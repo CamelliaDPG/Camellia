@@ -22,7 +22,8 @@
 
 using namespace Camellia;
 
-int main(int argc, char *argv[]) {
+int main(int argc, char *argv[])
+{
 
 #ifdef HAVE_MPI
   Teuchos::GlobalMPISession mpiSession(&argc, &argv,0);
@@ -59,7 +60,8 @@ int main(int argc, char *argv[]) {
   cmdp.setOption("solver", &solverChoice, "0=iterative, 1=KLI, 2=SuperLu");
   cmdp.setOption("solverTolerance", &solverTolerance, "iterative solver tolerance");
 
-  if (cmdp.parse(argc,argv) != Teuchos::CommandLineProcessor::PARSE_SUCCESSFUL) {
+  if (cmdp.parse(argc,argv) != Teuchos::CommandLineProcessor::PARSE_SUCCESSFUL)
+  {
 #ifdef HAVE_MPI
     MPI_Finalize();
 #endif
@@ -97,17 +99,20 @@ int main(int argc, char *argv[]) {
   FunctionPtr x = Function::xn(1);
   FunctionPtr y = Function::yn(1);
   FunctionPtr z = Function::zn(1);
-  if (spaceDim == 1) {
+  if (spaceDim == 1)
+  {
     bc->addDirichlet(tc, inflowX, -one);
     bc->addDirichlet(uhat, outflowX, zero);
   }
-  if (spaceDim == 2) {
+  if (spaceDim == 2)
+  {
     bc->addDirichlet(tc, inflowX, -1*.5*(one-y));
     bc->addDirichlet(uhat, outflowX, zero);
     bc->addDirichlet(tc, inflowY, -2*.5*(one-x));
     bc->addDirichlet(uhat, outflowY, zero);
   }
-  if (spaceDim == 3) {
+  if (spaceDim == 3)
+  {
     bc->addDirichlet(tc, inflowX, -1*.25*(one-y)*(one-z));
     bc->addDirichlet(uhat, outflowX, zero);
     bc->addDirichlet(tc, inflowY, -2*.25*(one-x)*(one-z));
@@ -121,7 +126,8 @@ int main(int argc, char *argv[]) {
   double width = 2.0;
   vector<double> dimensions;
   vector<int> elementCounts;
-  for (int d=0; d<spaceDim; d++) {
+  for (int d=0; d<spaceDim; d++)
+  {
     dimensions.push_back(width);
     elementCounts.push_back(numXElems);
   }
@@ -147,50 +153,51 @@ int main(int argc, char *argv[]) {
 
   ofstream dataFile(refName.str()+".txt");
   dataFile << "ref\t " << "iterations\t " << "elements\t " << "dofs\t " << "error\t " << endl;
-  for (int refIndex=0; refIndex <= numRefs; refIndex++) {
+  for (int refIndex=0; refIndex <= numRefs; refIndex++)
+  {
     Teuchos::RCP<GMGSolver> gmgSolver;
-    if (solverChoice == 0) 
+    if (solverChoice == 0)
     {
       gmgSolver = Teuchos::rcp( new GMGSolver(soln, k0Mesh, maxIters, solverTolerance, kluSolver, useStaticCondensation));
       gmgSolver->setAztecOutput(azOutput);
     }
     switch(solverChoice)
     {
-      case 0:
-        soln->solve(gmgSolver);
-        break;
-      case 1:
-        soln->condensedSolve(kluSolver);
-        break;
-      case 2:
-        soln->condensedSolve(superluSolver);
-        break;
+    case 0:
+      soln->solve(gmgSolver);
+      break;
+    case 1:
+      soln->condensedSolve(kluSolver);
+      break;
+    case 2:
+      soln->condensedSolve(superluSolver);
+      break;
     }
 
     double energyError = soln->energyErrorTotal();
     if (commRank == 0)
     {
       // if (refIndex > 0)
-        // refStrategy.printRefinementStatistics(refIndex-1);
-      if (solverChoice == 0) 
+      // refStrategy.printRefinementStatistics(refIndex-1);
+      if (solverChoice == 0)
       {
         cout << "Refinement:\t " << refIndex
-          << " \tIteration Count:\t " << gmgSolver->iterationCount()
-          << " \tElements:\t " << mesh->numActiveElements()
-          << " \tDOFs:\t " << mesh->numGlobalDofs()
-          << " \tEnergy Error:\t " << energyError << endl;
+             << " \tIteration Count:\t " << gmgSolver->iterationCount()
+             << " \tElements:\t " << mesh->numActiveElements()
+             << " \tDOFs:\t " << mesh->numGlobalDofs()
+             << " \tEnergy Error:\t " << energyError << endl;
         dataFile << refIndex
-          << " " << gmgSolver->iterationCount()
-          << " " << mesh->numActiveElements()
-          << " " << mesh->numGlobalDofs()
-          << " " << energyError << endl;
+                 << " " << gmgSolver->iterationCount()
+                 << " " << mesh->numActiveElements()
+                 << " " << mesh->numGlobalDofs()
+                 << " " << energyError << endl;
       }
       else
       {
         cout << "Refinement:\t " << refIndex
-          << " \tElements:\t " << mesh->numActiveElements()
-          << " \tDOFs:\t " << mesh->numGlobalDofs()
-          << " \tEnergy Error:\t " << energyError << endl;
+             << " \tElements:\t " << mesh->numActiveElements()
+             << " \tDOFs:\t " << mesh->numGlobalDofs()
+             << " \tEnergy Error:\t " << energyError << endl;
       }
     }
 

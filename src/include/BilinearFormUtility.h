@@ -44,58 +44,60 @@
 
 using namespace std;
 
-namespace Camellia {
-  template <typename Scalar>
-  class BilinearFormUtility {
-  private:
-    static bool _warnAboutZeroRowsAndColumns;
-  public:
-    // the "pre-stiffness" (rectangular) matrix methods:
-    static void computeStiffnessMatrix(Intrepid::FieldContainer<Scalar> &stiffness, TBFPtr<Scalar> bilinearForm,
-                                       Teuchos::RCP<DofOrdering> trialOrdering, Teuchos::RCP<DofOrdering> testOrdering,
-                                       CellTopoPtr cellTopo, Intrepid::FieldContainer<double> &physicalCellNodes,
-                                       Intrepid::FieldContainer<double> &cellSideParities);
+namespace Camellia
+{
+template <typename Scalar>
+class BilinearFormUtility
+{
+private:
+  static bool _warnAboutZeroRowsAndColumns;
+public:
+  // the "pre-stiffness" (rectangular) matrix methods:
+  static void computeStiffnessMatrix(Intrepid::FieldContainer<Scalar> &stiffness, TBFPtr<Scalar> bilinearForm,
+                                     Teuchos::RCP<DofOrdering> trialOrdering, Teuchos::RCP<DofOrdering> testOrdering,
+                                     CellTopoPtr cellTopo, Intrepid::FieldContainer<double> &physicalCellNodes,
+                                     Intrepid::FieldContainer<double> &cellSideParities);
 
-    // the real one:
+  // the real one:
   //  static void computeStiffnessMatrix(Intrepid::FieldContainer<double> &stiffness, BFPtr bilinearForm,
   //                                     Teuchos::RCP<DofOrdering> trialOrdering, Teuchos::RCP<DofOrdering> testOrdering,
   //                                     Intrepid::FieldContainer<double> &cellSideParities, Teuchos::RCP<BasisCache> basisCache);
 
-    static void computeStiffnessMatrixForCell(Intrepid::FieldContainer<Scalar> &stiffness, Teuchos::RCP<Mesh> mesh, int cellID);
+  static void computeStiffnessMatrixForCell(Intrepid::FieldContainer<Scalar> &stiffness, Teuchos::RCP<Mesh> mesh, int cellID);
 
-    // final (square) stiffness methods, with optimal test functions applied:
-    // the following is meant for testing; the three-argument computeStiffnessMatrix below will be more efficient...
-    static void computeOptimalStiffnessMatrix(Intrepid::FieldContainer<Scalar> &stiffness,
-                                              Intrepid::FieldContainer<Scalar> &optimalTestWeights,
-                                              TBFPtr<Scalar> bilinearForm,
-                                              Teuchos::RCP<DofOrdering> trialOrdering, Teuchos::RCP<DofOrdering> testOrdering,
-                                              CellTopoPtr cellTopo, Intrepid::FieldContainer<double> &physicalCellNodes,
-                                              Intrepid::FieldContainer<double> &cellSideParities);
+  // final (square) stiffness methods, with optimal test functions applied:
+  // the following is meant for testing; the three-argument computeStiffnessMatrix below will be more efficient...
+  static void computeOptimalStiffnessMatrix(Intrepid::FieldContainer<Scalar> &stiffness,
+      Intrepid::FieldContainer<Scalar> &optimalTestWeights,
+      TBFPtr<Scalar> bilinearForm,
+      Teuchos::RCP<DofOrdering> trialOrdering, Teuchos::RCP<DofOrdering> testOrdering,
+      CellTopoPtr cellTopo, Intrepid::FieldContainer<double> &physicalCellNodes,
+      Intrepid::FieldContainer<double> &cellSideParities);
 
-    static void computeStiffnessMatrix(Intrepid::FieldContainer<Scalar> &stiffness, Intrepid::FieldContainer<Scalar> &innerProductMatrix,
-                                       Intrepid::FieldContainer<Scalar> &optimalTestWeights);
+  static void computeStiffnessMatrix(Intrepid::FieldContainer<Scalar> &stiffness, Intrepid::FieldContainer<Scalar> &innerProductMatrix,
+                                     Intrepid::FieldContainer<Scalar> &optimalTestWeights);
 
-    // this method is deprecated; use the next one
-    static void computeRHS(Intrepid::FieldContainer<Scalar> &rhsVector, TBFPtr<Scalar> bilinearForm, RHS &rhs,
-                           Intrepid::FieldContainer<Scalar> &optimalTestWeights, Teuchos::RCP<DofOrdering> testOrdering,
-                           shards::CellTopology &cellTopo, Intrepid::FieldContainer<double> &physicalCellNodes);
+  // this method is deprecated; use the next one
+  static void computeRHS(Intrepid::FieldContainer<Scalar> &rhsVector, TBFPtr<Scalar> bilinearForm, RHS &rhs,
+                         Intrepid::FieldContainer<Scalar> &optimalTestWeights, Teuchos::RCP<DofOrdering> testOrdering,
+                         shards::CellTopology &cellTopo, Intrepid::FieldContainer<double> &physicalCellNodes);
 
   //  static void computeRHS(Intrepid::FieldContainer<double> &rhsVector, BFPtr bilinearForm, RHS &rhs,
   //                  Intrepid::FieldContainer<double> &optimalTestWeights, Teuchos::RCP<DofOrdering> testOrdering,
   //                  BasisCachePtr basisCache);
 
-    static void transposeFCMatrices(Intrepid::FieldContainer<Scalar> &fcTranspose,
-                                    const Intrepid::FieldContainer<Scalar> &fc);
+  static void transposeFCMatrices(Intrepid::FieldContainer<Scalar> &fcTranspose,
+                                  const Intrepid::FieldContainer<Scalar> &fc);
 
-    static bool checkForZeroRowsAndColumns(string name, Intrepid::FieldContainer<Scalar> &array, bool checkRows = true, bool checkCols = true);
+  static bool checkForZeroRowsAndColumns(string name, Intrepid::FieldContainer<Scalar> &array, bool checkRows = true, bool checkCols = true);
 
-    static void weightCellBasisValues(Intrepid::FieldContainer<double> &basisValues,
-                                      const Intrepid::FieldContainer<double> &weights, int offset);
+  static void weightCellBasisValues(Intrepid::FieldContainer<double> &basisValues,
+                                    const Intrepid::FieldContainer<double> &weights, int offset);
 
-    static void setWarnAboutZeroRowsAndColumns( bool value );
-    static bool warnAboutZeroRowsAndColumns();
-  };
+  static void setWarnAboutZeroRowsAndColumns( bool value );
+  static bool warnAboutZeroRowsAndColumns();
+};
 
-  extern template class BilinearFormUtility<double>;
+extern template class BilinearFormUtility<double>;
 }
 #endif

@@ -20,67 +20,81 @@
 #include "choice.hpp"
 #endif
 
-class EpsilonScaling : public hFunction {
+class EpsilonScaling : public hFunction
+{
   double _epsilon;
-  public:
-  EpsilonScaling(double epsilon) {
+public:
+  EpsilonScaling(double epsilon)
+  {
     _epsilon = epsilon;
   }
-  double value(double x, double y, double h) {
+  double value(double x, double y, double h)
+  {
     double scaling = min(_epsilon/(h*h), 1.0);
     // since this is used in inner product term a like (a,a), take square root
     return sqrt(scaling);
   }
 };
 
-class ZeroMeanScaling : public hFunction {
-  public:
-  double value(double x, double y, double h) {
+class ZeroMeanScaling : public hFunction
+{
+public:
+  double value(double x, double y, double h)
+  {
     return 1.0/(h*h);
   }
 };
 
-class ConstantXBoundary : public SpatialFilter {
-  private:
-    double xval;
-  public:
-    ConstantXBoundary(double xval): xval(xval) {};
-    bool matchesPoint(double x, double y) {
-      double tol = 1e-14;
-      return (abs(x-xval) < tol);
-    }
+class ConstantXBoundary : public SpatialFilter
+{
+private:
+  double xval;
+public:
+  ConstantXBoundary(double xval): xval(xval) {};
+  bool matchesPoint(double x, double y)
+  {
+    double tol = 1e-14;
+    return (abs(x-xval) < tol);
+  }
 };
 
 ;
 
-class ConstantYBoundary : public SpatialFilter {
-  private:
-    double yval;
-  public:
-    ConstantYBoundary(double yval): yval(yval) {};
-    bool matchesPoint(double x, double y) {
-      double tol = 1e-14;
-      return (abs(y-yval) < tol);
-    }
+class ConstantYBoundary : public SpatialFilter
+{
+private:
+  double yval;
+public:
+  ConstantYBoundary(double yval): yval(yval) {};
+  bool matchesPoint(double x, double y)
+  {
+    double tol = 1e-14;
+    return (abs(y-yval) < tol);
+  }
 };
 
-class BottomFree : public SpatialFilter {
-  public:
-    bool matchesPoint(double x, double y) {
-      double tol = 1e-14;
-      return (abs(y) < tol && (x < 0));
-    }
+class BottomFree : public SpatialFilter
+{
+public:
+  bool matchesPoint(double x, double y)
+  {
+    double tol = 1e-14;
+    return (abs(y) < tol && (x < 0));
+  }
 };
 
-class BottomPlate : public SpatialFilter {
-  public:
-    bool matchesPoint(double x, double y) {
-      double tol = 1e-14;
-      return (abs(y) < tol && (x >= 0));
-    }
+class BottomPlate : public SpatialFilter
+{
+public:
+  bool matchesPoint(double x, double y)
+  {
+    double tol = 1e-14;
+    return (abs(y) < tol && (x >= 0));
+  }
 };
 
-int main(int argc, char *argv[]) {
+int main(int argc, char *argv[])
+{
 #ifdef HAVE_MPI
   Teuchos::GlobalMPISession mpiSession(&argc, &argv,0);
   choice::MpiArgs args( argc, argv );
@@ -137,7 +151,7 @@ int main(int argc, char *argv[]) {
 
   // create a pointer to a new mesh:
   Teuchos::RCP<Mesh> mesh = Mesh::buildQuadMesh(meshBoundary, xCells, yCells,
-      bf, H1Order, H1Order+deltaP);
+                            bf, H1Order, H1Order+deltaP);
 
   vector<double> beta;
   beta.push_back(1);
@@ -171,7 +185,7 @@ int main(int argc, char *argv[]) {
     FunctionPtr ip_scaling = Teuchos::rcp( new EpsilonScaling(epsilon) );
     // FunctionPtr h2_scaling = Teuchos::rcp( new ZeroMeanScaling );
     // if (!zeroL2)
-      ip->addTerm( v );
+    ip->addTerm( v );
     ip->addTerm( sqrt(epsilon) * v->grad() );
     // Weight these two terms for inflow
     ip->addTerm( beta * v->grad() );
@@ -188,7 +202,7 @@ int main(int argc, char *argv[]) {
     // FunctionPtr h2_scaling = Teuchos::rcp( new ZeroMeanScaling );
     // FunctionPtr ip_weight = Teuchos::rcp( new IPWeight() );
     // if (!zeroL2)
-      ip->addTerm( v );
+    ip->addTerm( v );
     ip->addTerm( sqrt(epsilon) * v->grad() );
     ip->addTerm( beta * v->grad() );
     ip->addTerm( tau->div() - beta*v->grad() );
@@ -221,7 +235,8 @@ int main(int argc, char *argv[]) {
   Teuchos::RCP<Solution> solution = Teuchos::rcp( new Solution(mesh, bc, rhs, ip) );
   // solution->setFilter(pc);
 
-  if (enforceLocalConservation) {
+  if (enforceLocalConservation)
+  {
     FunctionPtr zero = Teuchos::rcp( new ConstantScalarFunction(0.0) );
     solution->lagrangeConstraints()->addConstraint(fhat == zero);
   }
@@ -230,10 +245,12 @@ int main(int argc, char *argv[]) {
   RefinementStrategy refinementStrategy( solution, energyThreshold );
   VTKExporter exporter(solution, mesh, varFactory);
 
-  for (int refIndex=0; refIndex<=numRefs; refIndex++){
+  for (int refIndex=0; refIndex<=numRefs; refIndex++)
+  {
     solution->solve(false);
 
-    if (commRank==0){
+    if (commRank==0)
+    {
       stringstream outfile;
       outfile << "flatplateconfusion_" << refIndex;
       exporter.exportSolution(outfile.str());

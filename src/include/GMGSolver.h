@@ -13,73 +13,76 @@
 #include "Mesh.h"
 #include "GMGOperator.h"
 
-namespace Camellia {
-  class GMGSolver : public Solver {
-    int _maxIters;
-    bool _printToConsole;
-    double _tol;
+namespace Camellia
+{
+class GMGSolver : public Solver
+{
+  int _maxIters;
+  bool _printToConsole;
+  double _tol;
 
-    Epetra_Map _finePartitionMap;
+  Epetra_Map _finePartitionMap;
 
-    GMGOperator _gmgOperator;
+  GMGOperator _gmgOperator;
 
-    bool _applySmoothing;    // whether we should add the smoothing term (almost always want this--basically we turn off for some tests)
-    bool _diagonalScaling;   // whether we should scale the entire system by the diagonal
+  bool _applySmoothing;    // whether we should add the smoothing term (almost always want this--basically we turn off for some tests)
+  bool _diagonalScaling;   // whether we should scale the entire system by the diagonal
 
-    bool _computeCondest;
+  bool _computeCondest;
 
-    int _azOutput;
+  int _azOutput;
 
-    bool _useCG; // otherwise, will use GMRES
+  bool _useCG; // otherwise, will use GMRES
 
-    // info about the last call to solve()
-    double _condest; // -1 if none exists
-    int _iterationCount;
+  // info about the last call to solve()
+  double _condest; // -1 if none exists
+  int _iterationCount;
 
-    int _azConvergenceOption; // defaults to AZ_rhs
+  int _azConvergenceOption; // defaults to AZ_rhs
 
-    bool _printIterationCountIfNoAzOutput;
+  bool _printIterationCountIfNoAzOutput;
 
-    std::vector< int > _iterationCountLog; // each time solve() is called, we push_back the number of iterations we run
+  std::vector< int > _iterationCountLog; // each time solve() is called, we push_back the number of iterations we run
 
-    int solve(bool rebuildCoarseStiffness);
-  public:
-    GMGSolver(BCPtr zeroBCs, MeshPtr coarseMesh, IPPtr coarseIP, MeshPtr fineMesh, Teuchos::RCP<DofInterpreter> fineDofInterpreter,
-              Epetra_Map finePartitionMap, int maxIters, double tol, Teuchos::RCP<Solver> coarseSolver, bool useStaticCondensation);
-    GMGSolver(TSolutionPtr<double> fineSolution, MeshPtr coarseMesh, int maxIters, double tol, Teuchos::RCP<Solver> coarseSolver, bool useStaticCondensation);
+  int solve(bool rebuildCoarseStiffness);
+public:
+  GMGSolver(BCPtr zeroBCs, MeshPtr coarseMesh, IPPtr coarseIP, MeshPtr fineMesh, Teuchos::RCP<DofInterpreter> fineDofInterpreter,
+            Epetra_Map finePartitionMap, int maxIters, double tol, Teuchos::RCP<Solver> coarseSolver, bool useStaticCondensation);
+  GMGSolver(TSolutionPtr<double> fineSolution, MeshPtr coarseMesh, int maxIters, double tol, Teuchos::RCP<Solver> coarseSolver, bool useStaticCondensation);
 
-    double condest();
+  double condest();
 
-    int iterationCount();
+  int iterationCount();
 
-    void setPrintToConsole(bool printToConsole);
+  void setPrintToConsole(bool printToConsole);
 
-    int resolve();
-    int solve();
+  int resolve();
+  int solve();
 
-    void setApplySmoothingOperator(bool applySmoothingOp);
+  void setApplySmoothingOperator(bool applySmoothingOp);
 
-    void setComputeConditionNumberEstimate(bool value);
+  void setComputeConditionNumberEstimate(bool value);
 
-    void setUseDiagonalScaling(bool value);
+  void setUseDiagonalScaling(bool value);
 
-    void setTolerance(double tol);
+  void setTolerance(double tol);
 
-    GMGOperator & gmgOperator() {
-      return _gmgOperator;
-    }
+  GMGOperator & gmgOperator()
+  {
+    return _gmgOperator;
+  }
 
-    void setAztecConvergenceOption(int value);
-    void setAztecOutput(int value);
+  void setAztecConvergenceOption(int value);
+  void setAztecOutput(int value);
 
-    void setFineMesh(MeshPtr fineMesh, Epetra_Map finePartitionMap);
+  void setFineMesh(MeshPtr fineMesh, Epetra_Map finePartitionMap);
 
-    void setUseConjugateGradient(bool value); // otherwise will use GMRES
+  void setUseConjugateGradient(bool value); // otherwise will use GMRES
 
-    void setPrintIterationCount(bool value);
+  void setPrintIterationCount(bool value);
 
-    vector<int> getIterationCountLog();
-  };
+  vector<int> getIterationCountLog();
+};
 }
 
 #endif /* defined(__Camellia_debug__GMGSolver__) */

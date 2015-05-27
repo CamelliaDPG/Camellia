@@ -33,21 +33,25 @@ int maxDofsForKLU;
 double coarseCGTol;
 int coarseMaxIterations;
 
-string getFactorizationTypeString(GMGOperator::FactorType factorizationType) {
-  switch (factorizationType) {
-    case GMGOperator::Direct:
-      return "Direct";
-    case GMGOperator::IC:
-      return "IC";
-    case GMGOperator::ILU:
-      return "ILU";
-    default:
-      return "Unknown";
+string getFactorizationTypeString(GMGOperator::FactorType factorizationType)
+{
+  switch (factorizationType)
+  {
+  case GMGOperator::Direct:
+    return "Direct";
+  case GMGOperator::IC:
+    return "IC";
+  case GMGOperator::ILU:
+    return "ILU";
+  default:
+    return "Unknown";
   }
 }
 
-GMGOperator::FactorType getFactorizationType(string factorizationTypeString) {
-  if (factorizationTypeString == "Direct") {
+GMGOperator::FactorType getFactorizationType(string factorizationTypeString)
+{
+  if (factorizationTypeString == "Direct")
+  {
     return GMGOperator::Direct;
   }
   if (factorizationTypeString == "IC") return GMGOperator::IC;
@@ -57,40 +61,45 @@ GMGOperator::FactorType getFactorizationType(string factorizationTypeString) {
 }
 
 Teuchos::RCP<Epetra_Operator> CamelliaAdditiveSchwarzPreconditioner(::Epetra_RowMatrix* A, int overlapLevel, MeshPtr mesh, Teuchos::RCP<DofInterpreter> dofInterpreter,
-                                                                    GMGOperator::FactorType schwarzBlockFactorization,
-                                                                    int levelOfFill, double fillRatio, bool hOnly) {
+    GMGOperator::FactorType schwarzBlockFactorization,
+    int levelOfFill, double fillRatio, bool hOnly)
+{
 
   Teuchos::RCP<Ifpack_Preconditioner> preconditioner;
   Teuchos::ParameterList List;
-  switch (schwarzBlockFactorization) {
-    case GMGOperator::Direct:
-      preconditioner = Teuchos::rcp(new AdditiveSchwarz<Ifpack_Amesos>(A, overlapLevel, mesh, dofInterpreter, hOnly) );
-      break;
-    case GMGOperator::IC:
-      preconditioner = Teuchos::rcp(new AdditiveSchwarz<Ifpack_IC>(A, overlapLevel, mesh, dofInterpreter, hOnly) );
-      List.set("fact: ict level-of-fill", fillRatio);
-      break;
-    case GMGOperator::ILU:
-      preconditioner = Teuchos::rcp(new AdditiveSchwarz<Ifpack_ILU>(A, overlapLevel, mesh, dofInterpreter, hOnly) );
-      List.set("fact: level-of-fill", levelOfFill);
-      break;
-    default:
-      break;
+  switch (schwarzBlockFactorization)
+  {
+  case GMGOperator::Direct:
+    preconditioner = Teuchos::rcp(new AdditiveSchwarz<Ifpack_Amesos>(A, overlapLevel, mesh, dofInterpreter, hOnly) );
+    break;
+  case GMGOperator::IC:
+    preconditioner = Teuchos::rcp(new AdditiveSchwarz<Ifpack_IC>(A, overlapLevel, mesh, dofInterpreter, hOnly) );
+    List.set("fact: ict level-of-fill", fillRatio);
+    break;
+  case GMGOperator::ILU:
+    preconditioner = Teuchos::rcp(new AdditiveSchwarz<Ifpack_ILU>(A, overlapLevel, mesh, dofInterpreter, hOnly) );
+    List.set("fact: level-of-fill", levelOfFill);
+    break;
+  default:
+    break;
   }
 
   List.set("schwarz: combine mode", "Add"); // The PDF doc says to use "Insert" to maintain symmetry, but the HTML docs (which are more recent) say to use "Add".  http://trilinos.org/docs/r11.10/packages/ifpack/doc/html/index.html
   int err = preconditioner->SetParameters(List);
-  if (err != 0) {
+  if (err != 0)
+  {
     cout << "WARNING: In additiveSchwarzPreconditioner, preconditioner->SetParameters() returned with err " << err << endl;
   }
 
   err = preconditioner->Initialize();
-  if (err != 0) {
+  if (err != 0)
+  {
     cout << "WARNING: In additiveSchwarzPreconditioner, preconditioner->Initialize() returned with err " << err << endl;
   }
   err = preconditioner->Compute();
 
-  if (err != 0) {
+  if (err != 0)
+  {
     cout << "WARNING: In additiveSchwarzPreconditioner, preconditioner->Compute() returned with err = " << err << endl;
   }
 
@@ -98,47 +107,53 @@ Teuchos::RCP<Epetra_Operator> CamelliaAdditiveSchwarzPreconditioner(::Epetra_Row
 }
 
 Teuchos::RCP<Epetra_Operator> IfPackAdditiveSchwarzPreconditioner(Epetra_RowMatrix* A, int overlapLevel,
-                                                                  GMGOperator::FactorType schwarzBlockFactorization,
-                                                                  int levelOfFill, double fillRatio) {
+    GMGOperator::FactorType schwarzBlockFactorization,
+    int levelOfFill, double fillRatio)
+{
   Teuchos::RCP<Ifpack_Preconditioner> preconditioner;
   Teuchos::ParameterList List;
-  switch (schwarzBlockFactorization) {
-    case GMGOperator::Direct:
-      preconditioner = Teuchos::rcp(new Ifpack_AdditiveSchwarz<Ifpack_Amesos>(A, overlapLevel) );
-      break;
-    case GMGOperator::IC:
-      preconditioner = Teuchos::rcp(new Ifpack_AdditiveSchwarz<Ifpack_IC>(A, overlapLevel) );
-      List.set("fact: ict level-of-fill", fillRatio);
-      break;
-    case GMGOperator::ILU:
-      preconditioner = Teuchos::rcp(new Ifpack_AdditiveSchwarz<Ifpack_ILU>(A, overlapLevel) );
-      List.set("fact: level-of-fill", levelOfFill);
-      break;
-    default:
-      break;
+  switch (schwarzBlockFactorization)
+  {
+  case GMGOperator::Direct:
+    preconditioner = Teuchos::rcp(new Ifpack_AdditiveSchwarz<Ifpack_Amesos>(A, overlapLevel) );
+    break;
+  case GMGOperator::IC:
+    preconditioner = Teuchos::rcp(new Ifpack_AdditiveSchwarz<Ifpack_IC>(A, overlapLevel) );
+    List.set("fact: ict level-of-fill", fillRatio);
+    break;
+  case GMGOperator::ILU:
+    preconditioner = Teuchos::rcp(new Ifpack_AdditiveSchwarz<Ifpack_ILU>(A, overlapLevel) );
+    List.set("fact: level-of-fill", levelOfFill);
+    break;
+  default:
+    break;
   }
 
   List.set("schwarz: combine mode", "Add"); // The PDF doc says to use "Insert" to maintain symmetry, but the HTML docs (which are more recent) say to use "Add".  http://trilinos.org/docs/r11.10/packages/ifpack/doc/html/index.html
   int err = preconditioner->SetParameters(List);
-  if (err != 0) {
+  if (err != 0)
+  {
     cout << "WARNING: In additiveSchwarzPreconditioner, preconditioner->SetParameters() returned with err " << err << endl;
   }
 
 
   err = preconditioner->Initialize();
-  if (err != 0) {
+  if (err != 0)
+  {
     cout << "WARNING: In additiveSchwarzPreconditioner, preconditioner->Initialize() returned with err " << err << endl;
   }
   err = preconditioner->Compute();
 
-  if (err != 0) {
+  if (err != 0)
+  {
     cout << "WARNING: In additiveSchwarzPreconditioner, preconditioner->Compute() returned with err = " << err << endl;
   }
 
   return preconditioner;
 }
 
-class AztecSolver : public Solver {
+class AztecSolver : public Solver
+{
   int _maxIters;
   double _tol;
   int _schwarzOverlap;
@@ -157,7 +172,8 @@ class AztecSolver : public Solver {
   GMGOperator::FactorType _schwarzBlockFactorization;
 public:
   AztecSolver(int maxIters, double tol, int schwarzOverlapLevel, bool useSchwarzPreconditioner,
-              GMGOperator::FactorType schwarzBlockFactorization, int levelOfFill, double fillRatio) {
+              GMGOperator::FactorType schwarzBlockFactorization, int levelOfFill, double fillRatio)
+  {
     _maxIters = maxIters;
     _tol = tol;
     _schwarzOverlap = schwarzOverlapLevel;
@@ -171,7 +187,8 @@ public:
 
   AztecSolver(int maxIters, double tol, int schwarzOverlapLevel, bool useSchwarzPreconditioner,
               GMGOperator::FactorType schwarzBlockFactorization, int levelOfFill, double fillRatio,
-              MeshPtr mesh, Teuchos::RCP<DofInterpreter> dofInterpreter, bool hierarchical) {
+              MeshPtr mesh, Teuchos::RCP<DofInterpreter> dofInterpreter, bool hierarchical)
+  {
     _mesh = mesh;
     _dofInterpreter = dofInterpreter;
     _maxIters = maxIters;
@@ -184,11 +201,13 @@ public:
     _fillRatio = fillRatio;
     _hierarchical = hierarchical;
   }
-  void setAztecOutputLevel(int AztecOutputLevel) {
+  void setAztecOutputLevel(int AztecOutputLevel)
+  {
     _azOutputLevel = AztecOutputLevel;
   }
 
-  int solve() {
+  int solve()
+  {
     AztecOO solver(this->_stiffnessMatrix.get(), this->_lhs.get(), this->_rhs.get());
 
     solver.SetAztecOption(AZ_solver, AZ_cg);
@@ -196,9 +215,10 @@ public:
     Teuchos::RCP<Epetra_CrsMatrix> A = this->_stiffnessMatrix;
 
     Teuchos::RCP<Epetra_Operator> preconditioner;
-    if (_mesh != Teuchos::null) {
+    if (_mesh != Teuchos::null)
+    {
       preconditioner = CamelliaAdditiveSchwarzPreconditioner(A.get(), _schwarzOverlap, _mesh, _dofInterpreter, _schwarzBlockFactorization,
-                                                             _levelOfFill, _fillRatio, _hierarchical);
+                       _levelOfFill, _fillRatio, _hierarchical);
 
 //      Teuchos::RCP< Epetra_CrsMatrix > M;
 //      M = Epetra_Operator_to_Epetra_Matrix::constructInverseMatrix(*preconditioner, A->RowMatrixRowMap());
@@ -207,14 +227,19 @@ public:
 //      if (rank==0) cout << "writing preconditioner to /tmp/preconditioner.dat.\n";
 //      EpetraExt::RowMatrixToMatrixMarketFile("/tmp/preconditioner.dat",*M, NULL, NULL, false);
 
-    } else {
+    }
+    else
+    {
       preconditioner = IfPackAdditiveSchwarzPreconditioner(A.get(), _schwarzOverlap, _schwarzBlockFactorization, _levelOfFill, _fillRatio);
     }
 
-    if (_useSchwarzPreconditioner) {
+    if (_useSchwarzPreconditioner)
+    {
       solver.SetPrecOperator(preconditioner.get());
       solver.SetAztecOption(AZ_precond, AZ_user_precond);
-    } else {
+    }
+    else
+    {
       solver.SetAztecOption(AZ_precond, AZ_none);
     }
 
@@ -233,7 +258,8 @@ public:
 
     int maxRestarts = 1;
     int numRestarts = 0;
-    while ((whyTerminated==AZ_loss) && (numRestarts < maxRestarts)) {
+    while ((whyTerminated==AZ_loss) && (numRestarts < maxRestarts))
+    {
       remainingIters -= status[AZ_its];
       if (rank==0) cout << "Aztec warned that the recursive residual indicates convergence even though the true residual is too large.  Restarting with the new solution as initial guess, with maxIters = " << remainingIters << endl;
       solveResult = solver.Iterate(remainingIters,_tol);
@@ -243,39 +269,42 @@ public:
     remainingIters -= status[AZ_its];
     _iterationCount = _maxIters - remainingIters;
 
-    switch (whyTerminated) {
-      case AZ_normal:
+    switch (whyTerminated)
+    {
+    case AZ_normal:
 //        cout << "whyTerminated: AZ_normal " << endl;
-        break;
-      case AZ_param:
-        cout << "whyTerminated: AZ_param " << endl;
-        break;
-      case AZ_breakdown:
-        cout << "whyTerminated: AZ_breakdown " << endl;
-        break;
-      case AZ_loss:
-        cout << "whyTerminated: AZ_loss " << endl;
-        break;
-      case AZ_ill_cond:
-        cout << "whyTerminated: AZ_ill_cond " << endl;
-        break;
-      case AZ_maxits:
-        cout << "whyTerminated: AZ_maxits " << endl;
-        break;
-      default:
-        break;
+      break;
+    case AZ_param:
+      cout << "whyTerminated: AZ_param " << endl;
+      break;
+    case AZ_breakdown:
+      cout << "whyTerminated: AZ_breakdown " << endl;
+      break;
+    case AZ_loss:
+      cout << "whyTerminated: AZ_loss " << endl;
+      break;
+    case AZ_ill_cond:
+      cout << "whyTerminated: AZ_ill_cond " << endl;
+      break;
+    case AZ_maxits:
+      cout << "whyTerminated: AZ_maxits " << endl;
+      break;
+    default:
+      break;
     }
 
     _iterationCount = status[AZ_its];
 
     return solveResult;
   }
-  Teuchos::RCP< Epetra_CrsMatrix > getPreconditionerMatrix(const Epetra_Map &map) {
+  Teuchos::RCP< Epetra_CrsMatrix > getPreconditionerMatrix(const Epetra_Map &map)
+  {
     Teuchos::RCP<Epetra_CrsMatrix> A = this->_stiffnessMatrix;
     Teuchos::RCP<Epetra_Operator> preconditioner;
-    if (_mesh != Teuchos::null) {
+    if (_mesh != Teuchos::null)
+    {
       preconditioner = CamelliaAdditiveSchwarzPreconditioner(A.get(), _schwarzOverlap, _mesh, _dofInterpreter,
-                                                             _schwarzBlockFactorization, _levelOfFill, _fillRatio,_hierarchical);
+                       _schwarzBlockFactorization, _levelOfFill, _fillRatio,_hierarchical);
 
 //      Teuchos::RCP< Epetra_CrsMatrix > M;
 //      M = Epetra_Operator_to_Epetra_Matrix::constructInverseMatrix(*preconditioner, A->RowMatrixRowMap());
@@ -284,14 +313,17 @@ public:
 //      if (rank==0) cout << "writing preconditioner to /tmp/preconditioner.dat.\n";
 //      EpetraExt::RowMatrixToMatrixMarketFile("/tmp/preconditioner.dat",*M, NULL, NULL, false);
 
-    } else {
+    }
+    else
+    {
       preconditioner = IfPackAdditiveSchwarzPreconditioner(A.get(), _schwarzOverlap, _schwarzBlockFactorization,
-                                                           _levelOfFill, _fillRatio);
+                       _levelOfFill, _fillRatio);
     }
 
     return Epetra_Operator_to_Epetra_Matrix::constructInverseMatrix(*preconditioner, map);
   }
-  int iterationCount() {
+  int iterationCount()
+  {
     return _iterationCount;
   }
 };
@@ -318,14 +350,16 @@ public:
 
 #include "GMGSolver.h"
 
-enum ProblemChoice {
+enum ProblemChoice
+{
   Poisson,
   ConvectionDiffusion,
   Stokes,
   NavierStokes
 };
 
-enum RunManyPreconditionerChoices {
+enum RunManyPreconditionerChoices
+{
   DontPrecondition,
   GMGAlgebraicSchwarz, // GMG with algebraic Schwarz smoother
   GMGGeometricSchwarz, // GMG with geometric Schwarz smoother
@@ -340,30 +374,33 @@ enum RunManyPreconditionerChoices {
   All         // All of the above, including the DontPrecondition option
 };
 
-string smootherString(GMGOperator::SmootherChoice smoother) {
-  switch (smoother) {
-    case GMGOperator::IFPACK_ADDITIVE_SCHWARZ:
-      return "IfPack-Schwarz";
-    case GMGOperator::CAMELLIA_ADDITIVE_SCHWARZ:
-      return "Camellia-Schwarz";
-    case GMGOperator::NONE:
-      return "None";
-    case GMGOperator::BLOCK_SYMMETRIC_GAUSS_SEIDEL:
-      return "Block-Gauss-Seidel";
-    case GMGOperator::POINT_SYMMETRIC_GAUSS_SEIDEL:
-      return "Point-Gauss-Seidel";
-    case GMGOperator::BLOCK_JACOBI:
-      return "Block-Jacobi";
-    case GMGOperator::POINT_JACOBI:
-      return "Point-Jacobi";
-    default:
-      return "Unknown";
+string smootherString(GMGOperator::SmootherChoice smoother)
+{
+  switch (smoother)
+  {
+  case GMGOperator::IFPACK_ADDITIVE_SCHWARZ:
+    return "IfPack-Schwarz";
+  case GMGOperator::CAMELLIA_ADDITIVE_SCHWARZ:
+    return "Camellia-Schwarz";
+  case GMGOperator::NONE:
+    return "None";
+  case GMGOperator::BLOCK_SYMMETRIC_GAUSS_SEIDEL:
+    return "Block-Gauss-Seidel";
+  case GMGOperator::POINT_SYMMETRIC_GAUSS_SEIDEL:
+    return "Point-Gauss-Seidel";
+  case GMGOperator::BLOCK_JACOBI:
+    return "Block-Jacobi";
+  case GMGOperator::POINT_JACOBI:
+    return "Point-Jacobi";
+  default:
+    return "Unknown";
   }
 }
 
 void initializeSolutionAndCoarseMesh(SolutionPtr &solution, MeshPtr &coarseMesh, IPPtr &graphNorm, ProblemChoice problemChoice,
                                      int spaceDim, bool conformingTraces, bool useStaticCondensation, int numCells, int k, int delta_k,
-                                     int rootMeshNumCells, bool useZeroMeanConstraints = false) {
+                                     int rootMeshNumCells, bool useZeroMeanConstraints = false)
+{
   BFPtr bf;
   BCPtr bc;
   RHSPtr rhs;
@@ -374,7 +411,8 @@ void initializeSolutionAndCoarseMesh(SolutionPtr &solution, MeshPtr &coarseMesh,
 
   VarPtr p; // pressure
 
-  if (problemChoice == Poisson) {
+  if (problemChoice == Poisson)
+  {
     PoissonFormulation formulation(spaceDim, conformingTraces);
 
     bf = formulation.bf();
@@ -389,7 +427,9 @@ void initializeSolutionAndCoarseMesh(SolutionPtr &solution, MeshPtr &coarseMesh,
     SpatialFilterPtr boundary = SpatialFilter::allSpace();
     VarPtr phi_hat = formulation.phi_hat();
     bc->addDirichlet(phi_hat, boundary, Function::zero());
-  } else if (problemChoice == ConvectionDiffusion) {
+  }
+  else if (problemChoice == ConvectionDiffusion)
+  {
     double epsilon = 1e-2;
     FunctionPtr beta;
     FunctionPtr beta_x = Function::constant(1);
@@ -425,17 +465,20 @@ void initializeSolutionAndCoarseMesh(SolutionPtr &solution, MeshPtr &coarseMesh,
     FunctionPtr x = Function::xn(1);
     FunctionPtr y = Function::yn(1);
     FunctionPtr z = Function::zn(1);
-    if (spaceDim == 1) {
+    if (spaceDim == 1)
+    {
       bc->addDirichlet(tc, inflowX, -one);
       bc->addDirichlet(uhat, outflowX, zero);
     }
-    if (spaceDim == 2) {
+    if (spaceDim == 2)
+    {
       bc->addDirichlet(tc, inflowX, -1*.5*(one-y));
       bc->addDirichlet(uhat, outflowX, zero);
       bc->addDirichlet(tc, inflowY, -2*.5*(one-x));
       bc->addDirichlet(uhat, outflowY, zero);
     }
-    if (spaceDim == 3) {
+    if (spaceDim == 3)
+    {
       bc->addDirichlet(tc, inflowX, -1*.25*(one-y)*(one-z));
       bc->addDirichlet(uhat, outflowX, zero);
       bc->addDirichlet(tc, inflowY, -2*.25*(one-x)*(one-z));
@@ -443,7 +486,9 @@ void initializeSolutionAndCoarseMesh(SolutionPtr &solution, MeshPtr &coarseMesh,
       bc->addDirichlet(tc, inflowZ, -3*.25*(one-x)*(one-y));
       bc->addDirichlet(uhat, outflowZ, zero);
     }
-  } else if (problemChoice == Stokes) {
+  }
+  else if (problemChoice == Stokes)
+  {
 
     StokesVGPFormulation formulation(spaceDim, conformingTraces);
 
@@ -465,12 +510,15 @@ void initializeSolutionAndCoarseMesh(SolutionPtr &solution, MeshPtr &coarseMesh,
 
     FunctionPtr u1_exact, u2_exact, u3_exact, p_exact;
 
-    if (spaceDim == 2) {
+    if (spaceDim == 2)
+    {
       // this one was in the Cockburn Kanschat LDG Stokes paper
       u1_exact = - exp_x * ( y * cos_y + sin_y );
       u2_exact = exp_x * y * sin_y;
       p_exact = 2.0 * exp_x * sin_y;
-    } else {
+    }
+    else
+    {
       // this one is inspired by the 2D one
       u1_exact = - exp_x * ( y * cos_y + sin_y );
       u2_exact = exp_x * y * sin_y + exp_z * y * cos_y;
@@ -500,10 +548,13 @@ void initializeSolutionAndCoarseMesh(SolutionPtr &solution, MeshPtr &coarseMesh,
     double mu = 1.0;
 
     FunctionPtr f1, f2, f3;
-    if (spaceDim==2) {
+    if (spaceDim==2)
+    {
       f1 = -p_exact->dx() + mu * (u1_exact->dx()->dx() + u1_exact->dy()->dy());
       f2 = -p_exact->dy() + mu * (u2_exact->dx()->dx() + u2_exact->dy()->dy());
-    } else {
+    }
+    else
+    {
       f1 = -p_exact->dx() + mu * (u1_exact->dx()->dx() + u1_exact->dy()->dy() + u1_exact->dz()->dz());
       f2 = -p_exact->dy() + mu * (u2_exact->dx()->dx() + u2_exact->dy()->dy() + u2_exact->dz()->dz());
       f3 = -p_exact->dz() + mu * (u3_exact->dx()->dx() + u3_exact->dy()->dy() + u3_exact->dz()->dz());
@@ -528,23 +579,29 @@ void initializeSolutionAndCoarseMesh(SolutionPtr &solution, MeshPtr &coarseMesh,
 
   vector<double> dimensions;
   vector<int> elementCounts;
-  for (int d=0; d<spaceDim; d++) {
+  for (int d=0; d<spaceDim; d++)
+  {
     dimensions.push_back(width);
     elementCounts.push_back(rootMeshNumCells);
   }
   mesh = MeshFactory::rectilinearMesh(bf, dimensions, elementCounts, H1Order, delta_k, x0);
 
   // now that we have mesh, add pressure constraint for Stokes (imposing zero at origin--want to aim for center of mesh)
-  if ((problemChoice == Stokes) || (problemChoice==NavierStokes)) {
-    if (!useZeroMeanConstraints) {
+  if ((problemChoice == Stokes) || (problemChoice==NavierStokes))
+  {
+    if (!useZeroMeanConstraints)
+    {
       vector<double> origin(spaceDim,0);
       IndexType vertexIndex;
 
-      if (!mesh->getTopology()->getVertexIndex(origin, vertexIndex)) {
+      if (!mesh->getTopology()->getVertexIndex(origin, vertexIndex))
+      {
         TEUCHOS_TEST_FOR_EXCEPTION(true, std::invalid_argument, "origin vertex not found");
       }
       bc->addSinglePointBC(p->ID(), 0, vertexIndex);
-    } else {
+    }
+    else
+    {
       bc->addZeroMeanConstraint(p);
     }
   }
@@ -557,7 +614,8 @@ void initializeSolutionAndCoarseMesh(SolutionPtr &solution, MeshPtr &coarseMesh,
   RefinementPatternPtr refPattern = RefinementPattern::regularRefinementPattern(cellTopo);
 
   int meshWidthCells = rootMeshNumCells;
-  while (meshWidthCells < numCells) {
+  while (meshWidthCells < numCells)
+  {
     set<IndexType> activeCellIDs = mesh->getActiveCellIDs(); // should match between coarseMesh and mesh
     mesh->hRefine(activeCellIDs, refPattern);
     coarseMesh->hRefine(activeCellIDs, refPattern);
@@ -565,9 +623,11 @@ void initializeSolutionAndCoarseMesh(SolutionPtr &solution, MeshPtr &coarseMesh,
     meshWidthCells *= 2;
   }
 
-  if (meshWidthCells != numCells) {
+  if (meshWidthCells != numCells)
+  {
     int rank = Teuchos::GlobalMPISession::getRank();
-    if (rank == 0) {
+    if (rank == 0)
+    {
       cout << "Warning: may have overrefined mesh; mesh has width " << meshWidthCells << ", not " << numCells << endl;
     }
   }
@@ -584,17 +644,22 @@ void run(ProblemChoice problemChoice, int &iterationCount, int spaceDim, int num
          int schwarzOverlap, GMGOperator::FactorType schwarzBlockFactorization, int schwarzLevelOfFill, double schwarzFillRatio,
          Solver::SolverChoice coarseSolverChoice, double cgTol, int cgMaxIterations, int AztecOutputLevel,
          bool reportTimings, double &solveTime, bool reportEnergyError, int numCellsRootMesh, bool hOnly, bool useZeroMeanConstraints,
-         bool writeAndExit) {
+         bool writeAndExit)
+{
   int rank = Teuchos::GlobalMPISession::getRank();
 
-  if (hOnly && (numCellsRootMesh == -1)) {
+  if (hOnly && (numCellsRootMesh == -1))
+  {
     // then use a single level of h-coarsening as the root mesh.
     numCellsRootMesh = numCells / 2;
-    if (numCellsRootMesh == 0) {
+    if (numCellsRootMesh == 0)
+    {
       cout << "Too few cells in root mesh.  Aborting.\n";
       exit(1);
     }
-  } else if (numCellsRootMesh == -1) {
+  }
+  else if (numCellsRootMesh == -1)
+  {
     numCellsRootMesh = numCells;
   }
 
@@ -607,7 +672,8 @@ void run(ProblemChoice problemChoice, int &iterationCount, int spaceDim, int num
   MeshPtr mesh = solution->mesh();
   BCPtr bc = solution->bc();
 
-  if (hOnly) {
+  if (hOnly)
+  {
     // then replace the k0Mesh with the h-coarsened mesh:
     MeshTopologyPtr coarseMeshTopo = mesh->getTopology()->getRootMeshTopology();
     int H1OrderP0 = k + 1;
@@ -615,29 +681,40 @@ void run(ProblemChoice problemChoice, int &iterationCount, int spaceDim, int num
   }
 
   Teuchos::RCP<Solver> solver;
-  if (!precondition) {
+  if (!precondition)
+  {
     solver = Teuchos::rcp( new AztecSolver(cgMaxIterations,cgTol,schwarzOverlap,precondition, schwarzBlockFactorization, schwarzLevelOfFill, schwarzFillRatio) );
     ((AztecSolver*) solver.get())->setAztecOutputLevel(AztecOutputLevel);
-  } else if (schwarzOnly) {
-    if (smootherType==GMGOperator::CAMELLIA_ADDITIVE_SCHWARZ) {
+  }
+  else if (schwarzOnly)
+  {
+    if (smootherType==GMGOperator::CAMELLIA_ADDITIVE_SCHWARZ)
+    {
       solver = Teuchos::rcp( new AztecSolver(cgMaxIterations,cgTol,schwarzOverlap, precondition, schwarzBlockFactorization,
                                              schwarzLevelOfFill, schwarzFillRatio, mesh, solution->getDofInterpreter(), hOnly) );
-    } else {
+    }
+    else
+    {
       solver = Teuchos::rcp( new AztecSolver(cgMaxIterations,cgTol,schwarzOverlap,precondition, schwarzBlockFactorization,
                                              schwarzLevelOfFill, schwarzFillRatio) );
     }
     ((AztecSolver*) solver.get())->setAztecOutputLevel(AztecOutputLevel);
-  } else {
+  }
+  else
+  {
     BCPtr zeroBCs = bc->copyImposingZero();
     bool saveFactorization = true;
 
     Teuchos::RCP<Solver> coarseSolver = Teuchos::null;
     GMGSolver* gmgSolver = new GMGSolver(solution, k0Mesh, cgMaxIterations, cgTol, coarseSolver, useStaticCondensation);
 
-    if (coarseSolverChoice != Solver::GMGSolver_1_Level_h) {
+    if (coarseSolverChoice != Solver::GMGSolver_1_Level_h)
+    {
       coarseSolver = Solver::getSolver(coarseSolverChoice, saveFactorization,
                                        coarseCGTol, coarseMaxIterations);
-    } else {
+    }
+    else
+    {
       MeshTopologyPtr coarsestMeshTopo = k0Mesh->getTopology()->getRootMeshTopology();
       int H1OrderP0 = 0 + 1;
       MeshPtr coarsestMesh = Teuchos::rcp( new Mesh(coarsestMeshTopo, k0Mesh->bilinearForm(), H1OrderP0, delta_k) );
@@ -652,9 +729,12 @@ void run(ProblemChoice problemChoice, int &iterationCount, int spaceDim, int num
 
       SolverPtr coarsestSolver;
 
-      if (numGlobalDofs <= maxDofsForKLU) {
+      if (numGlobalDofs <= maxDofsForKLU)
+      {
         coarsestSolver = Solver::getSolver(Solver::KLU, saveFactorization);
-      } else {
+      }
+      else
+      {
         coarsestSolver = Solver::getSolver(Solver::SuperLUDist, saveFactorization);
       }
 
@@ -712,15 +792,23 @@ void run(ProblemChoice problemChoice, int &iterationCount, int spaceDim, int num
 
   solveTime = timer.ElapsedTime();
 
-  if (result == 0) {
-    if (!precondition) {
+  if (result == 0)
+  {
+    if (!precondition)
+    {
       iterationCount = ((AztecSolver *) solver.get())->iterationCount();
-    } else if (schwarzOnly) {
+    }
+    else if (schwarzOnly)
+    {
       iterationCount = ((AztecSolver *) solver.get())->iterationCount();
-    } else {
+    }
+    else
+    {
       iterationCount = ((GMGSolver *) solver.get())->iterationCount();
     }
-  } else {
+  }
+  else
+  {
     iterationCount = -1;
   }
 
@@ -728,18 +816,21 @@ void run(ProblemChoice problemChoice, int &iterationCount, int spaceDim, int num
   double energyErrorTotal = solution->energyErrorTotal();
 
   GMGSolver* fineSolver = dynamic_cast<GMGSolver*>(solver.get());
-  if (fineSolver != NULL) {
+  if (fineSolver != NULL)
+  {
     if (rank==0) cout << "************   Fine GMG Solver, timings   *************\n";
     fineSolver->gmgOperator().reportTimings();
 
     GMGSolver* coarseSolver = dynamic_cast<GMGSolver*>(fineSolver->gmgOperator().getCoarseSolver().get());
-    if (coarseSolver != NULL) {
+    if (coarseSolver != NULL)
+    {
       if (rank==0) cout << "************   Coarse GMG Solver, timings   *************\n";
       coarseSolver->gmgOperator().reportTimings();
       vector<int> iterationCountLog = coarseSolver->getIterationCountLog();
       if (rank==0) Camellia::print("coarseSolver iteration counts:",iterationCountLog);
       double totalIterationCount = 0;
-      for (int i=0; i<iterationCountLog.size(); i++) {
+      for (int i=0; i<iterationCountLog.size(); i++)
+      {
         totalIterationCount += iterationCountLog[i];
       }
       if (rank==0) cout << "Average coarse solver iteration count: " << totalIterationCount / iterationCountLog.size() << endl;
@@ -748,18 +839,23 @@ void run(ProblemChoice problemChoice, int &iterationCount, int spaceDim, int num
 
   GlobalIndexType numFluxDofs = mesh->numFluxDofs();
   GlobalIndexType numGlobalDofs = mesh->numGlobalDofs();
-  if ((rank==0) && reportEnergyError) {
+  if ((rank==0) && reportEnergyError)
+  {
     cout << "Mesh has " << mesh->numActiveElements() << " elements and " << numFluxDofs << " trace dofs (";
     cout << numGlobalDofs << " total dofs, including fields).\n";
     cout << "Energy error: " << energyErrorTotal << endl;
   }
 
-  if (writeAndExit) {
+  if (writeAndExit)
+  {
     Teuchos::RCP< Epetra_CrsMatrix > A = solution->getStiffnessMatrix();
     Teuchos::RCP< Epetra_CrsMatrix > M;
-    if (schwarzOnly) {
+    if (schwarzOnly)
+    {
       if (rank==0) cout << "writeAndExit not yet supported for schwarzOnly.\n";
-    } else {
+    }
+    else
+    {
       GMGOperator* op = &((GMGSolver*)solver.get())->gmgOperator();
 
       Teuchos::RCP< Epetra_CrsMatrix > A_coarse = op->getCoarseStiffnessMatrix();
@@ -796,68 +892,71 @@ void runMany(ProblemChoice problemChoice, int spaceDim, int delta_k, int minCell
              GMGOperator::FactorType schwarzBlockFactorization, int schwarzLevelOfFill, double schwarzFillRatio,
              Solver::SolverChoice coarseSolverChoice,
              double cgTol, int cgMaxIterations, int aztecOutputLevel, RunManyPreconditionerChoices preconditionerChoices,
-             int k, int overlapLevel, int numCellsRootMesh, bool reportTimings, bool hOnly, int maxCells, bool useZeroMeanConstraints) {
+             int k, int overlapLevel, int numCellsRootMesh, bool reportTimings, bool hOnly, int maxCells, bool useZeroMeanConstraints)
+{
   int rank = Teuchos::GlobalMPISession::getRank();
 
   string problemChoiceString;
-  switch (problemChoice) {
-    case Poisson:
-      problemChoiceString = "Poisson";
-      break;
-    case ConvectionDiffusion:
-      problemChoiceString = "ConvectionDiffusion";
-      break;
-    case Stokes:
-      problemChoiceString = "Stokes";
-      break;
-    case NavierStokes:
-      problemChoiceString = "NavierStokes";
-    default:
-      TEUCHOS_TEST_FOR_EXCEPTION(true, std::invalid_argument, "Unhandled problem choice");
-      break;
+  switch (problemChoice)
+  {
+  case Poisson:
+    problemChoiceString = "Poisson";
+    break;
+  case ConvectionDiffusion:
+    problemChoiceString = "ConvectionDiffusion";
+    break;
+  case Stokes:
+    problemChoiceString = "Stokes";
+    break;
+  case NavierStokes:
+    problemChoiceString = "NavierStokes";
+  default:
+    TEUCHOS_TEST_FOR_EXCEPTION(true, std::invalid_argument, "Unhandled problem choice");
+    break;
   }
 
   string preconditionerChoiceString;
-  switch (preconditionerChoices) {
-    case All:
-      preconditionerChoiceString = "All";
-      break;
-    case AllGMG:
-      preconditionerChoiceString = "AllGMG";
-      break;
-    case AllSchwarz:
-      preconditionerChoiceString = "AllSchwarz";
-      break;
-    case DontPrecondition:
-      preconditionerChoiceString = "NoPrecondition";
-      break;
-    case GMGAlgebraicSchwarz:
-      preconditionerChoiceString = "GMGAlgebraicSchwarz";
-      break;
-    case GMGGeometricSchwarz:
-      preconditionerChoiceString = "GMGGeometricSchwarz";
-      break;
-    case GMGBlockJacobi:
-      preconditionerChoiceString = "GMGBlockJacobi";
-      break;
-    case GMGPointJacobi:
-      preconditionerChoiceString = "GMGPointJacobi";
-      break;
-    case GMGBlockSymmetricGaussSeidel:
-      preconditionerChoiceString = "GMGBlockGaussSeidel";
-      break;
-    case GMGPointSymmetricGaussSeidel:
-      preconditionerChoiceString = "GMGPointGaussSeidel";
-      break;
-    case AlgebraicSchwarz:
-      preconditionerChoiceString = "AlgebraicSchwarz";
-      break;
-    case GeometricSchwarz:
-      preconditionerChoiceString = "GeometricSchwarz";
-      break;
-    default:
-      TEUCHOS_TEST_FOR_EXCEPTION(true, std::invalid_argument, "Unhandled preconditioner choice subset");
-      break;
+  switch (preconditionerChoices)
+  {
+  case All:
+    preconditionerChoiceString = "All";
+    break;
+  case AllGMG:
+    preconditionerChoiceString = "AllGMG";
+    break;
+  case AllSchwarz:
+    preconditionerChoiceString = "AllSchwarz";
+    break;
+  case DontPrecondition:
+    preconditionerChoiceString = "NoPrecondition";
+    break;
+  case GMGAlgebraicSchwarz:
+    preconditionerChoiceString = "GMGAlgebraicSchwarz";
+    break;
+  case GMGGeometricSchwarz:
+    preconditionerChoiceString = "GMGGeometricSchwarz";
+    break;
+  case GMGBlockJacobi:
+    preconditionerChoiceString = "GMGBlockJacobi";
+    break;
+  case GMGPointJacobi:
+    preconditionerChoiceString = "GMGPointJacobi";
+    break;
+  case GMGBlockSymmetricGaussSeidel:
+    preconditionerChoiceString = "GMGBlockGaussSeidel";
+    break;
+  case GMGPointSymmetricGaussSeidel:
+    preconditionerChoiceString = "GMGPointGaussSeidel";
+    break;
+  case AlgebraicSchwarz:
+    preconditionerChoiceString = "AlgebraicSchwarz";
+    break;
+  case GeometricSchwarz:
+    preconditionerChoiceString = "GeometricSchwarz";
+    break;
+  default:
+    TEUCHOS_TEST_FOR_EXCEPTION(true, std::invalid_argument, "Unhandled preconditioner choice subset");
+    break;
   }
 
   vector<bool> preconditionValues;
@@ -865,96 +964,101 @@ void runMany(ProblemChoice problemChoice, int spaceDim, int delta_k, int minCell
   vector<bool> schwarzOnly_maxChoices;
   vector<GMGOperator::SmootherChoice> smootherChoices;
 
-  switch (preconditionerChoices) {
-    case DontPrecondition:
-      preconditionValues.push_back(false);
-      schwarzOnly_maxChoices.push_back(false);
-      smootherChoices.push_back(GMGOperator::NONE);
-      break;
-    case GMGAlgebraicSchwarz:
-      preconditionValues.push_back(true);
-      schwarzOnly_maxChoices.push_back(false);
-      smootherChoices.push_back(GMGOperator::IFPACK_ADDITIVE_SCHWARZ);
-      break;
-    case GMGGeometricSchwarz:
-      preconditionValues.push_back(true);
-      schwarzOnly_maxChoices.push_back(false);
-      smootherChoices.push_back(GMGOperator::CAMELLIA_ADDITIVE_SCHWARZ);
-      break;
-    case GMGBlockJacobi:
-      preconditionValues.push_back(true);
-      schwarzOnly_maxChoices.push_back(false);
-      smootherChoices.push_back(GMGOperator::BLOCK_JACOBI);
-      break;
-    case GMGPointJacobi:
-      preconditionValues.push_back(true);
-      schwarzOnly_maxChoices.push_back(false);
-      smootherChoices.push_back(GMGOperator::POINT_JACOBI);
-      break;
-    case GMGBlockSymmetricGaussSeidel:
-      preconditionValues.push_back(true);
-      schwarzOnly_maxChoices.push_back(false);
-      smootherChoices.push_back(GMGOperator::BLOCK_SYMMETRIC_GAUSS_SEIDEL);
-      break;
-    case GMGPointSymmetricGaussSeidel:
-      preconditionValues.push_back(true);
-      schwarzOnly_maxChoices.push_back(false);
-      smootherChoices.push_back(GMGOperator::POINT_SYMMETRIC_GAUSS_SEIDEL);
-      break;
-    case AlgebraicSchwarz:
-      preconditionValues.push_back(true);
-      schwarzOnly_maxChoices.push_back(true);
-      smootherChoices.push_back(GMGOperator::IFPACK_ADDITIVE_SCHWARZ);
-      break;
-    case GeometricSchwarz:
-      preconditionValues.push_back(true);
-      schwarzOnly_maxChoices.push_back(true);
-      smootherChoices.push_back(GMGOperator::CAMELLIA_ADDITIVE_SCHWARZ);
-      break;
-    case AllGMG:
-      preconditionValues.push_back(true);
-      schwarzOnly_maxChoices.push_back(false);
-      smootherChoices.push_back(GMGOperator::IFPACK_ADDITIVE_SCHWARZ);
-      smootherChoices.push_back(GMGOperator::CAMELLIA_ADDITIVE_SCHWARZ);
+  switch (preconditionerChoices)
+  {
+  case DontPrecondition:
+    preconditionValues.push_back(false);
+    schwarzOnly_maxChoices.push_back(false);
+    smootherChoices.push_back(GMGOperator::NONE);
+    break;
+  case GMGAlgebraicSchwarz:
+    preconditionValues.push_back(true);
+    schwarzOnly_maxChoices.push_back(false);
+    smootherChoices.push_back(GMGOperator::IFPACK_ADDITIVE_SCHWARZ);
+    break;
+  case GMGGeometricSchwarz:
+    preconditionValues.push_back(true);
+    schwarzOnly_maxChoices.push_back(false);
+    smootherChoices.push_back(GMGOperator::CAMELLIA_ADDITIVE_SCHWARZ);
+    break;
+  case GMGBlockJacobi:
+    preconditionValues.push_back(true);
+    schwarzOnly_maxChoices.push_back(false);
+    smootherChoices.push_back(GMGOperator::BLOCK_JACOBI);
+    break;
+  case GMGPointJacobi:
+    preconditionValues.push_back(true);
+    schwarzOnly_maxChoices.push_back(false);
+    smootherChoices.push_back(GMGOperator::POINT_JACOBI);
+    break;
+  case GMGBlockSymmetricGaussSeidel:
+    preconditionValues.push_back(true);
+    schwarzOnly_maxChoices.push_back(false);
+    smootherChoices.push_back(GMGOperator::BLOCK_SYMMETRIC_GAUSS_SEIDEL);
+    break;
+  case GMGPointSymmetricGaussSeidel:
+    preconditionValues.push_back(true);
+    schwarzOnly_maxChoices.push_back(false);
+    smootherChoices.push_back(GMGOperator::POINT_SYMMETRIC_GAUSS_SEIDEL);
+    break;
+  case AlgebraicSchwarz:
+    preconditionValues.push_back(true);
+    schwarzOnly_maxChoices.push_back(true);
+    smootherChoices.push_back(GMGOperator::IFPACK_ADDITIVE_SCHWARZ);
+    break;
+  case GeometricSchwarz:
+    preconditionValues.push_back(true);
+    schwarzOnly_maxChoices.push_back(true);
+    smootherChoices.push_back(GMGOperator::CAMELLIA_ADDITIVE_SCHWARZ);
+    break;
+  case AllGMG:
+    preconditionValues.push_back(true);
+    schwarzOnly_maxChoices.push_back(false);
+    smootherChoices.push_back(GMGOperator::IFPACK_ADDITIVE_SCHWARZ);
+    smootherChoices.push_back(GMGOperator::CAMELLIA_ADDITIVE_SCHWARZ);
 //      smootherChoices.push_back(GMGOperator::BLOCK_SYMMETRIC_GAUSS_SEIDEL);
-      smootherChoices.push_back(GMGOperator::POINT_SYMMETRIC_GAUSS_SEIDEL);
+    smootherChoices.push_back(GMGOperator::POINT_SYMMETRIC_GAUSS_SEIDEL);
 //      smootherChoices.push_back(GMGOperator::BLOCK_JACOBI);
-      smootherChoices.push_back(GMGOperator::POINT_JACOBI);
-      break;
-    case AllSchwarz:
-      preconditionValues.push_back(true);
-      schwarzOnly_maxChoices.push_back(true);
-      smootherChoices.push_back(GMGOperator::IFPACK_ADDITIVE_SCHWARZ);
-      smootherChoices.push_back(GMGOperator::CAMELLIA_ADDITIVE_SCHWARZ);
-      break;
-    case All:
-      preconditionValues.push_back(false);
-      preconditionValues.push_back(true);
-      schwarzOnly_maxChoices.push_back(false);
-      schwarzOnly_maxChoices.push_back(true);
-      smootherChoices.push_back(GMGOperator::IFPACK_ADDITIVE_SCHWARZ);
-      smootherChoices.push_back(GMGOperator::CAMELLIA_ADDITIVE_SCHWARZ);
+    smootherChoices.push_back(GMGOperator::POINT_JACOBI);
+    break;
+  case AllSchwarz:
+    preconditionValues.push_back(true);
+    schwarzOnly_maxChoices.push_back(true);
+    smootherChoices.push_back(GMGOperator::IFPACK_ADDITIVE_SCHWARZ);
+    smootherChoices.push_back(GMGOperator::CAMELLIA_ADDITIVE_SCHWARZ);
+    break;
+  case All:
+    preconditionValues.push_back(false);
+    preconditionValues.push_back(true);
+    schwarzOnly_maxChoices.push_back(false);
+    schwarzOnly_maxChoices.push_back(true);
+    smootherChoices.push_back(GMGOperator::IFPACK_ADDITIVE_SCHWARZ);
+    smootherChoices.push_back(GMGOperator::CAMELLIA_ADDITIVE_SCHWARZ);
 //      smootherChoices.push_back(GMGOperator::BLOCK_SYMMETRIC_GAUSS_SEIDEL);
-      smootherChoices.push_back(GMGOperator::POINT_SYMMETRIC_GAUSS_SEIDEL);
+    smootherChoices.push_back(GMGOperator::POINT_SYMMETRIC_GAUSS_SEIDEL);
 //      smootherChoices.push_back(GMGOperator::BLOCK_JACOBI);
-      smootherChoices.push_back(GMGOperator::POINT_JACOBI);
-      break;
+    smootherChoices.push_back(GMGOperator::POINT_JACOBI);
+    break;
   }
 
   vector<int> kValues;
-  if (k == -1) {
+  if (k == -1)
+  {
     kValues.push_back(1);
     kValues.push_back(2);
     if (spaceDim < 3) kValues.push_back(4);
     if (spaceDim < 2) kValues.push_back(8);
     if (spaceDim < 2) kValues.push_back(16);
-  } else {
+  }
+  else
+  {
     kValues.push_back(k);
   }
 
   vector<int> numCellsValues;
   int numCells = minCells;
-  while (pow((double)numCells,spaceDim) <= maxCells) {
+  while (pow((double)numCells,spaceDim) <= maxCells)
+  {
     // want to do as many as we can with just one cell per processor
     numCellsValues.push_back(numCells);
     numCells *= 2;
@@ -963,56 +1067,77 @@ void runMany(ProblemChoice problemChoice, int spaceDim, int delta_k, int minCell
   ostringstream results;
   results << "Preconditioner\tSmoother\tOverlap\tnum_cells\tmesh_width\tk\tIterations\tSolve_time\n";
 
-  for (vector<bool>::iterator preconditionChoiceIt = preconditionValues.begin(); preconditionChoiceIt != preconditionValues.end(); preconditionChoiceIt++) {
+  for (vector<bool>::iterator preconditionChoiceIt = preconditionValues.begin(); preconditionChoiceIt != preconditionValues.end(); preconditionChoiceIt++)
+  {
     bool precondition = *preconditionChoiceIt;
 
     vector<bool> schwarzOnlyValues;
     vector<GMGOperator::SmootherChoice> smootherChoiceValues;
-    if (precondition) {
+    if (precondition)
+    {
       schwarzOnlyValues = schwarzOnly_maxChoices;
       smootherChoiceValues = smootherChoices;
-    } else {
+    }
+    else
+    {
       // schwarzOnly and smootherChoice ignored; just use one of each
       schwarzOnlyValues.push_back(false);
       smootherChoiceValues.push_back(GMGOperator::NONE);
     }
-    for (vector<bool>::iterator schwarzOnlyChoiceIt = schwarzOnlyValues.begin(); schwarzOnlyChoiceIt != schwarzOnlyValues.end(); schwarzOnlyChoiceIt++) {
+    for (vector<bool>::iterator schwarzOnlyChoiceIt = schwarzOnlyValues.begin(); schwarzOnlyChoiceIt != schwarzOnlyValues.end(); schwarzOnlyChoiceIt++)
+    {
       bool schwarzOnly = *schwarzOnlyChoiceIt;
-      for (vector<GMGOperator::SmootherChoice>::iterator smootherIt = smootherChoiceValues.begin(); smootherIt != smootherChoiceValues.end(); smootherIt++) {
+      for (vector<GMGOperator::SmootherChoice>::iterator smootherIt = smootherChoiceValues.begin(); smootherIt != smootherChoiceValues.end(); smootherIt++)
+      {
         GMGOperator::SmootherChoice smoother = *smootherIt;
 
         vector<int> overlapValues;
-        if (precondition && ((smoother==GMGOperator::CAMELLIA_ADDITIVE_SCHWARZ) || (smoother==GMGOperator::IFPACK_ADDITIVE_SCHWARZ))) {
-          if (overlapLevel == -1) {
+        if (precondition && ((smoother==GMGOperator::CAMELLIA_ADDITIVE_SCHWARZ) || (smoother==GMGOperator::IFPACK_ADDITIVE_SCHWARZ)))
+        {
+          if (overlapLevel == -1)
+          {
             overlapValues.push_back(0);
             overlapValues.push_back(1);
             if (spaceDim < 3) overlapValues.push_back(2);
-          } else {
+          }
+          else
+          {
             overlapValues.push_back(overlapLevel);
           }
-        } else {
+        }
+        else
+        {
           overlapValues.push_back(0);
         }
 
         // smoother choice description
         string S_str = smootherString(smoother);
         string M_str; // preconditioner descriptor for output
-        if (!precondition) {
+        if (!precondition)
+        {
           M_str = "None";
-        } else {
-          if (schwarzOnly) {
+        }
+        else
+        {
+          if (schwarzOnly)
+          {
             M_str = S_str;
             S_str = "-"; // no smoother
-          } else {
+          }
+          else
+          {
             M_str = "GMG";
           }
         }
 
-        for (vector<int>::iterator overlapValueIt = overlapValues.begin(); overlapValueIt != overlapValues.end(); overlapValueIt++) {
+        for (vector<int>::iterator overlapValueIt = overlapValues.begin(); overlapValueIt != overlapValues.end(); overlapValueIt++)
+        {
           int overlapValue = *overlapValueIt;
-          for (vector<int>::iterator numCellsValueIt = numCellsValues.begin(); numCellsValueIt != numCellsValues.end(); numCellsValueIt++) {
+          for (vector<int>::iterator numCellsValueIt = numCellsValues.begin(); numCellsValueIt != numCellsValues.end(); numCellsValueIt++)
+          {
             int numCells1D = *numCellsValueIt;
-            for (vector<int>::iterator kValueIt = kValues.begin(); kValueIt != kValues.end(); kValueIt++) {
+            for (vector<int>::iterator kValueIt = kValues.begin(); kValueIt != kValues.end(); kValueIt++)
+            {
               int k = *kValueIt;
 
               int iterationCount;
@@ -1043,20 +1168,24 @@ void runMany(ProblemChoice problemChoice, int spaceDim, int delta_k, int minCell
     }
   }
 
-  if (rank == 0) {
+  if (rank == 0)
+  {
     ostringstream filename;
     filename << problemChoiceString << "Driver" << spaceDim << "D_";
     filename << preconditionerChoiceString;
     if (schwarzBlockFactorization != GMGOperator::Direct)
       filename << "_schwarzFactorization_" << getFactorizationTypeString(schwarzBlockFactorization);
-    if (overlapLevel != -1) {
+    if (overlapLevel != -1)
+    {
       filename << "_overlap" << overlapLevel;
     }
-    if (k != -1) {
+    if (k != -1)
+    {
       filename << "_k" << k;
     }
 
-    if (hOnly) {
+    if (hOnly)
+    {
       filename << "_hOnly";
     }
 
@@ -1071,7 +1200,8 @@ void runMany(ProblemChoice problemChoice, int spaceDim, int delta_k, int minCell
   }
 }
 
-int main(int argc, char *argv[]) {
+int main(int argc, char *argv[])
+{
 #ifdef ENABLE_INTEL_FLOATING_POINT_EXCEPTIONS
   cout << "NOTE: enabling floating point exceptions for divide by zero.\n";
   _MM_SET_EXCEPTION_MASK(_MM_GET_EXCEPTION_MASK() & ~_MM_MASK_INVALID);
@@ -1191,7 +1321,8 @@ int main(int argc, char *argv[]) {
 
   cmdp.setOption("gmgOperatorDebug", "gmgOperatorNormal", &runGMGOperatorInDebugMode, "Run GMGOperator in a debug mode");
 
-  if (cmdp.parse(argc,argv) != Teuchos::CommandLineProcessor::PARSE_SUCCESSFUL) {
+  if (cmdp.parse(argc,argv) != Teuchos::CommandLineProcessor::PARSE_SUCCESSFUL)
+  {
 #ifdef HAVE_MPI
     MPI_Finalize();
 #endif
@@ -1200,19 +1331,28 @@ int main(int argc, char *argv[]) {
 
   ProblemChoice problemChoice;
 
-  if (problemChoiceString == "Poisson") {
+  if (problemChoiceString == "Poisson")
+  {
     problemChoice = Poisson;
-  } else if (problemChoiceString == "ConvectionDiffusion") {
+  }
+  else if (problemChoiceString == "ConvectionDiffusion")
+  {
     problemChoice = ConvectionDiffusion;
-  } else if (problemChoiceString == "Stokes") {
+  }
+  else if (problemChoiceString == "Stokes")
+  {
     problemChoice = Stokes;
-  } else if (problemChoiceString == "Navier-Stokes") {
+  }
+  else if (problemChoiceString == "Navier-Stokes")
+  {
     if (rank==0) cout << "Navier-Stokes not yet supported by this driver!\n";
 #ifdef HAVE_MPI
     MPI_Finalize();
 #endif
     return -1;
-  } else {
+  }
+  else
+  {
     if (rank==0) cout << "Problem choice not recognized.\n";
 #ifdef HAVE_MPI
     MPI_Finalize();
@@ -1222,21 +1362,36 @@ int main(int argc, char *argv[]) {
 
   GMGOperator::SmootherChoice smootherChoice;
 
-  if (smootherChoiceStr == "None") {
+  if (smootherChoiceStr == "None")
+  {
     smootherChoice = GMGOperator::NONE;
-  } else if (smootherChoiceStr == "IfPack-Schwarz") {
+  }
+  else if (smootherChoiceStr == "IfPack-Schwarz")
+  {
     smootherChoice = GMGOperator::IFPACK_ADDITIVE_SCHWARZ;
-  } else if (smootherChoiceStr == "Camellia-Schwarz") {
+  }
+  else if (smootherChoiceStr == "Camellia-Schwarz")
+  {
     smootherChoice = GMGOperator::CAMELLIA_ADDITIVE_SCHWARZ;
-  } else if (smootherChoiceStr == "Point-Jacobi") {
+  }
+  else if (smootherChoiceStr == "Point-Jacobi")
+  {
     smootherChoice = GMGOperator::POINT_JACOBI;
-  } else if (smootherChoiceStr == "Block-Jacobi") {
+  }
+  else if (smootherChoiceStr == "Block-Jacobi")
+  {
     smootherChoice = GMGOperator::BLOCK_JACOBI;
-  } else if (smootherChoiceStr == "Point-Gauss-Seidel") {
+  }
+  else if (smootherChoiceStr == "Point-Gauss-Seidel")
+  {
     smootherChoice = GMGOperator::POINT_SYMMETRIC_GAUSS_SEIDEL;
-  } else if (smootherChoiceStr == "Block-Gauss-Seidel") {
+  }
+  else if (smootherChoiceStr == "Block-Gauss-Seidel")
+  {
     smootherChoice = GMGOperator::BLOCK_SYMMETRIC_GAUSS_SEIDEL;
-  } else {
+  }
+  else
+  {
     if (rank==0) cout << "Smoother choice string not recognized.\n";
 #ifdef HAVE_MPI
     MPI_Finalize();
@@ -1248,27 +1403,48 @@ int main(int argc, char *argv[]) {
 
   RunManyPreconditionerChoices runManySubsetChoice;
 
-  if (runManySubsetString == "All") {
+  if (runManySubsetString == "All")
+  {
     runManySubsetChoice = All;
-  } else if (runManySubsetString == "DontPrecondition") {
+  }
+  else if (runManySubsetString == "DontPrecondition")
+  {
     runManySubsetChoice = DontPrecondition;
-  } else if (runManySubsetString == "AllGMG") {
+  }
+  else if (runManySubsetString == "AllGMG")
+  {
     runManySubsetChoice = AllGMG;
-  } else if (runManySubsetString == "AllSchwarz") {
+  }
+  else if (runManySubsetString == "AllSchwarz")
+  {
     runManySubsetChoice = AllSchwarz;
-  } else if (runManySubsetString == "AlgebraicSchwarz") {
+  }
+  else if (runManySubsetString == "AlgebraicSchwarz")
+  {
     runManySubsetChoice = AlgebraicSchwarz;
-  } else if (runManySubsetString == "GeometricSchwarz") {
+  }
+  else if (runManySubsetString == "GeometricSchwarz")
+  {
     runManySubsetChoice = GeometricSchwarz;
-  } else if (runManySubsetString == "GMGAlgebraicSchwarz") {
+  }
+  else if (runManySubsetString == "GMGAlgebraicSchwarz")
+  {
     runManySubsetChoice = GMGAlgebraicSchwarz;
-  } else if (runManySubsetString == "GMGGeometricSchwarz") {
+  }
+  else if (runManySubsetString == "GMGGeometricSchwarz")
+  {
     runManySubsetChoice = GMGGeometricSchwarz;
-  } else if (runManySubsetString == "GMGPointGaussSeidel") {
+  }
+  else if (runManySubsetString == "GMGPointGaussSeidel")
+  {
     runManySubsetChoice = GMGPointSymmetricGaussSeidel;
-  } else if (runManySubsetString == "GMGPointJacobi") {
+  }
+  else if (runManySubsetString == "GMGPointJacobi")
+  {
     runManySubsetChoice = GMGPointJacobi;
-  } else {
+  }
+  else
+  {
     if (rank==0) cout << "Run many subset string not recognized.\n";
 #ifdef HAVE_MPI
     MPI_Finalize();
@@ -1280,7 +1456,8 @@ int main(int argc, char *argv[]) {
 
   if (delta_k==-1) delta_k = spaceDim;
 
-  if (! runAutomatic) {
+  if (! runAutomatic)
+  {
     int iterationCount;
     bool reportEnergyError = true;
 
@@ -1295,8 +1472,11 @@ int main(int argc, char *argv[]) {
         cgTol, cgMaxIterations, AztecOutputLevel, reportTimings, solveTime, reportEnergyError, numCellsRootMesh, hOnly, useZeroMeanConstraints, writeAndExit);
 
     if (rank==0) cout << "Iteration count: " << iterationCount << "; solve time " << solveTime << " seconds." << endl;
-  } else {
-    if (rank==0) {
+  }
+  else
+  {
+    if (rank==0)
+    {
       cout << "Running " << problemChoiceString << " solver in automatic mode (subset: ";
       cout << runManySubsetString << "), with spaceDim " << spaceDim;
       cout << ", delta_k = " << delta_k << ", ";
@@ -1307,7 +1487,8 @@ int main(int argc, char *argv[]) {
       cout << "CG tolerance = " << cgTol << ", max iterations = " << cgMaxIterations << endl;
     }
 
-    if (maxCells == -1) {
+    if (maxCells == -1)
+    {
       maxCells = Teuchos::GlobalMPISession::getNProc(); // by default, ensure max of 1 cell per MPI node
     }
     runMany(problemChoice, spaceDim, delta_k, runManyMinCells,

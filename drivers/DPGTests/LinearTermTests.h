@@ -23,7 +23,8 @@
 
 #include "BF.h"
 
-class LinearTermTests : public TestSuite {
+class LinearTermTests : public TestSuite
+{
   VarFactoryPtr varFactory;
 
   VarPtr v1, v2, v3; // HGRAD members (test variables)

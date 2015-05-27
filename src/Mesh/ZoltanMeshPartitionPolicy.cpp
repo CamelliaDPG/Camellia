@@ -31,20 +31,23 @@
 using namespace Intrepid;
 using namespace Camellia;
 
-ZoltanMeshPartitionPolicy::ZoltanMeshPartitionPolicy(){
+ZoltanMeshPartitionPolicy::ZoltanMeshPartitionPolicy()
+{
   string partitionerName = "HSFC"; // was "BLOCK"
   string debug_level = "0"; // was "10"
 //  cout << "ZoltanMeshPartitionPolicy: Defaulting to HSFC partitioner" << endl;
   _ZoltanPartitioner = partitionerName;
   _debug_level = debug_level;
 }
-ZoltanMeshPartitionPolicy::ZoltanMeshPartitionPolicy(string partitionerName){
+ZoltanMeshPartitionPolicy::ZoltanMeshPartitionPolicy(string partitionerName)
+{
   string debug_level = "0";
   _ZoltanPartitioner = partitionerName;
   _debug_level = debug_level;
 }
 
-void ZoltanMeshPartitionPolicy::partitionMesh(Mesh *mesh, PartitionIndexType numPartitions) {
+void ZoltanMeshPartitionPolicy::partitionMesh(Mesh *mesh, PartitionIndexType numPartitions)
+{
   int myNode = Teuchos::GlobalMPISession::getRank();
 //  cout << "Entered ZoltanMeshPartitionPolicy::partitionMesh() on rank " << myNode << endl;
 //  cout << "ZoltanMeshPartitionPolicy::partitionMesh, registered solution count: " << mesh->globalDofAssignment()->getRegisteredSolutions().size() << endl;
@@ -58,22 +61,26 @@ void ZoltanMeshPartitionPolicy::partitionMesh(Mesh *mesh, PartitionIndexType num
 
   MeshTopologyPtr meshTopology = mesh->getTopology();
 
-  if (meshTopology->getSpaceDim() > 3) {
+  if (meshTopology->getSpaceDim() > 3)
+  {
     cout << "WARNING: in ZoltanMeshPartitionPolicy, spaceDim > 3, but HSFC only supports spaceDim <= 3.  For the moment, as a stopgap, all cells will be placed on rank 0.  This should be changed!\n";
     numNodes = 1;
   }
 
-  if (numNodes>1){
+  if (numNodes>1)
+  {
 #ifdef HAVE_MPI
     Zoltan *zz = new Zoltan(MPI::COMM_WORLD);
-    if (zz == NULL){
+    if (zz == NULL)
+    {
       cout << "ZoltanMeshPartititionPolicy: construction of new Zoltan object failed.\n";
       MPI::Finalize();
       exit(0);
     }
     bool useLocalIDs = false;
 
-    if (_debug_level == "0") {
+    if (_debug_level == "0")
+    {
       // then suppress all debug output (in particular, the "ZOLTAN Load balancing method" messages) as follows:
       ostringstream numProcStream;
       numProcStream << numNodes;
@@ -86,9 +93,12 @@ void ZoltanMeshPartitionPolicy::partitionMesh(Mesh *mesh, PartitionIndexType num
     //cout << "Setting zoltan params" << endl;
     zz->Set_Param( "LB_METHOD", _ZoltanPartitioner.c_str());    /* Zoltan method */
     zz->Set_Param( "NUM_GID_ENTRIES", "1");  /* global ID is 1 integer */
-    if (useLocalIDs){
+    if (useLocalIDs)
+    {
       zz->Set_Param( "NUM_LID_ENTRIES", "1");  /* local ID is 1 integer */
-    }else{
+    }
+    else
+    {
       zz->Set_Param( "NUM_LID_ENTRIES", "0");  /* local ID is null */
     }
     zz->Set_Param( "OBJ_WEIGHT_DIM", "0");
@@ -131,36 +141,46 @@ void ZoltanMeshPartitionPolicy::partitionMesh(Mesh *mesh, PartitionIndexType num
                               numImport, importGlobalIds, importLocalIds, importProcs, importToPart,
                               numExport, exportGlobalIds, exportLocalIds, exportProcs, exportToPart);
 
-    if (rc == ZOLTAN_WARN) {
-      if (numActiveElements / numPartitions > 0) { // if the warning is just because not every process received an element, don't even note that the warning was issued
-        if (myNode == 0) {
+    if (rc == ZOLTAN_WARN)
+    {
+      if (numActiveElements / numPartitions > 0)   // if the warning is just because not every process received an element, don't even note that the warning was issued
+      {
+        if (myNode == 0)
+        {
 //          printf("Partitioning with Zoltan on process %d returned a warning.  # active elements = %d\n",myNode,numActiveElements);
           printf("Partitioning with Zoltan returned a warning.  # active elements = %d\n",numActiveElements);
         }
-      } else
+      }
+      else
         rc = ZOLTAN_OK;
     }
 
-    if (rc == ZOLTAN_FATAL) {
+    if (rc == ZOLTAN_FATAL)
+    {
       printf("Partitioning failed on process %d with a fatal error.  Exiting...\n",myNode);
       exit(1);
-    } else {
+    }
+    else
+    {
 
       /* ----------- modify output array partitionedActiveCells ------- */
 
       set<GlobalIndexType> rankLocalCells = getRankLocalCellIDs(mesh);
       // remove export IDs FOR THIS NODE
-      for (int i=0;i<numExport;i++){
+      for (int i=0; i<numExport; i++)
+      {
         rankLocalCells.erase(exportGlobalIds[i]);
       }
       // add import IDs FOR THIS NODE
-      for (int i=0;i<numImport;i++){
+      for (int i=0; i<numImport; i++)
+      {
         rankLocalCells.insert(importGlobalIds[i]);
       }
       // compute total number of IDs for this proc
       bool reportAssignment = false;
 //      bool reportAssignment = (rc==ZOLTAN_WARN);
-      if (reportAssignment) {
+      if (reportAssignment)
+      {
         ostringstream rankListLabel;
         rankListLabel << "For rank " << myNode << ", Zoltan assigned IDs: ";
         Camellia::print(rankListLabel.str(), rankLocalCells);
@@ -186,7 +206,8 @@ void ZoltanMeshPartitionPolicy::partitionMesh(Mesh *mesh, PartitionIndexType num
       myPartition.initialize(-1);
 
       int index = 0;
-      for (set<GlobalIndexType>::iterator myCellIt = rankLocalCells.begin(); myCellIt != rankLocalCells.end(); myCellIt++) {
+      for (set<GlobalIndexType>::iterator myCellIt = rankLocalCells.begin(); myCellIt != rankLocalCells.end(); myCellIt++)
+      {
         myPartition[index] = *myCellIt;
         index++;
       }
@@ -194,8 +215,10 @@ void ZoltanMeshPartitionPolicy::partitionMesh(Mesh *mesh, PartitionIndexType num
       MPIWrapper::allGatherHomogeneous(allPartitions, myPartition);
 
       // convert the ints to GlobalIndexType -- if sizeof(GlobalIndexType) ever is bigger than sizeof(int), then we'll want to do something else above to pack the cell IDs into ints, etc.
-      for (int node=0;node<numNodes;node++){
-        for (int i=0;i<maxPartitionSize;i++){
+      for (int node=0; node<numNodes; node++)
+      {
+        for (int i=0; i<maxPartitionSize; i++)
+        {
           partitionedActiveCells(node,i) = allPartitions(node,i);
         }
       }
@@ -207,7 +230,8 @@ void ZoltanMeshPartitionPolicy::partitionMesh(Mesh *mesh, PartitionIndexType num
       int rc = zz->Migrate(numImport, importGlobalIds, importLocalIds, importProcs, importToPart,
                            numExport, exportGlobalIds, exportLocalIds, exportProcs, exportToPart);
 
-      if (rc == ZOLTAN_FATAL) {
+      if (rc == ZOLTAN_FATAL)
+      {
         printf("Zoltan: migration failed on process %d with a fatal error.  Exiting...\n",myNode);
         exit(1);
       }
@@ -229,11 +253,14 @@ void ZoltanMeshPartitionPolicy::partitionMesh(Mesh *mesh, PartitionIndexType num
 
     delete zz;
 #endif
-  } else { // if just one node, partition = active cellID array
+  }
+  else     // if just one node, partition = active cellID array
+  {
     set<GlobalIndexType> activeCellIDSet = mesh->getTopology()->getActiveCellIndices();
     FieldContainer<GlobalIndexType> partitionedActiveCells(numNodes,numActiveElements);
     int i=0;
-    for (set<GlobalIndexType>::iterator cellIDIt = activeCellIDSet.begin();cellIDIt != activeCellIDSet.end(); cellIDIt++, i++){
+    for (set<GlobalIndexType>::iterator cellIDIt = activeCellIDSet.begin(); cellIDIt != activeCellIDSet.end(); cellIDIt++, i++)
+    {
       //    for (vector<Teuchos::RCP< Element > >::iterator elemIt=activeElements.begin();elemIt!=activeElements.end();elemIt++){
       partitionedActiveCells(0,i) = *cellIDIt;
     }
@@ -256,7 +283,8 @@ void ZoltanMeshPartitionPolicy::partitionMesh(Mesh *mesh, PartitionIndexType num
 /*-------------------------ZOLTAN QUERY FUNCTIONS -------------------*/
 
 // get number of active elements
-int ZoltanMeshPartitionPolicy::get_number_of_objects(void *data, int *ierr){
+int ZoltanMeshPartitionPolicy::get_number_of_objects(void *data, int *ierr)
+{
 //  int myNode = Teuchos::GlobalMPISession::getRank();
 //  int numNodes = Teuchos::GlobalMPISession::getNProc();
 
@@ -280,13 +308,15 @@ int ZoltanMeshPartitionPolicy::get_number_of_objects(void *data, int *ierr){
 }
 
 void ZoltanMeshPartitionPolicy::get_object_list(void *data, int sizeGID, int sizeLID,
-                                                ZOLTAN_ID_PTR globalID, ZOLTAN_ID_PTR localID,
-                                                int wgt_dim, float *obj_wgts, int *ierr) {
+    ZOLTAN_ID_PTR globalID, ZOLTAN_ID_PTR localID,
+    int wgt_dim, float *obj_wgts, int *ierr)
+{
   Mesh* mesh = (Mesh*) data;
 
   set<GlobalIndexType> rankLocalCellIDs = getRankLocalCellIDs(mesh);
   int i=0;
-  for (set<unsigned>::const_iterator cellIDIt = rankLocalCellIDs.begin(); cellIDIt != rankLocalCellIDs.end(); cellIDIt++) {
+  for (set<unsigned>::const_iterator cellIDIt = rankLocalCellIDs.begin(); cellIDIt != rankLocalCellIDs.end(); cellIDIt++)
+  {
     globalID[i]= *cellIDIt;
     i++;
   }
@@ -296,7 +326,8 @@ void ZoltanMeshPartitionPolicy::get_object_list(void *data, int sizeGID, int siz
   return;
 }
 
-int ZoltanMeshPartitionPolicy::get_num_geom(void *data, int *ierr){
+int ZoltanMeshPartitionPolicy::get_num_geom(void *data, int *ierr)
+{
   Mesh *mesh = (Mesh*)data;
   MeshTopologyPtr meshTopology = mesh->getTopology();
   *ierr = ZOLTAN_OK;
@@ -309,17 +340,20 @@ int ZoltanMeshPartitionPolicy::get_num_geom(void *data, int *ierr){
 }
 
 // get a single coordinate identifying an element
-void ZoltanMeshPartitionPolicy::get_geom_list(void *data, int num_gid_entries, int num_lid_entries, int num_obj, ZOLTAN_ID_PTR global_ids, ZOLTAN_ID_PTR local_ids, int num_dim, double *geom_vec, int *ierr){
+void ZoltanMeshPartitionPolicy::get_geom_list(void *data, int num_gid_entries, int num_lid_entries, int num_obj, ZOLTAN_ID_PTR global_ids, ZOLTAN_ID_PTR local_ids, int num_dim, double *geom_vec, int *ierr)
+{
 
   Mesh *mesh = (Mesh*) data;
 
   // loop thru all objects
-  for (int i=0;i<num_obj;i++){
+  for (int i=0; i<num_obj; i++)
+  {
     GlobalIndexType cellID = global_ids[i];
     vector<double> centroid = mesh->getTopology()->getCellCentroid(cellID);
 
     // store vertex centroid
-    for (int k=0;k<num_dim;k++){
+    for (int k=0; k<num_dim; k++)
+    {
       geom_vec[i*num_dim+k] = centroid[k];
     }
   }
@@ -476,11 +510,12 @@ void ZoltanMeshPartitionPolicy::get_child_weight(void *data, int num_gid_entries
 
 
 int ZoltanMeshPartitionPolicy::get_elem_data_size(void *data,
-                                                  int num_gid_entries,
-                                                  int num_lid_entries,
-                                                  ZOLTAN_ID_PTR global_id,
-                                                  ZOLTAN_ID_PTR local_id,
-                                                  int *ierr) {
+    int num_gid_entries,
+    int num_lid_entries,
+    ZOLTAN_ID_PTR global_id,
+    ZOLTAN_ID_PTR local_id,
+    int *ierr)
+{
 
   // returns size in bytes
   Mesh *mesh = (Mesh*) data;
@@ -489,20 +524,22 @@ int ZoltanMeshPartitionPolicy::get_elem_data_size(void *data,
   return CellDataMigration::dataSize(mesh, cellID);
 }
 void ZoltanMeshPartitionPolicy::pack_elem_data(void *data,
-                                               int num_gid_entries,
-                                               int num_lid_entries,
-                                               ZOLTAN_ID_PTR global_id,
-                                               ZOLTAN_ID_PTR local_id,
-                                               int dest,
-                                               int size,
-                                               char *buf,
-                                               int *ierr) {
+    int num_gid_entries,
+    int num_lid_entries,
+    ZOLTAN_ID_PTR global_id,
+    ZOLTAN_ID_PTR local_id,
+    int dest,
+    int size,
+    char *buf,
+    int *ierr)
+{
   Mesh *mesh = (Mesh*) data;
   GlobalIndexType cellID = *global_id;
   CellPtr cell = mesh->getTopology()->getCell(cellID);
   bool isChild = cell->getParent().get() != NULL;
   bool hasData = false;
-  if (mesh->globalDofAssignment()->getRegisteredSolutions().size() > 0) {
+  if (mesh->globalDofAssignment()->getRegisteredSolutions().size() > 0)
+  {
     TSolutionPtr<double> soln = mesh->globalDofAssignment()->getRegisteredSolutions()[0];
     hasData = soln->cellHasCoefficientsAssigned(cellID);
   }
@@ -512,35 +549,41 @@ void ZoltanMeshPartitionPolicy::pack_elem_data(void *data,
 }
 
 void ZoltanMeshPartitionPolicy::unpack_elem_data(void *data,
-                                                 int num_gid_entries,
-                                                 ZOLTAN_ID_PTR global_id,
-                                                 int size,
-                                                 char *buf,
-                                                 int *ierr) {
+    int num_gid_entries,
+    ZOLTAN_ID_PTR global_id,
+    int size,
+    char *buf,
+    int *ierr)
+{
   Mesh *mesh = (Mesh*) data;
   GlobalIndexType cellID = *global_id;
   CellDataMigration::unpackData(mesh, cellID, buf, size);
   *ierr = ZOLTAN_OK; // CellDataMigration throws exceptions if it's not OK
 }
 
-set<GlobalIndexType> ZoltanMeshPartitionPolicy::getRankLocalCellIDs(Mesh *mesh) {
+set<GlobalIndexType> ZoltanMeshPartitionPolicy::getRankLocalCellIDs(Mesh *mesh)
+{
   MeshTopologyPtr meshTopo = mesh->getTopology();
 
   set<GlobalIndexType> rankLocalCells = mesh->globalDofAssignment()->cellsInPartition(-1);
 
   // this will include parents of refined children, but not the children.  We should eliminate the parents, add the children
   set<GlobalIndexType> parentCellIDs;
-  for (set<GlobalIndexType>::iterator cellIDIt = rankLocalCells.begin(); cellIDIt != rankLocalCells.end(); cellIDIt++) {
+  for (set<GlobalIndexType>::iterator cellIDIt = rankLocalCells.begin(); cellIDIt != rankLocalCells.end(); cellIDIt++)
+  {
     CellPtr cell = meshTopo->getCell(*cellIDIt);
-    if (cell->isParent()) {
+    if (cell->isParent())
+    {
       parentCellIDs.insert(*cellIDIt);
     }
   }
-  for (set<GlobalIndexType>::iterator parentIDIt = parentCellIDs.begin(); parentIDIt != parentCellIDs.end(); parentIDIt++) {
+  for (set<GlobalIndexType>::iterator parentIDIt = parentCellIDs.begin(); parentIDIt != parentCellIDs.end(); parentIDIt++)
+  {
     rankLocalCells.erase(*parentIDIt);
     CellPtr parent = meshTopo->getCell(*parentIDIt);
     vector<IndexType> childIDs = parent->getChildIndices();
-    for (vector<IndexType>::iterator childIDIt = childIDs.begin(); childIDIt != childIDs.end(); childIDIt++) {
+    for (vector<IndexType>::iterator childIDIt = childIDs.begin(); childIDIt != childIDs.end(); childIDIt++)
+    {
       rankLocalCells.insert(*childIDIt);
     }
   }

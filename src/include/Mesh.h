@@ -76,48 +76,50 @@
 
 #include "DofInterpreter.h"
 
-namespace Camellia {
+namespace Camellia
+{
 class MeshTransformationFunction;
 class MeshPartitionPolicy;
 
-  class Mesh : public RefinementObserver, public DofInterpreter {
-    MeshTopologyPtr _meshTopology;
+class Mesh : public RefinementObserver, public DofInterpreter
+{
+  MeshTopologyPtr _meshTopology;
 
-    Teuchos::RCP<GlobalDofAssignment> _gda;
+  Teuchos::RCP<GlobalDofAssignment> _gda;
 
   //  Teuchos::RCP<GDAMaximumRule2D> _maximumRule2D;
 
-    int _pToAddToTest;
-    bool _enforceMBFluxContinuity; // default to false (the historical value)
-    bool _usePatchBasis; // use MultiBasis if this is false.
-    bool _useConformingTraces; // if true, enforces vertex trace continuity
+  int _pToAddToTest;
+  bool _enforceMBFluxContinuity; // default to false (the historical value)
+  bool _usePatchBasis; // use MultiBasis if this is false.
+  bool _useConformingTraces; // if true, enforces vertex trace continuity
 
-    TBFPtr<double> _bilinearForm;
-    VarFactoryPtr _varFactory;
-    // for now, just a uniform mesh, with a rectangular boundary and elements.
-    Boundary _boundary;
+  TBFPtr<double> _bilinearForm;
+  VarFactoryPtr _varFactory;
+  // for now, just a uniform mesh, with a rectangular boundary and elements.
+  Boundary _boundary;
 
-    // preferred private constructor to use during deepCopy();
-    Mesh(MeshTopologyPtr meshTopology, Teuchos::RCP<GlobalDofAssignment> gda, VarFactoryPtr varFactory,
-         int pToAddToTest, bool useConformingTraces, bool usePatchBasis, bool enforceMBFluxContinuity);
+  // preferred private constructor to use during deepCopy();
+  Mesh(MeshTopologyPtr meshTopology, Teuchos::RCP<GlobalDofAssignment> gda, VarFactoryPtr varFactory,
+       int pToAddToTest, bool useConformingTraces, bool usePatchBasis, bool enforceMBFluxContinuity);
 
-    // deprecated private constructor to use during deepCopy();
-    Mesh(MeshTopologyPtr meshTopology, Teuchos::RCP<GlobalDofAssignment> gda, TBFPtr<double> bf,
-         int pToAddToTest, bool useConformingTraces, bool usePatchBasis, bool enforceMBFluxContinuity);
+  // deprecated private constructor to use during deepCopy();
+  Mesh(MeshTopologyPtr meshTopology, Teuchos::RCP<GlobalDofAssignment> gda, TBFPtr<double> bf,
+       int pToAddToTest, bool useConformingTraces, bool usePatchBasis, bool enforceMBFluxContinuity);
 
-    //set< pair<int,int> > _edges;
+  //set< pair<int,int> > _edges;
   //  map< pair<GlobalIndexType,GlobalIndexType>, vector< pair<GlobalIndexType, GlobalIndexType> > > _edgeToCellIDs; //keys are (vertexIndex1, vertexIndex2)
-                                                                    //values are (cellID, sideIndex)
-                                                                    //( will need to do something else in 3D )
-    // keep track of upgrades to the sides of cells since the last rebuild:
-    // (used to remap solution coefficients)
+  //values are (cellID, sideIndex)
+  //( will need to do something else in 3D )
+  // keep track of upgrades to the sides of cells since the last rebuild:
+  // (used to remap solution coefficients)
   //  map< GlobalIndexType, pair< ElementTypePtr, ElementTypePtr > > _cellSideUpgrades; // cellID --> (oldType, newType)
 
   //  map< pair<GlobalIndexType,IndexType>, pair<GlobalIndexType,IndexType> > _dofPairingIndex; // key/values are (cellID,localDofIndex)
-    // note that the FieldContainer for cellSideParities has dimensions (numCellsForType,numSidesForType),
-    // and that the values are 1.0 or -1.0.  These are weights to account for the fact that fluxes are defined in
-    // terms of an outward normal, and thus one cell's idea about the flux is the negative of its neighbor's.
-    // We decide parity by cellID: the neighbor with the lower cellID gets +1, the higher gets -1.
+  // note that the FieldContainer for cellSideParities has dimensions (numCellsForType,numSidesForType),
+  // and that the values are 1.0 or -1.0.  These are weights to account for the fact that fluxes are defined in
+  // terms of an outward normal, and thus one cell's idea about the flux is the negative of its neighbor's.
+  // We decide parity by cellID: the neighbor with the lower cellID gets +1, the higher gets -1.
 
   //  // call buildTypeLookups to rebuild the elementType data structures:
   //  vector< map< ElementType*, vector<GlobalIndexType> > > _cellIDsForElementType;
@@ -132,178 +134,178 @@ class MeshPartitionPolicy;
   //  map< ElementType*, Intrepid::FieldContainer<double> > _physicalCellNodesForElementType; // for uniform mesh, just a single entry..
   //  vector< set<GlobalIndexType> > _partitionedGlobalDofIndices;
 
-    vector< Teuchos::RCP<RefinementObserver> > _registeredObservers; // meshes that should be modified upon refinement (must differ from this only in bilinearForm; must have identical geometry & cellIDs)
+  vector< Teuchos::RCP<RefinementObserver> > _registeredObservers; // meshes that should be modified upon refinement (must differ from this only in bilinearForm; must have identical geometry & cellIDs)
 
 
-    map<IndexType, GlobalIndexType> getGlobalVertexIDs(const Intrepid::FieldContainer<double> &vertexCoordinates);
+  map<IndexType, GlobalIndexType> getGlobalVertexIDs(const Intrepid::FieldContainer<double> &vertexCoordinates);
 
-    ElementPtr addElement(const vector<IndexType> & vertexIndices, ElementTypePtr elemType);
-    void addChildren(ElementPtr parent, vector< vector<IndexType> > &children,
-                     vector< vector< pair< IndexType, IndexType> > > &childrenForSide);
+  ElementPtr addElement(const vector<IndexType> & vertexIndices, ElementTypePtr elemType);
+  void addChildren(ElementPtr parent, vector< vector<IndexType> > &children,
+                   vector< vector< pair< IndexType, IndexType> > > &childrenForSide);
 
-    Intrepid::FieldContainer<double> physicalCellNodes( Teuchos::RCP< ElementType > elemTypePtr, vector<GlobalIndexType> &cellIDs );
+  Intrepid::FieldContainer<double> physicalCellNodes( Teuchos::RCP< ElementType > elemTypePtr, vector<GlobalIndexType> &cellIDs );
 
-    void setElementType(GlobalIndexType cellID, ElementTypePtr newType, bool sideUpgradeOnly);
+  void setElementType(GlobalIndexType cellID, ElementTypePtr newType, bool sideUpgradeOnly);
 
-    void setNeighbor(ElementPtr elemPtr, unsigned elemSide, ElementPtr neighborPtr, unsigned neighborSide);
+  void setNeighbor(ElementPtr elemPtr, unsigned elemSide, ElementPtr neighborPtr, unsigned neighborSide);
 
-    GlobalIndexType getVertexIndex(double x, double y, double tol=1e-14);
+  GlobalIndexType getVertexIndex(double x, double y, double tol=1e-14);
 
-    void verticesForCells(Intrepid::FieldContainer<double>& vertices, vector<GlobalIndexType> &cellIDs);
+  void verticesForCells(Intrepid::FieldContainer<double>& vertices, vector<GlobalIndexType> &cellIDs);
 
-    static map<int,int> _emptyIntIntMap; // just defined here to implement a default argument to constructor (there's got to be a better way)
-  public:
-    RefinementHistory _refinementHistory;
+  static map<int,int> _emptyIntIntMap; // just defined here to implement a default argument to constructor (there's got to be a better way)
+public:
+  RefinementHistory _refinementHistory;
 
-    // Preferred Constructor for min rule, n-D, single H1Order
-    Mesh(MeshTopologyPtr meshTopology, VarFactoryPtr varFactory, int H1Order, int pToAddTest,
-         map<int,int> trialOrderEnhancements=_emptyIntIntMap, map<int,int> testOrderEnhancements=_emptyIntIntMap,
-         MeshPartitionPolicyPtr meshPartitionPolicy = Teuchos::null);
+  // Preferred Constructor for min rule, n-D, single H1Order
+  Mesh(MeshTopologyPtr meshTopology, VarFactoryPtr varFactory, int H1Order, int pToAddTest,
+       map<int,int> trialOrderEnhancements=_emptyIntIntMap, map<int,int> testOrderEnhancements=_emptyIntIntMap,
+       MeshPartitionPolicyPtr meshPartitionPolicy = Teuchos::null);
 
-    // Preferred Constructor for min rule, n-D, vector H1Order for tensor topologies (tensorial degree 0 and 1 supported)
-    Mesh(MeshTopologyPtr meshTopology, VarFactoryPtr varFactory, vector<int> H1Order, int pToAddTest,
-         map<int,int> trialOrderEnhancements=_emptyIntIntMap, map<int,int> testOrderEnhancements=_emptyIntIntMap,
-         MeshPartitionPolicyPtr meshPartitionPolicy = Teuchos::null);
+  // Preferred Constructor for min rule, n-D, vector H1Order for tensor topologies (tensorial degree 0 and 1 supported)
+  Mesh(MeshTopologyPtr meshTopology, VarFactoryPtr varFactory, vector<int> H1Order, int pToAddTest,
+       map<int,int> trialOrderEnhancements=_emptyIntIntMap, map<int,int> testOrderEnhancements=_emptyIntIntMap,
+       MeshPartitionPolicyPtr meshPartitionPolicy = Teuchos::null);
 
-    // legacy (max rule 2D) constructor:
-    Mesh(const vector<vector<double> > &vertices, vector< vector<IndexType> > &elementVertices,
-         TBFPtr<double> bilinearForm, int H1Order, int pToAddTest, bool useConformingTraces = true,
-         map<int,int> trialOrderEnhancements=_emptyIntIntMap, map<int,int> testOrderEnhancements=_emptyIntIntMap,
-         vector< PeriodicBCPtr > periodicBCs = vector< PeriodicBCPtr >());
+  // legacy (max rule 2D) constructor:
+  Mesh(const vector<vector<double> > &vertices, vector< vector<IndexType> > &elementVertices,
+       TBFPtr<double> bilinearForm, int H1Order, int pToAddTest, bool useConformingTraces = true,
+       map<int,int> trialOrderEnhancements=_emptyIntIntMap, map<int,int> testOrderEnhancements=_emptyIntIntMap,
+       vector< PeriodicBCPtr > periodicBCs = vector< PeriodicBCPtr >());
 
-    // Deprecated Constructor for min rule, n-D, single H1Order
-    Mesh(MeshTopologyPtr meshTopology, TBFPtr<double> bilinearForm, int H1Order, int pToAddTest,
-         map<int,int> trialOrderEnhancements=_emptyIntIntMap, map<int,int> testOrderEnhancements=_emptyIntIntMap,
-         MeshPartitionPolicyPtr meshPartitionPolicy = Teuchos::null);
+  // Deprecated Constructor for min rule, n-D, single H1Order
+  Mesh(MeshTopologyPtr meshTopology, TBFPtr<double> bilinearForm, int H1Order, int pToAddTest,
+       map<int,int> trialOrderEnhancements=_emptyIntIntMap, map<int,int> testOrderEnhancements=_emptyIntIntMap,
+       MeshPartitionPolicyPtr meshPartitionPolicy = Teuchos::null);
 
-    // Deprecated Constructor for min rule, n-D, vector H1Order for tensor topologies (tensorial degree 0 and 1 supported)
-    Mesh(MeshTopologyPtr meshTopology, TBFPtr<double> bilinearForm, vector<int> H1Order, int pToAddTest,
-         map<int,int> trialOrderEnhancements=_emptyIntIntMap, map<int,int> testOrderEnhancements=_emptyIntIntMap,
-         MeshPartitionPolicyPtr meshPartitionPolicy = Teuchos::null);
+  // Deprecated Constructor for min rule, n-D, vector H1Order for tensor topologies (tensorial degree 0 and 1 supported)
+  Mesh(MeshTopologyPtr meshTopology, TBFPtr<double> bilinearForm, vector<int> H1Order, int pToAddTest,
+       map<int,int> trialOrderEnhancements=_emptyIntIntMap, map<int,int> testOrderEnhancements=_emptyIntIntMap,
+       MeshPartitionPolicyPtr meshPartitionPolicy = Teuchos::null);
 
 #ifdef HAVE_EPETRAEXT_HDF5
-    void saveToHDF5(string filename);
+  void saveToHDF5(string filename);
 #endif
 
-    // ! deepCopy makes a deep copy of both MeshTopology and GDA, but not bilinear form
-    MeshPtr deepCopy();
+  // ! deepCopy makes a deep copy of both MeshTopology and GDA, but not bilinear form
+  MeshPtr deepCopy();
 
-    static MeshPtr readMsh(string filePath, TBFPtr<double> bilinearForm, int H1Order, int pToAdd);
+  static MeshPtr readMsh(string filePath, TBFPtr<double> bilinearForm, int H1Order, int pToAdd);
 
-    static MeshPtr readTriangle(string filePath, TBFPtr<double> bilinearForm, int H1Order, int pToAdd);
+  static MeshPtr readTriangle(string filePath, TBFPtr<double> bilinearForm, int H1Order, int pToAdd);
 
-    // deprecated static constructors (use MeshFactory methods instead):
-    static MeshPtr buildQuadMesh(const Intrepid::FieldContainer<double> &quadBoundaryPoints,
-                                            int horizontalElements, int verticalElements,
-                                            TBFPtr<double> bilinearForm,
-                                            int H1Order, int pTest, bool triangulate=false, bool useConformingTraces=true,
-                                            map<int,int> trialOrderEnhancements=_emptyIntIntMap,
-                                            map<int,int> testOrderEnhancements=_emptyIntIntMap);
-    static MeshPtr buildQuadMeshHybrid(const Intrepid::FieldContainer<double> &quadBoundaryPoints,
-                                                  int horizontalElements, int verticalElements,
-                                                  TBFPtr<double> bilinearForm,
-                                                  int H1Order, int pTest, bool useConformingTraces=true);
-    static void quadMeshCellIDs(Intrepid::FieldContainer<int> &cellIDs,
-                                int horizontalElements, int verticalElements,
-                                bool useTriangles);
+  // deprecated static constructors (use MeshFactory methods instead):
+  static MeshPtr buildQuadMesh(const Intrepid::FieldContainer<double> &quadBoundaryPoints,
+                               int horizontalElements, int verticalElements,
+                               TBFPtr<double> bilinearForm,
+                               int H1Order, int pTest, bool triangulate=false, bool useConformingTraces=true,
+                               map<int,int> trialOrderEnhancements=_emptyIntIntMap,
+                               map<int,int> testOrderEnhancements=_emptyIntIntMap);
+  static MeshPtr buildQuadMeshHybrid(const Intrepid::FieldContainer<double> &quadBoundaryPoints,
+                                     int horizontalElements, int verticalElements,
+                                     TBFPtr<double> bilinearForm,
+                                     int H1Order, int pTest, bool useConformingTraces=true);
+  static void quadMeshCellIDs(Intrepid::FieldContainer<int> &cellIDs,
+                              int horizontalElements, int verticalElements,
+                              bool useTriangles);
 
-    GlobalIndexType activeCellOffset();
+  GlobalIndexType activeCellOffset();
 
-    Intrepid::FieldContainer<double> cellSideParities( ElementTypePtr elemTypePtr);
-    Intrepid::FieldContainer<double> cellSideParitiesForCell( GlobalIndexType cellID );
+  Intrepid::FieldContainer<double> cellSideParities( ElementTypePtr elemTypePtr);
+  Intrepid::FieldContainer<double> cellSideParitiesForCell( GlobalIndexType cellID );
 
-    TBFPtr<double> bilinearForm();
-    void setBilinearForm( TBFPtr<double>);
+  TBFPtr<double> bilinearForm();
+  void setBilinearForm( TBFPtr<double>);
 
-    //! This method should probably be moved to MeshTopology; its implementation is independent of Mesh.
+  //! This method should probably be moved to MeshTopology; its implementation is independent of Mesh.
   //  bool cellContainsPoint(GlobalIndexType cellID, vector<double> &point);
-    std::vector<GlobalIndexType> cellIDsForPoints(const Intrepid::FieldContainer<double> &physicalPoints, bool minusOnesForOffRank=true);
-    std::vector<ElementPtr> elementsForPoints(const Intrepid::FieldContainer<double> &physicalPoints, bool nullElementsIfOffRank=true);
+  std::vector<GlobalIndexType> cellIDsForPoints(const Intrepid::FieldContainer<double> &physicalPoints, bool minusOnesForOffRank=true);
+  std::vector<ElementPtr> elementsForPoints(const Intrepid::FieldContainer<double> &physicalPoints, bool nullElementsIfOffRank=true);
 
-    vector< Teuchos::RCP< ElementType > > elementTypes(PartitionIndexType partitionNumber=-1); // returns *all* elementTypes by default
+  vector< Teuchos::RCP< ElementType > > elementTypes(PartitionIndexType partitionNumber=-1); // returns *all* elementTypes by default
 
-    Boundary &boundary();
+  Boundary &boundary();
 
-    GlobalIndexType cellID(ElementTypePtr elemTypePtr, IndexType cellIndex, PartitionIndexType partitionNumber=-1);
+  GlobalIndexType cellID(ElementTypePtr elemTypePtr, IndexType cellIndex, PartitionIndexType partitionNumber=-1);
 
-    vector< GlobalIndexType > cellIDsOfType(ElementTypePtr elemType); // for current MPI node.
-    vector< GlobalIndexType > cellIDsOfType(int partitionNumber, ElementTypePtr elemTypePtr);
-    vector< GlobalIndexType > cellIDsOfTypeGlobal(ElementTypePtr elemTypePtr);
+  vector< GlobalIndexType > cellIDsOfType(ElementTypePtr elemType); // for current MPI node.
+  vector< GlobalIndexType > cellIDsOfType(int partitionNumber, ElementTypePtr elemTypePtr);
+  vector< GlobalIndexType > cellIDsOfTypeGlobal(ElementTypePtr elemTypePtr);
 
-    set<GlobalIndexType> cellIDsInPartition(); // rank-local cellIDs
+  set<GlobalIndexType> cellIDsInPartition(); // rank-local cellIDs
 
-    int cellPolyOrder(GlobalIndexType cellID);
-    vector<int> cellTensorPolyOrder(GlobalIndexType cellID);
+  int cellPolyOrder(GlobalIndexType cellID);
+  vector<int> cellTensorPolyOrder(GlobalIndexType cellID);
 
-    void enforceOneIrregularity();
+  void enforceOneIrregularity();
   //  void enforceOneIrregularity(vector< TSolutionPtr<double> > solutions);
 
-    vector<double> getCellCentroid(GlobalIndexType cellID);
+  vector<double> getCellCentroid(GlobalIndexType cellID);
 
-    // commented out because unused
-    //Epetra_Map getCellIDPartitionMap(int rank, Epetra_Comm* Comm);
+  // commented out because unused
+  //Epetra_Map getCellIDPartitionMap(int rank, Epetra_Comm* Comm);
 
-    ElementPtr getElement(GlobalIndexType cellID);
-    ElementTypePtr getElementType(GlobalIndexType cellID);
+  ElementPtr getElement(GlobalIndexType cellID);
+  ElementTypePtr getElementType(GlobalIndexType cellID);
 
-    const map< pair<GlobalIndexType,IndexType> , GlobalIndexType>& getLocalToGlobalMap();
-    //  map< int, pair<int,int> > getGlobalToLocalMap();
+  const map< pair<GlobalIndexType,IndexType> , GlobalIndexType>& getLocalToGlobalMap();
+  //  map< int, pair<int,int> > getGlobalToLocalMap();
 
-    GlobalIndexType globalDofCount();
-    GlobalIndexType globalDofIndex(GlobalIndexType cellID, IndexType localDofIndex);
-    set<GlobalIndexType> globalDofIndicesForPartition(PartitionIndexType partitionNumber);
+  GlobalIndexType globalDofCount();
+  GlobalIndexType globalDofIndex(GlobalIndexType cellID, IndexType localDofIndex);
+  set<GlobalIndexType> globalDofIndicesForPartition(PartitionIndexType partitionNumber);
 
-    GlobalDofAssignmentPtr globalDofAssignment();
+  GlobalDofAssignmentPtr globalDofAssignment();
 
-    set<GlobalIndexType> getActiveCellIDs();
+  set<GlobalIndexType> getActiveCellIDs();
 
-    vector< ElementPtr > activeElements();  // deprecated -- use getActiveElement instead
-    ElementPtr ancestralNeighborForSide(ElementPtr elem, int sideOrdinal, int &elemSideOrdinalInNeighbor);
+  vector< ElementPtr > activeElements();  // deprecated -- use getActiveElement instead
+  ElementPtr ancestralNeighborForSide(ElementPtr elem, int sideOrdinal, int &elemSideOrdinalInNeighbor);
 
   //  GlobalIndexType numEdgeToCellIDEntries(){
   //    return _edgeToCellIDs.size();
   //  }
 
-    vector< ElementPtr > elementsOfType(PartitionIndexType partitionNumber, ElementTypePtr elemTypePtr);
-    vector< ElementPtr > elementsOfTypeGlobal(ElementTypePtr elemTypePtr); // may want to deprecate in favor of cellIDsOfTypeGlobal()
+  vector< ElementPtr > elementsOfType(PartitionIndexType partitionNumber, ElementTypePtr elemTypePtr);
+  vector< ElementPtr > elementsOfTypeGlobal(ElementTypePtr elemTypePtr); // may want to deprecate in favor of cellIDsOfTypeGlobal()
 
-    vector< ElementPtr > elementsInPartition(PartitionIndexType partitionNumber = -1);
+  vector< ElementPtr > elementsInPartition(PartitionIndexType partitionNumber = -1);
 
-    int getDimension(); // spatial dimension of the mesh
-    set<GlobalIndexType> globalDofIndicesForCell(GlobalIndexType cellID);
-    DofOrderingFactory & getDofOrderingFactory();
+  int getDimension(); // spatial dimension of the mesh
+  set<GlobalIndexType> globalDofIndicesForCell(GlobalIndexType cellID);
+  DofOrderingFactory & getDofOrderingFactory();
 
-    ElementTypeFactory & getElementTypeFactory();
+  ElementTypeFactory & getElementTypeFactory();
   //  void getMultiBasisOrdering(DofOrderingPtr &originalNonParentOrdering,
   //                             ElementPtr parent, int sideIndex, int parentSideIndexInNeighbor,
   //                             ElementPtr nonParent);
   //
   //  void getPatchBasisOrdering(DofOrderingPtr &originalChildOrdering, ElementPtr child, int sideIndex);
 
-    TFunctionPtr<double> getTransformationFunction(); // will be NULL for meshes without edge curves defined
+  TFunctionPtr<double> getTransformationFunction(); // will be NULL for meshes without edge curves defined
 
-    // method signature inherited from RefinementObserver:
-    void hRefine(const set<GlobalIndexType> &cellIDs, Teuchos::RCP<RefinementPattern> refPattern);
+  // method signature inherited from RefinementObserver:
+  void hRefine(const set<GlobalIndexType> &cellIDs, Teuchos::RCP<RefinementPattern> refPattern);
 
-    using RefinementObserver::hRefine; // avoid compiler warnings about the hRefine() methods below.
-    void hRefine(const vector<GlobalIndexType> &cellIDs);
-    void hRefine(const set<GlobalIndexType> &cellIDs);
+  using RefinementObserver::hRefine; // avoid compiler warnings about the hRefine() methods below.
+  void hRefine(const vector<GlobalIndexType> &cellIDs);
+  void hRefine(const set<GlobalIndexType> &cellIDs);
 
-    void hRefine(const set<GlobalIndexType> &cellIDs, Teuchos::RCP<RefinementPattern> refPattern, bool repartitionAndRebuild);
-    void hRefine(const vector<GlobalIndexType> &cellIDs, Teuchos::RCP<RefinementPattern> refPattern);
+  void hRefine(const set<GlobalIndexType> &cellIDs, Teuchos::RCP<RefinementPattern> refPattern, bool repartitionAndRebuild);
+  void hRefine(const vector<GlobalIndexType> &cellIDs, Teuchos::RCP<RefinementPattern> refPattern);
 
-    void hUnrefine(const set<GlobalIndexType> &cellIDs);
+  void hUnrefine(const set<GlobalIndexType> &cellIDs);
 
-    void interpretGlobalCoefficients(GlobalIndexType cellID, Intrepid::FieldContainer<double> &localCoefficients, const Epetra_MultiVector &globalCoefficients);
-    void interpretLocalBasisCoefficients(GlobalIndexType cellID, int varID, int sideOrdinal, const Intrepid::FieldContainer<double> &basisCoefficients,
-                                         Intrepid::FieldContainer<double> &globalCoefficients, Intrepid::FieldContainer<GlobalIndexType> &globalDofIndices);
-    void interpretLocalData(GlobalIndexType cellID, const Intrepid::FieldContainer<double> &localData,
-                            Intrepid::FieldContainer<double> &globalData, Intrepid::FieldContainer<GlobalIndexType> &globalDofIndices);
+  void interpretGlobalCoefficients(GlobalIndexType cellID, Intrepid::FieldContainer<double> &localCoefficients, const Epetra_MultiVector &globalCoefficients);
+  void interpretLocalBasisCoefficients(GlobalIndexType cellID, int varID, int sideOrdinal, const Intrepid::FieldContainer<double> &basisCoefficients,
+                                       Intrepid::FieldContainer<double> &globalCoefficients, Intrepid::FieldContainer<GlobalIndexType> &globalDofIndices);
+  void interpretLocalData(GlobalIndexType cellID, const Intrepid::FieldContainer<double> &localData,
+                          Intrepid::FieldContainer<double> &globalData, Intrepid::FieldContainer<GlobalIndexType> &globalDofIndices);
 
-    bool meshUsesMaximumRule();
-    bool meshUsesMinimumRule();
+  bool meshUsesMaximumRule();
+  bool meshUsesMinimumRule();
 
-    // for the case where we want to reproject the previous mesh solution onto the new one:
+  // for the case where we want to reproject the previous mesh solution onto the new one:
   //  void hRefine(vector<GlobalIndexType> cellIDs, Teuchos::RCP<RefinementPattern> refPattern, vector< TSolutionPtr<double> > solutions);
 
   //  void matchNeighbor(const ElementPtr &elem, int sideIndex);
@@ -315,78 +317,78 @@ class MeshPartitionPolicy;
   //  static int neighborChildPermutation(int childIndex, int numChildrenInSide);
   //  static int neighborDofPermutation(int dofIndex, int numDofsForSide);
 
-    GlobalIndexType numActiveElements();
+  GlobalIndexType numActiveElements();
 
-    GlobalIndexType numFluxDofs();
-    GlobalIndexType numFieldDofs();
+  GlobalIndexType numFluxDofs();
+  GlobalIndexType numFieldDofs();
 
-    GlobalIndexType numGlobalDofs();
+  GlobalIndexType numGlobalDofs();
 
-    GlobalIndexType numElements();
+  GlobalIndexType numElements();
 
-    GlobalIndexType numElementsOfType( Teuchos::RCP< ElementType > elemTypePtr );
+  GlobalIndexType numElementsOfType( Teuchos::RCP< ElementType > elemTypePtr );
 
-    GlobalIndexType numInitialElements();
+  GlobalIndexType numInitialElements();
 
-    int parityForSide(GlobalIndexType cellID, int sideOrdinal);
+  int parityForSide(GlobalIndexType cellID, int sideOrdinal);
 
-    PartitionIndexType partitionForCellID(GlobalIndexType cellID);
-    PartitionIndexType partitionForGlobalDofIndex( GlobalIndexType globalDofIndex );
-    PartitionIndexType partitionLocalIndexForGlobalDofIndex( GlobalIndexType globalDofIndex );
+  PartitionIndexType partitionForCellID(GlobalIndexType cellID);
+  PartitionIndexType partitionForGlobalDofIndex( GlobalIndexType globalDofIndex );
+  PartitionIndexType partitionLocalIndexForGlobalDofIndex( GlobalIndexType globalDofIndex );
 
-    Intrepid::FieldContainer<double> physicalCellNodes( ElementTypePtr elemType);
-    Intrepid::FieldContainer<double> physicalCellNodesForCell(GlobalIndexType cellID);
-    Intrepid::FieldContainer<double> physicalCellNodesGlobal( ElementTypePtr elemType );
+  Intrepid::FieldContainer<double> physicalCellNodes( ElementTypePtr elemType);
+  Intrepid::FieldContainer<double> physicalCellNodesForCell(GlobalIndexType cellID);
+  Intrepid::FieldContainer<double> physicalCellNodesGlobal( ElementTypePtr elemType );
 
-    void pRefine(const vector<GlobalIndexType> &cellIDsForPRefinements);
-    void pRefine(const vector<GlobalIndexType> &cellIDsForPRefinements, int pToAdd);
-    void pRefine(const set<GlobalIndexType> &cellIDsForPRefinements);
-    void pRefine(const set<GlobalIndexType> &cellIDsForPRefinements, int pToAdd); // added by jesse
-    void printLocalToGlobalMap(); // for debugging
-    void printVertices(); // for debugging
+  void pRefine(const vector<GlobalIndexType> &cellIDsForPRefinements);
+  void pRefine(const vector<GlobalIndexType> &cellIDsForPRefinements, int pToAdd);
+  void pRefine(const set<GlobalIndexType> &cellIDsForPRefinements);
+  void pRefine(const set<GlobalIndexType> &cellIDsForPRefinements, int pToAdd); // added by jesse
+  void printLocalToGlobalMap(); // for debugging
+  void printVertices(); // for debugging
 
-    void rebuildLookups();
+  void rebuildLookups();
 
-    void registerObserver(Teuchos::RCP<RefinementObserver> observer);
+  void registerObserver(Teuchos::RCP<RefinementObserver> observer);
 
-    template <typename Scalar>
-      void registerSolution(TSolutionPtr<Scalar> solution);
+  template <typename Scalar>
+  void registerSolution(TSolutionPtr<Scalar> solution);
 
-    int condensedRowSizeUpperBound();
-    int rowSizeUpperBound(); // accounts for multiplicity, but isn't a tight bound
+  int condensedRowSizeUpperBound();
+  int rowSizeUpperBound(); // accounts for multiplicity, but isn't a tight bound
 
-    void setEdgeToCurveMap(const map< pair<GlobalIndexType, GlobalIndexType>, ParametricCurvePtr > &edgeToCurveMap);
-    void setEnforceMultiBasisFluxContinuity( bool value );
+  void setEdgeToCurveMap(const map< pair<GlobalIndexType, GlobalIndexType>, ParametricCurvePtr > &edgeToCurveMap);
+  void setEnforceMultiBasisFluxContinuity( bool value );
 
-    vector< ParametricCurvePtr > parametricEdgesForCell(GlobalIndexType cellID, bool neglectCurves=false);
+  vector< ParametricCurvePtr > parametricEdgesForCell(GlobalIndexType cellID, bool neglectCurves=false);
 
-    void setPartitionPolicy(  Teuchos::RCP< MeshPartitionPolicy > partitionPolicy );
+  void setPartitionPolicy(  Teuchos::RCP< MeshPartitionPolicy > partitionPolicy );
 
-    void setUsePatchBasis( bool value );
-    bool usePatchBasis();
+  void setUsePatchBasis( bool value );
+  bool usePatchBasis();
 
-    MeshTopologyPtr getTopology();
+  MeshTopologyPtr getTopology();
 
-    vector< vector<double> > verticesForCell(GlobalIndexType cellID);
-    vector<unsigned> vertexIndicesForCell(GlobalIndexType cellID);
-    Intrepid::FieldContainer<double> vertexCoordinates(GlobalIndexType vertexIndex);
+  vector< vector<double> > verticesForCell(GlobalIndexType cellID);
+  vector<unsigned> vertexIndicesForCell(GlobalIndexType cellID);
+  Intrepid::FieldContainer<double> vertexCoordinates(GlobalIndexType vertexIndex);
 
-    void verticesForCell(Intrepid::FieldContainer<double>& vertices, GlobalIndexType cellID);
-    void verticesForElementType(Intrepid::FieldContainer<double>& vertices, ElementTypePtr elemTypePtr);
-    void verticesForSide(Intrepid::FieldContainer<double>& vertices, GlobalIndexType cellID, int sideOrdinal);
+  void verticesForCell(Intrepid::FieldContainer<double>& vertices, GlobalIndexType cellID);
+  void verticesForElementType(Intrepid::FieldContainer<double>& vertices, ElementTypePtr elemTypePtr);
+  void verticesForSide(Intrepid::FieldContainer<double>& vertices, GlobalIndexType cellID, int sideOrdinal);
 
-    void unregisterObserver(RefinementObserver* observer);
-    void unregisterObserver(Teuchos::RCP<RefinementObserver> observer);
-    template <typename Scalar>
-      void unregisterSolution(TSolutionPtr<Scalar> solution);
+  void unregisterObserver(RefinementObserver* observer);
+  void unregisterObserver(Teuchos::RCP<RefinementObserver> observer);
+  template <typename Scalar>
+  void unregisterSolution(TSolutionPtr<Scalar> solution);
 
-    void writeMeshPartitionsToFile(const string & fileName);
+  void writeMeshPartitionsToFile(const string & fileName);
 
-    double getCellMeasure(GlobalIndexType cellID);
-    double getCellXSize(GlobalIndexType cellID);
-    double getCellYSize(GlobalIndexType cellID);
-    vector<double> getCellOrientation(GlobalIndexType cellID);
-  };
+  double getCellMeasure(GlobalIndexType cellID);
+  double getCellXSize(GlobalIndexType cellID);
+  double getCellYSize(GlobalIndexType cellID);
+  vector<double> getCellOrientation(GlobalIndexType cellID);
+};
 }
 
 #endif

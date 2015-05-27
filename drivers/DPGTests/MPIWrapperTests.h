@@ -12,15 +12,16 @@
 #include "TestSuite.h"
 #include "MPIWrapper.h"
 
-class MPIWrapperTests : public TestSuite {
+class MPIWrapperTests : public TestSuite
+{
   void setup();
   void teardown();
 public:
   void runTests(int &numTestsRun, int &numTestsPassed);
-  
+
   bool testSimpleSum();
   bool testentryWiseSum();
-  
+
   std::string testSuiteName();
 };
 

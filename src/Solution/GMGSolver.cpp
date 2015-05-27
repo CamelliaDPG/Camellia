@@ -20,9 +20,10 @@ const bool DIAGONAL_SCALING_DEFAULT = false;
 GMGSolver::GMGSolver(BCPtr zeroBCs, MeshPtr coarseMesh, IPPtr coarseIP,
                      MeshPtr fineMesh, Teuchos::RCP<DofInterpreter> fineDofInterpreter, Epetra_Map finePartitionMap,
                      int maxIters, double tol, Teuchos::RCP<Solver> coarseSolver, bool useStaticCondensation) :
-                    _finePartitionMap(finePartitionMap),
-                    _gmgOperator(zeroBCs,coarseMesh,coarseIP,fineMesh,fineDofInterpreter,
-                                 finePartitionMap,coarseSolver, useStaticCondensation, DIAGONAL_SCALING_DEFAULT) {
+  _finePartitionMap(finePartitionMap),
+  _gmgOperator(zeroBCs,coarseMesh,coarseIP,fineMesh,fineDofInterpreter,
+               finePartitionMap,coarseSolver, useStaticCondensation, DIAGONAL_SCALING_DEFAULT)
+{
   _maxIters = maxIters;
   _printToConsole = false;
   _tol = tol;
@@ -38,10 +39,10 @@ GMGSolver::GMGSolver(BCPtr zeroBCs, MeshPtr coarseMesh, IPPtr coarseIP,
 
 GMGSolver::GMGSolver(TSolutionPtr<double> fineSolution, MeshPtr coarseMesh, int maxIters, double tol,
                      Teuchos::RCP<Solver> coarseSolver, bool useStaticCondensation) :
-                    _finePartitionMap(fineSolution->getPartitionMap()),
-                    _gmgOperator(fineSolution->bc()->copyImposingZero(),coarseMesh,
-                                 fineSolution->ip(), fineSolution->mesh(), fineSolution->getDofInterpreter(),
-                                 _finePartitionMap, coarseSolver, useStaticCondensation, DIAGONAL_SCALING_DEFAULT)
+  _finePartitionMap(fineSolution->getPartitionMap()),
+  _gmgOperator(fineSolution->bc()->copyImposingZero(),coarseMesh,
+               fineSolution->ip(), fineSolution->mesh(), fineSolution->getDofInterpreter(),
+               _finePartitionMap, coarseSolver, useStaticCondensation, DIAGONAL_SCALING_DEFAULT)
 {
   _maxIters = maxIters;
   _printToConsole = false;
@@ -56,46 +57,56 @@ GMGSolver::GMGSolver(TSolutionPtr<double> fineSolution, MeshPtr coarseMesh, int 
   _azConvergenceOption = AZ_rhs;
 }
 
-double GMGSolver::condest() {
+double GMGSolver::condest()
+{
   return _condest;
 }
 
-vector<int> GMGSolver::getIterationCountLog() {
+vector<int> GMGSolver::getIterationCountLog()
+{
   return _iterationCountLog;
 }
 
-int GMGSolver::iterationCount() {
+int GMGSolver::iterationCount()
+{
   return _iterationCount;
 }
 
-void GMGSolver::setApplySmoothingOperator(bool applySmoothingOp) {
+void GMGSolver::setApplySmoothingOperator(bool applySmoothingOp)
+{
   _applySmoothing = applySmoothingOp;
   _gmgOperator.setApplySmoothingOperator(_applySmoothing);
 }
 
-void GMGSolver::setFineMesh(MeshPtr fineMesh, Epetra_Map finePartitionMap) {
+void GMGSolver::setFineMesh(MeshPtr fineMesh, Epetra_Map finePartitionMap)
+{
   _gmgOperator.setFineMesh(fineMesh, finePartitionMap);
 }
 
-void GMGSolver::setPrintToConsole(bool printToConsole) {
+void GMGSolver::setPrintToConsole(bool printToConsole)
+{
   _printToConsole = printToConsole;
 }
 
-void GMGSolver::setTolerance(double tol) {
+void GMGSolver::setTolerance(double tol)
+{
   _tol = tol;
 }
 
-int GMGSolver::resolve() {
+int GMGSolver::resolve()
+{
   bool buildCoarseStiffness = false; // won't have changed since solve() was called
   return solve(buildCoarseStiffness);
 }
 
-int GMGSolver::solve() {
+int GMGSolver::solve()
+{
   bool buildCoarseStiffness = true;
   return solve(buildCoarseStiffness);
 }
 
-int GMGSolver::solve(bool buildCoarseStiffness) {
+int GMGSolver::solve(bool buildCoarseStiffness)
+{
   int rank = Teuchos::GlobalMPISession::getRank();
 
   // in place of doing the scaling ourselves, for the moment I've switched
@@ -107,7 +118,8 @@ int GMGSolver::solve(bool buildCoarseStiffness) {
 
   Epetra_CrsMatrix *A = dynamic_cast<Epetra_CrsMatrix *>( problem.GetMatrix() );
 
-  if (A == NULL) {
+  if (A == NULL)
+  {
     cout << "Error: GMGSolver requires an Epetra_CrsMatrix.\n";
     TEUCHOS_TEST_FOR_EXCEPTION(true, std::invalid_argument, "Error: GMGSolver requires an Epetra_CrsMatrix.\n");
   }
@@ -131,7 +143,8 @@ int GMGSolver::solve(bool buildCoarseStiffness) {
   Epetra_Vector diagA_sqrt_inv(*map);
   Epetra_Vector diagA_inv(*map);
 
-  if (_diagonalScaling && !useAztecToScaleDiagonally) {
+  if (_diagonalScaling && !useAztecToScaleDiagonally)
+  {
     int length = scale_vector.MyLength();
     for (int i=0; i<length; i++) scale_vector[i] = 1.0 / sqrt(fabs(diagA[i]));
 
@@ -148,22 +161,34 @@ int GMGSolver::solve(bool buildCoarseStiffness) {
 
   if (buildCoarseStiffness) _gmgOperator.computeCoarseStiffnessMatrix(A);
 
-  if (_diagonalScaling && useAztecToScaleDiagonally) {
+  if (_diagonalScaling && useAztecToScaleDiagonally)
+  {
     solver.SetAztecOption(AZ_scaling, AZ_sym_diag);
-  } else {
+  }
+  else
+  {
     solver.SetAztecOption(AZ_scaling, AZ_none);
   }
-  if (_useCG) {
-    if (_computeCondest) {
+  if (_useCG)
+  {
+    if (_computeCondest)
+    {
       solver.SetAztecOption(AZ_solver, AZ_cg_condnum);
-    } else {
+    }
+    else
+    {
       solver.SetAztecOption(AZ_solver, AZ_cg);
     }
-  } else {
+  }
+  else
+  {
     solver.SetAztecOption(AZ_kspace, 200); // default is 30
-    if (_computeCondest) {
+    if (_computeCondest)
+    {
       solver.SetAztecOption(AZ_solver, AZ_gmres_condnum);
-    } else {
+    }
+    else
+    {
       solver.SetAztecOption(AZ_solver, AZ_gmres);
     }
   }
@@ -183,7 +208,8 @@ int GMGSolver::solve(bool buildCoarseStiffness) {
   int whyTerminated = status[AZ_why];
   int maxRestarts = 1;
   int numRestarts = 0;
-  while ((whyTerminated==AZ_loss) && (numRestarts < maxRestarts)) {
+  while ((whyTerminated==AZ_loss) && (numRestarts < maxRestarts))
+  {
     remainingIters -= status[AZ_its];
     if (rank==0) cout << "Aztec warned that the recursive residual indicates convergence even though the true residual is too large.  Restarting with the new solution as initial guess, with maxIters = " << remainingIters << endl;
     solveResult = solver.Iterate(remainingIters,_tol);
@@ -194,35 +220,38 @@ int GMGSolver::solve(bool buildCoarseStiffness) {
   _iterationCount = _maxIters - remainingIters;
   _condest = solver.Condest(); // will be -1 if running without condest
 
-  if (rank==0) {
-    switch (whyTerminated) {
-      case AZ_normal:
-        //        cout << "whyTerminated: AZ_normal " << endl;
-        break;
-      case AZ_param:
-        cout << "whyTerminated: AZ_param " << endl;
-        break;
-      case AZ_breakdown:
-        cout << "whyTerminated: AZ_breakdown " << endl;
-        break;
-      case AZ_loss:
-        cout << "whyTerminated: AZ_loss " << endl;
-        break;
-      case AZ_ill_cond:
-        cout << "whyTerminated: AZ_ill_cond " << endl;
-        break;
-      case AZ_maxits:
-        cout << "whyTerminated: AZ_maxits " << endl;
-        break;
-      default:
-        break;
+  if (rank==0)
+  {
+    switch (whyTerminated)
+    {
+    case AZ_normal:
+      //        cout << "whyTerminated: AZ_normal " << endl;
+      break;
+    case AZ_param:
+      cout << "whyTerminated: AZ_param " << endl;
+      break;
+    case AZ_breakdown:
+      cout << "whyTerminated: AZ_breakdown " << endl;
+      break;
+    case AZ_loss:
+      cout << "whyTerminated: AZ_loss " << endl;
+      break;
+    case AZ_ill_cond:
+      cout << "whyTerminated: AZ_ill_cond " << endl;
+      break;
+    case AZ_maxits:
+      cout << "whyTerminated: AZ_maxits " << endl;
+      break;
+    default:
+      break;
     }
   }
 
   //  Epetra_MultiVector *x = problem().GetLHS();
   //  EpetraExt::MultiVectorToMatlabFile("/tmp/x.dat",*x);
 
-  if (_diagonalScaling && !useAztecToScaleDiagonally) {
+  if (_diagonalScaling && !useAztecToScaleDiagonally)
+  {
     // reverse the scaling here
     scale_vector.Reciprocal(scale_vector);
     problem.LeftScale(scale_vector);
@@ -236,27 +265,33 @@ int GMGSolver::solve(bool buildCoarseStiffness) {
   return solveResult;
 }
 
-void GMGSolver::setAztecConvergenceOption(int value) {
+void GMGSolver::setAztecConvergenceOption(int value)
+{
   _azConvergenceOption = value;
 }
 
-void GMGSolver::setAztecOutput(int value) {
+void GMGSolver::setAztecOutput(int value)
+{
   _azOutput = value;
 }
 
-void GMGSolver::setComputeConditionNumberEstimate(bool value) {
+void GMGSolver::setComputeConditionNumberEstimate(bool value)
+{
   _computeCondest = value;
 }
 
-void GMGSolver::setPrintIterationCount(bool value) {
+void GMGSolver::setPrintIterationCount(bool value)
+{
   _printIterationCountIfNoAzOutput = value;
 }
 
-void GMGSolver::setUseConjugateGradient(bool value) {
+void GMGSolver::setUseConjugateGradient(bool value)
+{
   _useCG = value;
 }
 
-void GMGSolver::setUseDiagonalScaling(bool value) {
+void GMGSolver::setUseDiagonalScaling(bool value)
+{
   _diagonalScaling = value;
   _gmgOperator.setFineSolverUsesDiagonalScaling(value);
 }

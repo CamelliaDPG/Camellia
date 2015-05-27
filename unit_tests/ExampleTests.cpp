@@ -10,7 +10,8 @@
 
 // Int_UnitTests.cpp
 #include "Teuchos_UnitTestHarness.hpp"
-namespace {
+namespace
+{
 //  TEUCHOS_UNIT_TEST( Int, Basic )
 //  {
 //    int i1 = 5;

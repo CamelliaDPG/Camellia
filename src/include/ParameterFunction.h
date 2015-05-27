@@ -11,38 +11,40 @@
 
 #include "Function.h"
 
-namespace Camellia {
-  class ParameterFunction : public TFunction<double> {
-    TFunctionPtr<double> _fxn;
-  public:
-    ParameterFunction(double value);
-    ParameterFunction(TFunctionPtr<double> value);
+namespace Camellia
+{
+class ParameterFunction : public TFunction<double>
+{
+  TFunctionPtr<double> _fxn;
+public:
+  ParameterFunction(double value);
+  ParameterFunction(TFunctionPtr<double> value);
 
-    TFunctionPtr<double> getValue() const;
+  TFunctionPtr<double> getValue() const;
 
-    void setValue(TFunctionPtr<double> fxn);
-    void setValue(double value);
+  void setValue(TFunctionPtr<double> fxn);
+  void setValue(double value);
 
-    // overridden from Function:
-    TFunctionPtr<double> x();
-    TFunctionPtr<double> y();
-    TFunctionPtr<double> z();
+  // overridden from Function:
+  TFunctionPtr<double> x();
+  TFunctionPtr<double> y();
+  TFunctionPtr<double> z();
 
-    TFunctionPtr<double> dx();
-    TFunctionPtr<double> dy();
-    TFunctionPtr<double> dz();
+  TFunctionPtr<double> dx();
+  TFunctionPtr<double> dy();
+  TFunctionPtr<double> dz();
 
-    TFunctionPtr<double> grad(int numComponents=-1); // gradient of sum is the sum of gradients
-    TFunctionPtr<double> div();  // divergence of sum is sum of divergences
+  TFunctionPtr<double> grad(int numComponents=-1); // gradient of sum is the sum of gradients
+  TFunctionPtr<double> div();  // divergence of sum is sum of divergences
 
-    void values(Intrepid::FieldContainer<double> &values, BasisCachePtr basisCache);
-    bool boundaryValueOnly();
+  void values(Intrepid::FieldContainer<double> &values, BasisCachePtr basisCache);
+  bool boundaryValueOnly();
 
-    string displayString();
+  string displayString();
 
-    static Teuchos::RCP<ParameterFunction> parameterFunction(double value);
-    static Teuchos::RCP<ParameterFunction> parameterFunction(TFunctionPtr<double> fxn);
-  };
+  static Teuchos::RCP<ParameterFunction> parameterFunction(double value);
+  static Teuchos::RCP<ParameterFunction> parameterFunction(TFunctionPtr<double> fxn);
+};
 }
 
 #endif

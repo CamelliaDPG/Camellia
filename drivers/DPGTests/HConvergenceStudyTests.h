@@ -13,7 +13,8 @@
 #include "TestSuite.h"
 
 #include "SpatialFilter.h" // for testing
-class HConvergenceStudyTests : public TestSuite {
+class HConvergenceStudyTests : public TestSuite
+{
 private:
   void setup();
   void teardown();

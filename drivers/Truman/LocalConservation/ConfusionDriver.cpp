@@ -20,98 +20,122 @@
 #include "choice.hpp"
 #endif
 
-class EpsilonScaling : public hFunction {
+class EpsilonScaling : public hFunction
+{
   double _epsilon;
-  public:
-  EpsilonScaling(double epsilon) {
+public:
+  EpsilonScaling(double epsilon)
+  {
     _epsilon = epsilon;
   }
-  double value(double x, double y, double h) {
+  double value(double x, double y, double h)
+  {
     double scaling = min(_epsilon/(h*h), 1.0);
     // since this is used in inner product term a like (a,a), take square root
     return sqrt(scaling);
   }
 };
 
-class ZeroMeanScaling : public hFunction {
-  public:
-  double value(double x, double y, double h) {
+class ZeroMeanScaling : public hFunction
+{
+public:
+  double value(double x, double y, double h)
+  {
     return 1.0/(h*h);
   }
 };
 
-class InflowBoundary : public SpatialFilter {
-  public:
-    bool matchesPoint(double x, double y) {
-      double tol = 1e-14;
-      bool xMatch = (abs(x) < tol) ;
-      bool yMatch = (abs(y) < tol) ;
-      return xMatch || yMatch;
-    }
+class InflowBoundary : public SpatialFilter
+{
+public:
+  bool matchesPoint(double x, double y)
+  {
+    double tol = 1e-14;
+    bool xMatch = (abs(x) < tol) ;
+    bool yMatch = (abs(y) < tol) ;
+    return xMatch || yMatch;
+  }
 };
 
-class OutflowBoundary : public SpatialFilter {
-  public:
-    bool matchesPoint(double x, double y) {
-      double tol = 1e-14;
-      bool xMatch = (abs(x-1.0) < tol);
-      bool yMatch = (abs(y-1.0) < tol);
-      return xMatch || yMatch;
-    }
+class OutflowBoundary : public SpatialFilter
+{
+public:
+  bool matchesPoint(double x, double y)
+  {
+    double tol = 1e-14;
+    bool xMatch = (abs(x-1.0) < tol);
+    bool yMatch = (abs(y-1.0) < tol);
+    return xMatch || yMatch;
+  }
 };
 
 // boundary value for u
-class U0 : public Function {
-  public:
-    U0() : Function(0) {}
-    void values(FieldContainer<double> &values, BasisCachePtr basisCache) {
-      int numCells = values.dimension(0);
-      int numPoints = values.dimension(1);
+class U0 : public Function
+{
+public:
+  U0() : Function(0) {}
+  void values(FieldContainer<double> &values, BasisCachePtr basisCache)
+  {
+    int numCells = values.dimension(0);
+    int numPoints = values.dimension(1);
 
-      const FieldContainer<double> *points = &(basisCache->getPhysicalCubaturePoints());
-      double tol=1e-14;
-      for (int cellIndex=0; cellIndex<numCells; cellIndex++) {
-        for (int ptIndex=0; ptIndex<numPoints; ptIndex++) {
+    const FieldContainer<double> *points = &(basisCache->getPhysicalCubaturePoints());
+    double tol=1e-14;
+    for (int cellIndex=0; cellIndex<numCells; cellIndex++)
+    {
+      for (int ptIndex=0; ptIndex<numPoints; ptIndex++)
+      {
+        double x = (*points)(cellIndex,ptIndex,0);
+        double y = (*points)(cellIndex,ptIndex,1);
+        // solution with a boundary layer (section 5.2 in DPG Part II)
+        // for x = 1, y = 1: u = 0
+        if ( ( abs(x-1.0) < tol ) || (abs(y-1.0) < tol ) )
+        {
+          values(cellIndex,ptIndex) = 0;
+        }
+        else if ( abs(x) < tol )     // for x=0: u = 1 - y
+        {
+          values(cellIndex,ptIndex) = 1.0 - y;
+        }
+        else     // for y=0: u=1-x
+        {
+          values(cellIndex,ptIndex) = 1.0 - x;
+        }
+
+      }
+    }
+  }
+};
+
+class Beta : public Function
+{
+public:
+  Beta() : Function(1) {}
+  void values(FieldContainer<double> &values, BasisCachePtr basisCache)
+  {
+    int numCells = values.dimension(0);
+    int numPoints = values.dimension(1);
+    int spaceDim = values.dimension(2);
+
+    const FieldContainer<double> *points = &(basisCache->getPhysicalCubaturePoints());
+    for (int cellIndex=0; cellIndex<numCells; cellIndex++)
+    {
+      for (int ptIndex=0; ptIndex<numPoints; ptIndex++)
+      {
+        for (int d = 0; d < spaceDim; d++)
+        {
           double x = (*points)(cellIndex,ptIndex,0);
           double y = (*points)(cellIndex,ptIndex,1);
-          // solution with a boundary layer (section 5.2 in DPG Part II)
-          // for x = 1, y = 1: u = 0
-          if ( ( abs(x-1.0) < tol ) || (abs(y-1.0) < tol ) ) {
-            values(cellIndex,ptIndex) = 0;
-          } else if ( abs(x) < tol ) { // for x=0: u = 1 - y
-            values(cellIndex,ptIndex) = 1.0 - y;
-          } else { // for y=0: u=1-x
-            values(cellIndex,ptIndex) = 1.0 - x;
-          }
-
+          values(cellIndex,ptIndex,0) = y;
+          values(cellIndex,ptIndex,0) = -x;
         }
       }
     }
+  }
 };
 
-class Beta : public Function {
-  public:
-    Beta() : Function(1) {}
-    void values(FieldContainer<double> &values, BasisCachePtr basisCache) {
-      int numCells = values.dimension(0);
-      int numPoints = values.dimension(1);
-      int spaceDim = values.dimension(2);
-
-      const FieldContainer<double> *points = &(basisCache->getPhysicalCubaturePoints());
-      for (int cellIndex=0; cellIndex<numCells; cellIndex++) {
-        for (int ptIndex=0; ptIndex<numPoints; ptIndex++) {
-          for (int d = 0; d < spaceDim; d++) {
-            double x = (*points)(cellIndex,ptIndex,0);
-            double y = (*points)(cellIndex,ptIndex,1);
-            values(cellIndex,ptIndex,0) = y;
-            values(cellIndex,ptIndex,0) = -x;
-          }
-        }
-      }
-    }
-};
-
-int main(int argc, char *argv[]) {
+int main(int argc, char *argv[])
+{
 #ifdef HAVE_MPI
   Teuchos::GlobalMPISession mpiSession(&argc, &argv,0);
   choice::MpiArgs args( argc, argv );
@@ -162,7 +186,7 @@ int main(int argc, char *argv[]) {
 
   // create a pointer to a new mesh:
   Teuchos::RCP<Mesh> mesh = Mesh::buildQuadMesh(meshBoundary, horizontalCells, verticalCells,
-      bf, H1Order, H1Order+pToAdd, false);
+                            bf, H1Order, H1Order+pToAdd, false);
 
   vector<double> beta;
   beta.push_back(2.0);
@@ -242,7 +266,8 @@ int main(int argc, char *argv[]) {
   Teuchos::RCP<Solution> solution = Teuchos::rcp( new Solution(mesh, bc, rhs, ip) );
   // solution->setFilter(pc);
 
-  if (enforceLocalConservation) {
+  if (enforceLocalConservation)
+  {
     FunctionPtr zero = Teuchos::rcp( new ConstantScalarFunction(0.0) );
     solution->lagrangeConstraints()->addConstraint(fhat == zero);
   }
@@ -254,11 +279,13 @@ int main(int argc, char *argv[]) {
   if (commRank == 0)
     errOut.open("confusion_err.txt");
 
-  for (int refIndex=0; refIndex<=numRefs; refIndex++){
+  for (int refIndex=0; refIndex<=numRefs; refIndex++)
+  {
     solution->solve(false);
 
     double energy_error = solution->energyErrorTotal();
-    if (commRank==0){
+    if (commRank==0)
+    {
       stringstream outfile;
       outfile << "confusion_" << refIndex;
       exporter.exportSolution(outfile.str());
@@ -269,10 +296,10 @@ int main(int argc, char *argv[]) {
       FunctionPtr zero = Teuchos::rcp( new ConstantScalarFunction(0.0) );
       Teuchos::Tuple<double, 3> fluxImbalances = checkConservation(flux, zero, varFactory, mesh);
       cout << "Mass flux: Largest Local = " << fluxImbalances[0]
-        << ", Global = " << fluxImbalances[1] << ", Sum Abs = " << fluxImbalances[2] << endl;
+           << ", Global = " << fluxImbalances[1] << ", Sum Abs = " << fluxImbalances[2] << endl;
 
       errOut << mesh->numGlobalDofs() << " " << energy_error << " "
-        << fluxImbalances[0] << " " << fluxImbalances[1] << " " << fluxImbalances[2] << endl;
+             << fluxImbalances[0] << " " << fluxImbalances[1] << " " << fluxImbalances[2] << endl;
     }
 
     if (refIndex < numRefs)

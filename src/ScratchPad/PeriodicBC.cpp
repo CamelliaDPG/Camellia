@@ -16,17 +16,21 @@
 using namespace Intrepid;
 using namespace Camellia;
 
-class TransformXFunction : public SimpleVectorFunction<double> {
+class TransformXFunction : public SimpleVectorFunction<double>
+{
   double _xFrom, _xTo;
 public:
-  TransformXFunction(double xFrom, double xTo) {
+  TransformXFunction(double xFrom, double xTo)
+  {
     _xFrom = xFrom;
     _xTo = xTo;
   }
-  vector<double> value(double x, double y) {
+  vector<double> value(double x, double y)
+  {
     vector<double> value(2);
     double tol=1e-14;
-    if (abs(x-_xFrom)>tol) {
+    if (abs(x-_xFrom)>tol)
+    {
       cout << "x must match xFrom!\n";
       TEUCHOS_TEST_FOR_EXCEPTION(true, std::invalid_argument, "x must match xFrom!")
     }
@@ -34,10 +38,12 @@ public:
     value[1] = y;
     return value;
   }
-  vector<double> value(double x, double y, double z) {
+  vector<double> value(double x, double y, double z)
+  {
     vector<double> value(3);
     double tol=1e-14;
-    if (abs(x-_xFrom)>tol) {
+    if (abs(x-_xFrom)>tol)
+    {
       cout << "x must match xFrom!\n";
       TEUCHOS_TEST_FOR_EXCEPTION(true, std::invalid_argument, "x must match xFrom!")
     }
@@ -48,17 +54,21 @@ public:
   }
 };
 
-class TransformYFunction : public SimpleVectorFunction<double> {
+class TransformYFunction : public SimpleVectorFunction<double>
+{
   double _yFrom, _yTo;
 public:
-  TransformYFunction(double yFrom, double yTo) {
+  TransformYFunction(double yFrom, double yTo)
+  {
     _yFrom = yFrom;
     _yTo = yTo;
   }
-  vector<double> value(double x, double y) {
+  vector<double> value(double x, double y)
+  {
     vector<double> value(2);
     double tol=1e-14;
-    if (abs(y-_yFrom)>tol) {
+    if (abs(y-_yFrom)>tol)
+    {
       cout << "y must match yFrom!\n";
       TEUCHOS_TEST_FOR_EXCEPTION(true, std::invalid_argument, "y must match yFrom!")
     }
@@ -66,10 +76,12 @@ public:
     value[1] = _yTo;
     return value;
   }
-  vector<double> value(double x, double y, double z) {
+  vector<double> value(double x, double y, double z)
+  {
     vector<double> value(3);
     double tol=1e-14;
-    if (abs(y-_yFrom)>tol) {
+    if (abs(y-_yFrom)>tol)
+    {
       cout << "y must match yFrom!\n";
       TEUCHOS_TEST_FOR_EXCEPTION(true, std::invalid_argument, "y must match yFrom!")
     }
@@ -80,17 +92,21 @@ public:
   }
 };
 
-class TransformZFunction : public SimpleVectorFunction<double> {
+class TransformZFunction : public SimpleVectorFunction<double>
+{
   double _zFrom, _zTo;
 public:
-  TransformZFunction(double zFrom, double zTo) {
+  TransformZFunction(double zFrom, double zTo)
+  {
     _zFrom = zFrom;
     _zTo = zTo;
   }
-  vector<double> value(double x, double y, double z) {
+  vector<double> value(double x, double y, double z)
+  {
     vector<double> value(3);
     double tol=1e-14;
-    if (abs(z-_zFrom)>tol) {
+    if (abs(z-_zFrom)>tol)
+    {
       cout << "z must match zFrom!\n";
       TEUCHOS_TEST_FOR_EXCEPTION(true, std::invalid_argument, "z must match zFrom!")
     }
@@ -102,8 +118,10 @@ public:
 };
 
 PeriodicBC::PeriodicBC(SpatialFilterPtr pointFilter0, SpatialFilterPtr pointFilter1,
-                       TFunctionPtr<double> transform0to1, TFunctionPtr<double> transform1to0) {
-  if ((transform0to1->rank() != 1) || (transform1to0->rank() != 1)) {
+                       TFunctionPtr<double> transform0to1, TFunctionPtr<double> transform1to0)
+{
+  if ((transform0to1->rank() != 1) || (transform1to0->rank() != 1))
+  {
     TEUCHOS_TEST_FOR_EXCEPTION(true, std::invalid_argument, "transform function must be vector-valued (rank 1).");
   }
 
@@ -113,13 +131,19 @@ PeriodicBC::PeriodicBC(SpatialFilterPtr pointFilter0, SpatialFilterPtr pointFilt
   _transform1to0 = transform1to0;
 }
 
-vector<double> PeriodicBC::getMatchingPoint(const std::vector<double> &point, int whichSide) {
+vector<double> PeriodicBC::getMatchingPoint(const std::vector<double> &point, int whichSide)
+{
   TFunctionPtr<double> f;
-  if (whichSide==0) {
+  if (whichSide==0)
+  {
     f = _transform0to1;
-  } else if (whichSide==1) {
+  }
+  else if (whichSide==1)
+  {
     f = _transform1to0;
-  } else {
+  }
+  else
+  {
     TEUCHOS_TEST_FOR_EXCEPTION(true, std::invalid_argument, "whichSide must be 0 or 1!");
   }
 
@@ -128,53 +152,73 @@ vector<double> PeriodicBC::getMatchingPoint(const std::vector<double> &point, in
   FieldContainer<double> physPoint(1,1,spaceDim);
 
   Teuchos::RCP<PhysicalPointCache> dummyCache = Teuchos::rcp( new PhysicalPointCache(physPoint) );
-  for (int d=0; d<spaceDim; d++) {
+  for (int d=0; d<spaceDim; d++)
+  {
     dummyCache->writablePhysicalCubaturePoints()(0,0,d) = point[d];
   }
   f->values(value,dummyCache);
 
   vector<double> transformedPoint;
-  for (int d=0; d<spaceDim; d++) {
+  for (int d=0; d<spaceDim; d++)
+  {
     transformedPoint.push_back(value(0,0,d));
   }
 
   return transformedPoint;
 }
 
-std::vector<int> PeriodicBC::getMatchingSides(const std::vector<double> &point) {
+std::vector<int> PeriodicBC::getMatchingSides(const std::vector<double> &point)
+{
   // returns 0 if the point matches pointFilter0, 1 if it matches pointFilter1, -1 otherwise.
   vector<int> matches;
-  if (point.size() == 1) {
-    if (_pointFilter0->matchesPoint(point[0])) {
+  if (point.size() == 1)
+  {
+    if (_pointFilter0->matchesPoint(point[0]))
+    {
       matches.push_back(0);
     }
-    if (_pointFilter1->matchesPoint(point[0])) {
+    if (_pointFilter1->matchesPoint(point[0]))
+    {
       matches.push_back(1);
     }
-  } else if (point.size() == 2) {
-    if (_pointFilter0->matchesPoint(point[0],point[1])) {
+  }
+  else if (point.size() == 2)
+  {
+    if (_pointFilter0->matchesPoint(point[0],point[1]))
+    {
       matches.push_back(0);
-    } else if (_pointFilter1->matchesPoint(point[0],point[1])) {
+    }
+    else if (_pointFilter1->matchesPoint(point[0],point[1]))
+    {
       matches.push_back(1);
     }
-  } else if (point.size() == 3) {
-    if (_pointFilter0->matchesPoint(point[0],point[1],point[2])) {
+  }
+  else if (point.size() == 3)
+  {
+    if (_pointFilter0->matchesPoint(point[0],point[1],point[2]))
+    {
       matches.push_back(0);
-    } else if (_pointFilter1->matchesPoint(point[0],point[1],point[2])) {
+    }
+    else if (_pointFilter1->matchesPoint(point[0],point[1],point[2]))
+    {
       matches.push_back(1);
     }
-  } else {
+  }
+  else
+  {
     cout << "Unsupported point size.\n";
     TEUCHOS_TEST_FOR_EXCEPTION(true, std::invalid_argument, "Unsupported point size");
   }
   return matches;
 }
 
-PeriodicBCPtr PeriodicBC::periodicBC(SpatialFilterPtr pointFilter1, SpatialFilterPtr pointFilter2, TFunctionPtr<double> transform1to2, TFunctionPtr<double> transform2to1) {
+PeriodicBCPtr PeriodicBC::periodicBC(SpatialFilterPtr pointFilter1, SpatialFilterPtr pointFilter2, TFunctionPtr<double> transform1to2, TFunctionPtr<double> transform2to1)
+{
   return Teuchos::rcp( new PeriodicBC(pointFilter1,pointFilter2,transform1to2,transform2to1) );
 }
 
-Teuchos::RCP<PeriodicBC> PeriodicBC::xIdentification(double x1, double x2) {
+Teuchos::RCP<PeriodicBC> PeriodicBC::xIdentification(double x1, double x2)
+{
   SpatialFilterPtr x1Filter = SpatialFilter::matchingX(x1);
   SpatialFilterPtr x2Filter = SpatialFilter::matchingX(x2);
   TFunctionPtr<double> x1_to_x2 = Teuchos::rcp( new TransformXFunction(x1,x2) );
@@ -182,7 +226,8 @@ Teuchos::RCP<PeriodicBC> PeriodicBC::xIdentification(double x1, double x2) {
   return periodicBC(x1Filter, x2Filter, x1_to_x2, x2_to_x1);
 }
 
-Teuchos::RCP<PeriodicBC> PeriodicBC::yIdentification(double y1, double y2) {
+Teuchos::RCP<PeriodicBC> PeriodicBC::yIdentification(double y1, double y2)
+{
   SpatialFilterPtr y1Filter = SpatialFilter::matchingY(y1);
   SpatialFilterPtr y2Filter = SpatialFilter::matchingY(y2);
   TFunctionPtr<double> y1_to_y2 = Teuchos::rcp( new TransformYFunction(y1,y2) );
@@ -190,7 +235,8 @@ Teuchos::RCP<PeriodicBC> PeriodicBC::yIdentification(double y1, double y2) {
   return periodicBC(y1Filter, y2Filter, y1_to_y2, y2_to_y1);
 }
 
-Teuchos::RCP<PeriodicBC> PeriodicBC::zIdentification(double z1, double z2) {
+Teuchos::RCP<PeriodicBC> PeriodicBC::zIdentification(double z1, double z2)
+{
   SpatialFilterPtr z1Filter = SpatialFilter::matchingZ(z1);
   SpatialFilterPtr z2Filter = SpatialFilter::matchingZ(z2);
   TFunctionPtr<double> z1_to_z2 = Teuchos::rcp( new TransformZFunction(z1,z2) );

@@ -29,7 +29,8 @@ using namespace Camellia;
 
 // TODO: move all the stuff to do with transfinite interpolation into ParametricSurface.cpp
 
-VectorBasisPtr basisForTransformation(ElementTypePtr cellType) {
+VectorBasisPtr basisForTransformation(ElementTypePtr cellType)
+{
   int polyOrder = std::max(cellType->trialOrderPtr->maxBasisDegree(), cellType->testOrderPtr->maxBasisDegree());
 
   BasisPtr basis = BasisFactory::basisFactory()->getBasis(polyOrder, cellType->cellTopoPtr, Camellia::FUNCTION_SPACE_VECTOR_HGRAD);
@@ -37,11 +38,13 @@ VectorBasisPtr basisForTransformation(ElementTypePtr cellType) {
   return vectorBasis;
 }
 
-vector< ParametricCurvePtr > edgeLines(MeshPtr mesh, int cellID) {
+vector< ParametricCurvePtr > edgeLines(MeshPtr mesh, int cellID)
+{
   vector< ParametricCurvePtr > lines;
   ElementPtr cell = mesh->getElement(cellID);
   vector<unsigned> vertexIndices = mesh->vertexIndicesForCell(cellID);
-  for (int i=0; i<vertexIndices.size(); i++) {
+  for (int i=0; i<vertexIndices.size(); i++)
+  {
     FieldContainer<double> v0 = mesh->vertexCoordinates(vertexIndices[i]);
     FieldContainer<double> v1 = mesh->vertexCoordinates(vertexIndices[(i+1)%vertexIndices.size()]);
     // 2D only for now
@@ -51,22 +54,28 @@ vector< ParametricCurvePtr > edgeLines(MeshPtr mesh, int cellID) {
   return lines;
 }
 
-void roundToOneOrZero(double &value, double tol) {
+void roundToOneOrZero(double &value, double tol)
+{
   // if value is within tol of 1 or 0, replace value by 1 or 0
-  if (abs(value-1)<tol) {
+  if (abs(value-1)<tol)
+  {
     value = 1;
-  } else if (abs(value)<tol) {
+  }
+  else if (abs(value)<tol)
+  {
     value = 0;
   }
 }
 
-class CellTransformationFunction : public TFunction<double> {
+class CellTransformationFunction : public TFunction<double>
+{
   FieldContainer<double> _basisCoefficients;
   VectorBasisPtr _basis;
   Camellia::EOperator _op;
   int _cellIndex; // index into BasisCache's list of cellIDs; must be set prior to each call to values() (there's a reason why this is a private class!)
 
-  FieldContainer<double> pointLatticeQuad(int numPointsTotal, const vector< ParametricCurvePtr > &edgeFunctions) {
+  FieldContainer<double> pointLatticeQuad(int numPointsTotal, const vector< ParametricCurvePtr > &edgeFunctions)
+  {
     int spaceDim = 2;
     FieldContainer<double> pointLattice(numPointsTotal,spaceDim);
 
@@ -76,23 +85,27 @@ class CellTransformationFunction : public TFunction<double> {
     vector< int > numPoints;
     int approxPoints1D = (int) sqrt( numPointsTotal );
     int remainder = numPointsTotal - approxPoints1D * approxPoints1D;
-    for (int i=0; i<approxPoints1D; i++) {
+    for (int i=0; i<approxPoints1D; i++)
+    {
       int extraPoint = (i < remainder) ? 1 : 0;
       numPoints.push_back(approxPoints1D + extraPoint);
     }
 
-    if (edgeFunctions.size() != 4) {
+    if (edgeFunctions.size() != 4)
+    {
       TEUCHOS_TEST_FOR_EXCEPTION(true, std::invalid_argument, "wrong number of edgeFunctions");
     }
 
     int numPoints_t1 = numPoints.size();
 
     int pointIndex = 0;
-    for (int t1_index = 0; t1_index < numPoints_t1; t1_index++) {
+    for (int t1_index = 0; t1_index < numPoints_t1; t1_index++)
+    {
       int numPoints_t2 = numPoints[t1_index];
       double t1 = ((double)t1_index) / (double) (numPoints_t1 - 1);
 
-      for (int t2_index=0; t2_index < numPoints_t2; t2_index++) {
+      for (int t2_index=0; t2_index < numPoints_t2; t2_index++)
+      {
         double t2 = ((double)t2_index) / (double) (numPoints_t2 - 1);
 
 //        cout << "(t1,t2) = (" << t1 << ", " << t2 << ")" << endl;
@@ -108,14 +121,16 @@ class CellTransformationFunction : public TFunction<double> {
   }
 
 protected:
-  CellTransformationFunction(VectorBasisPtr basis, FieldContainer<double> &basisCoefficients, Camellia::EOperator op) : TFunction<double>(1) {
+  CellTransformationFunction(VectorBasisPtr basis, FieldContainer<double> &basisCoefficients, Camellia::EOperator op) : TFunction<double>(1)
+  {
     _basis = basis;
     _basisCoefficients = basisCoefficients;
     _op = op;
     _cellIndex = -1;
   }
 public:
-  CellTransformationFunction(MeshPtr mesh, int cellID, const vector< ParametricCurvePtr > &edgeFunctions) : TFunction<double>(1) {
+  CellTransformationFunction(MeshPtr mesh, int cellID, const vector< ParametricCurvePtr > &edgeFunctions) : TFunction<double>(1)
+  {
     _cellIndex = -1;
     _op = OP_VALUE;
     ElementPtr cell = mesh->getElement(cellID);
@@ -123,7 +138,8 @@ public:
     ParametricSurface::basisWeightsForProjectedInterpolant(_basisCoefficients, _basis, mesh, cellID);
   }
 
-  void values(FieldContainer<double> &values, BasisCachePtr basisCache) {
+  void values(FieldContainer<double> &values, BasisCachePtr basisCache)
+  {
     // sets values(_cellIndex,P,D)
     TEUCHOS_TEST_FOR_EXCEPTION(_cellIndex == -1, std::invalid_argument, "must call setCellIndex before calling values!");
 
@@ -149,21 +165,26 @@ public:
     int numPoints = values.dimension(1);
 
     // initialize the values we're responsible for setting
-    for (int ptIndex=0; ptIndex<numPoints; ptIndex++) {
-      for (int d=0; d<spaceDim; d++) {
+    for (int ptIndex=0; ptIndex<numPoints; ptIndex++)
+    {
+      for (int d=0; d<spaceDim; d++)
+      {
         values(_cellIndex,ptIndex,d) = 0.0;
       }
     }
 
     int entriesPerPoint = values.size() / (numCells * numPoints);
-    for (int i=0;i<numDofs;i++){
+    for (int i=0; i<numDofs; i++)
+    {
       double weight = _basisCoefficients(i);
-      for (int ptIndex=0;ptIndex<numPoints;ptIndex++){
+      for (int ptIndex=0; ptIndex<numPoints; ptIndex++)
+      {
         int valueIndex = (_cellIndex*numPoints + ptIndex)*entriesPerPoint;
         int basisValueIndex = (_cellIndex*numPoints*numDofs + i*numPoints + ptIndex) * entriesPerPoint;
         double *value = &values[valueIndex];
         const double *basisValue = &((*transformedValues)[basisValueIndex]);
-        for (int j=0; j<entriesPerPoint; j++) {
+        for (int j=0; j<entriesPerPoint; j++)
+        {
           *value++ += *basisValue++ * weight;
         }
       }
@@ -218,33 +239,40 @@ public:
 //    }
   }
 
-  int basisDegree() {
+  int basisDegree()
+  {
     return _basis->getDegree();
   }
 
-  void setCellIndex(int cellIndex) {
+  void setCellIndex(int cellIndex)
+  {
     _cellIndex = cellIndex;
   }
 
-  TFunctionPtr<double> dx() {
+  TFunctionPtr<double> dx()
+  {
     return Teuchos::rcp( new CellTransformationFunction(_basis,_basisCoefficients,OP_DX) );
   }
 
-  TFunctionPtr<double> dy() {
+  TFunctionPtr<double> dy()
+  {
     return Teuchos::rcp( new CellTransformationFunction(_basis,_basisCoefficients,OP_DY) );
   }
 
-  TFunctionPtr<double> dz() {
+  TFunctionPtr<double> dz()
+  {
     return Teuchos::rcp( new CellTransformationFunction(_basis,_basisCoefficients,OP_DZ) );
   }
 
-  static Teuchos::RCP<CellTransformationFunction> cellTransformation(MeshPtr mesh, GlobalIndexType cellID, const vector< ParametricCurvePtr > edgeFunctions) {
+  static Teuchos::RCP<CellTransformationFunction> cellTransformation(MeshPtr mesh, GlobalIndexType cellID, const vector< ParametricCurvePtr > edgeFunctions)
+  {
     return Teuchos::rcp( new CellTransformationFunction(mesh,cellID,edgeFunctions));
   }
 };
 
 // protected method; used for dx(), dy(), dz():
-MeshTransformationFunction::MeshTransformationFunction(MeshPtr mesh, map< GlobalIndexType, TFunctionPtr<double>> cellTransforms, Camellia::EOperator op) : TFunction<double>(1) {
+MeshTransformationFunction::MeshTransformationFunction(MeshPtr mesh, map< GlobalIndexType, TFunctionPtr<double>> cellTransforms, Camellia::EOperator op) : TFunction<double>(1)
+{
   _mesh = mesh;
   _cellTransforms = cellTransforms;
   _op = op;
@@ -252,21 +280,25 @@ MeshTransformationFunction::MeshTransformationFunction(MeshPtr mesh, map< Global
 
 }
 
-MeshTransformationFunction::MeshTransformationFunction(MeshPtr mesh, set<GlobalIndexType> cellIDsToTransform) : TFunction<double>(1) { // vector-valued Function
+MeshTransformationFunction::MeshTransformationFunction(MeshPtr mesh, set<GlobalIndexType> cellIDsToTransform) : TFunction<double>(1)   // vector-valued Function
+{
   _op = OP_VALUE;
   _mesh = mesh;
   _maxPolynomialDegree = 1; // 1 is the degree of the identity transform (x,y) -> (x,y)
   this->updateCells(cellIDsToTransform);
 }
 
-int MeshTransformationFunction::maxDegree() {
+int MeshTransformationFunction::maxDegree()
+{
   return _maxPolynomialDegree;
 }
 
-bool MeshTransformationFunction::mapRefCellPointsUsingExactGeometry(FieldContainer<double> &cellPoints, const FieldContainer<double> &refCellPoints, GlobalIndexType cellID) {
+bool MeshTransformationFunction::mapRefCellPointsUsingExactGeometry(FieldContainer<double> &cellPoints, const FieldContainer<double> &refCellPoints, GlobalIndexType cellID)
+{
   // returns true if the MeshTransformationFunction handles this cell, false otherwise
   // if true, then populates cellPoints
-  if (_cellTransforms.find(cellID) == _cellTransforms.end()) {
+  if (_cellTransforms.find(cellID) == _cellTransforms.end())
+  {
     return false;
   }
 //  cout << "refCellPoints in mapRefCellPointsUsingExactGeometry():\n" << refCellPoints;
@@ -274,10 +306,12 @@ bool MeshTransformationFunction::mapRefCellPointsUsingExactGeometry(FieldContain
 //  cout << "cellPoints prior to mapRefCellPointsUsingExactGeometry():\n" << cellPoints;
 
   CellTopoPtr cellTopo = _mesh->getElement(cellID)->elementType()->cellTopoPtr;
-  if (cellTopo->getTensorialDegree() > 0) {
+  if (cellTopo->getTensorialDegree() > 0)
+  {
     TEUCHOS_TEST_FOR_EXCEPTION(true, std::invalid_argument, "mapRefCellPointsUsingExactGeometry does not support tensorial degree > 0.");
   }
-  if (cellTopo->getKey().first == shards::Quadrilateral<4>::key) {
+  if (cellTopo->getKey().first == shards::Quadrilateral<4>::key)
+  {
     int numPoints = refCellPoints.dimension(0);
     int spaceDim = refCellPoints.dimension(1);
     TEUCHOS_TEST_FOR_EXCEPTION(spaceDim != 2, std::invalid_argument, "points must be in 2D for the quad!");
@@ -293,7 +327,8 @@ bool MeshTransformationFunction::mapRefCellPointsUsingExactGeometry(FieldContain
 
     ParametricSurfacePtr interpolant = ParametricSurface::transfiniteInterpolant(edgeFunctions);
 
-    for (int ptIndex=0; ptIndex<numPoints; ptIndex++) {
+    for (int ptIndex=0; ptIndex<numPoints; ptIndex++)
+    {
       double t1 = parametricPoints(ptIndex,0);
       double t2 = parametricPoints(ptIndex,1);
 
@@ -305,7 +340,9 @@ bool MeshTransformationFunction::mapRefCellPointsUsingExactGeometry(FieldContain
       cellPoints(ptIndex,1) = y;
     }
 
-  } else {
+  }
+  else
+  {
     // TODO: work out what to do for triangles (or perhaps even a general polygon)
     TEUCHOS_TEST_FOR_EXCEPTION(true, std::invalid_argument, "Unhandled cell type");
   }
@@ -315,8 +352,10 @@ bool MeshTransformationFunction::mapRefCellPointsUsingExactGeometry(FieldContain
   return true;
 }
 
-void MeshTransformationFunction::updateCells(const set<GlobalIndexType> &cellIDs) {
-  for (set<GlobalIndexType>::iterator cellIDIt = cellIDs.begin(); cellIDIt != cellIDs.end(); cellIDIt++) {
+void MeshTransformationFunction::updateCells(const set<GlobalIndexType> &cellIDs)
+{
+  for (set<GlobalIndexType>::iterator cellIDIt = cellIDs.begin(); cellIDIt != cellIDs.end(); cellIDIt++)
+  {
     GlobalIndexType cellID = *cellIDIt;
     Teuchos::RCP<CellTransformationFunction> cellTransform =  CellTransformationFunction::cellTransformation(_mesh, cellID, _mesh->parametricEdgesForCell(cellID));
     _cellTransforms[cellID] = cellTransform;
@@ -324,37 +363,49 @@ void MeshTransformationFunction::updateCells(const set<GlobalIndexType> &cellIDs
   }
 }
 
-void MeshTransformationFunction::values(FieldContainer<double> &values, BasisCachePtr basisCache) {
+void MeshTransformationFunction::values(FieldContainer<double> &values, BasisCachePtr basisCache)
+{
   CHECK_VALUES_RANK(values);
   vector<GlobalIndexType> cellIDs = basisCache->cellIDs();
   // identity map is the right thing most of the time
   // we'll do something different only where necessary
   int spaceDim = basisCache->getSpaceDim();
-  if (_op == OP_VALUE) {
+  if (_op == OP_VALUE)
+  {
     values = basisCache->getPhysicalCubaturePoints(); // identity
-  } else if (_op == OP_DX) {
+  }
+  else if (_op == OP_DX)
+  {
     // identity map is 1 in all the x slots, 0 in all others
     int mod_value = 0; // the x slots are the mod spaceDim = 0 slots;
-    for (int i=0; i<values.size(); i++) {
+    for (int i=0; i<values.size(); i++)
+    {
       values[i] = (i%spaceDim == mod_value) ? 1.0 : 0.0;
     }
-  } else if (_op == OP_DY) {
+  }
+  else if (_op == OP_DY)
+  {
     // identity map is 1 in all the y slots, 0 in all others
     int mod_value = 1; // the y slots are the mod spaceDim = 1 slots;
-    for (int i=0; i<values.size(); i++) {
+    for (int i=0; i<values.size(); i++)
+    {
       values[i] = (i%spaceDim == mod_value) ? 1.0 : 0.0;
     }
-  } else if (_op == OP_DZ) {
+  }
+  else if (_op == OP_DZ)
+  {
     // identity map is 1 in all the z slots, 0 in all others
     int mod_value = 2; // the z slots are the mod spaceDim = 2 slots;
-    for (int i=0; i<values.size(); i++) {
+    for (int i=0; i<values.size(); i++)
+    {
       values[i] = (i%spaceDim == mod_value) ? 1.0 : 0.0;
     }
   }
 //  if (_op == OP_DX) {
 //    cout << "values before cellTransformation:\n" << values;
 //  }
-  for (int cellIndex=0; cellIndex < cellIDs.size(); cellIndex++) {
+  for (int cellIndex=0; cellIndex < cellIDs.size(); cellIndex++)
+  {
     GlobalIndexType cellID = cellIDs[cellIndex];
     if (_cellTransforms.find(cellID) == _cellTransforms.end()) continue;
     TFunctionPtr<double> cellTransformation = _cellTransforms[cellID];
@@ -366,48 +417,59 @@ void MeshTransformationFunction::values(FieldContainer<double> &values, BasisCac
 //  }
 }
 
-map< GlobalIndexType, TFunctionPtr<double> > applyOperatorToCellTransforms(const map< GlobalIndexType, TFunctionPtr<double> > &cellTransforms, Camellia::EOperator op) {
+map< GlobalIndexType, TFunctionPtr<double> > applyOperatorToCellTransforms(const map< GlobalIndexType, TFunctionPtr<double> > &cellTransforms, Camellia::EOperator op)
+{
   map<GlobalIndexType, TFunctionPtr<double> > newTransforms;
   for (map< GlobalIndexType, TFunctionPtr<double> >::const_iterator cellTransformIt = cellTransforms.begin();
-       cellTransformIt != cellTransforms.end(); cellTransformIt++) {
+       cellTransformIt != cellTransforms.end(); cellTransformIt++)
+  {
     GlobalIndexType cellID = cellTransformIt->first;
     newTransforms[cellID] = TFunction<double>::op(cellTransformIt->second, op);
   }
   return newTransforms;
 }
 
-TFunctionPtr<double> MeshTransformationFunction::dx() {
+TFunctionPtr<double> MeshTransformationFunction::dx()
+{
   Camellia::EOperator op = OP_DX;
   return Teuchos::rcp( new MeshTransformationFunction(_mesh, applyOperatorToCellTransforms(_cellTransforms, op),op));
 }
 
-TFunctionPtr<double> MeshTransformationFunction::dy() {
-  if (_mesh->getDimension() < 2) {
+TFunctionPtr<double> MeshTransformationFunction::dy()
+{
+  if (_mesh->getDimension() < 2)
+  {
     return TFunction<double>::null();
   }
   Camellia::EOperator op = OP_DY;
   return Teuchos::rcp( new MeshTransformationFunction(_mesh, applyOperatorToCellTransforms(_cellTransforms, op),op));
 }
 
-TFunctionPtr<double> MeshTransformationFunction::dz() {
-  if (_mesh->getDimension() < 3) {
+TFunctionPtr<double> MeshTransformationFunction::dz()
+{
+  if (_mesh->getDimension() < 3)
+  {
     return TFunction<double>::null();
   }
   Camellia::EOperator op = OP_DZ;
   return Teuchos::rcp( new MeshTransformationFunction(_mesh, applyOperatorToCellTransforms(_cellTransforms, op),op));
 }
 
-void MeshTransformationFunction::didHRefine(const set<GlobalIndexType> &cellIDs) {
+void MeshTransformationFunction::didHRefine(const set<GlobalIndexType> &cellIDs)
+{
   set<GlobalIndexType> childrenWithCurvedEdges;
 
   MeshTopologyPtr topology = _mesh->getTopology();
 
-  for (set<GlobalIndexType>::iterator cellIDIt = cellIDs.begin(); cellIDIt != cellIDs.end(); cellIDIt++) {
+  for (set<GlobalIndexType>::iterator cellIDIt = cellIDs.begin(); cellIDIt != cellIDs.end(); cellIDIt++)
+  {
     GlobalIndexType parentCellID = *cellIDIt;
     vector<IndexType> childCells = topology->getCell(parentCellID)->getChildIndices();
-    for (vector<IndexType>::iterator childCellIt = childCells.begin(); childCellIt != childCells.end(); childCellIt++) {
+    for (vector<IndexType>::iterator childCellIt = childCells.begin(); childCellIt != childCells.end(); childCellIt++)
+    {
       unsigned childCellID = *childCellIt;
-      if (topology->cellHasCurvedEdges(childCellID)) {
+      if (topology->cellHasCurvedEdges(childCellID))
+      {
         childrenWithCurvedEdges.insert(childCellID);
       }
     }
@@ -415,7 +477,8 @@ void MeshTransformationFunction::didHRefine(const set<GlobalIndexType> &cellIDs)
   updateCells(childrenWithCurvedEdges);
 }
 
-void MeshTransformationFunction::didPRefine(const set<GlobalIndexType> &cellIDs) {
+void MeshTransformationFunction::didPRefine(const set<GlobalIndexType> &cellIDs)
+{
   updateCells(cellIDs);
 }
 

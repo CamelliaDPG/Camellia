@@ -27,11 +27,13 @@
 
 using namespace Camellia;
 
-int kronDelta(int i, int j) {
+int kronDelta(int i, int j)
+{
   return (i == j) ? 1 : 0;
 }
 
-vector<double> makeVertex(double v0, double v1, double v2) {
+vector<double> makeVertex(double v0, double v1, double v2)
+{
   vector<double> v;
   v.push_back(v0);
   v.push_back(v1);
@@ -39,7 +41,8 @@ vector<double> makeVertex(double v0, double v1, double v2) {
   return v;
 }
 
-int main(int argc, char *argv[]) {
+int main(int argc, char *argv[])
+{
 
 #ifdef HAVE_MPI
   Teuchos::GlobalMPISession mpiSession(&argc, &argv,0);
@@ -78,7 +81,8 @@ int main(int argc, char *argv[]) {
   cmdp.setOption("saveToFile", "skipSave", &saveToFile, "Save solution after each refinement/solve");
   cmdp.setOption("savePrefix", &savePrefix, "Filename prefix for saved solutions if saveToFile option is selected");
 
-  if (cmdp.parse(argc,argv) != Teuchos::CommandLineProcessor::PARSE_SUCCESSFUL) {
+  if (cmdp.parse(argc,argv) != Teuchos::CommandLineProcessor::PARSE_SUCCESSFUL)
+  {
 #ifdef HAVE_MPI
     MPI_Finalize();
 #endif
@@ -97,7 +101,7 @@ int main(int argc, char *argv[]) {
   VarPtr sigma33 = vf->fieldVar("\\sigma_{33}", L2);
 
   Space traceSpace = L2;
-  
+
   // traces:
   VarPtr u1hat = vf->traceVar("\\hat{u_1}",traceSpace);
   VarPtr u2hat = vf->traceVar("\\hat{u_2}",traceSpace);
@@ -122,12 +126,16 @@ int main(int argc, char *argv[]) {
   // Compliance Tensor
   static const int N = 3;
   double C[N][N][N][N];
-  for (int i = 0; i < N; ++i){
-    for (int j = 0; j < N; ++j){
-      for (int k = 0; k < N; ++k){
-        for (int l = 0; l < N; ++l){
+  for (int i = 0; i < N; ++i)
+  {
+    for (int j = 0; j < N; ++j)
+    {
+      for (int k = 0; k < N; ++k)
+      {
+        for (int l = 0; l < N; ++l)
+        {
           C[i][j][k][l] = 1/(2*mu)*(0.5*(kronDelta(i,k)*kronDelta(j,l)+kronDelta(i,l)*kronDelta(j,k))
-                        - lambda/(2*mu+N*lambda)*kronDelta(i,j)*kronDelta(k,l));
+                                    - lambda/(2*mu+N*lambda)*kronDelta(i,j)*kronDelta(k,l));
           // cout << "C(" << i << "," << j << "," << k << "," << l << ") = " << C[i][j][k][l] << endl;
         }
       }
@@ -136,12 +144,16 @@ int main(int argc, char *argv[]) {
 
   // Stiffness Tensor
   double E[N][N][N][N];
-  for (int i = 0; i < N; ++i){
-    for (int j = 0; j < N; ++j){
-      for (int k = 0; k < N; ++k){
-        for (int l = 0; l < N; ++l){
+  for (int i = 0; i < N; ++i)
+  {
+    for (int j = 0; j < N; ++j)
+    {
+      for (int k = 0; k < N; ++k)
+      {
+        for (int l = 0; l < N; ++l)
+        {
           E[i][j][k][l] = (2*mu)*0.5*(kronDelta(i,k)*kronDelta(j,l)+kronDelta(i,l)*kronDelta(j,k))
-                        + lambda*kronDelta(i,j)*kronDelta(k,l);
+                          + lambda*kronDelta(i,j)*kronDelta(k,l);
           // cout << "C(" << i << "," << j << "," << k << "," << l << ") = " << C[i][j][k][l] << endl;
         }
       }
@@ -186,11 +198,16 @@ int main(int argc, char *argv[]) {
   bf->addTerm(u1hat, tau11*n->x()+tau12*n->y()+tau13*n->z());
   bf->addTerm(u2hat, tau12*n->x()+tau22*n->y()+tau23*n->z());
   bf->addTerm(u3hat, tau13*n->x()+tau23*n->y()+tau33*n->z());
-  for (int i = 0; i < N; ++i){
-    for (int j = 0; j < N; ++j){
-      for (int k = 0; k < N; ++k){
-        for (int l = 0; l < N; ++l){
-          if (abs(C[i][j][k][l])>1e-14){
+  for (int i = 0; i < N; ++i)
+  {
+    for (int j = 0; j < N; ++j)
+    {
+      for (int k = 0; k < N; ++k)
+      {
+        for (int l = 0; l < N; ++l)
+        {
+          if (abs(C[i][j][k][l])>1e-14)
+          {
             bf->addTerm(sigma[k][l],-Function::constant(C[i][j][k][l])*tau[i][j]);
           }
         }
@@ -309,10 +326,11 @@ int main(int argc, char *argv[]) {
   IPPtr ip = elasticityIPs[norm];
 
   SolutionPtr soln;
-  
+
   MeshPtr mesh, k0Mesh;
-  
-  if (loadRefinementNumber == -1) {
+
+  if (loadRefinementNumber == -1)
+  {
     // Mesh
     CellTopoPtr hex = CellTopology::hexahedron();
     vector<double> V0 = {0,0,0};
@@ -323,37 +341,39 @@ int main(int argc, char *argv[]) {
     vector<double> V5 = {1,0,1};
     vector<double> V6 = {1,1,1};
     vector<double> V7 = {0,1,1};
-    
+
     vector< vector<double> > vertices = {V0,V1,V2,V3,V4,V5,V6,V7};
     vector<unsigned> hexVertexList = {0,1,2,3,4,5,6,7};
-    
+
     vector< vector<unsigned> > elementVertices;
     elementVertices.push_back(hexVertexList);
-    
+
     vector< CellTopoPtr > cellTopos;
     cellTopos.push_back(hex);
-    
+
     MeshGeometryPtr meshGeometry = Teuchos::rcp( new MeshGeometry(vertices, elementVertices, cellTopos) );
-    
+
     MeshTopologyPtr meshTopology = Teuchos::rcp( new MeshTopology(meshGeometry) );
-    
+
     mesh = Teuchos::rcp( new Mesh (meshTopology, bf, k+1, delta_k) );
     k0Mesh = Teuchos::rcp( new Mesh (meshTopology->deepCopy(), bf, 1, delta_k) );
-    
+
     mesh->registerObserver(k0Mesh);
-    
+
     soln = Solution::solution(mesh, bc, rhs, ip);
-  } else {
+  }
+  else
+  {
     ostringstream filePrefix;
     filePrefix << loadPrefix << loadRefinementNumber;
     if (commRank==0) cout << "loading " << filePrefix.str() << endl;
     soln = Solution::load(bf, filePrefix.str());
     mesh = soln->mesh();
-    
+
     MeshTopologyPtr meshTopo = mesh->getTopology();
     k0Mesh = Teuchos::rcp( new Mesh (meshTopo->deepCopy(), bf, 1, delta_k) );
     mesh->registerObserver(k0Mesh);
-    
+
     soln->setBC(bc);
     soln->setRHS(rhs);
     soln->setIP(ip);
@@ -365,7 +385,7 @@ int main(int argc, char *argv[]) {
 
   double threshold = 0.20;
   RefinementStrategy refStrategy(soln, threshold);
-  
+
 //  bool meshLocalGlobalConsistencyCheck = MeshTestUtility::checkLocalGlobalConsistency(mesh,1e-6); // 1e-6: we're just looking for egregious errors
 //  if (!meshLocalGlobalConsistencyCheck)
 //  {
@@ -375,20 +395,22 @@ int main(int argc, char *argv[]) {
 //  {
 //    cout << "Mesh passed local/global consistency check on rank " << commRank << endl;
 //  }
-  
+
   int startIndex = loadRefinementNumber + 1; // the first refinement we haven't computed (is 0 when we aren't loading from file)
-  if (startIndex > 0) {
+  if (startIndex > 0)
+  {
     // then refine first
     refStrategy.refine();
   }
-  
+
   SolverPtr kluSolver = Solver::getSolver(Solver::KLU, true);
   double tol = 1e-6;
   int maxIters = 10000;
   bool useStaticCondensation = false;
   int azOutput = 20; // print residual every 20 CG iterations
-  
-  for (int refIndex=startIndex; refIndex < numRefs; refIndex++) {
+
+  for (int refIndex=startIndex; refIndex < numRefs; refIndex++)
+  {
     Teuchos::RCP<GMGSolver> gmgSolver = Teuchos::rcp( new GMGSolver(soln, k0Mesh, maxIters, tol, kluSolver, useStaticCondensation));
     gmgSolver->setAztecOutput(azOutput);
     soln->solve(gmgSolver);
@@ -397,13 +419,14 @@ int main(int argc, char *argv[]) {
     if (commRank == 0)
     {
       // if (refIndex > 0)
-        // refStrategy.printRefinementStatistics(refIndex-1);
+      // refStrategy.printRefinementStatistics(refIndex-1);
       cout << "Refinement:\t " << refIndex << " \tElements:\t " << mesh->numActiveElements()
-        << " \tDOFs:\t " << mesh->numGlobalDofs() << " \tEnergy Error:\t " << energyError << endl;
+           << " \tDOFs:\t " << mesh->numGlobalDofs() << " \tEnergy Error:\t " << energyError << endl;
     }
 
     // save solution to file
-    if (saveToFile) {
+    if (saveToFile)
+    {
       ostringstream filePrefix;
       filePrefix << savePrefix << refIndex;
       soln->save(filePrefix.str());

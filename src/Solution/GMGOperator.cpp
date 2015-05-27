@@ -53,11 +53,12 @@ extern "C" void HPM_Stop(char *);
 
 GMGOperator::GMGOperator(BCPtr zeroBCs, MeshPtr coarseMesh, IPPtr coarseIP,
                          MeshPtr fineMesh, Teuchos::RCP<DofInterpreter> fineDofInterpreter, Epetra_Map finePartitionMap,
-                         Teuchos::RCP<Solver> coarseSolver, bool useStaticCondensation, bool fineSolverUsesDiagonalScaling) :  _finePartitionMap(finePartitionMap), _br(true) {
+                         Teuchos::RCP<Solver> coarseSolver, bool useStaticCondensation, bool fineSolverUsesDiagonalScaling) :  _finePartitionMap(finePartitionMap), _br(true)
+{
   _useStaticCondensation = useStaticCondensation;
   _fineDofInterpreter = fineDofInterpreter;
   _fineSolverUsesDiagonalScaling = false;
-  
+
   _hierarchicalNeighborsForSchwarz = false;
 
   _debugMode = false;
@@ -92,14 +93,16 @@ GMGOperator::GMGOperator(BCPtr zeroBCs, MeshPtr coarseMesh, IPPtr coarseIP,
   setSmootherType(IFPACK_ADDITIVE_SCHWARZ); // default
   _smootherOverlap = 0;
 
-  { // DEBUGGING
+  {
+    // DEBUGGING
 //    GlobalIndexType fineGlobalDofCount = _fineMesh->numGlobalDofs();
 //    GlobalIndexType coarseGlobalDofCount = _coarseMesh->numGlobalDofs();
 //    cout << "Global dof count for fine mesh: " << fineGlobalDofCount << endl;
 //    cout << "Global dof count for coarse mesh: " << coarseGlobalDofCount << endl;
   }
 
-  if (( coarseMesh->meshUsesMaximumRule()) || (! fineMesh->meshUsesMinimumRule()) ) {
+  if (( coarseMesh->meshUsesMaximumRule()) || (! fineMesh->meshUsesMinimumRule()) )
+  {
     cout << "GMGOperator only supports minimum rule.\n";
     TEUCHOS_TEST_FOR_EXCEPTION(true, std::invalid_argument, "GMGOperator only supports minimum rule.");
   }
@@ -139,7 +142,8 @@ GMGOperator::GMGOperator(BCPtr zeroBCs, MeshPtr coarseMesh, IPPtr coarseIP,
   _timeProlongationOperatorConstruction = prolongationTimer.ElapsedTime();
 
   int rank = Teuchos::GlobalMPISession::getRank();
-  if (rank==0) {
+  if (rank==0)
+  {
     cout << "Prolongation operator constructed in " << _timeProlongationOperatorConstruction << " seconds.\n";
   }
 
@@ -149,20 +153,26 @@ GMGOperator::GMGOperator(BCPtr zeroBCs, MeshPtr coarseMesh, IPPtr coarseIP,
   _timeConstruction += constructionTimer.ElapsedTime();
 }
 
-void GMGOperator::clearTimings() {
+void GMGOperator::clearTimings()
+{
   _timeMapFineToCoarse = 0, _timeMapCoarseToFine = 0, _timeConstruction = 0, _timeCoarseSolve = 0, _timeCoarseImport = 0, _timeLocalCoefficientMapConstruction = 0, _timeComputeCoarseStiffnessMatrix = 0, _timeProlongationOperatorConstruction = 0;
 }
 
-void GMGOperator::computeCoarseStiffnessMatrix(Epetra_CrsMatrix *fineStiffnessMatrix) {
+void GMGOperator::computeCoarseStiffnessMatrix(Epetra_CrsMatrix *fineStiffnessMatrix)
+{
   int globalColCount = fineStiffnessMatrix->NumGlobalCols();
-  if (_P.get() == NULL) {
+  if (_P.get() == NULL)
+  {
     constructProlongationOperator();
-  } else if (_P->NumGlobalRows() != globalColCount) {
+  }
+  else if (_P->NumGlobalRows() != globalColCount)
+  {
     constructProlongationOperator();
-    if (_P->NumGlobalRows() != globalColCount) {
+    if (_P->NumGlobalRows() != globalColCount)
+    {
       cout << "GMGOperator::computeCoarseStiffnessMatrix: Even after a fresh call to constructProlongationOperator, _P->NumGlobalRows() != globalColCount (";
       cout << _P->NumGlobalRows() << " != " << globalColCount << ").\n";
-      
+
       TEUCHOS_TEST_FOR_EXCEPTION(true, std::invalid_argument, "_P->NumGlobalRows() != globalColCount");
     }
   }
@@ -190,7 +200,8 @@ void GMGOperator::computeCoarseStiffnessMatrix(Epetra_CrsMatrix *fineStiffnessMa
   Epetra_CrsMatrix AP(::Copy, _finePartitionMap, maxRowSize);
 
   int err = EpetraExt::MatrixMatrix::Multiply(*fineStiffnessMatrix, false, *_P, false, AP);
-  if (err != 0) {
+  if (err != 0)
+  {
     cout << "ERROR: EpetraExt::MatrixMatrix::Multiply returned an error during computeCoarseStiffnessMatrix's computation of A * P.\n";
     TEUCHOS_TEST_FOR_EXCEPTION(true, std::invalid_argument, "EpetraExt::MatrixMatrix::Multiply returned an error during computeCoarseStiffnessMatrix's computation of A * P.");
   }
@@ -201,7 +212,8 @@ void GMGOperator::computeCoarseStiffnessMatrix(Epetra_CrsMatrix *fineStiffnessMa
 
   // compute P^T * A * P
   err = EpetraExt::MatrixMatrix::Multiply(*_P, true, AP, false, *PT_A_P);
-  if (err != 0) {
+  if (err != 0)
+  {
     cout << "WARNING: EpetraExt::MatrixMatrix::Multiply returned an error during computeCoarseStiffnessMatrix's computation of P^T * (A * P).\n";
     TEUCHOS_TEST_FOR_EXCEPTION(true, std::invalid_argument, "EpetraExt::MatrixMatrix::Multiply returned an error during computeCoarseStiffnessMatrix's computation of P^T * (A * P).");
   }
@@ -220,7 +232,8 @@ void GMGOperator::computeCoarseStiffnessMatrix(Epetra_CrsMatrix *fineStiffnessMa
   Epetra_Import  coarseImporter(coarsePartitionMap, PT_A_P->RowMap());
   Teuchos::RCP<Epetra_CrsMatrix> coarseStiffness;
   if (_coarseSolution->getZMCsAsGlobalLagrange() &&
-      (_P->NumGlobalCols() > _coarseSolution->getDofInterpreter()->globalDofCount())) {
+      (_P->NumGlobalCols() > _coarseSolution->getDofInterpreter()->globalDofCount()))
+  {
     // essentially: there are some lagrange constraints applied in coarse solve --> we shouldn't use the fused import,
     //              since this will call FillComplete()
 
@@ -231,7 +244,9 @@ void GMGOperator::computeCoarseStiffnessMatrix(Epetra_CrsMatrix *fineStiffnessMa
     _coarseSolution->imposeZMCsUsingLagrange(); // fills in the augmented matrix -- the ZMC rows that are at the end.
     // now can call FillComplete()
     coarseStiffness->FillComplete();
-  } else {
+  }
+  else
+  {
     coarseStiffness = Teuchos::rcp( new Epetra_CrsMatrix(*PT_A_P, coarseImporter) );
     _coarseSolution->setStiffnessMatrix(coarseStiffness);
     _coarseSolution->imposeZMCsUsingLagrange(); // fills in the augmented matrix -- the ZMC rows that are at the end.
@@ -242,19 +257,22 @@ void GMGOperator::computeCoarseStiffnessMatrix(Epetra_CrsMatrix *fineStiffnessMa
   _haveSolvedOnCoarseMesh = false; // having recomputed coarseStiffness, any existing factorization is invalid
 }
 
-void GMGOperator::constructLocalCoefficientMaps() {
+void GMGOperator::constructLocalCoefficientMaps()
+{
   Epetra_Time timer(Comm());
 
   set<GlobalIndexType> cellsInPartition = _fineMesh->globalDofAssignment()->cellsInPartition(-1); // rank-local
 
-  for (set<GlobalIndexType>::iterator cellIDIt=cellsInPartition.begin(); cellIDIt != cellsInPartition.end(); cellIDIt++) {
+  for (set<GlobalIndexType>::iterator cellIDIt=cellsInPartition.begin(); cellIDIt != cellsInPartition.end(); cellIDIt++)
+  {
     GlobalIndexType fineCellID = *cellIDIt;
     LocalDofMapperPtr fineMapper = getLocalCoefficientMap(fineCellID);
   }
   _timeLocalCoefficientMapConstruction += timer.ElapsedTime();
 }
 
-Teuchos::RCP<Epetra_CrsMatrix> GMGOperator::constructProlongationOperator() {
+Teuchos::RCP<Epetra_CrsMatrix> GMGOperator::constructProlongationOperator()
+{
   // row indices belong to the fine grid, columns to the coarse
   // maps coefficients from coarse to fine
 //  _globalStiffMatrix = Teuchos::rcp(new Epetra_FECrsMatrix(::Copy, partMap, maxRowSize));
@@ -285,19 +303,23 @@ Teuchos::RCP<Epetra_CrsMatrix> GMGOperator::constructProlongationOperator() {
     vector<GlobalIndexTypeToCast> myGlobalIndices(_finePartitionMap.NumMyElements());
     {
       set<GlobalIndexTypeToCast> globalIndicesForRank;
-      for  (int i=0;i <_finePartitionMap.NumMyElements(); i++) {
+      for  (int i=0; i <_finePartitionMap.NumMyElements(); i++)
+      {
         globalIndicesForRank.insert(myGlobalIndicesPtr[i]);
         myGlobalIndices[i] = myGlobalIndicesPtr[i];
       }
 
       // for dof interpreter's sake, want to put 0's in slots for any seen-but-not-owned global coefficients
       set<GlobalIndexType> myCellIDs = _fineMesh->globalDofAssignment()->cellsInPartition(-1);
-      for (set<GlobalIndexType>::iterator cellIDIt = myCellIDs.begin(); cellIDIt != myCellIDs.end(); cellIDIt++) {
+      for (set<GlobalIndexType>::iterator cellIDIt = myCellIDs.begin(); cellIDIt != myCellIDs.end(); cellIDIt++)
+      {
         GlobalIndexType cellID = *cellIDIt;
         set<GlobalIndexType> globalDofsForCell = _fineDofInterpreter->globalDofIndicesForCell(cellID);
-        for (set<GlobalIndexType>::iterator globalDofIt = globalDofsForCell.begin(); globalDofIt != globalDofsForCell.end(); globalDofIt++) {
+        for (set<GlobalIndexType>::iterator globalDofIt = globalDofsForCell.begin(); globalDofIt != globalDofsForCell.end(); globalDofIt++)
+        {
           cellsForGlobalDofOrdinal[*globalDofIt].insert(cellID);
-          if (globalIndicesForRank.find(*globalDofIt) == globalIndicesForRank.end()) {
+          if (globalIndicesForRank.find(*globalDofIt) == globalIndicesForRank.end())
+          {
             myGlobalIndices.push_back(*globalDofIt);
 //            offRankGlobalIndicesForMyCells.insert(*globalDofIt);
           }
@@ -308,13 +330,15 @@ Teuchos::RCP<Epetra_CrsMatrix> GMGOperator::constructProlongationOperator() {
     Epetra_Map    localXMap(myGlobalIndices.size(), myGlobalIndices.size(), &myGlobalIndices[0], 0, SerialComm);
     Teuchos::RCP<Epetra_Vector> XLocal = Teuchos::rcp( new Epetra_Vector(localXMap) );
 
-    for (int localID=0; localID < _finePartitionMap.NumMyElements(); localID++) {
+    for (int localID=0; localID < _finePartitionMap.NumMyElements(); localID++)
+    {
       GlobalIndexTypeToCast globalRow = _finePartitionMap.GID(localID);
 
       map<GlobalIndexTypeToCast, double> coarseXVectorLocal; // rank-local representation, so we just use an STL map.  Has the advantage of growing as we need it to.
       (*XLocal)[localID] = 1.0;
 
-      if (globalRow >= firstFineConstraintRowIndex) {
+      if (globalRow >= firstFineConstraintRowIndex)
+      {
         // belongs to a lagrange degree of freedom (zero-mean constraints are a special case), so we do a one-to-one map
         // NOTE: this isn't going to work properly for element Lagrange constraints in the context of h-multigrid, since
         //       for these we have one row per element, and the number of elements is reduced for the coarse mesh;
@@ -325,17 +349,20 @@ Teuchos::RCP<Epetra_CrsMatrix> GMGOperator::constructProlongationOperator() {
         int offset = globalRow - firstFineConstraintRowIndex;
         GlobalIndexType coarseGlobalRow = firstCoarseConstraintRowIndex + offset;
         coarseXVectorLocal[coarseGlobalRow] = 1.0;
-      } else {
+      }
+      else
+      {
 
         set<GlobalIndexType> cells = cellsForGlobalDofOrdinal[globalRow];
-        for (set<GlobalIndexType>::iterator cellIDIt=cells.begin(); cellIDIt != cells.end(); cellIDIt++) {
+        for (set<GlobalIndexType>::iterator cellIDIt=cells.begin(); cellIDIt != cells.end(); cellIDIt++)
+        {
           GlobalIndexType fineCellID = *cellIDIt;
           int fineDofCount = _fineMesh->getElementType(fineCellID)->trialOrderPtr->totalDofs();
           FieldContainer<double> fineCellData(fineDofCount);
           _fineDofInterpreter->interpretGlobalCoefficients(fineCellID, fineCellData, *XLocal);
-  //        if (globalRow==1) {
-  //          cout << "fineCellData:\n" << fineCellData;
-  //        }
+          //        if (globalRow==1) {
+          //          cout << "fineCellData:\n" << fineCellData;
+          //        }
           LocalDofMapperPtr fineMapper = getLocalCoefficientMap(fineCellID);
           GlobalIndexType coarseCellID = getCoarseCellID(fineCellID);
           int coarseDofCount = _coarseMesh->getElementType(coarseCellID)->trialOrderPtr->totalDofs();
@@ -345,18 +372,21 @@ Teuchos::RCP<Epetra_CrsMatrix> GMGOperator::constructProlongationOperator() {
 
           CellPtr fineCell = _fineMesh->getTopology()->getCell(fineCellID);
           int sideCount = fineCell->getSideCount();
-          for (int sideOrdinal=0; sideOrdinal<sideCount; sideOrdinal++) {
-            if (fineCell->ownsSide(sideOrdinal)) {
-  //        cout << "fine cell " << fineCellID << " owns side " << sideOrdinal << endl;
+          for (int sideOrdinal=0; sideOrdinal<sideCount; sideOrdinal++)
+          {
+            if (fineCell->ownsSide(sideOrdinal))
+            {
+              //        cout << "fine cell " << fineCellID << " owns side " << sideOrdinal << endl;
               fineMapper->mapLocalDataSide(fineCellData, mappedCoarseCellData, false, sideOrdinal);
             }
           }
 
-  //        if (globalRow==1) {
-  //          cout << "mappedCoarseCellData:\n" << mappedCoarseCellData;
-  //        }
+          //        if (globalRow==1) {
+          //          cout << "mappedCoarseCellData:\n" << mappedCoarseCellData;
+          //        }
           vector<GlobalIndexType> mappedCoarseDofIndices = fineMapper->globalIndices(); // "global" here means the coarse local
-          for (int mappedCoarseDofOrdinal = 0; mappedCoarseDofOrdinal < mappedCoarseDofIndices.size(); mappedCoarseDofOrdinal++) {
+          for (int mappedCoarseDofOrdinal = 0; mappedCoarseDofOrdinal < mappedCoarseDofIndices.size(); mappedCoarseDofOrdinal++)
+          {
             GlobalIndexType coarseDofIndex = mappedCoarseDofIndices[mappedCoarseDofOrdinal];
             coarseCellData[coarseDofIndex] = mappedCoarseCellData[mappedCoarseDofOrdinal];
           }
@@ -364,7 +394,8 @@ Teuchos::RCP<Epetra_CrsMatrix> GMGOperator::constructProlongationOperator() {
           FieldContainer<GlobalIndexType> interpretedGlobalDofIndices;
           _coarseSolution->getDofInterpreter()->interpretLocalData(coarseCellID, coarseCellData, interpretedCoarseData, interpretedGlobalDofIndices);
 
-          for (int interpretedCoarseGlobalDofOrdinal=0; interpretedCoarseGlobalDofOrdinal < interpretedGlobalDofIndices.size(); interpretedCoarseGlobalDofOrdinal++) {
+          for (int interpretedCoarseGlobalDofOrdinal=0; interpretedCoarseGlobalDofOrdinal < interpretedGlobalDofIndices.size(); interpretedCoarseGlobalDofOrdinal++)
+          {
             GlobalIndexType globalDofIndex = interpretedGlobalDofIndices[interpretedCoarseGlobalDofOrdinal];
             coarseXVectorLocal[globalDofIndex] += interpretedCoarseData[interpretedCoarseGlobalDofOrdinal];
           }
@@ -375,8 +406,10 @@ Teuchos::RCP<Epetra_CrsMatrix> GMGOperator::constructProlongationOperator() {
       FieldContainer<double> coarseGlobalValues(coarseXVectorLocal.size());
       int nnz = 0; // nonzero entries
 //      cout << "P global row " << globalRow << ": ";
-      for (map<GlobalIndexTypeToCast, double>::iterator coarseXIt=coarseXVectorLocal.begin(); coarseXIt != coarseXVectorLocal.end(); coarseXIt++) {
-        if (coarseXIt->second != 0.0) {
+      for (map<GlobalIndexTypeToCast, double>::iterator coarseXIt=coarseXVectorLocal.begin(); coarseXIt != coarseXVectorLocal.end(); coarseXIt++)
+      {
+        if (coarseXIt->second != 0.0)
+        {
           coarseGlobalIndices[nnz] = coarseXIt->first;
           coarseGlobalValues[nnz] = coarseXIt->second;
 //          cout << coarseGlobalIndices[nnz] << " --> " << coarseGlobalValues[nnz] << "; ";
@@ -384,7 +417,8 @@ Teuchos::RCP<Epetra_CrsMatrix> GMGOperator::constructProlongationOperator() {
         }
       }
 //      cout << endl;
-      if (nnz > 0) {
+      if (nnz > 0)
+      {
         P->InsertGlobalValues(globalRow, nnz, &coarseGlobalValues[0], &coarseGlobalIndices[0]);
 //        cout << "Inserting values for row " << globalRow << endl;
       }
@@ -409,14 +443,17 @@ Teuchos::RCP<Epetra_CrsMatrix> GMGOperator::constructProlongationOperator() {
   return _P;
 }
 
-GlobalIndexType GMGOperator::getCoarseCellID(GlobalIndexType fineCellID) const {
+GlobalIndexType GMGOperator::getCoarseCellID(GlobalIndexType fineCellID) const
+{
   const set<IndexType>* coarseCellIDs = &_coarseMesh->getTopology()->getActiveCellIndices();
   CellPtr fineCell = _fineMesh->getTopology()->getCell(fineCellID);
   CellPtr ancestor = fineCell;
   RefinementBranch refBranch;
-  while (coarseCellIDs->find(ancestor->cellIndex()) == coarseCellIDs->end()) {
+  while (coarseCellIDs->find(ancestor->cellIndex()) == coarseCellIDs->end())
+  {
     CellPtr parent = ancestor->getParent();
-    if (parent.get() == NULL) {
+    if (parent.get() == NULL)
+    {
       TEUCHOS_TEST_FOR_EXCEPTION(true, std::invalid_argument, "ancestor for fine cell not found in coarse mesh");
     }
     unsigned childOrdinal = parent->childOrdinal(ancestor->cellIndex());
@@ -426,22 +463,27 @@ GlobalIndexType GMGOperator::getCoarseCellID(GlobalIndexType fineCellID) const {
   return ancestor->cellIndex();
 }
 
-TSolutionPtr<double> GMGOperator::getCoarseSolution() {
+TSolutionPtr<double> GMGOperator::getCoarseSolution()
+{
   return _coarseSolution;
 }
 
-SolverPtr GMGOperator::getCoarseSolver() {
+SolverPtr GMGOperator::getCoarseSolver()
+{
   return _coarseSolver;
 }
 
-LocalDofMapperPtr GMGOperator::getLocalCoefficientMap(GlobalIndexType fineCellID) const {
+LocalDofMapperPtr GMGOperator::getLocalCoefficientMap(GlobalIndexType fineCellID) const
+{
   const set<IndexType>* coarseCellIDs = &_coarseMesh->getTopology()->getActiveCellIndices();
   CellPtr fineCell = _fineMesh->getTopology()->getCell(fineCellID);
   CellPtr ancestor = fineCell;
   RefinementBranch refBranch;
-  while (coarseCellIDs->find(ancestor->cellIndex()) == coarseCellIDs->end()) {
+  while (coarseCellIDs->find(ancestor->cellIndex()) == coarseCellIDs->end())
+  {
     CellPtr parent = ancestor->getParent();
-    if (parent.get() == NULL) {
+    if (parent.get() == NULL)
+    {
       TEUCHOS_TEST_FOR_EXCEPTION(true, std::invalid_argument, "ancestor for fine cell not found in coarse mesh");
     }
     unsigned childOrdinal = parent->childOrdinal(ancestor->cellIndex());
@@ -450,7 +492,8 @@ LocalDofMapperPtr GMGOperator::getLocalCoefficientMap(GlobalIndexType fineCellID
   }
   GlobalIndexType coarseCellID = ancestor->cellIndex();
   CellPtr coarseCell = ancestor;
-  if (_fineMesh->globalDofAssignment()->getH1Order(fineCellID).size() > 1) {
+  if (_fineMesh->globalDofAssignment()->getH1Order(fineCellID).size() > 1)
+  {
     TEUCHOS_TEST_FOR_EXCEPTION(true, std::invalid_argument, "tensor-product H1Orders not yet supported in GMGOperator");
   }
   int fineOrder = _fineMesh->globalDofAssignment()->getH1Order(fineCellID)[0];
@@ -463,7 +506,8 @@ LocalDofMapperPtr GMGOperator::getLocalCoefficientMap(GlobalIndexType fineCellID
 
   CondensedDofInterpreter<double>* condensedDofInterpreter = NULL;
 
-  if (_useStaticCondensation) {
+  if (_useStaticCondensation)
+  {
     condensedDofInterpreter = dynamic_cast<CondensedDofInterpreter<double>*>(_fineDofInterpreter.get());
   }
 
@@ -472,14 +516,17 @@ LocalDofMapperPtr GMGOperator::getLocalCoefficientMap(GlobalIndexType fineCellID
   int sideDim = spaceDim - 1;
   vector<unsigned> ancestralSideOrdinals(fineSideCount);
   vector< RefinementBranch > sideRefBranches(fineSideCount);
-  for (int sideOrdinal=0; sideOrdinal<fineSideCount; sideOrdinal++) {
+  for (int sideOrdinal=0; sideOrdinal<fineSideCount; sideOrdinal++)
+  {
     ancestralSideOrdinals[sideOrdinal] = RefinementPattern::ancestralSubcellOrdinal(refBranch, sideDim, sideOrdinal);
-    if (ancestralSideOrdinals[sideOrdinal] != -1) {
+    if (ancestralSideOrdinals[sideOrdinal] != -1)
+    {
       sideRefBranches[sideOrdinal] = RefinementPattern::sideRefinementBranch(refBranch, sideOrdinal);
     }
   }
 
-  if (_localCoefficientMap.find(key) == _localCoefficientMap.end()) {
+  if (_localCoefficientMap.find(key) == _localCoefficientMap.end())
+  {
     VarFactoryPtr vf = _fineMesh->bilinearForm()->varFactory();
 
     typedef vector< SubBasisDofMapperPtr > BasisMap; // taken together, these maps map a whole basis
@@ -491,20 +538,24 @@ LocalDofMapperPtr GMGOperator::getLocalCoefficientMap(GlobalIndexType fineCellID
 
     // for the moment, we skip the mapping from traces to fields based on traceTerm
     unsigned vertexNodePermutation = 0; // because we're "reconciling" to an ancestor, the views of the cells and sides are necessarily the same
-    for (set<int>::iterator trialIDIt = trialIDs.begin(); trialIDIt != trialIDs.end(); trialIDIt++) {
+    for (set<int>::iterator trialIDIt = trialIDs.begin(); trialIDIt != trialIDs.end(); trialIDIt++)
+    {
       int trialID = *trialIDIt;
 
       VarPtr trialVar = vf->trialVars().find(trialID)->second;
       Space varSpace = trialVar->space();
       Camellia::EFunctionSpace varFS = efsForSpace(varSpace);
-      if (! Camellia::functionSpaceIsDiscontinuous(varFS)) {
+      if (! Camellia::functionSpaceIsDiscontinuous(varFS))
+      {
         int rank = Teuchos::GlobalMPISession::getRank();
         if (rank == 0)
           cout << "WARNING: function space for var " << trialVar->name() << " is not discontinuous, and GMGOperator does not yet support continuous variables, even continuous trace variables (i.e. all trace variables must be in L^2 or some other discontinuous space, like HGRAD_DISC).\n";
       }
 
-      if (coarseTrialOrdering->getSidesForVarID(trialID).size() == 1) { // field variable
-        if (condensedDofInterpreter != NULL) {
+      if (coarseTrialOrdering->getSidesForVarID(trialID).size() == 1)   // field variable
+      {
+        if (condensedDofInterpreter != NULL)
+        {
           if (condensedDofInterpreter->varDofsAreCondensible(trialID, 0, fineTrialOrdering)) continue;
         }
 //        cout << "Warning: for debugging purposes, skipping projection of fields in GMGOperator.\n";
@@ -514,22 +565,28 @@ LocalDofMapperPtr GMGOperator::getLocalCoefficientMap(GlobalIndexType fineCellID
         set<unsigned> fineDofOrdinals(weights.fineOrdinals.begin(),weights.fineOrdinals.end());
 
         vector<GlobalIndexType> coarseDofIndices;
-        for (set<int>::iterator coarseOrdinalIt=weights.coarseOrdinals.begin(); coarseOrdinalIt != weights.coarseOrdinals.end(); coarseOrdinalIt++) {
+        for (set<int>::iterator coarseOrdinalIt=weights.coarseOrdinals.begin(); coarseOrdinalIt != weights.coarseOrdinals.end(); coarseOrdinalIt++)
+        {
           unsigned coarseDofIndex = coarseTrialOrdering->getDofIndex(trialID, *coarseOrdinalIt);
           coarseDofIndices.push_back(coarseDofIndex);
         }
         BasisMap basisMap(1,SubBasisDofMapper::subBasisDofMapper(fineDofOrdinals, coarseDofIndices, weights.weights));
         volumeMaps[trialID] = basisMap;
-      } else { // flux/trace
+      }
+      else     // flux/trace
+      {
 //        cout << "Warning: for debugging purposes, skipping projection of fluxes and traces in GMGOperator.\n";
-        for (int sideOrdinal=0; sideOrdinal<fineSideCount; sideOrdinal++) {
-          if (condensedDofInterpreter != NULL) {
+        for (int sideOrdinal=0; sideOrdinal<fineSideCount; sideOrdinal++)
+        {
+          if (condensedDofInterpreter != NULL)
+          {
             if (condensedDofInterpreter->varDofsAreCondensible(trialID, sideOrdinal, fineTrialOrdering)) continue;
           }
           unsigned coarseSideOrdinal = ancestralSideOrdinals[sideOrdinal];
           BasisPtr coarseBasis, fineBasis;
           BasisMap basisMap;
-          if (coarseSideOrdinal == -1) { // the fine side falls inside a coarse volume
+          if (coarseSideOrdinal == -1)   // the fine side falls inside a coarse volume
+          {
             // we map trace to field using the traceTerm LinearTermPtr
             VarPtr trialVar = vf->trial(trialID);
 
@@ -541,7 +598,8 @@ LocalDofMapperPtr GMGOperator::getLocalCoefficientMap(GlobalIndexType fineCellID
             fineBasis = fineTrialOrdering->getBasis(trialID, sideOrdinal);
 
             set<int> varsTraced = termTraced->varIDs();
-            for (set<int>::iterator varTracedIt = varsTraced.begin(); varTracedIt != varsTraced.end(); varTracedIt++) {
+            for (set<int>::iterator varTracedIt = varsTraced.begin(); varTracedIt != varsTraced.end(); varTracedIt++)
+            {
               int varTracedID = *varTracedIt;
               coarseBasis = coarseTrialOrdering->getBasis(varTracedID);
 
@@ -549,24 +607,29 @@ LocalDofMapperPtr GMGOperator::getLocalCoefficientMap(GlobalIndexType fineCellID
               unsigned coarseSubcellPermutation = 0;
               unsigned fineSubcellOrdinalInFineDomain = 0; // the side is the whole fine domain...
               SubBasisReconciliationWeights weights = _br.computeConstrainedWeightsForTermTraced(termTraced, varTracedID,
-                                                                                                 sideDim, fineBasis, fineSubcellOrdinalInFineDomain, refBranch, sideOrdinal,
-                                                                                                 ancestor->topology(),
-                                                                                                 spaceDim, coarseBasis, coarseSubcellOrdinal, coarseDomainOrdinal, coarseSubcellPermutation);
+                                                      sideDim, fineBasis, fineSubcellOrdinalInFineDomain, refBranch, sideOrdinal,
+                                                      ancestor->topology(),
+                                                      spaceDim, coarseBasis, coarseSubcellOrdinal, coarseDomainOrdinal, coarseSubcellPermutation);
               set<unsigned> fineDofOrdinals(weights.fineOrdinals.begin(),weights.fineOrdinals.end());
               vector<GlobalIndexType> coarseDofIndices;
-              for (set<int>::iterator coarseOrdinalIt=weights.coarseOrdinals.begin(); coarseOrdinalIt != weights.coarseOrdinals.end(); coarseOrdinalIt++) {
+              for (set<int>::iterator coarseOrdinalIt=weights.coarseOrdinals.begin(); coarseOrdinalIt != weights.coarseOrdinals.end(); coarseOrdinalIt++)
+              {
                 unsigned coarseDofIndex = coarseTrialOrdering->getDofIndex(varTracedID, *coarseOrdinalIt);
                 coarseDofIndices.push_back(coarseDofIndex);
               }
 
               basisMap.push_back(SubBasisDofMapper::subBasisDofMapper(fineDofOrdinals, coarseDofIndices, weights.weights));
             }
-          } else { // fine side maps to a coarse side
-            if (! coarseTrialOrdering->hasBasisEntry(trialID, coarseSideOrdinal)) {
+          }
+          else     // fine side maps to a coarse side
+          {
+            if (! coarseTrialOrdering->hasBasisEntry(trialID, coarseSideOrdinal))
+            {
               cout << "ERROR: no entry for trial var " << trialVar->name() << " on side " << coarseSideOrdinal << " in coarse mesh.\n";
               TEUCHOS_TEST_FOR_EXCEPTION(true, std::invalid_argument, "Missing basis entry on coarse side!");
             }
-            if (! fineTrialOrdering->hasBasisEntry(trialID, sideOrdinal)) {
+            if (! fineTrialOrdering->hasBasisEntry(trialID, sideOrdinal))
+            {
               cout << "ERROR: no entry for trial var " << trialVar->name() << " on side " << sideOrdinal << " in fine mesh.\n";
               TEUCHOS_TEST_FOR_EXCEPTION(true, std::invalid_argument, "Missing basis entry on fine side!");
             }
@@ -576,7 +639,8 @@ LocalDofMapperPtr GMGOperator::getLocalCoefficientMap(GlobalIndexType fineCellID
 
             set<unsigned> fineDofOrdinals(weights.fineOrdinals.begin(),weights.fineOrdinals.end());
             vector<GlobalIndexType> coarseDofIndices;
-            for (set<int>::iterator coarseOrdinalIt=weights.coarseOrdinals.begin(); coarseOrdinalIt != weights.coarseOrdinals.end(); coarseOrdinalIt++) {
+            for (set<int>::iterator coarseOrdinalIt=weights.coarseOrdinals.begin(); coarseOrdinalIt != weights.coarseOrdinals.end(); coarseOrdinalIt++)
+            {
               unsigned coarseDofIndex = coarseTrialOrdering->getDofIndex(trialID, *coarseOrdinalIt, coarseSideOrdinal);
               coarseDofIndices.push_back(coarseDofIndex);
             }
@@ -591,7 +655,8 @@ LocalDofMapperPtr GMGOperator::getLocalCoefficientMap(GlobalIndexType fineCellID
 
     int coarseDofCount = coarseTrialOrdering->totalDofs();
     set<GlobalIndexType> allCoarseDofs; // include these even when not mapped (which can happen with static condensation) to guarantee that the dof mapper interprets coarse cell data correctly...
-    for (int coarseOrdinal=0; coarseOrdinal<coarseDofCount; coarseOrdinal++) {
+    for (int coarseOrdinal=0; coarseOrdinal<coarseDofCount; coarseOrdinal++)
+    {
       allCoarseDofs.insert(coarseOrdinal);
     }
 
@@ -601,7 +666,7 @@ LocalDofMapperPtr GMGOperator::getLocalCoefficientMap(GlobalIndexType fineCellID
     vector< set<GlobalIndexType> > fittableGlobalDofOrdinalsOnSides(fineSideCount);
 
     LocalDofMapperPtr dofMapper = Teuchos::rcp( new LocalDofMapper(fineTrialOrdering, volumeMaps, fittableGlobalDofOrdinalsInVolume,
-                                                                   sideMaps, fittableGlobalDofOrdinalsOnSides, allCoarseDofs) );
+                                  sideMaps, fittableGlobalDofOrdinalsOnSides, allCoarseDofs) );
     _localCoefficientMap[key] = dofMapper;
   }
 
@@ -611,15 +676,20 @@ LocalDofMapperPtr GMGOperator::getLocalCoefficientMap(GlobalIndexType fineCellID
   FieldContainer<double> coarseCellSideParities = _coarseMesh->globalDofAssignment()->cellSideParitiesForCell(coarseCellID);
   FieldContainer<double> fineCellSideParities = _fineMesh->globalDofAssignment()->cellSideParitiesForCell(fineCellID);
   set<unsigned> fineSidesToCorrect;
-  for (unsigned fineSideOrdinal=0; fineSideOrdinal<fineSideCount; fineSideOrdinal++) {
+  for (unsigned fineSideOrdinal=0; fineSideOrdinal<fineSideCount; fineSideOrdinal++)
+  {
     unsigned coarseSideOrdinal = ancestralSideOrdinals[fineSideOrdinal];
-    if (coarseSideOrdinal != -1) { // ancestor shares side
+    if (coarseSideOrdinal != -1)   // ancestor shares side
+    {
       double coarseParity = coarseCellSideParities(0,coarseSideOrdinal);
       double fineParity = fineCellSideParities(0,fineSideOrdinal);
-      if (coarseParity != fineParity) {
+      if (coarseParity != fineParity)
+      {
         fineSidesToCorrect.insert(fineSideOrdinal);
       }
-    } else {
+    }
+    else
+    {
       // when we have done a map from field to trace, no parities have been taken into account; the termTraced will involve
       // the outward facing normal, but not the potential negation of this to make neighbors agree.  Therefore, we need to "correct"
       // any interior fine side whose parity is -1.
@@ -630,13 +700,15 @@ LocalDofMapperPtr GMGOperator::getLocalCoefficientMap(GlobalIndexType fineCellID
     }
   }
 
-  if (fineSidesToCorrect.size() > 0) {
+  if (fineSidesToCorrect.size() > 0)
+  {
     // copy before changing dofMapper:
     dofMapper = Teuchos::rcp( new LocalDofMapper(*dofMapper.get()) );
     set<int> fluxIDs;
     VarFactoryPtr vf = _fineMesh->bilinearForm()->varFactory();
     vector<VarPtr> fluxVars = vf->fluxVars();
-    for (vector<VarPtr>::iterator fluxIt = fluxVars.begin(); fluxIt != fluxVars.end(); fluxIt++) {
+    for (vector<VarPtr>::iterator fluxIt = fluxVars.begin(); fluxIt != fluxVars.end(); fluxIt++)
+    {
       fluxIDs.insert((*fluxIt)->ID());
     }
     dofMapper->reverseParity(fluxIDs, fineSidesToCorrect);
@@ -645,11 +717,13 @@ LocalDofMapperPtr GMGOperator::getLocalCoefficientMap(GlobalIndexType fineCellID
   return dofMapper;
 }
 
-int GMGOperator::Apply(const Epetra_MultiVector& X, Epetra_MultiVector& Y) const {
+int GMGOperator::Apply(const Epetra_MultiVector& X, Epetra_MultiVector& Y) const
+{
   TEUCHOS_TEST_FOR_EXCEPTION(true, std::invalid_argument, "Unsupported method.");
 }
 
-int GMGOperator::ApplyInverse(const Epetra_MultiVector& X_in, Epetra_MultiVector& Y) const {
+int GMGOperator::ApplyInverse(const Epetra_MultiVector& X_in, Epetra_MultiVector& Y) const
+{
 //  cout << "GMGOperator::ApplyInverse.\n";
   int rank = Teuchos::GlobalMPISession::getRank();
   bool printVerboseOutput = (rank==0) && _debugMode;
@@ -657,7 +731,8 @@ int GMGOperator::ApplyInverse(const Epetra_MultiVector& X_in, Epetra_MultiVector
   Epetra_Time timer(Comm());
 
   Epetra_MultiVector X(X_in); // looks like Y may be stored in the same location as X_in, so that changing Y will change X, too...
-  if (_fineSolverUsesDiagonalScaling) {
+  if (_fineSolverUsesDiagonalScaling)
+  {
     if (printVerboseOutput) cout << "multiplying X by _diag_sqrt\n";
     // Here, we assume symmetric diagonal scaling: D^-1/2 A D^-1/2, where A is the fine matrix.
     // (because the inverse that we otherwise approximate is A^-1, we now approximate D^1/2 A^-1 D^1/2)
@@ -669,7 +744,8 @@ int GMGOperator::ApplyInverse(const Epetra_MultiVector& X_in, Epetra_MultiVector
   Teuchos::RCP<Epetra_FEVector> coarseRHSVector = _coarseSolution->getRHSVector();
   if (printVerboseOutput) cout << "returned from _coarseSolution->getRHSVector()\n";
 
-  if (coarseRHSVector->GlobalLength() != _P->NumGlobalCols()) {
+  if (coarseRHSVector->GlobalLength() != _P->NumGlobalCols())
+  {
     // TODO: add support for coarseRHSVector that may have lagrange/zmc constraints applied even though fine solution neglects these...
     TEUCHOS_TEST_FOR_EXCEPTION(true, std::invalid_argument, "coarseRHSVector->GlobalLength() != _P->NumGlobalCols()");
   }
@@ -682,13 +758,16 @@ int GMGOperator::ApplyInverse(const Epetra_MultiVector& X_in, Epetra_MultiVector
   _timeMapFineToCoarse += timer.ElapsedTime();
 
   timer.ResetStartTime();
-  if (!_haveSolvedOnCoarseMesh) {
+  if (!_haveSolvedOnCoarseMesh)
+  {
     if (printVerboseOutput) cout << "solving on coarse mesh\n";
     _coarseSolution->setProblem(_coarseSolver);
     _coarseSolution->solveWithPrepopulatedStiffnessAndLoad(_coarseSolver, false);
     if (printVerboseOutput) cout << "finished solving on coarse mesh\n";
     _haveSolvedOnCoarseMesh = true;
-  } else {
+  }
+  else
+  {
     if (printVerboseOutput) cout << "resolving on coarse mesh\n";
     _coarseSolver->setRHS(coarseRHSVector);
     _coarseSolution->solveWithPrepopulatedStiffnessAndLoad(_coarseSolver, true); // call resolve() instead of solve() -- reuse factorization
@@ -707,24 +786,29 @@ int GMGOperator::ApplyInverse(const Epetra_MultiVector& X_in, Epetra_MultiVector
   _timeMapCoarseToFine += timer.ElapsedTime();
 
   // if _applySmoothingOperator is set, add S^(-1)X to Y.
-  if (_applySmoothingOperator && (_smootherType != NONE)) {
+  if (_applySmoothingOperator && (_smootherType != NONE))
+  {
     if (printVerboseOutput) cout << "copying X into X2\n";
     Epetra_MultiVector X2(X); // copy, since I'm not sure ApplyInverse is generally OK with X and Y in same location (though Aztec seems to make that assumption, so it probably is OK).
     if (printVerboseOutput) cout << "finished copying X into X2\n";
     if (printVerboseOutput) cout << "calling _smoother->ApplyInverse(X2, X)\n";
     int err = _smoother->ApplyInverse(X2, X);
-    if (err != 0) {
+    if (err != 0)
+    {
       cout << "_smoother->ApplyInverse returned non-zero error code " << err << endl;
     }
     if (printVerboseOutput) cout << "finished _smoother->ApplyInverse(X2, X)\n";
     if (printVerboseOutput) cout << "calling Y.Update(1.0, X, 1.0)\n";
     Y.Update(1.0, X, 1.0);
     if (printVerboseOutput) cout << "finished Y.Update(1.0, X, 1.0)\n";
-  } else {
+  }
+  else
+  {
     //    cout << "_diag is NULL.\n";
   }
 
-  if (_fineSolverUsesDiagonalScaling) {
+  if (_fineSolverUsesDiagonalScaling)
+  {
     if (printVerboseOutput) cout << "calling Y.Multiply(1.0, *_diag_sqrt, Y, 0)\n";
     Y.Multiply(1.0, *_diag_sqrt, Y, 0);
     if (printVerboseOutput) cout << "finished Y.Multiply(1.0, *_diag_sqrt, Y, 0)\n";
@@ -742,9 +826,11 @@ int GMGOperator::ApplyInverse(const Epetra_MultiVector& X_in, Epetra_MultiVector
    then this may not work.
    */
   GlobalIndexType firstFineConstraintRowIndex = _fineDofInterpreter->globalDofCount();
-  for (GlobalIndexTypeToCast fineRowIndex=firstFineConstraintRowIndex; fineRowIndex<Y.GlobalLength(); fineRowIndex++) {
+  for (GlobalIndexTypeToCast fineRowIndex=firstFineConstraintRowIndex; fineRowIndex<Y.GlobalLength(); fineRowIndex++)
+  {
     int LID = Y.Map().LID(fineRowIndex);
-    if (LID != -1) {
+    if (LID != -1)
+    {
       Y[0][LID] = 0.0;
     }
   }
@@ -752,49 +838,59 @@ int GMGOperator::ApplyInverse(const Epetra_MultiVector& X_in, Epetra_MultiVector
   return 0;
 }
 
-double GMGOperator::NormInf() const {
+double GMGOperator::NormInf() const
+{
   TEUCHOS_TEST_FOR_EXCEPTION(true, std::invalid_argument, "Unsupported method.");
 }
 
-const char * GMGOperator::Label() const {
+const char * GMGOperator::Label() const
+{
   return "Camellia Geometric Multi-Grid Preconditioner";
 }
 
-int GMGOperator::SetUseTranspose(bool UseTranspose) {
+int GMGOperator::SetUseTranspose(bool UseTranspose)
+{
   return -1; // not supported for now.  (wouldn't be hard, but I don't see the point.)
 }
 
-bool GMGOperator::UseTranspose() const {
+bool GMGOperator::UseTranspose() const
+{
   return false; // not supported for now.  (wouldn't be hard, but I don't see the point.)
 }
 
 //! Returns true if the \e this object can provide an approximate Inf-norm, false otherwise.
-bool GMGOperator::HasNormInf() const {
+bool GMGOperator::HasNormInf() const
+{
   return false;
 }
 
 //! Returns a pointer to the Epetra_Comm communicator associated with this operator.
-const Epetra_Comm & GMGOperator::Comm() const {
+const Epetra_Comm & GMGOperator::Comm() const
+{
   return _finePartitionMap.Comm();
 }
 
 //! Returns the Epetra_Map object associated with the domain of this operator.
-const Epetra_Map & GMGOperator::OperatorDomainMap() const {
+const Epetra_Map & GMGOperator::OperatorDomainMap() const
+{
   return _finePartitionMap;
 }
 
 //! Returns the Epetra_Map object associated with the range of this operator.
-const Epetra_Map & GMGOperator::OperatorRangeMap() const {
+const Epetra_Map & GMGOperator::OperatorRangeMap() const
+{
   return _finePartitionMap;
 }
 
-set<GlobalIndexTypeToCast> GMGOperator::setCoarseRHSVector(const Epetra_MultiVector &X, Epetra_FEVector &coarseRHSVector) const {
+set<GlobalIndexTypeToCast> GMGOperator::setCoarseRHSVector(const Epetra_MultiVector &X, Epetra_FEVector &coarseRHSVector) const
+{
   // the data coming in (X) is in global dofs defined on the fine mesh.  First thing we'd like to do is map it to the fine mesh's local cells
   set<GlobalIndexType> cellsInPartition = _fineMesh->globalDofAssignment()->cellsInPartition(-1); // rank-local
 
   coarseRHSVector.PutScalar(0); // clear
   set<GlobalIndexTypeToCast> coarseDofIndicesToImport; // keep track of the coarse dof indices that this partition's fine cells talk to
-  for (set<GlobalIndexType>::iterator cellIDIt=cellsInPartition.begin(); cellIDIt != cellsInPartition.end(); cellIDIt++) {
+  for (set<GlobalIndexType>::iterator cellIDIt=cellsInPartition.begin(); cellIDIt != cellsInPartition.end(); cellIDIt++)
+  {
     GlobalIndexType fineCellID = *cellIDIt;
     int fineDofCount = _fineMesh->getElementType(fineCellID)->trialOrderPtr->totalDofs();
     FieldContainer<double> fineCellData(fineDofCount);
@@ -809,8 +905,10 @@ set<GlobalIndexTypeToCast> GMGOperator::setCoarseRHSVector(const Epetra_MultiVec
 
     CellPtr fineCell = _fineMesh->getTopology()->getCell(fineCellID);
     int sideCount = fineCell->getSideCount();
-    for (int sideOrdinal=0; sideOrdinal<sideCount; sideOrdinal++) {
-      if (fineCell->ownsSide(sideOrdinal)) {
+    for (int sideOrdinal=0; sideOrdinal<sideCount; sideOrdinal++)
+    {
+      if (fineCell->ownsSide(sideOrdinal))
+      {
 //        cout << "fine cell " << fineCellID << " owns side " << sideOrdinal << endl;
         fineMapper->mapLocalDataSide(fineCellData, mappedCoarseCellData, false, sideOrdinal);
       }
@@ -818,7 +916,8 @@ set<GlobalIndexTypeToCast> GMGOperator::setCoarseRHSVector(const Epetra_MultiVec
 
 //    cout << "mappedCoarseCellData:\n" << mappedCoarseCellData;
     vector<GlobalIndexType> mappedCoarseDofIndices = fineMapper->globalIndices(); // "global" here means the coarse local
-    for (int mappedCoarseDofOrdinal = 0; mappedCoarseDofOrdinal < mappedCoarseDofIndices.size(); mappedCoarseDofOrdinal++) {
+    for (int mappedCoarseDofOrdinal = 0; mappedCoarseDofOrdinal < mappedCoarseDofIndices.size(); mappedCoarseDofOrdinal++)
+    {
       GlobalIndexType coarseDofIndex = mappedCoarseDofIndices[mappedCoarseDofOrdinal];
       coarseCellData[coarseDofIndex] = mappedCoarseCellData[mappedCoarseDofOrdinal];
     }
@@ -827,7 +926,8 @@ set<GlobalIndexTypeToCast> GMGOperator::setCoarseRHSVector(const Epetra_MultiVec
     _coarseSolution->getDofInterpreter()->interpretLocalData(coarseCellID, coarseCellData, interpretedCoarseData, interpretedGlobalDofIndices);
 //    cout << "interpretedCoarseData:\n" << interpretedCoarseData;
     FieldContainer<GlobalIndexTypeToCast> interpretedGlobalDofIndicesCast(interpretedGlobalDofIndices.size());
-    for (int interpretedDofOrdinal=0; interpretedDofOrdinal < interpretedGlobalDofIndices.size(); interpretedDofOrdinal++) {
+    for (int interpretedDofOrdinal=0; interpretedDofOrdinal < interpretedGlobalDofIndices.size(); interpretedDofOrdinal++)
+    {
       interpretedGlobalDofIndicesCast[interpretedDofOrdinal] = (GlobalIndexTypeToCast) interpretedGlobalDofIndices[interpretedDofOrdinal];
       coarseDofIndicesToImport.insert(interpretedGlobalDofIndicesCast[interpretedDofOrdinal]);
     }
@@ -837,7 +937,8 @@ set<GlobalIndexTypeToCast> GMGOperator::setCoarseRHSVector(const Epetra_MultiVec
   return coarseDofIndicesToImport;
 }
 
-TimeStatistics GMGOperator::getStatistics(double timeValue) const {
+TimeStatistics GMGOperator::getStatistics(double timeValue) const
+{
   TimeStatistics stats;
   int indexBase = 0;
   int numProcs = Teuchos::GlobalMPISession::getNProc();
@@ -853,7 +954,8 @@ TimeStatistics GMGOperator::getStatistics(double timeValue) const {
   return stats;
 }
 
-void GMGOperator::reportTimings() const {
+void GMGOperator::reportTimings() const
+{
   //   mutable double _timeMapFineToCoarse, _timeMapCoarseToFine, _timeCoarseImport, _timeConstruction, _timeCoarseSolve;  // totals over the life of the object
   int rank = Teuchos::GlobalMPISession::getRank();
 
@@ -867,9 +969,11 @@ void GMGOperator::reportTimings() const {
   reportValues["map fine to coarse"] = _timeMapFineToCoarse;
   reportValues["compute coarse stiffness matrix"] = _timeComputeCoarseStiffnessMatrix;
 
-  for (map<string,double>::iterator reportIt = reportValues.begin(); reportIt != reportValues.end(); reportIt++) {
+  for (map<string,double>::iterator reportIt = reportValues.begin(); reportIt != reportValues.end(); reportIt++)
+  {
     TimeStatistics stats = getStatistics(reportIt->second);
-    if (rank==0) {
+    if (rank==0)
+    {
       cout << reportIt->first << ":\n";
       cout <<  "mean = " << stats.mean << " seconds\n";
       cout << "max =  " << stats.max << " seconds\n";
@@ -879,214 +983,242 @@ void GMGOperator::reportTimings() const {
   }
 }
 
-void GMGOperator::setApplySmoothingOperator(bool value) {
+void GMGOperator::setApplySmoothingOperator(bool value)
+{
   _applySmoothingOperator = value;
 }
 
-void GMGOperator::setCoarseSolver(SolverPtr coarseSolver) {
+void GMGOperator::setCoarseSolver(SolverPtr coarseSolver)
+{
   _coarseSolver = coarseSolver;
 }
 
-void GMGOperator::setDebugMode(bool value) {
+void GMGOperator::setDebugMode(bool value)
+{
   _debugMode = value;
 }
 
-void GMGOperator::setFineMesh(MeshPtr fineMesh, Epetra_Map finePartitionMap) {
+void GMGOperator::setFineMesh(MeshPtr fineMesh, Epetra_Map finePartitionMap)
+{
   _fineMesh = fineMesh;
   _finePartitionMap = finePartitionMap;
 
   constructProlongationOperator(); // _P
 }
 
-void GMGOperator::setFillRatio(double fillRatio) {
+void GMGOperator::setFillRatio(double fillRatio)
+{
   _fillRatio = fillRatio;
 //  cout << "fill ratio set to " << fillRatio << endl;
 }
 
-void GMGOperator::setFineSolverUsesDiagonalScaling(bool value) {
-  if (value != _fineSolverUsesDiagonalScaling) {
+void GMGOperator::setFineSolverUsesDiagonalScaling(bool value)
+{
+  if (value != _fineSolverUsesDiagonalScaling)
+  {
     _fineSolverUsesDiagonalScaling = value;
   }
 }
 
-void GMGOperator::setLevelOfFill(int fillLevel) {
+void GMGOperator::setLevelOfFill(int fillLevel)
+{
   _levelOfFill = fillLevel;
 //  cout << "level of fill set to " << fillLevel << endl;
 }
 
-void GMGOperator::setSchwarzFactorizationType(FactorType choice) {
+void GMGOperator::setSchwarzFactorizationType(FactorType choice)
+{
   _schwarzBlockFactorizationType = choice;
 }
 
-void GMGOperator::setStiffnessDiagonal(Teuchos::RCP< Epetra_MultiVector> diagonal) {
+void GMGOperator::setStiffnessDiagonal(Teuchos::RCP< Epetra_MultiVector> diagonal)
+{
   // this should be the true diagonal (before scaling) of the fine stiffness matrix.
-    _diag = diagonal;
-  if (diagonal.get() != NULL) {
+  _diag = diagonal;
+  if (diagonal.get() != NULL)
+  {
     // construct inverse, too.
     const Epetra_BlockMap* map = &_diag->Map();
     _diag_inv = Teuchos::rcp( new Epetra_MultiVector(*map, 1) );
     _diag_sqrt = Teuchos::rcp( new Epetra_MultiVector(*map, 1) );
-    if (map->NumMyElements() > 0) {
-      for (int lid = map->MinLID(); lid <= map->MaxLID(); lid++) {
+    if (map->NumMyElements() > 0)
+    {
+      for (int lid = map->MinLID(); lid <= map->MaxLID(); lid++)
+      {
         (*_diag_inv)[0][lid] = 1.0 / (*_diag)[0][lid];
         (*_diag_sqrt)[0][lid] = sqrt((*_diag)[0][lid]);
       }
     }
-  } else {
+  }
+  else
+  {
     _diag_inv = Teuchos::rcp( (Epetra_MultiVector*) NULL);
     _diag_sqrt = Teuchos::rcp( (Epetra_MultiVector*) NULL);
   }
 
 }
 
-void GMGOperator::setSmootherOverlap(int overlap) {
+void GMGOperator::setSmootherOverlap(int overlap)
+{
   _smootherOverlap = overlap;
 }
 
-void GMGOperator::setSmootherType(GMGOperator::SmootherChoice smootherType) {
-  if (smootherType != NONE) {
+void GMGOperator::setSmootherType(GMGOperator::SmootherChoice smootherType)
+{
+  if (smootherType != NONE)
+  {
     setApplySmoothingOperator(true);
-  } else {
+  }
+  else
+  {
     setApplySmoothingOperator(false);
   }
   _smootherType = smootherType;
 }
 
-void GMGOperator::setUpSmoother(Epetra_CrsMatrix *fineStiffnessMatrix) {
+void GMGOperator::setUpSmoother(Epetra_CrsMatrix *fineStiffnessMatrix)
+{
   SmootherChoice choice = _smootherType;
 
   Teuchos::ParameterList List;
 
   Teuchos::RCP<Ifpack_Preconditioner> smoother;
 
-  switch (choice) {
-    case NONE:
-      _smoother = Teuchos::null;
-      return;
-    case POINT_JACOBI:
-    {
-      List.set("relaxation: type", "Jacobi");
-      smoother = Teuchos::rcp(new Ifpack_PointRelaxation(fineStiffnessMatrix) );
-    }
-      break;
-    case POINT_SYMMETRIC_GAUSS_SEIDEL:
-    {
-      List.set("relaxation: type", "symmetric Gauss-Seidel");
-      smoother = Teuchos::rcp(new Ifpack_PointRelaxation(fineStiffnessMatrix) );
-    }
-      break;
-    case BLOCK_JACOBI:
-    {
-      // TODO: work out how we're supposed to specify partitioning scheme.
-      //      TEUCHOS_TEST_FOR_EXCEPTION(true, std::invalid_argument, "Block Gauss-Seidel smoother not yet supported.");
+  switch (choice)
+  {
+  case NONE:
+    _smoother = Teuchos::null;
+    return;
+  case POINT_JACOBI:
+  {
+    List.set("relaxation: type", "Jacobi");
+    smoother = Teuchos::rcp(new Ifpack_PointRelaxation(fineStiffnessMatrix) );
+  }
+  break;
+  case POINT_SYMMETRIC_GAUSS_SEIDEL:
+  {
+    List.set("relaxation: type", "symmetric Gauss-Seidel");
+    smoother = Teuchos::rcp(new Ifpack_PointRelaxation(fineStiffnessMatrix) );
+  }
+  break;
+  case BLOCK_JACOBI:
+  {
+    // TODO: work out how we're supposed to specify partitioning scheme.
+    //      TEUCHOS_TEST_FOR_EXCEPTION(true, std::invalid_argument, "Block Gauss-Seidel smoother not yet supported.");
 
-      smoother = Teuchos::rcp(new Ifpack_BlockRelaxation<Ifpack_SparseContainer<Ifpack_Amesos> >(fineStiffnessMatrix) );
-      Teuchos::ParameterList List;
-      // TODO: work out what the various parameters do, and how they should depend on the problem...
-      int overlapBlocks = _smootherOverlap;
-      int sweeps = 2;
-      int localParts = 4;
+    smoother = Teuchos::rcp(new Ifpack_BlockRelaxation<Ifpack_SparseContainer<Ifpack_Amesos> >(fineStiffnessMatrix) );
+    Teuchos::ParameterList List;
+    // TODO: work out what the various parameters do, and how they should depend on the problem...
+    int overlapBlocks = _smootherOverlap;
+    int sweeps = 2;
+    int localParts = 4;
 
-      List.set("relaxation: type", "Jacobi");
-      List.set("relaxation: sweeps", sweeps);
-      List.set("amesos: solver type", "Amesos_Klu");
+    List.set("relaxation: type", "Jacobi");
+    List.set("relaxation: sweeps", sweeps);
+    List.set("amesos: solver type", "Amesos_Klu");
 
-      List.set("partitioner: overlap", overlapBlocks);
+    List.set("partitioner: overlap", overlapBlocks);
 #ifdef HAVE_IFPACK_METIS
-      // use METIS to create the blocks. This requires --enable-ifpack-metis.
-      // If METIS is not installed, the user may select "linear".
-      List.set("partitioner: type", "metis");
+    // use METIS to create the blocks. This requires --enable-ifpack-metis.
+    // If METIS is not installed, the user may select "linear".
+    List.set("partitioner: type", "metis");
 #else
-      // or a simple greedy algorithm is METIS is not enabled
-      List.set("partitioner: type", "greedy");
+    // or a simple greedy algorithm is METIS is not enabled
+    List.set("partitioner: type", "greedy");
 #endif
-      // defines here the number of local blocks. If 1,
-      // and only one process is used in the computation, then
-      // the preconditioner must converge in one iteration.
-      List.set("partitioner: local parts", localParts);
-    }
-      break;
-    case BLOCK_SYMMETRIC_GAUSS_SEIDEL:
-    {
-      // TODO: work out how we're supposed to specify partitioning scheme.
+    // defines here the number of local blocks. If 1,
+    // and only one process is used in the computation, then
+    // the preconditioner must converge in one iteration.
+    List.set("partitioner: local parts", localParts);
+  }
+  break;
+  case BLOCK_SYMMETRIC_GAUSS_SEIDEL:
+  {
+    // TODO: work out how we're supposed to specify partitioning scheme.
 //      TEUCHOS_TEST_FOR_EXCEPTION(true, std::invalid_argument, "Block Gauss-Seidel smoother not yet supported.");
 
-      smoother = Teuchos::rcp(new Ifpack_BlockRelaxation<Ifpack_SparseContainer<Ifpack_Amesos> >(fineStiffnessMatrix) );
-      Teuchos::ParameterList List;
-      // TODO: work out what the various parameters do, and how they should depend on the problem...
-      int overlapBlocks = _smootherOverlap;
-      int sweeps = 2;
-      int localParts = 4;
+    smoother = Teuchos::rcp(new Ifpack_BlockRelaxation<Ifpack_SparseContainer<Ifpack_Amesos> >(fineStiffnessMatrix) );
+    Teuchos::ParameterList List;
+    // TODO: work out what the various parameters do, and how they should depend on the problem...
+    int overlapBlocks = _smootherOverlap;
+    int sweeps = 2;
+    int localParts = 4;
 
-      List.set("relaxation: type", "symmetric Gauss-Seidel");
-      List.set("relaxation: sweeps", sweeps);
-      List.set("amesos: solver type", "Amesos_Klu");
+    List.set("relaxation: type", "symmetric Gauss-Seidel");
+    List.set("relaxation: sweeps", sweeps);
+    List.set("amesos: solver type", "Amesos_Klu");
 
-      List.set("partitioner: overlap", overlapBlocks);
+    List.set("partitioner: overlap", overlapBlocks);
 #ifdef HAVE_IFPACK_METIS
-      // use METIS to create the blocks. This requires --enable-ifpack-metis.
-      // If METIS is not installed, the user may select "linear".
-      List.set("partitioner: type", "metis");
+    // use METIS to create the blocks. This requires --enable-ifpack-metis.
+    // If METIS is not installed, the user may select "linear".
+    List.set("partitioner: type", "metis");
 #else
-      // or a simple greedy algorithm if METIS is not enabled
-      List.set("partitioner: type", "greedy");
+    // or a simple greedy algorithm if METIS is not enabled
+    List.set("partitioner: type", "greedy");
 #endif
-      // defines here the number of local blocks. If 1,
-      // and only one process is used in the computation, then
-      // the preconditioner must converge in one iteration.
-      List.set("partitioner: local parts", localParts);
-    }
-      break;
-    case IFPACK_ADDITIVE_SCHWARZ:
-    case CAMELLIA_ADDITIVE_SCHWARZ:
-    {
+    // defines here the number of local blocks. If 1,
+    // and only one process is used in the computation, then
+    // the preconditioner must converge in one iteration.
+    List.set("partitioner: local parts", localParts);
+  }
+  break;
+  case IFPACK_ADDITIVE_SCHWARZ:
+  case CAMELLIA_ADDITIVE_SCHWARZ:
+  {
 //      cout << "Using additive Schwarz smoother.\n";
-      int OverlapLevel = _smootherOverlap;
+    int OverlapLevel = _smootherOverlap;
 
-      if (choice==IFPACK_ADDITIVE_SCHWARZ) {
-        switch (_schwarzBlockFactorizationType) {
-          case Direct:
-            smoother = Teuchos::rcp(new Ifpack_AdditiveSchwarz<Ifpack_Amesos>(fineStiffnessMatrix, OverlapLevel) );
-            break;
-          case ILU:
-            smoother = Teuchos::rcp(new Ifpack_AdditiveSchwarz<Ifpack_ILU>(fineStiffnessMatrix, OverlapLevel) );
-            List.set("fact: level-of-fill", _levelOfFill);
-            break;
-          case IC:
-            smoother = Teuchos::rcp(new Ifpack_AdditiveSchwarz<Ifpack_IC>(fineStiffnessMatrix, OverlapLevel) );
-            List.set("fact: ict level-of-fill", _fillRatio);
-            break;
-          default:
-            break;
-        }
-      } else {
-        switch (_schwarzBlockFactorizationType) {
-          case Direct:
-            smoother = Teuchos::rcp(new Camellia::AdditiveSchwarz<Ifpack_Amesos>(fineStiffnessMatrix, OverlapLevel, _fineMesh, _fineDofInterpreter, _hierarchicalNeighborsForSchwarz) );
-            break;
-          case ILU:
-            smoother = Teuchos::rcp(new Camellia::AdditiveSchwarz<Ifpack_ILU>(fineStiffnessMatrix, OverlapLevel, _fineMesh, _fineDofInterpreter, _hierarchicalNeighborsForSchwarz) );
-            List.set("fact: level-of-fill", _levelOfFill);
-            break;
-          case IC:
-            smoother = Teuchos::rcp(new Camellia::AdditiveSchwarz<Ifpack_IC>(fineStiffnessMatrix, OverlapLevel, _fineMesh, _fineDofInterpreter, _hierarchicalNeighborsForSchwarz) );
-            List.set("fact: ict level-of-fill", _fillRatio);
-            break;
-          default:
-            break;
-        }
+    if (choice==IFPACK_ADDITIVE_SCHWARZ)
+    {
+      switch (_schwarzBlockFactorizationType)
+      {
+      case Direct:
+        smoother = Teuchos::rcp(new Ifpack_AdditiveSchwarz<Ifpack_Amesos>(fineStiffnessMatrix, OverlapLevel) );
+        break;
+      case ILU:
+        smoother = Teuchos::rcp(new Ifpack_AdditiveSchwarz<Ifpack_ILU>(fineStiffnessMatrix, OverlapLevel) );
+        List.set("fact: level-of-fill", _levelOfFill);
+        break;
+      case IC:
+        smoother = Teuchos::rcp(new Ifpack_AdditiveSchwarz<Ifpack_IC>(fineStiffnessMatrix, OverlapLevel) );
+        List.set("fact: ict level-of-fill", _fillRatio);
+        break;
+      default:
+        break;
       }
-
-      List.set("schwarz: combine mode", "Add"); // The PDF doc says to use "Insert" to maintain symmetry, but the HTML docs (which are more recent) say to use "Add".  http://trilinos.org/docs/r11.10/packages/ifpack/doc/html/index.html
     }
-      break;
+    else
+    {
+      switch (_schwarzBlockFactorizationType)
+      {
+      case Direct:
+        smoother = Teuchos::rcp(new Camellia::AdditiveSchwarz<Ifpack_Amesos>(fineStiffnessMatrix, OverlapLevel, _fineMesh, _fineDofInterpreter, _hierarchicalNeighborsForSchwarz) );
+        break;
+      case ILU:
+        smoother = Teuchos::rcp(new Camellia::AdditiveSchwarz<Ifpack_ILU>(fineStiffnessMatrix, OverlapLevel, _fineMesh, _fineDofInterpreter, _hierarchicalNeighborsForSchwarz) );
+        List.set("fact: level-of-fill", _levelOfFill);
+        break;
+      case IC:
+        smoother = Teuchos::rcp(new Camellia::AdditiveSchwarz<Ifpack_IC>(fineStiffnessMatrix, OverlapLevel, _fineMesh, _fineDofInterpreter, _hierarchicalNeighborsForSchwarz) );
+        List.set("fact: ict level-of-fill", _fillRatio);
+        break;
+      default:
+        break;
+      }
+    }
 
-    default:
-      break;
+    List.set("schwarz: combine mode", "Add"); // The PDF doc says to use "Insert" to maintain symmetry, but the HTML docs (which are more recent) say to use "Add".  http://trilinos.org/docs/r11.10/packages/ifpack/doc/html/index.html
+  }
+  break;
+
+  default:
+    break;
   }
 
   int err = smoother->SetParameters(List);
-  if (err != 0) {
+  if (err != 0)
+  {
     cout << "WARNING: In GMGOperator, smoother->SetParameters() returned with err " << err << endl;
   }
 
@@ -1097,18 +1229,20 @@ void GMGOperator::setUpSmoother(Epetra_CrsMatrix *fineStiffnessMatrix) {
 //  }
 
 //  if (_smootherType != IFPACK_ADDITIVE_SCHWARZ) {
-    // not real sure why, but in the doc examples, this isn't called for additive schwarz
-    err = smoother->Initialize();
-    if (err != 0) {
-      cout << "WARNING: In GMGOperator, smoother->Initialize() returned with err " << err << endl;
-    }
+  // not real sure why, but in the doc examples, this isn't called for additive schwarz
+  err = smoother->Initialize();
+  if (err != 0)
+  {
+    cout << "WARNING: In GMGOperator, smoother->Initialize() returned with err " << err << endl;
+  }
 //  }
 //  cout << "Calling smoother->Compute()\n";
   err = smoother->Compute();
 //  cout << "smoother->Compute() completed\n";
 
 
-  if (err != 0) {
+  if (err != 0)
+  {
     cout << "WARNING: In GMGOperator, smoother->Compute() returned with err = " << err << endl;
   }
 
@@ -1141,15 +1275,18 @@ void GMGOperator::setUseHierarchicalNeighborsForSchwarz(bool value)
   _hierarchicalNeighborsForSchwarz = value;
 }
 
-Teuchos::RCP<Epetra_CrsMatrix> GMGOperator::getProlongationOperator() {
+Teuchos::RCP<Epetra_CrsMatrix> GMGOperator::getProlongationOperator()
+{
   return _P;
 }
 
-Teuchos::RCP<Epetra_CrsMatrix> GMGOperator::getSmootherAsMatrix() {
+Teuchos::RCP<Epetra_CrsMatrix> GMGOperator::getSmootherAsMatrix()
+{
   return Epetra_Operator_to_Epetra_Matrix::constructInverseMatrix(*_smoother, _finePartitionMap);
 }
 
 //! Returns the coarse stiffness matrix (an Epetra_CrsMatrix).
-Teuchos::RCP<Epetra_CrsMatrix> GMGOperator::getCoarseStiffnessMatrix() {
+Teuchos::RCP<Epetra_CrsMatrix> GMGOperator::getCoarseStiffnessMatrix()
+{
   return _coarseSolution->getStiffnessMatrix();
 }

@@ -53,7 +53,8 @@ using namespace Intrepid;
 using namespace Camellia;
 
 template <typename Scalar>
-double ExactSolution<Scalar>::L2NormOfError(TSolutionPtr<Scalar> solution, int trialID, int cubDegree) {
+double ExactSolution<Scalar>::L2NormOfError(TSolutionPtr<Scalar> solution, int trialID, int cubDegree)
+{
   Teuchos::RCP<Mesh> mesh = solution->mesh();
   double totalErrorSquared = 0.0;
   // check if the trialID is one for which a single-point BC was imposed:
@@ -68,23 +69,29 @@ double ExactSolution<Scalar>::L2NormOfError(TSolutionPtr<Scalar> solution, int t
 
   vector<ElementTypePtr> elemTypes = mesh->elementTypes(rank);
   vector<ElementTypePtr>::iterator elemTypeIt;
-  for (elemTypeIt = elemTypes.begin(); elemTypeIt != elemTypes.end(); elemTypeIt++) {
+  for (elemTypeIt = elemTypes.begin(); elemTypeIt != elemTypes.end(); elemTypeIt++)
+  {
     ElementTypePtr elemTypePtr = *(elemTypeIt);
     int numCells = mesh->cellIDsOfType(elemTypePtr).size();
     FieldContainer<double> errorSquaredPerCell(numCells);
 
     int numSides;
 
-    if (! solution->mesh()->bilinearForm()->isFluxOrTrace(trialID)) {
+    if (! solution->mesh()->bilinearForm()->isFluxOrTrace(trialID))
+    {
       numSides = 1;
-    } else {
+    }
+    else
+    {
       numSides = elemTypePtr->cellTopoPtr->getSideCount();
     }
 
-    for (int sideIndex=0; sideIndex<numSides; sideIndex++) {
+    for (int sideIndex=0; sideIndex<numSides; sideIndex++)
+    {
       L2NormOfError(errorSquaredPerCell, solution, elemTypePtr,trialID,sideIndex, cubDegree, solutionLift);
 
-      for (int i=0; i<numCells; i++) {
+      for (int i=0; i<numCells; i++)
+      {
         totalErrorSquared += errorSquaredPerCell(i);
       }
     }
@@ -94,7 +101,8 @@ double ExactSolution<Scalar>::L2NormOfError(TSolutionPtr<Scalar> solution, int t
 }
 
 template <typename Scalar>
-void ExactSolution<Scalar>::L2NormOfError(FieldContainer<double> &errorSquaredPerCell, TSolutionPtr<Scalar> solution, ElementTypePtr elemTypePtr, int trialID, int sideIndex, int cubDegree, double solutionLift) {
+void ExactSolution<Scalar>::L2NormOfError(FieldContainer<double> &errorSquaredPerCell, TSolutionPtr<Scalar> solution, ElementTypePtr elemTypePtr, int trialID, int sideIndex, int cubDegree, double solutionLift)
+{
 //  BasisCache(ElementTypePtr elemType, Teuchos::RCP<Mesh> mesh = Teuchos::rcp( (Mesh*) NULL ), bool testVsTest=false, int cubatureDegreeEnrichment = 0)
 
   DofOrdering dofOrdering = *(elemTypePtr->trialOrderPtr.get());
@@ -103,15 +111,21 @@ void ExactSolution<Scalar>::L2NormOfError(FieldContainer<double> &errorSquaredPe
   bool boundaryIntegral = solution->mesh()->bilinearForm()->isFluxOrTrace(trialID);
 
   BasisCachePtr basisCache;
-  if (cubDegree <= 0) { // then take the default cub. degree
+  if (cubDegree <= 0)   // then take the default cub. degree
+  {
     basisCache = Teuchos::rcp( new BasisCache( elemTypePtr, solution->mesh() ) );
-  } else {
+  }
+  else
+  {
     // we could eliminate the logic below if we just added BasisCache::setCubatureDegree()...
     // (the logic below is just to make the enriched cubature match the requested cubature degree...)
     int maxTrialDegree;
-    if (!boundaryIntegral) {
+    if (!boundaryIntegral)
+    {
       maxTrialDegree = elemTypePtr->trialOrderPtr->maxBasisDegreeForVolume();
-    } else {
+    }
+    else
+    {
       maxTrialDegree = elemTypePtr->trialOrderPtr->maxBasisDegree(); // generally, this will be the trace degree
     }
     int maxTestDegree = elemTypePtr->testOrderPtr->maxBasisDegree();
@@ -124,7 +138,8 @@ void ExactSolution<Scalar>::L2NormOfError(FieldContainer<double> &errorSquaredPe
   vector<GlobalIndexType> cellIDs = solution->mesh()->cellIDsOfType(elemTypePtr);
   basisCache->setPhysicalCellNodes(physicalCellNodes, cellIDs, true);
 
-  if (boundaryIntegral) {
+  if (boundaryIntegral)
+  {
     basisCache = basisCache->getSideBasisCache(sideIndex);
   }
 
@@ -140,16 +155,19 @@ void ExactSolution<Scalar>::L2NormOfError(FieldContainer<double> &errorSquaredPe
   dimensions.push_back(numCubPoints);
 
   int basisRank = BasisFactory::basisFactory()->getBasisRank(basis);
-  if (basisRank==1) {
+  if (basisRank==1)
+  {
     dimensions.push_back(spaceDim);
   }
 
   FieldContainer<Scalar> computedValues(dimensions);
   FieldContainer<Scalar> exactValues(dimensions);
 
-  if (solutionLift != 0.0) {
+  if (solutionLift != 0.0)
+  {
     int size = computedValues.size();
-    for (int i=0; i<size; i++) {
+    for (int i=0; i<size; i++)
+    {
       computedValues[i] += solutionLift;
     }
   }
@@ -165,8 +183,10 @@ void ExactSolution<Scalar>::L2NormOfError(FieldContainer<double> &errorSquaredPe
   squaredDifference(errorSquared,computedValues,exactValues);
 
   weightedErrorSquared.resize(numCells,numCubPoints);
-  for (int cellIndex=0; cellIndex<numCells; cellIndex++) {
-    for (int ptIndex=0; ptIndex<numCubPoints; ptIndex++) {
+  for (int cellIndex=0; cellIndex<numCells; cellIndex++)
+  {
+    for (int ptIndex=0; ptIndex<numCubPoints; ptIndex++)
+    {
       // following two lines for viewing in the debugger:
       double weight = weightedMeasure(cellIndex,ptIndex);
       double errorSquaredVal = errorSquared(cellIndex,ptIndex);
@@ -177,36 +197,46 @@ void ExactSolution<Scalar>::L2NormOfError(FieldContainer<double> &errorSquaredPe
   // compute the integral
   errorSquaredPerCell.initialize(0.0);
   int numPoints = weightedErrorSquared.dimension(1);
-  for (int cellIndex=0; cellIndex<numCells; cellIndex++) {
-    for (int ptIndex=0; ptIndex<numPoints; ptIndex++) {
+  for (int cellIndex=0; cellIndex<numCells; cellIndex++)
+  {
+    for (int ptIndex=0; ptIndex<numPoints; ptIndex++)
+    {
       errorSquaredPerCell(cellIndex) += weightedErrorSquared(cellIndex,ptIndex);
     }
   }
 }
 
 template <typename Scalar>
-bool ExactSolution<Scalar>::functionDefined(int trialID) {
+bool ExactSolution<Scalar>::functionDefined(int trialID)
+{
   // not supported by legacy subclasses
   return _exactFunctions.find(trialID) != _exactFunctions.end();
 }
 
 template <typename Scalar>
-void ExactSolution<Scalar>::squaredDifference(FieldContainer<double> &diffSquared, FieldContainer<Scalar> &values1, FieldContainer<Scalar> &values2) {
+void ExactSolution<Scalar>::squaredDifference(FieldContainer<double> &diffSquared, FieldContainer<Scalar> &values1, FieldContainer<Scalar> &values2)
+{
   // two possibilities for values:
   // (C,P) or (C,P,D)
   // output is (C,P) regardless
   int numCells = diffSquared.dimension(0);
   int numPoints = diffSquared.dimension(1);
   bool vectorValued = (values1.rank() == 3);
-  for (int cellIndex = 0; cellIndex < numCells; cellIndex++) {
-    for (int ptIndex = 0; ptIndex < numPoints; ptIndex++) {
+  for (int cellIndex = 0; cellIndex < numCells; cellIndex++)
+  {
+    for (int ptIndex = 0; ptIndex < numPoints; ptIndex++)
+    {
       Scalar value = 0.0;
-      if (vectorValued) {
+      if (vectorValued)
+      {
         int spaceDim = values1.dimension(2);
-        for (int i=0; i<spaceDim; i++) {
+        for (int i=0; i<spaceDim; i++)
+        {
           value += (values1(cellIndex,ptIndex,i) - values2(cellIndex,ptIndex,i)) * (values1(cellIndex,ptIndex,i) - values2(cellIndex,ptIndex,i));
         }
-      } else {
+      }
+      else
+      {
         value = (values1(cellIndex,ptIndex) - values2(cellIndex,ptIndex)) * (values1(cellIndex,ptIndex) - values2(cellIndex,ptIndex));
       }
       diffSquared(cellIndex,ptIndex) = value;
@@ -216,7 +246,8 @@ void ExactSolution<Scalar>::squaredDifference(FieldContainer<double> &diffSquare
 
 template <typename Scalar>
 void ExactSolution<Scalar>::solutionValues(FieldContainer<Scalar> &values, int trialID,
-                                   FieldContainer<double> &physicalPoints) {
+    FieldContainer<double> &physicalPoints)
+{
   int numCells = physicalPoints.dimension(0);
   int numPoints = physicalPoints.dimension(1);
   int spaceDim = physicalPoints.dimension(2);
@@ -226,8 +257,10 @@ void ExactSolution<Scalar>::solutionValues(FieldContainer<Scalar> &values, int t
 
 //  cout << "ExactSolution: physicalPoints:\n" << physicalPoints;
 
-  for (int cellIndex=0; cellIndex<numCells; cellIndex++) {
-    for (int ptIndex=0; ptIndex<numPoints; ptIndex++) {
+  for (int cellIndex=0; cellIndex<numCells; cellIndex++)
+  {
+    for (int ptIndex=0; ptIndex<numPoints; ptIndex++)
+    {
       FieldContainer<double> point(pointDimensions,&physicalPoints(cellIndex,ptIndex,0));
       Scalar value = solutionValue(trialID, point);
       values(cellIndex,ptIndex) = value;
@@ -236,27 +269,33 @@ void ExactSolution<Scalar>::solutionValues(FieldContainer<Scalar> &values, int t
 }
 
 template <typename Scalar>
-void ExactSolution<Scalar>::solutionValues(FieldContainer<Scalar> &values, int trialID, BasisCachePtr basisCache) {
-  if (_exactFunctions.find(trialID) != _exactFunctions.end() ) {
+void ExactSolution<Scalar>::solutionValues(FieldContainer<Scalar> &values, int trialID, BasisCachePtr basisCache)
+{
+  if (_exactFunctions.find(trialID) != _exactFunctions.end() )
+  {
     _exactFunctions[trialID]->values(values,basisCache);
     return;
   }
 
   // TODO: change ExactSolution<Scalar>::solutionValues (below) to take a *const* points FieldContainer, to avoid this copy:
   FieldContainer<double> points = basisCache->getPhysicalCubaturePoints();
-  if (basisCache->getSideIndex() >= 0) {
+  if (basisCache->getSideIndex() >= 0)
+  {
     FieldContainer<double> unitNormals = basisCache->getSideNormals();
     this->solutionValues(values,trialID,points,unitNormals);
-  } else {
+  }
+  else
+  {
     this->solutionValues(values,trialID,points);
   }
 }
 
 template <typename Scalar>
 void ExactSolution<Scalar>::solutionValues(FieldContainer<Scalar> &values,
-                                   int trialID,
-                                   FieldContainer<double> &physicalPoints,
-                                   FieldContainer<double> &unitNormals) {
+    int trialID,
+    FieldContainer<double> &physicalPoints,
+    FieldContainer<double> &unitNormals)
+{
   int numCells = physicalPoints.dimension(0);
   int numPoints = physicalPoints.dimension(1);
   int spaceDim = physicalPoints.dimension(2);
@@ -266,8 +305,10 @@ void ExactSolution<Scalar>::solutionValues(FieldContainer<Scalar> &values,
 
   //  cout << "ExactSolution: physicalPoints:\n" << physicalPoints;
 
-  for (int cellIndex=0; cellIndex<numCells; cellIndex++) {
-    for (int ptIndex=0; ptIndex<numPoints; ptIndex++) {
+  for (int cellIndex=0; cellIndex<numCells; cellIndex++)
+  {
+    for (int ptIndex=0; ptIndex<numPoints; ptIndex++)
+    {
       FieldContainer<double> point(pointDimensions,&physicalPoints(cellIndex,ptIndex,0));
       FieldContainer<double> unitNormal(pointDimensions,&unitNormals(cellIndex,ptIndex,0));
       Scalar value = solutionValue(trialID, point, unitNormal);
@@ -277,26 +318,31 @@ void ExactSolution<Scalar>::solutionValues(FieldContainer<Scalar> &values,
 }
 
 template <typename Scalar>
-TBFPtr<Scalar> ExactSolution<Scalar>::bilinearForm() {
+TBFPtr<Scalar> ExactSolution<Scalar>::bilinearForm()
+{
   return _bilinearForm;
 }
 
 template <typename Scalar>
-TBCPtr<Scalar> ExactSolution<Scalar>::bc() {
+TBCPtr<Scalar> ExactSolution<Scalar>::bc()
+{
   return _bc;
 }
 template <typename Scalar>
-TRHSPtr<Scalar> ExactSolution<Scalar>::rhs() {
+TRHSPtr<Scalar> ExactSolution<Scalar>::rhs()
+{
   return _rhs;
 }
 
 template <typename Scalar>
-ExactSolution<Scalar>::ExactSolution() {
+ExactSolution<Scalar>::ExactSolution()
+{
 
 }
 
 template <typename Scalar>
-ExactSolution<Scalar>::ExactSolution(TBFPtr<Scalar> bf, TBCPtr<Scalar> bc, TRHSPtr<Scalar> rhs, int H1Order) {
+ExactSolution<Scalar>::ExactSolution(TBFPtr<Scalar> bf, TBCPtr<Scalar> bc, TRHSPtr<Scalar> rhs, int H1Order)
+{
   _bilinearForm = bf;
   _bc = bc;
   _rhs = rhs;
@@ -304,7 +350,8 @@ ExactSolution<Scalar>::ExactSolution(TBFPtr<Scalar> bf, TBCPtr<Scalar> bc, TRHSP
 }
 
 template <typename Scalar>
-Scalar ExactSolution<Scalar>::solutionValue(int trialID, FieldContainer<double> &physicalPoint) {
+Scalar ExactSolution<Scalar>::solutionValue(int trialID, FieldContainer<double> &physicalPoint)
+{
   TEUCHOS_TEST_FOR_EXCEPTION(true, std::invalid_argument, "Unimplemented method.");
   return 0;
 //  int spaceDim = physicalPoint.size();
@@ -324,7 +371,8 @@ Scalar ExactSolution<Scalar>::solutionValue(int trialID, FieldContainer<double> 
 
 template <typename Scalar>
 Scalar ExactSolution<Scalar>::solutionValue(int trialID, FieldContainer<double> &physicalPoint,
-                                    FieldContainer<double> &unitNormal) {
+    FieldContainer<double> &unitNormal)
+{
   TEUCHOS_TEST_FOR_EXCEPTION(true, std::invalid_argument, "Unimplemented method.");
   return 0;
 //  int spaceDim = physicalPoint.size();
@@ -348,20 +396,24 @@ Scalar ExactSolution<Scalar>::solutionValue(int trialID, FieldContainer<double> 
 }
 
 template <typename Scalar>
-int ExactSolution<Scalar>::H1Order() { // return -1 for non-polynomial solutions
+int ExactSolution<Scalar>::H1Order()   // return -1 for non-polynomial solutions
+{
   return _H1Order;
 }
 
 template <typename Scalar>
-const map< int, TFunctionPtr<Scalar> > ExactSolution<Scalar>::exactFunctions() {
+const map< int, TFunctionPtr<Scalar> > ExactSolution<Scalar>::exactFunctions()
+{
   return _exactFunctions;
 }
 
 template <typename Scalar>
-void ExactSolution<Scalar>::setSolutionFunction( VarPtr var, TFunctionPtr<Scalar> varFunction ) {
+void ExactSolution<Scalar>::setSolutionFunction( VarPtr var, TFunctionPtr<Scalar> varFunction )
+{
   _exactFunctions[var->ID()] = varFunction;
 }
 
-namespace Camellia {
-  template class ExactSolution<double>;
+namespace Camellia
+{
+template class ExactSolution<double>;
 }

@@ -33,37 +33,46 @@
 #include "MeshUtilities.h"
 using namespace std;
 
-class PositivePart : public Function {
+class PositivePart : public Function
+{
   FunctionPtr _f;
 public:
-  PositivePart(FunctionPtr f) {
+  PositivePart(FunctionPtr f)
+  {
     _f = f;
   }
-  void values(FieldContainer<double> &values, BasisCachePtr basisCache) {
+  void values(FieldContainer<double> &values, BasisCachePtr basisCache)
+  {
     int numCells = values.dimension(0);
     int numPoints = values.dimension(1);
 
     FieldContainer<double> beta_pts(numCells,numPoints);
     _f->values(values,basisCache);
-    
-    for (int i = 0;i<numCells;i++){
-      for (int j = 0;j<numPoints;j++){
-	if (values(i,j)<0){
-	  values(i,j) = 0.0;
-	}
+
+    for (int i = 0; i<numCells; i++)
+    {
+      for (int j = 0; j<numPoints; j++)
+      {
+        if (values(i,j)<0)
+        {
+          values(i,j) = 0.0;
+        }
       }
     }
   }
 };
 
 
-class EpsilonScaling : public hFunction {
+class EpsilonScaling : public hFunction
+{
   double _epsilon;
 public:
-  EpsilonScaling(double epsilon) {
+  EpsilonScaling(double epsilon)
+  {
     _epsilon = epsilon;
   }
-  double value(double x, double y, double h) {
+  double value(double x, double y, double h)
+  {
     // should probably by sqrt(_epsilon/h) instead (note parentheses)
     // but this is what was in the old code, so sticking with it for now.
     double scaling = min(_epsilon/(h*h), 1.0);
@@ -72,23 +81,28 @@ public:
   }
 };
 
-class U0 : public SimpleFunction {
+class U0 : public SimpleFunction
+{
 public:
-  double value(double x, double y) {
+  double value(double x, double y)
+  {
     return 1 - 2 * x;
   }
 };
 
-class TopBoundary : public SpatialFilter {
+class TopBoundary : public SpatialFilter
+{
 public:
-  bool matchesPoint(double x, double y) {
+  bool matchesPoint(double x, double y)
+  {
     double tol = 1e-14;
     bool yMatch = (abs(y-1.0) < tol);
     return yMatch;
   }
 };
 
-int main(int argc, char *argv[]) {
+int main(int argc, char *argv[])
+{
 #ifdef HAVE_MPI
   Teuchos::GlobalMPISession mpiSession(&argc, &argv,0);
   int rank=mpiSession.getRank();
@@ -98,52 +112,60 @@ int main(int argc, char *argv[]) {
   int numProcs = 1;
 #endif
   int polyOrder = 2;
-  
+
   // define our manufactured solution or problem bilinear form:
   double epsilon = 1e-3;
   bool useTriangles = false;
-  
+
   int pToAdd = 2;
   int nCells = 2;
-  if ( argc > 1) {
+  if ( argc > 1)
+  {
     nCells = atoi(argv[1]);
-    if (rank==0){
+    if (rank==0)
+    {
       cout << "numCells = " << nCells << endl;
     }
   }
- int numSteps = 20;
-  if ( argc > 2) {
+  int numSteps = 20;
+  if ( argc > 2)
+  {
     numSteps = atoi(argv[2]);
-    if (rank==0){
+    if (rank==0)
+    {
       cout << "num NR steps = " << numSteps << endl;
     }
   }
- int useHessian = 0; // defaults to "not use"
-  if ( argc > 3) {
+  int useHessian = 0; // defaults to "not use"
+  if ( argc > 3)
+  {
     useHessian = atoi(argv[3]);
-    if (rank==0){
+    if (rank==0)
+    {
       cout << "useHessian = " << useHessian << endl;
     }
-  } 
+  }
 
   int thresh = numSteps; // threshhold for when to apply linesearch/hessian
-  if ( argc > 4) {
+  if ( argc > 4)
+  {
     thresh = atoi(argv[4]);
-    if (rank==0){
+    if (rank==0)
+    {
       cout << "thresh = " << thresh << endl;
     }
   }
 
   int H1Order = polyOrder + 1;
-  
+
   double energyThreshold = 0.2; // for mesh refinements
   double nonlinearStepSize = 0.5;
   double nonlinearRelativeEnergyTolerance = 1e-8; // used to determine convergence of the nonlinear solution
-  
+
   ////////////////////////////////////////////////////////////////////
-  // DEFINE VARIABLES 
+  // DEFINE VARIABLES
   ////////////////////////////////////////////////////////////////////
-  
+
   // new-style bilinear form definition
   VarFactory varFactory;
   VarPtr uhat = varFactory.traceVar("\\widehat{u}");
@@ -151,44 +173,44 @@ int main(int argc, char *argv[]) {
   VarPtr u = varFactory.fieldVar("u");
   VarPtr sigma1 = varFactory.fieldVar("\\sigma_1");
   VarPtr sigma2 = varFactory.fieldVar("\\sigma_2");
-  
+
   VarPtr tau = varFactory.testVar("\\tau",HDIV);
   VarPtr v = varFactory.testVar("v",HGRAD);
   BFPtr bf = Teuchos::rcp( new BF(varFactory) ); // initialize bilinear form
-  
+
   ////////////////////////////////////////////////////////////////////
-  // CREATE MESH 
+  // CREATE MESH
   ////////////////////////////////////////////////////////////////////
-  
+
   // create a pointer to a new mesh:
   Teuchos::RCP<Mesh> mesh = MeshUtilities::buildUnitQuadMesh(nCells, bf, H1Order, H1Order+pToAdd);
   mesh->setPartitionPolicy(Teuchos::rcp(new ZoltanMeshPartitionPolicy("HSFC")));
-  
+
   ////////////////////////////////////////////////////////////////////
   // INITIALIZE BACKGROUND FLOW FUNCTIONS
   ////////////////////////////////////////////////////////////////////
   BCPtr nullBC = Teuchos::rcp((BC*)NULL);
   RHSPtr nullRHS = Teuchos::rcp((RHS*)NULL);
   IPPtr nullIP = Teuchos::rcp((IP*)NULL);
-  SolutionPtr backgroundFlow = Teuchos::rcp(new Solution(mesh, nullBC, 
-                                                         nullRHS, nullIP) );
-  
+  SolutionPtr backgroundFlow = Teuchos::rcp(new Solution(mesh, nullBC,
+                               nullRHS, nullIP) );
+
   vector<double> e1(2); // (1,0)
   e1[0] = 1;
   vector<double> e2(2); // (0,1)
   e2[1] = 1;
-  
+
   FunctionPtr u_prev = Teuchos::rcp( new PreviousSolutionFunction(backgroundFlow, u) );
   FunctionPtr beta = e1 * u_prev + Teuchos::rcp( new ConstantVectorFunction( e2 ) );
-  
+
   ////////////////////////////////////////////////////////////////////
   // DEFINE BILINEAR FORM
   ////////////////////////////////////////////////////////////////////
-  
+
   // tau parts:
   // 1/eps (sigma, tau)_K + (u, div tau)_K - (u_hat, tau_n)_dK
-  bf->addTerm(sigma1 / epsilon, tau->x()); 
-  bf->addTerm(sigma2 / epsilon, tau->y()); 
+  bf->addTerm(sigma1 / epsilon, tau->x());
+  bf->addTerm(sigma2 / epsilon, tau->y());
   bf->addTerm(u, tau->div());
   bf->addTerm( - uhat, tau->dot_normal() );
 
@@ -203,12 +225,12 @@ int main(int argc, char *argv[]) {
   mesh->registerSolution(backgroundFlow);
   FunctionPtr zero = Teuchos::rcp( new ConstantScalarFunction(0.0) );
   FunctionPtr u0 = Teuchos::rcp( new U0 );
-  
+
   map<int, Teuchos::RCP<Function> > functionMap;
   functionMap[u->ID()] = u0;
   functionMap[sigma1->ID()] = zero;
   functionMap[sigma2->ID()] = zero;
- 
+
   backgroundFlow->projectOntoMesh(functionMap);
   // ==================== END SET INITIAL GUESS ==========================
 
@@ -216,7 +238,7 @@ int main(int argc, char *argv[]) {
   // DEFINE INNER PRODUCT
   ////////////////////////////////////////////////////////////////////
   // function to scale the squared guy by epsilon/h
-  FunctionPtr epsilonOverHScaling = Teuchos::rcp( new EpsilonScaling(epsilon) ); 
+  FunctionPtr epsilonOverHScaling = Teuchos::rcp( new EpsilonScaling(epsilon) );
   IPPtr ip = Teuchos::rcp( new IP );
   ip->addTerm( epsilonOverHScaling * (1.0/sqrt(epsilon))* tau);
   ip->addTerm( tau->div());
@@ -231,7 +253,7 @@ int main(int argc, char *argv[]) {
   ////////////////////////////////////////////////////////////////////
   RHSPtr rhs = RHS::rhs();
   FunctionPtr u_prev_squared_div2 = 0.5 * u_prev * u_prev;
-  
+
   rhs->addTerm((e1 * u_prev_squared_div2 + e2 * u_prev) * v->grad() - u_prev * tau->div());
 
   ////////////////////////////////////////////////////////////////////
@@ -242,9 +264,9 @@ int main(int argc, char *argv[]) {
   SpatialFilterPtr inflowBoundary = Teuchos::rcp( new NegatedSpatialFilter(outflowBoundary) );
   BCPtr inflowBC = BC::bc();
   FunctionPtr u0_squared_div_2 = 0.5 * u0 * u0;
-  inflowBC->addDirichlet(beta_n_u_minus_sigma_hat,inflowBoundary, 
+  inflowBC->addDirichlet(beta_n_u_minus_sigma_hat,inflowBoundary,
                          ( e1 * u0_squared_div_2 + e2 * u0) * n );
-  
+
   ////////////////////////////////////////////////////////////////////
   // CREATE SOLUTION OBJECT
   ////////////////////////////////////////////////////////////////////
@@ -279,61 +301,69 @@ int main(int argc, char *argv[]) {
   FunctionPtr e_v = Teuchos::rcp(new RepFunction(v,riesz));
   e_v->writeValuesToMATLABFile(mesh, "e_v.m");
   FunctionPtr posErrPart = Teuchos::rcp(new PositivePart(e_v->dx()));
-  hessianBF->addTerm(e_v->dx()*u,du); 
-  //  hessianBF->addTerm(posErrPart*u,du); 
+  hessianBF->addTerm(e_v->dx()*u,du);
+  //  hessianBF->addTerm(posErrPart*u,du);
   Teuchos::RCP<HessianFilter> hessianFilter = Teuchos::rcp(new HessianFilter(hessianBF));
 
-  if (useHessian){
+  if (useHessian)
+  {
     solution->setWriteMatrixToFile(true,"hessianStiffness.dat");
-  }else{
-    solution->setWriteMatrixToFile(true,"stiffness.dat");    
+  }
+  else
+  {
+    solution->setWriteMatrixToFile(true,"stiffness.dat");
   }
 
   Teuchos::RCP< LineSearchStep > LS_Step = Teuchos::rcp(new LineSearchStep(riesz));
   ofstream out;
-  out.open("Burgers.txt"); 
+  out.open("Burgers.txt");
   double NL_residual = 9e99;
-  for (int i = 0;i<numSteps;i++){
-    solution->solve(false); // do one solve to initialize things...   
+  for (int i = 0; i<numSteps; i++)
+  {
+    solution->solve(false); // do one solve to initialize things...
     double stepLength = 1.0;
     stepLength = LS_Step->stepSize(backgroundFlow,solution, NL_residual);
-    if (useHessian){
-      solution->setFilter(hessianFilter);        
+    if (useHessian)
+    {
+      solution->setFilter(hessianFilter);
     }
     backgroundFlow->addSolution(solution,stepLength);
     NL_residual = LS_Step->getNLResidual();
-    if (rank==0){
-      cout << "NL residual after adding = " << NL_residual << " with step size " << stepLength << endl;    
-      out << NL_residual << endl; // saves initial NL error     
+    if (rank==0)
+    {
+      cout << "NL residual after adding = " << NL_residual << " with step size " << stepLength << endl;
+      out << NL_residual << endl; // saves initial NL error
     }
   }
   out.close();
- 
-  
+
+
   ////////////////////////////////////////////////////////////////////
   // DEFINE REFINEMENT STRATEGY
   ////////////////////////////////////////////////////////////////////
   Teuchos::RCP<RefinementStrategy> refinementStrategy;
   refinementStrategy = Teuchos::rcp(new RefinementStrategy(solution,energyThreshold));
-  
+
   int numRefs = 0;
-  
+
   Teuchos::RCP<NonlinearStepSize> stepSize = Teuchos::rcp(new NonlinearStepSize(nonlinearStepSize));
   Teuchos::RCP<NonlinearSolveStrategy> solveStrategy;
   solveStrategy = Teuchos::rcp( new NonlinearSolveStrategy(backgroundFlow, solution, stepSize,
-                                                           nonlinearRelativeEnergyTolerance));
+                                nonlinearRelativeEnergyTolerance));
 
   ////////////////////////////////////////////////////////////////////
-  // SOLVE 
+  // SOLVE
   ////////////////////////////////////////////////////////////////////
-  
-  for (int refIndex=0;refIndex<numRefs;refIndex++){    
+
+  for (int refIndex=0; refIndex<numRefs; refIndex++)
+  {
     solveStrategy->solve(rank==0);       // print to console on rank 0
     refinementStrategy->refine(rank==0); // print to console on rank 0
   }
   //  solveStrategy->solve(rank==0);
 
-  if (rank==0){ 
+  if (rank==0)
+  {
     backgroundFlow->writeToVTK("Burgers.vtu",min(H1Order+1,4));
     solution->writeFluxesToFile(uhat->ID(), "burgers.dat");
     cout << "wrote solution files" << endl;

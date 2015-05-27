@@ -16,47 +16,56 @@
 
 int H1Order = 3, pToAdd = 2;
 
-class TimeZeroBoundary : public SpatialFilter {
-  public:
-    bool matchesPoint(double x, double y) {
-      double tol = 1e-14;
-      return (abs(y) < tol);
-    }
+class TimeZeroBoundary : public SpatialFilter
+{
+public:
+  bool matchesPoint(double x, double y)
+  {
+    double tol = 1e-14;
+    return (abs(y) < tol);
+  }
 };
 
-class ConstantXBoundary : public SpatialFilter {
-   private:
-      double xval;
-   public:
-      ConstantXBoundary(double xval): xval(xval) {};
-      bool matchesPoint(double x, double y) {
-         double tol = 1e-14;
-         return (abs(x-xval) < tol);
+class ConstantXBoundary : public SpatialFilter
+{
+private:
+  double xval;
+public:
+  ConstantXBoundary(double xval): xval(xval) {};
+  bool matchesPoint(double x, double y)
+  {
+    double tol = 1e-14;
+    return (abs(x-xval) < tol);
+  }
+};
+
+class InitialCondition : public Function
+{
+public:
+  InitialCondition() : Function(0) {}
+  void values(FieldContainer<double> &values, BasisCachePtr basisCache)
+  {
+    int numCells = values.dimension(0);
+    int numPoints = values.dimension(1);
+
+    const FieldContainer<double> *points = &(basisCache->getPhysicalCubaturePoints());
+    for (int cellIndex=0; cellIndex<numCells; cellIndex++)
+    {
+      for (int ptIndex=0; ptIndex<numPoints; ptIndex++)
+      {
+        double x = (*points)(cellIndex,ptIndex,0);
+        double y = (*points)(cellIndex,ptIndex,1);
+        if (abs(x) <= 0.25)
+          values(cellIndex, ptIndex) = 1.0;
+        else
+          values(cellIndex, ptIndex) = 0;
       }
-};
-
-class InitialCondition : public Function {
-  public:
-    InitialCondition() : Function(0) {}
-    void values(FieldContainer<double> &values, BasisCachePtr basisCache) {
-      int numCells = values.dimension(0);
-      int numPoints = values.dimension(1);
-
-      const FieldContainer<double> *points = &(basisCache->getPhysicalCubaturePoints());
-      for (int cellIndex=0; cellIndex<numCells; cellIndex++) {
-        for (int ptIndex=0; ptIndex<numPoints; ptIndex++) {
-          double x = (*points)(cellIndex,ptIndex,0);
-          double y = (*points)(cellIndex,ptIndex,1);
-          if (abs(x) <= 0.25)
-            values(cellIndex, ptIndex) = 1.0;
-          else
-            values(cellIndex, ptIndex) = 0;
-        }
-      }
     }
+  }
 };
 
-int main(int argc, char *argv[]) {
+int main(int argc, char *argv[])
+{
 #ifdef HAVE_MPI
   Teuchos::GlobalMPISession mpiSession(&argc, &argv,0);
   choice::MpiArgs args( argc, argv );
@@ -109,7 +118,7 @@ int main(int argc, char *argv[]) {
 
   // create a pointer to a new mesh:
   Teuchos::RCP<Mesh> mesh = Mesh::buildQuadMesh(meshBoundary, horizontalCells, verticalCells,
-                                                bf, H1Order, H1Order+pToAdd);
+                            bf, H1Order, H1Order+pToAdd);
 
   ////////////////////   DEFINE BILINEAR FORM   ///////////////////////
   double epsilon_x = 1e-2;
@@ -188,13 +197,13 @@ int main(int argc, char *argv[]) {
 
   for (int refIndex=0; refIndex<=numRefs; refIndex++)
   {
-     solution->solve(false);
+    solution->solve(false);
 
-     if (commRank == 0)
-     {
-        stringstream outfile;
-        outfile << "Confusion_" << refIndex;
-        exporter.exportSolution(outfile.str());
+    if (commRank == 0)
+    {
+      stringstream outfile;
+      outfile << "Confusion_" << refIndex;
+      exporter.exportSolution(outfile.str());
     }
 
     if (refIndex < numRefs)

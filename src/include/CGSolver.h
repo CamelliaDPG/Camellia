@@ -11,17 +11,19 @@
 
 #include "Solver.h"
 
-namespace Camellia {
-	class CGSolver : public Solver {
-	  int _maxIters;
-	  bool _printToConsole;
-	  double _tol;
-	public:
-	  CGSolver(int maxIters, double tol);
-	  void setPrintToConsole(bool printToConsole);
-	  int solve();
-	  void setTolerance(double tol);
-	};
+namespace Camellia
+{
+class CGSolver : public Solver
+{
+  int _maxIters;
+  bool _printToConsole;
+  double _tol;
+public:
+  CGSolver(int maxIters, double tol);
+  void setPrintToConsole(bool printToConsole);
+  int solve();
+  void setTolerance(double tol);
+};
 }
 
 #endif

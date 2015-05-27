@@ -16,12 +16,13 @@
 using namespace Intrepid;
 using namespace Camellia;
 
-void MeshPartitionPolicy::partitionMesh(Mesh *mesh, PartitionIndexType numPartitions) {
+void MeshPartitionPolicy::partitionMesh(Mesh *mesh, PartitionIndexType numPartitions)
+{
   // default simply divides the active cells into equally-sized partitions, in the order listed in activeCells…
   MeshTopologyPtr meshTopology = mesh->getTopology();
   int numActiveCells = meshTopology->activeCellCount(); // leaf nodes
   FieldContainer<GlobalIndexType> partitionedActiveCells(numPartitions,numActiveCells);
-  
+
   partitionedActiveCells.initialize(-1); // cellID == -1 signals end of partition
   int chunkSize = numActiveCells / numPartitions;
   int remainder = numActiveCells % numPartitions;
@@ -29,9 +30,11 @@ void MeshPartitionPolicy::partitionMesh(Mesh *mesh, PartitionIndexType numPartit
   vector<GlobalIndexType> activeCellIDs;
   set<IndexType> cellIDSet = meshTopology->getActiveCellIndices();
   activeCellIDs.insert(activeCellIDs.begin(),cellIDSet.begin(),cellIDSet.end());
-  for (int i=0; i<numPartitions; i++) {
+  for (int i=0; i<numPartitions; i++)
+  {
     int chunkSizeWithRemainder = (i < remainder) ? chunkSize + 1 : chunkSize;
-    for (int j=0; j<chunkSizeWithRemainder; j++) {
+    for (int j=0; j<chunkSizeWithRemainder; j++)
+    {
       partitionedActiveCells(i,j) = activeCellIDs[activeCellIndex];
       activeCellIndex++;
     }
@@ -39,18 +42,22 @@ void MeshPartitionPolicy::partitionMesh(Mesh *mesh, PartitionIndexType numPartit
   mesh->globalDofAssignment()->setPartitions(partitionedActiveCells);
 }
 
-MeshPartitionPolicyPtr MeshPartitionPolicy::standardPartitionPolicy() {
+MeshPartitionPolicyPtr MeshPartitionPolicy::standardPartitionPolicy()
+{
   MeshPartitionPolicyPtr partitionPolicy = Teuchos::rcp( new ZoltanMeshPartitionPolicy() );
   return partitionPolicy;
 }
 
-class OneRankPartitionPolicy : public MeshPartitionPolicy {
+class OneRankPartitionPolicy : public MeshPartitionPolicy
+{
   int _rankNumber;
 public:
-  OneRankPartitionPolicy(int rankNumber) {
+  OneRankPartitionPolicy(int rankNumber)
+  {
     _rankNumber = rankNumber;
   }
-  void partitionMesh(Mesh *mesh, PartitionIndexType numPartitions) {
+  void partitionMesh(Mesh *mesh, PartitionIndexType numPartitions)
+  {
     set<GlobalIndexType> activeCellIDs = mesh->getActiveCellIDs();
     vector< set<GlobalIndexType> > partitions(numPartitions);
     partitions[_rankNumber] = activeCellIDs;
@@ -58,6 +65,7 @@ public:
   }
 };
 
-MeshPartitionPolicyPtr MeshPartitionPolicy::oneRankPartitionPolicy(int rankNumber) {
+MeshPartitionPolicyPtr MeshPartitionPolicy::oneRankPartitionPolicy(int rankNumber)
+{
   return Teuchos::rcp( new OneRankPartitionPolicy(rankNumber) );
 }

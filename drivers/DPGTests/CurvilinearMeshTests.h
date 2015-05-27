@@ -11,12 +11,13 @@
 
 #include "TestSuite.h"
 
-class CurvilinearMeshTests : public TestSuite {
+class CurvilinearMeshTests : public TestSuite
+{
   void setup();
   void teardown();
 public:
   void runTests(int &numTestsRun, int &numTestsPassed);
-  
+
   bool testAutomaticStraightEdgesMatchVertices();
   bool testEdgeLength();
   bool testCylinderMesh();
@@ -24,7 +25,7 @@ public:
   bool testPointsRemainInsideElement();
   bool testTransformationJacobian();
   bool testStraightEdgeMesh();
-  
+
   std::string testSuiteName();
 };
 

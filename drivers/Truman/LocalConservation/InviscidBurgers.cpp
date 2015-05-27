@@ -33,44 +33,53 @@ bool enforceLocalConservation = false;
 double newtonStepSize = 1.0;
 int maxNewtonIterations = 100;
 
-class U0 : public SimpleFunction {
-  public:
-    double value(double x, double y) {
-      return 1 - 2 * x;
-      // double pi = 2.0*acos(0.0);
-      // return sin(pi*x);
-    }
+class U0 : public SimpleFunction
+{
+public:
+  double value(double x, double y)
+  {
+    return 1 - 2 * x;
+    // double pi = 2.0*acos(0.0);
+    // return sin(pi*x);
+  }
 };
 
-class BottomBoundary : public SpatialFilter {
-  public:
-    bool matchesPoint(double x, double y) {
-      double tol = 1e-14;
-      bool match = (abs(y) < tol);
-      return match;
-    }
+class BottomBoundary : public SpatialFilter
+{
+public:
+  bool matchesPoint(double x, double y)
+  {
+    double tol = 1e-14;
+    bool match = (abs(y) < tol);
+    return match;
+  }
 };
 
-class LeftBoundary : public SpatialFilter {
-  public:
-    bool matchesPoint(double x, double y) {
-      double tol = 1e-14;
-      bool match = (abs(x) < tol);
-      return match;
-    }
+class LeftBoundary : public SpatialFilter
+{
+public:
+  bool matchesPoint(double x, double y)
+  {
+    double tol = 1e-14;
+    bool match = (abs(x) < tol);
+    return match;
+  }
 };
 
-class RightBoundary : public SpatialFilter {
-  public:
-    bool matchesPoint(double x, double y) {
-      double tol = 1e-14;
-      bool match = (abs(x-1.0) < tol);
-      return match;
-    }
+class RightBoundary : public SpatialFilter
+{
+public:
+  bool matchesPoint(double x, double y)
+  {
+    double tol = 1e-14;
+    bool match = (abs(x-1.0) < tol);
+    return match;
+  }
 };
 
 
-int main(int argc, char *argv[]) {
+int main(int argc, char *argv[])
+{
 #ifdef HAVE_MPI
   Teuchos::GlobalMPISession mpiSession(&argc, &argv,0);
   int rank=mpiSession.getRank();
@@ -121,8 +130,8 @@ int main(int argc, char *argv[]) {
 
   // create a pointer to a new mesh:
   Teuchos::RCP<Mesh> mesh = Mesh::buildQuadMesh(meshPoints, horizontalCells,
-      verticalCells, bf, H1Order,
-      H1Order+pToAdd, useTriangles);
+                            verticalCells, bf, H1Order,
+                            H1Order+pToAdd, useTriangles);
   mesh->setPartitionPolicy(Teuchos::rcp(new ZoltanMeshPartitionPolicy("HSFC")));
 
   ////////////////////////////////////////////////////////////////////
@@ -132,7 +141,7 @@ int main(int argc, char *argv[]) {
   RHSPtr nullRHS = Teuchos::rcp((RHS*)NULL);
   IPPtr nullIP = Teuchos::rcp((IP*)NULL);
   SolutionPtr backgroundFlow = Teuchos::rcp(new Solution(mesh, nullBC,
-        nullRHS, nullIP) );
+                               nullRHS, nullIP) );
 
   vector<double> e1(2); // (1,0)
   e1[0] = 1;
@@ -204,7 +213,8 @@ int main(int argc, char *argv[]) {
   Teuchos::RCP<Solution> solution = Teuchos::rcp(new Solution(mesh, inflowBC, rhs, ip));
   mesh->registerSolution(solution);
 
-  if (enforceLocalConservation) {
+  if (enforceLocalConservation)
+  {
     FunctionPtr zero = Teuchos::rcp( new ConstantScalarFunction(0.0) );
     solution->lagrangeConstraints()->addConstraint(fhat == zero);
   }
@@ -219,7 +229,8 @@ int main(int argc, char *argv[]) {
   // SOLVE
   ////////////////////////////////////////////////////////////////////
 
-  for (int refIndex=0;refIndex<=numRefs;refIndex++){
+  for (int refIndex=0; refIndex<=numRefs; refIndex++)
+  {
     double L2Update = 1e7;
     int iterCount = 0;
     while (L2Update > nonlinearRelativeEnergyTolerance && iterCount < maxNewtonIterations)
@@ -252,11 +263,13 @@ int main(int argc, char *argv[]) {
     double maxMassFluxIntegral = 0.0;
     double totalMassFlux = 0.0;
     double totalAbsMassFlux = 0.0;
-    for (vector< ElementTypePtr >::iterator elemTypeIt = elemTypes.begin(); elemTypeIt != elemTypes.end(); elemTypeIt++) {
+    for (vector< ElementTypePtr >::iterator elemTypeIt = elemTypes.begin(); elemTypeIt != elemTypes.end(); elemTypeIt++)
+    {
       ElementTypePtr elemType = *elemTypeIt;
       vector< ElementPtr > elems = mesh->elementsOfTypeGlobal(elemType);
       vector<int> cellIDs;
-      for (int i=0; i<elems.size(); i++) {
+      for (int i=0; i<elems.size(); i++)
+      {
         cellIDs.push_back(elems[i]->cellID());
       }
       FieldContainer<double> physicalCellNodes = mesh->physicalCellNodesGlobal(elemType);
@@ -265,24 +278,28 @@ int main(int argc, char *argv[]) {
       FieldContainer<double> cellMeasures = basisCache->getCellMeasures();
       FieldContainer<double> fakeRHSIntegrals(elems.size(),testOrdering->totalDofs());
       massFluxTerm->integrate(fakeRHSIntegrals,testOrdering,basisCache,true); // true: force side evaluation
-      for (int i=0; i<elems.size(); i++) {
+      for (int i=0; i<elems.size(); i++)
+      {
         int cellID = cellIDs[i];
         // pick out the ones for testOne:
         massFluxIntegral[cellID] = fakeRHSIntegrals(i,testOneIndex);
       }
       // find the largest:
-      for (int i=0; i<elems.size(); i++) {
+      for (int i=0; i<elems.size(); i++)
+      {
         int cellID = cellIDs[i];
         maxMassFluxIntegral = max(abs(massFluxIntegral[cellID]), maxMassFluxIntegral);
       }
-      for (int i=0; i<elems.size(); i++) {
+      for (int i=0; i<elems.size(); i++)
+      {
         int cellID = cellIDs[i];
         maxMassFluxIntegral = max(abs(massFluxIntegral[cellID]), maxMassFluxIntegral);
         totalMassFlux += massFluxIntegral[cellID];
         totalAbsMassFlux += abs( massFluxIntegral[cellID] );
       }
     }
-    if (rank==0){
+    if (rank==0)
+    {
       cout << endl;
       cout << "largest mass flux: " << maxMassFluxIntegral << endl;
       cout << "total mass flux: " << totalMassFlux << endl;

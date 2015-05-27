@@ -34,7 +34,8 @@
 
 #include "CamelliaCellTools.h"
 
-FieldContainer<double> referenceCubeNodes() {
+FieldContainer<double> referenceCubeNodes()
+{
   FieldContainer<double> cubePoints(8,3);
   cubePoints(0,0) = -1;
   cubePoints(0,1) = -1;
@@ -70,32 +71,39 @@ FieldContainer<double> referenceCubeNodes() {
   return cubePoints;
 }
 
-FieldContainer<double> unitCubeNodes() {
+FieldContainer<double> unitCubeNodes()
+{
   FieldContainer<double> cubePoints = referenceCubeNodes();
-  for (int i=0; i<cubePoints.size(); i++) {
+  for (int i=0; i<cubePoints.size(); i++)
+  {
     cubePoints[i] = (cubePoints[i]+1) / 2;
   }
   return cubePoints;
 }
 
-FieldContainer<double> scaledRefCubeNodes(double weight) {
+FieldContainer<double> scaledRefCubeNodes(double weight)
+{
   FieldContainer<double> cubePoints = referenceCubeNodes();
-  for (int i=0; i<cubePoints.size(); i++) {
+  for (int i=0; i<cubePoints.size(); i++)
+  {
     cubePoints[i] = weight * cubePoints[i];
   }
   return cubePoints;
 }
 
-void printDofIndicesForVariable(DofOrderingPtr dofOrdering, VarPtr var, int sideIndex) {
+void printDofIndicesForVariable(DofOrderingPtr dofOrdering, VarPtr var, int sideIndex)
+{
   vector<int> dofIndices = dofOrdering->getDofIndices(var->ID(), sideIndex);
   cout << "dofIndices for " << var->name() << ", side " << sideIndex << ":" << endl;
-  for (int i=0; i<dofIndices.size(); i++) {
+  for (int i=0; i<dofIndices.size(); i++)
+  {
     cout << dofIndices[i] << " ";
   }
   cout << endl;
 }
 
-double evaluateSoln(FunctionPtr fxn, double x, double y, double z) {
+double evaluateSoln(FunctionPtr fxn, double x, double y, double z)
+{
   // uses the fact that the reference element and physical are identical
 
   FieldContainer<double> value(1,1);
@@ -110,7 +118,8 @@ double evaluateSoln(FunctionPtr fxn, double x, double y, double z) {
   refCubeNodes.resize(1,8,3);
 
   BasisCachePtr basisCache = Teuchos::rcp( new BasisCache(refCubeNodes, cellTopo, 0) );
-  if (fxn->rank() != 0) {
+  if (fxn->rank() != 0)
+  {
     TEUCHOS_TEST_FOR_EXCEPTION(true, std::invalid_argument, "Function::evaluate requires a rank 1 Function.");
   }
   basisCache->setRefCellPoints(physPoint); // this is where we use the fact that the ref element matches physical
@@ -119,47 +128,58 @@ double evaluateSoln(FunctionPtr fxn, double x, double y, double z) {
 }
 
 void determinePointPermutation(int* permutation, const FieldContainer<double> &points1,
-                      const FieldContainer<double> &points2) {
+                               const FieldContainer<double> &points2)
+{
   // this method is overkill for our purposes--so far, our only permutation should be a reversal--
   // but we might like to reuse for point sets that might be permuted in other ways
   int numPoints = points1.dimension(0);
   int spaceDim = points1.dimension(1);
   double tol = 1e-14;
-  for (int pt1Index=0; pt1Index<numPoints; pt1Index++) {
+  for (int pt1Index=0; pt1Index<numPoints; pt1Index++)
+  {
     bool pt1Matched = false;
-    for (int pt2Index=0; pt2Index<numPoints; pt2Index++) {
+    for (int pt2Index=0; pt2Index<numPoints; pt2Index++)
+    {
       bool match = true;
-      for (int d=0; d<spaceDim; d++) {
-        if ( abs(points1(pt1Index,d) - points2(pt2Index,d) ) > tol) {
+      for (int d=0; d<spaceDim; d++)
+      {
+        if ( abs(points1(pt1Index,d) - points2(pt2Index,d) ) > tol)
+        {
           match = false;
         }
       }
-      if (match) {
+      if (match)
+      {
         permutation[pt1Index] = pt2Index;
         pt1Matched = true;
         break;
       }
     }
-    if (!pt1Matched) {
+    if (!pt1Matched)
+    {
       cout << "ERROR: No match found for point " << pt1Index << endl;
       TEUCHOS_TEST_FOR_EXCEPTION(true, std::invalid_argument, "no match found for point");
     }
   }
 }
 
-void permutePoints(int *permutation, FieldContainer<double> &pointsToPermute) {
+void permutePoints(int *permutation, FieldContainer<double> &pointsToPermute)
+{
   int numPoints = pointsToPermute.dimension(0);
   int spaceDim = pointsToPermute.dimension(1);
   FieldContainer<double> pointsCopy = pointsToPermute;
-  for (int ptIndex=0; ptIndex<numPoints; ptIndex++) {
-    for (int d=0; d<spaceDim; d++) {
+  for (int ptIndex=0; ptIndex<numPoints; ptIndex++)
+  {
+    for (int d=0; d<spaceDim; d++)
+    {
       pointsToPermute(ptIndex,d) = pointsCopy(permutation[ptIndex],d);
     }
   }
 }
 
 bool basesAgreeOnEdge(BasisPtr basis1, int side1, int edge1, int dofOrdinal1,
-                      BasisPtr basis2, int side2, int edge2, int dofOrdinal2) {
+                      BasisPtr basis2, int side2, int edge2, int dofOrdinal2)
+{
   // sides are sides of the hex
   // bases are defined on quad (sides of hex)
   // and should agree on their shared edge
@@ -178,14 +198,16 @@ bool basesAgreeOnEdge(BasisPtr basis1, int side1, int edge1, int dofOrdinal1,
 
   FieldContainer<double> edgePoints(numPoints,edgeDim);
 //  FieldContainer<double> edgePointsReversed(numPoints,edgeDim);
-  for (int i=0; i<numPoints; i++) {
+  for (int i=0; i<numPoints; i++)
+  {
     // equispaced in (-1,1)
     edgePoints(i,0) = dxPerPoint * i - 1;
 //    edgePointsReversed(numPoints-i-1,0) = edgePoints(i,0);
   }
 //  cout << "edgePoints:\n" << edgePoints;
 
-  if ((basis1->rangeRank() != 0) || (basis2->rangeRank() != 0)) {
+  if ((basis1->rangeRank() != 0) || (basis2->rangeRank() != 0))
+  {
     TEUCHOS_TEST_FOR_EXCEPTION(true, std::invalid_argument, "basesAgreeOnEdge only supports scalar-valued bases");
   }
   FieldContainer<double> values1(basis1->getCardinality(),numPoints);
@@ -228,14 +250,16 @@ bool basesAgreeOnEdge(BasisPtr basis1, int side1, int edge1, int dofOrdinal1,
 //  cout << "values2:\n" << values2;
 
   bool success = true;
-  for (int pt1Index=0; pt1Index < numPoints; pt1Index++) {
+  for (int pt1Index=0; pt1Index < numPoints; pt1Index++)
+  {
 //    int pt2Index = pointPermutation[pt1Index];
 //    double diff = abs(values1(dofOrdinal1,pt1Index)-values2(dofOrdinal2,pt2Index));
 
     // since quadPoints2 agrees in order with quadPoints1 when mapped, I believe
     // values2 should likewise agree in order with values1...
     double diff = abs(values1(dofOrdinal1,pt1Index)-values2(dofOrdinal2,pt1Index));
-    if (diff > tol) {
+    if (diff > tol)
+    {
       success = false;
       cout << "bases differ by " << diff << " at point (";
       cout << hexPoints1(pt1Index,0) << "," << hexPoints1(pt1Index,1) << ",";
@@ -243,11 +267,14 @@ bool basesAgreeOnEdge(BasisPtr basis1, int side1, int edge1, int dofOrdinal1,
     }
   }
 
-  if (success) {
+  if (success)
+  {
 //    cout << "identification of side " << side1 << ", edge " << edge1 << ", dofOrdinal " << dofOrdinal1;
 //    cout << " with side " << side2 << ", edge " << edge2 << ", dofOrdinal " << dofOrdinal2 << ": ";
 //    cout << "bases agree\n";
-  } else {
+  }
+  else
+  {
     cout << "identification of side " << side1 << ", edge " << edge1 << ", dofOrdinal " << dofOrdinal1;
     cout << " with side " << side2 << ", edge " << edge2 << ", dofOrdinal " << dofOrdinal2 << ": ";
     cout << "bases disagree\n";
@@ -256,7 +283,8 @@ bool basesAgreeOnEdge(BasisPtr basis1, int side1, int edge1, int dofOrdinal1,
   return success;
 }
 
-int main(int argc, char *argv[]) {
+int main(int argc, char *argv[])
+{
   Teuchos::GlobalMPISession mpiSession(&argc, &argv,0);
   int rank = mpiSession.getRank();
 
@@ -264,7 +292,8 @@ int main(int argc, char *argv[]) {
   int maxH1Order = 6;
   int pToAdd = 2;
 
-  if (rank==0) {
+  if (rank==0)
+  {
     cout << "min H^1 Order: " << minH1Order << "\n";
     cout << "max H^1 Order: " << maxH1Order << "\n";
     cout << "pToAdd: " << pToAdd << "\n";
@@ -331,7 +360,8 @@ int main(int argc, char *argv[]) {
   // inner product
   IPPtr ip = bf->graphNorm();
 
-  if (rank==0) {
+  if (rank==0)
+  {
     cout << "Laplace bilinear form:\n";
     bf->printTrialTestInteractions();
   }
@@ -355,7 +385,8 @@ int main(int argc, char *argv[]) {
   int sideDim = 2;
   int delta_k = 2;
 
-  for (int polyOrder=minH1Order; polyOrder<=maxH1Order; polyOrder++) {
+  for (int polyOrder=minH1Order; polyOrder<=maxH1Order; polyOrder++)
+  {
     BasisPtr hGradBasisQuad = BasisFactory::getBasis(polyOrder, shards::Quadrilateral<4>::key, IntrepidExtendedTypes::FUNCTION_SPACE_HGRAD);
     BasisPtr l2BasisQuad = BasisFactory::getBasis(polyOrder, shards::Quadrilateral<4>::key, IntrepidExtendedTypes::FUNCTION_SPACE_HVOL);
 
@@ -374,11 +405,13 @@ int main(int argc, char *argv[]) {
     trialOrderPtr->addEntry(psi3->ID(), l2BasisHex, l2BasisQuad->rangeRank());
 
     // traces:
-    for (int sideOrdinal = 0; sideOrdinal < hexTopoPtr->getSideCount(); sideOrdinal++) {
+    for (int sideOrdinal = 0; sideOrdinal < hexTopoPtr->getSideCount(); sideOrdinal++)
+    {
       trialOrderPtr->addEntry(phi_hat->ID(), hGradBasisQuad, l2BasisQuad->rangeRank(), sideOrdinal);
     }
     // fluxes:
-    for (int sideOrdinal = 0; sideOrdinal < hexTopoPtr->getSideCount(); sideOrdinal++) {
+    for (int sideOrdinal = 0; sideOrdinal < hexTopoPtr->getSideCount(); sideOrdinal++)
+    {
       trialOrderPtr->addEntry(psi_hat_n->ID(), l2BasisQuad, l2BasisQuad->rangeRank(), sideOrdinal);
     }
 
@@ -405,10 +438,12 @@ int main(int argc, char *argv[]) {
 //      cout << endl;
 //    }
 
-    for (int sideOrdinal = 0; sideOrdinal < hexTopoPtr->getSideCount(); sideOrdinal++) {
+    for (int sideOrdinal = 0; sideOrdinal < hexTopoPtr->getSideCount(); sideOrdinal++)
+    {
       shards::CellTopology sideTopo(hexTopoPtr->getCellTopologyData(sideDim, sideOrdinal));
 //      cout << "Side " << sideOrdinal << endl;
-      for (int edgeOrdinal=0; edgeOrdinal < sideTopo.getEdgeCount(); edgeOrdinal++) {
+      for (int edgeOrdinal=0; edgeOrdinal < sideTopo.getEdgeCount(); edgeOrdinal++)
+      {
         // how does the hex identify this edge?
         unsigned hexNodeForVertex0 = hexTopoPtr->getNodeMap(faceDim, sideOrdinal, edgeOrdinal);
         unsigned hexNodeForVertex1 = hexTopoPtr->getNodeMap(faceDim, sideOrdinal, (edgeOrdinal+1)%(sideTopo.getVertexCount()));
@@ -420,65 +455,70 @@ int main(int argc, char *argv[]) {
 
         pair< unsigned, unsigned > edge = make_pair(hexNodeMin, hexNodeMax);
 
-        if (edgeNodeToSideEdge.find(edge) == edgeNodeToSideEdge.end()) {
+        if (edgeNodeToSideEdge.find(edge) == edgeNodeToSideEdge.end())
+        {
           edgeNodeToSideEdge[edge] = vector< pair< pair<unsigned, unsigned>, bool > >();
         }
         edgeNodeToSideEdge[edge].push_back(make_pair(make_pair(sideOrdinal, edgeOrdinal), orientationAgreesWithNodeOrdering));
       }
-      for (int vertexOrdinal=0; vertexOrdinal < sideTopo.getVertexCount(); vertexOrdinal++) {
+      for (int vertexOrdinal=0; vertexOrdinal < sideTopo.getVertexCount(); vertexOrdinal++)
+      {
         // how does the hex identify this vertex?
         unsigned hexNodeForVertex = hexTopoPtr->getNodeMap(faceDim, sideOrdinal, vertexOrdinal);
-        if (vertexNodeToSideVertex.find(hexNodeForVertex) == vertexNodeToSideVertex.end()) {
+        if (vertexNodeToSideVertex.find(hexNodeForVertex) == vertexNodeToSideVertex.end())
+        {
           vertexNodeToSideVertex[hexNodeForVertex] = vector< pair<unsigned, unsigned> >();
         }
         vertexNodeToSideVertex[hexNodeForVertex].push_back(make_pair(sideOrdinal, vertexOrdinal));
       }
     }
     // DEBUG loop over vertexNodeToSideVertex:
-/*    for (map< unsigned, vector< pair<unsigned, unsigned> > >::iterator vertexNodeIter = vertexNodeToSideVertex.begin();
-         vertexNodeIter != vertexNodeToSideVertex.end(); vertexNodeIter++) {
-      int hexNodeForVertex = vertexNodeIter->first;
-      cout << "vertex " << hexNodeForVertex << ", (side, vertex) pairs: ";
-      vector< pair<unsigned, unsigned> > vertices = vertexNodeIter->second;
-      for (vector< pair<unsigned, unsigned> >::iterator verticesIter = vertices.begin();
-           verticesIter != vertices.end(); verticesIter++) {
-        int sideOrdinal = verticesIter->first;
-        int vertexOrdinalInSide = verticesIter->second;
-        cout << "(" << sideOrdinal << ", " << vertexOrdinalInSide << ") ";
-      }
-      cout << endl;
-    }
-    // DEBUG loop over edgeNodeToSideEdge:
-    for (map< pair<unsigned, unsigned>, vector< pair< pair<unsigned, unsigned>, bool > > > ::iterator edgeNodeIter = edgeNodeToSideEdge.begin();
-         edgeNodeIter != edgeNodeToSideEdge.end(); edgeNodeIter++) {
-      unsigned v0 = edgeNodeIter->first.first;
-      unsigned v1 = edgeNodeIter->first.second;
-      cout << "edge (" << v0 << "," << v1 << ") (side, edge) pairs: ";
-      vector< pair < pair<unsigned, unsigned>, bool > > edges = edgeNodeIter->second;
-      for (vector< pair < pair<unsigned, unsigned>, bool > >::iterator edgesIter = edges.begin();
-           edgesIter != edges.end(); edgesIter++) {
-        bool orientationsAgree = edgesIter->second;
-        int sideOrdinal = edgesIter->first.first;
-        int edgeOrdinalInSide = edgesIter->first.second;
-        cout << "(" << sideOrdinal << ", " << edgeOrdinalInSide << ") ";
-      }
-      cout << endl;
-    }*/
+    /*    for (map< unsigned, vector< pair<unsigned, unsigned> > >::iterator vertexNodeIter = vertexNodeToSideVertex.begin();
+             vertexNodeIter != vertexNodeToSideVertex.end(); vertexNodeIter++) {
+          int hexNodeForVertex = vertexNodeIter->first;
+          cout << "vertex " << hexNodeForVertex << ", (side, vertex) pairs: ";
+          vector< pair<unsigned, unsigned> > vertices = vertexNodeIter->second;
+          for (vector< pair<unsigned, unsigned> >::iterator verticesIter = vertices.begin();
+               verticesIter != vertices.end(); verticesIter++) {
+            int sideOrdinal = verticesIter->first;
+            int vertexOrdinalInSide = verticesIter->second;
+            cout << "(" << sideOrdinal << ", " << vertexOrdinalInSide << ") ";
+          }
+          cout << endl;
+        }
+        // DEBUG loop over edgeNodeToSideEdge:
+        for (map< pair<unsigned, unsigned>, vector< pair< pair<unsigned, unsigned>, bool > > > ::iterator edgeNodeIter = edgeNodeToSideEdge.begin();
+             edgeNodeIter != edgeNodeToSideEdge.end(); edgeNodeIter++) {
+          unsigned v0 = edgeNodeIter->first.first;
+          unsigned v1 = edgeNodeIter->first.second;
+          cout << "edge (" << v0 << "," << v1 << ") (side, edge) pairs: ";
+          vector< pair < pair<unsigned, unsigned>, bool > > edges = edgeNodeIter->second;
+          for (vector< pair < pair<unsigned, unsigned>, bool > >::iterator edgesIter = edges.begin();
+               edgesIter != edges.end(); edgesIter++) {
+            bool orientationsAgree = edgesIter->second;
+            int sideOrdinal = edgesIter->first.first;
+            int edgeOrdinalInSide = edgesIter->first.second;
+            cout << "(" << sideOrdinal << ", " << edgeOrdinalInSide << ") ";
+          }
+          cout << endl;
+        }*/
     // now, we want to identify all those dofs:
     for (map< unsigned, vector< pair<unsigned, unsigned> > >::iterator vertexNodeIter = vertexNodeToSideVertex.begin();
-         vertexNodeIter != vertexNodeToSideVertex.end(); vertexNodeIter++) {
+         vertexNodeIter != vertexNodeToSideVertex.end(); vertexNodeIter++)
+    {
       vector< pair<unsigned, unsigned> > vertices = vertexNodeIter->second;
       vector< pair<unsigned, unsigned> >::iterator verticesIter = vertices.begin();
       unsigned firstSideOrdinal = verticesIter->first;
       unsigned firstVertexOrdinal = verticesIter->second;
       unsigned firstVertexDofOrdinal = trialOrderPtr->getBasis(phi_hat->ID(), firstSideOrdinal)
-                                                    ->getDofOrdinal(vertexDim, firstVertexOrdinal, 0); // 0: only one vertex dof, so its index is 0
+                                       ->getDofOrdinal(vertexDim, firstVertexOrdinal, 0); // 0: only one vertex dof, so its index is 0
 
-      while (++verticesIter != vertices.end()) {
+      while (++verticesIter != vertices.end())
+      {
         unsigned sideOrdinal = verticesIter->first;
         unsigned vertexOrdinal = verticesIter->second;
         unsigned vertexDofOrdinal = trialOrderPtr->getBasis(phi_hat->ID(), sideOrdinal)
-                                                 ->getDofOrdinal(vertexDim, vertexOrdinal, 0); // 0: only one vertex dof, so its index is 0
+                                    ->getDofOrdinal(vertexDim, vertexOrdinal, 0); // 0: only one vertex dof, so its index is 0
         trialOrderPtr->addIdentification(phi_hat->ID(), firstSideOrdinal, firstVertexDofOrdinal,
                                          sideOrdinal, vertexDofOrdinal);
 //        cout << "(" << firstSideOrdinal << ", " << firstVertexOrdinal;
@@ -487,7 +527,8 @@ int main(int argc, char *argv[]) {
     }
 
     for (map< pair<unsigned, unsigned>, vector< pair< pair<unsigned, unsigned>, bool > > > ::iterator edgeNodeIter = edgeNodeToSideEdge.begin();
-         edgeNodeIter != edgeNodeToSideEdge.end(); edgeNodeIter++) {
+         edgeNodeIter != edgeNodeToSideEdge.end(); edgeNodeIter++)
+    {
       vector< pair < pair<unsigned, unsigned>, bool > > edges = edgeNodeIter->second;
       vector< pair < pair<unsigned, unsigned>, bool > >::iterator edgeIter = edges.begin();
       if (edgeIter == edges.end()) continue;
@@ -503,11 +544,13 @@ int main(int argc, char *argv[]) {
 
       int numDofs = trialOrderPtr->getBasis(phi_hat->ID(), firstSideOrdinal)->dofOrdinalsForSubcell(edgeDim, firstEdgeOrdinalInSide).size();
 
-      while (++edgeIter != edges.end()) {
+      while (++edgeIter != edges.end())
+      {
         unsigned sideOrdinal = edgeIter->first.first;
         unsigned edgeOrdinal = edgeIter->first.second;
         bool orientationAgrees = edgeIter->second;
-        for (int dofNumber=0; dofNumber<numDofs; dofNumber++) {
+        for (int dofNumber=0; dofNumber<numDofs; dofNumber++)
+        {
           // this is the point where we consider the relative permutation of the identified bases...
           // when we do this in a mesh, we'll need to do something more sophisticated.
           unsigned firstDofOrdinal, secondDofOrdinal;
@@ -516,26 +559,30 @@ int main(int argc, char *argv[]) {
           // we need to swap things when we're on either side 2 or 3...
           bool hexEdgeOrientationsAgree = orientationAgrees == firstOrientationAgrees;
           bool quadEdgeOrientationsAgree = ((firstEdgeOrdinalInSide <= 1) && (edgeOrdinal <= 1))
-                                        || ((firstEdgeOrdinalInSide  > 1) && (edgeOrdinal  > 1));
+                                           || ((firstEdgeOrdinalInSide  > 1) && (edgeOrdinal  > 1));
 
           bool swapDofOrder = hexEdgeOrientationsAgree ^ quadEdgeOrientationsAgree; // xor
 
-          if (swapDofOrder) {
+          if (swapDofOrder)
+          {
             firstDofOrdinal = trialOrderPtr->getBasis(phi_hat->ID(), firstSideOrdinal)
-                                           ->getDofOrdinal(edgeDim, firstEdgeOrdinalInSide, numDofs - dofNumber - 1);
+                              ->getDofOrdinal(edgeDim, firstEdgeOrdinalInSide, numDofs - dofNumber - 1);
 //                                           ->getDofOrdinal(edgeDim, firstEdgeOrdinalInSide, dofNumber); // JUST A TEST
             secondDofOrdinal = trialOrderPtr->getBasis(phi_hat->ID(), sideOrdinal)
-                                            ->getDofOrdinal(edgeDim, edgeOrdinal, dofNumber);
-          } else {
+                               ->getDofOrdinal(edgeDim, edgeOrdinal, dofNumber);
+          }
+          else
+          {
 //            cout << "two sides agree on edge orientation.\n";
             firstDofOrdinal = trialOrderPtr->getBasis(phi_hat->ID(), firstSideOrdinal)
-                                                    ->getDofOrdinal(edgeDim, firstEdgeOrdinalInSide, dofNumber);
+                              ->getDofOrdinal(edgeDim, firstEdgeOrdinalInSide, dofNumber);
             secondDofOrdinal = trialOrderPtr->getBasis(phi_hat->ID(), sideOrdinal)
-                                                    ->getDofOrdinal(edgeDim, edgeOrdinal, dofNumber);
+                               ->getDofOrdinal(edgeDim, edgeOrdinal, dofNumber);
           }
 
           if (! basesAgreeOnEdge(trialOrderPtr->getBasis(phi_hat->ID(), firstSideOrdinal), firstSideOrdinal, firstEdgeOrdinalInSide, firstDofOrdinal,
-                                 trialOrderPtr->getBasis(phi_hat->ID(), sideOrdinal), sideOrdinal, edgeOrdinal, secondDofOrdinal) ) {
+                                 trialOrderPtr->getBasis(phi_hat->ID(), sideOrdinal), sideOrdinal, edgeOrdinal, secondDofOrdinal) )
+          {
             cout << "identified basis dofs disagree on shared edge...\n";
             // the commented out code below is hackish, and appears not to work anyway -- we pass the check, but the ultimate solution isn't right.
             // need to work out how the mapping from physical space to the reference quad on a side works.  There may be something amiss with the
@@ -618,7 +665,8 @@ int main(int argc, char *argv[]) {
 
     int optSuccess = bf->optimalTestWeights(optTestCoeffs, ipMatrix, elemTypePtr, cellSideParities, basisCache);
 
-    if (optSuccess != 0) {
+    if (optSuccess != 0)
+    {
       cout << "Error while solving for optimal test weights.\n";
     }
 
@@ -638,13 +686,15 @@ int main(int argc, char *argv[]) {
     FieldContainer<double> bcVector(trialOrderPtr->totalDofs());
     set<int> bcDofIndices;
     int sideCount = CamelliaCellTools::getSideCount(*cellTopoPtr);
-    for (int sideIndex=0; sideIndex < sideCount; sideIndex++) {
+    for (int sideIndex=0; sideIndex < sideCount; sideIndex++)
+    {
       BasisPtr basis = trialOrderPtr->getBasis(varID,sideIndex);
       FieldContainer<double> dirichletValues(numCells, basis->getCardinality());
       bc->coefficientsForBC(dirichletValues, bcFunction, basis, basisCache->getSideBasisCache(sideIndex));
 //      cout << "dirichletValues for side " << sideIndex << ":" << endl << dirichletValues;
       int cellIndex = 0;
-      for (int basisOrdinal=0; basisOrdinal < basis->getCardinality(); basisOrdinal++) {
+      for (int basisOrdinal=0; basisOrdinal < basis->getCardinality(); basisOrdinal++)
+      {
         int localDofIndex = trialOrderPtr->getDofIndex(varID, basisOrdinal, sideIndex);
         // we can also skip any global dof index lookup, since we're dealing with just one element
         bcVector(localDofIndex) = dirichletValues(cellIndex,basisOrdinal);
@@ -663,14 +713,17 @@ int main(int argc, char *argv[]) {
     bcVector.resize(numTrialDofs);
 
     // adjust RHS:
-    for (int dofIndex=0; dofIndex<numTrialDofs; dofIndex++) {
+    for (int dofIndex=0; dofIndex<numTrialDofs; dofIndex++)
+    {
       localRHSVector(dofIndex) -= rhsAdjustment(dofIndex);
     }
 
     // zero out the stiffness matrix rows and columns for dirichlet values
-    for (set<int>::iterator dofIndexIt = bcDofIndices.begin(); dofIndexIt != bcDofIndices.end(); dofIndexIt++) {
+    for (set<int>::iterator dofIndexIt = bcDofIndices.begin(); dofIndexIt != bcDofIndices.end(); dofIndexIt++)
+    {
       int dofIndex = *dofIndexIt;
-      for (int i=0; i<numTrialDofs; i++) {
+      for (int i=0; i<numTrialDofs; i++)
+      {
         finalStiffness(i,dofIndex) = 0;
         finalStiffness(dofIndex,i) = 0;
       }
@@ -684,10 +737,12 @@ int main(int argc, char *argv[]) {
     SerialDenseWrapper::solveSystem(solution, finalStiffness, localRHSVector);
 
     bool bcsCorrect = true;
-    for (set<int>::iterator dofIndexIt = bcDofIndices.begin(); dofIndexIt != bcDofIndices.end(); dofIndexIt++) {
+    for (set<int>::iterator dofIndexIt = bcDofIndices.begin(); dofIndexIt != bcDofIndices.end(); dofIndexIt++)
+    {
       int dofIndex = *dofIndexIt;
 
-      if (solution(dofIndex) != bcVector(dofIndex)) {
+      if (solution(dofIndex) != bcVector(dofIndex))
+      {
         cout << solution(dofIndex) << " = solution(" << dofIndex;
         cout << ") != bcVector(" << dofIndex << ") = " << bcVector(dofIndex) << "\n";
         bcsCorrect = false;
@@ -702,12 +757,15 @@ int main(int argc, char *argv[]) {
 
     // check solution
     map<int, VarPtr > trialVars = vf->trialVars();
-    for (map<int, VarPtr >::iterator trialVarIt = trialVars.begin(); trialVarIt != trialVars.end(); trialVarIt++) {
+    for (map<int, VarPtr >::iterator trialVarIt = trialVars.begin(); trialVarIt != trialVars.end(); trialVarIt++)
+    {
       VarPtr var = trialVarIt->second;
-      if (var->varType() == FIELD) {
+      if (var->varType() == FIELD)
+      {
         BasisPtr basis = trialOrderPtr->getBasis(var->ID());
         FieldContainer<double> solnCoefficients(basis->getCardinality());
-        for (int basisOrdinal=0; basisOrdinal<basis->getCardinality(); basisOrdinal++) {
+        for (int basisOrdinal=0; basisOrdinal<basis->getCardinality(); basisOrdinal++)
+        {
           int localDofIndex = trialOrderPtr->getDofIndex(var->ID(), basisOrdinal);
           solnCoefficients(basisOrdinal) = solution(localDofIndex);
         }

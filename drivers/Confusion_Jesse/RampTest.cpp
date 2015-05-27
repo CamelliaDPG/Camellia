@@ -30,18 +30,21 @@
 #include "Epetra_FEVector.h"
 #include "StandardAssembler.h" // for system assembly
 #include "SerialDenseWrapper.h" // for system assembly
-#include "TestingUtilities.h" 
+#include "TestingUtilities.h"
 #include "MeshPolyOrderFunction.h"
 
 double pi = 2.0*acos(0.0);
 
-class EpsilonScaling : public hFunction {
+class EpsilonScaling : public hFunction
+{
   double _epsilon;
 public:
-  EpsilonScaling(double epsilon) {
+  EpsilonScaling(double epsilon)
+  {
     _epsilon = epsilon;
   }
-  double value(double x, double y, double h) {
+  double value(double x, double y, double h)
+  {
     // should probably by sqrt(_epsilon/h) instead (note parentheses)
     // but this is what was in the old code, so sticking with it for now.
     double scaling = min(_epsilon/(h*h), 1.0);
@@ -50,13 +53,16 @@ public:
   }
 };
 
-class AnisotropicHScaling : public Function {
+class AnisotropicHScaling : public Function
+{
   int _spatialCoord;
 public:
-  AnisotropicHScaling(int spatialCoord){
+  AnisotropicHScaling(int spatialCoord)
+  {
     _spatialCoord = spatialCoord;
   }
-  void values(FieldContainer<double> &values, BasisCachePtr basisCache){
+  void values(FieldContainer<double> &values, BasisCachePtr basisCache)
+  {
     int numCells = values.dimension(0);
     int numPoints = values.dimension(1);
 
@@ -64,60 +70,77 @@ public:
     vector<int> cellIDs = basisCache->cellIDs();
 
     double tol=1e-14;
-    for (int cellIndex=0; cellIndex<numCells; cellIndex++) {
+    for (int cellIndex=0; cellIndex<numCells; cellIndex++)
+    {
       double h = 1.0;
-      if (_spatialCoord==0){
-	h = mesh->getCellXSize(cellIDs[cellIndex]);
-      }else if (_spatialCoord==1){
-	h = mesh->getCellYSize(cellIDs[cellIndex]);
-      }	
-      for (int ptIndex=0; ptIndex<numPoints; ptIndex++) {
-	values(cellIndex,ptIndex) = sqrt(h);
+      if (_spatialCoord==0)
+      {
+        h = mesh->getCellXSize(cellIDs[cellIndex]);
+      }
+      else if (_spatialCoord==1)
+      {
+        h = mesh->getCellYSize(cellIDs[cellIndex]);
+      }
+      for (int ptIndex=0; ptIndex<numPoints; ptIndex++)
+      {
+        values(cellIndex,ptIndex) = sqrt(h);
       }
     }
   }
 };
 
-class SqrtHScaling : public hFunction {
+class SqrtHScaling : public hFunction
+{
 public:
-  double value(double x, double y, double h) {
+  double value(double x, double y, double h)
+  {
     return sqrt(h);
   }
 };
-class InvSqrtHScaling : public hFunction {
+class InvSqrtHScaling : public hFunction
+{
 public:
-  double value(double x, double y, double h) {
+  double value(double x, double y, double h)
+  {
     return sqrt(1.0/h);
   }
 };
-class InvHScaling : public hFunction {
+class InvHScaling : public hFunction
+{
 public:
-  double value(double x, double y, double h) {
+  double value(double x, double y, double h)
+  {
     return 1.0/h;
   }
 };
 
-class RampTopBoundary : public SpatialFilter{
+class RampTopBoundary : public SpatialFilter
+{
 public:
-  bool matchesPoint(double x, double y) {
+  bool matchesPoint(double x, double y)
+  {
     double tol = 1e-14;
     bool xMatch = (abs(x)<tol);
     return xMatch;
   }
 };
 
-class LeftInflow : public SpatialFilter{
-public: 
-  bool matchesPoint(double x, double y) {
+class LeftInflow : public SpatialFilter
+{
+public:
+  bool matchesPoint(double x, double y)
+  {
     double tol = 1e-14;
     bool xMatch = abs(x)<tol;
     return xMatch;
   }
 };
 
-class FreeStreamBoundary : public SpatialFilter{
-public: 
-  bool matchesPoint(double x, double y) {
+class FreeStreamBoundary : public SpatialFilter
+{
+public:
+  bool matchesPoint(double x, double y)
+  {
     double tol = 1e-14;
     bool topWall = abs(y-1.0)<tol;
     bool bottomWall = (x<1.0) && abs(y)<tol;
@@ -125,35 +148,43 @@ public:
   }
 };
 
-class OutflowBoundary : public SpatialFilter{
-public: 
-  bool matchesPoint(double x, double y) {
+class OutflowBoundary : public SpatialFilter
+{
+public:
+  bool matchesPoint(double x, double y)
+  {
     double tol = 1e-14;
     bool outWall = abs(x-2.0)<tol;
     return outWall;
   }
 };
 
-class EnergyErrorFunction : public Function {
+class EnergyErrorFunction : public Function
+{
   map<int, double> _energyErrorForCell;
 public:
-  EnergyErrorFunction(map<int, double> energyErrorForCell) : Function(0) {
+  EnergyErrorFunction(map<int, double> energyErrorForCell) : Function(0)
+  {
     _energyErrorForCell = energyErrorForCell;
   }
-  void values(FieldContainer<double> &values, BasisCachePtr basisCache){
+  void values(FieldContainer<double> &values, BasisCachePtr basisCache)
+  {
     vector<int> cellIDs = basisCache->cellIDs();
     int numPoints = values.dimension(1);
-    for (int i = 0;i<cellIDs.size();i++){
+    for (int i = 0; i<cellIDs.size(); i++)
+    {
       double energyError = _energyErrorForCell[cellIDs[i]];
-      for (int j = 0;j<numPoints;j++){
-	values(i,j) = energyError;
+      for (int j = 0; j<numPoints; j++)
+      {
+        values(i,j) = energyError;
       }
     }
   }
 };
 
-int main(int argc, char *argv[]) {
- 
+int main(int argc, char *argv[])
+{
+
 #ifdef HAVE_MPI
   Teuchos::GlobalMPISession mpiSession(&argc, &argv,0);
   choice::MpiArgs args( argc, argv );
@@ -162,8 +193,8 @@ int main(int argc, char *argv[]) {
 #endif
   int rank = Teuchos::GlobalMPISession::getRank();
   int numProcs = Teuchos::GlobalMPISession::getNProc();
-  
-  int nCells = args.Input<int>("--nCells", "num cells",2);  
+
+  int nCells = args.Input<int>("--nCells", "num cells",2);
   int numRefs = args.Input<int>("--numRefs","num adaptive refinements",0);
   int numPreRefs = args.Input<int>("--numPreRefs","num preemptive adaptive refinements",0);
   int order = args.Input<int>("--order","order of approximation",2);
@@ -176,15 +207,17 @@ int main(int argc, char *argv[]) {
   FunctionPtr one = Function::constant(1.0);
   FunctionPtr n = Teuchos::rcp( new UnitNormalFunction );
   vector<double> e1,e2;
-  e1.push_back(1.0);e1.push_back(0.0);
-  e2.push_back(0.0);e2.push_back(1.0);
+  e1.push_back(1.0);
+  e1.push_back(0.0);
+  e2.push_back(0.0);
+  e2.push_back(1.0);
 
   ////////////////////   DECLARE VARIABLES   ///////////////////////
   // define test variables
-  VarFactory varFactory; 
+  VarFactory varFactory;
   VarPtr tau = varFactory.testVar("\\tau", HDIV);
   VarPtr v = varFactory.testVar("v", HGRAD);
-  
+
   // define trial variables
   VarPtr uhat = varFactory.traceVar("\\widehat{u}");
   VarPtr beta_n_u_minus_sigma_n = varFactory.fluxVar("\\widehat{\\beta \\cdot n u - \\sigma_{n}}");
@@ -195,7 +228,7 @@ int main(int argc, char *argv[]) {
   vector<double> beta;
   beta.push_back(1.0);
   beta.push_back(0.0);
-  
+
   ////////////////////   DEFINE BILINEAR FORM   ///////////////////////
 
   BFPtr confusionBF = Teuchos::rcp( new BF(varFactory) );
@@ -204,7 +237,7 @@ int main(int argc, char *argv[]) {
   confusionBF->addTerm(sigma2 / eps, tau->y());
   confusionBF->addTerm(u, tau->div());
   confusionBF->addTerm(uhat, -tau->dot_normal());
-  
+
   // v terms:
   confusionBF->addTerm( sigma1, v->dx() );
   confusionBF->addTerm( sigma2, v->dy() );
@@ -214,12 +247,12 @@ int main(int argc, char *argv[]) {
   // first order term with magnitude alpha
   double alpha = 0.0;
   confusionBF->addTerm(alpha * u, v);
-  
+
   ////////////////////   DEFINE INNER PRODUCT(S)   ///////////////////////
 
-   // robust test norm
+  // robust test norm
   IPPtr robIP = Teuchos::rcp(new IP);
-  FunctionPtr C_h = Teuchos::rcp( new EpsilonScaling(eps) );  
+  FunctionPtr C_h = Teuchos::rcp( new EpsilonScaling(eps) );
   FunctionPtr invH = Teuchos::rcp(new InvHScaling);
   FunctionPtr invSqrtH = Teuchos::rcp(new InvSqrtHScaling);
   FunctionPtr sqrtH = Teuchos::rcp(new SqrtHScaling);
@@ -229,7 +262,7 @@ int main(int argc, char *argv[]) {
   robIP->addTerm(sqrt(eps) * v->grad() );
   robIP->addTerm(beta * v->grad() );
   robIP->addTerm(tau->div() );
-  robIP->addTerm(C_h/sqrt(eps) * tau );  
+  robIP->addTerm(C_h/sqrt(eps) * tau );
 
   LinearTermPtr vVecLT = Teuchos::rcp(new LinearTerm);
   LinearTermPtr tauVecLT = Teuchos::rcp(new LinearTerm);
@@ -268,22 +301,23 @@ int main(int argc, char *argv[]) {
 
   ////////////////////   BUILD MESH   ///////////////////////
   // define nodes for mesh
-  int H1Order = order+1; int pToAdd = 2;
- 
+  int H1Order = order+1;
+  int pToAdd = 2;
+
   // create a pointer to a new mesh:
   //  Teuchos::RCP<Mesh> mesh = MeshUtilities::buildUnitQuadMesh(nCells,confusionBF, H1Order, H1Order+pToAdd);
   Teuchos::RCP<Mesh> mesh = MeshUtilities::buildRampMesh(rampHeight,confusionBF, H1Order, H1Order+pToAdd);
-  mesh->setPartitionPolicy(Teuchos::rcp(new ZoltanMeshPartitionPolicy("HSFC")));  
-  
+  mesh->setPartitionPolicy(Teuchos::rcp(new ZoltanMeshPartitionPolicy("HSFC")));
+
   ////////////////////   SOLVE & REFINE   ///////////////////////
 
   Teuchos::RCP<Solution> solution;
   solution = Teuchos::rcp( new Solution(mesh, bc, rhs, robIP) );
   //  solution->solve(false);
   solution->condensedSolve();
-  
+
   LinearTermPtr residual = rhs->linearTermCopy();
-  residual->addTerm(-confusionBF->testFunctional(solution));  
+  residual->addTerm(-confusionBF->testFunctional(solution));
   RieszRepPtr rieszResidual = Teuchos::rcp(new RieszRep(mesh, robIP, residual));
   rieszResidual->computeRieszRep();
   FunctionPtr e_v = Teuchos::rcp(new RepFunction(v,rieszResidual));
@@ -298,34 +332,40 @@ int main(int argc, char *argv[]) {
   FunctionPtr yErr = (errTau->y())*(errTau->y()) + (errV->dy())*(errV->dy());
   FunctionPtr restErr = errRest*errRest;
 
-  RefinementStrategy refinementStrategy( solution, energyThreshold );    
+  RefinementStrategy refinementStrategy( solution, energyThreshold );
 
   ////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
-  //                     PRE REFINEMENTS 
-  ////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////  
+  //                     PRE REFINEMENTS
+  ////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 
-  if (rank==0){
+  if (rank==0)
+  {
     cout << "Number of pre-refinements = " << numPreRefs << endl;
   }
-  for (int i =0;i<=numPreRefs;i++){   
+  for (int i =0; i<=numPreRefs; i++)
+  {
     vector<ElementPtr> elems = mesh->activeElements();
     vector<ElementPtr>::iterator elemIt;
-    vector<int> wallCells;    
-    for (elemIt=elems.begin();elemIt != elems.end();elemIt++){
+    vector<int> wallCells;
+    for (elemIt=elems.begin(); elemIt != elems.end(); elemIt++)
+    {
       int cellID = (*elemIt)->cellID();
       int numSides = mesh->getElement(cellID)->numSides();
       FieldContainer<double> vertices(numSides,2); //for quads
 
       mesh->verticesForCell(vertices, cellID);
-      bool cellIDset = false;	
-      for (int j = 0;j<numSides;j++){ 	
-	if ((abs(vertices(j,0)-1.0)<1e-7) && (abs(vertices(j,1))<1e-7) && !cellIDset){ // if at singularity, i.e. if a vertex is (1,0)
-	  wallCells.push_back(cellID);
-	  cellIDset = true;
-	}
+      bool cellIDset = false;
+      for (int j = 0; j<numSides; j++)
+      {
+        if ((abs(vertices(j,0)-1.0)<1e-7) && (abs(vertices(j,1))<1e-7) && !cellIDset)  // if at singularity, i.e. if a vertex is (1,0)
+        {
+          wallCells.push_back(cellID);
+          cellIDset = true;
+        }
       }
     }
-    if (i<numPreRefs){
+    if (i<numPreRefs)
+    {
       refinementStrategy.refineCells(wallCells);
     }
   }
@@ -333,40 +373,45 @@ int main(int argc, char *argv[]) {
   ////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
   VTKExporter exporter(solution, mesh, varFactory);
 
-  for (int refIndex=0;refIndex<numRefs;refIndex++){
-    if (rank==0){
+  for (int refIndex=0; refIndex<numRefs; refIndex++)
+  {
+    if (rank==0)
+    {
       cout << "on ref index " << refIndex << endl;
-    }    
-    rieszResidual->computeRieszRep(); // in preparation to get anisotropy    
+    }
+    rieszResidual->computeRieszRep(); // in preparation to get anisotropy
 
     vector<int> cellIDs;
     refinementStrategy.getCellsAboveErrorThreshhold(cellIDs);
 
-    map<int,double> energyError = solution->energyError();  
+    map<int,double> energyError = solution->energyError();
 
     map<int,double> xErrMap = xErr->cellIntegrals(cellIDs,mesh,5,true);
     map<int,double> yErrMap = yErr->cellIntegrals(cellIDs,mesh,5,true);
-    map<int,double> restErrMap = restErr->cellIntegrals(cellIDs,mesh,5,true);    
-    for (vector<ElementPtr>::iterator elemIt = mesh->activeElements().begin();elemIt!=mesh->activeElements().end();elemIt++){
+    map<int,double> restErrMap = restErr->cellIntegrals(cellIDs,mesh,5,true);
+    for (vector<ElementPtr>::iterator elemIt = mesh->activeElements().begin(); elemIt!=mesh->activeElements().end(); elemIt++)
+    {
       int cellID = (*elemIt)->cellID();
       double err = xErrMap[cellID]+ yErrMap[cellID] + restErrMap[cellID];
       if (rank==0)
-      cout << "err thru LT = " << sqrt(err) << ", while energy err = " << energyError[cellID] << endl;
+        cout << "err thru LT = " << sqrt(err) << ", while energy err = " << energyError[cellID] << endl;
     }
 
     map<int,double> ratio,xErr,yErr;
     vector<ElementPtr> elems = mesh->activeElements();
-    for (vector<ElementPtr>::iterator elemIt = elems.begin();elemIt!=elems.end();elemIt++){
+    for (vector<ElementPtr>::iterator elemIt = elems.begin(); elemIt!=elems.end(); elemIt++)
+    {
       int cellID = (*elemIt)->cellID();
       ratio[cellID] = 0.0;
       xErr[cellID] = 0.0;
       yErr[cellID] = 0.0;
-      if (std::find(cellIDs.begin(),cellIDs.end(),cellID)!=cellIDs.end()){ // if this cell is above energy thresh
-	ratio[cellID] = yErrMap[cellID]/xErrMap[cellID];
-	xErr[cellID] = xErrMap[cellID];
-	yErr[cellID] = yErrMap[cellID];
+      if (std::find(cellIDs.begin(),cellIDs.end(),cellID)!=cellIDs.end())  // if this cell is above energy thresh
+      {
+        ratio[cellID] = yErrMap[cellID]/xErrMap[cellID];
+        xErr[cellID] = xErrMap[cellID];
+        yErr[cellID] = yErrMap[cellID];
       }
-    }   
+    }
     FunctionPtr ratioFxn = Teuchos::rcp(new EnergyErrorFunction(ratio));
     FunctionPtr xErrFxn = Teuchos::rcp(new EnergyErrorFunction(xErr));
     FunctionPtr yErrFxn = Teuchos::rcp(new EnergyErrorFunction(yErr));
@@ -376,9 +421,12 @@ int main(int argc, char *argv[]) {
     exporter.exportFunction(xErrFxn, string("xErr")+oss.str());
     exporter.exportFunction(yErrFxn, string("yErr")+oss.str());
 
-    if (useAnisotropy){
+    if (useAnisotropy)
+    {
       refinementStrategy.refine(rank==0,xErrMap,yErrMap); //anisotropic refinements
-    }else{
+    }
+    else
+    {
       refinementStrategy.refine(rank==0); // no anisotropy
     }
 
@@ -393,13 +441,14 @@ int main(int argc, char *argv[]) {
   FunctionPtr orderFxn = Teuchos::rcp(new MeshPolyOrderFunction(mesh));
   std::ostringstream oss;
   oss << nCells;
-  if (rank==0){
+  if (rank==0)
+  {
     exporter.exportSolution(string("robustIP")+oss.str());
     exporter.exportFunction(orderFxn, "meshOrder");
     cout << endl;
   }
- 
+
   return 0;
-} 
+}
 
 

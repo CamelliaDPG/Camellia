@@ -47,7 +47,7 @@
 #include "Teuchos_RCP.hpp"
 
 #ifdef HAVE_IFPACK_AMESOS
-  #include "Ifpack_AMDReordering.h"
+#include "Ifpack_AMDReordering.h"
 #endif
 
 #include "Mesh.h"
@@ -125,10 +125,12 @@
   \date Last modified on 17-Nov-2014.
 */
 
-namespace Camellia {
+namespace Camellia
+{
 
 template<typename T>
-class AdditiveSchwarz : public virtual Ifpack_Preconditioner {
+class AdditiveSchwarz : public virtual Ifpack_Preconditioner
+{
 
 public:
 
@@ -160,17 +162,17 @@ public:
 
   //@{ \name Attribute set methods.
 
-    //! If set true, transpose of this operator will be applied (not implemented).
-    /*! This flag allows the transpose of the given operator to be used
-     * implicitly.
+  //! If set true, transpose of this operator will be applied (not implemented).
+  /*! This flag allows the transpose of the given operator to be used
+   * implicitly.
 
-    \param
-	   UseTranspose_in - (In) If true, multiply by the transpose of operator,
-	   otherwise just use operator.
+  \param
+   UseTranspose_in - (In) If true, multiply by the transpose of operator,
+   otherwise just use operator.
 
-    \return Integer error code, set to 0 if successful.  Set to -1 if this implementation does not support transpose.
+  \return Integer error code, set to 0 if successful.  Set to -1 if this implementation does not support transpose.
   */
-    virtual int SetUseTranspose(bool UseTranspose_in);
+  virtual int SetUseTranspose(bool UseTranspose_in);
   //@}
 
   //@{ \name Mathematical functions.
@@ -186,9 +188,9 @@ public:
 
     \return Integer error code, set to 0 if successful.
     */
-    virtual int Apply(const Epetra_MultiVector& X, Epetra_MultiVector& Y) const;
+  virtual int Apply(const Epetra_MultiVector& X, Epetra_MultiVector& Y) const;
 
-    //! Applies the preconditioner to X, returns the result in Y.
+  //! Applies the preconditioner to X, returns the result in Y.
   /*!
     \param
     X - (In) A Epetra_MultiVector of dimension NumVectors to be preconditioned.
@@ -200,31 +202,31 @@ public:
     \warning In order to work with AztecOO, any implementation of this method
     must support the case where X and Y are the same object.
     */
-    virtual int ApplyInverse(const Epetra_MultiVector& X, Epetra_MultiVector& Y) const;
+  virtual int ApplyInverse(const Epetra_MultiVector& X, Epetra_MultiVector& Y) const;
 
-    //! Returns the infinity norm of the global matrix (not implemented)
-    virtual double NormInf() const;
+  //! Returns the infinity norm of the global matrix (not implemented)
+  virtual double NormInf() const;
   //@}
 
   //@{ \name Attribute access functions
 
-    //! Returns a character string describing the operator
-    virtual const char * Label() const;
+  //! Returns a character string describing the operator
+  virtual const char * Label() const;
 
-    //! Returns the current UseTranspose setting.
-    virtual bool UseTranspose() const;
+  //! Returns the current UseTranspose setting.
+  virtual bool UseTranspose() const;
 
-    //! Returns true if the \e this object can provide an approximate Inf-norm, false otherwise.
-    virtual bool HasNormInf() const;
+  //! Returns true if the \e this object can provide an approximate Inf-norm, false otherwise.
+  virtual bool HasNormInf() const;
 
-    //! Returns a pointer to the Epetra_Comm communicator associated with this operator.
-    virtual const Epetra_Comm & Comm() const;
+  //! Returns a pointer to the Epetra_Comm communicator associated with this operator.
+  virtual const Epetra_Comm & Comm() const;
 
-    //! Returns the Epetra_Map object associated with the domain of this operator.
-    virtual const Epetra_Map & OperatorDomainMap() const;
+  //! Returns the Epetra_Map object associated with the domain of this operator.
+  virtual const Epetra_Map & OperatorDomainMap() const;
 
-    //! Returns the Epetra_Map object associated with the range of this operator.
-    virtual const Epetra_Map & OperatorRangeMap() const;
+  //! Returns the Epetra_Map object associated with the range of this operator.
+  virtual const Epetra_Map & OperatorRangeMap() const;
   //@}
 
   //! Returns \c true if the preconditioner has been successfully initialized.
@@ -272,10 +274,10 @@ public:
   virtual int Compute();
 
   //! Computes the estimated condition number and returns its value.
-    virtual double Condest(const Ifpack_CondestType CT = Ifpack_Cheap,
-                           const int MaxIters = 1550,
-                           const double Tol = 1e-9,
-                           Epetra_RowMatrix* Matrix_in = 0);
+  virtual double Condest(const Ifpack_CondestType CT = Ifpack_Cheap,
+                         const int MaxIters = 1550,
+                         const double Tol = 1e-9,
+                         Epetra_RowMatrix* Matrix_in = 0);
 
   //! Returns the estimated condition number, or -1.0 if not computed.
   virtual double Condest() const
@@ -389,7 +391,7 @@ protected:
 
   //! Camellia addition: the DofInterpreter
   Teuchos::RCP<DofInterpreter> dofInterpreter_;
-  
+
   //! Camellia addition: whether to use "hierarchical" overlap definition
   bool hierarchical_;
 
@@ -398,11 +400,11 @@ protected:
   //! Pointers to the overlapping matrix.
   Teuchos::RCP<OverlappingRowMatrix> OverlappingMatrix_;
   //! Localized version of Matrix_ or OverlappingMatrix_.
-/*
-  //TODO if we choose to expose the node aware code, i.e., no ifdefs,
-  //TODO then we should switch to this definition.
-  Teuchos::RCP<Epetra_RowMatrix> LocalizedMatrix_;
-*/
+  /*
+    //TODO if we choose to expose the node aware code, i.e., no ifdefs,
+    //TODO then we should switch to this definition.
+    Teuchos::RCP<Epetra_RowMatrix> LocalizedMatrix_;
+  */
 
   Teuchos::RCP<Ifpack_LocalFilter> LocalizedMatrix_;
   //! Contains the label of \c this object.
@@ -464,8 +466,8 @@ protected:
 //==============================================================================
 template<typename T>
 AdditiveSchwarz<T>::
-  AdditiveSchwarz(Epetra_RowMatrix* Matrix_in, int OverlapLevel_in, MeshPtr mesh,
-                  Teuchos::RCP<DofInterpreter> dofInterpreter, bool hierarchical) :
+AdditiveSchwarz(Epetra_RowMatrix* Matrix_in, int OverlapLevel_in, MeshPtr mesh,
+                Teuchos::RCP<DofInterpreter> dofInterpreter, bool hierarchical) :
   mesh_(mesh),
   dofInterpreter_(dofInterpreter),
   hierarchical_(hierarchical),
@@ -511,7 +513,8 @@ int AdditiveSchwarz<T>::Setup()
 
   Epetra_RowMatrix* MatrixPtr;
 
-  try{
+  try
+  {
     if (OverlappingMatrix_ != Teuchos::null)
     {
       LocalizedMatrix_ = Teuchos::rcp( new Ifpack_LocalFilter(OverlappingMatrix_) );
@@ -521,22 +524,25 @@ int AdditiveSchwarz<T>::Setup()
       LocalizedMatrix_ = Teuchos::rcp( new Ifpack_LocalFilter(Matrix_) );
     }
   }
-  catch(...) {
-     fprintf(stderr,"%s","AdditiveSchwarz Setup: problem creating local filter matrix.\n");
+  catch(...)
+  {
+    fprintf(stderr,"%s","AdditiveSchwarz Setup: problem creating local filter matrix.\n");
   }
 
   if (LocalizedMatrix_ == Teuchos::null)
     IFPACK_CHK_ERR(-5);
 
   // users may want to skip singleton check
-  if (FilterSingletons_) {
+  if (FilterSingletons_)
+  {
     SingletonFilter_ = Teuchos::rcp( new Ifpack_SingletonFilter(LocalizedMatrix_) );
     MatrixPtr = &*SingletonFilter_;
   }
   else
     MatrixPtr = &*LocalizedMatrix_;
 
-  if (UseReordering_) {
+  if (UseReordering_)
+  {
 
     // create reordering and compute it
     if (ReorderingType_ == "rcm")
@@ -547,7 +553,8 @@ int AdditiveSchwarz<T>::Setup()
     else if (ReorderingType_ == "amd" )
       Reordering_ = Teuchos::rcp( new Ifpack_AMDReordering() );
 #endif
-    else {
+    else
+    {
       cerr << "reordering type not correct (" << ReorderingType_ << ")" << endl;
       exit(EXIT_FAILURE);
     }
@@ -626,7 +633,7 @@ int AdditiveSchwarz<T>::SetParameters(Teuchos::ParameterList& List_in)
           true,std::logic_error
           ,"Error, The (Epetra) combine mode of \""<<mode<<"\" is not valid!  Only the values"
           " \"Add\", \"Zero\", \"Insert\", \"InsertAdd\", \"Average\", and \"AbsMax\" are accepted!"
-          );
+        );
       }
     }
     else if ( typeid(Epetra_CombineMode) == combineModeEntry->getAny().type() )
@@ -677,10 +684,12 @@ int AdditiveSchwarz<T>::Initialize()
   Time_->ResetStartTime();
 
   // compute the overlapping matrix if necessary
-  if (IsOverlapping_) {
+  if (IsOverlapping_)
+  {
     OverlappingMatrix_ = Teuchos::rcp( new OverlappingRowMatrix(Matrix_, OverlapLevel_, mesh_, dofInterpreter_) );
 
-    if (OverlappingMatrix_ == Teuchos::null) {
+    if (OverlappingMatrix_ == Teuchos::null)
+    {
       IFPACK_CHK_ERR(-5);
     }
   }
@@ -702,7 +711,7 @@ int AdditiveSchwarz<T>::Initialize()
   if (UseTranspose())
     Label_ += ", transp";
   Label_ += ", ov = " + Ifpack_toString(OverlapLevel_)
-    + ", local solver = \n\t\t***** `" + string(Inverse_->Label()) + "'";
+            + ", local solver = \n\t\t***** `" + string(Inverse_->Label()) + "'";
 
   IsInitialized_ = true;
   ++NumInitialize_;
@@ -741,7 +750,7 @@ int AdditiveSchwarz<T>::Compute()
 #ifdef IFPACK_FLOPCOUNTERS
   // sum up flops
   double partial = Inverse_->ComputeFlops();
-   double total;
+  double total;
   Comm().SumAll(&partial, &total, 1);
   ComputeFlops_ += total;
 #endif
@@ -756,9 +765,9 @@ int AdditiveSchwarz<T>::Compute()
 
   // add Condest() to label
   Label_ = "AdditiveSchwarz, ov = " + Ifpack_toString(OverlapLevel_)
-    + ", local solver = \n\t\t***** `" + string(Inverse_->Label()) + "'"
-    + "\n\t\t***** " + R + "Condition number estimate = "
-    + Ifpack_toString(Condest_);
+           + ", local solver = \n\t\t***** `" + string(Inverse_->Label()) + "'"
+           + "\n\t\t***** " + R + "Condition number estimate = "
+           + Ifpack_toString(Condest_);
 
   return(0);
 }
@@ -863,11 +872,12 @@ ApplyInverse(const Epetra_MultiVector& X, Epetra_MultiVector& Y) const
 #endif
 
   // process overlap, may need to create vectors and import data
-  if (IsOverlapping()) {
+  if (IsOverlapping())
+  {
     OverlappingX = Teuchos::rcp( new Epetra_MultiVector(OverlappingMatrix_->RowMatrixRowMap(),
-							X.NumVectors()) );
+                                 X.NumVectors()) );
     OverlappingY = Teuchos::rcp( new Epetra_MultiVector(OverlappingMatrix_->RowMatrixRowMap(),
-							Y.NumVectors()) );
+                                 Y.NumVectors()) );
     if (OverlappingY == Teuchos::null) IFPACK_CHK_ERR(-5);
     OverlappingY->PutScalar(0.0);
     OverlappingX->PutScalar(0.0);
@@ -876,13 +886,15 @@ ApplyInverse(const Epetra_MultiVector& X, Epetra_MultiVector& Y) const
     // solutions. The same for other cases below.
     // IFPACK_CHK_ERR(OverlappingMatrix_->ImportMultiVector(Y,*OverlappingY,Insert));
   }
-  else {
+  else
+  {
     Xtmp = Teuchos::rcp( new Epetra_MultiVector(X) );
     OverlappingX = Xtmp;
     OverlappingY = Teuchos::rcp( &Y, false );
   }
 
-  if (FilterSingletons_) {
+  if (FilterSingletons_)
+  {
     // process singleton filter
     Epetra_MultiVector ReducedX(SingletonFilter_->Map(),NumVectors);
     Epetra_MultiVector ReducedY(SingletonFilter_->Map(),NumVectors);
@@ -890,10 +902,12 @@ ApplyInverse(const Epetra_MultiVector& X, Epetra_MultiVector& Y) const
     IFPACK_CHK_ERR(SingletonFilter_->CreateReducedRHS(*OverlappingY,*OverlappingX,ReducedX));
 
     // process reordering
-    if (!UseReordering_) {
+    if (!UseReordering_)
+    {
       IFPACK_CHK_ERR(Inverse_->ApplyInverse(ReducedX,ReducedY));
     }
-    else {
+    else
+    {
       Epetra_MultiVector ReorderedX(ReducedX);
       Epetra_MultiVector ReorderedY(ReducedY);
       IFPACK_CHK_ERR(Reordering_->P(ReducedX,ReorderedX));
@@ -904,12 +918,15 @@ ApplyInverse(const Epetra_MultiVector& X, Epetra_MultiVector& Y) const
     // finish up with singletons
     IFPACK_CHK_ERR(SingletonFilter_->UpdateLHS(ReducedY,*OverlappingY));
   }
-  else {
+  else
+  {
     // process reordering
-    if (!UseReordering_) {
+    if (!UseReordering_)
+    {
       IFPACK_CHK_ERR(Inverse_->ApplyInverse(*OverlappingX,*OverlappingY));
     }
-    else {
+    else
+    {
       Epetra_MultiVector ReorderedX(*OverlappingX);
       Epetra_MultiVector ReorderedY(*OverlappingY);
       IFPACK_CHK_ERR(Reordering_->P(*OverlappingX,ReorderedX));
@@ -918,9 +935,10 @@ ApplyInverse(const Epetra_MultiVector& X, Epetra_MultiVector& Y) const
     }
   }
 
-  if (IsOverlapping()) {
+  if (IsOverlapping())
+  {
     IFPACK_CHK_ERR(OverlappingMatrix_->ExportMultiVector(*OverlappingY,Y,
-							 CombineMode_));
+                   CombineMode_));
   }
 
 #ifdef IFPACK_FLOPCOUNTERS
@@ -1021,8 +1039,8 @@ Print(std::ostream& os) const
 //==============================================================================
 template<typename T>
 double AdditiveSchwarz<T>::
-  Condest(const Ifpack_CondestType CT, const int MaxIters,
-          const double Tol, Epetra_RowMatrix* Matrix_in)
+Condest(const Ifpack_CondestType CT, const int MaxIters,
+        const double Tol, Epetra_RowMatrix* Matrix_in)
 {
   if (!IsComputed()) // cannot compute right now
     return(-1.0);

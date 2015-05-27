@@ -12,20 +12,23 @@
 #include <Teuchos_GlobalMPISession.hpp>
 #endif
 
-vector<double> makeVertex(double v0) {
+vector<double> makeVertex(double v0)
+{
   vector<double> v;
   v.push_back(v0);
   return v;
 }
 
-vector<double> makeVertex(double v0, double v1) {
+vector<double> makeVertex(double v0, double v1)
+{
   vector<double> v;
   v.push_back(v0);
   v.push_back(v1);
   return v;
 }
 
-vector<double> makeVertex(double v0, double v1, double v2) {
+vector<double> makeVertex(double v0, double v1, double v2)
+{
   vector<double> v;
   v.push_back(v0);
   v.push_back(v1);
@@ -33,7 +36,8 @@ vector<double> makeVertex(double v0, double v1, double v2) {
   return v;
 }
 
-vector<double> makeVertex(double v0, double v1, double v2, double v3) {
+vector<double> makeVertex(double v0, double v1, double v2, double v3)
+{
   vector<double> v;
   v.push_back(v0);
   v.push_back(v1);
@@ -42,32 +46,40 @@ vector<double> makeVertex(double v0, double v1, double v2, double v3) {
   return v;
 }
 
-class EntireBoundary1D : public SpatialFilter {
-  public:
-    bool matchesPoint(double x) {
-        return true;
-    }
+class EntireBoundary1D : public SpatialFilter
+{
+public:
+  bool matchesPoint(double x)
+  {
+    return true;
+  }
 };
 
-class EntireBoundary2D : public SpatialFilter {
-  public:
-    bool matchesPoint(double x, double y) {
-        return true;
-    }
+class EntireBoundary2D : public SpatialFilter
+{
+public:
+  bool matchesPoint(double x, double y)
+  {
+    return true;
+  }
 };
 
-class EntireBoundary3D : public SpatialFilter {
-  public:
-    bool matchesPoint(double x, double y, double z) {
-        return true;
-    }
+class EntireBoundary3D : public SpatialFilter
+{
+public:
+  bool matchesPoint(double x, double y, double z)
+  {
+    return true;
+  }
 };
 
-class EntireBoundary4D : public SpatialFilter {
-  public:
-    bool matchesPoint(double x, double y, double z, double t) {
-        return true;
-    }
+class EntireBoundary4D : public SpatialFilter
+{
+public:
+  bool matchesPoint(double x, double y, double z, double t)
+  {
+    return true;
+  }
 };
 
 int main(int argc, char *argv[])
@@ -381,26 +393,26 @@ int main(int argc, char *argv[])
     // Space-time
     MeshTopologyPtr spaceTimeMeshTopology = Teuchos::rcp( new MeshTopology(spaceTimeMeshGeometry) );
 
-  //   FunctionPtr x2 = Function::xn(2);
-  //   FunctionPtr y2 = Function::yn(2);
-  //   FunctionPtr function = x2 + y2;
-  //   FunctionPtr vect = Function::vectorize(x2, y2);
-  //   FunctionPtr fbdr = Function::restrictToCellBoundary(function);
-  //   vector<FunctionPtr> functions;
-  //   functions.push_back(function);
-  //   functions.push_back(vect);
-  //   vector<string> functionNames;
-  //   functionNames.push_back("function");
-  //   functionNames.push_back("vect");
-  //   vector<FunctionPtr> bdrfunctions;
-  //   bdrfunctions.push_back(fbdr);
-  //   bdrfunctions.push_back(fbdr);
-  //   vector<string> bdrfunctionNames;
-  //   bdrfunctionNames.push_back("bdr1");
-  //   bdrfunctionNames.push_back("bdr2");
+    //   FunctionPtr x2 = Function::xn(2);
+    //   FunctionPtr y2 = Function::yn(2);
+    //   FunctionPtr function = x2 + y2;
+    //   FunctionPtr vect = Function::vectorize(x2, y2);
+    //   FunctionPtr fbdr = Function::restrictToCellBoundary(function);
+    //   vector<FunctionPtr> functions;
+    //   functions.push_back(function);
+    //   functions.push_back(vect);
+    //   vector<string> functionNames;
+    //   functionNames.push_back("function");
+    //   functionNames.push_back("vect");
+    //   vector<FunctionPtr> bdrfunctions;
+    //   bdrfunctions.push_back(fbdr);
+    //   bdrfunctions.push_back(fbdr);
+    //   vector<string> bdrfunctionNames;
+    //   bdrfunctionNames.push_back("bdr1");
+    //   bdrfunctionNames.push_back("bdr2");
 
-  //   map<int, int> cellIDToNum1DPts;
-  //   cellIDToNum1DPts[1] = 4;
+    //   map<int, int> cellIDToNum1DPts;
+    //   cellIDToNum1DPts[1] = 4;
 
     ////////////////////   DECLARE VARIABLES   ///////////////////////
     // define test variables
@@ -431,78 +443,78 @@ int main(int argc, char *argv[])
     // Space-time
     Teuchos::RCP<Mesh> spaceTimeMesh = Teuchos::rcp( new Mesh (spaceTimeMeshTopology, bf, H1Order, pToAdd) );
 
-  //   ////////////////////   DEFINE INNER PRODUCT(S)   ///////////////////////
-  //   IPPtr ip = bf->graphNorm();
+    //   ////////////////////   DEFINE INNER PRODUCT(S)   ///////////////////////
+    //   IPPtr ip = bf->graphNorm();
 
-  //   ////////////////////   SPECIFY RHS   ///////////////////////
-  //   RHSPtr rhs = RHS::rhs();
-  //   // Teuchos::RCP<RHS> rhs = Teuchos::rcp( new RHS );
-  //   FunctionPtr one = Function::constant(1.0);
-  //   rhs->addTerm( one * v );
+    //   ////////////////////   SPECIFY RHS   ///////////////////////
+    //   RHSPtr rhs = RHS::rhs();
+    //   // Teuchos::RCP<RHS> rhs = Teuchos::rcp( new RHS );
+    //   FunctionPtr one = Function::constant(1.0);
+    //   rhs->addTerm( one * v );
 
-  //   ////////////////////   CREATE BCs   ///////////////////////
-  //   // Teuchos::RCP<BC> bc = Teuchos::rcp( new BCEasy );
-  //   BCPtr bc = BC::bc();
-  //   FunctionPtr zero = Function::zero();
-  //   SpatialFilterPtr entireBoundary = Teuchos::rcp( new EntireBoundary );
-  //   bc->addDirichlet(uhat, entireBoundary, zero);
+    //   ////////////////////   CREATE BCs   ///////////////////////
+    //   // Teuchos::RCP<BC> bc = Teuchos::rcp( new BCEasy );
+    //   BCPtr bc = BC::bc();
+    //   FunctionPtr zero = Function::zero();
+    //   SpatialFilterPtr entireBoundary = Teuchos::rcp( new EntireBoundary );
+    //   bc->addDirichlet(uhat, entireBoundary, zero);
 
-  //   ////////////////////   SOLVE & REFINE   ///////////////////////
-  //   Teuchos::RCP<Solution> solution = Teuchos::rcp( new Solution(mesh, bc, rhs, ip) );
-  //   solution->solve(false);
-  //   RefinementStrategy refinementStrategy( solution, 0.2);
+    //   ////////////////////   SOLVE & REFINE   ///////////////////////
+    //   Teuchos::RCP<Solution> solution = Teuchos::rcp( new Solution(mesh, bc, rhs, ip) );
+    //   solution->solve(false);
+    //   RefinementStrategy refinementStrategy( solution, 0.2);
 
-  //   // Output solution
-  //   FunctionPtr uSoln = Function::solution(u, solution);
-  //   FunctionPtr sigmaSoln = Function::solution(sigma, solution);
-  //   FunctionPtr uhatSoln = Function::solution(uhat, solution);
-  //   FunctionPtr fhatSoln = Function::solution(fhat, solution);
-  //   vector<FunctionPtr> solnFunctions;
-  //   solnFunctions.push_back(uSoln);
-  //   solnFunctions.push_back(sigmaSoln);
-  //   vector<string> solnNames;
-  //   solnNames.push_back("u");
-  //   solnNames.push_back("sigma");
-  //   // set<GlobalIndexType> cellIndices;
-  //   // cellIndices.insert(0);
-  //   {
-  //       // HDF5Exporter exporter(mesh, "HDF5Poisson", false);
-  //       // exporter.exportFunction(solnFunctions, solnNames, 0, 4);
-  //       // exporter.exportFunction(uSoln, "u", 0, 4);
-  //       // exporter.exportFunction(uSoln, "u", 1, 5);
-  //       // exporter.exportFunction(uhatSoln, "uhat", 0, 4);
-  //       // exporter.exportFunction(uhatSoln, "uhat", 1, 5);
-  //       // exporter.exportFunction(fhatSoln, "fhat", 0, 4);
-  //       // exporter.exportFunction(fhatSoln, "fhat", 1, 5);
-  //   }
-  //   {
-  //       // HDF5Exporter exporter(mesh, "Poisson");
-  //       // exporter.exportSolution(solution, varFactory, 0, 2, cellIDToSubdivision(mesh, 4));
-  //       // int numRefs = 1;
-  //       // for (int ref = 1; ref <= numRefs; ref++)
-  //       // {
-  //       //     refinementStrategy.refine(commRank==0);
-  //       //     solution->solve(false);
-  //       //     exporter.exportSolution(solution, varFactory, ref, 2, cellIDToSubdivision(mesh, 4));
-  //       // }
-  //   }
-  //   // exporter.exportFunction(sigmaSoln, "Poisson-s", "sigma", 0, 5);
-  //   // exporter.exportFunction(uhatSoln, "Poisson-uhat", "uhat", 1, 6);
+    //   // Output solution
+    //   FunctionPtr uSoln = Function::solution(u, solution);
+    //   FunctionPtr sigmaSoln = Function::solution(sigma, solution);
+    //   FunctionPtr uhatSoln = Function::solution(uhat, solution);
+    //   FunctionPtr fhatSoln = Function::solution(fhat, solution);
+    //   vector<FunctionPtr> solnFunctions;
+    //   solnFunctions.push_back(uSoln);
+    //   solnFunctions.push_back(sigmaSoln);
+    //   vector<string> solnNames;
+    //   solnNames.push_back("u");
+    //   solnNames.push_back("sigma");
+    //   // set<GlobalIndexType> cellIndices;
+    //   // cellIndices.insert(0);
+    //   {
+    //       // HDF5Exporter exporter(mesh, "HDF5Poisson", false);
+    //       // exporter.exportFunction(solnFunctions, solnNames, 0, 4);
+    //       // exporter.exportFunction(uSoln, "u", 0, 4);
+    //       // exporter.exportFunction(uSoln, "u", 1, 5);
+    //       // exporter.exportFunction(uhatSoln, "uhat", 0, 4);
+    //       // exporter.exportFunction(uhatSoln, "uhat", 1, 5);
+    //       // exporter.exportFunction(fhatSoln, "fhat", 0, 4);
+    //       // exporter.exportFunction(fhatSoln, "fhat", 1, 5);
+    //   }
+    //   {
+    //       // HDF5Exporter exporter(mesh, "Poisson");
+    //       // exporter.exportSolution(solution, varFactory, 0, 2, cellIDToSubdivision(mesh, 4));
+    //       // int numRefs = 1;
+    //       // for (int ref = 1; ref <= numRefs; ref++)
+    //       // {
+    //       //     refinementStrategy.refine(commRank==0);
+    //       //     solution->solve(false);
+    //       //     exporter.exportSolution(solution, varFactory, ref, 2, cellIDToSubdivision(mesh, 4));
+    //       // }
+    //   }
+    //   // exporter.exportFunction(sigmaSoln, "Poisson-s", "sigma", 0, 5);
+    //   // exporter.exportFunction(uhatSoln, "Poisson-uhat", "uhat", 1, 6);
 
-  //   {
-  //       HDF5Exporter exporter(mesh, "Grid2D");
-  //       // exporter.exportFunction(function, "function2", 0, 10);
-  //       exporter.exportFunction(vect, "vect2", 1, 10, cellIDToNum1DPts);
-  //       exporter.exportFunction(fbdr, "boundary2", 0);
-  //       exporter.exportFunction(functions, functionNames, 1, 10);
-  //   }
-  //   {
-  //       HDF5Exporter exporter(mesh, "BdrGrid2D");
-  //       exporter.exportFunction(function, "function2", 0, 10);
-  //       exporter.exportFunction(vect, "vect2", 1, 10, cellIDToNum1DPts);
-  //       exporter.exportFunction(fbdr, "boundary2", 0);
-  //       exporter.exportFunction(bdrfunctions, bdrfunctionNames, 1, 10);
-  //   }
+    //   {
+    //       HDF5Exporter exporter(mesh, "Grid2D");
+    //       // exporter.exportFunction(function, "function2", 0, 10);
+    //       exporter.exportFunction(vect, "vect2", 1, 10, cellIDToNum1DPts);
+    //       exporter.exportFunction(fbdr, "boundary2", 0);
+    //       exporter.exportFunction(functions, functionNames, 1, 10);
+    //   }
+    //   {
+    //       HDF5Exporter exporter(mesh, "BdrGrid2D");
+    //       exporter.exportFunction(function, "function2", 0, 10);
+    //       exporter.exportFunction(vect, "vect2", 1, 10, cellIDToNum1DPts);
+    //       exporter.exportFunction(fbdr, "boundary2", 0);
+    //       exporter.exportFunction(bdrfunctions, bdrfunctionNames, 1, 10);
+    //   }
     {
       HDF5Exporter exporter(spaceTimeMesh, "SliceAnimation2D");
       vector<FunctionPtr> fcns;
@@ -726,25 +738,25 @@ int main(int argc, char *argv[])
     // cellIDs.insert(0);
     // mesh->hRefine(cellIDs, RefinementPattern::regularRefinementPatternHexahedron());
 
-  //   ////////////////////   DEFINE INNER PRODUCT(S)   ///////////////////////
-  //   IPPtr ip = bf->graphNorm();
+    //   ////////////////////   DEFINE INNER PRODUCT(S)   ///////////////////////
+    //   IPPtr ip = bf->graphNorm();
 
-  //   ////////////////////   SPECIFY RHS   ///////////////////////
-  //   RHSPtr rhs = RHS::rhs();
-  //   // Teuchos::RCP<RHS> rhs = Teuchos::rcp( new RHS );
-  //   FunctionPtr one = Function::constant(1.0);
-  //   rhs->addTerm( one * v );
+    //   ////////////////////   SPECIFY RHS   ///////////////////////
+    //   RHSPtr rhs = RHS::rhs();
+    //   // Teuchos::RCP<RHS> rhs = Teuchos::rcp( new RHS );
+    //   FunctionPtr one = Function::constant(1.0);
+    //   rhs->addTerm( one * v );
 
-  //   ////////////////////   CREATE BCs   ///////////////////////
-  //   // Teuchos::RCP<BC> bc = Teuchos::rcp( new BCEasy );
-  //   BCPtr bc = BC::bc();
-  //   FunctionPtr zero = Function::zero();
-  //   SpatialFilterPtr entireBoundary = Teuchos::rcp( new EntireBoundary3D );
-  //   bc->addDirichlet(uhat, entireBoundary, Function::xn(1));
+    //   ////////////////////   CREATE BCs   ///////////////////////
+    //   // Teuchos::RCP<BC> bc = Teuchos::rcp( new BCEasy );
+    //   BCPtr bc = BC::bc();
+    //   FunctionPtr zero = Function::zero();
+    //   SpatialFilterPtr entireBoundary = Teuchos::rcp( new EntireBoundary3D );
+    //   bc->addDirichlet(uhat, entireBoundary, Function::xn(1));
 
-  //   ////////////////////   SOLVE & REFINE   ///////////////////////
-  //   Teuchos::RCP<Solution> solution = Teuchos::rcp( new Solution(mesh, bc, rhs, ip) );
-  //   solution->solve(false);
+    //   ////////////////////   SOLVE & REFINE   ///////////////////////
+    //   Teuchos::RCP<Solution> solution = Teuchos::rcp( new Solution(mesh, bc, rhs, ip) );
+    //   solution->solve(false);
 
     {
       HDF5Exporter exporter(mesh, "Spatial3D");
@@ -779,40 +791,40 @@ int main(int argc, char *argv[])
     }
 
 
-  //   {
-  //       HDF5Exporter exporter(mesh, "Poisson3D");
-  //       exporter.exportSolution(solution, varFactory, 0, 4, cellIDToSubdivision(mesh, 4));
-  //   }
+    //   {
+    //       HDF5Exporter exporter(mesh, "Poisson3D");
+    //       exporter.exportSolution(solution, varFactory, 0, 4, cellIDToSubdivision(mesh, 4));
+    //   }
 
 
-  //   FunctionPtr x = Function::xn(1);
-  //   FunctionPtr y = Function::yn(1);
-  //   FunctionPtr z = Function::zn(1);
-  //   FunctionPtr function = x + y + z;
-  //   FunctionPtr fbdr = Function::restrictToCellBoundary(function);
-  //   FunctionPtr vect = Function::vectorize(x, y, z);
-  //   vector<FunctionPtr> functions;
-  //   functions.push_back(function);
-  //   functions.push_back(vect);
-  //   vector<string> functionNames;
-  //   functionNames.push_back("function");
-  //   functionNames.push_back("vect");
+    //   FunctionPtr x = Function::xn(1);
+    //   FunctionPtr y = Function::yn(1);
+    //   FunctionPtr z = Function::zn(1);
+    //   FunctionPtr function = x + y + z;
+    //   FunctionPtr fbdr = Function::restrictToCellBoundary(function);
+    //   FunctionPtr vect = Function::vectorize(x, y, z);
+    //   vector<FunctionPtr> functions;
+    //   functions.push_back(function);
+    //   functions.push_back(vect);
+    //   vector<string> functionNames;
+    //   functionNames.push_back("function");
+    //   functionNames.push_back("vect");
 
-  //   // {
-  //   //     HDF5Exporter exporter(mesh, "function3", false);
-  //   //     exporter.exportFunction(function, "function3");
-  //   // }
-  //   // {
-  //   //     HDF5Exporter exporter(mesh, "boundary3", false);
-  //   //     exporter.exportFunction(fbdr, "boundary3");
-  //   // }
-  //   // {
-  //   //     HDF5Exporter exporter(mesh, "vect3", false);
-  //   //     exporter.exportFunction(vect, "vect3");
-  //   // }
-  //   // {
-  //   //     HDF5Exporter exporter(mesh, "functions3", false);
-  //   //     exporter.exportFunction(functions, functionNames);
-  //   // }
+    //   // {
+    //   //     HDF5Exporter exporter(mesh, "function3", false);
+    //   //     exporter.exportFunction(function, "function3");
+    //   // }
+    //   // {
+    //   //     HDF5Exporter exporter(mesh, "boundary3", false);
+    //   //     exporter.exportFunction(fbdr, "boundary3");
+    //   // }
+    //   // {
+    //   //     HDF5Exporter exporter(mesh, "vect3", false);
+    //   //     exporter.exportFunction(vect, "vect3");
+    //   // }
+    //   // {
+    //   //     HDF5Exporter exporter(mesh, "functions3", false);
+    //   //     exporter.exportFunction(functions, functionNames);
+    //   // }
   }
 }

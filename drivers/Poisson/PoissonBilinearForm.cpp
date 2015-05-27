@@ -41,7 +41,8 @@ const string PoissonBilinearForm::S_PSI_HAT_N ="\\hat{\\psi}_n";
 const string PoissonBilinearForm::S_Q = "q";
 const string PoissonBilinearForm::S_TAU = "\\tau";
 
-BFPtr PoissonBilinearForm::poissonBilinearForm(bool useConformingTraces) {
+BFPtr PoissonBilinearForm::poissonBilinearForm(bool useConformingTraces)
+{
   VarFactoryPtr varFactory = VarFactory::varFactory();
   VarPtr tau = varFactory->testVar(S_TAU, HDIV);
   VarPtr q = varFactory->testVar(S_Q, HGRAD);

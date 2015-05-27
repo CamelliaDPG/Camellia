@@ -24,7 +24,8 @@
 
 typedef vector< pair< FunctionPtr, int > > PolyExactFunctions; // (u1, u2, p) -> poly degree
 
-class IncompressibleFormulationsTests : public TestSuite {
+class IncompressibleFormulationsTests : public TestSuite
+{
   bool _thoroughMode; // if true, tests take considerably longer...
 
   FunctionPtr x, x2, x3, y, y2, y3, zero;
@@ -61,7 +62,7 @@ class IncompressibleFormulationsTests : public TestSuite {
   map<int, FunctionPtr > vgpSolutionMap(FunctionPtr u1_exact, FunctionPtr u2_exact, FunctionPtr p_exact, double Re);
 
   vector< VarPtr > nonZeroComponents( LinearTermPtr lt, vector< VarPtr > &varsToTry, Teuchos::RCP<Mesh> mesh, IPPtr ip );
-  public:
+public:
   void runTests(int &numTestsRun, int &numTestsPassed);
 
   bool testVGPNavierStokesLocalConservation();

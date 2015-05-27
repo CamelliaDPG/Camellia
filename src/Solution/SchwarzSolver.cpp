@@ -11,22 +11,26 @@
 
 using namespace Camellia;
 
-SchwarzSolver::SchwarzSolver(int overlapLevel, int maxIters, double tol) {
+SchwarzSolver::SchwarzSolver(int overlapLevel, int maxIters, double tol)
+{
   _overlapLevel = overlapLevel;
   _maxIters = maxIters;
   _printToConsole = false;
   _tol = tol;
 }
 
-void SchwarzSolver::setPrintToConsole(bool printToConsole) {
+void SchwarzSolver::setPrintToConsole(bool printToConsole)
+{
   _printToConsole = printToConsole;
 }
 
-void SchwarzSolver::setTolerance(double tol) {
+void SchwarzSolver::setTolerance(double tol)
+{
   _tol = tol;
 }
 
-int SchwarzSolver::solve() {
+int SchwarzSolver::solve()
+{
   // compute some statistics for the original problem
   double condest = -1;
   Epetra_LinearProblem problem(_stiffnessMatrix.get(), _lhs.get(), _rhs.get());
@@ -36,7 +40,8 @@ int SchwarzSolver::solve() {
   Epetra_RowMatrix *A = problem.GetMatrix();
   double norminf = A->NormInf();
   double normone = A->NormOne();
-  if (_printToConsole) {
+  if (_printToConsole)
+  {
     cout << "\n Inf-norm of stiffness matrix before scaling = " << norminf;
     cout << "\n One-norm of stiffness matrix before scaling = " << normone << endl << endl;
     cout << "Condition number estimate: " << condest << endl;
@@ -64,7 +69,8 @@ int SchwarzSolver::solve() {
   condest = solver.Condest();
   int numIters = solver.NumIters();
 
-  if (_printToConsole) {
+  if (_printToConsole)
+  {
     cout << "\n Inf-norm of stiffness matrix after scaling = " << norminf;
     cout << "\n One-norm of stiffness matrix after scaling = " << normone << endl << endl;
     cout << "Condition number estimate: " << condest << endl;

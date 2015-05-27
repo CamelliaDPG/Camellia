@@ -17,9 +17,11 @@
 #include "RefinementStrategy.h"
 
 
-class UnitSquareBoundary : public SpatialFilter {
+class UnitSquareBoundary : public SpatialFilter
+{
 public:
-  bool matchesPoint(double x, double y) {
+  bool matchesPoint(double x, double y)
+  {
     double tol = 1e-14;
     bool xMatch = (abs(x+1.0) < tol) || (abs(x-1.0) < tol);
     bool yMatch = (abs(y+1.0) < tol) || (abs(y-1.0) < tol);
@@ -28,9 +30,11 @@ public:
   }
 };
 
-class SquareBoundary : public SpatialFilter {
+class SquareBoundary : public SpatialFilter
+{
 public:
-  bool matchesPoint(double x, double y) {
+  bool matchesPoint(double x, double y)
+  {
     double tol = 1e-14;
     bool xMatch = (abs(x) < tol) || (abs(x-1.0) < tol);
     bool yMatch = (abs(y) < tol) || (abs(y-1.0) < tol);
@@ -38,9 +42,11 @@ public:
   }
 };
 
-class InflowSquareBoundary : public SpatialFilter {
+class InflowSquareBoundary : public SpatialFilter
+{
 public:
-  bool matchesPoint(double x, double y) {
+  bool matchesPoint(double x, double y)
+  {
     double tol = 1e-14;
     bool xMatch = (abs(x) < tol);
     bool yMatch = (abs(y) < tol);
@@ -48,40 +54,50 @@ public:
   }
 };
 
-class LRInflowSquareBoundary : public SpatialFilter {
+class LRInflowSquareBoundary : public SpatialFilter
+{
 public:
-  bool matchesPoint(double x, double y) {
+  bool matchesPoint(double x, double y)
+  {
     double tol = 1e-14;
     bool xMatch = (abs(x)<tol); // left inflow
     bool yMatch = ((abs(y)<tol) || (abs(y-1.0)<tol)); // top/bottom
     return xMatch || yMatch;
   }
 };
-class LROutflowSquareBoundary : public SpatialFilter {
+class LROutflowSquareBoundary : public SpatialFilter
+{
 public:
-  bool matchesPoint(double x, double y) {
+  bool matchesPoint(double x, double y)
+  {
     double tol = 1e-14;
     bool xMatch = (abs(x-1.0)<tol);
     return xMatch;
   }
 };
 
-class Uinflow : public Function {
+class Uinflow : public Function
+{
 public:
-  void values(FieldContainer<double> &values, BasisCachePtr basisCache){
+  void values(FieldContainer<double> &values, BasisCachePtr basisCache)
+  {
     double tol = 1e-11;
     vector<GlobalIndexType> cellIDs = basisCache->cellIDs();
     int numPoints = values.dimension(1);
     FieldContainer<double> points = basisCache->getPhysicalCubaturePoints();
-    for (int i = 0;i<cellIDs.size();i++){
-      for (int j = 0;j<numPoints;j++){
+    for (int i = 0; i<cellIDs.size(); i++)
+    {
+      for (int j = 0; j<numPoints; j++)
+      {
         double x = points(i,j,0);
         double y = points(i,j,1);
         values(i,j) = 0.0;
-        if (abs(y)<tol){
+        if (abs(y)<tol)
+        {
           values(i,j) = 1.0;
         }
-        if (abs(x)<tol){
+        if (abs(x)<tol)
+        {
           values(i,j) = -1.0;
         }
       }
@@ -90,14 +106,18 @@ public:
 };
 
 // just for a discontinuity
-class CellIDFunction : public Function {
+class CellIDFunction : public Function
+{
 public:
-  void values(FieldContainer<double> &values, BasisCachePtr basisCache){
+  void values(FieldContainer<double> &values, BasisCachePtr basisCache)
+  {
     vector<GlobalIndexType> cellIDs = basisCache->cellIDs();
     int numPoints = values.dimension(1);
     FieldContainer<double> points = basisCache->getPhysicalCubaturePoints();
-    for (int i = 0;i<cellIDs.size();i++){
-      for (int j = 0;j<numPoints;j++){
+    for (int i = 0; i<cellIDs.size(); i++)
+    {
+      for (int j = 0; j<numPoints; j++)
+      {
         values(i,j) = cellIDs[i];
       }
     }
@@ -105,23 +125,31 @@ public:
 };
 
 // is zero except on the edge (.5, y) on a 2x1 unit quad mesh - an edge restriction function
-class EdgeFunction : public Function {
+class EdgeFunction : public Function
+{
 public:
-  bool boundaryValueOnly() {
+  bool boundaryValueOnly()
+  {
     return true;
   }
-  void values(FieldContainer<double> &values, BasisCachePtr basisCache){
+  void values(FieldContainer<double> &values, BasisCachePtr basisCache)
+  {
     double tol = 1e-11;
     vector<GlobalIndexType> cellIDs = basisCache->cellIDs();
     int numPoints = values.dimension(1);
     FieldContainer<double> points = basisCache->getPhysicalCubaturePoints();
-    for (int i = 0;i<cellIDs.size();i++){
-      for (int j = 0;j<numPoints;j++){
+    for (int i = 0; i<cellIDs.size(); i++)
+    {
+      for (int j = 0; j<numPoints; j++)
+      {
         double x = points(i,j,0);
         double y = points(i,j,1);
-        if (abs(x-.5)<tol){
+        if (abs(x-.5)<tol)
+        {
           values(i,j) = 1.0;
-        } else {
+        }
+        else
+        {
           values(i,j) = 0.0;
         }
       }
@@ -129,14 +157,17 @@ public:
   }
 };
 
-class PositiveX : public SpatialFilter {
+class PositiveX : public SpatialFilter
+{
 public:
-  bool matchesPoint(double x, double y) {
+  bool matchesPoint(double x, double y)
+  {
     return x > 0;
   }
 };
 
-void ScratchPadTests::setup() {
+void ScratchPadTests::setup()
+{
   ////////////////////   DECLARE VARIABLES   ///////////////////////
   // define test variables
   VarFactoryPtr varFactory = VarFactory::varFactory();
@@ -190,7 +221,7 @@ void ScratchPadTests::setup() {
 
   // create a pointer to a new mesh:
   _spectralConfusionMesh = MeshFactory::buildQuadMesh(quadPoints, horizontalCells, verticalCells,
-                                               _confusionBF, H1Order, H1Order+pToAdd);
+                           _confusionBF, H1Order, H1Order+pToAdd);
 
   // some 2D test points:
   // setup test points:
@@ -199,8 +230,10 @@ void ScratchPadTests::setup() {
   double y[NUM_POINTS_1D] = {-0.8,-0.6,-.4,-.2,0,0.2,0.4,0.6,0.8,1.0};
 
   _testPoints = FieldContainer<double>(NUM_POINTS_1D*NUM_POINTS_1D,2);
-  for (int i=0; i<NUM_POINTS_1D; i++) {
-    for (int j=0; j<NUM_POINTS_1D; j++) {
+  for (int i=0; i<NUM_POINTS_1D; i++)
+  {
+    for (int j=0; j<NUM_POINTS_1D; j++)
+    {
       _testPoints(i*NUM_POINTS_1D + j, 0) = x[i];
       _testPoints(i*NUM_POINTS_1D + j, 1) = y[i];
     }
@@ -217,41 +250,48 @@ void ScratchPadTests::setup() {
 
 }
 
-void ScratchPadTests::teardown() {
+void ScratchPadTests::teardown()
+{
 
 }
 
-void ScratchPadTests::runTests(int &numTestsRun, int &numTestsPassed) {
+void ScratchPadTests::runTests(int &numTestsRun, int &numTestsPassed)
+{
   setup();
-  if (testIntegrateDiscontinuousFunction()) {
+  if (testIntegrateDiscontinuousFunction())
+  {
     numTestsPassed++;
   }
   numTestsRun++;
   teardown();
 
   setup();
-  if (testPenaltyConstraints()) {
+  if (testPenaltyConstraints())
+  {
     numTestsPassed++;
   }
   numTestsRun++;
   teardown();
 
   setup();
-  if (testSpatiallyFilteredFunction()) {
+  if (testSpatiallyFilteredFunction())
+  {
     numTestsPassed++;
   }
   numTestsRun++;
   teardown();
 
   setup();
-  if (testConstantFunctionProduct()) {
+  if (testConstantFunctionProduct())
+  {
     numTestsPassed++;
   }
   numTestsRun++;
   teardown();
 
   setup();
-  if (testLinearTermEvaluationConsistency()) {
+  if (testLinearTermEvaluationConsistency())
+  {
     numTestsPassed++;
   }
   numTestsRun++;
@@ -259,28 +299,32 @@ void ScratchPadTests::runTests(int &numTestsRun, int &numTestsPassed) {
 
 
   setup();
-  if (testRieszIntegration()) {
+  if (testRieszIntegration())
+  {
     numTestsPassed++;
   }
   numTestsRun++;
   teardown();
 
   setup();
-  if (testLTResidualSimple()) {
+  if (testLTResidualSimple())
+  {
     numTestsPassed++;
   }
   numTestsRun++;
   teardown();
 
   setup();
-  if (testLTResidual()) {
+  if (testLTResidual())
+  {
     numTestsPassed++;
   }
   numTestsRun++;
   teardown();
 
   setup();
-  if (testResidualMemoryError()) {
+  if (testResidualMemoryError())
+  {
     numTestsPassed++;
   }
   numTestsRun++;
@@ -295,7 +339,8 @@ void ScratchPadTests::runTests(int &numTestsRun, int &numTestsPassed) {
   */
 }
 
-bool ScratchPadTests::testConstantFunctionProduct() {
+bool ScratchPadTests::testConstantFunctionProduct()
+{
   bool success = true;
   // set up basisCache (even though it won't really be used here)
   BasisCachePtr basisCache = Teuchos::rcp( new BasisCache( _elemType, _spectralConfusionMesh ) );
@@ -303,7 +348,7 @@ bool ScratchPadTests::testConstantFunctionProduct() {
   int cellID = 0;
   cellIDs.push_back(cellID);
   basisCache->setPhysicalCellNodes( _spectralConfusionMesh->physicalCellNodesForCell(cellID),
-				    cellIDs, true );
+                                    cellIDs, true );
 
   int numCells = _basisCache->getPhysicalCubaturePoints().dimension(0);
   int numPoints = _testPoints.dimension(0);
@@ -319,14 +364,16 @@ bool ScratchPadTests::testConstantFunctionProduct() {
 
   double tol = 1e-15;
   double maxDiff = 0.0;
-  if ( ! fcsAgree(expectedValues, values, tol, maxDiff) ) {
+  if ( ! fcsAgree(expectedValues, values, tol, maxDiff) )
+  {
     success = false;
     cout << "Expected product differs from actual; maxDiff: " << maxDiff << endl;
   }
   return success;
 }
 
-bool ScratchPadTests::testPenaltyConstraints() {
+bool ScratchPadTests::testPenaltyConstraints()
+{
   bool success = true;
   int numCells = 1;
   FunctionPtr one = Function::constant(1.0);
@@ -349,14 +396,18 @@ bool ScratchPadTests::testPenaltyConstraints() {
                                           _elemType->trialOrderPtr->totalDofs());
   FieldContainer<double> expectedRHSSparsity(numCells,_elemType->trialOrderPtr->totalDofs());
 
-  for (int cellIndex=0; cellIndex<numCells; cellIndex++) {
-    for (int sideIndex=0; sideIndex<4; sideIndex++) {
+  for (int cellIndex=0; cellIndex<numCells; cellIndex++)
+  {
+    for (int sideIndex=0; sideIndex<4; sideIndex++)
+    {
       vector<int> uhat_dofIndices = _elemType->trialOrderPtr->getDofIndices(_uhat_confusion->ID(),sideIndex);
 
-      for (int dofOrdinal1=0; dofOrdinal1 < uhat_dofIndices.size(); dofOrdinal1++) {
+      for (int dofOrdinal1=0; dofOrdinal1 < uhat_dofIndices.size(); dofOrdinal1++)
+      {
         int dofIndex1 = uhat_dofIndices[dofOrdinal1];
         expectedRHSSparsity(cellIndex,dofIndex1) = 1.0;
-        for (int dofOrdinal2=0; dofOrdinal2 < uhat_dofIndices.size(); dofOrdinal2++) {
+        for (int dofOrdinal2=0; dofOrdinal2 < uhat_dofIndices.size(); dofOrdinal2++)
+        {
           int dofIndex2 = uhat_dofIndices[dofOrdinal2];
           expectedSparsity(cellIndex,dofIndex1,dofIndex2) = 1.0;
         }
@@ -375,26 +426,33 @@ bool ScratchPadTests::testPenaltyConstraints() {
   //  cout << "testPenaltyConstraints: localRHSVector:\n" << localRHSVector;
 
   // compare sparsity
-  for (int cellIndex=0; cellIndex<numCells; cellIndex++) {
-    for (int i=0; i<trialDofs; i++) {
+  for (int cellIndex=0; cellIndex<numCells; cellIndex++)
+  {
+    for (int i=0; i<trialDofs; i++)
+    {
       double rhsValue = localRHSVector(cellIndex,i);
       double rhsSparsityValue = expectedRHSSparsity(cellIndex,i);
-      if ((rhsSparsityValue == 0.0) && (rhsValue != 0.0)) {
+      if ((rhsSparsityValue == 0.0) && (rhsValue != 0.0))
+      {
         cout << "testPenaltyConstraints rhs: expected 0 but found " << rhsValue << " at i = " << i << ".\n";
         success = false;
       }
-      if ((rhsSparsityValue != 0.0) && (rhsValue == 0.0)) {
+      if ((rhsSparsityValue != 0.0) && (rhsValue == 0.0))
+      {
         cout << "testPenaltyConstraints rhs: expected nonzero but found 0 at i = " << i << ".\n";
         success = false;
       }
-      for (int j=0; j<trialDofs; j++) {
+      for (int j=0; j<trialDofs; j++)
+      {
         double stiffValue = localStiffness(cellIndex,i,j);
         double sparsityValue = expectedSparsity(cellIndex,i,j);
-        if ((sparsityValue == 0.0) && (stiffValue != 0.0)) {
+        if ((sparsityValue == 0.0) && (stiffValue != 0.0))
+        {
           cout << "testPenaltyConstraints stiffness: expected 0 but found " << stiffValue << " at (" << i << ", " << j << ").\n";
           success = false;
         }
-        if ((sparsityValue != 0.0) && (stiffValue == 0.0)) {
+        if ((sparsityValue != 0.0) && (stiffValue == 0.0))
+        {
           cout << "testPenaltyConstraints stiffness: expected nonzero but found 0 at (" << i << ", " << j << ").\n";
           success = false;
         }
@@ -404,7 +462,8 @@ bool ScratchPadTests::testPenaltyConstraints() {
   return success;
 }
 
-bool ScratchPadTests::testSpatiallyFilteredFunction() {
+bool ScratchPadTests::testSpatiallyFilteredFunction()
+{
   bool success = true;
   FunctionPtr one = Function::constant(1.0);
   SpatialFilterPtr positiveX = Teuchos::rcp( new PositiveX );
@@ -416,12 +475,17 @@ bool ScratchPadTests::testSpatiallyFilteredFunction() {
   FieldContainer<double> values(numCells,numPoints);
   FieldContainer<double> expectedValues(numCells,numPoints);
 
-  for (int cellIndex=0; cellIndex<numCells; cellIndex++) {
-    for (int ptIndex=0; ptIndex<numPoints;ptIndex++) {
+  for (int cellIndex=0; cellIndex<numCells; cellIndex++)
+  {
+    for (int ptIndex=0; ptIndex<numPoints; ptIndex++)
+    {
       double x = _basisCache->getPhysicalCubaturePoints()(cellIndex,ptIndex,0);
-      if (x > 0) {
+      if (x > 0)
+      {
         expectedValues(cellIndex,ptIndex) = 1.0;
-      } else {
+      }
+      else
+      {
         expectedValues(cellIndex,ptIndex) = 0.0;
       }
     }
@@ -431,7 +495,8 @@ bool ScratchPadTests::testSpatiallyFilteredFunction() {
 
   double tol = 1e-15;
   double maxDiff = 0.0;
-  if ( ! fcsAgree(expectedValues, values, tol, maxDiff) ) {
+  if ( ! fcsAgree(expectedValues, values, tol, maxDiff) )
+  {
     success = false;
     cout << "testSpatiallyFilteredFunction: Expected values differ from actual; maxDiff: " << maxDiff << endl;
   }
@@ -439,7 +504,8 @@ bool ScratchPadTests::testSpatiallyFilteredFunction() {
 }
 
 // tests whether a mixed type LT
-bool ScratchPadTests::testLinearTermEvaluationConsistency(){
+bool ScratchPadTests::testLinearTermEvaluationConsistency()
+{
   bool success = true;
 
   ////////////////////   DECLARE VARIABLES   ///////////////////////
@@ -472,7 +538,8 @@ bool ScratchPadTests::testLinearTermEvaluationConsistency(){
 
   // define nodes for mesh
   int order = 1;
-  int H1Order = order+1; int pToAdd = 1;
+  int H1Order = order+1;
+  int pToAdd = 1;
 
   // create a pointer to a new mesh:
   Teuchos::RCP<Mesh> mesh = MeshUtilities::buildUnitQuadMesh(1, convectionBF, H1Order, H1Order+pToAdd);
@@ -503,7 +570,8 @@ bool ScratchPadTests::testLinearTermEvaluationConsistency(){
   double edgeOnlyVal = edgeOnly->integrate(mesh,10);
 
   double diff = edgeOnlyVal-edgeVal;
-  if (abs(diff)>1e-11){
+  if (abs(diff)>1e-11)
+  {
     success = false;
     cout << "Failed testLinearTermEvaluationConsistency() with diff = " << diff << endl;
   }
@@ -511,16 +579,20 @@ bool ScratchPadTests::testLinearTermEvaluationConsistency(){
   return success;
 }
 
-class IndicatorFunction : public Function {
+class IndicatorFunction : public Function
+{
   set<int> _cellIDs;
 public:
-  IndicatorFunction(set<int> cellIDs) : Function(0) {
+  IndicatorFunction(set<int> cellIDs) : Function(0)
+  {
     _cellIDs = cellIDs;
   }
-  IndicatorFunction(int cellID) : Function(0) {
+  IndicatorFunction(int cellID) : Function(0)
+  {
     _cellIDs.insert(cellID);
   }
-  virtual void values(FieldContainer<double> &values, BasisCachePtr basisCache) {
+  virtual void values(FieldContainer<double> &values, BasisCachePtr basisCache)
+  {
     values.initialize(1.0);
     vector<GlobalIndexType> contextCellIDs = basisCache->cellIDs();
     int cellIndex=0; // keep track of index into values
@@ -529,11 +601,14 @@ public:
     int numCells = values.dimension(0);
     int numEntriesPerCell = entryCount / numCells;
 
-    for (vector<GlobalIndexType>::iterator cellIt = contextCellIDs.begin(); cellIt != contextCellIDs.end(); cellIt++) {
+    for (vector<GlobalIndexType>::iterator cellIt = contextCellIDs.begin(); cellIt != contextCellIDs.end(); cellIt++)
+    {
       GlobalIndexType cellID = *cellIt;
-      if (_cellIDs.find(cellID) == _cellIDs.end()) {
+      if (_cellIDs.find(cellID) == _cellIDs.end())
+      {
         // clear out the associated entries
-        for (int j=0; j<numEntriesPerCell; j++) {
+        for (int j=0; j<numEntriesPerCell; j++)
+        {
           values[cellIndex*numEntriesPerCell + j] = 0;
         }
       }
@@ -543,7 +618,8 @@ public:
 };
 
 // tests whether a mixed type LT
-bool ScratchPadTests::testIntegrateDiscontinuousFunction(){
+bool ScratchPadTests::testIntegrateDiscontinuousFunction()
+{
   bool success = true;
 
   ////////////////////   DECLARE VARIABLES   ///////////////////////
@@ -580,7 +656,8 @@ bool ScratchPadTests::testIntegrateDiscontinuousFunction(){
 
   // define nodes for mesh
   int order = 1;
-  int H1Order = order+1; int pToAdd = 1;
+  int H1Order = order+1;
+  int pToAdd = 1;
 
   // create a pointer to a new mesh:
   Teuchos::RCP<Mesh> mesh = MeshUtilities::buildUnitQuadMesh(2, 1, convectionBF, H1Order, H1Order+pToAdd);
@@ -611,14 +688,16 @@ bool ScratchPadTests::testIntegrateDiscontinuousFunction(){
 
   double expectedValue = .5 + .5*jumpWeight;
   double diff = abs(expectedValue-edgeRestrictedValue);
-  if (abs(diff)>1e-11){
+  if (abs(diff)>1e-11)
+  {
     success = false;
     cout << "Failed testIntegrateDiscontinuousFunction() with expectedValue = " << expectedValue << " and actual value = " << edgeRestrictedValue << endl;
   }
   return success;
 }
 
-struct DofInfo {
+struct DofInfo
+{
   int cellID;
   int trialID;
   int basisOrdinal;
@@ -629,7 +708,8 @@ struct DofInfo {
   int totalDofs;     // number of dofs in the trial ordering
 };
 
-string dofInfoString(const DofInfo &info) {
+string dofInfoString(const DofInfo &info)
+{
   ostringstream dis;
   dis << "cellID = " << info.cellID << "; trialID = " << info.trialID;
   dis << "; sideIndex = " << info.sideIndex << " (" << info.numSides << " total sides)";
@@ -637,34 +717,41 @@ string dofInfoString(const DofInfo &info) {
   return dis.str();
 }
 
-string dofInfoString(const vector<DofInfo> infoVector) {
+string dofInfoString(const vector<DofInfo> infoVector)
+{
   ostringstream dis;
-  for (vector<DofInfo>::const_iterator infoIt=infoVector.begin(); infoIt != infoVector.end(); infoIt++) {
+  for (vector<DofInfo>::const_iterator infoIt=infoVector.begin(); infoIt != infoVector.end(); infoIt++)
+  {
     dis << dofInfoString(*infoIt) << endl;
   }
   return dis.str();
 }
 
-map< int, vector<DofInfo> > constructGlobalDofToLocalDofInfoMap(MeshPtr mesh) {
+map< int, vector<DofInfo> > constructGlobalDofToLocalDofInfoMap(MeshPtr mesh)
+{
   // go through the mesh as a whole, and collect info for each dof
   map< int, vector<DofInfo> > infoMap;
   DofInfo info;
   set<GlobalIndexType> activeCellIDs = mesh->getActiveCellIDs();
-  for (set<GlobalIndexType>::iterator cellIt = activeCellIDs.begin(); cellIt != activeCellIDs.end(); cellIt++) {
+  for (set<GlobalIndexType>::iterator cellIt = activeCellIDs.begin(); cellIt != activeCellIDs.end(); cellIt++)
+  {
     GlobalIndexType cellID = *cellIt;
     info.cellID = cellID;
     ElementPtr element = mesh->getElement(cellID);
     DofOrderingPtr trialOrder = element->elementType()->trialOrderPtr;
     set<int> trialIDs = trialOrder->getVarIDs();
     info.totalDofs = trialOrder->totalDofs();
-    for (set<int>::iterator trialIt=trialIDs.begin(); trialIt != trialIDs.end(); trialIt++) {
+    for (set<int>::iterator trialIt=trialIDs.begin(); trialIt != trialIDs.end(); trialIt++)
+    {
       info.trialID = *trialIt;
       const vector<int>* sidesForVar = &trialOrder->getSidesForVarID(info.trialID);
-      for (vector<int>::const_iterator sideIt = sidesForVar->begin(); sideIt != sidesForVar->end(); sideIt++) {
+      for (vector<int>::const_iterator sideIt = sidesForVar->begin(); sideIt != sidesForVar->end(); sideIt++)
+      {
         int sideIndex = *sideIt;
         info.sideIndex = sideIndex;
         info.basisCardinality = trialOrder->getBasisCardinality(info.trialID, info.sideIndex);
-        for (int basisOrdinal=0; basisOrdinal < info.basisCardinality; basisOrdinal++) {
+        for (int basisOrdinal=0; basisOrdinal < info.basisCardinality; basisOrdinal++)
+        {
           info.basisOrdinal = basisOrdinal;
           info.localDofIndex = trialOrder->getDofIndex(info.trialID, info.basisOrdinal, info.sideIndex);
           pair<int, int> localDofIndexKey = make_pair(info.cellID, info.localDofIndex);
@@ -678,7 +765,8 @@ map< int, vector<DofInfo> > constructGlobalDofToLocalDofInfoMap(MeshPtr mesh) {
   return infoMap;
 }
 
-bool ScratchPadTests::testGalerkinOrthogonality(){
+bool ScratchPadTests::testGalerkinOrthogonality()
+{
 
   double tol = 1e-11;
   bool success = true;
@@ -714,7 +802,8 @@ bool ScratchPadTests::testGalerkinOrthogonality(){
 
   // define nodes for mesh
   int order = 2;
-  int H1Order = order+1; int pToAdd = 1;
+  int H1Order = order+1;
+  int pToAdd = 1;
 
   // create a pointer to a new mesh:
   Teuchos::RCP<Mesh> mesh = MeshUtilities::buildUnitQuadMesh(4, convectionBF, H1Order, H1Order+pToAdd);
@@ -751,37 +840,43 @@ bool ScratchPadTests::testGalerkinOrthogonality(){
   FieldContainer<double> bcGlobalValues;
   mesh->boundary().bcsToImpose(bcGlobalIndices,bcGlobalValues,*(solution->bc()), NULL, NULL);
   set<int> bcInds;
-  for (int i=0;i<bcGlobalIndices.dimension(0);i++){
+  for (int i=0; i<bcGlobalIndices.dimension(0); i++)
+  {
     bcInds.insert(bcGlobalIndices(i));
   }
 
   ////////////////////   CHECK GALERKIN ORTHOGONALITY   ///////////////////////
 
-  BCPtr nullBC; RHSPtr nullRHS; IPPtr nullIP;
+  BCPtr nullBC;
+  RHSPtr nullRHS;
+  IPPtr nullIP;
   SolutionPtr solnPerturbation = Teuchos::rcp(new Solution(mesh, nullBC, nullRHS, nullIP) );
 
   map< int, vector<DofInfo> > infoMap = constructGlobalDofToLocalDofInfoMap(mesh);
 
   for (map< int, vector<DofInfo> >::iterator mapIt = infoMap.begin();
-       mapIt != infoMap.end(); mapIt++) {
+       mapIt != infoMap.end(); mapIt++)
+  {
     int dofIndex = mapIt->first;
     vector< DofInfo > dofInfoVector = mapIt->second; // all the local dofs that map to dofIndex
     // create perturbation in direction du
     solnPerturbation->clear(); // clear all solns
     // set each corresponding local dof to 1.0
     for (vector< DofInfo >::iterator dofInfoIt = dofInfoVector.begin();
-         dofInfoIt != dofInfoVector.end(); dofInfoIt++) {
+         dofInfoIt != dofInfoVector.end(); dofInfoIt++)
+    {
       DofInfo info = *dofInfoIt;
       FieldContainer<double> solnCoeffs(info.basisCardinality);
       solnCoeffs(info.basisOrdinal) = 1.0;
       solnPerturbation->setSolnCoeffsForCellID(solnCoeffs, info.cellID, info.trialID, info.sideIndex);
-   }
+    }
     //    solnPerturbation->setSolnCoeffForGlobalDofIndex(1.0,dofIndex);
 
     LinearTermPtr b_du =  convectionBF->testFunctional(solnPerturbation);
     FunctionPtr gradient = b_du->evaluate(err_rep_map, TestingUtilities::isFluxOrTraceDof(mesh,dofIndex)); // use boundary part only if flux
     double grad = gradient->integrate(mesh,10);
-    if (!TestingUtilities::isFluxOrTraceDof(mesh,dofIndex) && abs(grad)>tol){ // if we're not single-precision zero FOR FIELDS
+    if (!TestingUtilities::isFluxOrTraceDof(mesh,dofIndex) && abs(grad)>tol)  // if we're not single-precision zero FOR FIELDS
+    {
       //      int cellID = mesh->getGlobalToLocalMap()[dofIndex].first;
       cout << "Failed testGalerkinOrthogonality() for fields with diff " << abs(grad) << " at dof " << dofIndex << "; info:" << endl;
       cout << dofInfoString(infoMap[dofIndex]);
@@ -791,31 +886,37 @@ bool ScratchPadTests::testGalerkinOrthogonality(){
   FieldContainer<double> errorJumps(mesh->numGlobalDofs()); //initialized to zero
   // just test fluxes ON INTERNAL SKELETON here
   vector<ElementPtr> elems = mesh->activeElements();
-  for (vector<ElementPtr>::iterator elemIt=elems.begin();elemIt!=elems.end();elemIt++){
-    for (int sideIndex = 0;sideIndex < 4;sideIndex++){
+  for (vector<ElementPtr>::iterator elemIt=elems.begin(); elemIt!=elems.end(); elemIt++)
+  {
+    for (int sideIndex = 0; sideIndex < 4; sideIndex++)
+    {
       ElementPtr elem = *elemIt;
       ElementTypePtr elemType = elem->elementType();
       vector<int> localDofIndices = elemType->trialOrderPtr->getDofIndices(beta_n_u->ID(), sideIndex);
-      for (int i = 0;i<localDofIndices.size();i++){
+      for (int i = 0; i<localDofIndices.size(); i++)
+      {
         int globalDofIndex = mesh->globalDofIndex(elem->cellID(), localDofIndices[i]);
         vector< DofInfo > dofInfoVector = infoMap[globalDofIndex];
 
-	solnPerturbation->clear();
-	TestingUtilities::setSolnCoeffForGlobalDofIndex(solnPerturbation,1.0,globalDofIndex);
-	// also add in BCs
-	for (int i = 0;i<bcGlobalIndices.dimension(0);i++){
-	  TestingUtilities::setSolnCoeffForGlobalDofIndex(solnPerturbation,bcGlobalValues(i),bcGlobalIndices(i));
-	}
+        solnPerturbation->clear();
+        TestingUtilities::setSolnCoeffForGlobalDofIndex(solnPerturbation,1.0,globalDofIndex);
+        // also add in BCs
+        for (int i = 0; i<bcGlobalIndices.dimension(0); i++)
+        {
+          TestingUtilities::setSolnCoeffForGlobalDofIndex(solnPerturbation,bcGlobalValues(i),bcGlobalIndices(i));
+        }
 
         LinearTermPtr b_du =  convectionBF->testFunctional(solnPerturbation);
         FunctionPtr gradient = b_du->evaluate(err_rep_map, TestingUtilities::isFluxOrTraceDof(mesh,globalDofIndex)); // use boundary part only if flux
         double jump = gradient->integrate(mesh,10);
-	errorJumps(globalDofIndex) += jump;
+        errorJumps(globalDofIndex) += jump;
       }
     }
   }
-  for (int i = 0;i<mesh->numGlobalDofs();i++){
-    if (abs(errorJumps(i))>tol){
+  for (int i = 0; i<mesh->numGlobalDofs(); i++)
+  {
+    if (abs(errorJumps(i))>tol)
+    {
       cout << "Failing Galerkin orthogonality test for fluxes with diff " << errorJumps(i) << " at dof " << i << endl;
       cout << dofInfoString(infoMap[i]);
       success = false;
@@ -826,7 +927,8 @@ bool ScratchPadTests::testGalerkinOrthogonality(){
 }
 
 // tests to make sure that the rieszNorm computed via matrices is the same as the one computed thru direct integration
-bool ScratchPadTests::testRieszIntegration(){
+bool ScratchPadTests::testRieszIntegration()
+{
   double tol = 1e-11;
   bool success = true;
 
@@ -868,7 +970,7 @@ bool ScratchPadTests::testRieszIntegration(){
 
   ////////////////////   DEFINE INNER PRODUCT(S)   ///////////////////////
 
-   // robust test norm
+  // robust test norm
   IPPtr ip = Teuchos::rcp(new IP);
 
   // just H1 projection
@@ -881,8 +983,10 @@ bool ScratchPadTests::testRieszIntegration(){
 
   FunctionPtr n = Function::normal();
   vector<double> e1,e2;
-  e1.push_back(1.0);e1.push_back(0.0);
-  e2.push_back(0.0);e2.push_back(1.0);
+  e1.push_back(1.0);
+  e1.push_back(0.0);
+  e2.push_back(0.0);
+  e2.push_back(1.0);
   FunctionPtr one = Function::constant(1.0);
 
   FunctionPtr zero = Function::constant(0.0);
@@ -900,7 +1004,8 @@ bool ScratchPadTests::testRieszIntegration(){
 
   // define nodes for mesh
   int order = 2;
-  int H1Order = order+1; int pToAdd = 2;
+  int H1Order = order+1;
+  int pToAdd = 2;
 
   // create a pointer to a new mesh:
   Teuchos::RCP<Mesh> mesh = MeshUtilities::buildUnitQuadMesh(nCells,confusionBF, H1Order, H1Order+pToAdd);
@@ -922,7 +1027,8 @@ bool ScratchPadTests::testRieszIntegration(){
 
   double integratedNorm = sqrt((lt->evaluate(repFxns,false))->integrate(mesh,5,true));
   success = abs(rieszNorm-integratedNorm)<tol;
-  if (success==false){
+  if (success==false)
+  {
     cout << "Failed testRieszIntegration; riesz norm is computed to be = " << rieszNorm << ", while using integration it's computed to be " << integratedNorm << endl;
     return success;
   }
@@ -930,7 +1036,8 @@ bool ScratchPadTests::testRieszIntegration(){
 }
 
 // tests residual computation on simple convection
-bool ScratchPadTests::testLTResidualSimple(){
+bool ScratchPadTests::testLTResidualSimple()
+{
   double tol = 1e-11;
   int rank = Teuchos::GlobalMPISession::getRank();
 
@@ -961,7 +1068,7 @@ bool ScratchPadTests::testLTResidualSimple(){
 
   ////////////////////   DEFINE INNER PRODUCT(S)   ///////////////////////
 
-   // robust test norm
+  // robust test norm
   IPPtr ip = Teuchos::rcp(new IP);
 
   // choose the mesh-independent norm even though it may have BLs
@@ -972,8 +1079,10 @@ bool ScratchPadTests::testLTResidualSimple(){
 
   FunctionPtr n = Function::normal();
   vector<double> e1,e2;
-  e1.push_back(1.0);e1.push_back(0.0);
-  e2.push_back(0.0);e2.push_back(1.0);
+  e1.push_back(1.0);
+  e1.push_back(0.0);
+  e2.push_back(0.0);
+  e2.push_back(1.0);
   FunctionPtr one = Function::constant(1.0);
 
   FunctionPtr zero = Function::constant(0.0);
@@ -990,7 +1099,8 @@ bool ScratchPadTests::testLTResidualSimple(){
   ////////////////////   BUILD MESH   ///////////////////////
   // define nodes for mesh
   int order = 2;
-  int H1Order = order+1; int pToAdd = 2;
+  int H1Order = order+1;
+  int pToAdd = 2;
 
   // create a pointer to a new mesh:
   Teuchos::RCP<Mesh> mesh = MeshUtilities::buildUnitQuadMesh(nCells,confusionBF, H1Order, H1Order+pToAdd);
@@ -1019,14 +1129,16 @@ bool ScratchPadTests::testLTResidualSimple(){
   double energyErrorIntegrated = sqrt(err->integrate(mesh,cubEnrich,testVsTest));
   // check that energy error computed thru Solution and through rieszRep are the same
   success = abs(energyError-energyErrorLT) < tol;
-  if (success==false) {
+  if (success==false)
+  {
     if (rank==0)
       cout << "Failed testLTResidualSimple; energy error = " << energyError << ", while linearTerm error is computed to be " << energyErrorLT << endl;
     return success;
   }
   // checks that matrix-computed and integrated errors are the same
   success = abs(energyErrorLT-energyErrorIntegrated)<tol;
-  if (success==false) {
+  if (success==false)
+  {
     if (rank==0)
       cout << "Failed testLTResidualSimple; energy error = " << energyError << ", while error computed via integration is " << energyErrorIntegrated << endl;
     return success;
@@ -1035,7 +1147,8 @@ bool ScratchPadTests::testLTResidualSimple(){
 }
 
 // tests to make sure the energy error calculated thru direct integration works for vector valued test functions too
-bool ScratchPadTests::testLTResidual(){
+bool ScratchPadTests::testLTResidual()
+{
   double tol = 1e-11;
   int rank = Teuchos::GlobalMPISession::getRank();
 
@@ -1079,7 +1192,7 @@ bool ScratchPadTests::testLTResidual(){
 
   ////////////////////   DEFINE INNER PRODUCT(S)   ///////////////////////
 
-   // robust test norm
+  // robust test norm
   IPPtr ip = Teuchos::rcp(new IP);
 
   // choose the mesh-independent norm even though it may have boundary layers
@@ -1092,8 +1205,10 @@ bool ScratchPadTests::testLTResidual(){
 
   FunctionPtr n = Function::normal();
   vector<double> e1,e2;
-  e1.push_back(1.0);e1.push_back(0.0);
-  e2.push_back(0.0);e2.push_back(1.0);
+  e1.push_back(1.0);
+  e1.push_back(0.0);
+  e2.push_back(0.0);
+  e2.push_back(1.0);
   FunctionPtr one = Function::constant(1.0);
 
   FunctionPtr zero = Function::constant(0.0);
@@ -1110,7 +1225,8 @@ bool ScratchPadTests::testLTResidual(){
   ////////////////////   BUILD MESH   ///////////////////////
   // define nodes for mesh
   int order = 2;
-  int H1Order = order+1; int pToAdd = 2;
+  int H1Order = order+1;
+  int pToAdd = 2;
 
   // create a pointer to a new mesh:
   Teuchos::RCP<Mesh> mesh = MeshUtilities::buildUnitQuadMesh(nCells,confusionBF, H1Order, H1Order+pToAdd);
@@ -1138,7 +1254,8 @@ bool ScratchPadTests::testLTResidual(){
   rieszResidual->computeRieszRep();
   double energyErrorLT = rieszResidual->getNorm();
 
-  int cubEnrich = 0; bool testVsTest = true;
+  int cubEnrich = 0;
+  bool testVsTest = true;
   FunctionPtr e_v = RieszRep::repFunction(v,rieszResidual);
   FunctionPtr e_tau = RieszRep::repFunction(tau,rieszResidual);
   // experiment by Nate: manually specify the error (this appears to produce identical results, as it should)
@@ -1155,7 +1272,8 @@ bool ScratchPadTests::testLTResidual(){
   // checks that matrix-computed and integrated errors are the same
   bool success2 = abs(energyErrorLT-energyErrorIntegrated)<tol;
   success = success1==true && success2==true;
-  if (!success){
+  if (!success)
+  {
     if (rank==0)
       cout << "Failed testLTResidual; energy error = " << energyError << ", while linearTerm error is computed to be " << energyErrorLT << ", and when computing through integration of the Riesz rep function, error = " << energyErrorIntegrated << endl;
   }
@@ -1166,7 +1284,8 @@ bool ScratchPadTests::testLTResidual(){
   return success;
 }
 
-bool ScratchPadTests::testResidualMemoryError(){
+bool ScratchPadTests::testResidualMemoryError()
+{
 
   int rank = Teuchos::GlobalMPISession::getRank();
 
@@ -1210,7 +1329,7 @@ bool ScratchPadTests::testResidualMemoryError(){
 
   ////////////////////   DEFINE INNER PRODUCT(S)   ///////////////////////
 
-   // robust test norm
+  // robust test norm
   IPPtr robIP = Teuchos::rcp(new IP);
   robIP->addTerm(tau);
   robIP->addTerm(tau->div());
@@ -1234,8 +1353,10 @@ bool ScratchPadTests::testResidualMemoryError(){
   FunctionPtr n = Function::normal();
 
   vector<double> e1,e2;
-  e1.push_back(1.0);e1.push_back(0.0);
-  e2.push_back(0.0);e2.push_back(1.0);
+  e1.push_back(1.0);
+  e1.push_back(0.0);
+  e2.push_back(0.0);
+  e2.push_back(1.0);
 
   bc->addDirichlet(beta_n_u_minus_sigma_n, inflowBoundary, beta*n*one);
   bc->addDirichlet(uhat, outflowBoundary, zero);
@@ -1243,7 +1364,8 @@ bool ScratchPadTests::testResidualMemoryError(){
   ////////////////////   BUILD MESH   ///////////////////////
   // define nodes for mesh
   int order = 2;
-  int H1Order = order+1; int pToAdd = 2;
+  int H1Order = order+1;
+  int pToAdd = 2;
 
   // create a pointer to a new mesh:
   Teuchos::RCP<Mesh> mesh = MeshUtilities::buildUnitQuadMesh(nCells,confusionBF, H1Order, H1Order+pToAdd);
@@ -1272,7 +1394,8 @@ bool ScratchPadTests::testResidualMemoryError(){
   double energyErr2 = solution->energyErrorTotal();
 
   // if energy error rises
-  if (energyErr1 < energyErr2) {
+  if (energyErr1 < energyErr2)
+  {
     if (rank==0)
       cout << "energy error increased from " << energyErr1 << " to " << energyErr2 << " after refinement.\n";
     success = false;
@@ -1282,6 +1405,7 @@ bool ScratchPadTests::testResidualMemoryError(){
 }
 
 
-std::string ScratchPadTests::testSuiteName() {
+std::string ScratchPadTests::testSuiteName()
+{
   return "ScratchPadTests";
 }

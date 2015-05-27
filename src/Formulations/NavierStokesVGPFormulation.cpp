@@ -37,19 +37,25 @@ const string NavierStokesVGPFormulation::S_TAU3 = "\\tau_{3}";
 const string NavierStokesVGPFormulation::S_Q = "q";
 
 void NavierStokesVGPFormulation::initialize(MeshTopologyPtr meshTopology, std::string filePrefix,
-                                            int spaceDim, double Re, int fieldPolyOrder, int delta_k,
-                                            TFunctionPtr<double> forcingFunction, bool transientFormulation,
-                                            bool useConformingTraces) {
-  if (transientFormulation) {
+    int spaceDim, double Re, int fieldPolyOrder, int delta_k,
+    TFunctionPtr<double> forcingFunction, bool transientFormulation,
+    bool useConformingTraces)
+{
+  if (transientFormulation)
+  {
     cout << "WARNING: transientFormulation is not yet implemented.\n";
     TEUCHOS_TEST_FOR_EXCEPTION(true, std::invalid_argument, "transientFormulation not yet supported in NavierStokesVGPFormulation");
   }
-  if (meshTopology != Teuchos::null) {
+  if (meshTopology != Teuchos::null)
+  {
     // then we take spaceDim from meshTopology
     _spaceDim = meshTopology->getSpaceDim();
-  } else {
+  }
+  else
+  {
     _spaceDim = spaceDim;
-    if (filePrefix == "") {
+    if (filePrefix == "")
+    {
       TEUCHOS_TEST_FOR_EXCEPTION(true, std::invalid_argument, "You must specify a non-null meshTopology or a file prefix");
     }
   }
@@ -59,7 +65,8 @@ void NavierStokesVGPFormulation::initialize(MeshTopologyPtr meshTopology, std::s
 
   _neglectFluxesOnRHS = true;
 
-  if ((_spaceDim != 2) && (_spaceDim != 3)) {
+  if ((_spaceDim != 2) && (_spaceDim != 3))
+  {
     TEUCHOS_TEST_FOR_EXCEPTION(true, std::invalid_argument, "spaceDim must be 2 or 3");
   }
 
@@ -87,7 +94,8 @@ void NavierStokesVGPFormulation::initialize(MeshTopologyPtr meshTopology, std::s
 
   sigma1 = vf->fieldVar(S_SIGMA1, VECTOR_L2);
   sigma2 = vf->fieldVar(S_SIGMA2, VECTOR_L2);
-  if (_spaceDim==3) {
+  if (_spaceDim==3)
+  {
     sigma3 = vf->fieldVar(S_SIGMA3, VECTOR_L2);
   }
 
@@ -101,7 +109,8 @@ void NavierStokesVGPFormulation::initialize(MeshTopologyPtr meshTopology, std::s
   LinearTermPtr t1n_lt, t2n_lt, t3n_lt;
   t1n_lt = p * n->x() - sigma1 * n;
   t2n_lt = p * n->y() - sigma2 * n;
-  if (_spaceDim==3) {
+  if (_spaceDim==3)
+  {
     t3n_lt = p * n->z() - sigma3 * n;
   }
   t1n = vf->fluxVar(S_TN1_HAT, t1n_lt);
@@ -114,7 +123,8 @@ void NavierStokesVGPFormulation::initialize(MeshTopologyPtr meshTopology, std::s
 
   tau1 = vf->testVar(S_TAU1, HDIV);
   tau2 = vf->testVar(S_TAU2, HDIV);
-  if (_spaceDim==3) {
+  if (_spaceDim==3)
+  {
     tau3 = vf->testVar(S_TAU3, HDIV);
   }
 
@@ -124,9 +134,12 @@ void NavierStokesVGPFormulation::initialize(MeshTopologyPtr meshTopology, std::s
   int H1Order = fieldPolyOrder + 1;
 
   MeshPtr mesh;
-  if (filePrefix == "") {
+  if (filePrefix == "")
+  {
     mesh = Teuchos::rcp( new Mesh(meshTopology, _navierStokesBF, H1Order, delta_k) ) ;
-  } else {
+  }
+  else
+  {
     mesh = MeshFactory::loadFromHDF5(_navierStokesBF, filePrefix+".mesh");
   }
 
@@ -149,7 +162,8 @@ void NavierStokesVGPFormulation::initialize(MeshTopologyPtr meshTopology, std::s
   _navierStokesBF->addTerm(-u2_hat, tau2->dot_normal());
 
   // tau3:
-  if (_spaceDim==3) {
+  if (_spaceDim==3)
+  {
     _navierStokesBF->addTerm(u3, tau3->div());
     _navierStokesBF->addTerm((1.0/_mu) * sigma3, tau3);
     _navierStokesBF->addTerm(-u3_hat, tau3->dot_normal());
@@ -166,7 +180,8 @@ void NavierStokesVGPFormulation::initialize(MeshTopologyPtr meshTopology, std::s
   _navierStokesBF->addTerm( t2n, v2);
 
   // v3:
-  if (_spaceDim==3) {
+  if (_spaceDim==3)
+  {
     _navierStokesBF->addTerm(sigma3, v3->grad()); // ( sigma3, grad v3)
     _navierStokesBF->addTerm( - p, v3->dz());
     _navierStokesBF->addTerm( t3n, v3);
@@ -177,9 +192,12 @@ void NavierStokesVGPFormulation::initialize(MeshTopologyPtr meshTopology, std::s
   _navierStokesBF->addTerm(-u2,q->dy());
   if (_spaceDim==3) _navierStokesBF->addTerm(-u3, q->dz());
 
-  if (_spaceDim==2) {
+  if (_spaceDim==2)
+  {
     _navierStokesBF->addTerm(u1_hat * n->x() + u2_hat * n->y(), q);
-  } else if (_spaceDim==3) {
+  }
+  else if (_spaceDim==3)
+  {
     _navierStokesBF->addTerm(u1_hat * n->x() + u2_hat * n->y() + u3_hat * n->z(), q);
   }
 
@@ -196,18 +214,22 @@ void NavierStokesVGPFormulation::initialize(MeshTopologyPtr meshTopology, std::s
   TFunctionPtr<double> u2_prev = TFunction<double>::solution(u2,backgroundFlowWeakReference);
   TFunctionPtr<double> p_prev = TFunction<double>::solution(p, backgroundFlowWeakReference);
   TFunctionPtr<double> u3_prev, sigma3_prev;
-  if (_spaceDim == 3) {
+  if (_spaceDim == 3)
+  {
     u3_prev = TFunction<double>::solution(u3,backgroundFlowWeakReference);
     sigma3_prev = TFunction<double>::solution(sigma3,backgroundFlowWeakReference);
   }
 
-  if (_spaceDim == 2) {
+  if (_spaceDim == 2)
+  {
     _navierStokesBF->addTerm( Re * sigma1_prev->x() * u1 + Re * sigma1_prev->y() * u2, v1);
     _navierStokesBF->addTerm( Re * sigma2_prev->x() * u1 + Re * sigma2_prev->y() * u2, v2);
 
     _navierStokesBF->addTerm( Re * u1_prev * sigma1->x() + Re * u2_prev * sigma1->y(), v1);
     _navierStokesBF->addTerm( Re * u1_prev * sigma2->x() + Re * u2_prev * sigma2->y(), v2);
-  } else {
+  }
+  else
+  {
 
     _navierStokesBF->addTerm( Re * sigma1_prev->x() * u1 + Re * sigma1_prev->y() * u2 + Re * sigma1_prev->z() * u3, v1);
     _navierStokesBF->addTerm( Re * sigma2_prev->x() * u1 + Re * sigma2_prev->y() * u2 + Re * sigma2_prev->z() * u3, v2);
@@ -222,7 +244,8 @@ void NavierStokesVGPFormulation::initialize(MeshTopologyPtr meshTopology, std::s
   setIP( _navierStokesBF->graphNorm() );
 
   // set the RHS:
-  if (forcingFunction == Teuchos::null) {
+  if (forcingFunction == Teuchos::null)
+  {
     int vectorRank = 1;
     forcingFunction = TFunction<double>::zero(vectorRank);
   }
@@ -238,10 +261,13 @@ void NavierStokesVGPFormulation::initialize(MeshTopologyPtr meshTopology, std::s
   // define tractions (used in outflow conditions)
   // definition of traction: _mu * ( (\nabla u) + (\nabla u)^T ) n - p n
   //                      = (sigma + sigma^T) n - p n
-  if (_spaceDim == 2) {
+  if (_spaceDim == 2)
+  {
     _t1 = n->x() * (2 * sigma1->x() - p)       + n->y() * (sigma1->x() + sigma2->x());
     _t2 = n->x() * (sigma1->y() + sigma2->x()) + n->y() * (2 * sigma2->y() - p);
-  } else {
+  }
+  else
+  {
     _t1 = n->x() * (2 * sigma1->x() - p)       + n->y() * (sigma1->x() + sigma2->x()) + n->z() * (sigma1->z() + sigma3->x());
     _t2 = n->x() * (sigma1->y() + sigma2->x()) + n->y() * (2 * sigma2->y() - p)       + n->z() * (sigma2->z() + sigma3->y());
     _t3 = n->x() * (sigma1->z() + sigma3->x()) + n->y() * (sigma2->z() + sigma3->y()) + n->z() * (2 * sigma3->z() - p);
@@ -262,36 +288,44 @@ void NavierStokesVGPFormulation::initialize(MeshTopologyPtr meshTopology, std::s
   TFunctionPtr<double> u2_incr = TFunction<double>::solution(u2,_solnIncrement);
   TFunctionPtr<double> u3_incr, sigma3_incr;
   TFunctionPtr<double> p_incr = TFunction<double>::solution(p, _solnIncrement);
-  if (_spaceDim == 3) {
+  if (_spaceDim == 3)
+  {
     u3_incr = TFunction<double>::solution(u3,_solnIncrement);
     sigma3_incr = TFunction<double>::solution(sigma3,_solnIncrement);
   }
 
-  if (_spaceDim == 2) {
+  if (_spaceDim == 2)
+  {
     _L2IncrementFunction = u1_incr * u1_incr + u2_incr * u2_incr + p_incr * p_incr
-    + sigma1_incr * sigma1_incr + sigma2_incr * sigma2_incr;
+                           + sigma1_incr * sigma1_incr + sigma2_incr * sigma2_incr;
     _L2SolutionFunction = u1_prev * u1_prev + u2_prev * u2_prev + p_prev * p_prev
-    + sigma1_prev * sigma1_prev + sigma2_prev * sigma2_prev;
-  } else {
+                          + sigma1_prev * sigma1_prev + sigma2_prev * sigma2_prev;
+  }
+  else
+  {
     _L2IncrementFunction = u1_incr * u1_incr + u2_incr * u2_incr + p_incr * p_incr
-    + sigma1_incr * sigma1_incr + sigma2_incr * sigma2_incr + sigma3_incr * sigma3_incr;
+                           + sigma1_incr * sigma1_incr + sigma2_incr * sigma2_incr + sigma3_incr * sigma3_incr;
     _L2SolutionFunction  = u1_prev * u1_prev + u2_prev * u2_prev + p_prev * p_prev
-    + sigma1_prev * sigma1_prev + sigma2_prev * sigma2_prev + sigma3_prev * sigma3_prev;
+                           + sigma1_prev * sigma1_prev + sigma2_prev * sigma2_prev + sigma3_prev * sigma3_prev;
   }
 
   _solver = Solver::getDirectSolver();
 
   _nonlinearIterationCount = 0;
 
-  if (_spaceDim==2) {
+  if (_spaceDim==2)
+  {
     // finally, set up a stream function solve for 2D
     _streamFormulation = Teuchos::rcp( new PoissonFormulation(_spaceDim,_useConformingTraces) );
 
     MeshPtr streamMesh;
-    if (filePrefix == "") {
+    if (filePrefix == "")
+    {
       MeshTopologyPtr streamMeshTopo = meshTopology->deepCopy();
       streamMesh = Teuchos::rcp( new Mesh(streamMeshTopo, _streamFormulation->bf(), H1Order, delta_k) ) ;
-    } else {
+    }
+    else
+    {
       streamMesh = MeshFactory::loadFromHDF5(_streamFormulation->bf(), filePrefix+"_stream.mesh");
     }
 
@@ -330,30 +364,34 @@ void NavierStokesVGPFormulation::initialize(MeshTopologyPtr meshTopology, std::s
     IPPtr streamIP = _streamFormulation->bf()->graphNorm();
     _streamSolution = TSolution<double>::solution(streamMesh,streamBC,streamRHS,streamIP);
 
-    if (filePrefix != "") {
+    if (filePrefix != "")
+    {
       _streamSolution->loadFromHDF5(filePrefix + "_stream.soln");
     }
   }
 }
 
 NavierStokesVGPFormulation::NavierStokesVGPFormulation(MeshTopologyPtr meshTopology, double Re,
-                                                       int fieldPolyOrder, int delta_k,
-                                                       TFunctionPtr<double> forcingFunction,
-                                                       bool transientFormulation, bool useConformingTraces) {
+    int fieldPolyOrder, int delta_k,
+    TFunctionPtr<double> forcingFunction,
+    bool transientFormulation, bool useConformingTraces)
+{
   initialize(meshTopology, "", meshTopology->getSpaceDim(), Re, fieldPolyOrder, delta_k,
              forcingFunction, transientFormulation, useConformingTraces);
 }
 
 NavierStokesVGPFormulation::NavierStokesVGPFormulation(std::string filePrefix, int spaceDim, double Re,
-                                                       int fieldPolyOrder, int delta_k,
-                                                       TFunctionPtr<double> forcingFunction,
-                                                       bool transientFormulation,
-                                                       bool useConformingTraces) {
+    int fieldPolyOrder, int delta_k,
+    TFunctionPtr<double> forcingFunction,
+    bool transientFormulation,
+    bool useConformingTraces)
+{
   initialize(Teuchos::null, filePrefix, spaceDim, Re, fieldPolyOrder, delta_k,
              forcingFunction, transientFormulation, useConformingTraces);
 }
 
-void NavierStokesVGPFormulation::addInflowCondition(SpatialFilterPtr inflowRegion, TFunctionPtr<double> u) {
+void NavierStokesVGPFormulation::addInflowCondition(SpatialFilterPtr inflowRegion, TFunctionPtr<double> u)
+{
   int spaceDim = _backgroundFlow->mesh()->getTopology()->getSpaceDim();
 
   VarPtr u1_hat = this->u_hat(1), u2_hat = this->u_hat(2);
@@ -361,10 +399,13 @@ void NavierStokesVGPFormulation::addInflowCondition(SpatialFilterPtr inflowRegio
   if (spaceDim==3) u3_hat = this->u_hat(3);
 
   TFunctionPtr<double> u_incr;
-  if (_neglectFluxesOnRHS) {
+  if (_neglectFluxesOnRHS)
+  {
     // this also governs how we accumulate in the fluxes and traces, and hence whether we should use zero BCs or the true BCs for solution increment
     u_incr = u;
-  } else {
+  }
+  else
+  {
     // we assume that _neglectFluxesOnRHS = true, in that we always use the full BCs, not their zero-imposing counterparts, when solving for solution increment
     TEUCHOS_TEST_FOR_EXCEPTION(true, std::invalid_argument, "_neglectFluxesOnRHS = true assumed various places");
   }
@@ -374,7 +415,8 @@ void NavierStokesVGPFormulation::addInflowCondition(SpatialFilterPtr inflowRegio
   if (spaceDim==3) _solnIncrement->bc()->addDirichlet(u3_hat, inflowRegion, u_incr->z());
 }
 
-void NavierStokesVGPFormulation::addOutflowCondition(SpatialFilterPtr outflowRegion) {
+void NavierStokesVGPFormulation::addOutflowCondition(SpatialFilterPtr outflowRegion)
+{
   int spaceDim = _backgroundFlow->mesh()->getTopology()->getSpaceDim();
 
   // my favorite way to do outflow conditions is via penalty constraints imposing a zero traction
@@ -383,12 +425,16 @@ void NavierStokesVGPFormulation::addOutflowCondition(SpatialFilterPtr outflowReg
   Teuchos::RCP< PenaltyConstraints > pcRCP;
   PenaltyConstraints* pc;
 
-  if (filter_incr.get() != NULL) {
+  if (filter_incr.get() != NULL)
+  {
     pc = dynamic_cast<PenaltyConstraints*>(filter_incr.get());
-    if (pc == NULL) {
+    if (pc == NULL)
+    {
       TEUCHOS_TEST_FOR_EXCEPTION(true, std::invalid_argument, "Can't add PenaltyConstraints when a non-PenaltyConstraints LocalStiffnessMatrixFilter already in place");
     }
-  } else {
+  }
+  else
+  {
     pcRCP = Teuchos::rcp( new PenaltyConstraints );
     pc = pcRCP.get();
   }
@@ -397,42 +443,50 @@ void NavierStokesVGPFormulation::addOutflowCondition(SpatialFilterPtr outflowReg
   pc->addConstraint(_t2==zero, outflowRegion);
   if (spaceDim==3) pc->addConstraint(_t3==zero, outflowRegion);
 
-  if (pcRCP != Teuchos::null) { // i.e., we're not just adding to a prior PenaltyConstraints object
+  if (pcRCP != Teuchos::null)   // i.e., we're not just adding to a prior PenaltyConstraints object
+  {
     _solnIncrement->setFilter(pcRCP);
   }
 }
 
-void NavierStokesVGPFormulation::addPointPressureCondition() {
+void NavierStokesVGPFormulation::addPointPressureCondition()
+{
   VarPtr p = this->p();
 
   _solnIncrement->bc()->addSinglePointBC(p->ID(), 0.0);
 
-  if (_solnIncrement->bc()->imposeZeroMeanConstraint(p->ID())) {
+  if (_solnIncrement->bc()->imposeZeroMeanConstraint(p->ID()))
+  {
     _solnIncrement->bc()->removeZeroMeanConstraint(p->ID());
   }
 }
 
-void NavierStokesVGPFormulation::addWallCondition(SpatialFilterPtr wall) {
+void NavierStokesVGPFormulation::addWallCondition(SpatialFilterPtr wall)
+{
   int spaceDim = _solnIncrement->mesh()->getTopology()->getSpaceDim();
   vector<double> zero(spaceDim, 0.0);
   addInflowCondition(wall, TFunction<double>::constant(zero));
 }
 
-void NavierStokesVGPFormulation::addZeroMeanPressureCondition() {
+void NavierStokesVGPFormulation::addZeroMeanPressureCondition()
+{
   VarPtr p = this->p();
 
   _solnIncrement->bc()->addZeroMeanConstraint(p);
 
-  if (_solnIncrement->bc()->singlePointBC(p->ID())) {
+  if (_solnIncrement->bc()->singlePointBC(p->ID()))
+  {
     _solnIncrement->bc()->removeSinglePointBC(p->ID());
   }
 }
 
-BFPtr NavierStokesVGPFormulation::bf() {
+BFPtr NavierStokesVGPFormulation::bf()
+{
   return _navierStokesBF;
 }
 
-Teuchos::RCP<ExactSolution<double>> NavierStokesVGPFormulation::exactSolution(TFunctionPtr<double> u_exact, TFunctionPtr<double> p_exact) {
+Teuchos::RCP<ExactSolution<double>> NavierStokesVGPFormulation::exactSolution(TFunctionPtr<double> u_exact, TFunctionPtr<double> p_exact)
+{
   int spaceDim = _backgroundFlow->mesh()->getTopology()->getSpaceDim();
 
   // f1 and f2 are those for Stokes, but minus u \cdot \grad u
@@ -489,7 +543,8 @@ Teuchos::RCP<ExactSolution<double>> NavierStokesVGPFormulation::exactSolution(TF
 
   t1n_exact = p_exact * n->x() - sigma1_exact * n;
   t2n_exact = p_exact * n->y() - sigma2_exact * n;
-  if (spaceDim==3) {
+  if (spaceDim==3)
+  {
     t3n_exact = p_exact * n->z() - sigma3_exact * n;
   }
 
@@ -503,7 +558,8 @@ Teuchos::RCP<ExactSolution<double>> NavierStokesVGPFormulation::exactSolution(TF
   mySolution->setSolutionFunction(t1n, t1n_exact * sideParity);
   mySolution->setSolutionFunction(t2n, t2n_exact * sideParity);
 
-  if (spaceDim==3) {
+  if (spaceDim==3)
+  {
     mySolution->setSolutionFunction(u3, u3_exact);
     mySolution->setSolutionFunction(t3n, t3n_exact);
   }
@@ -511,7 +567,8 @@ Teuchos::RCP<ExactSolution<double>> NavierStokesVGPFormulation::exactSolution(TF
   return mySolution;
 }
 
-TFunctionPtr<double> NavierStokesVGPFormulation::forcingFunction(int spaceDim, double Re, TFunctionPtr<double> u_exact, TFunctionPtr<double> p_exact) {
+TFunctionPtr<double> NavierStokesVGPFormulation::forcingFunction(int spaceDim, double Re, TFunctionPtr<double> u_exact, TFunctionPtr<double> p_exact)
+{
   // f1 and f2 are those for Stokes, but minus u \cdot \grad u
   double mu = 1.0 / Re;
   TFunctionPtr<double> u1_exact = u_exact->x();
@@ -520,12 +577,15 @@ TFunctionPtr<double> NavierStokesVGPFormulation::forcingFunction(int spaceDim, d
 
   TFunctionPtr<double> f;
 
-  if (spaceDim == 2) {
+  if (spaceDim == 2)
+  {
     TFunctionPtr<double> f1, f2;
     f1 = p_exact->dx() - mu * (u1_exact->dx()->dx() + u1_exact->dy()->dy()) + u1_exact * u1_exact->dx() + u2_exact * u1_exact->dy();
     f2 = p_exact->dy() - mu * (u2_exact->dx()->dx() + u2_exact->dy()->dy()) + u1_exact * u2_exact->dx() + u2_exact * u2_exact->dy();
     f = TFunction<double>::vectorize(f1, f2);
-  } else {
+  }
+  else
+  {
     TFunctionPtr<double> f1, f2, f3;
     f1 = p_exact->dx() - mu * (u1_exact->dx()->dx() + u1_exact->dy()->dy() + u1_exact->dz()->dz()) + u1_exact * u1_exact->dx() + u2_exact * u1_exact->dy() + u3_exact * u1_exact->dz();
     f2 = p_exact->dy() - mu * (u2_exact->dx()->dx() + u2_exact->dy()->dy() + u2_exact->dz()->dz()) + u1_exact * u2_exact->dx() + u2_exact * u2_exact->dy() + u3_exact * u2_exact->dz();
@@ -535,60 +595,72 @@ TFunctionPtr<double> NavierStokesVGPFormulation::forcingFunction(int spaceDim, d
   return f;
 }
 
-double NavierStokesVGPFormulation::L2NormSolution() {
+double NavierStokesVGPFormulation::L2NormSolution()
+{
   double l2_squared = _L2SolutionFunction->integrate(_backgroundFlow->mesh());
   return sqrt(l2_squared);
 }
 
-double NavierStokesVGPFormulation::L2NormSolutionIncrement() {
+double NavierStokesVGPFormulation::L2NormSolutionIncrement()
+{
   double l2_squared = _L2IncrementFunction->integrate(_solnIncrement->mesh());
   return sqrt(l2_squared);
 }
 
-int NavierStokesVGPFormulation::nonlinearIterationCount() {
+int NavierStokesVGPFormulation::nonlinearIterationCount()
+{
   return _nonlinearIterationCount;
 }
 
-VarPtr NavierStokesVGPFormulation::p() {
+VarPtr NavierStokesVGPFormulation::p()
+{
   VarFactoryPtr vf = _navierStokesBF->varFactory();
   return vf->fieldVar(S_P);
 }
 
-void NavierStokesVGPFormulation::setIP(IPPtr ip) {
+void NavierStokesVGPFormulation::setIP(IPPtr ip)
+{
   _solnIncrement->setIP(ip);
 }
 
-RefinementStrategyPtr NavierStokesVGPFormulation::getRefinementStrategy() {
+RefinementStrategyPtr NavierStokesVGPFormulation::getRefinementStrategy()
+{
   return _refinementStrategy;
 }
 
-void NavierStokesVGPFormulation::setRefinementStrategy(RefinementStrategyPtr refStrategy) {
+void NavierStokesVGPFormulation::setRefinementStrategy(RefinementStrategyPtr refStrategy)
+{
   _refinementStrategy = refStrategy;
 }
 
-void NavierStokesVGPFormulation::refine(RefinementStrategyPtr refStrategy) {
+void NavierStokesVGPFormulation::refine(RefinementStrategyPtr refStrategy)
+{
   _nonlinearIterationCount = 0;
   _solnIncrement->setRHS(_rhsForResidual);
   refStrategy->refine();
   _solnIncrement->setRHS(_rhsForSolve);
 }
 
-void NavierStokesVGPFormulation::refine() {
+void NavierStokesVGPFormulation::refine()
+{
   _nonlinearIterationCount = 0;
   _solnIncrement->setRHS(_rhsForResidual);
   _refinementStrategy->refine();
   _solnIncrement->setRHS(_rhsForSolve);
 }
 
-void NavierStokesVGPFormulation::hRefine() {
+void NavierStokesVGPFormulation::hRefine()
+{
   _hRefinementStrategy->refine();
 }
 
-void NavierStokesVGPFormulation::pRefine() {
+void NavierStokesVGPFormulation::pRefine()
+{
   _pRefinementStrategy->refine();
 }
 
-RHSPtr NavierStokesVGPFormulation::rhs(TFunctionPtr<double> f, bool excludeFluxesAndTraces) {
+RHSPtr NavierStokesVGPFormulation::rhs(TFunctionPtr<double> f, bool excludeFluxesAndTraces)
+{
   int spaceDim = _backgroundFlow->mesh()->getTopology()->getSpaceDim();
 
   // set the RHS:
@@ -599,7 +671,8 @@ RHSPtr NavierStokesVGPFormulation::rhs(TFunctionPtr<double> f, bool excludeFluxe
   VarPtr v3;
   if (spaceDim==3) v3 = this->v(3);
 
-  if (f != Teuchos::null) {
+  if (f != Teuchos::null)
+  {
     rhs->addTerm( f->x() * v1 );
     rhs->addTerm( f->y() * v2 );
     if (spaceDim == 3) rhs->addTerm( f->z() * v3 );
@@ -623,16 +696,20 @@ RHSPtr NavierStokesVGPFormulation::rhs(TFunctionPtr<double> f, bool excludeFluxe
   TFunctionPtr<double> u1_prev = TFunction<double>::solution(u1,backgroundFlowWeakReference);
   TFunctionPtr<double> u2_prev = TFunction<double>::solution(u2,backgroundFlowWeakReference);
   TFunctionPtr<double> u3_prev, sigma3_prev;
-  if (spaceDim == 3) {
+  if (spaceDim == 3)
+  {
     u3_prev = TFunction<double>::solution(u3,backgroundFlowWeakReference);
     sigma3_prev = TFunction<double>::solution(sigma3,backgroundFlowWeakReference);
   }
 
   // finally, add the u sigma term:
-  if (spaceDim == 2) {
+  if (spaceDim == 2)
+  {
     rhs->addTerm( -((u1_prev / _mu) * sigma1_prev->x() + (u2_prev / _mu) * sigma1_prev->y()) * v1 );
     rhs->addTerm( -((u1_prev / _mu) * sigma2_prev->x() + (u2_prev / _mu) * sigma2_prev->y()) * v2 );
-  } else {
+  }
+  else
+  {
     rhs->addTerm( -((u1_prev / _mu) * sigma1_prev->x() + (u2_prev / _mu) * sigma1_prev->y() + (u3_prev / _mu) * sigma1_prev->z()) * v1 );
     rhs->addTerm( -((u1_prev / _mu) * sigma2_prev->x() + (u2_prev / _mu) * sigma2_prev->y() + (u3_prev / _mu) * sigma2_prev->z()) * v2 );
     rhs->addTerm( -((u1_prev / _mu) * sigma3_prev->x() + (u2_prev / _mu) * sigma3_prev->y() + (u3_prev / _mu) * sigma3_prev->z()) * v3 );
@@ -641,166 +718,201 @@ RHSPtr NavierStokesVGPFormulation::rhs(TFunctionPtr<double> f, bool excludeFluxe
 }
 
 // ! Saves the solution(s) and mesh to an HDF5 format.
-void NavierStokesVGPFormulation::save(std::string prefixString) {
+void NavierStokesVGPFormulation::save(std::string prefixString)
+{
   _backgroundFlow->mesh()->saveToHDF5(prefixString+".mesh");
   _backgroundFlow->saveToHDF5(prefixString+".soln");
   _solnIncrement->saveToHDF5(prefixString+"_previous.soln");
 
-  if (_streamSolution != Teuchos::null) {
+  if (_streamSolution != Teuchos::null)
+  {
     _streamSolution->mesh()->saveToHDF5(prefixString+"_stream.mesh");
     _streamSolution->saveToHDF5(prefixString + "_stream.soln");
   }
 }
 
-TSolutionPtr<double> NavierStokesVGPFormulation::solution() {
+TSolutionPtr<double> NavierStokesVGPFormulation::solution()
+{
   return _backgroundFlow;
 }
 
-TSolutionPtr<double> NavierStokesVGPFormulation::solutionIncrement() {
+TSolutionPtr<double> NavierStokesVGPFormulation::solutionIncrement()
+{
   return _solnIncrement;
 }
 
-void NavierStokesVGPFormulation::solveAndAccumulate(double weight) {
+void NavierStokesVGPFormulation::solveAndAccumulate(double weight)
+{
   _solnIncrement->solve(_solver);
   bool allowEmptyCells = false;
   _backgroundFlow->addSolution(_solnIncrement, weight, allowEmptyCells, _neglectFluxesOnRHS);
   _nonlinearIterationCount++;
 }
 
-VarPtr NavierStokesVGPFormulation::streamPhi() {
-  if (_spaceDim == 2) {
-    if (_streamFormulation == Teuchos::null) {
+VarPtr NavierStokesVGPFormulation::streamPhi()
+{
+  if (_spaceDim == 2)
+  {
+    if (_streamFormulation == Teuchos::null)
+    {
       cout << "ERROR: streamPhi() called before initializeSolution called.  Returning null.\n";
       return Teuchos::null;
     }
     return _streamFormulation->phi();
-  } else {
+  }
+  else
+  {
     cout << "ERROR: stream function is only supported on 2D solutions.  Returning null.\n";
     return Teuchos::null;
   }
 }
 
-TSolutionPtr<double> NavierStokesVGPFormulation::streamSolution() {
-  if (_spaceDim == 2) {
-    if (_streamFormulation == Teuchos::null) {
+TSolutionPtr<double> NavierStokesVGPFormulation::streamSolution()
+{
+  if (_spaceDim == 2)
+  {
+    if (_streamFormulation == Teuchos::null)
+    {
       cout << "ERROR: streamPhi() called before initializeSolution called.  Returning null.\n";
       return Teuchos::null;
     }
     return _streamSolution;
-  } else {
+  }
+  else
+  {
     cout << "ERROR: stream function is only supported on 2D solutions.  Returning null.\n";
     return Teuchos::null;
   }
 }
 
-void NavierStokesVGPFormulation::setTimeStep(double dt) {
+void NavierStokesVGPFormulation::setTimeStep(double dt)
+{
   _dt->setValue(dt);
 }
 
-VarPtr NavierStokesVGPFormulation::sigma(int i) {
+VarPtr NavierStokesVGPFormulation::sigma(int i)
+{
   int spaceDim = _backgroundFlow->mesh()->getTopology()->getSpaceDim();
-  if (i > spaceDim) {
+  if (i > spaceDim)
+  {
     TEUCHOS_TEST_FOR_EXCEPTION(true, std::invalid_argument, "i must be less than or equal to spaceDim");
   }
   VarFactoryPtr vf = _navierStokesBF->varFactory();
-  switch (i) {
-    case 1:
-      return vf->fieldVar(S_SIGMA1);
-    case 2:
-      return vf->fieldVar(S_SIGMA2);
-    case 3:
-      return vf->fieldVar(S_SIGMA3);
+  switch (i)
+  {
+  case 1:
+    return vf->fieldVar(S_SIGMA1);
+  case 2:
+    return vf->fieldVar(S_SIGMA2);
+  case 3:
+    return vf->fieldVar(S_SIGMA3);
   }
   TEUCHOS_TEST_FOR_EXCEPTION(true, std::invalid_argument, "unhandled i value");
 }
 
-BFPtr NavierStokesVGPFormulation::stokesBF() {
+BFPtr NavierStokesVGPFormulation::stokesBF()
+{
   return _stokesBF;
 }
 
-VarPtr NavierStokesVGPFormulation::u(int i) {
+VarPtr NavierStokesVGPFormulation::u(int i)
+{
   int spaceDim = _backgroundFlow->mesh()->getTopology()->getSpaceDim();
-  if (i > spaceDim) {
+  if (i > spaceDim)
+  {
     TEUCHOS_TEST_FOR_EXCEPTION(true, std::invalid_argument, "i must be less than or equal to spaceDim");
   }
   VarFactoryPtr vf = _navierStokesBF->varFactory();
-  switch (i) {
-    case 1:
-      return vf->fieldVar(S_U1);
-    case 2:
-      return vf->fieldVar(S_U2);
-    case 3:
-      return vf->fieldVar(S_U3);
+  switch (i)
+  {
+  case 1:
+    return vf->fieldVar(S_U1);
+  case 2:
+    return vf->fieldVar(S_U2);
+  case 3:
+    return vf->fieldVar(S_U3);
   }
   TEUCHOS_TEST_FOR_EXCEPTION(true, std::invalid_argument, "unhandled i value");
 }
 
 // traces:
-VarPtr NavierStokesVGPFormulation::tn_hat(int i) {
+VarPtr NavierStokesVGPFormulation::tn_hat(int i)
+{
   int spaceDim = _backgroundFlow->mesh()->getTopology()->getSpaceDim();
-  if (i > spaceDim) {
+  if (i > spaceDim)
+  {
     TEUCHOS_TEST_FOR_EXCEPTION(true, std::invalid_argument, "i must be less than or equal to spaceDim");
   }
   VarFactoryPtr vf = _navierStokesBF->varFactory();
-  switch (i) {
-    case 1:
-      return vf->fluxVar(S_TN1_HAT);
-    case 2:
-      return vf->fluxVar(S_TN2_HAT);
-    case 3:
-      return vf->fluxVar(S_TN3_HAT);
+  switch (i)
+  {
+  case 1:
+    return vf->fluxVar(S_TN1_HAT);
+  case 2:
+    return vf->fluxVar(S_TN2_HAT);
+  case 3:
+    return vf->fluxVar(S_TN3_HAT);
   }
   TEUCHOS_TEST_FOR_EXCEPTION(true, std::invalid_argument, "unhandled i value");
 }
 
-VarPtr NavierStokesVGPFormulation::u_hat(int i) {
+VarPtr NavierStokesVGPFormulation::u_hat(int i)
+{
   int spaceDim = _backgroundFlow->mesh()->getTopology()->getSpaceDim();
-  if (i > spaceDim) {
+  if (i > spaceDim)
+  {
     TEUCHOS_TEST_FOR_EXCEPTION(true, std::invalid_argument, "i must be less than or equal to spaceDim");
   }
   VarFactoryPtr vf = _navierStokesBF->varFactory();
-  switch (i) {
-    case 1:
-      return vf->traceVar(S_U1_HAT);
-    case 2:
-      return vf->traceVar(S_U2_HAT);
-    case 3:
-      return vf->traceVar(S_U3_HAT);
+  switch (i)
+  {
+  case 1:
+    return vf->traceVar(S_U1_HAT);
+  case 2:
+    return vf->traceVar(S_U2_HAT);
+  case 3:
+    return vf->traceVar(S_U3_HAT);
   }
   TEUCHOS_TEST_FOR_EXCEPTION(true, std::invalid_argument, "unhandled i value");
 }
 
 // test variables:
-VarPtr NavierStokesVGPFormulation::tau(int i) {
+VarPtr NavierStokesVGPFormulation::tau(int i)
+{
   int spaceDim = _backgroundFlow->mesh()->getTopology()->getSpaceDim();
-  if (i > spaceDim) {
+  if (i > spaceDim)
+  {
     TEUCHOS_TEST_FOR_EXCEPTION(true, std::invalid_argument, "i must be less than or equal to spaceDim");
   }
   VarFactoryPtr vf = _navierStokesBF->varFactory();
-  switch (i) {
-    case 1:
-      return vf->testVar(S_TAU1, HDIV);
-    case 2:
-      return vf->testVar(S_TAU2, HDIV);
-    case 3:
-      return vf->testVar(S_TAU3, HDIV);
+  switch (i)
+  {
+  case 1:
+    return vf->testVar(S_TAU1, HDIV);
+  case 2:
+    return vf->testVar(S_TAU2, HDIV);
+  case 3:
+    return vf->testVar(S_TAU3, HDIV);
   }
   TEUCHOS_TEST_FOR_EXCEPTION(true, std::invalid_argument, "unhandled i value");
 }
 
-VarPtr NavierStokesVGPFormulation::v(int i) {
+VarPtr NavierStokesVGPFormulation::v(int i)
+{
   int spaceDim = _backgroundFlow->mesh()->getTopology()->getSpaceDim();
-  if (i > spaceDim) {
+  if (i > spaceDim)
+  {
     TEUCHOS_TEST_FOR_EXCEPTION(true, std::invalid_argument, "i must be less than or equal to spaceDim");
   }
   VarFactoryPtr vf = _navierStokesBF->varFactory();
-  switch (i) {
-    case 1:
-      return vf->testVar(S_V1, HGRAD);
-    case 2:
-      return vf->testVar(S_V2, HGRAD);
-    case 3:
-      return vf->testVar(S_V3, HGRAD);
+  switch (i)
+  {
+  case 1:
+    return vf->testVar(S_V1, HGRAD);
+  case 2:
+    return vf->testVar(S_V2, HGRAD);
+  case 3:
+    return vf->testVar(S_V3, HGRAD);
   }
   TEUCHOS_TEST_FOR_EXCEPTION(true, std::invalid_argument, "unhandled i value");
 }

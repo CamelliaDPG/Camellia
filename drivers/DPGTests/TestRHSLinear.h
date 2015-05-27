@@ -5,31 +5,31 @@
 //
 // Copyright © 2011 Sandia Corporation. All Rights Reserved.
 //
-// Redistribution and use in source and binary forms, with or without modification, are 
+// Redistribution and use in source and binary forms, with or without modification, are
 // permitted provided that the following conditions are met:
-// 1. Redistributions of source code must retain the above copyright notice, this list of 
+// 1. Redistributions of source code must retain the above copyright notice, this list of
 // conditions and the following disclaimer.
-// 2. Redistributions in binary form must reproduce the above copyright notice, this list of 
-// conditions and the following disclaimer in the documentation and/or other materials 
+// 2. Redistributions in binary form must reproduce the above copyright notice, this list of
+// conditions and the following disclaimer in the documentation and/or other materials
 // provided with the distribution.
-// 3. The name of the author may not be used to endorse or promote products derived from 
+// 3. The name of the author may not be used to endorse or promote products derived from
 // this software without specific prior written permission.
 //
-// THIS SOFTWARE IS PROVIDED BY SANDIA CORPORATION "AS IS" AND ANY 
-// EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE 
-// IMPLIED WARRANTIES OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR 
-// PURPOSE ARE DISCLAIMED. IN NO EVENT SHALL THE AUTHOR BE LIABLE FOR 
-// ANY DIRECT, INDIRECT, INCIDENTAL, SPECIAL, EXEMPLARY, OR 
-// CONSEQUENTIAL DAMAGES (INCLUDING, BUT NOT LIMITED TO, PROCUREMENT 
-// OF SUBSTITUTE GOODS OR SERVICES; LOSS OF USE, DATA, OR PROFITS; OR 
-// BUSINESS INTERRUPTION) HOWEVER CAUSED AND ON ANY THEORY OF 
-// LIABILITY, WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT (INCLUDING 
-// NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE OF THIS 
+// THIS SOFTWARE IS PROVIDED BY SANDIA CORPORATION "AS IS" AND ANY
+// EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE
+// IMPLIED WARRANTIES OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR
+// PURPOSE ARE DISCLAIMED. IN NO EVENT SHALL THE AUTHOR BE LIABLE FOR
+// ANY DIRECT, INDIRECT, INCIDENTAL, SPECIAL, EXEMPLARY, OR
+// CONSEQUENTIAL DAMAGES (INCLUDING, BUT NOT LIMITED TO, PROCUREMENT
+// OF SUBSTITUTE GOODS OR SERVICES; LOSS OF USE, DATA, OR PROFITS; OR
+// BUSINESS INTERRUPTION) HOWEVER CAUSED AND ON ANY THEORY OF
+// LIABILITY, WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT (INCLUDING
+// NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE OF THIS
 // SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 //
 // Questions? Contact Nate Roberts (nate@nateroberts.com).
 //
-// @HEADER 
+// @HEADER
 /*
  *  TestRHSLinear.h
  *
@@ -41,27 +41,33 @@
 
 using namespace Intrepid;
 
-class TestRHSLinear : public RHS {
+class TestRHSLinear : public RHS
+{
 public:
   TestRHSLinear() : RHS(true) {} // true: legacy subclass of RHS
-  bool nonZeroRHS(int testVarID) {
+  bool nonZeroRHS(int testVarID)
+  {
     return true;
   }
-  
-  void rhs(int testVarID, const FieldContainer<double> &physicalPoints, FieldContainer<double> &values) {
+
+  void rhs(int testVarID, const FieldContainer<double> &physicalPoints, FieldContainer<double> &values)
+  {
     int numCells = physicalPoints.dimension(0);
     int numPoints = physicalPoints.dimension(1);
     values.resize(numCells,numPoints);
-    for (int cellIndex=0; cellIndex<numCells; cellIndex++) {
-      for (int ptIndex=0; ptIndex<numPoints; ptIndex++) {
+    for (int cellIndex=0; cellIndex<numCells; cellIndex++)
+    {
+      for (int ptIndex=0; ptIndex<numPoints; ptIndex++)
+      {
         double x = physicalPoints(cellIndex,ptIndex,0);
         double y = physicalPoints(cellIndex,ptIndex,1);
         values(cellIndex,ptIndex) = 6.0*x+12.0*y;
       }
     }
   }
-  
-  static void expectedRHSForCubicOnQuad(FieldContainer<double> &rhsVector) {
+
+  static void expectedRHSForCubicOnQuad(FieldContainer<double> &rhsVector)
+  {
     // values from Mathematica notebook RHSIntegrationTests (on reference quad)
     rhsVector.resize(1,16);
     rhsVector(0,0) = -0.49999999999999967;
@@ -81,8 +87,9 @@ public:
     rhsVector(0,14) = 2.0393446629166325;
     rhsVector(0,15) = 0.49999999999999917;
   }
-  
-  static void expectedRHSForCubicOnTri(FieldContainer<double> &rhsVector) {
+
+  static void expectedRHSForCubicOnTri(FieldContainer<double> &rhsVector)
+  {
     // values from Mathematica notebook RHSIntegrationTests (on lower half of ref quad)
     rhsVector.resize(1,10);
     rhsVector(0,0) = -5.704166666666664;
@@ -96,8 +103,9 @@ public:
     rhsVector(0,8) = 10.228279740156152;
     rhsVector(0,9) = -0.32916666666667055;
   }
-  
-  static void expectedRHSForCubicOnUnitTri(FieldContainer<double> &rhsVector) {
+
+  static void expectedRHSForCubicOnUnitTri(FieldContainer<double> &rhsVector)
+  {
     // values from Mathematica notebook RHSIntegrationTests (on lower half of (0,1)^2, the ref tri reflected)
     rhsVector.resize(1,10);
     rhsVector(0,0) = 0.06666666666666643;
@@ -111,8 +119,9 @@ public:
     rhsVector(0,8) = 0.6545084971874751;
     rhsVector(0,9) = 0.0666666666666651;
   }
-  
-  static void expectedRHSForCubicOnUnitQuad(FieldContainer<double> &rhsVector) {
+
+  static void expectedRHSForCubicOnUnitQuad(FieldContainer<double> &rhsVector)
+  {
     // values from Mathematica notebook RHSIntegrationTests (on (0,1)^2, NOT ref quad)
     rhsVector.resize(1,16);
     rhsVector(0,0) = 0.;

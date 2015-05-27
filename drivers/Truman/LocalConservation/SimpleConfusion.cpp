@@ -26,13 +26,16 @@ double halfWidth = 1;
 int numRefs = 0;
 int H1Order = 3, pToAdd = 2;
 
-class EpsilonScaling : public hFunction {
+class EpsilonScaling : public hFunction
+{
   double _epsilon;
 public:
-  EpsilonScaling(double epsilon) {
+  EpsilonScaling(double epsilon)
+  {
     _epsilon = epsilon;
   }
-  double value(double x, double y, double h) {
+  double value(double x, double y, double h)
+  {
     // should probably by sqrt(_epsilon/h) instead (note parentheses)
     // but this is what was in the old code, so sticking with it for now.
     double scaling = min(_epsilon/(h*h), 1.0);
@@ -41,43 +44,54 @@ public:
   }
 };
 
-class ScalarParamFunction : public Function {
+class ScalarParamFunction : public Function
+{
   double _a;
-  public:
-  ScalarParamFunction(double a) : Function(0){
+public:
+  ScalarParamFunction(double a) : Function(0)
+  {
     _a = a;
   }
-  void set_param(double a){
+  void set_param(double a)
+  {
     _a = a;
   }
-  double get_param(){
+  double get_param()
+  {
     return _a;
   }
-  void values(FieldContainer<double> &values, BasisCachePtr basisCache) {
+  void values(FieldContainer<double> &values, BasisCachePtr basisCache)
+  {
     CHECK_VALUES_RANK(values);
     values.initialize(_a);
   }
 };
 
-class LeftBoundary : public SpatialFilter {
-  public:
-    bool matchesPoint(double x, double y) {
-      double tol = 1e-14;
-      return (abs(x) < tol);
-    }
+class LeftBoundary : public SpatialFilter
+{
+public:
+  bool matchesPoint(double x, double y)
+  {
+    double tol = 1e-14;
+    return (abs(x) < tol);
+  }
 };
 
-class RightBoundary : public SpatialFilter {
+class RightBoundary : public SpatialFilter
+{
 public:
-  bool matchesPoint(double x, double y) {
+  bool matchesPoint(double x, double y)
+  {
     double tol = 1e-14;
     return (abs(x-4.0) < tol);
   }
 };
 
-class TopBottomBoundary : public SpatialFilter {
+class TopBottomBoundary : public SpatialFilter
+{
 public:
-  bool matchesPoint(double x, double y) {
+  bool matchesPoint(double x, double y)
+  {
     double tol = 1e-14;
     bool topMatch = (abs(y-2.0) < tol);
     bool bottomMatch = (abs(y+2.0) < tol);
@@ -86,57 +100,70 @@ public:
 };
 
 // boundary value for u
-class ZeroBC : public Function {
-  public:
-    ZeroBC() : Function(0) {}
-    void values(FieldContainer<double> &values, BasisCachePtr basisCache) {
-      int numCells = values.dimension(0);
-      int numPoints = values.dimension(1);
+class ZeroBC : public Function
+{
+public:
+  ZeroBC() : Function(0) {}
+  void values(FieldContainer<double> &values, BasisCachePtr basisCache)
+  {
+    int numCells = values.dimension(0);
+    int numPoints = values.dimension(1);
 
-      const FieldContainer<double> *points = &(basisCache->getPhysicalCubaturePoints());
-      double tol=1e-14;
-      for (int cellIndex=0; cellIndex<numCells; cellIndex++) {
-        for (int ptIndex=0; ptIndex<numPoints; ptIndex++) {
-          values(cellIndex, ptIndex) = 0;
-        }
+    const FieldContainer<double> *points = &(basisCache->getPhysicalCubaturePoints());
+    double tol=1e-14;
+    for (int cellIndex=0; cellIndex<numCells; cellIndex++)
+    {
+      for (int ptIndex=0; ptIndex<numPoints; ptIndex++)
+      {
+        values(cellIndex, ptIndex) = 0;
       }
     }
+  }
 };
 
 // boundary value for sigma_n
-class InletBC : public Function {
-  public:
-    InletBC() : Function(0) {}
-    void values(FieldContainer<double> &values, BasisCachePtr basisCache) {
-      int numCells = values.dimension(0);
-      int numPoints = values.dimension(1);
+class InletBC : public Function
+{
+public:
+  InletBC() : Function(0) {}
+  void values(FieldContainer<double> &values, BasisCachePtr basisCache)
+  {
+    int numCells = values.dimension(0);
+    int numPoints = values.dimension(1);
 
-      const FieldContainer<double> *points = &(basisCache->getPhysicalCubaturePoints());
-      for (int cellIndex=0; cellIndex<numCells; cellIndex++) {
-        for (int ptIndex=0; ptIndex<numPoints; ptIndex++) {
-          double x = (*points)(cellIndex,ptIndex,0);
-          double y = (*points)(cellIndex,ptIndex,1);
-          if (abs(y) <= halfWidth)
-            values(cellIndex, ptIndex) = -1.0*(1.0-y*y);
-          else
-            values(cellIndex, ptIndex) = 0;
-        }
+    const FieldContainer<double> *points = &(basisCache->getPhysicalCubaturePoints());
+    for (int cellIndex=0; cellIndex<numCells; cellIndex++)
+    {
+      for (int ptIndex=0; ptIndex<numPoints; ptIndex++)
+      {
+        double x = (*points)(cellIndex,ptIndex,0);
+        double y = (*points)(cellIndex,ptIndex,1);
+        if (abs(y) <= halfWidth)
+          values(cellIndex, ptIndex) = -1.0*(1.0-y*y);
+        else
+          values(cellIndex, ptIndex) = 0;
       }
     }
+  }
 };
 
-class Beta : public Function {
+class Beta : public Function
+{
 public:
   Beta() : Function(1) {}
-  void values(FieldContainer<double> &values, BasisCachePtr basisCache) {
+  void values(FieldContainer<double> &values, BasisCachePtr basisCache)
+  {
     int numCells = values.dimension(0);
     int numPoints = values.dimension(1);
     int spaceDim = values.dimension(2);
-    
+
     const FieldContainer<double> *points = &(basisCache->getPhysicalCubaturePoints());
-    for (int cellIndex=0; cellIndex<numCells; cellIndex++) {
-      for (int ptIndex=0; ptIndex<numPoints; ptIndex++) {
-        for (int d = 0; d < spaceDim; d++) {
+    for (int cellIndex=0; cellIndex<numCells; cellIndex++)
+    {
+      for (int ptIndex=0; ptIndex<numPoints; ptIndex++)
+      {
+        for (int d = 0; d < spaceDim; d++)
+        {
           double x = (*points)(cellIndex,ptIndex,0);
           double y = (*points)(cellIndex,ptIndex,1);
           values(cellIndex,ptIndex,0) = 1;
@@ -147,7 +174,8 @@ public:
   }
 };
 
-int main(int argc, char *argv[]) {
+int main(int argc, char *argv[])
+{
   // Process command line arguments
   if (argc > 1)
     epsilon = atof(argv[1]);
@@ -169,22 +197,22 @@ int main(int argc, char *argv[]) {
 
   ////////////////////   DECLARE VARIABLES   ///////////////////////
   // define test variables
-  VarFactory varFactory; 
+  VarFactory varFactory;
   VarPtr tau = varFactory.testVar("\\tau", HDIV);
   VarPtr v = varFactory.testVar("v", HGRAD);
-  
+
   // define trial variables
   VarPtr uhat = varFactory.traceVar("\\widehat{u}");
   VarPtr beta_n_u_minus_sigma_n = varFactory.fluxVar("\\widehat{\\beta \\cdot n u - \\sigma_{n}}");
   VarPtr u = varFactory.fieldVar("u");
   VarPtr sigma1 = varFactory.fieldVar("\\sigma_1");
   VarPtr sigma2 = varFactory.fieldVar("\\sigma_2");
-  
+
   ////////////////////   BUILD MESH   ///////////////////////
   BFPtr confusionBF = Teuchos::rcp( new BF(varFactory) );
   // define nodes for mesh
   FieldContainer<double> meshBoundary(4,2);
-  
+
   meshBoundary(0,0) =  0.0; // x1
   meshBoundary(0,1) = -2.0; // y1
   meshBoundary(1,0) =  4.0;
@@ -195,10 +223,10 @@ int main(int argc, char *argv[]) {
   meshBoundary(3,1) =  2.0;
 
   int horizontalCells = 8, verticalCells = 8;
-  
+
   // create a pointer to a new mesh:
   Teuchos::RCP<Mesh> mesh = Mesh::buildQuadMesh(meshBoundary, horizontalCells, verticalCells,
-                                                confusionBF, H1Order, H1Order+pToAdd);
+                            confusionBF, H1Order, H1Order+pToAdd);
 
   ////////////////////////////////////////////////////////////////////
   // INITIALIZE FLOW FUNCTIONS
@@ -207,21 +235,21 @@ int main(int argc, char *argv[]) {
   BCPtr nullBC = Teuchos::rcp((BC*)NULL);
   RHSPtr nullRHS = Teuchos::rcp((RHS*)NULL);
   IPPtr nullIP = Teuchos::rcp((IP*)NULL);
-  SolutionPtr prevTimeFlow = Teuchos::rcp(new Solution(mesh, nullBC, nullRHS, nullIP) );  
-  SolutionPtr flowResidual = Teuchos::rcp(new Solution(mesh, nullBC, nullRHS, nullIP) );  
+  SolutionPtr prevTimeFlow = Teuchos::rcp(new Solution(mesh, nullBC, nullRHS, nullIP) );
+  SolutionPtr flowResidual = Teuchos::rcp(new Solution(mesh, nullBC, nullRHS, nullIP) );
 
   FunctionPtr u_prev_time = Teuchos::rcp( new PreviousSolutionFunction(prevTimeFlow, u) );
-  
+
   ////////////////////   DEFINE BILINEAR FORM   ///////////////////////
   Teuchos::RCP<RHSEasy> rhs = Teuchos::rcp( new RHSEasy );
-  FunctionPtr invDt = Teuchos::rcp(new ScalarParamFunction(1.0/dt));    
+  FunctionPtr invDt = Teuchos::rcp(new ScalarParamFunction(1.0/dt));
 
   // tau terms:
   confusionBF->addTerm(sigma1 / epsilon, tau->x());
   confusionBF->addTerm(sigma2 / epsilon, tau->y());
   confusionBF->addTerm(u, tau->div());
   confusionBF->addTerm(-uhat, tau->dot_normal());
-  
+
   // v terms:
   confusionBF->addTerm( sigma1, v->dx() );
   confusionBF->addTerm( sigma2, v->dy() );
@@ -233,11 +261,11 @@ int main(int argc, char *argv[]) {
     confusionBF->addTerm( u, invDt*v );
     rhs->addTerm( u_prev_time * invDt * v );
   }
-  
+
   ////////////////////   SPECIFY RHS   ///////////////////////
   FunctionPtr f = Teuchos::rcp( new ConstantScalarFunction(0.0) );
   rhs->addTerm( f * v ); // obviously, with f = 0 adding this term is not necessary!
-  
+
   ////////////////////   DEFINE INNER PRODUCT(S)   ///////////////////////
   // mathematician's norm
   IPPtr mathIP = Teuchos::rcp(new IP());
@@ -255,7 +283,7 @@ int main(int argc, char *argv[]) {
 
   // robust test norm
   IPPtr robIP = Teuchos::rcp(new IP);
-  FunctionPtr ip_scaling = Teuchos::rcp( new EpsilonScaling(epsilon) ); 
+  FunctionPtr ip_scaling = Teuchos::rcp( new EpsilonScaling(epsilon) );
   if (!enforceLocalConservation || !steady)
     robIP->addTerm( ip_scaling * v );
   robIP->addTerm( sqrt(epsilon) * v->grad() );
@@ -297,9 +325,10 @@ int main(int argc, char *argv[]) {
   functionMap[sigma2->ID()] = Teuchos::rcp( new ConstantScalarFunction(sigma2_free) );
 
   prevTimeFlow->projectOntoMesh(functionMap);
-  
+
   ////////////////////   SOLVE & REFINE   ///////////////////////
-  if (enforceLocalConservation) {
+  if (enforceLocalConservation)
+  {
     if (steady)
     {
       FunctionPtr zero = Teuchos::rcp( new ConstantScalarFunction(0.0) );
@@ -315,11 +344,12 @@ int main(int argc, char *argv[]) {
       solution->lagrangeConstraints()->addConstraint(conservedQuantity == u_prev_time * invDt);
     }
   }
-  
+
   double energyThreshold = 0.2; // for mesh refinements
   RefinementStrategy refinementStrategy( solution, energyThreshold );
-  
-  for (int refIndex=0; refIndex<=numRefs; refIndex++){    
+
+  for (int refIndex=0; refIndex<=numRefs; refIndex++)
+  {
     if (steady)
     {
       solution->solve(false);
@@ -334,8 +364,8 @@ int main(int argc, char *argv[]) {
         FunctionPtr flux = Teuchos::rcp( new PreviousSolutionFunction(solution, beta_n_u_minus_sigma_n) );
         FunctionPtr zero = Teuchos::rcp( new ConstantScalarFunction(0.0) );
         Teuchos::Tuple<double, 3> fluxImbalances = checkConservation(flux, zero, varFactory, mesh);
-        cout << "Mass flux: Largest Local = " << fluxImbalances[0] 
-          << ", Global = " << fluxImbalances[1] << ", Sum Abs = " << fluxImbalances[2] << endl;
+        cout << "Mass flux: Largest Local = " << fluxImbalances[0]
+             << ", Global = " << fluxImbalances[1] << ", Sum Abs = " << fluxImbalances[2] << endl;
       }
     }
     else
@@ -348,12 +378,12 @@ int main(int argc, char *argv[]) {
         solution->solve(false);
         // Subtract solutions to get residual
         flowResidual->setSolution(solution);
-        flowResidual->addSolution(prevTimeFlow, -1.0);       
+        flowResidual->addSolution(prevTimeFlow, -1.0);
         double L2u = flowResidual->L2NormOfSolutionGlobal(u->ID());
         double L2sigma1 = flowResidual->L2NormOfSolutionGlobal(sigma1->ID());
         double L2sigma2 = flowResidual->L2NormOfSolutionGlobal(sigma2->ID());
         L2_time_residual = sqrt(L2u*L2u + L2sigma1*L2sigma1 + L2sigma2*L2sigma2);
-        cout << endl << "Timestep: " << timestepCount << ", dt = " << dt << ", Time residual = " << L2_time_residual << endl;    	
+        cout << endl << "Timestep: " << timestepCount << ", dt = " << dt << ", Time residual = " << L2_time_residual << endl;
 
         if (rank == 0)
         {
@@ -366,8 +396,8 @@ int main(int argc, char *argv[]) {
           FunctionPtr source = Teuchos::rcp( new PreviousSolutionFunction(flowResidual, u) );
           source = invDt * source;
           Teuchos::Tuple<double, 3> fluxImbalances = checkConservation(flux, source, varFactory, mesh);
-          cout << "Mass flux: Largest Local = " << fluxImbalances[0] 
-            << ", Global = " << fluxImbalances[1] << ", Sum Abs = " << fluxImbalances[2] << endl;
+          cout << "Mass flux: Largest Local = " << fluxImbalances[0]
+               << ", Global = " << fluxImbalances[1] << ", Sum Abs = " << fluxImbalances[2] << endl;
         }
 
         prevTimeFlow->setSolution(solution); // reset previous time solution to current time sol
@@ -379,6 +409,6 @@ int main(int argc, char *argv[]) {
       refinementStrategy.refine(rank==0); // print to console on rank 0
     cout << endl;
   }
-  
+
   return 0;
 }

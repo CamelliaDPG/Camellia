@@ -18,172 +18,194 @@ double pi = 2.0*acos(0.0);
 
 int H1Order = 4, pToAdd = 2;
 
-class ConstantXBoundary : public SpatialFilter {
-   private:
-      double xval;
-   public:
-      ConstantXBoundary(double xval): xval(xval) {};
-      bool matchesPoint(double x, double y) {
-         double tol = 1e-14;
-         return (abs(x-xval) < tol);
-      }
+class ConstantXBoundary : public SpatialFilter
+{
+private:
+  double xval;
+public:
+  ConstantXBoundary(double xval): xval(xval) {};
+  bool matchesPoint(double x, double y)
+  {
+    double tol = 1e-14;
+    return (abs(x-xval) < tol);
+  }
 };
 
-class ConstantYBoundary : public SpatialFilter {
-   private:
-      double yval;
-   public:
-      ConstantYBoundary(double yval): yval(yval) {};
-      bool matchesPoint(double x, double y) {
-         double tol = 1e-14;
-         return (abs(y-yval) < tol);
-      }
+class ConstantYBoundary : public SpatialFilter
+{
+private:
+  double yval;
+public:
+  ConstantYBoundary(double yval): yval(yval) {};
+  bool matchesPoint(double x, double y)
+  {
+    double tol = 1e-14;
+    return (abs(y-yval) < tol);
+  }
 };
 
-class ExactU1 : public Function {
-  public:
-    double R;
-    ExactU1(double R) : Function(0), R(R) {}
-    void values(FieldContainer<double> &values, BasisCachePtr basisCache) {
-      int numCells = values.dimension(0);
-      int numPoints = values.dimension(1);
+class ExactU1 : public Function
+{
+public:
+  double R;
+  ExactU1(double R) : Function(0), R(R) {}
+  void values(FieldContainer<double> &values, BasisCachePtr basisCache)
+  {
+    int numCells = values.dimension(0);
+    int numPoints = values.dimension(1);
 
-      const FieldContainer<double> *points = &(basisCache->getPhysicalCubaturePoints());
-      for (int cellIndex=0; cellIndex<numCells; cellIndex++) {
-        for (int ptIndex=0; ptIndex<numPoints; ptIndex++) {
-          double x = (*points)(cellIndex,ptIndex,0);
-          double y = (*points)(cellIndex,ptIndex,1);
-          values(cellIndex, ptIndex) = 0.75-1./(4*(1+exp(R*(-getTime()-4*x+4*y)/32)));
-        }
-      }
-    }
-};
-
-class ExactU2 : public Function {
-  public:
-    double R;
-    ExactU2(double R) : Function(0), R(R) {}
-    void values(FieldContainer<double> &values, BasisCachePtr basisCache) {
-      int numCells = values.dimension(0);
-      int numPoints = values.dimension(1);
-
-      const FieldContainer<double> *points = &(basisCache->getPhysicalCubaturePoints());
-      for (int cellIndex=0; cellIndex<numCells; cellIndex++) {
-        for (int ptIndex=0; ptIndex<numPoints; ptIndex++) {
-          double x = (*points)(cellIndex,ptIndex,0);
-          double y = (*points)(cellIndex,ptIndex,1);
-          values(cellIndex, ptIndex) = 0.75+1./(4*(1+exp(R*(-getTime()-4*x+4*y)/32)));
-        }
-      }
-    }
-};
-
-class ExactSigma1 : public Function {
-  public:
-    double R;
-    ExactSigma1(double R) : Function(1), R(R) {}
-    void values(FieldContainer<double> &values, BasisCachePtr basisCache) {
-      int numCells = values.dimension(0);
-      int numPoints = values.dimension(1);
-
-      const FieldContainer<double> *points = &(basisCache->getPhysicalCubaturePoints());
-      for (int cellIndex=0; cellIndex<numCells; cellIndex++) {
-        for (int ptIndex=0; ptIndex<numPoints; ptIndex++) {
-          double x = (*points)(cellIndex,ptIndex,0);
-          double y = (*points)(cellIndex,ptIndex,1);
-          values(cellIndex, ptIndex, 0) = -1./32*exp(R/32*(-getTime()-4*x+4*y))/pow(1+exp(R*(-getTime()-4*x+4*y)/32),2);
-          values(cellIndex, ptIndex, 1) = 1./32*exp(R/32*(-getTime()-4*x+4*y))/pow(1+exp(R*(-getTime()-4*x+4*y)/32),2);
-        }
-      }
-    }
-};
-
-class ExactSigma2 : public Function {
-  public:
-    double R;
-    ExactSigma2(double R) : Function(1), R(R) {}
-    void values(FieldContainer<double> &values, BasisCachePtr basisCache) {
-      int numCells = values.dimension(0);
-      int numPoints = values.dimension(1);
-
-      const FieldContainer<double> *points = &(basisCache->getPhysicalCubaturePoints());
-      for (int cellIndex=0; cellIndex<numCells; cellIndex++) {
-        for (int ptIndex=0; ptIndex<numPoints; ptIndex++) {
-          double x = (*points)(cellIndex,ptIndex,0);
-          double y = (*points)(cellIndex,ptIndex,1);
-          values(cellIndex, ptIndex, 0) = 1./32*exp(R/32*(-getTime()-4*x+4*y))/pow(1+exp(R*(-getTime()-4*x+4*y)/32),2);
-          values(cellIndex, ptIndex, 1) = -1./32*exp(R/32*(-getTime()-4*x+4*y))/pow(1+exp(R*(-getTime()-4*x+4*y)/32),2);
-        }
-      }
-    }
-};
-
-class BurgersSteadyResidual : public SteadyResidual{
-  private:
-    vector<double> beta;
-    double R;
-  public:
-    BurgersSteadyResidual(VarFactory &varFactory, double R):
-      SteadyResidual(varFactory), R(R) {};
-    LinearTermPtr createResidual(SolutionPtr solution, bool includeBoundaryTerms)
+    const FieldContainer<double> *points = &(basisCache->getPhysicalCubaturePoints());
+    for (int cellIndex=0; cellIndex<numCells; cellIndex++)
     {
-      VarPtr tau1 = varFactory.testVar("tau1", HDIV);
-      VarPtr tau2 = varFactory.testVar("tau2", HDIV);
-      VarPtr v1 = varFactory.testVar("v1", HGRAD);
-      VarPtr v2 = varFactory.testVar("v2", HGRAD);
-
-      // define trial variables
-      VarPtr u1 = varFactory.fieldVar("u1");
-      VarPtr u2 = varFactory.fieldVar("u2");
-      VarPtr sigma1 = varFactory.fieldVar("sigma1", VECTOR_L2);
-      VarPtr sigma2 = varFactory.fieldVar("sigma2", VECTOR_L2);
-      VarPtr u1hat = varFactory.traceVar("u1hat");
-      VarPtr u2hat = varFactory.traceVar("u2hat");
-      VarPtr f1hat = varFactory.fluxVar("f1hat");
-      VarPtr f2hat = varFactory.fluxVar("f2hat");
-
-      FunctionPtr u1_prev = Function::solution(u1, solution);
-      FunctionPtr u2_prev = Function::solution(u2, solution);
-      FunctionPtr sigma1_prev = Function::solution(sigma1, solution);
-      FunctionPtr sigma2_prev = Function::solution(sigma2, solution);
-      FunctionPtr u1hat_prev = Function::solution(u1hat, solution);
-      FunctionPtr u2hat_prev = Function::solution(u2hat, solution);
-      FunctionPtr f1hat_prev = Function::solution(f1hat, solution);
-      FunctionPtr f2hat_prev = Function::solution(f2hat, solution);
-
-      vector<double> e1(2); // (1,0)
-      e1[0] = R;
-      vector<double> e2(2); // (0,1)
-      e2[1] = R;
-      FunctionPtr Rbeta = e1 * u1_prev + e2 * u2_prev;
-      FunctionPtr Rfunc = Function::constant(R);
-
-      LinearTermPtr residual = Teuchos::rcp( new LinearTerm );
-      residual->addTerm( Rfunc*sigma1_prev * tau1 );
-      residual->addTerm( Rfunc*sigma2_prev * tau2 );
-      residual->addTerm( u1_prev * tau1->div() );
-      residual->addTerm( u2_prev * tau2->div() );
-      if (includeBoundaryTerms)
+      for (int ptIndex=0; ptIndex<numPoints; ptIndex++)
       {
-        residual->addTerm( -u1hat_prev * tau1->dot_normal());
-        residual->addTerm( -u2hat_prev * tau2->dot_normal());
+        double x = (*points)(cellIndex,ptIndex,0);
+        double y = (*points)(cellIndex,ptIndex,1);
+        values(cellIndex, ptIndex) = 0.75-1./(4*(1+exp(R*(-getTime()-4*x+4*y)/32)));
       }
-
-      residual->addTerm( Rbeta*sigma1_prev * v1);
-      residual->addTerm( Rbeta*sigma2_prev * v2);
-      residual->addTerm( sigma1_prev * v1->grad() );
-      residual->addTerm( sigma2_prev * v2->grad() );
-      if (includeBoundaryTerms)
-      {
-        residual->addTerm( -f1hat_prev * v1);
-        residual->addTerm( -f2hat_prev * v2);
-      }
-
-      return residual;
     }
+  }
 };
 
-int main(int argc, char *argv[]) {
+class ExactU2 : public Function
+{
+public:
+  double R;
+  ExactU2(double R) : Function(0), R(R) {}
+  void values(FieldContainer<double> &values, BasisCachePtr basisCache)
+  {
+    int numCells = values.dimension(0);
+    int numPoints = values.dimension(1);
+
+    const FieldContainer<double> *points = &(basisCache->getPhysicalCubaturePoints());
+    for (int cellIndex=0; cellIndex<numCells; cellIndex++)
+    {
+      for (int ptIndex=0; ptIndex<numPoints; ptIndex++)
+      {
+        double x = (*points)(cellIndex,ptIndex,0);
+        double y = (*points)(cellIndex,ptIndex,1);
+        values(cellIndex, ptIndex) = 0.75+1./(4*(1+exp(R*(-getTime()-4*x+4*y)/32)));
+      }
+    }
+  }
+};
+
+class ExactSigma1 : public Function
+{
+public:
+  double R;
+  ExactSigma1(double R) : Function(1), R(R) {}
+  void values(FieldContainer<double> &values, BasisCachePtr basisCache)
+  {
+    int numCells = values.dimension(0);
+    int numPoints = values.dimension(1);
+
+    const FieldContainer<double> *points = &(basisCache->getPhysicalCubaturePoints());
+    for (int cellIndex=0; cellIndex<numCells; cellIndex++)
+    {
+      for (int ptIndex=0; ptIndex<numPoints; ptIndex++)
+      {
+        double x = (*points)(cellIndex,ptIndex,0);
+        double y = (*points)(cellIndex,ptIndex,1);
+        values(cellIndex, ptIndex, 0) = -1./32*exp(R/32*(-getTime()-4*x+4*y))/pow(1+exp(R*(-getTime()-4*x+4*y)/32),2);
+        values(cellIndex, ptIndex, 1) = 1./32*exp(R/32*(-getTime()-4*x+4*y))/pow(1+exp(R*(-getTime()-4*x+4*y)/32),2);
+      }
+    }
+  }
+};
+
+class ExactSigma2 : public Function
+{
+public:
+  double R;
+  ExactSigma2(double R) : Function(1), R(R) {}
+  void values(FieldContainer<double> &values, BasisCachePtr basisCache)
+  {
+    int numCells = values.dimension(0);
+    int numPoints = values.dimension(1);
+
+    const FieldContainer<double> *points = &(basisCache->getPhysicalCubaturePoints());
+    for (int cellIndex=0; cellIndex<numCells; cellIndex++)
+    {
+      for (int ptIndex=0; ptIndex<numPoints; ptIndex++)
+      {
+        double x = (*points)(cellIndex,ptIndex,0);
+        double y = (*points)(cellIndex,ptIndex,1);
+        values(cellIndex, ptIndex, 0) = 1./32*exp(R/32*(-getTime()-4*x+4*y))/pow(1+exp(R*(-getTime()-4*x+4*y)/32),2);
+        values(cellIndex, ptIndex, 1) = -1./32*exp(R/32*(-getTime()-4*x+4*y))/pow(1+exp(R*(-getTime()-4*x+4*y)/32),2);
+      }
+    }
+  }
+};
+
+class BurgersSteadyResidual : public SteadyResidual
+{
+private:
+  vector<double> beta;
+  double R;
+public:
+  BurgersSteadyResidual(VarFactory &varFactory, double R):
+    SteadyResidual(varFactory), R(R) {};
+  LinearTermPtr createResidual(SolutionPtr solution, bool includeBoundaryTerms)
+  {
+    VarPtr tau1 = varFactory.testVar("tau1", HDIV);
+    VarPtr tau2 = varFactory.testVar("tau2", HDIV);
+    VarPtr v1 = varFactory.testVar("v1", HGRAD);
+    VarPtr v2 = varFactory.testVar("v2", HGRAD);
+
+    // define trial variables
+    VarPtr u1 = varFactory.fieldVar("u1");
+    VarPtr u2 = varFactory.fieldVar("u2");
+    VarPtr sigma1 = varFactory.fieldVar("sigma1", VECTOR_L2);
+    VarPtr sigma2 = varFactory.fieldVar("sigma2", VECTOR_L2);
+    VarPtr u1hat = varFactory.traceVar("u1hat");
+    VarPtr u2hat = varFactory.traceVar("u2hat");
+    VarPtr f1hat = varFactory.fluxVar("f1hat");
+    VarPtr f2hat = varFactory.fluxVar("f2hat");
+
+    FunctionPtr u1_prev = Function::solution(u1, solution);
+    FunctionPtr u2_prev = Function::solution(u2, solution);
+    FunctionPtr sigma1_prev = Function::solution(sigma1, solution);
+    FunctionPtr sigma2_prev = Function::solution(sigma2, solution);
+    FunctionPtr u1hat_prev = Function::solution(u1hat, solution);
+    FunctionPtr u2hat_prev = Function::solution(u2hat, solution);
+    FunctionPtr f1hat_prev = Function::solution(f1hat, solution);
+    FunctionPtr f2hat_prev = Function::solution(f2hat, solution);
+
+    vector<double> e1(2); // (1,0)
+    e1[0] = R;
+    vector<double> e2(2); // (0,1)
+    e2[1] = R;
+    FunctionPtr Rbeta = e1 * u1_prev + e2 * u2_prev;
+    FunctionPtr Rfunc = Function::constant(R);
+
+    LinearTermPtr residual = Teuchos::rcp( new LinearTerm );
+    residual->addTerm( Rfunc*sigma1_prev * tau1 );
+    residual->addTerm( Rfunc*sigma2_prev * tau2 );
+    residual->addTerm( u1_prev * tau1->div() );
+    residual->addTerm( u2_prev * tau2->div() );
+    if (includeBoundaryTerms)
+    {
+      residual->addTerm( -u1hat_prev * tau1->dot_normal());
+      residual->addTerm( -u2hat_prev * tau2->dot_normal());
+    }
+
+    residual->addTerm( Rbeta*sigma1_prev * v1);
+    residual->addTerm( Rbeta*sigma2_prev * v2);
+    residual->addTerm( sigma1_prev * v1->grad() );
+    residual->addTerm( sigma2_prev * v2->grad() );
+    if (includeBoundaryTerms)
+    {
+      residual->addTerm( -f1hat_prev * v1);
+      residual->addTerm( -f2hat_prev * v2);
+    }
+
+    return residual;
+  }
+};
+
+int main(int argc, char *argv[])
+{
 #ifdef HAVE_MPI
   Teuchos::GlobalMPISession mpiSession(&argc, &argv,0);
   choice::MpiArgs args( argc, argv );
@@ -252,7 +274,7 @@ int main(int argc, char *argv[]) {
   meshBoundary(3,1) =  ymax;
 
   MeshPtr mesh = Mesh::buildQuadMesh(meshBoundary, numX, numX,
-      steadyJacobian, H1Order, H1Order+pToAdd, false);
+                                     steadyJacobian, H1Order, H1Order+pToAdd, false);
 
   ////////////////////   SET INITIAL CONDITIONS   ///////////////////////
   map<int, Teuchos::RCP<Function> > initialConditions;

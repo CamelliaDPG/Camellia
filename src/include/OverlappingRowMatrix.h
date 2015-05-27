@@ -45,31 +45,31 @@ class Epetra_Comm;
 /*!
  Note: this class, and this documentation, are essentially copied from
  IfPack_OverlappingRowMatrix.
- 
+
  Modifications support definitions of overlap level in terms of a Camellia
  Mesh.
- 
+
  Zero-level overlap means that the owner of each cell sees all the
  degrees of freedom for that cell--including all the traces, even when
  the cell owner does not own them.
- 
- Nonzero-level overlap has a different meaning depending on the value of 
+
+ Nonzero-level overlap has a different meaning depending on the value of
  hierarchical provided on construction.  Using hierarchical = true is often
  appropriate when doing h-multigrid; while hierarchical = false would be
  appropriate for p-multigrid.
- 
+
  When hierarchical is false, one-level overlap means that the owner of a
  cell sees all degrees of freedom belonging to the neighbors of that cell
  (the cells that share sides with the owned cell).  Two-level overlap extends
  this to neighbors of neighbors, etc.
- 
+
  When hierarchical is true, one-level overlap means that the owner of a
  cell sees all degrees of freedom belonging to its siblings (the children
  of its parent).  Two-level overlap extends this to all descendants of its
  grandparent, etc.
- 
+
  \author Nathan V. Roberts, ALCF.  Based on IfPack_OverlappingRowMatrix.
- 
+
  \date Last modified on 26-Mar-2015.
  */
 
@@ -77,11 +77,13 @@ class Epetra_Comm;
 #include "Mesh.h"
 #include "DofInterpreter.h"
 
-namespace Camellia {
+namespace Camellia
+{
 
-  class OverlappingRowMatrix : public virtual Epetra_RowMatrix {
+class OverlappingRowMatrix : public virtual Epetra_RowMatrix
+{
 
-  public:
+public:
 
   //@{ Constructors/Destructors
   //! Constructor for mesh-based overlap levels, hierarchical and otherwise.
@@ -99,10 +101,10 @@ namespace Camellia {
   //@{ \name Matrix data extraction routines
 
   //! Returns the number of nonzero entries in MyRow.
-  /*! 
-    \param 
+  /*!
+    \param
     MyRow - (In) Local row.
-    \param 
+    \param
     NumEntries - (Out) Number of nonzero values present.
 
     \return Integer error code, set to 0 if successful.
@@ -116,7 +118,7 @@ namespace Camellia {
   }
 
   //! Returns a copy of the specified local row in user-provided arrays.
-  /*! 
+  /*!
     \param
     MyRow - (In) Local row to extract.
     \param
@@ -125,7 +127,7 @@ namespace Camellia {
     NumEntries - (Out) Number of nonzero entries extracted.
     \param
     Values - (Out) Extracted values for this row.
-    \param 
+    \param
     Indices - (Out) Extracted global column indices for the corresponding values.
 
     \return Integer error code, set to 0 if successful.
@@ -133,7 +135,7 @@ namespace Camellia {
   virtual int ExtractMyRowCopy(int MyRow, int Length, int & NumEntries, double *Values, int * Indices) const;
 
   //! Returns a copy of the main diagonal in a user-provided vector.
-  /*! 
+  /*!
     \param
     Diagonal - (Out) Extracted main diagonal.
 
@@ -145,12 +147,12 @@ namespace Camellia {
   //@{ \name Mathematical functions.
 
   //! Returns the result of a Epetra_RowMatrix multiplied by a Epetra_MultiVector X in Y.
-  /*! 
-    \param 
+  /*!
+    \param
     TransA -(In) If true, multiply by the transpose of matrix, otherwise just use matrix.
-    \param 
+    \param
     X - (In) A Epetra_MultiVector of dimension NumVectors to multiply with matrix.
-    \param 
+    \param
     Y -(Out) A Epetra_MultiVector of dimension NumVectorscontaining result.
 
     \return Integer error code, set to 0 if successful.
@@ -158,17 +160,17 @@ namespace Camellia {
   virtual int Multiply(bool TransA, const Epetra_MultiVector& X, Epetra_MultiVector& Y) const;
 
   //! Returns result of a local-only solve using a triangular Epetra_RowMatrix with Epetra_MultiVectors X and Y (NOT IMPLEMENTED).
-  virtual int Solve(bool Upper, bool Trans, bool UnitDiagonal, const Epetra_MultiVector& X, 
-		    Epetra_MultiVector& Y) const
+  virtual int Solve(bool Upper, bool Trans, bool UnitDiagonal, const Epetra_MultiVector& X,
+                    Epetra_MultiVector& Y) const
   {
-    IFPACK_RETURN(-1); // not implemented 
+    IFPACK_RETURN(-1); // not implemented
   }
 
   virtual int Apply(const Epetra_MultiVector& X,
-		    Epetra_MultiVector& Y) const;
+                    Epetra_MultiVector& Y) const;
 
   virtual int ApplyInverse(const Epetra_MultiVector& X,
-			   Epetra_MultiVector& Y) const;
+                           Epetra_MultiVector& Y) const;
   //! Computes the sum of absolute values of the rows of the Epetra_RowMatrix, results returned in x (NOT IMPLEMENTED).
   virtual int InvRowSums(Epetra_Vector& x) const
   {
@@ -189,7 +191,7 @@ namespace Camellia {
 
 
   //! Scales the Epetra_RowMatrix on the right with a Epetra_Vector x (NOT IMPLEMENTED).
-  virtual int RightScale(const Epetra_Vector& x) 
+  virtual int RightScale(const Epetra_Vector& x)
   {
     IFPACK_RETURN(-1); // not implemented
   }
@@ -207,7 +209,7 @@ namespace Camellia {
   //! Returns the infinity norm of the global matrix.
   /* Returns the quantity \f$ \| A \|_\infty\f$ such that
      \f[\| A \|_\infty = \max_{1\lei\len} \sum_{i=1}^m |a_{ij}| \f].
-     */ 
+     */
   virtual double NormInf() const
   {
     return(A().NormInf());
@@ -216,7 +218,7 @@ namespace Camellia {
   //! Returns the one norm of the global matrix.
   /* Returns the quantity \f$ \| A \|_1\f$ such that
      \f[\| A \|_1= \max_{1\lej\len} \sum_{j=1}^n |a_{ij}| \f].
-     */ 
+     */
   virtual double NormOne() const
   {
     return(A().NormOne());
@@ -227,9 +229,9 @@ namespace Camellia {
   virtual int NumGlobalNonzeros() const
   {
     if(A().RowMatrixRowMap().GlobalIndicesInt())
-       return (int) NumGlobalNonzeros_;
+      return (int) NumGlobalNonzeros_;
     else
-       throw "OverlappingRowMatrix::NumGlobalNonzeros: Global indices not int";
+      throw "OverlappingRowMatrix::NumGlobalNonzeros: Global indices not int";
   }
 
   //! Returns the number of global matrix rows.
@@ -346,7 +348,7 @@ namespace Camellia {
   }
 
   //! Returns the current UseTranspose setting.
-  bool UseTranspose() const 
+  bool UseTranspose() const
   {
     return(UseTranspose_);
   }
@@ -364,42 +366,44 @@ namespace Camellia {
   }
 
   //! Returns the Epetra_Map object associated with the domain of this operator.
-  const Epetra_Map & OperatorDomainMap() const 
+  const Epetra_Map & OperatorDomainMap() const
   {
     return(*Map_);
   }
 
   //! Returns the Epetra_Map object associated with the range of this operator.
-  const Epetra_Map & OperatorRangeMap() const 
+  const Epetra_Map & OperatorRangeMap() const
   {
     return(*Map_);
   }
   //@}
 
-const Epetra_BlockMap& Map() const;
+  const Epetra_BlockMap& Map() const;
 
-const char* Label() const{
-  return(Label_.c_str());
-}
+  const char* Label() const
+  {
+    return(Label_.c_str());
+  }
 
-const set<GlobalIndexType> & RowIndices() {
-  return rowIndices_;
-}
-    
-int OverlapLevel() const
-{
-  return(OverlapLevel_);
-}
+  const set<GlobalIndexType> & RowIndices()
+  {
+    return rowIndices_;
+  }
 
-int ImportMultiVector(const Epetra_MultiVector& X,
-                      Epetra_MultiVector& OvX,
-                      Epetra_CombineMode CM = Insert);
+  int OverlapLevel() const
+  {
+    return(OverlapLevel_);
+  }
 
-int ExportMultiVector(const Epetra_MultiVector& OvX,
-                      Epetra_MultiVector& X,
-                      Epetra_CombineMode CM = Add);
+  int ImportMultiVector(const Epetra_MultiVector& X,
+                        Epetra_MultiVector& OvX,
+                        Epetra_CombineMode CM = Insert);
 
-private: 
+  int ExportMultiVector(const Epetra_MultiVector& OvX,
+                        Epetra_MultiVector& X,
+                        Epetra_CombineMode CM = Add);
+
+private:
   inline const Epetra_RowMatrix& A() const
   {
     return(*Matrix_);
@@ -411,10 +415,10 @@ private:
   // Camellia additions:
 //    MeshPtr mesh_;
 //    Teuchos::RCP<DofInterpreter> dofInterpreter_;
-    
-    set<GlobalIndexType> rowIndices_; // for this rank
+
+  set<GlobalIndexType> rowIndices_; // for this rank
   // end of Camellia additions
-  
+
   int NumMyRows_;
   int NumMyCols_;
   int NumMyDiagonals_;
@@ -441,10 +445,10 @@ private:
 
   template<typename int_type>
   void BuildMap(int OverlapLevel_in);
-    
+
   template<typename int_type>
   void BuildMap(int OverlapLevel_in, const set<GlobalIndexType> &rowIndices, bool filterByRowIndices = true);
-  
+
   template<typename int_type>
   void BuildMap(int OverlapLevel_in, MeshPtr mesh, Teuchos::RCP<DofInterpreter> dofInterpreter, bool hierarchical);
 

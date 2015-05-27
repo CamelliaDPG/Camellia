@@ -8,15 +8,16 @@
 
 #include "MeshTopology.h"
 
-class MeshTopologyTests : public TestSuite {
+class MeshTopologyTests : public TestSuite
+{
 private:
   void setup();
   void teardown();
-  
+
   vector<double> makeVertex(double v0);
   vector<double> makeVertex(double v0, double v1);
   vector<double> makeVertex(double v0, double v1, double v2);
-  
+
   vector< vector<double> > quadPoints(double x0, double y0, double width, double height);
   vector< vector<double> > hexPoints(double x0, double y0, double z0, double width, double height, double depth) ;
   MeshTopologyPtr makeRectMesh(double x0, double y0, double width, double height,
@@ -26,16 +27,19 @@ private:
 public:
   MeshTopologyTests();
   void runTests(int &numTestsRun, int &numTestsPassed);
-  string testSuiteName() { return "MeshTopologyTests"; }
-  
+  string testSuiteName()
+  {
+    return "MeshTopologyTests";
+  }
+
   bool test1DMesh();
   bool test2DMesh();
   bool test3DMesh();
-  
+
   bool testEntityConstraints();
   bool testCellsForEntity();
   bool testConstraintRelaxation();
-  
+
   bool testNeighborRelationships();
 };
 

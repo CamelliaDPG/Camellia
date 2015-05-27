@@ -30,13 +30,16 @@ int H1Order = 3, pToAdd = 2;
 
 // ===================== Mesh functions ====================
 
-class EpsilonScaling : public hFunction {
+class EpsilonScaling : public hFunction
+{
   double _epsilon;
-  public:
-  EpsilonScaling(double epsilon) {
+public:
+  EpsilonScaling(double epsilon)
+  {
     _epsilon = epsilon;
   }
-  double value(double x, double y, double h) {
+  double value(double x, double y, double h)
+  {
     // should probably by sqrt(_epsilon/h) instead (note parentheses)
     // but this is what was in the old code, so sticking with it for now.
     double scaling = min(_epsilon/(h*h), 1.0);
@@ -47,19 +50,24 @@ class EpsilonScaling : public hFunction {
 
 // ===================== Helper functions ====================
 
-class ScalarParamFunction : public Function {
+class ScalarParamFunction : public Function
+{
   double _a;
-  public:
-  ScalarParamFunction(double a) : Function(0){
+public:
+  ScalarParamFunction(double a) : Function(0)
+  {
     _a = a;
   }
-  void set_param(double a){
+  void set_param(double a)
+  {
     _a = a;
   }
-  double get_param(){
+  double get_param()
+  {
     return _a;
   }
-  void values(FieldContainer<double> &values, BasisCachePtr basisCache) {
+  void values(FieldContainer<double> &values, BasisCachePtr basisCache)
+  {
     CHECK_VALUES_RANK(values);
     values.initialize(_a);
   }
@@ -67,116 +75,140 @@ class ScalarParamFunction : public Function {
 
 // ===================== Spatial filter boundary functions ====================
 
-class LeftBoundary : public SpatialFilter {
-  public:
-    bool matchesPoint(double x, double y) {
-      double tol = 1e-14;
-      return (abs(x) < tol);
-    }
+class LeftBoundary : public SpatialFilter
+{
+public:
+  bool matchesPoint(double x, double y)
+  {
+    double tol = 1e-14;
+    return (abs(x) < tol);
+  }
 };
 
-class RightBoundary : public SpatialFilter {
-  public:
-    bool matchesPoint(double x, double y) {
-      double tol = 1e-14;
-      return (abs(x-4) < tol);
-    }
+class RightBoundary : public SpatialFilter
+{
+public:
+  bool matchesPoint(double x, double y)
+  {
+    double tol = 1e-14;
+    return (abs(x-4) < tol);
+  }
 };
 
-class TopBottomBoundary : public SpatialFilter {
-  public:
-    bool matchesPoint(double x, double y) {
-      double tol = 1e-14;
-      bool match = (abs(y)-2 < tol);
-      return match;
-    }
+class TopBottomBoundary : public SpatialFilter
+{
+public:
+  bool matchesPoint(double x, double y)
+  {
+    double tol = 1e-14;
+    bool match = (abs(y)-2 < tol);
+    return match;
+  }
 };
 
-class ZeroBC : public Function {
-  public:
-    ZeroBC() : Function(0) {}
-    void values(FieldContainer<double> &values, BasisCachePtr basisCache) {
-      int numCells = values.dimension(0);
-      int numPoints = values.dimension(1);
+class ZeroBC : public Function
+{
+public:
+  ZeroBC() : Function(0) {}
+  void values(FieldContainer<double> &values, BasisCachePtr basisCache)
+  {
+    int numCells = values.dimension(0);
+    int numPoints = values.dimension(1);
 
-      const FieldContainer<double> *points = &(basisCache->getPhysicalCubaturePoints());
-      for (int cellIndex=0; cellIndex<numCells; cellIndex++) {
-        for (int ptIndex=0; ptIndex<numPoints; ptIndex++) {
-          double x = (*points)(cellIndex,ptIndex,0);
-          double y = (*points)(cellIndex,ptIndex,1);
-          values(cellIndex, ptIndex) = 0;
-        }
+    const FieldContainer<double> *points = &(basisCache->getPhysicalCubaturePoints());
+    for (int cellIndex=0; cellIndex<numCells; cellIndex++)
+    {
+      for (int ptIndex=0; ptIndex<numPoints; ptIndex++)
+      {
+        double x = (*points)(cellIndex,ptIndex,0);
+        double y = (*points)(cellIndex,ptIndex,1);
+        values(cellIndex, ptIndex) = 0;
       }
     }
+  }
 };
 
 // boundary value for sigma_n
-class InletBC : public Function {
-  public:
-    InletBC() : Function(0) {}
-    void values(FieldContainer<double> &values, BasisCachePtr basisCache) {
-      int numCells = values.dimension(0);
-      int numPoints = values.dimension(1);
+class InletBC : public Function
+{
+public:
+  InletBC() : Function(0) {}
+  void values(FieldContainer<double> &values, BasisCachePtr basisCache)
+  {
+    int numCells = values.dimension(0);
+    int numPoints = values.dimension(1);
 
-      const FieldContainer<double> *points = &(basisCache->getPhysicalCubaturePoints());
-      for (int cellIndex=0; cellIndex<numCells; cellIndex++) {
-        for (int ptIndex=0; ptIndex<numPoints; ptIndex++) {
-          double x = (*points)(cellIndex,ptIndex,0);
-          double y = (*points)(cellIndex,ptIndex,1);
-          if (abs(y) <= halfWidth)
-            values(cellIndex, ptIndex) = -1.0*(1.0-y*y);
-          else
-            values(cellIndex, ptIndex) = 0;
-        }
+    const FieldContainer<double> *points = &(basisCache->getPhysicalCubaturePoints());
+    for (int cellIndex=0; cellIndex<numCells; cellIndex++)
+    {
+      for (int ptIndex=0; ptIndex<numPoints; ptIndex++)
+      {
+        double x = (*points)(cellIndex,ptIndex,0);
+        double y = (*points)(cellIndex,ptIndex,1);
+        if (abs(y) <= halfWidth)
+          values(cellIndex, ptIndex) = -1.0*(1.0-y*y);
+        else
+          values(cellIndex, ptIndex) = 0;
       }
     }
+  }
 };
 
-class Beta : public Function {
-  public:
-    Beta() : Function(1) {}
-    void values(FieldContainer<double> &values, BasisCachePtr basisCache) {
-      int numCells = values.dimension(0);
-      int numPoints = values.dimension(1);
-      int spaceDim = values.dimension(2);
+class Beta : public Function
+{
+public:
+  Beta() : Function(1) {}
+  void values(FieldContainer<double> &values, BasisCachePtr basisCache)
+  {
+    int numCells = values.dimension(0);
+    int numPoints = values.dimension(1);
+    int spaceDim = values.dimension(2);
 
-      const FieldContainer<double> *points = &(basisCache->getPhysicalCubaturePoints());
-      for (int cellIndex=0; cellIndex<numCells; cellIndex++) {
-        for (int ptIndex=0; ptIndex<numPoints; ptIndex++) {
-          for (int d = 0; d < spaceDim; d++) {
-            double x = (*points)(cellIndex,ptIndex,0);
-            double y = (*points)(cellIndex,ptIndex,1);
-            values(cellIndex,ptIndex,0) = 1;
-            values(cellIndex,ptIndex,1) = 0;
-          }
-        }
-      }
-    }
-};
-
-class IPWeight : public Function {
-  public:
-    IPWeight() : Function(0) {}
-    void values(FieldContainer<double> &values, BasisCachePtr basisCache) {
-      int numCells = values.dimension(0);
-      int numPoints = values.dimension(1);
-
-      double a = 2;
-
-      const FieldContainer<double> *points = &(basisCache->getPhysicalCubaturePoints());
-      for (int cellIndex=0; cellIndex<numCells; cellIndex++) {
-        for (int ptIndex=0; ptIndex<numPoints; ptIndex++) {
+    const FieldContainer<double> *points = &(basisCache->getPhysicalCubaturePoints());
+    for (int cellIndex=0; cellIndex<numCells; cellIndex++)
+    {
+      for (int ptIndex=0; ptIndex<numPoints; ptIndex++)
+      {
+        for (int d = 0; d < spaceDim; d++)
+        {
           double x = (*points)(cellIndex,ptIndex,0);
           double y = (*points)(cellIndex,ptIndex,1);
-          values(cellIndex, ptIndex) = 1.0;
+          values(cellIndex,ptIndex,0) = 1;
+          values(cellIndex,ptIndex,1) = 0;
         }
       }
     }
+  }
+};
+
+class IPWeight : public Function
+{
+public:
+  IPWeight() : Function(0) {}
+  void values(FieldContainer<double> &values, BasisCachePtr basisCache)
+  {
+    int numCells = values.dimension(0);
+    int numPoints = values.dimension(1);
+
+    double a = 2;
+
+    const FieldContainer<double> *points = &(basisCache->getPhysicalCubaturePoints());
+    for (int cellIndex=0; cellIndex<numCells; cellIndex++)
+    {
+      for (int ptIndex=0; ptIndex<numPoints; ptIndex++)
+      {
+        double x = (*points)(cellIndex,ptIndex,0);
+        double y = (*points)(cellIndex,ptIndex,1);
+        values(cellIndex, ptIndex) = 1.0;
+      }
+    }
+  }
 };
 
 // ===================== Main Function ====================
 
-int main(int argc, char *argv[]) {
+int main(int argc, char *argv[])
+{
   // Process command line arguments
   if (argc > 1)
     numRefs = atof(argv[1]);
@@ -192,10 +224,10 @@ int main(int argc, char *argv[]) {
   FunctionPtr beta = Teuchos::rcp(new Beta());
 
   ////////////////////////////////////////////////////////////////////
-  // DEFINE VARIABLES 
+  // DEFINE VARIABLES
   ////////////////////////////////////////////////////////////////////
   // test variables
-  VarFactory varFactory; 
+  VarFactory varFactory;
   VarPtr tau = varFactory.testVar("\\tau", HDIV);
   VarPtr v = varFactory.testVar("v", HGRAD);
 
@@ -207,7 +239,7 @@ int main(int argc, char *argv[]) {
   VarPtr sigma2 = varFactory.fieldVar("\\sigma_2");
 
   ////////////////////////////////////////////////////////////////////
-  // CREATE MESH 
+  // CREATE MESH
   ////////////////////////////////////////////////////////////////////
 
   BFPtr confusionBF = Teuchos::rcp( new BF(varFactory) );
@@ -227,7 +259,7 @@ int main(int argc, char *argv[]) {
 
   // create a pointer to a new mesh:
   Teuchos::RCP<Mesh> mesh = Mesh::buildQuadMesh(meshBoundary, horizontalCells, verticalCells,
-      confusionBF, H1Order, H1Order+pToAdd, false);
+                            confusionBF, H1Order, H1Order+pToAdd, false);
 
   ////////////////////////////////////////////////////////////////////
   // INITIALIZE BACKGROUND FLOW FUNCTIONS
@@ -236,8 +268,8 @@ int main(int argc, char *argv[]) {
   BCPtr nullBC = Teuchos::rcp((BC*)NULL);
   RHSPtr nullRHS = Teuchos::rcp((RHS*)NULL);
   IPPtr nullIP = Teuchos::rcp((IP*)NULL);
-  SolutionPtr prevTimeFlow = Teuchos::rcp(new Solution(mesh, nullBC, nullRHS, nullIP) );  
-  SolutionPtr flowResidual = Teuchos::rcp(new Solution(mesh, nullBC, nullRHS, nullIP) );  
+  SolutionPtr prevTimeFlow = Teuchos::rcp(new Solution(mesh, nullBC, nullRHS, nullIP) );
+  SolutionPtr flowResidual = Teuchos::rcp(new Solution(mesh, nullBC, nullRHS, nullIP) );
 
   FunctionPtr u_prev_time = Teuchos::rcp( new PreviousSolutionFunction(prevTimeFlow, u) );
 
@@ -275,8 +307,9 @@ int main(int argc, char *argv[]) {
   Teuchos::RCP<RHSEasy> rhs = Teuchos::rcp( new RHSEasy );
 
   double dt = 0.25;
-  FunctionPtr invDt = Teuchos::rcp(new ScalarParamFunction(1.0/dt));    
-  if (rank==0){
+  FunctionPtr invDt = Teuchos::rcp(new ScalarParamFunction(1.0/dt));
+  if (rank==0)
+  {
     cout << "Timestep dt = " << dt << endl;
   }
   if (transient)
@@ -305,7 +338,7 @@ int main(int argc, char *argv[]) {
 
   // robust test norm
   IPPtr robIP = Teuchos::rcp(new IP);
-  FunctionPtr ip_scaling = Teuchos::rcp( new EpsilonScaling(epsilon) ); 
+  FunctionPtr ip_scaling = Teuchos::rcp( new EpsilonScaling(epsilon) );
   if (!enforceLocalConservation)
   {
     robIP->addTerm( ip_scaling * v );
@@ -352,7 +385,8 @@ int main(int argc, char *argv[]) {
   // solution->setFilter(pc);
 
   // ==================== Enforce Local Conservation ==================
-  if (enforceLocalConservation) {
+  if (enforceLocalConservation)
+  {
     if (transient)
     {
       FunctionPtr conserved_rhs = u_prev_time * invDt;
@@ -379,7 +413,7 @@ int main(int argc, char *argv[]) {
   refinementStrategy = Teuchos::rcp(new RefinementStrategy(solution,energyThreshold));
 
   ////////////////////////////////////////////////////////////////////
-  // PSEUDO-TIME SOLVE STRATEGY 
+  // PSEUDO-TIME SOLVE STRATEGY
   ////////////////////////////////////////////////////////////////////
 
   double time_tol = 1e-8;
@@ -394,12 +428,12 @@ int main(int argc, char *argv[]) {
       solution->solve(false);
       // subtract solutions to get residual
       flowResidual->setSolution(solution); // reset previous time solution to current time sol
-      flowResidual->addSolution(prevTimeFlow, -1.0);       
+      flowResidual->addSolution(prevTimeFlow, -1.0);
       double L2u = flowResidual->L2NormOfSolutionGlobal(u->ID());
       double L2sigma1 = flowResidual->L2NormOfSolutionGlobal(sigma1->ID());
       double L2sigma2 = flowResidual->L2NormOfSolutionGlobal(sigma2->ID());
       L2_time_residual = sqrt(L2u*L2u + L2sigma1*L2sigma1 + L2sigma2*L2sigma2);
-      cout << endl << "Timestep: " << timestepCount << ", dt = " << dt << ", Time residual = " << L2_time_residual << endl;    	
+      cout << endl << "Timestep: " << timestepCount << ", dt = " << dt << ", Time residual = " << L2_time_residual << endl;
 
       if (rank == 0)
       {
@@ -448,12 +482,13 @@ int main(int argc, char *argv[]) {
       double maxMassFluxIntegral = 0.0;
       double totalMassFlux = 0.0;
       double totalAbsMassFlux = 0.0;
-      for (vector< ElementTypePtr >::iterator elemTypeIt = elemTypes.begin(); elemTypeIt != elemTypes.end(); elemTypeIt++) 
+      for (vector< ElementTypePtr >::iterator elemTypeIt = elemTypes.begin(); elemTypeIt != elemTypes.end(); elemTypeIt++)
       {
         ElementTypePtr elemType = *elemTypeIt;
         vector< ElementPtr > elems = mesh->elementsOfTypeGlobal(elemType);
         vector<int> cellIDs;
-        for (int i=0; i<elems.size(); i++) {
+        for (int i=0; i<elems.size(); i++)
+        {
           cellIDs.push_back(elems[i]->cellID());
         }
         FieldContainer<double> physicalCellNodes = mesh->physicalCellNodesGlobal(elemType);
@@ -462,17 +497,20 @@ int main(int argc, char *argv[]) {
         FieldContainer<double> cellMeasures = basisCache->getCellMeasures();
         FieldContainer<double> fakeRHSIntegrals(elems.size(),testOrdering->totalDofs());
         massFluxTerm->integrate(fakeRHSIntegrals,testOrdering,basisCache,true); // true: force side evaluation
-        for (int i=0; i<elems.size(); i++) {
+        for (int i=0; i<elems.size(); i++)
+        {
           int cellID = cellIDs[i];
           // pick out the ones for testOne:
           massFluxIntegral[cellID] = fakeRHSIntegrals(i,testOneIndex);
         }
         // find the largest:
-        for (int i=0; i<elems.size(); i++) {
+        for (int i=0; i<elems.size(); i++)
+        {
           int cellID = cellIDs[i];
           maxMassFluxIntegral = max(abs(massFluxIntegral[cellID]), maxMassFluxIntegral);
         }
-        for (int i=0; i<elems.size(); i++) {
+        for (int i=0; i<elems.size(); i++)
+        {
           int cellID = cellIDs[i];
           maxMassFluxIntegral = max(abs(massFluxIntegral[cellID]), maxMassFluxIntegral);
           totalMassFlux += massFluxIntegral[cellID];
@@ -492,11 +530,13 @@ int main(int argc, char *argv[]) {
       timestepCount++;
     }
 
-    if (refIndex < numRefs){
-      if (rank==0){
+    if (refIndex < numRefs)
+    {
+      if (rank==0)
+      {
         cout << "Performing refinement number " << refIndex << endl;
-      }     
-      refinementStrategy->refine(rank==0);    
+      }
+      refinementStrategy->refine(rank==0);
       // RESET solution every refinement - make sure discretization error doesn't creep in
       // prevTimeFlow->projectOntoMesh(functionMap);
     }

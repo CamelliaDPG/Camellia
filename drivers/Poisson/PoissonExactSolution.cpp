@@ -41,7 +41,8 @@
 #include "SpatialFilter.h"
 #include "TrigFunctions.h"
 
-PoissonExactSolution::PoissonExactSolution(PoissonExactSolutionType type, int polyOrder, bool useConformingTraces) {
+PoissonExactSolution::PoissonExactSolution(PoissonExactSolutionType type, int polyOrder, bool useConformingTraces)
+{
   // poly order here means that of phi
   _polyOrder = polyOrder;
   _type = type;
@@ -77,11 +78,13 @@ PoissonExactSolution::PoissonExactSolution(PoissonExactSolutionType type, int po
   setUseSinglePointBCForPHI(false, -1); // sets _bc
 }
 
-int PoissonExactSolution::H1Order() {
+int PoissonExactSolution::H1Order()
+{
   return _polyOrder + 1;
 }
 
-FunctionPtr PoissonExactSolution::phi() {
+FunctionPtr PoissonExactSolution::phi()
+{
   // simple solution choice: let phi = (x + 2y)^_polyOrder
   FunctionPtr f;
   double integral;
@@ -90,50 +93,56 @@ FunctionPtr PoissonExactSolution::phi() {
   FunctionPtr sin_x = Teuchos::rcp( new Sin_x );
   FunctionPtr cos_y = Teuchos::rcp( new Cos_y );
   FunctionPtr sin_y = Teuchos::rcp( new Sin_y );
-  switch (_type) {
-    case POLYNOMIAL:
+  switch (_type)
+  {
+  case POLYNOMIAL:
+  {
+    f = Function::constant(1);
+    if (_polyOrder == 0)
     {
-      f = Function::constant(1);
-      if (_polyOrder == 0) {
-        f = Function::constant(0);
-        integral = 0;
-        break;
-      }
-      for (int i=0; i<_polyOrder; i++) {
-        f = f * (x + 2 * y);
-      }
-      double two_to_power = 1; // power = _polyOrder + 2
-      double three_to_power = 1;
-      for (int i=0; i<_polyOrder+2; i++) {
-        two_to_power *= 2.0;
-        three_to_power *= 3.0;
-      }
-      integral = (three_to_power - two_to_power - 1) / (2 * (_polyOrder + 2) * (_polyOrder + 1) );
-    }
-      break;
-    case TRIGONOMETRIC:
-      f = sin_x * y + 3.0 * cos_y * x * x;
+      f = Function::constant(0);
       integral = 0;
       break;
-    case EXPONENTIAL:
-    {
-      integral = exp(1.0);
-      FunctionPtr exp_x = Teuchos::rcp( new Exp_x );
-      f = exp_x;
     }
+    for (int i=0; i<_polyOrder; i++)
+    {
+      f = f * (x + 2 * y);
+    }
+    double two_to_power = 1; // power = _polyOrder + 2
+    double three_to_power = 1;
+    for (int i=0; i<_polyOrder+2; i++)
+    {
+      two_to_power *= 2.0;
+      three_to_power *= 3.0;
+    }
+    integral = (three_to_power - two_to_power - 1) / (2 * (_polyOrder + 2) * (_polyOrder + 1) );
+  }
+  break;
+  case TRIGONOMETRIC:
+    f = sin_x * y + 3.0 * cos_y * x * x;
+    integral = 0;
+    break;
+  case EXPONENTIAL:
+  {
+    integral = exp(1.0);
+    FunctionPtr exp_x = Teuchos::rcp( new Exp_x );
+    f = exp_x;
+  }
   }
   f = f - integral;
   return f;
 }
 
-std::vector<double> PoissonExactSolution::getPointForBCImposition() {
+std::vector<double> PoissonExactSolution::getPointForBCImposition()
+{
   std::vector<double> point(2);
   point[0] = 1.0;
   point[1] = 1.0;
   return point;
 }
 
-void PoissonExactSolution::setUseSinglePointBCForPHI(bool useSinglePointBCForPhi, IndexType vertexIndexForZeroValue) {
+void PoissonExactSolution::setUseSinglePointBCForPHI(bool useSinglePointBCForPhi, IndexType vertexIndexForZeroValue)
+{
   FunctionPtr phi_exact = phi();
 
   VarFactoryPtr vf = _bf->varFactory();
@@ -149,10 +158,13 @@ void PoissonExactSolution::setUseSinglePointBCForPHI(bool useSinglePointBCForPhi
 
   _bc = BC::bc();
   _bc->addDirichlet(psi_hat_n, wholeBoundary, psi_n_exact);
-  if (!useSinglePointBCForPhi) {
+  if (!useSinglePointBCForPhi)
+  {
     _bc->addZeroMeanConstraint(phi);
 
-  } else {
+  }
+  else
+  {
     std::vector<double> point = getPointForBCImposition();
     double value = Function::evaluate(phi_exact, point[0], point[1]);
 //    cout << "PoissonExactSolution: imposing phi = " << value << " at (" << point[0] << ", " << point[1] << ")\n";
@@ -160,6 +172,7 @@ void PoissonExactSolution::setUseSinglePointBCForPHI(bool useSinglePointBCForPhi
   }
 }
 
-Teuchos::RCP<ExactSolution<double>> PoissonExactSolution::poissonExactPolynomialSolution(int polyOrder, bool useConformingTraces) {
+Teuchos::RCP<ExactSolution<double>> PoissonExactSolution::poissonExactPolynomialSolution(int polyOrder, bool useConformingTraces)
+{
   return Teuchos::rcp( new PoissonExactSolution(POLYNOMIAL,polyOrder,useConformingTraces));
 }

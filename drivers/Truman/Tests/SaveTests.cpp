@@ -16,20 +16,23 @@
 #include <Teuchos_GlobalMPISession.hpp>
 #endif
 
-vector<double> makeVertex(double v0) {
+vector<double> makeVertex(double v0)
+{
   vector<double> v;
   v.push_back(v0);
   return v;
 }
 
-vector<double> makeVertex(double v0, double v1) {
+vector<double> makeVertex(double v0, double v1)
+{
   vector<double> v;
   v.push_back(v0);
   v.push_back(v1);
   return v;
 }
 
-vector<double> makeVertex(double v0, double v1, double v2) {
+vector<double> makeVertex(double v0, double v1, double v2)
+{
   vector<double> v;
   v.push_back(v0);
   v.push_back(v1);
@@ -37,11 +40,13 @@ vector<double> makeVertex(double v0, double v1, double v2) {
   return v;
 }
 
-class EntireBoundary : public SpatialFilter {
-  public:
-    bool matchesPoint(double x, double y) {
-        return true;
-    }
+class EntireBoundary : public SpatialFilter
+{
+public:
+  bool matchesPoint(double x, double y)
+  {
+    return true;
+  }
 };
 
 int main(int argc, char *argv[])
@@ -108,11 +113,11 @@ int main(int argc, char *argv[])
   //   // }
   // }
   {
-  // 2D tests
+    // 2D tests
     CellTopoPtrLegacy quad_4 = Teuchos::rcp( new shards::CellTopology(shards::getCellTopologyData<shards::Quadrilateral<4> >() ) );
     CellTopoPtrLegacy tri_3 = Teuchos::rcp( new shards::CellTopology(shards::getCellTopologyData<shards::Triangle<3> >() ) );
 
-  // let's draw a little house
+    // let's draw a little house
     vector<double> v0 = makeVertex(-1,0);
     vector<double> v1 = makeVertex(1,0);
     vector<double> v2 = makeVertex(1,2);
@@ -232,19 +237,25 @@ int main(int argc, char *argv[])
       MeshPtr loadedMesh = MeshFactory::loadFromHDF5(bf, "MeshSave.h5");
       FieldContainer<GlobalIndexType> loadedCellPartition;
       loadedMesh->globalDofAssignment()->getPartitions(loadedCellPartition);
-      if (loadedCellPartition.size() != savedCellPartition.size()) {
+      if (loadedCellPartition.size() != savedCellPartition.size())
+      {
         cout << "Error: the loaded partition has different size/shape than the saved one.\n";
         cout << "loaded size: " << loadedCellPartition.size() << "; saved size: " << savedCellPartition.size() << endl;
-      } else {
+      }
+      else
+      {
         bool partitionsMatch = true;
-        for (int i=0; i<loadedCellPartition.size(); i++) {
-          if (loadedCellPartition[i] != savedCellPartition[i]) {
+        for (int i=0; i<loadedCellPartition.size(); i++)
+        {
+          if (loadedCellPartition[i] != savedCellPartition[i])
+          {
             partitionsMatch = false;
             break;
           }
         }
         if (partitionsMatch) cout << "Saved and loaded cell partitions match!\n";
-        else {
+        else
+        {
           cout << "Saved and loaded cell partitions differ.\n";
           cout << "saved:\n" << savedCellPartition;
           cout << "loaded:\n" << loadedCellPartition;
@@ -252,49 +263,64 @@ int main(int argc, char *argv[])
       }
       Teuchos::RCP<Solution> loadedSolution = Teuchos::rcp( new Solution(loadedMesh, bc, rhs, ip) );
       loadedSolution->loadFromHDF5("SolnSave.h5");
-      
+
       Teuchos::RCP<Epetra_FEVector> loadedLHSVector = loadedSolution->getLHSVector();
-      if (loadedLHSVector->Map().MinLID() != savedLHSVector->Map().MinLID()) {
+      if (loadedLHSVector->Map().MinLID() != savedLHSVector->Map().MinLID())
+      {
         cout << "On rank " << commRank << ", loaded min LID = " << loadedLHSVector->Map().MinLID();
         cout << ", but saved min LID = " << savedLHSVector->Map().MinLID() << endl;
-      } else if (loadedLHSVector->Map().MaxLID() != savedLHSVector->Map().MaxLID()) {
+      }
+      else if (loadedLHSVector->Map().MaxLID() != savedLHSVector->Map().MaxLID())
+      {
         cout << "On rank " << commRank << ", loaded max LID = " << loadedLHSVector->Map().MaxLID();
         cout << ", but saved max LID = " << savedLHSVector->Map().MaxLID() << endl;
-      } else {
+      }
+      else
+      {
         bool globalIDsMatch = true;
-        for (int lid = loadedLHSVector->Map().MinLID(); lid <= loadedLHSVector->Map().MaxLID(); lid++) {
-          if (loadedLHSVector->Map().GID(lid) != savedLHSVector->Map().GID(lid)) {
+        for (int lid = loadedLHSVector->Map().MinLID(); lid <= loadedLHSVector->Map().MaxLID(); lid++)
+        {
+          if (loadedLHSVector->Map().GID(lid) != savedLHSVector->Map().GID(lid))
+          {
             globalIDsMatch = false;
           }
         }
-        if (! globalIDsMatch) {
+        if (! globalIDsMatch)
+        {
           cout << "On rank " << commRank << ", loaded and saved solution vector maps differ in their global IDs.\n";
-        } else {
+        }
+        else
+        {
           cout << "On rank " << commRank << ", loaded and saved solution vector maps match in their global IDs.\n";
         }
-        
+
         bool entriesMatch = true;
         double tol = 1e-16;
         if (loadedLHSVector->Map().MinLID() != loadedLHSVector->Map().MaxLID())
         {
-          for (int lid = loadedLHSVector->Map().MinLID(); lid <= loadedLHSVector->Map().MaxLID(); lid++) {
+          for (int lid = loadedLHSVector->Map().MinLID(); lid <= loadedLHSVector->Map().MaxLID(); lid++)
+          {
             double loadedValue = (*loadedLHSVector)[0][lid];
             double savedValue = (*savedLHSVector)[0][lid];
             double diff = abs( loadedValue - savedValue );
-            if (diff > tol) {
+            if (diff > tol)
+            {
               entriesMatch = false;
               cout << "On rank " << commRank << ", loaded and saved solution vectors differ in entry with lid " << lid;
               cout << "; loaded value = " << loadedValue << "; saved value = " << savedValue << ".\n";
             }
           }
-          if (entriesMatch) {
+          if (entriesMatch)
+          {
             cout << "On rank " << commRank << ", loaded and saved solution vectors match!\n";
-          } else {
+          }
+          else
+          {
             cout << "On rank " << commRank << ", loaded and saved solution vectors do not match.\n";
           }
         }
       }
-      
+
       HDF5Exporter exporter(loadedMesh, "SolutionLoaded");
       exporter.exportSolution(loadedSolution, varFactory, 0, 2, cellIDToSubdivision(loadedMesh, 4));
     }

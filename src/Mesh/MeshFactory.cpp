@@ -23,7 +23,8 @@
 using namespace Intrepid;
 using namespace Camellia;
 
-static ParametricCurvePtr parametricRect(double width, double height, double x0, double y0) {
+static ParametricCurvePtr parametricRect(double width, double height, double x0, double y0)
+{
   // starts at the positive x axis and proceeds counter-clockwise, just like our parametric circle
   vector< pair<double, double> > vertices;
   vertices.push_back(make_pair(x0 + width/2.0, y0 + 0));
@@ -37,87 +38,94 @@ static ParametricCurvePtr parametricRect(double width, double height, double x0,
 map<int,int> MeshFactory::_emptyIntIntMap;
 
 #ifdef HAVE_EPETRAEXT_HDF5
-MeshPtr MeshFactory::loadFromHDF5(TBFPtr<double> bf, string filename) {
-    Epetra_SerialComm Comm;
-    EpetraExt::HDF5 hdf5(Comm);
-    hdf5.Open(filename);
-    int vertexIndicesSize, topoKeysSize, verticesSize, trialOrderEnhancementsSize, testOrderEnhancementsSize, histArraySize, H1OrderSize;
-    hdf5.Read("Mesh", "vertexIndicesSize", vertexIndicesSize);
-    hdf5.Read("Mesh", "topoKeysSize", topoKeysSize);
-    hdf5.Read("Mesh", "verticesSize", verticesSize);
-    hdf5.Read("Mesh", "trialOrderEnhancementsSize", trialOrderEnhancementsSize);
-    hdf5.Read("Mesh", "testOrderEnhancementsSize", testOrderEnhancementsSize);
-    hdf5.Read("Mesh", "histArraySize", histArraySize);
-    hdf5.Read("Mesh", "H1OrderSize", H1OrderSize);
+MeshPtr MeshFactory::loadFromHDF5(TBFPtr<double> bf, string filename)
+{
+  Epetra_SerialComm Comm;
+  EpetraExt::HDF5 hdf5(Comm);
+  hdf5.Open(filename);
+  int vertexIndicesSize, topoKeysSize, verticesSize, trialOrderEnhancementsSize, testOrderEnhancementsSize, histArraySize, H1OrderSize;
+  hdf5.Read("Mesh", "vertexIndicesSize", vertexIndicesSize);
+  hdf5.Read("Mesh", "topoKeysSize", topoKeysSize);
+  hdf5.Read("Mesh", "verticesSize", verticesSize);
+  hdf5.Read("Mesh", "trialOrderEnhancementsSize", trialOrderEnhancementsSize);
+  hdf5.Read("Mesh", "testOrderEnhancementsSize", testOrderEnhancementsSize);
+  hdf5.Read("Mesh", "histArraySize", histArraySize);
+  hdf5.Read("Mesh", "H1OrderSize", H1OrderSize);
 
-    int topoKeysIntSize = topoKeysSize * sizeof(Camellia::CellTopologyKey) / sizeof(int);
+  int topoKeysIntSize = topoKeysSize * sizeof(Camellia::CellTopologyKey) / sizeof(int);
 
-    int numPartitions, maxPartitionSize;
+  int numPartitions, maxPartitionSize;
 
-    hdf5.Read("Mesh", "numPartitions", numPartitions);
-    hdf5.Read("Mesh", "maxPartitionSize", maxPartitionSize);
-    FieldContainer<int> partitionsCastToInt(numPartitions,maxPartitionSize);
-    FieldContainer<GlobalIndexType> partitions;
-    if (numPartitions > 0) {
-      hdf5.Read("Mesh", "partitions", H5T_NATIVE_INT, partitionsCastToInt.size(), &partitionsCastToInt[0]);
-      partitions.resize(numPartitions,maxPartitionSize);
-      for (int i=0; i<numPartitions; i++) {
-        for (int j=0; j<maxPartitionSize; j++) {
-          partitions(i,j) = (GlobalIndexType) partitionsCastToInt(i,j);
-        }
+  hdf5.Read("Mesh", "numPartitions", numPartitions);
+  hdf5.Read("Mesh", "maxPartitionSize", maxPartitionSize);
+  FieldContainer<int> partitionsCastToInt(numPartitions,maxPartitionSize);
+  FieldContainer<GlobalIndexType> partitions;
+  if (numPartitions > 0)
+  {
+    hdf5.Read("Mesh", "partitions", H5T_NATIVE_INT, partitionsCastToInt.size(), &partitionsCastToInt[0]);
+    partitions.resize(numPartitions,maxPartitionSize);
+    for (int i=0; i<numPartitions; i++)
+    {
+      for (int j=0; j<maxPartitionSize; j++)
+      {
+        partitions(i,j) = (GlobalIndexType) partitionsCastToInt(i,j);
       }
-    } else {
     }
+  }
+  else
+  {
+  }
 
-    int dimension, deltaP;
-    vector<int> vertexIndices(vertexIndicesSize);
-    vector<Camellia::CellTopologyKey> topoKeys(topoKeysSize);
-    vector<int> trialOrderEnhancementsVec(trialOrderEnhancementsSize);
-    vector<int> testOrderEnhancementsVec(testOrderEnhancementsSize);
-    vector<double> vertices(verticesSize);
-    vector<int> histArray(histArraySize);
-    vector<int> H1Order(H1OrderSize);
-    string GDARule;
-    hdf5.Read("Mesh", "dimension", dimension);
-    hdf5.Read("Mesh", "vertexIndices", H5T_NATIVE_INT, vertexIndicesSize, &vertexIndices[0]);
-    hdf5.Read("Mesh", "topoKeys", H5T_NATIVE_INT, topoKeysIntSize, &topoKeys[0]);
-    hdf5.Read("Mesh", "vertices", H5T_NATIVE_DOUBLE, verticesSize, &vertices[0]);
-    hdf5.Read("Mesh", "deltaP", deltaP);
-    hdf5.Read("Mesh", "GDARule", GDARule);
-    if (GDARule == "min")
+  int dimension, deltaP;
+  vector<int> vertexIndices(vertexIndicesSize);
+  vector<Camellia::CellTopologyKey> topoKeys(topoKeysSize);
+  vector<int> trialOrderEnhancementsVec(trialOrderEnhancementsSize);
+  vector<int> testOrderEnhancementsVec(testOrderEnhancementsSize);
+  vector<double> vertices(verticesSize);
+  vector<int> histArray(histArraySize);
+  vector<int> H1Order(H1OrderSize);
+  string GDARule;
+  hdf5.Read("Mesh", "dimension", dimension);
+  hdf5.Read("Mesh", "vertexIndices", H5T_NATIVE_INT, vertexIndicesSize, &vertexIndices[0]);
+  hdf5.Read("Mesh", "topoKeys", H5T_NATIVE_INT, topoKeysIntSize, &topoKeys[0]);
+  hdf5.Read("Mesh", "vertices", H5T_NATIVE_DOUBLE, verticesSize, &vertices[0]);
+  hdf5.Read("Mesh", "deltaP", deltaP);
+  hdf5.Read("Mesh", "GDARule", GDARule);
+  if (GDARule == "min")
+  {
+  }
+  else if(GDARule == "max")
+  {
+  }
+  else
+    TEUCHOS_TEST_FOR_EXCEPTION(true, std::invalid_argument, "Invalid GDA");
+  hdf5.Read("Mesh", "trialOrderEnhancements", H5T_NATIVE_INT, trialOrderEnhancementsSize, &trialOrderEnhancementsVec[0]);
+  hdf5.Read("Mesh", "testOrderEnhancements", H5T_NATIVE_INT, testOrderEnhancementsSize, &testOrderEnhancementsVec[0]);
+  hdf5.Read("Mesh", "H1Order", H5T_NATIVE_INT, H1OrderSize, &H1Order[0]);
+
+  if (histArraySize > 0) hdf5.Read("Mesh", "refinementHistory", H5T_NATIVE_INT, histArraySize, &histArray[0]);
+  hdf5.Close();
+
+  CellTopoPtr line_2 = Camellia::CellTopology::line();
+  CellTopoPtr quad_4 = Camellia::CellTopology::quad();
+  CellTopoPtr tri_3 = Camellia::CellTopology::triangle();
+  CellTopoPtr hex_8 = Camellia::CellTopology::hexahedron();
+
+  vector< CellTopoPtr > cellTopos;
+  vector< vector<unsigned> > elementVertices;
+  int vindx = 0;
+  for (unsigned cellNumber = 0; cellNumber < topoKeysSize; cellNumber++)
+  {
+    CellTopoPtr cellTopo = CamelliaCellTools::cellTopoForKey(topoKeys[cellNumber]);
+    cellTopos.push_back(cellTopo);
+    vector<unsigned> elemVertices;
+    for (int i=0; i < cellTopo->getVertexCount(); i++)
     {
+      elemVertices.push_back(vertexIndices[vindx]);
+      vindx++;
     }
-    else if(GDARule == "max")
-    {
-    }
-    else
-      TEUCHOS_TEST_FOR_EXCEPTION(true, std::invalid_argument, "Invalid GDA");
-    hdf5.Read("Mesh", "trialOrderEnhancements", H5T_NATIVE_INT, trialOrderEnhancementsSize, &trialOrderEnhancementsVec[0]);
-    hdf5.Read("Mesh", "testOrderEnhancements", H5T_NATIVE_INT, testOrderEnhancementsSize, &testOrderEnhancementsVec[0]);
-    hdf5.Read("Mesh", "H1Order", H5T_NATIVE_INT, H1OrderSize, &H1Order[0]);
-
-    if (histArraySize > 0) hdf5.Read("Mesh", "refinementHistory", H5T_NATIVE_INT, histArraySize, &histArray[0]);
-    hdf5.Close();
-
-    CellTopoPtr line_2 = Camellia::CellTopology::line();
-    CellTopoPtr quad_4 = Camellia::CellTopology::quad();
-    CellTopoPtr tri_3 = Camellia::CellTopology::triangle();
-    CellTopoPtr hex_8 = Camellia::CellTopology::hexahedron();
-
-    vector< CellTopoPtr > cellTopos;
-    vector< vector<unsigned> > elementVertices;
-    int vindx = 0;
-    for (unsigned cellNumber = 0; cellNumber < topoKeysSize; cellNumber++)
-    {
-      CellTopoPtr cellTopo = CamelliaCellTools::cellTopoForKey(topoKeys[cellNumber]);
-      cellTopos.push_back(cellTopo);
-      vector<unsigned> elemVertices;
-      for (int i=0; i < cellTopo->getVertexCount(); i++) {
-        elemVertices.push_back(vertexIndices[vindx]);
-        vindx++;
-      }
-      elementVertices.push_back(elemVertices);
-    }
+    elementVertices.push_back(elemVertices);
+  }
 
 //    cout << "Elements:\n";
 //    for (int i=0; i<elementVertices.size(); i++) {
@@ -125,15 +133,16 @@ MeshPtr MeshFactory::loadFromHDF5(TBFPtr<double> bf, string filename) {
 //      Camellia::print("vertex indices", elementVertices[i]);
 //    }
 
-    vector< vector<double> > verticesList;
-    for (int i=0; i < vertices.size()/dimension; i++)
+  vector< vector<double> > verticesList;
+  for (int i=0; i < vertices.size()/dimension; i++)
+  {
+    vector<double> vertex;
+    for (int d=0; d<dimension; d++)
     {
-      vector<double> vertex;
-      for (int d=0; d<dimension; d++) {
-        vertex.push_back(vertices[dimension*i+d]);
-      }
-      verticesList.push_back(vertex);
+      vertex.push_back(vertices[dimension*i+d]);
     }
+    verticesList.push_back(vertex);
+  }
 
 //    cout << "Vertices:\n";
 //    for (int i=0; i<verticesList.size(); i++) {
@@ -141,70 +150,78 @@ MeshPtr MeshFactory::loadFromHDF5(TBFPtr<double> bf, string filename) {
 //      Camellia::print("vertex coordinates", verticesList[i]);
 //    }
 
-    map<int, int> trialOrderEnhancements;
-    map<int, int> testOrderEnhancements;
-    for (int i=0; i < trialOrderEnhancementsVec.size()/2; i++) // divide by two because we have 2 entries per var; map goes varID --> enhancement
-    {
-      trialOrderEnhancements[trialOrderEnhancementsVec[2*i]] = trialOrderEnhancementsVec[2*i+1];
-    }
-    for (int i=0; i < testOrderEnhancementsVec.size()/2; i++)
-    {
-      testOrderEnhancements[testOrderEnhancementsVec[2*i]] = testOrderEnhancementsVec[2*i+1];
-    }
+  map<int, int> trialOrderEnhancements;
+  map<int, int> testOrderEnhancements;
+  for (int i=0; i < trialOrderEnhancementsVec.size()/2; i++) // divide by two because we have 2 entries per var; map goes varID --> enhancement
+  {
+    trialOrderEnhancements[trialOrderEnhancementsVec[2*i]] = trialOrderEnhancementsVec[2*i+1];
+  }
+  for (int i=0; i < testOrderEnhancementsVec.size()/2; i++)
+  {
+    testOrderEnhancements[testOrderEnhancementsVec[2*i]] = testOrderEnhancementsVec[2*i+1];
+  }
 
-    MeshGeometryPtr meshGeometry = Teuchos::rcp( new MeshGeometry(verticesList, elementVertices, cellTopos) );
-    MeshTopologyPtr meshTopology = Teuchos::rcp( new MeshTopology(meshGeometry) );
-    MeshPtr mesh = Teuchos::rcp( new Mesh (meshTopology, bf, H1Order, deltaP, trialOrderEnhancements, testOrderEnhancements) );
+  MeshGeometryPtr meshGeometry = Teuchos::rcp( new MeshGeometry(verticesList, elementVertices, cellTopos) );
+  MeshTopologyPtr meshTopology = Teuchos::rcp( new MeshTopology(meshGeometry) );
+  MeshPtr mesh = Teuchos::rcp( new Mesh (meshTopology, bf, H1Order, deltaP, trialOrderEnhancements, testOrderEnhancements) );
 
-    for (int i=0; i < histArraySize;)
+  for (int i=0; i < histArraySize;)
+  {
+    RefinementType refType = RefinementType(histArray[i]);
+    i++;
+    int numCells = histArray[i];
+    i++;
+    CellTopoPtr cellTopo; // we assume all cells for the refinement have the same type
+    if (numCells > 0)
     {
-      RefinementType refType = RefinementType(histArray[i]);
+      GlobalIndexType firstCellID = histArray[i];
+      cellTopo = mesh->getElementType(firstCellID)->cellTopoPtr;
+    }
+    set<GlobalIndexType> cellIDs;
+    for (int c=0; c < numCells; c++)
+    {
+      GlobalIndexType cellID = histArray[i];
       i++;
-      int numCells = histArray[i];
-      i++;
-      CellTopoPtr cellTopo; // we assume all cells for the refinement have the same type
-      if (numCells > 0) {
-        GlobalIndexType firstCellID = histArray[i];
-        cellTopo = mesh->getElementType(firstCellID)->cellTopoPtr;
-      }
-      set<GlobalIndexType> cellIDs;
-      for (int c=0; c < numCells; c++)
+      cellIDs.insert(cellID);
+      // check that the cellIDs are all active nodes
+      if (refType != H_UNREFINEMENT)
       {
-        GlobalIndexType cellID = histArray[i];
-        i++;
-        cellIDs.insert(cellID);
-        // check that the cellIDs are all active nodes
-        if (refType != H_UNREFINEMENT) {
-          set<GlobalIndexType> activeIDs = mesh->getActiveCellIDs();
-          if (activeIDs.find(cellID) == activeIDs.end()) {
-            TEUCHOS_TEST_FOR_EXCEPTION(true, std::invalid_argument, "cellID for refinement is not an active cell of the mesh");
-          }
+        set<GlobalIndexType> activeIDs = mesh->getActiveCellIDs();
+        if (activeIDs.find(cellID) == activeIDs.end())
+        {
+          TEUCHOS_TEST_FOR_EXCEPTION(true, std::invalid_argument, "cellID for refinement is not an active cell of the mesh");
         }
       }
-      bool repartitionAndRebuild = false; // we'll do this at the end: if partitions were set, we'll use those.  Otherwise, we'll just do a standard repartition
+    }
+    bool repartitionAndRebuild = false; // we'll do this at the end: if partitions were set, we'll use those.  Otherwise, we'll just do a standard repartition
 
-      switch (refType) {
-        case P_REFINEMENT:
-          mesh->pRefine(cellIDs);
-          break;
-        case H_UNREFINEMENT:
-          mesh->hUnrefine(cellIDs);
-          break;
-        default:
-          // if we get here, it should be an h-refinement with a ref pattern
-          mesh->hRefine(cellIDs, RefinementHistory::refPatternForRefType(refType, cellTopo), repartitionAndRebuild);
-      }
+    switch (refType)
+    {
+    case P_REFINEMENT:
+      mesh->pRefine(cellIDs);
+      break;
+    case H_UNREFINEMENT:
+      mesh->hUnrefine(cellIDs);
+      break;
+    default:
+      // if we get here, it should be an h-refinement with a ref pattern
+      mesh->hRefine(cellIDs, RefinementHistory::refPatternForRefType(refType, cellTopo), repartitionAndRebuild);
     }
-    if (numPartitions > 0) {
-      mesh->globalDofAssignment()->setPartitions(partitions);
-    } else {
-      mesh->globalDofAssignment()->repartitionAndMigrate(); // since no Solution registered, won't actually migrate anything
-    }
-    return mesh;
   }
+  if (numPartitions > 0)
+  {
+    mesh->globalDofAssignment()->setPartitions(partitions);
+  }
+  else
+  {
+    mesh->globalDofAssignment()->repartitionAndMigrate(); // since no Solution registered, won't actually migrate anything
+  }
+  return mesh;
+}
 #endif
 
-MeshPtr MeshFactory::quadMesh(Teuchos::ParameterList &parameters) {
+MeshPtr MeshFactory::quadMesh(Teuchos::ParameterList &parameters)
+{
   bool useMinRule = parameters.get<bool>("useMinRule",true);
   TBFPtr<double> bf = parameters.get< TBFPtr<double> >("bf");
   int H1Order = parameters.get<int>("H1Order");
@@ -223,10 +240,13 @@ MeshPtr MeshFactory::quadMesh(Teuchos::ParameterList &parameters) {
   vector< PeriodicBCPtr > emptyPeriodicBCs;
   vector< PeriodicBCPtr >* periodicBCs = parameters.get< vector< PeriodicBCPtr >* >("periodicBCs",&emptyPeriodicBCs);
 
-  if (useMinRule) {
+  if (useMinRule)
+  {
     MeshTopologyPtr meshTopology = quadMeshTopology(width,height,horizontalElements,verticalElements,divideIntoTriangles,x0,y0,*periodicBCs);
     return Teuchos::rcp( new Mesh(meshTopology, bf, H1Order, delta_k, *trialOrderEnhancements, *testOrderEnhancements) );
-  } else {
+  }
+  else
+  {
     bool useConformingTraces = parameters.get<bool>("useConformingTraces", true);
 //  cout << "periodicBCs size is " << periodicBCs->size() << endl;
     vector<vector<double> > vertices;
@@ -235,9 +255,12 @@ MeshPtr MeshFactory::quadMesh(Teuchos::ParameterList &parameters) {
     int numElements = divideIntoTriangles ? horizontalElements * verticalElements * 2 : horizontalElements * verticalElements;
 
     CellTopoPtr topo;
-    if (divideIntoTriangles) {
+    if (divideIntoTriangles)
+    {
       topo = Camellia::CellTopology::triangle();
-    } else {
+    }
+    else
+    {
       topo = Camellia::CellTopology::quad();
     }
     vector< CellTopoPtr > cellTopos(numElements, topo);
@@ -254,7 +277,7 @@ MeshPtr MeshFactory::quadMesh(Teuchos::ParameterList &parameters) {
     //  cout << "creating mesh with boundary points:\n" << quadBoundaryPoints;
 
     double southWest_x = quadBoundaryPoints(0,0),
-    southWest_y = quadBoundaryPoints(0,1);
+           southWest_y = quadBoundaryPoints(0,1);
 
     double elemWidth = width / horizontalElements;
     double elemHeight = height / verticalElements;
@@ -262,8 +285,10 @@ MeshPtr MeshFactory::quadMesh(Teuchos::ParameterList &parameters) {
     // set up vertices:
     // vertexIndices is for easy vertex lookup by (x,y) index for our Cartesian grid:
     vector< vector<int> > vertexIndices(horizontalElements+1, vector<int>(verticalElements+1));
-    for (int i=0; i<=horizontalElements; i++) {
-      for (int j=0; j<=verticalElements; j++) {
+    for (int i=0; i<=horizontalElements; i++)
+    {
+      for (int j=0; j<=verticalElements; j++)
+      {
         vertexIndices[i][j] = vertices.size();
         vector<double> vertex(spaceDim);
         vertex[0] = southWest_x + elemWidth*i;
@@ -272,16 +297,21 @@ MeshPtr MeshFactory::quadMesh(Teuchos::ParameterList &parameters) {
       }
     }
 
-    for (int i=0; i<horizontalElements; i++) {
-      for (int j=0; j<verticalElements; j++) {
-        if (!divideIntoTriangles) {
+    for (int i=0; i<horizontalElements; i++)
+    {
+      for (int j=0; j<verticalElements; j++)
+      {
+        if (!divideIntoTriangles)
+        {
           vector<unsigned> elemVertices;
           elemVertices.push_back(vertexIndices[i][j]);
           elemVertices.push_back(vertexIndices[i+1][j]);
           elemVertices.push_back(vertexIndices[i+1][j+1]);
           elemVertices.push_back(vertexIndices[i][j+1]);
           allElementVertices.push_back(elemVertices);
-        } else {
+        }
+        else
+        {
           vector<unsigned> elemVertices1, elemVertices2; // elem1 is SE of quad, elem2 is NW
           elemVertices1.push_back(vertexIndices[i][j]);     // SIDE1 is SOUTH side of quad
           elemVertices1.push_back(vertexIndices[i+1][j]);   // SIDE2 is EAST
@@ -334,13 +364,16 @@ public:
   }
 };*/
 
-MeshPtr MeshFactory::quadMesh(TBFPtr<double> bf, int H1Order, FieldContainer<double> &quadNodes, int pToAddTest) {
-  if (quadNodes.size() != 8) {
+MeshPtr MeshFactory::quadMesh(TBFPtr<double> bf, int H1Order, FieldContainer<double> &quadNodes, int pToAddTest)
+{
+  if (quadNodes.size() != 8)
+  {
     TEUCHOS_TEST_FOR_EXCEPTION(true, std::invalid_argument, "quadNodes must be 4 x 2");
   }
   int spaceDim = 2;
   vector< vector<double> > vertices;
-  for (int i=0; i<4; i++) {
+  for (int i=0; i<4; i++)
+  {
     vector<double> vertex(spaceDim);
     vertex[0] = quadNodes[2*i];
     vertex[1] = quadNodes[2*i+1];
@@ -360,7 +393,8 @@ MeshPtr MeshFactory::quadMesh(TBFPtr<double> bf, int H1Order, FieldContainer<dou
 
 MeshPtr MeshFactory::quadMesh(TBFPtr<double> bf, int H1Order, int pToAddTest,
                               double width, double height, int horizontalElements, int verticalElements, bool divideIntoTriangles,
-                              double x0, double y0, vector<PeriodicBCPtr> periodicBCs) {
+                              double x0, double y0, vector<PeriodicBCPtr> periodicBCs)
+{
 
   Teuchos::ParameterList pl;
 
@@ -381,8 +415,9 @@ MeshPtr MeshFactory::quadMesh(TBFPtr<double> bf, int H1Order, int pToAddTest,
 }
 
 MeshPtr MeshFactory::quadMeshMinRule(TBFPtr<double> bf, int H1Order, int pToAddTest,
-                                      double width, double height, int horizontalElements, int verticalElements,
-                                     bool divideIntoTriangles, double x0, double y0, vector<PeriodicBCPtr> periodicBCs) {
+                                     double width, double height, int horizontalElements, int verticalElements,
+                                     bool divideIntoTriangles, double x0, double y0, vector<PeriodicBCPtr> periodicBCs)
+{
   Teuchos::ParameterList pl;
 
   pl.set("useMinRule", true);
@@ -402,16 +437,20 @@ MeshPtr MeshFactory::quadMeshMinRule(TBFPtr<double> bf, int H1Order, int pToAddT
 }
 
 MeshTopologyPtr MeshFactory::quadMeshTopology(double width, double height, int horizontalElements, int verticalElements, bool divideIntoTriangles,
-                                              double x0, double y0, vector<PeriodicBCPtr> periodicBCs) {
+    double x0, double y0, vector<PeriodicBCPtr> periodicBCs)
+{
   vector<vector<double> > vertices;
   vector< vector<unsigned> > allElementVertices;
 
   int numElements = divideIntoTriangles ? horizontalElements * verticalElements * 2 : horizontalElements * verticalElements;
 
   CellTopoPtr topo;
-  if (divideIntoTriangles) {
+  if (divideIntoTriangles)
+  {
     topo = Camellia::CellTopology::triangle();
-  } else {
+  }
+  else
+  {
     topo = Camellia::CellTopology::quad();
   }
   vector< CellTopoPtr > cellTopos(numElements, topo);
@@ -430,7 +469,7 @@ MeshTopologyPtr MeshFactory::quadMeshTopology(double width, double height, int h
   //  cout << "creating mesh with boundary points:\n" << quadBoundaryPoints;
 
   double southWest_x = quadBoundaryPoints(0,0),
-  southWest_y = quadBoundaryPoints(0,1);
+         southWest_y = quadBoundaryPoints(0,1);
 
   double elemWidth = width / horizontalElements;
   double elemHeight = height / verticalElements;
@@ -438,8 +477,10 @@ MeshTopologyPtr MeshFactory::quadMeshTopology(double width, double height, int h
   // set up vertices:
   // vertexIndices is for easy vertex lookup by (x,y) index for our Cartesian grid:
   vector< vector<int> > vertexIndices(horizontalElements+1, vector<int>(verticalElements+1));
-  for (int i=0; i<=horizontalElements; i++) {
-    for (int j=0; j<=verticalElements; j++) {
+  for (int i=0; i<=horizontalElements; i++)
+  {
+    for (int j=0; j<=verticalElements; j++)
+    {
       vertexIndices[i][j] = vertices.size();
       vector<double> vertex(spaceDim);
       vertex[0] = southWest_x + elemWidth*i;
@@ -448,16 +489,21 @@ MeshTopologyPtr MeshFactory::quadMeshTopology(double width, double height, int h
     }
   }
 
-  for (int i=0; i<horizontalElements; i++) {
-    for (int j=0; j<verticalElements; j++) {
-      if (!divideIntoTriangles) {
+  for (int i=0; i<horizontalElements; i++)
+  {
+    for (int j=0; j<verticalElements; j++)
+    {
+      if (!divideIntoTriangles)
+      {
         vector<unsigned> elemVertices;
         elemVertices.push_back(vertexIndices[i][j]);
         elemVertices.push_back(vertexIndices[i+1][j]);
         elemVertices.push_back(vertexIndices[i+1][j+1]);
         elemVertices.push_back(vertexIndices[i][j+1]);
         allElementVertices.push_back(elemVertices);
-      } else {
+      }
+      else
+      {
         vector<unsigned> elemVertices1, elemVertices2; // elem1 is SE of quad, elem2 is NW
         elemVertices1.push_back(vertexIndices[i][j]);
         elemVertices1.push_back(vertexIndices[i+1][j]);
@@ -482,23 +528,27 @@ MeshPtr MeshFactory::hemkerMesh(double meshWidth, double meshHeight, double cyli
   return shiftedHemkerMesh(-meshWidth/2, meshWidth/2, meshHeight, cylinderRadius, bilinearForm, H1Order, pToAddTest);
 }
 
-MeshPtr MeshFactory::intervalMesh(TBFPtr<double> bf, double xLeft, double xRight, int numElements, int H1Order, int delta_k) {
+MeshPtr MeshFactory::intervalMesh(TBFPtr<double> bf, double xLeft, double xRight, int numElements, int H1Order, int delta_k)
+{
   MeshTopologyPtr meshTopology = intervalMeshTopology(xLeft, xRight, numElements);
   return Teuchos::rcp( new Mesh(meshTopology, bf, H1Order, delta_k) );
 }
 
-MeshTopologyPtr MeshFactory::intervalMeshTopology(double xLeft, double xRight, int numElements) {
+MeshTopologyPtr MeshFactory::intervalMeshTopology(double xLeft, double xRight, int numElements)
+{
   int n = numElements;
   vector< vector<double> > vertices(n+1);
   vector<double> vertex(1);
   double length = xRight - xLeft;
   vector< vector<IndexType> > elementVertices(n);
   vector<IndexType> oneElement(2);
-  for (int i=0; i<n+1; i++) {
+  for (int i=0; i<n+1; i++)
+  {
     vertex[0] = xLeft + (i * length) / n;
     //    cout << "vertex " << i << ": " << vertex[0] << endl;
     vertices[i] = vertex;
-    if (i != n) {
+    if (i != n)
+    {
       oneElement[0] = i;
       oneElement[1] = i+1;
       elementVertices[i] = oneElement;
@@ -512,9 +562,11 @@ MeshTopologyPtr MeshFactory::intervalMeshTopology(double xLeft, double xRight, i
   return meshTopology;
 }
 
-MeshPtr MeshFactory::rectilinearMesh(TBFPtr<double> bf, vector<double> dimensions, vector<int> elementCounts, int H1Order, int pToAddTest, vector<double> x0) {
+MeshPtr MeshFactory::rectilinearMesh(TBFPtr<double> bf, vector<double> dimensions, vector<int> elementCounts, int H1Order, int pToAddTest, vector<double> x0)
+{
   int spaceDim = dimensions.size();
-  if (pToAddTest==-1) {
+  if (pToAddTest==-1)
+  {
     pToAddTest = spaceDim;
   }
 
@@ -523,43 +575,57 @@ MeshPtr MeshFactory::rectilinearMesh(TBFPtr<double> bf, vector<double> dimension
   return Teuchos::rcp( new Mesh(meshTopology, bf, H1Order, pToAddTest) );
 }
 
-MeshTopologyPtr MeshFactory::rectilinearMeshTopology(vector<double> dimensions, vector<int> elementCounts, vector<double> x0) {
+MeshTopologyPtr MeshFactory::rectilinearMeshTopology(vector<double> dimensions, vector<int> elementCounts, vector<double> x0)
+{
   int spaceDim = dimensions.size();
 
-  if (x0.size()==0) {
-    for (int d=0; d<spaceDim; d++) {
+  if (x0.size()==0)
+  {
+    for (int d=0; d<spaceDim; d++)
+    {
       x0.push_back(0.0);
     }
   }
 
-  if (elementCounts.size() != dimensions.size()) {
+  if (elementCounts.size() != dimensions.size())
+  {
     cout << "Element count container must match dimensions container in length.\n";
     TEUCHOS_TEST_FOR_EXCEPTION(true, std::invalid_argument, "Element count container must match dimensions container in length.\n");
   }
 
-  if (spaceDim == 1) {
+  if (spaceDim == 1)
+  {
     double xLeft = x0[0];
     double xRight = dimensions[0] + xLeft;
     return MeshFactory::intervalMeshTopology(xLeft, xRight, elementCounts[0]);
   }
 
-  if (spaceDim == 2) {
+  if (spaceDim == 2)
+  {
     return MeshFactory::quadMeshTopology(dimensions[0], dimensions[1], elementCounts[0], elementCounts[1], false, x0[0], x0[1]);
   }
 
-  if (spaceDim != 3) {
+  if (spaceDim != 3)
+  {
     cout << "For now, only spaceDim 1,2,3 are supported by this MeshFactory method.\n";
     TEUCHOS_TEST_FOR_EXCEPTION(true, std::invalid_argument, "For now, only spaceDim 1,2,3 are is supported by this MeshFactory method.");
   }
 
   CellTopoPtr topo;
-  if (spaceDim==1) {
+  if (spaceDim==1)
+  {
     topo = Camellia::CellTopology::line();
-  } else if (spaceDim==2) {
+  }
+  else if (spaceDim==2)
+  {
     topo = Camellia::CellTopology::quad();
-  } else if (spaceDim==3) {
+  }
+  else if (spaceDim==3)
+  {
     topo = Camellia::CellTopology::hexahedron();
-  } else {
+  }
+  else
+  {
     cout << "Unsupported spatial dimension.\n";
     TEUCHOS_TEST_FOR_EXCEPTION(true, std::invalid_argument, "Unsupported spatial dimension");
   }
@@ -567,7 +633,8 @@ MeshTopologyPtr MeshFactory::rectilinearMeshTopology(vector<double> dimensions, 
   int numElements = 1;
   vector<double> elemLinearMeasures(spaceDim);
   vector<double> origin = x0;
-  for (int d=0; d<spaceDim; d++) {
+  for (int d=0; d<spaceDim; d++)
+  {
     numElements *= elementCounts[d];
     elemLinearMeasures[d] = dimensions[d] / elementCounts[d];
   }
@@ -576,13 +643,16 @@ MeshTopologyPtr MeshFactory::rectilinearMeshTopology(vector<double> dimensions, 
   map< vector<int>, unsigned> vertexLookup;
   vector< vector<double> > vertices;
 
-  for (int i=0; i<elementCounts[0]+1; i++) {
+  for (int i=0; i<elementCounts[0]+1; i++)
+  {
     double x = origin[0] + elemLinearMeasures[0] * i;
 
-    for (int j=0; j<elementCounts[1]+1; j++) {
+    for (int j=0; j<elementCounts[1]+1; j++)
+    {
       double y = origin[1] + elemLinearMeasures[1] * j;
 
-      for (int k=0; k<elementCounts[2]+1; k++) {
+      for (int k=0; k<elementCounts[2]+1; k++)
+      {
         double z = origin[2] + elemLinearMeasures[2] * k;
 
         vector<int> vertexIndex;
@@ -602,9 +672,12 @@ MeshTopologyPtr MeshFactory::rectilinearMeshTopology(vector<double> dimensions, 
   }
 
   vector< vector<unsigned> > elementVertices;
-  for (int i=0; i<elementCounts[0]; i++) {
-    for (int j=0; j<elementCounts[1]; j++) {
-      for (int k=0; k<elementCounts[2]; k++) {
+  for (int i=0; i<elementCounts[0]; i++)
+  {
+    for (int j=0; j<elementCounts[1]; j++)
+    {
+      for (int k=0; k<elementCounts[2]; k++)
+      {
         vector< vector<int> > vertexIntCoords(8, vector<int>(3));
         vertexIntCoords[0][0] = i;
         vertexIntCoords[0][1] = j;
@@ -632,7 +705,8 @@ MeshTopologyPtr MeshFactory::rectilinearMeshTopology(vector<double> dimensions, 
         vertexIntCoords[7][2] = k+1;
 
         vector<unsigned> elementVertexOrdinals;
-        for (int n=0; n<8; n++) {
+        for (int n=0; n<8; n++)
+        {
           elementVertexOrdinals.push_back(vertexLookup[vertexIntCoords[n]]);
         }
 
@@ -647,7 +721,8 @@ MeshTopologyPtr MeshFactory::rectilinearMeshTopology(vector<double> dimensions, 
   return meshTopology;
 }
 
-MeshGeometryPtr MeshFactory::shiftedHemkerGeometry(double xLeft, double xRight, double meshHeight, double cylinderRadius) {
+MeshGeometryPtr MeshFactory::shiftedHemkerGeometry(double xLeft, double xRight, double meshHeight, double cylinderRadius)
+{
   return shiftedHemkerGeometry(xLeft, xRight, -meshHeight/2.0, meshHeight/2.0, cylinderRadius);
 }
 
@@ -767,23 +842,24 @@ MeshPtr MeshFactory::buildQuadMesh(const FieldContainer<double> &quadBoundaryPoi
                                    TBFPtr<double> bilinearForm,
                                    int H1Order, int pTest, bool triangulate, bool useConformingTraces,
                                    map<int,int> trialOrderEnhancements,
-                                   map<int,int> testOrderEnhancements) {
+                                   map<int,int> testOrderEnhancements)
+{
   //  if (triangulate) cout << "Mesh: Triangulating\n" << endl;
   int pToAddTest = pTest - H1Order;
   // rectBoundaryPoints dimensions: (4,2) -- and should be in counterclockwise order
 
   // check that inputs match the assumptions (of a rectilinear mesh)
   TEUCHOS_TEST_FOR_EXCEPTION( ( quadBoundaryPoints.dimension(0) != 4 ) || ( quadBoundaryPoints.dimension(1) != 2 ),
-                             std::invalid_argument,
-                             "quadBoundaryPoints should be dimensions (4,2), points in ccw order.");
+                              std::invalid_argument,
+                              "quadBoundaryPoints should be dimensions (4,2), points in ccw order.");
   double southWest_x = quadBoundaryPoints(0,0),
-  southWest_y = quadBoundaryPoints(0,1),
-  southEast_x = quadBoundaryPoints(1,0),
+         southWest_y = quadBoundaryPoints(0,1),
+         southEast_x = quadBoundaryPoints(1,0),
 //  southEast_y = quadBoundaryPoints(1,1),
 //  northEast_x = quadBoundaryPoints(2,0),
 //  northEast_y = quadBoundaryPoints(2,1),
 //  northWest_x = quadBoundaryPoints(3,0),
-  northWest_y = quadBoundaryPoints(3,1);
+         northWest_y = quadBoundaryPoints(3,1);
 
   double width = southEast_x - southWest_x;
   double height = northWest_y - southWest_y;
@@ -809,9 +885,10 @@ MeshPtr MeshFactory::buildQuadMesh(const FieldContainer<double> &quadBoundaryPoi
 }
 
 MeshPtr MeshFactory::buildQuadMeshHybrid(const FieldContainer<double> &quadBoundaryPoints,
-                                             int horizontalElements, int verticalElements,
-                                             TBFPtr<double> bilinearForm,
-                                             int H1Order, int pTest, bool useConformingTraces) {
+    int horizontalElements, int verticalElements,
+    TBFPtr<double> bilinearForm,
+    int H1Order, int pTest, bool useConformingTraces)
+{
   int pToAddToTest = pTest - H1Order;
   int spaceDim = 2;
   // rectBoundaryPoints dimensions: (4,2) -- and should be in counterclockwise order
@@ -820,19 +897,19 @@ MeshPtr MeshFactory::buildQuadMeshHybrid(const FieldContainer<double> &quadBound
   vector< vector<unsigned> > allElementVertices;
 
   TEUCHOS_TEST_FOR_EXCEPTION( ( quadBoundaryPoints.dimension(0) != 4 ) || ( quadBoundaryPoints.dimension(1) != 2 ),
-                             std::invalid_argument,
-                             "quadBoundaryPoints should be dimensions (4,2), points in ccw order.");
+                              std::invalid_argument,
+                              "quadBoundaryPoints should be dimensions (4,2), points in ccw order.");
 
   int numDimensions = 2;
 
   double southWest_x = quadBoundaryPoints(0,0),
-  southWest_y = quadBoundaryPoints(0,1),
-  southEast_x = quadBoundaryPoints(1,0),
-  southEast_y = quadBoundaryPoints(1,1),
-  northEast_x = quadBoundaryPoints(2,0),
-  northEast_y = quadBoundaryPoints(2,1),
-  northWest_x = quadBoundaryPoints(3,0),
-  northWest_y = quadBoundaryPoints(3,1);
+         southWest_y = quadBoundaryPoints(0,1),
+         southEast_x = quadBoundaryPoints(1,0),
+         southEast_y = quadBoundaryPoints(1,1),
+         northEast_x = quadBoundaryPoints(2,0),
+         northEast_y = quadBoundaryPoints(2,1),
+         northWest_x = quadBoundaryPoints(3,0),
+         northWest_y = quadBoundaryPoints(3,1);
 
   double elemWidth = (southEast_x - southWest_x) / horizontalElements;
   double elemHeight = (northWest_y - southWest_y) / verticalElements;
@@ -842,8 +919,10 @@ MeshPtr MeshFactory::buildQuadMeshHybrid(const FieldContainer<double> &quadBound
   // set up vertices:
   // vertexIndices is for easy vertex lookup by (x,y) index for our Cartesian grid:
   vector< vector<int> > vertexIndices(horizontalElements+1, vector<int>(verticalElements+1));
-  for (int i=0; i<=horizontalElements; i++) {
-    for (int j=0; j<=verticalElements; j++) {
+  for (int i=0; i<=horizontalElements; i++)
+  {
+    for (int j=0; j<=verticalElements; j++)
+    {
       vertexIndices[i][j] = vertices.size();
       vector<double> vertex(spaceDim);
       vertex[0] = southWest_x + elemWidth*i;
@@ -854,17 +933,22 @@ MeshPtr MeshFactory::buildQuadMeshHybrid(const FieldContainer<double> &quadBound
 
   int SOUTH = 0, EAST = 1, NORTH = 2, WEST = 3;
   int SIDE1 = 0, SIDE2 = 1, SIDE3 = 2;
-  for (int i=0; i<horizontalElements; i++) {
-    for (int j=0; j<verticalElements; j++) {
+  for (int i=0; i<horizontalElements; i++)
+  {
+    for (int j=0; j<verticalElements; j++)
+    {
       bool triangulate = (i >= horizontalElements / 2); // triangles on right half of mesh
-      if ( ! triangulate ) {
+      if ( ! triangulate )
+      {
         vector<unsigned> elemVertices;
         elemVertices.push_back(vertexIndices[i][j]);
         elemVertices.push_back(vertexIndices[i+1][j]);
         elemVertices.push_back(vertexIndices[i+1][j+1]);
         elemVertices.push_back(vertexIndices[i][j+1]);
         allElementVertices.push_back(elemVertices);
-      } else {
+      }
+      else
+      {
         vector<unsigned> elemVertices1, elemVertices2; // elem1 is SE of quad, elem2 is NW
         elemVertices1.push_back(vertexIndices[i][j]);     // SIDE1 is SOUTH side of quad
         elemVertices1.push_back(vertexIndices[i+1][j]);   // SIDE2 is EAST
@@ -881,7 +965,8 @@ MeshPtr MeshFactory::buildQuadMeshHybrid(const FieldContainer<double> &quadBound
   return Teuchos::rcp( new Mesh(vertices,allElementVertices,bilinearForm,H1Order,pToAddToTest,useConformingTraces));
 }
 
-void MeshFactory::quadMeshCellIDs(FieldContainer<int> &cellIDs, int horizontalElements, int verticalElements, bool useTriangles) {
+void MeshFactory::quadMeshCellIDs(FieldContainer<int> &cellIDs, int horizontalElements, int verticalElements, bool useTriangles)
+{
   // populates cellIDs with either (h,v) or (h,v,2)
   // where h: horizontalElements (indexed by i, below)
   //       v: verticalElements   (indexed by j)
@@ -893,39 +978,49 @@ void MeshFactory::quadMeshCellIDs(FieldContainer<int> &cellIDs, int horizontalEl
   TEUCHOS_TEST_FOR_EXCEPTION(cellIDs.dimension(1)!=verticalElements,
                              std::invalid_argument,
                              "cellIDs should have dimensions: (horizontalElements, verticalElements) or (horizontalElements, verticalElements,2)");
-  if (useTriangles) {
+  if (useTriangles)
+  {
     TEUCHOS_TEST_FOR_EXCEPTION(cellIDs.dimension(2)!=2,
                                std::invalid_argument,
                                "cellIDs should have dimensions: (horizontalElements, verticalElements,2)");
     TEUCHOS_TEST_FOR_EXCEPTION(cellIDs.rank() != 3,
                                std::invalid_argument,
                                "cellIDs should have dimensions: (horizontalElements, verticalElements,2)");
-  } else {
+  }
+  else
+  {
     TEUCHOS_TEST_FOR_EXCEPTION(cellIDs.rank() != 2,
                                std::invalid_argument,
                                "cellIDs should have dimensions: (horizontalElements, verticalElements)");
   }
 
   int cellID = 0;
-  for (int i=0; i<horizontalElements; i++) {
-    for (int j=0; j<verticalElements; j++) {
-      if (useTriangles) {
+  for (int i=0; i<horizontalElements; i++)
+  {
+    for (int j=0; j<verticalElements; j++)
+    {
+      if (useTriangles)
+      {
         cellIDs(i,j,0) = cellID++;
         cellIDs(i,j,1) = cellID++;
-      } else {
+      }
+      else
+      {
         cellIDs(i,j) = cellID++;
       }
     }
   }
 }
 
-MeshGeometryPtr MeshFactory::shiftedHemkerGeometry(double xLeft, double xRight, double yBottom, double yTop, double cylinderRadius) {
+MeshGeometryPtr MeshFactory::shiftedHemkerGeometry(double xLeft, double xRight, double yBottom, double yTop, double cylinderRadius)
+{
   double meshHeight = yTop - yBottom;
   double embeddedSquareSideLength = cylinderRadius+meshHeight/2;
   return shiftedHemkerGeometry(xLeft, xRight, yBottom, yTop, cylinderRadius, embeddedSquareSideLength);
 }
 
-MeshGeometryPtr MeshFactory::shiftedHemkerGeometry(double xLeft, double xRight, double yBottom, double yTop, double cylinderRadius, double embeddedSquareSideLength) {
+MeshGeometryPtr MeshFactory::shiftedHemkerGeometry(double xLeft, double xRight, double yBottom, double yTop, double cylinderRadius, double embeddedSquareSideLength)
+{
   // first, set up an 8-element mesh, centered at the origin
   ParametricCurvePtr circle = ParametricCurve::circle(cylinderRadius, 0, 0);
   double meshHeight = yTop - yBottom;
@@ -941,7 +1036,8 @@ MeshGeometryPtr MeshFactory::shiftedHemkerGeometry(double xLeft, double xRight, 
   vector<IndexType> outerVertexIndices;
 
   double t = 0;
-  for (int i=0; i<numPoints; i++) {
+  for (int i=0; i<numPoints; i++)
+  {
     circle->value(t, innerVertices(i,0), innerVertices(i,1));
     rect  ->value(t, outerVertices(i,0), outerVertices(i,1));
     circle->value(t, innerVertex[0], innerVertex[1]);
@@ -965,7 +1061,8 @@ MeshGeometryPtr MeshFactory::shiftedHemkerGeometry(double xLeft, double xRight, 
 
   t = 0;
   map< pair<IndexType, IndexType>, ParametricCurvePtr > edgeToCurveMap;
-  for (int i=0; i<numPoints; i++) { // numPoints = numElements
+  for (int i=0; i<numPoints; i++)   // numPoints = numElements
+  {
     vector<IndexType> vertexIndices;
     int innerIndex0 = (i * 2) % totalVertices;
     int innerIndex1 = ((i+1) * 2) % totalVertices;
@@ -1121,7 +1218,8 @@ MeshGeometryPtr MeshFactory::shiftedHemkerGeometry(double xLeft, double xRight, 
 }
 
 MeshPtr MeshFactory::shiftedHemkerMesh(double xLeft, double xRight, double meshHeight, double cylinderRadius, // cylinder is centered in quad mesh.
-                                TBFPtr<double> bilinearForm, int H1Order, int pToAddTest) {
+                                       TBFPtr<double> bilinearForm, int H1Order, int pToAddTest)
+{
   MeshGeometryPtr geometry = MeshFactory::shiftedHemkerGeometry(xLeft, xRight, meshHeight, cylinderRadius);
   MeshPtr mesh = Teuchos::rcp( new Mesh(geometry->vertices(), geometry->elementVertices(),
                                         bilinearForm, H1Order, pToAddTest) );
@@ -1134,7 +1232,8 @@ MeshPtr MeshFactory::shiftedHemkerMesh(double xLeft, double xRight, double meshH
 
 // TODO: test this!
 MeshPtr MeshFactory::spaceTimeMesh(MeshTopologyPtr spatialMeshTopology, double t0, double t1,
-                                   TBFPtr<double> bf, int spatialH1Order, int temporalH1Order, int pToAdd) {
+                                   TBFPtr<double> bf, int spatialH1Order, int temporalH1Order, int pToAdd)
+{
   MeshTopologyPtr meshTopology = spaceTimeMeshTopology(spatialMeshTopology, t0, t1);
 
   vector<int> H1Order(2);
@@ -1147,7 +1246,8 @@ MeshPtr MeshFactory::spaceTimeMesh(MeshTopologyPtr spatialMeshTopology, double t
 }
 
 // TODO: test this!
-MeshTopologyPtr MeshFactory::spaceTimeMeshTopology(MeshTopologyPtr spatialMeshTopology, double t0, double t1, int temporalDivisions) {
+MeshTopologyPtr MeshFactory::spaceTimeMeshTopology(MeshTopologyPtr spatialMeshTopology, double t0, double t1, int temporalDivisions)
+{
   // we allow spatialMeshTopology to have been refined; we start with a coarse space-time topology matching the root spatial topology,
   // and then refine accordingly...
 
@@ -1189,7 +1289,7 @@ MeshTopologyPtr MeshFactory::spaceTimeMeshTopology(MeshTopologyPtr spatialMeshTo
       }
     }
   }
-  
+
   // for now, we only do refinements on the first temporal subdivision
   // later, we might want to enforce 1-irregularity, at least
   set<IndexType> cellIndices = rootSpatialTopology->getRootCellIndices();
@@ -1197,9 +1297,9 @@ MeshTopologyPtr MeshFactory::spaceTimeMeshTopology(MeshTopologyPtr spatialMeshTo
   vector< FieldContainer<double> > componentNodes(2);
   FieldContainer<double> spatialCellNodes;
   FieldContainer<double> spaceTimeCellNodes;
-  
+
   map<IndexType,IndexType> cellIDMap; // from space-time ID (in first temporal subdivision) to corresponding spatial ID
-  
+
   for (int timeSubdivision=0; timeSubdivision<temporalDivisions; timeSubdivision++)
   {
     FieldContainer<double> timeValues(2,1);
@@ -1207,7 +1307,8 @@ MeshTopologyPtr MeshFactory::spaceTimeMeshTopology(MeshTopologyPtr spatialMeshTo
     timeValues[1] = t0 + (timeSubdivision+1) * (t1-t0) / temporalDivisions;
     componentNodes[1] = timeValues;
 
-    for (set<IndexType>::iterator cellIt = cellIndices.begin(); cellIt != cellIndices.end(); cellIt++) {
+    for (set<IndexType>::iterator cellIt = cellIndices.begin(); cellIt != cellIndices.end(); cellIt++)
+    {
       IndexType cellIndex = *cellIt;
       CellPtr spatialCell = rootSpatialTopology->getCell(cellIndex);
       CellTopoPtr spaceTimeCellTopology = CellTopology::cellTopology(spatialCell->topology(), tensorialDegree);
@@ -1215,17 +1316,19 @@ MeshTopologyPtr MeshFactory::spaceTimeMeshTopology(MeshTopologyPtr spatialMeshTo
 
       spatialCellNodes.resize(vertexCount,spaceDim);
       const vector<IndexType>* vertexIndices = &spatialCell->vertices();
-      for (int vertex=0; vertex<vertexCount; vertex++) {
+      for (int vertex=0; vertex<vertexCount; vertex++)
+      {
         IndexType vertexIndex = (*vertexIndices)[vertex];
-        for (int i=0; i<spaceDim; i++) {
+        for (int i=0; i<spaceDim; i++)
+        {
           spatialCellNodes(vertex,i) = spatialMeshTopology->getVertex(vertexIndex)[i];
         }
       }
       componentNodes[0] = spatialCellNodes;
-      
+
       spaceTimeCellNodes.resize(spaceTimeCellTopology->getVertexCount(),spaceTimeDim);
       spaceTimeCellTopology->initializeNodes(componentNodes, spaceTimeCellNodes);
-      
+
       CellPtr spaceTimeCell = spaceTimeTopology->addCell(spaceTimeCellTopology, spaceTimeCellNodes);
       if (timeSubdivision==0) cellIDMap[spaceTimeCell->cellIndex()] = cellIndex;
     }
@@ -1233,16 +1336,20 @@ MeshTopologyPtr MeshFactory::spaceTimeMeshTopology(MeshTopologyPtr spatialMeshTo
 
   bool noCellsToRefine = false;
 
-  while (!noCellsToRefine) {
+  while (!noCellsToRefine)
+  {
     noCellsToRefine = true;
 
     set<IndexType> activeSpaceTimeCellIndices = spaceTimeTopology->getActiveCellIndices();
-    for (set<IndexType>::iterator cellIt = activeSpaceTimeCellIndices.begin(); cellIt != activeSpaceTimeCellIndices.end(); cellIt++) {
+    for (set<IndexType>::iterator cellIt = activeSpaceTimeCellIndices.begin(); cellIt != activeSpaceTimeCellIndices.end(); cellIt++)
+    {
       IndexType spaceTimeCellIndex = *cellIt;
-      if (cellIDMap.find(spaceTimeCellIndex) != cellIDMap.end()) {
+      if (cellIDMap.find(spaceTimeCellIndex) != cellIDMap.end())
+      {
         IndexType spatialCellIndex = cellIDMap[spaceTimeCellIndex];
         CellPtr spatialCell = spatialMeshTopology->getCell(spatialCellIndex);
-        if (spatialCell->isParent()) {
+        if (spatialCell->isParent())
+        {
           noCellsToRefine = false; // indicate we refined some on this pass...
 
           CellPtr spaceTimeCell = spaceTimeTopology->getCell(*cellIt);
@@ -1250,7 +1357,8 @@ MeshTopologyPtr MeshFactory::spaceTimeMeshTopology(MeshTopologyPtr spatialMeshTo
           spaceTimeTopology->refineCell(spaceTimeCellIndex, refPattern);
 
           vector<CellPtr> spatialChildren = spatialCell->children();
-          for (int childOrdinal=0; childOrdinal<spatialChildren.size(); childOrdinal++) {
+          for (int childOrdinal=0; childOrdinal<spatialChildren.size(); childOrdinal++)
+          {
             CellPtr spatialChild = spatialChildren[childOrdinal];
             int vertexCount = spatialChild->topology()->getVertexCount();
 
@@ -1258,7 +1366,8 @@ MeshTopologyPtr MeshFactory::spaceTimeMeshTopology(MeshTopologyPtr spatialMeshTo
 
             spatialCellNodes.resize(vertexCount,spaceDim);
             const vector<IndexType>* vertexIndices = &spatialChild->vertices();
-            for (int vertex=0; vertex<vertexCount; vertex++) {
+            for (int vertex=0; vertex<vertexCount; vertex++)
+            {
               IndexType vertexIndex = (*vertexIndices)[vertex];
               childNodes[vertex] = spatialMeshTopology->getVertex(vertexIndex);
               childNodes[vertex].push_back(t0);

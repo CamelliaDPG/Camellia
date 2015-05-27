@@ -21,67 +21,80 @@
 
 double pi = 2.0*acos(0.0);
 
-class ConstantXBoundary : public SpatialFilter {
-  private:
-    double xval;
-  public:
-    ConstantXBoundary(double xval): xval(xval) {};
-    bool matchesPoint(double x, double y) {
-      double tol = 1e-14;
-      return (abs(x-xval) < tol);
-    }
+class ConstantXBoundary : public SpatialFilter
+{
+private:
+  double xval;
+public:
+  ConstantXBoundary(double xval): xval(xval) {};
+  bool matchesPoint(double x, double y)
+  {
+    double tol = 1e-14;
+    return (abs(x-xval) < tol);
+  }
 };
 
-class ConstantYBoundary : public SpatialFilter {
-  private:
-    double yval;
-  public:
-    ConstantYBoundary(double yval): yval(yval) {};
-    bool matchesPoint(double x, double y) {
-      double tol = 1e-14;
-      return (abs(y-yval) < tol);
-    }
+class ConstantYBoundary : public SpatialFilter
+{
+private:
+  double yval;
+public:
+  ConstantYBoundary(double yval): yval(yval) {};
+  bool matchesPoint(double x, double y)
+  {
+    double tol = 1e-14;
+    return (abs(y-yval) < tol);
+  }
 };
 
-class ExactU1 : public Function {
-  public:
-    double lambda;
-    ExactU1(double lambda) : Function(0), lambda(lambda) {}
-    void values(FieldContainer<double> &values, BasisCachePtr basisCache) {
-      int numCells = values.dimension(0);
-      int numPoints = values.dimension(1);
+class ExactU1 : public Function
+{
+public:
+  double lambda;
+  ExactU1(double lambda) : Function(0), lambda(lambda) {}
+  void values(FieldContainer<double> &values, BasisCachePtr basisCache)
+  {
+    int numCells = values.dimension(0);
+    int numPoints = values.dimension(1);
 
-      const FieldContainer<double> *points = &(basisCache->getPhysicalCubaturePoints());
-      for (int cellIndex=0; cellIndex<numCells; cellIndex++) {
-        for (int ptIndex=0; ptIndex<numPoints; ptIndex++) {
-          double x = (*points)(cellIndex,ptIndex,0);
-          double y = (*points)(cellIndex,ptIndex,1);
-          values(cellIndex, ptIndex) = 1-exp(lambda*x)*cos(2*pi*y);
-        }
+    const FieldContainer<double> *points = &(basisCache->getPhysicalCubaturePoints());
+    for (int cellIndex=0; cellIndex<numCells; cellIndex++)
+    {
+      for (int ptIndex=0; ptIndex<numPoints; ptIndex++)
+      {
+        double x = (*points)(cellIndex,ptIndex,0);
+        double y = (*points)(cellIndex,ptIndex,1);
+        values(cellIndex, ptIndex) = 1-exp(lambda*x)*cos(2*pi*y);
       }
     }
+  }
 };
 
-class ExactU2 : public Function {
-  public:
-    double lambda;
-    ExactU2(double lambda) : Function(0), lambda(lambda) {}
-    void values(FieldContainer<double> &values, BasisCachePtr basisCache) {
-      int numCells = values.dimension(0);
-      int numPoints = values.dimension(1);
+class ExactU2 : public Function
+{
+public:
+  double lambda;
+  ExactU2(double lambda) : Function(0), lambda(lambda) {}
+  void values(FieldContainer<double> &values, BasisCachePtr basisCache)
+  {
+    int numCells = values.dimension(0);
+    int numPoints = values.dimension(1);
 
-      const FieldContainer<double> *points = &(basisCache->getPhysicalCubaturePoints());
-      for (int cellIndex=0; cellIndex<numCells; cellIndex++) {
-        for (int ptIndex=0; ptIndex<numPoints; ptIndex++) {
-          double x = (*points)(cellIndex,ptIndex,0);
-          double y = (*points)(cellIndex,ptIndex,1);
-          values(cellIndex, ptIndex) = lambda/(2*pi)*exp(lambda*x)*sin(2*pi*y);
-        }
+    const FieldContainer<double> *points = &(basisCache->getPhysicalCubaturePoints());
+    for (int cellIndex=0; cellIndex<numCells; cellIndex++)
+    {
+      for (int ptIndex=0; ptIndex<numPoints; ptIndex++)
+      {
+        double x = (*points)(cellIndex,ptIndex,0);
+        double y = (*points)(cellIndex,ptIndex,1);
+        values(cellIndex, ptIndex) = lambda/(2*pi)*exp(lambda*x)*sin(2*pi*y);
       }
     }
+  }
 };
 
-int main(int argc, char *argv[]) {
+int main(int argc, char *argv[])
+{
 #ifdef HAVE_MPI
   Teuchos::GlobalMPISession mpiSession(&argc, &argv,0);
   choice::MpiArgs args( argc, argv );
@@ -159,7 +172,7 @@ int main(int argc, char *argv[]) {
 
   // create a pointer to a new mesh:
   Teuchos::RCP<Mesh> mesh = MeshFactory::buildQuadMesh(meshBoundary, horizontalCells, verticalCells,
-                                                bf, H1Order, H1Order+deltaP);
+                            bf, H1Order, H1Order+deltaP);
 
   ////////////////////////////////////////////////////////////////////
   // INITIALIZE BACKGROUND FLOW FUNCTIONS

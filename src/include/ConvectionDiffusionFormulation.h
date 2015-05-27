@@ -14,43 +14,45 @@
 #include "VarFactory.h"
 #include "BF.h"
 
-namespace Camellia {
-  class ConvectionDiffusionFormulation {
-    int _spaceDim;
-    double _epsilon;
-    FunctionPtr _beta;
+namespace Camellia
+{
+class ConvectionDiffusionFormulation
+{
+  int _spaceDim;
+  double _epsilon;
+  FunctionPtr _beta;
 
-    VarFactoryPtr _vf;
-    BFPtr _bf;
-    map<string, IPPtr> _ips;
+  VarFactoryPtr _vf;
+  BFPtr _bf;
+  map<string, IPPtr> _ips;
 
-    static const string s_u;
-    static const string s_sigma;
+  static const string s_u;
+  static const string s_sigma;
 
-    static const string s_uhat;
-    static const string s_tc;
+  static const string s_uhat;
+  static const string s_tc;
 
-    static const string s_v;
-    static const string s_tau;
-  public:
-    ConvectionDiffusionFormulation(int spaceDim, bool useConformingTraces, FunctionPtr beta, double epsilon=1e-2);
+  static const string s_v;
+  static const string s_tau;
+public:
+  ConvectionDiffusionFormulation(int spaceDim, bool useConformingTraces, FunctionPtr beta, double epsilon=1e-2);
 
-    VarFactoryPtr vf();
-    BFPtr bf();
-    IPPtr ip(string normName);
+  VarFactoryPtr vf();
+  BFPtr bf();
+  IPPtr ip(string normName);
 
-    // field variables:
-    VarPtr u();
-    VarPtr sigma();
+  // field variables:
+  VarPtr u();
+  VarPtr sigma();
 
-    // traces:
-    VarPtr tc();
-    VarPtr uhat();
+  // traces:
+  VarPtr tc();
+  VarPtr uhat();
 
-    // test variables:
-    VarPtr v();
-    VarPtr tau();
-  };
+  // test variables:
+  VarPtr v();
+  VarPtr tau();
+};
 }
 
 #endif

@@ -11,31 +11,33 @@
 
 #include "Function.h"
 
-namespace Camellia {
-  template <typename Scalar>
-  class SumFunction : public TFunction<Scalar> {
-    TFunctionPtr<Scalar> _f1, _f2;
-  public:
-    SumFunction(TFunctionPtr<Scalar> f1, TFunctionPtr<Scalar> f2);
+namespace Camellia
+{
+template <typename Scalar>
+class SumFunction : public TFunction<Scalar>
+{
+  TFunctionPtr<Scalar> _f1, _f2;
+public:
+  SumFunction(TFunctionPtr<Scalar> f1, TFunctionPtr<Scalar> f2);
 
-    TFunctionPtr<Scalar> x();
-    TFunctionPtr<Scalar> y();
-    TFunctionPtr<Scalar> z();
-    TFunctionPtr<Scalar> t();
+  TFunctionPtr<Scalar> x();
+  TFunctionPtr<Scalar> y();
+  TFunctionPtr<Scalar> z();
+  TFunctionPtr<Scalar> t();
 
-    TFunctionPtr<Scalar> dx();
-    TFunctionPtr<Scalar> dy();
-    TFunctionPtr<Scalar> dz();
-    TFunctionPtr<Scalar> dt();
+  TFunctionPtr<Scalar> dx();
+  TFunctionPtr<Scalar> dy();
+  TFunctionPtr<Scalar> dz();
+  TFunctionPtr<Scalar> dt();
 
-    TFunctionPtr<Scalar> grad(int numComponents=-1); // gradient of sum is the sum of gradients
-    TFunctionPtr<Scalar> div();  // divergence of sum is sum of divergences
+  TFunctionPtr<Scalar> grad(int numComponents=-1); // gradient of sum is the sum of gradients
+  TFunctionPtr<Scalar> div();  // divergence of sum is sum of divergences
 
-    void values(Intrepid::FieldContainer<Scalar> &values, BasisCachePtr basisCache);
-    bool boundaryValueOnly();
+  void values(Intrepid::FieldContainer<Scalar> &values, BasisCachePtr basisCache);
+  bool boundaryValueOnly();
 
-    string displayString();
-  };
+  string displayString();
+};
 }
 
 #endif

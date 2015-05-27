@@ -60,9 +60,11 @@ using namespace Intrepid;
 #include "Basis.h"
 #include "doubleBasisConstruction.h"
 
-class TestBilinearFormAnalyticBoundaryIntegral {
+class TestBilinearFormAnalyticBoundaryIntegral
+{
 public:
-  static BFPtr bf() {
+  static BFPtr bf()
+  {
     VarFactoryPtr varFactory = VarFactory::varFactory();
     VarPtr v = varFactory->testVar("v", HGRAD);
     VarPtr uhat = varFactory->traceVar("uhat");
@@ -71,24 +73,29 @@ public:
     return bf;
   }
 
-  static DofOrderingPtr testOrdering(int polyOrder) {
+  static DofOrderingPtr testOrdering(int polyOrder)
+  {
     Teuchos::RCP<DofOrdering> testOrdering = Teuchos::rcp( new DofOrdering(CellTopology::quad()) );
     int testID = 0;
     BasisPtr testBasis = Camellia::intrepidQuadHGRAD(polyOrder);
     testOrdering->addEntry(testID, testBasis, testBasis->rangeRank());
     return testOrdering;
   }
-  static DofOrderingPtr trialOrdering(int polyOrder, int numSides, bool conforming) {
+  static DofOrderingPtr trialOrdering(int polyOrder, int numSides, bool conforming)
+  {
     Teuchos::RCP<DofOrdering> trialOrdering = Teuchos::rcp( new DofOrdering(CellTopology::quad()) );
     int trialID = 0;
     BasisPtr trialBasis = Camellia::intrepidLineHGRAD(polyOrder);
-    for (int sideIndex=0; sideIndex<numSides; sideIndex++) {
+    for (int sideIndex=0; sideIndex<numSides; sideIndex++)
+    {
       trialOrdering->addEntry(trialID, trialBasis, trialBasis->rangeRank(), sideIndex);
     }
-    if (conforming) {
+    if (conforming)
+    {
       int firstVertexOrdinal = *(trialBasis->dofOrdinalsForVertex(0).begin());
       int lastVertexOrdinal = *(trialBasis->dofOrdinalsForVertex(1).begin());
-      for (int sideIndex=0; sideIndex<numSides; sideIndex++) {
+      for (int sideIndex=0; sideIndex<numSides; sideIndex++)
+      {
         int otherSideIndex = (sideIndex+1) % numSides;
         trialOrdering->addIdentification(trialID, sideIndex, lastVertexOrdinal, otherSideIndex, firstVertexOrdinal);
       }
@@ -97,8 +104,10 @@ public:
     return trialOrdering;
   }
 
-  static void expectedPreStiffnessForCubicsOnQuad(FieldContainer<double> &stiffnessExpected, bool conformingTraces) {
-    if (! conformingTraces) {
+  static void expectedPreStiffnessForCubicsOnQuad(FieldContainer<double> &stiffnessExpected, bool conformingTraces)
+  {
+    if (! conformingTraces)
+    {
       stiffnessExpected.resize(1,16,16);
       stiffnessExpected(0,0,0) = 0.42857142857142905;
       stiffnessExpected(0,0,1) = 0.15971914124998537;
@@ -356,7 +365,9 @@ public:
       stiffnessExpected(0,15,13) = -0.026619856874997377;
       stiffnessExpected(0,15,14) = 0.026619856874997586;
       stiffnessExpected(0,15,15) = -0.011904761904761897;
-    } else {
+    }
+    else
+    {
       stiffnessExpected.resize(1,16,12);
       stiffnessExpected(0,0,0) = 0.857142857142858;
       stiffnessExpected(0,0,1) = 0.15971914124998537;
@@ -552,7 +563,8 @@ public:
       stiffnessExpected(0,15,11) = 0.026619856874997586;
     }
   }
-  static void expectedIPMatrixForCubicsOnQuad(FieldContainer<double> &ipMatrixExpected) {
+  static void expectedIPMatrixForCubicsOnQuad(FieldContainer<double> &ipMatrixExpected)
+  {
     ipMatrixExpected.resize(1,16,16);
     ipMatrixExpected(0,0,0) = 0.6394557823129254;
     ipMatrixExpected(0,1,0) = -0.2255000638541592;
@@ -811,8 +823,10 @@ public:
     ipMatrixExpected(0,14,15) = -0.22550006385415985;
     ipMatrixExpected(0,15,15) = 0.639455782312925;
   }
-  static void expectedOptTestWeightsForCubicsOnQuad(FieldContainer<double> & optTestWeights, bool conformingTraces) {
-    if (! conformingTraces) {
+  static void expectedOptTestWeightsForCubicsOnQuad(FieldContainer<double> & optTestWeights, bool conformingTraces)
+  {
+    if (! conformingTraces)
+    {
       optTestWeights.resize(1,16,16);
       optTestWeights(0,0,0) = 0.6275677526325448;
       optTestWeights(0,1,0) = 0.3843365488514948;
@@ -1070,7 +1084,9 @@ public:
       optTestWeights(0,13,15) = 0.07616853779027825;
       optTestWeights(0,14,15) = 0.016928873660665315;
       optTestWeights(0,15,15) = -0.005629985542189624;
-    } else {
+    }
+    else
+    {
       optTestWeights.resize(1,12,16);
       optTestWeights(0,0,0) = 1.255135505265089;
       optTestWeights(0,1,0) = 0.3843365488514948;
@@ -1266,8 +1282,10 @@ public:
       optTestWeights(0,11,15) = 0.016928873660665398;
     }
   }
-  static void expectedFinalStiffnessForCubicsOnQuad(FieldContainer<double> & finalStiffnessExpected, bool conformingTraces) {
-    if (! conformingTraces) {
+  static void expectedFinalStiffnessForCubicsOnQuad(FieldContainer<double> & finalStiffnessExpected, bool conformingTraces)
+  {
+    if (! conformingTraces)
+    {
       finalStiffnessExpected.resize(1,16,16);
       finalStiffnessExpected(0,0,0) = 0.4475982354968517;
       finalStiffnessExpected(0,1,0) = 0.39303908181994723;
@@ -1525,7 +1543,9 @@ public:
       finalStiffnessExpected(0,13,15) = -0.194098979852339;
       finalStiffnessExpected(0,14,15) = 0.39303908181994546;
       finalStiffnessExpected(0,15,15) = 0.44759823549685024;
-    } else {
+    }
+    else
+    {
       finalStiffnessExpected.resize(1,12,12);
       finalStiffnessExpected(0,0,0) = 1.2130738017483724;
       finalStiffnessExpected(0,0,1) = 0.1874959664710494;
@@ -1670,7 +1690,8 @@ public:
       finalStiffnessExpected(0,11,8) = -0.04265812023286017;
       finalStiffnessExpected(0,11,9) = -0.16278969816999722;
       finalStiffnessExpected(0,11,10) = 0.6465168073949052;
-      finalStiffnessExpected(0,11,11) = 2.768471070769951;    }
+      finalStiffnessExpected(0,11,11) = 2.768471070769951;
+    }
   }
 };
 #endif

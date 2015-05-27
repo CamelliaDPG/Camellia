@@ -25,70 +25,84 @@
 #include "choice.hpp"
 #endif
 
-class EpsilonScaling : public hFunction {
+class EpsilonScaling : public hFunction
+{
   double _epsilon;
-  public:
-  EpsilonScaling(double epsilon) {
+public:
+  EpsilonScaling(double epsilon)
+  {
     _epsilon = epsilon;
   }
-  double value(double x, double y, double h) {
+  double value(double x, double y, double h)
+  {
     double scaling = min(_epsilon/(h*h), 1.0);
     // since this is used in inner product term a like (a,a), take square root
     return sqrt(scaling);
   }
 };
 
-class ZeroMeanScaling : public hFunction {
-  public:
-  double value(double x, double y, double h) {
+class ZeroMeanScaling : public hFunction
+{
+public:
+  double value(double x, double y, double h)
+  {
     return 1.0/(h*h);
   }
 };
 
-class InflowBoundary : public SpatialFilter {
-  public:
-    bool matchesPoint(double x, double y) {
-      double tol = 1e-14;
-      bool xMatch = (abs(x) < tol) ;
-      bool yMatch = (abs(y) < tol) ;
-      return xMatch || yMatch;
-    }
+class InflowBoundary : public SpatialFilter
+{
+public:
+  bool matchesPoint(double x, double y)
+  {
+    double tol = 1e-14;
+    bool xMatch = (abs(x) < tol) ;
+    bool yMatch = (abs(y) < tol) ;
+    return xMatch || yMatch;
+  }
 };
 
-class OutflowBoundary : public SpatialFilter {
-  public:
-    bool matchesPoint(double x, double y) {
-      double tol = 1e-14;
-      bool xMatch = (abs(x-1.0) < tol);
-      bool yMatch = (abs(y-1.0) < tol);
-      return xMatch || yMatch;
-    }
+class OutflowBoundary : public SpatialFilter
+{
+public:
+  bool matchesPoint(double x, double y)
+  {
+    double tol = 1e-14;
+    bool xMatch = (abs(x-1.0) < tol);
+    bool yMatch = (abs(y-1.0) < tol);
+    return xMatch || yMatch;
+  }
 };
 
 // boundary value for u
-class SourceTerm : public Function {
-  public:
-    SourceTerm() : Function(0) {}
-    void values(FieldContainer<double> &values, BasisCachePtr basisCache) {
-      int numCells = values.dimension(0);
-      int numPoints = values.dimension(1);
+class SourceTerm : public Function
+{
+public:
+  SourceTerm() : Function(0) {}
+  void values(FieldContainer<double> &values, BasisCachePtr basisCache)
+  {
+    int numCells = values.dimension(0);
+    int numPoints = values.dimension(1);
 
-      const FieldContainer<double> *points = &(basisCache->getPhysicalCubaturePoints());
-      double tol=1e-14;
-      for (int cellIndex=0; cellIndex<numCells; cellIndex++) {
-        for (int ptIndex=0; ptIndex<numPoints; ptIndex++) {
-          double x = (*points)(cellIndex,ptIndex,0);
-          double y = (*points)(cellIndex,ptIndex,1);
-          if (y > 2*x)
-            values(cellIndex, ptIndex) = 1;
-          else
-            values(cellIndex, ptIndex) = -1;
-        }
+    const FieldContainer<double> *points = &(basisCache->getPhysicalCubaturePoints());
+    double tol=1e-14;
+    for (int cellIndex=0; cellIndex<numCells; cellIndex++)
+    {
+      for (int ptIndex=0; ptIndex<numPoints; ptIndex++)
+      {
+        double x = (*points)(cellIndex,ptIndex,0);
+        double y = (*points)(cellIndex,ptIndex,1);
+        if (y > 2*x)
+          values(cellIndex, ptIndex) = 1;
+        else
+          values(cellIndex, ptIndex) = -1;
       }
     }
+  }
 };
 
-int main(int argc, char *argv[]) {
+int main(int argc, char *argv[])
+{
 #ifdef HAVE_MPI
   Teuchos::GlobalMPISession mpiSession(&argc, &argv,0);
   choice::MpiArgs args( argc, argv );
@@ -110,7 +124,7 @@ int main(int argc, char *argv[]) {
 
   ////////////////////   DECLARE VARIABLES   ///////////////////////
   // define test variables
-  VarFactory varFactory; 
+  VarFactory varFactory;
   VarPtr tau = varFactory.testVar("\\tau", HDIV);
   VarPtr v = varFactory.testVar("v", HGRAD);
 
@@ -141,15 +155,15 @@ int main(int argc, char *argv[]) {
   if (norm == 0)
   {
     ip = bf->graphNorm();
-    FunctionPtr h2_scaling = Teuchos::rcp( new ZeroMeanScaling ); 
+    FunctionPtr h2_scaling = Teuchos::rcp( new ZeroMeanScaling );
     ip->addZeroMeanTerm( h2_scaling*v );
   }
   // Robust norm
   else if (norm == 1)
   {
     // robust test norm
-    FunctionPtr ip_scaling = Teuchos::rcp( new EpsilonScaling(epsilon) ); 
-    FunctionPtr h2_scaling = Teuchos::rcp( new ZeroMeanScaling ); 
+    FunctionPtr ip_scaling = Teuchos::rcp( new EpsilonScaling(epsilon) );
+    FunctionPtr h2_scaling = Teuchos::rcp( new ZeroMeanScaling );
     if (!zeroL2)
       ip->addTerm( v );
     ip->addTerm( sqrt(epsilon) * v->grad() );
@@ -164,8 +178,8 @@ int main(int argc, char *argv[]) {
   else if (norm == 2)
   {
     // robust test norm
-    FunctionPtr ip_scaling = Teuchos::rcp( new EpsilonScaling(epsilon) ); 
-    FunctionPtr h2_scaling = Teuchos::rcp( new ZeroMeanScaling ); 
+    FunctionPtr ip_scaling = Teuchos::rcp( new EpsilonScaling(epsilon) );
+    FunctionPtr h2_scaling = Teuchos::rcp( new ZeroMeanScaling );
     // FunctionPtr ip_weight = Teuchos::rcp( new IPWeight() );
     if (!zeroL2)
       ip->addTerm( v );
@@ -180,7 +194,7 @@ int main(int argc, char *argv[]) {
   ////////////////////   SPECIFY RHS   ///////////////////////
   Teuchos::RCP<RHSEasy> rhs = Teuchos::rcp( new RHSEasy );
   FunctionPtr f = Teuchos::rcp( new SourceTerm );
-  rhs->addTerm( f * v ); 
+  rhs->addTerm( f * v );
 
   ////////////////////   CREATE BCs   ///////////////////////
   Teuchos::RCP<BCEasy> bc = Teuchos::rcp( new BCEasy );
@@ -216,13 +230,14 @@ int main(int argc, char *argv[]) {
 
   // create a pointer to a new mesh:
   Teuchos::RCP<Mesh> mesh = Mesh::buildQuadMesh(meshBoundary, horizontalCells, verticalCells,
-      bf, H1Order, H1Order+pToAdd, false);
+                            bf, H1Order, H1Order+pToAdd, false);
 
   ////////////////////   SOLVE & REFINE   ///////////////////////
   Teuchos::RCP<Solution> solution = Teuchos::rcp( new Solution(mesh, bc, rhs, ip) );
   // solution->setFilter(pc);
 
-  if (enforceLocalConservation) {
+  if (enforceLocalConservation)
+  {
     solution->lagrangeConstraints()->addConstraint(beta_n_u_minus_sigma_n == f);
   }
 
@@ -234,7 +249,8 @@ int main(int argc, char *argv[]) {
   if (commRank == 0)
     errOut.open("discontinuous_err.txt");
 
-  for (int refIndex=0; refIndex<=numRefs; refIndex++){    
+  for (int refIndex=0; refIndex<=numRefs; refIndex++)
+  {
     // // Loop through elements and check conditioning
     // vector<ElementPtr> elems = mesh->activeElements();
     // for (vector<ElementPtr>::iterator it = elems.begin(); it != elems.end(); ++it)
@@ -251,7 +267,8 @@ int main(int argc, char *argv[]) {
     solution->solve(false);
 
     double energy_error = solution->energyErrorTotal();
-    if (commRank==0){
+    if (commRank==0)
+    {
       stringstream outfile;
       outfile << "discontinuous_" << refIndex;
       exporter.exportSolution(outfile.str());
@@ -260,11 +277,11 @@ int main(int argc, char *argv[]) {
       // Check local conservation
       FunctionPtr flux = Teuchos::rcp( new PreviousSolutionFunction(solution, beta_n_u_minus_sigma_n) );
       Teuchos::Tuple<double, 3> fluxImbalances = checkConservation(flux, f, varFactory, mesh, 0);
-      cout << "Mass flux: Largest Local = " << fluxImbalances[0] 
-        << ", Global = " << fluxImbalances[1] << ", Sum Abs = " << fluxImbalances[2] << endl;
+      cout << "Mass flux: Largest Local = " << fluxImbalances[0]
+           << ", Global = " << fluxImbalances[1] << ", Sum Abs = " << fluxImbalances[2] << endl;
 
       errOut << mesh->numGlobalDofs() << " " << energy_error << " "
-        << fluxImbalances[0] << " " << fluxImbalances[1] << " " << fluxImbalances[2] << endl;
+             << fluxImbalances[0] << " " << fluxImbalances[1] << " " << fluxImbalances[2] << endl;
     }
 
     if (refIndex < numRefs)

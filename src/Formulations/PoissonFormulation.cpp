@@ -19,7 +19,8 @@ const string PoissonFormulation::S_PSI_N_HAT = "\\widehat{\\psi}_n";
 const string PoissonFormulation::S_Q = "q";
 const string PoissonFormulation::S_TAU = "\\tau";
 
-PoissonFormulation::PoissonFormulation(int spaceDim, bool useConformingTraces) {
+PoissonFormulation::PoissonFormulation(int spaceDim, bool useConformingTraces)
+{
   _spaceDim = spaceDim;
 
   Space tauSpace = (spaceDim > 1) ? HDIV : HGRAD;
@@ -59,7 +60,8 @@ PoissonFormulation::PoissonFormulation(int spaceDim, bool useConformingTraces) {
 
   _poissonBF = Teuchos::rcp( new BF(vf) );
 
-  if (spaceDim==1) {
+  if (spaceDim==1)
+  {
     // for spaceDim==1, the "normal" component is in the flux-ness of phi_hat (it's a plus or minus 1)
     _poissonBF->addTerm(phi, tau->dx());
     _poissonBF->addTerm(psi, tau);
@@ -67,7 +69,9 @@ PoissonFormulation::PoissonFormulation(int spaceDim, bool useConformingTraces) {
 
     _poissonBF->addTerm(-psi, q->dx());
     _poissonBF->addTerm(psi_n_hat, q);
-  } else {
+  }
+  else
+  {
     _poissonBF->addTerm(phi, tau->div());
     _poissonBF->addTerm(psi, tau);
     _poissonBF->addTerm(-phi_hat, tau->dot_normal());
@@ -77,39 +81,46 @@ PoissonFormulation::PoissonFormulation(int spaceDim, bool useConformingTraces) {
   }
 }
 
-BFPtr PoissonFormulation::bf() {
+BFPtr PoissonFormulation::bf()
+{
   return _poissonBF;
 }
 
 // field variables:
-VarPtr PoissonFormulation::phi() {
+VarPtr PoissonFormulation::phi()
+{
   VarFactoryPtr vf = _poissonBF->varFactory();
   return vf->fieldVar(S_PHI);
 }
 
-VarPtr PoissonFormulation::psi() {
+VarPtr PoissonFormulation::psi()
+{
   VarFactoryPtr vf = _poissonBF->varFactory();
   return vf->fieldVar(S_PSI);
 }
 
 // traces:
-VarPtr PoissonFormulation::psi_n_hat() {
+VarPtr PoissonFormulation::psi_n_hat()
+{
   VarFactoryPtr vf = _poissonBF->varFactory();
   return vf->fluxVar(S_PSI_N_HAT);
 }
 
-VarPtr PoissonFormulation::phi_hat() {
+VarPtr PoissonFormulation::phi_hat()
+{
   VarFactoryPtr vf = _poissonBF->varFactory();
   return vf->traceVar(S_PHI_HAT);
 }
 
 // test variables:
-VarPtr PoissonFormulation::q() {
+VarPtr PoissonFormulation::q()
+{
   VarFactoryPtr vf = _poissonBF->varFactory();
   return vf->testVar(S_Q, HGRAD);
 }
 
-VarPtr PoissonFormulation::tau() {
+VarPtr PoissonFormulation::tau()
+{
   VarFactoryPtr vf = _poissonBF->varFactory();
   if (_spaceDim > 1)
     return vf->testVar(S_TAU, HDIV);

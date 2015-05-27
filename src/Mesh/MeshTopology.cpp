@@ -24,7 +24,8 @@ using namespace Intrepid;
 using namespace Camellia;
 using namespace std;
 
-void MeshTopology::init(unsigned spaceDim) {
+void MeshTopology::init(unsigned spaceDim)
+{
   if (spaceDim >= 2) RefinementPattern::initializeAnisotropicRelationships(); // not sure this is the optimal place for this call
 
   _spaceDim = spaceDim;
@@ -44,12 +45,14 @@ void MeshTopology::init(unsigned spaceDim) {
   _gda = NULL;
 }
 
-MeshTopology::MeshTopology(unsigned spaceDim, vector<PeriodicBCPtr> periodicBCs) {
+MeshTopology::MeshTopology(unsigned spaceDim, vector<PeriodicBCPtr> periodicBCs)
+{
   init(spaceDim);
   _periodicBCs = periodicBCs;
 }
 
-MeshTopology::MeshTopology(MeshGeometryPtr meshGeometry, vector<PeriodicBCPtr> periodicBCs) {
+MeshTopology::MeshTopology(MeshGeometryPtr meshGeometry, vector<PeriodicBCPtr> periodicBCs)
+{
   unsigned spaceDim = meshGeometry->vertices()[0].size();
 
   init(spaceDim);
@@ -58,7 +61,8 @@ MeshTopology::MeshTopology(MeshGeometryPtr meshGeometry, vector<PeriodicBCPtr> p
   vector< vector<double> > vertices = meshGeometry->vertices();
 
   vector<int> myVertexIndexForMeshGeometryIndex(vertices.size());
-  for (int i=0; i<vertices.size(); i++) {
+  for (int i=0; i<vertices.size(); i++)
+  {
     myVertexIndexForMeshGeometryIndex[i] = getVertexIndexAdding(vertices[i], 1e-14);
   }
   //  _vertices = meshGeometry->vertices();
@@ -72,11 +76,13 @@ MeshTopology::MeshTopology(MeshGeometryPtr meshGeometry, vector<PeriodicBCPtr> p
 
   int numElements = meshGeometry->cellTopos().size();
 
-  for (int i=0; i<numElements; i++) {
+  for (int i=0; i<numElements; i++)
+  {
     CellTopoPtr cellTopo = meshGeometry->cellTopos()[i];
     vector< unsigned > cellVerticesInMeshGeometry = meshGeometry->elementVertices()[i];
     vector<unsigned> cellVertices;
-    for (int j=0; j<cellVerticesInMeshGeometry.size(); j++) {
+    for (int j=0; j<cellVerticesInMeshGeometry.size(); j++)
+    {
       cellVertices.push_back(myVertexIndexForMeshGeometryIndex[cellVerticesInMeshGeometry[j]]);
     }
 
@@ -84,17 +90,20 @@ MeshTopology::MeshTopology(MeshGeometryPtr meshGeometry, vector<PeriodicBCPtr> p
   }
 }
 
-unsigned MeshTopology::activeCellCount() {
+unsigned MeshTopology::activeCellCount()
+{
   return _activeCells.size();
 }
 
-const set<unsigned> & MeshTopology::getActiveCellIndices() {
+const set<unsigned> & MeshTopology::getActiveCellIndices()
+{
   return _activeCells;
 }
 
 // LLVM memory approximations come from http://info.prelert.com/blog/stl-container-memory-usage
 template<typename A, typename B>
-long long approximateMapSizeLLVM(map<A,B> &someMap) { // in bytes
+long long approximateMapSizeLLVM(map<A,B> &someMap)   // in bytes
+{
   // 24 bytes for the map itself; nodes are 32 bytes + sizeof(pair<A,B>) each
   // if A and B are containers, this won't count their contents...
 
@@ -107,7 +116,8 @@ long long approximateMapSizeLLVM(map<A,B> &someMap) { // in bytes
 }
 
 template<typename A>
-long long approximateSetSizeLLVM(set<A> &someSet) { // in bytes
+long long approximateSetSizeLLVM(set<A> &someSet)   // in bytes
+{
   // 48 bytes for the set itself; nodes are 32 bytes + sizeof(pair<A,B>) each
   // if A and B are containers, this won't count their contents...
 
@@ -120,7 +130,8 @@ long long approximateSetSizeLLVM(set<A> &someSet) { // in bytes
 }
 
 template<typename A>
-long long approximateVectorSizeLLVM(vector<A> &someVector) { // in bytes
+long long approximateVectorSizeLLVM(vector<A> &someVector)   // in bytes
+{
   // 24 bytes for the vector itself; nodes are 32 bytes + sizeof(pair<A,B>) each
   // if A and B are containers, this won't count their contents...
   vector<int> emptyVector;
@@ -129,7 +140,8 @@ long long approximateVectorSizeLLVM(vector<A> &someVector) { // in bytes
   return VECTOR_OVERHEAD + sizeof(A) * someVector.capacity();
 }
 
-map<string, long long> MeshTopology::approximateMemoryCosts() {
+map<string, long long> MeshTopology::approximateMemoryCosts()
+{
   map<string, long long> variableCost;
 
   // calibrate by computing some sizes
@@ -148,7 +160,8 @@ map<string, long long> MeshTopology::approximateMemoryCosts() {
   variableCost["_vertexMap"] = approximateMapSizeLLVM(_vertexMap);
 
   variableCost["_vertices"] = VECTOR_OVERHEAD; // for the outer vector _vertices.
-  for (vector< vector<double> >::iterator entryIt = _vertices.begin(); entryIt != _vertices.end(); entryIt++) {
+  for (vector< vector<double> >::iterator entryIt = _vertices.begin(); entryIt != _vertices.end(); entryIt++)
+  {
     variableCost["_vertices"] += approximateVectorSizeLLVM(*entryIt);
   }
   variableCost["_vertices"] += VECTOR_OVERHEAD * (_vertices.capacity() - _vertices.size());
@@ -156,7 +169,8 @@ map<string, long long> MeshTopology::approximateMemoryCosts() {
   variableCost["_periodicBCs"] = approximateVectorSizeLLVM(_periodicBCs);
 
   variableCost["_periodicBCIndicesMatchingNode"] = MAP_OVERHEAD; // for map _periodicBCIndicesMatchingNode
-  for (map<IndexType, set< pair<int, int> > >::iterator entryIt = _periodicBCIndicesMatchingNode.begin(); entryIt != _periodicBCIndicesMatchingNode.end(); entryIt++) {
+  for (map<IndexType, set< pair<int, int> > >::iterator entryIt = _periodicBCIndicesMatchingNode.begin(); entryIt != _periodicBCIndicesMatchingNode.end(); entryIt++)
+  {
     variableCost["_periodicBCIndicesMatchingNode"] += MAP_NODE_OVERHEAD;
     variableCost["_periodicBCIndicesMatchingNode"] += sizeof(IndexType);
     variableCost["_periodicBCIndicesMatchingNode"] += approximateSetSizeLLVM(entryIt->second);
@@ -165,9 +179,11 @@ map<string, long long> MeshTopology::approximateMemoryCosts() {
   variableCost["_equivalentNodeViaPeriodicBC"] = approximateMapSizeLLVM(_equivalentNodeViaPeriodicBC); // for map _equivalentNodeViaPeriodicBC
 
   variableCost["_entities"] = VECTOR_OVERHEAD; // for outer vector _entities
-  for (vector< vector< vector<IndexType> > >::iterator entryIt = _entities.begin(); entryIt != _entities.end(); entryIt++) {
+  for (vector< vector< vector<IndexType> > >::iterator entryIt = _entities.begin(); entryIt != _entities.end(); entryIt++)
+  {
     variableCost["_entities"] += VECTOR_OVERHEAD; //
-    for (vector< vector<IndexType> >::iterator entry2It = entryIt->begin(); entry2It != entryIt->end(); entry2It++) {
+    for (vector< vector<IndexType> >::iterator entry2It = entryIt->begin(); entry2It != entryIt->end(); entry2It++)
+    {
       variableCost["_entities"] += approximateVectorSizeLLVM(*entry2It);
     }
     variableCost["_entities"] += VECTOR_OVERHEAD * (entryIt->capacity() - entryIt->size());
@@ -175,9 +191,11 @@ map<string, long long> MeshTopology::approximateMemoryCosts() {
   variableCost["_entities"] += VECTOR_OVERHEAD * (_entities.capacity() - _entities.size());
 
   variableCost["_knownEntities"] = VECTOR_OVERHEAD; // for outer vector _knownEntities
-  for (vector< map< vector<IndexType>, IndexType > >::iterator entryIt = _knownEntities.begin(); entryIt != _knownEntities.end(); entryIt++) {
+  for (vector< map< vector<IndexType>, IndexType > >::iterator entryIt = _knownEntities.begin(); entryIt != _knownEntities.end(); entryIt++)
+  {
     variableCost["_knownEntities"] += MAP_OVERHEAD; // for inner map
-    for (map< vector<IndexType>, IndexType >::iterator entry2It = entryIt->begin(); entry2It != entryIt->end(); entry2It++) {
+    for (map< vector<IndexType>, IndexType >::iterator entry2It = entryIt->begin(); entry2It != entryIt->end(); entry2It++)
+    {
       vector<IndexType> entryVector = entry2It->first;
       variableCost["_knownEntities"] += approximateVectorSizeLLVM(entryVector) + sizeof(IndexType);
     }
@@ -185,9 +203,11 @@ map<string, long long> MeshTopology::approximateMemoryCosts() {
   variableCost["_knownEntities"] += MAP_OVERHEAD * (_knownEntities.capacity() - _knownEntities.size());
 
   variableCost["_canonicalEntityOrdering"] = VECTOR_OVERHEAD; // for outer vector _canonicalEntityOrdering
-  for (vector< vector< vector<IndexType> > >::iterator entryIt = _canonicalEntityOrdering.begin(); entryIt != _canonicalEntityOrdering.end(); entryIt++) {
+  for (vector< vector< vector<IndexType> > >::iterator entryIt = _canonicalEntityOrdering.begin(); entryIt != _canonicalEntityOrdering.end(); entryIt++)
+  {
     variableCost["_canonicalEntityOrdering"] += VECTOR_OVERHEAD;
-    for (vector< vector<IndexType> >::iterator entry2It = entryIt->begin(); entry2It != entryIt->end(); entry2It++) {
+    for (vector< vector<IndexType> >::iterator entry2It = entryIt->begin(); entry2It != entryIt->end(); entry2It++)
+    {
       variableCost["_canonicalEntityOrdering"] += approximateVectorSizeLLVM(*entry2It);
     }
     variableCost["_canonicalEntityOrdering"] += VECTOR_OVERHEAD * (entryIt->capacity() - entryIt->size());
@@ -195,9 +215,11 @@ map<string, long long> MeshTopology::approximateMemoryCosts() {
   variableCost["_canonicalEntityOrdering"] += MAP_OVERHEAD * (_canonicalEntityOrdering.capacity() - _canonicalEntityOrdering.size());
 
   variableCost["_activeCellsForEntities"] += VECTOR_OVERHEAD; // for outer vector _activeCellsForEntities
-  for (vector< vector< vector< pair<IndexType, unsigned> > > >::iterator entryIt = _activeCellsForEntities.begin(); entryIt != _activeCellsForEntities.end(); entryIt++) {
+  for (vector< vector< vector< pair<IndexType, unsigned> > > >::iterator entryIt = _activeCellsForEntities.begin(); entryIt != _activeCellsForEntities.end(); entryIt++)
+  {
     variableCost["_activeCellsForEntities"] += VECTOR_OVERHEAD; // inner vector
-    for (vector< vector< pair<IndexType, unsigned> > >::iterator entry2It = entryIt->begin(); entry2It != entryIt->end(); entry2It++) {
+    for (vector< vector< pair<IndexType, unsigned> > >::iterator entry2It = entryIt->begin(); entry2It != entryIt->end(); entry2It++)
+    {
       variableCost["_activeCellsForEntities"] += approximateVectorSizeLLVM(*entry2It);
     }
     variableCost["_activeCellsForEntities"] += VECTOR_OVERHEAD * (entryIt->capacity() - entryIt->size());
@@ -205,9 +227,11 @@ map<string, long long> MeshTopology::approximateMemoryCosts() {
   variableCost["_activeCellsForEntities"] += VECTOR_OVERHEAD * (_activeCellsForEntities.capacity() - _activeCellsForEntities.size());
 
   variableCost["_sidesForEntities"] = VECTOR_OVERHEAD; // _sidesForEntities
-  for (vector< vector< vector<IndexType> > >::iterator entryIt = _sidesForEntities.begin(); entryIt != _sidesForEntities.end(); entryIt++) {
+  for (vector< vector< vector<IndexType> > >::iterator entryIt = _sidesForEntities.begin(); entryIt != _sidesForEntities.end(); entryIt++)
+  {
     variableCost["_sidesForEntities"] += VECTOR_OVERHEAD;
-    for (vector< vector<IndexType> >::iterator entry2It = entryIt->begin(); entry2It != entryIt->end(); entry2It++) {
+    for (vector< vector<IndexType> >::iterator entry2It = entryIt->begin(); entry2It != entryIt->end(); entry2It++)
+    {
       variableCost["_sidesForEntities"] += sizeof(IndexType);
       variableCost["_sidesForEntities"] += approximateVectorSizeLLVM(*entry2It);
     }
@@ -220,9 +244,11 @@ map<string, long long> MeshTopology::approximateMemoryCosts() {
   variableCost["_boundarySides"] = approximateSetSizeLLVM(_boundarySides);
 
   variableCost["_parentEntities"] = VECTOR_OVERHEAD; // vector _parentEntities
-  for (vector< map< IndexType, vector< pair<IndexType, unsigned> > > >::iterator entryIt = _parentEntities.begin(); entryIt != _parentEntities.end(); entryIt++) {
+  for (vector< map< IndexType, vector< pair<IndexType, unsigned> > > >::iterator entryIt = _parentEntities.begin(); entryIt != _parentEntities.end(); entryIt++)
+  {
     variableCost["_parentEntities"] += MAP_OVERHEAD; // map
-    for (map< IndexType, vector< pair<IndexType, unsigned> > > ::iterator entry2It = entryIt->begin(); entry2It != entryIt->end(); entry2It++) {
+    for (map< IndexType, vector< pair<IndexType, unsigned> > > ::iterator entry2It = entryIt->begin(); entry2It != entryIt->end(); entry2It++)
+    {
       variableCost["_parentEntities"] += MAP_NODE_OVERHEAD; // map node
       variableCost["_parentEntities"] += sizeof(IndexType);
       variableCost["_parentEntities"] += approximateVectorSizeLLVM(entry2It->second);
@@ -231,20 +257,24 @@ map<string, long long> MeshTopology::approximateMemoryCosts() {
   variableCost["_parentEntities"] += MAP_OVERHEAD * (_parentEntities.capacity() - _parentEntities.size());
 
   variableCost["_generalizedParentEntities"] = VECTOR_OVERHEAD; // vector _generalizedParentEntities
-  for (vector< map< IndexType, pair<IndexType, unsigned> > >::iterator entryIt = _generalizedParentEntities.begin(); entryIt != _generalizedParentEntities.end(); entryIt++) {
+  for (vector< map< IndexType, pair<IndexType, unsigned> > >::iterator entryIt = _generalizedParentEntities.begin(); entryIt != _generalizedParentEntities.end(); entryIt++)
+  {
     variableCost["_generalizedParentEntities"] += approximateMapSizeLLVM(*entryIt);
   }
   variableCost["_generalizedParentEntities"] += MAP_OVERHEAD * (_generalizedParentEntities.capacity() - _generalizedParentEntities.size());
 
   variableCost["_childEntities"] = VECTOR_OVERHEAD; // vector _childEntities
-  for (vector< map< IndexType, vector< pair< RefinementPatternPtr, vector<IndexType> > > > >::iterator entryIt = _childEntities.begin(); entryIt != _childEntities.end(); entryIt++) {
+  for (vector< map< IndexType, vector< pair< RefinementPatternPtr, vector<IndexType> > > > >::iterator entryIt = _childEntities.begin(); entryIt != _childEntities.end(); entryIt++)
+  {
     variableCost["_childEntities"] += MAP_OVERHEAD; // map
-    for (map< IndexType, vector< pair< RefinementPatternPtr, vector<IndexType> > > >::iterator entry2It = entryIt->begin(); entry2It != entryIt->end(); entry2It++) {
+    for (map< IndexType, vector< pair< RefinementPatternPtr, vector<IndexType> > > >::iterator entry2It = entryIt->begin(); entry2It != entryIt->end(); entry2It++)
+    {
       variableCost["_childEntities"] += MAP_NODE_OVERHEAD; // map node
       variableCost["_childEntities"] += sizeof(IndexType);
 
       variableCost["_childEntities"] += VECTOR_OVERHEAD; // vector
-      for (vector< pair< RefinementPatternPtr, vector<IndexType> > >::iterator entry3It = entry2It->second.begin(); entry3It != entry2It->second.end(); entry3It++) {
+      for (vector< pair< RefinementPatternPtr, vector<IndexType> > >::iterator entry3It = entry2It->second.begin(); entry3It != entry2It->second.end(); entry3It++)
+      {
         variableCost["_childEntities"] += sizeof(RefinementPatternPtr);
         variableCost["_childEntities"] += approximateVectorSizeLLVM(entry3It->second);
       }
@@ -254,13 +284,15 @@ map<string, long long> MeshTopology::approximateMemoryCosts() {
   variableCost["_childEntities"] += MAP_OVERHEAD * (_childEntities.capacity() - _childEntities.size());
 
   variableCost["_entityCellTopologyKeys"] = VECTOR_OVERHEAD; // _entityCellTopologyKeys vector
-  for (vector< vector< CellTopologyKey > >::iterator entryIt = _entityCellTopologyKeys.begin(); entryIt != _entityCellTopologyKeys.end(); entryIt++) {
+  for (vector< vector< CellTopologyKey > >::iterator entryIt = _entityCellTopologyKeys.begin(); entryIt != _entityCellTopologyKeys.end(); entryIt++)
+  {
     variableCost["_entityCellTopologyKeys"] += approximateVectorSizeLLVM(*entryIt);
   }
   variableCost["_entityCellTopologyKeys"] += VECTOR_OVERHEAD * (_entityCellTopologyKeys.capacity() - _entityCellTopologyKeys.size());
 
   variableCost["_cells"] = VECTOR_OVERHEAD; // _cells vector
-  for (vector< CellPtr >::iterator entryIt = _cells.begin(); entryIt != _cells.end(); entryIt++) {
+  for (vector< CellPtr >::iterator entryIt = _cells.begin(); entryIt != _cells.end(); entryIt++)
+  {
     variableCost["_cells"] += (*entryIt)->approximateMemoryFootprint();
   }
   variableCost["_cells"] += sizeof(CellPtr) * (_cells.capacity() - _cells.size());
@@ -277,34 +309,41 @@ map<string, long long> MeshTopology::approximateMemoryCosts() {
   return variableCost;
 }
 
-long long MeshTopology::approximateMemoryFootprint() {
+long long MeshTopology::approximateMemoryFootprint()
+{
   long long memSize = 0; // in bytes
 
   map<string, long long> variableCost = approximateMemoryCosts();
-  for (map<string, long long>::iterator entryIt = variableCost.begin(); entryIt != variableCost.end(); entryIt++) {
+  for (map<string, long long>::iterator entryIt = variableCost.begin(); entryIt != variableCost.end(); entryIt++)
+  {
     //    cout << entryIt->first << ": " << entryIt->second << endl;
     memSize += entryIt->second;
   }
   return memSize;
 }
 
-CellPtr MeshTopology::addCell(CellTopoPtr cellTopo, const FieldContainer<double> &cellVertices) {
+CellPtr MeshTopology::addCell(CellTopoPtr cellTopo, const FieldContainer<double> &cellVertices)
+{
   TEUCHOS_TEST_FOR_EXCEPTION(cellTopo->getDimension() != _spaceDim, std::invalid_argument, "cellTopo dimension must match mesh topology dimension");
   TEUCHOS_TEST_FOR_EXCEPTION(cellVertices.dimension(0) != cellTopo->getVertexCount(), std::invalid_argument, "cellVertices must have shape (P,D)");
   TEUCHOS_TEST_FOR_EXCEPTION(cellVertices.dimension(1) != cellTopo->getDimension(), std::invalid_argument, "cellVertices must have shape (P,D)");
-  
+
   int vertexCount = cellVertices.dimension(0);
   vector< vector<double> > cellVertexVector(vertexCount,vector<double>(_spaceDim));
-  for (int vertexOrdinal=0; vertexOrdinal<vertexCount; vertexOrdinal++) {
-    for (int d=0; d<_spaceDim; d++) {
+  for (int vertexOrdinal=0; vertexOrdinal<vertexCount; vertexOrdinal++)
+  {
+    for (int d=0; d<_spaceDim; d++)
+    {
       cellVertexVector[vertexOrdinal][d] = cellVertices(vertexOrdinal,d);
     }
   }
   return addCell(cellTopo, cellVertexVector);
 }
 
-CellPtr MeshTopology::addCell(CellTopoPtr cellTopo, const vector<vector<double> > &cellVertices) {
-  if (cellTopo->getNodeCount() != cellVertices.size()) {
+CellPtr MeshTopology::addCell(CellTopoPtr cellTopo, const vector<vector<double> > &cellVertices)
+{
+  if (cellTopo->getNodeCount() != cellVertices.size())
+  {
     cout << "ERROR: cellTopo->getNodeCount() != cellVertices.size().\n";
     TEUCHOS_TEST_FOR_EXCEPTION(true,std::invalid_argument,"cellTopo->getNodeCount() != cellVertices.size()");
   }
@@ -314,37 +353,46 @@ CellPtr MeshTopology::addCell(CellTopoPtr cellTopo, const vector<vector<double> 
   return _cells[cellIndex];
 }
 
-CellPtr MeshTopology::addCell(CellTopoPtrLegacy shardsTopo, const vector<vector<double> > &cellVertices) {
+CellPtr MeshTopology::addCell(CellTopoPtrLegacy shardsTopo, const vector<vector<double> > &cellVertices)
+{
   CellTopoPtr cellTopo = CellTopology::cellTopology(*shardsTopo);
   return addCell(cellTopo, cellVertices);
 }
 
-unsigned MeshTopology::addCell(CellTopoPtrLegacy shardsTopo, const vector<unsigned> &cellVertices, unsigned parentCellIndex) {
+unsigned MeshTopology::addCell(CellTopoPtrLegacy shardsTopo, const vector<unsigned> &cellVertices, unsigned parentCellIndex)
+{
   CellTopoPtr cellTopo = CellTopology::cellTopology(*shardsTopo);
   return addCell(cellTopo, cellVertices, parentCellIndex);
 }
 
-unsigned MeshTopology::addCell(CellTopoPtr cellTopo, const vector<unsigned> &cellVertices, unsigned parentCellIndex) {
+unsigned MeshTopology::addCell(CellTopoPtr cellTopo, const vector<unsigned> &cellVertices, unsigned parentCellIndex)
+{
   vector< vector< unsigned > > cellEntityPermutations;
   unsigned cellIndex = _cells.size();
 
   vector< vector<unsigned> > cellEntityIndices(_spaceDim); // subcdim, subcord
-  for (int d=0; d<_spaceDim; d++) { // start with vertices, and go up to sides
+  for (int d=0; d<_spaceDim; d++)   // start with vertices, and go up to sides
+  {
     int entityCount = cellTopo->getSubcellCount(d);
     if (d > 0) cellEntityPermutations.push_back(vector<unsigned>(entityCount));
     else cellEntityPermutations.push_back(vector<unsigned>(0)); // empty vector for d=0 -- we don't track permutations here...
     cellEntityIndices[d] = vector<unsigned>(entityCount);
-    for (int j=0; j<entityCount; j++) {
+    for (int j=0; j<entityCount; j++)
+    {
       // for now, we treat vertices just like all the others--could save a bit of memory, etc. by not storing in _knownEntities[0], etc.
       unsigned entityIndex, entityPermutation;
       vector< unsigned > nodes;
-      if (d != 0) {
+      if (d != 0)
+      {
         int entityNodeCount = cellTopo->getNodeCount(d, j);
-        for (int node=0; node<entityNodeCount; node++) {
+        for (int node=0; node<entityNodeCount; node++)
+        {
           unsigned nodeIndexInCell = cellTopo->getNodeMap(d, j, node);
           nodes.push_back(cellVertices[nodeIndexInCell]);
         }
-      } else {
+      }
+      else
+      {
         nodes.push_back(cellVertices[j]);
       }
 
@@ -353,7 +401,8 @@ unsigned MeshTopology::addCell(CellTopoPtr cellTopo, const vector<unsigned> &cel
 
       // if d==0, then we don't need permutation info
       if (d != 0) cellEntityPermutations[d][j] = entityPermutation;
-      if (_activeCellsForEntities[d].size() <= entityIndex) { // expand container
+      if (_activeCellsForEntities[d].size() <= entityIndex)   // expand container
+      {
         _activeCellsForEntities[d].resize(entityIndex + 1, vector< pair<IndexType, unsigned> >());
       }
       _activeCellsForEntities[d][entityIndex].push_back(make_pair(cellIndex,j));
@@ -361,9 +410,12 @@ unsigned MeshTopology::addCell(CellTopoPtr cellTopo, const vector<unsigned> &cel
       // now that we've added, sort:
       std::sort(_activeCellsForEntities[d][entityIndex].begin(), _activeCellsForEntities[d][entityIndex].end());
 
-      if (d == 0) { // vertex --> should set parent relationships for any vertices that are equivalent via periodic BCs
-        if (_periodicBCIndicesMatchingNode.find(entityIndex) != _periodicBCIndicesMatchingNode.end()) {
-          for (set< pair<int, int> >::iterator bcIt = _periodicBCIndicesMatchingNode[entityIndex].begin(); bcIt != _periodicBCIndicesMatchingNode[entityIndex].end(); bcIt++) {
+      if (d == 0)   // vertex --> should set parent relationships for any vertices that are equivalent via periodic BCs
+      {
+        if (_periodicBCIndicesMatchingNode.find(entityIndex) != _periodicBCIndicesMatchingNode.end())
+        {
+          for (set< pair<int, int> >::iterator bcIt = _periodicBCIndicesMatchingNode[entityIndex].begin(); bcIt != _periodicBCIndicesMatchingNode[entityIndex].end(); bcIt++)
+          {
             IndexType equivalentNode = _equivalentNodeViaPeriodicBC[make_pair(entityIndex, *bcIt)];
             _activeCellsForEntities[d][equivalentNode].push_back(make_pair(cellIndex, j));
             // now that we've added, sort:
@@ -377,61 +429,78 @@ unsigned MeshTopology::addCell(CellTopoPtr cellTopo, const vector<unsigned> &cel
   _cells.push_back(cell);
   _activeCells.insert(cellIndex);
   _rootCells.insert(cellIndex); // will remove if a parent relationship is established
-  if (parentCellIndex != -1) {
+  if (parentCellIndex != -1)
+  {
     cell->setParent(getCell(parentCellIndex));
   }
 
   // set neighbors:
   unsigned sideDim = _spaceDim - 1;
   unsigned sideCount = cellTopo->getSideCount();
-  for (int sideOrdinal=0; sideOrdinal<sideCount; sideOrdinal++) {
+  for (int sideOrdinal=0; sideOrdinal<sideCount; sideOrdinal++)
+  {
     unsigned sideEntityIndex = cell->entityIndex(sideDim, sideOrdinal);
     addCellForSide(cellIndex,sideOrdinal,sideEntityIndex);
   }
-  for (int sideOrdinal=0; sideOrdinal<sideCount; sideOrdinal++) {
+  for (int sideOrdinal=0; sideOrdinal<sideCount; sideOrdinal++)
+  {
     unsigned sideEntityIndex = cell->entityIndex(sideDim, sideOrdinal);
     unsigned cellCountForSide = getCellCountForSide(sideEntityIndex);
-    if (cellCountForSide == 2) { // compatible neighbors
+    if (cellCountForSide == 2)   // compatible neighbors
+    {
       pair<unsigned,unsigned> firstNeighbor  = _cellsForSideEntities[sideEntityIndex].first;
       pair<unsigned,unsigned> secondNeighbor = _cellsForSideEntities[sideEntityIndex].second;
       CellPtr firstCell = _cells[firstNeighbor.first];
       CellPtr secondCell = _cells[secondNeighbor.first];
       firstCell->setNeighbor(firstNeighbor.second, secondNeighbor.first, secondNeighbor.second);
       secondCell->setNeighbor(secondNeighbor.second, firstNeighbor.first, firstNeighbor.second);
-      if (_boundarySides.find(sideEntityIndex) != _boundarySides.end()) {
-        if (_childEntities[sideDim].find(sideEntityIndex) != _childEntities[sideDim].end()) {
+      if (_boundarySides.find(sideEntityIndex) != _boundarySides.end())
+      {
+        if (_childEntities[sideDim].find(sideEntityIndex) != _childEntities[sideDim].end())
+        {
           cout << "Unhandled case: boundary side acquired neighbor after being refined.\n";
           TEUCHOS_TEST_FOR_EXCEPTION(true, std::invalid_argument, "Unhandled case: boundary side acquired neighbor after being refined");
         }
         _boundarySides.erase(sideEntityIndex);
       }
       // if the pre-existing neighbor is refined, set its descendants to have the appropriate neighbor.
-      if (firstCell->isParent()) {
+      if (firstCell->isParent())
+      {
         vector< pair< GlobalIndexType, unsigned> > firstCellDescendants = firstCell->getDescendantsForSide(firstNeighbor.second);
-        for (vector< pair< GlobalIndexType, unsigned> >::iterator descIt = firstCellDescendants.begin(); descIt != firstCellDescendants.end(); descIt++) {
+        for (vector< pair< GlobalIndexType, unsigned> >::iterator descIt = firstCellDescendants.begin(); descIt != firstCellDescendants.end(); descIt++)
+        {
           unsigned childCellIndex = descIt->first;
           unsigned childSideIndex = descIt->second;
           getCell(childCellIndex)->setNeighbor(childSideIndex, secondNeighbor.first, secondNeighbor.second);
         }
       }
-      if (secondCell->isParent()) { // I don't think we should ever get here
+      if (secondCell->isParent())   // I don't think we should ever get here
+      {
         vector< pair< GlobalIndexType, unsigned> > secondCellDescendants = secondCell->getDescendantsForSide(secondNeighbor.first);
-        for (vector< pair< GlobalIndexType, unsigned> >::iterator descIt = secondCellDescendants.begin(); descIt != secondCellDescendants.end(); descIt++) {
+        for (vector< pair< GlobalIndexType, unsigned> >::iterator descIt = secondCellDescendants.begin(); descIt != secondCellDescendants.end(); descIt++)
+        {
           GlobalIndexType childCellIndex = descIt->first;
           unsigned childSideOrdinal = descIt->second;
           getCell(childCellIndex)->setNeighbor(childSideOrdinal, firstNeighbor.first, firstNeighbor.second);
         }
       }
-    } else if (cellCountForSide == 1) { // just this side
-      if (parentCellIndex == -1) { // for now anyway, we are on the boundary...
+    }
+    else if (cellCountForSide == 1)     // just this side
+    {
+      if (parentCellIndex == -1)   // for now anyway, we are on the boundary...
+      {
         _boundarySides.insert(sideEntityIndex);
-      } else {
+      }
+      else
+      {
         vector< pair<unsigned, unsigned> > sideAncestry = getConstrainingSideAncestry(sideEntityIndex);
         // the last entry, if any, should refer to an active cell's side...
-        if (sideAncestry.size() > 0) {
+        if (sideAncestry.size() > 0)
+        {
           unsigned sideAncestorIndex = sideAncestry[sideAncestry.size()-1].first;
           vector< pair<unsigned, unsigned> > activeCellEntries = _activeCellsForEntities[sideDim][sideAncestorIndex];
-          if (activeCellEntries.size() != 1) {
+          if (activeCellEntries.size() != 1)
+          {
             cout << "Internal error: activeCellEntries does not have the expected size.\n";
             cout << "sideEntityIndex: " << sideEntityIndex << endl;
             cout << "sideAncestorIndex: " << sideAncestorIndex << endl;
@@ -449,14 +518,19 @@ unsigned MeshTopology::addCell(CellTopoPtr cellTopo, const vector<unsigned> &cel
       }
     }
 
-    for (int d=0; d<sideDim; d++) {
+    for (int d=0; d<sideDim; d++)
+    {
       set<unsigned> sideSubcellIndices = getEntitiesForSide(sideEntityIndex, d);
-      for (set<unsigned>::iterator subcellIt = sideSubcellIndices.begin(); subcellIt != sideSubcellIndices.end(); subcellIt++) {
+      for (set<unsigned>::iterator subcellIt = sideSubcellIndices.begin(); subcellIt != sideSubcellIndices.end(); subcellIt++)
+      {
         unsigned subcellEntityIndex = *subcellIt;
         addSideForEntity(d, subcellEntityIndex, sideEntityIndex);
-        if (d==0) {
-          if (_periodicBCIndicesMatchingNode.find(subcellEntityIndex) != _periodicBCIndicesMatchingNode.end()) {
-            for (set< pair<int, int> >::iterator bcIt = _periodicBCIndicesMatchingNode[subcellEntityIndex].begin(); bcIt != _periodicBCIndicesMatchingNode[subcellEntityIndex].end(); bcIt++) {
+        if (d==0)
+        {
+          if (_periodicBCIndicesMatchingNode.find(subcellEntityIndex) != _periodicBCIndicesMatchingNode.end())
+          {
+            for (set< pair<int, int> >::iterator bcIt = _periodicBCIndicesMatchingNode[subcellEntityIndex].begin(); bcIt != _periodicBCIndicesMatchingNode[subcellEntityIndex].end(); bcIt++)
+            {
               IndexType equivalentNode = _equivalentNodeViaPeriodicBC[make_pair(subcellEntityIndex, *bcIt)];
 
               addSideForEntity(d, equivalentNode, sideEntityIndex);
@@ -472,30 +546,42 @@ unsigned MeshTopology::addCell(CellTopoPtr cellTopo, const vector<unsigned> &cel
   return cellIndex;
 }
 
-void MeshTopology::addCellForSide(unsigned int cellIndex, unsigned int sideOrdinal, unsigned int sideEntityIndex) {
-  if (_cellsForSideEntities.find(sideEntityIndex) == _cellsForSideEntities.end()) {
+void MeshTopology::addCellForSide(unsigned int cellIndex, unsigned int sideOrdinal, unsigned int sideEntityIndex)
+{
+  if (_cellsForSideEntities.find(sideEntityIndex) == _cellsForSideEntities.end())
+  {
     pair< unsigned, unsigned > cell1 = make_pair(cellIndex, sideOrdinal);
     pair< unsigned, unsigned > cell2 = make_pair(-1, -1);
     _cellsForSideEntities[sideEntityIndex] = make_pair(cell1, cell2);
-  } else {
+  }
+  else
+  {
     pair< unsigned, unsigned > cell1 = _cellsForSideEntities[sideEntityIndex].first;
     pair< unsigned, unsigned > cell2 = _cellsForSideEntities[sideEntityIndex].second;
 
     CellPtr cellToAdd = getCell(cellIndex);
     unsigned parentCellIndex;
-    if ( cellToAdd->getParent().get() == NULL) {
+    if ( cellToAdd->getParent().get() == NULL)
+    {
       parentCellIndex = -1;
-    } else {
+    }
+    else
+    {
       parentCellIndex = cellToAdd->getParent()->cellIndex();
     }
-    if (parentCellIndex == cell1.first) {
+    if (parentCellIndex == cell1.first)
+    {
       // then replace cell1's entry with the new one
       cell1.first = cellIndex;
       cell1.second = sideOrdinal;
-    } else if ((cell2.first == -1) || (parentCellIndex == cell2.first)) {
+    }
+    else if ((cell2.first == -1) || (parentCellIndex == cell2.first))
+    {
       cell2.first = cellIndex;
       cell2.second = sideOrdinal;
-    } else {
+    }
+    else
+    {
       cout << "Internal error: attempt to add 3rd cell for side with entity index " << sideEntityIndex << endl;
       TEUCHOS_TEST_FOR_EXCEPTION(true, std::invalid_argument, "Internal error: attempt to add 3rd cell for side");
     }
@@ -503,7 +589,8 @@ void MeshTopology::addCellForSide(unsigned int cellIndex, unsigned int sideOrdin
   }
 }
 
-void MeshTopology::addEdgeCurve(pair<unsigned,unsigned> edge, ParametricCurvePtr curve) {
+void MeshTopology::addEdgeCurve(pair<unsigned,unsigned> edge, ParametricCurvePtr curve)
+{
   // note: does NOT update the MeshTransformationFunction.  That's caller's responsibility,
   // because we don't know whether there are more curves coming for the affected elements.
 
@@ -514,11 +601,13 @@ void MeshTopology::addEdgeCurve(pair<unsigned,unsigned> edge, ParametricCurvePtr
 
   std::sort(edgeNodes.begin(), edgeNodes.end());
 
-  if (_knownEntities[edgeDim].find(edgeNodes) == _knownEntities[edgeDim].end() ) {
+  if (_knownEntities[edgeDim].find(edgeNodes) == _knownEntities[edgeDim].end() )
+  {
     TEUCHOS_TEST_FOR_EXCEPTION(true, std::invalid_argument, "edge not found.");
   }
   unsigned edgeIndex = _knownEntities[edgeDim][edgeNodes];
-  if (getChildEntities(edgeDim, edgeIndex).size() > 0) {
+  if (getChildEntities(edgeDim, edgeIndex).size() > 0)
+  {
     TEUCHOS_TEST_FOR_EXCEPTION(true, std::invalid_argument, "setting curves along broken edges not supported.  Should set for each piece separately.");
   }
 
@@ -533,11 +622,13 @@ void MeshTopology::addEdgeCurve(pair<unsigned,unsigned> edge, ParametricCurvePtr
   curve->value(1, curve1(0), curve1(1));
   double maxDiff = 0;
   double tol = 1e-14;
-  for (int d=0; d<spaceDim; d++) {
+  for (int d=0; d<spaceDim; d++)
+  {
     maxDiff = std::max(maxDiff, abs(curve0(d)-v0[d]));
     maxDiff = std::max(maxDiff, abs(curve1(d)-v1[d]));
   }
-  if (maxDiff > tol) {
+  if (maxDiff > tol)
+  {
     cout << "Error: curve's endpoints do not match edge vertices (maxDiff in coordinates " << maxDiff << ")" << endl;
     cout << "curve0:\n" << curve0;
     cout << "v0: (" << v0[0] << ", " << v0[1] << ")\n";
@@ -550,18 +641,21 @@ void MeshTopology::addEdgeCurve(pair<unsigned,unsigned> edge, ParametricCurvePtr
 
   vector< pair<unsigned, unsigned> > cellIDsForEdge = _activeCellsForEntities[edgeDim][edgeIndex];
   //  (cellIndex, entityIndexInCell)
-  if (cellIDsForEdge.size() != 1) {
+  if (cellIDsForEdge.size() != 1)
+  {
     TEUCHOS_TEST_FOR_EXCEPTION(true, std::invalid_argument, "right now, only edges belonging to exactly one cell are supported by curvilinear geometry...");
   }
   unsigned cellID = cellIDsForEdge[0].first;
   _cellIDsWithCurves.insert(cellID);
 }
 
-unsigned MeshTopology::addEntity(CellTopoPtr entityTopo, const vector<unsigned> &entityVertices, unsigned &entityPermutation) {
+unsigned MeshTopology::addEntity(CellTopoPtr entityTopo, const vector<unsigned> &entityVertices, unsigned &entityPermutation)
+{
   set< unsigned > nodeSet;
   nodeSet.insert(entityVertices.begin(),entityVertices.end());
 
-  if (nodeSet.size() != entityVertices.size()) {
+  if (nodeSet.size() != entityVertices.size())
+  {
     TEUCHOS_TEST_FOR_EXCEPTION(true, std::invalid_argument, "Entities may not have repeated vertices");
   }
   unsigned d  = entityTopo->getDimension();
@@ -569,18 +663,22 @@ unsigned MeshTopology::addEntity(CellTopoPtr entityTopo, const vector<unsigned> 
 
   vector<unsigned> sortedVertices(nodeSet.begin(),nodeSet.end());
 
-  if ( entityIndex == -1 ) {
+  if ( entityIndex == -1 )
+  {
     // new entity
     entityIndex = _entities[d].size();
     _entities[d].push_back(sortedVertices);
     _knownEntities[d].insert(make_pair(sortedVertices, entityIndex));
     if (d != 0) _canonicalEntityOrdering[d].push_back(entityVertices);
     entityPermutation = 0;
-    if (_knownTopologies.find(entityTopo->getKey()) == _knownTopologies.end()) {
+    if (_knownTopologies.find(entityTopo->getKey()) == _knownTopologies.end())
+    {
       _knownTopologies[entityTopo->getKey()] = entityTopo;
     }
     _entityCellTopologyKeys[d].push_back(entityTopo->getKey());
-  } else {
+  }
+  else
+  {
     // existing entity
     // maintain order but relabel nodes according to periodic BCs:
     vector<IndexType> canonicalVerticesNewOrdering = getCanonicalEntityNodesViaPeriodicBCs(d, entityVertices);
@@ -592,11 +690,13 @@ unsigned MeshTopology::addEntity(CellTopoPtr entityTopo, const vector<unsigned> 
   return entityIndex;
 }
 
-void MeshTopology::addChildren(CellPtr parentCell, const vector< CellTopoPtr > &childTopos, const vector< vector<unsigned> > &childVertices) {
+void MeshTopology::addChildren(CellPtr parentCell, const vector< CellTopoPtr > &childTopos, const vector< vector<unsigned> > &childVertices)
+{
   int numChildren = childTopos.size();
   TEUCHOS_TEST_FOR_EXCEPTION(numChildren != childVertices.size(), std::invalid_argument, "childTopos and childVertices must be the same size");
   vector< CellPtr > children;
-  for (int childIndex=0; childIndex<numChildren; childIndex++) {
+  for (int childIndex=0; childIndex<numChildren; childIndex++)
+  {
     unsigned cellIndex = addCell(childTopos[childIndex], childVertices[childIndex],parentCell->cellIndex());
     children.push_back(_cells[cellIndex]);
     _rootCells.erase(cellIndex);
@@ -624,47 +724,62 @@ void MeshTopology::addChildren(CellPtr parentCell, const vector< CellTopoPtr > &
   //  }
 }
 
-void MeshTopology::addSideForEntity(unsigned int entityDim, IndexType entityIndex, IndexType sideEntityIndex) {
-  if (_sidesForEntities[entityDim].size() <= entityIndex) {
+void MeshTopology::addSideForEntity(unsigned int entityDim, IndexType entityIndex, IndexType sideEntityIndex)
+{
+  if (_sidesForEntities[entityDim].size() <= entityIndex)
+  {
     _sidesForEntities[entityDim].resize(entityIndex + 1);
   }
 
   std::vector<IndexType>::iterator searchResult = std::find(_sidesForEntities[entityDim][entityIndex].begin(), _sidesForEntities[entityDim][entityIndex].end(), sideEntityIndex);
-  if (searchResult == _sidesForEntities[entityDim][entityIndex].end()) {
+  if (searchResult == _sidesForEntities[entityDim][entityIndex].end())
+  {
     _sidesForEntities[entityDim][entityIndex].push_back(sideEntityIndex);
   }
 }
 
-void MeshTopology::addVertex(const vector<double> &vertex) {
+void MeshTopology::addVertex(const vector<double> &vertex)
+{
   double tol = 1e-15;
   getVertexIndexAdding(vertex, tol);
 }
 
-vector<IndexType> MeshTopology::getCanonicalEntityNodesViaPeriodicBCs(unsigned d, const vector<IndexType> &myEntityNodes) {
+vector<IndexType> MeshTopology::getCanonicalEntityNodesViaPeriodicBCs(unsigned d, const vector<IndexType> &myEntityNodes)
+{
 //  set<IndexType> myNodeSet(myEntityNodes.begin(),myEntityNodes.end());
   vector<IndexType> sortedNodes(myEntityNodes.begin(),myEntityNodes.end());
   std::sort(sortedNodes.begin(), sortedNodes.end());
 
-  if (_knownEntities[d].find(sortedNodes) != _knownEntities[d].end()) {
+  if (_knownEntities[d].find(sortedNodes) != _knownEntities[d].end())
+  {
     return myEntityNodes;
-  } else {
+  }
+  else
+  {
     // compute the intersection of the periodic BCs that match each node in nodeSet
     set< pair<int, int> > matchingPeriodicBCsIntersection;
     bool firstNode = true;
-    for (vector<IndexType>::const_iterator nodeIt=myEntityNodes.begin(); nodeIt!=myEntityNodes.end(); nodeIt++) {
-      if (_periodicBCIndicesMatchingNode.find(*nodeIt) == _periodicBCIndicesMatchingNode.end()) {
+    for (vector<IndexType>::const_iterator nodeIt=myEntityNodes.begin(); nodeIt!=myEntityNodes.end(); nodeIt++)
+    {
+      if (_periodicBCIndicesMatchingNode.find(*nodeIt) == _periodicBCIndicesMatchingNode.end())
+      {
         matchingPeriodicBCsIntersection.clear();
         break;
       }
-      if (firstNode) {
+      if (firstNode)
+      {
         matchingPeriodicBCsIntersection = _periodicBCIndicesMatchingNode[*nodeIt];
         firstNode = false;
-      } else {
+      }
+      else
+      {
         set< pair<int, int> > newSet;
         set< pair<int, int> > matchesForThisNode = _periodicBCIndicesMatchingNode[*nodeIt];
         for (set< pair<int, int> >::iterator prevMatchIt=matchingPeriodicBCsIntersection.begin();
-             prevMatchIt != matchingPeriodicBCsIntersection.end(); prevMatchIt++) {
-          if (matchesForThisNode.find(*prevMatchIt) != matchesForThisNode.end()) {
+             prevMatchIt != matchingPeriodicBCsIntersection.end(); prevMatchIt++)
+        {
+          if (matchesForThisNode.find(*prevMatchIt) != matchesForThisNode.end())
+          {
             newSet.insert(*prevMatchIt);
           }
         }
@@ -673,17 +788,20 @@ vector<IndexType> MeshTopology::getCanonicalEntityNodesViaPeriodicBCs(unsigned d
     }
     // for each periodic BC that remains, convert the nodeSet using that periodic BC
     for (set< pair<int, int> >::iterator bcIt=matchingPeriodicBCsIntersection.begin();
-         bcIt != matchingPeriodicBCsIntersection.end(); bcIt++) {
+         bcIt != matchingPeriodicBCsIntersection.end(); bcIt++)
+    {
       pair<int,int> matchingBC = *bcIt;
       vector<IndexType> equivalentNodeVector;
-      for (vector<IndexType>::const_iterator nodeIt=myEntityNodes.begin(); nodeIt!=myEntityNodes.end(); nodeIt++) {
+      for (vector<IndexType>::const_iterator nodeIt=myEntityNodes.begin(); nodeIt!=myEntityNodes.end(); nodeIt++)
+      {
         equivalentNodeVector.push_back(_equivalentNodeViaPeriodicBC[make_pair(*nodeIt, matchingBC)]);
       }
 
       vector<IndexType> sortedEquivalentNodeVector = equivalentNodeVector;
       std::sort(sortedEquivalentNodeVector.begin(), sortedEquivalentNodeVector.end());
 
-      if (_knownEntities[d].find(sortedEquivalentNodeVector) != _knownEntities[d].end()) {
+      if (_knownEntities[d].find(sortedEquivalentNodeVector) != _knownEntities[d].end())
+      {
         return equivalentNodeVector;
       }
     }
@@ -691,36 +809,43 @@ vector<IndexType> MeshTopology::getCanonicalEntityNodesViaPeriodicBCs(unsigned d
   return vector<IndexType>(); // empty result meant to indicate not found...
 }
 
-unsigned MeshTopology::cellCount() {
+unsigned MeshTopology::cellCount()
+{
   return _cells.size();
 }
 
-bool MeshTopology::cellHasCurvedEdges(unsigned cellIndex) {
+bool MeshTopology::cellHasCurvedEdges(unsigned cellIndex)
+{
   CellPtr cell = getCell(cellIndex);
   unsigned edgeCount = cell->topology()->getEdgeCount();
   unsigned edgeDim = 1;
-  for (int edgeOrdinal=0; edgeOrdinal<edgeCount; edgeOrdinal++) {
+  for (int edgeOrdinal=0; edgeOrdinal<edgeCount; edgeOrdinal++)
+  {
     unsigned edgeIndex = cell->entityIndex(edgeDim, edgeOrdinal);
     unsigned v0 = _canonicalEntityOrdering[edgeDim][edgeIndex][0];
     unsigned v1 = _canonicalEntityOrdering[edgeDim][edgeIndex][1];
     pair<unsigned, unsigned> edge = make_pair(v0, v1);
     pair<unsigned, unsigned> edgeReversed = make_pair(v1, v0);
-    if (_edgeToCurveMap.find(edge) != _edgeToCurveMap.end()) {
+    if (_edgeToCurveMap.find(edge) != _edgeToCurveMap.end())
+    {
       return true;
     }
-    if (_edgeToCurveMap.find(edgeReversed) != _edgeToCurveMap.end()) {
+    if (_edgeToCurveMap.find(edgeReversed) != _edgeToCurveMap.end())
+    {
       return true;
     }
   }
   return false;
 }
 
-bool MeshTopology::cellContainsPoint(GlobalIndexType cellID, const vector<double> &point, int cubatureDegree) {
+bool MeshTopology::cellContainsPoint(GlobalIndexType cellID, const vector<double> &point, int cubatureDegree)
+{
   // note that this design, with a single point being passed in, will be quite inefficient
   // if there are many points.  TODO: revise to allow multiple points (returning vector<bool>, maybe)
   int numCells = 1, numPoints = 1;
   FieldContainer<double> physicalPoints(numCells,numPoints,_spaceDim);
-  for (int d=0; d<_spaceDim; d++) {
+  for (int d=0; d<_spaceDim; d++)
+  {
     physicalPoints(0,0,d) = point[d];
   }
   //  cout << "cell " << elem->cellID() << ": (" << x << "," << y << ") --> ";
@@ -730,7 +855,8 @@ bool MeshTopology::cellContainsPoint(GlobalIndexType cellID, const vector<double
 
   CellTopoPtr cellTopo = getCell(cellID)->topology();
 
-  if (cellTopo->getTensorialDegree() > 0) {
+  if (cellTopo->getTensorialDegree() > 0)
+  {
     TEUCHOS_TEST_FOR_EXCEPTION(true, std::invalid_argument, "cellContainsPoint doesn't yet support tensorial degree > 0");
     // TODO: implement CamelliaCellTools::checkPointInclusion
   }
@@ -739,7 +865,8 @@ bool MeshTopology::cellContainsPoint(GlobalIndexType cellID, const vector<double
   return result == 1;
 }
 
-vector<IndexType> MeshTopology::cellIDsForPoints(const FieldContainer<double> &physicalPoints) {
+vector<IndexType> MeshTopology::cellIDsForPoints(const FieldContainer<double> &physicalPoints)
+{
   // returns a vector of an active element per point, or null if there is no element including that point
   vector<GlobalIndexType> cellIDs;
   //  cout << "entered elementsForPoints: \n" << physicalPoints;
@@ -751,51 +878,64 @@ vector<IndexType> MeshTopology::cellIDsForPoints(const FieldContainer<double> &p
 
   // NOTE: the above does depend on the domain of the mesh remaining fixed after refinements begin.
 
-  for (int pointIndex=0; pointIndex<numPoints; pointIndex++) {
+  for (int pointIndex=0; pointIndex<numPoints; pointIndex++)
+  {
     vector<double> point;
 
-    for (int d=0; d<spaceDim; d++) {
+    for (int d=0; d<spaceDim; d++)
+    {
       point.push_back(physicalPoints(pointIndex,d));
     }
 
     // find the element from the original mesh that contains this point
     CellPtr cell;
-    for (set<GlobalIndexType>::iterator cellIt = rootCellIndices.begin(); cellIt != rootCellIndices.end(); cellIt++) {
+    for (set<GlobalIndexType>::iterator cellIt = rootCellIndices.begin(); cellIt != rootCellIndices.end(); cellIt++)
+    {
       GlobalIndexType cellID = *cellIt;
       int cubatureDegreeForCell = 1;
-      if (_gda != NULL) {
+      if (_gda != NULL)
+      {
         cubatureDegreeForCell = _gda->getCubatureDegree(cellID);
       }
-      if (cellContainsPoint(cellID,point,cubatureDegreeForCell)) {
+      if (cellContainsPoint(cellID,point,cubatureDegreeForCell))
+      {
         cell = getCell(cellID);
         break;
       }
     }
-    if (cell.get() != NULL) {
-      while ( cell->isParent() ) {
+    if (cell.get() != NULL)
+    {
+      while ( cell->isParent() )
+      {
         int numChildren = cell->numChildren();
         bool foundMatchingChild = false;
-        for (int childOrdinal = 0; childOrdinal < numChildren; childOrdinal++) {
+        for (int childOrdinal = 0; childOrdinal < numChildren; childOrdinal++)
+        {
           CellPtr child = cell->children()[childOrdinal];
           int cubatureDegreeForCell = 1;
-          if (_gda != NULL) {
+          if (_gda != NULL)
+          {
             cubatureDegreeForCell = _gda->getCubatureDegree(child->cellIndex());
           }
-          if ( cellContainsPoint(child->cellIndex(),point,cubatureDegreeForCell) ) {
+          if ( cellContainsPoint(child->cellIndex(),point,cubatureDegreeForCell) )
+          {
             cell = child;
             foundMatchingChild = true;
             break;
           }
         }
-        if (!foundMatchingChild) {
+        if (!foundMatchingChild)
+        {
           cout << "parent matches, but none of its children do... will return nearest cell centroid\n";
           int numVertices = cell->vertices().size();
           FieldContainer<double> vertices(numVertices,spaceDim);
           vector<unsigned> vertexIndices = cell->vertices();
 
           //vertices.resize(numVertices,dimension);
-          for (unsigned vertexOrdinal = 0; vertexOrdinal < numVertices; vertexOrdinal++) {
-            for (int d=0; d<spaceDim; d++) {
+          for (unsigned vertexOrdinal = 0; vertexOrdinal < numVertices; vertexOrdinal++)
+          {
+            for (int d=0; d<spaceDim; d++)
+            {
               vertices(vertexOrdinal,d) = getVertex(vertexIndices[vertexOrdinal])[d];
             }
           }
@@ -803,27 +943,32 @@ vector<IndexType> MeshTopology::cellIDsForPoints(const FieldContainer<double> &p
           cout << "parent vertices:\n" << vertices;
           double minDistance = numeric_limits<double>::max();
           int childSelected = -1;
-          for (int childIndex = 0; childIndex < numChildren; childIndex++) {
+          for (int childIndex = 0; childIndex < numChildren; childIndex++)
+          {
             CellPtr child = cell->children()[childIndex];
             int numVertices = child->vertices().size();
             FieldContainer<double> vertices(numVertices,spaceDim);
             vector<unsigned> vertexIndices = child->vertices();
 
             //vertices.resize(numVertices,dimension);
-            for (unsigned vertexOrdinal = 0; vertexOrdinal < numVertices; vertexOrdinal++) {
-              for (int d=0; d<spaceDim; d++) {
+            for (unsigned vertexOrdinal = 0; vertexOrdinal < numVertices; vertexOrdinal++)
+            {
+              for (int d=0; d<spaceDim; d++)
+              {
                 vertices(vertexOrdinal,d) = getVertex(vertexIndices[vertexOrdinal])[d];
               }
             }
             cout << "child " << childIndex << ", vertices:\n" << vertices;
             vector<double> cellCentroid = getCellCentroid(child->cellIndex());
             double squaredDistance = 0;
-            for (int d=0; d<spaceDim; d++) {
+            for (int d=0; d<spaceDim; d++)
+            {
               squaredDistance += (cellCentroid[d] - physicalPoints(pointIndex,d)) * (cellCentroid[d] - physicalPoints(pointIndex,d));
             }
 
             double distance = sqrt(squaredDistance);
-            if (distance < minDistance) {
+            if (distance < minDistance)
+            {
               minDistance = distance;
               childSelected = childIndex;
             }
@@ -833,7 +978,8 @@ vector<IndexType> MeshTopology::cellIDsForPoints(const FieldContainer<double> &p
       }
     }
     GlobalIndexType cellID = -1;
-    if (cell.get() != NULL) {
+    if (cell.get() != NULL)
+    {
       cellID = cell->cellIndex();
     }
     cellIDs.push_back(cellID);
@@ -841,16 +987,19 @@ vector<IndexType> MeshTopology::cellIDsForPoints(const FieldContainer<double> &p
   return cellIDs;
 }
 
-CellPtr MeshTopology::findCellWithVertices(const vector< vector<double> > &cellVertices) {
+CellPtr MeshTopology::findCellWithVertices(const vector< vector<double> > &cellVertices)
+{
   CellPtr cell;
   vector<IndexType> vertexIndices;
   bool firstVertex = true;
   unsigned vertexDim = 0;
   set<IndexType> matchingCells;
-  for (vector< vector<double> >::const_iterator vertexIt = cellVertices.begin(); vertexIt != cellVertices.end(); vertexIt++) {
+  for (vector< vector<double> >::const_iterator vertexIt = cellVertices.begin(); vertexIt != cellVertices.end(); vertexIt++)
+  {
     vector<double> vertex = *vertexIt;
     IndexType vertexIndex;
-    if (! getVertexIndex(vertex, vertexIndex) ) {
+    if (! getVertexIndex(vertex, vertexIndex) )
+    {
       cout << "vertex not found. returning NULL.\n";
       return cell;
     }
@@ -859,12 +1008,17 @@ CellPtr MeshTopology::findCellWithVertices(const vector< vector<double> > &cellV
 
     set< pair<IndexType, unsigned> > matchingCellPairs = getCellsContainingEntity(vertexDim, vertexIndex);
     set<IndexType> matchingCellsIntersection;
-    for (set< pair<IndexType, unsigned> >::iterator cellPairIt = matchingCellPairs.begin(); cellPairIt != matchingCellPairs.end(); cellPairIt++) {
+    for (set< pair<IndexType, unsigned> >::iterator cellPairIt = matchingCellPairs.begin(); cellPairIt != matchingCellPairs.end(); cellPairIt++)
+    {
       IndexType cellID = cellPairIt->first;
-      if (firstVertex) {
+      if (firstVertex)
+      {
         matchingCellsIntersection.insert(cellID);
-      } else {
-        if (matchingCells.find(cellID) != matchingCells.end()) {
+      }
+      else
+      {
+        if (matchingCells.find(cellID) != matchingCells.end())
+        {
           matchingCellsIntersection.insert(cellID);
         }
       }
@@ -872,27 +1026,34 @@ CellPtr MeshTopology::findCellWithVertices(const vector< vector<double> > &cellV
     matchingCells = matchingCellsIntersection;
     firstVertex = false;
   }
-  if (matchingCells.size() == 0) {
+  if (matchingCells.size() == 0)
+  {
     return cell; // null
   }
-  if (matchingCells.size() > 1) {
+  if (matchingCells.size() > 1)
+  {
     cout << "WARNING: multiple matching cells found.  Returning first one that matches.\n";
   }
   cell = getCell(*matchingCells.begin());
   return cell;
 }
 
-set< pair<IndexType, unsigned> > MeshTopology::getActiveBoundaryCells() { // (cellIndex, sideOrdinal)
+set< pair<IndexType, unsigned> > MeshTopology::getActiveBoundaryCells()   // (cellIndex, sideOrdinal)
+{
   set< pair<IndexType, unsigned> > boundaryCells;
-  for (set<IndexType>::iterator boundarySideIt = _boundarySides.begin(); boundarySideIt != _boundarySides.end(); boundarySideIt++) {
+  for (set<IndexType>::iterator boundarySideIt = _boundarySides.begin(); boundarySideIt != _boundarySides.end(); boundarySideIt++)
+  {
     IndexType sideEntityIndex = *boundarySideIt;
     int cellCount = getCellCountForSide(sideEntityIndex);
-    if (cellCount == 1) {
+    if (cellCount == 1)
+    {
       pair<IndexType, unsigned> cellInfo = _cellsForSideEntities[sideEntityIndex].first;
-      if (cellInfo.first == -1) {
+      if (cellInfo.first == -1)
+      {
         TEUCHOS_TEST_FOR_EXCEPTION(true, std::invalid_argument, "Invalid cellIndex for side boundary.");
       }
-      if (_activeCells.find(cellInfo.first) != _activeCells.end()) {
+      if (_activeCells.find(cellInfo.first) != _activeCells.end())
+      {
         boundaryCells.insert(cellInfo);
         // DEBUGGING:
         //        if (getCell(cellInfo.first)->isParent()) {
@@ -900,98 +1061,130 @@ set< pair<IndexType, unsigned> > MeshTopology::getActiveBoundaryCells() { // (ce
         //          TEUCHOS_TEST_FOR_EXCEPTION(true, std::invalid_argument, "cell is parent, but is stored as an active cell in the mesh...");
         //        }
       }
-    } else if (cellCount > 1) {
+    }
+    else if (cellCount > 1)
+    {
       TEUCHOS_TEST_FOR_EXCEPTION(true, std::invalid_argument, "boundary side has more than 1 cell!");
     } // cellCount = 0 just means that the side has been refined; that's acceptable
   }
   return boundaryCells;
 }
 
-vector<double> MeshTopology::getCellCentroid(IndexType cellIndex) {
+vector<double> MeshTopology::getCellCentroid(IndexType cellIndex)
+{
   // average of the cell vertices
   vector<double> centroid(_spaceDim);
   CellPtr cell = getCell(cellIndex);
   unsigned vertexCount = cell->vertices().size();
-  for (unsigned vertexOrdinal=0; vertexOrdinal<vertexCount; vertexOrdinal++) {
+  for (unsigned vertexOrdinal=0; vertexOrdinal<vertexCount; vertexOrdinal++)
+  {
     unsigned vertexIndex = cell->vertices()[vertexOrdinal];
-    for (unsigned d=0; d<_spaceDim; d++) {
+    for (unsigned d=0; d<_spaceDim; d++)
+    {
       centroid[d] += _vertices[vertexIndex][d];
     }
   }
-  for (unsigned d=0; d<_spaceDim; d++) {
+  for (unsigned d=0; d<_spaceDim; d++)
+  {
     centroid[d] /= vertexCount;
   }
   return centroid;
 }
 
-unsigned MeshTopology::getCellCountForSide(IndexType sideEntityIndex) {
-  if (_cellsForSideEntities.find(sideEntityIndex) == _cellsForSideEntities.end()) {
+unsigned MeshTopology::getCellCountForSide(IndexType sideEntityIndex)
+{
+  if (_cellsForSideEntities.find(sideEntityIndex) == _cellsForSideEntities.end())
+  {
     return 0;
-  } else {
+  }
+  else
+  {
     pair<IndexType, unsigned> cell1 = _cellsForSideEntities[sideEntityIndex].first;
     pair<IndexType, unsigned> cell2 = _cellsForSideEntities[sideEntityIndex].second;
-    if (cell2.first == -1) {
+    if (cell2.first == -1)
+    {
       return 1;
-    } else {
+    }
+    else
+    {
       return 2;
     }
   }
 }
 
-pair<IndexType, unsigned> MeshTopology::getFirstCellForSide(IndexType sideEntityIndex) {
+pair<IndexType, unsigned> MeshTopology::getFirstCellForSide(IndexType sideEntityIndex)
+{
   return _cellsForSideEntities[sideEntityIndex].first;
 }
 
-pair<IndexType, unsigned> MeshTopology::getSecondCellForSide(IndexType sideEntityIndex) {
+pair<IndexType, unsigned> MeshTopology::getSecondCellForSide(IndexType sideEntityIndex)
+{
   return _cellsForSideEntities[sideEntityIndex].second;
 }
 
-void MeshTopology::deactivateCell(CellPtr cell) {
+void MeshTopology::deactivateCell(CellPtr cell)
+{
   //  cout << "deactivating cell " << cell->cellIndex() << endl;
   CellTopoPtr cellTopo = cell->topology();
-  for (int d=0; d<_spaceDim; d++) { // start with vertices, and go up to sides
+  for (int d=0; d<_spaceDim; d++)   // start with vertices, and go up to sides
+  {
     int entityCount = cellTopo->getSubcellCount(d);
-    for (int j=0; j<entityCount; j++) {
+    for (int j=0; j<entityCount; j++)
+    {
       // for now, we treat vertices just like all the others--could save a bit of memory, etc. by not storing in _knownEntities[0], etc.
       int entityNodeCount = cellTopo->getNodeCount(d, j);
       set< unsigned > nodeSet;
-      if (d != 0) {
-        for (int node=0; node<entityNodeCount; node++) {
+      if (d != 0)
+      {
+        for (int node=0; node<entityNodeCount; node++)
+        {
           unsigned nodeIndexInCell = cellTopo->getNodeMap(d, j, node);
           nodeSet.insert(cell->vertices()[nodeIndexInCell]);
         }
-      } else {
+      }
+      else
+      {
         nodeSet.insert(cell->vertices()[j]);
       }
 
       unsigned entityIndex = getEntityIndex(d, nodeSet);
-      if (entityIndex == -1) {
+      if (entityIndex == -1)
+      {
         // entity not found: an error
         TEUCHOS_TEST_FOR_EXCEPTION(true, std::invalid_argument, "cell entity not found!");
       }
 
       // delete from the _activeCellsForEntities store
-      if (_activeCellsForEntities[d].size() <= entityIndex) {
+      if (_activeCellsForEntities[d].size() <= entityIndex)
+      {
         cout << "WARNING: Entity index is out of bounds for _activeCellsForEntities[" << d << "][" << entityIndex << "]\n";
-      } else {
+      }
+      else
+      {
         vector<unsigned> indicesToDelete;
         int i = 0;
         for (vector< pair<IndexType, unsigned> >::iterator entryIt = _activeCellsForEntities[d][entityIndex].begin();
-             entryIt != _activeCellsForEntities[d][entityIndex].end(); entryIt++, i++) {
-          if ((entryIt->first == cell->cellIndex()) && (entryIt->second  == j)) {
+             entryIt != _activeCellsForEntities[d][entityIndex].end(); entryIt++, i++)
+        {
+          if ((entryIt->first == cell->cellIndex()) && (entryIt->second  == j))
+          {
             indicesToDelete.push_back(i);
           }
         }
         // delete in reverse order
-        for (int j=indicesToDelete.size()-1; j >= 0; j--) {
+        for (int j=indicesToDelete.size()-1; j >= 0; j--)
+        {
           int i = indicesToDelete[j];
           _activeCellsForEntities[d][entityIndex].erase(_activeCellsForEntities[d][entityIndex].begin() + i);
         }
 
         unsigned eraseCount = indicesToDelete.size();
-        if (eraseCount==0) {
+        if (eraseCount==0)
+        {
           cout << "WARNING: attempt was made to deactivate a non-active subcell topology...\n";
-        } else {
+        }
+        else
+        {
           //        cout << "Erased _activeCellsForEntities[" << d << "][" << entityIndex << "] entry for (";
           //        cout << cell->cellIndex() << "," << j << ").  Remaining entries: ";
           //        set< pair<unsigned,unsigned> > remainingEntries = _activeCellsForEntities[d][entityIndex];
@@ -1001,31 +1194,41 @@ void MeshTopology::deactivateCell(CellPtr cell) {
           //        cout << endl;
         }
       }
-      if (d == 0) { // vertex --> should delete entries for any that are equivalent via periodic BCs
-        if (_periodicBCIndicesMatchingNode.find(entityIndex) != _periodicBCIndicesMatchingNode.end()) {
-          for (set< pair<int, int> >::iterator bcIt = _periodicBCIndicesMatchingNode[entityIndex].begin(); bcIt != _periodicBCIndicesMatchingNode[entityIndex].end(); bcIt++) {
+      if (d == 0)   // vertex --> should delete entries for any that are equivalent via periodic BCs
+      {
+        if (_periodicBCIndicesMatchingNode.find(entityIndex) != _periodicBCIndicesMatchingNode.end())
+        {
+          for (set< pair<int, int> >::iterator bcIt = _periodicBCIndicesMatchingNode[entityIndex].begin(); bcIt != _periodicBCIndicesMatchingNode[entityIndex].end(); bcIt++)
+          {
             IndexType equivalentNode = _equivalentNodeViaPeriodicBC[make_pair(entityIndex, *bcIt)];
-            if (_activeCellsForEntities[d].size() <= equivalentNode) {
+            if (_activeCellsForEntities[d].size() <= equivalentNode)
+            {
               cout << "WARNING: Entity index is out of bounds for _activeCellsForEntities[" << d << "][" << equivalentNode << "]\n";
-            } else {
+            }
+            else
+            {
 
               vector<unsigned> indicesToDelete;
               int i = 0;
               for (vector< pair<IndexType, unsigned> >::iterator entryIt = _activeCellsForEntities[d][equivalentNode].begin();
-                   entryIt != _activeCellsForEntities[d][equivalentNode].end(); entryIt++, i++) {
-                if ((entryIt->first == cell->cellIndex()) && (entryIt->second  == j)) {
+                   entryIt != _activeCellsForEntities[d][equivalentNode].end(); entryIt++, i++)
+              {
+                if ((entryIt->first == cell->cellIndex()) && (entryIt->second  == j))
+                {
                   indicesToDelete.push_back(i);
                 }
               }
               // delete in reverse order
-              for (int j=indicesToDelete.size()-1; j > 0; j--) {
+              for (int j=indicesToDelete.size()-1; j > 0; j--)
+              {
                 int i = indicesToDelete[j];
                 _activeCellsForEntities[d][equivalentNode].erase(_activeCellsForEntities[d][equivalentNode].begin() + i);
               }
 
               unsigned eraseCount = indicesToDelete.size();
 
-              if (eraseCount==0) {
+              if (eraseCount==0)
+              {
                 cout << "WARNING: attempt was made to deactivate a non-active subcell topology...\n";
               }
             }
@@ -1037,33 +1240,39 @@ void MeshTopology::deactivateCell(CellPtr cell) {
   _activeCells.erase(cell->cellIndex());
 }
 
-MeshTopologyPtr MeshTopology::deepCopy() {
+MeshTopologyPtr MeshTopology::deepCopy()
+{
   MeshTopologyPtr meshTopoCopy = Teuchos::rcp( new MeshTopology(*this) );
   meshTopoCopy->deepCopyCells();
   return meshTopoCopy;
 }
 
-void MeshTopology::deepCopyCells() {
+void MeshTopology::deepCopyCells()
+{
   vector<CellPtr> oldCells = _cells;
 
   int numCells = oldCells.size();
 
   // first pass: construct cells
-  for (int cellOrdinal=0; cellOrdinal<numCells; cellOrdinal++) {
+  for (int cellOrdinal=0; cellOrdinal<numCells; cellOrdinal++)
+  {
     CellPtr oldCell = oldCells[cellOrdinal];
     _cells[cellOrdinal] = Teuchos::rcp( new Cell(oldCell->topology(), oldCell->vertices(), oldCell->subcellPermutations(), oldCell->cellIndex(), this) );
   }
 
   // second pass: establish parent-child relationships
-  for (int cellOrdinal=0; cellOrdinal<numCells; cellOrdinal++) {
+  for (int cellOrdinal=0; cellOrdinal<numCells; cellOrdinal++)
+  {
     CellPtr oldCell = oldCells[cellOrdinal];
     CellPtr oldParent = oldCell->getParent();
-    if (oldParent != Teuchos::null) {
+    if (oldParent != Teuchos::null)
+    {
       CellPtr newParent = _cells[oldParent->cellIndex()];
       _cells[cellOrdinal]->setParent(newParent);
     }
     vector<CellPtr> children;
-    for (int childOrdinal=0; childOrdinal<oldCell->children().size(); childOrdinal++) {
+    for (int childOrdinal=0; childOrdinal<oldCell->children().size(); childOrdinal++)
+    {
       CellPtr newChild = _cells[oldCell->children()[childOrdinal]->cellIndex()];
       children.push_back(newChild);
     }
@@ -1071,17 +1280,21 @@ void MeshTopology::deepCopyCells() {
   }
 }
 
-set<unsigned> MeshTopology::descendants(unsigned d, unsigned entityIndex) {
+set<unsigned> MeshTopology::descendants(unsigned d, unsigned entityIndex)
+{
   set<unsigned> allDescendants;
 
   allDescendants.insert(entityIndex);
-  if (_childEntities[d].find(entityIndex) != _childEntities[d].end()) {
+  if (_childEntities[d].find(entityIndex) != _childEntities[d].end())
+  {
     set<unsigned> unfollowedDescendants;
-    for (unsigned i=0; i<_childEntities[d][entityIndex].size(); i++) {
+    for (unsigned i=0; i<_childEntities[d][entityIndex].size(); i++)
+    {
       vector<unsigned> immediateChildren = _childEntities[d][entityIndex][i].second;
       unfollowedDescendants.insert(immediateChildren.begin(), immediateChildren.end());
     }
-    for (set<unsigned>::iterator descIt=unfollowedDescendants.begin(); descIt!=unfollowedDescendants.end(); descIt++) {
+    for (set<unsigned>::iterator descIt=unfollowedDescendants.begin(); descIt!=unfollowedDescendants.end(); descIt++)
+    {
       set<unsigned> myDescendants = descendants(d,*descIt);
       allDescendants.insert(myDescendants.begin(),myDescendants.end());
     }
@@ -1090,25 +1303,31 @@ set<unsigned> MeshTopology::descendants(unsigned d, unsigned entityIndex) {
   return allDescendants;
 }
 
-bool MeshTopology::entityHasChildren(unsigned int d, IndexType entityIndex) {
+bool MeshTopology::entityHasChildren(unsigned int d, IndexType entityIndex)
+{
   if (_childEntities[d].find(entityIndex) == _childEntities[d].end()) return false;
   return _childEntities[d][entityIndex].size() > 0;
 }
 
-bool MeshTopology::entityHasParent(unsigned d, unsigned entityIndex) {
+bool MeshTopology::entityHasParent(unsigned d, unsigned entityIndex)
+{
   if (_parentEntities[d].find(entityIndex) == _parentEntities[d].end()) return false;
   return _parentEntities[d][entityIndex].size() > 0;
 }
 
-bool MeshTopology::entityIsAncestor(unsigned d, unsigned ancestor, unsigned descendent) {
+bool MeshTopology::entityIsAncestor(unsigned d, unsigned ancestor, unsigned descendent)
+{
   if (ancestor == descendent) return true;
   map< unsigned, vector< pair<unsigned, unsigned> > >::iterator parentIt = _parentEntities[d].find(descendent);
-  while (parentIt != _parentEntities[d].end()) {
+  while (parentIt != _parentEntities[d].end())
+  {
     vector< pair<unsigned, unsigned> > parents = parentIt->second;
     unsigned parentEntityIndex = -1;
-    for (vector< pair<unsigned, unsigned> >::iterator entryIt = parents.begin(); entryIt != parents.end(); entryIt++) {
+    for (vector< pair<unsigned, unsigned> >::iterator entryIt = parents.begin(); entryIt != parents.end(); entryIt++)
+    {
       parentEntityIndex = entryIt->first;
-      if (parentEntityIndex==ancestor) {
+      if (parentEntityIndex==ancestor)
+      {
         return true;
       }
     }
@@ -1118,7 +1337,7 @@ bool MeshTopology::entityIsAncestor(unsigned d, unsigned ancestor, unsigned desc
 }
 
 bool MeshTopology::entityIsGeneralizedAncestor(unsigned ancestorDimension, IndexType ancestor,
-                                               unsigned descendentDimension, IndexType descendent)
+    unsigned descendentDimension, IndexType descendent)
 {
   // note that this method does not treat the possibility of multiple parents, which can happen in
   // the context of anisotropic refinements.
@@ -1127,7 +1346,7 @@ bool MeshTopology::entityIsGeneralizedAncestor(unsigned ancestorDimension, Index
     return entityIsAncestor(ancestorDimension, ancestor, descendent);
   }
   if (ancestorDimension < descendentDimension) return false;
-  
+
   while (_generalizedParentEntities[descendentDimension].find(descendent) != _generalizedParentEntities[descendentDimension].end())
   {
     pair<IndexType, unsigned> generalizedParent = _generalizedParentEntities[descendentDimension][descendent];
@@ -1138,50 +1357,67 @@ bool MeshTopology::entityIsGeneralizedAncestor(unsigned ancestorDimension, Index
   return false;
 }
 
-unsigned MeshTopology::getActiveCellCount(unsigned int d, unsigned int entityIndex) {
-  if (_activeCellsForEntities[d].size() <= entityIndex) {
+unsigned MeshTopology::getActiveCellCount(unsigned int d, unsigned int entityIndex)
+{
+  if (_activeCellsForEntities[d].size() <= entityIndex)
+  {
     return 0;
-  } else {
+  }
+  else
+  {
     return _activeCellsForEntities[d][entityIndex].size();
   }
 }
 
-const vector< pair<unsigned,unsigned> > & MeshTopology::getActiveCellIndices(unsigned d, unsigned entityIndex) {
+const vector< pair<unsigned,unsigned> > & MeshTopology::getActiveCellIndices(unsigned d, unsigned entityIndex)
+{
   return _activeCellsForEntities[d][entityIndex];
 }
 
-CellPtr MeshTopology::getCell(unsigned cellIndex) {
-  if (cellIndex > _cells.size()) {
+CellPtr MeshTopology::getCell(unsigned cellIndex)
+{
+  if (cellIndex > _cells.size())
+  {
     cout << "MeshTopology::getCell: cellIndex " << cellIndex << " out of bounds (0, " << _cells.size() - 1 << ").\n";
     TEUCHOS_TEST_FOR_EXCEPTION(true, std::invalid_argument, "cellIndex out of bounds.\n");
   }
   return _cells[cellIndex];
 }
 
-unsigned MeshTopology::getEntityCount(unsigned int d) {
+unsigned MeshTopology::getEntityCount(unsigned int d)
+{
   if (d==0) return _vertices.size();
   return _entities[d].size();
 }
 
-pair<IndexType, unsigned> MeshTopology::getEntityGeneralizedParent(unsigned int d, IndexType entityIndex) {
+pair<IndexType, unsigned> MeshTopology::getEntityGeneralizedParent(unsigned int d, IndexType entityIndex)
+{
   if ((d < _generalizedParentEntities.size()) && (_generalizedParentEntities[d].find(entityIndex) != _generalizedParentEntities[d].end()))
     return _generalizedParentEntities[d][entityIndex];
-  else {
+  else
+  {
     // entity may be a cell, in which case parent is also a cell (if there is a parent)
-    if (d == _spaceDim) {
-      if (entityIndex >= _cells.size()) {
+    if (d == _spaceDim)
+    {
+      if (entityIndex >= _cells.size())
+      {
         TEUCHOS_TEST_FOR_EXCEPTION(true, std::invalid_argument, "entityIndex is out of bounds");
       }
       CellPtr cell = _cells[entityIndex];
-      if (cell->getParent() != Teuchos::null) {
+      if (cell->getParent() != Teuchos::null)
+      {
         return make_pair(cell->getParent()->cellIndex(), _spaceDim);
       }
-    } else {
+    }
+    else
+    {
       // generalized parent may be a cell
       set< pair<IndexType, unsigned> > cellsForEntity = getCellsContainingEntity(d, entityIndex);
-      if (cellsForEntity.size() > 0) {
+      if (cellsForEntity.size() > 0)
+      {
         IndexType cellIndex = cellsForEntity.begin()->first;
-        if (_cells[cellIndex]->getParent() != Teuchos::null) {
+        if (_cells[cellIndex]->getParent() != Teuchos::null)
+        {
           return make_pair(_cells[cellIndex]->getParent()->cellIndex(), _spaceDim);
         }
       }
@@ -1191,28 +1427,38 @@ pair<IndexType, unsigned> MeshTopology::getEntityGeneralizedParent(unsigned int 
   return make_pair(-1,-1);
 }
 
-unsigned MeshTopology::getEntityIndex(unsigned d, const set<unsigned> &nodeSet) {
-  if (d==0) {
-    if (nodeSet.size()==1) {
+unsigned MeshTopology::getEntityIndex(unsigned d, const set<unsigned> &nodeSet)
+{
+  if (d==0)
+  {
+    if (nodeSet.size()==1)
+    {
       return *nodeSet.begin();
-    } else {
+    }
+    else
+    {
       TEUCHOS_TEST_FOR_EXCEPTION(true, std::invalid_argument, "node set for vertex should not have more than one entry!");
     }
   }
   vector<unsigned> sortedNodes(nodeSet.begin(),nodeSet.end());
-  if (_knownEntities[d].find(sortedNodes) != _knownEntities[d].end()) {
+  if (_knownEntities[d].find(sortedNodes) != _knownEntities[d].end())
+  {
     return _knownEntities[d][sortedNodes];
-  } else {
+  }
+  else
+  {
     // look for alternative, equivalent nodeSets, arrived at via periodic BCs
     vector<IndexType> nodeVector(nodeSet.begin(),nodeSet.end());
     vector<IndexType> equivalentNodeVector = getCanonicalEntityNodesViaPeriodicBCs(d, nodeVector);
 
-    if (equivalentNodeVector.size() > 0) {
+    if (equivalentNodeVector.size() > 0)
+    {
       vector<IndexType> sortedEquivalentNodeVector = equivalentNodeVector;
       std::sort(sortedEquivalentNodeVector.begin(), sortedEquivalentNodeVector.end());
 
 //      set<IndexType> equivalentNodeSet(equivalentNodeVector.begin(),equivalentNodeVector.end());
-      if (_knownEntities[d].find(sortedEquivalentNodeVector) != _knownEntities[d].end()) {
+      if (_knownEntities[d].find(sortedEquivalentNodeVector) != _knownEntities[d].end())
+      {
         return _knownEntities[d][sortedEquivalentNodeVector];
       }
     }
@@ -1220,59 +1466,74 @@ unsigned MeshTopology::getEntityIndex(unsigned d, const set<unsigned> &nodeSet) 
   return -1;
 }
 
-unsigned MeshTopology::getEntityParent(unsigned d, unsigned entityIndex, unsigned parentOrdinal) {
+unsigned MeshTopology::getEntityParent(unsigned d, unsigned entityIndex, unsigned parentOrdinal)
+{
   TEUCHOS_TEST_FOR_EXCEPTION(! entityHasParent(d, entityIndex), std::invalid_argument, "entity does not have parent");
   return _parentEntities[d][entityIndex][parentOrdinal].first;
 }
 
-CellTopoPtr MeshTopology::getEntityTopology(unsigned d, IndexType entityIndex) {
+CellTopoPtr MeshTopology::getEntityTopology(unsigned d, IndexType entityIndex)
+{
   CellTopoPtr entityTopo;
-  if (d < _spaceDim) {
+  if (d < _spaceDim)
+  {
     TEUCHOS_TEST_FOR_EXCEPTION(entityIndex >= _entityCellTopologyKeys[d].size(), std::invalid_argument, "entityIndex is out of bounds");
     return _knownTopologies[_entityCellTopologyKeys[d][entityIndex]];
-  } else {
+  }
+  else
+  {
     return getCell(entityIndex)->topology();
   }
 }
 
-vector<unsigned> MeshTopology::getEntityVertexIndices(unsigned d, unsigned entityIndex) {
-  if (d==0) {
+vector<unsigned> MeshTopology::getEntityVertexIndices(unsigned d, unsigned entityIndex)
+{
+  if (d==0)
+  {
     return vector<IndexType>(1,entityIndex);
   }
-  if (d==_spaceDim) {
+  if (d==_spaceDim)
+  {
     return getCell(entityIndex)->vertices();
   }
-  if (d > _canonicalEntityOrdering.size()) {
+  if (d > _canonicalEntityOrdering.size())
+  {
     TEUCHOS_TEST_FOR_EXCEPTION(true, std::invalid_argument, "d out of bounds");
   }
-  if (_canonicalEntityOrdering[d].size() <= entityIndex) {
+  if (_canonicalEntityOrdering[d].size() <= entityIndex)
+  {
     TEUCHOS_TEST_FOR_EXCEPTION(true, std::invalid_argument, "entityIndex out of bounds");
   }
   return _canonicalEntityOrdering[d][entityIndex];
 }
 
-set<unsigned> MeshTopology::getEntitiesForSide(unsigned sideEntityIndex, unsigned d) {
+set<unsigned> MeshTopology::getEntitiesForSide(unsigned sideEntityIndex, unsigned d)
+{
   unsigned sideDim = _spaceDim - 1;
   unsigned subEntityCount = getSubEntityCount(sideDim, sideEntityIndex, d);
   set<unsigned> subEntities;
-  for (int subEntityOrdinal=0; subEntityOrdinal<subEntityCount; subEntityOrdinal++) {
+  for (int subEntityOrdinal=0; subEntityOrdinal<subEntityCount; subEntityOrdinal++)
+  {
     subEntities.insert(getSubEntityIndex(sideDim, sideEntityIndex, d, subEntityOrdinal));
   }
   return subEntities;
 }
 
-unsigned MeshTopology::getFaceEdgeIndex(unsigned int faceIndex, unsigned int edgeOrdinalInFace) {
+unsigned MeshTopology::getFaceEdgeIndex(unsigned int faceIndex, unsigned int edgeOrdinalInFace)
+{
   return getSubEntityIndex(2, faceIndex, 1, edgeOrdinalInFace);
 }
 
-MeshTopologyPtr MeshTopology::getRootMeshTopology() {
+MeshTopologyPtr MeshTopology::getRootMeshTopology()
+{
   // TODO: add support for curvilinear elements, periodic BCs to this method.
   set<IndexType> vertexIndicesSet;
 
   vector< vector<IndexType> > allCellsVertexIndices;
   vector< CellTopoPtr > cellTopos;
 
-  for (set<IndexType>::iterator rootCellIt = _rootCells.begin(); rootCellIt != _rootCells.end(); rootCellIt++) {
+  for (set<IndexType>::iterator rootCellIt = _rootCells.begin(); rootCellIt != _rootCells.end(); rootCellIt++)
+  {
     IndexType rootCellIndex = *rootCellIt;
     CellPtr cell = getCell(rootCellIndex);
 
@@ -1287,7 +1548,8 @@ MeshTopologyPtr MeshTopology::getRootMeshTopology() {
   // we require that the vertices be contiguously numbered (we want to enforce that root MeshTopology shares vertex numbers with this).
 
   vector< vector<double> > vertices( vertexIndicesSet.size() );
-  for (set<IndexType>::iterator vertexIndexIt = vertexIndicesSet.begin(); vertexIndexIt != vertexIndicesSet.end(); vertexIndexIt++) {
+  for (set<IndexType>::iterator vertexIndexIt = vertexIndicesSet.begin(); vertexIndexIt != vertexIndicesSet.end(); vertexIndexIt++)
+  {
     IndexType vertexIndex = *vertexIndexIt;
     vertices[vertexIndex] = getVertex(vertexIndex);
   }
@@ -1298,15 +1560,21 @@ MeshTopologyPtr MeshTopology::getRootMeshTopology() {
   return rootTopology;
 }
 
-unsigned MeshTopology::getSpaceDim() {
+unsigned MeshTopology::getSpaceDim()
+{
   return _spaceDim;
 }
 
-unsigned MeshTopology::getSubEntityCount(unsigned int d, unsigned int entityIndex, unsigned int subEntityDim) {
-  if (d==0) {
-    if (subEntityDim==0) {
+unsigned MeshTopology::getSubEntityCount(unsigned int d, unsigned int entityIndex, unsigned int subEntityDim)
+{
+  if (d==0)
+  {
+    if (subEntityDim==0)
+    {
       return 1; // the vertex is its own sub-entity then
-    } else {
+    }
+    else
+    {
       return 0;
     }
   }
@@ -1314,12 +1582,16 @@ unsigned MeshTopology::getSubEntityCount(unsigned int d, unsigned int entityInde
   return entityTopo->getSubcellCount(subEntityDim);
 }
 
-unsigned MeshTopology::getSubEntityIndex(unsigned int d, unsigned int entityIndex, unsigned int subEntityDim, unsigned int subEntityOrdinal) {
+unsigned MeshTopology::getSubEntityIndex(unsigned int d, unsigned int entityIndex, unsigned int subEntityDim, unsigned int subEntityOrdinal)
+{
   if (d==0)
   {
-    if ((subEntityDim==0) && (subEntityOrdinal==0))  {
+    if ((subEntityDim==0) && (subEntityOrdinal==0))
+    {
       return entityIndex; // the vertex is its own sub-entity then
-    } else {
+    }
+    else
+    {
       TEUCHOS_TEST_FOR_EXCEPTION(true, std::invalid_argument, "sub-entity not found for vertex");
     }
   }
@@ -1334,16 +1606,19 @@ unsigned MeshTopology::getSubEntityIndex(unsigned int d, unsigned int entityInde
   unsigned subEntityNodeCount = (subEntityDim > 0) ? entityTopo->getNodeCount(subEntityDim, subEntityOrdinal) : 1; // vertices are by definition just one node
   vector<unsigned> entityNodes = getEntityVertexIndices(d, entityIndex);
 
-  for (unsigned nodeOrdinal=0; nodeOrdinal<subEntityNodeCount; nodeOrdinal++) {
+  for (unsigned nodeOrdinal=0; nodeOrdinal<subEntityNodeCount; nodeOrdinal++)
+  {
     unsigned nodeOrdinalInEntity = entityTopo->getNodeMap(subEntityDim, subEntityOrdinal, nodeOrdinal);
     unsigned nodeIndexInMesh = entityNodes[nodeOrdinalInEntity];
-    if (subEntityDim == 0) {
+    if (subEntityDim == 0)
+    {
       return nodeIndexInMesh;
     }
     subEntityNodes.insert(nodeIndexInMesh);
   }
   unsigned subEntityIndex = getEntityIndex(subEntityDim, subEntityNodes);
-  if (subEntityIndex == -1) {
+  if (subEntityIndex == -1)
+  {
     cout << "sub-entity not found with vertices:\n";
     printVertices(subEntityNodes);
     cout << "entity vertices:\n";
@@ -1354,13 +1629,16 @@ unsigned MeshTopology::getSubEntityIndex(unsigned int d, unsigned int entityInde
   return subEntityIndex;
 }
 
-const vector<double>& MeshTopology::getVertex(unsigned vertexIndex) {
+const vector<double>& MeshTopology::getVertex(unsigned vertexIndex)
+{
   return _vertices[vertexIndex];
 }
 
-bool MeshTopology::getVertexIndex(const vector<double> &vertex, IndexType &vertexIndex, double tol) {
+bool MeshTopology::getVertexIndex(const vector<double> &vertex, IndexType &vertexIndex, double tol)
+{
   vector<double> vertexForLowerBound;
-  for (int d=0; d<_spaceDim; d++) {
+  for (int d=0; d<_spaceDim; d++)
+  {
     vertexForLowerBound.push_back(vertex[d]-tol);
   }
 
@@ -1369,44 +1647,54 @@ bool MeshTopology::getVertexIndex(const vector<double> &vertex, IndexType &verte
   double bestMatchDistance = tol;
   double xDist = 0; // xDist because vector<double> sorts according to the first entry: so we'll end up looking at
   // all the vertices that are near (x,...) in x...
-  while ((lowerBoundIt != _vertexMap.end()) && (xDist < tol)) {
+  while ((lowerBoundIt != _vertexMap.end()) && (xDist < tol))
+  {
     double dist = 0;
-    for (int d=0; d<_spaceDim; d++) {
+    for (int d=0; d<_spaceDim; d++)
+    {
       double ddist = (lowerBoundIt->first[d] - vertex[d]);
       dist += ddist * ddist;
     }
     dist = sqrt( dist );
-    if (dist < bestMatchDistance) {
+    if (dist < bestMatchDistance)
+    {
       bestMatchDistance = dist;
       bestMatchIndex = lowerBoundIt->second;
     }
     xDist = abs(lowerBoundIt->first[0] - vertex[0]);
     lowerBoundIt++;
   }
-  if (bestMatchIndex == -1) {
+  if (bestMatchIndex == -1)
+  {
     return false;
-  } else {
+  }
+  else
+  {
     vertexIndex = bestMatchIndex;
     return true;
   }
 }
 
-unsigned MeshTopology::getVertexIndexAdding(const vector<double> &vertex, double tol) {
+unsigned MeshTopology::getVertexIndexAdding(const vector<double> &vertex, double tol)
+{
   unsigned vertexIndex;
-  if (getVertexIndex(vertex, vertexIndex, tol)) {
+  if (getVertexIndex(vertex, vertexIndex, tol))
+  {
     return vertexIndex;
   }
   // if we get here, then we should add
   vertexIndex = _vertices.size();
   _vertices.push_back(vertex);
 
-  if (_vertexMap.find(vertex) != _vertexMap.end() ) {
+  if (_vertexMap.find(vertex) != _vertexMap.end() )
+  {
     cout << "Mesh error: attempting to add existing vertex.\n";
     TEUCHOS_TEST_FOR_EXCEPTION(true, std::invalid_argument, "Mesh error: attempting to add existing vertex");
   }
   _vertexMap[vertex] = vertexIndex;
 
-  { // update the various entity containers
+  {
+    // update the various entity containers
     int vertexDim = 0;
     vector<IndexType> nodeVector(1,vertexIndex);
     _entities[vertexDim].push_back(nodeVector);
@@ -1415,7 +1703,8 @@ unsigned MeshTopology::getVertexIndexAdding(const vector<double> &vertex, double
     entityVertices.push_back(vertexIndex);
     //_canonicalEntityOrdering[vertexDim][vertexIndex] = entityVertices;
     CellTopoPtr nodeTopo = CellTopology::point();
-    if (_knownTopologies.find(nodeTopo->getKey()) == _knownTopologies.end()) {
+    if (_knownTopologies.find(nodeTopo->getKey()) == _knownTopologies.end())
+    {
       _knownTopologies[nodeTopo->getKey()] = nodeTopo;
     }
     _entityCellTopologyKeys[vertexDim].push_back(nodeTopo->getKey());
@@ -1423,9 +1712,11 @@ unsigned MeshTopology::getVertexIndexAdding(const vector<double> &vertex, double
 
   set< pair<int,int> > matchingPeriodicBCs;
 
-  for (int i=0; i<_periodicBCs.size(); i++) {
+  for (int i=0; i<_periodicBCs.size(); i++)
+  {
     vector<int> matchingSides = _periodicBCs[i]->getMatchingSides(vertex);
-    for (int j=0; j<matchingSides.size(); j++) {
+    for (int j=0; j<matchingSides.size(); j++)
+    {
       int matchingSide = matchingSides[j];
       pair<int,int> matchingBC = make_pair(i, matchingSide);
       matchingPeriodicBCs.insert(matchingBC);
@@ -1446,14 +1737,17 @@ unsigned MeshTopology::getVertexIndexAdding(const vector<double> &vertex, double
 }
 
 // key: index in vertices; value: index in _vertices
-vector<unsigned> MeshTopology::getVertexIndices(const FieldContainer<double> &vertices) {
+vector<unsigned> MeshTopology::getVertexIndices(const FieldContainer<double> &vertices)
+{
   double tol = 1e-14; // tolerance for vertex equality
 
   int numVertices = vertices.dimension(0);
   vector<unsigned> localToGlobalVertexIndex(numVertices);
-  for (int i=0; i<numVertices; i++) {
+  for (int i=0; i<numVertices; i++)
+  {
     vector<double> vertex;
-    for (int d=0; d<_spaceDim; d++) {
+    for (int d=0; d<_spaceDim; d++)
+    {
       vertex.push_back(vertices(i,d));
     }
     localToGlobalVertexIndex[i] = getVertexIndexAdding(vertex,tol);
@@ -1462,55 +1756,65 @@ vector<unsigned> MeshTopology::getVertexIndices(const FieldContainer<double> &ve
 }
 
 // key: index in vertices; value: index in _vertices
-map<unsigned, IndexType> MeshTopology::getVertexIndicesMap(const FieldContainer<double> &vertices) {
+map<unsigned, IndexType> MeshTopology::getVertexIndicesMap(const FieldContainer<double> &vertices)
+{
   map<unsigned, IndexType> vertexMap;
   vector<IndexType> vertexVector = getVertexIndices(vertices);
   unsigned numVertices = vertexVector.size();
-  for (unsigned i=0; i<numVertices; i++) {
+  for (unsigned i=0; i<numVertices; i++)
+  {
     vertexMap[i] = vertexVector[i];
   }
   return vertexMap;
 }
 
-vector<IndexType> MeshTopology::getVertexIndices(const vector< vector<double> > &vertices) {
+vector<IndexType> MeshTopology::getVertexIndices(const vector< vector<double> > &vertices)
+{
   double tol = 1e-14; // tolerance for vertex equality
 
   int numVertices = vertices.size();
   vector<IndexType> localToGlobalVertexIndex(numVertices);
-  for (int i=0; i<numVertices; i++) {
+  for (int i=0; i<numVertices; i++)
+  {
     localToGlobalVertexIndex[i] = getVertexIndexAdding(vertices[i],tol);
   }
   return localToGlobalVertexIndex;
 }
 
-vector<unsigned> MeshTopology::getChildEntities(unsigned int d, IndexType entityIndex) {
+vector<unsigned> MeshTopology::getChildEntities(unsigned int d, IndexType entityIndex)
+{
   vector<unsigned> childIndices;
   if (d==0) return childIndices;
-  if (d==_spaceDim) {
+  if (d==_spaceDim)
+  {
     return getCell(entityIndex)->getChildIndices();
   }
   if (_childEntities[d].find(entityIndex) == _childEntities[d].end()) return childIndices;
   vector< pair< RefinementPatternPtr, vector<unsigned> > > childEntries = _childEntities[d][entityIndex];
   for (vector< pair< RefinementPatternPtr, vector<unsigned> > >::iterator entryIt = childEntries.begin();
-       entryIt != childEntries.end(); entryIt++) {
+       entryIt != childEntries.end(); entryIt++)
+  {
     childIndices.insert(childIndices.end(),entryIt->second.begin(),entryIt->second.end());
   }
   return childIndices;
 }
 
-set<unsigned> MeshTopology::getChildEntitiesSet(unsigned int d, unsigned int entityIndex) {
+set<unsigned> MeshTopology::getChildEntitiesSet(unsigned int d, unsigned int entityIndex)
+{
   set<unsigned> childIndices;
   if (d==0) return childIndices;
   if (_childEntities[d].find(entityIndex) == _childEntities[d].end()) return childIndices;
   vector< pair< RefinementPatternPtr, vector<unsigned> > > childEntries = _childEntities[d][entityIndex];
   for (vector< pair< RefinementPatternPtr, vector<unsigned> > >::iterator entryIt = childEntries.begin();
-       entryIt != childEntries.end(); entryIt++) {
+       entryIt != childEntries.end(); entryIt++)
+  {
     childIndices.insert(entryIt->second.begin(),entryIt->second.end());
   }
   return childIndices;
 }
 
-pair<IndexType, unsigned> MeshTopology::getConstrainingEntity(unsigned d, IndexType entityIndex) {
+pair<IndexType, unsigned> MeshTopology::getConstrainingEntity(unsigned d, IndexType entityIndex)
+{
   unsigned sideDim = _spaceDim - 1;
 
   pair<IndexType, unsigned> constrainingEntity; // we store the highest-dimensional constraint.  (This will be the maximal constraint.)
@@ -1518,69 +1822,91 @@ pair<IndexType, unsigned> MeshTopology::getConstrainingEntity(unsigned d, IndexT
   constrainingEntity.second = d;
 
   IndexType generalizedAncestorEntityIndex = entityIndex;
-  for (unsigned generalizedAncestorDim=d; generalizedAncestorDim <= sideDim; ) {
+  for (unsigned generalizedAncestorDim=d; generalizedAncestorDim <= sideDim; )
+  {
     IndexType possibleConstrainingEntityIndex = getConstrainingEntityIndexOfLikeDimension(generalizedAncestorDim, generalizedAncestorEntityIndex);
-    if (possibleConstrainingEntityIndex != generalizedAncestorEntityIndex) {
+    if (possibleConstrainingEntityIndex != generalizedAncestorEntityIndex)
+    {
       constrainingEntity.second = generalizedAncestorDim;
       constrainingEntity.first = possibleConstrainingEntityIndex;
-    } else {
+    }
+    else
+    {
       // if the generalized parent has no constraint of like dimension, then either the generalized parent is the constraint, or there is no constraint of this dimension
       // basic rule: if there exists a side belonging to an active cell that contains the putative constraining entity, then we constrain
       // I am a bit vague on whether this will work correctly in the context of anisotropic refinements.  (It might, but I'm not sure.)  But first we are targeting isotropic.
       vector<IndexType> sidesForEntity;
-      if (generalizedAncestorDim==sideDim) {
+      if (generalizedAncestorDim==sideDim)
+      {
         sidesForEntity.push_back(generalizedAncestorEntityIndex);
-      } else {
+      }
+      else
+      {
         sidesForEntity = _sidesForEntities[generalizedAncestorDim][generalizedAncestorEntityIndex];
       }
-      for (vector<IndexType>::iterator sideEntityIt = sidesForEntity.begin(); sideEntityIt != sidesForEntity.end(); sideEntityIt++) {
+      for (vector<IndexType>::iterator sideEntityIt = sidesForEntity.begin(); sideEntityIt != sidesForEntity.end(); sideEntityIt++)
+      {
         IndexType sideEntityIndex = *sideEntityIt;
-        if (getActiveCellCount(sideDim, sideEntityIndex) > 0) {
+        if (getActiveCellCount(sideDim, sideEntityIndex) > 0)
+        {
           constrainingEntity.second = generalizedAncestorDim;
           constrainingEntity.first = possibleConstrainingEntityIndex;
           break;
         }
       }
     }
-    while (entityHasParent(generalizedAncestorDim, generalizedAncestorEntityIndex)) { // parent of like dimension
+    while (entityHasParent(generalizedAncestorDim, generalizedAncestorEntityIndex))   // parent of like dimension
+    {
       generalizedAncestorEntityIndex = getEntityParent(generalizedAncestorDim, generalizedAncestorEntityIndex);
     }
     if (_generalizedParentEntities[generalizedAncestorDim].find(generalizedAncestorEntityIndex)
-        != _generalizedParentEntities[generalizedAncestorDim].end()) {
+        != _generalizedParentEntities[generalizedAncestorDim].end())
+    {
       pair< IndexType, unsigned > generalizedParent = _generalizedParentEntities[generalizedAncestorDim][generalizedAncestorEntityIndex];
       generalizedAncestorEntityIndex = generalizedParent.first;
       generalizedAncestorDim = generalizedParent.second;
-    } else { // at top of refinement tree -- break out of for loop
+    }
+    else     // at top of refinement tree -- break out of for loop
+    {
       break;
     }
   }
   return constrainingEntity;
 }
 
-unsigned MeshTopology::getConstrainingEntityIndexOfLikeDimension(unsigned int d, unsigned int entityIndex) {
+unsigned MeshTopology::getConstrainingEntityIndexOfLikeDimension(unsigned int d, unsigned int entityIndex)
+{
   unsigned constrainingEntityIndex = entityIndex;
 
-  if (d==0) { // one vertex can't constrain another...
+  if (d==0)   // one vertex can't constrain another...
+  {
     return entityIndex;
   }
 
   vector<unsigned> sidesForEntity;
   unsigned sideDim = _spaceDim - 1;
-  if (d==sideDim) {
+  if (d==sideDim)
+  {
     sidesForEntity.push_back(entityIndex);
-  } else {
+  }
+  else
+  {
     sidesForEntity = _sidesForEntities[d][entityIndex];
   }
-  for (vector<unsigned>::iterator sideEntityIt = sidesForEntity.begin(); sideEntityIt != sidesForEntity.end(); sideEntityIt++) {
+  for (vector<unsigned>::iterator sideEntityIt = sidesForEntity.begin(); sideEntityIt != sidesForEntity.end(); sideEntityIt++)
+  {
     unsigned sideEntityIndex = *sideEntityIt;
     vector< pair<unsigned,unsigned> > sideAncestry = getConstrainingSideAncestry(sideEntityIndex);
     unsigned constrainingEntityIndexForSide = entityIndex;
-    if (sideAncestry.size() > 0) {
+    if (sideAncestry.size() > 0)
+    {
       // need to find the subcellEntity for the constraining side that overlaps with the one on our present side
-      for (vector< pair<unsigned,unsigned> >::iterator entryIt=sideAncestry.begin(); entryIt != sideAncestry.end(); entryIt++) {
+      for (vector< pair<unsigned,unsigned> >::iterator entryIt=sideAncestry.begin(); entryIt != sideAncestry.end(); entryIt++)
+      {
         // need to map constrained entity index from the current side to its parent in sideAncestry
         unsigned parentSideEntityIndex = entryIt->first;
-        if (_parentEntities[d].find(constrainingEntityIndexForSide) == _parentEntities[d].end()) {
+        if (_parentEntities[d].find(constrainingEntityIndexForSide) == _parentEntities[d].end())
+        {
           // no parent for this entity (may be that it was a refinement-interior edge, e.g.)
           break;
         }
@@ -1594,31 +1920,39 @@ unsigned MeshTopology::getConstrainingEntityIndexOfLikeDimension(unsigned int d,
 }
 
 // pair: first is the sideEntityIndex of the ancestor; second is the refinementIndex of the refinement to get from parent to child (see _parentEntities and _childEntities)
-vector< pair<unsigned,unsigned> > MeshTopology::getConstrainingSideAncestry(unsigned int sideEntityIndex) {
+vector< pair<unsigned,unsigned> > MeshTopology::getConstrainingSideAncestry(unsigned int sideEntityIndex)
+{
   // three possibilities: 1) compatible side, 2) side is parent, 3) side is child
   // 1) and 2) mean unconstrained.  3) means constrained (by parent)
   unsigned sideDim = _spaceDim - 1;
   vector< pair<unsigned, unsigned> > ancestry;
-  if (_boundarySides.find(sideEntityIndex) != _boundarySides.end()) {
+  if (_boundarySides.find(sideEntityIndex) != _boundarySides.end())
+  {
     return ancestry; // sides on boundary are unconstrained...
   }
 
   vector< pair<unsigned,unsigned> > sideCellEntries = _activeCellsForEntities[sideDim][sideEntityIndex];
   int activeCellCountForSide = sideCellEntries.size();
-  if (activeCellCountForSide == 2) {
+  if (activeCellCountForSide == 2)
+  {
     // compatible side
     return ancestry; // will be empty
-  } else if ((activeCellCountForSide == 0) || (activeCellCountForSide == 1)) {
+  }
+  else if ((activeCellCountForSide == 0) || (activeCellCountForSide == 1))
+  {
     // then we're either parent or child of an active side
     // if we are a child, then we should find and return an ancestral path that ends in an active side
     map< unsigned, vector< pair<unsigned, unsigned> > >::iterator parentIt = _parentEntities[sideDim].find(sideEntityIndex);
-    while (parentIt != _parentEntities[sideDim].end()) {
+    while (parentIt != _parentEntities[sideDim].end())
+    {
       vector< pair<unsigned, unsigned> > parents = parentIt->second;
       unsigned parentEntityIndex, refinementIndex;
-      for (vector< pair<unsigned, unsigned> >::iterator entryIt = parents.begin(); entryIt != parents.end(); entryIt++) {
+      for (vector< pair<unsigned, unsigned> >::iterator entryIt = parents.begin(); entryIt != parents.end(); entryIt++)
+      {
         parentEntityIndex = entryIt->first;
         refinementIndex = entryIt->second;
-        if (getActiveCellCount(sideDim, parentEntityIndex) > 0) {
+        if (getActiveCellCount(sideDim, parentEntityIndex) > 0)
+        {
           // active cell; we've found our final ancestor
           ancestry.push_back(*entryIt);
           return ancestry;
@@ -1632,14 +1966,17 @@ vector< pair<unsigned,unsigned> > MeshTopology::getConstrainingSideAncestry(unsi
     // if no such ancestral path exists, then we are a parent, and are unconstrained (return empty ancestry)
     ancestry.clear();
     return ancestry;
-  } else {
+  }
+  else
+  {
     cout << "MeshTopology internal error: # active cells for side is not 0, 1, or 2\n";
     TEUCHOS_TEST_FOR_EXCEPTION(true, std::invalid_argument, "MeshTopology internal error: # active cells for side is not 0, 1, or 2\n");
     return ancestry; // unreachable, but most compilers don't seem to know that.
   }
 }
 
-RefinementBranch MeshTopology::getSideConstraintRefinementBranch(IndexType sideEntityIndex) {
+RefinementBranch MeshTopology::getSideConstraintRefinementBranch(IndexType sideEntityIndex)
+{
   // Returns a RefinementBranch that goes from the constraining side to the side indicated.
   vector< pair<IndexType,unsigned> > constrainingSideAncestry = getConstrainingSideAncestry(sideEntityIndex);
   pair< RefinementPattern*, unsigned > branchEntry;
@@ -1647,13 +1984,16 @@ RefinementBranch MeshTopology::getSideConstraintRefinementBranch(IndexType sideE
   IndexType previousChild = sideEntityIndex;
   RefinementBranch refBranch;
   for (vector< pair<IndexType,unsigned> >::iterator ancestorIt = constrainingSideAncestry.begin();
-       ancestorIt != constrainingSideAncestry.end(); ancestorIt++) {
+       ancestorIt != constrainingSideAncestry.end(); ancestorIt++)
+  {
     IndexType ancestorSideEntityIndex = ancestorIt->first;
     unsigned refinementIndex = ancestorIt->second;
     pair<RefinementPatternPtr, vector<IndexType> > children = _childEntities[sideDim][ancestorSideEntityIndex][refinementIndex];
     branchEntry.first = children.first.get();
-    for (int i=0; i<children.second.size(); i++) {
-      if (children.second[i]==previousChild) {
+    for (int i=0; i<children.second.size(); i++)
+    {
+      if (children.second[i]==previousChild)
+      {
         branchEntry.second = i;
         break;
       }
@@ -1665,7 +2005,8 @@ RefinementBranch MeshTopology::getSideConstraintRefinementBranch(IndexType sideE
 }
 
 unsigned MeshTopology::getEntityParentForSide(unsigned d, unsigned entityIndex,
-                                              unsigned parentSideEntityIndex) {
+    unsigned parentSideEntityIndex)
+{
   // returns the entity index for the parent (which might be the entity itself) of entity (d,entityIndex) that is
   // a subcell of side parentSideEntityIndex
 
@@ -1686,15 +2027,18 @@ unsigned MeshTopology::getEntityParentForSide(unsigned d, unsigned entityIndex,
   //  cout << "parentSide vertices:\n";
   //  printEntityVertices(_spaceDim-1, parentSideEntityIndex);
 
-  if (entitiesForParentSide.find(entityIndex) != entitiesForParentSide.end()) {
+  if (entitiesForParentSide.find(entityIndex) != entitiesForParentSide.end())
+  {
     return entityIndex;
   }
   vector< pair<unsigned, unsigned> > entityParents = _parentEntities[d][entityIndex];
   //  cout << "parent entities of entity " << entityIndex << ": ";
-  for (vector< pair<unsigned, unsigned> >::iterator parentIt = entityParents.begin(); parentIt != entityParents.end(); parentIt++) {
+  for (vector< pair<unsigned, unsigned> >::iterator parentIt = entityParents.begin(); parentIt != entityParents.end(); parentIt++)
+  {
     unsigned parentEntityIndex = parentIt->first;
     //    cout << parentEntityIndex << " ";
-    if (entitiesForParentSide.find(parentEntityIndex) != entitiesForParentSide.end()) {
+    if (entitiesForParentSide.find(parentEntityIndex) != entitiesForParentSide.end())
+    {
       //      cout << endl;
       return parentEntityIndex;
     }
@@ -1708,7 +2052,8 @@ unsigned MeshTopology::getEntityParentForSide(unsigned d, unsigned entityIndex,
 }
 
 // ! pairs are (cellIndex, sideOrdinal) where the sideOrdinal is a side that contains the entity
-set< pair<IndexType, unsigned> > MeshTopology::getCellsContainingEntity(unsigned d, unsigned entityIndex) { // not *all* cells, but within any refinement branch, the most refined cell that contains the entity will be present in this set.  The unsigned value is the ordinal of a *side* in the cell containing this entity.  There may be multiple sides in a cell that contain the entity; this method will return just one entry per cell.
+set< pair<IndexType, unsigned> > MeshTopology::getCellsContainingEntity(unsigned d, unsigned entityIndex)   // not *all* cells, but within any refinement branch, the most refined cell that contains the entity will be present in this set.  The unsigned value is the ordinal of a *side* in the cell containing this entity.  There may be multiple sides in a cell that contain the entity; this method will return just one entry per cell.
+{
   if (d==getSpaceDim())
   {
     // entityIndex is a cell; the side then is contained within the cell; we'll flag this fact by setting the side ordinal to -1.
@@ -1718,27 +2063,36 @@ set< pair<IndexType, unsigned> > MeshTopology::getCellsContainingEntity(unsigned
   typedef pair<IndexType,unsigned> CellPair;
   set< CellPair > cells;
   set< IndexType > cellIndices;  // container to keep track of which cells we've already counted -- we only return one (cell, side) pair per cell that contains the entity...
-  for (vector<IndexType>::iterator sideEntityIt = sidesForEntity.begin(); sideEntityIt != sidesForEntity.end(); sideEntityIt++) {
+  for (vector<IndexType>::iterator sideEntityIt = sidesForEntity.begin(); sideEntityIt != sidesForEntity.end(); sideEntityIt++)
+  {
     IndexType sideEntityIndex = *sideEntityIt;
     int numCellsForSide = getCellCountForSide(sideEntityIndex);
-    if (numCellsForSide == 2) {
+    if (numCellsForSide == 2)
+    {
       CellPair cell1 = getFirstCellForSide(sideEntityIndex);
-      if (cellIndices.find(cell1.first) == cellIndices.end()) {
+      if (cellIndices.find(cell1.first) == cellIndices.end())
+      {
         cells.insert(cell1);
         cellIndices.insert(cell1.first);
       }
       CellPair cell2 = getSecondCellForSide(sideEntityIndex);
-      if (cellIndices.find(cell2.first) == cellIndices.end()) {
+      if (cellIndices.find(cell2.first) == cellIndices.end())
+      {
         cells.insert(cell2);
         cellIndices.insert(cell2.first);
       }
-    } else if (numCellsForSide == 1) {
+    }
+    else if (numCellsForSide == 1)
+    {
       CellPair cell1 = getFirstCellForSide(sideEntityIndex);
-      if (cellIndices.find(cell1.first) == cellIndices.end()) {
+      if (cellIndices.find(cell1.first) == cellIndices.end())
+      {
         cells.insert(cell1);
         cellIndices.insert(cell1.first);
       }
-    } else {
+    }
+    else
+    {
       cout << "Unexpected cell count for side.\n";
       TEUCHOS_TEST_FOR_EXCEPTION(true, std::invalid_argument, "Unexpected cell count for side.");
     }
@@ -1746,7 +2100,8 @@ set< pair<IndexType, unsigned> > MeshTopology::getCellsContainingEntity(unsigned
   return cells;
 }
 
-pair<IndexType,IndexType> MeshTopology::owningCellIndexForConstrainingEntity(unsigned d, unsigned constrainingEntityIndex) {
+pair<IndexType,IndexType> MeshTopology::owningCellIndexForConstrainingEntity(unsigned d, unsigned constrainingEntityIndex)
+{
   // sorta like the old leastActiveCellIndexContainingEntityConstrainedByConstrainingEntity, but now prefers larger cells
   // -- the first level of the entity refinement hierarchy that has an active cell containing an entity in that level is the one from
   // which we choose the owning cell (and we do take the least such cellIndex)
@@ -1755,52 +2110,66 @@ pair<IndexType,IndexType> MeshTopology::owningCellIndexForConstrainingEntity(uns
   constrainedEntities.insert(constrainingEntityIndex);
 
   IndexType leastActiveCellConstrainedEntityIndex;
-  while (true) {
+  while (true)
+  {
     set<IndexType> nextTierConstrainedEntities;
 
-    for (set<IndexType>::iterator constrainedEntityIt = constrainedEntities.begin(); constrainedEntityIt != constrainedEntities.end(); constrainedEntityIt++) {
+    for (set<IndexType>::iterator constrainedEntityIt = constrainedEntities.begin(); constrainedEntityIt != constrainedEntities.end(); constrainedEntityIt++)
+    {
       IndexType constrainedEntityIndex = *constrainedEntityIt;
 
       // get this entity's immediate children, in case we don't find an active cell on this tier
-      if (_childEntities[d].find(constrainedEntityIndex) != _childEntities[d].end()) {
-        for (unsigned i=0; i<_childEntities[d][constrainedEntityIndex].size(); i++) {
+      if (_childEntities[d].find(constrainedEntityIndex) != _childEntities[d].end())
+      {
+        for (unsigned i=0; i<_childEntities[d][constrainedEntityIndex].size(); i++)
+        {
           vector<unsigned> immediateChildren = _childEntities[d][constrainedEntityIndex][i].second;
           nextTierConstrainedEntities.insert(immediateChildren.begin(), immediateChildren.end());
         }
       }
 
-      if (_sidesForEntities[d].size() <= constrainingEntityIndex) {
+      if (_sidesForEntities[d].size() <= constrainingEntityIndex)
+      {
         cout << "ERROR: entityIndex " << constrainingEntityIndex << " of dimension " << d << " is beyond bounds of _sidesForEntities" << endl;
         TEUCHOS_TEST_FOR_EXCEPTION(true, std::invalid_argument, "ERROR: constrainingEntityIndex is out of bounds of _sidesForEntities");
       }
       vector<IndexType> sideEntityIndices = _sidesForEntities[d][constrainedEntityIndex];
-      for (vector<IndexType>::iterator sideEntityIt = sideEntityIndices.begin(); sideEntityIt != sideEntityIndices.end(); sideEntityIt++) {
+      for (vector<IndexType>::iterator sideEntityIt = sideEntityIndices.begin(); sideEntityIt != sideEntityIndices.end(); sideEntityIt++)
+      {
         IndexType sideEntityIndex = *sideEntityIt;
         typedef pair<IndexType, unsigned> CellPair;
         pair<CellPair,CellPair> cellsForSide = _cellsForSideEntities[sideEntityIndex];
         IndexType firstCellIndex = cellsForSide.first.first;
-        if (_activeCells.find(firstCellIndex) != _activeCells.end()) {
-          if (firstCellIndex < leastActiveCellIndex) {
+        if (_activeCells.find(firstCellIndex) != _activeCells.end())
+        {
+          if (firstCellIndex < leastActiveCellIndex)
+          {
             leastActiveCellConstrainedEntityIndex = constrainedEntityIndex;
             leastActiveCellIndex = firstCellIndex;
           }
         }
         IndexType secondCellIndex = cellsForSide.second.first;
-        if (_activeCells.find(secondCellIndex) != _activeCells.end()) {
-          if (secondCellIndex < leastActiveCellIndex) {
+        if (_activeCells.find(secondCellIndex) != _activeCells.end())
+        {
+          if (secondCellIndex < leastActiveCellIndex)
+          {
             leastActiveCellConstrainedEntityIndex = constrainedEntityIndex;
             leastActiveCellIndex = secondCellIndex;
           }
         }
       }
     }
-    if (leastActiveCellIndex == -1) {
+    if (leastActiveCellIndex == -1)
+    {
       // try the next refinement level down
-      if (nextTierConstrainedEntities.size() == 0) {
+      if (nextTierConstrainedEntities.size() == 0)
+      {
         TEUCHOS_TEST_FOR_EXCEPTION(true, std::invalid_argument, "No active cell found containing entity constrained by constraining entity");
       }
       constrainedEntities = nextTierConstrainedEntities;
-    } else {
+    }
+    else
+    {
       return make_pair(leastActiveCellIndex, leastActiveCellConstrainedEntityIndex);
     }
   }
@@ -1808,17 +2177,21 @@ pair<IndexType,IndexType> MeshTopology::owningCellIndexForConstrainingEntity(uns
   return make_pair(leastActiveCellIndex, leastActiveCellConstrainedEntityIndex);
 }
 
-vector< IndexType > MeshTopology::getSidesContainingEntity(unsigned d, unsigned entityIndex) {
-  if (_sidesForEntities[d].size() <= entityIndex) {
+vector< IndexType > MeshTopology::getSidesContainingEntity(unsigned d, unsigned entityIndex)
+{
+  if (_sidesForEntities[d].size() <= entityIndex)
+  {
     return vector<IndexType> ();
   }
   return _sidesForEntities[d][entityIndex];
 }
 
-unsigned MeshTopology::getSubEntityPermutation(unsigned d, IndexType entityIndex, unsigned subEntityDim, unsigned subEntityOrdinal) {
+unsigned MeshTopology::getSubEntityPermutation(unsigned d, IndexType entityIndex, unsigned subEntityDim, unsigned subEntityOrdinal)
+{
   if (subEntityDim==0) return 0;
 
-  if (subEntityDim >= d) {
+  if (subEntityDim >= d)
+  {
     cout << "subEntityDim cannot be greater than d!\n";
     TEUCHOS_TEST_FOR_EXCEPTION(true, std::invalid_argument, "subEntityDim cannot be greater than d!");
   }
@@ -1827,7 +2200,8 @@ unsigned MeshTopology::getSubEntityPermutation(unsigned d, IndexType entityIndex
   CellTopoPtr topo = getEntityTopology(d, entityIndex);
   vector<unsigned> subEntityNodes;
   int subEntityNodeCount = topo->getNodeCount(subEntityDim, subEntityOrdinal);
-  for (int seNodeOrdinal = 0; seNodeOrdinal<subEntityNodeCount; seNodeOrdinal++) {
+  for (int seNodeOrdinal = 0; seNodeOrdinal<subEntityNodeCount; seNodeOrdinal++)
+  {
     unsigned entityNodeOrdinal = topo->getNodeMap(subEntityDim, subEntityOrdinal, seNodeOrdinal);
     subEntityNodes.push_back(entityNodes[entityNodeOrdinal]);
   }
@@ -1876,7 +2250,8 @@ unsigned MeshTopology::getSubEntityPermutation(unsigned d, IndexType entityIndex
 //  return make_pair(leastActiveCellIndex, leastActiveCellConstrainedEntityIndex);
 //}
 
-unsigned MeshTopology::maxConstraint(unsigned d, unsigned entityIndex1, unsigned entityIndex2) {
+unsigned MeshTopology::maxConstraint(unsigned d, unsigned entityIndex1, unsigned entityIndex2)
+{
   // if one of the entities is the ancestor of the other, returns that one.  Otherwise returns (unsigned) -1.
 
   if (entityIndex1==entityIndex2) return entityIndex1;
@@ -1884,21 +2259,26 @@ unsigned MeshTopology::maxConstraint(unsigned d, unsigned entityIndex1, unsigned
   // a good guess is that the entity with lower index is the ancestor
   unsigned smallerEntityIndex = std::min(entityIndex1, entityIndex2);
   unsigned largerEntityIndex = std::max(entityIndex1, entityIndex2);
-  if (entityIsAncestor(d,smallerEntityIndex,largerEntityIndex)) {
+  if (entityIsAncestor(d,smallerEntityIndex,largerEntityIndex))
+  {
     return smallerEntityIndex;
-  } else if (entityIsAncestor(d,largerEntityIndex,smallerEntityIndex)) {
+  }
+  else if (entityIsAncestor(d,largerEntityIndex,smallerEntityIndex))
+  {
     return largerEntityIndex;
   }
   return -1;
 }
 
-vector< ParametricCurvePtr > MeshTopology::parametricEdgesForCell(unsigned cellIndex, bool neglectCurves) {
+vector< ParametricCurvePtr > MeshTopology::parametricEdgesForCell(unsigned cellIndex, bool neglectCurves)
+{
   vector< ParametricCurvePtr > edges;
   CellPtr cell = getCell(cellIndex);
   int numNodes = cell->vertices().size();
   TEUCHOS_TEST_FOR_EXCEPTION(_spaceDim != 2, std::invalid_argument, "Only 2D supported right now.");
   vector<unsigned> vertices = cell->vertices();
-  for (int nodeIndex=0; nodeIndex<numNodes; nodeIndex++) {
+  for (int nodeIndex=0; nodeIndex<numNodes; nodeIndex++)
+  {
     int v0_index = vertices[nodeIndex];
     int v1_index = vertices[(nodeIndex+1)%numNodes];
     vector<double> v0 = getVertex(v0_index);
@@ -1913,14 +2293,21 @@ vector< ParametricCurvePtr > MeshTopology::parametricEdgesForCell(unsigned cellI
 
     ParametricCurvePtr straightEdgeFxn = ParametricCurve::line(x0, y0, x1, y1);
 
-    if (neglectCurves) {
+    if (neglectCurves)
+    {
       edgeFxn = straightEdgeFxn;
-    } if ( _edgeToCurveMap.find(edge) != _edgeToCurveMap.end() ) {
+    }
+    if ( _edgeToCurveMap.find(edge) != _edgeToCurveMap.end() )
+    {
       edgeFxn = _edgeToCurveMap[edge];
-    } else if ( _edgeToCurveMap.find(reverse_edge) != _edgeToCurveMap.end() ) {
+    }
+    else if ( _edgeToCurveMap.find(reverse_edge) != _edgeToCurveMap.end() )
+    {
       TEUCHOS_TEST_FOR_EXCEPTION(true, std::invalid_argument, "No support yet for curved edges outside mesh boundary.");
       // TODO: make ParametricCurves reversible (swap t=0 and t=1)
-    } else {
+    }
+    else
+    {
       edgeFxn = straightEdgeFxn;
     }
     edges.push_back(edgeFxn);
@@ -1928,7 +2315,8 @@ vector< ParametricCurvePtr > MeshTopology::parametricEdgesForCell(unsigned cellI
   return edges;
 }
 
-void MeshTopology::printApproximateMemoryReport() {
+void MeshTopology::printApproximateMemoryReport()
+{
   cout << "**** MeshTopology Memory Report ****\n";
   cout << "Memory sizes are in bytes.\n";
 
@@ -1937,12 +2325,15 @@ void MeshTopology::printApproximateMemoryReport() {
   map<string, long long> variableCost = approximateMemoryCosts();
 
   map<long long, vector<string> > variableOrderedByCost;
-  for (map<string, long long>::iterator entryIt = variableCost.begin(); entryIt != variableCost.end(); entryIt++) {
+  for (map<string, long long>::iterator entryIt = variableCost.begin(); entryIt != variableCost.end(); entryIt++)
+  {
     variableOrderedByCost[entryIt->second].push_back(entryIt->first);
   }
 
-  for (map<long long, vector<string> >::iterator entryIt = variableOrderedByCost.begin(); entryIt != variableOrderedByCost.end(); entryIt++) {
-    for (int i=0; i< entryIt->second.size(); i++) {
+  for (map<long long, vector<string> >::iterator entryIt = variableOrderedByCost.begin(); entryIt != variableOrderedByCost.end(); entryIt++)
+  {
+    for (int i=0; i< entryIt->second.size(); i++)
+    {
       cout << setw(30) << (entryIt->second)[i] << setw(30) << entryIt->first << endl;
       memSize += entryIt->first;
     }
@@ -1950,7 +2341,8 @@ void MeshTopology::printApproximateMemoryReport() {
   cout << "Total: " << memSize << " bytes.\n";
 }
 
-void MeshTopology::printConstraintReport(unsigned d) {
+void MeshTopology::printConstraintReport(unsigned d)
+{
   if (_entities.size() <= d)
   {
     cout << "No entities of dimension " << d << " in MeshTopology.\n";
@@ -1958,7 +2350,8 @@ void MeshTopology::printConstraintReport(unsigned d) {
   }
   IndexType entityCount = _entities[d].size();
   cout << "******* MeshTopology, constraints for d = " << d << " *******\n";
-  for (IndexType entityIndex=0; entityIndex<entityCount; entityIndex++) {
+  for (IndexType entityIndex=0; entityIndex<entityCount; entityIndex++)
+  {
     pair<IndexType, unsigned> constrainingEntity = getConstrainingEntity(d, entityIndex);
     if ((d != constrainingEntity.second) || (entityIndex != constrainingEntity.first))
       cout << "Entity " << entityIndex << " is constrained by entity " << constrainingEntity.first << " of dimension " << constrainingEntity.second << endl;
@@ -1967,43 +2360,59 @@ void MeshTopology::printConstraintReport(unsigned d) {
   }
 }
 
-void MeshTopology::printVertex(unsigned int vertexIndex) {
+void MeshTopology::printVertex(unsigned int vertexIndex)
+{
   cout << "vertex " << vertexIndex << ": (";
-  for (unsigned d=0; d<_spaceDim; d++) {
+  for (unsigned d=0; d<_spaceDim; d++)
+  {
     cout << _vertices[vertexIndex][d];
     if (d != _spaceDim-1) cout << ",";
   }
   cout << ")\n";
 }
 
-void MeshTopology::printVertices(set<unsigned int> vertexIndices) {
-  for (set<unsigned>::iterator indexIt=vertexIndices.begin(); indexIt!=vertexIndices.end(); indexIt++) {
+void MeshTopology::printVertices(set<unsigned int> vertexIndices)
+{
+  for (set<unsigned>::iterator indexIt=vertexIndices.begin(); indexIt!=vertexIndices.end(); indexIt++)
+  {
     unsigned vertexIndex = *indexIt;
     printVertex(vertexIndex);
   }
 }
 
-void MeshTopology::printEntityVertices(unsigned int d, unsigned int entityIndex) {
-  if (d==0) {
+void MeshTopology::printEntityVertices(unsigned int d, unsigned int entityIndex)
+{
+  if (d==0)
+  {
     printVertex(entityIndex);
     return;
   }
   vector<unsigned> entityVertices = _canonicalEntityOrdering[d][entityIndex];
-  for (vector<unsigned>::iterator vertexIt=entityVertices.begin(); vertexIt !=entityVertices.end(); vertexIt++) {
+  for (vector<unsigned>::iterator vertexIt=entityVertices.begin(); vertexIt !=entityVertices.end(); vertexIt++)
+  {
     printVertex(*vertexIt);
   }
 }
 
-void MeshTopology::printAllEntities() {
-  for (int d=0; d<_spaceDim; d++) {
+void MeshTopology::printAllEntities()
+{
+  for (int d=0; d<_spaceDim; d++)
+  {
     string entityTypeString;
-    if (d==0) {
+    if (d==0)
+    {
       entityTypeString = "Vertex";
-    } else if (d==1) {
+    }
+    else if (d==1)
+    {
       entityTypeString = "Edge";
-    } else if (d==2) {
+    }
+    else if (d==2)
+    {
       entityTypeString = "Face";
-    } else if (d==3) {
+    }
+    else if (d==3)
+    {
       entityTypeString = "Solid";
     }
     cout << "****************************  ";
@@ -2011,7 +2420,8 @@ void MeshTopology::printAllEntities() {
     cout << "  ****************************\n";
 
     int entityCount = getEntityCount(d);
-    for (int entityIndex=0; entityIndex < entityCount; entityIndex++) {
+    for (int entityIndex=0; entityIndex < entityCount; entityIndex++)
+    {
       if (d != 0) cout << entityTypeString << " " << entityIndex << ":" << endl;
       printEntityVertices(d, entityIndex);
     }
@@ -2022,22 +2432,31 @@ void MeshTopology::printAllEntities() {
   cout << "      ****************************\n";
 
   int numCells = cellCount();
-  for (int cellIndex=0; cellIndex<numCells; cellIndex++) {
+  for (int cellIndex=0; cellIndex<numCells; cellIndex++)
+  {
     CellPtr cell = getCell(cellIndex);
     cout << "Cell " << cellIndex << ":\n";
     int vertexCount = cell->vertices().size();
-    for (int vertexOrdinal=0; vertexOrdinal<vertexCount; vertexOrdinal++) {
+    for (int vertexOrdinal=0; vertexOrdinal<vertexCount; vertexOrdinal++)
+    {
       printVertex(cell->vertices()[vertexOrdinal]);
     }
-    for (int d=1; d<_spaceDim; d++) {
+    for (int d=1; d<_spaceDim; d++)
+    {
       int subcellCount = cell->topology()->getSubcellCount(d);
-      for (int subcord=0; subcord<subcellCount; subcord++) {
+      for (int subcord=0; subcord<subcellCount; subcord++)
+      {
         ostringstream labelStream;
-        if (d==1) {
+        if (d==1)
+        {
           labelStream << "Edge";
-        } else if (d==2) {
+        }
+        else if (d==2)
+        {
           labelStream << "Face";
-        } else if (d==3) {
+        }
+        else if (d==3)
+        {
           labelStream << "Solid";
         }
         labelStream << " " << subcord << " nodes";
@@ -2047,36 +2466,44 @@ void MeshTopology::printAllEntities() {
   }
 }
 
-FieldContainer<double> MeshTopology::physicalCellNodesForCell(unsigned int cellIndex, bool includeCellDimension) {
+FieldContainer<double> MeshTopology::physicalCellNodesForCell(unsigned int cellIndex, bool includeCellDimension)
+{
   CellPtr cell = getCell(cellIndex);
   unsigned vertexCount = cell->vertices().size();
   FieldContainer<double> nodes(vertexCount, _spaceDim);
-  for (unsigned vertexOrdinal=0; vertexOrdinal<vertexCount; vertexOrdinal++) {
+  for (unsigned vertexOrdinal=0; vertexOrdinal<vertexCount; vertexOrdinal++)
+  {
     unsigned vertexIndex = cell->vertices()[vertexOrdinal];
-    for (unsigned d=0; d<_spaceDim; d++) {
+    for (unsigned d=0; d<_spaceDim; d++)
+    {
       nodes(vertexOrdinal,d) = _vertices[vertexIndex][d];
     }
   }
-  if (includeCellDimension) {
+  if (includeCellDimension)
+  {
     nodes.resize(1,nodes.dimension(0),nodes.dimension(1));
   }
   return nodes;
 }
 
-void MeshTopology::refineCell(unsigned cellIndex, RefinementPatternPtr refPattern) {
+void MeshTopology::refineCell(unsigned cellIndex, RefinementPatternPtr refPattern)
+{
   // TODO: worry about the case (currently unsupported in RefinementPattern) of children that do not share topology with the parent.  E.g. quad broken into triangles.  (3D has better examples.)
 
   CellPtr cell = _cells[cellIndex];
   FieldContainer<double> cellNodes(cell->vertices().size(), _spaceDim);
 
-  for (int vertexIndex=0; vertexIndex < cellNodes.dimension(0); vertexIndex++) {
-    for (int d=0; d<_spaceDim; d++) {
+  for (int vertexIndex=0; vertexIndex < cellNodes.dimension(0); vertexIndex++)
+  {
+    for (int d=0; d<_spaceDim; d++)
+    {
       cellNodes(vertexIndex,d) = _vertices[cell->vertices()[vertexIndex]][d];
     }
   }
 
   FieldContainer<double> vertices = refPattern->verticesForRefinement(cellNodes);
-  if (_transformationFunction.get()) {
+  if (_transformationFunction.get())
+  {
     bool changedVertices = _transformationFunction->mapRefCellPointsUsingExactGeometry(vertices, refPattern->verticesOnReferenceCell(), cellIndex);
     //    cout << "transformed vertices:\n" << vertices;
   }
@@ -2099,23 +2526,27 @@ void MeshTopology::refineCell(unsigned cellIndex, RefinementPatternPtr refPatter
 
   determineGeneralizedParentsForRefinement(cell, refPattern);
 
-  if (_edgeToCurveMap.size() > 0) {
+  if (_edgeToCurveMap.size() > 0)
+  {
     vector< vector< pair< unsigned, unsigned> > > childrenForSides = refPattern->childrenForSides(); // outer vector: indexed by parent's sides; inner vector: (child index in children, index of child's side shared with parent)
     // handle any broken curved edges
     //    set<int> childrenWithCurvedEdges;
     vector<unsigned> parentVertices = cell->vertices();
     int numVertices = parentVertices.size();
-    for (int edgeIndex=0; edgeIndex < numVertices; edgeIndex++) {
+    for (int edgeIndex=0; edgeIndex < numVertices; edgeIndex++)
+    {
       int numChildrenForSide = childrenForSides[edgeIndex].size();
       if (numChildrenForSide==1) continue; // unbroken edge: no treatment necessary
       int v0 = parentVertices[edgeIndex];
       int v1 = parentVertices[ (edgeIndex+1) % numVertices];
       pair<int,int> edge = make_pair(v0, v1);
-      if (_edgeToCurveMap.find(edge) != _edgeToCurveMap.end()) {
+      if (_edgeToCurveMap.find(edge) != _edgeToCurveMap.end())
+      {
         // then define the new curves
         double child_t0 = 0.0;
         double increment = 1.0 / numChildrenForSide;
-        for (int i=0; i<numChildrenForSide; i++) {
+        for (int i=0; i<numChildrenForSide; i++)
+        {
           int childIndex = childrenForSides[edgeIndex][i].first;
           int childSideIndex = childrenForSides[edgeIndex][i].second;
           int childCellIndex = cell->getChildIndices()[childIndex];
@@ -2137,19 +2568,23 @@ void MeshTopology::refineCell(unsigned cellIndex, RefinementPatternPtr refPatter
   }
 }
 
-void MeshTopology::refineCellEntities(CellPtr cell, RefinementPatternPtr refPattern) {
+void MeshTopology::refineCellEntities(CellPtr cell, RefinementPatternPtr refPattern)
+{
   // ensures that the appropriate child entities exist, and parental relationships are recorded in _parentEntities
 
   FieldContainer<double> cellNodes(1,cell->vertices().size(), _spaceDim);
 
-  for (int vertexIndex=0; vertexIndex < cellNodes.dimension(1); vertexIndex++) {
-    for (int d=0; d<_spaceDim; d++) {
+  for (int vertexIndex=0; vertexIndex < cellNodes.dimension(1); vertexIndex++)
+  {
+    for (int d=0; d<_spaceDim; d++)
+    {
       cellNodes(0,vertexIndex,d) = _vertices[cell->vertices()[vertexIndex]][d];
     }
   }
 
   vector< RefinementPatternRecipe > relatedRecipes = refPattern->relatedRecipes();
-  if (relatedRecipes.size()==0) {
+  if (relatedRecipes.size()==0)
+  {
     RefinementPatternRecipe recipe;
     vector<unsigned> initialCell;
     recipe.push_back(make_pair(refPattern.get(),vector<unsigned>()));
@@ -2159,9 +2594,11 @@ void MeshTopology::refineCellEntities(CellPtr cell, RefinementPatternPtr refPatt
   // TODO generalize the below code to apply recipes instead of just the refPattern...
 
   CellTopoPtr cellTopo = cell->topology();
-  for (unsigned d=1; d<_spaceDim; d++) {
+  for (unsigned d=1; d<_spaceDim; d++)
+  {
     unsigned subcellCount = cellTopo->getSubcellCount(d);
-    for (unsigned subcord = 0; subcord < subcellCount; subcord++) {
+    for (unsigned subcord = 0; subcord < subcellCount; subcord++)
+    {
       RefinementPatternPtr subcellRefPattern = refPattern->patternForSubcell(d, subcord);
       FieldContainer<double> refinedNodes = subcellRefPattern->refinedNodes(); // NOTE: refinedNodes implicitly assumes that all child topos are the same
       unsigned childCount = refinedNodes.dimension(0);
@@ -2172,13 +2609,17 @@ void MeshTopology::refineCellEntities(CellPtr cell, RefinementPatternPtr refPatt
       unsigned parentIndex = cell->entityIndex(d, subcord);
       // if we ever allow multiple parentage, then we'll need to record things differently in both _childEntities and _parentEntities
       // (and the if statement just below will need to change in a corresponding way, indexed by the particular refPattern in question maybe
-      if (_childEntities[d].find(parentIndex) == _childEntities[d].end()) {
+      if (_childEntities[d].find(parentIndex) == _childEntities[d].end())
+      {
         vector<unsigned> childEntityIndices(childCount);
-        for (unsigned childIndex=0; childIndex<childCount; childIndex++) {
+        for (unsigned childIndex=0; childIndex<childCount; childIndex++)
+        {
           unsigned nodeCount = refinedNodes.dimension(1);
           FieldContainer<double> nodesOnSubcell(nodeCount,d);
-          for (int nodeIndex=0; nodeIndex<nodeCount; nodeIndex++) {
-            for (int dimIndex=0; dimIndex<d; dimIndex++) {
+          for (int nodeIndex=0; nodeIndex<nodeCount; nodeIndex++)
+          {
+            for (int dimIndex=0; dimIndex<d; dimIndex++)
+            {
               nodesOnSubcell(nodeIndex,dimIndex) = refinedNodes(childIndex,nodeIndex,dimIndex);
             }
           }
@@ -2201,7 +2642,8 @@ void MeshTopology::refineCellEntities(CellPtr cell, RefinementPatternPtr refPatt
           //            cout << "physicalNodes:\n" << physicalNodes;
           //          }
 
-          if (_transformationFunction.get()) {
+          if (_transformationFunction.get())
+          {
             physicalNodes.resize(nodeCount,_spaceDim);
             bool changedVertices = _transformationFunction->mapRefCellPointsUsingExactGeometry(physicalNodes, nodesOnRefCell, cell->cellIndex());
             //            cout << "physicalNodes after transformation:\n" << physicalNodes;
@@ -2222,8 +2664,10 @@ void MeshTopology::refineCellEntities(CellPtr cell, RefinementPatternPtr refPatt
           // TODO: ?? do something with parentActiveCells?  Seems like we just trailed off here...
         }
         _childEntities[d][parentIndex] = vector< pair<RefinementPatternPtr,vector<unsigned> > >(1, make_pair(subcellRefPattern, childEntityIndices) ); // TODO: this also needs to change when we work through recipes.  Note that the correct parent will vary here...  i.e. in the anisotropic case, the child we're ultimately interested in will have an anisotropic parent, and *its* parent would be the bigger guy referred to here.
-        if (d==_spaceDim-1) { // side
-          if (_boundarySides.find(parentIndex) != _boundarySides.end()) { // parent is a boundary side, so children are, too
+        if (d==_spaceDim-1)   // side
+        {
+          if (_boundarySides.find(parentIndex) != _boundarySides.end())   // parent is a boundary side, so children are, too
+          {
             _boundarySides.insert(childEntityIndices.begin(),childEntityIndices.end());
           }
         }
@@ -2232,17 +2676,21 @@ void MeshTopology::refineCellEntities(CellPtr cell, RefinementPatternPtr refPatt
   }
 }
 
-void MeshTopology::determineGeneralizedParentsForRefinement(CellPtr cell, RefinementPatternPtr refPattern) {
+void MeshTopology::determineGeneralizedParentsForRefinement(CellPtr cell, RefinementPatternPtr refPattern)
+{
   FieldContainer<double> cellNodes(1,cell->vertices().size(), _spaceDim);
 
-  for (int vertexIndex=0; vertexIndex < cellNodes.dimension(1); vertexIndex++) {
-    for (int d=0; d<_spaceDim; d++) {
+  for (int vertexIndex=0; vertexIndex < cellNodes.dimension(1); vertexIndex++)
+  {
+    for (int d=0; d<_spaceDim; d++)
+    {
       cellNodes(0,vertexIndex,d) = _vertices[cell->vertices()[vertexIndex]][d];
     }
   }
 
   vector< RefinementPatternRecipe > relatedRecipes = refPattern->relatedRecipes();
-  if (relatedRecipes.size()==0) {
+  if (relatedRecipes.size()==0)
+  {
     RefinementPatternRecipe recipe;
     vector<unsigned> initialCell;
     recipe.push_back(make_pair(refPattern.get(),vector<unsigned>()));
@@ -2252,9 +2700,11 @@ void MeshTopology::determineGeneralizedParentsForRefinement(CellPtr cell, Refine
   // TODO generalize the below code to apply recipes instead of just the refPattern...
 
   CellTopoPtr cellTopo = cell->topology();
-  for (unsigned d=1; d<_spaceDim; d++) {
+  for (unsigned d=1; d<_spaceDim; d++)
+  {
     unsigned subcellCount = cellTopo->getSubcellCount(d);
-    for (unsigned subcord = 0; subcord < subcellCount; subcord++) {
+    for (unsigned subcord = 0; subcord < subcellCount; subcord++)
+    {
       RefinementPatternPtr subcellRefPattern = refPattern->patternForSubcell(d, subcord);
       FieldContainer<double> refinedNodes = subcellRefPattern->refinedNodes(); // refinedNodes implicitly assumes that all child topos are the same
       unsigned childCount = refinedNodes.dimension(0);
@@ -2269,28 +2719,36 @@ void MeshTopology::determineGeneralizedParentsForRefinement(CellPtr cell, Refine
       set<IndexType> parentVertexIndexSet(parentVertexIndices.begin(),parentVertexIndices.end());
       vector< pair<RefinementPatternPtr,vector<IndexType> > > childEntities = _childEntities[d][parentIndex];
       for (vector< pair<RefinementPatternPtr,vector<IndexType> > >::iterator refIt = childEntities.begin();
-           refIt != childEntities.end(); refIt++) {
+           refIt != childEntities.end(); refIt++)
+      {
         vector<IndexType> childEntityIndices = refIt->second;
-        for (int childOrdinal=0; childOrdinal<childEntityIndices.size(); childOrdinal++) {
+        for (int childOrdinal=0; childOrdinal<childEntityIndices.size(); childOrdinal++)
+        {
           IndexType childEntityIndex = childEntityIndices[childOrdinal];
-          if (parentIndex == childEntityIndex) { // "null" refinement pattern -- nothing to do here.
+          if (parentIndex == childEntityIndex)   // "null" refinement pattern -- nothing to do here.
+          {
             continue;
           }
           setEntityGeneralizedParent(d, childEntityIndex, d, parentIndex); // TODO: change this to consider anisotropic refinements/ recipes...  (need to choose nearest of the possible ancestors, in my view)
-          for (int subcdim=0; subcdim<d; subcdim++) {
+          for (int subcdim=0; subcdim<d; subcdim++)
+          {
             int subcCount = this->getSubEntityCount(d, childEntityIndex, subcdim);
-            for (int subcord=0; subcord < subcCount; subcord++) {
+            for (int subcord=0; subcord < subcCount; subcord++)
+            {
               IndexType subcellEntityIndex = this->getSubEntityIndex(d, childEntityIndex, subcdim, subcord);
 
               // if this is a vertex that also belongs to the parent, then its parentage will already be handled...
-              if ((subcdim==0) && (parentVertexIndexSet.find(subcellEntityIndex) != parentVertexIndexSet.end() )) {
+              if ((subcdim==0) && (parentVertexIndexSet.find(subcellEntityIndex) != parentVertexIndexSet.end() ))
+              {
                 continue;
               }
 
               // if there was a previous entry, have a look at it...
-              if (_generalizedParentEntities[subcdim].find(subcellEntityIndex) != _generalizedParentEntities[subcdim].end()) {
+              if (_generalizedParentEntities[subcdim].find(subcellEntityIndex) != _generalizedParentEntities[subcdim].end())
+              {
                 pair<IndexType, unsigned> previousParent = _generalizedParentEntities[subcdim][subcellEntityIndex];
-                if (previousParent.second <= d) { // then the previous parent is a better (nearer) parent
+                if (previousParent.second <= d)   // then the previous parent is a better (nearer) parent
+                {
                   continue;
                 }
               }
@@ -2305,16 +2763,19 @@ void MeshTopology::determineGeneralizedParentsForRefinement(CellPtr cell, Refine
   }
 }
 
-const set<unsigned> &MeshTopology::getRootCellIndices() {
+const set<unsigned> &MeshTopology::getRootCellIndices()
+{
   return _rootCells;
 }
 
-void MeshTopology::setEdgeToCurveMap(const map< pair<IndexType, IndexType>, ParametricCurvePtr > &edgeToCurveMap, MeshPtr mesh) {
+void MeshTopology::setEdgeToCurveMap(const map< pair<IndexType, IndexType>, ParametricCurvePtr > &edgeToCurveMap, MeshPtr mesh)
+{
   _edgeToCurveMap.clear();
   map< pair<IndexType, IndexType>, ParametricCurvePtr >::const_iterator edgeIt;
   _cellIDsWithCurves.clear();
 
-  for (edgeIt = edgeToCurveMap.begin(); edgeIt != edgeToCurveMap.end(); edgeIt++) {
+  for (edgeIt = edgeToCurveMap.begin(); edgeIt != edgeToCurveMap.end(); edgeIt++)
+  {
     addEdgeCurve(edgeIt->first, edgeIt->second);
   }
   // mesh transformation function expects global ID type
@@ -2322,15 +2783,20 @@ void MeshTopology::setEdgeToCurveMap(const map< pair<IndexType, IndexType>, Para
   _transformationFunction = Teuchos::rcp(new MeshTransformationFunction(mesh, cellIDsGlobal));
 }
 
-void MeshTopology::setGlobalDofAssignment(GlobalDofAssignment* gda) { // for cubature degree lookups
+void MeshTopology::setGlobalDofAssignment(GlobalDofAssignment* gda)   // for cubature degree lookups
+{
   _gda = gda;
 }
 
-void MeshTopology::setEntityGeneralizedParent(unsigned entityDim, IndexType entityIndex, unsigned parentDim, IndexType parentEntityIndex) {
+void MeshTopology::setEntityGeneralizedParent(unsigned entityDim, IndexType entityIndex, unsigned parentDim, IndexType parentEntityIndex)
+{
   _generalizedParentEntities[entityDim][entityIndex] = make_pair(parentEntityIndex,parentDim);
-  if (entityDim == 0) { // vertex --> should set parent relationships for any vertices that are equivalent via periodic BCs
-    if (_periodicBCIndicesMatchingNode.find(entityIndex) != _periodicBCIndicesMatchingNode.end()) {
-      for (set< pair<int, int> >::iterator bcIt = _periodicBCIndicesMatchingNode[entityIndex].begin(); bcIt != _periodicBCIndicesMatchingNode[entityIndex].end(); bcIt++) {
+  if (entityDim == 0)   // vertex --> should set parent relationships for any vertices that are equivalent via periodic BCs
+  {
+    if (_periodicBCIndicesMatchingNode.find(entityIndex) != _periodicBCIndicesMatchingNode.end())
+    {
+      for (set< pair<int, int> >::iterator bcIt = _periodicBCIndicesMatchingNode[entityIndex].begin(); bcIt != _periodicBCIndicesMatchingNode[entityIndex].end(); bcIt++)
+      {
         IndexType equivalentNode = _equivalentNodeViaPeriodicBC[make_pair(entityIndex, *bcIt)];
         _generalizedParentEntities[entityDim][equivalentNode] = make_pair(parentEntityIndex,parentDim);
       }
@@ -2338,19 +2804,23 @@ void MeshTopology::setEntityGeneralizedParent(unsigned entityDim, IndexType enti
   }
 }
 
-Teuchos::RCP<MeshTransformationFunction> MeshTopology::transformationFunction() {
+Teuchos::RCP<MeshTransformationFunction> MeshTopology::transformationFunction()
+{
   return _transformationFunction;
 }
 
-void MeshTopology::verticesForCell(FieldContainer<double>& vertices, GlobalIndexType cellID) {
+void MeshTopology::verticesForCell(FieldContainer<double>& vertices, GlobalIndexType cellID)
+{
   CellPtr cell = getCell(cellID);
   vector<IndexType> vertexIndices = cell->vertices();
   int numVertices = vertexIndices.size();
   int spaceDim = getSpaceDim();
-  
+
   //vertices.resize(numVertices,dimension);
-  for (unsigned vertexOrdinal = 0; vertexOrdinal < numVertices; vertexOrdinal++) {
-    for (int d=0; d<spaceDim; d++) {
+  for (unsigned vertexOrdinal = 0; vertexOrdinal < numVertices; vertexOrdinal++)
+  {
+    for (int d=0; d<spaceDim; d++)
+    {
       vertices(vertexOrdinal,d) = getVertex(vertexIndices[vertexOrdinal])[d];
     }
   }

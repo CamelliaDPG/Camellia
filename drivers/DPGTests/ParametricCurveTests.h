@@ -12,7 +12,8 @@
 #include "ParametricCurve.h"
 #include "TestSuite.h"
 
-class ParametricCurveTests : public TestSuite {
+class ParametricCurveTests : public TestSuite
+{
   void setup();
   void teardown() {}
 public:
@@ -25,7 +26,7 @@ public:
   bool testPolygon();
   bool testProjectionBasedInterpolation();
   bool testTransfiniteInterpolant();
-  
+
   std::string testSuiteName();
 };
 

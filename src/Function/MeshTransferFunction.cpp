@@ -14,7 +14,8 @@ using namespace Intrepid;
 using namespace Camellia;
 
 MeshTransferFunction::MeshTransferFunction(TFunctionPtr<double> originalFunction, MeshPtr originalMesh,
-                                           MeshPtr newMesh, double interface_t) : TFunction<double>(originalFunction->rank()) {
+    MeshPtr newMesh, double interface_t) : TFunction<double>(originalFunction->rank())
+{
   _originalFunction = originalFunction;
   _originalMesh = originalMesh;
   _newMesh = newMesh;
@@ -32,14 +33,17 @@ MeshTransferFunction::MeshTransferFunction(TFunctionPtr<double> originalFunction
   rebuildMaps();
 }
 
-bool MeshTransferFunction::boundaryValueOnly() {
+bool MeshTransferFunction::boundaryValueOnly()
+{
   // This function is only valid on the interface (boundary) between the two meshes.
   return true;
 }
 
 
-void MeshTransferFunction::didRepartition(MeshTopologyPtr meshTopo) {
-  if ((meshTopo.get() != _originalMesh->getTopology().get()) && (meshTopo.get() != _newMesh->getTopology().get())) {
+void MeshTransferFunction::didRepartition(MeshTopologyPtr meshTopo)
+{
+  if ((meshTopo.get() != _originalMesh->getTopology().get()) && (meshTopo.get() != _newMesh->getTopology().get()))
+  {
     cout << "ERROR: MeshTransferFunction received didHRefine notification for unrecognized MeshTopology!\n";
     TEUCHOS_TEST_FOR_EXCEPTION(true, std::invalid_argument, "MeshTransferFunction received didHRefine notification for unrecognized MeshTopology!");
   }
@@ -48,8 +52,9 @@ void MeshTransferFunction::didRepartition(MeshTopologyPtr meshTopo) {
 }
 
 bool MeshTransferFunction::findAncestralPairForNewMeshCellSide(const CellSide &newMeshCellSide,
-                                                               CellSide &newMeshCellSideAncestor, CellSide &originalMeshCellSideAncestor,
-                                                               unsigned &newMeshCellSideAncestorPermutation) {
+    CellSide &newMeshCellSideAncestor, CellSide &originalMeshCellSideAncestor,
+    unsigned &newMeshCellSideAncestorPermutation)
+{
   MeshTopologyPtr newMeshTopology = _newMesh->getTopology();
   MeshTopologyPtr originalMeshTopology = _originalMesh->getTopology();
 
@@ -58,7 +63,8 @@ bool MeshTransferFunction::findAncestralPairForNewMeshCellSide(const CellSide &n
   int sideDim = newMeshTopology->getSpaceDim() - 1;
 
   bool notFound = true;
-  while (notFound) {
+  while (notFound)
+  {
     notFound = false;
     map<IndexType,IndexType> originalVertexIndexToNewVertexIndex;
 
@@ -66,17 +72,21 @@ bool MeshTransferFunction::findAncestralPairForNewMeshCellSide(const CellSide &n
     IndexType newMeshActiveSideEntityIndex = newMeshCell->entityIndex(sideDim, newMeshCellSideAncestor.second);
     vector<IndexType> newVertexIndices = newMeshTopology->getEntityVertexIndices(sideDim, newMeshActiveSideEntityIndex);
     vector<IndexType> originalVertexIndices(newVertexIndices.size());
-    for (int vertexOrdinal=0; vertexOrdinal<newVertexIndices.size(); vertexOrdinal++) {
+    for (int vertexOrdinal=0; vertexOrdinal<newVertexIndices.size(); vertexOrdinal++)
+    {
       vector<double> newVertex = newMeshTopology->getVertex(newVertexIndices[vertexOrdinal]);
 
-      if (! originalMeshTopology->getVertexIndex(newVertex, originalVertexIndices[vertexOrdinal])) {
+      if (! originalMeshTopology->getVertexIndex(newVertex, originalVertexIndices[vertexOrdinal]))
+      {
         notFound = true;
         break;
       }
       originalVertexIndexToNewVertexIndex[originalVertexIndices[vertexOrdinal]] = newVertexIndices[vertexOrdinal];
     }
-    if (notFound) { // missing at least one vertex; try the parent of newCellSide
-      if (newMeshCell->getParent().get() == NULL) {
+    if (notFound)   // missing at least one vertex; try the parent of newCellSide
+    {
+      if (newMeshCell->getParent().get() == NULL)
+      {
         return false;
         // TEUCHOS_TEST_FOR_EXCEPTION(true, std::invalid_argument, "cellSide not found in originalMesh hierarchy");
       }
@@ -87,24 +97,30 @@ bool MeshTransferFunction::findAncestralPairForNewMeshCellSide(const CellSide &n
       pair<unsigned, unsigned> subcellInfo = parent->refinementPattern()->mapSubcellFromChildToParent(childOrdinalInParent, sideDim, newMeshCellSideAncestor.second);
 
       unsigned parentSideOrdinal = subcellInfo.second;
-      if ((parentSideOrdinal == -1) || (subcellInfo.first != sideDim)) {
+      if ((parentSideOrdinal == -1) || (subcellInfo.first != sideDim))
+      {
         return false;
       }
 
       newMeshCellSideAncestor.first = parent->cellIndex();
       newMeshCellSideAncestor.second = parentSideOrdinal;
-    } else {
+    }
+    else
+    {
       // if we get here, found a matching cell side; now work out the details:
       set<IndexType> vertexSet(originalVertexIndices.begin(),originalVertexIndices.end());
       IndexType originalSideEntityIndex = originalMeshTopology->getEntityIndex(sideDim, vertexSet);
-      if (originalSideEntityIndex == -1) {
+      if (originalSideEntityIndex == -1)
+      {
         TEUCHOS_TEST_FOR_EXCEPTION(true, std::invalid_argument, "vertices found in originalMesh, but no matching side!");
       }
       set< CellSide > cellSides = originalMeshTopology->getCellsContainingEntity(sideDim, originalSideEntityIndex);
-      if (cellSides.size() == 0) {
+      if (cellSides.size() == 0)
+      {
         TEUCHOS_TEST_FOR_EXCEPTION(true, std::invalid_argument, "side found, but no cells containing side found in originalMesh");
       }
-      if (cellSides.size() != 1) {
+      if (cellSides.size() != 1)
+      {
         TEUCHOS_TEST_FOR_EXCEPTION(true, std::invalid_argument, "multiple cells containing side found in originalMesh");
       }
       originalMeshCellSideAncestor = *cellSides.begin();
@@ -117,7 +133,8 @@ bool MeshTransferFunction::findAncestralPairForNewMeshCellSide(const CellSide &n
       // determine permutation:
       vector<unsigned> originalOrder(originalVertexIndices.size()); // order in originalMesh
       vector<unsigned> permutedOrder = newVertexIndices; // order in the newMesh
-      for (int vertexOrdinal=0; vertexOrdinal<originalVertexIndices.size(); vertexOrdinal++) {
+      for (int vertexOrdinal=0; vertexOrdinal<originalVertexIndices.size(); vertexOrdinal++)
+      {
         IndexType originalVertexIndex = originalVertexIndices[vertexOrdinal];
         originalOrder[vertexOrdinal] = originalVertexIndexToNewVertexIndex[originalVertexIndex];
       }
@@ -128,7 +145,8 @@ bool MeshTransferFunction::findAncestralPairForNewMeshCellSide(const CellSide &n
   return true;
 }
 
-void MeshTransferFunction::rebuildMaps() {
+void MeshTransferFunction::rebuildMaps()
+{
   MeshTopologyPtr newMeshTopology = _newMesh->getTopology();
 
   int sideDim = newMeshTopology->getSpaceDim() - 1;
@@ -142,22 +160,27 @@ void MeshTransferFunction::rebuildMaps() {
   set<GlobalIndexType> myNewMeshCells = _newMesh->globalDofAssignment()->cellsInPartition(-1); // -1: this rank
   set<CellSide> newMeshActiveCellSides;
   double tol = 1e-15; // for matching on the interface
-  for (set<GlobalIndexType>::iterator cellIDIt = myNewMeshCells.begin(); cellIDIt != myNewMeshCells.end(); cellIDIt++) {
+  for (set<GlobalIndexType>::iterator cellIDIt = myNewMeshCells.begin(); cellIDIt != myNewMeshCells.end(); cellIDIt++)
+  {
     GlobalIndexType cellID = *cellIDIt;
     CellPtr cell = newMeshTopology->getCell(cellID);
     vector<unsigned> boundarySideOrdinals = cell->boundarySides();
 
-    for (int i=0; i<boundarySideOrdinals.size(); i++) {
+    for (int i=0; i<boundarySideOrdinals.size(); i++)
+    {
       bool sideMatchesInterface = true; // will set to false if we find a vertex that does not match
       IndexType sideEntityIndex = cell->entityIndex(sideDim, boundarySideOrdinals[i]);
       vector<IndexType> vertexIndices = newMeshTopology->getEntityVertexIndices(sideDim, sideEntityIndex);
-      for (int vertexOrdinal=0; vertexOrdinal<vertexIndices.size(); vertexOrdinal++) {
+      for (int vertexOrdinal=0; vertexOrdinal<vertexIndices.size(); vertexOrdinal++)
+      {
         vector<double> vertex = newMeshTopology->getVertex(vertexIndices[vertexOrdinal]);
-        if (abs(vertex[timeDimOrdinal] - _interface_t) > tol) {
+        if (abs(vertex[timeDimOrdinal] - _interface_t) > tol)
+        {
           sideMatchesInterface = false;
         }
       }
-      if (sideMatchesInterface) {
+      if (sideMatchesInterface)
+      {
         CellSide cellSide = make_pair(cellID, boundarySideOrdinals[i]);
         newMeshActiveCellSides.insert(cellSide);
       }
@@ -192,7 +215,8 @@ void MeshTransferFunction::rebuildMaps() {
   vector<GlobalIndexType> cellsToImport;
 
   for ( set<CellSide>::iterator newMeshEntryIt = newMeshActiveCellSides.begin();
-       newMeshEntryIt != newMeshActiveCellSides.end(); newMeshEntryIt++) {
+        newMeshEntryIt != newMeshActiveCellSides.end(); newMeshEntryIt++)
+  {
     CellSide newActiveCellSide = *newMeshEntryIt;
     CellSide originalCellSide;
 
@@ -200,7 +224,8 @@ void MeshTransferFunction::rebuildMaps() {
 
     unsigned permutation;
     bool matchFound = findAncestralPairForNewMeshCellSide(newActiveCellSide, newCellSide, originalCellSide, permutation);
-    if (!matchFound) {
+    if (!matchFound)
+    {
       TEUCHOS_TEST_FOR_EXCEPTION(true, std::invalid_argument, "no match found during rebuildMaps()");
     }
 
@@ -209,14 +234,19 @@ void MeshTransferFunction::rebuildMaps() {
 
     _permutationForNewMeshCellSide[newCellSide] = permutation;
 
-    if (originalMeshActiveRankLocalCells->find(originalCellSide.first) == originalMeshActiveRankLocalCells->end()) {
+    if (originalMeshActiveRankLocalCells->find(originalCellSide.first) == originalMeshActiveRankLocalCells->end())
+    {
       // off-rank or parent; record for import:
       CellPtr originalCell = _originalMesh->getTopology()->getCell(originalCellSide.first);
-      if (!originalCell->isParent()) {
+      if (!originalCell->isParent())
+      {
         cellsToImport.push_back(originalCellSide.first);
-      } else {
+      }
+      else
+      {
         vector< pair< GlobalIndexType, unsigned> > descendants = originalCell->getDescendantsForSide(originalCellSide.second);
-        for (vector< pair< GlobalIndexType, unsigned> >::iterator entryIt = descendants.begin(); entryIt != descendants.end(); entryIt++) {
+        for (vector< pair< GlobalIndexType, unsigned> >::iterator entryIt = descendants.begin(); entryIt != descendants.end(); entryIt++)
+        {
           cellsToImport.push_back(entryIt->first);
         }
       }
@@ -241,9 +271,11 @@ void MeshTransferFunction::rebuildMaps() {
   // here typically only need to be done once per solve on newMesh, and this during the determination of boundary conditions.
 }
 
-void MeshTransferFunction::values(FieldContainer<double> &values, BasisCachePtr basisCache) {
+void MeshTransferFunction::values(FieldContainer<double> &values, BasisCachePtr basisCache)
+{
   // incoming basisCache should be defined on newMesh
-  if (basisCache->mesh().get() != _newMesh.get()) {
+  if (basisCache->mesh().get() != _newMesh.get())
+  {
     cout << "ERROR: MeshTransferFunction::values() requires incoming BasisCache to be defined on newMesh.\n";
     TEUCHOS_TEST_FOR_EXCEPTION(true, std::invalid_argument, "BasisCache not defined on newMesh");
   }
@@ -264,7 +296,8 @@ void MeshTransferFunction::values(FieldContainer<double> &values, BasisCachePtr 
 
   vector<GlobalIndexType> newMeshCellIDs = basisCache->cellIDs();
   int cellOrdinal = 0;
-  for (vector<GlobalIndexType>::iterator cellIDIt = newMeshCellIDs.begin(); cellIDIt != newMeshCellIDs.end(); cellIDIt++, cellOrdinal++) {
+  for (vector<GlobalIndexType>::iterator cellIDIt = newMeshCellIDs.begin(); cellIDIt != newMeshCellIDs.end(); cellIDIt++, cellOrdinal++)
+  {
     valuesLocation[0] = cellOrdinal;
 
     GlobalIndexType newMeshCellID = *cellIDIt;
@@ -276,20 +309,25 @@ void MeshTransferFunction::values(FieldContainer<double> &values, BasisCachePtr 
     unsigned newMeshAncestralCellSidePermutation;
     bool matchFound = findAncestralPairForNewMeshCellSide(newMeshActiveCellSide, newMeshAncestralCellSide, originalMeshAncestralCellSide, newMeshAncestralCellSidePermutation);
 
-    if (!matchFound) {
+    if (!matchFound)
+    {
       TEUCHOS_TEST_FOR_EXCEPTION(true, std::invalid_argument, "CellSide not found!");
     }
 
     FieldContainer<double> newMeshCellReferencePoints;
 
     // in newMesh, may have to map upward to an ancestor
-    if (newMeshActiveCellSide == newMeshAncestralCellSide) {
+    if (newMeshActiveCellSide == newMeshAncestralCellSide)
+    {
       newMeshCellReferencePoints = refCellPoints;
-    } else {
+    }
+    else
+    {
       GlobalIndexType ancestralCellID = newMeshAncestralCellSide.first;
       CellPtr cell = _newMesh->getTopology()->getCell(newMeshCellID);
       RefinementBranch refBranchVolume;
-      while (cell->cellIndex() != ancestralCellID) {
+      while (cell->cellIndex() != ancestralCellID)
+      {
         CellPtr parent = cell->getParent();
         unsigned childOrdinal = parent->childOrdinal(cell->cellIndex());
         refBranchVolume.insert(refBranchVolume.end(), make_pair(parent->refinementPattern().get(),childOrdinal));
@@ -299,15 +337,18 @@ void MeshTransferFunction::values(FieldContainer<double> &values, BasisCachePtr 
       RefinementPattern::mapRefCellPointsToAncestor(refBranch, refCellPoints, newMeshCellReferencePoints);
     }
 
-    { // DEBUGGING
+    {
+      // DEBUGGING
       BasisCachePtr ancestorBasisCache = BasisCache::basisCacheForCell(_newMesh, newMeshAncestralCellSide.first);
       BasisCachePtr ancestorSideBasisCache = ancestorBasisCache->getSideBasisCache(newMeshAncestralCellSide.second);
       ancestorSideBasisCache->setRefCellPoints(newMeshCellReferencePoints);
 
       FieldContainer<double> originalPhysicalPoints(1,newMeshCellReferencePoints.dimension(0), _newMesh->getDimension());
 
-      for (int pointOrdinal=0; pointOrdinal<newMeshCellReferencePoints.dimension(0); pointOrdinal++) {
-        for (int d=0; d<_newMesh->getDimension(); d++) {
+      for (int pointOrdinal=0; pointOrdinal<newMeshCellReferencePoints.dimension(0); pointOrdinal++)
+      {
+        for (int d=0; d<_newMesh->getDimension(); d++)
+        {
           originalPhysicalPoints(0,pointOrdinal,d) = basisCache->getPhysicalCubaturePoints()(cellOrdinal,pointOrdinal,d);
         }
       }
@@ -315,8 +356,10 @@ void MeshTransferFunction::values(FieldContainer<double> &values, BasisCachePtr 
       FieldContainer<double> ancestorPhysicalPoints = ancestorSideBasisCache->getPhysicalCubaturePoints();
       double tol = 1e-15;
       double maxDiff = 0;
-      for (int pointOrdinal=0; pointOrdinal<newMeshCellReferencePoints.dimension(0); pointOrdinal++) {
-        for (int d=0; d<_newMesh->getDimension(); d++) {
+      for (int pointOrdinal=0; pointOrdinal<newMeshCellReferencePoints.dimension(0); pointOrdinal++)
+      {
+        for (int d=0; d<_newMesh->getDimension(); d++)
+        {
           double diff = abs( originalPhysicalPoints(0,pointOrdinal,d) - ancestorPhysicalPoints(0,pointOrdinal,d) );
           if (diff==0) continue;
           double maxVal = std::max(abs(originalPhysicalPoints(0,pointOrdinal,d)), abs(ancestorPhysicalPoints(0,pointOrdinal,d)));
@@ -324,7 +367,8 @@ void MeshTransferFunction::values(FieldContainer<double> &values, BasisCachePtr 
           maxDiff = std::max(maxDiff,relDiff);
         }
       }
-      if (maxDiff > tol) {
+      if (maxDiff > tol)
+      {
         cout << "ERROR: ancestorPhysicalPoints and originalPhysicalPoints differ.\n";
         cout << "originalPhysicalPoints:\n" << originalPhysicalPoints;
         cout << "ancestorPhysicalPoints:\n" << ancestorPhysicalPoints;
@@ -343,14 +387,17 @@ void MeshTransferFunction::values(FieldContainer<double> &values, BasisCachePtr 
 
     // in originalMesh, may have to map downward to descendants
     CellPtr cell = _originalMesh->getTopology()->getCell(originalMeshAncestralCellSide.first);
-    if (! cell->isParent()) {
+    if (! cell->isParent())
+    {
       BasisCachePtr originalBasisCache = BasisCache::basisCacheForCell(_originalMesh, originalMeshAncestralCellSide.first);
       BasisCachePtr originalBasisCacheSide = originalBasisCache->getSideBasisCache(originalMeshAncestralCellSide.second);
       originalBasisCacheSide->setRefCellPoints(originalMeshCellReferencePoints);
       int enumeration = values.getEnumeration(valuesLocation);
       FieldContainer<double> cellValues(valuesDimOneCell, &values[enumeration]);
       _originalFunction->values(cellValues, originalBasisCacheSide);
-    } else {
+    }
+    else
+    {
       // otherwise, we examine points individually -- a good deal of room for optimization here, though I'm not sure how
       // much this method will be used; should do a profile to see how expensive it really is
 
@@ -358,10 +405,12 @@ void MeshTransferFunction::values(FieldContainer<double> &values, BasisCachePtr 
 //      vector< unsigned > sideOrdinalForPoint(numPoints); // side ordinal in descendant
 //      vector< vector<double> > pointInDescendant(numPoints); // in ref space for descendant side
 
-      for (int pointOrdinal=0; pointOrdinal<numPoints; pointOrdinal++) {
+      for (int pointOrdinal=0; pointOrdinal<numPoints; pointOrdinal++)
+      {
         FieldContainer<double> parentPointFC(1,sideDim);
         vector<double> refPointParent(sideDim);
-        for (int d=0; d<sideDim; d++) {
+        for (int d=0; d<sideDim; d++)
+        {
           parentPointFC(0,d) = originalMeshCellReferencePoints(pointOrdinal,d);
           refPointParent[d] = originalMeshCellReferencePoints(pointOrdinal,d);
         }
@@ -370,7 +419,8 @@ void MeshTransferFunction::values(FieldContainer<double> &values, BasisCachePtr 
         vector<unsigned> branch;
         unsigned sideOrdinal = originalMeshAncestralCellSide.second;
 
-        while (descendantCell->isParent()) {
+        while (descendantCell->isParent())
+        {
           RefinementPatternPtr refPattern = descendantCell->refinementPattern();
           RefinementPatternPtr sideRefPattern = refPattern->sideRefinementPatterns()[sideOrdinal];
 
@@ -384,7 +434,8 @@ void MeshTransferFunction::values(FieldContainer<double> &values, BasisCachePtr 
           sideRefPattern->mapPointsToChildRefCoordinates(parentPointFC, childOrdinalInSide, childPoint);
           parentPointFC = childPoint;
 
-          for (int d=0; d<sideDim; d++) {
+          for (int d=0; d<sideDim; d++)
+          {
             refPointParent[d] = childPoint(0,d);
           }
 
@@ -422,7 +473,8 @@ void MeshTransferFunction::values(FieldContainer<double> &values, BasisCachePtr 
 
 }
 
-MeshTransferFunction::~MeshTransferFunction() {
+MeshTransferFunction::~MeshTransferFunction()
+{
   _newMesh->unregisterObserver(this);
   _originalMesh->unregisterObserver(this);
 }

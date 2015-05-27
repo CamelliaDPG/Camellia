@@ -21,45 +21,54 @@
 
 double pi = 2.0*acos(0.0);
 
-class ConstantXBoundary : public SpatialFilter {
-  private:
-    double xval;
-  public:
-    ConstantXBoundary(double xval): xval(xval) {};
-    bool matchesPoint(double x, double y) {
-      double tol = 1e-14;
-      return (abs(x-xval) < tol);
-    }
+class ConstantXBoundary : public SpatialFilter
+{
+private:
+  double xval;
+public:
+  ConstantXBoundary(double xval): xval(xval) {};
+  bool matchesPoint(double x, double y)
+  {
+    double tol = 1e-14;
+    return (abs(x-xval) < tol);
+  }
 };
 
-class ConstantYBoundary : public SpatialFilter {
-  private:
-    double yval;
-  public:
-    ConstantYBoundary(double yval): yval(yval) {};
-    bool matchesPoint(double x, double y) {
-      double tol = 1e-14;
-      return (abs(y-yval) < tol);
-    }
+class ConstantYBoundary : public SpatialFilter
+{
+private:
+  double yval;
+public:
+  ConstantYBoundary(double yval): yval(yval) {};
+  bool matchesPoint(double x, double y)
+  {
+    double tol = 1e-14;
+    return (abs(y-yval) < tol);
+  }
 };
 
-class PlateBoundary : public SpatialFilter {
-  public:
-    bool matchesPoint(double x, double y) {
-      double tol = 1e-14;
-      return (abs(y) < tol && x >= 0);
-    }
+class PlateBoundary : public SpatialFilter
+{
+public:
+  bool matchesPoint(double x, double y)
+  {
+    double tol = 1e-14;
+    return (abs(y) < tol && x >= 0);
+  }
 };
 
-class UpstreamBoundary : public SpatialFilter {
-  public:
-    bool matchesPoint(double x, double y) {
-      double tol = 1e-14;
-      return (abs(y) < tol && x < 0);
-    }
+class UpstreamBoundary : public SpatialFilter
+{
+public:
+  bool matchesPoint(double x, double y)
+  {
+    double tol = 1e-14;
+    return (abs(y) < tol && x < 0);
+  }
 };
 
-int main(int argc, char *argv[]) {
+int main(int argc, char *argv[])
+{
 #ifdef HAVE_MPI
   Teuchos::GlobalMPISession mpiSession(&argc, &argv,0);
   choice::MpiArgs args( argc, argv );
@@ -136,7 +145,7 @@ int main(int argc, char *argv[]) {
 
   // create a pointer to a new mesh:
   Teuchos::RCP<Mesh> mesh = MeshFactory::buildQuadMesh(meshBoundary, horizontalCells, verticalCells,
-                                                bf, H1Order, H1Order+deltaP);
+                            bf, H1Order, H1Order+deltaP);
 
   ////////////////////////////////////////////////////////////////////
   // INITIALIZE BACKGROUND FLOW FUNCTIONS
@@ -286,7 +295,7 @@ int main(int argc, char *argv[]) {
   nonlinearVars.insert(u1->ID());
   nonlinearVars.insert(u2->ID());
 
-  double nonlinearRelativeEnergyTolerance = 1e-5; 
+  double nonlinearRelativeEnergyTolerance = 1e-5;
   for (int refIndex=0; refIndex<=numRefs; refIndex++)
   {
     double L2Update = 1e10;

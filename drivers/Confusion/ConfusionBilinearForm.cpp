@@ -17,7 +17,8 @@ int ConfusionBilinearForm::U_ID = 2, ConfusionBilinearForm::SIGMA_1_ID = 3, Conf
 
 int ConfusionBilinearForm::V_ID = 1;
 
-BFPtr ConfusionBilinearForm::confusionBF(double eps, FunctionPtr beta) {
+BFPtr ConfusionBilinearForm::confusionBF(double eps, FunctionPtr beta)
+{
   VarFactoryPtr vf = VarFactory::varFactory();
   VarPtr tau = vf->testVar(S_TAU, HDIV);
   VarPtr v = vf->testVar(S_V, HGRAD);
@@ -51,7 +52,8 @@ BFPtr ConfusionBilinearForm::confusionBF(double eps, FunctionPtr beta) {
   return bf;
 }
 
-BFPtr ConfusionBilinearForm::confusionBF(double epsilon, double beta_x, double beta_y) {
+BFPtr ConfusionBilinearForm::confusionBF(double epsilon, double beta_x, double beta_y)
+{
   FunctionPtr beta = Function::vectorize(Function::constant(beta_x), Function::constant(beta_y));
 
   return confusionBF(epsilon, beta);

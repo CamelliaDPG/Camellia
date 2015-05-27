@@ -42,7 +42,8 @@ const string StokesVGPFormulation::S_TAU3 = "\\tau_{3}";
 const string StokesVGPFormulation::S_Q = "q";
 
 StokesVGPFormulation::StokesVGPFormulation(int spaceDim, bool useConformingTraces, double mu,
-                                           bool transient, double dt) {
+    bool transient, double dt)
+{
   _spaceDim = spaceDim;
   _useConformingTraces = useConformingTraces;
   _mu = mu;
@@ -52,7 +53,8 @@ StokesVGPFormulation::StokesVGPFormulation(int spaceDim, bool useConformingTrace
   _theta = ParameterFunction::parameterFunction(0.5); // Crank-Nicolson
   _transient = transient;
 
-  if ((spaceDim != 2) && (spaceDim != 3)) {
+  if ((spaceDim != 2) && (spaceDim != 3))
+  {
     TEUCHOS_TEST_FOR_EXCEPTION(true, std::invalid_argument, "spaceDim must be 2 or 3");
   }
 
@@ -80,7 +82,8 @@ StokesVGPFormulation::StokesVGPFormulation(int spaceDim, bool useConformingTrace
 
   sigma1 = _vf->fieldVar(S_SIGMA1, VECTOR_L2);
   sigma2 = _vf->fieldVar(S_SIGMA2, VECTOR_L2);
-  if (spaceDim==3) {
+  if (spaceDim==3)
+  {
     sigma3 = _vf->fieldVar(S_SIGMA3, VECTOR_L2);
   }
 
@@ -96,7 +99,8 @@ StokesVGPFormulation::StokesVGPFormulation(int spaceDim, bool useConformingTrace
   LinearTermPtr t1n_lt, t2n_lt, t3n_lt;
   t1n_lt = p * n_parity->x() - sigma1 * n_parity ;
   t2n_lt = p * n_parity->y() - sigma2 * n_parity;
-  if (spaceDim==3) {
+  if (spaceDim==3)
+  {
     t3n_lt = p * n_parity->z() - sigma3 * n_parity;
   }
   t1n = _vf->fluxVar(S_TN1_HAT, t1n_lt);
@@ -109,7 +113,8 @@ StokesVGPFormulation::StokesVGPFormulation(int spaceDim, bool useConformingTrace
 
   tau1 = _vf->testVar(S_TAU1, HDIV);
   tau2 = _vf->testVar(S_TAU2, HDIV);
-  if (spaceDim==3) {
+  if (spaceDim==3)
+  {
     tau3 = _vf->testVar(S_TAU3, HDIV);
   }
 
@@ -128,7 +133,8 @@ StokesVGPFormulation::StokesVGPFormulation(int spaceDim, bool useConformingTrace
   _steadyStokesBF->addTerm(-u2_hat, tau2->dot_normal());
 
   // tau3:
-  if (spaceDim==3) {
+  if (spaceDim==3)
+  {
     _steadyStokesBF->addTerm(u3, tau3->div());
     _steadyStokesBF->addTerm((1.0/_mu) * sigma3, tau3);
     _steadyStokesBF->addTerm(-u3_hat, tau3->dot_normal());
@@ -145,7 +151,8 @@ StokesVGPFormulation::StokesVGPFormulation(int spaceDim, bool useConformingTrace
   _steadyStokesBF->addTerm( t2n, v2);
 
   // v3:
-  if (spaceDim==3) {
+  if (spaceDim==3)
+  {
     _steadyStokesBF->addTerm(sigma3, v3->grad()); // (mu sigma3, grad v3)
     _steadyStokesBF->addTerm( - p, v3->dz());
     _steadyStokesBF->addTerm( t3n, v3);
@@ -156,15 +163,21 @@ StokesVGPFormulation::StokesVGPFormulation(int spaceDim, bool useConformingTrace
   _steadyStokesBF->addTerm(-u2,q->dy());
   if (spaceDim==3) _steadyStokesBF->addTerm(-u3, q->dz());
 
-  if (spaceDim==2) {
+  if (spaceDim==2)
+  {
     _steadyStokesBF->addTerm(u1_hat * n->x() + u2_hat * n->y(), q);
-  } else if (spaceDim==3) {
+  }
+  else if (spaceDim==3)
+  {
     _steadyStokesBF->addTerm(u1_hat * n->x() + u2_hat * n->y() + u3_hat * n->z(), q);
   }
 
-  if (!_transient) {
+  if (!_transient)
+  {
     _stokesBF = _steadyStokesBF;
-  } else {
+  }
+  else
+  {
     _stokesBF = Teuchos::rcp( new BF(_vf) );
     // v1
     // tau1 terms:
@@ -178,7 +191,8 @@ StokesVGPFormulation::StokesVGPFormulation(int spaceDim, bool useConformingTrace
     _stokesBF->addTerm(-u2_hat, tau2->dot_normal());
 
     // tau3:
-    if (spaceDim==3) {
+    if (spaceDim==3)
+    {
       _stokesBF->addTerm(_theta * u3, tau3->div());
       _stokesBF->addTerm(_theta * ((1.0/_mu) * sigma3), tau3);
       _stokesBF->addTerm(-u3_hat, tau3->dot_normal());
@@ -198,7 +212,8 @@ StokesVGPFormulation::StokesVGPFormulation(int spaceDim, bool useConformingTrace
     _stokesBF->addTerm( t2n, v2);
 
     // v3:
-    if (spaceDim==3) {
+    if (spaceDim==3)
+    {
       _stokesBF->addTerm(u3 / dtFxn, v3);
       _stokesBF->addTerm(_theta * sigma3, v3->grad()); // (mu sigma3, grad v3)
       _stokesBF->addTerm(_theta * (- p), v3->dz());
@@ -210,9 +225,12 @@ StokesVGPFormulation::StokesVGPFormulation(int spaceDim, bool useConformingTrace
     _stokesBF->addTerm(_theta * (-u2),q->dy());
     if (spaceDim==3) _stokesBF->addTerm(_theta * (-u3), q->dz());
 
-    if (spaceDim==2) {
+    if (spaceDim==2)
+    {
       _stokesBF->addTerm(u1_hat * n->x() + u2_hat * n->y(), q);
-    } else if (spaceDim==3) {
+    }
+    else if (spaceDim==3)
+    {
       _stokesBF->addTerm(u1_hat * n->x() + u2_hat * n->y() + u3_hat * n->z(), q);
     }
   }
@@ -220,28 +238,35 @@ StokesVGPFormulation::StokesVGPFormulation(int spaceDim, bool useConformingTrace
   // define tractions (used in outflow conditions)
   // definition of traction: _mu * ( (\nabla u) + (\nabla u)^T ) n - p n
   //                      = (sigma + sigma^T) n - p n
-  if (spaceDim == 2) {
+  if (spaceDim == 2)
+  {
     _t1 = n->x() * (2 * sigma1->x() - p)       + n->y() * (sigma1->x() + sigma2->x());
     _t2 = n->x() * (sigma1->y() + sigma2->x()) + n->y() * (2 * sigma2->y() - p);
-  } else {
+  }
+  else
+  {
     _t1 = n->x() * (2 * sigma1->x() - p)       + n->y() * (sigma1->x() + sigma2->x()) + n->z() * (sigma1->z() + sigma3->x());
     _t2 = n->x() * (sigma1->y() + sigma2->x()) + n->y() * (2 * sigma2->y() - p)       + n->z() * (sigma2->z() + sigma3->y());
     _t3 = n->x() * (sigma1->z() + sigma3->x()) + n->y() * (sigma2->z() + sigma3->y()) + n->z() * (2 * sigma3->z() - p);
   }
 }
 
-void StokesVGPFormulation::addInflowCondition(SpatialFilterPtr inflowRegion, TFunctionPtr<double> u) {
+void StokesVGPFormulation::addInflowCondition(SpatialFilterPtr inflowRegion, TFunctionPtr<double> u)
+{
   int spaceDim = _solution->mesh()->getTopology()->getSpaceDim();
 
   VarPtr u1_hat = this->u_hat(1), u2_hat = this->u_hat(2);
   VarPtr u3_hat;
   if (spaceDim==3) u3_hat = this->u_hat(3);
 
-  if (! _transient) {
+  if (! _transient)
+  {
     _solution->bc()->addDirichlet(u1_hat, inflowRegion, u->x());
     _solution->bc()->addDirichlet(u2_hat, inflowRegion, u->y());
     if (spaceDim==3) _solution->bc()->addDirichlet(u3_hat, inflowRegion, u->z());
-  } else {
+  }
+  else
+  {
     TFunctionPtr<double> u1_hat_prev, u2_hat_prev, u3_hat_prev;
     TSolutionPtr<double> prevSolnWeakRef = Teuchos::rcp( _previousSolution.get(), false ); // avoid circular references
 
@@ -255,7 +280,8 @@ void StokesVGPFormulation::addInflowCondition(SpatialFilterPtr inflowRegion, TFu
   }
 }
 
-void StokesVGPFormulation::addOutflowCondition(SpatialFilterPtr outflowRegion) {
+void StokesVGPFormulation::addOutflowCondition(SpatialFilterPtr outflowRegion)
+{
   int spaceDim = _solution->mesh()->getTopology()->getSpaceDim();
 
 //  for (int d=0; d<spaceDim; d++) {
@@ -267,12 +293,14 @@ void StokesVGPFormulation::addOutflowCondition(SpatialFilterPtr outflowRegion) {
 
   // point pressure and zero-mean pressures are not compatible with outflow conditions:
   VarPtr p = this->p();
-  if (_solution->bc()->imposeZeroMeanConstraint(p->ID())) {
+  if (_solution->bc()->imposeZeroMeanConstraint(p->ID()))
+  {
     cout << "Removing zero-mean constraint on pressure by virtue of outflow condition.\n";
     _solution->bc()->removeZeroMeanConstraint(p->ID());
   }
 
-  if (_solution->bc()->singlePointBC(p->ID())) {
+  if (_solution->bc()->singlePointBC(p->ID()))
+  {
     cout << "Removing zero-point condition on pressure by virtue of outflow condition.\n";
     _solution->bc()->removeSinglePointBC(p->ID());
   }
@@ -283,12 +311,16 @@ void StokesVGPFormulation::addOutflowCondition(SpatialFilterPtr outflowRegion) {
   Teuchos::RCP< PenaltyConstraints > pcRCP;
   PenaltyConstraints* pc;
 
-  if (filter_incr.get() != NULL) {
+  if (filter_incr.get() != NULL)
+  {
     pc = dynamic_cast<PenaltyConstraints*>(filter_incr.get());
-    if (pc == NULL) {
+    if (pc == NULL)
+    {
       TEUCHOS_TEST_FOR_EXCEPTION(true, std::invalid_argument, "Can't add PenaltyConstraints when a non-PenaltyConstraints LocalStiffnessMatrixFilter already in place");
     }
-  } else {
+  }
+  else
+  {
     pcRCP = Teuchos::rcp( new PenaltyConstraints );
     pc = pcRCP.get();
   }
@@ -297,13 +329,16 @@ void StokesVGPFormulation::addOutflowCondition(SpatialFilterPtr outflowRegion) {
   pc->addConstraint(_t2==zero, outflowRegion);
   if (spaceDim==3) pc->addConstraint(_t3==zero, outflowRegion);
 
-  if (pcRCP != Teuchos::null) { // i.e., we're not just adding to a prior PenaltyConstraints object
+  if (pcRCP != Teuchos::null)   // i.e., we're not just adding to a prior PenaltyConstraints object
+  {
     _solution->setFilter(pcRCP);
   }
 }
 
-void StokesVGPFormulation::addPointPressureCondition() {
-  if (_haveOutflowConditionsImposed) {
+void StokesVGPFormulation::addPointPressureCondition()
+{
+  if (_haveOutflowConditionsImposed)
+  {
     cout << "ERROR: can't add pressure point condition if there are outflow conditions imposed.\n";
     TEUCHOS_TEST_FOR_EXCEPTION(true, std::invalid_argument, "");
   }
@@ -312,19 +347,23 @@ void StokesVGPFormulation::addPointPressureCondition() {
 
   _solution->bc()->addSinglePointBC(p->ID(), 0.0);
 
-  if (_solution->bc()->imposeZeroMeanConstraint(p->ID())) {
+  if (_solution->bc()->imposeZeroMeanConstraint(p->ID()))
+  {
     _solution->bc()->removeZeroMeanConstraint(p->ID());
   }
 }
 
-void StokesVGPFormulation::addWallCondition(SpatialFilterPtr wall) {
+void StokesVGPFormulation::addWallCondition(SpatialFilterPtr wall)
+{
   int spaceDim = _solution->mesh()->getTopology()->getSpaceDim();
   vector<double> zero(spaceDim, 0.0);
   addInflowCondition(wall, TFunction<double>::constant(zero));
 }
 
-void StokesVGPFormulation::addZeroMeanPressureCondition() {
-  if (_haveOutflowConditionsImposed) {
+void StokesVGPFormulation::addZeroMeanPressureCondition()
+{
+  if (_haveOutflowConditionsImposed)
+  {
     cout << "ERROR: can't add zero mean pressure condition if there are outflow conditions imposed.\n";
     TEUCHOS_TEST_FOR_EXCEPTION(true, std::invalid_argument, "");
   }
@@ -333,16 +372,19 @@ void StokesVGPFormulation::addZeroMeanPressureCondition() {
 
   _solution->bc()->addZeroMeanConstraint(p);
 
-  if (_solution->bc()->singlePointBC(p->ID())) {
+  if (_solution->bc()->singlePointBC(p->ID()))
+  {
     _solution->bc()->removeSinglePointBC(p->ID());
   }
 }
 
-BFPtr StokesVGPFormulation::bf() {
+BFPtr StokesVGPFormulation::bf()
+{
   return _stokesBF;
 }
 
-TFunctionPtr<double> StokesVGPFormulation::forcingFunction(int spaceDim, double mu, TFunctionPtr<double> u_exact, TFunctionPtr<double> p_exact) {
+TFunctionPtr<double> StokesVGPFormulation::forcingFunction(int spaceDim, double mu, TFunctionPtr<double> u_exact, TFunctionPtr<double> p_exact)
+{
   // f1 and f2 are those for Navier-Stokes, but without the u \cdot \grad u term
   TFunctionPtr<double> u1_exact = u_exact->x();
   TFunctionPtr<double> u2_exact = u_exact->y();
@@ -350,12 +392,15 @@ TFunctionPtr<double> StokesVGPFormulation::forcingFunction(int spaceDim, double 
 
   TFunctionPtr<double> f;
 
-  if (spaceDim == 2) {
+  if (spaceDim == 2)
+  {
     TFunctionPtr<double> f1, f2;
     f1 = p_exact->dx() - mu * (u1_exact->dx()->dx() + u1_exact->dy()->dy());
     f2 = p_exact->dy() - mu * (u2_exact->dx()->dx() + u2_exact->dy()->dy());
     f = TFunction<double>::vectorize(f1, f2);
-  } else {
+  }
+  else
+  {
     TFunctionPtr<double> f1, f2, f3;
     f1 = p_exact->dx() - mu * (u1_exact->dx()->dx() + u1_exact->dy()->dy() + u1_exact->dz()->dz());
     f2 = p_exact->dy() - mu * (u2_exact->dx()->dx() + u2_exact->dy()->dy() + u2_exact->dz()->dz());
@@ -366,31 +411,38 @@ TFunctionPtr<double> StokesVGPFormulation::forcingFunction(int spaceDim, double 
 }
 
 void StokesVGPFormulation::initializeSolution(MeshTopologyPtr meshTopo, int fieldPolyOrder, int delta_k,
-                                              TFunctionPtr<double> forcingFunction) {
+    TFunctionPtr<double> forcingFunction)
+{
   this->initializeSolution(meshTopo, fieldPolyOrder, delta_k, forcingFunction, "");
 }
 
 void StokesVGPFormulation::initializeSolution(std::string filePrefix, int fieldPolyOrder, int delta_k,
-                                              TFunctionPtr<double> forcingFunction) {
+    TFunctionPtr<double> forcingFunction)
+{
   this->initializeSolution(Teuchos::null, fieldPolyOrder, delta_k, forcingFunction, filePrefix);
 }
 
 void StokesVGPFormulation::initializeSolution(MeshTopologyPtr meshTopo, int fieldPolyOrder, int delta_k,
-                                              TFunctionPtr<double> forcingFunction, string savedSolutionAndMeshPrefix) {
+    TFunctionPtr<double> forcingFunction, string savedSolutionAndMeshPrefix)
+{
   _haveOutflowConditionsImposed = false;
   BCPtr bc = BC::bc();
 
   int H1Order = fieldPolyOrder + 1;
   MeshPtr mesh;
-  if (savedSolutionAndMeshPrefix == "") {
+  if (savedSolutionAndMeshPrefix == "")
+  {
     mesh = Teuchos::rcp( new Mesh(meshTopo, _stokesBF, H1Order, delta_k) ) ;
     _solution = TSolution<double>::solution(mesh,bc);
     if (_transient) _previousSolution = TSolution<double>::solution(mesh,bc);
-  } else {
+  }
+  else
+  {
     mesh = MeshFactory::loadFromHDF5(_stokesBF, savedSolutionAndMeshPrefix+".mesh");
     _solution = TSolution<double>::solution(mesh, bc);
     _solution->loadFromHDF5(savedSolutionAndMeshPrefix+".soln");
-    if (_transient) {
+    if (_transient)
+    {
       _previousSolution = TSolution<double>::solution(mesh,bc);
       _previousSolution->loadFromHDF5(savedSolutionAndMeshPrefix+"_previous.soln");
     }
@@ -418,15 +470,19 @@ void StokesVGPFormulation::initializeSolution(MeshTopologyPtr meshTopo, int fiel
   _time = 0;
   _t->setTime(_time);
 
-  if (_spaceDim==2) {
+  if (_spaceDim==2)
+  {
     // finally, set up a stream function solve for 2D
     _streamFormulation = Teuchos::rcp( new PoissonFormulation(_spaceDim,_useConformingTraces) );
 
     MeshPtr streamMesh;
-    if (savedSolutionAndMeshPrefix == "") {
+    if (savedSolutionAndMeshPrefix == "")
+    {
       MeshTopologyPtr streamMeshTopo = meshTopo->deepCopy();
       streamMesh = Teuchos::rcp( new Mesh(streamMeshTopo, _streamFormulation->bf(), H1Order, delta_k) ) ;
-    } else {
+    }
+    else
+    {
       streamMesh = MeshFactory::loadFromHDF5(_streamFormulation->bf(), savedSolutionAndMeshPrefix+"_stream.mesh");
     }
 
@@ -465,13 +521,15 @@ void StokesVGPFormulation::initializeSolution(MeshTopologyPtr meshTopo, int fiel
     IPPtr streamIP = _streamFormulation->bf()->graphNorm();
     _streamSolution = TSolution<double>::solution(streamMesh,streamBC,streamRHS,streamIP);
 
-    if (savedSolutionAndMeshPrefix != "") {
+    if (savedSolutionAndMeshPrefix != "")
+    {
       _streamSolution->loadFromHDF5(savedSolutionAndMeshPrefix + "_stream.soln");
     }
   }
 }
 
-double StokesVGPFormulation::L2NormOfTimeStep() {
+double StokesVGPFormulation::L2NormOfTimeStep()
+{
   TFunctionPtr<double>  p_current = TFunction<double>::solution( p(), _solution);
   TFunctionPtr<double> u1_current = TFunction<double>::solution(u(1), _solution);
   TFunctionPtr<double> u2_current = TFunction<double>::solution(u(2), _solution);
@@ -484,35 +542,43 @@ double StokesVGPFormulation::L2NormOfTimeStep() {
   return sqrt(valSquared);
 }
 
-double StokesVGPFormulation::mu() {
+double StokesVGPFormulation::mu()
+{
   return _mu;
 }
 
-VarPtr StokesVGPFormulation::p() {
+VarPtr StokesVGPFormulation::p()
+{
   return _vf->fieldVar(S_P);
 }
 
-RefinementStrategyPtr StokesVGPFormulation::getRefinementStrategy() {
+RefinementStrategyPtr StokesVGPFormulation::getRefinementStrategy()
+{
   return _refinementStrategy;
 }
 
-void StokesVGPFormulation::setRefinementStrategy(RefinementStrategyPtr refStrategy) {
+void StokesVGPFormulation::setRefinementStrategy(RefinementStrategyPtr refStrategy)
+{
   _refinementStrategy = refStrategy;
 }
 
-void StokesVGPFormulation::refine() {
+void StokesVGPFormulation::refine()
+{
   _refinementStrategy->refine();
 }
 
-void StokesVGPFormulation::hRefine() {
+void StokesVGPFormulation::hRefine()
+{
   _hRefinementStrategy->refine();
 }
 
-void StokesVGPFormulation::pRefine() {
+void StokesVGPFormulation::pRefine()
+{
   _pRefinementStrategy->refine();
 }
 
-RHSPtr StokesVGPFormulation::rhs(TFunctionPtr<double> f) {
+RHSPtr StokesVGPFormulation::rhs(TFunctionPtr<double> f)
+{
   int spaceDim = _solution->mesh()->getTopology()->getSpaceDim();
 
   RHSPtr rhs = RHS::rhs();
@@ -522,13 +588,15 @@ RHSPtr StokesVGPFormulation::rhs(TFunctionPtr<double> f) {
   VarPtr v3;
   if (spaceDim==3) v3 = this->v(3);
 
-  if (f != Teuchos::null) {
+  if (f != Teuchos::null)
+  {
     rhs->addTerm( f->x() * v1 );
     rhs->addTerm( f->y() * v2 );
     if (spaceDim == 3) rhs->addTerm( f->z() * v3 );
   }
 
-  if (_transient) {
+  if (_transient)
+  {
     TFunctionPtr<double> u1_prev, u2_prev, u3_prev;
     u1_prev = TFunction<double>::solution(this->u(1), _previousSolution);
     u2_prev = TFunction<double>::solution(this->u(2), _previousSolution);
@@ -547,149 +615,183 @@ RHSPtr StokesVGPFormulation::rhs(TFunctionPtr<double> f) {
   return rhs;
 }
 
-VarPtr StokesVGPFormulation::sigma(int i) {
-  if (i > _spaceDim) {
+VarPtr StokesVGPFormulation::sigma(int i)
+{
+  if (i > _spaceDim)
+  {
     TEUCHOS_TEST_FOR_EXCEPTION(true, std::invalid_argument, "i must be less than or equal to _spaceDim");
   }
-  switch (i) {
-    case 1:
-      return _vf->fieldVar(S_SIGMA1);
-    case 2:
-      return _vf->fieldVar(S_SIGMA2);
-    case 3:
-      return _vf->fieldVar(S_SIGMA3);
+  switch (i)
+  {
+  case 1:
+    return _vf->fieldVar(S_SIGMA1);
+  case 2:
+    return _vf->fieldVar(S_SIGMA2);
+  case 3:
+    return _vf->fieldVar(S_SIGMA3);
   }
   TEUCHOS_TEST_FOR_EXCEPTION(true, std::invalid_argument, "unhandled i value");
 }
 
-VarPtr StokesVGPFormulation::u(int i) {
-  if (i > _spaceDim) {
+VarPtr StokesVGPFormulation::u(int i)
+{
+  if (i > _spaceDim)
+  {
     TEUCHOS_TEST_FOR_EXCEPTION(true, std::invalid_argument, "i must be less than or equal to _spaceDim");
   }
-  switch (i) {
-    case 1:
-      return _vf->fieldVar(S_U1);
-    case 2:
-      return _vf->fieldVar(S_U2);
-    case 3:
-      return _vf->fieldVar(S_U3);
+  switch (i)
+  {
+  case 1:
+    return _vf->fieldVar(S_U1);
+  case 2:
+    return _vf->fieldVar(S_U2);
+  case 3:
+    return _vf->fieldVar(S_U3);
   }
   TEUCHOS_TEST_FOR_EXCEPTION(true, std::invalid_argument, "unhandled i value");
 }
 
 // traces:
-VarPtr StokesVGPFormulation::tn_hat(int i) {
-  if (i > _spaceDim) {
+VarPtr StokesVGPFormulation::tn_hat(int i)
+{
+  if (i > _spaceDim)
+  {
     TEUCHOS_TEST_FOR_EXCEPTION(true, std::invalid_argument, "i must be less than or equal to _spaceDim");
   }
-  switch (i) {
-    case 1:
-      return _vf->fluxVar(S_TN1_HAT);
-    case 2:
-      return _vf->fluxVar(S_TN2_HAT);
-    case 3:
-      return _vf->fluxVar(S_TN3_HAT);
+  switch (i)
+  {
+  case 1:
+    return _vf->fluxVar(S_TN1_HAT);
+  case 2:
+    return _vf->fluxVar(S_TN2_HAT);
+  case 3:
+    return _vf->fluxVar(S_TN3_HAT);
   }
   TEUCHOS_TEST_FOR_EXCEPTION(true, std::invalid_argument, "unhandled i value");
 }
 
-VarPtr StokesVGPFormulation::u_hat(int i) {
-  if (i > _spaceDim) {
+VarPtr StokesVGPFormulation::u_hat(int i)
+{
+  if (i > _spaceDim)
+  {
     TEUCHOS_TEST_FOR_EXCEPTION(true, std::invalid_argument, "i must be less than or equal to _spaceDim");
   }
-  switch (i) {
-    case 1:
-      return _vf->traceVar(S_U1_HAT);
-    case 2:
-      return _vf->traceVar(S_U2_HAT);
-    case 3:
-      return _vf->traceVar(S_U3_HAT);
+  switch (i)
+  {
+  case 1:
+    return _vf->traceVar(S_U1_HAT);
+  case 2:
+    return _vf->traceVar(S_U2_HAT);
+  case 3:
+    return _vf->traceVar(S_U3_HAT);
   }
   TEUCHOS_TEST_FOR_EXCEPTION(true, std::invalid_argument, "unhandled i value");
 }
 
 // test variables:
-VarPtr StokesVGPFormulation::tau(int i) {
-  if (i > _spaceDim) {
+VarPtr StokesVGPFormulation::tau(int i)
+{
+  if (i > _spaceDim)
+  {
     TEUCHOS_TEST_FOR_EXCEPTION(true, std::invalid_argument, "i must be less than or equal to _spaceDim");
   }
-  switch (i) {
-    case 1:
-      return _vf->testVar(S_TAU1, HDIV);
-    case 2:
-      return _vf->testVar(S_TAU2, HDIV);
-    case 3:
-      return _vf->testVar(S_TAU3, HDIV);
+  switch (i)
+  {
+  case 1:
+    return _vf->testVar(S_TAU1, HDIV);
+  case 2:
+    return _vf->testVar(S_TAU2, HDIV);
+  case 3:
+    return _vf->testVar(S_TAU3, HDIV);
   }
   TEUCHOS_TEST_FOR_EXCEPTION(true, std::invalid_argument, "unhandled i value");
 
 }
 
 // ! Saves the solution(s) and mesh to an HDF5 format.
-void StokesVGPFormulation::save(std::string prefixString) {
+void StokesVGPFormulation::save(std::string prefixString)
+{
   _solution->mesh()->saveToHDF5(prefixString+".mesh");
   _solution->saveToHDF5(prefixString+".soln");
-  if (_transient) {
+  if (_transient)
+  {
     _previousSolution->saveToHDF5(prefixString+"_previous.soln");
   }
-  if (_streamSolution != Teuchos::null) {
+  if (_streamSolution != Teuchos::null)
+  {
     _streamSolution->mesh()->saveToHDF5(prefixString+"_stream.mesh");
     _streamSolution->saveToHDF5(prefixString + "_stream.soln");
   }
 }
 
 // ! set current time step used for transient solve
-void StokesVGPFormulation::setTimeStep(double dt) {
+void StokesVGPFormulation::setTimeStep(double dt)
+{
   _dt->setValue(dt);
 }
 
 // ! Returns the solution (at current time)
-TSolutionPtr<double> StokesVGPFormulation::solution() {
+TSolutionPtr<double> StokesVGPFormulation::solution()
+{
   return _solution;
 }
 
 // ! Returns the solution (at previous time)
-TSolutionPtr<double> StokesVGPFormulation::solutionPreviousTimeStep() {
+TSolutionPtr<double> StokesVGPFormulation::solutionPreviousTimeStep()
+{
   return _previousSolution;
 }
 
 // ! Solves
-void StokesVGPFormulation::solve() {
+void StokesVGPFormulation::solve()
+{
   _solution->solve();
 }
 
-PoissonFormulation & StokesVGPFormulation::streamFormulation() {
+PoissonFormulation & StokesVGPFormulation::streamFormulation()
+{
   return *_streamFormulation;
 }
 
-VarPtr StokesVGPFormulation::streamPhi() {
-  if (_spaceDim == 2) {
-    if (_streamFormulation == Teuchos::null) {
+VarPtr StokesVGPFormulation::streamPhi()
+{
+  if (_spaceDim == 2)
+  {
+    if (_streamFormulation == Teuchos::null)
+    {
       cout << "ERROR: streamPhi() called before initializeSolution called.  Returning null.\n";
       return Teuchos::null;
     }
     return _streamFormulation->phi();
-  } else {
+  }
+  else
+  {
     cout << "ERROR: stream function is only supported on 2D solutions.  Returning null.\n";
     return Teuchos::null;
   }
 }
 
-TSolutionPtr<double> StokesVGPFormulation::streamSolution() {
-  if (_spaceDim == 2) {
-    if (_streamFormulation == Teuchos::null) {
+TSolutionPtr<double> StokesVGPFormulation::streamSolution()
+{
+  if (_spaceDim == 2)
+  {
+    if (_streamFormulation == Teuchos::null)
+    {
       cout << "ERROR: streamPhi() called before initializeSolution called.  Returning null.\n";
       return Teuchos::null;
     }
     return _streamSolution;
-  } else {
+  }
+  else
+  {
     cout << "ERROR: stream function is only supported on 2D solutions.  Returning null.\n";
     return Teuchos::null;
   }
 }
 
 // ! Takes a time step (assumes you have called solve() first)
-void StokesVGPFormulation::takeTimeStep() {
+void StokesVGPFormulation::takeTimeStep()
+{
   ConstantScalarFunction<double>* dtValueFxn = dynamic_cast<ConstantScalarFunction<double>*>(_dt->getValue().get());
 
   double dt = dtValueFxn->value(0);
@@ -702,25 +804,30 @@ void StokesVGPFormulation::takeTimeStep() {
 }
 
 // ! Returns the sum of the time steps taken thus far.
-double StokesVGPFormulation::getTime() {
+double StokesVGPFormulation::getTime()
+{
   return _time;
 }
 
-TFunctionPtr<double> StokesVGPFormulation::getTimeFunction() {
+TFunctionPtr<double> StokesVGPFormulation::getTimeFunction()
+{
   return _t;
 }
 
-VarPtr StokesVGPFormulation::v(int i) {
-  if (i > _spaceDim) {
+VarPtr StokesVGPFormulation::v(int i)
+{
+  if (i > _spaceDim)
+  {
     TEUCHOS_TEST_FOR_EXCEPTION(true, std::invalid_argument, "i must be less than or equal to _spaceDim");
   }
-  switch (i) {
-    case 1:
-      return _vf->testVar(S_V1, HGRAD);
-    case 2:
-      return _vf->testVar(S_V2, HGRAD);
-    case 3:
-      return _vf->testVar(S_V3, HGRAD);
+  switch (i)
+  {
+  case 1:
+    return _vf->testVar(S_V1, HGRAD);
+  case 2:
+    return _vf->testVar(S_V2, HGRAD);
+  case 3:
+    return _vf->testVar(S_V3, HGRAD);
   }
   TEUCHOS_TEST_FOR_EXCEPTION(true, std::invalid_argument, "unhandled i value");
 }

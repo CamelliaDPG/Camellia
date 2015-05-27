@@ -57,34 +57,41 @@ using namespace Intrepid;
 using namespace Camellia;
 using namespace std;
 
-Boundary::Boundary() {
+Boundary::Boundary()
+{
   _mesh = Teuchos::rcp((Mesh*)NULL);
 }
 
-void Boundary::setMesh(MeshPtr mesh) {
+void Boundary::setMesh(MeshPtr mesh)
+{
   _mesh = mesh;
   buildLookupTables();
 }
 
-void Boundary::buildLookupTables() {
+void Boundary::buildLookupTables()
+{
   _boundaryElements.clear();
 
   int rank = Teuchos::GlobalMPISession::getRank();
 
   set< GlobalIndexType > rankLocalCells = _mesh->cellIDsInPartition();
-  for (set< GlobalIndexType >::iterator cellIDIt = rankLocalCells.begin(); cellIDIt != rankLocalCells.end(); cellIDIt++) {
+  for (set< GlobalIndexType >::iterator cellIDIt = rankLocalCells.begin(); cellIDIt != rankLocalCells.end(); cellIDIt++)
+  {
     GlobalIndexType cellID = *cellIDIt;
     CellPtr cell = _mesh->getTopology()->getCell(cellID);
     vector<unsigned> boundarySides = cell->boundarySides();
-    for (int i=0; i<boundarySides.size(); i++) {
+    for (int i=0; i<boundarySides.size(); i++)
+    {
       _boundaryElements.insert(make_pair(cellID, boundarySides[i]));
     }
   }
 
   _imposeSingletonBCsOnThisRank = (_mesh->globalDofAssignment()->cellsInPartition(rank).size() > 0);  // want this to be true for the first rank that has some active cells
-  for (int i=0; i<rank; i++) {
+  for (int i=0; i<rank; i++)
+  {
     int activeCellCount = _mesh->globalDofAssignment()->cellsInPartition(i).size();
-    if (activeCellCount > 0) {
+    if (activeCellCount > 0)
+    {
       _imposeSingletonBCsOnThisRank = false;
       break;
     }
@@ -93,7 +100,8 @@ void Boundary::buildLookupTables() {
 
 template <typename Scalar>
 void Boundary::bcsToImpose(FieldContainer<GlobalIndexType> &globalIndices, FieldContainer<Scalar> &globalValues, TBC<Scalar> &bc,
-                           set<GlobalIndexType> &globalIndexFilter, DofInterpreter* dofInterpreter, const Epetra_Map *globalDofMap) {
+                           set<GlobalIndexType> &globalIndexFilter, DofInterpreter* dofInterpreter, const Epetra_Map *globalDofMap)
+{
 //  int rank = Teuchos::GlobalMPISession::getRank();
 //  ostringstream rankLabel;
 //  rankLabel << "on rank " << rank << ", globalIndexFilter";
@@ -105,9 +113,11 @@ void Boundary::bcsToImpose(FieldContainer<GlobalIndexType> &globalIndices, Field
 //  cout << "rank " << rank << " allGlobalIndices:\n" << allGlobalIndices;
   set<int> matchingFCIndices;
   int i;
-  for (i=0; i<allGlobalIndices.size(); i++) {
+  for (i=0; i<allGlobalIndices.size(); i++)
+  {
     int globalIndex = allGlobalIndices(i);
-    if (globalIndexFilter.find(globalIndex) != globalIndexFilter.end() ) {
+    if (globalIndexFilter.find(globalIndex) != globalIndexFilter.end() )
+    {
       matchingFCIndices.insert(i);
     }
   }
@@ -117,7 +127,8 @@ void Boundary::bcsToImpose(FieldContainer<GlobalIndexType> &globalIndices, Field
 
   i=-1;
   for (set<int>::iterator setIt = matchingFCIndices.begin();
-       setIt != matchingFCIndices.end(); setIt++) {
+       setIt != matchingFCIndices.end(); setIt++)
+  {
     int matchingFCIndex = *setIt;
     i++;
     globalIndices(i) = allGlobalIndices(matchingFCIndex);
@@ -129,7 +140,8 @@ void Boundary::bcsToImpose(FieldContainer<GlobalIndexType> &globalIndices, Field
 template <typename Scalar>
 void Boundary::bcsToImpose(FieldContainer<GlobalIndexType> &globalIndices,
                            FieldContainer<Scalar> &globalValues, TBC<Scalar> &bc,
-                           DofInterpreter* dofInterpreter, const Epetra_Map *globalDofMap) {
+                           DofInterpreter* dofInterpreter, const Epetra_Map *globalDofMap)
+{
 //  int rank = Teuchos::GlobalMPISession::getRank();
 
   set< GlobalIndexType > rankLocalCells = _mesh->cellIDsInPartition();
@@ -138,26 +150,33 @@ void Boundary::bcsToImpose(FieldContainer<GlobalIndexType> &globalIndices,
   map<IndexType, set < pair<int, unsigned> > > singletonsForCell;
 
   vector< int > trialIDs = _mesh->bilinearForm()->trialIDs();
-  for (vector< int >::iterator trialIt = trialIDs.begin(); trialIt != trialIDs.end(); trialIt++) {
+  for (vector< int >::iterator trialIt = trialIDs.begin(); trialIt != trialIDs.end(); trialIt++)
+  {
     int trialID = *trialIt;
-    if (bc.singlePointBC(trialID)) {
+    if (bc.singlePointBC(trialID))
+    {
       GlobalIndexType vertexNumberForImposition = bc.vertexForSinglePointBC(trialID);
       if (vertexNumberForImposition == -1) vertexNumberForImposition = 0; // just pick the first point in the mesh.  This should never be a hanging node.
       unsigned vertexDim = 0;
       IndexType leastActiveCellIndex = -1;
       set< pair<IndexType, unsigned> > cellsForVertex = _mesh->getTopology()->getCellsContainingEntity(vertexDim, vertexNumberForImposition);
-      for (set< pair<IndexType, unsigned> >::iterator cellEntryIt = cellsForVertex.begin(); cellEntryIt != cellsForVertex.end(); cellEntryIt++) {
+      for (set< pair<IndexType, unsigned> >::iterator cellEntryIt = cellsForVertex.begin(); cellEntryIt != cellsForVertex.end(); cellEntryIt++)
+      {
         IndexType cellIndex = cellEntryIt->first;
-        if (_mesh->getTopology()->getActiveCellIndices().find(cellIndex) != _mesh->getTopology()->getActiveCellIndices().end()) {
+        if (_mesh->getTopology()->getActiveCellIndices().find(cellIndex) != _mesh->getTopology()->getActiveCellIndices().end())
+        {
           leastActiveCellIndex = cellIndex;
           break;
         }
       }
-      if (rankLocalCells.find(leastActiveCellIndex) != rankLocalCells.end()) { // we own this cell, so we're responsible for imposing the singleton BC
+      if (rankLocalCells.find(leastActiveCellIndex) != rankLocalCells.end())   // we own this cell, so we're responsible for imposing the singleton BC
+      {
         CellPtr cell = _mesh->getTopology()->getCell(leastActiveCellIndex);
         int vertexCount = cell->vertices().size();
-        for (int vertexOrdinal=0; vertexOrdinal<vertexCount; vertexOrdinal++) {
-          if (vertexNumberForImposition == cell->vertices()[vertexOrdinal]) {
+        for (int vertexOrdinal=0; vertexOrdinal<vertexCount; vertexOrdinal++)
+        {
+          if (vertexNumberForImposition == cell->vertices()[vertexOrdinal])
+          {
             singletonsForCell[leastActiveCellIndex].insert(make_pair(trialID, vertexOrdinal));
           }
         }
@@ -168,10 +187,14 @@ void Boundary::bcsToImpose(FieldContainer<GlobalIndexType> &globalIndices,
   map< GlobalIndexType, double> bcGlobalIndicesAndValues;
   set < pair<int, unsigned> > noSingletons;
 
-  for (set< GlobalIndexType >::iterator cellIDIt = rankLocalCells.begin(); cellIDIt != rankLocalCells.end(); cellIDIt++) {
-    if (singletonsForCell.find(*cellIDIt) != singletonsForCell.end()) {
+  for (set< GlobalIndexType >::iterator cellIDIt = rankLocalCells.begin(); cellIDIt != rankLocalCells.end(); cellIDIt++)
+  {
+    if (singletonsForCell.find(*cellIDIt) != singletonsForCell.end())
+    {
       bcsToImpose(bcGlobalIndicesAndValues, bc, *cellIDIt, singletonsForCell[*cellIDIt], dofInterpreter, globalDofMap);
-    } else {
+    }
+    else
+    {
       bcsToImpose(bcGlobalIndicesAndValues, bc, *cellIDIt, noSingletons, dofInterpreter, globalDofMap);
     }
   }
@@ -181,7 +204,8 @@ void Boundary::bcsToImpose(FieldContainer<GlobalIndexType> &globalIndices,
   globalIndices.initialize(0);
   globalValues.initialize(0.0);
   int entryOrdinal = 0;
-  for (map< GlobalIndexType, double>::iterator bcEntry = bcGlobalIndicesAndValues.begin(); bcEntry != bcGlobalIndicesAndValues.end(); bcEntry++, entryOrdinal++) {
+  for (map< GlobalIndexType, double>::iterator bcEntry = bcGlobalIndicesAndValues.begin(); bcEntry != bcGlobalIndicesAndValues.end(); bcEntry++, entryOrdinal++)
+  {
     globalIndices[entryOrdinal] = bcEntry->first;
     globalValues[entryOrdinal] = bcEntry->second;
   }
@@ -201,8 +225,9 @@ void Boundary::bcsToImpose(FieldContainer<GlobalIndexType> &globalIndices,
 
 template <typename Scalar>
 void Boundary::bcsToImpose( map<  GlobalIndexType, Scalar > &globalDofIndicesAndValues, TBC<Scalar> &bc,
-                           GlobalIndexType cellID, set < pair<int, unsigned> > &singletons,
-                           DofInterpreter* dofInterpreter, const Epetra_Map *globalDofMap) {
+                            GlobalIndexType cellID, set < pair<int, unsigned> > &singletons,
+                            DofInterpreter* dofInterpreter, const Epetra_Map *globalDofMap)
+{
   CellPtr cell = _mesh->getTopology()->getCell(cellID);
 
   // define a couple of important inner products:
@@ -219,43 +244,51 @@ void Boundary::bcsToImpose( map<  GlobalIndexType, Scalar > &globalDofIndicesAnd
   vector< int > trialIDs = _mesh->bilinearForm()->trialIDs();
 
   vector<unsigned> boundarySides = cell->boundarySides();
-  if (boundarySides.size() > 0) {
+  if (boundarySides.size() > 0)
+  {
     BasisCachePtr basisCache = BasisCache::basisCacheForCell(_mesh, cellID);
-    for (vector< int >::iterator trialIt = trialIDs.begin(); trialIt != trialIDs.end(); trialIt++) {
+    for (vector< int >::iterator trialIt = trialIDs.begin(); trialIt != trialIDs.end(); trialIt++)
+    {
       int trialID = *(trialIt);
       bool isTrace = _mesh->bilinearForm()->functionSpaceForTrial(trialID) == Camellia::FUNCTION_SPACE_HGRAD;
       // we assume if it's not a trace, then it's a flux (i.e. L2 projection is appropriate)
-      if ( bc.bcsImposed(trialID) ) {
+      if ( bc.bcsImposed(trialID) )
+      {
         // Determine global dof indices and values, in one pass per side
-        for (int i=0; i<boundarySides.size(); i++) {
+        for (int i=0; i<boundarySides.size(); i++)
+        {
           unsigned sideOrdinal = boundarySides[i];
           if (! trialOrderingPtr->hasBasisEntry(trialID, sideOrdinal)) continue;
           BasisPtr basis = trialOrderingPtr->getBasis(trialID,sideOrdinal);
           int numDofs = basis->getCardinality();
           GlobalIndexType numCells = 1;
-          if (numCells > 0) {
+          if (numCells > 0)
+          {
             FieldContainer<double> dirichletValues(numCells,numDofs);
             // project bc function onto side basis:
             BCPtr bcPtr = Teuchos::rcp(&bc, false);
             Teuchos::RCP<BCFunction<double>> bcFunction = BCFunction<double>::bcFunction(bcPtr, trialID, isTrace);
             bcPtr->coefficientsForBC(dirichletValues, bcFunction, basis, basisCache->getSideBasisCache(sideOrdinal));
             dirichletValues.resize(numDofs);
-            if (bcFunction->imposeOnCell(0)) {
+            if (bcFunction->imposeOnCell(0))
+            {
               FieldContainer<double> globalData;
               FieldContainer<GlobalIndexType> globalDofIndices;
               dofInterpreter->interpretLocalBasisCoefficients(cellID, trialID, sideOrdinal, dirichletValues, globalData, globalDofIndices);
-                for (int globalDofOrdinal=0; globalDofOrdinal<globalDofIndices.size(); globalDofOrdinal++) {
-                  GlobalIndexType globalDofIndex = globalDofIndices(globalDofOrdinal);
-                  globalDofIndicesAndValues[globalDofIndex] = globalData(globalDofOrdinal);
-                }
+              for (int globalDofOrdinal=0; globalDofOrdinal<globalDofIndices.size(); globalDofOrdinal++)
+              {
+                GlobalIndexType globalDofIndex = globalDofIndices(globalDofOrdinal);
+                globalDofIndicesAndValues[globalDofIndex] = globalData(globalDofOrdinal);
               }
             }
           }
         }
+      }
     }
   }
 
-  for (set<pair<int, unsigned> >::iterator singletonIt = singletons.begin(); singletonIt != singletons.end(); singletonIt++) {
+  for (set<pair<int, unsigned> >::iterator singletonIt = singletons.begin(); singletonIt != singletons.end(); singletonIt++)
+  {
     int trialID = singletonIt->first;
     unsigned vertexOrdinalInCell = singletonIt->second;
 
@@ -276,16 +309,22 @@ void Boundary::bcsToImpose( map<  GlobalIndexType, Scalar > &globalDofIndicesAnd
 
     int sideForVertex = -1;
     int sideDim = cellTopo->getDimension() - 1;
-    if (!_mesh->bilinearForm()->isFluxOrTrace(trialID)) {
+    if (!_mesh->bilinearForm()->isFluxOrTrace(trialID))
+    {
       vertexOrdinal = vertexOrdinalInCell;
       sideForVertex = 0; // for volume trialIDs, the "side" in DofOrdering is 0
-    } else {
+    }
+    else
+    {
       int vertexOrdinalInSide = -1;
-      for (int sideOrdinal=0; sideOrdinal < numSides; sideOrdinal++) {
+      for (int sideOrdinal=0; sideOrdinal < numSides; sideOrdinal++)
+      {
         if (! cellTopo->sideIsSpatial(sideOrdinal)) continue; // because some fluxes are only defined on spatial sides, skip any that are not (i.e., we insist that sideForVertex is a spatial side).
         vector<IndexType> vertexIndicesForSide = cell->getEntityVertexIndices(sideDim, sideOrdinal);
-        for (int vertexOrdinal=0; vertexOrdinal < vertexIndicesForSide.size(); vertexOrdinal++) {
-          if (vertexIndicesForSide[vertexOrdinal] == vertexIndex) {
+        for (int vertexOrdinal=0; vertexOrdinal < vertexIndicesForSide.size(); vertexOrdinal++)
+        {
+          if (vertexIndicesForSide[vertexOrdinal] == vertexIndex)
+          {
             sideForVertex = sideOrdinal;
             vertexOrdinalInSide = vertexOrdinal;
             break;
@@ -293,7 +332,8 @@ void Boundary::bcsToImpose( map<  GlobalIndexType, Scalar > &globalDofIndicesAnd
         }
         if (sideForVertex != -1) break;
       }
-      if (sideForVertex == -1) {
+      if (sideForVertex == -1)
+      {
         cout << "ERROR: sideForVertex not found during singleton BC imposition.\n";
         TEUCHOS_TEST_FOR_EXCEPTION(true, std::invalid_argument, "sideForVertex not found during singleton BC imposition");
       }
@@ -303,22 +343,29 @@ void Boundary::bcsToImpose( map<  GlobalIndexType, Scalar > &globalDofIndicesAnd
 
     int dofOrdinal;
 
-    if (basis->getCardinality() > 1) {
+    if (basis->getCardinality() > 1)
+    {
       // upgrade basis to continuous one of the same cardinality, if it is discontinuous.
-      if ((basis->functionSpace() == Camellia::FUNCTION_SPACE_HVOL) || (basis->functionSpace() == Camellia::FUNCTION_SPACE_HVOL_DISC)) {
+      if ((basis->functionSpace() == Camellia::FUNCTION_SPACE_HVOL) || (basis->functionSpace() == Camellia::FUNCTION_SPACE_HVOL_DISC))
+      {
         basis = BasisFactory::basisFactory()->getBasis(basis->getDegree(), basis->domainTopology(), Camellia::FUNCTION_SPACE_HGRAD);
-      } else if (Camellia::functionSpaceIsDiscontinuous(basis->functionSpace())) {
+      }
+      else if (Camellia::functionSpaceIsDiscontinuous(basis->functionSpace()))
+      {
         Camellia::EFunctionSpace fsContinuous = Camellia::continuousSpaceForDiscontinuous((basis->functionSpace()));
         basis = BasisFactory::basisFactory()->getBasis(basis->getDegree(), basis->domainTopology(), fsContinuous);
       }
 
       std::set<int> dofOrdinals = basis->dofOrdinalsForVertex(vertexOrdinal);
-      if (dofOrdinals.size() != 1) {
+      if (dofOrdinals.size() != 1)
+      {
         cout << "ERROR: dofOrdinals.size() != 1 during singleton BC imposition.\n";
         TEUCHOS_TEST_FOR_EXCEPTION(true, std::invalid_argument, "dofOrdinals.size() != 1 during singleton BC imposition");
       }
       dofOrdinal = *dofOrdinals.begin();
-    } else {
+    }
+    else
+    {
       dofOrdinal = 0;
     }
     int basisCardinality = basis->getCardinality();
@@ -327,12 +374,15 @@ void Boundary::bcsToImpose( map<  GlobalIndexType, Scalar > &globalDofIndicesAnd
     FieldContainer<double> globalCoefficients; // we'll ignore this
     FieldContainer<GlobalIndexType> globalDofIndices;
     dofInterpreter->interpretLocalBasisCoefficients(cellID, trialID, sideForVertex, basisCoefficients,
-                                                    globalCoefficients, globalDofIndices);
+        globalCoefficients, globalDofIndices);
     double tol = 1e-14;
     int nonzeroEntryOrdinal = -1;
-    for (int fieldOrdinal=0; fieldOrdinal < globalCoefficients.size(); fieldOrdinal++) {
-      if (abs(globalCoefficients[fieldOrdinal]) > tol) {
-        if (nonzeroEntryOrdinal != -1) {
+    for (int fieldOrdinal=0; fieldOrdinal < globalCoefficients.size(); fieldOrdinal++)
+    {
+      if (abs(globalCoefficients[fieldOrdinal]) > tol)
+      {
+        if (nonzeroEntryOrdinal != -1)
+        {
           // previous nonzero entry found; this is a problem--it means we have multiple global coefficients that depend on this vertex
           // (could happen if user specified a hanging node)
           cout << "Error: vertex for single-point imposition has multiple global degrees of freedom.\n";
@@ -342,25 +392,34 @@ void Boundary::bcsToImpose( map<  GlobalIndexType, Scalar > &globalDofIndicesAnd
         nonzeroEntryOrdinal = fieldOrdinal;
 
         // NOTE (NVR, 4-29-15): Pretty sure we can simplify the below and eliminate the globalDofMap argument if we simply do:
-/*        set<GlobalIndexType> rankLocalDofIndices = dofInterpreter->globalDofIndicesForPartition(-1); // current rank
-        if (rankLocalDofIndices.find(globalDofIndices[fieldOrdinal]) != rankLocalDofIndices.end()) {
-          globalDofIndicesAndValues[globalDofIndices[fieldOrdinal]] = bc.valueForSinglePointBC(trialID) * globalCoefficients[fieldOrdinal];;
-        } else {
-          TEUCHOS_TEST_FOR_EXCEPTION(true, std::invalid_argument, "ERROR: global dof index for single-point BC is not locally owned");
-        }*/
+        /*        set<GlobalIndexType> rankLocalDofIndices = dofInterpreter->globalDofIndicesForPartition(-1); // current rank
+                if (rankLocalDofIndices.find(globalDofIndices[fieldOrdinal]) != rankLocalDofIndices.end()) {
+                  globalDofIndicesAndValues[globalDofIndices[fieldOrdinal]] = bc.valueForSinglePointBC(trialID) * globalCoefficients[fieldOrdinal];;
+                } else {
+                  TEUCHOS_TEST_FOR_EXCEPTION(true, std::invalid_argument, "ERROR: global dof index for single-point BC is not locally owned");
+                }*/
 
-        if (globalDofMap != NULL) {
-          if (globalDofMap->LID((GlobalIndexTypeToCast)globalDofIndices[fieldOrdinal]) != -1) {
+        if (globalDofMap != NULL)
+        {
+          if (globalDofMap->LID((GlobalIndexTypeToCast)globalDofIndices[fieldOrdinal]) != -1)
+          {
             globalDofIndicesAndValues[globalDofIndices[fieldOrdinal]] = bc.valueForSinglePointBC(trialID) * globalCoefficients[fieldOrdinal];
-          } else {
+          }
+          else
+          {
             TEUCHOS_TEST_FOR_EXCEPTION(true, std::invalid_argument, "ERROR: global dof index for single-point BC is not locally owned");
           }
-        } else {
+        }
+        else
+        {
           // _globalDofMap not set, so presumably mesh->GDA sees an accurate picture of the global dofs.
           set<GlobalIndexType> rankLocalDofIndices = _mesh->globalDofAssignment()->globalDofIndicesForPartition(-1); // current rank
-          if (rankLocalDofIndices.find(globalDofIndices[fieldOrdinal]) != rankLocalDofIndices.end()) {
+          if (rankLocalDofIndices.find(globalDofIndices[fieldOrdinal]) != rankLocalDofIndices.end())
+          {
             globalDofIndicesAndValues[globalDofIndices[fieldOrdinal]] = 0.0;
-          } else {
+          }
+          else
+          {
             TEUCHOS_TEST_FOR_EXCEPTION(true, std::invalid_argument, "ERROR: global dof index for single-point BC is not locally owned");
           }
         }
@@ -371,7 +430,8 @@ void Boundary::bcsToImpose( map<  GlobalIndexType, Scalar > &globalDofIndicesAnd
 
 template <typename Scalar>
 void Boundary::bcsToImpose2(FieldContainer<GlobalIndexType> &globalIndices, FieldContainer<Scalar> &globalValues, TBC<Scalar> &bc,
-                           set<GlobalIndexType> &globalIndexFilter, DofInterpreter* dofInterpreter, const MapPtr globalDofMap) {
+                            set<GlobalIndexType> &globalIndexFilter, DofInterpreter* dofInterpreter, const MapPtr globalDofMap)
+{
 //  int rank = Teuchos::GlobalMPISession::getRank();
 //  ostringstream rankLabel;
 //  rankLabel << "on rank " << rank << ", globalIndexFilter";
@@ -383,9 +443,11 @@ void Boundary::bcsToImpose2(FieldContainer<GlobalIndexType> &globalIndices, Fiel
 //  cout << "rank " << rank << " allGlobalIndices:\n" << allGlobalIndices;
   set<int> matchingFCIndices;
   int i;
-  for (i=0; i<allGlobalIndices.size(); i++) {
+  for (i=0; i<allGlobalIndices.size(); i++)
+  {
     int globalIndex = allGlobalIndices(i);
-    if (globalIndexFilter.find(globalIndex) != globalIndexFilter.end() ) {
+    if (globalIndexFilter.find(globalIndex) != globalIndexFilter.end() )
+    {
       matchingFCIndices.insert(i);
     }
   }
@@ -395,7 +457,8 @@ void Boundary::bcsToImpose2(FieldContainer<GlobalIndexType> &globalIndices, Fiel
 
   i=-1;
   for (set<int>::iterator setIt = matchingFCIndices.begin();
-       setIt != matchingFCIndices.end(); setIt++) {
+       setIt != matchingFCIndices.end(); setIt++)
+  {
     int matchingFCIndex = *setIt;
     i++;
     globalIndices(i) = allGlobalIndices(matchingFCIndex);
@@ -406,8 +469,9 @@ void Boundary::bcsToImpose2(FieldContainer<GlobalIndexType> &globalIndices, Fiel
 
 template <typename Scalar>
 void Boundary::bcsToImpose2(FieldContainer<GlobalIndexType> &globalIndices,
-                           FieldContainer<Scalar> &globalValues, TBC<Scalar> &bc,
-                           DofInterpreter* dofInterpreter, const MapPtr globalDofMap) {
+                            FieldContainer<Scalar> &globalValues, TBC<Scalar> &bc,
+                            DofInterpreter* dofInterpreter, const MapPtr globalDofMap)
+{
 //  int rank = Teuchos::GlobalMPISession::getRank();
 
   set< GlobalIndexType > rankLocalCells = _mesh->cellIDsInPartition();
@@ -416,26 +480,33 @@ void Boundary::bcsToImpose2(FieldContainer<GlobalIndexType> &globalIndices,
   map<IndexType, set < pair<int, unsigned> > > singletonsForCell;
 
   vector< int > trialIDs = _mesh->bilinearForm()->trialIDs();
-  for (vector< int >::iterator trialIt = trialIDs.begin(); trialIt != trialIDs.end(); trialIt++) {
+  for (vector< int >::iterator trialIt = trialIDs.begin(); trialIt != trialIDs.end(); trialIt++)
+  {
     int trialID = *trialIt;
-    if (bc.singlePointBC(trialID)) {
+    if (bc.singlePointBC(trialID))
+    {
       GlobalIndexType vertexNumberForImposition = bc.vertexForSinglePointBC(trialID);
       if (vertexNumberForImposition == -1) vertexNumberForImposition = 0; // just pick the first point in the mesh.  This should never be a hanging node.
       unsigned vertexDim = 0;
       IndexType leastActiveCellIndex = -1;
       set< pair<IndexType, unsigned> > cellsForVertex = _mesh->getTopology()->getCellsContainingEntity(vertexDim, vertexNumberForImposition);
-      for (set< pair<IndexType, unsigned> >::iterator cellEntryIt = cellsForVertex.begin(); cellEntryIt != cellsForVertex.end(); cellEntryIt++) {
+      for (set< pair<IndexType, unsigned> >::iterator cellEntryIt = cellsForVertex.begin(); cellEntryIt != cellsForVertex.end(); cellEntryIt++)
+      {
         IndexType cellIndex = cellEntryIt->first;
-        if (_mesh->getTopology()->getActiveCellIndices().find(cellIndex) != _mesh->getTopology()->getActiveCellIndices().end()) {
+        if (_mesh->getTopology()->getActiveCellIndices().find(cellIndex) != _mesh->getTopology()->getActiveCellIndices().end())
+        {
           leastActiveCellIndex = cellIndex;
           break;
         }
       }
-      if (rankLocalCells.find(leastActiveCellIndex) != rankLocalCells.end()) { // we own this cell, so we're responsible for imposing the singleton BC
+      if (rankLocalCells.find(leastActiveCellIndex) != rankLocalCells.end())   // we own this cell, so we're responsible for imposing the singleton BC
+      {
         CellPtr cell = _mesh->getTopology()->getCell(leastActiveCellIndex);
         int vertexCount = cell->vertices().size();
-        for (int vertexOrdinal=0; vertexOrdinal<vertexCount; vertexOrdinal++) {
-          if (vertexNumberForImposition == cell->vertices()[vertexOrdinal]) {
+        for (int vertexOrdinal=0; vertexOrdinal<vertexCount; vertexOrdinal++)
+        {
+          if (vertexNumberForImposition == cell->vertices()[vertexOrdinal])
+          {
             singletonsForCell[leastActiveCellIndex].insert(make_pair(trialID, vertexOrdinal));
           }
         }
@@ -446,10 +517,14 @@ void Boundary::bcsToImpose2(FieldContainer<GlobalIndexType> &globalIndices,
   map< GlobalIndexType, double> bcGlobalIndicesAndValues;
   set < pair<int, unsigned> > noSingletons;
 
-  for (set< GlobalIndexType >::iterator cellIDIt = rankLocalCells.begin(); cellIDIt != rankLocalCells.end(); cellIDIt++) {
-    if (singletonsForCell.find(*cellIDIt) != singletonsForCell.end()) {
+  for (set< GlobalIndexType >::iterator cellIDIt = rankLocalCells.begin(); cellIDIt != rankLocalCells.end(); cellIDIt++)
+  {
+    if (singletonsForCell.find(*cellIDIt) != singletonsForCell.end())
+    {
       bcsToImpose2(bcGlobalIndicesAndValues, bc, *cellIDIt, singletonsForCell[*cellIDIt], dofInterpreter, globalDofMap);
-    } else {
+    }
+    else
+    {
       bcsToImpose2(bcGlobalIndicesAndValues, bc, *cellIDIt, noSingletons, dofInterpreter, globalDofMap);
     }
   }
@@ -459,7 +534,8 @@ void Boundary::bcsToImpose2(FieldContainer<GlobalIndexType> &globalIndices,
   globalIndices.initialize(0);
   globalValues.initialize(0.0);
   int entryOrdinal = 0;
-  for (map< GlobalIndexType, double>::iterator bcEntry = bcGlobalIndicesAndValues.begin(); bcEntry != bcGlobalIndicesAndValues.end(); bcEntry++, entryOrdinal++) {
+  for (map< GlobalIndexType, double>::iterator bcEntry = bcGlobalIndicesAndValues.begin(); bcEntry != bcGlobalIndicesAndValues.end(); bcEntry++, entryOrdinal++)
+  {
     globalIndices[entryOrdinal] = bcEntry->first;
     globalValues[entryOrdinal] = bcEntry->second;
   }
@@ -479,8 +555,9 @@ void Boundary::bcsToImpose2(FieldContainer<GlobalIndexType> &globalIndices,
 
 template <typename Scalar>
 void Boundary::bcsToImpose2( map<  GlobalIndexType, Scalar > &globalDofIndicesAndValues, TBC<Scalar> &bc,
-                           GlobalIndexType cellID, set < pair<int, unsigned> > &singletons,
-                           DofInterpreter* dofInterpreter, const MapPtr globalDofMap) {
+                             GlobalIndexType cellID, set < pair<int, unsigned> > &singletons,
+                             DofInterpreter* dofInterpreter, const MapPtr globalDofMap)
+{
   CellPtr cell = _mesh->getTopology()->getCell(cellID);
 
   // define a couple of important inner products:
@@ -497,43 +574,51 @@ void Boundary::bcsToImpose2( map<  GlobalIndexType, Scalar > &globalDofIndicesAn
   vector< int > trialIDs = _mesh->bilinearForm()->trialIDs();
 
   vector<unsigned> boundarySides = cell->boundarySides();
-  if (boundarySides.size() > 0) {
+  if (boundarySides.size() > 0)
+  {
     BasisCachePtr basisCache = BasisCache::basisCacheForCell(_mesh, cellID);
-    for (vector< int >::iterator trialIt = trialIDs.begin(); trialIt != trialIDs.end(); trialIt++) {
+    for (vector< int >::iterator trialIt = trialIDs.begin(); trialIt != trialIDs.end(); trialIt++)
+    {
       int trialID = *(trialIt);
       bool isTrace = _mesh->bilinearForm()->functionSpaceForTrial(trialID) == Camellia::FUNCTION_SPACE_HGRAD;
       // we assume if it's not a trace, then it's a flux (i.e. L2 projection is appropriate)
-      if ( bc.bcsImposed(trialID) ) {
+      if ( bc.bcsImposed(trialID) )
+      {
         // Determine global dof indices and values, in one pass per side
-        for (int i=0; i<boundarySides.size(); i++) {
+        for (int i=0; i<boundarySides.size(); i++)
+        {
           unsigned sideOrdinal = boundarySides[i];
           if (! trialOrderingPtr->hasBasisEntry(trialID, sideOrdinal)) continue;
           BasisPtr basis = trialOrderingPtr->getBasis(trialID,sideOrdinal);
           int numDofs = basis->getCardinality();
           GlobalIndexType numCells = 1;
-          if (numCells > 0) {
+          if (numCells > 0)
+          {
             FieldContainer<double> dirichletValues(numCells,numDofs);
             // project bc function onto side basis:
             BCPtr bcPtr = Teuchos::rcp(&bc, false);
             Teuchos::RCP<BCFunction<double>> bcFunction = BCFunction<double>::bcFunction(bcPtr, trialID, isTrace);
             bcPtr->coefficientsForBC(dirichletValues, bcFunction, basis, basisCache->getSideBasisCache(sideOrdinal));
             dirichletValues.resize(numDofs);
-            if (bcFunction->imposeOnCell(0)) {
+            if (bcFunction->imposeOnCell(0))
+            {
               FieldContainer<double> globalData;
               FieldContainer<GlobalIndexType> globalDofIndices;
               dofInterpreter->interpretLocalBasisCoefficients(cellID, trialID, sideOrdinal, dirichletValues, globalData, globalDofIndices);
-                for (int globalDofOrdinal=0; globalDofOrdinal<globalDofIndices.size(); globalDofOrdinal++) {
-                  GlobalIndexType globalDofIndex = globalDofIndices(globalDofOrdinal);
-                  globalDofIndicesAndValues[globalDofIndex] = globalData(globalDofOrdinal);
-                }
+              for (int globalDofOrdinal=0; globalDofOrdinal<globalDofIndices.size(); globalDofOrdinal++)
+              {
+                GlobalIndexType globalDofIndex = globalDofIndices(globalDofOrdinal);
+                globalDofIndicesAndValues[globalDofIndex] = globalData(globalDofOrdinal);
               }
             }
           }
         }
+      }
     }
   }
 
-  for (set<pair<int, unsigned> >::iterator singletonIt = singletons.begin(); singletonIt != singletons.end(); singletonIt++) {
+  for (set<pair<int, unsigned> >::iterator singletonIt = singletons.begin(); singletonIt != singletons.end(); singletonIt++)
+  {
     int trialID = singletonIt->first;
     unsigned vertexOrdinalInCell = singletonIt->second;
 
@@ -554,16 +639,22 @@ void Boundary::bcsToImpose2( map<  GlobalIndexType, Scalar > &globalDofIndicesAn
 
     int sideForVertex = -1;
     int sideDim = cellTopo->getDimension() - 1;
-    if (!_mesh->bilinearForm()->isFluxOrTrace(trialID)) {
+    if (!_mesh->bilinearForm()->isFluxOrTrace(trialID))
+    {
       vertexOrdinal = vertexOrdinalInCell;
       sideForVertex = 0; // for volume trialIDs, the "side" in DofOrdering is 0
-    } else {
+    }
+    else
+    {
       int vertexOrdinalInSide = -1;
-      for (int sideOrdinal=0; sideOrdinal < numSides; sideOrdinal++) {
+      for (int sideOrdinal=0; sideOrdinal < numSides; sideOrdinal++)
+      {
         if (! cellTopo->sideIsSpatial(sideOrdinal)) continue; // because some fluxes are only defined on spatial sides, skip any that are not (i.e., we insist that sideForVertex is a spatial side).
         vector<IndexType> vertexIndicesForSide = cell->getEntityVertexIndices(sideDim, sideOrdinal);
-        for (int vertexOrdinal=0; vertexOrdinal < vertexIndicesForSide.size(); vertexOrdinal++) {
-          if (vertexIndicesForSide[vertexOrdinal] == vertexIndex) {
+        for (int vertexOrdinal=0; vertexOrdinal < vertexIndicesForSide.size(); vertexOrdinal++)
+        {
+          if (vertexIndicesForSide[vertexOrdinal] == vertexIndex)
+          {
             sideForVertex = sideOrdinal;
             vertexOrdinalInSide = vertexOrdinal;
             break;
@@ -571,7 +662,8 @@ void Boundary::bcsToImpose2( map<  GlobalIndexType, Scalar > &globalDofIndicesAn
         }
         if (sideForVertex != -1) break;
       }
-      if (sideForVertex == -1) {
+      if (sideForVertex == -1)
+      {
         cout << "ERROR: sideForVertex not found during singleton BC imposition.\n";
         TEUCHOS_TEST_FOR_EXCEPTION(true, std::invalid_argument, "sideForVertex not found during singleton BC imposition");
       }
@@ -581,22 +673,29 @@ void Boundary::bcsToImpose2( map<  GlobalIndexType, Scalar > &globalDofIndicesAn
 
     int dofOrdinal;
 
-    if (basis->getCardinality() > 1) {
+    if (basis->getCardinality() > 1)
+    {
       // upgrade basis to continuous one of the same cardinality, if it is discontinuous.
-      if ((basis->functionSpace() == Camellia::FUNCTION_SPACE_HVOL) || (basis->functionSpace() == Camellia::FUNCTION_SPACE_HVOL_DISC)) {
+      if ((basis->functionSpace() == Camellia::FUNCTION_SPACE_HVOL) || (basis->functionSpace() == Camellia::FUNCTION_SPACE_HVOL_DISC))
+      {
         basis = BasisFactory::basisFactory()->getBasis(basis->getDegree(), basis->domainTopology(), Camellia::FUNCTION_SPACE_HGRAD);
-      } else if (Camellia::functionSpaceIsDiscontinuous(basis->functionSpace())) {
+      }
+      else if (Camellia::functionSpaceIsDiscontinuous(basis->functionSpace()))
+      {
         Camellia::EFunctionSpace fsContinuous = Camellia::continuousSpaceForDiscontinuous((basis->functionSpace()));
         basis = BasisFactory::basisFactory()->getBasis(basis->getDegree(), basis->domainTopology(), fsContinuous);
       }
 
       std::set<int> dofOrdinals = basis->dofOrdinalsForVertex(vertexOrdinal);
-      if (dofOrdinals.size() != 1) {
+      if (dofOrdinals.size() != 1)
+      {
         cout << "ERROR: dofOrdinals.size() != 1 during singleton BC imposition.\n";
         TEUCHOS_TEST_FOR_EXCEPTION(true, std::invalid_argument, "dofOrdinals.size() != 1 during singleton BC imposition");
       }
       dofOrdinal = *dofOrdinals.begin();
-    } else {
+    }
+    else
+    {
       dofOrdinal = 0;
     }
     int basisCardinality = basis->getCardinality();
@@ -605,12 +704,15 @@ void Boundary::bcsToImpose2( map<  GlobalIndexType, Scalar > &globalDofIndicesAn
     FieldContainer<double> globalCoefficients; // we'll ignore this
     FieldContainer<GlobalIndexType> globalDofIndices;
     dofInterpreter->interpretLocalBasisCoefficients(cellID, trialID, sideForVertex, basisCoefficients,
-                                                    globalCoefficients, globalDofIndices);
+        globalCoefficients, globalDofIndices);
     double tol = 1e-14;
     int nonzeroEntryOrdinal = -1;
-    for (int fieldOrdinal=0; fieldOrdinal < globalCoefficients.size(); fieldOrdinal++) {
-      if (abs(globalCoefficients[fieldOrdinal]) > tol) {
-        if (nonzeroEntryOrdinal != -1) {
+    for (int fieldOrdinal=0; fieldOrdinal < globalCoefficients.size(); fieldOrdinal++)
+    {
+      if (abs(globalCoefficients[fieldOrdinal]) > tol)
+      {
+        if (nonzeroEntryOrdinal != -1)
+        {
           // previous nonzero entry found; this is a problem--it means we have multiple global coefficients that depend on this vertex
           // (could happen if user specified a hanging node)
           cout << "Error: vertex for single-point imposition has multiple global degrees of freedom.\n";
@@ -620,25 +722,34 @@ void Boundary::bcsToImpose2( map<  GlobalIndexType, Scalar > &globalDofIndicesAn
         nonzeroEntryOrdinal = fieldOrdinal;
 
         // NOTE (NVR, 4-29-15): Pretty sure we can simplify the below and eliminate the globalDofMap argument if we simply do:
-/*        set<GlobalIndexType> rankLocalDofIndices = dofInterpreter->globalDofIndicesForPartition(-1); // current rank
-        if (rankLocalDofIndices.find(globalDofIndices[fieldOrdinal]) != rankLocalDofIndices.end()) {
-          globalDofIndicesAndValues[globalDofIndices[fieldOrdinal]] = bc.valueForSinglePointBC(trialID) * globalCoefficients[fieldOrdinal];;
-        } else {
-          TEUCHOS_TEST_FOR_EXCEPTION(true, std::invalid_argument, "ERROR: global dof index for single-point BC is not locally owned");
-        }*/
+        /*        set<GlobalIndexType> rankLocalDofIndices = dofInterpreter->globalDofIndicesForPartition(-1); // current rank
+                if (rankLocalDofIndices.find(globalDofIndices[fieldOrdinal]) != rankLocalDofIndices.end()) {
+                  globalDofIndicesAndValues[globalDofIndices[fieldOrdinal]] = bc.valueForSinglePointBC(trialID) * globalCoefficients[fieldOrdinal];;
+                } else {
+                  TEUCHOS_TEST_FOR_EXCEPTION(true, std::invalid_argument, "ERROR: global dof index for single-point BC is not locally owned");
+                }*/
 
-        if (globalDofMap != Teuchos::null) {
-          if (globalDofMap->getLocalElement(globalDofIndices[fieldOrdinal]) != Teuchos::OrdinalTraits<IndexType>::invalid()) {
+        if (globalDofMap != Teuchos::null)
+        {
+          if (globalDofMap->getLocalElement(globalDofIndices[fieldOrdinal]) != Teuchos::OrdinalTraits<IndexType>::invalid())
+          {
             globalDofIndicesAndValues[globalDofIndices[fieldOrdinal]] = bc.valueForSinglePointBC(trialID) * globalCoefficients[fieldOrdinal];
-          } else {
+          }
+          else
+          {
             TEUCHOS_TEST_FOR_EXCEPTION(true, std::invalid_argument, "ERROR: global dof index for single-point BC is not locally owned");
           }
-        } else {
+        }
+        else
+        {
           // _globalDofMap not set, so presumably mesh->GDA sees an accurate picture of the global dofs.
           set<GlobalIndexType> rankLocalDofIndices = _mesh->globalDofAssignment()->globalDofIndicesForPartition(-1); // current rank
-          if (rankLocalDofIndices.find(globalDofIndices[fieldOrdinal]) != rankLocalDofIndices.end()) {
+          if (rankLocalDofIndices.find(globalDofIndices[fieldOrdinal]) != rankLocalDofIndices.end())
+          {
             globalDofIndicesAndValues[globalDofIndices[fieldOrdinal]] = 0.0;
-          } else {
+          }
+          else
+          {
             TEUCHOS_TEST_FOR_EXCEPTION(true, std::invalid_argument, "ERROR: global dof index for single-point BC is not locally owned");
           }
         }
@@ -647,19 +758,20 @@ void Boundary::bcsToImpose2( map<  GlobalIndexType, Scalar > &globalDofIndicesAn
   }
 }
 
-namespace Camellia {
-  template void Boundary::bcsToImpose(Intrepid::FieldContainer<GlobalIndexType> &globalIndices, Intrepid::FieldContainer<double> &globalValues,
-                     TBC<double> &bc, set<GlobalIndexType>& globalIndexFilter,
-                     DofInterpreter* dofInterpreter, const Epetra_Map *globalDofMap);
-  template void Boundary::bcsToImpose(Intrepid::FieldContainer<GlobalIndexType> &globalIndices, Intrepid::FieldContainer<double> &globalValues, TBC<double> &bc,
-                     DofInterpreter* dofInterpreter, const Epetra_Map *globalDofMap);
-  template void Boundary::bcsToImpose( map< GlobalIndexType, double > &globalDofIndicesAndValues, TBC<double> &bc, GlobalIndexType cellID,
-                     set < pair<int, unsigned> > &singletons, DofInterpreter* dofInterpreter, const Epetra_Map *globalDofMap);
-  template void Boundary::bcsToImpose2(Intrepid::FieldContainer<GlobalIndexType> &globalIndices, Intrepid::FieldContainer<double> &globalValues,
-                     TBC<double> &bc, set<GlobalIndexType>& globalIndexFilter,
-                     DofInterpreter* dofInterpreter, const MapPtr globalDofMap);
-  template void Boundary::bcsToImpose2(Intrepid::FieldContainer<GlobalIndexType> &globalIndices, Intrepid::FieldContainer<double> &globalValues, TBC<double> &bc,
-                     DofInterpreter* dofInterpreter, const MapPtr globalDofMap);
-  template void Boundary::bcsToImpose2( map< GlobalIndexType, double > &globalDofIndicesAndValues, TBC<double> &bc, GlobalIndexType cellID,
-                     set < pair<int, unsigned> > &singletons, DofInterpreter* dofInterpreter, const MapPtr globalDofMap);
+namespace Camellia
+{
+template void Boundary::bcsToImpose(Intrepid::FieldContainer<GlobalIndexType> &globalIndices, Intrepid::FieldContainer<double> &globalValues,
+                                    TBC<double> &bc, set<GlobalIndexType>& globalIndexFilter,
+                                    DofInterpreter* dofInterpreter, const Epetra_Map *globalDofMap);
+template void Boundary::bcsToImpose(Intrepid::FieldContainer<GlobalIndexType> &globalIndices, Intrepid::FieldContainer<double> &globalValues, TBC<double> &bc,
+                                    DofInterpreter* dofInterpreter, const Epetra_Map *globalDofMap);
+template void Boundary::bcsToImpose( map< GlobalIndexType, double > &globalDofIndicesAndValues, TBC<double> &bc, GlobalIndexType cellID,
+                                     set < pair<int, unsigned> > &singletons, DofInterpreter* dofInterpreter, const Epetra_Map *globalDofMap);
+template void Boundary::bcsToImpose2(Intrepid::FieldContainer<GlobalIndexType> &globalIndices, Intrepid::FieldContainer<double> &globalValues,
+                                     TBC<double> &bc, set<GlobalIndexType>& globalIndexFilter,
+                                     DofInterpreter* dofInterpreter, const MapPtr globalDofMap);
+template void Boundary::bcsToImpose2(Intrepid::FieldContainer<GlobalIndexType> &globalIndices, Intrepid::FieldContainer<double> &globalValues, TBC<double> &bc,
+                                     DofInterpreter* dofInterpreter, const MapPtr globalDofMap);
+template void Boundary::bcsToImpose2( map< GlobalIndexType, double > &globalDofIndicesAndValues, TBC<double> &bc, GlobalIndexType cellID,
+                                      set < pair<int, unsigned> > &singletons, DofInterpreter* dofInterpreter, const MapPtr globalDofMap);
 }

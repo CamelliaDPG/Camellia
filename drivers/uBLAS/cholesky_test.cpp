@@ -43,7 +43,7 @@ namespace ublas = boost::numeric::ublas;
 
 /** \brief make a immutable triangular adaptor from a matrix
  *
- * \usage: 
+ * \usage:
 <code>
  A = triangular< lower >(B);
  A = triangular(B, lower());
@@ -58,7 +58,7 @@ triangular(const MATRIX & A, const TYPE& uplo = TYPE())
 
 /** \brief make a immutable banded adaptor from a matrix
  *
- * \usage: 
+ * \usage:
 <code>
  A = banded(B, lower, upper);
 </code>
@@ -72,7 +72,7 @@ banded(const MATRIX & A, const size_t lower, const size_t upper)
 
 /** \brief make a immutable symmetric adaptor from a matrix
  *
- * \usage: 
+ * \usage:
 <code>
  A = symmetric< lower >(B);
  A = symmetric(B, lower());
@@ -86,18 +86,20 @@ symmetric(const MATRIX & A, const TYPE& uplo = TYPE())
 }
 
 
-/** \brief fill lower triangular matrix L 
+/** \brief fill lower triangular matrix L
  */
 template < class MATRIX >
 void fill_symm(MATRIX & L, const size_t bands = std::numeric_limits<size_t>::max() )
 {
   typedef typename MATRIX::size_type size_type;
-  
+
   assert(L.size1() == L.size2());
 
   size_type size = L.size1();
-  for (size_type i=0; i<size; i++) {
-    for (size_type j = ((i>bands)?(i-bands):0); j<i; j++) {
+  for (size_type i=0; i<size; i++)
+  {
+    for (size_type j = ((i>bands)?(i-bands):0); j<i; j++)
+    {
       L(i,j) = 1 + (1.0 + i)/(1.0 + j) + 1.0 / (0.5 + i - j);
     }
     L(i,i) = 1+i+size;
@@ -146,7 +148,7 @@ int main(int argc, char * argv[] )
     cholesky_solve(L, x, ublas::lower());
     sv = t1.elapsed();
 
-    std::cout << res << ": " 
+    std::cout << res << ": "
               << ublas::norm_inf(L-T) << " "
               << ublas::norm_2(x-y) << " "
               << " (deco: " << de << " sec)"
@@ -161,7 +163,7 @@ int main(int argc, char * argv[] )
     ublas::triangular_matrix<DBL, ublas::lower, ORI> A (size, size);
     ublas::triangular_matrix<DBL, ublas::lower, ORI> T (size, size);
     ublas::triangular_matrix<DBL, ublas::lower, ORI> L (size, size);
-    
+
     A = ublas::zero_matrix<DBL> (size, size) ;
     A = triangular<ublas::lower>( ublas::zero_matrix<DBL> (size, size) );
     A = triangular( ublas::zero_matrix<DBL> (size, size), ublas::lower() );
@@ -188,7 +190,7 @@ int main(int argc, char * argv[] )
     cholesky_solve(L, x, ublas::lower());
     sv = t1.elapsed();
 
-    std::cout << res << ": " 
+    std::cout << res << ": "
               << ublas::norm_inf(L-T) << " "
               << ublas::norm_2(x-y) << " "
               << " (deco: " << de << " sec)"
@@ -211,7 +213,7 @@ int main(int argc, char * argv[] )
     MAT A (size, size, bands, 0);
     MAT T (size, size, bands, 0);
     MAT L (size, size, bands, 0);
-    
+
     A = ublas::zero_matrix<DBL> (size, size) ;
     A = banded( ublas::zero_matrix<DBL> (size, size), bands, 0 );
 
@@ -237,7 +239,7 @@ int main(int argc, char * argv[] )
     cholesky_solve(L, x, ublas::lower());
     sv = t1.elapsed();
 
-    std::cout << res << ": " 
+    std::cout << res << ": "
               << ublas::norm_inf(L-T) << " "
               << ublas::norm_2(x-y) << " "
               << " (deco: " << de << " sec)"

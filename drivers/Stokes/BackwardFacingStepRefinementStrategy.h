@@ -14,14 +14,16 @@
 
 using namespace std;
 
-class BackwardFacingStepRefinementStrategy : public RefinementStrategy {
+class BackwardFacingStepRefinementStrategy : public RefinementStrategy
+{
   double _hmin;
   int _maxPolyOrder;
   bool _printToConsole;
   vector< pair<double,double> > _corners;
 public:
-  BackwardFacingStepRefinementStrategy( SolutionPtr solution, double relativeEnergyThreshold, double hmin, int maxPolyOrder, bool printToConsole=false) 
-  : RefinementStrategy(solution,relativeEnergyThreshold) {
+  BackwardFacingStepRefinementStrategy( SolutionPtr solution, double relativeEnergyThreshold, double hmin, int maxPolyOrder, bool printToConsole=false)
+    : RefinementStrategy(solution,relativeEnergyThreshold)
+  {
     _hmin = hmin;
     _maxPolyOrder = maxPolyOrder;
     _printToConsole = printToConsole;

@@ -22,43 +22,50 @@ using namespace Camellia;
 
 GDAMinimumRule::GDAMinimumRule(MeshPtr mesh, VarFactoryPtr varFactory, DofOrderingFactoryPtr dofOrderingFactory, MeshPartitionPolicyPtr partitionPolicy,
                                unsigned initialH1OrderTrial, unsigned testOrderEnhancement)
-: GlobalDofAssignment(mesh,varFactory,dofOrderingFactory,partitionPolicy, vector<int>(1,initialH1OrderTrial), testOrderEnhancement, false)
+  : GlobalDofAssignment(mesh,varFactory,dofOrderingFactory,partitionPolicy, vector<int>(1,initialH1OrderTrial), testOrderEnhancement, false)
 {
 
 }
 
 GDAMinimumRule::GDAMinimumRule(MeshPtr mesh, VarFactoryPtr varFactory, DofOrderingFactoryPtr dofOrderingFactory, MeshPartitionPolicyPtr partitionPolicy,
                                vector<int> initialH1OrderTrial, unsigned testOrderEnhancement)
-: GlobalDofAssignment(mesh,varFactory,dofOrderingFactory,partitionPolicy, initialH1OrderTrial, testOrderEnhancement, false)
+  : GlobalDofAssignment(mesh,varFactory,dofOrderingFactory,partitionPolicy, initialH1OrderTrial, testOrderEnhancement, false)
 {
 
 }
 
-vector<unsigned> GDAMinimumRule::allBasisDofOrdinalsVector(int basisCardinality) {
+vector<unsigned> GDAMinimumRule::allBasisDofOrdinalsVector(int basisCardinality)
+{
   vector<unsigned> ordinals(basisCardinality);
-  for (int i=0; i<basisCardinality; i++) {
+  for (int i=0; i<basisCardinality; i++)
+  {
     ordinals[i] = i;
   }
   return ordinals;
 }
 
-GlobalDofAssignmentPtr GDAMinimumRule::deepCopy() {
+GlobalDofAssignmentPtr GDAMinimumRule::deepCopy()
+{
   return Teuchos::rcp(new GDAMinimumRule(*this) );
 }
 
-void GDAMinimumRule::didChangePartitionPolicy() {
+void GDAMinimumRule::didChangePartitionPolicy()
+{
   rebuildLookups();
 }
 
-void GDAMinimumRule::didHRefine(const set<GlobalIndexType> &parentCellIDs) {
+void GDAMinimumRule::didHRefine(const set<GlobalIndexType> &parentCellIDs)
+{
   set<GlobalIndexType> neighborsOfNewElements;
-  for (set<GlobalIndexType>::const_iterator cellIDIt = parentCellIDs.begin(); cellIDIt != parentCellIDs.end(); cellIDIt++) {
+  for (set<GlobalIndexType>::const_iterator cellIDIt = parentCellIDs.begin(); cellIDIt != parentCellIDs.end(); cellIDIt++)
+  {
     GlobalIndexType parentCellID = *cellIDIt;
 //    cout << "GDAMinimumRule: h-refining " << parentCellID << endl;
     CellPtr parentCell = _meshTopology->getCell(parentCellID);
     vector<IndexType> childIDs = parentCell->getChildIndices();
     vector<int> parentH1Order = _cellH1Orders[parentCellID];
-    for (vector<IndexType>::iterator childIDIt = childIDs.begin(); childIDIt != childIDs.end(); childIDIt++) {
+    for (vector<IndexType>::iterator childIDIt = childIDs.begin(); childIDIt != childIDs.end(); childIDIt++)
+    {
       GlobalIndexType childCellID = *childIDIt;
       _cellH1Orders[childCellID] = parentH1Order;
       assignInitialElementType(childCellID);
@@ -67,16 +74,19 @@ void GDAMinimumRule::didHRefine(const set<GlobalIndexType> &parentCellIDs) {
       CellPtr childCell = _meshTopology->getCell(childCellID);
 
       unsigned childSideCount = childCell->getSideCount();
-      for (int childSideOrdinal=0; childSideOrdinal<childSideCount; childSideOrdinal++) {
+      for (int childSideOrdinal=0; childSideOrdinal<childSideCount; childSideOrdinal++)
+      {
         GlobalIndexType neighborCellID = childCell->getNeighborInfo(childSideOrdinal).first;
-        if (neighborCellID != -1) {
+        if (neighborCellID != -1)
+        {
           neighborsOfNewElements.insert(neighborCellID);
         }
       }
     }
   }
   // this set is not as lean as it might be -- we could restrict to peer neighbors, I think -- but it's a pretty cheap operation.
-  for (set<GlobalIndexType>::iterator cellIDIt = neighborsOfNewElements.begin(); cellIDIt != neighborsOfNewElements.end(); cellIDIt++) {
+  for (set<GlobalIndexType>::iterator cellIDIt = neighborsOfNewElements.begin(); cellIDIt != neighborsOfNewElements.end(); cellIDIt++)
+  {
     assignParities(*cellIDIt);
   }
 //  for (set<GlobalIndexType>::const_iterator cellIDIt = parentCellIDs.begin(); cellIDIt != parentCellIDs.end(); cellIDIt++) {
@@ -94,22 +104,30 @@ void GDAMinimumRule::didHRefine(const set<GlobalIndexType> &parentCellIDs) {
   this->GlobalDofAssignment::didHRefine(parentCellIDs);
 }
 
-void GDAMinimumRule::didPRefine(const set<GlobalIndexType> &cellIDs, int deltaP) {
+void GDAMinimumRule::didPRefine(const set<GlobalIndexType> &cellIDs, int deltaP)
+{
   this->GlobalDofAssignment::didPRefine(cellIDs, deltaP);
 
   // the above assigns _cellH1Orders for active elements; now we take minimums for parents (inactive elements)
-  for (set<GlobalIndexType>::const_iterator cellIDIt = cellIDs.begin(); cellIDIt != cellIDs.end(); cellIDIt++) {
+  for (set<GlobalIndexType>::const_iterator cellIDIt = cellIDs.begin(); cellIDIt != cellIDs.end(); cellIDIt++)
+  {
     CellPtr cell = _meshTopology->getCell(*cellIDIt);
     CellPtr parent = cell->getParent();
-    while (parent.get() != NULL) {
+    while (parent.get() != NULL)
+    {
       vector<IndexType> childIndices = parent->getChildIndices();
       vector<int> minH1Order = _cellH1Orders[*cellIDIt];
-      for (int childOrdinal=0; childOrdinal<childIndices.size(); childOrdinal++) {
-        if (_cellH1Orders.find(childIndices[childOrdinal])==_cellH1Orders.end()) {
+      for (int childOrdinal=0; childOrdinal<childIndices.size(); childOrdinal++)
+      {
+        if (_cellH1Orders.find(childIndices[childOrdinal])==_cellH1Orders.end())
+        {
           TEUCHOS_TEST_FOR_EXCEPTION(true, std::invalid_argument, "sibling H1 order not found");
-        } else {
+        }
+        else
+        {
           // take minimum component-wise
-          for (int pComponent=0; pComponent < minH1Order.size(); pComponent++) {
+          for (int pComponent=0; pComponent < minH1Order.size(); pComponent++)
+          {
             minH1Order[pComponent] = min(minH1Order[pComponent],_cellH1Orders[childIndices[childOrdinal]][pComponent]);
           }
         }
@@ -119,11 +137,13 @@ void GDAMinimumRule::didPRefine(const set<GlobalIndexType> &cellIDs, int deltaP)
     }
   }
 
-  for (set<GlobalIndexType>::const_iterator cellIDIt = cellIDs.begin(); cellIDIt != cellIDs.end(); cellIDIt++) {
+  for (set<GlobalIndexType>::const_iterator cellIDIt = cellIDs.begin(); cellIDIt != cellIDs.end(); cellIDIt++)
+  {
     ElementTypePtr oldType = elementType(*cellIDIt);
     assignInitialElementType(*cellIDIt);
     for (typename vector< TSolutionPtr<double> >::iterator solutionIt = _registeredSolutions.begin();
-         solutionIt != _registeredSolutions.end(); solutionIt++) {
+         solutionIt != _registeredSolutions.end(); solutionIt++)
+    {
       // do projection
       vector<IndexType> childIDs(1,*cellIDIt); // "child" ID is just the cellID
       (*solutionIt)->projectOldCellOntoNewCells(*cellIDIt,oldType,childIDs);
@@ -132,7 +152,8 @@ void GDAMinimumRule::didPRefine(const set<GlobalIndexType> &cellIDs, int deltaP)
 //  rebuildLookups();
 }
 
-void GDAMinimumRule::didHUnrefine(const set<GlobalIndexType> &parentCellIDs) {
+void GDAMinimumRule::didHUnrefine(const set<GlobalIndexType> &parentCellIDs)
+{
   this->GlobalDofAssignment::didHUnrefine(parentCellIDs);
   // TODO: implement this
   cout << "WARNING: GDAMinimumRule::didHUnrefine() unimplemented.\n";
@@ -140,49 +161,62 @@ void GDAMinimumRule::didHUnrefine(const set<GlobalIndexType> &parentCellIDs) {
 //  rebuildLookups();
 }
 
-ElementTypePtr GDAMinimumRule::elementType(GlobalIndexType cellID) {
+ElementTypePtr GDAMinimumRule::elementType(GlobalIndexType cellID)
+{
   return _elementTypeForCell[cellID];
 }
 
 void GDAMinimumRule::filterSubBasisConstraintData(set<unsigned> &basisDofOrdinals, vector<GlobalIndexType> &globalDofOrdinals,
-                                                  Intrepid::FieldContainer<double> &constraintMatrix, Intrepid::FieldContainer<bool> &processedDofs,
-                                                  DofOrderingPtr trialOrdering, VarPtr var, int sideOrdinal) {
+    Intrepid::FieldContainer<double> &constraintMatrix, Intrepid::FieldContainer<bool> &processedDofs,
+    DofOrderingPtr trialOrdering, VarPtr var, int sideOrdinal)
+{
   double tol = 1e-12;
   vector<unsigned> localOrdinalsVector(basisDofOrdinals.begin(), basisDofOrdinals.end());
   set<unsigned> zeroRows, zeroCols;
   int numRows = constraintMatrix.dimension(0);
   int numCols = constraintMatrix.dimension(1);
-  for (int i=0; i < numRows; i++) {
+  for (int i=0; i < numRows; i++)
+  {
     bool nonZeroFound = false;
-    for (int j=0; j < numCols; j++) {
-      if (abs(constraintMatrix(i,j)) > tol) {
+    for (int j=0; j < numCols; j++)
+    {
+      if (abs(constraintMatrix(i,j)) > tol)
+      {
         nonZeroFound = true;
       }
     }
-    if (!nonZeroFound) {
+    if (!nonZeroFound)
+    {
       zeroRows.insert(i);
     }
   }
-  for (int j=0; j < numCols; j++) {
+  for (int j=0; j < numCols; j++)
+  {
     bool nonZeroFound = false;
-    for (int i=0; i < numRows; i++) {
-      if (abs(constraintMatrix(i,j)) > tol) {
+    for (int i=0; i < numRows; i++)
+    {
+      if (abs(constraintMatrix(i,j)) > tol)
+      {
         nonZeroFound = true;
       }
     }
-    if (!nonZeroFound) {
+    if (!nonZeroFound)
+    {
       zeroCols.insert(j);
     }
   }
   set<unsigned> rowsToSkip = zeroRows;
   set<unsigned> colsToSkip = zeroCols;
-  for (int i=0; i<numRows; i++) {
+  for (int i=0; i<numRows; i++)
+  {
     unsigned localDofOrdinal = localOrdinalsVector[i];
     unsigned localDofIndex = trialOrdering->getDofIndex(var->ID(), localDofOrdinal, sideOrdinal);
-    if (processedDofs[localDofIndex]) {
+    if (processedDofs[localDofIndex])
+    {
       rowsToSkip.insert(i);
     }
-    if (rowsToSkip.find(i) == rowsToSkip.end()) { // we will be processing this one, so mark as such
+    if (rowsToSkip.find(i) == rowsToSkip.end())   // we will be processing this one, so mark as such
+    {
       processedDofs[localDofIndex] = true;
     }
   }
@@ -192,15 +226,19 @@ void GDAMinimumRule::filterSubBasisConstraintData(set<unsigned> &basisDofOrdinal
   basisDofOrdinals.clear();
 
   int rowOffset = 0; // decrement for each skipped row
-  for (int i=0; i<numRows; i++) {
-    if (rowsToSkip.find(i) != rowsToSkip.end()) {
+  for (int i=0; i<numRows; i++)
+  {
+    if (rowsToSkip.find(i) != rowsToSkip.end())
+    {
       rowOffset -= 1;
       continue;
     }
     basisDofOrdinals.insert(localOrdinalsVector[i+rowOffset]);
     int colOffset = 0;
-    for (int j=0; j<numCols; j++) {
-      if (colsToSkip.find(j) != colsToSkip.end()) {
+    for (int j=0; j<numCols; j++)
+    {
+      if (colsToSkip.find(j) != colsToSkip.end())
+      {
         colOffset -= 1;
         continue;
       }
@@ -211,8 +249,10 @@ void GDAMinimumRule::filterSubBasisConstraintData(set<unsigned> &basisDofOrdinal
   vector<GlobalIndexType> globalDofOrdinalsCopy = globalDofOrdinals;
   globalDofOrdinals.clear();
   int colOffset = 0;
-  for (int j=0; j<numCols; j++) {
-    if (colsToSkip.find(j) != colsToSkip.end()) {
+  for (int j=0; j<numCols; j++)
+  {
+    if (colsToSkip.find(j) != colsToSkip.end())
+    {
       colOffset -= 1;
       continue;
     }
@@ -220,8 +260,10 @@ void GDAMinimumRule::filterSubBasisConstraintData(set<unsigned> &basisDofOrdinal
   }
 
   // mark dofs corresponding to the remaining rows as processed
-  for (int i=0; i<numRows; i++) {
-    if (rowsToSkip.find(i) == rowsToSkip.end()) { // we will be processing this one, so mark as such
+  for (int i=0; i<numRows; i++)
+  {
+    if (rowsToSkip.find(i) == rowsToSkip.end())   // we will be processing this one, so mark as such
+    {
       unsigned localDofOrdinal = localOrdinalsVector[i];
       unsigned localDofIndex = trialOrdering->getDofIndex(var->ID(), localDofOrdinal, sideOrdinal);
       processedDofs[localDofIndex] = true;
@@ -229,14 +271,16 @@ void GDAMinimumRule::filterSubBasisConstraintData(set<unsigned> &basisDofOrdinal
   }
 }
 
-GlobalIndexType GDAMinimumRule::globalDofCount() {
+GlobalIndexType GDAMinimumRule::globalDofCount()
+{
   // assumes the lookups have been rebuilt since the last change that would affect the count
 
   // TODO: Consider working out a way to guard against a stale value here.  E.g. could have a "dirty" flag that gets set anytime there's a change to the refinements, and cleared when lookups are rebuilt.  If we're dirty when we get here, we rebuild before returning the global dof count.
   return _globalDofCount;
 }
 
-set<GlobalIndexType> GDAMinimumRule::globalDofIndicesForCell(GlobalIndexType cellID) {
+set<GlobalIndexType> GDAMinimumRule::globalDofIndicesForCell(GlobalIndexType cellID)
+{
   set<GlobalIndexType> globalDofIndices;
 
   CellConstraints constraints = getCellConstraints(cellID);
@@ -247,7 +291,8 @@ set<GlobalIndexType> GDAMinimumRule::globalDofIndicesForCell(GlobalIndexType cel
   return globalDofIndices;
 }
 
-set<GlobalIndexType> GDAMinimumRule::globalDofIndicesForPartition(PartitionIndexType partitionNumber) {
+set<GlobalIndexType> GDAMinimumRule::globalDofIndicesForPartition(PartitionIndexType partitionNumber)
+{
   int rank = Teuchos::GlobalMPISession::getRank();
 
   if (partitionNumber==-1) partitionNumber = rank;
@@ -256,18 +301,24 @@ set<GlobalIndexType> GDAMinimumRule::globalDofIndicesForPartition(PartitionIndex
   // dispense with the argument...  (The recently added case which violates this is in CondensedDofInterpreter)
 //  TEUCHOS_TEST_FOR_EXCEPTION(partitionNumber != rank, std::invalid_argument, "partitionNumber must be -1 or the current MPI rank");
   set<GlobalIndexType> globalDofIndices;
-  if (partitionNumber == rank) {
+  if (partitionNumber == rank)
+  {
     // by construction, our globalDofIndices are contiguously numbered, starting with _partitionDofOffset
-    for (GlobalIndexType i=0; i<_partitionDofCount; i++) {
+    for (GlobalIndexType i=0; i<_partitionDofCount; i++)
+    {
       globalDofIndices.insert(_partitionDofOffset + i);
     }
-  } else {
+  }
+  else
+  {
     GlobalIndexType partitionDofOffset = 0;
-    for (int i=0; i<partitionNumber; i++) {
+    for (int i=0; i<partitionNumber; i++)
+    {
       partitionDofOffset += _partitionDofCounts[i];
     }
     IndexType partitionDofCount = _partitionDofCounts[partitionNumber];
-    for (IndexType i=0; i<partitionDofCount; i++) {
+    for (IndexType i=0; i<partitionDofCount; i++)
+    {
       globalDofIndices.insert(partitionDofOffset + i);
     }
   }
@@ -275,7 +326,8 @@ set<GlobalIndexType> GDAMinimumRule::globalDofIndicesForPartition(PartitionIndex
   return globalDofIndices;
 }
 
-set<GlobalIndexType> GDAMinimumRule::ownedGlobalDofIndicesForCell(GlobalIndexType cellID) {
+set<GlobalIndexType> GDAMinimumRule::ownedGlobalDofIndicesForCell(GlobalIndexType cellID)
+{
   set<GlobalIndexType> globalDofIndices;
 
   CellConstraints constraints = getCellConstraints(cellID);
@@ -284,12 +336,15 @@ set<GlobalIndexType> GDAMinimumRule::ownedGlobalDofIndicesForCell(GlobalIndexTyp
   CellTopoPtr cellTopo = _meshTopology->getCell(cellID)->topology();
 
   int dim = cellTopo->getDimension();
-  for (int d=0; d<=dim; d++) {
+  for (int d=0; d<=dim; d++)
+  {
     int scCount = cellTopo->getSubcellCount(d);
-    for (int scord = 0; scord < scCount; scord++) {
+    for (int scord = 0; scord < scCount; scord++)
+    {
       map<int, vector<GlobalIndexType> > globalDofOrdinalsMapForSubcell = owningCellDofIndexInfo[d][scord]; // keys are varIDs
       for (map<int, vector<GlobalIndexType> >::iterator entryIt = globalDofOrdinalsMapForSubcell.begin();
-           entryIt != globalDofOrdinalsMapForSubcell.end(); entryIt++) {
+           entryIt != globalDofOrdinalsMapForSubcell.end(); entryIt++)
+      {
         globalDofIndices.insert(entryIt->second.begin(), entryIt->second.end());
       }
     }
@@ -298,52 +353,64 @@ set<GlobalIndexType> GDAMinimumRule::ownedGlobalDofIndicesForCell(GlobalIndexTyp
   return globalDofIndices;
 }
 
-set<GlobalIndexType> GDAMinimumRule::partitionOwnedGlobalFieldIndices() {
+set<GlobalIndexType> GDAMinimumRule::partitionOwnedGlobalFieldIndices()
+{
   // compute complement of fluxes and traces
   set<GlobalIndexType> fieldDofIndices;
   // by construction, our globalDofIndices are contiguously numbered, starting with _partitionDofOffset
-  for (GlobalIndexType i=0; i<_partitionDofCount; i++) {
+  for (GlobalIndexType i=0; i<_partitionDofCount; i++)
+  {
     if ((_partitionTraceIndexOffsets.find(i) == _partitionTraceIndexOffsets.end()) &&
-        (_partitionFluxIndexOffsets.find(i) == _partitionFluxIndexOffsets.end()) ) {
-          fieldDofIndices.insert(_partitionDofOffset + i);
+        (_partitionFluxIndexOffsets.find(i) == _partitionFluxIndexOffsets.end()) )
+    {
+      fieldDofIndices.insert(_partitionDofOffset + i);
     }
   }
   return fieldDofIndices;
 }
 
-set<GlobalIndexType> GDAMinimumRule::partitionOwnedIndicesForVariables(set<int> varIDs) {
+set<GlobalIndexType> GDAMinimumRule::partitionOwnedIndicesForVariables(set<int> varIDs)
+{
   set<GlobalIndexType> varIndices;
-  for (set<int>::iterator varIt = varIDs.begin(); varIt != varIDs.end(); varIt++) {
+  for (set<int>::iterator varIt = varIDs.begin(); varIt != varIDs.end(); varIt++)
+  {
     for (set<IndexType>::iterator varOffsetIt=_partitionIndexOffsetsForVarID[*varIt].begin();
-         varOffsetIt != _partitionIndexOffsetsForVarID[*varIt].end(); varOffsetIt++) {
+         varOffsetIt != _partitionIndexOffsetsForVarID[*varIt].end(); varOffsetIt++)
+    {
       varIndices.insert(*varOffsetIt + _partitionDofOffset);
     }
   }
   return varIndices;
 }
 
-set<GlobalIndexType> GDAMinimumRule::partitionOwnedGlobalFluxIndices() {
+set<GlobalIndexType> GDAMinimumRule::partitionOwnedGlobalFluxIndices()
+{
   set<GlobalIndexType> fluxIndices;
-  for (set<IndexType>::iterator fluxOffsetIt=_partitionFluxIndexOffsets.begin(); fluxOffsetIt != _partitionFluxIndexOffsets.end(); fluxOffsetIt++) {
+  for (set<IndexType>::iterator fluxOffsetIt=_partitionFluxIndexOffsets.begin(); fluxOffsetIt != _partitionFluxIndexOffsets.end(); fluxOffsetIt++)
+  {
     fluxIndices.insert(*fluxOffsetIt + _partitionDofOffset);
   }
   return fluxIndices;
 }
 
-set<GlobalIndexType> GDAMinimumRule::partitionOwnedGlobalTraceIndices() {
+set<GlobalIndexType> GDAMinimumRule::partitionOwnedGlobalTraceIndices()
+{
   set<GlobalIndexType> traceIndices;
-  for (set<IndexType>::iterator traceOffsetIt=_partitionTraceIndexOffsets.begin(); traceOffsetIt != _partitionTraceIndexOffsets.end(); traceOffsetIt++) {
+  for (set<IndexType>::iterator traceOffsetIt=_partitionTraceIndexOffsets.begin(); traceOffsetIt != _partitionTraceIndexOffsets.end(); traceOffsetIt++)
+  {
     traceIndices.insert(*traceOffsetIt + _partitionDofOffset);
   }
   return traceIndices;
 }
 
-vector<int> GDAMinimumRule::H1Order(GlobalIndexType cellID, unsigned sideOrdinal) {
+vector<int> GDAMinimumRule::H1Order(GlobalIndexType cellID, unsigned sideOrdinal)
+{
   // this is meant to track the cell's interior idea of what the H^1 order is along that side.  We're isotropic for now, but eventually we might want to allow anisotropy in p...
   return _cellH1Orders[cellID];
 }
 
-void GDAMinimumRule::interpretGlobalCoefficients(GlobalIndexType cellID, Intrepid::FieldContainer<double> &localCoefficients, const Epetra_MultiVector &globalCoefficients) {
+void GDAMinimumRule::interpretGlobalCoefficients(GlobalIndexType cellID, Intrepid::FieldContainer<double> &localCoefficients, const Epetra_MultiVector &globalCoefficients)
+{
   CellConstraints constraints = getCellConstraints(cellID);
   LocalDofMapperPtr dofMapper = getDofMapper(cellID, constraints);
   vector<GlobalIndexType> globalIndexVector = dofMapper->globalIndices();
@@ -354,30 +421,42 @@ void GDAMinimumRule::interpretGlobalCoefficients(GlobalIndexType cellID, Intrepi
 //    dofMapper->printMappingReport();
 //  }
 
-  if (globalCoefficients.NumVectors() == 1) {
+  if (globalCoefficients.NumVectors() == 1)
+  {
     Intrepid::FieldContainer<double> globalCoefficientsFC(globalIndexVector.size());
     Epetra_BlockMap partMap = globalCoefficients.Map();
-    for (int i=0; i<globalIndexVector.size(); i++) {
+    for (int i=0; i<globalIndexVector.size(); i++)
+    {
       GlobalIndexTypeToCast globalIndex = globalIndexVector[i];
       int localIndex = partMap.LID(globalIndex);
-      if (localIndex != -1) {
+      if (localIndex != -1)
+      {
         globalCoefficientsFC[i] = globalCoefficients[0][localIndex];
-      } else {
+      }
+      else
+      {
         // non-local coefficient: ignore
         globalCoefficientsFC[i] = 0;
       }
     }
     localCoefficients = dofMapper->mapGlobalCoefficients(globalCoefficientsFC);
-  } else {
+  }
+  else
+  {
     Intrepid::FieldContainer<double> globalCoefficientsFC(globalCoefficients.NumVectors(), globalIndexVector.size());
     Epetra_BlockMap partMap = globalCoefficients.Map();
-    for (int vectorOrdinal=0; vectorOrdinal < globalCoefficients.NumVectors(); vectorOrdinal++) {
-      for (int i=0; i<globalIndexVector.size(); i++) {
+    for (int vectorOrdinal=0; vectorOrdinal < globalCoefficients.NumVectors(); vectorOrdinal++)
+    {
+      for (int i=0; i<globalIndexVector.size(); i++)
+      {
         GlobalIndexTypeToCast globalIndex = globalIndexVector[i];
         int localIndex = partMap.LID(globalIndex);
-        if (localIndex != -1) {
+        if (localIndex != -1)
+        {
           globalCoefficientsFC(vectorOrdinal,i) = globalCoefficients[vectorOrdinal][localIndex];
-        } else {
+        }
+        else
+        {
           // non-local coefficient: ignore
           globalCoefficientsFC(vectorOrdinal,i) = 0;
         }
@@ -390,7 +469,8 @@ void GDAMinimumRule::interpretGlobalCoefficients(GlobalIndexType cellID, Intrepi
 }
 
 template <typename Scalar>
-void GDAMinimumRule::interpretGlobalCoefficients2(GlobalIndexType cellID, Intrepid::FieldContainer<Scalar> &localCoefficients, const TVectorPtr<Scalar> globalCoefficients) {
+void GDAMinimumRule::interpretGlobalCoefficients2(GlobalIndexType cellID, Intrepid::FieldContainer<Scalar> &localCoefficients, const TVectorPtr<Scalar> globalCoefficients)
+{
   CellConstraints constraints = getCellConstraints(cellID);
   LocalDofMapperPtr dofMapper = getDofMapper(cellID, constraints);
   vector<GlobalIndexType> globalIndexVector = dofMapper->globalIndices();
@@ -401,7 +481,8 @@ void GDAMinimumRule::interpretGlobalCoefficients2(GlobalIndexType cellID, Intrep
 //    dofMapper->printMappingReport();
 //  }
 
-  if (globalCoefficients->getNumVectors() == 1) {
+  if (globalCoefficients->getNumVectors() == 1)
+  {
     // TODO: Test whether this is actually correct
     Teuchos::ArrayRCP<Scalar> globalCoefficientsArray = globalCoefficients->getDataNonConst(globalIndexVector.size());
     Intrepid::FieldContainer<Scalar> globalCoefficientsFC(globalIndexVector.size());
@@ -419,7 +500,9 @@ void GDAMinimumRule::interpretGlobalCoefficients2(GlobalIndexType cellID, Intrep
     //   }
     // }
     localCoefficients = dofMapper->mapGlobalCoefficients(globalCoefficientsFC);
-  } else {
+  }
+  else
+  {
     TEUCHOS_TEST_FOR_EXCEPTION(true, std::invalid_argument, "InterpretGlobalCoefficients not implemented for more than one vector");
     // Teuchos::ArrayRCP<Teuchos::ArrayRCP<Scalar>> globalCoefficients2DArray = globalCoefficients->get2dViewNonConst(globalIndexVector.size());
     // Intrepid::FieldContainer<Scalar> globalCoefficientsFC(globalCoefficients.numVectors(), globalIndexVector.size());
@@ -428,19 +511,19 @@ void GDAMinimumRule::interpretGlobalCoefficients2(GlobalIndexType cellID, Intrep
     //   Teuchos::ArrayView<Scalar> arrayView = globalCoefficientsArray.view(0,globalIndexVector.size());
     //   globalCoefficientsFC.setValues(arrayView);
     // }
-  //   Intrepid::FieldContainer<Scalar> globalCoefficientsFC(globalCoefficients.NumVectors(), globalIndexVector.size());
-  //   Epetra_BlockMap partMap = globalCoefficients.Map();
-  //   for (int vectorOrdinal=0; vectorOrdinal < globalCoefficients.NumVectors(); vectorOrdinal++) {
-  //     for (int i=0; i<globalIndexVector.size(); i++) {
-  //       GlobalIndexTypeToCast globalIndex = globalIndexVector[i];
-  //       int localIndex = partMap.LID(globalIndex);
-  //       if (localIndex != -1) {
-  //         globalCoefficientsFC(vectorOrdinal,i) = globalCoefficients[vectorOrdinal][localIndex];
-  //       } else {
-  //         // non-local coefficient: ignore
-  //         globalCoefficientsFC(vectorOrdinal,i) = 0;
-  //       }
-  //     }
+    //   Intrepid::FieldContainer<Scalar> globalCoefficientsFC(globalCoefficients.NumVectors(), globalIndexVector.size());
+    //   Epetra_BlockMap partMap = globalCoefficients.Map();
+    //   for (int vectorOrdinal=0; vectorOrdinal < globalCoefficients.NumVectors(); vectorOrdinal++) {
+    //     for (int i=0; i<globalIndexVector.size(); i++) {
+    //       GlobalIndexTypeToCast globalIndex = globalIndexVector[i];
+    //       int localIndex = partMap.LID(globalIndex);
+    //       if (localIndex != -1) {
+    //         globalCoefficientsFC(vectorOrdinal,i) = globalCoefficients[vectorOrdinal][localIndex];
+    //       } else {
+    //         // non-local coefficient: ignore
+    //         globalCoefficientsFC(vectorOrdinal,i) = 0;
+    //       }
+    //     }
     // }
     // localCoefficients = dofMapper->mapGlobalCoefficients(globalCoefficientsFC);
   }
@@ -451,7 +534,8 @@ void GDAMinimumRule::interpretGlobalCoefficients2(GlobalIndexType cellID, Intrep
 template void GDAMinimumRule::interpretGlobalCoefficients2(GlobalIndexType cellID, Intrepid::FieldContainer<double> &localCoefficients, const TVectorPtr<double> globalCoefficients);
 
 void GDAMinimumRule::interpretLocalData(GlobalIndexType cellID, const Intrepid::FieldContainer<double> &localData,
-                                        Intrepid::FieldContainer<double> &globalData, Intrepid::FieldContainer<GlobalIndexType> &globalDofIndices) {
+                                        Intrepid::FieldContainer<double> &globalData, Intrepid::FieldContainer<GlobalIndexType> &globalDofIndices)
+{
   CellConstraints constraints = getCellConstraints(cellID);
   LocalDofMapperPtr dofMapper = getDofMapper(cellID, constraints);
 
@@ -466,7 +550,8 @@ void GDAMinimumRule::interpretLocalData(GlobalIndexType cellID, const Intrepid::
   globalData = dofMapper->mapLocalData(localData, false);
   vector<GlobalIndexType> globalIndexVector = dofMapper->globalIndices();
   globalDofIndices.resize(globalIndexVector.size());
-  for (int i=0; i<globalIndexVector.size(); i++) {
+  for (int i=0; i<globalIndexVector.size(); i++)
+  {
     globalDofIndices(i) = globalIndexVector[i];
   }
 
@@ -513,7 +598,8 @@ void GDAMinimumRule::interpretLocalData(GlobalIndexType cellID, const Intrepid::
 }
 
 void GDAMinimumRule::interpretLocalBasisCoefficients(GlobalIndexType cellID, int varID, int sideOrdinal, const Intrepid::FieldContainer<double> &basisCoefficients,
-                                                     Intrepid::FieldContainer<double> &globalCoefficients, Intrepid::FieldContainer<GlobalIndexType> &globalDofIndices) {
+    Intrepid::FieldContainer<double> &globalCoefficients, Intrepid::FieldContainer<GlobalIndexType> &globalDofIndices)
+{
   CellConstraints constraints = getCellConstraints(cellID);
   LocalDofMapperPtr dofMapper = getDofMapper(cellID, constraints, varID, sideOrdinal);
 
@@ -533,12 +619,14 @@ void GDAMinimumRule::interpretLocalBasisCoefficients(GlobalIndexType cellID, int
 //  cout << "cellID " << cellID << ", side " << sideOrdinal << ", var " << varID;
 //  Camellia::print(", globalIndexVector", globalIndexVector);
 //  cout << "globalCoefficients:\n" << globalCoefficients;
-  for (int i=0; i<globalIndexVector.size(); i++) {
+  for (int i=0; i<globalIndexVector.size(); i++)
+  {
     globalDofIndices(i) = globalIndexVector[i];
   }
 }
 
-IndexType GDAMinimumRule::localDofCount() {
+IndexType GDAMinimumRule::localDofCount()
+{
   // TODO: implement this
   cout << "WARNING: localDofCount() unimplemented.\n";
   return 0;
@@ -546,7 +634,8 @@ IndexType GDAMinimumRule::localDofCount() {
 
 typedef vector< SubBasisDofMapperPtr > BasisMap;
 // volume variable version
-BasisMap GDAMinimumRule::getBasisMap(GlobalIndexType cellID, SubCellDofIndexInfo& dofIndexInfo, VarPtr var) {
+BasisMap GDAMinimumRule::getBasisMap(GlobalIndexType cellID, SubCellDofIndexInfo& dofIndexInfo, VarPtr var)
+{
   BasisMap varVolumeMap;
 
   CellPtr cell = _meshTopology->getCell(cellID);
@@ -564,11 +653,13 @@ BasisMap GDAMinimumRule::getBasisMap(GlobalIndexType cellID, SubCellDofIndexInfo
   set<unsigned> basisDofOrdinals;
   basisDofOrdinals.insert(ordinalsInt.begin(),ordinalsInt.end());
 
-  if (basisDofOrdinals.size() > 0) {
+  if (basisDofOrdinals.size() > 0)
+  {
     varVolumeMap.push_back(SubBasisDofMapper::subBasisDofMapper(basisDofOrdinals, globalDofOrdinals));
   }
 
-  if (globalDofOrdinals.size() != basisDofOrdinals.size()) {
+  if (globalDofOrdinals.size() != basisDofOrdinals.size())
+  {
     cout << "";
     TEUCHOS_TEST_FOR_EXCEPTION(true, std::invalid_argument, "volume getBasisMap() doesn't yet support non-L^2 bases.");
   }
@@ -712,7 +803,8 @@ BasisMap GDAMinimumRule::getBasisMap(GlobalIndexType cellID, SubCellDofIndexInfo
 }
 
 // trace variable version
-BasisMap GDAMinimumRule::getBasisMap(GlobalIndexType cellID, SubCellDofIndexInfo& dofIndexInfo, VarPtr var, int sideOrdinal) {
+BasisMap GDAMinimumRule::getBasisMap(GlobalIndexType cellID, SubCellDofIndexInfo& dofIndexInfo, VarPtr var, int sideOrdinal)
+{
 
   vector<SubBasisMapInfo> subBasisMaps;
 
@@ -750,7 +842,8 @@ BasisMap GDAMinimumRule::getBasisMap(GlobalIndexType cellID, SubCellDofIndexInfo
   GDAMinimumRuleConstraints::computeConstraintWeights(constraintWeights, this, rootEntry, var);
 
   // TODO: use the weights computed to determine the weights for each global dof.
-  for (map<AnnotatedEntity, SubBasisReconciliationWeights>::iterator weightIt = constraintWeights.begin(); weightIt != constraintWeights.end(); weightIt++) {
+  for (map<AnnotatedEntity, SubBasisReconciliationWeights>::iterator weightIt = constraintWeights.begin(); weightIt != constraintWeights.end(); weightIt++)
+  {
     AnnotatedEntity entityInfo = weightIt->first;
     ConstraintEntryPtr entityEntry = definedConstraints.getConstraintEntry(entityInfo);
 
@@ -762,7 +855,8 @@ BasisMap GDAMinimumRule::getBasisMap(GlobalIndexType cellID, SubCellDofIndexInfo
 
     SubBasisReconciliationWeights entityInteriorWeights = BasisReconciliation::weightsForCoarseSubcell(weights, basis, entityInfo.dimension, entityInfo.subcellOrdinal, false);
 
-    if ((entityInteriorWeights.coarseOrdinals.size() > 0) && (entityInteriorWeights.fineOrdinals.size() > 0)) {
+    if ((entityInteriorWeights.coarseOrdinals.size() > 0) && (entityInteriorWeights.fineOrdinals.size() > 0))
+    {
       CellConstraints constrainingCellConstraints = getCellConstraints(entityInfo.cellID);
       OwnershipInfo ownershipInfo = constrainingCellConstraints.owningCellIDForSubcell[entityInfo.dimension][entityEntry->subcellOrdinalInCell()];
       CellConstraints owningCellConstraints = getCellConstraints(ownershipInfo.cellID);
@@ -774,20 +868,25 @@ BasisMap GDAMinimumRule::getBasisMap(GlobalIndexType cellID, SubCellDofIndexInfo
       set<int> constrainingBasisOrdinalsForSubcell = basis->dofOrdinalsForSubcell(entityInfo.dimension, entityInfo.subcellOrdinal);
       vector<int> basisOrdinalsVector(constrainingBasisOrdinalsForSubcell.begin(),constrainingBasisOrdinalsForSubcell.end());
       vector<GlobalIndexType> globalDofOrdinals;
-      for (int i=0; i<basisOrdinalsVector.size(); i++) {
-        if (entityInteriorWeights.coarseOrdinals.find(basisOrdinalsVector[i]) != entityInteriorWeights.coarseOrdinals.end()) {
+      for (int i=0; i<basisOrdinalsVector.size(); i++)
+      {
+        if (entityInteriorWeights.coarseOrdinals.find(basisOrdinalsVector[i]) != entityInteriorWeights.coarseOrdinals.end())
+        {
           globalDofOrdinals.push_back(globalDofOrdinalsForSubcell[i]);
           // DEBUGGING:
-          if ((globalDofOrdinalsForSubcell[i]==DEBUG_GLOBAL_DOF) && (cellID==DEBUG_CELL_ID) && (sideOrdinal==DEBUG_SIDE_ORDINAL)) {
+          if ((globalDofOrdinalsForSubcell[i]==DEBUG_GLOBAL_DOF) && (cellID==DEBUG_CELL_ID) && (sideOrdinal==DEBUG_SIDE_ORDINAL))
+          {
             cout << "globalDofOrdinalsForSubcell " << DEBUG_GLOBAL_DOF << ".\n";
-            for (int fine=0; fine<entityInteriorWeights.fineOrdinals.size(); fine++) {
+            for (int fine=0; fine<entityInteriorWeights.fineOrdinals.size(); fine++)
+            {
               cout << "fine ordinal " << fine << " weight for global dof " << DEBUG_GLOBAL_DOF << ": " << entityInteriorWeights.weights(fine,i) << endl;
             }
           }
         }
       }
 
-      if (entityInteriorWeights.coarseOrdinals.size() != globalDofOrdinals.size()) {
+      if (entityInteriorWeights.coarseOrdinals.size() != globalDofOrdinals.size())
+      {
         cout << "Error: coarseOrdinals container isn't the same size as the globalDofOrdinals that it's supposed to correspond to.\n";
         Camellia::print("coarseOrdinals", entityInteriorWeights.coarseOrdinals);
         Camellia::print("globalDofOrdinals", globalDofOrdinals);
@@ -798,7 +897,8 @@ BasisMap GDAMinimumRule::getBasisMap(GlobalIndexType cellID, SubCellDofIndexInfo
       basisDofOrdinals.insert(entityInteriorWeights.fineOrdinals.begin(), entityInteriorWeights.fineOrdinals.end()); // TODO: change fineOrdinals to be a set<unsigned>
 
       // DEBUGGING:
-      if ((cellID==DEBUG_CELL_ID) && (sideOrdinal==DEBUG_SIDE_ORDINAL) && (var->ID()==DEBUG_VAR_ID)) {
+      if ((cellID==DEBUG_CELL_ID) && (sideOrdinal==DEBUG_SIDE_ORDINAL) && (var->ID()==DEBUG_VAR_ID))
+      {
         set<unsigned> globalDofOrdinalsSet(globalDofOrdinals.begin(),globalDofOrdinals.end());
         CellPtr constrainingCell = _meshTopology->getCell( entityInfo.cellID );
         IndexType constrainingSubcellEntityIndex = constrainingCell->entityIndex(entityInfo.dimension, entityEntry->subcellOrdinalInCell());
@@ -836,23 +936,29 @@ BasisMap GDAMinimumRule::getBasisMap(GlobalIndexType cellID, SubCellDofIndexInfo
 
   map< unsigned, set<GlobalIndexType> > globalOrdinalsForFineOrdinal;
 
-  for (vector<SubBasisMapInfo>::iterator subBasisIt = subBasisMaps.begin(); subBasisIt != subBasisMaps.end(); subBasisIt++) {
+  for (vector<SubBasisMapInfo>::iterator subBasisIt = subBasisMaps.begin(); subBasisIt != subBasisMaps.end(); subBasisIt++)
+  {
     subBasisMap = *subBasisIt;
     vector<GlobalIndexType> globalDofOrdinals = subBasisMap.globalDofOrdinals;
     set<unsigned> basisDofOrdinals = subBasisMap.basisDofOrdinals;
     vector<unsigned> basisDofOrdinalsVector(basisDofOrdinals.begin(),basisDofOrdinals.end());
     // weights are fine x coarse
-    for (int j=0; j<subBasisMap.weights.dimension(1); j++) {
+    for (int j=0; j<subBasisMap.weights.dimension(1); j++)
+    {
       GlobalIndexType globalDofOrdinal = globalDofOrdinals[j];
       map<unsigned, double> fineOrdinalCoefficientsThusFar = weightsForGlobalOrdinal[globalDofOrdinal];
-      for (int i=0; i<subBasisMap.weights.dimension(0); i++) {
+      for (int i=0; i<subBasisMap.weights.dimension(0); i++)
+      {
         unsigned fineOrdinal = basisDofOrdinalsVector[i];
         double coefficient = subBasisMap.weights(i,j);
-        if (coefficient != 0) {
-          if (fineOrdinalCoefficientsThusFar.find(fineOrdinal) != fineOrdinalCoefficientsThusFar.end()) {
+        if (coefficient != 0)
+        {
+          if (fineOrdinalCoefficientsThusFar.find(fineOrdinal) != fineOrdinalCoefficientsThusFar.end())
+          {
             double tol = 1e-14;
             double previousCoefficient = fineOrdinalCoefficientsThusFar[fineOrdinal];
-            if (abs(previousCoefficient-coefficient) > tol) {
+            if (abs(previousCoefficient-coefficient) > tol)
+            {
               cout  << "ERROR: incompatible entries for fine ordinal " << fineOrdinal << " in representation of global ordinal " << globalDofOrdinal << endl;
               cout << "previousCoefficient = " << previousCoefficient << endl;
               cout << "coefficient = " << coefficient << endl;
@@ -874,7 +980,8 @@ BasisMap GDAMinimumRule::getBasisMap(GlobalIndexType cellID, SubCellDofIndexInfo
   vector< set<unsigned> > fineOrdinalsForPartition;
 
   for (map< GlobalIndexType, map<unsigned, double> >::iterator globalWeightsIt = weightsForGlobalOrdinal.begin();
-       globalWeightsIt != weightsForGlobalOrdinal.end(); globalWeightsIt++) {
+       globalWeightsIt != weightsForGlobalOrdinal.end(); globalWeightsIt++)
+  {
     GlobalIndexType globalOrdinal = globalWeightsIt->first;
     if (partitionedGlobalDofOrdinals.find(globalOrdinal) != partitionedGlobalDofOrdinals.end()) continue;
 
@@ -886,7 +993,8 @@ BasisMap GDAMinimumRule::getBasisMap(GlobalIndexType cellID, SubCellDofIndexInfo
     set<GlobalIndexType> globalOrdinalsInPartitionWhoseFineOrdinalsHaveBeenProcessed;
 
     map<unsigned, double> fineCoefficients = globalWeightsIt->second;
-    for (map<unsigned, double>::iterator coefficientIt = fineCoefficients.begin(); coefficientIt != fineCoefficients.end(); coefficientIt++) {
+    for (map<unsigned, double>::iterator coefficientIt = fineCoefficients.begin(); coefficientIt != fineCoefficients.end(); coefficientIt++)
+    {
       unsigned fineOrdinal = coefficientIt->first;
       fineOrdinals.insert(fineOrdinal);
       set<GlobalIndexType> globalOrdinalsForFine = globalOrdinalsForFineOrdinal[fineOrdinal];
@@ -895,13 +1003,16 @@ BasisMap GDAMinimumRule::getBasisMap(GlobalIndexType cellID, SubCellDofIndexInfo
 
     globalOrdinalsInPartitionWhoseFineOrdinalsHaveBeenProcessed.insert(globalOrdinal);
 
-    while (globalOrdinalsInPartitionWhoseFineOrdinalsHaveBeenProcessed.size() != partition.size()) {
-      for (set<GlobalIndexType>::iterator globalOrdIt = partition.begin(); globalOrdIt != partition.end(); globalOrdIt++) {
+    while (globalOrdinalsInPartitionWhoseFineOrdinalsHaveBeenProcessed.size() != partition.size())
+    {
+      for (set<GlobalIndexType>::iterator globalOrdIt = partition.begin(); globalOrdIt != partition.end(); globalOrdIt++)
+      {
         GlobalIndexType globalOrdinal = *globalOrdIt;
         if (globalOrdinalsInPartitionWhoseFineOrdinalsHaveBeenProcessed.find(globalOrdinal) !=
             globalOrdinalsInPartitionWhoseFineOrdinalsHaveBeenProcessed.end()) continue;
         map<unsigned, double> fineCoefficients = weightsForGlobalOrdinal[globalOrdinal];
-        for (map<unsigned, double>::iterator coefficientIt = fineCoefficients.begin(); coefficientIt != fineCoefficients.end(); coefficientIt++) {
+        for (map<unsigned, double>::iterator coefficientIt = fineCoefficients.begin(); coefficientIt != fineCoefficients.end(); coefficientIt++)
+        {
           unsigned fineOrdinal = coefficientIt->first;
           fineOrdinals.insert(fineOrdinal);
           set<GlobalIndexType> globalOrdinalsForFine = globalOrdinalsForFineOrdinal[fineOrdinal];
@@ -912,7 +1023,8 @@ BasisMap GDAMinimumRule::getBasisMap(GlobalIndexType cellID, SubCellDofIndexInfo
       }
     }
 
-    for (set<GlobalIndexType>::iterator globalOrdIt = partition.begin(); globalOrdIt != partition.end(); globalOrdIt++) {
+    for (set<GlobalIndexType>::iterator globalOrdIt = partition.begin(); globalOrdIt != partition.end(); globalOrdIt++)
+    {
       GlobalIndexType globalOrdinal = *globalOrdIt;
       partitionedGlobalDofOrdinals.insert(globalOrdinal);
     }
@@ -921,20 +1033,24 @@ BasisMap GDAMinimumRule::getBasisMap(GlobalIndexType cellID, SubCellDofIndexInfo
   }
 
   BasisMap varSideMap;
-  for (int i=0; i<globalDofOrdinalPartitions.size(); i++) {
+  for (int i=0; i<globalDofOrdinalPartitions.size(); i++)
+  {
     set<GlobalIndexType> partition = globalDofOrdinalPartitions[i];
     set<unsigned> fineOrdinals = fineOrdinalsForPartition[i];
     vector<unsigned> fineOrdinalsVector(fineOrdinals.begin(), fineOrdinals.end());
     map<unsigned,int> fineOrdinalRowLookup;
-    for (int i=0; i<fineOrdinalsVector.size(); i++) {
+    for (int i=0; i<fineOrdinalsVector.size(); i++)
+    {
       fineOrdinalRowLookup[fineOrdinalsVector[i]] = i;
     }
     Intrepid::FieldContainer<double> weights(fineOrdinals.size(),partition.size());
     int col=0;
-    for (set<GlobalIndexType>::iterator globalDofIt=partition.begin(); globalDofIt != partition.end(); globalDofIt++) {
+    for (set<GlobalIndexType>::iterator globalDofIt=partition.begin(); globalDofIt != partition.end(); globalDofIt++)
+    {
       GlobalIndexType globalOrdinal = *globalDofIt;
       map<unsigned, double> fineCoefficients = weightsForGlobalOrdinal[globalOrdinal];
-      for (map<unsigned, double>::iterator coefficientIt = fineCoefficients.begin(); coefficientIt != fineCoefficients.end(); coefficientIt++) {
+      for (map<unsigned, double>::iterator coefficientIt = fineCoefficients.begin(); coefficientIt != fineCoefficients.end(); coefficientIt++)
+      {
         unsigned fineOrdinal = coefficientIt->first;
         double coefficient = coefficientIt->second;
         int row = fineOrdinalRowLookup[fineOrdinal];
@@ -953,7 +1069,8 @@ BasisMap GDAMinimumRule::getBasisMap(GlobalIndexType cellID, SubCellDofIndexInfo
 // trace variable version
 // 1-22-15 NOTE: "getBasisMapOld" is the one for traces that is still in use!  The "new" getBasisMap() for traces has not yet been finished...
 //               (Intent was to fix issues related to refinements for conforming 3D, but for now we are just supporting non-conforming 3D)
-BasisMap GDAMinimumRule::getBasisMapOld(GlobalIndexType cellID, SubCellDofIndexInfo& dofIndexInfo, VarPtr var, int sideOrdinal) {
+BasisMap GDAMinimumRule::getBasisMapOld(GlobalIndexType cellID, SubCellDofIndexInfo& dofIndexInfo, VarPtr var, int sideOrdinal)
+{
   vector<SubBasisMapInfo> subBasisMaps;
 
   SubBasisMapInfo subBasisMap;
@@ -999,7 +1116,8 @@ BasisMap GDAMinimumRule::getBasisMapOld(GlobalIndexType cellID, SubCellDofIndexI
   SubBasisReconciliationWeights unitWeights;
   unitWeights.weights.resize(basis->getCardinality(), basis->getCardinality());
   set<int> allOrdinals;
-  for (int i=0; i<basis->getCardinality(); i++) {
+  for (int i=0; i<basis->getCardinality(); i++)
+  {
     allOrdinals.insert(i);
     unitWeights.weights(i,i) = 1.0;
   }
@@ -1033,20 +1151,23 @@ BasisMap GDAMinimumRule::getBasisMapOld(GlobalIndexType cellID, SubCellDofIndexI
     appliedWeights[d].clear();
 
     map< GlobalIndexType, AppliedWeightVector >::iterator appliedWeightsIt;
-    for (appliedWeightsIt = appliedWeightsForDimension.begin(); appliedWeightsIt != appliedWeightsForDimension.end(); appliedWeightsIt++) {
+    for (appliedWeightsIt = appliedWeightsForDimension.begin(); appliedWeightsIt != appliedWeightsForDimension.end(); appliedWeightsIt++)
+    {
       // appliedWeightVectorForSubcell seems misnamed to me; just appliedWeightVector would seem more appropriate
       // (we don't yet have a particular subcell in mind; the entries in "appliedWeightVectorForSubcell" specify which
       //  subcell they apply to, right?)
       AppliedWeightVector appliedWeightVectorForSubcell = appliedWeightsIt->second;
 
       for (AppliedWeightVector::iterator appliedWeightPairIt = appliedWeightVectorForSubcell.begin();
-           appliedWeightPairIt != appliedWeightVectorForSubcell.end(); appliedWeightPairIt++) {
+           appliedWeightPairIt != appliedWeightVectorForSubcell.end(); appliedWeightPairIt++)
+      {
         AppliedWeightPair appliedWeightsForSubcell = *appliedWeightPairIt;
 
         AnnotatedEntity subcellInfo = appliedWeightsForSubcell.first;
         SubBasisReconciliationWeights prevWeights = appliedWeightsForSubcell.second;
 
-        if (subcellInfo.dimension != d) {
+        if (subcellInfo.dimension != d)
+        {
           cout << "INTERNAL ERROR: subcellInfo.dimension should be d!\n";
           TEUCHOS_TEST_FOR_EXCEPTION(true, std::invalid_argument, "INTERNAL ERROR: subcellInfo.dimension should be d!");
         }
@@ -1054,14 +1175,14 @@ BasisMap GDAMinimumRule::getBasisMapOld(GlobalIndexType cellID, SubCellDofIndexI
         CellPtr appliedConstraintCell = _meshTopology->getCell(subcellInfo.cellID);
 
         unsigned subcordInAppliedConstraintCell = CamelliaCellTools::subcellOrdinalMap(appliedConstraintCell->topology(), sideDim,
-                                                                                       subcellInfo.sideOrdinal, d, subcellInfo.subcellOrdinal);
+            subcellInfo.sideOrdinal, d, subcellInfo.subcellOrdinal);
 
         DofOrderingPtr appliedConstraintTrialOrdering = _elementTypeForCell[subcellInfo.cellID]->trialOrderPtr;
         BasisPtr appliedConstraintBasis = appliedConstraintTrialOrdering->getBasis(var->ID(), subcellInfo.sideOrdinal);
 
         CellConstraints cellConstraints = getCellConstraints(subcellInfo.cellID);
         AnnotatedEntity subcellConstraint = cellConstraints.subcellConstraints[d][subcordInAppliedConstraintCell];
-        
+
         CellPtr constrainingCell = _meshTopology->getCell(subcellConstraint.cellID);
 
         DofOrderingPtr constrainingTrialOrdering = _elementTypeForCell[subcellConstraint.cellID]->trialOrderPtr;
@@ -1069,10 +1190,11 @@ BasisMap GDAMinimumRule::getBasisMapOld(GlobalIndexType cellID, SubCellDofIndexI
 
 
         unsigned subcellOrdinalInConstrainingCell = CamelliaCellTools::subcellOrdinalMap(constrainingCell->topology(), sideDim, subcellConstraint.sideOrdinal,
-                                                                                         subcellConstraint.dimension, subcellConstraint.subcellOrdinal);
-        
+            subcellConstraint.dimension, subcellConstraint.subcellOrdinal);
+
         // DEBUGGING
-        if ((cellID==DEBUG_CELL_ID) && (sideOrdinal==DEBUG_SIDE_ORDINAL) && (var->ID()==DEBUG_VAR_ID)) {
+        if ((cellID==DEBUG_CELL_ID) && (sideOrdinal==DEBUG_SIDE_ORDINAL) && (var->ID()==DEBUG_VAR_ID))
+        {
           IndexType appliedConstraintSubcellEntityIndex = appliedConstraintCell->entityIndex(subcellInfo.dimension, subcordInAppliedConstraintCell);
           IndexType constrainingSubcellEntityIndex = constrainingCell->entityIndex(subcellConstraint.dimension, subcellOrdinalInConstrainingCell);
 
@@ -1123,68 +1245,83 @@ BasisMap GDAMinimumRule::getBasisMapOld(GlobalIndexType cellID, SubCellDofIndexI
         unsigned ancestralSubcellOrdinal = ancestralSubcell.first;
         unsigned ancestralSubcellDimension = ancestralSubcell.second;
 
-        if (ancestralSubcellOrdinal == -1) {
+        if (ancestralSubcellOrdinal == -1)
+        {
           cout << "Internal error: ancestral subcell ordinal was not found.\n";
           TEUCHOS_TEST_FOR_EXCEPTION(true, std::invalid_argument, "Internal error: ancestral subcell ordinal was not found.");
         }
 
         unsigned ancestralSideOrdinal;
-        /* 
-         How we know that there is always an ancestralSideOrdinal to speak of: 
+        /*
+         How we know that there is always an ancestralSideOrdinal to speak of:
          In the extreme case, consider what happens when you have a triangular refinement and an interior triangle selected,
          and you're concerned with one of its vertices: even then there is a side ordinal even then, and a unique one.  Whatever constraints
          there are eventually come through some constraining side (or the subcell of some constraining side).
          */
-        if (ancestralSubcellDimension == sideDim) {
+        if (ancestralSubcellDimension == sideDim)
+        {
           ancestralSideOrdinal = ancestralSubcellOrdinal;
-        } else {
+        }
+        else
+        {
 
           IndexType ancestralSubcellEntityIndex = ancestralCell->entityIndex(ancestralSubcellDimension, ancestralSubcellOrdinal);
 
           // for subcells constrained by subcells of unlike dimension, we can handle any side that contains the ancestral subcell,
           // but for like-dimensional constraints, we do need the ancestralSideOrdinal to be the ancestor of the side in subcellInfo...
 
-          if (subcellConstraint.dimension == d) {
+          if (subcellConstraint.dimension == d)
+          {
             IndexType descendantSideEntityIndex = appliedConstraintCell->entityIndex(sideDim, subcellInfo.sideOrdinal);
 
             ancestralSideOrdinal = -1;
             int sideCount = ancestralCell->getSideCount();
-            for (int side=0; side<sideCount; side++) {
+            for (int side=0; side<sideCount; side++)
+            {
               IndexType ancestralSideEntityIndex = ancestralCell->entityIndex(sideDim, side);
-              if (ancestralSideEntityIndex == descendantSideEntityIndex) {
+              if (ancestralSideEntityIndex == descendantSideEntityIndex)
+              {
                 ancestralSideOrdinal = side;
                 break;
               }
 
-              if (_meshTopology->entityIsAncestor(sideDim, ancestralSideEntityIndex, descendantSideEntityIndex)) {
+              if (_meshTopology->entityIsAncestor(sideDim, ancestralSideEntityIndex, descendantSideEntityIndex))
+              {
                 ancestralSideOrdinal = side;
                 break;
               }
             }
 
-            if (ancestralSideOrdinal == -1) {
+            if (ancestralSideOrdinal == -1)
+            {
               cout << "Error: no ancestor of side found.\n";
               TEUCHOS_TEST_FOR_EXCEPTION(true, std::invalid_argument, "Error: no ancestor of side contains the ancestral subcell.");
             }
 
-            { // a sanity check:
+            {
+              // a sanity check:
               vector<IndexType> sidesForSubcell = _meshTopology->getSidesContainingEntity(ancestralSubcellDimension, ancestralSubcellEntityIndex);
               IndexType ancestralSideEntityIndex = ancestralCell->entityIndex(sideDim, ancestralSideOrdinal);
-              if (std::find(sidesForSubcell.begin(), sidesForSubcell.end(), ancestralSideEntityIndex) == sidesForSubcell.end()) {
+              if (std::find(sidesForSubcell.begin(), sidesForSubcell.end(), ancestralSideEntityIndex) == sidesForSubcell.end())
+              {
                 cout << "Error: the ancestral side does not contain the ancestral subcell.\n";
                 TEUCHOS_TEST_FOR_EXCEPTION(true, std::invalid_argument, "the ancestral side does not contain the ancestral subcell.");
               }
             }
 
-          } else {
+          }
+          else
+          {
             // find some side in the ancestral cell that contains the ancestral subcell, then (there should be at least two; which one shouldn't matter)
             vector<IndexType> sidesForSubcell = _meshTopology->getSidesContainingEntity(ancestralSubcellDimension, ancestralSubcellEntityIndex);
 
             ancestralSideOrdinal = -1;
             int sideCount = ancestralCell->getSideCount();
-            for (int side=0; side<sideCount; side++) {
+            for (int side=0; side<sideCount; side++)
+            {
               IndexType ancestralSideEntityIndex = ancestralCell->entityIndex(sideDim, side);
-              if (std::find(sidesForSubcell.begin(), sidesForSubcell.end(), ancestralSideEntityIndex) != sidesForSubcell.end()) {
+              if (std::find(sidesForSubcell.begin(), sidesForSubcell.end(), ancestralSideEntityIndex) != sidesForSubcell.end())
+              {
                 ancestralSideOrdinal = side;
                 break;
               }
@@ -1192,7 +1329,8 @@ BasisMap GDAMinimumRule::getBasisMapOld(GlobalIndexType cellID, SubCellDofIndexI
           }
         }
 
-        if (ancestralSideOrdinal == -1) {
+        if (ancestralSideOrdinal == -1)
+        {
           cout << "Error: ancestralSideOrdinal not found.\n";
           TEUCHOS_TEST_FOR_EXCEPTION(true, std::invalid_argument, "Error: ancestralSideOrdinal not found.");
         }
@@ -1202,7 +1340,8 @@ BasisMap GDAMinimumRule::getBasisMapOld(GlobalIndexType cellID, SubCellDofIndexI
         //          Solution_ProjectOnTensorMesh2D_Slow and Solution_ProjectOnTensorMesh3D_Slow, fail that don't with the separate treatment.  However, even once
         //          said bugs are fixed, it is appears this version of computeConstrainedWeights is a *LOT* slower; overall runtime of runTests about doubled when
         //          I tried using this for both.
-        if (subcellConstraint.dimension != d) {
+        if (subcellConstraint.dimension != d)
+        {
           unsigned ancestralSubcellOrdinalInSide = CamelliaCellTools::subcellReverseOrdinalMap(ancestralCell->topology(), sideDim, ancestralSideOrdinal, subcellConstraint.dimension, ancestralSubcellOrdinal);
 
           // 5-25-15: changing permutations here to be relative to *volumes*
@@ -1210,32 +1349,33 @@ BasisMap GDAMinimumRule::getBasisMapOld(GlobalIndexType cellID, SubCellDofIndexI
           unsigned ancestralCellPermutation = ancestralCell->subcellPermutation(ancestralSubcellDimension, ancestralSubcellOrdinal);
           // constrainingPermutation goes from canonical to the constraining side's ordering
           unsigned constrainingCellPermutation = constrainingCell->subcellPermutation(subcellConstraint.dimension, subcellOrdinalInConstrainingCell); // subcell permutation as seen from the perspective of the constraining cell's side
-          
+
           // ancestralPermutationInverse goes from ancestral view to canonical
           unsigned ancestralPermutationInverse = CamelliaCellTools::permutationInverse(constrainingTopo, ancestralCellPermutation);
           unsigned ancestralToConstrainedPermutation = CamelliaCellTools::permutationComposition(constrainingTopo, ancestralPermutationInverse, constrainingCellPermutation);
 
-          
+
           // 5-21-15: second-to-last argument of the following call was ancestralSideOrdinal.  AFAIK it won't make a difference on the present implementation--since
           //          I believe the ancestor is generally the constraining cell, but I'm pretty sure the conceptually correct thing here is not ancestralSideOrdinal
           //          but subcellConstraint.sideOrdinal.  So I have replaced this just now.
           SubBasisReconciliationWeights newWeightsToApply = BasisReconciliation::computeConstrainedWeights(d, appliedConstraintBasis, subcellInfo.subcellOrdinal,
-                                                                                                           volumeRefinements, subcellInfo.sideOrdinal,
-                                                                                                           ancestralCell->topology(), subcellConstraint.dimension,
-                                                                                                           constrainingBasis, subcellConstraint.subcellOrdinal,
-                                                                                                           subcellConstraint.sideOrdinal, ancestralToConstrainedPermutation);
+              volumeRefinements, subcellInfo.sideOrdinal,
+              ancestralCell->topology(), subcellConstraint.dimension,
+              constrainingBasis, subcellConstraint.subcellOrdinal,
+              subcellConstraint.sideOrdinal, ancestralToConstrainedPermutation);
 
-          
-          
+
+
           composedWeights = BasisReconciliation::composedSubBasisReconciliationWeights(prevWeights, newWeightsToApply);
 
 // DEBUGGING
-          if ((cellID==DEBUG_CELL_ID) && (sideOrdinal==DEBUG_SIDE_ORDINAL) && (var->ID()==DEBUG_VAR_ID)) {
+          if ((cellID==DEBUG_CELL_ID) && (sideOrdinal==DEBUG_SIDE_ORDINAL) && (var->ID()==DEBUG_VAR_ID))
+          {
             cout << "subcellInfo:\n" << subcellInfo << endl;
             cout << "subcellConstraint:\n" << subcellConstraint << endl;
-            
+
             cout << "ancestralToConstrainedPermutation: " << ancestralToConstrainedPermutation << endl;
-            
+
             cout << "prevWeights:\n";
             Camellia::print("prevWeights fine ordinals", prevWeights.fineOrdinals);
             Camellia::print("prevWeights coarse ordinals", prevWeights.coarseOrdinals);
@@ -1252,7 +1392,9 @@ BasisMap GDAMinimumRule::getBasisMapOld(GlobalIndexType cellID, SubCellDofIndexI
             cout << "composedWeights weights:\n" << composedWeights.weights;
           }
 
-        } else {
+        }
+        else
+        {
           RefinementBranch sideRefinements = RefinementPattern::subcellRefinementBranch(volumeRefinements, sideDim, ancestralSideOrdinal);
 
           IndexType constrainingEntityIndex = constrainingCell->entityIndex(subcellConstraint.dimension, subcellOrdinalInConstrainingCell);
@@ -1269,28 +1411,29 @@ BasisMap GDAMinimumRule::getBasisMapOld(GlobalIndexType cellID, SubCellDofIndexI
           // 5-14-15: I think this permutation goes the wrong way
 //          unsigned constrainingPermutationInverse = CamelliaCellTools::permutationInverse(constrainingTopo, constrainingPermutation);
 //          unsigned composedPermutation = CamelliaCellTools::permutationComposition(constrainingTopo, constrainingPermutationInverse, ancestralPermutation);
-          
+
           // 5-14-15: trying this instead:
           // from ancestral to canonical:
           unsigned ancestralPermutationInverse = CamelliaCellTools::permutationInverse(constrainingTopo, ancestralPermutation);
           unsigned ancestralToConstrainingPermutation = CamelliaCellTools::permutationComposition(constrainingTopo, ancestralPermutationInverse, constrainingPermutation);
 
           SubBasisReconciliationWeights newWeightsToApply = _br.constrainedWeights(d, appliedConstraintBasis,
-                                                                                   subcellInfo.subcellOrdinal,
-                                                                                   sideRefinements, constrainingBasis,
-                                                                                   subcellConstraint.subcellOrdinal,
-                                                                                   ancestralToConstrainingPermutation);
+              subcellInfo.subcellOrdinal,
+              sideRefinements, constrainingBasis,
+              subcellConstraint.subcellOrdinal,
+              ancestralToConstrainingPermutation);
 
           // compose the new weights with existing weights for this subcell
           composedWeights = BasisReconciliation::composedSubBasisReconciliationWeights(prevWeights, newWeightsToApply);
 
           // DEBUGGING
-          if ((cellID==DEBUG_CELL_ID) && (sideOrdinal==DEBUG_SIDE_ORDINAL) && (var->ID()==DEBUG_VAR_ID)) {
+          if ((cellID==DEBUG_CELL_ID) && (sideOrdinal==DEBUG_SIDE_ORDINAL) && (var->ID()==DEBUG_VAR_ID))
+          {
             cout << "subcellInfo:\n" << subcellInfo << endl;
             cout << "subcellConstraint:\n" << subcellConstraint << endl;
-            
+
             cout << "ancestralToConstrainingPermutation: " << ancestralToConstrainingPermutation << endl;
-            
+
             cout << "prevWeights:\n";
             Camellia::print("prevWeights fine ordinals", prevWeights.fineOrdinals);
             Camellia::print("prevWeights coarse ordinals", prevWeights.coarseOrdinals);
@@ -1309,11 +1452,13 @@ BasisMap GDAMinimumRule::getBasisMapOld(GlobalIndexType cellID, SubCellDofIndexI
         }
 
         // populate the containers for the (d-1)-dimensional constituents of the constraining subcell
-        if (subcellConstraint.dimension >= minimumConstraintDimension + 1) {
+        if (subcellConstraint.dimension >= minimumConstraintDimension + 1)
+        {
           int d1 = subcellConstraint.dimension-1;
           unsigned sscCount = constrainingTopo->getSubcellCount(d1);
           CellTopoPtr constrainingCellTopo = constrainingCell->topology();
-          for (unsigned ssubcord=0; ssubcord<sscCount; ssubcord++) {
+          for (unsigned ssubcord=0; ssubcord<sscCount; ssubcord++)
+          {
             unsigned ssubcordInCell = CamelliaCellTools::subcellOrdinalMap(constrainingCellTopo, subcellConstraint.dimension, subcellOrdinalInConstrainingCell, d1, ssubcord);
             IndexType ssEntityIndex = constrainingCell->entityIndex(d1, ssubcordInCell);
             // DEBUGGING:
@@ -1328,23 +1473,25 @@ BasisMap GDAMinimumRule::getBasisMapOld(GlobalIndexType cellID, SubCellDofIndexI
 
             CellPtr constrainingCell = _meshTopology->getCell(subcellConstraint.cellID);
             subsubcellConstraint.subcellOrdinal = CamelliaCellTools::subcellReverseOrdinalMap(constrainingCellTopo, sideDim, subsubcellConstraint.sideOrdinal,
-                                                                                              d1, ssubcordInCell);
+                                                  d1, ssubcordInCell);
 
             //          if ((cellID==21) && (sideOrdinal==2) && (d1==0) && (subcellConstraint.cellID==6) && ((ssubcordInCell==3) || (ssubcordInCell==0))) {
             //            cout << "About to compute composed weights for sub subcell.\n";
             //          }
 
             SubBasisReconciliationWeights composedWeightsForSubSubcell = BasisReconciliation::weightsForCoarseSubcell(composedWeights, constrainingBasis, d1,
-                                                                                                                      subsubcellConstraint.subcellOrdinal, true);
+                subsubcellConstraint.subcellOrdinal, true);
             // DEBUGGING
-            if ((cellID==DEBUG_CELL_ID) && (sideOrdinal==DEBUG_SIDE_ORDINAL) && (var->ID()==DEBUG_VAR_ID)) {
+            if ((cellID==DEBUG_CELL_ID) && (sideOrdinal==DEBUG_SIDE_ORDINAL) && (var->ID()==DEBUG_VAR_ID))
+            {
               cout << "subsubcellConstraint: " << subsubcellConstraint << endl;
               Camellia::print("composedWeightsForSubSubcell.coarseOrdinals", composedWeightsForSubSubcell.coarseOrdinals);
               Camellia::print("composedWeightsForSubSubcell.fineOrdinals", composedWeightsForSubSubcell.fineOrdinals);
               cout << "composed weights for subSubSubcell:\n" << composedWeightsForSubSubcell.weights;
             }
 
-            if (composedWeightsForSubSubcell.weights.size() > 0) {
+            if (composedWeightsForSubSubcell.weights.size() > 0)
+            {
               appliedWeights[d1][ssEntityIndex].push_back(make_pair(subsubcellConstraint, composedWeightsForSubSubcell));
             }
           }
@@ -1353,9 +1500,10 @@ BasisMap GDAMinimumRule::getBasisMapOld(GlobalIndexType cellID, SubCellDofIndexI
         // add sub-basis map for dofs interior to the constraining subcell
         // filter the weights whose coarse dofs are interior to this subcell, and create a SubBasisDofMapper for these (add it to varSideMap)
         SubBasisReconciliationWeights subcellInteriorWeights = BasisReconciliation::weightsForCoarseSubcell(composedWeights, constrainingBasis, subcellConstraint.dimension,
-                                                                                                            subcellConstraint.subcellOrdinal, false);
+            subcellConstraint.subcellOrdinal, false);
 
-        if ((subcellInteriorWeights.coarseOrdinals.size() > 0) && (subcellInteriorWeights.fineOrdinals.size() > 0)) {
+        if ((subcellInteriorWeights.coarseOrdinals.size() > 0) && (subcellInteriorWeights.fineOrdinals.size() > 0))
+        {
           CellConstraints constrainingCellConstraints = getCellConstraints(subcellConstraint.cellID);
           OwnershipInfo ownershipInfo = constrainingCellConstraints.owningCellIDForSubcell[subcellConstraint.dimension][subcellOrdinalInConstrainingCell];
           CellConstraints owningCellConstraints = getCellConstraints(ownershipInfo.cellID);
@@ -1367,22 +1515,27 @@ BasisMap GDAMinimumRule::getBasisMapOld(GlobalIndexType cellID, SubCellDofIndexI
           set<int> constrainingBasisOrdinalsForSubcell = constrainingBasis->dofOrdinalsForSubcell(subcellConstraint.dimension, subcellConstraint.subcellOrdinal);
           vector<int> basisOrdinalsVector(constrainingBasisOrdinalsForSubcell.begin(),constrainingBasisOrdinalsForSubcell.end());
           vector<GlobalIndexType> globalDofOrdinals;
-          for (int i=0; i<basisOrdinalsVector.size(); i++) {
-            if (subcellInteriorWeights.coarseOrdinals.find(basisOrdinalsVector[i]) != subcellInteriorWeights.coarseOrdinals.end()) {
+          for (int i=0; i<basisOrdinalsVector.size(); i++)
+          {
+            if (subcellInteriorWeights.coarseOrdinals.find(basisOrdinalsVector[i]) != subcellInteriorWeights.coarseOrdinals.end())
+            {
               globalDofOrdinals.push_back(globalDofOrdinalsForSubcell[i]);
               // DEBUGGING:
-              if ((globalDofOrdinalsForSubcell[i]==DEBUG_GLOBAL_DOF) && (cellID==DEBUG_CELL_ID) && (sideOrdinal==DEBUG_SIDE_ORDINAL)) {
+              if ((globalDofOrdinalsForSubcell[i]==DEBUG_GLOBAL_DOF) && (cellID==DEBUG_CELL_ID) && (sideOrdinal==DEBUG_SIDE_ORDINAL))
+              {
                 cout << "globalDofOrdinalsForSubcell includes global dof ordinal " << DEBUG_GLOBAL_DOF << ".\n";
                 auto fineOrdinalIt = subcellInteriorWeights.fineOrdinals.begin();
                 for (int fineWeightOrdinal=0; fineWeightOrdinal<subcellInteriorWeights.fineOrdinals.size(); fineWeightOrdinal++,
-                     fineOrdinalIt++) {
+                     fineOrdinalIt++)
+                {
                   cout << "fine ordinal " << *fineOrdinalIt << " weight for global dof " << DEBUG_GLOBAL_DOF << ": " << subcellInteriorWeights.weights(fineWeightOrdinal,i) << endl;
                 }
               }
             }
           }
 
-          if (subcellInteriorWeights.coarseOrdinals.size() != globalDofOrdinals.size()) {
+          if (subcellInteriorWeights.coarseOrdinals.size() != globalDofOrdinals.size())
+          {
             cout << "Error: coarseOrdinals container isn't the same size as the globalDofOrdinals that it's supposed to correspond to.\n";
             Camellia::print("coarseOrdinals", subcellInteriorWeights.coarseOrdinals);
             Camellia::print("globalDofOrdinals", globalDofOrdinals);
@@ -1392,8 +1545,9 @@ BasisMap GDAMinimumRule::getBasisMapOld(GlobalIndexType cellID, SubCellDofIndexI
           set<unsigned> basisDofOrdinals;
           basisDofOrdinals.insert(subcellInteriorWeights.fineOrdinals.begin(), subcellInteriorWeights.fineOrdinals.end()); // TODO: change fineOrdinals to be a set<unsigned>
 
-         // DEBUGGING:
-          if ((cellID==DEBUG_CELL_ID) && (sideOrdinal==DEBUG_SIDE_ORDINAL) && (var->ID()==DEBUG_VAR_ID)) {
+          // DEBUGGING:
+          if ((cellID==DEBUG_CELL_ID) && (sideOrdinal==DEBUG_SIDE_ORDINAL) && (var->ID()==DEBUG_VAR_ID))
+          {
             set<unsigned> globalDofOrdinalsSet(globalDofOrdinals.begin(),globalDofOrdinals.end());
             IndexType constrainingSubcellEntityIndex = constrainingCell->entityIndex(subcellConstraint.dimension, subcellOrdinalInConstrainingCell);
 
@@ -1440,23 +1594,29 @@ BasisMap GDAMinimumRule::getBasisMapOld(GlobalIndexType cellID, SubCellDofIndexI
 
   map< unsigned, set<GlobalIndexType> > globalOrdinalsForFineOrdinal;
 
-  for (vector<SubBasisMapInfo>::iterator subBasisIt = subBasisMaps.begin(); subBasisIt != subBasisMaps.end(); subBasisIt++) {
+  for (vector<SubBasisMapInfo>::iterator subBasisIt = subBasisMaps.begin(); subBasisIt != subBasisMaps.end(); subBasisIt++)
+  {
     subBasisMap = *subBasisIt;
     vector<GlobalIndexType> globalDofOrdinals = subBasisMap.globalDofOrdinals;
     set<unsigned> basisDofOrdinals = subBasisMap.basisDofOrdinals;
     vector<unsigned> basisDofOrdinalsVector(basisDofOrdinals.begin(),basisDofOrdinals.end());
     // weights are fine x coarse
-    for (int j=0; j<subBasisMap.weights.dimension(1); j++) {
+    for (int j=0; j<subBasisMap.weights.dimension(1); j++)
+    {
       GlobalIndexType globalDofOrdinal = globalDofOrdinals[j];
       map<unsigned, double> fineOrdinalCoefficientsThusFar = weightsForGlobalOrdinal[globalDofOrdinal];
-      for (int i=0; i<subBasisMap.weights.dimension(0); i++) {
+      for (int i=0; i<subBasisMap.weights.dimension(0); i++)
+      {
         unsigned fineOrdinal = basisDofOrdinalsVector[i];
         double coefficient = subBasisMap.weights(i,j);
-        if (coefficient != 0) {
-          if (fineOrdinalCoefficientsThusFar.find(fineOrdinal) != fineOrdinalCoefficientsThusFar.end()) {
+        if (coefficient != 0)
+        {
+          if (fineOrdinalCoefficientsThusFar.find(fineOrdinal) != fineOrdinalCoefficientsThusFar.end())
+          {
             double tol = 1e-14;
             double previousCoefficient = fineOrdinalCoefficientsThusFar[fineOrdinal];
-            if (abs(previousCoefficient-coefficient) > tol) {
+            if (abs(previousCoefficient-coefficient) > tol)
+            {
               cout  << "ERROR: incompatible entries for fine ordinal " << fineOrdinal << " in representation of global ordinal " << globalDofOrdinal << endl;
               cout << "previousCoefficient = " << previousCoefficient << endl;
               cout << "coefficient = " << coefficient << endl;
@@ -1478,7 +1638,8 @@ BasisMap GDAMinimumRule::getBasisMapOld(GlobalIndexType cellID, SubCellDofIndexI
   vector< set<unsigned> > fineOrdinalsForPartition;
 
   for (map< GlobalIndexType, map<unsigned, double> >::iterator globalWeightsIt = weightsForGlobalOrdinal.begin();
-       globalWeightsIt != weightsForGlobalOrdinal.end(); globalWeightsIt++) {
+       globalWeightsIt != weightsForGlobalOrdinal.end(); globalWeightsIt++)
+  {
     GlobalIndexType globalOrdinal = globalWeightsIt->first;
     if (partitionedGlobalDofOrdinals.find(globalOrdinal) != partitionedGlobalDofOrdinals.end()) continue;
 
@@ -1490,7 +1651,8 @@ BasisMap GDAMinimumRule::getBasisMapOld(GlobalIndexType cellID, SubCellDofIndexI
     set<GlobalIndexType> globalOrdinalsInPartitionWhoseFineOrdinalsHaveBeenProcessed;
 
     map<unsigned, double> fineCoefficients = globalWeightsIt->second;
-    for (map<unsigned, double>::iterator coefficientIt = fineCoefficients.begin(); coefficientIt != fineCoefficients.end(); coefficientIt++) {
+    for (map<unsigned, double>::iterator coefficientIt = fineCoefficients.begin(); coefficientIt != fineCoefficients.end(); coefficientIt++)
+    {
       unsigned fineOrdinal = coefficientIt->first;
       fineOrdinals.insert(fineOrdinal);
       set<GlobalIndexType> globalOrdinalsForFine = globalOrdinalsForFineOrdinal[fineOrdinal];
@@ -1499,13 +1661,16 @@ BasisMap GDAMinimumRule::getBasisMapOld(GlobalIndexType cellID, SubCellDofIndexI
 
     globalOrdinalsInPartitionWhoseFineOrdinalsHaveBeenProcessed.insert(globalOrdinal);
 
-    while (globalOrdinalsInPartitionWhoseFineOrdinalsHaveBeenProcessed.size() != partition.size()) {
-      for (set<GlobalIndexType>::iterator globalOrdIt = partition.begin(); globalOrdIt != partition.end(); globalOrdIt++) {
+    while (globalOrdinalsInPartitionWhoseFineOrdinalsHaveBeenProcessed.size() != partition.size())
+    {
+      for (set<GlobalIndexType>::iterator globalOrdIt = partition.begin(); globalOrdIt != partition.end(); globalOrdIt++)
+      {
         GlobalIndexType globalOrdinal = *globalOrdIt;
         if (globalOrdinalsInPartitionWhoseFineOrdinalsHaveBeenProcessed.find(globalOrdinal) !=
             globalOrdinalsInPartitionWhoseFineOrdinalsHaveBeenProcessed.end()) continue;
         map<unsigned, double> fineCoefficients = weightsForGlobalOrdinal[globalOrdinal];
-        for (map<unsigned, double>::iterator coefficientIt = fineCoefficients.begin(); coefficientIt != fineCoefficients.end(); coefficientIt++) {
+        for (map<unsigned, double>::iterator coefficientIt = fineCoefficients.begin(); coefficientIt != fineCoefficients.end(); coefficientIt++)
+        {
           unsigned fineOrdinal = coefficientIt->first;
           fineOrdinals.insert(fineOrdinal);
           set<GlobalIndexType> globalOrdinalsForFine = globalOrdinalsForFineOrdinal[fineOrdinal];
@@ -1516,7 +1681,8 @@ BasisMap GDAMinimumRule::getBasisMapOld(GlobalIndexType cellID, SubCellDofIndexI
       }
     }
 
-    for (set<GlobalIndexType>::iterator globalOrdIt = partition.begin(); globalOrdIt != partition.end(); globalOrdIt++) {
+    for (set<GlobalIndexType>::iterator globalOrdIt = partition.begin(); globalOrdIt != partition.end(); globalOrdIt++)
+    {
       GlobalIndexType globalOrdinal = *globalOrdIt;
       partitionedGlobalDofOrdinals.insert(globalOrdinal);
     }
@@ -1525,20 +1691,24 @@ BasisMap GDAMinimumRule::getBasisMapOld(GlobalIndexType cellID, SubCellDofIndexI
   }
 
   BasisMap varSideMap;
-  for (int i=0; i<globalDofOrdinalPartitions.size(); i++) {
+  for (int i=0; i<globalDofOrdinalPartitions.size(); i++)
+  {
     set<GlobalIndexType> partition = globalDofOrdinalPartitions[i];
     set<unsigned> fineOrdinals = fineOrdinalsForPartition[i];
     vector<unsigned> fineOrdinalsVector(fineOrdinals.begin(), fineOrdinals.end());
     map<unsigned,int> fineOrdinalRowLookup;
-    for (int i=0; i<fineOrdinalsVector.size(); i++) {
+    for (int i=0; i<fineOrdinalsVector.size(); i++)
+    {
       fineOrdinalRowLookup[fineOrdinalsVector[i]] = i;
     }
     Intrepid::FieldContainer<double> weights(fineOrdinals.size(),partition.size());
     int col=0;
-    for (set<GlobalIndexType>::iterator globalDofIt=partition.begin(); globalDofIt != partition.end(); globalDofIt++) {
+    for (set<GlobalIndexType>::iterator globalDofIt=partition.begin(); globalDofIt != partition.end(); globalDofIt++)
+    {
       GlobalIndexType globalOrdinal = *globalDofIt;
       map<unsigned, double> fineCoefficients = weightsForGlobalOrdinal[globalOrdinal];
-      for (map<unsigned, double>::iterator coefficientIt = fineCoefficients.begin(); coefficientIt != fineCoefficients.end(); coefficientIt++) {
+      for (map<unsigned, double>::iterator coefficientIt = fineCoefficients.begin(); coefficientIt != fineCoefficients.end(); coefficientIt++)
+      {
         unsigned fineOrdinal = coefficientIt->first;
         double coefficient = coefficientIt->second;
         int row = fineOrdinalRowLookup[fineOrdinal];
@@ -1562,9 +1732,11 @@ BasisMap GDAMinimumRule::getBasisMapOld(GlobalIndexType cellID, SubCellDofIndexI
   return varSideMap;
 }
 
-CellConstraints GDAMinimumRule::getCellConstraints(GlobalIndexType cellID) {
+CellConstraints GDAMinimumRule::getCellConstraints(GlobalIndexType cellID)
+{
 
-  if (_constraintsCache.find(cellID) == _constraintsCache.end()) {
+  if (_constraintsCache.find(cellID) == _constraintsCache.end())
+  {
 
 //    cout << "Getting cell constraints for cellID " << cellID << endl;
 
@@ -1582,16 +1754,20 @@ CellConstraints GDAMinimumRule::getCellConstraints(GlobalIndexType cellID) {
     AnnotatedEntity emptyConstraintInfo;
     emptyConstraintInfo.cellID = -1;
 
-    for (int d=0; d<=spaceDim; d++) {
+    for (int d=0; d<=spaceDim; d++)
+    {
       int scCount = topo->getSubcellCount(d);
       processedSubcells[d] = vector<bool>(scCount, false);
       constrainingSubcellInfo[d] = vector< AnnotatedEntity >(scCount, emptyConstraintInfo);
     }
 
-    for (int d=sideDim; d >= 0; d--) {
+    for (int d=sideDim; d >= 0; d--)
+    {
       int scCount = topo->getSubcellCount(d);
-      for (int subcord=0; subcord < scCount; subcord++) { // subcell ordinals in cell
-        if (! processedSubcells[d][subcord]) { // i.e. we don't yet know the constraining entity for this subcell
+      for (int subcord=0; subcord < scCount; subcord++)   // subcell ordinals in cell
+      {
+        if (! processedSubcells[d][subcord])   // i.e. we don't yet know the constraining entity for this subcell
+        {
 
           IndexType entityIndex = cell->entityIndex(d, subcord);
 
@@ -1612,16 +1788,21 @@ CellConstraints GDAMinimumRule::getCellConstraints(GlobalIndexType cellID) {
           // appropriate order along the *interface* in question)
           int leastH1Order = INT_MAX;
           set< CellPair > cellsWithLeastH1Order;
-          for (set< CellPair >::iterator cellForSubcellIt = cellsForSubcell.begin(); cellForSubcellIt != cellsForSubcell.end(); cellForSubcellIt++) {
+          for (set< CellPair >::iterator cellForSubcellIt = cellsForSubcell.begin(); cellForSubcellIt != cellsForSubcell.end(); cellForSubcellIt++)
+          {
             IndexType subcellCellID = cellForSubcellIt->first;
-            if (_cellH1Orders[subcellCellID][0] == leastH1Order) {
+            if (_cellH1Orders[subcellCellID][0] == leastH1Order)
+            {
               cellsWithLeastH1Order.insert(*cellForSubcellIt);
-            } else if (_cellH1Orders[subcellCellID][0] < leastH1Order) {
+            }
+            else if (_cellH1Orders[subcellCellID][0] < leastH1Order)
+            {
               cellsWithLeastH1Order.clear();
               leastH1Order = _cellH1Orders[subcellCellID][0];
               cellsWithLeastH1Order.insert(*cellForSubcellIt);
             }
-            if (cellsWithLeastH1Order.size() == 0) {
+            if (cellsWithLeastH1Order.size() == 0)
+            {
               cout << "ERROR: No cells found for constraining subside entity.\n";
               TEUCHOS_TEST_FOR_EXCEPTION(true, std::invalid_argument, "No cells found for constraining subside entity.");
             }
@@ -1640,13 +1821,16 @@ CellConstraints GDAMinimumRule::getCellConstraints(GlobalIndexType cellID) {
           constrainingSubcellInfo[d][subcord].subcellOrdinal = subcellOrdinalInConstrainingSide;
           constrainingSubcellInfo[d][subcord].dimension = constrainingEntityDimension;
 
-          if (constrainingEntityDimension < d) {
+          if (constrainingEntityDimension < d)
+          {
             cout << "Internal error: constrainingEntityDimension < entity dimension.  This should not happen!\n";
             TEUCHOS_TEST_FOR_EXCEPTION(true, std::invalid_argument, "constrainingEntityDimension < entity dimension.  This should not happen!");
           }
 
-          if ((d==0) && (constrainingEntityDimension==0)) {
-            if (constrainingEntityIndex != entityIndex) {
+          if ((d==0) && (constrainingEntityDimension==0))
+          {
+            if (constrainingEntityIndex != entityIndex)
+            {
               cout << "Internal error: one vertex constrained by another.  This should not happen!\n";
               TEUCHOS_TEST_FOR_EXCEPTION(true, std::invalid_argument, "one vertex constrained by another.  Shouldn't happen!");
             }
@@ -1672,20 +1856,25 @@ CellConstraints GDAMinimumRule::getCellConstraints(GlobalIndexType cellID) {
 
     // determine subcell ownership from the perspective of the cell
     cellConstraints.owningCellIDForSubcell = vector< vector< OwnershipInfo > >(spaceDim+1);
-    for (int d=0; d<spaceDim; d++) {
+    for (int d=0; d<spaceDim; d++)
+    {
       vector<IndexType> scIndices = cell->getEntityIndices(d);
       unsigned scCount = scIndices.size();
       cellConstraints.owningCellIDForSubcell[d] = vector< OwnershipInfo >(scCount);
-      for (int scOrdinal = 0; scOrdinal < scCount; scOrdinal++) {
+      for (int scOrdinal = 0; scOrdinal < scCount; scOrdinal++)
+      {
         IndexType entityIndex = scIndices[scOrdinal];
         unsigned constrainingDimension = constrainingSubcellInfo[d][scOrdinal].dimension;
         IndexType constrainingEntityIndex;
-        if (d==constrainingDimension) {
+        if (d==constrainingDimension)
+        {
           constrainingEntityIndex = _meshTopology->getConstrainingEntity(d, entityIndex).first;
-        } else {
+        }
+        else
+        {
           CellPtr constrainingCell = _meshTopology->getCell(constrainingSubcellInfo[d][scOrdinal].cellID);
           unsigned constrainingSubcellOrdinalInCell = CamelliaCellTools::subcellOrdinalMap(constrainingCell->topology(), sideDim, constrainingSubcellInfo[d][scOrdinal].sideOrdinal,
-                                                                                           constrainingDimension, constrainingSubcellInfo[d][scOrdinal].subcellOrdinal);
+              constrainingDimension, constrainingSubcellInfo[d][scOrdinal].subcellOrdinal);
           constrainingEntityIndex = constrainingCell->entityIndex(constrainingDimension, constrainingSubcellOrdinalInCell);
         }
         pair<GlobalIndexType,GlobalIndexType> owningCellInfo = _meshTopology->owningCellIndexForConstrainingEntity(constrainingDimension, constrainingEntityIndex);
@@ -1715,21 +1904,21 @@ unsigned GDAMinimumRule::getConstraintPermutation(GlobalIndexType cellID, unsign
 {
   CellPtr cell = _meshTopology->getCell(cellID);
   CellPtr ancestralCell = cell->ancestralCellForSubcell(subcdim, subcord);
-  
+
   pair<unsigned, unsigned> ancestralSubcell = cell->ancestralSubcellOrdinalAndDimension(subcdim, subcord);
-  
+
   unsigned ancestralSubcellOrdinal = ancestralSubcell.first;
   unsigned ancestralSubcellDimension = ancestralSubcell.second;
   unsigned ancestralPermutation = ancestralCell->subcellPermutation(ancestralSubcellDimension, ancestralSubcellOrdinal);
-  
+
   CellConstraints cellConstraints = getCellConstraints(cellID);
   GlobalIndexType constrainingCellID = cellConstraints.subcellConstraints[subcdim][subcord].cellID;
   GlobalIndexType constrainingSubcellOrdinal = cellConstraints.subcellConstraints[subcdim][subcord].subcellOrdinal;
   GlobalIndexType constrainingSubcellDimension = cellConstraints.subcellConstraints[subcdim][subcord].dimension;
-  
+
   CellPtr constrainingCell = _meshTopology->getCell(constrainingCellID);
   unsigned constrainingCellPermutation = constrainingCell->subcellPermutation(constrainingSubcellOrdinal, constrainingSubcellDimension);
-  
+
   // ancestral and constrainingCell permutations are from canonical.  We want to go from ancestor to constraining:
   CellTopoPtr ancestralSubcellTopo = ancestralCell->topology()->getSubcell(ancestralSubcellDimension, ancestralSubcellOrdinal);
   unsigned ancestralPermutationInverse = CamelliaCellTools::permutationInverse(ancestralSubcellTopo, ancestralPermutation);
@@ -1748,7 +1937,8 @@ typedef map<int, vector<GlobalIndexType> > VarIDToDofIndices; // key: varID
 typedef map<unsigned, VarIDToDofIndices> SubCellOrdinalToMap; // key: subcell ordinal
 typedef vector< SubCellOrdinalToMap > SubCellDofIndexInfo; // index to vector: subcell dimension
 
-set<GlobalIndexType> GDAMinimumRule::getFittableGlobalDofIndices(GlobalIndexType cellID, CellConstraints &constraints, int sideOrdinal) {
+set<GlobalIndexType> GDAMinimumRule::getFittableGlobalDofIndices(GlobalIndexType cellID, CellConstraints &constraints, int sideOrdinal)
+{
   // returns the global dof indices for basis functions which have support on the given side.  This is determined by taking the union of the global dof indices defined on all the constraining sides for the given side (the constraining sides are by definition unconstrained).
   SubCellDofIndexInfo dofIndexInfo = getGlobalDofIndices(cellID, constraints);
   CellPtr cell = _meshTopology->getCell(cellID);
@@ -1776,23 +1966,31 @@ set<GlobalIndexType> GDAMinimumRule::getFittableGlobalDofIndices(GlobalIndexType
   CellTopoPtr constrainingCellTopo = constrainingCell->topology();
   CellTopoPtr constrainingSideTopo = constrainingCellTopo->getSubcell(sideDim, constrainingCellSideOrdinal);
   set<unsigned> constrainingCellConstrainedNodes; // vertices in the constraining cell that belong to subcell entities that are constrained by other cells
-  for (int d=sideDim; d>=0; d--) {
+  for (int d=sideDim; d>=0; d--)
+  {
     int scCount = constrainingSideTopo->getSubcellCount(d);
-    for (int scOrdinal=0; scOrdinal<scCount; scOrdinal++) {
+    for (int scOrdinal=0; scOrdinal<scCount; scOrdinal++)
+    {
       int scordInConstrainingCell = CamelliaCellTools::subcellOrdinalMap(constrainingCellTopo, sideDim, constrainingCellSideOrdinal, d, scOrdinal);
       set<unsigned> scNodesInConstrainingCell;
       bool nodeNotKnownToBeConstrainedFound = false;
-      if (d==0) {
+      if (d==0)
+      {
         scNodesInConstrainingCell.insert(scordInConstrainingCell);
-        if (constrainingCellConstrainedNodes.find(scordInConstrainingCell) == constrainingCellConstrainedNodes.end()) {
+        if (constrainingCellConstrainedNodes.find(scordInConstrainingCell) == constrainingCellConstrainedNodes.end())
+        {
           nodeNotKnownToBeConstrainedFound = true;
         }
-      } else {
+      }
+      else
+      {
         int nodeCount = constrainingCellTopo->getNodeCount(d, scordInConstrainingCell);
-        for (int nodeOrdinal=0; nodeOrdinal<nodeCount; nodeOrdinal++) {
+        for (int nodeOrdinal=0; nodeOrdinal<nodeCount; nodeOrdinal++)
+        {
           unsigned nodeInConstrainingCell = constrainingCellTopo->getNodeMap(d, scordInConstrainingCell, nodeOrdinal);
           scNodesInConstrainingCell.insert(nodeInConstrainingCell);
-          if (constrainingCellConstrainedNodes.find(nodeInConstrainingCell) == constrainingCellConstrainedNodes.end()) {
+          if (constrainingCellConstrainedNodes.find(nodeInConstrainingCell) == constrainingCellConstrainedNodes.end())
+          {
             nodeNotKnownToBeConstrainedFound = true;
           }
         }
@@ -1802,13 +2000,17 @@ set<GlobalIndexType> GDAMinimumRule::getFittableGlobalDofIndices(GlobalIndexType
 
       IndexType subcellIndex = constrainingCell->entityIndex(d, scordInConstrainingCell);
       pair<IndexType,unsigned> constrainingSubcell = _meshTopology->getConstrainingEntity(d, subcellIndex);
-      if ((constrainingSubcell.second == d) && (constrainingSubcell.first == subcellIndex)) { // i.e. the subcell is not further constrained.
+      if ((constrainingSubcell.second == d) && (constrainingSubcell.first == subcellIndex))   // i.e. the subcell is not further constrained.
+      {
         map<int, vector<GlobalIndexType> > dofIndicesInConstrainingSide = constrainingCellDofIndexInfo[d][scordInConstrainingCell];
         for (map<int, vector<GlobalIndexType> >::iterator dofIndicesIt = dofIndicesInConstrainingSide.begin();
-             dofIndicesIt != dofIndicesInConstrainingSide.end(); dofIndicesIt++) {
+             dofIndicesIt != dofIndicesInConstrainingSide.end(); dofIndicesIt++)
+        {
           fittableDofIndices.insert(dofIndicesIt->second.begin(), dofIndicesIt->second.end());
         }
-      } else {
+      }
+      else
+      {
         constrainingCellConstrainedNodes.insert(scNodesInConstrainingCell.begin(),scNodesInConstrainingCell.end());
       }
     }
@@ -1816,10 +2018,12 @@ set<GlobalIndexType> GDAMinimumRule::getFittableGlobalDofIndices(GlobalIndexType
   return fittableDofIndices;
 }
 
-SubCellDofIndexInfo GDAMinimumRule::getOwnedGlobalDofIndices(GlobalIndexType cellID, CellConstraints &constraints) {
+SubCellDofIndexInfo GDAMinimumRule::getOwnedGlobalDofIndices(GlobalIndexType cellID, CellConstraints &constraints)
+{
   // there's a lot of redundancy between this method and the dof-counting bit of rebuild lookups.  May be worth factoring that out.
 
-  if (_ownedGlobalDofIndicesCache.find(cellID) != _ownedGlobalDofIndicesCache.end()) {
+  if (_ownedGlobalDofIndicesCache.find(cellID) != _ownedGlobalDofIndicesCache.end())
+  {
     return _ownedGlobalDofIndicesCache[cellID];
   }
 
@@ -1839,33 +2043,43 @@ SubCellDofIndexInfo GDAMinimumRule::getOwnedGlobalDofIndices(GlobalIndexType cel
 
   GlobalIndexType globalDofIndex = _globalCellDofOffsets[cellID]; // this cell's first globalDofIndex
 
-  for (map<int, VarPtr>::iterator varIt = trialVars.begin(); varIt != trialVars.end(); varIt++) {
+  for (map<int, VarPtr>::iterator varIt = trialVars.begin(); varIt != trialVars.end(); varIt++)
+  {
     map< pair<unsigned,IndexType>, pair<unsigned, unsigned> > entitiesClaimedForVariable; // maps from the constraining entity claimed to the (d, scord) entry that claimed it.
     VarPtr var = varIt->second;
     unsigned scordForBasis;
     bool varHasSupportOnVolume = (var->varType() == FIELD) || (var->varType() == TEST);
 //    cout << " var " << var->name() << ":\n";
 
-    for (int d=0; d<=spaceDim; d++) {
+    for (int d=0; d<=spaceDim; d++)
+    {
       int scCount = topo->getSubcellCount(d);
-      for (int scord=0; scord<scCount; scord++) {
+      for (int scord=0; scord<scCount; scord++)
+      {
         OwnershipInfo ownershipInfo = constraints.owningCellIDForSubcell[d][scord];
-        if (ownershipInfo.cellID == cellID) { // owned by this cell: count all the constraining dofs as entries for this cell
+        if (ownershipInfo.cellID == cellID)   // owned by this cell: count all the constraining dofs as entries for this cell
+        {
           GlobalIndexType constrainingCellID = constraints.subcellConstraints[d][scord].cellID;
           unsigned constrainingDimension = constraints.subcellConstraints[d][scord].dimension;
           DofOrderingPtr trialOrdering = _elementTypeForCell[constrainingCellID]->trialOrderPtr;
           BasisPtr basis; // the constraining basis for the subcell
-          if (varHasSupportOnVolume) {
-            if (d==spaceDim) {
+          if (varHasSupportOnVolume)
+          {
+            if (d==spaceDim)
+            {
               // then there is only one subcell ordinal (and there will be -1's in sideOrdinal and subcellOrdinalInSide....
               scordForBasis = 0;
-            } else {
+            }
+            else
+            {
               scordForBasis = CamelliaCellTools::subcellOrdinalMap(_meshTopology->getCell(constrainingCellID)->topology(), sideDim,
-                                                                   constraints.subcellConstraints[d][scord].sideOrdinal,
-                                                                   constrainingDimension, constraints.subcellConstraints[d][scord].subcellOrdinal);
+                              constraints.subcellConstraints[d][scord].sideOrdinal,
+                              constrainingDimension, constraints.subcellConstraints[d][scord].subcellOrdinal);
             }
             basis = trialOrdering->getBasis(var->ID());
-          } else {
+          }
+          else
+          {
             if (d==spaceDim) continue; // side bases don't have any support on the interior of the cell...
             if (! trialOrdering->hasBasisEntry(var->ID(), constraints.subcellConstraints[d][scord].sideOrdinal) ) continue;
             scordForBasis = constraints.subcellConstraints[d][scord].subcellOrdinal; // the basis sees the side, so that's the view to use for subcell ordinal
@@ -1875,12 +2089,15 @@ SubCellDofIndexInfo GDAMinimumRule::getOwnedGlobalDofIndices(GlobalIndexType cel
           if (minimumConstraintDimension > d) continue; // then we don't enforce (or own) anything for this subcell/basis combination
 
           pair<unsigned, IndexType> owningSubcellEntity = make_pair(ownershipInfo.dimension, ownershipInfo.owningSubcellEntityIndex);
-          if (entitiesClaimedForVariable.find(owningSubcellEntity) != entitiesClaimedForVariable.end()) {
+          if (entitiesClaimedForVariable.find(owningSubcellEntity) != entitiesClaimedForVariable.end())
+          {
             // already processed this guy on this cell: just copy
             pair<unsigned,unsigned> previousConstrainedSubcell = entitiesClaimedForVariable[owningSubcellEntity];
             scInfo[d][scord][var->ID()] = scInfo[previousConstrainedSubcell.first][previousConstrainedSubcell.second][var->ID()];
             continue;
-          } else {
+          }
+          else
+          {
             entitiesClaimedForVariable[owningSubcellEntity] = make_pair(d, scord);
           }
 
@@ -1889,12 +2106,14 @@ SubCellDofIndexInfo GDAMinimumRule::getOwnedGlobalDofIndices(GlobalIndexType cel
 
 //          cout << "   dim " << d << ", scord " << scord << ":";
 
-          for (int i=0; i<dofOrdinalCount; i++) {
+          for (int i=0; i<dofOrdinalCount; i++)
+          {
 //            cout << " " << globalDofIndex;
             globalDofIndices.push_back(globalDofIndex++);
           }
 //          cout << endl;
-          if (scInfo.size() < d+1) {
+          if (scInfo.size() < d+1)
+          {
             TEUCHOS_TEST_FOR_EXCEPTION(true, std::invalid_argument, "Internal error: scInfo vector not big enough");
           }
 //          if (scInfo[d].find(scord) == scInfo[d].end()) {
@@ -1912,19 +2131,23 @@ SubCellDofIndexInfo GDAMinimumRule::getOwnedGlobalDofIndices(GlobalIndexType cel
   return scInfo;
 }
 
-void printDofIndexInfo(GlobalIndexType cellID, SubCellDofIndexInfo &dofIndexInfo) {
+void printDofIndexInfo(GlobalIndexType cellID, SubCellDofIndexInfo &dofIndexInfo)
+{
   //typedef vector< SubCellOrdinalToMap > SubCellDofIndexInfo; // index to vector: subcell dimension
   cout << "Dof Index info for cell ID " << cellID << ":\n";
   ostringstream varIDstream;
-  for (int d=0; d<dofIndexInfo.size(); d++) {
+  for (int d=0; d<dofIndexInfo.size(); d++)
+  {
     //    typedef map<int, vector<GlobalIndexType> > VarIDToDofIndices; // key: varID
     //    typedef map<unsigned, VarIDToDofIndices> SubCellOrdinalToMap; // key: subcell ordinal
     cout << "****** dimension " << d << " *******\n";
     SubCellOrdinalToMap scordMap = dofIndexInfo[d];
-    for (SubCellOrdinalToMap::iterator scordMapIt = scordMap.begin(); scordMapIt != scordMap.end(); scordMapIt++) {
+    for (SubCellOrdinalToMap::iterator scordMapIt = scordMap.begin(); scordMapIt != scordMap.end(); scordMapIt++)
+    {
       cout << "  scord " << scordMapIt->first << ":\n";
       VarIDToDofIndices varMap = scordMapIt->second;
-      for (VarIDToDofIndices::iterator varIt = varMap.begin(); varIt != varMap.end(); varIt++) {
+      for (VarIDToDofIndices::iterator varIt = varMap.begin(); varIt != varMap.end(); varIt++)
+      {
         varIDstream.str("");
         varIDstream << "     var " << varIt->first << ", global dofs";
         if (varIt->second.size() > 0) Camellia::print(varIDstream.str(), varIt->second);
@@ -1933,7 +2156,8 @@ void printDofIndexInfo(GlobalIndexType cellID, SubCellDofIndexInfo &dofIndexInfo
   }
 }
 
-SubCellDofIndexInfo GDAMinimumRule::getGlobalDofIndices(GlobalIndexType cellID, CellConstraints &constraints) {
+SubCellDofIndexInfo GDAMinimumRule::getGlobalDofIndices(GlobalIndexType cellID, CellConstraints &constraints)
+{
   /**************** ESTABLISH OWNERSHIP ****************/
   SubCellDofIndexInfo dofIndexInfo = getOwnedGlobalDofIndices(cellID, constraints);
 
@@ -1944,17 +2168,21 @@ SubCellDofIndexInfo GDAMinimumRule::getGlobalDofIndices(GlobalIndexType cellID, 
 
   // fill in the other global dof indices (the ones not owned by this cell):
   map< GlobalIndexType, SubCellDofIndexInfo > otherDofIndexInfoCache; // local lookup, to avoid a bunch of redundant calls to getOwnedGlobalDofIndices
-  for (int d=0; d<=spaceDim; d++) {
+  for (int d=0; d<=spaceDim; d++)
+  {
     int scCount = topo->getSubcellCount(d);
-    for (int scord=0; scord<scCount; scord++) {
-      if (dofIndexInfo[d].find(scord) == dofIndexInfo[d].end()) { // this one not yet filled in
+    for (int scord=0; scord<scCount; scord++)
+    {
+      if (dofIndexInfo[d].find(scord) == dofIndexInfo[d].end())   // this one not yet filled in
+      {
         OwnershipInfo owningCellInfo = constraints.owningCellIDForSubcell[d][scord];
         GlobalIndexType owningCellID = owningCellInfo.cellID;
         CellConstraints owningConstraints = getCellConstraints(owningCellID);
         GlobalIndexType scEntityIndex = owningCellInfo.owningSubcellEntityIndex;
         CellPtr owningCell = _meshTopology->getCell(owningCellID);
         unsigned owningCellScord = owningCell->findSubcellOrdinal(owningCellInfo.dimension, scEntityIndex);
-        if (otherDofIndexInfoCache.find(owningCellID) == otherDofIndexInfoCache.end()) {
+        if (otherDofIndexInfoCache.find(owningCellID) == otherDofIndexInfoCache.end())
+        {
           otherDofIndexInfoCache[owningCellID] = getOwnedGlobalDofIndices(owningCellID, owningConstraints);
         }
         SubCellDofIndexInfo owningDofIndexInfo = otherDofIndexInfoCache[owningCellID];
@@ -1969,13 +2197,15 @@ SubCellDofIndexInfo GDAMinimumRule::getGlobalDofIndices(GlobalIndexType cellID, 
   return dofIndexInfo;
 }
 
-set<GlobalIndexType> GDAMinimumRule::getGlobalDofIndicesForIntegralContribution(GlobalIndexType cellID, int sideOrdinal) { // assuming an integral is being done over the whole mesh skeleton, returns either an empty set or the global dof indices associated with the given side, depending on whether the cell "owns" the side for the purpose of such contributions.
+set<GlobalIndexType> GDAMinimumRule::getGlobalDofIndicesForIntegralContribution(GlobalIndexType cellID, int sideOrdinal)   // assuming an integral is being done over the whole mesh skeleton, returns either an empty set or the global dof indices associated with the given side, depending on whether the cell "owns" the side for the purpose of such contributions.
+{
   set<GlobalIndexType> indices;
 
   CellPtr cell = _meshTopology->getCell(cellID);
   bool ownsSide = cell->ownsSide(sideOrdinal);
 
-  if (ownsSide) {
+  if (ownsSide)
+  {
     CellConstraints cellConstraints = getCellConstraints(cellID);
     SubCellDofIndexInfo dofIndexInfo = getGlobalDofIndices(cellID, cellConstraints);
     int spaceDim =  _meshTopology->getSpaceDim();
@@ -1983,14 +2213,17 @@ set<GlobalIndexType> GDAMinimumRule::getGlobalDofIndicesForIntegralContribution(
     CellTopoPtr cellTopo = cell->topology();
     CellTopoPtr sideTopo = cellTopo->getSubcell(spaceDim-1, sideOrdinal);
 
-    for (int d=0; d<spaceDim; d++) {
+    for (int d=0; d<spaceDim; d++)
+    {
       int scCount = sideTopo->getSubcellCount(d);
-      for (int scordSide=0; scordSide<scCount; scordSide++) {
+      for (int scordSide=0; scordSide<scCount; scordSide++)
+      {
         int scordCell = CamelliaCellTools::subcellOrdinalMap(cellTopo, spaceDim-1, sideOrdinal, d, scordSide);
         map<int, vector<GlobalIndexType> > dofIndices = dofIndexInfo[d][scordCell];
 
 
-        for (map<int, vector<GlobalIndexType> >::iterator dofIndicesIt = dofIndices.begin(); dofIndicesIt != dofIndices.end(); dofIndicesIt++) {
+        for (map<int, vector<GlobalIndexType> >::iterator dofIndicesIt = dofIndices.begin(); dofIndicesIt != dofIndices.end(); dofIndicesIt++)
+        {
           indices.insert(dofIndicesIt->second.begin(), dofIndicesIt->second.end());
         }
       }
@@ -2000,19 +2233,27 @@ set<GlobalIndexType> GDAMinimumRule::getGlobalDofIndicesForIntegralContribution(
   return indices;
 }
 
-LocalDofMapperPtr GDAMinimumRule::getDofMapper(GlobalIndexType cellID, CellConstraints &constraints, int varIDToMap, int sideOrdinalToMap) {
-  if ((varIDToMap == -1) && (sideOrdinalToMap == -1)) {
+LocalDofMapperPtr GDAMinimumRule::getDofMapper(GlobalIndexType cellID, CellConstraints &constraints, int varIDToMap, int sideOrdinalToMap)
+{
+  if ((varIDToMap == -1) && (sideOrdinalToMap == -1))
+  {
     // a mapper for the whole dof ordering: we cache these separately...
-    if (_dofMapperCache.find(cellID) != _dofMapperCache.end()) {
+    if (_dofMapperCache.find(cellID) != _dofMapperCache.end())
+    {
       return _dofMapperCache[cellID];
     }
-  } else {
+  }
+  else
+  {
     map< GlobalIndexType, map<int, map<int, LocalDofMapperPtr> > >::iterator cellMapEntry = _dofMapperForVariableOnSideCache.find(cellID);
-    if (cellMapEntry != _dofMapperForVariableOnSideCache.end()) {
+    if (cellMapEntry != _dofMapperForVariableOnSideCache.end())
+    {
       map<int, map<int, LocalDofMapperPtr> >::iterator sideMapEntry = cellMapEntry->second.find(sideOrdinalToMap);
-      if (sideMapEntry != cellMapEntry->second.end()) {
+      if (sideMapEntry != cellMapEntry->second.end())
+      {
         map<int, LocalDofMapperPtr>::iterator varMapEntry = sideMapEntry->second.find(varIDToMap);
-        if (varMapEntry != sideMapEntry->second.end()) {
+        if (varMapEntry != sideMapEntry->second.end())
+        {
           return varMapEntry->second;
         }
       }
@@ -2037,7 +2278,8 @@ LocalDofMapperPtr GDAMinimumRule::getDofMapper(GlobalIndexType cellID, CellConst
   vector< map< int, BasisMap > > sideMaps(sideCount);
 
   vector< set<GlobalIndexType> > fittableGlobalDofOrdinalsOnSides(sideCount);
-  for (int sideOrdinal=0; sideOrdinal<sideCount; sideOrdinal++) {
+  for (int sideOrdinal=0; sideOrdinal<sideCount; sideOrdinal++)
+  {
     if ((sideOrdinalToMap != -1) && (sideOrdinal != sideOrdinalToMap)) continue; // skip this side...
     fittableGlobalDofOrdinalsOnSides[sideOrdinal] = getFittableGlobalDofIndices(cellID, constraints, sideOrdinal);
 //    cout << "sideOrdinal " << sideOrdinal;
@@ -2051,7 +2293,8 @@ LocalDofMapperPtr GDAMinimumRule::getDofMapper(GlobalIndexType cellID, CellConst
 
   /**************** CREATE SUB-BASIS MAPPERS ****************/
 
-  for (map<int, VarPtr>::iterator varIt = trialVars.begin(); varIt != trialVars.end(); varIt++) {
+  for (map<int, VarPtr>::iterator varIt = trialVars.begin(); varIt != trialVars.end(); varIt++)
+  {
     VarPtr var = varIt->second;
     bool varHasSupportOnVolume = (var->varType() == FIELD) || (var->varType() == TEST);
     bool omitVarEntry = (varIDToMap != -1) && (var->ID() != varIDToMap);
@@ -2062,11 +2305,15 @@ LocalDofMapperPtr GDAMinimumRule::getDofMapper(GlobalIndexType cellID, CellConst
 //      cout << "WARNING: looks like you're trying to impose BCs on a variable defined on the volume.  (For volume variables, we don't yet appropriately filter just the sides you're asking for--i.e. just the boundary--in getDofMapper).\n";
 //    }
 
-    if (varHasSupportOnVolume) {
+    if (varHasSupportOnVolume)
+    {
       volumeMap[var->ID()] = getBasisMap(cellID, dofIndexInfo, var); // this is where we should add an argument to specify the side being requested...
       fittableGlobalDofOrdinalsInVolume.insert(dofIndexInfo[spaceDim][0][var->ID()].begin(),dofIndexInfo[spaceDim][0][var->ID()].end());
-    } else {
-      for (int sideOrdinal=0; sideOrdinal < sideCount; sideOrdinal++) {
+    }
+    else
+    {
+      for (int sideOrdinal=0; sideOrdinal < sideCount; sideOrdinal++)
+      {
         if ((sideOrdinalToMap != -1) && (sideOrdinal != sideOrdinalToMap)) continue; // skip this side...
         if (! trialOrdering->hasBasisEntry(var->ID(), sideOrdinal)) continue; // skip this side/var combo...
         sideMaps[sideOrdinal][var->ID()] = getBasisMapOld(cellID, dofIndexInfo, var, sideOrdinal);
@@ -2076,38 +2323,47 @@ LocalDofMapperPtr GDAMinimumRule::getDofMapper(GlobalIndexType cellID, CellConst
 
   set<GlobalIndexType> emptyGlobalIDSet; // the "extra" guys to map
   LocalDofMapperPtr dofMapper = Teuchos::rcp( new LocalDofMapper(trialOrdering,volumeMap,fittableGlobalDofOrdinalsInVolume,
-                                                                 sideMaps,fittableGlobalDofOrdinalsOnSides,emptyGlobalIDSet,varIDToMap,sideOrdinalToMap) );
-  if ((varIDToMap == -1) && (sideOrdinalToMap == -1)) {
+                                sideMaps,fittableGlobalDofOrdinalsOnSides,emptyGlobalIDSet,varIDToMap,sideOrdinalToMap) );
+  if ((varIDToMap == -1) && (sideOrdinalToMap == -1))
+  {
     // a mapper for the whole dof ordering: we cache these...
     _dofMapperCache[cellID] = dofMapper;
     return _dofMapperCache[cellID];
-  } else {
+  }
+  else
+  {
     _dofMapperForVariableOnSideCache[cellID][sideOrdinalToMap][varIDToMap] = dofMapper;
     return dofMapper;
   }
 }
 
-PartitionIndexType GDAMinimumRule::partitionForGlobalDofIndex( GlobalIndexType globalDofIndex ) {
+PartitionIndexType GDAMinimumRule::partitionForGlobalDofIndex( GlobalIndexType globalDofIndex )
+{
   PartitionIndexType numRanks = _partitionDofCounts.size();
   GlobalIndexType totalDofCount = 0;
-  for (PartitionIndexType i=0; i<numRanks; i++) {
+  for (PartitionIndexType i=0; i<numRanks; i++)
+  {
     totalDofCount += _partitionDofCounts(i);
-    if (totalDofCount > globalDofIndex) {
+    if (totalDofCount > globalDofIndex)
+    {
       return i;
     }
   }
   TEUCHOS_TEST_FOR_EXCEPTION(true, std::invalid_argument, "Invalid globalDofIndex");
 }
 
-void GDAMinimumRule::printConstraintInfo(GlobalIndexType cellID) {
+void GDAMinimumRule::printConstraintInfo(GlobalIndexType cellID)
+{
   CellConstraints cellConstraints = getCellConstraints(cellID);
   cout << "***** Constraints for cell " << cellID << " ****** \n";
   CellPtr cell = _meshTopology->getCell(cellID);
   int spaceDim = cell->topology()->getDimension();
-  for (int d=0; d<spaceDim; d++) {
+  for (int d=0; d<spaceDim; d++)
+  {
     cout << "  dimension " << d << " subcells: " << endl;
     int subcellCount = cell->topology()->getSubcellCount(d);
-    for (int scord=0; scord<subcellCount; scord++) {
+    for (int scord=0; scord<subcellCount; scord++)
+    {
       AnnotatedEntity constraintInfo = cellConstraints.subcellConstraints[d][scord];
       cout << "    ordinal " << scord  << " constrained by cell " << constraintInfo.cellID;
       cout << ", side " << constraintInfo.sideOrdinal << "'s dimension " << constraintInfo.dimension << " subcell ordinal " << constraintInfo.subcellOrdinal << endl;
@@ -2115,18 +2371,22 @@ void GDAMinimumRule::printConstraintInfo(GlobalIndexType cellID) {
   }
 
   cout << "Ownership info:\n";
-  for (int d=0; d<spaceDim; d++) {
+  for (int d=0; d<spaceDim; d++)
+  {
     cout << "  dimension " << d << " subcells: " << endl;
     int subcellCount = cell->topology()->getSubcellCount(d);
-    for (int scord=0; scord<subcellCount; scord++) {
+    for (int scord=0; scord<subcellCount; scord++)
+    {
       cout << "    ordinal " << scord  << " owned by cell " << cellConstraints.owningCellIDForSubcell[d][scord].cellID << endl;
     }
   }
 }
 
-void GDAMinimumRule::printGlobalDofInfo() {
+void GDAMinimumRule::printGlobalDofInfo()
+{
   set<GlobalIndexType> cellIDs = _meshTopology->getActiveCellIndices();
-  for (set<GlobalIndexType>::iterator cellIDIt = cellIDs.begin(); cellIDIt != cellIDs.end(); cellIDIt++) {
+  for (set<GlobalIndexType>::iterator cellIDIt = cellIDs.begin(); cellIDIt != cellIDs.end(); cellIDIt++)
+  {
     GlobalIndexType cellID = *cellIDIt;
 
     CellConstraints cellConstraints = getCellConstraints(cellID);
@@ -2135,7 +2395,8 @@ void GDAMinimumRule::printGlobalDofInfo() {
   }
 }
 
-void GDAMinimumRule::rebuildLookups() {
+void GDAMinimumRule::rebuildLookups()
+{
   _constraintsCache.clear(); // to free up memory, could clear this again after the lookups are rebuilt.  Having the cache is most important during the construction below.
   _dofMapperCache.clear();
   _dofMapperForVariableOnSideCache.clear();
@@ -2162,7 +2423,8 @@ void GDAMinimumRule::rebuildLookups() {
   // But in the interest of avoiding wasting development time on premature optimization, I'm leaving it as is for now...
 
   _partitionDofCount = 0; // how many dofs we own locally
-  for (set<GlobalIndexType>::iterator cellIDIt = myCellIDs.begin(); cellIDIt != myCellIDs.end(); cellIDIt++) {
+  for (set<GlobalIndexType>::iterator cellIDIt = myCellIDs.begin(); cellIDIt != myCellIDs.end(); cellIDIt++)
+  {
     GlobalIndexType cellID = *cellIDIt;
     _cellDofOffsets[cellID] = _partitionDofCount;
     CellPtr cell = _meshTopology->getCell(cellID);
@@ -2171,42 +2433,56 @@ void GDAMinimumRule::rebuildLookups() {
 
     set< pair<unsigned,IndexType> > entitiesClaimedForCell;
 
-    for (int d=0; d<=spaceDim; d++) {
+    for (int d=0; d<=spaceDim; d++)
+    {
       int scCount = topo->getSubcellCount(d);
-      for (int scord=0; scord<scCount; scord++) {
+      for (int scord=0; scord<scCount; scord++)
+      {
         OwnershipInfo ownershipInfo = constraints.owningCellIDForSubcell[d][scord];
-        if (ownershipInfo.cellID == cellID) { // owned by this cell: count all the constraining dofs as entries for this cell
+        if (ownershipInfo.cellID == cellID)   // owned by this cell: count all the constraining dofs as entries for this cell
+        {
           pair<unsigned, IndexType> owningSubcellEntity = make_pair(ownershipInfo.dimension, ownershipInfo.owningSubcellEntityIndex);
-          if (entitiesClaimedForCell.find(owningSubcellEntity) != entitiesClaimedForCell.end()) {
+          if (entitiesClaimedForCell.find(owningSubcellEntity) != entitiesClaimedForCell.end())
+          {
             continue; // already processed this guy on this cell
-          } else {
+          }
+          else
+          {
             entitiesClaimedForCell.insert(owningSubcellEntity);
           }
           GlobalIndexType constrainingCellID = constraints.subcellConstraints[d][scord].cellID;
           unsigned constrainingSubcellDimension = constraints.subcellConstraints[d][scord].dimension;
           DofOrderingPtr trialOrdering = _elementTypeForCell[constrainingCellID]->trialOrderPtr;
-          for (map<int, VarPtr>::iterator varIt = trialVars.begin(); varIt != trialVars.end(); varIt++) {
+          for (map<int, VarPtr>::iterator varIt = trialVars.begin(); varIt != trialVars.end(); varIt++)
+          {
             VarPtr var = varIt->second;
             unsigned scordForBasis;
             bool varHasSupportOnVolume = (var->varType() == FIELD) || (var->varType() == TEST);
             BasisPtr basis; // the constraining basis for the subcell
-            if (varHasSupportOnVolume) {
-               // volume basis => the basis sees the cell as a whole: in constraining cell, map from side scord to the volume
-              if (constrainingSubcellDimension==spaceDim) {
+            if (varHasSupportOnVolume)
+            {
+              // volume basis => the basis sees the cell as a whole: in constraining cell, map from side scord to the volume
+              if (constrainingSubcellDimension==spaceDim)
+              {
                 // then there is only one subcell ordinal (and there will be -1's in sideOrdinal and subcellOrdinalInSide....
                 scordForBasis = 0;
-              } else {
+              }
+              else
+              {
                 scordForBasis = CamelliaCellTools::subcellOrdinalMap(_meshTopology->getCell(constrainingCellID)->topology(), sideDim,
-                                                                     constraints.subcellConstraints[d][scord].sideOrdinal,
-                                                                     constrainingSubcellDimension, constraints.subcellConstraints[d][scord].subcellOrdinal);
+                                constraints.subcellConstraints[d][scord].sideOrdinal,
+                                constrainingSubcellDimension, constraints.subcellConstraints[d][scord].subcellOrdinal);
               }
               basis = trialOrdering->getBasis(var->ID());
               // field
               int ordinalCount = basis->dofOrdinalsForSubcell(constrainingSubcellDimension, scordForBasis).size();
-              for (int ordinal=0; ordinal<ordinalCount; ordinal++) {
+              for (int ordinal=0; ordinal<ordinalCount; ordinal++)
+              {
                 _partitionIndexOffsetsForVarID[var->ID()].insert(ordinal+_partitionDofCount);
               }
-            } else {
+            }
+            else
+            {
               if (constrainingSubcellDimension==spaceDim) continue; // side bases don't have any support on the interior of the cell...
               if (!trialOrdering->hasBasisEntry(var->ID(), constraints.subcellConstraints[d][scord].sideOrdinal)) continue;
 
@@ -2214,13 +2490,18 @@ void GDAMinimumRule::rebuildLookups() {
               basis = trialOrdering->getBasis(var->ID(), constraints.subcellConstraints[d][scord].sideOrdinal);
 
               int ordinalCount = basis->dofOrdinalsForSubcell(constrainingSubcellDimension, scordForBasis).size();
-              if (var->varType()==FLUX) {
-                for (int ordinal=0; ordinal<ordinalCount; ordinal++) {
+              if (var->varType()==FLUX)
+              {
+                for (int ordinal=0; ordinal<ordinalCount; ordinal++)
+                {
                   _partitionFluxIndexOffsets.insert(ordinal+_partitionDofCount);
                   _partitionIndexOffsetsForVarID[var->ID()].insert(ordinal+_partitionDofCount);
                 }
-              } else if (var->varType() == TRACE) {
-                for (int ordinal=0; ordinal<ordinalCount; ordinal++) {
+              }
+              else if (var->varType() == TRACE)
+              {
+                for (int ordinal=0; ordinal<ordinalCount; ordinal++)
+                {
                   _partitionTraceIndexOffsets.insert(ordinal+_partitionDofCount);
                   _partitionIndexOffsetsForVarID[var->ID()].insert(ordinal+_partitionDofCount);
                 }
@@ -2239,11 +2520,13 @@ void GDAMinimumRule::rebuildLookups() {
   MPIWrapper::entryWiseSum(_partitionDofCounts);
 //  if (rank==0) cout << "partitionDofCounts:\n" << _partitionDofCounts;
   _partitionDofOffset = 0; // add this to a local partition dof index to get the global dof index
-  for (int i=0; i<rank; i++) {
+  for (int i=0; i<rank; i++)
+  {
     _partitionDofOffset += _partitionDofCounts[i];
   }
   _globalDofCount = _partitionDofOffset;
-  for (int i=rank; i<numRanks; i++) {
+  for (int i=rank; i<numRanks; i++)
+  {
     _globalDofCount += _partitionDofCounts[i];
   }
 //  if (rank==0) cout << "globalDofCount: " << _globalDofCount << endl;
@@ -2251,13 +2534,15 @@ void GDAMinimumRule::rebuildLookups() {
   int activeCellCount = _meshTopology->getActiveCellIndices().size();
   Intrepid::FieldContainer<int> globalCellIDDofOffsets(activeCellCount);
   int partitionCellOffset = 0;
-  for (int i=0; i<rank; i++) {
+  for (int i=0; i<rank; i++)
+  {
     partitionCellOffset += _partitions[i].size();
   }
   // fill in our _cellDofOffsets:
 
   int i=0;
-  for (set<GlobalIndexType>::iterator cellIDIt = myCellIDs.begin(); cellIDIt != myCellIDs.end(); cellIDIt++) {
+  for (set<GlobalIndexType>::iterator cellIDIt = myCellIDs.begin(); cellIDIt != myCellIDs.end(); cellIDIt++)
+  {
     globalCellIDDofOffsets[partitionCellOffset+i] = _cellDofOffsets[*cellIDIt] + _partitionDofOffset;
     i++;
   }
@@ -2266,9 +2551,11 @@ void GDAMinimumRule::rebuildLookups() {
   // fill in the lookup table:
   _globalCellDofOffsets.clear();
   int globalCellIndex = 0;
-  for (int i=0; i<numRanks; i++) {
+  for (int i=0; i<numRanks; i++)
+  {
     set<GlobalIndexType> rankCellIDs = _partitions[i];
-    for (set<GlobalIndexType>::iterator cellIDIt = rankCellIDs.begin(); cellIDIt != rankCellIDs.end(); cellIDIt++) {
+    for (set<GlobalIndexType>::iterator cellIDIt = rankCellIDs.begin(); cellIDIt != rankCellIDs.end(); cellIDIt++)
+    {
       GlobalIndexType cellID = *cellIDIt;
       _globalCellDofOffsets[cellID] = globalCellIDDofOffsets[globalCellIndex];
 //      if (rank==numRanks-1) cout << "global dof offset for cell " << cellID << ": " << _globalCellDofOffsets[cellID] << endl;
@@ -2277,9 +2564,11 @@ void GDAMinimumRule::rebuildLookups() {
   }
 
   _cellIDsForElementType = vector< map< ElementType*, vector<GlobalIndexType> > >(numRanks);
-  for (int i=0; i<numRanks; i++) {
+  for (int i=0; i<numRanks; i++)
+  {
     set<GlobalIndexType> cellIDs = _partitions[i];
-    for (set<GlobalIndexType>::iterator cellIDIt = cellIDs.begin(); cellIDIt != cellIDs.end(); cellIDIt++) {
+    for (set<GlobalIndexType>::iterator cellIDIt = cellIDs.begin(); cellIDIt != cellIDs.end(); cellIDIt++)
+    {
       GlobalIndexType cellID = *cellIDIt;
       ElementTypePtr elemType = _elementTypeForCell[cellID];
       _cellIDsForElementType[i][elemType.get()].push_back(cellID);

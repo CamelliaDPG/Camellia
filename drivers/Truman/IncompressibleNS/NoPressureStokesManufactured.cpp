@@ -21,29 +21,34 @@
 
 double pi = 2.0*acos(0.0);
 
-class ConstantXBoundary : public SpatialFilter {
-  private:
-    double xval;
-  public:
-    ConstantXBoundary(double xval): xval(xval) {};
-    bool matchesPoint(double x, double y) {
-      double tol = 1e-14;
-      return (abs(x-xval) < tol);
-    }
+class ConstantXBoundary : public SpatialFilter
+{
+private:
+  double xval;
+public:
+  ConstantXBoundary(double xval): xval(xval) {};
+  bool matchesPoint(double x, double y)
+  {
+    double tol = 1e-14;
+    return (abs(x-xval) < tol);
+  }
 };
 
-class ConstantYBoundary : public SpatialFilter {
-  private:
-    double yval;
-  public:
-    ConstantYBoundary(double yval): yval(yval) {};
-    bool matchesPoint(double x, double y) {
-      double tol = 1e-14;
-      return (abs(y-yval) < tol);
-    }
+class ConstantYBoundary : public SpatialFilter
+{
+private:
+  double yval;
+public:
+  ConstantYBoundary(double yval): yval(yval) {};
+  bool matchesPoint(double x, double y)
+  {
+    double tol = 1e-14;
+    return (abs(y-yval) < tol);
+  }
 };
 
-int main(int argc, char *argv[]) {
+int main(int argc, char *argv[])
+{
 #ifdef HAVE_MPI
   Teuchos::GlobalMPISession mpiSession(&argc, &argv,0);
   choice::MpiArgs args( argc, argv );
@@ -116,7 +121,7 @@ int main(int argc, char *argv[]) {
 
   // create a pointer to a new mesh:
   Teuchos::RCP<Mesh> mesh = Mesh::buildQuadMesh(meshBoundary, horizontalCells, verticalCells,
-                                                bf, H1Order, H1Order+deltaP);
+                            bf, H1Order, H1Order+deltaP);
 
   ////////////////////////////////////////////////////////////////////
   // INITIALIZE BACKGROUND FLOW FUNCTIONS
@@ -290,11 +295,11 @@ int main(int argc, char *argv[]) {
       double sigma22Error = sigma22Sqr->integrate(mesh);
       double L2Error = sqrt(u1Error + u2Error);
       cout << "L2 Error = " << endl
-      << sqrt(u1Error) << endl
-      << sqrt(u2Error) << endl
-      << sqrt(sigma11Error) << endl
-      << sqrt(sigma12Error) << endl
-      << sqrt(sigma22Error) << endl;
+           << sqrt(u1Error) << endl
+           << sqrt(u2Error) << endl
+           << sqrt(sigma11Error) << endl
+           << sqrt(sigma12Error) << endl
+           << sqrt(sigma22Error) << endl;
     }
 
     if (refIndex < numRefs)
@@ -304,4 +309,3 @@ int main(int argc, char *argv[]) {
   return 0;
 }
 
-  

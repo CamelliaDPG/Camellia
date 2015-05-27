@@ -16,20 +16,21 @@
 
 #include "Mesh.h"
 
-class ElementTests : public TestSuite {
+class ElementTests : public TestSuite
+{
   FieldContainer<double> _testPoints1D;
-  
+
   Teuchos::RCP<Mesh> _mesh; // a 2x2 mesh refined in SW, and then in the SE of the SW
   ElementPtr _sw, _se, _nw, _ne, _sw_se, _sw_ne, _sw_se_se, _sw_se_ne;
-  
+
   void setup();
   void teardown();
 public:
   void runTests(int &numTestsRun, int &numTestsPassed);
-  
+
   bool testNeighborPointMapping();
   bool testParentPointMapping();
-  
+
   std::string testSuiteName();
 };
 

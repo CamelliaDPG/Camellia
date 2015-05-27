@@ -26,13 +26,16 @@
 
 #define saveVTK
 
-class EpsilonScaling : public hFunction {
+class EpsilonScaling : public hFunction
+{
   double _epsilon;
 public:
-  EpsilonScaling(double epsilon) {
+  EpsilonScaling(double epsilon)
+  {
     _epsilon = epsilon;
   }
-  double value(double x, double y, double h) {
+  double value(double x, double y, double h)
+  {
     // should probably by sqrt(_epsilon/h) instead (note parentheses)
     // but this is what was in the old code, so sticking with it for now.
     double scaling = min(_epsilon/(h*h), 1.0);
@@ -41,60 +44,74 @@ public:
   }
 };
 
-class ZeroMeanScaling : public hFunction {
-  public:
-  double value(double x, double y, double h) {
+class ZeroMeanScaling : public hFunction
+{
+public:
+  double value(double x, double y, double h)
+  {
     return 1.0/(h*h);
   }
 };
 
-class LeftBoundary : public SpatialFilter {
+class LeftBoundary : public SpatialFilter
+{
 public:
-  bool matchesPoint(double x, double y) {
+  bool matchesPoint(double x, double y)
+  {
     double tol = 1e-14;
     return (abs(x+3) < tol);
   }
 };
 
-class RightBoundary : public SpatialFilter {
+class RightBoundary : public SpatialFilter
+{
 public:
-  bool matchesPoint(double x, double y) {
+  bool matchesPoint(double x, double y)
+  {
     double tol = 1e-14;
     bool rightMatch = (abs(x-9) < tol);
     return rightMatch;
   }
 };
 
-class TopBottomBoundary : public SpatialFilter {
+class TopBottomBoundary : public SpatialFilter
+{
 public:
-  bool matchesPoint(double x, double y) {
+  bool matchesPoint(double x, double y)
+  {
     double tol = 1e-14;
     bool topMatch = (abs(y-3) < tol);
     bool bottomMatch;
-      bottomMatch = (abs(y+3) < tol);
+    bottomMatch = (abs(y+3) < tol);
     return topMatch || bottomMatch;
   }
 };
 
-class CircleBoundary : public SpatialFilter {
+class CircleBoundary : public SpatialFilter
+{
 public:
-  bool matchesPoint(double x, double y) {
+  bool matchesPoint(double x, double y)
+  {
     double tol = 1e-3;
     return (abs(x*x+y*y) < 1+tol);
   }
 };
 
-class LeftCircleBoundary : public SpatialFilter {
+class LeftCircleBoundary : public SpatialFilter
+{
 public:
-  bool matchesPoint(double x, double y) {
+  bool matchesPoint(double x, double y)
+  {
     double tol = 1e-3;
     return (abs(x*x+y*y) < 1+tol) && (x < 0);
   }
 };
 
-class RightCircleBoundary : public SpatialFilter {
+class RightCircleBoundary : public SpatialFilter
+{
 public:
-  bool matchesPoint(double x, double y) {
+  bool matchesPoint(double x, double y)
+  {
     double tol = 1e-3;
     return (abs(x*x+y*y) < 1+tol) && (x >= 0);
   }
@@ -106,9 +123,9 @@ public:
 //     void values(FieldContainer<double> &values, BasisCachePtr basisCache) {
 //       int numCells = values.dimension(0);
 //       int numPoints = values.dimension(1);
-// 
+//
 //       double a = 2;
-// 
+//
 //       const FieldContainer<double> *points = &(basisCache->getPhysicalCubaturePoints());
 //       for (int cellIndex=0; cellIndex<numCells; cellIndex++) {
 //         for (int ptIndex=0; ptIndex<numPoints; ptIndex++) {
@@ -128,7 +145,8 @@ public:
 //     }
 // };
 
-int main(int argc, char *argv[]) {
+int main(int argc, char *argv[])
+{
 #ifdef HAVE_MPI
   Teuchos::GlobalMPISession mpiSession(&argc, &argv,0);
   choice::MpiArgs args( argc, argv );
@@ -150,46 +168,46 @@ int main(int argc, char *argv[]) {
 
   ////////////////////   DECLARE VARIABLES   ///////////////////////
   // define test variables
-  VarFactory varFactory; 
+  VarFactory varFactory;
   VarPtr tau = varFactory.testVar("\\tau", HDIV);
   VarPtr v = varFactory.testVar("v", HGRAD);
-  
+
   // define trial variables
   VarPtr uhat = varFactory.traceVar("\\widehat{u}");
   VarPtr beta_n_u_minus_sigma_n = varFactory.fluxVar("\\widehat{\\beta \\cdot n u - \\sigma_{n}}");
   VarPtr u = varFactory.fieldVar("u");
   VarPtr sigma = varFactory.fieldVar("sigma", VECTOR_L2);
-  
+
   vector<double> beta;
   beta.push_back(1.0);
   beta.push_back(0.0);
-  
+
   ////////////////////   DEFINE BILINEAR FORM   ///////////////////////
   BFPtr bf = Teuchos::rcp( new BF(varFactory) );
   // tau terms:
   bf->addTerm(sigma / epsilon, tau);
   bf->addTerm(u, tau->div());
   bf->addTerm(-uhat, tau->dot_normal());
-  
+
   // v terms:
   bf->addTerm( sigma, v->grad() );
   bf->addTerm( beta * u, - v->grad() );
   bf->addTerm( beta_n_u_minus_sigma_n, v);
-  
+
   ////////////////////   DEFINE INNER PRODUCT(S)   ///////////////////////
   IPPtr ip = Teuchos::rcp(new IP);
   if (norm == 0)
   {
     ip = bf->graphNorm();
-    FunctionPtr h2_scaling = Teuchos::rcp( new ZeroMeanScaling ); 
+    FunctionPtr h2_scaling = Teuchos::rcp( new ZeroMeanScaling );
     ip->addZeroMeanTerm( h2_scaling*v );
   }
   // Robust norm
   else if (norm == 1)
   {
     // robust test norm
-    FunctionPtr ip_scaling = Teuchos::rcp( new EpsilonScaling(epsilon) ); 
-    FunctionPtr h2_scaling = Teuchos::rcp( new ZeroMeanScaling ); 
+    FunctionPtr ip_scaling = Teuchos::rcp( new EpsilonScaling(epsilon) );
+    FunctionPtr h2_scaling = Teuchos::rcp( new ZeroMeanScaling );
     if (!zeroL2)
       ip->addTerm( v );
     ip->addTerm( sqrt(epsilon) * v->grad() );
@@ -204,8 +222,8 @@ int main(int argc, char *argv[]) {
   else if (norm == 2)
   {
     // robust test norm
-    FunctionPtr ip_scaling = Teuchos::rcp( new EpsilonScaling(epsilon) ); 
-    FunctionPtr h2_scaling = Teuchos::rcp( new ZeroMeanScaling ); 
+    FunctionPtr ip_scaling = Teuchos::rcp( new EpsilonScaling(epsilon) );
+    FunctionPtr h2_scaling = Teuchos::rcp( new ZeroMeanScaling );
     // FunctionPtr ip_weight = Teuchos::rcp( new IPWeight() );
     if (!zeroL2)
       ip->addTerm( v );
@@ -219,7 +237,7 @@ int main(int argc, char *argv[]) {
 
   // // robust test norm
   // IPPtr robIP = Teuchos::rcp(new IP);
-  // FunctionPtr ip_scaling = Teuchos::rcp( new EpsilonScaling(epsilon) ); 
+  // FunctionPtr ip_scaling = Teuchos::rcp( new EpsilonScaling(epsilon) );
   // if (!enforceLocalConservation)
   //   robIP->addTerm( ip_scaling * v );
   // robIP->addTerm( sqrt(epsilon) * v->grad() );
@@ -230,7 +248,7 @@ int main(int argc, char *argv[]) {
   // robIP->addTerm( ip_scaling/sqrt(epsilon) * tau );
   // if (enforceLocalConservation)
   //   robIP->addZeroMeanTerm( v );
-  
+
   ////////////////////   SPECIFY RHS   ///////////////////////
   Teuchos::RCP<RHSEasy> rhs = Teuchos::rcp( new RHSEasy );
   FunctionPtr f = Teuchos::rcp( new ConstantScalarFunction(0.0) );
@@ -258,26 +276,27 @@ int main(int argc, char *argv[]) {
   // bc->addDirichlet(beta_n_u_minus_sigma_n, rightCircleBoundary, beta*n*one);
   bc->addDirichlet(uhat, circleBoundary, one);
 
-  
+
   ////////////////////   BUILD MESH   ///////////////////////
   // define nodes for mesh
   int H1Order = 3, pToAdd = 2;
   Teuchos::RCP<Mesh> mesh;
   mesh = MeshFactory::shiftedHemkerMesh(-3, 9, 6, 1, bf, H1Order, pToAdd);
   // mesh = BuildHemkerMesh(bf, nseg, circleMesh, triangulateMesh, H1Order, pToAdd);
-  
+
   ////////////////////   SOLVE & REFINE   ///////////////////////
   Teuchos::RCP<Solution> solution = Teuchos::rcp( new Solution(mesh, bc, rhs, ip) );
   solution->setFilter(pc);
 
-  if (enforceLocalConservation) {
+  if (enforceLocalConservation)
+  {
     FunctionPtr zero = Teuchos::rcp( new ConstantScalarFunction(0.0) );
     solution->lagrangeConstraints()->addConstraint(beta_n_u_minus_sigma_n == zero);
   }
-  
+
   double energyThreshold = 0.25; // for mesh refinements
   RefinementStrategy refinementStrategy( solution, energyThreshold );
-  Teuchos::RCP<RefinementHistory> refHistory = Teuchos::rcp( new RefinementHistory ); 
+  Teuchos::RCP<RefinementHistory> refHistory = Teuchos::rcp( new RefinementHistory );
   mesh->registerObserver(refHistory);
 #ifdef saveVTK
   VTKExporter exporter(solution, mesh, varFactory);
@@ -285,12 +304,14 @@ int main(int argc, char *argv[]) {
   ofstream errOut;
   if (commRank == 0)
     errOut.open("hemker_err.txt");
-  
-  for (int refIndex=0; refIndex<=numRefs; refIndex++){    
+
+  for (int refIndex=0; refIndex<=numRefs; refIndex++)
+  {
     solution->solve(false);
 
     double energy_error = solution->energyErrorTotal();
-    if (commRank==0){
+    if (commRank==0)
+    {
       stringstream outfile;
       outfile << "hemker_" << refIndex;
 #ifdef saveVTK
@@ -301,11 +322,11 @@ int main(int argc, char *argv[]) {
       FunctionPtr flux = Teuchos::rcp( new PreviousSolutionFunction(solution, beta_n_u_minus_sigma_n) );
       FunctionPtr zero = Teuchos::rcp( new ConstantScalarFunction(0.0) );
       Teuchos::Tuple<double, 3> fluxImbalances = checkConservation(flux, zero, varFactory, mesh);
-      cout << "Mass flux: Largest Local = " << fluxImbalances[0] 
-        << ", Global = " << fluxImbalances[1] << ", Sum Abs = " << fluxImbalances[2] << endl;
+      cout << "Mass flux: Largest Local = " << fluxImbalances[0]
+           << ", Global = " << fluxImbalances[1] << ", Sum Abs = " << fluxImbalances[2] << endl;
 
       errOut << mesh->numGlobalDofs() << " " << energy_error << " "
-        << fluxImbalances[0] << " " << fluxImbalances[1] << " " << fluxImbalances[2] << endl;
+             << fluxImbalances[0] << " " << fluxImbalances[1] << " " << fluxImbalances[2] << endl;
     }
 
     if (refIndex < numRefs)
@@ -313,6 +334,6 @@ int main(int argc, char *argv[]) {
   }
   if (commRank == 0)
     errOut.close();
-  
+
   return 0;
 }

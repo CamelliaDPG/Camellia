@@ -5,7 +5,8 @@
 
 using namespace Camellia;
 
-double FiniteDifferenceUtilities::finiteDifferenceGradient(MeshPtr mesh, RieszRepPtr residual, TSolutionPtr<double> backgroundSoln, int dofIndex){
+double FiniteDifferenceUtilities::finiteDifferenceGradient(MeshPtr mesh, RieszRepPtr residual, TSolutionPtr<double> backgroundSoln, int dofIndex)
+{
   residual->computeRieszRep();
   double fx =  residual->getNorm();
 

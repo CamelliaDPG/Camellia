@@ -14,7 +14,8 @@
 using namespace Camellia;
 using namespace Intrepid;
 
-int main(int argc, char *argv[]) {
+int main(int argc, char *argv[])
+{
   Teuchos::GlobalMPISession mpiSession(&argc, &argv);
   int rank = Teuchos::GlobalMPISession::getRank();
 
@@ -35,24 +36,26 @@ int main(int argc, char *argv[]) {
   {
     myDofs = 300;
   }
-  
+
   partitionDofCounts[rank] = myDofs;
   MPIWrapper::entryWiseSum(partitionDofCounts);
-  
+
   int partitionDofOffset = 0; // add this to a local partition dof index to get the global dof index
-  for (int i=0; i<rank; i++) {
+  for (int i=0; i<rank; i++)
+  {
     partitionDofOffset += partitionDofCounts[i];
   }
   int globalDofCount = partitionDofOffset;
-  for (int i=rank; i<numRanks; i++) {
+  for (int i=rank; i<numRanks; i++)
+  {
     globalDofCount += partitionDofCounts[i];
   }
 
   int activeCellCount = 1;
   Intrepid::FieldContainer<int> globalCellIDDofOffsets(activeCellCount);
-  
+
   // global copy:
   MPIWrapper::entryWiseSum(globalCellIDDofOffsets);
-  
+
   return 0;
 }

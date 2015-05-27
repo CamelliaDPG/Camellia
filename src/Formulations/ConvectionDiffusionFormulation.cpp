@@ -19,7 +19,8 @@ const string ConvectionDiffusionFormulation::s_tc = "tc";
 const string ConvectionDiffusionFormulation::s_v = "v";
 const string ConvectionDiffusionFormulation::s_tau = "tau";
 
-ConvectionDiffusionFormulation::ConvectionDiffusionFormulation(int spaceDim, bool useConformingTraces, FunctionPtr beta, double epsilon) {
+ConvectionDiffusionFormulation::ConvectionDiffusionFormulation(int spaceDim, bool useConformingTraces, FunctionPtr beta, double epsilon)
+{
   _spaceDim = spaceDim;
   _epsilon = epsilon;
   _beta = beta;
@@ -64,7 +65,8 @@ ConvectionDiffusionFormulation::ConvectionDiffusionFormulation(int spaceDim, boo
 
   _bf = Teuchos::rcp( new BF(_vf) );
 
-  if (spaceDim==1) {
+  if (spaceDim==1)
+  {
     // for spaceDim==1, the "normal" component is in the flux-ness of uhat (it's a plus or minus 1)
     _bf->addTerm(sigma/_epsilon, tau);
     _bf->addTerm(u, tau->dx());
@@ -72,7 +74,9 @@ ConvectionDiffusionFormulation::ConvectionDiffusionFormulation(int spaceDim, boo
 
     _bf->addTerm(-_beta*u + sigma, v->dx());
     _bf->addTerm(tc, v);
-  } else {
+  }
+  else
+  {
     _bf->addTerm(sigma/_epsilon, tau);
     _bf->addTerm(u, tau->div());
     _bf->addTerm(-uhat, tau->dot_normal());
@@ -83,7 +87,8 @@ ConvectionDiffusionFormulation::ConvectionDiffusionFormulation(int spaceDim, boo
 
   _ips["Graph"] = _bf->graphNorm();
 
-  if (spaceDim > 1) {
+  if (spaceDim > 1)
+  {
     _ips["Robust"] = Teuchos::rcp(new IP);
     _ips["Robust"]->addTerm(tau->div());
     _ips["Robust"]->addTerm(_beta*v->grad());
@@ -92,7 +97,8 @@ ConvectionDiffusionFormulation::ConvectionDiffusionFormulation(int spaceDim, boo
     _ips["Robust"]->addTerm(_beta*v->grad());
     _ips["Robust"]->addTerm(Function::min(sqrt(_epsilon)*one/Function::h(),one)*v);
   }
-  else {
+  else
+  {
     _ips["Robust"] = Teuchos::rcp(new IP);
     _ips["Robust"]->addTerm(tau->dx());
     _ips["Robust"]->addTerm(_beta*v->dx());
@@ -102,7 +108,8 @@ ConvectionDiffusionFormulation::ConvectionDiffusionFormulation(int spaceDim, boo
     _ips["Robust"]->addTerm(Function::min(sqrt(_epsilon)*one/Function::h(),one)*v);
   }
 
-  if (spaceDim > 1) {
+  if (spaceDim > 1)
+  {
     _ips["CoupledRobust"] = Teuchos::rcp(new IP);
     _ips["CoupledRobust"]->addTerm(tau->div()-_beta*v->grad());
     _ips["CoupledRobust"]->addTerm(Function::min(one/Function::h(),Function::constant(1./sqrt(_epsilon)))*tau);
@@ -110,7 +117,8 @@ ConvectionDiffusionFormulation::ConvectionDiffusionFormulation(int spaceDim, boo
     _ips["CoupledRobust"]->addTerm(_beta*v->grad());
     _ips["CoupledRobust"]->addTerm(Function::min(sqrt(_epsilon)*one/Function::h(),one)*v);
   }
-  else {
+  else
+  {
     _ips["CoupledRobust"] = Teuchos::rcp(new IP);
     _ips["CoupledRobust"]->addTerm(tau->dx()-_beta*v->dx());
     _ips["CoupledRobust"]->addTerm(Function::min(one/Function::h(),Function::constant(1./sqrt(_epsilon)))*tau);
@@ -120,42 +128,51 @@ ConvectionDiffusionFormulation::ConvectionDiffusionFormulation(int spaceDim, boo
   }
 }
 
-VarFactoryPtr ConvectionDiffusionFormulation::vf() {
+VarFactoryPtr ConvectionDiffusionFormulation::vf()
+{
   return _vf;
 }
 
-BFPtr ConvectionDiffusionFormulation::bf() {
+BFPtr ConvectionDiffusionFormulation::bf()
+{
   return _bf;
 }
 
-IPPtr ConvectionDiffusionFormulation::ip(string normName) {
+IPPtr ConvectionDiffusionFormulation::ip(string normName)
+{
   return _ips.at(normName);
 }
 
 // field variables:
-VarPtr ConvectionDiffusionFormulation::u() {
+VarPtr ConvectionDiffusionFormulation::u()
+{
   return _vf->fieldVar(s_u);
 }
 
-VarPtr ConvectionDiffusionFormulation::sigma() {
+VarPtr ConvectionDiffusionFormulation::sigma()
+{
   return _vf->fieldVar(s_sigma);
 }
 
 // traces:
-VarPtr ConvectionDiffusionFormulation::tc() {
+VarPtr ConvectionDiffusionFormulation::tc()
+{
   return _vf->fluxVar(s_tc);
 }
 
-VarPtr ConvectionDiffusionFormulation::uhat() {
+VarPtr ConvectionDiffusionFormulation::uhat()
+{
   return _vf->traceVar(s_uhat);
 }
 
 // test variables:
-VarPtr ConvectionDiffusionFormulation::v() {
+VarPtr ConvectionDiffusionFormulation::v()
+{
   return _vf->testVar(s_v, HGRAD);
 }
 
-VarPtr ConvectionDiffusionFormulation::tau() {
+VarPtr ConvectionDiffusionFormulation::tau()
+{
   if (_spaceDim > 1)
     return _vf->testVar(s_tau, HDIV);
   else

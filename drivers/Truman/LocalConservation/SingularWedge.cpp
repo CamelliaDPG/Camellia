@@ -23,72 +23,88 @@
 
 double halfwidth;
 
-class EpsilonScaling : public hFunction {
+class EpsilonScaling : public hFunction
+{
   double _epsilon;
 public:
-  EpsilonScaling(double epsilon) {
+  EpsilonScaling(double epsilon)
+  {
     _epsilon = epsilon;
   }
-  double value(double x, double y, double h) {
+  double value(double x, double y, double h)
+  {
     double scaling = min(_epsilon/(h*h), 1.0);
     // since this is used in inner product term a like (a,a), take square root
     return sqrt(scaling);
   }
 };
 
-class ZeroMeanScaling : public hFunction {
-  public:
-  double value(double x, double y, double h) {
+class ZeroMeanScaling : public hFunction
+{
+public:
+  double value(double x, double y, double h)
+  {
     return 1.0/(h*h);
   }
 };
 
-class Inflow: public SpatialFilter {
-  public:
-    bool matchesPoint(double x, double y) {
-      double tol = 1e-14;
-      bool xMatch = (abs(x+halfwidth) < tol) ;
-      return xMatch;
-    }
+class Inflow: public SpatialFilter
+{
+public:
+  bool matchesPoint(double x, double y)
+  {
+    double tol = 1e-14;
+    bool xMatch = (abs(x+halfwidth) < tol) ;
+    return xMatch;
+  }
 };
 
-class Outflow: public SpatialFilter {
-  public:
-    bool matchesPoint(double x, double y) {
-      double tol = 1e-14;
-      bool xMatch = (abs(x-halfwidth) < tol) ;
-      return xMatch;
-    }
+class Outflow: public SpatialFilter
+{
+public:
+  bool matchesPoint(double x, double y)
+  {
+    double tol = 1e-14;
+    bool xMatch = (abs(x-halfwidth) < tol) ;
+    return xMatch;
+  }
 };
 
-class LeadingWedge: public SpatialFilter {
-  public:
-    bool matchesPoint(double x, double y) {
-      double tol = 1e-14;
-      bool match = abs(1./halfwidth*x-y) < tol;
-      return match;
-    }
+class LeadingWedge: public SpatialFilter
+{
+public:
+  bool matchesPoint(double x, double y)
+  {
+    double tol = 1e-14;
+    bool match = abs(1./halfwidth*x-y) < tol;
+    return match;
+  }
 };
 
-class TrailingWedge: public SpatialFilter {
-  public:
-    bool matchesPoint(double x, double y) {
-      double tol = 1e-14;
-      bool match = abs(1./halfwidth*x+y) < tol;
-      return match;
-    }
+class TrailingWedge: public SpatialFilter
+{
+public:
+  bool matchesPoint(double x, double y)
+  {
+    double tol = 1e-14;
+    bool match = abs(1./halfwidth*x+y) < tol;
+    return match;
+  }
 };
 
-class Top: public SpatialFilter {
-  public:
-    bool matchesPoint(double x, double y) {
-      double tol = 1e-14;
-      bool yMatch = (abs(y-halfwidth) < tol) ;
-      return yMatch;
-    }
+class Top: public SpatialFilter
+{
+public:
+  bool matchesPoint(double x, double y)
+  {
+    double tol = 1e-14;
+    bool yMatch = (abs(y-halfwidth) < tol) ;
+    return yMatch;
+  }
 };
 
-int main(int argc, char *argv[]) {
+int main(int argc, char *argv[])
+{
 #ifdef HAVE_MPI
   Teuchos::GlobalMPISession mpiSession(&argc, &argv,0);
   choice::MpiArgs args( argc, argv );
@@ -112,10 +128,10 @@ int main(int argc, char *argv[]) {
 
   ////////////////////   DECLARE VARIABLES   ///////////////////////
   // define test variables
-  VarFactory varFactory; 
+  VarFactory varFactory;
   VarPtr tau = varFactory.testVar("tau", HDIV);
   VarPtr v = varFactory.testVar("v", HGRAD);
-  
+
   // define trial variables
   VarPtr uhat = varFactory.traceVar("uhat");
   VarPtr beta_n_u_minus_sigma_n = varFactory.fluxVar("fhat");
@@ -125,34 +141,34 @@ int main(int argc, char *argv[]) {
   vector<double> beta;
   beta.push_back(1.0);
   beta.push_back(0.0);
-  
+
   ////////////////////   DEFINE BILINEAR FORM   ///////////////////////
   BFPtr bf = Teuchos::rcp( new BF(varFactory) );
   // tau terms:
   bf->addTerm(sigma / epsilon, tau);
   bf->addTerm(u, tau->div());
   bf->addTerm(-uhat, tau->dot_normal());
-  
+
   // v terms:
   bf->addTerm( sigma, v->grad() );
   bf->addTerm( beta * u, - v->grad() );
   bf->addTerm( beta_n_u_minus_sigma_n, v);
-  
+
   ////////////////////   DEFINE INNER PRODUCT(S)   ///////////////////////
   IPPtr ip = Teuchos::rcp(new IP);
   // Graph norm
   if (norm == 0)
   {
     ip = bf->graphNorm();
-    FunctionPtr h2_scaling = Teuchos::rcp( new ZeroMeanScaling ); 
+    FunctionPtr h2_scaling = Teuchos::rcp( new ZeroMeanScaling );
     ip->addZeroMeanTerm( h2_scaling*v );
   }
   // Robust norm
   else if (norm == 1)
   {
     // robust test norm
-    FunctionPtr ip_scaling = Teuchos::rcp( new EpsilonScaling(epsilon) ); 
-    FunctionPtr h2_scaling = Teuchos::rcp( new ZeroMeanScaling ); 
+    FunctionPtr ip_scaling = Teuchos::rcp( new EpsilonScaling(epsilon) );
+    FunctionPtr h2_scaling = Teuchos::rcp( new ZeroMeanScaling );
     if (!zeroL2)
       ip->addTerm( v );
     ip->addTerm( sqrt(epsilon) * v->grad() );
@@ -167,8 +183,8 @@ int main(int argc, char *argv[]) {
   else if (norm == 2)
   {
     // robust test norm
-    FunctionPtr ip_scaling = Teuchos::rcp( new EpsilonScaling(epsilon) ); 
-    FunctionPtr h2_scaling = Teuchos::rcp( new ZeroMeanScaling ); 
+    FunctionPtr ip_scaling = Teuchos::rcp( new EpsilonScaling(epsilon) );
+    FunctionPtr h2_scaling = Teuchos::rcp( new ZeroMeanScaling );
     if (!zeroL2)
       ip->addTerm( v );
     ip->addTerm( sqrt(epsilon) * v->grad() );
@@ -177,7 +193,7 @@ int main(int argc, char *argv[]) {
     if (zeroL2)
       ip->addZeroMeanTerm( h2_scaling*v );
   }
-  
+
   ////////////////////   SPECIFY RHS   ///////////////////////
   Teuchos::RCP<RHSEasy> rhs = Teuchos::rcp( new RHSEasy );
   FunctionPtr f = Teuchos::rcp( new ConstantScalarFunction(0.0) );
@@ -206,7 +222,7 @@ int main(int argc, char *argv[]) {
 
   SpatialFilterPtr outflow = Teuchos::rcp( new Outflow );
   pc->addConstraint(beta*uhat->times_normal() - beta_n_u_minus_sigma_n == zero, outflow);
-  
+
   ////////////////////   BUILD MESH   ///////////////////////
   int H1Order = 3, pToAdd = 2;
   // define nodes for mesh
@@ -218,76 +234,109 @@ int main(int argc, char *argv[]) {
 
   if (allQuads)
   {
-    pt(0) = -halfwidth; pt(1) = -1;
+    pt(0) = -halfwidth;
+    pt(1) = -1;
     vertices.push_back(pt);
-    pt(0) =  0;         pt(1) =  0;
+    pt(0) =  0;
+    pt(1) =  0;
     vertices.push_back(pt);
-    pt(0) =  halfwidth; pt(1) = -1;
+    pt(0) =  halfwidth;
+    pt(1) = -1;
     vertices.push_back(pt);
-    pt(0) =  halfwidth; pt(1) =  halfwidth;
+    pt(0) =  halfwidth;
+    pt(1) =  halfwidth;
     vertices.push_back(pt);
-    pt(0) =  0;         pt(1) =  halfwidth;
+    pt(0) =  0;
+    pt(1) =  halfwidth;
     vertices.push_back(pt);
-    pt(0) = -halfwidth; pt(1) =  halfwidth;
+    pt(0) = -halfwidth;
+    pt(1) =  halfwidth;
     vertices.push_back(pt);
 
-    q[0] = 0; q[1] = 1; q[2] = 4; q[3] = 5;
+    q[0] = 0;
+    q[1] = 1;
+    q[2] = 4;
+    q[3] = 5;
     elementIndices.push_back(q);
-    q[0] = 1; q[1] = 2; q[2] = 3; q[3] = 4;
+    q[0] = 1;
+    q[1] = 2;
+    q[2] = 3;
+    q[3] = 4;
     elementIndices.push_back(q);
   }
   else
   {
-    pt(0) = -halfwidth; pt(1) = -1;
+    pt(0) = -halfwidth;
+    pt(1) = -1;
     vertices.push_back(pt);
-    pt(0) =  0;         pt(1) =  0;
+    pt(0) =  0;
+    pt(1) =  0;
     vertices.push_back(pt);
-    pt(0) =  halfwidth; pt(1) = -1;
+    pt(0) =  halfwidth;
+    pt(1) = -1;
     vertices.push_back(pt);
-    pt(0) =  halfwidth; pt(1) =  0;
+    pt(0) =  halfwidth;
+    pt(1) =  0;
     vertices.push_back(pt);
-    pt(0) =  halfwidth; pt(1) =  halfwidth;
+    pt(0) =  halfwidth;
+    pt(1) =  halfwidth;
     vertices.push_back(pt);
-    pt(0) =  0;         pt(1) =  halfwidth;
+    pt(0) =  0;
+    pt(1) =  halfwidth;
     vertices.push_back(pt);
-    pt(0) = -halfwidth; pt(1) =  halfwidth;
+    pt(0) = -halfwidth;
+    pt(1) =  halfwidth;
     vertices.push_back(pt);
-    pt(0) = -halfwidth; pt(1) =  0;
+    pt(0) = -halfwidth;
+    pt(1) =  0;
     vertices.push_back(pt);
 
-    t[0] = 0; t[1] = 1; t[2] = 7;
+    t[0] = 0;
+    t[1] = 1;
+    t[2] = 7;
     elementIndices.push_back(t);
-    t[0] = 1; t[1] = 2; t[2] = 3;
+    t[0] = 1;
+    t[1] = 2;
+    t[2] = 3;
     elementIndices.push_back(t);
-    q[0] = 1; q[1] = 3; q[2] = 4; q[3] = 5;
+    q[0] = 1;
+    q[1] = 3;
+    q[2] = 4;
+    q[3] = 5;
     elementIndices.push_back(q);
-    q[0] = 7; q[1] = 1; q[2] = 5; q[3] = 6;
+    q[0] = 7;
+    q[1] = 1;
+    q[2] = 5;
+    q[3] = 6;
     elementIndices.push_back(q);
   }
 
-  Teuchos::RCP<Mesh> mesh = Teuchos::rcp( new Mesh(vertices, elementIndices, bf, H1Order, pToAdd) );  
-  
+  Teuchos::RCP<Mesh> mesh = Teuchos::rcp( new Mesh(vertices, elementIndices, bf, H1Order, pToAdd) );
+
   ////////////////////   SOLVE & REFINE   ///////////////////////
   Teuchos::RCP<Solution> solution = Teuchos::rcp( new Solution(mesh, bc, rhs, ip) );
   solution->setFilter(pc);
 
-  if (enforceLocalConservation) {
+  if (enforceLocalConservation)
+  {
     FunctionPtr zero = Teuchos::rcp( new ConstantScalarFunction(0.0) );
     solution->lagrangeConstraints()->addConstraint(beta_n_u_minus_sigma_n == zero);
   }
-  
+
   double energyThreshold = 0.2; // for mesh refinements
   RefinementStrategy refinementStrategy( solution, energyThreshold );
   VTKExporter exporter(solution, mesh, varFactory);
   ofstream errOut;
   if (commRank == 0)
     errOut.open("singularwedge_err.txt");
-  
-  for (int refIndex=0; refIndex<=numRefs; refIndex++){    
+
+  for (int refIndex=0; refIndex<=numRefs; refIndex++)
+  {
     solution->solve(false);
 
     double energy_error = solution->energyErrorTotal();
-    if (commRank==0){
+    if (commRank==0)
+    {
       stringstream outfile;
       outfile << "singularwedge_" << refIndex;
       exporter.exportSolution(outfile.str());
@@ -296,11 +345,11 @@ int main(int argc, char *argv[]) {
       FunctionPtr flux = Teuchos::rcp( new PreviousSolutionFunction(solution, beta_n_u_minus_sigma_n) );
       FunctionPtr zero = Teuchos::rcp( new ConstantScalarFunction(0.0) );
       Teuchos::Tuple<double, 3> fluxImbalances = checkConservation(flux, zero, varFactory, mesh);
-      cout << "Mass flux: Largest Local = " << fluxImbalances[0] 
-        << ", Global = " << fluxImbalances[1] << ", Sum Abs = " << fluxImbalances[2] << endl;
+      cout << "Mass flux: Largest Local = " << fluxImbalances[0]
+           << ", Global = " << fluxImbalances[1] << ", Sum Abs = " << fluxImbalances[2] << endl;
 
       errOut << mesh->numGlobalDofs() << " " << energy_error << " "
-        << fluxImbalances[0] << " " << fluxImbalances[1] << " " << fluxImbalances[2] << endl;
+             << fluxImbalances[0] << " " << fluxImbalances[1] << " " << fluxImbalances[2] << endl;
     }
 
     if (refIndex < numRefs)
@@ -308,6 +357,6 @@ int main(int argc, char *argv[]) {
   }
   if (commRank == 0)
     errOut.close();
-  
+
   return 0;
 }

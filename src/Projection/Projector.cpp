@@ -33,27 +33,32 @@ using namespace Camellia;
 
 template <typename Scalar>
 void Projector<Scalar>::projectFunctionOntoBasis(FieldContainer<Scalar> &basisCoefficients, TFunctionPtr<Scalar> fxn,
-                                         BasisPtr basis, BasisCachePtr basisCache, TIPPtr<Scalar> ip, VarPtr v,
-                                         set<int> fieldIndicesToSkip) {
+    BasisPtr basis, BasisCachePtr basisCache, TIPPtr<Scalar> ip, VarPtr v,
+    set<int> fieldIndicesToSkip)
+{
   CellTopoPtr cellTopo = basis->domainTopology();
   DofOrderingPtr dofOrderPtr = Teuchos::rcp(new DofOrdering(cellTopo));
 
-  if (! fxn.get()) {
+  if (! fxn.get())
+  {
     TEUCHOS_TEST_FOR_EXCEPTION(true, std::invalid_argument, "fxn cannot be null!");
   }
 
-  if (fxn->rank() != basis->rangeRank()) {
+  if (fxn->rank() != basis->rangeRank())
+  {
     TEUCHOS_TEST_FOR_EXCEPTION(true, std::invalid_argument, "Function rank must agree with basis rank");
   }
 
-  if (fxn->rank() != v->rank()) {
+  if (fxn->rank() != v->rank())
+  {
     TEUCHOS_TEST_FOR_EXCEPTION(true, std::invalid_argument, "Function rank must agree with variable rank");
   }
 
   int cardinality = basis->getCardinality();
   int numCells = basisCache->getPhysicalCubaturePoints().dimension(0);
   int numDofs = cardinality - fieldIndicesToSkip.size();
-  if (numDofs==0) {
+  if (numDofs==0)
+  {
     // we're skipping all the fields, so just initialize basisCoefficients to 0 and return
     basisCoefficients.resize(numCells,cardinality);
     basisCoefficients.initialize(0);
@@ -65,9 +70,12 @@ void Projector<Scalar>::projectFunctionOntoBasis(FieldContainer<Scalar> &basisCo
 
   // fake a DofOrdering
   DofOrderingPtr dofOrdering = Teuchos::rcp( new DofOrdering(cellTopo) );
-  if (! basisCache->isSideCache()) {
+  if (! basisCache->isSideCache())
+  {
     dofOrdering->addEntry(v->ID(), basis, v->rank());
-  } else {
+  }
+  else
+  {
     dofOrdering->addEntry(v->ID(), basis, v->rank(), basisCache->getSideIndex());
   }
 
@@ -75,16 +83,21 @@ void Projector<Scalar>::projectFunctionOntoBasis(FieldContainer<Scalar> &basisCo
   ip->computeInnerProductVector(ipVector, v, fxn, dofOrdering, basisCache);
 
   map<int,int> oldToNewIndices;
-  if (fieldIndicesToSkip.size() > 0) {
+  if (fieldIndicesToSkip.size() > 0)
+  {
     // the code to do with fieldIndicesToSkip might not be terribly efficient...
     // (but it's not likely to be called too frequently)
     int i_indices_skipped = 0;
-    for (int i=0; i<cardinality; i++) {
+    for (int i=0; i<cardinality; i++)
+    {
       int new_index;
-      if (fieldIndicesToSkip.find(i) != fieldIndicesToSkip.end()) {
+      if (fieldIndicesToSkip.find(i) != fieldIndicesToSkip.end())
+      {
         i_indices_skipped++;
         new_index = -1;
-      } else {
+      }
+      else
+      {
         new_index = i - i_indices_skipped;
       }
       oldToNewIndices[i] = new_index;
@@ -94,17 +107,22 @@ void Projector<Scalar>::projectFunctionOntoBasis(FieldContainer<Scalar> &basisCo
     FieldContainer<Scalar> ipVectorFiltered(numCells,numDofs);
     // now filter out the values that we're to skip
 
-    for (int cellIndex=0; cellIndex<numCells; cellIndex++) {
-      for (int i=0; i<cardinality; i++) {
+    for (int cellIndex=0; cellIndex<numCells; cellIndex++)
+    {
+      for (int i=0; i<cardinality; i++)
+      {
         int i_filtered = oldToNewIndices[i];
-        if (i_filtered == -1) {
+        if (i_filtered == -1)
+        {
           continue;
         }
         ipVectorFiltered(cellIndex,i_filtered) = ipVector(cellIndex,i);
 
-        for (int j=0; j<cardinality; j++) {
+        for (int j=0; j<cardinality; j++)
+        {
           int j_filtered = oldToNewIndices[j];
-          if (j_filtered == -1) {
+          if (j_filtered == -1)
+          {
             continue;
           }
           gramMatrixFiltered(cellIndex,i_filtered,j_filtered) = gramMatrix(cellIndex,i,j);
@@ -120,8 +138,9 @@ void Projector<Scalar>::projectFunctionOntoBasis(FieldContainer<Scalar> &basisCo
 //  cout << "physical points for projection:\n" << basisCache->getPhysicalCubaturePoints();
 //  cout << "gramMatrix:\n" << gramMatrix;
 //  cout << "ipVector:\n" << ipVector;
-  
-  for (int cellIndex=0; cellIndex<numCells; cellIndex++){
+
+  for (int cellIndex=0; cellIndex<numCells; cellIndex++)
+  {
 
     // TODO: rewrite to take advantage of SerialDenseWrapper...
     Epetra_SerialDenseSolver solver;
@@ -140,38 +159,50 @@ void Projector<Scalar>::projectFunctionOntoBasis(FieldContainer<Scalar> &basisCo
 
     solver.SetMatrix(A);
     int info = solver.SetVectors(x,b);
-    if (info!=0){
+    if (info!=0)
+    {
       cout << "projectFunctionOntoBasis: failed to SetVectors with error " << info << endl;
     }
 
     bool equilibrated = false;
-    if (solver.ShouldEquilibrate()){
+    if (solver.ShouldEquilibrate())
+    {
       solver.EquilibrateMatrix();
       solver.EquilibrateRHS();
       equilibrated = true;
     }
 
     info = solver.Solve();
-    if (info!=0){
+    if (info!=0)
+    {
       cout << "projectFunctionOntoBasis: failed to solve with error " << info << endl;
     }
 
-    if (equilibrated) {
+    if (equilibrated)
+    {
       int successLocal = solver.UnequilibrateLHS();
-      if (successLocal != 0) {
+      if (successLocal != 0)
+      {
         cout << "projection: unequilibration FAILED with error: " << successLocal << endl;
       }
     }
 
     basisCoefficients.resize(numCells,cardinality);
-    for (int i=0;i<cardinality;i++) {
-      if (fieldIndicesToSkip.size()==0) {
+    for (int i=0; i<cardinality; i++)
+    {
+      if (fieldIndicesToSkip.size()==0)
+      {
         basisCoefficients(cellIndex,i) = x(i);
-      } else {
+      }
+      else
+      {
         int i_filtered = oldToNewIndices[i];
-        if (i_filtered==-1) {
+        if (i_filtered==-1)
+        {
           basisCoefficients(cellIndex,i) = 0.0;
-        } else {
+        }
+        else
+        {
           basisCoefficients(cellIndex,i) = x(i_filtered);
         }
       }
@@ -182,18 +213,27 @@ void Projector<Scalar>::projectFunctionOntoBasis(FieldContainer<Scalar> &basisCo
 
 template <typename Scalar>
 void Projector<Scalar>::projectFunctionOntoBasis(FieldContainer<Scalar> &basisCoefficients, TFunctionPtr<Scalar> fxn,
-                                         BasisPtr basis, BasisCachePtr basisCache) {
+    BasisPtr basis, BasisCachePtr basisCache)
+{
   VarFactoryPtr varFactory = VarFactory::varFactory();
   VarPtr var;
-  if (! basisCache->isSideCache()) {
-    if (fxn->rank()==0) {
+  if (! basisCache->isSideCache())
+  {
+    if (fxn->rank()==0)
+    {
       var = varFactory->fieldVar("dummyField");
-    } else if (fxn->rank()==1) {
+    }
+    else if (fxn->rank()==1)
+    {
       var = varFactory->fieldVar("dummyField",VECTOR_L2);
-    } else {
+    }
+    else
+    {
       TEUCHOS_TEST_FOR_EXCEPTION(true, std::invalid_argument, "projectFunctionOntoBasis does not yet support functions of rank > 1.");
     }
-  } else {
+  }
+  else
+  {
     // for present purposes, distinction between trace and flux doesn't really matter,
     // except that parities come into the IP computation for fluxes (even though they'll cancel),
     // and since basisCache doesn't necessarily have parities defined (especially in tests),
@@ -207,7 +247,8 @@ void Projector<Scalar>::projectFunctionOntoBasis(FieldContainer<Scalar> &basisCo
 
 template <typename Scalar>
 void Projector<Scalar>::projectFunctionOntoBasisInterpolating(FieldContainer<Scalar> &basisCoefficients, TFunctionPtr<Scalar> fxn,
-                                                              BasisPtr basis, BasisCachePtr domainBasisCache) {
+    BasisPtr basis, BasisCachePtr domainBasisCache)
+{
   basisCoefficients.initialize(0);
   CellTopoPtr domainTopo = basis->domainTopology();
   unsigned domainDim = domainTopo->getDimension();
@@ -232,27 +273,35 @@ void Projector<Scalar>::projectFunctionOntoBasisInterpolating(FieldContainer<Sca
   int basisCardinality = basis->getCardinality();
 
   set<int> allDofs;
-  for (int i=0; i<basisCardinality; i++) {
+  for (int i=0; i<basisCardinality; i++)
+  {
     allDofs.insert(i);
   }
 
-  for (int d=0; d<=domainDim; d++) {
+  for (int d=0; d<=domainDim; d++)
+  {
     TFunctionPtr<Scalar> projectionThusFar = BasisSumFunction::basisSumFunction(basis, basisCoefficients);
     TFunctionPtr<Scalar> fxnToApproximate = fxn - projectionThusFar;
     int subcellCount = domainTopo->getSubcellCount(d);
-    for (int subcord=0; subcord<subcellCount; subcord++) {
+    for (int subcord=0; subcord<subcellCount; subcord++)
+    {
       set<int> subcellDofOrdinals = basis->dofOrdinalsForSubcell(d, subcord);
-      if (subcellDofOrdinals.size() > 0) {
+      if (subcellDofOrdinals.size() > 0)
+      {
         FieldContainer<double> refCellPoints;
         FieldContainer<double> cubatureWeightsSubcell; // allows us to integrate over the fine subcell even when domain is higher-dimensioned
-        if (d == 0) {
+        if (d == 0)
+        {
           refCellPoints.resize(1,domainDim);
-          for (int d1=0; d1<domainDim; d1++) {
+          for (int d1=0; d1<domainDim; d1++)
+          {
             refCellPoints(0,d1) = referenceDomainNodes(subcord,d1);
           }
           cubatureWeightsSubcell.resize(1);
           cubatureWeightsSubcell(0) = 1.0;
-        } else {
+        }
+        else
+        {
           CellTopoPtr subcellTopo = domainTopo->getSubcell(d, subcord);
 //          Teuchos::RCP<Cubature<double> > subcellCubature = cubFactory.create(subcellTopo, domainBasisCache->cubatureDegree());
           BasisCachePtr subcellCache = Teuchos::rcp( new BasisCache(subcellTopo, domainBasisCache->cubatureDegree(), false) );
@@ -260,23 +309,29 @@ void Projector<Scalar>::projectFunctionOntoBasisInterpolating(FieldContainer<Sca
           refCellPoints.resize(numPoints,domainDim);
           cubatureWeightsSubcell = subcellCache->getCubatureWeights();
 
-          if (d == domainDim) {
+          if (d == domainDim)
+          {
             refCellPoints = subcellCache->getRefCellPoints();
-          } else {
+          }
+          else
+          {
             CamelliaCellTools::mapToReferenceSubcell(refCellPoints, subcellCache->getRefCellPoints(), d,
-                                                     subcord, domainTopo);
+                subcord, domainTopo);
           }
         }
         domainBasisCache->setRefCellPoints(refCellPoints, cubatureWeightsSubcell);
         TIPPtr<Scalar> ipForProjection = (d==0) ? ip_l2 : ip; // just use values at vertices (ignore derivatives)
         set<int> dofsToSkip = allDofs;
-        for (auto dofOrdinal : subcellDofOrdinals) {
+        for (auto dofOrdinal : subcellDofOrdinals)
+        {
           dofsToSkip.erase(dofOrdinal);
         }
         FieldContainer<Scalar> newBasisCoefficients;
         projectFunctionOntoBasis(newBasisCoefficients, fxnToApproximate, basis, domainBasisCache, ipForProjection, v, dofsToSkip);
-        for (int cellOrdinal=0; cellOrdinal<newBasisCoefficients.dimension(0); cellOrdinal++) {
-          for (auto dofOrdinal : subcellDofOrdinals) {
+        for (int cellOrdinal=0; cellOrdinal<newBasisCoefficients.dimension(0); cellOrdinal++)
+        {
+          for (auto dofOrdinal : subcellDofOrdinals)
+          {
             basisCoefficients(cellOrdinal,dofOrdinal) = newBasisCoefficients(cellOrdinal,dofOrdinal);
 //            cout << "Assigned dofOrdinal " << dofOrdinal << " " << " coefficient " << newBasisCoefficients(cellOrdinal,dofOrdinal);
 //            cout << " (subcord,d) = (" << subcord << "," << d << ")" << endl;
@@ -291,7 +346,8 @@ void Projector<Scalar>::projectFunctionOntoBasisInterpolating(FieldContainer<Sca
   }
 }
 
-namespace Camellia {
-  template class Projector<double>;
+namespace Camellia
+{
+template class Projector<double>;
 }
 

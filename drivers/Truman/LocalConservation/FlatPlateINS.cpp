@@ -15,45 +15,54 @@
 #include "choice.hpp"
 #endif
 
-class ConstantXBoundary : public SpatialFilter {
-  private:
-    double xval;
-  public:
-    ConstantXBoundary(double xval): xval(xval) {};
-    bool matchesPoint(double x, double y) {
-      double tol = 1e-14;
-      return (abs(x-xval) < tol);
-    }
+class ConstantXBoundary : public SpatialFilter
+{
+private:
+  double xval;
+public:
+  ConstantXBoundary(double xval): xval(xval) {};
+  bool matchesPoint(double x, double y)
+  {
+    double tol = 1e-14;
+    return (abs(x-xval) < tol);
+  }
 };
 
-class ConstantYBoundary : public SpatialFilter {
-  private:
-    double yval;
-  public:
-    ConstantYBoundary(double yval): yval(yval) {};
-    bool matchesPoint(double x, double y) {
-      double tol = 1e-14;
-      return (abs(y-yval) < tol);
-    }
+class ConstantYBoundary : public SpatialFilter
+{
+private:
+  double yval;
+public:
+  ConstantYBoundary(double yval): yval(yval) {};
+  bool matchesPoint(double x, double y)
+  {
+    double tol = 1e-14;
+    return (abs(y-yval) < tol);
+  }
 };
 
-class BottomFree : public SpatialFilter {
-  public:
-    bool matchesPoint(double x, double y) {
-      double tol = 1e-14;
-      return (abs(y) < tol && (x < 0));
-    }
+class BottomFree : public SpatialFilter
+{
+public:
+  bool matchesPoint(double x, double y)
+  {
+    double tol = 1e-14;
+    return (abs(y) < tol && (x < 0));
+  }
 };
 
-class BottomPlate : public SpatialFilter {
-  public:
-    bool matchesPoint(double x, double y) {
-      double tol = 1e-14;
-      return (abs(y) < tol && (x >= 0));
-    }
+class BottomPlate : public SpatialFilter
+{
+public:
+  bool matchesPoint(double x, double y)
+  {
+    double tol = 1e-14;
+    return (abs(y) < tol && (x >= 0));
+  }
 };
 
-int main(int argc, char *argv[]) {
+int main(int argc, char *argv[])
+{
 #ifdef HAVE_MPI
   Teuchos::GlobalMPISession mpiSession(&argc, &argv,0);
   choice::MpiArgs args( argc, argv );
@@ -120,7 +129,7 @@ int main(int argc, char *argv[]) {
 
   // create a pointer to a new mesh:
   Teuchos::RCP<Mesh> mesh = MeshFactory::buildQuadMesh(meshBoundary, xCells, yCells,
-      bf, H1Order, H1Order+deltaP);
+                            bf, H1Order, H1Order+deltaP);
 
   ////////////////////////////////////////////////////////////////////
   // INITIALIZE BACKGROUND FLOW FUNCTIONS

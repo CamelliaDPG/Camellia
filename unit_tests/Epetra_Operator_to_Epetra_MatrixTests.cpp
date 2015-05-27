@@ -25,7 +25,7 @@
 #else
     Epetra_SerialComm comm;
 #endif
-    
+
     Epetra_Map map(numRows,0,comm);
 
     int entriesPerRow = 0;
@@ -36,7 +36,7 @@
       for (int col=0; col<numCols; col++) {
         rowStorage[col] = -row + row * row / (1 + col);
       }
-      
+
     }
   }
 } // namespace*/

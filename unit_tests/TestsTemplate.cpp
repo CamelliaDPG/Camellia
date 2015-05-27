@@ -14,7 +14,8 @@
 
 using namespace Camellia;
 
-namespace {
+namespace
+{
 //  TEUCHOS_UNIT_TEST( Int, Basic )
 //  {
 //    int i1 = 5;

@@ -10,30 +10,36 @@ using namespace Intrepid;
 using namespace std;
 
 template <typename Scalar>
-SimpleSolutionFunction<Scalar>::SimpleSolutionFunction(VarPtr var, TSolutionPtr<Scalar> soln) : TFunction<Scalar>(var->rank()) {
+SimpleSolutionFunction<Scalar>::SimpleSolutionFunction(VarPtr var, TSolutionPtr<Scalar> soln) : TFunction<Scalar>(var->rank())
+{
   _var = var;
   _soln = soln;
 }
 
 template <typename Scalar>
-bool SimpleSolutionFunction<Scalar>::boundaryValueOnly() {
+bool SimpleSolutionFunction<Scalar>::boundaryValueOnly()
+{
   return (_var->varType() == FLUX) || (_var->varType() == TRACE);
 }
 
 template <typename Scalar>
-string SimpleSolutionFunction<Scalar>::displayString() {
+string SimpleSolutionFunction<Scalar>::displayString()
+{
   ostringstream str;
   str << "\\overline{" << _var->displayString() << "} ";
   return str.str();
 }
 
 template <typename Scalar>
-void SimpleSolutionFunction<Scalar>::importCellData(std::vector<GlobalIndexType> cells) {
+void SimpleSolutionFunction<Scalar>::importCellData(std::vector<GlobalIndexType> cells)
+{
   int rank = Teuchos::GlobalMPISession::getRank();
   set<GlobalIndexType> offRankCells;
   const set<GlobalIndexType>* rankLocalCells = &_soln->mesh()->globalDofAssignment()->cellsInPartition(rank);
-  for (int cellOrdinal=0; cellOrdinal < cells.size(); cellOrdinal++) {
-    if (rankLocalCells->find(cells[cellOrdinal]) == rankLocalCells->end()) {
+  for (int cellOrdinal=0; cellOrdinal < cells.size(); cellOrdinal++)
+  {
+    if (rankLocalCells->find(cells[cellOrdinal]) == rankLocalCells->end())
+    {
       offRankCells.insert(cells[cellOrdinal]);
     }
   }
@@ -41,11 +47,15 @@ void SimpleSolutionFunction<Scalar>::importCellData(std::vector<GlobalIndexType>
 }
 
 template <typename Scalar>
-void SimpleSolutionFunction<Scalar>::values(Intrepid::FieldContainer<Scalar> &values, BasisCachePtr basisCache) {
+void SimpleSolutionFunction<Scalar>::values(Intrepid::FieldContainer<Scalar> &values, BasisCachePtr basisCache)
+{
   bool dontWeightForCubature = false;
-  if (basisCache->mesh().get() != NULL) { // then we assume that the BasisCache is appropriate for solution's mesh...
+  if (basisCache->mesh().get() != NULL)   // then we assume that the BasisCache is appropriate for solution's mesh...
+  {
     _soln->solutionValues(values, _var->ID(), basisCache, dontWeightForCubature, _var->op());
-  } else {
+  }
+  else
+  {
     // the following adapted from PreviousSolutionFunction.  Probably would do well to consolidate
     // that class with this one at some point...
     LinearTermPtr solnExpression = 1.0 * _var;
@@ -63,14 +73,18 @@ void SimpleSolutionFunction<Scalar>::values(Intrepid::FieldContainer<Scalar> &va
     vector<GlobalIndexType> cellID;
     cellID.push_back(-1);
     BasisCachePtr basisCacheOnePoint;
-    for (int cellIndex=0; cellIndex<numCells; cellIndex++) {
-      for (int ptIndex=0; ptIndex<numPoints; ptIndex++, combinedIndex++) {
+    for (int cellIndex=0; cellIndex<numCells; cellIndex++)
+    {
+      for (int ptIndex=0; ptIndex<numPoints; ptIndex++, combinedIndex++)
+      {
         if (elements[combinedIndex].get()==NULL) continue; // no element found for point; skip it…
         ElementTypePtr elemType = elements[combinedIndex]->elementType();
-        for (int d=0; d<spaceDim; d++) {
+        for (int d=0; d<spaceDim; d++)
+        {
           point(0,0,d) = physicalPoints(combinedIndex,d);
         }
-        if (elements[combinedIndex]->cellID() != cellID[0]) {
+        if (elements[combinedIndex]->cellID() != cellID[0])
+        {
           cellID[0] = elements[combinedIndex]->cellID();
           basisCacheOnePoint = Teuchos::rcp( new BasisCache(elemType, _soln->mesh()) );
           basisCacheOnePoint->setPhysicalCellNodes(_soln->mesh()->physicalCellNodesForCell(cellID[0]),cellID,false); // false: don't createSideCacheToo
@@ -89,66 +103,92 @@ void SimpleSolutionFunction<Scalar>::values(Intrepid::FieldContainer<Scalar> &va
       }
     }
   }
-  if (_var->varType()==FLUX) { // weight by sideParity
+  if (_var->varType()==FLUX)   // weight by sideParity
+  {
     this->sideParity()->scalarMultiplyFunctionValues(values, basisCache);
   }
 }
 
 template <typename Scalar>
-TFunctionPtr<Scalar> SimpleSolutionFunction<Scalar>::dx() {
-  if (_var->op() != Camellia::OP_VALUE) {
+TFunctionPtr<Scalar> SimpleSolutionFunction<Scalar>::dx()
+{
+  if (_var->op() != Camellia::OP_VALUE)
+  {
     return TFunction<Scalar>::null();
-  } else {
+  }
+  else
+  {
     return TFunction<Scalar>::solution(_var->dx(), _soln);
   }
 }
 
 template <typename Scalar>
-TFunctionPtr<Scalar> SimpleSolutionFunction<Scalar>::dy() {
-  if (_var->op() != Camellia::OP_VALUE) {
+TFunctionPtr<Scalar> SimpleSolutionFunction<Scalar>::dy()
+{
+  if (_var->op() != Camellia::OP_VALUE)
+  {
     return TFunction<Scalar>::null();
-  } else {
+  }
+  else
+  {
     return TFunction<Scalar>::solution(_var->dy(), _soln);
   }
 }
 
 template <typename Scalar>
-TFunctionPtr<Scalar> SimpleSolutionFunction<Scalar>::dz() {
-  if (_var->op() != Camellia::OP_VALUE) {
+TFunctionPtr<Scalar> SimpleSolutionFunction<Scalar>::dz()
+{
+  if (_var->op() != Camellia::OP_VALUE)
+  {
     return TFunction<Scalar>::null();
-  } else {
+  }
+  else
+  {
     return TFunction<Scalar>::solution(_var->dz(), _soln);
   }
 }
 
 template <typename Scalar>
-TFunctionPtr<Scalar> SimpleSolutionFunction<Scalar>::x() {
-  if (_var->op() != Camellia::OP_VALUE) {
+TFunctionPtr<Scalar> SimpleSolutionFunction<Scalar>::x()
+{
+  if (_var->op() != Camellia::OP_VALUE)
+  {
     return TFunction<Scalar>::null();
-  } else {
+  }
+  else
+  {
     return TFunction<Scalar>::solution(_var->x(), _soln);
   }
 }
 
 template <typename Scalar>
-TFunctionPtr<Scalar> SimpleSolutionFunction<Scalar>::y() {
-  if (_var->op() != Camellia::OP_VALUE) {
+TFunctionPtr<Scalar> SimpleSolutionFunction<Scalar>::y()
+{
+  if (_var->op() != Camellia::OP_VALUE)
+  {
     return TFunction<Scalar>::null();
-  } else {
+  }
+  else
+  {
     return TFunction<Scalar>::solution(_var->y(), _soln);
   }
 }
 
 template <typename Scalar>
-TFunctionPtr<Scalar> SimpleSolutionFunction<Scalar>::z() {
-  if (_var->op() != Camellia::OP_VALUE) {
+TFunctionPtr<Scalar> SimpleSolutionFunction<Scalar>::z()
+{
+  if (_var->op() != Camellia::OP_VALUE)
+  {
     return TFunction<Scalar>::null();
-  } else {
+  }
+  else
+  {
     return TFunction<Scalar>::solution(_var->z(), _soln);
   }
 }
 
-namespace Camellia {
-  template class SimpleSolutionFunction<double>;
+namespace Camellia
+{
+template class SimpleSolutionFunction<double>;
 }
 

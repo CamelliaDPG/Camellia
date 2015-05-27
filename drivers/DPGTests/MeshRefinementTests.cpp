@@ -18,20 +18,24 @@
 #include "HDF5Exporter.h"
 #endif
 
-bool MeshRefinementTests::checkMultiElementStiffness(Teuchos::RCP<Mesh> mesh) {
+bool MeshRefinementTests::checkMultiElementStiffness(Teuchos::RCP<Mesh> mesh)
+{
   bool success = true;
 
   set<GlobalIndexType> activeCellIDs = mesh->getActiveCellIDs();
-  for (set<GlobalIndexType>::iterator cellIt = activeCellIDs.begin(); cellIt != activeCellIDs.end(); cellIt++) {
+  for (set<GlobalIndexType>::iterator cellIt = activeCellIDs.begin(); cellIt != activeCellIDs.end(); cellIt++)
+  {
     GlobalIndexType cellID = *cellIt;
-    if ( ! checkMultiElementStiffness(mesh, cellID) ) {
+    if ( ! checkMultiElementStiffness(mesh, cellID) )
+    {
       success = false;
     }
   }
   return success;
 }
 
-bool MeshRefinementTests::checkMultiElementStiffness(Teuchos::RCP<Mesh> mesh, int cellID) {
+bool MeshRefinementTests::checkMultiElementStiffness(Teuchos::RCP<Mesh> mesh, int cellID)
+{
   bool success = true;
 
   double tol = 1e-14;
@@ -53,13 +57,16 @@ bool MeshRefinementTests::checkMultiElementStiffness(Teuchos::RCP<Mesh> mesh, in
   multiBrokenSides(brokenSideSet,elem);
   ElementTypePtr elemType = elem->elementType();
   sideParities = mesh->cellSideParitiesForCell(cellID);
-  { // check that the test can proceed:
+  {
+    // check that the test can proceed:
     DofOrderingPtr testOrder = elemType->testOrderPtr;
     int testID  =  *(testOrder->getVarIDs().begin()); // just grab the first one
     BasisPtr testBasis = testOrder->getBasis(testID);
-    if (! testBasis->isConforming()) {
+    if (! testBasis->isConforming())
+    {
       static bool haveWarned = false;
-      if (!haveWarned) {
+      if (!haveWarned)
+      {
         cout << "checkMultiElementStiffness(): test relies on conforming test basis, but we don't have one.  Skipping test with a PASS.\n";
         haveWarned = true;
       }
@@ -69,7 +76,8 @@ bool MeshRefinementTests::checkMultiElementStiffness(Teuchos::RCP<Mesh> mesh, in
   }
   preStiffnessExpectedMulti(expectedValues,h,brokenSideSet,elemType,sideParities);
 
-  if (cellID == 1) {
+  if (cellID == 1)
+  {
 //    cout << "MultiBasis expectedValues for cell " << cellID << ":\n";
 //    cout << expectedValues;
   }
@@ -78,7 +86,8 @@ bool MeshRefinementTests::checkMultiElementStiffness(Teuchos::RCP<Mesh> mesh, in
   physicalCellNodes = mesh->physicalCellNodesForCell(cellID);
   BilinearFormUtility<double>::computeStiffnessMatrixForCell(actualValues, mesh, cellID);
 
-  if ( !fcsAgree(expectedValues,actualValues,tol,maxDiff) ) {
+  if ( !fcsAgree(expectedValues,actualValues,tol,maxDiff) )
+  {
     cout << "Failure in element " << cellID <<  " stiffness computation (using Multi-Basis); maxDiff = " << maxDiff << endl;
     cout << "expectedValues:\n" << expectedValues;
     cout << "actualValues:\n" << actualValues;
@@ -88,18 +97,22 @@ bool MeshRefinementTests::checkMultiElementStiffness(Teuchos::RCP<Mesh> mesh, in
   return success;
 }
 
-void MeshRefinementTests::multiBrokenSides(set<int> &brokenSideSet, ElementPtr elem) {
+void MeshRefinementTests::multiBrokenSides(set<int> &brokenSideSet, ElementPtr elem)
+{
   brokenSideSet.clear();
   int numSides = elem->numSides();
-  for (int sideIndex=0; sideIndex<numSides; sideIndex++) {
+  for (int sideIndex=0; sideIndex<numSides; sideIndex++)
+  {
     ElementPtr neighbor;
     int sideIndexInNeighbor;
     neighbor = elem->getNeighbor(sideIndexInNeighbor, sideIndex);
-    if (neighbor.get() == NULL) {
+    if (neighbor.get() == NULL)
+    {
       // boundary or this is a small side; either way, not broken
       continue;
     }
-    if (neighbor->isParent() && (neighbor->childIndicesForSide(sideIndexInNeighbor).size() > 1)) {
+    if (neighbor->isParent() && (neighbor->childIndicesForSide(sideIndexInNeighbor).size() > 1))
+    {
       // if neighbor is a parent *and* broken along the given side, then MultiBasis…
       brokenSideSet.insert(sideIndex);
     }
@@ -107,8 +120,9 @@ void MeshRefinementTests::multiBrokenSides(set<int> &brokenSideSet, ElementPtr e
 }
 
 void MeshRefinementTests::preStiffnessExpectedUniform(FieldContainer<double> &preStiff,
-                                                      double h, ElementTypePtr elemType,
-                                                      FieldContainer<double> &sideParities) {
+    double h, ElementTypePtr elemType,
+    FieldContainer<double> &sideParities)
+{
   double h_ratio = h / 2.0; // because the master line has length 2...
 
   DofOrderingPtr trialOrder = elemType->trialOrderPtr;
@@ -134,9 +148,12 @@ void MeshRefinementTests::preStiffnessExpectedUniform(FieldContainer<double> &pr
   BasisPtr testBasis = testOrder->getBasis(testID);
   FieldContainer<double> testValues(testBasis->getCardinality(),refPoints2D.dimension(0));
   testBasis->getValues(testValues, refPoints2D, Intrepid::OPERATOR_VALUE);
-  for (int testOrdinal=0; testOrdinal<testBasis->getCardinality(); testOrdinal++) {
-    for (int pointIndex=0; pointIndex<numPoints; pointIndex++) {
-      if (abs(testValues(testOrdinal,pointIndex)-1.0) < tol) {
+  for (int testOrdinal=0; testOrdinal<testBasis->getCardinality(); testOrdinal++)
+  {
+    for (int pointIndex=0; pointIndex<numPoints; pointIndex++)
+    {
+      if (abs(testValues(testOrdinal,pointIndex)-1.0) < tol)
+      {
         phi_ordinals[pointIndex] = testOrdinal;
       }
     }
@@ -152,9 +169,12 @@ void MeshRefinementTests::preStiffnessExpectedUniform(FieldContainer<double> &pr
 
   FieldContainer<double> trialValues(trialBasis->getCardinality(),refPoints1D.dimension(0));
   trialBasis->getValues(trialValues, refPoints1D, Intrepid::OPERATOR_VALUE);
-  for (int trialOrdinal=0; trialOrdinal<trialBasis->getCardinality(); trialOrdinal++) {
-    for (int pointIndex=0; pointIndex<numPoints; pointIndex++) {
-      if (abs(trialValues(trialOrdinal,pointIndex)-1.0) < tol) {
+  for (int trialOrdinal=0; trialOrdinal<trialBasis->getCardinality(); trialOrdinal++)
+  {
+    for (int pointIndex=0; pointIndex<numPoints; pointIndex++)
+    {
+      if (abs(trialValues(trialOrdinal,pointIndex)-1.0) < tol)
+      {
         v_ordinals[pointIndex] = trialOrdinal;
       }
     }
@@ -169,10 +189,12 @@ void MeshRefinementTests::preStiffnessExpectedUniform(FieldContainer<double> &pr
   preStiff.initialize(0.0);
   int numSides = 4;
   int phiNodes[2];
-  for (int sideIndex=0; sideIndex<numSides; sideIndex++) {
+  for (int sideIndex=0; sideIndex<numSides; sideIndex++)
+  {
     phiNodes[0] = phiNodesForSide[sideIndex].first;
     phiNodes[1] = phiNodesForSide[sideIndex].second;
-    for (int nodeIndex=0; nodeIndex<2; nodeIndex++) { // loop over the line's two nodes
+    for (int nodeIndex=0; nodeIndex<2; nodeIndex++)   // loop over the line's two nodes
+    {
       int testOrdinal = phi_ordinals[ phiNodes[nodeIndex] ]; // ordinal of the test that "agrees"
       int testDofIndex = testOrder->getDofIndex(testID,testOrdinal);
       int trialDofIndex = trialOrder->getDofIndex(trialID,nodeIndex,sideIndex);
@@ -185,8 +207,9 @@ void MeshRefinementTests::preStiffnessExpectedUniform(FieldContainer<double> &pr
 }
 
 void MeshRefinementTests::preStiffnessExpectedMulti(FieldContainer<double> &preStiff, double h,
-                                                    const set<int> &brokenSides, ElementTypePtr elemType,
-                                                    FieldContainer<double> &sideParities) {
+    const set<int> &brokenSides, ElementTypePtr elemType,
+    FieldContainer<double> &sideParities)
+{
   double h_ratio = h / 2.0; // because the master line has length 2...
 
   DofOrderingPtr trialOrder = elemType->trialOrderPtr;
@@ -212,9 +235,12 @@ void MeshRefinementTests::preStiffnessExpectedMulti(FieldContainer<double> &preS
   BasisPtr testBasis = testOrder->getBasis(testID);
   FieldContainer<double> testValues(testBasis->getCardinality(),refPoints2D.dimension(0));
   testBasis->getValues(testValues, refPoints2D, Intrepid::OPERATOR_VALUE);
-  for (int testOrdinal=0; testOrdinal<testBasis->getCardinality(); testOrdinal++) {
-    for (int pointIndex=0; pointIndex<numPoints; pointIndex++) {
-      if (abs(testValues(testOrdinal,pointIndex)-1.0) < tol) {
+  for (int testOrdinal=0; testOrdinal<testBasis->getCardinality(); testOrdinal++)
+  {
+    for (int pointIndex=0; pointIndex<numPoints; pointIndex++)
+    {
+      if (abs(testValues(testOrdinal,pointIndex)-1.0) < tol)
+      {
         phi_ordinals[pointIndex] = testOrdinal;
       }
     }
@@ -230,9 +256,12 @@ void MeshRefinementTests::preStiffnessExpectedMulti(FieldContainer<double> &preS
 
   FieldContainer<double> trialValues(trialBasis->getCardinality(),refPoints1D.dimension(0));
   trialBasis->getValues(trialValues, refPoints1D, Intrepid::OPERATOR_VALUE);
-  for (int trialOrdinal=0; trialOrdinal<trialBasis->getCardinality(); trialOrdinal++) {
-    for (int pointIndex=0; pointIndex<numPoints; pointIndex++) {
-      if (abs(trialValues(trialOrdinal,pointIndex)-1.0) < tol) {
+  for (int trialOrdinal=0; trialOrdinal<trialBasis->getCardinality(); trialOrdinal++)
+  {
+    for (int pointIndex=0; pointIndex<numPoints; pointIndex++)
+    {
+      if (abs(trialValues(trialOrdinal,pointIndex)-1.0) < tol)
+      {
         v_ordinals[pointIndex] = trialOrdinal;
       }
     }
@@ -247,7 +276,8 @@ void MeshRefinementTests::preStiffnessExpectedMulti(FieldContainer<double> &preS
   preStiff.initialize(0.0);
   int numSides = 4;
   int phiNodes[2];
-  for (int sideIndex=0; sideIndex<numSides; sideIndex++) {
+  for (int sideIndex=0; sideIndex<numSides; sideIndex++)
+  {
     phiNodes[0] = phiNodesForSide[sideIndex].first;
     phiNodes[1] = phiNodesForSide[sideIndex].second;
 
@@ -261,29 +291,38 @@ void MeshRefinementTests::preStiffnessExpectedMulti(FieldContainer<double> &preS
     bool hasMultiBasis = (brokenSides.find(sideIndex) != brokenSides.end());
     int numSubSides = hasMultiBasis ? 2 : 1; // because of our setup, max subsides is 2
 
-    for (int subSideIndex=0; subSideIndex < numSubSides; subSideIndex++) {
-      if (hasMultiBasis) {
+    for (int subSideIndex=0; subSideIndex < numSubSides; subSideIndex++)
+    {
+      if (hasMultiBasis)
+      {
         // here, the meaning of agreement: if phi belongs to the first node in the big element edge and the little edge node is the first, that's agreement
-        if (subSideIndex == 0) {
+        if (subSideIndex == 0)
+        {
           agreeValue[0]    = 5.0 / 12.0;
           disagreeValue[0] = 1.0 / 12.0;
           agreeValue[1]    = 1.0 /  6.0;
           disagreeValue[1] = 1.0 /  3.0;
-        } else {
+        }
+        else
+        {
           agreeValue[0]    = 1.0 /  6.0;
           disagreeValue[0] = 1.0 /  3.0;
           agreeValue[1]    = 5.0 / 12.0;
           disagreeValue[1] = 1.0 / 12.0;
         }
       }
-      for (int nodeIndex=0; nodeIndex<2; nodeIndex++) { // loop over the line's two nodes
+      for (int nodeIndex=0; nodeIndex<2; nodeIndex++)   // loop over the line's two nodes
+      {
         int testOrdinal = phi_ordinals[ phiNodes[nodeIndex] ]; // ordinal of the test that "agrees"
         int testDofIndex = testOrder->getDofIndex(testID,testOrdinal);
         int trialDofIndex;
-        if (hasMultiBasis) {
+        if (hasMultiBasis)
+        {
           trialDofIndex = trialOrder->getDofIndex(trialID,nodeIndex,sideIndex,subSideIndex);
 //          cout << "trialDofIndex for trialID " << trialID << ", node " << nodeIndex << ", subSideIndex " << subSideIndex << ": " << trialDofIndex << endl;
-        } else {
+        }
+        else
+        {
           trialDofIndex = trialOrder->getDofIndex(trialID,nodeIndex,sideIndex);
         }
         preStiff(0,testDofIndex,trialDofIndex) += agreeValue[nodeIndex] * h_ratio * sideParities(0,sideIndex);
@@ -295,7 +334,8 @@ void MeshRefinementTests::preStiffnessExpectedMulti(FieldContainer<double> &preS
   }
 }
 
-void MeshRefinementTests::setup() {
+void MeshRefinementTests::setup()
+{
   // throughout setup, we have hard-coded cellIDs.
   // this will break if the way mesh or the refinements order their elements changes.
   // not hard, though tedious, to test for the points we know should be in the elements.
@@ -318,7 +358,8 @@ void MeshRefinementTests::setup() {
 
   int H1Order = 2;  // means linear for fluxes
   int delta_p = -1; // means tests will likewise be (bi-)linear
-  int horizontalCells = 2; int verticalCells = 1;
+  int horizontalCells = 2;
+  int verticalCells = 1;
 
   _h = 1.0;
   _h_small = 0.5;
@@ -360,41 +401,48 @@ void MeshRefinementTests::setup() {
   _C5multi = _multiC->getElement(5);
 }
 
-void MeshRefinementTests::teardown() {
+void MeshRefinementTests::teardown()
+{
 
 }
 
-void MeshRefinementTests::runTests(int &numTestsRun, int &numTestsPassed) {
+void MeshRefinementTests::runTests(int &numTestsRun, int &numTestsPassed)
+{
   setup();
-  if (testPRefinements()) {
+  if (testPRefinements())
+  {
     numTestsPassed++;
   }
   numTestsRun++;
   teardown();
 
   setup();
-  if (testMultiBasisSideParities()) {
+  if (testMultiBasisSideParities())
+  {
     numTestsPassed++;
   }
   numTestsRun++;
   teardown();
 
   setup();
-  if (testUniformMeshStiffnessMatrices()) {
+  if (testUniformMeshStiffnessMatrices())
+  {
     numTestsPassed++;
   }
   numTestsRun++;
   teardown();
 
   setup();
-  if (testMultiBasisStiffnessMatrices()) {
+  if (testMultiBasisStiffnessMatrices())
+  {
     numTestsPassed++;
   }
   numTestsRun++;
   teardown();
 }
 
-bool MeshRefinementTests::testUniformMeshStiffnessMatrices() {
+bool MeshRefinementTests::testUniformMeshStiffnessMatrices()
+{
   bool success = true;
 
   double tol = 1e-14;
@@ -412,13 +460,16 @@ bool MeshRefinementTests::testUniformMeshStiffnessMatrices() {
   // determine expected values:
   ElementTypePtr elemType = _B1multi->elementType();
   sideParities = _multiB->cellSideParitiesForCell(_B1multi->cellID());
-  { // check that the test can proceed:
+  {
+    // check that the test can proceed:
     DofOrderingPtr testOrder = elemType->testOrderPtr;
     int testID  =  *(testOrder->getVarIDs().begin()); // just grab the first one
     BasisPtr testBasis = testOrder->getBasis(testID);
-    if (! testBasis->isConforming()) {
+    if (! testBasis->isConforming())
+    {
       static bool haveWarned = false;
-      if (! haveWarned ) {
+      if (! haveWarned )
+      {
         cout << "testUniformMeshStiffnessMatrices(): test relies on conforming test basis, but we don't have one.  Skipping test with a PASS.\n";
         haveWarned = true;
       }
@@ -430,7 +481,8 @@ bool MeshRefinementTests::testUniformMeshStiffnessMatrices() {
   physicalCellNodes = _multiB->physicalCellNodesForCell(_B1multi->cellID());
   BilinearFormUtility<double>::computeStiffnessMatrixForCell(actualValues, _multiB, _B1multi->cellID());
 
-  if ( !fcsAgree(expectedValues,actualValues,tol,maxDiff) ) {
+  if ( !fcsAgree(expectedValues,actualValues,tol,maxDiff) )
+  {
     cout << "Failure in uniform mesh B (with usePatchBasis=false) stiffness computation; maxDiff = " << maxDiff << endl;
     cout << "expectedValues:\n" << expectedValues;
     cout << "actualValues:\n" << actualValues;
@@ -447,7 +499,8 @@ bool MeshRefinementTests::testUniformMeshStiffnessMatrices() {
   physicalCellNodes = _multiC->physicalCellNodesForCell(_C4multi->cellID());
   BilinearFormUtility<double>::computeStiffnessMatrixForCell(actualValues, _multiC, _C4multi->cellID());
 
-  if ( !fcsAgree(expectedValues,actualValues,tol,maxDiff) ) {
+  if ( !fcsAgree(expectedValues,actualValues,tol,maxDiff) )
+  {
     cout << "Failure in uniform mesh C (with usePatchBasis=false) stiffness computation; maxDiff = " << maxDiff << endl;
     cout << "expectedValues:\n" << expectedValues;
     cout << "actualValues:\n" << actualValues;
@@ -457,25 +510,30 @@ bool MeshRefinementTests::testUniformMeshStiffnessMatrices() {
   return success;
 }
 
-bool MeshRefinementTests::testMultiBasisStiffnessMatrices() {
+bool MeshRefinementTests::testMultiBasisStiffnessMatrices()
+{
   bool success = true;
 
-  if ( ! checkMultiElementStiffness(_multiA) ) {
+  if ( ! checkMultiElementStiffness(_multiA) )
+  {
     success = false;
   }
 
-  if ( ! checkMultiElementStiffness(_multiB) ) {
+  if ( ! checkMultiElementStiffness(_multiB) )
+  {
     success = false;
   }
 
-  if ( ! checkMultiElementStiffness(_multiC) ) {
+  if ( ! checkMultiElementStiffness(_multiC) )
+  {
     success = false;
   }
 
   return success;
 }
 
-bool MeshRefinementTests::testMultiBasisSideParities() {
+bool MeshRefinementTests::testMultiBasisSideParities()
+{
   bool success = true;
 
   FieldContainer<double> A0_side_parities = _multiA->cellSideParitiesForCell(_A3multi->getParent()->cellID());
@@ -484,29 +542,37 @@ bool MeshRefinementTests::testMultiBasisSideParities() {
   FieldContainer<double> A4_side_parities = _multiA->cellSideParitiesForCell(_A4multi->cellID());
 
   // check the entry for sideIndex 1 (the patchBasis side)
-  if (A0_side_parities(0,1) != A3_side_parities(0,1)) {
+  if (A0_side_parities(0,1) != A3_side_parities(0,1))
+  {
     success = false;
     cout << "Failure: MultiBasisSideParities: child doesn't match parent along broken side.\n";
   }
-  if (A3_side_parities(0,1) != A4_side_parities(0,1)) {
+  if (A3_side_parities(0,1) != A4_side_parities(0,1))
+  {
     success = false;
     cout << "Failure: MultiBasisSideParities: children don't match each other along parent side.\n";
   }
-  if (A3_side_parities(0,1) != - A1_side_parities(0,3)) {
+  if (A3_side_parities(0,1) != - A1_side_parities(0,3))
+  {
     success = false;
     cout << "Failure: MultiBasisSideParities: children aren't opposite large neighbor cell parity.\n";
   }
   return success;
 }
 
-bool cellsHaveH1Order(MeshPtr mesh, int H1Order, set<GlobalIndexType> cellIDs) {
-  for (set<GlobalIndexType>::iterator cellIDIt = cellIDs.begin(); cellIDIt != cellIDs.end(); cellIDIt++) {
+bool cellsHaveH1Order(MeshPtr mesh, int H1Order, set<GlobalIndexType> cellIDs)
+{
+  for (set<GlobalIndexType>::iterator cellIDIt = cellIDs.begin(); cellIDIt != cellIDs.end(); cellIDIt++)
+  {
     GlobalIndexType cellID = *cellIDIt;
     vector<int> cellOrder = mesh->globalDofAssignment()->getH1Order(cellID);
-    if (cellOrder.size() != 1) {
+    if (cellOrder.size() != 1)
+    {
       cout << "cell " << cellID << "'s H1Order does not have exactly one value; has " << cellOrder.size() << endl;
       return false;
-    } else if (cellOrder[0] != H1Order) {
+    }
+    else if (cellOrder[0] != H1Order)
+    {
       cout << "cell " << cellID << "'s H1Order " << cellOrder[0] << " does not match expected " << H1Order << endl;
       return false;
     }
@@ -514,7 +580,8 @@ bool cellsHaveH1Order(MeshPtr mesh, int H1Order, set<GlobalIndexType> cellIDs) {
   return true;
 }
 
-bool MeshRefinementTests::testPRefinements() {
+bool MeshRefinementTests::testPRefinements()
+{
   // make a few simple meshes:
   bool success = true;
 
@@ -538,12 +605,14 @@ bool MeshRefinementTests::testPRefinements() {
   meshes.push_back(mesh2D);
   meshes.push_back(mesh3D);
 
-  for (int meshOrdinal=0; meshOrdinal < meshes.size(); meshOrdinal++) {
+  for (int meshOrdinal=0; meshOrdinal < meshes.size(); meshOrdinal++)
+  {
     MeshPtr mesh = meshes[meshOrdinal];
 
     // check that the H1Orders are right to begin with:
     set<GlobalIndexType> cellIDs = mesh->getActiveCellIDs();
-    if (! cellsHaveH1Order(mesh, H1Order, cellIDs)) {
+    if (! cellsHaveH1Order(mesh, H1Order, cellIDs))
+    {
       cout << "Internal test error: initial mesh order does not match expected.\n";
       success = false;
     }
@@ -551,7 +620,8 @@ bool MeshRefinementTests::testPRefinements() {
     // first, try a uniform p-refinement:
     mesh->pRefine(cellIDs,2);
     H1Order += 2;
-    if (! cellsHaveH1Order(mesh, H1Order, cellIDs)) {
+    if (! cellsHaveH1Order(mesh, H1Order, cellIDs))
+    {
       cout << "Test failure: after p-refinement (by 2), cells do not match expected order.\n";
       success = false;
     }
@@ -559,7 +629,8 @@ bool MeshRefinementTests::testPRefinements() {
     // now, a uniform p-unrefinement to take us back:
     mesh->pRefine(cellIDs,-2);
     H1Order -= 2;
-    if (! cellsHaveH1Order(mesh, H1Order, cellIDs)) {
+    if (! cellsHaveH1Order(mesh, H1Order, cellIDs))
+    {
       cout << "Test failure: after p-refinement (by 2), cells do not match expected order.\n";
       success = false;
     }
@@ -572,29 +643,34 @@ bool MeshRefinementTests::testPRefinements() {
     mesh->hRefine(set0, refPattern);
 
     cellIDs = mesh->getActiveCellIDs();
-    if (! cellsHaveH1Order(mesh, H1Order, cellIDs)) {
+    if (! cellsHaveH1Order(mesh, H1Order, cellIDs))
+    {
       cout << "After h-refinement, mesh order does not match expected.\n";
       success = false;
     }
     // uniform p-refinement:
     mesh->pRefine(cellIDs,1);
     H1Order += 1;
-    if (! cellsHaveH1Order(mesh, H1Order, cellIDs)) {
+    if (! cellsHaveH1Order(mesh, H1Order, cellIDs))
+    {
       cout << "After h-refinement followed by p-refinement, mesh order does not match expected.\n";
       success = false;
     }
-    if (! cellsHaveH1Order(mesh, H1Order, set0)) {
+    if (! cellsHaveH1Order(mesh, H1Order, set0))
+    {
       cout << "After h-refinement followed by p-refinement, cell 0 (the parent) does not have the new polynomial order.\n";
       success = false;
     }
 
     mesh->pRefine(cellIDs,-1);
     H1Order -= 1;
-    if (! cellsHaveH1Order(mesh, H1Order, cellIDs)) {
+    if (! cellsHaveH1Order(mesh, H1Order, cellIDs))
+    {
       cout << "After h-refinement followed by p-refinement and p-unrefinement, mesh order does not match expected.\n";
       success = false;
     }
-    if (! cellsHaveH1Order(mesh, H1Order, set0)) {
+    if (! cellsHaveH1Order(mesh, H1Order, set0))
+    {
       cout << "After h-refinement followed by p-refinement and p-unrefinement, cell 0 (the parent) does not have the new polynomial order.\n";
       success = false;
     }

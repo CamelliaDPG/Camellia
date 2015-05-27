@@ -44,23 +44,29 @@
 #include "HDF5Exporter.h"
 #endif
 
-class NewQuadraticFunction : public SimpleFunction<double> {
+class NewQuadraticFunction : public SimpleFunction<double>
+{
 public:
-  double value(double x, double y) {
+  double value(double x, double y)
+  {
     return x*y + 3.0 * x * x;
   }
 };
 
-class SqrtFunction : public SimpleFunction<double> {
+class SqrtFunction : public SimpleFunction<double>
+{
 public:
-  double value(double x, double y) {
+  double value(double x, double y)
+  {
     return sqrt(abs(x));
   }
 };
 
-class UnitSquareBoundary : public SpatialFilter {
+class UnitSquareBoundary : public SpatialFilter
+{
 public:
-  bool matchesPoint(double x, double y) {
+  bool matchesPoint(double x, double y)
+  {
     double tol = 1e-14;
     bool xMatch = (abs(x-1.0)<tol) || (abs(x)<tol);
     bool yMatch = (abs(y-1.0)<tol) || (abs(y)<tol);
@@ -68,9 +74,11 @@ public:
   }
 };
 
-class InflowBoundary : public SpatialFilter {
+class InflowBoundary : public SpatialFilter
+{
 public:
-  bool matchesPoint(double x, double y) {
+  bool matchesPoint(double x, double y)
+  {
     double tol = 1e-14;
     bool xMatch =  (abs(x)<tol);
     bool yMatch =  (abs(y)<tol);
@@ -78,7 +86,8 @@ public:
   }
 };
 
-bool SolutionTests::solutionCoefficientsAreConsistent(Teuchos::RCP<Solution> soln, bool printDetailsToConsole) {
+bool SolutionTests::solutionCoefficientsAreConsistent(Teuchos::RCP<Solution> soln, bool printDetailsToConsole)
+{
   BFPtr bf = soln->mesh()->bilinearForm();
 
   vector<int> trialIDs = bf->trialIDs();
@@ -88,16 +97,20 @@ bool SolutionTests::solutionCoefficientsAreConsistent(Teuchos::RCP<Solution> sol
   bool success = true;
 
   double tol = 1e-14;
-  for (int i=0; i<trialIDs.size(); i++) {
+  for (int i=0; i<trialIDs.size(); i++)
+  {
     int trialID = trialIDs[i];
-    if (bf->isFluxOrTrace(trialID) ) {
+    if (bf->isFluxOrTrace(trialID) )
+    {
       // then there's a chance at inconsistency
       set<GlobalIndexType> rankLocalCellIDs = soln->mesh()->cellIDsInPartition();
-      for (set<GlobalIndexType>::iterator cellIt = rankLocalCellIDs.begin(); cellIt != rankLocalCellIDs.end(); cellIt++) {
+      for (set<GlobalIndexType>::iterator cellIt = rankLocalCellIDs.begin(); cellIt != rankLocalCellIDs.end(); cellIt++)
+      {
         GlobalIndexType cellID = *cellIt;
         DofOrderingPtr trialSpace = soln->mesh()->getElement(cellID)->elementType()->trialOrderPtr;
         const vector<int>* sidesForVar = &trialSpace->getSidesForVarID(trialID);
-        for (vector<int>::const_iterator sideIt = sidesForVar->begin(); sideIt != sidesForVar->end(); sideIt++) {
+        for (vector<int>::const_iterator sideIt = sidesForVar->begin(); sideIt != sidesForVar->end(); sideIt++)
+        {
           int sideIndex = *sideIt;
           vector<int> localDofIndices = trialSpace->getDofIndices(trialID,sideIndex);
           int basisCardinality = localDofIndices.size();
@@ -105,14 +118,18 @@ bool SolutionTests::solutionCoefficientsAreConsistent(Teuchos::RCP<Solution> sol
           FieldContainer<double> solnCoeffs(basisCardinality);
           soln->solnCoeffsForCellID(solnCoeffs, cellID, trialID, sideIndex);
 
-          for (int dofOrdinal = 0; dofOrdinal < basisCardinality; dofOrdinal++) {
+          for (int dofOrdinal = 0; dofOrdinal < basisCardinality; dofOrdinal++)
+          {
             int localDofIndex = localDofIndices[dofOrdinal];
             int globalDofIndex = soln->mesh()->globalDofIndex(cellID,localDofIndex);
-            if ( globalBasisCoefficients.find(globalDofIndex) != globalBasisCoefficients.end() ) {
+            if ( globalBasisCoefficients.find(globalDofIndex) != globalBasisCoefficients.end() )
+            {
               // compare previous entry
               double diff = abs(globalBasisCoefficients[globalDofIndex] - solnCoeffs[dofOrdinal]);
-              if (diff > tol) {
-                if (printDetailsToConsole) {
+              if (diff > tol)
+              {
+                if (printDetailsToConsole)
+                {
                   cout << "coefficients inconsistent for cellID " << cellID << " and dofOrdinal " << dofOrdinal;
                   cout << " (on side " << sideIndex << "; globalDofIndex = " << globalDofIndex << ")";
                   cout << " and trialID " << trialID << " (diff = " << diff;
@@ -135,11 +152,12 @@ bool SolutionTests::solutionCoefficientsAreConsistent(Teuchos::RCP<Solution> sol
 // unclear on why these initializers are necessary but others (e.g. _confusionSolution1_2x2) are not
 // maybe a bug in Teuchos::RCP?
 SolutionTests::SolutionTests() :
-_confusionExactSolution(Teuchos::rcp( (ConfusionManufacturedSolution*) NULL )),
-_poissonExactSolution(Teuchos::rcp( (PoissonExactSolution*) NULL ))
+  _confusionExactSolution(Teuchos::rcp( (ConfusionManufacturedSolution*) NULL )),
+  _poissonExactSolution(Teuchos::rcp( (PoissonExactSolution*) NULL ))
 {}
 
-void SolutionTests::setup() {
+void SolutionTests::setup()
+{
   // first, build a simple mesh
 
 //  int rank = Teuchos::GlobalMPISession::getRank();
@@ -163,11 +181,12 @@ void SolutionTests::setup() {
   int polyOrder = 2; // 2 is minimum for projecting QuadraticFunction exactly
   _poissonExactSolution =
     Teuchos::rcp( new PoissonExactSolution(PoissonExactSolution::POLYNOMIAL,
-					   polyOrder, useConformingTraces) );
+                  polyOrder, useConformingTraces) );
   _poissonExactSolution->setUseSinglePointBCForPHI(false, -1); // impose zero-mean constraint
 
   int H1Order = polyOrder+1;
-  int horizontalCells = 2; int verticalCells = 2;
+  int horizontalCells = 2;
+  int verticalCells = 2;
 
   // before we hRefine, compute a solution for comparison after refinement
   IPPtr ipConfusion = Teuchos::rcp(new MathInnerProduct(_confusionExactSolution->bilinearForm()));
@@ -197,8 +216,10 @@ void SolutionTests::setup() {
   double y[NUM_POINTS_1D] = {0.1,0.2,0.3,0.4,0.5,0.6,0.7,0.8,0.9,1.0};
 
   _testPoints = FieldContainer<double>(NUM_POINTS_1D*NUM_POINTS_1D,2);
-  for (int i=0; i<NUM_POINTS_1D; i++) {
-    for (int j=0; j<NUM_POINTS_1D; j++) {
+  for (int i=0; i<NUM_POINTS_1D; i++)
+  {
+    for (int j=0; j<NUM_POINTS_1D; j++)
+    {
       _testPoints(i*NUM_POINTS_1D + j, 0) = x[i];
       _testPoints(i*NUM_POINTS_1D + j, 1) = y[j];
     }
@@ -206,19 +227,22 @@ void SolutionTests::setup() {
 //  cout << "completed setup() on rank " << rank << endl;
 }
 
-void SolutionTests::teardown() {
+void SolutionTests::teardown()
+{
   _confusionSolution1_2x2 = Teuchos::rcp( (Solution*)NULL );
   _confusionSolution2_2x2 = Teuchos::rcp( (Solution*)NULL );
   _testPoints.resize(0);
 }
 
-void SolutionTests::runTests(int &numTestsRun, int &numTestsPassed) {
+void SolutionTests::runTests(int &numTestsRun, int &numTestsPassed)
+{
 
   int rank = Teuchos::GlobalMPISession::getRank();
   cout << "Starting SolutionTests::runTests on rank " << rank << endl;
 
   setup();
-  if (testProjectSolutionOntoOtherMesh()) {
+  if (testProjectSolutionOntoOtherMesh())
+  {
     numTestsPassed++;
   }
   numTestsRun++;
@@ -227,7 +251,8 @@ void SolutionTests::runTests(int &numTestsRun, int &numTestsPassed) {
   cout << "finished test testProjectSolutionOntoOtherMesh().\n";
 
 //  setup(); // commented out to make certain debugging output easier to read (in fact testCondensationSolveNonlinear() doesn't depend on setup at all...)
-  if (testCondensationSolveNonlinear()) {
+  if (testCondensationSolveNonlinear())
+  {
     numTestsPassed++;
   }
   numTestsRun++;
@@ -235,7 +260,8 @@ void SolutionTests::runTests(int &numTestsRun, int &numTestsPassed) {
 
 
   setup();
-  if (testAddCondensedSolution()) {
+  if (testAddCondensedSolution())
+  {
     numTestsPassed++;
   }
   numTestsRun++;
@@ -243,28 +269,32 @@ void SolutionTests::runTests(int &numTestsRun, int &numTestsPassed) {
 
 
   setup();
-  if (testCondensationSolve()) {
+  if (testCondensationSolve())
+  {
     numTestsPassed++;
   }
   numTestsRun++;
   teardown();
 
   setup();
-  if (testCondensationSolveWithSinglePointConstraint()) {
+  if (testCondensationSolveWithSinglePointConstraint())
+  {
     numTestsPassed++;
   }
   numTestsRun++;
   teardown();
 
   setup();
-  if (testCondensationSolveWithZeroMeanConstraint()) {
+  if (testCondensationSolveWithZeroMeanConstraint())
+  {
     numTestsPassed++;
   }
   numTestsRun++;
   teardown();
 
   setup();
-  if (testNewProjectFunction()) {
+  if (testNewProjectFunction())
+  {
     numTestsPassed++;
   }
   numTestsRun++;
@@ -272,7 +302,8 @@ void SolutionTests::runTests(int &numTestsRun, int &numTestsPassed) {
 
   setup();
 
-  if (testProjectVectorValuedSolution()) {
+  if (testProjectVectorValuedSolution())
+  {
     numTestsPassed++;
   }
   numTestsRun++;
@@ -281,7 +312,8 @@ void SolutionTests::runTests(int &numTestsRun, int &numTestsPassed) {
   cout << "finished test testProjectVectorValuedSolution() on rank " << rank << ".\n";
 
   setup();
-  if (testHRefinementInitialization()) {
+  if (testHRefinementInitialization())
+  {
     numTestsPassed++;
   }
   numTestsRun++;
@@ -291,7 +323,8 @@ void SolutionTests::runTests(int &numTestsRun, int &numTestsPassed) {
 
 
   setup();
-  if (testSolutionsAreConsistent()) {
+  if (testSolutionsAreConsistent())
+  {
     numTestsPassed++;
   }
   numTestsRun++;
@@ -300,7 +333,8 @@ void SolutionTests::runTests(int &numTestsRun, int &numTestsPassed) {
   cout << "finished test testSolutionsAreConsistent().\n";
 
   setup();
-  if (testSolutionEvaluationBasisCache() ) {
+  if (testSolutionEvaluationBasisCache() )
+  {
     numTestsPassed++;
   }
   numTestsRun++;
@@ -309,7 +343,8 @@ void SolutionTests::runTests(int &numTestsRun, int &numTestsPassed) {
   cout << "finished test testSolutionEvaluationBasisCache().\n";
 
   setup();
-  if (testAddSolution()) {
+  if (testAddSolution())
+  {
     numTestsPassed++;
   }
   numTestsRun++;
@@ -318,7 +353,8 @@ void SolutionTests::runTests(int &numTestsRun, int &numTestsPassed) {
   cout << "finished test testAddSolution().\n";
 
   setup();
-  if (testProjectFunction()) {
+  if (testProjectFunction())
+  {
     numTestsPassed++;
   }
   numTestsRun++;
@@ -327,7 +363,8 @@ void SolutionTests::runTests(int &numTestsRun, int &numTestsPassed) {
   cout << "finished test testProjectFunction().\n";
 
   setup();
-  if (testAddRefinedSolutions()) {
+  if (testAddRefinedSolutions())
+  {
     numTestsPassed++;
   }
   numTestsRun++;
@@ -336,7 +373,8 @@ void SolutionTests::runTests(int &numTestsRun, int &numTestsPassed) {
   cout << "finished test testAddRefinedSolutions().\n";
 
   setup();
-  if (testEnergyError()) {
+  if (testEnergyError())
+  {
     numTestsPassed++;
   }
   numTestsRun++;
@@ -345,7 +383,8 @@ void SolutionTests::runTests(int &numTestsRun, int &numTestsPassed) {
   cout << "finished test testEnergyError().\n";
 
   setup();
-  if (testPRefinementInitialization()) {
+  if (testPRefinementInitialization())
+  {
     numTestsPassed++;
   }
   numTestsRun++;
@@ -353,8 +392,9 @@ void SolutionTests::runTests(int &numTestsRun, int &numTestsPassed) {
 
   cout << "finished test testPRefinementInitialization().\n";
 
- setup();
-  if (testScratchPadSolution()) {
+  setup();
+  if (testScratchPadSolution())
+  {
     numTestsPassed++;
   }
   numTestsRun++;
@@ -363,27 +403,32 @@ void SolutionTests::runTests(int &numTestsRun, int &numTestsPassed) {
   cout << "finished test testScratchPadSolution().\n";
 }
 
-bool SolutionTests::storageSizesAgree(Teuchos::RCP< Solution > soln1, Teuchos::RCP< Solution > soln2) {
+bool SolutionTests::storageSizesAgree(Teuchos::RCP< Solution > soln1, Teuchos::RCP< Solution > soln2)
+{
   const map< GlobalIndexType, FieldContainer<double> >* solnMap1 = &(soln1->solutionForCellIDGlobal());
   const map< GlobalIndexType, FieldContainer<double> >* solnMap2 = &(soln2->solutionForCellIDGlobal());
-  if (solnMap1->size() != solnMap2->size() ) {
+  if (solnMap1->size() != solnMap2->size() )
+  {
     cout << "SOLUTION 1 entries: ";
     for(map< GlobalIndexType, FieldContainer<double> >::const_iterator soln1It = (*solnMap1).begin();
-        soln1It != (*solnMap1).end(); soln1It++) {
+        soln1It != (*solnMap1).end(); soln1It++)
+    {
       int cellID = soln1It->first;
       cout << cellID << " ";
     }
     cout << endl;
     cout << "SOLUTION 2 entries: ";
     for(map< GlobalIndexType, FieldContainer<double> >::const_iterator soln2It = (*solnMap2).begin();
-        soln2It != (*solnMap2).end(); soln2It++) {
+        soln2It != (*solnMap2).end(); soln2It++)
+    {
       int cellID = soln2It->first;
       cout << cellID << " ";
     }
     cout << endl;
     cout << "active elements: ";
     int numElements = soln1->mesh()->activeElements().size();
-    for (int elemIndex=0; elemIndex<numElements; elemIndex++){
+    for (int elemIndex=0; elemIndex<numElements; elemIndex++)
+    {
       int cellID = soln1->mesh()->activeElements()[elemIndex]->cellID();
       cout << cellID << " ";
     }
@@ -392,21 +437,25 @@ bool SolutionTests::storageSizesAgree(Teuchos::RCP< Solution > soln1, Teuchos::R
     return false;
   }
   for(map< GlobalIndexType, FieldContainer<double> >::const_iterator soln1It = (*solnMap1).begin();
-      soln1It != (*solnMap1).end(); soln1It++) {
+      soln1It != (*solnMap1).end(); soln1It++)
+  {
     GlobalIndexType cellID = soln1It->first;
     int size = soln1It->second.size();
     map< GlobalIndexType, FieldContainer<double> >::const_iterator soln2It = (*solnMap2).find(cellID);
-    if (soln2It == (*solnMap2).end()) {
+    if (soln2It == (*solnMap2).end())
+    {
       return false;
     }
-    if ((soln2It->second).size() != size) {
+    if ((soln2It->second).size() != size)
+    {
       return false;
     }
   }
   return true;
 }
 
-bool SolutionTests::testAddCondensedSolution() {
+bool SolutionTests::testAddCondensedSolution()
+{
   bool success = true;
 
   double weight = 3.141592;
@@ -489,15 +538,19 @@ bool SolutionTests::testAddCondensedSolution() {
 
   // load lhsVector1 and 2 with some arbitrary data
 
-  if (lhsVector1->Map().NumMyElements() > 0) {
-    for (int i=lhsVector1->Map().MinLID(); i<=lhsVector1->Map().MaxLID(); i++) {
+  if (lhsVector1->Map().NumMyElements() > 0)
+  {
+    for (int i=lhsVector1->Map().MinLID(); i<=lhsVector1->Map().MaxLID(); i++)
+    {
       GlobalIndexType gid = lhsVector1->Map().GID(i);
       (*lhsVector1)[0][i] = (double) gid;
     }
   }
 
-  if (lhsVector2->Map().NumMyElements() > 0) {
-    for (int i=lhsVector2->Map().MinLID(); i<=lhsVector2->Map().MaxLID(); i++) {
+  if (lhsVector2->Map().NumMyElements() > 0)
+  {
+    for (int i=lhsVector2->Map().MinLID(); i<=lhsVector2->Map().MaxLID(); i++)
+    {
       GlobalIndexType gid = lhsVector2->Map().GID(i);
       (*lhsVector2)[0][i] = (double) soln2_coefficientWeight * gid;
     }
@@ -514,12 +567,14 @@ bool SolutionTests::testAddCondensedSolution() {
 
 //  cout << "soln1_cell0:\n" << soln1_cell0;
 
-  { // DEBUGGING: check for linear dependence of cell0 coefficients on the lhsVector coefficients
+  {
+    // DEBUGGING: check for linear dependence of cell0 coefficients on the lhsVector coefficients
     FieldContainer<double> soln1_doubled = soln1_cell0;
     SerialDenseWrapper::multiplyFCByWeight(soln1_doubled, soln2_coefficientWeight);
     double tol = 1e-14;
     double maxDiff = 0;
-    if ( !TestSuite::fcsAgree(soln1_doubled, soln2_cell0, tol, maxDiff) ) {
+    if ( !TestSuite::fcsAgree(soln1_doubled, soln2_cell0, tol, maxDiff) )
+    {
       cout << "Error: before calling addSolution, coefficients for soln2 aren't as expected...\n";
       success = false;
     }
@@ -531,7 +586,8 @@ bool SolutionTests::testAddCondensedSolution() {
   FieldContainer<double> expectedValues = soln1_cell0;
   SerialDenseWrapper::multiplyFCByWeight(expectedValues, soln2_coefficientWeight * weight + 1);
   double maxDiff = 0;
-  if ( !TestSuite::fcsAgree(expectedValues, actualValues, tol, maxDiff) ) {
+  if ( !TestSuite::fcsAgree(expectedValues, actualValues, tol, maxDiff) )
+  {
     cout << "Error: after calling addSolution, actual coefficients for sum differ from expected by as much as " << maxDiff << "...\n";
     success = false;
   }
@@ -539,8 +595,10 @@ bool SolutionTests::testAddCondensedSolution() {
   // now repeat, but with a different version of addSolution
   // first, reset soln1:
   {
-    if (lhsVector1->Map().NumMyElements() > 0) {
-      for (int i=lhsVector1->Map().MinLID(); i<=lhsVector1->Map().MaxLID(); i++) {
+    if (lhsVector1->Map().NumMyElements() > 0)
+    {
+      for (int i=lhsVector1->Map().MinLID(); i<=lhsVector1->Map().MaxLID(); i++)
+      {
         GlobalIndexType gid = lhsVector1->Map().GID(i);
         (*lhsVector1)[0][i] = (double) gid;
       }
@@ -552,7 +610,8 @@ bool SolutionTests::testAddCondensedSolution() {
 
   actualValues = soln1->allCoefficientsForCellID(cellID);
   maxDiff = 0;
-  if ( !TestSuite::fcsAgree(expectedValues, actualValues, tol, maxDiff) ) {
+  if ( !TestSuite::fcsAgree(expectedValues, actualValues, tol, maxDiff) )
+  {
     cout << "Error: after calling addSolution (varID filtered version), actual coefficients for sum differ from expected by as much as " << maxDiff << "...\n";
     success = false;
   }
@@ -582,7 +641,8 @@ bool SolutionTests::testAddCondensedSolution() {
   map<GlobalIndexType, FieldContainer<double> > cellCoefficientsForRank;
   set<GlobalIndexType> rankLocalCells = _confusionSolution1_2x2->mesh()->cellIDsInPartition();
 
-  for (set<GlobalIndexType>::iterator cellIDIt = rankLocalCells.begin(); cellIDIt != rankLocalCells.end(); cellIDIt++) {
+  for (set<GlobalIndexType>::iterator cellIDIt = rankLocalCells.begin(); cellIDIt != rankLocalCells.end(); cellIDIt++)
+  {
     GlobalIndexType cellID = *cellIDIt;
     FieldContainer<double> coefficients = _confusionSolution1_2x2->allCoefficientsForCellID(cellID);
     cellCoefficientsForRank[cellID] = coefficients;
@@ -606,13 +666,15 @@ bool SolutionTests::testAddCondensedSolution() {
 
   // check that the cell-local coefficients are as expected (multiplied by weight + 1)
 
-  for (set<GlobalIndexType>::iterator cellIDIt = rankLocalCells.begin(); cellIDIt != rankLocalCells.end(); cellIDIt++) {
+  for (set<GlobalIndexType>::iterator cellIDIt = rankLocalCells.begin(); cellIDIt != rankLocalCells.end(); cellIDIt++)
+  {
     GlobalIndexType cellID = *cellIDIt;
     FieldContainer<double> actualCoefficients = _confusionSolution1_2x2->allCoefficientsForCellID(cellID);
     FieldContainer<double> expectedCoefficients = cellCoefficientsForRank[cellID];
     SerialDenseWrapper::multiplyFCByWeight(expectedCoefficients, weight + 1.0);
     double maxDiff = 0;
-    if (! TestSuite::fcsAgree(expectedCoefficients, actualCoefficients, tol, maxDiff) ) {
+    if (! TestSuite::fcsAgree(expectedCoefficients, actualCoefficients, tol, maxDiff) )
+    {
       cout << "Error: expected coefficients for cell ID " << cellID << " differ from actual by " << maxDiff << endl;
 
       cout << "expectedCoefficients:\n" << expectedCoefficients;
@@ -639,21 +701,25 @@ bool SolutionTests::testAddCondensedSolution() {
   _confusionSolution1_2x2->solutionValues(valuesSIGMA1, ConfusionBilinearForm::SIGMA_1_ID, _testPoints);
   _confusionSolution1_2x2->solutionValues(valuesSIGMA2, ConfusionBilinearForm::SIGMA_2_ID, _testPoints);
 
-  for (int pointIndex=0; pointIndex < valuesU.size(); pointIndex++) {
+  for (int pointIndex=0; pointIndex < valuesU.size(); pointIndex++)
+  {
     double diff = abs(valuesU[pointIndex] - expectedValuesU[pointIndex]);
-    if (diff > tol) {
+    if (diff > tol)
+    {
       success = false;
       cout << "expected value of U: " << expectedValuesU[pointIndex] << "; actual: " << valuesU[pointIndex] << endl;
     }
 
     diff = abs(valuesSIGMA1[pointIndex] - expectedValuesSIGMA1[pointIndex]);
-    if (diff > tol) {
+    if (diff > tol)
+    {
       success = false;
       cout << "expected value of SIGMA1: " << expectedValuesSIGMA1[pointIndex] << "; actual: " << valuesSIGMA1[pointIndex] << endl;
     }
 
     diff = abs(valuesSIGMA2[pointIndex] - expectedValuesSIGMA2[pointIndex]);
-    if (diff > tol) {
+    if (diff > tol)
+    {
       success = false;
       cout << "expected value of SIGMA2: " << expectedValuesSIGMA2[pointIndex] << "; actual: " << valuesSIGMA2[pointIndex] << endl;
     }
@@ -662,7 +728,8 @@ bool SolutionTests::testAddCondensedSolution() {
   return success;
 }
 
-bool SolutionTests::testAddSolution() {
+bool SolutionTests::testAddSolution()
+{
   bool success = true;
 
   double weight = 3.141592;
@@ -688,21 +755,25 @@ bool SolutionTests::testAddSolution() {
   _confusionSolution1_2x2->solutionValues(valuesSIGMA1, ConfusionBilinearForm::SIGMA_1_ID, _testPoints);
   _confusionSolution1_2x2->solutionValues(valuesSIGMA2, ConfusionBilinearForm::SIGMA_2_ID, _testPoints);
 
-  for (int pointIndex=0; pointIndex < valuesU.size(); pointIndex++) {
+  for (int pointIndex=0; pointIndex < valuesU.size(); pointIndex++)
+  {
     double diff = abs(valuesU[pointIndex] - expectedValuesU[pointIndex]);
-    if (diff > tol) {
+    if (diff > tol)
+    {
       success = false;
       cout << "expected value of U: " << expectedValuesU[pointIndex] << "; actual: " << valuesU[pointIndex] << endl;
     }
 
     diff = abs(valuesSIGMA1[pointIndex] - expectedValuesSIGMA1[pointIndex]);
-    if (diff > tol) {
+    if (diff > tol)
+    {
       success = false;
       cout << "expected value of SIGMA1: " << expectedValuesSIGMA1[pointIndex] << "; actual: " << valuesSIGMA1[pointIndex] << endl;
     }
 
     diff = abs(valuesSIGMA2[pointIndex] - expectedValuesSIGMA2[pointIndex]);
-    if (diff > tol) {
+    if (diff > tol)
+    {
       success = false;
       cout << "expected value of SIGMA2: " << expectedValuesSIGMA2[pointIndex] << "; actual: " << valuesSIGMA2[pointIndex] << endl;
     }
@@ -711,7 +782,8 @@ bool SolutionTests::testAddSolution() {
   return success;
 }
 
-bool SolutionTests::testProjectFunction() {
+bool SolutionTests::testProjectFunction()
+{
   bool success = true;
   double tol = 1e-14;
 
@@ -737,23 +809,27 @@ bool SolutionTests::testProjectFunction() {
 //  FieldContainer<double> functionValues(1,_testPoints.dimension(0));
 //  quadraticFunction->getValues(functionValues,allCellTestPoints);
   int numValues = _testPoints.dimension(0);
-  for (int valueIndex = 0;valueIndex<numValues;valueIndex++){
+  for (int valueIndex = 0; valueIndex<numValues; valueIndex++)
+  {
     double x = _testPoints(valueIndex,0), y = _testPoints(valueIndex,1);
     double functionValue = quadraticFunction->evaluate(x,y);
 
     double diff = abs(functionValue-valuesU[valueIndex]);
-    if (diff>tol){
+    if (diff>tol)
+    {
       success = false;
       cout << "Test failed: difference in projected and computed values is " << diff << endl;
     }
     diff = abs(functionValue-valuesSIGMA1[valueIndex]);
-    if (diff>tol){
+    if (diff>tol)
+    {
       success = false;
       cout << "Test failed: difference in projected and computed values is " << diff << endl;
     }
 
     diff = abs(functionValue-valuesSIGMA2[valueIndex]);
-    if (diff>tol){
+    if (diff>tol)
+    {
       success = false;
       cout << "Test failed: difference in projected and computed values is " << diff << endl;
     }
@@ -763,7 +839,8 @@ bool SolutionTests::testProjectFunction() {
   return success;
 }
 
-bool SolutionTests::testProjectVectorValuedSolution() {
+bool SolutionTests::testProjectVectorValuedSolution()
+{
   bool success = true;
   double tol = 1e-14;
 
@@ -808,12 +885,16 @@ bool SolutionTests::testProjectVectorValuedSolution() {
   FunctionPtr vectorFunction = Function::vectorize(Function::xn(1), quadraticFunction);
 
   for (map<int, VarPtr >::iterator varIt = trialVars.begin();
-       varIt != trialVars.end(); varIt++) {
+       varIt != trialVars.end(); varIt++)
+  {
     VarPtr var = varIt->second;
     int varID = var->ID();
-    if (var->space() == VECTOR_L2) {
+    if (var->space() == VECTOR_L2)
+    {
       functionMap[varID] = vectorFunction;
-    } else {
+    }
+    else
+    {
       functionMap[varID] = quadraticFunction;
     }
   }
@@ -845,20 +926,24 @@ bool SolutionTests::testProjectVectorValuedSolution() {
 
   confusionSoln->projectOntoMesh(functionMap);
 
-  if ( ! solutionCoefficientsAreConsistent(confusionSoln) ) {
+  if ( ! solutionCoefficientsAreConsistent(confusionSoln) )
+  {
     cout << "testProjectVectorValuedSolution: for quadraticFunction projection, solution coefficients are inconsistent.\n";
     success = false;
   }
 
 //  cout << "Finished call to solutionCoefficientsAreConsistent on rank " << rank << endl;
 
-  for (int testIndex=0; testIndex<2; testIndex++) {
+  for (int testIndex=0; testIndex<2; testIndex++)
+  {
     set<GlobalIndexType> myActiveCellIDs = confusionSoln->mesh()->globalDofAssignment()->cellsInPartition(-1);
-    if (testIndex == 1) {
+    if (testIndex == 1)
+    {
       // test in which we project the Solution itself
       // here, we just project the Solution onto itself, nothing terribly interesting, but should exercise the vector-valuedness anyway
       // conveniently, this means that the expected values don't change, so we can use the same verification logic below
-      for (set<GlobalIndexType>::iterator cellIDIt = myActiveCellIDs.begin(); cellIDIt != myActiveCellIDs.end(); cellIDIt++) {
+      for (set<GlobalIndexType>::iterator cellIDIt = myActiveCellIDs.begin(); cellIDIt != myActiveCellIDs.end(); cellIDIt++)
+      {
         GlobalIndexType cellID = *cellIDIt;
         ElementTypePtr elemType = confusionSoln->mesh()->getElement(cellID)->elementType();
         vector<GlobalIndexType> childIDs;
@@ -867,7 +952,8 @@ bool SolutionTests::testProjectVectorValuedSolution() {
       }
     }
 
-    for (set<GlobalIndexType>::iterator cellIDIt = myActiveCellIDs.begin(); cellIDIt != myActiveCellIDs.end(); cellIDIt++) {
+    for (set<GlobalIndexType>::iterator cellIDIt = myActiveCellIDs.begin(); cellIDIt != myActiveCellIDs.end(); cellIDIt++)
+    {
       int numCells = 1;
       GlobalIndexType cellID = *cellIDIt;
       ElementPtr elem = confusionSoln->mesh()->getElement(cellID);
@@ -875,7 +961,7 @@ bool SolutionTests::testProjectVectorValuedSolution() {
       BasisCachePtr basisCache = Teuchos::rcp( new BasisCache(elem->elementType(),confusionSoln->mesh()) );
 
       basisCache->setPhysicalCellNodes( confusionSoln->mesh()->physicalCellNodesForCell(cellID),
-                                       cellIDs, true); // true: create side cache, too
+                                        cellIDs, true); // true: create side cache, too
       int numPoints = basisCache->getPhysicalCubaturePoints().dimension(1);
       int sideToTest = 2;
       int numPointsSide = basisCache->getSideBasisCache(sideToTest)->getPhysicalCubaturePoints().dimension(1);
@@ -893,30 +979,40 @@ bool SolutionTests::testProjectVectorValuedSolution() {
       vectorFunction->values(vectorFunctionValuesSide, basisCache->getSideBasisCache(sideToTest));
 
       for (map<int, VarPtr >::iterator varIt = trialVars.begin();
-           varIt != trialVars.end(); varIt++) {
+           varIt != trialVars.end(); varIt++)
+      {
         VarPtr var = varIt->second;
         int varID = var->ID();
         // for second test, we only want to test fields, since that's what's supported in projections...
         if ((testIndex==1) && ((var->varType()==FLUX) || (var->varType()==TRACE))) continue;
         FieldContainer<double> valuesExpected;
         FieldContainer<double> valuesActual;
-        if ( confusionBF->isFluxOrTrace(varID) ) {
+        if ( confusionBF->isFluxOrTrace(varID) )
+        {
           FieldContainer<double> values;
-          if (var->rank()==0) {
+          if (var->rank()==0)
+          {
             values = FieldContainer<double>(numCells, numPointsSide);
             valuesExpected = functionValuesSide;
-          } else if (var->rank()==1) {
+          }
+          else if (var->rank()==1)
+          {
             values = FieldContainer<double>(numCells, numPointsSide, spaceDim);
             valuesExpected = vectorFunctionValuesSide;
           }
           confusionSoln->solutionValues(values, varID, basisCache->getSideBasisCache(sideToTest));
           valuesActual = values;
-        } else { // volume
+        }
+        else     // volume
+        {
           FieldContainer<double> values;
-          if (var->rank()==0) {
+          if (var->rank()==0)
+          {
             values = FieldContainer<double>(numCells, numPoints);
             valuesExpected = functionValues;
-          } else if (var->rank()==1) {
+          }
+          else if (var->rank()==1)
+          {
             values = FieldContainer<double>(numCells, numPoints, spaceDim);
             valuesExpected = vectorFunctionValues;
           }
@@ -924,7 +1020,8 @@ bool SolutionTests::testProjectVectorValuedSolution() {
           valuesActual = values;
         }
         double maxDiff;
-        if ( !fcsAgree(valuesExpected, valuesActual, tol, maxDiff) ) {
+        if ( !fcsAgree(valuesExpected, valuesActual, tol, maxDiff) )
+        {
           cout << "rank " << rank << " testProjectVectorValuedSolution() failure: maxDiff is " << maxDiff << " for trial variable " << var->name() << endl;
           cout << "rank " << rank << " expectedValues:\n" << valuesExpected << endl;
           cout << "rank " << rank << " actualValues:\n" << valuesActual << endl;
@@ -932,7 +1029,8 @@ bool SolutionTests::testProjectVectorValuedSolution() {
         }
       }
     }
-    if (testIndex==1) {
+    if (testIndex==1)
+    {
       // then let's try adding vector-valued Solutions together
       // (just checking that this doesn't throw an exception)
       SolutionPtr soln2 = Teuchos::rcp(new Solution(mesh));
@@ -952,7 +1050,8 @@ bool SolutionTests::testProjectVectorValuedSolution() {
   return allSuccess( success );
 }
 
-bool SolutionTests::testNewProjectFunction() {
+bool SolutionTests::testNewProjectFunction()
+{
   bool success = true;
   double tol = 1e-14;
 
@@ -962,20 +1061,23 @@ bool SolutionTests::testNewProjectFunction() {
 
   map<int, FunctionPtr > functionMap;
   FunctionPtr quadraticFunction = Teuchos::rcp(new NewQuadraticFunction );
-  for (int i=0; i<trialIDs.size(); i++) {
+  for (int i=0; i<trialIDs.size(); i++)
+  {
     int trialID = trialIDs[i];
     functionMap[trialID] = quadraticFunction;
   }
 
   _confusionUnsolved->projectOntoMesh(functionMap);
 
-  if ( ! solutionCoefficientsAreConsistent(_confusionUnsolved) ) {
+  if ( ! solutionCoefficientsAreConsistent(_confusionUnsolved) )
+  {
     cout << "testNewProjectFunction: for quadraticFunction projection, solution coefficients are inconsistent.\n";
     success = false;
   }
 
   set<GlobalIndexType> rankLocalCellIDs = _confusionUnsolved->mesh()->cellIDsInPartition();
-  for (set<GlobalIndexType>::iterator cellIDIt = rankLocalCellIDs.begin(); cellIDIt != rankLocalCellIDs.end(); cellIDIt++) {
+  for (set<GlobalIndexType>::iterator cellIDIt = rankLocalCellIDs.begin(); cellIDIt != rankLocalCellIDs.end(); cellIDIt++)
+  {
     int numCells = 1;
     ElementPtr elem = _confusionUnsolved->mesh()->getElement(*cellIDIt);
     int cellID = elem->cellID();
@@ -983,7 +1085,7 @@ bool SolutionTests::testNewProjectFunction() {
     BasisCachePtr basisCache = Teuchos::rcp( new BasisCache(elem->elementType(),_confusionUnsolved->mesh()) );
 
     basisCache->setPhysicalCellNodes( _confusionUnsolved->mesh()->physicalCellNodesForCell(cellID),
-                                     cellIDs, true); // true: create side cache, too
+                                      cellIDs, true); // true: create side cache, too
     int numPoints = basisCache->getPhysicalCubaturePoints().dimension(1);
     int sideToTest = 2;
     int numPointsSide = basisCache->getSideBasisCache(sideToTest)->getPhysicalCubaturePoints().dimension(1);
@@ -994,23 +1096,28 @@ bool SolutionTests::testNewProjectFunction() {
     FieldContainer<double> functionValuesSide(numCells, numPointsSide);
     quadraticFunction->values(functionValuesSide,basisCache->getSideBasisCache(sideToTest));
 
-    for (int trialIndex=0; trialIndex<trialIDs.size(); trialIndex++) {
+    for (int trialIndex=0; trialIndex<trialIDs.size(); trialIndex++)
+    {
       int trialID = trialIDs[trialIndex];
       FieldContainer<double> valuesExpected;
       FieldContainer<double> valuesActual;
-      if ( bf->isFluxOrTrace(trialID) ) {
+      if ( bf->isFluxOrTrace(trialID) )
+      {
         FieldContainer<double> values(numCells, numPointsSide);
         _confusionUnsolved->solutionValues(values, trialID, basisCache->getSideBasisCache(sideToTest));
         valuesActual = values;
         valuesExpected = functionValuesSide;
-      } else { // volume
+      }
+      else     // volume
+      {
         FieldContainer<double> values(numCells, numPoints);
         _confusionUnsolved->solutionValues(values, trialID, basisCache);
         valuesActual = values;
         valuesExpected = functionValues;
       }
       double maxDiff;
-      if ( !fcsAgree(valuesExpected, valuesActual, tol, maxDiff) ) {
+      if ( !fcsAgree(valuesExpected, valuesActual, tol, maxDiff) )
+      {
         cout << "testNewProjectFunction() failure: maxDiff is " << maxDiff << " for trialID " << trialID << endl;
         cout << "expectedValues:\n" << valuesExpected << endl;
         cout << "actualValues:\n" << valuesActual << endl;
@@ -1070,7 +1177,8 @@ bool SolutionTests::testNewProjectFunction() {
   FunctionPtr sqrtFunction = Teuchos::rcp( new SqrtFunction );
   functions.push_back(sqrtFunction);
 
-  for (int j=0; j<functions.size(); j++) {
+  for (int j=0; j<functions.size(); j++)
+  {
     FunctionPtr f = functions[j];
     functionMap.clear();
     functionMap[u->ID()] = f;
@@ -1095,28 +1203,32 @@ bool SolutionTests::testNewProjectFunction() {
     f->integrate(expectedValues, basisCache);
     FieldContainer<double> cellMeasures = basisCache->getCellMeasures();
 
-    for (int i=0; i<expectedValues.size(); i++) {
+    for (int i=0; i<expectedValues.size(); i++)
+    {
       expectedValues(i) /= cellMeasures(i);
     }
 
     soln->setCubatureEnrichmentDegree(cubatureDegreeEnrichment);
     soln->projectOntoMesh(functionMap);
 
-    if ( ! solutionCoefficientsAreConsistent(soln) ) {
+    if ( ! solutionCoefficientsAreConsistent(soln) )
+    {
       cout << "testNewProjectFunction: in projection of Function " << j << " onto constants, solution coefficients are inconsistent.\n";
       success = false;
     }
 
     FunctionPtr projectedFunction = Function::solution(u, soln);
     projectedFunction->integrate(actualValues, basisCache); // these will be weighted by cellMeasures
-    for (int i=0; i<actualValues.size(); i++) {
+    for (int i=0; i<actualValues.size(); i++)
+    {
       actualValues(i) /= cellMeasures(i);
     }
 
 //    cout << "expectedValues for projection of f onto constants:\n" << expectedValues;
 
     double maxDiff;
-    if ( !fcsAgree(expectedValues, actualValues, tol, maxDiff) ) {
+    if ( !fcsAgree(expectedValues, actualValues, tol, maxDiff) )
+    {
       cout << "testNewProjectFunction() failure in projection of Function " << j << " onto constants: maxDiff is " << maxDiff << endl;
       cout << "expectedValues:\n" << expectedValues << endl;
       cout << "actualValues:\n" << actualValues << endl;
@@ -1139,7 +1251,8 @@ bool SolutionTests::testNewProjectFunction() {
     double l2errorExpected = bestFxnError->l2norm(soln->mesh(),matchingCubatureEnrichment); // here the cubature is actually an enrichment....
 
     double diff = abs(l2errorExpected - l2errorActual);
-    if ( diff > tol) {
+    if ( diff > tol)
+    {
       success = false;
       cout << "testNewProjectFunction: for function " << j << ", ExactSolution error doesn't match";
       cout << " that measured by Function: " << l2errorActual << " vs " << l2errorExpected;
@@ -1150,7 +1263,8 @@ bool SolutionTests::testNewProjectFunction() {
   return success;
 }
 
-bool SolutionTests::testProjectSolutionOntoOtherMesh() {
+bool SolutionTests::testProjectSolutionOntoOtherMesh()
+{
   bool success = true;
   double tol = 1e-14;
   int rank = Teuchos::GlobalMPISession::getRank();
@@ -1206,10 +1320,12 @@ bool SolutionTests::testProjectSolutionOntoOtherMesh() {
   // test for all field variables:
   vector<int> fieldIDs = _poissonSolution_1x1->mesh()->bilinearForm()->trialVolumeIDs();
 
-  for (vector<int>::iterator fieldIDIt=fieldIDs.begin(); fieldIDIt != fieldIDs.end(); fieldIDIt++) {
+  for (vector<int>::iterator fieldIDIt=fieldIDs.begin(); fieldIDIt != fieldIDs.end(); fieldIDIt++)
+  {
     int fieldID = *fieldIDIt;
     double diffL2 = _poissonSolution_1x1_unsolved->L2NormOfSolutionGlobal(fieldID);
-    if (diffL2 > tol) {
+    if (diffL2 > tol)
+    {
       string varName = _poissonSolution_1x1->mesh()->bilinearForm()->trialName(fieldID);
       cout << "testProjectSolutionOntoOtherMesh: Failure for trial ID " << varName << ": ";
       cout << "coarse solution projected onto fine mesh then back onto coarse differs from original by L2 norm of " << diffL2 << endl;
@@ -1221,7 +1337,8 @@ bool SolutionTests::testProjectSolutionOntoOtherMesh() {
   return success;
 }
 
-bool SolutionTests::testAddRefinedSolutions() {
+bool SolutionTests::testAddRefinedSolutions()
+{
   bool success = true;
 
   FunctionPtr x = Function::xn(1), y = Function::yn(1);
@@ -1249,7 +1366,8 @@ bool SolutionTests::testAddRefinedSolutions() {
   // solve
   _confusionSolution1_2x2->solve(false); // resolve for du on new mesh
 
-  if ( ! storageSizesAgree(_confusionSolution1_2x2, _confusionSolution2_2x2) ) {
+  if ( ! storageSizesAgree(_confusionSolution1_2x2, _confusionSolution2_2x2) )
+  {
     cout << "Storage sizes disagree, so add will fail.\n";
     return false;
   }
@@ -1260,7 +1378,8 @@ bool SolutionTests::testAddRefinedSolutions() {
   return success;
 }
 
-bool SolutionTests::testEnergyError() {
+bool SolutionTests::testEnergyError()
+{
   double tol = 1e-11;
 
   bool success = true;
@@ -1270,12 +1389,14 @@ bool SolutionTests::testEnergyError() {
   vector< Teuchos::RCP< Element > >::iterator activeElemIt;
 
   double totalEnergyErrorSquared = 0.0;
-  for (activeElemIt = activeElements.begin();activeElemIt != activeElements.end(); activeElemIt++){
+  for (activeElemIt = activeElements.begin(); activeElemIt != activeElements.end(); activeElemIt++)
+  {
     Teuchos::RCP< Element > current_element = *(activeElemIt);
     int cellID = current_element->cellID();
     totalEnergyErrorSquared += energyError[cellID]*energyError[cellID];
   }
-  if (totalEnergyErrorSquared > tol) {
+  if (totalEnergyErrorSquared > tol)
+  {
     success = false;
     cout << "testEnergyError failed: energy error is " << totalEnergyErrorSquared << endl;
   }
@@ -1321,7 +1442,8 @@ bool SolutionTests::testEnergyError() {
 
   double actualEnergyError = soln->energyErrorTotal();
 
-  if (abs(actualEnergyError - expectedEnergyError) > tol) {
+  if (abs(actualEnergyError - expectedEnergyError) > tol)
+  {
     cout << "Expected energy error to be " << expectedEnergyError << "; was " << actualEnergyError << endl;
     success = false;
   }
@@ -1339,7 +1461,8 @@ bool SolutionTests::testEnergyError() {
 
   actualEnergyError = soln->energyErrorTotal();
 
-  if (abs(actualEnergyError - expectedEnergyError) > tol) {
+  if (abs(actualEnergyError - expectedEnergyError) > tol)
+  {
     cout << "Expected energy error to be " << expectedEnergyError << "; was " << actualEnergyError << endl;
     success = false;
   }
@@ -1356,7 +1479,8 @@ bool SolutionTests::testEnergyError() {
   expectedEnergyError = sqrt( (uSoln * uSoln)->integrate(mesh) );
   actualEnergyError = soln->energyErrorTotal();
 
-  if (abs(actualEnergyError - expectedEnergyError) > tol) {
+  if (abs(actualEnergyError - expectedEnergyError) > tol)
+  {
     cout << "Expected energy error to be " << expectedEnergyError << "; was " << actualEnergyError << endl;
     success = false;
   }
@@ -1365,7 +1489,8 @@ bool SolutionTests::testEnergyError() {
 }
 
 
-bool SolutionTests::testHRefinementInitialization() {
+bool SolutionTests::testHRefinementInitialization()
+{
 
   int rank = Teuchos::GlobalMPISession::getRank();
 //  cout << "Starting testHRefinementInitialization() on rank " << rank << endl;
@@ -1430,7 +1555,8 @@ bool SolutionTests::testHRefinementInitialization() {
 
 //  cout << "About to populate expected values on rank " << rank << endl;
 
-  for (vector<int>::iterator fieldIDIt=fieldIDs.begin(); fieldIDIt != fieldIDs.end(); fieldIDIt++) {
+  for (vector<int>::iterator fieldIDIt=fieldIDs.begin(); fieldIDIt != fieldIDs.end(); fieldIDIt++)
+  {
     int fieldID = *fieldIDIt;
     _poissonSolution->solutionValues(expectedValues,fieldID,_testPoints);
     expectedMap[fieldID] = expectedValues;
@@ -1473,11 +1599,13 @@ bool SolutionTests::testHRefinementInitialization() {
 
 //  cout << "About to check FC agreement on rank " << rank << endl;
 
-  for (vector<int>::iterator fieldIDIt=fieldIDs.begin(); fieldIDIt != fieldIDs.end(); fieldIDIt++) {
+  for (vector<int>::iterator fieldIDIt=fieldIDs.begin(); fieldIDIt != fieldIDs.end(); fieldIDIt++)
+  {
     int fieldID = *fieldIDIt;
     _poissonSolution->solutionValues(actualValues,fieldID,_testPoints);
     double maxDiff = 0;
-    if ( ! fcsAgree(expectedMap[fieldID],actualValues,tol,maxDiff) ) {
+    if ( ! fcsAgree(expectedMap[fieldID],actualValues,tol,maxDiff) )
+    {
       success = false;
       cout << "testHRefinementInitialization failed: max difference in "
            << _poissonSolution->mesh()->bilinearForm()->trialName(fieldID) << " is " << maxDiff << endl;
@@ -1502,7 +1630,8 @@ bool SolutionTests::testHRefinementInitialization() {
 }
 
 
-bool SolutionTests::testPRefinementInitialization() {
+bool SolutionTests::testPRefinementInitialization()
+{
 
   double tol = 1e-14;
 
@@ -1518,7 +1647,8 @@ bool SolutionTests::testPRefinementInitialization() {
   FieldContainer<double> expectedValues(_testPoints.dimension(0));
   FieldContainer<double> actualValues(_testPoints.dimension(0));
 
-  for (vector<int>::iterator fieldIDIt=fieldIDs.begin(); fieldIDIt != fieldIDs.end(); fieldIDIt++) {
+  for (vector<int>::iterator fieldIDIt=fieldIDs.begin(); fieldIDIt != fieldIDs.end(); fieldIDIt++)
+  {
     int fieldID = *fieldIDIt;
     _poissonSolution->solutionValues(expectedValues,fieldID,_testPoints);
     expectedMap[fieldID] = expectedValues;
@@ -1531,27 +1661,31 @@ bool SolutionTests::testPRefinementInitialization() {
   _poissonSolution->mesh()->registerSolution(_poissonSolution);
   _poissonSolution->mesh()->pRefine(quadCellsToRefine);
 
-  for (vector<int>::iterator fieldIDIt=fieldIDs.begin(); fieldIDIt != fieldIDs.end(); fieldIDIt++) {
+  for (vector<int>::iterator fieldIDIt=fieldIDs.begin(); fieldIDIt != fieldIDs.end(); fieldIDIt++)
+  {
     int fieldID = *fieldIDIt;
     _poissonSolution->solutionValues(actualValues,fieldID,_testPoints);
     double maxDiff;
-    if ( ! fcsAgree(expectedMap[fieldID],actualValues,tol,maxDiff) ) {
+    if ( ! fcsAgree(expectedMap[fieldID],actualValues,tol,maxDiff) )
+    {
       success = false;
       cout << "testHRefinementInitialization failed: max difference in "
-      << _poissonSolution->mesh()->bilinearForm()->trialName(fieldID) << " is " << maxDiff << endl;
+           << _poissonSolution->mesh()->bilinearForm()->trialName(fieldID) << " is " << maxDiff << endl;
     }
   }
 
   return success;
 }
 
-bool SolutionTests::testSolutionEvaluationBasisCache() {
+bool SolutionTests::testSolutionEvaluationBasisCache()
+{
   bool success = true;
   double tol = 1e-12;
 
   // remap _testPoints from (0,1)^2 to (-1,1)^2:
   int numPoints = _testPoints.dimension(0);
-  for (int i=0; i<numPoints; i++) {
+  for (int i=0; i<numPoints; i++)
+  {
     double x = _testPoints(i,0);
     double y = _testPoints(i,1);
     _testPoints(i,0) = x * 2.0 - 1.0;
@@ -1566,7 +1700,7 @@ bool SolutionTests::testSolutionEvaluationBasisCache() {
   basisCache->setRefCellPoints( _testPoints ); // don't use cubature points...
 //  cout << "physicalCellNodes:\n" << _poissonSolution_1x1->mesh()->physicalCellNodesForCell(cellID);
   basisCache->setPhysicalCellNodes( _poissonSolution_1x1->mesh()->physicalCellNodesForCell(cellID),
-                                   cellIDs, true); // true: create side cache, too
+                                    cellIDs, true); // true: create side cache, too
 
   FieldContainer<double> testPoints = basisCache->getPhysicalCubaturePoints();
 
@@ -1578,7 +1712,8 @@ bool SolutionTests::testSolutionEvaluationBasisCache() {
   FieldContainer<double> actualValues(numCells,numPoints);
 
   vector<int> fieldIDs = _poissonSolution_1x1->mesh()->bilinearForm()->trialVolumeIDs();
-  for (vector<int>::iterator fieldIDIt=fieldIDs.begin(); fieldIDIt != fieldIDs.end(); fieldIDIt++) {
+  for (vector<int>::iterator fieldIDIt=fieldIDs.begin(); fieldIDIt != fieldIDs.end(); fieldIDIt++)
+  {
     int fieldID = *fieldIDIt;
     FunctionPtr exactFxn = _poissonExactSolution->exactFunctions().find(fieldID)->second;
     exactFxn->values(expectedValues, basisCache);
@@ -1587,15 +1722,17 @@ bool SolutionTests::testSolutionEvaluationBasisCache() {
 
   _poissonSolution_1x1->importGlobalSolution();
   // test for all field variables:
-  for (vector<int>::iterator fieldIDIt=fieldIDs.begin(); fieldIDIt != fieldIDs.end(); fieldIDIt++) {
+  for (vector<int>::iterator fieldIDIt=fieldIDs.begin(); fieldIDIt != fieldIDs.end(); fieldIDIt++)
+  {
     int fieldID = *fieldIDIt;
     _poissonSolution_1x1->solutionValues(actualValues,fieldID,basisCache);
     double maxDiff;
     expectedValues = expectedMap[fieldID];
-    if ( ! fcsAgree(expectedValues,actualValues,tol,maxDiff) ) {
+    if ( ! fcsAgree(expectedValues,actualValues,tol,maxDiff) )
+    {
       success = false;
       cout << "testSolutionEvaluationBasisCache failed: max difference in "
-      << _poissonSolution_1x1->mesh()->bilinearForm()->trialName(fieldID) << " is " << maxDiff << endl;
+           << _poissonSolution_1x1->mesh()->bilinearForm()->trialName(fieldID) << " is " << maxDiff << endl;
 
       cout << "Expected:\n" << expectedValues;
       cout << "Actual:\n" << actualValues;
@@ -1607,7 +1744,8 @@ bool SolutionTests::testSolutionEvaluationBasisCache() {
   return success;
 }
 
-bool SolutionTests::testScratchPadSolution() {
+bool SolutionTests::testScratchPadSolution()
+{
 
   bool success = true;
   double tol = 1e-12;
@@ -1674,7 +1812,8 @@ bool SolutionTests::testScratchPadSolution() {
 
   ////////////////////   BUILD MESH   ///////////////////////
   // define nodes for mesh
-  int H1Order = 1; int pToAdd = 1;
+  int H1Order = 1;
+  int pToAdd = 1;
 
   FieldContainer<double> quadPoints(4,2);
 
@@ -1692,7 +1831,7 @@ bool SolutionTests::testScratchPadSolution() {
 
   // create a pointer to a new mesh:
   Teuchos::RCP<Mesh> mesh = MeshFactory::buildQuadMesh(quadPoints, horizontalCells, verticalCells,
-                                                confusionBF, H1Order, H1Order+pToAdd);
+                            confusionBF, H1Order, H1Order+pToAdd);
 
   ////////////////////   SOLVE & REFINE   ///////////////////////
 
@@ -1704,7 +1843,8 @@ bool SolutionTests::testScratchPadSolution() {
   double sigma2L2Norm = solution->L2NormOfSolutionGlobal(sigma2->ID()); // shoudl be 0
   double L1L2Norm = uL2Norm + sigma1L2Norm + sigma2L2Norm;
 
-  if (abs(L1L2Norm-1.0)>tol){
+  if (abs(L1L2Norm-1.0)>tol)
+  {
     success = false;
   }
   return success;
@@ -1712,7 +1852,8 @@ bool SolutionTests::testScratchPadSolution() {
 
 
 
-bool SolutionTests::testCondensationSolve() {
+bool SolutionTests::testCondensationSolve()
+{
 
   bool success = true;
   double tol = 1e-12;
@@ -1767,7 +1908,9 @@ bool SolutionTests::testCondensationSolve() {
 
   ////////////////////   BUILD MESH   ///////////////////////
 
-  int H1Order = 2; int pToAdd = 2; int nCells = 2;
+  int H1Order = 2;
+  int pToAdd = 2;
+  int nCells = 2;
 
   // first, single-element mesh
   Teuchos::RCP<Mesh> mesh = MeshUtilities::buildUnitQuadMesh(1, bf, H1Order, H1Order+pToAdd);
@@ -1782,7 +1925,8 @@ bool SolutionTests::testCondensationSolve() {
   FunctionPtr uF = Function::solution(u,solution);
   FunctionPtr uCond = Function::solution(u,condensedSolution);
   double diff = (uF-uCond)->l2norm(mesh,H1Order);
-  if (diff>tol){
+  if (diff>tol)
+  {
     cout << "Failing test: Condensed solve on single-element max rule mesh does not match regular solve" << endl;
     cout << "L2 norm of difference is " << diff << "; tol is " << tol << endl;
     success=false;
@@ -1798,7 +1942,8 @@ bool SolutionTests::testCondensationSolve() {
   uF = Function::solution(u,solution);
   uCond = Function::solution(u,condensedSolution);
   diff = (uF-uCond)->l2norm(mesh,H1Order);
-  if (diff>tol){
+  if (diff>tol)
+  {
     cout << "Failing test: Condensed solve on single-element min rule mesh does not match regular solve" << endl;
     cout << "L2 norm of difference is " << diff << "; tol is " << tol << endl;
     success=false;
@@ -1817,7 +1962,8 @@ bool SolutionTests::testCondensationSolve() {
   uF = Function::solution(u,solution);
   uCond = Function::solution(u,condensedSolution);
   diff = (uF-uCond)->l2norm(mesh,H1Order);
-  if (diff>tol){
+  if (diff>tol)
+  {
     cout << "Failing test: Condensed solve on refined max rule mesh does not match regular solve" << endl;
     cout << "L2 norm of difference is " << diff << "; tol is " << tol << endl;
 
@@ -1842,7 +1988,8 @@ bool SolutionTests::testCondensationSolve() {
   uF = Function::solution(u,solution);
   uCond = Function::solution(u,condensedSolution);
   diff = (uF-uCond)->l2norm(mesh,H1Order);
-  if (diff>tol){
+  if (diff>tol)
+  {
     cout << "Failing test: Condensed solve on multi-element (compatible) min rule mesh does not match regular solve" << endl;
     cout << "L2 norm of difference is " << diff << "; tol is " << tol << endl;
     success=false;
@@ -1865,14 +2012,16 @@ bool SolutionTests::testCondensationSolve() {
   uF = Function::solution(u,solution);
   uCond = Function::solution(u,condensedSolution);
   diff = (uF-uCond)->l2norm(mesh,H1Order);
-  if (diff>tol){
+  if (diff>tol)
+  {
     cout << "Failing test: Condensed solve on refined min rule mesh does not match regular solve" << endl;
     cout << "L2 norm of difference is " << diff << "; tol is " << tol << endl;
     success=false;
     int cellID = 6;
     FieldContainer<double> cell6coeffs_standard = solution->allCoefficientsForCellID(cellID, false); // false: don't warn if off-rank
     FieldContainer<double> cell6coeffs_condensed = condensedSolution->allCoefficientsForCellID(cellID, false); // false: don't warn if off-rank
-    if (rank==0) {
+    if (rank==0)
+    {
       cout << "cell " << cellID << ", standard solution coefficients:\n" << cell6coeffs_standard;
       cout << "cell " << cellID << ", condensed solution coefficients:\n" << cell6coeffs_condensed;
     }
@@ -1889,7 +2038,8 @@ bool SolutionTests::testCondensationSolve() {
   return success;
 }
 
-bool SolutionTests::testCondensationSolveNonlinear() {
+bool SolutionTests::testCondensationSolveNonlinear()
+{
   bool success = true;
 
   int rank = Teuchos::GlobalMPISession::getRank();
@@ -1938,9 +2088,9 @@ bool SolutionTests::testCondensationSolveNonlinear() {
 
   bool dontEnhanceFluxes = false;
   VGPNavierStokesProblem problem = VGPNavierStokesProblem(Re, quadPoints,
-                                                          horizontalCells, verticalCells,
-                                                          H1Order, pToAdd,
-                                                          u1_exact, u2_exact, p_exact, enrichVelocity, dontEnhanceFluxes);
+                                   horizontalCells, verticalCells,
+                                   H1Order, pToAdd,
+                                   u1_exact, u2_exact, p_exact, enrichVelocity, dontEnhanceFluxes);
 
   VarPtr u1_vgp = problem.vgpNavierStokesFormulation()->u1var();
   VarPtr u2_vgp = problem.vgpNavierStokesFormulation()->u2var();
@@ -1948,9 +2098,9 @@ bool SolutionTests::testCondensationSolveNonlinear() {
 
   // set up identical problem for condensed solve
   VGPNavierStokesProblem problem_condensed = VGPNavierStokesProblem(Re, quadPoints,
-                                                                    horizontalCells, verticalCells,
-                                                                    H1Order, pToAdd,
-                                                                    u1_exact, u2_exact, p_exact, enrichVelocity, dontEnhanceFluxes);
+      horizontalCells, verticalCells,
+      H1Order, pToAdd,
+      u1_exact, u2_exact, p_exact, enrichVelocity, dontEnhanceFluxes);
 
   SolutionPtr solnIncrement = problem.solutionIncrement();
   SolutionPtr backgroundFlow = problem.backgroundFlow();
@@ -1973,24 +2123,28 @@ bool SolutionTests::testCondensationSolveNonlinear() {
   FunctionPtr p_incr_condensed = Function::solution(p_vgp, solnIncrement_condensed);
 
   FunctionPtr l2_incr_condensed = u1_incr_condensed * u1_incr_condensed
-                                + u2_incr_condensed * u2_incr_condensed
-                                + p_incr_condensed * p_incr_condensed;
+                                  + u2_incr_condensed * u2_incr_condensed
+                                  + p_incr_condensed * p_incr_condensed;
 
   double l2_incr_norm, l2_incr_norm_condensed;
-  do {
+  do
+  {
     problem.iterate(useLineSearch,false);          // false: don't use condensation
     problem_condensed.iterate(useLineSearch,true); //  true: use condensation
 
     l2_incr_norm = sqrt(l2_incr->integrate(mesh));
     l2_incr_norm_condensed = sqrt(l2_incr_condensed->integrate(mesh));
-    if (rank==0) {
+    if (rank==0)
+    {
 //      cout << "l2_incr_norm: " << l2_incr_norm << endl;
 //      cout << "l2_incr_norm_condensed: " << l2_incr_norm_condensed << endl;
     }
 
-    if (abs(l2_incr_norm_condensed - l2_incr_norm) > tol) {
+    if (abs(l2_incr_norm_condensed - l2_incr_norm) > tol)
+    {
       success = false;
-      if (rank==0) {
+      if (rank==0)
+      {
         cout << "Failure in SolutionTests::testCondensationSolveNonlinear: on iteration " << problem.iterationCount() << ", condensed solve and standard differ in L^2 norm of increment by ";
         cout << abs(l2_incr_norm_condensed - l2_incr_norm) << endl;
       }
@@ -2018,7 +2172,8 @@ bool SolutionTests::testCondensationSolveNonlinear() {
       double t1n_diff = (t1n_soln - t1n_soln_condensed)->l2norm(mesh);
       double t2n_diff = (t2n_soln - t2n_soln_condensed)->l2norm(mesh);
 
-      if (rank==0) {
+      if (rank==0)
+      {
         cout << "p difference: " << p_diff << endl;
         cout << "u1 difference: " << u1_diff << endl;
         cout << "u2 difference: " << u2_diff << endl;
@@ -2031,12 +2186,14 @@ bool SolutionTests::testCondensationSolveNonlinear() {
 
       break;
     }
-  }  while ( (problem.iterationCount() < maxIters) );
+  }
+  while ( (problem.iterationCount() < maxIters) );
 
   return success;
 }
 
-bool SolutionTests::testCondensationSolveWithSinglePointConstraint() {
+bool SolutionTests::testCondensationSolveWithSinglePointConstraint()
+{
   bool success = true;
   double tol = 1e-11;
 
@@ -2077,7 +2234,8 @@ bool SolutionTests::testCondensationSolveWithSinglePointConstraint() {
 
   ////////////////////   BUILD MESH   ///////////////////////
 
-  int H1Order = 2; int pToAdd = 2;
+  int H1Order = 2;
+  int pToAdd = 2;
 
   // first, single-element mesh
   MeshPtr mesh = MeshUtilities::buildUnitQuadMesh(1, bf, H1Order, H1Order+pToAdd);
@@ -2098,7 +2256,8 @@ bool SolutionTests::testCondensationSolveWithSinglePointConstraint() {
   FunctionPtr u1_soln = Function::solution(u1,solution);
   FunctionPtr u1_condensed_soln = Function::solution(u1,condensedSolution);
   double diff = (u1_soln-u1_condensed_soln)->l2norm(mesh,H1Order);
-  if (diff > tol) {
+  if (diff > tol)
+  {
     cout << "Failing test: Condensed solve with single-point constraint on single-element max rule mesh does not match regular solve" << endl;
     cout << "L2 norm of difference is " << diff << "; tol is " << tol << endl;
     success=false;
@@ -2106,7 +2265,8 @@ bool SolutionTests::testCondensationSolveWithSinglePointConstraint() {
   FunctionPtr p_soln = Function::solution(p,solution);
   FunctionPtr p_condensed_soln = Function::solution(p,condensedSolution);
   diff = (p_soln-p_condensed_soln)->l2norm(mesh,H1Order);
-  if (diff > tol) {
+  if (diff > tol)
+  {
     cout << "Failing test: Condensed solve pressure solution with single-point constraint on single-element max rule mesh does not match regular solve" << endl;
     cout << "L2 norm of difference is " << diff << "; tol is " << tol << endl;
     success=false;
@@ -2129,7 +2289,8 @@ bool SolutionTests::testCondensationSolveWithSinglePointConstraint() {
   u1_soln = Function::solution(u1,solution);
   u1_condensed_soln = Function::solution(u1,condensedSolution);
   diff = (u1_soln-u1_condensed_soln)->l2norm(mesh,H1Order);
-  if (diff > tol) {
+  if (diff > tol)
+  {
     cout << "Failing test: Condensed solve with single-point constraint on single-element max rule mesh does not match regular solve";
     cout << " when using newer setUseCondensedSolve() method." << endl;
     cout << "L2 norm of difference is " << diff << "; tol is " << tol << endl;
@@ -2138,7 +2299,8 @@ bool SolutionTests::testCondensationSolveWithSinglePointConstraint() {
   p_soln = Function::solution(p,solution);
   p_condensed_soln = Function::solution(p,condensedSolution);
   diff = (p_soln-p_condensed_soln)->l2norm(mesh,H1Order);
-  if (diff > tol) {
+  if (diff > tol)
+  {
     cout << "Failing test: Condensed solve pressure solution with single-point constraint on single-element max rule mesh does not match regular solve";
     cout << " when using newer setUseCondensedSolve() method." << endl;
     cout << "L2 norm of difference is " << diff << "; tol is " << tol << endl;
@@ -2157,7 +2319,8 @@ bool SolutionTests::testCondensationSolveWithSinglePointConstraint() {
   u1_soln = Function::solution(u1,solution);
   u1_condensed_soln = Function::solution(u1,condensedSolution);
   diff = (u1_soln-u1_condensed_soln)->l2norm(mesh,H1Order);
-  if (diff>tol){
+  if (diff>tol)
+  {
     cout << "Failing test: Condensed solve with single-point constraint on single-element min rule mesh does not match regular solve" << endl;
     cout << "L2 norm of difference is " << diff << "; tol is " << tol << endl;
     success=false;
@@ -2165,7 +2328,8 @@ bool SolutionTests::testCondensationSolveWithSinglePointConstraint() {
   p_soln = Function::solution(p,solution);
   p_condensed_soln = Function::solution(p,condensedSolution);
   diff = (p_soln-p_condensed_soln)->l2norm(mesh,H1Order);
-  if (diff > tol) {
+  if (diff > tol)
+  {
     cout << "Failing test: Condensed solve pressure solution with single-point constraint on single-element min rule mesh does not match regular solve" << endl;
     cout << "L2 norm of difference is " << diff << "; tol is " << tol << endl;
     success=false;
@@ -2186,7 +2350,8 @@ bool SolutionTests::testCondensationSolveWithSinglePointConstraint() {
   u1_condensed_soln = Function::solution(u1,condensedSolution);
   diff = (u1_soln-u1_condensed_soln)->l2norm(mesh,H1Order);
 
-  if (diff>tol){
+  if (diff>tol)
+  {
     cout << "Failing test: Condensed solve with single-point constraint on refined max rule mesh does not match regular solve" << endl;
     cout << "L2 norm of difference is " << diff << "; tol is " << tol << endl;
     success=false;
@@ -2194,7 +2359,8 @@ bool SolutionTests::testCondensationSolveWithSinglePointConstraint() {
   p_soln = Function::solution(p,solution);
   p_condensed_soln = Function::solution(p,condensedSolution);
   diff = (p_soln-p_condensed_soln)->l2norm(mesh,H1Order);
-  if (diff > tol) {
+  if (diff > tol)
+  {
     cout << "Failing test: Condensed solve pressure solution with single-point constraint on refined max rule mesh does not match regular solve" << endl;
     cout << "L2 norm of difference is " << diff << "; tol is " << tol << endl;
     success=false;
@@ -2210,7 +2376,8 @@ bool SolutionTests::testCondensationSolveWithSinglePointConstraint() {
   u1_soln = Function::solution(u1,solution);
   u1_condensed_soln = Function::solution(u1,condensedSolution);
   diff = (u1_soln-u1_condensed_soln)->l2norm(mesh,H1Order);
-  if (diff>tol){
+  if (diff>tol)
+  {
     cout << "Failing test: Condensed solve with single-point constraint on multi-element (compatible) min rule mesh does not match regular solve" << endl;
     cout << "L2 norm of difference is " << diff << "; tol is " << tol << endl;
     success=false;
@@ -2226,7 +2393,8 @@ bool SolutionTests::testCondensationSolveWithSinglePointConstraint() {
   p_soln = Function::solution(p,solution);
   p_condensed_soln = Function::solution(p,condensedSolution);
   diff = (p_soln-p_condensed_soln)->l2norm(mesh,H1Order);
-  if (diff > tol) {
+  if (diff > tol)
+  {
     cout << "Failing test: Condensed solve pressure solution with single-point constraint on multi-element (compatible) min rule mesh does not match regular solve" << endl;
     cout << "L2 norm of difference is " << diff << "; tol is " << tol << endl;
     success=false;
@@ -2243,14 +2411,16 @@ bool SolutionTests::testCondensationSolveWithSinglePointConstraint() {
   u1_soln = Function::solution(u1,solution);
   u1_condensed_soln = Function::solution(u1,condensedSolution);
   diff = (u1_soln-u1_condensed_soln)->l2norm(mesh,H1Order);
-  if (diff>tol){
+  if (diff>tol)
+  {
     cout << "Failing test: Condensed solve with single-point constraint on refined min rule mesh does not match regular solve" << endl;
     cout << "L2 norm of difference is " << diff << "; tol is " << tol << endl;
     success=false;
     int cellID = 6;
     FieldContainer<double> cell6coeffs_standard = solution->allCoefficientsForCellID(cellID, false); // false: don't warn if off-rank
     FieldContainer<double> cell6coeffs_condensed = condensedSolution->allCoefficientsForCellID(cellID, false); // false: don't warn if off-rank
-    if (rank==0) {
+    if (rank==0)
+    {
       cout << "cell " << cellID << ", standard solution coefficients:\n" << cell6coeffs_standard;
       cout << "cell " << cellID << ", condensed solution coefficients:\n" << cell6coeffs_condensed;
     }
@@ -2258,7 +2428,8 @@ bool SolutionTests::testCondensationSolveWithSinglePointConstraint() {
   p_soln = Function::solution(p,solution);
   p_condensed_soln = Function::solution(p,condensedSolution);
   diff = (p_soln-p_condensed_soln)->l2norm(mesh,H1Order);
-  if (diff > tol) {
+  if (diff > tol)
+  {
     cout << "Failing test: Condensed solve pressure solution with single-point constraint on refined min rule mesh does not match regular solve" << endl;
     cout << "L2 norm of difference is " << diff << "; tol is " << tol << endl;
     success=false;
@@ -2267,7 +2438,8 @@ bool SolutionTests::testCondensationSolveWithSinglePointConstraint() {
   return success;
 }
 
-bool SolutionTests::testCondensationSolveWithZeroMeanConstraint() {
+bool SolutionTests::testCondensationSolveWithZeroMeanConstraint()
+{
   bool success = true;
   double tol = 1e-12;
 
@@ -2308,7 +2480,8 @@ bool SolutionTests::testCondensationSolveWithZeroMeanConstraint() {
 
   ////////////////////   BUILD MESH   ///////////////////////
 
-  int H1Order = 2; int pToAdd = 2;
+  int H1Order = 2;
+  int pToAdd = 2;
 
   // first, single-element mesh
   Teuchos::RCP<Mesh> mesh = MeshUtilities::buildUnitQuadMesh(1, bf, H1Order, H1Order+pToAdd);
@@ -2324,7 +2497,8 @@ bool SolutionTests::testCondensationSolveWithZeroMeanConstraint() {
   FunctionPtr u1_soln = Function::solution(u1,solution);
   FunctionPtr u1_condensed_soln = Function::solution(u1,condensedSolution);
   double diff = (u1_soln-u1_condensed_soln)->l2norm(mesh,H1Order);
-  if (diff > tol) {
+  if (diff > tol)
+  {
     cout << "Failing test: Condensed solve with zero-mean constraint on single-element max rule mesh does not match regular solve" << endl;
     cout << "L2 norm of difference is " << diff << "; tol is " << tol << endl;
     success=false;
@@ -2332,7 +2506,8 @@ bool SolutionTests::testCondensationSolveWithZeroMeanConstraint() {
   FunctionPtr p_soln = Function::solution(p,solution);
   FunctionPtr p_condensed_soln = Function::solution(p,condensedSolution);
   diff = (p_soln-p_condensed_soln)->l2norm(mesh,H1Order);
-  if (diff > tol) {
+  if (diff > tol)
+  {
     cout << "Failing test: Condensed solve pressure solution with zero-mean constraint on single-element max rule mesh does not match regular solve" << endl;
     cout << "L2 norm of difference is " << diff << "; tol is " << tol << endl;
     success=false;
@@ -2350,7 +2525,8 @@ bool SolutionTests::testCondensationSolveWithZeroMeanConstraint() {
   u1_soln = Function::solution(u1,solution);
   u1_condensed_soln = Function::solution(u1,condensedSolution);
   diff = (u1_soln-u1_condensed_soln)->l2norm(mesh,H1Order);
-  if (diff>tol){
+  if (diff>tol)
+  {
     cout << "Failing test: Condensed solve with zero-mean constraint on single-element min rule mesh does not match regular solve" << endl;
     cout << "L2 norm of difference is " << diff << "; tol is " << tol << endl;
     success=false;
@@ -2358,7 +2534,8 @@ bool SolutionTests::testCondensationSolveWithZeroMeanConstraint() {
   p_soln = Function::solution(p,solution);
   p_condensed_soln = Function::solution(p,condensedSolution);
   diff = (p_soln-p_condensed_soln)->l2norm(mesh,H1Order);
-  if (diff > tol) {
+  if (diff > tol)
+  {
     cout << "Failing test: Condensed solve pressure solution with zero-mean constraint on single-element min rule mesh does not match regular solve" << endl;
     cout << "L2 norm of difference is " << diff << "; tol is " << tol << endl;
     success=false;
@@ -2380,7 +2557,8 @@ bool SolutionTests::testCondensationSolveWithZeroMeanConstraint() {
   u1_condensed_soln = Function::solution(u1,condensedSolution);
   diff = (u1_soln-u1_condensed_soln)->l2norm(mesh,H1Order);
 
-  if (diff>tol){
+  if (diff>tol)
+  {
     cout << "Failing test: Condensed solve with zero-mean constraint on refined max rule mesh does not match regular solve" << endl;
     cout << "L2 norm of difference is " << diff << "; tol is " << tol << endl;
 
@@ -2397,7 +2575,8 @@ bool SolutionTests::testCondensationSolveWithZeroMeanConstraint() {
   p_soln = Function::solution(p,solution);
   p_condensed_soln = Function::solution(p,condensedSolution);
   diff = (p_soln-p_condensed_soln)->l2norm(mesh,H1Order);
-  if (diff > tol) {
+  if (diff > tol)
+  {
     cout << "Failing test: Condensed solve pressure solution with zero-mean constraint on refined max rule mesh does not match regular solve" << endl;
     cout << "L2 norm of difference is " << diff << "; tol is " << tol << endl;
     success=false;
@@ -2413,7 +2592,8 @@ bool SolutionTests::testCondensationSolveWithZeroMeanConstraint() {
   u1_soln = Function::solution(u1,solution);
   u1_condensed_soln = Function::solution(u1,condensedSolution);
   diff = (u1_soln-u1_condensed_soln)->l2norm(mesh,H1Order);
-  if (diff>tol){
+  if (diff>tol)
+  {
     cout << "Failing test: Condensed solve with zero-mean constraint on multi-element (compatible) min rule mesh does not match regular solve" << endl;
     cout << "L2 norm of difference is " << diff << "; tol is " << tol << endl;
     success=false;
@@ -2429,7 +2609,8 @@ bool SolutionTests::testCondensationSolveWithZeroMeanConstraint() {
   p_soln = Function::solution(p,solution);
   p_condensed_soln = Function::solution(p,condensedSolution);
   diff = (p_soln-p_condensed_soln)->l2norm(mesh,H1Order);
-  if (diff > tol) {
+  if (diff > tol)
+  {
     cout << "Failing test: Condensed solve pressure solution with zero-mean constraint on multi-element (compatible) min rule mesh does not match regular solve" << endl;
     cout << "L2 norm of difference is " << diff << "; tol is " << tol << endl;
     success=false;
@@ -2445,7 +2626,8 @@ bool SolutionTests::testCondensationSolveWithZeroMeanConstraint() {
   u1_soln = Function::solution(u1,solution);
   u1_condensed_soln = Function::solution(u1,condensedSolution);
   diff = (u1_soln-u1_condensed_soln)->l2norm(mesh,H1Order);
-  if (diff>tol){
+  if (diff>tol)
+  {
     cout << "Failing test: Condensed solve with zero-mean constraint on refined min rule mesh does not match regular solve" << endl;
     cout << "L2 norm of difference is " << diff << "; tol is " << tol << endl;
     success=false;
@@ -2453,7 +2635,8 @@ bool SolutionTests::testCondensationSolveWithZeroMeanConstraint() {
   p_soln = Function::solution(p,solution);
   p_condensed_soln = Function::solution(p,condensedSolution);
   diff = (p_soln-p_condensed_soln)->l2norm(mesh,H1Order);
-  if (diff > tol) {
+  if (diff > tol)
+  {
     cout << "Failing test: Condensed solve pressure solution with zero-mean constraint on refined min rule mesh does not match regular solve" << endl;
     cout << "L2 norm of difference is " << diff << "; tol is " << tol << endl;
     success=false;
@@ -2462,15 +2645,18 @@ bool SolutionTests::testCondensationSolveWithZeroMeanConstraint() {
   return success;
 }
 
-bool SolutionTests::testSolutionsAreConsistent() {
+bool SolutionTests::testSolutionsAreConsistent()
+{
   bool success = true;
 
-  if (! solutionCoefficientsAreConsistent(_confusionSolution1_2x2) ) {
+  if (! solutionCoefficientsAreConsistent(_confusionSolution1_2x2) )
+  {
     success = false;
     cout << "_confusionSolution1_2x2 coefficients are inconsistent.\n";
   }
 
-  if (! solutionCoefficientsAreConsistent(_confusionSolution2_2x2) ) {
+  if (! solutionCoefficientsAreConsistent(_confusionSolution2_2x2) )
+  {
     success = false;
     cout << "_confusionSolution1_2x2 coefficients are inconsistent.\n";
   }

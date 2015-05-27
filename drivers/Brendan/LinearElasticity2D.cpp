@@ -24,13 +24,15 @@
 
 #include "RefinementStrategy.h"
 
-int kronDelta(int i, int j) {
+int kronDelta(int i, int j)
+{
   return (i == j) ? 1 : 0;
 }
 
 using namespace Camellia;
 
-int main(int argc, char *argv[]) {
+int main(int argc, char *argv[])
+{
 
 #ifdef HAVE_MPI
   Teuchos::GlobalMPISession mpiSession(&argc, &argv,0);
@@ -61,7 +63,8 @@ int main(int argc, char *argv[]) {
   cmdp.setOption("mu", &mu, "mu");
   cmdp.setOption("norm", &norm, "norm");
 
-  if (cmdp.parse(argc,argv) != Teuchos::CommandLineProcessor::PARSE_SUCCESSFUL) {
+  if (cmdp.parse(argc,argv) != Teuchos::CommandLineProcessor::PARSE_SUCCESSFUL)
+  {
 #ifdef HAVE_MPI
     MPI_Finalize();
 #endif
@@ -94,12 +97,16 @@ int main(int argc, char *argv[]) {
   // Compliance Tensor
   int N = 2;
   double C[2][2][2][2];
-  for (int i = 0; i < 2; ++i){
-    for (int j = 0; j < 2; ++j){
-      for (int k = 0; k < 2; ++k){
-        for (int l = 0; l < 2; ++l){
+  for (int i = 0; i < 2; ++i)
+  {
+    for (int j = 0; j < 2; ++j)
+    {
+      for (int k = 0; k < 2; ++k)
+      {
+        for (int l = 0; l < 2; ++l)
+        {
           C[i][j][k][l] = 1/(2*mu)*(0.5*(kronDelta(i,k)*kronDelta(j,l)+kronDelta(i,l)*kronDelta(j,k))
-                        - lambda/(2*mu+N*lambda)*kronDelta(i,j)*kronDelta(k,l));
+                                    - lambda/(2*mu+N*lambda)*kronDelta(i,j)*kronDelta(k,l));
           // cout << "C(" << i << "," << j << "," << k << "," << l << ") = " << C[i][j][k][l] << endl;
         }
       }
@@ -108,12 +115,16 @@ int main(int argc, char *argv[]) {
 
   // Stiffness Tensor
   double E[2][2][2][2];
-  for (int i = 0; i < 2; ++i){
-    for (int j = 0; j < 2; ++j){
-      for (int k = 0; k < 2; ++k){
-        for (int l = 0; l < 2; ++l){
+  for (int i = 0; i < 2; ++i)
+  {
+    for (int j = 0; j < 2; ++j)
+    {
+      for (int k = 0; k < 2; ++k)
+      {
+        for (int l = 0; l < 2; ++l)
+        {
           E[i][j][k][l] = (2*mu)*0.5*(kronDelta(i,k)*kronDelta(j,l)+kronDelta(i,l)*kronDelta(j,k))
-                        + lambda*kronDelta(i,j)*kronDelta(k,l);
+                          + lambda*kronDelta(i,j)*kronDelta(k,l);
           // cout << "C(" << i << "," << j << "," << k << "," << l << ") = " << C[i][j][k][l] << endl;
         }
       }
@@ -147,11 +158,16 @@ int main(int argc, char *argv[]) {
   bf->addTerm(w, tau2->x());
   bf->addTerm(u1hat, tau1->dot_normal());
   bf->addTerm(u2hat, tau2->dot_normal());
-  for (int i = 0; i < 2; ++i){
-    for (int j = 0; j < 2; ++j){
-      for (int k = 0; k < 2; ++k){
-        for (int l = 0; l < 2; ++l){
-          if (abs(C[i][j][k][l])>1e-14){
+  for (int i = 0; i < 2; ++i)
+  {
+    for (int j = 0; j < 2; ++j)
+    {
+      for (int k = 0; k < 2; ++k)
+      {
+        for (int l = 0; l < 2; ++l)
+        {
+          if (abs(C[i][j][k][l])>1e-14)
+          {
             bf->addTerm(sigma[k][l],-Function::constant(C[i][j][k][l])*tau[i][j]);
           }
         }
@@ -261,16 +277,17 @@ int main(int argc, char *argv[]) {
   refName << "elasticity";
   HDF5Exporter exporter(mesh,refName.str());
 
-  for (int refIndex=0; refIndex < numRefs; refIndex++) {
+  for (int refIndex=0; refIndex < numRefs; refIndex++)
+  {
     soln->solve();
 
     double energyError = soln->energyErrorTotal();
     if (commRank == 0)
     {
       // if (refIndex > 0)
-        // refStrategy.printRefinementStatistics(refIndex-1);
+      // refStrategy.printRefinementStatistics(refIndex-1);
       cout << "Refinement:\t " << refIndex << " \tElements:\t " << mesh->numActiveElements()
-        << " \tDOFs:\t " << mesh->numGlobalDofs() << " \tEnergy Error:\t " << energyError << endl;
+           << " \tDOFs:\t " << mesh->numGlobalDofs() << " \tEnergy Error:\t " << energyError << endl;
     }
 
     exporter.exportSolution(soln, refIndex);

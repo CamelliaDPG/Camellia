@@ -16,38 +16,49 @@
 
 double pi = 2.0*acos(0.0);
 
-class InvSqrtHScaling : public hFunction {
+class InvSqrtHScaling : public hFunction
+{
 public:
-  double value(double x, double y, double h) {
+  double value(double x, double y, double h)
+  {
     return sqrt(1.0/h);
   }
 };
-class InvHScaling : public hFunction {
+class InvHScaling : public hFunction
+{
 public:
-  double value(double x, double y, double h) {
+  double value(double x, double y, double h)
+  {
     return 1.0/h;
   }
 };
-class HScaling : public hFunction {
+class HScaling : public hFunction
+{
 public:
-  double value(double x, double y, double h) {
+  double value(double x, double y, double h)
+  {
     return h;
   }
 };
-class SqrtHScaling : public hFunction {
+class SqrtHScaling : public hFunction
+{
 public:
-  double value(double x, double y, double h) {
+  double value(double x, double y, double h)
+  {
     return sqrt(h);
   }
 };
 
-class EpsilonScaling : public hFunction {
+class EpsilonScaling : public hFunction
+{
   double _epsilon;
 public:
-  EpsilonScaling(double epsilon) {
+  EpsilonScaling(double epsilon)
+  {
     _epsilon = epsilon;
   }
-  double value(double x, double y, double h) {
+  double value(double x, double y, double h)
+  {
     // should probably by sqrt(_epsilon/h) instead (note parentheses)
     // but this is what was in the old code, so sticking with it for now.
     double scaling = min(_epsilon/(h*h), 1.0);
@@ -56,16 +67,20 @@ public:
   }
 };
 
-class ZeroMeanScaling : public hFunction {
-  public:
-  double value(double x, double y, double h) {
+class ZeroMeanScaling : public hFunction
+{
+public:
+  double value(double x, double y, double h)
+  {
     return 1.0/(h*h);
   }
 };
 
-class InflowSquareBoundary : public SpatialFilter {
+class InflowSquareBoundary : public SpatialFilter
+{
 public:
-  bool matchesPoint(double x, double y) {
+  bool matchesPoint(double x, double y)
+  {
     double tol = 1e-14;
     bool xMatch = (abs(x)<tol); // left inflow
     bool yMatch = ((abs(y)<tol) || (abs(y-1.0)<tol)); // top/bottom
@@ -73,146 +88,180 @@ public:
   }
 };
 
-class OutflowSquareBoundary : public SpatialFilter {
+class OutflowSquareBoundary : public SpatialFilter
+{
 public:
-  bool matchesPoint(double x, double y) {
+  bool matchesPoint(double x, double y)
+  {
     double tol = 1e-14;
     bool xMatch = (abs(x-1.0)<tol);
     return xMatch;
   }
 };
 
-class Udisc : public Function {
+class Udisc : public Function
+{
 public:
-  Udisc() : Function(0) {
+  Udisc() : Function(0)
+  {
   }
-  void values(FieldContainer<double> &values, BasisCachePtr basisCache) {
+  void values(FieldContainer<double> &values, BasisCachePtr basisCache)
+  {
 
     int numCells = values.dimension(0);
-    int numPoints = values.dimension(1);    
+    int numPoints = values.dimension(1);
     const FieldContainer<double> *points = &(basisCache->getPhysicalCubaturePoints());
-    for (int cellIndex=0; cellIndex<numCells; cellIndex++) {
-      for (int ptIndex=0; ptIndex<numPoints; ptIndex++) {
+    for (int cellIndex=0; cellIndex<numCells; cellIndex++)
+    {
+      for (int ptIndex=0; ptIndex<numPoints; ptIndex++)
+      {
         double x = (*points)(cellIndex,ptIndex,0);
         double y = (*points)(cellIndex,ptIndex,1);
-	if (y>.5){
-	  values(cellIndex,ptIndex) = (y-1.0)*(y-1.0);
-	}else{
-	  values(cellIndex,ptIndex) = -y*y;
-	}
+        if (y>.5)
+        {
+          values(cellIndex,ptIndex) = (y-1.0)*(y-1.0);
+        }
+        else
+        {
+          values(cellIndex,ptIndex) = -y*y;
+        }
       }
     }
   }
 };
 
 // inflow values for u
-class Uex : public Function {
+class Uex : public Function
+{
   double _eps;
   int _returnID;
 public:
-  Uex(double eps) : Function(0) {
+  Uex(double eps) : Function(0)
+  {
     _eps = eps;
     _returnID = 0;
   }
-  Uex(double eps,int trialID) : Function(0) {
+  Uex(double eps,int trialID) : Function(0)
+  {
     _eps = eps;
     _returnID = trialID;
   }
-  void values(FieldContainer<double> &values, BasisCachePtr basisCache) {
+  void values(FieldContainer<double> &values, BasisCachePtr basisCache)
+  {
 
     int numCells = values.dimension(0);
-    int numPoints = values.dimension(1);    
+    int numPoints = values.dimension(1);
     const FieldContainer<double> *points = &(basisCache->getPhysicalCubaturePoints());
-    for (int cellIndex=0; cellIndex<numCells; cellIndex++) {
-      for (int ptIndex=0; ptIndex<numPoints; ptIndex++) {
+    for (int cellIndex=0; cellIndex<numCells; cellIndex++)
+    {
+      for (int ptIndex=0; ptIndex<numPoints; ptIndex++)
+      {
         double x = (*points)(cellIndex,ptIndex,0);
         double y = (*points)(cellIndex,ptIndex,1);
 
-	double C0 = 0.0;// average of u0
-	double u = C0;
-	double u_x = 0.0;
-	double u_y = 0.0;  	
-	bool useDiscontinuous = false; // use discontinuous soln
-	int numTerms = 20;
-	if (!useDiscontinuous)
-	  numTerms = 1;
-	for (int n = 1;n<numTerms+1;n++){
+        double C0 = 0.0;// average of u0
+        double u = C0;
+        double u_x = 0.0;
+        double u_y = 0.0;
+        bool useDiscontinuous = false; // use discontinuous soln
+        int numTerms = 20;
+        if (!useDiscontinuous)
+          numTerms = 1;
+        for (int n = 1; n<numTerms+1; n++)
+        {
 
-	  double lambda = n*n*pi*pi*_eps;
-	  double d = sqrt(1.0+4.0*_eps*lambda);
-	  double r1 = (1.0+d)/(2.0*_eps);
-	  double r2 = (1.0-d)/(2.0*_eps);
-    
-	  double Cn = 0.0;            
-	  if (!useDiscontinuous){
-	    if (n==1){
-	      Cn = 1.0; // first term only
-	    } 	  
-	  }else{
-	    // discontinuous hat 
-	    Cn = -1 + cos(n*pi/2)+.5*n*pi*sin(n*pi/2) + sin(n*pi/4)*(n*pi*cos(n*pi/4)-2*sin(3*n*pi/4));
-	    Cn /= (n*pi);
-	    Cn /= (n*pi);    
-	  }
-	  
+          double lambda = n*n*pi*pi*_eps;
+          double d = sqrt(1.0+4.0*_eps*lambda);
+          double r1 = (1.0+d)/(2.0*_eps);
+          double r2 = (1.0-d)/(2.0*_eps);
 
-	  // normal stress outflow
-	  double Xbottom;
-	  double Xtop;
-	  double dXtop;
-	  // wall, zero outflow
-	  Xtop = (exp(r2*(x-1))-exp(r1*(x-1)));
-	  Xbottom = (exp(-r2)-exp(-r1));
-	  dXtop = (exp(r2*(x-1))*r2-exp(r1*(x-1))*r1);    
+          double Cn = 0.0;
+          if (!useDiscontinuous)
+          {
+            if (n==1)
+            {
+              Cn = 1.0; // first term only
+            }
+          }
+          else
+          {
+            // discontinuous hat
+            Cn = -1 + cos(n*pi/2)+.5*n*pi*sin(n*pi/2) + sin(n*pi/4)*(n*pi*cos(n*pi/4)-2*sin(3*n*pi/4));
+            Cn /= (n*pi);
+            Cn /= (n*pi);
+          }
 
-	  double X = Xtop/Xbottom;
-	  double dX = dXtop/Xbottom;
-	  double Y = Cn*cos(n*pi*y);
-	  double dY = -Cn*n*pi*sin(n*pi*y);
-    
-	  u += X*Y;
-	  u_x += _eps * dX*Y;
-	  u_y += _eps * X*dY;
-	}
-	if (_returnID==0){
-	  values(cellIndex,ptIndex) = u;
-	}else if (_returnID==1){
-	  values(cellIndex,ptIndex) = u_x;
-	}else if (_returnID==2){
-	  values(cellIndex,ptIndex) = u_y;
-	}
+
+          // normal stress outflow
+          double Xbottom;
+          double Xtop;
+          double dXtop;
+          // wall, zero outflow
+          Xtop = (exp(r2*(x-1))-exp(r1*(x-1)));
+          Xbottom = (exp(-r2)-exp(-r1));
+          dXtop = (exp(r2*(x-1))*r2-exp(r1*(x-1))*r1);
+
+          double X = Xtop/Xbottom;
+          double dX = dXtop/Xbottom;
+          double Y = Cn*cos(n*pi*y);
+          double dY = -Cn*n*pi*sin(n*pi*y);
+
+          u += X*Y;
+          u_x += _eps * dX*Y;
+          u_y += _eps * X*dY;
+        }
+        if (_returnID==0)
+        {
+          values(cellIndex,ptIndex) = u;
+        }
+        else if (_returnID==1)
+        {
+          values(cellIndex,ptIndex) = u_x;
+        }
+        else if (_returnID==2)
+        {
+          values(cellIndex,ptIndex) = u_y;
+        }
       }
     }
   }
 };
 
-class EnergyErrorFunction : public Function {
+class EnergyErrorFunction : public Function
+{
   map<int, double> _energyErrorForCell;
 public:
-  EnergyErrorFunction(map<int, double> energyErrorForCell) : Function(0) {
+  EnergyErrorFunction(map<int, double> energyErrorForCell) : Function(0)
+  {
     _energyErrorForCell = energyErrorForCell;
   }
-  void values(FieldContainer<double> &values, BasisCachePtr basisCache){
+  void values(FieldContainer<double> &values, BasisCachePtr basisCache)
+  {
     vector<int> cellIDs = basisCache->cellIDs();
     int numPoints = values.dimension(1);
-    for (int i = 0;i<cellIDs.size();i++){
+    for (int i = 0; i<cellIDs.size(); i++)
+    {
       double energyError = _energyErrorForCell[cellIDs[i]];
-      for (int j = 0;j<numPoints;j++){
-	values(i,j) = energyError;
+      for (int j = 0; j<numPoints; j++)
+      {
+        values(i,j) = energyError;
       }
     }
   }
 };
 
 // inflow values for u
-class l2NormOfVector : public Function {
+class l2NormOfVector : public Function
+{
   FunctionPtr _beta;
 public:
-  l2NormOfVector(FunctionPtr beta) : Function(0){
+  l2NormOfVector(FunctionPtr beta) : Function(0)
+  {
     _beta = beta;
   }
 
-  void values(FieldContainer<double> &values, BasisCachePtr basisCache) {
+  void values(FieldContainer<double> &values, BasisCachePtr basisCache)
+  {
     int numCells = values.dimension(0);
     int numPoints = values.dimension(1);
 
@@ -221,20 +270,23 @@ public:
 
     const FieldContainer<double> *points = &(basisCache->getPhysicalCubaturePoints());
     double tol=1e-14;
-    for (int cellIndex=0; cellIndex<numCells; cellIndex++) {
-      for (int ptIndex=0; ptIndex<numPoints; ptIndex++) {
+    for (int cellIndex=0; cellIndex<numCells; cellIndex++)
+    {
+      for (int ptIndex=0; ptIndex<numPoints; ptIndex++)
+      {
         double x = (*points)(cellIndex,ptIndex,0);
         double y = (*points)(cellIndex,ptIndex,1);
-	double b1 =  beta_pts(cellIndex,ptIndex,0);
-	double b2 =  beta_pts(cellIndex,ptIndex,1);
-	double beta_norm =b1*b1 + b2*b2;
-	values(cellIndex,ptIndex) = sqrt(beta_norm);
+        double b1 =  beta_pts(cellIndex,ptIndex,0);
+        double b2 =  beta_pts(cellIndex,ptIndex,1);
+        double beta_norm =b1*b1 + b2*b2;
+        values(cellIndex,ptIndex) = sqrt(beta_norm);
       }
     }
   }
 };
 
-int main(int argc, char *argv[]) {
+int main(int argc, char *argv[])
+{
 #ifdef HAVE_MPI
   Teuchos::GlobalMPISession mpiSession(&argc, &argv,0);
   choice::MpiArgs args( argc, argv );
@@ -244,20 +296,20 @@ int main(int argc, char *argv[]) {
 
   int rank = Teuchos::GlobalMPISession::getRank();
   int numProcs = Teuchos::GlobalMPISession::getNProc();
-  
-  int nCells = args.Input<int>("--nCells", "num cells",2);  
+
+  int nCells = args.Input<int>("--nCells", "num cells",2);
   int numRefs = args.Input<int>("--numRefs","num adaptive refinements",0);
   double eps = args.Input<double>("--epsilon","diffusion parameter",1e-2);
-  double energyThreshold = args.Input<double>("--energyThreshold","adaptivity energy thresh",.2); 
+  double energyThreshold = args.Input<double>("--energyThreshold","adaptivity energy thresh",.2);
   bool useGraphNorm = args.Input<bool>("--useGraphNorm","graph norm flag",false);
-  bool scaleH = args.Input<bool>("--scaleH","hScale flag",false); 
+  bool scaleH = args.Input<bool>("--scaleH","hScale flag",false);
 
   ////////////////////   DECLARE VARIABLES   ///////////////////////
   // define test variables
-  VarFactory varFactory; 
+  VarFactory varFactory;
   VarPtr tau = varFactory.testVar("\\tau", HDIV);
   VarPtr v = varFactory.testVar("v", HGRAD);
-  
+
   // define trial variables
   VarPtr uhat = varFactory.traceVar("\\widehat{u}");
   VarPtr beta_n_u_minus_sigma_n = varFactory.fluxVar("\\widehat{\\beta \\cdot n u - \\sigma_{n}}");
@@ -268,7 +320,7 @@ int main(int argc, char *argv[]) {
   vector<double> beta;
   beta.push_back(1.0);
   beta.push_back(0.0);
-  
+
   ////////////////////   DEFINE BILINEAR FORM   ///////////////////////
 
   BFPtr confusionBF = Teuchos::rcp( new BF(varFactory) );
@@ -277,22 +329,25 @@ int main(int argc, char *argv[]) {
   confusionBF->addTerm(sigma2 / eps, tau->y());
   confusionBF->addTerm(u, tau->div());
   confusionBF->addTerm(uhat, -tau->dot_normal());
-  
+
   // v terms:
   confusionBF->addTerm( sigma1, v->dx() );
   confusionBF->addTerm( sigma2, v->dy() );
   confusionBF->addTerm( -u, beta * v->grad() );
   confusionBF->addTerm( beta_n_u_minus_sigma_n, v);
-  
+
   ////////////////////   DEFINE INNER PRODUCT(S)   ///////////////////////
 
   // quasi-optimal norm
-  IPPtr qoptIP = Teuchos::rcp(new IP);  
+  IPPtr qoptIP = Teuchos::rcp(new IP);
   FunctionPtr invH = Teuchos::rcp(new InvHScaling);
   FunctionPtr h = Teuchos::rcp(new HScaling);
-  if (scaleH){
+  if (scaleH)
+  {
     qoptIP->addTerm( invH*v );
-  }else{
+  }
+  else
+  {
     qoptIP->addTerm( v );
   }
   qoptIP->addTerm( tau / eps + v->grad() );
@@ -300,19 +355,22 @@ int main(int argc, char *argv[]) {
 
   // robust test norm
   IPPtr robIP = Teuchos::rcp(new IP);
-  FunctionPtr ip_scaling = Teuchos::rcp( new EpsilonScaling(eps) ); 
-  if (scaleH){
+  FunctionPtr ip_scaling = Teuchos::rcp( new EpsilonScaling(eps) );
+  if (scaleH)
+  {
     robIP->addTerm( invH*v);
     robIP->addTerm( h*beta * v->grad() );
-  
-  }else{
+
+  }
+  else
+  {
     robIP->addTerm( v);
     robIP->addTerm( beta * v->grad() );
   }
-  robIP->addTerm( sqrt(eps) * v->grad() );  
+  robIP->addTerm( sqrt(eps) * v->grad() );
   robIP->addTerm( ip_scaling/sqrt(eps) * tau );
-  robIP->addTerm( tau->div() );  
-  
+  robIP->addTerm( tau->div() );
+
   ////////////////////   SPECIFY RHS   ///////////////////////
   FunctionPtr zero = Teuchos::rcp( new ConstantScalarFunction(0.0) );
   Teuchos::RCP<RHSEasy> rhs = Teuchos::rcp( new RHSEasy );
@@ -334,36 +392,40 @@ int main(int argc, char *argv[]) {
   e2[1] = 1;
   FunctionPtr sigma = sig1_exact*e1 + sig2_exact*e2;
   bc->addDirichlet(uhat, outflowBoundary, zero);
-  bc->addDirichlet(beta_n_u_minus_sigma_n, inflowBoundary, beta*n*u_exact-sigma*n);  
+  bc->addDirichlet(beta_n_u_minus_sigma_n, inflowBoundary, beta*n*u_exact-sigma*n);
   //  FunctionPtr u_disc = Teuchos::rcp( new Udisc );
-  //  bc->addDirichlet(beta_n_u_minus_sigma_n, inflowBoundary, beta*n*u_disc);  
+  //  bc->addDirichlet(beta_n_u_minus_sigma_n, inflowBoundary, beta*n*u_disc);
 
   ////////////////////   BUILD MESH   ///////////////////////
   // define nodes for mesh
   int order = 2;
   int H1Order = order+1, pToAdd = 2;
-  
+
   int horizontalCells = nCells, verticalCells = nCells;
-  
+
   // create a pointer to a new mesh:
   Teuchos::RCP<Mesh> mesh = MeshUtilities::buildUnitQuadMesh(nCells,confusionBF, H1Order, H1Order+pToAdd);
-    
+
   ////////////////////   SOLVE & REFINE   ///////////////////////
 
-  Teuchos::RCP<Solution> solution; 
-  if (useGraphNorm){
+  Teuchos::RCP<Solution> solution;
+  if (useGraphNorm)
+  {
     solution = Teuchos::rcp( new Solution(mesh, bc, rhs, qoptIP) );
-  }else{
+  }
+  else
+  {
     solution = Teuchos::rcp( new Solution(mesh, bc, rhs, robIP) );
   }
-  
+
   RefinementStrategy refinementStrategy( solution, energyThreshold );
-   
+
   ofstream convOut;
   stringstream convOutFile;
   convOutFile << "erickson_conv_" << round(-log(eps)/log(10.0)) <<".txt";
   convOut.open(convOutFile.str().c_str());
-  for (int refIndex=0; refIndex<numRefs; refIndex++){    
+  for (int refIndex=0; refIndex<numRefs; refIndex++)
+  {
     solution->condensedSolve(false);
     //    solution->solve(false);
 
@@ -387,23 +449,25 @@ int main(int argc, char *argv[]) {
     sig2_exact->writeValuesToMATLABFile(mesh, "s2_exact.m");
 
     convOut << mesh->numGlobalDofs() << " " << L2_error << " " << energy_error << endl;
-    if (rank==0){
+    if (rank==0)
+    {
       cout << "L2 error = " << L2_error << ", energy error = " << energy_error << ", ratio = " << L2_error/energy_error << endl;
       //      cout << "u squared L2 error = " << u_L2_error << ", sigma squared l2 error = " << sigma_L2_error << ", num dofs = " << mesh->numGlobalDofs() << endl;
     }
 
     refinementStrategy.refine(rank==0); // print to console on rank 0
   }
-  convOut.close();  
+  convOut.close();
 
   // one more solve on the final refined mesh:
   solution->condensedSolve(false);
 
   VTKExporter exporter(solution, mesh, varFactory);
-  if (rank==0){
+  if (rank==0)
+  {
     exporter.exportSolution("robustIP");
     cout << endl;
   }
 
-  return 0; 
+  return 0;
 }

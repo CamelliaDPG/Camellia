@@ -29,51 +29,63 @@
 const static string S_GMGTests_U1 = "u_1";
 const static string S_GMGTests_U2 = "u_2";
 
-FunctionPtr GMGTests::getPhiExact(int spaceDim) {
+FunctionPtr GMGTests::getPhiExact(int spaceDim)
+{
   FunctionPtr x = Function::xn(1);
   FunctionPtr y = Function::yn(1);
   FunctionPtr z = Function::zn(1);
-  if (spaceDim==1) {
+  if (spaceDim==1)
+  {
     return x * x + 1;
-  } else if (spaceDim==2) {
+  }
+  else if (spaceDim==2)
+  {
     return x * y + x * x;
-  } else if (spaceDim==3) {
+  }
+  else if (spaceDim==3)
+  {
     return x * y * z + z * z * x;
   }
   TEUCHOS_TEST_FOR_EXCEPTION(true, std::invalid_argument, "Unhandled spaceDim");
 }
 
-VarPtr GMGTests::getPoissonPhi(int spaceDim) {
+VarPtr GMGTests::getPoissonPhi(int spaceDim)
+{
   bool conformingTraces = true; // doesn't affect variable labeling
   PoissonFormulation pf(spaceDim,conformingTraces);
   return pf.phi();
 }
 
-VarPtr GMGTests::getPoissonPsi(int spaceDim) {
+VarPtr GMGTests::getPoissonPsi(int spaceDim)
+{
   bool conformingTraces = true; // doesn't affect variable labeling
   PoissonFormulation pf(spaceDim,conformingTraces);
   return pf.psi();
 }
 
-VarPtr GMGTests::getPoissonPhiHat(int spaceDim) {
+VarPtr GMGTests::getPoissonPhiHat(int spaceDim)
+{
   bool conformingTraces = true; // doesn't affect variable labeling
   PoissonFormulation pf(spaceDim,conformingTraces);
   return pf.phi_hat();
 }
 
-VarPtr GMGTests::getPoissonPsi_n(int spaceDim) {
+VarPtr GMGTests::getPoissonPsi_n(int spaceDim)
+{
   bool conformingTraces = true; // doesn't affect variable labeling
   PoissonFormulation pf(spaceDim,conformingTraces);
   return pf.psi_n_hat();
 }
 
-SolutionPtr GMGTests::poissonExactSolution(int numCells_x, int H1Order, FunctionPtr phi_exact, bool useH1Traces) {
+SolutionPtr GMGTests::poissonExactSolution(int numCells_x, int H1Order, FunctionPtr phi_exact, bool useH1Traces)
+{
   vector<int> numCells;
   numCells.push_back(numCells_x);
   return poissonExactSolution(numCells, H1Order, phi_exact, useH1Traces);
 }
 
-SolutionPtr GMGTests::poissonExactSolution(vector<int> numCells, int H1Order, FunctionPtr phi_exact, bool useH1Traces) {
+SolutionPtr GMGTests::poissonExactSolution(vector<int> numCells, int H1Order, FunctionPtr phi_exact, bool useH1Traces)
+{
   int spaceDim = numCells.size();
 
   PoissonFormulation pf(spaceDim,useH1Traces);
@@ -96,7 +108,8 @@ SolutionPtr GMGTests::poissonExactSolution(vector<int> numCells, int H1Order, Fu
 //  double width = 1.0, height = 1.0, depth = 1.0;
 
   vector<double> dimensions;
-  for (int d=0; d<spaceDim; d++) {
+  for (int d=0; d<spaceDim; d++)
+  {
     dimensions.push_back(1.0);
   }
 
@@ -108,19 +121,20 @@ SolutionPtr GMGTests::poissonExactSolution(vector<int> numCells, int H1Order, Fu
   // rhs = f * q, where f = \Delta phi
   RHSPtr rhs = RHS::rhs();
   FunctionPtr f;
-  switch (spaceDim) {
-    case 1:
-      f = phi_exact->dx()->dx();
-      break;
-    case 2:
-      f = phi_exact->dx()->dx() + phi_exact->dy()->dy();
-      break;
-    case 3:
-      f = phi_exact->dx()->dx() + phi_exact->dy()->dy() + phi_exact->dz()->dz();
-      break;
-    default:
-      TEUCHOS_TEST_FOR_EXCEPTION(true, std::invalid_argument, "Unhandled spaceDim");
-      break;
+  switch (spaceDim)
+  {
+  case 1:
+    f = phi_exact->dx()->dx();
+    break;
+  case 2:
+    f = phi_exact->dx()->dx() + phi_exact->dy()->dy();
+    break;
+  case 3:
+    f = phi_exact->dx()->dx() + phi_exact->dy()->dy() + phi_exact->dz()->dz();
+    break;
+  default:
+    TEUCHOS_TEST_FOR_EXCEPTION(true, std::invalid_argument, "Unhandled spaceDim");
+    break;
   }
   rhs->addTerm(f * q);
 
@@ -136,7 +150,8 @@ SolutionPtr GMGTests::poissonExactSolution(vector<int> numCells, int H1Order, Fu
   return solution;
 }
 
-SolutionPtr GMGTests::poissonExactSolutionRefined(int H1Order, FunctionPtr phi_exact, bool useH1Traces, int refinementSetOrdinal) {
+SolutionPtr GMGTests::poissonExactSolutionRefined(int H1Order, FunctionPtr phi_exact, bool useH1Traces, int refinementSetOrdinal)
+{
   vector<int> numCells;
   numCells.push_back(2);
   numCells.push_back(2);
@@ -145,27 +160,28 @@ SolutionPtr GMGTests::poissonExactSolutionRefined(int H1Order, FunctionPtr phi_e
   MeshPtr mesh = soln->mesh();
 
   set<GlobalIndexType> cellIDs;
-  switch (refinementSetOrdinal) {
-    case 0: // no refinements
-      break;
-    case 1: // one refinement
-      cellIDs.insert(3);
-      mesh->hRefine(cellIDs,RefinementPattern::regularRefinementPatternQuad(),true);
-      break;
-    case 2:
-      cellIDs.insert(3);
-      mesh->hRefine(cellIDs,RefinementPattern::regularRefinementPatternQuad(),false);
-      cellIDs.clear();
+  switch (refinementSetOrdinal)
+  {
+  case 0: // no refinements
+    break;
+  case 1: // one refinement
+    cellIDs.insert(3);
+    mesh->hRefine(cellIDs,RefinementPattern::regularRefinementPatternQuad(),true);
+    break;
+  case 2:
+    cellIDs.insert(3);
+    mesh->hRefine(cellIDs,RefinementPattern::regularRefinementPatternQuad(),false);
+    cellIDs.clear();
 
-      cellIDs.insert(6);
-      cellIDs.insert(7);
-      mesh->hRefine(cellIDs,RefinementPattern::regularRefinementPatternQuad(),false);
-      cellIDs.clear();
+    cellIDs.insert(6);
+    cellIDs.insert(7);
+    mesh->hRefine(cellIDs,RefinementPattern::regularRefinementPatternQuad(),false);
+    cellIDs.clear();
 
-      cellIDs.insert(1);
-      mesh->hRefine(cellIDs,RefinementPattern::regularRefinementPatternQuad(),true);
-      cellIDs.clear();
-      break;
+    cellIDs.insert(1);
+    mesh->hRefine(cellIDs,RefinementPattern::regularRefinementPatternQuad(),true);
+    cellIDs.clear();
+    break;
 
   case 3:
     cellIDs.insert(1);
@@ -204,69 +220,80 @@ SolutionPtr GMGTests::poissonExactSolutionRefined(int H1Order, FunctionPtr phi_e
   return soln;
 }
 
-void GMGTests::setup() {
+void GMGTests::setup()
+{
 
 }
 
-void GMGTests::runTests(int &numTestsRun, int &numTestsPassed) {
+void GMGTests::runTests(int &numTestsRun, int &numTestsPassed)
+{
   setup();
-  if (testGMGOperatorP()) {
-    numTestsPassed++;
-  }
-  numTestsRun++;
-  teardown();
-  
-  setup();
-  if (testProlongationOperator()) {
+  if (testGMGOperatorP())
+  {
     numTestsPassed++;
   }
   numTestsRun++;
   teardown();
 
   setup();
-  if (testGMGSolverIdentityUniformMeshes()) {
+  if (testProlongationOperator())
+  {
     numTestsPassed++;
   }
   numTestsRun++;
   teardown();
 
   setup();
-  if (testGMGSolverIdentity2DRefinedMeshes()) {
+  if (testGMGSolverIdentityUniformMeshes())
+  {
     numTestsPassed++;
   }
   numTestsRun++;
   teardown();
 
   setup();
-  if (testGMGOperatorIdentityRHSMap()) {
+  if (testGMGSolverIdentity2DRefinedMeshes())
+  {
     numTestsPassed++;
   }
   numTestsRun++;
   teardown();
 
   setup();
-  if (testGMGOperatorIdentityLocalCoefficientMap()) {
+  if (testGMGOperatorIdentityRHSMap())
+  {
     numTestsPassed++;
   }
   numTestsRun++;
   teardown();
 
   setup();
-  if (testGMGSolverTwoGrid()) {
+  if (testGMGOperatorIdentityLocalCoefficientMap())
+  {
     numTestsPassed++;
   }
   numTestsRun++;
   teardown();
 
   setup();
-  if (testGMGSolverThreeGrid()) {
+  if (testGMGSolverTwoGrid())
+  {
+    numTestsPassed++;
+  }
+  numTestsRun++;
+  teardown();
+
+  setup();
+  if (testGMGSolverThreeGrid())
+  {
     numTestsPassed++;
   }
   numTestsRun++;
   teardown();
 }
 
-bool GMGTests::testGMGOperatorIdentityLocalCoefficientMap() {
+bool GMGTests::testGMGOperatorIdentityLocalCoefficientMap()
+{
   bool success = true;
 
   /***   1D-3D TESTS    ***/
@@ -280,13 +307,17 @@ bool GMGTests::testGMGOperatorIdentityLocalCoefficientMap() {
   useStaticCondensationValues.push_back(false);
 
   for (  vector<bool>::iterator useStaticCondensationIt = useStaticCondensationValues.begin();
-       useStaticCondensationIt != useStaticCondensationValues.end(); useStaticCondensationIt++) {
+         useStaticCondensationIt != useStaticCondensationValues.end(); useStaticCondensationIt++)
+  {
     bool useStaticCondensation = *useStaticCondensationIt;
-    for (int spaceDim=1; spaceDim<=3; spaceDim++) {
-      for (int i=0; i<cellCounts.size(); i++) {
+    for (int spaceDim=1; spaceDim<=3; spaceDim++)
+    {
+      for (int i=0; i<cellCounts.size(); i++)
+      {
         if ((spaceDim==3) && (i==cellCounts.size()-1)) continue; // skip the 4x4x4 case, in interest of time.
         vector<int> cellCount;
-        for (int d=0; d<spaceDim; d++) {
+        for (int d=0; d<spaceDim; d++)
+        {
           cellCount.push_back(cellCounts[i]);
         }
 
@@ -310,7 +341,8 @@ bool GMGTests::testGMGOperatorIdentityLocalCoefficientMap() {
         GlobalIndexType cellID = 0; // fine and coarse both
         GlobalIndexType expectedCoarseCellID = cellID;
         GlobalIndexType actualCoarseCellID = gmgOperator.getCoarseCellID(cellID);
-        if (actualCoarseCellID != expectedCoarseCellID) {
+        if (actualCoarseCellID != expectedCoarseCellID)
+        {
           cout << "actualCoarseCellID does not match expected.\n";
           success = false;
         }
@@ -320,8 +352,10 @@ bool GMGTests::testGMGOperatorIdentityLocalCoefficientMap() {
         int numTrialDofs = trialOrder->totalDofs();
         FieldContainer<double> localData(numTrialDofs,numTrialDofs);
         // just some arbitrary data:
-        for (int i=0; i<numTrialDofs; i++) {
-          for (int j=0; j<numTrialDofs; j++) {
+        for (int i=0; i<numTrialDofs; i++)
+        {
+          for (int j=0; j<numTrialDofs; j++)
+          {
             localData(i,j) = i + 5 * j;
             if (i==j) localData(i,j) = 100 * localData(i,j); // make diagonally dominant
           }
@@ -331,14 +365,17 @@ bool GMGTests::testGMGOperatorIdentityLocalCoefficientMap() {
 
         double tol = 1e-12;
         double maxDiff = 0;
-        if (mappedData.size() != expectedMappedData.size()) {
+        if (mappedData.size() != expectedMappedData.size())
+        {
           cout << "FAILURE: For cellCount = " << cellCounts[i] << " in " << spaceDim << "D, ";
           cout << "mapped data differs in dimension from expected: " << mappedData.size() << " != " << expectedMappedData.size() << endl;
           success = false;
           SerialDenseWrapper::writeMatrixToMatlabFile("/tmp/mappedData.dat", mappedData);
           SerialDenseWrapper::writeMatrixToMatlabFile("/tmp/expectedMappedData.dat", expectedMappedData);
 
-        } else if (! fcsAgree(mappedData, expectedMappedData, tol, maxDiff)) {
+        }
+        else if (! fcsAgree(mappedData, expectedMappedData, tol, maxDiff))
+        {
           cout << "FAILURE: For cellCount = " << cellCounts[i] << " in " << spaceDim << "D, ";
           cout << "mapped data differs from expected by as much as " << maxDiff << "; tol = " << tol << endl;
           success = false;
@@ -355,7 +392,8 @@ bool GMGTests::testGMGOperatorIdentityLocalCoefficientMap() {
   return success;
 }
 
-bool GMGTests::testGMGOperatorIdentityRHSMap() {
+bool GMGTests::testGMGOperatorIdentityRHSMap()
+{
   bool success = true;
 
   vector<bool> useStaticCondensationValues;
@@ -364,9 +402,11 @@ bool GMGTests::testGMGOperatorIdentityRHSMap() {
 
   // some 2D-specific tests on refined meshes
   for (  vector<bool>::iterator useStaticCondensationIt = useStaticCondensationValues.begin();
-       useStaticCondensationIt != useStaticCondensationValues.end(); useStaticCondensationIt++) {
+         useStaticCondensationIt != useStaticCondensationValues.end(); useStaticCondensationIt++)
+  {
     bool useStaticCondensation = *useStaticCondensationIt;
-    for (int refinementOrdinal=-1; refinementOrdinal<3; refinementOrdinal++) { // refinementOrdinal=3 is a slow one, so we skip it...
+    for (int refinementOrdinal=-1; refinementOrdinal<3; refinementOrdinal++)   // refinementOrdinal=3 is a slow one, so we skip it...
+    {
       int spaceDim = 2;
 
       int H1Order_coarse = 2, H1Order = 2;
@@ -375,12 +415,15 @@ bool GMGTests::testGMGOperatorIdentityRHSMap() {
 
       bool useH1Traces = false; // false is the more forgiving; a place to start testing
       SolutionPtr solnCoarse, solnFine;
-      if (refinementOrdinal == -1) { // simple as it gets: unrefined, single-element, and H^1 order = 1
+      if (refinementOrdinal == -1)   // simple as it gets: unrefined, single-element, and H^1 order = 1
+      {
         H1Order = 1, H1Order_coarse = 1;
         vector<int> numCells(2,1);
         solnCoarse = poissonExactSolution(numCells, H1Order_coarse, phiExact, useH1Traces);
         solnFine = poissonExactSolution(numCells, H1Order, phiExact, useH1Traces);
-      } else {
+      }
+      else
+      {
         solnCoarse = poissonExactSolutionRefined(H1Order_coarse, phiExact, useH1Traces, refinementOrdinal);
         solnFine = poissonExactSolutionRefined(H1Order, phiExact, useH1Traces, refinementOrdinal);
       }
@@ -396,7 +439,8 @@ bool GMGTests::testGMGOperatorIdentityRHSMap() {
       // as a first test, do "multi" grid between mesh and itself.  Solution should match phiExact.
       Teuchos::RCP<Solver> coarseSolver = Teuchos::rcp( new Amesos2Solver(true) );
 
-      if (useStaticCondensation) {
+      if (useStaticCondensation)
+      {
         // need to populate local stiffness matrices before dealing with the RHS.
         solnFine->initializeLHSVector();
         solnFine->initializeStiffnessAndLoad();
@@ -421,7 +465,8 @@ bool GMGTests::testGMGOperatorIdentityRHSMap() {
 
       int minLID = rhsVector->Map().MinLID();
       int numLIDs = rhsVector->Map().NumMyElements();
-      for (int lid=minLID; lid < minLID + numLIDs; lid++ ) {
+      for (int lid=minLID; lid < minLID + numLIDs; lid++ )
+      {
         GlobalIndexTypeToCast gid = rhsVector->Map().GID(lid);
         (*rhsVector)[0][lid] = (double) gid; // arbitrary data
       }
@@ -431,12 +476,14 @@ bool GMGTests::testGMGOperatorIdentityRHSMap() {
       gmgOperator.setCoarseRHSVector(*rhsVector, mappedRHSVector);
 
       double tol = 1e-14;
-      for (int lid=minLID; lid < minLID + numLIDs; lid++ ) {
+      for (int lid=minLID; lid < minLID + numLIDs; lid++ )
+      {
         double expected = (*rhsVector)[0][lid];
         double actual = mappedRHSVector[0][lid];
 
         double diff = abs(expected-actual);
-        if (diff > tol) {
+        if (diff > tol)
+        {
           GlobalIndexTypeToCast gid = rhsVector->Map().GID(lid);
 
           cout << "Failure: in rhs mapping for refinement sequence " << refinementOrdinal;
@@ -451,7 +498,8 @@ bool GMGTests::testGMGOperatorIdentityRHSMap() {
   return success;
 }
 
-bool GMGTests::testGMGOperatorP() {
+bool GMGTests::testGMGOperatorP()
+{
   bool success = true;
 
   int spaceDim = 2;
@@ -465,7 +513,8 @@ bool GMGTests::testGMGOperatorP() {
   useStaticCondensationValues.push_back(false);
 
   for (  vector<bool>::iterator useStaticCondensationIt = useStaticCondensationValues.begin();
-       useStaticCondensationIt != useStaticCondensationValues.end(); useStaticCondensationIt++) {
+         useStaticCondensationIt != useStaticCondensationValues.end(); useStaticCondensationIt++)
+  {
     bool useStaticCondensation = *useStaticCondensationIt;
 
     bool useH1Traces = true; // false is the more forgiving; a place to start testing
@@ -486,7 +535,8 @@ bool GMGTests::testGMGOperatorP() {
 
     Teuchos::RCP<Solver> coarseSolver = Teuchos::rcp( new Amesos2Solver(true) );
 
-    if (useStaticCondensation) {
+    if (useStaticCondensation)
+    {
       // need to populate local stiffness matrices for sake of condensed solver
       solnFine->initializeLHSVector();
       solnFine->initializeStiffnessAndLoad();
@@ -494,9 +544,9 @@ bool GMGTests::testGMGOperatorP() {
     }
 
     Teuchos::RCP<GMGSolver> gmgSolver = Teuchos::rcp( new GMGSolver(zeroBCs, coarseMesh, graphNorm, fineMesh,
-                                                                    solnFine->getDofInterpreter(),
-                                                                    solnFine->getPartitionMap(),
-                                                                    maxIters, iter_tol, coarseSolver, useStaticCondensation) );
+                                        solnFine->getDofInterpreter(),
+                                        solnFine->getPartitionMap(),
+                                        maxIters, iter_tol, coarseSolver, useStaticCondensation) );
 
     GMGOperator* gmgOperator = &gmgSolver->gmgOperator();
 
@@ -511,7 +561,8 @@ bool GMGTests::testGMGOperatorP() {
     set<GlobalIndexType> cellIDs = coarseMesh->cellIDsInPartition();
 
     set<GlobalIndexType> coarseFieldIndices = coarseGDA->partitionOwnedGlobalFieldIndices();
-    for (set<GlobalIndexType>::iterator cellIDIt=cellIDs.begin(); cellIDIt != cellIDs.end(); cellIDIt++) {
+    for (set<GlobalIndexType>::iterator cellIDIt=cellIDs.begin(); cellIDIt != cellIDs.end(); cellIDIt++)
+    {
       GlobalIndexType cellID = *cellIDIt;
       BasisCachePtr basisCache = BasisCache::basisCacheForCell(fineMesh, cellID); // since the mesh geometry is the same, fineMesh's cache will work for both fine and coarse cell.
 
@@ -524,18 +575,22 @@ bool GMGTests::testGMGOperatorP() {
 
       vector< VarPtr > fieldVars = bf->varFactory()->fieldVars();
       set<int> fieldIDs;
-      for (vector< VarPtr >::iterator fieldIt = fieldVars.begin(); fieldIt != fieldVars.end(); fieldIt++) {
+      for (vector< VarPtr >::iterator fieldIt = fieldVars.begin(); fieldIt != fieldVars.end(); fieldIt++)
+      {
         fieldIDs.insert((*fieldIt)->ID());
       }
 
       int sideCount = fineMesh->getElementType(cellID)->cellTopoPtr->getSideCount();
 
       set<int> varIDs = coarseOrdering->getVarIDs();
-      for (set<int>::iterator varIDIt = varIDs.begin(); varIDIt != varIDs.end(); varIDIt++) {
+      for (set<int>::iterator varIDIt = varIDs.begin(); varIDIt != varIDs.end(); varIDIt++)
+      {
         int varID = *varIDIt;
         if ((fieldIDs.find(varID) != fieldIDs.end()) && useStaticCondensation) continue; // skip field test for static condensation: these guys are mapped in that case...
-        for (int sideOrdinal=0; sideOrdinal<sideCount; sideOrdinal++) {
-          if (coarseOrdering->hasBasisEntry(varID, sideOrdinal) != fineOrdering->hasBasisEntry(varID, sideOrdinal)) {
+        for (int sideOrdinal=0; sideOrdinal<sideCount; sideOrdinal++)
+        {
+          if (coarseOrdering->hasBasisEntry(varID, sideOrdinal) != fineOrdering->hasBasisEntry(varID, sideOrdinal))
+          {
             TEUCHOS_TEST_FOR_EXCEPTION(true, std::invalid_argument, "coarse and fine orderings disagree on whether varID is defined on side sideOrdinal");
           }
           if (! coarseOrdering->hasBasisEntry(varID, sideOrdinal)) continue;
@@ -545,7 +600,8 @@ bool GMGTests::testGMGOperatorP() {
           FieldContainer<double> coarseBasisCoefficients(coarseBasis->getCardinality());
           FieldContainer<double> fineBasisCoefficients(fineBasis->getCardinality());
 
-          for (int coarseBasisOrdinal=0; coarseBasisOrdinal < coarseBasis->getCardinality(); coarseBasisOrdinal++) {
+          for (int coarseBasisOrdinal=0; coarseBasisOrdinal < coarseBasis->getCardinality(); coarseBasisOrdinal++)
+          {
             int coarseDofIndex = coarseOrdering->getDofIndex(varID, coarseBasisOrdinal, sideOrdinal);
             coarseBasisCoefficients.initialize(0);
             coarseCoefficients.initialize(0);
@@ -555,7 +611,8 @@ bool GMGTests::testGMGOperatorP() {
 
             FieldContainer<double> fineLocalCoefficients = fineToCoarseMapper->mapGlobalCoefficients(coarseCoefficients);
 
-            for (int basisOrdinal=0; basisOrdinal < fineBasis->getCardinality(); basisOrdinal++) {
+            for (int basisOrdinal=0; basisOrdinal < fineBasis->getCardinality(); basisOrdinal++)
+            {
               int fineDofIndex = fineOrdering->getDofIndex(varID, basisOrdinal, sideOrdinal);
               fineBasisCoefficients[basisOrdinal] = fineLocalCoefficients[fineDofIndex];
             }
@@ -569,7 +626,8 @@ bool GMGTests::testGMGOperatorP() {
             double l2diff = sqrt( (diffFxn * diffFxn)->integrate(basisCacheForIntegration) );
 
             double tol = 1e-14;
-            if (l2diff > tol) {
+            if (l2diff > tol)
+            {
               success = false;
               cout << "Test Failure: on cell " << cellID << ", for variable " << varID;
               if (coarseOrdering->getSidesForVarID(varID).size() > 1) cout << " on side " << sideOrdinal << " ";
@@ -587,7 +645,8 @@ bool GMGTests::testGMGOperatorP() {
   return TestSuite::allSuccess(success);
 }
 
-bool GMGTests::testGMGSolverIdentity2DRefinedMeshes() {
+bool GMGTests::testGMGSolverIdentity2DRefinedMeshes()
+{
   bool success = true;
 
   vector<bool> useStaticCondensationValues;
@@ -595,11 +654,13 @@ bool GMGTests::testGMGSolverIdentity2DRefinedMeshes() {
   useStaticCondensationValues.push_back(false);
 
   for (  vector<bool>::iterator useStaticCondensationIt = useStaticCondensationValues.begin();
-       useStaticCondensationIt != useStaticCondensationValues.end(); useStaticCondensationIt++) {
+         useStaticCondensationIt != useStaticCondensationValues.end(); useStaticCondensationIt++)
+  {
     bool useStaticCondensation = *useStaticCondensationIt;
 
     // some 2D-specific tests on refined meshes
-    for (int refinementOrdinal=0; refinementOrdinal<4; refinementOrdinal++) {
+    for (int refinementOrdinal=0; refinementOrdinal<4; refinementOrdinal++)
+    {
       int spaceDim = 2;
 
       int H1Order_coarse = 2, H1Order = 2;
@@ -626,7 +687,8 @@ bool GMGTests::testGMGSolverIdentity2DRefinedMeshes() {
 
       //    solnFine->setWriteMatrixToFile(true, "/tmp/A_fine.dat");
 
-      if (useStaticCondensation) {
+      if (useStaticCondensation)
+      {
         // need to populate local stiffness matrices before dealing with the RHS.
         solnFine->initializeLHSVector();
         solnFine->initializeStiffnessAndLoad();
@@ -634,9 +696,9 @@ bool GMGTests::testGMGSolverIdentity2DRefinedMeshes() {
       }
 
       Teuchos::RCP<GMGSolver> gmgSolver = Teuchos::rcp( new GMGSolver(zeroBCs, fineMesh, graphNorm, fineMesh,
-                                                                      solnFine->getDofInterpreter(),
-                                                                      solnFine->getPartitionMap(),
-                                                                      maxIters, iter_tol, coarseSolver, useStaticCondensation) );
+                                          solnFine->getDofInterpreter(),
+                                          solnFine->getPartitionMap(),
+                                          maxIters, iter_tol, coarseSolver, useStaticCondensation) );
       gmgSolver->setComputeConditionNumberEstimate(false);
 
       {
@@ -665,8 +727,10 @@ bool GMGTests::testGMGSolverIdentity2DRefinedMeshes() {
         Teuchos::RCP<Epetra_Vector> diagA_inv = Teuchos::rcp( new Epetra_Vector(*map, 1) );
         Teuchos::RCP<Epetra_Vector> diagA_sqrt_inv = Teuchos::rcp( new Epetra_Vector(*map, 1) );
         diagA_inv->Reciprocal(*diagA);
-        if (map->NumMyElements() > 0) {
-          for (int lid = map->MinLID(); lid <= map->MaxLID(); lid++) {
+        if (map->NumMyElements() > 0)
+        {
+          for (int lid = map->MinLID(); lid <= map->MaxLID(); lid++)
+          {
             (*diagA_sqrt_inv)[lid] = 1.0 / sqrt((*diagA)[lid]);
           }
         }
@@ -676,13 +740,15 @@ bool GMGTests::testGMGSolverIdentity2DRefinedMeshes() {
         gmgSolver->gmgOperator().setSmootherType(GMGOperator::POINT_JACOBI);
         gmgSolver->gmgOperator().computeCoarseStiffnessMatrix(A);
 
-        for (int i=0; i<fineDiagonalScalingValues.size(); i++) {
+        for (int i=0; i<fineDiagonalScalingValues.size(); i++)
+        {
           bool fineSolverUsesDiagonalScaling = fineDiagonalScalingValues[i];
           Epetra_MultiVector gmg_lhsVector(rhsVectorCopy.Map(), 1); // lhs has same distribution structure as rhs
           gmgSolver->gmgOperator().setSmootherType(GMGOperator::NONE); // turn off for this next test, comparing direct solve to ApplyInverse
           gmgSolver->gmgOperator().setFineSolverUsesDiagonalScaling(fineSolverUsesDiagonalScaling);
 
-          if (fineSolverUsesDiagonalScaling) {
+          if (fineSolverUsesDiagonalScaling)
+          {
             // then we need to imitate GMGSolver: first, communicate the diagonal
             gmgSolver->gmgOperator().setStiffnessDiagonal(diagA);
 
@@ -695,14 +761,19 @@ bool GMGTests::testGMGSolverIdentity2DRefinedMeshes() {
 
           // determine the expected value
           Epetra_MultiVector directValue(*lhsVector); // x
-          if (applySmoothing && !fineSolverUsesDiagonalScaling) {
+          if (applySmoothing && !fineSolverUsesDiagonalScaling)
+          {
             // x + D^-1 b
             directValue.Multiply(1.0, rhsVectorCopy2, *diagA_inv, 1.0);
-          } else if (applySmoothing && fineSolverUsesDiagonalScaling) {
+          }
+          else if (applySmoothing && fineSolverUsesDiagonalScaling)
+          {
             // D^1/2 x + D^-1/2 b
             directValue.Multiply(1.0, directValue, *diagA_sqrt, 0.0);
             directValue.Multiply(1.0, rhsVectorCopy2, *diagA_sqrt_inv, 1.0);
-          } else if (!applySmoothing && fineSolverUsesDiagonalScaling) {
+          }
+          else if (!applySmoothing && fineSolverUsesDiagonalScaling)
+          {
             // D^1/2 x
             directValue.Multiply(1.0, directValue, *diagA_sqrt, 0.0);
           }
@@ -710,11 +781,13 @@ bool GMGTests::testGMGSolverIdentity2DRefinedMeshes() {
           double tol = 1e-10;
           int minLID = gmg_lhsVector.Map().MinLID();
           int numLIDs = gmg_lhsVector.Map().NumMyElements();
-          for (int lid=minLID; lid < minLID + numLIDs; lid++ ) {
+          for (int lid=minLID; lid < minLID + numLIDs; lid++ )
+          {
             double direct_val = directValue[0][lid];
             double gmg_val = gmg_lhsVector[0][lid];
             double diff = abs(direct_val - gmg_val);
-            if (diff > tol) {
+            if (diff > tol)
+            {
               GlobalIndexType gid = gmg_lhsVector.Map().GID(lid);
               cout << "FAILURE: For refinement sequence " << refinementOrdinal << " in " << spaceDim << "D, ";
               cout << "GMG ApplyInverse and direct solve differ for gid " << gid << " with difference = " << diff << ".\n";
@@ -745,7 +818,8 @@ bool GMGTests::testGMGSolverIdentity2DRefinedMeshes() {
       double l2_diff = (directPhiSoln-iterativePhiSoln)->l2norm(fineMesh);
 
       double tol = iter_tol * 100;
-      if (l2_diff > tol) {
+      if (l2_diff > tol)
+      {
         success = false;
         cout << "FAILURE: For refinement sequence " << refinementOrdinal << " in " << spaceDim << "D, ";
 
@@ -757,7 +831,8 @@ bool GMGTests::testGMGSolverIdentity2DRefinedMeshes() {
   return allSuccess(success);
 }
 
-bool GMGTests::testGMGSolverIdentityUniformMeshes() {
+bool GMGTests::testGMGSolverIdentityUniformMeshes()
+{
 
   bool success = true;
 
@@ -766,7 +841,8 @@ bool GMGTests::testGMGSolverIdentityUniformMeshes() {
   useStaticCondensationValues.push_back(false);
 
   for (  vector<bool>::iterator useStaticCondensationIt = useStaticCondensationValues.begin();
-       useStaticCondensationIt != useStaticCondensationValues.end(); useStaticCondensationIt++) {
+         useStaticCondensationIt != useStaticCondensationValues.end(); useStaticCondensationIt++)
+  {
     bool useStaticCondensation = *useStaticCondensationIt;
 
     vector<int> cellCounts;
@@ -774,11 +850,14 @@ bool GMGTests::testGMGSolverIdentityUniformMeshes() {
     cellCounts.push_back(2);
 //    cellCounts.push_back(4);
 
-    for (int spaceDim=1; spaceDim<=3; spaceDim++) {
-      for (int i=0; i<cellCounts.size(); i++) {
+    for (int spaceDim=1; spaceDim<=3; spaceDim++)
+    {
+      for (int i=0; i<cellCounts.size(); i++)
+      {
 //        if ((spaceDim==3) && (i==cellCounts.size()-1)) continue; // skip the 4x4x4 case, in interest of time.
         vector<int> cellCount;
-        for (int d=0; d<spaceDim; d++) {
+        for (int d=0; d<spaceDim; d++)
+        {
           cellCount.push_back(cellCounts[i]);
         }
 
@@ -797,7 +876,8 @@ bool GMGTests::testGMGSolverIdentityUniformMeshes() {
         BF* bf = dynamic_cast< BF* >( mesh->bilinearForm().get() );
         IPPtr graphNorm = bf->graphNorm();
 
-        if (useStaticCondensation) {
+        if (useStaticCondensation)
+        {
           // need to populate local stiffness matrices for condensed dof interpreter
           exactPoissonSolution->initializeLHSVector();
           exactPoissonSolution->initializeStiffnessAndLoad();
@@ -808,15 +888,15 @@ bool GMGTests::testGMGSolverIdentityUniformMeshes() {
         int maxIters = 100;
         double iter_tol = 1e-14;
         Teuchos::RCP<GMGSolver> gmgSolver = Teuchos::rcp( new GMGSolver(zeroBCs, mesh, graphNorm, mesh,
-                                                                        exactPoissonSolution->getDofInterpreter(),
-                                                                        exactPoissonSolution->getPartitionMap(),
-                                                                        maxIters, iter_tol, coarseSolver, useStaticCondensation) );
+                                            exactPoissonSolution->getDofInterpreter(),
+                                            exactPoissonSolution->getPartitionMap(),
+                                            maxIters, iter_tol, coarseSolver, useStaticCondensation) );
         gmgSolver->setComputeConditionNumberEstimate(false);
 
         {
           // before we test the solve proper, let's check that with smoothing off, ApplyInverse acts just like the standard solve
-  //        exactPoissonSolution->setWriteMatrixToFile(true, "/tmp/A_direct.dat");
-  //        exactPoissonSolution->setWriteRHSToMatrixMarketFile(true, "/tmp/b_direct.dat");
+          //        exactPoissonSolution->setWriteMatrixToFile(true, "/tmp/A_direct.dat");
+          //        exactPoissonSolution->setWriteRHSToMatrixMarketFile(true, "/tmp/b_direct.dat");
           exactPoissonSolution->initializeLHSVector();
           exactPoissonSolution->initializeStiffnessAndLoad();
           exactPoissonSolution->populateStiffnessAndLoad();
@@ -825,7 +905,7 @@ bool GMGTests::testGMGSolverIdentityUniformMeshes() {
           Epetra_MultiVector rhsVectorCopy(*rhsVector);
           exactPoissonSolution->solve();
           Teuchos::RCP<Epetra_MultiVector> lhsVector = exactPoissonSolution->getLHSVector();
-  //        EpetraExt::MultiVectorToMatlabFile("/tmp/x_direct.dat",*lhsVector);
+          //        EpetraExt::MultiVectorToMatlabFile("/tmp/x_direct.dat",*lhsVector);
 
           Epetra_MultiVector gmg_lhsVector(rhsVectorCopy.Map(), 1); // lhs has same distribution structure as rhs
 
@@ -833,14 +913,16 @@ bool GMGTests::testGMGSolverIdentityUniformMeshes() {
           applySmoothingValues.push_back(false);
           applySmoothingValues.push_back(true);
 
-          for (int j=0; j<applySmoothingValues.size(); j++) {
+          for (int j=0; j<applySmoothingValues.size(); j++)
+          {
             bool applySmoothing = applySmoothingValues[j];
 
             vector<bool> fineDiagonalScalingValues;
             fineDiagonalScalingValues.push_back(false);
             fineDiagonalScalingValues.push_back(true);
 
-            for (int j=0; j<fineDiagonalScalingValues.size(); j++) {
+            for (int j=0; j<fineDiagonalScalingValues.size(); j++)
+            {
               bool fineSolverUsesDiagonalScaling = fineDiagonalScalingValues[j];
               Epetra_MultiVector gmg_lhsVector(rhsVectorCopy.Map(), 1); // lhs has same distribution structure as rhs
               gmgSolver->setApplySmoothingOperator(applySmoothing);
@@ -861,8 +943,10 @@ bool GMGTests::testGMGSolverIdentityUniformMeshes() {
               Teuchos::RCP<Epetra_Vector> diagA_inv = Teuchos::rcp( new Epetra_Vector(*map, 1) );
               Teuchos::RCP<Epetra_Vector> diagA_sqrt_inv = Teuchos::rcp( new Epetra_Vector(*map, 1) );
               diagA_inv->Reciprocal(*diagA);
-              if (map->NumMyElements() > 0) {
-                for (int lid = map->MinLID(); lid <= map->MaxLID(); lid++) {
+              if (map->NumMyElements() > 0)
+              {
+                for (int lid = map->MinLID(); lid <= map->MaxLID(); lid++)
+                {
                   (*diagA_sqrt_inv)[lid] = 1.0 / sqrt((*diagA)[lid]);
                 }
               }
@@ -874,19 +958,25 @@ bool GMGTests::testGMGSolverIdentityUniformMeshes() {
 
               // determine the expected value
               Epetra_MultiVector directValue(*lhsVector); // x
-              if (applySmoothing && !fineSolverUsesDiagonalScaling) {
+              if (applySmoothing && !fineSolverUsesDiagonalScaling)
+              {
                 // x + D^-1 b
                 directValue.Multiply(1.0, rhsVectorCopy2, *diagA_inv, 1.0);
-              } else if (applySmoothing && fineSolverUsesDiagonalScaling) {
+              }
+              else if (applySmoothing && fineSolverUsesDiagonalScaling)
+              {
                 // D^1/2 x + D^-1/2 b
                 directValue.Multiply(1.0, directValue, *diagA_sqrt, 0.0);
                 directValue.Multiply(1.0, rhsVectorCopy2, *diagA_sqrt_inv, 1.0);
-              } else if (!applySmoothing && fineSolverUsesDiagonalScaling) {
+              }
+              else if (!applySmoothing && fineSolverUsesDiagonalScaling)
+              {
                 // D^1/2 x
                 directValue.Multiply(1.0, directValue, *diagA_sqrt, 0.0);
               }
 
-              if (fineSolverUsesDiagonalScaling) {
+              if (fineSolverUsesDiagonalScaling)
+              {
                 // then, apply the inverse sqrt diagonal operator to the RHS we pass to GMG Operator.
                 rhsVectorCopy2.Multiply(1.0, rhsVectorCopy2, *diagA_sqrt_inv, 0);
 //                EpetraExt::MultiVectorToMatlabFile("/tmp/scaled_rhs.dat",rhsVectorCopy2);
@@ -895,9 +985,12 @@ bool GMGTests::testGMGSolverIdentityUniformMeshes() {
               // if applySmoothing = false, then we expect exact agreement between direct solution and iterative.
               // If applySmoothing = true,  then we expect iterative = exact + D^-1 b
 
-              if (applySmoothing) {
+              if (applySmoothing)
+              {
                 gmgSolver->gmgOperator().setSmootherType(GMGOperator::POINT_JACOBI);
-              } else {
+              }
+              else
+              {
                 gmgSolver->gmgOperator().setSmootherType(GMGOperator::NONE);
               }
 
@@ -907,11 +1000,13 @@ bool GMGTests::testGMGSolverIdentityUniformMeshes() {
               double tol = 1e-10;
               int minLID = gmg_lhsVector.Map().MinLID();
               int numLIDs = gmg_lhsVector.Map().NumMyElements();
-              for (int lid=minLID; lid < minLID + numLIDs; lid++ ) {
+              for (int lid=minLID; lid < minLID + numLIDs; lid++ )
+              {
                 double direct_val = directValue[0][lid];
                 double gmg_val = gmg_lhsVector[0][lid];
                 double diff = abs(direct_val - gmg_val);
-                if (diff > tol) {
+                if (diff > tol)
+                {
                   GlobalIndexType gid = gmg_lhsVector.Map().GID(lid);
                   cout << "FAILURE: For cellCount = " << cellCounts[i] << " in " << spaceDim << "D, ";
                   cout << "GMG ApplyInverse and direct solve differ for gid " << gid << " with difference = " << diff << ".\n";
@@ -927,13 +1022,15 @@ bool GMGTests::testGMGSolverIdentityUniformMeshes() {
         applySmoothingValues.push_back(false);
         applySmoothingValues.push_back(true);
 
-        for (int j=0; j<applySmoothingValues.size(); j++) {
+        for (int j=0; j<applySmoothingValues.size(); j++)
+        {
           bool applySmoothing = applySmoothingValues[j];
 
           // do "multi" grid between mesh and itself.  Solution should match phiExact.
           int maxIters = applySmoothing ? 100 : 1; // if smoothing not applied, then GMG should recover exactly the direct solution, in 1 iteration
 
-          if (useStaticCondensation) {
+          if (useStaticCondensation)
+          {
             // need to populate local stiffness matrices in the
             actualPoissonSolution->initializeLHSVector();
             actualPoissonSolution->initializeStiffnessAndLoad();
@@ -941,19 +1038,19 @@ bool GMGTests::testGMGSolverIdentityUniformMeshes() {
           }
 
           Teuchos::RCP<GMGSolver> gmgSolver = Teuchos::rcp( new GMGSolver(zeroBCs, mesh, graphNorm, mesh,
-                                                                          actualPoissonSolution->getDofInterpreter(),
-                                                                          actualPoissonSolution->getPartitionMap(),
-                                                                          maxIters, iter_tol, coarseSolver, useStaticCondensation) );
+                                              actualPoissonSolution->getDofInterpreter(),
+                                              actualPoissonSolution->getPartitionMap(),
+                                              maxIters, iter_tol, coarseSolver, useStaticCondensation) );
 
           gmgSolver->setComputeConditionNumberEstimate(false);
           gmgSolver->setApplySmoothingOperator(applySmoothing);
 
           Teuchos::RCP<Solver> fineSolver = gmgSolver;
 
-    //      exactPoissonSolution->setWriteMatrixToFile(true, "/tmp/A.dat");
-    //      exactPoissonSolution->setWriteRHSToMatrixMarketFile(true, "/tmp/b.dat");
+          //      exactPoissonSolution->setWriteMatrixToFile(true, "/tmp/A.dat");
+          //      exactPoissonSolution->setWriteRHSToMatrixMarketFile(true, "/tmp/b.dat");
 
-    //      exactPoissonSolution->solve(coarseSolver);
+          //      exactPoissonSolution->solve(coarseSolver);
 
           actualPoissonSolution->solve(fineSolver);
           exactPoissonSolution->solve(coarseSolver);
@@ -966,7 +1063,8 @@ bool GMGTests::testGMGSolverIdentityUniformMeshes() {
           double l2_diff = (exactPhiSoln-actualPhiSoln)->l2norm(mesh);
 
           double tol = iter_tol * 10;
-          if (l2_diff > tol) {
+          if (l2_diff > tol)
+          {
             success = false;
             cout << "FAILURE: For cellCount = " << cellCounts[i] << " in " << spaceDim << "D, ";
 
@@ -979,17 +1077,21 @@ bool GMGTests::testGMGSolverIdentityUniformMeshes() {
   return TestSuite::allSuccess(success);
 }
 
-bool GMGTests::testGMGSolverTwoGrid() {
+bool GMGTests::testGMGSolverTwoGrid()
+{
   bool success = true;
   vector<int> cellCounts;
   cellCounts.push_back(1);
 
   bool useStaticCondensation = false; // static condensation is not yet supported for h-multigrid.
 
-  for (int spaceDim=1; spaceDim<=3; spaceDim++) {
-    for (int i=0; i<cellCounts.size(); i++) {
+  for (int spaceDim=1; spaceDim<=3; spaceDim++)
+  {
+    for (int i=0; i<cellCounts.size(); i++)
+    {
       vector<int> cellCount;
-      for (int d=0; d<spaceDim; d++) {
+      for (int d=0; d<spaceDim; d++)
+      {
         cellCount.push_back(cellCounts[i]);
       }
 
@@ -1022,9 +1124,9 @@ bool GMGTests::testGMGSolverTwoGrid() {
       int maxIters = 200;
       Teuchos::RCP<Solver> coarseSolver = Teuchos::rcp( new Amesos2Solver(true) );
       Teuchos::RCP<GMGSolver> gmgSolver = Teuchos::rcp( new GMGSolver(zeroBCs, coarseMesh, graphNorm, fineMesh,
-                                                                      exactPoissonSolution->getDofInterpreter(),
-                                                                      exactPoissonSolution->getPartitionMap(),
-                                                                      maxIters, iter_tol, coarseSolver, useStaticCondensation) );
+                                          exactPoissonSolution->getDofInterpreter(),
+                                          exactPoissonSolution->getPartitionMap(),
+                                          maxIters, iter_tol, coarseSolver, useStaticCondensation) );
 
       gmgSolver->setApplySmoothingOperator(applySmoothing);
 
@@ -1045,7 +1147,8 @@ bool GMGTests::testGMGSolverTwoGrid() {
       double l2_diff = (exactPhiSoln-actualPhiSoln)->l2norm(mesh);
 
       double tol = iter_tol * 10;
-      if (l2_diff > tol) {
+      if (l2_diff > tol)
+      {
         success = false;
         cout << "FAILURE: For cellCount = " << cellCounts[i] << " in " << spaceDim << "D, ";
 
@@ -1056,7 +1159,8 @@ bool GMGTests::testGMGSolverTwoGrid() {
   return success;
 }
 
-bool GMGTests::testGMGSolverThreeGrid() {
+bool GMGTests::testGMGSolverThreeGrid()
+{
   bool success = true;
   vector<int> cellCounts;
   cellCounts.push_back(1);
@@ -1066,109 +1170,116 @@ bool GMGTests::testGMGSolverThreeGrid() {
   useStaticCondensationValues.push_back(false);
 
   for (  vector<bool>::iterator useStaticCondensationIt = useStaticCondensationValues.begin();
-       useStaticCondensationIt != useStaticCondensationValues.end(); useStaticCondensationIt++) {
+         useStaticCondensationIt != useStaticCondensationValues.end(); useStaticCondensationIt++)
+  {
     bool useStaticCondensation = *useStaticCondensationIt;
-    for (int spaceDim=1; spaceDim<=3; spaceDim++) {
-    for (int i=0; i<cellCounts.size(); i++) {
-      //      if ((spaceDim==3) && (i==cellCounts.size()-1)) continue; // skip the 4x4x4 case, in interest of time.
-      vector<int> cellCount;
-      for (int d=0; d<spaceDim; d++) {
-        cellCount.push_back(cellCounts[i]);
-      }
+    for (int spaceDim=1; spaceDim<=3; spaceDim++)
+    {
+      for (int i=0; i<cellCounts.size(); i++)
+      {
+        //      if ((spaceDim==3) && (i==cellCounts.size()-1)) continue; // skip the 4x4x4 case, in interest of time.
+        vector<int> cellCount;
+        for (int d=0; d<spaceDim; d++)
+        {
+          cellCount.push_back(cellCounts[i]);
+        }
 
-      int H1Order = 2;
-      bool useH1Traces = false;
-      FunctionPtr phiExact = getPhiExact(spaceDim);
+        int H1Order = 2;
+        bool useH1Traces = false;
+        FunctionPtr phiExact = getPhiExact(spaceDim);
 
-      SolutionPtr coarsestSolution = poissonExactSolution(cellCount, H1Order-1, phiExact, useH1Traces);
-      MeshPtr coarsestMesh = coarsestSolution->mesh();
-      SolutionPtr coarseSolution = poissonExactSolution(cellCount, H1Order, phiExact, useH1Traces);
-      MeshPtr coarseMesh = coarseSolution->mesh();
+        SolutionPtr coarsestSolution = poissonExactSolution(cellCount, H1Order-1, phiExact, useH1Traces);
+        MeshPtr coarsestMesh = coarsestSolution->mesh();
+        SolutionPtr coarseSolution = poissonExactSolution(cellCount, H1Order, phiExact, useH1Traces);
+        MeshPtr coarseMesh = coarseSolution->mesh();
 
-      SolutionPtr exactPoissonSolution = poissonExactSolution(cellCount, H1Order, phiExact, useH1Traces);
-      SolutionPtr actualPoissonSolution = poissonExactSolution(cellCount, H1Order, phiExact, useH1Traces);
+        SolutionPtr exactPoissonSolution = poissonExactSolution(cellCount, H1Order, phiExact, useH1Traces);
+        SolutionPtr actualPoissonSolution = poissonExactSolution(cellCount, H1Order, phiExact, useH1Traces);
 
-      MeshPtr exactMesh = exactPoissonSolution->mesh();
-      MeshPtr fineMesh = actualPoissonSolution->mesh();
+        MeshPtr exactMesh = exactPoissonSolution->mesh();
+        MeshPtr fineMesh = actualPoissonSolution->mesh();
 
-      // refine uniformly once in both exact and actual:
-      CellTopoPtr cellTopo = coarseMesh->getTopology()->getCell(0)->topology();
-      RefinementPatternPtr refPattern = RefinementPattern::regularRefinementPattern(cellTopo->getKey());
-      exactMesh->hRefine(exactMesh->getActiveCellIDs(), refPattern);
-      fineMesh->hRefine(fineMesh->getActiveCellIDs(), refPattern);
+        // refine uniformly once in both exact and actual:
+        CellTopoPtr cellTopo = coarseMesh->getTopology()->getCell(0)->topology();
+        RefinementPatternPtr refPattern = RefinementPattern::regularRefinementPattern(cellTopo->getKey());
+        exactMesh->hRefine(exactMesh->getActiveCellIDs(), refPattern);
+        fineMesh->hRefine(fineMesh->getActiveCellIDs(), refPattern);
 
-      BCPtr poissonBC = exactPoissonSolution->bc();
-      BCPtr zeroBCs = poissonBC->copyImposingZero();
-      MeshPtr mesh = exactPoissonSolution->mesh();
-      BF* bf = dynamic_cast< BF* >( mesh->bilinearForm().get() );
-      IPPtr graphNorm = bf->graphNorm();
+        BCPtr poissonBC = exactPoissonSolution->bc();
+        BCPtr zeroBCs = poissonBC->copyImposingZero();
+        MeshPtr mesh = exactPoissonSolution->mesh();
+        BF* bf = dynamic_cast< BF* >( mesh->bilinearForm().get() );
+        IPPtr graphNorm = bf->graphNorm();
 
-      double iter_tol = 1e-10;
-      bool applySmoothing = true;
-      int maxIters = 200;
-      Teuchos::RCP<Solver> coarsestSolver = Teuchos::rcp( new Amesos2Solver(true) );
+        double iter_tol = 1e-10;
+        bool applySmoothing = true;
+        int maxIters = 200;
+        Teuchos::RCP<Solver> coarsestSolver = Teuchos::rcp( new Amesos2Solver(true) );
 
-      coarseSolution->setUseCondensedSolve(useStaticCondensation);
-      exactPoissonSolution->setUseCondensedSolve(useStaticCondensation);
-      actualPoissonSolution->setUseCondensedSolve(useStaticCondensation);
+        coarseSolution->setUseCondensedSolve(useStaticCondensation);
+        exactPoissonSolution->setUseCondensedSolve(useStaticCondensation);
+        actualPoissonSolution->setUseCondensedSolve(useStaticCondensation);
 
-      if (useStaticCondensation) {
-        // then for coarseSolution->getDofInterpreter() and exactPoissonSolution->getDofInterpreter() to work,
-        // need to populate their local stiffness matrices
-        coarseSolution->initializeLHSVector();
-        coarseSolution->initializeStiffnessAndLoad();
-        coarseSolution->populateStiffnessAndLoad();
+        if (useStaticCondensation)
+        {
+          // then for coarseSolution->getDofInterpreter() and exactPoissonSolution->getDofInterpreter() to work,
+          // need to populate their local stiffness matrices
+          coarseSolution->initializeLHSVector();
+          coarseSolution->initializeStiffnessAndLoad();
+          coarseSolution->populateStiffnessAndLoad();
 
-        exactPoissonSolution->initializeLHSVector();
-        exactPoissonSolution->initializeStiffnessAndLoad();
-        exactPoissonSolution->populateStiffnessAndLoad();
-      }
+          exactPoissonSolution->initializeLHSVector();
+          exactPoissonSolution->initializeStiffnessAndLoad();
+          exactPoissonSolution->populateStiffnessAndLoad();
+        }
 
-      Teuchos::RCP<GMGSolver> coarseSolver = Teuchos::rcp( new GMGSolver(zeroBCs, coarsestMesh, graphNorm, coarseMesh,
-                                                                         coarseSolution->getDofInterpreter(),
-                                                                         coarseSolution->getPartitionMap(),
-                                                                         maxIters, iter_tol * 10, coarsestSolver, useStaticCondensation) );
+        Teuchos::RCP<GMGSolver> coarseSolver = Teuchos::rcp( new GMGSolver(zeroBCs, coarsestMesh, graphNorm, coarseMesh,
+                                               coarseSolution->getDofInterpreter(),
+                                               coarseSolution->getPartitionMap(),
+                                               maxIters, iter_tol * 10, coarsestSolver, useStaticCondensation) );
 
-      Teuchos::RCP<GMGSolver> gmgSolver = Teuchos::rcp( new GMGSolver(zeroBCs, coarseMesh, graphNorm, fineMesh,
-                                                                      exactPoissonSolution->getDofInterpreter(),
-                                                                      exactPoissonSolution->getPartitionMap(),
-                                                                      maxIters, iter_tol, coarseSolver, useStaticCondensation) );
+        Teuchos::RCP<GMGSolver> gmgSolver = Teuchos::rcp( new GMGSolver(zeroBCs, coarseMesh, graphNorm, fineMesh,
+                                            exactPoissonSolution->getDofInterpreter(),
+                                            exactPoissonSolution->getPartitionMap(),
+                                            maxIters, iter_tol, coarseSolver, useStaticCondensation) );
 
-      coarseSolver->setComputeConditionNumberEstimate(false);
-      gmgSolver->setComputeConditionNumberEstimate(false);
+        coarseSolver->setComputeConditionNumberEstimate(false);
+        gmgSolver->setComputeConditionNumberEstimate(false);
 
-      gmgSolver->setApplySmoothingOperator(applySmoothing);
+        gmgSolver->setApplySmoothingOperator(applySmoothing);
 
-      Teuchos::RCP<Solver> fineSolver = gmgSolver;
+        Teuchos::RCP<Solver> fineSolver = gmgSolver;
 
-      //      exactPoissonSolution->setWriteMatrixToFile(true, "/tmp/A.dat");
-      //      exactPoissonSolution->setWriteRHSToMatrixMarketFile(true, "/tmp/b.dat");
+        //      exactPoissonSolution->setWriteMatrixToFile(true, "/tmp/A.dat");
+        //      exactPoissonSolution->setWriteRHSToMatrixMarketFile(true, "/tmp/b.dat");
 
-      exactPoissonSolution->solve(coarsestSolver);
+        exactPoissonSolution->solve(coarsestSolver);
 
-      actualPoissonSolution->solve(fineSolver);
+        actualPoissonSolution->solve(fineSolver);
 
-      VarPtr phi = getPoissonPhi(spaceDim);
+        VarPtr phi = getPoissonPhi(spaceDim);
 
-      FunctionPtr exactPhiSoln = Function::solution(phi, exactPoissonSolution);
-      FunctionPtr actualPhiSoln = Function::solution(phi, actualPoissonSolution);
+        FunctionPtr exactPhiSoln = Function::solution(phi, exactPoissonSolution);
+        FunctionPtr actualPhiSoln = Function::solution(phi, actualPoissonSolution);
 
-      double l2_diff = (exactPhiSoln-actualPhiSoln)->l2norm(mesh);
+        double l2_diff = (exactPhiSoln-actualPhiSoln)->l2norm(mesh);
 
-      double tol = iter_tol * 10;
-      if (l2_diff > tol) {
-        success = false;
-        cout << "FAILURE: For cellCount = " << cellCounts[i] << " in " << spaceDim << "D, ";
+        double tol = iter_tol * 10;
+        if (l2_diff > tol)
+        {
+          success = false;
+          cout << "FAILURE: For cellCount = " << cellCounts[i] << " in " << spaceDim << "D, ";
 
-        cout << "three grid GMG solver and direct differ with L^2 norm of the difference = " << l2_diff << ".\n";
+          cout << "three grid GMG solver and direct differ with L^2 norm of the difference = " << l2_diff << ".\n";
+        }
       }
     }
-  }
   }
   return success;
 }
 
-bool GMGTests::testProlongationOperator() {
+bool GMGTests::testProlongationOperator()
+{
   /*
    This is not a great test, just a quick check against some hand-determined values.
    */
@@ -1208,9 +1319,9 @@ bool GMGTests::testProlongationOperator() {
   int maxIters = 200;
   Teuchos::RCP<Solver> coarseSolver = Teuchos::rcp( new Amesos2Solver(true) );
   Teuchos::RCP<GMGSolver> gmgSolver = Teuchos::rcp( new GMGSolver(zeroBCs, coarseMesh, graphNorm, fineMesh,
-                                                                  exactPoissonSolution->getDofInterpreter(),
-                                                                  exactPoissonSolution->getPartitionMap(),
-                                                                  maxIters, iter_tol, coarseSolver, useStaticCondensation) );
+                                      exactPoissonSolution->getDofInterpreter(),
+                                      exactPoissonSolution->getPartitionMap(),
+                                      maxIters, iter_tol, coarseSolver, useStaticCondensation) );
 
   gmgSolver->gmgOperator().constructLocalCoefficientMaps();
   GlobalIndexType cellID = 1; // the left cell in the fine mesh
@@ -1253,7 +1364,8 @@ bool GMGTests::testProlongationOperator() {
 
   FieldContainer<double> expectedValues(8,8);
 
-  if (traceToFieldsEnabled) {
+  if (traceToFieldsEnabled)
+  {
     // phiHatLeft maps to the corresponding trace on the coarse element; hence no weight for (phiHatLeft,phiLeft)
     expectedValues(phiHatRight,phiLeft) = 0.5;
 
@@ -1282,18 +1394,21 @@ bool GMGTests::testProlongationOperator() {
   expectedValues(psiRight,psiRight) = 0.5;
 
   FieldContainer<double> actualValues(8,8);
-  for (int i=0; i<8; i++) {
+  for (int i=0; i<8; i++)
+  {
     FieldContainer<double> localData(8);
     localData(i) = 1.0;
     FieldContainer<double> globalData = localCoefficientMap->mapLocalData(localData, false);
-    for (int j=0; j<8; j++) {
+    for (int j=0; j<8; j++)
+    {
       actualValues(i,j) = globalData(j);
     }
   }
 
   double tol = 1e-12;
   double maxDiff;
-  if (! fcsAgree(expectedValues, actualValues, tol, maxDiff)) {
+  if (! fcsAgree(expectedValues, actualValues, tol, maxDiff))
+  {
     cout << "left child: expected differs from actual; maxDiff " << maxDiff << endl;
     success = false;
 
@@ -1314,7 +1429,8 @@ bool GMGTests::testProlongationOperator() {
 
   expectedValues.initialize(0.0);
 
-  if (traceToFieldsEnabled) { // in 1D, traces and fluxes are the same, and both need to be parity weighted....
+  if (traceToFieldsEnabled)   // in 1D, traces and fluxes are the same, and both need to be parity weighted....
+  {
     expectedValues(phiHatLeft,phiLeft) = -0.5;
     expectedValues(phiHatRight,phiLeft) = 0.0;
 
@@ -1343,17 +1459,20 @@ bool GMGTests::testProlongationOperator() {
   expectedValues(psiLeft,psiRight) = 0.5;
 
   actualValues.initialize(0.0);
-  for (int i=0; i<8; i++) {
+  for (int i=0; i<8; i++)
+  {
     FieldContainer<double> localData(8);
     localData(i) = 1.0;
     FieldContainer<double> globalData = localCoefficientMap->mapLocalData(localData, false);
-    for (int j=0; j<8; j++) {
+    for (int j=0; j<8; j++)
+    {
       actualValues(i,j) = globalData(j);
     }
   }
 
   maxDiff = 0;
-  if (! fcsAgree(expectedValues, actualValues, tol, maxDiff)) {
+  if (! fcsAgree(expectedValues, actualValues, tol, maxDiff))
+  {
     cout << "right child: expected differs from actual; maxDiff " << maxDiff << endl;
     success = false;
 
@@ -1370,6 +1489,7 @@ bool GMGTests::testProlongationOperator() {
   return success;
 }
 
-string GMGTests::testSuiteName() {
+string GMGTests::testSuiteName()
+{
   return "GMGTests";
 }

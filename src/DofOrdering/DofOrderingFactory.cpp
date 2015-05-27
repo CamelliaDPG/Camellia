@@ -44,33 +44,38 @@
 using namespace Intrepid;
 using namespace Camellia;
 
-DofOrderingFactory::DofOrderingFactory(VarFactoryPtr varFactory) {
+DofOrderingFactory::DofOrderingFactory(VarFactoryPtr varFactory)
+{
   _varFactory = varFactory;
 }
 
 DofOrderingFactory::DofOrderingFactory(VarFactoryPtr varFactory,
                                        map<int,int> trialOrderEnhancements,
-                                       map<int,int> testOrderEnhancements) {
+                                       map<int,int> testOrderEnhancements)
+{
   _varFactory = varFactory;
   _trialOrderEnhancements = trialOrderEnhancements;
   _testOrderEnhancements = testOrderEnhancements;
 }
 
-DofOrderingFactory::DofOrderingFactory(TBFPtr<double> bilinearForm) {
+DofOrderingFactory::DofOrderingFactory(TBFPtr<double> bilinearForm)
+{
   // _bilinearForm = bilinearForm;
   _varFactory = bilinearForm->varFactory();
 }
 
 DofOrderingFactory::DofOrderingFactory(TBFPtr<double> bilinearForm,
                                        map<int,int> trialOrderEnhancements,
-                                       map<int,int> testOrderEnhancements) {
+                                       map<int,int> testOrderEnhancements)
+{
   // _bilinearForm = bilinearForm;
   _varFactory = bilinearForm->varFactory();
   _trialOrderEnhancements = trialOrderEnhancements;
   _testOrderEnhancements = testOrderEnhancements;
 }
 
-DofOrderingPtr DofOrderingFactory::testOrdering(vector<int> &polyOrder, CellTopoPtr cellTopo) {
+DofOrderingPtr DofOrderingFactory::testOrdering(vector<int> &polyOrder, CellTopoPtr cellTopo)
+{
   // vector<int> testIDs = _bilinearForm->testIDs();
   vector<int> testIDs = _varFactory->testIDs();
   vector<int>::iterator testIterator;
@@ -79,12 +84,14 @@ DofOrderingPtr DofOrderingFactory::testOrdering(vector<int> &polyOrder, CellTopo
 
   vector<int> testIDPolyOrder(polyOrder.size());
 
-  for (testIterator = testIDs.begin(); testIterator != testIDs.end(); testIterator++) {
+  for (testIterator = testIDs.begin(); testIterator != testIDs.end(); testIterator++)
+  {
     int testID = *testIterator;
     // Camellia::EFunctionSpace fs = _bilinearForm->functionSpaceForTest(testID);
     Camellia::EFunctionSpace fs = efsForSpace(_varFactory->test(testID)->space());
     BasisPtr basis;
-    for (int pComponent = 0; pComponent < polyOrder.size(); pComponent++) {
+    for (int pComponent = 0; pComponent < polyOrder.size(); pComponent++)
+    {
       testIDPolyOrder[pComponent] = polyOrder[pComponent] + _testOrderEnhancements[testID]; // uses the fact that map defaults to 0 for entries that aren't found
     }
     Camellia::EFunctionSpace fsTemporal = FUNCTION_SPACE_HGRAD; // tests should use HGRAD, so we can take time derivatives...
@@ -98,16 +105,19 @@ DofOrderingPtr DofOrderingFactory::testOrdering(vector<int> &polyOrder, CellTopo
 }
 
 DofOrderingPtr DofOrderingFactory::testOrdering(vector<int> &polyOrder,
-                                                const shards::CellTopology &shardsTopo) {
+    const shards::CellTopology &shardsTopo)
+{
   CellTopoPtr cellTopo = CellTopology::cellTopology(shardsTopo);
   return testOrdering(polyOrder, cellTopo);
 }
 
 DofOrderingPtr DofOrderingFactory::trialOrdering(vector<int> &polyOrder,
-                                                 CellTopoPtr cellTopo,
-                                                 bool conformingVertices) {
+    CellTopoPtr cellTopo,
+    bool conformingVertices)
+{
   // conformingVertices = true only works for 2D topologies
-  if ((cellTopo->getDimension() != 2) && conformingVertices) {
+  if ((cellTopo->getDimension() != 2) && conformingVertices)
+  {
     cout << "ERROR: DofOrderingFactory only supports conformingVertices = true for 2D topologies.\n";
     TEUCHOS_TEST_FOR_EXCEPTION(true, std::invalid_argument, "DofOrderingFactory only supports conformingVertices = true for 2D topologies");
   }
@@ -124,10 +134,12 @@ DofOrderingPtr DofOrderingFactory::trialOrdering(vector<int> &polyOrder,
 
   vector<int> trialIDPolyOrder(polyOrder.size());
 
-  for (trialIterator = trialIDs.begin(); trialIterator != trialIDs.end(); trialIterator++) {
+  for (trialIterator = trialIDs.begin(); trialIterator != trialIDs.end(); trialIterator++)
+  {
     int trialID = *trialIterator;
     VarPtr trialVar = _varFactory->trialVars().find(trialID)->second;
-    for (int pComponent = 0; pComponent < polyOrder.size(); pComponent++) {
+    for (int pComponent = 0; pComponent < polyOrder.size(); pComponent++)
+    {
       trialIDPolyOrder[pComponent] = polyOrder[pComponent] + _trialOrderEnhancements[trialID]; // uses the fact that map defaults to 0 for entries that aren't found
     }
 
@@ -140,18 +152,21 @@ DofOrderingPtr DofOrderingFactory::trialOrdering(vector<int> &polyOrder,
 
     // if (_bilinearForm->isFluxOrTrace(trialID)) {
     VarType varType = _varFactory->trial(trialID)->varType();
-    if ((varType == FLUX) || (varType == TRACE)) {
+    if ((varType == FLUX) || (varType == TRACE))
+    {
       Camellia::EFunctionSpace temporalFS = (fs == FUNCTION_SPACE_HGRAD) ? FUNCTION_SPACE_HGRAD : FUNCTION_SPACE_HVOL;
       int sideDim = cellTopo->getDimension() - 1;
       int numSides = cellTopo->getSideCount();
-      for (int sideOrdinal=0; sideOrdinal<numSides; sideOrdinal++) {
+      for (int sideOrdinal=0; sideOrdinal<numSides; sideOrdinal++)
+      {
         CellTopoPtr sideTopo = cellTopo->getSubcell(sideDim, sideOrdinal);
         basis = BasisFactory::basisFactory()->getConformingBasis( trialIDPolyOrder, sideTopo, fs, temporalFS );
         basisRank = basis->rangeRank();
 
         bool temporalSide = ! cellTopo->sideIsSpatial(sideOrdinal);
 
-        if ( temporalSide && !trialVar->isDefinedOnTemporalInterface() ) {
+        if ( temporalSide && !trialVar->isDefinedOnTemporalInterface() )
+        {
           // skip adding on this side
           continue;
         }
@@ -160,13 +175,16 @@ DofOrderingPtr DofOrderingFactory::trialOrdering(vector<int> &polyOrder,
         traceOrder->addEntry(trialID,basis,basisRank,sideOrdinal);
       }
       if ( conformingVertices
-          && fs == Camellia::FUNCTION_SPACE_HGRAD) {
+           && fs == Camellia::FUNCTION_SPACE_HGRAD)
+      {
         // then we want to identify basis dofs at the vertices...
 
         addConformingVertexPairings(trialID, trialOrder, cellTopo);
         addConformingVertexPairings(trialID, traceOrder, cellTopo);
       }
-    } else {
+    }
+    else
+    {
       basis = BasisFactory::basisFactory()->getBasis(trialIDPolyOrder, cellTopo, fs);
       basisRank = basis->rangeRank();
       trialOrder->addEntry(trialID,basis,basisRank,0);
@@ -189,13 +207,15 @@ DofOrderingPtr DofOrderingFactory::trialOrdering(vector<int> &polyOrder,
 }
 
 DofOrderingPtr DofOrderingFactory::trialOrdering(vector<int> &polyOrder,
-                                                 const shards::CellTopology &shardsTopo,
-                                                 bool conformingVertices) {
+    const shards::CellTopology &shardsTopo,
+    bool conformingVertices)
+{
   CellTopoPtr cellTopoPtr = CellTopology::cellTopology(shardsTopo);
   return trialOrdering(polyOrder, cellTopoPtr, conformingVertices);
 }
 
-DofOrderingPtr DofOrderingFactory::getRelabeledDofOrdering(DofOrderingPtr dofOrdering, map<int, int> &oldKeysNewValues) {
+DofOrderingPtr DofOrderingFactory::getRelabeledDofOrdering(DofOrderingPtr dofOrdering, map<int, int> &oldKeysNewValues)
+{
   bool conforming = _isConforming[dofOrdering.get()];
   DofOrderingPtr newOrdering = Teuchos::rcp(new DofOrdering(dofOrdering->cellTopology()));
 
@@ -204,25 +224,31 @@ DofOrderingPtr DofOrderingFactory::getRelabeledDofOrdering(DofOrderingPtr dofOrd
 
   set<int> varIDs = dofOrdering->getVarIDs();
   CellTopoPtr cellTopoPtr = dofOrdering->cellTopology();
-  for (set<int>::iterator idIt = varIDs.begin(); idIt != varIDs.end(); idIt++) {
+  for (set<int>::iterator idIt = varIDs.begin(); idIt != varIDs.end(); idIt++)
+  {
     int varID = *idIt;
     int newVarID = oldKeysNewValues[varID];
     int numSides = cellTopoPtr->getSideCount();
     Camellia::EFunctionSpace fs;
-    for (int sideIndex=0; sideIndex<numSides; sideIndex++) {
+    for (int sideIndex=0; sideIndex<numSides; sideIndex++)
+    {
       if (! dofOrdering->hasBasisEntry(varID, sideIndex)) continue;
       BasisPtr basis = dofOrdering->getBasis(varID,sideIndex);
 
       fs = BasisFactory::basisFactory()->getBasisFunctionSpace(basis);
       int basisRank = BasisFactory::basisFactory()->getBasisRank(basis);
       newOrdering->addEntry(newVarID,basis,basisRank,sideIndex);
-      if (numSides == 1) {
+      if (numSides == 1)
+      {
         newFieldOrder->addEntry(newVarID, basis, basisRank, sideIndex);
-      } else {
+      }
+      else
+      {
         newTraceOrder->addEntry(newVarID, basis, basisRank, sideIndex);
       }
     }
-    if ((numSides > 1) && (fs == Camellia::FUNCTION_SPACE_HGRAD) && (conforming)) {
+    if ((numSides > 1) && (fs == Camellia::FUNCTION_SPACE_HGRAD) && (conforming))
+    {
       addConformingVertexPairings(newVarID, newOrdering, cellTopoPtr);
       addConformingVertexPairings(newVarID, newTraceOrder, cellTopoPtr);
     }
@@ -242,65 +268,81 @@ DofOrderingPtr DofOrderingFactory::getRelabeledDofOrdering(DofOrderingPtr dofOrd
   return newOrdering;
 }
 
-DofOrderingPtr DofOrderingFactory::getTrialOrdering(DofOrdering &ordering) {
+DofOrderingPtr DofOrderingFactory::getTrialOrdering(DofOrdering &ordering)
+{
   DofOrderingPtr orderingPtr = Teuchos::rcp(&ordering,false);
   typename set<DofOrderingPtr, Comparator >::iterator orderingIt = _trialOrderings.find(orderingPtr);
-  if ( orderingIt != _trialOrderings.end() ) {
+  if ( orderingIt != _trialOrderings.end() )
+  {
     return *orderingIt;
   }
   TEUCHOS_TEST_FOR_EXCEPTION(true, std::invalid_argument, "ordering not found");
   return Teuchos::rcp((DofOrdering*) NULL);
 }
 
-DofOrderingPtr DofOrderingFactory::getTestOrdering(DofOrdering &ordering) {
+DofOrderingPtr DofOrderingFactory::getTestOrdering(DofOrdering &ordering)
+{
   DofOrderingPtr orderingPtr = Teuchos::rcp(&ordering,false);
   typename set<DofOrderingPtr, Comparator >::iterator orderingIt = _testOrderings.find(orderingPtr);
-  if ( orderingIt != _testOrderings.end() ) {
+  if ( orderingIt != _testOrderings.end() )
+  {
     return *orderingIt;
   }
   TEUCHOS_TEST_FOR_EXCEPTION(true, std::invalid_argument, "ordering not found");
   return Teuchos::rcp((DofOrdering*) NULL);
 }
 
-DofOrderingPtr DofOrderingFactory::getFieldOrdering(DofOrderingPtr trialOrdering) {
+DofOrderingPtr DofOrderingFactory::getFieldOrdering(DofOrderingPtr trialOrdering)
+{
   // returns the sub-ordering that contains only the traces
-  if (_fieldOrderingForTrial.find(trialOrdering.get()) == _fieldOrderingForTrial.end()) {
+  if (_fieldOrderingForTrial.find(trialOrdering.get()) == _fieldOrderingForTrial.end())
+  {
     cout << "trialOrdering not found in DofOrderingFactory!  Did you use DofOrderingFactory to create it??\n";
     TEUCHOS_TEST_FOR_EXCEPTION(true, std::invalid_argument, "trialOrdering not found in DofOrderingFactory!  Did you use DofOrderingFactory to create it??");
   }
   return _fieldOrderingForTrial[trialOrdering.get()];
 }
 
-DofOrderingPtr DofOrderingFactory::getTraceOrdering(DofOrderingPtr trialOrdering) {
+DofOrderingPtr DofOrderingFactory::getTraceOrdering(DofOrderingPtr trialOrdering)
+{
   // returns the sub-ordering that contains only the traces
-  if (_traceOrderingForTrial.find(trialOrdering.get()) == _traceOrderingForTrial.end()) {
+  if (_traceOrderingForTrial.find(trialOrdering.get()) == _traceOrderingForTrial.end())
+  {
     cout << "trialOrdering not found in DofOrderingFactory!  Did you use DofOrderingFactory to create it??\n";
     TEUCHOS_TEST_FOR_EXCEPTION(true, std::invalid_argument, "trialOrdering not found in DofOrderingFactory!  Did you use DofOrderingFactory to create it??");
   }
   return _traceOrderingForTrial[trialOrdering.get()];
 }
 
-map<int, int> DofOrderingFactory::getTestOrderEnhancements() {
+map<int, int> DofOrderingFactory::getTestOrderEnhancements()
+{
   return _testOrderEnhancements;
 }
 
-map<int, int> DofOrderingFactory::getTrialOrderEnhancements() {
+map<int, int> DofOrderingFactory::getTrialOrderEnhancements()
+{
   return _trialOrderEnhancements;
 }
 
-void DofOrderingFactory::addConformingVertexPairings(int varID, DofOrderingPtr dofOrdering, CellTopoPtr cellTopo) {
+void DofOrderingFactory::addConformingVertexPairings(int varID, DofOrderingPtr dofOrdering, CellTopoPtr cellTopo)
+{
   // then we want to identify basis dofs at the vertices...
   map< int, pair<int,int> > cellVertexOrdinalToSideVertexOrdinal; // vertexOrdinal --> pair<sideNumber, vertexNumber>
   int numSides = cellTopo->getSideCount();
-  for (int j=0; j<numSides; j++) {
+  for (int j=0; j<numSides; j++)
+  {
     int numVerticesPerSide = cellTopo->getVertexCount(1,j); // should be 2
-    for (int i=0; i < numVerticesPerSide; i++) {
+    for (int i=0; i < numVerticesPerSide; i++)
+    {
       unsigned vertexOrdinal = cellTopo->getNodeMap(1,j,i);
       if ( cellVertexOrdinalToSideVertexOrdinal.find(vertexOrdinal)
-          == cellVertexOrdinalToSideVertexOrdinal.end() ) {
+           == cellVertexOrdinalToSideVertexOrdinal.end() )
+      {
         // haven't seen this one yet
         cellVertexOrdinalToSideVertexOrdinal[vertexOrdinal] = make_pair(j,i);
-      } else {
+      }
+      else
+      {
         pair<int,int> pairedSideVertex = cellVertexOrdinalToSideVertexOrdinal[vertexOrdinal];
         int firstSide = pairedSideVertex.first;
         int firstVertex = pairedSideVertex.second;
@@ -317,37 +359,44 @@ void DofOrderingFactory::addConformingVertexPairings(int varID, DofOrderingPtr d
   }
 }
 
-int DofOrderingFactory::polyOrder(DofOrderingPtr dofOrdering, bool isTestOrdering) {
+int DofOrderingFactory::polyOrder(DofOrderingPtr dofOrdering, bool isTestOrdering)
+{
   set<int> varIDs = dofOrdering->getVarIDs();
   set<int>::iterator idIt;
   int interiorVariable;
   bool interiorVariableFound = false;
   int minSidePolyOrder = INT_MAX;
 
-  for (idIt = varIDs.begin(); idIt != varIDs.end(); idIt++) {
+  for (idIt = varIDs.begin(); idIt != varIDs.end(); idIt++)
+  {
     int varID = *idIt;
     const vector<int>* sidesForVar = &dofOrdering->getSidesForVarID(varID);
     int numSides = sidesForVar->size();
     int varIDEnhancement = isTestOrdering ? _testOrderEnhancements[varID] : _trialOrderEnhancements[varID];
-    if (numSides == 1) {
+    if (numSides == 1)
+    {
       interiorVariable = varID;
       interiorVariableFound = true;
       break;
-    } else {
-      for (vector<int>::const_iterator sideIt = sidesForVar->begin(); sideIt != sidesForVar->end(); sideIt++) {
+    }
+    else
+    {
+      for (vector<int>::const_iterator sideIt = sidesForVar->begin(); sideIt != sidesForVar->end(); sideIt++)
+      {
         int sideOrdinal = *sideIt;
         int polyOrder = BasisFactory::basisFactory()->basisPolyOrder( dofOrdering->getBasis(varID,sideOrdinal) ) - varIDEnhancement;
         minSidePolyOrder = min(minSidePolyOrder,polyOrder);
       }
     }
   }
-  if ( ! interiorVariableFound) {
+  if ( ! interiorVariableFound)
+  {
     // all side variables, which is a bit weird
     // if we have some idea of what the minimum poly order is for a side, then we return that.
     // otherwise, throw an exception
     TEUCHOS_TEST_FOR_EXCEPTION( minSidePolyOrder == INT_MAX,
-                       std::invalid_argument,
-                       "DofOrdering appears not to have any interior (volume) varIDs--DofOrderingFactory cannot pRefine.");
+                                std::invalid_argument,
+                                "DofOrdering appears not to have any interior (volume) varIDs--DofOrderingFactory cannot pRefine.");
     return minSidePolyOrder;
   }
   int varIDEnhancement = isTestOrdering ? _testOrderEnhancements[interiorVariable] : _trialOrderEnhancements[interiorVariable];
@@ -355,26 +404,33 @@ int DofOrderingFactory::polyOrder(DofOrderingPtr dofOrdering, bool isTestOrderin
   return BasisFactory::basisFactory()->basisPolyOrder(interiorBasis) - varIDEnhancement;
 }
 
-map<int, BasisPtr> DofOrderingFactory::getMultiBasisUpgradeMap(vector< pair< DofOrderingPtr,int > > &childTrialOrdersForSide) {
+map<int, BasisPtr> DofOrderingFactory::getMultiBasisUpgradeMap(vector< pair< DofOrderingPtr,int > > &childTrialOrdersForSide)
+{
   vector< BasisPtr > bases;
   set<int> varIDs = (childTrialOrdersForSide[0].first)->getVarIDs();
   map<int, BasisPtr> varIDsToUpgrade;
   set<int>::iterator idIt;
-  for (idIt = varIDs.begin(); idIt != varIDs.end(); idIt++) {
+  for (idIt = varIDs.begin(); idIt != varIDs.end(); idIt++)
+  {
     int varID = *idIt;
     int numSides = childTrialOrdersForSide[0].first->getSidesForVarID(varID).size();
-    if (numSides > 1) { // a variable that lives on the sides: we need to match basis
+    if (numSides > 1)   // a variable that lives on the sides: we need to match basis
+    {
       int numBases = childTrialOrdersForSide.size();
-      for (int i=numBases-1; i>=0; i-- ) {
+      for (int i=numBases-1; i>=0; i-- )
+      {
         // reverse order of bases ( valid only for 2D; in 3D we'll need a more general permutation )
         int childSideIndex = childTrialOrdersForSide[i].second;
         BasisPtr basis  = childTrialOrdersForSide[i].first->getBasis(varID,childSideIndex);
         bases.push_back(basis);
       }
-      if (bases.size() != 1) {
+      if (bases.size() != 1)
+      {
         BasisPtr multiBasis = BasisFactory::basisFactory()->getMultiBasis(bases);
         varIDsToUpgrade[varID] = multiBasis;
-      } else {
+      }
+      else
+      {
         varIDsToUpgrade[varID] = bases[0];
       }
       bases.clear();
@@ -384,21 +440,27 @@ map<int, BasisPtr> DofOrderingFactory::getMultiBasisUpgradeMap(vector< pair< Dof
 }
 
 map<int, BasisPtr> DofOrderingFactory::getPatchBasisUpgradeMap(const DofOrderingPtr childTrialOrdering, int childSideIndex,
-                                                               const DofOrderingPtr parentTrialOrdering, int parentSideIndex,
-                                                               int childIndexInParentSide) {
+    const DofOrderingPtr parentTrialOrdering, int parentSideIndex,
+    int childIndexInParentSide)
+{
   set<int> varIDs = childTrialOrdering->getVarIDs();
   map<int, BasisPtr> varIDsToUpgrade;
   set<int>::iterator idIt;
-  for (idIt = varIDs.begin(); idIt != varIDs.end(); idIt++) {
+  for (idIt = varIDs.begin(); idIt != varIDs.end(); idIt++)
+  {
     int varID = *idIt;
     int numSides = childTrialOrdering->getSidesForVarID(varID).size();
-    if (numSides > 1) { // a variable that lives on the sides: we need to match basis
+    if (numSides > 1)   // a variable that lives on the sides: we need to match basis
+    {
       BasisPtr basis = parentTrialOrdering->getBasis(varID,parentSideIndex);
       FieldContainer<double> nodes(2,1); // just 1D patches supported right now
-      if (childIndexInParentSide==0) {
+      if (childIndexInParentSide==0)
+      {
         nodes(0,0) = -1.0;
         nodes(1,0) = 0.0;
-      } else {
+      }
+      else
+      {
         nodes(0,0) = 0.0;
         nodes(1,0) = 1.0;
       }
@@ -410,28 +472,33 @@ map<int, BasisPtr> DofOrderingFactory::getPatchBasisUpgradeMap(const DofOrdering
 }
 
 void DofOrderingFactory::assignMultiBasis(DofOrderingPtr &trialOrdering, int sideIndex,
-                                          CellTopoPtr cellTopo,
-                                          vector< pair< DofOrderingPtr,int > > &childTrialOrdersForSide ) {
+    CellTopoPtr cellTopo,
+    vector< pair< DofOrderingPtr,int > > &childTrialOrdersForSide )
+{
   map<int, BasisPtr> varIDsToUpgrade = getMultiBasisUpgradeMap(childTrialOrdersForSide);
   trialOrdering = upgradeSide(trialOrdering,cellTopo,varIDsToUpgrade,sideIndex);
 }
 
 void DofOrderingFactory::assignPatchBasis(DofOrderingPtr &childTrialOrdering, int childSideIndex,
-                                          const DofOrderingPtr parentTrialOrdering, int parentSideIndex,
-                                          int childIndexInParentSide, CellTopoPtr childCellTopo) {
+    const DofOrderingPtr parentTrialOrdering, int parentSideIndex,
+    int childIndexInParentSide, CellTopoPtr childCellTopo)
+{
   TEUCHOS_TEST_FOR_EXCEPTION(childIndexInParentSide >= 2, std::invalid_argument, "assignPatchBasis only supports 2 children on a side right now.");
   map<int, BasisPtr> varIDsToUpgrade = getPatchBasisUpgradeMap(childTrialOrdering, childSideIndex, parentTrialOrdering,
-                                                               parentSideIndex, childIndexInParentSide);
+                                       parentSideIndex, childIndexInParentSide);
   childTrialOrdering = upgradeSide(childTrialOrdering,childCellTopo,varIDsToUpgrade,childSideIndex);
 }
 
-bool DofOrderingFactory::sideHasMultiBasis(DofOrderingPtr &trialOrdering, int sideIndex) {
+bool DofOrderingFactory::sideHasMultiBasis(DofOrderingPtr &trialOrdering, int sideIndex)
+{
   set<int> varIDs = trialOrdering->getVarIDs();
   set<int>::iterator idIt;
-  for (idIt = varIDs.begin(); idIt != varIDs.end(); idIt++) {
+  for (idIt = varIDs.begin(); idIt != varIDs.end(); idIt++)
+  {
     int varID = *idIt;
     int numSides = trialOrdering->getSidesForVarID(varID).size();
-    if (numSides > 1) { // a variable that lives on the sides
+    if (numSides > 1)   // a variable that lives on the sides
+    {
       BasisPtr basis = trialOrdering->getBasis(varID,sideIndex);
       // as one side basis goes, so go they all:
       return BasisFactory::basisFactory()->isMultiBasis(basis);
@@ -442,22 +509,27 @@ bool DofOrderingFactory::sideHasMultiBasis(DofOrderingPtr &trialOrdering, int si
 }
 
 void DofOrderingFactory::childMatchParent(DofOrderingPtr &childTrialOrdering, int childSideIndex,
-                                          CellTopoPtr childTopo,
-                                          int childIndexInParentSide, // == where in the multi-basis are we, if there is a multi-basis?
-                                          DofOrderingPtr &parentTrialOrdering, int sideIndex,
-                                          CellTopoPtr parentTopo) {
+    CellTopoPtr childTopo,
+    int childIndexInParentSide, // == where in the multi-basis are we, if there is a multi-basis?
+    DofOrderingPtr &parentTrialOrdering, int sideIndex,
+    CellTopoPtr parentTopo)
+{
   // basic strategy: if parent has MultiBasis on that side, then child should get a piece of that
   //                 otherwise, we can simply use matchSides as it is...
-  if ( sideHasMultiBasis(parentTrialOrdering,sideIndex) ) {
+  if ( sideHasMultiBasis(parentTrialOrdering,sideIndex) )
+  {
     set<int> varIDs = parentTrialOrdering->getVarIDs();
     map<int, BasisPtr> varIDsToUpgrade;
     set<int>::iterator idIt;
-    for (idIt = varIDs.begin(); idIt != varIDs.end(); idIt++) {
+    for (idIt = varIDs.begin(); idIt != varIDs.end(); idIt++)
+    {
       int varID = *idIt;
       int numSides = parentTrialOrdering->getSidesForVarID(varID).size();
-      if (numSides > 1) { // a variable that lives on the sides: we need to match basis
+      if (numSides > 1)   // a variable that lives on the sides: we need to match basis
+      {
         BasisPtr basis  = parentTrialOrdering->getBasis(varID,sideIndex);
-        if (! BasisFactory::basisFactory()->isMultiBasis(basis) ) {
+        if (! BasisFactory::basisFactory()->isMultiBasis(basis) )
+        {
           TEUCHOS_TEST_FOR_EXCEPTION(true, std::invalid_argument, "if one basis is multibasis, they all should be");
         }
         MultiBasis<>* multiBasis = (MultiBasis<>*) basis.get();
@@ -465,49 +537,61 @@ void DofOrderingFactory::childMatchParent(DofOrderingPtr &childTrialOrdering, in
       }
     }
     childTrialOrdering = upgradeSide(childTrialOrdering,childTopo,varIDsToUpgrade,childSideIndex);
-  } else {
+  }
+  else
+  {
     int upgradedSide = matchSides(childTrialOrdering,childSideIndex,childTopo,
                                   parentTrialOrdering,sideIndex,parentTopo);
-    if (upgradedSide == 2) {
+    if (upgradedSide == 2)
+    {
       TEUCHOS_TEST_FOR_EXCEPTION(true, std::invalid_argument, "parent should never be upgraded!");
     }
   }
 }
 
 int DofOrderingFactory::matchSides(DofOrderingPtr &firstOrdering, int firstSideIndex,
-                                    CellTopoPtr firstCellTopo,
-                                    DofOrderingPtr &secondOrdering, int secondSideIndex,
-                                    CellTopoPtr secondCellTopo) {
+                                   CellTopoPtr firstCellTopo,
+                                   DofOrderingPtr &secondOrdering, int secondSideIndex,
+                                   CellTopoPtr secondCellTopo)
+{
   // upgrades the lesser-order basis
   map<int, BasisPtr > varIDsToUpgrade;
   int orderingToUpgrade = 0; // 0 means neither, 1 first, 2 second, -1 means PatchBasis (i.e. can't matchSides w/o more Mesh info)
   set<int> varIDs = firstOrdering->getVarIDs();
   set<int>::iterator idIt;
-  for (idIt = varIDs.begin(); idIt != varIDs.end(); idIt++) {
+  for (idIt = varIDs.begin(); idIt != varIDs.end(); idIt++)
+  {
     int varID = *idIt;
     int numSides = firstOrdering->getSidesForVarID(varID).size();
-    if (numSides > 1) { // a variable that lives on the sides: we need to match basis
+    if (numSides > 1)   // a variable that lives on the sides: we need to match basis
+    {
       BasisPtr firstBasis = firstOrdering->getBasis(varID,firstSideIndex);
       BasisPtr secondBasis = secondOrdering->getBasis(varID,secondSideIndex);
-      if (BasisFactory::basisFactory()->isPatchBasis(firstBasis) || BasisFactory::basisFactory()->isPatchBasis(secondBasis)) {
+      if (BasisFactory::basisFactory()->isPatchBasis(firstBasis) || BasisFactory::basisFactory()->isPatchBasis(secondBasis))
+      {
         return -1; // then we need to deal with ancestors, etc.--and we can't do that here
       }
 
       // use cardinality instead of degree to compare so that multiBasis > singleBasis
-      if ( firstBasis->getCardinality() > secondBasis->getCardinality() ) {
-        if (orderingToUpgrade == 1) {
+      if ( firstBasis->getCardinality() > secondBasis->getCardinality() )
+      {
+        if (orderingToUpgrade == 1)
+        {
           TEUCHOS_TEST_FOR_EXCEPTION( true,
-                             std::invalid_argument,
-                             "DofOrderings vary in terms of which has higher degree.  Unhandled case in DofOrderingFactory.");
+                                      std::invalid_argument,
+                                      "DofOrderings vary in terms of which has higher degree.  Unhandled case in DofOrderingFactory.");
         }
         // otherwise
         orderingToUpgrade = 2;
         varIDsToUpgrade[varID] = firstBasis;
-      } else if (secondBasis->getCardinality() > firstBasis->getCardinality() ) {
-        if (orderingToUpgrade == 2) {
+      }
+      else if (secondBasis->getCardinality() > firstBasis->getCardinality() )
+      {
+        if (orderingToUpgrade == 2)
+        {
           TEUCHOS_TEST_FOR_EXCEPTION( true,
-                             std::invalid_argument,
-                             "DofOrderings vary in terms of which has higher degree.  Unhandled case in DofOrderingFactory.");
+                                      std::invalid_argument,
+                                      "DofOrderings vary in terms of which has higher degree.  Unhandled case in DofOrderingFactory.");
         }
         // otherwise
         orderingToUpgrade = 1;
@@ -518,9 +602,12 @@ int DofOrderingFactory::matchSides(DofOrderingPtr &firstOrdering, int firstSideI
   // now that we know which ones to upgrade, rebuild the DofOrdering, overriding with those when needed...
   // TODO: ? (Don't forget to worry about conforming bases...)
 
-  if (orderingToUpgrade==1) {
+  if (orderingToUpgrade==1)
+  {
     firstOrdering = upgradeSide(firstOrdering,firstCellTopo,varIDsToUpgrade,firstSideIndex);
-  } else if (orderingToUpgrade==2) {
+  }
+  else if (orderingToUpgrade==2)
+  {
     secondOrdering = upgradeSide(secondOrdering,secondCellTopo,varIDsToUpgrade,secondSideIndex);
   }
 
@@ -528,41 +615,49 @@ int DofOrderingFactory::matchSides(DofOrderingPtr &firstOrdering, int firstSideI
 }
 
 DofOrderingPtr DofOrderingFactory::upgradeSide(DofOrderingPtr dofOrdering,
-                                               CellTopoPtr cellTopo,
-                                               map<int,BasisPtr> varIDsToUpgrade,
-                                               int sideToUpgrade) {
+    CellTopoPtr cellTopo,
+    map<int,BasisPtr> varIDsToUpgrade,
+    int sideToUpgrade)
+{
   bool conforming = _isConforming[dofOrdering.get()];
   DofOrderingPtr newOrdering = Teuchos::rcp(new DofOrdering(dofOrdering->cellTopology()));
 
   set<int> varIDs = dofOrdering->getVarIDs();
   set<int>::iterator idIt;
 
-  for (idIt = varIDs.begin(); idIt != varIDs.end(); idIt++) {
+  for (idIt = varIDs.begin(); idIt != varIDs.end(); idIt++)
+  {
     int varID = *idIt;
     int numSides = dofOrdering->getSidesForVarID(varID).size();
-    if ((varIDsToUpgrade.find(varID) != varIDsToUpgrade.end()) && numSides == 1) {
+    if ((varIDsToUpgrade.find(varID) != varIDsToUpgrade.end()) && numSides == 1)
+    {
       TEUCHOS_TEST_FOR_EXCEPTION( true,
-                         std::invalid_argument,
-                         "upgradeSide requested for varID on interior.");
+                                  std::invalid_argument,
+                                  "upgradeSide requested for varID on interior.");
     }
     Camellia::EFunctionSpace fs;
     int sideCount = dofOrdering->cellTopology()->getSideCount();
-    for (int sideIndex=0; sideIndex<sideCount; sideIndex++) {
+    for (int sideIndex=0; sideIndex<sideCount; sideIndex++)
+    {
       if (! dofOrdering->hasBasisEntry(varID, sideIndex)) continue;
       BasisPtr basis = dofOrdering->getBasis(varID,sideIndex);
       fs = BasisFactory::basisFactory()->getBasisFunctionSpace(basis);
       int basisRank = BasisFactory::basisFactory()->getBasisRank(basis);
-      if ((varIDsToUpgrade.find(varID) == varIDsToUpgrade.end()) || (sideIndex != sideToUpgrade)) {
+      if ((varIDsToUpgrade.find(varID) == varIDsToUpgrade.end()) || (sideIndex != sideToUpgrade))
+      {
         // use existing basis
         newOrdering->addEntry(varID,basis,basisRank,sideIndex);
-      } else {
+      }
+      else
+      {
         // upgrade basis
         basis = varIDsToUpgrade[varID];
         newOrdering->addEntry(varID,basis,basisRank,sideToUpgrade);
       }
     }
 
-    if ((numSides > 1) && (fs == Camellia::FUNCTION_SPACE_HGRAD) && (conforming)) {
+    if ((numSides > 1) && (fs == Camellia::FUNCTION_SPACE_HGRAD) && (conforming))
+    {
       addConformingVertexPairings(varID, newOrdering, cellTopo);
     }
   }
@@ -573,7 +668,8 @@ DofOrderingPtr DofOrderingFactory::upgradeSide(DofOrderingPtr dofOrdering,
   return newOrdering;
 }
 
-DofOrderingPtr DofOrderingFactory::pRefine(DofOrderingPtr dofOrdering, CellTopoPtr cellTopo, int pToAdd, bool isTestOrdering) {
+DofOrderingPtr DofOrderingFactory::pRefine(DofOrderingPtr dofOrdering, CellTopoPtr cellTopo, int pToAdd, bool isTestOrdering)
+{
   // could consider adding a cache that lets you go from (DofOrdering*,pToAdd) --> enrichedDofOrdering...
   // (since likely we'll be upgrading the same DofOrdering a bunch of times)
   set<int> varIDs = dofOrdering->getVarIDs();
@@ -581,31 +677,40 @@ DofOrderingPtr DofOrderingFactory::pRefine(DofOrderingPtr dofOrdering, CellTopoP
   int newPolyOrder = interiorPolyOrder + pToAdd;
   bool conforming = _isConforming[dofOrdering.get()];
   DofOrderingPtr newOrdering = Teuchos::rcp(new DofOrdering(dofOrdering->cellTopology()));
-  for (set<int>::iterator idIt = varIDs.begin(); idIt != varIDs.end(); idIt++) {
+  for (set<int>::iterator idIt = varIDs.begin(); idIt != varIDs.end(); idIt++)
+  {
     int varID = *idIt;
     const vector<int>* sidesForVar = &dofOrdering->getSidesForVarID(varID);
     int numSides = sidesForVar->size();
     Camellia::EFunctionSpace fs;
     int newPolyOrderForVarID;
-    if (isTestOrdering) {
+    if (isTestOrdering)
+    {
       newPolyOrderForVarID = newPolyOrder + _testOrderEnhancements[varID];
-    } else {
+    }
+    else
+    {
       newPolyOrderForVarID = newPolyOrder + _trialOrderEnhancements[varID];
     }
-    for (vector<int>::const_iterator sideIt = sidesForVar->begin(); sideIt != sidesForVar->end(); sideIt++) {
+    for (vector<int>::const_iterator sideIt = sidesForVar->begin(); sideIt != sidesForVar->end(); sideIt++)
+    {
       int sideIndex = *sideIt;
       BasisPtr basis = dofOrdering->getBasis(varID,sideIndex);
       fs = BasisFactory::basisFactory()->getBasisFunctionSpace(basis);
       int basisRank = BasisFactory::basisFactory()->getBasisRank(basis);
-      if (BasisFactory::basisFactory()->basisPolyOrder(basis) >= newPolyOrderForVarID) {
+      if (BasisFactory::basisFactory()->basisPolyOrder(basis) >= newPolyOrderForVarID)
+      {
         newOrdering->addEntry(varID,basis,basisRank,sideIndex);
-      } else {
+      }
+      else
+      {
         // upgrade basis
         basis = BasisFactory::basisFactory()->setPolyOrder(basis, newPolyOrderForVarID);
         newOrdering->addEntry(varID,basis,basisRank,sideIndex);
       }
     }
-    if ((numSides > 1) && (fs == Camellia::FUNCTION_SPACE_HGRAD) && (conforming)) {
+    if ((numSides > 1) && (fs == Camellia::FUNCTION_SPACE_HGRAD) && (conforming))
+    {
       addConformingVertexPairings(varID, newOrdering, cellTopo);
     }
   }
@@ -618,36 +723,43 @@ DofOrderingPtr DofOrderingFactory::pRefine(DofOrderingPtr dofOrdering, CellTopoP
 
 
 DofOrderingPtr DofOrderingFactory::pRefineTest(DofOrderingPtr testOrdering,
-                                               const shards::CellTopology &cellTopo, int pToAdd) {
+    const shards::CellTopology &cellTopo, int pToAdd)
+{
   CellTopoPtr cellTopoPtr = CellTopology::cellTopology(cellTopo);
   return pRefine(testOrdering, cellTopoPtr, pToAdd, true);
 }
 
 DofOrderingPtr DofOrderingFactory::pRefineTrial(DofOrderingPtr trialOrdering,
-                                               const shards::CellTopology &cellTopo, int pToAdd) {
+    const shards::CellTopology &cellTopo, int pToAdd)
+{
   CellTopoPtr cellTopoPtr = CellTopology::cellTopology(cellTopo);
   return pRefine(trialOrdering, cellTopoPtr, pToAdd, false);
 }
 
 DofOrderingPtr DofOrderingFactory::pRefineTest(DofOrderingPtr testOrdering,
-                                               CellTopoPtr cellTopo, int pToAdd) {
+    CellTopoPtr cellTopo, int pToAdd)
+{
   return pRefine(testOrdering, cellTopo, pToAdd, true);
 }
 
 DofOrderingPtr DofOrderingFactory::pRefineTrial(DofOrderingPtr trialOrdering,
-                                                CellTopoPtr cellTopo, int pToAdd) {
+    CellTopoPtr cellTopo, int pToAdd)
+{
   return pRefine(trialOrdering, cellTopo, pToAdd, false);
 }
 
-int DofOrderingFactory::testPolyOrder(DofOrderingPtr testOrdering) {
+int DofOrderingFactory::testPolyOrder(DofOrderingPtr testOrdering)
+{
   return polyOrder(testOrdering,true);
 }
 
-int DofOrderingFactory::trialPolyOrder(DofOrderingPtr trialOrdering) {
+int DofOrderingFactory::trialPolyOrder(DofOrderingPtr trialOrdering)
+{
   return polyOrder(trialOrdering,false);
 }
 
-DofOrderingPtr DofOrderingFactory::setBasisDegree(DofOrderingPtr dofOrdering, int basisDegreeToSet, bool replaceDiscontinuousFSWithContinuous) {
+DofOrderingPtr DofOrderingFactory::setBasisDegree(DofOrderingPtr dofOrdering, int basisDegreeToSet, bool replaceDiscontinuousFSWithContinuous)
+{
   bool conforming = _isConforming[dofOrdering.get()];
   DofOrderingPtr newOrdering = Teuchos::rcp(new DofOrdering(dofOrdering->cellTopology()));
 
@@ -656,19 +768,23 @@ DofOrderingPtr DofOrderingFactory::setBasisDegree(DofOrderingPtr dofOrdering, in
 
   set<int> varIDs = dofOrdering->getVarIDs();
   CellTopoPtr cellTopoPtr = dofOrdering->cellTopology();
-  for (set<int>::iterator idIt = varIDs.begin(); idIt != varIDs.end(); idIt++) {
+  for (set<int>::iterator idIt = varIDs.begin(); idIt != varIDs.end(); idIt++)
+  {
     int varID = *idIt;
     const vector<int>* sidesForVar = &dofOrdering->getSidesForVarID(varID);
     Camellia::EFunctionSpace fs;
-    for (vector<int>::const_iterator sideIt = sidesForVar->begin(); sideIt != sidesForVar->end(); sideIt++) {
+    for (vector<int>::const_iterator sideIt = sidesForVar->begin(); sideIt != sidesForVar->end(); sideIt++)
+    {
       int sideIndex = *sideIt;
 
       if (! dofOrdering->hasBasisEntry(varID, sideIndex)) continue;
       BasisPtr basis = dofOrdering->getBasis(varID,sideIndex);
 
       fs = BasisFactory::basisFactory()->getBasisFunctionSpace(basis);
-      if (replaceDiscontinuousFSWithContinuous) {
-        if (Camellia::functionSpaceIsDiscontinuous(fs)) {
+      if (replaceDiscontinuousFSWithContinuous)
+      {
+        if (Camellia::functionSpaceIsDiscontinuous(fs))
+        {
           fs = Camellia::continuousSpaceForDiscontinuous(fs);
         }
       }
@@ -680,13 +796,17 @@ DofOrderingPtr DofOrderingFactory::setBasisDegree(DofOrderingPtr dofOrdering, in
 //      basis = BasisFactory::basisFactory()->setPolyOrder(basis, currentPolyOrder + delta_k );
       basis = BasisFactory::basisFactory()->getBasis( currentPolyOrder + delta_k, basis->domainTopology(), fs );
       newOrdering->addEntry(varID,basis,basisRank,sideIndex);
-      if (sidesForVar->size() == 1) {
+      if (sidesForVar->size() == 1)
+      {
         newFieldOrder->addEntry(varID, basis, basisRank, sideIndex);
-      } else {
+      }
+      else
+      {
         newTraceOrder->addEntry(varID, basis, basisRank, sideIndex);
       }
     }
-    if ((sidesForVar->size() > 1) && (fs == Camellia::FUNCTION_SPACE_HGRAD) && (conforming)) {
+    if ((sidesForVar->size() > 1) && (fs == Camellia::FUNCTION_SPACE_HGRAD) && (conforming))
+    {
       addConformingVertexPairings(varID, newOrdering, cellTopoPtr);
       addConformingVertexPairings(varID, newTraceOrder, cellTopoPtr);
     }
@@ -707,23 +827,28 @@ DofOrderingPtr DofOrderingFactory::setBasisDegree(DofOrderingPtr dofOrdering, in
 }
 
 DofOrderingPtr DofOrderingFactory::setSidePolyOrder(DofOrderingPtr dofOrdering, int sideIndexToSet,
-                                                    int newPolyOrder, bool replacePatchBasis) {
+    int newPolyOrder, bool replacePatchBasis)
+{
   bool conforming = _isConforming[dofOrdering.get()];
   DofOrderingPtr newOrdering = Teuchos::rcp(new DofOrdering(dofOrdering->cellTopology()));
   set<int> varIDs = dofOrdering->getVarIDs();
   CellTopoPtr cellTopoPtr = dofOrdering->cellTopology();
 
-  for (set<int>::iterator idIt = varIDs.begin(); idIt != varIDs.end(); idIt++) {
+  for (set<int>::iterator idIt = varIDs.begin(); idIt != varIDs.end(); idIt++)
+  {
     int varID = *idIt;
     const vector<int>* sidesForVar = &dofOrdering->getSidesForVarID(varID);
     Camellia::EFunctionSpace fs;
-    for (vector<int>::const_iterator sideIt = sidesForVar->begin(); sideIt != sidesForVar->end(); sideIt++) {
+    for (vector<int>::const_iterator sideIt = sidesForVar->begin(); sideIt != sidesForVar->end(); sideIt++)
+    {
       int sideIndex = *sideIt;
 
       if (! dofOrdering->hasBasisEntry(varID, sideIndex)) continue;
       BasisPtr basis = dofOrdering->getBasis(varID,sideIndex);
-      if (replacePatchBasis) {
-        if (BasisFactory::basisFactory()->isPatchBasis(basis)) {
+      if (replacePatchBasis)
+      {
+        if (BasisFactory::basisFactory()->isPatchBasis(basis))
+        {
           // if we have a PatchBasis, then we want to get the underlying basis...
           basis = ((PatchBasis<>*)basis.get())->nonPatchAncestorBasis();
         }
@@ -731,13 +856,15 @@ DofOrderingPtr DofOrderingFactory::setSidePolyOrder(DofOrderingPtr dofOrdering, 
       fs = BasisFactory::basisFactory()->getBasisFunctionSpace(basis);
       int basisRank = BasisFactory::basisFactory()->getBasisRank(basis);
       int basisPolyOrder = BasisFactory::basisFactory()->basisPolyOrder(basis);
-      if ( (sidesForVar->size() > 1) && (sideIndex==sideIndexToSet) && (basisPolyOrder < newPolyOrder) ) {
+      if ( (sidesForVar->size() > 1) && (sideIndex==sideIndexToSet) && (basisPolyOrder < newPolyOrder) )
+      {
         // upgrade basis
         basis = BasisFactory::basisFactory()->setPolyOrder(basis, newPolyOrder);
       }
       newOrdering->addEntry(varID,basis,basisRank,sideIndex);
     }
-    if ((sidesForVar->size() > 1) && (fs == Camellia::FUNCTION_SPACE_HGRAD) && (conforming)) {
+    if ((sidesForVar->size() > 1) && (fs == Camellia::FUNCTION_SPACE_HGRAD) && (conforming))
+    {
       addConformingVertexPairings(varID, newOrdering, cellTopoPtr);
     }
   }

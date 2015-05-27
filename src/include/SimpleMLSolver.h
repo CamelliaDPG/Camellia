@@ -19,20 +19,22 @@
 
 #include "Solver.h"
 
-namespace Camellia {
-	class SimpleMLSolver : public Solver {
-	  bool _saveFactorization;
-	  Teuchos::RCP< AztecOO > _savedSolver;
-	  Teuchos::RCP< ML_Epetra::MultiLevelPreconditioner > _savedPreconditioner;
-	  
-	  double _resTol;
-	  int _maxIters;
-	public:
-	  SimpleMLSolver(bool saveFactorization, double residualTolerance, int maxIterations);
-	  int solve();
-	  int resolve();
-	  // void setProblem(Teuchos::RCP< Epetra_LinearProblem > problem);
-	};
+namespace Camellia
+{
+class SimpleMLSolver : public Solver
+{
+  bool _saveFactorization;
+  Teuchos::RCP< AztecOO > _savedSolver;
+  Teuchos::RCP< ML_Epetra::MultiLevelPreconditioner > _savedPreconditioner;
+
+  double _resTol;
+  int _maxIters;
+public:
+  SimpleMLSolver(bool saveFactorization, double residualTolerance, int maxIterations);
+  int solve();
+  int resolve();
+  // void setProblem(Teuchos::RCP< Epetra_LinearProblem > problem);
+};
 }
 
 #endif

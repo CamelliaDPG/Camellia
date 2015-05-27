@@ -18,81 +18,98 @@
 #include "choice.hpp"
 #endif
 
-class ConstantXBoundary : public SpatialFilter {
-  private:
-    double xval;
-  public:
-    ConstantXBoundary(double xval): xval(xval) {};
-    bool matchesPoint(double x, double y) {
-      double tol = 1e-14;
-      return (abs(x-xval) < tol);
-    }
-};
-
-class ConstantYBoundary : public SpatialFilter {
-  private:
-    double yval;
-  public:
-    ConstantYBoundary(double yval): yval(yval) {};
-    bool matchesPoint(double x, double y) {
-      double tol = 1e-14;
-      return (abs(y-yval) < tol);
-    }
-};
-
-class BottomStepBoundary : public SpatialFilter {
-  public:
-  bool matchesPoint(double x, double y) {
-     double tol = 1e-14;
-     return (abs(y-0.5) < tol && x <= 2);
+class ConstantXBoundary : public SpatialFilter
+{
+private:
+  double xval;
+public:
+  ConstantXBoundary(double xval): xval(xval) {};
+  bool matchesPoint(double x, double y)
+  {
+    double tol = 1e-14;
+    return (abs(x-xval) < tol);
   }
 };
 
-class RightStepBoundary : public SpatialFilter {
-  public:
-  bool matchesPoint(double x, double y) {
-     double tol = 1e-14;
-     return (abs(x-2) < tol && y <= 0.5);
+class ConstantYBoundary : public SpatialFilter
+{
+private:
+  double yval;
+public:
+  ConstantYBoundary(double yval): yval(yval) {};
+  bool matchesPoint(double x, double y)
+  {
+    double tol = 1e-14;
+    return (abs(y-yval) < tol);
   }
 };
 
-class InflowU1 : public Function {
-  public:
-    InflowU1() : Function(0) {}
-    void values(FieldContainer<double> &values, BasisCachePtr basisCache) {
-      int numCells = values.dimension(0);
-      int numPoints = values.dimension(1);
-
-      const FieldContainer<double> *points = &(basisCache->getPhysicalCubaturePoints());
-      for (int cellIndex=0; cellIndex<numCells; cellIndex++) {
-        for (int ptIndex=0; ptIndex<numPoints; ptIndex++) {
-          double x = (*points)(cellIndex,ptIndex,0);
-          double y = (*points)(cellIndex,ptIndex,1);
-          values(cellIndex, ptIndex) = 8*(y-0.5)*(1-y);
-        }
-      }
-    }
+class BottomStepBoundary : public SpatialFilter
+{
+public:
+  bool matchesPoint(double x, double y)
+  {
+    double tol = 1e-14;
+    return (abs(y-0.5) < tol && x <= 2);
+  }
 };
 
-class OutflowU1 : public Function {
-  public:
-    OutflowU1() : Function(0) {}
-    void values(FieldContainer<double> &values, BasisCachePtr basisCache) {
-      int numCells = values.dimension(0);
-      int numPoints = values.dimension(1);
-
-      const FieldContainer<double> *points = &(basisCache->getPhysicalCubaturePoints());
-      for (int cellIndex=0; cellIndex<numCells; cellIndex++) {
-        for (int ptIndex=0; ptIndex<numPoints; ptIndex++) {
-          double x = (*points)(cellIndex,ptIndex,0);
-          double y = (*points)(cellIndex,ptIndex,1);
-          values(cellIndex, ptIndex) = y*(1-y);
-        }
-      }
-    }
+class RightStepBoundary : public SpatialFilter
+{
+public:
+  bool matchesPoint(double x, double y)
+  {
+    double tol = 1e-14;
+    return (abs(x-2) < tol && y <= 0.5);
+  }
 };
 
-int main(int argc, char *argv[]) {
+class InflowU1 : public Function
+{
+public:
+  InflowU1() : Function(0) {}
+  void values(FieldContainer<double> &values, BasisCachePtr basisCache)
+  {
+    int numCells = values.dimension(0);
+    int numPoints = values.dimension(1);
+
+    const FieldContainer<double> *points = &(basisCache->getPhysicalCubaturePoints());
+    for (int cellIndex=0; cellIndex<numCells; cellIndex++)
+    {
+      for (int ptIndex=0; ptIndex<numPoints; ptIndex++)
+      {
+        double x = (*points)(cellIndex,ptIndex,0);
+        double y = (*points)(cellIndex,ptIndex,1);
+        values(cellIndex, ptIndex) = 8*(y-0.5)*(1-y);
+      }
+    }
+  }
+};
+
+class OutflowU1 : public Function
+{
+public:
+  OutflowU1() : Function(0) {}
+  void values(FieldContainer<double> &values, BasisCachePtr basisCache)
+  {
+    int numCells = values.dimension(0);
+    int numPoints = values.dimension(1);
+
+    const FieldContainer<double> *points = &(basisCache->getPhysicalCubaturePoints());
+    for (int cellIndex=0; cellIndex<numCells; cellIndex++)
+    {
+      for (int ptIndex=0; ptIndex<numPoints; ptIndex++)
+      {
+        double x = (*points)(cellIndex,ptIndex,0);
+        double y = (*points)(cellIndex,ptIndex,1);
+        values(cellIndex, ptIndex) = y*(1-y);
+      }
+    }
+  }
+};
+
+int main(int argc, char *argv[])
+{
 #ifdef HAVE_MPI
   Teuchos::GlobalMPISession mpiSession(&argc, &argv,0);
   choice::MpiArgs args( argc, argv );
@@ -156,40 +173,57 @@ int main(int argc, char *argv[]) {
 
   for (int c=0; c < 4; c++)
   {
-     double xpos = c*0.5;
-     pt(0) = xpos; pt(1) = 0.5;
-     vertices.push_back(pt);
-     pt(0) = xpos; pt(1) = 1.0;
-     vertices.push_back(pt);
+    double xpos = c*0.5;
+    pt(0) = xpos;
+    pt(1) = 0.5;
+    vertices.push_back(pt);
+    pt(0) = xpos;
+    pt(1) = 1.0;
+    vertices.push_back(pt);
   }
   for (int c=4; c <= 20; c++)
   {
-     double xpos = c*0.5;
-     pt(0) = xpos; pt(1) = 0.0;
-     vertices.push_back(pt);
-     pt(0) = xpos; pt(1) = 0.5;
-     vertices.push_back(pt);
-     pt(0) = xpos; pt(1) = 1.0;
-     vertices.push_back(pt);
+    double xpos = c*0.5;
+    pt(0) = xpos;
+    pt(1) = 0.0;
+    vertices.push_back(pt);
+    pt(0) = xpos;
+    pt(1) = 0.5;
+    vertices.push_back(pt);
+    pt(0) = xpos;
+    pt(1) = 1.0;
+    vertices.push_back(pt);
   }
 
   // Columns 0-2
   for (int c=0; c < 3; c++)
   {
-     e[0] = 2*c; e[1] = 2*(c+1); e[2] = 2*(c+1)+1; e[3] = 2*c+1;
-     elementIndices.push_back(e);
+    e[0] = 2*c;
+    e[1] = 2*(c+1);
+    e[2] = 2*(c+1)+1;
+    e[3] = 2*c+1;
+    elementIndices.push_back(e);
   }
   // Column 3
-  e[0] = 6; e[1] = 9; e[2] = 10; e[3] = 7;
+  e[0] = 6;
+  e[1] = 9;
+  e[2] = 10;
+  e[3] = 7;
   elementIndices.push_back(e);
   // Columns 4-19
   for (int c=0; c < 16; c++)
   {
-     e[0] = 3*c+8; e[1] = 3*(c+1)+8; e[2] = 3*(c+1)+9; e[3] = 3*c+9;
-     elementIndices.push_back(e);
-     // Columns 4-19
-     e[0] = 3*c+9; e[1] = 3*(c+1)+9; e[2] = 3*(c+1)+10; e[3] = 3*c+10;
-     elementIndices.push_back(e);
+    e[0] = 3*c+8;
+    e[1] = 3*(c+1)+8;
+    e[2] = 3*(c+1)+9;
+    e[3] = 3*c+9;
+    elementIndices.push_back(e);
+    // Columns 4-19
+    e[0] = 3*c+9;
+    e[1] = 3*(c+1)+9;
+    e[2] = 3*(c+1)+10;
+    e[3] = 3*c+10;
+    elementIndices.push_back(e);
   }
 
   // create a pointer to a new mesh:
@@ -316,7 +350,8 @@ int main(int argc, char *argv[]) {
 
   Teuchos::RCP<Solution> solution = Teuchos::rcp( new Solution(mesh, bc, rhs, ip) );
 
-  if (enforceLocalConservation) {
+  if (enforceLocalConservation)
+  {
     solution->lagrangeConstraints()->addConstraint(u1hat->times_normal_x() + u2hat->times_normal_y() == zero);
   }
 
@@ -348,26 +383,28 @@ int main(int argc, char *argv[]) {
   cellFaceSets.push_back(cellFaces);
   for (int c = 0; c < 4; c++)
   {
-     vector< pair<ElementPtr, int> > cellFaces;
-     cellFaces.push_back(make_pair(mesh->getElement(c), 1));
-     cellFaceSets.push_back(cellFaces);
+    vector< pair<ElementPtr, int> > cellFaces;
+    cellFaces.push_back(make_pair(mesh->getElement(c), 1));
+    cellFaceSets.push_back(cellFaces);
   }
   for (int c = 0; c < 16; c++)
   {
-     vector< pair<ElementPtr, int> > cellFaces;
-     cellFaces.push_back(make_pair(mesh->getElement(2*c+4), 1));
-     cellFaces.push_back(make_pair(mesh->getElement(2*c+5), 1));
-     cellFaceSets.push_back(cellFaces);
+    vector< pair<ElementPtr, int> > cellFaces;
+    cellFaces.push_back(make_pair(mesh->getElement(2*c+4), 1));
+    cellFaces.push_back(make_pair(mesh->getElement(2*c+5), 1));
+    cellFaceSets.push_back(cellFaces);
   }
 
   // for loading refinement history
-  if (replayFile.length() > 0) {
+  if (replayFile.length() > 0)
+  {
     RefinementHistory refHistory;
     replayFile = replayFile;
     refHistory.loadFromFile(replayFile);
     refHistory.playback(mesh);
     int numElems = mesh->numActiveElements();
-    if (commRank==0){
+    if (commRank==0)
+    {
       cout << "after replay, num elems = " << numElems << endl;
     }
   }
@@ -394,22 +431,23 @@ int main(int argc, char *argv[]) {
         FunctionPtr flux = u1_prev*n->x() + u2_prev*n->y();
         Teuchos::Tuple<double, 3> fluxImbalances = checkConservation(flux, zero, mesh);
         cout << "Mass flux: Largest Local = " << fluxImbalances[0]
-          << ", Global = " << fluxImbalances[1] << ", Sum Abs = " << fluxImbalances[2] << endl;
+             << ", Global = " << fluxImbalances[1] << ", Sum Abs = " << fluxImbalances[2] << endl;
 
         errOut << mesh->numGlobalDofs() << " " << energy_error << " "
-          << fluxImbalances[0] << " " << fluxImbalances[1] << " " << fluxImbalances[2] << endl;
+               << fluxImbalances[0] << " " << fluxImbalances[1] << " " << fluxImbalances[2] << endl;
 
         cout << "Total mass flux = ";
         for (int i = 0; i < cellFaceSets.size(); i++)
         {
-           double massFlux = computeFluxOverElementSides(u1_prev, mesh, cellFaceSets[i]);
-           cout << massFlux << " ";
-           fluxOut << massFlux << " ";
+          double massFlux = computeFluxOverElementSides(u1_prev, mesh, cellFaceSets[i]);
+          cout << massFlux << " ";
+          fluxOut << massFlux << " ";
         }
         cout << endl;
         fluxOut << endl;
 
-        if (saveFile.length() > 0) {
+        if (saveFile.length() > 0)
+        {
           std::ostringstream oss;
           oss << string(saveFile) << refIndex ;
           cout << "on refinement " << refIndex << " saving mesh file to " << oss.str() << endl;

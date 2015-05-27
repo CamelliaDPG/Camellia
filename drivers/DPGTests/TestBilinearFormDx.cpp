@@ -2,7 +2,8 @@
 
 #include "VarFactory.h"
 
-BFPtr TestBilinearFormDx::bf() {
+BFPtr TestBilinearFormDx::bf()
+{
   VarFactoryPtr vf = VarFactory::varFactory();
   VarPtr u = vf->fieldVar("u",HGRAD);
   VarPtr v = vf->testVar("v",HGRAD);

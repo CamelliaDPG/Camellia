@@ -12,20 +12,22 @@
 #include "Basis.h"
 #include "Intrepid_FieldContainer.hpp"
 
-namespace Camellia {
-  template<class Scalar=double, class ArrayScalar=Intrepid::FieldContainer<double> > class LegendreHVOL_LineBasis;
-  template<class Scalar, class ArrayScalar> class LegendreHVOL_LineBasis : public Basis<Scalar,ArrayScalar> {
-  protected:
-    void initializeTags() const;
-    int _degree;
-    
-    Intrepid::FieldContainer<double> _legendreL2norms;
-    void initializeL2normValues();
-  public:
-    LegendreHVOL_LineBasis(int degree); // conforming means not strictly hierarchical, but has e.g. vertex dofs defined...
-    
-    void getValues(ArrayScalar &values, const ArrayScalar &refPoints, Intrepid::EOperator operatorType) const;
-  };
+namespace Camellia
+{
+template<class Scalar=double, class ArrayScalar=Intrepid::FieldContainer<double> > class LegendreHVOL_LineBasis;
+template<class Scalar, class ArrayScalar> class LegendreHVOL_LineBasis : public Basis<Scalar,ArrayScalar>
+{
+protected:
+  void initializeTags() const;
+  int _degree;
+
+  Intrepid::FieldContainer<double> _legendreL2norms;
+  void initializeL2normValues();
+public:
+  LegendreHVOL_LineBasis(int degree); // conforming means not strictly hierarchical, but has e.g. vertex dofs defined...
+
+  void getValues(ArrayScalar &values, const ArrayScalar &refPoints, Intrepid::EOperator operatorType) const;
+};
 }
 
 #include "LegendreHVOL_LineBasisDef.h"

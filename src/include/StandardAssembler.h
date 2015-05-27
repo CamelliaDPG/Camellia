@@ -39,35 +39,39 @@
 
 #include "Element.h"
 
-namespace Camellia {
-  class StandardAssembler : public Assembler {
-    TSolutionPtr<double> _solution;
-  public:
-    StandardAssembler(TSolutionPtr<double> solution){
-      _solution = solution;
-    };
-    Epetra_Map getPartMap();
-    Epetra_FECrsMatrix initializeMatrix();
-    Epetra_FEVector initializeVector();
-
-    //  Teuchos::RCP<Epetra_LinearProblem> assembleProblem();
-    //  Epetra_FECrsMatrix assembleProblem();
-    void assembleProblem(Epetra_FECrsMatrix &globalStiffMatrix, Epetra_FEVector &rhsVector);
-
-    void distributeDofs(Epetra_FEVector dofs);
-
-    Intrepid::FieldContainer<double> getRHS(ElementPtr elem);
-    Intrepid::FieldContainer<double> getOverdeterminedStiffness(ElementPtr elem);
-    Intrepid::FieldContainer<double> getIPMatrix(ElementPtr elem);
-    int numTestDofsForElem(ElementPtr elem);
-    int numTrialDofsForElem(ElementPtr elem);
-    void applyBCs(Epetra_FECrsMatrix &globalStiffMatrix, Epetra_FEVector &rhsVector);
-    Intrepid::FieldContainer<double> getSubVector(Epetra_FEVector u, ElementPtr elem);
-    void getElemData(ElementPtr elem, Intrepid::FieldContainer<double> &K, Intrepid::FieldContainer<double> &f);
-    TSolutionPtr<double> solution(){
-      return _solution;
-    }
+namespace Camellia
+{
+class StandardAssembler : public Assembler
+{
+  TSolutionPtr<double> _solution;
+public:
+  StandardAssembler(TSolutionPtr<double> solution)
+  {
+    _solution = solution;
   };
+  Epetra_Map getPartMap();
+  Epetra_FECrsMatrix initializeMatrix();
+  Epetra_FEVector initializeVector();
+
+  //  Teuchos::RCP<Epetra_LinearProblem> assembleProblem();
+  //  Epetra_FECrsMatrix assembleProblem();
+  void assembleProblem(Epetra_FECrsMatrix &globalStiffMatrix, Epetra_FEVector &rhsVector);
+
+  void distributeDofs(Epetra_FEVector dofs);
+
+  Intrepid::FieldContainer<double> getRHS(ElementPtr elem);
+  Intrepid::FieldContainer<double> getOverdeterminedStiffness(ElementPtr elem);
+  Intrepid::FieldContainer<double> getIPMatrix(ElementPtr elem);
+  int numTestDofsForElem(ElementPtr elem);
+  int numTrialDofsForElem(ElementPtr elem);
+  void applyBCs(Epetra_FECrsMatrix &globalStiffMatrix, Epetra_FEVector &rhsVector);
+  Intrepid::FieldContainer<double> getSubVector(Epetra_FEVector u, ElementPtr elem);
+  void getElemData(ElementPtr elem, Intrepid::FieldContainer<double> &K, Intrepid::FieldContainer<double> &f);
+  TSolutionPtr<double> solution()
+  {
+    return _solution;
+  }
+};
 }
 
 #endif

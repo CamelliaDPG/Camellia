@@ -19,17 +19,21 @@
 #include "TrigFunctions.h"
 
 // "previous solution" value for u -- what Burgers would see, according to InitialGuess.h, in first linear step
-class UPrev : public Function {
+class UPrev : public Function
+{
 public:
   UPrev() : Function(0) {}
-  void values(FieldContainer<double> &values, BasisCachePtr basisCache) {
+  void values(FieldContainer<double> &values, BasisCachePtr basisCache)
+  {
     int numCells = values.dimension(0);
     int numPoints = values.dimension(1);
 
     const FieldContainer<double> *points = &(basisCache->getPhysicalCubaturePoints());
     double tol=1e-14;
-    for (int cellIndex=0; cellIndex<numCells; cellIndex++) {
-      for (int ptIndex=0; ptIndex<numPoints; ptIndex++) {
+    for (int cellIndex=0; cellIndex<numCells; cellIndex++)
+    {
+      for (int ptIndex=0; ptIndex<numPoints; ptIndex++)
+      {
         double x = (*points)(cellIndex,ptIndex,0);
         double y = (*points)(cellIndex,ptIndex,1);
         values(cellIndex,ptIndex) = 1 - 2*x;
@@ -38,17 +42,21 @@ public:
   }
 };
 
-class BoundaryLayerFunction : public SimpleFunction<double> {
+class BoundaryLayerFunction : public SimpleFunction<double>
+{
   double _eps;
 public:
-  BoundaryLayerFunction(double eps) {
+  BoundaryLayerFunction(double eps)
+  {
     _eps = eps;
   }
-  double value(double x, double y){
+  double value(double x, double y)
+  {
     return exp(x/_eps);
   }
 };
-void FunctionTests::setup() {
+void FunctionTests::setup()
+{
   ////////////////////   DECLARE VARIABLES   ///////////////////////
   // define test variables
   VarFactoryPtr varFactory = VarFactory::varFactory();
@@ -100,7 +108,7 @@ void FunctionTests::setup() {
 
   // create a pointer to a new mesh:
   _spectralConfusionMesh = MeshFactory::buildQuadMesh(quadPoints, horizontalCells, verticalCells,
-                                               _confusionBF, H1Order, H1Order+pToAdd);
+                           _confusionBF, H1Order, H1Order+pToAdd);
 
   // some 2D test points:
   // setup test points:
@@ -109,8 +117,10 @@ void FunctionTests::setup() {
   double y[NUM_POINTS_1D] = {-0.8,-0.6,-.4,-.2,0,0.2,0.4,0.6,0.8,1.0};
 
   _testPoints = FieldContainer<double>(NUM_POINTS_1D*NUM_POINTS_1D,2);
-  for (int i=0; i<NUM_POINTS_1D; i++) {
-    for (int j=0; j<NUM_POINTS_1D; j++) {
+  for (int i=0; i<NUM_POINTS_1D; i++)
+  {
+    for (int j=0; j<NUM_POINTS_1D; j++)
+    {
       _testPoints(i*NUM_POINTS_1D + j, 0) = x[i];
       _testPoints(i*NUM_POINTS_1D + j, 1) = y[j];
     }
@@ -126,83 +136,96 @@ void FunctionTests::setup() {
   _basisCache->setPhysicalCellNodes( _spectralConfusionMesh->physicalCellNodesForCell(cellID), cellIDs, true );
 }
 
-void FunctionTests::runTests(int &numTestsRun, int &numTestsPassed) {
+void FunctionTests::runTests(int &numTestsRun, int &numTestsPassed)
+{
   setup();
-  if (testComponentFunction()) {
+  if (testComponentFunction())
+  {
     numTestsPassed++;
   }
   numTestsRun++;
   teardown();
 
   setup();
-  if (testVectorFunctionValuesOrdering()) {
+  if (testVectorFunctionValuesOrdering())
+  {
     numTestsPassed++;
   }
   numTestsRun++;
   teardown();
 
   setup();
-  if (testJacobianOrdering()) {
+  if (testJacobianOrdering())
+  {
     numTestsPassed++;
   }
   numTestsRun++;
   teardown();
 
   setup();
-  if (testBasisSumFunction()) {
+  if (testBasisSumFunction())
+  {
     numTestsPassed++;
   }
   numTestsRun++;
   teardown();
 
   setup();
-  if (testValuesDottedWithTensor()) {
+  if (testValuesDottedWithTensor())
+  {
     numTestsPassed++;
   }
   numTestsRun++;
   teardown();
 
   setup();
-  if (testJumpIntegral()) {
+  if (testJumpIntegral())
+  {
     numTestsPassed++;
   }
   numTestsRun++;
   teardown();
 
   setup();
-  if (testIntegrate()) {
+  if (testIntegrate())
+  {
     numTestsPassed++;
   }
   numTestsRun++;
   teardown();
 
   setup();
-  if (testAdaptiveIntegrate()) {
+  if (testAdaptiveIntegrate())
+  {
     numTestsPassed++;
   }
   numTestsRun++;
   teardown();
 
   setup();
-  if (testThatLikeFunctionsAgree()) {
+  if (testThatLikeFunctionsAgree())
+  {
     numTestsPassed++;
   }
   numTestsRun++;
   teardown();
   setup();
-  if (testProductRule()) {
+  if (testProductRule())
+  {
     numTestsPassed++;
   }
   numTestsRun++;
   teardown();
   setup();
-  if (testQuotientRule()) {
+  if (testQuotientRule())
+  {
     numTestsPassed++;
   }
   numTestsRun++;
   teardown();
   setup();
-  if (testPolarizedFunctions()) {
+  if (testPolarizedFunctions())
+  {
     numTestsPassed++;
   }
   numTestsRun++;
@@ -210,7 +233,8 @@ void FunctionTests::runTests(int &numTestsRun, int &numTestsPassed) {
 
 }
 
-bool FunctionTests::testBasisSumFunction() {
+bool FunctionTests::testBasisSumFunction()
+{
   bool success = true;
   // on a single-element mesh, the BasisSumFunction should be identical to
   // the Solution with those coefficients
@@ -233,7 +257,7 @@ bool FunctionTests::testBasisSumFunction() {
 
   // create a pointer to a new mesh:
   MeshPtr spectralConfusionMesh = MeshFactory::buildQuadMesh(quadPoints, horizontalCells, verticalCells,
-                                                      _confusionBF, H1Order, H1Order+pToAdd);
+                                  _confusionBF, H1Order, H1Order+pToAdd);
 
   BCPtr bc = BC::bc();
   SolutionPtr soln = Teuchos::rcp( new Solution(spectralConfusionMesh, bc) );
@@ -248,18 +272,21 @@ bool FunctionTests::testBasisSumFunction() {
 
   BasisCachePtr volumeCache = BasisCache::basisCacheForCell(spectralConfusionMesh, cellID);
 
-  for (set<int>::iterator trialIt=trialIDs.begin(); trialIt != trialIDs.end(); trialIt++) {
+  for (set<int>::iterator trialIt=trialIDs.begin(); trialIt != trialIDs.end(); trialIt++)
+  {
     int trialID = *trialIt;
     const vector<int>* sidesForVar = &trialSpace->getSidesForVarID(trialID);
     bool boundaryValued = sidesForVar->size() != 1;
     // note that for volume trialIDs, sideIndex = 0, and numSides = 1…
-    for (vector<int>::const_iterator sideIt = sidesForVar->begin(); sideIt != sidesForVar->end(); sideIt++) {
+    for (vector<int>::const_iterator sideIt = sidesForVar->begin(); sideIt != sidesForVar->end(); sideIt++)
+    {
       int sideIndex = *sideIt;
 
       BasisCachePtr sideCache = volumeCache->getSideBasisCache(sideIndex);
       BasisPtr basis = trialSpace->getBasis(trialID, sideIndex);
       int basisCardinality = basis->getCardinality();
-      for (int basisOrdinal = 0; basisOrdinal<basisCardinality; basisOrdinal++) {
+      for (int basisOrdinal = 0; basisOrdinal<basisCardinality; basisOrdinal++)
+      {
         FieldContainer<double> basisCoefficients(basisCardinality);
         basisCoefficients(basisOrdinal) = 1.0;
         soln->setSolnCoeffsForCellID(basisCoefficients, cellID, trialID, sideIndex);
@@ -267,10 +294,12 @@ bool FunctionTests::testBasisSumFunction() {
         VarPtr v = Var::varForTrialID(trialID, spectralConfusionMesh->bilinearForm());
         FunctionPtr solnFxn = Function::solution(v, soln);
         FunctionPtr basisSumFxn = Teuchos::rcp( new BasisSumFunction(basis, basisCoefficients, Teuchos::rcp((BasisCache*)NULL), OP_VALUE, boundaryValued) );
-        if (!boundaryValued) {
+        if (!boundaryValued)
+        {
           double l2diff = (solnFxn - basisSumFxn)->l2norm(spectralConfusionMesh);
 //          cout << "l2diff = " << l2diff << endl;
-          if (l2diff > tol) {
+          if (l2diff > tol)
+          {
             success = false;
             cout << "testBasisSumFunction: l2diff of " << l2diff << " exceeds tol of " << tol << endl;
             cout << "l2norm of basisSumFxn: " << basisSumFxn->l2norm(spectralConfusionMesh) << endl;
@@ -278,7 +307,8 @@ bool FunctionTests::testBasisSumFunction() {
           }
           l2diff = (solnFxn->dx() - basisSumFxn->dx())->l2norm(spectralConfusionMesh);
           //          cout << "l2diff = " << l2diff << endl;
-          if (l2diff > tol) {
+          if (l2diff > tol)
+          {
             success = false;
             cout << "testBasisSumFunction: l2diff of dx() " << l2diff << " exceeds tol of " << tol << endl;
             cout << "l2norm of basisSumFxn->dx(): " << basisSumFxn->dx()->l2norm(spectralConfusionMesh) << endl;
@@ -287,26 +317,32 @@ bool FunctionTests::testBasisSumFunction() {
 
           // test that the restriction to a side works
           int numSides = volumeCache->cellTopology()->getSideCount();
-          for (int i=0; i<numSides; i++) {
+          for (int i=0; i<numSides; i++)
+          {
             BasisCachePtr mySideCache = volumeCache->getSideBasisCache(i);
-            if (! solnFxn->equals(basisSumFxn, mySideCache, tol)) {
+            if (! solnFxn->equals(basisSumFxn, mySideCache, tol))
+            {
               success = false;
               cout << "testBasisSumFunction: on side 0, l2diff of " << l2diff << " exceeds tol of " << tol << endl;
               reportFunctionValueDifferences(solnFxn, basisSumFxn, mySideCache, tol);
             }
-            if (! solnFxn->grad(spaceDim)->equals(basisSumFxn->grad(spaceDim), mySideCache, tol)) {
+            if (! solnFxn->grad(spaceDim)->equals(basisSumFxn->grad(spaceDim), mySideCache, tol))
+            {
               success = false;
               cout << "testBasisSumFunction: on side 0, l2diff of dx() " << l2diff << " exceeds tol of " << tol << endl;
               reportFunctionValueDifferences(solnFxn->grad(spaceDim), basisSumFxn->grad(spaceDim), mySideCache, tol);
             }
           }
-        } else {
+        }
+        else
+        {
           FieldContainer<double> cellIntegral(1);
           // compute l2 diff of integral along the one side where we can legitimately assert equality:
           FunctionPtr diffFxn = solnFxn - basisSumFxn;
           (diffFxn*diffFxn)->integrate(cellIntegral, sideCache);
           double l2diff = sqrt(cellIntegral(0));
-          if (l2diff > tol) {
+          if (l2diff > tol)
+          {
             success = false;
             cout << "testBasisSumFunction: on side " << sideIndex << ", l2diff of " << l2diff << " exceeds tol of " << tol << endl;
 
@@ -317,7 +353,9 @@ bool FunctionTests::testBasisSumFunction() {
             basisSumFxn->values(basisFxnValues, sideCache);
             cout << "solnFxnValues:\n" << solnFxnValues;
             cout << "basisFxnValues:\n" << basisFxnValues;
-          } else {
+          }
+          else
+          {
 //            cout << "testBasisSumFunction: on side " << sideIndex << ", l2diff of " << l2diff << " is within tol of " << tol << endl;
           }
         }
@@ -328,7 +366,8 @@ bool FunctionTests::testBasisSumFunction() {
   return success;
 }
 
-bool FunctionTests::testThatLikeFunctionsAgree() {
+bool FunctionTests::testThatLikeFunctionsAgree()
+{
   bool success = true;
 
   FunctionPtr u_prev = Teuchos::rcp( new UPrev );
@@ -344,7 +383,8 @@ bool FunctionTests::testThatLikeFunctionsAgree() {
 
   if (! functionsAgree(e2 * u_prev,
                        Function::constant( e2 ) * u_prev,
-                       _basisCache) ) {
+                       _basisCache) )
+  {
     cout << "two like functions differ...\n";
     success = false;
   }
@@ -353,8 +393,9 @@ bool FunctionTests::testThatLikeFunctionsAgree() {
   FunctionPtr e2_f = Function::constant( e2 );
   FunctionPtr one  = Function::constant( 1.0 );
   if (! functionsAgree( e1_f * (e1_f + e2_f),
-                       one,
-                       _basisCache) ) {
+                        one,
+                        _basisCache) )
+  {
     cout << "two like functions differ...\n";
     success = false;
   }
@@ -364,21 +405,24 @@ bool FunctionTests::testThatLikeFunctionsAgree() {
 
   if (! functionsAgree(u_prev_squared_div2,
                        (e1_div2 * beta) * u_prev,
-                       _basisCache) ) {
+                       _basisCache) )
+  {
     cout << "two like functions differ...\n";
     success = false;
   }
 
   if (! functionsAgree(e1 * u_prev_squared_div2,
                        (e1_div2 * beta * e1) * u_prev,
-                       _basisCache) ) {
+                       _basisCache) )
+  {
     cout << "two like functions differ...\n";
     success = false;
   }
 
   if (! functionsAgree(e1 * u_prev_squared_div2 + e2 * u_prev,
                        (e1_div2 * beta * e1 + Function::constant( e2 ) ) * u_prev,
-                       _basisCache) ) {
+                       _basisCache) )
+  {
     cout << "two like functions differ...\n";
     success = false;
   }
@@ -386,7 +430,8 @@ bool FunctionTests::testThatLikeFunctionsAgree() {
   return success;
 }
 
-bool FunctionTests::testComponentFunction() {
+bool FunctionTests::testComponentFunction()
+{
   FunctionPtr one = Function::constant(1);
   FunctionPtr two = Function::constant(2);
 
@@ -395,19 +440,23 @@ bool FunctionTests::testComponentFunction() {
   FunctionPtr yPart = Function::yPart(vector);
 
   bool success = true;
-  if (! functionsAgree(one, xPart, _basisCache)) {
+  if (! functionsAgree(one, xPart, _basisCache))
+  {
     success = false;
     cout << "xPart != one";
   }
-  if (! functionsAgree(two, yPart, _basisCache)) {
+  if (! functionsAgree(two, yPart, _basisCache))
+  {
     success = false;
     cout << "yPart != two";
   }
   return success;
 }
 
-bool FunctionTests::functionsAgree(FunctionPtr f1, FunctionPtr f2, BasisCachePtr basisCache) {
-  if (f2->rank() != f1->rank() ) {
+bool FunctionTests::functionsAgree(FunctionPtr f1, FunctionPtr f2, BasisCachePtr basisCache)
+{
+  if (f2->rank() != f1->rank() )
+  {
     cout << "f1->rank() " << f1->rank() << " != f2->rank() " << f2->rank() << endl;
     return false;
   }
@@ -418,7 +467,8 @@ bool FunctionTests::functionsAgree(FunctionPtr f1, FunctionPtr f2, BasisCachePtr
   Teuchos::Array<int> dim;
   dim.append(numCells);
   dim.append(numPoints);
-  for (int i=0; i<rank; i++) {
+  for (int i=0; i<rank; i++)
+  {
     dim.append(spaceDim);
   }
   FieldContainer<double> f1Values(dim);
@@ -429,18 +479,22 @@ bool FunctionTests::functionsAgree(FunctionPtr f1, FunctionPtr f2, BasisCachePtr
   double tol = 1e-14;
   double maxDiff;
   bool functionsAgree = TestSuite::fcsAgree(f1Values,f2Values,tol,maxDiff);
-  if ( ! functionsAgree ) {
+  if ( ! functionsAgree )
+  {
     functionsAgree = false;
     cout << "Test failed: f1 and f2 disagree; maxDiff " << maxDiff << ".\n";
     cout << "f1Values: \n" << f1Values;
     cout << "f2Values: \n" << f2Values;
-  } else {
+  }
+  else
+  {
 //    cout << "f1 and f2 agree!" << endl;
   }
   return functionsAgree;
 }
 
-bool FunctionTests::testPolarizedFunctions() {
+bool FunctionTests::testPolarizedFunctions()
+{
   bool success = true;
 
   // redo _testPoints to avoid 0 point (which might cause a division by 0??)
@@ -449,8 +503,10 @@ bool FunctionTests::testPolarizedFunctions() {
   double yVals[NUM_POINTS_1D] = {-0.8,-0.6,-.4,-.2,0.1,0.2,0.4,0.6,0.8,1.0};
 
   _testPoints = FieldContainer<double>(NUM_POINTS_1D*NUM_POINTS_1D,2);
-  for (int i=0; i<NUM_POINTS_1D; i++) {
-    for (int j=0; j<NUM_POINTS_1D; j++) {
+  for (int i=0; i<NUM_POINTS_1D; i++)
+  {
+    for (int j=0; j<NUM_POINTS_1D; j++)
+    {
       _testPoints(i*NUM_POINTS_1D + j, 0) = xVals[i];
       _testPoints(i*NUM_POINTS_1D + j, 1) = yVals[j];
     }
@@ -471,19 +527,22 @@ bool FunctionTests::testPolarizedFunctions() {
   FunctionPtr df_dy = f->dy();
 
   // f == x
-  if (! functionsAgree(f, x, _basisCache) ) {
+  if (! functionsAgree(f, x, _basisCache) )
+  {
     cout << "f != x...\n";
     success = false;
   }
 
   // df/dx == 1
-  if (! functionsAgree(df_dx, one, _basisCache) ) {
+  if (! functionsAgree(df_dx, one, _basisCache) )
+  {
     cout << "df/dx != 1...\n";
     success = false;
   }
 
   // df/dy == 0
-  if (! functionsAgree(df_dy, zero, _basisCache) ) {
+  if (! functionsAgree(df_dy, zero, _basisCache) )
+  {
     cout << "df/dy != 0...\n";
     success = false;
   }
@@ -495,19 +554,22 @@ bool FunctionTests::testPolarizedFunctions() {
   df_dy = f->dy();
 
   // f == x
-  if (! functionsAgree(f, y, _basisCache) ) {
+  if (! functionsAgree(f, y, _basisCache) )
+  {
     cout << "f != y...\n";
     success = false;
   }
 
   // df/dx == 0
-  if (! functionsAgree(df_dx, zero, _basisCache) ) {
+  if (! functionsAgree(df_dx, zero, _basisCache) )
+  {
     cout << "df/dx != 0...\n";
     success = false;
   }
 
   // df/dy == 0
-  if (! functionsAgree(df_dy, one, _basisCache) ) {
+  if (! functionsAgree(df_dy, one, _basisCache) )
+  {
     cout << "df/dy != 1...\n";
     success = false;
   }
@@ -520,19 +582,22 @@ bool FunctionTests::testPolarizedFunctions() {
   df_dy = f->dy();
 
   // f == x^2
-  if (! functionsAgree(f, x * x, _basisCache) ) {
+  if (! functionsAgree(f, x * x, _basisCache) )
+  {
     cout << "f != x^2...\n";
     success = false;
   }
 
   // df/dx == 2x
-  if (! functionsAgree(df_dx, 2 * x, _basisCache) ) {
+  if (! functionsAgree(df_dx, 2 * x, _basisCache) )
+  {
     cout << "df/dx != 2x...\n";
     success = false;
   }
 
   // df/dy == 0
-  if (! functionsAgree(df_dy, zero, _basisCache) ) {
+  if (! functionsAgree(df_dy, zero, _basisCache) )
+  {
     cout << "df/dy != 0...\n";
     success = false;
   }
@@ -540,7 +605,8 @@ bool FunctionTests::testPolarizedFunctions() {
   return success;
 }
 
-bool FunctionTests::testProductRule() {
+bool FunctionTests::testProductRule()
+{
   bool success = true;
 
   // take f = x^2 * exp(x).  f' = 2 x * exp(x) + f
@@ -554,7 +620,8 @@ bool FunctionTests::testProductRule() {
   FunctionPtr f_prime_expected = 2.0 * x * exp_x + f;
 
   if (! functionsAgree(f_prime, f_prime_expected,
-                       _basisCache) ) {
+                       _basisCache) )
+  {
     cout << "Product rule: expected and actual derivatives differ...\n";
     success = false;
   }
@@ -562,7 +629,8 @@ bool FunctionTests::testProductRule() {
   return success;
 }
 
-bool FunctionTests::testQuotientRule() {
+bool FunctionTests::testQuotientRule()
+{
   bool success = true;
   // take f = exp(x) / x^2.  f' = f - 2 * x * exp(x) / x^4
   FunctionPtr x2 = Function::xn(2);
@@ -581,8 +649,10 @@ bool FunctionTests::testQuotientRule() {
   double yVals[NUM_POINTS_1D] = {-0.8,-0.6,-.4,-.2,0.1,0.2,0.4,0.6,0.8,1.0};
 
   _testPoints = FieldContainer<double>(NUM_POINTS_1D*NUM_POINTS_1D,2);
-  for (int i=0; i<NUM_POINTS_1D; i++) {
-    for (int j=0; j<NUM_POINTS_1D; j++) {
+  for (int i=0; i<NUM_POINTS_1D; i++)
+  {
+    for (int j=0; j<NUM_POINTS_1D; j++)
+    {
       _testPoints(i*NUM_POINTS_1D + j, 0) = xVals[i];
       _testPoints(i*NUM_POINTS_1D + j, 1) = yVals[j];
     }
@@ -590,7 +660,8 @@ bool FunctionTests::testQuotientRule() {
   _basisCache->setRefCellPoints(_testPoints);
 
   if (! functionsAgree(f_prime, f_prime_expected,
-                       _basisCache) ) {
+                       _basisCache) )
+  {
     cout << "Quotient rule: expected and actual derivatives differ...\n";
     success = false;
   }
@@ -599,14 +670,16 @@ bool FunctionTests::testQuotientRule() {
 
 }
 
-bool FunctionTests::testIntegrate(){
+bool FunctionTests::testIntegrate()
+{
   bool success = true;
 
   FunctionPtr x = Function::xn(1);
   double value = x->integrate(_spectralConfusionMesh);
   double expectedValue = 0.0; // odd function in x on (-1,1)^2
   double tol = 1e-11;
-  if (abs(value-expectedValue)>tol){
+  if (abs(value-expectedValue)>tol)
+  {
     success = false;
     cout << "failed testIntegrate() on function x" << endl;
   }
@@ -617,7 +690,8 @@ bool FunctionTests::testIntegrate(){
 
   value = (f1 * f1)->integrate(_spectralConfusionMesh,1); // enrich cubature to handle quadratics
   expectedValue = 8.0 / 3.0; // integral of x^2 + y^2 on (-1,1)^2
-  if (abs(value-expectedValue)>tol){
+  if (abs(value-expectedValue)>tol)
+  {
     success = false;
     cout << "failing testIntegrate() on function (x,y) dot (x,y)" << endl;
   }
@@ -625,7 +699,8 @@ bool FunctionTests::testIntegrate(){
   return success;
 }
 
-bool FunctionTests::testAdaptiveIntegrate(){
+bool FunctionTests::testAdaptiveIntegrate()
+{
   bool success = true;
 
   // we must create our own basisCache here because _basisCache
@@ -647,14 +722,16 @@ bool FunctionTests::testAdaptiveIntegrate(){
   double relativeError = abs(diff)/abs(trueIntegral); // relative error
 
   double tol = 1e-2;
-  if (relativeError > tol){
+  if (relativeError > tol)
+  {
     success = false;
     cout << "failing testAdaptiveIntegrate() with computed integral " << computedIntegral << " and true integral " << trueIntegral << endl;
   }
   return success;
 }
 
-bool FunctionTests::testJacobianOrdering() {
+bool FunctionTests::testJacobianOrdering()
+{
   bool success = true;
 
   FunctionPtr y = Function::yn(1);
@@ -672,8 +749,10 @@ bool FunctionTests::testJacobianOrdering() {
 
   FieldContainer<double> expectedValues(numCells, numPoints, spaceDim, spaceDim);
 
-  for (int cellIndex=0; cellIndex<numCells; cellIndex++) {
-    for (int ptIndex=0; ptIndex<numPoints; ptIndex++) {
+  for (int cellIndex=0; cellIndex<numCells; cellIndex++)
+  {
+    for (int ptIndex=0; ptIndex<numPoints; ptIndex++)
+    {
       expectedValues(cellIndex,ptIndex,0,0) = 0;
       expectedValues(cellIndex,ptIndex,0,1) = 1;
       expectedValues(cellIndex,ptIndex,1,0) = 0;
@@ -686,7 +765,8 @@ bool FunctionTests::testJacobianOrdering() {
 
   double maxDiff = 0;
   double tol = 1e-14;
-  if (! fcsAgree(expectedValues, values, tol, maxDiff)) {
+  if (! fcsAgree(expectedValues, values, tol, maxDiff))
+  {
     cout << "expectedValues does not match values in testJacobianOrdering().\n";
     reportFunctionValueDifferences(physicalPoints, expectedValues, values, tol);
     success = false;
@@ -715,8 +795,10 @@ bool FunctionTests::testJacobianOrdering() {
   numPoints = physicalPoints.dimension(1);
 
   FieldContainer<double> expectedJacobian(numCells,numPoints,spaceDim,spaceDim);
-  for (int cellIndex=0; cellIndex<numCells; cellIndex++) {
-    for (int ptIndex=0; ptIndex<numPoints; ptIndex++) {
+  for (int cellIndex=0; cellIndex<numCells; cellIndex++)
+  {
+    for (int ptIndex=0; ptIndex<numPoints; ptIndex++)
+    {
       expectedJacobian(cellIndex,ptIndex,0,0) = 0;
       expectedJacobian(cellIndex,ptIndex,0,1) = -1;
       expectedJacobian(cellIndex,ptIndex,1,0) = 2;
@@ -727,7 +809,8 @@ bool FunctionTests::testJacobianOrdering() {
   FieldContainer<double> jacobianValues = rotatedCache->getJacobian();
 
   maxDiff = 0;
-  if (! fcsAgree(expectedJacobian, jacobianValues, tol, maxDiff)) {
+  if (! fcsAgree(expectedJacobian, jacobianValues, tol, maxDiff))
+  {
     cout << "expectedJacobian does not match jacobianValues in testJacobianOrdering().\n";
     reportFunctionValueDifferences(physicalPoints, expectedJacobian, jacobianValues, tol);
     success = false;
@@ -736,19 +819,23 @@ bool FunctionTests::testJacobianOrdering() {
   return success;
 }
 
-class CellIDFilteredFunction : public Function {
+class CellIDFilteredFunction : public Function
+{
   FunctionPtr _fxn;
   set<int> _cellIDs;
 public:
-  CellIDFilteredFunction(FunctionPtr fxn, set<int> cellIDs) : Function(fxn->rank()) {
+  CellIDFilteredFunction(FunctionPtr fxn, set<int> cellIDs) : Function(fxn->rank())
+  {
     _fxn = fxn;
     _cellIDs = cellIDs;
   }
-  CellIDFilteredFunction(FunctionPtr fxn, int cellID) : Function(fxn->rank()) {
+  CellIDFilteredFunction(FunctionPtr fxn, int cellID) : Function(fxn->rank())
+  {
     _fxn = fxn;
     _cellIDs.insert(cellID);
   }
-  virtual void values(FieldContainer<double> &values, BasisCachePtr basisCache) {
+  virtual void values(FieldContainer<double> &values, BasisCachePtr basisCache)
+  {
     // not the most efficient implementation
     _fxn->values(values,basisCache);
     vector<GlobalIndexType> contextCellIDs = basisCache->cellIDs();
@@ -758,11 +845,14 @@ public:
     int numCells = values.dimension(0);
     int numEntriesPerCell = entryCount / numCells;
 
-    for (vector<GlobalIndexType>::iterator cellIt = contextCellIDs.begin(); cellIt != contextCellIDs.end(); cellIt++) {
+    for (vector<GlobalIndexType>::iterator cellIt = contextCellIDs.begin(); cellIt != contextCellIDs.end(); cellIt++)
+    {
       GlobalIndexType cellID = *cellIt;
-      if (_cellIDs.find(cellID) == _cellIDs.end()) {
+      if (_cellIDs.find(cellID) == _cellIDs.end())
+      {
         // clear out the associated entries
-        for (int j=0; j<numEntriesPerCell; j++) {
+        for (int j=0; j<numEntriesPerCell; j++)
+        {
           values[cellIndex*numEntriesPerCell + j] = 0;
         }
       }
@@ -771,7 +861,8 @@ public:
   }
 };
 
-bool FunctionTests::testJumpIntegral() {
+bool FunctionTests::testJumpIntegral()
+{
   bool success = true;
   double tol = 1e-14;
 
@@ -793,11 +884,12 @@ bool FunctionTests::testJumpIntegral() {
 
   // create a pointer to a new mesh:
   Teuchos::RCP<Mesh> mesh = MeshFactory::buildQuadMesh(quadPoints, horizontalCells, verticalCells,
-                                                _confusionBF, H1Order, H1Order+pToAdd);
+                            _confusionBF, H1Order, H1Order+pToAdd);
 
   FieldContainer<double> points(1,2);
   // southwest center:
-  points(0,0) = 0.25; points(0,1) = 0.25;
+  points(0,0) = 0.25;
+  points(0,1) = 0.25;
   vector< Teuchos::RCP<Element> > elements = mesh->elementsForPoints(points, false);
 
   int swCellID = elements[0]->cellID();
@@ -811,18 +903,23 @@ bool FunctionTests::testJumpIntegral() {
 
   int cubEnrichment = 0;
 
-  for (int sideIndex=0; sideIndex<numSides; sideIndex++) {
+  for (int sideIndex=0; sideIndex<numSides; sideIndex++)
+  {
     double actualValue = valOnSWCell->integralOfJump(mesh, swCellID, sideIndex, cubEnrichment);
     double expectedValue;
-    if (mesh->getTopology()->getCell(swCellID)->isBoundary(sideIndex)) {
+    if (mesh->getTopology()->getCell(swCellID)->isBoundary(sideIndex))
+    {
       expectedValue = 0;
-    } else {
+    }
+    else
+    {
       double sideParity = mesh->parityForSide(swCellID, sideIndex);
       expectedValue = sideParity * val * sideLength;
     }
 
     double diff = abs(actualValue-expectedValue);
-    if (diff > tol) {
+    if (diff > tol)
+    {
       cout << "testJumpFunction(): expected " << expectedValue << " but actualValue was " << actualValue << endl;
       success = false;
     }
@@ -831,7 +928,8 @@ bool FunctionTests::testJumpIntegral() {
   return success;
 }
 
-bool FunctionTests::testValuesDottedWithTensor() {
+bool FunctionTests::testValuesDottedWithTensor()
+{
   bool success = true;
 
   vector< FunctionPtr > vectorFxns;
@@ -852,13 +950,16 @@ bool FunctionTests::testValuesDottedWithTensor() {
   int cellID=0; // the only cell
   BasisCachePtr basisCache = BasisCache::basisCacheForCell(mesh, cellID);
 
-  for (int i=0; i<vectorFxns.size(); i++) {
+  for (int i=0; i<vectorFxns.size(); i++)
+  {
     FunctionPtr vectorFxn_i = vectorFxns[i];
-    for (int j=0; j<vectorFxns.size(); j++) {
+    for (int j=0; j<vectorFxns.size(); j++)
+    {
       FunctionPtr vectorFxn_j = vectorFxns[j];
       FunctionPtr dotProduct = vectorFxn_i * vectorFxn_j;
       FunctionPtr expectedDotProduct = vectorFxn_i->x() * vectorFxn_j->x() + vectorFxn_i->y() * vectorFxn_j->y();
-      if (! expectedDotProduct->equals(dotProduct, basisCache)) {
+      if (! expectedDotProduct->equals(dotProduct, basisCache))
+      {
         cout << "testValuesDottedWithTensor() failed: expected dot product does not match dotProduct.\n";
         success = false;
         double tol = 1e-14;
@@ -879,12 +980,14 @@ bool FunctionTests::testValuesDottedWithTensor() {
   int numCells = 1;
   int numFields = basis->getCardinality();
 
-  for (int i=0; i<vectorFxns.size(); i++) {
+  for (int i=0; i<vectorFxns.size(); i++)
+  {
     FunctionPtr f_i = vectorFxns[i];
     LinearTermPtr lt_i = f_i * v;
     LinearTermPtr lt_i_x = f_i->x() * v;
     LinearTermPtr lt_i_y = f_i->y() * v;
-    for (int j=0; j<vectorFxns.size(); j++) {
+    for (int j=0; j<vectorFxns.size(); j++)
+    {
       FunctionPtr f_j = vectorFxns[j];
       LinearTermPtr lt_j = f_j * v;
       LinearTermPtr lt_j_x = f_j->x() * v;
@@ -896,7 +999,8 @@ bool FunctionTests::testValuesDottedWithTensor() {
       lt_i_y->integrate(values_expected,dofOrdering,lt_j_y,dofOrdering,basisCache);
       double tol = 1e-14;
       double maxDiff = 0;
-      if (!fcsAgree(values, values_expected, tol, maxDiff)) {
+      if (!fcsAgree(values, values_expected, tol, maxDiff))
+      {
         cout << "FunctionTests::testValuesDottedWithTensor: ";
         cout << "dot product and sum of the products of scalar components differ by maxDiff " << maxDiff;
         cout << " in LinearTerm::integrate().\n";
@@ -923,7 +1027,8 @@ bool FunctionTests::testValuesDottedWithTensor() {
   return success;
 }
 
-bool FunctionTests::testVectorFunctionValuesOrdering() {
+bool FunctionTests::testVectorFunctionValuesOrdering()
+{
   bool success = true;
 
   FunctionPtr x = Function::xn(1);
@@ -942,15 +1047,18 @@ bool FunctionTests::testVectorFunctionValuesOrdering() {
 //  cout << "(x,0) function values:\n" << values;
 
   double tol = 1e-14;
-  for (int cellIndex=0; cellIndex<numCells; cellIndex++) {
-    for (int ptIndex=0; ptIndex<numPoints; ptIndex++) {
+  for (int cellIndex=0; cellIndex<numCells; cellIndex++)
+  {
+    for (int ptIndex=0; ptIndex<numPoints; ptIndex++)
+    {
       double xValueExpected = points(cellIndex,ptIndex,0);
       double yValueExpected = 0;
       double xValue = values(cellIndex,ptIndex,0);
       double yValue = values(cellIndex,ptIndex,1);
       double xErr = abs(xValue-xValueExpected);
       double yErr = abs(yValue-yValueExpected);
-      if ( (xErr > tol) || (yErr > tol) ) {
+      if ( (xErr > tol) || (yErr > tol) )
+      {
         success = false;
         cout << "testVectorFunctionValuesOrdering(): vectorized function values incorrect (presumably out of order).\n";
         cout << "x: " << xValueExpected << " ≠ " << xValue << endl;
@@ -962,6 +1070,7 @@ bool FunctionTests::testVectorFunctionValuesOrdering() {
   return success;
 }
 
-std::string FunctionTests::testSuiteName() {
+std::string FunctionTests::testSuiteName()
+{
   return "FunctionTests";
 }

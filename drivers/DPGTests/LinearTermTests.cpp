@@ -19,15 +19,19 @@
 
 typedef pair< FunctionPtr, VarPtr > LinearSummand;
 
-class Sine_x : public Function {
+class Sine_x : public Function
+{
 public:
-  void values(FieldContainer<double> &values, BasisCachePtr basisCache) {
+  void values(FieldContainer<double> &values, BasisCachePtr basisCache)
+  {
     int numCells = values.dimension(0);
     int numPoints = values.dimension(1);
 
     const FieldContainer<double> *points = &(basisCache->getPhysicalCubaturePoints());
-    for (int cellIndex=0; cellIndex<numCells; cellIndex++) {
-      for (int ptIndex=0; ptIndex<numPoints; ptIndex++) {
+    for (int cellIndex=0; cellIndex<numCells; cellIndex++)
+    {
+      for (int ptIndex=0; ptIndex<numPoints; ptIndex++)
+      {
         double x = (*points)(cellIndex,ptIndex,0);
         double y = (*points)(cellIndex,ptIndex,1);
         values(cellIndex,ptIndex) = sin(x);
@@ -37,15 +41,19 @@ public:
 };
 
 
-class Cosine_y : public Function {
+class Cosine_y : public Function
+{
 public:
-  void values(FieldContainer<double> &values, BasisCachePtr basisCache) {
+  void values(FieldContainer<double> &values, BasisCachePtr basisCache)
+  {
     int numCells = values.dimension(0);
     int numPoints = values.dimension(1);
 
     const FieldContainer<double> *points = &(basisCache->getPhysicalCubaturePoints());
-    for (int cellIndex=0; cellIndex<numCells; cellIndex++) {
-      for (int ptIndex=0; ptIndex<numPoints; ptIndex++) {
+    for (int cellIndex=0; cellIndex<numCells; cellIndex++)
+    {
+      for (int ptIndex=0; ptIndex<numPoints; ptIndex++)
+      {
         double x = (*points)(cellIndex,ptIndex,0);
         double y = (*points)(cellIndex,ptIndex,1);
         values(cellIndex,ptIndex) = cos(y);
@@ -54,7 +62,8 @@ public:
   }
 };
 
-void LinearTermTests::setup() {
+void LinearTermTests::setup()
+{
 
 //  VarPtr v1, v2, v3; // HGRAD members (test variables)
 //  VarPtr q1, q2, q3; // HDIV members (test variables)
@@ -131,62 +140,72 @@ void LinearTermTests::setup() {
   basisCache->setPhysicalCellNodes(mesh->physicalCellNodesGlobal(elemType), cellIDs, createSideCacheToo);
 }
 
-void LinearTermTests::teardown() {
+void LinearTermTests::teardown()
+{
 
 }
 
-void LinearTermTests::runTests(int &numTestsRun, int &numTestsPassed) {
+void LinearTermTests::runTests(int &numTestsRun, int &numTestsPassed)
+{
   setup();
-  if (testRieszInversionAsProjection()) {
+  if (testRieszInversionAsProjection())
+  {
     numTestsPassed++;
   }
   numTestsRun++;
   teardown();
 
   setup();
-  if (testBoundaryPlusVolumeTerms()) {
+  if (testBoundaryPlusVolumeTerms())
+  {
     numTestsPassed++;
   }
   numTestsRun++;
   teardown();
 
   setup();
-  if (testIntegrateMixedBasis()) {
+  if (testIntegrateMixedBasis())
+  {
     numTestsPassed++;
   }
   numTestsRun++;
   teardown();
 
   setup();
-  if (testMixedTermConsistency()) {
+  if (testMixedTermConsistency())
+  {
     numTestsPassed++;
   }
   numTestsRun++;
   teardown();
 
   setup();
-  if (testRieszInversion()) {
+  if (testRieszInversion())
+  {
     numTestsPassed++;
   }
   numTestsRun++;
   teardown();
 
   setup();
-  if (testSums()) {
+  if (testSums())
+  {
     numTestsPassed++;
   }
   numTestsRun++;
   teardown();
 
   setup();
-  if (testIntegration()) {
+  if (testIntegration())
+  {
     numTestsPassed++;
   }
   numTestsRun++;
   teardown();
 
   setup();
-  if (testLinearTermEvaluation()) {
+  if (testLinearTermEvaluation())
+  {
     numTestsPassed++;
   }
   numTestsRun++;
@@ -194,12 +213,14 @@ void LinearTermTests::runTests(int &numTestsRun, int &numTestsPassed) {
 
 }
 
-bool LinearTermTests::testSums() {
+bool LinearTermTests::testSums()
+{
   bool success = true;
 
   LinearTermPtr sum = v1 + v2;
 
-  if (sum->summands().size() != 2) {
+  if (sum->summands().size() != 2)
+  {
     success = false;
     cout << "sum has the wrong number of summands\n";
     return success;
@@ -214,38 +235,45 @@ bool LinearTermTests::testSums() {
   VarPtr second_var = second_summand.second;
   Camellia::EOperator second_op = second_var->op();
 
-  if (first_var->ID() != v1->ID()) {
+  if (first_var->ID() != v1->ID())
+  {
     success = false;
     cout << "first summand isn't v1.\n";
   }
 
-  if (first_var->op() != OP_VALUE) {
+  if (first_var->op() != OP_VALUE)
+  {
     success = false;
     cout << "first op isn't VALUE.\n";
   }
 
-  if (second_var->ID() != v2->ID()) {
+  if (second_var->ID() != v2->ID())
+  {
     success = false;
     cout << "second summand isn't v2 (is named " << second_var->name() << ").\n";
   }
 
-  if (second_var->op() != OP_VALUE) {
+  if (second_var->op() != OP_VALUE)
+  {
     success = false;
     cout << "second op isn't VALUE.\n";
   }
 
   // check that sum reports having both varIDs
-  if (sum->varIDs().find(v1->ID()) == sum->varIDs().end()) {
+  if (sum->varIDs().find(v1->ID()) == sum->varIDs().end())
+  {
     cout << "sum->varIDs() doesn't include v1.\n";
     success = false;
   }
 
-  if (sum->varIDs().find(v2->ID()) == sum->varIDs().end()) {
+  if (sum->varIDs().find(v2->ID()) == sum->varIDs().end())
+  {
     cout << "sum->varIDs() doesn't include v2.\n";
     success = false;
   }
 
-  if (sum->varIDs().size() != 2) {
+  if (sum->varIDs().size() != 2)
+  {
     cout << "sum->varIDs() doesn't have the expected size (expected 2; is " << sum->varIDs().size() << ").\n";
     success = false;
   }
@@ -255,7 +283,8 @@ bool LinearTermTests::testSums() {
   return success;
 }
 
-bool checkLTSumConsistency(LinearTermPtr a, LinearTermPtr b, DofOrderingPtr dofOrdering, BasisCachePtr basisCache) {
+bool checkLTSumConsistency(LinearTermPtr a, LinearTermPtr b, DofOrderingPtr dofOrdering, BasisCachePtr basisCache)
+{
   double tol = 1e-14;
 
   int numCells = basisCache->cellIDs().size();
@@ -268,17 +297,20 @@ bool checkLTSumConsistency(LinearTermPtr a, LinearTermPtr b, DofOrderingPtr dofO
 
   int size = aValues.size();
 
-  for (int i=0; i<size; i++) {
+  for (int i=0; i<size; i++)
+  {
     double expectedValue = aValues[i] + bValues[i];
     double diff = abs( expectedValue - sumValues[i] );
-    if (diff > tol) {
+    if (diff > tol)
+    {
       return false;
     }
   }
   return true;
 }
 
-bool LinearTermTests::testIntegration() {
+bool LinearTermTests::testIntegration()
+{
   // for now, we just check the consistency: for LinearTerm a = b + c, does a->integrate
   // give the same values as b->integrate + c->integrate ?
   bool success = true;
@@ -291,27 +323,32 @@ bool LinearTermTests::testIntegration() {
   //
   //  FunctionPtr sine_x;
 
-  if ( ! checkLTSumConsistency(1 * v1, 1 * v2, testOrder, basisCache) ) {
+  if ( ! checkLTSumConsistency(1 * v1, 1 * v2, testOrder, basisCache) )
+  {
     cout << "(v1 + v2)->integrate not consistent with sum of summands integration.\n";
     success = false;
   }
 
-  if ( ! checkLTSumConsistency(sine_x * v1, 1 * v2, testOrder, basisCache) ) {
+  if ( ! checkLTSumConsistency(sine_x * v1, 1 * v2, testOrder, basisCache) )
+  {
     cout << "(sine_x * v1 + v2)->integrate not consistent with sum of summands integration.\n";
     success = false;
   }
 
-  if ( ! checkLTSumConsistency(1 * q1->div(), 1 * q2->x(), testOrder, basisCache) ) {
+  if ( ! checkLTSumConsistency(1 * q1->div(), 1 * q2->x(), testOrder, basisCache) )
+  {
     cout << "(q1->div() + q2->x())->integrate not consistent with sum of summands integration.\n";
     success = false;
   }
 
-  if ( ! checkLTSumConsistency(1 * u1, 1 * u2, trialOrder, basisCache) ) {
+  if ( ! checkLTSumConsistency(1 * u1, 1 * u2, trialOrder, basisCache) )
+  {
     cout << "(u1 + u2)->integrate not consistent with sum of summands integration.\n";
     success = false;
   }
 
-  if ( ! checkLTSumConsistency(1 * u1, sine_x * u2, trialOrder, basisCache) ) {
+  if ( ! checkLTSumConsistency(1 * u1, sine_x * u2, trialOrder, basisCache) )
+  {
     cout << "(u1 + sine_x * u2)->integrate not consistent with sum of summands integration.\n";
     success = false;
   }
@@ -355,19 +392,22 @@ bool LinearTermTests::testIntegration() {
   LinearTermPtr testFunctionalBoundaryValues = u1_hat_prev * q1->dot_normal() + u3_hat_prev * v1;
 
   if ( ! checkLTSumConsistency(testFunctionalNoBoundaryValues, testFunctionalBoundaryValues,
-                               testOrder, basisCache) ) {
+                               testOrder, basisCache) )
+  {
     cout << "bfTestFunctional->integrate not consistent with sum of summands integration.\n";
     success = false;
   }
 
   if ( ! checkLTSumConsistency(testFunctionalBoundaryValues, bfTestFunctional - testFunctionalBoundaryValues,
-                               testOrder, basisCache) ) {
+                               testOrder, basisCache) )
+  {
     cout << "bfTestFunctional->integrate not consistent with sum of summands integration.\n";
     success = false;
   }
 
   if ( ! checkLTSumConsistency(testFunctionalNoBoundaryValues, bfTestFunctional - testFunctionalNoBoundaryValues,
-                               testOrder, basisCache) ) {
+                               testOrder, basisCache) )
+  {
     cout << "bfTestFunctional->integrate not consistent with sum of summands integration.\n";
     success = false;
   }
@@ -375,7 +415,8 @@ bool LinearTermTests::testIntegration() {
   return success;
 }
 
-bool LinearTermTests::testBoundaryPlusVolumeTerms() {
+bool LinearTermTests::testBoundaryPlusVolumeTerms()
+{
   bool success = true;
 
   // notion is integration by parts:
@@ -407,7 +448,8 @@ bool LinearTermTests::testBoundaryPlusVolumeTerms() {
   f_fxns.push_back( Function::vectorize( x,    Function::zero() ) ); // div of this = 1
   f_fxns.push_back( Function::vectorize( x2 / 6.0, x2 * y / 2.0 ) ); // div of this = x / 3 + x^2 / 2
 
-  for ( vector< FunctionPtr >::iterator fIt = f_fxns.begin(); fIt != f_fxns.end(); fIt++) {
+  for ( vector< FunctionPtr >::iterator fIt = f_fxns.begin(); fIt != f_fxns.end(); fIt++)
+  {
     FunctionPtr vector_fxn = *fIt;
     LinearTermPtr lt_v = vector_fxn->div()*v1;
 
@@ -435,7 +477,8 @@ bool LinearTermTests::testBoundaryPlusVolumeTerms() {
     double actualValue = boundaryIntegralSum + volumeIntegralSum;
 
     double tol = 1e-14;
-    if (abs(expectedValue - actualValue)>tol){
+    if (abs(expectedValue - actualValue)>tol)
+    {
       success = false;
     }
 
@@ -448,7 +491,8 @@ bool LinearTermTests::testBoundaryPlusVolumeTerms() {
     ibp->integrate(integrals_actual,testOrder,basisCache);
 
     double maxDiff = 0;
-    if (! fcsAgree(integrals_actual, integrals_expected, tol, maxDiff) ) {
+    if (! fcsAgree(integrals_actual, integrals_expected, tol, maxDiff) )
+    {
       cout << "LT integrated by parts does not agree with the original; maxDiff: " << maxDiff << endl;
       success = false;
     }
@@ -458,7 +502,8 @@ bool LinearTermTests::testBoundaryPlusVolumeTerms() {
     ibp->integrate(integrals_actual,testOrder,basisCache, false, false);
 
     maxDiff = 0;
-    if (! fcsAgree(integrals_actual, integrals_expected, tol, maxDiff) ) {
+    if (! fcsAgree(integrals_actual, integrals_expected, tol, maxDiff) )
+    {
       cout << "LT integrated by parts does not agree with the original; maxDiff: " << maxDiff << endl;
       success = false;
     }
@@ -473,7 +518,8 @@ bool LinearTermTests::testBoundaryPlusVolumeTerms() {
     lt_v->integrate(integrals_actual_two_term, testOrder, ibp2, testOrder, basisCache, false, true);  // DO sumInto
 
     maxDiff = 0;
-    if (! fcsAgree(integrals_actual_two_term, integrals_expected_two_term, tol, maxDiff) ) {
+    if (! fcsAgree(integrals_actual_two_term, integrals_expected_two_term, tol, maxDiff) )
+    {
       cout << "two-term integration is not bilinear; maxDiff: " << maxDiff << endl;
       success = false;
     }
@@ -484,7 +530,8 @@ bool LinearTermTests::testBoundaryPlusVolumeTerms() {
     ibp2->integrate(integrals_actual_two_term, testOrder, lt_v, testOrder, basisCache, false, true);  // DO sumInto
 
     maxDiff = 0;
-    if (! fcsAgree(integrals_actual_two_term, integrals_expected_two_term, tol, maxDiff) ) {
+    if (! fcsAgree(integrals_actual_two_term, integrals_expected_two_term, tol, maxDiff) )
+    {
       cout << "two-term integration is not bilinear; maxDiff: " << maxDiff << endl;
       success = false;
     }
@@ -496,7 +543,8 @@ bool LinearTermTests::testBoundaryPlusVolumeTerms() {
     // we expect the integrals to commute up to a transpose, so let's transpose one of the containers:
     transposeFieldContainer(integrals_expected_two_term);
     maxDiff = 0;
-    if (! fcsAgree(integrals_actual_two_term, integrals_expected_two_term, tol, maxDiff) ) {
+    if (! fcsAgree(integrals_actual_two_term, integrals_expected_two_term, tol, maxDiff) )
+    {
       cout << "two-term integration does not commute for boundary value (ibp1); maxDiff: " << maxDiff << endl;
       success = false;
     }
@@ -507,7 +555,8 @@ bool LinearTermTests::testBoundaryPlusVolumeTerms() {
     // we expect the integrals to commute up to a transpose, so let's transpose one of the containers:
     transposeFieldContainer(integrals_expected_two_term);
     maxDiff = 0;
-    if (! fcsAgree(integrals_actual_two_term, integrals_expected_two_term, tol, maxDiff) ) {
+    if (! fcsAgree(integrals_actual_two_term, integrals_expected_two_term, tol, maxDiff) )
+    {
       cout << "two-term integration does not commute for volume value (ibp2); maxDiff: " << maxDiff << endl;
       success = false;
     }
@@ -522,7 +571,8 @@ bool LinearTermTests::testBoundaryPlusVolumeTerms() {
 
     // first, let's confirm that the v1 basis *is* nodal:
     BasisPtr v1Basis = testOrder->getBasis(v1->ID());
-    if (! v1Basis->isNodal()) {
+    if (! v1Basis->isNodal())
+    {
       cout << "testBoundaryPlusVolumeTerms: final part of test relies on a nodal basis, but the basis is not nodal.";
       cout << "  Exiting test early (with whatever success value we have thus far).\n";
       return success;
@@ -535,10 +585,12 @@ bool LinearTermTests::testBoundaryPlusVolumeTerms() {
     FunctionPtr ibp2_at_v1_equals_one = ibp2->evaluate(v1_equals_one,false); // ibp2 has no boundary terms, so we don't ask for these
     FunctionPtr lt_v_at_v1_equals_one = lt_v->evaluate(v1_equals_one,false); // lt_v also has no boundary terms
 
-    if (ibp1_at_v1_equals_one->isZero()) {
+    if (ibp1_at_v1_equals_one->isZero())
+    {
       cout << "ibp1_at_v1_equals_one->isZero() = true.\n";
     }
-    if (lt_v_at_v1_equals_one->isZero()) {
+    if (lt_v_at_v1_equals_one->isZero())
+    {
       cout << "lt_v_at_v1_equals_one->isZero() = true.\n";
     }
 
@@ -552,12 +604,14 @@ bool LinearTermTests::testBoundaryPlusVolumeTerms() {
     ibp1->integrate(integrals_ibp1_first,  testOrder, lt_v, testOrder, basisCache, false, false);
     lt_v->integrate(integrals_lt_v_first, testOrder, ibp1, testOrder, basisCache, false, false);
 
-    for (int i=0; i<integrals_lt_v_first.size(); i++) {
+    for (int i=0; i<integrals_lt_v_first.size(); i++)
+    {
       lt_v_first_integral += integrals_lt_v_first[i];
       ibp1_first_integral += integrals_ibp1_first[i];
     }
 
-    if (abs(lt_v_first_integral - integral) > tol) {
+    if (abs(lt_v_first_integral - integral) > tol)
+    {
       double diff = abs(lt_v_first_integral - integral);
       success = false;
       cout << "Integral with v1=1 substituted does not match two-term integration of (lt_v,ibp1) with lt_v as this. diff = " << diff << "\n";
@@ -565,7 +619,8 @@ bool LinearTermTests::testBoundaryPlusVolumeTerms() {
       cout << "    (true) integral = " << integral << endl;
     }
 
-    if (abs(ibp1_first_integral - integral) > tol) {
+    if (abs(ibp1_first_integral - integral) > tol)
+    {
       double diff = abs(ibp1_first_integral - integral);
       success = false;
       cout << "Integral with v1=1 substituted does not match two-term integration of (lt_v,ibp1) with ibp1 as this. diff = " << diff << "\n";
@@ -582,12 +637,14 @@ bool LinearTermTests::testBoundaryPlusVolumeTerms() {
     lt_v_first_integral = 0.0;
     ibp1_first_integral = 0.0;
     ibp2_first_integral = 0.0;
-    for (int i=0; i<integrals_lt_v_first.size(); i++) {
+    for (int i=0; i<integrals_lt_v_first.size(); i++)
+    {
       lt_v_first_integral += integrals_lt_v_first[i];
       ibp2_first_integral += integrals_ibp2_first[i];
     }
 
-    if (abs(lt_v_first_integral - integral) > tol) {
+    if (abs(lt_v_first_integral - integral) > tol)
+    {
       double diff = abs(lt_v_first_integral - integral);
       success = false;
       cout << "Integral with v1=1 substituted does not match two-term integration of (lt_v,ibp2) with lt_v as this. diff = " << diff << "\n";
@@ -595,7 +652,8 @@ bool LinearTermTests::testBoundaryPlusVolumeTerms() {
       cout << "    (true) integral = " << integral << endl;
     }
 
-    if (abs(ibp2_first_integral - integral) > tol) {
+    if (abs(ibp2_first_integral - integral) > tol)
+    {
       double diff = abs(ibp2_first_integral - integral);
       success = false;
       cout << "Integral with v1=1 substituted does not match two-term integration of (lt_v,ibp2) with ibp2 as this. diff = " << diff << "\n";
@@ -607,7 +665,8 @@ bool LinearTermTests::testBoundaryPlusVolumeTerms() {
   return success;
 }
 
-bool LinearTermTests::testRieszInversionAsProjection() {
+bool LinearTermTests::testRieszInversionAsProjection()
+{
   bool success = true;
 
   ////////////////////   DECLARE VARIABLES   ///////////////////////
@@ -645,7 +704,8 @@ bool LinearTermTests::testRieszInversionAsProjection() {
 
   ////////////////////   BUILD MESH   ///////////////////////
   // define nodes for mesh
-  int H1Order = 2; int pToAdd = 2;
+  int H1Order = 2;
+  int pToAdd = 2;
 
   FieldContainer<double> quadPoints(4,2);
 
@@ -704,7 +764,8 @@ bool LinearTermTests::testRieszInversionAsProjection() {
   double maxDiff;
   double tol = 1e-12;
   success = TestSuite::fcsAgree(valProject,valExpected,tol,maxDiff);
-  if (success==false){
+  if (success==false)
+  {
     cout << "Failed Riesz Inversion Projection test with maxDiff = " << maxDiff << endl;
     serializeOutput("valExpected", valExpected);
     serializeOutput("valProject", valProject);
@@ -713,123 +774,8 @@ bool LinearTermTests::testRieszInversionAsProjection() {
   return allSuccess(success);
 }
 
-bool LinearTermTests::testMixedTermConsistency() {
-   bool success = true;
-
-  ////////////////////   DECLARE VARIABLES   ///////////////////////
-  // define test variables
-  VarFactoryPtr varFactory = VarFactory::varFactory();
-  VarPtr tau = varFactory->testVar("\\tau", HDIV);
-  VarPtr v = varFactory->testVar("v", HGRAD);
-
-  // define trial variables
-  VarPtr uhat = varFactory->traceVar("\\widehat{u}");
-  VarPtr beta_n_u_minus_sigma_n = varFactory->fluxVar("\\widehat{\\beta \\cdot n u - \\sigma_{n}}");
-  VarPtr u = varFactory->fieldVar("u");
-  VarPtr sigma1 = varFactory->fieldVar("\\sigma_1");
-  VarPtr sigma2 = varFactory->fieldVar("\\sigma_2");
-
-  vector<double> beta;
-  beta.push_back(1.0);
-  beta.push_back(0.0);
-  double eps = .01;
-
-  ////////////////////   DEFINE BILINEAR FORM   ///////////////////////
-
-  BFPtr confusionBF = Teuchos::rcp( new BF(varFactory) );
-  // tau terms:
-  confusionBF->addTerm(sigma1 / eps, tau->x());
-  confusionBF->addTerm(sigma2 / eps, tau->y());
-  confusionBF->addTerm(u, tau->div());
-  confusionBF->addTerm(uhat, -tau->dot_normal());
-
-  // v terms:
-  confusionBF->addTerm( sigma1, v->dx() );
-  confusionBF->addTerm( sigma2, v->dy() );
-  confusionBF->addTerm( -u, beta * v->grad() );
-  confusionBF->addTerm( beta_n_u_minus_sigma_n, v);
-
-  ////////////////////   BUILD MESH   ///////////////////////
-  // define nodes for mesh
-  int H1Order = 1; int pToAdd = 1;
-
-  FieldContainer<double> quadPoints(4,2);
-
-  quadPoints(0,0) = 0.0; // x1
-  quadPoints(0,1) = 0.0; // y1
-  quadPoints(1,0) = 1.0;
-  quadPoints(1,1) = 0.0;
-  quadPoints(2,0) = 1.0;
-  quadPoints(2,1) = 1.0;
-  quadPoints(3,0) = 0.0;
-  quadPoints(3,1) = 1.0;
-
-  int nCells = 1;
-  int horizontalCells = nCells, verticalCells = nCells;
-  // create a pointer to a new mesh:
-  Teuchos::RCP<Mesh> myMesh = MeshFactory::buildQuadMesh(quadPoints, horizontalCells, verticalCells,
-						  confusionBF, H1Order, H1Order+pToAdd);
-
-  ElementTypePtr elemType = myMesh->getElement(0)->elementType();
-  //  DofOrderingPtr testOrder = elemType->testOrderPtr;
-  BasisCachePtr basisCache = Teuchos::rcp(new BasisCache(elemType, myMesh, true));
-
-
-  LinearTermPtr integrandIBP = Teuchos::rcp(new LinearTerm);// residual
-
-  vector<double> e1(2); // (1,0)
-  vector<double> e2(2); // (0,1)
-  e1[0] = 1;
-  e2[1] = 1;
-  FunctionPtr n = Function::normal();
-  FunctionPtr X = Function::xn(1);
-  FunctionPtr Y = Function::yn(1);
-  FunctionPtr testFxn1 = X;
-  FunctionPtr testFxn2 = Y;
-  FunctionPtr divTestFxn = testFxn1->dx() + testFxn2->dy();
-  FunctionPtr vectorTest = testFxn1*e1 + testFxn2*e2;
-
-  integrandIBP->addTerm(vectorTest*n*v + -vectorTest*v->grad()); // boundary term
-
-  // define dummy IP to initialize riesz rep class, but just integrate RHS
-  IPPtr dummyIP = Teuchos::rcp(new IP);
-  dummyIP->addTerm(v);
-  Teuchos::RCP<RieszRep> riesz = Teuchos::rcp(new RieszRep(myMesh, dummyIP, integrandIBP));
-  map<GlobalIndexType,FieldContainer<double> > rieszRHS = riesz->integrateFunctional();
-
-  set<GlobalIndexType> cellIDs = myMesh->cellIDsInPartition();
-  for (set<GlobalIndexType>::iterator cellIDIt=cellIDs.begin(); cellIDIt !=cellIDs.end(); cellIDIt++){
-    GlobalIndexType cellID = *cellIDIt;
-
-    ElementTypePtr elemTypePtr = myMesh->getElementType(cellID);
-    DofOrderingPtr testOrderingPtr = elemTypePtr->testOrderPtr;
-    int numTestDofs = testOrderingPtr->totalDofs();
-
-    BasisCachePtr basisCache = BasisCache::basisCacheForCell(myMesh, cellID, true);
-
-    FieldContainer<double> rhsIBPValues(1,numTestDofs);
-    integrandIBP->integrate(rhsIBPValues, testOrderingPtr, basisCache);
-    FieldContainer<double> rieszValues(1,numTestDofs);
-    (riesz->getFunctional())->integrate(rieszValues, testOrderingPtr, basisCache);
-    double maxDiff;
-    double tol = 1e-13;
-    FieldContainer<double> rhsIBPVals(numTestDofs);
-    for (int i = 0;i< numTestDofs; i++){
-      rhsIBPVals(i) = rhsIBPValues(0,i);
-      //      cout << "riesz rhs values = " << rieszRHS[cellID](i) << ", rhsIBPValues = " << rhsIBPVals(i) << ", riesz returned values = " << rieszValues(0,i) << endl;
-    }
-    bool fcsAgree = TestSuite::fcsAgree(rieszRHS[cellID],rhsIBPVals,tol,maxDiff);
-    if (!fcsAgree){
-      success=false;
-      cout << "Failed mixed term consistency test with maxDiff = " << maxDiff << " on cellID " << cellID<< endl;
-    }
-  }
-  return allSuccess(success);
-
-}
-
-// tests Riesz inversion by integration by parts
-bool LinearTermTests::testRieszInversion() {
+bool LinearTermTests::testMixedTermConsistency()
+{
   bool success = true;
 
   ////////////////////   DECLARE VARIABLES   ///////////////////////
@@ -867,7 +813,8 @@ bool LinearTermTests::testRieszInversion() {
 
   ////////////////////   BUILD MESH   ///////////////////////
   // define nodes for mesh
-  int H1Order = 1; int pToAdd = 1;
+  int H1Order = 1;
+  int pToAdd = 1;
 
   FieldContainer<double> quadPoints(4,2);
 
@@ -884,7 +831,128 @@ bool LinearTermTests::testRieszInversion() {
   int horizontalCells = nCells, verticalCells = nCells;
   // create a pointer to a new mesh:
   Teuchos::RCP<Mesh> myMesh = MeshFactory::buildQuadMesh(quadPoints, horizontalCells, verticalCells,
-						  confusionBF, H1Order, H1Order+pToAdd);
+                              confusionBF, H1Order, H1Order+pToAdd);
+
+  ElementTypePtr elemType = myMesh->getElement(0)->elementType();
+  //  DofOrderingPtr testOrder = elemType->testOrderPtr;
+  BasisCachePtr basisCache = Teuchos::rcp(new BasisCache(elemType, myMesh, true));
+
+
+  LinearTermPtr integrandIBP = Teuchos::rcp(new LinearTerm);// residual
+
+  vector<double> e1(2); // (1,0)
+  vector<double> e2(2); // (0,1)
+  e1[0] = 1;
+  e2[1] = 1;
+  FunctionPtr n = Function::normal();
+  FunctionPtr X = Function::xn(1);
+  FunctionPtr Y = Function::yn(1);
+  FunctionPtr testFxn1 = X;
+  FunctionPtr testFxn2 = Y;
+  FunctionPtr divTestFxn = testFxn1->dx() + testFxn2->dy();
+  FunctionPtr vectorTest = testFxn1*e1 + testFxn2*e2;
+
+  integrandIBP->addTerm(vectorTest*n*v + -vectorTest*v->grad()); // boundary term
+
+  // define dummy IP to initialize riesz rep class, but just integrate RHS
+  IPPtr dummyIP = Teuchos::rcp(new IP);
+  dummyIP->addTerm(v);
+  Teuchos::RCP<RieszRep> riesz = Teuchos::rcp(new RieszRep(myMesh, dummyIP, integrandIBP));
+  map<GlobalIndexType,FieldContainer<double> > rieszRHS = riesz->integrateFunctional();
+
+  set<GlobalIndexType> cellIDs = myMesh->cellIDsInPartition();
+  for (set<GlobalIndexType>::iterator cellIDIt=cellIDs.begin(); cellIDIt !=cellIDs.end(); cellIDIt++)
+  {
+    GlobalIndexType cellID = *cellIDIt;
+
+    ElementTypePtr elemTypePtr = myMesh->getElementType(cellID);
+    DofOrderingPtr testOrderingPtr = elemTypePtr->testOrderPtr;
+    int numTestDofs = testOrderingPtr->totalDofs();
+
+    BasisCachePtr basisCache = BasisCache::basisCacheForCell(myMesh, cellID, true);
+
+    FieldContainer<double> rhsIBPValues(1,numTestDofs);
+    integrandIBP->integrate(rhsIBPValues, testOrderingPtr, basisCache);
+    FieldContainer<double> rieszValues(1,numTestDofs);
+    (riesz->getFunctional())->integrate(rieszValues, testOrderingPtr, basisCache);
+    double maxDiff;
+    double tol = 1e-13;
+    FieldContainer<double> rhsIBPVals(numTestDofs);
+    for (int i = 0; i< numTestDofs; i++)
+    {
+      rhsIBPVals(i) = rhsIBPValues(0,i);
+      //      cout << "riesz rhs values = " << rieszRHS[cellID](i) << ", rhsIBPValues = " << rhsIBPVals(i) << ", riesz returned values = " << rieszValues(0,i) << endl;
+    }
+    bool fcsAgree = TestSuite::fcsAgree(rieszRHS[cellID],rhsIBPVals,tol,maxDiff);
+    if (!fcsAgree)
+    {
+      success=false;
+      cout << "Failed mixed term consistency test with maxDiff = " << maxDiff << " on cellID " << cellID<< endl;
+    }
+  }
+  return allSuccess(success);
+
+}
+
+// tests Riesz inversion by integration by parts
+bool LinearTermTests::testRieszInversion()
+{
+  bool success = true;
+
+  ////////////////////   DECLARE VARIABLES   ///////////////////////
+  // define test variables
+  VarFactoryPtr varFactory = VarFactory::varFactory();
+  VarPtr tau = varFactory->testVar("\\tau", HDIV);
+  VarPtr v = varFactory->testVar("v", HGRAD);
+
+  // define trial variables
+  VarPtr uhat = varFactory->traceVar("\\widehat{u}");
+  VarPtr beta_n_u_minus_sigma_n = varFactory->fluxVar("\\widehat{\\beta \\cdot n u - \\sigma_{n}}");
+  VarPtr u = varFactory->fieldVar("u");
+  VarPtr sigma1 = varFactory->fieldVar("\\sigma_1");
+  VarPtr sigma2 = varFactory->fieldVar("\\sigma_2");
+
+  vector<double> beta;
+  beta.push_back(1.0);
+  beta.push_back(0.0);
+  double eps = .01;
+
+  ////////////////////   DEFINE BILINEAR FORM   ///////////////////////
+
+  BFPtr confusionBF = Teuchos::rcp( new BF(varFactory) );
+  // tau terms:
+  confusionBF->addTerm(sigma1 / eps, tau->x());
+  confusionBF->addTerm(sigma2 / eps, tau->y());
+  confusionBF->addTerm(u, tau->div());
+  confusionBF->addTerm(uhat, -tau->dot_normal());
+
+  // v terms:
+  confusionBF->addTerm( sigma1, v->dx() );
+  confusionBF->addTerm( sigma2, v->dy() );
+  confusionBF->addTerm( -u, beta * v->grad() );
+  confusionBF->addTerm( beta_n_u_minus_sigma_n, v);
+
+  ////////////////////   BUILD MESH   ///////////////////////
+  // define nodes for mesh
+  int H1Order = 1;
+  int pToAdd = 1;
+
+  FieldContainer<double> quadPoints(4,2);
+
+  quadPoints(0,0) = 0.0; // x1
+  quadPoints(0,1) = 0.0; // y1
+  quadPoints(1,0) = 1.0;
+  quadPoints(1,1) = 0.0;
+  quadPoints(2,0) = 1.0;
+  quadPoints(2,1) = 1.0;
+  quadPoints(3,0) = 0.0;
+  quadPoints(3,1) = 1.0;
+
+  int nCells = 1;
+  int horizontalCells = nCells, verticalCells = nCells;
+  // create a pointer to a new mesh:
+  Teuchos::RCP<Mesh> myMesh = MeshFactory::buildQuadMesh(quadPoints, horizontalCells, verticalCells,
+                              confusionBF, H1Order, H1Order+pToAdd);
 
   ElementTypePtr elemType = myMesh->getElement(0)->elementType();
   BasisCachePtr basisCache = Teuchos::rcp(new BasisCache(elemType, myMesh));
@@ -892,7 +960,8 @@ bool LinearTermTests::testRieszInversion() {
   vector<GlobalIndexType> cellIDs;
   vector<ElementPtr> elems = myMesh->activeElements();
   vector<ElementPtr>::iterator elemIt;
-  for (elemIt=elems.begin();elemIt!=elems.end();elemIt++){
+  for (elemIt=elems.begin(); elemIt!=elems.end(); elemIt++)
+  {
     int cellID = (*elemIt)->cellID();
     cellIDs.push_back(cellID);
   }
@@ -944,13 +1013,15 @@ bool LinearTermTests::testRieszInversion() {
   double tol = 1e-14;
   success = TestSuite::fcsAgree(valOriginal,valIBP,tol,maxDiff);
 
-  if (success==false){
+  if (success==false)
+  {
     cout << "Failed TestRieszInversion with maxDiff = " << maxDiff << endl;
   }
   return success;
 }
 
-bool LinearTermTests::testIntegrateMixedBasis() {
+bool LinearTermTests::testIntegrateMixedBasis()
+{
   bool success = true;
 
   ////////////////////   DECLARE VARIABLES   ///////////////////////
@@ -988,7 +1059,8 @@ bool LinearTermTests::testIntegrateMixedBasis() {
   vector<GlobalIndexType> cellIDs;
   vector< ElementPtr > allElems = mesh->activeElements();
   vector< ElementPtr >::iterator elemIt;
-  for (elemIt=allElems.begin();elemIt!=allElems.end();elemIt++){
+  for (elemIt=allElems.begin(); elemIt!=allElems.end(); elemIt++)
+  {
     cellIDs.push_back((*elemIt)->cellID());
   }
   bool createSideCacheToo = true;
@@ -1004,13 +1076,16 @@ bool LinearTermTests::testIntegrateMixedBasis() {
   int dofForField = trialOrdering->getDofIndex(u->ID(), 0);
   vector<int> dofsForFlux;
   const vector<int>* sidesForFlux = &trialOrdering->getSidesForVarID(beta_n_u_hat->ID());
-  for (vector<int>::const_iterator sideIt = sidesForFlux->begin(); sideIt != sidesForFlux->end(); sideIt++) {
+  for (vector<int>::const_iterator sideIt = sidesForFlux->begin(); sideIt != sidesForFlux->end(); sideIt++)
+  {
     int sideIndex = *sideIt;
     dofsForFlux.push_back(trialOrdering->getDofIndex(beta_n_u_hat->ID(), 0, sideIndex));
   }
-  for (int cellIndex = 0; cellIndex < numCells; cellIndex++) {
+  for (int cellIndex = 0; cellIndex < numCells; cellIndex++)
+  {
     expectedIntegrals(cellIndex, dofForField) = areaPerCell;
-    for (vector<int>::iterator dofIt = dofsForFlux.begin(); dofIt != dofsForFlux.end(); dofIt++) {
+    for (vector<int>::iterator dofIt = dofsForFlux.begin(); dofIt != dofsForFlux.end(); dofIt++)
+    {
       int fluxDofIndex = *dofIt;
       expectedIntegrals(cellIndex, fluxDofIndex) = sidelengthOfCell;
     }
@@ -1030,21 +1105,25 @@ bool LinearTermTests::testIntegrateMixedBasis() {
   double tol = 1e-12;
   double maxDiff;
   success = TestSuite::fcsAgree(integrals,expectedIntegrals,tol,maxDiff);
-  if (success==false){
+  if (success==false)
+  {
     cout << "Failed testIntegrateMixedBasis with maxDiff = " << maxDiff << endl;
   }
 
   return success;
 }
 
-bool LinearTermTests::testLinearTermEvaluation(){
+bool LinearTermTests::testLinearTermEvaluation()
+{
   bool success = true;
   double eps = .1;
 
   FunctionPtr one = Function::constant(1.0);
   vector<double> e1,e2;
-  e1.push_back(1.0);e1.push_back(0.0);
-  e2.push_back(0.0);e2.push_back(1.0);
+  e1.push_back(1.0);
+  e1.push_back(0.0);
+  e2.push_back(0.0);
+  e2.push_back(1.0);
 
   // define test variables
   VarFactoryPtr varFactory = VarFactory::varFactory();
@@ -1064,13 +1143,16 @@ bool LinearTermTests::testLinearTermEvaluation(){
   errRepMap[tau->ID()] = one*e1+one*e2; // vector valued fxn (1,1)
   FunctionPtr errTau = tauVecLT->evaluate(errRepMap,false);
   FunctionPtr errV = vVecLT->evaluate(errRepMap,false);
-  try {
+  try
+  {
     bool xTauZero = errTau->x()->isZero();
     bool yTauZero = errTau->y()->isZero();
     bool xVZero = errV->dx()->isZero();
     bool yVZero = errV->dy()->isZero();
 
-  } catch (...) {
+  }
+  catch (...)
+  {
     cout << "testLinearTermEvaluation: Caught exception.\n";
     success = false;
   }
@@ -1085,20 +1167,25 @@ bool LinearTermTests::testLinearTermEvaluation(){
 
 }
 
-std::string LinearTermTests::testSuiteName() {
+std::string LinearTermTests::testSuiteName()
+{
   return "LinearTermTests";
 }
 
-void LinearTermTests::transposeFieldContainer(FieldContainer<double> &fc) {
+void LinearTermTests::transposeFieldContainer(FieldContainer<double> &fc)
+{
   // this is NOT meant for production code.  Could do the transpose in place if we were concerned with efficiency.
   FieldContainer<double> fcCopy = fc;
   int numCells = fc.dimension(0);
   int dim1 = fc.dimension(1);
   int dim2 = fc.dimension(2);
   fc.resize(numCells,dim2,dim1);
-  for (int i=0; i<numCells; i++) {
-    for (int j=0; j<dim1; j++) {
-      for (int k=0; k<dim2; k++) {
+  for (int i=0; i<numCells; i++)
+  {
+    for (int j=0; j<dim1; j++)
+    {
+      for (int k=0; k<dim2; k++)
+      {
         fc(i,k,j) = fcCopy(i,j,k);
       }
     }

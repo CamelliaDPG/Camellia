@@ -9,53 +9,61 @@
 #include "SerialDenseMatrixUtilityTests.h"
 #include "SerialDenseWrapper.h"
 
-void SerialDenseMatrixUtilityTests::setup() {
-  
+void SerialDenseMatrixUtilityTests::setup()
+{
+
 }
 
-void SerialDenseMatrixUtilityTests::teardown() {
-  
+void SerialDenseMatrixUtilityTests::teardown()
+{
+
 }
 
-void SerialDenseMatrixUtilityTests::runTests(int &numTestsRun, int &numTestsPassed) {
+void SerialDenseMatrixUtilityTests::runTests(int &numTestsRun, int &numTestsPassed)
+{
   setup();
-  if (testMultiplyMatrices()) {
+  if (testMultiplyMatrices())
+  {
     numTestsPassed++;
   }
   numTestsRun++;
   teardown();
 
   setup();
-  if (testSimpleSolve()) {
+  if (testSimpleSolve())
+  {
     numTestsPassed++;
   }
   numTestsRun++;
   teardown();
 
   setup();
-  if (testSolveMultipleRHS()) {
+  if (testSolveMultipleRHS())
+  {
     numTestsPassed++;
   }
   numTestsRun++;
   teardown();
 
   setup();
-  if (testAddMatrices()) {
+  if (testAddMatrices())
+  {
     numTestsPassed++;
   }
   numTestsRun++;
   teardown();
 }
 
-bool SerialDenseMatrixUtilityTests::testAddMatrices() {
+bool SerialDenseMatrixUtilityTests::testAddMatrices()
+{
   bool success = true;
-  
+
   double tol = 1e-16;
   FieldContainer<double> a(2,3);
   FieldContainer<double> b(2,3);
-  FieldContainer<double> x(2,3); 
+  FieldContainer<double> x(2,3);
   FieldContainer<double> expected_x(2,3);
-  
+
   // A = [ 1 1 ]
   //     [ 0 1 ]
   // x = [ 3 ]
@@ -86,26 +94,28 @@ bool SerialDenseMatrixUtilityTests::testAddMatrices() {
   SerialDenseWrapper::add(x, a, b);
 
   double maxDiff = 0;
-  if (! fcsAgree(x, expected_x, tol, maxDiff)) {
+  if (! fcsAgree(x, expected_x, tol, maxDiff))
+  {
     cout << "testSolveMultipleRHS() failed: maxDiff " << maxDiff << " exceeds tol " << tol << endl;
     cout << "x: " << endl << x;
     cout << "expected_x: " << endl << expected_x;
     success = false;
     return success;
   }
-  
+
   return success;
 }
-bool SerialDenseMatrixUtilityTests::testMultiplyMatrices() {
+bool SerialDenseMatrixUtilityTests::testMultiplyMatrices()
+{
   bool success = true;
-  
+
   double tol = 1e-16;
   FieldContainer<double> A(2,2);
   FieldContainer<double> b(2,3);
-  FieldContainer<double> x(2,3); 
+  FieldContainer<double> x(2,3);
   FieldContainer<double> expected_x(2,3);
 
-  
+
   // A = [ 1 1 ]
   //     [ 0 1 ]
   // x = [ 3 ]
@@ -133,7 +143,8 @@ bool SerialDenseMatrixUtilityTests::testMultiplyMatrices() {
   SerialDenseWrapper::multiplyAndAdd(x, A, b, 'N', 'N', 1.0, 0.0);
 
   double maxDiff = 0;
-  if (! fcsAgree(x, expected_x, tol, maxDiff)) {
+  if (! fcsAgree(x, expected_x, tol, maxDiff))
+  {
     cout << "testSolveMultipleRHS() failed: maxDiff " << maxDiff << " exceeds tol " << tol << endl;
     cout << "x: " << endl << x;
     cout << "expected_x: " << endl << expected_x;
@@ -153,27 +164,29 @@ bool SerialDenseMatrixUtilityTests::testMultiplyMatrices() {
   SerialDenseWrapper::multiply(xT, b, A, 'T','T');
 
   maxDiff = 0;
-  if (! fcsAgree(xT, expected_xT, tol, maxDiff)) {
+  if (! fcsAgree(xT, expected_xT, tol, maxDiff))
+  {
     cout << "testSolveMultipleRHS() failed on getting transpose: maxDiff " << maxDiff << " exceeds tol " << tol << endl;
     cout << "xT: " << endl << xT;
     cout << "expected_xT: " << endl << expected_xT;
     success = false;
-    return success;    
+    return success;
   }
-  
+
   return success;
 }
 
-bool SerialDenseMatrixUtilityTests::testSimpleSolve() {
+bool SerialDenseMatrixUtilityTests::testSimpleSolve()
+{
   bool success = true;
-  
+
   double tol = 1e-16;
   FieldContainer<double> A(2,2);
   FieldContainer<double> b(2);
   FieldContainer<double> x(2);
-  
+
   FieldContainer<double> expected_x(2);
-  
+
   // A = [ 1 1 ]
   //     [ 0 1 ]
   // x = [ 3 ]
@@ -188,35 +201,37 @@ bool SerialDenseMatrixUtilityTests::testSimpleSolve() {
   expected_x(1) = 4.0;
   b(0) = 7.0;
   b(1) = 4.0;
-  
+
   SerialDenseWrapper::solveSystem(x, A, b);
-  
+
   double maxDiff = 0;
-  if (! fcsAgree(x, expected_x, tol, maxDiff)) {
+  if (! fcsAgree(x, expected_x, tol, maxDiff))
+  {
     cout << "testSimpleSolve() failed: maxDiff " << maxDiff << " exceeds tol " << tol << endl;
     cout << "x: " << endl << x;
     cout << "expected_x: " << endl << expected_x;
     success = false;
-    return success;    
+    return success;
   }
-  
+
   return success;
 }
 
-bool SerialDenseMatrixUtilityTests::testSolveMultipleRHS() {
+bool SerialDenseMatrixUtilityTests::testSolveMultipleRHS()
+{
   bool success = true;
-  
+
   double tol = 1e-16;
   FieldContainer<double> A(2,2);
   FieldContainer<double> b(2,3);
-  FieldContainer<double> x(2,3); 
+  FieldContainer<double> x(2,3);
   FieldContainer<double> expected_x(2,3);
   /*
   FieldContainer<double> b(2,1);
-  FieldContainer<double> x(2,1); 
+  FieldContainer<double> x(2,1);
   FieldContainer<double> expected_x(2,1);
   */
-  
+
   // A = [ 1 1 ]
   //     [ 0 1 ]
   // x = [ 3 1 5 ]
@@ -242,19 +257,21 @@ bool SerialDenseMatrixUtilityTests::testSolveMultipleRHS() {
   b(1,2) = 6.0;
 
   SerialDenseWrapper::solveSystemMultipleRHS(x, A, b);
-  
+
   double maxDiff = 0;
-  if (! fcsAgree(x, expected_x, tol, maxDiff)) {
+  if (! fcsAgree(x, expected_x, tol, maxDiff))
+  {
     cout << "testSolveMultipleRHS() failed: maxDiff " << maxDiff << " exceeds tol " << tol << endl;
     cout << "x: " << endl << x;
     cout << "expected_x: " << endl << expected_x;
     success = false;
-    return success;    
+    return success;
   }
-  
+
   return success;
 }
 
-std::string SerialDenseMatrixUtilityTests::testSuiteName() {
+std::string SerialDenseMatrixUtilityTests::testSuiteName()
+{
   return "SerialDenseMatrixUtilityTests";
 }

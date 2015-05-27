@@ -37,10 +37,12 @@ const string PressurelessStokesFormulation::S_TAU22 = "\\tau_{22}";
 const string PressurelessStokesFormulation::S_TAU23 = "\\tau_{23}";
 const string PressurelessStokesFormulation::S_TAU33 = "\\tau_{33}";
 
-PressurelessStokesFormulation::PressurelessStokesFormulation(int spaceDim) {
+PressurelessStokesFormulation::PressurelessStokesFormulation(int spaceDim)
+{
   _spaceDim = spaceDim;
 
-  if ((spaceDim != 2) && (spaceDim != 3)) {
+  if ((spaceDim != 2) && (spaceDim != 3))
+  {
     TEUCHOS_TEST_FOR_EXCEPTION(true, std::invalid_argument, "spaceDim must be 2 or 3");
   }
 
@@ -69,7 +71,8 @@ PressurelessStokesFormulation::PressurelessStokesFormulation(int spaceDim) {
   sigma11 = vf->fieldVar(S_SIGMA11);
   sigma12 = vf->fieldVar(S_SIGMA12);
   sigma22 = vf->fieldVar(S_SIGMA22);
-  if (spaceDim==3) {
+  if (spaceDim==3)
+  {
     sigma13 = vf->fieldVar(S_SIGMA13);
     sigma23 = vf->fieldVar(S_SIGMA23);
     sigma33 = vf->fieldVar(S_SIGMA33);
@@ -81,10 +84,13 @@ PressurelessStokesFormulation::PressurelessStokesFormulation(int spaceDim) {
 
   TFunctionPtr<double> n = TFunction<double>::normal();
   LinearTermPtr sigma1n, sigma2n, sigma3n;
-  if (spaceDim==2) {
+  if (spaceDim==2)
+  {
     sigma1n = sigma11 * n->x() + sigma12 * n->y();
     sigma2n = sigma12 * n->x() + sigma22 * n->y();
-  } else {
+  }
+  else
+  {
     sigma1n = sigma11 * n->x() + sigma12 * n->y() + sigma13 * n->z();
     sigma2n = sigma12 * n->x() + sigma22 * n->y() + sigma23 * n->z();
     sigma3n = sigma13 * n->x() + sigma23 * n->y() + sigma33 * n->z();
@@ -100,7 +106,8 @@ PressurelessStokesFormulation::PressurelessStokesFormulation(int spaceDim) {
   tau11 = vf->testVar(S_TAU11, HGRAD);
   tau12 = vf->testVar(S_TAU12, HGRAD);
   tau22 = vf->testVar(S_TAU22, HGRAD);
-  if (spaceDim==3) {
+  if (spaceDim==3)
+  {
     tau13 = vf->testVar(S_TAU13, HGRAD);
     tau23 = vf->testVar(S_TAU23, HGRAD);
     tau33 = vf->testVar(S_TAU33, HGRAD);
@@ -110,7 +117,8 @@ PressurelessStokesFormulation::PressurelessStokesFormulation(int spaceDim) {
   // v1
   _stokesBF->addTerm(-sigma11, v1->dx());
   _stokesBF->addTerm(-sigma12, v1->dy());
-  if (spaceDim==3) {
+  if (spaceDim==3)
+  {
     _stokesBF->addTerm(-sigma13, v1->dz());
   }
   _stokesBF->addTerm(t1n, v1);
@@ -118,13 +126,15 @@ PressurelessStokesFormulation::PressurelessStokesFormulation(int spaceDim) {
   // v2
   _stokesBF->addTerm(-sigma12, v2->dx());
   _stokesBF->addTerm(-sigma22, v2->dy());
-  if (spaceDim==3) {
+  if (spaceDim==3)
+  {
     _stokesBF->addTerm(-sigma23, v2->dz());
   }
   _stokesBF->addTerm(t2n, v2);
 
   // v3
-  if (spaceDim==3) {
+  if (spaceDim==3)
+  {
     _stokesBF->addTerm(-sigma13, v3->dx());
     _stokesBF->addTerm(-sigma23, v3->dy());
     _stokesBF->addTerm(-sigma33, v3->dz());
@@ -132,21 +142,27 @@ PressurelessStokesFormulation::PressurelessStokesFormulation(int spaceDim) {
   }
 
   LinearTermPtr p; // pressure term, the negative weighted trace of tensor sigma
-  if (spaceDim==2) {
+  if (spaceDim==2)
+  {
     p = -0.5 * sigma11 + -0.5 * sigma22;
-  } else {
+  }
+  else
+  {
     p = -(1.0/3.0) * sigma11 + -(1.0/3.0) * sigma22 + -(1.0/3.0) * sigma33;
   }
 
   LinearTermPtr tau1n, tau2n, tau3n;
   LinearTermPtr div_tau1, div_tau2, div_tau3;
-  if (spaceDim==2) {
+  if (spaceDim==2)
+  {
     tau1n = tau11 * n->x() + tau12 * n->y();
     tau2n = tau12 * n->x() + tau22 * n->y();
 
     div_tau1 = tau11->dx() + tau12->dy();
     div_tau2 = tau12->dx() + tau22->dy();
-  } else {
+  }
+  else
+  {
     tau1n = tau11 * n->x() + tau12 * n->y() + tau13 * n->z();
     tau2n = tau12 * n->x() + tau22 * n->y() + tau23 * n->z();
     tau3n = tau13 * n->x() + tau23 * n->y() + tau33 * n->z();
@@ -173,7 +189,8 @@ PressurelessStokesFormulation::PressurelessStokesFormulation(int spaceDim) {
   _stokesBF->addTerm(p, tau22);
 
   // tau3j
-  if (spaceDim==3) {
+  if (spaceDim==3)
+  {
     _stokesBF->addTerm(sigma13, tau13);
     _stokesBF->addTerm(sigma23, tau23);
     _stokesBF->addTerm(sigma33, tau33);
@@ -183,158 +200,189 @@ PressurelessStokesFormulation::PressurelessStokesFormulation(int spaceDim) {
   }
 }
 
-BFPtr PressurelessStokesFormulation::bf() {
+BFPtr PressurelessStokesFormulation::bf()
+{
   return _stokesBF;
 }
 
-LinearTermPtr PressurelessStokesFormulation::p() {
+LinearTermPtr PressurelessStokesFormulation::p()
+{
   VarPtr sigma11 = this->sigma(1, 1);
   VarPtr sigma22 = this->sigma(2, 2);
 
   LinearTermPtr p; // pressure term, the negative weighted trace of tensor sigma
-  if (_spaceDim==2) {
+  if (_spaceDim==2)
+  {
     p = -0.5 * sigma11 + -0.5 * sigma22;
-  } else {
+  }
+  else
+  {
     VarPtr sigma33 = this->sigma(3, 3);
     p = -(1.0/3.0) * sigma11 + -(1.0/3.0) * sigma22 + -(1.0/3.0) * sigma33;
   }
   return p;
 }
 
-VarPtr PressurelessStokesFormulation::sigma(int i, int j) {
-  if (i > j) { // swap them
+VarPtr PressurelessStokesFormulation::sigma(int i, int j)
+{
+  if (i > j)   // swap them
+  {
     int k = i;
     i = j;
     j = k;
   }
-  if (j > _spaceDim) {
+  if (j > _spaceDim)
+  {
     TEUCHOS_TEST_FOR_EXCEPTION(true, std::invalid_argument, "i and j must be less than or equal to _spaceDim");
   }
   VarFactoryPtr vf = _stokesBF->varFactory();
-  switch (i) {
+  switch (i)
+  {
+  case 1:
+    switch (j)
+    {
     case 1:
-      switch (j) {
-        case 1:
-          return vf->fieldVar(S_SIGMA11);
-        case 2:
-          return vf->fieldVar(S_SIGMA12);
-        case 3:
-          return vf->fieldVar(S_SIGMA13);
-      }
+      return vf->fieldVar(S_SIGMA11);
     case 2:
-      switch (j) {
-        case 2:
-          return vf->fieldVar(S_SIGMA22);
-        case 3:
-          return vf->fieldVar(S_SIGMA23);
-      }
+      return vf->fieldVar(S_SIGMA12);
     case 3:
-      switch (j) {
-        case 3:
-          return vf->fieldVar(S_SIGMA23);
-      }
+      return vf->fieldVar(S_SIGMA13);
+    }
+  case 2:
+    switch (j)
+    {
+    case 2:
+      return vf->fieldVar(S_SIGMA22);
+    case 3:
+      return vf->fieldVar(S_SIGMA23);
+    }
+  case 3:
+    switch (j)
+    {
+    case 3:
+      return vf->fieldVar(S_SIGMA23);
+    }
   }
   TEUCHOS_TEST_FOR_EXCEPTION(true, std::invalid_argument, "unhandled (i,j) pair");
 }
 
-VarPtr PressurelessStokesFormulation::u(int i) {
-  if (i > _spaceDim) {
+VarPtr PressurelessStokesFormulation::u(int i)
+{
+  if (i > _spaceDim)
+  {
     TEUCHOS_TEST_FOR_EXCEPTION(true, std::invalid_argument, "i must be less than or equal to _spaceDim");
   }
   VarFactoryPtr vf = _stokesBF->varFactory();
-  switch (i) {
-    case 1:
-      return vf->fieldVar(S_U1);
-    case 2:
-      return vf->fieldVar(S_U2);
-    case 3:
-      return vf->fieldVar(S_U3);
+  switch (i)
+  {
+  case 1:
+    return vf->fieldVar(S_U1);
+  case 2:
+    return vf->fieldVar(S_U2);
+  case 3:
+    return vf->fieldVar(S_U3);
   }
   TEUCHOS_TEST_FOR_EXCEPTION(true, std::invalid_argument, "unhandled i value");
 }
 
 // traces:
-VarPtr PressurelessStokesFormulation::tn_hat(int i) {
-  if (i > _spaceDim) {
+VarPtr PressurelessStokesFormulation::tn_hat(int i)
+{
+  if (i > _spaceDim)
+  {
     TEUCHOS_TEST_FOR_EXCEPTION(true, std::invalid_argument, "i must be less than or equal to _spaceDim");
   }
   VarFactoryPtr vf = _stokesBF->varFactory();
-  switch (i) {
-    case 1:
-      return vf->fluxVar(S_TN1_HAT);
-    case 2:
-      return vf->fluxVar(S_TN2_HAT);
-    case 3:
-      return vf->fluxVar(S_TN3_HAT);
+  switch (i)
+  {
+  case 1:
+    return vf->fluxVar(S_TN1_HAT);
+  case 2:
+    return vf->fluxVar(S_TN2_HAT);
+  case 3:
+    return vf->fluxVar(S_TN3_HAT);
   }
   TEUCHOS_TEST_FOR_EXCEPTION(true, std::invalid_argument, "unhandled i value");
 }
 
-VarPtr PressurelessStokesFormulation::u_hat(int i) {
-  if (i > _spaceDim) {
+VarPtr PressurelessStokesFormulation::u_hat(int i)
+{
+  if (i > _spaceDim)
+  {
     TEUCHOS_TEST_FOR_EXCEPTION(true, std::invalid_argument, "i must be less than or equal to _spaceDim");
   }
   VarFactoryPtr vf = _stokesBF->varFactory();
-  switch (i) {
-    case 1:
-      return vf->traceVar(S_U1_HAT);
-    case 2:
-      return vf->traceVar(S_U2_HAT);
-    case 3:
-      return vf->traceVar(S_U3_HAT);
+  switch (i)
+  {
+  case 1:
+    return vf->traceVar(S_U1_HAT);
+  case 2:
+    return vf->traceVar(S_U2_HAT);
+  case 3:
+    return vf->traceVar(S_U3_HAT);
   }
   TEUCHOS_TEST_FOR_EXCEPTION(true, std::invalid_argument, "unhandled i value");
 }
 
 // test variables:
-VarPtr PressurelessStokesFormulation::tau(int i, int j) {
-  if (i > j) { // swap them
+VarPtr PressurelessStokesFormulation::tau(int i, int j)
+{
+  if (i > j)   // swap them
+  {
     int k = i;
     i = j;
     j = k;
   }
-  if (j > _spaceDim) {
+  if (j > _spaceDim)
+  {
     TEUCHOS_TEST_FOR_EXCEPTION(true, std::invalid_argument, "i and j must be less than or equal to _spaceDim");
   }
   VarFactoryPtr vf = _stokesBF->varFactory();
-  switch (i) {
+  switch (i)
+  {
+  case 1:
+    switch (j)
+    {
     case 1:
-      switch (j) {
-        case 1:
-          return vf->testVar(S_TAU11, HGRAD);
-        case 2:
-          return vf->testVar(S_TAU12, HGRAD);
-        case 3:
-          return vf->testVar(S_TAU13, HGRAD);
-      }
+      return vf->testVar(S_TAU11, HGRAD);
     case 2:
-      switch (j) {
-        case 2:
-          return vf->testVar(S_TAU22, HGRAD);
-        case 3:
-          return vf->testVar(S_TAU23, HGRAD);
-      }
+      return vf->testVar(S_TAU12, HGRAD);
     case 3:
-      switch (j) {
-        case 3:
-          return vf->testVar(S_TAU23, HGRAD);
-      }
+      return vf->testVar(S_TAU13, HGRAD);
+    }
+  case 2:
+    switch (j)
+    {
+    case 2:
+      return vf->testVar(S_TAU22, HGRAD);
+    case 3:
+      return vf->testVar(S_TAU23, HGRAD);
+    }
+  case 3:
+    switch (j)
+    {
+    case 3:
+      return vf->testVar(S_TAU23, HGRAD);
+    }
   }
   TEUCHOS_TEST_FOR_EXCEPTION(true, std::invalid_argument, "unhandled (i,j) pair");
 }
 
-VarPtr PressurelessStokesFormulation::v(int i) {
-  if (i > _spaceDim) {
+VarPtr PressurelessStokesFormulation::v(int i)
+{
+  if (i > _spaceDim)
+  {
     TEUCHOS_TEST_FOR_EXCEPTION(true, std::invalid_argument, "i must be less than or equal to _spaceDim");
   }
   VarFactoryPtr vf = _stokesBF->varFactory();
-  switch (i) {
-    case 1:
-      return vf->testVar(S_V1, HGRAD);
-    case 2:
-      return vf->testVar(S_V2, HGRAD);
-    case 3:
-      return vf->testVar(S_V3, HGRAD);
+  switch (i)
+  {
+  case 1:
+    return vf->testVar(S_V1, HGRAD);
+  case 2:
+    return vf->testVar(S_V2, HGRAD);
+  case 3:
+    return vf->testVar(S_V3, HGRAD);
   }
   TEUCHOS_TEST_FOR_EXCEPTION(true, std::invalid_argument, "unhandled i value");
 }

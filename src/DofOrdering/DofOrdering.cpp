@@ -2,31 +2,31 @@
 //
 // Copyright © 2011 Sandia Corporation. All Rights Reserved.
 //
-// Redistribution and use in source and binary forms, with or without modification, are 
+// Redistribution and use in source and binary forms, with or without modification, are
 // permitted provided that the following conditions are met:
-// 1. Redistributions of source code must retain the above copyright notice, this list of 
+// 1. Redistributions of source code must retain the above copyright notice, this list of
 // conditions and the following disclaimer.
-// 2. Redistributions in binary form must reproduce the above copyright notice, this list of 
-// conditions and the following disclaimer in the documentation and/or other materials 
+// 2. Redistributions in binary form must reproduce the above copyright notice, this list of
+// conditions and the following disclaimer in the documentation and/or other materials
 // provided with the distribution.
-// 3. The name of the author may not be used to endorse or promote products derived from 
+// 3. The name of the author may not be used to endorse or promote products derived from
 // this software without specific prior written permission.
 //
-// THIS SOFTWARE IS PROVIDED BY SANDIA CORPORATION "AS IS" AND ANY 
-// EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE 
-// IMPLIED WARRANTIES OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR 
-// PURPOSE ARE DISCLAIMED. IN NO EVENT SHALL THE AUTHOR BE LIABLE FOR 
-// ANY DIRECT, INDIRECT, INCIDENTAL, SPECIAL, EXEMPLARY, OR 
-// CONSEQUENTIAL DAMAGES (INCLUDING, BUT NOT LIMITED TO, PROCUREMENT 
-// OF SUBSTITUTE GOODS OR SERVICES; LOSS OF USE, DATA, OR PROFITS; OR 
-// BUSINESS INTERRUPTION) HOWEVER CAUSED AND ON ANY THEORY OF 
-// LIABILITY, WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT (INCLUDING 
-// NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE OF THIS 
+// THIS SOFTWARE IS PROVIDED BY SANDIA CORPORATION "AS IS" AND ANY
+// EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE
+// IMPLIED WARRANTIES OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR
+// PURPOSE ARE DISCLAIMED. IN NO EVENT SHALL THE AUTHOR BE LIABLE FOR
+// ANY DIRECT, INDIRECT, INCIDENTAL, SPECIAL, EXEMPLARY, OR
+// CONSEQUENTIAL DAMAGES (INCLUDING, BUT NOT LIMITED TO, PROCUREMENT
+// OF SUBSTITUTE GOODS OR SERVICES; LOSS OF USE, DATA, OR PROFITS; OR
+// BUSINESS INTERRUPTION) HOWEVER CAUSED AND ON ANY THEORY OF
+// LIABILITY, WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT (INCLUDING
+// NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE OF THIS
 // SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 //
 // Questions? Contact Nate Roberts (nate@nateroberts.com).
 //
-// @HEADER 
+// @HEADER
 
 #include "DofOrdering.h"
 #include "MultiBasis.h"
@@ -36,34 +36,40 @@ using namespace std;
 using namespace Intrepid;
 using namespace Camellia;
 
-DofOrdering::DofOrdering(CellTopoPtr cellTopo) { // constructor
+DofOrdering::DofOrdering(CellTopoPtr cellTopo)   // constructor
+{
   _nextIndex = 0;
   _indexNeedsToBeRebuilt = false;
   _cellTopologyForSide[-1] = cellTopo; // side -1 means volume, in this context.
 }
 
-void DofOrdering::addEntry(int varID, BasisPtr basis, int basisRank, int sideIndex) {
+void DofOrdering::addEntry(int varID, BasisPtr basis, int basisRank, int sideIndex)
+{
   // test to see if we already have one matching this.  (If so, that's an error.)
   pair<int,int> key = make_pair(varID, sideIndex);
-  if ( indices.find(key) != indices.end() ) {
+  if ( indices.find(key) != indices.end() )
+  {
     TEUCHOS_TEST_FOR_EXCEPTION( true,
-                       std::invalid_argument,
-                       "Already have an entry in DofOrdering for this varID, sideIndex pair.");
-  } else {
+                                std::invalid_argument,
+                                "Already have an entry in DofOrdering for this varID, sideIndex pair.");
+  }
+  else
+  {
     indices[key] = vector<int>(basis->getCardinality());
   }
-  
+
   vector<int>* dofIndices = &(indices[key]);
-  
-  for (vector<int>::iterator dofEntryIt = dofIndices->begin(); dofEntryIt != dofIndices->end(); dofEntryIt++) {
+
+  for (vector<int>::iterator dofEntryIt = dofIndices->begin(); dofEntryIt != dofIndices->end(); dofEntryIt++)
+  {
     *dofEntryIt = _nextIndex;
     _nextIndex++;
   }
-  
+
   varIDs.insert(varID);
-  
+
   _sidesForVarID[varID].push_back(sideIndex);
-  
+
   numSidesForVarID[varID]++;
   //cout << "numSidesForVarID[" << varID << "]" << numSidesForVarID[varID] << endl;
   pair<int, int> basisKey = make_pair(varID,sideIndex);
@@ -73,56 +79,68 @@ void DofOrdering::addEntry(int varID, BasisPtr basis, int basisRank, int sideInd
 }
 
 void DofOrdering::addIdentification(int varID, int side1, int basisDofOrdinal1,
-                                    int side2, int basisDofOrdinal2) {
+                                    int side2, int basisDofOrdinal2)
+{
   _indexNeedsToBeRebuilt = true;
 //  cout << "addIdentification: " << varID << ", (" << side1 << "," << basisDofOrdinal1 << ")=(" << side2 << "," << basisDofOrdinal2 << ")" << endl;
   pair<int, int> sidePair1; // defined so that sidePair1.side < sidePair2.side
   pair<int, int> sidePair2;
-  if (side1 < side2) {
+  if (side1 < side2)
+  {
     sidePair1 = make_pair(side1,basisDofOrdinal1);
     sidePair2 = make_pair(side2,basisDofOrdinal2);
-  } else if (side2 < side1) {
+  }
+  else if (side2 < side1)
+  {
     sidePair1 = make_pair(side2,basisDofOrdinal2);
     sidePair2 = make_pair(side1,basisDofOrdinal1);
-  } else { // side2 == side1 -- probably an exception
+  }
+  else     // side2 == side1 -- probably an exception
+  {
     TEUCHOS_TEST_FOR_EXCEPTION( ( side1 == side2 ),
-                       std::invalid_argument,
-                       "addIdentification for side1==side2 not supported.");
+                                std::invalid_argument,
+                                "addIdentification for side1==side2 not supported.");
   }
   dofIdentifications[make_pair(varID,sidePair2)] = sidePair1;
 }
 
-CellTopoPtr DofOrdering::cellTopology(int sideIndex) {
+CellTopoPtr DofOrdering::cellTopology(int sideIndex)
+{
   return _cellTopologyForSide[sideIndex];
 }
 
 void DofOrdering::copyLikeCoefficients( FieldContainer<double> &newValues, Teuchos::RCP<DofOrdering> oldDofOrdering,
-                          const FieldContainer<double> &oldValues ) {
+                                        const FieldContainer<double> &oldValues )
+{
   // copy the coefficients for the bases that agree between the two DofOrderings
   // requires that "like" bases are actually pointers to the same memory location
   TEUCHOS_TEST_FOR_EXCEPTION( newValues.rank() != 1, std::invalid_argument, "newValues.rank() != 1");
   TEUCHOS_TEST_FOR_EXCEPTION( newValues.size() != totalDofs(), std::invalid_argument, "newValues.size() != totalDofs()");
   TEUCHOS_TEST_FOR_EXCEPTION( oldValues.rank() != 1, std::invalid_argument, "oldValues.rank() != 1");
   TEUCHOS_TEST_FOR_EXCEPTION( oldValues.size() != oldDofOrdering->totalDofs(), std::invalid_argument, "oldValues.size() != oldDofOrdering->totalDofs()");
-  
+
   newValues.initialize(0.0);
-  
-  for (set<int>::iterator varIDIt = varIDs.begin(); varIDIt != varIDs.end(); varIDIt++) {
+
+  for (set<int>::iterator varIDIt = varIDs.begin(); varIDIt != varIDs.end(); varIDIt++)
+  {
     int varID = *varIDIt;
     // skip any varIDs that one or the other dofOrdering does not have:
     if (! oldDofOrdering->hasEntryForVarID(varID)) continue;
     if (! this->hasEntryForVarID(varID)) continue;
-    
+
     const vector<int>* sides = &oldDofOrdering->getSidesForVarID(varID);
-    for (vector<int>::const_iterator sideIt = sides->begin(); sideIt != sides->end(); sideIt++) {
+    for (vector<int>::const_iterator sideIt = sides->begin(); sideIt != sides->end(); sideIt++)
+    {
       int sideOrdinal = *sideIt;
       if (!hasBasisEntry(varID, sideOrdinal)) continue;
       if (!oldDofOrdering->hasBasisEntry(varID, sideOrdinal)) continue;
       BasisPtr basis = getBasis(varID,sideOrdinal);
-      if (basis.get() == oldDofOrdering->getBasis(varID,sideOrdinal).get() ) {
+      if (basis.get() == oldDofOrdering->getBasis(varID,sideOrdinal).get() )
+      {
         // bases alike: copy coefficients
         int cardinality = basis->getCardinality();
-        for (int dofOrdinal=0; dofOrdinal < cardinality; dofOrdinal++) {
+        for (int dofOrdinal=0; dofOrdinal < cardinality; dofOrdinal++)
+        {
           int dofIndex = getDofIndex(varID,dofOrdinal,sideOrdinal);
           newValues(dofIndex) = oldValues( oldDofOrdering->getDofIndex(varID,dofOrdinal,sideOrdinal) );
         }
@@ -131,10 +149,12 @@ void DofOrdering::copyLikeCoefficients( FieldContainer<double> &newValues, Teuch
   }
 }
 
-BasisPtr DofOrdering::getBasis(int varID, int sideIndex) {
+BasisPtr DofOrdering::getBasis(int varID, int sideIndex)
+{
   pair<int,int> key = make_pair(varID,sideIndex);
   map< pair<int,int>, BasisPtr >::iterator entry = bases.find(key);
-  if (entry == bases.end()) {
+  if (entry == bases.end())
+  {
     //cout << *this;
     cout << "basis not found.\n";
     TEUCHOS_TEST_FOR_EXCEPTION(true, std::invalid_argument, "basis not found.");
@@ -142,14 +162,17 @@ BasisPtr DofOrdering::getBasis(int varID, int sideIndex) {
   return (*entry).second;
 }
 
-int DofOrdering::getDofIndex(int varID, int basisDofOrdinal, int sideIndex, int subSideIndex) { 
+int DofOrdering::getDofIndex(int varID, int basisDofOrdinal, int sideIndex, int subSideIndex)
+{
   TEUCHOS_TEST_FOR_EXCEPTION( ( _indexNeedsToBeRebuilt ),
-                     std::invalid_argument,
-                     "getDofIndex called when _indexNeedsToBeRebuilt = true.  Call rebuildIndex() first.");
-  if (subSideIndex >= 0) {
+                              std::invalid_argument,
+                              "getDofIndex called when _indexNeedsToBeRebuilt = true.  Call rebuildIndex() first.");
+  if (subSideIndex >= 0)
+  {
     // then we've got a MultiBasis, and the basisDofOrdinal we have is *relative* to the subbasis
     BasisPtr basis = getBasis(varID,sideIndex);
-    if ( ! BasisFactory::basisFactory()->isMultiBasis(basis) ) {
+    if ( ! BasisFactory::basisFactory()->isMultiBasis(basis) )
+    {
       TEUCHOS_TEST_FOR_EXCEPTION(true, std::invalid_argument, "subSideIndex >= 0 for non-MultiBasis...");
     }
     MultiBasis<>* multiBasis = (MultiBasis<>*) basis.get();
@@ -157,55 +180,67 @@ int DofOrdering::getDofIndex(int varID, int basisDofOrdinal, int sideIndex, int 
     basisDofOrdinal = multiBasis->relativeToAbsoluteDofOrdinal(basisDofOrdinal,subSideIndex);
     //cout << basisDofOrdinal << endl;
   }
-  
+
   pair<int,int> key = make_pair(varID, sideIndex);
   map< pair<int,int>, vector<int> >::iterator entryIt = indices.find(key);
-  if ( entryIt != indices.end() ) {
+  if ( entryIt != indices.end() )
+  {
     int dofIndex = ((*entryIt).second)[basisDofOrdinal];
-    if ((dofIndex < 0) || (dofIndex >= _nextIndex)) {
+    if ((dofIndex < 0) || (dofIndex >= _nextIndex))
+    {
       cout << "dofIndex out of bounds.\n";
       TEUCHOS_TEST_FOR_EXCEPTION( (dofIndex < 0) || (dofIndex >= _nextIndex), std::invalid_argument, "dofIndex out of bounds.");
     }
     return dofIndex;
-  } else {
+  }
+  else
+  {
     cout << "No entry found for dofIndex\n";
     TEUCHOS_TEST_FOR_EXCEPTION(true, std::invalid_argument, "No entry found for DofIndex.");
     return -1;
   }
 }
 
-const vector<int> & DofOrdering::getDofIndices(int varID, int sideIndex) {
+const vector<int> & DofOrdering::getDofIndices(int varID, int sideIndex)
+{
   TEUCHOS_TEST_FOR_EXCEPTION( ( _indexNeedsToBeRebuilt ),
-                     std::invalid_argument,
-                     "getDofIndices called when _indexNeedsToBeRebuilt = true.  Call rebuildIndex() first.");
-  
+                              std::invalid_argument,
+                              "getDofIndices called when _indexNeedsToBeRebuilt = true.  Call rebuildIndex() first.");
+
   pair<int,int> key = make_pair(varID, sideIndex);
   map< pair<int,int>, vector<int> >::iterator entryIt = indices.find(key);
-  if ( entryIt == indices.end() ) {
+  if ( entryIt == indices.end() )
+  {
     TEUCHOS_TEST_FOR_EXCEPTION(true, std::invalid_argument, "No entry found for DofIndex.");
   }
   return (*entryIt).second;
 }
 
-int DofOrdering::getBasisCardinality(int varID, int sideIndex) {
+int DofOrdering::getBasisCardinality(int varID, int sideIndex)
+{
   BasisPtr basis = getBasis(varID,sideIndex);
   return basis->getCardinality();
 }
 
-int DofOrdering::getNumSidesForVarID(int varID) {
+int DofOrdering::getNumSidesForVarID(int varID)
+{
   return numSidesForVarID[varID];
 }
 
-const vector<int> & DofOrdering::getSidesForVarID(int varID) const {
+const vector<int> & DofOrdering::getSidesForVarID(int varID) const
+{
   return _sidesForVarID.find(varID)->second;
 }
 
-int DofOrdering::getTotalBasisCardinality() { // total number of *distinct* basis functions
+int DofOrdering::getTotalBasisCardinality()   // total number of *distinct* basis functions
+{
   int totalBasisCardinality = 0;
   set< ::Camellia::Basis<>* > basesCounted;
-  for (map< pair<int, int>, BasisPtr >::iterator basisIt = bases.begin(); basisIt != bases.end(); basisIt++) {
+  for (map< pair<int, int>, BasisPtr >::iterator basisIt = bases.begin(); basisIt != bases.end(); basisIt++)
+  {
     BasisPtr basis = basisIt->second;
-    if (basesCounted.find(basis.get())==basesCounted.end()) {
+    if (basesCounted.find(basis.get())==basesCounted.end())
+    {
       basesCounted.insert(basis.get());
       totalBasisCardinality += basis->getCardinality();
     }
@@ -213,13 +248,17 @@ int DofOrdering::getTotalBasisCardinality() { // total number of *distinct* basi
   return totalBasisCardinality;
 }
 
-set<int> DofOrdering::getTraceDofIndices() {
+set<int> DofOrdering::getTraceDofIndices()
+{
   // returns dof indices corresponding to variables with numSides > 1.
   set<int> traceDofIndices;
-  for (set<int>::iterator varIDIt = varIDs.begin(); varIDIt != varIDs.end(); varIDIt++) {
+  for (set<int>::iterator varIDIt = varIDs.begin(); varIDIt != varIDs.end(); varIDIt++)
+  {
     int varID = *varIDIt;
-    if (numSidesForVarID[varID] > 1) {
-      for (int sideOrdinal=0; sideOrdinal<numSidesForVarID[varID]; sideOrdinal++) {
+    if (numSidesForVarID[varID] > 1)
+    {
+      for (int sideOrdinal=0; sideOrdinal<numSidesForVarID[varID]; sideOrdinal++)
+      {
         const vector<int> * indices = &getDofIndices(varID, sideOrdinal);
         traceDofIndices.insert(indices->begin(),indices->end());
       }
@@ -228,57 +267,70 @@ set<int> DofOrdering::getTraceDofIndices() {
   return traceDofIndices;
 }
 
-const set<int> & DofOrdering::getVarIDs() {
+const set<int> & DofOrdering::getVarIDs()
+{
   return varIDs;
 }
 
-bool DofOrdering::hasBasisEntry(int varID, int sideIndex) {
+bool DofOrdering::hasBasisEntry(int varID, int sideIndex)
+{
   pair<int,int> key = make_pair(varID,sideIndex);
   map< pair<int,int>, BasisPtr >::iterator entry = bases.find(key);
   return entry != bases.end();
 }
 
-bool DofOrdering::hasEntryForVarID(int varID) {
+bool DofOrdering::hasEntryForVarID(int varID)
+{
   return varIDs.find(varID) != varIDs.end();
 }
 
-bool DofOrdering::hasSideVarIDs() {
+bool DofOrdering::hasSideVarIDs()
+{
   // returns true if there are any varIDs defined on more than one side
-  for (set<int>::iterator varIt = varIDs.begin(); varIt != varIDs.end(); varIt++) {
+  for (set<int>::iterator varIt = varIDs.begin(); varIt != varIDs.end(); varIt++)
+  {
     int varID = *varIt;
-    if (numSidesForVarID[varID] > 1) {
+    if (numSidesForVarID[varID] > 1)
+    {
       return true;
     }
   }
   return false;
 }
 
-int DofOrdering::maxBasisDegree() {
+int DofOrdering::maxBasisDegree()
+{
   map< pair<int,int>, BasisPtr >::iterator basisIterator;
-  
+
   int maxBasisDegree = 0;
-  
-  for (basisIterator = bases.begin(); basisIterator != bases.end(); basisIterator++) {
+
+  for (basisIterator = bases.begin(); basisIterator != bases.end(); basisIterator++)
+  {
     //pair< const pair<int,int>, BasisPtr > basisPair = *basisIterator;
     BasisPtr basis = (*basisIterator).second;
-    if (maxBasisDegree < basis->getDegree() ) {
+    if (maxBasisDegree < basis->getDegree() )
+    {
       maxBasisDegree = basis->getDegree();
     }
   }
   return maxBasisDegree;
 }
 
-int DofOrdering::maxBasisDegreeForVolume() { // max degree among the varIDs with numSides == 1
-  
+int DofOrdering::maxBasisDegreeForVolume()   // max degree among the varIDs with numSides == 1
+{
+
   int maxBasisDegree = 0;
   int volumeSideIndex = 0;
-  
-  for (set<int>::iterator varIt = varIDs.begin(); varIt != varIDs.end(); varIt++) {
+
+  for (set<int>::iterator varIt = varIDs.begin(); varIt != varIDs.end(); varIt++)
+  {
     int varID = *varIt;
-    if (numSidesForVarID[varID]==1) {
+    if (numSidesForVarID[varID]==1)
+    {
       pair<int,int> key = make_pair(varID, volumeSideIndex);
       int degree = bases[key]->getDegree();
-      if (maxBasisDegree < degree ) {
+      if (maxBasisDegree < degree )
+      {
         maxBasisDegree = degree;
       }
     }
@@ -286,40 +338,50 @@ int DofOrdering::maxBasisDegreeForVolume() { // max degree among the varIDs with
   return maxBasisDegree;
 }
 
-void DofOrdering::rebuildIndex() {
-  if (dofIdentifications.size() == 0) {
+void DofOrdering::rebuildIndex()
+{
+  if (dofIdentifications.size() == 0)
+  {
     // nothing to do
     return;
   }
   set<int>::iterator varIDIterator;
   int numIdentificationsProcessed = 0;
   int sideCount = cellTopology()->getSideCount();
-  for (varIDIterator = varIDs.begin(); varIDIterator != varIDs.end(); varIDIterator++) {
+  for (varIDIterator = varIDs.begin(); varIDIterator != varIDs.end(); varIDIterator++)
+  {
     int varID = *varIDIterator;
     //cout << "rebuildIndex: varID=" << varID << endl;
-    
-    for (int sideIndex=0; sideIndex<sideCount; sideIndex++) {
+
+    for (int sideIndex=0; sideIndex<sideCount; sideIndex++)
+    {
       if (!hasBasisEntry(varID, sideIndex)) continue;
       BasisPtr basis = getBasis(varID,sideIndex);
       int cellTopoSideIndex = (numSidesForVarID[varID]==1) ? -1 : sideIndex;
-      if ( _cellTopologyForSide.find(cellTopoSideIndex) == _cellTopologyForSide.end() ) {
+      if ( _cellTopologyForSide.find(cellTopoSideIndex) == _cellTopologyForSide.end() )
+      {
         CellTopoPtr cellTopoPtr = basis->domainTopology();
         _cellTopologyForSide[cellTopoSideIndex] = cellTopoPtr;
       }
-      for (int dofOrdinal=0; dofOrdinal < basis->getCardinality(); dofOrdinal++) {
+      for (int dofOrdinal=0; dofOrdinal < basis->getCardinality(); dofOrdinal++)
+      {
         pair<int, pair<int,int> > key = make_pair(varID, make_pair(sideIndex,dofOrdinal));
         pair<int, int> indexKey = make_pair(key.first,key.second.first); // key into indices container
-        if ( dofIdentifications.find(key) != dofIdentifications.end() ) {
+        if ( dofIdentifications.find(key) != dofIdentifications.end() )
+        {
           int earlierSideIndex  = dofIdentifications[key].first;
           int earlierDofOrdinal = dofIdentifications[key].second;
           pair<int,int> earlierIndexKey = make_pair(varID,earlierSideIndex);
-          if (indices[indexKey][dofOrdinal] != indices[earlierIndexKey][earlierDofOrdinal]) {
+          if (indices[indexKey][dofOrdinal] != indices[earlierIndexKey][earlierDofOrdinal])
+          {
             indices[indexKey][dofOrdinal] = indices[earlierIndexKey][earlierDofOrdinal];
 //            cout << "processed identification for varID " << varID << ": (" << sideIndex << "," << dofOrdinal << ")";
 //            cout << " --> " << "(" << earlierSideIndex << "," << earlierDofOrdinal << ")" << endl;
             numIdentificationsProcessed++;
           }
-        } else {
+        }
+        else
+        {
           // modify the index according to the number of dofs we've consolidated
 //          cout << "Reducing indices for key (varID=" << indexKey.first << ", sideIndex " << indexKey.second << ") for dofOrdinal " << dofOrdinal << " from ";
 //          cout << indices[indexKey][dofOrdinal] << " to ";
@@ -334,35 +396,41 @@ void DofOrdering::rebuildIndex() {
   _indexNeedsToBeRebuilt = false;
 }
 
-std::ostream& operator << (std::ostream& os, DofOrdering& dofOrdering) {
+std::ostream& operator << (std::ostream& os, DofOrdering& dofOrdering)
+{
   // Save the format state of the original ostream os.
   Teuchos::oblackholestream oldFormatState;
-  oldFormatState.copyfmt(os);  
-  
+  oldFormatState.copyfmt(os);
+
   os.setf(std::ios_base::scientific, std::ios_base::floatfield);
   os.setf(std::ios_base::right);
-  
+
   set< int > varIDs = dofOrdering.getVarIDs();
-  
+
   unsigned numVarIDs = varIDs.size();
-  
+
   os<< "===============================================================================\n"\
-  << "\t Number of varIDs = " << numVarIDs << "\n";
+    << "\t Number of varIDs = " << numVarIDs << "\n";
   os << "\t Number of dofs = " << dofOrdering.totalDofs() << endl;
-  for (set<int>::iterator varIt = varIDs.begin(); varIt != varIDs.end(); varIt++) {
+  for (set<int>::iterator varIt = varIDs.begin(); varIt != varIDs.end(); varIt++)
+  {
     int varID = *varIt;
     os << varID << " (" << dofOrdering.getSidesForVarID(varID).size() << " sides)" << endl;
   }
-  
-  if( numVarIDs == 0 ) {
+
+  if( numVarIDs == 0 )
+  {
     os<< "====================================================================================\n"\
-    << "|                        *** This is an empty DofOrdering ****                       |\n";
+      << "|                        *** This is an empty DofOrdering ****                       |\n";
   }
-  else {
-    for (set<int>::iterator varIt = varIDs.begin(); varIt != varIDs.end(); varIt++) {
+  else
+  {
+    for (set<int>::iterator varIt = varIDs.begin(); varIt != varIDs.end(); varIt++)
+    {
       int varID = *varIt;
       int numSides = dofOrdering.cellTopology()->getSideCount();
-      for (int sideIndex=0; sideIndex<numSides; sideIndex++) {
+      for (int sideIndex=0; sideIndex<numSides; sideIndex++)
+      {
         if (! dofOrdering.hasBasisEntry(varID, sideIndex)) continue;
         os << "basis cardinality for varID=" << varID << ", side " << sideIndex << ": ";
         os << dofOrdering.getBasis(varID,sideIndex)->getCardinality() << endl;
@@ -370,36 +438,36 @@ std::ostream& operator << (std::ostream& os, DofOrdering& dofOrdering) {
       }
     }
     /*os<< "\t Dimensions     = ";
-    
+
     for(int r = 0; r < rank; r++){
       os << " (" << dimensions[r] <<") ";
     }
     os << "\n";
-    
+
     os<< "====================================================================================\n"\
     << "|              Multi-index          Enumeration             Value                  |\n"\
     << "====================================================================================\n";
-  }
-  
-  for(int address = 0; address < numVarIDs; address++){
+    }
+
+    for(int address = 0; address < numVarIDs; address++){
     container.getMultiIndex(multiIndex,address);
     std::ostringstream mistring;
     for(int r = 0; r < rank; r++){
-      mistring <<  multiIndex[r] << std::dec << " "; 
+      mistring <<  multiIndex[r] << std::dec << " ";
     }
     os.setf(std::ios::right, std::ios::adjustfield);
-    os << std::setw(27) << mistring.str(); 
+    os << std::setw(27) << mistring.str();
     os << std::setw(20) << address;
     os << "             ";
     os.setf(std::ios::left, std::ios::adjustfield);
     os << std::setw(myprec+8) << container[address] << "\n";
-  }
+    }
      */
-  
+
     os<< "====================================================================================\n\n";
   }
   // reset format state of os
   os.copyfmt(oldFormatState);
-  
+
   return os;
 }

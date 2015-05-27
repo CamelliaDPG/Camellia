@@ -85,14 +85,17 @@ VarPtr u1, u2, sigma11, sigma12, sigma21, sigma22, p;
 // stream Vars required by BCs:
 VarPtr phi_hat;
 
-class LeftBoundary : public SpatialFilter {
+class LeftBoundary : public SpatialFilter
+{
   double _left;
 public:
-  LeftBoundary(double xLeft) {
+  LeftBoundary(double xLeft)
+  {
     double tol = 1e-14;
     _left = xLeft + tol;
   }
-  bool matchesPoint(double x, double y) {
+  bool matchesPoint(double x, double y)
+  {
     bool matches = x < _left;
 //    cout << "Left boundary ";
 //    if (matches) {
@@ -105,64 +108,81 @@ public:
   }
 };
 
-class RightBoundary : public SpatialFilter {
+class RightBoundary : public SpatialFilter
+{
   double _right;
 public:
-  RightBoundary(double xRight) {
+  RightBoundary(double xRight)
+  {
     double tol = 1e-14;
     _right = xRight - tol;
   }
-  bool matchesPoint(double x, double y) {
+  bool matchesPoint(double x, double y)
+  {
     return x > _right;
   }
 };
 
 
-class TopBoundary : public SpatialFilter {
+class TopBoundary : public SpatialFilter
+{
   double _top;
 public:
-  TopBoundary(double yTop) {
+  TopBoundary(double yTop)
+  {
     double tol = 1e-14;
     _top = yTop - tol;
   }
-  bool matchesPoint(double x, double y) {
+  bool matchesPoint(double x, double y)
+  {
     return y > _top;
   }
 };
 
-class BottomBoundary : public SpatialFilter {
+class BottomBoundary : public SpatialFilter
+{
   double _bottom;
 public:
-  BottomBoundary(double yBottom) {
+  BottomBoundary(double yBottom)
+  {
     double tol = 1e-14;
     _bottom = yBottom + tol;
   }
-  bool matchesPoint(double x, double y) {
+  bool matchesPoint(double x, double y)
+  {
     return y < _bottom;
   }
 };
 
-class NearCylinder : public SpatialFilter {
+class NearCylinder : public SpatialFilter
+{
   double _enlarged_radius;
 public:
-  NearCylinder(double radius) {
+  NearCylinder(double radius)
+  {
     double enlargement_factor = 1.2;
     _enlarged_radius = radius * enlargement_factor;
   }
-  bool matchesPoint(double x, double y) {
-    if (x*x + y*y < _enlarged_radius * _enlarged_radius) {
+  bool matchesPoint(double x, double y)
+  {
+    if (x*x + y*y < _enlarged_radius * _enlarged_radius)
+    {
       return true;
-    } else {
+    }
+    else
+    {
       return false;
     }
   }
 };
 
-class BoundaryVelocity : public SimpleFunction {
+class BoundaryVelocity : public SimpleFunction
+{
   double _left, _right, _top, _bottom, _radius;
   int _comp;
 public:
-  BoundaryVelocity(double width, double height, double radius, int component) {
+  BoundaryVelocity(double width, double height, double radius, int component)
+  {
     double tol = 1e-14;
     _left = - width / 2.0 + tol;
     _right = width / 2.0 - tol;
@@ -171,54 +191,63 @@ public:
     _radius = radius;
     _comp = component; // 0 for x, 1 for y
   }
-  
-  double value(double x, double y) {
+
+  double value(double x, double y)
+  {
     // widen the radius to allow for some geometry error
     double enlarged_radius = _radius * 1.2;
-    if (x*x + y*y < enlarged_radius * enlarged_radius) {
+    if (x*x + y*y < enlarged_radius * enlarged_radius)
+    {
       // then we're on the cylinder
       return 0.0;
     }
-    if (_comp == 0) { // u0 == 1 everywhere that we set u0
+    if (_comp == 0)   // u0 == 1 everywhere that we set u0
+    {
       return 1.0;
-    } else {
+    }
+    else
+    {
       return 0.0;
     }
   }
 };
 
-FieldContainer<double> solutionDataFromRefPoints(FieldContainer<double> &refPoints, SolutionPtr solution, VarPtr u) {
+FieldContainer<double> solutionDataFromRefPoints(FieldContainer<double> &refPoints, SolutionPtr solution, VarPtr u)
+{
   int numPointsPerCell = refPoints.dimension(0);
 
   MeshPtr mesh = solution->mesh();
   int numCells = mesh->numActiveElements();
   int numPoints = numCells * numPointsPerCell;
   FieldContainer<double> xyzData(numPoints, 3);
-  
+
   vector< ElementTypePtr > elementTypes = mesh->elementTypes(); // global element types list
   vector< ElementTypePtr >::iterator elemTypeIt;
 
   int globalPtIndex = 0;
-  
-  for (elemTypeIt = elementTypes.begin(); elemTypeIt != elementTypes.end(); elemTypeIt++) {
+
+  for (elemTypeIt = elementTypes.begin(); elemTypeIt != elementTypes.end(); elemTypeIt++)
+  {
     //cout << "Solution: elementType loop, iteration: " << elemTypeNumber++ << endl;
     ElementTypePtr elemTypePtr = *(elemTypeIt);
     BasisCachePtr basisCache = Teuchos::rcp(new BasisCache(elemTypePtr, mesh));
     basisCache->setRefCellPoints(refPoints);
-    
+
     vector<GlobalIndexType> globalCellIDs = mesh->cellIDsOfTypeGlobal(elemTypePtr);
-    
+
     FieldContainer<double> solutionValues(globalCellIDs.size(),numPointsPerCell);
     FieldContainer<double> physicalCellNodesForType = mesh->physicalCellNodesGlobal(elemTypePtr);
 
     basisCache->setPhysicalCellNodes(physicalCellNodesForType, globalCellIDs, false); // false: don't create side cache
-    
+
     solution->solutionValues(solutionValues, u->ID(), basisCache);
-    
+
     FieldContainer<double> physicalPoints = basisCache->getPhysicalCubaturePoints();
-    
-    for (int cellIndex = 0; cellIndex < globalCellIDs.size(); cellIndex++) {
-      for (int localPtIndex=0; localPtIndex<numPointsPerCell; localPtIndex++) {
+
+    for (int cellIndex = 0; cellIndex < globalCellIDs.size(); cellIndex++)
+    {
+      for (int localPtIndex=0; localPtIndex<numPointsPerCell; localPtIndex++)
+      {
         xyzData(globalPtIndex,0) = physicalPoints(cellIndex,localPtIndex,0);
         xyzData(globalPtIndex,1) = physicalPoints(cellIndex,localPtIndex,1);
         xyzData(globalPtIndex,2) = solutionValues(cellIndex,localPtIndex);
@@ -226,14 +255,16 @@ FieldContainer<double> solutionDataFromRefPoints(FieldContainer<double> &refPoin
       }
     }
   }
-  
+
   return xyzData;
 }
 
-set<double> logContourLevels(double height, int numPointsTop=50) {
+set<double> logContourLevels(double height, int numPointsTop=50)
+{
   set<double> levels;
   double level = height;
-  for (int i=0; i<numPointsTop; i++) {
+  for (int i=0; i<numPointsTop; i++)
+  {
     levels.insert(level);
     levels.insert(-level);
     level /= 2.0;
@@ -241,31 +272,38 @@ set<double> logContourLevels(double height, int numPointsTop=50) {
   return levels;
 }
 
-vector< int > cellIDsForVertices(MeshPtr mesh, const FieldContainer<double> &vertices) {
+vector< int > cellIDsForVertices(MeshPtr mesh, const FieldContainer<double> &vertices)
+{
   // this method not meant to be efficient: searches vertices in a brute force way
   int numVertices = vertices.dimension(0);
   int spaceDim = vertices.dimension(1);
   vector< int > cellIDs(numVertices);
-  
+
   double tol = 1e-14;
-  
+
   int numSides = 4; // only quads supported right now
   FieldContainer<double> cellVertices(numSides, spaceDim);
-  
+
   vector< ElementPtr > activeElements = mesh->activeElements();
   for ( vector< ElementPtr >::iterator elemIt = activeElements.begin();
-       elemIt != activeElements.end(); elemIt++) {
+        elemIt != activeElements.end(); elemIt++)
+  {
     int cellID = (*elemIt)->cellID();
     mesh->verticesForCell(cellVertices, cellID);
-    for (int i=0; i<numVertices; i++) {
-      for (int vertexIndex=0; vertexIndex<numSides; vertexIndex++) {
+    for (int i=0; i<numVertices; i++)
+    {
+      for (int vertexIndex=0; vertexIndex<numSides; vertexIndex++)
+      {
         int matches = true;
-        for (int d=0; d<spaceDim; d++) {
-          if (abs(cellVertices(vertexIndex,d) - vertices(i,d)) > tol ) {
+        for (int d=0; d<spaceDim; d++)
+        {
+          if (abs(cellVertices(vertexIndex,d) - vertices(i,d)) > tol )
+          {
             matches = false;
           }
         }
-        if (matches) {
+        if (matches)
+        {
           cellIDs[i] = cellID;
         }
       }
@@ -274,71 +312,77 @@ vector< int > cellIDsForVertices(MeshPtr mesh, const FieldContainer<double> &ver
   return cellIDs;
 }
 
-FunctionPtr friction(SolutionPtr soln) {
+FunctionPtr friction(SolutionPtr soln)
+{
   // friction is given by (sigma n) x n (that's a cross product)
   FunctionPtr n = Function::normal();
   LinearTermPtr f_lt = n->y() * (sigma11->times_normal_x() + sigma12->times_normal_y())
-                     - n->x() * (sigma21->times_normal_x() + sigma22->times_normal_y());
-  
+                       - n->x() * (sigma21->times_normal_x() + sigma22->times_normal_y());
+
   FunctionPtr f = Teuchos::rcp( new PreviousSolutionFunction(soln, f_lt) );
   return f;
 }
 
-double dragCoefficient(SolutionPtr soln, double radius, bool neglectPressure = false) {
+double dragCoefficient(SolutionPtr soln, double radius, bool neglectPressure = false)
+{
   // a more efficient way of doing this would be to actually identify the cells on the boundary
   // or the ones near the cylinder, and only do the integral over those.  The present approach
   // just ensures that the integrand will be zero except in the region of interest...
   SpatialFilterPtr nearCylinder = Teuchos::rcp( new NearCylinder(radius) );
-  
+
   FunctionPtr frictionFxn = friction(soln);
-  
+
   FunctionPtr pressure = Teuchos::rcp( new PreviousSolutionFunction(soln, p) );
-  
-  if (neglectPressure) {
+
+  if (neglectPressure)
+  {
     pressure = Function::zero();
   }
-  
+
   FunctionPtr n = Function::normal();
   FunctionPtr boundaryRestriction = Function::meshBoundaryCharacteristic();
-  
+
   // taken from Schäfer and Turek.  We negate everything because our normals are relative to
   // elements, whereas the normal in the formula is going out from the cylinder...
   FunctionPtr dF_D = Teuchos::rcp( new SpatiallyFilteredFunction( (- frictionFxn * n->y() + pressure * n->x()) * boundaryRestriction,
-                                                                 nearCylinder));
-  
+                                   nearCylinder));
+
   double F_D = dF_D->integrate(soln->mesh());
-  
+
   return 2 * F_D;
 }
 
-double liftCoefficient(SolutionPtr soln, double radius, bool neglectPressure = false) {
+double liftCoefficient(SolutionPtr soln, double radius, bool neglectPressure = false)
+{
   // a more efficient way of doing this would be to actually identify the cells on the boundary
   // or the ones near the cylinder, and only do the integral over those.  The present approach
   // just ensures that the integrand will be zero except in the region of interest...
   SpatialFilterPtr nearCylinder = Teuchos::rcp( new NearCylinder(radius) );
-  
+
   FunctionPtr frictionFxn = friction(soln);
-  
+
   FunctionPtr pressure = Teuchos::rcp( new PreviousSolutionFunction(soln, p) );
-  
-  if (neglectPressure) {
+
+  if (neglectPressure)
+  {
     pressure = Function::zero();
   }
-  
+
   FunctionPtr n = Function::normal();
   FunctionPtr boundaryRestriction = Function::meshBoundaryCharacteristic();
-  
+
   // taken from Schäfer and Turek.  We negate everything because our normals are relative to
   // elements, whereas the normal in the formula is going out from the cylinder...
   FunctionPtr dF_L = Teuchos::rcp( new SpatiallyFilteredFunction( (frictionFxn * n->x() + pressure * n->y()) * boundaryRestriction,
-                                                                 nearCylinder));
-  
+                                   nearCylinder));
+
   double F_L = dF_L->integrate(soln->mesh());
-  
+
   return 2 * F_L;
 }
 
-double pressureDifference(FunctionPtr pressure, double radius, MeshPtr mesh) {
+double pressureDifference(FunctionPtr pressure, double radius, MeshPtr mesh)
+{
   // first thing: find elements for vertices (-r, 0) and (r, 0)
   // (we're using here the fact that these start out as element vertices, and therefore remain such,
   //  as well as the fact that our geometry transformation leaves vertices unmoved.)
@@ -355,58 +399,62 @@ double pressureDifference(FunctionPtr pressure, double radius, MeshPtr mesh) {
   int leftPointVertexIndex = -1, rightPointVertexIndex = -1;
   FieldContainer<double> leftElementVertices(numSides,spaceDim);
   FieldContainer<double> rightElementVertices(numSides,spaceDim);
-  
+
   mesh->verticesForCell( leftElementVertices, cellIDs[0]);
   mesh->verticesForCell(rightElementVertices, cellIDs[1]);
 
   double tol = 1e-14;
-  for (int vertexIndex=0; vertexIndex < numSides; vertexIndex++) {
+  for (int vertexIndex=0; vertexIndex < numSides; vertexIndex++)
+  {
     if (   (abs(leftElementVertices(vertexIndex,0) - points(0,0)) < tol)
-        && (abs(leftElementVertices(vertexIndex,1) - points(0,1)) < tol) )
+           && (abs(leftElementVertices(vertexIndex,1) - points(0,1)) < tol) )
     {
       leftPointVertexIndex = vertexIndex;
     }
     if (   (abs(rightElementVertices(vertexIndex,0) - points(1,0)) < tol)
-        && (abs(rightElementVertices(vertexIndex,1) - points(1,1)) < tol) )
+           && (abs(rightElementVertices(vertexIndex,1) - points(1,1)) < tol) )
     {
       rightPointVertexIndex = vertexIndex;
     }
   }
-  if (leftPointVertexIndex == -1) {
+  if (leftPointVertexIndex == -1)
+  {
     TEUCHOS_TEST_FOR_EXCEPTION(true, std::invalid_argument, "Couldn't find leftPointVertexIndex");
   }
-  if (rightPointVertexIndex == -1) {
+  if (rightPointVertexIndex == -1)
+  {
     TEUCHOS_TEST_FOR_EXCEPTION(true, std::invalid_argument, "Couldn't find rightPointVertexIndex");
   }
   FieldContainer<double> referenceVertices = RefinementPattern::noRefinementPatternQuad()->verticesOnReferenceCell();
   BasisCachePtr leftBasisCache = BasisCache::basisCacheForCell(mesh, cellIDs[0]);
   referenceVertices.resize(numSides,spaceDim); // reshape to get rid of cellIndex dimension
   leftBasisCache->setRefCellPoints(referenceVertices);
-  
+
   BasisCachePtr rightBasisCache = BasisCache::basisCacheForCell(mesh, cellIDs[1]);
   referenceVertices.resize(numSides,spaceDim); // reshape to get rid of cellIndex dimension
   rightBasisCache->setRefCellPoints(referenceVertices);
-  
+
   FieldContainer<double> leftValues(1,numSides);
   FieldContainer<double> rightValues(1,numSides);
-  
+
   pressure->values(leftValues, leftBasisCache);
   pressure->values(rightValues, rightBasisCache);
-  
+
   double leftValue = leftValues(0,leftPointVertexIndex);
   double rightValue = rightValues(0,rightPointVertexIndex);
-  
+
 //  cout << "left physical point for pressure computation: (" << leftBasisCache->getPhysicalCubaturePoints()(0,leftPointVertexIndex,0);
 //  cout << ", " << leftBasisCache->getPhysicalCubaturePoints()(0,leftPointVertexIndex,1) << ")\n";
-//  
+//
 //  cout << "right physical point for pressure computation: (" << rightBasisCache->getPhysicalCubaturePoints()(0,rightPointVertexIndex,0);
 //  cout << ", " << rightBasisCache->getPhysicalCubaturePoints()(0,rightPointVertexIndex,1) << ")\n";
-  
+
   return leftValue - rightValue;
 }
 
 
-void makeRoughlyIsotropic(MeshPtr hemkerMeshNoCurves, double radius, bool enforceOneIrregularity) {
+void makeRoughlyIsotropic(MeshPtr hemkerMeshNoCurves, double radius, bool enforceOneIrregularity)
+{
   // start by identifying the various elements: there are 10 of interest to us
   // to find the thin banded elements, note that radius * 3 will be outside the bounding square
   // and that radius / 2 will be inside the band
@@ -443,31 +491,32 @@ void makeRoughlyIsotropic(MeshPtr hemkerMeshNoCurves, double radius, bool enforc
   elementPoints(9,1) = - radius * 3;
 
   vector< ElementPtr > elements = hemkerMeshNoCurves->elementsForPoints(elementPoints);
-  
+
   vector<int> horizontalBandCellIDs;
   horizontalBandCellIDs.push_back(elements[0]->cellID());
   horizontalBandCellIDs.push_back(elements[1]->cellID());
   horizontalBandCellIDs.push_back(elements[2]->cellID());
   horizontalBandCellIDs.push_back(elements[3]->cellID());
-  
+
   vector<int> verticalBandCellIDs;
   verticalBandCellIDs.push_back(elements[4]->cellID());
   verticalBandCellIDs.push_back(elements[5]->cellID());
   verticalBandCellIDs.push_back(elements[6]->cellID());
   verticalBandCellIDs.push_back(elements[7]->cellID());
-  
+
   // the bigger, fatter guys in the corners count as horizontal bands (because that's the direction of their anisotropy)
   horizontalBandCellIDs.push_back(elements[8]->cellID());
   horizontalBandCellIDs.push_back(elements[9]->cellID());
-  
+
   Teuchos::RCP<RefinementPattern> verticalCut = RefinementPattern::xAnisotropicRefinementPatternQuad();
   Teuchos::RCP<RefinementPattern> horizontalCut = RefinementPattern::yAnisotropicRefinementPatternQuad();
-  
+
   FieldContainer<double> vertices(4,2);
-  
+
   // horizontal bands want vertical cuts, and vice versa
   for (vector<int>::iterator cellIDIt = horizontalBandCellIDs.begin();
-       cellIDIt != horizontalBandCellIDs.end(); cellIDIt++) {
+       cellIDIt != horizontalBandCellIDs.end(); cellIDIt++)
+  {
     int cellID = *cellIDIt;
 //    cout << "Identified cell " << cellID << " as a horizontal band.\n";
     // work out what the current aspect ratio is
@@ -477,34 +526,37 @@ void makeRoughlyIsotropic(MeshPtr hemkerMeshNoCurves, double radius, bool enforc
     // we know that the first edges are always horizontal...
     double xDiff = abs(vertices(1,0)-vertices(0,0));
     double yDiff = abs(vertices(2,1)-vertices(1,1));
-    
+
 //    cout << "xDiff: " << xDiff << endl;
 //    cout << "yDiff: " << yDiff << endl;
-    
+
     set<GlobalIndexType> cellIDsToRefine;
     cellIDsToRefine.insert(cellID);
     double aspect = xDiff / yDiff;
-    while (aspect > 2.0) {
+    while (aspect > 2.0)
+    {
 //      cout << "aspect ratio: " << aspect << endl;
       hemkerMeshNoCurves->hRefine(cellIDsToRefine, verticalCut);
-      
+
       // the next set of cellIDsToRefine are the children of the ones just refined
       set<GlobalIndexType> childCellIDs;
       for (set<GlobalIndexType>::iterator refinedCellIDIt = cellIDsToRefine.begin();
-           refinedCellIDIt != cellIDsToRefine.end(); refinedCellIDIt++) {
+           refinedCellIDIt != cellIDsToRefine.end(); refinedCellIDIt++)
+      {
         int refinedCellID = *refinedCellIDIt;
         set<int> refinedCellChildren = hemkerMeshNoCurves->getElement(refinedCellID)->getDescendants();
         childCellIDs.insert(refinedCellChildren.begin(),refinedCellChildren.end());
       }
-      
+
       cellIDsToRefine = childCellIDs;
       aspect /= 2;
     }
   }
-  
+
   // horizontal bands want vertical cuts, and vice versa
   for (vector<int>::iterator cellIDIt = verticalBandCellIDs.begin();
-       cellIDIt != verticalBandCellIDs.end(); cellIDIt++) {
+       cellIDIt != verticalBandCellIDs.end(); cellIDIt++)
+  {
     int cellID = *cellIDIt;
 //    cout << "Identified cell " << cellID << " as a vertical band.\n";
     // work out what the current aspect ratio is
@@ -513,22 +565,24 @@ void makeRoughlyIsotropic(MeshPtr hemkerMeshNoCurves, double radius, bool enforc
     // we know that the first edges are always horizontal...
     double xDiff = abs(vertices(1,0)-vertices(0,0));
     double yDiff = abs(vertices(2,1)-vertices(1,1));
-    
+
     set<GlobalIndexType> cellIDsToRefine;
     cellIDsToRefine.insert(cellID);
     double aspect = yDiff / xDiff;
-    while (aspect > 2.0) {
+    while (aspect > 2.0)
+    {
       hemkerMeshNoCurves->hRefine(cellIDsToRefine, horizontalCut);
-      
+
       // the next set of cellIDsToRefine are the children of the ones just refined
       set<GlobalIndexType> childCellIDs;
       for (set<GlobalIndexType>::iterator refinedCellIDIt = cellIDsToRefine.begin();
-           refinedCellIDIt != cellIDsToRefine.end(); refinedCellIDIt++) {
+           refinedCellIDIt != cellIDsToRefine.end(); refinedCellIDIt++)
+      {
         int refinedCellID = *refinedCellIDIt;
         set<int> refinedCellChildren = hemkerMeshNoCurves->getElement(refinedCellID)->getDescendants();
         childCellIDs.insert(refinedCellChildren.begin(),refinedCellChildren.end());
       }
-      
+
       cellIDsToRefine = childCellIDs;
       aspect /= 2;
     }
@@ -537,18 +591,22 @@ void makeRoughlyIsotropic(MeshPtr hemkerMeshNoCurves, double radius, bool enforc
     hemkerMeshNoCurves->enforceOneIrregularity();
 }
 
-int cornerDescendantID(ElementPtr cell, int side1, int side2) {
+int cornerDescendantID(ElementPtr cell, int side1, int side2)
+{
   vector< pair<int,int> > cell_descendants_side1_neighbors = cell->getDescendantsForSide(side1); // (cellID, sideIndex) pairs
   set<int> cell_side1_neighbors_set;
-  for (int i=0; i<cell_descendants_side1_neighbors.size(); i++) {
+  for (int i=0; i<cell_descendants_side1_neighbors.size(); i++)
+  {
     cell_side1_neighbors_set.insert(cell_descendants_side1_neighbors[i].first);
   }
   vector< pair<int,int> > cell0_descendants_cylinder = cell->getDescendantsForSide(side2); // (cellID, sideIndex) pairs
-  
+
   int cornerCellID = -1;
-  for (int i=0; i<cell0_descendants_cylinder.size(); i++) {
+  for (int i=0; i<cell0_descendants_cylinder.size(); i++)
+  {
     int cellID = cell0_descendants_cylinder[i].first;
-    if (cell_side1_neighbors_set.find(cellID) != cell_side1_neighbors_set.end()) {
+    if (cell_side1_neighbors_set.find(cellID) != cell_side1_neighbors_set.end())
+    {
       cornerCellID = cellID;
     }
   }
@@ -556,17 +614,20 @@ int cornerDescendantID(ElementPtr cell, int side1, int side2) {
   return cornerCellID;
 }
 
-void saveRefinementInfo() {
+void saveRefinementInfo()
+{
   int rank     = Teuchos::GlobalMPISession::getRank();
-  if (rank==0){
+  if (rank==0)
+  {
     ofstream fout;
     ostringstream fileName;
     fileName << "hemkerRefinements.txt";
-    
+
     fout.open(fileName.str().c_str());
     fout << "ref. #\trel. energy error\tL^2 tol.\tNR iterations\telements\tdofs\tflux dofs\n";
     int numRefs = relativeEnergyErrors.size() - 1; // will output zeros for refinements that haven't been done yet...
-    for (int refIndex=0; refIndex<=numRefs; refIndex++) {
+    for (int refIndex=0; refIndex<=numRefs; refIndex++)
+    {
       fout << setprecision(8) << fixed;
       fout << refIndex << "\t";
       fout << setprecision(3) << scientific;;
@@ -582,17 +643,20 @@ void saveRefinementInfo() {
   }
 }
 
-void printNeighbors(ElementPtr cell) {
+void printNeighbors(ElementPtr cell)
+{
   cout << "cell " << cell->cellID() << " neighbors: ";
-  for (int i=0; i<4; i++) {
+  for (int i=0; i<4; i++)
+  {
     cout << cell->getNeighborCellID(i) << " ";
   }
   cout << endl;
 }
 
-void recreateBCs() { // recreates both bc and pc, as necessary
+void recreateBCs()   // recreates both bc and pc, as necessary
+{
   int rank     = Teuchos::GlobalMPISession::getRank();
-  
+
   FunctionPtr zero = Function::zero();
   bc = BC::bc();
   SpatialFilterPtr nearCylinder = Teuchos::rcp( new NearCylinder(radius) );
@@ -600,102 +664,127 @@ void recreateBCs() { // recreates both bc and pc, as necessary
   SpatialFilterPtr bottom       = Teuchos::rcp( new BottomBoundary(-meshHeight/2.0) );
   SpatialFilterPtr left         = Teuchos::rcp( new LeftBoundary(xLeft) );
   SpatialFilterPtr right        = Teuchos::rcp( new RightBoundary(xRight) );
-  
+
   bc->addDirichlet(u1hat,nearCylinder,zero);
   bc->addDirichlet(u2hat,nearCylinder,zero);
   bc->addDirichlet(u1hat,left,inflowSpeed);
   bc->addDirichlet(u2hat,left,zero);
-  
+
   SpatialFilterPtr topAndBottom = SpatialFilter::unionFilter(top, bottom);
-  
+
   pc = Teuchos::rcp(new PenaltyConstraints);
-  
+
   // define traction components in terms of field variables
   FunctionPtr n = Function::normal();
   LinearTermPtr t1 = n->x() * (2 * sigma11 - p) + n->y() * (sigma12 + sigma21);
   LinearTermPtr t2 = n->x() * (sigma12 + sigma21) + n->y() * (2 * sigma22 - p);
-  
-  if (velocityConditionsTopAndBottom) {
+
+  if (velocityConditionsTopAndBottom)
+  {
     bc->addDirichlet(u1hat,topAndBottom,inflowSpeed);
     bc->addDirichlet(u2hat,topAndBottom,zero);
-    
-    if (velocityConditionsRight) {
+
+    if (velocityConditionsRight)
+    {
       bc->addDirichlet(u1hat,right,inflowSpeed);
       bc->addDirichlet(u2hat,right,zero);
-      
-      if (rank==0) {
+
+      if (rank==0)
+      {
         cout << "velocity conditions everywhere: imposing zero mean on pressure.\n";
       }
       bc->addZeroMeanConstraint(p);
-    } else if (streamwiseGradientConditionsRight) {
+    }
+    else if (streamwiseGradientConditionsRight)
+    {
       if (rank==0)
         cout << "Imposing streamwise gradient == 0 at outflow with penalty constraints.\n";
       pc->addConstraint(sigma11==zero, right);
       pc->addConstraint(sigma21==zero, right);
-    } else if (noBCsRight) {
+    }
+    else if (noBCsRight)
+    {
       if (rank==0)
         cout << "Not imposing any BCs at outflow.\n";
-    } else {
+    }
+    else
+    {
       if (rank==0)
         cout << "Imposing zero traction at outflow with penalty constraints.\n";
       // outflow: both traction components are 0
       pc->addConstraint(t1==zero, right);
       pc->addConstraint(t2==zero, right);
-      
+
     }
-  } else if (symmetryConditionsTopAndBottom) {
+  }
+  else if (symmetryConditionsTopAndBottom)
+  {
     // at top and bottom, we impose u2 = 0, t2n = 0
     bc->addDirichlet(u2hat, topAndBottom, zero);
     bc->addDirichlet(t2n, topAndBottom, zero);
-  } else { // else, no-traction conditions
+  }
+  else     // else, no-traction conditions
+  {
     // t1n, t2n are *pseudo*-tractions
     // we use penalty conditions for the true traction
-    
+
     //      if (rank==0)
     //        cout << "EXPERIMENTALLY, imposing zero-mean constraint on pressure.\n";
     //      bc->addZeroMeanConstraint(p);
-    
+
     bool imposeZeroSecondTraction = true;
-    
-    if (imposeZeroSecondTraction) {
+
+    if (imposeZeroSecondTraction)
+    {
       pc->addConstraint(t1==zero,topAndBottom);
       pc->addConstraint(t2==zero,topAndBottom);
-      if (rank==0) {
+      if (rank==0)
+      {
         cout << "imposing zero second traction (t2) at top and bottom\n";
       }
-    } else {
+    }
+    else
+    {
       // at top, we impose u2 = 0 and t1 = 0
       bc->addDirichlet(u2hat, topAndBottom, zero);
       pc->addConstraint(t1==zero,topAndBottom);
-      if (rank==0) {
+      if (rank==0)
+      {
         cout << "imposing zero second velocity (u2) at top and bottom\n";
       }
     }
-    
-    if (velocityConditionsRight) {
+
+    if (velocityConditionsRight)
+    {
       bc->addDirichlet(u1hat,right,inflowSpeed);
       bc->addDirichlet(u2hat,right,zero);
-    } else if (streamwiseGradientConditionsRight) {
+    }
+    else if (streamwiseGradientConditionsRight)
+    {
       if (rank==0)
         cout << "Imposing streamwise gradient == 0 at outflow with penalty constraints.\n";
       pc->addConstraint(sigma11==zero, right);
       pc->addConstraint(sigma21==zero, right);
-    } else {
+    }
+    else
+    {
       // outflow: both traction components are 0
       pc->addConstraint(t1==zero, right);
       pc->addConstraint(t2==zero, right);
     }
-    
+
     if (rank==0)
       cout << "Imposing zero-traction conditions using penalty constraints.\n";
   }
-  
-  if ( (velocityConditionsRight && velocityConditionsTopAndBottom) ) { // i.e. there are NO penalty constraints -- set to be NULL
+
+  if ( (velocityConditionsRight && velocityConditionsTopAndBottom) )   // i.e. there are NO penalty constraints -- set to be NULL
+  {
     pc = Teuchos::rcp( (PenaltyConstraints *) NULL);
   }
 }
 
-void recreateStreamBCs() {
+void recreateStreamBCs()
+{
   FunctionPtr zero = Function::zero();
   SpatialFilterPtr nearCylinder = Teuchos::rcp( new NearCylinder(radius) );
   SpatialFilterPtr top          = Teuchos::rcp( new TopBoundary(meshHeight/2.0) );
@@ -713,7 +802,8 @@ void recreateStreamBCs() {
   streamBC->addDirichlet(phi_hat, bottom, y);
 }
 
-double separationAngleInDegrees(ParametricCurvePtr searchArcForSeparationAngle, FunctionPtr vorticity, MeshPtr mesh) {
+double separationAngleInDegrees(ParametricCurvePtr searchArcForSeparationAngle, FunctionPtr vorticity, MeshPtr mesh)
+{
   double t_zeroVorticity = findSignReversal(searchArcForSeparationAngle, 0, 1, vorticity, mesh);
   double x_zeroVorticity, y_zeroVorticity;
   searchArcForSeparationAngle->value(t_zeroVorticity, x_zeroVorticity, y_zeroVorticity);
@@ -721,18 +811,20 @@ double separationAngleInDegrees(ParametricCurvePtr searchArcForSeparationAngle, 
   return separationAngleRadians * (180.0 / PI);
 }
 
-double wakeLengthFromCylinder(ParametricCurvePtr searchLineForWakeLength, double radius, FunctionPtr u1, MeshPtr mesh) {
+double wakeLengthFromCylinder(ParametricCurvePtr searchLineForWakeLength, double radius, FunctionPtr u1, MeshPtr mesh)
+{
   double t_zero_x_velocity = findSignReversal(searchLineForWakeLength, 0, 1, u1, mesh);
   double x_zero_x_velocity, y_zero_x_velocity;
   searchLineForWakeLength->value(t_zero_x_velocity, x_zero_x_velocity, y_zero_x_velocity);
   return (x_zero_x_velocity - radius) / radius; // wake lengths in literature are relative to unit radius.
 }
 
-int main(int argc, char *argv[]) {
+int main(int argc, char *argv[])
+{
 //  signal(SIGSEGV, errorhandler);   // install error handler
-  
+
   int rank = 0;
-  
+
   Teuchos::GlobalMPISession mpiSession(&argc, &argv,0);
   rank=mpiSession.getRank();
 
@@ -741,13 +833,14 @@ int main(int argc, char *argv[]) {
 #else
   choice::Args args(argc, argv );
 #endif
-  
-  try {
+
+  try
+  {
     // read args:
     int polyOrder = args.Input<int>("--polyOrder", "L^2 (field) polynomial order");
     int numRefs = args.Input<int>("--numRefs", "Number of refinements", 6);
     Re = args.Input<double>("--Re", "Reynolds number", 40);
-    
+
     string replayFile = args.Input<string>("--replayFile", "file with refinement history to replay", "");
     string solnFile = args.Input<string>("--solnFile", "file with solution data", "");
     string solnSaveFile = args.Input<string>("--solnSaveFile", "file to which to save solution data", "nsHemker.solution");
@@ -755,68 +848,70 @@ int main(int argc, char *argv[]) {
 
     int maxIters = args.Input<int>("--maxIters", "maximum number of Newton-Raphson iterations to take to try to match tolerance", 50);
     double minL2Increment = args.Input<double>("--NRtol", "Newton-Raphson tolerance, L^2 norm of increment", 1e-8);
-    
+
     meshHeight = args.Input<double>("--meshHeight", "mesh height", 30);
-    
+
     bool useStraightEdgedGeometry = args.Input<bool>("--noCurves", "use straight-edge geometric approximation", false);
-    
+
     double dt = args.Input<double>("--timeStep", "time step (0 for none)", 0); // 0.5 used to be the standard value
-    
+
     bool parabolicInflow = args.Input<bool>("--parabolicInflow", "use parabolic inflow (false for uniform)", false);
-    
+
     bool makeMeshRoughlyIsotropic = args.Input<bool>("--isotropicMesh", "make starting mesh roughly isotropic", true);
     bool enforceOneIrregularity = args.Input<bool>("--oneIrregular", "enforce 1-irregularity", true);
-    
+
     xLeft = args.Input<double>("--xLeft", "x coordinate of the leftmost boundary", -15);
     xRight = args.Input<double>("--xRight", "x coordinate of the rightmost boundary", 45);
-    
+
     bool refineInPFirst = args.Input<bool>("--pFirst", "prefer p-refinements", false);
-    
+
     velocityConditionsTopAndBottom = args.Input<bool>("--velocityConditionsTopAndBottom", "impose velocity BCs on top and bottom boundaries", false);
-    
+
     symmetryConditionsTopAndBottom = args.Input<bool>("--symmetryConditionsTopAndBottom", "impose symmetry BCs on top and bottom boundaries", false);
 
     velocityConditionsRight = args.Input<bool>("--velocityConditionsRight", "impose velocity BCs on right boundaries", false);
-    
+
     streamwiseGradientConditionsRight = args.Input<bool>("--streamwiseGradientConditionsRight", "impose streamwise gradient BCs on right boundaries", false);
-    
+
     noBCsRight = args.Input<bool>("--noBCsRight", "impose no BCs on right boundaries", false);
 
     bool skipPostProcessing = args.Input<bool>("--skipPostProcessing", "skip computations of mass flux, pressure, and stream solution", false);
-    
+
     bool useMumps = args.Input<bool>("--useMumps", "use MUMPS as global linear solver", true);
-    
+
     bool useZeroInitialGuess = args.Input<bool>("--useZeroInitialGuess", "use zero initial guess (incompatible with BCs, but they're weakly enforced so it's OK)", true);
 
     bool useCondensedSolve = args.Input<bool>("--useCondensedSolve", "use condensed solve", true);
-    
+
     args.Process();
-    
+
     bool artificialTimeStepping = (dt > 0);
-    
+
     bool useLineSearch = false;
-    
+
     int pToAdd = 2; // for optimal test function approximation
     bool reportPerCellErrors  = true;
 
     bool startWithZeroSolutionAfterRefinement = false;
-    
+
     bool useScaleCompliantGraphNorm = false;
     bool enrichVelocity = useScaleCompliantGraphNorm;
-    
-    if (useScaleCompliantGraphNorm) {
+
+    if (useScaleCompliantGraphNorm)
+    {
       cout << "WARNING: useScaleCompliantGraphNorm = true, but support for this is not yet implemented in Hemker driver.\n";
     }
-    
+
     relativeEnergyErrors = vector<double>(numRefs + 1);
     dofCounts = vector<long>(numRefs+1);
     fluxDofCounts = vector<long>(numRefs+1);
     elementCounts = vector<long>(numRefs+1);
     iterationCounts = vector<int>(numRefs+1);
     tolerances = vector<double>(numRefs+1);
-    
+
     Teuchos::RCP<Solver> solver;
-    if (useMumps) {
+    if (useMumps)
+    {
 #ifdef USE_MUMPS
       solver = Teuchos::rcp(new MumpsSolver());
 #else
@@ -824,10 +919,12 @@ int main(int argc, char *argv[]) {
         cout << "useMumps = true, but USE_MUMPS is unset.  Exiting...\n";
       exit(1);
 #endif
-    } else {
+    }
+    else
+    {
       solver = Teuchos::rcp(new KluSolver());
     }
-    
+
 //    // usage: polyOrder [numRefinements]
 //    // parse args:
 //    if ((argc != 4) && (argc != 3) && (argc != 2) && (argc != 5)) {
@@ -843,38 +940,58 @@ int main(int argc, char *argv[]) {
 //      numRefs = atoi(argv[2]);
 //      Re = atof(argv[3]);
 //    }
-    if (rank == 0) {
+    if (rank == 0)
+    {
       cout << "NEW as of 8-3-13: using L^2 tolerance relative to L^2 norm of background flow.\n";
       cout << "numRefinements = " << numRefs << endl;
       cout << "Re = " << Re << endl;
       if (artificialTimeStepping) cout << "dt = " << dt << endl;
-      if (!startWithZeroSolutionAfterRefinement) {
+      if (!startWithZeroSolutionAfterRefinement)
+      {
         cout << "NOTE: experimentally, NOT starting with 0 solution after refinement...\n";
       }
-      if (useCondensedSolve) {
+      if (useCondensedSolve)
+      {
         cout << "using condensed solve.\n";
-      } else {
+      }
+      else
+      {
         cout << "not using condensed solve.\n";
       }
-      if (useMumps) {
+      if (useMumps)
+      {
         cout << "using MUMPS for global linear solves.\n";
-      } else {
+      }
+      else
+      {
         cout << "using KLU for global linear solves.\n";
       }
-      if (velocityConditionsTopAndBottom) {
+      if (velocityConditionsTopAndBottom)
+      {
         cout << "imposing velocity BCs on top and bottom boundaries.\n";
-      } else if (symmetryConditionsTopAndBottom) {
+      }
+      else if (symmetryConditionsTopAndBottom)
+      {
         cout << "imposing symmetry BCs on top and bottom boundaries.\n";
-      } else {
+      }
+      else
+      {
         cout << "imposing zero-traction BCs on top and bottom boundaries.\n";
       }
-      if (velocityConditionsRight) {
+      if (velocityConditionsRight)
+      {
         cout << "imposing velocity BCs on outflow boundary.\n";
-      } else if (streamwiseGradientConditionsRight) {
+      }
+      else if (streamwiseGradientConditionsRight)
+      {
         cout << "imposing streamwise gradient BCs on outflow boundary.\n";
-      } else if (noBCsRight) {
+      }
+      else if (noBCsRight)
+      {
         cout << "imposing no BCs on outflow boundary.\n";
-      } else {
+      }
+      else
+      {
         cout << "imposing zero-traction BCs on outflow boundary.\n";
       }
     }
@@ -891,50 +1008,53 @@ int main(int argc, char *argv[]) {
     sigma21 = varFactory.fieldVar(VGP_SIGMA21_S);
     sigma22 = varFactory.fieldVar(VGP_SIGMA22_S);
     p = varFactory.fieldVar(VGP_P_S);
-    
+
     u1hat = varFactory.traceVar(VGP_U1HAT_S);
     u2hat = varFactory.traceVar(VGP_U2HAT_S);
     t1n = varFactory.fluxVar(VGP_T1HAT_S);
     t2n = varFactory.fluxVar(VGP_T2HAT_S);
-    
+
     v1 = varFactory.testVar(VGP_V1_S, HGRAD);
     v2 = varFactory.testVar(VGP_V2_S, HGRAD);
     tau1 = varFactory.testVar(VGP_TAU1_S, HDIV);
     tau2 = varFactory.testVar(VGP_TAU2_S, HDIV);
     q = varFactory.testVar(VGP_Q_S, HGRAD);
-    
+
     FunctionPtr zero = Function::zero();
-    
+
     double yTop = meshHeight / 2.0;
     double yBottom = - meshHeight / 2.0;
-    
-    if (! parabolicInflow) {
+
+    if (! parabolicInflow)
+    {
       inflowSpeed = Function::constant(1.0);
-    } else {
+    }
+    else
+    {
       // following Schäfer and Turek -- though we multiply by 10 to get a unit diameter
       xLeft = -2.0;
       xRight = 20.5;
       yTop = 2.1;
       yBottom = -2.0;
       meshHeight = yTop - yBottom;
-      
+
       FunctionPtr y = Function::yn();
       double nu_ref = .02;
       double D_ref = .1;
       double Uref = Re * nu_ref / D_ref;
       double Um = 0.3 / Uref;
       inflowSpeed = (4 * Um / (meshHeight*meshHeight)) * (y - yBottom) * (yTop - y);
-      
+
       if (rank==0) cout << "WARNING: parabolicInflow known not to be fully consistent with Schäfer and Turek's results!\n";
     }
-    
+
     double embeddedSideLength = 3 * radius;
     MeshGeometryPtr geometry = MeshFactory::shiftedHemkerGeometry(xLeft, xRight, yBottom, yTop, radius, embeddedSideLength); //MeshFactory::hemkerGeometry(width,height,radius);
-    
+
     double theta0 = PI / 8, theta1 = 3 * PI / 8;
     // tweak the radius slightly to ensure that we get inside the elements...
     ParametricCurvePtr searchArcForSeparationAngle = ParametricCurve::circularArc(radius * 1.0000001, 0, 0, theta0, theta1);
-    
+
     ParametricCurvePtr searchLineForWakeLength = ParametricCurve::line(radius * 2, 0, xRight * .9999999, 0); // cheat the xRight inside to guarantee inclusion in the mesh...
 
     {
@@ -946,37 +1066,38 @@ int main(int argc, char *argv[]) {
 //        }
 //      }
     }
-    
-    if (useStraightEdgedGeometry) {
+
+    if (useStraightEdgedGeometry)
+    {
       // right now, this is going to end up meaning that we have an octagon instead of a circle
       MeshGeometryPtr straightEdgeGeometry = Teuchos::rcp( new MeshGeometry(geometry->vertices(), geometry->elementVertices()));
       // (and that will remain true even as we refine)
       geometry = straightEdgeGeometry;
     }
-    
+
     VGPNavierStokesProblem problem = VGPNavierStokesProblem(Function::constant(Re),geometry,
-                                                            H1Order, pToAdd,
-                                                            Function::zero(), Function::zero(), // zero forcing function
-                                                            useScaleCompliantGraphNorm); // enrich velocity if using compliant graph norm
+                                     H1Order, pToAdd,
+                                     Function::zero(), Function::zero(), // zero forcing function
+                                     useScaleCompliantGraphNorm); // enrich velocity if using compliant graph norm
     problem.setSolver(solver);
     SolutionPtr solution = problem.backgroundFlow();
     SolutionPtr solnIncrement = problem.solutionIncrement();
     solution->setReportTimingResults(false);
     solnIncrement->setReportTimingResults(false);
-    
+
     recreateBCs();
-    
+
     // set pc and bc -- pc in particular may be null
     problem.backgroundFlow()->setFilter(pc);
     problem.solutionIncrement()->setFilter(pc);
 
     problem.backgroundFlow()->setBC(bc);
     problem.solutionIncrement()->setBC(bc);
-    
+
     Teuchos::RCP<Mesh> mesh = problem.mesh();
     mesh->registerSolution(solution);
     mesh->registerSolution(solnIncrement);
-    
+
 //    {
 //      if (rank==0) {
 //        ElementPtr cell0 = mesh->getElement(0);
@@ -988,25 +1109,26 @@ int main(int argc, char *argv[]) {
 //      cellIDs.push_back(0);
 //      cellIDs.push_back(7);
 //      mesh->hRefine(cellIDs, RefinementPattern::regularRefinementPatternQuad());
-//      
+//
 //      if (rank==0) {
 //        ElementPtr cell0 = mesh->getElement(0);
 //        int cornerCellID = cornerDescendantID(cell0, 0, 3); // side 0: cell7, side 3: cylinder
 //        cout << "cell0 cornerCellID = " << cornerCellID << endl;
 //        printNeighbors(mesh->getElement(cornerCellID));
-//        
+//
 //        ElementPtr cell7 = mesh->getElement(7);
 //        cornerCellID = cornerDescendantID(cell7, 2, 3); // side 2: cell0, side 3: cylinder
 //        cout << "cell7 cornerCellID = " << cornerCellID << endl;
 //        printNeighbors(mesh->getElement(cornerCellID));
 //      }
 //    }
-    
+
     Teuchos::RCP< RefinementHistory > refHistory = Teuchos::rcp( new RefinementHistory );
     mesh->registerObserver(refHistory);
-    
+
     ParameterFunctionPtr dt_inv = ParameterFunction::parameterFunction(1.0 / dt); //Teuchos::rcp( new ConstantScalarFunction(1.0 / dt, "\\frac{1}{dt}") );
-    if (artificialTimeStepping) {
+    if (artificialTimeStepping)
+    {
       //    // LHS gets u_inc / dt:
       BFPtr bf = problem.bf();
       FunctionPtr dt_inv_fxn = Teuchos::rcp(dynamic_cast< Function* >(dt_inv.get()), false);
@@ -1014,11 +1136,12 @@ int main(int argc, char *argv[]) {
       bf->addTerm(-dt_inv_fxn * u2, v2);
       problem.setIP( bf->graphNorm() ); // graph norm has changed...
     }
-    
-    if (useScaleCompliantGraphNorm) {
+
+    if (useScaleCompliantGraphNorm)
+    {
       problem.setIP(problem.vgpNavierStokesFormulation()->scaleCompliantGraphNorm());
     }
-    
+
     // define bilinear form for stream function:
     VarFactory streamVarFactory;
     phi_hat = streamVarFactory.traceVar("\\widehat{\\phi}");
@@ -1032,28 +1155,30 @@ int main(int argc, char *argv[]) {
     streamBF->addTerm(psi_1, q_s->dx());
     streamBF->addTerm(psi_2, q_s->dy());
     streamBF->addTerm(-psin_hat, q_s);
-    
+
     streamBF->addTerm(psi_1, v_s->x());
     streamBF->addTerm(psi_2, v_s->y());
     streamBF->addTerm(phi, v_s->div());
     streamBF->addTerm(-phi_hat, v_s->dot_normal());
-    
+
     Teuchos::RCP<Mesh> streamMesh;
-    
+
     bool useConformingTraces = true;
     map<int, int> trialOrderEnhancements;
-    if (enrichVelocity) {
+    if (enrichVelocity)
+    {
       trialOrderEnhancements[u1->ID()] = 1;
       trialOrderEnhancements[u2->ID()] = 1;
     }
     streamMesh = Teuchos::rcp( new Mesh(geometry->vertices(), geometry->elementVertices(),
-                                   streamBF, H1Order, pToAdd,
-                                   useConformingTraces, trialOrderEnhancements) );
+                                        streamBF, H1Order, pToAdd,
+                                        useConformingTraces, trialOrderEnhancements) );
     streamMesh->setEdgeToCurveMap(geometry->edgeToCurveMap());
-    
+
     mesh->registerObserver(streamMesh); // will refine streamMesh in the same way as mesh.
-    
-    if (rank==0) {
+
+    if (rank==0)
+    {
       GnuPlotUtil::writeComputationalMeshSkeleton("preliminaryHemkerMesh", mesh, false);
     }
 
@@ -1061,77 +1186,86 @@ int main(int argc, char *argv[]) {
     // to do spatial lookups, we need a mesh without curves (this is a bit ugly)
     // we don't care which BF we use, so we use streamBF because it's cheaper
     MeshPtr proxyMesh = Teuchos::rcp( new Mesh(geometry->vertices(), geometry->elementVertices(),
-                                               streamBF, H1Order, pToAdd,
-                                               useConformingTraces, trialOrderEnhancements) );
+                                      streamBF, H1Order, pToAdd,
+                                      useConformingTraces, trialOrderEnhancements) );
     // now, register the real mesh with the proxy
     proxyMesh->registerObserver(mesh);
     // and make the proxy roughly isotropic:
-    if (makeMeshRoughlyIsotropic) {
+    if (makeMeshRoughlyIsotropic)
+    {
       makeRoughlyIsotropic(proxyMesh, radius, enforceOneIrregularity);
     }
 
-    if (rank==0) {
+    if (rank==0)
+    {
       GnuPlotUtil::writeComputationalMeshSkeleton("initialHemkerMesh", mesh, false);
     }
-    
-    if (rank == 0) {
+
+    if (rank == 0)
+    {
       cout << "Starting mesh has " << problem.mesh()->numActiveElements() << " elements and ";
       cout << mesh->numGlobalDofs() << " total dofs.\n";
-      cout << "polyOrder = " << polyOrder << endl; 
+      cout << "polyOrder = " << polyOrder << endl;
       cout << "pToAdd = " << pToAdd << endl;
-      
-      if (enforceOneIrregularity) {
+
+      if (enforceOneIrregularity)
+      {
         cout << "Enforcing 1-irregularity.\n";
-      } else {
+      }
+      else
+      {
         cout << "NOT enforcing 1-irregularity.\n";
       }
     }
-    
-    if (replayFile.length() > 0) {
+
+    if (replayFile.length() > 0)
+    {
       RefinementHistory refHistory;
       refHistory.loadFromFile(replayFile);
       refHistory.playback(mesh);
     }
-    if (solnFile.length() > 0) {
+    if (solnFile.length() > 0)
+    {
       solution->readFromFile(solnFile);
     }
-    
+
     map< int, FunctionPtr > initialGuess;
     initialGuess[u1->ID()] = Function::constant(1.0);
     initialGuess[u1hat->ID()] = Function::constant(1.0);
     // all other variables: use zero initial guess (the implicit one)
-    
+
     ////////////////////   CREATE BCs   ///////////////////////
     FunctionPtr u1_prev = Function::solution(u1,solution);
     FunctionPtr u2_prev = Function::solution(u2,solution);
-    
+
     FunctionPtr u1hat_prev = Function::solution(u1hat,solution);
     FunctionPtr u2hat_prev = Function::solution(u2hat,solution);
 
     ////////////////////   SOLVE & REFINE   ///////////////////////
-    
-  //  FunctionPtr vorticity = Teuchos::rcp( new PreviousSolutionFunction(solution, - u1->dy() + u2->dx() ) );
+
+    //  FunctionPtr vorticity = Teuchos::rcp( new PreviousSolutionFunction(solution, - u1->dy() + u2->dx() ) );
     if (rank==0) cout << "using sigma-based vorticity definition.\n";
     FunctionPtr vorticity = Teuchos::rcp( new PreviousSolutionFunction(solution, - Re * sigma12 + Re * sigma21 ) ); // Re because sigma = 1/Re grad u
     FunctionPtr p_prev = Teuchos::rcp( new PreviousSolutionFunction(solution, p) );
 
     double delta = pressureDifference(p_prev, radius, mesh);
     if (rank==0) cout << "computed pressure delta on initial solution as " << delta << endl;
-    
+
     FunctionPtr polyOrderFunction = Teuchos::rcp( new MeshPolyOrderFunction(mesh) );
-    
+
     double energyThreshold = 0.20; // for mesh refinements
     Teuchos::RCP<RefinementStrategy> refinementStrategy;
-  //  if (rank==0) cout << "NOTE: using solution, not solnIncrement, for refinement strategy.\n";
-  //  refinementStrategy = Teuchos::rcp( new RefinementStrategy( solution, energyThreshold ));
+    //  if (rank==0) cout << "NOTE: using solution, not solnIncrement, for refinement strategy.\n";
+    //  refinementStrategy = Teuchos::rcp( new RefinementStrategy( solution, energyThreshold ));
     double min_h = 0;
     int maxP = 11;
     refinementStrategy = Teuchos::rcp( new RefinementStrategy( solnIncrement, energyThreshold, min_h, maxP, refineInPFirst ));
-    
+
     refinementStrategy->setEnforceOneIrregularity(enforceOneIrregularity);
     refinementStrategy->setReportPerCellErrors(reportPerCellErrors);
-    
-    if (true) { // do regular refinement strategy...
+
+    if (true)   // do regular refinement strategy...
+    {
 //      bool printToConsole = rank==0;
       FunctionPtr u1_incr = Function::solution(u1, solnIncrement);
       FunctionPtr u2_incr = Function::solution(u2, solnIncrement);
@@ -1140,10 +1274,10 @@ int main(int argc, char *argv[]) {
       FunctionPtr sigma21_incr = Function::solution(sigma21, solnIncrement);
       FunctionPtr sigma22_incr = Function::solution(sigma22, solnIncrement);
       FunctionPtr p_incr = Function::solution(p, solnIncrement);
-      
+
       FunctionPtr l2_incr = u1_incr * u1_incr + u2_incr * u2_incr + p_incr * p_incr
-      + sigma11_incr * sigma11_incr + sigma12_incr * sigma12_incr
-      + sigma21_incr * sigma21_incr + sigma22_incr * sigma22_incr;
+                            + sigma11_incr * sigma11_incr + sigma12_incr * sigma12_incr
+                            + sigma21_incr * sigma21_incr + sigma22_incr * sigma22_incr;
 
       FunctionPtr u1_prev = Function::solution(u1, solution);
       FunctionPtr u2_prev = Function::solution(u2, solution);
@@ -1152,125 +1286,143 @@ int main(int argc, char *argv[]) {
       FunctionPtr sigma21_prev = Function::solution(sigma21, solution);
       FunctionPtr sigma22_prev = Function::solution(sigma22, solution);
       FunctionPtr p_prev = Function::solution(p, solution);
-      
+
       FunctionPtr l2_prev = u1_prev * u1_prev + u2_prev * u2_prev + p_prev * p_prev
-      + sigma11_prev * sigma11_prev + sigma12_prev * sigma12_prev
-      + sigma21_prev * sigma21_prev + sigma22_prev * sigma22_prev;
-      
+                            + sigma11_prev * sigma11_prev + sigma12_prev * sigma12_prev
+                            + sigma21_prev * sigma21_prev + sigma22_prev * sigma22_prev;
+
       double initialMinL2Increment = minL2Increment;
       tolerances[0] = initialMinL2Increment;
       if (rank==0) cout << "Initial relative L^2 tolerance: " << minL2Increment << endl;
-      
+
       LinearTermPtr backgroundSolnFunctional = problem.bf()->testFunctional(problem.backgroundFlow());
       RieszRep solnRieszRep(mesh, problem.solutionIncrement()->ip(), backgroundSolnFunctional);
-      
+
       LinearTermPtr incrementalSolnFunctional = problem.bf()->testFunctional(problem.solutionIncrement());
       RieszRep incrementRieszRep(mesh, problem.solutionIncrement()->ip(), incrementalSolnFunctional);
-      
-      for (int refIndex=0; refIndex<numRefs; refIndex++){
-        if (startWithZeroSolutionAfterRefinement) {
+
+      for (int refIndex=0; refIndex<numRefs; refIndex++)
+      {
+        if (startWithZeroSolutionAfterRefinement)
+        {
           // start with a fresh initial guess for each adaptive mesh:
           solution->clear();
-          if (useZeroInitialGuess) {
+          if (useZeroInitialGuess)
+          {
             cout << "using zero initial guess for now...\n";
-    //        solution->projectOntoMesh(initialGuess);
+            //        solution->projectOntoMesh(initialGuess);
             problem.setIterationCount(0); // must be zero to force solve with background flow again (instead of solnIncrement) -- necessary to impose BCs
-          } else {
+          }
+          else
+          {
             solution->projectOntoMesh(initialGuess); // for this to work initialGuess must match all the non-zero BCs
           }
         }
-        
+
         double incr_norm, prev_norm;
-        do {
+        do
+        {
           problem.iterate(useLineSearch,useCondensedSolve);
           incr_norm = sqrt(l2_incr->integrate(problem.mesh()));
           prev_norm = sqrt(l2_prev->integrate(problem.mesh()));
-          if (prev_norm > 0) {
+          if (prev_norm > 0)
+          {
             incr_norm /= prev_norm;
           }
-          if (rank==0) {
+          if (rank==0)
+          {
             cout << "\x1B[2K"; // Erase the entire current line.
             cout << "\x1B[0E"; // Move to the beginning of the current line.
             cout << "Refinement # " << refIndex << ", iteration: " << problem.iterationCount() << "; L^2(incr) = " << incr_norm;
             flush(cout);
           }
-        } while ((incr_norm > minL2Increment ) && (problem.iterationCount() < maxIters));
+        }
+        while ((incr_norm > minL2Increment ) && (problem.iterationCount() < maxIters));
 
         double incrementalEnergyErrorTotal = solnIncrement->energyErrorTotal();
         solnRieszRep.computeRieszRep();
         double solnEnergyNormTotal = solnRieszRep.getNorm();
         //    incrementRieszRep.computeRieszRep();
         //    double incrementEnergyNormTotal = incrementRieszRep.getNorm();
-        
+
         double relativeEnergyError = incrementalEnergyErrorTotal / solnEnergyNormTotal;
         minL2Increment = initialMinL2Increment * relativeEnergyError;
-        
+
         relativeEnergyErrors[refIndex] = relativeEnergyError;
         dofCounts[refIndex] = mesh->numGlobalDofs();
         fluxDofCounts[refIndex] = mesh->numFluxDofs();
         elementCounts[refIndex] = mesh->numActiveElements();
-        
+
         iterationCounts[refIndex] = (refIndex==0) ? problem.iterationCount() : problem.iterationCount() - 1;
         tolerances[refIndex+1] = minL2Increment;
-        
+
         saveRefinementInfo();
-        
-        if (rank==0) {
+
+        if (rank==0)
+        {
           cout << "\nFor refinement " << refIndex << ", num iterations: " << problem.iterationCount() << endl;
         }
-        
-        if (rank == 0) {
+
+        if (rank == 0)
+        {
           cout << "For refinement " << refIndex << ", mesh has " << mesh->numActiveElements() << " elements and " << mesh->numGlobalDofs() << " dofs.\n";
           cout << "  Incremental solution's energy error is " << incrementalEnergyErrorTotal << ".\n";
           cout << "  Background flow's energy norm is " << solnEnergyNormTotal << ".\n";
           cout << "  Relative energy error: " << incrementalEnergyErrorTotal / solnEnergyNormTotal * 100.0 << "%" << endl;
           cout << "  Updated L^2 tolerance for nonlinear iteration: " << minL2Increment << endl;
         }
-        
+
 //        double t_zeroVorticity = findSignReversal(searchArcForSeparationAngle, 0, 1, vorticity, mesh);
 //        double x_zeroVorticity, y_zeroVorticity;
 //        searchArcForSeparationAngle->value(t_zeroVorticity, x_zeroVorticity, y_zeroVorticity);
         double separationAngle = separationAngleInDegrees(searchArcForSeparationAngle, vorticity, mesh); // atan(y_zeroVorticity / x_zeroVorticity);
-        if (rank==0) {
+        if (rank==0)
+        {
           cout << "separation angle = " << separationAngle << " degrees." << endl;
         }
 
         double wakeLength = wakeLengthFromCylinder(searchLineForWakeLength, radius, u1_prev, mesh);
-        if (rank==0) {
+        if (rank==0)
+        {
           cout << "wake length = " << wakeLength << "." << endl;
         }
-        
+
         // compute pressure difference between front and back of cylinder
         double delta_pressure = pressureDifference(p_prev, radius, mesh);
-        if (rank==0) {
+        if (rank==0)
+        {
           cout << "pressure difference (front to back of cylinder): " << delta_pressure << endl;
         }
-        
+
         // compute lift coefficient:
         double c_L = liftCoefficient(solution, radius);
 //        double c_L_neglectingPressure = liftCoefficient(solution, radius, true);
-        if (rank==0) {
+        if (rank==0)
+        {
           cout << "lift coefficient: " << c_L << endl;
 //          cout << "lift coefficient neglecting pressure contribution: " << c_L_neglectingPressure << endl;
         }
-        
+
         // compute drag coefficient:
         double c_D = dragCoefficient(solution, radius);
 //        double c_D_neglectingPressure = dragCoefficient(solution, radius, true);
-        if (rank==0) {
+        if (rank==0)
+        {
           cout << "drag coefficient: " << c_D << endl;
 //          cout << "drag coefficient neglecting pressure contribution: " << c_D_neglectingPressure << endl;
         }
-        
+
         // reset iteration count to 1 (for the background flow):
         problem.setIterationCount(1);
-        
-        if (rank==0) {
-          if (solnSaveFile.length() > 0) {
+
+        if (rank==0)
+        {
+          if (solnSaveFile.length() > 0)
+          {
             solution->writeToFile(solnSaveFile);
           }
         }
-        
+
 #ifdef HAVE_EPETRAEXT_HDF5
         ostringstream dir_name;
         dir_name << "cylinder_flow_k_" << polyOrder << "_ref_" << refIndex;
@@ -1278,7 +1430,7 @@ int main(int argc, char *argv[]) {
         exporter.exportSolution(solution, varFactory, 0, 4, cellIDToSubdivision(mesh, 4));
 //        exporter.exportSolution(solution, varFactory);
 #endif
-        
+
 #ifdef USE_VTK
         ostringstream vtk_name;
         vtk_name << "cylinder_flow_k_" << polyOrder << "_ref_" << refIndex;
@@ -1287,58 +1439,67 @@ int main(int argc, char *argv[]) {
         vtkExporter.exportSolution(vtk_name.str(), H1Order*2);
 #endif
         refinementStrategy->refine(false); // don't print to console // (rank==0); // print to console on rank 0
-        if (rank==0) {
+        if (rank==0)
+        {
           cout << "After refinement, mesh has " << mesh->numActiveElements() << " elements and " << mesh->numGlobalDofs() << " global dofs" << endl;
         }
-        
-        if (saveFile.length() > 0) {
-          if (rank == 0) {
+
+        if (saveFile.length() > 0)
+        {
+          if (rank == 0)
+          {
             refHistory->saveToFile(saveFile);
           }
         }
-        
+
       }
       // skip final solve if we haven't changed the solution that was loaded from disk:
-      if ((solnFile.length() == 0) || (numRefs > 0)) {
+      if ((solnFile.length() == 0) || (numRefs > 0))
+      {
         // one more solve on the final refined mesh:
         if (rank==0) cout << "Final solve:\n";
-        if (startWithZeroSolutionAfterRefinement) {
+        if (startWithZeroSolutionAfterRefinement)
+        {
           // start with a fresh (zero) initial guess for each adaptive mesh:
           solution->clear();
           problem.setIterationCount(0); // must be zero to force solve with background flow again (instead of solnIncrement)
         }
         double incr_norm, prev_norm;
-        do {
+        do
+        {
           problem.iterate(useLineSearch,useCondensedSolve);
           incr_norm = sqrt(l2_incr->integrate(problem.mesh()));
           prev_norm = sqrt(l2_prev->integrate(problem.mesh()));
-          if (prev_norm > 0) {
+          if (prev_norm > 0)
+          {
             incr_norm /= prev_norm;
           }
-          if (rank==0) {
+          if (rank==0)
+          {
             cout << "\x1B[2K"; // Erase the entire current line.
             cout << "\x1B[0E"; // Move to the beginning of the current line.
             cout << "Iteration: " << problem.iterationCount() << "; L^2(incr) = " << incr_norm;
             flush(cout);
           }
-        } while ((incr_norm > minL2Increment ) && (problem.iterationCount() < maxIters));
+        }
+        while ((incr_norm > minL2Increment ) && (problem.iterationCount() < maxIters));
         if (rank==0) cout << endl;
-        
+
         double incrementalEnergyErrorTotal = solnIncrement->energyErrorTotal();
         solnRieszRep.computeRieszRep();
         double solnEnergyNormTotal = solnRieszRep.getNorm();
         //    incrementRieszRep.computeRieszRep();
         //    double incrementEnergyNormTotal = incrementRieszRep.getNorm();
-        
+
         double relativeEnergyError = incrementalEnergyErrorTotal / solnEnergyNormTotal;
         minL2Increment = initialMinL2Increment * relativeEnergyError;
-        
+
         int refIndex = numRefs;
         relativeEnergyErrors[refIndex] = relativeEnergyError;
         dofCounts[refIndex] = mesh->numGlobalDofs();
         fluxDofCounts[refIndex] = mesh->numFluxDofs();
         elementCounts[refIndex] = mesh->numActiveElements();
-        
+
         iterationCounts[refIndex] = (refIndex==0) ? problem.iterationCount() : problem.iterationCount() - 1;
         saveRefinementInfo();
       }
@@ -1351,45 +1512,52 @@ int main(int argc, char *argv[]) {
     exporter.exportSolution(solution, varFactory, 0, 4, cellIDToSubdivision(mesh, 4));
     //        exporter.exportSolution(solution, varFactory);
 #endif
-    
-    if (rank==0) {
-      if (solnSaveFile.length() > 0) {
+
+    if (rank==0)
+    {
+      if (solnSaveFile.length() > 0)
+      {
         solution->writeToFile(solnSaveFile);
       }
     }
-    
+
     double separationAngle = separationAngleInDegrees(searchArcForSeparationAngle, vorticity, mesh);
-    if (rank==0) {
+    if (rank==0)
+    {
       cout << "separation angle = " << separationAngle << " degrees." << endl;
     }
-    
+
     double wakeLength = wakeLengthFromCylinder(searchLineForWakeLength, radius, u1_prev, mesh);
-    if (rank==0) {
+    if (rank==0)
+    {
       cout << "wake length = " << wakeLength << "." << endl;
     }
-    
+
     // compute pressure difference between front and back of cylinder
     double delta_pressure = pressureDifference(p_prev, radius, mesh);
-    if (rank==0) {
+    if (rank==0)
+    {
       cout << "pressure difference (front to back of cylinder): " << delta_pressure << endl;
     }
-    
+
     // compute lift coefficient:
     double c_L = liftCoefficient(solution, radius);
 //    double c_L_neglectingPressure = liftCoefficient(solution, radius, true);
-    if (rank==0) {
+    if (rank==0)
+    {
       cout << "lift coefficient: " << c_L << endl;
 //      cout << "lift coefficient neglecting pressure contribution: " << c_L_neglectingPressure << endl;
     }
-    
+
     // compute drag coefficient:
     double c_D = dragCoefficient(solution, radius);
     double c_D_neglectingPressure = dragCoefficient(solution, radius, true);
-    if (rank==0) {
+    if (rank==0)
+    {
       cout << "drag coefficient: " << c_D << endl;
 //      cout << "drag coefficient neglecting pressure contribution: " << c_D_neglectingPressure << endl;
     }
-    
+
     LinearTermPtr backgroundSolnFunctional = problem.bf()->testFunctional(problem.backgroundFlow());
     RieszRep solnRieszRep(mesh, problem.solutionIncrement()->ip(), backgroundSolnFunctional);
     solnRieszRep.computeRieszRep();
@@ -1399,55 +1567,61 @@ int main(int argc, char *argv[]) {
 
     double incrementalEnergyErrorTotal = solnIncrement->energyErrorTotal();
 
-    if (rank == 0) {
+    if (rank == 0)
+    {
       cout << "Final mesh has " << mesh->numActiveElements() << " elements and " << mesh->numGlobalDofs() << " dofs.\n";
       cout << "  Incremental solution's energy error is " << incrementalEnergyErrorTotal << ".\n";
       cout << "  Background flow's energy norm is " << solnEnergyNormTotal << ".\n";
       cout << "  Relative energy error: " << incrementalEnergyErrorTotal / solnEnergyNormTotal * 100.0 << "%" << endl;
     }
-    
-    if (!skipPostProcessing) {
+
+    if (!skipPostProcessing)
+    {
       FunctionPtr u1_sq = u1_prev * u1_prev;
       FunctionPtr u_dot_u = u1_sq + (u2_prev * u2_prev);
       FunctionPtr u_div = Teuchos::rcp( new PreviousSolutionFunction(solution, u1->dx() + u2->dy() ) );
-      
+
       // check that the zero mean pressure is being correctly imposed:
       double p_avg = p_prev->integrate(mesh);
       if (rank==0)
         cout << "Integral of pressure: " << p_avg << endl;
 
       FunctionPtr u_n = Teuchos::rcp( new PreviousSolutionFunction(solution, u1hat->times_normal_x() + u2hat->times_normal_y()) );
-      
+
       FunctionPtr massFlux = Teuchos::rcp( new MassFluxFunction(u_n) );
       FunctionPtr absMassFlux = Teuchos::rcp( new MassFluxFunction(u_n,true) );
-      
+
       double totalAbsMassFlux = absMassFlux->integrate(mesh,11,false,true); // 11: enrich cubature a bunch
       double totalMassFlux = massFlux->integrate(mesh,11,false,true); // 11: enrich cubature a bunch
-      
+
       // examine cell sizes:
       double maxCellMeasure = 0;
       double minCellMeasure = 1;
-      
+
       vector< ElementTypePtr > elemTypes = mesh->elementTypes(); // global element types
-      for (vector< ElementTypePtr >::iterator elemTypeIt = elemTypes.begin(); elemTypeIt != elemTypes.end(); elemTypeIt++) {
+      for (vector< ElementTypePtr >::iterator elemTypeIt = elemTypes.begin(); elemTypeIt != elemTypes.end(); elemTypeIt++)
+      {
         ElementTypePtr elemType = *elemTypeIt;
         vector< ElementPtr > elems = mesh->elementsOfTypeGlobal(elemType);
         vector<GlobalIndexType> cellIDs;
-        for (int i=0; i<elems.size(); i++) {
+        for (int i=0; i<elems.size(); i++)
+        {
           cellIDs.push_back(elems[i]->cellID());
         }
         FieldContainer<double> physicalCellNodes = mesh->physicalCellNodesGlobal(elemType);
         BasisCachePtr basisCache = Teuchos::rcp( new BasisCache(elemType,mesh,polyOrder) ); // enrich by trial space order
         basisCache->setPhysicalCellNodes(physicalCellNodes,cellIDs,true); // true: create side caches
         FieldContainer<double> cellMeasures = basisCache->getCellMeasures();
-        
-        for (int i=0; i<elems.size(); i++) {
+
+        for (int i=0; i<elems.size(); i++)
+        {
           maxCellMeasure = max(maxCellMeasure,cellMeasures(i));
           minCellMeasure = min(minCellMeasure,cellMeasures(i));
         }
       }
 
-      if (rank==0) {
+      if (rank==0)
+      {
         cout << "total mass flux: " << totalMassFlux << endl;
         cout << "sum of mass flux absolute value: " << totalAbsMassFlux << endl;
         cout << "largest h: " << sqrt(maxCellMeasure) << endl;
@@ -1457,99 +1631,113 @@ int main(int argc, char *argv[]) {
     }
 
     saveRefinementInfo();
-    
-    if (rank==0){
+
+    if (rank==0)
+    {
       GnuPlotUtil::writeComputationalMeshSkeleton("finalHemkerMesh", mesh);
-      
+
 #ifdef USE_VTK
-        VTKExporter exporter(solution, mesh, varFactory);
-        exporter.exportSolution("nsHemkerSoln", H1Order*2);
-        
-        exporter.exportFunction(vorticity, "HemkerVorticity");
+      VTKExporter exporter(solution, mesh, varFactory);
+      exporter.exportSolution("nsHemkerSoln", H1Order*2);
+
+      exporter.exportFunction(vorticity, "HemkerVorticity");
 #endif
-      
-  //    massFlux->writeBoundaryValuesToMATLABFile(solution->mesh(), "massFlux.dat");
-  //    u_div->writeValuesToMATLABFile(solution->mesh(), "u_div.m");
-  //    solution->writeFieldsToFile(u1->ID(), "u1.m");
-  //    solution->writeFluxesToFile(u1hat->ID(), "u1_hat.dat");
-  //    solution->writeFieldsToFile(u2->ID(), "u2.m");
-  //    solution->writeFluxesToFile(u2hat->ID(), "u2_hat.dat");
-  //    solution->writeFieldsToFile(p->ID(), "p.m");
-      
-  //    polyOrderFunction->writeValuesToMATLABFile(mesh, "hemkerPolyOrders.m");
+
+      //    massFlux->writeBoundaryValuesToMATLABFile(solution->mesh(), "massFlux.dat");
+      //    u_div->writeValuesToMATLABFile(solution->mesh(), "u_div.m");
+      //    solution->writeFieldsToFile(u1->ID(), "u1.m");
+      //    solution->writeFluxesToFile(u1hat->ID(), "u1_hat.dat");
+      //    solution->writeFieldsToFile(u2->ID(), "u2.m");
+      //    solution->writeFluxesToFile(u2hat->ID(), "u2_hat.dat");
+      //    solution->writeFieldsToFile(p->ID(), "p.m");
+
+      //    polyOrderFunction->writeValuesToMATLABFile(mesh, "hemkerPolyOrders.m");
     }
-    
-    if ( !skipPostProcessing ) {
+
+    if ( !skipPostProcessing )
+    {
       RHSPtr streamRHS = RHS::rhs();
       streamRHS->addTerm(vorticity * q_s);
       ((PreviousSolutionFunction*) vorticity.get())->setOverrideMeshCheck(true);
       ((PreviousSolutionFunction*) u1_prev.get())->setOverrideMeshCheck(true);
       ((PreviousSolutionFunction*) u2_prev.get())->setOverrideMeshCheck(true);
-      
+
       recreateStreamBCs();
-      
+
       IPPtr streamIP = Teuchos::rcp( new IP );
       streamIP->addTerm(q_s);
       streamIP->addTerm(q_s->grad());
       streamIP->addTerm(v_s);
       streamIP->addTerm(v_s->div());
       SolutionPtr streamSolution = Teuchos::rcp( new Solution( streamMesh, streamBC, streamRHS, streamIP ) );
-      
-      if (rank==0) {
+
+      if (rank==0)
+      {
         cout << "streamMesh has " << streamMesh->numActiveElements() << " elements.\n";
         cout << "solving for approximate stream function...\n";
       }
 
-      if (useCondensedSolve) {
+      if (useCondensedSolve)
+      {
         streamSolution->condensedSolve(solver);
-      } else {
+      }
+      else
+      {
         streamSolution->solve(solver);
       }
       double energyErrorTotal = streamSolution->energyErrorTotal();
-      if (rank == 0) {
+      if (rank == 0)
+      {
         cout << "...solved.\n";
         cout << "Stream mesh has energy error: " << energyErrorTotal << endl;
       }
-      
-      if (rank==0){
+
+      if (rank==0)
+      {
 #ifdef USE_VTK
         VTKExporter streamExporter(streamSolution, streamMesh, streamVarFactory);
         streamExporter.exportSolution("hemkerStreamSoln", H1Order*2);
 #endif
 
         // the commented-out code below doesn't really work because gnuplot requires a "point grid" in physical space...
-    //    FieldContainer<double> refPoints = pointGrid(-1, 1, -1, 1, H1Order);
-    //    FieldContainer<double> pointData = solutionDataFromRefPoints(refPoints, streamSolution, phi);
-    //    string patchDataPath = "phi_navierStokes_hemker.dat";
-    //    GnuPlotUtil::writeXYPoints(patchDataPath, pointData);
-    //    set<double> patchContourLevels = logContourLevels(height);
-    //    vector<string> patchDataPaths;
-    //    patchDataPaths.push_back(patchDataPath);
-    //    GnuPlotUtil::writeContourPlotScript(patchContourLevels, patchDataPaths, "hemkerNavierStokes.p");
+        //    FieldContainer<double> refPoints = pointGrid(-1, 1, -1, 1, H1Order);
+        //    FieldContainer<double> pointData = solutionDataFromRefPoints(refPoints, streamSolution, phi);
+        //    string patchDataPath = "phi_navierStokes_hemker.dat";
+        //    GnuPlotUtil::writeXYPoints(patchDataPath, pointData);
+        //    set<double> patchContourLevels = logContourLevels(height);
+        //    vector<string> patchDataPaths;
+        //    patchDataPaths.push_back(patchDataPath);
+        //    GnuPlotUtil::writeContourPlotScript(patchContourLevels, patchDataPaths, "hemkerNavierStokes.p");
       }
     }
-    
-    if (saveFile.length() > 0) {
-      if (rank == 0) {
+
+    if (saveFile.length() > 0)
+    {
+      if (rank == 0)
+      {
         refHistory->saveToFile(saveFile);
         cout << "Saved refinement history to " << saveFile << endl;
       }
     }
-    if (solnSaveFile.length() > 0) {
-      if (rank==0) {
+    if (solnSaveFile.length() > 0)
+    {
+      if (rank==0)
+      {
         solution->writeToFile(solnSaveFile);
         cout << "Saved solution to " << solnSaveFile << endl;
       }
     }
 
-    
-  } catch ( std::exception& e )
+
+  }
+  catch ( std::exception& e )
   {
-    if (rank==0) {
+    if (rank==0)
+    {
       cout << e.what() << endl;
       throw e;
     }
   }
-  
+
   return 0;
 }

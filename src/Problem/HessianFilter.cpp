@@ -6,13 +6,15 @@
 using namespace Intrepid;
 using namespace Camellia;
 
-void HessianFilter::filter(FieldContainer<double> &localStiffnessMatrix, FieldContainer<double> &localRHSVector, BasisCachePtr basisCache, Teuchos::RCP<Mesh> mesh, Teuchos::RCP<BC> bc){
+void HessianFilter::filter(FieldContainer<double> &localStiffnessMatrix, FieldContainer<double> &localRHSVector, BasisCachePtr basisCache, Teuchos::RCP<Mesh> mesh, Teuchos::RCP<BC> bc)
+{
 
   //  cout << "numCells = " << localStiffnessMatrix.dimension(0) << ", numTestDofs = " << localStiffnessMatrix.dimension(1) << ", numTrialDofs = " << localStiffnessMatrix.dimension(2) << endl;
 
   vector<GlobalIndexType> cellIDs = basisCache->cellIDs();
   GlobalIndexType numCells = cellIDs.size();
-  if (numCells>0){
+  if (numCells>0)
+  {
     ElementTypePtr elemTypePtr = mesh->getElement(cellIDs[0])->elementType(); // assumes all elements in basisCache are of the same type.
 
     int numTrialDofs = elemTypePtr->trialOrderPtr->totalDofs();
@@ -46,11 +48,14 @@ void HessianFilter::filter(FieldContainer<double> &localStiffnessMatrix, FieldCo
     }
     */
 
-    for (int cellIndex = 0;cellIndex<numCells;cellIndex++){
-      for (int i = 0;i<numTrialDofs;i++){
-        for (int j = 0;j<numTrialDofs;j++){
+    for (int cellIndex = 0; cellIndex<numCells; cellIndex++)
+    {
+      for (int i = 0; i<numTrialDofs; i++)
+      {
+        for (int j = 0; j<numTrialDofs; j++)
+        {
           localStiffnessMatrix(cellIndex,i,j) += hessianStiffness(cellIndex,i,j);
-        }    
+        }
       }
     }
   }

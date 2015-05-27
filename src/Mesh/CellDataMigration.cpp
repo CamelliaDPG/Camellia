@@ -17,7 +17,8 @@
 using namespace Intrepid;
 using namespace Camellia;
 
-int CellDataMigration::dataSize(Mesh *mesh, GlobalIndexType cellID) {
+int CellDataMigration::dataSize(Mesh *mesh, GlobalIndexType cellID)
+{
 //  cout << "CellDataMigration::dataSize() called for cell " << cellID << endl;
 
   int size = 0;
@@ -31,7 +32,8 @@ int CellDataMigration::dataSize(Mesh *mesh, GlobalIndexType cellID) {
   // store # of solution objects
   int numSolutions = solutions.size();
   size += sizeof(numSolutions);
-  for (int i=0; i<numSolutions; i++) {
+  for (int i=0; i<numSolutions; i++)
+  {
     // # dofs per solution
     int localDofs = elemType->trialOrderPtr->totalDofs();
     size += sizeof(localDofs);
@@ -42,7 +44,8 @@ int CellDataMigration::dataSize(Mesh *mesh, GlobalIndexType cellID) {
   return size;
 }
 
-void CellDataMigration::packData(Mesh *mesh, GlobalIndexType cellID, bool packParentDofs, char *dataBuffer, int size) {
+void CellDataMigration::packData(Mesh *mesh, GlobalIndexType cellID, bool packParentDofs, char *dataBuffer, int size)
+{
   // ideally, we'd pack the global coefficients for this cell and simply remap them when unpacking
   // however, producing the map is an implementation challenge, particularly in the presence of refined elements
   // so what we do instead is map local data, and then use the local to global mapper that we build anyway to map
@@ -51,7 +54,8 @@ void CellDataMigration::packData(Mesh *mesh, GlobalIndexType cellID, bool packPa
 
 //  cout << "CellDataMigration::packData() called for cell " << cellID << " on rank " << myRank << endl;
   char* dataLocation = dataBuffer;
-  if (size<dataSize(mesh, cellID)) {
+  if (size<dataSize(mesh, cellID))
+  {
     TEUCHOS_TEST_FOR_EXCEPTION(true, std::invalid_argument, "undersized dataBuffer");
   }
 
@@ -67,15 +71,20 @@ void CellDataMigration::packData(Mesh *mesh, GlobalIndexType cellID, bool packPa
   dataLocation += sizeof(numSolutions);
 
   GlobalIndexType cellIDForCoefficients;
-  if (packParentDofs) {
+  if (packParentDofs)
+  {
     CellPtr cell = mesh->getTopology()->getCell(cellID);
     cellIDForCoefficients = cell->getParent()->cellIndex();
-  } else {
+  }
+  else
+  {
     cellIDForCoefficients = cellID;
   }
 //  cout << numSolutions << " ";
-  for (int i=0; i<numSolutions; i++) {
-    if (! solutions[i]->cellHasCoefficientsAssigned(cellIDForCoefficients)) {
+  for (int i=0; i<numSolutions; i++)
+  {
+    if (! solutions[i]->cellHasCoefficientsAssigned(cellIDForCoefficients))
+    {
       int localDofs = 0;
       memcpy(dataLocation, &localDofs, sizeof(localDofs));
       dataLocation += sizeof(localDofs);
@@ -100,12 +109,14 @@ void CellDataMigration::packData(Mesh *mesh, GlobalIndexType cellID, bool packPa
 //  cout << endl;
 }
 
-void CellDataMigration::unpackData(Mesh *mesh, GlobalIndexType cellID, const char *dataBuffer, int size) {
+void CellDataMigration::unpackData(Mesh *mesh, GlobalIndexType cellID, const char *dataBuffer, int size)
+{
   int myRank                    = Teuchos::GlobalMPISession::getRank();
 
 //  cout << "CellDataMigration::unpackData() called for cell " << cellID << " on rank " << myRank << endl;
   const char* dataLocation = dataBuffer;
-  if (size<dataSize(mesh, cellID)) {
+  if (size<dataSize(mesh, cellID))
+  {
     cout << "undersized dataBuffer\n";
     TEUCHOS_TEST_FOR_EXCEPTION(true, std::invalid_argument, "undersized dataBuffer");
   }
@@ -116,7 +127,8 @@ void CellDataMigration::unpackData(Mesh *mesh, GlobalIndexType cellID, const cha
   bool coefficientsBelongToParent = parentDataPackedFlag != 0;
 
   set<GlobalIndexType> rankLocalCellIDs = mesh->cellIDsInPartition();
-  if (rankLocalCellIDs.find(cellID) == rankLocalCellIDs.end()) {
+  if (rankLocalCellIDs.find(cellID) == rankLocalCellIDs.end())
+  {
     // it may be that when we do ghost cells, this shouldn't be an exception--or maybe the ghost cells will be packed in with the active cell
     cout << "unpackData called for a non-rank-local cellID\n";
     TEUCHOS_TEST_FOR_EXCEPTION(true, std::invalid_argument, "unpackData called for a non-rank-local cellID");
@@ -126,22 +138,26 @@ void CellDataMigration::unpackData(Mesh *mesh, GlobalIndexType cellID, const cha
   int numSolutions = solutions.size();
   int numSolutionsPacked;
   memcpy(&numSolutionsPacked, dataLocation, sizeof(numSolutionsPacked));
-  if (numSolutions != numSolutionsPacked) {
+  if (numSolutions != numSolutionsPacked)
+  {
     cout << "numSolutions != numSolutionsPacked.\n";
     TEUCHOS_TEST_FOR_EXCEPTION(true, std::invalid_argument, "numSolutions != numSolutionsPacked");
   }
   dataLocation += sizeof(numSolutions);
-  for (int solnOrdinal=0; solnOrdinal<numSolutions; solnOrdinal++) {
+  for (int solnOrdinal=0; solnOrdinal<numSolutions; solnOrdinal++)
+  {
     // # dofs per solution
     int localDofs;
     memcpy(&localDofs, dataLocation, sizeof(localDofs));
     dataLocation += sizeof(localDofs);
-    if (localDofs==0) {
+    if (localDofs==0)
+    {
       // no dofs assigned -- proceed to next solution
       continue;
     }
 
-    if (localDofs != elemType->trialOrderPtr->totalDofs()) {
+    if (localDofs != elemType->trialOrderPtr->totalDofs())
+    {
       cout << "localDofs != elemType->trialOrderPtr->totalDofs().\n";
       TEUCHOS_TEST_FOR_EXCEPTION(true, std::invalid_argument, "localDofs != elemType->trialOrderPtr->totalDofs()");
     }
@@ -150,19 +166,24 @@ void CellDataMigration::unpackData(Mesh *mesh, GlobalIndexType cellID, const cha
     memcpy(&solnCoeffs[0], dataLocation, localDofs * sizeof(double));
     // the dofs themselves
     dataLocation += localDofs * sizeof(double);
-    if (!coefficientsBelongToParent) {
+    if (!coefficientsBelongToParent)
+    {
       solutions[solnOrdinal]->setSolnCoeffsForCellID(solnCoeffs, cellID);
 //      cout << "CellDataMigration: setting soln coefficients for cell " << cellID << endl;
-    } else {
+    }
+    else
+    {
       CellPtr cell = mesh->getTopology()->getCell(cellID);
       CellPtr parent = cell->getParent();
       int childOrdinal = -1;
       vector<IndexType> childIndices = parent->getChildIndices();
-      for (int i=0; i<childIndices.size(); i++) {
+      for (int i=0; i<childIndices.size(); i++)
+      {
         if (childIndices[i]==cellID) childOrdinal = i;
         else childIndices[i] = -1; // indication that Solution should not compute the projection for this child
       }
-      if (childOrdinal == -1) {
+      if (childOrdinal == -1)
+      {
         cout << "ERROR: child not found.\n";
         TEUCHOS_TEST_FOR_EXCEPTION(true, std::invalid_argument, "child not found!");
       }

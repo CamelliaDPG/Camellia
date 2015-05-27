@@ -2,7 +2,8 @@
 #include "ConfusionManufacturedSolution.h"
 #include "ExpFunction.h"
 
-ConfusionManufacturedSolution::ConfusionManufacturedSolution(double epsilon, double beta_x, double beta_y) {
+ConfusionManufacturedSolution::ConfusionManufacturedSolution(double epsilon, double beta_x, double beta_y)
+{
   _epsilon = epsilon;
   _beta_x  = beta_x;
   _beta_y  = beta_y;
@@ -50,12 +51,14 @@ ConfusionManufacturedSolution::ConfusionManufacturedSolution(double epsilon, dou
   this->setSolutionFunction(_beta_n_u_minus_sigma_hat, sigma_flux_exact);
 }
 
-int ConfusionManufacturedSolution::H1Order() {
+int ConfusionManufacturedSolution::H1Order()
+{
   // -1 for non-polynomial solution...
   return -1;
 }
 
-FunctionPtr ConfusionManufacturedSolution::u() {
+FunctionPtr ConfusionManufacturedSolution::u()
+{
   // DPG Part III, section 5.1 (Egger and Schoeberl) solution choice:
   // u =   (x + (exp[(beta_x * x)/eps] - 1)/(1-exp[beta_x/eps]))
   //     * (y + (exp[(beta_y * y)/eps] - 1)/(1-exp[beta_y/eps]))

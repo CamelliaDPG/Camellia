@@ -11,12 +11,13 @@
 
 #include "TestSuite.h"
 
-class SerialDenseMatrixUtilityTests : public TestSuite {
+class SerialDenseMatrixUtilityTests : public TestSuite
+{
   void setup();
   void teardown();
 public:
   void runTests(int &numTestsRun, int &numTestsPassed);
-  bool testMultiplyMatrices();  
+  bool testMultiplyMatrices();
   bool testSimpleSolve();
   bool testSolveMultipleRHS();
   bool testAddMatrices();

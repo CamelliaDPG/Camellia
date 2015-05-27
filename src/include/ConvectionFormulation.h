@@ -12,30 +12,32 @@
 #include "VarFactory.h"
 #include "BF.h"
 
-namespace Camellia {
-  class ConvectionFormulation {
-    BFPtr _convectionBF;
-    int _spaceDim;
+namespace Camellia
+{
+class ConvectionFormulation
+{
+  BFPtr _convectionBF;
+  int _spaceDim;
 
-    static const string S_U;
+  static const string S_U;
 
-    static const string S_Q_N_HAT;
+  static const string S_Q_N_HAT;
 
-    static const string S_V;
-  public:
-    ConvectionFormulation(int spaceDim, TFunctionPtr<double> convectiveFunction);
+  static const string S_V;
+public:
+  ConvectionFormulation(int spaceDim, TFunctionPtr<double> convectiveFunction);
 
-    BFPtr bf();
+  BFPtr bf();
 
-    // field variables:
-    VarPtr u();
+  // field variables:
+  VarPtr u();
 
-    // traces:
-    VarPtr q_n_hat();
+  // traces:
+  VarPtr q_n_hat();
 
-    // test variables:
-    VarPtr v();
-  };
+  // test variables:
+  VarPtr v();
+};
 }
 
 

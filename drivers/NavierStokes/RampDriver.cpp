@@ -56,100 +56,127 @@ static const double rampHeight = .258819;
 
 using namespace std;
 
-class PlateCut : public Function {
+class PlateCut : public Function
+{
   double _Re;
 public:
-  PlateCut(double Re) : Function(0) {
+  PlateCut(double Re) : Function(0)
+  {
     _Re = Re;
   }
-  void values(FieldContainer<double> &values, BasisCachePtr basisCache) {
+  void values(FieldContainer<double> &values, BasisCachePtr basisCache)
+  {
     CHECK_VALUES_RANK(values);
     vector<int> cellIDs = basisCache->cellIDs();
     int numCells = values.dimension(0);
     int numPoints = values.dimension(1);
-    for (int cellIndex=0; cellIndex < numCells; cellIndex++) {
+    for (int cellIndex=0; cellIndex < numCells; cellIndex++)
+    {
       int cellID = cellIDs[cellIndex];
       int numSides = 4; // warning: hardcoded for quads
       FieldContainer<double> vv(numSides,2);
-      basisCache->mesh()->verticesForCell(vv, cellID);      
+      basisCache->mesh()->verticesForCell(vv, cellID);
       double cellMeasure = basisCache->mesh()->getCellMeasure(cellID);
       // check if at singularity
-      bool atSingularity = false; 
-      if (cellMeasure<.01){
-	for (int i = 0;i < numSides;i++){
-	  if (abs(vv(i,0)-X_PLATE) < 1e-14 && abs(vv(i,0)) < 1e-14){
-	    atSingularity = true;
-	  }
-	}
+      bool atSingularity = false;
+      if (cellMeasure<.01)
+      {
+        for (int i = 0; i < numSides; i++)
+        {
+          if (abs(vv(i,0)-X_PLATE) < 1e-14 && abs(vv(i,0)) < 1e-14)
+          {
+            atSingularity = true;
+          }
+        }
       }
 
-      for (int ptIndex=0; ptIndex<numPoints; ptIndex++) {
-	if (atSingularity){
-	  values(cellIndex,ptIndex) = 1.0/_Re; // de-emphasize plate edge
-	}else{
-	  values(cellIndex,ptIndex) = 1.0;       
-	}
+      for (int ptIndex=0; ptIndex<numPoints; ptIndex++)
+      {
+        if (atSingularity)
+        {
+          values(cellIndex,ptIndex) = 1.0/_Re; // de-emphasize plate edge
+        }
+        else
+        {
+          values(cellIndex,ptIndex) = 1.0;
+        }
       }
     }
   }
 };
-class InvH : public hFunction {
+class InvH : public hFunction
+{
 public:
-  double value(double x, double y, double h) {
+  double value(double x, double y, double h)
+  {
     return 1.0/h;
   }
 };
 
-class InvSqrtH : public hFunction {
+class InvSqrtH : public hFunction
+{
 public:
-  double value(double x, double y, double h) {
+  double value(double x, double y, double h)
+  {
     return 1.0/sqrt(h);
   }
 };
 // ===================== Mesh functions ====================
 
-class MeshInfo {
+class MeshInfo
+{
   MeshPtr _mesh;
 public:
-  MeshInfo(MeshPtr mesh){
+  MeshInfo(MeshPtr mesh)
+  {
     _mesh = mesh;
   }
-  double getMinCellMeasure(){
+  double getMinCellMeasure()
+  {
     double minMeasure = 1e7;
     vector<ElementPtr> elems = _mesh->activeElements();
-    for (vector<ElementPtr>::iterator elemIt = elems.begin();elemIt!=elems.end();elemIt++){
+    for (vector<ElementPtr>::iterator elemIt = elems.begin(); elemIt!=elems.end(); elemIt++)
+    {
       minMeasure = min(minMeasure, _mesh->getCellMeasure((*elemIt)->cellID()));
     }
     return minMeasure;
   }
-  vector<int> getMinCellSizeCellIDs(){
+  vector<int> getMinCellSizeCellIDs()
+  {
     double minMeasure = getMinCellMeasure();
     vector<int> minMeasureCellIDs;
     vector<ElementPtr> elems = _mesh->activeElements();
-    for (vector<ElementPtr>::iterator elemIt = elems.begin();elemIt!=elems.end();elemIt++){
-      if (minMeasure <= _mesh->getCellMeasure((*elemIt)->cellID())){
-	minMeasureCellIDs.push_back((*elemIt)->cellID());
+    for (vector<ElementPtr>::iterator elemIt = elems.begin(); elemIt!=elems.end(); elemIt++)
+    {
+      if (minMeasure <= _mesh->getCellMeasure((*elemIt)->cellID()))
+      {
+        minMeasureCellIDs.push_back((*elemIt)->cellID());
       }
     }
     return minMeasureCellIDs;
   }
-  double getMinCellSideLength(){
+  double getMinCellSideLength()
+  {
     double minMeasure = 1e7;
     vector<ElementPtr> elems = _mesh->activeElements();
-    for (vector<ElementPtr>::iterator elemIt = elems.begin();elemIt!=elems.end();elemIt++){
+    for (vector<ElementPtr>::iterator elemIt = elems.begin(); elemIt!=elems.end(); elemIt++)
+    {
       minMeasure = min(minMeasure, _mesh->getCellXSize((*elemIt)->cellID()));
       minMeasure = min(minMeasure, _mesh->getCellYSize((*elemIt)->cellID()));
     }
     return minMeasure;
   }
-  bool checkIfVertexAtPoint(int cellID, FieldContainer<double> point){
+  bool checkIfVertexAtPoint(int cellID, FieldContainer<double> point)
+  {
     int numSides = _mesh->getElement(cellID)->numSides();
     FieldContainer<double> vertices(numSides,2); //for quads
     _mesh->verticesForCell(vertices, cellID);
-    bool atPoint = false;	
-    for (int j = 0;j<numSides;j++){ // num sides = num verts
-      if (abs(vertices(j,0)-point(0))<1e-7 && (abs(vertices(j,1)-point(1))<1e-7)){ 
-	atPoint = true;
+    bool atPoint = false;
+    for (int j = 0; j<numSides; j++) // num sides = num verts
+    {
+      if (abs(vertices(j,0)-point(0))<1e-7 && (abs(vertices(j,1)-point(1))<1e-7))
+      {
+        atPoint = true;
       }
     }
     return atPoint;
@@ -158,46 +185,57 @@ public:
 
 // ===================== Helper functions ====================
 
-class ScalarParamFunction : public Function {
+class ScalarParamFunction : public Function
+{
   double _a;
 public:
-  ScalarParamFunction(double a) : Function(0){
+  ScalarParamFunction(double a) : Function(0)
+  {
     _a = a;
   }
-  void set_param(double a){
+  void set_param(double a)
+  {
     _a = a;
   }
-  double get_param(){
+  double get_param()
+  {
     return _a;
   }
-  void values(FieldContainer<double> &values, BasisCachePtr basisCache) {
+  void values(FieldContainer<double> &values, BasisCachePtr basisCache)
+  {
     CHECK_VALUES_RANK(values);
     values.initialize(_a);
   }
 };
 
-class PowerFunction : public Function {
+class PowerFunction : public Function
+{
   FunctionPtr _f;
   double _power;
   double _minVal;
 public:
-  PowerFunction(FunctionPtr f,double power) : Function(0) {
+  PowerFunction(FunctionPtr f,double power) : Function(0)
+  {
     _f = f;
     _power = power;
     _minVal = 1e-7;
   }
-  PowerFunction(FunctionPtr f,double power,double minVal) : Function(0) {
+  PowerFunction(FunctionPtr f,double power,double minVal) : Function(0)
+  {
     _f = f;
     _power = power;
     _minVal = minVal;
   }
-  void values(FieldContainer<double> &values, BasisCachePtr basisCache) {
+  void values(FieldContainer<double> &values, BasisCachePtr basisCache)
+  {
     CHECK_VALUES_RANK(values);
-    _f->values(values,basisCache);    
+    _f->values(values,basisCache);
     int numCells = values.dimension(0);
     int numPoints = values.dimension(1);
-    for (int cellIndex=0; cellIndex<numCells; cellIndex++) {
-      for (int ptIndex=0; ptIndex<numPoints; ptIndex++) {
+    for (int cellIndex=0; cellIndex<numCells; cellIndex++)
+    {
+      for (int ptIndex=0; ptIndex<numPoints; ptIndex++)
+      {
         double value = values(cellIndex,ptIndex);
         values(cellIndex,ptIndex) = pow(max(value,_minVal),_power); // WARNING: MAX OPERATOR HACK FOR NEG TEMP
       }
@@ -205,47 +243,59 @@ public:
   }
 };
 
-class PositiveFunction : public Function {
+class PositiveFunction : public Function
+{
   FunctionPtr _f;
   double _minVal;
 public:
-  PositiveFunction(FunctionPtr f) : Function(0) {
+  PositiveFunction(FunctionPtr f) : Function(0)
+  {
     _f = f;
     _minVal = 1e-7;
   }
-  PositiveFunction(FunctionPtr f,double minVal) : Function(0) {
+  PositiveFunction(FunctionPtr f,double minVal) : Function(0)
+  {
     _f = f;
     _minVal = minVal;
   }
-  void values(FieldContainer<double> &values, BasisCachePtr basisCache) {
+  void values(FieldContainer<double> &values, BasisCachePtr basisCache)
+  {
     CHECK_VALUES_RANK(values);
-    _f->values(values,basisCache);    
+    _f->values(values,basisCache);
     int numCells = values.dimension(0);
     int numPoints = values.dimension(1);
-    for (int cellIndex=0; cellIndex<numCells; cellIndex++) {
-      for (int ptIndex=0; ptIndex<numPoints; ptIndex++) {
+    for (int cellIndex=0; cellIndex<numCells; cellIndex++)
+    {
+      for (int ptIndex=0; ptIndex<numPoints; ptIndex++)
+      {
         double value = values(cellIndex,ptIndex);
-	if (value < _minVal){
-	  values(cellIndex,ptIndex) = _minVal;
-	}
+        if (value < _minVal)
+        {
+          values(cellIndex,ptIndex) = _minVal;
+        }
       }
     }
   }
 };
 
-class LogFunction : public Function {
+class LogFunction : public Function
+{
   FunctionPtr _f;
 public:
-  LogFunction(FunctionPtr f) : Function(0) {
+  LogFunction(FunctionPtr f) : Function(0)
+  {
     _f = f;
   }
-  void values(FieldContainer<double> &values, BasisCachePtr basisCache) {
+  void values(FieldContainer<double> &values, BasisCachePtr basisCache)
+  {
     CHECK_VALUES_RANK(values);
-    _f->values(values,basisCache);    
+    _f->values(values,basisCache);
     int numCells = values.dimension(0);
     int numPoints = values.dimension(1);
-    for (int cellIndex=0; cellIndex<numCells; cellIndex++) {
-      for (int ptIndex=0; ptIndex<numPoints; ptIndex++) {
+    for (int cellIndex=0; cellIndex<numCells; cellIndex++)
+    {
+      for (int ptIndex=0; ptIndex<numPoints; ptIndex++)
+      {
         double value = values(cellIndex,ptIndex);
         values(cellIndex,ptIndex) = log(value);
       }
@@ -253,109 +303,136 @@ public:
   }
 };
 
-class NormSqOverElement : public Function {
+class NormSqOverElement : public Function
+{
   FunctionPtr _f;
   Teuchos::RCP<Mesh> _mesh;
 public:
-  NormSqOverElement(FunctionPtr f, Teuchos::RCP<Mesh> mesh) : Function(0) {
+  NormSqOverElement(FunctionPtr f, Teuchos::RCP<Mesh> mesh) : Function(0)
+  {
     _f = f;
     _mesh = mesh;
   }
-  void values(FieldContainer<double> &values, BasisCachePtr basisCache) {
+  void values(FieldContainer<double> &values, BasisCachePtr basisCache)
+  {
     CHECK_VALUES_RANK(values);
     FunctionPtr fsq = _f*_f;
     int numCells = basisCache->cellIDs().size();
-    int numPoints = values.dimension(1);   
+    int numPoints = values.dimension(1);
     FieldContainer<double> cellIntegs(numCells);
-    fsq->integrate(cellIntegs,basisCache);    
-    for (int cellIndex=0; cellIndex<numCells; cellIndex++) {
-      for (int ptIndex=0; ptIndex<numPoints; ptIndex++) {
-	values(cellIndex,ptIndex) = cellIntegs(cellIndex);
+    fsq->integrate(cellIntegs,basisCache);
+    for (int cellIndex=0; cellIndex<numCells; cellIndex++)
+    {
+      for (int ptIndex=0; ptIndex<numPoints; ptIndex++)
+      {
+        values(cellIndex,ptIndex) = cellIntegs(cellIndex);
       }
     }
   }
 };
 
-class PartitionFunction : public Function {
+class PartitionFunction : public Function
+{
   Teuchos::RCP<Mesh> _mesh;
 public:
-  PartitionFunction(  Teuchos::RCP<Mesh> mesh) : Function(0) {
+  PartitionFunction(  Teuchos::RCP<Mesh> mesh) : Function(0)
+  {
     _mesh = mesh;
   }
-  void values(FieldContainer<double> &values, BasisCachePtr basisCache){
+  void values(FieldContainer<double> &values, BasisCachePtr basisCache)
+  {
     vector<int> cellIDs = basisCache->cellIDs();
     int numPoints = values.dimension(1);
-    for (int i = 0;i<cellIDs.size();i++){
+    for (int i = 0; i<cellIDs.size(); i++)
+    {
       int partitionNumber = _mesh->partitionForCellID(cellIDs[i]);
-      for (int j = 0;j<numPoints;j++){
-	values(i,j) = partitionNumber;
+      for (int j = 0; j<numPoints; j++)
+      {
+        values(i,j) = partitionNumber;
       }
     }
   }
 };
 
-class EpsilonScaling : public hFunction {
+class EpsilonScaling : public hFunction
+{
   double _epsilon;
 public:
-  EpsilonScaling(double epsilon) {
+  EpsilonScaling(double epsilon)
+  {
     _epsilon = epsilon;
   }
-  double value(double x, double y, double h) {
+  double value(double x, double y, double h)
+  {
     // h = sqrt(|K|), or measure of one side of a quad elem
     double scaling = min(_epsilon/h, 1.0);
     // sqrt because it's inserted into an IP form in a symmetric fashion
     return sqrt(scaling);
   }
-  void set_param(double a){
+  void set_param(double a)
+  {
     _epsilon = a;
   }
-  double get_param(){
+  double get_param()
+  {
     return _epsilon;
   }
 };
 
-class hPowerFunction : public Function {
+class hPowerFunction : public Function
+{
   double _power;
   int _xyDim;
-public: 
-  hPowerFunction(double power){
+public:
+  hPowerFunction(double power)
+  {
     _power = power;
     _xyDim = 0; // isotropic assumption
   }
-  hPowerFunction(double power, int anisotropicDimension){
+  hPowerFunction(double power, int anisotropicDimension)
+  {
     _power = power;
     _xyDim = anisotropicDimension;
   }
-  void values(FieldContainer<double> &values, BasisCachePtr basisCache){
+  void values(FieldContainer<double> &values, BasisCachePtr basisCache)
+  {
     MeshPtr mesh = basisCache->mesh();
     vector<int> cellIDs = basisCache->cellIDs();
     int numPoints = values.dimension(1);
-    for (int i = 0;i<cellIDs.size();i++){
+    for (int i = 0; i<cellIDs.size(); i++)
+    {
       double h = mesh->getCellXSize(cellIDs[i]); // default to x-direction
-      if (_xyDim == 1){
-	h = mesh->getCellYSize(cellIDs[i]);
+      if (_xyDim == 1)
+      {
+        h = mesh->getCellYSize(cellIDs[i]);
       }
-      double hPower = pow(h,_power);      
-      for (int j = 0;j<numPoints;j++){
-	values(i,j) = hPower;
+      double hPower = pow(h,_power);
+      for (int j = 0; j<numPoints; j++)
+      {
+        values(i,j) = hPower;
       }
     }
   }
 };
 
-class EnergyErrorFunction : public Function {
+class EnergyErrorFunction : public Function
+{
   map<int, double> _energyErrorForCell;
 public:
-  EnergyErrorFunction(map<int, double> energyErrorForCell) : Function(0) {
+  EnergyErrorFunction(map<int, double> energyErrorForCell) : Function(0)
+  {
     _energyErrorForCell = energyErrorForCell;
   }
-  void values(FieldContainer<double> &values, BasisCachePtr basisCache){
+  void values(FieldContainer<double> &values, BasisCachePtr basisCache)
+  {
     vector<int> cellIDs = basisCache->cellIDs();
     int numPoints = values.dimension(1);
-    for (int i = 0;i<cellIDs.size();i++){
+    for (int i = 0; i<cellIDs.size(); i++)
+    {
       double energyError = _energyErrorForCell[cellIDs[i]];
-      for (int j = 0;j<numPoints;j++){
-	values(i,j) = energyError;
+      for (int j = 0; j<numPoints; j++)
+      {
+        values(i,j) = energyError;
       }
     }
   }
@@ -364,37 +441,45 @@ public:
 
 // ===================== Spatial filter boundary functions ====================
 
-class OutflowBoundary : public SpatialFilter {
+class OutflowBoundary : public SpatialFilter
+{
 public:
-  bool matchesPoint(double x, double y) {
+  bool matchesPoint(double x, double y)
+  {
     double tol = 1e-14;
     bool yMatch = ((abs(x-X_RIGHT) < tol) && (y > 0.0) && (y < YTOP));
     return yMatch;
   }
 };
 
-class InflowBoundary : public SpatialFilter {
+class InflowBoundary : public SpatialFilter
+{
 public:
-  bool matchesPoint(double x, double y) {
+  bool matchesPoint(double x, double y)
+  {
     double tol = 1e-14;
     bool yMatch = ((abs(x - X_LEFT) < tol) && (y > 0) && (y < YTOP));
     return yMatch;
   }
 };
 
-class FreeStreamBoundaryTop : public SpatialFilter {
+class FreeStreamBoundaryTop : public SpatialFilter
+{
 public:
-  bool matchesPoint(double x, double y) {
+  bool matchesPoint(double x, double y)
+  {
     double tol = 1e-14;
     bool yMatch = (abs(y-YTOP) < tol && (x < X_RIGHT) && (x > X_LEFT));
-    //    bool yMatch = (abs(y-YTOP) < tol); 
+    //    bool yMatch = (abs(y-YTOP) < tol);
     return yMatch;
   }
 };
 
-class FreeStreamBoundaryBottom : public SpatialFilter {
+class FreeStreamBoundaryBottom : public SpatialFilter
+{
 public:
-  bool matchesPoint(double x, double y) {
+  bool matchesPoint(double x, double y)
+  {
     double tol = 1e-14;
     bool match = ((abs(y) < tol) && (x < X_PLATE) && (x > X_LEFT));
     return match; // if it's just a flat plate
@@ -402,53 +487,64 @@ public:
 };
 
 // in front of ramp
-class NonRampPlate : public SpatialFilter {
+class NonRampPlate : public SpatialFilter
+{
 public:
-  bool matchesPoint(double x, double y) {
+  bool matchesPoint(double x, double y)
+  {
     double tol = 1e-14;
     bool yMatch = ((abs(y) < tol) && (x > X_PLATE) && (x < X_RAMP));
     return yMatch;
   }
 };
 
-class WallBoundary : public SpatialFilter {
-public:  
-  bool matchesPoint(double x, double y) {
+class WallBoundary : public SpatialFilter
+{
+public:
+  bool matchesPoint(double x, double y)
+  {
     double tol = 1e-14;
     bool yMatch = ((abs(y) < tol) && (x > 1.0) && (x < 2.0));
     return yMatch;
-  }  
+  }
 };
 
 // ===================== IP helper functions ====================
 
-class TwoDGaussian : public SimpleFunction {
+class TwoDGaussian : public SimpleFunction
+{
   double _width,_amplitude,_center;
 public:
-  TwoDGaussian(double width,double amplitude){
+  TwoDGaussian(double width,double amplitude)
+  {
     _width = width;
     _amplitude = amplitude;
     _center = 1.0;
   }
-  TwoDGaussian(double width,double center, double amplitude){
+  TwoDGaussian(double width,double center, double amplitude)
+  {
     _width = width;
     _center = center;
     _amplitude = amplitude;
   }
-  double value(double x, double y){
+  double value(double x, double y)
+  {
     return _amplitude*exp(-((x-_center)*(x-_center)+y*y)/(2.0*_width*_width));
   }
 };
 
-void initLinearTermVector(sparseFxnMatrix A, map<int, LinearTermPtr> &Mvec){
-  
+void initLinearTermVector(sparseFxnMatrix A, map<int, LinearTermPtr> &Mvec)
+{
+
   sparseFxnMatrix::iterator testIt;
-  for (testIt = A.begin();testIt!=A.end();testIt++){
-    int testID = testIt->first;      
+  for (testIt = A.begin(); testIt!=A.end(); testIt++)
+  {
+    int testID = testIt->first;
     sparseFxnVector a = testIt->second;
-    sparseFxnVector::iterator trialIt;   
-    for (trialIt = a.begin();trialIt!=a.end();trialIt++){
-      int trialID = trialIt->first;	
+    sparseFxnVector::iterator trialIt;
+    for (trialIt = a.begin(); trialIt!=a.end(); trialIt++)
+    {
+      int trialID = trialIt->first;
       Mvec[trialID] = Teuchos::rcp(new LinearTerm);
     }
   }
@@ -457,7 +553,8 @@ void initLinearTermVector(sparseFxnMatrix A, map<int, LinearTermPtr> &Mvec){
 
 // ===================== main file ====================
 
-int main(int argc, char *argv[]) {
+int main(int argc, char *argv[])
+{
 #ifdef HAVE_MPI
   Teuchos::GlobalMPISession mpiSession(&argc, &argv,0);
   choice::MpiArgs args( argc, argv );
@@ -472,7 +569,7 @@ int main(int argc, char *argv[]) {
   e1[0] = 1;
   vector<double> e2(2); // (0,1)
   e2[1] = 1;
-  FunctionPtr negOne = Function::constant(-1.0);  
+  FunctionPtr negOne = Function::constant(-1.0);
   FunctionPtr one = Function::constant(1.0);
 
   // problem params
@@ -481,13 +578,14 @@ int main(int argc, char *argv[]) {
   double Ma = args.Input<double>("--Ma","Mach number",3.0);
 
   // solver
-  int nCells = args.Input<int>("--nCells", "num cells",2);  
+  int nCells = args.Input<int>("--nCells", "num cells",2);
   int polyOrder = args.Input<int>("--p","order of approximation",2);
-  int pToAdd = args.Input<int>("--pToAdd", "test space enrichment",2); 
+  int pToAdd = args.Input<int>("--pToAdd", "test space enrichment",2);
   double time_tol_orig = args.Input<double>("--timeTol", "time step tolerance",1e-8);
   bool useLineSearch = args.Input<bool>("--useLineSearch", "flag for line search",true); // default to zero
   int delayLineSearch = args.Input<int>("--delayLineSearch", "number of refinement iters to delay line search",0); // default to zero
-  if (rank==0){
+  if (rank==0)
+  {
     cout << "delaying line search by " << delayLineSearch << " iters." << endl;
   }
   int maxNRIter = args.Input<int>("--maxNRIter","maximum number of NR iterations",2); // default to one per timestep
@@ -500,7 +598,7 @@ int main(int argc, char *argv[]) {
   // adaptivity
   int numUniformRefs = args.Input<int>("--numUniformRefs","num uniform refinements (pre-adaptivity)",0);
   int numRefs = args.Input<int>("--numRefs","num adaptive refinements",0);
-  double energyThreshold = args.Input<double>("--energyThreshold", "energy thresh for adaptivity",0.25); // for mesh refinements 
+  double energyThreshold = args.Input<double>("--energyThreshold", "energy thresh for adaptivity",0.25); // for mesh refinements
   double anisotropicThresh = args.Input<int>("--anisotropicThresh","anisotropy threshhold",10.0);
   bool useAnisotropy = args.Input<bool>("--useAnisotropy","anisotropy flag",false);
   bool useAnalyticContin = args.Input<bool>("--useAnalyticContin","use analtyic continuation in Re",false);
@@ -511,9 +609,9 @@ int main(int argc, char *argv[]) {
   int hScaleOption = args.Input<int>("--hScaleOption","option to scale terms to offset conditioning for small h", 0);
 
   // etc - experimental
-  bool useHigherOrderForU = args.Input<bool>("--useHigherOrderForU","option to increase order for field vars",false); // HGRAD is one higher order 
-  double CFL = args.Input<double>("--CFL","specified CFL number",32.0); 
-  bool useCFL = args.Input<bool>("--useCFL","option to use a CFL limit for conditioning",false); 
+  bool useHigherOrderForU = args.Input<bool>("--useHigherOrderForU","option to increase order for field vars",false); // HGRAD is one higher order
+  double CFL = args.Input<double>("--CFL","specified CFL number",32.0);
+  bool useCFL = args.Input<bool>("--useCFL","option to use a CFL limit for conditioning",false);
   int numPreRefs = args.Input<int>("--numPreRefs","pre-refinements on singularity",0);
   int numPlateRefs = args.Input<int>("--numPlateRefs","pre-refinements on plate",0);
   double ipSwitch = args.Input<double>("--ipSwitch","smallest elem thresh to switch to graph norm",0.0); // default to not changing
@@ -532,21 +630,25 @@ int main(int argc, char *argv[]) {
 
   string saveName = args.Input<string>("--saveName", "file to which to save soln/refinement history", "");
   string loadName = args.Input<string>("--loadName", "file to which to load soln/refinement history", "");
-  if (saveName.length() > 0){
+  if (saveName.length() > 0)
+  {
     saveFile = string("mesh_")+saveName;
     solnSaveFile = string("soln_")+saveName;
   }
-  if (loadName.length() > 0){
+  if (loadName.length() > 0)
+  {
     replayFile = string("mesh_")+loadName;
     solnLoadFile = string("soln_")+loadName;
   }
 
-  if (rank==0){
+  if (rank==0)
+  {
     cout << "saveFile is " << dir + saveFile << endl;
     cout << "saveSolnFile is " << dir + solnSaveFile << endl;
   }
 
-  if (rank==0){
+  if (rank==0)
+  {
     cout << "loadFile is " << dir + replayFile << endl;
     cout << "loadSolnFile is " << dir + solnLoadFile << endl;
   }
@@ -555,23 +657,25 @@ int main(int argc, char *argv[]) {
   //                            END OF INPUT ARGUMENTS
   ///////////////////////////////////////////////////////////////////////////////////////////////
 
-  if (useHigherOrderForU){
+  if (useHigherOrderForU)
+  {
     polyOrder = 1;
   }
-  
+
   // define our manufactured solution or problem bilinear form:
   double cv = 1.0 / ( GAMMA * (GAMMA - 1) * (Ma * Ma) );
-  if (rank==0){
+  if (rank==0)
+  {
     cout << "Running with polynomial order " << polyOrder << ", delta p = " << pToAdd << endl;
     cout << "Running with parameters Re = " << ReynoldsNumber << ", Mach = " << Ma << ", and dt = " << dt << " with time tol = " << time_tol_orig << endl;
     cout << "AnisotropyFlag = " << useAnisotropy << ", and aniso thresh = " << anisotropicThresh << endl;
     cout << "Conditioning CFL = " << useCFL << endl;
     cout << "c_v = " << cv << endl;
   }
-  FunctionPtr Re = Teuchos::rcp(new ScalarParamFunction(ReynoldsNumber));    
-  
-  bool useTriangles = false;  
-  FieldContainer<double> domainPoints(4,2);  
+  FunctionPtr Re = Teuchos::rcp(new ScalarParamFunction(ReynoldsNumber));
+
+  bool useTriangles = false;
+  FieldContainer<double> domainPoints(4,2);
 
   domainPoints(0,0) = 0.0; // x1
   domainPoints(0,1) = 0.0; // y1
@@ -580,29 +684,29 @@ int main(int argc, char *argv[]) {
   domainPoints(2,0) = X_RIGHT;
   domainPoints(2,1) = YTOP;
   domainPoints(3,0) = 0.0;
-  domainPoints(3,1) = YTOP;  
-  
+  domainPoints(3,1) = YTOP;
+
   int H1Order = polyOrder + 1;
   //  int H1Order = 2; // start with linears, and keep singularity linear at singularity
   int horizontalCells = 2*nCells, verticalCells = nCells;
- 
+
   ////////////////////////////////////////////////////////////////////
-  // DEFINE VARIABLES 
+  // DEFINE VARIABLES
   ////////////////////////////////////////////////////////////////////
-  
+
   // new-style bilinear form definition
   // traces
   VarFactory varFactory;
   VarPtr u1hat = varFactory.traceVar("\\widehat{u}_1");
   VarPtr u2hat = varFactory.traceVar("\\widehat{u}_2");
   VarPtr That = varFactory.traceVar("\\widehat{T}");
-  
+
   // fluxes
   VarPtr F1nhat = varFactory.fluxVar("\\widehat{F}_1n");
   VarPtr F2nhat = varFactory.fluxVar("\\widehat{F}_2n");
   VarPtr F3nhat = varFactory.fluxVar("\\widehat{F}_3n");
   VarPtr F4nhat = varFactory.fluxVar("\\widehat{F}_4n");
-  
+
   // stress fields
   VarPtr sigma11 = varFactory.fieldVar("\\sigma_{11}");
   VarPtr sigma12 = varFactory.fieldVar("\\sigma_{12}");
@@ -610,19 +714,22 @@ int main(int argc, char *argv[]) {
   VarPtr q1 = varFactory.fieldVar("q_1");
   VarPtr q2 = varFactory.fieldVar("q_2");
   VarPtr omega = varFactory.fieldVar("\\omega");
-  
+
   VarPtr u_1,u_2,u_3,u_4;
   // H1-ish fields
-  if (useHigherOrderForU){ // HGRAD is one higher order 
-    u_1 = varFactory.fieldVar("u_1",HGRAD); 
+  if (useHigherOrderForU)  // HGRAD is one higher order
+  {
+    u_1 = varFactory.fieldVar("u_1",HGRAD);
     u_2 = varFactory.fieldVar("u_2",HGRAD);
     u_3 = varFactory.fieldVar("u_3",HGRAD);
-    u_4 = varFactory.fieldVar("u_4",HGRAD);        
-  }else{
-    u_1= varFactory.fieldVar("u_1"); 
+    u_4 = varFactory.fieldVar("u_4",HGRAD);
+  }
+  else
+  {
+    u_1= varFactory.fieldVar("u_1");
     u_2 = varFactory.fieldVar("u_2");
     u_3 = varFactory.fieldVar("rho");
-    u_4 = varFactory.fieldVar("T");        
+    u_4 = varFactory.fieldVar("T");
   }
 
   // test fxns
@@ -633,9 +740,9 @@ int main(int argc, char *argv[]) {
   VarPtr v2 = varFactory.testVar("v_2",HGRAD);
   VarPtr v3 = varFactory.testVar("v_3",HGRAD);
   VarPtr v4 = varFactory.testVar("v_4",HGRAD);
-   
+
   ////////////////////////////////////////////////////////////////////
-  // CREATE BILINEAR FORM PTR AND MESH 
+  // CREATE BILINEAR FORM PTR AND MESH
   ////////////////////////////////////////////////////////////////////
 
   BFPtr bf = Teuchos::rcp( new BF(varFactory) ); // initialize bilinear form
@@ -648,9 +755,9 @@ int main(int argc, char *argv[]) {
   MeshInfo meshInfo(mesh); // gets info like cell measure, etc
 
   // for writing ref history to file
-  Teuchos::RCP< RefinementHistory > refHistory = Teuchos::rcp( new RefinementHistory ); 
+  Teuchos::RCP< RefinementHistory > refHistory = Teuchos::rcp( new RefinementHistory );
   mesh->registerObserver(refHistory);
-  
+
   ////////////////////////////////////////////////////////////////////
   // INITIALIZE BACKGROUND FLOW FUNCTIONS
   ////////////////////////////////////////////////////////////////////
@@ -662,9 +769,11 @@ int main(int argc, char *argv[]) {
   rho = u_3;
   T = u_4;
 
-  BCPtr nullBC = Teuchos::rcp((BC*)NULL); RHSPtr nullRHS = Teuchos::rcp((RHS*)NULL); IPPtr nullIP = Teuchos::rcp((IP*)NULL);
-  SolutionPtr backgroundFlow = Teuchos::rcp(new Solution(mesh, nullBC, nullRHS, nullIP) );  
-  SolutionPtr prevTimeFlow = Teuchos::rcp(new Solution(mesh, nullBC, nullRHS, nullIP) );  
+  BCPtr nullBC = Teuchos::rcp((BC*)NULL);
+  RHSPtr nullRHS = Teuchos::rcp((RHS*)NULL);
+  IPPtr nullIP = Teuchos::rcp((IP*)NULL);
+  SolutionPtr backgroundFlow = Teuchos::rcp(new Solution(mesh, nullBC, nullRHS, nullIP) );
+  SolutionPtr prevTimeFlow = Teuchos::rcp(new Solution(mesh, nullBC, nullRHS, nullIP) );
 
   FunctionPtr u1_prev = Function::solution(u1,backgroundFlow);
   FunctionPtr u2_prev = Function::solution(u2,backgroundFlow);
@@ -678,12 +787,12 @@ int main(int argc, char *argv[]) {
   FunctionPtr sigma22_prev = Function::solution(sigma22,backgroundFlow);
 
   // previous timestep quantities
-  FunctionPtr u1_prev_time = Function::solution(u1,prevTimeFlow); 
-  FunctionPtr u2_prev_time = Function::solution(u2,prevTimeFlow); 
-  FunctionPtr rho_prev_time = Function::solution(rho,prevTimeFlow); 
+  FunctionPtr u1_prev_time = Function::solution(u1,prevTimeFlow);
+  FunctionPtr u2_prev_time = Function::solution(u2,prevTimeFlow);
+  FunctionPtr rho_prev_time = Function::solution(rho,prevTimeFlow);
   FunctionPtr T_prev_time = Function::solution(T,prevTimeFlow);
-  
-  FunctionPtr zero = Function::constant(0.0);    
+
+  FunctionPtr zero = Function::constant(0.0);
 
   // ==================== SET INITIAL GUESS ==========================
 
@@ -692,7 +801,8 @@ int main(int argc, char *argv[]) {
   double u2_free = 0.0;
   double T_free = 1.0; //1.0/(GAMMA*(GAMMA-1.0)*Ma*Ma); // TODO - check this value - from Capon paper
 
-  if (rank==0){
+  if (rank==0)
+  {
     cout << "T_free = " << T_free << endl;
   }
 
@@ -706,12 +816,13 @@ int main(int argc, char *argv[]) {
   backgroundFlow->projectOntoMesh(functionMap);
   prevTimeFlow->projectOntoMesh(functionMap);
 
-  if (rank==0){
+  if (rank==0)
+  {
     cout << "Initial guess set" << endl;
   }
 
   // ==================== END SET INITIAL GUESS ==========================
-  
+
   ////////////////////////////////////////////////////////////////////
   // DEFINE PHYSICAL QUANTITIES
   ////////////////////////////////////////////////////////////////////
@@ -724,29 +835,32 @@ int main(int argc, char *argv[]) {
   FunctionPtr iota = cv*T_prev; // internal energy per unit mass
   FunctionPtr p = (gam1 * cv) * rho_prev * T_prev;
   FunctionPtr e = .5*unorm + iota; // kinetic + internal energy (per unit mass)
-  
+
   // derivatives of p and e
   FunctionPtr dpdrho = (gam1*cv)*T_prev;
   FunctionPtr dpdT = (gam1*cv)*rho_prev;
   FunctionPtr dedu1 = u1_prev;
   FunctionPtr dedu2 = u2_prev;
-  double dedT = cv; 
+  double dedT = cv;
 
   double beta = 2.0/3.0;
   //  double beta = 0.0;
   FunctionPtr T_visc;
-  if (abs(beta)<1e-14){
+  if (abs(beta)<1e-14)
+  {
     T_visc = Function::constant(1.0);
-  }else{
+  }
+  else
+  {
     T_visc = Teuchos::rcp( new PowerFunction(T_prev/T_free, beta, T_free/1e4) );  // set min viscosity
   }
- 
+
   FunctionPtr mu = T_visc / Re;
 
   /*
   double maxArtVisc = 5e-4;
   double minArtVisc = 1e-5;
-  FunctionPtr artVisc = Teuchos::rcp(new ScalarParamFunction(minArtVisc));    
+  FunctionPtr artVisc = Teuchos::rcp(new ScalarParamFunction(minArtVisc));
   if (useArtVisc){
     mu = T_visc * (1/Re + artVisc);
     double artViscMag = ((ScalarParamFunction*)artVisc.get())->get_param();
@@ -768,7 +882,7 @@ int main(int argc, char *argv[]) {
   bf->addTerm(F3nhat, v3);
   bf->addTerm(F4nhat, v4);
 
-  // conservation law test functions 
+  // conservation law test functions
   map<int, VarPtr> V;
   V[v1->ID()] = v1;
   V[v2->ID()] = v2;
@@ -776,7 +890,7 @@ int main(int argc, char *argv[]) {
   V[v4->ID()] = v4;
 
   // stress law traces
-  bf->addTerm(u1hat, -tau1->dot_normal() );    
+  bf->addTerm(u1hat, -tau1->dot_normal() );
   bf->addTerm(u2hat, -tau2->dot_normal() );
   bf->addTerm(That, -tau3->dot_normal() );
 
@@ -787,7 +901,7 @@ int main(int argc, char *argv[]) {
   TAU[tau3->ID()] = tau3;
 
   ///////////////////////////////////////////////////////////////////////
-  // 
+  //
   ///////////////////////////////////////////////////////////////////////
 
   // field variables
@@ -808,7 +922,7 @@ int main(int argc, char *argv[]) {
   sparseFxnMatrix A_euler; // conservation law matrix multiplying eulerian variables
   sparseFxnMatrix A_visc; // conservation law matrix multiplying stresses
   sparseFxnMatrix eps_visc; // multiplies viscous terms (like 1/epsilon * sigma)
-  sparseFxnMatrix eps_euler; // multiplies eulerian terms (like grad(u)) 
+  sparseFxnMatrix eps_euler; // multiplies eulerian terms (like grad(u))
 
   ////////////////////////////////////////////////////////////////////
   // CONSTRUCT JACOBIANS
@@ -816,17 +930,18 @@ int main(int argc, char *argv[]) {
 
   // ========================================= TIMESTEPPING TERMS ====================================
 
-  if (rank==0){
+  if (rank==0)
+  {
     cout << "Timestep dt = " << dt << endl;
   }
-  FunctionPtr invDt = Teuchos::rcp(new ScalarParamFunction(1.0/dt));    
-  FunctionPtr sqrtInvDt = Teuchos::rcp(new ScalarParamFunction(sqrt(1.0/dt)));    
+  FunctionPtr invDt = Teuchos::rcp(new ScalarParamFunction(1.0/dt));
+  FunctionPtr sqrtInvDt = Teuchos::rcp(new ScalarParamFunction(sqrt(1.0/dt)));
 
   // mass d(rho)/dt
-  A_time[v1->ID()][rho->ID()] = invDt*one; 
+  A_time[v1->ID()][rho->ID()] = invDt*one;
 
   // x-momentum d(rho*u1)/dt
-  A_time[v2->ID()][rho->ID()] = invDt*u1_prev; 
+  A_time[v2->ID()][rho->ID()] = invDt*u1_prev;
   A_time[v2->ID()][u1->ID()] = invDt*rho_prev;
 
   // x-momentum d(rho*u2)/dt
@@ -888,20 +1003,20 @@ int main(int argc, char *argv[]) {
   A_visc[v4->ID()][sigma22->ID()]  = -u2_prev*e2;
   A_visc[v4->ID()][q1->ID()]  = negOne*e1;
   A_visc[v4->ID()][q2->ID()]  = negOne*e2;
- 
+
   // ========================================= STRESS LAWS  =========================================
 
   FunctionPtr lambda_factor_fxn = lambda / (4.0 * mu * (mu + lambda) );
-  FunctionPtr two_mu = 2*mu; 
+  FunctionPtr two_mu = 2*mu;
 
   // 1st stress eqn
   eps_visc[tau1->ID()][sigma11->ID()] = (one/two_mu - lambda_factor_fxn)*e1;
   eps_visc[tau1->ID()][sigma12->ID()] = one/two_mu*e2;
   eps_visc[tau1->ID()][sigma22->ID()] = -lambda_factor_fxn*e1;
   eps_visc[tau1->ID()][omega->ID()] = -one*Re*e2;
-  
+
   eps_euler[tau1->ID()][u1->ID()] = one;
-  
+
   // 2nd stress eqn
   eps_visc[tau2->ID()][sigma11->ID()] = -lambda_factor_fxn*e2;
   eps_visc[tau2->ID()][sigma12->ID()] = one/two_mu*e1;
@@ -911,21 +1026,23 @@ int main(int argc, char *argv[]) {
   eps_euler[tau2->ID()][u2->ID()] = one;
 
   // Heat stress equation
-  eps_visc[tau3->ID()][q1->ID()] = one/kappa*e1; 
-  eps_visc[tau3->ID()][q2->ID()] = one/kappa*e2; 
+  eps_visc[tau3->ID()][q1->ID()] = one/kappa*e1;
+  eps_visc[tau3->ID()][q2->ID()] = one/kappa*e2;
   eps_euler[tau3->ID()][T->ID()] = one;
- 
+
   ///////////////////////////////////////////////////////////
   // APPLICATION OF JACOBIAN DATA
   ///////////////////////////////////////////////////////////
 
   sparseFxnMatrix::iterator testIt;
   // timestepping terms in conservation laws
-  for (testIt = A_time.begin();testIt!=A_time.end();testIt++){
+  for (testIt = A_time.begin(); testIt!=A_time.end(); testIt++)
+  {
     int testID = testIt->first;
     sparseFxnVector a = testIt->second;
     sparseFxnVector::iterator trialIt;
-    for (trialIt = a.begin();trialIt!=a.end();trialIt++){
+    for (trialIt = a.begin(); trialIt!=a.end(); trialIt++)
+    {
       int trialID = trialIt->first;
       FunctionPtr trialWeight = trialIt->second;
       bf->addTerm(trialWeight*U[trialID],V[testID]);
@@ -933,54 +1050,62 @@ int main(int argc, char *argv[]) {
   }
 
   // conservation (Hgrad) equations
-  for (testIt = A_euler.begin();testIt!=A_euler.end();testIt++){
+  for (testIt = A_euler.begin(); testIt!=A_euler.end(); testIt++)
+  {
     int testID = testIt->first;
     sparseFxnVector a = testIt->second;
     sparseFxnVector::iterator trialIt;
-    for (trialIt = a.begin();trialIt!=a.end();trialIt++){
-      int trialID = trialIt->first;
-      FunctionPtr trialWeight = trialIt->second;
-      bf->addTerm(-trialWeight*U[trialID],V[testID]->grad());
-    }
-  }
-  
-  // stresses in conservation laws
-  sparseFxnTensor::iterator xyIt;
-  for (testIt = A_visc.begin();testIt!=A_visc.end();testIt++){
-    int testID = testIt->first;
-    sparseFxnVector a = testIt->second;
-    sparseFxnVector::iterator trialIt;
-    for (trialIt = a.begin();trialIt!=a.end();trialIt++){
+    for (trialIt = a.begin(); trialIt!=a.end(); trialIt++)
+    {
       int trialID = trialIt->first;
       FunctionPtr trialWeight = trialIt->second;
       bf->addTerm(-trialWeight*U[trialID],V[testID]->grad());
     }
   }
 
-  // Stress (Hdiv) equations 
-  for (testIt = eps_visc.begin();testIt!=eps_visc.end();testIt++){
+  // stresses in conservation laws
+  sparseFxnTensor::iterator xyIt;
+  for (testIt = A_visc.begin(); testIt!=A_visc.end(); testIt++)
+  {
     int testID = testIt->first;
     sparseFxnVector a = testIt->second;
     sparseFxnVector::iterator trialIt;
-    for (trialIt = a.begin();trialIt!=a.end();trialIt++){
+    for (trialIt = a.begin(); trialIt!=a.end(); trialIt++)
+    {
+      int trialID = trialIt->first;
+      FunctionPtr trialWeight = trialIt->second;
+      bf->addTerm(-trialWeight*U[trialID],V[testID]->grad());
+    }
+  }
+
+  // Stress (Hdiv) equations
+  for (testIt = eps_visc.begin(); testIt!=eps_visc.end(); testIt++)
+  {
+    int testID = testIt->first;
+    sparseFxnVector a = testIt->second;
+    sparseFxnVector::iterator trialIt;
+    for (trialIt = a.begin(); trialIt!=a.end(); trialIt++)
+    {
       int trialID = trialIt->first;
       FunctionPtr trialWeight = trialIt->second;
       bf->addTerm(trialWeight*U[trialID],TAU[testID]);
     }
   }
- 
+
   // Eulerian component of stress (Hdiv) equations (positive b/c of IBP)
   //  sparseFxnMatrix::iterator testIt;
-  for (testIt = eps_euler.begin();testIt!=eps_euler.end();testIt++){
+  for (testIt = eps_euler.begin(); testIt!=eps_euler.end(); testIt++)
+  {
     int testID = testIt->first;
     sparseFxnVector a = testIt->second;
     sparseFxnVector::iterator trialIt;
-    for (trialIt = a.begin();trialIt!=a.end();trialIt++){
+    for (trialIt = a.begin(); trialIt!=a.end(); trialIt++)
+    {
       int trialID = trialIt->first;
       FunctionPtr trialWeight = trialIt->second;
       bf->addTerm(trialWeight*U[trialID],TAU[testID]->div());
     }
-  } 
+  }
 
   ////////////////////////////////////////////////////////////////////////////
   // TIMESTEPPING RHS TERMS - RESIDUALS (independent of choice of variables)
@@ -995,24 +1120,24 @@ int main(int argc, char *argv[]) {
   FunctionPtr unorm_pt = (u1sq_pt + u2sq_pt);
   FunctionPtr e_prev_time = .5*unorm_pt + iota_pt; // kinetic + internal energy
 
-  //rhs 
+  //rhs
   LinearTermPtr time_res_LT = Teuchos::rcp(new LinearTerm);
-  // mass 
-  FunctionPtr time_res_1 = rho_prev_time - rho_prev;  
+  // mass
+  FunctionPtr time_res_1 = rho_prev_time - rho_prev;
   time_res_LT->addTerm( (time_res_1 * invDt) * v1);
-    
+
   // x momentum
   FunctionPtr time_res_2 = rho_prev_time * u1_prev_time - rho_prev * u1_prev;
   time_res_LT->addTerm((time_res_2*invDt) * v2);
 
-  // y momentum  
+  // y momentum
   FunctionPtr time_res_3 = rho_prev_time * u2_prev_time - rho_prev * u2_prev;
   time_res_LT->addTerm((time_res_3 *  invDt ) *v3);
 
-  // energy  
+  // energy
   FunctionPtr time_res_4 = (rho_prev_time * e_prev_time - rho_prev * e);
-  time_res_LT->addTerm((time_res_4 * invDt) * v4);    
-  
+  time_res_LT->addTerm((time_res_4 * invDt) * v4);
+
   rhs->addTerm(time_res_LT);
 
   ////////////////////////////////////////////////////////////////////
@@ -1027,29 +1152,30 @@ int main(int argc, char *argv[]) {
   LinearTermPtr vVecLTx = Teuchos::rcp(new LinearTerm); // for evaluating anisotropic error
   LinearTermPtr vVecLTy = Teuchos::rcp(new LinearTerm); // for evaluating anisotropic error
 
-  double width = .001; 
+  double width = .001;
   double center = 1.0; // - width/2.0;
   double amplitude = 25.0;
-  FunctionPtr gaussianAtPlate = Teuchos::rcp(new TwoDGaussian(width,center,amplitude)); 
-  FunctionPtr plateWeight = gaussianAtPlate + Function::constant(1.0); // weights area around plate less 
-    
+  FunctionPtr gaussianAtPlate = Teuchos::rcp(new TwoDGaussian(width,center,amplitude));
+  FunctionPtr plateWeight = gaussianAtPlate + Function::constant(1.0); // weights area around plate less
+
   ////////////////////////////////////////////////////////////////////
   // H-scaling terms for conditioning/approximation V
   ////////////////////////////////////////////////////////////////////
 
   FunctionPtr invH = Teuchos::rcp(new InvH); // 1/h
   FunctionPtr sqrtH = Teuchos::rcp(new hPowerFunction(.5)); // sqrt(h) - squared in IP
-  FunctionPtr invSqrtH = Teuchos::rcp(new InvSqrtH); // 1/sqrt(h) 
+  FunctionPtr invSqrtH = Teuchos::rcp(new InvSqrtH); // 1/sqrt(h)
 
   // only really need to scale one or two of these to achieve better conditioning
-  FunctionPtr streamlineHScale = Function::constant(1.0);    
+  FunctionPtr streamlineHScale = Function::constant(1.0);
   FunctionPtr l2HScale = Function::constant(1.0);
-  switch (hScaleOption){
+  switch (hScaleOption)
+  {
   case 1:
     l2HScale = invSqrtH; // "weakest" scaling option
     break;
   case 2:
-    l2HScale = invH; // ||v||^2 -> ||v||^2/h^2 
+    l2HScale = invH; // ||v||^2 -> ||v||^2/h^2
     break;
   case 3:
     streamlineHScale = sqrtH; // scale beta\dot \grad v by h
@@ -1071,22 +1197,25 @@ int main(int argc, char *argv[]) {
   ////////////////////////////////////////////////////////////////////
   // Timestep L2 portion of V
   ////////////////////////////////////////////////////////////////////
- 
+
   map<int,LinearTermPtr> vTime;
   initLinearTermVector(A_time,vTime); // initialize to LinearTermPtrs of dimensions of A_time
-  for (testIt = A_time.begin();testIt!=A_time.end();testIt++){
+  for (testIt = A_time.begin(); testIt!=A_time.end(); testIt++)
+  {
     int testID = testIt->first;
     sparseFxnVector a = testIt->second;
     sparseFxnVector::iterator trialIt;
-    for (trialIt = a.begin();trialIt!=a.end();trialIt++){
+    for (trialIt = a.begin(); trialIt!=a.end(); trialIt++)
+    {
       int trialID = trialIt->first;
       FunctionPtr trialWeight = trialIt->second;
       vTime[trialID] = vTime[trialID] + trialWeight*V[testID];
     }
-  } 
+  }
 
   // adds dual test portion to IP
-  for (map<int, LinearTermPtr>::iterator vTimeIt = vTime.begin();vTimeIt != vTime.end();vTimeIt++){
+  for (map<int, LinearTermPtr>::iterator vTimeIt = vTime.begin(); vTimeIt != vTime.end(); vTimeIt++)
+  {
     LinearTermPtr ipSum = vTimeIt->second;
     ip->addTerm(l2HScale*ipSum);
   }
@@ -1100,34 +1229,39 @@ int main(int argc, char *argv[]) {
   initLinearTermVector(eps_visc,tauX); // initialize to LinearTermPtrs of dimensions of eps_visc
   initLinearTermVector(eps_visc,tauY); // initialize to LinearTermPtrs of dimensions of eps_visc
 
-  for (testIt = eps_visc.begin();testIt!=eps_visc.end();testIt++){
+  for (testIt = eps_visc.begin(); testIt!=eps_visc.end(); testIt++)
+  {
     int testID = testIt->first;
     sparseFxnVector a = testIt->second;
     sparseFxnVector::iterator trialIt;
-    for (trialIt = a.begin();trialIt!=a.end();trialIt++){
+    for (trialIt = a.begin(); trialIt!=a.end(); trialIt++)
+    {
       int trialID = trialIt->first;
       FunctionPtr trialWeight = trialIt->second;
       tauVec[trialID] = tauVec[trialID] + trialWeight*TAU[testID];
       tauX[trialID] = tauX[trialID] + (e1*trialWeight)*(TAU[testID]->x());
       tauY[trialID] = tauY[trialID] + (e2*trialWeight)*(TAU[testID]->y());
     }
-  } 
+  }
   // adds dual test portion to IP
   map<int, LinearTermPtr>::iterator tauIt;
-  for (tauIt = tauVec.begin();tauIt != tauVec.end();tauIt++){
+  for (tauIt = tauVec.begin(); tauIt != tauVec.end(); tauIt++)
+  {
     LinearTermPtr ipSum = tauIt->second;
     ip->addTerm(TauReScaling*ipSum);
-  }  
+  }
   // for anisotropic bits - x and y contributions to erro
-  for (tauIt = tauX.begin();tauIt!=tauX.end();tauIt++){
+  for (tauIt = tauX.begin(); tauIt!=tauX.end(); tauIt++)
+  {
     LinearTermPtr lt = tauIt->second;
     xip->addTerm(TauReScaling*lt);
   }
-  for (tauIt = tauY.begin();tauIt!=tauY.end();tauIt++){
+  for (tauIt = tauY.begin(); tauIt!=tauY.end(); tauIt++)
+  {
     LinearTermPtr lt = tauIt->second;
     yip->addTerm(TauReScaling*lt);
   }
- 
+
   ////////////////////////////////////////////////////////////////////
   // epsilon portion of grad V
   ////////////////////////////////////////////////////////////////////
@@ -1140,30 +1274,35 @@ int main(int argc, char *argv[]) {
   initLinearTermVector(A_visc,vEpsX); // initialize to LinearTermPtrs of dimensions of A_euler
   initLinearTermVector(A_visc,vEpsY); // initialize to LinearTermPtrs of dimensions of A_euler
 
-  for (testIt = A_visc.begin();testIt!=A_visc.end();testIt++){
+  for (testIt = A_visc.begin(); testIt!=A_visc.end(); testIt++)
+  {
     int testID = testIt->first;
     sparseFxnVector a = testIt->second;
     sparseFxnVector::iterator trialIt;
-    for (trialIt = a.begin();trialIt!=a.end();trialIt++){
+    for (trialIt = a.begin(); trialIt!=a.end(); trialIt++)
+    {
       int trialID = trialIt->first;
       FunctionPtr trialWeight = trialIt->second;
       vEpsVec[trialID] = vEpsVec[trialID] + trialWeight*V[testID]->grad();
       vEpsX[trialID] = vEpsX[trialID] + (e1*trialWeight)*V[testID]->dx();
       vEpsY[trialID] = vEpsY[trialID] + (e2*trialWeight)*V[testID]->dy();
     }
-  } 
+  }
   // adds dual test portion to IP
   map<int, LinearTermPtr>::iterator vEpsIt;
-  for (vEpsIt = vEpsVec.begin();vEpsIt != vEpsVec.end();vEpsIt++){
+  for (vEpsIt = vEpsVec.begin(); vEpsIt != vEpsVec.end(); vEpsIt++)
+  {
     LinearTermPtr ipSum = vEpsIt->second;
     ip->addTerm(timeScaling*SqrtReInv*ipSum);
   }
   // for anisotropic bits - x and y contributions to erro
-  for (vEpsIt = vEpsX.begin();vEpsIt != vEpsX.end();vEpsIt++){
+  for (vEpsIt = vEpsX.begin(); vEpsIt != vEpsX.end(); vEpsIt++)
+  {
     LinearTermPtr lt = vEpsIt->second;
     xip->addTerm(timeScaling*SqrtReInv*lt);
   }
-  for (vEpsIt = vEpsY.begin();vEpsIt != vEpsY.end();vEpsIt++){
+  for (vEpsIt = vEpsY.begin(); vEpsIt != vEpsY.end(); vEpsIt++)
+  {
     LinearTermPtr lt = vEpsIt->second;
     yip->addTerm(timeScaling*SqrtReInv*lt);
   }
@@ -1174,23 +1313,26 @@ int main(int argc, char *argv[]) {
 
   map<int, LinearTermPtr> vStreamVec;
   initLinearTermVector(A_euler,vStreamVec); // initialize to LinearTermPtrs of dimensions of A_euler
-  for (testIt = A_euler.begin();testIt!=A_euler.end();testIt++){
+  for (testIt = A_euler.begin(); testIt!=A_euler.end(); testIt++)
+  {
     int testID = testIt->first;
     sparseFxnVector a = testIt->second;
     sparseFxnVector::iterator trialIt;
-    for (trialIt = a.begin();trialIt!=a.end();trialIt++){
+    for (trialIt = a.begin(); trialIt!=a.end(); trialIt++)
+    {
       int trialID = trialIt->first;
       FunctionPtr trialWeight = trialIt->second;
       vStreamVec[trialID] = vStreamVec[trialID] + trialWeight*V[testID]->grad();
     }
-  } 
+  }
   // adds dual test portion to IP
   map<int, LinearTermPtr>::iterator vStreamIt;
-  for (vStreamIt = vStreamVec.begin();vStreamIt != vStreamVec.end();vStreamIt++){
+  for (vStreamIt = vStreamVec.begin(); vStreamIt != vStreamVec.end(); vStreamIt++)
+  {
     LinearTermPtr ipSum = vStreamIt->second;
     ip->addTerm(streamlineHScale*ipSum); // streamlineHScale option for conditioning!
     //    ip->addTerm(ipSum);
-  } 
+  }
 
   ////////////////////////////////////////////////////////////////////
   // rest of the test terms (easier)
@@ -1199,9 +1341,9 @@ int main(int argc, char *argv[]) {
   ip->addTerm( l2HScale*v1 ); // doesn't get smaller with Re -> 0
   ip->addTerm( l2HScale*v2 );
   ip->addTerm( l2HScale*v3 );
-  ip->addTerm( l2HScale*v4 );    
-  
-  // div remains the same (identity operator in classical variables)  
+  ip->addTerm( l2HScale*v4 );
+
+  // div remains the same (identity operator in classical variables)
   ip->addTerm(TauDivScaling*tau1->div());
   ip->addTerm(TauDivScaling*tau2->div());
   ip->addTerm(TauDivScaling*tau3->div());
@@ -1213,27 +1355,30 @@ int main(int argc, char *argv[]) {
   ipCoupled->addTerm(TauDivScaling*tau2->div() - streamlineHScale*vStreamVec[u2->ID()]);
   // T
   ipCoupled->addTerm(TauDivScaling*tau3->div() - streamlineHScale*vStreamVec[T->ID()]);
-  
+
   IPPtr graphIP = bf->graphNorm();
-  graphIP->addTerm( l2HScale*v1 ); 
+  graphIP->addTerm( l2HScale*v1 );
   graphIP->addTerm( l2HScale*v2 );
   graphIP->addTerm( l2HScale*v3 );
-  graphIP->addTerm( l2HScale*v4 );    
+  graphIP->addTerm( l2HScale*v4 );
 
   IPPtr innerProduct;
-  if (ipSwitch > 1e-8){
+  if (ipSwitch > 1e-8)
+  {
     //    innerProduct = Teuchos::rcp(new IPSwitcher(ip,graphIP,ipSwitch));
     innerProduct = Teuchos::rcp(new IPSwitcher(ip,ipCoupled,ipSwitch));
-  }else{
+  }
+  else
+  {
     innerProduct = ip;
   }
   innerProduct = ipCoupled;
-  
+
   /*
   int count = 0;
   for (int i = 0;i<mesh->numActiveElements();i++){
     int cellID = mesh->activeElements()[i]->cellID();
-    double h = min(mesh->getCellXSize(cellID),mesh->getCellYSize(cellID)); 
+    double h = min(mesh->getCellXSize(cellID),mesh->getCellYSize(cellID));
     if (h<ipSwitch)
     count++;
     }
@@ -1296,11 +1441,11 @@ int main(int argc, char *argv[]) {
   double p_free = (gam1 * cv) * rho_free * T_free;
   double e_free = .5*(u1_free*u1_free+u2_free*u2_free) + cv*T_free; // kinetic + internal energy
 
-  FunctionPtr m1_free = Function::constant(rho_free*u1_free); 
-  FunctionPtr m2_free = Function::constant(rho_free*u2_free); 
+  FunctionPtr m1_free = Function::constant(rho_free*u1_free);
+  FunctionPtr m2_free = Function::constant(rho_free*u2_free);
 
   // inviscid momentum contributions
-  FunctionPtr mom_x1_free = Function::constant(rho_free * u1_free*u1_free + p_free); 
+  FunctionPtr mom_x1_free = Function::constant(rho_free * u1_free*u1_free + p_free);
   FunctionPtr mom_x2_free = Function::constant(rho_free * u1_free * u2_free);
   FunctionPtr mom_y1_free = Function::constant(rho_free * u1_free * u2_free);
   FunctionPtr mom_y2_free = Function::constant(rho_free * u2_free*u2_free + p_free );
@@ -1309,17 +1454,18 @@ int main(int argc, char *argv[]) {
   FunctionPtr energy_1_free = Function::constant(rho_e_p_free * u1_free);
   FunctionPtr energy_2_free = Function::constant(rho_e_p_free * u2_free);
 
-  // inflow BCs   
+  // inflow BCs
   bc->addDirichlet(F1nhat, inflowBoundary, ( e1 * m1_free + e2 * m2_free) * n );
   bc->addDirichlet(F2nhat, inflowBoundary, ( e1 * mom_x1_free + e2 * mom_x2_free) * n );
   bc->addDirichlet(F3nhat, inflowBoundary, ( e1 * mom_y1_free + e2 * mom_y2_free) * n );
-  bc->addDirichlet(F4nhat, inflowBoundary, ( e1 * energy_1_free + e2 * energy_2_free) * n ); 
+  bc->addDirichlet(F4nhat, inflowBoundary, ( e1 * energy_1_free + e2 * energy_2_free) * n );
 
   // =============================================================================================
-  
+
   // wall BCs
   double Tscale = 2.8; //1.0 + gam1*Ma*Ma/2.0; // from pj capon paper "adaptive finite element method compressible...".  Is equal to 2.8 for Mach 3 and Gamma = 1.4;
-  if ( Ma > 7.0){
+  if ( Ma > 7.0)
+  {
     Tscale = 4.6; // from Ben Kirk's thesis
   }
 
@@ -1330,18 +1476,18 @@ int main(int argc, char *argv[]) {
 
   bc->addDirichlet(u2hat, wallBoundary, zero);
   bc->addDirichlet(u1hat, wallBoundary, zero);
-  bc->addDirichlet(That, wallBoundary, Function::constant(T_wall));  
+  bc->addDirichlet(That, wallBoundary, Function::constant(T_wall));
   //  bc->addDirichlet(F4nhat, wallBoundary, zero); // sets zero heat-flux in free stream bottom boundary
 
   bc->addDirichlet(u2hat, nonRampPlate, zero);
   bc->addDirichlet(u1hat, nonRampPlate, zero);
-  bc->addDirichlet(That, nonRampPlate, Function::constant(T_wall));  
+  bc->addDirichlet(That, nonRampPlate, Function::constant(T_wall));
 
   // =============================================================================================
 
   // symmetry BCs
   SpatialFilterPtr freeTop = Teuchos::rcp( new FreeStreamBoundaryTop );
-  //  bc->addDirichlet(F1nhat, freeTop, zero); // for consistency, but this one doesn't make much diff  
+  //  bc->addDirichlet(F1nhat, freeTop, zero); // for consistency, but this one doesn't make much diff
   bc->addDirichlet(u2hat,  freeTop, zero); // top sym bc
   bc->addDirichlet(F2nhat, freeTop, zero);
   bc->addDirichlet(F4nhat, freeTop, zero); // sets zero y-heat flux in free stream top boundary
@@ -1361,31 +1507,35 @@ int main(int argc, char *argv[]) {
   ////////////////////////////////////////////////////////////////////
 
   Teuchos::RCP<Solution> solution = Teuchos::rcp(new Solution(mesh, bc, rhs, innerProduct));
-  int enrichDegree = 2; // just for kicks. 
+  int enrichDegree = 2; // just for kicks.
   if (rank==0)
     cout << "enriching cubature by " << enrichDegree << endl;
-  solution->setCubatureEnrichmentDegree(enrichDegree); // double cubature enrichment 
-  if (reportTimingResults){
+  solution->setCubatureEnrichmentDegree(enrichDegree); // double cubature enrichment
+  if (reportTimingResults)
+  {
     solution->setReportTimingResults(true);
   }
-  
+
   mesh->registerSolution(solution);
   mesh->registerSolution(backgroundFlow); // u_t(i)
   mesh->registerSolution(prevTimeFlow); // u_t(i-1)
-    
+
   // for loading refinement history
-  if (replayFile.length() > 0) {
+  if (replayFile.length() > 0)
+  {
     RefinementHistory refHistory;
     replayFile = dir + replayFile;
     refHistory.loadFromFile(replayFile);
     refHistory.playback(mesh);
     int numElems = mesh->numActiveElements();
-    if (rank==0){
-      double minSideLength = meshInfo.getMinCellSideLength() ;    
+    if (rank==0)
+    {
+      double minSideLength = meshInfo.getMinCellSideLength() ;
       cout << "after replay, num elems = " << numElems << " and min side length = " << minSideLength << endl;
     }
-  }  
-  if (solnLoadFile.length() > 0) {
+  }
+  if (solnLoadFile.length() > 0)
+  {
     std::ostringstream ss;
     ss << dir <<  "solution_" << solnLoadFile;
     solution->readFromFile(ss.str());
@@ -1413,9 +1563,10 @@ int main(int argc, char *argv[]) {
   Teuchos::RCP<RefinementStrategy> refinementStrategy;
   refinementStrategy = Teuchos::rcp(new RefinementStrategy(solution,energyThreshold));
   //  refinementStrategy->setMinH(.5/Re); // 1/2 length of diffusion scale
-  for (int i = 0;i<numUniformRefs;i++){
-    refinementStrategy->hRefineUniformly(mesh); 
-  } 
+  for (int i = 0; i<numUniformRefs; i++)
+  {
+    refinementStrategy->hRefineUniformly(mesh);
+  }
   int numElems = mesh->numActiveElements();
   if (rank==0)
     cout << "Num elements after uniform refs = " << numElems << endl;
@@ -1424,36 +1575,44 @@ int main(int argc, char *argv[]) {
   // PREREFINE THE MESH
   ////////////////////////////////////////////////////////////////////
 
-  if (rank==0){
+  if (rank==0)
+  {
     cout << "Number of pre-refinements = " << numPreRefs << endl;
   }
-  for (int i =0;i<=numPreRefs;i++){   
+  for (int i =0; i<=numPreRefs; i++)
+  {
     vector<ElementPtr> elems = mesh->activeElements();
     vector<ElementPtr>::iterator elemIt;
-    vector<int> wallCells;    
-    for (elemIt=elems.begin();elemIt != elems.end();elemIt++){
+    vector<int> wallCells;
+    for (elemIt=elems.begin(); elemIt != elems.end(); elemIt++)
+    {
       int cellID = (*elemIt)->cellID();
       int numSides = mesh->getElement(cellID)->numSides();
       FieldContainer<double> vertices(numSides,2); //for quads
 
       mesh->verticesForCell(vertices, cellID);
-      bool cellIDset = false;	
-      for (int j = 0;j<numSides;j++){ // num sides = 4
-	if ((abs(vertices(j,0)-X_PLATE)<1e-7) && (abs(vertices(j,1))<1e-7) && !cellIDset){ // if at singularity, i.e. if a vertex is (1,0)
-	  wallCells.push_back(cellID);
-	  cellIDset = true;
-	}
+      bool cellIDset = false;
+      for (int j = 0; j<numSides; j++) // num sides = 4
+      {
+        if ((abs(vertices(j,0)-X_PLATE)<1e-7) && (abs(vertices(j,1))<1e-7) && !cellIDset)  // if at singularity, i.e. if a vertex is (1,0)
+        {
+          wallCells.push_back(cellID);
+          cellIDset = true;
+        }
       }
     }
-    if (i<numPreRefs){
+    if (i<numPreRefs)
+    {
       refinementStrategy->refineCells(wallCells);
     }
   }
-  if (numPreRefs>0){
+  if (numPreRefs>0)
+  {
     double minSideLength = meshInfo.getMinCellSideLength() ;
     double minCellMeasure = meshInfo.getMinCellMeasure() ;
     int numElems = mesh->numActiveElements();
-    if (rank==0){
+    if (rank==0)
+    {
       cout << "after prerefs, sqrt min cell measure = " << sqrt(minCellMeasure) << ", min side length = " << minSideLength << ", num elems = " << numElems << endl;
     }
   }
@@ -1462,50 +1621,58 @@ int main(int argc, char *argv[]) {
   // Plate pre-refinements
   ////////////////////////////////////////////////////////////////////
 
-  if (rank==0){
+  if (rank==0)
+  {
     cout << "Number of plate pre-refinements = " << numPlateRefs << endl;
   }
-  for (int i =0;i<=numPlateRefs;i++){   
+  for (int i =0; i<=numPlateRefs; i++)
+  {
     vector<ElementPtr> elems = mesh->activeElements();
     vector<ElementPtr>::iterator elemIt;
     vector<int> wallCells;
-    for (elemIt=elems.begin();elemIt != elems.end();elemIt++){
+    for (elemIt=elems.begin(); elemIt != elems.end(); elemIt++)
+    {
       int cellID = (*elemIt)->cellID();
       int numSides = mesh->getElement(cellID)->numSides();
       FieldContainer<double> vertices(numSides,2); //for quads
       mesh->verticesForCell(vertices, cellID);
-      bool cellIDset = false;	
+      bool cellIDset = false;
       bool atPlate = false;
       bool atRamp = false;
-      for (int j = 0;j<numSides;j++){ // num sides = 4
-	double vx = vertices(j,0);
-	double vy = vertices(j,1);
-	bool atPlate = ((vx > X_PLATE) && (vy < 1e-12));
-	bool atRamp = abs(rampHeight*(vx-X_RAMP)-vy)<1e-10 && vx > X_RAMP;
-	if ((atPlate || atRamp) && !cellIDset){
-	  wallCells.push_back(cellID);
-	  cellIDset = true;
-	}
+      for (int j = 0; j<numSides; j++) // num sides = 4
+      {
+        double vx = vertices(j,0);
+        double vy = vertices(j,1);
+        bool atPlate = ((vx > X_PLATE) && (vy < 1e-12));
+        bool atRamp = abs(rampHeight*(vx-X_RAMP)-vy)<1e-10 && vx > X_RAMP;
+        if ((atPlate || atRamp) && !cellIDset)
+        {
+          wallCells.push_back(cellID);
+          cellIDset = true;
+        }
       }
     }
-    if (i<numPlateRefs){
-      //      refinementStrategy->refineCells(wallCells); 
-      vector<int> empty;      
-      mesh->hRefine(wallCells, RefinementPattern::yAnisotropicRefinementPatternQuad());    
+    if (i<numPlateRefs)
+    {
+      //      refinementStrategy->refineCells(wallCells);
+      vector<int> empty;
+      mesh->hRefine(wallCells, RefinementPattern::yAnisotropicRefinementPatternQuad());
       refinementStrategy->enforceAnisotropicOneIrregularity(empty, wallCells);
     }
   }
-  if (numPlateRefs>0){
+  if (numPlateRefs>0)
+  {
     double minSideLength = meshInfo.getMinCellSideLength() ;
     double minCellMeasure = meshInfo.getMinCellMeasure() ;
     int numElems = mesh->numActiveElements();
-    if (rank==0){
+    if (rank==0)
+    {
       cout << "after plateRefs, sqrt min cell measure = " << sqrt(minCellMeasure) << ", min side length = " << minSideLength << ", num elems = " << numElems << endl;
     }
   }
 
   ////////////////////////////////////////////////////////////////////
-  // PSEUDO-TIME SOLVE STRATEGY 
+  // PSEUDO-TIME SOLVE STRATEGY
   ////////////////////////////////////////////////////////////////////
 
 #ifdef USE_VTK
@@ -1514,7 +1681,7 @@ int main(int argc, char *argv[]) {
 #endif
 
   LinearTermPtr residual = rhs->linearTermCopy();
-  residual->addTerm(-bf->testFunctional(solution));  
+  residual->addTerm(-bf->testFunctional(solution));
   RieszRepPtr rieszResidual = Teuchos::rcp(new RieszRep(mesh, innerProduct, residual));
 
   // for timestepping
@@ -1525,52 +1692,57 @@ int main(int argc, char *argv[]) {
   FunctionPtr p_prev = (GAMMA-1.0)*rho_prev*cv*T_prev;
   FunctionPtr s = Teuchos::rcp(new LogFunction(p_prev/rhoToTheGamma));
   FunctionPtr H = rho_prev*s; // entropy functional
-  FunctionPtr Hsq = H*H; // entropy functional sq   
+  FunctionPtr Hsq = H*H; // entropy functional sq
 
   // start first step with very small time tolerance, then change it
   double time_tol = time_tol_orig;
 
   // time steps
-  for (int k = 0;k < numRefs+1;k++){    
+  for (int k = 0; k < numRefs+1; k++)
+  {
 
-    if (rank==0){
+    if (rank==0)
+    {
       cout << "doing timesteps on refinement " << k << endl << endl;
     }
     //////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
     //                               ADJUST TIMESTEP
     //////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 
-    double minSideLength = meshInfo.getMinCellSideLength();	
+    double minSideLength = meshInfo.getMinCellSideLength();
 
     // prevent conditioning issues (and keep robustness under control by increasing 1/dt in problem)
-    if (useCFL){	
+    if (useCFL)
+    {
       double CFL = 25.0; // conservative estimate based off of low Re runs, 75 also seems to work, 100 does not.
       double oldDt = 1.0/((ScalarParamFunction*)invDt.get())->get_param();
       double newDt = min(minSideLength*CFL,oldDt); // take orig dt if smaller (so dt doesn't get too large)
-      newDt = min(maxDt,newDt); 
-      newDt = max(minDt,newDt); 
+      newDt = min(maxDt,newDt);
+      newDt = max(minDt,newDt);
       int newTimeSteps = (int)(numTimeSteps*oldDt/newDt);
       if (rank==0)
-	cout << "min side len = " << minSideLength << ", CFL = " << CFL << ", newDt = " << newDt << endl;
-      if (newDt < oldDt){
-	numTimeSteps = min(newTimeSteps,300); // cap num timesteps at 300
-	((ScalarParamFunction*)invDt.get())->set_param(1.0/newDt);
-	((ScalarParamFunction*)sqrtInvDt.get())->set_param(sqrt(1.0/newDt));
-	double setDt = 1.0/((ScalarParamFunction*)invDt.get())->get_param();
-	if (rank==0)
-	  cout << "setting timestep to " << setDt << " with num timesteps " << numTimeSteps << endl;
-      }      
+        cout << "min side len = " << minSideLength << ", CFL = " << CFL << ", newDt = " << newDt << endl;
+      if (newDt < oldDt)
+      {
+        numTimeSteps = min(newTimeSteps,300); // cap num timesteps at 300
+        ((ScalarParamFunction*)invDt.get())->set_param(1.0/newDt);
+        ((ScalarParamFunction*)sqrtInvDt.get())->set_param(sqrt(1.0/newDt));
+        double setDt = 1.0/((ScalarParamFunction*)invDt.get())->get_param();
+        if (rank==0)
+          cout << "setting timestep to " << setDt << " with num timesteps " << numTimeSteps << endl;
+      }
     }
-    
-    if (useAnalyticContin){
+
+    if (useAnalyticContin)
+    {
       /*
-	double oldArtVisc = ((ScalarParamFunction*)artVisc.get())->get_param();
-	double newArtVisc = max(minArtVisc,minSideLength/2.5); // O(h)
-	newArtVisc = min(maxArtVisc,newArtVisc); // h/10
-	((ScalarParamFunction*)artVisc.get())->set_param(newArtVisc);
-	double artViscMag = ((ScalarParamFunction*)artVisc.get())->get_param();
-	if (rank==0)
-	cout << "changing amount of art visc to " << artViscMag << endl;
+      double oldArtVisc = ((ScalarParamFunction*)artVisc.get())->get_param();
+      double newArtVisc = max(minArtVisc,minSideLength/2.5); // O(h)
+      newArtVisc = min(maxArtVisc,newArtVisc); // h/10
+      ((ScalarParamFunction*)artVisc.get())->set_param(newArtVisc);
+      double artViscMag = ((ScalarParamFunction*)artVisc.get())->get_param();
+      if (rank==0)
+      cout << "changing amount of art visc to " << artViscMag << endl;
       */
       double maxRe = 1e4;
       double oldRe = ((ScalarParamFunction*)Re.get())->get_param();
@@ -1580,7 +1752,7 @@ int main(int argc, char *argv[]) {
       double newReynoldsNumber = ((ScalarParamFunction*)Re.get())->get_param();
       ((ScalarParamFunction*)SqrtReInv.get())->set_param(1.0/sqrt(newReynoldsNumber));
       if (rank==0)
-	cout << "changing Reynolds number to " << newReynoldsNumber << endl;
+        cout << "changing Reynolds number to " << newReynoldsNumber << endl;
       ((EpsilonScaling*)TauReScaling.get())->set_param(1.0/newReynoldsNumber);
     }
 
@@ -1588,8 +1760,9 @@ int main(int argc, char *argv[]) {
     //                               END ADJUSTING TIMESTEP
     //////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 
-    ofstream residualFile;      
-    if (rank==0){
+    ofstream residualFile;
+    if (rank==0)
+    {
       std::ostringstream refNum;
       refNum << k;
       string filename1 = dir + "time_res" + refNum.str()+ ".txt";
@@ -1597,171 +1770,191 @@ int main(int argc, char *argv[]) {
     }
     double L2_time_residual = 1e7;
     int i = 0;
-    while(L2_time_residual > time_tol && (i<numTimeSteps)){
+    while(L2_time_residual > time_tol && (i<numTimeSteps))
+    {
 
       double alpha = 0.0; // to initialize
       int nriter = 0;
       int posEnrich = 2; // amount of enriching of grid points on which to ensure positivity
       double newtonNorm = 1e7; // init to big value
       double newtonTol = 1e-6;//min(max(L2_time_residual/100.0,1e-6),1e-4);  // min newton tol 1e-6, max newton tol 1e-3
-      while (newtonNorm > newtonTol && nriter < maxNRIter){
-	solution->condensedSolve();  // don't save memory (maybe turn on if ndofs > maxDofs?)      
+      while (newtonNorm > newtonTol && nriter < maxNRIter)
+      {
+        solution->condensedSolve();  // don't save memory (maybe turn on if ndofs > maxDofs?)
 
-	// line search algorithm
-	alpha = 1.0; 
-	if (useLineSearch && k > delayLineSearch){ // to enforce positivity of density and temperature
-	  double lineSearchFactor = .5; double eps = 1e-2;// arbitrary
-	  FunctionPtr rhoTemp = Function::solution(rho,backgroundFlow) + alpha*Function::solution(rho,solution) - Function::constant(eps); 
-	  FunctionPtr TTemp = Function::solution(T,backgroundFlow) + alpha*Function::solution(T,solution) - Function::constant(eps); 
-	  bool rhoIsPositive = rhoTemp->isPositive(mesh,posEnrich); 
-	  bool TIsPositive = TTemp->isPositive(mesh,posEnrich); 
-	  int iter = 0; int maxIter = 18;
-	  while (!(rhoIsPositive && TIsPositive) && iter < maxIter){
-	    alpha = alpha*lineSearchFactor;
-	    rhoTemp = Function::solution(rho,backgroundFlow) + alpha*Function::solution(rho,solution); 
-	    TTemp = Function::solution(T,backgroundFlow) + alpha*Function::solution(T,solution); 
-	    rhoIsPositive = rhoTemp->isPositive(mesh,posEnrich); 
-	    TIsPositive = TTemp->isPositive(mesh,posEnrich); 	    
-	    iter++;
-	  }
-	  if (rank==0 && alpha < 1.0){
-	    cout << "line search factor alpha = " << alpha << ", with rhoPositive = " << rhoIsPositive << ", and TisPositive " << TIsPositive << endl;
-	  }      
-	}
-	backgroundFlow->addSolution(solution,alpha); // update with dU
-	nriter++;
+        // line search algorithm
+        alpha = 1.0;
+        if (useLineSearch && k > delayLineSearch)  // to enforce positivity of density and temperature
+        {
+          double lineSearchFactor = .5;
+          double eps = 1e-2;// arbitrary
+          FunctionPtr rhoTemp = Function::solution(rho,backgroundFlow) + alpha*Function::solution(rho,solution) - Function::constant(eps);
+          FunctionPtr TTemp = Function::solution(T,backgroundFlow) + alpha*Function::solution(T,solution) - Function::constant(eps);
+          bool rhoIsPositive = rhoTemp->isPositive(mesh,posEnrich);
+          bool TIsPositive = TTemp->isPositive(mesh,posEnrich);
+          int iter = 0;
+          int maxIter = 18;
+          while (!(rhoIsPositive && TIsPositive) && iter < maxIter)
+          {
+            alpha = alpha*lineSearchFactor;
+            rhoTemp = Function::solution(rho,backgroundFlow) + alpha*Function::solution(rho,solution);
+            TTemp = Function::solution(T,backgroundFlow) + alpha*Function::solution(T,solution);
+            rhoIsPositive = rhoTemp->isPositive(mesh,posEnrich);
+            TIsPositive = TTemp->isPositive(mesh,posEnrich);
+            iter++;
+          }
+          if (rank==0 && alpha < 1.0)
+          {
+            cout << "line search factor alpha = " << alpha << ", with rhoPositive = " << rhoIsPositive << ", and TisPositive " << TIsPositive << endl;
+          }
+        }
+        backgroundFlow->addSolution(solution,alpha); // update with dU
+        nriter++;
 
-	double rhoNorm = solution->L2NormOfSolutionGlobal(rho->ID());
-	double u1Norm = solution->L2NormOfSolutionGlobal(u1->ID());
-	double u2Norm = solution->L2NormOfSolutionGlobal(u2->ID());
-	double TNorm = solution->L2NormOfSolutionGlobal(T->ID());
-	newtonNorm = sqrt(rhoNorm*rhoNorm + u1Norm*u1Norm + u2Norm*u2Norm + TNorm*TNorm);
-	if (rank==0)
-	  cout << "in Newton step, soln L2 norm = " << newtonNorm << " and tol = " << newtonTol << endl;
+        double rhoNorm = solution->L2NormOfSolutionGlobal(rho->ID());
+        double u1Norm = solution->L2NormOfSolutionGlobal(u1->ID());
+        double u2Norm = solution->L2NormOfSolutionGlobal(u2->ID());
+        double TNorm = solution->L2NormOfSolutionGlobal(T->ID());
+        newtonNorm = sqrt(rhoNorm*rhoNorm + u1Norm*u1Norm + u2Norm*u2Norm + TNorm*TNorm);
+        if (rank==0)
+          cout << "in Newton step, soln L2 norm = " << newtonNorm << " and tol = " << newtonTol << endl;
       }
-     
+
       rieszTimeResidual->computeRieszRep();
       double timeRes = rieszTimeResidual->getNorm();
-      
+
       L2_time_residual = timeRes;
 
       // optional writing of timestep files
       std::ostringstream oss;
       oss << k << "_" << i ;
-      if (writeTimestepFiles){
-	//	solution->setWriteMatrixToFile(true,string("K")+oss.str());
+      if (writeTimestepFiles)
+      {
+        //	solution->setWriteMatrixToFile(true,string("K")+oss.str());
       }
       double current_dt = 1.0/((ScalarParamFunction*)invDt.get())->get_param();
-      if (rank==0){
-	residualFile << L2_time_residual << " " << current_dt << endl;
+      if (rank==0)
+      {
+        residualFile << L2_time_residual << " " << current_dt << endl;
 
-	cout << "at timestep i = " << i << " with dt = " << current_dt << ", and time residual = " << L2_time_residual << endl << endl;
+        cout << "at timestep i = " << i << " with dt = " << current_dt << ", and time residual = " << L2_time_residual << endl << endl;
 
-	if (writeTimestepFiles){
-	  string Ustr("U");      
-	  string dUstr("dU");      
-#ifdef USE_VTK	 
-	  exporter.exportSolution(string("dU") + oss.str());
-	  backgroundFlowExporter.exportSolution(string("U") + oss.str());
+        if (writeTimestepFiles)
+        {
+          string Ustr("U");
+          string dUstr("dU");
+#ifdef USE_VTK
+          exporter.exportSolution(string("dU") + oss.str());
+          backgroundFlowExporter.exportSolution(string("U") + oss.str());
 #endif
-	}
-      }  
+        }
+      }
 
-      prevTimeFlow->setSolution(backgroundFlow); // reset previous time solution to current time sol           
+      prevTimeFlow->setSolution(backgroundFlow); // reset previous time solution to current time sol
       i++;
 
-      if (useAdaptiveTimestepping){
-	double r = 1.75;	    
-	/*
-	int k_thresh = 10; // check every k_thresh timesteps
-	double prev_residual;      
-	if (i % k_thresh==0){ // if we should check
-	  if (i>k_thresh){ 
-	    if (rank==0)
-	      cout << "Time res on k = " << k << " is " << timeRes << ", and prev_res is " << prev_residual << endl;
+      if (useAdaptiveTimestepping)
+      {
+        double r = 1.75;
+        /*
+        int k_thresh = 10; // check every k_thresh timesteps
+        double prev_residual;
+        if (i % k_thresh==0){ // if we should check
+          if (i>k_thresh){
+            if (rank==0)
+              cout << "Time res on k = " << k << " is " << timeRes << ", and prev_res is " << prev_residual << endl;
 
-	    double oldDt = 1.0/((ScalarParamFunction*)invDt.get())->get_param();
-	    double newDt = min(maxDt,oldDt*pow(prev_residual/timeRes,r));  // growth factor
-	    if (timeRes > prev_residual){ // if we don't decrease sufficiently fast, consider it a stall
-	      newDt = oldDt/r; 
-	    }
-	    newDt = max(newDt,minDt);
-	    ((ScalarParamFunction*)invDt.get())->set_param(1.0/newDt);
-	  }
-	  prev_residual = timeRes;
-	}
-	*/
-	
-	// conservative timestepping algorithm - if max timestep is hit, relax things
-	if (i==numTimeSteps && k > 0){
-	  double oldDt = 1.0/((ScalarParamFunction*)invDt.get())->get_param();
-	  double newDt = oldDt/r;
-	  newDt = max(newDt,minDt);
-	  ((ScalarParamFunction*)invDt.get())->set_param(1.0/newDt);
-	  double dtSet = 1.0/((ScalarParamFunction*)invDt.get())->get_param(); 
-	  numTimeSteps = min((int)(numTimeSteps*dt/newDt),300); // cap num timesteps at 300
-	  if (rank==0)	    
-	    cout << "max time steps reached on refinement " << k << ", decreasing dt to " << dtSet << ", with num time steps = " << numTimeSteps << endl; //" and max ts to " << nextNumTimeSteps << endl;
-	}
-	
+            double oldDt = 1.0/((ScalarParamFunction*)invDt.get())->get_param();
+            double newDt = min(maxDt,oldDt*pow(prev_residual/timeRes,r));  // growth factor
+            if (timeRes > prev_residual){ // if we don't decrease sufficiently fast, consider it a stall
+              newDt = oldDt/r;
+            }
+            newDt = max(newDt,minDt);
+            ((ScalarParamFunction*)invDt.get())->set_param(1.0/newDt);
+          }
+          prev_residual = timeRes;
+        }
+        */
+
+        // conservative timestepping algorithm - if max timestep is hit, relax things
+        if (i==numTimeSteps && k > 0)
+        {
+          double oldDt = 1.0/((ScalarParamFunction*)invDt.get())->get_param();
+          double newDt = oldDt/r;
+          newDt = max(newDt,minDt);
+          ((ScalarParamFunction*)invDt.get())->set_param(1.0/newDt);
+          double dtSet = 1.0/((ScalarParamFunction*)invDt.get())->get_param();
+          numTimeSteps = min((int)(numTimeSteps*dt/newDt),300); // cap num timesteps at 300
+          if (rank==0)
+            cout << "max time steps reached on refinement " << k << ", decreasing dt to " << dtSet << ", with num time steps = " << numTimeSteps << endl; //" and max ts to " << nextNumTimeSteps << endl;
+        }
+
       }
 
     }
 
     // save mesh to file
-    if (rank == 0) {	  
-      if (saveFile.length() > 0) {
-	std::ostringstream oss;
-	oss << dir << string(saveFile) << k ;            
-	cout << "on refinement " << k << " saving mesh file to " << oss.str() << endl;
-	refHistory->saveToFile(oss.str());
+    if (rank == 0)
+    {
+      if (saveFile.length() > 0)
+      {
+        std::ostringstream oss;
+        oss << dir << string(saveFile) << k ;
+        cout << "on refinement " << k << " saving mesh file to " << oss.str() << endl;
+        refHistory->saveToFile(oss.str());
       }
-      if (solnSaveFile.length() > 0) {
-	std::ostringstream oss;
-	oss << dir << "solution_" << string(solnSaveFile) << k ;            
-	cout << "on refinement " << k << " saving solution update to " << oss.str() << endl;
-	solution->writeToFile(oss.str());
-	
-	oss.str(""); // clear variable
-	oss << dir << "backgroundFlow_" << string(solnSaveFile) << k ;            
-	cout << "on refinement " << k << " saving background flow to " << oss.str() << endl;
-	backgroundFlow->writeToFile(oss.str());
-	
-	oss.str(""); // clear variable
-	oss << dir << "prevTimeFlow_" << string(solnSaveFile) << k ;            
-	cout << "on refinement " << k << " saving prev time flow to " << oss.str() << endl;
-	prevTimeFlow->writeToFile(oss.str());
+      if (solnSaveFile.length() > 0)
+      {
+        std::ostringstream oss;
+        oss << dir << "solution_" << string(solnSaveFile) << k ;
+        cout << "on refinement " << k << " saving solution update to " << oss.str() << endl;
+        solution->writeToFile(oss.str());
+
+        oss.str(""); // clear variable
+        oss << dir << "backgroundFlow_" << string(solnSaveFile) << k ;
+        cout << "on refinement " << k << " saving background flow to " << oss.str() << endl;
+        backgroundFlow->writeToFile(oss.str());
+
+        oss.str(""); // clear variable
+        oss << dir << "prevTimeFlow_" << string(solnSaveFile) << k ;
+        cout << "on refinement " << k << " saving prev time flow to " << oss.str() << endl;
+        prevTimeFlow->writeToFile(oss.str());
       }
     }
-    
+
     ////////////////////////////////////////////////////////////////////////////////////////////////////////////
-    //                                          CHECK CONDITIONING 
+    //                                          CHECK CONDITIONING
     ////////////////////////////////////////////////////////////////////////////////////////////////////////////
 
-    if (rank==0){
+    if (rank==0)
+    {
       cout << "Mesh has minCellLength " << minSideLength << endl;
     }
     bool checkConditioning = false;
-    if (checkConditioning){
+    if (checkConditioning)
+    {
       double minSideLength = meshInfo.getMinCellSideLength() ;
       StandardAssembler assembler(solution);
       vector<int> cellIDs = meshInfo.getMinCellSizeCellIDs();
       double maxCond = 0.0;
       int maxCellID = 0;
-      for (int i = 0;i<cellIDs.size();i++){
-	int cellID = cellIDs[i];
-	FieldContainer<double> ipMat = assembler.getIPMatrix(mesh->getElement(cellID));
-	double cond = SerialDenseWrapper::getMatrixConditionNumber(ipMat);
-	if (cond>maxCond){
-	  maxCond = cond;
-	  maxCellID = cellID;
-	}
+      for (int i = 0; i<cellIDs.size(); i++)
+      {
+        int cellID = cellIDs[i];
+        FieldContainer<double> ipMat = assembler.getIPMatrix(mesh->getElement(cellID));
+        double cond = SerialDenseWrapper::getMatrixConditionNumber(ipMat);
+        if (cond>maxCond)
+        {
+          maxCond = cond;
+          maxCellID = cellID;
+        }
       }
-      if (rank==0){
-	cout << "cell ID  " << maxCellID << " has minCellLength " << minSideLength << " and condition estimate " << maxCond << endl;
+      if (rank==0)
+      {
+        cout << "cell ID  " << maxCellID << " has minCellLength " << minSideLength << " and condition estimate " << maxCond << endl;
       }
       std::ostringstream oss;
-      oss << k;      	  
+      oss << k;
       string ipMatName = string("ipMat_")+oss.str()+string(".mat");
       ElementPtr maxCondElem = mesh->getElement(maxCellID);
       FieldContainer<double> ipMat = assembler.getIPMatrix(maxCondElem);
@@ -1774,33 +1967,36 @@ int main(int argc, char *argv[]) {
       dofIndices[tau1->ID()] = maxCondElem->elementType()->testOrderPtr->getDofIndices(tau1->ID());
       dofIndices[tau2->ID()] = maxCondElem->elementType()->testOrderPtr->getDofIndices(tau2->ID());
       dofIndices[tau3->ID()] = maxCondElem->elementType()->testOrderPtr->getDofIndices(tau3->ID());
-      if (rank==0){
-	for (map<int,vector<int> >::iterator mapIt = dofIndices.begin();mapIt!=dofIndices.end();mapIt++){
-	  int testID = mapIt->first;
-	  std::ostringstream testIDstream;
-	  testIDstream << testID;
-	  string dofIndicesName = string("dofInds_")+oss.str()+string("_testID_")+testIDstream.str()+string(".txt");
-	  /*
-	  ofstream dofIndsFile;    
-	  dofIndsFile.open(dofIndicesName.c_str());	
-	  vector<int> dofInds = mapIt->second;
-	  for (int i = 0;i<dofInds.size();i++){
-	    dofIndsFile << dofInds[i] << endl;
-	  }
-	  dofIndsFile.close();
-	  */
-	}      
+      if (rank==0)
+      {
+        for (map<int,vector<int> >::iterator mapIt = dofIndices.begin(); mapIt!=dofIndices.end(); mapIt++)
+        {
+          int testID = mapIt->first;
+          std::ostringstream testIDstream;
+          testIDstream << testID;
+          string dofIndicesName = string("dofInds_")+oss.str()+string("_testID_")+testIDstream.str()+string(".txt");
+          /*
+          ofstream dofIndsFile;
+          dofIndsFile.open(dofIndicesName.c_str());
+          vector<int> dofInds = mapIt->second;
+          for (int i = 0;i<dofInds.size();i++){
+            dofIndsFile << dofInds[i] << endl;
+          }
+          dofIndsFile.close();
+          */
+        }
       }
     }
     ////////////////////////////////////////////////////////////////////////////////////////////////////////////
-    //                                          END OF CHECKING CONDITIONING 
+    //                                          END OF CHECKING CONDITIONING
     ////////////////////////////////////////////////////////////////////////////////////////////////////////////
 
     map<int,double> errMap = solution->energyError();
-    FunctionPtr energyErrorFxn = Teuchos::rcp( new EnergyErrorFunction(errMap) );    
-    if (rank==0){
+    FunctionPtr energyErrorFxn = Teuchos::rcp( new EnergyErrorFunction(errMap) );
+    if (rank==0)
+    {
       std::ostringstream oss;
-      oss << k ;      
+      oss << k ;
       residualFile.close();
 #ifdef USE_VTK
       exporter.exportSolution(string("dU")+oss.str());
@@ -1808,120 +2004,142 @@ int main(int argc, char *argv[]) {
 #endif
     }
 
-    if (k<numRefs){
+    if (k<numRefs)
+    {
 
       // adaptive time tolerance
       double energyError = solution->energyErrorTotal();
       time_tol = max(energyError*5e-3,time_tol_orig);
       //      time_tol = time_tol_orig;
 
-      if (rank==0){
-	cout << "Performing refinement number " << k << ", with energy error " << energyError << " and time tolerance = " << time_tol << endl;
-      }     
-
-      if (!useAnisotropy){
-	refinementStrategy->refine(rank==0);          // isotropic option
-      }else{	       
-	if (rank==0)
-	  cout << "doing anisotropic refs" << endl;
-	
-	double maxThresh = 1e7;
-	vector<int> cellIDs;
-	refinementStrategy->getCellsAboveErrorThreshhold(cellIDs);
-
-	// hack to always refine at the singularity
-	vector<int> singularCellIDs;
-	vector<ElementPtr> elems = mesh->activeElements();
-	for (vector<ElementPtr>::iterator elemIt=elems.begin();elemIt != elems.end();elemIt++){
-	  int cellID = (*elemIt)->cellID();
-	  FieldContainer<double> singularPoint(2);
-	  singularPoint(0) = 1.0; singularPoint(1) = 0.0;
-	  bool  vertexAtSingularity = meshInfo.checkIfVertexAtPoint(cellID,singularPoint);
-	  bool notInCellsTORefine = std::find(cellIDs.begin(), cellIDs.end(), cellID) == cellIDs.end();
-	  if (vertexAtSingularity && notInCellsTORefine){
-	    singularCellIDs.push_back(cellID);
-	    if (rank==0)
-	      cout << "artificially adding cell " << cellID << " at singularity for refinement" << endl;
-	  }
-	}
-
-	rieszResidual->computeRieszRep();
-	map<int,double> xErrMap = rieszResidual->computeAlternativeNormSqOnCells(xip,cellIDs);
-	map<int,double> yErrMap = rieszResidual->computeAlternativeNormSqOnCells(yip,cellIDs);
-
-	vector<int> xCells,yCells,regCells;
-	map<int,double> threshMap;
-	map<int,bool> useHRefFlagMap;
-	for (int i = 0;i<cellIDs.size();i++){
-	  int cellID = cellIDs[i];
-	  vector<double> c = mesh->getCellCentroid(cellID);
-	  bool atWall = c[0] > X_PLATE; // only do anisotropy on wall, to avoid the weird H1 error wrt singularity issue
-	  FieldContainer<double> vv(4,2); mesh->verticesForCell(vv, cellID);
-	  bool vertexOnWall = false; bool vertexAtSingularity = false;
-	  for (int j = 0;j<4;j++){
-	    if (abs(vv(j,1))<1e-10 && vv(j,0) > X_PLATE) // if any vertex is on the flat plate
-	      vertexOnWall = true;
-
-	    if (abs(rampHeight*(vv(j,0)-X_RAMP)-vv(j,1))<1e-10 && vv(j,0) > X_RAMP) // if any vertex is close to ramp wall
-	      vertexOnWall = true;
-
-	    FieldContainer<double> singularPoint(2);
-	    singularPoint(0) = X_PLATE; singularPoint(1) = 0.0;
-	    vertexAtSingularity = meshInfo.checkIfVertexAtPoint(cellID,singularPoint);
-
-	  }
-	  bool onWall = !vertexAtSingularity; //&& vertexOnWall; // only do anisotropy on wall, to avoid the weird H1 error wrt singularity issue
-	    
-	  double ratio = xErrMap[cellID]/yErrMap[cellID];
-	  threshMap[cellID] = anisotropicThresh;
-	  double minCellSize = min(mesh->getCellXSize(cellID),mesh->getCellYSize(cellID));	  
-	  if (vertexOnWall && minCellSize > (polyOrder/ReynoldsNumber)){
-	    threshMap[cellID] = 2.5; // make it easier to do anisotropic refinements at the wall (scale it with entropy functional in the future?)
-	    // WARNING: A HACK TO TRIGGER ANISOTROPIC REFINEMENTS
-	    yErrMap[cellID] = yErrMap[cellID]*2;
-	  }
-	  if (vertexAtSingularity || !atWall){
-	    threshMap[cellID] = maxThresh; // want ISOTROPIC refinements only at or before singularity
-	  }
-	}	
-
-	refinementStrategy->refine(rank==0,xErrMap,yErrMap,threshMap); //anisotropic hp-scheme
-	if (refineAtSingularity){	
-	  if (rank==0)
-	    cout << "refining singular cell contributions" << endl;
-	  refinementStrategy->refineCells(singularCellIDs);
-	}
-	double minSideLength = meshInfo.getMinCellSideLength() ;
-	if (rank==0){
-	  cout << "Num elements = " << mesh->numActiveElements() << ", num total dofs = " << mesh->numGlobalDofs() << ", and num flux dofs = " << mesh->numFluxDofs() << endl;
-	  cout << "min side length after refinement = " << minSideLength << endl;
-	}
+      if (rank==0)
+      {
+        cout << "Performing refinement number " << k << ", with energy error " << energyError << " and time tolerance = " << time_tol << endl;
       }
-      if (rank==0){
-	cout << "Done with  refinement number " << k << endl;
-      }  
-     
+
+      if (!useAnisotropy)
+      {
+        refinementStrategy->refine(rank==0);          // isotropic option
+      }
+      else
+      {
+        if (rank==0)
+          cout << "doing anisotropic refs" << endl;
+
+        double maxThresh = 1e7;
+        vector<int> cellIDs;
+        refinementStrategy->getCellsAboveErrorThreshhold(cellIDs);
+
+        // hack to always refine at the singularity
+        vector<int> singularCellIDs;
+        vector<ElementPtr> elems = mesh->activeElements();
+        for (vector<ElementPtr>::iterator elemIt=elems.begin(); elemIt != elems.end(); elemIt++)
+        {
+          int cellID = (*elemIt)->cellID();
+          FieldContainer<double> singularPoint(2);
+          singularPoint(0) = 1.0;
+          singularPoint(1) = 0.0;
+          bool  vertexAtSingularity = meshInfo.checkIfVertexAtPoint(cellID,singularPoint);
+          bool notInCellsTORefine = std::find(cellIDs.begin(), cellIDs.end(), cellID) == cellIDs.end();
+          if (vertexAtSingularity && notInCellsTORefine)
+          {
+            singularCellIDs.push_back(cellID);
+            if (rank==0)
+              cout << "artificially adding cell " << cellID << " at singularity for refinement" << endl;
+          }
+        }
+
+        rieszResidual->computeRieszRep();
+        map<int,double> xErrMap = rieszResidual->computeAlternativeNormSqOnCells(xip,cellIDs);
+        map<int,double> yErrMap = rieszResidual->computeAlternativeNormSqOnCells(yip,cellIDs);
+
+        vector<int> xCells,yCells,regCells;
+        map<int,double> threshMap;
+        map<int,bool> useHRefFlagMap;
+        for (int i = 0; i<cellIDs.size(); i++)
+        {
+          int cellID = cellIDs[i];
+          vector<double> c = mesh->getCellCentroid(cellID);
+          bool atWall = c[0] > X_PLATE; // only do anisotropy on wall, to avoid the weird H1 error wrt singularity issue
+          FieldContainer<double> vv(4,2);
+          mesh->verticesForCell(vv, cellID);
+          bool vertexOnWall = false;
+          bool vertexAtSingularity = false;
+          for (int j = 0; j<4; j++)
+          {
+            if (abs(vv(j,1))<1e-10 && vv(j,0) > X_PLATE) // if any vertex is on the flat plate
+              vertexOnWall = true;
+
+            if (abs(rampHeight*(vv(j,0)-X_RAMP)-vv(j,1))<1e-10 && vv(j,0) > X_RAMP) // if any vertex is close to ramp wall
+              vertexOnWall = true;
+
+            FieldContainer<double> singularPoint(2);
+            singularPoint(0) = X_PLATE;
+            singularPoint(1) = 0.0;
+            vertexAtSingularity = meshInfo.checkIfVertexAtPoint(cellID,singularPoint);
+
+          }
+          bool onWall = !vertexAtSingularity; //&& vertexOnWall; // only do anisotropy on wall, to avoid the weird H1 error wrt singularity issue
+
+          double ratio = xErrMap[cellID]/yErrMap[cellID];
+          threshMap[cellID] = anisotropicThresh;
+          double minCellSize = min(mesh->getCellXSize(cellID),mesh->getCellYSize(cellID));
+          if (vertexOnWall && minCellSize > (polyOrder/ReynoldsNumber))
+          {
+            threshMap[cellID] = 2.5; // make it easier to do anisotropic refinements at the wall (scale it with entropy functional in the future?)
+            // WARNING: A HACK TO TRIGGER ANISOTROPIC REFINEMENTS
+            yErrMap[cellID] = yErrMap[cellID]*2;
+          }
+          if (vertexAtSingularity || !atWall)
+          {
+            threshMap[cellID] = maxThresh; // want ISOTROPIC refinements only at or before singularity
+          }
+        }
+
+        refinementStrategy->refine(rank==0,xErrMap,yErrMap,threshMap); //anisotropic hp-scheme
+        if (refineAtSingularity)
+        {
+          if (rank==0)
+            cout << "refining singular cell contributions" << endl;
+          refinementStrategy->refineCells(singularCellIDs);
+        }
+        double minSideLength = meshInfo.getMinCellSideLength() ;
+        if (rank==0)
+        {
+          cout << "Num elements = " << mesh->numActiveElements() << ", num total dofs = " << mesh->numGlobalDofs() << ", and num flux dofs = " << mesh->numFluxDofs() << endl;
+          cout << "min side length after refinement = " << minSideLength << endl;
+        }
+      }
+      if (rank==0)
+      {
+        cout << "Done with  refinement number " << k << endl;
+      }
+
       // RESET solution every refinement - make sure discretization error doesn't creep in
       //      backgroundFlow->projectOntoMesh(functionMap);
-      //      prevTimeFlow->projectOntoMesh(functionMap);   
+      //      prevTimeFlow->projectOntoMesh(functionMap);
 
-    } else {
+    }
+    else
+    {
 
-   
+
       time_tol = time_tol_orig; // return to original time tolerance for final solve
-      if (rank==0){
-	cout << "Finishing it off with the final solve" << endl;
+      if (rank==0)
+      {
+        cout << "Finishing it off with the final solve" << endl;
       }
 
     }
-    
+
   }
-  if (rank==0){
+  if (rank==0)
+  {
 #ifdef USE_VTK
     exporter.exportSolution("dU");
     backgroundFlowExporter.exportSolution("U");
 #endif
   }
-  
+
   return 0;
 }

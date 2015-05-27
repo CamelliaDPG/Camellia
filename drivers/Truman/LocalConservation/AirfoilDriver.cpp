@@ -21,68 +21,82 @@
 #include "choice.hpp"
 #endif
 
-class EpsilonScaling : public hFunction {
+class EpsilonScaling : public hFunction
+{
   double _epsilon;
 public:
-  EpsilonScaling(double epsilon) {
+  EpsilonScaling(double epsilon)
+  {
     _epsilon = epsilon;
   }
-  double value(double x, double y, double h) {
+  double value(double x, double y, double h)
+  {
     double scaling = min(_epsilon/(h*h), 1.0);
     // since this is used in inner product term a like (a,a), take square root
     return sqrt(scaling);
   }
 };
 
-class LeftBoundary : public SpatialFilter {
+class LeftBoundary : public SpatialFilter
+{
 public:
-  bool matchesPoint(double x, double y) {
+  bool matchesPoint(double x, double y)
+  {
     double tol = 1e-14;
     return (abs(x+1) < tol);
   }
 };
 
-class RightBoundary : public SpatialFilter {
+class RightBoundary : public SpatialFilter
+{
 public:
-  bool matchesPoint(double x, double y) {
+  bool matchesPoint(double x, double y)
+  {
     double tol = 1e-14;
     bool rightMatch = (abs(x-9) < tol);
     return rightMatch;
   }
 };
 
-class TopBoundary : public SpatialFilter {
+class TopBoundary : public SpatialFilter
+{
 public:
-  bool matchesPoint(double x, double y) {
+  bool matchesPoint(double x, double y)
+  {
     double tol = 1e-14;
     return (abs(y-1) < tol);
   }
 };
 
-class BottomBoundary : public SpatialFilter {
+class BottomBoundary : public SpatialFilter
+{
 public:
-  bool matchesPoint(double x, double y) {
+  bool matchesPoint(double x, double y)
+  {
     double tol = 1e-14;
     return (abs(y+1) < tol);
   }
 };
 
-class AirfoilInflowBoundary : public SpatialFilter {
+class AirfoilInflowBoundary : public SpatialFilter
+{
 private:
   vector<double> _beta;
 public:
   AirfoilInflowBoundary(vector<double> b) : SpatialFilter(), _beta(b) {}
-  bool matchesPoints(FieldContainer<bool> &pointsMatch, BasisCachePtr basisCache) 
+  bool matchesPoints(FieldContainer<bool> &pointsMatch, BasisCachePtr basisCache)
   {
-    const FieldContainer<double> *points = &(basisCache->getPhysicalCubaturePoints());    
+    const FieldContainer<double> *points = &(basisCache->getPhysicalCubaturePoints());
     const FieldContainer<double> *normals = &(basisCache->getSideNormals());
     int numCells = (*points).dimension(0);
     int numPoints = (*points).dimension(1);
 
     double tol = 1e-3;
     bool somePointMatches = false;
-    for (int cellIndex=0; cellIndex<numCells; cellIndex++) {
-      for (int ptIndex=0; ptIndex<numPoints; ptIndex++) {
+    for (int cellIndex=0; cellIndex<numCells; cellIndex++)
+    {
+      for (int ptIndex=0; ptIndex<numPoints; ptIndex++)
+      {
         double x = (*points)(cellIndex,ptIndex,0);
         double y = (*points)(cellIndex,ptIndex,1);
         double n1 = (*normals)(cellIndex,ptIndex,0);
@@ -100,22 +114,25 @@ public:
   }
 };
 
-class AirfoilOutflowBoundary : public SpatialFilter {
+class AirfoilOutflowBoundary : public SpatialFilter
+{
 private:
   vector<double> _beta;
 public:
   AirfoilOutflowBoundary(vector<double> b) : SpatialFilter(), _beta(b) {}
-  bool matchesPoints(FieldContainer<bool> &pointsMatch, BasisCachePtr basisCache) 
+  bool matchesPoints(FieldContainer<bool> &pointsMatch, BasisCachePtr basisCache)
   {
-    const FieldContainer<double> *points = &(basisCache->getPhysicalCubaturePoints());    
+    const FieldContainer<double> *points = &(basisCache->getPhysicalCubaturePoints());
     const FieldContainer<double> *normals = &(basisCache->getSideNormals());
     int numCells = (*points).dimension(0);
     int numPoints = (*points).dimension(1);
 
     double tol = 1e-3;
     bool somePointMatches = false;
-    for (int cellIndex=0; cellIndex<numCells; cellIndex++) {
-      for (int ptIndex=0; ptIndex<numPoints; ptIndex++) {
+    for (int cellIndex=0; cellIndex<numCells; cellIndex++)
+    {
+      for (int ptIndex=0; ptIndex<numPoints; ptIndex++)
+      {
         double x = (*points)(cellIndex,ptIndex,0);
         double y = (*points)(cellIndex,ptIndex,1);
         double n1 = (*normals)(cellIndex,ptIndex,0);
@@ -133,41 +150,50 @@ public:
   }
 };
 
-class ZeroBC : public Function {
-  public:
-    ZeroBC() : Function(0) {}
-    void values(FieldContainer<double> &values, BasisCachePtr basisCache) {
-      int numCells = values.dimension(0);
-      int numPoints = values.dimension(1);
+class ZeroBC : public Function
+{
+public:
+  ZeroBC() : Function(0) {}
+  void values(FieldContainer<double> &values, BasisCachePtr basisCache)
+  {
+    int numCells = values.dimension(0);
+    int numPoints = values.dimension(1);
 
-      const FieldContainer<double> *points = &(basisCache->getPhysicalCubaturePoints());
-      for (int cellIndex=0; cellIndex<numCells; cellIndex++) {
-        for (int ptIndex=0; ptIndex<numPoints; ptIndex++) {
-          double x = (*points)(cellIndex,ptIndex,0);
-          double y = (*points)(cellIndex,ptIndex,1);
-          values(cellIndex, ptIndex) = 0;
-        }
+    const FieldContainer<double> *points = &(basisCache->getPhysicalCubaturePoints());
+    for (int cellIndex=0; cellIndex<numCells; cellIndex++)
+    {
+      for (int ptIndex=0; ptIndex<numPoints; ptIndex++)
+      {
+        double x = (*points)(cellIndex,ptIndex,0);
+        double y = (*points)(cellIndex,ptIndex,1);
+        values(cellIndex, ptIndex) = 0;
       }
     }
+  }
 };
 
-class OneBC : public Function {
-  public:
-    OneBC() : Function(0) {}
-    void values(FieldContainer<double> &values, BasisCachePtr basisCache) {
-      int numCells = values.dimension(0);
-      int numPoints = values.dimension(1);
+class OneBC : public Function
+{
+public:
+  OneBC() : Function(0) {}
+  void values(FieldContainer<double> &values, BasisCachePtr basisCache)
+  {
+    int numCells = values.dimension(0);
+    int numPoints = values.dimension(1);
 
-      const FieldContainer<double> *points = &(basisCache->getPhysicalCubaturePoints());
-      for (int cellIndex=0; cellIndex<numCells; cellIndex++) {
-        for (int ptIndex=0; ptIndex<numPoints; ptIndex++) {
-          values(cellIndex, ptIndex) = 1;
-        }
+    const FieldContainer<double> *points = &(basisCache->getPhysicalCubaturePoints());
+    for (int cellIndex=0; cellIndex<numCells; cellIndex++)
+    {
+      for (int ptIndex=0; ptIndex<numPoints; ptIndex++)
+      {
+        values(cellIndex, ptIndex) = 1;
       }
     }
+  }
 };
 
-int main(int argc, char *argv[]) {
+int main(int argc, char *argv[])
+{
 #ifdef HAVE_MPI
   Teuchos::GlobalMPISession mpiSession(&argc, &argv,0);
   choice::MpiArgs args( argc, argv );
@@ -189,10 +215,10 @@ int main(int argc, char *argv[]) {
 
   ////////////////////   DECLARE VARIABLES   ///////////////////////
   // define test variables
-  VarFactory varFactory; 
+  VarFactory varFactory;
   VarPtr tau = varFactory.testVar("tau", HDIV);
   VarPtr v = varFactory.testVar("v", HGRAD);
-  
+
   // define trial variables
   VarPtr uhat = varFactory.traceVar("uhat");
   VarPtr beta_n_u_minus_sigma_n = varFactory.fluxVar("fhat");
@@ -202,19 +228,19 @@ int main(int argc, char *argv[]) {
   vector<double> beta;
   beta.push_back(1.0);
   beta.push_back(0.25);
-  
+
   ////////////////////   DEFINE BILINEAR FORM   ///////////////////////
   BFPtr bf = Teuchos::rcp( new BF(varFactory) );
   // tau terms:
   bf->addTerm(sigma / epsilon, tau);
   bf->addTerm(u, tau->div());
   bf->addTerm(-uhat, tau->dot_normal());
-  
+
   // v terms:
   bf->addTerm( sigma, v->grad() );
   bf->addTerm( beta * u, - v->grad() );
   bf->addTerm( beta_n_u_minus_sigma_n, v);
-  
+
   ////////////////////   DEFINE INNER PRODUCT(S)   ///////////////////////
   IPPtr ip = Teuchos::rcp(new IP);
   if (graphNorm)
@@ -224,7 +250,7 @@ int main(int argc, char *argv[]) {
   else
   {
     // robust test norm
-    FunctionPtr ip_scaling = Teuchos::rcp( new EpsilonScaling(epsilon) ); 
+    FunctionPtr ip_scaling = Teuchos::rcp( new EpsilonScaling(epsilon) );
     if (!enforceLocalConservation)
       ip->addTerm( ip_scaling * v );
     ip->addTerm( sqrt(epsilon) * v->grad() );
@@ -235,7 +261,7 @@ int main(int argc, char *argv[]) {
     if (enforceLocalConservation)
       ip->addZeroMeanTerm( v );
   }
-  
+
   ////////////////////   SPECIFY RHS   ///////////////////////
   Teuchos::RCP<RHSEasy> rhs = Teuchos::rcp( new RHSEasy );
   FunctionPtr f = Teuchos::rcp( new ConstantScalarFunction(0.0) );
@@ -263,7 +289,7 @@ int main(int argc, char *argv[]) {
 
   // pc->addConstraint(beta*uhat->times_normal() - beta_n_u_minus_sigma_n == u0, rBoundary);
   // pc->addConstraint(beta*uhat->times_normal() - beta_n_u_minus_sigma_n == u0, tBoundary);
-  
+
   ////////////////////   BUILD MESH   ///////////////////////
   // define nodes for mesh
   int H1Order = 3, pToAdd = 2;
@@ -272,16 +298,17 @@ int main(int argc, char *argv[]) {
     mesh = Mesh::readTriangle(Camellia_MeshDir+"HighLift/HighLift.1", bf, H1Order, pToAdd);
   else
     mesh = Mesh::readTriangle(Camellia_MeshDir+"NACA0012/NACA0012.1", bf, H1Order, pToAdd);
-  
+
   ////////////////////   SOLVE & REFINE   ///////////////////////
   Teuchos::RCP<Solution> solution = Teuchos::rcp( new Solution(mesh, bc, rhs, ip) );
   // solution->setFilter(pc);
 
-  if (enforceLocalConservation) {
+  if (enforceLocalConservation)
+  {
     FunctionPtr zero = Teuchos::rcp( new ConstantScalarFunction(0.0) );
     solution->lagrangeConstraints()->addConstraint(beta_n_u_minus_sigma_n == zero);
   }
-  
+
   double energyThreshold = 0.2; // for mesh refinements
   RefinementStrategy refinementStrategy( solution, energyThreshold );
   VTKExporter exporter(solution, mesh, varFactory);
@@ -303,8 +330,8 @@ int main(int argc, char *argv[]) {
       FunctionPtr flux = Teuchos::rcp( new PreviousSolutionFunction(solution, beta_n_u_minus_sigma_n) );
       FunctionPtr zero = Teuchos::rcp( new ConstantScalarFunction(0.0) );
       Teuchos::Tuple<double, 3> fluxImbalances = checkConservation(flux, zero, varFactory, mesh);
-      cout << "Mass flux: Largest Local = " << fluxImbalances[0] 
-        << ", Global = " << fluxImbalances[1] << ", Sum Abs = " << fluxImbalances[2] << endl;
+      cout << "Mass flux: Largest Local = " << fluxImbalances[0]
+           << ", Global = " << fluxImbalances[1] << ", Sum Abs = " << fluxImbalances[2] << endl;
     }
 
     if (refIndex < numRefs)
@@ -330,6 +357,6 @@ int main(int argc, char *argv[]) {
       refinementStrategy.hRefineCells(mesh, cells_h);
     }
   }
-  
+
   return 0;
 }

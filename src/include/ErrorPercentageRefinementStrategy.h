@@ -13,16 +13,18 @@
 
 #include "Solution.h"
 
-namespace Camellia {
-  template <typename Scalar>
-	class ErrorPercentageRefinementStrategy : public TRefinementStrategy<Scalar> {
-	  double _percentageThreshold;
-	public:
-	  ErrorPercentageRefinementStrategy(TSolutionPtr<Scalar> soln, double percentageThreshold, double min_h = 0, int max_p = 10, bool preferPRefinements = false);
-	  virtual void refine(bool printToConsole);
-	};
+namespace Camellia
+{
+template <typename Scalar>
+class ErrorPercentageRefinementStrategy : public TRefinementStrategy<Scalar>
+{
+  double _percentageThreshold;
+public:
+  ErrorPercentageRefinementStrategy(TSolutionPtr<Scalar> soln, double percentageThreshold, double min_h = 0, int max_p = 10, bool preferPRefinements = false);
+  virtual void refine(bool printToConsole);
+};
 
-  extern template class ErrorPercentageRefinementStrategy<double>;
+extern template class ErrorPercentageRefinementStrategy<double>;
 }
 
 

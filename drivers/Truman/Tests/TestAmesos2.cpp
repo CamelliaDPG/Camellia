@@ -10,7 +10,8 @@
 #include <Tpetra_CrsMatrix.hpp>
 #include "Amesos2.hpp"
 #include "Amesos2_Version.hpp"
-int main(int argc, char *argv[]) {
+int main(int argc, char *argv[])
+{
   Teuchos::GlobalMPISession mpiSession(&argc,&argv);
   typedef double Scalar;
   typedef int LO;
@@ -22,10 +23,11 @@ int main(int argc, char *argv[]) {
   using Teuchos::RCP;
   using Teuchos::rcp;
   // Before we do anything, check that SuperLU is enabled
-  if( !Amesos2::query("SuperLU") ){
+  if( !Amesos2::query("SuperLU") )
+  {
     std::cerr << "SuperLU not enabled.  Exiting..." << std::endl;
     return EXIT_SUCCESS;  // Otherwise CTest will pick it up as
-        // failure, which it isn't really
+    // failure, which it isn't really
   }
   Teuchos::RCP<const Teuchos::Comm<int> > comm
     = Tpetra::DefaultPlatform::getDefaultPlatform().getComm();
@@ -51,7 +53,8 @@ int main(int argc, char *argv[]) {
    *
    */
   // Construct matrix
-  if( myRank == 0 ){
+  if( myRank == 0 )
+  {
     A->insertGlobalValues(0,tuple<GO>(0,2,4),tuple<Scalar>(7,-3,-1));
     A->insertGlobalValues(1,tuple<GO>(0,1),tuple<Scalar>(2,8));
     A->insertGlobalValues(2,tuple<GO>(2),tuple<Scalar>(1));
@@ -76,8 +79,10 @@ int main(int argc, char *argv[]) {
    */
   RCP<MV> B = rcp(new MV(map,numVectors));
   int data[6] = {-7,18,3,17,18,28};
-  for( int i = 0; i < 6; ++i ){
-    if( B->getMap()->isNodeGlobalElement(i) ){
+  for( int i = 0; i < 6; ++i )
+  {
+    if( B->getMap()->isNodeGlobalElement(i) )
+    {
       B->replaceGlobalValue(i,0,data[i]);
     }
   }

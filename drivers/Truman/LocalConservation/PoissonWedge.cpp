@@ -25,52 +25,63 @@ bool enforceLocalConservation = false;
 double numRefs = 15;
 double halfwidth = 1.0;
 
-class Inflow: public SpatialFilter {
-  public:
-    bool matchesPoint(double x, double y) {
-      double tol = 1e-14;
-      bool xMatch = (abs(x+halfwidth) < tol) ;
-      return xMatch;
-    }
+class Inflow: public SpatialFilter
+{
+public:
+  bool matchesPoint(double x, double y)
+  {
+    double tol = 1e-14;
+    bool xMatch = (abs(x+halfwidth) < tol) ;
+    return xMatch;
+  }
 };
 
-class Outflow: public SpatialFilter {
-  public:
-    bool matchesPoint(double x, double y) {
-      double tol = 1e-14;
-      bool xMatch = (abs(x-halfwidth) < tol) ;
-      return xMatch;
-    }
+class Outflow: public SpatialFilter
+{
+public:
+  bool matchesPoint(double x, double y)
+  {
+    double tol = 1e-14;
+    bool xMatch = (abs(x-halfwidth) < tol) ;
+    return xMatch;
+  }
 };
 
-class LeadingWedge: public SpatialFilter {
-  public:
-    bool matchesPoint(double x, double y) {
-      double tol = 1e-14;
-      bool match = abs(1./halfwidth*x-y) < tol;
-      return match;
-    }
+class LeadingWedge: public SpatialFilter
+{
+public:
+  bool matchesPoint(double x, double y)
+  {
+    double tol = 1e-14;
+    bool match = abs(1./halfwidth*x-y) < tol;
+    return match;
+  }
 };
 
-class TrailingWedge: public SpatialFilter {
-  public:
-    bool matchesPoint(double x, double y) {
-      double tol = 1e-14;
-      bool match = abs(1./halfwidth*x+y) < tol;
-      return match;
-    }
+class TrailingWedge: public SpatialFilter
+{
+public:
+  bool matchesPoint(double x, double y)
+  {
+    double tol = 1e-14;
+    bool match = abs(1./halfwidth*x+y) < tol;
+    return match;
+  }
 };
 
-class Top: public SpatialFilter {
-  public:
-    bool matchesPoint(double x, double y) {
-      double tol = 1e-14;
-      bool yMatch = (abs(y-halfwidth) < tol) ;
-      return yMatch;
-    }
+class Top: public SpatialFilter
+{
+public:
+  bool matchesPoint(double x, double y)
+  {
+    double tol = 1e-14;
+    bool yMatch = (abs(y-halfwidth) < tol) ;
+    return yMatch;
+  }
 };
 
-int main(int argc, char *argv[]) {
+int main(int argc, char *argv[])
+{
 #ifdef HAVE_MPI
   Teuchos::GlobalMPISession mpiSession(&argc, &argv,0);
   int rank=mpiSession.getRank();
@@ -81,17 +92,17 @@ int main(int argc, char *argv[]) {
 #endif
   ////////////////////   DECLARE VARIABLES   ///////////////////////
   // define test variables
-  VarFactory varFactory; 
+  VarFactory varFactory;
   VarPtr tau = varFactory.testVar("tau", HDIV);
   VarPtr v = varFactory.testVar("v", HGRAD);
-  
+
   // define trial variables
   VarPtr uhat = varFactory.traceVar("uhat");
   VarPtr sigma_n = varFactory.fluxVar("fhat");
   VarPtr u = varFactory.fieldVar("u");
   VarPtr sigma1 = varFactory.fieldVar("sigma1");
   VarPtr sigma2 = varFactory.fieldVar("sigma2");
-  
+
   ////////////////////   DEFINE BILINEAR FORM   ///////////////////////
   BFPtr bf = Teuchos::rcp( new BF(varFactory) );
   // tau terms:
@@ -99,19 +110,19 @@ int main(int argc, char *argv[]) {
   bf->addTerm(sigma2, tau->y());
   bf->addTerm(u, tau->div());
   bf->addTerm(-uhat, tau->dot_normal());
-  
+
   // v terms:
   bf->addTerm( sigma1, v->dx() );
   bf->addTerm( sigma2, v->dy() );
   bf->addTerm( -sigma_n, v);
-  
+
   ////////////////////   DEFINE INNER PRODUCT(S)   ///////////////////////
   IPPtr ip = bf->graphNorm();
-  
+
   ////////////////////   SPECIFY RHS   ///////////////////////
   Teuchos::RCP<RHSEasy> rhs = Teuchos::rcp( new RHSEasy );
   FunctionPtr f = Teuchos::rcp( new ConstantScalarFunction(1.0) );
-  rhs->addTerm( f * v ); 
+  rhs->addTerm( f * v );
 
   ////////////////////   CREATE BCs   ///////////////////////
   Teuchos::RCP<BCEasy> bc = Teuchos::rcp( new BCEasy );
@@ -136,7 +147,7 @@ int main(int argc, char *argv[]) {
 
   SpatialFilterPtr outflow = Teuchos::rcp( new Outflow );
   bc->addDirichlet(uhat, outflow, zero);
-  
+
   ////////////////////   BUILD MESH   ///////////////////////
   bool allQuads = true;
   int H1Order = 3, pToAdd = 2;
@@ -149,71 +160,104 @@ int main(int argc, char *argv[]) {
 
   if (allQuads)
   {
-    pt(0) = -halfwidth; pt(1) = -1;
+    pt(0) = -halfwidth;
+    pt(1) = -1;
     vertices.push_back(pt);
-    pt(0) =  0;         pt(1) =  0;
+    pt(0) =  0;
+    pt(1) =  0;
     vertices.push_back(pt);
-    pt(0) =  halfwidth; pt(1) = -1;
+    pt(0) =  halfwidth;
+    pt(1) = -1;
     vertices.push_back(pt);
-    pt(0) =  halfwidth; pt(1) =  halfwidth;
+    pt(0) =  halfwidth;
+    pt(1) =  halfwidth;
     vertices.push_back(pt);
-    pt(0) =  0;         pt(1) =  halfwidth;
+    pt(0) =  0;
+    pt(1) =  halfwidth;
     vertices.push_back(pt);
-    pt(0) = -halfwidth; pt(1) =  halfwidth;
+    pt(0) = -halfwidth;
+    pt(1) =  halfwidth;
     vertices.push_back(pt);
 
-    q[0] = 0; q[1] = 1; q[2] = 4; q[3] = 5;
+    q[0] = 0;
+    q[1] = 1;
+    q[2] = 4;
+    q[3] = 5;
     elementIndices.push_back(q);
-    q[0] = 1; q[1] = 2; q[2] = 3; q[3] = 4;
+    q[0] = 1;
+    q[1] = 2;
+    q[2] = 3;
+    q[3] = 4;
     elementIndices.push_back(q);
   }
   else
   {
-    pt(0) = -halfwidth; pt(1) = -1;
+    pt(0) = -halfwidth;
+    pt(1) = -1;
     vertices.push_back(pt);
-    pt(0) =  0;         pt(1) =  0;
+    pt(0) =  0;
+    pt(1) =  0;
     vertices.push_back(pt);
-    pt(0) =  halfwidth; pt(1) = -1;
+    pt(0) =  halfwidth;
+    pt(1) = -1;
     vertices.push_back(pt);
-    pt(0) =  halfwidth; pt(1) =  0;
+    pt(0) =  halfwidth;
+    pt(1) =  0;
     vertices.push_back(pt);
-    pt(0) =  halfwidth; pt(1) =  halfwidth;
+    pt(0) =  halfwidth;
+    pt(1) =  halfwidth;
     vertices.push_back(pt);
-    pt(0) =  0;         pt(1) =  halfwidth;
+    pt(0) =  0;
+    pt(1) =  halfwidth;
     vertices.push_back(pt);
-    pt(0) = -halfwidth; pt(1) =  halfwidth;
+    pt(0) = -halfwidth;
+    pt(1) =  halfwidth;
     vertices.push_back(pt);
-    pt(0) = -halfwidth; pt(1) =  0;
+    pt(0) = -halfwidth;
+    pt(1) =  0;
     vertices.push_back(pt);
 
-    t[0] = 0; t[1] = 1; t[2] = 7;
+    t[0] = 0;
+    t[1] = 1;
+    t[2] = 7;
     elementIndices.push_back(t);
-    t[0] = 1; t[1] = 2; t[2] = 3;
+    t[0] = 1;
+    t[1] = 2;
+    t[2] = 3;
     elementIndices.push_back(t);
-    q[0] = 1; q[1] = 3; q[2] = 4; q[3] = 5;
+    q[0] = 1;
+    q[1] = 3;
+    q[2] = 4;
+    q[3] = 5;
     elementIndices.push_back(q);
-    q[0] = 7; q[1] = 1; q[2] = 5; q[3] = 6;
+    q[0] = 7;
+    q[1] = 1;
+    q[2] = 5;
+    q[3] = 6;
     elementIndices.push_back(q);
   }
 
-  Teuchos::RCP<Mesh> mesh = Teuchos::rcp( new Mesh(vertices, elementIndices, bf, H1Order, pToAdd) );  
-  
+  Teuchos::RCP<Mesh> mesh = Teuchos::rcp( new Mesh(vertices, elementIndices, bf, H1Order, pToAdd) );
+
   ////////////////////   SOLVE & REFINE   ///////////////////////
   Teuchos::RCP<Solution> solution = Teuchos::rcp( new Solution(mesh, bc, rhs, ip) );
   solution->setFilter(pc);
 
-  if (enforceLocalConservation) {
+  if (enforceLocalConservation)
+  {
     FunctionPtr zero = Teuchos::rcp( new ConstantScalarFunction(0.0) );
     solution->lagrangeConstraints()->addConstraint(sigma_n == zero);
   }
-  
+
   double energyThreshold = 0.2; // for mesh refinements
   RefinementStrategy refinementStrategy( solution, energyThreshold );
-  
-  for (int refIndex=0; refIndex<=numRefs; refIndex++){    
+
+  for (int refIndex=0; refIndex<=numRefs; refIndex++)
+  {
     solution->solve(false);
 
-    if (rank==0){
+    if (rank==0)
+    {
       stringstream outfile;
       outfile << "poissonwedge_" << refIndex;
       solution->writeToVTK(outfile.str());
@@ -222,8 +266,8 @@ int main(int argc, char *argv[]) {
       FunctionPtr flux = Teuchos::rcp( new PreviousSolutionFunction(solution, sigma_n) );
       FunctionPtr zero = Teuchos::rcp( new ConstantScalarFunction(0.0) );
       Teuchos::Tuple<double, 3> fluxImbalances = checkConservation(flux, zero, varFactory, mesh);
-      cout << "Mass flux: Largest Local = " << fluxImbalances[0] 
-        << ", Global = " << fluxImbalances[1] << ", Sum Abs = " << fluxImbalances[2] << endl;
+      cout << "Mass flux: Largest Local = " << fluxImbalances[0]
+           << ", Global = " << fluxImbalances[1] << ", Sum Abs = " << fluxImbalances[2] << endl;
     }
 
     if (refIndex < numRefs)
@@ -239,11 +283,10 @@ int main(int argc, char *argv[]) {
           int pOrder = mesh->cellPolyOrder(cellsToRefine[i]);
           if (allQuads)
             cells_p.push_back(cellsToRefine[i]);
+          else if (pOrder < 8)
+            cells_p.push_back(cellsToRefine[i]);
           else
-            if (pOrder < 8)
-              cells_p.push_back(cellsToRefine[i]);
-            else
-              cout << "Reached cell size and polynomial order limits" << endl;
+            cout << "Reached cell size and polynomial order limits" << endl;
           //   cells_h.push_back(cellsToRefine[i]);
         }
         else
@@ -252,6 +295,6 @@ int main(int argc, char *argv[]) {
       refinementStrategy.hRefineCells(mesh, cells_h);
     }
   }
-  
+
   return 0;
 }

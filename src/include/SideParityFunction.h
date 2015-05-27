@@ -11,14 +11,16 @@
 
 #include "Function.h"
 
-namespace Camellia {
-  class SideParityFunction : public TFunction<double> {
-  public:
-    SideParityFunction();
-    bool boundaryValueOnly();
-    string displayString();
-    void values(Intrepid::FieldContainer<double> &values, BasisCachePtr basisCache);
-  };
+namespace Camellia
+{
+class SideParityFunction : public TFunction<double>
+{
+public:
+  SideParityFunction();
+  bool boundaryValueOnly();
+  string displayString();
+  void values(Intrepid::FieldContainer<double> &values, BasisCachePtr basisCache);
+};
 }
 
 #endif

@@ -24,51 +24,59 @@ void LobattoBasisTests::setup() {}
 
 void LobattoBasisTests::teardown() {}
 
-void LobattoBasisTests::runTests(int &numTestsRun, int &numTestsPassed) {
+void LobattoBasisTests::runTests(int &numTestsRun, int &numTestsPassed)
+{
   setup();
-  if (testSimpleStiffnessMatrix()) {
+  if (testSimpleStiffnessMatrix())
+  {
     numTestsPassed++;
   }
   numTestsRun++;
   teardown();
 
   setup();
-  if (testLegendreValues()) {
+  if (testLegendreValues())
+  {
     numTestsPassed++;
   }
   numTestsRun++;
   teardown();
 
   setup();
-  if (testLobattoDerivativeValues()) {
+  if (testLobattoDerivativeValues())
+  {
     numTestsPassed++;
   }
   numTestsRun++;
   teardown();
 
   setup();
-  if (testLobattoValues()) {
+  if (testLobattoValues())
+  {
     numTestsPassed++;
   }
   numTestsRun++;
   teardown();
 
   setup();
-  if (testH1Classifications()) {
+  if (testH1Classifications())
+  {
     numTestsPassed++;
   }
   numTestsRun++;
   teardown();
 
   setup();
-  if (testLobattoLineClassifications()) {
+  if (testLobattoLineClassifications())
+  {
     numTestsPassed++;
   }
   numTestsRun++;
   teardown();
 }
 
-bool LobattoBasisTests::testLegendreValues() {
+bool LobattoBasisTests::testLegendreValues()
+{
   bool success = true;
 
   FunctionPtr x = Function::xn(1);
@@ -83,7 +91,8 @@ bool LobattoBasisTests::testLegendreValues() {
   vector< FunctionPtr > legendreFunctions;
 
   int n_max = 4;
-  for (int n=0; n<=n_max; n++) {
+  for (int n=0; n<=n_max; n++)
+  {
     legendreFunctions.push_back( Teuchos::rcp( new LegendreFunction(n) ) );
   }
 
@@ -97,8 +106,10 @@ bool LobattoBasisTests::testLegendreValues() {
   BasisCachePtr basisCache = BasisCache::basisCacheForCell(mesh, 0);
 
   double tol = 1e-8; // relax to make sure that failure isn't just roundoff
-  for (int n=0; n<=n_max; n++) {
-    if (! legendreFunctions[n]->equals(legendreFunctionsExpected[n], basisCache, tol) ) {
+  for (int n=0; n<=n_max; n++)
+  {
+    if (! legendreFunctions[n]->equals(legendreFunctionsExpected[n], basisCache, tol) )
+    {
       cout << "Legendre function " << n << " does not match expected.\n";
       success = false;
     }
@@ -107,7 +118,8 @@ bool LobattoBasisTests::testLegendreValues() {
   return success;
 }
 
-bool LobattoBasisTests::testLobattoDerivativeValues() {
+bool LobattoBasisTests::testLobattoDerivativeValues()
+{
   bool success = true;
   FunctionPtr x = Function::xn(1);
   vector< FunctionPtr > legendreFunctions; // manually specified
@@ -124,7 +136,8 @@ bool LobattoBasisTests::testLobattoDerivativeValues() {
   bool conformingFalse = false;
 
   int n_max = 4;
-  for (int n=0; n<=n_max+1; n++) {
+  for (int n=0; n<=n_max+1; n++)
+  {
     lobattoDerivatives.push_back( Teuchos::rcp( new LobattoFunction<>(n,conformingFalse,true) ) );
   }
 
@@ -138,8 +151,10 @@ bool LobattoBasisTests::testLobattoDerivativeValues() {
   BasisCachePtr basisCache = BasisCache::basisCacheForCell(mesh, 0);
 
   double tol = 1e-8;
-  for (int n=0; n<=n_max; n++) {
-    if (! legendreFunctions[n]->equals(lobattoDerivatives[n+1], basisCache, tol) ) {
+  for (int n=0; n<=n_max; n++)
+  {
+    if (! legendreFunctions[n]->equals(lobattoDerivatives[n+1], basisCache, tol) )
+    {
       cout << "Legendre function " << n << " != Lobatto function " << n + 1 << " derivative.\n";
       cout << "L_" << n << "(0.5) = " << Function::evaluate(legendreFunctions[n],0.5) << endl;
       cout << "l'_" << n+1 << "(0.5) = " << Function::evaluate(lobattoDerivatives[n+1],0.5) << endl;
@@ -150,7 +165,8 @@ bool LobattoBasisTests::testLobattoDerivativeValues() {
   return success;
 }
 
-bool LobattoBasisTests::testLobattoValues() {
+bool LobattoBasisTests::testLobattoValues()
+{
   bool success = true;
 
   FunctionPtr x = Function::xn(1);
@@ -172,7 +188,8 @@ bool LobattoBasisTests::testLobattoValues() {
   bool conformingFalse = false;
 
   int n_max = 4;
-  for (int n=0; n<=n_max; n++) {
+  for (int n=0; n<=n_max; n++)
+  {
     lobattoFunctions.push_back( Teuchos::rcp( new LobattoFunction<>(n,conformingFalse,false) ) );
   }
 
@@ -186,8 +203,10 @@ bool LobattoBasisTests::testLobattoValues() {
   BasisCachePtr basisCache = BasisCache::basisCacheForCell(mesh, 0);
 
   double tol = 1e-12;
-  for (int n=0; n<=n_max; n++) {
-    if (! lobattoFunctions[n]->equals(lobattoFunctionsExpected[n], basisCache, tol) ) {
+  for (int n=0; n<=n_max; n++)
+  {
+    if (! lobattoFunctions[n]->equals(lobattoFunctionsExpected[n], basisCache, tol) )
+    {
       cout << "Lobatto function " << n << " does not match expected.\n";
       success = false;
     }
@@ -196,7 +215,8 @@ bool LobattoBasisTests::testLobattoValues() {
   return success;
 }
 
-bool checkVertexOrdinalsQuad(BasisPtr basis, vector<int> &vertexOrdinals) {
+bool checkVertexOrdinalsQuad(BasisPtr basis, vector<int> &vertexOrdinals)
+{
   // check that the given indices are exactly the vertex basis functions:
   // a) these are (1,0) or (0,1) at the corresponding vertices
   // b) others are (0,0) at the vertices
@@ -218,18 +238,25 @@ bool checkVertexOrdinalsQuad(BasisPtr basis, vector<int> &vertexOrdinals) {
   basis->getValues(values, refCellPoints, OPERATOR_VALUE);
 
   double tol = 1e-14;
-  for (int vertexIndex=0; vertexIndex<numVertices; vertexIndex++) {
+  for (int vertexIndex=0; vertexIndex<numVertices; vertexIndex++)
+  {
     int vertexOrdinal = vertexOrdinals[vertexIndex];
-    for (int fieldIndex=0; fieldIndex<basis->getCardinality(); fieldIndex++) {
+    for (int fieldIndex=0; fieldIndex<basis->getCardinality(); fieldIndex++)
+    {
       double value = values(fieldIndex,vertexIndex);
-      if (fieldIndex==vertexOrdinal) {
+      if (fieldIndex==vertexOrdinal)
+      {
         // expect non-zero
-        if (value < tol) {
+        if (value < tol)
+        {
           return false;
         }
-      } else {
+      }
+      else
+      {
         // expect zero
-        if (value > tol) {
+        if (value > tol)
+        {
           return false;
         }
       }
@@ -238,7 +265,8 @@ bool checkVertexOrdinalsQuad(BasisPtr basis, vector<int> &vertexOrdinals) {
   return true;
 }
 
-bool testBasisClassifications(BasisPtr basis) {
+bool testBasisClassifications(BasisPtr basis)
+{
   bool success = true;
 
   CellTopoPtr cellTopo = basis->domainTopology();
@@ -250,7 +278,8 @@ bool testBasisClassifications(BasisPtr basis) {
 
   // TODO: finish this
   vector<int> vertexOrdinals;
-  for (int vertexIndex=0; vertexIndex < numVertices; vertexIndex++) {
+  for (int vertexIndex=0; vertexIndex < numVertices; vertexIndex++)
+  {
     set<int> dofOrdinals = basis->dofOrdinalsForVertex(vertexIndex);
     if (dofOrdinals.size() == 0) TEUCHOS_TEST_FOR_EXCEPTION(true, std::invalid_argument, "No dofOrdinal for vertex...");
     if (dofOrdinals.size() > 1) TEUCHOS_TEST_FOR_EXCEPTION(true, std::invalid_argument, "More than one dofOrdinal per vertex...");
@@ -269,13 +298,18 @@ bool testBasisClassifications(BasisPtr basis) {
 
   // get the points in reference space for each vertex
   FieldContainer<double> points;
-  if (numVertices == 2) { // line
+  if (numVertices == 2)   // line
+  {
     points.resize(2,1);
     points(0,0) = -1;
     points(1,0) = 1;
-  } else if (numVertices == 3) { // triangle
+  }
+  else if (numVertices == 3)     // triangle
+  {
     TEUCHOS_TEST_FOR_EXCEPTION(true, std::invalid_argument, "triangles not yet supported");
-  } else if (numVertices == 4) { // quad
+  }
+  else if (numVertices == 4)     // quad
+  {
     points.resize(4,2);
     points(0,0) = -1;
     points(0,1) = -1;
@@ -285,32 +319,44 @@ bool testBasisClassifications(BasisPtr basis) {
     points(2,1) =  1;
     points(3,0) = -1;
     points(3,1) =  1;
-  } else {
+  }
+  else
+  {
     TEUCHOS_TEST_FOR_EXCEPTION(true, std::invalid_argument, "unsupported topology");
   }
 
   FieldContainer<double> vertexValues;
-  if (basis->rangeRank() > 0) {
+  if (basis->rangeRank() > 0)
+  {
     TEUCHOS_TEST_FOR_EXCEPTION(true, std::invalid_argument, "rank > 0 bases not yet supported");
-  } else {
+  }
+  else
+  {
     vertexValues.resize(basis->getCardinality(),numVertices);
   }
 
   basis->getValues(vertexValues, points, Intrepid::OPERATOR_VALUE);
 
   // test that the points are correctly classified
-  for (int fieldIndex=0; fieldIndex<basis->getCardinality(); fieldIndex++) {
-    for (int ptIndex=0; ptIndex<numVertices; ptIndex++) {
+  for (int fieldIndex=0; fieldIndex<basis->getCardinality(); fieldIndex++)
+  {
+    for (int ptIndex=0; ptIndex<numVertices; ptIndex++)
+    {
       int dofOrdinalForPoint = vertexOrdinals[ptIndex];
       bool expectZero = (dofOrdinalForPoint != fieldIndex);
-      if (expectZero) {
-        if (vertexValues(fieldIndex,ptIndex) != 0) {
+      if (expectZero)
+      {
+        if (vertexValues(fieldIndex,ptIndex) != 0)
+        {
           success = false;
           cout << "Expected 0 for fieldIndex " << fieldIndex << " and ptIndex " << ptIndex;
           cout << ", but got " << vertexValues(fieldIndex,ptIndex) << endl;
         }
-      } else {
-        if (vertexValues(fieldIndex,ptIndex) == 0) {
+      }
+      else
+      {
+        if (vertexValues(fieldIndex,ptIndex) == 0)
+        {
           cout << "Expected nonzero for fieldIndex " << fieldIndex << " and ptIndex " << ptIndex << endl;
           success = false;
         }
@@ -318,19 +364,23 @@ bool testBasisClassifications(BasisPtr basis) {
     }
   }
 
-  if (!success) {
+  if (!success)
+  {
     cout << "Failed testBasisClassifications; vertexValues:\n" << vertexValues;
   }
 
   return success;
 }
 
-bool LobattoBasisTests::testLobattoLineClassifications() {
+bool LobattoBasisTests::testLobattoLineClassifications()
+{
   bool success = true;
   bool conformingTrue = true;
-  for (int polyOrder=1; polyOrder<20; polyOrder++) {
+  for (int polyOrder=1; polyOrder<20; polyOrder++)
+  {
     BasisPtr lobattoBasis = Teuchos::rcp( new LobattoHGRAD_LineBasis<>(polyOrder,conformingTrue) );
-    if (! testBasisClassifications(lobattoBasis) ) {
+    if (! testBasisClassifications(lobattoBasis) )
+    {
       cout << "LobattoBasisTests::testLobattoLineClassifications() failed for polyOrder " << polyOrder << endl;
     }
   }
@@ -340,16 +390,19 @@ bool LobattoBasisTests::testLobattoLineClassifications() {
   return success;
 }
 
-bool LobattoBasisTests::testH1Classifications() {
+bool LobattoBasisTests::testH1Classifications()
+{
   // checks that edge functions, vertex functions, etc. are correctly listed for the H^1 Lobatto basis
   bool success = true;
 
   int rank = Teuchos::GlobalMPISession::getRank();
 
   bool conformingTrue = true;
-  for (int polyOrder=1; polyOrder<20; polyOrder++) {
+  for (int polyOrder=1; polyOrder<20; polyOrder++)
+  {
     BasisPtr lobattoBasis = Teuchos::rcp( new LobattoHGRAD_QuadBasis<>(polyOrder,conformingTrue) );
-    if (! testBasisClassifications(lobattoBasis) ) {
+    if (! testBasisClassifications(lobattoBasis) )
+    {
       if (rank==0)
         cout << "LobattoBasisTests::testH1Classifications() failed for polyOrder " << polyOrder << endl;
     }
@@ -361,7 +414,8 @@ bool LobattoBasisTests::testH1Classifications() {
   return success;
 }
 
-bool LobattoBasisTests::testSimpleStiffnessMatrix() {
+bool LobattoBasisTests::testSimpleStiffnessMatrix()
+{
   bool success = true;
 
   int rank = Teuchos::GlobalMPISession::getRank();
@@ -389,7 +443,8 @@ bool LobattoBasisTests::testSimpleStiffnessMatrix() {
   BasisPtr fieldBasis = Camellia::intrepidQuadHGRAD(fieldOrder);
   BasisPtr fluxBasis = Camellia::intrepidLineHGRAD(fieldOrder);
   trialSpace->addEntry(u->ID(), fieldBasis, fieldBasis->rangeRank());
-  for (int i=0; i<numSides; i++) {
+  for (int i=0; i<numSides; i++)
+  {
     trialSpace->addEntry(un->ID(), fluxBasis, fluxBasis->rangeRank(), i);
   }
 
@@ -433,6 +488,7 @@ bool LobattoBasisTests::testSimpleStiffnessMatrix() {
   return success;
 }
 
-string LobattoBasisTests::testSuiteName() {
+string LobattoBasisTests::testSuiteName()
+{
   return "LobattoBasisTests";
 }

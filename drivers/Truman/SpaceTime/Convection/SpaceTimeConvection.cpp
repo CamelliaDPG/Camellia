@@ -17,64 +17,77 @@
 
 int H1Order = 5, pToAdd = 2;
 
-class TimeZero : public SpatialFilter {
-  public:
-    bool matchesPoint(double x, double y) {
-      double tol = 1e-14;
-      return (abs(y) < tol);
-    }
+class TimeZero : public SpatialFilter
+{
+public:
+  bool matchesPoint(double x, double y)
+  {
+    double tol = 1e-14;
+    return (abs(y) < tol);
+  }
 };
 
-class Inlet : public SpatialFilter {
-  public:
-    bool matchesPoint(double x, double y) {
-      double tol = 1e-14;
-      return (abs(x+1) < tol);
-    }
-};
-
-// boundary value for sigma_n
-class InitialCondition : public Function {
-  public:
-    InitialCondition() : Function(0) {}
-    void values(FieldContainer<double> &values, BasisCachePtr basisCache) {
-      int numCells = values.dimension(0);
-      int numPoints = values.dimension(1);
-
-      const FieldContainer<double> *points = &(basisCache->getPhysicalCubaturePoints());
-      for (int cellIndex=0; cellIndex<numCells; cellIndex++) {
-        for (int ptIndex=0; ptIndex<numPoints; ptIndex++) {
-          double x = (*points)(cellIndex,ptIndex,0);
-          double y = (*points)(cellIndex,ptIndex,1);
-          if (abs(x) <= 0.25)
-            values(cellIndex, ptIndex) = 1.0;
-          else
-            values(cellIndex, ptIndex) = 0;
-        }
-      }
-    }
+class Inlet : public SpatialFilter
+{
+public:
+  bool matchesPoint(double x, double y)
+  {
+    double tol = 1e-14;
+    return (abs(x+1) < tol);
+  }
 };
 
 // boundary value for sigma_n
-class InletValue : public Function {
-  public:
-    InletValue() : Function(0) {}
-    void values(FieldContainer<double> &values, BasisCachePtr basisCache) {
-      int numCells = values.dimension(0);
-      int numPoints = values.dimension(1);
+class InitialCondition : public Function
+{
+public:
+  InitialCondition() : Function(0) {}
+  void values(FieldContainer<double> &values, BasisCachePtr basisCache)
+  {
+    int numCells = values.dimension(0);
+    int numPoints = values.dimension(1);
 
-      const FieldContainer<double> *points = &(basisCache->getPhysicalCubaturePoints());
-      for (int cellIndex=0; cellIndex<numCells; cellIndex++) {
-        for (int ptIndex=0; ptIndex<numPoints; ptIndex++) {
-          double x = (*points)(cellIndex,ptIndex,0);
-          double y = (*points)(cellIndex,ptIndex,1);
-          values(cellIndex, ptIndex) = 0.0;
-        }
+    const FieldContainer<double> *points = &(basisCache->getPhysicalCubaturePoints());
+    for (int cellIndex=0; cellIndex<numCells; cellIndex++)
+    {
+      for (int ptIndex=0; ptIndex<numPoints; ptIndex++)
+      {
+        double x = (*points)(cellIndex,ptIndex,0);
+        double y = (*points)(cellIndex,ptIndex,1);
+        if (abs(x) <= 0.25)
+          values(cellIndex, ptIndex) = 1.0;
+        else
+          values(cellIndex, ptIndex) = 0;
       }
     }
+  }
 };
 
-int main(int argc, char *argv[]) {
+// boundary value for sigma_n
+class InletValue : public Function
+{
+public:
+  InletValue() : Function(0) {}
+  void values(FieldContainer<double> &values, BasisCachePtr basisCache)
+  {
+    int numCells = values.dimension(0);
+    int numPoints = values.dimension(1);
+
+    const FieldContainer<double> *points = &(basisCache->getPhysicalCubaturePoints());
+    for (int cellIndex=0; cellIndex<numCells; cellIndex++)
+    {
+      for (int ptIndex=0; ptIndex<numPoints; ptIndex++)
+      {
+        double x = (*points)(cellIndex,ptIndex,0);
+        double y = (*points)(cellIndex,ptIndex,1);
+        values(cellIndex, ptIndex) = 0.0;
+      }
+    }
+  }
+};
+
+int main(int argc, char *argv[])
+{
 #ifdef HAVE_MPI
   Teuchos::GlobalMPISession mpiSession(&argc, &argv,0);
   choice::MpiArgs args( argc, argv );
@@ -118,7 +131,7 @@ int main(int argc, char *argv[]) {
 
   // create a pointer to a new mesh:
   Teuchos::RCP<Mesh> mesh = Mesh::buildQuadMesh(meshBoundary, horizontalCells, verticalCells,
-                                                bf, H1Order, H1Order+pToAdd);
+                            bf, H1Order, H1Order+pToAdd);
 
   ////////////////////   DEFINE BILINEAR FORM   ///////////////////////
   Teuchos::RCP<RHSEasy> rhs = Teuchos::rcp( new RHSEasy );
@@ -158,13 +171,13 @@ int main(int argc, char *argv[]) {
 
   for (int refIndex=0; refIndex<=numRefs; refIndex++)
   {
-     solution->solve(false);
+    solution->solve(false);
 
-     if (commRank == 0)
-     {
-        stringstream outfile;
-        outfile << "Convection_" << refIndex;
-        exporter.exportSolution(outfile.str());
+    if (commRank == 0)
+    {
+      stringstream outfile;
+      outfile << "Convection_" << refIndex;
+      exporter.exportSolution(outfile.str());
     }
 
     if (refIndex < numRefs)

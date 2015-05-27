@@ -24,31 +24,37 @@ const static double PI  = 3.141592653589793238462;
 
 using namespace Camellia;
 
-void CurvilinearMeshTests::setup() {
+void CurvilinearMeshTests::setup()
+{
 
 }
 
-void CurvilinearMeshTests::teardown() {
+void CurvilinearMeshTests::teardown()
+{
 
 }
 
-void CurvilinearMeshTests::runTests(int &numTestsRun, int &numTestsPassed) {
+void CurvilinearMeshTests::runTests(int &numTestsRun, int &numTestsPassed)
+{
   setup();
-  if (testEdgeLength()) {
+  if (testEdgeLength())
+  {
     numTestsPassed++;
   }
   numTestsRun++;
   teardown();
 
   setup();
-  if (testH1Projection()) {
+  if (testH1Projection())
+  {
     numTestsPassed++;
   }
   numTestsRun++;
   teardown();
 
   setup();
-  if (testAutomaticStraightEdgesMatchVertices()) {
+  if (testAutomaticStraightEdgesMatchVertices())
+  {
     numTestsPassed++;
   }
   numTestsRun++;
@@ -64,42 +70,51 @@ void CurvilinearMeshTests::runTests(int &numTestsRun, int &numTestsPassed) {
 //  teardown();
 
   setup();
-  if (testCylinderMesh()) {
+  if (testCylinderMesh())
+  {
     numTestsPassed++;
   }
   numTestsRun++;
   teardown();
 
   setup();
-  if (testTransformationJacobian()) {
+  if (testTransformationJacobian())
+  {
     numTestsPassed++;
   }
   numTestsRun++;
   teardown();
 
   setup();
-  if (testStraightEdgeMesh()) {
+  if (testStraightEdgeMesh())
+  {
     numTestsPassed++;
   }
   numTestsRun++;
   teardown();
 }
 
-void lineAcrossQuadRefCell(FieldContainer<double> &refPoints, int numPoints, bool horizontal) {
+void lineAcrossQuadRefCell(FieldContainer<double> &refPoints, int numPoints, bool horizontal)
+{
   int pointsInLine = numPoints;
   refPoints.resize(pointsInLine,2);
-  for (int i=0; i<pointsInLine; i++) {
-    if (horizontal) {
+  for (int i=0; i<pointsInLine; i++)
+  {
+    if (horizontal)
+    {
       refPoints(i,0) = 2.0 * (i) / (pointsInLine-1) - 1.0;
       refPoints(i,1) = 0;
-    } else {
+    }
+    else
+    {
       refPoints(i,0) = 0;
       refPoints(i,1) = 2.0 * (i) / (pointsInLine-1) - 1.0;
     }
   }
 }
 
-bool CurvilinearMeshTests::testCylinderMesh() {
+bool CurvilinearMeshTests::testCylinderMesh()
+{
   bool success = true;
 
   int rank = Teuchos::GlobalMPISession::getRank();
@@ -130,7 +145,8 @@ bool CurvilinearMeshTests::testCylinderMesh() {
 
   GlobalIndexType numCells = mesh->numElements();
   set<GlobalIndexType> allCells;
-  for (GlobalIndexType i=0; i<numCells; i++) {
+  for (GlobalIndexType i=0; i<numCells; i++)
+  {
     allCells.insert(i);
   }
 
@@ -139,18 +155,22 @@ bool CurvilinearMeshTests::testCylinderMesh() {
   // test p-convergence of mesh area
   double previousError = 1000;
   int numPRefinements = 3;
-  for (int i=1; i<=numPRefinements; i++) {
+  for (int i=1; i<=numPRefinements; i++)
+  {
     double approximateArea = one->integrate(mesh,5);
     double impliedPi = (width * height - approximateArea) / (r*r);
-    if (rank==0) {
+    if (rank==0)
+    {
       cout << "For k=" << i << ", implied value of pi: " << impliedPi;
       cout << " (error " << abs(PI-impliedPi) << ")\n";
     }
     //    cout << "Area with H1Order " << H1Order << ": " << approximateArea << endl;
     double error = abs(trueArea - approximateArea);
-    if ((error > previousError) && (error > tol)) { // non-convergence
+    if ((error > previousError) && (error > tol))   // non-convergence
+    {
       success = false;
-      if (rank==0) {
+      if (rank==0)
+      {
         cout << "Error with H1Order = " << i << " is greater than with H1Order = " << i - 1 << endl;
         cout << "Current error = " << error << "; previous = " << previousError << endl;
       }
@@ -183,7 +203,8 @@ bool CurvilinearMeshTests::testCylinderMesh() {
 
 
     // p-refine
-    if (i < numPRefinements) {
+    if (i < numPRefinements)
+    {
       mesh->pRefine(allCells);
     }
   }
@@ -193,18 +214,22 @@ bool CurvilinearMeshTests::testCylinderMesh() {
   mesh = MeshFactory::hemkerMesh(width, height, r, bf, H1Order, pToAdd);
   previousError = 1000;
   int numHRefinements = 3;
-  for (int i=0; i<=numHRefinements; i++) {
+  for (int i=0; i<=numHRefinements; i++)
+  {
     double approximateArea = one->integrate(mesh);
     double impliedPi = (width * height - approximateArea) / (r*r);
-    if (rank==0) {
+    if (rank==0)
+    {
       cout << "For h-refinement " << i << ", implied value of pi: " << impliedPi;
       cout << " (error " << abs(PI-impliedPi) << ")\n";
     }
     //    cout << "Area with H1Order " << H1Order << ": " << approximateArea << endl;
     double error = abs(trueArea - approximateArea);
-    if ((error > previousError) && (error > tol)) { // non-convergence
+    if ((error > previousError) && (error > tol))   // non-convergence
+    {
       success = false;
-      if (rank==0) {
+      if (rank==0)
+      {
         cout << "Error for h-refinement " << i << " is greater than for h-refinement " << i - 1 << endl;
         cout << "Current error = " << error << "; previous = " << previousError << endl;
       }
@@ -218,7 +243,8 @@ bool CurvilinearMeshTests::testCylinderMesh() {
     previousError = error;
 
     // h-refine
-    if (i<numHRefinements) {
+    if (i<numHRefinements)
+    {
       mesh->hRefine(mesh->getActiveCellIDs(),RefinementPattern::regularRefinementPatternQuad());
     }
   }
@@ -226,7 +252,8 @@ bool CurvilinearMeshTests::testCylinderMesh() {
   return success;
 }
 
-bool CurvilinearMeshTests::testAutomaticStraightEdgesMatchVertices() {
+bool CurvilinearMeshTests::testAutomaticStraightEdgesMatchVertices()
+{
   bool success = true;
   FunctionPtr t = Function::xn(1);
 
@@ -287,7 +314,8 @@ bool CurvilinearMeshTests::testAutomaticStraightEdgesMatchVertices() {
   // now, get back the edges for the cell, and check that they interpolate the vertices:
   vector< ParametricCurvePtr > edgeCurves = quadMesh->parametricEdgesForCell(cellID);
   double tol=1e-14;
-  for (int vertex=0; vertex<numVertices; vertex++) {
+  for (int vertex=0; vertex<numVertices; vertex++)
+  {
     ParametricCurvePtr curve = edgeCurves[vertex];
     double x0, y0;
     double x1, y1;
@@ -300,7 +328,8 @@ bool CurvilinearMeshTests::testAutomaticStraightEdgesMatchVertices() {
     if ((abs(x0_expected - x0) > tol)
         || ((x1_expected - x1) > tol)
         || (abs(y0_expected - y0) > tol)
-        || ((y1_expected - y1) > tol)) {
+        || ((y1_expected - y1) > tol))
+    {
       success = false;
       cout << "testAutomaticStraightEdgesMatchVertices() failure: edge " << vertex << " does not interpolate vertices.\n";
     }
@@ -335,7 +364,8 @@ bool CurvilinearMeshTests::testAutomaticStraightEdgesMatchVertices() {
 
 
   double maxDiff = 0;
-  if (! fcsAgree(values, physicalCellNodes, tol, maxDiff)) {
+  if (! fcsAgree(values, physicalCellNodes, tol, maxDiff))
+  {
     success = false;
     cout << "transformation function for straight-edge mesh does not map vertices to themselves; max difference " << maxDiff << endl;
     cout << "vertices:\n" << physicalCellNodes;
@@ -345,7 +375,8 @@ bool CurvilinearMeshTests::testAutomaticStraightEdgesMatchVertices() {
   return success;
 }
 
-bool CurvilinearMeshTests::testEdgeLength() {
+bool CurvilinearMeshTests::testEdgeLength()
+{
   bool success = true;
 
   int rank = Teuchos::GlobalMPISession::getRank();
@@ -439,7 +470,8 @@ bool CurvilinearMeshTests::testEdgeLength() {
       expectedJacobian = expectedTransformation->grad(spaceDim);
     }
 
-    for (int hRefinement=0; hRefinement<5; hRefinement++) {
+    for (int hRefinement=0; hRefinement<5; hRefinement++)
+    {
       BasisCachePtr basisCache = BasisCache::basisCacheForCell(quadMesh, cellID);
       BasisCachePtr sideCache = basisCache->getSideBasisCache(0);
 
@@ -461,13 +493,15 @@ bool CurvilinearMeshTests::testEdgeLength() {
       FunctionPtr transformationJacobian = transformationFxn->grad();
       transformationJacobian->values(jacobianValues,sideCache);
 
-      if (! expectedTransformation->equals(transformationFxn, basisCache) ) { // pass
+      if (! expectedTransformation->equals(transformationFxn, basisCache) )   // pass
+      {
         success = false;
         cout << "expectedTransformation and transformationFxn differ on interior of the element.\n";
         reportFunctionValueDifferences(expectedTransformation, transformationFxn, basisCache, tol);
       }
 
-      if (! expectedJacobian->equals(transformationJacobian, basisCache) ) { // fail
+      if (! expectedJacobian->equals(transformationJacobian, basisCache) )   // fail
+      {
         success = false;
         cout << "expectedJacobian and transformationJacobian differ on interior of the element.\n";
         reportFunctionValueDifferences(expectedJacobian, transformationJacobian, basisCache, tol);
@@ -475,13 +509,15 @@ bool CurvilinearMeshTests::testEdgeLength() {
 
       double maxDiff = 0;
 
-      if (! expectedTransformation->equals(transformationFxn, sideCache)) { // pass
+      if (! expectedTransformation->equals(transformationFxn, sideCache))   // pass
+      {
         success = false;
         cout << "testEdgeLength(): expected values don't match transformation function values along parametrically specified edge.\n";
         reportFunctionValueDifferences(expectedTransformation, transformationFxn, sideCache, tol);
       }
 
-      if (! fcsAgree(expectedJacobianValues, jacobianValues, tol, maxDiff)) { // fail
+      if (! fcsAgree(expectedJacobianValues, jacobianValues, tol, maxDiff))   // fail
+      {
         success = false;
         cout << "testEdgeLength(): expected jacobian values don't match transformation function's gradient values along parametrically specified edge.\n";
         reportFunctionValueDifferences(expectedJacobian, transformationJacobian, sideCache, tol);
@@ -489,7 +525,8 @@ bool CurvilinearMeshTests::testEdgeLength() {
 
       double perimeter = oneOnBoundary->integrate(quadMesh);
       double err = abs( perimeter - expectedPerimeter );
-      if (err > tol) {
+      if (err > tol)
+      {
         cout << "For h-refinement " << hRefinement << ", edge integral of y=x-1 does not match expected.\n";
         cout << "err = " << err << endl;
         cout << "expected perimeter = " << expectedPerimeter << "; actual = " << perimeter << endl;
@@ -506,7 +543,8 @@ bool CurvilinearMeshTests::testEdgeLength() {
 
   double expectedPerimeter = 4*(meshWidth);
   double err = abs(perimeter - expectedPerimeter);
-  if (err > tol) {
+  if (err > tol)
+  {
     cout << "Problem with test: on square mesh, perimeter should be " << expectedPerimeter;
     cout << " but is " << perimeter << endl;
     success = false;
@@ -518,7 +556,8 @@ bool CurvilinearMeshTests::testEdgeLength() {
   vector< ParametricCurvePtr > lines = mesh->parametricEdgesForCell(cellID);
   vector< unsigned > vertices = mesh->vertexIndicesForCell(cellID);
 
-  for (int i=0; i<vertices.size(); i++) {
+  for (int i=0; i<vertices.size(); i++)
+  {
     int vertex = vertices[i];
     int nextVertex = vertices[(i+1) % vertices.size()];
     pair< int, int > edge = make_pair(vertex,nextVertex);
@@ -528,11 +567,13 @@ bool CurvilinearMeshTests::testEdgeLength() {
   mesh->setEdgeToCurveMap(edgeToCurveMap);
 
   int numPRefinements = 5;
-  for (int i=1; i<=numPRefinements; i++) {
+  for (int i=1; i<=numPRefinements; i++)
+  {
     perimeter = oneOnBoundary->integrate(mesh);
     //    cout << "perimeter: " << perimeter << endl;
     double error = abs(expectedPerimeter - perimeter);
-    if (error > tol) {
+    if (error > tol)
+    {
       success = false;
       cout << "testEdgeLength: On square mesh (straight 'curves'), error with H1Order = " << i << " exceeds tol " << tol << endl;
       cout << "Error = " << error << endl;
@@ -543,7 +584,8 @@ bool CurvilinearMeshTests::testEdgeLength() {
 //    GnuPlotUtil::writeComputationalMeshSkeleton(filePath.str(), mesh);
 
     // p-refine
-    if (i < numPRefinements) {
+    if (i < numPRefinements)
+    {
       mesh->pRefine(mesh->getActiveCellIDs());
     }
   }
@@ -552,17 +594,20 @@ bool CurvilinearMeshTests::testEdgeLength() {
   H1Order = 2;
   mesh = MeshFactory::quadMesh(bf, H1Order, pToAdd, meshWidth, meshWidth);
   int numHRefinements = 3;
-  for (int i=0; i<=numHRefinements; i++) {
+  for (int i=0; i<=numHRefinements; i++)
+  {
     perimeter = oneOnBoundary->integrate(mesh);
     //    cout << "perimeter: " << perimeter << endl;
     double error = abs(expectedPerimeter - perimeter);
-    if (error > tol) {
+    if (error > tol)
+    {
       success = false;
       cout << "testEdgeLength: On square mesh (straight 'curves'), error for h-refinement " << i << " exceeds tol " << tol << endl;
       cout << "Error = " << error << endl;
     }
     // h-refine
-    if (i<numHRefinements) {
+    if (i<numHRefinements)
+    {
       mesh->hRefine(mesh->getActiveCellIDs(),RefinementPattern::regularRefinementPatternQuad());
     }
   }
@@ -596,17 +641,21 @@ bool CurvilinearMeshTests::testEdgeLength() {
   double previousError = 1000;
 
   numPRefinements = 3;
-  for (int i=1; i<=numPRefinements; i++) {
+  for (int i=1; i<=numPRefinements; i++)
+  {
     perimeter = oneOnBoundary->integrate(mesh);
     //    cout << "perimeter: " << perimeter << endl;
     double impliedPi = (perimeter - straightEdgePerimeter) / (2 * radius);
-    if (rank==0) {
+    if (rank==0)
+    {
       cout << "For p=" << i << ", implied value of pi: " << impliedPi << endl;
     }
     double error = abs(truePerimeter - perimeter);
-    if ((error >= previousError) && (error > tol)) { // non-convergence
+    if ((error >= previousError) && (error > tol))   // non-convergence
+    {
       success = false;
-      if (rank==0) {
+      if (rank==0)
+      {
         cout << "testEdgeLength: Error with H1Order = " << i << " is greater than with H1Order = " << i - 1 << endl;
         cout << "Current error = " << error << "; previous = " << previousError << endl;
       }
@@ -616,7 +665,8 @@ bool CurvilinearMeshTests::testEdgeLength() {
 //    GnuPlotUtil::writeComputationalMeshSkeleton(filePath.str(), mesh);
     previousError = error;
     // p-refine
-    if (i < numPRefinements) {
+    if (i < numPRefinements)
+    {
       mesh->pRefine(mesh->getActiveCellIDs());
     }
   }
@@ -627,19 +677,23 @@ bool CurvilinearMeshTests::testEdgeLength() {
   mesh->setEdgeToCurveMap(edgeToCurveMap);
   previousError = 1000;
   numHRefinements = 3;
-  for (int i=0; i<=numHRefinements; i++) {
+  for (int i=0; i<=numHRefinements; i++)
+  {
     perimeter = oneOnBoundary->integrate(mesh);
 
     //    cout << "perimeter: " << perimeter << endl;
     double impliedPi = (perimeter - straightEdgePerimeter) / (2 * radius);
-    if (rank==0) {
+    if (rank==0)
+    {
       cout << "For h-refinement " << i << ", implied value of pi: " << impliedPi << endl;
     }
 
     double error = abs(truePerimeter - perimeter);
-    if ((error >= previousError) && (error > tol)) { // non-convergence
+    if ((error >= previousError) && (error > tol))   // non-convergence
+    {
       success = false;
-      if (rank==0) {
+      if (rank==0)
+      {
         cout << "testEdgeLength: Error for h-refinement " << i << " is greater than for h-refinement " << i - 1 << endl;
         cout << "Current error = " << error << "; previous = " << previousError << endl;
       }
@@ -653,7 +707,8 @@ bool CurvilinearMeshTests::testEdgeLength() {
     previousError = error;
 
     // h-refine
-    if (i<numHRefinements) {
+    if (i<numHRefinements)
+    {
       mesh->hRefine(mesh->getActiveCellIDs(),RefinementPattern::regularRefinementPatternQuad());
     }
   }
@@ -661,7 +716,8 @@ bool CurvilinearMeshTests::testEdgeLength() {
   return success;
 }
 
-bool CurvilinearMeshTests::testStraightEdgeMesh() {
+bool CurvilinearMeshTests::testStraightEdgeMesh()
+{
   bool success = true;
 
   // to begin, a very simple test: do we compute the correct area for a square?
@@ -685,14 +741,16 @@ bool CurvilinearMeshTests::testStraightEdgeMesh() {
   // sanity check on the test: regular mesh gets the area right:
   double tol = 1e-14;
   double err = abs(trueArea-approximateArea);
-  if (err > tol) {
+  if (err > tol)
+  {
     success = false;
     cout << "Error: even regular mesh (no curves set) gets the area wrong.\n";
   }
 
   //  GnuPlotUtil::writeExactMeshSkeleton("/tmp/unitMesh.dat", mesh, 2);
 
-  for (int i=0; i<4; i++) {
+  for (int i=0; i<4; i++)
+  {
     H1Order = i+1;
     mesh = MeshFactory::quadMesh(bf, H1Order, pToAdd, width, height);
 
@@ -703,7 +761,8 @@ bool CurvilinearMeshTests::testStraightEdgeMesh() {
     vector< ParametricCurvePtr > lines = mesh->parametricEdgesForCell(cellID);
     vector< unsigned > vertices = mesh->vertexIndicesForCell(cellID);
 
-    for (int i=0; i<vertices.size(); i++) {
+    for (int i=0; i<vertices.size(); i++)
+    {
       int vertex = vertices[i];
       int nextVertex = vertices[(i+1) % vertices.size()];
       pair< GlobalIndexType, GlobalIndexType > edge = make_pair(vertex,nextVertex);
@@ -716,7 +775,8 @@ bool CurvilinearMeshTests::testStraightEdgeMesh() {
     approximateArea = one->integrate(mesh);
     tol = 2e-14;
     err = abs(trueArea-approximateArea);
-    if (err > tol) {
+    if (err > tol)
+    {
       success = false;
       cout << "Error: mesh with straight-edge 'curves' and H1Order " << H1Order;
       cout << " has area " << approximateArea << "; should be " << trueArea << "." << endl;
@@ -730,12 +790,14 @@ bool CurvilinearMeshTests::testStraightEdgeMesh() {
   return success;
 }
 
-std::string CurvilinearMeshTests::testSuiteName() {
+std::string CurvilinearMeshTests::testSuiteName()
+{
   return "CurvilinearMeshTests";
 }
 
 
-bool CurvilinearMeshTests::testH1Projection() {
+bool CurvilinearMeshTests::testH1Projection()
+{
   bool success = true;
 
   bool useL2 = false; // H1 semi-norm otherwise
@@ -755,47 +817,57 @@ bool CurvilinearMeshTests::testH1Projection() {
   int numMiddleNodesScalar = quadraticScalarBasis->getCardinality() - scalarEdgeNodes.size();
   int numMiddleNodesVector = quadraticVectorBasis->getCardinality() - vectorEdgeNodes.size();
 
-  if (numMiddleNodesScalar != 1) {
+  if (numMiddleNodesScalar != 1)
+  {
     cout << "# middle nodes for quadratic scalar basis is " << numMiddleNodesScalar;
     cout << "; expected 1.\n";
     success = false;
 
     cout << "scalarEdgeNodes: ";
-    for (set<int>::iterator nodeIt = scalarEdgeNodes.begin(); nodeIt != scalarEdgeNodes.end(); nodeIt++) {
+    for (set<int>::iterator nodeIt = scalarEdgeNodes.begin(); nodeIt != scalarEdgeNodes.end(); nodeIt++)
+    {
       cout << *nodeIt << ", ";
     }
     cout << endl;
   }
-  if (numMiddleNodesVector != 2) {
+  if (numMiddleNodesVector != 2)
+  {
     cout << "# middle nodes for quadratic vector basis is " << numMiddleNodesVector;
     cout << "; expected 2.\n";
     success = false;
     cout << "vectorEdgeNodes: ";
-    for (set<int>::iterator nodeIt = vectorEdgeNodes.begin(); nodeIt != vectorEdgeNodes.end(); nodeIt++) {
+    for (set<int>::iterator nodeIt = vectorEdgeNodes.begin(); nodeIt != vectorEdgeNodes.end(); nodeIt++)
+    {
       cout << *nodeIt << ", ";
     }
     cout << endl;
   }
   int middleNodeScalar;
   vector<int> middleNodeVector;
-  for (int i=0; i<quadraticScalarBasis->getCardinality(); i++) {
-    if (scalarEdgeNodes.find(i) == scalarEdgeNodes.end()) {
+  for (int i=0; i<quadraticScalarBasis->getCardinality(); i++)
+  {
+    if (scalarEdgeNodes.find(i) == scalarEdgeNodes.end())
+    {
       middleNodeScalar = i;
     }
   }
-  for (int i=0; i<quadraticVectorBasis->getCardinality(); i++) {
-    if (vectorEdgeNodes.find(i) == vectorEdgeNodes.end()) {
+  for (int i=0; i<quadraticVectorBasis->getCardinality(); i++)
+  {
+    if (vectorEdgeNodes.find(i) == vectorEdgeNodes.end())
+    {
       middleNodeVector.push_back( i );
     }
   }
 
   FieldContainer<double> dofCoords(quadraticScalarBasis->getCardinality(),2);
   IntrepidBasisWrapper< double, Intrepid::FieldContainer<double> >* intrepidBasisWrapper = dynamic_cast< IntrepidBasisWrapper< double, Intrepid::FieldContainer<double> >* >(quadraticScalarBasis.get());
-  if (!intrepidBasisWrapper) {
+  if (!intrepidBasisWrapper)
+  {
     TEUCHOS_TEST_FOR_EXCEPTION(true, std::invalid_argument, "compBasis does not appear to be an instance of IntrepidBasisWrapper");
   }
   Basis_HGRAD_QUAD_Cn_FEM<double, Intrepid::FieldContainer<double> >* intrepidBasis = dynamic_cast< Basis_HGRAD_QUAD_Cn_FEM<double, Intrepid::FieldContainer<double> >* >(intrepidBasisWrapper->intrepidBasis().get());
-  if (!intrepidBasis) {
+  if (!intrepidBasis)
+  {
     TEUCHOS_TEST_FOR_EXCEPTION(true, std::invalid_argument, "IntrepidBasisWrapper does not appear to wrap Basis_HGRAD_QUAD_Cn_FEM.");
   }
   intrepidBasis->getDofCoords(dofCoords);
@@ -804,7 +876,8 @@ bool CurvilinearMeshTests::testH1Projection() {
 //  ((Basis_HGRAD_QUAD_Cn_FEM<double, Intrepid::FieldContainer<double> >*) quadraticScalarBasis.get())->getDofCoords(dofCoords);
 
   // for quadratic basis, we expect the middle node to be at (0,0)
-  if ((dofCoords(middleNodeScalar,0) != 0.0) || (dofCoords(middleNodeScalar,1) != 0.0)) {
+  if ((dofCoords(middleNodeScalar,0) != 0.0) || (dofCoords(middleNodeScalar,1) != 0.0))
+  {
     cout << "middle node dof coord is (" << dofCoords(middleNodeScalar,0);
     cout << "," << dofCoords(middleNodeScalar,1) << " not (0,0) as expected.\n";
     success = false;
@@ -815,17 +888,23 @@ bool CurvilinearMeshTests::testH1Projection() {
   VarFactoryPtr varFactory = VarFactory::varFactory();
   VarPtr v_vector = varFactory->testVar("v", VECTOR_HGRAD);
   IPPtr ip_vector = Teuchos::rcp( new IP );
-  if (useL2) {
+  if (useL2)
+  {
     ip_vector->addTerm(v_vector);
-  } else {
+  }
+  else
+  {
     ip_vector->addTerm(v_vector->grad());
   }
 
   VarPtr v_scalar = varFactory->testVar("v_s", HGRAD);
   IPPtr ip_scalar = Teuchos::rcp( new IP) ;
-  if (useL2) {
+  if (useL2)
+  {
     ip_scalar->addTerm(v_scalar);
-  } else {
+  }
+  else
+  {
     ip_scalar->addTerm(v_scalar->grad());
   }
 
@@ -853,21 +932,25 @@ bool CurvilinearMeshTests::testH1Projection() {
     // per Wolfram Alpha:
     // on unit quad, the L2 norm should be 64/225
     // the H^1 semi-norm should be 256/45
-    if (! middleNodeFunction->equals(middleNodeFunction_expected, basisCache)) {
+    if (! middleNodeFunction->equals(middleNodeFunction_expected, basisCache))
+    {
       cout << "middle node function differs from expected.\n";
       success = false;
     }
-    if (useL2) {
+    if (useL2)
+    {
       middleNode_norm = (middleNodeFunction_expected * middleNodeFunction_expected)->integrate(basisCache);
       rhs_ip = (middleNodeFunction_expected * fxnScalar)->integrate(basisCache);
       // for fxnScalar = x^2, L2 rhs should be ___
-    } else {
+    }
+    else
+    {
       middleNode_norm = (middleNodeFunction_expected->dx() * middleNodeFunction_expected->dx()
                          + middleNodeFunction_expected->dy() * middleNodeFunction_expected->dy()
-                         )->integrate(basisCache);
+                        )->integrate(basisCache);
       rhs_ip = (middleNodeFunction_expected->dx() * fxnScalar->dx()
                 + middleNodeFunction_expected->dy() * fxnScalar->dy()
-                )->integrate(basisCache);
+               )->integrate(basisCache);
       // for fxnScalar = x^2, H1 semi-norm rhs should be -8/9
     }
   }
@@ -884,7 +967,8 @@ bool CurvilinearMeshTests::testH1Projection() {
   scalarCoefficients_expected(middleNodeScalar) = rhs_ip / middleNode_norm;
   double maxDiff = 0;
   double tol = 1e-14;
-  if (! fcsAgree(scalarCoefficients_expected, scalarCoefficients, tol, maxDiff)) {
+  if (! fcsAgree(scalarCoefficients_expected, scalarCoefficients, tol, maxDiff))
+  {
     cout << "projectFunctionOntoBasis doesn't match expected weights for scalar projection onto quadratic middle node.\n";
     cout << "expected:\n" << scalarCoefficients_expected;
     cout << "actual:\n" << scalarCoefficients;
@@ -899,7 +983,8 @@ bool CurvilinearMeshTests::testH1Projection() {
   //  cout << "expected solution to projection problem at quadratic middle node:" << rhs_ip / middleNode_norm << endl;
 
   maxDiff = 0;
-  if (! fcsAgree(vectorCoefficients_expected, vectorCoefficients, tol, maxDiff)) {
+  if (! fcsAgree(vectorCoefficients_expected, vectorCoefficients, tol, maxDiff))
+  {
     cout << "projectFunctionOntoBasis doesn't match expected weights for vector projection onto quadratic middle nodes.\n";
     cout << "expected:\n" << vectorCoefficients_expected;
     cout << "actual:\n" << vectorCoefficients;
@@ -921,7 +1006,8 @@ bool CurvilinearMeshTests::testH1Projection() {
   ip->addTerm(v);
   ip->addTerm(v->grad());
 
-  for (int H1Order=1; H1Order<5; H1Order++) {
+  for (int H1Order=1; H1Order<5; H1Order++)
+  {
     MeshPtr mesh = MeshFactory::quadMesh(bf, H1Order, pToAdd, width, height);
     int cellID = 0; // the only cell
     bool testVsTest = true;
@@ -939,7 +1025,8 @@ bool CurvilinearMeshTests::testH1Projection() {
     FunctionPtr projectedFunction = Teuchos::rcp( new BasisSumFunction(basis, basisCoefficients) );
 
     double tol=1e-13;
-    if (! projectedFunction->equals(tfi, basisCache, tol) ) {
+    if (! projectedFunction->equals(tfi, basisCache, tol) )
+    {
       success = false;
       cout << "For H1Order " << H1Order << ", ";
       cout << "H^1-projected function does not match original, even though original is in the space.\n";
@@ -969,9 +1056,12 @@ bool CurvilinearMeshTests::testH1Projection() {
 
     // check that the only nonzeros in edgeInterpolantCoefficients belong to edges
     set<int> edgeFieldIndices = BasisFactory::basisFactory()->sideFieldIndices(vectorBasis, true); // true: include the vertices
-    for (int i=0; i<edgeInterpolantCoefficients.size(); i++) {
-      if (edgeInterpolantCoefficients(i) != 0) {
-        if (edgeFieldIndices.find(i) == edgeFieldIndices.end()) {
+    for (int i=0; i<edgeInterpolantCoefficients.size(); i++)
+    {
+      if (edgeInterpolantCoefficients(i) != 0)
+      {
+        if (edgeFieldIndices.find(i) == edgeFieldIndices.end())
+        {
           // then we have a nonzero weight for a non-edge field index
           cout << "edgeInterpolationCoefficients(" << i << ") = " << edgeInterpolantCoefficients(i);
           cout << ", but " << i << " is not an edge field index.\n";
@@ -981,7 +1071,8 @@ bool CurvilinearMeshTests::testH1Projection() {
     }
 
     // check that the edgeFieldIndices all belong to basis functions that are non-zero on some edge
-    for (set<int>::iterator edgeFieldIt = edgeFieldIndices.begin(); edgeFieldIt != edgeFieldIndices.end(); edgeFieldIt++) {
+    for (set<int>::iterator edgeFieldIt = edgeFieldIndices.begin(); edgeFieldIt != edgeFieldIndices.end(); edgeFieldIt++)
+    {
       int fieldIndex = *edgeFieldIt;
       FieldContainer<double> edgeBasisFunctionWeights(basis->getCardinality());
       edgeBasisFunctionWeights[fieldIndex] = 1.0;
@@ -990,23 +1081,28 @@ bool CurvilinearMeshTests::testH1Projection() {
       FunctionPtr edgeBasisFunction = BasisSumFunction::basisSumFunction(basis, edgeBasisFunctionWeights);
       int basisRank = BasisFactory::basisFactory()->getBasisRank(basis);
 
-      for (int sideIndex=0; sideIndex<numEdges; sideIndex++) {
+      for (int sideIndex=0; sideIndex<numEdges; sideIndex++)
+      {
         BasisCachePtr sideCache = basisCache->getSideBasisCache(sideIndex);
-        if (! edgeBasisFunction->equals(Function::zero(basisRank), sideCache, tol) ) {
+        if (! edgeBasisFunction->equals(Function::zero(basisRank), sideCache, tol) )
+        {
           nonZeroSomewhere = true;
           break;
         }
       }
 
-      if (! nonZeroSomewhere ) {
+      if (! nonZeroSomewhere )
+      {
         success = false;
         cout << "Field index " << fieldIndex << " is supposed to be an edge field index, but is zero on all edges.\n";
       }
     }
 
     // check that all the non-edgeFieldIndices are zero on all edges
-    for (int fieldIndex=0; fieldIndex < basis->getCardinality(); fieldIndex++) {
-      if (edgeFieldIndices.find(fieldIndex) != edgeFieldIndices.end()) {
+    for (int fieldIndex=0; fieldIndex < basis->getCardinality(); fieldIndex++)
+    {
+      if (edgeFieldIndices.find(fieldIndex) != edgeFieldIndices.end())
+      {
         // edge field index: skip
         continue;
       }
@@ -1016,9 +1112,11 @@ bool CurvilinearMeshTests::testH1Projection() {
       FunctionPtr nonEdgeBasisFunction = BasisSumFunction::basisSumFunction(basis, nonEdgeBasisFunctionWeights);
       int basisRank = BasisFactory::basisFactory()->getBasisRank(basis);
 
-      for (int sideIndex=0; sideIndex<numEdges; sideIndex++) {
+      for (int sideIndex=0; sideIndex<numEdges; sideIndex++)
+      {
         BasisCachePtr sideCache = basisCache->getSideBasisCache(sideIndex);
-        if (! nonEdgeBasisFunction->equals(Function::zero(basisRank), sideCache, tol) ) {
+        if (! nonEdgeBasisFunction->equals(Function::zero(basisRank), sideCache, tol) )
+        {
           success = false;
           cout << "Field index " << fieldIndex << " is not supposed to be an edge field index, but is non-zero on edge " << sideIndex << ".\n";
         }
@@ -1034,9 +1132,11 @@ bool CurvilinearMeshTests::testH1Projection() {
     //
     //    Projector<double>::projectFunctionOntoBasis(…)
 
-    for (int sideIndex=0; sideIndex<numEdges; sideIndex++) {
+    for (int sideIndex=0; sideIndex<numEdges; sideIndex++)
+    {
       BasisCachePtr sideCache = basisCache->getSideBasisCache(sideIndex);
-      if (! edgeFunction->equals(tfi, sideCache, tol) ) {
+      if (! edgeFunction->equals(tfi, sideCache, tol) )
+      {
         success = false;
         cout << "For H1Order " << H1Order << ", ";
         cout << "edge interpolation function does not match original, even though original is in the space.\n";
@@ -1054,7 +1154,8 @@ bool CurvilinearMeshTests::testH1Projection() {
 
       // now, it should be the case that the transfinite interpolant (exactSurface) is exactly the same as the edgeFunction
       // along the edges
-      if (! edgeFunction->equals(exactSurface, sideCache, tol) ) {
+      if (! edgeFunction->equals(exactSurface, sideCache, tol) )
+      {
         success = false;
         cout << "For H1Order " << H1Order << ", ";
         cout << "edge interpolation function does not match exactSurface, even though original is in the space.\n";
@@ -1074,9 +1175,11 @@ bool CurvilinearMeshTests::testH1Projection() {
     ParametricSurface::basisWeightsForProjectedInterpolant(basisCoefficients, vectorBasis, mesh, cellID);
 
     // check that the basisCoefficients for the edge functions are the same as the edgeCoefficients above
-    for (set<int>::iterator edgeFieldIt = edgeFieldIndices.begin(); edgeFieldIt != edgeFieldIndices.end(); edgeFieldIt++) {
+    for (set<int>::iterator edgeFieldIt = edgeFieldIndices.begin(); edgeFieldIt != edgeFieldIndices.end(); edgeFieldIt++)
+    {
       int fieldIndex = *edgeFieldIt;
-      if (basisCoefficients(fieldIndex) != edgeInterpolantCoefficients(fieldIndex) ) {
+      if (basisCoefficients(fieldIndex) != edgeInterpolantCoefficients(fieldIndex) )
+      {
         cout << "For field index " << fieldIndex << " (an edge field index), ";
         cout << "projection-based interpolant weight is " << basisCoefficients(fieldIndex);
         cout << ", but the edge projection weight is " << edgeInterpolantCoefficients(fieldIndex) << endl;
@@ -1093,7 +1196,8 @@ bool CurvilinearMeshTests::testH1Projection() {
 
     tol = 5e-14;
     maxDiff = 0;
-    if (! fcsAgree(expectedCoefficients, basisCoefficients, tol, maxDiff)) {
+    if (! fcsAgree(expectedCoefficients, basisCoefficients, tol, maxDiff))
+    {
       success = false;
       cout << "Expected coefficients do not match actual:\n";
       reportFCDifferences(expectedCoefficients, basisCoefficients, tol);
@@ -1118,7 +1222,8 @@ bool CurvilinearMeshTests::testH1Projection() {
 
     expectedCoefficients.resize(expectedCoefficients.size()); // flatten
     FunctionPtr expectedFunction = BasisSumFunction::basisSumFunction(basis, expectedCoefficients);
-    if (! expectedFunction->equals(tfi, basisCache, tol) ) {
+    if (! expectedFunction->equals(tfi, basisCache, tol) )
+    {
       cout << "For H1Order " << H1Order << ", ";
       cout << "Problem with test?? expected function does not match tfi.\n";
       success = false;
@@ -1136,7 +1241,8 @@ bool CurvilinearMeshTests::testH1Projection() {
 
     projectedFunction = Teuchos::rcp( new BasisSumFunction(basis, basisCoefficients) );
 
-    if (! projectedFunction->equals(tfi, basisCache, tol) ) {
+    if (! projectedFunction->equals(tfi, basisCache, tol) )
+    {
       success = false;
       cout << "For H1Order " << H1Order << ", ";
       cout << "projection-based interpolation function does not match original, even though original is in the space.\n";
@@ -1157,7 +1263,8 @@ bool CurvilinearMeshTests::testH1Projection() {
   return success;
 }
 
-bool CurvilinearMeshTests::testPointsRemainInsideElement() {
+bool CurvilinearMeshTests::testPointsRemainInsideElement()
+{
   bool success = true;
 
   double width = 5.0;
@@ -1167,7 +1274,8 @@ bool CurvilinearMeshTests::testPointsRemainInsideElement() {
 
   int pToAdd = 0; // 0 so that H1Order itself will govern the order of the approximation
 
-  for (int H1Order=1; H1Order < 5; H1Order++) {
+  for (int H1Order=1; H1Order < 5; H1Order++)
+  {
     MeshPtr mesh = MeshFactory::quadMesh(bf, H1Order, pToAdd, width, height);
 
     ParametricCurvePtr halfCircleTop = ParametricCurve::circularArc(width/2, width/2, height, 0, PI);
@@ -1195,7 +1303,8 @@ bool CurvilinearMeshTests::testPointsRemainInsideElement() {
     GnuPlotUtil::writeXYPoints("/tmp/halfCircles_horizontal_line.dat", basisCache->getPhysicalCubaturePoints());
   }
 
-  for (int H1Order=1; H1Order < 5; H1Order++) {
+  for (int H1Order=1; H1Order < 5; H1Order++)
+  {
     FieldContainer<double> physicalCellNodes(1,4,2); // (C,P,D)
     physicalCellNodes(0,0,0) = 0;
     physicalCellNodes(0,0,1) = 0;
@@ -1235,7 +1344,8 @@ bool CurvilinearMeshTests::testPointsRemainInsideElement() {
   }
 
 
-  for (int H1Order=1; H1Order < 5; H1Order++) {
+  for (int H1Order=1; H1Order < 5; H1Order++)
+  {
     FieldContainer<double> physicalCellNodes(1,4,2); // (C,P,D)
 
     physicalCellNodes(0,0,0) = 0;
@@ -1308,7 +1418,8 @@ bool CurvilinearMeshTests::testPointsRemainInsideElement() {
     // curves2: p-refinement
     // curves3: manually set curves after p-refinement
 
-    for (int H1Order=1; H1Order < 5; H1Order++) {
+    for (int H1Order=1; H1Order < 5; H1Order++)
+    {
       MeshPtr mesh = MeshFactory::quadMesh(bf, H1Order, physicalCellNodes, pToAdd);
 
       ParametricCurvePtr arcTop = ParametricCurve::circularArc(r, 0, 2.5 * r, 7*PI/4, 3*PI/2);
@@ -1343,13 +1454,16 @@ bool CurvilinearMeshTests::testPointsRemainInsideElement() {
         basisCache = BasisCache::basisCacheForCell(mesh_pRefined, cellID);
 
         // now that we have the various curves defined, let's compare them
-        for (int i=0; i<curves1.size(); i++) {
-          if (! curves1[i]->equals(curves2[i], basisCache) ) {
+        for (int i=0; i<curves1.size(); i++)
+        {
+          if (! curves1[i]->equals(curves2[i], basisCache) )
+          {
             cout << "For H1Order " << H1Order << ", ";
             cout << "curves1 and curves2 differ in entry " << i << endl;
             success = false;
           }
-          if (! curves2[i]->equals(curves3[i], basisCache) ) {
+          if (! curves2[i]->equals(curves3[i], basisCache) )
+          {
             cout << "For H1Order " << H1Order << ", ";
             cout << "curves2 and curves3 differ in entry " << i << endl;
             success = false;
@@ -1381,7 +1495,8 @@ bool CurvilinearMeshTests::testPointsRemainInsideElement() {
   return success;
 }
 
-bool CurvilinearMeshTests::testTransformationJacobian() {
+bool CurvilinearMeshTests::testTransformationJacobian()
+{
   bool success = true;
 
   double width = 4.0;
@@ -1397,7 +1512,8 @@ bool CurvilinearMeshTests::testTransformationJacobian() {
 
   double tol = 1e-13;
 
-  for (int i=0; i<4; i++) {
+  for (int i=0; i<4; i++)
+  {
     H1Order = i+1;
     mesh = MeshFactory::quadMesh(bf, H1Order, pToAdd, width, height);
     int cellID = 0; // the only cell
@@ -1415,7 +1531,8 @@ bool CurvilinearMeshTests::testTransformationJacobian() {
     vector< ParametricCurvePtr > lines = mesh->parametricEdgesForCell(cellID);
     vector< unsigned > vertices = mesh->vertexIndicesForCell(cellID);
 
-    for (int i=0; i<vertices.size(); i++) {
+    for (int i=0; i<vertices.size(); i++)
+    {
       GlobalIndexType vertex = vertices[i];
       GlobalIndexType nextVertex = vertices[(i+1) % vertices.size()];
       pair< GlobalIndexType, GlobalIndexType > edge = make_pair(vertex,nextVertex);
@@ -1427,47 +1544,63 @@ bool CurvilinearMeshTests::testTransformationJacobian() {
     BasisCachePtr curvilinearMeshCache = BasisCache::basisCacheForCell(mesh, cellID);
 
     int numSides = mesh->getElement(cellID)->numSides();
-    for (int sideIndex=-1; sideIndex<numSides; sideIndex++) {
+    for (int sideIndex=-1; sideIndex<numSides; sideIndex++)
+    {
       BasisCachePtr standardCache, curvilinearCache;
 
-      if (sideIndex < 0) {
+      if (sideIndex < 0)
+      {
         standardCache = standardMeshCache;
         curvilinearCache = curvilinearMeshCache;
-      } else {
+      }
+      else
+      {
         standardCache = standardMeshCache->getSideBasisCache(sideIndex);
         curvilinearCache = curvilinearMeshCache->getSideBasisCache(sideIndex);
       }
       // check that jacobians are equal
       double maxDiff = 0;
-      if (!fcsAgree(standardCache->getJacobian(), curvilinearCache->getJacobian(), tol, maxDiff)) {
+      if (!fcsAgree(standardCache->getJacobian(), curvilinearCache->getJacobian(), tol, maxDiff))
+      {
         success = false;
         cout << "testTransformationJacobian(): standard and 'curvilinear' Jacobians disagree for k=" << H1Order;
         cout << " and sideIndex " << sideIndex;
-        if (maxDiff > 0) {
+        if (maxDiff > 0)
+        {
           cout << ", maxDiff " << maxDiff << endl;
-        } else {
+        }
+        else
+        {
           cout << "; sizes differ: standard has " << standardCache->getJacobian().size();
           cout << " entries; 'curvilinear' "   << curvilinearCache->getJacobian().size() << endl;
         }
       }
-      if (!fcsAgree(standardCache->getJacobianDet(), curvilinearCache->getJacobianDet(), tol, maxDiff)) {
+      if (!fcsAgree(standardCache->getJacobianDet(), curvilinearCache->getJacobianDet(), tol, maxDiff))
+      {
         success = false;
         cout << "testTransformationJacobian(): standard and 'curvilinear' Jacobian determinants disagree for k=" << H1Order;
         cout << " and sideIndex " << sideIndex;
-        if (maxDiff > 0) {
+        if (maxDiff > 0)
+        {
           cout << ", maxDiff " << maxDiff << endl;
-        } else {
+        }
+        else
+        {
           cout << "; sizes differ: standard has " << standardCache->getJacobianDet().size();
           cout << " entries; 'curvilinear' "   << curvilinearCache->getJacobianDet().size() << endl;
         }
       }
-      if (!fcsAgree(standardCache->getJacobianInv(), curvilinearCache->getJacobianInv(), tol, maxDiff)) {
+      if (!fcsAgree(standardCache->getJacobianInv(), curvilinearCache->getJacobianInv(), tol, maxDiff))
+      {
         success = false;
         cout << "testTransformationJacobian(): standard and 'curvilinear' Jacobian inverses disagree for k=" << H1Order;
         cout << " and sideIndex " << sideIndex;
-        if (maxDiff > 0) {
+        if (maxDiff > 0)
+        {
           cout << ", maxDiff " << maxDiff << endl;
-        } else {
+        }
+        else
+        {
           cout << "; sizes differ: standard has " << standardCache->getJacobianInv().size();
           cout << " entries; 'curvilinear' "   << curvilinearCache->getJacobianInv().size() << endl;
         }

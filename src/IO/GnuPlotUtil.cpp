@@ -13,7 +13,8 @@
 using namespace Intrepid;
 using namespace Camellia;
 
-FieldContainer<double> GnuPlotUtil::cellCentroids(MeshTopology* meshTopo) {
+FieldContainer<double> GnuPlotUtil::cellCentroids(MeshTopology* meshTopo)
+{
   // this only works on quads right now
 
   int spaceDim = meshTopo->getSpaceDim(); // not that this will really work in 3D...
@@ -24,17 +25,20 @@ FieldContainer<double> GnuPlotUtil::cellCentroids(MeshTopology* meshTopo) {
   set<IndexType> cellIDset = meshTopo->getActiveCellIndices();
   vector<GlobalIndexType> cellIDs(cellIDset.begin(),cellIDset.end());
 
-  for (int cellIndex=0; cellIndex<numActiveElements; cellIndex++) {
+  for (int cellIndex=0; cellIndex<numActiveElements; cellIndex++)
+  {
     vector<double> cellCentroid = meshTopo->getCellCentroid(cellIDs[cellIndex]);
 
-    for (int i=0; i<spaceDim; i++) {
+    for (int i=0; i<spaceDim; i++)
+    {
       cellCentroids(cellIndex,i) = cellCentroid[i];
     }
   }
   return cellCentroids;
 }
 
-FieldContainer<double> GnuPlotUtil::cellCentroids(MeshPtr mesh) {
+FieldContainer<double> GnuPlotUtil::cellCentroids(MeshPtr mesh)
+{
   // this only works on quads right now
 
   int spaceDim = mesh->getDimension(); // not that this will really work in 3D...
@@ -45,18 +49,22 @@ FieldContainer<double> GnuPlotUtil::cellCentroids(MeshPtr mesh) {
   set<GlobalIndexType> cellIDset = mesh->getActiveCellIDs();
   vector<GlobalIndexType> cellIDs(cellIDset.begin(),cellIDset.end());
 
-  for (int cellOrdinal=0; cellOrdinal<numActiveElements; cellOrdinal++) {
+  for (int cellOrdinal=0; cellOrdinal<numActiveElements; cellOrdinal++)
+  {
     vector<double> centroid = mesh->getTopology()->getCellCentroid(cellIDs[cellOrdinal]);
-    for (int d=0; d<spaceDim; d++) {
+    for (int d=0; d<spaceDim; d++)
+    {
       cellCentroids(cellOrdinal,d) = centroid[d];
     }
   }
   return cellCentroids;
 }
 
-void GnuPlotUtil::writeComputationalMeshSkeleton(const string &filePath, MeshPtr mesh, bool labelCells, string rgbColor, string title) {
+void GnuPlotUtil::writeComputationalMeshSkeleton(const string &filePath, MeshPtr mesh, bool labelCells, string rgbColor, string title)
+{
   TFunctionPtr<double> transformationFunction = mesh->getTransformationFunction();
-  if (transformationFunction.get()==NULL) {
+  if (transformationFunction.get()==NULL)
+  {
     // then the computational and exact meshes are the same: call the other method:
     writeExactMeshSkeleton(filePath,mesh,2,labelCells,rgbColor,title);
     return;
@@ -78,7 +86,8 @@ void GnuPlotUtil::writeComputationalMeshSkeleton(const string &filePath, MeshPtr
   set<GlobalIndexType> cellIDset = mesh->getActiveCellIDs();
   vector<GlobalIndexType> cellIDs(cellIDset.begin(),cellIDset.end());
 
-  for (int cellIndex=0; cellIndex<numActiveElements; cellIndex++) {
+  for (int cellIndex=0; cellIndex<numActiveElements; cellIndex++)
+  {
     ElementPtr cell = mesh->getElement(cellIDs[cellIndex]);
     vector< ParametricCurvePtr > edgeLines = ParametricCurve::referenceCellEdges(cell->elementType()->cellTopoPtr->getKey());
     int numEdges = edgeLines.size();
@@ -88,13 +97,15 @@ void GnuPlotUtil::writeComputationalMeshSkeleton(const string &filePath, MeshPtr
     FieldContainer<double> edgePoints(numPointsTotal,spaceDim);
 
     int ptIndex = 0;
-    for (int edgeIndex=0; edgeIndex < edgeLines.size(); edgeIndex++) {
+    for (int edgeIndex=0; edgeIndex < edgeLines.size(); edgeIndex++)
+    {
       ParametricCurvePtr edge = edgeLines[edgeIndex];
       double t = 0;
       double increment = 1.0 / (numPointsPerEdge - 1);
       // last edge gets one extra point (to connect to first edge):
       int thisEdgePoints = (edgeIndex < edgeLines.size()-1) ? numPointsPerEdge-1 : numPointsPerEdge;
-      for (int i=0; i<thisEdgePoints; i++) {
+      for (int i=0; i<thisEdgePoints; i++)
+      {
         double x, y;
         edge->value(t,x,y);
         edgePoints(ptIndex,0) = x;
@@ -117,9 +128,11 @@ void GnuPlotUtil::writeComputationalMeshSkeleton(const string &filePath, MeshPtr
     //      cout << "transformedPoints:\n" << transformedPoints;
 
     ptIndex = 0;
-    for (int i=0; i<numEdges; i++) {
+    for (int i=0; i<numEdges; i++)
+    {
       int thisEdgePoints = (i < edgeLines.size()-1) ? numPointsPerEdge-1 : numPointsPerEdge;
-      for (int j=0; j<thisEdgePoints; j++) {
+      for (int j=0; j<thisEdgePoints; j++)
+      {
         double x = transformedPoints(0,ptIndex,0);
         double y = transformedPoints(0,ptIndex,1);
         fout << x << "   " << y << endl;
@@ -133,7 +146,8 @@ void GnuPlotUtil::writeComputationalMeshSkeleton(const string &filePath, MeshPtr
 
     fout << endl; // line break to separate elements
 
-    if (labelCells) {
+    if (labelCells)
+    {
       // this only works on quads right now
       cellCentroids = GnuPlotUtil::cellCentroids(mesh);
     }
@@ -148,8 +162,10 @@ void GnuPlotUtil::writeComputationalMeshSkeleton(const string &filePath, MeshPtr
   fout << "# set xrange [" << minX- 0.1*xDiff << ":" << maxX+0.1*xDiff << "] \n";
   fout << "# set yrange [" << minY- 0.1*yDiff << ":" << maxY+0.1*yDiff << "] \n";
   fout << "# plot \"" << filePath << "\" using 1:2 title 'mesh' with lines lc rgb \"" << rgbColor << "\"\n";
-  if (labelCells) {
-    for (int i=0; i<cellIDs.size(); i++) {
+  if (labelCells)
+  {
+    for (int i=0; i<cellIDs.size(); i++)
+    {
       int cellID = cellIDs[i];
       fout << "set label \"" << cellID << "\" at " << cellCentroids(i,0) << ",";
       fout << cellCentroids(i,1) << " center " << endl;
@@ -166,8 +182,10 @@ void GnuPlotUtil::writeComputationalMeshSkeleton(const string &filePath, MeshPtr
   scriptOut << "set xrange [" << minX- 0.1*xDiff << ":" << maxX+0.1*xDiff << "] \n";
   scriptOut << "set yrange [" << minY- 0.1*yDiff << ":" << maxY+0.1*yDiff << "] \n";
   scriptOut << "plot \"" << filePath << "\" using 1:2 title 'mesh' with lines lc rgb \"" << rgbColor << "\"\n";
-  if (labelCells) {
-    for (int i=0; i<cellIDs.size(); i++) {
+  if (labelCells)
+  {
+    for (int i=0; i<cellIDs.size(); i++)
+    {
       int cellID = cellIDs[i];
       scriptOut << "set label \"" << cellID << "\" at " << cellCentroids(i,0) << ",";
       scriptOut << cellCentroids(i,1) << " center " << endl;
@@ -185,7 +203,8 @@ void GnuPlotUtil::writeComputationalMeshSkeleton(const string &filePath, MeshPtr
 }
 
 void GnuPlotUtil::writeExactMeshSkeleton(const string &filePath, MeshTopology* meshTopo, int numPointsPerEdge,
-                                         bool labelCells, string rgbColor, string title) {
+    bool labelCells, string rgbColor, string title)
+{
   ofstream fout(filePath.c_str());
   fout << setprecision(15);
 
@@ -194,7 +213,8 @@ void GnuPlotUtil::writeExactMeshSkeleton(const string &filePath, MeshTopology* m
 
   int numActiveElements = meshTopo->activeCellCount();
   FieldContainer<double> cellCentroids;
-  if (labelCells) {
+  if (labelCells)
+  {
     cellCentroids = GnuPlotUtil::cellCentroids(meshTopo);
   }
 
@@ -203,17 +223,20 @@ void GnuPlotUtil::writeExactMeshSkeleton(const string &filePath, MeshTopology* m
   set<IndexType> cellIDset = meshTopo->getActiveCellIndices();
   vector<GlobalIndexType> cellIDs(cellIDset.begin(),cellIDset.end());
 
-  for (int cellIndex=0; cellIndex<numActiveElements; cellIndex++) {
+  for (int cellIndex=0; cellIndex<numActiveElements; cellIndex++)
+  {
     CellPtr cell = meshTopo->getCell(cellIDs[cellIndex]);
     cellIDs.push_back(cell->cellIndex());
     vector< ParametricCurvePtr > edgeCurves = meshTopo->parametricEdgesForCell(cell->cellIndex(), false);
-    for (int edgeIndex=0; edgeIndex < edgeCurves.size(); edgeIndex++) {
+    for (int edgeIndex=0; edgeIndex < edgeCurves.size(); edgeIndex++)
+    {
       ParametricCurvePtr edge = edgeCurves[edgeIndex];
       double t = 0;
       double increment = 1.0 / (numPointsPerEdge - 1);
       // last edge gets one extra point (to connect to first edge):
       int thisEdgePoints = (edgeIndex < edgeCurves.size()-1) ? numPointsPerEdge-1 : numPointsPerEdge;
-      for (int i=0; i<thisEdgePoints; i++) {
+      for (int i=0; i<thisEdgePoints; i++)
+      {
         double x, y;
         edge->value(t,x,y);
         fout << x << "   " << y << endl;
@@ -235,8 +258,10 @@ void GnuPlotUtil::writeExactMeshSkeleton(const string &filePath, MeshTopology* m
   fout << "# set xrange [" << minX- 0.1*xDiff << ":" << maxX+0.1*xDiff << "] \n";
   fout << "# set yrange [" << minY- 0.1*yDiff << ":" << maxY+0.1*yDiff << "] \n";
   fout << "# plot \"" << filePath << "\" using 1:2 title '" << title << "' with lines lc rgb \"" << rgbColor << "\"\n";
-  if (labelCells) {
-    for (int i=0; i<numActiveElements; i++) {
+  if (labelCells)
+  {
+    for (int i=0; i<numActiveElements; i++)
+    {
       int cellID = cellIDs[i];
       fout << "# set label \"" << cellID << "\" at " << cellCentroids(i,0) << ",";
       fout << cellCentroids(i,1) << " center " << endl;
@@ -249,8 +274,10 @@ void GnuPlotUtil::writeExactMeshSkeleton(const string &filePath, MeshTopology* m
   scriptOut << "set xrange [" << minX- 0.1*xDiff << ":" << maxX+0.1*xDiff << "] \n";
   scriptOut << "set yrange [" << minY- 0.1*yDiff << ":" << maxY+0.1*yDiff << "] \n";
   scriptOut << "plot \"" << filePath << "\" using 1:2 title '" << title << "' with lines lc rgb \"" << rgbColor << "\"\n";
-  if (labelCells) {
-    for (int i=0; i<numActiveElements; i++) {
+  if (labelCells)
+  {
+    for (int i=0; i<numActiveElements; i++)
+    {
       int cellID = cellIDs[i];
       scriptOut << "set label \"" << cellID << "\" at " << cellCentroids(i,0) << ",";
       scriptOut << cellCentroids(i,1) << " center " << endl;
@@ -267,7 +294,8 @@ void GnuPlotUtil::writeExactMeshSkeleton(const string &filePath, MeshTopology* m
   scriptOut.close();
 }
 
-void GnuPlotUtil::writeExactMeshSkeleton(const string &filePath, MeshPtr mesh, int numPointsPerEdge, bool labelCells, string rgbColor, string title) {
+void GnuPlotUtil::writeExactMeshSkeleton(const string &filePath, MeshPtr mesh, int numPointsPerEdge, bool labelCells, string rgbColor, string title)
+{
   ofstream fout(filePath.c_str());
   fout << setprecision(15);
 
@@ -276,7 +304,8 @@ void GnuPlotUtil::writeExactMeshSkeleton(const string &filePath, MeshPtr mesh, i
 
   int numActiveElements = mesh->numActiveElements();
   FieldContainer<double> cellCentroids;
-  if (labelCells) {
+  if (labelCells)
+  {
     cellCentroids = GnuPlotUtil::cellCentroids(mesh);
   }
 
@@ -285,17 +314,20 @@ void GnuPlotUtil::writeExactMeshSkeleton(const string &filePath, MeshPtr mesh, i
   set<GlobalIndexType> cellIDset = mesh->getActiveCellIDs();
   vector<GlobalIndexType> cellIDs(cellIDset.begin(),cellIDset.end());
 
-  for (int cellIndex=0; cellIndex<numActiveElements; cellIndex++) {
+  for (int cellIndex=0; cellIndex<numActiveElements; cellIndex++)
+  {
     ElementPtr cell = mesh->getElement(cellIDs[cellIndex]);
     cellIDs.push_back(cell->cellID());
     vector< ParametricCurvePtr > edgeCurves = mesh->parametricEdgesForCell(cell->cellID());
-    for (int edgeIndex=0; edgeIndex < edgeCurves.size(); edgeIndex++) {
+    for (int edgeIndex=0; edgeIndex < edgeCurves.size(); edgeIndex++)
+    {
       ParametricCurvePtr edge = edgeCurves[edgeIndex];
       double t = 0;
       double increment = 1.0 / (numPointsPerEdge - 1);
       // last edge gets one extra point (to connect to first edge):
       int thisEdgePoints = (edgeIndex < edgeCurves.size()-1) ? numPointsPerEdge-1 : numPointsPerEdge;
-      for (int i=0; i<thisEdgePoints; i++) {
+      for (int i=0; i<thisEdgePoints; i++)
+      {
         double x, y;
         edge->value(t,x,y);
         fout << x << "   " << y << endl;
@@ -317,8 +349,10 @@ void GnuPlotUtil::writeExactMeshSkeleton(const string &filePath, MeshPtr mesh, i
   fout << "# set xrange [" << minX- 0.1*xDiff << ":" << maxX+0.1*xDiff << "] \n";
   fout << "# set yrange [" << minY- 0.1*yDiff << ":" << maxY+0.1*yDiff << "] \n";
   fout << "# plot \"" << filePath << "\" using 1:2 title '" << title << "' with lines lc rgb \"" << rgbColor << "\"\n";
-  if (labelCells) {
-    for (int i=0; i<numActiveElements; i++) {
+  if (labelCells)
+  {
+    for (int i=0; i<numActiveElements; i++)
+    {
       int cellID = cellIDs[i];
       fout << "# set label \"" << cellID << "\" at " << cellCentroids(i,0) << ",";
       fout << cellCentroids(i,1) << " center " << endl;
@@ -331,8 +365,10 @@ void GnuPlotUtil::writeExactMeshSkeleton(const string &filePath, MeshPtr mesh, i
   scriptOut << "set xrange [" << minX- 0.1*xDiff << ":" << maxX+0.1*xDiff << "] \n";
   scriptOut << "set yrange [" << minY- 0.1*yDiff << ":" << maxY+0.1*yDiff << "] \n";
   scriptOut << "plot \"" << filePath << "\" using 1:2 title '" << title << "' with lines lc rgb \"" << rgbColor << "\"\n";
-  if (labelCells) {
-    for (int i=0; i<numActiveElements; i++) {
+  if (labelCells)
+  {
+    for (int i=0; i<numActiveElements; i++)
+    {
       int cellID = cellIDs[i];
       scriptOut << "set label \"" << cellID << "\" at " << cellCentroids(i,0) << ",";
       scriptOut << cellCentroids(i,1) << " center " << endl;
@@ -350,17 +386,20 @@ void GnuPlotUtil::writeExactMeshSkeleton(const string &filePath, MeshPtr mesh, i
 }
 
 // badly named, maybe: we support arbitrary space dimension...
-void GnuPlotUtil::writeXYPoints(const string &filePath, const FieldContainer<double> &dataPoints) {
+void GnuPlotUtil::writeXYPoints(const string &filePath, const FieldContainer<double> &dataPoints)
+{
   FieldContainer<double> dataPointsCopy = dataPoints;
 
-  if (dataPoints.rank()==3) {
+  if (dataPoints.rank()==3)
+  {
     int numCells = dataPoints.dimension(0);
     int numPoints = dataPoints.dimension(1);
     int spaceDim = dataPoints.dimension(2);
     dataPointsCopy.resize(numCells*numPoints, spaceDim);
   }
 
-  if (dataPointsCopy.rank() != 2) {
+  if (dataPointsCopy.rank() != 2)
+  {
     TEUCHOS_TEST_FOR_EXCEPTION(true,std::invalid_argument,"writeXYPoints only supports containers of rank 2 or 3");
   }
 
@@ -371,20 +410,27 @@ void GnuPlotUtil::writeXYPoints(const string &filePath, const FieldContainer<dou
   fout << setprecision(15);
 
   fout << "# Camellia GnuPlotUtil output\n";
-  if (spaceDim==2) {
+  if (spaceDim==2)
+  {
     fout << "# x                  y\n";
-  } else if (spaceDim==3) {
+  }
+  else if (spaceDim==3)
+  {
     fout << "# x                  y                  z\n";
   }
 
-  for (int i=0; i<numPoints; i++) {
-    if ((spaceDim==3) && (i>0)) {
+  for (int i=0; i<numPoints; i++)
+  {
+    if ((spaceDim==3) && (i>0))
+    {
       // for 3D point sets, separate new x values with a new line.
-      if (dataPointsCopy(i,0) != dataPointsCopy(i-1,0)) {
+      if (dataPointsCopy(i,0) != dataPointsCopy(i-1,0))
+      {
         fout << "\n";
       }
     }
-    for (int d=0; d<spaceDim; d++) {
+    for (int d=0; d<spaceDim; d++)
+    {
       fout << dataPointsCopy(i,d) << "   ";
     }
     fout << "\n";
@@ -394,23 +440,28 @@ void GnuPlotUtil::writeXYPoints(const string &filePath, const FieldContainer<dou
 }
 
 void GnuPlotUtil::writeContourPlotScript(set<double> contourLevels, const vector<string> &filePathsOfData,
-                                         const string &outputFile, double xTics, double yTics) {
+    const string &outputFile, double xTics, double yTics)
+{
   ofstream fout((outputFile).c_str());
   ostringstream splotLine;
   splotLine << "splot ";
-  for (int i=0; i<filePathsOfData.size(); i++) {
+  for (int i=0; i<filePathsOfData.size(); i++)
+  {
     string filePath = filePathsOfData[i];
     splotLine << "\"" << filePath << "\" using 1:2:3 notitle with lines lc rgb \"#0000ff\"";
-    if (i != filePathsOfData.size()-1) {
+    if (i != filePathsOfData.size()-1)
+    {
       splotLine << ", ";
     }
   }
   splotLine << "\n";
   int levelNumber = 0;
   ostringstream levelsString;
-  for (set<double>::iterator levelIt = contourLevels.begin(); levelIt != contourLevels.end(); levelIt++, levelNumber++) {
+  for (set<double>::iterator levelIt = contourLevels.begin(); levelIt != contourLevels.end(); levelIt++, levelNumber++)
+  {
     levelsString << *levelIt;
-    if (levelNumber != contourLevels.size() - 1) {
+    if (levelNumber != contourLevels.size() - 1)
+    {
       levelsString << ", ";
     }
   }
@@ -422,10 +473,12 @@ void GnuPlotUtil::writeContourPlotScript(set<double> contourLevels, const vector
   fout << "unset clabel" << endl;
   fout << "set cntrparam bspline" << endl;
   fout << "set size ratio -1" << endl;
-  if (xTics > 0) {
+  if (xTics > 0)
+  {
     fout << "set xtics " << xTics << endl;
   }
-  if (yTics > 0) {
+  if (yTics > 0)
+  {
     fout << "set ytics" << yTics << endl;
   }
   fout << "set style data lines" << endl;

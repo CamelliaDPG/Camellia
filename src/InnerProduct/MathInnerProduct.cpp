@@ -39,25 +39,39 @@ using namespace Intrepid;
 using namespace Camellia;
 
 void MathInnerProduct::operators(int testID1, int testID2,
-               vector<Camellia::EOperator> &testOp1,
-               vector<Camellia::EOperator> &testOp2) {
+                                 vector<Camellia::EOperator> &testOp1,
+                                 vector<Camellia::EOperator> &testOp2)
+{
   testOp1.clear();
   testOp2.clear();
-  if (testID1 == testID2) {
+  if (testID1 == testID2)
+  {
     Camellia::EOperator dOperator;
-    if (_bilinearForm->functionSpaceForTest(testID1) == Camellia::FUNCTION_SPACE_REAL_SCALAR) {
+    if (_bilinearForm->functionSpaceForTest(testID1) == Camellia::FUNCTION_SPACE_REAL_SCALAR)
+    {
       testOp1.push_back( Camellia::OP_VALUE);
       testOp2.push_back( Camellia::OP_VALUE);
-    } else {
-      if (_bilinearForm->functionSpaceForTest(testID1) == Camellia::FUNCTION_SPACE_HGRAD) {
+    }
+    else
+    {
+      if (_bilinearForm->functionSpaceForTest(testID1) == Camellia::FUNCTION_SPACE_HGRAD)
+      {
         dOperator = Camellia::OP_GRAD;
-      } else if (_bilinearForm->functionSpaceForTest(testID1) == Camellia::FUNCTION_SPACE_HDIV) {
+      }
+      else if (_bilinearForm->functionSpaceForTest(testID1) == Camellia::FUNCTION_SPACE_HDIV)
+      {
         dOperator = Camellia::OP_DIV;
-      } else if (_bilinearForm->functionSpaceForTest(testID1) == Camellia::FUNCTION_SPACE_HCURL) {
+      }
+      else if (_bilinearForm->functionSpaceForTest(testID1) == Camellia::FUNCTION_SPACE_HCURL)
+      {
         dOperator = Camellia::OP_CURL;
-      } else if ( _bilinearForm->functionSpaceForTest(testID1) == Camellia::FUNCTION_SPACE_VECTOR_HGRAD ) {
+      }
+      else if ( _bilinearForm->functionSpaceForTest(testID1) == Camellia::FUNCTION_SPACE_VECTOR_HGRAD )
+      {
         dOperator = Camellia::OP_GRAD; // will the integration routine do the right thing here??
-      } else {
+      }
+      else
+      {
         TEUCHOS_TEST_FOR_EXCEPTION(true, std::invalid_argument, "Unknown test space.");
       }
       testOp1.push_back( Camellia::OP_VALUE);
@@ -69,8 +83,9 @@ void MathInnerProduct::operators(int testID1, int testID2,
 }
 
 void MathInnerProduct::applyInnerProductData(FieldContainer<double> &testValues1,
-                                             FieldContainer<double> &testValues2,
-                                             int testID1, int testID2, int operatorIndex,
-                                             const FieldContainer<double>& physicalPoints) {
+    FieldContainer<double> &testValues2,
+    int testID1, int testID2, int operatorIndex,
+    const FieldContainer<double>& physicalPoints)
+{
   // empty implementation -- no weights needed...
 }

@@ -114,18 +114,21 @@ using namespace std;
 using namespace Intrepid;
 using namespace Camellia;
 
-ElementTypePtr makeElemType(DofOrderingPtr trialOrdering, DofOrderingPtr testOrdering, CellTopoPtr cellTopo) {
+ElementTypePtr makeElemType(DofOrderingPtr trialOrdering, DofOrderingPtr testOrdering, CellTopoPtr cellTopo)
+{
   return Teuchos::rcp( new ElementType( trialOrdering, testOrdering, cellTopo) );
 }
 
 BasisCachePtr makeBasisCache(ElementTypePtr elemType, const FieldContainer<double> &physicalCellNodes, const vector<GlobalIndexType> &cellIDs,
-                         bool createSideCacheToo = true) {
+                             bool createSideCacheToo = true)
+{
   BasisCachePtr basisCache = Teuchos::rcp( new BasisCache(elemType) );
   basisCache->setPhysicalCellNodes(physicalCellNodes,cellIDs,createSideCacheToo);
   return basisCache;
 }
 
-int main(int argc, char *argv[]) {
+int main(int argc, char *argv[])
+{
 #ifdef HAVE_MPI
   Teuchos::GlobalMPISession mpiSession(&argc, &argv,0);
 #else
@@ -136,7 +139,8 @@ int main(int argc, char *argv[]) {
 static const int C1_FAKE_POLY_ORDER = -1;
 static const int C3_FAKE_POLY_ORDER = -3;
 
-void DPGTests::createBases() {
+void DPGTests::createBases()
+{
   shards::CellTopology quad_4(shards::getCellTopologyData<shards::Quadrilateral<4> >() );
   shards::CellTopology tri_3(shards::getCellTopologyData<shards::Triangle<3> >() );
   shards::CellTopology line_2(shards::getCellTopologyData<shards::Line<2> >() );
@@ -157,7 +161,8 @@ void DPGTests::createBases() {
   BasisFactory::basisFactory()->registerBasis(basis,1, C1_FAKE_POLY_ORDER, quad_4.getKey(), hdiv);
 }
 
-void DPGTests::runTests() {
+void DPGTests::runTests()
+{
 
   int rank = Teuchos::GlobalMPISession::getRank();
 
@@ -194,11 +199,15 @@ void DPGTests::runTests() {
 
   testSuites.push_back( Teuchos::rcp( new GMGTests ) );
 
-  if (skipSlowTests) {
-    if (rank==0) {
+  if (skipSlowTests)
+  {
+    if (rank==0)
+    {
       cout << "skipping slow tests (IncompressibleFormulationsTests).\n";
     }
-  } else {
+  }
+  else
+  {
     testSuites.push_back( Teuchos::rcp( new IncompressibleFormulationsTests(false) ) ); // false: turn "thorough" off
   }
 
@@ -241,7 +250,8 @@ void DPGTests::runTests() {
   //  testSuites.push_back( Teuchos::rcp( new PatchBasisTests ) ); // skip until we have a proper GDAMinimumRule constructed
 
   int numTestSuites = testSuites.size();
-  for (int testSuiteIndex = 0; testSuiteIndex < numTestSuites; testSuiteIndex++) {
+  for (int testSuiteIndex = 0; testSuiteIndex < numTestSuites; testSuiteIndex++)
+  {
     Teuchos::RCP< TestSuite > testSuite = testSuites[testSuiteIndex];
     int numSuiteTests = 0, numSuiteTestsPassed = 0;
     string name = testSuite->testSuiteName();
@@ -255,99 +265,130 @@ void DPGTests::runTests() {
 
   success = testMathInnerProductDx();
   ++numTestsTotal;
-  if (success) {
+  if (success)
+  {
     numTestsPassed++;
     if (rank==0) cout << "Passed test testMathInnerProductDx." << endl;
-  } else {
+  }
+  else
+  {
     if (rank==0) cout << "Failed test testMathInnerProductDx." << endl;
   }
 
   success = testTestBilinearFormAnalyticBoundaryIntegralExpectedConformingMatrices();
   ++numTestsTotal;
-  if (success) {
+  if (success)
+  {
     numTestsPassed++;
     if (rank==0) cout << "Passed test testTestBilinearFormAnalyticBoundaryIntegralExpectedConformingMatrices." << endl;
-  } else {
+  }
+  else
+  {
     if (rank==0) cout << "Failed test testTestBilinearFormAnalyticBoundaryIntegralExpectedConformingMatrices." << endl;
   }
 
   success = testComputeStiffnessConformingVertices();
   ++numTestsTotal;
-  if (success) {
+  if (success)
+  {
     numTestsPassed++;
     if (rank==0) cout << "Passed test testComputeStiffnessConformingVertices." << endl;
-  } else {
+  }
+  else
+  {
     if (rank==0) cout << "Failed test testComputeStiffnessConformingVertices." << endl;
   }
 
 
   success = testAnalyticBoundaryIntegral(false);
   ++numTestsTotal;
-  if (success) {
+  if (success)
+  {
     numTestsPassed++;
     if (rank==0) cout << "Passed test testAnalyticBoundaryIntegral (non-conforming)." << endl;
-  } else {
+  }
+  else
+  {
     if (rank==0) cout << "Failed test testAnalyticBoundaryIntegral (non-conforming)." << endl;
   }
 
   success = testAnalyticBoundaryIntegral(true);
   ++numTestsTotal;
-  if (success) {
+  if (success)
+  {
     numTestsPassed++;
     if (rank==0) cout << "Passed test testAnalyticBoundaryIntegral (conforming)." << endl;
-  } else {
+  }
+  else
+  {
     if (rank==0) cout << "Failed test testAnalyticBoundaryIntegral (conforming)." << endl;
   }
 
   success = testOptimalStiffnessByMultiplying();
   ++numTestsTotal;
-  if (success) {
+  if (success)
+  {
     numTestsPassed++;
     if (rank==0) cout << "Passed test testOptimalStiffnessByMultiplying." << endl;
-  } else {
+  }
+  else
+  {
     if (rank==0) cout << "Failed test testOptimalStiffnessByMultiplying." << endl;
   }
 
   success = testWeightBasis();
   ++numTestsTotal;
-  if (success) {
+  if (success)
+  {
     numTestsPassed++;
     if (rank==0) cout << "Passed test testWeightBasis." << endl;
-  } else {
+  }
+  else
+  {
     if (rank==0) cout << "Failed test testWeightBasis." << endl;
   }
 
   success = testDofOrdering();
   ++numTestsTotal;
-  if (success) {
+  if (success)
+  {
     numTestsPassed++;
     if (rank==0) cout << "Passed test testDofOrdering." << endl;
-  } else {
+  }
+  else
+  {
     if (rank==0) cout << "Failed test testDofOrdering." << endl;
   }
 
   success = testComputeStiffnessTrace();
   ++numTestsTotal;
-  if (success) {
+  if (success)
+  {
     numTestsPassed++;
     if (rank==0) cout << "Passed test ComputeStiffnessTrace." << endl;
-  } else {
+  }
+  else
+  {
     if (rank==0) cout << "Failed test ComputeStiffnessTrace." << endl;
   }
 
   success = testComputeStiffnessFlux();
   ++numTestsTotal;
-  if (success) {
+  if (success)
+  {
     numTestsPassed++;
     if (rank==0) cout << "Passed test ComputeStiffnessFlux." << endl;
-  } else {
+  }
+  else
+  {
     if (rank==0) cout << "Failed test ComputeStiffnessFlux." << endl;
   }
 
   if (rank==0) cout << "Passed " << numTestsPassed << " out of " << numTestsTotal << "." << endl;
 }
 
-bool DPGTests::testComputeStiffnessConformingVertices() {
+bool DPGTests::testComputeStiffnessConformingVertices()
+{
   bool oldWarnState = BilinearFormUtility<double>::warnAboutZeroRowsAndColumns();
   BilinearFormUtility<double>::setWarnAboutZeroRowsAndColumns(false);
 
@@ -400,18 +441,21 @@ bool DPGTests::testComputeStiffnessConformingVertices() {
   cellSideParities.initialize(1.0); // for 1-element meshes, all side parites are 1.0
 
   BilinearFormUtility<double>::computeStiffnessMatrix(conformingStiffness, bilinearForm,
-                                              conformingOrdering, testOrdering,
-                                              quad_4, quadPoints,cellSideParities);
+      conformingOrdering, testOrdering,
+      quad_4, quadPoints,cellSideParities);
   BilinearFormUtility<double>::computeStiffnessMatrix(nonConformingStiffness, bilinearForm,
-                                              nonConformingOrdering, testOrdering,
-                                              quad_4, quadPoints,cellSideParities);
+      nonConformingOrdering, testOrdering,
+      quad_4, quadPoints,cellSideParities);
 
   expectedConformingStiffness.initialize(0.0);
-  for (int sideIndex=0; sideIndex<numSides; sideIndex++) {
-    for (int dofOrdinal=0; dofOrdinal<numDofsPerSide; dofOrdinal++) {
+  for (int sideIndex=0; sideIndex<numSides; sideIndex++)
+  {
+    for (int dofOrdinal=0; dofOrdinal<numDofsPerSide; dofOrdinal++)
+    {
       int trialDofIndexConforming = conformingOrdering->getDofIndex(0, dofOrdinal, sideIndex);
       int trialDofIndexNonConforming = nonConformingOrdering->getDofIndex(0, dofOrdinal, sideIndex);
-      for (int testDofIndex=0; testDofIndex<numTestDofs; testDofIndex++) {
+      for (int testDofIndex=0; testDofIndex<numTestDofs; testDofIndex++)
+      {
         expectedConformingStiffness(0,testDofIndex,trialDofIndexConforming)
         += nonConformingStiffness(0,testDofIndex,trialDofIndexNonConforming);
       }
@@ -425,7 +469,8 @@ bool DPGTests::testComputeStiffnessConformingVertices() {
 
 }
 
-bool DPGTests::testDofOrdering() {
+bool DPGTests::testDofOrdering()
+{
   bool success = true;
   DofOrdering traceOrdering(CellTopology::line());
 
@@ -434,21 +479,24 @@ bool DPGTests::testDofOrdering() {
   shards::CellTopology line_2(shards::getCellTopologyData<shards::Line<2> >() );
 
   BasisPtr traceBasis
-  =
-  BasisFactory::basisFactory()->getBasis(C1_FAKE_POLY_ORDER,
-                         line_2.getKey(), Camellia::FUNCTION_SPACE_HGRAD);
+    =
+      BasisFactory::basisFactory()->getBasis(C1_FAKE_POLY_ORDER,
+          line_2.getKey(), Camellia::FUNCTION_SPACE_HGRAD);
 
   int numSides = 4;
 
-  for (int i=0; i<numSides; i++) {
+  for (int i=0; i<numSides; i++)
+  {
     traceOrdering.addEntry(0,traceBasis,0,i);
   }
 
   int numFieldsPerFlux = traceBasis->getCardinality();
-  for (int i=0; i<numSides; i++) {
+  for (int i=0; i<numSides; i++)
+  {
     int expectedIndex = i*numFieldsPerFlux;
     int actualIndex = traceOrdering.getDofIndex(0,0,i);
-    if (expectedIndex != actualIndex) {
+    if (expectedIndex != actualIndex)
+    {
       cout << myName << ": expected " << expectedIndex << " but had " << actualIndex << endl;
       success = false;
     }
@@ -476,11 +524,14 @@ bool DPGTests::testDofOrdering() {
   expectedDofIndices(3,0) = 3;
   expectedDofIndices(3,1) = 0;
 
-  for (int sideIndex=0; sideIndex<numSides; sideIndex++) {
-    for (int dofOrdinal=0; dofOrdinal<dofsPerSide; dofOrdinal++) {
+  for (int sideIndex=0; sideIndex<numSides; sideIndex++)
+  {
+    for (int dofOrdinal=0; dofOrdinal<dofsPerSide; dofOrdinal++)
+    {
       int actualDofIndex = trialOrder->getDofIndex(0, dofOrdinal, sideIndex);
       int expectedDofIndex = expectedDofIndices(sideIndex,dofOrdinal);
-      if ( expectedDofIndex != actualDofIndex ) {
+      if ( expectedDofIndex != actualDofIndex )
+      {
         cout << myName << ": failed conforming vertex test for sideIndex " << sideIndex << ", dofOrdinal " << dofOrdinal << "." << endl;
         cout << "Expected " << expectedDofIndex << "; actual was " << actualDofIndex << "." << endl;
         success = false;
@@ -490,38 +541,52 @@ bool DPGTests::testDofOrdering() {
 
   // now with cubics
   shards::CellTopology tri_3(shards::getCellTopologyData<shards::Triangle<3> >() );
-  for (numSides=3; numSides <= 4; numSides++) {
+  for (numSides=3; numSides <= 4; numSides++)
+  {
     polyOrder = 3;
     vector<int> polyOrderVector(1,polyOrder);
     dofsPerSide = polyOrder+1;
-    if (numSides == 3) {
+    if (numSides == 3)
+    {
       trialOrder = dofOrderingFactory.trialOrdering(polyOrderVector, tri_3);
-    } else {
+    }
+    else
+    {
       trialOrder = dofOrderingFactory.trialOrdering(polyOrderVector, quad_4);
     }
 
     // set up expected indices...
     expectedDofIndices.resize(numSides,dofsPerSide);
     int dofIndex = 0;
-    for (int sideIndex=0; sideIndex<numSides; sideIndex++) {
-      for (int dofOrdinal=0; dofOrdinal<dofsPerSide; dofOrdinal++) {
-        if ((sideIndex > 0) && (dofOrdinal==0) ) {
+    for (int sideIndex=0; sideIndex<numSides; sideIndex++)
+    {
+      for (int dofOrdinal=0; dofOrdinal<dofsPerSide; dofOrdinal++)
+      {
+        if ((sideIndex > 0) && (dofOrdinal==0) )
+        {
           // then this vertex matches the last one on the previous side...
           expectedDofIndices(sideIndex,dofOrdinal) = expectedDofIndices(sideIndex-1,dofsPerSide-1);
-        } else if ((sideIndex==numSides-1) && (dofOrdinal==dofsPerSide-1)) {
+        }
+        else if ((sideIndex==numSides-1) && (dofOrdinal==dofsPerSide-1))
+        {
           // last one, back to 0
           expectedDofIndices(sideIndex,dofOrdinal) = 0;
-        } else {
+        }
+        else
+        {
           expectedDofIndices(sideIndex,dofOrdinal) = dofIndex;
           dofIndex++;
         }
       }
     }
-    for (int sideIndex=0; sideIndex<numSides; sideIndex++) {
-      for (int dofOrdinal=0; dofOrdinal<dofsPerSide; dofOrdinal++) {
+    for (int sideIndex=0; sideIndex<numSides; sideIndex++)
+    {
+      for (int dofOrdinal=0; dofOrdinal<dofsPerSide; dofOrdinal++)
+      {
         int actualDofIndex = trialOrder->getDofIndex(0, dofOrdinal, sideIndex);
         int expectedDofIndex = expectedDofIndices(sideIndex,dofOrdinal);
-        if ( expectedDofIndex != actualDofIndex ) {
+        if ( expectedDofIndex != actualDofIndex )
+        {
           cout << myName << ": failed conforming vertex test for sideIndex " << sideIndex << ", dofOrdinal " << dofOrdinal << "." << endl;
           cout << "Expected " << expectedDofIndex << "; actual was " << actualDofIndex << "." << endl;
           success = false;
@@ -532,7 +597,8 @@ bool DPGTests::testDofOrdering() {
   return success;
 }
 
-bool DPGTests::testComputeStiffnessFlux() {
+bool DPGTests::testComputeStiffnessFlux()
+{
   bool success = true;
   Teuchos::RCP<DofOrdering> traceOrdering = Teuchos::rcp(new DofOrdering(CellTopology::quad()));
   Teuchos::RCP<DofOrdering> testOrdering = Teuchos::rcp(new DofOrdering(CellTopology::quad()));
@@ -540,21 +606,22 @@ bool DPGTests::testComputeStiffnessFlux() {
   shards::CellTopology line_2(shards::getCellTopologyData<shards::Line<2> >() );
 
   BasisPtr traceBasis
-  =
-  BasisFactory::basisFactory()->getBasis(C1_FAKE_POLY_ORDER,
-                         line_2.getKey(), Camellia::FUNCTION_SPACE_HGRAD);
+    =
+      BasisFactory::basisFactory()->getBasis(C1_FAKE_POLY_ORDER,
+          line_2.getKey(), Camellia::FUNCTION_SPACE_HGRAD);
 
   int numSides = 4;
 
-  for (int i=0; i<numSides; i++) {
+  for (int i=0; i<numSides; i++)
+  {
     traceOrdering->addEntry(0,traceBasis,0,i);
   }
 
   CellTopoPtr quad_4 = Camellia::CellTopology::quad();
 
   BasisPtr testBasis
-  =
-  BasisFactory::basisFactory()->getBasis(C1_FAKE_POLY_ORDER, quad_4, Camellia::FUNCTION_SPACE_HGRAD);
+    =
+      BasisFactory::basisFactory()->getBasis(C1_FAKE_POLY_ORDER, quad_4, Camellia::FUNCTION_SPACE_HGRAD);
   testOrdering->addEntry(0,testBasis,0);
 
   int numTests = 1;  // 1. ref quad
@@ -601,16 +668,20 @@ bool DPGTests::testComputeStiffnessFlux() {
   cellSideParities.initialize(1.0); // for 1-element meshes, all side parites are 1.0
 
   BilinearFormUtility<double>::computeStiffnessMatrix(stiffnessActual, bilinearForm,
-                                              traceOrdering, testOrdering,
-                                              quad_4, quadPoints, cellSideParities);
+      traceOrdering, testOrdering,
+      quad_4, quadPoints, cellSideParities);
 
-  for (int testIndex = 0; testIndex < numTests; testIndex++) {
+  for (int testIndex = 0; testIndex < numTests; testIndex++)
+  {
 
     double tol = 1e-14;
-    for (int i=0; i<stiffnessExpected.dimension(1); i++) {
-      for (int j=0; j<stiffnessExpected.dimension(2); j++) {
+    for (int i=0; i<stiffnessExpected.dimension(1); i++)
+    {
+      for (int j=0; j<stiffnessExpected.dimension(2); j++)
+      {
         double diff = abs(stiffnessActual(testIndex,i,j)-stiffnessExpected(testIndex,i,j));
-        if (diff > tol) {
+        if (diff > tol)
+        {
           cout << "testComputeStiffnessFlux, testIndex=" << testIndex << ":" << endl;
           cout << "   expected and actual stiffness differ in i=" << i << ",j=" << j << "; difference: " << diff << endl;
           cout << "   expected: " << stiffnessExpected(testIndex,i,j) << endl;
@@ -620,32 +691,35 @@ bool DPGTests::testComputeStiffnessFlux() {
       }
     }
   }
-  if (!success) {
+  if (!success)
+  {
     cout << "testComputeStiffnessFlux failed; actual stiffness:" << stiffnessActual << endl;
   }
   return success;
 
 }
 
-bool DPGTests::testComputeStiffnessTrace() {
+bool DPGTests::testComputeStiffnessTrace()
+{
   bool success = true;
   Teuchos::RCP<DofOrdering> traceOrdering = Teuchos::rcp(new DofOrdering(CellTopology::quad()));
   Teuchos::RCP<DofOrdering> testOrdering = Teuchos::rcp(new DofOrdering(CellTopology::quad()));
 
   shards::CellTopology line_2(shards::getCellTopologyData<shards::Line<2> >() );
   BasisPtr traceBasis
-  = BasisFactory::basisFactory()->getBasis(C1_FAKE_POLY_ORDER,
-                           line_2.getKey(), Camellia::FUNCTION_SPACE_HGRAD);
+    = BasisFactory::basisFactory()->getBasis(C1_FAKE_POLY_ORDER,
+        line_2.getKey(), Camellia::FUNCTION_SPACE_HGRAD);
 
   int numSides = 4;
 
-  for (int i=0; i<numSides; i++) {
+  for (int i=0; i<numSides; i++)
+  {
     traceOrdering->addEntry(0,traceBasis,0,i);
   }
 
   CellTopoPtr quad_4 = Camellia::CellTopology::quad();
   BasisPtr testBasis = BasisFactory::basisFactory()->getBasis(C1_FAKE_POLY_ORDER,
-                                                              quad_4, Camellia::FUNCTION_SPACE_HDIV);
+                       quad_4, Camellia::FUNCTION_SPACE_HDIV);
 
   testOrdering->addEntry(0,testBasis,1,0);
 
@@ -687,16 +761,20 @@ bool DPGTests::testComputeStiffnessTrace() {
   cellSideParities.initialize(1.0); // for 1-element meshes, all side parites are 1.0
 
   BilinearFormUtility<double>::computeStiffnessMatrix(stiffnessActual, bilinearForm,
-                                              traceOrdering, testOrdering,
-                                              quad_4, quadPoints,cellSideParities);
+      traceOrdering, testOrdering,
+      quad_4, quadPoints,cellSideParities);
 
-  for (int testIndex = 0; testIndex < numTests; testIndex++) {
+  for (int testIndex = 0; testIndex < numTests; testIndex++)
+  {
 
     double tol = 1e-14;
-    for (int i=0; i<stiffnessExpected.dimension(1); i++) {
-      for (int j=0; j<stiffnessExpected.dimension(2); j++) {
+    for (int i=0; i<stiffnessExpected.dimension(1); i++)
+    {
+      for (int j=0; j<stiffnessExpected.dimension(2); j++)
+      {
         double diff = abs(stiffnessActual(testIndex,i,j)-stiffnessExpected(testIndex,i,j));
-        if (diff > tol) {
+        if (diff > tol)
+        {
           cout << "testComputeStiffnessTrace, testIndex=" << testIndex << ":" << endl;
           cout << "   expected and actual stiffness differ in i=" << i << ",j=" << j << "; difference: " << diff << endl;
           cout << "   expected: " << stiffnessExpected(testIndex,i,j) << endl;
@@ -708,7 +786,8 @@ bool DPGTests::testComputeStiffnessTrace() {
   }
 
 
-  if (!success) {
+  if (!success)
+  {
     cout << "testComputeStiffnessTrace failed; actual stiffness:" << stiffnessActual << endl;
   }
 
@@ -716,7 +795,8 @@ bool DPGTests::testComputeStiffnessTrace() {
 
 }
 
-bool DPGTests::testMathInnerProductDx() {
+bool DPGTests::testMathInnerProductDx()
+{
   int numTests = 1;
 
   BFPtr bilinearForm = TestBilinearFormDx::bf();
@@ -776,7 +856,8 @@ bool DPGTests::testMathInnerProductDx() {
 }
 
 bool DPGTests::fcsAgree(string &testName, FieldContainer<double> &expected,
-                        FieldContainer<double> &actual, double tol) {
+                        FieldContainer<double> &actual, double tol)
+{
   int numTests = expected.dimension(0);
   bool success = true;
   int diffsPrinted = 0, numDiffs = 0, numEntries = 0;
@@ -785,15 +866,20 @@ bool DPGTests::fcsAgree(string &testName, FieldContainer<double> &expected,
   int maxDiffRow=-1, maxDiffCol=-1;
   vector<int> rowIndicesThatAgree, colIndicesThatAgree;
   vector<double> valuesThatAgree;
-  for (int testIndex = 0; testIndex < numTests; testIndex++) {
+  for (int testIndex = 0; testIndex < numTests; testIndex++)
+  {
     bool firstDiffForTest = true;
-    for (int i=0; i<expected.dimension(1); i++) {
-      if (expected.rank() <= 2) {
+    for (int i=0; i<expected.dimension(1); i++)
+    {
+      if (expected.rank() <= 2)
+      {
         numEntries++;
         double diff = abs(actual(testIndex,i)-expected(testIndex,i));
-        if (diff > tol) {
+        if (diff > tol)
+        {
           numDiffs++;
-          if (diffsPrinted < 10) {
+          if (diffsPrinted < 10)
+          {
             if (firstDiffForTest)
               cout << testName << ",testIndex=" << testIndex << ":" << endl;
             cout << "   expected and actual vector differ in i=" << i << "; difference: " << diff << endl;
@@ -801,28 +887,37 @@ bool DPGTests::fcsAgree(string &testName, FieldContainer<double> &expected,
             cout << "   actual:   " << actual(testIndex,i) << endl;
             success = false;
             firstDiffForTest = false;
-            if (diffsPrinted == 9) {
+            if (diffsPrinted == 9)
+            {
               cout << "(suppressing further detailed diff info.)" << endl;
             }
           }
-          if (diff > maxDiff) {
+          if (diff > maxDiff)
+          {
             maxDiff = diff;
             maxDiffRow = i;
             expectedAtMaxDiff = expected(testIndex,i);
             actualAtMaxDiff = actual(testIndex,i);
           }
           diffsPrinted++;
-        } else {
+        }
+        else
+        {
           rowIndicesThatAgree.push_back(i);
           valuesThatAgree.push_back(actual(testIndex,i));
         }
-      } else {
-        for (int j=0; j<expected.dimension(2); j++) {
+      }
+      else
+      {
+        for (int j=0; j<expected.dimension(2); j++)
+        {
           numEntries++;
           double diff = abs(actual(testIndex,i,j)-expected(testIndex,i,j));
-          if (diff > tol) {
+          if (diff > tol)
+          {
             numDiffs++;
-            if (diffsPrinted < 10) {
+            if (diffsPrinted < 10)
+            {
               if (firstDiffForTest)
                 cout << testName << ",testIndex=" << testIndex << ":" << endl;
               cout << "   expected and actual matrix differ in i=" << i << ",j=" << j << "; difference: " << diff << endl;
@@ -830,11 +925,13 @@ bool DPGTests::fcsAgree(string &testName, FieldContainer<double> &expected,
               cout << "   actual:   " << actual(testIndex,i,j) << endl;
               success = false;
               firstDiffForTest = false;
-              if (diffsPrinted == 9) {
+              if (diffsPrinted == 9)
+              {
                 cout << "(suppressing further detailed diff info.)" << endl;
               }
             }
-            if (diff > maxDiff) {
+            if (diff > maxDiff)
+            {
               maxDiff = diff;
               maxDiffRow = i;
               maxDiffCol = j;
@@ -842,7 +939,9 @@ bool DPGTests::fcsAgree(string &testName, FieldContainer<double> &expected,
               actualAtMaxDiff = actual(testIndex,i,j);
             }
             diffsPrinted++;
-          } else {
+          }
+          else
+          {
             rowIndicesThatAgree.push_back(i);
             colIndicesThatAgree.push_back(j);
             valuesThatAgree.push_back(actual(testIndex,i,j));
@@ -851,15 +950,21 @@ bool DPGTests::fcsAgree(string &testName, FieldContainer<double> &expected,
       }
     }
   }
-  if (numDiffs > 0) {
+  if (numDiffs > 0)
+  {
     cout << testName << ": matrices differ in " << numDiffs << " of " << numEntries << " entries." << endl;
-    if (numDiffs != numEntries) {
+    if (numDiffs != numEntries)
+    {
       cout << "entries that agree are as follows:" << endl;
-      for (unsigned i=0; i<rowIndicesThatAgree.size(); i++) {
-        if (expected.rank() > 2) {
+      for (unsigned i=0; i<rowIndicesThatAgree.size(); i++)
+      {
+        if (expected.rank() > 2)
+        {
           cout << "(" << rowIndicesThatAgree[i] << "," << colIndicesThatAgree[i] << ") = " << valuesThatAgree[i];
           if (i<rowIndicesThatAgree.size()-1) cout << ", ";
-        } else {
+        }
+        else
+        {
           cout << "(" << rowIndicesThatAgree[i] << ") = " << valuesThatAgree[i];
           if (i<rowIndicesThatAgree.size()-1) cout << ", ";
         }
@@ -872,27 +977,37 @@ bool DPGTests::fcsAgree(string &testName, FieldContainer<double> &expected,
 }
 
 bool DPGTests::fcEqualsSDM(FieldContainer<double> &fc, int cellIndex,
-                           Epetra_SerialDenseMatrix &sdm, double tol, bool transpose) {
+                           Epetra_SerialDenseMatrix &sdm, double tol, bool transpose)
+{
   double maxDiff = 0.0;
-  for (int i=0; i<fc.dimension(1); i++) {
-    for (int j=0; j<fc.dimension(2); j++) {
+  for (int i=0; i<fc.dimension(1); i++)
+  {
+    for (int j=0; j<fc.dimension(2); j++)
+    {
       double diff;
-      if (! transpose) {
+      if (! transpose)
+      {
         diff = abs(fc(cellIndex,i,j) - sdm(i,j));
-      } else {
+      }
+      else
+      {
         diff = abs(fc(cellIndex,i,j) - sdm(j,i));
       }
       diff = max(diff,maxDiff);
     }
   }
-  if (maxDiff > tol) {
+  if (maxDiff > tol)
+  {
     return false;
-  } else {
+  }
+  else
+  {
     return true;
   }
 }
 
-bool DPGTests::testAnalyticBoundaryIntegral(bool conforming) {
+bool DPGTests::testAnalyticBoundaryIntegral(bool conforming)
+{
   int numTests = 1;
 
   int order = 3; // cubic
@@ -926,7 +1041,7 @@ bool DPGTests::testAnalyticBoundaryIntegral(bool conforming) {
   trialOrdering = TestBilinearFormAnalyticBoundaryIntegral::trialOrdering(order, 4, conforming);
 
   FieldContainer<double> stiffnessExpected(numTests,cubicHGradOrdering->totalDofs(),
-                                           trialOrdering->totalDofs() );
+      trialOrdering->totalDofs() );
   FieldContainer<double> stiffnessActual(numTests,cubicHGradOrdering->totalDofs(),
                                          trialOrdering->totalDofs() );
 
@@ -944,7 +1059,8 @@ bool DPGTests::testAnalyticBoundaryIntegral(bool conforming) {
   string myNameStiffness = "testAnalyticBoundaryIntegral.stiffness";
 
   bool successLocal = fcsAgree(myNameStiffness, stiffnessExpected, stiffnessActual, tol);
-  if (! successLocal) {
+  if (! successLocal)
+  {
     success = false;
     cout << myNameStiffness << ": comparison of stiffnessExpected and stiffnessActual failed." << endl;
   }
@@ -963,47 +1079,51 @@ bool DPGTests::testAnalyticBoundaryIntegral(bool conforming) {
   string myNameIPMatrix = "testAnalyticBoundaryIntegral.ipMatrix";
   successLocal = fcsAgree(myNameIPMatrix, ipMatrixExpected, ipMatrixActual, tol);
 
-  if (! successLocal) {
+  if (! successLocal)
+  {
     success = false;
     cout << myNameIPMatrix << ": comparison of ipMatrixExpected and ipMatrixActual failed." << endl;
   }
 
   FieldContainer<double> ipWeightsExpected(numTests,trialOrdering->totalDofs(),
-                                           cubicHGradOrdering->totalDofs() );
+      cubicHGradOrdering->totalDofs() );
   FieldContainer<double> ipWeightsActual(numTests,trialOrdering->totalDofs(),
                                          cubicHGradOrdering->totalDofs() );
 
   TestBilinearFormAnalyticBoundaryIntegral::expectedOptTestWeightsForCubicsOnQuad(ipWeightsExpected,conforming);
 
   int optSuccess = bilinearForm->optimalTestWeights(ipWeightsActual, ipMatrixExpected,
-                                                    elemType, cellSideParities, basisCache);
+                   elemType, cellSideParities, basisCache);
 
   string myNameIPWeights = "testAnalyticBoundaryIntegral.ipWeights";
 
-  if (optSuccess != 0) {
+  if (optSuccess != 0)
+  {
     cout << myNameIPWeights << ": computeOptimalTest failed." << endl;
   }
 
   successLocal = fcsAgree(myNameIPWeights, ipWeightsExpected, ipWeightsActual, tol);
 
-  if (! successLocal) {
+  if (! successLocal)
+  {
     success = false;
     cout << myNameIPWeights << ": comparison of ipWeightsExpected and ipWeightsActual failed." << endl;
   }
 
   // confirm that the optWeights actually fulfill the contract....
   // placed here mostly as sanity check for checkOptTestWeights
-  if ( ! checkOptTestWeights(ipWeightsExpected,ipMatrixExpected,stiffnessExpected,tol) ) {
+  if ( ! checkOptTestWeights(ipWeightsExpected,ipMatrixExpected,stiffnessExpected,tol) )
+  {
     cout << myNameIPWeights << ": check that optWeights == ipMatrix^(-1) * preStiffness failed." << endl;
     return false;
   }
 
   FieldContainer<double> finalStiffnessExpected(numTests,trialOrdering->totalDofs(),
-                                                trialOrdering->totalDofs() );
+      trialOrdering->totalDofs() );
   FieldContainer<double> finalStiffnessActual1(numTests,trialOrdering->totalDofs(),
-                                               trialOrdering->totalDofs() );
+      trialOrdering->totalDofs() );
   FieldContainer<double> finalStiffnessActual2(numTests,trialOrdering->totalDofs(),
-                                               trialOrdering->totalDofs() );
+      trialOrdering->totalDofs() );
 
   TestBilinearFormAnalyticBoundaryIntegral::expectedFinalStiffnessForCubicsOnQuad(finalStiffnessExpected,conforming);
 
@@ -1012,7 +1132,8 @@ bool DPGTests::testAnalyticBoundaryIntegral(bool conforming) {
   string myNameFinalByMultiplying = "testAnalyticBoundaryIntegral.finalStiffnessByMultiplying";
   successLocal = fcsAgree(myNameFinalByMultiplying, finalStiffnessExpected, finalStiffnessActual1, tol);
 
-  if (! successLocal) {
+  if (! successLocal)
+  {
     success = false;
     cout << myNameFinalByMultiplying << ": comparison of finalStiffnessExpected and finalStiffnessByMultiplying failed." << endl;
   }
@@ -1020,7 +1141,8 @@ bool DPGTests::testAnalyticBoundaryIntegral(bool conforming) {
   return success;
 }
 
-bool DPGTests::testOptimalStiffnessByMultiplying() {
+bool DPGTests::testOptimalStiffnessByMultiplying()
+{
   // verifies the multiplication
   int numTests = 1;
   int numTestDofs = 25;
@@ -1034,14 +1156,18 @@ bool DPGTests::testOptimalStiffnessByMultiplying() {
   FieldContainer<double> expectedStiffness(numTests,numTrialDofs,numTrialDofs);
 
   srand(0);
-  for (int i=0; i<numTrialDofs; i++) {
-    for (int j=0; j<numTestDofs; j++) {
+  for (int i=0; i<numTrialDofs; i++)
+  {
+    for (int j=0; j<numTestDofs; j++)
+    {
       double random = (double) rand() / RAND_MAX;
       optWeights(0,i,j) = random;
     }
   }
-  for (int i=0; i<numTestDofs; i++) {
-    for (int j=0; j<numTestDofs; j++) {
+  for (int i=0; i<numTestDofs; i++)
+  {
+    for (int j=0; j<numTestDofs; j++)
+    {
       double random = (double) rand() / RAND_MAX;
       ipMatrix(0,i,j) = random;
     }
@@ -1051,18 +1177,24 @@ bool DPGTests::testOptimalStiffnessByMultiplying() {
   FieldContainer<double> intermediate(numTests,numTrialDofs,numTestDofs);
   intermediate.initialize(0.0);
   // intermediate = optWeights * ipMatrix^T
-  for (int row=0; row<numTrialDofs; row++) {
-    for (int col=0; col<numTestDofs; col++) {
-      for (int i=0; i<numTestDofs; i++) {
+  for (int row=0; row<numTrialDofs; row++)
+  {
+    for (int col=0; col<numTestDofs; col++)
+    {
+      for (int i=0; i<numTestDofs; i++)
+      {
         intermediate(0,row,col) += optWeights(0,row,i)*ipMatrix(0,col,i);
       }
     }
   }
   // expectedStiffness = intermediate * optWeights^T
   expectedStiffness.initialize(0.0);
-  for (int row=0; row<numTrialDofs; row++) {
-    for (int col=0; col<numTrialDofs; col++) {
-      for (int i=0; i<numTestDofs; i++) {
+  for (int row=0; row<numTrialDofs; row++)
+  {
+    for (int col=0; col<numTrialDofs; col++)
+    {
+      for (int i=0; i<numTestDofs; i++)
+      {
         expectedStiffness(0,row,col) += intermediate(0,row,i) * optWeights(0,col,i);
       }
     }
@@ -1072,7 +1204,8 @@ bool DPGTests::testOptimalStiffnessByMultiplying() {
   return fcsAgree(myName,expectedStiffness,stiffness,tol);
 }
 
-bool DPGTests::testWeightBasis() {
+bool DPGTests::testWeightBasis()
+{
   int numCells = 2;
   int numBasisFields = 18;
   int offset = 8;
@@ -1082,23 +1215,30 @@ bool DPGTests::testWeightBasis() {
   FieldContainer<double> expectedBasisValues(basisValues);
   FieldContainer<double> weights(numCells,numBasisFields+offset);
   weights.initialize(1000.0);
-  for (int cellIndex = 0; cellIndex < numCells; cellIndex++) {
-    for (int fieldIndex=0; fieldIndex < numBasisFields; fieldIndex++) {
+  for (int cellIndex = 0; cellIndex < numCells; cellIndex++)
+  {
+    for (int fieldIndex=0; fieldIndex < numBasisFields; fieldIndex++)
+    {
       weights(cellIndex,fieldIndex+offset) = cellIndex * 1.0 + fieldIndex * 1.34;
-      for (int i=0; i<spaceDim; i++) {
+      for (int i=0; i<spaceDim; i++)
+      {
         expectedBasisValues(cellIndex,fieldIndex,i) *= weights(cellIndex,fieldIndex+offset);
       }
     }
   }
   BilinearFormUtility<double>::weightCellBasisValues(basisValues, weights, offset);
   bool success = true;
-  for (int cellIndex = 0; cellIndex < numCells; cellIndex++) {
-    for (int fieldIndex=0; fieldIndex < numBasisFields; fieldIndex++) {
-      for (int i=0; i<spaceDim; i++) {
-        if (expectedBasisValues(cellIndex,fieldIndex,i) != basisValues(cellIndex,fieldIndex,i)) {
+  for (int cellIndex = 0; cellIndex < numCells; cellIndex++)
+  {
+    for (int fieldIndex=0; fieldIndex < numBasisFields; fieldIndex++)
+    {
+      for (int i=0; i<spaceDim; i++)
+      {
+        if (expectedBasisValues(cellIndex,fieldIndex,i) != basisValues(cellIndex,fieldIndex,i))
+        {
           success = false;
           cout << "testWeightBasis: values differ in cellIndex=" << cellIndex << ", fieldIndex="
-          << fieldIndex << ", spaceDim=" << i << endl;
+               << fieldIndex << ", spaceDim=" << i << endl;
         }
       }
     }
@@ -1106,12 +1246,17 @@ bool DPGTests::testWeightBasis() {
   return success;
 }
 
-bool DPGTests::fcIsSymmetric(FieldContainer<double> &fc, double tol, int &cellOfAsymmetry, int &rowOfAsymmetry, int &colOfAsymmetry) {
-  for (int cellIndex=0; cellIndex<fc.dimension(0); cellIndex++) {
-    for (int i=0; i<fc.dimension(1); i++) {
-      for (int j=0; j<fc.dimension(2); j++) {
+bool DPGTests::fcIsSymmetric(FieldContainer<double> &fc, double tol, int &cellOfAsymmetry, int &rowOfAsymmetry, int &colOfAsymmetry)
+{
+  for (int cellIndex=0; cellIndex<fc.dimension(0); cellIndex++)
+  {
+    for (int i=0; i<fc.dimension(1); i++)
+    {
+      for (int j=0; j<fc.dimension(2); j++)
+      {
         double diff = abs(fc(cellIndex,i,j) - fc(cellIndex,j,i));
-        if (diff > tol) {
+        if (diff > tol)
+        {
           cellOfAsymmetry = cellIndex;
           rowOfAsymmetry = i;
           colOfAsymmetry = j;
@@ -1125,7 +1270,8 @@ bool DPGTests::fcIsSymmetric(FieldContainer<double> &fc, double tol, int &cellOf
 
 bool DPGTests::checkOptTestWeights(FieldContainer<double> &optWeights,
                                    FieldContainer<double> &ipMatrix,
-                                   FieldContainer<double> &preStiffness, double tol) {
+                                   FieldContainer<double> &preStiffness, double tol)
+{
   string myName = "checkOptTestWeights";
   // should be the case that optWeights = ipMatrix^(-1) * stiffness, which is to say
   //    stiffness = ipMatrix * optWeights...
@@ -1133,7 +1279,8 @@ bool DPGTests::checkOptTestWeights(FieldContainer<double> &optWeights,
   int numCells = optWeights.dimension(0);
   FieldContainer<double> preStiffExpected(numCells,preStiffness.dimension(1),
                                           preStiffness.dimension(2));
-  for (int cellIndex=0; cellIndex < numCells; cellIndex++) {
+  for (int cellIndex=0; cellIndex < numCells; cellIndex++)
+  {
     Epetra_SerialDenseMatrix optWeightsT(::Copy,
                                          &optWeights(cellIndex,0,0),
                                          optWeights.dimension(2), // stride
@@ -1144,14 +1291,17 @@ bool DPGTests::checkOptTestWeights(FieldContainer<double> &optWeights,
                                        ipMatrix.dimension(2), // stride
                                        ipMatrix.dimension(2),ipMatrix.dimension(1));
     Epetra_SerialDenseMatrix preStiffExpectedSDM(preStiffness.dimension(1), // note not transposed
-                                                 preStiffness.dimension(2));
+        preStiffness.dimension(2));
     int multResult = preStiffExpectedSDM.Multiply('T','N',1.0,ipMatrixT,optWeightsT,0.0);
-    if (multResult != 0) {
+    if (multResult != 0)
+    {
       cout << myName << ": multiplication failed with code: " << multResult << endl;
     }
     // copy to FieldContainer
-    for (int i=0; i<preStiffExpected.dimension(1); i++) {
-      for (int j=0; j<preStiffExpected.dimension(2); j++) {
+    for (int i=0; i<preStiffExpected.dimension(1); i++)
+    {
+      for (int j=0; j<preStiffExpected.dimension(2); j++)
+      {
         preStiffExpected(cellIndex,i,j) = preStiffExpectedSDM(i,j);
       }
     }
@@ -1160,7 +1310,8 @@ bool DPGTests::checkOptTestWeights(FieldContainer<double> &optWeights,
   return success;
 }
 
-bool DPGTests::testTestBilinearFormAnalyticBoundaryIntegralExpectedConformingMatrices() {
+bool DPGTests::testTestBilinearFormAnalyticBoundaryIntegralExpectedConformingMatrices()
+{
   bool success = true;
   string myName = "testTestBilinearFormAnalyticBoundaryIntegralExpectedConformingMatrices";
 
@@ -1202,11 +1353,14 @@ bool DPGTests::testTestBilinearFormAnalyticBoundaryIntegralExpectedConformingMat
   FieldContainer<double> expectedConformingStiffness(numTests, numTestDofs, numTrialDofsConforming);
 
   expectedConformingStiffness.initialize(0.0);
-  for (int sideIndex=0; sideIndex<numSides; sideIndex++) {
-    for (int dofOrdinal=0; dofOrdinal<numDofsPerSide; dofOrdinal++) {
+  for (int sideIndex=0; sideIndex<numSides; sideIndex++)
+  {
+    for (int dofOrdinal=0; dofOrdinal<numDofsPerSide; dofOrdinal++)
+    {
       int trialDofIndexConforming = conformingOrdering->getDofIndex(0, dofOrdinal, sideIndex);
       int trialDofIndexNonConforming = nonConformingOrdering->getDofIndex(0, dofOrdinal, sideIndex);
-      for (int testDofIndex=0; testDofIndex<numTestDofs; testDofIndex++) {
+      for (int testDofIndex=0; testDofIndex<numTestDofs; testDofIndex++)
+      {
         expectedConformingStiffness(0,testDofIndex,trialDofIndexConforming)
         += preStiffnessNonConforming(0,testDofIndex,trialDofIndexNonConforming);
       }
@@ -1218,7 +1372,8 @@ bool DPGTests::testTestBilinearFormAnalyticBoundaryIntegralExpectedConformingMat
   return success;
 }
 
-vector<double> makeVertex(double v0, double v1, double v2) {
+vector<double> makeVertex(double v0, double v1, double v2)
+{
   vector<double> v;
   v.push_back(v0);
   v.push_back(v1);
@@ -1226,7 +1381,8 @@ vector<double> makeVertex(double v0, double v1, double v2) {
   return v;
 }
 
-void DPGTests::runExceptionThrowingTest() {
+void DPGTests::runExceptionThrowingTest()
+{
 //  int tensorialDegree = 1;
 //  CellTopoPtr quad_x_time = CellTopology::cellTopology(CellTopology::quad(), tensorialDegree);
 //  CellTopoPtr tri_x_time = CellTopology::cellTopology(CellTopology::triangle(), tensorialDegree);

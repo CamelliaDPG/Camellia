@@ -10,20 +10,23 @@
 #include <Teuchos_GlobalMPISession.hpp>
 #endif
 
-vector<double> makeVertex(double v0) {
+vector<double> makeVertex(double v0)
+{
   vector<double> v;
   v.push_back(v0);
   return v;
 }
 
-vector<double> makeVertex(double v0, double v1) {
+vector<double> makeVertex(double v0, double v1)
+{
   vector<double> v;
   v.push_back(v0);
   v.push_back(v1);
   return v;
 }
 
-vector<double> makeVertex(double v0, double v1, double v2) {
+vector<double> makeVertex(double v0, double v1, double v2)
+{
   vector<double> v;
   v.push_back(v0);
   v.push_back(v1);
@@ -31,11 +34,13 @@ vector<double> makeVertex(double v0, double v1, double v2) {
   return v;
 }
 
-class EntireBoundary : public SpatialFilter {
-  public:
-    bool matchesPoint(double x, double y) {
-        return true;
-    }
+class EntireBoundary : public SpatialFilter
+{
+public:
+  bool matchesPoint(double x, double y)
+  {
+    return true;
+  }
 };
 
 int main(int argc, char *argv[])
@@ -45,10 +50,10 @@ int main(int argc, char *argv[])
 #endif
 
   {
-  // 1D tests
+    // 1D tests
     CellTopoPtr line_2 = Teuchos::rcp( new shards::CellTopology(shards::getCellTopologyData<shards::Line<2> >() ) );
 
-  // let's draw a line
+    // let's draw a line
     vector<double> v0 = makeVertex(0);
     vector<double> v1 = makeVertex(1);
     vector<double> v2 = makeVertex(2);
@@ -87,24 +92,24 @@ int main(int argc, char *argv[])
     functionNames.push_back("function2");
 
     {
-        XDMFExporter exporter(meshTopology, "function1", false);
-        exporter.exportFunction(function, "function1");
+      XDMFExporter exporter(meshTopology, "function1", false);
+      exporter.exportFunction(function, "function1");
     }
     {
-        XDMFExporter exporter(meshTopology, "boundary1", false);
-        exporter.exportFunction(fbdr, "boundary1");
+      XDMFExporter exporter(meshTopology, "boundary1", false);
+      exporter.exportFunction(fbdr, "boundary1");
     }
     {
-        XDMFExporter exporter(meshTopology, "functions1", false);
-        exporter.exportFunction(functions, functionNames);
+      XDMFExporter exporter(meshTopology, "functions1", false);
+      exporter.exportFunction(functions, functionNames);
     }
   }
   {
-  // 2D tests
+    // 2D tests
     CellTopoPtr quad_4 = Teuchos::rcp( new shards::CellTopology(shards::getCellTopologyData<shards::Quadrilateral<4> >() ) );
     CellTopoPtr tri_3 = Teuchos::rcp( new shards::CellTopology(shards::getCellTopologyData<shards::Triangle<3> >() ) );
 
-  // let's draw a little house
+    // let's draw a little house
     vector<double> v0 = makeVertex(-1,0);
     vector<double> v1 = makeVertex(1,0);
     vector<double> v2 = makeVertex(1,2);
@@ -162,18 +167,18 @@ int main(int argc, char *argv[])
     cellIDToNum1DPts[1] = 4;
 
     {
-        XDMFExporter exporter(meshTopology, "Grid2D", false);
-        // exporter.exportFunction(function, "function2", 0, 10);
-        // exporter.exportFunction(vect, "vect2", 1, 10, cellIDToNum1DPts);
-        // exporter.exportFunction(fbdr, "boundary2", 0);
-        exporter.exportFunction(functions, functionNames, 1, 10);
+      XDMFExporter exporter(meshTopology, "Grid2D", false);
+      // exporter.exportFunction(function, "function2", 0, 10);
+      // exporter.exportFunction(vect, "vect2", 1, 10, cellIDToNum1DPts);
+      // exporter.exportFunction(fbdr, "boundary2", 0);
+      exporter.exportFunction(functions, functionNames, 1, 10);
     }
     {
-        XDMFExporter exporter(meshTopology, "BdrGrid2D", false);
-        // exporter.exportFunction(function, "function2", 0, 10);
-        // exporter.exportFunction(vect, "vect2", 1, 10, cellIDToNum1DPts);
-        // exporter.exportFunction(fbdr, "boundary2", 0);
-        exporter.exportFunction(bdrfunctions, bdrfunctionNames, 1, 10);
+      XDMFExporter exporter(meshTopology, "BdrGrid2D", false);
+      // exporter.exportFunction(function, "function2", 0, 10);
+      // exporter.exportFunction(vect, "vect2", 1, 10, cellIDToNum1DPts);
+      // exporter.exportFunction(fbdr, "boundary2", 0);
+      exporter.exportFunction(bdrfunctions, bdrfunctionNames, 1, 10);
     }
 
     ////////////////////   DECLARE VARIABLES   ///////////////////////
@@ -230,30 +235,30 @@ int main(int argc, char *argv[])
     FunctionPtr uhatSoln = Function::solution(uhat, solution);
     FunctionPtr fhatSoln = Function::solution(fhat, solution);
     {
-        XDMFExporter exporter(meshTopology, "Poisson", false);
-        exporter.exportFunction(uSoln, "u", 0, 4);
-        exporter.exportFunction(uSoln, "u", 1, 5);
-        exporter.exportFunction(uhatSoln, "uhat", 0, 4);
-        exporter.exportFunction(uhatSoln, "uhat", 1, 5);
-        // exporter.exportFunction(fhatSoln, "fhat", 0, 4);
-        // exporter.exportFunction(fhatSoln, "fhat", 1, 5);
+      XDMFExporter exporter(meshTopology, "Poisson", false);
+      exporter.exportFunction(uSoln, "u", 0, 4);
+      exporter.exportFunction(uSoln, "u", 1, 5);
+      exporter.exportFunction(uhatSoln, "uhat", 0, 4);
+      exporter.exportFunction(uhatSoln, "uhat", 1, 5);
+      // exporter.exportFunction(fhatSoln, "fhat", 0, 4);
+      // exporter.exportFunction(fhatSoln, "fhat", 1, 5);
     }
     {
-        XDMFExporter exporter(meshTopology, "PoissonSolution", false);
-        exporter.exportSolution(solution, mesh, varFactory, 0, 2, cellIDToSubdivision(mesh, 10));
-        refinementStrategy.refine(true);
-        solution->solve(false);
-        exporter.exportSolution(solution, mesh, varFactory, 1, 2, cellIDToSubdivision(mesh, 10));
+      XDMFExporter exporter(meshTopology, "PoissonSolution", false);
+      exporter.exportSolution(solution, mesh, varFactory, 0, 2, cellIDToSubdivision(mesh, 10));
+      refinementStrategy.refine(true);
+      solution->solve(false);
+      exporter.exportSolution(solution, mesh, varFactory, 1, 2, cellIDToSubdivision(mesh, 10));
     }
     // exporter.exportFunction(sigmaSoln, "Poisson-s", "sigma", 0, 5);
     // exporter.exportFunction(uhatSoln, "Poisson-uhat", "uhat", 1, 6);
-}
+  }
 
   {
-  // 3D tests
+    // 3D tests
     CellTopoPtr hex = Teuchos::rcp(new shards::CellTopology(shards::getCellTopologyData<shards::Hexahedron<8> >() ));
 
-  // let's draw a little box
+    // let's draw a little box
     vector<double> v0 = makeVertex(0,0,0);
     vector<double> v1 = makeVertex(1,0,0);
     vector<double> v2 = makeVertex(1,1,0);
@@ -313,20 +318,20 @@ int main(int argc, char *argv[])
     functionNames.push_back("vect");
 
     {
-        XDMFExporter exporter(meshTopology, "function3", false);
-        exporter.exportFunction(function, "function3");
+      XDMFExporter exporter(meshTopology, "function3", false);
+      exporter.exportFunction(function, "function3");
     }
     {
-        XDMFExporter exporter(meshTopology, "boundary3", false);
-        exporter.exportFunction(fbdr, "boundary3");
+      XDMFExporter exporter(meshTopology, "boundary3", false);
+      exporter.exportFunction(fbdr, "boundary3");
     }
     {
-        XDMFExporter exporter(meshTopology, "vect3", false);
-        exporter.exportFunction(vect, "vect3");
+      XDMFExporter exporter(meshTopology, "vect3", false);
+      exporter.exportFunction(vect, "vect3");
     }
     {
-        XDMFExporter exporter(meshTopology, "functions3", false);
-        exporter.exportFunction(functions, functionNames);
+      XDMFExporter exporter(meshTopology, "functions3", false);
+      exporter.exportFunction(functions, functionNames);
     }
   }
 }

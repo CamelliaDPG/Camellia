@@ -18,104 +18,117 @@ double pi = 2.0*acos(0.0);
 
 int H1Order = 3, pToAdd = 2;
 
-class EpsilonScaling : public hFunction {
+class EpsilonScaling : public hFunction
+{
   double _epsilon;
-  public:
-  EpsilonScaling(double epsilon) {
+public:
+  EpsilonScaling(double epsilon)
+  {
     _epsilon = epsilon;
   }
-  double value(double x, double y, double h) {
+  double value(double x, double y, double h)
+  {
     double scaling = min(_epsilon/(h*h), 1.0);
     // since this is used in inner product term a like (a,a), take square root
     return sqrt(scaling);
   }
 };
 
-class ConstantXBoundary : public SpatialFilter {
-   private:
-      double xval;
-   public:
-      ConstantXBoundary(double xval): xval(xval) {};
-      bool matchesPoint(double x, double y) {
-         double tol = 1e-14;
-         return (abs(x-xval) < tol);
-      }
+class ConstantXBoundary : public SpatialFilter
+{
+private:
+  double xval;
+public:
+  ConstantXBoundary(double xval): xval(xval) {};
+  bool matchesPoint(double x, double y)
+  {
+    double tol = 1e-14;
+    return (abs(x-xval) < tol);
+  }
 };
 
-class ConstantYBoundary : public SpatialFilter {
-   private:
-      double yval;
-   public:
-      ConstantYBoundary(double yval): yval(yval) {};
-      bool matchesPoint(double x, double y) {
-         double tol = 1e-14;
-         return (abs(y-yval) < tol);
-      }
+class ConstantYBoundary : public SpatialFilter
+{
+private:
+  double yval;
+public:
+  ConstantYBoundary(double yval): yval(yval) {};
+  bool matchesPoint(double x, double y)
+  {
+    double tol = 1e-14;
+    return (abs(y-yval) < tol);
+  }
 };
 
-class InitialU : public Function {
-  public:
-    InitialU() : Function(0) {}
-    void values(FieldContainer<double> &values, BasisCachePtr basisCache) {
-      int numCells = values.dimension(0);
-      int numPoints = values.dimension(1);
+class InitialU : public Function
+{
+public:
+  InitialU() : Function(0) {}
+  void values(FieldContainer<double> &values, BasisCachePtr basisCache)
+  {
+    int numCells = values.dimension(0);
+    int numPoints = values.dimension(1);
 
-      const FieldContainer<double> *points = &(basisCache->getPhysicalCubaturePoints());
-      for (int cellIndex=0; cellIndex<numCells; cellIndex++) {
-        for (int ptIndex=0; ptIndex<numPoints; ptIndex++) {
-          double x = (*points)(cellIndex,ptIndex,0);
-          double y = (*points)(cellIndex,ptIndex,1);
-          if (abs(x) <= 0.25)
-            values(cellIndex, ptIndex) = 1+cos(4*pi*x);
-          else
-            values(cellIndex, ptIndex) = 0;
-        }
-      }
-    }
-};
-
-class ConfusionSteadyResidual : public SteadyResidual{
-  private:
-    vector<double> beta;
-    double epsilon;
-  public:
-    ConfusionSteadyResidual(VarFactory &varFactory, vector<double> beta, double epsilon):
-      SteadyResidual(varFactory), beta(beta), epsilon(epsilon) {};
-    LinearTermPtr createResidual(SolutionPtr solution, bool includeBoundaryTerms)
+    const FieldContainer<double> *points = &(basisCache->getPhysicalCubaturePoints());
+    for (int cellIndex=0; cellIndex<numCells; cellIndex++)
     {
-      VarPtr tau = varFactory.testVar("tau", HDIV);
-      VarPtr v = varFactory.testVar("v", HGRAD);
-
-      VarPtr u = varFactory.fieldVar("u");
-      VarPtr sigma = varFactory.fieldVar("sigma", VECTOR_L2);
-      VarPtr uhat = varFactory.traceVar("uhat");
-      VarPtr fhat = varFactory.fluxVar("fhat");
-
-      FunctionPtr u_prev = Function::solution(u, solution);
-      FunctionPtr sigma_prev = Function::solution(sigma, solution);
-      FunctionPtr uhat_prev = Function::solution(uhat, solution);
-      FunctionPtr fhat_prev = Function::solution(fhat, solution);
-
-      LinearTermPtr residual = Teuchos::rcp( new LinearTerm );
-      residual->addTerm( beta*u_prev * -v->grad() );
-      residual->addTerm( sigma_prev * v->grad() );
-      if (includeBoundaryTerms)
+      for (int ptIndex=0; ptIndex<numPoints; ptIndex++)
       {
-        residual->addTerm( fhat_prev * v);
+        double x = (*points)(cellIndex,ptIndex,0);
+        double y = (*points)(cellIndex,ptIndex,1);
+        if (abs(x) <= 0.25)
+          values(cellIndex, ptIndex) = 1+cos(4*pi*x);
+        else
+          values(cellIndex, ptIndex) = 0;
       }
-
-      residual->addTerm( sigma_prev / epsilon * tau);
-      residual->addTerm( u_prev * tau->div());
-      if (includeBoundaryTerms)
-      {
-        residual->addTerm( -uhat_prev * tau->dot_normal());
-      }
-
-      return residual;
     }
+  }
 };
 
-int main(int argc, char *argv[]) {
+class ConfusionSteadyResidual : public SteadyResidual
+{
+private:
+  vector<double> beta;
+  double epsilon;
+public:
+  ConfusionSteadyResidual(VarFactory &varFactory, vector<double> beta, double epsilon):
+    SteadyResidual(varFactory), beta(beta), epsilon(epsilon) {};
+  LinearTermPtr createResidual(SolutionPtr solution, bool includeBoundaryTerms)
+  {
+    VarPtr tau = varFactory.testVar("tau", HDIV);
+    VarPtr v = varFactory.testVar("v", HGRAD);
+
+    VarPtr u = varFactory.fieldVar("u");
+    VarPtr sigma = varFactory.fieldVar("sigma", VECTOR_L2);
+    VarPtr uhat = varFactory.traceVar("uhat");
+    VarPtr fhat = varFactory.fluxVar("fhat");
+
+    FunctionPtr u_prev = Function::solution(u, solution);
+    FunctionPtr sigma_prev = Function::solution(sigma, solution);
+    FunctionPtr uhat_prev = Function::solution(uhat, solution);
+    FunctionPtr fhat_prev = Function::solution(fhat, solution);
+
+    LinearTermPtr residual = Teuchos::rcp( new LinearTerm );
+    residual->addTerm( beta*u_prev * -v->grad() );
+    residual->addTerm( sigma_prev * v->grad() );
+    if (includeBoundaryTerms)
+    {
+      residual->addTerm( fhat_prev * v);
+    }
+
+    residual->addTerm( sigma_prev / epsilon * tau);
+    residual->addTerm( u_prev * tau->div());
+    if (includeBoundaryTerms)
+    {
+      residual->addTerm( -uhat_prev * tau->dot_normal());
+    }
+
+    return residual;
+  }
+};
+
+int main(int argc, char *argv[])
+{
 #ifdef HAVE_MPI
   Teuchos::GlobalMPISession mpiSession(&argc, &argv,0);
   choice::MpiArgs args( argc, argv );
@@ -181,7 +194,7 @@ int main(int argc, char *argv[]) {
   int horizontalCells = 64, verticalCells = 1;
 
   MeshPtr mesh = Mesh::buildQuadMesh(meshBoundary, horizontalCells, verticalCells,
-      steadyJacobian, H1Order, H1Order+pToAdd, false);
+                                     steadyJacobian, H1Order, H1Order+pToAdd, false);
 
   ////////////////////   SET INITIAL CONDITIONS   ///////////////////////
   map<int, Teuchos::RCP<Function> > initialConditions;

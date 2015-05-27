@@ -17,7 +17,8 @@
 
 #include "RefinementStrategy.h"
 
-int main(int argc, char *argv[]) {
+int main(int argc, char *argv[])
+{
 
 #ifdef HAVE_MPI
   Teuchos::GlobalMPISession mpiSession(&argc, &argv,0);
@@ -93,7 +94,8 @@ int main(int argc, char *argv[]) {
   refName << "confusion";
   HDF5Exporter exporter(mesh,refName.str());
 
-  for (int refIndex=0; refIndex < numRefs; refIndex++) {
+  for (int refIndex=0; refIndex < numRefs; refIndex++)
+  {
     soln->solve();
 
     double energyError = soln->energyErrorTotal();

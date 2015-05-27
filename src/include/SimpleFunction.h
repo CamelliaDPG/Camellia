@@ -11,16 +11,18 @@
 
 #include "Function.h"
 
-namespace Camellia {
-  template <typename Scalar>
-  class SimpleFunction : public TFunction<Scalar> {
-  public:
-    virtual ~SimpleFunction() {}
-    virtual Scalar value(double x);
-    virtual Scalar value(double x, double y);
-    virtual Scalar value(double x, double y, double z);
-    virtual Scalar value(double x, double y, double z, double t);
-    virtual void values(Intrepid::FieldContainer<Scalar> &values, BasisCachePtr basisCache);
-  };
+namespace Camellia
+{
+template <typename Scalar>
+class SimpleFunction : public TFunction<Scalar>
+{
+public:
+  virtual ~SimpleFunction() {}
+  virtual Scalar value(double x);
+  virtual Scalar value(double x, double y);
+  virtual Scalar value(double x, double y, double z);
+  virtual Scalar value(double x, double y, double z, double t);
+  virtual void values(Intrepid::FieldContainer<Scalar> &values, BasisCachePtr basisCache);
+};
 }
 #endif

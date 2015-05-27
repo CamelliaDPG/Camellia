@@ -11,21 +11,23 @@
 
 #include "Function.h"
 
-namespace Camellia {
-  template <typename Scalar>
-  class ConstantVectorFunction : public TFunction<Scalar> {
-    std::vector<Scalar> _value;
-  public:
-    ConstantVectorFunction(std::vector<Scalar> value);
-    bool isZero();
+namespace Camellia
+{
+template <typename Scalar>
+class ConstantVectorFunction : public TFunction<Scalar>
+{
+  std::vector<Scalar> _value;
+public:
+  ConstantVectorFunction(std::vector<Scalar> value);
+  bool isZero();
 
-    TFunctionPtr<Scalar> x();
-    TFunctionPtr<Scalar> y();
-    TFunctionPtr<Scalar> z();
+  TFunctionPtr<Scalar> x();
+  TFunctionPtr<Scalar> y();
+  TFunctionPtr<Scalar> z();
 
-    void values(Intrepid::FieldContainer<Scalar> &values, BasisCachePtr basisCache);
-    std::vector<Scalar> value();
-  };
+  void values(Intrepid::FieldContainer<Scalar> &values, BasisCachePtr basisCache);
+  std::vector<Scalar> value();
+};
 }
 
 #endif

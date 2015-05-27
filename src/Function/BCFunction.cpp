@@ -8,10 +8,12 @@ using namespace Intrepid;
 using namespace Camellia;
 
 template <typename Scalar>
-Teuchos::RCP<BCFunction<Scalar>> BCFunction<Scalar>::bcFunction(BCPtr bc, int varID, bool isTrace) {
+Teuchos::RCP<BCFunction<Scalar>> BCFunction<Scalar>::bcFunction(BCPtr bc, int varID, bool isTrace)
+{
   TFunctionPtr<Scalar> spatiallyFilteredFunction;
   int rank = 0;
-  if (! bc->isLegacySubclass()) {
+  if (! bc->isLegacySubclass())
+  {
     spatiallyFilteredFunction = bc->getSpatiallyFilteredFunctionForDirichletBC(varID);
     rank = spatiallyFilteredFunction->rank();
   }
@@ -20,7 +22,8 @@ Teuchos::RCP<BCFunction<Scalar>> BCFunction<Scalar>::bcFunction(BCPtr bc, int va
 }
 
 template <typename Scalar>
-BCFunction<Scalar>::BCFunction(BCPtr bc, int varID, bool isTrace, TFunctionPtr<Scalar> spatiallyFilteredFunction, int rank) : TFunction<Scalar>(rank) {
+BCFunction<Scalar>::BCFunction(BCPtr bc, int varID, bool isTrace, TFunctionPtr<Scalar> spatiallyFilteredFunction, int rank) : TFunction<Scalar>(rank)
+{
   _bc = bc;
   _varID = varID;
   _isTrace = isTrace;
@@ -28,7 +31,8 @@ BCFunction<Scalar>::BCFunction(BCPtr bc, int varID, bool isTrace, TFunctionPtr<S
 }
 
 template <typename Scalar>
-void BCFunction<Scalar>::values(FieldContainer<Scalar> &values, BasisCachePtr basisCache) {
+void BCFunction<Scalar>::values(FieldContainer<Scalar> &values, BasisCachePtr basisCache)
+{
   int numCells = basisCache->cellIDs().size();
   int numPoints = basisCache->getPhysicalCubaturePoints().dimension(1);
   _imposeHere.resize(numCells,numPoints);
@@ -37,51 +41,61 @@ void BCFunction<Scalar>::values(FieldContainer<Scalar> &values, BasisCachePtr ba
 }
 
 template <typename Scalar>
-bool BCFunction<Scalar>::imposeOnCell(int cellIndex) {
+bool BCFunction<Scalar>::imposeOnCell(int cellIndex)
+{
   // returns true if at least one cubature point lies within the SpatialFilter or equivalent
   // MUST call values() with appropriate basisCache before calling this...
   int numPoints = _imposeHere.dimension(1);
-  for (int ptIndex=0; ptIndex < numPoints; ptIndex++) {
+  for (int ptIndex=0; ptIndex < numPoints; ptIndex++)
+  {
     if (_imposeHere(cellIndex,ptIndex)) return true;
   }
   return false;
 }
 
 template <typename Scalar>
-bool BCFunction<Scalar>::isTrace() {
+bool BCFunction<Scalar>::isTrace()
+{
   return _isTrace;
 }
 
 template <typename Scalar>
-int BCFunction<Scalar>::varID() {
+int BCFunction<Scalar>::varID()
+{
   return _varID;
 }
 
 template <typename Scalar>
-TFunctionPtr<Scalar> BCFunction<Scalar>::curl() {
+TFunctionPtr<Scalar> BCFunction<Scalar>::curl()
+{
   return _spatiallyFilteredFunction->curl();
 }
 
 template <typename Scalar>
-TFunctionPtr<Scalar> BCFunction<Scalar>::div() {
+TFunctionPtr<Scalar> BCFunction<Scalar>::div()
+{
   return _spatiallyFilteredFunction->div();
 }
 
 template <typename Scalar>
-TFunctionPtr<Scalar> BCFunction<Scalar>::dx() {
+TFunctionPtr<Scalar> BCFunction<Scalar>::dx()
+{
   return _spatiallyFilteredFunction->dx();
 }
 
 template <typename Scalar>
-TFunctionPtr<Scalar> BCFunction<Scalar>::dy() {
+TFunctionPtr<Scalar> BCFunction<Scalar>::dy()
+{
   return _spatiallyFilteredFunction->dy();
 }
 
 template <typename Scalar>
-TFunctionPtr<Scalar> BCFunction<Scalar>::dz() {
+TFunctionPtr<Scalar> BCFunction<Scalar>::dz()
+{
   return _spatiallyFilteredFunction->dz();
 }
 
-namespace Camellia {
-  template class BCFunction<double>;
+namespace Camellia
+{
+template class BCFunction<double>;
 }

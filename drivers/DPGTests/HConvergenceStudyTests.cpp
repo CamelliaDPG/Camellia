@@ -4,28 +4,34 @@
 #include "ExactSolution.h"
 #include "NavierStokesFormulation.h"
 
-void HConvergenceStudyTests::setup() {
+void HConvergenceStudyTests::setup()
+{
 
 }
 
-void HConvergenceStudyTests::teardown() {
+void HConvergenceStudyTests::teardown()
+{
 
 }
 
-HConvergenceStudyTests::HConvergenceStudyTests() {
+HConvergenceStudyTests::HConvergenceStudyTests()
+{
 
 }
 
-void HConvergenceStudyTests::runTests(int &numTestsRun, int &numTestsPassed) {
+void HConvergenceStudyTests::runTests(int &numTestsRun, int &numTestsPassed)
+{
   setup();
-  if ( testBestApproximationErrorComputation() ) {
+  if ( testBestApproximationErrorComputation() )
+  {
     numTestsPassed++;
   }
   numTestsRun++;
   teardown();
 }
 
-bool HConvergenceStudyTests::testBestApproximationErrorComputation() {
+bool HConvergenceStudyTests::testBestApproximationErrorComputation()
+{
   bool success = true;
 
   bool enrichVelocity = false; // true would be for the "compliant" norm, which isn't working well yet
@@ -68,18 +74,18 @@ bool HConvergenceStudyTests::testBestApproximationErrorComputation() {
   FunctionPtr zero = Function::zero();
   bool dontEnhanceFluxes = false;
   VGPNavierStokesProblem zeroProblem = VGPNavierStokesProblem(Re, quadPointsKovasznay,
-                                                              numCellsFineMesh, numCellsFineMesh,
-                                                              H1OrderFineMesh, pToAdd,
-                                                              zero, zero, zero, enrichVelocity, dontEnhanceFluxes);
+                                       numCellsFineMesh, numCellsFineMesh,
+                                       H1OrderFineMesh, pToAdd,
+                                       zero, zero, zero, enrichVelocity, dontEnhanceFluxes);
 
   FunctionPtr u1_exact, u2_exact, p_exact;
   NavierStokesFormulation::setKovasznay(Re, zeroProblem.mesh(), u1_exact, u2_exact, p_exact);
 
 
   VGPNavierStokesProblem problem = VGPNavierStokesProblem(Re,quadPointsKovasznay,
-                                                          numCells1D,numCells1D,
-                                                          H1Order, pToAdd,
-                                                          u1_exact, u2_exact, p_exact, enrichVelocity, dontEnhanceFluxes);
+                                   numCells1D,numCells1D,
+                                   H1Order, pToAdd,
+                                   u1_exact, u2_exact, p_exact, enrichVelocity, dontEnhanceFluxes);
 
   HConvergenceStudy study(problem.exactSolution(),
                           problem.mesh()->bilinearForm(),
@@ -119,7 +125,8 @@ bool HConvergenceStudyTests::testBestApproximationErrorComputation() {
     f->integrate(projectionValues, basisCache);
     FieldContainer<double> cellMeasures = basisCache->getCellMeasures();
 
-    for (int i=0; i<projectionValues.size(); i++) {
+    for (int i=0; i<projectionValues.size(); i++)
+    {
       projectionValues(i) /= cellMeasures(i);
     }
 
@@ -135,16 +142,20 @@ bool HConvergenceStudyTests::testBestApproximationErrorComputation() {
     // for a single-cell mesh, approximation error should be the same as the L^2 error of the average
     double diff = abs(approximationError - l2ErrorOfAverage);
 
-    if (diff > tol) {
+    if (diff > tol)
+    {
       cout << "testBestApproximationErrorComputation: diff " << diff << " exceeds tol " << tol << endl;
       success = false;
-    } else {
+    }
+    else
+    {
 //      cout << "testBestApproximationErrorComputation: diff " << diff << " is below tol " << tol << endl;
     }
   }
   return success;
 }
 
-string HConvergenceStudyTests::testSuiteName() {
+string HConvergenceStudyTests::testSuiteName()
+{
   return "HConvergenceStudyTests";
 }

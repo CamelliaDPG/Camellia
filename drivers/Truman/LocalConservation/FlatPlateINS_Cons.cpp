@@ -15,64 +15,77 @@
 #include "choice.hpp"
 #endif
 
-class ConstantXBoundary : public SpatialFilter {
-  private:
-    double xval;
-  public:
-    ConstantXBoundary(double xval): xval(xval) {};
-    bool matchesPoint(double x, double y) {
-      double tol = 1e-14;
-      return (abs(x-xval) < tol);
-    }
+class ConstantXBoundary : public SpatialFilter
+{
+private:
+  double xval;
+public:
+  ConstantXBoundary(double xval): xval(xval) {};
+  bool matchesPoint(double x, double y)
+  {
+    double tol = 1e-14;
+    return (abs(x-xval) < tol);
+  }
 };
 
-class ConstantYBoundary : public SpatialFilter {
-  private:
-    double yval;
-  public:
-    ConstantYBoundary(double yval): yval(yval) {};
-    bool matchesPoint(double x, double y) {
-      double tol = 1e-14;
-      return (abs(y-yval) < tol);
-    }
+class ConstantYBoundary : public SpatialFilter
+{
+private:
+  double yval;
+public:
+  ConstantYBoundary(double yval): yval(yval) {};
+  bool matchesPoint(double x, double y)
+  {
+    double tol = 1e-14;
+    return (abs(y-yval) < tol);
+  }
 };
 
-class BottomFree : public SpatialFilter {
-  public:
-    bool matchesPoint(double x, double y) {
-      double tol = 1e-14;
-      return (abs(y) < tol && abs(x) > .5);
-    }
+class BottomFree : public SpatialFilter
+{
+public:
+  bool matchesPoint(double x, double y)
+  {
+    double tol = 1e-14;
+    return (abs(y) < tol && abs(x) > .5);
+  }
 };
 
-class BottomPlate : public SpatialFilter {
-  public:
-    bool matchesPoint(double x, double y) {
-      double tol = 1e-14;
-      return (abs(y) < tol && abs(x) <= 0.5);
-    }
+class BottomPlate : public SpatialFilter
+{
+public:
+  bool matchesPoint(double x, double y)
+  {
+    double tol = 1e-14;
+    return (abs(y) < tol && abs(x) <= 0.5);
+  }
 };
 
-class IPWeight : public Function {
-  public:
-    IPWeight() : Function(0) {}
-    void values(FieldContainer<double> &values, BasisCachePtr basisCache) {
-      int numCells = values.dimension(0);
-      int numPoints = values.dimension(1);
+class IPWeight : public Function
+{
+public:
+  IPWeight() : Function(0) {}
+  void values(FieldContainer<double> &values, BasisCachePtr basisCache)
+  {
+    int numCells = values.dimension(0);
+    int numPoints = values.dimension(1);
 
-      const FieldContainer<double> *points = &(basisCache->getPhysicalCubaturePoints());
-      double tol=1e-14;
-      for (int cellIndex=0; cellIndex<numCells; cellIndex++) {
-        for (int ptIndex=0; ptIndex<numPoints; ptIndex++) {
-          double x = (*points)(cellIndex,ptIndex,0);
-          double y = (*points)(cellIndex,ptIndex,1);
-          values(cellIndex, ptIndex) = 0.1+1-abs(x);
-        }
+    const FieldContainer<double> *points = &(basisCache->getPhysicalCubaturePoints());
+    double tol=1e-14;
+    for (int cellIndex=0; cellIndex<numCells; cellIndex++)
+    {
+      for (int ptIndex=0; ptIndex<numPoints; ptIndex++)
+      {
+        double x = (*points)(cellIndex,ptIndex,0);
+        double y = (*points)(cellIndex,ptIndex,1);
+        values(cellIndex, ptIndex) = 0.1+1-abs(x);
       }
     }
+  }
 };
 
-int main(int argc, char *argv[]) {
+int main(int argc, char *argv[])
+{
 #ifdef HAVE_MPI
   Teuchos::GlobalMPISession mpiSession(&argc, &argv,0);
   choice::MpiArgs args( argc, argv );
@@ -139,7 +152,7 @@ int main(int argc, char *argv[]) {
 
   // create a pointer to a new mesh:
   Teuchos::RCP<Mesh> mesh = Mesh::buildQuadMesh(meshBoundary, xCells, yCells,
-      bf, H1Order, H1Order+deltaP);
+                            bf, H1Order, H1Order+deltaP);
 
   ////////////////////////////////////////////////////////////////////
   // INITIALIZE BACKGROUND FLOW FUNCTIONS
@@ -233,17 +246,17 @@ int main(int argc, char *argv[]) {
     ip->addTerm( ipw*sqrt(1./Re)*v1->grad() );
     ip->addTerm( ipw*sqrt(1./Re)*v2->grad() );
     ip->addTerm( ipw*tau1->div()
-        -0.5*ipw*u1_prev*v1->dx()
-        -0.5*ipw*u2_prev*v1->dy()
-        -0.5*ipw*u1_prev*v1->dx()
-        -0.5*ipw*u2_prev*v2->dx()
-        -ipw*q->dx() );
+                 -0.5*ipw*u1_prev*v1->dx()
+                 -0.5*ipw*u2_prev*v1->dy()
+                 -0.5*ipw*u1_prev*v1->dx()
+                 -0.5*ipw*u2_prev*v2->dx()
+                 -ipw*q->dx() );
     ip->addTerm( ipw*tau2->div()
-        -0.5*ipw*u1_prev*v2->dx()
-        -0.5*ipw*u2_prev*v2->dy()
-        -0.5*ipw*u1_prev*v1->dy()
-        -0.5*ipw*u2_prev*v2->dy()
-        -ipw*q->dy() );
+                 -0.5*ipw*u1_prev*v2->dx()
+                 -0.5*ipw*u2_prev*v2->dy()
+                 -0.5*ipw*u1_prev*v1->dy()
+                 -0.5*ipw*u2_prev*v2->dy()
+                 -ipw*q->dy() );
     ip->addTerm( ipw*v1->dx() );
     ip->addTerm( ipw*v2->dy() );
     ip->addTerm( ipw*v1 );

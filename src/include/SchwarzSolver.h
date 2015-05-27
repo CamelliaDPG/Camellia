@@ -11,18 +11,20 @@
 
 #include "Solver.h"
 
-namespace Camellia {
-	class SchwarzSolver : public Solver {
-	  int _overlapLevel;
-	  int _maxIters;
-	  bool _printToConsole;
-	  double _tol;
-	public:
-	  SchwarzSolver(int overlapLevel, int maxIters, double tol);
-	  void setPrintToConsole(bool printToConsole);
-	  int solve();
-	  void setTolerance(double tol);
-	};
+namespace Camellia
+{
+class SchwarzSolver : public Solver
+{
+  int _overlapLevel;
+  int _maxIters;
+  bool _printToConsole;
+  double _tol;
+public:
+  SchwarzSolver(int overlapLevel, int maxIters, double tol);
+  void setPrintToConsole(bool printToConsole);
+  int solve();
+  void setTolerance(double tol);
+};
 }
 
 #endif

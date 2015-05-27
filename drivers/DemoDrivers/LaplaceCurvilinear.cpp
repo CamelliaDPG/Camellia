@@ -20,7 +20,8 @@
 
 #include "MeshFactory.h"
 
-int main(int argc, char *argv[]) {
+int main(int argc, char *argv[])
+{
   Teuchos::GlobalMPISession mpiSession(&argc, &argv,0);
   int rank = mpiSession.getRank();
 
@@ -34,7 +35,8 @@ int main(int argc, char *argv[]) {
   double height = 10;
   double radius = 1;
 
-  if (rank==0) {
+  if (rank==0)
+  {
     cout << "minPolyOrder: " << minPolyOrder << "\n";
     cout << "maxPolyOrder: " << maxPolyOrder << "\n";
     cout << "pToAdd: " << pToAdd << "\n";
@@ -86,21 +88,26 @@ int main(int argc, char *argv[]) {
   // inner product
   IPPtr ip = bf->graphNorm();
 
-  if (rank==0) {
+  if (rank==0)
+  {
     cout << "Laplace bilinear form:\n";
     bf->printTrialTestInteractions();
   }
 
-  for (int polyOrder=minPolyOrder; polyOrder<=maxPolyOrder; polyOrder++) {
+  for (int polyOrder=minPolyOrder; polyOrder<=maxPolyOrder; polyOrder++)
+  {
     HConvergenceStudy study(exactSolution,
                             bf, rhs, bc, ip,
                             minLogElements, maxLogElements,
                             polyOrder+1, pToAdd, false, useTriangles, false);
 
     bool useHemkerMesh = true;
-    if (useHemkerMesh) {
+    if (useHemkerMesh)
+    {
       study.solve(MeshFactory::hemkerGeometry(width, height, radius));
-    } else {
+    }
+    else
+    {
       if (rank==0)
         cout << "TEST: just using a quad mesh\n;";
       // just a quad
@@ -113,12 +120,13 @@ int main(int argc, char *argv[]) {
       quadPoints(2,1) =  height / 2;
       quadPoints(3,0) = -width / 2;
       quadPoints(3,1
-                 ) =  height / 2;
+                ) =  height / 2;
 
       study.solve(quadPoints);
     }
 
-    if (rank==0) {
+    if (rank==0)
+    {
       cout << study.TeXErrorRateTable();
       cout << "******** Best Approximation comparison: ********\n";
       vector<int> primaryVariables;
@@ -127,7 +135,8 @@ int main(int argc, char *argv[]) {
       primaryVariables.push_back(psi2->ID());
       cout << study.TeXBestApproximationComparisonTable(primaryVariables);
 
-      for (int i=minLogElements; i<=maxLogElements; i++) {
+      for (int i=minLogElements; i<=maxLogElements; i++)
+      {
         ostringstream filePath;
         filePath << "/tmp/hemkerMeshLevel" << i << ".dat";
         GnuPlotUtil::writeComputationalMeshSkeleton(filePath.str(), study.getSolution(i)->mesh());

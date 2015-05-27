@@ -52,22 +52,26 @@ using namespace Intrepid;
 using namespace Camellia;
 
 template <typename Scalar>
-TLinearTermPtr<Scalar> TRieszRep<Scalar>::getFunctional(){
+TLinearTermPtr<Scalar> TRieszRep<Scalar>::getFunctional()
+{
   return _functional;
 }
 
 template <typename Scalar>
-MeshPtr TRieszRep<Scalar>::mesh() {
+MeshPtr TRieszRep<Scalar>::mesh()
+{
   return _mesh;
 }
 
 template <typename Scalar>
-map<GlobalIndexType,FieldContainer<Scalar> > TRieszRep<Scalar>::integrateFunctional() {
+map<GlobalIndexType,FieldContainer<Scalar> > TRieszRep<Scalar>::integrateFunctional()
+{
   // NVR: changed this to only return integrated values for rank-local cells.
 
   map<GlobalIndexType,FieldContainer<Scalar> > cellRHS;
   set<GlobalIndexType> cellIDs = _mesh->cellIDsInPartition();
-  for (set<GlobalIndexType>::iterator cellIDIt=cellIDs.begin(); cellIDIt !=cellIDs.end(); cellIDIt++){
+  for (set<GlobalIndexType>::iterator cellIDIt=cellIDs.begin(); cellIDIt !=cellIDs.end(); cellIDIt++)
+  {
     GlobalIndexType cellID = *cellIDIt;
     ElementTypePtr elemTypePtr = _mesh->getElementType(cellID);
     DofOrderingPtr testOrderingPtr = elemTypePtr->testOrderPtr;
@@ -80,7 +84,8 @@ map<GlobalIndexType,FieldContainer<Scalar> > TRieszRep<Scalar>::integrateFunctio
     _functional->integrate(rhsValues, testOrderingPtr, basisCache);
 
     FieldContainer<Scalar> rhsVals(numTestDofs);
-    for (int i = 0;i<numTestDofs;i++){
+    for (int i = 0; i<numTestDofs; i++)
+    {
       rhsVals(i) = rhsValues(0,i);
     }
     cellRHS[cellID] = rhsVals;
@@ -89,7 +94,8 @@ map<GlobalIndexType,FieldContainer<Scalar> > TRieszRep<Scalar>::integrateFunctio
 }
 
 template <typename Scalar>
-void TRieszRep<Scalar>::computeRieszRep(int cubatureEnrichment){
+void TRieszRep<Scalar>::computeRieszRep(int cubatureEnrichment)
+{
 #ifdef HAVE_MPI
   Epetra_MpiComm Comm(MPI_COMM_WORLD);
   //cout << "rank: " << rank << " of " << numProcs << endl;
@@ -98,7 +104,8 @@ void TRieszRep<Scalar>::computeRieszRep(int cubatureEnrichment){
 #endif
 
   set<GlobalIndexType> cellIDs = _mesh->cellIDsInPartition();
-  for (set<GlobalIndexType>::iterator cellIDIt=cellIDs.begin(); cellIDIt !=cellIDs.end(); cellIDIt++){
+  for (set<GlobalIndexType>::iterator cellIDIt=cellIDs.begin(); cellIDIt !=cellIDs.end(); cellIDIt++)
+  {
     GlobalIndexType cellID = *cellIDIt;
 
     ElementTypePtr elemTypePtr = _mesh->getElementType(cellID);
@@ -109,7 +116,8 @@ void TRieszRep<Scalar>::computeRieszRep(int cubatureEnrichment){
 
     FieldContainer<Scalar> rhsValues(1,numTestDofs);
     _functional->integrate(rhsValues, testOrderingPtr, basisCache);
-    if (_printAll){
+    if (_printAll)
+    {
       cout << "RieszRep: LinearTerm values for cell " << cellID << ":\n " << rhsValues << endl;
     }
 
@@ -117,7 +125,8 @@ void TRieszRep<Scalar>::computeRieszRep(int cubatureEnrichment){
     _ip->computeInnerProductMatrix(ipMatrix,testOrderingPtr, basisCache);
 
     bool printOutRiesz = false;
-    if (printOutRiesz){
+    if (printOutRiesz)
+    {
       cout << " ============================ In RIESZ ==========================" << endl;
       cout << "matrix: \n" << ipMatrix;
     }
@@ -127,7 +136,8 @@ void TRieszRep<Scalar>::computeRieszRep(int cubatureEnrichment){
     rhsValues.resize(numTestDofs,1);
     int success = SerialDenseWrapper::solveSystemUsingQR(rieszRepDofs, ipMatrix, rhsValues);
 
-    if (success != 0) {
+    if (success != 0)
+    {
       cout << "TRieszRep<Scalar>::computeRieszRep: Solve FAILED with error: " << success << endl;
     }
 
@@ -137,14 +147,16 @@ void TRieszRep<Scalar>::computeRieszRep(int cubatureEnrichment){
 
 //    cout << "normSquared for cell " << cellID << ": " << _rieszRepNormSquared[cellID] << endl;
 
-    if (printOutRiesz){
+    if (printOutRiesz)
+    {
       cout << "rhs: \n" << rhsValues;
       cout << "dofs: \n" << rieszRepDofs;
       cout << " ================================================================" << endl;
     }
 
     FieldContainer<Scalar> dofs(numTestDofs);
-    for (int i = 0;i<numTestDofs;i++){
+    for (int i = 0; i<numTestDofs; i++)
+    {
       dofs(i) = rieszRepDofs(i,0);
     }
     _rieszRepDofs[cellID] = dofs;
@@ -154,9 +166,11 @@ void TRieszRep<Scalar>::computeRieszRep(int cubatureEnrichment){
 }
 
 template <typename Scalar>
-double TRieszRep<Scalar>::getNorm(){
+double TRieszRep<Scalar>::getNorm()
+{
 
-  if (_repsNotComputed){
+  if (_repsNotComputed)
+  {
     cout << "Computing riesz rep dofs" << endl;
     computeRieszRep();
   }
@@ -164,7 +178,8 @@ double TRieszRep<Scalar>::getNorm(){
   vector< ElementPtr > allElems = _mesh->activeElements();
   vector< ElementPtr >::iterator elemIt;
   double normSum = 0.0;
-  for (elemIt=allElems.begin();elemIt!=allElems.end();elemIt++){
+  for (elemIt=allElems.begin(); elemIt!=allElems.end(); elemIt++)
+  {
 
     ElementPtr elem = *elemIt;
     int cellID = elem->cellID();
@@ -174,17 +189,20 @@ double TRieszRep<Scalar>::getNorm(){
 }
 
 template <typename Scalar>
-const map<GlobalIndexType,double> & TRieszRep<Scalar>::getNormsSquared() {
+const map<GlobalIndexType,double> & TRieszRep<Scalar>::getNormsSquared()
+{
   return _rieszRepNormSquared;
 }
 
 template <typename Scalar>
-const map<GlobalIndexType,double> & TRieszRep<Scalar>::getNormsSquaredGlobal() { // should be renamed getNormsSquaredGlobal()
+const map<GlobalIndexType,double> & TRieszRep<Scalar>::getNormsSquaredGlobal()   // should be renamed getNormsSquaredGlobal()
+{
   return _rieszRepNormSquaredGlobal;
 }
 
 template <typename Scalar>
-void TRieszRep<Scalar>::distributeDofs(){
+void TRieszRep<Scalar>::distributeDofs()
+{
   int myRank = Teuchos::GlobalMPISession::getRank();
   int numRanks = Teuchos::GlobalMPISession::getNProc();
 #ifdef HAVE_MPI
@@ -197,19 +215,22 @@ void TRieszRep<Scalar>::distributeDofs(){
   // the code below could stand to be reworked; I'm pretty sure this is not the best way to distribute the data, and it would also be best to get rid of the iteration over the global set of active elements.  But a similar point could be made about this method as a whole: do we really need to distribute all the dofs to every rank?  It may be best to eliminate this method altogether.
 
   vector<GlobalIndexType> cellIDsByPartitionOrdering;
-  for (int rank=0; rank<numRanks; rank++) {
+  for (int rank=0; rank<numRanks; rank++)
+  {
     set<GlobalIndexType> cellIDsForRank = _mesh->globalDofAssignment()->cellsInPartition(rank);
     cellIDsByPartitionOrdering.insert(cellIDsByPartitionOrdering.end(), cellIDsForRank.begin(), cellIDsForRank.end());
   }
   // determine inverse map:
   map<GlobalIndexType,int> ordinalForCellID;
-  for (int ordinal=0; ordinal<cellIDsByPartitionOrdering.size(); ordinal++) {
+  for (int ordinal=0; ordinal<cellIDsByPartitionOrdering.size(); ordinal++)
+  {
     GlobalIndexType cellID = cellIDsByPartitionOrdering[ordinal];
     ordinalForCellID[cellID] = ordinal;
 //    cout << "ordinalForCellID[" << cellID << "] = " << ordinal << endl;
   }
 
-  for (int cellOrdinal=0; cellOrdinal<cellIDsByPartitionOrdering.size(); cellOrdinal++) {
+  for (int cellOrdinal=0; cellOrdinal<cellIDsByPartitionOrdering.size(); cellOrdinal++)
+  {
     GlobalIndexType cellID = cellIDsByPartitionOrdering[cellOrdinal];
     ElementTypePtr elemTypePtr = _mesh->getElementType(cellID);
     DofOrderingPtr testOrderingPtr = elemTypePtr->testOrderPtr;
@@ -220,17 +241,22 @@ void TRieszRep<Scalar>::distributeDofs(){
 
     int numMyDofs;
     FieldContainer<Scalar> dofs(numDofs);
-    if (isInPartition){  // if in partition
+    if (isInPartition)   // if in partition
+    {
       numMyDofs = numDofs;
       dofs = _rieszRepDofs[cellID];
-    } else{
+    }
+    else
+    {
       numMyDofs = 0;
     }
 
     Epetra_Map dofMap(numDofs,numMyDofs,0,Comm);
     Epetra_Vector distributedRieszDofs(dofMap);
-    if (isInPartition) {
-      for (int i = 0;i<numMyDofs;i++) { // shouldn't activate on off-proc partitions
+    if (isInPartition)
+    {
+      for (int i = 0; i<numMyDofs; i++) // shouldn't activate on off-proc partitions
+      {
         distributedRieszDofs.ReplaceGlobalValues(1,&dofs(i),&i);
       }
     }
@@ -238,8 +264,10 @@ void TRieszRep<Scalar>::distributeDofs(){
     Epetra_Import testDofImporter(importMap, dofMap);
     Epetra_Vector globalRieszDofs(importMap);
     globalRieszDofs.Import(distributedRieszDofs, testDofImporter, Insert);
-    if (!isInPartition){
-      for (int i = 0;i<numDofs;i++){
+    if (!isInPartition)
+    {
+      for (int i = 0; i<numDofs; i++)
+      {
         dofs(i) = globalRieszDofs[i];
       }
     }
@@ -261,7 +289,8 @@ void TRieszRep<Scalar>::distributeDofs(){
 
   double rankLocalRieszNorms[numMyElems];
 
-  for (set<GlobalIndexType>::iterator cellIDIt = rankLocalCellIDs.begin(); cellIDIt != rankLocalCellIDs.end(); cellIDIt++) {
+  for (set<GlobalIndexType>::iterator cellIDIt = rankLocalCellIDs.begin(); cellIDIt != rankLocalCellIDs.end(); cellIDIt++)
+  {
     GlobalIndexType cellID = *cellIDIt;
     myElems[myCellOrdinal] = ordinalForCellID[cellID];
     rankLocalRieszNorms[myCellOrdinal] = _rieszRepNormSquared[cellID];
@@ -271,7 +300,8 @@ void TRieszRep<Scalar>::distributeDofs(){
 
   Epetra_Vector distributedRieszNorms(normMap);
   int err = distributedRieszNorms.ReplaceGlobalValues(numMyElems,rankLocalRieszNorms,(GlobalIndexTypeToCast *)myElems);
-  if (err != 0) {
+  if (err != 0)
+  {
     cout << "TRieszRep<Scalar>::distributeDofs(): on rank" << myRank << ", ReplaceGlobalValues returned error code " << err << endl;
   }
 
@@ -280,7 +310,8 @@ void TRieszRep<Scalar>::distributeDofs(){
   Epetra_Vector globalNorms(normImportMap);
   globalNorms.Import(distributedRieszNorms, normImporter, Add);  // add should be OK (everything should be zeros)
 
-  for (int cellOrdinal=0; cellOrdinal<cellIDsByPartitionOrdering.size(); cellOrdinal++) {
+  for (int cellOrdinal=0; cellOrdinal<cellIDsByPartitionOrdering.size(); cellOrdinal++)
+  {
     GlobalIndexType cellID = cellIDsByPartitionOrdering[cellOrdinal];
     _rieszRepNormSquaredGlobal[cellID] = globalNorms[cellOrdinal];
 //    if (myRank==0) cout << "_rieszRepNormSquaredGlobal[" << cellID << "] = " << globalNorms[cellOrdinal] << endl;
@@ -290,9 +321,11 @@ void TRieszRep<Scalar>::distributeDofs(){
 
 // computes riesz representation over a single element - map is from int (testID) to FieldContainer of values (sized cellIndex, numPoints)
 template <typename Scalar>
-void TRieszRep<Scalar>::computeRepresentationValues(FieldContainer<Scalar> &values, int testID, Camellia::EOperator op, BasisCachePtr basisCache){
+void TRieszRep<Scalar>::computeRepresentationValues(FieldContainer<Scalar> &values, int testID, Camellia::EOperator op, BasisCachePtr basisCache)
+{
 
-  if (_repsNotComputed){
+  if (_repsNotComputed)
+  {
     cout << "Computing riesz rep dofs" << endl;
     computeRieszRep();
   }
@@ -315,7 +348,8 @@ void TRieszRep<Scalar>::computeRepresentationValues(FieldContainer<Scalar> &valu
   Teuchos::RCP< const FieldContainer<double> > transformedBasisValues = basisCache->getTransformedValues(testBasis,op,useCubPointsSideRefCell);
 
   int rank = values.rank() - 2; // if values are shaped as (C,P), scalar...
-  if (rank > 1) {
+  if (rank > 1)
+  {
     cout << "ranks greater than 1 not presently supported...\n";
     TEUCHOS_TEST_FOR_EXCEPTION(true, std::invalid_argument, "ranks greater than 1 not presently supported...");
   }
@@ -323,16 +357,23 @@ void TRieszRep<Scalar>::computeRepresentationValues(FieldContainer<Scalar> &valu
 //  Camellia::print("cellIDs",cellIDs);
 
   values.initialize(0.0);
-  for (int cellIndex = 0;cellIndex<numCells;cellIndex++){
+  for (int cellIndex = 0; cellIndex<numCells; cellIndex++)
+  {
     int cellID = cellIDs[cellIndex];
-    for (int j = 0;j<numTestDofsForVarID;j++) {
+    for (int j = 0; j<numTestDofsForVarID; j++)
+    {
       int dofIndex = testOrderingPtr->getDofIndex(testID, j);
-      for (int i = 0;i<numPoints;i++) {
-        if (rank==0) {
+      for (int i = 0; i<numPoints; i++)
+      {
+        if (rank==0)
+        {
           double basisValue = (*transformedBasisValues)(cellIndex,j,i);
           values(cellIndex,i) += basisValue*_rieszRepDofsGlobal[cellID](dofIndex);
-        } else {
-          for (int d = 0; d<spaceDim; d++) {
+        }
+        else
+        {
+          for (int d = 0; d<spaceDim; d++)
+          {
             double basisValue = (*transformedBasisValues)(cellIndex,j,i,d);
             values(cellIndex,i,d) += basisValue*_rieszRepDofsGlobal[cellID](dofIndex);
           }
@@ -344,10 +385,12 @@ void TRieszRep<Scalar>::computeRepresentationValues(FieldContainer<Scalar> &valu
 }
 
 template <typename Scalar>
-map<GlobalIndexType,double> TRieszRep<Scalar>::computeAlternativeNormSqOnCells(TIPPtr<Scalar> ip, vector<GlobalIndexType> cellIDs){
+map<GlobalIndexType,double> TRieszRep<Scalar>::computeAlternativeNormSqOnCells(TIPPtr<Scalar> ip, vector<GlobalIndexType> cellIDs)
+{
   map<GlobalIndexType,double> altNorms;
   int numCells = cellIDs.size();
-  for (int i = 0;i<numCells;i++){
+  for (int i = 0; i<numCells; i++)
+  {
     altNorms[cellIDs[i]] = computeAlternativeNormSqOnCell(ip, _mesh->getElement(cellIDs[i]));
   }
   return altNorms;
@@ -397,7 +440,8 @@ map<GlobalIndexType,double> TRieszRep<Scalar>::computeAlternativeNormSqOnCells(T
 }
 
 template <typename Scalar>
-double TRieszRep<Scalar>::computeAlternativeNormSqOnCell(TIPPtr<Scalar> ip, ElementPtr elem){
+double TRieszRep<Scalar>::computeAlternativeNormSqOnCell(TIPPtr<Scalar> ip, ElementPtr elem)
+{
   GlobalIndexType cellID = elem->cellID();
   Teuchos::RCP<DofOrdering> testOrdering= elem->elementType()->testOrderPtr;
   bool testVsTest = true;
@@ -408,8 +452,10 @@ double TRieszRep<Scalar>::computeAlternativeNormSqOnCell(TIPPtr<Scalar> ip, Elem
   ip->computeInnerProductMatrix(ipMat,testOrdering,basisCache);
 
   double sum = 0.0;
-  for (int i = 0;i<numDofs;i++){
-    for (int j = 0;j<numDofs;j++){
+  for (int i = 0; i<numDofs; i++)
+  {
+    for (int j = 0; j<numDofs; j++)
+    {
       sum += _rieszRepDofsGlobal[cellID](i)*_rieszRepDofsGlobal[cellID](j)*ipMat(0,i,j);
     }
   }
@@ -418,16 +464,19 @@ double TRieszRep<Scalar>::computeAlternativeNormSqOnCell(TIPPtr<Scalar> ip, Elem
 }
 
 template <typename Scalar>
-TFunctionPtr<Scalar> TRieszRep<Scalar>::repFunction( VarPtr var, TRieszRepPtr<Scalar> rep ) {
+TFunctionPtr<Scalar> TRieszRep<Scalar>::repFunction( VarPtr var, TRieszRepPtr<Scalar> rep )
+{
   return Teuchos::rcp( new RepFunction<Scalar>(var, rep) );
 }
 
 template <typename Scalar>
-TRieszRepPtr<Scalar> TRieszRep<Scalar>::rieszRep(MeshPtr mesh, TIPPtr<Scalar> ip, TLinearTermPtr<Scalar> rhs) {
+TRieszRepPtr<Scalar> TRieszRep<Scalar>::rieszRep(MeshPtr mesh, TIPPtr<Scalar> ip, TLinearTermPtr<Scalar> rhs)
+{
   return Teuchos::rcp( new TRieszRep<Scalar>(mesh,ip,rhs) );
 }
 
-namespace Camellia {
-  template class TRieszRep<double>;
-  template class RepFunction<double>;
+namespace Camellia
+{
+template class TRieszRep<double>;
+template class RepFunction<double>;
 }

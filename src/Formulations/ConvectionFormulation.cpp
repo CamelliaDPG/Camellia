@@ -14,10 +14,12 @@ const string ConvectionFormulation::S_U = "u";
 const string ConvectionFormulation::S_Q_N_HAT = "\\widehat{q}_n";
 const string ConvectionFormulation::S_V = "v";
 
-ConvectionFormulation::ConvectionFormulation(int spaceDim, TFunctionPtr<double> convectiveFunction) { // convectiveFunction should have zero divergence
+ConvectionFormulation::ConvectionFormulation(int spaceDim, TFunctionPtr<double> convectiveFunction)   // convectiveFunction should have zero divergence
+{
   _spaceDim = spaceDim;
 
-  if (_spaceDim != 2) {
+  if (_spaceDim != 2)
+  {
     cout << "ConvectionFormulation only supports 2D right now.\n";
     TEUCHOS_TEST_FOR_EXCEPTION(true, std::invalid_argument, "ConvectionFormulation only supports 2D right now.");
   }
@@ -40,24 +42,28 @@ ConvectionFormulation::ConvectionFormulation(int spaceDim, TFunctionPtr<double> 
   _convectionBF->addTerm(qHat, v);
 }
 
-BFPtr ConvectionFormulation::bf() {
+BFPtr ConvectionFormulation::bf()
+{
   return _convectionBF;
 }
 
 // field variables:
-VarPtr ConvectionFormulation::u() {
+VarPtr ConvectionFormulation::u()
+{
   VarFactoryPtr vf = _convectionBF->varFactory();
   return vf->fieldVar(S_U);
 }
 
 // traces
-VarPtr ConvectionFormulation::q_n_hat() {
+VarPtr ConvectionFormulation::q_n_hat()
+{
   VarFactoryPtr vf = _convectionBF->varFactory();
   return vf->fluxVar(S_Q_N_HAT);
 }
 
 // tests:
-VarPtr ConvectionFormulation::v() {
+VarPtr ConvectionFormulation::v()
+{
   VarFactoryPtr vf = _convectionBF->varFactory();
   return vf->testVar(S_V, HGRAD);
 }

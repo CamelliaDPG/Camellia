@@ -10,7 +10,7 @@
 using namespace Camellia;
 
 TimeIntegrator::TimeIntegrator(BFPtr steadyJacobian, SteadyResidual &steadyResidual, MeshPtr mesh,
-    BCPtr bc, IPPtr ip, map<int, TFunctionPtr<double>> initialCondition, bool nonlinear) :
+                               BCPtr bc, IPPtr ip, map<int, TFunctionPtr<double>> initialCondition, bool nonlinear) :
   _steadyJacobian(steadyJacobian), _steadyResidual(steadyResidual), _bc(bc), _nonlinear(nonlinear)
 {
   _t = 0;
@@ -148,7 +148,7 @@ void ImplicitEulerIntegrator::runToTime(double T, double dt)
 }
 
 ESDIRKIntegrator::ESDIRKIntegrator(BFPtr steadyJacobian, SteadyResidual &steadyResidual, MeshPtr mesh,
-    BCPtr bc, IPPtr ip, map<int, TFunctionPtr<double>> initialCondition, int numStages, bool nonlinear) :
+                                   BCPtr bc, IPPtr ip, map<int, TFunctionPtr<double>> initialCondition, int numStages, bool nonlinear) :
   TimeIntegrator(steadyJacobian, steadyResidual, mesh, bc, ip, initialCondition, nonlinear),
   _numStages(numStages)
 {
@@ -164,87 +164,87 @@ ESDIRKIntegrator::ESDIRKIntegrator(BFPtr steadyJacobian, SteadyResidual &steadyR
 
   switch (_numStages)
   {
-    case 2:
-      // second order accurate
-      a[1][0] = 1./2;
-      a[1][1] = 1./2;
+  case 2:
+    // second order accurate
+    a[1][0] = 1./2;
+    a[1][1] = 1./2;
 
-      b[0] = 1./2;
-      b[1] = 1./2;
+    b[0] = 1./2;
+    b[1] = 1./2;
 
-      c[0] = 0;
-      c[1] = 1;
-      break;
-    case 4:
-      // 3rd order accurate
-      // Values from http://dx.doi.org/10.1006/jcph.2002.7059
-      a[1][0] = 1767732205903./4055673282236;
-      a[1][1] = 1767732205903./4055673282236;
+    c[0] = 0;
+    c[1] = 1;
+    break;
+  case 4:
+    // 3rd order accurate
+    // Values from http://dx.doi.org/10.1006/jcph.2002.7059
+    a[1][0] = 1767732205903./4055673282236;
+    a[1][1] = 1767732205903./4055673282236;
 
-      a[2][0] = 2746238789719./10658868560708;
-      a[2][1] = -640167445237./6845629431997;
-      a[2][2] = 1767732205903./4055673282236;
+    a[2][0] = 2746238789719./10658868560708;
+    a[2][1] = -640167445237./6845629431997;
+    a[2][2] = 1767732205903./4055673282236;
 
-      a[3][0] = 1471266399579./7840856788654;
-      a[3][1] = -4482444167858./7529755066697;
-      a[3][2] = 11266239266428./11593286722821;
-      a[3][3] = 1767732205903./4055673282236;
+    a[3][0] = 1471266399579./7840856788654;
+    a[3][1] = -4482444167858./7529755066697;
+    a[3][2] = 11266239266428./11593286722821;
+    a[3][3] = 1767732205903./4055673282236;
 
-      b[0] = 1471266399579./7840856788654;
-      b[1] = -4482444167858./7529755066697;
-      b[2] = 11266239266428./11593286722821;
-      b[3] = 1767732205903./4055673282236;
+    b[0] = 1471266399579./7840856788654;
+    b[1] = -4482444167858./7529755066697;
+    b[2] = 11266239266428./11593286722821;
+    b[3] = 1767732205903./4055673282236;
 
-      c[0] = 0;
-      c[1] = 1767732205903./2027836641118;
-      c[2] = 3./5;
-      c[3] = 1;
-      break;
-    case 6:
-      // 4th order accurate
-      // Values from http://utoronto-comp-aero.wikispaces.com/file/view/sammy_isono_masc.pdf
-      a[1][0] = 1./4;
-      a[1][1] = 1./4;
+    c[0] = 0;
+    c[1] = 1767732205903./2027836641118;
+    c[2] = 3./5;
+    c[3] = 1;
+    break;
+  case 6:
+    // 4th order accurate
+    // Values from http://utoronto-comp-aero.wikispaces.com/file/view/sammy_isono_masc.pdf
+    a[1][0] = 1./4;
+    a[1][1] = 1./4;
 
-      a[2][0] = 8611./62500;
-      a[2][1] = -1743./31250;
-      a[2][2] = 1./4;
+    a[2][0] = 8611./62500;
+    a[2][1] = -1743./31250;
+    a[2][2] = 1./4;
 
-      a[3][0] = 5012029./34652500;
-      a[3][1] = -654441./2922500;
-      a[3][2] = 174375./388108;
-      a[3][3] = 1./4;
+    a[3][0] = 5012029./34652500;
+    a[3][1] = -654441./2922500;
+    a[3][2] = 174375./388108;
+    a[3][3] = 1./4;
 
-      a[4][0] = 15267082809./155376265600;
-      a[4][1] = -71443401./120774400;
-      a[4][2] = 730878875./902184768;
-      a[4][3] = 2285395./8070912;
-      a[4][4] = 1./4;
+    a[4][0] = 15267082809./155376265600;
+    a[4][1] = -71443401./120774400;
+    a[4][2] = 730878875./902184768;
+    a[4][3] = 2285395./8070912;
+    a[4][4] = 1./4;
 
-      a[5][0] = 82889./524892;
-      a[5][1] = 0;
-      a[5][2] = 15625./83664;
-      a[5][3] = 69875./102672;
-      a[5][4] = -2260./8211;
-      a[5][5] = 1./4;
+    a[5][0] = 82889./524892;
+    a[5][1] = 0;
+    a[5][2] = 15625./83664;
+    a[5][3] = 69875./102672;
+    a[5][4] = -2260./8211;
+    a[5][5] = 1./4;
 
-      b[0] = 82889./524892;
-      b[1] = 0;
-      b[2] = 15625./83664;
-      b[3] = 69875./102672;
-      b[4] = -2260./8211;
-      b[5] = 1./4;
+    b[0] = 82889./524892;
+    b[1] = 0;
+    b[2] = 15625./83664;
+    b[3] = 69875./102672;
+    b[4] = -2260./8211;
+    b[5] = 1./4;
 
-      c[0] = 0;
-      c[1] = 1./2;
-      c[2] = 83./250;
-      c[3] = 31./50;
-      c[4] = 17./20;
-      c[5] = 1;
-      break;
+    c[0] = 0;
+    c[1] = 1./2;
+    c[2] = 83./250;
+    c[3] = 31./50;
+    c[4] = 17./20;
+    c[5] = 1;
+    break;
 
-    default:
-      TEUCHOS_TEST_FOR_EXCEPTION(true, std::invalid_argument, "invalid ESDIRK stage number");
+  default:
+    TEUCHOS_TEST_FOR_EXCEPTION(true, std::invalid_argument, "invalid ESDIRK stage number");
   }
 
   BCPtr nullBC = Teuchos::rcp((BC*)NULL);
@@ -323,7 +323,7 @@ void ESDIRKIntegrator::calcNextTimeStep(double dt)
           {
             cout << "Hit maximum number of iterations" << endl;
           }
-            break;
+          break;
         }
       }
       _stageSolution[k]->setSolution(_prevNLSolution);

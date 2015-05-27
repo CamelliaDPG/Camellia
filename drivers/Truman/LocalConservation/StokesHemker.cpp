@@ -18,58 +18,69 @@
 #include "choice.hpp"
 #endif
 
-class ConstantXBoundary : public SpatialFilter {
-  private:
-    double xval;
-  public:
-    ConstantXBoundary(double xval): xval(xval) {};
-    bool matchesPoint(double x, double y) {
-      double tol = 1e-14;
-      return (abs(x-xval) < tol);
-    }
+class ConstantXBoundary : public SpatialFilter
+{
+private:
+  double xval;
+public:
+  ConstantXBoundary(double xval): xval(xval) {};
+  bool matchesPoint(double x, double y)
+  {
+    double tol = 1e-14;
+    return (abs(x-xval) < tol);
+  }
 };
 
-class ConstantYBoundary : public SpatialFilter {
-  private:
-    double yval;
-  public:
-    ConstantYBoundary(double yval): yval(yval) {};
-    bool matchesPoint(double x, double y) {
-      double tol = 1e-14;
-      return (abs(y-yval) < tol);
-    }
+class ConstantYBoundary : public SpatialFilter
+{
+private:
+  double yval;
+public:
+  ConstantYBoundary(double yval): yval(yval) {};
+  bool matchesPoint(double x, double y)
+  {
+    double tol = 1e-14;
+    return (abs(y-yval) < tol);
+  }
 };
 
-class CircleBoundary : public SpatialFilter {
-  private:
-    double r;
-  public:
+class CircleBoundary : public SpatialFilter
+{
+private:
+  double r;
+public:
   CircleBoundary(double radius): r(radius) {};
-  bool matchesPoint(double x, double y) {
+  bool matchesPoint(double x, double y)
+  {
     double tol = 1e-3;
     return (abs(x*x+y*y) < r*r+tol);
   }
 };
 
-class BoundaryU1 : public Function {
-  public:
-    BoundaryU1() : Function(0) {}
-    void values(FieldContainer<double> &values, BasisCachePtr basisCache) {
-      int numCells = values.dimension(0);
-      int numPoints = values.dimension(1);
+class BoundaryU1 : public Function
+{
+public:
+  BoundaryU1() : Function(0) {}
+  void values(FieldContainer<double> &values, BasisCachePtr basisCache)
+  {
+    int numCells = values.dimension(0);
+    int numPoints = values.dimension(1);
 
-      const FieldContainer<double> *points = &(basisCache->getPhysicalCubaturePoints());
-      for (int cellIndex=0; cellIndex<numCells; cellIndex++) {
-        for (int ptIndex=0; ptIndex<numPoints; ptIndex++) {
-          double x = (*points)(cellIndex,ptIndex,0);
-          double y = (*points)(cellIndex,ptIndex,1);
-          values(cellIndex, ptIndex) = (1-y)*(1+y);
-        }
+    const FieldContainer<double> *points = &(basisCache->getPhysicalCubaturePoints());
+    for (int cellIndex=0; cellIndex<numCells; cellIndex++)
+    {
+      for (int ptIndex=0; ptIndex<numPoints; ptIndex++)
+      {
+        double x = (*points)(cellIndex,ptIndex,0);
+        double y = (*points)(cellIndex,ptIndex,1);
+        values(cellIndex, ptIndex) = (1-y)*(1+y);
       }
     }
+  }
 };
 
-int main(int argc, char *argv[]) {
+int main(int argc, char *argv[])
+{
 #ifdef HAVE_MPI
   Teuchos::GlobalMPISession mpiSession(&argc, &argv,0);
   choice::MpiArgs args( argc, argv );
@@ -241,7 +252,8 @@ int main(int argc, char *argv[]) {
 
   Teuchos::RCP<Solution> solution = Teuchos::rcp( new Solution(mesh, bc, rhs, ip) );
 
-  if (enforceLocalConservation) {
+  if (enforceLocalConservation)
+  {
     solution->lagrangeConstraints()->addConstraint(u1hat->times_normal_x() + u2hat->times_normal_y() == zero);
   }
 
@@ -307,7 +319,7 @@ int main(int argc, char *argv[]) {
   // }
 
   for (int i = 0; i < uniformRefinements; i++)
-     refinementStrategy.hRefineUniformly(mesh);
+    refinementStrategy.hRefineUniformly(mesh);
 
   double nonlinearRelativeEnergyTolerance = 1e-5; // used to determine convergence of the nonlinear solution
   for (int refIndex=0; refIndex<=numRefs; refIndex++)
@@ -334,7 +346,7 @@ int main(int argc, char *argv[]) {
         //   << ", Global = " << fluxImbalances[1] << ", Sum Abs = " << fluxImbalances[2] << endl;
 
         errOut << mesh->numGlobalDofs() << " " << energy_error << " "
-          << fluxImbalances[0] << " " << fluxImbalances[1] << " " << fluxImbalances[2] << endl;
+               << fluxImbalances[0] << " " << fluxImbalances[1] << " " << fluxImbalances[2] << endl;
 
         double massFlux0 = computeFluxOverElementSides(u1_prev, mesh, cellFace0);
         double massFlux1 = computeFluxOverElementSides(u1_prev, mesh, cellFace1);

@@ -52,7 +52,8 @@ using namespace Camellia;
 
 double pi = 2.0*acos(0.0);
 
-int main(int argc, char *argv[]) {
+int main(int argc, char *argv[])
+{
 
 #ifdef HAVE_MPI
   Teuchos::GlobalMPISession mpiSession(&argc, &argv,0);
@@ -81,7 +82,8 @@ int main(int argc, char *argv[]) {
   cmdp.setOption("mu", &mu, "mu");
   cmdp.setOption("permCoef", &permCoef, "Permeability coefficient");
 
-  if (cmdp.parse(argc,argv) != Teuchos::CommandLineProcessor::PARSE_SUCCESSFUL) {
+  if (cmdp.parse(argc,argv) != Teuchos::CommandLineProcessor::PARSE_SUCCESSFUL)
+  {
 #ifdef HAVE_MPI
     MPI_Finalize();
 #endif
@@ -198,16 +200,17 @@ int main(int argc, char *argv[]) {
   refName << "brinkman";
   HDF5Exporter exporter(mesh,refName.str());
 
-  for (int refIndex=0; refIndex <= numRefs; refIndex++) {
+  for (int refIndex=0; refIndex <= numRefs; refIndex++)
+  {
     soln->solve(false);
 
     double energyError = soln->energyErrorTotal();
     if (commRank == 0)
     {
       // if (refIndex > 0)
-        // refStrategy.printRefinementStatistics(refIndex-1);
+      // refStrategy.printRefinementStatistics(refIndex-1);
       cout << "Refinement:\t " << refIndex << " \tElements:\t " << mesh->numActiveElements()
-        << " \tDOFs:\t " << mesh->numGlobalDofs() << " \tEnergy Error:\t " << energyError << endl;
+           << " \tDOFs:\t " << mesh->numGlobalDofs() << " \tEnergy Error:\t " << energyError << endl;
     }
 
     exporter.exportSolution(soln, refIndex);

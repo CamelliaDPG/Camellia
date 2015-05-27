@@ -23,45 +23,56 @@
 double pi = 2.0*acos(0.0);
 double epsilon;
 
-class EpsilonScaling : public hFunction {
+class EpsilonScaling : public hFunction
+{
   double _epsilon;
 public:
-  EpsilonScaling(double epsilon) {
+  EpsilonScaling(double epsilon)
+  {
     _epsilon = epsilon;
   }
-  double value(double x, double y, double h) {
+  double value(double x, double y, double h)
+  {
     double scaling = min(_epsilon/(h*h), 1.0);
     // since this is used in inner product term a like (a,a), take square root
     return sqrt(scaling);
   }
 };
 
-class ZeroMeanScaling : public hFunction {
-  public:
-  double value(double x, double y, double h) {
+class ZeroMeanScaling : public hFunction
+{
+public:
+  double value(double x, double y, double h)
+  {
     return 1.0/(h*h);
   }
 };
 
-class LeftBoundary : public SpatialFilter {
+class LeftBoundary : public SpatialFilter
+{
 public:
-  bool matchesPoint(double x, double y) {
+  bool matchesPoint(double x, double y)
+  {
     double tol = 1e-14;
     return (abs(x) < tol);
   }
 };
 
-class RightBoundary : public SpatialFilter {
+class RightBoundary : public SpatialFilter
+{
 public:
-  bool matchesPoint(double x, double y) {
+  bool matchesPoint(double x, double y)
+  {
     double tol = 1e-14;
     return (abs(x-1.0) < tol);
   }
 };
 
-class TopBottomBoundary : public SpatialFilter {
+class TopBottomBoundary : public SpatialFilter
+{
 public:
-  bool matchesPoint(double x, double y) {
+  bool matchesPoint(double x, double y)
+  {
     double tol = 1e-14;
     bool topMatch = (abs(y-1.0) < tol);
     bool bottomMatch = (abs(y) < tol);
@@ -70,53 +81,64 @@ public:
 };
 
 // boundary value for u
-class UExact : public Function {
+class UExact : public Function
+{
   double _eps;
   int _returnID;
-  public:
-  UExact(double eps) : Function(0) {
+public:
+  UExact(double eps) : Function(0)
+  {
     _eps = eps;
     _returnID = 0;
   }
-  UExact(double eps,int trialID) : Function(0) {
+  UExact(double eps,int trialID) : Function(0)
+  {
     _eps = eps;
     _returnID = trialID;
   }
-  void values(FieldContainer<double> &values, BasisCachePtr basisCache) {
+  void values(FieldContainer<double> &values, BasisCachePtr basisCache)
+  {
 
     int numCells = values.dimension(0);
-    int numPoints = values.dimension(1);    
+    int numPoints = values.dimension(1);
     const FieldContainer<double> *points = &(basisCache->getPhysicalCubaturePoints());
-    for (int cellIndex=0; cellIndex<numCells; cellIndex++) {
-      for (int ptIndex=0; ptIndex<numPoints; ptIndex++) {
+    for (int cellIndex=0; cellIndex<numCells; cellIndex++)
+    {
+      for (int ptIndex=0; ptIndex<numPoints; ptIndex++)
+      {
         double x = (*points)(cellIndex,ptIndex,0);
         double y = (*points)(cellIndex,ptIndex,1);
 
         double C0 = 0.0;// average of u0
         double u = C0;
         double u_x = 0.0;
-        double u_y = 0.0;  	
+        double u_y = 0.0;
         bool useDiscontinuous = false; // use discontinuous soln
         int numTerms = 20;
         if (!useDiscontinuous)
           numTerms = 1;
-        for (int n = 1;n<numTerms+1;n++){
+        for (int n = 1; n<numTerms+1; n++)
+        {
 
           double lambda = n*n*pi*pi*_eps;
           double d = sqrt(1.0+4.0*_eps*lambda);
           double r1 = (1.0+d)/(2.0*_eps);
           double r2 = (1.0-d)/(2.0*_eps);
 
-          double Cn = 0.0;            
-          if (!useDiscontinuous){
-            if (n==1){
+          double Cn = 0.0;
+          if (!useDiscontinuous)
+          {
+            if (n==1)
+            {
               Cn = 1.0; // first term only
-            } 	  
-          }else{
-            // discontinuous hat 
+            }
+          }
+          else
+          {
+            // discontinuous hat
             Cn = -1 + cos(n*pi/2)+.5*n*pi*sin(n*pi/2) + sin(n*pi/4)*(n*pi*cos(n*pi/4)-2*sin(3*n*pi/4));
             Cn /= (n*pi);
-            Cn /= (n*pi);    
+            Cn /= (n*pi);
           }
 
 
@@ -127,7 +149,7 @@ class UExact : public Function {
           // wall, zero outflow
           Xtop = (exp(r2*(x-1))-exp(r1*(x-1)));
           Xbottom = (exp(-r2)-exp(-r1));
-          dXtop = (exp(r2*(x-1))*r2-exp(r1*(x-1))*r1);    
+          dXtop = (exp(r2*(x-1))*r2-exp(r1*(x-1))*r1);
 
           double X = Xtop/Xbottom;
           double dX = dXtop/Xbottom;
@@ -138,13 +160,16 @@ class UExact : public Function {
           u_x += _eps * dX*Y;
           u_y += _eps * X*dY;
         }
-        if (_returnID==0){
+        if (_returnID==0)
+        {
           values(cellIndex,ptIndex) = u;
         }
-        else if (_returnID==1){
+        else if (_returnID==1)
+        {
           values(cellIndex,ptIndex) = u_x;
         }
-        else if (_returnID==2){
+        else if (_returnID==2)
+        {
           values(cellIndex,ptIndex) = u_y;
         }
       }
@@ -160,7 +185,7 @@ class UExact : public Function {
 //       double lambda_n = pi*pi*epsilon;
 //       double r1 = (1+sqrt(1+4*epsilon*lambda_n))/(2*epsilon);
 //       double r2 = (1-sqrt(1+4*epsilon*lambda_n))/(2*epsilon);
-// 
+//
 //       const FieldContainer<double> *points = &(basisCache->getPhysicalCubaturePoints());
 //       double tol=1e-14;
 //       for (int cellIndex=0; cellIndex<numCells; cellIndex++) {
@@ -174,7 +199,8 @@ class UExact : public Function {
 //     }
 // };
 
-int main(int argc, char *argv[]) {
+int main(int argc, char *argv[])
+{
 #ifdef HAVE_MPI
   Teuchos::GlobalMPISession mpiSession(&argc, &argv,0);
   choice::MpiArgs args( argc, argv );
@@ -196,10 +222,10 @@ int main(int argc, char *argv[]) {
 
   ////////////////////   DECLARE VARIABLES   ///////////////////////
   // define test variables
-  VarFactory varFactory; 
+  VarFactory varFactory;
   VarPtr tau = varFactory.testVar("tau", HDIV);
   VarPtr v = varFactory.testVar("v", HGRAD);
-  
+
   // define trial variables
   VarPtr uhat = varFactory.traceVar("uhat");
   VarPtr beta_n_u_minus_sigma_n = varFactory.fluxVar("fhat");
@@ -209,33 +235,33 @@ int main(int argc, char *argv[]) {
   vector<double> beta;
   beta.push_back(1.0);
   beta.push_back(0.0);
-  
+
   ////////////////////   DEFINE BILINEAR FORM   ///////////////////////
   BFPtr bf = Teuchos::rcp( new BF(varFactory) );
   // tau terms:
   bf->addTerm(sigma / epsilon, tau);
   bf->addTerm(u, tau->div());
   bf->addTerm(-uhat, tau->dot_normal());
-  
+
   // v terms:
   bf->addTerm( sigma, v->grad() );
   bf->addTerm( beta * u, - v->grad() );
   bf->addTerm( beta_n_u_minus_sigma_n, v);
-  
+
   ////////////////////   DEFINE INNER PRODUCT(S)   ///////////////////////
   IPPtr ip = Teuchos::rcp(new IP);
   if (norm == 0)
   {
     ip = bf->graphNorm();
-    FunctionPtr h2_scaling = Teuchos::rcp( new ZeroMeanScaling ); 
+    FunctionPtr h2_scaling = Teuchos::rcp( new ZeroMeanScaling );
     ip->addZeroMeanTerm( h2_scaling*v );
   }
   // Robust norm
   else if (norm == 1)
   {
     // robust test norm
-    FunctionPtr ip_scaling = Teuchos::rcp( new EpsilonScaling(epsilon) ); 
-    FunctionPtr h2_scaling = Teuchos::rcp( new ZeroMeanScaling ); 
+    FunctionPtr ip_scaling = Teuchos::rcp( new EpsilonScaling(epsilon) );
+    FunctionPtr h2_scaling = Teuchos::rcp( new ZeroMeanScaling );
     if (!zeroL2)
       ip->addTerm( v );
     ip->addTerm( sqrt(epsilon) * v->grad() );
@@ -250,8 +276,8 @@ int main(int argc, char *argv[]) {
   else if (norm == 2)
   {
     // robust test norm
-    FunctionPtr ip_scaling = Teuchos::rcp( new EpsilonScaling(epsilon) ); 
-    FunctionPtr h2_scaling = Teuchos::rcp( new ZeroMeanScaling ); 
+    FunctionPtr ip_scaling = Teuchos::rcp( new EpsilonScaling(epsilon) );
+    FunctionPtr h2_scaling = Teuchos::rcp( new ZeroMeanScaling );
     // FunctionPtr ip_weight = Teuchos::rcp( new IPWeight() );
     if (!zeroL2)
       ip->addTerm( v );
@@ -262,7 +288,7 @@ int main(int argc, char *argv[]) {
     if (zeroL2)
       ip->addZeroMeanTerm( h2_scaling*v );
   }
-  
+
   ////////////////////   SPECIFY RHS   ///////////////////////
   RHSPtr rhs = RHS::rhs();
   FunctionPtr f = Teuchos::rcp( new ConstantScalarFunction(0.0) );
@@ -286,11 +312,11 @@ int main(int argc, char *argv[]) {
   bc->addDirichlet(beta_n_u_minus_sigma_n, lBoundary, beta*n*u_exact-sigma_exact*n);
   bc->addDirichlet(beta_n_u_minus_sigma_n, tbBoundary, beta*n*u_exact-sigma_exact*n);
   bc->addDirichlet(uhat, rBoundary, u_r);
-  
+
   ////////////////////   BUILD MESH   ///////////////////////
   // define nodes for mesh
   FieldContainer<double> meshBoundary(4,2);
-  
+
   meshBoundary(0,0) = 0.0; // x1
   meshBoundary(0,1) = 0.0; // y1
   meshBoundary(1,0) = 1.0;
@@ -299,24 +325,25 @@ int main(int argc, char *argv[]) {
   meshBoundary(2,1) = 1.0;
   meshBoundary(3,0) = 0.0;
   meshBoundary(3,1) = 1.0;
-  
+
   int H1Order = 3, pToAdd = 2;
   int horizontalCells = 2, verticalCells = 2;
-  
+
   // create a pointer to a new mesh:
   Teuchos::RCP<Mesh> mesh = Mesh::buildQuadMesh(meshBoundary, horizontalCells, verticalCells,
-                                                bf, H1Order, H1Order+pToAdd);
-  
+                            bf, H1Order, H1Order+pToAdd);
+
   ////////////////////   SOLVE & REFINE   ///////////////////////
   // Teuchos::RCP<Solution> solution = Teuchos::rcp( new Solution(mesh, bc, rhs, qoptIP) );
   Teuchos::RCP<Solution> solution = Teuchos::rcp( new Solution(mesh, bc, rhs, ip) );
   // solution->setFilter(pc);
 
-  if (enforceLocalConservation) {
+  if (enforceLocalConservation)
+  {
     FunctionPtr zero = Teuchos::rcp( new ConstantScalarFunction(0.0) );
     solution->lagrangeConstraints()->addConstraint(beta_n_u_minus_sigma_n == zero);
   }
-  
+
   double energyThreshold = 0.3; // for mesh refinements
   RefinementStrategy refinementStrategy( solution, energyThreshold );
   // VTKExporter exporter(solution, mesh, varFactory);
@@ -328,7 +355,8 @@ int main(int argc, char *argv[]) {
   if (commRank == 0)
     convOut.open(convOutFile.str().c_str());
   // u_exact->writeValuesToMATLABFile(mesh, "u_exact.m");
-  for (int refIndex=0; refIndex<=numRefs; refIndex++){    
+  for (int refIndex=0; refIndex<=numRefs; refIndex++)
+  {
     solution->solve(false);
 
 
@@ -343,7 +371,8 @@ int main(int argc, char *argv[]) {
     double L2_error = sqrt(L2_error_u + L2_error_sigma);
     double energy_error = solution->energyErrorTotal();
 
-    if (commRank==0){
+    if (commRank==0)
+    {
       stringstream outfile;
       stringstream errfile;
       outfile << "erickson_" << refIndex;
@@ -358,11 +387,11 @@ int main(int argc, char *argv[]) {
       FunctionPtr flux = Teuchos::rcp( new PreviousSolutionFunction(solution, beta_n_u_minus_sigma_n) );
       FunctionPtr zero = Teuchos::rcp( new ConstantScalarFunction(0.0) );
       Teuchos::Tuple<double, 3> fluxImbalances = checkConservation(flux, zero, mesh, 0);
-      cout << "Mass flux: Largest Local = " << fluxImbalances[0] 
-        << ", Global = " << fluxImbalances[1] << ", Sum Abs = " << fluxImbalances[2] << endl;
+      cout << "Mass flux: Largest Local = " << fluxImbalances[0]
+           << ", Global = " << fluxImbalances[1] << ", Sum Abs = " << fluxImbalances[2] << endl;
 
       convOut << mesh->numGlobalDofs() << " " << L2_error << " " << energy_error << " "
-        << fluxImbalances[0] << " " << fluxImbalances[1] << " " << fluxImbalances[2] << endl;
+              << fluxImbalances[0] << " " << fluxImbalances[1] << " " << fluxImbalances[2] << endl;
     }
 
     if (refIndex < numRefs)
@@ -373,6 +402,6 @@ int main(int argc, char *argv[]) {
   }
   if (commRank == 0)
     convOut.close();
-  
+
   return 0;
 }

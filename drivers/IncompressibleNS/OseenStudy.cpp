@@ -33,7 +33,8 @@
 
 using namespace std;
 
-int main(int argc, char *argv[]) {
+int main(int argc, char *argv[])
+{
   Teuchos::GlobalMPISession mpiSession(&argc, &argv,0);
   int rank=mpiSession.getRank();
   int numProcs=mpiSession.getNProc();
@@ -43,7 +44,7 @@ int main(int argc, char *argv[]) {
   choice::Args args(argc, argv );
 #endif
   bool useGraphNorm = true;
-  
+
   int minPolyOrder = args.Input<int>("--minPolyOrder", "L^2 (field) minimum polynomial order",0);
   int maxPolyOrder = args.Input<int>("--maxPolyOrder", "L^2 (field) maximum polynomial order",1);
   int minLogElements = args.Input<int>("--minLogElements", "base 2 log of the minimum number of elements in one mesh direction", 0);
@@ -54,32 +55,35 @@ int main(int argc, char *argv[]) {
   bool computeMaxConditionNumber = args.Input<bool>("--computeMaxConditionNumber", "compute the maximum Gram matrix condition number for final mesh.", false);
   bool useCompliantNorm = args.Input<bool>("--useCompliantNorm", "use the 'scale-compliant' norm", !useGraphNorm);
   bool writeMATLABplotData = args.Input<bool>("--writeMATLABplotData", "write MATLAB plot data", false);
-  
+
   useGraphNorm = !useCompliantNorm;
-  
-  try {
+
+  try
+  {
     args.Process();
-  } catch ( choice::ArgException& e )
+  }
+  catch ( choice::ArgException& e )
   {
     exit(1);
   }
-  
+
   int pToAdd = 2; // for optimal test function approximation
   bool computeRelativeErrors = true; // we'll say false when one of the exact solution components is 0
   bool useEnrichedTraces = true; // enriched traces are the right choice, mathematically speaking
   BasisFactory::basisFactory()->setUseEnrichedTraces(useEnrichedTraces);
   bool scaleSigmaByMu = true;
-  
+
   bool useTriangles = false;
-  
-  if (rank == 0) {
+
+  if (rank == 0)
+  {
     cout << "pToAdd = " << pToAdd << endl;
     cout << "useTriangles = "    << (useTriangles   ? "true" : "false") << "\n";
     cout << "useGraphNorm = "  << (useGraphNorm ? "true" : "false") << "\n";
     cout << "useCompliantNorm = "  << (useCompliantNorm ? "true" : "false") << "\n";
     cout << "longDoubleGramInversion = "  << (longDoubleGramInversion ? "true" : "false") << "\n";
   }
-  
+
   // define Kovasznay domain:
   FieldContainer<double> quadPointsKovasznay(4,2);
   // domain from Cockburn Kanschat for Stokes:
@@ -91,7 +95,7 @@ int main(int argc, char *argv[]) {
   quadPointsKovasznay(2,1) =  2.0;
   quadPointsKovasznay(3,0) = -0.5;
   quadPointsKovasznay(3,1) =  2.0;
-  
+
   // Domain from Evans Hughes for Navier-Stokes:
 //  quadPointsKovasznay(0,0) =  0.0; // x1
 //  quadPointsKovasznay(0,1) = -0.5; // y1
@@ -111,24 +115,24 @@ int main(int argc, char *argv[]) {
 //  quadPointsKovasznay(2,1) =  1.0;
 //  quadPointsKovasznay(3,0) = -1.0;
 //  quadPointsKovasznay(3,1) =  1.0;
-  
+
 //  double Re = 10.0;  // Cockburn Kanschat Stokes
 //  double Re = 40.0; // Evans Hughes Navier-Stokes
 //  double Re = 1000.0;
-  
+
   string formulationTypeStr = "vgp";
-  
+
   FunctionPtr u1_exact, u2_exact, p_exact;
-  
+
   int numCellsFineMesh = 20; // for computing a zero-mean pressure
   int H1OrderFineMesh = 5;
 
   FunctionPtr zero = Function::zero();
   VGPOseenProblem zeroProblem = VGPOseenProblem(Re, quadPointsKovasznay,
-                                                numCellsFineMesh, numCellsFineMesh,
-                                                H1OrderFineMesh, pToAdd,
-                                                zero, zero, zero, useCompliantNorm, scaleSigmaByMu);
-  
+                                numCellsFineMesh, numCellsFineMesh,
+                                H1OrderFineMesh, pToAdd,
+                                zero, zero, zero, useCompliantNorm, scaleSigmaByMu);
+
   VarFactory varFactory = VGPStokesFormulation::vgpVarFactory();
   VarPtr u1_vgp = varFactory.fieldVar(VGP_U1_S);
   VarPtr u2_vgp = varFactory.fieldVar(VGP_U2_S);
@@ -137,9 +141,9 @@ int main(int argc, char *argv[]) {
   VarPtr sigma21_vgp = varFactory.fieldVar(VGP_SIGMA21_S);
   VarPtr sigma22_vgp = varFactory.fieldVar(VGP_SIGMA22_S);
   VarPtr p_vgp = varFactory.fieldVar(VGP_P_S);
-    
+
   VGPStokesFormulation stokesForm(1/Re,false,true);
-  
+
   NavierStokesFormulation::setKovasznay(Re, zeroProblem.mesh(), u1_exact, u2_exact, p_exact);
 
   // test:
@@ -147,75 +151,83 @@ int main(int argc, char *argv[]) {
 //  u2_exact = -Function::yn(1); // -2 * Function::xn(1) * Function::yn(1); //- Function::yn(2); //-Function::yn(1);
 //  p_exact  = Function::zero(); //Function::xn(5); // odd function
 //  computeRelativeErrors = false;
-  
+
   map< string, string > convergenceDataForMATLAB; // key: field file name
-  
-  for (int polyOrder = minPolyOrder; polyOrder <= maxPolyOrder; polyOrder++) {
+
+  for (int polyOrder = minPolyOrder; polyOrder <= maxPolyOrder; polyOrder++)
+  {
     int H1Order = polyOrder + 1;
-    
+
     int numCells1D = pow(2.0,minLogElements);
 
-    if (rank==0) {
+    if (rank==0)
+    {
       cout << "L^2 order: " << polyOrder << endl;
       cout << "Re = " << Re << endl;
     }
-    
+
     int kovasznayCubatureEnrichment = 20; // 20 is better than 10 for accurately measuring error on the coarser meshes.
 
     vector< VGPOseenProblem > problems;
-    do {
+    do
+    {
       VGPOseenProblem problem = VGPOseenProblem(Re, quadPointsKovasznay,
-                                                numCells1D, numCells1D,
-                                                H1Order, pToAdd,
-                                                u1_exact, u2_exact, p_exact, useCompliantNorm, scaleSigmaByMu);
-      
+                                numCells1D, numCells1D,
+                                H1Order, pToAdd,
+                                u1_exact, u2_exact, p_exact, useCompliantNorm, scaleSigmaByMu);
+
 //      cout << "problem.bf():\n";
 //      problem.bf()->printTrialTestInteractions();
-      
+
       problem.bf()->setUseExtendedPrecisionSolveForOptimalTestFunctions(longDoubleGramInversion);
-      
+
       problem.solution()->setCubatureEnrichmentDegree(kovasznayCubatureEnrichment);
       problems.push_back(problem);
-      if ( useCompliantNorm ) {
+      if ( useCompliantNorm )
+      {
         problem.setIP(problem.vgpOseenFormulation()->scaleCompliantGraphNorm());
-      } else if (! useGraphNorm ) {
+      }
+      else if (! useGraphNorm )
+      {
         // then use the naive:
         problem.setIP(problem.bf()->naiveNorm());
       }
-      if (rank==0) {
+      if (rank==0)
+      {
         cout << numCells1D << " x " << numCells1D << ": " << problem.mesh()->numGlobalDofs() << " dofs " << endl;
       }
       numCells1D *= 2;
-    } while (pow(2.0,maxLogElements) >= numCells1D);
-    
+    }
+    while (pow(2.0,maxLogElements) >= numCells1D);
+
     /*{ // DEBUGGING CODE:
       FunctionPtr u1_exact_fxn = problems[0].exactSolution()->exactFunctions().find(u1_vgp->ID())->second;
       FunctionPtr u2_exact_fxn = problems[0].exactSolution()->exactFunctions().find(u2_vgp->ID())->second;
       FunctionPtr p_exact_fxn = problems[0].exactSolution()->exactFunctions().find(p_vgp->ID())->second;
-      
+
       double u1_err = (u1_exact_fxn - u1_exact)->l2norm(problems[0].mesh());
       double u2_err = (u2_exact_fxn - u2_exact)->l2norm(problems[0].mesh());
       double p_err = (p_exact_fxn - p_exact)->l2norm(problems[0].mesh());
-      
+
       cout << "u1 err: " << u1_err << endl;
       cout << "u2 err: " << u2_err << endl;
       cout << "p err: "  << p_err << endl;
-      
+
       FunctionPtr sigma11_exact = problems[0].exactSolution()->exactFunctions().find(sigma11_vgp->ID())->second;
       FunctionPtr sigma12_exact = problems[0].exactSolution()->exactFunctions().find(sigma12_vgp->ID())->second;
       FunctionPtr sigma21_exact = problems[0].exactSolution()->exactFunctions().find(sigma21_vgp->ID())->second;
       FunctionPtr sigma22_exact = problems[0].exactSolution()->exactFunctions().find(sigma22_vgp->ID())->second;
-      
+
       double sigma11_err = (sigma11_exact - 1.0 / Re)->l2norm(problems[0].mesh());
       double sigma12_err = ( sigma12_exact )->l2norm(problems[0].mesh());
       double sigma21_err = ( sigma21_exact )->l2norm(problems[0].mesh());
       double sigma22_err = ( sigma22_exact + 1.0 / Re)->l2norm(problems[0].mesh());
-      
+
       cout << "sigma11 err: " << sigma11_err << endl;
       cout << "sigma12 err: " << sigma12_err << endl;
       cout << "sigma21 err: " << sigma21_err << endl;
       cout << "sigma22 err: " << sigma22_err << endl;
-     
+
       LinearTermPtr rhsLT = problems[0].exactSolution()->rhs()->linearTerm();
       cout << "rhsLT has " << rhsLT->summands().size() << " summands.\n";
       cout << "rhsLT: " << rhsLT->displayString() << endl;
@@ -242,29 +254,30 @@ int main(int argc, char *argv[]) {
         }
       }
     }*/
-    
+
     HConvergenceStudy study(problems[0].exactSolution(),
                             problems[0].mesh()->bilinearForm(),
                             problems[0].exactSolution()->rhs(),
                             problems[0].solution()->bc(),
                             problems[0].bf()->graphNorm(),
-                            minLogElements, maxLogElements, 
+                            minLogElements, maxLogElements,
                             H1Order, pToAdd, false, useTriangles, false);
     study.setReportRelativeErrors(computeRelativeErrors);
     study.setCubatureDegreeForExact(kovasznayCubatureEnrichment);
-    
+
     vector< SolutionPtr > solutions;
     numCells1D = pow(2.0,minLogElements);
     for (vector< VGPOseenProblem >::iterator problem = problems.begin();
-         problem != problems.end(); problem++) {
-      
+         problem != problems.end(); problem++)
+    {
+
       SolutionPtr soln = problem->solution();
       soln->condensedSolve();
       solutions.push_back( soln );
-      
+
       numCells1D *= 2;
     }
-    
+
     study.setSolutions(solutions);
 
 //    for (int i=0; i<=maxLogElements-minLogElements; i++) {
@@ -274,19 +287,20 @@ int main(int argc, char *argv[]) {
 //      Teuchos::RCP<ExactSolution> exact = nsFormBest.exactSolution(u1_exact, u2_exact, p_exact, entireBoundary);
 ////      bestApproximation->setIP( nsFormBest.bf()->naiveNorm() );
 ////      bestApproximation->setRHS( exact->rhs() );
-//      
+//
 //      // use backgroundFlow's IP so that they're comparable
 //      Teuchos::RCP<DPGInnerProduct> ip = problems[i].backgroundFlow()->ip();
 //      LinearTermPtr rhsLT = exact->rhs()->linearTerm();
 //      RieszRep rieszRep(bestApproximation->mesh(), ip, rhsLT);
 //      rieszRep.computeRieszRep();
-//            
+//
 //      double bestCostFunction = rieszRep.getNorm();
 //      if (rank==0)
 //        cout << "best energy error (measured according to the actual solution's test space IP): " << bestCostFunction << endl;
 //    }
-    
-    if (rank == 0) {
+
+    if (rank == 0)
+    {
       cout << study.TeXErrorRateTable();
       vector<int> primaryVariables;
       stokesForm.primaryTrialIDs(primaryVariables);
@@ -295,15 +309,16 @@ int main(int argc, char *argv[]) {
       stokesForm.trialIDs(fieldIDs,traceIDs,fieldFileNames);
       cout << "******** Best Approximation comparison: ********\n";
       cout << study.TeXBestApproximationComparisonTable(primaryVariables);
-      
+
       ostringstream filePathPrefix;
       filePathPrefix << "oseen/" << formulationTypeStr << "_p" << polyOrder << "_velpressure";
       study.TeXBestApproximationComparisonTable(primaryVariables,filePathPrefix.str());
       filePathPrefix.str("");
       filePathPrefix << "oseen/" << formulationTypeStr << "_p" << polyOrder << "_all";
-      study.TeXBestApproximationComparisonTable(fieldIDs); 
+      study.TeXBestApproximationComparisonTable(fieldIDs);
 
-      for (int i=0; i<fieldIDs.size(); i++) {
+      for (int i=0; i<fieldIDs.size(); i++)
+      {
         int fieldID = fieldIDs[i];
         int traceID = traceIDs[i];
         string fieldName = fieldFileNames[i];
@@ -311,45 +326,55 @@ int main(int argc, char *argv[]) {
         filePathPrefix << "oseen/" << fieldName << "_p" << polyOrder;
         study.writeToFiles(filePathPrefix.str(),fieldID,traceID, writeMATLABplotData);
       }
-      
-      for (int i=0; i<primaryVariables.size(); i++) {
+
+      for (int i=0; i<primaryVariables.size(); i++)
+      {
         string convData = study.convergenceDataMATLAB(primaryVariables[i], minPolyOrder);
         cout << convData;
         convergenceDataForMATLAB[fieldFileNames[i]] += convData;
       }
-      
+
       filePathPrefix.str("");
       filePathPrefix << "oseen/" << formulationTypeStr << "_p" << polyOrder << "_numDofs";
       cout << study.TeXNumGlobalDofsTable();
     }
-    if (computeMaxConditionNumber) {
-      for (int i=minLogElements; i<=maxLogElements; i++) {
+    if (computeMaxConditionNumber)
+    {
+      for (int i=minLogElements; i<=maxLogElements; i++)
+      {
         SolutionPtr soln = study.getSolution(i);
         ostringstream fileNameStream;
         fileNameStream << "nsStudy_maxConditionIPMatrix_" << i << ".dat";
         IPPtr ip = Teuchos::rcp( dynamic_cast< IP* >(soln->ip().get()), false );
         bool jacobiScalingTrue = true;
         double maxConditionNumber = MeshUtilities::computeMaxLocalConditionNumber(ip, soln->mesh(), jacobiScalingTrue, fileNameStream.str());
-        if (rank==0) {
+        if (rank==0)
+        {
           cout << "max Gram matrix condition number estimate for logElements " << i << ": "  << maxConditionNumber << endl;
           cout << "putative worst-conditioned Gram matrix written to: " << fileNameStream.str() << "." << endl;
         }
       }
     }
     map< int, double > energyNormWeights;
-    if (useCompliantNorm) {
+    if (useCompliantNorm)
+    {
       energyNormWeights[u1_vgp->ID()] = 1.0; // should be 1/h
       energyNormWeights[u2_vgp->ID()] = 1.0; // should be 1/h
       energyNormWeights[sigma11_vgp->ID()] = Re; // 1/mu
       energyNormWeights[sigma12_vgp->ID()] = Re; // 1/mu
       energyNormWeights[sigma21_vgp->ID()] = Re; // 1/mu
       energyNormWeights[sigma22_vgp->ID()] = Re; // 1/mu
-      if (Re < 1) { // assuming we're using the experimental small Re thing
+      if (Re < 1)   // assuming we're using the experimental small Re thing
+      {
         energyNormWeights[p_vgp->ID()] = Re;
-      } else {
+      }
+      else
+      {
         energyNormWeights[p_vgp->ID()] = 1.0;
       }
-    } else {
+    }
+    else
+    {
       energyNormWeights[u1_vgp->ID()] = 1.0; // should be 1/h
       energyNormWeights[u2_vgp->ID()] = 1.0; // should be 1/h
       energyNormWeights[sigma11_vgp->ID()] = 1.0; // 1/mu
@@ -360,73 +385,80 @@ int main(int argc, char *argv[]) {
     }
     vector<double> bestEnergy = study.weightedL2Error(energyNormWeights,true);
     vector<double> solnEnergy = study.weightedL2Error(energyNormWeights,false);
-    
+
     map<int, double> velocityWeights;
     velocityWeights[u1_vgp->ID()] = 1.0;
     velocityWeights[u2_vgp->ID()] = 1.0;
     vector<double> bestVelocityError = study.weightedL2Error(velocityWeights,true);
     vector<double> solnVelocityError = study.weightedL2Error(velocityWeights,false);
-    
+
     map<int, double> pressureWeight;
     pressureWeight[p_vgp->ID()] = 1.0;
     vector<double> bestPressureError = study.weightedL2Error(pressureWeight,true);
     vector<double> solnPressureError = study.weightedL2Error(pressureWeight,false);
-    
-    if (rank==0) {
+
+    if (rank==0)
+    {
       cout << setw(25);
       cout << "Solution Energy Error:" << setw(25) << "Best Energy Error:" << endl;
       cout << scientific << setprecision(1);
-      for (int i=0; i<bestEnergy.size(); i++) {
+      for (int i=0; i<bestEnergy.size(); i++)
+      {
         cout << setw(25) << solnEnergy[i] << setw(25) << bestEnergy[i] << endl;
       }
       cout << setw(25);
       cout << "Solution Velocity Error:" << setw(25) << "Best Velocity Error:" << endl;
       cout << scientific << setprecision(1);
-      for (int i=0; i<bestEnergy.size(); i++) {
+      for (int i=0; i<bestEnergy.size(); i++)
+      {
         cout << setw(25) << solnVelocityError[i] << setw(25) << bestVelocityError[i] << endl;
       }
       cout << setw(25);
       cout << "Solution Pressure Error:" << setw(25) << "Best Pressure Error:" << endl;
       cout << scientific << setprecision(1);
-      for (int i=0; i<bestEnergy.size(); i++) {
+      for (int i=0; i<bestEnergy.size(); i++)
+      {
         cout << setw(25) << solnPressureError[i] << setw(25) << bestPressureError[i] << endl;
       }
-      
+
       vector< string > tableHeaders;
       vector< vector<double> > dataTable;
       vector< double > meshWidths;
-      for (int i=minLogElements; i<=maxLogElements; i++) {
+      for (int i=minLogElements; i<=maxLogElements; i++)
+      {
         double width = pow(2.0,i);
         meshWidths.push_back(width);
       }
-      
+
       tableHeaders.push_back("mesh_width");
       dataTable.push_back(meshWidths);
       tableHeaders.push_back("soln_energy_error");
       dataTable.push_back(solnEnergy);
       tableHeaders.push_back("best_energy_error");
       dataTable.push_back(bestEnergy);
-      
+
       tableHeaders.push_back("soln_velocity_error");
       dataTable.push_back(solnVelocityError);
       tableHeaders.push_back("best_velocity_error");
       dataTable.push_back(bestVelocityError);
-      
+
       tableHeaders.push_back("soln_pressure_error");
       dataTable.push_back(solnPressureError);
       tableHeaders.push_back("best_pressure_error");
       dataTable.push_back(bestPressureError);
-      
+
       ostringstream fileNameStream;
       fileNameStream << "oseen/Re" << Re << "k" << polyOrder << "_results.dat";
-      
+
       DataIO::outputTableToFile(tableHeaders,dataTable,fileNameStream.str());
     }
   }
-  if (rank==0) {
+  if (rank==0)
+  {
     ostringstream filePathPrefix;
     filePathPrefix << "oseen/" << formulationTypeStr << "_";
-    for (map<string,string>::iterator convIt = convergenceDataForMATLAB.begin(); convIt != convergenceDataForMATLAB.end(); convIt++) {
+    for (map<string,string>::iterator convIt = convergenceDataForMATLAB.begin(); convIt != convergenceDataForMATLAB.end(); convIt++)
+    {
       string fileName = convIt->first + ".m";
       string data = convIt->second;
       fileName = filePathPrefix.str() + fileName;
