@@ -206,7 +206,7 @@ namespace {
 
   }
 
-  TEUCHOS_UNIT_TEST( GMGOperator, ProlongationOperatorQuad )
+  TEUCHOS_UNIT_TEST( GMGOperator, ProlongationOperatorQuad_Slow )
   {
     /*
 

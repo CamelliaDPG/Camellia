@@ -64,8 +64,6 @@ public:
   bool testHangingNodePoissonQuad();
   bool testHangingNodeStokesQuad();
   
-  bool testHangingNodePoisson3D();
-  
   bool testPoissonCompatibleMeshWithHeterogeneousOrientations2D();
   
 };

@@ -582,11 +582,12 @@ unsigned MeshTopology::addEntity(CellTopoPtr entityTopo, const vector<unsigned> 
     _entityCellTopologyKeys[d].push_back(entityTopo->getKey());
   } else {
     // existing entity
-    vector<IndexType> canonicalVertices = getCanonicalEntityNodesViaPeriodicBCs(d, entityVertices);
+    // maintain order but relabel nodes according to periodic BCs:
+    vector<IndexType> canonicalVerticesNewOrdering = getCanonicalEntityNodesViaPeriodicBCs(d, entityVertices);
     //
     //    Camellia::print("canonicalEntityOrdering",_canonicalEntityOrdering[d][entityIndex]);
     if (d==0) entityPermutation = 0;
-    else entityPermutation = CamelliaCellTools::permutationMatchingOrder(entityTopo, _canonicalEntityOrdering[d][entityIndex], canonicalVertices);
+    else entityPermutation = CamelliaCellTools::permutationMatchingOrder(entityTopo, _canonicalEntityOrdering[d][entityIndex], canonicalVerticesNewOrdering);
   }
   return entityIndex;
 }
@@ -1100,6 +1101,7 @@ bool MeshTopology::entityHasParent(unsigned d, unsigned entityIndex) {
 }
 
 bool MeshTopology::entityIsAncestor(unsigned d, unsigned ancestor, unsigned descendent) {
+  if (ancestor == descendent) return true;
   map< unsigned, vector< pair<unsigned, unsigned> > >::iterator parentIt = _parentEntities[d].find(descendent);
   while (parentIt != _parentEntities[d].end()) {
     vector< pair<unsigned, unsigned> > parents = parentIt->second;
@@ -1111,6 +1113,27 @@ bool MeshTopology::entityIsAncestor(unsigned d, unsigned ancestor, unsigned desc
       }
     }
     parentIt = _parentEntities[d].find(parentEntityIndex);
+  }
+  return false;
+}
+
+bool MeshTopology::entityIsGeneralizedAncestor(unsigned ancestorDimension, IndexType ancestor,
+                                               unsigned descendentDimension, IndexType descendent)
+{
+  // note that this method does not treat the possibility of multiple parents, which can happen in
+  // the context of anisotropic refinements.
+  if (ancestorDimension == descendentDimension)
+  {
+    return entityIsAncestor(ancestorDimension, ancestor, descendent);
+  }
+  if (ancestorDimension < descendentDimension) return false;
+  
+  while (_generalizedParentEntities[descendentDimension].find(descendent) != _generalizedParentEntities[descendentDimension].end())
+  {
+    pair<IndexType, unsigned> generalizedParent = _generalizedParentEntities[descendentDimension][descendent];
+    descendentDimension = generalizedParent.second;
+    descendent = generalizedParent.first;
+    if (descendent == ancestor) return true;
   }
   return false;
 }
@@ -1292,12 +1315,18 @@ unsigned MeshTopology::getSubEntityCount(unsigned int d, unsigned int entityInde
 }
 
 unsigned MeshTopology::getSubEntityIndex(unsigned int d, unsigned int entityIndex, unsigned int subEntityDim, unsigned int subEntityOrdinal) {
-  if (d==0) {
+  if (d==0)
+  {
     if ((subEntityDim==0) && (subEntityOrdinal==0))  {
       return entityIndex; // the vertex is its own sub-entity then
     } else {
       TEUCHOS_TEST_FOR_EXCEPTION(true, std::invalid_argument, "sub-entity not found for vertex");
     }
+  }
+  else if (d==_spaceDim)
+  {
+    // entity is a cell
+    return getCell(entityIndex)->entityIndex(subEntityDim, subEntityOrdinal);
   }
 
   CellTopoPtr entityTopo = getEntityTopology(d, entityIndex);
@@ -1680,6 +1709,11 @@ unsigned MeshTopology::getEntityParentForSide(unsigned d, unsigned entityIndex,
 
 // ! pairs are (cellIndex, sideOrdinal) where the sideOrdinal is a side that contains the entity
 set< pair<IndexType, unsigned> > MeshTopology::getCellsContainingEntity(unsigned d, unsigned entityIndex) { // not *all* cells, but within any refinement branch, the most refined cell that contains the entity will be present in this set.  The unsigned value is the ordinal of a *side* in the cell containing this entity.  There may be multiple sides in a cell that contain the entity; this method will return just one entry per cell.
+  if (d==getSpaceDim())
+  {
+    // entityIndex is a cell; the side then is contained within the cell; we'll flag this fact by setting the side ordinal to -1.
+    return {{entityIndex,-1}};
+  }
   vector<IndexType> sidesForEntity = _sidesForEntities[d][entityIndex];
   typedef pair<IndexType,unsigned> CellPair;
   set< CellPair > cells;
@@ -1917,6 +1951,11 @@ void MeshTopology::printApproximateMemoryReport() {
 }
 
 void MeshTopology::printConstraintReport(unsigned d) {
+  if (_entities.size() <= d)
+  {
+    cout << "No entities of dimension " << d << " in MeshTopology.\n";
+    return;
+  }
   IndexType entityCount = _entities[d].size();
   cout << "******* MeshTopology, constraints for d = " << d << " *******\n";
   for (IndexType entityIndex=0; entityIndex<entityCount; entityIndex++) {

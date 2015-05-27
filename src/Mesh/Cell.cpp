@@ -516,6 +516,7 @@ unsigned Cell::sideSubcellPermutation(unsigned int sideOrdinal, unsigned int sid
 
 unsigned Cell::subcellPermutation(unsigned d, unsigned scord) {
   if (d==0) return 0;
+  if ((d==_cellTopo->getDimension()) && (scord==0)) return 0;
   
   if (d >= _subcellPermutations.size()) {
     TEUCHOS_TEST_FOR_EXCEPTION(true, std::invalid_argument, "Dimension d is out of bounds.");

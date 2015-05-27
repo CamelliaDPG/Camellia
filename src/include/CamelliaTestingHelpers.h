@@ -40,9 +40,9 @@ namespace Camellia {
  * \ingroup teuchos_testing_grp
  */
 template<class Array1, class Array2, class ScalarMag>
-bool compareFloatingArrays(const Array1 &a1, const std::string &a1_name,
-                           const Array2 &a2, const std::string &a2_name,
-                           const ScalarMag &tol, Teuchos::FancyOStream &out
+bool compareFloatingArraysCamellia(const Array1 &a1, const std::string &a1_name,
+                                   const Array2 &a2, const std::string &a2_name,
+                                   const ScalarMag &tol, Teuchos::FancyOStream &out
   );
 
 } // namespace Camellia
@@ -56,7 +56,7 @@ bool compareFloatingArrays(const Array1 &a1, const std::string &a1_name,
  */
 #define TEST_COMPARE_FLOATING_ARRAYS_CAMELLIA( a1, a2, tol ) \
 { \
-const bool result = Camellia::compareFloatingArrays(a1,#a1,a2,#a2,tol,out); \
+const bool result = Camellia::compareFloatingArraysCamellia(a1,#a1,a2,#a2,tol,out); \
 if (!result) success = false; \
 }
 
@@ -65,7 +65,7 @@ if (!result) success = false; \
 //
 
 template<class Array1, class Array2, class ScalarMag>
-bool Camellia::compareFloatingArrays(
+bool Camellia::compareFloatingArraysCamellia(
   const Array1 &a1, const std::string &a1_name,
   const Array2 &a2, const std::string &a2_name,
   const ScalarMag &tol,

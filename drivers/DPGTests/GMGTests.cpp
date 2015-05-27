@@ -210,6 +210,13 @@ void GMGTests::setup() {
 
 void GMGTests::runTests(int &numTestsRun, int &numTestsPassed) {
   setup();
+  if (testGMGOperatorP()) {
+    numTestsPassed++;
+  }
+  numTestsRun++;
+  teardown();
+  
+  setup();
   if (testProlongationOperator()) {
     numTestsPassed++;
   }
@@ -225,13 +232,6 @@ void GMGTests::runTests(int &numTestsRun, int &numTestsPassed) {
 
   setup();
   if (testGMGSolverIdentity2DRefinedMeshes()) {
-    numTestsPassed++;
-  }
-  numTestsRun++;
-  teardown();
-
-  setup();
-  if (testGMGOperatorP()) {
     numTestsPassed++;
   }
   numTestsRun++;

@@ -134,13 +134,7 @@ namespace {
     }
     return filteredValues;
   }
-  
-  // copied from DPGTests's BasisReconciliationTests
-  FieldContainer<double> filterValues(FieldContainer<double> &basisValues, set<int> &dofOrdinalFilterInt, bool includesCellDimension) {
-    set<unsigned> dofOrdinalFilter(dofOrdinalFilterInt.begin(),dofOrdinalFilterInt.end());
-    return filterValues(basisValues, dofOrdinalFilter, includesCellDimension);
-  }
-  
+
   // copied from DPGTests's BasisReconciliationTests
   FieldContainer<double> interpretValues(FieldContainer<double> &fineValues, FieldContainer<double> &weights) {
     int fineCount = weights.dimension(0);   // number of fine ordinals
@@ -277,31 +271,6 @@ namespace {
     basisCache->setRefCellPoints(pointsOnFineCell);
     basisCache->setPhysicalCellNodes(refCellNodes, vector<GlobalIndexType>(), false);
     return *(basisCache->getTransformedValues(basis, OP_VALUE).get());
-  }
-  
-  // copied from DPGTests's BasisReconciliationTests
-  FieldContainer<double> transformedBasisValuesAtSidePoints(BasisPtr basis, unsigned sideIndex, const FieldContainer<double> &pointsOnSideRefCell,
-                                                            RefinementBranch &refinements) {
-    CellTopoPtr cellTopo = basis->domainTopology();
-    FieldContainer<double> refCellNodes;
-    refCellNodes.resize(cellTopo->getNodeCount(),cellTopo->getDimension());
-    if (refinements.size() == 0) {
-      CamelliaCellTools::refCellNodesForTopology(refCellNodes, cellTopo);
-    } else {
-      CellTopoPtr coarseCellTopo = refinements[0].first->parentTopology();
-      FieldContainer<double> coarseCellNodes(coarseCellTopo->getNodeCount(),coarseCellTopo->getDimension());
-      CamelliaCellTools::refCellNodesForTopology(coarseCellNodes, coarseCellTopo);
-      refCellNodes = RefinementPattern::descendantNodes(refinements,coarseCellNodes);
-    }
-    refCellNodes.resize(1,cellTopo->getNodeCount(),cellTopo->getDimension());
-    
-    int dummyCubatureDegree = 1;
-    BasisCachePtr basisCache = Teuchos::rcp( new BasisCache(cellTopo, dummyCubatureDegree, true) );
-    CamelliaCellTools::refCellNodesForTopology(refCellNodes, cellTopo);
-    basisCache->getSideBasisCache(sideIndex)->setRefCellPoints(pointsOnSideRefCell);
-    basisCache->setPhysicalCellNodes(refCellNodes, vector<GlobalIndexType>(), true);
-    
-    return *(basisCache->getSideBasisCache(sideIndex)->getTransformedValues(basis, OP_VALUE, true).get());
   }
   
   // copied from DPGTests's BasisReconciliationTests
@@ -630,8 +599,8 @@ namespace {
             CellTopoPtr entityTopo = meshTopo->getEntityTopology(d, entityIndex);
 
             // get the permutation that goes from meshTopo's canonical node ordering to cell1's sideOrdinal1's ordering of the subcell nodes.
-            unsigned canonicalToSide1Subcell = cell1->sideSubcellPermutation(sideOrdinal1, d, subcellOrdinalSide1);
-            unsigned side1SubcellToCanonical = CamelliaCellTools::permutationInverse(entityTopo, canonicalToSide1Subcell);
+            unsigned canonicalToCell1Subcell = cell1->subcellPermutation(d, subcellOrdinalCell1);
+            unsigned cell1SubcellToCanonical = CamelliaCellTools::permutationInverse(entityTopo, canonicalToCell1Subcell);
             
             auto sidesForEntity = meshTopo->getSidesContainingEntity(d, entityIndex);
             for (auto sideEntityIndex2 : sidesForEntity)
@@ -647,11 +616,13 @@ namespace {
                 CellPtr cell2 = meshTopo->getCell(cellID2);
                 CellTopoPtr sideTopo2 = meshTopo->getEntityTopology(sideDim, sideEntityIndex2);
                 
-                int subcellOrdinalSide2 = cell2->findSubcellOrdinalInSide(d, entityIndex, sideOrdinal2); //findEntityOrdinalInSide(meshTopo, d, entityIndex, sideEntityIndex2);
+                int subcellOrdinalCell2 = cell2->findSubcellOrdinal(d, entityIndex);
+                int subcellOrdinalSide2 = cell2->findSubcellOrdinalInSide(d, entityIndex, sideOrdinal2);
                 // get the permutation that goes from meshTopo's canonical node ordering to cell1's sideOrdinal1's ordering of the subcell nodes.
-                unsigned canonicalToSide2Subcell = cell2->sideSubcellPermutation(sideOrdinal2, d, subcellOrdinalSide2);
-                unsigned subcellPermutationSide1ToSide2 = CamelliaCellTools::permutationComposition(entityTopo, side1SubcellToCanonical,
-                                                                                                    canonicalToSide2Subcell);
+                unsigned canonicalToCell2Subcell = cell2->subcellPermutation(d, subcellOrdinalCell2);
+                unsigned subcellPermutationCell1ToCell2 = CamelliaCellTools::permutationComposition(entityTopo,
+                                                                                                    cell1SubcellToCanonical,
+                                                                                                    canonicalToCell2Subcell);
                 
                 BasisPtr basis1 = basisForSideEntity[sideEntityIndex1];
                 BasisPtr basis2 = basisForSideEntity[sideEntityIndex2];
@@ -661,7 +632,7 @@ namespace {
                                                        trivialRefBranch, sideOrdinal1,
                                                        cell2->topology(),
                                                        d, basis2, subcellOrdinalSide2,
-                                                       sideOrdinal2, subcellPermutationSide1ToSide2);
+                                                       sideOrdinal2, subcellPermutationCell1ToCell2);
                 
                 // now, we want to try computing some values with the two bases, and check that basis1 (the "finer") weighted
                 // with weights actually sums up to match basis2 on the subcell that we've matched.
@@ -683,6 +654,14 @@ namespace {
                 FieldContainer<double> subcellPointsInParent1(numPoints,sideTopo1->getDimension());
                 CamelliaCellTools::mapToReferenceSubcell(subcellPointsInParent1, subcellCubPoints1, d, subcellOrdinalSide1, sideTopo1);
 
+                
+                unsigned canonicalToSide1Subcell = cell1->sideSubcellPermutation(sideOrdinal1, d, subcellOrdinalSide1);
+                unsigned side1SubcellToCanonical = CamelliaCellTools::permutationInverse(entityTopo, canonicalToSide1Subcell);
+                unsigned canonicalToSide2Subcell = cell2->sideSubcellPermutation(sideOrdinal2, d, subcellOrdinalSide2);
+                unsigned subcellPermutationSide1ToSide2 = CamelliaCellTools::permutationComposition(subcellTopo1,
+                                                                                                    side1SubcellToCanonical,
+                                                                                                    canonicalToSide2Subcell);
+                
                 FieldContainer<double> subcellCubPoints2(subcellCubPoints1.dimension(0), subcellCubPoints1.dimension(1));
                 CamelliaCellTools::permutedReferenceCellPoints(subcellTopo1, subcellPermutationSide1ToSide2, subcellCubPoints1, subcellCubPoints2);
                 
@@ -816,6 +795,16 @@ namespace {
                   out << "weights.weights:\n" << weights.weights;
                   out << "values2Filtered:\n" << values2Filtered;
                   out << "weightedValues1:\n" << weightedValues1;
+                  
+                  BasisCachePtr side1Cache, side2Cache;
+                  br.setupFineAndCoarseBasisCachesForReconciliation(side1Cache, side2Cache,
+                                                                    d, basis1, subcellOrdinalSide1,
+                                                                    trivialRefBranch, sideOrdinal1,
+                                                                    cell2->topology(),
+                                                                    d, basis2, subcellOrdinalSide2,
+                                                                    sideOrdinal2, subcellPermutationCell1ToCell2);
+                  out << "side1Cache->getRefCellPoints():\n" << side1Cache->getRefCellPoints();
+                  out << "side2Cache->getRefCellPoints():\n" << side2Cache->getRefCellPoints();
                 }
               }
             }
@@ -834,6 +823,64 @@ namespace {
     CamelliaCellTools::pointsVectorFromFC(cellNodesVector, refCellNodes);
     meshTopo->addCell(volumeTopo, cellNodesVector);
     testHGRADTrace(meshTopo, polyOrder, out, success);
+  }
+  
+  void testWeightedBasesAgree(FieldContainer<double> &fineBasisValues, FieldContainer<double> &coarseBasisValues,
+                              SubBasisReconciliationWeights &weights,
+                              Teuchos::FancyOStream &out, bool &success)
+  {
+    int numPoints = fineBasisValues.dimension(2);
+    FieldContainer<double> values1Filtered(weights.fineOrdinals.size(),numPoints);
+    int i=0;
+    for (auto fineOrdinal : weights.fineOrdinals)
+    {
+      for (int ptOrdinal=0; ptOrdinal<numPoints; ptOrdinal++)
+      {
+        values1Filtered(i,ptOrdinal) = fineBasisValues(0,fineOrdinal,ptOrdinal);
+      }
+      i++;
+    }
+    
+    FieldContainer<double> values2Filtered(weights.coarseOrdinals.size(),numPoints);
+    i=0;
+    for (auto coarseOrdinal : weights.coarseOrdinals)
+    {
+      for (int ptOrdinal=0; ptOrdinal<numPoints; ptOrdinal++)
+      {
+        values2Filtered(i,ptOrdinal) = coarseBasisValues(0,coarseOrdinal,ptOrdinal);
+      }
+      i++;
+    }
+    
+    FieldContainer<double> weightedValues1(weights.coarseOrdinals.size(),numPoints);
+    weightedValues1.initialize(0.0);
+    for (int i=0; i<weights.fineOrdinals.size(); i++)
+    {
+      for (int j=0; j<weights.coarseOrdinals.size(); j++)
+      {
+        for (int ptOrdinal=0; ptOrdinal<numPoints; ptOrdinal++)
+        {
+          weightedValues1(j,ptOrdinal) += weights.weights(i,j) * values1Filtered(i,ptOrdinal);
+        }
+      }
+    }
+    
+    double tol = 1e-14;
+    // allow detection of local failure, and print out info just for things that fail
+    bool oldSuccess = success;
+    success = true;
+    TEST_COMPARE_FLOATING_ARRAYS_CAMELLIA(values2Filtered, weightedValues1, tol);
+    
+    if (!success)
+    {
+      out << "values1Filtered:\n" << values1Filtered;
+      out << "weights.weights:\n" << weights.weights;
+      out << "values2Filtered:\n" << values2Filtered;
+      out << "weightedValues1:\n" << weightedValues1;
+    }
+    
+    // restore global success
+    success = oldSuccess && success;
   }
   
   void testHGRADVolumeNoHangingNodes(MeshTopologyPtr meshTopo, int polyOrder, Teuchos::FancyOStream &out, bool &success)
@@ -954,51 +1001,10 @@ namespace {
             FieldContainer<double> values1 = *basisCache1->getTransformedValues(basis1, OP_VALUE);
             FieldContainer<double> values2 = *basisCache2->getTransformedValues(basis2, OP_VALUE);
             
-            FieldContainer<double> values1Filtered(weights.fineOrdinals.size(),numPoints);
-            int i=0;
-            for (auto fineOrdinal : weights.fineOrdinals)
-            {
-              for (int ptOrdinal=0; ptOrdinal<numPoints; ptOrdinal++)
-              {
-                values1Filtered(i,ptOrdinal) = values1(0,fineOrdinal,ptOrdinal);
-              }
-              i++;
-            }
-            
-            FieldContainer<double> values2Filtered(weights.coarseOrdinals.size(),numPoints);
-            i=0;
-            for (auto coarseOrdinal : weights.coarseOrdinals)
-            {
-              for (int ptOrdinal=0; ptOrdinal<numPoints; ptOrdinal++)
-              {
-                values2Filtered(i,ptOrdinal) = values2(0,coarseOrdinal,ptOrdinal);
-              }
-              i++;
-            }
-            
-            //            out << "Weights to represent side2 = sideOrdinal " << side2 << " subcell " << subcellOrdinalSide2;
-            //            out << " of dimension " << d << " in terms of basis on side1 = sideOrdinal " << side1;
-            //            out << " subcell " << subcellOrdinalSide1 << ":\n" << weights.weights;
-            
-            FieldContainer<double> weightedValues1(weights.coarseOrdinals.size(),numPoints);
-            weightedValues1.initialize(0.0);
-            for (int i=0; i<weights.fineOrdinals.size(); i++)
-            {
-              for (int j=0; j<weights.coarseOrdinals.size(); j++)
-              {
-                for (int ptOrdinal=0; ptOrdinal<numPoints; ptOrdinal++)
-                {
-                  weightedValues1(j,ptOrdinal) += weights.weights(i,j) * values1Filtered(i,ptOrdinal);
-                  //                  out << "weightedValues1(" << j << "," << ptOrdinal << ") += " << weights.weights(i,j) * values1Filtered(i,ptOrdinal) << endl;
-                }
-              }
-            }
-            
-            double tol = 1e-14;
             // allow detection of local failure, and print out info just for things that fail
             bool oldSuccess = success;
             success = true;
-            TEST_COMPARE_FLOATING_ARRAYS_CAMELLIA(values2Filtered, weightedValues1, tol);
+            testWeightedBasesAgree(values1, values2, weights, out, success);
             
             if (!success)
             {
@@ -1025,11 +1031,6 @@ namespace {
                 if (i < scVertices.size()-1) out << ",";
                 else out << "}\n";
               }
-              
-              out << "values1Filtered:\n" << values1Filtered;
-              out << "weights.weights:\n" << weights.weights;
-              out << "values2Filtered:\n" << values2Filtered;
-              out << "weightedValues1:\n" << weightedValues1;
             }
             
             // restore global success
@@ -1040,162 +1041,37 @@ namespace {
     }
   }
   
-/*  void testHGRADTrace(CellTopoPtr volumeTopo, int polyOrder, Teuchos::FancyOStream &out, bool &success)
+  void testMap(const FieldContainer<double> &expectedCoarseSubcellPoints,
+               const FieldContainer<double> &fineSubcellPoints,
+               unsigned fineSubcellDimension,
+               unsigned fineSubcellOrdinalInFineDomain, unsigned fineDomainDim,
+               unsigned fineDomainOrdinalInRefinementLeaf,
+               RefinementBranch refBranch,
+               CellTopoPtr volumeTopo,
+               unsigned coarseSubcellDimension, unsigned coarseSubcellOrdinalInCoarseDomain,
+               unsigned coarseDomainDim, unsigned coarseDomainOrdinalInRefinementRoot,
+               unsigned coarseSubcellPermutation,
+               Teuchos::FancyOStream &out, bool &success)
   {
-    Camellia::EFunctionSpace fsSpace = Camellia::FUNCTION_SPACE_HGRAD;
-    Camellia::EFunctionSpace fsTime = Camellia::FUNCTION_SPACE_HGRAD;
-    vector<int> H1Orders = {polyOrder,polyOrder};
-    vector<BasisPtr> basisForSide(volumeTopo->getSideCount());
-    for (int sideOrdinal=0; sideOrdinal<volumeTopo->getSideCount(); sideOrdinal++) {
-      CellTopoPtr sideTopo = volumeTopo->getSide(sideOrdinal);
-      basisForSide[sideOrdinal] = BasisFactory::basisFactory()->getBasis(H1Orders, sideTopo, fsSpace, fsTime);
-    }
+    // map two points on a fine edge to the coarse volume
+    int coarseDim = expectedCoarseSubcellPoints.dimension(1);
+    int numPoints = fineSubcellPoints.dimension(0);
+    FieldContainer<double> coarseSubcellPoints(numPoints,coarseDim);
+
+    BasisReconciliation::mapFineSubcellPointsToCoarseDomain(coarseSubcellPoints, fineSubcellPoints, fineSubcellDimension, fineSubcellOrdinalInFineDomain,
+                                                            fineDomainDim, fineDomainOrdinalInRefinementLeaf, refBranch,
+                                                            volumeTopo,
+                                                            coarseSubcellDimension, coarseSubcellOrdinalInCoarseDomain,
+                                                            coarseDomainDim, coarseDomainOrdinalInRefinementRoot, coarseSubcellPermutation);
     
-    MeshTopologyPtr meshTopo = Teuchos::rcp(new MeshTopology(volumeTopo->getDimension()));
-    FieldContainer<double> refCellNodes(volumeTopo->getNodeCount(), volumeTopo->getDimension());
-    CamelliaCellTools::refCellNodesForTopology(refCellNodes, volumeTopo);
-    vector<vector<double>> cellNodesVector;
-    CamelliaCellTools::pointsVectorFromFC(cellNodesVector, refCellNodes);
-    meshTopo->addCell(volumeTopo, cellNodesVector);
+    out << "coarseSubcellPoints:\n" << coarseSubcellPoints;
+    out << "expectedCoarseSubcellPoints:\n" << expectedCoarseSubcellPoints;
     
-    int sideDim = volumeTopo->getDimension() - 1;
-    map<IndexType,int> sideOrdinalForSideEntityIndex;
-    IndexType cellID = 0;
-    for (int sideOrdinal=0; sideOrdinal<volumeTopo->getSideCount(); sideOrdinal++) {
-      IndexType sideEntityIndex = meshTopo->getCell(cellID)->entityIndex(sideDim, sideOrdinal);
-      sideOrdinalForSideEntityIndex[sideEntityIndex] = sideOrdinal;
-    }
-    
-//    meshTopo->printAllEntities();
-    
-    int cubatureDegree = polyOrder*2;
-    
-    BasisReconciliation br;
-    RefinementPatternPtr trivialRefinement = RefinementPattern::noRefinementPattern(volumeTopo);
-    RefinementBranch trivialRefBranch = {{trivialRefinement.get(),0}};
-    
-    for (int d=0; d<=sideDim; d++)
-    {
-      int entityCount = meshTopo->getEntityCount(d);
-      for (IndexType entityIndex=0; entityIndex<entityCount; entityIndex++)
-      {
-        int entityNodeCount = meshTopo->getEntityVertexIndices(d, entityIndex).size();
-        CellTopoPtr entityTopo = meshTopo->getEntityTopology(d, entityIndex);
-        auto sidesForEntity = meshTopo->getSidesContainingEntity(d, entityIndex);
-        for (auto side1 : sidesForEntity)
-        {
-          int subcellOrdinalSide1 = findEntityOrdinalInSide(meshTopo, d, entityIndex, side1);
-          int sideOrdinal1 = sideOrdinalForSideEntityIndex[side1];
-          vector<IndexType> subcellNodesSide1; // ordered according to side1's view of the subcell
-          vector<IndexType> sideNodes1 = meshTopo->getEntityVertexIndices(sideDim, side1);
-          CellTopoPtr sideTopo1 = meshTopo->getEntityTopology(sideDim, side1);
-          for (int subcellNodeOrdinal=0; subcellNodeOrdinal<entityNodeCount; subcellNodeOrdinal++)
-          {
-            int nodeOrdinalInSide = sideTopo1->getNodeMap(d, subcellOrdinalSide1, subcellNodeOrdinal);
-            IndexType nodeVertexIndex = sideNodes1[nodeOrdinalInSide];
-            subcellNodesSide1.push_back(nodeVertexIndex);
-          }
-          
-          BasisPtr basis1 = basisForSide[sideOrdinal1];
-          for (auto side2 : sidesForEntity)
-          {
-            if (side1 == side2) continue;
-            int subcellOrdinalSide2 = findEntityOrdinalInSide(meshTopo, d, entityIndex, side2);
-            int sideOrdinal2 = sideOrdinalForSideEntityIndex[side2];
-            vector<IndexType> subcellNodesSide2; // ordered according to side2's view of the subcell
-            vector<IndexType> sideNodes2 = meshTopo->getEntityVertexIndices(sideDim, side2);
-            CellTopoPtr sideTopo2 = meshTopo->getEntityTopology(sideDim, side2);
-            for (int subcellNodeOrdinal=0; subcellNodeOrdinal<entityNodeCount; subcellNodeOrdinal++)
-            {
-              int nodeOrdinalInSide = sideTopo2->getNodeMap(d, subcellOrdinalSide2, subcellNodeOrdinal);
-              IndexType nodeVertexIndex = sideNodes2[nodeOrdinalInSide];
-              subcellNodesSide2.push_back(nodeVertexIndex);
-            }
-            unsigned permutationSide1ToSide2 = CamelliaCellTools::permutationMatchingOrder(entityTopo, subcellNodesSide1, subcellNodesSide2);
-            
-            BasisPtr basis2 = basisForSide[sideOrdinal2];
-            SubBasisReconciliationWeights weights = br.computeConstrainedWeights(d, basis1, subcellOrdinalSide1, trivialRefBranch, sideOrdinal1,
-                                                                                 d, basis2, subcellOrdinalSide2, sideOrdinal2, permutationSide1ToSide2);
-            
-            // now, we want to try computing some values with the two bases, and check that basis1 (the "finer") weighted
-            // with weights actually sums up to match basis2 on the subcell that we've matched.
-            
-            CellTopoPtr subcellTopo1 = sideTopo1->getSubcell(d, subcellOrdinalSide1);
-            CellTopoPtr subcellTopo2 = sideTopo2->getSubcell(d, subcellOrdinalSide2);
-            
-            out << "Checking BasisReconciliation for " << CamelliaCellTools::entityTypeString(subcellTopo1->getDimension());
-            out << " with entity index " << entityIndex << " on side1 = " << side1 << " (subcell ordinal " << subcellOrdinalSide1;
-            out << ") and side2 = " << side2 << " (subcell ordinal " << subcellOrdinalSide2 << ")\n";
-            
-            TEST_EQUALITY(subcellTopo1->getKey(), subcellTopo2->getKey());
-            
-            // lazy way to get the cubature points for subcell:
-            BasisCachePtr subcellCache = BasisCache::basisCacheForReferenceCell(subcellTopo1, cubatureDegree);
-            FieldContainer<double> subcellCubPoints = subcellCache->getRefCellPoints();
-            int numPoints = subcellCubPoints.dimension(0);
-            
-            FieldContainer<double> subcellPointsInParent1(numPoints,sideTopo1->getDimension());
-            CamelliaCellTools::mapToReferenceSubcell(subcellPointsInParent1, subcellCubPoints, d, subcellOrdinalSide1, sideTopo1);
-            FieldContainer<double> subcellPointsInParent2(numPoints,sideTopo2->getDimension());
-            CamelliaCellTools::mapToReferenceSubcell(subcellPointsInParent2, subcellCubPoints, d, subcellOrdinalSide2, sideTopo2);
-            
-            FieldContainer<double> values1(basis1->getCardinality(),numPoints);
-            basis1->getValues(values1, subcellPointsInParent1, OPERATOR_VALUE);
-            
-            FieldContainer<double> values2(basis2->getCardinality(),numPoints);
-            basis2->getValues(values2, subcellPointsInParent2, OPERATOR_VALUE);
-            
-            FieldContainer<double> values1Filtered(weights.fineOrdinals.size(),numPoints);
-            int i=0;
-            for (auto fineOrdinal : weights.fineOrdinals)
-            {
-              for (int ptOrdinal=0; ptOrdinal<numPoints; ptOrdinal++)
-              {
-                values1Filtered(i,ptOrdinal) = values1(fineOrdinal,ptOrdinal);
-              }
-              i++;
-            }
-            
-            FieldContainer<double> values2Filtered(weights.coarseOrdinals.size(),numPoints);
-            i=0;
-            for (auto coarseOrdinal : weights.coarseOrdinals)
-            {
-              for (int ptOrdinal=0; ptOrdinal<numPoints; ptOrdinal++)
-              {
-                values2Filtered(i,ptOrdinal) = values2(coarseOrdinal,ptOrdinal);
-              }
-              i++;
-            }
-            
-//            out << "Weights to represent side2 = sideOrdinal " << side2 << " subcell " << subcellOrdinalSide2;
-//            out << " of dimension " << d << " in terms of basis on side1 = sideOrdinal " << side1;
-//            out << " subcell " << subcellOrdinalSide1 << ":\n" << weights.weights;
-            
-            FieldContainer<double> weightedValues1(weights.coarseOrdinals.size(),numPoints);
-            weightedValues1.initialize(0.0);
-            for (int i=0; i<weights.fineOrdinals.size(); i++)
-            {
-              for (int j=0; j<weights.coarseOrdinals.size(); j++)
-              {
-                for (int ptOrdinal=0; ptOrdinal<numPoints; ptOrdinal++)
-                {
-                  weightedValues1(j,ptOrdinal) += weights.weights(i,j) * values1Filtered(i,ptOrdinal);
-//                  out << "weightedValues1(" << j << "," << ptOrdinal << ") += " << weights.weights(i,j) * values1Filtered(i,ptOrdinal) << endl;
-                }
-              }
-            }
-//            out << "weightedValues1:\n" << weightedValues1;
-//            out << "values2Filtered:\n" << values2Filtered;
-            
-            double tol = 1e-14;
-            TEST_COMPARE_FLOATING_ARRAYS_CAMELLIA(values2Filtered, weightedValues1, tol);
-          }
-        }
-      }
-    }
-  }*/
+    double tol = 1e-15;
+    TEST_COMPARE_FLOATING_ARRAYS_CAMELLIA(coarseSubcellPoints, expectedCoarseSubcellPoints, tol);
+  }
   
-  TEUCHOS_UNIT_TEST( BasisReconciliation, h )
+  TEUCHOS_UNIT_TEST( BasisReconciliation, h_Slow )
   {
     // copied from DPGTests's BasisReconciliationTests::testH()
     int fineOrder = 1;
@@ -1484,14 +1360,14 @@ namespace {
     testHGRADTrace(meshTopo, polyOrder, out, success);
   }
   
-  TEUCHOS_UNIT_TEST( BasisReconciliation, HGRADTrace_Quad_x_Line )
+  TEUCHOS_UNIT_TEST( BasisReconciliation, HGRADTrace_Quad_x_Line_Slow )
   {
     CellTopoPtr volumeTopo = CellTopology::cellTopology(CellTopology::quad(), 1);
     int polyOrder = 2;
     testHGRADTrace(volumeTopo, polyOrder, out, success);
   }
   
-  TEUCHOS_UNIT_TEST( BasisReconciliation, HGRADTrace_Triangle_x_Line )
+  TEUCHOS_UNIT_TEST( BasisReconciliation, HGRADTrace_Triangle_x_Line_Slow )
   {
     CellTopoPtr volumeTopo = CellTopology::cellTopology(CellTopology::triangle(), 1);
     int polyOrder = 2;
@@ -1505,14 +1381,14 @@ namespace {
     testHGRADTrace(volumeTopo, polyOrder, out, success);
   }
   
-  TEUCHOS_UNIT_TEST( BasisReconciliation, HGRADTrace_Hexahedron_x_Line )
+  TEUCHOS_UNIT_TEST( BasisReconciliation, HGRADTrace_Hexahedron_x_Line_Slow )
   {
     CellTopoPtr volumeTopo = CellTopology::cellTopology(CellTopology::hexahedron(), 1);
     int polyOrder = 2;
     testHGRADTrace(volumeTopo, polyOrder, out, success);
   }
   
-  TEUCHOS_UNIT_TEST( BasisReconciliation, HGRADTrace_Hexahedron )
+  TEUCHOS_UNIT_TEST( BasisReconciliation, HGRADTrace_Hexahedron_Slow )
   {
     CellTopoPtr volumeTopo = CellTopology::hexahedron();
     int polyOrder = 1;
@@ -1591,6 +1467,135 @@ namespace {
       out << "BasisReconciliationTests: test failure.  Twice-refined quadratic H^1 basis should have 3 internal dof ordinals, but has " << internalDofOrdinals.size() << endl;
       success = false;
     }
+  }
+  
+  TEUCHOS_UNIT_TEST( BasisReconciliation, MapFineSubcellPointsToCoarseSubcell_1DLine_TwoRefinements)
+  {
+    // refine line twice.  Let the fine domain be a line (volume topo), choosing the left branch at first refinement,
+    // right at second.  Subcell is the domain itself, but the points we choose are interior, and not symmetric.
+    // the points should thus be scaled by 1/4, and translated -0.25
+    
+    int numPoints = 2;
+    int spaceDim  = 1;
+    FieldContainer<double> fineSubcellPoints(numPoints, spaceDim);
+    fineSubcellPoints(0,0) = -0.5;
+    fineSubcellPoints(0,1) =  1.0;
+    
+    FieldContainer<double> expectedCoarseSubcellPoints(numPoints,spaceDim);
+    for (int ptOrdinal=0; ptOrdinal<numPoints; ptOrdinal++)
+    {
+      expectedCoarseSubcellPoints(ptOrdinal,0) = fineSubcellPoints(ptOrdinal,0) / 4.0 - 0.25;
+    }
+    
+    FieldContainer<double> coarseSubcellPoints;
+    
+    unsigned fineSubcellDimension = 1; // line
+    unsigned fineSubcellOrdinalInFineDomain = 0; // only one
+    
+    unsigned fineDomainDim = 1; // fine domain is 1D (a volume)
+    unsigned fineDomainOrdinalInRefinementLeaf = 0; // the only one
+    
+    CellTopoPtr volumeTopo = CellTopology::line();
+    
+    RefinementPatternPtr oneRefinement = RefinementPattern::regularRefinementPattern(volumeTopo);
+    RefinementBranch twoRefinements = {{oneRefinement.get(),0},{oneRefinement.get(),1}}; // left, then right
+    
+    unsigned coarseSubcellDimension = 1; // volume
+    unsigned coarseSubcellOrdinalInCoarseDomain = 0;
+    unsigned coarseDomainDim = 1;
+    unsigned coarseDomainOrdinalInRefinementRoot = 0;
+    unsigned coarseSubcellPermutation = 0;
+    
+    BasisReconciliation::mapFineSubcellPointsToCoarseDomain(coarseSubcellPoints, fineSubcellPoints, fineSubcellDimension, fineSubcellOrdinalInFineDomain,
+                                                            fineDomainDim, fineDomainOrdinalInRefinementLeaf, twoRefinements,
+                                                            volumeTopo,
+                                                            coarseSubcellDimension, coarseSubcellOrdinalInCoarseDomain,
+                                                            coarseDomainDim, coarseDomainOrdinalInRefinementRoot, coarseSubcellPermutation);
+    double tol = 1e-15;
+    TEST_COMPARE_FLOATING_ARRAYS_CAMELLIA(expectedCoarseSubcellPoints, coarseSubcellPoints, tol);
+  }
+  
+  TEUCHOS_UNIT_TEST( BasisReconciliation, MapFineSubcellPointsToCoarseSubcell_1DVertex_TwoRefinementsFineDomainIsLine)
+  {
+    // refine line twice.  Let the fine domain be a line (volume topo), choosing the left branch at first refinement,
+    // right at second.  Subcell is the left of two vertices -- this should be the x = -0.5 point.
+    
+    int numPoints = 1;
+    int spaceDim  = 0;
+    FieldContainer<double> fineSubcellPoints(numPoints, spaceDim);
+    
+    FieldContainer<double> coarseSubcellPoints;
+    
+    unsigned fineSubcellDimension = 0; // vertex
+    unsigned fineSubcellOrdinalInFineDomain = 0; // left vertex
+    
+    unsigned fineDomainDim = 1; // fine domain is 1D (a volume)
+    unsigned fineDomainOrdinalInRefinementLeaf = 0; // the only one
+    
+    CellTopoPtr volumeTopo = CellTopology::line();
+    
+    RefinementPatternPtr oneRefinement = RefinementPattern::regularRefinementPattern(volumeTopo);
+    RefinementBranch twoRefinements = {{oneRefinement.get(),0},{oneRefinement.get(),1}}; // left, then right
+    
+    unsigned coarseSubcellDimension = 1; // volume
+    unsigned coarseSubcellOrdinalInCoarseDomain = 0;
+    unsigned coarseDomainDim = 1;
+    unsigned coarseDomainOrdinalInRefinementRoot = 0;
+    unsigned coarseSubcellPermutation = 0;
+    
+    BasisReconciliation::mapFineSubcellPointsToCoarseDomain(coarseSubcellPoints, fineSubcellPoints, fineSubcellDimension, fineSubcellOrdinalInFineDomain,
+                                                            fineDomainDim, fineDomainOrdinalInRefinementLeaf, twoRefinements,
+                                                            volumeTopo,
+                                                            coarseSubcellDimension, coarseSubcellOrdinalInCoarseDomain,
+                                                            coarseDomainDim, coarseDomainOrdinalInRefinementRoot, coarseSubcellPermutation);
+    double tol = 1e-15;
+    double expected_x = -0.5;
+    
+    double actual_x = coarseSubcellPoints(0,0);
+    
+    TEST_FLOATING_EQUALITY(actual_x, expected_x, tol);
+  }
+  
+  TEUCHOS_UNIT_TEST( BasisReconciliation, MapFineSubcellPointsToCoarseSubcell_1DVertex_TwoRefinementsFineDomainIsVertex)
+  {
+    // refine line twice.  Let the fine domain be a vertex.  Choose the right branch at first refinement,
+    // left at second.  Fine domain is the right of two vertices -- this should be the x = +0.5 point.
+    
+    int numPoints = 1;
+    int spaceDim  = 0;
+    FieldContainer<double> fineSubcellPoints(numPoints, spaceDim);
+    
+    FieldContainer<double> coarseSubcellPoints;
+    
+    unsigned fineSubcellDimension = 0; // vertex
+    unsigned fineSubcellOrdinalInFineDomain = 0; // left vertex
+    
+    unsigned fineDomainDim = 0; // fine domain is a point (a "side")
+    unsigned fineDomainOrdinalInRefinementLeaf = 1; // right vertex in fine cell
+    
+    CellTopoPtr volumeTopo = CellTopology::line();
+    
+    RefinementPatternPtr oneRefinement = RefinementPattern::regularRefinementPattern(volumeTopo);
+    RefinementBranch twoRefinements = {{oneRefinement.get(),1},{oneRefinement.get(),0}}; // right, then left
+    
+    unsigned coarseSubcellDimension = 1; // volume
+    unsigned coarseSubcellOrdinalInCoarseDomain = 0;
+    unsigned coarseDomainDim = 1;
+    unsigned coarseDomainOrdinalInRefinementRoot = 0;
+    unsigned coarseSubcellPermutation = 0;
+    
+    BasisReconciliation::mapFineSubcellPointsToCoarseDomain(coarseSubcellPoints, fineSubcellPoints, fineSubcellDimension, fineSubcellOrdinalInFineDomain,
+                                                            fineDomainDim, fineDomainOrdinalInRefinementLeaf, twoRefinements,
+                                                            volumeTopo,
+                                                            coarseSubcellDimension, coarseSubcellOrdinalInCoarseDomain,
+                                                            coarseDomainDim, coarseDomainOrdinalInRefinementRoot, coarseSubcellPermutation);
+    
+    
+    double tol = 1e-15;
+    double expected_x = 0.5;
+    
+    double actual_x = coarseSubcellPoints(0,0);
+    TEST_FLOATING_EQUALITY(actual_x, expected_x, tol);
   }
   
   TEUCHOS_UNIT_TEST( BasisReconciliation, MapFineSubcellPointsToCoarseSubcell_Vertex)
@@ -1688,6 +1693,297 @@ namespace {
     double tol = 1e-15;
 
     TEST_COMPARE_FLOATING_ARRAYS_CAMELLIA(coarseSubcellPoints, expectedCoarseSubcellPoints, tol);
+  }
+
+  TEUCHOS_UNIT_TEST( BasisReconciliation, MapFineSubcellPointsToCoarseSubcell_Volume)
+  {
+    // map two points on a fine edge to the coarse volume
+    
+    int numPoints = 2;
+    int fineDim  = 1;
+    FieldContainer<double> fineSubcellPoints(numPoints, fineDim);
+    fineSubcellPoints(0,0) = -0.25;
+    fineSubcellPoints(1,0) = 0.5;
+    
+    int coarseDim = 2;
+    FieldContainer<double> expectedCoarseSubcellPoints(numPoints,coarseDim);
+    expectedCoarseSubcellPoints(0,0) = 0.0;
+    expectedCoarseSubcellPoints(0,1) = 0.5 * fineSubcellPoints(0,0) - 0.5;
+    expectedCoarseSubcellPoints(1,0) = 0.0;
+    expectedCoarseSubcellPoints(1,1) = 0.5 * fineSubcellPoints(1,0) - 0.5;
+    
+    FieldContainer<double> coarseSubcellPoints;
+    
+    unsigned fineSubcellDimension = fineDim; // edge
+    unsigned fineSubcellOrdinalInFineDomain = 0; // edge
+    
+    unsigned fineDomainDim = fineDim; // fine domain is 1D
+    unsigned fineDomainOrdinalInRefinementLeaf = 1; // side 1
+    
+    CellTopoPtr volumeTopo = CellTopology::quad();
+    
+    RefinementBranch refBranch;
+    RefinementPatternPtr oneRefinement = RefinementPattern::regularRefinementPatternQuad();
+    refBranch.push_back( make_pair(oneRefinement.get(), 0) );
+    
+    unsigned coarseSubcellDimension = 2; // volume
+    unsigned coarseSubcellOrdinalInCoarseDomain = 0;
+    unsigned coarseDomainDim = 2;
+    unsigned coarseDomainOrdinalInRefinementRoot = 0;
+    unsigned coarseSubcellPermutation = 0;
+    
+    BasisReconciliation::mapFineSubcellPointsToCoarseDomain(coarseSubcellPoints, fineSubcellPoints, fineSubcellDimension, fineSubcellOrdinalInFineDomain,
+                                                            fineDomainDim, fineDomainOrdinalInRefinementLeaf, refBranch,
+                                                            volumeTopo,
+                                                            coarseSubcellDimension, coarseSubcellOrdinalInCoarseDomain,
+                                                            coarseDomainDim, coarseDomainOrdinalInRefinementRoot, coarseSubcellPermutation);
+  
+    out << "coarseSubcellPoints:\n" << coarseSubcellPoints;
+    out << "expectedCoarseSubcellPoints:\n" << expectedCoarseSubcellPoints;
+    
+    double tol = 1e-15;
+    TEST_COMPARE_FLOATING_ARRAYS_CAMELLIA(coarseSubcellPoints, expectedCoarseSubcellPoints, tol);
+  }
+  
+  TEUCHOS_UNIT_TEST( BasisReconciliation, MapFineSubcellPointsToCoarseDomain_HexahedronHangingEdge)
+  {
+    // map points on child 1, side 2, edge 3 to the parent's side 1.  In parent reference space, this edge goes from
+    // (1,0,-1) to (1,0,0), but it has orientation opposite that in the child's side.  This is a particular
+    // case where GDAMinimumRule is failing, and my suspicion is that it has to do with the orientation of that
+    // edge.
+    
+    int numPoints = 3;
+    int fineDim  = 1;
+    FieldContainer<double> fineSubcellPoints(numPoints, fineDim);
+    fineSubcellPoints(0,0) = -1.0;
+    fineSubcellPoints(1,0) =  0.0;
+    fineSubcellPoints(2,0) =  1.0;
+    
+    int coarseDim = 2;
+    FieldContainer<double> expectedCoarseDomainPoints(numPoints,coarseDim);
+    for (int coarsePointOrdinal=0; coarsePointOrdinal<numPoints; coarsePointOrdinal++)
+    {
+      int finePointOrdinal = numPoints - 1 - coarsePointOrdinal; // account for permutation
+      expectedCoarseDomainPoints(coarsePointOrdinal,0) = 0.0;
+      expectedCoarseDomainPoints(coarsePointOrdinal,1) = 0.5 * (fineSubcellPoints(finePointOrdinal,0) - 1.0);
+    }
+    
+    unsigned fineSubcellDimension = fineDim; // edge
+    unsigned fineSubcellOrdinalInFineDomain = 3; // edge
+    
+    unsigned fineDomainDim = 2; // fine domain is 2D
+    unsigned fineDomainOrdinalInRefinementLeaf = 2; // side 2
+    
+    CellTopoPtr volumeTopo = CellTopology::hexahedron();
+    
+    RefinementBranch refBranch;
+    RefinementPatternPtr oneRefinement = RefinementPattern::regularRefinementPatternHexahedron();
+    refBranch.push_back( make_pair(oneRefinement.get(), 1) ); // child ordinal 1
+    
+    unsigned coarseSubcellDimension = 2; // side
+    unsigned coarseSubcellOrdinalInCoarseDomain = 0;
+    unsigned coarseDomainDim = 2;
+    unsigned coarseDomainOrdinalInRefinementRoot = 1;
+    unsigned coarseSubcellPermutation = 0;
+    
+    testMap(expectedCoarseDomainPoints, fineSubcellPoints, fineSubcellDimension, fineSubcellOrdinalInFineDomain,
+            fineDomainDim, fineDomainOrdinalInRefinementLeaf, refBranch,
+            volumeTopo,
+            coarseSubcellDimension, coarseSubcellOrdinalInCoarseDomain,
+            coarseDomainDim, coarseDomainOrdinalInRefinementRoot, coarseSubcellPermutation, out, success);
+  }
+  
+  TEUCHOS_UNIT_TEST( BasisReconciliation, MapFineSubcellPointsToCoarseDomain_HexahedronSameSideEdge)
+  {
+    /*
+     For an unrefined hexahedron with fine = coarse subcell, but for which the side orientation disagrees with that
+     of volume, confirm that fineSubcellPoints and coarseSubcellPoints are identical.
+     
+     Side 2, edge 3 of the hexahedron has such an opposite orientation (this is edge 10, from vertex 2 to vertex 6 in hexahedron).
+     */
+    
+    int numPoints = 3;
+    int fineDim  = 1;
+    FieldContainer<double> fineSubcellPoints(numPoints, fineDim);
+    fineSubcellPoints(0,0) = -1.0;
+    fineSubcellPoints(1,0) =  0.0;
+    fineSubcellPoints(2,0) =  1.0;
+    
+    
+    unsigned fineSubcellDimension = fineDim; // edge
+    unsigned fineSubcellOrdinalInFineDomain = 3; // edge
+    
+    unsigned fineDomainDim = 2; // fine domain is 2D
+    unsigned fineDomainOrdinalInRefinementLeaf = 2; // side 2
+    
+    CellTopoPtr volumeTopo = CellTopology::hexahedron();
+    CellTopoPtr sideTopo = volumeTopo->getSide(fineDomainOrdinalInRefinementLeaf);
+    
+    RefinementBranch refBranch;
+    RefinementPatternPtr noRefinement = RefinementPattern::noRefinementPattern(volumeTopo);
+    refBranch.push_back( make_pair(noRefinement.get(), 0) ); // child ordinal 0
+    
+    unsigned coarseSubcellDimension = fineSubcellDimension;
+    unsigned coarseSubcellOrdinalInCoarseDomain = fineSubcellOrdinalInFineDomain;
+    unsigned coarseDomainDim = fineDomainDim;
+    unsigned coarseDomainOrdinalInRefinementRoot = fineDomainOrdinalInRefinementLeaf;
+    unsigned coarseSubcellPermutation = 0;
+    
+    FieldContainer<double> expectedCoarseDomainPoints(numPoints,coarseDomainDim);
+    // the coarse domain points expected are the fine subcell points mapped to the fine/coarse reference domain
+    CamelliaCellTools::mapToReferenceSubcell(expectedCoarseDomainPoints, fineSubcellPoints,
+                                             fineSubcellDimension, fineSubcellOrdinalInFineDomain, sideTopo);
+    
+    testMap(expectedCoarseDomainPoints, fineSubcellPoints, fineSubcellDimension, fineSubcellOrdinalInFineDomain,
+            fineDomainDim, fineDomainOrdinalInRefinementLeaf, refBranch,
+            volumeTopo,
+            coarseSubcellDimension, coarseSubcellOrdinalInCoarseDomain,
+            coarseDomainDim, coarseDomainOrdinalInRefinementRoot, coarseSubcellPermutation, out, success);
+  }
+  
+  TEUCHOS_UNIT_TEST( BasisReconciliation, MapFineSubcellPointsToCoarseDomain_HexahedronSideEdges)
+  {
+    /*
+     This test runs through the faces of the hexahedron, and for each considers its edges.  The present
+     face is considered the "fine" domain, and the neighboring face along the edge is the coarse domain.
+     The coarse and fine subcells of interest are the shared edge.
+     
+     We check the mapping by using a BasisCache defined on the volume; we check that the physical points
+     for both fine and coarse sides agree.
+     */
+    
+    int numPoints = 3;
+    int edgeDim  = 1;
+    FieldContainer<double> fineSubcellPoints(numPoints, edgeDim);
+    fineSubcellPoints(0,0) = -1.0;
+    fineSubcellPoints(1,0) =  0.0;
+    fineSubcellPoints(2,0) =  1.0;
+    
+    unsigned fineSubcellDimension = edgeDim; // edge
+    unsigned fineDomainDim = 2; // fine domain is 2D
+    unsigned coarseDomainDim = fineDomainDim;
+    unsigned coarseSubcellDimension = edgeDim; // edge
+    
+    CellTopoPtr volumeTopo = CellTopology::hexahedron();
+    RefinementPatternPtr noRefinement = RefinementPattern::noRefinementPattern(volumeTopo);
+    RefinementBranch refBranch = {{noRefinement.get(), 0}}; // child ordinal 0
+    
+    // we use MeshTopology to find the other side that shares a given edge:
+    MeshTopologyPtr meshTopo = noRefinement->refinementMeshTopology();
+    IndexType cellIndex = 0;
+    CellPtr cell = meshTopo->getCell(cellIndex);
+    int sideDim = fineDomainDim;
+    bool createSideCache = true;
+    BasisCachePtr cellBasisCache = BasisCache::basisCacheForReferenceCell(volumeTopo, 1, createSideCache); // 1: arbitrary cubature degree
+    double tol = 1e-15;
+    
+    for (int fineSideOrdinal=0; fineSideOrdinal<volumeTopo->getSideCount(); fineSideOrdinal++)
+    {
+      CellTopoPtr sideTopo = volumeTopo->getSide(fineSideOrdinal);
+      IndexType fineSideEntityIndex = cell->entityIndex(sideDim, fineSideOrdinal);
+      for (int fineEdgeOrdinal=0; fineEdgeOrdinal<sideTopo->getEdgeCount(); fineEdgeOrdinal++)
+      {
+        CellTopoPtr edgeTopo = sideTopo->getSubcell(edgeDim, fineEdgeOrdinal);
+        int edgeOrdinalInCell = CamelliaCellTools::subcellOrdinalMap(volumeTopo, sideDim, fineSideOrdinal,
+                                                                     edgeDim, fineEdgeOrdinal);
+        IndexType edgeEntityIndex = cell->entityIndex(edgeDim, edgeOrdinalInCell);
+        vector<IndexType> sidesForEdge = meshTopo->getSidesContainingEntity(edgeDim, edgeEntityIndex);
+        if (sidesForEdge.size() != 2)
+        {
+          out << "Failure: sidesForEdge has unexpected size.\n";
+          success = false;
+          // quit early if this happens
+          return;
+        }
+        IndexType coarseSideEntityIndex = (sidesForEdge[0] == fineSideEntityIndex) ? sidesForEdge[1] : sidesForEdge[0];
+        int coarseSideOrdinal = cell->findSubcellOrdinal(sideDim, coarseSideEntityIndex);
+        int coarseEdgeOrdinal = cell->findSubcellOrdinalInSide(edgeDim, edgeEntityIndex, coarseSideOrdinal);
+        
+        unsigned fineSubcellOrdinalInFineDomain = fineEdgeOrdinal;
+        unsigned coarseSubcellOrdinalInCoarseDomain = coarseEdgeOrdinal;
+        unsigned coarseDomainOrdinalInRefinementRoot = coarseSideOrdinal;
+        unsigned fineDomainOrdinalInRefinementLeaf = fineSideOrdinal;
+        
+        unsigned coarseSubcellPermutation = 0; // since fine ancestral cell and coarse cell are the same, 0.
+        
+        FieldContainer<double> coarseDomainPoints(numPoints,coarseDomainDim);
+        BasisReconciliation::mapFineSubcellPointsToCoarseDomain(coarseDomainPoints, fineSubcellPoints,
+                                                                fineSubcellDimension, fineSubcellOrdinalInFineDomain,
+                                                                fineDomainDim, fineDomainOrdinalInRefinementLeaf,
+                                                                refBranch, volumeTopo,
+                                                                coarseSubcellDimension, coarseSubcellOrdinalInCoarseDomain,
+                                                                coarseDomainDim, coarseDomainOrdinalInRefinementRoot,
+                                                                coarseSubcellPermutation);
+        
+        // Now that we've mapped the *subcell* points, map them into their respective side BasisCaches,
+        // and check that the physical points mapped are the same.
+        BasisCachePtr fineCache = cellBasisCache->getSideBasisCache(fineSideOrdinal);
+        BasisCachePtr coarseCache = cellBasisCache->getSideBasisCache(coarseSideOrdinal);
+        
+        FieldContainer<double> fineDomainPoints(numPoints,fineDomainDim);
+        CamelliaCellTools::mapToReferenceSubcell(fineDomainPoints, fineSubcellPoints, edgeDim, fineEdgeOrdinal, sideTopo);
+        fineCache->setRefCellPoints(fineDomainPoints);
+        
+        coarseCache->setRefCellPoints(coarseDomainPoints);
+        
+        FieldContainer<double> finePhysicalPoints = fineCache->getPhysicalCubaturePoints();
+        FieldContainer<double> coarsePhysicalPoints = coarseCache->getPhysicalCubaturePoints();
+        
+        out << "Mapping side ordinal " << fineSideOrdinal << ", edge " << fineEdgeOrdinal;
+        out << " to side ordinal " << coarseSideOrdinal << ", edge " << coarseEdgeOrdinal;
+        out << " (permutation = " << coarseSubcellPermutation << ")\n";
+        
+        out << "fine subcell points:\n" << fineSubcellPoints;
+        out << "fine domain points:\n" << fineDomainPoints;
+        
+        out << "coarse domain points:\n" << coarseDomainPoints;
+        
+        TEST_COMPARE_FLOATING_ARRAYS_CAMELLIA(finePhysicalPoints, coarsePhysicalPoints, tol);
+      }
+    }
+  }
+  
+  TEUCHOS_UNIT_TEST( BasisReconciliation, MapFineSubcellPointsToCoarseSubcell_InteriorTriangleSideToTriangleVolume)
+  {
+    // map two points on edge of interior triangle to the parent
+    // we take the 0 edge on the interior triangle, which extends from (0.5,0) to (0.5,0.5) in parent
+    
+    int numPoints = 2;
+    int fineDim  = 1;
+    FieldContainer<double> fineSubcellPoints(numPoints, fineDim);
+    fineSubcellPoints(0,0) = -0.25;
+    fineSubcellPoints(1,0) = 0.5;
+    
+    int coarseDim = 2;
+    FieldContainer<double> expectedCoarseSubcellPoints(numPoints,coarseDim);
+    expectedCoarseSubcellPoints(0,0) = 0.5;
+    expectedCoarseSubcellPoints(0,1) = 0.25 * fineSubcellPoints(0,0) + 0.25;
+    expectedCoarseSubcellPoints(1,0) = 0.5;
+    expectedCoarseSubcellPoints(1,1) = 0.25 * fineSubcellPoints(1,0) + 0.25;
+    
+    unsigned fineSubcellDimension = fineDim; // edge
+    unsigned fineSubcellOrdinalInFineDomain = 0; // edge
+    
+    unsigned fineDomainDim = fineDim; // fine domain is 1D
+    unsigned fineDomainOrdinalInRefinementLeaf = 0; // side 0
+    
+    CellTopoPtr volumeTopo = CellTopology::triangle();
+    
+    RefinementBranch refBranch;
+    RefinementPatternPtr oneRefinement = RefinementPattern::regularRefinementPatternTriangle();
+    refBranch.push_back( make_pair(oneRefinement.get(), 1) ); // child ordinal 1 is the interior triangle
+    
+    unsigned coarseSubcellDimension = 2; // volume
+    unsigned coarseSubcellOrdinalInCoarseDomain = 0;
+    unsigned coarseDomainDim = 2;
+    unsigned coarseDomainOrdinalInRefinementRoot = 0;
+    unsigned coarseSubcellPermutation = 0;
+    
+    testMap(expectedCoarseSubcellPoints, fineSubcellPoints, fineSubcellDimension, fineSubcellOrdinalInFineDomain,
+            fineDomainDim, fineDomainOrdinalInRefinementLeaf, refBranch,
+            volumeTopo,
+            coarseSubcellDimension, coarseSubcellOrdinalInCoarseDomain,
+            coarseDomainDim, coarseDomainOrdinalInRefinementRoot, coarseSubcellPermutation, out, success);
   }
   
   TEUCHOS_UNIT_TEST(BasisReconciliation, p)
@@ -1871,17 +2167,25 @@ namespace {
   }
 
   void equispacedPoints(int numPoints1D, CellTopoPtr cellTopo, FieldContainer<double> &points) {
-    if (cellTopo->getDimension() == 1) {
+    if (cellTopo->getDimension() == 0)
+    {
+      points.resize(1,1);
+    }
+    else if (cellTopo->getDimension() == 1)
+    {
       // compute some equispaced points on the reference line:
       points.resize(numPoints1D, cellTopo->getDimension());
       for (int pointOrdinal=0; pointOrdinal < numPoints1D; pointOrdinal++) {
         int d = 0;
         points(pointOrdinal,d) = -1.0 + pointOrdinal * (2.0 / (numPoints1D - 1));
       }
-    } else if (cellTopo->getKey() == CellTopology::quad()->getKey()) {
+    }
+    else if (cellTopo->getKey() == CellTopology::quad()->getKey())
+    {
       points.resize(numPoints1D * numPoints1D, cellTopo->getDimension());
-
-    } else {
+    }
+    else
+    {
       TEUCHOS_TEST_FOR_EXCEPTION(true, std::invalid_argument, "Unhandled CellTopology");
     }
   }
@@ -1917,7 +2221,7 @@ namespace {
     unsigned coarseDomainOrdinalInRefinementRoot = 0; // again, since coarse domain is for a field variable, this will always be 0
     unsigned coarseSubcellPermutation = 0;            // not sure if this will ever be nontrivial permutation in practice; we don't test anything else here
 
-    int H1Order = 1;
+    int H1Order = 2;
     int numPoints1D = 5;
 
     BasisPtr volumeBasis;
@@ -1926,18 +2230,17 @@ namespace {
     else
       volumeBasis = BasisFactory::basisFactory()->getBasis(H1Order, volumeTopo, Camellia::FUNCTION_SPACE_VECTOR_HVOL);
 
-    RefinementBranch noRefinements;
     RefinementPatternPtr noRefinement = RefinementPattern::noRefinementPattern(volumeTopo);
-    noRefinements.push_back( make_pair(noRefinement.get(), 0) );
-
-    RefinementBranch oneRefinement;
     RefinementPatternPtr regularRefinement = RefinementPattern::regularRefinementPattern(volumeTopo);
-    oneRefinement.push_back( make_pair(regularRefinement.get(), 1) ); // 1: select child ordinal 1
+    
+    RefinementBranch noRefinements = {{noRefinement.get(), 0}};
+    RefinementBranch oneRefinement = {{regularRefinement.get(), 1}}; // 1: select child ordinal 1
+//    RefinementBranch twoRefinements = {{regularRefinement.get(), 1}, {regularRefinement.get(),0}}; // select child 1 in first refinement, 0 in second
 
-    vector<RefinementBranch> refinementBranches;
-    refinementBranches.push_back(noRefinements);
-    refinementBranches.push_back(oneRefinement);
+//    vector<RefinementBranch> refinementBranches = {noRefinements,oneRefinement,twoRefinements};
 
+    vector<RefinementBranch> refinementBranches = {noRefinements,oneRefinement};
+    
     FieldContainer<double> volumeRefNodes(volumeTopo->getVertexCount(), volumeTopo->getDimension());
 
     CamelliaCellTools::refCellNodesForTopology(volumeRefNodes, volumeTopo);
@@ -1948,6 +2251,10 @@ namespace {
     for (int i=0; i< refinementBranches.size(); i++) {
       RefinementBranch refBranch = refinementBranches[i];
 
+      FieldContainer<double> refinedNodes = RefinementPattern::descendantNodesRelativeToAncestorReferenceCell(refBranch);
+      addCellDimensionToFC(refinedNodes);
+      volumeBasisCache->setPhysicalCellNodes(refinedNodes, {}, createSideCache);
+      
       out << "***** Refinement Type Number " << i << " *****\n";
 
       for (int traceSideOrdinal=0; traceSideOrdinal < volumeTopo->getSideCount(); traceSideOrdinal++) {
@@ -1956,7 +2263,9 @@ namespace {
         equispacedPoints(numPoints1D, sideTopo, tracePointsSideReferenceSpace);
         int numPoints = tracePointsSideReferenceSpace.dimension(0);
 
-        BasisPtr traceBasis = BasisFactory::basisFactory()->getBasis(H1Order, sideTopo, Camellia::FUNCTION_SPACE_HVOL);
+        // choose trace basis in much the way that we would in actual applications:
+        Camellia::EFunctionSpace traceFS = (traceOrFluxType==TRACE) ? Camellia::FUNCTION_SPACE_HGRAD : Camellia::FUNCTION_SPACE_HVOL;
+        BasisPtr traceBasis = BasisFactory::basisFactory()->getBasis(H1Order, sideTopo, traceFS);
 
         out << "\n\n*****      Side Ordinal " << traceSideOrdinal << "      *****\n\n\n";
 
@@ -1984,8 +2293,10 @@ namespace {
 
         int fineSubcellOrdinalInFineDomain = 0; // since the side *is* both domain and subcell, it's necessarily ordinal 0 in the domain
         SubBasisReconciliationWeights weights;
-        weights = BasisReconciliation::computeConstrainedWeightsForTermTraced(traceVar->termTraced(), fieldVar->ID(), sideTopo->getDimension(),
-                                                                              traceBasis, fineSubcellOrdinalInFineDomain, refBranch, traceSideOrdinal,
+        weights = BasisReconciliation::computeConstrainedWeightsForTermTraced(traceVar->termTraced(), fieldVar->ID(),
+                                                                              sideTopo->getDimension(),
+                                                                              traceBasis, fineSubcellOrdinalInFineDomain, refBranch,
+                                                                              traceSideOrdinal,
                                                                               volumeTopo,
                                                                               volumeTopo->getDimension(), volumeBasis,
                                                                               coarseSubcellOrdinalInCoarseDomain,
@@ -2012,34 +2323,17 @@ namespace {
 
         out << "coarseValuesActual:\n" << coarseValuesActual;
 
-        for (int pointOrdinal = 0; pointOrdinal < numPoints; pointOrdinal++) {
-          int coarseOrdinalInWeights = 0;
-          for (int coarseOrdinal=0; coarseOrdinal < volumeBasis->getCardinality(); coarseOrdinal++) {
-            double expectedValue = coarseValuesExpected(0,coarseOrdinal,pointOrdinal);
-
-            double actualValue;
-            if (weights.coarseOrdinals.find(coarseOrdinal) != weights.coarseOrdinals.end()) {
-              actualValue = coarseValuesActual(coarseOrdinalInWeights,pointOrdinal);
-              coarseOrdinalInWeights++;
-            } else {
-              actualValue = 0.0;
-            }
-
-            if ( abs(expectedValue) > tol ) {
-              TEST_FLOATING_EQUALITY(expectedValue, actualValue, tol);
-            } else {
-              TEST_ASSERT( abs(actualValue) < tol );
-
-              if (abs(actualValue) >= tol) {
-                out << "coarseOrdinal " << coarseOrdinal << ", point " << pointOrdinal << " on side " << traceSideOrdinal << ", actualValue = " << actualValue << endl;
-              }
-            }
-          }
-        }
+        TEST_COMPARE_FLOATING_ARRAYS_CAMELLIA(coarseValuesExpected, coarseValuesActual, tol);
       }
     }
   }
 
+  TEUCHOS_UNIT_TEST( BasisReconciliation, TermTraced_1D_new )
+  {
+    CellTopoPtr lineTopo = CellTopology::line();
+    termTracedTest(out,success,lineTopo,TRACE);
+  }
+  
   TEUCHOS_UNIT_TEST( BasisReconciliation, TermTraced_1D )
   {
     // TODO: rewrite this to use termTracedTest(), as in TermTraced_2D tests, below
@@ -2151,20 +2445,32 @@ namespace {
       }
     }
   }
-
-  TEUCHOS_UNIT_TEST( BasisReconciliation, TermTraced_2D )
+  
+  TEUCHOS_UNIT_TEST( BasisReconciliation, TermTraced_2D_Quad )
   {
     CellTopoPtr quadTopo = CellTopology::quad();
     termTracedTest(out,success,quadTopo,TRACE);
   }
-
-  TEUCHOS_UNIT_TEST( BasisReconciliation, TermTraced_2D_Flux )
+  
+  TEUCHOS_UNIT_TEST( BasisReconciliation, TermTraced_2D_Quad_Flux )
   {
     CellTopoPtr quadTopo = CellTopology::quad();
     termTracedTest(out,success,quadTopo,FLUX);
   }
+  
+  TEUCHOS_UNIT_TEST( BasisReconciliation, TermTraced_2D_Triangle )
+  {
+    CellTopoPtr triangleTopo = CellTopology::triangle();
+    termTracedTest(out,success,triangleTopo,TRACE);
+  }
+  
+  TEUCHOS_UNIT_TEST( BasisReconciliation, TermTraced_2D_Triangle_Flux )
+  {
+    CellTopoPtr triangleTopo = CellTopology::triangle();
+    termTracedTest(out,success,triangleTopo,FLUX);
+  }
 
-  TEUCHOS_UNIT_TEST( BasisReconciliation, TermTraced_3D_Hexahedron)
+  TEUCHOS_UNIT_TEST( BasisReconciliation, TermTraced_3D_Hexahedron_Slow)
   {
     // TODO: rewrite this to use termTracedTest(), as in TermTraced_2D tests, above
     // TODO: add Hexahedron flux test

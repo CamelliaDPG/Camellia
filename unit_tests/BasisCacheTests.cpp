@@ -249,14 +249,14 @@ namespace {
           unsigned spatialSideOrdinal = cellTopo->getSpatialComponentSideOrdinal(sideOrdinal);
           BasisCachePtr sideCacheSpace = volumeCacheSpace->getSideBasisCache(spatialSideOrdinal);
           // set up cubature points for shards topo
-          FieldContainer<double> refPointsSpaceTime = sideCacheSpaceTime->getSideRefCellPointsInVolumeCoordinates();
-          FieldContainer<double> refPointsSpace(numCubPoints, shardsTopo->getDimension());
+          FieldContainer<double> refPointsSpaceTimeSide = sideCacheSpaceTime->getRefCellPoints();
+          FieldContainer<double> refPointsSpaceSide(numCubPoints, shardsTopo->getDimension()-1);
           for (int ptOrdinal=0; ptOrdinal<numCubPoints; ptOrdinal++) {
-            for (int d=0; d<shardsTopo->getDimension(); d++) {
-              refPointsSpace(ptOrdinal,d) = refPointsSpaceTime(ptOrdinal,d);
+            for (int d=0; d<shardsTopo->getDimension()-1; d++) {
+              refPointsSpaceSide(ptOrdinal,d) = refPointsSpaceTimeSide(ptOrdinal,d);
             }
           }
-          sideCacheSpace->setRefCellPoints(refPointsSpace);
+          sideCacheSpace->setRefCellPoints(refPointsSpaceSide);
           FieldContainer<double> sideNormalsSpace = sideCacheSpace->getSideNormals();
           for (int cellOrdinal=0; cellOrdinal < numCells; cellOrdinal++) {
             for (int ptOrdinal=0; ptOrdinal < numCubPoints; ptOrdinal++) {

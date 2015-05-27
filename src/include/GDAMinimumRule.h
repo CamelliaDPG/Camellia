@@ -58,18 +58,18 @@ namespace Camellia {
 
     vector<unsigned> allBasisDofOrdinalsVector(int basisCardinality);
 
+    static string annotatedEntityToString(AnnotatedEntity &entity);
+    
     void filterSubBasisConstraintData(set<unsigned> &basisDofOrdinals,vector<GlobalIndexType> &globalDofOrdinals,
                                       Intrepid::FieldContainer<double> &constraintMatrixSideInterior, Intrepid::FieldContainer<bool> &processedDofs,
                                       DofOrderingPtr trialOrdering, VarPtr var, int sideOrdinal = 0);
 
     typedef vector< SubBasisDofMapperPtr > BasisMap;
     BasisMap getBasisMap(GlobalIndexType cellID, SubCellDofIndexInfo& dofOwnershipInfo, VarPtr var);
-    BasisMap getBasisMapOld(GlobalIndexType cellID, SubCellDofIndexInfo& dofOwnershipInfo, VarPtr var, int sideOrdinal);
 
     BasisMap getBasisMap(GlobalIndexType cellID, SubCellDofIndexInfo& dofOwnershipInfo, VarPtr var, int sideOrdinal);
 
     SubCellDofIndexInfo getOwnedGlobalDofIndices(GlobalIndexType cellID, CellConstraints &cellConstraints);
-    SubCellDofIndexInfo getGlobalDofIndices(GlobalIndexType cellID, CellConstraints &cellConstraints);
 
     set<GlobalIndexType> getFittableGlobalDofIndices(GlobalIndexType cellID, CellConstraints &constraints, int sideOrdinal); // returns the global dof indices for basis functions which have support on the given side (i.e. their support intersected with the side has positive measure).  This is determined by taking the union of the global dof indices defined on all the constraining sides for the given side (the constraining sides are by definition unconstrained).
 
@@ -79,10 +79,15 @@ namespace Camellia {
 
   public:
     // these are public just for easier testing:
+    BasisMap getBasisMapOld(GlobalIndexType cellID, SubCellDofIndexInfo& dofOwnershipInfo, VarPtr var, int sideOrdinal);
     CellConstraints getCellConstraints(GlobalIndexType cellID);
     LocalDofMapperPtr getDofMapper(GlobalIndexType cellID, CellConstraints &constraints, int varIDToMap = -1, int sideOrdinalToMap = -1);
-
+    SubCellDofIndexInfo getGlobalDofIndices(GlobalIndexType cellID, CellConstraints &cellConstraints);
     set<GlobalIndexType> getGlobalDofIndicesForIntegralContribution(GlobalIndexType cellID, int sideOrdinal); // assuming an integral is being done over the whole mesh skeleton, returns either an empty set or the global dof indices associated with the given side, depending on whether the cell "owns" the side for the purpose of such contributions.
+    // ! returns the permutation that goes from the indicated cell's view of the subcell to the constraining cell's view.
+    unsigned getConstraintPermutation(GlobalIndexType cellID, unsigned subcdim, unsigned subcord);
+    // ! returns the permutation that goes from the indicated side's view of the subcell to the constraining side's view.
+    unsigned getConstraintPermutation(GlobalIndexType cellID, unsigned sideOrdinal, unsigned subcdim, unsigned subcord);
   public:
     GDAMinimumRule(MeshPtr mesh, VarFactoryPtr varFactory, DofOrderingFactoryPtr dofOrderingFactory, MeshPartitionPolicyPtr partitionPolicy,
                    unsigned initialH1OrderTrial, unsigned testOrderEnhancement);
@@ -103,7 +108,7 @@ namespace Camellia {
     GlobalIndexType globalDofCount();
     set<GlobalIndexType> globalDofIndicesForCell(GlobalIndexType cellID);
     set<GlobalIndexType> globalDofIndicesForPartition(PartitionIndexType partitionNumber);
-
+    
     set<GlobalIndexType> ownedGlobalDofIndicesForCell(GlobalIndexType cellID);
 
     set<GlobalIndexType> partitionOwnedGlobalFieldIndices();

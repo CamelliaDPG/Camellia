@@ -885,288 +885,456 @@ void BasisReconciliation::mapFineSubcellPointsToCoarseDomain(FieldContainer<doub
                                                              unsigned coarseSubcellOrdinalInCoarseDomain,
                                                              unsigned coarseDomainDim,
                                                              unsigned coarseDomainOrdinalInCoarseCellTopo,
-                                                             unsigned coarseSubcellPermutation) {
+                                                             unsigned coarseSubcellPermutation)
+{
   if (fineCellRefinementBranch.size() == 0) {
     TEUCHOS_TEST_FOR_EXCEPTION(true, std::invalid_argument, "cellRefinementBranch must have at least one refinement!");
   }
   
+  RefinementPattern* leafRefPattern = fineCellRefinementBranch[fineCellRefinementBranch.size()-1].first;
+  unsigned leafChildOrdinal = fineCellRefinementBranch[fineCellRefinementBranch.size()-1].second;
+  CellTopoPtr fineCellTopo = leafRefPattern->childTopology(leafChildOrdinal);
+  CellTopoPtr fineDomainTopo = fineCellTopo->getSubcell(fineDomainDim, fineDomainOrdinalInRefinementLeaf);
+  CellTopoPtr fineSubcellTopo = fineDomainTopo->getSubcell(fineSubcellDimension, fineSubcellOrdinalInFineDomain);
+  CellTopoPtr coarseDomainTopo = coarseCellTopo->getSubcell(coarseDomainDim, coarseDomainOrdinalInCoarseCellTopo);
+  CellTopoPtr coarseSubcellTopo = coarseDomainTopo->getSubcell(coarseSubcellDimension, coarseSubcellOrdinalInCoarseDomain);
   int numPoints = fineSubcellPoints.dimension(0);
   
-  TEUCHOS_TEST_FOR_EXCEPTION((fineSubcellDimension == 0) && (numPoints != 1), std::invalid_argument, "When fine subcell is a point, numPoints must be 1!");
-  
-  CellTopoPtr fineRootCellTopo = fineCellRefinementBranch[0].first->parentTopology();
-  CellTopoPtr leafCellTopo = RefinementPattern::descendantTopology(fineCellRefinementBranch);
-  
-  CellTopoPtr fineTopo = leafCellTopo->getSubcell(fineDomainDim, fineDomainOrdinalInRefinementLeaf);
-  CellTopoPtr fineSubcellTopo = fineTopo->getSubcell(fineSubcellDimension, fineSubcellOrdinalInFineDomain);
-  
-  CellTopoPtr coarseTopo = coarseCellTopo->getSubcell(coarseDomainDim, coarseDomainOrdinalInCoarseCellTopo);
-  CellTopoPtr coarseSubcellTopo = coarseTopo->getSubcell(coarseSubcellDimension, coarseSubcellOrdinalInCoarseDomain);
-  
-  FieldContainer<double> fineTopoRefNodes(fineTopo->getVertexCount(), fineTopo->getDimension());
-  CamelliaCellTools::refCellNodesForTopology(fineTopoRefNodes, fineTopo);
-  FieldContainer<double> coarseTopoRefNodes(coarseTopo->getVertexCount(), coarseTopo->getDimension());
-  CamelliaCellTools::refCellNodesForTopology(coarseTopoRefNodes, coarseTopo);
-  
-  FieldContainer<double> leafCellNodes = RefinementPattern::descendantNodesRelativeToAncestorReferenceCell(fineCellRefinementBranch);
-  
-  FieldContainer<double> mappedFineSubcellPoints = fineSubcellPoints;
-  
-  // work out what the subcell ordinal of the fine subcell is in the leaf of coarseDomainRefinements...
-  unsigned fineSubcellOrdinalInLeafCell = CamelliaCellTools::subcellOrdinalMap(leafCellTopo, fineDomainDim, fineDomainOrdinalInRefinementLeaf,
+  unsigned fineSubcellOrdinalInFineCell = CamelliaCellTools::subcellOrdinalMap(fineCellTopo, fineDomainDim, fineDomainOrdinalInRefinementLeaf,
                                                                                fineSubcellDimension, fineSubcellOrdinalInFineDomain);
-  int temporaryCubatureDegree = 1;
-
-  // ************************************************************************************************************
-  //       determine the relative permutation of the subcell as seen by the fine domain and the subcell as seen by the
-  //       leaf of the subcell refinement branch used to generate the coarse domain's points.  Use this to permute the
-  //       fineSubcellPoints appropriately before generating the coarse domain's points...
   
-  if (fineSubcellTopo->getNodeCount() > 1) {
-    vector<unsigned> fineDomainSubcellNodes;
-    for (int i=0; i<fineSubcellTopo->getNodeCount(); i++) {
-      unsigned nodeInFineDomain = fineTopo->getNodeMap(fineSubcellDimension, fineSubcellOrdinalInFineDomain, i);
-      unsigned nodeInFineCell = leafCellTopo->getNodeMap(fineDomainDim, fineDomainOrdinalInRefinementLeaf, nodeInFineDomain);
-      fineDomainSubcellNodes.push_back(nodeInFineCell);
-    }
-    
-    vector<unsigned> subcellParentChildNodes; // a bit complicated: ascend the ref pattern hierarchy, then descend again to get the view from which we'll start to construct cubature for the coarse domain (the subcell's parent's child may be of different dimension than the subcell).
-    {
-      // worth noting that this code is by design redundant with the first bit of the while (refOrdinal >= 0) loop below.
-      // in the interest of eliminating said redundancy, it might be worthwhile to do the permutation determination inside that loop,
-      // guarding it with an if (refOrdinal == cellRefinementBranch.size() - 1).
-      int lastRefOrdinal = fineCellRefinementBranch.size() - 1;
-      
-      RefinementBranch lastRefinementBranch;
-      lastRefinementBranch.push_back(fineCellRefinementBranch[lastRefOrdinal]);
-      
-      RefinementPattern* refPattern = lastRefinementBranch[0].first;
-      unsigned childOrdinal = lastRefinementBranch[0].second;
-      
-      pair<unsigned, unsigned> subcellParent = refPattern->mapSubcellFromChildToParent(childOrdinal, fineSubcellDimension, fineSubcellOrdinalInLeafCell);
-      
-      bool tolerateSubcellsWithoutDescendants = true;
-      RefinementBranch lastSubcellRefinementBranch = RefinementPattern::subcellRefinementBranch(lastRefinementBranch, subcellParent.first, subcellParent.second,
-                                                                                                tolerateSubcellsWithoutDescendants);
-      unsigned subcellChildOrdinal = lastSubcellRefinementBranch[0].second;
-      
-      MeshTopologyPtr refTopology = refPattern->refinementMeshTopology();
-      CellPtr parentCell = refTopology->getCell(0);
-      CellPtr childCell = parentCell->children()[childOrdinal];
-      IndexType fineSubcellEntityIndex = childCell->entityIndex(fineSubcellDimension, fineSubcellOrdinalInLeafCell);
-      IndexType subcellParentEntityIndex = parentCell->entityIndex(subcellParent.first, subcellParent.second);
-      
-      unsigned fineSubcellOrdinalInParentChild = -1;
-      IndexType subcellParentChildEntityIndex;
-      if ((fineSubcellEntityIndex == subcellParentEntityIndex) && (fineSubcellDimension == subcellParent.first)) {
-        // i.e. the refinement on the subcell is the "no refinement" pattern.  There is probably a cleaner way of handling this case.
-        subcellParentChildEntityIndex = subcellParentEntityIndex;
-      } else {
-        subcellParentChildEntityIndex = refTopology->getChildEntities(subcellParent.first, subcellParentEntityIndex)[subcellChildOrdinal];
-      }
-      
-      unsigned subsubcellCount = refTopology->getSubEntityCount(subcellParent.first, subcellParentChildEntityIndex, fineSubcellDimension);
-      for (unsigned ssOrdinal = 0; ssOrdinal < subsubcellCount; ssOrdinal++) {
-        if (refTopology->getSubEntityIndex(subcellParent.first, subcellParentChildEntityIndex, fineSubcellDimension, ssOrdinal) == fineSubcellEntityIndex) {
-          fineSubcellOrdinalInParentChild = ssOrdinal;
-          break;
-        }
-      }
-      if (fineSubcellOrdinalInParentChild == -1) {
-        cout << "fineSubcellOrdinalInParentChild not found.\n";
-        TEUCHOS_TEST_FOR_EXCEPTION(true, std::invalid_argument, "fineSubcellOrdinalInParentChild not found.");
-      }
-      unsigned parentChildOrdinalInChildCell = childCell->findSubcellOrdinal(subcellParent.first, subcellParentChildEntityIndex);
-      CellTopoPtr parentChildTopo = refTopology->getEntityTopology(subcellParent.first, subcellParentChildEntityIndex);
-      for (int i=0; i<fineSubcellTopo->getNodeCount(); i++) {
-        unsigned nodeInParentChild = parentChildTopo->getNodeMap(fineSubcellDimension, fineSubcellOrdinalInParentChild, i);
-        unsigned nodeInCell = leafCellTopo->getNodeMap(subcellParent.first, parentChildOrdinalInChildCell, nodeInParentChild);
-        subcellParentChildNodes.push_back(nodeInCell);
-      }
-    }
-    unsigned permutation = CamelliaCellTools::permutationMatchingOrder(fineSubcellTopo, fineDomainSubcellNodes, subcellParentChildNodes);
-    if (permutation != 0) {
-      FieldContainer<double> permutedRefNodes(fineSubcellTopo->getNodeCount(),fineSubcellDimension);
-      
-      FieldContainer<double> fineSubcellPointsCopy = mappedFineSubcellPoints;
-      CamelliaCellTools::permutedReferenceCellPoints(fineSubcellTopo, permutation, fineSubcellPointsCopy, mappedFineSubcellPoints);
-    }
+  // fineSubcellPoints are understood in the subcell orientation on the fine domain.  When we use genRefBranch below, we use the subcell in
+  // the *cell*, which may have a different orientation.  Therefore, we need to determine the permutation that maps from the fine domain's
+  // view to that of the cell, and use that to permute fineSubcellPoints.
+  
+  unsigned permutationFromFineDomainToCell = CamelliaCellTools::permutationFromSubsubcellToParent(fineCellTopo, fineDomainDim, fineDomainOrdinalInRefinementLeaf,
+                                                                                                  fineSubcellDimension, fineSubcellOrdinalInFineDomain);
+  
+  FieldContainer<double> fineSubcellPermutedPoints;
+  if (permutationFromFineDomainToCell == 0)
+  {
+    fineSubcellPermutedPoints = fineSubcellPoints; // we could avoid this copy if we made fineSubcellPermutedPoints an RCP, say.  Not sure it matters much, though.
+  }
+  else
+  {
+    fineSubcellPermutedPoints.resize(fineSubcellPoints.dimension(0),fineSubcellPoints.dimension(1));
+    CamelliaCellTools::permutedReferenceCellPoints(fineSubcellTopo, permutationFromFineDomainToCell, fineSubcellPoints, fineSubcellPermutedPoints);
   }
   
-  // ************************************************************************************************************
+  GeneralizedRefinementBranch genRefBranch = RefinementPattern::generalizedRefinementBranchForLeafSubcell(fineCellRefinementBranch,
+                                                                                                          fineSubcellDimension, fineSubcellOrdinalInFineCell);
+  unsigned fineSubcellAncestralDimension = genRefBranch[0].rootDimension;
+  unsigned fineSubcellAncestralOrdinalInCell = genRefBranch[0].previousTierSubcellOrdinal;
+  CellTopoPtr fineCellAncestor = fineCellRefinementBranch[0].first->parentTopology();
   
-  ///////////////////////// DETERMINE COARSE DOMAIN POINTS /////////////////////////
-  
-  // follow the subcell upward through the cell refinement branch, mapping the subcell cubature points as we go
-  unsigned fineSubcellAncestralOrdinal = fineSubcellOrdinalInLeafCell;
-  unsigned fineSubcellAncestralDimension = fineSubcellDimension;
-  
-  int refOrdinal = fineCellRefinementBranch.size() - 1;  // go in reverse order (fine to coarse)
-  
-  RefinementBranch refinementBranchTier; // cell refinements for which the subcell has a same-dimensional parent
-  
-  pair<unsigned,unsigned> subcellAncestor = make_pair(fineSubcellAncestralDimension, fineSubcellAncestralOrdinal);
-  
-  while (refOrdinal >= 0) {
-    
-    RefinementPattern* refPattern = fineCellRefinementBranch[refOrdinal].first;
-    unsigned childOrdinal = fineCellRefinementBranch[refOrdinal].second;
-    
-    fineSubcellAncestralOrdinal = subcellAncestor.second;
-    subcellAncestor = refPattern->mapSubcellFromChildToParent(childOrdinal, fineSubcellAncestralDimension, fineSubcellAncestralOrdinal);
-    
-    if (subcellAncestor.first == fineSubcellAncestralDimension) {
-      refinementBranchTier.insert(refinementBranchTier.begin(), fineCellRefinementBranch[refOrdinal]);
-      fineSubcellAncestralOrdinal = subcellAncestor.second;
-    } else {
-      // then we're at a shift to higher dimensions: first, map along the same-dimensional refinement branch (if there are refinements there)
-      RefinementBranch subcellRefinementBranch = RefinementPattern::subcellRefinementBranch(refinementBranchTier, fineSubcellAncestralDimension, fineSubcellAncestralOrdinal);
-      
-      if (subcellRefinementBranch.size() > 0) {
-        FieldContainer<double> fineSubcellNodes = RefinementPattern::descendantNodesRelativeToAncestorReferenceCell(subcellRefinementBranch);
-        CellTopoPtr leafSubcellTopo = RefinementPattern::descendantTopology(subcellRefinementBranch);
-        
-        BasisCachePtr fineSubcellCache = Teuchos::rcp( new BasisCache(leafSubcellTopo, temporaryCubatureDegree, false) );
-        fineSubcellCache->setRefCellPoints(mappedFineSubcellPoints);
-        fineSubcellNodes.resize(1,fineSubcellNodes.dimension(0),fineSubcellNodes.dimension(1)); // add cell dimension
-        fineSubcellCache->setPhysicalCellNodes(fineSubcellNodes, vector<GlobalIndexType>(), false);
-        mappedFineSubcellPoints = fineSubcellCache->getPhysicalCubaturePoints();
-        mappedFineSubcellPoints.resize(numPoints,fineSubcellAncestralDimension); // strip cell dimension
-      }
-      refinementBranchTier.clear();
-      
-      // next, map mappedFineSubcellPoints into the ancestral subcell's child (which is of higher dimension)
-      refinementBranchTier.insert(refinementBranchTier.begin(), fineCellRefinementBranch[refOrdinal]);
-      bool tolerateSubcellsWithoutDescendants = true;
-      subcellRefinementBranch = RefinementPattern::subcellRefinementBranch(refinementBranchTier, subcellAncestor.first, subcellAncestor.second,
-                                                                           tolerateSubcellsWithoutDescendants);
-      RefinementPattern* subcellRefPattern = subcellRefinementBranch[0].first;
-      unsigned subcellChildOrdinal = subcellRefinementBranch[0].second;
-      
-      // HERE, need to figure out what the sub-subcell ordinal is relative to the ancestral subcell's child in the subcellRefinementBranch
-      
-      unsigned subsubcellOrdinalInSubcellAncestorChild = -1;
-      // KNOW: the sub-subcell ordinal in the child *cell* (this is fineSubcellAncestralOrdinal)
-      {
-        MeshTopologyPtr refTopology = refPattern->refinementMeshTopology();
-        CellPtr parentCell = refTopology->getCell(0);
-        CellPtr childCell = parentCell->children()[childOrdinal];
-        IndexType subsubcellEntityIndex = childCell->entityIndex(fineSubcellAncestralDimension, fineSubcellAncestralOrdinal);
-        IndexType subcellAncestorEntityIndex = parentCell->entityIndex(subcellAncestor.first, subcellAncestor.second);
-        IndexType subcellAncestorChildEntityIndex = refTopology->getChildEntities(subcellAncestor.first, subcellAncestorEntityIndex)[subcellChildOrdinal];
-        unsigned subsubcellCount = refTopology->getSubEntityCount(subcellAncestor.first, subcellAncestorChildEntityIndex, fineSubcellAncestralDimension);
-        for (unsigned ssOrdinal = 0; ssOrdinal < subsubcellCount; ssOrdinal++) {
-          if (refTopology->getSubEntityIndex(subcellAncestor.first, subcellAncestorChildEntityIndex, fineSubcellAncestralDimension, ssOrdinal) == subsubcellEntityIndex) {
-            subsubcellOrdinalInSubcellAncestorChild = ssOrdinal;
-            break;
-          }
-        }
-        if (subsubcellOrdinalInSubcellAncestorChild == -1) {
-          cout << "subsubcellOrdinalInSubcellAncestorChild not found.\n";
-          TEUCHOS_TEST_FOR_EXCEPTION(true, std::invalid_argument, "subsubcellOrdinalInSubcellAncestorChild not found.");
-        }
-      }
-      
-      if (fineSubcellAncestralDimension == 0) { // then the "cubature point" is a node in the ancestral subcell's child
-        CellTopoPtr subcellAncestorChildTopo = subcellRefPattern->childTopology(subcellRefinementBranch[0].second);
-        FieldContainer<double> subcellAncestorChildRefNodes(subcellAncestorChildTopo->getVertexCount(),subcellAncestor.first);
-        CamelliaCellTools::refCellNodesForTopology(subcellAncestorChildRefNodes, subcellAncestorChildTopo);
-        mappedFineSubcellPoints.resize(1, subcellAncestor.first);
-        for (int d=0; d<subcellAncestor.first; d++) {
-          mappedFineSubcellPoints(0,d) = subcellAncestorChildRefNodes(subsubcellOrdinalInSubcellAncestorChild,d);
-        }
-      } else {
-        FieldContainer<double> mappedFineSubcellPointsPrevious = mappedFineSubcellPoints;
-        
-        mappedFineSubcellPoints.resize(numPoints, subcellAncestor.first); // resize for new dimension
-        
-        CellTopoPtr subcellChildTopo = subcellRefPattern->childTopology(subcellRefinementBranch[0].second);
-        CamelliaCellTools::mapToReferenceSubcell(mappedFineSubcellPoints, mappedFineSubcellPointsPrevious, fineSubcellAncestralDimension,
-                                                 subsubcellOrdinalInSubcellAncestorChild, subcellChildTopo);
-      }
-      
-      fineSubcellAncestralDimension = subcellAncestor.first;
-      fineSubcellAncestralOrdinal = subcellAncestor.second;
-    }
-    refOrdinal--;
+  if (coarseSubcellDimension > fineSubcellAncestralDimension)
+  {
+    // in this case, the refinement branch doesn't take us all the way to the coarse subcell; therefore,
+    // we assume that the coarse cell is identical to the ancestral cell in the refinement branch.  Here,
+    // we check two consequences of this assumption:
+    TEUCHOS_TEST_FOR_EXCEPTION(fineCellAncestor->getKey() != coarseCellTopo->getKey(), std::invalid_argument, "When refinement branch does not end in coarse subcell, coarse cell must be identical to the fine cell ancestor!");
+    TEUCHOS_TEST_FOR_EXCEPTION(coarseSubcellPermutation != 0, std::invalid_argument, "When refinement branch does not end in coarse subcell, coarse cell must be identical to the fine cell ancestor!");
   }
   
-  if (fineSubcellAncestralDimension == 0) { // then the "cubature point" is a node in the ancestral subcell's child
-    // NVR 1-30-15: Changed the cell topo to be the coarse subcell topo, instead of the root volume topo.
-    CellTopoPtr topo = coarseSubcellTopo;
-    FieldContainer<double> topoRefNodes(topo->getVertexCount(),topo->getDimension());
-    CamelliaCellTools::refCellNodesForTopology(topoRefNodes, topo);
-    mappedFineSubcellPoints.resize(1, topo->getDimension());
-    for (int d=0; d < topo->getDimension(); d++) {
-      mappedFineSubcellPoints(0,d) = topoRefNodes(fineSubcellAncestralOrdinal,d);
-    }
-  }
-  
-  // process any unprocessed subcell refinements
-  bool tolerateSubcellsWithoutDescendants = true;
-  RefinementBranch subcellRefinementBranch = RefinementPattern::subcellRefinementBranch(refinementBranchTier,
-                                                                                        fineSubcellAncestralDimension,
-                                                                                        fineSubcellAncestralOrdinal,
-                                                                                        tolerateSubcellsWithoutDescendants);
-  
-  if (subcellRefinementBranch.size() > 0) {
-    FieldContainer<double> fineSubcellNodes = RefinementPattern::descendantNodesRelativeToAncestorReferenceCell(subcellRefinementBranch);
-    CellTopoPtr leafSubcellTopo = RefinementPattern::descendantTopology(subcellRefinementBranch);
+  if (fineDomainDim < fineSubcellAncestralDimension)
+  {
+    // since the coarseSubcellPermutation argument tells us about the permutation relative to the fine domain's
+    // view of the subcell, and we are now using the *cell* which contains the fine domain to view the subcell,
+    // we need to tweak the permutation.
     
-    BasisCachePtr fineSubcellCache = Teuchos::rcp( new BasisCache(leafSubcellTopo, temporaryCubatureDegree, false) );
-    fineSubcellCache->setRefCellPoints(mappedFineSubcellPoints);
-    fineSubcellNodes.resize(1,fineSubcellNodes.dimension(0),fineSubcellNodes.dimension(1)); // add cell dimension
-    fineSubcellCache->setPhysicalCellNodes(fineSubcellNodes, vector<GlobalIndexType>(), false);
-    mappedFineSubcellPoints = fineSubcellCache->getPhysicalCubaturePoints();
-    mappedFineSubcellPoints.resize(mappedFineSubcellPoints.dimension(1),mappedFineSubcellPoints.dimension(2)); // strip cell dimension
+    // MAYBE so.  I'm not certain.
+    // Here's my feeling: if we are mapping to something that's higher-dimensional than the fine domain, then any "orientation" of the subcell should
+    // be entirely captured by the refinement branch -- I believe this amounts to saying that we won't do any "termTraced" type stuff for neighbors,
+    // only for ancestors.  This makes sense to me.  Given that, for now anyway I'm going to suggest that having coarseSubcellPermutation be nonzero
+    // is an error condition:
+    
+    TEUCHOS_TEST_FOR_EXCEPTION(coarseSubcellPermutation != 0, std::invalid_argument, "for trace-to-volume maps, permutation must be the identity!");
   }
   
-  if ((coarseSubcellDimension > fineSubcellAncestralDimension) && (fineSubcellAncestralDimension > 0)) { // (we handle the (fineSubcellAncestralDimension == 0) case above)
+  // we want to map fineSubcellPermutedPoints to the ancestor of the fine subcell.  genRefBranch currently ends in the
+  // fine *cell*.  We therefore rewrite the root-level entry to match the fine subcell ancestor:
+  genRefBranch[0].previousTierTopo = fineCellAncestor->getSubcell(genRefBranch[0].rootDimension,
+                                                                  genRefBranch[0].previousTierSubcellOrdinal);
+  genRefBranch[0].previousTierSubcellOrdinal = 0;
+  
+  FieldContainer<double> mappedFineSubcellPoints;
+  RefinementPattern::mapRefCellPointsToAncestor(genRefBranch, fineSubcellPermutedPoints, mappedFineSubcellPoints);
+  
+  if (coarseSubcellDimension > fineSubcellAncestralDimension) // (we handle the (fineSubcellAncestralDimension == 0) case above)
+  {
     // then we need to determine the subcellAncestor's ordinal in the coarse subcell topology, and map the points
-    
+
     // the canonical use case for this is when we map a trace term to volume
     // when this happens, the understanding is that the coarse cell is identified with the root of the
     // fineCellRefinementBranch.  Therefore, fineRootCellTopo and coarseCellTopo should be identical topologies:
-    TEUCHOS_TEST_FOR_EXCEPTION(fineRootCellTopo != coarseCellTopo, std::invalid_argument, "When fine subcell ancestor is not identical to coarse subcell, then the coarse cell must be the root of the refinement branch.");
-    
+    TEUCHOS_TEST_FOR_EXCEPTION(fineCellTopo != coarseCellTopo, std::invalid_argument, "When fine subcell ancestor is not identical to coarse subcell, then the coarse cell must be the root of the refinement branch.");
+
     // subcellAncestor has dimension and ordinal in the *volume*
     unsigned coarseSubcellOrdinalInRootVolume = CamelliaCellTools::subcellOrdinalMap(coarseCellTopo,
                                                                                      coarseDomainDim, coarseDomainOrdinalInCoarseCellTopo,
                                                                                      coarseSubcellDimension, coarseSubcellOrdinalInCoarseDomain);
-    unsigned ancestralSubcellOrdinalInCoarseSubcell = CamelliaCellTools::subcellReverseOrdinalMap(coarseCellTopo, coarseSubcellDimension, coarseSubcellOrdinalInRootVolume,
-                                                                                                  fineSubcellAncestralDimension, fineSubcellAncestralOrdinal);
-    // copy
-    FieldContainer<double> ancestralSubcellPoints = mappedFineSubcellPoints;
-    // resize mappedFineSubcellPoints for the coarseSubcellDimension:
-    mappedFineSubcellPoints.resize(mappedFineSubcellPoints.dimension(0), coarseSubcellDimension);
-    // map
-    CamelliaCellTools::mapToReferenceSubcell(mappedFineSubcellPoints, ancestralSubcellPoints,
-                                             fineSubcellAncestralDimension, ancestralSubcellOrdinalInCoarseSubcell, coarseSubcellTopo);
+    unsigned ancestralSubcellOrdinalInCoarseSubcell = CamelliaCellTools::subcellReverseOrdinalMap(coarseCellTopo, coarseSubcellDimension,
+                                                                                                  coarseSubcellOrdinalInRootVolume,
+                                                                                                  fineSubcellAncestralDimension, fineSubcellAncestralOrdinalInCell);
+    if (fineSubcellAncestralDimension > 0)
+    {
+      // copy
+      FieldContainer<double> ancestralSubcellPoints = mappedFineSubcellPoints;
+      // resize mappedFineSubcellPoints for the coarseSubcellDimension:
+      mappedFineSubcellPoints.resize(mappedFineSubcellPoints.dimension(0), coarseSubcellDimension);
+      // map
+      CamelliaCellTools::mapToReferenceSubcell(mappedFineSubcellPoints, ancestralSubcellPoints,
+                                               fineSubcellAncestralDimension, ancestralSubcellOrdinalInCoarseSubcell, coarseSubcellTopo);
+    }
+    else
+    {
+      CellTopoPtr topo = coarseSubcellTopo;
+      FieldContainer<double> topoRefNodes(topo->getVertexCount(),topo->getDimension());
+      CamelliaCellTools::refCellNodesForTopology(topoRefNodes, topo);
+      mappedFineSubcellPoints.resize(1, topo->getDimension());
+      for (int d=0; d < topo->getDimension(); d++) {
+        mappedFineSubcellPoints(0,d) = topoRefNodes(ancestralSubcellOrdinalInCoarseSubcell,d);
+      }
+    }
   }
   
-  FieldContainer<double> coarseSubcellPoints(numPoints, coarseDomainDim);
-  
+  FieldContainer<double> coarseSubcellPoints;
+
   if (coarseSubcellDimension == 0) {
     coarseSubcellPoints = mappedFineSubcellPoints; // not real sure we need to do this...
   } else {
     // when you set physical cell nodes according to the coarse-to-fine permutation, then the reference-to-physical map
     // is fine-to-coarse (which is what we want).  Because the coarseSubcellPermutation is fine-to-coarse, we want its inverse:
     unsigned ancestralSubcellPermutation = CamelliaCellTools::permutationInverse(coarseSubcellTopo, coarseSubcellPermutation);
-    
+
+    coarseSubcellPoints.resize(numPoints,coarseSubcellDimension);
     CamelliaCellTools::permutedReferenceCellPoints(coarseSubcellTopo, ancestralSubcellPermutation, mappedFineSubcellPoints, coarseSubcellPoints);
+    
+    // coarseSubcellPoints are understood in the subcell orientation on the coarse domain.  When we use genRefBranch as above, we map to the subcell in
+    // the *cell*, which may have a different orientation.  Therefore, we need to determine the permutation that maps from the cell's view
+    // to that of the coarse domain, and use that to permute coarseSubcellPoints.
+    unsigned permutationFromCoarseDomainToCell = CamelliaCellTools::permutationFromSubsubcellToParent(coarseCellTopo, coarseDomainDim, coarseDomainOrdinalInCoarseCellTopo,
+                                                                                                      coarseSubcellDimension, coarseSubcellOrdinalInCoarseDomain);
+    if (permutationFromCoarseDomainToCell != 0)
+    {
+      unsigned permutationFromCellToCoarseDomain = CamelliaCellTools::permutationInverse(coarseSubcellTopo, permutationFromCoarseDomainToCell);
+      FieldContainer<double> coarseSubcellPointsCopy = coarseSubcellPoints;
+      CamelliaCellTools::permutedReferenceCellPoints(coarseSubcellTopo, permutationFromCellToCoarseDomain, coarseSubcellPointsCopy, coarseSubcellPoints);
+    }
+    // TODO: combine the two permutations above.  I think this should be represented by:
+//    CamelliaCellTools::permutationComposition(coarseSubcellTopo, ancestralSubcellPermutation, permutationFromCellToCoarseDomain);
   }
-  
+
   if (coarseDomainDim == coarseSubcellDimension) {
     // if fineSubcellAncestralDimension is the same as the domain dimension, then the ancestral subcell is exactly the coarse domain
     coarseDomainPoints = coarseSubcellPoints;
   } else {
     // If fineSubcellAncestralDimension is *NOT* the same as the domain dimension, then the ancestral subcell is a subcell of the coarse domain
-    
+
     coarseDomainPoints.resize(mappedFineSubcellPoints.dimension(0), coarseDomainDim);
     CamelliaCellTools::mapToReferenceSubcell(coarseDomainPoints, coarseSubcellPoints, fineSubcellAncestralDimension,
-                                             coarseSubcellOrdinalInCoarseDomain, coarseTopo);
+                                             coarseSubcellOrdinalInCoarseDomain, coarseDomainTopo);
   }
 }
+
+//void BasisReconciliation::mapFineSubcellPointsToCoarseDomain(FieldContainer<double> &coarseDomainPoints,
+//                                                             const FieldContainer<double> &fineSubcellPoints,
+//                                                             unsigned fineSubcellDimension,
+//                                                             unsigned fineSubcellOrdinalInFineDomain,
+//                                                             unsigned fineDomainDim,
+//                                                             unsigned fineDomainOrdinalInRefinementLeaf,
+//                                                             RefinementBranch &fineCellRefinementBranch,
+//                                                             CellTopoPtr coarseCellTopo,
+//                                                             unsigned coarseSubcellDimension,
+//                                                             unsigned coarseSubcellOrdinalInCoarseDomain,
+//                                                             unsigned coarseDomainDim,
+//                                                             unsigned coarseDomainOrdinalInCoarseCellTopo,
+//                                                             unsigned coarseSubcellPermutation) {
+//  if (fineCellRefinementBranch.size() == 0) {
+//    TEUCHOS_TEST_FOR_EXCEPTION(true, std::invalid_argument, "cellRefinementBranch must have at least one refinement!");
+//  }
+//  
+//  int numPoints = fineSubcellPoints.dimension(0);
+//  
+//  TEUCHOS_TEST_FOR_EXCEPTION((fineSubcellDimension == 0) && (numPoints != 1), std::invalid_argument, "When fine subcell is a point, numPoints must be 1!");
+//  
+//  CellTopoPtr fineRootCellTopo = fineCellRefinementBranch[0].first->parentTopology();
+//  CellTopoPtr leafCellTopo = RefinementPattern::descendantTopology(fineCellRefinementBranch);
+//  
+//  CellTopoPtr fineTopo = leafCellTopo->getSubcell(fineDomainDim, fineDomainOrdinalInRefinementLeaf);
+//  CellTopoPtr fineSubcellTopo = fineTopo->getSubcell(fineSubcellDimension, fineSubcellOrdinalInFineDomain);
+//  
+//  CellTopoPtr coarseTopo = coarseCellTopo->getSubcell(coarseDomainDim, coarseDomainOrdinalInCoarseCellTopo);
+//  CellTopoPtr coarseSubcellTopo = coarseTopo->getSubcell(coarseSubcellDimension, coarseSubcellOrdinalInCoarseDomain);
+//  
+//  FieldContainer<double> fineTopoRefNodes(fineTopo->getVertexCount(), fineTopo->getDimension());
+//  CamelliaCellTools::refCellNodesForTopology(fineTopoRefNodes, fineTopo);
+//  FieldContainer<double> coarseTopoRefNodes(coarseTopo->getVertexCount(), coarseTopo->getDimension());
+//  CamelliaCellTools::refCellNodesForTopology(coarseTopoRefNodes, coarseTopo);
+//  
+//  FieldContainer<double> leafCellNodes = RefinementPattern::descendantNodesRelativeToAncestorReferenceCell(fineCellRefinementBranch);
+//  
+//  FieldContainer<double> mappedFineSubcellPoints = fineSubcellPoints;
+//  
+//  // work out what the subcell ordinal of the fine subcell is in the leaf of fineCellRefinementBranch...
+//  unsigned fineSubcellOrdinalInLeafCell = CamelliaCellTools::subcellOrdinalMap(leafCellTopo, fineDomainDim, fineDomainOrdinalInRefinementLeaf,
+//                                                                               fineSubcellDimension, fineSubcellOrdinalInFineDomain);
+//  int temporaryCubatureDegree = 1;
+//
+//  // ************************************************************************************************************
+//  //  Determine the relative permutation of the subcell as seen by the fine domain and the subcell as seen by the
+//  //  leaf of the subcell refinement branch.  Use this to permute the fineSubcellPoints appropriately before generating
+//  //  the coarse domain's points...
+//  
+//  if (fineSubcellTopo->getNodeCount() > 1) {
+//    vector<unsigned> fineDomainSubcellNodes;
+//    for (int i=0; i<fineSubcellTopo->getNodeCount(); i++) {
+//      unsigned nodeInFineDomain = fineTopo->getNodeMap(fineSubcellDimension, fineSubcellOrdinalInFineDomain, i);
+//      fineDomainSubcellNodes.push_back(nodeInFineDomain);
+//    }
+//    
+//    vector<unsigned> subcellParentChildNodes; // a bit complicated: ascend the ref pattern hierarchy, then descend again to get the view from which we'll start to construct cubature for the coarse domain (the subcell's parent's child may be of different dimension than the subcell).
+//    {
+//      int lastRefOrdinal = fineCellRefinementBranch.size() - 1;
+//      
+//      RefinementBranch cellLastRefinementBranch = { fineCellRefinementBranch[lastRefOrdinal] };
+//      
+//      RefinementPattern* cellLastRefinementPattern = fineCellRefinementBranch[lastRefOrdinal].first;
+//      unsigned cellLastRefinementChildOrdinal = fineCellRefinementBranch[lastRefOrdinal].second;
+//      
+//      pair<unsigned, unsigned> fineDomainParent = cellLastRefinementPattern->mapSubcellFromChildToParent(cellLastRefinementChildOrdinal, fineDomainDim,
+//                                                                                                         fineDomainOrdinalInRefinementLeaf);
+//      RefinementBranch fineDomainLastRefinementBranch = RefinementPattern::subcellRefinementBranch(cellLastRefinementBranch,
+//                                                                                                   fineDomainParent.first, fineDomainParent.second);
+//      
+//      RefinementPattern* refPattern = fineDomainLastRefinementBranch[0].first;
+//      unsigned childOrdinal = fineDomainLastRefinementBranch[0].second;
+//      
+//      pair<unsigned, unsigned> subcellParent = refPattern->mapSubcellFromChildToParent(childOrdinal, fineSubcellDimension, fineSubcellOrdinalInFineDomain);
+//      
+//      bool tolerateSubcellsWithoutDescendants = true;
+//      RefinementBranch lastSubcellRefinementBranch = RefinementPattern::subcellRefinementBranch(fineDomainLastRefinementBranch,
+//                                                                                                subcellParent.first, subcellParent.second,
+//                                                                                                tolerateSubcellsWithoutDescendants);
+//      unsigned subcellChildOrdinal = lastSubcellRefinementBranch[0].second;
+//      
+//      MeshTopologyPtr refTopology = refPattern->refinementMeshTopology();
+//      CellPtr parentCell = refTopology->getCell(0); // these cells are not necessarily volume objects; could be sides
+//      CellPtr childCell = parentCell->children()[childOrdinal];
+//      IndexType fineSubcellEntityIndex = childCell->entityIndex(fineSubcellDimension, fineSubcellOrdinalInFineDomain);
+//      IndexType subcellParentEntityIndex = parentCell->entityIndex(subcellParent.first, subcellParent.second);
+//      
+//      unsigned fineSubcellOrdinalInParentChild = -1;
+//      IndexType subcellParentChildEntityIndex;
+//      if ((fineSubcellEntityIndex == subcellParentEntityIndex) && (fineSubcellDimension == subcellParent.first)) {
+//        // i.e. the refinement on the subcell is the "no refinement" pattern.  There is probably a cleaner way of handling this case.
+//        subcellParentChildEntityIndex = subcellParentEntityIndex;
+//      } else {
+//        subcellParentChildEntityIndex = refTopology->getChildEntities(subcellParent.first, subcellParentEntityIndex)[subcellChildOrdinal];
+//      }
+//      
+//      unsigned subsubcellCount = refTopology->getSubEntityCount(subcellParent.first, subcellParentChildEntityIndex, fineSubcellDimension);
+//      for (unsigned ssOrdinal = 0; ssOrdinal < subsubcellCount; ssOrdinal++) {
+//        if (refTopology->getSubEntityIndex(subcellParent.first, subcellParentChildEntityIndex, fineSubcellDimension, ssOrdinal) == fineSubcellEntityIndex) {
+//          fineSubcellOrdinalInParentChild = ssOrdinal;
+//          break;
+//        }
+//      }
+//      if (fineSubcellOrdinalInParentChild == -1) {
+//        cout << "fineSubcellOrdinalInParentChild not found.\n";
+//        TEUCHOS_TEST_FOR_EXCEPTION(true, std::invalid_argument, "fineSubcellOrdinalInParentChild not found.");
+//      }
+//      unsigned parentChildOrdinalInChildCell = childCell->findSubcellOrdinal(subcellParent.first, subcellParentChildEntityIndex);
+//      CellTopoPtr parentChildTopo = refTopology->getEntityTopology(subcellParent.first, subcellParentChildEntityIndex);
+//      for (int i=0; i<fineSubcellTopo->getNodeCount(); i++) {
+//        unsigned nodeInParentChild = parentChildTopo->getNodeMap(fineSubcellDimension, fineSubcellOrdinalInParentChild, i);
+//        unsigned nodeInFineDomain = fineTopo->getNodeMap(subcellParent.first, parentChildOrdinalInChildCell, nodeInParentChild);
+//        subcellParentChildNodes.push_back(nodeInFineDomain);
+//      }
+//    }
+//    unsigned permutation = CamelliaCellTools::permutationMatchingOrder(fineSubcellTopo, fineDomainSubcellNodes, subcellParentChildNodes);
+//    if (permutation != 0) {
+//      FieldContainer<double> permutedRefNodes(fineSubcellTopo->getNodeCount(),fineSubcellDimension);
+//      
+//      FieldContainer<double> fineSubcellPointsCopy = mappedFineSubcellPoints;
+//      CamelliaCellTools::permutedReferenceCellPoints(fineSubcellTopo, permutation, fineSubcellPointsCopy, mappedFineSubcellPoints);
+//    }
+//  }
+//  
+//  // ************************************************************************************************************
+//  
+//  ///////////////////////// DETERMINE COARSE DOMAIN POINTS /////////////////////////
+//  
+//  // follow the subcell upward through the cell refinement branch, mapping the subcell cubature points as we go
+//  unsigned fineSubcellAncestralOrdinal = fineSubcellOrdinalInLeafCell;
+//  unsigned fineSubcellAncestralDimension = fineSubcellDimension;
+//  
+//  int refOrdinal = fineCellRefinementBranch.size() - 1;  // go in reverse order (fine to coarse)
+//  
+//  RefinementBranch refinementBranchTier; // cell refinements for which the subcell has a same-dimensional parent
+//  
+//  pair<unsigned,unsigned> subcellAncestor = make_pair(fineSubcellAncestralDimension, fineSubcellAncestralOrdinal);
+//  
+//  while (refOrdinal >= 0) {
+//    
+//    RefinementPattern* refPattern = fineCellRefinementBranch[refOrdinal].first;
+//    unsigned childOrdinal = fineCellRefinementBranch[refOrdinal].second;
+//    
+//    fineSubcellAncestralOrdinal = subcellAncestor.second;
+//    subcellAncestor = refPattern->mapSubcellFromChildToParent(childOrdinal, fineSubcellAncestralDimension, fineSubcellAncestralOrdinal);
+//    
+//    if (subcellAncestor.first == fineSubcellAncestralDimension) {
+//      refinementBranchTier.insert(refinementBranchTier.begin(), fineCellRefinementBranch[refOrdinal]);
+//      fineSubcellAncestralOrdinal = subcellAncestor.second;
+//    } else {
+//      // then we're at a shift to higher dimensions: first, map along the same-dimensional refinement branch (if there are refinements there)
+//      RefinementBranch subcellRefinementBranch = RefinementPattern::subcellRefinementBranch(refinementBranchTier, fineSubcellAncestralDimension, fineSubcellAncestralOrdinal);
+//      
+//      if (subcellRefinementBranch.size() > 0) {
+//        FieldContainer<double> fineSubcellNodes = RefinementPattern::descendantNodesRelativeToAncestorReferenceCell(subcellRefinementBranch);
+//        CellTopoPtr leafSubcellTopo = RefinementPattern::descendantTopology(subcellRefinementBranch);
+//        
+//        BasisCachePtr fineSubcellCache = Teuchos::rcp( new BasisCache(leafSubcellTopo, temporaryCubatureDegree, false) );
+//        fineSubcellCache->setRefCellPoints(mappedFineSubcellPoints);
+//        fineSubcellNodes.resize(1,fineSubcellNodes.dimension(0),fineSubcellNodes.dimension(1)); // add cell dimension
+//        fineSubcellCache->setPhysicalCellNodes(fineSubcellNodes, vector<GlobalIndexType>(), false);
+//        mappedFineSubcellPoints = fineSubcellCache->getPhysicalCubaturePoints();
+//        mappedFineSubcellPoints.resize(numPoints,fineSubcellAncestralDimension); // strip cell dimension
+//      }
+//      refinementBranchTier.clear();
+//      
+//      // next, map mappedFineSubcellPoints into the ancestral subcell's child (which is of higher dimension)
+//      refinementBranchTier.insert(refinementBranchTier.begin(), fineCellRefinementBranch[refOrdinal]);
+//      bool tolerateSubcellsWithoutDescendants = true;
+//      subcellRefinementBranch = RefinementPattern::subcellRefinementBranch(refinementBranchTier, subcellAncestor.first, subcellAncestor.second,
+//                                                                           tolerateSubcellsWithoutDescendants);
+//      RefinementPattern* subcellRefPattern = subcellRefinementBranch[0].first;
+//      unsigned subcellChildOrdinal = subcellRefinementBranch[0].second;
+//      
+//      // HERE, need to figure out what the sub-subcell ordinal is relative to the ancestral subcell's child in the subcellRefinementBranch
+//      
+//      unsigned subsubcellOrdinalInSubcellAncestorChild = -1;
+//      // KNOW: the sub-subcell ordinal in the child *cell* (this is fineSubcellAncestralOrdinal)
+//      {
+//        MeshTopologyPtr refTopology = refPattern->refinementMeshTopology();
+//        CellPtr parentCell = refTopology->getCell(0);
+//        CellPtr childCell = parentCell->children()[childOrdinal];
+//        IndexType subsubcellEntityIndex = childCell->entityIndex(fineSubcellAncestralDimension, fineSubcellAncestralOrdinal);
+//        IndexType subcellAncestorEntityIndex = parentCell->entityIndex(subcellAncestor.first, subcellAncestor.second);
+//        IndexType subcellAncestorChildEntityIndex = refTopology->getChildEntities(subcellAncestor.first, subcellAncestorEntityIndex)[subcellChildOrdinal];
+//        unsigned subsubcellCount = refTopology->getSubEntityCount(subcellAncestor.first, subcellAncestorChildEntityIndex, fineSubcellAncestralDimension);
+//        for (unsigned ssOrdinal = 0; ssOrdinal < subsubcellCount; ssOrdinal++) {
+//          if (refTopology->getSubEntityIndex(subcellAncestor.first, subcellAncestorChildEntityIndex, fineSubcellAncestralDimension, ssOrdinal) == subsubcellEntityIndex) {
+//            subsubcellOrdinalInSubcellAncestorChild = ssOrdinal;
+//            break;
+//          }
+//        }
+//        if (subsubcellOrdinalInSubcellAncestorChild == -1) {
+//          cout << "subsubcellOrdinalInSubcellAncestorChild not found.\n";
+//          TEUCHOS_TEST_FOR_EXCEPTION(true, std::invalid_argument, "subsubcellOrdinalInSubcellAncestorChild not found.");
+//        }
+//      }
+//      
+//      if (fineSubcellAncestralDimension == 0) { // then the "cubature point" is a node in the ancestral subcell's child
+//        CellTopoPtr subcellAncestorChildTopo = subcellRefPattern->childTopology(subcellRefinementBranch[0].second);
+//        FieldContainer<double> subcellAncestorChildRefNodes(subcellAncestorChildTopo->getVertexCount(),subcellAncestor.first);
+//        CamelliaCellTools::refCellNodesForTopology(subcellAncestorChildRefNodes, subcellAncestorChildTopo);
+//        mappedFineSubcellPoints.resize(1, subcellAncestor.first);
+//        for (int d=0; d<subcellAncestor.first; d++) {
+//          mappedFineSubcellPoints(0,d) = subcellAncestorChildRefNodes(subsubcellOrdinalInSubcellAncestorChild,d);
+//        }
+//      } else {
+//        FieldContainer<double> mappedFineSubcellPointsPrevious = mappedFineSubcellPoints;
+//        
+//        mappedFineSubcellPoints.resize(numPoints, subcellAncestor.first); // resize for new dimension
+//        
+//        CellTopoPtr subcellChildTopo = subcellRefPattern->childTopology(subcellRefinementBranch[0].second);
+//        CamelliaCellTools::mapToReferenceSubcell(mappedFineSubcellPoints, mappedFineSubcellPointsPrevious, fineSubcellAncestralDimension,
+//                                                 subsubcellOrdinalInSubcellAncestorChild, subcellChildTopo);
+//      }
+//      
+//      fineSubcellAncestralDimension = subcellAncestor.first;
+//      fineSubcellAncestralOrdinal = subcellAncestor.second;
+//    }
+//    refOrdinal--;
+//  }
+//  
+//  if (fineSubcellAncestralDimension == 0) { // then the "cubature point" is a node in the ancestral subcell's child
+//    // NVR 1-30-15: Changed the cell topo to be the coarse subcell topo, instead of the root volume topo.
+//    CellTopoPtr topo = coarseSubcellTopo;
+//    FieldContainer<double> topoRefNodes(topo->getVertexCount(),topo->getDimension());
+//    CamelliaCellTools::refCellNodesForTopology(topoRefNodes, topo);
+//    mappedFineSubcellPoints.resize(1, topo->getDimension());
+//    for (int d=0; d < topo->getDimension(); d++) {
+//      mappedFineSubcellPoints(0,d) = topoRefNodes(fineSubcellAncestralOrdinal,d);
+//    }
+//  }
+//  
+//  // process any unprocessed subcell refinements
+//  bool tolerateSubcellsWithoutDescendants = true;
+//  RefinementBranch subcellRefinementBranch = RefinementPattern::subcellRefinementBranch(refinementBranchTier,
+//                                                                                        fineSubcellAncestralDimension,
+//                                                                                        fineSubcellAncestralOrdinal,
+//                                                                                        tolerateSubcellsWithoutDescendants);
+//  
+//  if (subcellRefinementBranch.size() > 0) {
+//    FieldContainer<double> fineSubcellNodes = RefinementPattern::descendantNodesRelativeToAncestorReferenceCell(subcellRefinementBranch);
+//    CellTopoPtr leafSubcellTopo = RefinementPattern::descendantTopology(subcellRefinementBranch);
+//    
+//    BasisCachePtr fineSubcellCache = Teuchos::rcp( new BasisCache(leafSubcellTopo, temporaryCubatureDegree, false) );
+//    fineSubcellCache->setRefCellPoints(mappedFineSubcellPoints);
+//    fineSubcellNodes.resize(1,fineSubcellNodes.dimension(0),fineSubcellNodes.dimension(1)); // add cell dimension
+//    fineSubcellCache->setPhysicalCellNodes(fineSubcellNodes, vector<GlobalIndexType>(), false);
+//    mappedFineSubcellPoints = fineSubcellCache->getPhysicalCubaturePoints();
+//    mappedFineSubcellPoints.resize(mappedFineSubcellPoints.dimension(1),mappedFineSubcellPoints.dimension(2)); // strip cell dimension
+//  }
+//  
+//  if ((coarseSubcellDimension > fineSubcellAncestralDimension) && (fineSubcellAncestralDimension > 0)) { // (we handle the (fineSubcellAncestralDimension == 0) case above)
+//    // then we need to determine the subcellAncestor's ordinal in the coarse subcell topology, and map the points
+//    
+//    // the canonical use case for this is when we map a trace term to volume
+//    // when this happens, the understanding is that the coarse cell is identified with the root of the
+//    // fineCellRefinementBranch.  Therefore, fineRootCellTopo and coarseCellTopo should be identical topologies:
+//    TEUCHOS_TEST_FOR_EXCEPTION(fineRootCellTopo != coarseCellTopo, std::invalid_argument, "When fine subcell ancestor is not identical to coarse subcell, then the coarse cell must be the root of the refinement branch.");
+//    
+//    // subcellAncestor has dimension and ordinal in the *volume*
+//    unsigned coarseSubcellOrdinalInRootVolume = CamelliaCellTools::subcellOrdinalMap(coarseCellTopo,
+//                                                                                     coarseDomainDim, coarseDomainOrdinalInCoarseCellTopo,
+//                                                                                     coarseSubcellDimension, coarseSubcellOrdinalInCoarseDomain);
+//    unsigned ancestralSubcellOrdinalInCoarseSubcell = CamelliaCellTools::subcellReverseOrdinalMap(coarseCellTopo, coarseSubcellDimension, coarseSubcellOrdinalInRootVolume,
+//                                                                                                  fineSubcellAncestralDimension, fineSubcellAncestralOrdinal);
+//    // copy
+//    FieldContainer<double> ancestralSubcellPoints = mappedFineSubcellPoints;
+//    // resize mappedFineSubcellPoints for the coarseSubcellDimension:
+//    mappedFineSubcellPoints.resize(mappedFineSubcellPoints.dimension(0), coarseSubcellDimension);
+//    // map
+//    CamelliaCellTools::mapToReferenceSubcell(mappedFineSubcellPoints, ancestralSubcellPoints,
+//                                             fineSubcellAncestralDimension, ancestralSubcellOrdinalInCoarseSubcell, coarseSubcellTopo);
+//  }
+//  
+//  FieldContainer<double> coarseSubcellPoints(numPoints, coarseDomainDim);
+//  
+//  if (coarseSubcellDimension == 0) {
+//    coarseSubcellPoints = mappedFineSubcellPoints; // not real sure we need to do this...
+//  } else {
+//    // when you set physical cell nodes according to the coarse-to-fine permutation, then the reference-to-physical map
+//    // is fine-to-coarse (which is what we want).  Because the coarseSubcellPermutation is fine-to-coarse, we want its inverse:
+//    unsigned ancestralSubcellPermutation = CamelliaCellTools::permutationInverse(coarseSubcellTopo, coarseSubcellPermutation);
+//    
+//    CamelliaCellTools::permutedReferenceCellPoints(coarseSubcellTopo, ancestralSubcellPermutation, mappedFineSubcellPoints, coarseSubcellPoints);
+//  }
+//  
+//  if (coarseDomainDim == coarseSubcellDimension) {
+//    // if fineSubcellAncestralDimension is the same as the domain dimension, then the ancestral subcell is exactly the coarse domain
+//    coarseDomainPoints = coarseSubcellPoints;
+//  } else {
+//    // If fineSubcellAncestralDimension is *NOT* the same as the domain dimension, then the ancestral subcell is a subcell of the coarse domain
+//    
+//    coarseDomainPoints.resize(mappedFineSubcellPoints.dimension(0), coarseDomainDim);
+//    CamelliaCellTools::mapToReferenceSubcell(coarseDomainPoints, coarseSubcellPoints, fineSubcellAncestralDimension,
+//                                             coarseSubcellOrdinalInCoarseDomain, coarseTopo);
+//  }
+//}
 
 void BasisReconciliation::setupFineAndCoarseBasisCachesForReconciliation(BasisCachePtr &fineDomainCache,
                                                                          BasisCachePtr &coarseDomainCache,
@@ -1267,7 +1435,7 @@ void BasisReconciliation::setupFineAndCoarseBasisCachesForReconciliation(BasisCa
     }
   } else { // subcellDimension == 0 --> vertex
     numPoints = 1;
-    subcellCubaturePoints.resize(numPoints,0); // empty container, but the 1st dimension gets interpreted as numPoints in mapFineSubcellPointsToCoarseDomain
+    subcellCubaturePoints.resize(numPoints,1);
     fineDomainPoints.resize(numPoints,fineDomainDim);
     for (int d=0; d<fineDomainDim; d++) {
       fineDomainPoints(0,d) = fineTopoRefNodes(fineSubcellOrdinalInFineDomain,d);

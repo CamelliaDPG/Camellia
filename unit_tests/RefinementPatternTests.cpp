@@ -10,8 +10,9 @@
 #include "Teuchos_UnitTestHelpers.hpp"
 
 #include "Intrepid_FieldContainer.hpp"
-#include "CamelliaCellTools.h"
 
+#include "CamelliaCellTools.h"
+#include "CamelliaTestingHelpers.h"
 #include "RefinementPattern.h"
 
 using namespace Camellia;
@@ -30,6 +31,180 @@ namespace {
     return shardsTopologies;
   }
 
+  TEUCHOS_UNIT_TEST( RefinementPattern, GeneralizedRefinementBranchForLeafSubcell_HangingVertexOnOutsideEdge )
+  {
+    RefinementPatternPtr quadRefinement = RefinementPattern::regularRefinementPatternQuad();
+    // create a two-refinement branch, selecting lower-left quad each time:
+    RefinementBranch refBranch = { {quadRefinement.get(),0}, {quadRefinement.get(),0} };
+    
+    /* taking the 1 vertex as our subcell on the leaf cell, we expect GeneralizedRefinementBranch like so.
+     From leaf to root:
+     1.       previousTierTopo = Quad;
+                 rootDimension = 1;
+    previousTierSubcellOrdinal = 0
+                     refBranch = {{lineRefinement,0},{lineRefinement,0}};
+                leafSubcellDim = 0;
+            leafSubcellOrdinal = 1 // 1 in the leaf line
+     */
+    unsigned vertexDim = 0;
+    unsigned vertexOrdinalInCell = 1;
+    GeneralizedRefinementBranch genRefBranch = RefinementPattern::generalizedRefinementBranchForLeafSubcell(refBranch,
+                                                                                                            vertexDim,
+                                                                                                            vertexOrdinalInCell);
+    TEST_EQUALITY(genRefBranch.size(), 1);
+    
+    TEST_EQUALITY(genRefBranch[0].previousTierTopo->getKey(), CellTopology::quad()->getKey());
+    TEST_EQUALITY(genRefBranch[0].rootDimension, 1);
+    TEST_EQUALITY(genRefBranch[0].previousTierSubcellOrdinal, 0);
+    
+    TEST_EQUALITY(genRefBranch[0].refBranch.size(), 2);
+    TEST_EQUALITY(genRefBranch[0].refBranch[0].first->parentTopology()->getKey(), CellTopology::line()->getKey());
+    TEST_EQUALITY(genRefBranch[0].refBranch[0].second, 0);
+    TEST_EQUALITY(genRefBranch[0].refBranch.size(), 2);
+    TEST_EQUALITY(genRefBranch[0].refBranch[1].first->parentTopology()->getKey(), CellTopology::line()->getKey());
+    TEST_EQUALITY(genRefBranch[0].refBranch[1].second, 0);
+    TEST_EQUALITY(genRefBranch[0].leafSubcellDimension, 0);
+    TEST_EQUALITY(genRefBranch[0].leafSubcellOrdinal, 1);
+  }
+
+  TEUCHOS_UNIT_TEST( RefinementPattern, GeneralizedRefinementBranchForLeafSubcell_HangingVertexOnOutsideEdgeForInteriorTriangle )
+  {
+    RefinementPatternPtr triangleRefinement = RefinementPattern::regularRefinementPatternTriangle();
+    // create a one-refinement branch, selecting middle triangle (child 1):
+    RefinementBranch refBranch = { {triangleRefinement.get(),1} };
+    
+    /* taking the 2 vertex as our subcell on the leaf cell, we expect GeneralizedRefinementBranch like so.
+     From leaf to root:
+     1.       previousTierTopo = Triangle;
+     rootDimension = 1;
+     previousTierSubcellOrdinal = 2
+     refBranch = {{lineRefinement,0}}; OR {{lineRefinement,1}};
+     leafSubcellDim = 0;
+     leafSubcellOrdinal = 1 OR 0
+     */
+    unsigned vertexDim = 0;
+    unsigned vertexOrdinalInCell = 2;
+    GeneralizedRefinementBranch genRefBranch = RefinementPattern::generalizedRefinementBranchForLeafSubcell(refBranch,
+                                                                                                            vertexDim,
+                                                                                                            vertexOrdinalInCell);
+    TEST_EQUALITY(genRefBranch.size(), 1);
+    
+    TEST_EQUALITY(genRefBranch[0].previousTierTopo->getKey(), CellTopology::triangle()->getKey());
+    TEST_EQUALITY(genRefBranch[0].rootDimension, 1);
+    TEST_EQUALITY(genRefBranch[0].previousTierSubcellOrdinal, 2);
+    
+    TEST_EQUALITY(genRefBranch[0].refBranch.size(), 1);
+    TEST_EQUALITY(genRefBranch[0].refBranch[0].first->parentTopology()->getKey(), CellTopology::line()->getKey());
+    
+    TEST_EQUALITY(genRefBranch[0].leafSubcellDimension, 0);
+    // which vertex ordinal depends on which of the two edges was selected:
+    if (genRefBranch[0].refBranch[0].second == 0)
+    {
+      TEST_EQUALITY(genRefBranch[0].leafSubcellOrdinal, 1);
+    }
+    else
+    {
+      TEST_EQUALITY(genRefBranch[0].leafSubcellOrdinal, 0);
+    }
+  }
+  
+  TEUCHOS_UNIT_TEST( RefinementPattern, GeneralizedRefinementBranchForLeafSubcell_InteriorTriangleEdge )
+  {
+    RefinementPatternPtr triangleRefinement = RefinementPattern::regularRefinementPatternTriangle();
+    // create a one-refinement branch, selecting middle triangle (child 1):
+    RefinementBranch refBranch = { {triangleRefinement.get(),1} };
+    
+    /* taking the 0 edge as our subcell on the leaf cell, we expect GeneralizedRefinementBranch like so.
+     From leaf to root:
+     1.  previousTierTopo = Triangle;
+         rootDimension = 2;
+         previousTierSubcellOrdinal = 0
+         refBranch = {{triangleRefinement,1}};
+         leafSubcellDim = 1;
+         leafSubcellOrdinal = 0
+     */
+    unsigned edgeDim = 1;
+    unsigned edgeOrdinalInCell = 0;
+    GeneralizedRefinementBranch genRefBranch = RefinementPattern::generalizedRefinementBranchForLeafSubcell(refBranch,
+                                                                                                            edgeDim,
+                                                                                                            edgeOrdinalInCell);
+    TEST_EQUALITY(genRefBranch.size(), 1);
+    
+    TEST_EQUALITY(genRefBranch[0].previousTierTopo->getKey(), CellTopology::triangle()->getKey());
+    TEST_EQUALITY(genRefBranch[0].rootDimension, 2);
+    TEST_EQUALITY(genRefBranch[0].previousTierSubcellOrdinal, 0);
+    
+    TEST_EQUALITY(genRefBranch[0].refBranch.size(), 1);
+    TEST_EQUALITY(genRefBranch[0].refBranch[0].first->parentTopology()->getKey(), CellTopology::triangle()->getKey());
+    TEST_EQUALITY(genRefBranch[0].refBranch[0].second, 1);
+
+    TEST_EQUALITY(genRefBranch[0].leafSubcellDimension, 1);
+    TEST_EQUALITY(genRefBranch[0].leafSubcellOrdinal, 0);
+  }
+  
+  TEUCHOS_UNIT_TEST( RefinementPattern, GeneralizedRefinementBranchForLeafSubcell_ConformingVertex )
+  {
+    RefinementPatternPtr quadRefinement = RefinementPattern::regularRefinementPatternQuad();
+    // create a two-refinement branch, selecting lower-left quad each time:
+    RefinementBranch refBranch = { {quadRefinement.get(),0}, {quadRefinement.get(),0} };
+    
+    /* taking the 0 vertex as our subcell on the leaf cell, we expect GeneralizedRefinementBranch like so.
+     From leaf to root:
+     1.       previousTierTopo = Quad;
+                 rootDimension = 0;
+    previousTierSubcellOrdinal = 0
+                     refBranch = {{nodeNoRefinement,0},{nodeNoRefinement,0}};
+                leafSubcellDim = 0;
+            leafSubcellOrdinal = 0
+     */
+    unsigned vertexDim = 0;
+    unsigned vertexOrdinalInCell = 0;
+    GeneralizedRefinementBranch genRefBranch = RefinementPattern::generalizedRefinementBranchForLeafSubcell(refBranch,
+                                                                                                            vertexDim,
+                                                                                                            vertexOrdinalInCell);
+    TEST_EQUALITY(genRefBranch[0].previousTierTopo->getKey(), CellTopology::quad()->getKey());
+    TEST_EQUALITY(genRefBranch[0].rootDimension, 0);
+    TEST_EQUALITY(genRefBranch[0].previousTierSubcellOrdinal, 0);
+    TEST_EQUALITY(genRefBranch[0].refBranch[0].first->parentTopology()->getKey(), CellTopology::point()->getKey());
+    TEST_EQUALITY(genRefBranch[0].refBranch[0].second, 0);
+    TEST_EQUALITY(genRefBranch[0].refBranch[1].first->parentTopology()->getKey(), CellTopology::point()->getKey());
+    TEST_EQUALITY(genRefBranch[0].refBranch[1].second, 0);
+    TEST_EQUALITY(genRefBranch[0].leafSubcellDimension, 0);
+    TEST_EQUALITY(genRefBranch[0].leafSubcellOrdinal, 0);
+  }
+  
+  TEUCHOS_UNIT_TEST( RefinementPattern, GeneralizedRefinementBranchForLeafSubcell_HangingVertexInsideVolume )
+  {
+    RefinementPatternPtr quadRefinement = RefinementPattern::regularRefinementPatternQuad();
+    // create a two-refinement branch, selecting lower-left quad each time:
+    RefinementBranch refBranch = { {quadRefinement.get(),0}, {quadRefinement.get(),0} };
+    
+    /* taking the 2 vertex as our subcell on the leaf cell, we expect GeneralizedRefinementBranch like so.
+     From leaf to root:
+     1.       previousTierTopo = Quad;
+     rootDimension = 2;
+     previousTierSubcellOrdinal = 0
+     refBranch = {{Quad,0},{Quad,0}};
+     leafSubcellDim = 0;
+     leafSubcellOrdinal = 2
+     */
+    unsigned vertexDim = 0;
+    unsigned vertexOrdinalInCell = 2;
+    GeneralizedRefinementBranch genRefBranch = RefinementPattern::generalizedRefinementBranchForLeafSubcell(refBranch,
+                                                                                                            vertexDim,
+                                                                                                            vertexOrdinalInCell);
+    TEST_EQUALITY(genRefBranch[0].previousTierTopo->getKey(), CellTopology::quad()->getKey());
+    TEST_EQUALITY(genRefBranch[0].rootDimension, 2);
+    TEST_EQUALITY(genRefBranch[0].previousTierSubcellOrdinal, 0);
+    TEST_EQUALITY(genRefBranch[0].refBranch[0].first->parentTopology()->getKey(), CellTopology::quad()->getKey());
+    TEST_EQUALITY(genRefBranch[0].refBranch[0].second, 0);
+    TEST_EQUALITY(genRefBranch[0].refBranch[1].first->parentTopology()->getKey(), CellTopology::quad()->getKey());
+    TEST_EQUALITY(genRefBranch[0].refBranch[1].second, 0);
+    TEST_EQUALITY(genRefBranch[0].leafSubcellDimension, 0);
+    TEST_EQUALITY(genRefBranch[0].leafSubcellOrdinal, 2);
+  }
+  
+  
   TEUCHOS_UNIT_TEST( RefinementPattern, MapSubcellFromChildToParent_CommonVertices )
   {
     // test checks that regular refinement patterns do the right thing mapping from each child vertex to the parent,
@@ -122,21 +297,17 @@ namespace {
     // test takes regular refinement patterns and checks that RefinementPattern::mapRefCellPointsToAncestor
     // does the right thing when we use the reference cell points on child cell in a one-level refinement branch
 
-    vector< CellTopoPtrLegacy > cellTopos;
-    cellTopos.push_back( Teuchos::rcp( new shards::CellTopology(shards::getCellTopologyData< shards::Line<2> >()) ) );
-    cellTopos.push_back( Teuchos::rcp( new shards::CellTopology(shards::getCellTopologyData< shards::Quadrilateral<4> >()) ) );
-    cellTopos.push_back( Teuchos::rcp( new shards::CellTopology(shards::getCellTopologyData< shards::Triangle<3> >()) ) );
-    cellTopos.push_back( Teuchos::rcp( new shards::CellTopology(shards::getCellTopologyData< shards::Hexahedron<8> >()) ) );
+    vector< CellTopoPtr > cellTopos = { CellTopology::line(), CellTopology::quad(), CellTopology::triangle(), CellTopology::hexahedron() };
     
     for (int topoOrdinal=0; topoOrdinal<cellTopos.size(); topoOrdinal++) {
-      CellTopoPtrLegacy cellTopo = cellTopos[topoOrdinal];
+      CellTopoPtr cellTopo = cellTopos[topoOrdinal];
       
       int nodeCount = cellTopo->getNodeCount();
       int spaceDim = cellTopo->getDimension();
       
       FieldContainer<double> refCellNodes(nodeCount,spaceDim);
       
-      CamelliaCellTools::refCellNodesForTopology(refCellNodes, *cellTopo);
+      CamelliaCellTools::refCellNodesForTopology(refCellNodes, cellTopo);
       
       FieldContainer<double> childRefCellNodes = refCellNodes;
       
@@ -160,6 +331,162 @@ namespace {
         TEST_COMPARE_FLOATING_ARRAYS(expectedPoints, actualPoints, 1e-15);
       }
     }
+  }
+  
+  TEUCHOS_UNIT_TEST( RefinementPattern, MapRefCellPointsToAncestor_GeneralizedRefBranch_ChildNodeIdentity )
+  {
+    // test takes regular refinement patterns and checks that RefinementPattern::mapRefCellPointsToAncestor
+    // does the right thing when we use the reference subcell nodes on child cell in a one-level generalized refinement branch
+    
+    vector< CellTopoPtr > cellTopos = { CellTopology::line(), CellTopology::quad(), CellTopology::triangle(), CellTopology::hexahedron() };
+    
+    for (int topoOrdinal=0; topoOrdinal<cellTopos.size(); topoOrdinal++) {
+      CellTopoPtr cellTopo = cellTopos[topoOrdinal];
+      
+      int spaceDim = cellTopo->getDimension();
+      
+      RefinementPatternPtr regularRefinement = RefinementPattern::regularRefinementPattern(cellTopo->getKey());
+      
+      int childCount = regularRefinement->numChildren();
+      
+      for (int childOrdinal=0; childOrdinal<childCount; childOrdinal++)
+      {
+        RefinementBranch refBranch = {{regularRefinement.get(),childOrdinal}};
+        CellTopoPtr childTopo = regularRefinement->childTopology(childOrdinal);
+        for (int subcdim=0; subcdim<spaceDim; subcdim++)
+        {
+          int subcellCount = childTopo->getSubcellCount(subcdim);
+          for (int subcord=0; subcord<subcellCount; subcord++)
+          {
+            GeneralizedRefinementBranch genRefBranch = RefinementPattern::generalizedRefinementBranchForLeafSubcell(refBranch, subcdim, subcord);
+            CellTopoPtr subcellTopo = childTopo->getSubcell(subcdim, subcord);
+            int nodeCount = subcellTopo->getNodeCount();
+            FieldContainer<double> refSubcellNodes(nodeCount,subcdim);
+            CamelliaCellTools::refCellNodesForTopology(refSubcellNodes, subcellTopo);
+            FieldContainer<double> expectedPoints(nodeCount,spaceDim);
+            for (int subcellNode=0; subcellNode<nodeCount; subcellNode++)
+            {
+              int childNode = childTopo->getNodeMap(subcdim, subcord, subcellNode);
+              for (int d=0; d<spaceDim; d++)
+              {
+                expectedPoints(subcellNode,d) = regularRefinement->refinedNodes()(childOrdinal,childNode,d);
+              }
+            }
+            FieldContainer<double> actualPoints(nodeCount,spaceDim);
+            RefinementPattern::mapRefCellPointsToAncestor(genRefBranch, refSubcellNodes, actualPoints);
+            bool oldSuccess = success;
+            success = true;
+            TEST_COMPARE_FLOATING_ARRAYS_CAMELLIA(expectedPoints, actualPoints, 1e-15);
+            if (success==false)
+            {
+              // local failure
+              out << "failure for cellTopo " << cellTopo->getName() << ", child " << childOrdinal;
+              out << ", " << CamelliaCellTools::entityTypeString(subcdim) << " ordinal " << subcord << endl;
+              out << "expectedPoints:\n" << expectedPoints;
+              out << "actualPoints:\n" << actualPoints;
+              
+              // rerun for debugging:
+              RefinementPattern::mapRefCellPointsToAncestor(genRefBranch, refSubcellNodes, actualPoints);
+            }
+            success = success && oldSuccess;
+          }
+        }
+      }
+    }
+  }
+  
+  TEUCHOS_UNIT_TEST( RefinementPattern, MapRefCellPointsToAncestor_InteriorTriangleEdge )
+  {
+    // The genRefBranch here is identical to the one we use in GeneralizedRefinementBranchForLeafSubcell_InteriorTriangleEdge, above
+    RefinementPatternPtr triangleRefinement = RefinementPattern::regularRefinementPatternTriangle();
+    // create a one-refinement branch, selecting middle triangle (child 1):
+    RefinementBranch refBranch = { {triangleRefinement.get(),1} };
+    
+    /* taking the 0 edge as our subcell on the leaf cell, we expect GeneralizedRefinementBranch like so.
+     From leaf to root:
+     1.  previousTierTopo = Triangle;
+     rootDimension = 2;
+     previousTierSubcellOrdinal = 0
+     refBranch = {{triangleRefinement,1}};
+     leafSubcellDim = 1;
+     leafSubcellOrdinal = 0
+     */
+    unsigned edgeDim = 1;
+    unsigned edgeOrdinalInCell = 0;
+    GeneralizedRefinementBranch genRefBranch = RefinementPattern::generalizedRefinementBranchForLeafSubcell(refBranch,
+                                                                                                            edgeDim,
+                                                                                                            edgeOrdinalInCell);
+
+    int numPoints = 2;
+    int fineDim  = 1;
+    FieldContainer<double> leafSubcellPoints(numPoints, fineDim);
+    leafSubcellPoints(0,0) = -0.25;
+    leafSubcellPoints(1,0) = 0.5;
+    
+    /* The 0 edge in the triangle's child 1 (the interior triangle) extends from (0.5,0) to (0.5,0.5) in parent */
+
+    int volumeDim = 2;
+    FieldContainer<double> expectedPointsInParent(numPoints,volumeDim);
+    expectedPointsInParent(0,0) = 0.5;
+    expectedPointsInParent(0,1) = 0.25 * leafSubcellPoints(0,0) + 0.25;
+    expectedPointsInParent(1,0) = 0.5;
+    expectedPointsInParent(1,1) = 0.25 * leafSubcellPoints(1,0) + 0.25;
+
+    FieldContainer<double> actualPoints(numPoints,volumeDim);
+    RefinementPattern::mapRefCellPointsToAncestor(genRefBranch, leafSubcellPoints, actualPoints);
+
+    double tol = 1e-15;
+    TEST_COMPARE_FLOATING_ARRAYS_CAMELLIA(expectedPointsInParent,actualPoints,tol);
+  }
+  
+  TEUCHOS_UNIT_TEST( RefinementPattern, MapRefCellPointsToAncestor_HexahedronHangingEdge )
+  {
+    // A test roughly corresponding to a case that's failing in GDAMinimumRule.  That issue likely has to do with
+    // the permutation of the edge as seen by the side and the edge as seen by the cell; here, we only have
+    // the edge seen by the cell.  I.e., I do expect this to pass.
+    
+    RefinementPatternPtr hexahedronRefinement = RefinementPattern::regularRefinementPatternHexahedron();
+    // create a one-refinement branch, selecting child 1:
+    RefinementBranch refBranch = { {hexahedronRefinement.get(),1} };
+    
+    /* taking the 10 edge as our subcell on the leaf cell, we expect GeneralizedRefinementBranch like so.
+     From leaf to root:
+     1.  previousTierTopo = Hexahedron;
+     rootDimension = 2;
+     previousTierSubcellOrdinal = 1;
+     refBranch = {{quadRefinement,1}};
+     leafSubcellDim = 1;
+     leafSubcellOrdinal = 3
+     */
+    unsigned edgeDim = 1;
+    unsigned edgeOrdinalInCell = 10;
+    GeneralizedRefinementBranch genRefBranch = RefinementPattern::generalizedRefinementBranchForLeafSubcell(refBranch,
+                                                                                                            edgeDim,
+                                                                                                            edgeOrdinalInCell);
+    
+    int numPoints = 3;
+    int fineDim  = 1;
+    FieldContainer<double> leafSubcellPoints(numPoints, fineDim);
+    leafSubcellPoints(0,0) = -1.0;
+    leafSubcellPoints(1,0) = 0.0;
+    leafSubcellPoints(2,0) = 1.0;
+    
+    /* The 10 edge in the hexahedron child 1 extends from vertex 2 to 6 in the child, which is (1,0,-1) to (1,0,0) in parent */
+    
+    int volumeDim = 3;
+    FieldContainer<double> expectedPointsInParent(numPoints,volumeDim);
+    for (int pointOrdinal=0; pointOrdinal<numPoints; pointOrdinal++)
+    {
+      expectedPointsInParent(pointOrdinal,0) = 1.0;
+      expectedPointsInParent(pointOrdinal,1) = 0.0;
+      expectedPointsInParent(pointOrdinal,2) = 0.5 * (leafSubcellPoints(pointOrdinal,0) - 1.0);
+    }
+    
+    FieldContainer<double> actualPoints(numPoints,volumeDim);
+    RefinementPattern::mapRefCellPointsToAncestor(genRefBranch, leafSubcellPoints, actualPoints);
+    
+    double tol = 1e-15;
+    TEST_COMPARE_FLOATING_ARRAYS_CAMELLIA(expectedPointsInParent,actualPoints,tol);
   }
   
   TEUCHOS_UNIT_TEST( RefinementPattern, SpaceTimeTopology )

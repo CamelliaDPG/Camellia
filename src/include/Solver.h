@@ -126,6 +126,9 @@ namespace Camellia {
     // May require specific instructions while building Trilinos
     TAmesos2Solver(bool saveFactorization = false, std::string solverString="klu"): _saveFactorization(saveFactorization), _solverString(solverString) {}
     int solve() {
+      TEUCHOS_TEST_FOR_EXCEPTION(this->_stiffnessMatrix.get() == NULL, std::invalid_argument, "stiffness matrix is unset.");
+      TEUCHOS_TEST_FOR_EXCEPTION(this->_lhs.get() == NULL, std::invalid_argument, "lhs is unset.");
+      TEUCHOS_TEST_FOR_EXCEPTION(this->_rhs.get() == NULL, std::invalid_argument, "rhs is unset.");
       if (!_saveFactorization) {
         Teuchos::RCP<Amesos2::Solver<Epetra_CrsMatrix,Epetra_MultiVector> > solver
           = Amesos2::create<Epetra_CrsMatrix,Epetra_MultiVector>(_solverString, this->_stiffnessMatrix, this->_lhs, this->_rhs);

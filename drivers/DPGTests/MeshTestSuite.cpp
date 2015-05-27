@@ -268,14 +268,14 @@ bool MeshTestSuite::neighborBasesAgreeOnSides(Teuchos::RCP<Mesh> mesh, const Fie
       unsigned ancestralPermutation = ancestralCell->subcellPermutation(sideDim, ancestralSideOrdinal);
       unsigned neighborPermutation = neighborCell->subcellPermutation(sideDim, neighborSideOrdinal);
       unsigned neighborPermutationInverse = CamelliaCellTools::permutationInverse(ancestralSideTopo, neighborPermutation);
-      unsigned composedPermutation = CamelliaCellTools::permutationComposition(ancestralSideTopo, neighborPermutationInverse, ancestralPermutation);
+      unsigned composedPermutation = CamelliaCellTools::permutationComposition(ancestralSideTopo, neighborPermutationInverse, ancestralPermutation);  // if neighbor is coarse, then this is coarse-to-fine.
 
       // when you set physical cell nodes according to the coarse-to-fine permutation, then the reference-to-physical map
-      // is fine-to-coarse (which is what we want).  Because the composedPermutation is fine-to-coarse, we want its inverse:
-      unsigned composedPermutationInverse = CamelliaCellTools::permutationInverse(ancestralSideTopo, composedPermutation);
-
+      // is fine-to-coarse (which is what we want).
+      
       FieldContainer<double> permutedAncestralSideReferenceNodes(ancestralSideTopo->getVertexCount(),sideDim);
-      CamelliaCellTools::refCellNodesForTopology(permutedAncestralSideReferenceNodes, ancestralSideTopo, composedPermutationInverse);
+      CamelliaCellTools::refCellNodesForTopology(permutedAncestralSideReferenceNodes, ancestralSideTopo, composedPermutation);
+      
       // add cell dimension:
       permutedAncestralSideReferenceNodes.resize(1,permutedAncestralSideReferenceNodes.dimension(0),permutedAncestralSideReferenceNodes.dimension(1));
       ancestralSideTopoCache->setPhysicalCellNodes(permutedAncestralSideReferenceNodes, vector<GlobalIndexType>(), false);

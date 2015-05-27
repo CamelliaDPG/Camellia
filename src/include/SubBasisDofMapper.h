@@ -37,10 +37,10 @@ namespace Camellia {
   //  virtual Intrepid::FieldContainer<double> getConstraintMatrix();
     
     virtual Intrepid::FieldContainer<double> mapCoarseCoefficients(Intrepid::FieldContainer<double> &coarseCoefficients) {
-      return mapData(true,coarseCoefficients);
+      return mapData(false,coarseCoefficients); // 5-18-15: changed "true" to "false"
     }
     virtual Intrepid::FieldContainer<double> mapFineData(Intrepid::FieldContainer<double> &fineData) {
-      return mapData(false, fineData);
+      return mapData(true, fineData); // 5-18-15: changed "false" to "true"
     }
     
     virtual const set<unsigned> &basisDofOrdinalFilter() = 0;
