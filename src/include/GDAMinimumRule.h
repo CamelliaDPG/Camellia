@@ -34,6 +34,7 @@ struct CellConstraints
 {
   vector< vector< AnnotatedEntity > > subcellConstraints; // outer: subcell dim, inner: subcell ordinal in cell
   vector< vector< OwnershipInfo > > owningCellIDForSubcell; // outer vector indexed by subcell dimension; inner vector indexed by subcell ordinal in cell.  Pairs are (CellID, subcellIndex in MeshTopology)
+//  vector< vector< vector<bool> > > sideSubcellConstraintEnforcedBySuper; // outermost vector indexed by side ordinal, then subcell dimension, then subcell ordinal.  When true, subcell does not need to be independently considered.
 };
 
 class GDAMinimumRule : public GlobalDofAssignment

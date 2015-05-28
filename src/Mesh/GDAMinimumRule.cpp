@@ -1076,9 +1076,9 @@ BasisMap GDAMinimumRule::getBasisMapOld(GlobalIndexType cellID, SubCellDofIndexI
   SubBasisMapInfo subBasisMap;
 
 //  const static int DEBUG_VAR_ID = 2;
-//  const static GlobalIndexType DEBUG_CELL_ID = 9;
+//  const static GlobalIndexType DEBUG_CELL_ID = 16;
 //  const static unsigned DEBUG_SIDE_ORDINAL = 2;
-//  const static GlobalIndexType DEBUG_GLOBAL_DOF = 45;
+//  const static GlobalIndexType DEBUG_GLOBAL_DOF = 8;
 
   const static int DEBUG_VAR_ID = -1;
   const static GlobalIndexType DEBUG_CELL_ID = -1;
@@ -1454,33 +1454,45 @@ BasisMap GDAMinimumRule::getBasisMapOld(GlobalIndexType cellID, SubCellDofIndexI
         // populate the containers for the (d-1)-dimensional constituents of the constraining subcell
         if (subcellConstraint.dimension >= minimumConstraintDimension + 1)
         {
+          CellTopoPtr constrainingCellTopo = constrainingCell->topology();
+          CellTopoPtr constrainingSideTopo = constrainingCellTopo->getSide(subcellConstraint.sideOrdinal);
+          
           int d1 = subcellConstraint.dimension-1;
           unsigned sscCount = constrainingTopo->getSubcellCount(d1);
-          CellTopoPtr constrainingCellTopo = constrainingCell->topology();
           for (unsigned ssubcord=0; ssubcord<sscCount; ssubcord++)
           {
+            // 5/28/15: the commented-out code below belongs to an effort to guarantee that fine and coarse are reconciled only using the
+            //          full intersection of their domains.  This, however, does not quite suffice, at least in the present approach.  We can
+            //          have a fine and a coarse domain that intersect in an edge, and then one of the edge's vertices is constrained by a face
+            //          which intersects the original fine domain in a full edge.  So we need more than a "local" guarantee.
+//            unsigned ssubcordInSide = CamelliaCellTools::subcellOrdinalMap(constrainingSideTopo, subcellConstraint.dimension, subcellConstraint.subcellOrdinal, d1, ssubcord);;
+//            if (cellConstraints.sideSubcellConstraintEnforcedBySuper[subcellInfo.sideOrdinal][d1][ssubcordInSide])
+//            {
+//              // then the containing subcells have already taken care of the sub-subcell
+//              continue;
+//            }
             unsigned ssubcordInCell = CamelliaCellTools::subcellOrdinalMap(constrainingCellTopo, subcellConstraint.dimension, subcellOrdinalInConstrainingCell, d1, ssubcord);
             IndexType ssEntityIndex = constrainingCell->entityIndex(d1, ssubcordInCell);
             // DEBUGGING:
-//            if ((d1==0) && (ssEntityIndex==12)) {
-//              cout << "Adding vertex 12 to the list.\n";
-//            }
-
+            //            if ((d1==0) && (ssEntityIndex==12)) {
+            //              cout << "Adding vertex 12 to the list.\n";
+            //            }
+            
             AnnotatedEntity subsubcellConstraint;
             subsubcellConstraint.cellID = subcellConstraint.cellID;
             subsubcellConstraint.sideOrdinal = subcellConstraint.sideOrdinal;
             subsubcellConstraint.dimension = d1;
-
+            
             CellPtr constrainingCell = _meshTopology->getCell(subcellConstraint.cellID);
             subsubcellConstraint.subcellOrdinal = CamelliaCellTools::subcellReverseOrdinalMap(constrainingCellTopo, sideDim, subsubcellConstraint.sideOrdinal,
-                                                  d1, ssubcordInCell);
-
+                                                                                              d1, ssubcordInCell);
+            
             //          if ((cellID==21) && (sideOrdinal==2) && (d1==0) && (subcellConstraint.cellID==6) && ((ssubcordInCell==3) || (ssubcordInCell==0))) {
             //            cout << "About to compute composed weights for sub subcell.\n";
             //          }
-
+            
             SubBasisReconciliationWeights composedWeightsForSubSubcell = BasisReconciliation::weightsForCoarseSubcell(composedWeights, constrainingBasis, d1,
-                subsubcellConstraint.subcellOrdinal, true);
+                                                                                                                      subsubcellConstraint.subcellOrdinal, true);
             // DEBUGGING
             if ((cellID==DEBUG_CELL_ID) && (sideOrdinal==DEBUG_SIDE_ORDINAL) && (var->ID()==DEBUG_VAR_ID))
             {
@@ -1489,7 +1501,7 @@ BasisMap GDAMinimumRule::getBasisMapOld(GlobalIndexType cellID, SubCellDofIndexI
               Camellia::print("composedWeightsForSubSubcell.fineOrdinals", composedWeightsForSubSubcell.fineOrdinals);
               cout << "composed weights for subSubSubcell:\n" << composedWeightsForSubSubcell.weights;
             }
-
+            
             if (composedWeightsForSubSubcell.weights.size() > 0)
             {
               appliedWeights[d1][ssEntityIndex].push_back(make_pair(subsubcellConstraint, composedWeightsForSubSubcell));
@@ -1621,6 +1633,7 @@ BasisMap GDAMinimumRule::getBasisMapOld(GlobalIndexType cellID, SubCellDofIndexI
               cout << "previousCoefficient = " << previousCoefficient << endl;
               cout << "coefficient = " << coefficient << endl;
               cout << "diff = " << abs(previousCoefficient - coefficient) << endl;
+              cout << "Encountered the incompatible entry while processing variable " << var->name() << " on cell " << cellID << ", side " << sideOrdinal << endl;
               TEUCHOS_TEST_FOR_EXCEPTION(true, std::invalid_argument, "Internal Error: incompatible entries for fine ordinal " );
             }
           }
@@ -1734,7 +1747,6 @@ BasisMap GDAMinimumRule::getBasisMapOld(GlobalIndexType cellID, SubCellDofIndexI
 
 CellConstraints GDAMinimumRule::getCellConstraints(GlobalIndexType cellID)
 {
-
   if (_constraintsCache.find(cellID) == _constraintsCache.end())
   {
 
@@ -1889,6 +1901,72 @@ CellConstraints GDAMinimumRule::getCellConstraints(GlobalIndexType cellID)
     cellConstraints.owningCellIDForSubcell[spaceDim][0].owningSubcellEntityIndex = cellID;
     cellConstraints.owningCellIDForSubcell[spaceDim][0].dimension = spaceDim;
 
+    /* 5-28-15:
+     
+     Something like the idea (or at least the goal) of sideSubcellConstraintEnforcedBySuper is good, but
+     I need to get mathematically and geometrically precise on what the domain of enforcement should be,
+     and the commented-out code below does not suffice to get us to uniqueness of that domain.
+     
+     It *might* be something like: take the AnnotatedEntity that constrains a given subcell; local degrees of freedom
+     belonging to that subcell should be eliminated from any "enforcement path" that does not begin with that AnnotatedEntity.
+     
+     */
+    /* Finally, build sideSubcellConstraintEnforcedBySuper.
+     The point of this is to guarantee that during getBasisMap, as we split off lower-dimensioned subcells,
+     we never enforce constraints on anything less than the intersection of the fine and coarse domains.  The
+     rule is, if the side that constrains the subcell is the same as the sub-subcell, then the sub-subcell
+     constraint is taken care of, and we can mark "true" for that sub-subcell.
+     
+     */
+//    int sideCount = topo->getSideCount();
+//    cellConstraints.sideSubcellConstraintEnforcedBySuper = vector< vector< vector<bool> > >(sideCount);
+//    for (int sideOrdinal=0; sideOrdinal<sideCount; sideOrdinal++)
+//    {
+//      cellConstraints.sideSubcellConstraintEnforcedBySuper[sideOrdinal] = vector< vector<bool> >(sideDim+1);
+//      CellTopoPtr sideTopo = topo->getSide(sideOrdinal);
+//      
+//      // initialize all entries to false:
+//      for (int scdim=0; scdim<=sideDim; scdim++)
+//      {
+//        int subcellCount = sideTopo->getSubcellCount(scdim);
+//        cellConstraints.sideSubcellConstraintEnforcedBySuper[sideOrdinal][scdim] = vector<bool>(subcellCount,false);
+//      }
+//      
+//      for (int scdim=sideDim; scdim>0; scdim--)
+//      {
+//        int subcellCount = sideTopo->getSubcellCount(scdim);
+//        for (int scord=0; scord<subcellCount; scord++) // ordinal in side
+//        {
+////          { // DEBUGGING:
+////            if ((sideOrdinal==5) && (cellID==18) && (scdim==1) && (scord==0))
+////            {
+////              cout << "(sideOrdinal==5) && (cellID==18) && (scdim==1) && (scord==0).\n"; //breakpoint here
+////            }
+////          }
+//          
+//          int scordInCell = CamelliaCellTools::subcellOrdinalMap(topo, sideDim, sideOrdinal, scdim, scord);
+//          GlobalIndexType constrainingCellID = cellConstraints.subcellConstraints[scdim][scordInCell].cellID;
+//          unsigned constrainingSideOrdinal = cellConstraints.subcellConstraints[scdim][scordInCell].sideOrdinal;
+//          CellTopoPtr subcell = sideTopo->getSubcell(scdim, scord);
+//          for (int sscdim=scdim-1; sscdim >= 0; sscdim--)
+//          {
+//            int subsubcellCount = subcell->getSubcellCount(sscdim);
+//            for (int sscord=0; sscord<subsubcellCount; sscord++) // ordinal in subcell
+//            {
+//              int sscordInSide = CamelliaCellTools::subcellOrdinalMap(sideTopo, scdim, scord, sscdim, sscord);
+//              int sscordInCell = CamelliaCellTools::subcellOrdinalMap(topo, sideDim, sideOrdinal, sscdim, sscordInSide);
+//              GlobalIndexType sscConstrainingCellID = cellConstraints.subcellConstraints[sscdim][sscordInCell].cellID;
+//              GlobalIndexType sscConstrainingSideOrdinal = cellConstraints.subcellConstraints[sscdim][sscordInCell].sideOrdinal;
+//              if ((sscConstrainingCellID == constrainingCellID) && (constrainingSideOrdinal == sscConstrainingSideOrdinal))
+//              {
+//                cellConstraints.sideSubcellConstraintEnforcedBySuper[sideOrdinal][sscdim][sscordInSide] = true;
+//              }
+//            }
+//          }
+//        }
+//      }
+//    }
+    
     _constraintsCache[cellID] = cellConstraints;
 
 //    if (cellID==4) { // DEBUGGING
