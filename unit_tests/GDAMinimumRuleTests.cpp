@@ -762,15 +762,71 @@ MeshPtr poisson3DUniformMesh()
     MeshPtr mesh = poissonIrregularMesh(spaceDim, irregularity, H1Order);
     testCoarseBasisEqualsWeightedFineBasis(mesh, out, success);
   }
-  
+
+  // This test fails.  Think of it as a warning (avoid 2-irregular meshes in 3D, at least...)
   TEUCHOS_UNIT_TEST( GDAMinimumRule, BasisMapsAgreePoisson3DHangingNode2Irregular_Slow)
   {
     int irregularity = 2;
     int spaceDim = 3;
-    int H1Order = 2;
+    int H1Order = 1;
     MeshPtr mesh = poissonIrregularMesh(spaceDim, irregularity, H1Order);
+//    { // DEBUGGING:
+//      mesh->getTopology()->printAllEntities();
+//      GDAMinimumRule* minRule = dynamic_cast<GDAMinimumRule*>(mesh->globalDofAssignment().get());
+//      minRule->printGlobalDofInfo();
+//    }
     testCoarseBasisEqualsWeightedFineBasis(mesh, out, success);
   }
+  
+//  TEUCHOS_UNIT_TEST( GDAMinimumRule, SideSubcellConstraintEnforcedBySuperPoisson3DHangingNode2Irregular)
+//  {
+//    /*
+//     This test is meant to check that the CellConstraints.sideSubcellConstraintEnforcedBySuper is
+//     filled in appropriately.  Kind of hard-coded right now, and just checks one case that's of interest.
+//     */
+//    int irregularity = 2;
+//    int spaceDim = 3;
+//    int sideDim = spaceDim - 1;
+//    int H1Order = 1;
+//    MeshPtr mesh = poissonIrregularMesh(spaceDim, irregularity, H1Order);
+//    GDAMinimumRule* minRule = dynamic_cast<GDAMinimumRule*>(mesh->globalDofAssignment().get());
+//    GlobalIndexType twoIrregularCellID = 16;
+//    unsigned twoIrregularSideOrdinal = 2;
+//    CellConstraints twoIrregularCellConstraints = minRule->getCellConstraints(twoIrregularCellID);
+//
+//    vector<vector<bool>> expectedSideSubcellConstraintsEnforcedBySuper(vector<vector<bool>>(sideDim+1));
+//    expectedSideSubcellConstraintsEnforcedBySuper[sideDim] = {false}; // side itself not constrained by any super
+//    int edgeDim = 1, vertexDim = 0;
+//    // edges 2 has constraints enforced by super:
+//    expectedSideSubcellConstraintsEnforcedBySuper[edgeDim] = {false,false,true,false};
+//    // all vertices have constraints enforced by super:
+//    expectedSideSubcellConstraintsEnforcedBySuper[vertexDim] = {true,true,true,true};
+//    
+//    vector<vector<bool>> actualSideSubcellConstraintsEnforcedBySuper = twoIrregularCellConstraints.sideSubcellConstraintEnforcedBySuper[twoIrregularSideOrdinal];
+//    for (int d=0; d<=sideDim; d++)
+//    {
+//      out << "Comparing expected to actual sideSubcellConstraintsEnforcedBySuper for d=" << d << "\n";
+//      TEST_COMPARE_ARRAYS(expectedSideSubcellConstraintsEnforcedBySuper[d], actualSideSubcellConstraintsEnforcedBySuper[d]);
+//    }
+//    
+//    // second test: neighboring cell, 18, side 5 (top face)
+//    twoIrregularCellID = 18;
+//    twoIrregularSideOrdinal = 5;
+//    twoIrregularCellConstraints = minRule->getCellConstraints(twoIrregularCellID);
+//    
+//    expectedSideSubcellConstraintsEnforcedBySuper[sideDim] = {false}; // side itself not constrained by any super
+//    // no edge has constraints enforced by super:
+//    expectedSideSubcellConstraintsEnforcedBySuper[edgeDim] = {false,false,false,false};
+//    // vertices 0,2,3 have constraints enforced by super:
+//    expectedSideSubcellConstraintsEnforcedBySuper[vertexDim] = {true,false,true,true};
+//    
+//    actualSideSubcellConstraintsEnforcedBySuper = twoIrregularCellConstraints.sideSubcellConstraintEnforcedBySuper[twoIrregularSideOrdinal];
+//    for (int d=0; d<=sideDim; d++)
+//    {
+//      out << "Comparing expected to actual sideSubcellConstraintsEnforcedBySuper for d=" << d << "\n";
+//      TEST_COMPARE_ARRAYS(expectedSideSubcellConstraintsEnforcedBySuper[d], actualSideSubcellConstraintsEnforcedBySuper[d]);
+//    }
+//  }
   
   TEUCHOS_UNIT_TEST( GDAMinimumRule, CheckConstraintsPoisson3DUniform )
   {
@@ -791,7 +847,7 @@ MeshPtr poisson3DUniformMesh()
   {
     int irregularity = 2;
     int spaceDim = 3;
-    int H1Order = 2;
+    int H1Order = 1;
     MeshPtr mesh = poissonIrregularMesh(spaceDim, irregularity, H1Order);
     testSubcellConstraintIsAncestor(mesh, out, success);
   }
