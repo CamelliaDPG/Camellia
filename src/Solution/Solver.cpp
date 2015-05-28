@@ -78,9 +78,15 @@ TSolverPtr<Scalar> TSolver<Scalar>::getSolver(SolverChoice choice, bool saveFact
 
 template <typename Scalar>
 TSolverPtr<Scalar> TSolver<Scalar>::getDirectSolver(bool saveFactorization) {
-#if defined(HAVE_AMESOS_SUPERLUDIST)
-  return getSolver(TSolver<Scalar>::SuperLUDist, saveFactorization);
-#elif defined(HAVE_AMESOS_MUMPS)
+//#if defined(HAVE_AMESOS_SUPERLUDIST)
+//  return getSolver(TSolver<Scalar>::SuperLUDist, saveFactorization);
+//#elif defined(HAVE_AMESOS_MUMPS)
+//  return getSolver(TSolver<Scalar>::MUMPS, saveFactorization);
+//#else
+//  return getSolver(TSolver<Scalar>::KLU, saveFactorization);
+//#endif
+  // for now, commented out the above, because SuperLUDist is broken with latest Trilinos, from the looks of it
+#if defined(HAVE_AMESOS_MUMPS)
   return getSolver(TSolver<Scalar>::MUMPS, saveFactorization);
 #else
   return getSolver(TSolver<Scalar>::KLU, saveFactorization);
