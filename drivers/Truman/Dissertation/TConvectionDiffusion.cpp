@@ -8,6 +8,7 @@
 
 #include "Teuchos_CommandLineProcessor.hpp"
 #include "Teuchos_ParameterList.hpp"
+#include "Teuchos_TimeMonitor.hpp"
 
 #include "EpetraExt_ConfigDefs.h"
 #ifdef HAVE_EPETRAEXT_HDF5
@@ -142,19 +143,22 @@ int main(int argc, char *argv[])
   RefinementStrategy refStrategy(soln, threshold);
 
   ostringstream refName;
-  refName << "confusion" << spaceDim << "D_" << norm << "_" << epsilon << "_k" << k;
+  refName << "confusion" << spaceDim << "D_" << norm << "_" << epsilon << "_k" << k << "_solver" << solverChoice;
   // HDF5Exporter exporter(mesh,refName.str());
 
+  Teuchos::RCP<Time> solverTime = Teuchos::TimeMonitor::getNewCounter("Solve Time");
+
   SolverPtr kluSolver = Solver::getSolver(Solver::KLU, true);
-  SolverPtr superluSolver = Solver::getSolver(Solver::SuperLUDist, true);
+  // SolverPtr superluSolver = Solver::getSolver(Solver::SuperLUDist, true);
   int maxIters = 10000;
   bool useStaticCondensation = false;
   int azOutput = 20; // print residual every 20 CG iterations
 
   ofstream dataFile(refName.str()+".txt");
-  dataFile << "ref\t " << "iterations\t " << "elements\t " << "dofs\t " << "error\t " << endl;
+  dataFile << "ref\t " << "iterations\t " << "elements\t " << "dofs\t " << "error\t " << "solvetime\t" << endl;
   for (int refIndex=0; refIndex <= numRefs; refIndex++)
   {
+    solverTime->start(true);
     Teuchos::RCP<GMGSolver> gmgSolver;
     if (solverChoice == 0)
     {
@@ -169,10 +173,11 @@ int main(int argc, char *argv[])
     case 1:
       soln->condensedSolve(kluSolver);
       break;
-    case 2:
-      soln->condensedSolve(superluSolver);
-      break;
+    // case 2:
+    //   soln->condensedSolve(superluSolver);
+    //   break;
     }
+    double solveTime = solverTime->stop();
 
     double energyError = soln->energyErrorTotal();
     if (commRank == 0)
@@ -185,19 +190,31 @@ int main(int argc, char *argv[])
              << " \tIteration Count:\t " << gmgSolver->iterationCount()
              << " \tElements:\t " << mesh->numActiveElements()
              << " \tDOFs:\t " << mesh->numGlobalDofs()
-             << " \tEnergy Error:\t " << energyError << endl;
+             << " \tEnergy Error:\t " << energyError
+             << " \tSolve Time:\t " << solveTime
+             << endl;
         dataFile << refIndex
                  << " " << gmgSolver->iterationCount()
                  << " " << mesh->numActiveElements()
                  << " " << mesh->numGlobalDofs()
-                 << " " << energyError << endl;
+                 << " " << energyError
+                 << " " << solveTime
+                 << endl;
       }
       else
       {
         cout << "Refinement:\t " << refIndex
              << " \tElements:\t " << mesh->numActiveElements()
              << " \tDOFs:\t " << mesh->numGlobalDofs()
-             << " \tEnergy Error:\t " << energyError << endl;
+             << " \tEnergy Error:\t " << energyError
+             << " \tSolve Time:\t " << solveTime
+             << endl;
+        dataFile << refIndex
+                 << " " << mesh->numActiveElements()
+                 << " " << mesh->numGlobalDofs()
+                 << " " << energyError
+                 << " " << solveTime
+                 << endl;
       }
     }
 
