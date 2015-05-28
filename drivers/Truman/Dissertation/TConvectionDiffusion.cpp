@@ -8,6 +8,7 @@
 
 #include "Teuchos_CommandLineProcessor.hpp"
 #include "Teuchos_ParameterList.hpp"
+#include "Teuchos_TimeMonitor.hpp"
 
 #include "EpetraExt_ConfigDefs.h"
 #ifdef HAVE_EPETRAEXT_HDF5
@@ -46,7 +47,7 @@ int main(int argc, char *argv[])
   int k = 2, delta_k = 2;
   int numXElems = 1;
   bool useConformingTraces = true;
-  int solverChoice = 0;
+  string solverChoice = "GMG-Direct";
   double solverTolerance = 1e-6;
   string norm = "CoupledRobust";
   cmdp.setOption("spaceDim", &spaceDim, "spatial dimension");
@@ -57,7 +58,7 @@ int main(int argc, char *argv[])
   cmdp.setOption("epsilon", &epsilon, "epsilon");
   cmdp.setOption("norm", &norm, "norm");
   cmdp.setOption("conformingTraces", "nonconformingTraces", &useConformingTraces, "use conforming traces");
-  cmdp.setOption("solver", &solverChoice, "0=iterative, 1=KLI, 2=SuperLu");
+  cmdp.setOption("solver", &solverChoice, "GMG-Direct, GMG-ILU, GMG-IC, KLU, SuperLU");
   cmdp.setOption("solverTolerance", &solverTolerance, "iterative solver tolerance");
 
   if (cmdp.parse(argc,argv) != Teuchos::CommandLineProcessor::PARSE_SUCCESSFUL)
@@ -142,62 +143,84 @@ int main(int argc, char *argv[])
   RefinementStrategy refStrategy(soln, threshold);
 
   ostringstream refName;
-  refName << "confusion" << spaceDim << "D_" << norm << "_" << epsilon << "_k" << k;
+  refName << "confusion" << spaceDim << "D_" << norm << "_" << epsilon << "_k" << k << "_" << solverChoice;
   // HDF5Exporter exporter(mesh,refName.str());
 
-  SolverPtr kluSolver = Solver::getSolver(Solver::KLU, true);
-  SolverPtr superluSolver = Solver::getSolver(Solver::SuperLUDist, true);
+  Teuchos::RCP<Time> solverTime = Teuchos::TimeMonitor::getNewCounter("Solve Time");
+
+  map<string, SolverPtr> solvers;
+  solvers["KLU"] = Solver::getSolver(Solver::KLU, true);
+  // SolverPtr superluSolver = Solver::getSolver(Solver::SuperLUDist, true);
   int maxIters = 10000;
   bool useStaticCondensation = false;
   int azOutput = 20; // print residual every 20 CG iterations
 
   ofstream dataFile(refName.str()+".txt");
-  dataFile << "ref\t " << "iterations\t " << "elements\t " << "dofs\t " << "error\t " << endl;
+  dataFile << "ref\t " << "iterations\t " << "elements\t " << "dofs\t " << "error\t " << "solvetime\t" << endl;
   for (int refIndex=0; refIndex <= numRefs; refIndex++)
   {
+    solverTime->start(true);
     Teuchos::RCP<GMGSolver> gmgSolver;
-    if (solverChoice == 0)
+    if (solverChoice == "GMG-Direct")
     {
-      gmgSolver = Teuchos::rcp( new GMGSolver(soln, k0Mesh, maxIters, solverTolerance, kluSolver, useStaticCondensation));
-      gmgSolver->setAztecOutput(azOutput);
+      solvers["GMG-Direct"] = Teuchos::rcp( new GMGSolver(soln, k0Mesh, maxIters, solverTolerance, solvers["KLU"], useStaticCondensation));
+      dynamic_cast<GMGSolver*>(solvers["GMG-Direct"].get())->setAztecOutput(azOutput);
+      GMGOperator gmgOperator = dynamic_cast<GMGSolver*>(solvers["GMG-Direct"].get())->gmgOperator();
+      gmgOperator.setSchwarzFactorizationType(GMGOperator::Direct);
     }
-    switch(solverChoice)
+    if (solverChoice == "GMG-ILU")
     {
-    case 0:
-      soln->solve(gmgSolver);
-      break;
-    case 1:
-      soln->condensedSolve(kluSolver);
-      break;
-    case 2:
-      soln->condensedSolve(superluSolver);
-      break;
+      solvers["GMG-ILU"] = Teuchos::rcp( new GMGSolver(soln, k0Mesh, maxIters, solverTolerance, solvers["KLU"], useStaticCondensation));
+      dynamic_cast<GMGSolver*>(solvers["GMG-ILU"].get())->setAztecOutput(azOutput);
+      GMGOperator gmgOperator = dynamic_cast<GMGSolver*>(solvers["GMG-ILU"].get())->gmgOperator();
+      gmgOperator.setSchwarzFactorizationType(GMGOperator::ILU);
     }
+    if (solverChoice == "GMG-IC")
+    {
+      solvers["GMG-IC"] = Teuchos::rcp( new GMGSolver(soln, k0Mesh, maxIters, solverTolerance, solvers["KLU"], useStaticCondensation));
+      dynamic_cast<GMGSolver*>(solvers["GMG-IC"].get())->setAztecOutput(azOutput);
+      GMGOperator gmgOperator = dynamic_cast<GMGSolver*>(solvers["GMG-IC"].get())->gmgOperator();
+      gmgOperator.setSchwarzFactorizationType(GMGOperator::IC);
+    }
+    soln->solve(solvers[solverChoice]);
+    double solveTime = solverTime->stop();
 
     double energyError = soln->energyErrorTotal();
     if (commRank == 0)
     {
       // if (refIndex > 0)
       // refStrategy.printRefinementStatistics(refIndex-1);
-      if (solverChoice == 0)
+      if (solverChoice[0] == 'G')
       {
         cout << "Refinement:\t " << refIndex
              << " \tIteration Count:\t " << gmgSolver->iterationCount()
              << " \tElements:\t " << mesh->numActiveElements()
              << " \tDOFs:\t " << mesh->numGlobalDofs()
-             << " \tEnergy Error:\t " << energyError << endl;
+             << " \tEnergy Error:\t " << energyError
+             << " \tSolve Time:\t " << solveTime
+             << endl;
         dataFile << refIndex
                  << " " << gmgSolver->iterationCount()
                  << " " << mesh->numActiveElements()
                  << " " << mesh->numGlobalDofs()
-                 << " " << energyError << endl;
+                 << " " << energyError
+                 << " " << solveTime
+                 << endl;
       }
       else
       {
         cout << "Refinement:\t " << refIndex
              << " \tElements:\t " << mesh->numActiveElements()
              << " \tDOFs:\t " << mesh->numGlobalDofs()
-             << " \tEnergy Error:\t " << energyError << endl;
+             << " \tEnergy Error:\t " << energyError
+             << " \tSolve Time:\t " << solveTime
+             << endl;
+        dataFile << refIndex
+                 << " " << mesh->numActiveElements()
+                 << " " << mesh->numGlobalDofs()
+                 << " " << energyError
+                 << " " << solveTime
+                 << endl;
       }
     }
 
