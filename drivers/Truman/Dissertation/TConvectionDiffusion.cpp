@@ -148,10 +148,12 @@ int main(int argc, char *argv[])
 
   Teuchos::RCP<Time> solverTime = Teuchos::TimeMonitor::getNewCounter("Solve Time");
 
+  if (commRank == 0)
+    Solver::printAvailableSolversReport();
   map<string, SolverPtr> solvers;
   solvers["KLU"] = Solver::getSolver(Solver::KLU, true);
   // SolverPtr superluSolver = Solver::getSolver(Solver::SuperLUDist, true);
-  int maxIters = 10000;
+  int maxIters = 2000;
   bool useStaticCondensation = false;
   int azOutput = 20; // print residual every 20 CG iterations
 
@@ -174,7 +176,7 @@ int main(int argc, char *argv[])
       soln->solve(gmgSolver);
     }
     else
-      soln->condensedSolve(solvers["KLU"]);
+      soln->condensedSolve(solvers[solverChoice]);
     double solveTime = solverTime->stop();
 
     double energyError = soln->energyErrorTotal();

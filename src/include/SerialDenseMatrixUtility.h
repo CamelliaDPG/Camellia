@@ -52,13 +52,13 @@ public:
       transposeSquareMatrix(A); // FCs are in row-major order, so we swap for compatibility with SDM
     }
 
-    Epetra_SerialDenseMatrix AMatrix(Copy,
+    Epetra_SerialDenseMatrix AMatrix(::Copy,
                                      &A(0,0),
                                      A.dimension(1),
                                      A.dimension(1),
                                      A.dimension(0)); // stride -- fc stores in row-major order (a.o.t. SDM)
 
-    Epetra_SerialDenseVector bVector(Copy,
+    Epetra_SerialDenseVector bVector(::Copy,
                                      &b(0),
                                      b.dimension(0));
 
@@ -130,7 +130,7 @@ public:
       transposeSquareMatrix(A); // FCs are in row-major order, so we swap for compatibility with SDM
     }
 
-    Epetra_SerialDenseMatrix AMatrix(Copy,
+    Epetra_SerialDenseMatrix AMatrix(::Copy,
                                      &A(0,0),
                                      A.dimension(0),
                                      A.dimension(1),
@@ -233,7 +233,7 @@ public:
 
     transposeSquareMatrix(A); // FCs are in row-major order, so we swap for compatibility with SDM
 
-    Epetra_SerialDenseMatrix AMatrix(Copy,
+    Epetra_SerialDenseMatrix AMatrix(::Copy,
                                      &A(0,0),
                                      A.dimension(0),
                                      A.dimension(1),
@@ -286,7 +286,7 @@ public:
       transposeSquareMatrix(A); // FCs are in row-major order, so we swap for compatibility with SDM
     }
 
-    Epetra_SerialDenseMatrix AMatrix(Copy,
+    Epetra_SerialDenseMatrix AMatrix(::Copy,
                                      &A(0,0),
                                      A.dimension(0),
                                      A.dimension(1),

@@ -28,6 +28,8 @@
 // #include <Tpetra_Map.hpp>
 // #include <Tpetra_MultiVector.hpp>
 // #include <Tpetra_CrsMatrix.hpp>
+
+#include "Amesos_config.h"
 #include "Amesos2.hpp"
 
 using namespace std;
@@ -100,14 +102,16 @@ public:
     SimpleML,
     GMGSolver_1_Level_h
   };
-
+  
   static TSolverPtr<Scalar> getSolver(SolverChoice choice, bool saveFactorization,
                                       double residualTolerance = 1e-12, int maxIterations = 50000,
                                       TSolutionPtr<double> fineSolution = Teuchos::null, MeshPtr coarseMesh = Teuchos::null,
                                       TSolverPtr<Scalar> coarseSolver = Teuchos::null);
 
   static TSolverPtr<Scalar> getDirectSolver(bool saveFactorization=false);
-
+  
+  static void printAvailableSolversReport();
+  
   static SolverChoice solverChoiceFromString(std::string choiceString)
   {
     if (choiceString=="KLU") return KLU;

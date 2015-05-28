@@ -209,17 +209,17 @@ void BilinearFormUtility<Scalar>::computeStiffnessMatrix(FieldContainer<Scalar> 
 
   for (int cellIndex=0; cellIndex < numCells; cellIndex++)
   {
-    Epetra_SerialDenseMatrix weightsT(Copy,
+    Epetra_SerialDenseMatrix weightsT(::Copy,
                                       &optimalTestWeights(cellIndex,0,0),
                                       optimalTestWeights.dimension(2), // stride
                                       optimalTestWeights.dimension(2),optimalTestWeights.dimension(1));
 
-    Epetra_SerialDenseMatrix ipMatrixT(Copy,
+    Epetra_SerialDenseMatrix ipMatrixT(::Copy,
                                        &innerProductMatrix(cellIndex,0,0),
                                        innerProductMatrix.dimension(2), // stride
                                        innerProductMatrix.dimension(2),innerProductMatrix.dimension(1));
 
-    Epetra_SerialDenseMatrix   stiffT (View,
+    Epetra_SerialDenseMatrix   stiffT (::View,
                                        &stiffness(cellIndex,0,0),
                                        stiffness.dimension(2), // stride
                                        stiffness.dimension(2),stiffness.dimension(1));
