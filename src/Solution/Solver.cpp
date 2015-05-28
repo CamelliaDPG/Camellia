@@ -18,6 +18,21 @@
 using namespace Camellia;
 
 template <typename Scalar>
+void TSolver<Scalar>::printAvailableSolversReport()
+{
+  cout << "Available solvers:\n";
+  cout << solverChoiceString(KLU) << endl;
+#if defined(HAVE_AMESOS_SUPERLUDIST) || defined(HAVE_AMESOS2_SUPERLUDIST)
+  cout << solverChoiceString(SuperLUDist) << endl;
+#endif
+#ifdef HAVE_AMESOS_MUMPS
+  cout << solverChoiceString(MUMPS) << endl;
+#endif
+  cout << solverChoiceString(SimpleML) << endl;
+  cout << solverChoiceString(GMGSolver_1_Level_h) << endl;
+}
+
+template <typename Scalar>
 TSolverPtr<Scalar> TSolver<Scalar>::getSolver(SolverChoice choice, bool saveFactorization,
     double residualTolerance, int maxIterations,
     TSolutionPtr<double> fineSolution, MeshPtr coarseMesh,
@@ -62,9 +77,8 @@ TSolverPtr<Scalar> TSolver<Scalar>::getSolver(SolverChoice choice, bool saveFact
 }
 
 template <typename Scalar>
-TSolverPtr<Scalar> TSolver<Scalar>::getDirectSolver(bool saveFactorization)
-{
-#if defined(HAVE_AMESOS_SUPERLUDIST) || defined(HAVE_AMESOS2_SUPERLUDIST)
+TSolverPtr<Scalar> TSolver<Scalar>::getDirectSolver(bool saveFactorization) {
+#if defined(HAVE_AMESOS_SUPERLUDIST)
   return getSolver(TSolver<Scalar>::SuperLUDist, saveFactorization);
 #elif defined(HAVE_AMESOS_MUMPS)
   return getSolver(TSolver<Scalar>::MUMPS, saveFactorization);
