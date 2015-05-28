@@ -15,54 +15,57 @@
 
 using namespace std;
 
-namespace Camellia
-{
-// class RefinementPattern;
-// typedef Teuchos::RCP<RefinementPattern> RefinementPatternPtr;
-typedef vector< pair<RefinementPattern*, unsigned> > RefinementBranch; //unsigned: the child ordinal; order is from coarse to fine
-typedef vector< pair<RefinementPattern*, vector<unsigned> > > RefinementPatternRecipe;
+namespace Camellia {
+  // class RefinementPattern;
+  // typedef Teuchos::RCP<RefinementPattern> RefinementPatternPtr;
+  typedef vector< pair<RefinementPattern*, unsigned> > RefinementBranch; //unsigned: the child ordinal; order is from coarse to fine
+  typedef vector< pair<RefinementPattern*, vector<unsigned> > > RefinementPatternRecipe;
 
-struct RefinementBranchTier
-{
-  CellTopoPtr previousTierTopo;          // topology of the previous tier
-  unsigned rootDimension;                // dimension of the root of this tier
-  unsigned previousTierSubcellOrdinal;   // ordinal of the root of this tier in the leaf of the previous tier
-  RefinementBranch refBranch;            // refinement branch for the tier
-  unsigned leafSubcellDimension;         // leaf subcell dimension
-  unsigned leafSubcellOrdinal;           // subcell ordinal in the refBranch's leaf
-  unsigned leafSubcellPermutation;       // ordinal of the permutation that takes the leaf nodes as seen by refBranch to their order in topmost (volume) topology
-};
+  struct RefinementBranchTier
+  {
+    CellTopoPtr previousTierTopo;          // topology of the previous tier
+    unsigned rootDimension;                // dimension of the root of this tier
+    unsigned previousTierSubcellOrdinal;   // ordinal of the root of this tier in the leaf of the previous tier
+    RefinementBranch refBranch;            // refinement branch for the tier
+    unsigned leafSubcellDimension;         // leaf subcell dimension
+    unsigned leafSubcellOrdinal;           // subcell ordinal in the refBranch's leaf
+    unsigned leafSubcellPermutation;       // ordinal of the permutation that takes the leaf nodes as seen by refBranch to their order in topmost (volume) topology
+  };
+  
+  typedef std::vector<RefinementBranchTier> GeneralizedRefinementBranch; // allows mapping child points that may fall inside a volume, e.g.
+  
+  class RefinementPattern {
+    MeshTopologyPtr _refinementTopology;
 
-typedef std::vector<RefinementBranchTier> GeneralizedRefinementBranch; // allows mapping child points that may fall inside a volume, e.g.
+    CellTopoPtr _cellTopoPtr;
+    Intrepid::FieldContainer<double> _nodes;
+    vector< vector< unsigned > > _subCells;
+    Intrepid::FieldContainer<double> _vertices;
 
-class RefinementPattern
-{
-  MeshTopologyPtr _refinementTopology;
+    vector< CellTopoPtr > _childTopos;
 
-  CellTopoPtr _cellTopoPtr;
-  Intrepid::FieldContainer<double> _nodes;
-  vector< vector< unsigned > > _subCells;
-  Intrepid::FieldContainer<double> _vertices;
+    vector< vector< Teuchos::RCP<RefinementPattern> > > _patternForSubcell;
+    vector< RefinementPatternRecipe > _relatedRecipes;
+    vector< Teuchos::RCP<RefinementPattern> > _sideRefinementPatterns;
+    vector< vector< pair< unsigned, unsigned> > > _childrenForSides; // parentSide --> vector< pair(childIndex, childSideIndex) >
 
-  vector< CellTopoPtr > _childTopos;
+    vector< vector<unsigned> > _sideRefinementChildIndices; // maps from index of child in side refinement to the index in volume refinement pattern
 
-  vector< vector< Teuchos::RCP<RefinementPattern> > > _patternForSubcell;
-  vector< RefinementPatternRecipe > _relatedRecipes;
-  vector< Teuchos::RCP<RefinementPattern> > _sideRefinementPatterns;
-  vector< vector< pair< unsigned, unsigned> > > _childrenForSides; // parentSide --> vector< pair(childIndex, childSideIndex) >
+    // map goes from (childIndex,childSideIndex) --> parentSide (essentially the inverse of the _childrenForSides)
+    map< pair<unsigned,unsigned>, unsigned> _parentSideForChildSide;
+    bool colinear(const vector<double> &v1_outside, const vector<double> &v2_outside, const vector<double> &v3_maybe_inside);
 
-  vector< vector<unsigned> > _sideRefinementChildIndices; // maps from index of child in side refinement to the index in volume refinement pattern
+    double distance(const vector<double> &v1, const vector<double> &v2);
 
-  // map goes from (childIndex,childSideIndex) --> parentSide (essentially the inverse of the _childrenForSides)
-  map< pair<unsigned,unsigned>, unsigned> _parentSideForChildSide;
-  bool colinear(const vector<double> &v1_outside, const vector<double> &v2_outside, const vector<double> &v3_maybe_inside);
-
-  double distance(const vector<double> &v1, const vector<double> &v2);
-
-  static map< pair<unsigned,unsigned>, Teuchos::RCP<RefinementPattern> > _refPatternForKeyTensorialDegree;
-public:
-  RefinementPattern(CellTopoPtr cellTopoPtr, Intrepid::FieldContainer<double> refinedNodes,
-                    vector< Teuchos::RCP<RefinementPattern> > sideRefinementPatterns);
+    static map< pair<unsigned,unsigned>, Teuchos::RCP<RefinementPattern> > _refPatternForKeyTensorialDegree;
+    
+    void determineChildSubcellInfoInSubcellRefinement(unsigned &childSubcellDimension, unsigned &childSubcellOrdinal,
+                                                      unsigned &childSubcellPermutation, unsigned &subcellRefChild,
+                                                      unsigned subcdim, unsigned subcord, unsigned childOrdinal,
+                                                      bool preferSubcellsBelongingToVolumeChild);
+  public:
+    RefinementPattern(CellTopoPtr cellTopoPtr, Intrepid::FieldContainer<double> refinedNodes,
+                      vector< Teuchos::RCP<RefinementPattern> > sideRefinementPatterns);
   //  RefinementPattern(Teuchos::RCP< shards::CellTopology > shardsTopoPtr, Intrepid::FieldContainer<double> refinedNodes,
   //                    vector< Teuchos::RCP<RefinementPattern> > sideRefinementPatterns);
 
