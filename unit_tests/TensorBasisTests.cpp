@@ -192,9 +192,9 @@ void sizeFCForBasisValues(FC &values, BasisPtr basis, int numPoints, Intrepid::E
   }
 }
 
-void testBasisOrdinalsForSubcell(CellTopoPtr spaceTopo, bool useHGRADInTime, Teuchos::FancyOStream &out, bool &success)
+void testBasisOrdinalsForSubcell(CellTopoPtr spaceTopo, bool useHGRADInTime, int spaceH1Order, int timeH1Order,
+                                 Teuchos::FancyOStream &out, bool &success)
 {
-  int timeH1Order = 2, spaceH1Order = 2;
   CellTopoPtr line = CellTopology::line();
 
   BasisFactoryPtr basisFactory = BasisFactory::basisFactory();
@@ -439,84 +439,96 @@ TEUCHOS_UNIT_TEST( TensorBasis, BasisOrdinalsForSubcell_HGRADInTime_Point )
 {
   CellTopoPtr spaceTopo = CellTopology::point();
   bool useHGRADForTime = true;
-  testBasisOrdinalsForSubcell(spaceTopo, useHGRADForTime, out, success);
+  int spaceH1Order = 2, timeH1Order = 2;
+  testBasisOrdinalsForSubcell(spaceTopo, useHGRADForTime, spaceH1Order, timeH1Order, out, success);
 }
 
 TEUCHOS_UNIT_TEST( TensorBasis, BasisOrdinalsForSubcell_HGRADInTime_Line )
 {
   CellTopoPtr spaceTopo = CellTopology::line();
   bool useHGRADForTime = true;
-  testBasisOrdinalsForSubcell(spaceTopo, useHGRADForTime, out, success);
+  int spaceH1Order = 2, timeH1Order = 2;
+  testBasisOrdinalsForSubcell(spaceTopo, useHGRADForTime, spaceH1Order, timeH1Order, out, success);
 }
 
 TEUCHOS_UNIT_TEST( TensorBasis, BasisOrdinalsForSubcell_HGRADInTime_Quad )
 {
   CellTopoPtr spaceTopo = CellTopology::quad();
   bool useHGRADForTime = true;
-  testBasisOrdinalsForSubcell(spaceTopo, useHGRADForTime, out, success);
+  int spaceH1Order = 2, timeH1Order = 2;
+  testBasisOrdinalsForSubcell(spaceTopo, useHGRADForTime, spaceH1Order, timeH1Order, out, success);
 }
 
 TEUCHOS_UNIT_TEST( TensorBasis, BasisOrdinalsForSubcell_HGRADInTime_Triangle )
 {
   CellTopoPtr spaceTopo = CellTopology::triangle();
   bool useHGRADForTime = true;
-  testBasisOrdinalsForSubcell(spaceTopo, useHGRADForTime, out, success);
+  int spaceH1Order = 2, timeH1Order = 2;
+  testBasisOrdinalsForSubcell(spaceTopo, useHGRADForTime, spaceH1Order, timeH1Order, out, success);
 }
 
 TEUCHOS_UNIT_TEST( TensorBasis, BasisOrdinalsForSubcell_HGRADInTime_Hexahedron )
 {
   CellTopoPtr spaceTopo = CellTopology::hexahedron();
   bool useHGRADForTime = true;
-  testBasisOrdinalsForSubcell(spaceTopo, useHGRADForTime, out, success);
+  int spaceH1Order = 2, timeH1Order = 2;
+  testBasisOrdinalsForSubcell(spaceTopo, useHGRADForTime, spaceH1Order, timeH1Order, out, success);
 }
 
 TEUCHOS_UNIT_TEST( TensorBasis, BasisOrdinalsForSubcell_HGRADInTime_Tetrahedron )
 {
   CellTopoPtr spaceTopo = CellTopology::tetrahedron();
   bool useHGRADForTime = true;
-  testBasisOrdinalsForSubcell(spaceTopo, useHGRADForTime, out, success);
+  int spaceH1Order = 2, timeH1Order = 2;
+  testBasisOrdinalsForSubcell(spaceTopo, useHGRADForTime, spaceH1Order, timeH1Order, out, success);
 }
 
 TEUCHOS_UNIT_TEST( TensorBasis, BasisOrdinalsForSubcell_HVOLInTime_Point )
 {
   CellTopoPtr spaceTopo = CellTopology::point();
   bool useHGRADForTime = false;
-  testBasisOrdinalsForSubcell(spaceTopo, useHGRADForTime, out, success);
+  int spaceH1Order = 2, timeH1Order = 2;
+  testBasisOrdinalsForSubcell(spaceTopo, useHGRADForTime, spaceH1Order, timeH1Order, out, success);
 }
 
 TEUCHOS_UNIT_TEST( TensorBasis, BasisOrdinalsForSubcell_HVOLInTime_Line )
 {
   CellTopoPtr spaceTopo = CellTopology::line();
   bool useHGRADForTime = false;
-  testBasisOrdinalsForSubcell(spaceTopo, useHGRADForTime, out, success);
+  int spaceH1Order = 2, timeH1Order = 2;
+  testBasisOrdinalsForSubcell(spaceTopo, useHGRADForTime, spaceH1Order, timeH1Order, out, success);
 }
 
 TEUCHOS_UNIT_TEST( TensorBasis, BasisOrdinalsForSubcell_HVOLInTime_Quad )
 {
   CellTopoPtr spaceTopo = CellTopology::quad();
   bool useHGRADForTime = false;
-  testBasisOrdinalsForSubcell(spaceTopo, useHGRADForTime, out, success);
+  int spaceH1Order = 2, timeH1Order = 2;
+  testBasisOrdinalsForSubcell(spaceTopo, useHGRADForTime, spaceH1Order, timeH1Order, out, success);
 }
 
 TEUCHOS_UNIT_TEST( TensorBasis, BasisOrdinalsForSubcell_HVOLInTime_Triangle )
 {
   CellTopoPtr spaceTopo = CellTopology::triangle();
   bool useHGRADForTime = false;
-  testBasisOrdinalsForSubcell(spaceTopo, useHGRADForTime, out, success);
+  int spaceH1Order = 2, timeH1Order = 2;
+  testBasisOrdinalsForSubcell(spaceTopo, useHGRADForTime, spaceH1Order, timeH1Order, out, success);
 }
 
 TEUCHOS_UNIT_TEST( TensorBasis, BasisOrdinalsForSubcell_HVOLInTime_Hexahedron )
 {
   CellTopoPtr spaceTopo = CellTopology::hexahedron();
   bool useHGRADForTime = false;
-  testBasisOrdinalsForSubcell(spaceTopo, useHGRADForTime, out, success);
+  int spaceH1Order = 2, timeH1Order = 2;
+  testBasisOrdinalsForSubcell(spaceTopo, useHGRADForTime, spaceH1Order, timeH1Order, out, success);
 }
 
 TEUCHOS_UNIT_TEST( TensorBasis, BasisOrdinalsForSubcell_HVOLInTime_Tetrahedron )
 {
   CellTopoPtr spaceTopo = CellTopology::tetrahedron();
   bool useHGRADForTime = false;
-  testBasisOrdinalsForSubcell(spaceTopo, useHGRADForTime, out, success);
+  int spaceH1Order = 2, timeH1Order = 2;
+  testBasisOrdinalsForSubcell(spaceTopo, useHGRADForTime, spaceH1Order, timeH1Order, out, success);
 }
 
 TEUCHOS_UNIT_TEST( TensorBasis, GetTensorValues )
