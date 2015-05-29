@@ -394,13 +394,6 @@ void testCoarseBasisEqualsWeightedFineBasis(MeshPtr mesh, Teuchos::FancyOStream 
             map<GlobalIndexType,double> coarseGlobalValues;
             for (auto subBasisMap : coarseBasisMap)
             {
-              {
-                // DEBUGGING
-                if ((cellID==16) && (sideOrdinal==2) && (subcdim==0) && (subcord==1))
-                {
-                  cout << "Set breakpoint here.\n";
-                }
-              }
               GeneralizedRefinementBranch genRefBranch = RefinementPattern::generalizedRefinementBranchForLeafSubcell(cellRefinementBranch, subcdim, subcordInCell);
               // genRefBranch will end in volume topology; we want it to end in the constraining subcell topology:
               CellTopoPtr ancestralCellTopo = genRefBranch[0].previousTierTopo;
