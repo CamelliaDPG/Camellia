@@ -79,7 +79,7 @@ const Teuchos::RCP< Camellia::Basis<Scalar, ArrayScalar> > TensorBasis<Scalar, A
 template<class Scalar, class ArrayScalar>
 int TensorBasis<Scalar,ArrayScalar>::getDegree() const
 {
-  return _spatialBasis->getDegree();
+  return max(_spatialBasis->getDegree(), _temporalBasis->getDegree());
 }
 
 template<class Scalar, class ArrayScalar>
