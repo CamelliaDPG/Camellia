@@ -222,11 +222,13 @@ SubBasisReconciliationWeights BasisReconciliation::composedSubBasisReconciliatio
   return filterOutZeroRowsAndColumns(cWeights);
 }
 
-SubBasisReconciliationWeights BasisReconciliation::computeConstrainedWeights(unsigned int subcellDimension,
-    BasisPtr finerBasis, unsigned int finerBasisSubcellOrdinal,
-    RefinementBranch &refinements,
-    BasisPtr coarserBasis, unsigned int coarserBasisSubcellOrdinal,
-    unsigned int vertexNodePermutation)
+SubBasisReconciliationWeights BasisReconciliation::computeConstrainedWeights(unsigned subcellDimension,
+                                                                             BasisPtr finerBasis,
+                                                                             unsigned finerBasisSubcellOrdinal,
+                                                                             RefinementBranch &refinements,
+                                                                             BasisPtr coarserBasis,
+                                                                             unsigned coarserBasisSubcellOrdinal,
+                                                                             unsigned vertexNodePermutation)
 {
   SubBasisReconciliationWeights weights;
 
@@ -328,7 +330,8 @@ SubBasisReconciliationWeights BasisReconciliation::computeConstrainedWeights(uns
     }
     else
     {
-      CamelliaCellTools::mapToReferenceSubcell(fineVolumeCubaturePoints, fineSubcellCubaturePoints, subcellDimension, finerBasisSubcellOrdinal, fineTopo);
+      CamelliaCellTools::mapToReferenceSubcell(fineVolumeCubaturePoints, fineSubcellCubaturePoints, subcellDimension,
+                                               finerBasisSubcellOrdinal, fineTopo);
     }
 
     // now, fineSubcellCache's physicalCubaturePoints are exactly the ones in the ancestral subcell
@@ -399,7 +402,7 @@ SubBasisReconciliationWeights BasisReconciliation::computeConstrainedWeights(uns
   BasisCachePtr coarseVolumeCache = BasisCache::basisCacheForCellTopology(coarseTopo, cubDegree, coarseTopoRefNodes);
   coarseTopoRefNodes.resize(coarseTopoRefNodes.dimension(1),coarseTopoRefNodes.dimension(2));
   coarseVolumeCache->setRefCellPoints(coarseVolumeCubaturePoints);
-
+  
   int numPoints = cubatureWeights.size();
 
   Teuchos::RCP< const FieldContainer<double> > finerBasisValues = fineVolumeCache->getTransformedValues(finerBasis, OP_VALUE, false);
@@ -415,8 +418,12 @@ SubBasisReconciliationWeights BasisReconciliation::computeConstrainedWeights(uns
   filterFCValues(fineBasisValuesFilteredWeighted, *(finerBasisValuesWeighted.get()), weights.fineOrdinals, finerBasis->getCardinality());
   filterFCValues(coarserBasisValuesFiltered, *(coarserBasisValues.get()), weights.coarseOrdinals, coarserBasis->getCardinality());
 
-  //  cout << "fineBasisValues:\n" << *finerBasisValues;
-  //  cout << "fineBasisValuesFiltered:\n" << fineBasisValuesFiltered;
+//  cout << "fineBasisValues:\n" << *finerBasisValues;
+//  cout << "fineBasisValuesFiltered:\n" << fineBasisValuesFiltered;
+//  cout << "finerBasisValuesWeighted:\n" << *finerBasisValuesWeighted;
+//  cout << "fineBasisValuesFilteredWeighted:\n" << fineBasisValuesFilteredWeighted;
+//  cout << "coarserBasisValues:\n" << *coarserBasisValues;
+//  cout << "coarserBasisValuesFiltered:\n" << coarserBasisValuesFiltered;
 
   FieldContainer<double> lhsValues(1,weights.fineOrdinals.size(),weights.fineOrdinals.size());
   FieldContainer<double> rhsValues(1,weights.fineOrdinals.size(),weights.coarseOrdinals.size());
@@ -427,9 +434,23 @@ SubBasisReconciliationWeights BasisReconciliation::computeConstrainedWeights(uns
   lhsValues.resize(lhsValues.dimension(1),lhsValues.dimension(2));
   rhsValues.resize(rhsValues.dimension(1),rhsValues.dimension(2));
 
+//  cout << "lhsValues:\n" << lhsValues;
+//  cout << "rhsValues:\n" << rhsValues;
+  
   weights.weights.resize(weights.fineOrdinals.size(), weights.coarseOrdinals.size());
 
-  SerialDenseMatrixUtility::solveSystemMultipleRHS(weights.weights, lhsValues, rhsValues);
+//  SerialDenseMatrixUtility::solveSystemMultipleRHS(weights.weights, lhsValues, rhsValues);
+  
+  int err = SerialDenseWrapper::solveSystemMultipleRHS(weights.weights, lhsValues, rhsValues);
+  if (err != 0)
+  {
+    cout << "ERROR: solve for BasisReconciliation returned error code " << err << endl;
+    cout << "lhsValues:\n" << lhsValues;
+    cout << "rhsValues:\n" << rhsValues;
+    TEUCHOS_TEST_FOR_EXCEPTION(true, std::invalid_argument, "solve for BasisReconciliation returned error code.");
+  }
+  
+//  cout << weights.weights;
 
   return weights;
 }
@@ -514,7 +535,16 @@ SubBasisReconciliationWeights BasisReconciliation::computeConstrainedWeights(uns
 
   weights.weights.resize(weights.fineOrdinals.size(), weights.coarseOrdinals.size());
 
-  SerialDenseMatrixUtility::solveSystemMultipleRHS(weights.weights, lhsValues, rhsValues);
+//  SerialDenseMatrixUtility::solveSystemMultipleRHS(weights.weights, lhsValues, rhsValues);
+  
+  int err = SerialDenseWrapper::solveSystemMultipleRHS(weights.weights, lhsValues, rhsValues);
+  if (err != 0)
+  {
+    cout << "ERROR: solve for BasisReconciliation returned error code " << err << endl;
+    cout << "lhsValues:\n" << lhsValues;
+    cout << "rhsValues:\n" << rhsValues;
+    TEUCHOS_TEST_FOR_EXCEPTION(true, std::invalid_argument, "solve for BasisReconciliation returned error code.");
+  }
 
   return weights;
 }
@@ -622,8 +652,16 @@ SubBasisReconciliationWeights BasisReconciliation::computeConstrainedWeightsForT
 //  cout << "lhsValues:\n" << lhsValues;
 //  cout << "rhsValues:\n" << rhsValues;
 
-  SerialDenseMatrixUtility::solveSystemMultipleRHS(weights.weights, lhsValues, rhsValues);
-
+//  SerialDenseMatrixUtility::solveSystemMultipleRHS(weights.weights, lhsValues, rhsValues);
+  
+  int err = SerialDenseWrapper::solveSystemMultipleRHS(weights.weights, lhsValues, rhsValues);
+  if (err != 0)
+  {
+    cout << "ERROR: solve for BasisReconciliation returned error code " << err << endl;
+    cout << "lhsValues:\n" << lhsValues;
+    cout << "rhsValues:\n" << rhsValues;
+    TEUCHOS_TEST_FOR_EXCEPTION(true, std::invalid_argument, "solve for BasisReconciliation returned error code.");
+  }
   return weights;
 }
 
@@ -664,10 +702,10 @@ const SubBasisReconciliationWeights & BasisReconciliation::constrainedWeights(Ba
 }
 
 const SubBasisReconciliationWeights & BasisReconciliation::constrainedWeights(unsigned subcellDimension,
-    BasisPtr finerBasis, unsigned finerBasisSubcellOrdinal,
-    RefinementBranch &refinements,
-    BasisPtr coarserBasis, unsigned coarserBasisSubcellOrdinal,
-    unsigned vertexNodePermutation)
+                                                                              BasisPtr finerBasis, unsigned finerBasisSubcellOrdinal,
+                                                                              RefinementBranch &refinements,
+                                                                              BasisPtr coarserBasis, unsigned coarserBasisSubcellOrdinal,
+                                                                              unsigned vertexNodePermutation)
 {
 
   SubcellBasisRestriction fineBasisRestriction = make_pair(finerBasis.get(), make_pair(subcellDimension, finerBasisSubcellOrdinal) );
@@ -679,7 +717,12 @@ const SubBasisReconciliationWeights & BasisReconciliation::constrainedWeights(un
   if (_subcellReconcilationWeights.find(cacheKey) == _subcellReconcilationWeights.end())
   {
     _subcellReconcilationWeights[cacheKey] = computeConstrainedWeights(subcellDimension, finerBasis, finerBasisSubcellOrdinal, refinements,
-        coarserBasis, coarserBasisSubcellOrdinal, vertexNodePermutation);
+                                                                       coarserBasis, coarserBasisSubcellOrdinal, vertexNodePermutation);
+    // unnecessary copy added for debugging purposes:
+//    SubBasisReconciliationWeights weights = computeConstrainedWeights(subcellDimension, finerBasis, finerBasisSubcellOrdinal, refinements,
+//                                                                      coarserBasis, coarserBasisSubcellOrdinal, vertexNodePermutation);
+//    cout << "weights.weights:\n" << weights.weights;
+//    _subcellReconcilationWeights[cacheKey] = weights;
   }
 
   return _subcellReconcilationWeights[cacheKey];
