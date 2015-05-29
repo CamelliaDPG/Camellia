@@ -416,7 +416,7 @@ void GDAMinimumRule::interpretGlobalCoefficients(GlobalIndexType cellID, Intrepi
   vector<GlobalIndexType> globalIndexVector = dofMapper->globalIndices();
 
   // DEBUGGING
-//  if (cellID==4) {
+//  if (cellID==0) {
 //    cout << "interpretGlobalData, mapping report for cell " << cellID << ":\n";
 //    dofMapper->printMappingReport();
 //  }
@@ -607,8 +607,9 @@ void GDAMinimumRule::interpretLocalBasisCoefficients(GlobalIndexType cellID, int
 //  dofMapper->printMappingReport();
 
   // DEBUGGING:
-//  if ((cellID==2) && (varID==0) && (sideOrdinal==3)) {
+//  if ((cellID==0) && (varID==2) && (sideOrdinal==3)) {
 //    cout << "(cellID==2) && (varID==0) && (sideOrdinal==3).\n";
+//    dofMapper->printMappingReport();
 //  }
 
   // the new, right way to do this:
@@ -1076,9 +1077,9 @@ BasisMap GDAMinimumRule::getBasisMapOld(GlobalIndexType cellID, SubCellDofIndexI
   SubBasisMapInfo subBasisMap;
 
 //  const static int DEBUG_VAR_ID = 2;
-//  const static GlobalIndexType DEBUG_CELL_ID = 16;
+//  const static GlobalIndexType DEBUG_CELL_ID = 0;
 //  const static unsigned DEBUG_SIDE_ORDINAL = 2;
-//  const static GlobalIndexType DEBUG_GLOBAL_DOF = 8;
+//  const static GlobalIndexType DEBUG_GLOBAL_DOF = -3;
 
   const static int DEBUG_VAR_ID = -1;
   const static GlobalIndexType DEBUG_CELL_ID = -1;
@@ -1216,12 +1217,6 @@ BasisMap GDAMinimumRule::getBasisMapOld(GlobalIndexType cellID, SubCellDofIndexI
             cout << CamelliaCellTools::entityTypeString(subcellInfo.dimension) << " " << appliedConstraintSubcellEntityIndex;
             cout << " constrained by " << CamelliaCellTools::entityTypeString(subcellConstraint.dimension) << " " << constrainingSubcellEntityIndex;
             cout << endl;
-          }
-          // a particular case I'm debugging right now:
-          if ((subcellInfo.dimension == 1) && (appliedConstraintSubcellEntityIndex == 91)
-              && (subcellConstraint.dimension == 2) && (constrainingSubcellEntityIndex == 7))
-          {
-            cout << "Breakpoint for debugger.\n";
           }
         }
 
@@ -1418,11 +1413,20 @@ BasisMap GDAMinimumRule::getBasisMapOld(GlobalIndexType cellID, SubCellDofIndexI
           unsigned ancestralToConstrainingPermutation = CamelliaCellTools::permutationComposition(constrainingTopo, ancestralPermutationInverse, constrainingPermutation);
 
           SubBasisReconciliationWeights newWeightsToApply = _br.constrainedWeights(d, appliedConstraintBasis,
-              subcellInfo.subcellOrdinal,
-              sideRefinements, constrainingBasis,
-              subcellConstraint.subcellOrdinal,
-              ancestralToConstrainingPermutation);
+                                                                                   subcellInfo.subcellOrdinal,
+                                                                                   sideRefinements, constrainingBasis,
+                                                                                   subcellConstraint.subcellOrdinal,
+                                                                                   ancestralToConstrainingPermutation);
 
+          // DEBUGGING
+          if ((cellID==DEBUG_CELL_ID) && (sideOrdinal==DEBUG_SIDE_ORDINAL) && (var->ID()==DEBUG_VAR_ID))
+          {
+            cout << "newWeightsToApply:\n";
+            Camellia::print("newWeightsToApply fine ordinals", newWeightsToApply.fineOrdinals);
+            Camellia::print("newWeightsToApply coarse ordinals", newWeightsToApply.coarseOrdinals);
+            cout << "newWeightsToApply weights:\n" << newWeightsToApply.weights;
+          }
+          
           // compose the new weights with existing weights for this subcell
           composedWeights = BasisReconciliation::composedSubBasisReconciliationWeights(prevWeights, newWeightsToApply);
 
@@ -2313,6 +2317,13 @@ set<GlobalIndexType> GDAMinimumRule::getGlobalDofIndicesForIntegralContribution(
 
 LocalDofMapperPtr GDAMinimumRule::getDofMapper(GlobalIndexType cellID, CellConstraints &constraints, int varIDToMap, int sideOrdinalToMap)
 {
+//  { // DEBUGGING
+//    if ((cellID==0) && (sideOrdinalToMap==3))
+//    {
+//      cout << "set breakpoint here.\n";
+//    }
+//  }
+  
   if ((varIDToMap == -1) && (sideOrdinalToMap == -1))
   {
     // a mapper for the whole dof ordering: we cache these separately...
@@ -2401,7 +2412,8 @@ LocalDofMapperPtr GDAMinimumRule::getDofMapper(GlobalIndexType cellID, CellConst
 
   set<GlobalIndexType> emptyGlobalIDSet; // the "extra" guys to map
   LocalDofMapperPtr dofMapper = Teuchos::rcp( new LocalDofMapper(trialOrdering,volumeMap,fittableGlobalDofOrdinalsInVolume,
-                                sideMaps,fittableGlobalDofOrdinalsOnSides,emptyGlobalIDSet,varIDToMap,sideOrdinalToMap) );
+                                                                 sideMaps,fittableGlobalDofOrdinalsOnSides,emptyGlobalIDSet,
+                                                                 varIDToMap,sideOrdinalToMap) );
   if ((varIDToMap == -1) && (sideOrdinalToMap == -1))
   {
     // a mapper for the whole dof ordering: we cache these...
