@@ -103,7 +103,7 @@ int main(int argc, char *argv[])
   // FunctionPtr z = Function::zn(1);
   if (spaceDim == 1)
   {
-    bc->addDirichlet(tc, pulseX & initTime, -one);
+    bc->addDirichlet(tc, pulseX & initTime, -(1-4*x2));
     bc->addDirichlet(tc, (!pulseX) & initTime, zero);
     bc->addDirichlet(uhat, rightX, zero);
     bc->addDirichlet(uhat, leftX, zero);
@@ -139,6 +139,8 @@ int main(int argc, char *argv[])
   // MeshPtr mesh = MeshFactory::rectilinearMesh(form.bf(), dimensions, elementCounts, k+1, delta_k, x0);
   MeshPtr k0Mesh = Teuchos::rcp( new Mesh (spaceTimeMeshTopo->deepCopy(), form.bf(), 1, delta_k) );
   mesh->registerObserver(k0Mesh);
+
+  form.bf()->printTrialTestInteractions();
 
   // Set up solution
   // SolutionPtr soln = Solution::solution(form.bf(), mesh, bc, rhs, form.ip(norm));
