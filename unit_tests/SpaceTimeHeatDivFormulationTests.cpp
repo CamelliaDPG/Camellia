@@ -86,7 +86,7 @@ namespace
 
     FunctionPtr u = Function::constant(0.5);
 
-    bool useConformingTraces = true;
+    bool useConformingTraces = false;
     SpaceTimeHeatDivFormulation form(spaceDim, useConformingTraces, epsilon);
 
     setupExactSolution(form, u, spaceTimeMeshTopo, fieldPolyOrder, delta_k);
@@ -210,7 +210,7 @@ namespace
 
     FunctionPtr u = Function::constant(0.5);
 
-    bool useConformingTraces = true;
+    bool useConformingTraces = false;
     SpaceTimeHeatDivFormulation form(spaceDim, useConformingTraces, epsilon);
 
     setupExactSolution(form, u, spaceTimeMeshTopo, fieldPolyOrder, delta_k);
@@ -243,7 +243,7 @@ namespace
     FunctionPtr n_x = Function::normal(); // spatial normal
     FunctionPtr n_xt = Function::normalSpaceTime();
 
-    bool useConformingTraces = true;
+    bool useConformingTraces = false;
     SpaceTimeHeatDivFormulation form(spaceDim, useConformingTraces, epsilon);
 
     setupExactSolution(form, u, spaceTimeMeshTopo, fieldPolyOrder, delta_k);
@@ -322,7 +322,7 @@ namespace
     FunctionPtr n_x = Function::normal(); // spatial normal
     FunctionPtr n_xt = Function::normalSpaceTime();
 
-    bool useConformingTraces = true;
+    bool useConformingTraces = false;
     SpaceTimeHeatDivFormulation form(spaceDim, useConformingTraces, epsilon);
 
     setupExactSolution(form, u, spaceTimeMeshTopo, fieldPolyOrder, delta_k);
@@ -380,7 +380,7 @@ namespace
   TEUCHOS_UNIT_TEST( SpaceTimeHeatDivFormulation, Consistency_Conforming_1D )
   {
     // consistency test for space-time formulation with 1D space
-    bool useConformingTraces = true; // conforming and non conforming are the same for 1D
+    bool useConformingTraces = false; // conforming and non conforming are the same for 1D
     testSpaceTimeHeatConsistency(1, useConformingTraces, out, success);
   }
 
@@ -394,14 +394,14 @@ namespace
   TEUCHOS_UNIT_TEST( SpaceTimeHeatDivFormulation, Consistency_Conforming_2D )
   {
     // consistency test for space-time formulation with 2D space
-    bool useConformingTraces = true;
+    bool useConformingTraces = false;
     testSpaceTimeHeatConsistency(2, useConformingTraces, out, success);
   }
 
   TEUCHOS_UNIT_TEST( SpaceTimeHeatDivFormulation, Consistency_Conforming_3D_Slow )
   {
     // consistency test for space-time formulation with 3D space
-    bool useConformingTraces = true;
+    bool useConformingTraces = false;
     testSpaceTimeHeatConsistency(3, useConformingTraces, out, success);
   }
 
