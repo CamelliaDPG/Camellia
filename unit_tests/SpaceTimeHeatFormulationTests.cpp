@@ -87,7 +87,7 @@ namespace
     FunctionPtr u = Function::constant(0.5);
     
     bool useConformingTraces = true;
-    SpaceTimeHeatFormulation form(spaceDim, useConformingTraces, epsilon);
+    SpaceTimeHeatFormulation form(spaceDim, epsilon, useConformingTraces);
     
     setupExactSolution(form, u, spaceTimeMeshTopo, fieldPolyOrder, delta_k);
     
@@ -211,7 +211,7 @@ namespace
     FunctionPtr u = Function::constant(0.5);
     
     bool useConformingTraces = true;
-    SpaceTimeHeatFormulation form(spaceDim, useConformingTraces, epsilon);
+    SpaceTimeHeatFormulation form(spaceDim, epsilon, useConformingTraces);
     
     setupExactSolution(form, u, spaceTimeMeshTopo, fieldPolyOrder, delta_k);
     projectExactSolution(form, form.solution(), u);
@@ -241,7 +241,7 @@ namespace
     FunctionPtr u = Function::constant(CONST_VALUE);
     
     bool useConformingTraces = true;
-    SpaceTimeHeatFormulation form(spaceDim, useConformingTraces, epsilon);
+    SpaceTimeHeatFormulation form(spaceDim, epsilon, useConformingTraces);
     
     setupExactSolution(form, u, spaceTimeMeshTopo, fieldPolyOrder, delta_k);
     
@@ -315,7 +315,7 @@ namespace
     FunctionPtr u = Function::constant(0.5);
     
     bool useConformingTraces = true;
-    SpaceTimeHeatFormulation form(spaceDim, useConformingTraces, epsilon);
+    SpaceTimeHeatFormulation form(spaceDim, epsilon, useConformingTraces);
     
     setupExactSolution(form, u, spaceTimeMeshTopo, fieldPolyOrder, delta_k);
     

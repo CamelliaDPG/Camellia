@@ -87,7 +87,7 @@ namespace
     FunctionPtr u = Function::constant(0.5);
 
     bool useConformingTraces = false;
-    SpaceTimeHeatDivFormulation form(spaceDim, useConformingTraces, epsilon);
+    SpaceTimeHeatDivFormulation form(spaceDim, epsilon, useConformingTraces);
 
     setupExactSolution(form, u, spaceTimeMeshTopo, fieldPolyOrder, delta_k);
 
@@ -211,7 +211,7 @@ namespace
     FunctionPtr u = Function::constant(0.5);
 
     bool useConformingTraces = false;
-    SpaceTimeHeatDivFormulation form(spaceDim, useConformingTraces, epsilon);
+    SpaceTimeHeatDivFormulation form(spaceDim, epsilon, useConformingTraces);
 
     setupExactSolution(form, u, spaceTimeMeshTopo, fieldPolyOrder, delta_k);
     projectExactSolution(form, form.solution(), u);
@@ -244,7 +244,7 @@ namespace
     FunctionPtr n_xt = Function::normalSpaceTime();
 
     bool useConformingTraces = false;
-    SpaceTimeHeatDivFormulation form(spaceDim, useConformingTraces, epsilon);
+    SpaceTimeHeatDivFormulation form(spaceDim, epsilon, useConformingTraces);
 
     setupExactSolution(form, u, spaceTimeMeshTopo, fieldPolyOrder, delta_k);
 
@@ -323,7 +323,7 @@ namespace
     FunctionPtr n_xt = Function::normalSpaceTime();
 
     bool useConformingTraces = false;
-    SpaceTimeHeatDivFormulation form(spaceDim, useConformingTraces, epsilon);
+    SpaceTimeHeatDivFormulation form(spaceDim, epsilon, useConformingTraces);
 
     setupExactSolution(form, u, spaceTimeMeshTopo, fieldPolyOrder, delta_k);
 
@@ -359,6 +359,19 @@ namespace
     TEST_COMPARE(energyError, <, tol);
   }
 
+  TEUCHOS_UNIT_TEST( SpaceTimeHeatDivFormulation, BFVariables_1D )
+  {
+    // check that all test and trial variables are in the BF for 1D formulation
+    
+    int spaceDim = 1;
+    double epsilon = .1;
+    bool useConformingTraces = false;
+    SpaceTimeHeatDivFormulation form(spaceDim, epsilon, useConformingTraces);
+    
+    TEST_EQUALITY(form.bf()->missingTestVars().size(), 0);
+    TEST_EQUALITY(form.bf()->missingTrialVars().size(), 0);
+  }
+  
   TEUCHOS_UNIT_TEST( SpaceTimeHeatDivFormulation, ConsistencyConstantSolution_1D )
   {
     // consistency test for space-time formulation with 1D space
@@ -377,12 +390,12 @@ namespace
   //    testSpaceTimeHeatConsistencyConstantSolution(3, out, success);
   //  }
 
-  TEUCHOS_UNIT_TEST( SpaceTimeHeatDivFormulation, Consistency_Conforming_1D )
-  {
-    // consistency test for space-time formulation with 1D space
-    bool useConformingTraces = false; // conforming and non conforming are the same for 1D
-    testSpaceTimeHeatConsistency(1, useConformingTraces, out, success);
-  }
+//  TEUCHOS_UNIT_TEST( SpaceTimeHeatDivFormulation, Consistency_Conforming_1D )
+//  {
+//    // consistency test for space-time formulation with 1D space
+//    bool useConformingTraces = true;
+//    testSpaceTimeHeatConsistency(1, useConformingTraces, out, success);
+//  }
 
   TEUCHOS_UNIT_TEST( SpaceTimeHeatDivFormulation, Consistency_Nonconforming_1D )
   {
@@ -391,19 +404,19 @@ namespace
     testSpaceTimeHeatConsistency(1, useConformingTraces, out, success);
   }
 
-  TEUCHOS_UNIT_TEST( SpaceTimeHeatDivFormulation, Consistency_Conforming_2D )
-  {
-    // consistency test for space-time formulation with 2D space
-    bool useConformingTraces = false;
-    testSpaceTimeHeatConsistency(2, useConformingTraces, out, success);
-  }
-
-  TEUCHOS_UNIT_TEST( SpaceTimeHeatDivFormulation, Consistency_Conforming_3D_Slow )
-  {
-    // consistency test for space-time formulation with 3D space
-    bool useConformingTraces = false;
-    testSpaceTimeHeatConsistency(3, useConformingTraces, out, success);
-  }
+//  TEUCHOS_UNIT_TEST( SpaceTimeHeatDivFormulation, Consistency_Conforming_2D )
+//  {
+//    // consistency test for space-time formulation with 2D space
+//    bool useConformingTraces = true;
+//    testSpaceTimeHeatConsistency(2, useConformingTraces, out, success);
+//  }
+//
+//  TEUCHOS_UNIT_TEST( SpaceTimeHeatDivFormulation, Consistency_Conforming_3D_Slow )
+//  {
+//    // consistency test for space-time formulation with 3D space
+//    bool useConformingTraces = true;
+//    testSpaceTimeHeatConsistency(3, useConformingTraces, out, success);
+//  }
 
   TEUCHOS_UNIT_TEST( SpaceTimeHeatDivFormulation, Consistency_Nonconforming_2D )
   {
