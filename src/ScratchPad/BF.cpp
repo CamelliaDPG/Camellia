@@ -200,6 +200,56 @@ string TBF<Scalar>::displayString()
   return bfStream.str();
 }
 
+  template <typename Scalar>
+  vector<VarPtr> TBF<Scalar>::missingTestVars()
+  {
+    vector<VarPtr> missingTestVars;
+    
+    set<int> thisTestIDs;
+    for (auto term : _terms)
+    {
+      LinearTermPtr testTerm = term.second;
+      set<int> termIDs = testTerm->varIDs();
+      thisTestIDs.insert(termIDs.begin(),termIDs.end());
+    }
+    
+    map< int, VarPtr > testVars = _varFactory->testVars();
+    for (auto testVarEntry : testVars)
+    {
+      if (thisTestIDs.find(testVarEntry.first) == thisTestIDs.end())
+      {
+        missingTestVars.push_back(testVarEntry.second);
+      }
+    }
+    
+    return missingTestVars;
+  }
+  
+  template <typename Scalar>
+  vector<VarPtr> TBF<Scalar>::missingTrialVars()
+  {
+    vector<VarPtr> missingTrialVars;
+    
+    set<int> thisTrialIDs;
+    for (auto term : _terms)
+    {
+      LinearTermPtr trialTerm = term.first;
+      set<int> termIDs = trialTerm->varIDs();
+      thisTrialIDs.insert(termIDs.begin(),termIDs.end());
+    }
+    
+    map< int, VarPtr > trialVars = _varFactory->trialVars();
+    for (auto trialVarEntry : trialVars)
+    {
+      if (thisTrialIDs.find(trialVarEntry.first) == thisTrialIDs.end())
+      {
+        missingTrialVars.push_back(trialVarEntry.second);
+      }
+    }
+    
+    return missingTrialVars;
+  }
+  
 template <typename Scalar>
 void TBF<Scalar>::printTrialTestInteractions()
 {

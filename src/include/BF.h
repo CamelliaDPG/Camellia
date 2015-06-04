@@ -83,6 +83,12 @@ public:
                                           TIPPtr<Scalar> ip, BasisCachePtr ipBasisCache,
                                           TRHSPtr<Scalar> rhs,  BasisCachePtr basisCache);
 
+  // ! returns a list of test variables from VarFactory that do not enter the bilinear form
+  std::vector<VarPtr> missingTestVars();
+  
+  // ! returns a list of trial variables from VarFactory that do not enter the bilinear form
+  std::vector<VarPtr> missingTrialVars();
+  
   virtual int optimalTestWeights(Intrepid::FieldContainer<Scalar> &optimalTestWeights, Intrepid::FieldContainer<Scalar> &innerProductMatrix,
                                  ElementTypePtr elemType, Intrepid::FieldContainer<double> &cellSideParities,
                                  BasisCachePtr stiffnessBasisCache);
