@@ -1504,17 +1504,17 @@ void BasisReconciliation::mapFineSubcellPointsToCoarseDomain(FieldContainer<doub
 //}
 
 void BasisReconciliation::setupFineAndCoarseBasisCachesForReconciliation(BasisCachePtr &fineDomainCache,
-    BasisCachePtr &coarseDomainCache,
-    unsigned fineSubcellDimension,
-    BasisPtr finerBasis,
-    unsigned fineSubcellOrdinalInFineDomain,
-    RefinementBranch &fineCellRefinementBranch, // i.e. ref. branch is in volume, even for skeleton domains
-    unsigned fineDomainOrdinalInRefinementLeaf,
-    CellTopoPtr coarseCellTopo,
-    unsigned coarseSubcellDimension,
-    BasisPtr coarserBasis, unsigned coarseSubcellOrdinalInCoarseDomain,
-    unsigned coarseDomainOrdinalInCoarseCellTopo, // we use the coarserBasis's domain topology to determine the domain's space dimension
-    unsigned coarseSubcellPermutation)
+                                                                         BasisCachePtr &coarseDomainCache,
+                                                                         unsigned fineSubcellDimension,
+                                                                         BasisPtr finerBasis,
+                                                                         unsigned fineSubcellOrdinalInFineDomain,
+                                                                         RefinementBranch &fineCellRefinementBranch, // i.e. ref. branch is in volume, even for skeleton domains
+                                                                         unsigned fineDomainOrdinalInRefinementLeaf,
+                                                                         CellTopoPtr coarseCellTopo,
+                                                                         unsigned coarseSubcellDimension,
+                                                                         BasisPtr coarserBasis, unsigned coarseSubcellOrdinalInCoarseDomain,
+                                                                         unsigned coarseDomainOrdinalInCoarseCellTopo, // we use the coarserBasis's domain topology to determine the domain's space dimension
+                                                                         unsigned coarseSubcellPermutation)
 {
   int fineDomainDim = finerBasis->domainTopology()->getDimension();
   int coarseDomainDim = coarserBasis->domainTopology()->getDimension();
@@ -1546,46 +1546,6 @@ void BasisReconciliation::setupFineAndCoarseBasisCachesForReconciliation(BasisCa
 
   FieldContainer<double> leafCellNodes = RefinementPattern::descendantNodesRelativeToAncestorReferenceCell(fineCellRefinementBranch);
   CellTopoPtr leafCellTopo = RefinementPattern::descendantTopology(fineCellRefinementBranch);
-
-//  FieldContainer<double> leafDomainNodes;
-//  CellTopoPtr leafDomainTopo;
-//
-//  if (fineCellRefinementBranch[0].first->parentTopology()->getDimension() == fineTopo->getDimension())
-//  {
-//    // i.e. fineBasis is a volume basis
-//    leafDomainNodes = RefinementPattern::descendantNodesRelativeToAncestorReferenceCell(fineCellRefinementBranch);
-//    leafDomainTopo = RefinementPattern::descendantTopology(fineCellRefinementBranch);
-//  }
-//  else if (fineCellRefinementBranch[0].first->parentTopology()->getDimension() == fineTopo->getDimension() + 1)
-//  {
-//    // i.e. fineBasis is a side basis
-//    if (fineTopo->getDimension()==0)
-//    {
-//      leafDomainTopo = CellTopology::point();
-//      leafDomainNodes.resize(1,1);
-//    }
-//    else
-//    {
-//      RefinementBranch fineDomainRefinementBranch;
-//      unsigned fineSideOrdinal = fineDomainOrdinalInRefinementLeaf;
-//      for (int refIndex=fineCellRefinementBranch.size()-1; refIndex >= 0; refIndex--)
-//      {
-//        RefinementPattern* volumeRefPattern = fineCellRefinementBranch[refIndex].first;
-//        unsigned volumeRefChildOrdinal = fineCellRefinementBranch[refIndex].second;
-//        unsigned sideRefChildOrdinal = volumeRefPattern->mapVolumeChildOrdinalToSubcellChildOrdinal(fineDomainDim, fineSideOrdinal, volumeRefChildOrdinal);
-//        fineSideOrdinal = volumeRefPattern->mapSubcellOrdinalFromChildToParent(volumeRefChildOrdinal,fineDomainDim,fineSideOrdinal);
-//
-//        RefinementPattern* sideRefPattern = volumeRefPattern->sideRefinementPatterns()[fineSideOrdinal].get();
-//        fineDomainRefinementBranch.insert(fineDomainRefinementBranch.begin(), make_pair(sideRefPattern, sideRefChildOrdinal));
-//      }
-//      leafDomainNodes = RefinementPattern::descendantNodesRelativeToAncestorReferenceCell(fineDomainRefinementBranch);
-//      leafDomainTopo = RefinementPattern::descendantTopology(fineDomainRefinementBranch);
-//    }
-//  }
-//  else
-//  {
-//    TEUCHOS_TEST_FOR_EXCEPTION(true, std::invalid_argument, "basis domains that are not either on cells or cell sides are unsupported.");
-//  }
 
   FieldContainer<double> subcellCubaturePoints;
   int numPoints;
