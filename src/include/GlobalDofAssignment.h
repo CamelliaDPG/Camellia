@@ -107,6 +107,9 @@ public:
 
   virtual std::vector<int> getH1Order(GlobalIndexType cellID);
   std::vector<int> getInitialH1Order();
+  
+  MeshPtr getMesh();
+  MeshTopologyPtr getMeshTopology();
 
   bool getPartitions(Intrepid::FieldContainer<GlobalIndexType> &partitions);
   PartitionIndexType getPartitionCount();
