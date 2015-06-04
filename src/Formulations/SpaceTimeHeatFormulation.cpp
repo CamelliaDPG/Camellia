@@ -31,6 +31,8 @@ SpaceTimeHeatFormulation::SpaceTimeHeatFormulation(int spaceDim, double epsilon,
   _epsilon = epsilon;
   _useConformingTraces = useConformingTraces;
 
+  TEUCHOS_TEST_FOR_EXCEPTION(epsilon==0, std::invalid_argument, "epsilon may not be 0!");
+  
   if ((spaceDim != 1) && (spaceDim != 2) && (spaceDim != 3))
   {
     TEUCHOS_TEST_FOR_EXCEPTION(true, std::invalid_argument, "spaceDim must be 1, 2, or 3");

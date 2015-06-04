@@ -27,6 +27,8 @@ const string SpaceTimeHeatDivFormulation::s_tau = "tau";
 
 SpaceTimeHeatDivFormulation::SpaceTimeHeatDivFormulation(int spaceDim, double epsilon, bool useConformingTraces)
 {
+  TEUCHOS_TEST_FOR_EXCEPTION(epsilon==0, std::invalid_argument, "epsilon may not be 0!");
+  
   _spaceDim = spaceDim;
   _epsilon = epsilon;
   _useConformingTraces = useConformingTraces;
