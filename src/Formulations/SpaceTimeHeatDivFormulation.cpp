@@ -80,9 +80,9 @@ SpaceTimeHeatDivFormulation::SpaceTimeHeatDivFormulation(int spaceDim, double ep
   // sigma_n_hat = _vf->fluxVarSpaceOnly(s_tc, sigma_n_lt);
   LinearTermPtr tc_lt;
   if (spaceDim > 1)
-    tc_lt = -sigma*n_x_parity + u*n_xt->t();
+    tc_lt = -sigma*n_x_parity + u*n_xt_parity->t();
   else
-    tc_lt = -sigma*n_x_parity->x() + u*n_xt->t();
+    tc_lt = -sigma*n_x_parity->x() + u*n_xt_parity->t();
   tc = _vf->fluxVar(s_tc, tc_lt);
 
   v = _vf->testVar(s_v, HGRAD);
@@ -143,63 +143,63 @@ IPPtr SpaceTimeHeatDivFormulation::ip(string normName)
   return _ips.at(normName);
 }
 
-// TFunctionPtr<double> SpaceTimeHeatDivFormulation::forcingFunction(int spaceDim, double epsilon, TFunctionPtr<double> u_exact)
-// {
-//   TFunctionPtr<double> f = u_exact->dt() - epsilon * u_exact->dx()->dx();
-//   if (spaceDim > 1) f = f - epsilon * u_exact->dy()->dy();
-//   if (spaceDim > 2) f = f - epsilon * u_exact->dz()->dz();
-//
-//   return f;
-// }
-//
-// void SpaceTimeHeatDivFormulation::initializeSolution(MeshTopologyPtr meshTopo, int fieldPolyOrder, int delta_k,
-//     TFunctionPtr<double> forcingFunction)
-// {
-//   this->initializeSolution(meshTopo, fieldPolyOrder, delta_k, forcingFunction, "");
-// }
-//
-// void SpaceTimeHeatDivFormulation::initializeSolution(std::string filePrefix, int fieldPolyOrder, int delta_k,
-//     TFunctionPtr<double> forcingFunction)
-// {
-//   this->initializeSolution(Teuchos::null, fieldPolyOrder, delta_k, forcingFunction, filePrefix);
-// }
+TFunctionPtr<double> SpaceTimeHeatDivFormulation::forcingFunction(int spaceDim, double epsilon, TFunctionPtr<double> u_exact)
+{
+  TFunctionPtr<double> f = u_exact->dt() - epsilon * u_exact->dx()->dx();
+  if (spaceDim > 1) f = f - epsilon * u_exact->dy()->dy();
+  if (spaceDim > 2) f = f - epsilon * u_exact->dz()->dz();
 
-// void SpaceTimeHeatDivFormulation::initializeSolution(MeshTopologyPtr meshTopo, int fieldPolyOrder, int delta_k,
-//     TFunctionPtr<double> forcingFunction, string savedSolutionAndMeshPrefix)
-// {
-//   TEUCHOS_TEST_FOR_EXCEPTION(meshTopo->getSpaceDim() != _spaceDim + 1, std::invalid_argument, "MeshTopo must be space-time mesh");
-//
-//   BCPtr bc = BC::bc();
-//
-//   vector<int> H1Order(2);
-//   H1Order[0] = fieldPolyOrder + 1;
-//   H1Order[1] = fieldPolyOrder + 1; // for now, use same poly. degree for temporal bases...
-//   MeshPtr mesh;
-//   if (savedSolutionAndMeshPrefix == "")
-//   {
-//     mesh = Teuchos::rcp( new Mesh(meshTopo, _bf, H1Order, delta_k) ) ;
-//     _solution = TSolution<double>::solution(mesh,bc);
-//   }
-//   else
-//   {
-//     mesh = MeshFactory::loadFromHDF5(_bf, savedSolutionAndMeshPrefix+".mesh");
-//     _solution = TSolution<double>::solution(mesh, bc);
-//     _solution->loadFromHDF5(savedSolutionAndMeshPrefix+".soln");
-//   }
-//
-//   RHSPtr rhs = this->rhs(forcingFunction); // in transient case, this will refer to _previousSolution
-//   IPPtr ip = _bf->graphNorm();
-//
-//   _solution->setRHS(rhs);
-//   _solution->setIP(ip);
-//
-//   mesh->registerSolution(_solution); // will project both time steps during refinements...
-//
-//   LinearTermPtr residual = rhs->linearTerm() - _bf->testFunctional(_solution,false); // false: don't exclude boundary terms
-//
-//   double energyThreshold = 0.2;
-//   _refinementStrategy = Teuchos::rcp( new RefinementStrategy( mesh, residual, ip, energyThreshold ) );
-// }
+  return f;
+}
+
+void SpaceTimeHeatDivFormulation::initializeSolution(MeshTopologyPtr meshTopo, int fieldPolyOrder, int delta_k,
+    TFunctionPtr<double> forcingFunction)
+{
+  this->initializeSolution(meshTopo, fieldPolyOrder, delta_k, forcingFunction, "");
+}
+
+void SpaceTimeHeatDivFormulation::initializeSolution(std::string filePrefix, int fieldPolyOrder, int delta_k,
+    TFunctionPtr<double> forcingFunction)
+{
+  this->initializeSolution(Teuchos::null, fieldPolyOrder, delta_k, forcingFunction, filePrefix);
+}
+
+void SpaceTimeHeatDivFormulation::initializeSolution(MeshTopologyPtr meshTopo, int fieldPolyOrder, int delta_k,
+    TFunctionPtr<double> forcingFunction, string savedSolutionAndMeshPrefix)
+{
+  TEUCHOS_TEST_FOR_EXCEPTION(meshTopo->getSpaceDim() != _spaceDim + 1, std::invalid_argument, "MeshTopo must be space-time mesh");
+
+  BCPtr bc = BC::bc();
+
+  vector<int> H1Order(2);
+  H1Order[0] = fieldPolyOrder + 1;
+  H1Order[1] = fieldPolyOrder + 1; // for now, use same poly. degree for temporal bases...
+  MeshPtr mesh;
+  if (savedSolutionAndMeshPrefix == "")
+  {
+    mesh = Teuchos::rcp( new Mesh(meshTopo, _bf, H1Order, delta_k) ) ;
+    _solution = TSolution<double>::solution(mesh,bc);
+  }
+  else
+  {
+    mesh = MeshFactory::loadFromHDF5(_bf, savedSolutionAndMeshPrefix+".mesh");
+    _solution = TSolution<double>::solution(mesh, bc);
+    _solution->loadFromHDF5(savedSolutionAndMeshPrefix+".soln");
+  }
+
+  RHSPtr rhs = this->rhs(forcingFunction); // in transient case, this will refer to _previousSolution
+  IPPtr ip = _bf->graphNorm();
+
+  _solution->setRHS(rhs);
+  _solution->setIP(ip);
+
+  mesh->registerSolution(_solution); // will project both time steps during refinements...
+
+  LinearTermPtr residual = rhs->linearTerm() - _bf->testFunctional(_solution,false); // false: don't exclude boundary terms
+
+  double energyThreshold = 0.2;
+  _refinementStrategy = Teuchos::rcp( new RefinementStrategy( mesh, residual, ip, energyThreshold ) );
+}
 
 double SpaceTimeHeatDivFormulation::epsilon()
 {
