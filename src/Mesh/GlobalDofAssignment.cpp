@@ -437,6 +437,16 @@ vector<int> GlobalDofAssignment::getInitialH1Order()
   return _initialH1OrderTrial;
 }
 
+MeshPtr GlobalDofAssignment::getMesh()
+{
+  return _mesh;
+}
+
+MeshTopologyPtr GlobalDofAssignment::getMeshTopology()
+{
+  return _meshTopology;
+}
+
 bool GlobalDofAssignment::getPartitions(FieldContainer<GlobalIndexType> &partitions)
 {
   if (_partitions.size() == 0) return false; // false: no partitions set

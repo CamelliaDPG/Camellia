@@ -1549,6 +1549,7 @@ void CamelliaCellTools::mapToReferenceSubcell(FieldContainer<double>       &refS
   {
     TEUCHOS_TEST_FOR_EXCEPTION(paramPoints.dimension(1) != subcellDim, std::invalid_argument, "paramPoints should have shape (P,D), where D is is the subcellDim, unless subcellDim = 0");
   }
+  TEUCHOS_TEST_FOR_EXCEPTION(subcellOrd >= subcellMap.dimension(0), std::invalid_argument, "subcellOrd is out of bounds");
 
   int numPoints = paramPoints.dimension(0);
   int parentDim = parentCell->getDimension();
