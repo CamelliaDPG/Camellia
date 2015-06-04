@@ -24,28 +24,32 @@ namespace
   {
     double epsilon = form.epsilon();
 
-    FunctionPtr sigma;
+    FunctionPtr sigma1, sigma2, sigma3;
     int spaceTimeDim = heatSolution->mesh()->getDimension();
     int spaceDim = spaceTimeDim - 1;
 
-    sigma = epsilon * u->grad();
+    sigma1 = epsilon * u->dx();
+    if (spaceDim > 1) sigma2 = epsilon * u->dy();
+    if (spaceDim > 2) sigma3 = epsilon * u->dz();
 
-    LinearTermPtr sigma_n_lt = form.tc()->termTraced();
+    LinearTermPtr tc_lt = form.tc()->termTraced();
     LinearTermPtr u_lt = form.uhat()->termTraced();
 
     map<int, FunctionPtr> exactMap;
     // fields:
     exactMap[form.u()->ID()] = u;
-    exactMap[form.sigma()->ID()] = sigma;
+    exactMap[form.sigma(1)->ID()] = sigma1;
+    if (spaceDim > 1) exactMap[form.sigma(2)->ID()] = sigma2;
+    if (spaceDim > 2) exactMap[form.sigma(3)->ID()] = sigma3;
 
     // flux:
     // use the exact field variable solution together with the termTraced to determine the flux traced
-    FunctionPtr sigma_n = sigma_n_lt->evaluate(exactMap);
-    exactMap[form.tc()->ID()] = sigma_n;
+    FunctionPtr tc = tc_lt->evaluate(exactMap);
+    exactMap[form.tc()->ID()] = tc;
 
     // traces:
-    FunctionPtr u_hat = u_lt->evaluate(exactMap);
-    exactMap[form.uhat()->ID()] = u_hat;
+    FunctionPtr uhat = u_lt->evaluate(exactMap);
+    exactMap[form.uhat()->ID()] = uhat;
 
     heatSolution->projectOntoMesh(exactMap);
   }
@@ -55,7 +59,7 @@ namespace
   {
     double epsilon = form.epsilon();
 
-    FunctionPtr sigma;
+    FunctionPtr sigma1, sigma2, sigma3;
     int spaceTimeDim = meshTopo->getSpaceDim();
     int spaceDim = spaceTimeDim - 1;
 
@@ -149,18 +153,18 @@ namespace
         printLabeledDofCoefficients(form.bf()->varFactory(), trialOrder, dofCoefficients);
 
 
-        VarPtr uHat = form.uhat();
+        VarPtr uhat = form.uhat();
         int sideOrdinal = 0;
         int basisOrdinal = 1; // the one we seek, corresponding to 82 above
-        BasisPtr uHatBasis = trialOrder->getBasis(uHat->ID(),sideOrdinal);
+        BasisPtr uhatBasis = trialOrder->getBasis(uhat->ID(),sideOrdinal);
 
-        int sideDim = uHatBasis->domainTopology()->getDimension();
+        int sideDim = uhatBasis->domainTopology()->getDimension();
         for (int subcdim=0; subcdim<=sideDim; subcdim++)
         {
-          int subcCount = uHatBasis->domainTopology()->getSubcellCount(subcdim);
+          int subcCount = uhatBasis->domainTopology()->getSubcellCount(subcdim);
           for (int subcord=0; subcord<subcCount; subcord++)
           {
-            set<int> dofOrdinalsForSubcell = uHatBasis->dofOrdinalsForSubcell(subcdim, subcord);
+            set<int> dofOrdinalsForSubcell = uhatBasis->dofOrdinalsForSubcell(subcdim, subcord);
             if (dofOrdinalsForSubcell.find(basisOrdinal) != dofOrdinalsForSubcell.end())
             {
               cout << "basisOrdinal " << basisOrdinal << " belongs to subcell " << subcord << " of dimension " << subcdim << endl;
@@ -220,7 +224,7 @@ namespace
     TEST_COMPARE(energyError, <, tol);
   }
 
-  void testSpaceTimeHeatImposeConstantTraceBCs(int spaceDim, Teuchos::FancyOStream &out, bool &success)
+  void testSpaceTimeHeatImposeConstantFluxBCs(int spaceDim, Teuchos::FancyOStream &out, bool &success)
   {
     vector<double> dimensions(spaceDim,2.0); // 2.0^d hypercube domain
     vector<int> elementCounts(spaceDim,1);   // one-element mesh
@@ -233,7 +237,7 @@ namespace
     double epsilon = .1;
     int fieldPolyOrder = 1, delta_k = 1;
 
-    static const double CONST_VALUE = 0.5;
+    static const double CONST_VALUE = 0.0;
     FunctionPtr u = Function::constant(CONST_VALUE);
     FunctionPtr sigma = epsilon*u->grad();
     FunctionPtr n_x = Function::normal(); // spatial normal
@@ -244,11 +248,11 @@ namespace
 
     setupExactSolution(form, u, spaceTimeMeshTopo, fieldPolyOrder, delta_k);
 
-    VarPtr u_hat = form.uhat();
+    VarPtr uhat = form.uhat();
     VarPtr tc = form.tc();
     bool isTrace = true;
     BCPtr bc = form.solution()->bc();
-    // bc->addDirichlet(u_hat, SpatialFilter::allSpace(), u);
+    // bc->addDirichlet(uhat, SpatialFilter::allSpace(), u);
     bc->addDirichlet(tc, SpatialFilter::allSpace(), -sigma*n_x + u*n_xt->t());
 
     MeshPtr mesh = form.solution()->mesh();
@@ -260,7 +264,7 @@ namespace
     set<pair<int, unsigned>> singletons;
     boundary.bcsToImpose<double>(globalDofIndicesAndValues, *bc, cellID, singletons, dofInterpreter, NULL);
 
-    // use our knowledge that we have a one-element mesh: every last dof for u_hat should be present, and have coefficient CONST_VALUE
+    // use our knowledge that we have a one-element mesh: every last dof for uhat should be present, and have coefficient CONST_VALUE
     DofOrderingPtr trialOrder = mesh->getElementType(cellID)->trialOrderPtr;
     CellTopoPtr cellTopo = mesh->getElementType(cellID)->cellTopoPtr;
 
@@ -270,12 +274,12 @@ namespace
     for (int sideOrdinal=0; sideOrdinal < cellTopo->getSideCount(); sideOrdinal++)
     {
       out << "******** SIDE " << sideOrdinal << " ********" << endl;
-      BasisPtr basis = trialOrder->getBasis(u_hat->ID(),sideOrdinal);
-      Intrepid::FieldContainer<double> uValues(basis->getCardinality());
-      uValues.initialize(CONST_VALUE);
+      BasisPtr basis = trialOrder->getBasis(tc->ID(),sideOrdinal);
+      Intrepid::FieldContainer<double> fluxValues(basis->getCardinality());
+      fluxValues.initialize(CONST_VALUE);
       Intrepid::FieldContainer<double> globalData;
       Intrepid::FieldContainer<GlobalIndexType> globalDofIndices;
-      dofInterpreter->interpretLocalBasisCoefficients(cellID, u_hat->ID(), sideOrdinal, uValues, globalData, globalDofIndices);
+      dofInterpreter->interpretLocalBasisCoefficients(cellID, tc->ID(), sideOrdinal, fluxValues, globalData, globalDofIndices);
       // sanity check on the interpreted global values
       for (int basisOrdinal=0; basisOrdinal<globalData.size(); basisOrdinal++)
       {
@@ -300,7 +304,7 @@ namespace
     }
   }
 
-  void testSpaceTimeHeatSolveConstantSolution(int spaceDim, bool useTraceBCsEverywhere, Teuchos::FancyOStream &out, bool &success)
+  void testSpaceTimeHeatSolveConstantSolution(int spaceDim, bool useFluxBCsEverywhere, Teuchos::FancyOStream &out, bool &success)
   {
     vector<double> dimensions(spaceDim,2.0); // 2.0^d hypercube domain
     vector<int> elementCounts(spaceDim,1);   // one-element mesh
@@ -323,17 +327,17 @@ namespace
 
     setupExactSolution(form, u, spaceTimeMeshTopo, fieldPolyOrder, delta_k);
 
-    if (!useTraceBCsEverywhere)
+    if (!useFluxBCsEverywhere)
     {
-      out << "useTraceBCsEverywhere = false not yet supported/implemented in test.\n";
+      out << "useFluxBCsEverywhere = false not yet supported/implemented in test.\n";
       success = false;
     }
     else
     {
-      VarPtr u_hat = form.uhat();
+      VarPtr uhat = form.uhat();
       VarPtr tc = form.tc();
       BCPtr bc = form.solution()->bc();
-      // bc->addDirichlet(u_hat, SpatialFilter::allSpace(), u);
+      // bc->addDirichlet(uhat, SpatialFilter::allSpace(), u);
       bc->addDirichlet(tc, SpatialFilter::allSpace(), -sigma*n_x + u*n_xt->t());
     }
 
@@ -433,29 +437,29 @@ namespace
     testForcingFunctionForConstantU(3, out, success);
   }
 
-  TEUCHOS_UNIT_TEST( SpaceTimeHeatDivFormulation, ImposeConstantTraceBCs_1D )
+  TEUCHOS_UNIT_TEST( SpaceTimeHeatDivFormulation, ImposeConstantFluxBCs_1D )
   {
     // test BC imposition for space-time formulation with 1D space, exact solution with u constant
-    testSpaceTimeHeatImposeConstantTraceBCs(1, out, success);
+    testSpaceTimeHeatImposeConstantFluxBCs(1, out, success);
   }
 
   TEUCHOS_UNIT_TEST( SpaceTimeHeatDivFormulation, SolveConstantSolution_1D )
   {
     // test solve for space-time formulation with 1D space, exact solution with u constant
-    bool useTraceBCsEverywhere = true;
-    testSpaceTimeHeatSolveConstantSolution(1, useTraceBCsEverywhere, out, success);
+    bool useFluxBCsEverywhere = true;
+    testSpaceTimeHeatSolveConstantSolution(1, useFluxBCsEverywhere, out, success);
   }
 
-  TEUCHOS_UNIT_TEST( SpaceTimeHeatDivFormulation, ImposeConstantTraceBCs_2D )
+  TEUCHOS_UNIT_TEST( SpaceTimeHeatDivFormulation, ImposeConstantFluxBCs_2D )
   {
     // test BC imposition for space-time formulation with 2D space, exact solution with u constant
-    testSpaceTimeHeatImposeConstantTraceBCs(2, out, success);
+    testSpaceTimeHeatImposeConstantFluxBCs(2, out, success);
   }
 
   TEUCHOS_UNIT_TEST( SpaceTimeHeatDivFormulation, SolveConstantSolution_2D )
   {
     // test solve for space-time formulation with 1D space, exact solution with u constant
-    bool useTraceBCsEverywhere = true;
-    testSpaceTimeHeatSolveConstantSolution(2, useTraceBCsEverywhere, out, success);
+    bool useFluxBCsEverywhere = true;
+    testSpaceTimeHeatSolveConstantSolution(2, useFluxBCsEverywhere, out, success);
   }
 } // namespace

@@ -37,7 +37,7 @@ class SpaceTimeHeatDivFormulation
   RefinementStrategyPtr _refinementStrategy;
 
   static const string s_u;
-  static const string s_sigma;
+  static const string s_sigma1, s_sigma2, s_sigma3;
 
   static const string s_uhat;
   static const string s_tc;
@@ -98,7 +98,7 @@ public:
   void solve();
 
   // field variables:
-  VarPtr sigma();
+  VarPtr sigma(int i);
   VarPtr u();
 
   // traces:

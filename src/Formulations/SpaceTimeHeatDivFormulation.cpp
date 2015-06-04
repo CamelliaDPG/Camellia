@@ -15,7 +15,9 @@
 using namespace Camellia;
 
 const string SpaceTimeHeatDivFormulation::s_u = "u";
-const string SpaceTimeHeatDivFormulation::s_sigma = "sigma";
+const string SpaceTimeHeatDivFormulation::s_sigma1 = "sigma1";
+const string SpaceTimeHeatDivFormulation::s_sigma2 = "sigma2";
+const string SpaceTimeHeatDivFormulation::s_sigma3 = "sigma3";
 
 const string SpaceTimeHeatDivFormulation::s_uhat = "uhat";
 const string SpaceTimeHeatDivFormulation::s_tc = "tc";
@@ -37,7 +39,7 @@ SpaceTimeHeatDivFormulation::SpaceTimeHeatDivFormulation(int spaceDim, double ep
   // declare all possible variables -- will only create the ones we need for spaceDim
   // fields
   VarPtr u;
-  VarPtr sigma;
+  VarPtr sigma1, sigma2, sigma3;
 
   // traces
   VarPtr uhat;
@@ -50,10 +52,12 @@ SpaceTimeHeatDivFormulation::SpaceTimeHeatDivFormulation(int spaceDim, double ep
   _vf = VarFactory::varFactory();
   u = _vf->fieldVar(s_u);
 
-  if (spaceDim > 1)
-    sigma = _vf->fieldVar(s_sigma, VECTOR_L2);
-  else
-    sigma = _vf->fieldVar(s_sigma, L2);
+  sigma1 = _vf->fieldVar(s_sigma1);
+  if (spaceDim > 1) sigma2 = _vf->fieldVar(s_sigma2);
+  if (spaceDim==3)
+  {
+    sigma3 = _vf->fieldVar(s_sigma3);
+  }
 
   Space uHatSpace = useConformingTraces ? HGRAD : L2;
 
@@ -64,25 +68,19 @@ SpaceTimeHeatDivFormulation::SpaceTimeHeatDivFormulation(int spaceDim, double ep
   TFunctionPtr<double> n_xt = TFunction<double>::normalSpaceTime();
   TFunctionPtr<double> n_xt_parity = n_xt * TFunction<double>::sideParity();
 
-  // LinearTermPtr sigma_n_lt;
-  // if (spaceDim == 1)
-  // {
-  //   sigma_n_lt = sigma1 * n_x_parity->x();
-  // }
-  // else if (spaceDim == 2)
-  // {
-  //   sigma_n_lt = sigma1 * n_x_parity->x() + sigma2 * n_x_parity->y();
-  // }
-  // else if (spaceDim == 3)
-  // {
-  //   sigma_n_lt = sigma1 * n_x_parity->x() + sigma2 * n_x_parity->y() + sigma3 * n_x_parity->z();
-  // }
-  // sigma_n_hat = _vf->fluxVarSpaceOnly(s_tc, sigma_n_lt);
   LinearTermPtr tc_lt;
-  if (spaceDim > 1)
-    tc_lt = -sigma*n_x_parity + u*n_xt_parity->t();
-  else
-    tc_lt = -sigma*n_x_parity->x() + u*n_xt_parity->t();
+  if (spaceDim == 1)
+  {
+    tc_lt = -sigma1 * n_x_parity->x() + u*n_xt_parity->t();
+  }
+  else if (spaceDim == 2)
+  {
+    tc_lt = -sigma1 * n_x_parity->x() - sigma2 * n_x_parity->y() + u*n_xt_parity->t();
+  }
+  else if (spaceDim == 3)
+  {
+    tc_lt = -sigma1 * n_x_parity->x() - sigma2 * n_x_parity->y() - sigma3 * n_x_parity->z() + u*n_xt_parity->t();
+  }
   tc = _vf->fluxVar(s_tc, tc_lt);
 
   v = _vf->testVar(s_v, HGRAD);
@@ -95,35 +93,26 @@ SpaceTimeHeatDivFormulation::SpaceTimeHeatDivFormulation(int spaceDim, double ep
   _bf = Teuchos::rcp( new BF(_vf) );
   // v terms
   _bf->addTerm(-u, v->dt());
-  if (spaceDim > 1)
-    _bf->addTerm(sigma, v->grad());
-  else
-    _bf->addTerm(sigma, v->dx());
-  // if (_spaceDim > 1) _bf->addTerm(sigma2, v->dy());
-  // if (_spaceDim > 2) _bf->addTerm(sigma3, v->dz());
+  _bf->addTerm(sigma1, v->dx());
+  if (_spaceDim > 1) _bf->addTerm(sigma2, v->dy());
+  if (_spaceDim > 2) _bf->addTerm(sigma3, v->dz());
   _bf->addTerm(tc, v);
 
   // tau terms
-  // if (_spaceDim > 1)
-  // {
-    _bf->addTerm((1.0 / _epsilon) * sigma, tau);
-    if (spaceDim > 1)
-    {
-      _bf->addTerm(u, tau->div());
-      _bf->addTerm(-uhat, tau * n_x);
-    }
-    else
-    {
-      _bf->addTerm(u, tau->dx());
-      _bf->addTerm(-uhat, tau * n_x->x());
-    }
-  // }
-  // else
-  // {
-  //   _bf->addTerm((1.0 / _epsilon) * sigma, tau);
-  //   _bf->addTerm(u, tau->dx());
-  //   _bf->addTerm(-uhat, tau * n_x->x());
-  // }
+  if (_spaceDim > 1)
+  {
+    _bf->addTerm((1.0 / _epsilon) * sigma1, tau->x());
+    _bf->addTerm((1.0 / _epsilon) * sigma2, tau->y());
+    if (_spaceDim > 2) _bf->addTerm((1.0 / _epsilon) * sigma3, tau->z());
+    _bf->addTerm(u, tau->div());
+    _bf->addTerm(-uhat, tau * n_x);
+  }
+  else
+  {
+    _bf->addTerm((1.0 / _epsilon) * sigma1, tau);
+    _bf->addTerm(u, tau->dx());
+    _bf->addTerm(-uhat, tau * n_x->x());
+  }
 
   _ips["Graph"] = _bf->graphNorm();
 }
@@ -235,9 +224,22 @@ RHSPtr SpaceTimeHeatDivFormulation::rhs(TFunctionPtr<double> f)
   return rhs;
 }
 
-VarPtr SpaceTimeHeatDivFormulation::sigma()
+VarPtr SpaceTimeHeatDivFormulation::sigma(int i)
 {
-  return _vf->fieldVar(s_sigma);
+  if (i > _spaceDim)
+  {
+    TEUCHOS_TEST_FOR_EXCEPTION(true, std::invalid_argument, "i must be less than or equal to _spaceDim");
+  }
+  switch (i)
+  {
+  case 1:
+    return _vf->fieldVar(s_sigma1);
+  case 2:
+    return _vf->fieldVar(s_sigma2);
+  case 3:
+    return _vf->fieldVar(s_sigma3);
+  }
+  TEUCHOS_TEST_FOR_EXCEPTION(true, std::invalid_argument, "unhandled i value");
 }
 
 VarPtr SpaceTimeHeatDivFormulation::u()
@@ -248,12 +250,12 @@ VarPtr SpaceTimeHeatDivFormulation::u()
 // traces:
 VarPtr SpaceTimeHeatDivFormulation::tc()
 {
-  return _vf->fluxVarSpaceOnly(s_tc);
+  return _vf->fluxVar(s_tc);
 }
 
 VarPtr SpaceTimeHeatDivFormulation::uhat()
 {
-  return _vf->traceVar(s_uhat);
+  return _vf->traceVarSpaceOnly(s_uhat);
 }
 
 // test variables:
