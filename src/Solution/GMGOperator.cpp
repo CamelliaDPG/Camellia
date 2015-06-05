@@ -498,11 +498,13 @@ LocalDofMapperPtr GMGOperator::getLocalCoefficientMap(GlobalIndexType fineCellID
     // first polynomial order as a key.  This is OK, so long as there aren't anisotropic refinements in polynomial order
     // (as of this writing, we don't offer these).
     int rank = Teuchos::GlobalMPISession::getRank();
-    if (rank==0)
+    static bool haveWarned = false;
+    if ((rank==0) && (!haveWarned))
     {
       cout << "Note: using tensor-product polynomial orders in GMGOperator.  This is supported so long as no anisotropic";
       cout << " refinements are done in the polynomial order.  A small upgrade to GMGOperator's lookup tables would be";
-      cout << " required to support this.\n";
+      cout << " required to support anistropic p-refinements.\n";
+      haveWarned = true;
     }
   }
   int fineOrder = _fineMesh->globalDofAssignment()->getH1Order(fineCellID)[0];
@@ -587,6 +589,8 @@ LocalDofMapperPtr GMGOperator::getLocalCoefficientMap(GlobalIndexType fineCellID
 //        cout << "Warning: for debugging purposes, skipping projection of fluxes and traces in GMGOperator.\n";
         for (int sideOrdinal=0; sideOrdinal<fineSideCount; sideOrdinal++)
         {
+          if (! fineTrialOrdering->hasBasisEntry(trialID, sideOrdinal)) continue;
+          
           if (condensedDofInterpreter != NULL)
           {
             if (condensedDofInterpreter->varDofsAreCondensible(trialID, sideOrdinal, fineTrialOrdering)) continue;
