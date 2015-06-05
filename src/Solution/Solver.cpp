@@ -8,12 +8,11 @@
 
 #include "Solver.h"
 
-#include "SimpleMLSolver.h"
-
 #include "GMGSolver.h"
-
-#include "Solution.h"
 #include "Mesh.h"
+#include "SimpleMLSolver.h"
+#include "Solution.h"
+#include "SuperLUDistSolver.h"
 
 using namespace Camellia;
 
@@ -45,7 +44,8 @@ TSolverPtr<Scalar> TSolver<Scalar>::getSolver(SolverChoice choice, bool saveFact
     break;
 #if defined(HAVE_AMESOS_SUPERLUDIST) || defined(HAVE_AMESOS2_SUPERLUDIST)
   case SuperLUDist:
-    return Teuchos::rcp( new TAmesos2Solver<Scalar>(saveFactorization, "superlu_dist") );
+    return Teuchos::rcp( new SuperLUDistSolver(saveFactorization) );
+//    return Teuchos::rcp( new TAmesos2Solver<Scalar>(saveFactorization, "superlu_dist") );
 #endif
 #ifdef HAVE_AMESOS_MUMPS
   case MUMPS:
@@ -78,15 +78,9 @@ TSolverPtr<Scalar> TSolver<Scalar>::getSolver(SolverChoice choice, bool saveFact
 
 template <typename Scalar>
 TSolverPtr<Scalar> TSolver<Scalar>::getDirectSolver(bool saveFactorization) {
-//#if defined(HAVE_AMESOS_SUPERLUDIST)
-//  return getSolver(TSolver<Scalar>::SuperLUDist, saveFactorization);
-//#elif defined(HAVE_AMESOS_MUMPS)
-//  return getSolver(TSolver<Scalar>::MUMPS, saveFactorization);
-//#else
-//  return getSolver(TSolver<Scalar>::KLU, saveFactorization);
-//#endif
-  // for now, commented out the above, because SuperLUDist is broken with latest Trilinos, from the looks of it
-#if defined(HAVE_AMESOS_MUMPS)
+#if defined(HAVE_AMESOS_SUPERLUDIST) || defined(HAVE_AMESOS2_SUPERLUDIST)
+  return getSolver(TSolver<Scalar>::SuperLUDist, saveFactorization);
+#elif defined(HAVE_AMESOS_MUMPS)
   return getSolver(TSolver<Scalar>::MUMPS, saveFactorization);
 #else
   return getSolver(TSolver<Scalar>::KLU, saveFactorization);
