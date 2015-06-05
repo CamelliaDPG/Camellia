@@ -46,7 +46,7 @@ class SpaceTimeHeatDivFormulation
   static const string s_tau;
 
   // ! initialize the Solution object(s) using the provided MeshTopology
-  void initializeSolution(MeshTopologyPtr meshTopo, int fieldPolyOrder, int delta_k,
+  void initializeSolution(MeshTopologyPtr meshTopo, int fieldPolyOrder, int delta_k, string norm,
                           TFunctionPtr<double> forcingFunction, std::string fileToLoadPrefix);
 public:
   SpaceTimeHeatDivFormulation(int spaceDim, double epsilon, bool useConformingTraces = false);
@@ -61,11 +61,11 @@ public:
   IPPtr ip(string normName);
 
   // ! initialize the Solution object(s) using the provided MeshTopology
-  void initializeSolution(MeshTopologyPtr meshTopo, int fieldPolyOrder, int delta_k = 1,
+  void initializeSolution(MeshTopologyPtr meshTopo, int fieldPolyOrder, int delta_k = 1, string norm = "Graph",
                           TFunctionPtr<double> forcingFunction = Teuchos::null);
 
   // ! initialize the Solution object(s) from file
-  void initializeSolution(std::string filePrefix, int fieldPolyOrder, int delta_k = 1,
+  void initializeSolution(std::string filePrefix, int fieldPolyOrder, int delta_k = 1, string norm = "Graph",
                           TFunctionPtr<double> forcingFunction = Teuchos::null);
 
   // ! Loads the mesh and solution from disk, if they were previously saved using save().  In the present

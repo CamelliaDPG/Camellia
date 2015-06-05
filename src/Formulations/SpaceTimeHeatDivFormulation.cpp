@@ -28,7 +28,7 @@ const string SpaceTimeHeatDivFormulation::s_tau = "tau";
 SpaceTimeHeatDivFormulation::SpaceTimeHeatDivFormulation(int spaceDim, double epsilon, bool useConformingTraces)
 {
   TEUCHOS_TEST_FOR_EXCEPTION(epsilon==0, std::invalid_argument, "epsilon may not be 0!");
-  
+
   _spaceDim = spaceDim;
   _epsilon = epsilon;
   _useConformingTraces = useConformingTraces;
@@ -143,19 +143,19 @@ TFunctionPtr<double> SpaceTimeHeatDivFormulation::forcingFunction(int spaceDim, 
   return f;
 }
 
-void SpaceTimeHeatDivFormulation::initializeSolution(MeshTopologyPtr meshTopo, int fieldPolyOrder, int delta_k,
+void SpaceTimeHeatDivFormulation::initializeSolution(MeshTopologyPtr meshTopo, int fieldPolyOrder, int delta_k, string norm,
     TFunctionPtr<double> forcingFunction)
 {
-  this->initializeSolution(meshTopo, fieldPolyOrder, delta_k, forcingFunction, "");
+  this->initializeSolution(meshTopo, fieldPolyOrder, delta_k, norm, forcingFunction, "");
 }
 
-void SpaceTimeHeatDivFormulation::initializeSolution(std::string filePrefix, int fieldPolyOrder, int delta_k,
+void SpaceTimeHeatDivFormulation::initializeSolution(std::string filePrefix, int fieldPolyOrder, int delta_k, string norm,
     TFunctionPtr<double> forcingFunction)
 {
-  this->initializeSolution(Teuchos::null, fieldPolyOrder, delta_k, forcingFunction, filePrefix);
+  this->initializeSolution(Teuchos::null, fieldPolyOrder, delta_k, norm, forcingFunction, filePrefix);
 }
 
-void SpaceTimeHeatDivFormulation::initializeSolution(MeshTopologyPtr meshTopo, int fieldPolyOrder, int delta_k,
+void SpaceTimeHeatDivFormulation::initializeSolution(MeshTopologyPtr meshTopo, int fieldPolyOrder, int delta_k, string norm,
     TFunctionPtr<double> forcingFunction, string savedSolutionAndMeshPrefix)
 {
   TEUCHOS_TEST_FOR_EXCEPTION(meshTopo->getSpaceDim() != _spaceDim + 1, std::invalid_argument, "MeshTopo must be space-time mesh");
@@ -179,7 +179,7 @@ void SpaceTimeHeatDivFormulation::initializeSolution(MeshTopologyPtr meshTopo, i
   }
 
   RHSPtr rhs = this->rhs(forcingFunction); // in transient case, this will refer to _previousSolution
-  IPPtr ip = _bf->graphNorm();
+  IPPtr ip = _ips.at(norm);
 
   _solution->setRHS(rhs);
   _solution->setIP(ip);
