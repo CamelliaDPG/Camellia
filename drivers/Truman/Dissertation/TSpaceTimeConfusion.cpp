@@ -19,7 +19,10 @@
 #include "Function.h"
 #include "RefinementStrategy.h"
 #include "GMGSolver.h"
-#include "SpaceTimeHeatFormulation.h"
+#include "SpaceTimeConvectionDiffusionFormulation.h"
+#include "SpatiallyFilteredFunction.h"
+#include "SimpleFunction.h"
+#include "ShiftedFunction.h"
 
 using namespace Camellia;
 
@@ -69,58 +72,22 @@ int main(int argc, char *argv[])
     return -1;
   }
 
-  SpaceTimeHeatFormulation form(spaceDim, epsilon, useConformingTraces);
+  // Exact solution
+  Teuchos::RCP<SimpleFunction<double>> exp = Teuchos::rcp(new Exp_ax(1));
+  FunctionPtr exp_1 = Teuchos::rcp(new ShiftedFunction(exp,-1));
 
-  // Define right hand side
-  RHSPtr rhs = RHS::rhs();
-  // rhs->addTerm(Function::constant(1)*form.v());
+  FunctionPtr beta;
+  FunctionPtr beta_x = Function::constant(1);
+  FunctionPtr beta_y = Function::constant(2);
+  FunctionPtr beta_z = Function::constant(3);
+  // if (spaceDim == 1)
+  //   beta = beta_x;
+  // else if (spaceDim == 2)
+  //   beta = Function::vectorize(beta_x, beta_y);
+  // else if (spaceDim == 3)
+    beta = Function::vectorize(beta_x, beta_y, beta_z);
 
-  // Set up boundary conditions
-  BCPtr bc = BC::bc();
-  VarPtr uhat = form.u_hat();
-  VarPtr sigma_n_hat = form.sigma_n_hat();
-  // SpatialFilterPtr inflowX = SpatialFilter::matchingX(-1);
-  // SpatialFilterPtr inflowY = SpatialFilter::matchingY(-1);
-  // SpatialFilterPtr inflowZ = SpatialFilter::matchingZ(-1);
-  // SpatialFilterPtr outflowX = SpatialFilter::matchingX(1);
-  // SpatialFilterPtr outflowY = SpatialFilter::matchingY(1);
-  // SpatialFilterPtr outflowZ = SpatialFilter::matchingZ(1);
-  SpatialFilterPtr lessHalfX = SpatialFilter::lessThanX(0.5);
-  SpatialFilterPtr greaterNegHalfX = SpatialFilter::greaterThanX(-0.5);
-  SpatialFilterPtr pulseX = lessHalfX & greaterNegHalfX;
-  SpatialFilterPtr lessHalfY = SpatialFilter::lessThanY(0.5);
-  SpatialFilterPtr greaterNegHalfY = SpatialFilter::greaterThanY(-0.5);
-  SpatialFilterPtr pulseY = lessHalfY & greaterNegHalfY;
-  SpatialFilterPtr initTime = SpatialFilter::matchingT(0);
-  SpatialFilterPtr rightX = SpatialFilter::matchingX(1);
-  SpatialFilterPtr leftX = SpatialFilter::matchingX(-1);
-  SpatialFilterPtr rightY = SpatialFilter::matchingY(1);
-  SpatialFilterPtr leftY = SpatialFilter::matchingY(-1);
-  FunctionPtr zero = Function::zero();
-  FunctionPtr one = Function::constant(1);
-  FunctionPtr x2 = Function::xn(2);
-  FunctionPtr y2 = Function::yn(2);
-  // FunctionPtr z = Function::zn(1);
-  if (spaceDim == 1)
-  {
-    bc->addDirichlet(uhat, pulseX & initTime, (1-4*x2));
-    bc->addDirichlet(uhat, (!pulseX) & initTime, zero);
-    bc->addDirichlet(uhat, rightX, zero);
-    bc->addDirichlet(uhat, leftX, zero);
-  }
-  if (spaceDim == 2)
-  {
-    bc->addDirichlet(uhat, pulseX & pulseY & initTime, (1-4*x2)*(1-4*y2));
-    bc->addDirichlet(uhat, !(pulseX & pulseY) & initTime, zero);
-    // bc->addDirichlet(tc, initTime, -(1-x2)*(1-y2));
-    bc->addDirichlet(uhat, rightX, zero);
-    bc->addDirichlet(uhat, leftX, zero);
-    bc->addDirichlet(uhat, rightY, zero);
-    bc->addDirichlet(uhat, leftY, zero);
-  }
-  if (spaceDim == 3)
-  {
-  }
+  SpaceTimeConvectionDiffusionFormulation form(spaceDim, epsilon, beta, useConformingTraces);
 
   // Build mesh
   vector<double> x0 = vector<double>(spaceDim,-1.0);
@@ -135,23 +102,66 @@ int main(int argc, char *argv[])
   MeshTopologyPtr spatialMeshTopo = MeshFactory::rectilinearMeshTopology(dimensions, elementCounts, x0);
   double t0 = 0.0, t1 = 1.0;
   MeshTopologyPtr spaceTimeMeshTopo = MeshFactory::spaceTimeMeshTopology(spatialMeshTopo, t0, t1);
-  MeshPtr mesh = Teuchos::rcp( new Mesh(spaceTimeMeshTopo, form.bf(), k+1, delta_k) ) ;
-  // MeshPtr mesh = MeshFactory::rectilinearMesh(form.bf(), dimensions, elementCounts, k+1, delta_k, x0);
+  // MeshPtr mesh = Teuchos::rcp( new Mesh(spaceTimeMeshTopo, form.bf(), k+1, delta_k) ) ;
+
+  FunctionPtr zero = Function::zero();
+  FunctionPtr one = Function::constant(1);
+  FunctionPtr x2 = Function::xn(2);
+  FunctionPtr y2 = Function::yn(2);
+  SpatialFilterPtr lessHalfX = SpatialFilter::lessThanX(0.25);
+  SpatialFilterPtr greaterNegHalfX = SpatialFilter::greaterThanX(-0.25);
+  SpatialFilterPtr pulseX = lessHalfX & greaterNegHalfX;
+  FunctionPtr pulseFunctionX = Teuchos::rcp(new SpatiallyFilteredFunction<double>(one, pulseX));
+  SpatialFilterPtr lessHalfY = SpatialFilter::lessThanY(0.25);
+  SpatialFilterPtr greaterNegHalfY = SpatialFilter::greaterThanY(-0.25);
+  SpatialFilterPtr pulseY = lessHalfY & greaterNegHalfY;
+  FunctionPtr pulseFunctionY = Teuchos::rcp(new SpatiallyFilteredFunction<double>(one, pulseY));
+
+  LinearTermPtr forcingTerm = Teuchos::null;
+  form.initializeSolution(spaceTimeMeshTopo, k+1, delta_k, norm, forcingTerm);
+
+  MeshPtr mesh = form.solution()->mesh();
   MeshPtr k0Mesh = Teuchos::rcp( new Mesh (spaceTimeMeshTopo->deepCopy(), form.bf(), 1, delta_k) );
   mesh->registerObserver(k0Mesh);
 
-  form.bf()->printTrialTestInteractions();
+  // Set up boundary conditions
+  BCPtr bc = form.solution()->bc();
+  VarPtr uhat = form.uhat();
+  VarPtr tc = form.tc();
+  SpatialFilterPtr initTime = SpatialFilter::matchingT(0);
+  if (spaceDim == 1)
+  {
+    SpatialFilterPtr leftX = SpatialFilter::matchingX(-1);
+    SpatialFilterPtr rightX = SpatialFilter::matchingX(1);
+    bc->addDirichlet(uhat, leftX, zero);
+    bc->addDirichlet(uhat, rightX, zero);
+    bc->addDirichlet(tc, initTime, -pulseFunctionX);
+  }
+  else if (spaceDim == 2)
+  {
+    SpatialFilterPtr leftX = SpatialFilter::matchingX(-1);
+    SpatialFilterPtr rightX = SpatialFilter::matchingX(1);
+    SpatialFilterPtr leftY = SpatialFilter::matchingY(-1);
+    SpatialFilterPtr rightY = SpatialFilter::matchingY(1);
+    bc->addDirichlet(uhat, leftX, zero);
+    bc->addDirichlet(uhat, rightX, zero);
+    bc->addDirichlet(uhat, leftY, zero);
+    bc->addDirichlet(uhat, rightY, zero);
+    bc->addDirichlet(tc, initTime, -pulseFunctionX*pulseFunctionY);
+  }
 
   // Set up solution
   // SolutionPtr soln = Solution::solution(form.bf(), mesh, bc, rhs, form.ip(norm));
-  SolutionPtr soln = Solution::solution(form.bf(), mesh, bc, rhs, form.bf()->graphNorm());
+  // SolutionPtr soln = Solution::solution(form.bf(), mesh, bc, rhs, form.bf()->graphNorm());
+  SolutionPtr soln = form.solution();
 
   double threshold = 0.20;
   RefinementStrategy refStrategy(soln, threshold);
 
-  ostringstream refName;
-  refName << "heat" << spaceDim << "D_" << norm << "_" << epsilon << "_k" << k << "_" << solverChoice;
-  HDF5Exporter exporter(mesh,refName.str());
+  string outputDir = "/tmp";
+  ostringstream solnName;
+  solnName << "spacetimeConfusion" << spaceDim << "D_" << norm << "_" << epsilon << "_k" << k << "_" << solverChoice;
+  HDF5Exporter exporter(mesh,solnName.str(), outputDir);
 
   Teuchos::RCP<Time> solverTime = Teuchos::TimeMonitor::getNewCounter("Solve Time");
 
@@ -164,8 +174,8 @@ int main(int argc, char *argv[])
   bool useStaticCondensation = false;
   int azOutput = 20; // print residual every 20 CG iterations
 
-  ofstream dataFile(refName.str()+".txt");
-  dataFile << "ref\t " << "elements\t " << "dofs\t " << "error\t " << "solvetime\t" << "iterations\t " << endl;
+  // ofstream dataFile(solnName.str()+".txt");
+  // dataFile << "ref\t " << "elements\t " << "dofs\t " << "error\t " << "solvetime\t" << "iterations\t " << endl;
   for (int refIndex=0; refIndex <= numRefs; refIndex++)
   {
     solverTime->start(true);
@@ -200,13 +210,13 @@ int main(int argc, char *argv[])
              << " \tSolve Time: " << solveTime
              << " \tIteration Count: " << gmgSolver->iterationCount()
              << endl;
-        dataFile << refIndex
-                 << " " << mesh->numActiveElements()
-                 << " " << mesh->numGlobalDofs()
-                 << " " << energyError
-                 << " " << solveTime
-                 << " " << gmgSolver->iterationCount()
-                 << endl;
+        // dataFile << refIndex
+        //          << " " << mesh->numActiveElements()
+        //          << " " << mesh->numGlobalDofs()
+        //          << " " << energyError
+        //          << " " << solveTime
+        //          << " " << gmgSolver->iterationCount()
+        //          << endl;
       }
       else
       {
@@ -216,12 +226,12 @@ int main(int argc, char *argv[])
              << " \tEnergy Error: " << energyError
              << " \tSolve Time: " << solveTime
              << endl;
-        dataFile << refIndex
-                 << " " << mesh->numActiveElements()
-                 << " " << mesh->numGlobalDofs()
-                 << " " << energyError
-                 << " " << solveTime
-                 << endl;
+        // dataFile << refIndex
+        //          << " " << mesh->numActiveElements()
+        //          << " " << mesh->numGlobalDofs()
+        //          << " " << energyError
+        //          << " " << solveTime
+        //          << endl;
       }
     }
 
@@ -230,7 +240,7 @@ int main(int argc, char *argv[])
     if (refIndex != numRefs)
       refStrategy.refine();
   }
-  dataFile.close();
+  // dataFile.close();
 
   return 0;
 }

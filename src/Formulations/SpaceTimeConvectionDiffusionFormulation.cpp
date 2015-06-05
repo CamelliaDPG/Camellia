@@ -1,12 +1,12 @@
 //
-//  SpaceTimeHeatDivFormulation.cpp
+//  SpaceTimeConvectionDiffusionFormulation.cpp
 //  Camellia
 //
 //  Created by Nate Roberts on 10/29/14.
 //
 //
 
-#include "SpaceTimeHeatDivFormulation.h"
+#include "SpaceTimeConvectionDiffusionFormulation.h"
 #include "MeshFactory.h"
 #include "PenaltyConstraints.h"
 #include "PoissonFormulation.h"
@@ -14,23 +14,24 @@
 
 using namespace Camellia;
 
-const string SpaceTimeHeatDivFormulation::s_u = "u";
-const string SpaceTimeHeatDivFormulation::s_sigma1 = "sigma1";
-const string SpaceTimeHeatDivFormulation::s_sigma2 = "sigma2";
-const string SpaceTimeHeatDivFormulation::s_sigma3 = "sigma3";
+const string SpaceTimeConvectionDiffusionFormulation::s_u = "u";
+const string SpaceTimeConvectionDiffusionFormulation::s_sigma1 = "sigma1";
+const string SpaceTimeConvectionDiffusionFormulation::s_sigma2 = "sigma2";
+const string SpaceTimeConvectionDiffusionFormulation::s_sigma3 = "sigma3";
 
-const string SpaceTimeHeatDivFormulation::s_uhat = "uhat";
-const string SpaceTimeHeatDivFormulation::s_tc = "tc";
+const string SpaceTimeConvectionDiffusionFormulation::s_uhat = "uhat";
+const string SpaceTimeConvectionDiffusionFormulation::s_tc = "tc";
 
-const string SpaceTimeHeatDivFormulation::s_v = "v";
-const string SpaceTimeHeatDivFormulation::s_tau = "tau";
+const string SpaceTimeConvectionDiffusionFormulation::s_v = "v";
+const string SpaceTimeConvectionDiffusionFormulation::s_tau = "tau";
 
-SpaceTimeHeatDivFormulation::SpaceTimeHeatDivFormulation(int spaceDim, double epsilon, bool useConformingTraces)
+SpaceTimeConvectionDiffusionFormulation::SpaceTimeConvectionDiffusionFormulation(int spaceDim, double epsilon, TFunctionPtr<double> beta, bool useConformingTraces)
 {
   TEUCHOS_TEST_FOR_EXCEPTION(epsilon==0, std::invalid_argument, "epsilon may not be 0!");
 
   _spaceDim = spaceDim;
   _epsilon = epsilon;
+  _beta = beta;
   _useConformingTraces = useConformingTraces;
 
   if ((spaceDim != 1) && (spaceDim != 2) && (spaceDim != 3))
@@ -73,15 +74,27 @@ SpaceTimeHeatDivFormulation::SpaceTimeHeatDivFormulation(int spaceDim, double ep
   LinearTermPtr tc_lt;
   if (spaceDim == 1)
   {
-    tc_lt = -sigma1 * n_x_parity->x() + u*n_xt_parity->t();
+    tc_lt = beta->x()*n_x_parity->x()*u
+      -sigma1 * n_x_parity->x()
+      + u*n_xt_parity->t();
   }
   else if (spaceDim == 2)
   {
-    tc_lt = -sigma1 * n_x_parity->x() - sigma2 * n_x_parity->y() + u*n_xt_parity->t();
+    tc_lt = beta->x()*n_x_parity->x()*u
+      + beta->y()*n_x_parity->y()*u
+      - sigma1 * n_x_parity->x()
+      - sigma2 * n_x_parity->y()
+      + u*n_xt_parity->t();
   }
   else if (spaceDim == 3)
   {
-    tc_lt = -sigma1 * n_x_parity->x() - sigma2 * n_x_parity->y() - sigma3 * n_x_parity->z() + u*n_xt_parity->t();
+    tc_lt = beta->x()*n_x_parity->x()*u
+      + beta->y()*n_x_parity->y()*u
+      + beta->z()*n_x_parity->z()*u
+      - sigma1 * n_x_parity->x()
+      - sigma2 * n_x_parity->y()
+      - sigma3 * n_x_parity->z()
+      + u*n_xt_parity->t();
   }
   tc = _vf->fluxVar(s_tc, tc_lt);
 
@@ -95,9 +108,9 @@ SpaceTimeHeatDivFormulation::SpaceTimeHeatDivFormulation(int spaceDim, double ep
   _bf = Teuchos::rcp( new BF(_vf) );
   // v terms
   _bf->addTerm(-u, v->dt());
-  _bf->addTerm(sigma1, v->dx());
-  if (_spaceDim > 1) _bf->addTerm(sigma2, v->dy());
-  if (_spaceDim > 2) _bf->addTerm(sigma3, v->dz());
+  _bf->addTerm(-beta->x()*u + sigma1, v->dx());
+  if (_spaceDim > 1) _bf->addTerm(-beta->y()*u + sigma2, v->dy());
+  if (_spaceDim > 2) _bf->addTerm(-beta->z()*u + sigma3, v->dz());
   _bf->addTerm(tc, v);
 
   // tau terms
@@ -121,43 +134,34 @@ SpaceTimeHeatDivFormulation::SpaceTimeHeatDivFormulation(int spaceDim, double ep
   _rhs = RHS::rhs();
 }
 
-VarFactoryPtr SpaceTimeHeatDivFormulation::vf()
+VarFactoryPtr SpaceTimeConvectionDiffusionFormulation::vf()
 {
   return _vf;
 }
 
-BFPtr SpaceTimeHeatDivFormulation::bf()
+BFPtr SpaceTimeConvectionDiffusionFormulation::bf()
 {
   return _bf;
 }
 
-IPPtr SpaceTimeHeatDivFormulation::ip(string normName)
+IPPtr SpaceTimeConvectionDiffusionFormulation::ip(string normName)
 {
   return _ips.at(normName);
 }
 
-// TFunctionPtr<double> SpaceTimeHeatDivFormulation::forcingFunction(int spaceDim, double epsilon, TFunctionPtr<double> u_exact)
-// {
-//   TFunctionPtr<double> f = u_exact->dt() - epsilon * u_exact->dx()->dx();
-//   if (spaceDim > 1) f = f - epsilon * u_exact->dy()->dy();
-//   if (spaceDim > 2) f = f - epsilon * u_exact->dz()->dz();
-//
-//   return f;
-// }
-
-void SpaceTimeHeatDivFormulation::initializeSolution(MeshTopologyPtr meshTopo, int fieldPolyOrder, int delta_k, string norm,
+void SpaceTimeConvectionDiffusionFormulation::initializeSolution(MeshTopologyPtr meshTopo, int fieldPolyOrder, int delta_k, string norm,
     TLinearTermPtr<double> forcingTerm)
 {
   this->initializeSolution(meshTopo, fieldPolyOrder, delta_k, norm, forcingTerm, "");
 }
 
-void SpaceTimeHeatDivFormulation::initializeSolution(std::string filePrefix, int fieldPolyOrder, int delta_k, string norm,
+void SpaceTimeConvectionDiffusionFormulation::initializeSolution(std::string filePrefix, int fieldPolyOrder, int delta_k, string norm,
     TLinearTermPtr<double> forcingTerm)
 {
   this->initializeSolution(Teuchos::null, fieldPolyOrder, delta_k, norm, forcingTerm, filePrefix);
 }
 
-void SpaceTimeHeatDivFormulation::initializeSolution(MeshTopologyPtr meshTopo, int fieldPolyOrder, int delta_k, string norm,
+void SpaceTimeConvectionDiffusionFormulation::initializeSolution(MeshTopologyPtr meshTopo, int fieldPolyOrder, int delta_k, string norm,
     TLinearTermPtr<double> forcingTerm, string savedSolutionAndMeshPrefix)
 {
   TEUCHOS_TEST_FOR_EXCEPTION(meshTopo->getSpaceDim() != _spaceDim + 1, std::invalid_argument, "MeshTopo must be space-time mesh");
@@ -196,27 +200,32 @@ void SpaceTimeHeatDivFormulation::initializeSolution(MeshTopologyPtr meshTopo, i
   _refinementStrategy = Teuchos::rcp( new RefinementStrategy( mesh, residual, ip, energyThreshold ) );
 }
 
-double SpaceTimeHeatDivFormulation::epsilon()
+double SpaceTimeConvectionDiffusionFormulation::epsilon()
 {
   return _epsilon;
 }
 
-RefinementStrategyPtr SpaceTimeHeatDivFormulation::getRefinementStrategy()
+TFunctionPtr<double> SpaceTimeConvectionDiffusionFormulation::beta()
+{
+  return _beta;
+}
+
+RefinementStrategyPtr SpaceTimeConvectionDiffusionFormulation::getRefinementStrategy()
 {
   return _refinementStrategy;
 }
 
-void SpaceTimeHeatDivFormulation::setRefinementStrategy(RefinementStrategyPtr refStrategy)
+void SpaceTimeConvectionDiffusionFormulation::setRefinementStrategy(RefinementStrategyPtr refStrategy)
 {
   _refinementStrategy = refStrategy;
 }
 
-void SpaceTimeHeatDivFormulation::refine()
+void SpaceTimeConvectionDiffusionFormulation::refine()
 {
   _refinementStrategy->refine();
 }
 
-// RHSPtr SpaceTimeHeatDivFormulation::rhs(TFunctionPtr<double> f)
+// RHSPtr SpaceTimeConvectionDiffusionFormulation::rhs(TFunctionPtr<double> f)
 // {
 //   RHSPtr rhs = RHS::rhs();
 //
@@ -230,7 +239,7 @@ void SpaceTimeHeatDivFormulation::refine()
 //   return rhs;
 // }
 
-VarPtr SpaceTimeHeatDivFormulation::sigma(int i)
+VarPtr SpaceTimeConvectionDiffusionFormulation::sigma(int i)
 {
   if (i > _spaceDim)
   {
@@ -248,48 +257,48 @@ VarPtr SpaceTimeHeatDivFormulation::sigma(int i)
   TEUCHOS_TEST_FOR_EXCEPTION(true, std::invalid_argument, "unhandled i value");
 }
 
-VarPtr SpaceTimeHeatDivFormulation::u()
+VarPtr SpaceTimeConvectionDiffusionFormulation::u()
 {
   return _vf->fieldVar(s_u);
 }
 
 // traces:
-VarPtr SpaceTimeHeatDivFormulation::tc()
+VarPtr SpaceTimeConvectionDiffusionFormulation::tc()
 {
   return _vf->fluxVar(s_tc);
 }
 
-VarPtr SpaceTimeHeatDivFormulation::uhat()
+VarPtr SpaceTimeConvectionDiffusionFormulation::uhat()
 {
   return _vf->traceVarSpaceOnly(s_uhat);
 }
 
 // test variables:
-VarPtr SpaceTimeHeatDivFormulation::tau()
+VarPtr SpaceTimeConvectionDiffusionFormulation::tau()
 {
   return _vf->testVar(s_tau, HDIV);
 }
 
 // ! Saves the solution(s) and mesh to an HDF5 format.
-void SpaceTimeHeatDivFormulation::save(std::string prefixString)
+void SpaceTimeConvectionDiffusionFormulation::save(std::string prefixString)
 {
   _solution->mesh()->saveToHDF5(prefixString+".mesh");
   _solution->saveToHDF5(prefixString+".soln");
 }
 
 // ! Returns the solution
-TSolutionPtr<double> SpaceTimeHeatDivFormulation::solution()
+TSolutionPtr<double> SpaceTimeConvectionDiffusionFormulation::solution()
 {
   return _solution;
 }
 
 // ! Solves
-void SpaceTimeHeatDivFormulation::solve()
+void SpaceTimeConvectionDiffusionFormulation::solve()
 {
   _solution->solve();
 }
 
-VarPtr SpaceTimeHeatDivFormulation::v()
+VarPtr SpaceTimeConvectionDiffusionFormulation::v()
 {
   return _vf->testVar(s_v, HGRAD);
 }

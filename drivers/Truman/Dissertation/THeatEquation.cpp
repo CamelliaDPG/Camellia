@@ -100,8 +100,8 @@ int main(int argc, char *argv[])
   SpatialFilterPtr pulseY = lessHalfY & greaterNegHalfY;
   FunctionPtr pulseFunctionY = Teuchos::rcp(new SpatiallyFilteredFunction<double>(one, pulseY));
 
-  FunctionPtr forcingFunction = zero;
-  form.initializeSolution(spaceTimeMeshTopo, k+1, delta_k, norm, forcingFunction);
+  LinearTermPtr forcingTerm = Teuchos::null;
+  form.initializeSolution(spaceTimeMeshTopo, k+1, delta_k, norm, forcingTerm);
 
   MeshPtr mesh = form.solution()->mesh();
   MeshPtr k0Mesh = Teuchos::rcp( new Mesh (spaceTimeMeshTopo->deepCopy(), form.bf(), 1, delta_k) );
