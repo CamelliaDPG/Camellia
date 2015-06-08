@@ -1,3 +1,0 @@
-project(SpaceTimeLinearizedEuler)
-
-add_executable(IsentropicSinePulse IsentropicSinePulse.cpp)

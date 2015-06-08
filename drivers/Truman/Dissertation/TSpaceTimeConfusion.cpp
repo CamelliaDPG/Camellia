@@ -19,10 +19,72 @@
 #include "Function.h"
 #include "RefinementStrategy.h"
 #include "GMGSolver.h"
-#include "SpaceTimeHeatDivFormulation.h"
+#include "SpaceTimeConvectionDiffusionFormulation.h"
 #include "SpatiallyFilteredFunction.h"
+#include "ExpFunction.h"
 
 using namespace Camellia;
+
+class ExactU1D : public Function
+{
+public:
+  double _l;
+  double _lambda1;
+  double _lambda2;
+  ExactU1D(double epsilon, double l=3) : Function(0), _l(l)
+  {
+    _l = 3;
+    _lambda1 = (-1.+sqrt(1.-4*epsilon*_l))/(-2.*epsilon);
+    _lambda2 = (-1.-sqrt(1.-4*epsilon*_l))/(-2.*epsilon);
+  }
+  void values(Intrepid::FieldContainer<double> &values, BasisCachePtr basisCache)
+  {
+    int numCells = values.dimension(0);
+    int numPoints = values.dimension(1);
+
+    const Intrepid::FieldContainer<double> *points = &(basisCache->getPhysicalCubaturePoints());
+    for (int cellIndex=0; cellIndex<numCells; cellIndex++)
+    {
+      for (int ptIndex=0; ptIndex<numPoints; ptIndex++)
+      {
+        double x = (*points)(cellIndex,ptIndex,0);
+        double t = (*points)(cellIndex,ptIndex,1);
+        values(cellIndex, ptIndex) = exp(-_l*t)*(exp(_lambda1*(x-1))-exp(_lambda2*(x-1)));
+      }
+    }
+  }
+};
+
+class ExactU2D : public Function
+{
+public:
+  double _l;
+  double _lambda1;
+  double _lambda2;
+  ExactU2D(double epsilon, double l=1) : Function(0), _l(l)
+  {
+    double k = l;
+    _lambda1 = (-1.+sqrt(1.-4*epsilon*k))/(-2.*epsilon);
+    _lambda2 = (-1.-sqrt(1.-4*epsilon*k))/(-2.*epsilon);
+  }
+  void values(Intrepid::FieldContainer<double> &values, BasisCachePtr basisCache)
+  {
+    int numCells = values.dimension(0);
+    int numPoints = values.dimension(1);
+
+    const Intrepid::FieldContainer<double> *points = &(basisCache->getPhysicalCubaturePoints());
+    for (int cellIndex=0; cellIndex<numCells; cellIndex++)
+    {
+      for (int ptIndex=0; ptIndex<numPoints; ptIndex++)
+      {
+        double x = (*points)(cellIndex,ptIndex,0);
+        double y = (*points)(cellIndex,ptIndex,1);
+        double t = (*points)(cellIndex,ptIndex,2);
+        values(cellIndex, ptIndex) = exp(-_l*t)*(exp(_lambda1*(x-1))-exp(_lambda2*(x-1)))*(2*(y-.5));
+      }
+    }
+  }
+};
 
 int main(int argc, char *argv[])
 {
@@ -70,11 +132,42 @@ int main(int argc, char *argv[])
     return -1;
   }
 
-  SpaceTimeHeatDivFormulation form(spaceDim, epsilon, useConformingTraces);
+  // Exact solution
+  // FunctionPtr uExact1D = Teuchos::rcp(new ExactU1D(epsilon));
+  // FunctionPtr uExact2D = Teuchos::rcp(new ExactU2D(epsilon));
+  double l = 3;
+  double lambda1 = (-1+sqrt(1-4*epsilon*l))/(-2*epsilon);
+  double lambda2 = (-1-sqrt(1-4*epsilon*l))/(-2*epsilon);
+  FunctionPtr explt = Teuchos::rcp(new Exp_at(-l));
+  FunctionPtr explambda1x = Teuchos::rcp(new Exp_ax(lambda1));
+  FunctionPtr explambda2x = Teuchos::rcp(new Exp_ax(lambda2));
+  FunctionPtr u_exact = explt*(explambda1x-explambda2x);
+  FunctionPtr sigma_exact = epsilon*u_exact->dx()->dx();
+  FunctionPtr tc_exact = u_exact-sigma_exact;
+  FunctionPtr uhat_exact = u_exact;
+
+  FunctionPtr beta;
+  FunctionPtr beta_x = Function::constant(1);
+  FunctionPtr beta_y = Function::constant(0);
+  FunctionPtr beta_z = Function::constant(0);
+  // if (spaceDim == 1)
+  //   beta = beta_x;
+  // else if (spaceDim == 2)
+  //   beta = Function::vectorize(beta_x, beta_y);
+  // else if (spaceDim == 3)
+    beta = Function::vectorize(beta_x, beta_y, beta_z);
+
+  SpaceTimeConvectionDiffusionFormulation form(spaceDim, epsilon, beta, useConformingTraces);
+
+  map<int, FunctionPtr> exactMap;
+  exactMap[form.u()->ID()] = u_exact;
+  exactMap[form.sigma(1)->ID()] = sigma_exact;
+  exactMap[form.tc()->ID()] = form.tc()->termTraced()->evaluate(exactMap);
+  exactMap[form.uhat()->ID()] = form.uhat()->termTraced()->evaluate(exactMap);
 
   // Build mesh
-  vector<double> x0 = vector<double>(spaceDim,-1.0);
-  double width = 2.0;
+  vector<double> x0 = vector<double>(spaceDim,-1);
+  double width = 1.0;
   vector<double> dimensions;
   vector<int> elementCounts;
   for (int d=0; d<spaceDim; d++)
@@ -89,16 +182,16 @@ int main(int argc, char *argv[])
 
   FunctionPtr zero = Function::zero();
   FunctionPtr one = Function::constant(1);
-  FunctionPtr x2 = Function::xn(2);
-  FunctionPtr y2 = Function::yn(2);
-  SpatialFilterPtr lessHalfX = SpatialFilter::lessThanX(0.25);
-  SpatialFilterPtr greaterNegHalfX = SpatialFilter::greaterThanX(-0.25);
-  SpatialFilterPtr pulseX = lessHalfX & greaterNegHalfX;
-  FunctionPtr pulseFunctionX = Teuchos::rcp(new SpatiallyFilteredFunction<double>(one, pulseX));
-  SpatialFilterPtr lessHalfY = SpatialFilter::lessThanY(0.25);
-  SpatialFilterPtr greaterNegHalfY = SpatialFilter::greaterThanY(-0.25);
-  SpatialFilterPtr pulseY = lessHalfY & greaterNegHalfY;
-  FunctionPtr pulseFunctionY = Teuchos::rcp(new SpatiallyFilteredFunction<double>(one, pulseY));
+  // FunctionPtr x2 = Function::xn(2);
+  // FunctionPtr y2 = Function::yn(2);
+  // SpatialFilterPtr lessHalfX = SpatialFilter::lessThanX(0.25);
+  // SpatialFilterPtr greaterNegHalfX = SpatialFilter::greaterThanX(-0.25);
+  // SpatialFilterPtr pulseX = lessHalfX & greaterNegHalfX;
+  // FunctionPtr pulseFunctionX = Teuchos::rcp(new SpatiallyFilteredFunction<double>(one, pulseX));
+  // SpatialFilterPtr lessHalfY = SpatialFilter::lessThanY(0.25);
+  // SpatialFilterPtr greaterNegHalfY = SpatialFilter::greaterThanY(-0.25);
+  // SpatialFilterPtr pulseY = lessHalfY & greaterNegHalfY;
+  // FunctionPtr pulseFunctionY = Teuchos::rcp(new SpatiallyFilteredFunction<double>(one, pulseY));
 
   LinearTermPtr forcingTerm = Teuchos::null;
   form.initializeSolution(spaceTimeMeshTopo, k+1, delta_k, norm, forcingTerm);
@@ -115,22 +208,22 @@ int main(int argc, char *argv[])
   if (spaceDim == 1)
   {
     SpatialFilterPtr leftX = SpatialFilter::matchingX(-1);
-    SpatialFilterPtr rightX = SpatialFilter::matchingX(1);
-    bc->addDirichlet(tc, leftX, zero);
-    bc->addDirichlet(tc, rightX, zero);
-    bc->addDirichlet(tc, initTime, -pulseFunctionX);
+    SpatialFilterPtr rightX = SpatialFilter::matchingX(0);
+    bc->addDirichlet(tc, leftX, exactMap[form.tc()->ID()]);
+    bc->addDirichlet(uhat, rightX, exactMap[form.uhat()->ID()]);
+    bc->addDirichlet(tc, initTime, exactMap[form.tc()->ID()]);
   }
   else if (spaceDim == 2)
   {
-    SpatialFilterPtr leftX = SpatialFilter::matchingX(-1);
-    SpatialFilterPtr rightX = SpatialFilter::matchingX(1);
-    SpatialFilterPtr leftY = SpatialFilter::matchingY(-1);
-    SpatialFilterPtr rightY = SpatialFilter::matchingY(1);
-    bc->addDirichlet(tc, leftX, zero);
-    bc->addDirichlet(tc, rightX, zero);
-    bc->addDirichlet(tc, leftY, zero);
-    bc->addDirichlet(tc, rightY, zero);
-    bc->addDirichlet(tc, initTime, -pulseFunctionX*pulseFunctionY);
+    // SpatialFilterPtr leftX = SpatialFilter::matchingX(-1);
+    // SpatialFilterPtr rightX = SpatialFilter::matchingX(0);
+    // SpatialFilterPtr leftY = SpatialFilter::matchingY(-1);
+    // SpatialFilterPtr rightY = SpatialFilter::matchingY(0);
+    // bc->addDirichlet(uhat, leftX, uExact2D);
+    // bc->addDirichlet(uhat, rightX, uExact2D);
+    // bc->addDirichlet(uhat, leftY, uExact2D);
+    // bc->addDirichlet(uhat, rightY, uExact2D);
+    // bc->addDirichlet(tc, initTime, -uExact2D);
   }
 
   // Set up solution
@@ -143,7 +236,7 @@ int main(int argc, char *argv[])
 
   string outputDir = "/tmp";
   ostringstream solnName;
-  solnName << "heat" << spaceDim << "D_" << norm << "_" << epsilon << "_k" << k << "_" << solverChoice;
+  solnName << "spacetimeConfusion" << spaceDim << "D_" << norm << "_" << epsilon << "_k" << k << "_" << solverChoice;
   HDF5Exporter exporter(mesh,solnName.str(), outputDir);
 
   Teuchos::RCP<Time> solverTime = Teuchos::TimeMonitor::getNewCounter("Solve Time");

@@ -91,7 +91,6 @@ ConvectionDiffusionFormulation::ConvectionDiffusionFormulation(int spaceDim, boo
   {
     _ips["Robust"] = Teuchos::rcp(new IP);
     _ips["Robust"]->addTerm(tau->div());
-    _ips["Robust"]->addTerm(_beta*v->grad());
     _ips["Robust"]->addTerm(Function::min(one/Function::h(),Function::constant(1./sqrt(_epsilon)))*tau);
     _ips["Robust"]->addTerm(sqrt(_epsilon)*v->grad());
     _ips["Robust"]->addTerm(_beta*v->grad());
@@ -101,7 +100,6 @@ ConvectionDiffusionFormulation::ConvectionDiffusionFormulation(int spaceDim, boo
   {
     _ips["Robust"] = Teuchos::rcp(new IP);
     _ips["Robust"]->addTerm(tau->dx());
-    _ips["Robust"]->addTerm(_beta*v->dx());
     _ips["Robust"]->addTerm(Function::min(one/Function::h(),Function::constant(1./sqrt(_epsilon)))*tau);
     _ips["Robust"]->addTerm(sqrt(_epsilon)*v->dx());
     _ips["Robust"]->addTerm(_beta*v->dx());

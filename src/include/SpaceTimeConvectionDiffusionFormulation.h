@@ -1,13 +1,13 @@
 //
-//  SpaceTimeHeatDivFormulation.h
+//  SpaceTimeConvectionDiffusionFormulation.h
 //  Camellia
 //
 //  Created by Nate Roberts on 10/29/14.
 //
 //
 
-#ifndef Camellia_SpaceTimeHeatDivFormulation_h
-#define Camellia_SpaceTimeHeatDivFormulation_h
+#ifndef Camellia_SpaceTimeConvectionDiffusionFormulation_h
+#define Camellia_SpaceTimeConvectionDiffusionFormulation_h
 
 #include "TypeDefs.h"
 
@@ -21,12 +21,13 @@
 
 namespace Camellia
 {
-class SpaceTimeHeatDivFormulation
+class SpaceTimeConvectionDiffusionFormulation
 {
 
   int _spaceDim;
   bool _useConformingTraces;
   double _epsilon;
+  TFunctionPtr<double> _beta;
 
   VarFactoryPtr _vf;
   BFPtr _bf;
@@ -50,7 +51,7 @@ class SpaceTimeHeatDivFormulation
   void initializeSolution(MeshTopologyPtr meshTopo, int fieldPolyOrder, int delta_k, string norm,
                           TLinearTermPtr<double> forcingTerm, std::string fileToLoadPrefix);
 public:
-  SpaceTimeHeatDivFormulation(int spaceDim, double epsilon, bool useConformingTraces = false);
+  SpaceTimeConvectionDiffusionFormulation(int spaceDim, double epsilon, TFunctionPtr<double> beta, bool useConformingTraces = false);
 
   // ! the formulation's variable factory
   VarFactoryPtr vf();
@@ -70,12 +71,15 @@ public:
                           TLinearTermPtr<double> forcingTerm = Teuchos::null);
 
   // ! Loads the mesh and solution from disk, if they were previously saved using save().  In the present
-  // ! implementation, assumes that the constructor arguments provided to SpaceTimeHeatDivFormulation were the same
-  // ! on the SpaceTimeHeatDivFormulation on which save() was invoked as they were for this SpaceTimeHeatDivFormulation.
+  // ! implementation, assumes that the constructor arguments provided to SpaceTimeConvectionDiffusionFormulation were the same
+  // ! on the SpaceTimeConvectionDiffusionFormulation on which save() was invoked as they were for this SpaceTimeConvectionDiffusionFormulation.
   void load(std::string prefixString);
 
   // ! Returns epsilon.
   double epsilon();
+
+  // ! Returns beta.
+  TFunctionPtr<double> beta();
 
   // ! refine according to energy error in the solution
   void refine();
