@@ -19,6 +19,7 @@ namespace Camellia {
   class SuperLUDistSolver : public Solver
   {
     Teuchos::RCP<Amesos_Superludist> _savedSolver;
+    Teuchos::RCP<Epetra_LinearProblem> _savedProblem;
     bool _saveFactorization;
   public:
     SuperLUDistSolver(bool saveFactorization)
@@ -27,15 +28,16 @@ namespace Camellia {
     }
     
     int solve() {
-      Epetra_LinearProblem problem(this->_stiffnessMatrix.get(), this->_lhs.get(), this->_rhs.get());
       if (!_saveFactorization)
       {
+        Epetra_LinearProblem problem(this->_stiffnessMatrix.get(), this->_lhs.get(), this->_rhs.get());
         Amesos_Superludist slu(problem);
         return slu.Solve();
       }
       else
       {
-        _savedSolver = Teuchos::rcp( new Amesos_Superludist(problem) );
+        _savedProblem = Teuchos::rcp( new Epetra_LinearProblem(this->_stiffnessMatrix.get(), this->_lhs.get(), this->_rhs.get()) );
+        _savedSolver = Teuchos::rcp( new Amesos_Superludist(*_savedProblem) );
         return _savedSolver->Solve();
       }
     }
