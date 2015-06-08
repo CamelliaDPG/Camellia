@@ -30,7 +30,7 @@ GMGSolver::GMGSolver(BCPtr zeroBCs, MeshPtr coarseMesh, IPPtr coarseIP,
   _applySmoothing = true;
   _diagonalScaling = DIAGONAL_SCALING_DEFAULT;
 
-  _computeCondest = true;
+  _computeCondest = false;
   _azOutput = AZ_warnings;
 
   _useCG = true;
