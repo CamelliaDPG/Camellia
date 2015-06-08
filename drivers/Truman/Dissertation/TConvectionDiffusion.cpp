@@ -48,6 +48,7 @@ int main(int argc, char *argv[])
   int numXElems = 1;
   bool useConformingTraces = true;
   string solverChoice = "KLU";
+  string coarseSolverChoice = "SuperLU";
   double solverTolerance = 1e-6;
   string norm = "CoupledRobust";
   cmdp.setOption("spaceDim", &spaceDim, "spatial dimension");
@@ -58,6 +59,7 @@ int main(int argc, char *argv[])
   cmdp.setOption("epsilon", &epsilon, "epsilon");
   cmdp.setOption("norm", &norm, "norm");
   cmdp.setOption("conformingTraces", "nonconformingTraces", &useConformingTraces, "use conforming traces");
+  cmdp.setOption("coarseSolver", &coarseSolverChoice, "KLU, SuperLU");
   cmdp.setOption("solver", &solverChoice, "KLU, SuperLU, MUMPS, GMG-Direct, GMG-ILU, GMG-IC");
   cmdp.setOption("solverTolerance", &solverTolerance, "iterative solver tolerance");
 
@@ -152,7 +154,9 @@ int main(int argc, char *argv[])
     Solver::printAvailableSolversReport();
   map<string, SolverPtr> solvers;
   solvers["KLU"] = Solver::getSolver(Solver::KLU, true);
-  // SolverPtr superluSolver = Solver::getSolver(Solver::SuperLUDist, true);
+  SolverPtr superluSolver = Solver::getSolver(Solver::SuperLUDist, true);
+  solvers["SuperLU"] = superluSolver;
+  
   int maxIters = 2000;
   bool useStaticCondensation = false;
   int azOutput = 20; // print residual every 20 CG iterations
@@ -165,7 +169,7 @@ int main(int argc, char *argv[])
     Teuchos::RCP<GMGSolver> gmgSolver;
     if (solverChoice[0] == 'G')
     {
-      gmgSolver = Teuchos::rcp( new GMGSolver(soln, k0Mesh, maxIters, solverTolerance, solvers["KLU"], useStaticCondensation));
+      gmgSolver = Teuchos::rcp( new GMGSolver(soln, k0Mesh, maxIters, solverTolerance, solvers[coarseSolverChoice], useStaticCondensation));
       gmgSolver->setAztecOutput(azOutput);
       if (solverChoice == "GMG-Direct")
         gmgSolver->gmgOperator().setSchwarzFactorizationType(GMGOperator::Direct);
