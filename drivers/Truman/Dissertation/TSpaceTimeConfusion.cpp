@@ -25,67 +25,6 @@
 
 using namespace Camellia;
 
-class ExactU1D : public Function
-{
-public:
-  double _l;
-  double _lambda1;
-  double _lambda2;
-  ExactU1D(double epsilon, double l=3) : Function(0), _l(l)
-  {
-    _l = 3;
-    _lambda1 = (-1.+sqrt(1.-4*epsilon*_l))/(-2.*epsilon);
-    _lambda2 = (-1.-sqrt(1.-4*epsilon*_l))/(-2.*epsilon);
-  }
-  void values(Intrepid::FieldContainer<double> &values, BasisCachePtr basisCache)
-  {
-    int numCells = values.dimension(0);
-    int numPoints = values.dimension(1);
-
-    const Intrepid::FieldContainer<double> *points = &(basisCache->getPhysicalCubaturePoints());
-    for (int cellIndex=0; cellIndex<numCells; cellIndex++)
-    {
-      for (int ptIndex=0; ptIndex<numPoints; ptIndex++)
-      {
-        double x = (*points)(cellIndex,ptIndex,0);
-        double t = (*points)(cellIndex,ptIndex,1);
-        values(cellIndex, ptIndex) = exp(-_l*t)*(exp(_lambda1*(x-1))-exp(_lambda2*(x-1)));
-      }
-    }
-  }
-};
-
-class ExactU2D : public Function
-{
-public:
-  double _l;
-  double _lambda1;
-  double _lambda2;
-  ExactU2D(double epsilon, double l=1) : Function(0), _l(l)
-  {
-    double k = l;
-    _lambda1 = (-1.+sqrt(1.-4*epsilon*k))/(-2.*epsilon);
-    _lambda2 = (-1.-sqrt(1.-4*epsilon*k))/(-2.*epsilon);
-  }
-  void values(Intrepid::FieldContainer<double> &values, BasisCachePtr basisCache)
-  {
-    int numCells = values.dimension(0);
-    int numPoints = values.dimension(1);
-
-    const Intrepid::FieldContainer<double> *points = &(basisCache->getPhysicalCubaturePoints());
-    for (int cellIndex=0; cellIndex<numCells; cellIndex++)
-    {
-      for (int ptIndex=0; ptIndex<numPoints; ptIndex++)
-      {
-        double x = (*points)(cellIndex,ptIndex,0);
-        double y = (*points)(cellIndex,ptIndex,1);
-        double t = (*points)(cellIndex,ptIndex,2);
-        values(cellIndex, ptIndex) = exp(-_l*t)*(exp(_lambda1*(x-1))-exp(_lambda2*(x-1)))*(2*(y-.5));
-      }
-    }
-  }
-};
-
 int main(int argc, char *argv[])
 {
 
@@ -107,15 +46,15 @@ int main(int argc, char *argv[])
   int spaceDim = 2;
   double epsilon = 1;
   int numRefs = 1;
-  int k = 2, delta_k = 2;
+  int p = 2, delta_p = 2;
   int numXElems = 1;
   bool useConformingTraces = false;
   string solverChoice = "KLU";
   double solverTolerance = 1e-6;
   string norm = "Graph";
   cmdp.setOption("spaceDim", &spaceDim, "spatial dimension");
-  cmdp.setOption("polyOrder",&k,"polynomial order for field variable u");
-  cmdp.setOption("delta_k", &delta_k, "test space polynomial order enrichment");
+  cmdp.setOption("polyOrder",&p,"polynomial order for field variable u");
+  cmdp.setOption("delta_p", &delta_p, "test space polynomial order enrichment");
   cmdp.setOption("numRefs",&numRefs,"number of refinements");
   cmdp.setOption("numXElems",&numXElems,"number of elements in x direction");
   cmdp.setOption("epsilon", &epsilon, "epsilon");
@@ -135,16 +74,17 @@ int main(int argc, char *argv[])
   // Exact solution
   // FunctionPtr uExact1D = Teuchos::rcp(new ExactU1D(epsilon));
   // FunctionPtr uExact2D = Teuchos::rcp(new ExactU2D(epsilon));
-  double l = 3;
+  double l = 1;
+  double k = 1;
   double lambda1 = (-1+sqrt(1-4*epsilon*l))/(-2*epsilon);
   double lambda2 = (-1-sqrt(1-4*epsilon*l))/(-2*epsilon);
   FunctionPtr explt = Teuchos::rcp(new Exp_at(-l));
   FunctionPtr explambda1x = Teuchos::rcp(new Exp_ax(lambda1));
   FunctionPtr explambda2x = Teuchos::rcp(new Exp_ax(lambda2));
   FunctionPtr u_exact = explt*(explambda1x-explambda2x);
-  FunctionPtr sigma_exact = epsilon*u_exact->dx()->dx();
-  FunctionPtr tc_exact = u_exact-sigma_exact;
-  FunctionPtr uhat_exact = u_exact;
+  if (spaceDim == 2)
+    u_exact = u_exact*Function::yn(1);
+  FunctionPtr sigma_exact = epsilon*u_exact->grad();
 
   FunctionPtr beta;
   FunctionPtr beta_x = Function::constant(1);
@@ -161,12 +101,16 @@ int main(int argc, char *argv[])
 
   map<int, FunctionPtr> exactMap;
   exactMap[form.u()->ID()] = u_exact;
-  exactMap[form.sigma(1)->ID()] = sigma_exact;
+  exactMap[form.sigma(1)->ID()] = sigma_exact->x();
+  if (spaceDim == 2)
+    exactMap[form.sigma(2)->ID()] = sigma_exact->y();
   exactMap[form.tc()->ID()] = form.tc()->termTraced()->evaluate(exactMap);
   exactMap[form.uhat()->ID()] = form.uhat()->termTraced()->evaluate(exactMap);
 
   // Build mesh
-  vector<double> x0 = vector<double>(spaceDim,-1);
+  vector<double> x0;// = vector<double>(spaceDim,-1);
+  x0.push_back(-1);
+  x0.push_back(-.5);
   double width = 1.0;
   vector<double> dimensions;
   vector<int> elementCounts;
@@ -178,26 +122,15 @@ int main(int argc, char *argv[])
   MeshTopologyPtr spatialMeshTopo = MeshFactory::rectilinearMeshTopology(dimensions, elementCounts, x0);
   double t0 = 0.0, t1 = 1.0;
   MeshTopologyPtr spaceTimeMeshTopo = MeshFactory::spaceTimeMeshTopology(spatialMeshTopo, t0, t1);
-  // MeshPtr mesh = Teuchos::rcp( new Mesh(spaceTimeMeshTopo, form.bf(), k+1, delta_k) ) ;
 
   FunctionPtr zero = Function::zero();
   FunctionPtr one = Function::constant(1);
-  // FunctionPtr x2 = Function::xn(2);
-  // FunctionPtr y2 = Function::yn(2);
-  // SpatialFilterPtr lessHalfX = SpatialFilter::lessThanX(0.25);
-  // SpatialFilterPtr greaterNegHalfX = SpatialFilter::greaterThanX(-0.25);
-  // SpatialFilterPtr pulseX = lessHalfX & greaterNegHalfX;
-  // FunctionPtr pulseFunctionX = Teuchos::rcp(new SpatiallyFilteredFunction<double>(one, pulseX));
-  // SpatialFilterPtr lessHalfY = SpatialFilter::lessThanY(0.25);
-  // SpatialFilterPtr greaterNegHalfY = SpatialFilter::greaterThanY(-0.25);
-  // SpatialFilterPtr pulseY = lessHalfY & greaterNegHalfY;
-  // FunctionPtr pulseFunctionY = Teuchos::rcp(new SpatiallyFilteredFunction<double>(one, pulseY));
 
   LinearTermPtr forcingTerm = Teuchos::null;
-  form.initializeSolution(spaceTimeMeshTopo, k+1, delta_k, norm, forcingTerm);
+  form.initializeSolution(spaceTimeMeshTopo, p+1, delta_p, norm, forcingTerm);
 
   MeshPtr mesh = form.solution()->mesh();
-  MeshPtr k0Mesh = Teuchos::rcp( new Mesh (spaceTimeMeshTopo->deepCopy(), form.bf(), 1, delta_k) );
+  MeshPtr k0Mesh = Teuchos::rcp( new Mesh (spaceTimeMeshTopo->deepCopy(), form.bf(), 1, delta_p) );
   mesh->registerObserver(k0Mesh);
 
   // Set up boundary conditions
@@ -207,28 +140,26 @@ int main(int argc, char *argv[])
   SpatialFilterPtr initTime = SpatialFilter::matchingT(0);
   if (spaceDim == 1)
   {
-    SpatialFilterPtr leftX = SpatialFilter::matchingX(-1);
-    SpatialFilterPtr rightX = SpatialFilter::matchingX(0);
-    bc->addDirichlet(tc, leftX, exactMap[form.tc()->ID()]);
-    bc->addDirichlet(uhat, rightX, exactMap[form.uhat()->ID()]);
-    bc->addDirichlet(tc, initTime, exactMap[form.tc()->ID()]);
+    SpatialFilterPtr leftX  = SpatialFilter::matchingX(x0[0]);
+    SpatialFilterPtr rightX = SpatialFilter::matchingX(x0[0]+width);
+    bc->addDirichlet(tc,   leftX,    exactMap[form.tc()->ID()]);
+    bc->addDirichlet(uhat, rightX,   exactMap[form.uhat()->ID()]);
+    bc->addDirichlet(tc,   initTime, exactMap[form.tc()->ID()]);
   }
   else if (spaceDim == 2)
   {
-    // SpatialFilterPtr leftX = SpatialFilter::matchingX(-1);
-    // SpatialFilterPtr rightX = SpatialFilter::matchingX(0);
-    // SpatialFilterPtr leftY = SpatialFilter::matchingY(-1);
-    // SpatialFilterPtr rightY = SpatialFilter::matchingY(0);
-    // bc->addDirichlet(uhat, leftX, uExact2D);
-    // bc->addDirichlet(uhat, rightX, uExact2D);
-    // bc->addDirichlet(uhat, leftY, uExact2D);
-    // bc->addDirichlet(uhat, rightY, uExact2D);
-    // bc->addDirichlet(tc, initTime, -uExact2D);
+    SpatialFilterPtr leftX  = SpatialFilter::matchingX(x0[0]);
+    SpatialFilterPtr rightX = SpatialFilter::matchingX(x0[0]+width);
+    SpatialFilterPtr leftY  = SpatialFilter::matchingX(x0[1]);
+    SpatialFilterPtr rightY = SpatialFilter::matchingX(x0[1]+width);
+    bc->addDirichlet(tc,   leftX,    exactMap[form.tc()->ID()]);
+    bc->addDirichlet(uhat, rightX,   exactMap[form.uhat()->ID()]);
+    bc->addDirichlet(tc, leftY,    exactMap[form.tc()->ID()]);
+    bc->addDirichlet(tc, rightY,   exactMap[form.tc()->ID()]);
+    bc->addDirichlet(tc,   initTime, exactMap[form.tc()->ID()]);
   }
 
   // Set up solution
-  // SolutionPtr soln = Solution::solution(form.bf(), mesh, bc, rhs, form.ip(norm));
-  // SolutionPtr soln = Solution::solution(form.bf(), mesh, bc, rhs, form.bf()->graphNorm());
   SolutionPtr soln = form.solution();
 
   double threshold = 0.20;
@@ -236,7 +167,7 @@ int main(int argc, char *argv[])
 
   string outputDir = "/tmp";
   ostringstream solnName;
-  solnName << "spacetimeConfusion" << spaceDim << "D_" << norm << "_" << epsilon << "_k" << k << "_" << solverChoice;
+  solnName << "spacetimeConfusion" << spaceDim << "D_" << norm << "_" << epsilon << "_p" << p << "_" << solverChoice;
   HDF5Exporter exporter(mesh,solnName.str(), outputDir);
 
   Teuchos::RCP<Time> solverTime = Teuchos::TimeMonitor::getNewCounter("Solve Time");
