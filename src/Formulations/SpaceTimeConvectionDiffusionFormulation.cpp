@@ -34,6 +34,9 @@ SpaceTimeConvectionDiffusionFormulation::SpaceTimeConvectionDiffusionFormulation
   _beta = beta;
   _useConformingTraces = useConformingTraces;
 
+  FunctionPtr zero = Function::constant(1);
+  FunctionPtr one = Function::constant(1);
+
   if ((spaceDim != 1) && (spaceDim != 2) && (spaceDim != 3))
   {
     TEUCHOS_TEST_FOR_EXCEPTION(true, std::invalid_argument, "spaceDim must be 1, 2, or 3");
@@ -130,6 +133,25 @@ SpaceTimeConvectionDiffusionFormulation::SpaceTimeConvectionDiffusionFormulation
   }
 
   _ips["Graph"] = _bf->graphNorm();
+
+  if (spaceDim > 1)
+  {
+    _ips["Robust"] = Teuchos::rcp(new IP);
+    _ips["Robust"]->addTerm(tau->div() - v->dt() - beta*v->grad());
+    _ips["Robust"]->addTerm(_beta*v->grad());
+    _ips["Robust"]->addTerm(Function::min(one/Function::h(),Function::constant(1./sqrt(_epsilon)))*tau);
+    _ips["Robust"]->addTerm(sqrt(_epsilon)*v->grad());
+    _ips["Robust"]->addTerm(Function::min(sqrt(_epsilon)*one/Function::h(),one)*v);
+  }
+  else
+  {
+    _ips["Robust"] = Teuchos::rcp(new IP);
+    _ips["Robust"]->addTerm(tau->dx() - v->dt() - beta->x()*v->dx());
+    _ips["Robust"]->addTerm(_beta->x()*v->dx());
+    _ips["Robust"]->addTerm(Function::min(one/Function::h(),Function::constant(1./sqrt(_epsilon)))*tau);
+    _ips["Robust"]->addTerm(sqrt(_epsilon)*v->dx());
+    _ips["Robust"]->addTerm(Function::min(sqrt(_epsilon)*one/Function::h(),one)*v);
+  }
 
   _rhs = RHS::rhs();
 }
