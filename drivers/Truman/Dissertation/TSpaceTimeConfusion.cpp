@@ -179,7 +179,12 @@ int main(int argc, char *argv[])
     Solver::printAvailableSolversReport();
   map<string, SolverPtr> solvers;
   solvers["KLU"] = Solver::getSolver(Solver::KLU, true);
-  // SolverPtr superluSolver = Solver::getSolver(Solver::SuperLUDist, true);
+#if defined(HAVE_AMESOS_SUPERLUDIST) || defined(HAVE_AMESOS2_SUPERLUDIST)
+  solvers["SuperLUDist"] = Solver::getSolver(Solver::SuperLUDist, true);
+#endif
+#ifdef HAVE_AMESOS_MUMPS
+  solvers["MUMPS"] = Solver::getSolver(Solver::MUMPS, true);
+#endif
   bool useStaticCondensation = false;
   int azOutput = 20; // print residual every 20 CG iterations
 
