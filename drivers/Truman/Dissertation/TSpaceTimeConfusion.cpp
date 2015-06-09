@@ -154,8 +154,8 @@ int main(int argc, char *argv[])
   {
     SpatialFilterPtr leftX  = SpatialFilter::matchingX(x0[0]);
     SpatialFilterPtr rightX = SpatialFilter::matchingX(x0[0]+width);
-    SpatialFilterPtr leftY  = SpatialFilter::matchingX(x0[1]);
-    SpatialFilterPtr rightY = SpatialFilter::matchingX(x0[1]+width);
+    SpatialFilterPtr leftY  = SpatialFilter::matchingY(x0[1]);
+    SpatialFilterPtr rightY = SpatialFilter::matchingY(x0[1]+width);
     bc->addDirichlet(tc,   leftX,    exactMap[form.tc()->ID()]);
     bc->addDirichlet(uhat, rightX,   exactMap[form.uhat()->ID()]);
     bc->addDirichlet(tc, leftY,    exactMap[form.tc()->ID()]);
