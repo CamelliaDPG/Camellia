@@ -222,7 +222,6 @@ public:
   int solve()
   {
     _savedProblem = Teuchos::rcp( new Epetra_LinearProblem(this->_stiffnessMatrix.get(), this->_lhs.get(), this->_rhs.get()) ) ;
-//    Epetra_LinearProblem problem(this->_stiffnessMatrix.get(), this->_lhs.get(), this->_rhs.get());
     Teuchos::RCP<Amesos_Mumps> mumps = Teuchos::rcp(new Amesos_Mumps(*_savedProblem));
     int numProcs=1;
     int rank=0;
@@ -321,15 +320,21 @@ public:
         break;
       }
     }
+    
+    int err = mumps->Solve();
+    
     if (_saveFactorization)
     {
       _savedSolver = mumps;
     }
     else
     {
+      // Amesos_Mumps depends on the Epetra_LinearProblem, so it's important we dealloc this first:
+      mumps = Teuchos::null;
       _savedProblem = Teuchos::null;
     }
-    return mumps->Solve();
+    
+    return err;
   }
   int resolve()
   {
@@ -350,6 +355,7 @@ public:
   virtual void stiffnessMatrixChanged()
   {
     _savedSolver = Teuchos::null;
+    _savedProblem = Teuchos::null;
   }
 };
 } // namespace
