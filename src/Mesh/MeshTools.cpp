@@ -113,7 +113,7 @@ bool cellMatches(FieldContainer<double> physicalNodes, double t)
 
 CellTopoPtr getBottomTopology(MeshTopologyPtr meshTopo, IndexType cellID)
 {
-  int spaceDim = meshTopo->getSpaceDim() - 1;
+  int spaceDim = meshTopo->getDimension() - 1;
   // determine cell topology:
   vector<IndexType> cellVertexIndices = meshTopo->getCell(cellID)->vertices();
   set<IndexType> bottomVertexIndices;
@@ -137,7 +137,7 @@ MeshPtr MeshTools::timeSliceMesh(MeshPtr spaceTimeMesh, double t,
 
   set<IndexType> allActiveCellIDs = meshTopo->getActiveCellIndices();
 
-  int spaceDim = meshTopo->getSpaceDim() - 1;  // # of true spatial dimensions
+  int spaceDim = meshTopo->getDimension() - 1;  // # of true spatial dimensions
 
   MeshTopologyPtr sliceTopo = Teuchos::rcp( new MeshTopology(spaceDim) );
   set<IndexType> rootCellIDs = meshTopo->getRootCellIndices();

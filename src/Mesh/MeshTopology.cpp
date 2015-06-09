@@ -872,7 +872,7 @@ vector<IndexType> MeshTopology::cellIDsForPoints(const FieldContainer<double> &p
   //  cout << "entered elementsForPoints: \n" << physicalPoints;
   int numPoints = physicalPoints.dimension(0);
 
-  int spaceDim = this->getSpaceDim();
+  int spaceDim = this->getDimension();
 
   set<GlobalIndexType> rootCellIndices = this->getRootCellIndices();
 
@@ -1560,7 +1560,7 @@ MeshTopologyPtr MeshTopology::getRootMeshTopology()
   return rootTopology;
 }
 
-unsigned MeshTopology::getSpaceDim()
+unsigned MeshTopology::getDimension()
 {
   return _spaceDim;
 }
@@ -2054,7 +2054,7 @@ unsigned MeshTopology::getEntityParentForSide(unsigned d, unsigned entityIndex,
 // ! pairs are (cellIndex, sideOrdinal) where the sideOrdinal is a side that contains the entity
 set< pair<IndexType, unsigned> > MeshTopology::getCellsContainingEntity(unsigned d, unsigned entityIndex)   // not *all* cells, but within any refinement branch, the most refined cell that contains the entity will be present in this set.  The unsigned value is the ordinal of a *side* in the cell containing this entity.  There may be multiple sides in a cell that contain the entity; this method will return just one entry per cell.
 {
-  if (d==getSpaceDim())
+  if (d==getDimension())
   {
     // entityIndex is a cell; the side then is contained within the cell; we'll flag this fact by setting the side ordinal to -1.
     return {{entityIndex,-1}};
@@ -2814,7 +2814,7 @@ void MeshTopology::verticesForCell(FieldContainer<double>& vertices, GlobalIndex
   CellPtr cell = getCell(cellID);
   vector<IndexType> vertexIndices = cell->vertices();
   int numVertices = vertexIndices.size();
-  int spaceDim = getSpaceDim();
+  int spaceDim = getDimension();
 
   //vertices.resize(numVertices,dimension);
   for (unsigned vertexOrdinal = 0; vertexOrdinal < numVertices; vertexOrdinal++)

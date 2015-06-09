@@ -322,7 +322,7 @@ Scalar TFunction<Scalar>::evaluate(MeshPtr mesh, double x)
   {
     TEUCHOS_TEST_FOR_EXCEPTION(true, std::invalid_argument, "TFunction<Scalar>::evaluate requires a rank 0 Function.");
   }
-  if (mesh->getTopology()->getSpaceDim() != 1)
+  if (mesh->getTopology()->getDimension() != 1)
   {
     TEUCHOS_TEST_FOR_EXCEPTION(true, std::invalid_argument, "TFunction<Scalar>::evaluate requires mesh to be 1D if only x is provided.");
   }
@@ -359,7 +359,7 @@ Scalar TFunction<Scalar>::evaluate(MeshPtr mesh, double x, double y)
   {
     TEUCHOS_TEST_FOR_EXCEPTION(true, std::invalid_argument, "TFunction<Scalar>::evaluate requires a rank 0 Function.");
   }
-  if (mesh->getTopology()->getSpaceDim() != spaceDim)
+  if (mesh->getTopology()->getDimension() != spaceDim)
   {
     TEUCHOS_TEST_FOR_EXCEPTION(true, std::invalid_argument, "TFunction<Scalar>::evaluate requires mesh to be 2D if (x,y) is provided.");
   }
@@ -397,7 +397,7 @@ Scalar TFunction<Scalar>::evaluate(MeshPtr mesh, double x, double y, double z)
   {
     TEUCHOS_TEST_FOR_EXCEPTION(true, std::invalid_argument, "TFunction<Scalar>::evaluate requires a rank 0 Function.");
   }
-  if (mesh->getTopology()->getSpaceDim() != spaceDim)
+  if (mesh->getTopology()->getDimension() != spaceDim)
   {
     TEUCHOS_TEST_FOR_EXCEPTION(true, std::invalid_argument, "TFunction<Scalar>::evaluate requires mesh to be 3D if (x,y,z) is provided.");
   }

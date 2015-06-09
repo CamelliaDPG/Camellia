@@ -207,7 +207,7 @@ void HDF5Exporter::exportFunction(vector<TFunctionPtr<double>> functions, vector
   if (defaultNum1DPts < 2)
     defaultNum1DPts = 2;
 
-  int spaceDim = _mesh->getTopology()->getSpaceDim();
+  int spaceDim = _mesh->getTopology()->getDimension();
 
   for (int i=0; i < nFcns; i++)
     if (exportingBoundaryValues != functions[i]->boundaryValueOnly())

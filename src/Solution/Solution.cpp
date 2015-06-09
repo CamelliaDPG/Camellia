@@ -4359,7 +4359,7 @@ void TSolution<Scalar>::projectOldCellOntoNewCells(GlobalIndexType cellID,
     }
   }
 
-  int sideDim = _mesh->getTopology()->getSpaceDim() - 1;
+  int sideDim = _mesh->getTopology()->getDimension() - 1;
 
   int sideCount = parentCell->topology()->getSideCount();
   vector< map<int, TFunctionPtr<Scalar>> > traceMap(sideCount);

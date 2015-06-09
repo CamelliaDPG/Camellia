@@ -482,7 +482,7 @@ bool MeshTestUtility::determineRefTestPointsForNeighbors(MeshTopologyPtr meshTop
     FieldContainer<double> &fineSideRefPoints, FieldContainer<double> &fineCellRefPoints,
     FieldContainer<double> &coarseSideRefPoints, FieldContainer<double> &coarseCellRefPoints)
 {
-  unsigned spaceDim = meshTopo->getSpaceDim();
+  unsigned spaceDim = meshTopo->getDimension();
   unsigned sideDim = spaceDim - 1;
 
   if (spaceDim == 1)
@@ -638,7 +638,7 @@ bool MeshTestUtility::neighborBasesAgreeOnSides(Teuchos::RCP<Mesh> mesh, Epetra_
 {
   bool success = true;
   MeshTopologyPtr meshTopo = mesh->getTopology();
-  int spaceDim = meshTopo->getSpaceDim();
+  int spaceDim = meshTopo->getDimension();
 
   set<IndexType> activeCellIndices = meshTopo->getActiveCellIndices();
   for (set<IndexType>::iterator cellIt=activeCellIndices.begin(); cellIt != activeCellIndices.end(); cellIt++)

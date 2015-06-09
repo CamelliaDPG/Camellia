@@ -909,7 +909,7 @@ bool IncompressibleFormulationsTests::testVGPNavierStokesFormulationConsistency(
           double Re = 1 / mu;
 
 //          int delta_k = 2; // spaceDim
-          FunctionPtr forcingFunction = NavierStokesVGPFormulation::forcingFunction(meshTopo->getSpaceDim(), Re, u_exact, p_exact);
+          FunctionPtr forcingFunction = NavierStokesVGPFormulation::forcingFunction(meshTopo->getDimension(), Re, u_exact, p_exact);
           bool transientFormulation = false;
           bool useConformingTraces = true;
           NavierStokesVGPFormulation formulation(meshTopo, Re, H1Order-1, pToAdd, forcingFunction, transientFormulation, useConformingTraces);

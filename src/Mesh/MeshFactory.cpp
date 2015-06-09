@@ -1253,7 +1253,7 @@ MeshTopologyPtr MeshFactory::spaceTimeMeshTopology(MeshTopologyPtr spatialMeshTo
 
   // (For now, though, we do make the assumption that all refinements are regular (isotropic).)
 
-  int spaceDim = spatialMeshTopology->getSpaceDim();
+  int spaceDim = spatialMeshTopology->getDimension();
   int spaceTimeDim = spaceDim + 1;
 
   MeshTopologyPtr rootSpatialTopology = spatialMeshTopology->getRootMeshTopology();

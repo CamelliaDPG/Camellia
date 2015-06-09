@@ -610,7 +610,7 @@ void testHGRADTrace(MeshTopologyPtr meshTopo, int polyOrder, Teuchos::FancyOStre
   Camellia::EFunctionSpace fsTime = Camellia::FUNCTION_SPACE_HGRAD;
   vector<int> H1Orders = {polyOrder,polyOrder};
 
-  int spaceDim = meshTopo->getSpaceDim();
+  int spaceDim = meshTopo->getDimension();
   int sideDim = spaceDim - 1;
   int sideCount = meshTopo->getEntityCount(sideDim);
 
@@ -939,7 +939,7 @@ void testHGRADVolumeNoHangingNodes(MeshTopologyPtr meshTopo, int polyOrder, Teuc
   Camellia::EFunctionSpace fsTime = Camellia::FUNCTION_SPACE_HGRAD;
   vector<int> H1Orders = {polyOrder,polyOrder};
 
-  int spaceDim = meshTopo->getSpaceDim();
+  int spaceDim = meshTopo->getDimension();
   int sideDim = spaceDim - 1;
 
   set<IndexType> cellIndices = meshTopo->getActiveCellIndices();

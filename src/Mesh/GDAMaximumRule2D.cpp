@@ -1402,7 +1402,7 @@ void GDAMaximumRule2D::verticesForCell(FieldContainer<double>& vertices, GlobalI
   CellPtr cell = _meshTopology->getCell(cellID);
   vector<IndexType> vertexIndices = cell->vertices();
   int numVertices = vertexIndices.size();
-  int spaceDim = _meshTopology->getSpaceDim();
+  int spaceDim = _meshTopology->getDimension();
 
   //vertices.resize(numVertices,dimension);
   for (unsigned vertexIndex = 0; vertexIndex < numVertices; vertexIndex++)
@@ -1418,7 +1418,7 @@ void GDAMaximumRule2D::verticesForCell(FieldContainer<double>& vertices, GlobalI
 void GDAMaximumRule2D::verticesForCells(FieldContainer<double>& vertices, vector<GlobalIndexType> &cellIDs)
 {
   // all cells represented in cellIDs must have the same topology
-  int spaceDim = _meshTopology->getSpaceDim();
+  int spaceDim = _meshTopology->getDimension();
   GlobalIndexType numCells = cellIDs.size();
 
   if (numCells == 0)

@@ -997,7 +997,7 @@ unsigned RefinementPattern::mapSubcellChildOrdinalToVolumeChildOrdinal(unsigned 
 unsigned RefinementPattern::mapSubcellOrdinalFromChildToParent(unsigned childOrdinal, unsigned int subcdim, unsigned int childSubcord)
 {
   // somewhat brute force, for now.
-  if (_refinementTopology->getSpaceDim() == subcdim)
+  if (_refinementTopology->getDimension() == subcdim)
   {
     if (childSubcord != 0)
     {
@@ -1051,7 +1051,7 @@ unsigned RefinementPattern::mapSubcellOrdinalFromParentToChild(unsigned childOrd
 pair<unsigned, unsigned> RefinementPattern::mapSubcellFromParentToChild(unsigned childOrdinal, unsigned subcdim, unsigned parentSubcord)
 {
   // pair is (subcdim, subcord)
-  if (subcdim == _refinementTopology->getSpaceDim())
+  if (subcdim == _refinementTopology->getDimension())
   {
     TEUCHOS_TEST_FOR_EXCEPTION(parentSubcord != 0, std::invalid_argument, "");
     return make_pair(subcdim, 0);
@@ -1123,7 +1123,7 @@ pair<unsigned, unsigned> RefinementPattern::mapSubcellFromChildToParent(unsigned
 
 unsigned RefinementPattern::mapVolumeChildOrdinalToSubcellChildOrdinal(unsigned subcdim, unsigned subcord, unsigned volumeChildOrdinal)
 {
-  if (subcdim == _refinementTopology->getSpaceDim())
+  if (subcdim == _refinementTopology->getDimension())
   {
     TEUCHOS_TEST_FOR_EXCEPTION(subcord != 0, std::invalid_argument, "subcdim = spaceDim, but subcord != 0");
     // then the "subcell refinement pattern" is just the refinement pattern; map from volume pattern to subcell pattern is identity

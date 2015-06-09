@@ -424,7 +424,7 @@ MeshTopologyPtr MeshTopologyTests::makeHexMesh(double x0, double y0, double z0, 
 
 void printMeshInfo(MeshTopologyPtr mesh)
 {
-  unsigned spaceDim = mesh->getSpaceDim();
+  unsigned spaceDim = mesh->getDimension();
   unsigned vertexCount = mesh->getEntityCount(0);
   unsigned edgeCount = (spaceDim > 1) ? mesh->getEntityCount(1) : 0;
   unsigned faceCount = (spaceDim > 2) ? mesh->getEntityCount(2) : 0;
@@ -594,7 +594,7 @@ bool MeshTopologyTests::testCellsForEntity()
   IndexType cellID = 0;
   CellPtr cell = mesh2D->getCell(cellID); // the only cell in the mesh
 
-  int spaceDim = mesh2D->getSpaceDim();
+  int spaceDim = mesh2D->getDimension();
   int sideDim = spaceDim - 1;
 
   for (int d=0; d<spaceDim; d++)

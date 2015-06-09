@@ -253,7 +253,7 @@ StokesVGPFormulation::StokesVGPFormulation(int spaceDim, bool useConformingTrace
 
 void StokesVGPFormulation::addInflowCondition(SpatialFilterPtr inflowRegion, TFunctionPtr<double> u)
 {
-  int spaceDim = _solution->mesh()->getTopology()->getSpaceDim();
+  int spaceDim = _solution->mesh()->getTopology()->getDimension();
 
   VarPtr u1_hat = this->u_hat(1), u2_hat = this->u_hat(2);
   VarPtr u3_hat;
@@ -282,7 +282,7 @@ void StokesVGPFormulation::addInflowCondition(SpatialFilterPtr inflowRegion, TFu
 
 void StokesVGPFormulation::addOutflowCondition(SpatialFilterPtr outflowRegion)
 {
-  int spaceDim = _solution->mesh()->getTopology()->getSpaceDim();
+  int spaceDim = _solution->mesh()->getTopology()->getDimension();
 
 //  for (int d=0; d<spaceDim; d++) {
 //    VarPtr tn_hat = this->tn_hat(d+1);
@@ -355,7 +355,7 @@ void StokesVGPFormulation::addPointPressureCondition()
 
 void StokesVGPFormulation::addWallCondition(SpatialFilterPtr wall)
 {
-  int spaceDim = _solution->mesh()->getTopology()->getSpaceDim();
+  int spaceDim = _solution->mesh()->getTopology()->getDimension();
   vector<double> zero(spaceDim, 0.0);
   addInflowCondition(wall, TFunction<double>::constant(zero));
 }
@@ -579,7 +579,7 @@ void StokesVGPFormulation::pRefine()
 
 RHSPtr StokesVGPFormulation::rhs(TFunctionPtr<double> f)
 {
-  int spaceDim = _solution->mesh()->getTopology()->getSpaceDim();
+  int spaceDim = _solution->mesh()->getTopology()->getDimension();
 
   RHSPtr rhs = RHS::rhs();
 

@@ -107,7 +107,7 @@ namespace
     }
     auto activeCellIDs = mesh->getActiveCellIDs();
     MeshTopologyPtr meshTopo = mesh->getTopology();
-    int sideDim = meshTopo->getSpaceDim() - 1;
+    int sideDim = meshTopo->getDimension() - 1;
     for (auto cellID : activeCellIDs)
     {
       CellPtr cell = meshTopo->getCell(cellID);
@@ -211,7 +211,7 @@ namespace
     //    unsigned edgeDim = 1;
     //    meshTopo->printConstraintReport(edgeDim);
     
-    int sideDim = meshTopo->getSpaceDim() - 1;
+    int sideDim = meshTopo->getDimension() - 1;
     Camellia::CubatureFactory cubFactory;
     for (auto cellID : activeCellIDs)
     {
@@ -415,7 +415,7 @@ namespace
                 print("nonzeroCoarseGlobalValues", nonzeroCoarseGlobalValues);
                 print("nonzeroFineGlobalValues", nonzeroFineGlobalValues);
                 cout << "physical point: (";
-                for (int d=0; d < meshTopo->getSpaceDim(); d++)
+                for (int d=0; d < meshTopo->getDimension(); d++)
                 {
                   cout << coarsePhysicalPoints(0,pointOrdinal,d);
                   if (d<sideDim) cout << ", ";
