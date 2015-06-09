@@ -86,8 +86,8 @@ int main(int argc, char *argv[])
   FunctionPtr explambda1x = Teuchos::rcp(new Exp_ax(lambda1));
   FunctionPtr explambda2x = Teuchos::rcp(new Exp_ax(lambda2));
   FunctionPtr u_exact = explt*(explambda1x-explambda2x);
-  // if (spaceDim == 2)
-  //   u_exact = u_exact*Function::yn(1);
+  if (spaceDim == 2)
+    u_exact = u_exact*Function::yn(1);
   FunctionPtr sigma_exact = epsilon*u_exact->grad();
 
   FunctionPtr beta;
