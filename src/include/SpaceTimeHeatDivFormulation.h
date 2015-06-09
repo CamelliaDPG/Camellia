@@ -110,7 +110,7 @@ public:
   VarPtr v();
   VarPtr tau();
 
-  // static TFunctionPtr<double> forcingFunction(int spaceDim, double epsilon, TFunctionPtr<double> u);
+  static TFunctionPtr<double> forcingFunction(int spaceDim, double epsilon, TFunctionPtr<double> u);
 };
 }
 

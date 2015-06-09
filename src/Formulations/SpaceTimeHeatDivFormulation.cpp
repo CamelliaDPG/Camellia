@@ -136,14 +136,14 @@ IPPtr SpaceTimeHeatDivFormulation::ip(string normName)
   return _ips.at(normName);
 }
 
-// TFunctionPtr<double> SpaceTimeHeatDivFormulation::forcingFunction(int spaceDim, double epsilon, TFunctionPtr<double> u_exact)
-// {
-//   TFunctionPtr<double> f = u_exact->dt() - epsilon * u_exact->dx()->dx();
-//   if (spaceDim > 1) f = f - epsilon * u_exact->dy()->dy();
-//   if (spaceDim > 2) f = f - epsilon * u_exact->dz()->dz();
-//
-//   return f;
-// }
+TFunctionPtr<double> SpaceTimeHeatDivFormulation::forcingFunction(int spaceDim, double epsilon, TFunctionPtr<double> u_exact)
+{
+  TFunctionPtr<double> f = u_exact->dt() - epsilon * u_exact->dx()->dx();
+  if (spaceDim > 1) f = f - epsilon * u_exact->dy()->dy();
+  if (spaceDim > 2) f = f - epsilon * u_exact->dz()->dz();
+  
+  return f;
+}
 
 void SpaceTimeHeatDivFormulation::initializeSolution(MeshTopologyPtr meshTopo, int fieldPolyOrder, int delta_k, string norm,
     TLinearTermPtr<double> forcingTerm)
