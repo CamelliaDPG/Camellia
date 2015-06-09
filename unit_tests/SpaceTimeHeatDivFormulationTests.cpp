@@ -60,12 +60,13 @@ namespace
     double epsilon = form.epsilon();
 
     FunctionPtr sigma1, sigma2, sigma3;
-    int spaceTimeDim = meshTopo->getSpaceDim();
+    int spaceTimeDim = meshTopo->getDimension();
     int spaceDim = spaceTimeDim - 1;
 
     FunctionPtr forcingFunction = SpaceTimeHeatDivFormulation::forcingFunction(spaceDim, epsilon, u);
+    LinearTermPtr forcingTerm = forcingFunction * form.v();
 
-    form.initializeSolution(meshTopo, fieldPolyOrder, delta_k, forcingFunction);
+    form.initializeSolution(meshTopo, fieldPolyOrder, delta_k, "Graph", forcingTerm);
   }
 
   void testForcingFunctionForConstantU(int spaceDim, Teuchos::FancyOStream &out, bool &success)

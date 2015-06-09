@@ -2613,7 +2613,7 @@ set<GlobalIndexType> GDAMinimumRule::getFittableGlobalDofIndices(GlobalIndexType
   // returns the global dof indices for basis functions which have support on the given side.  This is determined by taking the union of the global dof indices defined on all the constraining sides for the given side (the constraining sides are by definition unconstrained).
   SubCellDofIndexInfo dofIndexInfo = getGlobalDofIndices(cellID, constraints);
   CellPtr cell = _meshTopology->getCell(cellID);
-  int sideDim = _meshTopology->getSpaceDim() - 1;
+  int sideDim = _meshTopology->getDimension() - 1;
 
   GlobalIndexType constrainingCellID = constraints.subcellConstraints[sideDim][sideOrdinal].cellID;
   unsigned constrainingCellSideOrdinal = constraints.subcellConstraints[sideDim][sideOrdinal].sideOrdinal;
@@ -2698,7 +2698,7 @@ SubCellDofIndexInfo GDAMinimumRule::getOwnedGlobalDofIndices(GlobalIndexType cel
     return _ownedGlobalDofIndicesCache[cellID];
   }
 
-  int spaceDim = _meshTopology->getSpaceDim();
+  int spaceDim = _meshTopology->getDimension();
   int sideDim = spaceDim - 1;
 
   SubCellDofIndexInfo scInfo(spaceDim+1);
@@ -2879,7 +2879,7 @@ set<GlobalIndexType> GDAMinimumRule::getGlobalDofIndicesForIntegralContribution(
   {
     CellConstraints cellConstraints = getCellConstraints(cellID);
     SubCellDofIndexInfo dofIndexInfo = getGlobalDofIndices(cellID, cellConstraints);
-    int spaceDim =  _meshTopology->getSpaceDim();
+    int spaceDim =  _meshTopology->getDimension();
 
     CellTopoPtr cellTopo = cell->topology();
     CellTopoPtr sideTopo = cellTopo->getSubcell(spaceDim-1, sideOrdinal);
@@ -3094,7 +3094,7 @@ void GDAMinimumRule::rebuildLookups()
 
   _cellDofOffsets.clear(); // within the partition, offsets for the owned dofs in cell
 
-  int spaceDim = _meshTopology->getSpaceDim();
+  int spaceDim = _meshTopology->getDimension();
   int sideDim = spaceDim - 1;
 
   // pieces of this remain fairly ugly--the brute force searches are limited to entities on a cell (i.e. < O(12) items to search in a hexahedron),

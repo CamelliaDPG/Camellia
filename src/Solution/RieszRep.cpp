@@ -330,7 +330,7 @@ void TRieszRep<Scalar>::computeRepresentationValues(FieldContainer<Scalar> &valu
     computeRieszRep();
   }
 
-  int spaceDim = _mesh->getTopology()->getSpaceDim();
+  int spaceDim = _mesh->getTopology()->getDimension();
   int numCells = values.dimension(0);
   int numPoints = values.dimension(1);
   vector<GlobalIndexType> cellIDs = basisCache->cellIDs();

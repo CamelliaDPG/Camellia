@@ -166,7 +166,7 @@ public:
 
   RefinementBranch getSideConstraintRefinementBranch(IndexType sideEntityIndex); // Returns a RefinementBranch that goes from the constraining side to the side indicated.
 
-  unsigned getSpaceDim();
+  unsigned getDimension();
   unsigned getSubEntityCount(unsigned int d, IndexType entityIndex, unsigned subEntityDim);
   IndexType getSubEntityIndex(unsigned d, IndexType entityIndex, unsigned subEntityDim, unsigned subEntityOrdinal);
   unsigned getSubEntityPermutation(unsigned d, IndexType entityIndex, unsigned subEntityDim, unsigned subEntityOrdinal);

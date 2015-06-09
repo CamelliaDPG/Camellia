@@ -17,7 +17,7 @@ FieldContainer<double> GnuPlotUtil::cellCentroids(MeshTopology* meshTopo)
 {
   // this only works on quads right now
 
-  int spaceDim = meshTopo->getSpaceDim(); // not that this will really work in 3D...
+  int spaceDim = meshTopo->getDimension(); // not that this will really work in 3D...
   int numActiveElements = meshTopo->activeCellCount();
 
   FieldContainer<double> cellCentroids(numActiveElements,spaceDim); // used for labelling cells

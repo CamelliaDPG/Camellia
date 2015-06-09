@@ -437,7 +437,7 @@ void Mesh::enforceOneIrregularity()
   bool meshIsNotRegular = true; // assume it's not regular and check elements
   while (meshIsNotRegular)
   {
-    int spaceDim = _meshTopology->getSpaceDim();
+    int spaceDim = _meshTopology->getDimension();
     if (spaceDim == 1) return;
 
     map< Camellia::CellTopologyKey, set<GlobalIndexType> > irregularCellIDs; // key is CellTopology key
@@ -581,7 +581,7 @@ set<GlobalIndexType> Mesh::getActiveCellIDs()
 
 int Mesh::getDimension()
 {
-  return _meshTopology->getSpaceDim();
+  return _meshTopology->getDimension();
 }
 
 DofOrderingFactory & Mesh::getDofOrderingFactory()
@@ -1005,7 +1005,7 @@ FieldContainer<double> Mesh::physicalCellNodes( Teuchos::RCP< ElementType > elem
 {
   int numCells = cellIDs.size();
   int numVertices = elemTypePtr->cellTopoPtr->getVertexCount();
-  int spaceDim = _meshTopology->getSpaceDim();
+  int spaceDim = _meshTopology->getDimension();
 
   FieldContainer<double> physicalNodes(numCells, numVertices, spaceDim);
   for (int i=0; i<numCells; i++)
@@ -1026,7 +1026,7 @@ FieldContainer<double> Mesh::physicalCellNodesForCell( GlobalIndexType cellID )
 {
   CellPtr cell = _meshTopology->getCell(cellID);
   int vertexCount = cell->topology()->getVertexCount();
-  int spaceDim = _meshTopology->getSpaceDim();
+  int spaceDim = _meshTopology->getDimension();
   int numCells = 1;
   FieldContainer<double> physicalCellNodes(numCells,vertexCount,spaceDim);
 
@@ -1292,7 +1292,7 @@ vector<unsigned> Mesh::vertexIndicesForCell(GlobalIndexType cellID)
 
 FieldContainer<double> Mesh::vertexCoordinates(GlobalIndexType vertexIndex)
 {
-  int spaceDim = _meshTopology->getSpaceDim();
+  int spaceDim = _meshTopology->getDimension();
   FieldContainer<double> vertex(spaceDim);
   for (int d=0; d<spaceDim; d++)
   {
@@ -1324,7 +1324,7 @@ void Mesh::verticesForCell(FieldContainer<double>& vertices, GlobalIndexType cel
 // global across all MPI nodes:
 void Mesh::verticesForElementType(FieldContainer<double>& vertices, ElementTypePtr elemTypePtr)
 {
-  int spaceDim = _meshTopology->getSpaceDim();
+  int spaceDim = _meshTopology->getDimension();
   int numVertices = elemTypePtr->cellTopoPtr->getNodeCount();
   int numCells = numElementsOfType(elemTypePtr);
   vertices.resize(numCells,numVertices,spaceDim);
@@ -1344,7 +1344,7 @@ void Mesh::verticesForElementType(FieldContainer<double>& vertices, ElementTypeP
 void Mesh::verticesForCells(FieldContainer<double>& vertices, vector<GlobalIndexType> &cellIDs)
 {
   // all cells represented in cellIDs must have the same topology
-  int spaceDim = _meshTopology->getSpaceDim();
+  int spaceDim = _meshTopology->getDimension();
   int numCells = cellIDs.size();
 
   if (numCells == 0)
@@ -1372,7 +1372,7 @@ void Mesh::verticesForCells(FieldContainer<double>& vertices, vector<GlobalIndex
 void Mesh::verticesForSide(FieldContainer<double>& vertices, GlobalIndexType cellID, int sideIndex)
 {
   CellPtr cell = _meshTopology->getCell(cellID);
-  int spaceDim = _meshTopology->getSpaceDim();
+  int spaceDim = _meshTopology->getDimension();
   int sideDim = spaceDim - 1;
   unsigned sideEntityIndex = cell->entityIndex(sideDim, sideIndex);
   vector<unsigned> vertexIndices = _meshTopology->getEntityVertexIndices(sideDim, sideEntityIndex);

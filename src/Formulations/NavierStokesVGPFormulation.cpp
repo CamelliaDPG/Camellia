@@ -49,7 +49,7 @@ void NavierStokesVGPFormulation::initialize(MeshTopologyPtr meshTopology, std::s
   if (meshTopology != Teuchos::null)
   {
     // then we take spaceDim from meshTopology
-    _spaceDim = meshTopology->getSpaceDim();
+    _spaceDim = meshTopology->getDimension();
   }
   else
   {
@@ -376,7 +376,7 @@ NavierStokesVGPFormulation::NavierStokesVGPFormulation(MeshTopologyPtr meshTopol
     TFunctionPtr<double> forcingFunction,
     bool transientFormulation, bool useConformingTraces)
 {
-  initialize(meshTopology, "", meshTopology->getSpaceDim(), Re, fieldPolyOrder, delta_k,
+  initialize(meshTopology, "", meshTopology->getDimension(), Re, fieldPolyOrder, delta_k,
              forcingFunction, transientFormulation, useConformingTraces);
 }
 
@@ -392,7 +392,7 @@ NavierStokesVGPFormulation::NavierStokesVGPFormulation(std::string filePrefix, i
 
 void NavierStokesVGPFormulation::addInflowCondition(SpatialFilterPtr inflowRegion, TFunctionPtr<double> u)
 {
-  int spaceDim = _backgroundFlow->mesh()->getTopology()->getSpaceDim();
+  int spaceDim = _backgroundFlow->mesh()->getTopology()->getDimension();
 
   VarPtr u1_hat = this->u_hat(1), u2_hat = this->u_hat(2);
   VarPtr u3_hat;
@@ -417,7 +417,7 @@ void NavierStokesVGPFormulation::addInflowCondition(SpatialFilterPtr inflowRegio
 
 void NavierStokesVGPFormulation::addOutflowCondition(SpatialFilterPtr outflowRegion)
 {
-  int spaceDim = _backgroundFlow->mesh()->getTopology()->getSpaceDim();
+  int spaceDim = _backgroundFlow->mesh()->getTopology()->getDimension();
 
   // my favorite way to do outflow conditions is via penalty constraints imposing a zero traction
   Teuchos::RCP<LocalStiffnessMatrixFilter> filter_incr = _solnIncrement->filter();
@@ -463,7 +463,7 @@ void NavierStokesVGPFormulation::addPointPressureCondition()
 
 void NavierStokesVGPFormulation::addWallCondition(SpatialFilterPtr wall)
 {
-  int spaceDim = _solnIncrement->mesh()->getTopology()->getSpaceDim();
+  int spaceDim = _solnIncrement->mesh()->getTopology()->getDimension();
   vector<double> zero(spaceDim, 0.0);
   addInflowCondition(wall, TFunction<double>::constant(zero));
 }
@@ -487,7 +487,7 @@ BFPtr NavierStokesVGPFormulation::bf()
 
 Teuchos::RCP<ExactSolution<double>> NavierStokesVGPFormulation::exactSolution(TFunctionPtr<double> u_exact, TFunctionPtr<double> p_exact)
 {
-  int spaceDim = _backgroundFlow->mesh()->getTopology()->getSpaceDim();
+  int spaceDim = _backgroundFlow->mesh()->getTopology()->getDimension();
 
   // f1 and f2 are those for Stokes, but minus u \cdot \grad u
   TFunctionPtr<double> mu = TFunction<double>::constant(_mu);
@@ -661,7 +661,7 @@ void NavierStokesVGPFormulation::pRefine()
 
 RHSPtr NavierStokesVGPFormulation::rhs(TFunctionPtr<double> f, bool excludeFluxesAndTraces)
 {
-  int spaceDim = _backgroundFlow->mesh()->getTopology()->getSpaceDim();
+  int spaceDim = _backgroundFlow->mesh()->getTopology()->getDimension();
 
   // set the RHS:
   RHSPtr rhs = RHS::rhs();
@@ -792,7 +792,7 @@ void NavierStokesVGPFormulation::setTimeStep(double dt)
 
 VarPtr NavierStokesVGPFormulation::sigma(int i)
 {
-  int spaceDim = _backgroundFlow->mesh()->getTopology()->getSpaceDim();
+  int spaceDim = _backgroundFlow->mesh()->getTopology()->getDimension();
   if (i > spaceDim)
   {
     TEUCHOS_TEST_FOR_EXCEPTION(true, std::invalid_argument, "i must be less than or equal to spaceDim");
@@ -817,7 +817,7 @@ BFPtr NavierStokesVGPFormulation::stokesBF()
 
 VarPtr NavierStokesVGPFormulation::u(int i)
 {
-  int spaceDim = _backgroundFlow->mesh()->getTopology()->getSpaceDim();
+  int spaceDim = _backgroundFlow->mesh()->getTopology()->getDimension();
   if (i > spaceDim)
   {
     TEUCHOS_TEST_FOR_EXCEPTION(true, std::invalid_argument, "i must be less than or equal to spaceDim");
@@ -838,7 +838,7 @@ VarPtr NavierStokesVGPFormulation::u(int i)
 // traces:
 VarPtr NavierStokesVGPFormulation::tn_hat(int i)
 {
-  int spaceDim = _backgroundFlow->mesh()->getTopology()->getSpaceDim();
+  int spaceDim = _backgroundFlow->mesh()->getTopology()->getDimension();
   if (i > spaceDim)
   {
     TEUCHOS_TEST_FOR_EXCEPTION(true, std::invalid_argument, "i must be less than or equal to spaceDim");
@@ -858,7 +858,7 @@ VarPtr NavierStokesVGPFormulation::tn_hat(int i)
 
 VarPtr NavierStokesVGPFormulation::u_hat(int i)
 {
-  int spaceDim = _backgroundFlow->mesh()->getTopology()->getSpaceDim();
+  int spaceDim = _backgroundFlow->mesh()->getTopology()->getDimension();
   if (i > spaceDim)
   {
     TEUCHOS_TEST_FOR_EXCEPTION(true, std::invalid_argument, "i must be less than or equal to spaceDim");
@@ -879,7 +879,7 @@ VarPtr NavierStokesVGPFormulation::u_hat(int i)
 // test variables:
 VarPtr NavierStokesVGPFormulation::tau(int i)
 {
-  int spaceDim = _backgroundFlow->mesh()->getTopology()->getSpaceDim();
+  int spaceDim = _backgroundFlow->mesh()->getTopology()->getDimension();
   if (i > spaceDim)
   {
     TEUCHOS_TEST_FOR_EXCEPTION(true, std::invalid_argument, "i must be less than or equal to spaceDim");
@@ -899,7 +899,7 @@ VarPtr NavierStokesVGPFormulation::tau(int i)
 
 VarPtr NavierStokesVGPFormulation::v(int i)
 {
-  int spaceDim = _backgroundFlow->mesh()->getTopology()->getSpaceDim();
+  int spaceDim = _backgroundFlow->mesh()->getTopology()->getDimension();
   if (i > spaceDim)
   {
     TEUCHOS_TEST_FOR_EXCEPTION(true, std::invalid_argument, "i must be less than or equal to spaceDim");

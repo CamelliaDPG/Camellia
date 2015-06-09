@@ -459,9 +459,11 @@ void RefinementPattern::determineChildSubcellInfoInSubcellRefinement(unsigned &c
     childSubcellOrdinal = CamelliaCellTools::subcellReverseOrdinalMap(this->childTopology(childOrdinal),
                                                                       childSubcell.first, childSubcell.second,
                                                                       subcdim, subcord);
-    childSubcellPermutation = CamelliaCellTools::permutationFromSubsubcellToParent(this->childTopology(childOrdinal),
-                                                                                   childSubcell.first, childSubcell.second,
-                                                                                   subcdim, childSubcellOrdinal);
+    unsigned permutationFromSubcellToParent = CamelliaCellTools::permutationFromSubsubcellToParent(this->childTopology(childOrdinal),
+                                                                                                   childSubcell.first, childSubcell.second,
+                                                                                                   subcdim, childSubcellOrdinal);
+    CellTopoPtr subcell = this->childTopology(childOrdinal)->getSubcell(childSubcell.first, childSubcell.second)->getSubcell(subcdim, childSubcellOrdinal);
+    childSubcellPermutation = CamelliaCellTools::permutationInverse(subcell, permutationFromSubcellToParent);
   }
   else
   {
@@ -505,8 +507,11 @@ void RefinementPattern::determineChildSubcellInfoInSubcellRefinement(unsigned &c
             CellTopoPtr otherChildTopo = otherChildCell->topology();
             childSubcellOrdinal = CamelliaCellTools::subcellReverseOrdinalMap(otherChildTopo, parentSubcellDimension, subcellChildOrdinalInChildCell,
                                                                              subcdim, childSubcellOrdinalInChildCell);
-            childSubcellPermutation = CamelliaCellTools::permutationFromSubsubcellToParent(otherChildTopo, parentSubcellDimension, subcellChildOrdinalInChildCell,
-                                                                                          subcdim, childSubcellOrdinal);
+            unsigned childSubcellPermutationInverse = CamelliaCellTools::permutationFromSubsubcellToParent(otherChildTopo,
+                                                                                                           parentSubcellDimension, subcellChildOrdinalInChildCell,
+                                                                                                           subcdim, childSubcellOrdinal);
+            CellTopoPtr childSubcell = otherChildTopo->getSubcell(parentSubcellDimension, subcellChildOrdinalInChildCell)->getSubcell(subcdim, childSubcellOrdinal);
+            childSubcellPermutation = CamelliaCellTools::permutationInverse(childSubcell, childSubcellPermutationInverse);
           }
         }
       }
@@ -659,7 +664,7 @@ GeneralizedRefinementBranch RefinementPattern::generalizedRefinementBranchForLea
   // If, however, the volume child *does* contain a child of the parent subcell, then we want to select that one.
   // We do a first pass in which we check for that possibility.
   
-  // We may sometimes  want to turn the last preference off sometimes for testing purposes.  (AFAIK, there is no
+  // We may sometimes want to turn the last preference off for testing purposes.  (AFAIK, there is no
   // reason to expect different geometric computations, e.g., regardless of the preference.)
   
   bool preferSubcellsBelongingToVolumeChild = true;
@@ -680,42 +685,8 @@ GeneralizedRefinementBranch RefinementPattern::generalizedRefinementBranchForLea
     unsigned parentSubcellDimension = parentSubcellEntry.first;
     unsigned parentSubcellOrdinal = parentSubcellEntry.second;
 
-    if ((parentSubcellDimension != subcdim) && (tier.refBranch.size() > 0))
-    {
-      // a move to a higher dimension -- since all entries in a RefinementBranch must belong to the same dimension,
-      // we should store the current tier, and start a new one:
-      CellTopoPtr parentTopo = refPattern->parentTopology();
-      tier.previousTierTopo = parentTopo->getSubcell(parentSubcellEntry.first, parentSubcellEntry.second);
-      tier.rootDimension = subcdim;
-      {
-        // find the subcell
-        pair<unsigned,unsigned> childSubcell = refPattern->mapSubcellFromParentToChild(childOrdinal, parentSubcellDimension, parentSubcellOrdinal);
-        
-        unsigned dummyPermutation;
-        unsigned dummySubcellRefChild;
-        refPattern->determineChildSubcellInfoInSubcellRefinement(tier.rootDimension, tier.previousTierSubcellOrdinal,
-                                                                 dummyPermutation, dummySubcellRefChild,
-                                                                 subcdim, subcord, childOrdinal,
-                                                                 preferSubcellsBelongingToVolumeChild);        
-//        tier.rootDimension = subcdim;
-//        tier.previousTierSubcellOrdinal = CamelliaCellTools::subcellReverseOrdinalMap(refPattern->childTopology(childOrdinal),
-//                                                                                      childSubcell.first, childSubcell.second,
-//                                                                                      subcdim, subcord);
-        // from here on out, replace subcdim and subcord with those from childSubcell:
-        subcdim = childSubcell.first;
-        subcord = childSubcell.second;
-      }
-      genRefBranch.insert(genRefBranch.begin(), tier);
-      // start new:
-      tier.refBranch.clear();
-      tier.leafSubcellDimension = -1;
-      tier.leafSubcellOrdinal = -1;
-      tier.previousTierTopo = Teuchos::null;
-      tier.previousTierSubcellOrdinal = -1;
-    }
-
     RefinementPattern* subcellRefPattern;
-    if (parentSubcellEntry.first == refPattern->parentTopology()->getDimension())
+    if (parentSubcellDimension == refPattern->parentTopology()->getDimension())
     {
       TEUCHOS_TEST_FOR_EXCEPTION(parentSubcellOrdinal!= 0, std::invalid_argument, "ERROR: parentSubcellOrdinal > 0 when parentSubcellDimension == parentTopology()->getDimension().");
       subcellRefPattern = refPattern;
@@ -724,40 +695,92 @@ GeneralizedRefinementBranch RefinementPattern::generalizedRefinementBranchForLea
     {
       subcellRefPattern = refPattern->patternForSubcell(parentSubcellDimension, parentSubcellOrdinal).get();
     }
-    // now, need to determine which child we select in the subcellRefPattern
+    
+    // Will also need to determine which child we select in the subcellRefPattern.
     // When parent subcell is of the same dimension as the child subcell, we can use RefinementPattern::mapVolumeChildOrdinalToSubcellChildOrdinal.
     // But otherwise it can happen that the child of the volume subcell does not belong to the volume child; consider e.g.
     // triangle refinements where the interior triangle is under consideration; each vertex has as its parent an edge
     // of the parent triangle which intersects the child in a vertex.
-
+    
     unsigned subcellRefChild = -1;
     if (parentSubcellDimension == subcdim)
     {
       subcellRefChild = refPattern->mapVolumeChildOrdinalToSubcellChildOrdinal(parentSubcellDimension, parentSubcellOrdinal, childOrdinal);
-
+      TEUCHOS_TEST_FOR_EXCEPTION(subcellRefChild==-1, std::invalid_argument, "subcellRefChild = -1");
+    }
+    // subcellRefChild for cases when parentSubcellDimension != subcdim are determined below
+    if ((tier.refBranch.size() == 0) && (genRefBranch.size() == 0))
+    {
+      // bottommost tier
       // when we are working with a new tier, need to set the leafSubcellDimension and leafSubcellOrdinal appropriately:
-      if (tier.refBranch.size() == 0)
+      if (parentSubcellDimension == subcdim)
       {
         pair<unsigned,unsigned> childSubcell = refPattern->mapSubcellFromParentToChild(childOrdinal, parentSubcellEntry.first, parentSubcellEntry.second);
         tier.leafSubcellDimension = subcdim;
         tier.leafSubcellOrdinal = CamelliaCellTools::subcellReverseOrdinalMap(refPattern->childTopology(childOrdinal), childSubcell.first, childSubcell.second,
-                                  subcdim, subcord);
-        tier.leafSubcellPermutation = CamelliaCellTools::permutationFromSubsubcellToParent(refPattern->childTopology(childOrdinal),
-                                      childSubcell.first, childSubcell.second,
-                                      subcdim, tier.leafSubcellOrdinal);
+                                                                              subcdim, subcord);
+        unsigned permutationFromRefBranchToParent = CamelliaCellTools::permutationFromSubsubcellToParent(refPattern->childTopology(childOrdinal),
+                                                                                                         childSubcell.first, childSubcell.second,
+                                                                                                         subcdim, tier.leafSubcellOrdinal);
+        CellTopoPtr leafSubcellTopo = refPattern->childTopology(childOrdinal)->getSubcell(subcdim, subcord);
+        tier.leafSubcellPermutation = CamelliaCellTools::permutationInverse(leafSubcellTopo, permutationFromRefBranchToParent);
       }
+      else
+      {
+        // We had better be working on a new tier, in this case:
+        TEUCHOS_TEST_FOR_EXCEPTION(tier.refBranch.size() != 0, std::invalid_argument, "Should only have parentSubcellDimension > subcdim when working on a new tier");
+        tier.leafSubcellOrdinal = -1; // allows us to detect whether this is unset, below
+        refPattern->determineChildSubcellInfoInSubcellRefinement(tier.leafSubcellDimension, tier.leafSubcellOrdinal,
+                                                                 tier.leafSubcellPermutation, subcellRefChild,
+                                                                 subcdim, subcord, childOrdinal,
+                                                                 preferSubcellsBelongingToVolumeChild);
+        TEUCHOS_TEST_FOR_EXCEPTION(tier.leafSubcellOrdinal == -1, std::invalid_argument, "tier.leafSubcellOrdinal could not be determined");
+        TEUCHOS_TEST_FOR_EXCEPTION(subcellRefChild==-1, std::invalid_argument, "subcellRefChild = -1");
+      }
+
     }
-    else
+    else if ((parentSubcellDimension != subcdim) && (tier.refBranch.size() > 0))
     {
-      // We had better be working on a new tier, in this case:
-      TEUCHOS_TEST_FOR_EXCEPTION(tier.refBranch.size() != 0, std::invalid_argument, "Should only have parentSubcellDimension > subcdim when working on a new tier");
-      tier.leafSubcellOrdinal = -1; // allows us to detect whether this is unset, below
-      refPattern->determineChildSubcellInfoInSubcellRefinement(tier.leafSubcellDimension, tier.leafSubcellOrdinal,
-                                                               tier.leafSubcellPermutation, subcellRefChild,
+      // a move to a higher dimension -- since all entries in a RefinementBranch must belong to the same dimension,
+      // we should store the current tier, and start a new one:
+      CellTopoPtr parentTopo = refPattern->parentTopology();
+      tier.previousTierTopo = parentTopo->getSubcell(parentSubcellEntry.first, parentSubcellEntry.second);
+      tier.rootDimension = subcdim;
+      // find the subcell
+      pair<unsigned,unsigned> childSubcell = refPattern->mapSubcellFromParentToChild(childOrdinal, parentSubcellDimension, parentSubcellOrdinal);
+      
+      unsigned dummySubcellRefChild;
+      unsigned dummyPermutation;
+      refPattern->determineChildSubcellInfoInSubcellRefinement(tier.rootDimension, tier.previousTierSubcellOrdinal,
+                                                               dummyPermutation, dummySubcellRefChild,
                                                                subcdim, subcord, childOrdinal,
                                                                preferSubcellsBelongingToVolumeChild);
+      
+      // tier.previousTierSubcellOrdinal identifies the smaller-dimensional child in previousTierTopo
+      // We want to find the permutation of this in previousTierTopo as oriented in the parentTopo
+      tier.previousTierSubcellPermutation = CamelliaCellTools::permutationFromSubsubcellToParent(parentTopo, childSubcell.first, childSubcell.second,
+                                                                                                 tier.rootDimension, tier.previousTierSubcellOrdinal);
+      
+      genRefBranch.insert(genRefBranch.begin(), tier);
+      // start new:
+      tier.refBranch.clear();
+      tier.leafSubcellDimension = tier.rootDimension;            // the root dimension of old tier becomes new tier's leaf dimension
+      tier.leafSubcellOrdinal = tier.previousTierSubcellOrdinal; // old tier's "previous" subcell ordinal is new tier's leaf ordinal
+      tier.leafSubcellPermutation = tier.previousTierSubcellPermutation;
+      tier.previousTierTopo = Teuchos::null;
+      tier.previousTierSubcellOrdinal = -1;
+      tier.previousTierSubcellPermutation = -1;
+      tier.rootDimension = -1;
+      
+      // from here on out, replace subcdim and subcord with those from childSubcell:
+      subcdim = childSubcell.first;
+      subcord = childSubcell.second;
+      subcellRefChild = refPattern->mapVolumeChildOrdinalToSubcellChildOrdinal(parentSubcellDimension, parentSubcellOrdinal, childOrdinal);
+      TEUCHOS_TEST_FOR_EXCEPTION(subcellRefChild==-1, std::invalid_argument, "subcellRefChild = -1");
     }
-    TEUCHOS_TEST_FOR_EXCEPTION(tier.leafSubcellOrdinal == -1, std::invalid_argument, "tier.leafSubcellOrdinal could not be determined");
+
+    TEUCHOS_TEST_FOR_EXCEPTION(subcellRefChild==-1, std::invalid_argument, "subcellRefChild = -1");
+    
     tier.refBranch.insert(tier.refBranch.begin(), make_pair(subcellRefPattern, subcellRefChild));
 
     // set up subcdim, subcord for next round
@@ -770,6 +793,7 @@ GeneralizedRefinementBranch RefinementPattern::generalizedRefinementBranchForLea
       CellTopoPtr rootVolumeTopo = volumeRefinementBranch[0].first->parentTopology();
       tier.rootDimension = subcdim;
       tier.previousTierSubcellOrdinal = subcord;
+      tier.previousTierSubcellPermutation = 0;
       tier.previousTierTopo = rootVolumeTopo;
       genRefBranch.insert(genRefBranch.begin(), tier);
     }
@@ -973,7 +997,7 @@ unsigned RefinementPattern::mapSubcellChildOrdinalToVolumeChildOrdinal(unsigned 
 unsigned RefinementPattern::mapSubcellOrdinalFromChildToParent(unsigned childOrdinal, unsigned int subcdim, unsigned int childSubcord)
 {
   // somewhat brute force, for now.
-  if (_refinementTopology->getSpaceDim() == subcdim)
+  if (_refinementTopology->getDimension() == subcdim)
   {
     if (childSubcord != 0)
     {
@@ -1027,7 +1051,7 @@ unsigned RefinementPattern::mapSubcellOrdinalFromParentToChild(unsigned childOrd
 pair<unsigned, unsigned> RefinementPattern::mapSubcellFromParentToChild(unsigned childOrdinal, unsigned subcdim, unsigned parentSubcord)
 {
   // pair is (subcdim, subcord)
-  if (subcdim == _refinementTopology->getSpaceDim())
+  if (subcdim == _refinementTopology->getDimension())
   {
     TEUCHOS_TEST_FOR_EXCEPTION(parentSubcord != 0, std::invalid_argument, "");
     return make_pair(subcdim, 0);
@@ -1099,7 +1123,7 @@ pair<unsigned, unsigned> RefinementPattern::mapSubcellFromChildToParent(unsigned
 
 unsigned RefinementPattern::mapVolumeChildOrdinalToSubcellChildOrdinal(unsigned subcdim, unsigned subcord, unsigned volumeChildOrdinal)
 {
-  if (subcdim == _refinementTopology->getSpaceDim())
+  if (subcdim == _refinementTopology->getDimension())
   {
     TEUCHOS_TEST_FOR_EXCEPTION(subcord != 0, std::invalid_argument, "subcdim = spaceDim, but subcord != 0");
     // then the "subcell refinement pattern" is just the refinement pattern; map from volume pattern to subcell pattern is identity
@@ -1867,44 +1891,76 @@ void RefinementPattern::mapRefCellPointsToAncestor(GeneralizedRefinementBranch &
         cellTopo = refTier->previousTierTopo;
       }
       CellTopoPtr leafTopo = cellTopo->getSubcell(refTier->leafSubcellDimension, refTier->leafSubcellOrdinal);
-//      cout << "refPoints before permuting:\n" << rootRefCellPoints;
+//      cout << "leaf refPoints before permuting:\n" << rootRefCellPointsCopy;
       CamelliaCellTools::permutedReferenceCellPoints(leafTopo, refTier->leafSubcellPermutation, rootRefCellPointsCopy, rootRefCellPoints);
-//      cout << "refPoints after permuting:\n" << rootRefCellPoints;
+//      cout << "leaf refPoints after permuting:\n" << rootRefCellPoints;
       rootRefCellPointsCopy.resize(numPoints, cellTopo->getDimension());
       CamelliaCellTools::mapToReferenceSubcell(rootRefCellPointsCopy, rootRefCellPoints,
-          refTier->leafSubcellDimension,
-          refTier->leafSubcellOrdinal, cellTopo);
+                                               refTier->leafSubcellDimension,
+                                               refTier->leafSubcellOrdinal, cellTopo);
     }
     // once we get here, rootRefCellPointsCopy will contain subcell points in the leaf of the refBranch, appropriately permuted
     if (refTier->rootDimension > 0)
     {
-      mapRefCellPointsToAncestor(refTier->refBranch, rootRefCellPointsCopy, rootRefCellPoints);
+//      cout << "refPoints in fine subcell:\n" << rootRefCellPointsCopy;
+      mapRefCellPointsToAncestor(refTier->refBranch, rootRefCellPointsCopy, rootRefCellPoints); // assigns to rootRefCellPoints
+//      cout << "refPoints mapped to ancestor:\n" << rootRefCellPoints;
       CellTopoPtr parentCell = refTier->previousTierTopo;
-      FieldContainer<double> parentCellRefPoints(numPoints, parentCell->getDimension());
-      CamelliaCellTools::mapToReferenceSubcell(parentCellRefPoints, rootRefCellPoints,
-          generalizedRefBranch[tierNumber].rootDimension,
-          generalizedRefBranch[tierNumber].previousTierSubcellOrdinal, parentCell);
-      rootRefCellPoints = parentCellRefPoints;
+//      CellTopoPtr rootSubcellTopo = parentCell->getSubcell(refTier->rootDimension, refTier->previousTierSubcellOrdinal);
+//      CamelliaCellTools::permutedReferenceCellPoints(rootSubcellTopo, refTier->previousTierSubcellPermutation,
+//                                                     rootRefCellPoints, rootRefCellPointsCopy); // assigns to rootRefCellPointsCopy
+//      cout << "ancestral refPoints permuted:\n" << rootRefCellPointsCopy;
+      
+//      FieldContainer<double> parentCellRefPoints(numPoints, parentCell->getDimension());
+//      CamelliaCellTools::mapToReferenceSubcell(parentCellRefPoints, rootRefCellPoints,
+//                                               generalizedRefBranch[tierNumber].rootDimension,
+//                                               generalizedRefBranch[tierNumber].previousTierSubcellOrdinal, parentCell);
+//      rootRefCellPoints = parentCellRefPoints;
+//      
+//      cout << "parentCellRefPoints:\n" << parentCellRefPoints;
     }
     else
     {
-      // rootDimension == 0; just pick out the appropriate vertex in previousTierTopo in reference space
-      int nodeCount = refTier->previousTierTopo->getNodeCount();
-      int spaceDim = refTier->previousTierTopo->getDimension();
-      if (spaceDim==0) continue; // node-to-node map; just leave rootRefCellPoints as is
-      FieldContainer<double> previousTierRefNodes(nodeCount,spaceDim);
-      CamelliaCellTools::refCellNodesForTopology(previousTierRefNodes, refTier->previousTierTopo);
-
-      // all points will be identical, but if we get a request that involves several copies of a node (vertex),
-      // then we'll return several copies...
-      int numPoints = rootRefCellPoints.dimension(0);
-      rootRefCellPoints.resize(numPoints,spaceDim);
-      int nodeOrdinal = refTier->previousTierSubcellOrdinal;
-      for (int ptOrdinal=0; ptOrdinal<numPoints; ptOrdinal++)
+      // rootDimension == 0; nothing to do, I'm pretty sure
+    }
+    if (tierNumber==0)
+    {
+      if (refTier->rootDimension > 0)
       {
-        for (int d=0; d<spaceDim; d++)
+        // last tier: map to previousTierTopo
+        CellTopoPtr parentCell = refTier->previousTierTopo;
+        CellTopoPtr rootSubcellTopo = parentCell->getSubcell(refTier->rootDimension, refTier->previousTierSubcellOrdinal);
+        CamelliaCellTools::permutedReferenceCellPoints(rootSubcellTopo, refTier->previousTierSubcellPermutation,
+                                                       rootRefCellPoints, rootRefCellPointsCopy); // assigns to rootRefCellPointsCopy
+//        cout << "ancestral refPoints permuted:\n" << rootRefCellPointsCopy;
+        FieldContainer<double> parentCellRefPoints(numPoints, parentCell->getDimension());
+        CamelliaCellTools::mapToReferenceSubcell(parentCellRefPoints, rootRefCellPointsCopy,
+                                                 generalizedRefBranch[tierNumber].rootDimension,
+                                                 generalizedRefBranch[tierNumber].previousTierSubcellOrdinal, parentCell);
+        rootRefCellPoints = parentCellRefPoints;
+        
+//        cout << "parentCellRefPoints:\n" << parentCellRefPoints;
+      }
+      else
+      {
+        // rootDimension = 0; pick out the appropriate vertex
+        int nodeCount = refTier->previousTierTopo->getNodeCount();
+        int spaceDim = refTier->previousTierTopo->getDimension();
+        if (spaceDim==0) continue; // node-to-node map; just leave rootRefCellPoints as is
+        FieldContainer<double> previousTierRefNodes(nodeCount,spaceDim);
+        CamelliaCellTools::refCellNodesForTopology(previousTierRefNodes, refTier->previousTierTopo);
+        
+        // all points will be identical, but if we get a request that involves several copies of a node (vertex),
+        // then we'll return several copies...
+        int numPoints = rootRefCellPoints.dimension(0);
+        rootRefCellPoints.resize(numPoints,spaceDim);
+        int nodeOrdinal = refTier->previousTierSubcellOrdinal;
+        for (int ptOrdinal=0; ptOrdinal<numPoints; ptOrdinal++)
         {
-          rootRefCellPoints(ptOrdinal,d) = previousTierRefNodes(nodeOrdinal,d);
+          for (int d=0; d<spaceDim; d++)
+          {
+            rootRefCellPoints(ptOrdinal,d) = previousTierRefNodes(nodeOrdinal,d);
+          }
         }
       }
     }

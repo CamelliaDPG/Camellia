@@ -23,13 +23,14 @@ namespace Camellia {
 
   struct RefinementBranchTier
   {
-    CellTopoPtr previousTierTopo;          // topology of the previous tier
-    unsigned rootDimension;                // dimension of the root of this tier
-    unsigned previousTierSubcellOrdinal;   // ordinal of the root of this tier in the leaf of the previous tier
-    RefinementBranch refBranch;            // refinement branch for the tier
-    unsigned leafSubcellDimension;         // leaf subcell dimension
-    unsigned leafSubcellOrdinal;           // subcell ordinal in the refBranch's leaf
-    unsigned leafSubcellPermutation;       // ordinal of the permutation that takes the leaf nodes as seen by refBranch to their order in topmost (volume) topology
+    CellTopoPtr previousTierTopo;            // topology of the previous tier
+    unsigned rootDimension;                  // dimension of the root of this tier
+    unsigned previousTierSubcellOrdinal;     // ordinal of the root of this tier in the leaf of the previous tier
+    unsigned previousTierSubcellPermutation; // permutation of the root of this tier in the leaf of the previous tier (relative to the previousTierTopo)
+    RefinementBranch refBranch;              // refinement branch for the tier
+    unsigned leafSubcellDimension;           // leaf subcell dimension
+    unsigned leafSubcellOrdinal;             // subcell ordinal in the refBranch's leaf
+    unsigned leafSubcellPermutation;         // ordinal of the permutation that takes the leaf nodes as seen by topmost (volume) topology to their order in refBranch
   };
   
   typedef std::vector<RefinementBranchTier> GeneralizedRefinementBranch; // allows mapping child points that may fall inside a volume, e.g.

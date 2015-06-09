@@ -60,7 +60,7 @@ namespace
     double epsilon = form.epsilon();
     
     FunctionPtr sigma1, sigma2, sigma3;
-    int spaceTimeDim = meshTopo->getSpaceDim();
+    int spaceTimeDim = meshTopo->getDimension();
     int spaceDim = spaceTimeDim - 1;
     
     FunctionPtr forcingFunction = SpaceTimeHeatFormulation::forcingFunction(spaceDim, epsilon, u);

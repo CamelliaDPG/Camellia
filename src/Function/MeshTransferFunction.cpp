@@ -60,7 +60,7 @@ bool MeshTransferFunction::findAncestralPairForNewMeshCellSide(const CellSide &n
 
   newMeshCellSideAncestor = newMeshCellSide;
 
-  int sideDim = newMeshTopology->getSpaceDim() - 1;
+  int sideDim = newMeshTopology->getDimension() - 1;
 
   bool notFound = true;
   while (notFound)
@@ -149,7 +149,7 @@ void MeshTransferFunction::rebuildMaps()
 {
   MeshTopologyPtr newMeshTopology = _newMesh->getTopology();
 
-  int sideDim = newMeshTopology->getSpaceDim() - 1;
+  int sideDim = newMeshTopology->getDimension() - 1;
   int timeDimOrdinal = sideDim; // time is the last dimension
 
   // 1. Find (cellID, sideOrdinal) belonging to this rank that have interface_t values in newMesh.

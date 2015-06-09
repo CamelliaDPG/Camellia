@@ -610,7 +610,7 @@ void testHGRADTrace(MeshTopologyPtr meshTopo, int polyOrder, Teuchos::FancyOStre
   Camellia::EFunctionSpace fsTime = Camellia::FUNCTION_SPACE_HGRAD;
   vector<int> H1Orders = {polyOrder,polyOrder};
 
-  int spaceDim = meshTopo->getSpaceDim();
+  int spaceDim = meshTopo->getDimension();
   int sideDim = spaceDim - 1;
   int sideCount = meshTopo->getEntityCount(sideDim);
 
@@ -939,7 +939,7 @@ void testHGRADVolumeNoHangingNodes(MeshTopologyPtr meshTopo, int polyOrder, Teuc
   Camellia::EFunctionSpace fsTime = Camellia::FUNCTION_SPACE_HGRAD;
   vector<int> H1Orders = {polyOrder,polyOrder};
 
-  int spaceDim = meshTopo->getSpaceDim();
+  int spaceDim = meshTopo->getDimension();
   int sideDim = spaceDim - 1;
 
   set<IndexType> cellIndices = meshTopo->getActiveCellIndices();
@@ -1533,7 +1533,7 @@ TEUCHOS_UNIT_TEST( BasisReconciliation, MapFineSubcellPointsToCoarseSubcell_1DLi
   int spaceDim  = 1;
   FieldContainer<double> fineSubcellPoints(numPoints, spaceDim);
   fineSubcellPoints(0,0) = -0.5;
-  fineSubcellPoints(0,1) =  1.0;
+  fineSubcellPoints(1,0) =  1.0;
 
   FieldContainer<double> expectedCoarseSubcellPoints(numPoints,spaceDim);
   for (int ptOrdinal=0; ptOrdinal<numPoints; ptOrdinal++)
@@ -1798,8 +1798,441 @@ TEUCHOS_UNIT_TEST( BasisReconciliation, MapFineSubcellPointsToCoarseSubcell_Volu
   double tol = 1e-15;
   TEST_COMPARE_FLOATING_ARRAYS_CAMELLIA(coarseSubcellPoints, expectedCoarseSubcellPoints, tol);
 }
+
   
-  TEUCHOS_UNIT_TEST( BasisReconciliation, MapFineSubcellPointsToPermutedCoarseVolume)
+  TEUCHOS_UNIT_TEST( BasisReconciliation, MapFineEdgePointsToPermutedCoarseFace_OneRefinement)
+  {
+    /*
+     
+     Take a once-refined mesh like this:
+     
+     _________________________________
+     |               |               |
+     |               |               |
+     |               |               |
+     |               |               |
+     |               |               |
+     |               |               |
+     |               |               |
+     |_______________|_______________|
+     |               |               |
+     |               |               |
+     |               |               |
+     |               |               |
+     |               |       A       |
+     |               |               |
+     |               |               |
+     |_______________|_______________|
+     
+     We are interested in the west side of cell A, in particular in the case
+     when we are mapping points on this edge to a coarse quad that has been permuted
+     (so that it's clockwise rather than counter-clockwise; this is permutation 4 for the
+     quadrilateral).
+     
+     */
+    
+    // UNPERMUTED CASE:
+    int numPoints = 2;
+    int fineDomainDim  = 2;
+    int fineSubcellDim = 1; // edge
+    FieldContainer<double> fineSubcellPoints(numPoints, fineSubcellDim);
+    fineSubcellPoints(0,0) = -0.25;
+    fineSubcellPoints(1,0) = 0.5;
+    
+    // coarse face's view of the domain is permuted relative to a top-down view: i.e., we swap x and y.
+    int coarseDim = 2;
+    FieldContainer<double> expectedCoarseSubcellPoints(numPoints,coarseDim);
+    expectedCoarseSubcellPoints(0,0) = 0.5 * fineSubcellPoints(0,0) - 0.5;
+    expectedCoarseSubcellPoints(0,1) = 0.0;
+    expectedCoarseSubcellPoints(1,0) = 0.5 * fineSubcellPoints(1,0) - 0.5;
+    expectedCoarseSubcellPoints(1,1) = 0.0;
+    
+    FieldContainer<double> coarseSubcellPoints;
+    
+    unsigned fineSubcellOrdinalInFineDomain = 0; // edge 0 in the fine domain (bottom face goes clockwise when viewed from above)
+    unsigned fineDomainOrdinalInRefinementLeaf = 4; // side 4: bottom face
+    
+    CellTopoPtr volumeTopo = CellTopology::hexahedron();
+    
+    RefinementBranch refBranch;
+    RefinementPatternPtr oneRefinement = RefinementPattern::regularRefinementPatternHexahedron();
+    refBranch.push_back( {oneRefinement.get(), 1} ); // southeast, bottom hex
+    
+    unsigned coarseSubcellDimension = 2; // face
+    unsigned coarseSubcellOrdinalInCoarseDomain = 0;
+    unsigned coarseDomainDim = 2;
+    unsigned coarseDomainOrdinalInRefinementRoot = 4; // bottom face
+    unsigned coarseSubcellPermutation = 0; // ancestor = coarse cell; same orientation
+    
+    BasisReconciliation::mapFineSubcellPointsToCoarseDomain(coarseSubcellPoints, fineSubcellPoints, fineSubcellDim, fineSubcellOrdinalInFineDomain,
+                                                            fineDomainDim, fineDomainOrdinalInRefinementLeaf, refBranch,
+                                                            volumeTopo,
+                                                            coarseSubcellDimension, coarseSubcellOrdinalInCoarseDomain,
+                                                            coarseDomainDim, coarseDomainOrdinalInRefinementRoot, coarseSubcellPermutation);
+    
+    out << "UNPERMUTED CASE\n";
+    out << "coarseSubcellPoints:\n" << coarseSubcellPoints;
+    out << "expectedCoarseSubcellPoints:\n" << expectedCoarseSubcellPoints;
+    
+    double tol = 1e-15;
+    TEST_COMPARE_FLOATING_ARRAYS_CAMELLIA(coarseSubcellPoints, expectedCoarseSubcellPoints, tol);
+    
+    // PERMUTED CASE:
+    // exactly the same as above, except now the coarse domain is permuted.  This means we expect x and y to be swapped (back):
+    expectedCoarseSubcellPoints(0,0) = 0.0;
+    expectedCoarseSubcellPoints(0,1) = 0.5 * fineSubcellPoints(0,0) - 0.5;
+    expectedCoarseSubcellPoints(1,0) = 0.0;
+    expectedCoarseSubcellPoints(1,1) = 0.5 * fineSubcellPoints(1,0) - 0.5;
+    
+    coarseSubcellDimension = 2; // face
+    coarseSubcellOrdinalInCoarseDomain = 0;
+    coarseDomainDim = 2;
+    coarseDomainOrdinalInRefinementRoot = 5; // top face
+    coarseSubcellPermutation = 4; // would be better to determine the correct permutation programmatically.
+    BasisReconciliation::mapFineSubcellPointsToCoarseDomain(coarseSubcellPoints, fineSubcellPoints, fineSubcellDim, fineSubcellOrdinalInFineDomain,
+                                                            fineDomainDim, fineDomainOrdinalInRefinementLeaf, refBranch,
+                                                            volumeTopo,
+                                                            coarseSubcellDimension, coarseSubcellOrdinalInCoarseDomain,
+                                                            coarseDomainDim, coarseDomainOrdinalInRefinementRoot, coarseSubcellPermutation);
+    out << "PERMUTED CASE\n";
+    out << "coarseSubcellPoints:\n" << coarseSubcellPoints;
+    out << "expectedCoarseSubcellPoints:\n" << expectedCoarseSubcellPoints;
+    
+    TEST_COMPARE_FLOATING_ARRAYS_CAMELLIA(coarseSubcellPoints, expectedCoarseSubcellPoints, tol);
+  }
+  
+  TEUCHOS_UNIT_TEST( BasisReconciliation, MapFineFacePointsToPermutedCoarseFace_OneRefinement)
+  {
+    /*
+     
+     Take a once-refined mesh slice like this (bottom face, but viewed from above):
+     
+     _________________________________
+     |               |               |
+     |               |               |
+     |               |               |
+     |               |               |
+     |               |               |
+     |               |               |
+     |               |               |
+     |_______________|_______________|
+     |               |               |
+     |               |               |
+     |               |               |
+     |               |               |
+     |               |       A       |
+     |               |               |
+     |               |               |
+     |_______________|_______________|
+     
+     We are interested in points on the west side of cell A, in particular in the case
+     when we are mapping points on this face to a coarse quad that has been permuted
+     (so that it's clockwise rather than counter-clockwise; this is permutation 4 for the
+     quadrilateral).
+     
+     Note that because we're on the bottom face, the domain-local view of the points is 
+     permuted, so that x and y in physical space are flipped in domain space.  This is
+     true for both the coarse and the fine domains.
+     
+     */
+    
+    // UNPERMUTED CASE:
+    int numPoints = 2;
+    int fineDomainDim  = 2;
+    int fineSubcellDim = 2; // face
+    // In physical space we want to map (0,0) and (0,-1).
+    // On the coarse domain this is (0,0) and (-1,0);
+    // On the fine domain this is (1,-1) and (-1,-1);
+    FieldContainer<double> fineSubcellPoints(numPoints, fineSubcellDim);
+    fineSubcellPoints(0,0) = 1.0;
+    fineSubcellPoints(0,1) = -1.0;
+    fineSubcellPoints(1,0) = -1.0;
+    fineSubcellPoints(1,1) = -1.0;
+    
+    // coarse face's view of the domain is permuted relative to a top-down view: i.e., we swap x and y.
+    int coarseDim = 2;
+    FieldContainer<double> expectedCoarseSubcellPoints(numPoints,coarseDim);
+    expectedCoarseSubcellPoints(0,0) = 0.5 * fineSubcellPoints(0,0) - 0.5;
+    expectedCoarseSubcellPoints(0,1) = 0.5 * fineSubcellPoints(0,1) + 0.5;
+    expectedCoarseSubcellPoints(1,0) = 0.5 * fineSubcellPoints(1,0) - 0.5;
+    expectedCoarseSubcellPoints(1,1) = 0.5 * fineSubcellPoints(1,1) + 0.5;
+    
+    FieldContainer<double> coarseSubcellPoints;
+    
+    unsigned fineSubcellOrdinalInFineDomain = 0; // face 0 in the fine domain (bottom face goes clockwise when viewed from above)
+    unsigned fineDomainOrdinalInRefinementLeaf = 4; // side 4: bottom face
+    
+    CellTopoPtr volumeTopo = CellTopology::hexahedron();
+    
+    RefinementBranch refBranch;
+    RefinementPatternPtr oneRefinement = RefinementPattern::regularRefinementPatternHexahedron();
+    refBranch.push_back( {oneRefinement.get(), 1} ); // southeast, bottom hex
+    
+    unsigned coarseSubcellDimension = 2; // face
+    unsigned coarseSubcellOrdinalInCoarseDomain = 0;
+    unsigned coarseDomainDim = 2;
+    unsigned coarseDomainOrdinalInRefinementRoot = 4; // bottom face
+    unsigned coarseSubcellPermutation = 0; // ancestor = coarse cell; same orientation
+    
+    BasisReconciliation::mapFineSubcellPointsToCoarseDomain(coarseSubcellPoints, fineSubcellPoints, fineSubcellDim, fineSubcellOrdinalInFineDomain,
+                                                            fineDomainDim, fineDomainOrdinalInRefinementLeaf, refBranch,
+                                                            volumeTopo,
+                                                            coarseSubcellDimension, coarseSubcellOrdinalInCoarseDomain,
+                                                            coarseDomainDim, coarseDomainOrdinalInRefinementRoot, coarseSubcellPermutation);
+    
+    out << "UNPERMUTED CASE\n";
+    out << "coarseSubcellPoints:\n" << coarseSubcellPoints;
+    out << "expectedCoarseSubcellPoints:\n" << expectedCoarseSubcellPoints;
+    
+    double tol = 1e-15;
+    TEST_COMPARE_FLOATING_ARRAYS_CAMELLIA(coarseSubcellPoints, expectedCoarseSubcellPoints, tol);
+    
+    // PERMUTED CASE:
+    // exactly the same as above, except now the coarse domain is permuted.  This means we expect x and y to be swapped (back):
+    expectedCoarseSubcellPoints(0,0) = 0.5 * fineSubcellPoints(0,1) + 0.5;
+    expectedCoarseSubcellPoints(0,1) = 0.5 * fineSubcellPoints(0,0) - 0.5;
+    expectedCoarseSubcellPoints(1,0) = 0.5 * fineSubcellPoints(1,1) + 0.5;
+    expectedCoarseSubcellPoints(1,1) = 0.5 * fineSubcellPoints(1,0) - 0.5;
+    
+    coarseSubcellDimension = 2; // face
+    coarseSubcellOrdinalInCoarseDomain = 0;
+    coarseDomainDim = 2;
+    coarseDomainOrdinalInRefinementRoot = 5; // top face
+    coarseSubcellPermutation = 4; // would be better to determine the correct permutation programmatically.
+    BasisReconciliation::mapFineSubcellPointsToCoarseDomain(coarseSubcellPoints, fineSubcellPoints, fineSubcellDim, fineSubcellOrdinalInFineDomain,
+                                                            fineDomainDim, fineDomainOrdinalInRefinementLeaf, refBranch,
+                                                            volumeTopo,
+                                                            coarseSubcellDimension, coarseSubcellOrdinalInCoarseDomain,
+                                                            coarseDomainDim, coarseDomainOrdinalInRefinementRoot, coarseSubcellPermutation);
+    out << "PERMUTED CASE\n";
+    out << "coarseSubcellPoints:\n" << coarseSubcellPoints;
+    out << "expectedCoarseSubcellPoints:\n" << expectedCoarseSubcellPoints;
+    
+    TEST_COMPARE_FLOATING_ARRAYS_CAMELLIA(coarseSubcellPoints, expectedCoarseSubcellPoints, tol);
+  }
+  
+  TEUCHOS_UNIT_TEST( BasisReconciliation, MapFineFacePointsToPermutedCoarseFace_OneRefinement_Case2)
+  {
+    /*
+     
+     Take a once-refined mesh slice like this (bottom face, but viewed from above):
+     
+     _________________________________
+     |               |               |
+     |               |               |
+     |               |               |
+     |               |               |
+     |               |               |
+     |               |               |
+     |               |               |
+     |_______________|_______________|
+     |               |               |
+     |               |               |
+     |               |               |
+     |               |               |
+     |       A       |               |
+     |               |               |
+     |               |               |
+     |_______________|_______________|
+     
+     We are interested in points on the west side of cell A, in particular in the case
+     when we are mapping points on this face to a coarse quad that has been permuted
+     (so that it's clockwise rather than counter-clockwise; this is permutation 4 for the
+     quadrilateral).
+     
+     Note that because we're on the bottom face, the domain-local view of the points is
+     permuted, so that x and y in physical space are flipped in domain space.  This is
+     true for both the coarse and the fine domains.
+     
+     */
+    
+    // UNPERMUTED CASE:
+    int numPoints = 2;
+    int fineDomainDim  = 2;
+    int fineSubcellDim = 2; // face
+    // In physical space we want to map (-1,0) and (-1,-1).
+    // On the coarse domain this is (0,-1) and (-1,-1);
+    // On the fine domain this is (1,-1) and (-1,-1);
+    FieldContainer<double> fineSubcellPoints(numPoints, fineSubcellDim);
+    fineSubcellPoints(0,0) = 1.0;
+    fineSubcellPoints(0,1) = -1.0;
+    fineSubcellPoints(1,0) = -1.0;
+    fineSubcellPoints(1,1) = -1.0;
+    
+    // coarse face's view of the domain is permuted relative to a top-down view: i.e., we swap x and y.
+    int coarseDim = 2;
+    FieldContainer<double> expectedCoarseSubcellPoints(numPoints,coarseDim);
+    expectedCoarseSubcellPoints(0,0) = 0.5 * fineSubcellPoints(0,0) - 0.5;
+    expectedCoarseSubcellPoints(0,1) = 0.5 * fineSubcellPoints(0,1) - 0.5;
+    expectedCoarseSubcellPoints(1,0) = 0.5 * fineSubcellPoints(1,0) - 0.5;
+    expectedCoarseSubcellPoints(1,1) = 0.5 * fineSubcellPoints(1,1) - 0.5;
+    
+    FieldContainer<double> coarseSubcellPoints;
+    
+    unsigned fineSubcellOrdinalInFineDomain = 0; // face 0 in the fine domain (bottom face goes clockwise when viewed from above)
+    unsigned fineDomainOrdinalInRefinementLeaf = 4; // side 4: bottom face
+    
+    CellTopoPtr volumeTopo = CellTopology::hexahedron();
+    
+    RefinementBranch refBranch;
+    RefinementPatternPtr oneRefinement = RefinementPattern::regularRefinementPatternHexahedron();
+    refBranch.push_back( {oneRefinement.get(), 0} ); // southwest, bottom hex
+    
+    unsigned coarseSubcellDimension = 2; // face
+    unsigned coarseSubcellOrdinalInCoarseDomain = 0;
+    unsigned coarseDomainDim = 2;
+    unsigned coarseDomainOrdinalInRefinementRoot = 4; // bottom face
+    unsigned coarseSubcellPermutation = 0; // ancestor = coarse cell; same orientation
+    
+    BasisReconciliation::mapFineSubcellPointsToCoarseDomain(coarseSubcellPoints, fineSubcellPoints, fineSubcellDim, fineSubcellOrdinalInFineDomain,
+                                                            fineDomainDim, fineDomainOrdinalInRefinementLeaf, refBranch,
+                                                            volumeTopo,
+                                                            coarseSubcellDimension, coarseSubcellOrdinalInCoarseDomain,
+                                                            coarseDomainDim, coarseDomainOrdinalInRefinementRoot, coarseSubcellPermutation);
+    
+    out << "UNPERMUTED CASE\n";
+    out << "coarseSubcellPoints:\n" << coarseSubcellPoints;
+    out << "expectedCoarseSubcellPoints:\n" << expectedCoarseSubcellPoints;
+    
+    double tol = 1e-15;
+    TEST_COMPARE_FLOATING_ARRAYS_CAMELLIA(coarseSubcellPoints, expectedCoarseSubcellPoints, tol);
+    
+    // PERMUTED CASE:
+    // exactly the same as above, except now the coarse domain is permuted.  This means we expect x and y to be swapped (back):
+    expectedCoarseSubcellPoints(0,0) = 0.5 * fineSubcellPoints(0,1) - 0.5;
+    expectedCoarseSubcellPoints(0,1) = 0.5 * fineSubcellPoints(0,0) - 0.5;
+    expectedCoarseSubcellPoints(1,0) = 0.5 * fineSubcellPoints(1,1) - 0.5;
+    expectedCoarseSubcellPoints(1,1) = 0.5 * fineSubcellPoints(1,0) - 0.5;
+    
+    coarseSubcellDimension = 2; // face
+    coarseSubcellOrdinalInCoarseDomain = 0;
+    coarseDomainDim = 2;
+    coarseDomainOrdinalInRefinementRoot = 5; // top face
+    coarseSubcellPermutation = 4; // would be better to determine the correct permutation programmatically.
+    BasisReconciliation::mapFineSubcellPointsToCoarseDomain(coarseSubcellPoints, fineSubcellPoints, fineSubcellDim, fineSubcellOrdinalInFineDomain,
+                                                            fineDomainDim, fineDomainOrdinalInRefinementLeaf, refBranch,
+                                                            volumeTopo,
+                                                            coarseSubcellDimension, coarseSubcellOrdinalInCoarseDomain,
+                                                            coarseDomainDim, coarseDomainOrdinalInRefinementRoot, coarseSubcellPermutation);
+    out << "PERMUTED CASE\n";
+    out << "coarseSubcellPoints:\n" << coarseSubcellPoints;
+    out << "expectedCoarseSubcellPoints:\n" << expectedCoarseSubcellPoints;
+    
+    TEST_COMPARE_FLOATING_ARRAYS_CAMELLIA(coarseSubcellPoints, expectedCoarseSubcellPoints, tol);
+  }
+  
+  TEUCHOS_UNIT_TEST( BasisReconciliation, MapFineFacePointsToPermutedCoarseFace_TwoRefinements)
+  {
+    /*
+     
+     Take a twice-refined mesh slice like this (bottom face, but viewed from above):
+     
+     _________________________________
+     |               |               |
+     |               |               |
+     |               |               |
+     |               |               |
+     |               |               |
+     |               |               |
+     |               |               |
+     |_______________|_______________|
+     |               |       |       |
+     |               |       |       |
+     |               |       |       |
+     |               |_______|_______|
+     |               |       |       |
+     |               |       |       |
+     |               |   A   |       |
+     |_______________|_______|_______|
+     
+     We are interested in points on the west side of cell A, in particular in the case
+     when we are mapping points on this face to a coarse quad that has been permuted
+     (so that it's clockwise rather than counter-clockwise; this is permutation 4 for the
+     quadrilateral).
+     
+     Note that because we're on the bottom face, the domain-local view of the points is
+     permuted, so that x and y in physical space are flipped in domain space.  This is
+     true for both the coarse and the fine domains.
+     
+     */
+    
+    // UNPERMUTED CASE:
+    int numPoints = 2;
+    int fineDomainDim  = 2;
+    int fineSubcellDim = 2; // face
+    // In physical space we want to map (0,-0.5) and (0,-1).
+    // On the coarse domain this is (-0.5,0) and (-1,0);
+    // On the fine domain this is (1,-1) and (-1,-1);
+    FieldContainer<double> fineSubcellPoints(numPoints, fineSubcellDim);
+    fineSubcellPoints(0,0) = 1.0;
+    fineSubcellPoints(0,1) = -1.0;
+    fineSubcellPoints(1,0) = -1.0;
+    fineSubcellPoints(1,1) = -1.0;
+    
+    // coarse face's view of the domain is permuted relative to a top-down view: i.e., we swap x and y.
+    int coarseDim = 2;
+    FieldContainer<double> expectedCoarseSubcellPoints(numPoints,coarseDim);
+    expectedCoarseSubcellPoints(0,0) = 0.25 * fineSubcellPoints(0,0) - 0.75;
+    expectedCoarseSubcellPoints(0,1) = 0.25 * fineSubcellPoints(0,1) + 0.25;
+    expectedCoarseSubcellPoints(1,0) = 0.25 * fineSubcellPoints(1,0) - 0.75;
+    expectedCoarseSubcellPoints(1,1) = 0.25 * fineSubcellPoints(1,1) + 0.25;
+    
+    FieldContainer<double> coarseSubcellPoints;
+    
+    unsigned fineSubcellOrdinalInFineDomain = 0; // face 0 in the fine domain (bottom face goes clockwise when viewed from above)
+    unsigned fineDomainOrdinalInRefinementLeaf = 4; // side 4: bottom face
+    
+    CellTopoPtr volumeTopo = CellTopology::hexahedron();
+    
+    RefinementBranch refBranch;
+    RefinementPatternPtr oneRefinement = RefinementPattern::regularRefinementPatternHexahedron();
+    refBranch.push_back( {oneRefinement.get(), 1} ); // southeast, bottom hex
+    refBranch.push_back( {oneRefinement.get(), 0} ); // southwest, bottom hex
+    
+    unsigned coarseSubcellDimension = 2; // face
+    unsigned coarseSubcellOrdinalInCoarseDomain = 0;
+    unsigned coarseDomainDim = 2;
+    unsigned coarseDomainOrdinalInRefinementRoot = 4; // bottom face
+    unsigned coarseSubcellPermutation = 0; // ancestor = coarse cell; same orientation
+    
+    BasisReconciliation::mapFineSubcellPointsToCoarseDomain(coarseSubcellPoints, fineSubcellPoints, fineSubcellDim, fineSubcellOrdinalInFineDomain,
+                                                            fineDomainDim, fineDomainOrdinalInRefinementLeaf, refBranch,
+                                                            volumeTopo,
+                                                            coarseSubcellDimension, coarseSubcellOrdinalInCoarseDomain,
+                                                            coarseDomainDim, coarseDomainOrdinalInRefinementRoot, coarseSubcellPermutation);
+    
+    out << "UNPERMUTED CASE\n";
+    out << "coarseSubcellPoints:\n" << coarseSubcellPoints;
+    out << "expectedCoarseSubcellPoints:\n" << expectedCoarseSubcellPoints;
+    
+    double tol = 1e-15;
+    TEST_COMPARE_FLOATING_ARRAYS_CAMELLIA(coarseSubcellPoints, expectedCoarseSubcellPoints, tol);
+    
+    // PERMUTED CASE:
+    // exactly the same as above, except now the coarse domain is permuted.  This means we expect x and y to be swapped (back):
+    expectedCoarseSubcellPoints(0,0) = 0.25 * fineSubcellPoints(0,1) + 0.25;
+    expectedCoarseSubcellPoints(0,1) = 0.25 * fineSubcellPoints(0,0) - 0.75;
+    expectedCoarseSubcellPoints(1,0) = 0.25 * fineSubcellPoints(1,1) + 0.25;
+    expectedCoarseSubcellPoints(1,1) = 0.25 * fineSubcellPoints(1,0) - 0.75;
+    
+    coarseSubcellDimension = 2; // face
+    coarseSubcellOrdinalInCoarseDomain = 0;
+    coarseDomainDim = 2;
+    coarseDomainOrdinalInRefinementRoot = 5; // top face
+    coarseSubcellPermutation = 4; // would be better to determine the correct permutation programmatically.
+    BasisReconciliation::mapFineSubcellPointsToCoarseDomain(coarseSubcellPoints, fineSubcellPoints, fineSubcellDim, fineSubcellOrdinalInFineDomain,
+                                                            fineDomainDim, fineDomainOrdinalInRefinementLeaf, refBranch,
+                                                            volumeTopo,
+                                                            coarseSubcellDimension, coarseSubcellOrdinalInCoarseDomain,
+                                                            coarseDomainDim, coarseDomainOrdinalInRefinementRoot, coarseSubcellPermutation);
+    out << "PERMUTED CASE\n";
+    out << "coarseSubcellPoints:\n" << coarseSubcellPoints;
+    out << "expectedCoarseSubcellPoints:\n" << expectedCoarseSubcellPoints;
+    
+    TEST_COMPARE_FLOATING_ARRAYS_CAMELLIA(coarseSubcellPoints, expectedCoarseSubcellPoints, tol);
+  }
+  
+  TEUCHOS_UNIT_TEST( BasisReconciliation, MapFineEdgePointsToPermutedCoarseFace_TwoRefinements)
   {
     /*
      
@@ -1828,42 +2261,43 @@ TEUCHOS_UNIT_TEST( BasisReconciliation, MapFineSubcellPointsToCoarseSubcell_Volu
      (so that it's clockwise rather than counter-clockwise; this is permutation 4 for the
      quadrilateral).
      
-     TODO: Rewrite this to be a slice of a 3D mesh, so that the permuted case is allowed.
-     
      */
     
     // UNPERMUTED CASE:
     int numPoints = 2;
     int fineDomainDim  = 2;
     int fineSubcellDim = 1; // edge
+    
+    // fine subcell points are oriented according to the *domain's* view (i.e. the face)
     FieldContainer<double> fineSubcellPoints(numPoints, fineSubcellDim);
-    fineSubcellPoints(0,0) = -0.25;
-    fineSubcellPoints(1,0) = 0.5;
+    fineSubcellPoints(0,0) = -1.0;
+    fineSubcellPoints(1,0) = 1.0;
     
     int coarseDim = 2;
     FieldContainer<double> expectedCoarseSubcellPoints(numPoints,coarseDim);
-    expectedCoarseSubcellPoints(0,0) = 0.0;
-    expectedCoarseSubcellPoints(0,1) = -0.25 * fineSubcellPoints(0,0) - 0.75;
-    expectedCoarseSubcellPoints(1,0) = 0.0;
-    expectedCoarseSubcellPoints(1,1) = -0.25 * fineSubcellPoints(1,0) - 0.75;
+    // coarse face's view of the domain is permuted relative to a top-down view: i.e., we swap x and y.
+    expectedCoarseSubcellPoints(0,0) = 0.25 * fineSubcellPoints(0,0) - 0.75;
+    expectedCoarseSubcellPoints(0,1) = 0.0;
+    expectedCoarseSubcellPoints(1,0) = 0.25 * fineSubcellPoints(1,0) - 0.75;
+    expectedCoarseSubcellPoints(1,1) = 0.0;
     
     FieldContainer<double> coarseSubcellPoints;
     
-    unsigned fineSubcellOrdinalInFineDomain = 3; // edge 3 in the fine domain
-    unsigned fineDomainOrdinalInRefinementLeaf = 0; // side 0
+    unsigned fineSubcellOrdinalInFineDomain = 0; // edge 0 in the fine domain (bottom face goes clockwise when viewed from above)
+    unsigned fineDomainOrdinalInRefinementLeaf = 4; // side 4: bottom face
     
     CellTopoPtr volumeTopo = CellTopology::hexahedron();
     
     RefinementBranch refBranch;
     RefinementPatternPtr oneRefinement = RefinementPattern::regularRefinementPatternHexahedron();
-    refBranch.push_back( make_pair(oneRefinement.get(), 1) );
-    refBranch.push_back( make_pair(oneRefinement.get(), 4) );
+    refBranch.push_back( {oneRefinement.get(), 1} ); // southeast, bottom hex
+    refBranch.push_back( {oneRefinement.get(), 0} ); // southwest, bottom hex
     
     unsigned coarseSubcellDimension = 2; // face
     unsigned coarseSubcellOrdinalInCoarseDomain = 0;
     unsigned coarseDomainDim = 2;
-    unsigned coarseDomainOrdinalInRefinementRoot = 0; // bottom face
-    unsigned coarseSubcellPermutation = 0;
+    unsigned coarseDomainOrdinalInRefinementRoot = 4; // bottom face
+    unsigned coarseSubcellPermutation = 0; // ancestor = coarse cell; same orientation
     
     BasisReconciliation::mapFineSubcellPointsToCoarseDomain(coarseSubcellPoints, fineSubcellPoints, fineSubcellDim, fineSubcellOrdinalInFineDomain,
                                                             fineDomainDim, fineDomainOrdinalInRefinementLeaf, refBranch,
@@ -1880,10 +2314,10 @@ TEUCHOS_UNIT_TEST( BasisReconciliation, MapFineSubcellPointsToCoarseSubcell_Volu
     
     // PERMUTED CASE:
     // exactly the same as above, except now the coarse domain is permuted.  This means we expect x and y to be swapped:
-    expectedCoarseSubcellPoints(0,0) = -0.25 * fineSubcellPoints(0,0) - 0.75;
-    expectedCoarseSubcellPoints(0,1) = 0.0;
-    expectedCoarseSubcellPoints(1,0) = -0.25 * fineSubcellPoints(1,0) - 0.75;
-    expectedCoarseSubcellPoints(1,1) = 0.0;
+    expectedCoarseSubcellPoints(0,0) = 0.0;
+    expectedCoarseSubcellPoints(0,1) = 0.25 * fineSubcellPoints(0,0) - 0.75;
+    expectedCoarseSubcellPoints(1,0) = 0.0;
+    expectedCoarseSubcellPoints(1,1) = 0.25 * fineSubcellPoints(1,0) - 0.75;
     
     coarseSubcellDimension = 2; // face
     coarseSubcellOrdinalInCoarseDomain = 0;

@@ -210,7 +210,7 @@ bool MeshTestSuite::neighborBasesAgreeOnSides(Teuchos::RCP<Mesh> mesh, const Fie
   double tol = 1e-12;
   double maxDiff = 0.0;
 
-  unsigned spaceDim = mesh->getTopology()->getSpaceDim();
+  unsigned spaceDim = mesh->getTopology()->getDimension();
   unsigned sideDim = spaceDim - 1;
 
   int numPoints = testPointsRefCoords.dimension(0);

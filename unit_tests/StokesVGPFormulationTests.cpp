@@ -82,7 +82,7 @@ void projectExactSolution(StokesVGPFormulation &form, SolutionPtr stokesSolution
 void setupExactSolution(StokesVGPFormulation &form, FunctionPtr u, FunctionPtr p,
                         MeshTopologyPtr meshTopo, int fieldPolyOrder, int delta_k)
 {
-  int spaceDim = meshTopo->getSpaceDim();
+  int spaceDim = meshTopo->getDimension();
   double mu = form.mu();
 
   FunctionPtr forcingFunction = StokesVGPFormulation::forcingFunction(spaceDim, mu, u, p);
@@ -361,7 +361,7 @@ TEUCHOS_UNIT_TEST( StokesVGPFormulation, SaveAndLoad )
   string savePrefix = "StokesVGPTest";
   form.save(savePrefix);
 
-  StokesVGPFormulation loadedForm(meshTopo->getSpaceDim(),useConformingTraces, mu);
+  StokesVGPFormulation loadedForm(meshTopo->getDimension(),useConformingTraces, mu);
   loadedForm.initializeSolution(savePrefix,fieldPolyOrder,delta_k);
 
   // delete the files we created

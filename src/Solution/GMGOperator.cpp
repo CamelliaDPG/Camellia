@@ -523,7 +523,7 @@ LocalDofMapperPtr GMGOperator::getLocalCoefficientMap(GlobalIndexType fineCellID
   }
 
   int fineSideCount = fineCell->getSideCount();
-  int spaceDim = _fineMesh->getTopology()->getSpaceDim();
+  int spaceDim = _fineMesh->getTopology()->getDimension();
   int sideDim = spaceDim - 1;
   vector<unsigned> ancestralSideOrdinals(fineSideCount);
   vector< RefinementBranch > sideRefBranches(fineSideCount);

@@ -136,14 +136,14 @@ IPPtr SpaceTimeHeatDivFormulation::ip(string normName)
   return _ips.at(normName);
 }
 
-// TFunctionPtr<double> SpaceTimeHeatDivFormulation::forcingFunction(int spaceDim, double epsilon, TFunctionPtr<double> u_exact)
-// {
-//   TFunctionPtr<double> f = u_exact->dt() - epsilon * u_exact->dx()->dx();
-//   if (spaceDim > 1) f = f - epsilon * u_exact->dy()->dy();
-//   if (spaceDim > 2) f = f - epsilon * u_exact->dz()->dz();
-//
-//   return f;
-// }
+TFunctionPtr<double> SpaceTimeHeatDivFormulation::forcingFunction(int spaceDim, double epsilon, TFunctionPtr<double> u_exact)
+{
+  TFunctionPtr<double> f = u_exact->dt() - epsilon * u_exact->dx()->dx();
+  if (spaceDim > 1) f = f - epsilon * u_exact->dy()->dy();
+  if (spaceDim > 2) f = f - epsilon * u_exact->dz()->dz();
+  
+  return f;
+}
 
 void SpaceTimeHeatDivFormulation::initializeSolution(MeshTopologyPtr meshTopo, int fieldPolyOrder, int delta_k, string norm,
     TLinearTermPtr<double> forcingTerm)
@@ -160,7 +160,7 @@ void SpaceTimeHeatDivFormulation::initializeSolution(std::string filePrefix, int
 void SpaceTimeHeatDivFormulation::initializeSolution(MeshTopologyPtr meshTopo, int fieldPolyOrder, int delta_k, string norm,
     TLinearTermPtr<double> forcingTerm, string savedSolutionAndMeshPrefix)
 {
-  TEUCHOS_TEST_FOR_EXCEPTION(meshTopo->getSpaceDim() != _spaceDim + 1, std::invalid_argument, "MeshTopo must be space-time mesh");
+  TEUCHOS_TEST_FOR_EXCEPTION(meshTopo->getDimension() != _spaceDim + 1, std::invalid_argument, "MeshTopo must be space-time mesh");
 
   BCPtr bc = BC::bc();
 

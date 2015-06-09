@@ -143,7 +143,7 @@ TEUCHOS_UNIT_TEST( MeshTopology, InitialMeshEntitiesActiveCellCount)
   MeshPtr mesh = MeshFactory::quadMesh(bf, H1Order, width, height, horizontalElements, verticalElements); // creates a 1-cell mesh
   MeshTopologyPtr meshTopo = mesh->getTopology();
 
-  unsigned sideDim = meshTopo->getSpaceDim() - 1;
+  unsigned sideDim = meshTopo->getDimension() - 1;
 
   // uniform refinement --> none of the parent cells sides should have any active cells
   CellPtr cell = meshTopo->getCell(0);
@@ -213,7 +213,7 @@ TEUCHOS_UNIT_TEST( MeshTopology, DeactivateCellOnRefinement)
 
   mesh->hRefine(cellsToRefine, RefinementPattern::regularRefinementPatternQuad());
 
-  unsigned sideDim = meshTopo->getSpaceDim() - 1;
+  unsigned sideDim = meshTopo->getDimension() - 1;
 
   // uniform refinement --> none of the parent cells sides should have any active cells
   CellPtr cell = meshTopo->getCell(0);
@@ -250,7 +250,7 @@ TEUCHOS_UNIT_TEST( MeshTopology, ConstrainingSideAncestryUniformMesh)
 
   set<GlobalIndexType> activeCellIDs = mesh->cellIDsInPartition();
 
-  unsigned sideDim = meshTopo->getSpaceDim() - 1;
+  unsigned sideDim = meshTopo->getDimension() - 1;
 
   for (set<GlobalIndexType>::iterator cellIDIt = activeCellIDs.begin(); cellIDIt != activeCellIDs.end(); cellIDIt++)
   {
@@ -401,7 +401,7 @@ TEUCHOS_UNIT_TEST( MeshTopology, UnrefinedSpaceTimeMeshTopologyIsUnconstrained )
   double t0 = 0.0, t1 = 1.0;
   MeshTopologyPtr spaceTimeMeshTopo = MeshFactory::spaceTimeMeshTopology(spatialMeshTopo, t0, t1);
 
-  for (int d=0; d<spaceTimeMeshTopo->getSpaceDim(); d++)
+  for (int d=0; d<spaceTimeMeshTopo->getDimension(); d++)
   {
     map<unsigned,pair<IndexType,unsigned> > expectedConstraints;
     testConstraints(spaceTimeMeshTopo, d, expectedConstraints, out, success);
