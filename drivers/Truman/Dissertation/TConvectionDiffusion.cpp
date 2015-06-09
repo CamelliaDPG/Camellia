@@ -48,7 +48,7 @@ int main(int argc, char *argv[])
   int numXElems = 1;
   bool useConformingTraces = true;
   string solverChoice = "KLU";
-  string coarseSolverChoice = "SuperLU";
+  string coarseSolverChoice = "KLU"; // often this beats SuperLU_Dist as coarse solver (true on BG/Q with 6000 3D elements on 256 ranks)
   double solverTolerance = 1e-6;
   string norm = "CoupledRobust";
   cmdp.setOption("spaceDim", &spaceDim, "spatial dimension");

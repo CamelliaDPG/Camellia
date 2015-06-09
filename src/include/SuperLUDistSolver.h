@@ -52,6 +52,11 @@ namespace Camellia {
         return solve();
       }
     }
+    virtual void stiffnessMatrixChanged()
+    {
+      _savedSolver = Teuchos::null;
+      _savedProblem = Teuchos::null;
+    }
   };
 }
 #endif

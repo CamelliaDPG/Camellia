@@ -55,20 +55,24 @@ public:
     _stiffnessMatrix = stiffnessMatrix;
     _lhs = lhs;
     _rhs = rhs;
+    stiffnessMatrixChanged();
   }
   virtual void setProblem(TMatrixPtr<Scalar> stiffnessMatrix, TVectorPtr<Scalar> lhs, TVectorPtr<Scalar> rhs)
   {
     _stiffnessMatrix2 = stiffnessMatrix;
     _lhs2 = lhs;
     _rhs2 = rhs;
+    stiffnessMatrixChanged();
   }
   virtual void setStiffnessMatrix(Teuchos::RCP<Epetra_CrsMatrix> stiffnessMatrix)
   {
     _stiffnessMatrix = stiffnessMatrix;
+    stiffnessMatrixChanged();
   }
   virtual void setStiffnessMatrix(TMatrixPtr<Scalar> stiffnessMatrix)
   {
     _stiffnessMatrix2 = stiffnessMatrix;
+    stiffnessMatrixChanged();
   }
   virtual void setLHS(Teuchos::RCP<Epetra_MultiVector> lhs)
   {
@@ -85,6 +89,10 @@ public:
   virtual void setRHS2(TVectorPtr<Scalar> rhs)
   {
     _rhs2 = rhs;
+  }
+  virtual void stiffnessMatrixChanged()
+  {
+    
   }
   virtual int solve() = 0; // solve with an error code response
   virtual int resolve()
@@ -174,6 +182,10 @@ public:
     }
     return 0;
   }
+  virtual void stiffnessMatrixChanged()
+  {
+    _savedSolver = Teuchos::null;
+  }
 };
 
 extern template class TSolver<double>;
@@ -191,6 +203,7 @@ class MumpsSolver : public TSolver<double>
   int _maxMemoryPerCoreMB;
   bool _saveFactorization;
   Teuchos::RCP<Amesos_Mumps> _savedSolver;
+  Teuchos::RCP<Epetra_LinearProblem> _savedProblem;
 // protected:
 //   Teuchos::RCP< Epetra_LinearProblem > _problem;
 public:
@@ -201,14 +214,16 @@ public:
     _maxMemoryPerCoreMB = maxMemoryPerCoreMB;
     _saveFactorization = saveFactorization;
   }
+  
   // void setProblem(Teuchos::RCP< Epetra_LinearProblem > problem) {
   //   _savedSolver = Teuchos::rcp((Amesos_Mumps*)NULL);
   //   this->_problem = problem;
   // }
   int solve()
   {
-    Epetra_LinearProblem problem(this->_stiffnessMatrix.get(), this->_lhs.get(), this->_rhs.get());
-    Teuchos::RCP<Amesos_Mumps> mumps = Teuchos::rcp(new Amesos_Mumps(problem));
+    _savedProblem = Teuchos::rcp( new Epetra_LinearProblem(this->_stiffnessMatrix.get(), this->_lhs.get(), this->_rhs.get()) ) ;
+//    Epetra_LinearProblem problem(this->_stiffnessMatrix.get(), this->_lhs.get(), this->_rhs.get());
+    Teuchos::RCP<Amesos_Mumps> mumps = Teuchos::rcp(new Amesos_Mumps(*_savedProblem));
     int numProcs=1;
     int rank=0;
     int previousSize = 0;
@@ -306,7 +321,14 @@ public:
         break;
       }
     }
-    if (_saveFactorization) _savedSolver = mumps;
+    if (_saveFactorization)
+    {
+      _savedSolver = mumps;
+    }
+    else
+    {
+      _savedProblem = Teuchos::null;
+    }
     return mumps->Solve();
   }
   int resolve()
@@ -324,6 +346,10 @@ public:
     {
       return solve();
     }
+  }
+  virtual void stiffnessMatrixChanged()
+  {
+    _savedSolver = Teuchos::null;
   }
 };
 } // namespace
