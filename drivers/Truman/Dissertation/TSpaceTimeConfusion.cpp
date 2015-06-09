@@ -54,6 +54,7 @@ int main(int argc, char *argv[])
   double solverTolerance = 1e-8;
   int maxLinearIterations = 10000;
   bool computeL2Error = false;
+  bool exportSolution = false;
   string norm = "Graph";
   string outputDir = ".";
   cmdp.setOption("spaceDim", &spaceDim, "spatial dimension");
@@ -69,6 +70,7 @@ int main(int argc, char *argv[])
   cmdp.setOption("maxLinearIterations", &maxLinearIterations, "maximum number of iterations for linear solver");
   cmdp.setOption("outputDir", &outputDir, "output directory");
   cmdp.setOption("computeL2Error", "skipL2Error", &computeL2Error, "compute L2 error");
+  cmdp.setOption("exportSolution", "skipExport", &exportSolution, "export solution to HDF5");
 
   if (cmdp.parse(argc,argv) != Teuchos::CommandLineProcessor::PARSE_SUCCESSFUL)
   {
@@ -174,7 +176,9 @@ int main(int argc, char *argv[])
 
   ostringstream solnName;
   solnName << "spacetimeConfusion" << spaceDim << "D_" << norm << "_" << epsilon << "_p" << p << "_" << solverChoice;
-  HDF5Exporter exporter(mesh,solnName.str(), outputDir);
+  Teuchos::RCP<HDF5Exporter> exporter;
+  if (exportSolution)
+    exporter = Teuchos::rcp(new HDF5Exporter(mesh,solnName.str(), outputDir));
 
   Teuchos::RCP<Time> solverTime = Teuchos::TimeMonitor::getNewCounter("Solve Time");
 
@@ -191,7 +195,12 @@ int main(int argc, char *argv[])
   bool useStaticCondensation = false;
   int azOutput = 20; // print residual every 20 CG iterations
 
-  ofstream dataFile(outputDir+"/"+solnName.str()+"/"+solnName.str()+".txt");
+  string dataFileLocation;
+  if (exportSolution)
+    dataFileLocation = outputDir+"/"+solnName.str()+"/"+solnName.str()+".txt";
+  else
+    dataFileLocation = outputDir+"/"+solnName.str()+".txt";
+  ofstream dataFile(dataFileLocation);
   dataFile << "ref\t " << "elements\t " << "dofs\t " << "energy\t " << "l2\t " << "solvetime\t" << "iterations\t " << endl;
   for (int refIndex=0; refIndex <= numRefs; refIndex++)
   {
@@ -266,7 +275,8 @@ int main(int argc, char *argv[])
         << endl;
     }
 
-    exporter.exportSolution(soln, refIndex);
+    if (exportSolution)
+      exporter->exportSolution(soln, refIndex);
 
     if (refIndex != numRefs)
       refStrategy.refine();
