@@ -53,6 +53,7 @@ int main(int argc, char *argv[])
   string solverChoice = "KLU";
   double solverTolerance = 1e-8;
   int maxLinearIterations = 10000;
+  bool computeL2Error = false;
   string norm = "Graph";
   string outputDir = ".";
   cmdp.setOption("spaceDim", &spaceDim, "spatial dimension");
@@ -67,6 +68,7 @@ int main(int argc, char *argv[])
   cmdp.setOption("solverTolerance", &solverTolerance, "iterative solver tolerance");
   cmdp.setOption("maxLinearIterations", &maxLinearIterations, "maximum number of iterations for linear solver");
   cmdp.setOption("outputDir", &outputDir, "output directory");
+  cmdp.setOption("computeL2Error", "skipL2Error", &computeL2Error, "compute L2 error");
 
   if (cmdp.parse(argc,argv) != Teuchos::CommandLineProcessor::PARSE_SUCCESSFUL)
   {
@@ -190,7 +192,7 @@ int main(int argc, char *argv[])
   int azOutput = 20; // print residual every 20 CG iterations
 
   ofstream dataFile(outputDir+"/"+solnName.str()+"/"+solnName.str()+".txt");
-  dataFile << "ref\t " << "elements\t " << "dofs\t " << "error\t " << "solvetime\t" << "iterations\t " << endl;
+  dataFile << "ref\t " << "elements\t " << "dofs\t " << "energy\t " << "l2\t " << "solvetime\t" << "iterations\t " << endl;
   for (int refIndex=0; refIndex <= numRefs; refIndex++)
   {
     solverTime->start(true);
@@ -212,6 +214,33 @@ int main(int argc, char *argv[])
     double solveTime = solverTime->stop();
 
     double energyError = soln->energyErrorTotal();
+    double l2Error = 0;
+    if (computeL2Error)
+    {
+      FunctionPtr u_soln, sigma1_soln, sigma2_soln,
+                  u_diff, sigma1_diff, sigma2_diff,
+                  u_sqr, sigma1_sqr, sigma2_sqr;
+      u_soln = Function::solution(form.u(), soln);
+      sigma1_soln = Function::solution(form.sigma(1), soln);
+      if (spaceDim == 2)
+        sigma2_soln = Function::solution(form.sigma(2), soln);
+      u_diff = u_soln - u_exact;
+      sigma1_diff = sigma1_soln - sigma_exact->x();
+      if (spaceDim == 2)
+        sigma2_diff = sigma2_soln - sigma_exact->y();
+      u_sqr = u_diff*u_diff;
+      sigma1_sqr = sigma1_diff*sigma1_diff;
+      if (spaceDim == 2)
+        sigma2_sqr = sigma2_diff*sigma2_diff;
+      double u_l2, sigma1_l2, sigma2_l2;
+      u_l2 = u_sqr->integrate(mesh, 5);
+      sigma1_l2 = sigma1_sqr->integrate(mesh, 5);
+      if (spaceDim == 2)
+        sigma2_l2 = sigma2_sqr->integrate(mesh, 5);
+      else
+        sigma2_l2 = 0;
+      l2Error = sqrt(u_l2+sigma1_l2+sigma2_l2);
+    }
     if (commRank == 0)
     {
       int iterationCount;
@@ -223,6 +252,7 @@ int main(int argc, char *argv[])
         << " \tElements: " << mesh->numActiveElements()
         << " \tDOFs: " << mesh->numGlobalDofs()
         << " \tEnergy Error: " << energyError
+        << " \tL2 Error: " << l2Error
         << " \tSolve Time: " << solveTime
         << " \tIteration Count: " << iterationCount
         << endl;
@@ -230,6 +260,7 @@ int main(int argc, char *argv[])
         << " " << mesh->numActiveElements()
         << " " << mesh->numGlobalDofs()
         << " " << energyError
+        << " " << l2Error
         << " " << solveTime
         << " " << iterationCount
         << endl;
