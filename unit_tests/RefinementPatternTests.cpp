@@ -38,7 +38,7 @@ namespace
 
     /*
      The GeneralizedRefinementBranch structure is a bit redundant when there are multiple tiers, in that:
-       Tier n's leafSubcellDimension == Tier (n+1)'s previousTierTopo->getDimension()
+       Tier n's leafSubcellDimension == Tier (n+1)'s rootDimension
      In this test, we construct an n-level refinement branch (where n = refLevels), and then consider the subcells of the
      leaf cell.  For each of these we request a GeneralizedRefinementBranch.  When the returned branch has two tiers,
      we check that the above constraint is satisfied.
@@ -72,7 +72,7 @@ namespace
         { // note that this for loop only does something for ref genRefBranches with >= 2 tiers
           RefinementBranchTier* refTier = &genRefBranch[tierNumber];
           RefinementBranchTier* nextRefTier = &genRefBranch[tierNumber+1];
-          TEST_EQUALITY(refTier->leafSubcellDimension, nextRefTier->previousTierTopo->getDimension());
+          TEST_EQUALITY(refTier->leafSubcellDimension, nextRefTier->rootDimension);
         }
       }
     }
@@ -128,7 +128,7 @@ namespace
         rootDimension = 1;
         previousTierSubcellOrdinal = 0; // edge 0 in the quad
         refBranch = {{lineRefinement,0}};
-        leafSubcellDim = 1;
+        leafSubcellDim = 0;
         leafSubcellOrdinal = 1 // 1 in the leaf line
      */
     vertexOrdinalInCell = 1;
@@ -142,8 +142,8 @@ namespace
     TEST_EQUALITY(genRefBranch[0].refBranch.size(), 1);
     TEST_EQUALITY(genRefBranch[0].refBranch[0].first->parentTopology()->getKey(), CellTopology::line()->getKey());
     TEST_EQUALITY(genRefBranch[0].refBranch[0].second, 0);
-    TEST_EQUALITY(genRefBranch[0].leafSubcellDimension, 1);
-    TEST_EQUALITY(genRefBranch[0].leafSubcellOrdinal, 0);
+    TEST_EQUALITY(genRefBranch[0].leafSubcellDimension, 0);
+    TEST_EQUALITY(genRefBranch[0].leafSubcellOrdinal, 1);
 
     TEST_EQUALITY(genRefBranch[1].previousTierTopo->getKey(), CellTopology::line()->getKey());
     TEST_EQUALITY(genRefBranch[1].rootDimension, 0);
@@ -524,6 +524,31 @@ namespace
     }
   }
 
+  TEUCHOS_UNIT_TEST( RefinementPattern, MapRefCellPointsToAncestor_LineChild )
+  {
+    RefinementPatternPtr lineRefinement = RefinementPattern::regularRefinementPatternLine();
+    // create a one-refinement branch, selecting the right child (child 1):
+    RefinementBranch refBranch = { {lineRefinement.get(),1} }; // child goes from 0 to 1 in parent
+
+    int numPoints = 2;
+    int spaceDim = 1;
+    FieldContainer<double> fineLinePoints(numPoints,spaceDim);
+    fineLinePoints(0,0) = -1.0;
+    fineLinePoints(1,0) =  1.0;
+    
+    FieldContainer<double> expectedCoarsePoints(numPoints,spaceDim);
+    for (int pointOrdinal=0; pointOrdinal<numPoints; pointOrdinal++)
+    {
+      expectedCoarsePoints(pointOrdinal,0) = fineLinePoints(pointOrdinal,0) * 0.5 + 0.5;
+    }
+    
+    FieldContainer<double> actualPoints(numPoints,spaceDim);
+    RefinementPattern::mapRefCellPointsToAncestor(refBranch, fineLinePoints, actualPoints);
+    
+    double tol = 1e-15;
+    TEST_COMPARE_FLOATING_ARRAYS_CAMELLIA(expectedCoarsePoints,actualPoints,tol);
+  }
+  
   TEUCHOS_UNIT_TEST( RefinementPattern, MapRefCellPointsToAncestor_InteriorTriangleEdge )
   {
     // The genRefBranch here is identical to the one we use in GeneralizedRefinementBranchForLeafSubcell_InteriorTriangleEdge, above
