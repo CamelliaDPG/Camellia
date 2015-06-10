@@ -33,6 +33,7 @@ namespace Camellia {
     
     int solve() {
       Teuchos::ParameterList paramList;
+      paramList.set("MaxProcs",-3); // -3 means all processors will be used
       
       if (!_saveFactorization)
       {

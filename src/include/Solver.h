@@ -223,6 +223,10 @@ public:
   {
     _savedProblem = Teuchos::rcp( new Epetra_LinearProblem(this->_stiffnessMatrix.get(), this->_lhs.get(), this->_rhs.get()) ) ;
     Teuchos::RCP<Amesos_Mumps> mumps = Teuchos::rcp(new Amesos_Mumps(*_savedProblem));
+    Teuchos::ParameterList paramList;
+    paramList.set("MaxProcs",-3); // -3 means all processors will be used
+    mumps->SetParameters(paramList);
+    
     int numProcs=1;
     int rank=0;
     int previousSize = 0;
