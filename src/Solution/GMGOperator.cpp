@@ -295,10 +295,10 @@ Teuchos::RCP<Epetra_CrsMatrix> GMGOperator::constructProlongationOperator()
 
   {
     Epetra_SerialComm SerialComm; // rank-local map
-
+    
     GlobalIndexTypeToCast* myGlobalIndicesPtr;
     _finePartitionMap.MyGlobalElementsPtr(*&myGlobalIndicesPtr);
-
+    
     map<GlobalIndexTypeToCast, set<GlobalIndexType> > cellsForGlobalDofOrdinal;
     vector<GlobalIndexTypeToCast> myGlobalIndices(_finePartitionMap.NumMyElements());
     {
@@ -308,7 +308,7 @@ Teuchos::RCP<Epetra_CrsMatrix> GMGOperator::constructProlongationOperator()
         globalIndicesForRank.insert(myGlobalIndicesPtr[i]);
         myGlobalIndices[i] = myGlobalIndicesPtr[i];
       }
-
+      
       // for dof interpreter's sake, want to put 0's in slots for any seen-but-not-owned global coefficients
       set<GlobalIndexType> myCellIDs = _fineMesh->globalDofAssignment()->cellsInPartition(-1);
       for (set<GlobalIndexType>::iterator cellIDIt = myCellIDs.begin(); cellIDIt != myCellIDs.end(); cellIDIt++)
@@ -321,22 +321,22 @@ Teuchos::RCP<Epetra_CrsMatrix> GMGOperator::constructProlongationOperator()
           if (globalIndicesForRank.find(*globalDofIt) == globalIndicesForRank.end())
           {
             myGlobalIndices.push_back(*globalDofIt);
-//            offRankGlobalIndicesForMyCells.insert(*globalDofIt);
+            //            offRankGlobalIndicesForMyCells.insert(*globalDofIt);
           }
         }
       }
     }
-
+    
     Epetra_Map    localXMap(myGlobalIndices.size(), myGlobalIndices.size(), &myGlobalIndices[0], 0, SerialComm);
     Teuchos::RCP<Epetra_Vector> XLocal = Teuchos::rcp( new Epetra_Vector(localXMap) );
-
+    
     for (int localID=0; localID < _finePartitionMap.NumMyElements(); localID++)
     {
       GlobalIndexTypeToCast globalRow = _finePartitionMap.GID(localID);
-
+      
       map<GlobalIndexTypeToCast, double> coarseXVectorLocal; // rank-local representation, so we just use an STL map.  Has the advantage of growing as we need it to.
       (*XLocal)[localID] = 1.0;
-
+      
       if (globalRow >= firstFineConstraintRowIndex)
       {
         // belongs to a lagrange degree of freedom (zero-mean constraints are a special case), so we do a one-to-one map
@@ -352,7 +352,7 @@ Teuchos::RCP<Epetra_CrsMatrix> GMGOperator::constructProlongationOperator()
       }
       else
       {
-
+        
         set<GlobalIndexType> cells = cellsForGlobalDofOrdinal[globalRow];
         for (set<GlobalIndexType>::iterator cellIDIt=cells.begin(); cellIDIt != cells.end(); cellIDIt++)
         {
@@ -369,7 +369,7 @@ Teuchos::RCP<Epetra_CrsMatrix> GMGOperator::constructProlongationOperator()
           FieldContainer<double> coarseCellData(coarseDofCount);
           FieldContainer<double> mappedCoarseCellData(fineMapper->globalIndices().size());
           fineMapper->mapLocalDataVolume(fineCellData, mappedCoarseCellData, false);
-
+          
           CellPtr fineCell = _fineMesh->getTopology()->getCell(fineCellID);
           int sideCount = fineCell->getSideCount();
           for (int sideOrdinal=0; sideOrdinal<sideCount; sideOrdinal++)
@@ -380,7 +380,7 @@ Teuchos::RCP<Epetra_CrsMatrix> GMGOperator::constructProlongationOperator()
               fineMapper->mapLocalDataSide(fineCellData, mappedCoarseCellData, false, sideOrdinal);
             }
           }
-
+          
           //        if (globalRow==1) {
           //          cout << "mappedCoarseCellData:\n" << mappedCoarseCellData;
           //        }
@@ -393,7 +393,7 @@ Teuchos::RCP<Epetra_CrsMatrix> GMGOperator::constructProlongationOperator()
           FieldContainer<double> interpretedCoarseData;
           FieldContainer<GlobalIndexType> interpretedGlobalDofIndices;
           _coarseSolution->getDofInterpreter()->interpretLocalData(coarseCellID, coarseCellData, interpretedCoarseData, interpretedGlobalDofIndices);
-
+          
           for (int interpretedCoarseGlobalDofOrdinal=0; interpretedCoarseGlobalDofOrdinal < interpretedGlobalDofIndices.size(); interpretedCoarseGlobalDofOrdinal++)
           {
             GlobalIndexType globalDofIndex = interpretedGlobalDofIndices[interpretedCoarseGlobalDofOrdinal];
@@ -401,26 +401,26 @@ Teuchos::RCP<Epetra_CrsMatrix> GMGOperator::constructProlongationOperator()
           }
         }
       }
-
+      
       FieldContainer<GlobalIndexTypeToCast> coarseGlobalIndices(coarseXVectorLocal.size());
       FieldContainer<double> coarseGlobalValues(coarseXVectorLocal.size());
       int nnz = 0; // nonzero entries
-//      cout << "P global row " << globalRow << ": ";
+      //      cout << "P global row " << globalRow << ": ";
       for (map<GlobalIndexTypeToCast, double>::iterator coarseXIt=coarseXVectorLocal.begin(); coarseXIt != coarseXVectorLocal.end(); coarseXIt++)
       {
         if (coarseXIt->second != 0.0)
         {
           coarseGlobalIndices[nnz] = coarseXIt->first;
           coarseGlobalValues[nnz] = coarseXIt->second;
-//          cout << coarseGlobalIndices[nnz] << " --> " << coarseGlobalValues[nnz] << "; ";
+          //          cout << coarseGlobalIndices[nnz] << " --> " << coarseGlobalValues[nnz] << "; ";
           nnz++;
         }
       }
-//      cout << endl;
+      //      cout << endl;
       if (nnz > 0)
       {
         P->InsertGlobalValues(globalRow, nnz, &coarseGlobalValues[0], &coarseGlobalIndices[0]);
-//        cout << "Inserting values for row " << globalRow << endl;
+        //        cout << "Inserting values for row " << globalRow << endl;
       }
       (*XLocal)[localID] = 0.0;
     }
