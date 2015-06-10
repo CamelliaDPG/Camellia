@@ -208,7 +208,7 @@ int main(int argc, char *argv[])
     Teuchos::RCP<GMGSolver> gmgSolver;
     if (solverChoice[0] == 'G')
     {
-      gmgSolver = Teuchos::rcp( new GMGSolver(soln, k0Mesh, maxLinearIterations, solverTolerance, solvers["KLU"], useStaticCondensation));
+      gmgSolver = Teuchos::rcp( new GMGSolver(soln, k0Mesh, maxLinearIterations, solverTolerance, Solver::getDirectSolver(true), useStaticCondensation));
       gmgSolver->setAztecOutput(azOutput);
       if (solverChoice == "GMG-Direct")
         gmgSolver->gmgOperator().setSchwarzFactorizationType(GMGOperator::Direct);
