@@ -171,10 +171,6 @@ int main(int argc, char *argv[])
     if (solverChoice[0] == 'G')
     {
       gmgSolver = Teuchos::rcp( new GMGSolver(soln, k0Mesh, maxIters, solverTolerance, solvers[coarseSolverChoice], useStaticCondensation));
-      { // DEBUGGING OUTPUT
-        Epetra_Map map = gmgSolver->gmgOperator().getCoarseSolution()->getPartitionMap();
-        printMapSummary(map, "coarse partition map");
-      }
       
       gmgSolver->setAztecOutput(azOutput);
       if (solverChoice == "GMG-Direct")
