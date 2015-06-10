@@ -57,6 +57,7 @@ int main(int argc, char *argv[])
   bool exportSolution = false;
   string norm = "Graph";
   string outputDir = ".";
+  string tag="";
   cmdp.setOption("spaceDim", &spaceDim, "spatial dimension");
   cmdp.setOption("polyOrder",&p,"polynomial order for field variable u");
   cmdp.setOption("delta_p", &delta_p, "test space polynomial order enrichment");
@@ -71,6 +72,7 @@ int main(int argc, char *argv[])
   cmdp.setOption("outputDir", &outputDir, "output directory");
   cmdp.setOption("computeL2Error", "skipL2Error", &computeL2Error, "compute L2 error");
   cmdp.setOption("exportSolution", "skipExport", &exportSolution, "export solution to HDF5");
+  cmdp.setOption("tag", &tag, "output tag");
 
   if (cmdp.parse(argc,argv) != Teuchos::CommandLineProcessor::PARSE_SUCCESSFUL)
   {
@@ -176,6 +178,8 @@ int main(int argc, char *argv[])
 
   ostringstream solnName;
   solnName << "spacetimeConfusion" << spaceDim << "D_" << norm << "_" << epsilon << "_p" << p << "_" << solverChoice;
+  if (tag != "")
+    solnName << "_" << tag;
   Teuchos::RCP<HDF5Exporter> exporter;
   if (exportSolution)
     exporter = Teuchos::rcp(new HDF5Exporter(mesh,solnName.str(), outputDir));
