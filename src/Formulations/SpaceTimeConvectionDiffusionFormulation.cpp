@@ -134,24 +134,25 @@ SpaceTimeConvectionDiffusionFormulation::SpaceTimeConvectionDiffusionFormulation
 
   _ips["Graph"] = _bf->graphNorm();
 
+  _ips["CoupledRobust"] = Teuchos::rcp(new IP);
+  _ips["CoupledRobust"]->addTerm(_beta*v->grad());
+  _ips["CoupledRobust"]->addTerm(Function::min(one/Function::h(),Function::constant(1./sqrt(_epsilon)))*tau);
+  _ips["CoupledRobust"]->addTerm(sqrt(_epsilon)*v->grad());
+  _ips["CoupledRobust"]->addTerm(Function::min(sqrt(_epsilon)*one/Function::h(),one)*v);
   if (spaceDim > 1)
-  {
-    _ips["Robust"] = Teuchos::rcp(new IP);
-    _ips["Robust"]->addTerm(tau->div() - v->dt() - beta*v->grad());
-    _ips["Robust"]->addTerm(_beta*v->grad());
-    _ips["Robust"]->addTerm(Function::min(one/Function::h(),Function::constant(1./sqrt(_epsilon)))*tau);
-    _ips["Robust"]->addTerm(sqrt(_epsilon)*v->grad());
-    _ips["Robust"]->addTerm(Function::min(sqrt(_epsilon)*one/Function::h(),one)*v);
-  }
+    _ips["CoupledRobust"]->addTerm(tau->div() - v->dt() - beta*v->grad());
   else
-  {
-    _ips["Robust"] = Teuchos::rcp(new IP);
-    _ips["Robust"]->addTerm(tau->dx() - v->dt() - beta->x()*v->dx());
-    _ips["Robust"]->addTerm(_beta->x()*v->dx());
-    _ips["Robust"]->addTerm(Function::min(one/Function::h(),Function::constant(1./sqrt(_epsilon)))*tau);
-    _ips["Robust"]->addTerm(sqrt(_epsilon)*v->dx());
-    _ips["Robust"]->addTerm(Function::min(sqrt(_epsilon)*one/Function::h(),one)*v);
-  }
+    _ips["CoupledRobust"]->addTerm(tau->dx() - v->dt() - beta*v->grad());
+
+  _ips["NSDecoupledH1"] = Teuchos::rcp(new IP);
+  _ips["NSDecoupledH1"]->addTerm(one/Function::h()*tau);
+  _ips["NSDecoupledH1"]->addTerm(v->grad());
+  _ips["NSDecoupledH1"]->addTerm(_beta*v->grad()+v->dt());
+  if (spaceDim > 1)
+    _ips["NSDecoupledH1"]->addTerm(tau->div());
+  else
+    _ips["NSDecoupledH1"]->addTerm(tau->dx());
+  _ips["NSDecoupledH1"]->addTerm(v);
 
   _rhs = RHS::rhs();
 }
