@@ -440,6 +440,95 @@ void TSolution<Scalar>::addSolution(Teuchos::RCP< TSolution<Scalar> > otherSoln,
 }
 
 template <typename Scalar>
+void TSolution<Scalar>::addReplaceSolution(Teuchos::RCP< TSolution<Scalar> > otherSoln, double weight, set<int> varsToAdd, set<int> varsToReplace, bool allowEmptyCells)
+{
+  // In many situations, we can't legitimately add two condensed solution _lhsVectors together and back out the other (field) dofs.
+  // E.g., consider a nonlinear problem in which the bilinear form (and therefore stiffness matrix) depends on background data.
+  // Even a linear problem with two solutions with different RHS data would require us to accumulate the local load vectors.
+  // For this reason, we don't attempt to add the two _lhsVectors together.  Instead, we add their respective cell-local
+  // (expanded, basically) coefficients together, and then glean the condensed representation from that using the private
+  // setGlobalSolutionFromCellLocalCoefficients() method.
+
+  set<GlobalIndexType> myCellIDs = _mesh->cellIDsInPartition();
+
+  for (set<GlobalIndexType>::iterator cellIDIt = myCellIDs.begin(); cellIDIt != myCellIDs.end(); cellIDIt++)
+  {
+    GlobalIndexType cellID = *cellIDIt;
+
+    Intrepid::FieldContainer<Scalar> myCoefficients;
+    if (_solutionForCellIDGlobal.find(cellID) != _solutionForCellIDGlobal.end())
+    {
+      myCoefficients = _solutionForCellIDGlobal[cellID];
+    }
+    else
+    {
+      myCoefficients.resize(_mesh->getElementType(cellID)->trialOrderPtr->totalDofs());
+    }
+
+    Intrepid::FieldContainer<Scalar> otherCoefficients = otherSoln->allCoefficientsForCellID(cellID);
+
+    DofOrderingPtr trialOrder = _mesh->getElementType(cellID)->trialOrderPtr;
+    for (set<int>::iterator varIDIt = varsToAdd.begin(); varIDIt != varsToAdd.end(); varIDIt++)
+    {
+      int varID = *varIDIt;
+      const vector<int>* sidesForVar = &trialOrder->getSidesForVarID(varID);
+      for (vector<int>::const_iterator sideIt = sidesForVar->begin(); sideIt != sidesForVar->end(); sideIt++)
+      {
+        int sideOrdinal = *sideIt;
+        vector<int> dofIndices = trialOrder->getDofIndices(varID, sideOrdinal);
+        for (vector<int>::iterator dofIndexIt = dofIndices.begin(); dofIndexIt != dofIndices.end(); dofIndexIt++)
+        {
+          int dofIndex = *dofIndexIt;
+          myCoefficients[dofIndex] += weight * otherCoefficients[dofIndex];
+        }
+      }
+    }
+    for (set<int>::iterator varIDIt = varsToReplace.begin(); varIDIt != varsToReplace.end(); varIDIt++)
+    {
+      int varID = *varIDIt;
+      const vector<int>* sidesForVar = &trialOrder->getSidesForVarID(varID);
+      for (vector<int>::const_iterator sideIt = sidesForVar->begin(); sideIt != sidesForVar->end(); sideIt++)
+      {
+        int sideOrdinal = *sideIt;
+        vector<int> dofIndices = trialOrder->getDofIndices(varID, sideOrdinal);
+        for (vector<int>::iterator dofIndexIt = dofIndices.begin(); dofIndexIt != dofIndices.end(); dofIndexIt++)
+        {
+          int dofIndex = *dofIndexIt;
+          myCoefficients[dofIndex] = otherCoefficients[dofIndex];
+        }
+      }
+    }
+
+    _solutionForCellIDGlobal[cellID] = myCoefficients;
+  }
+
+  setGlobalSolutionFromCellLocalCoefficients();
+
+  clearComputedResiduals();
+
+  // old implementation below:
+  /*  set<GlobalIndexType> globalIndicesForVars = _mesh->globalDofAssignment()->partitionOwnedIndicesForVariables(varsToAdd);
+    Epetra_Map partMap = getPartitionMap();
+
+    // add the global solution vectors together.
+    if (otherSoln->getLHSVector().get() != NULL) {
+      if (_lhsVector.get() == NULL) {
+        // then we treat this solution as 0
+        _lhsVector = Teuchos::rcp(new Epetra_FEVector(partMap,1,true));
+        _lhsVector->PutScalar(0); // unclear whether this is redundant with constructor or not
+      }
+      for (set<GlobalIndexType>::iterator gidIt = globalIndicesForVars.begin(); gidIt != globalIndicesForVars.end(); gidIt++) {
+        int lid = partMap.LID((GlobalIndexTypeToCast)*gidIt);
+        (*_lhsVector)[0][lid] += (*otherSoln->getLHSVector())[0][lid] * weight;
+      }
+      // now, interpret the global data
+      importSolution();
+
+      clearComputedResiduals();
+    }*/
+}
+
+template <typename Scalar>
 bool TSolution<Scalar>::cellHasCoefficientsAssigned(GlobalIndexType cellID)
 {
   return _solutionForCellIDGlobal.find(cellID) != _solutionForCellIDGlobal.end();
