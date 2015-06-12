@@ -12,6 +12,7 @@
 #include "MPIWrapper.h"
 
 namespace Camellia {
+  // ! Narrator class allows opt-in logging defined by its subclasses, but the notion is that the class will note when "interesting events" occur.  Intended for debugging.
   class Narrator
   {
   private:
