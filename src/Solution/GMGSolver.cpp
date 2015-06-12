@@ -7,6 +7,8 @@
 //
 
 #include "GMGSolver.h"
+#include "MPIWrapper.h"
+
 #include "AztecOO.h"
 
 // EpetraExt includes
@@ -20,6 +22,7 @@ const bool DIAGONAL_SCALING_DEFAULT = false;
 GMGSolver::GMGSolver(BCPtr zeroBCs, MeshPtr coarseMesh, IPPtr coarseIP,
                      MeshPtr fineMesh, Teuchos::RCP<DofInterpreter> fineDofInterpreter, Epetra_Map finePartitionMap,
                      int maxIters, double tol, Teuchos::RCP<Solver> coarseSolver, bool useStaticCondensation) :
+  Narrator("GMGSolver"),
   _finePartitionMap(finePartitionMap),
   _gmgOperator(zeroBCs,coarseMesh,coarseIP,fineMesh,fineDofInterpreter,
                finePartitionMap,coarseSolver, useStaticCondensation, DIAGONAL_SCALING_DEFAULT)
@@ -39,6 +42,7 @@ GMGSolver::GMGSolver(BCPtr zeroBCs, MeshPtr coarseMesh, IPPtr coarseIP,
 
 GMGSolver::GMGSolver(TSolutionPtr<double> fineSolution, MeshPtr coarseMesh, int maxIters, double tol,
                      Teuchos::RCP<Solver> coarseSolver, bool useStaticCondensation) :
+  Narrator("GMGSolver"),
   _finePartitionMap(fineSolution->getPartitionMap()),
   _gmgOperator(fineSolution->bc()->copyImposingZero(),coarseMesh,
                fineSolution->ip(), fineSolution->mesh(), fineSolution->getDofInterpreter(),

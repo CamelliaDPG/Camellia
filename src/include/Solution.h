@@ -60,12 +60,13 @@
 #include "DofInterpreter.h"
 #include "ElementType.h"
 #include "LocalStiffnessMatrixFilter.h"
+#include "Narrator.h"
 #include "Solver.h"
 
 namespace Camellia
 {
 template <typename Scalar>
-class TSolution
+  class TSolution : public Narrator
 {
 private:
   int _cubatureEnrichmentDegree;
@@ -106,7 +107,7 @@ private:
   void integrateBasisFunctions(Intrepid::FieldContainer<GlobalIndexTypeToCast> &globalIndices,
                                Intrepid::FieldContainer<Scalar> &values, int trialID);
   void integrateBasisFunctions(Intrepid::FieldContainer<Scalar> &values, ElementTypePtr elemTypePtr, int trialID);
-
+  
   // statistics for the last solve:
   double _totalTimeLocalStiffness, _totalTimeGlobalAssembly, _totalTimeBCImposition, _totalTimeSolve, _totalTimeDistributeSolution;
   double _meanTimeLocalStiffness, _meanTimeGlobalAssembly, _meanTimeBCImposition, _meanTimeSolve, _meanTimeDistributeSolution;
@@ -182,7 +183,7 @@ public:
   void importSolution(); // imports for all rank-local cellIDs
   void importSolutionForOffRankCells(std::set<GlobalIndexType> cellIDs);
   void importGlobalSolution(); // imports (and interprets!) global solution.  NOT scalable.
-
+  
   int solve();
 
   int solve(bool useMumps);

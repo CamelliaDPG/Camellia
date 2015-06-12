@@ -21,7 +21,7 @@ namespace Camellia {
     std::string _defaultNameForNarration; // will be printed on each line of narration
     
   protected:
-    void narrate(std::string event)
+    void narrate(std::string event) const
     {
       if (_narrateOnThisRank)
       {

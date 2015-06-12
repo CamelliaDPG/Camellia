@@ -10,18 +10,15 @@
 
 #include "Epetra_Operator.h"
 
+#include "BasisReconciliation.h"
 #include "IP.h"
+#include "LocalDofMapper.h"
 #include "Mesh.h"
 #include "RefinementPattern.h"
 #include "Solution.h"
-
-#include "BasisReconciliation.h"
-#include "LocalDofMapper.h"
-
-#include "Ifpack_Preconditioner.h"
-
 #include "Solver.h"
 
+#include "Ifpack_Preconditioner.h"
 #include <map>
 
 using namespace std;
@@ -36,7 +33,7 @@ struct TimeStatistics
   double sum;
 };
 
-class GMGOperator : public Epetra_Operator
+class GMGOperator : public Epetra_Operator, public Narrator
 {
   bool _debugMode; // in debug mode, output verbose info about what we're doing on rank 0
 
