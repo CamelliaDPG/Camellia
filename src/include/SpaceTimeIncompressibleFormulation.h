@@ -100,7 +100,9 @@ public:
   void setRefinementStrategy(RefinementStrategyPtr refStrategy);
 
   // ! Returns the solution (at current time)
-  SolutionPtr solution();
+  SolutionPtr solutionUpdate();
+  SolutionPtr solutionBackground();
+  void updateSolution();
 
   // ! Solves
   void solve();
@@ -118,6 +120,8 @@ public:
   VarPtr v(int i);
   VarPtr tau(int i);
   VarPtr q();
+
+  set<int> nonlinearVars();
 };
 }
 

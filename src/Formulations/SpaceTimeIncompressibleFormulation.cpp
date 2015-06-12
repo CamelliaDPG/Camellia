@@ -11,6 +11,7 @@
 #include "PenaltyConstraints.h"
 #include "PoissonFormulation.h"
 #include "PreviousSolutionFunction.h"
+#include <algorithm>
 
 using namespace Camellia;
 
@@ -51,7 +52,7 @@ SpaceTimeIncompressibleFormulation::SpaceTimeIncompressibleFormulation(int space
   _mu = mu;
   _useConformingTraces = useConformingTraces;
 
-  TEUCHOS_TEST_FOR_EXCEPTION(meshTopo->getDimension() != _spaceDim + 1, std::invalid_argument, "MeshTopo must be space-time mesh");
+  // TEUCHOS_TEST_FOR_EXCEPTION(meshTopo->getDimension() != _spaceDim + 1, std::invalid_argument, "MeshTopo must be space-time mesh");
   TEUCHOS_TEST_FOR_EXCEPTION(mu==0, std::invalid_argument, "mu may not be 0!");
   TEUCHOS_TEST_FOR_EXCEPTION(spaceDim==1, std::invalid_argument, "Incompressible Navier-Stokes is trivial for spaceDim=1");
   TEUCHOS_TEST_FOR_EXCEPTION((spaceDim != 2) && (spaceDim != 3), std::invalid_argument, "spaceDim must be 2 or 3");
@@ -185,18 +186,22 @@ SpaceTimeIncompressibleFormulation::SpaceTimeIncompressibleFormulation(int space
   H1Order[1] = fieldPolyOrder + 1; // for now, use same poly. degree for temporal bases...
   if (savedSolutionAndMeshPrefix == "")
   {
-    _mesh = Teuchos::rcp( new Mesh(meshTopo, _vf, H1Order, delta_k) ) ;
-    _solutionBackground = Solution::solution(_bf, _mesh, bc);
+    _mesh = Teuchos::rcp( new Mesh(meshTopo, _bf, H1Order, delta_k) ) ;
     _solutionUpdate = Solution::solution(_bf, _mesh, bc);
+    _solutionBackground = Solution::solution(_bf, _mesh, bc);
+    map<int, FunctionPtr> initialGuess;
+    initialGuess[u(1)->ID()] = Function::zero();
+    initialGuess[u(2)->ID()] = Function::zero();
+    _solutionBackground->projectOntoMesh(initialGuess);
   }
   else
   {
     // BFPTR version should be deprecated
     _mesh = MeshFactory::loadFromHDF5(_bf, savedSolutionAndMeshPrefix+".mesh");
-    _solutionBackground = Solution::solution(_bf, _mesh, bc);
     _solutionUpdate = Solution::solution(_bf, _mesh, bc);
-    _solutionBackground->loadFromHDF5(savedSolutionAndMeshPrefix+"_background.soln");
     _solutionUpdate->loadFromHDF5(savedSolutionAndMeshPrefix+"_update.soln");
+    _solutionBackground = Solution::solution(_bf, _mesh, bc);
+    _solutionBackground->loadFromHDF5(savedSolutionAndMeshPrefix+"_background.soln");
   }
 
   FunctionPtr u1_prev = Function::solution(u1, _solutionBackground);
@@ -205,7 +210,7 @@ SpaceTimeIncompressibleFormulation::SpaceTimeIncompressibleFormulation(int space
 
   if (spaceDim == 2)
   {
-    // tau terms
+    // stress equation
     _bf->addTerm((1.0 / _mu) * sigma11, tau1->x());
     _bf->addTerm((1.0 / _mu) * sigma12, tau1->y());
     _bf->addTerm((1.0 / _mu) * sigma21, tau2->x());
@@ -215,9 +220,9 @@ SpaceTimeIncompressibleFormulation::SpaceTimeIncompressibleFormulation(int space
     _bf->addTerm(-u1hat, tau1 * n_x);
     _bf->addTerm(-u2hat, tau2 * n_x);
 
-    // v terms
-    _bf->addTerm(-u1, v1->dt());
-    _bf->addTerm(-u2, v2->dt());
+    // momentum equation
+    // _bf->addTerm(-u1, v1->dt());
+    // _bf->addTerm(-u2, v2->dt());
     _bf->addTerm(-u1_prev*u1, v1->dx());
     _bf->addTerm(-u1_prev*u1, v1->dx());
     _bf->addTerm(-u2_prev*u1, v1->dy());
@@ -238,23 +243,29 @@ SpaceTimeIncompressibleFormulation::SpaceTimeIncompressibleFormulation(int space
     _bf->addTerm(tm1hat, v1);
     _bf->addTerm(tm2hat, v2);
 
-    // q terms
+    // continuity equation
     _bf->addTerm(-u1, q->dx());
     _bf->addTerm(-u2, q->dy());
 
-    _bf->addTerm(u1hat*n_x->x(), q);
-    _bf->addTerm(u2hat*n_x->y(), q);
+    _bf->addTerm(u1hat, q->times_normal_x());
+    _bf->addTerm(u2hat, q->times_normal_y());
   }
 
   // Add residual to RHS
   _rhs = RHS::rhs();
-  _rhs->addTerm(u1_prev*u1_prev*v1->dx());
-  _rhs->addTerm(u1_prev*u2_prev*v1->dy());
-  _rhs->addTerm(u2_prev*u1_prev*v2->dx());
-  _rhs->addTerm(u2_prev*u2_prev*v2->dy());
+  // stress equation
+  _rhs->addTerm( -u1_prev * tau1->div() );
+  _rhs->addTerm( -u2_prev * tau2->div() );
 
-  _rhs->addTerm(u1_prev*q->dx());
-  _rhs->addTerm(u2_prev*q->dy());
+  // momentum equation
+  _rhs->addTerm( u1_prev*u1_prev*v1->dx() );
+  _rhs->addTerm( u1_prev*u2_prev*v1->dy() );
+  _rhs->addTerm( u2_prev*u1_prev*v2->dx() );
+  _rhs->addTerm( u2_prev*u2_prev*v2->dy() );
+
+  // continuity equation
+  _rhs->addTerm( u1_prev*q->dx());
+  _rhs->addTerm( u2_prev*q->dy());
 
   _ips["Graph"] = _bf->graphNorm();
 
@@ -487,17 +498,44 @@ VarPtr SpaceTimeIncompressibleFormulation::q()
   return _vf->testVar(s_q, HGRAD);
 }
 
+set<int> SpaceTimeIncompressibleFormulation::nonlinearVars()
+{
+  set<int> nonlinearVars;//{u(1)->ID(),u(2)->ID()};
+  nonlinearVars.insert(u(1)->ID());
+  nonlinearVars.insert(u(2)->ID());
+  return nonlinearVars;
+}
+
 // ! Saves the solution(s) and mesh to an HDF5 format.
 void SpaceTimeIncompressibleFormulation::save(std::string prefixString)
 {
   _solutionUpdate->mesh()->saveToHDF5(prefixString+".mesh");
-  _solutionUpdate->saveToHDF5(prefixString+".soln");
+  _solutionUpdate->saveToHDF5(prefixString+"_update.soln");
+  _solutionBackground->saveToHDF5(prefixString+"_background.soln");
 }
 
 // ! Returns the solution
-SolutionPtr SpaceTimeIncompressibleFormulation::solution()
+SolutionPtr SpaceTimeIncompressibleFormulation::solutionUpdate()
 {
   return _solutionUpdate;
+}
+
+// ! Returns the solution
+SolutionPtr SpaceTimeIncompressibleFormulation::solutionBackground()
+{
+  return _solutionBackground;
+}
+
+void SpaceTimeIncompressibleFormulation::updateSolution()
+{
+  double alpha = 1;
+  vector<int> trialIDs = _vf->trialIDs();
+  set<int> trialIDSet(trialIDs.begin(), trialIDs.end());
+  set<int> nlVars = nonlinearVars();
+  set<int> lVars;
+  set_difference(trialIDSet.begin(), trialIDSet.end(), nlVars.begin(), nlVars.end(),
+      std::inserter(lVars, lVars.end()));
+  _solutionBackground->addReplaceSolution(_solutionUpdate, alpha, nlVars, lVars);
 }
 
 // ! Solves
