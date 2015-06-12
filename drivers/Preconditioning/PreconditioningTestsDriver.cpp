@@ -751,6 +751,7 @@ void run(ProblemChoice problemChoice, int &iterationCount, int spaceDim, int num
       GMGSolver* coarseSolverGMG = static_cast<GMGSolver*>( coarseSolver.get() );
       coarseSolverGMG->setNarrateOnRankZero(narrateCoarseSolution, "coarse GMGSolver");
       coarseSolverGMG->gmgOperator().setNarrateOnRankZero(narrateCoarseSolution, "coarse GMGOperator");
+      coarseSolverGMG->gmgOperator().getCoarseSolution()->setNarrateOnRankZero(narrateCoarseSolution, "coarsest solution");
 
       coarseSolverGMG->gmgOperator().setSmootherType(GMGOperator::IFPACK_ADDITIVE_SCHWARZ);
     }
