@@ -116,15 +116,15 @@ int main(int argc, char *argv[])
   elementCounts.push_back(6);
   elementCounts.push_back(8);
   MeshTopologyPtr spatialMeshTopo = MeshFactory::rectilinearMeshTopology(dimensions, elementCounts, x0);
-  double t0 = 0.0, t1 = 0.5;
+  double t0 = 0.0, t1 = 0.25;
   MeshTopologyPtr spaceTimeMeshTopo = MeshFactory::spaceTimeMeshTopology(spatialMeshTopo, t0, t1);
 
   LinearTermPtr forcingTerm = Teuchos::null;
 
-  // SpaceTimeIncompressibleFormulation form(spaceDim, mu, useConformingTraces,
-  //     spaceTimeMeshTopo, p, delta_p, norm, forcingTerm, "");
   SpaceTimeIncompressibleFormulation form(spaceDim, mu, useConformingTraces,
-      spatialMeshTopo, p, delta_p, norm, forcingTerm, "");
+      spaceTimeMeshTopo, p, delta_p, norm, forcingTerm, "");
+  // SpaceTimeIncompressibleFormulation form(spaceDim, mu, useConformingTraces,
+  //     spatialMeshTopo, p, delta_p, norm, forcingTerm, "");
 
   map<int, FunctionPtr> exactMap;
   exactMap[form.u(1)->ID()] = u1_exact;
@@ -138,8 +138,8 @@ int main(int argc, char *argv[])
   // exactMap[form.tc()->ID()] = form.tc()->termTraced()->evaluate(exactMap);
 
   MeshPtr mesh = form.solutionUpdate()->mesh();
-  // MeshPtr k0Mesh = Teuchos::rcp( new Mesh (spaceTimeMeshTopo->deepCopy(), form.bf(), 1, delta_p) );
-  MeshPtr k0Mesh = Teuchos::rcp( new Mesh (spatialMeshTopo->deepCopy(), form.bf(), 1, delta_p) );
+  MeshPtr k0Mesh = Teuchos::rcp( new Mesh (spaceTimeMeshTopo->deepCopy(), form.bf(), 1, delta_p) );
+  // MeshPtr k0Mesh = Teuchos::rcp( new Mesh (spatialMeshTopo->deepCopy(), form.bf(), 1, delta_p) );
   mesh->registerObserver(k0Mesh);
 
   // Set up boundary conditions
@@ -161,8 +161,8 @@ int main(int argc, char *argv[])
   bc->addDirichlet(u2hat, leftY,    exactMap[form.uhat(2)->ID()]);
   bc->addDirichlet(u1hat, rightY,   exactMap[form.uhat(1)->ID()]);
   bc->addDirichlet(u2hat, rightY,   exactMap[form.uhat(2)->ID()]);
-  // bc->addDirichlet(tm1hat,initTime,-exactMap[form.uhat(1)->ID()]);
-  // bc->addDirichlet(tm2hat,initTime,-exactMap[form.uhat(2)->ID()]);
+  bc->addDirichlet(tm1hat,initTime,-exactMap[form.uhat(1)->ID()]);
+  bc->addDirichlet(tm2hat,initTime,-exactMap[form.uhat(2)->ID()]);
 
   // Set up solution
   SolutionPtr solutionUpdate = form.solutionUpdate();
