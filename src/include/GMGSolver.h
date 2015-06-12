@@ -12,10 +12,11 @@
 #include "Solver.h"
 #include "Mesh.h"
 #include "GMGOperator.h"
+#include "Narrator.h"
 
 namespace Camellia
 {
-class GMGSolver : public Solver
+class GMGSolver : public Solver, public Narrator
 {
   int _maxIters;
   bool _printToConsole;
@@ -37,7 +38,7 @@ class GMGSolver : public Solver
   // info about the last call to solve()
   double _condest; // -1 if none exists
   int _iterationCount;
-
+  
   int _azConvergenceOption; // defaults to AZ_rhs
 
   bool _printIterationCountIfNoAzOutput;
@@ -62,7 +63,7 @@ public:
   void setApplySmoothingOperator(bool applySmoothingOp);
 
   void setComputeConditionNumberEstimate(bool value);
-
+  
   void setUseDiagonalScaling(bool value);
 
   void setTolerance(double tol);

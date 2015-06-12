@@ -32,6 +32,8 @@ bool runGMGOperatorInDebugMode;
 int maxDofsForKLU;
 double coarseCGTol;
 int coarseMaxIterations;
+bool narrateSolution;
+bool narrateCoarseSolution;
 
 string getFactorizationTypeString(GMGOperator::FactorType factorizationType)
 {
@@ -668,7 +670,8 @@ void run(ProblemChoice problemChoice, int &iterationCount, int spaceDim, int num
   IPPtr graphNorm;
   initializeSolutionAndCoarseMesh(solution, k0Mesh, graphNorm, problemChoice, spaceDim, conformingTraces, useStaticCondensation,
                                   numCells, k, delta_k, numCellsRootMesh, useZeroMeanConstraints);
-
+  solution->setNarrateOnRankZero(narrateSolution, "fine Solution");
+  
   MeshPtr mesh = solution->mesh();
   BCPtr bc = solution->bc();
 
@@ -707,6 +710,9 @@ void run(ProblemChoice problemChoice, int &iterationCount, int spaceDim, int num
 
     Teuchos::RCP<Solver> coarseSolver = Teuchos::null;
     GMGSolver* gmgSolver = new GMGSolver(solution, k0Mesh, cgMaxIterations, cgTol, coarseSolver, useStaticCondensation);
+    gmgSolver->setNarrateOnRankZero(narrateSolution, "fine GMGSolver");
+    gmgSolver->gmgOperator().setNarrateOnRankZero(narrateSolution, "fine GMGOperator");
+    gmgSolver->gmgOperator().getCoarseSolution()->setNarrateOnRankZero(narrateCoarseSolution, "coarse solution");
 
     if (coarseSolverChoice != Solver::GMGSolver_1_Level_h)
     {
@@ -743,6 +749,8 @@ void run(ProblemChoice problemChoice, int &iterationCount, int spaceDim, int num
                                        gmgSolver->gmgOperator().getCoarseSolution(),
                                        coarsestMesh, coarsestSolver);
       GMGSolver* coarseSolverGMG = static_cast<GMGSolver*>( coarseSolver.get() );
+      coarseSolverGMG->setNarrateOnRankZero(narrateCoarseSolution, "coarse GMGSolver");
+      coarseSolverGMG->gmgOperator().setNarrateOnRankZero(narrateCoarseSolution, "coarse GMGOperator");
 
       coarseSolverGMG->gmgOperator().setSmootherType(GMGOperator::IFPACK_ADDITIVE_SCHWARZ);
     }
@@ -1258,6 +1266,9 @@ int main(int argc, char *argv[])
   bool reportTimings = false;
 
   bool hOnly = false;
+  
+  narrateSolution = false;
+  narrateCoarseSolution = false;
 
   bool useZeroMeanConstraints = false;
 
@@ -1292,6 +1303,8 @@ int main(int argc, char *argv[])
   cmdp.setOption("schwarzFillRatio", &fillRatio, "Schwarz block factorization: fill ratio for IC");
   cmdp.setOption("schwarzLevelOfFill", &levelOfFill, "Schwarz block factorization: level of fill for ILU");
   cmdp.setOption("useConformingTraces", "useNonConformingTraces", &conformingTraces);
+  cmdp.setOption("narrateSolution", "dontNarrateSolution", &narrateSolution);
+  cmdp.setOption("narrateCoarseSolution", "dontNarrateCoarseSolution", &narrateCoarseSolution);
   cmdp.setOption("precondition", "dontPrecondition", &precondition);
 
   cmdp.setOption("overlap", &schwarzOverlap, "Schwarz overlap level");
@@ -1469,7 +1482,8 @@ int main(int argc, char *argv[])
     run(problemChoice, iterationCount, spaceDim, numCells, k, delta_k, conformingTraces,
         useCondensedSolve, precondition, schwarzOnly, smootherChoice, schwarzOverlap,
         schwarzFactorType, levelOfFill, fillRatio, coarseSolverChoice,
-        cgTol, cgMaxIterations, AztecOutputLevel, reportTimings, solveTime, reportEnergyError, numCellsRootMesh, hOnly, useZeroMeanConstraints, writeAndExit);
+        cgTol, cgMaxIterations, AztecOutputLevel, reportTimings, solveTime,
+        reportEnergyError, numCellsRootMesh, hOnly, useZeroMeanConstraints, writeAndExit);
 
     if (rank==0) cout << "Iteration count: " << iterationCount << "; solve time " << solveTime << " seconds." << endl;
   }

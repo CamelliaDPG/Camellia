@@ -148,7 +148,7 @@ static const int MIN_BATCH_SIZE_IN_CELLS = 1; // overrides the above, if it resu
 
 // copy constructor:
 template <typename Scalar>
-TSolution<Scalar>::TSolution(const TSolution<Scalar> &soln)
+TSolution<Scalar>::TSolution(const TSolution<Scalar> &soln) : Narrator("Solution")
 {
   _mesh = soln.mesh();
   _dofInterpreter = Teuchos::rcp( _mesh.get(), false ); // false: doesn't own memory
@@ -169,7 +169,7 @@ TSolution<Scalar>::TSolution(const TSolution<Scalar> &soln)
 }
 
 template <typename Scalar>
-TSolution<Scalar>::TSolution(TBFPtr<Scalar> bf, MeshPtr mesh, TBCPtr<Scalar> bc, TRHSPtr<Scalar> rhs, TIPPtr<Scalar> ip)
+TSolution<Scalar>::TSolution(TBFPtr<Scalar> bf, MeshPtr mesh, TBCPtr<Scalar> bc, TRHSPtr<Scalar> rhs, TIPPtr<Scalar> ip) : Narrator("Solution")
 {
   _bf = bf;
   _mesh = mesh;
@@ -185,7 +185,7 @@ TSolution<Scalar>::TSolution(TBFPtr<Scalar> bf, MeshPtr mesh, TBCPtr<Scalar> bc,
 // Deprecated constructor, use the one which explicitly passes in BF
 // Will eventually be removing BF reference from Mesh
 template <typename Scalar>
-TSolution<Scalar>::TSolution(MeshPtr mesh, TBCPtr<Scalar> bc, TRHSPtr<Scalar> rhs, TIPPtr<Scalar> ip)
+TSolution<Scalar>::TSolution(MeshPtr mesh, TBCPtr<Scalar> bc, TRHSPtr<Scalar> rhs, TIPPtr<Scalar> ip) : Narrator("Solution")
 {
   _bf = Teuchos::null;
   _mesh = mesh;
@@ -221,7 +221,7 @@ void TSolution<Scalar>::initialize()
   _reportTimingResults = false;
   _globalSystemConditionEstimate = -1;
   _cubatureEnrichmentDegree = 0;
-
+  
   _zmcsAsLagrangeMultipliers = true; // default -- when false, it's user's / Solver's responsibility to enforce ZMCs
   _zmcsAsRankOneUpdate = false; // I believe this works, but it's slow!
   _zmcRho = -1; // default value: stabilization parameter for zero-mean constraints
@@ -581,6 +581,7 @@ void TSolution<Scalar>::initializeLHSVector()
 template <typename Scalar>
 void TSolution<Scalar>::initializeStiffnessAndLoad()
 {
+  narrate("initializeStiffnessAndLoad");
   Epetra_Map partMap = getPartitionMap();
 
   int maxRowSize = _mesh->rowSizeUpperBound();
@@ -592,6 +593,7 @@ void TSolution<Scalar>::initializeStiffnessAndLoad()
 template <typename Scalar>
 void TSolution<Scalar>::populateStiffnessAndLoad()
 {
+  narrate("populateStiffnessAndLoad()");
   int numProcs=Teuchos::GlobalMPISession::getNProc();;
   int rank = Teuchos::GlobalMPISession::getRank();
 
@@ -1068,6 +1070,7 @@ void TSolution<Scalar>::setProblem(TSolverPtr<Scalar> solver)
 template <typename Scalar>
 int TSolution<Scalar>::solveWithPrepopulatedStiffnessAndLoad(TSolverPtr<Scalar> solver, bool callResolveInsteadOfSolve)
 {
+  narrate("solveWithPrepopulatedStiffnessAndLoad()");
   int rank = Teuchos::GlobalMPISession::getRank();
   int numProcs = Teuchos::GlobalMPISession::getNProc();
 
@@ -1499,6 +1502,7 @@ TBFPtr<Scalar> TSolution<Scalar>::bf() const
 template <typename Scalar>
 void TSolution<Scalar>::imposeBCs()
 {
+  narrate("imposeBCs()");
   int rank     = Teuchos::GlobalMPISession::getRank();
 
   Intrepid::FieldContainer<GlobalIndexType> bcGlobalIndices;
@@ -1574,6 +1578,7 @@ void TSolution<Scalar>::imposeBCs()
 template <typename Scalar>
 void TSolution<Scalar>::imposeZMCsUsingLagrange()
 {
+  narrate("imposeZMCsUsingLagrange()");
   int rank = Teuchos::GlobalMPISession::getRank();
 
   if (_zmcsAsRankOneUpdate)
@@ -2521,6 +2526,7 @@ void TSolution<Scalar>::solutionValues(Intrepid::FieldContainer<Scalar> &values,
 template <typename Scalar>
 double TSolution<Scalar>::energyErrorTotal()
 {
+  narrate("energyErrorTotal()");
   double energyErrorSquared = 0.0;
   const map<GlobalIndexType,double>* energyErrorPerCell = &(rankLocalEnergyError());
 
@@ -2618,6 +2624,7 @@ const map<GlobalIndexType,double> & TSolution<Scalar>::rankLocalEnergyError()
 template <typename Scalar>
 void TSolution<Scalar>::computeErrorRepresentation()
 {
+  narrate("computeErrorRepresentation()");
   if (!_residualsComputed)
   {
     computeResiduals();
@@ -2673,6 +2680,7 @@ void TSolution<Scalar>::computeErrorRepresentation()
 template <typename Scalar>
 void TSolution<Scalar>::computeResiduals()
 {
+  narrate("computeResiduals()");
   set<GlobalIndexType> rankLocalCells = _mesh->cellIDsInPartition();
   for (set<GlobalIndexType>::iterator cellIDIt = rankLocalCells.begin(); cellIDIt != rankLocalCells.end(); cellIDIt++)
   {
@@ -2788,6 +2796,7 @@ TMatrixPtr<Scalar> TSolution<Scalar>::getStiffnessMatrix2()
 template <typename Scalar>
 void TSolution<Scalar>::setStiffnessMatrix(Teuchos::RCP<Epetra_CrsMatrix> stiffness)
 {
+  narrate("setStiffnessMatrix()");
 //  Epetra_FECrsMatrix* stiffnessFEMatrix = dynamic_cast<Epetra_FECrsMatrix*>(_globalStiffMatrix.get());
   _globalStiffMatrix = stiffness;
 }
@@ -2795,6 +2804,7 @@ void TSolution<Scalar>::setStiffnessMatrix(Teuchos::RCP<Epetra_CrsMatrix> stiffn
 template <typename Scalar>
 void TSolution<Scalar>::setStiffnessMatrix2(TMatrixPtr<Scalar> stiffness)
 {
+  narrate("setStiffnessMatrix2()");
 //  Epetra_FECrsMatrix* stiffnessFEMatrix = dynamic_cast<Epetra_FECrsMatrix*>(_globalStiffMatrix.get());
   _globalStiffMatrix2 = stiffness;
 }

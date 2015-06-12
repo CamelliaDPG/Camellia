@@ -53,7 +53,9 @@ extern "C" void HPM_Stop(char *);
 
 GMGOperator::GMGOperator(BCPtr zeroBCs, MeshPtr coarseMesh, IPPtr coarseIP,
                          MeshPtr fineMesh, Teuchos::RCP<DofInterpreter> fineDofInterpreter, Epetra_Map finePartitionMap,
-                         Teuchos::RCP<Solver> coarseSolver, bool useStaticCondensation, bool fineSolverUsesDiagonalScaling) :  _finePartitionMap(finePartitionMap), _br(true)
+                         Teuchos::RCP<Solver> coarseSolver, bool useStaticCondensation, bool fineSolverUsesDiagonalScaling) :
+Narrator("GMGOperator"),
+_finePartitionMap(finePartitionMap), _br(true)
 {
   _useStaticCondensation = useStaticCondensation;
   _fineDofInterpreter = fineDofInterpreter;
@@ -141,11 +143,9 @@ GMGOperator::GMGOperator(BCPtr zeroBCs, MeshPtr coarseMesh, IPPtr coarseIP,
 #endif
   _timeProlongationOperatorConstruction = prolongationTimer.ElapsedTime();
 
-  int rank = Teuchos::GlobalMPISession::getRank();
-  if (rank==0)
-  {
-    cout << "Prolongation operator constructed in " << _timeProlongationOperatorConstruction << " seconds.\n";
-  }
+  ostringstream prolongationTimingReport;
+  prolongationTimingReport << "Prolongation operator constructed in " << _timeProlongationOperatorConstruction << " seconds.";
+  narrate(prolongationTimingReport.str());
 
   _fineSolverUsesDiagonalScaling = false;
   setFineSolverUsesDiagonalScaling(fineSolverUsesDiagonalScaling);
@@ -160,6 +160,7 @@ void GMGOperator::clearTimings()
 
 void GMGOperator::computeCoarseStiffnessMatrix(Epetra_CrsMatrix *fineStiffnessMatrix)
 {
+  narrate("computeCoarseStiffnessMatrix");
   int globalColCount = fineStiffnessMatrix->NumGlobalCols();
   if (_P.get() == NULL)
   {
@@ -259,6 +260,7 @@ void GMGOperator::computeCoarseStiffnessMatrix(Epetra_CrsMatrix *fineStiffnessMa
 
 void GMGOperator::constructLocalCoefficientMaps()
 {
+  narrate("constructLocalCoefficientMaps()");
   Epetra_Time timer(Comm());
 
   set<GlobalIndexType> cellsInPartition = _fineMesh->globalDofAssignment()->cellsInPartition(-1); // rank-local
@@ -273,6 +275,7 @@ void GMGOperator::constructLocalCoefficientMaps()
 
 Teuchos::RCP<Epetra_CrsMatrix> GMGOperator::constructProlongationOperator()
 {
+  narrate("constructProlongationOperator");
   // row indices belong to the fine grid, columns to the coarse
   // maps coefficients from coarse to fine
 //  _globalStiffMatrix = Teuchos::rcp(new Epetra_FECrsMatrix(::Copy, partMap, maxRowSize));
@@ -737,6 +740,7 @@ int GMGOperator::Apply(const Epetra_MultiVector& X, Epetra_MultiVector& Y) const
 
 int GMGOperator::ApplyInverse(const Epetra_MultiVector& X_in, Epetra_MultiVector& Y) const
 {
+  narrate("ApplyInverse");
 //  cout << "GMGOperator::ApplyInverse.\n";
   int rank = Teuchos::GlobalMPISession::getRank();
   bool printVerboseOutput = (rank==0) && _debugMode;
@@ -764,7 +768,8 @@ int GMGOperator::ApplyInverse(const Epetra_MultiVector& X_in, Epetra_MultiVector
   }
 
   timer.ResetStartTime();
-
+  
+  narrate("multiply _P * coarseRHSVector");
   if (printVerboseOutput) cout << "calling _P->Multiply(true, X, *coarseRHSVector);\n";
   _P->Multiply(true, X, *coarseRHSVector);
   if (printVerboseOutput) cout << "finished _P->Multiply(true, X, *coarseRHSVector);\n";
@@ -794,6 +799,7 @@ int GMGOperator::ApplyInverse(const Epetra_MultiVector& X_in, Epetra_MultiVector
 
   if (printVerboseOutput) cout << "finished _coarseSolution->getLHSVector()\n";
   if (printVerboseOutput) cout << "calling _P->Multiply(false, *coarseLHSVector, Y)\n";
+  narrate("multiply _P * coarseLHSVector");
   _P->Multiply(false, *coarseLHSVector, Y);
   if (printVerboseOutput) cout << "finished _P->Multiply(false, *coarseLHSVector, Y)\n";
   _timeMapCoarseToFine += timer.ElapsedTime();
@@ -805,6 +811,7 @@ int GMGOperator::ApplyInverse(const Epetra_MultiVector& X_in, Epetra_MultiVector
     Epetra_MultiVector X2(X); // copy, since I'm not sure ApplyInverse is generally OK with X and Y in same location (though Aztec seems to make that assumption, so it probably is OK).
     if (printVerboseOutput) cout << "finished copying X into X2\n";
     if (printVerboseOutput) cout << "calling _smoother->ApplyInverse(X2, X)\n";
+    narrate("smoother->ApplyInverse()");
     int err = _smoother->ApplyInverse(X2, X);
     if (err != 0)
     {
@@ -897,6 +904,7 @@ const Epetra_Map & GMGOperator::OperatorRangeMap() const
 
 set<GlobalIndexTypeToCast> GMGOperator::setCoarseRHSVector(const Epetra_MultiVector &X, Epetra_FEVector &coarseRHSVector) const
 {
+  narrate("setCoarseRHSVector()");
   // the data coming in (X) is in global dofs defined on the fine mesh.  First thing we'd like to do is map it to the fine mesh's local cells
   set<GlobalIndexType> cellsInPartition = _fineMesh->globalDofAssignment()->cellsInPartition(-1); // rank-local
 
@@ -1091,6 +1099,7 @@ void GMGOperator::setSmootherType(GMGOperator::SmootherChoice smootherType)
 
 void GMGOperator::setUpSmoother(Epetra_CrsMatrix *fineStiffnessMatrix)
 {
+  narrate("setUpSmoother()");
   SmootherChoice choice = _smootherType;
 
   Teuchos::ParameterList List;
@@ -1295,6 +1304,7 @@ Teuchos::RCP<Epetra_CrsMatrix> GMGOperator::getProlongationOperator()
 
 Teuchos::RCP<Epetra_CrsMatrix> GMGOperator::getSmootherAsMatrix()
 {
+  narrate("getSmootherAsMatrix()");
   return Epetra_Operator_to_Epetra_Matrix::constructInverseMatrix(*_smoother, _finePartitionMap);
 }
 
