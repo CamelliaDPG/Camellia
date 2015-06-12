@@ -52,7 +52,7 @@ SpaceTimeIncompressibleFormulation::SpaceTimeIncompressibleFormulation(int space
   _mu = mu;
   _useConformingTraces = useConformingTraces;
 
-  // TEUCHOS_TEST_FOR_EXCEPTION(meshTopo->getDimension() != _spaceDim + 1, std::invalid_argument, "MeshTopo must be space-time mesh");
+  TEUCHOS_TEST_FOR_EXCEPTION(meshTopo->getDimension() != _spaceDim + 1, std::invalid_argument, "MeshTopo must be space-time mesh");
   TEUCHOS_TEST_FOR_EXCEPTION(mu==0, std::invalid_argument, "mu may not be 0!");
   TEUCHOS_TEST_FOR_EXCEPTION(spaceDim==1, std::invalid_argument, "Incompressible Navier-Stokes is trivial for spaceDim=1");
   TEUCHOS_TEST_FOR_EXCEPTION((spaceDim != 2) && (spaceDim != 3), std::invalid_argument, "spaceDim must be 2 or 3");
@@ -221,8 +221,8 @@ SpaceTimeIncompressibleFormulation::SpaceTimeIncompressibleFormulation(int space
     _bf->addTerm(-u2hat, tau2 * n_x);
 
     // momentum equation
-    // _bf->addTerm(-u1, v1->dt());
-    // _bf->addTerm(-u2, v2->dt());
+    _bf->addTerm(-u1, v1->dt());
+    _bf->addTerm(-u2, v2->dt());
     _bf->addTerm(-u1_prev*u1, v1->dx());
     _bf->addTerm(-u1_prev*u1, v1->dx());
     _bf->addTerm(-u2_prev*u1, v1->dy());
@@ -247,8 +247,10 @@ SpaceTimeIncompressibleFormulation::SpaceTimeIncompressibleFormulation(int space
     _bf->addTerm(-u1, q->dx());
     _bf->addTerm(-u2, q->dy());
 
-    _bf->addTerm(u1hat, q->times_normal_x());
-    _bf->addTerm(u2hat, q->times_normal_y());
+    // _bf->addTerm(u1hat, q->times_normal_x());
+    // _bf->addTerm(u2hat, q->times_normal_y());
+    _bf->addTerm(u1hat*n_x->x(), q);
+    _bf->addTerm(u2hat*n_x->y(), q);
   }
 
   // Add residual to RHS
@@ -258,10 +260,12 @@ SpaceTimeIncompressibleFormulation::SpaceTimeIncompressibleFormulation(int space
   _rhs->addTerm( -u2_prev * tau2->div() );
 
   // momentum equation
-  _rhs->addTerm( u1_prev*u1_prev*v1->dx() );
-  _rhs->addTerm( u1_prev*u2_prev*v1->dy() );
-  _rhs->addTerm( u2_prev*u1_prev*v2->dx() );
-  _rhs->addTerm( u2_prev*u2_prev*v2->dy() );
+  _rhs->addTerm( u1_prev * v1->dt());
+  _rhs->addTerm( u2_prev * v2->dt());
+  _rhs->addTerm( u1_prev * u1_prev*v1->dx() );
+  _rhs->addTerm( u1_prev * u2_prev*v1->dy() );
+  _rhs->addTerm( u2_prev * u1_prev*v2->dx() );
+  _rhs->addTerm( u2_prev * u2_prev*v2->dy() );
 
   // continuity equation
   _rhs->addTerm( u1_prev*q->dx());
@@ -291,7 +295,8 @@ SpaceTimeIncompressibleFormulation::SpaceTimeIncompressibleFormulation(int space
   _solutionUpdate->setIP(ip);
 
   // impose zero mean constraint
-  _solutionUpdate->bc()->imposeZeroMeanConstraint(p->ID());
+  // _solutionUpdate->bc()->imposeZeroMeanConstraint(p->ID());
+  _solutionUpdate->bc()->singlePointBC(p->ID());
 
   _mesh->registerSolution(_solutionBackground);
   _mesh->registerSolution(_solutionUpdate);
