@@ -650,7 +650,7 @@ void run(ProblemChoice problemChoice, int &iterationCount, int spaceDim, int num
 {
   int rank = Teuchos::GlobalMPISession::getRank();
 
-  if (hOnly && (numCellsRootMesh == -1))
+  if ((numCellsRootMesh == -1) && (hOnly || (coarseSolverChoice == Solver::GMGSolver_1_Level_h)))
   {
     // then use a single level of h-coarsening as the root mesh.
     numCellsRootMesh = numCells / 2;
@@ -1304,6 +1304,7 @@ int main(int argc, char *argv[])
   cmdp.setOption("schwarzFillRatio", &fillRatio, "Schwarz block factorization: fill ratio for IC");
   cmdp.setOption("schwarzLevelOfFill", &levelOfFill, "Schwarz block factorization: level of fill for ILU");
   cmdp.setOption("useConformingTraces", "useNonConformingTraces", &conformingTraces);
+  cmdp.setOption("maxDofsForKLU",&maxDofsForKLU, "for multi-level solves, maximum number of dofs to use with KLU solve at coarsest level");
   cmdp.setOption("narrateSolution", "dontNarrateSolution", &narrateSolution);
   cmdp.setOption("narrateCoarseSolution", "dontNarrateCoarseSolution", &narrateCoarseSolution);
   cmdp.setOption("precondition", "dontPrecondition", &precondition);
