@@ -664,6 +664,14 @@ void run(ProblemChoice problemChoice, int &iterationCount, int spaceDim, int num
   {
     numCellsRootMesh = numCells;
   }
+  
+#ifdef HAVE_MPI
+  Epetra_MpiComm Comm(MPI_COMM_WORLD);
+  //cout << "rank: " << rank << " of " << numProcs << endl;
+#else
+  Epetra_SerialComm Comm;
+#endif
+  Epetra_Time initializationTimer(Comm);
 
   SolutionPtr solution;
   MeshPtr k0Mesh;
@@ -683,6 +691,15 @@ void run(ProblemChoice problemChoice, int &iterationCount, int spaceDim, int num
     k0Mesh = Teuchos::rcp( new Mesh(coarseMeshTopo, mesh->bilinearForm(), H1OrderP0, delta_k) );
   }
 
+  double initializationTime = initializationTimer.ElapsedTime();
+  int numCoarseGlobalDofs = k0Mesh->numGlobalDofs();
+  int numFineGlobalDofs = solution->mesh()->numGlobalDofs();
+  if (narrateSolution && (rank==0))
+  {
+    cout << "Solution (" << numFineGlobalDofs << " fine global dofs) and k0 mesh (";
+    cout << numCoarseGlobalDofs << " coarse global dofs) initialized in " << initializationTime << " seconds.\n";
+  }
+  
   Teuchos::RCP<Solver> solver;
   if (!precondition)
   {
@@ -721,11 +738,17 @@ void run(ProblemChoice problemChoice, int &iterationCount, int spaceDim, int num
     }
     else
     {
+      initializationTimer.ResetStartTime();
       MeshTopologyPtr coarsestMeshTopo = k0Mesh->getTopology()->getRootMeshTopology();
       int H1OrderP0 = 0 + 1;
       MeshPtr coarsestMesh = Teuchos::rcp( new Mesh(coarsestMeshTopo, k0Mesh->bilinearForm(), H1OrderP0, delta_k) );
-
+      
       int numGlobalDofs = coarsestMesh->numGlobalDofs();
+      initializationTime = initializationTimer.ElapsedTime();
+      if (narrateSolution && (rank==0))
+      {
+        cout << "coarsest mesh (" << numGlobalDofs << " dofs) constructed in " << initializationTime << " seconds.\n";
+      }
 
       // debugging:
       // if (rank==0) cout << "coarsest mesh, dof count: " << numGlobalDofs << endl;
@@ -788,18 +811,12 @@ void run(ProblemChoice problemChoice, int &iterationCount, int spaceDim, int num
 //    if (rank==0) cout << "Writing fine Stokes matrix to /tmp/A_stokes.dat.\n";
 //    solution->setWriteMatrixToFile(true, "/tmp/A_stokes.dat");
 //  }
-
-#ifdef HAVE_MPI
-  Epetra_MpiComm Comm(MPI_COMM_WORLD);
-  //cout << "rank: " << rank << " of " << numProcs << endl;
-#else
-  Epetra_SerialComm Comm;
-#endif
-  Epetra_Time timer(Comm);
+  
+  Epetra_Time solveTimer(Comm);
 
   int result = solution->solve(solver);
 
-  solveTime = timer.ElapsedTime();
+  solveTime = solveTimer.ElapsedTime();
 
   if (result == 0)
   {
