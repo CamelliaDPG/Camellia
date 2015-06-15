@@ -123,6 +123,7 @@ public:
 
   set<int> nonlinearVars();
 };
+typedef Teuchos::RCP<SpaceTimeIncompressibleFormulation> SpaceTimeIncompressibleFormulationPtr;
 }
 
 
