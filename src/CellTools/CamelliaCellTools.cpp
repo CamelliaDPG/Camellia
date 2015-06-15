@@ -130,7 +130,7 @@ void CamelliaCellTools::computeSideMeasure(FieldContainer<double> &weightedMeasu
         for (int d1=0; d1<spaceDim-1; d1++)
         {
           int d2 = spaceDim - 1;
-          const double tol = 1e-15;
+          const double tol = 1e-14;
           if ((abs(cellJacobian(cellOrdinal,ptOrdinal,d1,d2)) > tol) || (abs(cellJacobian(cellOrdinal,ptOrdinal,d2,d1)) > tol))
           {
             cout << "CamelliaCellTools::computeSideMeasure requires the transformation to be orthogonal in space and time.\n";
