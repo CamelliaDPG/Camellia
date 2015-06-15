@@ -95,28 +95,43 @@ int main(int argc, char *argv[])
 
   // Exact solution
   double mu = 1./Re;
-  double pi = 2.0*acos(0.0);
-  double lambda = Re/2-sqrt(Re*Re/4+4*pi*pi);
-  FunctionPtr explambdax = Teuchos::rcp(new Exp_ax(lambda));
-  FunctionPtr cos2piy = Teuchos::rcp(new Cos_ay(2*pi));
-  FunctionPtr sin2piy = Teuchos::rcp(new Sin_ay(2*pi));
-  FunctionPtr u1_exact = 1 - explambdax*cos2piy;
-  FunctionPtr u2_exact = lambda/(2*pi)*explambdax*sin2piy;
+  double pi = atan(1)*4;
+  // double pi = 3.1415926;
+  // double lambda = Re/2-sqrt(Re*Re/4+4*pi*pi);
+  // FunctionPtr explambdax = Teuchos::rcp(new Exp_ax(lambda));
+  // FunctionPtr cos2piy = Teuchos::rcp(new Cos_ay(2*pi));
+  // FunctionPtr sin2piy = Teuchos::rcp(new Sin_ay(2*pi));
+  // FunctionPtr u1_exact = 1 - explambdax*cos2piy;
+  // FunctionPtr u2_exact = lambda/(2*pi)*explambdax*sin2piy;
+  FunctionPtr temporalDecay = Teuchos::rcp(new Exp_at(-2*mu));
+  FunctionPtr sinX = Teuchos::rcp(new Sin_x());
+  FunctionPtr cosX = Teuchos::rcp(new Cos_x());
+  FunctionPtr sinY = Teuchos::rcp(new Sin_y());
+  FunctionPtr cosY = Teuchos::rcp(new Cos_y());
+  FunctionPtr u1_exact = sinX*cosY*temporalDecay;
+  FunctionPtr u2_exact = -cosX*sinY*temporalDecay;
   FunctionPtr sigma1_exact = mu*u1_exact->grad();
   FunctionPtr sigma2_exact = mu*u2_exact->grad();
 
   // Build mesh
   vector<double> x0;// = vector<double>(spaceDim,-1);
-  x0.push_back(-.5);
-  x0.push_back(-.5);
+  // x0.push_back(-.5);
+  // x0.push_back(-.5);
+  x0.push_back(0);
+  x0.push_back(0);
   vector<double> dimensions;
-  dimensions.push_back(1.5);
-  dimensions.push_back(2.0);
+  // dimensions.push_back(1.5);
+  // dimensions.push_back(2.0);
+  dimensions.push_back(2*pi);
+  dimensions.push_back(2*pi);
   vector<int> elementCounts;
-  elementCounts.push_back(6);
-  elementCounts.push_back(8);
+  // elementCounts.push_back(3);
+  // elementCounts.push_back(4);
+  elementCounts.push_back(4);
+  elementCounts.push_back(4);
   MeshTopologyPtr spatialMeshTopo = MeshFactory::rectilinearMeshTopology(dimensions, elementCounts, x0);
-  double t0 = 0.0, t1 = 0.25;
+  // double t0 = 0.0, t1 = 0.25;
+  double t0 = 0.0, t1 = 1.0;
   MeshTopologyPtr spaceTimeMeshTopo = MeshFactory::spaceTimeMeshTopology(spatialMeshTopo, t0, t1);
 
   LinearTermPtr forcingTerm = Teuchos::null;
