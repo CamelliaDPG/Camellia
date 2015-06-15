@@ -724,6 +724,7 @@ void run(ProblemChoice problemChoice, int &iterationCount, int spaceDim, int num
   {
     BCPtr zeroBCs = bc->copyImposingZero();
     bool saveFactorization = true;
+    int coarseSolverSmootherOverlap = 1; // for h-multigrid on k=0 meshes, this seems the minimal sensible overlap level--and for a coarse mesh composed of the parent cells of the fine mesh cells, it seems likely the exactly right choice.
 
     Teuchos::RCP<Solver> coarseSolver = Teuchos::null;
     GMGSolver* gmgSolver = new GMGSolver(solution, k0Mesh, cgMaxIterations, cgTol, coarseSolver, useStaticCondensation);
@@ -776,7 +777,8 @@ void run(ProblemChoice problemChoice, int &iterationCount, int spaceDim, int num
       coarseSolverGMG->gmgOperator().setNarrateOnRankZero(narrateCoarseSolution, "coarse GMGOperator");
       coarseSolverGMG->gmgOperator().getCoarseSolution()->setNarrateOnRankZero(narrateCoarseSolution, "coarsest solution");
 
-      coarseSolverGMG->gmgOperator().setSmootherType(GMGOperator::IFPACK_ADDITIVE_SCHWARZ);
+      coarseSolverGMG->gmgOperator().setSmootherType(GMGOperator::CAMELLIA_ADDITIVE_SCHWARZ);
+      coarseSolverGMG->gmgOperator().setSmootherOverlap(coarseSolverSmootherOverlap);
     }
 
     gmgSolver->gmgOperator().setCoarseSolver(coarseSolver);
@@ -1043,9 +1045,9 @@ void runMany(ProblemChoice problemChoice, int spaceDim, int delta_k, int minCell
     smootherChoices.push_back(GMGOperator::IFPACK_ADDITIVE_SCHWARZ);
     smootherChoices.push_back(GMGOperator::CAMELLIA_ADDITIVE_SCHWARZ);
 //      smootherChoices.push_back(GMGOperator::BLOCK_SYMMETRIC_GAUSS_SEIDEL);
-    smootherChoices.push_back(GMGOperator::POINT_SYMMETRIC_GAUSS_SEIDEL);
+//    smootherChoices.push_back(GMGOperator::POINT_SYMMETRIC_GAUSS_SEIDEL);
 //      smootherChoices.push_back(GMGOperator::BLOCK_JACOBI);
-    smootherChoices.push_back(GMGOperator::POINT_JACOBI);
+//    smootherChoices.push_back(GMGOperator::POINT_JACOBI);
     break;
   case AllSchwarz:
     preconditionValues.push_back(true);
@@ -1061,9 +1063,9 @@ void runMany(ProblemChoice problemChoice, int spaceDim, int delta_k, int minCell
     smootherChoices.push_back(GMGOperator::IFPACK_ADDITIVE_SCHWARZ);
     smootherChoices.push_back(GMGOperator::CAMELLIA_ADDITIVE_SCHWARZ);
 //      smootherChoices.push_back(GMGOperator::BLOCK_SYMMETRIC_GAUSS_SEIDEL);
-    smootherChoices.push_back(GMGOperator::POINT_SYMMETRIC_GAUSS_SEIDEL);
+//    smootherChoices.push_back(GMGOperator::POINT_SYMMETRIC_GAUSS_SEIDEL);
 //      smootherChoices.push_back(GMGOperator::BLOCK_JACOBI);
-    smootherChoices.push_back(GMGOperator::POINT_JACOBI);
+//    smootherChoices.push_back(GMGOperator::POINT_JACOBI);
     break;
   }
 
