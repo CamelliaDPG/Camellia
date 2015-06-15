@@ -95,8 +95,8 @@ int main(int argc, char *argv[])
 
   // Exact solution
   double mu = 1./Re;
-  // double pi = 2.0*acos(0.0);
-  double pi = 3.1415926;
+  double pi = atan(1)*4;
+  // double pi = 3.1415926;
   // double lambda = Re/2-sqrt(Re*Re/4+4*pi*pi);
   // FunctionPtr explambdax = Teuchos::rcp(new Exp_ax(lambda));
   // FunctionPtr cos2piy = Teuchos::rcp(new Cos_ay(2*pi));
