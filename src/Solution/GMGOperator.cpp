@@ -949,14 +949,14 @@ TimeStatistics GMGOperator::getStatistics(double timeValue) const
   return stats;
 }
 
-void GMGOperator::reportTimings() const
+void GMGOperator::reportTimings(StatisticChoice whichStat) const
 {
   //   mutable double _timeMapFineToCoarse, _timeMapCoarseToFine, _timeCoarseImport, _timeConstruction, _timeCoarseSolve;  // totals over the life of the object
   int rank = Teuchos::GlobalMPISession::getRank();
 
   map<string, double> reportValues;
-  reportValues["construction time"] = _timeConstruction;
-  reportValues["  construct prolongation operator"] = _timeProlongationOperatorConstruction;
+  reportValues["total construction time"] = _timeConstruction;
+  reportValues["construct prolongation operator"] = _timeProlongationOperatorConstruction;
   reportValues["construct local coefficient maps"] = _timeLocalCoefficientMapConstruction;
   reportValues["coarse import"] = _timeCoarseImport;
   reportValues["coarse solve"] = _timeCoarseSolve;
@@ -966,16 +966,55 @@ void GMGOperator::reportTimings() const
   reportValues["set up smoother"] = _timeSetUpSmoother;
   reportValues["update coarse operator"] = _timeUpdateCoarseOperator;
 
+  if (rank == 0)
+  {
+    switch (whichStat)
+    {
+      case MIN:
+        cout << "Timing MINIMUM values:\n";
+        break;
+      case MAX:
+        cout << "Timing MAXIMUM values:\n";
+        break;
+      case MEAN:
+        cout << "Timing mean values:\n";
+        break;
+      case SUM:
+        cout << "SUM of timing values:\n";
+        break;
+      case ALL:
+        break;
+    }
+  }
   for (map<string,double>::iterator reportIt = reportValues.begin(); reportIt != reportValues.end(); reportIt++)
   {
     TimeStatistics stats = getStatistics(reportIt->second);
     if (rank==0)
     {
-      cout << reportIt->first << ":\n";
-      cout <<  "mean = " << stats.mean << " seconds\n";
-      cout << "max =  " << stats.max << " seconds\n";
-      cout << "min =  " << stats.min << " seconds\n";
-      cout << "sum =  " << stats.sum << " seconds\n";
+      cout << setprecision(2);
+      cout << std::scientific;
+      cout << setw(35) << reportIt->first << ": ";
+      switch (whichStat) {
+        case ALL:
+          cout << endl;
+          cout <<  "mean = " << stats.mean << " seconds\n";
+          cout << "max =  " << stats.max << " seconds\n";
+          cout << "min =  " << stats.min << " seconds\n";
+          cout << "sum =  " << stats.sum << " seconds\n";
+          break;
+        case MIN:
+          cout << stats.min << " seconds\n";
+          break;
+        case MAX:
+          cout << stats.max << " seconds\n";
+          break;
+        case MEAN:
+          cout << stats.mean << " seconds\n";
+          break;
+        case SUM:
+          cout << stats.sum << " seconds\n";
+          break;
+      }
     }
   }
 }

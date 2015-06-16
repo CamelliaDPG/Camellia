@@ -415,7 +415,7 @@ int main(int argc, char *argv[])
   {
     cout << "Finest GMGOperator, timing report:\n";
   }
-  gmgSolver->gmgOperator()->reportTimings();
+  gmgSolver->gmgOperator()->reportTimings(StatisticChoice::MAX);
   
   return 0;
 }

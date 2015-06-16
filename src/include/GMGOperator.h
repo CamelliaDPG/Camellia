@@ -32,6 +32,9 @@ struct TimeStatistics
   double mean;
   double sum;
 };
+  enum StatisticChoice {
+    ALL, MIN, MAX, MEAN, SUM
+  };
 
 class GMGOperator : public Epetra_Operator, public Narrator
 {
@@ -142,7 +145,7 @@ public:
   void setFineMesh(MeshPtr fineMesh, Epetra_Map finePartitionMap);
 
   void clearTimings();
-  void reportTimings() const;
+  void reportTimings(StatisticChoice stat = ALL) const;
 
   void constructLocalCoefficientMaps(); // we'll do this lazily if this is not called; this is mostly a way to separate out the time costs
 
