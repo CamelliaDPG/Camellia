@@ -17,21 +17,18 @@
 
 using namespace Camellia;
 
-const bool DIAGONAL_SCALING_DEFAULT = false;
-
 GMGSolver::GMGSolver(BCPtr zeroBCs, MeshPtr coarseMesh, IPPtr coarseIP,
                      MeshPtr fineMesh, Teuchos::RCP<DofInterpreter> fineDofInterpreter, Epetra_Map finePartitionMap,
                      int maxIters, double tol, Teuchos::RCP<Solver> coarseSolver, bool useStaticCondensation) :
   Narrator("GMGSolver"),
   _finePartitionMap(finePartitionMap),
   _gmgOperator(zeroBCs,coarseMesh,coarseIP,fineMesh,fineDofInterpreter,
-               finePartitionMap,coarseSolver, useStaticCondensation, DIAGONAL_SCALING_DEFAULT)
+               finePartitionMap,coarseSolver, useStaticCondensation)
 {
   _maxIters = maxIters;
   _printToConsole = false;
   _tol = tol;
   _applySmoothing = true;
-  _diagonalScaling = DIAGONAL_SCALING_DEFAULT;
 
   _computeCondest = false;
   _azOutput = AZ_warnings;
@@ -46,13 +43,12 @@ GMGSolver::GMGSolver(TSolutionPtr<double> fineSolution, MeshPtr coarseMesh, int 
   _finePartitionMap(fineSolution->getPartitionMap()),
   _gmgOperator(fineSolution->bc()->copyImposingZero(),coarseMesh,
                fineSolution->ip(), fineSolution->mesh(), fineSolution->getDofInterpreter(),
-               _finePartitionMap, coarseSolver, useStaticCondensation, DIAGONAL_SCALING_DEFAULT)
+               _finePartitionMap, coarseSolver, useStaticCondensation)
 {
   _maxIters = maxIters;
   _printToConsole = false;
   _tol = tol;
   _applySmoothing = true;
-  _diagonalScaling = DIAGONAL_SCALING_DEFAULT;
 
   _computeCondest = true;
   _azOutput = AZ_warnings;
@@ -113,10 +109,6 @@ int GMGSolver::solve(bool buildCoarseStiffness)
 {
   int rank = Teuchos::GlobalMPISession::getRank();
 
-  // in place of doing the scaling ourselves, for the moment I've switched
-  // over to using Aztec's built-in scaling.  This appears to be functionally identical.
-  bool useAztecToScaleDiagonally = true;
-
   Epetra_LinearProblem problem(_stiffnessMatrix.get(), _lhs.get(), _rhs.get());
   AztecOO solver(problem);
 
@@ -147,32 +139,19 @@ int GMGSolver::solve(bool buildCoarseStiffness)
   Epetra_Vector diagA_sqrt_inv(*map);
   Epetra_Vector diagA_inv(*map);
 
-  if (_diagonalScaling && !useAztecToScaleDiagonally)
-  {
-    int length = scale_vector.MyLength();
-    for (int i=0; i<length; i++) scale_vector[i] = 1.0 / sqrt(fabs(diagA[i]));
-
-    problem.LeftScale(scale_vector);
-    problem.RightScale(scale_vector);
-  }
-
   Teuchos::RCP<Epetra_MultiVector> diagA_ptr = Teuchos::rcp( &diagA, false );
 
   _gmgOperator.setStiffnessDiagonal(diagA_ptr);
 
   _gmgOperator.setApplySmoothingOperator(_applySmoothing);
-  _gmgOperator.setFineSolverUsesDiagonalScaling(_diagonalScaling);
 
-  if (buildCoarseStiffness) _gmgOperator.computeCoarseStiffnessMatrix(A);
+  if (buildCoarseStiffness)
+  {
+    _gmgOperator.computeCoarseStiffnessMatrix(A);
+    _gmgOperator.setUpSmoother(A);
+  }
 
-  if (_diagonalScaling && useAztecToScaleDiagonally)
-  {
-    solver.SetAztecOption(AZ_scaling, AZ_sym_diag);
-  }
-  else
-  {
-    solver.SetAztecOption(AZ_scaling, AZ_none);
-  }
+  solver.SetAztecOption(AZ_scaling, AZ_none);
   if (_useCG)
   {
     if (_computeCondest)
@@ -251,17 +230,6 @@ int GMGSolver::solve(bool buildCoarseStiffness)
     }
   }
 
-  //  Epetra_MultiVector *x = problem().GetLHS();
-  //  EpetraExt::MultiVectorToMatlabFile("/tmp/x.dat",*x);
-
-  if (_diagonalScaling && !useAztecToScaleDiagonally)
-  {
-    // reverse the scaling here
-    scale_vector.Reciprocal(scale_vector);
-    problem.LeftScale(scale_vector);
-    problem.RightScale(scale_vector);
-  }
-
   _gmgOperator.setStiffnessDiagonal(Teuchos::rcp((Epetra_MultiVector*) NULL ));
 
   _iterationCountLog.push_back(_iterationCount);
@@ -292,10 +260,4 @@ void GMGSolver::setPrintIterationCount(bool value)
 void GMGSolver::setUseConjugateGradient(bool value)
 {
   _useCG = value;
-}
-
-void GMGSolver::setUseDiagonalScaling(bool value)
-{
-  _diagonalScaling = value;
-  _gmgOperator.setFineSolverUsesDiagonalScaling(value);
 }

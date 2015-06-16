@@ -53,13 +53,12 @@ extern "C" void HPM_Stop(char *);
 
 GMGOperator::GMGOperator(BCPtr zeroBCs, MeshPtr coarseMesh, IPPtr coarseIP,
                          MeshPtr fineMesh, Teuchos::RCP<DofInterpreter> fineDofInterpreter, Epetra_Map finePartitionMap,
-                         Teuchos::RCP<Solver> coarseSolver, bool useStaticCondensation, bool fineSolverUsesDiagonalScaling) :
+                         Teuchos::RCP<Solver> coarseSolver, bool useStaticCondensation) :
 Narrator("GMGOperator"),
 _finePartitionMap(finePartitionMap), _br(true)
 {
   _useStaticCondensation = useStaticCondensation;
   _fineDofInterpreter = fineDofInterpreter;
-  _fineSolverUsesDiagonalScaling = false;
 
   _hierarchicalNeighborsForSchwarz = false;
 
@@ -95,31 +94,14 @@ _finePartitionMap(finePartitionMap), _br(true)
   setSmootherType(IFPACK_ADDITIVE_SCHWARZ); // default
   _smootherOverlap = 0;
 
-  {
-    // DEBUGGING
-//    GlobalIndexType fineGlobalDofCount = _fineMesh->numGlobalDofs();
-//    GlobalIndexType coarseGlobalDofCount = _coarseMesh->numGlobalDofs();
-//    cout << "Global dof count for fine mesh: " << fineGlobalDofCount << endl;
-//    cout << "Global dof count for coarse mesh: " << coarseGlobalDofCount << endl;
-  }
-
   if (( coarseMesh->meshUsesMaximumRule()) || (! fineMesh->meshUsesMinimumRule()) )
   {
     cout << "GMGOperator only supports minimum rule.\n";
     TEUCHOS_TEST_FOR_EXCEPTION(true, std::invalid_argument, "GMGOperator only supports minimum rule.");
   }
 
-//  cout << "Note: for debugging, GMGOperator writes coarse solution matrix to /tmp/A_coarse.dat.\n";
-//  _coarseSolution->setWriteMatrixToFile(true, "/tmp/A_coarse.dat");
-
-//  GDAMinimumRule* minRule = dynamic_cast<GDAMinimumRule *>(coarseMesh->globalDofAssignment().get());
-
-//  int rank = Teuchos::GlobalMPISession::getRank();
-//  if (rank==1)
-//    minRule->printGlobalDofInfo();
-
   _coarseSolution->initializeLHSVector();
-  _coarseSolution->initializeStiffnessAndLoad(); // actually don't need to initial stiffness anymore; we'll do this in computeCoarseStiffnessMatrix
+  _coarseSolution->initializeStiffnessAndLoad(); // actually don't need to initialize stiffness anymore; we'll do this in computeCoarseStiffnessMatrix
 
   // now that:
   //   a) CondensedDofInterpreter can supply local stiffness matrices as needed, and
@@ -147,15 +129,13 @@ _finePartitionMap(finePartitionMap), _br(true)
   prolongationTimingReport << "Prolongation operator constructed in " << _timeProlongationOperatorConstruction << " seconds.";
   narrate(prolongationTimingReport.str());
 
-  _fineSolverUsesDiagonalScaling = false;
-  setFineSolverUsesDiagonalScaling(fineSolverUsesDiagonalScaling);
-
   _timeConstruction += constructionTimer.ElapsedTime();
 }
 
 void GMGOperator::clearTimings()
 {
-  _timeMapFineToCoarse = 0, _timeMapCoarseToFine = 0, _timeConstruction = 0, _timeCoarseSolve = 0, _timeCoarseImport = 0, _timeLocalCoefficientMapConstruction = 0, _timeComputeCoarseStiffnessMatrix = 0, _timeProlongationOperatorConstruction = 0;
+  _timeMapFineToCoarse = 0, _timeMapCoarseToFine = 0, _timeConstruction = 0, _timeCoarseSolve = 0, _timeCoarseImport = 0, _timeLocalCoefficientMapConstruction = 0, _timeComputeCoarseStiffnessMatrix = 0, _timeProlongationOperatorConstruction = 0,
+  _timeSetUpSmoother = 0;
 }
 
 void GMGOperator::computeCoarseStiffnessMatrix(Epetra_CrsMatrix *fineStiffnessMatrix)
@@ -178,18 +158,10 @@ void GMGOperator::computeCoarseStiffnessMatrix(Epetra_CrsMatrix *fineStiffnessMa
     }
   }
 
-#ifdef HAVE_MPI
-  Epetra_MpiComm Comm(MPI_COMM_WORLD);
-  //cout << "rank: " << rank << " of " << numProcs << endl;
-#else
-  Epetra_SerialComm Comm;
-#endif
-  Epetra_Time coarseStiffnessTimer(Comm);
-
 //  cout << "Writing fine stiffness to disk before setting up smoother.\n";
 //  EpetraExt::RowMatrixToMatrixMarketFile("/tmp/A.dat",*fineStiffnessMatrix, NULL, NULL, false); // false: don't write header
-
-  setUpSmoother(fineStiffnessMatrix);
+  
+  Epetra_Time coarseStiffnessTimer(Comm());
 
 //  EpetraExt::RowMatrixToMatrixMarketFile("/tmp/A.dat",*fineStiffnessMatrix, NULL, NULL, false); // false: don't write header
 
@@ -748,14 +720,6 @@ int GMGOperator::ApplyInverse(const Epetra_MultiVector& X_in, Epetra_MultiVector
   Epetra_Time timer(Comm());
 
   Epetra_MultiVector X(X_in); // looks like Y may be stored in the same location as X_in, so that changing Y will change X, too...
-  if (_fineSolverUsesDiagonalScaling)
-  {
-    if (printVerboseOutput) cout << "multiplying X by _diag_sqrt\n";
-    // Here, we assume symmetric diagonal scaling: D^-1/2 A D^-1/2, where A is the fine matrix.
-    // (because the inverse that we otherwise approximate is A^-1, we now approximate D^1/2 A^-1 D^1/2)
-    X.Multiply(1.0, *_diag_sqrt, X, 0);
-    if (printVerboseOutput) cout << "finished multiplying X by _diag_sqrt\n";
-  }
 
   if (printVerboseOutput) cout << "calling _coarseSolution->getRHSVector()\n";
   Teuchos::RCP<Epetra_FEVector> coarseRHSVector = _coarseSolution->getRHSVector();
@@ -827,13 +791,6 @@ int GMGOperator::ApplyInverse(const Epetra_MultiVector& X_in, Epetra_MultiVector
   else
   {
     //    cout << "_diag is NULL.\n";
-  }
-
-  if (_fineSolverUsesDiagonalScaling)
-  {
-    if (printVerboseOutput) cout << "calling Y.Multiply(1.0, *_diag_sqrt, Y, 0)\n";
-    Y.Multiply(1.0, *_diag_sqrt, Y, 0);
-    if (printVerboseOutput) cout << "finished Y.Multiply(1.0, *_diag_sqrt, Y, 0)\n";
   }
 
   /*
@@ -991,6 +948,7 @@ void GMGOperator::reportTimings() const
   reportValues["map coarse to fine"] = _timeMapCoarseToFine;
   reportValues["map fine to coarse"] = _timeMapFineToCoarse;
   reportValues["compute coarse stiffness matrix"] = _timeComputeCoarseStiffnessMatrix;
+  reportValues["set up smoother"] = _timeSetUpSmoother;
 
   for (map<string,double>::iterator reportIt = reportValues.begin(); reportIt != reportValues.end(); reportIt++)
   {
@@ -1033,14 +991,6 @@ void GMGOperator::setFillRatio(double fillRatio)
 {
   _fillRatio = fillRatio;
 //  cout << "fill ratio set to " << fillRatio << endl;
-}
-
-void GMGOperator::setFineSolverUsesDiagonalScaling(bool value)
-{
-  if (value != _fineSolverUsesDiagonalScaling)
-  {
-    _fineSolverUsesDiagonalScaling = value;
-  }
 }
 
 void GMGOperator::setLevelOfFill(int fillLevel)
@@ -1102,6 +1052,8 @@ void GMGOperator::setSmootherType(GMGOperator::SmootherChoice smootherType)
 void GMGOperator::setUpSmoother(Epetra_CrsMatrix *fineStiffnessMatrix)
 {
   narrate("setUpSmoother()");
+  Epetra_Time smootherSetupTimer(Comm());
+  
   SmootherChoice choice = _smootherType;
 
   Teuchos::ParameterList List;
@@ -1270,28 +1222,8 @@ void GMGOperator::setUpSmoother(Epetra_CrsMatrix *fineStiffnessMatrix)
     cout << "WARNING: In GMGOperator, smoother->Compute() returned with err = " << err << endl;
   }
 
-//  int rank = Teuchos::GlobalMPISession::getRank();
-//  {
-//    // TEST CODE: compute and output condest
-//    double condest = smoother->Condest(Ifpack_CG);
-//
-//    if (rank==0) {
-//      cout << "smoother condest = " << condest << endl;
-//    }
-//  }
-
-//  {
-//    if (rank==0) cout << "Converting IfPack smoother to an Epetra_CrsMatrix.\n";
-//    // TEST CODE: construct an Epetra_Matrix and output to disk:
-//    Teuchos::RCP<Epetra_CrsMatrix> matrix = Epetra_Operator_to_Epetra_Matrix::constructInverseMatrix(*smoother, _finePartitionMap);
-//
-//    string smoother_path = "/tmp/smoother.dat";
-//    cout << "Writing smoother to disk at " << smoother_path << endl;
-//    EpetraExt::RowMatrixToMatrixMarketFile(smoother_path.c_str(), *matrix, NULL, NULL, false); // false: don't write header
-//  }
-
   _smoother = smoother;
-
+  _timeSetUpSmoother = smootherSetupTimer.ElapsedTime();
 }
 
 void GMGOperator::setUseHierarchicalNeighborsForSchwarz(bool value)

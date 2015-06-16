@@ -47,7 +47,6 @@ class GMGOperator : public Epetra_Operator, public Narrator
   MeshPtr _fineMesh, _coarseMesh;
   Epetra_Map _finePartitionMap;
 
-  bool _fineSolverUsesDiagonalScaling;
   bool _applySmoothingOperator; // almost always true; false for some tests
   BCPtr _bc;
 
@@ -62,7 +61,8 @@ class GMGOperator : public Epetra_Operator, public Narrator
   Teuchos::RCP<Epetra_MultiVector> _diag_sqrt; // square root of the diagonal of the fine (global) stiffness matrix
   Teuchos::RCP<Epetra_MultiVector> _diag_inv; // inverse of the diagonal
 
-  mutable double _timeMapFineToCoarse, _timeMapCoarseToFine, _timeCoarseImport, _timeConstruction, _timeCoarseSolve, _timeLocalCoefficientMapConstruction, _timeComputeCoarseStiffnessMatrix, _timeProlongationOperatorConstruction;  // totals over the life of the object
+  mutable double _timeMapFineToCoarse, _timeMapCoarseToFine, _timeCoarseImport, _timeConstruction, _timeCoarseSolve, _timeLocalCoefficientMapConstruction, _timeComputeCoarseStiffnessMatrix, _timeProlongationOperatorConstruction,
+      _timeSetUpSmoother; // totals over the life of the object
 
   mutable bool _haveSolvedOnCoarseMesh; // if this is true, then we can call resolve() instead of solve().
 
@@ -88,8 +88,7 @@ public:
   //! Constructor
   GMGOperator(BCPtr zeroBCs, MeshPtr coarseMesh, IPPtr coarseIP, MeshPtr fineMesh,
               Teuchos::RCP<DofInterpreter> fineDofInterpreter, Epetra_Map finePartitionMap,
-              Teuchos::RCP<Solver> coarseSolver, bool useStaticCondensation,
-              bool fineSolverUsesDiagonalScaling = true); // TODO: eliminate the fineSolverUsesDiagonalScaling option
+              Teuchos::RCP<Solver> coarseSolver, bool useStaticCondensation);
   //@}
 
   //! @name Attribute set methods
@@ -231,8 +230,6 @@ public:
 
   void setLevelOfFill(int fillLevel);
   void setFillRatio(double fillRatio);
-
-  void setFineSolverUsesDiagonalScaling(bool value);
 
   //! If true, use sibling/cousin relationships to define neighborhoods for Schwarz blocks.  Requires CAMELLIA_ADDITIVE_SCHWARZ as the smoother choice.
   void setUseHierarchicalNeighborsForSchwarz(bool value);
