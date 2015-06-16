@@ -54,7 +54,7 @@ public:
   GMGSolver(TSolutionPtr<double> fineSolution, MeshPtr coarseMesh, int maxIters, double tol, Teuchos::RCP<Solver> coarseSolver, bool useStaticCondensation);
   GMGSolver(TSolutionPtr<double> fineSolution, int maxIters, double tol, Teuchos::RCP<Solver> coarseSolver, bool useStaticCondensation);
   GMGSolver(TSolutionPtr<double> fineSolution, const std::vector<MeshPtr> &meshesCoarseToFine, int maxIters, double tol,
-            Teuchos::RCP<Solver> coarseSolver = Solver::getDirectSolver(), bool useStaticCondensation = false);
+            Teuchos::RCP<Solver> coarseSolver = Solver::getDirectSolver(true), bool useStaticCondensation = false);
 
   double condest();
 
