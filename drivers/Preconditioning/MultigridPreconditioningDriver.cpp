@@ -251,6 +251,7 @@ void initializeSolutionAndCoarseMesh(SolutionPtr &solution, vector<MeshPtr> &mes
   
   int H1Order_coarse = 0 + 1;
   MeshPtr k0Mesh = MeshFactory::rectilinearMesh(bf, dimensions, elementCounts, H1Order_coarse, delta_k, x0);
+
   
   // get a sample cell topology:
   CellTopoPtr cellTopo = k0Mesh->getTopology()->getCell(0)->topology();
@@ -307,7 +308,7 @@ int main(int argc, char *argv[])
   Teuchos::CommandLineProcessor cmdp(false,true); // false: don't throw exceptions; true: do return errors for unrecognized options
 
   int k = 1; // poly order for field variables
-  int delta_k = -1;   // test space enrichment; -1 for default detection (defaults to spaceDim)
+  int delta_k = 1;   // test space enrichment
 
   bool conformingTraces = false;
 
@@ -400,7 +401,21 @@ int main(int argc, char *argv[])
   Teuchos::RCP<GMGSolver> gmgSolver = Teuchos::rcp(new GMGSolver(solution, meshesCoarseToFine, cgMaxIterations, cgTol, coarseSolver));
   gmgSolver->setAztecOutput(10);
   
+  int numDofs = solution->mesh()->numGlobalDofs();
+  int numElements = solution->mesh()->numActiveElements();
+  if (rank==0)
+  {
+    cout << "Solving " << spaceDim << "D " << problemChoiceString << " problem with " << numDofs << " global degrees of freedom on ";
+    cout << numElements << " elements.\n";
+  }
+  
   solution->solve(gmgSolver);
+  
+  if (rank==0)
+  {
+    cout << "Finest GMGOperator, timing report:\n";
+  }
+  gmgSolver->gmgOperator()->reportTimings();
   
   return 0;
 }
