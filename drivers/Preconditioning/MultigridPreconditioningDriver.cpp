@@ -395,7 +395,9 @@ int main(int argc, char *argv[])
   initializeSolutionAndCoarseMesh(solution, meshesCoarseToFine, ip, problemChoice, spaceDim, conformingTraces, useCondensedSolve,
                                   numCells, k, delta_k, numCellsRootMesh, useZeroMeanConstraints);
   
-  Teuchos::RCP<GMGSolver> gmgSolver = Teuchos::rcp(new GMGSolver(solution, meshesCoarseToFine, cgMaxIterations, cgTol));
+  bool reuseFactorization = true;
+  SolverPtr coarseSolver = Solver::getDirectSolver(reuseFactorization);
+  Teuchos::RCP<GMGSolver> gmgSolver = Teuchos::rcp(new GMGSolver(solution, meshesCoarseToFine, cgMaxIterations, cgTol, coarseSolver));
   gmgSolver->setAztecOutput(10);
   
   solution->solve(gmgSolver);
