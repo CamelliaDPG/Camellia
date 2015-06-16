@@ -86,9 +86,8 @@ TEUCHOS_UNIT_TEST( GMGOperator, ProlongationOperatorLine )
   BCPtr bc = BC::bc();
   SolverPtr coarseSolver = Solver::getSolver(Solver::KLU, true);
   bool useStaticCondensation = false;
-  bool fineSolverUsesDiagonalScaling = false;
   GMGOperator gmgOperator(bc,mesh,ip,fineMesh,fineSoln->getDofInterpreter(),
-                          fineSoln->getPartitionMap(),coarseSolver, useStaticCondensation, fineSolverUsesDiagonalScaling);
+                          fineSoln->getPartitionMap(),coarseSolver, useStaticCondensation);
 
   Teuchos::RCP<Epetra_CrsMatrix> P = gmgOperator.constructProlongationOperator();
   Teuchos::RCP<Epetra_FEVector> coarseSolutionVector = coarseSoln->getLHSVector();
@@ -162,9 +161,8 @@ TEUCHOS_UNIT_TEST( GMGOperator, ProlongationOperatorQuad_Simple )
   BCPtr bc = BC::bc();
   SolverPtr coarseSolver = Solver::getSolver(Solver::KLU, true);
   bool useStaticCondensation = false;
-  bool fineSolverUsesDiagonalScaling = false;
   GMGOperator gmgOperator(bc,mesh,bf->graphNorm(),fineMesh,fineSoln->getDofInterpreter(),
-                          fineSoln->getPartitionMap(),coarseSolver, useStaticCondensation, fineSolverUsesDiagonalScaling);
+                          fineSoln->getPartitionMap(),coarseSolver, useStaticCondensation);
 
 //    LocalDofMapperPtr dofMapper_1 = gmgOperator.getLocalCoefficientMap(1);
 //    dofMapper_1->printMappingReport();
@@ -284,9 +282,8 @@ TEUCHOS_UNIT_TEST( GMGOperator, ProlongationOperatorQuad_Slow )
   BCPtr bc = BC::bc();
   SolverPtr coarseSolver = Solver::getSolver(Solver::KLU, true);
   bool useStaticCondensation = false;
-  bool fineSolverUsesDiagonalScaling = false;
   GMGOperator gmgOperator(bc,mesh,ip,fineMesh,fineSoln->getDofInterpreter(),
-                          fineSoln->getPartitionMap(),coarseSolver, useStaticCondensation, fineSolverUsesDiagonalScaling);
+                          fineSoln->getPartitionMap(),coarseSolver, useStaticCondensation);
 
   Teuchos::RCP<Epetra_CrsMatrix> P = gmgOperator.constructProlongationOperator();
   Teuchos::RCP<Epetra_FEVector> coarseSolutionVector = coarseSoln->getLHSVector();

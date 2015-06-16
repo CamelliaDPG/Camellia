@@ -14,6 +14,7 @@
 #ifdef HAVE_AMESOS_SUPERLUDIST
 #include "Amesos_Superludist.h"
 
+#include "CamelliaDebugUtility.h"
 #include "MPIWrapper.h"
 
 namespace Camellia {
@@ -35,8 +36,17 @@ namespace Camellia {
       Teuchos::ParameterList paramList;
       paramList.set("MaxProcs",-3); // -3 means all processors will be used
       
+//      if (!_havePrintedStatus)
+//      {
+//        if (MPIWrapper::rank() == 0)
+//        {
+//          cout << "SuperLUDist, about to solve with a matrix of " << this->_stiffnessMatrix->RowMap().NumGlobalElements() << " rows:\n";
+//        }
+//      }
+      
       if (!_saveFactorization)
       {
+        _havePrintedStatus = true;
         Epetra_LinearProblem problem(this->_stiffnessMatrix.get(), this->_lhs.get(), this->_rhs.get());
         Amesos_Superludist slu(problem);
         slu.SetParameters(paramList);

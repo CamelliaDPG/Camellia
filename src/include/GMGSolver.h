@@ -27,7 +27,6 @@ class GMGSolver : public Solver, public Narrator
   GMGOperator _gmgOperator;
 
   bool _applySmoothing;    // whether we should add the smoothing term (almost always want this--basically we turn off for some tests)
-  bool _diagonalScaling;   // whether we should scale the entire system by the diagonal
 
   bool _computeCondest;
 
@@ -63,8 +62,6 @@ public:
   void setApplySmoothingOperator(bool applySmoothingOp);
 
   void setComputeConditionNumberEstimate(bool value);
-  
-  void setUseDiagonalScaling(bool value);
 
   void setTolerance(double tol);
 
