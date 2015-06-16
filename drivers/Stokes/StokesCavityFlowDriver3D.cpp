@@ -530,7 +530,7 @@ int main(int argc, char *argv[])
                                 solution->getPartitionMap(), maxIters, tol, intermediateSolver, useCondensedSolve);
     }
     gmgSolver->setAztecOutput(100); // print residual every 100 iterations;
-//    gmgSolver->gmgOperator().constructLocalCoefficientMaps(); // for separating out the timings
+//    gmgSolver->gmgOperator()->constructLocalCoefficientMaps(); // for separating out the timings
     fineSolver = Teuchos::rcp( gmgSolver );
   }
   else
@@ -560,8 +560,8 @@ int main(int argc, char *argv[])
 
   if (useGMGSolver)
   {
-    gmgSolver->gmgOperator().reportTimings();
-    gmgSolver->gmgOperator().clearTimings();
+    gmgSolver->gmgOperator()->reportTimings();
+    gmgSolver->gmgOperator()->clearTimings();
   }
 
 #ifdef HAVE_EPETRAEXT_HDF5
@@ -659,7 +659,7 @@ int main(int argc, char *argv[])
                                     solution->getPartitionMap(), maxIters, tol, intermediateSolver, useCondensedSolve);
         }
         gmgSolver->setAztecOutput(100); // print residual every 100 iterations;
-        //    gmgSolver->gmgOperator().constructLocalCoefficientMaps(); // for separating out the timings
+        //    gmgSolver->gmgOperator()->constructLocalCoefficientMaps(); // for separating out the timings
         fineSolver = Teuchos::rcp( gmgSolver );
       }
       else
@@ -676,8 +676,8 @@ int main(int argc, char *argv[])
     solution->reportTimings();
     if (useGMGSolver)
     {
-      gmgSolver->gmgOperator().reportTimings();
-      gmgSolver->gmgOperator().clearTimings();
+      gmgSolver->gmgOperator()->reportTimings();
+      gmgSolver->gmgOperator()->clearTimings();
     }
 
 #ifdef HAVE_EPETRAEXT_HDF5

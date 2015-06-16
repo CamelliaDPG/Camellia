@@ -548,7 +548,7 @@ bool GMGTests::testGMGOperatorP()
                                         solnFine->getPartitionMap(),
                                         maxIters, iter_tol, coarseSolver, useStaticCondensation) );
 
-    GMGOperator* gmgOperator = &gmgSolver->gmgOperator();
+    Teuchos::RCP<GMGOperator> gmgOperator = gmgSolver->gmgOperator();
 
     GDAMinimumRule* coarseGDA = dynamic_cast< GDAMinimumRule*>(coarseMesh->globalDofAssignment().get());
 
@@ -733,13 +733,13 @@ bool GMGTests::testGMGSolverIdentity2DRefinedMeshes()
         Teuchos::RCP<Epetra_Vector> diagA_sqrt = Teuchos::rcp( new Epetra_Vector(*map, 1) );
         diagA_sqrt->Reciprocal(*diagA_sqrt_inv);
 
-        gmgSolver->gmgOperator().setSmootherType(GMGOperator::POINT_JACOBI);
-        gmgSolver->gmgOperator().computeCoarseStiffnessMatrix(A);
-        gmgSolver->gmgOperator().setUpSmoother(A);
+        gmgSolver->gmgOperator()->setSmootherType(GMGOperator::POINT_JACOBI);
+        gmgSolver->gmgOperator()->computeCoarseStiffnessMatrix(A);
+        gmgSolver->gmgOperator()->setUpSmoother(A);
 
         Epetra_MultiVector gmg_lhsVector(rhsVectorCopy.Map(), 1); // lhs has same distribution structure as rhs
-        gmgSolver->gmgOperator().setSmootherType(GMGOperator::NONE); // turn off for this next test, comparing direct solve to ApplyInverse
-        gmgSolver->gmgOperator().ApplyInverse(rhsVectorCopy2, gmg_lhsVector);
+        gmgSolver->gmgOperator()->setSmootherType(GMGOperator::NONE); // turn off for this next test, comparing direct solve to ApplyInverse
+        gmgSolver->gmgOperator()->ApplyInverse(rhsVectorCopy2, gmg_lhsVector);
 
         // determine the expected value
         Epetra_MultiVector directValue(*lhsVector); // x
@@ -900,7 +900,7 @@ bool GMGTests::testGMGSolverIdentityUniformMeshes()
             Teuchos::RCP<Epetra_Vector> diagA = Teuchos::rcp( new Epetra_Vector(*map) );
             A->ExtractDiagonalCopy(*diagA);
             
-            gmgSolver->gmgOperator().setStiffnessDiagonal(diagA);
+            gmgSolver->gmgOperator()->setStiffnessDiagonal(diagA);
             
             Teuchos::RCP<Epetra_Vector> diagA_inv = Teuchos::rcp( new Epetra_Vector(*map, 1) );
             Teuchos::RCP<Epetra_Vector> diagA_sqrt_inv = Teuchos::rcp( new Epetra_Vector(*map, 1) );
@@ -931,16 +931,16 @@ bool GMGTests::testGMGSolverIdentityUniformMeshes()
             
             if (applySmoothing)
             {
-              gmgSolver->gmgOperator().setSmootherType(GMGOperator::POINT_JACOBI);
+              gmgSolver->gmgOperator()->setSmootherType(GMGOperator::POINT_JACOBI);
             }
             else
             {
-              gmgSolver->gmgOperator().setSmootherType(GMGOperator::NONE);
+              gmgSolver->gmgOperator()->setSmootherType(GMGOperator::NONE);
             }
             
-            gmgSolver->gmgOperator().computeCoarseStiffnessMatrix(A);
-            gmgSolver->gmgOperator().setUpSmoother(A);
-            gmgSolver->gmgOperator().ApplyInverse(rhsVectorCopy2, gmg_lhsVector);
+            gmgSolver->gmgOperator()->computeCoarseStiffnessMatrix(A);
+            gmgSolver->gmgOperator()->setUpSmoother(A);
+            gmgSolver->gmgOperator()->ApplyInverse(rhsVectorCopy2, gmg_lhsVector);
             
             double tol = 1e-10;
             int minLID = gmg_lhsVector.Map().MinLID();
@@ -1267,9 +1267,9 @@ bool GMGTests::testProlongationOperator()
                                       exactPoissonSolution->getPartitionMap(),
                                       maxIters, iter_tol, coarseSolver, useStaticCondensation) );
 
-  gmgSolver->gmgOperator().constructLocalCoefficientMaps();
+  gmgSolver->gmgOperator()->constructLocalCoefficientMaps();
   GlobalIndexType cellID = 1; // the left cell in the fine mesh
-  LocalDofMapperPtr localCoefficientMap = gmgSolver->gmgOperator().getLocalCoefficientMap(cellID);
+  LocalDofMapperPtr localCoefficientMap = gmgSolver->gmgOperator()->getLocalCoefficientMap(cellID);
 
   bool traceToFieldsEnabled = true; // have not yet implemented the thing that will map fine traces to coarse fields
 
@@ -1367,7 +1367,7 @@ bool GMGTests::testProlongationOperator()
   }
 
   cellID = 2; // the right cell in the fine mesh
-  localCoefficientMap = gmgSolver->gmgOperator().getLocalCoefficientMap(cellID);
+  localCoefficientMap = gmgSolver->gmgOperator()->getLocalCoefficientMap(cellID);
 
   trialPtr = fineMesh->getElementType(cellID)->trialOrderPtr;
 

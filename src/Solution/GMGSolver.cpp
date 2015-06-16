@@ -21,10 +21,11 @@ GMGSolver::GMGSolver(BCPtr zeroBCs, MeshPtr coarseMesh, IPPtr coarseIP,
                      MeshPtr fineMesh, Teuchos::RCP<DofInterpreter> fineDofInterpreter, Epetra_Map finePartitionMap,
                      int maxIters, double tol, Teuchos::RCP<Solver> coarseSolver, bool useStaticCondensation) :
   Narrator("GMGSolver"),
-  _finePartitionMap(finePartitionMap),
-  _gmgOperator(zeroBCs,coarseMesh,coarseIP,fineMesh,fineDofInterpreter,
-               finePartitionMap,coarseSolver, useStaticCondensation)
+  _finePartitionMap(finePartitionMap)
 {
+  _gmgOperator = Teuchos::rcp(new GMGOperator(zeroBCs,coarseMesh,coarseIP,fineMesh,fineDofInterpreter,
+                                              finePartitionMap,coarseSolver, useStaticCondensation));
+  
   _maxIters = maxIters;
   _printToConsole = false;
   _tol = tol;
@@ -40,11 +41,11 @@ GMGSolver::GMGSolver(BCPtr zeroBCs, MeshPtr coarseMesh, IPPtr coarseIP,
 GMGSolver::GMGSolver(TSolutionPtr<double> fineSolution, MeshPtr coarseMesh, int maxIters, double tol,
                      Teuchos::RCP<Solver> coarseSolver, bool useStaticCondensation) :
   Narrator("GMGSolver"),
-  _finePartitionMap(fineSolution->getPartitionMap()),
-  _gmgOperator(fineSolution->bc()->copyImposingZero(),coarseMesh,
-               fineSolution->ip(), fineSolution->mesh(), fineSolution->getDofInterpreter(),
-               _finePartitionMap, coarseSolver, useStaticCondensation)
+  _finePartitionMap(fineSolution->getPartitionMap())
 {
+  _gmgOperator = Teuchos::rcp(new GMGOperator(fineSolution->bc()->copyImposingZero(),coarseMesh,
+                                              fineSolution->ip(), fineSolution->mesh(), fineSolution->getDofInterpreter(),
+                                              _finePartitionMap, coarseSolver, useStaticCondensation));
   _maxIters = maxIters;
   _printToConsole = false;
   _tol = tol;
@@ -55,6 +56,50 @@ GMGSolver::GMGSolver(TSolutionPtr<double> fineSolution, MeshPtr coarseMesh, int 
 
   _useCG = true;
   _azConvergenceOption = AZ_rhs;
+}
+
+GMGSolver::GMGSolver(TSolutionPtr<double> fineSolution, int maxIters, double tol,
+                     Teuchos::RCP<Solver> coarseSolver, bool useStaticCondensation) :
+Narrator("GMGSolver"),
+_finePartitionMap(fineSolution->getPartitionMap())
+{
+  _maxIters = maxIters;
+  _printToConsole = false;
+  _tol = tol;
+  _applySmoothing = true;
+  
+  _computeCondest = true;
+  _azOutput = AZ_warnings;
+  
+  _useCG = true;
+  _azConvergenceOption = AZ_rhs;
+  
+  // notion here is that we build a hierarchy of meshes in some intelligent way
+  // for now, we jump in p from whatever it is on the fine mesh to 0, and then
+  // do single h-coarsening steps until we reach the coarsest topology.
+  // TODO: implement this
+  TEUCHOS_TEST_FOR_EXCEPTION(true, std::invalid_argument, "This GMGSolver constructor not yet completed!");
+  
+  // once we have a list of meshes, use gmgOperatorFromMeshSequence to build the operator
+}
+
+GMGSolver::GMGSolver(TSolutionPtr<double> fineSolution, const std::vector<MeshPtr> &meshesCoarseToFine, int maxIters,
+                     double tol, Teuchos::RCP<Solver> coarseSolver, bool useStaticCondensation) :
+Narrator("GMGSolver"),
+_finePartitionMap(fineSolution->getPartitionMap())
+{
+  _maxIters = maxIters;
+  _printToConsole = false;
+  _tol = tol;
+  _applySmoothing = true;
+  
+  _computeCondest = true;
+  _azOutput = AZ_warnings;
+  
+  _useCG = true;
+  _azConvergenceOption = AZ_rhs;
+  
+  _gmgOperator = gmgOperatorFromMeshSequence(meshesCoarseToFine, fineSolution, coarseSolver, useStaticCondensation);
 }
 
 double GMGSolver::condest()
@@ -72,15 +117,60 @@ int GMGSolver::iterationCount()
   return _iterationCount;
 }
 
+Teuchos::RCP<GMGOperator> GMGSolver::gmgOperatorFromMeshSequence(const std::vector<MeshPtr> &meshesCoarseToFine, SolutionPtr fineSolution,
+                                                                 SolverPtr coarseSolver, bool useStaticCondensationInCoarseSolve)
+{
+  TEUCHOS_TEST_FOR_EXCEPTION(meshesCoarseToFine.size() < 2, std::invalid_argument, "meshesCoarseToFine must have at least two meshes");
+  Teuchos::RCP<GMGOperator> coarseOperator = Teuchos::null, finerOperator = Teuchos::null, finestOperator = Teuchos::null;
+  
+  Teuchos::RCP<DofInterpreter> fineDofInterpreter = fineSolution->getDofInterpreter();
+  IPPtr ip = fineSolution->ip();
+  BCPtr zeroBCs = fineSolution->bc()->copyImposingZero();
+  Epetra_Map finePartitionMap = fineSolution->getPartitionMap();
+  
+  for (int i=meshesCoarseToFine.size()-1; i>0; i--)
+  {
+    MeshPtr fineMesh = meshesCoarseToFine[i];
+    MeshPtr coarseMesh = meshesCoarseToFine[i-1];
+    if (i>1)
+    {
+      coarseOperator = Teuchos::rcp(new GMGOperator(zeroBCs, coarseMesh, fineMesh, fineDofInterpreter, finePartitionMap));
+    }
+    else
+    {
+      coarseOperator = Teuchos::rcp(new GMGOperator(zeroBCs,coarseMesh,ip,fineMesh,fineDofInterpreter,
+                                                    finePartitionMap, coarseSolver, useStaticCondensationInCoarseSolve));
+    }
+    coarseOperator->setSmootherType(GMGOperator::CAMELLIA_ADDITIVE_SCHWARZ);
+    bool hRefined = fineMesh->numActiveElements() > coarseMesh->numActiveElements();
+    coarseOperator->setUseHierarchicalNeighborsForSchwarz(hRefined);
+    if (hRefined) coarseOperator->setSmootherOverlap(1);
+
+    if (finerOperator != Teuchos::null)
+    {
+      finerOperator->setCoarseOperator(coarseOperator);
+    }
+    else
+    {
+      finestOperator = coarseOperator;
+    }
+    
+    finerOperator = coarseOperator;
+    finePartitionMap = finerOperator->getCoarseSolution()->getPartitionMap();
+    fineDofInterpreter = finerOperator->getCoarseSolution()->getDofInterpreter();
+  }
+  return finestOperator;
+}
+
 void GMGSolver::setApplySmoothingOperator(bool applySmoothingOp)
 {
   _applySmoothing = applySmoothingOp;
-  _gmgOperator.setApplySmoothingOperator(_applySmoothing);
+  _gmgOperator->setApplySmoothingOperator(_applySmoothing);
 }
 
 void GMGSolver::setFineMesh(MeshPtr fineMesh, Epetra_Map finePartitionMap)
 {
-  _gmgOperator.setFineMesh(fineMesh, finePartitionMap);
+  _gmgOperator->setFineMesh(fineMesh, finePartitionMap);
 }
 
 void GMGSolver::setPrintToConsole(bool printToConsole)
@@ -141,14 +231,14 @@ int GMGSolver::solve(bool buildCoarseStiffness)
 
   Teuchos::RCP<Epetra_MultiVector> diagA_ptr = Teuchos::rcp( &diagA, false );
 
-  _gmgOperator.setStiffnessDiagonal(diagA_ptr);
+  _gmgOperator->setStiffnessDiagonal(diagA_ptr);
 
-  _gmgOperator.setApplySmoothingOperator(_applySmoothing);
+  _gmgOperator->setApplySmoothingOperator(_applySmoothing);
 
   if (buildCoarseStiffness)
   {
-    _gmgOperator.computeCoarseStiffnessMatrix(A);
-    _gmgOperator.setUpSmoother(A);
+    _gmgOperator->computeCoarseStiffnessMatrix(A);
+    _gmgOperator->setUpSmoother(A);
   }
 
   solver.SetAztecOption(AZ_scaling, AZ_none);
@@ -176,7 +266,7 @@ int GMGSolver::solve(bool buildCoarseStiffness)
     }
   }
 
-  solver.SetPrecOperator(&_gmgOperator);
+  solver.SetPrecOperator(_gmgOperator.get());
   //  solver.SetAztecOption(AZ_precond, AZ_none);
   solver.SetAztecOption(AZ_precond, AZ_user_precond);
   solver.SetAztecOption(AZ_conv, _azConvergenceOption);
@@ -230,7 +320,7 @@ int GMGSolver::solve(bool buildCoarseStiffness)
     }
   }
 
-  _gmgOperator.setStiffnessDiagonal(Teuchos::rcp((Epetra_MultiVector*) NULL ));
+  _gmgOperator->setStiffnessDiagonal(Teuchos::rcp((Epetra_MultiVector*) NULL ));
 
   _iterationCountLog.push_back(_iterationCount);
 

@@ -262,8 +262,8 @@ int main(int argc, char *argv[])
     gmgSolver->setAztecOutput(AztecOutputLevel);
 
     gmgSolver->setUseConjugateGradient(true);
-    gmgSolver->gmgOperator().setSmootherType(GMGOperator::IFPACK_ADDITIVE_SCHWARZ);
-    gmgSolver->gmgOperator().setSmootherOverlap(schwarzOverlap);
+    gmgSolver->gmgOperator()->setSmootherType(GMGOperator::IFPACK_ADDITIVE_SCHWARZ);
+    gmgSolver->gmgOperator()->setSmootherOverlap(schwarzOverlap);
     solver = Teuchos::rcp( gmgSolver ); // we use "new" above, so we can let this RCP own the memory
   }
 
