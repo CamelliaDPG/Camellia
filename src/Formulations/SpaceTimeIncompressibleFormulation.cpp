@@ -44,15 +44,23 @@ const string SpaceTimeIncompressibleFormulation::s_tau2 = "tau2";
 const string SpaceTimeIncompressibleFormulation::s_tau3 = "tau3";
 const string SpaceTimeIncompressibleFormulation::s_q = "q";
 
-SpaceTimeIncompressibleFormulation::SpaceTimeIncompressibleFormulation(int spaceDim, double mu, bool useConformingTraces,
-    MeshTopologyPtr meshTopo, int fieldPolyOrder, int delta_k, string norm,
+SpaceTimeIncompressibleFormulation::SpaceTimeIncompressibleFormulation(int spaceDim, bool steady, double mu,
+    bool useConformingTraces, MeshTopologyPtr meshTopo, int fieldPolyOrder, int delta_k, string norm,
     LinearTermPtr forcingTerm, string savedSolutionAndMeshPrefix)
 {
   _spaceDim = spaceDim;
+  _steady = steady;
   _mu = mu;
   _useConformingTraces = useConformingTraces;
 
-  TEUCHOS_TEST_FOR_EXCEPTION(meshTopo->getDimension() != _spaceDim + 1, std::invalid_argument, "MeshTopo must be space-time mesh");
+  if (!steady)
+  {
+    TEUCHOS_TEST_FOR_EXCEPTION(meshTopo->getDimension() != _spaceDim + 1, std::invalid_argument, "MeshTopo must be space-time mesh for transient");
+  }
+  else
+  {
+    TEUCHOS_TEST_FOR_EXCEPTION(meshTopo->getDimension() != _spaceDim, std::invalid_argument, "MeshTopo must be spatial mesh for steady");
+  }
   TEUCHOS_TEST_FOR_EXCEPTION(mu==0, std::invalid_argument, "mu may not be 0!");
   TEUCHOS_TEST_FOR_EXCEPTION(spaceDim==1, std::invalid_argument, "Incompressible Navier-Stokes is trivial for spaceDim=1");
   TEUCHOS_TEST_FOR_EXCEPTION((spaceDim != 2) && (spaceDim != 3), std::invalid_argument, "spaceDim must be 2 or 3");
@@ -196,12 +204,19 @@ SpaceTimeIncompressibleFormulation::SpaceTimeIncompressibleFormulation(int space
   }
   else
   {
-    // BFPTR version should be deprecated
+    // // BFPTR version should be deprecated
     _mesh = MeshFactory::loadFromHDF5(_bf, savedSolutionAndMeshPrefix+".mesh");
     _solutionUpdate = Solution::solution(_bf, _mesh, bc);
     _solutionUpdate->loadFromHDF5(savedSolutionAndMeshPrefix+"_update.soln");
     _solutionBackground = Solution::solution(_bf, _mesh, bc);
     _solutionBackground->loadFromHDF5(savedSolutionAndMeshPrefix+"_background.soln");
+    // _mesh = Teuchos::rcp( new Mesh(meshTopo, _bf, H1Order, delta_k) ) ;
+    // _solutionUpdate = Solution::solution(_bf, _mesh, bc);
+    // _solutionBackground = Solution::solution(_bf, _mesh, bc);
+    // map<int, FunctionPtr> initialGuess;
+    // initialGuess[u(1)->ID()] = Function::zero();
+    // initialGuess[u(2)->ID()] = Function::zero();
+    // _solutionBackground->projectOntoMesh(initialGuess);
   }
 
   FunctionPtr u1_prev = Function::solution(u1, _solutionBackground);
@@ -221,8 +236,11 @@ SpaceTimeIncompressibleFormulation::SpaceTimeIncompressibleFormulation(int space
     _bf->addTerm(-u2hat, tau2 * n_x);
 
     // momentum equation
-    _bf->addTerm(-u1, v1->dt());
-    _bf->addTerm(-u2, v2->dt());
+    if (!steady)
+    {
+      _bf->addTerm(-u1, v1->dt());
+      _bf->addTerm(-u2, v2->dt());
+    }
     _bf->addTerm(-u1_prev*u1, v1->dx());
     _bf->addTerm(-u1_prev*u1, v1->dx());
     _bf->addTerm(-u2_prev*u1, v1->dy());
@@ -260,8 +278,11 @@ SpaceTimeIncompressibleFormulation::SpaceTimeIncompressibleFormulation(int space
   _rhs->addTerm( -u2_prev * tau2->div() );
 
   // momentum equation
-  _rhs->addTerm( u1_prev * v1->dt());
-  _rhs->addTerm( u2_prev * v2->dt());
+  if (!steady)
+  {
+    _rhs->addTerm( u1_prev * v1->dt());
+    _rhs->addTerm( u2_prev * v2->dt());
+  }
   _rhs->addTerm( u1_prev * u1_prev*v1->dx() );
   _rhs->addTerm( u1_prev * u2_prev*v1->dy() );
   _rhs->addTerm( u2_prev * u1_prev*v2->dx() );
@@ -295,8 +316,8 @@ SpaceTimeIncompressibleFormulation::SpaceTimeIncompressibleFormulation(int space
   _solutionUpdate->setIP(ip);
 
   // impose zero mean constraint
-  // _solutionUpdate->bc()->imposeZeroMeanConstraint(p->ID());
-  _solutionUpdate->bc()->singlePointBC(p->ID());
+  _solutionUpdate->bc()->imposeZeroMeanConstraint(p->ID());
+  // _solutionUpdate->bc()->singlePointBC(p->ID());
 
   _mesh->registerSolution(_solutionBackground);
   _mesh->registerSolution(_solutionUpdate);
@@ -321,43 +342,6 @@ IPPtr SpaceTimeIncompressibleFormulation::ip(string normName)
 {
   return _ips.at(normName);
 }
-
-// void SpaceTimeIncompressibleFormulation::initializeSolution(string norm, LinearTermPtr forcingTerm)
-// {
-//   this->initializeSolution(norm, forcingTerm, "");
-// }
-//
-// void SpaceTimeIncompressibleFormulation::initializeSolution(std::string filePrefix, string norm, LinearTermPtr forcingTerm)
-// {
-//   this->initializeSolution(norm, forcingTerm, filePrefix);
-// }
-
-// void SpaceTimeIncompressibleFormulation::initializeSolution(string norm, LinearTermPtr forcingTerm, string savedSolutionAndMeshPrefix)
-// {
-  // if (savedSolutionAndMeshPrefix == "")
-  // {
-  //   _solutionUpdate = Solution::solution(_mesh,bc);
-  // }
-  // else
-  // {
-  //   _solutionUpdate = Solution::solution(_mesh, bc);
-  //   _solutionUpdate->loadFromHDF5(savedSolutionAndMeshPrefix+".soln");
-  // }
-
-  // IPPtr ip = _ips.at(norm);
-  // if (forcingTerm != Teuchos::null)
-  //   _rhs->addTerm(forcingTerm);
-
-  // _solutionUpdate->setRHS(_rhs);
-  // _solutionUpdate->setIP(ip);
-
-  // _mesh->registerSolution(_solutionUpdate); // will project both time steps during refinements...
-
-  // LinearTermPtr residual = _rhs->linearTerm() - _bf->testFunctional(_solutionUpdate,false); // false: don't exclude boundary terms
-
-  // double energyThreshold = 0.2;
-  // _refinementStrategy = Teuchos::rcp( new RefinementStrategy( _mesh, residual, ip, energyThreshold ) );
-// }
 
 double SpaceTimeIncompressibleFormulation::mu()
 {

@@ -6,6 +6,7 @@
 #include "InnerProductScratchPad.h"
 #include "RefinementStrategy.h"
 #include "Solution.h"
+#include "SpatialFilter.h"
 #include "HDF5Exporter.h"
 
 #include "GlobalDofAssignment.h"
@@ -15,6 +16,8 @@
 #ifdef HAVE_MPI
 #include <Teuchos_GlobalMPISession.hpp>
 #endif
+
+using namespace Camellia;
 
 vector<double> makeVertex(double v0)
 {
@@ -39,15 +42,6 @@ vector<double> makeVertex(double v0, double v1, double v2)
   v.push_back(v2);
   return v;
 }
-
-class EntireBoundary : public SpatialFilter
-{
-public:
-  bool matchesPoint(double x, double y)
-  {
-    return true;
-  }
-};
 
 int main(int argc, char *argv[])
 {
@@ -114,8 +108,10 @@ int main(int argc, char *argv[])
   // }
   {
     // 2D tests
-    CellTopoPtrLegacy quad_4 = Teuchos::rcp( new shards::CellTopology(shards::getCellTopologyData<shards::Quadrilateral<4> >() ) );
-    CellTopoPtrLegacy tri_3 = Teuchos::rcp( new shards::CellTopology(shards::getCellTopologyData<shards::Triangle<3> >() ) );
+    // CellTopoPtrLegacy quad_4 = Teuchos::rcp( new shards::CellTopology(shards::getCellTopologyData<shards::Quadrilateral<4> >() ) );
+    // CellTopoPtrLegacy tri_3 = Teuchos::rcp( new shards::CellTopology(shards::getCellTopologyData<shards::Triangle<3> >() ) );
+    CellTopoPtr quad_4 = CellTopology::quad();
+    CellTopoPtr tri_3 = CellTopology::triangle();
 
     // let's draw a little house
     vector<double> v0 = makeVertex(-1,0);
@@ -146,7 +142,8 @@ int main(int argc, char *argv[])
     elementVertices.push_back(quadVertexList);
     elementVertices.push_back(triVertexList);
 
-    vector< CellTopoPtrLegacy > cellTopos;
+    // vector< CellTopoPtrLegacy > cellTopos;
+    vector< CellTopoPtr> cellTopos;
     cellTopos.push_back(quad_4);
     cellTopos.push_back(tri_3);
     MeshGeometryPtr meshGeometry = Teuchos::rcp( new MeshGeometry(vertices, elementVertices, cellTopos) );
@@ -155,18 +152,18 @@ int main(int argc, char *argv[])
 
     ////////////////////   DECLARE VARIABLES   ///////////////////////
     // define test variables
-    VarFactory varFactory;
-    VarPtr tau = varFactory.testVar("tau", HDIV);
-    VarPtr v = varFactory.testVar("v", HGRAD);
+    VarFactoryPtr vf = VarFactory::varFactory();
+    VarPtr tau = vf->testVar("tau", HDIV);
+    VarPtr v = vf->testVar("v", HGRAD);
 
     // define trial variables
-    VarPtr uhat = varFactory.traceVar("uhat");
-    VarPtr fhat = varFactory.fluxVar("fhat");
-    VarPtr u = varFactory.fieldVar("u");
-    VarPtr sigma = varFactory.fieldVar("sigma", VECTOR_L2);
+    VarPtr uhat = vf->traceVar("uhat");
+    VarPtr fhat = vf->fluxVar("fhat");
+    VarPtr u = vf->fieldVar("u");
+    VarPtr sigma = vf->fieldVar("sigma", VECTOR_L2);
 
     ////////////////////   DEFINE BILINEAR FORM   ///////////////////////
-    BFPtr bf = Teuchos::rcp( new BF(varFactory) );
+    BFPtr bf = Teuchos::rcp( new BF(vf) );
     // tau terms:
     bf->addTerm(sigma, tau);
     bf->addTerm(u, tau->div());
@@ -187,13 +184,13 @@ int main(int argc, char *argv[])
     ////////////////////   CREATE BCs   ///////////////////////
     BCPtr bc = BC::bc();
     FunctionPtr zero = Function::zero();
-    SpatialFilterPtr entireBoundary = Teuchos::rcp( new EntireBoundary );
+    SpatialFilterPtr entireBoundary = SpatialFilter::allSpace();
     bc->addDirichlet(uhat, entireBoundary, zero);
 
     ////////////////////   SOLVE & REFINE   ///////////////////////
 
     // Output solution
-    FieldContainer<GlobalIndexType> savedCellPartition;
+    Intrepid::FieldContainer<GlobalIndexType> savedCellPartition;
     Teuchos::RCP<Epetra_FEVector> savedLHSVector;
 
     {
@@ -205,7 +202,8 @@ int main(int argc, char *argv[])
       solution->solve(false);
       RefinementStrategy refinementStrategy( solution, 0.2);
       HDF5Exporter exporter(mesh, "Poisson");
-      exporter.exportSolution(solution, varFactory, 0, 2, cellIDToSubdivision(mesh, 4));
+      // exporter.exportSolution(solution, vf, 0, 2, cellIDToSubdivision(mesh, 4));
+      exporter.exportSolution(solution, 0, 2);
       mesh->saveToHDF5("MeshSave.h5");
       solution->saveToHDF5("SolnSave.h5");
       solution->save("PoissonProblem");
@@ -216,7 +214,7 @@ int main(int argc, char *argv[])
       //   solution->solve(false);
       //   mesh->saveToHDF5("MeshSave.h5");
       //   solution->saveToHDF5("SolnSave.h5");
-      //   exporter.exportSolution(solution, varFactory, ref, 2, cellIDToSubdivision(mesh, 4));
+      //   exporter.exportSolution(solution, vf, ref, 2, cellIDToSubdivision(mesh, 4));
       // }
       mesh->globalDofAssignment()->getPartitions(savedCellPartition);
       savedLHSVector = solution->getLHSVector();
@@ -224,18 +222,19 @@ int main(int argc, char *argv[])
     {
       SolutionPtr loadedSolution = Solution::load(bf, "PoissonProblem");
       HDF5Exporter exporter(loadedSolution->mesh(), "ProblemLoaded");
-      exporter.exportSolution(loadedSolution, varFactory, 0, 2, cellIDToSubdivision(loadedSolution->mesh(), 4));
+      // exporter.exportSolution(loadedSolution, vf, 0, 2, cellIDToSubdivision(loadedSolution->mesh(), 4));
+      exporter.exportSolution(loadedSolution, 0, 2);
     }
     // {
     //   MeshPtr loadedMesh = MeshFactory::loadFromHDF5(bf, "Test0.h5");
     //   Teuchos::RCP<Solution> loadedSolution = Teuchos::rcp( new Solution(loadedMesh, bc, rhs, ip) );
     //   loadedSolution->solve(false);
     //   HDF5Exporter exporter(loadedMesh, "MeshLoaded");
-    //   exporter.exportSolution(loadedSolution, varFactory, 0, 2, cellIDToSubdivision(loadedMesh, 4));
+    //   exporter.exportSolution(loadedSolution, vf, 0, 2, cellIDToSubdivision(loadedMesh, 4));
     // }
     {
       MeshPtr loadedMesh = MeshFactory::loadFromHDF5(bf, "MeshSave.h5");
-      FieldContainer<GlobalIndexType> loadedCellPartition;
+      Intrepid::FieldContainer<GlobalIndexType> loadedCellPartition;
       loadedMesh->globalDofAssignment()->getPartitions(loadedCellPartition);
       if (loadedCellPartition.size() != savedCellPartition.size())
       {
@@ -322,7 +321,8 @@ int main(int argc, char *argv[])
       }
 
       HDF5Exporter exporter(loadedMesh, "SolutionLoaded");
-      exporter.exportSolution(loadedSolution, varFactory, 0, 2, cellIDToSubdivision(loadedMesh, 4));
+      // exporter.exportSolution(loadedSolution, vf, 0, 2, cellIDToSubdivision(loadedMesh, 4));
+      exporter.exportSolution(loadedSolution, 0, 2);
     }
   }
 
