@@ -25,6 +25,8 @@
 #include "ExpFunction.h"
 #include "TrigFunctions.h"
 
+#include <unistd.h>
+
 using namespace Camellia;
 
 class IncompressibleProblem
@@ -39,6 +41,7 @@ class IncompressibleProblem
     vector<int> _elementCounts;
     double _t0;
     double _t1;
+    bool _steady;
   public:
     LinearTermPtr forcingTerm = Teuchos::null;
     virtual MeshTopologyPtr meshTopology() = 0;
@@ -48,25 +51,39 @@ class IncompressibleProblem
 
 class AnalyticalIncompressibleProblem : public IncompressibleProblem
 {
+  protected:
+    map<int, FunctionPtr> _exactMap;
   public:
     virtual MeshTopologyPtr meshTopology()
     {
       MeshTopologyPtr spatialMeshTopo = MeshFactory::rectilinearMeshTopology(_dimensions, _elementCounts, _x0);
       MeshTopologyPtr spaceTimeMeshTopo = MeshFactory::spaceTimeMeshTopology(spatialMeshTopo, _t0, _t1);
-      return spaceTimeMeshTopo;
+      if (_steady)
+        return spatialMeshTopo;
+      else
+        return spaceTimeMeshTopo;
+    }
+
+    void initializeExactMap(SpaceTimeIncompressibleFormulationPtr form)
+    {
+      _exactMap[form->u(1)->ID()] = _u1_exact;
+      _exactMap[form->u(2)->ID()] = _u2_exact;
+      _exactMap[form->sigma(1,1)->ID()] = _sigma1_exact->x();
+      _exactMap[form->sigma(1,2)->ID()] = _sigma1_exact->y();
+      _exactMap[form->sigma(2,1)->ID()] = _sigma2_exact->x();
+      _exactMap[form->sigma(2,2)->ID()] = _sigma2_exact->y();
+      _exactMap[form->uhat(1)->ID()] = form->uhat(1)->termTraced()->evaluate(_exactMap);
+      _exactMap[form->uhat(2)->ID()] = form->uhat(2)->termTraced()->evaluate(_exactMap);
+    }
+
+    void projectExactSolution(SolutionPtr solution)
+    {
+      solution->projectOntoMesh(_exactMap);
     }
 
     virtual void setBCs(SpaceTimeIncompressibleFormulationPtr form)
     {
-      map<int, FunctionPtr> exactMap;
-      exactMap[form->u(1)->ID()] = _u1_exact;
-      exactMap[form->u(2)->ID()] = _u2_exact;
-      exactMap[form->sigma(1,1)->ID()] = _sigma1_exact->x();
-      exactMap[form->sigma(1,2)->ID()] = _sigma1_exact->y();
-      exactMap[form->sigma(2,1)->ID()] = _sigma2_exact->x();
-      exactMap[form->sigma(2,2)->ID()] = _sigma2_exact->y();
-      exactMap[form->uhat(1)->ID()] = form->uhat(1)->termTraced()->evaluate(exactMap);
-      exactMap[form->uhat(2)->ID()] = form->uhat(2)->termTraced()->evaluate(exactMap);
+      initializeExactMap(form);
 
       BCPtr bc = form->solutionUpdate()->bc();
       SpatialFilterPtr initTime = SpatialFilter::matchingT(_t0);
@@ -74,16 +91,19 @@ class AnalyticalIncompressibleProblem : public IncompressibleProblem
       SpatialFilterPtr rightX = SpatialFilter::matchingX(_x0[0]+_dimensions[0]);
       SpatialFilterPtr leftY  = SpatialFilter::matchingY(_x0[1]);
       SpatialFilterPtr rightY = SpatialFilter::matchingY(_x0[1]+_dimensions[1]);
-      bc->addDirichlet(form->uhat(1), leftX,    exactMap[form->uhat(1)->ID()]);
-      bc->addDirichlet(form->uhat(2), leftX,    exactMap[form->uhat(2)->ID()]);
-      bc->addDirichlet(form->uhat(1), rightX,   exactMap[form->uhat(1)->ID()]);
-      bc->addDirichlet(form->uhat(2), rightX,   exactMap[form->uhat(2)->ID()]);
-      bc->addDirichlet(form->uhat(1), leftY,    exactMap[form->uhat(1)->ID()]);
-      bc->addDirichlet(form->uhat(2), leftY,    exactMap[form->uhat(2)->ID()]);
-      bc->addDirichlet(form->uhat(1), rightY,   exactMap[form->uhat(1)->ID()]);
-      bc->addDirichlet(form->uhat(2), rightY,   exactMap[form->uhat(2)->ID()]);
-      bc->addDirichlet(form->tmhat(1),initTime,-exactMap[form->uhat(1)->ID()]);
-      bc->addDirichlet(form->tmhat(2),initTime,-exactMap[form->uhat(2)->ID()]);
+      bc->addDirichlet(form->uhat(1), leftX,    _exactMap[form->uhat(1)->ID()]);
+      bc->addDirichlet(form->uhat(2), leftX,    _exactMap[form->uhat(2)->ID()]);
+      bc->addDirichlet(form->uhat(1), rightX,   _exactMap[form->uhat(1)->ID()]);
+      bc->addDirichlet(form->uhat(2), rightX,   _exactMap[form->uhat(2)->ID()]);
+      bc->addDirichlet(form->uhat(1), leftY,    _exactMap[form->uhat(1)->ID()]);
+      bc->addDirichlet(form->uhat(2), leftY,    _exactMap[form->uhat(2)->ID()]);
+      bc->addDirichlet(form->uhat(1), rightY,   _exactMap[form->uhat(1)->ID()]);
+      bc->addDirichlet(form->uhat(2), rightY,   _exactMap[form->uhat(2)->ID()]);
+      if (!_steady)
+      {
+        bc->addDirichlet(form->tmhat(1),initTime,-_exactMap[form->uhat(1)->ID()]);
+        bc->addDirichlet(form->tmhat(2),initTime,-_exactMap[form->uhat(2)->ID()]);
+      }
     }
     double computeL2Error(SpaceTimeIncompressibleFormulationPtr form, SolutionPtr solutionBackground)
     {
@@ -124,8 +144,9 @@ class KovasznayProblem : public AnalyticalIncompressibleProblem
 {
   private:
   public:
-    KovasznayProblem(double Re)
+    KovasznayProblem(bool steady, double Re)
     {
+      _steady = steady;
       // problemName = "Kovasznay";
       double pi = atan(1)*4;
       double lambda = Re/2-sqrt(Re*Re/4+4*pi*pi);
@@ -152,8 +173,9 @@ class TaylorGreenProblem : public AnalyticalIncompressibleProblem
 {
   private:
   public:
-    TaylorGreenProblem(double Re)
+    TaylorGreenProblem(bool steady, double Re)
     {
+      _steady = steady;
       // problemName = "Kovasznay";
       double pi = atan(1)*4;
       FunctionPtr temporalDecay = Teuchos::rcp(new Exp_at(-2./Re));
@@ -190,6 +212,16 @@ int main(int argc, char *argv[])
 
   int commRank = Teuchos::GlobalMPISession::getRank();
 
+  // if (commRank == 0)
+  // {
+  //   int i = 0;
+  //   char hostname[256];
+  //   gethostname(hostname, sizeof(hostname));
+  //   printf("PID %d on %s ready of attach\n", getpid(), hostname);
+  //   fflush(stdout);
+  //   while (0 == i)
+  //     sleep(5);
+  // }
   Comm.Barrier(); // set breakpoint here to allow debugger attachment to other MPI processes than the one you automatically attached to.
 
   Teuchos::CommandLineProcessor cmdp(false,true); // false: don't throw exceptions; true: do return errors for unrecognized options
@@ -197,6 +229,7 @@ int main(int argc, char *argv[])
   // problem parameters:
   int spaceDim = 2;
   double Re = 40;
+  bool steady = false;
   string problemChoice = "TaylorGreen";
   int numRefs = 1;
   int p = 2, delta_p = 2;
@@ -209,11 +242,14 @@ int main(int argc, char *argv[])
   int maxNonlinearIterations = 20;
   bool computeL2Error = false;
   bool exportSolution = false;
+  bool saveSolution = true;
+  bool loadSolution = false;
   string norm = "Graph";
   string outputDir = ".";
   string tag="";
   cmdp.setOption("spaceDim", &spaceDim, "spatial dimension");
   cmdp.setOption("Re", &Re, "Re");
+  cmdp.setOption("steady", "transient", &steady, "use steady incompressible Navier-Stokes");
   cmdp.setOption("problem", &problemChoice, "Kovasznay, TaylorGreen");
   cmdp.setOption("polyOrder",&p,"polynomial order for field variable u");
   cmdp.setOption("delta_p", &delta_p, "test space polynomial order enrichment");
@@ -229,6 +265,8 @@ int main(int argc, char *argv[])
   cmdp.setOption("outputDir", &outputDir, "output directory");
   cmdp.setOption("computeL2Error", "skipL2Error", &computeL2Error, "compute L2 error");
   cmdp.setOption("exportSolution", "skipExport", &exportSolution, "export solution to HDF5");
+  cmdp.setOption("saveSolution", "skipSave", &saveSolution, "save mesh and solution to HDF5");
+  cmdp.setOption("loadSolution", "skipLoad", &loadSolution, "load mesh and solution from HDF5");
   cmdp.setOption("tag", &tag, "output tag");
 
   if (cmdp.parse(argc,argv) != Teuchos::CommandLineProcessor::PARSE_SUCCESSFUL)
@@ -239,16 +277,33 @@ int main(int argc, char *argv[])
     return -1;
   }
 
+  ostringstream solnName;
+  solnName << problemChoice << spaceDim << "D_" << norm << "_" << Re << "_p" << p << "_" << solverChoice;
+  if (tag != "")
+    solnName << "_" << tag;
+  string saveFile = "";
+  if (loadSolution)
+  {
+    saveFile = solnName.str();
+    if (commRank == 0) cout << "Loading previous solution " << saveFile << endl;
+  }
+
   map<string, Teuchos::RCP<IncompressibleProblem>> problems;
-  problems["Kovasznay"] = Teuchos::rcp(new KovasznayProblem(Re));
-  problems["TaylorGreen"] = Teuchos::rcp(new TaylorGreenProblem(Re));
+  problems["Kovasznay"] = Teuchos::rcp(new KovasznayProblem(steady, Re));
+  problems["TaylorGreen"] = Teuchos::rcp(new TaylorGreenProblem(steady, Re));
   Teuchos::RCP<IncompressibleProblem> problem = problems.at(problemChoice);
 
   MeshTopologyPtr spaceTimeMeshTopo = problem->meshTopology();
 
-  SpaceTimeIncompressibleFormulationPtr form = Teuchos::rcp(new SpaceTimeIncompressibleFormulation(spaceDim, 1./Re,
-        useConformingTraces, spaceTimeMeshTopo, p, delta_p, norm, problem->forcingTerm, ""));
+  SpaceTimeIncompressibleFormulationPtr form = Teuchos::rcp(new SpaceTimeIncompressibleFormulation(spaceDim, steady, 1./Re,
+        useConformingTraces, spaceTimeMeshTopo, p, delta_p, norm, problem->forcingTerm, saveFile));
 
+  // if (loadSolution)
+  // {
+  //   form->solutionBackground()->mesh() = MeshFactory::loadFromHDF5(form->bf(), "save.mesh");
+  //   form->solutionBackground()->loadFromHDF5("save_background.soln");
+  //   form->solutionUpdate()->loadFromHDF5("save_update.soln");
+  // }
   MeshPtr mesh = form->solutionUpdate()->mesh();
   MeshPtr k0Mesh = Teuchos::rcp( new Mesh (spaceTimeMeshTopo->deepCopy(), form->bf(), 1, delta_p) );
   mesh->registerObserver(k0Mesh);
@@ -259,14 +314,9 @@ int main(int argc, char *argv[])
   // Set up solution
   SolutionPtr solutionUpdate = form->solutionUpdate();
   SolutionPtr solutionBackground = form->solutionBackground();
-  // solutionBackground->projectOntoMesh(exactMap);
+  // dynamic_cast<AnalyticalIncompressibleProblem*>(problem.get())->projectExactSolution(solutionBackground);
 
   RefinementStrategyPtr refStrategy = form->getRefinementStrategy();
-
-  ostringstream solnName;
-  solnName << "incompressible" << spaceDim << "D_" << norm << "_" << Re << "_p" << p << "_" << solverChoice;
-  if (tag != "")
-    solnName << "_" << tag;
   Teuchos::RCP<HDF5Exporter> exporter;
   if (exportSolution)
     exporter = Teuchos::rcp(new HDF5Exporter(mesh,solnName.str(), outputDir));
@@ -356,6 +406,9 @@ int main(int argc, char *argv[])
 
     if (exportSolution)
       exporter->exportSolution(solutionBackground, refIndex);
+
+    if (saveSolution)
+      form->save(saveFile);
 
     if (refIndex != numRefs)
       refStrategy->refine();
