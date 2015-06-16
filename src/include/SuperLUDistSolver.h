@@ -36,13 +36,13 @@ namespace Camellia {
       Teuchos::ParameterList paramList;
       paramList.set("MaxProcs",-3); // -3 means all processors will be used
       
-      if (!_havePrintedStatus)
-      {
-        if (MPIWrapper::rank() == 0)
-        {
-          cout << "SuperLUDist, about to solve with a matrix of " << this->_stiffnessMatrix->RowMap().NumGlobalElements() << " rows:\n";
-        }
-      }
+//      if (!_havePrintedStatus)
+//      {
+//        if (MPIWrapper::rank() == 0)
+//        {
+//          cout << "SuperLUDist, about to solve with a matrix of " << this->_stiffnessMatrix->RowMap().NumGlobalElements() << " rows:\n";
+//        }
+//      }
       
       if (!_saveFactorization)
       {
