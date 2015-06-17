@@ -356,11 +356,11 @@ int main(int argc, char *argv[])
         gmgSolver = Teuchos::rcp( new GMGSolver(solutionUpdate, k0Mesh, maxLinearIterations, solverTolerance, Solver::getDirectSolver(true), useStaticCondensation));
         gmgSolver->setAztecOutput(azOutput);
         if (solverChoice == "GMG-Direct")
-          gmgSolver->gmgOperator().setSchwarzFactorizationType(GMGOperator::Direct);
+          gmgSolver->gmgOperator()->setSchwarzFactorizationType(GMGOperator::Direct);
         if (solverChoice == "GMG-ILU")
-          gmgSolver->gmgOperator().setSchwarzFactorizationType(GMGOperator::ILU);
+          gmgSolver->gmgOperator()->setSchwarzFactorizationType(GMGOperator::ILU);
         if (solverChoice == "GMG-IC")
-          gmgSolver->gmgOperator().setSchwarzFactorizationType(GMGOperator::IC);
+          gmgSolver->gmgOperator()->setSchwarzFactorizationType(GMGOperator::IC);
         solutionUpdate->solve(gmgSolver);
       }
       else
