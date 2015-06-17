@@ -192,8 +192,18 @@ SpaceTimeIncompressibleFormulation::SpaceTimeIncompressibleFormulation(int space
   vector<int> H1Order(2);
   H1Order[0] = fieldPolyOrder + 1;
   H1Order[1] = fieldPolyOrder + 1; // for now, use same poly. degree for temporal bases...
-  if (savedSolutionAndMeshPrefix == "")
-  {
+  // _mesh = Teuchos::rcp( new Mesh(meshTopo, _bf, H1Order, delta_k) ) ;
+  // _mesh = MeshFactory::loadFromHDF5(_bf, "Kovasznay2D_Graph_40_p2_KLU.mesh");
+  // _solutionBackground = Teuchos::rcp( new Solution(_mesh, bc) );
+  // _solutionBackground = Solution::solution(_bf, _mesh, bc);
+  // _solutionBackground->loadFromHDF5("Kovasznay2D_Graph_40_p2_KLU_background.soln");
+  // _solutionUpdate = Solution::solution(_bf, _mesh, bc);
+  // _solutionUpdate->loadFromHDF5("Kovasznay2D_Graph_40_p2_KLU_update.soln");
+  // _solutionUpdate = Teuchos::rcp( new Solution(_mesh, bc) );
+  // _solutionUpdate = Solution::solution(_bf, _mesh, bc);
+  // _solutionUpdate->loadFromHDF5("Kovasznay2D_Graph_40_p2_KLU_update.soln");
+  // if (savedSolutionAndMeshPrefix == "")
+  // {
     _mesh = Teuchos::rcp( new Mesh(meshTopo, _bf, H1Order, delta_k) ) ;
     _solutionUpdate = Solution::solution(_bf, _mesh, bc);
     _solutionBackground = Solution::solution(_bf, _mesh, bc);
@@ -201,23 +211,16 @@ SpaceTimeIncompressibleFormulation::SpaceTimeIncompressibleFormulation(int space
     initialGuess[u(1)->ID()] = Function::zero();
     initialGuess[u(2)->ID()] = Function::zero();
     _solutionBackground->projectOntoMesh(initialGuess);
-  }
-  else
-  {
-    // // BFPTR version should be deprecated
-    _mesh = MeshFactory::loadFromHDF5(_bf, savedSolutionAndMeshPrefix+".mesh");
-    _solutionUpdate = Solution::solution(_bf, _mesh, bc);
-    _solutionUpdate->loadFromHDF5(savedSolutionAndMeshPrefix+"_update.soln");
-    _solutionBackground = Solution::solution(_bf, _mesh, bc);
-    _solutionBackground->loadFromHDF5(savedSolutionAndMeshPrefix+"_background.soln");
-    // _mesh = Teuchos::rcp( new Mesh(meshTopo, _bf, H1Order, delta_k) ) ;
-    // _solutionUpdate = Solution::solution(_bf, _mesh, bc);
-    // _solutionBackground = Solution::solution(_bf, _mesh, bc);
-    // map<int, FunctionPtr> initialGuess;
-    // initialGuess[u(1)->ID()] = Function::zero();
-    // initialGuess[u(2)->ID()] = Function::zero();
-    // _solutionBackground->projectOntoMesh(initialGuess);
-  }
+  // }
+  // else
+  // {
+  //   // // BFPTR version should be deprecated
+  //   _mesh = MeshFactory::loadFromHDF5(_bf, savedSolutionAndMeshPrefix+".mesh");
+  //   _solutionUpdate = Solution::solution(_bf, _mesh, bc);
+  //   _solutionUpdate->loadFromHDF5(savedSolutionAndMeshPrefix+"_update.soln");
+  //   _solutionBackground = Solution::solution(_bf, _mesh, bc);
+  //   _solutionBackground->loadFromHDF5(savedSolutionAndMeshPrefix+"_background.soln");
+  // }
 
   FunctionPtr u1_prev = Function::solution(u1, _solutionBackground);
   FunctionPtr u2_prev = Function::solution(u2, _solutionBackground);

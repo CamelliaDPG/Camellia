@@ -300,9 +300,9 @@ int main(int argc, char *argv[])
 
   // if (loadSolution)
   // {
-  //   form->solutionBackground()->mesh() = MeshFactory::loadFromHDF5(form->bf(), "save.mesh");
-  //   form->solutionBackground()->loadFromHDF5("save_background.soln");
-  //   form->solutionUpdate()->loadFromHDF5("save_update.soln");
+  //   form->solutionBackground()->mesh() = MeshFactory::loadFromHDF5(form->bf(), saveFile+".mesh");
+  //   form->solutionBackground()->loadFromHDF5(saveFile+"_background.soln");
+  //   form->solutionUpdate()->loadFromHDF5(saveFile+"_update.soln");
   // }
   MeshPtr mesh = form->solutionUpdate()->mesh();
   MeshPtr k0Mesh = Teuchos::rcp( new Mesh (spaceTimeMeshTopo->deepCopy(), form->bf(), 1, delta_p) );
@@ -408,7 +408,7 @@ int main(int argc, char *argv[])
       exporter->exportSolution(solutionBackground, refIndex);
 
     if (saveSolution)
-      form->save(saveFile);
+      form->save(solnName.str());
 
     if (refIndex != numRefs)
       refStrategy->refine();
