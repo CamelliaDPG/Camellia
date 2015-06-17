@@ -290,6 +290,23 @@ void initializeSolutionAndCoarseMesh(SolutionPtr &solution, vector<MeshPtr> &mes
   solution->setZMCsAsGlobalLagrange(false); // fine grid solution shouldn't impose ZMCs (should be handled in coarse grid solve)
 }
 
+long long approximateMemoryCostsForMeshTopologies(vector<MeshPtr> meshes)
+{
+  map<MeshTopology*, long long> meshTopologyCosts; // pointer as key ensures we only count each MeshTopology once, even if they are shared
+  for (MeshPtr mesh : meshes)
+  {
+    MeshTopologyPtr meshTopo = mesh->getTopology();
+    long long memoryCost = meshTopo->approximateMemoryFootprint();
+    meshTopologyCosts[meshTopo.get()] = memoryCost;
+  }
+  long long memoryCostTotal = 0;
+  for (auto entry : meshTopologyCosts)
+  {
+    memoryCostTotal += entry.second;
+  }
+  return memoryCostTotal;
+}
+
 int main(int argc, char *argv[])
 {
   Teuchos::GlobalMPISession mpiSession(&argc, &argv, 0);
@@ -383,6 +400,13 @@ int main(int argc, char *argv[])
     return -1;
   }
 
+  if (rank==0)
+  {
+    cout << "Solving " << spaceDim << "D " << problemChoiceString << " problem on " << numProcs << " MPI ranks.  Initializing meshes...\n";
+  }
+  
+  Epetra_Time timer(Comm);
+
   SolutionPtr solution;
   MeshPtr coarseMesh;
   IPPtr ip;
@@ -396,23 +420,42 @@ int main(int argc, char *argv[])
   initializeSolutionAndCoarseMesh(solution, meshesCoarseToFine, ip, problemChoice, spaceDim, conformingTraces, useCondensedSolve,
                                   numCells, k, delta_k, numCellsRootMesh, useZeroMeanConstraints);
   
+  double meshInitializationTime = timer.ElapsedTime();
+
+  int numDofs = solution->mesh()->numGlobalDofs();
+  int numElements = solution->mesh()->numActiveElements();
+  
+  long long approximateMemoryCostInBytes = approximateMemoryCostsForMeshTopologies(meshesCoarseToFine);
+  double memoryCostInMB = approximateMemoryCostInBytes / (1024.0 * 1024.0);
+  
+  if (rank==0)
+  {
+    cout << setprecision(2);
+    cout << "Mesh initialization completed in " << meshInitializationTime << " seconds.  Fine mesh has " << numDofs;
+    cout << " global degrees of freedom on " << numElements << " elements.\n";
+    cout << "Approximate (within a factor of 2 or so) memory cost for all mesh topologies: " << memoryCostInMB << " MB.\n";
+  }
+  
+  timer.ResetStartTime();
   bool reuseFactorization = true;
   SolverPtr coarseSolver = Solver::getDirectSolver(reuseFactorization);
   Teuchos::RCP<GMGSolver> gmgSolver = Teuchos::rcp(new GMGSolver(solution, meshesCoarseToFine, cgMaxIterations, cgTol, coarseSolver));
   gmgSolver->setAztecOutput(10);
   
-  int numDofs = solution->mesh()->numGlobalDofs();
-  int numElements = solution->mesh()->numActiveElements();
+  double gmgSolverInitializationTime = timer.ElapsedTime();
   if (rank==0)
   {
-    cout << "Solving " << spaceDim << "D " << problemChoiceString << " problem with " << numDofs << " global degrees of freedom on ";
-    cout << numElements << " elements.\n";
+    cout << "GMGSolver initialized in " << gmgSolverInitializationTime << " seconds.\n";
   }
-  
+
+  timer.ResetStartTime();
   solution->solve(gmgSolver);
+
+  double solveTime = timer.ElapsedTime();
   
   if (rank==0)
   {
+    cout << "Solve completed in " << solveTime << " seconds.\n";
     cout << "Finest GMGOperator, timing report:\n";
   }
   gmgSolver->gmgOperator()->reportTimings(StatisticChoice::MAX);
