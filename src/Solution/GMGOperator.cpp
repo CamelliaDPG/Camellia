@@ -57,6 +57,11 @@ GMGOperator::GMGOperator(BCPtr zeroBCs, MeshPtr coarseMesh, IPPtr coarseIP,
 Narrator("GMGOperator"),
 _finePartitionMap(finePartitionMap), _br(true)
 {
+  if (useStaticCondensation)
+  {
+    TEUCHOS_TEST_FOR_EXCEPTION(coarseIP == Teuchos::null, std::invalid_argument, "GMGOperator: coarseIP is required when useStaticCondensation = true");
+  }
+  
   _useStaticCondensation = useStaticCondensation;
   _fineDofInterpreter = fineDofInterpreter;
 
@@ -103,39 +108,19 @@ _finePartitionMap(finePartitionMap), _br(true)
   _coarseSolution->initializeLHSVector();
   _coarseSolution->initializeStiffnessAndLoad(); // actually don't need to initialize stiffness anymore; we'll do this in computeCoarseStiffnessMatrix
 
-  // now that:
-  //   a) CondensedDofInterpreter can supply local stiffness matrices as needed, and
-  //   b) we don't actually use a Solution-computed global stiffness matrix for coarse solves
-  // I'm pretty sure there's no reason to call populateStiffnessAndLoad(), and it is extra work (we avoid at least global assembly)
-
-//  if (_useStaticCondensation) {
-//    // then, since the coarse solution does a condensed solve, we need to supply CondensedDofInterpreter with the
-//    // local stiffness matrices on each coarse cell -- the easiest way to do this is just to invoke populateStiffnessAndLoad
-//    // (this does a little extra work, but probably this is negligible)
-//    _coarseSolution->populateStiffnessAndLoad();
-//  }
-
-  Epetra_Time prolongationTimer(Comm);
-#ifdef HPCTW
-  HPM_Start("constructProlongationOperator");
-#endif
   constructProlongationOperator();
-#ifdef HPCTW
-  HPM_Stop("constructProlongationOperator");
-#endif
-  _timeProlongationOperatorConstruction = prolongationTimer.ElapsedTime();
-
-  ostringstream prolongationTimingReport;
-  prolongationTimingReport << "Prolongation operator constructed in " << _timeProlongationOperatorConstruction << " seconds.";
-  narrate(prolongationTimingReport.str());
 
   _timeConstruction += constructionTimer.ElapsedTime();
 }
 
+GMGOperator::GMGOperator(BCPtr zeroBCs, MeshPtr coarseMesh, MeshPtr fineMesh,
+                         Teuchos::RCP<DofInterpreter> fineDofInterpreter, Epetra_Map finePartitionMap)
+: GMGOperator(zeroBCs,coarseMesh,Teuchos::null, fineMesh,fineDofInterpreter, finePartitionMap, Teuchos::null, false) {}
+
 void GMGOperator::clearTimings()
 {
   _timeMapFineToCoarse = 0, _timeMapCoarseToFine = 0, _timeConstruction = 0, _timeCoarseSolve = 0, _timeCoarseImport = 0, _timeLocalCoefficientMapConstruction = 0, _timeComputeCoarseStiffnessMatrix = 0, _timeProlongationOperatorConstruction = 0,
-  _timeSetUpSmoother = 0;
+  _timeSetUpSmoother = 0, _timeUpdateCoarseOperator = 0;
 }
 
 void GMGOperator::computeCoarseStiffnessMatrix(Epetra_CrsMatrix *fineStiffnessMatrix)
@@ -228,6 +213,15 @@ void GMGOperator::computeCoarseStiffnessMatrix(Epetra_CrsMatrix *fineStiffnessMa
   _timeComputeCoarseStiffnessMatrix = coarseStiffnessTimer.ElapsedTime();
 
   _haveSolvedOnCoarseMesh = false; // having recomputed coarseStiffness, any existing factorization is invalid
+  
+  if (_coarseOperator != Teuchos::null)
+  {
+    Epetra_Time coarseOperatorTimer(Comm());
+    // then our changed coarse matrix is coarse operator's fine matrix, and we need to ask coarse operator recompute *its* coarse matrix and smoother
+    _coarseOperator->computeCoarseStiffnessMatrix(coarseStiffness.get());
+    _coarseOperator->setUpSmoother(coarseStiffness.get());
+    _timeUpdateCoarseOperator = coarseOperatorTimer.ElapsedTime();
+  }
 }
 
 void GMGOperator::constructLocalCoefficientMaps()
@@ -247,6 +241,7 @@ void GMGOperator::constructLocalCoefficientMaps()
 
 Teuchos::RCP<Epetra_CrsMatrix> GMGOperator::constructProlongationOperator()
 {
+  Epetra_Time prolongationTimer(Comm());
   narrate("constructProlongationOperator");
   // row indices belong to the fine grid, columns to the coarse
   // maps coefficients from coarse to fine
@@ -415,6 +410,12 @@ Teuchos::RCP<Epetra_CrsMatrix> GMGOperator::constructProlongationOperator()
 
 //  cout << "after FillComplete(),  _P has " << _P->NumGlobalRows64() << " rows and " << _P->NumGlobalCols64() << " columns.\n";
 
+  _timeProlongationOperatorConstruction = prolongationTimer.ElapsedTime();
+  
+  ostringstream prolongationTimingReport;
+  prolongationTimingReport << "Prolongation operator constructed in " << _timeProlongationOperatorConstruction << " seconds.";
+  narrate(prolongationTimingReport.str());
+  
   return _P;
 }
 
@@ -446,6 +447,11 @@ TSolutionPtr<double> GMGOperator::getCoarseSolution()
 SolverPtr GMGOperator::getCoarseSolver()
 {
   return _coarseSolver;
+}
+
+Teuchos::RCP<DofInterpreter> GMGOperator::getFineDofInterpreter()
+{
+  return _fineDofInterpreter;
 }
 
 LocalDofMapperPtr GMGOperator::getLocalCoefficientMap(GlobalIndexType fineCellID) const
@@ -739,8 +745,17 @@ int GMGOperator::ApplyInverse(const Epetra_MultiVector& X_in, Epetra_MultiVector
   if (printVerboseOutput) cout << "finished _P->Multiply(true, X, *coarseRHSVector);\n";
   _timeMapFineToCoarse += timer.ElapsedTime();
 
+  Teuchos::RCP<Epetra_FEVector> coarseLHSVector;
+  
   timer.ResetStartTime();
-  if (!_haveSolvedOnCoarseMesh)
+  if (_coarseSolver == Teuchos::null)
+  {
+    // then we must be at a finer level than the coarsest, and the appropriate thing is to simply apply
+    // our _coarseOperator
+    TEUCHOS_TEST_FOR_EXCEPTION(_coarseOperator == Teuchos::null, std::invalid_argument, "GMGOperator internal error: _coarseOperator and _coarseSolver are both null");
+    _coarseOperator->ApplyInverse(*coarseRHSVector, *_coarseSolution->getLHSVector());
+  }
+  else if (!_haveSolvedOnCoarseMesh)
   {
     if (printVerboseOutput) cout << "solving on coarse mesh\n";
     narrate("_coarseSolution->solveWithPrepopulatedStiffnessAndLoad(_coarseSolver, false)");
@@ -761,7 +776,7 @@ int GMGOperator::ApplyInverse(const Epetra_MultiVector& X_in, Epetra_MultiVector
 
   timer.ResetStartTime();
   if (printVerboseOutput) cout << "calling _coarseSolution->getLHSVector()\n";
-  Teuchos::RCP<Epetra_FEVector> coarseLHSVector = _coarseSolution->getLHSVector();
+  coarseLHSVector = _coarseSolution->getLHSVector();
 
   if (printVerboseOutput) cout << "finished _coarseSolution->getLHSVector()\n";
   if (printVerboseOutput) cout << "calling _P->Multiply(false, *coarseLHSVector, Y)\n";
@@ -934,14 +949,14 @@ TimeStatistics GMGOperator::getStatistics(double timeValue) const
   return stats;
 }
 
-void GMGOperator::reportTimings() const
+void GMGOperator::reportTimings(StatisticChoice whichStat) const
 {
   //   mutable double _timeMapFineToCoarse, _timeMapCoarseToFine, _timeCoarseImport, _timeConstruction, _timeCoarseSolve;  // totals over the life of the object
   int rank = Teuchos::GlobalMPISession::getRank();
 
   map<string, double> reportValues;
-  reportValues["construction time"] = _timeConstruction;
-  reportValues["  construct prolongation operator"] = _timeProlongationOperatorConstruction;
+  reportValues["total construction time"] = _timeConstruction;
+  reportValues["construct prolongation operator"] = _timeProlongationOperatorConstruction;
   reportValues["construct local coefficient maps"] = _timeLocalCoefficientMapConstruction;
   reportValues["coarse import"] = _timeCoarseImport;
   reportValues["coarse solve"] = _timeCoarseSolve;
@@ -949,17 +964,57 @@ void GMGOperator::reportTimings() const
   reportValues["map fine to coarse"] = _timeMapFineToCoarse;
   reportValues["compute coarse stiffness matrix"] = _timeComputeCoarseStiffnessMatrix;
   reportValues["set up smoother"] = _timeSetUpSmoother;
+  reportValues["update coarse operator"] = _timeUpdateCoarseOperator;
 
+  if (rank == 0)
+  {
+    switch (whichStat)
+    {
+      case MIN:
+        cout << "Timing MINIMUM values:\n";
+        break;
+      case MAX:
+        cout << "Timing MAXIMUM values:\n";
+        break;
+      case MEAN:
+        cout << "Timing mean values:\n";
+        break;
+      case SUM:
+        cout << "SUM of timing values:\n";
+        break;
+      case ALL:
+        break;
+    }
+  }
   for (map<string,double>::iterator reportIt = reportValues.begin(); reportIt != reportValues.end(); reportIt++)
   {
     TimeStatistics stats = getStatistics(reportIt->second);
     if (rank==0)
     {
-      cout << reportIt->first << ":\n";
-      cout <<  "mean = " << stats.mean << " seconds\n";
-      cout << "max =  " << stats.max << " seconds\n";
-      cout << "min =  " << stats.min << " seconds\n";
-      cout << "sum =  " << stats.sum << " seconds\n";
+      cout << setprecision(2);
+      cout << std::scientific;
+      cout << setw(35) << reportIt->first << ": ";
+      switch (whichStat) {
+        case ALL:
+          cout << endl;
+          cout <<  "mean = " << stats.mean << " seconds\n";
+          cout << "max =  " << stats.max << " seconds\n";
+          cout << "min =  " << stats.min << " seconds\n";
+          cout << "sum =  " << stats.sum << " seconds\n";
+          break;
+        case MIN:
+          cout << stats.min << " seconds\n";
+          break;
+        case MAX:
+          cout << stats.max << " seconds\n";
+          break;
+        case MEAN:
+          cout << stats.mean << " seconds\n";
+          break;
+        case SUM:
+          cout << stats.sum << " seconds\n";
+          break;
+      }
     }
   }
 }
@@ -969,8 +1024,14 @@ void GMGOperator::setApplySmoothingOperator(bool value)
   _applySmoothingOperator = value;
 }
 
+void GMGOperator::setCoarseOperator(Teuchos::RCP<GMGOperator> coarseOperator)
+{
+  _coarseOperator = coarseOperator;
+}
+
 void GMGOperator::setCoarseSolver(SolverPtr coarseSolver)
 {
+  TEUCHOS_TEST_FOR_EXCEPTION(_coarseOperator != Teuchos::null, std::invalid_argument, "coarseSolver may not be set when _coarseOperator is set");
   _coarseSolver = coarseSolver;
 }
 

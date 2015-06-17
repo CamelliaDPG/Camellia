@@ -34,7 +34,10 @@ namespace Camellia {
     
     int solve() {
       Teuchos::ParameterList paramList;
-      paramList.set("MaxProcs",-3); // -3 means all processors will be used
+      
+      int numRanks = this->_stiffnessMatrix->Comm().NumProc();
+      int maxProcs = min(numRanks,256);
+      paramList.set("MaxProcs",maxProcs); // -3 means all processors will be used; -2 means square root of the number of processors available will be used
       
 //      if (!_havePrintedStatus)
 //      {

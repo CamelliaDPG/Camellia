@@ -287,8 +287,8 @@ int main(int argc, char *argv[])
 
     gmgSolver->setAztecOutput(AztecOutputLevel);
     gmgSolver->setUseConjugateGradient(true);
-    gmgSolver->gmgOperator().setSmootherType(GMGOperator::IFPACK_ADDITIVE_SCHWARZ);
-    gmgSolver->gmgOperator().setSmootherOverlap(smootherOverlap);
+    gmgSolver->gmgOperator()->setSmootherType(GMGOperator::IFPACK_ADDITIVE_SCHWARZ);
+    gmgSolver->gmgOperator()->setSmootherOverlap(smootherOverlap);
 
     fineSolver = Teuchos::rcp( gmgSolver );
   }
@@ -314,7 +314,7 @@ int main(int argc, char *argv[])
 #endif
 
   solution->reportTimings();
-  if (useGMGSolver) gmgSolver->gmgOperator().reportTimings();
+  if (useGMGSolver) gmgSolver->gmgOperator()->reportTimings();
   for (int refIndex=0; refIndex < refCount; refIndex++)
   {
     double energyError = solution->energyErrorTotal();
@@ -371,7 +371,7 @@ int main(int argc, char *argv[])
 
     solution->solve(fineSolver);
     solution->reportTimings();
-    if (useGMGSolver) gmgSolver->gmgOperator().reportTimings();
+    if (useGMGSolver) gmgSolver->gmgOperator()->reportTimings();
 
 #ifdef HAVE_EPETRAEXT_HDF5
     exporter.exportSolution(solution,varFactory,refIndex+1);

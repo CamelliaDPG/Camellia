@@ -32,6 +32,9 @@ struct TimeStatistics
   double mean;
   double sum;
 };
+  enum StatisticChoice {
+    ALL, MIN, MAX, MEAN, SUM
+  };
 
 class GMGOperator : public Epetra_Operator, public Narrator
 {
@@ -53,6 +56,7 @@ class GMGOperator : public Epetra_Operator, public Narrator
   TimeStatistics getStatistics(double timeValue) const;
 
   Teuchos::RCP<Solver> _coarseSolver;
+  Teuchos::RCP<GMGOperator> _coarseOperator;
 
   mutable BasisReconciliation _br;
   mutable map< pair< pair<int,int>, RefinementBranch >, LocalDofMapperPtr > _localCoefficientMap; // pair(fineH1Order,coarseH1Order)
@@ -62,7 +66,7 @@ class GMGOperator : public Epetra_Operator, public Narrator
   Teuchos::RCP<Epetra_MultiVector> _diag_inv; // inverse of the diagonal
 
   mutable double _timeMapFineToCoarse, _timeMapCoarseToFine, _timeCoarseImport, _timeConstruction, _timeCoarseSolve, _timeLocalCoefficientMapConstruction, _timeComputeCoarseStiffnessMatrix, _timeProlongationOperatorConstruction,
-      _timeSetUpSmoother; // totals over the life of the object
+      _timeSetUpSmoother, _timeUpdateCoarseOperator; // totals over the life of the object
 
   mutable bool _haveSolvedOnCoarseMesh; // if this is true, then we can call resolve() instead of solve().
 
@@ -83,12 +87,23 @@ public:
   ~GMGOperator() {}
   //@}
 
-  //! @name Constructor
+  //! @name Constructor (for coarsest grid operator)
   //@{
   //! Constructor
+  /*! This constructor is intended for the topmost (coarsest) level of multigrid operators.
+   \param coarseIP - May be null if useStaticCondensation is false
+   */
   GMGOperator(BCPtr zeroBCs, MeshPtr coarseMesh, IPPtr coarseIP, MeshPtr fineMesh,
               Teuchos::RCP<DofInterpreter> fineDofInterpreter, Epetra_Map finePartitionMap,
               Teuchos::RCP<Solver> coarseSolver, bool useStaticCondensation);
+  //@}
+  
+  //! @name Constructor (for all other operators)
+  //@{
+  //! Constructor
+  /*! This constructor is intended for any multigrid operators finer than the coarsest mesh.
+   */
+  GMGOperator(BCPtr zeroBCs, MeshPtr coarseMesh, MeshPtr fineMesh, Teuchos::RCP<DofInterpreter> fineDofInterpreter, Epetra_Map finePartitionMap);
   //@}
 
   //! @name Attribute set methods
@@ -130,7 +145,7 @@ public:
   void setFineMesh(MeshPtr fineMesh, Epetra_Map finePartitionMap);
 
   void clearTimings();
-  void reportTimings() const;
+  void reportTimings(StatisticChoice stat = ALL) const;
 
   void constructLocalCoefficientMaps(); // we'll do this lazily if this is not called; this is mostly a way to separate out the time costs
 
@@ -208,7 +223,10 @@ public:
     ILU,
     IC
   };
-
+  
+  //! set the coarse Operator
+  void setCoarseOperator(Teuchos::RCP<GMGOperator> coarseOperator);
+  
   //! set the coarse Solver
   void setCoarseSolver(SolverPtr coarseSolver);
 
@@ -249,6 +267,9 @@ public:
 
   //! Returns the Solution object used in the coarse solve.
   TSolutionPtr<double> getCoarseSolution();
+  
+  //! Returns the fine dof interpreter
+  Teuchos::RCP<DofInterpreter> getFineDofInterpreter();
 private:
   SmootherChoice _smootherType;
   int _smootherOverlap;

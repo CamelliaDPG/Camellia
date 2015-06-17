@@ -533,8 +533,8 @@ int main(int argc, char *argv[])
     gmgSolver->setApplySmoothingOperator(applyDiagonalSmoothing);
     gmgSolver->setUseConjugateGradient(useCG);
     gmgSolver->setUseDiagonalScaling(useDiagonalScaling);
-    gmgSolver->gmgOperator().setSmootherType(GMGOperator::IFPACK_ADDITIVE_SCHWARZ);
-    gmgSolver->gmgOperator().setSmootherOverlap(smootherOverlap);
+    gmgSolver->gmgOperator()->setSmootherType(GMGOperator::IFPACK_ADDITIVE_SCHWARZ);
+    gmgSolver->gmgOperator()->setSmootherOverlap(smootherOverlap);
     fineSolver = Teuchos::rcp( gmgSolver );
   }
   else
@@ -586,7 +586,7 @@ int main(int argc, char *argv[])
   {
     condestForRefinement.push_back(gmgSolver->condest());
     iterationsForRefinement.push_back(gmgSolver->iterationCount());
-    gmgSolver->gmgOperator().reportTimings();
+    gmgSolver->gmgOperator()->reportTimings();
   }
   for (int refIndex=0; refIndex < refCount; refIndex++)
   {
@@ -644,8 +644,8 @@ int main(int argc, char *argv[])
       gmgSolver->setApplySmoothingOperator(applyDiagonalSmoothing);
       gmgSolver->setUseConjugateGradient(useCG);
       gmgSolver->setUseDiagonalScaling(useDiagonalScaling);
-      gmgSolver->gmgOperator().setSmootherType(GMGOperator::IFPACK_ADDITIVE_SCHWARZ);
-      gmgSolver->gmgOperator().setSmootherOverlap(smootherOverlap);
+      gmgSolver->gmgOperator()->setSmootherType(GMGOperator::IFPACK_ADDITIVE_SCHWARZ);
+      gmgSolver->gmgOperator()->setSmootherOverlap(smootherOverlap);
       fineSolver = Teuchos::rcp( gmgSolver );
     }
 
@@ -657,7 +657,7 @@ int main(int argc, char *argv[])
       condestForRefinement.push_back(gmgSolver->condest());
       iterationsForRefinement.push_back(gmgSolver->iterationCount());
 
-      gmgSolver->gmgOperator().reportTimings();
+      gmgSolver->gmgOperator()->reportTimings();
     }
 
 #ifdef HAVE_EPETRAEXT_HDF5

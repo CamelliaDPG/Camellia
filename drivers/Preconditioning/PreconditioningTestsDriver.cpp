@@ -729,8 +729,8 @@ void run(ProblemChoice problemChoice, int &iterationCount, int spaceDim, int num
     Teuchos::RCP<Solver> coarseSolver = Teuchos::null;
     GMGSolver* gmgSolver = new GMGSolver(solution, k0Mesh, cgMaxIterations, cgTol, coarseSolver, useStaticCondensation);
     gmgSolver->setNarrateOnRankZero(narrateSolution, "fine GMGSolver");
-    gmgSolver->gmgOperator().setNarrateOnRankZero(narrateSolution, "fine GMGOperator");
-    gmgSolver->gmgOperator().getCoarseSolution()->setNarrateOnRankZero(narrateCoarseSolution, "coarse solution");
+    gmgSolver->gmgOperator()->setNarrateOnRankZero(narrateSolution, "fine GMGOperator");
+    gmgSolver->gmgOperator()->getCoarseSolution()->setNarrateOnRankZero(narrateCoarseSolution, "coarse solution");
 
     if (coarseSolverChoice != Solver::GMGSolver_1_Level_h)
     {
@@ -770,23 +770,23 @@ void run(ProblemChoice problemChoice, int &iterationCount, int spaceDim, int num
 
       coarseSolver = Solver::getSolver(coarseSolverChoice, saveFactorization,
                                        coarseCGTol, coarseMaxIterations,
-                                       gmgSolver->gmgOperator().getCoarseSolution(),
+                                       gmgSolver->gmgOperator()->getCoarseSolution(),
                                        coarsestMesh, coarsestSolver);
       GMGSolver* coarseSolverGMG = static_cast<GMGSolver*>( coarseSolver.get() );
       coarseSolverGMG->setNarrateOnRankZero(narrateCoarseSolution, "coarse GMGSolver");
-      coarseSolverGMG->gmgOperator().setNarrateOnRankZero(narrateCoarseSolution, "coarse GMGOperator");
-      coarseSolverGMG->gmgOperator().getCoarseSolution()->setNarrateOnRankZero(narrateCoarseSolution, "coarsest solution");
+      coarseSolverGMG->gmgOperator()->setNarrateOnRankZero(narrateCoarseSolution, "coarse GMGOperator");
+      coarseSolverGMG->gmgOperator()->getCoarseSolution()->setNarrateOnRankZero(narrateCoarseSolution, "coarsest solution");
 
-      coarseSolverGMG->gmgOperator().setSmootherType(GMGOperator::CAMELLIA_ADDITIVE_SCHWARZ);
-      coarseSolverGMG->gmgOperator().setSmootherOverlap(coarseSolverSmootherOverlap);
+      coarseSolverGMG->gmgOperator()->setSmootherType(GMGOperator::CAMELLIA_ADDITIVE_SCHWARZ);
+      coarseSolverGMG->gmgOperator()->setSmootherOverlap(coarseSolverSmootherOverlap);
     }
 
-    gmgSolver->gmgOperator().setCoarseSolver(coarseSolver);
+    gmgSolver->gmgOperator()->setCoarseSolver(coarseSolver);
 
     if ((smootherType == GMGOperator::CAMELLIA_ADDITIVE_SCHWARZ) && hOnly)
     {
       // then use hierarchical neighbor relationship
-      gmgSolver->gmgOperator().setUseHierarchicalNeighborsForSchwarz(true);
+      gmgSolver->gmgOperator()->setUseHierarchicalNeighborsForSchwarz(true);
       if (rank==0) cout << "using new hierarchical Schwarz neighbors option";
     }
 
@@ -798,14 +798,14 @@ void run(ProblemChoice problemChoice, int &iterationCount, int spaceDim, int num
 
     gmgSolver->setUseConjugateGradient(true);
     gmgSolver->setComputeConditionNumberEstimate(false);
-    gmgSolver->gmgOperator().setSchwarzFactorizationType(schwarzBlockFactorization);
-    gmgSolver->gmgOperator().setLevelOfFill(schwarzLevelOfFill);
-    gmgSolver->gmgOperator().setFillRatio(schwarzFillRatio);
+    gmgSolver->gmgOperator()->setSchwarzFactorizationType(schwarzBlockFactorization);
+    gmgSolver->gmgOperator()->setLevelOfFill(schwarzLevelOfFill);
+    gmgSolver->gmgOperator()->setFillRatio(schwarzFillRatio);
 //    cout << "Set GMGOperator level of fill to " << schwarzLevelOfFill << endl;
 //    cout << "Set GMGOperator fill ratio to " << schwarzFillRatio << endl;
-    gmgSolver->gmgOperator().setSmootherType(smootherType);
-    gmgSolver->gmgOperator().setSmootherOverlap(schwarzOverlap);
-    gmgSolver->gmgOperator().setDebugMode(runGMGOperatorInDebugMode);
+    gmgSolver->gmgOperator()->setSmootherType(smootherType);
+    gmgSolver->gmgOperator()->setSmootherOverlap(schwarzOverlap);
+    gmgSolver->gmgOperator()->setDebugMode(runGMGOperatorInDebugMode);
     solver = Teuchos::rcp( gmgSolver ); // we use "new" above, so we can let this RCP own the memory
   }
 
@@ -847,13 +847,13 @@ void run(ProblemChoice problemChoice, int &iterationCount, int spaceDim, int num
   if (fineSolver != NULL)
   {
     if (rank==0) cout << "************   Fine GMG Solver, timings   *************\n";
-    fineSolver->gmgOperator().reportTimings();
+    fineSolver->gmgOperator()->reportTimings();
 
-    GMGSolver* coarseSolver = dynamic_cast<GMGSolver*>(fineSolver->gmgOperator().getCoarseSolver().get());
+    GMGSolver* coarseSolver = dynamic_cast<GMGSolver*>(fineSolver->gmgOperator()->getCoarseSolver().get());
     if (coarseSolver != NULL)
     {
       if (rank==0) cout << "************   Coarse GMG Solver, timings   *************\n";
-      coarseSolver->gmgOperator().reportTimings();
+      coarseSolver->gmgOperator()->reportTimings();
       vector<int> iterationCountLog = coarseSolver->getIterationCountLog();
       if (rank==0) Camellia::print("coarseSolver iteration counts:",iterationCountLog);
       double totalIterationCount = 0;

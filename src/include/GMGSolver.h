@@ -24,7 +24,7 @@ class GMGSolver : public Solver, public Narrator
 
   Epetra_Map _finePartitionMap;
 
-  GMGOperator _gmgOperator;
+  Teuchos::RCP<GMGOperator> _gmgOperator;
 
   bool _applySmoothing;    // whether we should add the smoothing term (almost always want this--basically we turn off for some tests)
 
@@ -45,10 +45,16 @@ class GMGSolver : public Solver, public Narrator
   std::vector< int > _iterationCountLog; // each time solve() is called, we push_back the number of iterations we run
 
   int solve(bool rebuildCoarseStiffness);
+  
+  static Teuchos::RCP<GMGOperator> gmgOperatorFromMeshSequence(const std::vector<MeshPtr> &meshesCoarseToFine, SolutionPtr fineSolution,
+                                                               SolverPtr coarseSolver, bool useStaticCondensationInCoarseSolve);
 public:
   GMGSolver(BCPtr zeroBCs, MeshPtr coarseMesh, IPPtr coarseIP, MeshPtr fineMesh, Teuchos::RCP<DofInterpreter> fineDofInterpreter,
             Epetra_Map finePartitionMap, int maxIters, double tol, Teuchos::RCP<Solver> coarseSolver, bool useStaticCondensation);
   GMGSolver(TSolutionPtr<double> fineSolution, MeshPtr coarseMesh, int maxIters, double tol, Teuchos::RCP<Solver> coarseSolver, bool useStaticCondensation);
+  GMGSolver(TSolutionPtr<double> fineSolution, int maxIters, double tol, Teuchos::RCP<Solver> coarseSolver, bool useStaticCondensation);
+  GMGSolver(TSolutionPtr<double> fineSolution, const std::vector<MeshPtr> &meshesCoarseToFine, int maxIters, double tol,
+            Teuchos::RCP<Solver> coarseSolver = Solver::getDirectSolver(true), bool useStaticCondensation = false);
 
   double condest();
 
@@ -65,7 +71,7 @@ public:
 
   void setTolerance(double tol);
 
-  GMGOperator & gmgOperator()
+  Teuchos::RCP<GMGOperator> gmgOperator()
   {
     return _gmgOperator;
   }
