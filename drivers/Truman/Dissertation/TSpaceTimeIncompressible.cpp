@@ -26,6 +26,8 @@
 #include "TrigFunctions.h"
 
 #include <unistd.h>
+#include <sys/types.h>
+#include <sys/stat.h>
 
 using namespace Camellia;
 
@@ -252,10 +254,12 @@ int main(int argc, char *argv[])
   int maxNonlinearIterations = 20;
   bool computeL2Error = false;
   bool exportSolution = false;
-  bool saveSolution = true;
+  bool saveSolution = false;
   bool loadSolution = false;
+  int loadRef = 0;
+  int loadDirRef = 0;
   string norm = "Graph";
-  string outputDir = ".";
+  string rootDir = ".";
   string tag="";
   cmdp.setOption("spaceDim", &spaceDim, "spatial dimension");
   cmdp.setOption("Re", &Re, "Re");
@@ -273,11 +277,13 @@ int main(int argc, char *argv[])
   cmdp.setOption("nonlinearTolerance", &nonlinearTolerance, "nonlinear solver tolerance");
   cmdp.setOption("maxLinearIterations", &maxLinearIterations, "maximum number of iterations for linear solver");
   cmdp.setOption("maxNonlinearIterations", &maxNonlinearIterations, "maximum number of iterations for Newton solver");
-  cmdp.setOption("outputDir", &outputDir, "output directory");
+  cmdp.setOption("outputDir", &rootDir, "output directory");
   cmdp.setOption("computeL2Error", "skipL2Error", &computeL2Error, "compute L2 error");
   cmdp.setOption("exportSolution", "skipExport", &exportSolution, "export solution to HDF5");
   cmdp.setOption("saveSolution", "skipSave", &saveSolution, "save mesh and solution to HDF5");
   cmdp.setOption("loadSolution", "skipLoad", &loadSolution, "load mesh and solution from HDF5");
+  cmdp.setOption("loadRef", &loadRef, "load refinement number");
+  cmdp.setOption("loadDirRef", &loadDirRef, "which refinement directory to load from");
   cmdp.setOption("tag", &tag, "output tag");
 
   if (cmdp.parse(argc,argv) != Teuchos::CommandLineProcessor::PARSE_SUCCESSFUL)
@@ -304,19 +310,33 @@ int main(int argc, char *argv[])
     if (problem->numSteps() > 1 && commRank == 0 && !steady)
       cout << "Solving time slab [" << problem->currentT0() << ", " << problem->currentT1() << "]" << endl;
 
-    ostringstream solnName;
-    solnName << problemChoice << spaceDim << "D_slab" << problem->currentStep() << "_" << norm << "_" << Re << "_p" << p << "_" << solverChoice;
+    ostringstream problemName;
+    problemName << problemChoice << spaceDim << "D_slab" << problem->currentStep() << "_" << norm << "_" << Re << "_p" << p << "_" << solverChoice;
     if (tag != "")
-      solnName << "_" << tag;
-    string saveFile = "";
+      problemName << "_" << tag;
+    ostringstream saveDir;
+    saveDir << problemName.str() << "_ref" << loadRef;
+
+    int success = mkdir((rootDir+"/"+saveDir.str()).c_str(), S_IRWXU | S_IRWXG);
+
+    string dataFileLocation = rootDir + "/" + saveDir.str() + "/" + saveDir.str() + ".data";
+    string exportName = saveDir.str();
+
+    ostringstream loadDir;
+    loadDir << problemName.str() << "_ref" << loadDirRef;
+    string loadFilePrefix = "";
     if (loadSolution)
     {
-      saveFile = solnName.str();
-      if (commRank == 0) cout << "Loading previous solution " << saveFile << endl;
+      loadFilePrefix = rootDir + "/" + loadDir.str() + "/" + saveDir.str();
+      if (commRank == 0) cout << "Loading previous solution " << loadFilePrefix << endl;
     }
+    // ostringstream saveDir;
+    // saveDir << problemName.str() << "_ref" << loadRef;
+    string saveFilePrefix = rootDir + "/" + saveDir.str() + "/" + problemName.str();
+    if (saveSolution && commRank == 0) cout << "Saving to " << saveFilePrefix << endl;
 
     SpaceTimeIncompressibleFormulationPtr form = Teuchos::rcp(new SpaceTimeIncompressibleFormulation(spaceDim, steady, 1./Re,
-          useConformingTraces, problem->meshTopology(), p, delta_p, norm, problem->forcingTerm, saveFile));
+          useConformingTraces, problem->meshTopology(), p, delta_p, norm, problem->forcingTerm, loadFilePrefix));
 
     MeshPtr mesh = form->solutionUpdate()->mesh();
     MeshPtr k0Mesh = Teuchos::rcp( new Mesh (mesh->getTopology()->deepCopy(), form->bf(), 1, delta_p) );
@@ -333,7 +353,7 @@ int main(int argc, char *argv[])
     RefinementStrategyPtr refStrategy = form->getRefinementStrategy();
     Teuchos::RCP<HDF5Exporter> exporter;
     if (exportSolution)
-      exporter = Teuchos::rcp(new HDF5Exporter(mesh,solnName.str(), outputDir));
+      exporter = Teuchos::rcp(new HDF5Exporter(mesh,exportName, rootDir));
 
     Teuchos::RCP<Time> solverTime = Teuchos::TimeMonitor::getNewCounter("Solve Time");
     map<string, SolverPtr> solvers;
@@ -346,15 +366,9 @@ int main(int argc, char *argv[])
 #endif
     bool useStaticCondensation = false;
     int azOutput = 20; // print residual every 20 CG iterations
-
-    string dataFileLocation;
-    if (exportSolution)
-      dataFileLocation = outputDir+"/"+solnName.str()+"/"+solnName.str()+".txt";
-    else
-      dataFileLocation = outputDir+"/"+solnName.str()+".txt";
     ofstream dataFile(dataFileLocation);
     dataFile << "ref\t " << "elements\t " << "dofs\t " << "energy\t " << "l2\t " << "solvetime\t" << "iterations\t " << endl;
-    for (int refIndex=0; refIndex <= numRefs; refIndex++)
+    for (int refIndex=loadRef; refIndex <= numRefs; refIndex++)
     {
       double l2Update = 1e10;
       int iterCount = 0;
@@ -419,7 +433,11 @@ int main(int argc, char *argv[])
         exporter->exportSolution(solutionBackground, refIndex);
 
       if (saveSolution)
-        form->save(solnName.str());
+      {
+        ostringstream saveFile;
+        saveFile << saveFilePrefix << "_ref" << refIndex;
+        form->save(saveFile.str());
+      }
 
       if (refIndex != numRefs)
         refStrategy->refine();

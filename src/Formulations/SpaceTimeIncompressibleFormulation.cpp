@@ -207,9 +207,9 @@ SpaceTimeIncompressibleFormulation::SpaceTimeIncompressibleFormulation(int space
     // // BFPTR version should be deprecated
     _mesh = MeshFactory::loadFromHDF5(_bf, savedSolutionAndMeshPrefix+".mesh");
     _solutionBackground = Solution::solution(_bf, _mesh, bc);
-    _solutionBackground->loadFromHDF5(savedSolutionAndMeshPrefix+"_background.soln");
+    _solutionBackground->loadFromHDF5(savedSolutionAndMeshPrefix+".soln");
     _solutionUpdate = Solution::solution(_bf, _mesh, bc);
-    _solutionUpdate->loadFromHDF5(savedSolutionAndMeshPrefix+"_update.soln");
+    // _solutionUpdate->loadFromHDF5(savedSolutionAndMeshPrefix+"_update.soln");
   }
 
   FunctionPtr u1_prev = Function::solution(u1, _solutionBackground);
@@ -492,8 +492,8 @@ set<int> SpaceTimeIncompressibleFormulation::nonlinearVars()
 void SpaceTimeIncompressibleFormulation::save(std::string prefixString)
 {
   _solutionUpdate->mesh()->saveToHDF5(prefixString+".mesh");
-  _solutionUpdate->saveToHDF5(prefixString+"_update.soln");
-  _solutionBackground->saveToHDF5(prefixString+"_background.soln");
+  // _solutionUpdate->saveToHDF5(prefixString+"_update.soln");
+  _solutionBackground->saveToHDF5(prefixString+".soln");
 }
 
 // ! Returns the solution
