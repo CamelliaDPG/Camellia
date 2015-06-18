@@ -39,14 +39,22 @@ class IncompressibleProblem
     vector<double> _x0;
     vector<double> _dimensions;
     vector<int> _elementCounts;
-    double _t0;
-    double _t1;
+    double _tInit;
+    double _tFinal;
+    int _numSteps = 1;
+    int _currentStep = 0;
     bool _steady;
   public:
     LinearTermPtr forcingTerm = Teuchos::null;
     virtual MeshTopologyPtr meshTopology() = 0;
     virtual void setBCs(SpaceTimeIncompressibleFormulationPtr form) = 0;
     virtual double computeL2Error(SpaceTimeIncompressibleFormulationPtr form, SolutionPtr solutionBackground) = 0;
+    int numSteps() { return _numSteps; }
+    int currentStep() { return _currentStep; }
+    void advanceStep() { _currentStep++; }
+    double stepSize() { return (_tFinal-_tInit)/_numSteps; }
+    double currentT0() { return stepSize()*_currentStep; }
+    double currentT1() { return stepSize()*(_currentStep+1); }
 };
 
 class AnalyticalIncompressibleProblem : public IncompressibleProblem
@@ -57,7 +65,7 @@ class AnalyticalIncompressibleProblem : public IncompressibleProblem
     virtual MeshTopologyPtr meshTopology()
     {
       MeshTopologyPtr spatialMeshTopo = MeshFactory::rectilinearMeshTopology(_dimensions, _elementCounts, _x0);
-      MeshTopologyPtr spaceTimeMeshTopo = MeshFactory::spaceTimeMeshTopology(spatialMeshTopo, _t0, _t1);
+      MeshTopologyPtr spaceTimeMeshTopo = MeshFactory::spaceTimeMeshTopology(spatialMeshTopo, currentT0(), currentT1());
       if (_steady)
         return spatialMeshTopo;
       else
@@ -86,7 +94,7 @@ class AnalyticalIncompressibleProblem : public IncompressibleProblem
       initializeExactMap(form);
 
       BCPtr bc = form->solutionUpdate()->bc();
-      SpatialFilterPtr initTime = SpatialFilter::matchingT(_t0);
+      SpatialFilterPtr initTime = SpatialFilter::matchingT(_tInit);
       SpatialFilterPtr leftX  = SpatialFilter::matchingX(_x0[0]);
       SpatialFilterPtr rightX = SpatialFilter::matchingX(_x0[0]+_dimensions[0]);
       SpatialFilterPtr leftY  = SpatialFilter::matchingY(_x0[1]);
@@ -164,8 +172,8 @@ class KovasznayProblem : public AnalyticalIncompressibleProblem
       _dimensions.push_back(2.0);
       _elementCounts.push_back(3);
       _elementCounts.push_back(4);
-      _t0 = 0.0;
-      _t1 = 0.25;
+      _tInit = 0.0;
+      _tFinal = 0.25;
     }
 };
 
@@ -173,7 +181,7 @@ class TaylorGreenProblem : public AnalyticalIncompressibleProblem
 {
   private:
   public:
-    TaylorGreenProblem(bool steady, double Re)
+    TaylorGreenProblem(bool steady, double Re, int numSteps=1)
     {
       _steady = steady;
       // problemName = "Kovasznay";
@@ -192,10 +200,11 @@ class TaylorGreenProblem : public AnalyticalIncompressibleProblem
       _x0.push_back(0);
       _dimensions.push_back(2*pi);
       _dimensions.push_back(2*pi);
-      _elementCounts.push_back(4);
-      _elementCounts.push_back(4);
-      _t0 = 0.0;
-      _t1 = 1.0;
+      _elementCounts.push_back(2);
+      _elementCounts.push_back(2);
+      _tInit = 0.0;
+      _tFinal = 1.0;
+      _numSteps = numSteps;
     }
 };
 
@@ -234,6 +243,7 @@ int main(int argc, char *argv[])
   int numRefs = 1;
   int p = 2, delta_p = 2;
   int numXElems = 1;
+  int numSteps = 1;
   bool useConformingTraces = false;
   string solverChoice = "KLU";
   double solverTolerance = 1e-8;
@@ -255,6 +265,7 @@ int main(int argc, char *argv[])
   cmdp.setOption("delta_p", &delta_p, "test space polynomial order enrichment");
   cmdp.setOption("numRefs",&numRefs,"number of refinements");
   cmdp.setOption("numXElems",&numXElems,"number of elements in x direction");
+  cmdp.setOption("numSteps",&numSteps,"number of time slabs to use");
   cmdp.setOption("norm", &norm, "norm");
   cmdp.setOption("conformingTraces", "nonconformingTraces", &useConformingTraces, "use conforming traces");
   cmdp.setOption("solver", &solverChoice, "KLU, SuperLU, MUMPS, GMG-Direct, GMG-ILU, GMG-IC");
@@ -277,143 +288,144 @@ int main(int argc, char *argv[])
     return -1;
   }
 
-  ostringstream solnName;
-  solnName << problemChoice << spaceDim << "D_" << norm << "_" << Re << "_p" << p << "_" << solverChoice;
-  if (tag != "")
-    solnName << "_" << tag;
-  string saveFile = "";
-  if (loadSolution)
-  {
-    saveFile = solnName.str();
-    if (commRank == 0) cout << "Loading previous solution " << saveFile << endl;
-  }
-
   map<string, Teuchos::RCP<IncompressibleProblem>> problems;
   problems["Kovasznay"] = Teuchos::rcp(new KovasznayProblem(steady, Re));
-  problems["TaylorGreen"] = Teuchos::rcp(new TaylorGreenProblem(steady, Re));
+  problems["TaylorGreen"] = Teuchos::rcp(new TaylorGreenProblem(steady, Re, numSteps));
   Teuchos::RCP<IncompressibleProblem> problem = problems.at(problemChoice);
 
-  MeshTopologyPtr spaceTimeMeshTopo = problem->meshTopology();
-
-  SpaceTimeIncompressibleFormulationPtr form = Teuchos::rcp(new SpaceTimeIncompressibleFormulation(spaceDim, steady, 1./Re,
-        useConformingTraces, spaceTimeMeshTopo, p, delta_p, norm, problem->forcingTerm, saveFile));
-
-  // if (loadSolution)
+  // if (commRank == 0)
   // {
-  //   form->solutionBackground()->mesh() = MeshFactory::loadFromHDF5(form->bf(), saveFile+".mesh");
-  //   form->solutionBackground()->loadFromHDF5(saveFile+"_background.soln");
-  //   form->solutionUpdate()->loadFromHDF5(saveFile+"_update.soln");
+  //   Solver::printAvailableSolversReport();
+  //   cout << endl;
   // }
-  MeshPtr mesh = form->solutionUpdate()->mesh();
-  MeshPtr k0Mesh = Teuchos::rcp( new Mesh (spaceTimeMeshTopo->deepCopy(), form->bf(), 1, delta_p) );
-  mesh->registerObserver(k0Mesh);
 
-  // Set up boundary conditions
-  problem->setBCs(form);
+  for (; problem->currentStep() < problem->numSteps(); problem->advanceStep())
+  {
+    if (problem->numSteps() > 1 && commRank == 0 && !steady)
+      cout << "Solving time slab [" << problem->currentT0() << ", " << problem->currentT1() << "]" << endl;
 
-  // Set up solution
-  SolutionPtr solutionUpdate = form->solutionUpdate();
-  SolutionPtr solutionBackground = form->solutionBackground();
-  // dynamic_cast<AnalyticalIncompressibleProblem*>(problem.get())->projectExactSolution(solutionBackground);
+    ostringstream solnName;
+    solnName << problemChoice << spaceDim << "D_slab" << problem->currentStep() << "_" << norm << "_" << Re << "_p" << p << "_" << solverChoice;
+    if (tag != "")
+      solnName << "_" << tag;
+    string saveFile = "";
+    if (loadSolution)
+    {
+      saveFile = solnName.str();
+      if (commRank == 0) cout << "Loading previous solution " << saveFile << endl;
+    }
 
-  RefinementStrategyPtr refStrategy = form->getRefinementStrategy();
-  Teuchos::RCP<HDF5Exporter> exporter;
-  if (exportSolution)
-    exporter = Teuchos::rcp(new HDF5Exporter(mesh,solnName.str(), outputDir));
+    SpaceTimeIncompressibleFormulationPtr form = Teuchos::rcp(new SpaceTimeIncompressibleFormulation(spaceDim, steady, 1./Re,
+          useConformingTraces, problem->meshTopology(), p, delta_p, norm, problem->forcingTerm, saveFile));
 
-  Teuchos::RCP<Time> solverTime = Teuchos::TimeMonitor::getNewCounter("Solve Time");
+    MeshPtr mesh = form->solutionUpdate()->mesh();
+    MeshPtr k0Mesh = Teuchos::rcp( new Mesh (mesh->getTopology()->deepCopy(), form->bf(), 1, delta_p) );
+    mesh->registerObserver(k0Mesh);
 
-  if (commRank == 0)
-    Solver::printAvailableSolversReport();
-  map<string, SolverPtr> solvers;
-  solvers["KLU"] = Solver::getSolver(Solver::KLU, true);
+    // Set up boundary conditions
+    problem->setBCs(form);
+
+    // Set up solution
+    SolutionPtr solutionUpdate = form->solutionUpdate();
+    SolutionPtr solutionBackground = form->solutionBackground();
+    // dynamic_cast<AnalyticalIncompressibleProblem*>(problem.get())->projectExactSolution(solutionBackground);
+
+    RefinementStrategyPtr refStrategy = form->getRefinementStrategy();
+    Teuchos::RCP<HDF5Exporter> exporter;
+    if (exportSolution)
+      exporter = Teuchos::rcp(new HDF5Exporter(mesh,solnName.str(), outputDir));
+
+    Teuchos::RCP<Time> solverTime = Teuchos::TimeMonitor::getNewCounter("Solve Time");
+    map<string, SolverPtr> solvers;
+    solvers["KLU"] = Solver::getSolver(Solver::KLU, true);
 #if defined(HAVE_AMESOS_SUPERLUDIST) || defined(HAVE_AMESOS2_SUPERLUDIST)
-  solvers["SuperLUDist"] = Solver::getSolver(Solver::SuperLUDist, true);
+    solvers["SuperLUDist"] = Solver::getSolver(Solver::SuperLUDist, true);
 #endif
 #ifdef HAVE_AMESOS_MUMPS
-  solvers["MUMPS"] = Solver::getSolver(Solver::MUMPS, true);
+    solvers["MUMPS"] = Solver::getSolver(Solver::MUMPS, true);
 #endif
-  bool useStaticCondensation = false;
-  int azOutput = 20; // print residual every 20 CG iterations
+    bool useStaticCondensation = false;
+    int azOutput = 20; // print residual every 20 CG iterations
 
-  string dataFileLocation;
-  if (exportSolution)
-    dataFileLocation = outputDir+"/"+solnName.str()+"/"+solnName.str()+".txt";
-  else
-    dataFileLocation = outputDir+"/"+solnName.str()+".txt";
-  ofstream dataFile(dataFileLocation);
-  dataFile << "ref\t " << "elements\t " << "dofs\t " << "energy\t " << "l2\t " << "solvetime\t" << "iterations\t " << endl;
-  for (int refIndex=0; refIndex <= numRefs; refIndex++)
-  {
-    double l2Update = 1e10;
-    int iterCount = 0;
-    solverTime->start(true);
-    while (l2Update > nonlinearTolerance && iterCount < maxNonlinearIterations)
-    {
-      Teuchos::RCP<GMGSolver> gmgSolver;
-      if (solverChoice[0] == 'G')
-      {
-        gmgSolver = Teuchos::rcp( new GMGSolver(solutionUpdate, k0Mesh, maxLinearIterations, solverTolerance, Solver::getDirectSolver(true), useStaticCondensation));
-        gmgSolver->setAztecOutput(azOutput);
-        if (solverChoice == "GMG-Direct")
-          gmgSolver->gmgOperator()->setSchwarzFactorizationType(GMGOperator::Direct);
-        if (solverChoice == "GMG-ILU")
-          gmgSolver->gmgOperator()->setSchwarzFactorizationType(GMGOperator::ILU);
-        if (solverChoice == "GMG-IC")
-          gmgSolver->gmgOperator()->setSchwarzFactorizationType(GMGOperator::IC);
-        solutionUpdate->solve(gmgSolver);
-      }
-      else
-        solutionUpdate->condensedSolve(solvers[solverChoice]);
-
-      // Compute L2 norm of update
-      double u1L2Update = solutionUpdate->L2NormOfSolutionGlobal(form->u(1)->ID());
-      double u2L2Update = solutionUpdate->L2NormOfSolutionGlobal(form->u(2)->ID());
-      l2Update = sqrt(u1L2Update*u1L2Update + u2L2Update*u2L2Update);
-      if (commRank == 0)
-        cout << "Nonlinear Update:\t " << l2Update << endl;
-
-      form->updateSolution();
-      iterCount++;
-    }
-    double solveTime = solverTime->stop();
-
-    double energyError = solutionUpdate->energyErrorTotal();
-    double l2Error = 0;
-    if (computeL2Error)
-    {
-      l2Error = problem->computeL2Error(form, solutionBackground);
-    }
-    if (commRank == 0)
-    {
-      cout << "Refinement: " << refIndex
-        << " \tElements: " << mesh->numActiveElements()
-        << " \tDOFs: " << mesh->numGlobalDofs()
-        << " \tEnergy Error: " << energyError
-        << " \tL2 Error: " << l2Error
-        << " \tSolve Time: " << solveTime
-        // << " \tIteration Count: " << iterationCount
-        << endl;
-      dataFile << refIndex
-        << " " << mesh->numActiveElements()
-        << " " << mesh->numGlobalDofs()
-        << " " << energyError
-        << " " << l2Error
-        << " " << solveTime
-        // << " " << iterationCount
-        << endl;
-    }
-
+    string dataFileLocation;
     if (exportSolution)
-      exporter->exportSolution(solutionBackground, refIndex);
+      dataFileLocation = outputDir+"/"+solnName.str()+"/"+solnName.str()+".txt";
+    else
+      dataFileLocation = outputDir+"/"+solnName.str()+".txt";
+    ofstream dataFile(dataFileLocation);
+    dataFile << "ref\t " << "elements\t " << "dofs\t " << "energy\t " << "l2\t " << "solvetime\t" << "iterations\t " << endl;
+    for (int refIndex=0; refIndex <= numRefs; refIndex++)
+    {
+      double l2Update = 1e10;
+      int iterCount = 0;
+      solverTime->start(true);
+      while (l2Update > nonlinearTolerance && iterCount < maxNonlinearIterations)
+      {
+        Teuchos::RCP<GMGSolver> gmgSolver;
+        if (solverChoice[0] == 'G')
+        {
+          gmgSolver = Teuchos::rcp( new GMGSolver(solutionUpdate, k0Mesh, maxLinearIterations, solverTolerance, Solver::getDirectSolver(true), useStaticCondensation));
+          gmgSolver->setAztecOutput(azOutput);
+          if (solverChoice == "GMG-Direct")
+            gmgSolver->gmgOperator()->setSchwarzFactorizationType(GMGOperator::Direct);
+          if (solverChoice == "GMG-ILU")
+            gmgSolver->gmgOperator()->setSchwarzFactorizationType(GMGOperator::ILU);
+          if (solverChoice == "GMG-IC")
+            gmgSolver->gmgOperator()->setSchwarzFactorizationType(GMGOperator::IC);
+          solutionUpdate->solve(gmgSolver);
+        }
+        else
+          solutionUpdate->condensedSolve(solvers[solverChoice]);
 
-    if (saveSolution)
-      form->save(solnName.str());
+        // Compute L2 norm of update
+        double u1L2Update = solutionUpdate->L2NormOfSolutionGlobal(form->u(1)->ID());
+        double u2L2Update = solutionUpdate->L2NormOfSolutionGlobal(form->u(2)->ID());
+        l2Update = sqrt(u1L2Update*u1L2Update + u2L2Update*u2L2Update);
+        if (commRank == 0)
+          cout << "Nonlinear Update:\t " << l2Update << endl;
 
-    if (refIndex != numRefs)
-      refStrategy->refine();
+        form->updateSolution();
+        iterCount++;
+      }
+      double solveTime = solverTime->stop();
+
+      double energyError = solutionUpdate->energyErrorTotal();
+      double l2Error = 0;
+      if (computeL2Error)
+      {
+        l2Error = problem->computeL2Error(form, solutionBackground);
+      }
+      if (commRank == 0)
+      {
+        cout << "Refinement: " << refIndex
+          << " \tElements: " << mesh->numActiveElements()
+          << " \tDOFs: " << mesh->numGlobalDofs()
+          << " \tEnergy Error: " << energyError
+          << " \tL2 Error: " << l2Error
+          << " \tSolve Time: " << solveTime
+          // << " \tIteration Count: " << iterationCount
+          << endl;
+        dataFile << refIndex
+          << " " << mesh->numActiveElements()
+          << " " << mesh->numGlobalDofs()
+          << " " << energyError
+          << " " << l2Error
+          << " " << solveTime
+          // << " " << iterationCount
+          << endl;
+      }
+
+      if (exportSolution)
+        exporter->exportSolution(solutionBackground, refIndex);
+
+      if (saveSolution)
+        form->save(solnName.str());
+
+      if (refIndex != numRefs)
+        refStrategy->refine();
+    }
+    dataFile.close();
   }
-  dataFile.close();
 
   return 0;
 }
