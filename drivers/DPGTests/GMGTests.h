@@ -40,7 +40,6 @@ public:
   bool testGMGOperatorIdentityLocalCoefficientMap();
 
   bool testGMGSolverIdentity2DRefinedMeshes();
-  bool testGMGSolverIdentityUniformMeshes();
 
   // p-multigrid tests: fine and coarse mesh the same, except for polynomial order:
   bool testGMGOperatorP();
