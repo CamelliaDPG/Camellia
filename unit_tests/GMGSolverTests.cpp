@@ -48,12 +48,9 @@ namespace
     //    FunctionPtr phi_exact = Function::xn(2) * Function::yn(1); // x^2 y exact solution
     FunctionPtr psiExact = (spaceDim > 1) ? phiExact->grad() : phiExact->dx();
 
-
-    int coarseElementCount = 1;
     int delta_k = spaceDim;
     vector<double> dimensions(spaceDim,1.0);
-    vector<int> elementCounts(spaceDim,coarseElementCount);
-    MeshPtr mesh = MeshFactory::rectilinearMesh(bf, dimensions, elementCounts, H1Order, delta_k);
+    MeshPtr mesh = MeshFactory::rectilinearMesh(bf, dimensions, cellCounts, H1Order, delta_k);
     
     SolutionPtr coarseSoln = Solution::solution(mesh);
     
@@ -108,10 +105,66 @@ namespace
     return solution;
   }
   
-  // ! This test adapted from one that used to reside in GMGTests (testGMGSolverIdentityUniformMeshes)
-  void testIdentityUniformMeshes(int spaceDim, int meshWidth, bool useConformingTraces, bool useStaticCondensation,
-                                 bool applySmoothing, Teuchos::FancyOStream &out, bool &success)
+  SolutionPtr poissonExactSolutionRefined_2D(int H1Order, FunctionPtr phi_exact, bool useH1Traces, int refinementSetOrdinal)
   {
+    vector<int> numCells;
+    numCells.push_back(2);
+    numCells.push_back(2);
+    SolutionPtr soln = poissonExactSolution(numCells, H1Order, phi_exact, useH1Traces);
+    
+    MeshPtr mesh = soln->mesh();
+    
+    set<GlobalIndexType> cellIDs;
+    switch (refinementSetOrdinal)
+    {
+      case 0: // no refinements
+        break;
+      case 1: // one refinement
+        cellIDs = {3};
+        mesh->hRefine(cellIDs,RefinementPattern::regularRefinementPatternQuad(),true);
+        break;
+      case 2:
+        cellIDs = {3};
+        mesh->hRefine(cellIDs,RefinementPattern::regularRefinementPatternQuad(),false);
+
+        cellIDs = {6,7};
+        mesh->hRefine(cellIDs,RefinementPattern::regularRefinementPatternQuad(),false);
+        
+        cellIDs = {1};
+        mesh->hRefine(cellIDs,RefinementPattern::regularRefinementPatternQuad(),true);
+        cellIDs.clear();
+        break;
+        
+      case 3:
+        cellIDs = {1,3};
+        mesh->hRefine(cellIDs,RefinementPattern::regularRefinementPatternQuad(),false);
+        
+        cellIDs = {6,7,8,10,11};
+        mesh->hRefine(cellIDs,RefinementPattern::regularRefinementPatternQuad(),false);
+        
+        cellIDs = {2};
+        mesh->hRefine(cellIDs,RefinementPattern::regularRefinementPatternQuad(),false);
+        
+        cellIDs = {4,9,12,14,19,26,31};
+        mesh->hRefine(cellIDs,RefinementPattern::regularRefinementPatternQuad(),false);
+        
+        cellIDs = {0,5};
+        mesh->hRefine(cellIDs,RefinementPattern::regularRefinementPatternQuad(),true);
+        break;
+      default:
+        TEUCHOS_TEST_FOR_EXCEPTION(true, std::invalid_argument, "unsupported refinement number");
+    }
+    
+    return soln;
+  }
+
+  // ! In this test, the prolongation operator is the identity: we have the same mesh for coarse and fine.
+  void testIdentity(int spaceDim, bool useRefinedMeshes, int refinementNumber, int meshWidth,
+                    bool useConformingTraces, bool useStaticCondensation, bool applySmootherBeforeCoarseSolve,
+                    Teuchos::FancyOStream &out, bool &success)
+  {
+    // if applySmootherBeforeCoarseSolve is true, we apply smoother first, compute residual, and apply the coarse operator to the residual
+    // the consequence here being applySmootherBeforeCoarseSolve == true --> one iteration should nail the exact solution
     PoissonFormulation form(spaceDim, useConformingTraces);
     vector<int> cellCount;
     for (int d=0; d<spaceDim; d++)
@@ -122,8 +175,17 @@ namespace
     int H1Order = 1;
     bool useH1Traces = false;
     FunctionPtr phiExact = getPhiExact(spaceDim);
-    SolutionPtr exactPoissonSolution = poissonExactSolution(cellCount, H1Order, phiExact, useH1Traces);
-    SolutionPtr actualPoissonSolution = poissonExactSolution(cellCount, H1Order, phiExact, useH1Traces);
+    SolutionPtr exactPoissonSolution, actualPoissonSolution;
+    if (!useRefinedMeshes)
+    {
+      exactPoissonSolution = poissonExactSolution(cellCount, H1Order, phiExact, useH1Traces);
+      actualPoissonSolution = poissonExactSolution(cellCount, H1Order, phiExact, useH1Traces);
+    }
+    else if (spaceDim == 2)
+    {
+      exactPoissonSolution = poissonExactSolutionRefined_2D(H1Order, phiExact, useH1Traces, refinementNumber);
+      actualPoissonSolution = poissonExactSolutionRefined_2D(H1Order, phiExact, useH1Traces, refinementNumber);
+    }
     
     exactPoissonSolution->setUseCondensedSolve(useStaticCondensation);
     actualPoissonSolution->setUseCondensedSolve(useStaticCondensation);
@@ -165,7 +227,6 @@ namespace
     //        EpetraExt::MultiVectorToMatlabFile("/tmp/x_direct.dat",*lhsVector);
     
     Epetra_MultiVector gmg_lhsVector(rhsVectorCopy.Map(), 1); // lhs has same distribution structure as rhs
-    gmgSolver->setApplySmoothingOperator(applySmoothing);
     
     // since we may change the RHS vector below, let's make a copy and use that
     Epetra_MultiVector rhsVectorCopy2(rhsVectorCopy);
@@ -197,7 +258,7 @@ namespace
     
     // determine the expected value
     Epetra_MultiVector directValue(*lhsVector); // x
-    if (applySmoothing)
+    if (!applySmootherBeforeCoarseSolve)
     {
       // x + D^-1 b
       directValue.Multiply(1.0, rhsVectorCopy2, *diagA_inv, 1.0);
@@ -206,16 +267,10 @@ namespace
     // if applySmoothing = false, then we expect exact agreement between direct solution and iterative.
     // If applySmoothing = true,  then we expect iterative = exact + D^-1 b
     
-    if (applySmoothing)
-    {
-      gmgSolver->gmgOperator()->setSmootherType(GMGOperator::POINT_JACOBI);
-    }
-    else
-    {
-      gmgSolver->gmgOperator()->setSmootherType(GMGOperator::NONE);
-    }
+    gmgSolver->gmgOperator()->setSmootherType(GMGOperator::POINT_JACOBI);
     
     gmgSolver->gmgOperator()->setFineStiffnessMatrix(A);
+    gmgSolver->gmgOperator()->setSmoothBeforeCoarseSolve(applySmootherBeforeCoarseSolve);
     gmgSolver->gmgOperator()->ApplyInverse(rhsVectorCopy2, gmg_lhsVector);
     
     double tol = 1e-10;
@@ -236,7 +291,7 @@ namespace
     }
     
     // do "multi" grid between mesh and itself.  Solution should match phiExact.
-    maxIters = applySmoothing ? 100 : 1; // if smoothing not applied, then GMG should recover exactly the direct solution, in 1 iteration
+    maxIters = applySmootherBeforeCoarseSolve ? 1 : 100; // if smoother applied in sequence, then GMG should recover exactly the direct solution, in 1 iteration
     
     if (useStaticCondensation)
     {
@@ -252,7 +307,6 @@ namespace
                                             maxIters, iter_tol, coarseSolver, useStaticCondensation) );
     
     gmgSolver->setComputeConditionNumberEstimate(false);
-    gmgSolver->setApplySmoothingOperator(applySmoothing);
     
     Teuchos::RCP<Solver> fineSolver = gmgSolver;
     
@@ -276,22 +330,45 @@ namespace
     }
   }
   
+  // ! This test adapted from one that used to reside in GMGTests (testGMGSolverIdentityUniformMeshes)
+  // ! In this test, the prolongation operator is the identity: we have the same mesh for coarse and fine.
+  void testIdentityUniformMeshes(int spaceDim, int meshWidth, bool useConformingTraces, bool useStaticCondensation,
+                                 bool applySmootherBeforeCoarseSolve, Teuchos::FancyOStream &out, bool &success)
+  {
+    bool useRefinedMeshes = false;
+    int refinementNumber = -1;
+    testIdentity(spaceDim, useRefinedMeshes, refinementNumber, meshWidth, useConformingTraces,
+                 useStaticCondensation, applySmootherBeforeCoarseSolve, out, success);
+  }
+  
+  // ! This test adapted from one that used to reside in GMGTests (testGMGSolverIdentityUniformMeshes)
+  // ! In this test, the prolongation operator is the identity: we have the same mesh for coarse and fine.
+  void testIdentityRefined2DMeshes(int refinementSequence, bool useConformingTraces, bool useStaticCondensation,
+                                   bool applySmootherBeforeCoarseSolve, Teuchos::FancyOStream &out, bool &success)
+  {
+    bool useRefinedMeshes = true;
+    int spaceDim = 2;
+    int meshWidth = 2;
+    testIdentity(spaceDim, useRefinedMeshes, refinementSequence, meshWidth, useConformingTraces,
+                 useStaticCondensation, applySmootherBeforeCoarseSolve, out, success);
+  }
+  
   TEUCHOS_UNIT_TEST( GMGSolver, UniformIdentity_1D_Slow)
   {
     int spaceDim = 1;
     bool useConformingTraces = false;
     
     vector<bool> staticCondensationChoices = {false, true};
-    vector<bool> applySmoothingChoices = {false, true};
+    vector<bool> applySmootherBeforeCoarseSolveChoices = {false, true};
     vector<int> meshWidths = {1,2};
     
     for (bool useStaticCondensation : staticCondensationChoices)
     {
-      for (bool applySmoothing : applySmoothingChoices)
+      for (bool applySmootherBeforeCoarseSolve : applySmootherBeforeCoarseSolveChoices)
       {
         for (int meshWidth : meshWidths)
         {
-          testIdentityUniformMeshes(spaceDim, meshWidth, useConformingTraces, useStaticCondensation, applySmoothing, out, success);
+          testIdentityUniformMeshes(spaceDim, meshWidth, useConformingTraces, useStaticCondensation, applySmootherBeforeCoarseSolve, out, success);
         }
       }
     }
@@ -303,16 +380,37 @@ namespace
     bool useConformingTraces = false;
     
     vector<bool> staticCondensationChoices = {false, true};
-    vector<bool> applySmoothingChoices = {false, true};
+    vector<bool> applySmootherBeforeCoarseSolveChoices = {false, true};
     vector<int> meshWidths = {1,2};
     
     for (bool useStaticCondensation : staticCondensationChoices)
     {
-      for (bool applySmoothing : applySmoothingChoices)
+      for (bool applySmootherBeforeCoarseSolve : applySmootherBeforeCoarseSolveChoices)
       {
         for (int meshWidth : meshWidths)
         {
-          testIdentityUniformMeshes(spaceDim, meshWidth, useConformingTraces, useStaticCondensation, applySmoothing, out, success);
+          testIdentityUniformMeshes(spaceDim, meshWidth, useConformingTraces, useStaticCondensation, applySmootherBeforeCoarseSolve, out, success);
+        }
+      }
+    }
+  }
+  
+  TEUCHOS_UNIT_TEST( GMGSolver, RefinedIdentity_2D_Slow)
+  {
+    bool useConformingTraces = false;
+    
+    vector<bool> staticCondensationChoices = {false, true};
+    vector<bool> applySmootherBeforeCoarseSolveChoices = {true};
+    vector<int> refinementSequences = {0,1,2,3};
+    
+    for (bool useStaticCondensation : staticCondensationChoices)
+    {
+      for (bool applySmootherBeforeCoarseSolve : applySmootherBeforeCoarseSolveChoices)
+      {
+        for (int refinementSequence : refinementSequences)
+        {
+          testIdentityRefined2DMeshes(refinementSequence, useConformingTraces, useStaticCondensation,
+                                      applySmootherBeforeCoarseSolve, out, success);
         }
       }
     }
@@ -323,17 +421,17 @@ namespace
     int spaceDim = 3;
     bool useConformingTraces = false;
     
-    vector<bool> staticCondensationChoices = {false, true};
-    vector<bool> applySmoothingChoices = {false, true};
+    vector<bool> staticCondensationChoices = {false}; // to keep test cost down, we'll consider testing static condensation in 1D and 2D good enough.
+    vector<bool> applySmootherBeforeCoarseSolveChoices = {false, true};
     vector<int> meshWidths = {1,2};
     
     for (bool useStaticCondensation : staticCondensationChoices)
     {
-      for (bool applySmoothing : applySmoothingChoices)
+      for (bool applySmootherBeforeCoarseSolve : applySmootherBeforeCoarseSolveChoices)
       {
         for (int meshWidth : meshWidths)
         {
-          testIdentityUniformMeshes(spaceDim, meshWidth, useConformingTraces, useStaticCondensation, applySmoothing, out, success);
+          testIdentityUniformMeshes(spaceDim, meshWidth, useConformingTraces, useStaticCondensation, applySmootherBeforeCoarseSolve, out, success);
         }
       }
     }
