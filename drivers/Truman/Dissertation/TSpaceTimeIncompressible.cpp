@@ -183,7 +183,7 @@ class TaylorGreenProblem : public AnalyticalIncompressibleProblem
 {
   private:
   public:
-    TaylorGreenProblem(bool steady, double Re, int numSlabs=1)
+    TaylorGreenProblem(bool steady, double Re, int numXElems=2, int numSlabs=1)
     {
       _steady = steady;
       // problemName = "Kovasznay";
@@ -202,8 +202,8 @@ class TaylorGreenProblem : public AnalyticalIncompressibleProblem
       _x0.push_back(0);
       _dimensions.push_back(2*pi);
       _dimensions.push_back(2*pi);
-      _elementCounts.push_back(2*numSlabs);
-      _elementCounts.push_back(2*numSlabs);
+      _elementCounts.push_back(numXElems);
+      _elementCounts.push_back(numXElems);
       _tInit = 0.0;
       _tFinal = 1.0;
       _numSlabs = numSlabs;
@@ -297,7 +297,7 @@ int main(int argc, char *argv[])
 
   map<string, Teuchos::RCP<IncompressibleProblem>> problems;
   problems["Kovasznay"] = Teuchos::rcp(new KovasznayProblem(steady, Re));
-  problems["TaylorGreen"] = Teuchos::rcp(new TaylorGreenProblem(steady, Re, numSlabs));
+  problems["TaylorGreen"] = Teuchos::rcp(new TaylorGreenProblem(steady, Re, numXElems, numSlabs));
   Teuchos::RCP<IncompressibleProblem> problem = problems.at(problemChoice);
 
   // if (commRank == 0)
@@ -305,6 +305,8 @@ int main(int argc, char *argv[])
   //   Solver::printAvailableSolversReport();
   //   cout << endl;
   // }
+  Teuchos::RCP<Time> totalTimer = Teuchos::TimeMonitor::getNewCounter("Total Time");
+  totalTimer->start(true);
 
   for (; problem->currentStep() < problem->numSlabs(); problem->advanceStep())
   {
@@ -445,6 +447,9 @@ int main(int argc, char *argv[])
     }
     dataFile.close();
   }
+  double totalTime = totalTimer->stop();
+  if (commRank == 0)
+    cout << "Total time = " << totalTime << endl;
 
   return 0;
 }
