@@ -43,18 +43,18 @@ class IncompressibleProblem
     vector<int> _elementCounts;
     double _tInit;
     double _tFinal;
-    int _numSteps = 1;
+    int _numSlabs = 1;
     int _currentStep = 0;
     bool _steady;
   public:
     LinearTermPtr forcingTerm = Teuchos::null;
-    virtual MeshTopologyPtr meshTopology() = 0;
+    virtual MeshTopologyPtr meshTopology(int temporalDivisions=1) = 0;
     virtual void setBCs(SpaceTimeIncompressibleFormulationPtr form) = 0;
     virtual double computeL2Error(SpaceTimeIncompressibleFormulationPtr form, SolutionPtr solutionBackground) = 0;
-    int numSteps() { return _numSteps; }
+    int numSlabs() { return _numSlabs; }
     int currentStep() { return _currentStep; }
     void advanceStep() { _currentStep++; }
-    double stepSize() { return (_tFinal-_tInit)/_numSteps; }
+    double stepSize() { return (_tFinal-_tInit)/_numSlabs; }
     double currentT0() { return stepSize()*_currentStep; }
     double currentT1() { return stepSize()*(_currentStep+1); }
 };
@@ -64,7 +64,7 @@ class AnalyticalIncompressibleProblem : public IncompressibleProblem
   protected:
     map<int, FunctionPtr> _exactMap;
   public:
-    virtual MeshTopologyPtr meshTopology()
+    virtual MeshTopologyPtr meshTopology(int temporalDivisions=1)
     {
       MeshTopologyPtr spatialMeshTopo = MeshFactory::rectilinearMeshTopology(_dimensions, _elementCounts, _x0);
       MeshTopologyPtr spaceTimeMeshTopo = MeshFactory::spaceTimeMeshTopology(spatialMeshTopo, currentT0(), currentT1());
@@ -183,7 +183,7 @@ class TaylorGreenProblem : public AnalyticalIncompressibleProblem
 {
   private:
   public:
-    TaylorGreenProblem(bool steady, double Re, int numSteps=1)
+    TaylorGreenProblem(bool steady, double Re, int numSlabs=1)
     {
       _steady = steady;
       // problemName = "Kovasznay";
@@ -202,11 +202,11 @@ class TaylorGreenProblem : public AnalyticalIncompressibleProblem
       _x0.push_back(0);
       _dimensions.push_back(2*pi);
       _dimensions.push_back(2*pi);
-      _elementCounts.push_back(2);
-      _elementCounts.push_back(2);
+      _elementCounts.push_back(2*numSlabs);
+      _elementCounts.push_back(2*numSlabs);
       _tInit = 0.0;
       _tFinal = 1.0;
-      _numSteps = numSteps;
+      _numSlabs = numSlabs;
     }
 };
 
@@ -245,7 +245,8 @@ int main(int argc, char *argv[])
   int numRefs = 1;
   int p = 2, delta_p = 2;
   int numXElems = 1;
-  int numSteps = 1;
+  int numTElems = 1;
+  int numSlabs = 1;
   bool useConformingTraces = false;
   string solverChoice = "KLU";
   double solverTolerance = 1e-8;
@@ -269,7 +270,7 @@ int main(int argc, char *argv[])
   cmdp.setOption("delta_p", &delta_p, "test space polynomial order enrichment");
   cmdp.setOption("numRefs",&numRefs,"number of refinements");
   cmdp.setOption("numXElems",&numXElems,"number of elements in x direction");
-  cmdp.setOption("numSteps",&numSteps,"number of time slabs to use");
+  cmdp.setOption("numSlabs",&numSlabs,"number of time slabs to use");
   cmdp.setOption("norm", &norm, "norm");
   cmdp.setOption("conformingTraces", "nonconformingTraces", &useConformingTraces, "use conforming traces");
   cmdp.setOption("solver", &solverChoice, "KLU, SuperLU, MUMPS, GMG-Direct, GMG-ILU, GMG-IC");
@@ -296,7 +297,7 @@ int main(int argc, char *argv[])
 
   map<string, Teuchos::RCP<IncompressibleProblem>> problems;
   problems["Kovasznay"] = Teuchos::rcp(new KovasznayProblem(steady, Re));
-  problems["TaylorGreen"] = Teuchos::rcp(new TaylorGreenProblem(steady, Re, numSteps));
+  problems["TaylorGreen"] = Teuchos::rcp(new TaylorGreenProblem(steady, Re, numSlabs));
   Teuchos::RCP<IncompressibleProblem> problem = problems.at(problemChoice);
 
   // if (commRank == 0)
@@ -305,9 +306,9 @@ int main(int argc, char *argv[])
   //   cout << endl;
   // }
 
-  for (; problem->currentStep() < problem->numSteps(); problem->advanceStep())
+  for (; problem->currentStep() < problem->numSlabs(); problem->advanceStep())
   {
-    if (problem->numSteps() > 1 && commRank == 0 && !steady)
+    if (problem->numSlabs() > 1 && commRank == 0 && !steady)
       cout << "Solving time slab [" << problem->currentT0() << ", " << problem->currentT1() << "]" << endl;
 
     ostringstream problemName;
@@ -336,7 +337,7 @@ int main(int argc, char *argv[])
     if (saveSolution && commRank == 0) cout << "Saving to " << saveFilePrefix << endl;
 
     SpaceTimeIncompressibleFormulationPtr form = Teuchos::rcp(new SpaceTimeIncompressibleFormulation(spaceDim, steady, 1./Re,
-          useConformingTraces, problem->meshTopology(), p, delta_p, norm, problem->forcingTerm, loadFilePrefix));
+          useConformingTraces, problem->meshTopology(numTElems), p, delta_p, norm, problem->forcingTerm, loadFilePrefix));
 
     MeshPtr mesh = form->solutionUpdate()->mesh();
     MeshPtr k0Mesh = Teuchos::rcp( new Mesh (mesh->getTopology()->deepCopy(), form->bf(), 1, delta_p) );
