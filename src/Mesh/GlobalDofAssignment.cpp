@@ -327,10 +327,15 @@ void GlobalDofAssignment::didHRefine(const set<GlobalIndexType> &parentCellIDs) 
     GlobalIndexType parentID = *cellIDIt;
     if (_partitions[rank].find(parentID) != _partitions[rank].end())
     {
-      _partitions[rank].erase(parentID);
       CellPtr parent = _meshTopology->getCell(parentID);
       vector<GlobalIndexType> childIDs = parent->getChildIndices();
       _partitions[rank].insert(childIDs.begin(),childIDs.end());
+      for (GlobalIndexType childID : childIDs)
+      {
+        _partitionForCellID[childID] = rank;
+      }
+      _partitions[rank].erase(parentID);
+      _partitionForCellID.erase(parentID);
     }
   }
   constructActiveCellMap();
@@ -420,6 +425,8 @@ GlobalIndexType GlobalDofAssignment::globalCellIndex(GlobalIndexType cellID)
   GlobalIndexType cellIndex = partitionLocalCellIndex(cellID, partitionNumber);
   ElementType* elemType = _elementTypeForCell[cellID].get();
 
+  TEUCHOS_TEST_FOR_EXCEPTION(partitionNumber == -1, std::invalid_argument, "cellID not found -- perhaps it's not active?");
+  
   for (PartitionIndexType i=0; i<partitionNumber; i++)
   {
     cellIndex += _cellIDsForElementType[i][elemType].size();
