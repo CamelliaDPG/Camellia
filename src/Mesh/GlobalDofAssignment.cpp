@@ -320,21 +320,21 @@ void GlobalDofAssignment::repartitionAndMigrate()
 
 void GlobalDofAssignment::didHRefine(const set<GlobalIndexType> &parentCellIDs)   // subclasses should call super
 {
-  int rank     = Teuchos::GlobalMPISession::getRank();
   // until we repartition, assign the new children to the parent's partition
   for (set<GlobalIndexType>::const_iterator cellIDIt=parentCellIDs.begin(); cellIDIt != parentCellIDs.end(); cellIDIt++)
   {
     GlobalIndexType parentID = *cellIDIt;
-    if (_partitions[rank].find(parentID) != _partitions[rank].end())
+    PartitionIndexType partitionForParent = partitionForCellID(parentID);
+    if (partitionForParent != -1) // this check allows us to be robust against getting the notification twice.
     {
       CellPtr parent = _meshTopology->getCell(parentID);
       vector<GlobalIndexType> childIDs = parent->getChildIndices();
-      _partitions[rank].insert(childIDs.begin(),childIDs.end());
+      _partitions[partitionForParent].insert(childIDs.begin(),childIDs.end());
       for (GlobalIndexType childID : childIDs)
       {
-        _partitionForCellID[childID] = rank;
+        _partitionForCellID[childID] = partitionForParent;
       }
-      _partitions[rank].erase(parentID);
+      _partitions[partitionForParent].erase(parentID);
       _partitionForCellID.erase(parentID);
     }
   }
