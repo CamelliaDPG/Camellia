@@ -60,7 +60,7 @@ class SpaceTimeIncompressibleFormulation
   //                         LinearTermPtr forcingTerm, std::string fileToLoadPrefix);
 public:
   SpaceTimeIncompressibleFormulation(int spaceDim, bool steady, double mu, bool useConformingTraces,
-    MeshTopologyPtr meshTopo, int fieldPolyOrder, int delta_k, string norm,
+    MeshGeometryPtr meshGeometry, MeshTopologyPtr meshTopo, int fieldPolyOrder, int delta_k, string norm,
     LinearTermPtr forcingTerm, string savedSolutionAndMeshPrefix);
 
   // ! the formulation's variable factory

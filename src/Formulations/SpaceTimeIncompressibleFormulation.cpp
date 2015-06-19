@@ -45,7 +45,7 @@ const string SpaceTimeIncompressibleFormulation::s_tau3 = "tau3";
 const string SpaceTimeIncompressibleFormulation::s_q = "q";
 
 SpaceTimeIncompressibleFormulation::SpaceTimeIncompressibleFormulation(int spaceDim, bool steady, double mu,
-    bool useConformingTraces, MeshTopologyPtr meshTopo, int fieldPolyOrder, int delta_k, string norm,
+    bool useConformingTraces, MeshGeometryPtr meshGeometry, MeshTopologyPtr meshTopo, int fieldPolyOrder, int delta_k, string norm,
     LinearTermPtr forcingTerm, string savedSolutionAndMeshPrefix)
 {
   _spaceDim = spaceDim;
@@ -195,6 +195,8 @@ SpaceTimeIncompressibleFormulation::SpaceTimeIncompressibleFormulation(int space
   if (savedSolutionAndMeshPrefix == "")
   {
     _mesh = Teuchos::rcp( new Mesh(meshTopo, _bf, H1Order, delta_k) ) ;
+    if (meshGeometry != Teuchos::null)
+      _mesh->setEdgeToCurveMap(meshGeometry->edgeToCurveMap());
     _solutionUpdate = Solution::solution(_bf, _mesh, bc);
     _solutionBackground = Solution::solution(_bf, _mesh, bc);
     map<int, FunctionPtr> initialGuess;
