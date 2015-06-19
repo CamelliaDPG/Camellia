@@ -8,13 +8,6 @@
 
 #include "MPIWrapper.h"
 
-// MPI includes
-#ifdef HAVE_MPI
-#include "Epetra_MpiComm.h"
-#else
-#include "Epetra_SerialComm.h"
-#endif
-
 #include "Teuchos_GlobalMPISession.hpp"
 #include "Teuchos_Array.hpp"
 
@@ -115,15 +108,58 @@ int MPIWrapper::rank()
 //
 //}
 
-void MPIWrapper::entryWiseSum(FieldContainer<double> &values)   // sums values entry-wise across all processors
+template<typename ScalarType>
+void MPIWrapper::entryWiseSum(FieldContainer<ScalarType> &values)
 {
 #ifdef HAVE_MPI
   Epetra_MpiComm Comm(MPI_COMM_WORLD);
-  FieldContainer<double> valuesCopy = values; // it appears this copy is necessary
-  Comm.SumAll(&valuesCopy[0], &values[0], values.size());
+  entryWiseSum<ScalarType>(Comm,values);
 #else
 #endif
 }
+
+template<typename ScalarType>
+void MPIWrapper::entryWiseSum(const Epetra_Comm &Comm, FieldContainer<ScalarType> &values)
+{
+  FieldContainer<ScalarType> valuesCopy = values; // it appears this copy is necessary
+  bool DEBUGGING = false;
+  if (DEBUGGING)
+  {
+    int myRank = Teuchos::GlobalMPISession::getRank();
+    std::cout << "entryWiseSum: original values on rank " << myRank << ": ";
+    for (int i=0; i<values.size(); i++)
+    {
+      std::cout << values[i] << " ";
+    }
+    std::cout << std::endl;
+  }
+  Comm.SumAll(&valuesCopy[0], &values[0], values.size());
+  
+  if (DEBUGGING)
+  {
+    int myRank = Teuchos::GlobalMPISession::getRank();
+    if (myRank == 0)
+    {
+      std::cout << "entryWiseSum: final values on rank " << myRank << ": ";
+      for (int i=0; i<values.size(); i++)
+      {
+        std::cout << values[i] << " ";
+      }
+      std::cout << std::endl;
+    }
+  }
+}
+
+void MPIWrapper::entryWiseSum(FieldContainer<double> &values)   // sums values entry-wise across all processors
+{
+  entryWiseSum<double>(values);
+}
+
+void MPIWrapper::entryWiseSum(const Epetra_Comm &Comm, FieldContainer<double> &values)   // sums values entry-wise across all processors
+{
+  entryWiseSum<double>(Comm, values);
+}
+
 // sum the contents of valuesToSum across all processors, and returns the result:
 // (valuesToSum may vary in length across processors)
 double MPIWrapper::sum(const FieldContainer<double> &valuesToSum)

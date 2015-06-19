@@ -13,6 +13,13 @@
 
 #include <iostream>
 
+// MPI includes
+#ifdef HAVE_MPI
+#include "Epetra_MpiComm.h"
+#else
+#include "Epetra_SerialComm.h"
+#endif
+
 #include "Intrepid_FieldContainer.hpp"
 
 namespace Camellia
@@ -51,6 +58,16 @@ public:
 
   static int rank();
 
+  //! sum values entry-wise across all processors in Comm
+  template<typename ScalarType>
+  static void entryWiseSum(const Epetra_Comm &Comm, Intrepid::FieldContainer<ScalarType> &values);
+  
+  //! sum values entry-wise across all processors
+  template<typename ScalarType>
+  static void entryWiseSum(Intrepid::FieldContainer<ScalarType> &values);
+  
+  static void entryWiseSum(const Epetra_Comm &Comm, Intrepid::FieldContainer<double> &values); // sums values entry-wise across all processors
+  
   static void entryWiseSum(Intrepid::FieldContainer<double> &values); // sums values entry-wise across all processors
   // sum the contents of valuesToSum across all processors, and returns the result:
   // (valuesToSum may vary in length across processors)
