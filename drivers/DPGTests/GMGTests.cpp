@@ -672,15 +672,12 @@ bool GMGTests::testGMGSolverTwoGrid()
       IPPtr graphNorm = bf->graphNorm();
 
       double iter_tol = 1e-12;
-      bool applySmoothing = true;
       int maxIters = 200;
       Teuchos::RCP<Solver> coarseSolver = Teuchos::rcp( new Amesos2Solver(true) );
       Teuchos::RCP<GMGSolver> gmgSolver = Teuchos::rcp( new GMGSolver(zeroBCs, coarseMesh, graphNorm, fineMesh,
                                           exactPoissonSolution->getDofInterpreter(),
                                           exactPoissonSolution->getPartitionMap(),
                                           maxIters, iter_tol, coarseSolver, useStaticCondensation) );
-
-      gmgSolver->setApplySmoothingOperator(applySmoothing);
 
       Teuchos::RCP<Solver> fineSolver = gmgSolver;
 
@@ -764,7 +761,6 @@ bool GMGTests::testGMGSolverThreeGrid()
         IPPtr graphNorm = bf->graphNorm();
 
         double iter_tol = 1e-10;
-        bool applySmoothing = true;
         int maxIters = 200;
         Teuchos::RCP<Solver> coarsestSolver = Teuchos::rcp( new Amesos2Solver(true) );
 
@@ -797,8 +793,6 @@ bool GMGTests::testGMGSolverThreeGrid()
 
         coarseSolver->setComputeConditionNumberEstimate(false);
         gmgSolver->setComputeConditionNumberEstimate(false);
-
-        gmgSolver->setApplySmoothingOperator(applySmoothing);
 
         Teuchos::RCP<Solver> fineSolver = gmgSolver;
 
