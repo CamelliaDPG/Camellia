@@ -62,12 +62,6 @@ TSolverPtr<Scalar> TSolver<Scalar>::getSolver(SolverChoice choice, bool saveFact
 
     gmgSolver->setComputeConditionNumberEstimate(false); // faster if we don't compute it
 
-    // testing:
-//      gmgSolver->setAztecOutput(100);
-
-    // testing:
-//      gmgSolver->setApplySmoothingOperator(false);
-
     return Teuchos::rcp(gmgSolver);
   }
   default:
