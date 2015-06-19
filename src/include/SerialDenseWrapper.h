@@ -10,6 +10,7 @@
 
 #include "Intrepid_FieldContainer.hpp"
 
+#include "Epetra_RowMatrix.h"
 #include "Epetra_SerialDenseMatrix.h"
 #include "Epetra_SerialDenseVector.h"
 #include "Epetra_SerialDenseSolver.h"
@@ -23,6 +24,8 @@
 #include "Teuchos_SerialDenseMatrix.hpp"
 #include "Teuchos_SerialDenseVector.hpp"
 #include "Teuchos_SerialQRDenseSolver.hpp"
+
+#include "MPIWrapper.h"
 
 namespace Camellia
 {
@@ -42,6 +45,7 @@ class SerialDenseWrapper
       }
     }
   }
+  
   static Epetra_SerialDenseMatrix convertFCToSDM(const Intrepid::FieldContainer<double> &A, Epetra_DataAccess CV = ::Copy)
   {
     //  FC is row major, SDM expects column major data, so the roles of rows and columns get swapped
@@ -52,6 +56,7 @@ class SerialDenseWrapper
     Epetra_SerialDenseMatrix Amatrix(CV,firstEntry,m,m,n);
     return Amatrix;
   }
+  
   static void convertSDMToFC(Intrepid::FieldContainer<double>& A_fc, const Epetra_SerialDenseMatrix &A)
   {
     int n = A.M();
@@ -217,7 +222,86 @@ public:
     }
     return errOut;
   }
-
+  
+  static int extractFCFromEpetra_RowMatrix(const Epetra_RowMatrix &A, Intrepid::FieldContainer<double> &A_fc)
+  {
+    // this is not the most efficient way to do this; using an Epetra_Importer would probably be faster
+    // (I write it this way because it's easier for me to think about this way, and this method is meant primarily for
+    //  testing and debugging.)
+    A_fc.resize(A.NumGlobalRows(), A.NumGlobalCols());
+    // fill in the locally-known entries:
+    for (int myRow=0; myRow < A.NumMyRows(); myRow++)
+    {
+      int i = A.RowMatrixRowMap().GID(myRow); // global row ID
+      int numCols = -1;
+      int err = A.NumMyRowEntries(myRow, numCols);
+      TEUCHOS_TEST_FOR_EXCEPTION(err !=0, std::invalid_argument, "Error encountered during row extraction");
+      Intrepid::FieldContainer<int> localColIDs(numCols);
+      Intrepid::FieldContainer<double> values(numCols);
+      int numColsExtracted = 0;
+      A.ExtractMyRowCopy(myRow,numCols,numColsExtracted,&values[0],&localColIDs[0]);
+      TEUCHOS_TEST_FOR_EXCEPTION(numCols != numColsExtracted, std::invalid_argument, "");
+      for (int colOrdinal=0; colOrdinal < numColsExtracted; colOrdinal++)
+      {
+        int localColID = localColIDs(colOrdinal);
+        int j = A.RowMatrixColMap().GID(localColID);
+        A_fc(i,j) = values(colOrdinal);
+      }
+    }
+    MPIWrapper::entryWiseSum<double>(A.Comm(),A_fc);
+    return 0;
+  }
+  
+  static bool matrixIsSymmetric(Intrepid::FieldContainer<double> &A, double relTol = 1e-12, double absTol = 1e-14)
+  {
+    TEUCHOS_TEST_FOR_EXCEPTION(A.rank() != 2, std::invalid_argument, "A must have rank 2");
+    int numRows = A.dimension(0);
+    int numCols = A.dimension(1);
+    if (numRows != numCols) return false;
+    for (int i=0; i<numRows; i++)
+    {
+      for (int j=0; j<i; j++)
+      {
+        double absDiff = abs(A(i,j)-A(j,i));
+        if (absDiff > absTol)
+        {
+          double relDiff = absDiff / std::min(abs(A(i,j)),abs(A(j,i)));
+          if (relDiff > relTol)
+          {
+            return false;
+          }
+        }
+      }
+    }
+    return true;
+  }
+  
+  static bool matrixIsSymmetric(Intrepid::FieldContainer<double> &A, std::vector<std::pair<int,int>> &asymmetricEntries,
+                                double relTol = 1e-12, double absTol = 1e-14)
+  {
+    TEUCHOS_TEST_FOR_EXCEPTION(A.rank() != 2, std::invalid_argument, "A must have rank 2");
+    asymmetricEntries.clear();
+    int numRows = A.dimension(0);
+    int numCols = A.dimension(1);
+    if (numRows != numCols) return false;
+    for (int i=0; i<numRows; i++)
+    {
+      for (int j=0; j<i; j++)
+      {
+        double absDiff = abs(A(i,j)-A(j,i));
+        if (absDiff > absTol)
+        {
+          double relDiff = absDiff / std::min(abs(A(i,j)),abs(A(j,i)));
+          if (relDiff > relTol)
+          {
+            asymmetricEntries.push_back({i,j});
+          }
+        }
+      }
+    }
+    return asymmetricEntries.size() == 0;
+  }
+  
   // gives X = A*B.  Must pass in 2D arrays, even for vectors!
   static void multiply(Intrepid::FieldContainer<double> &X, const Intrepid::FieldContainer<double> &A,
                        const Intrepid::FieldContainer<double> &B, char TransposeA = 'N', char TransposeB = 'N')
@@ -723,6 +807,30 @@ public:
       //      std::cout << "SVD failed for matrix:\n" << A;
       return -1.0;
     }
+  }
+  
+  //! Returns true if all the eigenvalues are greater than zero
+  /*!
+   \param A In
+   A rank-2 FieldContainer with equal first and second dimensions.
+   
+   \return true if all the eigenvalues are positive; false otherwise.
+   */
+  static bool matrixIsPositiveDefinite(Intrepid::FieldContainer<double> &A)
+  {
+    return getMatrixConditionNumber2Norm(A, false) > 0.0;
+  }
+  
+  //! Returns true if all the eigenvalues are greater than or equal to zero
+  /*!
+   \param A In
+   A rank-2 FieldContainer with equal first and second dimensions.
+   
+   \return true if all the eigenvalues are non-negative; false otherwise.
+   */
+  static bool matrixIsPositiveSemiDefinite(Intrepid::FieldContainer<double> &A)
+  {
+    return getMatrixConditionNumber2Norm(A, true) > 0.0;
   }
 
   static void writeMatrixToMatlabFile(const std::string& filePath, Intrepid::FieldContainer<double> &A)
