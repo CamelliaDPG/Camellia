@@ -1752,6 +1752,17 @@ TFunctionPtr<Scalar> operator*(TFunctionPtr<Scalar> f1, TFunctionPtr<Scalar> f2)
       TEUCHOS_TEST_FOR_EXCEPTION(true,std::invalid_argument,"functions have incompatible rank for product.");
     }
   }
+  ConstantScalarFunction<Scalar>* f1_constant = dynamic_cast<ConstantScalarFunction<Scalar>*> (f1.get());
+  if (f1_constant)
+  {
+    // then check if f2 is constant, too:
+    ConstantScalarFunction<Scalar>* f2_constant = dynamic_cast<ConstantScalarFunction<Scalar>*> (f2.get());
+    if (f2_constant)
+    {
+      return Function::constant(f1_constant->value() * f2_constant->value());
+    }
+  }
+  
   return Teuchos::rcp( new ProductFunction<Scalar>(f1,f2) );
 }
 
@@ -1762,6 +1773,17 @@ TFunctionPtr<Scalar> operator/(TFunctionPtr<Scalar> f1, TFunctionPtr<Scalar> sca
   {
     return TFunction<Scalar>::zero(f1->rank());
   }
+  ConstantScalarFunction<Scalar>* f1_constant = dynamic_cast<ConstantScalarFunction<Scalar>*> (f1.get());
+  if (f1_constant)
+  {
+    // then check if scalarDivisor is constant, too:
+    ConstantScalarFunction<Scalar>* scalarDivisor_constant = dynamic_cast<ConstantScalarFunction<Scalar>*> (scalarDivisor.get());
+    if (scalarDivisor_constant)
+    {
+      return Function::constant(f1_constant->value() / scalarDivisor_constant->value());
+    }
+  }
+  
   return Teuchos::rcp( new QuotientFunction<Scalar>(f1,scalarDivisor) );
 }
 
@@ -1836,6 +1858,17 @@ TFunctionPtr<Scalar> operator+(TFunctionPtr<Scalar> f1, TFunctionPtr<Scalar> f2)
   {
     return f1;
   }
+  ConstantScalarFunction<Scalar>* f1_constant = dynamic_cast<ConstantScalarFunction<Scalar>*> (f1.get());
+  if (f1_constant)
+  {
+    // then check if f2 is constant, too:
+    ConstantScalarFunction<Scalar>* f2_constant = dynamic_cast<ConstantScalarFunction<Scalar>*> (f2.get());
+    if (f2_constant)
+    {
+      return Function::constant(f1_constant->value() + f2_constant->value());
+    }
+  }
+  
   return Teuchos::rcp( new SumFunction<Scalar>(f1, f2) );
 }
 
