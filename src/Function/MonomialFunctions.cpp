@@ -37,6 +37,10 @@ TFunctionPtr<double> Xn::dx()
   {
     return TFunction<double>::zero();
   }
+  else if (_n == 1)
+  {
+    return TFunction<double>::constant(1.0);
+  }
   TFunctionPtr<double> x_n_minus = Teuchos::rcp( new Xn(_n-1) );
   return (double)_n * x_n_minus;
 }
@@ -89,6 +93,10 @@ TFunctionPtr<double> Yn::dy()
   {
     return TFunction<double>::zero();
   }
+  else if (_n == 1)
+  {
+    return TFunction<double>::constant(1.0);
+  }
   TFunctionPtr<double> y_n_minus = Teuchos::rcp( new Yn(_n-1) );
   return (double)_n * y_n_minus;
 }
@@ -140,6 +148,10 @@ TFunctionPtr<double> Zn::dz()
   if (_n == 0)
   {
     return TFunction<double>::zero();
+  }
+  else if (_n == 1)
+  {
+    return TFunction<double>::constant(1.0);
   }
   TFunctionPtr<double> z_n_minus = Teuchos::rcp( new Zn(_n-1) );
   return (double)_n * z_n_minus;
@@ -200,6 +212,10 @@ TFunctionPtr<double> Tn::dt()
   if (_n == 0)
   {
     return TFunction<double>::zero();
+  }
+  else if (_n == 1)
+  {
+    return TFunction<double>::constant(1.0);
   }
   TFunctionPtr<double> t_n_minus = Teuchos::rcp( new Tn(_n-1) );
   return (double)_n * t_n_minus;
