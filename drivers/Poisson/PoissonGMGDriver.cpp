@@ -63,7 +63,6 @@ int main(int argc, char *argv[])
   bool enforceOneIrregularity = true;
   bool useStaticCondensation = false;
   bool conformingTraces = false;
-  bool applySmoothing = true;
   bool useDiagonalScaling = false; // of the global stiffness matrix in GMGSolver
 
   bool printRefinementDetails = false;
@@ -85,7 +84,6 @@ int main(int argc, char *argv[])
   cmdp.setOption("D", &D, "domain dimension");
   cmdp.setOption("useConformingTraces", "useNonConformingTraces", &conformingTraces);
   cmdp.setOption("enforceOneIrregularity", "dontEnforceOneIrregularity", &enforceOneIrregularity);
-  cmdp.setOption("useSmoothing", "useNoSmoothing", &applySmoothing);
 
   cmdp.setOption("smootherOverlap", &smootherOverlap, "overlap for smoother");
 
@@ -282,8 +280,6 @@ int main(int argc, char *argv[])
     gmgSolver = new GMGSolver(zeroBCs, k0Mesh, graphNorm, mesh, solution->getDofInterpreter(),
                               solution->getPartitionMap(), maxIters, tol, coarseSolver,
                               useStaticCondensation);
-    gmgSolver->setAztecOutput(AztecOutputLevel);
-    gmgSolver->setApplySmoothingOperator(applySmoothing);
 
     gmgSolver->setAztecOutput(AztecOutputLevel);
     gmgSolver->setUseConjugateGradient(true);
@@ -364,7 +360,6 @@ int main(int argc, char *argv[])
       gmgSolver = new GMGSolver(zeroBCs, k0Mesh, graphNorm, mesh, solution->getDofInterpreter(),
                                 solution->getPartitionMap(), maxIters, tol, coarseSolver, useStaticCondensation);
       gmgSolver->setAztecOutput(AztecOutputLevel);
-      gmgSolver->setApplySmoothingOperator(applySmoothing);
       gmgSolver->setUseDiagonalScaling(useDiagonalScaling);
       fineSolver = Teuchos::rcp( gmgSolver );
     }
