@@ -270,6 +270,7 @@ int main(int argc, char *argv[])
   cmdp.setOption("delta_p", &delta_p, "test space polynomial order enrichment");
   cmdp.setOption("numRefs",&numRefs,"number of refinements");
   cmdp.setOption("numXElems",&numXElems,"number of elements in x direction");
+  cmdp.setOption("numTElems",&numTElems,"number of elements in t direction");
   cmdp.setOption("numSlabs",&numSlabs,"number of time slabs to use");
   cmdp.setOption("norm", &norm, "norm");
   cmdp.setOption("conformingTraces", "nonconformingTraces", &useConformingTraces, "use conforming traces");
