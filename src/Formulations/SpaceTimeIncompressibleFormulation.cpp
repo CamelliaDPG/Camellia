@@ -197,16 +197,12 @@ SpaceTimeIncompressibleFormulation::SpaceTimeIncompressibleFormulation(int space
   H1Order[1] = fieldPolyOrder + 1; // for now, use same poly. degree for temporal bases...
   if (savedSolutionAndMeshPrefix == "")
   {
+    MeshPtr proxyMesh = Teuchos::rcp( new Mesh(meshTopo->deepCopy(), _bf, H1Order, delta_k) ) ;
     _mesh = Teuchos::rcp( new Mesh(meshTopo, _bf, H1Order, delta_k) ) ;
     if (meshGeometry != Teuchos::null)
       _mesh->setEdgeToCurveMap(meshGeometry->edgeToCurveMap());
-
-    // MeshPtr proxyMesh = Teuchos::rcp( new Mesh(meshGeometry->vertices(), meshGeometry->elementVertices(),
-    //                                   _bf, H1Order, delta_k, useConformingTraces) );
-    MeshPtr proxyMesh = Teuchos::rcp( new Mesh(meshTopo, _bf, H1Order, delta_k) ) ;
     proxyMesh->registerObserver(_mesh);
     problem->preprocessMesh(proxyMesh);
-    // problem->preprocessMesh(_mesh);
 
     _solutionUpdate = Solution::solution(_bf, _mesh, bc);
     _solutionBackground = Solution::solution(_bf, _mesh, bc);

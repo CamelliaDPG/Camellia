@@ -306,8 +306,6 @@ class CylinderProblem : public IncompressibleProblem
       horizontalBandCellIDs.push_back(elements[3]->cellID());
 
       vector<int> verticalBandCellIDs;
-      verticalBandCellIDs.push_back(1);
-      verticalBandCellIDs.push_back(2);
       verticalBandCellIDs.push_back(elements[4]->cellID());
       verticalBandCellIDs.push_back(elements[5]->cellID());
       verticalBandCellIDs.push_back(elements[6]->cellID());
