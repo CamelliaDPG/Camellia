@@ -226,6 +226,7 @@ SpaceTimeIncompressibleFormulation::SpaceTimeIncompressibleFormulation(int space
 
   FunctionPtr u1_prev = Function::solution(u1, _solutionBackground);
   FunctionPtr u2_prev = Function::solution(u2, _solutionBackground);
+  FunctionPtr u_prev = Function::vectorize(u1_prev, u2_prev);
 
 
   if (spaceDim == 2)
@@ -299,19 +300,64 @@ SpaceTimeIncompressibleFormulation::SpaceTimeIncompressibleFormulation(int space
 
   _ips["Graph"] = _bf->graphNorm();
 
-  // _ips["CoupledRobust"] = Teuchos::rcp(new IP);
+  _ips["CoupledRobust"] = Teuchos::rcp(new IP);
   // _ips["CoupledRobust"]->addTerm(_beta*v->grad());
+  _ips["CoupledRobust"]->addTerm(u_prev*v1->grad());
+  _ips["CoupledRobust"]->addTerm(u_prev*v2->grad());
+  _ips["CoupledRobust"]->addTerm(u1_prev*v1->dx() + u2_prev*v2->dx());
+  _ips["CoupledRobust"]->addTerm(u1_prev*v1->dy() + u2_prev*v2->dy());
   // _ips["CoupledRobust"]->addTerm(Function::min(one/Function::h(),Function::constant(1./sqrt(_mu)))*tau);
+  _ips["CoupledRobust"]->addTerm(Function::min(one/Function::h(),Function::constant(1./sqrt(_mu)))*tau1);
+  _ips["CoupledRobust"]->addTerm(Function::min(one/Function::h(),Function::constant(1./sqrt(_mu)))*tau2);
   // _ips["CoupledRobust"]->addTerm(sqrt(_mu)*v->grad());
+  _ips["CoupledRobust"]->addTerm(sqrt(_mu)*v1->grad());
+  _ips["CoupledRobust"]->addTerm(sqrt(_mu)*v2->grad());
   // _ips["CoupledRobust"]->addTerm(Function::min(sqrt(_mu)*one/Function::h(),one)*v);
+  _ips["CoupledRobust"]->addTerm(Function::min(sqrt(_mu)*one/Function::h(),one)*v1);
+  _ips["CoupledRobust"]->addTerm(Function::min(sqrt(_mu)*one/Function::h(),one)*v2);
   // _ips["CoupledRobust"]->addTerm(tau->div() - v->dt() - beta*v->grad());
+  if (!steady)
+  {
+    _ips["CoupledRobust"]->addTerm(tau1->div() -v1->dt() - u_prev*v1->grad() - u1_prev*v1->dx() - u2_prev*v2->dx());
+    _ips["CoupledRobust"]->addTerm(tau2->div() -v2->dt() - u_prev*v2->grad() - u1_prev*v1->dy() - u2_prev*v2->dy());
+  }
+  else
+  {
+    _ips["CoupledRobust"]->addTerm(tau1->div() - u_prev*v1->grad() - u1_prev*v1->dx() - u2_prev*v2->dx());
+    _ips["CoupledRobust"]->addTerm(tau2->div() - u_prev*v2->grad() - u1_prev*v1->dy() - u2_prev*v2->dy());
+  }
+  // _ips["CoupledRobust"]->addTerm(v1->dx() + v2->dy());
+  _ips["CoupledRobust"]->addTerm(q->grad());
+  _ips["CoupledRobust"]->addTerm(q);
 
-  // _ips["NSDecoupledH1"] = Teuchos::rcp(new IP);
+
+  _ips["NSDecoupledH1"] = Teuchos::rcp(new IP);
   // _ips["NSDecoupledH1"]->addTerm(one/Function::h()*tau);
+  _ips["NSDecoupledH1"]->addTerm(one/Function::h()*tau1);
+  _ips["NSDecoupledH1"]->addTerm(one/Function::h()*tau2);
   // _ips["NSDecoupledH1"]->addTerm(v->grad());
+  _ips["NSDecoupledH1"]->addTerm(v1->grad());
+  _ips["NSDecoupledH1"]->addTerm(v2->grad());
   // _ips["NSDecoupledH1"]->addTerm(_beta*v->grad()+v->dt());
+  if (!steady)
+  {
+    _ips["NSDecoupledH1"]->addTerm(v1->dt() + u_prev*v1->grad() + u1_prev*v1->dx() + u2_prev*v2->dx());
+    _ips["NSDecoupledH1"]->addTerm(v2->dt() + u_prev*v2->grad() + u1_prev*v1->dy() + u2_prev*v2->dy());
+  }
+  else
+  {
+    _ips["NSDecoupledH1"]->addTerm(u_prev*v1->grad() + u1_prev*v1->dx() + u2_prev*v2->dx());
+    _ips["NSDecoupledH1"]->addTerm(u_prev*v2->grad() + u1_prev*v1->dy() + u2_prev*v2->dy());
+  }
   // _ips["NSDecoupledH1"]->addTerm(tau->div());
+  _ips["NSDecoupledH1"]->addTerm(tau1->div());
+  _ips["NSDecoupledH1"]->addTerm(tau2->div());
   // _ips["NSDecoupledH1"]->addTerm(v);
+  _ips["NSDecoupledH1"]->addTerm(v1);
+  _ips["NSDecoupledH1"]->addTerm(v2);
+  // _ips["CoupledRobust"]->addTerm(v1->dx() + v2->dy());
+  _ips["NSDecoupledH1"]->addTerm(q->grad());
+  _ips["NSDecoupledH1"]->addTerm(q);
 
   IPPtr ip = _ips.at(norm);
   if (problem->forcingTerm != Teuchos::null)
