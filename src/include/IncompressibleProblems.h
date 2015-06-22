@@ -237,8 +237,8 @@ class CylinderProblem : public IncompressibleProblem
     }
     virtual MeshGeometryPtr meshGeometry()
     {
-      // double embeddedSideLength = 3 * _radius;
-      double embeddedSideLength = 60;
+      double embeddedSideLength = 3 * _radius;
+      // double embeddedSideLength = 60;
       return MeshFactory::shiftedHemkerGeometry(_xLeft, _xRight, _yBottom, _yTop, _radius, embeddedSideLength);
     }
     virtual MeshTopologyPtr meshTopology(int temporalDivisions=1)
@@ -297,8 +297,6 @@ class CylinderProblem : public IncompressibleProblem
       elementPoints(9,0) =   radius * 3;
       elementPoints(9,1) = - radius * 3;
 
-      cout << elementPoints << endl;
-
       vector< ElementPtr > elements = hemkerMeshNoCurves->elementsForPoints(elementPoints);
 
       vector<int> horizontalBandCellIDs;
@@ -308,6 +306,8 @@ class CylinderProblem : public IncompressibleProblem
       horizontalBandCellIDs.push_back(elements[3]->cellID());
 
       vector<int> verticalBandCellIDs;
+      verticalBandCellIDs.push_back(1);
+      verticalBandCellIDs.push_back(2);
       verticalBandCellIDs.push_back(elements[4]->cellID());
       verticalBandCellIDs.push_back(elements[5]->cellID());
       verticalBandCellIDs.push_back(elements[6]->cellID());
@@ -319,6 +319,10 @@ class CylinderProblem : public IncompressibleProblem
 
       Teuchos::RCP<RefinementPattern> verticalCut = RefinementPattern::xAnisotropicRefinementPatternQuad();
       Teuchos::RCP<RefinementPattern> horizontalCut = RefinementPattern::yAnisotropicRefinementPatternQuad();
+
+      // set<GlobalIndexType> cellIDsToRefine;
+      // cellIDsToRefine.insert(0);
+      // hemkerMeshNoCurves->hRefine(cellIDsToRefine, verticalCut);
 
       Intrepid::FieldContainer<double> vertices(4,2);
 
