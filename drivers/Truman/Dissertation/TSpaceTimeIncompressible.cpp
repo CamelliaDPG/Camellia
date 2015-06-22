@@ -149,7 +149,7 @@ int main(int argc, char *argv[])
     if (saveSolution && commRank == 0) cout << "Saving to " << saveFilePrefix << endl;
 
     SpaceTimeIncompressibleFormulationPtr form = Teuchos::rcp(new SpaceTimeIncompressibleFormulation(spaceDim, steady, 1./Re,
-          useConformingTraces, problem->meshGeometry(), problem->meshTopology(numTElems), p, delta_p, norm, problem->forcingTerm, loadFilePrefix));
+          useConformingTraces, problem, p, delta_p, numTElems, norm, loadFilePrefix));
 
     MeshPtr mesh = form->solutionUpdate()->mesh();
     MeshPtr k0Mesh = Teuchos::rcp( new Mesh (mesh->getTopology()->deepCopy(), form->bf(), 1, delta_p) );

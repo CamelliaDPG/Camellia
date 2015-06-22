@@ -11,6 +11,7 @@
 #include "PenaltyConstraints.h"
 #include "PoissonFormulation.h"
 #include "PreviousSolutionFunction.h"
+#include "IncompressibleProblems.h"
 #include <algorithm>
 
 using namespace Camellia;
@@ -44,14 +45,16 @@ const string SpaceTimeIncompressibleFormulation::s_tau2 = "tau2";
 const string SpaceTimeIncompressibleFormulation::s_tau3 = "tau3";
 const string SpaceTimeIncompressibleFormulation::s_q = "q";
 
-SpaceTimeIncompressibleFormulation::SpaceTimeIncompressibleFormulation(int spaceDim, bool steady, double mu,
-    bool useConformingTraces, MeshGeometryPtr meshGeometry, MeshTopologyPtr meshTopo, int fieldPolyOrder, int delta_k, string norm,
-    LinearTermPtr forcingTerm, string savedSolutionAndMeshPrefix)
+SpaceTimeIncompressibleFormulation::SpaceTimeIncompressibleFormulation(int spaceDim, bool steady, double mu, bool useConformingTraces,
+    Teuchos::RCP<IncompressibleProblem> problem, int fieldPolyOrder, int delta_k, int numTElems, string norm,
+    string savedSolutionAndMeshPrefix)
 {
   _spaceDim = spaceDim;
   _steady = steady;
   _mu = mu;
   _useConformingTraces = useConformingTraces;
+  MeshTopologyPtr meshTopo = problem->meshTopology(numTElems);
+  MeshGeometryPtr meshGeometry = problem->meshGeometry();
 
   if (!steady)
   {
@@ -197,6 +200,13 @@ SpaceTimeIncompressibleFormulation::SpaceTimeIncompressibleFormulation(int space
     _mesh = Teuchos::rcp( new Mesh(meshTopo, _bf, H1Order, delta_k) ) ;
     if (meshGeometry != Teuchos::null)
       _mesh->setEdgeToCurveMap(meshGeometry->edgeToCurveMap());
+
+    // MeshPtr proxyMesh = Teuchos::rcp( new Mesh(meshGeometry->vertices(), meshGeometry->elementVertices(),
+    //                                   _bf, H1Order, delta_k, useConformingTraces) );
+    // MeshPtr proxyMesh = Teuchos::rcp( new Mesh(meshTopo, _bf, H1Order, delta_k) ) ;
+    // proxyMesh->registerObserver(_mesh);
+    // problem->preprocessMesh(proxyMesh);
+
     _solutionUpdate = Solution::solution(_bf, _mesh, bc);
     _solutionBackground = Solution::solution(_bf, _mesh, bc);
     map<int, FunctionPtr> initialGuess;
@@ -304,8 +314,8 @@ SpaceTimeIncompressibleFormulation::SpaceTimeIncompressibleFormulation(int space
   // _ips["NSDecoupledH1"]->addTerm(v);
 
   IPPtr ip = _ips.at(norm);
-  if (forcingTerm != Teuchos::null)
-    _rhs->addTerm(forcingTerm);
+  if (problem->forcingTerm != Teuchos::null)
+    _rhs->addTerm(problem->forcingTerm);
 
   _solutionUpdate->setRHS(_rhs);
   _solutionUpdate->setIP(ip);

@@ -21,6 +21,8 @@
 
 namespace Camellia
 {
+class IncompressibleProblem;
+
 class SpaceTimeIncompressibleFormulation
 {
 
@@ -60,8 +62,8 @@ class SpaceTimeIncompressibleFormulation
   //                         LinearTermPtr forcingTerm, std::string fileToLoadPrefix);
 public:
   SpaceTimeIncompressibleFormulation(int spaceDim, bool steady, double mu, bool useConformingTraces,
-    MeshGeometryPtr meshGeometry, MeshTopologyPtr meshTopo, int fieldPolyOrder, int delta_k, string norm,
-    LinearTermPtr forcingTerm, string savedSolutionAndMeshPrefix);
+    Teuchos::RCP<IncompressibleProblem> problem, int fieldPolyOrder, int delta_k, int numTElems, string norm,
+    string savedSolutionAndMeshPrefix);
 
   // ! the formulation's variable factory
   VarFactoryPtr vf();

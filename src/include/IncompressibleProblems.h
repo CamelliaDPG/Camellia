@@ -23,6 +23,7 @@ class IncompressibleProblem
     LinearTermPtr forcingTerm = Teuchos::null;
     virtual MeshTopologyPtr meshTopology(int temporalDivisions=1) = 0;
     virtual MeshGeometryPtr meshGeometry() { return Teuchos::null; }
+    virtual void preprocessMesh(MeshPtr proxyMesh) {};
     virtual void setBCs(SpaceTimeIncompressibleFormulationPtr form) = 0;
     virtual double computeL2Error(SpaceTimeIncompressibleFormulationPtr form, SolutionPtr solutionBackground) { return 0; }
     int numSlabs() { return _numSlabs; }
@@ -213,12 +214,12 @@ class CylinderProblem : public IncompressibleProblem
 {
   private:
     double _radius = 0.5;
-    double _xLeft = -3;
-    double _xRight = 9;
-    double _meshHeight = 6;
-    // double _xLeft = -60;
-    // double _xRight = 180;
-    // double _meshHeight = 120;
+    // double _xLeft = -3;
+    // double _xRight = 9;
+    // double _meshHeight = 6;
+    double _xLeft = -60;
+    double _xRight = 180;
+    double _meshHeight = 120;
     double _yBottom = -_meshHeight/2;
     double _yTop = _meshHeight/2;
   public:
@@ -236,7 +237,8 @@ class CylinderProblem : public IncompressibleProblem
     }
     virtual MeshGeometryPtr meshGeometry()
     {
-      double embeddedSideLength = 6 * _radius;
+      // double embeddedSideLength = 3 * _radius;
+      double embeddedSideLength = 60;
       return MeshFactory::shiftedHemkerGeometry(_xLeft, _xRight, _yBottom, _yTop, _radius, embeddedSideLength);
     }
     virtual MeshTopologyPtr meshTopology(int temporalDivisions=1)
@@ -253,6 +255,150 @@ class CylinderProblem : public IncompressibleProblem
         return spatialMeshTopo;
       else
         return spaceTimeMeshTopo;
+    }
+
+    virtual void preprocessMesh(MeshPtr hemkerMeshNoCurves)
+    {
+      double radius = _radius;
+      bool enforceOneIrregularity = true;
+
+      // start by identifying the various elements: there are 10 of interest to us
+      // to find the thin banded elements, note that radius * 3 will be outside the bounding square
+      // and that radius / 2 will be inside the band
+      Intrepid::FieldContainer<double> elementPoints(10,2);
+      // ESE band
+      elementPoints(0,0) =   radius * 3;
+      elementPoints(0,1) = - radius / 2;
+      // ENE band
+      elementPoints(1,0) = radius * 3;
+      elementPoints(1,1) = radius / 2;
+      // WSW band
+      elementPoints(2,0) = - radius * 3;
+      elementPoints(2,1) = - radius / 2;
+      // WNW band
+      elementPoints(3,0) = - radius * 3;
+      elementPoints(3,1) =   radius / 2;
+      // NNE band
+      elementPoints(4,0) =   radius / 2;
+      elementPoints(4,1) =   radius * 3;
+      // NNW band
+      elementPoints(5,0) = - radius / 2;
+      elementPoints(5,1) =   radius * 3;
+      // SSE band
+      elementPoints(6,0) =   radius / 2;
+      elementPoints(6,1) = - radius * 3;
+      // SSE band
+      elementPoints(7,0) = - radius / 2;
+      elementPoints(7,1) = - radius * 3;
+      // NE big element
+      elementPoints(8,0) = radius * 3;
+      elementPoints(8,1) = radius * 3;
+      // SE big element
+      elementPoints(9,0) =   radius * 3;
+      elementPoints(9,1) = - radius * 3;
+
+      cout << elementPoints << endl;
+
+      vector< ElementPtr > elements = hemkerMeshNoCurves->elementsForPoints(elementPoints);
+
+      vector<int> horizontalBandCellIDs;
+      horizontalBandCellIDs.push_back(elements[0]->cellID());
+      horizontalBandCellIDs.push_back(elements[1]->cellID());
+      horizontalBandCellIDs.push_back(elements[2]->cellID());
+      horizontalBandCellIDs.push_back(elements[3]->cellID());
+
+      vector<int> verticalBandCellIDs;
+      verticalBandCellIDs.push_back(elements[4]->cellID());
+      verticalBandCellIDs.push_back(elements[5]->cellID());
+      verticalBandCellIDs.push_back(elements[6]->cellID());
+      verticalBandCellIDs.push_back(elements[7]->cellID());
+
+      // the bigger, fatter guys in the corners count as horizontal bands (because that's the direction of their anisotropy)
+      horizontalBandCellIDs.push_back(elements[8]->cellID());
+      horizontalBandCellIDs.push_back(elements[9]->cellID());
+
+      Teuchos::RCP<RefinementPattern> verticalCut = RefinementPattern::xAnisotropicRefinementPatternQuad();
+      Teuchos::RCP<RefinementPattern> horizontalCut = RefinementPattern::yAnisotropicRefinementPatternQuad();
+
+      Intrepid::FieldContainer<double> vertices(4,2);
+
+      // horizontal bands want vertical cuts, and vice versa
+      for (vector<int>::iterator cellIDIt = horizontalBandCellIDs.begin();
+          cellIDIt != horizontalBandCellIDs.end(); cellIDIt++)
+      {
+        int cellID = *cellIDIt;
+        //    cout << "Identified cell " << cellID << " as a horizontal band.\n";
+        // work out what the current aspect ratio is
+        hemkerMeshNoCurves->verticesForCell(vertices, cellID);
+        //    cout << "vertices for cell " << cellID << ":\n" << vertices;
+        // here, we use knowledge of the implementation of the hemker mesh generation:
+        // we know that the first edges are always horizontal...
+        double xDiff = abs(vertices(1,0)-vertices(0,0));
+        double yDiff = abs(vertices(2,1)-vertices(1,1));
+
+        //    cout << "xDiff: " << xDiff << endl;
+        //    cout << "yDiff: " << yDiff << endl;
+
+        set<GlobalIndexType> cellIDsToRefine;
+        cellIDsToRefine.insert(cellID);
+        double aspect = xDiff / yDiff;
+        cout << cellID << endl;
+        while (aspect > 2.0)
+        {
+          //      cout << "aspect ratio: " << aspect << endl;
+          hemkerMeshNoCurves->hRefine(cellIDsToRefine, verticalCut);
+
+          // the next set of cellIDsToRefine are the children of the ones just refined
+          set<GlobalIndexType> childCellIDs;
+          for (set<GlobalIndexType>::iterator refinedCellIDIt = cellIDsToRefine.begin();
+              refinedCellIDIt != cellIDsToRefine.end(); refinedCellIDIt++)
+          {
+            int refinedCellID = *refinedCellIDIt;
+            set<int> refinedCellChildren = hemkerMeshNoCurves->getElement(refinedCellID)->getDescendants();
+            childCellIDs.insert(refinedCellChildren.begin(),refinedCellChildren.end());
+          }
+
+          cellIDsToRefine = childCellIDs;
+          aspect /= 2;
+        }
+      }
+
+      // horizontal bands want vertical cuts, and vice versa
+      for (vector<int>::iterator cellIDIt = verticalBandCellIDs.begin();
+          cellIDIt != verticalBandCellIDs.end(); cellIDIt++)
+      {
+        int cellID = *cellIDIt;
+        //    cout << "Identified cell " << cellID << " as a vertical band.\n";
+        // work out what the current aspect ratio is
+        hemkerMeshNoCurves->verticesForCell(vertices, cellID);
+        // here, we use knowledge of the implementation of the hemker mesh generation:
+        // we know that the first edges are always horizontal...
+        double xDiff = abs(vertices(1,0)-vertices(0,0));
+        double yDiff = abs(vertices(2,1)-vertices(1,1));
+
+        set<GlobalIndexType> cellIDsToRefine;
+        cellIDsToRefine.insert(cellID);
+        double aspect = yDiff / xDiff;
+        while (aspect > 2.0)
+        {
+          hemkerMeshNoCurves->hRefine(cellIDsToRefine, horizontalCut);
+
+          // the next set of cellIDsToRefine are the children of the ones just refined
+          set<GlobalIndexType> childCellIDs;
+          for (set<GlobalIndexType>::iterator refinedCellIDIt = cellIDsToRefine.begin();
+              refinedCellIDIt != cellIDsToRefine.end(); refinedCellIDIt++)
+          {
+            int refinedCellID = *refinedCellIDIt;
+            set<int> refinedCellChildren = hemkerMeshNoCurves->getElement(refinedCellID)->getDescendants();
+            childCellIDs.insert(refinedCellChildren.begin(),refinedCellChildren.end());
+          }
+
+          cellIDsToRefine = childCellIDs;
+          aspect /= 2;
+        }
+      }
+      if (enforceOneIrregularity)
+        hemkerMeshNoCurves->enforceOneIrregularity();
     }
 
     virtual void setBCs(SpaceTimeIncompressibleFormulationPtr form)
