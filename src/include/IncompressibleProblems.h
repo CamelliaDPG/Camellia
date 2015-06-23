@@ -3,6 +3,7 @@
 #include "SpatialFilter.h"
 #include "ExpFunction.h"
 #include "TrigFunctions.h"
+#include "PenaltyConstraints.h"
 #include "SpaceTimeIncompressibleFormulation.h"
 
 namespace Camellia
@@ -10,6 +11,7 @@ namespace Camellia
 class IncompressibleProblem
 {
   protected:
+    Teuchos::RCP<PenaltyConstraints> _pc = Teuchos::null;
     FunctionPtr _u1_exact;
     FunctionPtr _u2_exact;
     FunctionPtr _sigma1_exact;
@@ -19,12 +21,17 @@ class IncompressibleProblem
     int _numSlabs = 1;
     int _currentStep = 0;
     bool _steady;
+    bool _pureVelocityBCs = true;
   public:
     LinearTermPtr forcingTerm = Teuchos::null;
+    FunctionPtr u1_exact() { return _u1_exact; }
+    FunctionPtr u2_exact() { return _u2_exact; }
     virtual MeshTopologyPtr meshTopology(int temporalDivisions=1) = 0;
     virtual MeshGeometryPtr meshGeometry() { return Teuchos::null; }
     virtual void preprocessMesh(MeshPtr proxyMesh) {};
     virtual void setBCs(SpaceTimeIncompressibleFormulationPtr form) = 0;
+    Teuchos::RCP<PenaltyConstraints> pc() { return _pc; }
+    bool imposeZeroMeanPressure() { return _pureVelocityBCs; }
     virtual double computeL2Error(SpaceTimeIncompressibleFormulationPtr form, SolutionPtr solutionBackground) { return 0; }
     int numSlabs() { return _numSlabs; }
     int currentStep() { return _currentStep; }
@@ -234,6 +241,7 @@ class CylinderProblem : public IncompressibleProblem
       _tInit = 0.0;
       _tFinal = 1.0;
       _numSlabs = numSlabs;
+      _pureVelocityBCs = false;
     }
     virtual MeshGeometryPtr meshGeometry()
     {
@@ -413,6 +421,8 @@ class CylinderProblem : public IncompressibleProblem
 
     virtual void setBCs(SpaceTimeIncompressibleFormulationPtr form)
     {
+      FunctionPtr zero = Function::zero();
+
       BCPtr bc = form->solutionUpdate()->bc();
       SpatialFilterPtr initTime = SpatialFilter::matchingT(_tInit);
       SpatialFilterPtr leftX  = SpatialFilter::matchingX(_xLeft);
@@ -424,17 +434,35 @@ class CylinderProblem : public IncompressibleProblem
       bc->addDirichlet(form->uhat(2), leftX,    _u2_exact);
       // bc->addDirichlet(form->uhat(1), rightX,   _u1_exact);
       // bc->addDirichlet(form->uhat(2), rightX,   _u2_exact);
-      bc->addDirichlet(form->uhat(1), leftY,    _u1_exact);
-      bc->addDirichlet(form->uhat(2), leftY,    _u2_exact);
-      bc->addDirichlet(form->uhat(1), rightY,   _u1_exact);
-      bc->addDirichlet(form->uhat(2), rightY,   _u2_exact);
-      bc->addDirichlet(form->uhat(1), nearCylinder, Function::zero());
-      bc->addDirichlet(form->uhat(2), nearCylinder, Function::zero());
+      // bc->addDirichlet(form->uhat(1), leftY,    _u1_exact);
+      // bc->addDirichlet(form->uhat(2), leftY,    _u2_exact);
+      // bc->addDirichlet(form->uhat(1), rightY,   _u1_exact);
+      // bc->addDirichlet(form->uhat(2), rightY,   _u2_exact);
+      bc->addDirichlet(form->uhat(1), nearCylinder, zero);
+      bc->addDirichlet(form->uhat(2), nearCylinder, zero);
       if (!_steady)
       {
         bc->addDirichlet(form->tmhat(1),initTime,-_u1_exact);
         bc->addDirichlet(form->tmhat(2),initTime,-_u2_exact);
       }
+
+      // define traction components in terms of field variables
+      FunctionPtr n = Function::normal();
+      VarPtr sigma11 = form->sigma(1,1);
+      VarPtr sigma12 = form->sigma(1,2);
+      VarPtr sigma21 = form->sigma(2,1);
+      VarPtr sigma22 = form->sigma(2,2);
+      VarPtr p = form->p();
+      LinearTermPtr t1 = n->x() * (2 * sigma11 - p) + n->y() * (sigma12 + sigma21);
+      LinearTermPtr t2 = n->x() * (sigma12 + sigma21) + n->y() * (2 * sigma22 - p);
+
+      _pc = Teuchos::rcp(new PenaltyConstraints);
+      _pc->addConstraint(t1==zero, rightX);
+      _pc->addConstraint(t2==zero, rightX);
+      _pc->addConstraint(t1==zero, leftY);
+      _pc->addConstraint(t2==zero, leftY);
+      _pc->addConstraint(t1==zero, rightY);
+      _pc->addConstraint(t2==zero, rightY);
     }
 };
 }

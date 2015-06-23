@@ -182,14 +182,14 @@ int main(int argc, char *argv[])
     ofstream dataFile(dataFileLocation);
     dataFile << "ref\t " << "elements\t " << "dofs\t " << "energy\t " << "l2\t " << "solvetime\t" << "iterations\t " << endl;
 
-    {
-      // ostringstream saveFile;
-      // saveFile << saveFilePrefix << "_ref" << -1;
-      // form->save(saveFile.str());
-      exporter->exportSolution(solutionBackground, -1);
-      if (commRank == 0)
-        cout << "Done exporting" << endl;
-    }
+    // {
+    //   // ostringstream saveFile;
+    //   // saveFile << saveFilePrefix << "_ref" << -1;
+    //   // form->save(saveFile.str());
+    //   exporter->exportSolution(solutionBackground, -1);
+    //   if (commRank == 0)
+    //     cout << "Done exporting" << endl;
+    // }
 
     for (int refIndex=loadRef; refIndex <= numRefs; refIndex++)
     {

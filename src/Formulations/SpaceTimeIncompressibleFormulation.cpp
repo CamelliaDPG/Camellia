@@ -208,8 +208,8 @@ SpaceTimeIncompressibleFormulation::SpaceTimeIncompressibleFormulation(int space
     _solutionUpdate = Solution::solution(_bf, _mesh, bc);
     _solutionBackground = Solution::solution(_bf, _mesh, bc);
     map<int, FunctionPtr> initialGuess;
-    initialGuess[u(1)->ID()] = Function::zero();
-    initialGuess[u(2)->ID()] = Function::zero();
+    initialGuess[u(1)->ID()] = problem->u1_exact();
+    initialGuess[u(2)->ID()] = problem->u2_exact();
     _solutionBackground->projectOntoMesh(initialGuess);
   }
   else
@@ -221,6 +221,7 @@ SpaceTimeIncompressibleFormulation::SpaceTimeIncompressibleFormulation(int space
     _solutionUpdate = Solution::solution(_bf, _mesh, bc);
     // _solutionUpdate->loadFromHDF5(savedSolutionAndMeshPrefix+"_update.soln");
   }
+  _solutionBackground->setFilter(problem->pc());
 
   FunctionPtr u1_prev = Function::solution(u1, _solutionBackground);
   FunctionPtr u2_prev = Function::solution(u2, _solutionBackground);
@@ -365,7 +366,8 @@ SpaceTimeIncompressibleFormulation::SpaceTimeIncompressibleFormulation(int space
   _solutionUpdate->setIP(ip);
 
   // impose zero mean constraint
-  _solutionUpdate->bc()->imposeZeroMeanConstraint(p->ID());
+  if (problem->imposeZeroMeanPressure())
+    _solutionUpdate->bc()->imposeZeroMeanConstraint(p->ID());
   // _solutionUpdate->bc()->singlePointBC(p->ID());
 
   _mesh->registerSolution(_solutionBackground);
