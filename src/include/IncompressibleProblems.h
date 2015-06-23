@@ -306,7 +306,9 @@ class CylinderProblem : public IncompressibleProblem
       // elementPoints(9,0) =   radius * 3;
       // elementPoints(9,1) = - radius * 3;
 
-      Intrepid::FieldContainer<double> horizontalBandPoints(10,2);
+      Intrepid::FieldContainer<double> horizontalBandPoints(6,2);
+      if (!_steady)
+        horizontalBandPoints.resize(6,3);
       // ESE band
       horizontalBandPoints(0,0) =   radius * 3;
       horizontalBandPoints(0,1) = - radius / 2;
@@ -321,25 +323,27 @@ class CylinderProblem : public IncompressibleProblem
       horizontalBandPoints(3,1) =   radius / 2;
       // the bigger, fatter guys in the corners count as horizontal bands (because that's the direction of their anisotropy)
       // NE big element
-      horizontalBandPoints(8,0) = radius * 3;
-      horizontalBandPoints(8,1) = radius * 3;
+      horizontalBandPoints(4,0) = radius * 3;
+      horizontalBandPoints(4,1) = radius * 3;
       // SE big element
-      horizontalBandPoints(9,0) =   radius * 3;
-      horizontalBandPoints(9,1) = - radius * 3;
+      horizontalBandPoints(5,0) =   radius * 3;
+      horizontalBandPoints(5,1) = - radius * 3;
 
-      Intrepid::FieldContainer<double> verticalBandPoints(10,2);
+      Intrepid::FieldContainer<double> verticalBandPoints(4,2);
+      if (!_steady)
+        verticalBandPoints.resize(6,3);
       // NNE band
-      verticalBandPoints(4,0) =   radius / 2;
-      verticalBandPoints(4,1) =   radius * 3;
+      verticalBandPoints(0,0) =   radius / 2;
+      verticalBandPoints(0,1) =   radius * 3;
       // NNW band
-      verticalBandPoints(5,0) = - radius / 2;
-      verticalBandPoints(5,1) =   radius * 3;
+      verticalBandPoints(1,0) = - radius / 2;
+      verticalBandPoints(1,1) =   radius * 3;
       // SSE band
-      verticalBandPoints(6,0) =   radius / 2;
-      verticalBandPoints(6,1) = - radius * 3;
+      verticalBandPoints(2,0) =   radius / 2;
+      verticalBandPoints(2,1) = - radius * 3;
       // SSE band
-      verticalBandPoints(7,0) = - radius / 2;
-      verticalBandPoints(7,1) = - radius * 3;
+      verticalBandPoints(3,0) = - radius / 2;
+      verticalBandPoints(3,1) = - radius * 3;
 
       // vector< ElementPtr > elements = hemkerMeshNoCurves->elementsForPoints(elementPoints, false);
 
@@ -359,8 +363,8 @@ class CylinderProblem : public IncompressibleProblem
       // horizontalBandCellIDs.push_back(elements[8]->cellID());
       // horizontalBandCellIDs.push_back(elements[9]->cellID());
 
-      vector< GlobalIndexType > horizontalBandCellIDs = hemkerMeshNoCurves->cellIDsForPoints(horizontalBandPoints, true);
-      vector< GlobalIndexType > verticalBandCellIDs = hemkerMeshNoCurves->cellIDsForPoints(verticalBandPoints, true);
+      vector< GlobalIndexType > horizontalBandCellIDs = hemkerMeshNoCurves->cellIDsForPoints(horizontalBandPoints, false);
+      vector< GlobalIndexType > verticalBandCellIDs = hemkerMeshNoCurves->cellIDsForPoints(verticalBandPoints, false);
 
       Teuchos::RCP<RefinementPattern> verticalCut = RefinementPattern::xAnisotropicRefinementPatternQuad();
       Teuchos::RCP<RefinementPattern> horizontalCut = RefinementPattern::yAnisotropicRefinementPatternQuad();
