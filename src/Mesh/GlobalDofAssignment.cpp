@@ -422,10 +422,13 @@ ElementTypeFactory & GlobalDofAssignment::getElementTypeFactory()
 GlobalIndexType GlobalDofAssignment::globalCellIndex(GlobalIndexType cellID)
 {
   int partitionNumber     = partitionForCellID(cellID);
+  if (partitionNumber == -1)
+  {
+    // no partition number found -- cell is presumably inactive.  Return -1
+    return -1;
+  }
   GlobalIndexType cellIndex = partitionLocalCellIndex(cellID, partitionNumber);
   ElementType* elemType = _elementTypeForCell[cellID].get();
-
-  TEUCHOS_TEST_FOR_EXCEPTION(partitionNumber == -1, std::invalid_argument, "cellID not found -- perhaps it's not active?");
   
   for (PartitionIndexType i=0; i<partitionNumber; i++)
   {
