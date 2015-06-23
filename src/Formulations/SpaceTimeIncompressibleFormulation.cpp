@@ -203,6 +203,7 @@ SpaceTimeIncompressibleFormulation::SpaceTimeIncompressibleFormulation(int space
       _mesh->setEdgeToCurveMap(meshGeometry->edgeToCurveMap());
     proxyMesh->registerObserver(_mesh);
     problem->preprocessMesh(proxyMesh);
+    _mesh->enforceOneIrregularity();
 
     _solutionUpdate = Solution::solution(_bf, _mesh, bc);
     _solutionBackground = Solution::solution(_bf, _mesh, bc);
