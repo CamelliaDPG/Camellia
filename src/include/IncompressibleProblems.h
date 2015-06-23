@@ -463,6 +463,8 @@ class CylinderProblem : public IncompressibleProblem
       _pc->addConstraint(t2==zero, leftY);
       _pc->addConstraint(t1==zero, rightY);
       _pc->addConstraint(t2==zero, rightY);
+
+      form->solutionUpdate()->setFilter(_pc);
     }
 };
 }

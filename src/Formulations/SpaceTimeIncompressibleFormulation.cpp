@@ -221,7 +221,8 @@ SpaceTimeIncompressibleFormulation::SpaceTimeIncompressibleFormulation(int space
     _solutionUpdate = Solution::solution(_bf, _mesh, bc);
     // _solutionUpdate->loadFromHDF5(savedSolutionAndMeshPrefix+"_update.soln");
   }
-  _solutionBackground->setFilter(problem->pc());
+  // _solutionUpdate->setFilter(problem->pc());
+  // _solutionBackground->setFilter(problem->pc());
 
   FunctionPtr u1_prev = Function::solution(u1, _solutionBackground);
   FunctionPtr u2_prev = Function::solution(u2, _solutionBackground);
