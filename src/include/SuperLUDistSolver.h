@@ -25,11 +25,13 @@ namespace Camellia {
     Teuchos::RCP<Epetra_LinearProblem> _savedProblem;
     bool _saveFactorization;
     bool _havePrintedStatus;
+    bool _runSilent; // false by default -- true outputs when reuse is requested
   public:
     SuperLUDistSolver(bool saveFactorization)
     {
       _saveFactorization = saveFactorization;
       _havePrintedStatus = false;
+      _runSilent = false;
     }
     
     int solve() {
@@ -66,7 +68,7 @@ namespace Camellia {
         
         int err = _savedSolver->Solve();
         
-        if (!_havePrintedStatus)
+        if (!_havePrintedStatus && !_runSilent)
         { // print status for diagnostic purposes
           if (MPIWrapper::rank() == 0) cout << "SuperLUDistSolver.h : SuperLU_Dist factorization reuse requested.  Details of solver:\n";
           _savedSolver->PrintStatus();
@@ -87,6 +89,12 @@ namespace Camellia {
         return solve();
       }
     }
+    
+    void setRunSilent(bool value)
+    {
+      _runSilent = value;
+    }
+    
     virtual void stiffnessMatrixChanged()
     {
       _savedSolver = Teuchos::null;
