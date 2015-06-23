@@ -6,11 +6,13 @@
 #include <vector>
 #include <set>
 #include <map>
+#include <ostream>
 #include <string>
 
 #include "Epetra_Map.h"
 #include "Teuchos_RCP.hpp"
 #include "Intrepid_FieldContainer.hpp"
+#include "Teuchos_FancyOStream.hpp"
 
 namespace Camellia
 {
@@ -38,6 +40,13 @@ namespace Camellia
   // ! If the trialSpaceDofs boolean is set to true, interprets the variable IDs as trial space variables;
   // ! otherwise, interprets them as test space variables.
   void printLabeledDofCoefficients(VarFactoryPtr vf, DofOrderingPtr dofOrdering,
+                                   const Intrepid::FieldContainer<double> &dofCoefficients,
+                                   bool trialSpaceDofs = true);
+  
+  // ! prints out the coefficients for each variable, labelled using the names from the VarFactory.
+  // ! If the trialSpaceDofs boolean is set to true, interprets the variable IDs as trial space variables;
+  // ! otherwise, interprets them as test space variables.
+  void printLabeledDofCoefficients(std::ostream &out, VarFactoryPtr vf, DofOrderingPtr dofOrdering,
                                    const Intrepid::FieldContainer<double> &dofCoefficients,
                                    bool trialSpaceDofs = true);
   
