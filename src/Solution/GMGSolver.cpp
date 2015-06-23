@@ -29,7 +29,6 @@ GMGSolver::GMGSolver(BCPtr zeroBCs, MeshPtr coarseMesh, IPPtr coarseIP,
   _maxIters = maxIters;
   _printToConsole = false;
   _tol = tol;
-  _applySmoothing = true;
 
   _computeCondest = false;
   _azOutput = AZ_warnings;
@@ -49,7 +48,6 @@ GMGSolver::GMGSolver(TSolutionPtr<double> fineSolution, MeshPtr coarseMesh, int 
   _maxIters = maxIters;
   _printToConsole = false;
   _tol = tol;
-  _applySmoothing = true;
 
   _computeCondest = true;
   _azOutput = AZ_warnings;
@@ -66,7 +64,6 @@ _finePartitionMap(fineSolution->getPartitionMap())
   _maxIters = maxIters;
   _printToConsole = false;
   _tol = tol;
-  _applySmoothing = true;
   
   _computeCondest = true;
   _azOutput = AZ_warnings;
@@ -91,7 +88,6 @@ _finePartitionMap(fineSolution->getPartitionMap())
   _maxIters = maxIters;
   _printToConsole = false;
   _tol = tol;
-  _applySmoothing = true;
   
   _computeCondest = true;
   _azOutput = AZ_warnings;
@@ -162,12 +158,6 @@ Teuchos::RCP<GMGOperator> GMGSolver::gmgOperatorFromMeshSequence(const std::vect
   return finestOperator;
 }
 
-void GMGSolver::setApplySmoothingOperator(bool applySmoothingOp)
-{
-  _applySmoothing = applySmoothingOp;
-  _gmgOperator->setApplySmoothingOperator(_applySmoothing);
-}
-
 void GMGSolver::setFineMesh(MeshPtr fineMesh, Epetra_Map finePartitionMap)
 {
   _gmgOperator->setFineMesh(fineMesh, finePartitionMap);
@@ -233,12 +223,9 @@ int GMGSolver::solve(bool buildCoarseStiffness)
 
   _gmgOperator->setStiffnessDiagonal(diagA_ptr);
 
-  _gmgOperator->setApplySmoothingOperator(_applySmoothing);
-
   if (buildCoarseStiffness)
   {
-    _gmgOperator->computeCoarseStiffnessMatrix(A);
-    _gmgOperator->setUpSmoother(A);
+    _gmgOperator->setFineStiffnessMatrix(A);
   }
 
   solver.SetAztecOption(AZ_scaling, AZ_none);
