@@ -259,6 +259,7 @@ class CylinderProblem : public IncompressibleProblem
 
     virtual void preprocessMesh(MeshPtr hemkerMeshNoCurves)
     {
+      // cout << "Beginning mesh preprocessing" << endl;
       double radius = _radius;
       bool enforceOneIrregularity = true;
 
@@ -296,8 +297,14 @@ class CylinderProblem : public IncompressibleProblem
       // SE big element
       elementPoints(9,0) =   radius * 3;
       elementPoints(9,1) = - radius * 3;
+      // // NW big element
+      // elementPoints(10,0) = - radius * 4;
+      // elementPoints(10,1) =   radius * 4;
+      // // SW big element
+      // elementPoints(11,0) = - radius * 4;
+      // elementPoints(11,1) = - radius * 4;
 
-      vector< ElementPtr > elements = hemkerMeshNoCurves->elementsForPoints(elementPoints);
+      vector< ElementPtr > elements = hemkerMeshNoCurves->elementsForPoints(elementPoints, false);
 
       vector<int> horizontalBandCellIDs;
       horizontalBandCellIDs.push_back(elements[0]->cellID());
@@ -315,12 +322,11 @@ class CylinderProblem : public IncompressibleProblem
       horizontalBandCellIDs.push_back(elements[8]->cellID());
       horizontalBandCellIDs.push_back(elements[9]->cellID());
 
+      // verticalBandCellIDs.push_back(elements[10]->cellID());
+      // verticalBandCellIDs.push_back(elements[11]->cellID());
+
       Teuchos::RCP<RefinementPattern> verticalCut = RefinementPattern::xAnisotropicRefinementPatternQuad();
       Teuchos::RCP<RefinementPattern> horizontalCut = RefinementPattern::yAnisotropicRefinementPatternQuad();
-
-      // set<GlobalIndexType> cellIDsToRefine;
-      // cellIDsToRefine.insert(0);
-      // hemkerMeshNoCurves->hRefine(cellIDsToRefine, verticalCut);
 
       Intrepid::FieldContainer<double> vertices(4,2);
 
@@ -329,6 +335,7 @@ class CylinderProblem : public IncompressibleProblem
           cellIDIt != horizontalBandCellIDs.end(); cellIDIt++)
       {
         int cellID = *cellIDIt;
+        // cout << "Refining cell " << cellID << endl;
         //    cout << "Identified cell " << cellID << " as a horizontal band.\n";
         // work out what the current aspect ratio is
         hemkerMeshNoCurves->verticesForCell(vertices, cellID);
@@ -344,7 +351,6 @@ class CylinderProblem : public IncompressibleProblem
         set<GlobalIndexType> cellIDsToRefine;
         cellIDsToRefine.insert(cellID);
         double aspect = xDiff / yDiff;
-        cout << cellID << endl;
         while (aspect > 2.0)
         {
           //      cout << "aspect ratio: " << aspect << endl;
@@ -356,7 +362,7 @@ class CylinderProblem : public IncompressibleProblem
               refinedCellIDIt != cellIDsToRefine.end(); refinedCellIDIt++)
           {
             int refinedCellID = *refinedCellIDIt;
-            set<int> refinedCellChildren = hemkerMeshNoCurves->getElement(refinedCellID)->getDescendants();
+            set<GlobalIndexType> refinedCellChildren = hemkerMeshNoCurves->getTopology()->getCell(refinedCellID)->getDescendants();
             childCellIDs.insert(refinedCellChildren.begin(),refinedCellChildren.end());
           }
 
@@ -370,6 +376,7 @@ class CylinderProblem : public IncompressibleProblem
           cellIDIt != verticalBandCellIDs.end(); cellIDIt++)
       {
         int cellID = *cellIDIt;
+        // cout << "Refining cell " << cellID << endl;
         //    cout << "Identified cell " << cellID << " as a vertical band.\n";
         // work out what the current aspect ratio is
         hemkerMeshNoCurves->verticesForCell(vertices, cellID);
@@ -391,7 +398,7 @@ class CylinderProblem : public IncompressibleProblem
               refinedCellIDIt != cellIDsToRefine.end(); refinedCellIDIt++)
           {
             int refinedCellID = *refinedCellIDIt;
-            set<int> refinedCellChildren = hemkerMeshNoCurves->getElement(refinedCellID)->getDescendants();
+            set<GlobalIndexType> refinedCellChildren = hemkerMeshNoCurves->getTopology()->getCell(refinedCellID)->getDescendants();
             childCellIDs.insert(refinedCellChildren.begin(),refinedCellChildren.end());
           }
 
@@ -401,6 +408,7 @@ class CylinderProblem : public IncompressibleProblem
       }
       if (enforceOneIrregularity)
         hemkerMeshNoCurves->enforceOneIrregularity();
+      // cout << "Done with mesh preprocessing" << endl;
     }
 
     virtual void setBCs(SpaceTimeIncompressibleFormulationPtr form)
