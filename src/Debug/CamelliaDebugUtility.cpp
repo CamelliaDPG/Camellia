@@ -106,6 +106,13 @@ namespace Camellia
                                    const Intrepid::FieldContainer<double> &dofCoefficients,
                                    bool trialSpaceDofs)
   {
+    printLabeledDofCoefficients(std::cout, vf, dofOrdering, dofCoefficients, trialSpaceDofs);
+  }
+  
+  void printLabeledDofCoefficients(ostream &out, VarFactoryPtr vf, DofOrderingPtr dofOrdering,
+                                   const Intrepid::FieldContainer<double> &dofCoefficients,
+                                   bool trialSpaceDofs)
+  {
     if (dofOrdering->totalDofs() != dofCoefficients.size())
     {
       TEUCHOS_TEST_FOR_EXCEPTION(true,std::invalid_argument,"dofOrdering size does not match dofCoefficients container size");
@@ -117,43 +124,43 @@ namespace Camellia
     }
     
     Teuchos::oblackholestream oldFormatState;
-    oldFormatState.copyfmt(cout);
+    oldFormatState.copyfmt(out);
     
-    int myprec = cout.precision();
-    cout.setf(std::ios_base::scientific, std::ios_base::floatfield);
-    cout.setf(std::ios_base::right);
+    int myprec = out.precision();
+    out.setf(std::ios_base::scientific, std::ios_base::floatfield);
+    out.setf(std::ios_base::right);
     
     vector< VarPtr > fieldVars = vf->fieldVars();
     vector< VarPtr > traceVars = vf->traceVars();
     vector< VarPtr > fluxVars = vf->fluxVars();
     
     bool printNonZerosOnly = true;
-    if (printNonZerosOnly) cout << "*** (printing only nonzeros) *** \n";
+    if (printNonZerosOnly) out << "*** (printing only nonzeros) *** \n";
     
     if (fieldVars.size() > 0)
     {
-      cout << "\n\n **************   FIELD coefficients   **************\n";
+      out << "\n\n **************   FIELD coefficients   **************\n";
       for (vector<VarPtr>::iterator varIt = fieldVars.begin(); varIt != fieldVars.end(); varIt++)
       {
         VarPtr var = *varIt;
-        cout << var->displayString() << ":\n";
+        out << var->displayString() << ":\n";
         const std::vector<int>* dofIndices = &dofOrdering->getDofIndices(var->ID());
         int basisDofOrdinal = 0;
         for (std::vector<int>::const_iterator dofIndexIt = dofIndices->begin(); dofIndexIt != dofIndices->end(); dofIndexIt++, basisDofOrdinal++)
         {
           if (printNonZerosOnly && (dofCoefficients[*dofIndexIt]==0.0)) continue;
-          cout.setf(std::ios::right, std::ios::adjustfield);
-          cout << std::setw(3) << basisDofOrdinal;
-          cout << "             ";
-          cout.setf(std::ios::right, std::ios::adjustfield);
-          cout << std::setw(myprec+8) << dofCoefficients[*dofIndexIt] << "\n";
+          out.setf(std::ios::right, std::ios::adjustfield);
+          out << std::setw(3) << basisDofOrdinal;
+          out << "             ";
+          out.setf(std::ios::right, std::ios::adjustfield);
+          out << std::setw(myprec+8) << dofCoefficients[*dofIndexIt] << "\n";
         }
       }
     }
     
     if (traceVars.size() > 0)
     {
-      cout << "\n\n ***************   TRACE coefficients   ***************\n";
+      out << "\n\n ***************   TRACE coefficients   ***************\n";
       for (vector<VarPtr>::iterator varIt = traceVars.begin(); varIt != traceVars.end(); varIt++)
       {
         VarPtr var = *varIt;
@@ -161,17 +168,17 @@ namespace Camellia
         for (vector<int>::const_iterator sideIt = sides->begin(); sideIt != sides->end(); sideIt++)
         {
           int sideOrdinal = *sideIt;
-          cout << var->displayString() << ", side " << sideOrdinal << ":\n";
+          out << var->displayString() << ", side " << sideOrdinal << ":\n";
           const std::vector<int>* dofIndices = &dofOrdering->getDofIndices(var->ID(), sideOrdinal);
           int basisDofOrdinal = 0;
           for (std::vector<int>::const_iterator dofIndexIt = dofIndices->begin(); dofIndexIt != dofIndices->end(); dofIndexIt++, basisDofOrdinal++)
           {
             if (printNonZerosOnly && (dofCoefficients[*dofIndexIt]==0.0)) continue;
-            cout.setf(std::ios::right, std::ios::adjustfield);
-            cout << std::setw(3) << basisDofOrdinal;
-            cout << "             ";
-            cout.setf(std::ios::right, std::ios::adjustfield);
-            cout << std::setw(myprec+8) << dofCoefficients[*dofIndexIt] << "\n";
+            out.setf(std::ios::right, std::ios::adjustfield);
+            out << std::setw(3) << basisDofOrdinal;
+            out << "             ";
+            out.setf(std::ios::right, std::ios::adjustfield);
+            out << std::setw(myprec+8) << dofCoefficients[*dofIndexIt] << "\n";
           }
         }
       }
@@ -179,7 +186,7 @@ namespace Camellia
     
     if (fluxVars.size() > 0)
     {
-      cout << "\n\n ***************   FLUX coefficients   ***************\n";
+      out << "\n\n ***************   FLUX coefficients   ***************\n";
       for (vector<VarPtr>::iterator varIt = fluxVars.begin(); varIt != fluxVars.end(); varIt++)
       {
         VarPtr var = *varIt;
@@ -187,23 +194,23 @@ namespace Camellia
         for (vector<int>::const_iterator sideIt = sides->begin(); sideIt != sides->end(); sideIt++)
         {
           int sideOrdinal = *sideIt;
-          cout << var->displayString() << ", side " << sideOrdinal << ":\n";
+          out << var->displayString() << ", side " << sideOrdinal << ":\n";
           const std::vector<int>* dofIndices = &dofOrdering->getDofIndices(var->ID(), sideOrdinal);
           int basisDofOrdinal = 0;
           for (std::vector<int>::const_iterator dofIndexIt = dofIndices->begin(); dofIndexIt != dofIndices->end(); dofIndexIt++, basisDofOrdinal++)
           {
             if (printNonZerosOnly && (dofCoefficients[*dofIndexIt]==0.0)) continue;
-            cout.setf(std::ios::right, std::ios::adjustfield);
-            cout << std::setw(3) << basisDofOrdinal;
-            cout << "             ";
-            cout.setf(std::ios::right, std::ios::adjustfield);
-            cout << std::setw(myprec+8) << dofCoefficients[*dofIndexIt] << "\n";
+            out.setf(std::ios::right, std::ios::adjustfield);
+            out << std::setw(3) << basisDofOrdinal;
+            out << "             ";
+            out.setf(std::ios::right, std::ios::adjustfield);
+            out << std::setw(myprec+8) << dofCoefficients[*dofIndexIt] << "\n";
           }
         }
       }
     }
     
-    cout.copyfmt(oldFormatState);
+    out.copyfmt(oldFormatState);
   }
   
   void printMapSummary(const Epetra_Map &map, string mapName = "map")

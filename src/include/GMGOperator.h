@@ -47,10 +47,12 @@ class GMGOperator : public Epetra_Operator, public Narrator
   bool _useStaticCondensation; // for both coarse and fine solves
   Teuchos::RCP<DofInterpreter> _fineDofInterpreter;
 
+  bool _smoothBeforeCoarseSolve;
+  bool _smoothAfterCoarseSolve;
+  
   MeshPtr _fineMesh, _coarseMesh;
   Epetra_Map _finePartitionMap;
 
-  bool _applySmoothingOperator; // almost always true; false for some tests
   BCPtr _bc;
 
   TimeStatistics getStatistics(double timeValue) const;
@@ -65,8 +67,10 @@ class GMGOperator : public Epetra_Operator, public Narrator
   Teuchos::RCP<Epetra_MultiVector> _diag_sqrt; // square root of the diagonal of the fine (global) stiffness matrix
   Teuchos::RCP<Epetra_MultiVector> _diag_inv; // inverse of the diagonal
 
+  Epetra_CrsMatrix* _fineStiffnessMatrix;
+  
   mutable double _timeMapFineToCoarse, _timeMapCoarseToFine, _timeCoarseImport, _timeConstruction, _timeCoarseSolve, _timeLocalCoefficientMapConstruction, _timeComputeCoarseStiffnessMatrix, _timeProlongationOperatorConstruction,
-      _timeSetUpSmoother, _timeUpdateCoarseOperator; // totals over the life of the object
+      _timeSetUpSmoother, _timeUpdateCoarseOperator, _timeApplyFineStiffness, _timeApplySmoother; // totals over the life of the object
 
   mutable bool _haveSolvedOnCoarseMesh; // if this is true, then we can call resolve() instead of solve().
 
@@ -211,8 +215,6 @@ public:
   //! Returns the Epetra_Map object associated with the range of this operator.
   const Epetra_Map & OperatorRangeMap() const;
 
-  void setApplySmoothingOperator(bool value);
-
   //! sets debug mode for verbose console output on rank 0.
   void setDebugMode(bool value);
 
@@ -242,26 +244,43 @@ public:
     CAMELLIA_ADDITIVE_SCHWARZ,
     NONE
   };
+  
+  // ! When set to true, will compute the new residual after coarse solve, and smooth that.  Note that in general this will not preserve symmetry, so this option should not generally be used with conjugate gradient iterations.  Off by default.
+  void setSmoothAfterCoarseSolve(bool value);
+  
+  // ! When set to true, will smooth and apply the coarse operator to the new residual.  Note that in general this will not preserve symmetry, so this option should not generally be used with conjugate gradient iterations.  Off by default.
+  void setSmoothBeforeCoarseSolve(bool value);
 
   void setSmootherType(SmootherChoice smootherType);
   void setSmootherOverlap(int overlap);
 
   void setLevelOfFill(int fillLevel);
   void setFillRatio(double fillRatio);
+  
+  static std::string smootherString(SmootherChoice choice);
 
   //! If true, use sibling/cousin relationships to define neighborhoods for Schwarz blocks.  Requires CAMELLIA_ADDITIVE_SCHWARZ as the smoother choice.
   void setUseHierarchicalNeighborsForSchwarz(bool value);
   //@}
 
+  //! Computes an Epetra_CrsMatrix representation of this operator.  Note that this can be an expensive operation, and is primarily intended for testing.
+  Teuchos::RCP<Epetra_CrsMatrix> getMatrixRepresentation();
+  
   //! Returns the prolongation operator (an Epetra_CrsMatrix).
   Teuchos::RCP<Epetra_CrsMatrix> getProlongationOperator(); // prolongation operator
 
-  //! Constructs and returns an Epetra_CrsMatrix for the smoother.
+  //! Constructs and returns an Epetra_CrsMatrix for the smoother.  Note that this can be an expensive operation.  Primarily intended for testing.
   Teuchos::RCP<Epetra_CrsMatrix> getSmootherAsMatrix();
 
   //! Returns the coarse stiffness matrix (an Epetra_CrsMatrix).
   Teuchos::RCP<Epetra_CrsMatrix> getCoarseStiffnessMatrix();
 
+  //! Set the fine stiffness matrix; calls computeCoarseStiffnessMatrix() and setUpSmoother()
+  void setFineStiffnessMatrix(Epetra_CrsMatrix* fineStiffnessMatrix);
+
+  //! Returns the coarse operator applied in the coarse solve.
+  Teuchos::RCP<GMGOperator> getCoarseOperator();
+  
   //! Returns the Solver used in the coarse solve.
   SolverPtr getCoarseSolver();
 

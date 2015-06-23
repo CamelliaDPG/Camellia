@@ -26,8 +26,6 @@ class GMGSolver : public Solver, public Narrator
 
   Teuchos::RCP<GMGOperator> _gmgOperator;
 
-  bool _applySmoothing;    // whether we should add the smoothing term (almost always want this--basically we turn off for some tests)
-
   bool _computeCondest;
 
   int _azOutput;
@@ -64,8 +62,6 @@ public:
 
   int resolve();
   int solve();
-
-  void setApplySmoothingOperator(bool applySmoothingOp);
 
   void setComputeConditionNumberEstimate(bool value);
 

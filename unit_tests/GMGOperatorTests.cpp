@@ -8,6 +8,7 @@
 #include "Teuchos_UnitTestHarness.hpp"
 
 #include "CamelliaDebugUtility.h"
+#include "CamelliaTestingHelpers.h"
 #include "GMGOperator.h"
 #include "MeshFactory.h"
 #include "PoissonFormulation.h"
@@ -125,13 +126,13 @@ TEUCHOS_UNIT_TEST( GMGOperator, ProlongationOperatorQuad_Simple )
   //    FunctionPtr phi_exact = Function::xn(2) * Function::yn(1); // x^2 y exact solution
   //    FunctionPtr psi_exact = phi_exact->grad();
 
-  FunctionPtr phi_exact = Function::zero();
+  FunctionPtr phi_exact = Function::constant(3.14159);
   FunctionPtr one = Function::constant(1.0);
   FunctionPtr two = Function::constant(2.0);
   FunctionPtr psi_exact = Function::vectorize(one, two);
 
   int coarseElementCount = 1;
-  int H1Order = 1, delta_k = spaceDim;
+  int H1Order = 2, delta_k = spaceDim;
   vector<double> dimensions(2,1.0);
   vector<int> elementCounts(2,coarseElementCount);
   MeshPtr mesh = MeshFactory::rectilinearMesh(bf, dimensions, elementCounts, H1Order, delta_k);
@@ -182,8 +183,8 @@ TEUCHOS_UNIT_TEST( GMGOperator, ProlongationOperatorQuad_Simple )
   set<GlobalIndexType> cellIDs = fineSoln->mesh()->getActiveCellIDs();
 
   // import global solution data onto each rank:
-  fineSoln->importSolutionForOffRankCells(cellIDs);
-  exactSoln->importSolutionForOffRankCells(cellIDs);
+//  fineSoln->importSolutionForOffRankCells(cellIDs);
+//  exactSoln->importSolutionForOffRankCells(cellIDs);
 
 //    bool warnAboutOffRank = false;
 //    VarFactoryPtr vf = bf->varFactory();
@@ -194,14 +195,37 @@ TEUCHOS_UNIT_TEST( GMGOperator, ProlongationOperatorQuad_Simple )
 //      printLabeledDofCoefficients(vf, trialOrder, coefficients);
 //    }
 
-  fineSoln->addSolution(exactSoln, -1.0);
+  set<GlobalIndexType> myCellIDs = fineSoln->mesh()->cellIDsInPartition();
+  
+  bool warnAboutOffRank = false;
+  for (GlobalIndexType cellID : myCellIDs) {
+    FieldContainer<double> coefficients = exactSoln->allCoefficientsForCellID(cellID, warnAboutOffRank);
+    out << "\n\n******************** Dofs for cell " << cellID << " (exactSoln) ********************\n\n";
+    DofOrderingPtr trialOrder = fineMesh->getElementType(cellID)->trialOrderPtr;
+    printLabeledDofCoefficients(out, form.bf()->varFactory(), trialOrder, coefficients);
+  }
+  
+  for (GlobalIndexType cellID : myCellIDs) {
+    FieldContainer<double> coefficients = fineSoln->allCoefficientsForCellID(cellID, warnAboutOffRank);
+    out << "\n\n******************** Dofs for cell " << cellID << " (fineSoln) ********************\n\n";
+    DofOrderingPtr trialOrder = fineMesh->getElementType(cellID)->trialOrderPtr;
+    printLabeledDofCoefficients(out, form.bf()->varFactory(), trialOrder, coefficients);
+  }
+  
+  fineSoln->addSolution(exactSoln, -1.0); // should recover zero solution this way
 
-//    for (set<GlobalIndexType>::iterator cellIDIt = cellIDs.begin(); cellIDIt != cellIDs.end(); cellIDIt++) {
-//      cout << "\n\n******************** Dofs for cell " << *cellIDIt << " (fineSoln after subtracting exact) ********************\n\n";
-//      FieldContainer<double> coefficients = fineSoln->allCoefficientsForCellID(*cellIDIt, warnAboutOffRank);
-//      DofOrderingPtr trialOrder = fineMesh->getElementType(*cellIDIt)->trialOrderPtr;
-//      printLabeledDofCoefficients(vf, trialOrder, coefficients);
-//    }
+  fineSoln->importSolutionForOffRankCells(cellIDs);
+  
+  double tol = 1e-14;
+  for (GlobalIndexType cellID : cellIDs) {
+    FieldContainer<double> coefficients = fineSoln->allCoefficientsForCellID(cellID, false);
+    FieldContainer<double> expectedCoefficients(coefficients.size()); // zero coefficients
+    
+    TEST_COMPARE_FLOATING_ARRAYS_CAMELLIA_ABSTOLTOO(coefficients, expectedCoefficients, tol, tol);
+//    cout << "\n\n******************** Dofs for cell " << cellID << " (fineSoln after subtracting exact) ********************\n\n";
+//    DofOrderingPtr trialOrder = fineMesh->getElementType(cellID)->trialOrderPtr;
+//    printLabeledDofCoefficients(form.bf()->varFactory(), trialOrder, coefficients);
+  }
 
 }
 
@@ -302,10 +326,6 @@ TEUCHOS_UNIT_TEST( GMGOperator, ProlongationOperatorQuad_Slow )
   energyError = fineSoln->energyErrorTotal();
   TEST_COMPARE(energyError, <, tol);
 
-  // import global solution data onto each rank:
-  fineSoln->importSolutionForOffRankCells(cellIDs);
-  exactSoln->importSolutionForOffRankCells(cellIDs);
-
   bool warnAboutOffRank = false;
   VarFactoryPtr vf = bf->varFactory();
 //    for (set<GlobalIndexType>::iterator cellIDIt = cellIDs.begin(); cellIDIt != cellIDs.end(); cellIDIt++) {
@@ -315,14 +335,36 @@ TEUCHOS_UNIT_TEST( GMGOperator, ProlongationOperatorQuad_Slow )
 //      printLabeledDofCoefficients(vf, trialOrder, coefficients);
 //    }
 
+  set<GlobalIndexType> myCellIDs = fineSoln->mesh()->cellIDsInPartition();
+  
+  for (GlobalIndexType cellID : myCellIDs) {
+    FieldContainer<double> coefficients = exactSoln->allCoefficientsForCellID(cellID, warnAboutOffRank);
+    out << "\n\n******************** Dofs for cell " << cellID << " (exactSoln) ********************\n\n";
+    DofOrderingPtr trialOrder = fineMesh->getElementType(cellID)->trialOrderPtr;
+    printLabeledDofCoefficients(out, form.bf()->varFactory(), trialOrder, coefficients);
+  }
+  
+  for (GlobalIndexType cellID : myCellIDs) {
+    FieldContainer<double> coefficients = fineSoln->allCoefficientsForCellID(cellID, warnAboutOffRank);
+    out << "\n\n******************** Dofs for cell " << cellID << " (fineSoln) ********************\n\n";
+    DofOrderingPtr trialOrder = fineMesh->getElementType(cellID)->trialOrderPtr;
+    printLabeledDofCoefficients(out, form.bf()->varFactory(), trialOrder, coefficients);
+  }
+  
   fineSoln->addSolution(exactSoln, -1.0);
 
-//    for (set<GlobalIndexType>::iterator cellIDIt = cellIDs.begin(); cellIDIt != cellIDs.end(); cellIDIt++) {
-//      cout << "\n\n******************** Dofs for cell " << *cellIDIt << " (fineSoln after subtracting exact) ********************\n\n";
-//      FieldContainer<double> coefficients = fineSoln->allCoefficientsForCellID(*cellIDIt, warnAboutOffRank);
-//      DofOrderingPtr trialOrder = fineMesh->getElementType(*cellIDIt)->trialOrderPtr;
-//      printLabeledDofCoefficients(vf, trialOrder, coefficients);
-//    }
+  // import global solution data onto each rank:
+  fineSoln->importSolutionForOffRankCells(cellIDs);
+  
+  for (GlobalIndexType cellID : cellIDs) {
+    FieldContainer<double> coefficients = fineSoln->allCoefficientsForCellID(cellID, warnAboutOffRank);
+    FieldContainer<double> expectedCoefficients(coefficients.size()); // zero coefficients
+    
+    TEST_COMPARE_FLOATING_ARRAYS_CAMELLIA_ABSTOLTOO(coefficients, expectedCoefficients, tol, tol);
+    //    cout << "\n\n******************** Dofs for cell " << cellID << " (fineSoln after subtracting exact) ********************\n\n";
+    //    DofOrderingPtr trialOrder = fineMesh->getElementType(cellID)->trialOrderPtr;
+    //    printLabeledDofCoefficients(form.bf()->varFactory(), trialOrder, coefficients);
+  }
 
 }
 } // namespace
