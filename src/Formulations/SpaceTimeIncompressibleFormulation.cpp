@@ -199,8 +199,8 @@ SpaceTimeIncompressibleFormulation::SpaceTimeIncompressibleFormulation(int space
   {
     MeshPtr proxyMesh = Teuchos::rcp( new Mesh(meshTopo->deepCopy(), _bf, H1Order, delta_k) ) ;
     _mesh = Teuchos::rcp( new Mesh(meshTopo, _bf, H1Order, delta_k) ) ;
-    if (meshGeometry != Teuchos::null)
-      _mesh->setEdgeToCurveMap(meshGeometry->edgeToCurveMap());
+    // if (meshGeometry != Teuchos::null)
+    //   _mesh->setEdgeToCurveMap(meshGeometry->edgeToCurveMap());
     proxyMesh->registerObserver(_mesh);
     problem->preprocessMesh(proxyMesh);
     _mesh->enforceOneIrregularity();

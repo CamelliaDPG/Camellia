@@ -274,64 +274,93 @@ class CylinderProblem : public IncompressibleProblem
       // start by identifying the various elements: there are 10 of interest to us
       // to find the thin banded elements, note that radius * 3 will be outside the bounding square
       // and that radius / 2 will be inside the band
-      Intrepid::FieldContainer<double> elementPoints(10,2);
+      // Intrepid::FieldContainer<double> elementPoints(10,2);
+      // // ESE band
+      // elementPoints(0,0) =   radius * 3;
+      // elementPoints(0,1) = - radius / 2;
+      // // ENE band
+      // elementPoints(1,0) = radius * 3;
+      // elementPoints(1,1) = radius / 2;
+      // // WSW band
+      // elementPoints(2,0) = - radius * 3;
+      // elementPoints(2,1) = - radius / 2;
+      // // WNW band
+      // elementPoints(3,0) = - radius * 3;
+      // elementPoints(3,1) =   radius / 2;
+      // // NNE band
+      // elementPoints(4,0) =   radius / 2;
+      // elementPoints(4,1) =   radius * 3;
+      // // NNW band
+      // elementPoints(5,0) = - radius / 2;
+      // elementPoints(5,1) =   radius * 3;
+      // // SSE band
+      // elementPoints(6,0) =   radius / 2;
+      // elementPoints(6,1) = - radius * 3;
+      // // SSE band
+      // elementPoints(7,0) = - radius / 2;
+      // elementPoints(7,1) = - radius * 3;
+      // // NE big element
+      // elementPoints(8,0) = radius * 3;
+      // elementPoints(8,1) = radius * 3;
+      // // SE big element
+      // elementPoints(9,0) =   radius * 3;
+      // elementPoints(9,1) = - radius * 3;
+
+      Intrepid::FieldContainer<double> horizontalBandPoints(10,2);
       // ESE band
-      elementPoints(0,0) =   radius * 3;
-      elementPoints(0,1) = - radius / 2;
+      horizontalBandPoints(0,0) =   radius * 3;
+      horizontalBandPoints(0,1) = - radius / 2;
       // ENE band
-      elementPoints(1,0) = radius * 3;
-      elementPoints(1,1) = radius / 2;
+      horizontalBandPoints(1,0) = radius * 3;
+      horizontalBandPoints(1,1) = radius / 2;
       // WSW band
-      elementPoints(2,0) = - radius * 3;
-      elementPoints(2,1) = - radius / 2;
+      horizontalBandPoints(2,0) = - radius * 3;
+      horizontalBandPoints(2,1) = - radius / 2;
       // WNW band
-      elementPoints(3,0) = - radius * 3;
-      elementPoints(3,1) =   radius / 2;
-      // NNE band
-      elementPoints(4,0) =   radius / 2;
-      elementPoints(4,1) =   radius * 3;
-      // NNW band
-      elementPoints(5,0) = - radius / 2;
-      elementPoints(5,1) =   radius * 3;
-      // SSE band
-      elementPoints(6,0) =   radius / 2;
-      elementPoints(6,1) = - radius * 3;
-      // SSE band
-      elementPoints(7,0) = - radius / 2;
-      elementPoints(7,1) = - radius * 3;
-      // NE big element
-      elementPoints(8,0) = radius * 3;
-      elementPoints(8,1) = radius * 3;
-      // SE big element
-      elementPoints(9,0) =   radius * 3;
-      elementPoints(9,1) = - radius * 3;
-      // // NW big element
-      // elementPoints(10,0) = - radius * 4;
-      // elementPoints(10,1) =   radius * 4;
-      // // SW big element
-      // elementPoints(11,0) = - radius * 4;
-      // elementPoints(11,1) = - radius * 4;
-
-      vector< ElementPtr > elements = hemkerMeshNoCurves->elementsForPoints(elementPoints, false);
-
-      vector<int> horizontalBandCellIDs;
-      horizontalBandCellIDs.push_back(elements[0]->cellID());
-      horizontalBandCellIDs.push_back(elements[1]->cellID());
-      horizontalBandCellIDs.push_back(elements[2]->cellID());
-      horizontalBandCellIDs.push_back(elements[3]->cellID());
-
-      vector<int> verticalBandCellIDs;
-      verticalBandCellIDs.push_back(elements[4]->cellID());
-      verticalBandCellIDs.push_back(elements[5]->cellID());
-      verticalBandCellIDs.push_back(elements[6]->cellID());
-      verticalBandCellIDs.push_back(elements[7]->cellID());
-
+      horizontalBandPoints(3,0) = - radius * 3;
+      horizontalBandPoints(3,1) =   radius / 2;
       // the bigger, fatter guys in the corners count as horizontal bands (because that's the direction of their anisotropy)
-      horizontalBandCellIDs.push_back(elements[8]->cellID());
-      horizontalBandCellIDs.push_back(elements[9]->cellID());
+      // NE big element
+      horizontalBandPoints(8,0) = radius * 3;
+      horizontalBandPoints(8,1) = radius * 3;
+      // SE big element
+      horizontalBandPoints(9,0) =   radius * 3;
+      horizontalBandPoints(9,1) = - radius * 3;
 
-      // verticalBandCellIDs.push_back(elements[10]->cellID());
-      // verticalBandCellIDs.push_back(elements[11]->cellID());
+      Intrepid::FieldContainer<double> verticalBandPoints(10,2);
+      // NNE band
+      verticalBandPoints(4,0) =   radius / 2;
+      verticalBandPoints(4,1) =   radius * 3;
+      // NNW band
+      verticalBandPoints(5,0) = - radius / 2;
+      verticalBandPoints(5,1) =   radius * 3;
+      // SSE band
+      verticalBandPoints(6,0) =   radius / 2;
+      verticalBandPoints(6,1) = - radius * 3;
+      // SSE band
+      verticalBandPoints(7,0) = - radius / 2;
+      verticalBandPoints(7,1) = - radius * 3;
+
+      // vector< ElementPtr > elements = hemkerMeshNoCurves->elementsForPoints(elementPoints, false);
+
+      // vector<int> horizontalBandCellIDs;
+      // horizontalBandCellIDs.push_back(elements[0]->cellID());
+      // horizontalBandCellIDs.push_back(elements[1]->cellID());
+      // horizontalBandCellIDs.push_back(elements[2]->cellID());
+      // horizontalBandCellIDs.push_back(elements[3]->cellID());
+
+      // vector<int> verticalBandCellIDs;
+      // verticalBandCellIDs.push_back(elements[4]->cellID());
+      // verticalBandCellIDs.push_back(elements[5]->cellID());
+      // verticalBandCellIDs.push_back(elements[6]->cellID());
+      // verticalBandCellIDs.push_back(elements[7]->cellID());
+
+      // // the bigger, fatter guys in the corners count as horizontal bands (because that's the direction of their anisotropy)
+      // horizontalBandCellIDs.push_back(elements[8]->cellID());
+      // horizontalBandCellIDs.push_back(elements[9]->cellID());
+
+      vector< GlobalIndexType > horizontalBandCellIDs = hemkerMeshNoCurves->cellIDsForPoints(horizontalBandPoints, true);
+      vector< GlobalIndexType > verticalBandCellIDs = hemkerMeshNoCurves->cellIDsForPoints(verticalBandPoints, true);
 
       Teuchos::RCP<RefinementPattern> verticalCut = RefinementPattern::xAnisotropicRefinementPatternQuad();
       Teuchos::RCP<RefinementPattern> horizontalCut = RefinementPattern::yAnisotropicRefinementPatternQuad();
@@ -339,7 +368,7 @@ class CylinderProblem : public IncompressibleProblem
       Intrepid::FieldContainer<double> vertices(4,2);
 
       // horizontal bands want vertical cuts, and vice versa
-      for (vector<int>::iterator cellIDIt = horizontalBandCellIDs.begin();
+      for (vector<GlobalIndexType>::iterator cellIDIt = horizontalBandCellIDs.begin();
           cellIDIt != horizontalBandCellIDs.end(); cellIDIt++)
       {
         int cellID = *cellIDIt;
@@ -380,7 +409,7 @@ class CylinderProblem : public IncompressibleProblem
       }
 
       // horizontal bands want vertical cuts, and vice versa
-      for (vector<int>::iterator cellIDIt = verticalBandCellIDs.begin();
+      for (vector<GlobalIndexType>::iterator cellIDIt = verticalBandCellIDs.begin();
           cellIDIt != verticalBandCellIDs.end(); cellIDIt++)
       {
         int cellID = *cellIDIt;
