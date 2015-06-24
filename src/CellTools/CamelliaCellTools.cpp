@@ -81,6 +81,32 @@ CellTopoPtrLegacy CamelliaCellTools::cellTopoForKey(unsigned key)
   }
 }
 
+int CamelliaCellTools::checkPointInclusion(const double*                 point,
+                                           const int                     pointDim,
+                                           CellTopoPtr                   cellTopo,
+                                           const double &                threshold)
+{
+  TEUCHOS_TEST_FOR_EXCEPTION( !(pointDim == (int)cellTopo->getDimension() ), std::invalid_argument,
+                             ">>> ERROR (Intrepid::CellTools::checkPointInclusion): Point and cell dimensions do not match. ");
+  if (cellTopo->getTensorialDegree() == 0)
+  {
+    return Intrepid::CellTools<double>::checkPointInclusion(point, pointDim, cellTopo->getShardsTopology(), threshold);
+  }
+  else
+  {
+    // first entries of point belong to the shards topology -- check whether these lie inside it
+    int shardsDim = cellTopo->getShardsTopology().getDimension();
+    int shardsInclusion = Intrepid::CellTools<double>::checkPointInclusion(point, shardsDim, cellTopo->getShardsTopology(), threshold);
+    if (shardsInclusion != 1) return shardsInclusion;
+    // if included in shards, then check whether the tensorial dimensions lie inside reference cell (-1,1)
+    for (int tensorDim=shardsDim; tensorDim<pointDim; tensorDim++)
+    {
+      if ((point[tensorDim] < -1.0 - threshold) || (point[tensorDim] > 1.0 + threshold)) return 0; // not included
+    }
+    return 1;
+  }
+}
+
 void CamelliaCellTools::computeSideMeasure(FieldContainer<double> &weightedMeasure, const FieldContainer<double> &cellJacobian, const FieldContainer<double> &cubWeights,
     int sideOrdinal, CellTopoPtr parentCell)
 {
