@@ -726,8 +726,40 @@ MeshGeometryPtr MeshFactory::shiftedHemkerGeometry(double xLeft, double xRight, 
   return shiftedHemkerGeometry(xLeft, xRight, -meshHeight/2.0, meshHeight/2.0, cylinderRadius);
 }
 
-MeshGeometryPtr MeshFactory::shiftedSquareCylinderGeometry(double xLeft, double xRight, double meshHeight, double cylinderRadius)
+MeshGeometryPtr MeshFactory::shiftedSquareCylinderGeometry(double xLeft, double xRight, double meshHeight, double squareDiameter)
 {
+  vector< vector<double> > vertices;
+  vector<double> xs = {xLeft, -squareDiameter/2, squareDiameter/2, xRight};
+  vector<double> ys = {-meshHeight/2, -squareDiameter/2, squareDiameter/2, meshHeight/2};
+  for (int j=0; j < 4; j++)
+  {
+    for (int i=0; i < 4; i++)
+    {
+      vector<double> vertex(2);
+      vertex[0] = xs[i];
+      vertex[1] = ys[j];
+      vertices.push_back(vertex);
+    }
+  }
+
+  vector< vector<unsigned> > elementVertices;
+  vector< CellTopoPtr > cellTopos;
+  CellTopoPtr quad_4 = Camellia::CellTopology::quad();
+  for (int j=0; j < 3; j++)
+  {
+    for (int i=0; i < 3; i++)
+    {
+      vector<unsigned> elVertex = {4*j+i, 4*j+i+1, 4*(j+1)+i+1, 4*(j+1)+i};
+      if (!(i == 1 && j == 1))
+      {
+        elementVertices.push_back(elVertex);
+        cellTopos.push_back(quad_4);
+      }
+    }
+  }
+
+
+  return Teuchos::rcp( new MeshGeometry(vertices, elementVertices, cellTopos) );
 }
 
 MeshPtr MeshFactory::readMesh(string filePath, TBFPtr<double> bilinearForm, int H1Order, int pToAdd)
