@@ -383,6 +383,58 @@ bool TIP<Scalar>::hasBoundaryTerms()
   else return _boundaryTerms.size() > 0;
 }
 
+// ! returns the number of potential nonzeros for the given trial ordering and test ordering
+template <typename Scalar>
+int TIP<Scalar>::nonZeroEntryCount(DofOrderingPtr testOrdering)
+{
+  int nonZeros = 0;
+  
+  set<pair<int,int>> testInteractions;
+  
+  for (TLinearTermPtr<Scalar> lt : _linearTerms)
+  {
+    set<int> varIDs = lt->varIDs();
+    for (int test1 : varIDs)
+    {
+      for (int test2 : varIDs)
+      {
+        testInteractions.insert({test1,test2});
+      }
+    }
+  }
+  for (TLinearTermPtr<Scalar> lt : _boundaryTerms)
+  {
+    set<int> varIDs = lt->varIDs();
+    for (int test1 : varIDs)
+    {
+      for (int test2 : varIDs)
+      {
+        testInteractions.insert({test1,test2});
+      }
+    }
+  }
+  for (TLinearTermPtr<Scalar> lt : _zeroMeanTerms)
+  {
+    set<int> varIDs = lt->varIDs();
+    for (int test1 : varIDs)
+    {
+      for (int test2 : varIDs)
+      {
+        testInteractions.insert({test1,test2});
+      }
+    }
+  }
+
+  for (pair<int,int> testPair : testInteractions)
+  {
+    int test1Cardinality = testOrdering->getBasis(testPair.first)->getCardinality();
+    int test2Cardinality = testOrdering->getBasis(testPair.second)->getCardinality();
+    nonZeros += test1Cardinality * test2Cardinality;
+  }
+  
+  return nonZeros;
+}
+
 template <typename Scalar>
 void TIP<Scalar>::operators(int testID1, int testID2,
                             vector<Camellia::EOperator> &testOp1,
