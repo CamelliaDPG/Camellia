@@ -726,6 +726,10 @@ MeshGeometryPtr MeshFactory::shiftedHemkerGeometry(double xLeft, double xRight, 
   return shiftedHemkerGeometry(xLeft, xRight, -meshHeight/2.0, meshHeight/2.0, cylinderRadius);
 }
 
+MeshGeometryPtr MeshFactory::shiftedSquareCylinderGeometry(double xLeft, double xRight, double meshHeight, double cylinderRadius)
+{
+}
+
 MeshPtr MeshFactory::readMesh(string filePath, TBFPtr<double> bilinearForm, int H1Order, int pToAdd)
 {
   ifstream mshFile;

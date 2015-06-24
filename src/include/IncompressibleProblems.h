@@ -52,7 +52,7 @@ class AnalyticalIncompressibleProblem : public IncompressibleProblem
     virtual MeshTopologyPtr meshTopology(int temporalDivisions=1)
     {
       MeshTopologyPtr spatialMeshTopo = MeshFactory::rectilinearMeshTopology(_dimensions, _elementCounts, _x0);
-      MeshTopologyPtr spaceTimeMeshTopo = MeshFactory::spaceTimeMeshTopology(spatialMeshTopo, currentT0(), currentT1());
+      MeshTopologyPtr spaceTimeMeshTopo = MeshFactory::spaceTimeMeshTopology(spatialMeshTopo, currentT0(), currentT1(), temporalDivisions);
       if (_steady)
         return spatialMeshTopo;
       else
@@ -244,13 +244,15 @@ class CylinderProblem : public IncompressibleProblem
     CylinderProblem(bool steady, double Re, int numSlabs=1)
     {
       _steady = steady;
-      _u1_exact = Function::constant(1);
+      _u1_exact = Function::min(Function::tn(1),Function::constant(1));
       _u2_exact = Function::constant(0);
-      _sigma1_exact = 1./Re*_u1_exact->grad();
-      _sigma2_exact = 1./Re*_u2_exact->grad();
+      // _sigma1_exact = 1./Re*_u1_exact->grad();
+      // _sigma2_exact = 1./Re*_u2_exact->grad();
+      _sigma1_exact = Function::zero();
+      _sigma2_exact = Function::zero();
 
       _tInit = 0.0;
-      _tFinal = 1.0;
+      _tFinal = 12.0;
       _numSlabs = numSlabs;
       _pureVelocityBCs = false;
     }
@@ -264,12 +266,7 @@ class CylinderProblem : public IncompressibleProblem
     {
       MeshGeometryPtr geometry = meshGeometry();
       MeshTopologyPtr spatialMeshTopo = Teuchos::rcp(new MeshTopology(geometry));
-      // MeshPtr proxyMesh = Teuchos::rcp( new Mesh(geometry->vertices(), geometry->elementVertices(),
-      //       streamBF, H1Order, pToAdd,
-      //       useConformingTraces, trialOrderEnhancements) );
-      // makeRoughlyIsotropic(proxyMesh, _radius, enforceOneIrregularity);
-      // MeshTopologyPtr spatialMeshTopo = MeshFactory::rectilinearMeshTopology(_dimensions, _elementCounts, _x0);
-      MeshTopologyPtr spaceTimeMeshTopo = MeshFactory::spaceTimeMeshTopology(spatialMeshTopo, currentT0(), currentT1());
+      MeshTopologyPtr spaceTimeMeshTopo = MeshFactory::spaceTimeMeshTopology(spatialMeshTopo, currentT0(), currentT1(), temporalDivisions);
       if (_steady)
         return spatialMeshTopo;
       else

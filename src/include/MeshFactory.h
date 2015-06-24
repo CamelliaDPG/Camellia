@@ -44,6 +44,8 @@ public:
       double yBottom, double yTop,
       double cylinderRadius, double embeddedSquareSideLength);
 
+  static MeshGeometryPtr shiftedSquareCylinderGeometry(double xLeft, double xRight, double meshHeight, double squareDiameter);
+
 
   // legacy method that originally belonged to Mesh:
   static MeshPtr buildQuadMesh(const Intrepid::FieldContainer<double> &quadBoundaryPoints,
