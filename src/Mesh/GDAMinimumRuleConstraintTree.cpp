@@ -145,7 +145,7 @@ namespace Camellia
     int pathLength = 0;
     _root = Teuchos::rcp( new ConstraintTreeNode(cellID, sideOrdinal, sideDim, sideOrdinalInSide, pathLength));
     
-    MeshTopologyPtr meshTopo = gdaMinimumRule->getMeshTopology();
+    MeshTopologyViewPtr meshTopo = gdaMinimumRule->getMeshTopology();
     set<pair<GlobalIndexType,unsigned>> previouslyVisitedDomains;
     vector<ConstraintTreeNodePtr> newLeafNodes = {_root};
     while (newLeafNodes.size() > 0)

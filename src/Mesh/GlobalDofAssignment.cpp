@@ -452,7 +452,7 @@ MeshPtr GlobalDofAssignment::getMesh()
   return _mesh;
 }
 
-MeshTopologyPtr GlobalDofAssignment::getMeshTopology()
+MeshTopologyViewPtr GlobalDofAssignment::getMeshTopology()
 {
   return _meshTopology;
 }

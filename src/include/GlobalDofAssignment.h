@@ -13,7 +13,7 @@
 
 #include <iostream>
 
-#include "MeshTopology.h"
+#include "MeshTopologyView.h"
 #include "DofOrderingFactory.h"
 #include "VarFactory.h"
 #include "MeshPartitionPolicy.h"
@@ -39,7 +39,7 @@ protected:
   bool _enforceConformityLocally; // whether the local DofOrdering should e.g. identify vertex dofs belonging to trace bases on sides -- currently true for max rule, false for min rule.  (Min rule will still enforce conformity, but this does not depend on it being enforced locally).  Set in base class constructor
 
   MeshPtr _mesh;
-  MeshTopologyPtr _meshTopology;
+  MeshTopologyViewPtr _meshTopology;
   VarFactoryPtr _varFactory;
   DofOrderingFactoryPtr _dofOrderingFactory;
   MeshPartitionPolicyPtr _partitionPolicy;
@@ -109,7 +109,7 @@ public:
   std::vector<int> getInitialH1Order();
   
   MeshPtr getMesh();
-  MeshTopologyPtr getMeshTopology();
+  MeshTopologyViewPtr getMeshTopology();
 
   bool getPartitions(Intrepid::FieldContainer<GlobalIndexType> &partitions);
   PartitionIndexType getPartitionCount();

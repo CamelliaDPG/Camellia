@@ -46,10 +46,15 @@ namespace Camellia {
     
     // ! creates a copy of this, deep-copying each Cell and all lookup tables (but does not deep copy any other objects, e.g. PeriodicBCPtrs).  Not supported for MeshTopologyViews with _meshTopo defined (i.e. those that are themselves defined in terms of another MeshTopology object).
     virtual Teuchos::RCP<MeshTopology> deepCopy();
+
+    virtual bool entityIsAncestor(unsigned d, IndexType ancestor, IndexType descendent);
     
+    virtual const std::set<IndexType> &getActiveCellIndices();
     virtual std::vector< std::pair<IndexType,unsigned> > getActiveCellIndices(unsigned d, IndexType entityIndex); // first entry in pair is the cellIndex, the second is the index of the entity in that cell (the subcord).
     
     virtual CellPtr getCell(IndexType cellIndex);
+    virtual std::set< std::pair<IndexType, unsigned> > getCellsContainingEntity(unsigned d, unsigned entityIndex);
+    virtual std::vector<IndexType> getCellsForSide(IndexType sideEntityIndex);
     
     virtual std::pair<IndexType, unsigned> getConstrainingEntity(unsigned d, IndexType entityIndex);
     virtual IndexType getConstrainingEntityIndexOfLikeDimension(unsigned d, IndexType entityIndex);
@@ -58,6 +63,8 @@ namespace Camellia {
     virtual unsigned getDimension();
     
     virtual std::vector<IndexType> getEntityVertexIndices(unsigned d, IndexType entityIndex);
+    
+    virtual IndexType getMaximumCellIndex();
     
     virtual const std::set<IndexType> &getRootCellIndices();
     

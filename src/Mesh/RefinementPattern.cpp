@@ -598,7 +598,8 @@ const FieldContainer<double> & RefinementPattern::verticesOnReferenceCell()
 unsigned RefinementPattern::childOrdinalForPoint(const std::vector<double> &pointParentCoords)
 {
   int cubatureDegree = 1; // straight-line mesh in reference space
-  for (int i=0; i<_refinementTopology->cellCount(); i++)
+  
+  for (int i=0; i<_refinementTopology->activeCellCount(); i++)
   {
     if (_refinementTopology->cellContainsPoint(i, pointParentCoords, cubatureDegree))
     {

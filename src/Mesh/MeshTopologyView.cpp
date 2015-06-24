@@ -77,6 +77,16 @@ Teuchos::RCP<MeshTopology> MeshTopologyView::deepCopy()
   TEUCHOS_TEST_FOR_EXCEPTION(true, std::invalid_argument, "deepCopy() not supported by MeshTopologyView; this method is defined for potential subclass support.");
 }
 
+bool MeshTopologyView::entityIsAncestor(unsigned d, IndexType ancestor, IndexType descendent)
+{
+  return _meshTopo->entityIsAncestor(d, ancestor, descendent);
+}
+
+const set<IndexType> &MeshTopologyView::getActiveCellIndices()
+{
+  return _activeCellIDs;
+}
+
 vector< pair<IndexType,unsigned> > MeshTopologyView::getActiveCellIndices(unsigned d, IndexType entityIndex)
 {
   // first entry in pair is the cellIndex, the second is the ordinal of the entity in that cell (the subcord).
@@ -111,6 +121,46 @@ vector<IndexType> MeshTopologyView::getActiveCellsForSide(IndexType sideEntityIn
 CellPtr MeshTopologyView::getCell(IndexType cellIndex)
 {
   return _meshTopo->getCell(cellIndex);
+}
+
+// getCellsContainingEntity() copied from MeshTopology; could possibly eliminate it in MeshTopology
+// ! pairs are (cellIndex, sideOrdinal) where the sideOrdinal is a side that contains the entity
+set< pair<IndexType, unsigned> > MeshTopologyView::getCellsContainingEntity(unsigned d, unsigned entityIndex)   // not *all* cells, but within any refinement branch, the most refined cell that contains the entity will be present in this set.  The unsigned value is the ordinal of a *side* in the cell containing this entity.  There may be multiple sides in a cell that contain the entity; this method will return just one entry per cell.
+{
+  if (d==getDimension())
+  {
+    // entityIndex is a cell; the side then is contained within the cell; we'll flag this fact by setting the side ordinal to -1.
+    return {{entityIndex,-1}};
+  }
+  vector<IndexType> sidesForEntity = getSidesContainingEntity(d, entityIndex);
+  typedef pair<IndexType,unsigned> CellPair;
+  set< CellPair > cells;
+  set< IndexType > cellIndices;  // container to keep track of which cells we've already counted -- we only return one (cell, side) pair per cell that contains the entity...
+  int sideDim = getDimension() - 1;
+  for (IndexType sideEntityIndex : sidesForEntity)
+  {
+    vector<IndexType> cellsForSide = getCellsForSide(sideEntityIndex);
+    TEUCHOS_TEST_FOR_EXCEPTION((cellsForSide.size() == 0) || (cellsForSide.size() > 2), std::invalid_argument, "Unexpected cell count for side.");
+    
+    for (IndexType cellIndex : cellsForSide)
+    {
+      if (cellIndices.find(cellIndex) != cellIndices.end()) continue; // already have an entry for this cell
+      CellPtr cell = _meshTopo->getCell(cellIndex);
+      unsigned sideSubcord = cell->findSubcellOrdinal(sideDim, sideEntityIndex);
+      cells.insert({cellIndex,sideSubcord});
+    }
+  }
+  return cells;
+}
+
+vector<IndexType> MeshTopologyView::getCellsForSide(IndexType sideEntityIndex)
+{
+  vector<IndexType> cells;
+  IndexType cellIndex = _meshTopo->getFirstCellForSide(sideEntityIndex).first;
+  if (cellIndex != -1) cells.push_back(cellIndex);
+  cellIndex = _meshTopo->getSecondCellForSide(sideEntityIndex).first;
+  if (cellIndex != -1) cells.push_back(cellIndex);
+  return cells;
 }
 
 std::pair<IndexType, unsigned> MeshTopologyView::getConstrainingEntity(unsigned d, IndexType entityIndex)
@@ -276,6 +326,14 @@ unsigned MeshTopologyView::getDimension()
 std::vector<IndexType> MeshTopologyView::getEntityVertexIndices(unsigned d, IndexType entityIndex)
 {
   return _meshTopo->getEntityVertexIndices(d,entityIndex);
+}
+
+IndexType MeshTopologyView::getMaximumCellIndex()
+{
+  if (_activeCellIDs.size() == 0) return 0;
+  std::set<IndexType>::iterator it = _activeCellIDs.end();
+  --it;
+  return *it;
 }
 
 const set<IndexType> & MeshTopologyView::getRootCellIndices()

@@ -809,11 +809,6 @@ vector<IndexType> MeshTopology::getCanonicalEntityNodesViaPeriodicBCs(unsigned d
   return vector<IndexType>(); // empty result meant to indicate not found...
 }
 
-unsigned MeshTopology::cellCount()
-{
-  return _cells.size();
-}
-
 bool MeshTopology::cellHasCurvedEdges(unsigned cellIndex)
 {
   CellPtr cell = getCell(cellIndex);
@@ -857,6 +852,11 @@ bool MeshTopology::cellContainsPoint(GlobalIndexType cellID, const vector<double
 
   int result = CamelliaCellTools::checkPointInclusion(&refPoints[0], _spaceDim, cellTopo);
   return result == 1;
+}
+
+IndexType MeshTopology::cellCount()
+{
+  return _cells.size();
 }
 
 vector<IndexType> MeshTopology::cellIDsForPoints(const FieldContainer<double> &physicalPoints)
@@ -1974,6 +1974,12 @@ vector< pair<unsigned,unsigned> > MeshTopology::getConstrainingSideAncestry(unsi
   }
 }
 
+IndexType MeshTopology::getMaximumCellIndex()
+{
+  // TODO: revise this once we distribute MeshTopology.
+  return _cells.size() -1;
+}
+
 RefinementBranch MeshTopology::getSideConstraintRefinementBranch(IndexType sideEntityIndex)
 {
   // Returns a RefinementBranch that goes from the constraining side to the side indicated.
@@ -2447,7 +2453,7 @@ void MeshTopology::printAllEntities()
   cout << "Cells:";
   cout << "      ****************************\n";
 
-  int numCells = cellCount();
+  int numCells = _cells.size();
   for (int cellIndex=0; cellIndex<numCells; cellIndex++)
   {
     CellPtr cell = getCell(cellIndex);

@@ -228,7 +228,7 @@ void GDAMaximumRule2D::buildTypeLookups()
 
 //  int rank = Teuchos::GlobalMPISession::getRank();
 
-  GlobalIndexType totalCellCount = _meshTopology->cellCount();
+  GlobalIndexType maximumCellID = _meshTopology->getMaximumCellIndex();
 
   for (PartitionIndexType partitionNumber=0; partitionNumber < _numPartitions; partitionNumber++)
   {
@@ -245,9 +245,9 @@ void GDAMaximumRule2D::buildTypeLookups()
          elemIterator != _partitions[partitionNumber].end(); elemIterator++)
     {
       GlobalIndexType cellID = *elemIterator;
-      if (cellID > totalCellCount)
+      if (cellID > maximumCellID)
       {
-        cout << "cellID " << cellID << " is out of range (0," << totalCellCount << ").\n";
+        cout << "cellID " << cellID << " is out of range (0," << maximumCellID << ").\n";
         TEUCHOS_TEST_FOR_EXCEPTION(true, std::invalid_argument, "cellID is out of range.\n");
       }
       ElementTypePtr elemTypePtr = _elementTypeForCell[cellID];

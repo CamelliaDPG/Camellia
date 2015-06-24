@@ -15,6 +15,7 @@
 #include "Intrepid_FieldContainer.hpp"
 
 #include "MeshGeometry.h"
+#include "MeshTopologyView.h"
 
 #include "RefinementPattern.h"
 
@@ -29,7 +30,7 @@ namespace Camellia
 class MeshTransformationFunction;
 class GlobalDofAssignment;
 
-class MeshTopology
+class MeshTopology : public MeshTopologyView
 {
   unsigned _spaceDim; // dimension of the mesh
 
@@ -189,6 +190,8 @@ public:
   set< pair<IndexType, unsigned> > getActiveBoundaryCells(); // (cellIndex, sideOrdinal)
   vector<double> getCellCentroid(IndexType cellIndex);
 
+  IndexType getMaximumCellIndex();
+  
   const set<IndexType> &getRootCellIndices();
 
   // ! maxConstraint made public for the sake of MeshTopologyView; not intended for general use
