@@ -464,9 +464,10 @@ unsigned MeshTopology::addCell(CellTopoPtr cellTopo, const vector<unsigned> &cel
         _boundarySides.erase(sideEntityIndex);
       }
       // if the pre-existing neighbor is refined, set its descendants to have the appropriate neighbor.
+      MeshTopologyPtr thisPtr = Teuchos::rcp(this,false);
       if (firstCell->isParent())
       {
-        vector< pair< GlobalIndexType, unsigned> > firstCellDescendants = firstCell->getDescendantsForSide(firstNeighbor.second);
+        vector< pair< GlobalIndexType, unsigned> > firstCellDescendants = firstCell->getDescendantsForSide(firstNeighbor.second, thisPtr);
         for (vector< pair< GlobalIndexType, unsigned> >::iterator descIt = firstCellDescendants.begin(); descIt != firstCellDescendants.end(); descIt++)
         {
           unsigned childCellIndex = descIt->first;
@@ -476,7 +477,7 @@ unsigned MeshTopology::addCell(CellTopoPtr cellTopo, const vector<unsigned> &cel
       }
       if (secondCell->isParent())   // I don't think we should ever get here
       {
-        vector< pair< GlobalIndexType, unsigned> > secondCellDescendants = secondCell->getDescendantsForSide(secondNeighbor.first);
+        vector< pair< GlobalIndexType, unsigned> > secondCellDescendants = secondCell->getDescendantsForSide(secondNeighbor.first, thisPtr);
         for (vector< pair< GlobalIndexType, unsigned> >::iterator descIt = secondCellDescendants.begin(); descIt != secondCellDescendants.end(); descIt++)
         {
           GlobalIndexType childCellIndex = descIt->first;
@@ -1974,12 +1975,6 @@ vector< pair<unsigned,unsigned> > MeshTopology::getConstrainingSideAncestry(unsi
   }
 }
 
-IndexType MeshTopology::getMaximumCellIndex()
-{
-  // TODO: revise this once we distribute MeshTopology.
-  return _cells.size() -1;
-}
-
 RefinementBranch MeshTopology::getSideConstraintRefinementBranch(IndexType sideEntityIndex)
 {
   // Returns a RefinementBranch that goes from the constraining side to the side indicated.
@@ -2117,6 +2112,11 @@ set< pair<IndexType, unsigned> > MeshTopology::getCellsContainingEntity(unsigned
 bool MeshTopology::isBoundarySide(IndexType sideEntityIndex)
 {
   return _boundarySides.find(sideEntityIndex) != _boundarySides.end();
+}
+
+bool MeshTopology::isValidCellIndex(IndexType cellIndex)
+{
+  return cellIndex < _cells.size();
 }
 
 pair<IndexType,IndexType> MeshTopology::owningCellIndexForConstrainingEntity(unsigned d, IndexType constrainingEntityIndex)

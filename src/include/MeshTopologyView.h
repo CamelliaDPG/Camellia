@@ -30,9 +30,12 @@ namespace Camellia {
   class MeshTopologyView
   {
     MeshTopologyPtr _meshTopo; // null when subclass constructor is used
-    std::set<IndexType> _activeCellIDs; // empty when subclass constructor is used
+    std::set<IndexType> _allKnownCells; // empty when subclass constructor is used
+    
+    void buildLookups(); // _rootCellIndices and _ancestralCells
   protected:
-    std::set<IndexType> _rootCellIndices; // lazily filled when meshTopoPtr is not null; otherwise responsibility belongs to subclass.
+    std::set<IndexType> _activeCells; // empty when subclass constructor is used
+    std::set<IndexType> _rootCells; // filled during construction when meshTopoPtr is not null; otherwise responsibility belongs to subclass.
     GlobalDofAssignment* _gda; // for cubature degree lookups
     
     std::vector<IndexType> getActiveCellsForSide(IndexType sideEntityIndex);
@@ -70,11 +73,13 @@ namespace Camellia {
     
     virtual std::vector<IndexType> getEntityVertexIndices(unsigned d, IndexType entityIndex);
     
-    virtual IndexType getMaximumCellIndex();
-    
     virtual const std::set<IndexType> &getRootCellIndices();
     
     virtual std::vector< IndexType > getSidesContainingEntity(unsigned d, IndexType entityIndex);
+    
+    virtual bool isParent(IndexType cellIndex);
+    
+    virtual bool isValidCellIndex(IndexType cellIndex);
     
     virtual const std::vector<double>& getVertex(IndexType vertexIndex);
     

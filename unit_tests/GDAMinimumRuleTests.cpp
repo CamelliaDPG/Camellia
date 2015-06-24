@@ -261,7 +261,7 @@ namespace
             fineValuesAllPoints.resize(fineBasis->getCardinality(), numPoints);
 
             
-            RefinementBranch cellRefinementBranch = cell->refinementBranchForSubcell(subcdim, subcordInCell);
+            RefinementBranch cellRefinementBranch = cell->refinementBranchForSubcell(subcdim, subcordInCell, mesh->getTopology());
             if (cellRefinementBranch.size() == 0)
             {
               RefinementPatternPtr noRefPattern = RefinementPattern::noRefinementPattern(cell->topology());
@@ -276,7 +276,7 @@ namespace
             BasisCachePtr constrainingCellBasisCache = BasisCache::basisCacheForCell(mesh, constrainingEntityInfo.cellID);
             BasisCachePtr constrainingSideBasisCache = constrainingCellBasisCache->getSideBasisCache(constrainingSideOrdinal);
 
-            unsigned canonicalToAncestralSubcellPermutation = cell->ancestralPermutationForSubcell(subcdim, subcordInCell);
+            unsigned canonicalToAncestralSubcellPermutation = cell->ancestralPermutationForSubcell(subcdim, subcordInCell, mesh->getTopology());
 
             CellPtr constrainingCell = meshTopo->getCell(constrainingEntityInfo.cellID);
             CellTopoPtr constrainingCellTopo = constrainingCell->topology();
@@ -286,8 +286,8 @@ namespace
             CellTopoPtr constrainingSubcellTopo = constrainingCellTopo->getSubcell(constrainingEntityInfo.dimension,constrainingSubcellInConstrainingCell);
             
             // sanity check: confirm that ancestral subcell and constraining subcell refer to the same entity
-            pair<unsigned, unsigned> subcellOrdinalAndDimension = cell->ancestralSubcellOrdinalAndDimension(subcdim, subcordInCell);
-            CellPtr ancestralCell = cell->ancestralCellForSubcell(subcdim, subcordInCell);
+            pair<unsigned, unsigned> subcellOrdinalAndDimension = cell->ancestralSubcellOrdinalAndDimension(subcdim, subcordInCell, mesh->getTopology());
+            CellPtr ancestralCell = cell->ancestralCellForSubcell(subcdim, subcordInCell, mesh->getTopology());
             unsigned ancestralSubcellOrdinal = subcellOrdinalAndDimension.first;
             unsigned ancestralSubcellDimension = subcellOrdinalAndDimension.second;
             TEUCHOS_TEST_FOR_EXCEPTION(ancestralSubcellDimension != constrainingEntityInfo.dimension, std::invalid_argument, "Internal test error: constraining entity has different dimension than ancestral subcell");
@@ -593,12 +593,12 @@ namespace
         unsigned childOrdinal = childrenForSide[i].first;
         CellPtr child = children[childOrdinal];
         unsigned childSideOrdinal = childrenForSide[i].second;
-        pair<GlobalIndexType,unsigned> neighborInfo = child->getNeighborInfo(childSideOrdinal);
+        pair<GlobalIndexType,unsigned> neighborInfo = child->getNeighborInfo(childSideOrdinal, mesh->getTopology());
         GlobalIndexType neighborCellID = neighborInfo.first;
         if (neighborCellID != -1)   // not boundary
         {
           CellPtr neighbor = mesh->getTopology()->getCell(neighborCellID);
-          pair<GlobalIndexType,unsigned> neighborNeighborInfo = neighbor->getNeighborInfo(neighborInfo.second);
+          pair<GlobalIndexType,unsigned> neighborNeighborInfo = neighbor->getNeighborInfo(neighborInfo.second, mesh->getTopology());
           bool neighborIsPeer = neighborNeighborInfo.first == child->cellIndex();
           if (!neighborIsPeer)   // then by refining this cell, we induce a 2-irregular mesh
           {
@@ -649,7 +649,7 @@ namespace
     unsigned sharedSideOrdinal = -1;
     for (int sideOrdinal=0; sideOrdinal<cellToRefine->getSideCount(); sideOrdinal++)
     {
-      if (cellToRefine->getNeighbor(sideOrdinal) != Teuchos::null)
+      if (cellToRefine->getNeighbor(sideOrdinal, mesh->getTopology()) != Teuchos::null)
       {
         sharedSideOrdinal = sideOrdinal;
         break;
@@ -658,6 +658,7 @@ namespace
     
     while (meshIrregularity < irregularity)
     {
+//      print("refining cells", cellsToRefine);
       mesh->hRefine(cellsToRefine);
       meshIrregularity++;
       
@@ -844,6 +845,51 @@ namespace
     int H1Order = 1;
     MeshPtr mesh = poissonIrregularMesh(spaceDim, irregularity, H1Order);
     testSubcellConstraintIsAncestor(mesh, out, success);
+  }
+  
+  TEUCHOS_UNIT_TEST( GDAMinimumRule, OneIrregularityEnforcement_2D)
+  {
+    int spaceDim = 2;
+    int irregularity = 2;
+    int H1Order = 2;
+    MeshPtr mesh = poissonIrregularMesh(spaceDim, irregularity, H1Order);
+    
+    GlobalIndexType activeElementCount_initial = mesh->numActiveElements();
+    
+    mesh->enforceOneIrregularity();
+    
+    GlobalIndexType activeElementCount_final = mesh->numActiveElements();
+    
+    if (activeElementCount_final <= activeElementCount_initial)
+    {
+      out << "Failure: # of elements did not increase during 1-irregularity enforcement of 2D mesh, even though the mesh is 2-irregular.\n";
+      success = false;
+    }
+  }
+  
+  TEUCHOS_UNIT_TEST( GDAMinimumRule, OneIrregularityEnforcement_3D )
+  {
+    // very simple test: take a 2-irregular mesh, count # elements, enforce 1-irregularity.  Just check that there are more elements after enforcement.
+    
+    // important thing here is the irregularity is 2:
+    int irregularity = 2;
+    FunctionPtr phi_exact = Function::zero();
+    int H1Order = 2;
+    
+    SolutionPtr soln = poissonExactSolution3DHangingNodes(irregularity,phi_exact,H1Order);
+    MeshPtr mesh = soln->mesh();
+    
+    GlobalIndexType activeElementCount_initial = mesh->numActiveElements();
+    
+    mesh->enforceOneIrregularity();
+    
+    GlobalIndexType activeElementCount_final = mesh->numActiveElements();
+    
+    if (activeElementCount_final <= activeElementCount_initial)
+    {
+      out << "Failure in test1IrregularityEnforcement: # of elements did not increase during 1-irregularity enforcement of 3D mesh, even though the mesh is 2-irregular.\n";
+      success = false;
+    }
   }
   
   TEUCHOS_UNIT_TEST( GDAMinimumRule, SolvePoisson3DHangingNode_Slow )

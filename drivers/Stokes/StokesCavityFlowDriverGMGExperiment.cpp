@@ -530,7 +530,6 @@ int main(int argc, char *argv[])
                               solution->getPartitionMap(), maxIters, tol, coarseSolver, useStaticCondensation);
     gmgSolver->setAztecConvergenceOption(azConv);
     gmgSolver->setAztecOutput(AztecOutputLevel);
-    gmgSolver->setApplySmoothingOperator(applyDiagonalSmoothing);
     gmgSolver->setUseConjugateGradient(useCG);
     gmgSolver->setUseDiagonalScaling(useDiagonalScaling);
     gmgSolver->gmgOperator()->setSmootherType(GMGOperator::IFPACK_ADDITIVE_SCHWARZ);
@@ -641,7 +640,6 @@ int main(int argc, char *argv[])
                                 solution->getPartitionMap(), maxIters, tol, coarseSolver, useStaticCondensation);
       gmgSolver->setAztecConvergenceOption(azConv);
       gmgSolver->setAztecOutput(AztecOutputLevel);
-      gmgSolver->setApplySmoothingOperator(applyDiagonalSmoothing);
       gmgSolver->setUseConjugateGradient(useCG);
       gmgSolver->setUseDiagonalScaling(useDiagonalScaling);
       gmgSolver->gmgOperator()->setSmootherType(GMGOperator::IFPACK_ADDITIVE_SCHWARZ);

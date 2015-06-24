@@ -106,7 +106,7 @@ void testOverlapDofOrdinals(bool hierarchical, Teuchos::FancyOStream &out, bool 
             {
               GlobalIndexType cellID = *cellIDIt;
               CellPtr cell = mesh->getTopology()->getCell(cellID);
-              vector< CellPtr > neighbors = cell->getNeighbors();
+              vector< CellPtr > neighbors = cell->getNeighbors(mesh->getTopology());
               for (vector< CellPtr >::iterator neighborIt = neighbors.begin(); neighborIt != neighbors.end(); neighborIt++)
               {
                 CellPtr neighbor = *neighborIt;
@@ -156,7 +156,7 @@ void testOverlapDofOrdinals(bool hierarchical, Teuchos::FancyOStream &out, bool 
         {
           GlobalIndexType cellID = *cellIDIt;
           CellPtr cell = mesh->getTopology()->getCell(cellID);
-          set<IndexType> descendants = cell->getDescendants();
+          set<IndexType> descendants = cell->getDescendants(mesh->getTopology());
           cells.insert(descendants.begin(),descendants.end());
         }
 //          Camellia::print("cells", cells);

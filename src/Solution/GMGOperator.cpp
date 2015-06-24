@@ -337,7 +337,7 @@ Teuchos::RCP<Epetra_CrsMatrix> GMGOperator::constructProlongationOperator()
           int sideCount = fineCell->getSideCount();
           for (int sideOrdinal=0; sideOrdinal<sideCount; sideOrdinal++)
           {
-            if (fineCell->ownsSide(sideOrdinal))
+            if (fineCell->ownsSide(sideOrdinal,_fineMesh->getTopology()))
             {
               //        cout << "fine cell " << fineCellID << " owns side " << sideOrdinal << endl;
               fineMapper->mapLocalDataSide(fineCellData, mappedCoarseCellData, false, sideOrdinal);
@@ -1065,7 +1065,7 @@ set<GlobalIndexTypeToCast> GMGOperator::setCoarseRHSVector(const Epetra_MultiVec
     int sideCount = fineCell->getSideCount();
     for (int sideOrdinal=0; sideOrdinal<sideCount; sideOrdinal++)
     {
-      if (fineCell->ownsSide(sideOrdinal))
+      if (fineCell->ownsSide(sideOrdinal,_fineMesh->getTopology()))
       {
 //        cout << "fine cell " << fineCellID << " owns side " << sideOrdinal << endl;
         fineMapper->mapLocalDataSide(fineCellData, mappedCoarseCellData, false, sideOrdinal);

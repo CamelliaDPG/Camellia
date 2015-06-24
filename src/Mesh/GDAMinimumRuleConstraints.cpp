@@ -269,8 +269,8 @@ GDAMinimumRuleConstraintEntry::GDAMinimumRuleConstraintEntry(GDAMinimumRuleConst
       definedConstraints.setConstraintEntry(constrainingSubcellInfo, _constrainingEntity);
     }
 
-    _ancestralCell = cell->ancestralCellForSubcell(_entityDim, _subcellOrdinalInCell);
-    _volumeRefinements = cell->refinementBranchForSubcell(_entityDim, _subcellOrdinalInCell);
+    _ancestralCell = cell->ancestralCellForSubcell(_entityDim, _subcellOrdinalInCell, minRule->getMeshTopology());
+    _volumeRefinements = cell->refinementBranchForSubcell(_entityDim, _subcellOrdinalInCell, minRule->getMeshTopology());
     if (_volumeRefinements.size()==0)
     {
       // a trick to sneak in the cell topology information that BasisReconciliation will require:
@@ -278,7 +278,7 @@ GDAMinimumRuleConstraintEntry::GDAMinimumRuleConstraintEntry(GDAMinimumRuleConst
       _volumeRefinements.push_back(make_pair(noRefinement.get(), 0));
     }
 
-    pair<unsigned, unsigned> ancestralSubcell = cell->ancestralSubcellOrdinalAndDimension(_entityDim, _subcellOrdinalInCell);
+    pair<unsigned, unsigned> ancestralSubcell = cell->ancestralSubcellOrdinalAndDimension(_entityDim, _subcellOrdinalInCell, minRule->getMeshTopology());
     _ancestralSubcellOrdinal = ancestralSubcell.first;
     _ancestralSubcellDimension = ancestralSubcell.second;
 

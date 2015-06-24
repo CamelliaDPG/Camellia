@@ -67,7 +67,7 @@ TEUCHOS_UNIT_TEST( Cell, Neighbors1D )
 
     for (int sideOrdinal = 0; sideOrdinal < cell->getSideCount(); sideOrdinal++)
     {
-      pair<GlobalIndexType, unsigned> neighborInfo = cell->getNeighborInfo(sideOrdinal);
+      pair<GlobalIndexType, unsigned> neighborInfo = cell->getNeighborInfo(sideOrdinal,meshTopo);
       if (neighborInfo.first == -1)
       {
         numBoundarySides++;
@@ -76,7 +76,7 @@ TEUCHOS_UNIT_TEST( Cell, Neighbors1D )
       {
         CellPtr neighbor = meshTopo->getCell(neighborInfo.first);
         unsigned sideOrdinalInNeighbor = neighborInfo.second;
-        pair<GlobalIndexType, unsigned> neighborNeighborInfo = neighbor->getNeighborInfo(sideOrdinalInNeighbor);
+        pair<GlobalIndexType, unsigned> neighborNeighborInfo = neighbor->getNeighborInfo(sideOrdinalInNeighbor,meshTopo);
         TEST_ASSERT(neighborNeighborInfo.first == cellIndex);
       }
     }

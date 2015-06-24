@@ -102,14 +102,14 @@ TEUCHOS_UNIT_TEST( Mesh, ParitySpaceTime1D )
     for (int sideOrdinal=0; sideOrdinal<cell->getSideCount(); sideOrdinal++)
     {
       double parity = parities[sideOrdinal];
-      if (cell->getNeighbor(sideOrdinal) == Teuchos::null)
+      if (cell->getNeighbor(sideOrdinal,spaceTimeMesh->getTopology()) == Teuchos::null)
       {
         // where there is no neighbor, the parity should be 1.0
         TEST_EQUALITY(parity, 1.0);
       }
       else
       {
-        pair<GlobalIndexType, unsigned> neighborInfo = cell->getNeighborInfo(sideOrdinal);
+        pair<GlobalIndexType, unsigned> neighborInfo = cell->getNeighborInfo(sideOrdinal,spaceTimeMesh->getTopology());
         GlobalIndexType neighborCellID = neighborInfo.first;
         unsigned neighborSide = neighborInfo.second;
         FieldContainer<double> neighborParities = spaceTimeMesh->globalDofAssignment()->cellSideParitiesForCell(neighborCellID);
@@ -152,10 +152,10 @@ TEUCHOS_UNIT_TEST( Mesh, NormalSpaceTime1D )
         TEST_FLOATING_EQUALITY(length,1.0,tol);
       }
 
-      if (cell->getNeighbor(sideOrdinal) != Teuchos::null)
+      if (cell->getNeighbor(sideOrdinal,spaceTimeMesh->getTopology()) != Teuchos::null)
       {
         // then we also want to check that pointwise the normals are opposite each other
-        pair<GlobalIndexType, unsigned> neighborInfo = cell->getNeighborInfo(sideOrdinal);
+        pair<GlobalIndexType, unsigned> neighborInfo = cell->getNeighborInfo(sideOrdinal,spaceTimeMesh->getTopology());
         GlobalIndexType neighborCellID = neighborInfo.first;
         unsigned neighborSide = neighborInfo.second;
         BasisCachePtr neighborBasisCache = BasisCache::basisCacheForCell(spaceTimeMesh,neighborCellID);

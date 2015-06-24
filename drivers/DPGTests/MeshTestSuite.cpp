@@ -261,10 +261,10 @@ bool MeshTestSuite::neighborBasesAgreeOnSides(Teuchos::RCP<Mesh> mesh, const Fie
        - use the mesh's GDA to map each set of local values to global values.
        */
 
-      RefinementBranch cellRefBranch = cell->refinementBranchForSide(sideOrdinal);
-      unsigned ancestralSideOrdinal = cell->ancestralSubcellOrdinalAndDimension(sideDim, sideOrdinal).first;
+      RefinementBranch cellRefBranch = cell->refinementBranchForSide(sideOrdinal, mesh->getTopology());
+      unsigned ancestralSideOrdinal = cell->ancestralSubcellOrdinalAndDimension(sideDim, sideOrdinal, mesh->getTopology()).first;
 
-      CellPtr ancestralCell = cell->ancestralCellForSubcell(sideDim, sideOrdinal);
+      CellPtr ancestralCell = cell->ancestralCellForSubcell(sideDim, sideOrdinal, mesh->getTopology());
 
       RefinementBranch sideRefBranch = RefinementPattern::subcellRefinementBranch(cellRefBranch, sideDim, ancestralSideOrdinal);
 

@@ -228,8 +228,6 @@ void GDAMaximumRule2D::buildTypeLookups()
 
 //  int rank = Teuchos::GlobalMPISession::getRank();
 
-  GlobalIndexType maximumCellID = _meshTopology->getMaximumCellIndex();
-
   for (PartitionIndexType partitionNumber=0; partitionNumber < _numPartitions; partitionNumber++)
   {
     _cellIDsForElementType.push_back( map< ElementType*, vector<GlobalIndexType> >() );
@@ -245,10 +243,10 @@ void GDAMaximumRule2D::buildTypeLookups()
          elemIterator != _partitions[partitionNumber].end(); elemIterator++)
     {
       GlobalIndexType cellID = *elemIterator;
-      if (cellID > maximumCellID)
+      if (! _meshTopology->isValidCellIndex(cellID) )
       {
-        cout << "cellID " << cellID << " is out of range (0," << maximumCellID << ").\n";
-        TEUCHOS_TEST_FOR_EXCEPTION(true, std::invalid_argument, "cellID is out of range.\n");
+        cout << "cellID " << cellID << " is invalid.\n";
+        TEUCHOS_TEST_FOR_EXCEPTION(true, std::invalid_argument, "cellID is invalid.\n");
       }
       ElementTypePtr elemTypePtr = _elementTypeForCell[cellID];
       if ( _cellIDsForElementType[partitionNumber].find( elemTypePtr.get() ) == _cellIDsForElementType[partitionNumber].end() )
@@ -418,11 +416,11 @@ void GDAMaximumRule2D::determineDofPairings()
         for (int sideIndex=0; sideIndex<numSides; sideIndex++)
         {
           int myNumDofs = elemTypePtr->trialOrderPtr->getBasisCardinality(trialID,sideIndex);
-          pair<unsigned, unsigned> neighborInfo = cell->getNeighborInfo(sideIndex);
+          pair<unsigned, unsigned> neighborInfo = cell->getNeighborInfo(sideIndex, _meshTopology);
           unsigned neighborCellID = neighborInfo.first;
           unsigned mySideIndexInNeighbor = neighborInfo.second;
 
-          bool neighborIsPeer = (neighborCellID != -1) && (_meshTopology->getCell(neighborCellID)->getNeighborInfo(mySideIndexInNeighbor).first==cellID);
+          bool neighborIsPeer = (neighborCellID != -1) && (_meshTopology->getCell(neighborCellID)->getNeighborInfo(mySideIndexInNeighbor, _meshTopology).first==cellID);
 
           if (neighborIsPeer)
           {
@@ -445,7 +443,7 @@ void GDAMaximumRule2D::determineDofPairings()
 
             // Here, we need to deal with the possibility that neighbor is a parent, broken along the shared side
             //  -- if so, we have a MultiBasis, and we need to match with each of neighbor's descendants along that side...
-            vector< pair<GlobalIndexType,unsigned> > descendantsForSide = neighbor->getDescendantsForSide(mySideIndexInNeighbor);
+            vector< pair<GlobalIndexType,unsigned> > descendantsForSide = neighbor->getDescendantsForSide(mySideIndexInNeighbor, _meshTopology);
             vector< pair<GlobalIndexType,unsigned> >:: iterator entryIt;
             int descendantIndex = -1;
             for (entryIt = descendantsForSide.begin(); entryIt != descendantsForSide.end(); entryIt++)
@@ -699,7 +697,7 @@ void GDAMaximumRule2D::didPRefine(const set<GlobalIndexType> &cellIDs, int delta
     for (int sideOrdinal=0; sideOrdinal<numSides; sideOrdinal++)
     {
       // get and match the big neighbor along the side, if we're a small element…
-      pair<GlobalIndexType, int> neighborInfo = cell->getNeighborInfo(sideOrdinal);
+      pair<GlobalIndexType, int> neighborInfo = cell->getNeighborInfo(sideOrdinal, _meshTopology);
       GlobalIndexType neighborToMatch = neighborInfo.first;
       int neighborSideIndex = neighborInfo.second;
 
@@ -1037,7 +1035,7 @@ void GDAMaximumRule2D::matchNeighbor(GlobalIndexType cellID, int sideIndex)
   CellPtr cell = _meshTopology->getCell(cellID);
   CellTopoPtr cellTopo = cell->topology();
 
-  pair< unsigned, unsigned > neighborRecord = cell->getNeighborInfo(sideIndex);
+  pair< unsigned, unsigned > neighborRecord = cell->getNeighborInfo(sideIndex, _meshTopology);
   GlobalIndexType neighborCellID = neighborRecord.first;
   unsigned sideIndexInNeighbor = neighborRecord.second;
 
@@ -1076,7 +1074,7 @@ void GDAMaximumRule2D::matchNeighbor(GlobalIndexType cellID, int sideIndex)
   }
 
   // check whether neighbor and cell are peers: this happens if the neighbor relationship commutes:
-  bool neighborIsPeer = neighbor->getNeighborInfo(sideIndexInNeighbor).first == cellID;
+  bool neighborIsPeer = neighbor->getNeighborInfo(sideIndexInNeighbor, _meshTopology).first == cellID;
   if ( !neighborIsPeer )
   {
     // TODO: figure out if this is correct: (I believe this will always result in a peer relationship, but if not, there'd be danger of an infinite recursion.)

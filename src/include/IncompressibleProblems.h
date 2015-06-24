@@ -360,7 +360,7 @@ class CylinderProblem : public IncompressibleProblem
               refinedCellIDIt != cellIDsToRefine.end(); refinedCellIDIt++)
           {
             int refinedCellID = *refinedCellIDIt;
-            set<GlobalIndexType> refinedCellChildren = hemkerMeshNoCurves->getTopology()->getCell(refinedCellID)->getDescendants();
+            set<GlobalIndexType> refinedCellChildren = hemkerMeshNoCurves->getTopology()->getCell(refinedCellID)->getDescendants(hemkerMeshNoCurves->getTopology());
             childCellIDs.insert(refinedCellChildren.begin(),refinedCellChildren.end());
           }
 
@@ -396,7 +396,7 @@ class CylinderProblem : public IncompressibleProblem
               refinedCellIDIt != cellIDsToRefine.end(); refinedCellIDIt++)
           {
             int refinedCellID = *refinedCellIDIt;
-            set<GlobalIndexType> refinedCellChildren = hemkerMeshNoCurves->getTopology()->getCell(refinedCellID)->getDescendants();
+            set<GlobalIndexType> refinedCellChildren = hemkerMeshNoCurves->getTopology()->getCell(refinedCellID)->getDescendants(hemkerMeshNoCurves->getTopology());
             childCellIDs.insert(refinedCellChildren.begin(),refinedCellChildren.end());
           }
 
@@ -556,7 +556,7 @@ class SquareCylinderProblem : public CylinderProblem
               refinedCellIDIt != cellIDsToRefine.end(); refinedCellIDIt++)
           {
             int refinedCellID = *refinedCellIDIt;
-            set<GlobalIndexType> refinedCellChildren = hemkerMeshNoCurves->getTopology()->getCell(refinedCellID)->getDescendants();
+            set<GlobalIndexType> refinedCellChildren = hemkerMeshNoCurves->getTopology()->getCell(refinedCellID)->getDescendants(hemkerMeshNoCurves->getTopology());
             childCellIDs.insert(refinedCellChildren.begin(),refinedCellChildren.end());
           }
 
@@ -592,7 +592,7 @@ class SquareCylinderProblem : public CylinderProblem
               refinedCellIDIt != cellIDsToRefine.end(); refinedCellIDIt++)
           {
             int refinedCellID = *refinedCellIDIt;
-            set<GlobalIndexType> refinedCellChildren = hemkerMeshNoCurves->getTopology()->getCell(refinedCellID)->getDescendants();
+            set<GlobalIndexType> refinedCellChildren = hemkerMeshNoCurves->getTopology()->getCell(refinedCellID)->getDescendants(hemkerMeshNoCurves->getTopology());
             childCellIDs.insert(refinedCellChildren.begin(),refinedCellChildren.end());
           }
 

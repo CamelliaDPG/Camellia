@@ -1198,17 +1198,17 @@ bool MeshTopologyTests::testNeighborRelationships()
 
   // not worth going into the details, but cell 6's side 0 should point to cell 17's side 2.  cell 17's side 2 should point to cell 2, side 0 (an inactive peer).
   CellPtr cell6 = mesh2D->getCell(6);
-  if (cell6->getNeighborInfo(0).first != 17)
+  if (cell6->getNeighborInfo(0,mesh2D).first != 17)
   {
     success = false;
-    cout << "cell 6's neighbor on side 0 is not 17, as expected, but " << cell6->getNeighborInfo(0).first << ".\n";
+    cout << "cell 6's neighbor on side 0 is not 17, as expected, but " << cell6->getNeighborInfo(0,mesh2D).first << ".\n";
   }
 
   CellPtr cell17 = mesh2D->getCell(17);
-  if (cell17->getNeighborInfo(2).first != 2)
+  if (cell17->getNeighborInfo(2,mesh2D).first != 2)
   {
     success = false;
-    cout << "cell 17's neighbor on side 2 is not 2, as expected, but " << cell17->getNeighborInfo(2).first << ".\n";
+    cout << "cell 17's neighbor on side 2 is not 2, as expected, but " << cell17->getNeighborInfo(2,mesh2D).first << ".\n";
   }
 
   return success;
