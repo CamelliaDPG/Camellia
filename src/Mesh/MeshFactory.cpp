@@ -749,7 +749,11 @@ MeshGeometryPtr MeshFactory::shiftedSquareCylinderGeometry(double xLeft, double 
   {
     for (int i=0; i < 3; i++)
     {
-      vector<unsigned> elVertex = {4*j+i, 4*j+i+1, 4*(j+1)+i+1, 4*(j+1)+i};
+      vector<unsigned> elVertex;
+      elVertex.push_back(4*j+i);
+      elVertex.push_back(4*j+i+1);
+      elVertex.push_back(4*(j+1)+i+1);
+      elVertex.push_back(4*(j+1)+i);
       if (!(i == 1 && j == 1))
       {
         elementVertices.push_back(elVertex);
