@@ -215,6 +215,17 @@ public:
       return false;
     }
   }
+  bool matchesPoint(double x, double y, double z)
+  {
+    if (x*x + y*y < _enlarged_radius * _enlarged_radius)
+    {
+      return true;
+    }
+    else
+    {
+      return false;
+    }
+  }
 };
 
 class CylinderProblem : public IncompressibleProblem
