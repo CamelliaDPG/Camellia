@@ -426,14 +426,35 @@ int main(int argc, char *argv[])
   int numElements = solution->mesh()->numActiveElements();
   
   long long approximateMemoryCostInBytes = approximateMemoryCostsForMeshTopologies(meshesCoarseToFine);
-  double memoryCostInMB = approximateMemoryCostInBytes / (1024.0 * 1024.0);
+  double bytesPerMB = (1024.0 * 1024.0);
+  double memoryCostInMB = approximateMemoryCostInBytes / bytesPerMB;
+  
+  GlobalIndexType sampleCellID = 0;
+  ElementTypePtr sampleElementType = solution->mesh()->getElementType(sampleCellID);
+  int totalTrialDofs = sampleElementType->trialOrderPtr->totalDofs();
+  int totalTestDofs = sampleElementType->testOrderPtr->totalDofs();
+  
+  int doubleSizeInBytes = sizeof(double);
+  double B_denseMatrixSize = (totalTrialDofs * totalTestDofs * doubleSizeInBytes) / bytesPerMB;
+  double G_denseMatrixSize = (totalTestDofs * totalTestDofs * doubleSizeInBytes) / bytesPerMB;
+  double K_denseMatrixSize = (totalTrialDofs * totalTrialDofs * doubleSizeInBytes) / bytesPerMB;
+
+  BFPtr bf = solution->mesh()->bilinearForm();
+  
+  double B_sparseMatrixSize = ( bf->nonZeroEntryCount(sampleElementType->trialOrderPtr, sampleElementType->testOrderPtr) * doubleSizeInBytes) / bytesPerMB;
+  double G_sparseMatrixSize = ( ip->nonZeroEntryCount(sampleElementType->testOrderPtr) * doubleSizeInBytes) / bytesPerMB;
   
   if (rank==0)
   {
     cout << setprecision(2);
     cout << "Mesh initialization completed in " << meshInitializationTime << " seconds.  Fine mesh has " << numDofs;
     cout << " global degrees of freedom on " << numElements << " elements.\n";
-    cout << "Approximate (within a factor of 2 or so) memory cost for all mesh topologies: " << memoryCostInMB << " MB.\n";
+    cout << "Approximate (correct within a factor of 2 or so) memory cost for all mesh topologies: " << memoryCostInMB << " MB.\n";
+    cout << "Approximate memory cost per element (assuming dense storage): G = " << G_denseMatrixSize << " MB, B = " << B_denseMatrixSize << " MB, K = ";
+    cout << K_denseMatrixSize << " MB.\n";
+    cout << totalTrialDofs << " trial dofs per element; " << totalTestDofs << " test dofs.\n";
+    
+    cout << "Approximate memory cost per element (assuming sparse storage): G = " << G_sparseMatrixSize << " MB, B = " << B_sparseMatrixSize << " MB.\n";
   }
   
   timer.ResetStartTime();
