@@ -15,7 +15,7 @@ namespace Camellia
 {
 class MeshTestUtility
 {
-  static bool determineRefTestPointsForNeighbors(MeshTopologyPtr meshTopo, CellPtr fineCell, unsigned sideOrdinal,
+  static bool determineRefTestPointsForNeighbors(MeshTopologyViewPtr meshTopo, CellPtr fineCell, unsigned sideOrdinal,
       Intrepid::FieldContainer<double> &fineSideRefPoints, Intrepid::FieldContainer<double> &fineCellRefPoints,
       Intrepid::FieldContainer<double> &coarseSideRefPoints, Intrepid::FieldContainer<double> &coarseCellRefPoints); // returns false if neighbor at sideOrdinal is broken
 

@@ -484,8 +484,8 @@ bool LinearTermTests::testBoundaryPlusVolumeTerms()
 
     // part b: integrate the bases over each of the cells:
     int num_dofs = testOrder->totalDofs();
-    FieldContainer<double> integrals_expected( mesh->numElements(), num_dofs );
-    FieldContainer<double> integrals_actual( mesh->numElements(), num_dofs );
+    FieldContainer<double> integrals_expected( mesh->numActiveElements(), num_dofs );
+    FieldContainer<double> integrals_actual( mesh->numActiveElements(), num_dofs );
 
     lt_v->integrate(integrals_expected,testOrder,basisCache);
     ibp->integrate(integrals_actual,testOrder,basisCache);
@@ -509,8 +509,8 @@ bool LinearTermTests::testBoundaryPlusVolumeTerms()
     }
 
     // part c: two-term integrals
-    FieldContainer<double> integrals_expected_two_term( mesh->numElements(), num_dofs, num_dofs);
-    FieldContainer<double> integrals_actual_two_term( mesh->numElements(), num_dofs, num_dofs );
+    FieldContainer<double> integrals_expected_two_term( mesh->numActiveElements(), num_dofs, num_dofs);
+    FieldContainer<double> integrals_actual_two_term( mesh->numActiveElements(), num_dofs, num_dofs );
     LinearTermPtr ibp1 = vector_fxn * n * v1;
     LinearTermPtr ibp2 = - vector_fxn * v1->grad();
     lt_v->integrate(integrals_expected_two_term, testOrder, ibp1 + ibp2, testOrder, basisCache, false, false);
@@ -594,9 +594,9 @@ bool LinearTermTests::testBoundaryPlusVolumeTerms()
       cout << "lt_v_at_v1_equals_one->isZero() = true.\n";
     }
 
-    FieldContainer<double> integrals_lt_v_first( mesh->numElements(), num_dofs, num_dofs );
-    FieldContainer<double> integrals_ibp1_first( mesh->numElements(), num_dofs, num_dofs );
-    FieldContainer<double> integrals_ibp2_first( mesh->numElements(), num_dofs, num_dofs );
+    FieldContainer<double> integrals_lt_v_first( mesh->numActiveElements(), num_dofs, num_dofs );
+    FieldContainer<double> integrals_ibp1_first( mesh->numActiveElements(), num_dofs, num_dofs );
+    FieldContainer<double> integrals_ibp2_first( mesh->numActiveElements(), num_dofs, num_dofs );
 
     double lt_v_first_integral = 0.0, ibp1_first_integral = 0.0, ibp2_first_integral = 0.0;
 
@@ -1067,7 +1067,7 @@ bool LinearTermTests::testIntegrateMixedBasis()
   basisCache->setPhysicalCellNodes(mesh->physicalCellNodesGlobal(elemType), cellIDs, createSideCacheToo);
 
   int numTrialDofs = elemType->trialOrderPtr->totalDofs();
-  int numCells = mesh->numElements();
+  int numCells = mesh->numActiveElements();
   double areaPerCell = 1.0 / numCells;
   FieldContainer<double> integrals(numCells,numTrialDofs);
   FieldContainer<double> expectedIntegrals(numCells,numTrialDofs);

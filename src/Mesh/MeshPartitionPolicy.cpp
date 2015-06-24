@@ -19,8 +19,8 @@ using namespace Camellia;
 void MeshPartitionPolicy::partitionMesh(Mesh *mesh, PartitionIndexType numPartitions)
 {
   // default simply divides the active cells into equally-sized partitions, in the order listed in activeCells…
-  MeshTopologyPtr meshTopology = mesh->getTopology();
-  int numActiveCells = meshTopology->activeCellCount(); // leaf nodes
+  MeshTopologyViewPtr meshTopology = mesh->getTopology();
+  int numActiveCells = meshTopology->getActiveCellIndices().size(); // leaf nodes
   FieldContainer<GlobalIndexType> partitionedActiveCells(numPartitions,numActiveCells);
 
   partitionedActiveCells.initialize(-1); // cellID == -1 signals end of partition

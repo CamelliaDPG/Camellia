@@ -269,7 +269,7 @@ void TRefinementStrategy<Scalar>::hRefineCells(MeshPtr mesh, const vector<Global
 {
   map< Camellia::CellTopologyKey, vector<GlobalIndexType> > topologyCellsToRefine;
 
-  MeshTopologyPtr meshTopology = mesh->getTopology();
+  MeshTopologyViewPtr meshTopology = mesh->getTopology();
 
   for (vector< GlobalIndexType >::const_iterator cellIDIt = cellIDs.begin();
        cellIDIt != cellIDs.end(); cellIDIt++)

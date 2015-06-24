@@ -111,7 +111,7 @@ bool cellMatches(FieldContainer<double> physicalNodes, double t)
   return hasVerticesAbove && hasVerticesBelow;
 }
 
-CellTopoPtr getBottomTopology(MeshTopologyPtr meshTopo, IndexType cellID)
+CellTopoPtr getBottomTopology(MeshTopology* meshTopo, IndexType cellID)
 {
   int spaceDim = meshTopo->getDimension() - 1;
   // determine cell topology:
@@ -131,7 +131,8 @@ CellTopoPtr getBottomTopology(MeshTopologyPtr meshTopo, IndexType cellID)
 MeshPtr MeshTools::timeSliceMesh(MeshPtr spaceTimeMesh, double t,
                                  map<GlobalIndexType, GlobalIndexType> &sliceCellIDToSpaceTimeCellID, int H1OrderForSlice)
 {
-  MeshTopologyPtr meshTopo = spaceTimeMesh->getTopology();
+  MeshTopology* meshTopo = dynamic_cast<MeshTopology*>(spaceTimeMesh->getTopology().get());
+  TEUCHOS_TEST_FOR_EXCEPTION(!meshTopo, std::invalid_argument, "timeSliceMesh() called with spaceTimeMesh that appears to be pure MeshTopologyView.  This is not supported.");
   set<IndexType> cellIDsToCheck = meshTopo->getRootCellIndices();
   set<IndexType> activeCellIDsForTime;
 

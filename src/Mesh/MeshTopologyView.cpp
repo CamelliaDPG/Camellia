@@ -51,6 +51,11 @@ long long MeshTopologyView::approximateMemoryFootprint()
   return  footprint;
 }
 
+IndexType MeshTopologyView::cellCount()
+{
+  return _activeCellIDs.size();
+}
+
 std::vector<IndexType> MeshTopologyView::cellIDsForPoints(const Intrepid::FieldContainer<double> &physicalPoints)
 {
   std::vector<IndexType> descendentIDs = _meshTopo->cellIDsForPoints(physicalPoints);
@@ -121,6 +126,11 @@ vector<IndexType> MeshTopologyView::getActiveCellsForSide(IndexType sideEntityIn
 CellPtr MeshTopologyView::getCell(IndexType cellIndex)
 {
   return _meshTopo->getCell(cellIndex);
+}
+
+vector<double> MeshTopologyView::getCellCentroid(IndexType cellIndex)
+{
+  return _meshTopo->getCellCentroid(cellIndex);
 }
 
 // getCellsContainingEntity() copied from MeshTopology; could possibly eliminate it in MeshTopology
@@ -376,6 +386,16 @@ bool MeshTopologyView::getVertexIndex(const vector<double> &vertex, IndexType &v
   return _meshTopo->getVertexIndex(vertex, vertexIndex, tol);
 }
 
+Intrepid::FieldContainer<double> MeshTopologyView::physicalCellNodesForCell(unsigned cellIndex, bool includeCellDimension)
+{
+  return _meshTopo->physicalCellNodesForCell(cellIndex,includeCellDimension);
+}
+
+Teuchos::RCP<MeshTransformationFunction> MeshTopologyView::transformationFunction()
+{
+  return Teuchos::null; // pure MeshTopologyViews are defined to have straight-edge geometry only.
+}
+
 // owningCellIndexForConstrainingEntity() copied from MeshTopology; once that's a subclass of MeshTopologyView, could possibly eliminate it in MeshTopology
 std::pair<IndexType,IndexType> MeshTopologyView::owningCellIndexForConstrainingEntity(unsigned d, IndexType constrainingEntityIndex)
 {
@@ -441,4 +461,9 @@ std::pair<IndexType,IndexType> MeshTopologyView::owningCellIndexForConstrainingE
 void MeshTopologyView::setGlobalDofAssignment(GlobalDofAssignment* gda)
 { // for cubature degree lookups
   _gda = gda;
+}
+
+void MeshTopologyView::verticesForCell(Intrepid::FieldContainer<double>& vertices, IndexType cellID)
+{
+  _meshTopo->verticesForCell(vertices, cellID);
 }

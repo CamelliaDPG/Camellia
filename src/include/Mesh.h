@@ -83,7 +83,7 @@ class MeshPartitionPolicy;
 
 class Mesh : public RefinementObserver, public DofInterpreter
 {
-  MeshTopologyPtr _meshTopology;
+  MeshTopologyViewPtr _meshTopology;
 
   Teuchos::RCP<GlobalDofAssignment> _gda;
 
@@ -100,11 +100,11 @@ class Mesh : public RefinementObserver, public DofInterpreter
   Boundary _boundary;
 
   // preferred private constructor to use during deepCopy();
-  Mesh(MeshTopologyPtr meshTopology, Teuchos::RCP<GlobalDofAssignment> gda, VarFactoryPtr varFactory,
+  Mesh(MeshTopologyViewPtr meshTopology, Teuchos::RCP<GlobalDofAssignment> gda, VarFactoryPtr varFactory,
        int pToAddToTest, bool useConformingTraces, bool usePatchBasis, bool enforceMBFluxContinuity);
 
   // deprecated private constructor to use during deepCopy();
-  Mesh(MeshTopologyPtr meshTopology, Teuchos::RCP<GlobalDofAssignment> gda, TBFPtr<double> bf,
+  Mesh(MeshTopologyViewPtr meshTopology, Teuchos::RCP<GlobalDofAssignment> gda, TBFPtr<double> bf,
        int pToAddToTest, bool useConformingTraces, bool usePatchBasis, bool enforceMBFluxContinuity);
 
   //set< pair<int,int> > _edges;
@@ -158,12 +158,12 @@ public:
   RefinementHistory _refinementHistory;
 
   // Preferred Constructor for min rule, n-D, single H1Order
-  Mesh(MeshTopologyPtr meshTopology, VarFactoryPtr varFactory, int H1Order, int pToAddTest,
+  Mesh(MeshTopologyViewPtr meshTopology, VarFactoryPtr varFactory, int H1Order, int pToAddTest,
        map<int,int> trialOrderEnhancements=_emptyIntIntMap, map<int,int> testOrderEnhancements=_emptyIntIntMap,
        MeshPartitionPolicyPtr meshPartitionPolicy = Teuchos::null);
 
   // Preferred Constructor for min rule, n-D, vector H1Order for tensor topologies (tensorial degree 0 and 1 supported)
-  Mesh(MeshTopologyPtr meshTopology, VarFactoryPtr varFactory, vector<int> H1Order, int pToAddTest,
+  Mesh(MeshTopologyViewPtr meshTopology, VarFactoryPtr varFactory, vector<int> H1Order, int pToAddTest,
        map<int,int> trialOrderEnhancements=_emptyIntIntMap, map<int,int> testOrderEnhancements=_emptyIntIntMap,
        MeshPartitionPolicyPtr meshPartitionPolicy = Teuchos::null);
 
@@ -174,12 +174,12 @@ public:
        vector< PeriodicBCPtr > periodicBCs = vector< PeriodicBCPtr >());
 
   // Deprecated Constructor for min rule, n-D, single H1Order
-  Mesh(MeshTopologyPtr meshTopology, TBFPtr<double> bilinearForm, int H1Order, int pToAddTest,
+  Mesh(MeshTopologyViewPtr meshTopology, TBFPtr<double> bilinearForm, int H1Order, int pToAddTest,
        map<int,int> trialOrderEnhancements=_emptyIntIntMap, map<int,int> testOrderEnhancements=_emptyIntIntMap,
        MeshPartitionPolicyPtr meshPartitionPolicy = Teuchos::null);
 
   // Deprecated Constructor for min rule, n-D, vector H1Order for tensor topologies (tensorial degree 0 and 1 supported)
-  Mesh(MeshTopologyPtr meshTopology, TBFPtr<double> bilinearForm, vector<int> H1Order, int pToAddTest,
+  Mesh(MeshTopologyViewPtr meshTopology, TBFPtr<double> bilinearForm, vector<int> H1Order, int pToAddTest,
        map<int,int> trialOrderEnhancements=_emptyIntIntMap, map<int,int> testOrderEnhancements=_emptyIntIntMap,
        MeshPartitionPolicyPtr meshPartitionPolicy = Teuchos::null);
 
@@ -345,7 +345,6 @@ public:
   void pRefine(const set<GlobalIndexType> &cellIDsForPRefinements);
   void pRefine(const set<GlobalIndexType> &cellIDsForPRefinements, int pToAdd); // added by jesse
   void printLocalToGlobalMap(); // for debugging
-  void printVertices(); // for debugging
 
   void rebuildLookups();
 
@@ -367,7 +366,7 @@ public:
   void setUsePatchBasis( bool value );
   bool usePatchBasis();
 
-  MeshTopologyPtr getTopology();
+  MeshTopologyViewPtr getTopology();
 
   vector< vector<double> > verticesForCell(GlobalIndexType cellID);
   vector<unsigned> vertexIndicesForCell(GlobalIndexType cellID);

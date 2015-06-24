@@ -39,7 +39,6 @@ bool MeshTransferFunction::boundaryValueOnly()
   return true;
 }
 
-
 void MeshTransferFunction::didRepartition(MeshTopologyPtr meshTopo)
 {
   if ((meshTopo.get() != _originalMesh->getTopology().get()) && (meshTopo.get() != _newMesh->getTopology().get()))
@@ -55,8 +54,8 @@ bool MeshTransferFunction::findAncestralPairForNewMeshCellSide(const CellSide &n
     CellSide &newMeshCellSideAncestor, CellSide &originalMeshCellSideAncestor,
     unsigned &newMeshCellSideAncestorPermutation)
 {
-  MeshTopologyPtr newMeshTopology = _newMesh->getTopology();
-  MeshTopologyPtr originalMeshTopology = _originalMesh->getTopology();
+  MeshTopologyViewPtr newMeshTopology = _newMesh->getTopology();
+  MeshTopologyViewPtr originalMeshTopology = _originalMesh->getTopology();
 
   newMeshCellSideAncestor = newMeshCellSide;
 
@@ -109,7 +108,12 @@ bool MeshTransferFunction::findAncestralPairForNewMeshCellSide(const CellSide &n
     {
       // if we get here, found a matching cell side; now work out the details:
       set<IndexType> vertexSet(originalVertexIndices.begin(),originalVertexIndices.end());
-      IndexType originalSideEntityIndex = originalMeshTopology->getEntityIndex(sideDim, vertexSet);
+      
+      MeshTopology* originalMeshTopologyInstance = dynamic_cast<MeshTopology*>(originalMeshTopology.get());
+      
+      TEUCHOS_TEST_FOR_EXCEPTION(!originalMeshTopologyInstance, std::invalid_argument, "MeshTransferFunction being used on Mesh that has a pure MeshTopologyView.");
+      
+      IndexType originalSideEntityIndex = originalMeshTopologyInstance->getEntityIndex(sideDim, vertexSet);
       if (originalSideEntityIndex == -1)
       {
         TEUCHOS_TEST_FOR_EXCEPTION(true, std::invalid_argument, "vertices found in originalMesh, but no matching side!");
@@ -138,7 +142,8 @@ bool MeshTransferFunction::findAncestralPairForNewMeshCellSide(const CellSide &n
         IndexType originalVertexIndex = originalVertexIndices[vertexOrdinal];
         originalOrder[vertexOrdinal] = originalVertexIndexToNewVertexIndex[originalVertexIndex];
       }
-      CellTopoPtr sideTopo = _originalMesh->getTopology()->getEntityTopology(sideDim, originalSideEntityIndex);
+      CellTopoPtr sideTopo = originalMeshCell->topology()->getSide(originalMeshCellSideAncestor.second);
+//      CellTopoPtr sideTopo = _originalMesh->getTopology()->getEntityTopology(sideDim, originalSideEntityIndex);
       newMeshCellSideAncestorPermutation = CamelliaCellTools::permutationMatchingOrder(sideTopo, originalOrder, permutedOrder);
     }
   }
@@ -147,7 +152,7 @@ bool MeshTransferFunction::findAncestralPairForNewMeshCellSide(const CellSide &n
 
 void MeshTransferFunction::rebuildMaps()
 {
-  MeshTopologyPtr newMeshTopology = _newMesh->getTopology();
+  MeshTopologyViewPtr newMeshTopology = _newMesh->getTopology();
 
   int sideDim = newMeshTopology->getDimension() - 1;
   int timeDimOrdinal = sideDim; // time is the last dimension
@@ -205,7 +210,7 @@ void MeshTransferFunction::rebuildMaps()
   // 3. Create a map in each direction.  This should be a bijection, but not all cells will be active;
   //    some will be inactive parent cells.
 
-  MeshTopologyPtr originalMeshTopology = _originalMesh->getTopology();
+  MeshTopologyViewPtr originalMeshTopology = _originalMesh->getTopology();
 
   _newToOriginalMap.clear();
   _originalToNewMap.clear();
@@ -379,8 +384,10 @@ void MeshTransferFunction::values(FieldContainer<double> &values, BasisCachePtr 
     // permute newMeshCellReferencePoints according to newMeshAncestralCellSidePermutation
 
     unsigned sideDim = _originalMesh->getDimension() - 1;
-    IndexType originalSideEntityIndex = _originalMesh->getTopology()->getCell(originalMeshAncestralCellSide.first)->entityIndex(sideDim,originalMeshAncestralCellSide.second);
-    CellTopoPtr sideTopo = _originalMesh->getTopology()->getEntityTopology(sideDim, originalSideEntityIndex);
+    CellPtr originalMeshAncestralCell = _originalMesh->getTopology()->getCell(originalMeshAncestralCellSide.first);
+    CellTopoPtr sideTopo = originalMeshAncestralCell->topology()->getSide(originalMeshAncestralCellSide.second);
+//    IndexType originalSideEntityIndex = originalMeshAncenstralCell->entityIndex(sideDim,originalMeshAncestralCellSide.second);
+//    CellTopoPtr sideTopo = _originalMesh->getTopology()->getEntityTopology(sideDim, originalSideEntityIndex);
 
     FieldContainer<double> originalMeshCellReferencePoints(newMeshCellReferencePoints.dimension(0), newMeshCellReferencePoints.dimension(1));
     CamelliaCellTools::permutedReferenceCellPoints(sideTopo, newMeshAncestralCellSidePermutation, newMeshCellReferencePoints, originalMeshCellReferencePoints);

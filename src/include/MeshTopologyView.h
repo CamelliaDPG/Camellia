@@ -21,7 +21,11 @@
 
 #include "TypeDefs.h"
 
+#include "Intrepid_FieldContainer.hpp"
+
 namespace Camellia {
+  
+  class MeshTransformationFunction;
 
   class MeshTopologyView
   {
@@ -43,6 +47,7 @@ namespace Camellia {
     virtual long long approximateMemoryFootprint();
     
     virtual std::vector<IndexType> cellIDsForPoints(const Intrepid::FieldContainer<double> &physicalPoints);
+    virtual IndexType cellCount();
     
     // ! creates a copy of this, deep-copying each Cell and all lookup tables (but does not deep copy any other objects, e.g. PeriodicBCPtrs).  Not supported for MeshTopologyViews with _meshTopo defined (i.e. those that are themselves defined in terms of another MeshTopology object).
     virtual Teuchos::RCP<MeshTopology> deepCopy();
@@ -53,6 +58,7 @@ namespace Camellia {
     virtual std::vector< std::pair<IndexType,unsigned> > getActiveCellIndices(unsigned d, IndexType entityIndex); // first entry in pair is the cellIndex, the second is the index of the entity in that cell (the subcord).
     
     virtual CellPtr getCell(IndexType cellIndex);
+    virtual std::vector<double> getCellCentroid(IndexType cellIndex);
     virtual std::set< std::pair<IndexType, unsigned> > getCellsContainingEntity(unsigned d, unsigned entityIndex);
     virtual std::vector<IndexType> getCellsForSide(IndexType sideEntityIndex);
     
@@ -73,10 +79,16 @@ namespace Camellia {
     virtual const std::vector<double>& getVertex(IndexType vertexIndex);
     
     virtual bool getVertexIndex(const std::vector<double> &vertex, IndexType &vertexIndex, double tol=1e-14);
+
+    virtual Intrepid::FieldContainer<double> physicalCellNodesForCell(unsigned cellIndex, bool includeCellDimension = false);
+    
+    virtual Teuchos::RCP<MeshTransformationFunction> transformationFunction();
     
     virtual std::pair<IndexType,IndexType> owningCellIndexForConstrainingEntity(unsigned d, unsigned constrainingEntityIndex);
     
     virtual void setGlobalDofAssignment(GlobalDofAssignment* gda); // for cubature degree lookups
+    
+    virtual void verticesForCell(Intrepid::FieldContainer<double>& vertices, IndexType cellID);
   };
 
 }

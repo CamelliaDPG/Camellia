@@ -459,7 +459,9 @@ void MeshTransformationFunction::didHRefine(const set<GlobalIndexType> &cellIDs)
 {
   set<GlobalIndexType> childrenWithCurvedEdges;
 
-  MeshTopologyPtr topology = _mesh->getTopology();
+  MeshTopology* topology = dynamic_cast<MeshTopology*>(_mesh->getTopology().get());
+  
+  TEUCHOS_TEST_FOR_EXCEPTION(!topology, std::invalid_argument, "Mesh::hRefine() called when _meshTopology is not an instance of MeshTopology--likely Mesh initialized with a pure MeshTopologyView, which cannot be h-refined.");
 
   for (set<GlobalIndexType>::iterator cellIDIt = cellIDs.begin(); cellIDIt != cellIDs.end(); cellIDIt++)
   {

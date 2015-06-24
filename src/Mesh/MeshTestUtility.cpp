@@ -478,7 +478,7 @@ bool MeshTestUtility::checkMeshDofConnectivities(Teuchos::RCP<Mesh> mesh)
   return success;
 }
 
-bool MeshTestUtility::determineRefTestPointsForNeighbors(MeshTopologyPtr meshTopo, CellPtr fineCell, unsigned int sideOrdinal,
+bool MeshTestUtility::determineRefTestPointsForNeighbors(MeshTopologyViewPtr meshTopo, CellPtr fineCell, unsigned int sideOrdinal,
     FieldContainer<double> &fineSideRefPoints, FieldContainer<double> &fineCellRefPoints,
     FieldContainer<double> &coarseSideRefPoints, FieldContainer<double> &coarseCellRefPoints)
 {
@@ -637,7 +637,7 @@ bool MeshTestUtility::neighborBasesAgreeOnSides(Teuchos::RCP<Mesh> mesh)
 bool MeshTestUtility::neighborBasesAgreeOnSides(Teuchos::RCP<Mesh> mesh, Epetra_MultiVector &globalSolutionCoefficients)
 {
   bool success = true;
-  MeshTopologyPtr meshTopo = mesh->getTopology();
+  MeshTopologyViewPtr meshTopo = mesh->getTopology();
   int spaceDim = meshTopo->getDimension();
 
   set<IndexType> activeCellIndices = meshTopo->getActiveCellIndices();

@@ -19,7 +19,7 @@ using namespace Intrepid;
 
 namespace
 {
-void testConstraints( MeshTopologyPtr mesh, unsigned entityDim, map<unsigned,pair<IndexType,unsigned> > &expectedConstraints, Teuchos::FancyOStream &out, bool &success)
+void testConstraints( MeshTopology* mesh, unsigned entityDim, map<unsigned,pair<IndexType,unsigned> > &expectedConstraints, Teuchos::FancyOStream &out, bool &success)
 {
 
   string meshName = "mesh";
@@ -141,7 +141,7 @@ TEUCHOS_UNIT_TEST( MeshTopology, InitialMeshEntitiesActiveCellCount)
   int verticalElements = 1;
   double width = 1.0, height = 1.0;
   MeshPtr mesh = MeshFactory::quadMesh(bf, H1Order, width, height, horizontalElements, verticalElements); // creates a 1-cell mesh
-  MeshTopologyPtr meshTopo = mesh->getTopology();
+  MeshTopology* meshTopo = dynamic_cast<MeshTopology*>(mesh->getTopology().get());
 
   unsigned sideDim = meshTopo->getDimension() - 1;
 
@@ -174,7 +174,7 @@ TEUCHOS_UNIT_TEST( MeshTopology, InitialMeshEntitiesActiveCellCount)
   horizontalElements = 2;
   verticalElements = 1;
   mesh = MeshFactory::quadMesh(bf, H1Order, width, height, horizontalElements, verticalElements); // creates a 1-cell mesh
-  meshTopo = mesh->getTopology();
+  meshTopo = dynamic_cast<MeshTopology*>(mesh->getTopology().get());
 
   for (int d=0; d<=sideDim; d++)
   {
@@ -206,7 +206,7 @@ TEUCHOS_UNIT_TEST( MeshTopology, DeactivateCellOnRefinement)
 
   int H1Order = 1;
   MeshPtr mesh = MeshFactory::quadMesh(bf, H1Order);
-  MeshTopologyPtr meshTopo = mesh->getTopology();
+  MeshTopology* meshTopo = dynamic_cast<MeshTopology*>(mesh->getTopology().get());
 
   set<GlobalIndexType> cellsToRefine;
   cellsToRefine.insert(0);
@@ -239,7 +239,7 @@ TEUCHOS_UNIT_TEST( MeshTopology, ConstrainingSideAncestryUniformMesh)
 
   int H1Order = 1;
   MeshPtr mesh = MeshFactory::quadMesh(bf, H1Order);
-  MeshTopologyPtr meshTopo = mesh->getTopology();
+  MeshTopology* meshTopo = dynamic_cast<MeshTopology*>(mesh->getTopology().get());
 
   set<GlobalIndexType> cellsToRefine;
   cellsToRefine.insert(0);
@@ -346,8 +346,10 @@ TEUCHOS_UNIT_TEST(MeshTopology, GetRootMeshTopology)
     mesh->RefinementObserver::hRefine(activeCellIDs, refPattern);
   }
 
-  MeshTopologyPtr rootMeshTopology = mesh->getTopology()->getRootMeshTopology();
-  MeshTopologyPtr originalMeshTopology = originalMesh->getTopology();
+  MeshTopology* meshTopo = dynamic_cast<MeshTopology*>(mesh->getTopology().get());
+  
+  MeshTopologyPtr rootMeshTopology = meshTopo->getRootMeshTopology();
+  MeshTopologyViewPtr originalMeshTopology = originalMesh->getTopology();
 
   TEST_EQUALITY(rootMeshTopology->cellCount(), originalMeshTopology->cellCount());
 
@@ -404,7 +406,7 @@ TEUCHOS_UNIT_TEST( MeshTopology, UnrefinedSpaceTimeMeshTopologyIsUnconstrained )
   for (int d=0; d<spaceTimeMeshTopo->getDimension(); d++)
   {
     map<unsigned,pair<IndexType,unsigned> > expectedConstraints;
-    testConstraints(spaceTimeMeshTopo, d, expectedConstraints, out, success);
+    testConstraints(spaceTimeMeshTopo.get(), d, expectedConstraints, out, success);
   }
 }
 } // namespace

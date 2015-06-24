@@ -190,7 +190,7 @@ public:
   set< pair<IndexType, unsigned> > getActiveBoundaryCells(); // (cellIndex, sideOrdinal)
   vector<double> getCellCentroid(IndexType cellIndex);
 
-  IndexType getMaximumCellIndex();
+  virtual IndexType getMaximumCellIndex();
   
   const set<IndexType> &getRootCellIndices();
 
@@ -211,7 +211,6 @@ public:
   // not sure this should ultimately be exposed -- using it now to allow correctly timed call to updateCells()
   // (will be transitioning from having MeshTransformationFunction talk to Mesh to having it talk to MeshTopology)
   Teuchos::RCP<MeshTransformationFunction> transformationFunction();
-
 
   // ! This method exposed for the sake of tests
   vector< pair<IndexType,unsigned> > getConstrainingSideAncestry(IndexType sideEntityIndex);   // pair: first is the sideEntityIndex of the ancestor; second is the refinementIndex of the refinement to get from parent to child (see _parentEntities and _childEntities)

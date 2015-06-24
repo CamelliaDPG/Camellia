@@ -106,7 +106,7 @@ namespace
       return;
     }
     auto activeCellIDs = mesh->getActiveCellIDs();
-    MeshTopologyPtr meshTopo = mesh->getTopology();
+    MeshTopology* meshTopo = dynamic_cast<MeshTopology*>(mesh->getTopology().get());
     int sideDim = meshTopo->getDimension() - 1;
     for (auto cellID : activeCellIDs)
     {
@@ -205,7 +205,7 @@ namespace
     //    gda->printGlobalDofInfo();
     
     auto activeCellIDs = mesh->getActiveCellIDs();
-    MeshTopologyPtr meshTopo = mesh->getTopology();
+    MeshTopology* meshTopo = dynamic_cast<MeshTopology*>(mesh->getTopology().get());
     
     //    meshTopo->printAllEntities();
     //    unsigned edgeDim = 1;

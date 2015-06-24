@@ -1240,7 +1240,7 @@ bool GDAMinimumRuleTests::testHangingNodePoisson(bool useQuads)
       success = false;
       cout << "GDAMinimumRuleTests failure: for 2-irregular quad mesh with hanging node and exactly recoverable solution, phi error is " << phi_err_l2;;
       cout << " (tol is " << tol << ")\n";
-      mesh->getTopology()->printAllEntities();
+      dynamic_cast<MeshTopology*>(mesh->getTopology().get())->printAllEntities();
 #ifdef USE_VTK
       VTKExporter solnExporter(soln,soln->mesh(),vf);
       solnExporter.exportSolution("poissonSolution_2_irregular");

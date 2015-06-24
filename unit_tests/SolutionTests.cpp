@@ -77,8 +77,6 @@ TEUCHOS_UNIT_TEST( Solution, ImportOffRankCellData )
   int H1Order = 1, delta_k = 1;
   MeshPtr mesh = MeshFactory::intervalMesh(form.bf(), xLeft, xRight, numCells, H1Order, delta_k);
 
-  MeshTopologyPtr meshTopo = mesh->getTopology();
-
   SolutionPtr soln = Solution::solution(mesh);
 
   set<GlobalIndexType> myCells = mesh->cellIDsInPartition();

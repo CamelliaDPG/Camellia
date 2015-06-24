@@ -56,7 +56,7 @@ GMGSolver::GMGSolver(TSolutionPtr<double> fineSolution, MeshPtr coarseMesh, int 
   _azConvergenceOption = AZ_rhs;
 }
 
-GMGSolver::GMGSolver(TSolutionPtr<double> fineSolution, int maxIters, double tol,
+GMGSolver::GMGSolver(TSolutionPtr<double> fineSolution, int maxIters, double tol, int H1OrderCoarse,
                      Teuchos::RCP<Solver> coarseSolver, bool useStaticCondensation) :
 Narrator("GMGSolver"),
 _finePartitionMap(fineSolution->getPartitionMap())
@@ -72,9 +72,22 @@ _finePartitionMap(fineSolution->getPartitionMap())
   _azConvergenceOption = AZ_rhs;
   
   // notion here is that we build a hierarchy of meshes in some intelligent way
-  // for now, we jump in p from whatever it is on the fine mesh to 0, and then
+  // for now, we jump in p from whatever it is on the fine mesh to H1OrderCoarse, and then
   // do single h-coarsening steps until we reach the coarsest topology.
-  // TODO: implement this
+  
+  vector<MeshPtr> meshesCoarseToFine;
+  MeshPtr fineMesh = fineSolution->mesh();
+  meshesCoarseToFine.push_back(fineMesh);
+  
+  VarFactoryPtr vf = fineMesh->bilinearForm()->varFactory();
+  int delta_k = 1; // this shouldn't matter for meshes outside the finest
+  MeshPtr mesh_pCoarsened = Teuchos::rcp( new Mesh(fineMesh->getTopology(), vf, H1OrderCoarse, delta_k) );
+  
+  meshesCoarseToFine.insert(meshesCoarseToFine.begin(), mesh_pCoarsened);
+  
+  
+  
+  // TODO: finish implementing this
   TEUCHOS_TEST_FOR_EXCEPTION(true, std::invalid_argument, "This GMGSolver constructor not yet completed!");
   
   // once we have a list of meshes, use gmgOperatorFromMeshSequence to build the operator

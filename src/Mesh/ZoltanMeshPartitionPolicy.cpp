@@ -59,7 +59,7 @@ void ZoltanMeshPartitionPolicy::partitionMesh(Mesh *mesh, PartitionIndexType num
   int argc = 0;
   Zoltan_Initialize(argc, NULL, &version);
 
-  MeshTopologyPtr meshTopology = mesh->getTopology();
+  MeshTopologyViewPtr meshTopology = mesh->getTopology();
 
   if (meshTopology->getDimension() > 3)
   {
@@ -289,7 +289,7 @@ int ZoltanMeshPartitionPolicy::get_number_of_objects(void *data, int *ierr)
 //  int numNodes = Teuchos::GlobalMPISession::getNProc();
 
   Mesh* mesh = (Mesh*) data;
-  MeshTopologyPtr meshTopo = mesh->getTopology();
+  MeshTopologyViewPtr meshTopo = mesh->getTopology();
 
   *ierr = ZOLTAN_OK;
 
@@ -329,7 +329,7 @@ void ZoltanMeshPartitionPolicy::get_object_list(void *data, int sizeGID, int siz
 int ZoltanMeshPartitionPolicy::get_num_geom(void *data, int *ierr)
 {
   Mesh *mesh = (Mesh*)data;
-  MeshTopologyPtr meshTopology = mesh->getTopology();
+  MeshTopologyViewPtr meshTopology = mesh->getTopology();
   *ierr = ZOLTAN_OK;
   /*
    cout << "--------------------" << endl;
@@ -372,7 +372,7 @@ void ZoltanMeshPartitionPolicy::get_geom_list(void *data, int num_gid_entries, i
   FieldContainer<GlobalIndexType>* partitionedCells = myData->second;
   *ierr = ZOLTAN_OK;
   //  cout << "in num_coarse_elem fn, num coarse elems is " << meshTopology->numInitialElements() <<endl;
-  MeshTopologyPtr meshTopology = mesh->getTopology();
+  MeshTopologyViewPtr meshTopology = mesh->getTopology();
   set<unsigned> rootCellIDSet = meshTopology->getRootCellIndices();
   vector<unsigned> rootCellIDs(rootCellIDSet.begin(),rootCellIDSet.end());
   int numTotalInitialElems = rootCellIDs.size();
@@ -393,7 +393,7 @@ void ZoltanMeshPartitionPolicy::get_coarse_elem_list(void *data, int num_gid_ent
 
   pair< Mesh *, FieldContainer<GlobalIndexType> * > *myData = (pair< Mesh *, FieldContainer<GlobalIndexType> * > *)data;
   Mesh *mesh = myData->first;
-  MeshTopologyPtr meshTopology = mesh->getTopology();
+  MeshTopologyViewPtr meshTopology = mesh->getTopology();
   FieldContainer<GlobalIndexType> partitionedCells = *(myData->second);
 
   *ierr = ZOLTAN_OK;
@@ -440,7 +440,7 @@ int ZoltanMeshPartitionPolicy::get_num_children(void *data, int num_gid_entries,
 
   pair< Mesh *, FieldContainer<GlobalIndexType> * > *myData = (pair< Mesh *, FieldContainer<GlobalIndexType> * > *)data;
   Mesh *mesh = myData->first;
-  MeshTopologyPtr meshTopology = mesh->getTopology();
+  MeshTopologyViewPtr meshTopology = mesh->getTopology();
 
   int parentID = *global_id;
   CellPtr parentCell = meshTopology->getCell(parentID);
@@ -458,7 +458,7 @@ void ZoltanMeshPartitionPolicy::get_children(void *data, int num_gid_entries, in
 
   pair< Mesh *, FieldContainer<GlobalIndexType> * > *myData = (pair< Mesh *, FieldContainer<GlobalIndexType> * > *)data;
   Mesh *mesh = myData->first;
-  MeshTopologyPtr meshTopology = mesh->getTopology();
+  MeshTopologyViewPtr meshTopology = mesh->getTopology();
   FieldContainer<GlobalIndexType>* partitionedActiveCells = myData->second;
 
   int parentID = *parent_gid;
@@ -500,7 +500,7 @@ void ZoltanMeshPartitionPolicy::get_child_weight(void *data, int num_gid_entries
 
   pair< Mesh *, FieldContainer<GlobalIndexType> * > *myData = (pair< Mesh *, FieldContainer<GlobalIndexType> * > *)data;
   Mesh *mesh = myData->first;
-  MeshTopologyPtr meshTopology = mesh->getTopology();
+  MeshTopologyViewPtr meshTopology = mesh->getTopology();
 
   if (wgt_dim>0){
     obj_wgt[0]=1;
@@ -563,7 +563,7 @@ void ZoltanMeshPartitionPolicy::unpack_elem_data(void *data,
 
 set<GlobalIndexType> ZoltanMeshPartitionPolicy::getRankLocalCellIDs(Mesh *mesh)
 {
-  MeshTopologyPtr meshTopo = mesh->getTopology();
+  MeshTopologyViewPtr meshTopo = mesh->getTopology();
 
   set<GlobalIndexType> rankLocalCells = mesh->globalDofAssignment()->cellsInPartition(-1);
 

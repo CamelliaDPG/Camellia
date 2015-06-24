@@ -143,7 +143,7 @@ bool CurvilinearMeshTests::testCylinderMesh()
   //  cout << "Approximate area on straight-line mesh: " << approximateArea << endl;
   //
 
-  GlobalIndexType numCells = mesh->numElements();
+  GlobalIndexType numCells = mesh->numActiveElements();
   set<GlobalIndexType> allCells;
   for (GlobalIndexType i=0; i<numCells; i++)
   {

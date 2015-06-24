@@ -12,7 +12,7 @@
 #include "Shards_CellTopology.hpp"
 
 #include "Mesh.h"
-#include "MeshTopology.h"
+#include "MeshTopologyView.h"
 
 #include "CellTopology.h"
 
@@ -253,7 +253,7 @@ public:
   static void mapToReferenceFrameInitGuess(      Intrepid::FieldContainer<double>  &        refPoints,
       const Intrepid::FieldContainer<double>  &        initGuess,
       const Intrepid::FieldContainer<double>  &        physPoints,
-      MeshTopologyPtr meshTopo, IndexType cellID, int cubatureDegree);
+      MeshTopologyViewPtr meshTopo, IndexType cellID, int cubatureDegree);
 
   // copied from Intrepid's CellTools and specialized to allow use when we have curvilinear geometry and/or space-time elements
   static void mapToReferenceFrameInitGuess(      Intrepid::FieldContainer<double>  &        refPoints,
@@ -271,7 +271,7 @@ public:
   // copied from Intrepid's CellTools and specialized to allow use when we have curvilinear geometry
   static void mapToReferenceFrame(      Intrepid::FieldContainer<double>      &        refPoints,
                                         const Intrepid::FieldContainer<double>      &        physPoints,
-                                        MeshTopologyPtr meshTopo, IndexType cellID, int cubatureDegree);
+                                        MeshTopologyViewPtr meshTopo, IndexType cellID, int cubatureDegree);
 
   static void mapToReferenceSubcell(Intrepid::FieldContainer<double>       &refSubcellPoints,
                                     const Intrepid::FieldContainer<double> &paramPoints,

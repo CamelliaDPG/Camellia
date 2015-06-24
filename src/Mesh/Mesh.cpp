@@ -74,7 +74,7 @@ using namespace std;
 
 map<int,int> Mesh::_emptyIntIntMap;
 
-Mesh::Mesh(MeshTopologyPtr meshTopology, VarFactoryPtr varFactory, vector<int> H1Order, int pToAddTest,
+Mesh::Mesh(MeshTopologyViewPtr meshTopology, VarFactoryPtr varFactory, vector<int> H1Order, int pToAddTest,
            map<int,int> trialOrderEnhancements, map<int,int> testOrderEnhancements,
            MeshPartitionPolicyPtr partitionPolicy) : DofInterpreter(Teuchos::rcp(this,false))
 {
@@ -103,7 +103,7 @@ Mesh::Mesh(MeshTopologyPtr meshTopology, VarFactoryPtr varFactory, vector<int> H
   this->registerObserver(Teuchos::rcp( &_refinementHistory, false ));
 }
 
-Mesh::Mesh(MeshTopologyPtr meshTopology, VarFactoryPtr varFactory, int H1Order, int pToAddTest,
+Mesh::Mesh(MeshTopologyViewPtr meshTopology, VarFactoryPtr varFactory, int H1Order, int pToAddTest,
            map<int,int> trialOrderEnhancements, map<int,int> testOrderEnhancements,
            MeshPartitionPolicyPtr partitionPolicy) : DofInterpreter(Teuchos::rcp(this,false))
 {
@@ -133,7 +133,7 @@ Mesh::Mesh(MeshTopologyPtr meshTopology, VarFactoryPtr varFactory, int H1Order, 
 }
 
 // Deprecated constructor
-Mesh::Mesh(MeshTopologyPtr meshTopology, TBFPtr<double> bilinearForm, vector<int> H1Order, int pToAddTest,
+Mesh::Mesh(MeshTopologyViewPtr meshTopology, TBFPtr<double> bilinearForm, vector<int> H1Order, int pToAddTest,
            map<int,int> trialOrderEnhancements, map<int,int> testOrderEnhancements,
            MeshPartitionPolicyPtr partitionPolicy) : DofInterpreter(Teuchos::rcp(this,false))
 {
@@ -164,7 +164,7 @@ Mesh::Mesh(MeshTopologyPtr meshTopology, TBFPtr<double> bilinearForm, vector<int
 }
 
 // Deprecated constructor
-Mesh::Mesh(MeshTopologyPtr meshTopology, TBFPtr<double> bilinearForm, int H1Order, int pToAddTest,
+Mesh::Mesh(MeshTopologyViewPtr meshTopology, TBFPtr<double> bilinearForm, int H1Order, int pToAddTest,
            map<int,int> trialOrderEnhancements, map<int,int> testOrderEnhancements,
            MeshPartitionPolicyPtr partitionPolicy) : DofInterpreter(Teuchos::rcp(this,false))
 {
@@ -254,7 +254,7 @@ Mesh::Mesh(const vector<vector<double> > &vertices, vector< vector<unsigned> > &
 }
 
 // private constructor for use by deepCopy()
-Mesh::Mesh(MeshTopologyPtr meshTopology, Teuchos::RCP<GlobalDofAssignment> gda, VarFactoryPtr varFactory,
+Mesh::Mesh(MeshTopologyViewPtr meshTopology, Teuchos::RCP<GlobalDofAssignment> gda, VarFactoryPtr varFactory,
            int pToAddToTest, bool useConformingTraces, bool usePatchBasis, bool enforceMBFluxContinuity) : DofInterpreter(Teuchos::rcp(this,false))
 {
   _meshTopology = meshTopology;
@@ -270,7 +270,7 @@ Mesh::Mesh(MeshTopologyPtr meshTopology, Teuchos::RCP<GlobalDofAssignment> gda, 
 }
 
 // deprecated private constructor for use by deepCopy()
-Mesh::Mesh(MeshTopologyPtr meshTopology, Teuchos::RCP<GlobalDofAssignment> gda, TBFPtr<double> bf,
+Mesh::Mesh(MeshTopologyViewPtr meshTopology, Teuchos::RCP<GlobalDofAssignment> gda, TBFPtr<double> bf,
            int pToAddToTest, bool useConformingTraces, bool usePatchBasis, bool enforceMBFluxContinuity) : DofInterpreter(Teuchos::rcp(this,false))
 {
   _meshTopology = meshTopology;
@@ -400,7 +400,7 @@ vector<GlobalIndexType> Mesh::cellIDsForPoints(const FieldContainer<double> &phy
 
 MeshPtr Mesh::deepCopy()
 {
-  MeshTopologyPtr meshTopoCopy = _meshTopology->deepCopy();
+  MeshTopologyViewPtr meshTopoCopy = _meshTopology->deepCopy();
   GlobalDofAssignmentPtr gdaCopy = _gda->deepCopy();
 
   MeshPtr meshCopy = Teuchos::rcp( new Mesh(meshTopoCopy, gdaCopy, _bilinearForm, _pToAddToTest, _useConformingTraces, _usePatchBasis, _enforceMBFluxContinuity ));
@@ -669,8 +669,8 @@ map<IndexType, GlobalIndexType> Mesh::getGlobalVertexIDs(const FieldContainer<do
 
 TFunctionPtr<double> Mesh::getTransformationFunction()
 {
-  // will be NULL for meshes without edge curves defined
-
+  // will be NULL for meshes without edge curves defined -- including those built around pure MeshTopologyView instances
+  
   // for now, we recompute the transformation function each time the edge curves get updated
   // we might later want to do something lazier, updating/creating it here if it's out of date
 
@@ -753,11 +753,17 @@ void Mesh::hRefine(const set<GlobalIndexType> &cellIDs, Teuchos::RCP<RefinementP
 {
   if (cellIDs.size() == 0) return;
 
+  MeshTopology* meshTopologyInstance = dynamic_cast<MeshTopology*>(_meshTopology.get());
+  
+  TEUCHOS_TEST_FOR_EXCEPTION(!meshTopologyInstance, std::invalid_argument, "Mesh::hRefine() called when _meshTopology is not an instance of MeshTopology--likely Mesh initialized with a pure MeshTopologyView, which cannot be h-refined.");
+  
+  MeshTopologyPtr writableMeshTopology = Teuchos::rcp(meshTopologyInstance, false);
+  
   // send h-refinement message any registered observers (may be meshes)
   for (vector< Teuchos::RCP<RefinementObserver> >::iterator meshIt = _registeredObservers.begin();
        meshIt != _registeredObservers.end(); meshIt++)
   {
-    (*meshIt)->hRefine(_meshTopology,cellIDs,refPattern);
+    (*meshIt)->hRefine(writableMeshTopology,cellIDs,refPattern);
   }
 
   set<GlobalIndexType>::const_iterator cellIt;
@@ -766,13 +772,13 @@ void Mesh::hRefine(const set<GlobalIndexType> &cellIDs, Teuchos::RCP<RefinementP
   {
     GlobalIndexType cellID = *cellIt;
 
-    if (_meshTopology->getActiveCellIndices().find(cellID) == _meshTopology->getActiveCellIndices().end())
+    if (writableMeshTopology->getActiveCellIndices().find(cellID) == writableMeshTopology->getActiveCellIndices().end())
     {
       cout << "cellID " << cellID << " is not active, but Mesh received request for h-refinement.\n";
       TEUCHOS_TEST_FOR_EXCEPTION(true, std::invalid_argument, "inactive cell");
     }
 
-    _meshTopology->refineCell(cellID, refPattern);
+    writableMeshTopology->refineCell(cellID, refPattern);
 
     // TODO: figure out what it is that breaks in GDAMaximumRule when we use didHRefine to notify about all cells together outside this loop
     //       (and/or try moving outside the loop if and only if we are using the minimum rule)
@@ -787,14 +793,14 @@ void Mesh::hRefine(const set<GlobalIndexType> &cellIDs, Teuchos::RCP<RefinementP
   for (vector< Teuchos::RCP<RefinementObserver> >::iterator observerIt = _registeredObservers.begin();
        observerIt != _registeredObservers.end(); observerIt++)
   {
-    (*observerIt)->didHRefine(_meshTopology,cellIDs,refPattern);
+    (*observerIt)->didHRefine(writableMeshTopology,cellIDs,refPattern);
   }
 
   // TODO: consider making transformation function a refinementObserver, using that interface to send it the notification
   // let transformation function know about the refinement that just took place
-  if (_meshTopology->transformationFunction().get())
+  if (writableMeshTopology->transformationFunction().get())
   {
-    _meshTopology->transformationFunction()->didHRefine(cellIDs);
+    writableMeshTopology->transformationFunction()->didHRefine(cellIDs);
   }
 
   if (repartitionAndRebuild)
@@ -805,7 +811,7 @@ void Mesh::hRefine(const set<GlobalIndexType> &cellIDs, Teuchos::RCP<RefinementP
     for (vector< Teuchos::RCP<RefinementObserver> >::iterator observerIt = _registeredObservers.begin();
          observerIt != _registeredObservers.end(); observerIt++)
     {
-      (*observerIt)->didRepartition(_meshTopology);
+      (*observerIt)->didRepartition(writableMeshTopology);
     }
   }
 }
@@ -821,6 +827,14 @@ void Mesh::hUnrefine(const set<GlobalIndexType> &cellIDs)
     (*meshIt)->hUnrefine(cellIDs);
   }
 
+  MeshTopology* meshTopologyInstance = dynamic_cast<MeshTopology*>(_meshTopology.get());
+
+  TEUCHOS_TEST_FOR_EXCEPTION(!meshTopologyInstance, std::invalid_argument, "Mesh::hUnrefine() called when _meshTopology is not an instance of MeshTopology--likely Mesh initialized with a pure MeshTopologyView, which cannot be h-unrefined.");
+  
+  MeshTopologyPtr writableMeshTopology = Teuchos::rcp(meshTopologyInstance, false);
+
+  // TODO: finish implementing this
+  
 //  set<GlobalIndexType>::const_iterator cellIt;
 //  set< pair<GlobalIndexType, int> > affectedNeighborSides; // (cellID, sideIndex)
 //  set< GlobalIndexType > deletedCellIDs;
@@ -901,7 +915,7 @@ void Mesh::hUnrefine(const set<GlobalIndexType> &cellIDs)
   for (vector< Teuchos::RCP<RefinementObserver> >::iterator meshIt = _registeredObservers.begin();
        meshIt != _registeredObservers.end(); meshIt++)
   {
-    (*meshIt)->didHUnrefine(_meshTopology,cellIDs);
+    (*meshIt)->didHUnrefine(writableMeshTopology,cellIDs);
   }
 
   _gda->repartitionAndMigrate();
@@ -927,7 +941,7 @@ void Mesh::interpretLocalData(GlobalIndexType cellID, const FieldContainer<doubl
 
 GlobalIndexType Mesh::numActiveElements()
 {
-  return _meshTopology->activeCellCount();
+  return _meshTopology->getActiveCellIndices().size();
 }
 
 GlobalIndexType Mesh::numElements()
@@ -1069,18 +1083,6 @@ void Mesh::printLocalToGlobalMap()
     int localDofIndex = entryIt->first.second;
     int globalDofIndex = entryIt->second;
     cout << "(" << cellID << "," << localDofIndex << ") --> " << globalDofIndex << endl;
-  }
-}
-
-void Mesh::printVertices()
-{
-  cout << "Vertices:\n";
-  unsigned vertexDim = 0;
-  unsigned vertexCount = _meshTopology->getEntityCount(vertexDim);
-  for (unsigned vertexIndex=0; vertexIndex<vertexCount; vertexIndex++)
-  {
-    vector<double> vertex = _meshTopology->getVertex(vertexIndex);
-    cout << vertexIndex << ": (" << vertex[0] << ", " << vertex[1] << ")\n";
   }
 }
 
@@ -1237,15 +1239,22 @@ int Mesh::rowSizeUpperBound()
 
 vector< ParametricCurvePtr > Mesh::parametricEdgesForCell(GlobalIndexType cellID, bool neglectCurves)
 {
-  return _meshTopology->parametricEdgesForCell(cellID, neglectCurves);
+  MeshTopology* meshTopologyInstance = dynamic_cast<MeshTopology*>(_meshTopology.get());
+  
+  TEUCHOS_TEST_FOR_EXCEPTION(!meshTopologyInstance, std::invalid_argument, "Mesh::parametricEdgesForCell() called when _meshTopology is not an instance of MeshTopology--likely Mesh initialized with a pure MeshTopologyView, which does not support this.");
+  
+  return meshTopologyInstance->parametricEdgesForCell(cellID, neglectCurves);
 }
 
-// TODO: consider adding/moving this logic into MeshTopology
 void Mesh::setEdgeToCurveMap(const map< pair<GlobalIndexType, GlobalIndexType>, ParametricCurvePtr > &edgeToCurveMap)
 {
+  MeshTopology* meshTopologyInstance = dynamic_cast<MeshTopology*>(_meshTopology.get());
+  
+  TEUCHOS_TEST_FOR_EXCEPTION(!meshTopologyInstance, std::invalid_argument, "Mesh::setEdgeToCurveMap() called when _meshTopology is not an instance of MeshTopology--likely Mesh initialized with a pure MeshTopologyView, which does not support this.");
+  
   MeshPtr thisPtr = Teuchos::rcp(this, false);
   map< pair<IndexType, IndexType>, ParametricCurvePtr > localMap(edgeToCurveMap.begin(),edgeToCurveMap.end());
-  _meshTopology->setEdgeToCurveMap(localMap, thisPtr);
+  meshTopologyInstance->setEdgeToCurveMap(localMap, thisPtr);
 }
 
 void Mesh::setElementType(GlobalIndexType cellID, ElementTypePtr newType, bool sideUpgradeOnly)
@@ -1280,7 +1289,7 @@ bool Mesh::usePatchBasis()
   return _usePatchBasis;
 }
 
-MeshTopologyPtr Mesh::getTopology()
+MeshTopologyViewPtr Mesh::getTopology()
 {
   return _meshTopology;
 }
