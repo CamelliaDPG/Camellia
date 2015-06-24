@@ -1780,9 +1780,9 @@ vector<IndexType> MeshTopology::getVertexIndices(const vector< vector<double> > 
   return localToGlobalVertexIndex;
 }
 
-vector<unsigned> MeshTopology::getChildEntities(unsigned int d, IndexType entityIndex)
+vector<IndexType> MeshTopology::getChildEntities(unsigned int d, IndexType entityIndex)
 {
-  vector<unsigned> childIndices;
+  vector<IndexType> childIndices;
   if (d==0) return childIndices;
   if (d==_spaceDim)
   {
@@ -2113,7 +2113,7 @@ bool MeshTopology::isBoundarySide(IndexType sideEntityIndex)
   return _boundarySides.find(sideEntityIndex) != _boundarySides.end();
 }
 
-pair<IndexType,IndexType> MeshTopology::owningCellIndexForConstrainingEntity(unsigned d, unsigned constrainingEntityIndex)
+pair<IndexType,IndexType> MeshTopology::owningCellIndexForConstrainingEntity(unsigned d, IndexType constrainingEntityIndex)
 {
   // sorta like the old leastActiveCellIndexContainingEntityConstrainedByConstrainingEntity, but now prefers larger cells
   // -- the first level of the entity refinement hierarchy that has an active cell containing an entity in that level is the one from

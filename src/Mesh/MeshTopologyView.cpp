@@ -77,7 +77,6 @@ Teuchos::RCP<MeshTopology> MeshTopologyView::deepCopy()
   TEUCHOS_TEST_FOR_EXCEPTION(true, std::invalid_argument, "deepCopy() not supported by MeshTopologyView; this method is defined for potential subclass support.");
 }
 
-// I think we actually don't need this--at least, not yet (may change as we finish implementing getConstrainingEntity)
 vector< pair<IndexType,unsigned> > MeshTopologyView::getActiveCellIndices(unsigned d, IndexType entityIndex)
 {
   // first entry in pair is the cellIndex, the second is the ordinal of the entity in that cell (the subcord).
@@ -126,7 +125,6 @@ std::pair<IndexType, unsigned> MeshTopologyView::getConstrainingEntity(unsigned 
   IndexType generalizedAncestorEntityIndex = entityIndex;
   for (unsigned generalizedAncestorDim=d; generalizedAncestorDim <= sideDim; )
   {
-    // TODO: implement getConstrainingEntityIndexOfLikeDimension()
     IndexType possibleConstrainingEntityIndex = getConstrainingEntityIndexOfLikeDimension(generalizedAncestorDim, generalizedAncestorEntityIndex);
     if (possibleConstrainingEntityIndex != generalizedAncestorEntityIndex)
     {
@@ -187,7 +185,6 @@ IndexType MeshTopologyView::getConstrainingEntityIndexOfLikeDimension(unsigned d
   }
   
   vector<IndexType> sidesForEntity = getSidesContainingEntity(d, entityIndex);
-  unsigned sideDim = getDimension() - 1;
   for (IndexType sideEntityIndex : sidesForEntity)
   {
     vector< pair<IndexType,unsigned> > sideAncestry = getConstrainingSideAncestry(sideEntityIndex);
@@ -321,10 +318,66 @@ bool MeshTopologyView::getVertexIndex(const vector<double> &vertex, IndexType &v
   return _meshTopo->getVertexIndex(vertex, vertexIndex, tol);
 }
 
-std::pair<IndexType,IndexType> owningCellIndexForConstrainingEntity(unsigned d, unsigned constrainingEntityIndex)
+// owningCellIndexForConstrainingEntity() copied from MeshTopology; once that's a subclass of MeshTopologyView, could possibly eliminate it in MeshTopology
+std::pair<IndexType,IndexType> MeshTopologyView::owningCellIndexForConstrainingEntity(unsigned d, IndexType constrainingEntityIndex)
 {
-  // TODO: implement this
-  TEUCHOS_TEST_FOR_EXCEPTION(true, std::invalid_argument, "Method not yet implemented");
+  // sorta like the old leastActiveCellIndexContainingEntityConstrainedByConstrainingEntity, but now prefers larger cells
+  // -- the first level of the entity refinement hierarchy that has an active cell containing an entity in that level is the one from
+  // which we choose the owning cell (and we do take the least such cellIndex)
+  unsigned leastActiveCellIndex = (unsigned)-1; // unsigned cast of -1 makes maximal unsigned #
+  set<IndexType> constrainedEntities;
+  constrainedEntities.insert(constrainingEntityIndex);
+  
+  IndexType leastActiveCellConstrainedEntityIndex;
+  while (true)
+  {
+    set<IndexType> nextTierConstrainedEntities;
+    
+    for (set<IndexType>::iterator constrainedEntityIt = constrainedEntities.begin(); constrainedEntityIt != constrainedEntities.end(); constrainedEntityIt++)
+    {
+      IndexType constrainedEntityIndex = *constrainedEntityIt;
+      
+      // get this entity's immediate children, in case we don't find an active cell on this tier
+      vector<IndexType> immediateChildren = _meshTopo->getChildEntities(d,constrainedEntityIndex);
+      nextTierConstrainedEntities.insert(immediateChildren.begin(), immediateChildren.end());
+
+      vector<IndexType> sideEntityIndices = getSidesContainingEntity(d, constrainingEntityIndex);
+      if (sideEntityIndices.size() == 0)
+      {
+        cout << "ERROR: no side containing entityIndex " << constrainingEntityIndex << " of dimension " << d << " found." << endl;
+        TEUCHOS_TEST_FOR_EXCEPTION(true, std::invalid_argument, "ERROR: no side containing entityIndex found.");
+      }
+
+      for (IndexType sideEntityIndex : sideEntityIndices)
+      {
+        vector<IndexType> activeCellsForSide = this->getActiveCellsForSide(sideEntityIndex);
+        
+        for (IndexType cellIndex : activeCellsForSide)
+        {
+          if (cellIndex < leastActiveCellIndex)
+          {
+            leastActiveCellConstrainedEntityIndex = constrainedEntityIndex;
+            leastActiveCellIndex = cellIndex;
+          }
+        }
+      }
+    }
+    if (leastActiveCellIndex == -1)
+    {
+      // try the next refinement level down
+      if (nextTierConstrainedEntities.size() == 0)
+      {
+        TEUCHOS_TEST_FOR_EXCEPTION(true, std::invalid_argument, "No active cell found containing entity constrained by constraining entity");
+      }
+      constrainedEntities = nextTierConstrainedEntities;
+    }
+    else
+    {
+      return {leastActiveCellIndex, leastActiveCellConstrainedEntityIndex};
+    }
+  }
+  
+  return {leastActiveCellIndex, leastActiveCellConstrainedEntityIndex};
 }
 
 void MeshTopologyView::setGlobalDofAssignment(GlobalDofAssignment* gda)
