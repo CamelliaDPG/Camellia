@@ -108,6 +108,7 @@ int main(int argc, char *argv[])
   problems["Kovasznay"] = Teuchos::rcp(new KovasznayProblem(steady, Re));
   problems["TaylorGreen"] = Teuchos::rcp(new TaylorGreenProblem(steady, Re, numXElems, numSlabs));
   problems["Cylinder"] = Teuchos::rcp(new CylinderProblem(steady, Re, numSlabs));
+  problems["SquareCylinder"] = Teuchos::rcp(new SquareCylinderProblem(steady, Re, numSlabs));
   Teuchos::RCP<IncompressibleProblem> problem = problems.at(problemChoice);
 
   // if (commRank == 0)
