@@ -27,6 +27,21 @@ public:
 
   static CellTopoPtrLegacy cellTopoForKey(unsigned key);
 
+  /** \brief  Checks if a point belongs to a reference cell. Adapted from Intrepid::CellTools::checkPointInclusion.
+   
+   Requires cell topology with a reference cell.
+   
+   \param  point             [in]  - spatial coordinates of the point tested for inclusion
+   \param  pointDim          [in]  - spatial dimension of that point
+   \param  cellTopo          [in]  - cell topology of the cells stored in \c cellWorkset
+   \param  threshold         [in]  - "tightness" of the inclusion test
+   \return 1 if the point is in the closure of the specified reference cell and 0 otherwise.
+   */
+  static int checkPointInclusion(const double*                 point,
+                                 const int                     pointDim,
+                                 CellTopoPtr                   cellTopo,
+                                 const double &                threshold = Intrepid::INTREPID_THRESHOLD);
+  
   /** \brief  Variation on Intrepid FunctionSpaceTools computeEdgeMeasure and computeFaceMeasure;
    intended to support Camellia CellTopology generally, though unlike computeEdgeMeasure we here
    assume that the subcell over which we integrate is of dimension (d-1) for a d-dimensional parent cell.

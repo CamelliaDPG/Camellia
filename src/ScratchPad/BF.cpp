@@ -250,6 +250,47 @@ string TBF<Scalar>::displayString()
     return missingTrialVars;
   }
   
+  // ! returns the number of potential nonzeros for the given trial ordering and test ordering
+  template <typename Scalar>
+  int TBF<Scalar>::nonZeroEntryCount(DofOrderingPtr trialOrdering, DofOrderingPtr testOrdering)
+  {
+    int nonZeros = 0;
+    
+    set<pair<int,int>> trialTestInteractions;
+    
+    for (TBilinearTerm<Scalar> bt : _terms)
+    {
+      TLinearTermPtr<Scalar> trialTerm = bt.first;
+      TLinearTermPtr<Scalar> testTerm = bt.second;
+      
+      set<int> trialIDs = trialTerm->varIDs();
+      set<int> testIDs = testTerm->varIDs();
+      for (int trialID : trialIDs)
+      {
+        for (int testID : testIDs)
+        {
+          trialTestInteractions.insert({trialID,testID});
+        }
+      }
+    }
+    
+    for (pair<int,int> trialTestPair : trialTestInteractions)
+    {
+      int trialID = trialTestPair.first, testID = trialTestPair.second;
+      int testCardinality = testOrdering->getBasis(testID)->getCardinality();
+      vector<int> sidesForTrial = trialOrdering->getSidesForVarID(trialID);
+      
+      for (int trialSide : sidesForTrial)
+      {
+        int trialCardinality = trialOrdering->getBasisCardinality(trialID, trialSide);
+        // if we get here, there is some (potential) interaction between test and trial on this side
+        // at most, this will mean trialCardinality * testCardinality nonzeros
+        nonZeros += trialCardinality * testCardinality;
+      }
+    }
+    return nonZeros;
+  }
+  
 template <typename Scalar>
 void TBF<Scalar>::printTrialTestInteractions()
 {

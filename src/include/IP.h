@@ -80,6 +80,8 @@ public:
 
   virtual bool hasBoundaryTerms();
 
+  int nonZeroEntryCount(DofOrderingPtr testOrdering);
+  
   virtual void operators(int testID1, int testID2,
                          std::vector<Camellia::EOperator> &testOp1,
                          std::vector<Camellia::EOperator> &testOp2);

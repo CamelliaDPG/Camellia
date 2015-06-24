@@ -855,13 +855,7 @@ bool MeshTopology::cellContainsPoint(GlobalIndexType cellID, const vector<double
 
   CellTopoPtr cellTopo = getCell(cellID)->topology();
 
-  if (cellTopo->getTensorialDegree() > 0)
-  {
-    TEUCHOS_TEST_FOR_EXCEPTION(true, std::invalid_argument, "cellContainsPoint doesn't yet support tensorial degree > 0");
-    // TODO: implement CamelliaCellTools::checkPointInclusion
-  }
-
-  int result = Intrepid::CellTools<double>::checkPointInclusion(&refPoints[0], _spaceDim, cellTopo->getShardsTopology());
+  int result = CamelliaCellTools::checkPointInclusion(&refPoints[0], _spaceDim, cellTopo);
   return result == 1;
 }
 
@@ -1315,6 +1309,11 @@ bool MeshTopology::entityHasParent(unsigned d, unsigned entityIndex)
   return _parentEntities[d][entityIndex].size() > 0;
 }
 
+bool MeshTopology::entityHasGeneralizedParent(unsigned d, IndexType entityIndex)
+{
+  return _generalizedParentEntities[d].find(entityIndex) != _generalizedParentEntities[d].end();
+}
+
 bool MeshTopology::entityIsAncestor(unsigned d, unsigned ancestor, unsigned descendent)
 {
   if (ancestor == descendent) return true;
@@ -1369,7 +1368,7 @@ unsigned MeshTopology::getActiveCellCount(unsigned int d, unsigned int entityInd
   }
 }
 
-const vector< pair<unsigned,unsigned> > & MeshTopology::getActiveCellIndices(unsigned d, unsigned entityIndex)
+vector< pair<unsigned,unsigned> > MeshTopology::getActiveCellIndices(unsigned d, unsigned entityIndex)
 {
   return _activeCellsForEntities[d][entityIndex];
 }
@@ -1781,9 +1780,9 @@ vector<IndexType> MeshTopology::getVertexIndices(const vector< vector<double> > 
   return localToGlobalVertexIndex;
 }
 
-vector<unsigned> MeshTopology::getChildEntities(unsigned int d, IndexType entityIndex)
+vector<IndexType> MeshTopology::getChildEntities(unsigned int d, IndexType entityIndex)
 {
-  vector<unsigned> childIndices;
+  vector<IndexType> childIndices;
   if (d==0) return childIndices;
   if (d==_spaceDim)
   {
@@ -2051,6 +2050,15 @@ unsigned MeshTopology::getEntityParentForSide(unsigned d, unsigned entityIndex,
   return -1;
 }
 
+unsigned MeshTopology::getEntityParentCount(unsigned d, IndexType entityIndex)
+{
+  if ((d >= _parentEntities.size()) || (entityIndex >= _parentEntities[d].size()))
+  {
+    TEUCHOS_TEST_FOR_EXCEPTION(true, std::invalid_argument, "entityIndex or dimension is out of bounds");
+  }
+  return _parentEntities[d][entityIndex].size();
+}
+
 // ! pairs are (cellIndex, sideOrdinal) where the sideOrdinal is a side that contains the entity
 set< pair<IndexType, unsigned> > MeshTopology::getCellsContainingEntity(unsigned d, unsigned entityIndex)   // not *all* cells, but within any refinement branch, the most refined cell that contains the entity will be present in this set.  The unsigned value is the ordinal of a *side* in the cell containing this entity.  There may be multiple sides in a cell that contain the entity; this method will return just one entry per cell.
 {
@@ -2100,7 +2108,12 @@ set< pair<IndexType, unsigned> > MeshTopology::getCellsContainingEntity(unsigned
   return cells;
 }
 
-pair<IndexType,IndexType> MeshTopology::owningCellIndexForConstrainingEntity(unsigned d, unsigned constrainingEntityIndex)
+bool MeshTopology::isBoundarySide(IndexType sideEntityIndex)
+{
+  return _boundarySides.find(sideEntityIndex) != _boundarySides.end();
+}
+
+pair<IndexType,IndexType> MeshTopology::owningCellIndexForConstrainingEntity(unsigned d, IndexType constrainingEntityIndex)
 {
   // sorta like the old leastActiveCellIndexContainingEntityConstrainedByConstrainingEntity, but now prefers larger cells
   // -- the first level of the entity refinement hierarchy that has an active cell containing an entity in that level is the one from
@@ -2177,11 +2190,14 @@ pair<IndexType,IndexType> MeshTopology::owningCellIndexForConstrainingEntity(uns
   return make_pair(leastActiveCellIndex, leastActiveCellConstrainedEntityIndex);
 }
 
-vector< IndexType > MeshTopology::getSidesContainingEntity(unsigned d, unsigned entityIndex)
+vector< IndexType > MeshTopology::getSidesContainingEntity(unsigned d, IndexType entityIndex)
 {
+  unsigned sideDim = getDimension() - 1;
+  if (d == sideDim) return {entityIndex};
+  
   if (_sidesForEntities[d].size() <= entityIndex)
   {
-    return vector<IndexType> ();
+    return {};
   }
   return _sidesForEntities[d][entityIndex];
 }
@@ -2250,7 +2266,7 @@ unsigned MeshTopology::getSubEntityPermutation(unsigned d, IndexType entityIndex
 //  return make_pair(leastActiveCellIndex, leastActiveCellConstrainedEntityIndex);
 //}
 
-unsigned MeshTopology::maxConstraint(unsigned d, unsigned entityIndex1, unsigned entityIndex2)
+IndexType MeshTopology::maxConstraint(unsigned d, IndexType entityIndex1, IndexType entityIndex2)
 {
   // if one of the entities is the ancestor of the other, returns that one.  Otherwise returns (unsigned) -1.
 

@@ -89,6 +89,9 @@ public:
   // ! returns a list of trial variables from VarFactory that do not enter the bilinear form
   std::vector<VarPtr> missingTrialVars();
   
+  // ! returns the number of potential nonzeros for the given trial ordering and test ordering
+  int nonZeroEntryCount(DofOrderingPtr trialOrdering, DofOrderingPtr testOrdering);
+  
   virtual int optimalTestWeights(Intrepid::FieldContainer<Scalar> &optimalTestWeights, Intrepid::FieldContainer<Scalar> &innerProductMatrix,
                                  ElementTypePtr elemType, Intrepid::FieldContainer<double> &cellSideParities,
                                  BasisCachePtr stiffnessBasisCache);

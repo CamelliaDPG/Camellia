@@ -88,7 +88,6 @@ class MeshTopology
   map<unsigned, IndexType> getVertexIndicesMap(const Intrepid::FieldContainer<double> &vertices);
   set<IndexType> getEntitiesForSide(IndexType sideEntityIndex, unsigned d);
   void init(unsigned spaceDim);
-  unsigned maxConstraint(unsigned d, IndexType entityIndex1, IndexType entityIndex2);
   void printVertex(IndexType vertexIndex);
   void printVertices(set<IndexType> vertexIndices);
   void refineCellEntities(CellPtr cell, RefinementPatternPtr refPattern); // ensures that the appropriate child entities exist, and parental relationships are recorded in _parentEntities
@@ -122,10 +121,11 @@ public:
   void printApproximateMemoryReport();
 
   bool entityHasParent(unsigned d, IndexType entityIndex);
+  bool entityHasGeneralizedParent(unsigned d, IndexType entityIndex);
   bool entityHasChildren(unsigned d, IndexType entityIndex);
   IndexType getActiveCellCount(unsigned d, IndexType entityIndex);
 
-  const vector< pair<IndexType,unsigned> > &getActiveCellIndices(unsigned d, IndexType entityIndex); // first entry in pair is the cellIndex, the second is the index of the entity in that cell (the subcord).
+  vector< pair<IndexType,unsigned> > getActiveCellIndices(unsigned d, IndexType entityIndex); // first entry in pair is the cellIndex, the second is the index of the entity in that cell (the subcord).
   CellPtr getCell(IndexType cellIndex);
   //  vector< pair< unsigned, unsigned > > getCellNeighbors(unsigned cellIndex, unsigned sideIndex); // second entry in return is the sideIndex in neighbor (note that in context of h-refinements, one or both of the sides may be broken)
   //  pair< CellPtr, unsigned > getCellAncestralNeighbor(unsigned cellIndex, unsigned sideIndex);
@@ -150,6 +150,7 @@ public:
   pair<IndexType,unsigned> getEntityGeneralizedParent(unsigned d, IndexType entityIndex); // returns (parentEntityIndex, parentDimension)
 
   IndexType getEntityParent(unsigned d, IndexType entityIndex, unsigned parentOrdinal=0);
+  unsigned getEntityParentCount(unsigned d, IndexType entityIndex);
   IndexType getEntityParentForSide(unsigned d, IndexType entityIndex, IndexType parentSideEntityIndex);   // returns the entity index for the parent (which might be the entity itself) of entity (d,entityIndex) that is a subcell of side parentSideEntityIndex
   vector<IndexType> getEntityVertexIndices(unsigned d, IndexType entityIndex);
   CellTopoPtr getEntityTopology(unsigned d, IndexType entityIndex);
@@ -172,6 +173,9 @@ public:
   unsigned getSubEntityPermutation(unsigned d, IndexType entityIndex, unsigned subEntityDim, unsigned subEntityOrdinal);
   bool getVertexIndex(const vector<double> &vertex, IndexType &vertexIndex, double tol=1e-14);
   const vector<double>& getVertex(IndexType vertexIndex);
+  
+  bool isBoundarySide(IndexType sideEntityIndex);
+  
   Intrepid::FieldContainer<double> physicalCellNodesForCell(unsigned cellIndex, bool includeCellDimension = false);
   void refineCell(IndexType cellIndex, RefinementPatternPtr refPattern);
   IndexType cellCount();
@@ -187,6 +191,9 @@ public:
 
   const set<IndexType> &getRootCellIndices();
 
+  // ! maxConstraint made public for the sake of MeshTopologyView; not intended for general use
+  IndexType maxConstraint(unsigned d, IndexType entityIndex1, IndexType entityIndex2);
+  
   pair<IndexType,IndexType> owningCellIndexForConstrainingEntity(unsigned d, unsigned constrainingEntityIndex);
 
   // 2D only:
