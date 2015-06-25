@@ -156,11 +156,12 @@ void CamelliaCellTools::computeSideMeasure(FieldContainer<double> &weightedMeasu
         for (int d1=0; d1<spaceDim-1; d1++)
         {
           int d2 = spaceDim - 1;
-          const double tol = 1e-14;
+          const double tol = 1e-13;
           if ((abs(cellJacobian(cellOrdinal,ptOrdinal,d1,d2)) > tol) || (abs(cellJacobian(cellOrdinal,ptOrdinal,d2,d1)) > tol))
           {
             cout << "CamelliaCellTools::computeSideMeasure requires the transformation to be orthogonal in space and time.\n";
             cout << "cellJacobian:\n" << cellJacobian;
+            cout << abs(cellJacobian(cellOrdinal,ptOrdinal,d1,d2)) << " " << abs(cellJacobian(cellOrdinal,ptOrdinal,d2,d1)) << endl;
             TEUCHOS_TEST_FOR_EXCEPTION(true, std::invalid_argument, "CamelliaCellTools::computeSideMeasure requires the transformation to be orthogonal in space and time.");
           }
           for (int d2=0; d2<spaceDim-1; d2++)
@@ -332,7 +333,7 @@ void CamelliaCellTools::getUnitSideNormals(FieldContainer<double> &unitSideNorma
           for (int d1=0; d1<spaceDim-1; d1++)
           {
             int d2 = spaceDim - 1;
-            const double tol = 1e-15;
+            const double tol = 1e-14;
             if ((abs(inCellJacobian(cellOrdinal,ptOrdinal,d1,d2)) > tol) || (abs(inCellJacobian(cellOrdinal,ptOrdinal,d2,d1)) > tol))
             {
               cout << "CamelliaCellTools::getUnitSideNormals requires the transformation to be orthogonal in space and time.\n";
