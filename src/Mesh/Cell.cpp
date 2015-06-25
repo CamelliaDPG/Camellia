@@ -34,10 +34,12 @@ vector< pair<GlobalIndexType, unsigned> > Cell::childrenForSide(unsigned sideInd
   return childIndicesForSide;
 }
 
-set<IndexType> Cell::getDescendants(bool leafNodesOnly)
+set<IndexType> Cell::getDescendants(MeshTopologyViewPtr meshTopoViewForCellValidity, bool leafNodesOnly)
 {
+  TEUCHOS_TEST_FOR_EXCEPTION(!meshTopoViewForCellValidity->isValidCellIndex(_cellIndex), std::invalid_argument, "_cellIndex is not valid");
+  
   set<IndexType> descendants;
-  if (!isParent())
+  if (!meshTopoViewForCellValidity->isParent(_cellIndex))
   {
     // no descendants save the present cell, which is a leaf node in any case
     descendants.insert(_cellIndex);
@@ -61,7 +63,8 @@ set<IndexType> Cell::getDescendants(bool leafNodesOnly)
       for (int childOrdinal=0; childOrdinal < children.size(); childOrdinal++)
       {
         CellPtr child = children[childOrdinal];
-        if (child->isParent())
+
+        if (meshTopoViewForCellValidity->isParent(child->cellIndex()))
         {
           parentCells.push_back(child);
         }
@@ -75,18 +78,20 @@ set<IndexType> Cell::getDescendants(bool leafNodesOnly)
   return descendants;
 }
 
-vector< pair< GlobalIndexType, unsigned> > Cell::getDescendantsForSide(int sideIndex, bool leafNodesOnly)
+vector< pair< GlobalIndexType, unsigned> > Cell::getDescendantsForSide(int sideIndex, MeshTopologyViewPtr meshTopoViewForCellValidity, bool leafNodesOnly)
 {
   // if leafNodesOnly == true,  returns a flat list of leaf nodes (descendants that are not themselves parents)
   // if leafNodesOnly == false, returns a list in descending order: immediate children, then their children, and so on.
 
   // guarantee is that if a child and its parent are both in the list, the parent will come first
 
+  TEUCHOS_TEST_FOR_EXCEPTION(!meshTopoViewForCellValidity->isValidCellIndex(_cellIndex), std::invalid_argument, "_cellIndex is not valid");
+  
   // pair (descendantCellIndex, descendantSideIndex)
   vector< pair< GlobalIndexType, unsigned> > descendantsForSide;
-  if ( ! isParent() )
+  if ( ! meshTopoViewForCellValidity->isParent(_cellIndex) )
   {
-    descendantsForSide.push_back( make_pair( _cellIndex, sideIndex) );
+    descendantsForSide.push_back( {_cellIndex, sideIndex} );
     return descendantsForSide;
   }
 
@@ -95,16 +100,17 @@ vector< pair< GlobalIndexType, unsigned> > Cell::getDescendantsForSide(int sideI
 
   for (entryIt=childIndices.begin(); entryIt != childIndices.end(); entryIt++)
   {
-    unsigned childIndex = (*entryIt).first;
-    unsigned childSideIndex = (*entryIt).second;
-    if ( (! _children[childIndex]->isParent()) || (! leafNodesOnly ) )
+    unsigned childOrdinal = (*entryIt).first;
+    unsigned childSideOrdinal = (*entryIt).second;
+    IndexType childCellIndex = _children[childOrdinal]->cellIndex();
+    if ( ( !meshTopoViewForCellValidity->isParent(childCellIndex)) || (! leafNodesOnly ) )
     {
       // (            leaf node              ) || ...
-      descendantsForSide.push_back( make_pair( _children[childIndex]->cellIndex(), childSideIndex) );
+      descendantsForSide.push_back( {_children[childOrdinal]->cellIndex(), childSideOrdinal} );
     }
-    if ( _children[childIndex]->isParent() )
+    if ( _children[childOrdinal]->isParent() )
     {
-      vector< pair<GlobalIndexType,unsigned> > childDescendants = _children[childIndex]->getDescendantsForSide(childSideIndex,leafNodesOnly);
+      vector< pair<GlobalIndexType,unsigned> > childDescendants = _children[childOrdinal]->getDescendantsForSide(childSideOrdinal,meshTopoViewForCellValidity,leafNodesOnly);
 //      descendantsForSide.insert(descendantsForSide.end(), childDescendants.begin(), childDescendants.end());
       vector< pair<GlobalIndexType,unsigned> >::iterator childEntryIt;
       for (childEntryIt=childDescendants.begin(); childEntryIt != childDescendants.end(); childEntryIt++)
@@ -125,7 +131,7 @@ Cell::Cell(CellTopoPtr cellTopo, const vector<unsigned> &vertices, const vector<
   _cellIndex = cellIndex;
   _meshTopo = meshTopo;
   int sideCount = cellTopo->getSideCount();
-  _neighbors = vector< pair<GlobalIndexType, unsigned> >(sideCount,make_pair(-1,-1));
+  _neighbors = vector< pair<GlobalIndexType, unsigned> >(sideCount,{-1,-1});
 }
 
 map<string, long long> Cell::approximateMemoryCosts()
@@ -313,16 +319,6 @@ unsigned Cell::findSubcellOrdinalInSide(unsigned int subcdim, IndexType subcEnti
   int sideDim = _cellTopo->getDimension() - 1;
   if (subcOrdinalInCell == -1) return -1;
   return CamelliaCellTools::subcellReverseOrdinalMap(topology(), sideDim, sideOrdinal, subcdim, subcOrdinalInCell);
-
-  /*
-    IndexType sideEntityIndex = entityIndex(sideDim, sideOrdinal);
-    int scCount = _meshTopo->getSubEntityCount(sideDim, sideEntityIndex, subcdim);
-    for (unsigned scordInSide=0; scordInSide < scCount; scordInSide++) {
-      if (subcEntityIndex == _meshTopo->getSubEntityIndex(sideDim, sideEntityIndex, subcdim, scordInSide)) {
-        return scordInSide;
-      }
-    }
-    return -1; // NOT FOUND*/
 }
 
 Teuchos::RCP<Cell> Cell::getParent()
@@ -340,12 +336,12 @@ bool Cell::isParent()
   return _children.size() > 0;
 }
 
-RefinementBranch Cell::refinementBranchForSide(unsigned sideOrdinal)
+RefinementBranch Cell::refinementBranchForSide(unsigned sideOrdinal, MeshTopologyViewPtr meshTopoViewForCellValidity)
 {
   // if this cell (on this side) is the finer side of a hanging node, returns the RefinementBranch starting
   // with the coarse neighbor's neighbor (this cell's ancestor).  (Otherwise, the RefinementBranch will be empty.)
   RefinementBranch refBranch;
-  pair<GlobalIndexType, unsigned> neighborInfo = this->getNeighborInfo(sideOrdinal);
+  pair<GlobalIndexType, unsigned> neighborInfo = this->getNeighborInfo(sideOrdinal, meshTopoViewForCellValidity);
   GlobalIndexType neighborCellIndex = neighborInfo.first;
   unsigned sideIndexInNeighbor = neighborInfo.second;
   if (neighborCellIndex == -1)
@@ -353,13 +349,13 @@ RefinementBranch Cell::refinementBranchForSide(unsigned sideOrdinal)
     return refBranch; // no refinements
   }
   CellPtr neighbor = _meshTopo->getCell(neighborCellIndex);
-  if (neighbor->getNeighborInfo(sideIndexInNeighbor).first == this->_cellIndex)   // peers!
+  if (neighbor->getNeighborInfo(sideIndexInNeighbor, meshTopoViewForCellValidity).first == this->_cellIndex)   // peers!
   {
     return refBranch; // no refinements
   }
   else
   {
-    GlobalIndexType ancestorCellIndex = neighbor->getNeighborInfo(sideIndexInNeighbor).first;
+    GlobalIndexType ancestorCellIndex = neighbor->getNeighborInfo(sideIndexInNeighbor, meshTopoViewForCellValidity).first;
     vector< CellPtr > ancestors;
     vector< unsigned > childOrdinals;
     CellPtr currentAncestor = _meshTopo->getCell(_cellIndex);
@@ -393,13 +389,13 @@ RefinementBranch Cell::refinementBranchForSide(unsigned sideOrdinal)
   return refBranch;
 }
 
-RefinementBranch Cell::refinementBranchForSubcell(unsigned subcdim, unsigned subcord)
+RefinementBranch Cell::refinementBranchForSubcell(unsigned subcdim, unsigned subcord, MeshTopologyViewPtr meshTopoViewForCellValidity)
 {
   // if the given subcell is constrained by another cell, this method will return a RefinementBranch which has as its root
   // this cell's ancestor that is compatible with the constraining cell, and as its leaf this cell.
   IndexType subcellEntityIndex = entityIndex(subcdim, subcord);
 
-  pair<IndexType, unsigned> constrainingEntity = _meshTopo->getConstrainingEntity(subcdim, subcellEntityIndex);
+  pair<IndexType, unsigned> constrainingEntity = meshTopoViewForCellValidity->getConstrainingEntity(subcdim, subcellEntityIndex);
 //  IndexType constrainingEntityIndex = _meshTopo->getConstrainingEntityIndex(subcdim, subcellEntityIndex);
   IndexType constrainingEntityIndex = constrainingEntity.first;
   unsigned constrainingEntityDim = constrainingEntity.second;
@@ -472,25 +468,25 @@ RefinementBranch Cell::refinementBranchForSubcell(unsigned subcdim, unsigned sub
   return refBranch;
 }
 
-pair<unsigned, unsigned> Cell::ancestralSubcellOrdinalAndDimension(unsigned subcdim, unsigned subcord)
+pair<unsigned, unsigned> Cell::ancestralSubcellOrdinalAndDimension(unsigned subcdim, unsigned subcord, MeshTopologyViewPtr meshTopoViewForCellValidity)
 {
   IndexType subcellEntityIndex = entityIndex(subcdim, subcord);
-  pair<IndexType,unsigned> constrainingEntity = _meshTopo->getConstrainingEntity(subcdim, subcellEntityIndex);
+  pair<IndexType,unsigned> constrainingEntity = meshTopoViewForCellValidity->getConstrainingEntity(subcdim, subcellEntityIndex);
 
-  CellPtr ancestralCell = this->ancestralCellForSubcell(subcdim, subcord);
+  CellPtr ancestralCell = this->ancestralCellForSubcell(subcdim, subcord, meshTopoViewForCellValidity);
 
   unsigned constrainingSubcellOrdinal = ancestralCell->findSubcellOrdinal(constrainingEntity.second, constrainingEntity.first);
   return make_pair(constrainingSubcellOrdinal, constrainingEntity.second);
 }
 
-unsigned Cell::ancestralPermutationForSubcell(unsigned subcdim, unsigned subcord)
+unsigned Cell::ancestralPermutationForSubcell(unsigned subcdim, unsigned subcord, MeshTopologyViewPtr meshTopoViewForCellValidity)
 {
   // if the given subcell is constrained by another cell, this method will return the subcell permutation of
   // this cell's nearest ancestor that is compatible with the constraining cell.
   IndexType subcellEntityIndex = entityIndex(subcdim, subcord);
-  pair<IndexType,unsigned> constrainingEntity = _meshTopo->getConstrainingEntity(subcdim, subcellEntityIndex);
+  pair<IndexType,unsigned> constrainingEntity = meshTopoViewForCellValidity->getConstrainingEntity(subcdim, subcellEntityIndex);
 
-  CellPtr ancestralCell = this->ancestralCellForSubcell(subcdim, subcord);
+  CellPtr ancestralCell = this->ancestralCellForSubcell(subcdim, subcord, meshTopoViewForCellValidity);
 
   unsigned constrainingSubcellOrdinal = ancestralCell->findSubcellOrdinal(constrainingEntity.second, constrainingEntity.first);
 
@@ -503,10 +499,10 @@ unsigned Cell::ancestralPermutationForSubcell(unsigned subcdim, unsigned subcord
   return ancestralCell->subcellPermutation(constrainingEntity.second, constrainingSubcellOrdinal);
 }
 
-CellPtr Cell::ancestralCellForSubcell(unsigned subcdim, unsigned subcord)
+CellPtr Cell::ancestralCellForSubcell(unsigned subcdim, unsigned subcord, MeshTopologyViewPtr meshTopoViewForCellValidity)
 {
   // if the given subcell is constrained by another cell, this method will return this cell's nearest ancestor that is compatible with the constraining cell.
-  RefinementBranch refBranch = refinementBranchForSubcell(subcdim, subcord);
+  RefinementBranch refBranch = refinementBranchForSubcell(subcdim, subcord, meshTopoViewForCellValidity);
 
   CellPtr currentAncestor = _meshTopo->getCell(_cellIndex);
 
@@ -544,11 +540,11 @@ int Cell::numChildren()
   return _children.size();
 }
 
-bool Cell::ownsSide(unsigned int sideOrdinal)
+bool Cell::ownsSide(unsigned int sideOrdinal, MeshTopologyViewPtr meshTopoViewForCellValidity)
 {
   bool ownsSide;
 
-  pair<GlobalIndexType,unsigned> neighborInfo = getNeighborInfo(sideOrdinal);
+  pair<GlobalIndexType,unsigned> neighborInfo = getNeighborInfo(sideOrdinal, meshTopoViewForCellValidity);
   GlobalIndexType neighborCellID = neighborInfo.first;
   unsigned neighborSideOrdinal = neighborInfo.second;
   if (neighborCellID == -1)   // boundary side
@@ -558,7 +554,7 @@ bool Cell::ownsSide(unsigned int sideOrdinal)
   else
   {
     CellPtr neighborCell = _meshTopo->getCell(neighborCellID);
-    bool isPeer = neighborCell->getNeighborInfo(neighborSideOrdinal).first == _cellIndex;
+    bool isPeer = neighborCell->getNeighborInfo(neighborSideOrdinal, meshTopoViewForCellValidity).first == _cellIndex;
 
     if (isPeer && !neighborCell->isParent())   // then the lower cellID owns
     {
@@ -578,7 +574,7 @@ bool Cell::ownsSide(unsigned int sideOrdinal)
     {
       // neighbor is parent, and we are a descendant of neighbor's neighbor (i.e. there is an anisotropic refinement)
       // in this case, we decide based on which of the ancestral cell IDs is lower
-      GlobalIndexType ancestralCellID = neighborCell->getNeighborInfo(neighborSideOrdinal).first;
+      GlobalIndexType ancestralCellID = neighborCell->getNeighborInfo(neighborSideOrdinal, meshTopoViewForCellValidity).first;
       ownsSide = (ancestralCellID < neighborCellID);
     }
   }
@@ -640,14 +636,14 @@ CellTopoPtr Cell::topology()
   return _cellTopo;
 }
 
-CellPtr Cell::getNeighbor(unsigned sideOrdinal)
+CellPtr Cell::getNeighbor(unsigned sideOrdinal, MeshTopologyViewPtr meshTopoViewForCellValidity)
 {
-  GlobalIndexType neighborCellIndex = this->getNeighborInfo(sideOrdinal).first;
+  GlobalIndexType neighborCellIndex = this->getNeighborInfo(sideOrdinal, meshTopoViewForCellValidity).first;
   if (neighborCellIndex == -1) return Teuchos::null;
   else return _meshTopo->getCell(neighborCellIndex);
 }
 
-pair<GlobalIndexType, unsigned> Cell::getNeighborInfo(unsigned sideOrdinal)
+pair<GlobalIndexType, unsigned> Cell::getNeighborInfo(unsigned sideOrdinal, MeshTopologyViewPtr meshTopoViewForCellValidity)
 {
   int sideCount = _cellTopo->getSideCount();
   if (sideOrdinal >= sideCount)
@@ -655,15 +651,18 @@ pair<GlobalIndexType, unsigned> Cell::getNeighborInfo(unsigned sideOrdinal)
     cout << "sideOrdinal " << sideOrdinal << " >= sideCount " << sideCount << endl;
     TEUCHOS_TEST_FOR_EXCEPTION(true, std::invalid_argument, "sideOrdinal must be less than sideCount!");
   }
-  return _neighbors[sideOrdinal];
+  if (meshTopoViewForCellValidity->isValidCellIndex(_neighbors[sideOrdinal].first))
+    return _neighbors[sideOrdinal];
+  else
+    return {-1,-1};
 }
 
-vector<CellPtr> Cell::getNeighbors()
+vector<CellPtr> Cell::getNeighbors(MeshTopologyViewPtr meshTopoViewForCellValidity)
 {
   vector<CellPtr> neighbors;
   for (int sideOrdinal=0; sideOrdinal<getSideCount(); sideOrdinal++)
   {
-    CellPtr neighbor = getNeighbor(sideOrdinal);
+    CellPtr neighbor = getNeighbor(sideOrdinal, meshTopoViewForCellValidity);
     if (! Teuchos::is_null(neighbor))
     {
       neighbors.push_back(neighbor);

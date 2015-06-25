@@ -576,16 +576,6 @@ void GDAMinimumRuleTests::runTests(int &numTestsRun, int &numTestsPassed)
   bool useQuads = true;
 
   setup();
-  if (test1IrregularityEnforcement())
-  {
-    numTestsPassed++;
-  }
-  numTestsRun++;
-  teardown();
-
-//  cout << "test1IrregularityEnforcement() complete.\n";
-
-  setup();
   if (testHangingNodePoisson(useQuads))
   {
     numTestsPassed++;
@@ -941,34 +931,6 @@ bool GDAMinimumRuleTests::checkLocalGlobalConsistency(MeshPtr mesh)
   return success;
 }
 
-bool GDAMinimumRuleTests::test1IrregularityEnforcement()
-{
-  bool success = true;
-  // very simple test: take a 2-irregular mesh, count # elements, enforce 1-irregularity.  Just check that there are more elements after enforcement.
-
-  // important thing here is the irregularity is 2:
-  int irregularity = 2;
-  FunctionPtr phi_exact = Function::zero();
-  int H1Order = 2;
-
-  SolutionPtr soln = poissonExactSolution3DHangingNodes(irregularity,phi_exact,H1Order);
-  MeshPtr mesh = soln->mesh();
-
-  GlobalIndexType activeElementCount_initial = mesh->numActiveElements();
-
-  mesh->enforceOneIrregularity();
-
-  GlobalIndexType activeElementCount_final = mesh->numActiveElements();
-
-  if (activeElementCount_final <= activeElementCount_initial)
-  {
-    int rank = Teuchos::GlobalMPISession::getRank();
-    if (rank==0) cout << "Failure in test1IrregularityEnforcement: # of elements did not increase during 1-irregularity enforcement of 3D mesh, even though the mesh is 2-irregular.\n";
-    success = false;
-  }
-  return success;
-}
-
 bool GDAMinimumRuleTests::testGlobalToLocalToGlobalConsistency()
 {
 
@@ -1121,12 +1083,12 @@ SolutionPtr GDAMinimumRuleTests::poissonExactSolution3DHangingNodes(int irregula
       unsigned childOrdinal = childrenForSide[i].first;
       CellPtr child = children[childOrdinal];
       unsigned childSideOrdinal = childrenForSide[i].second;
-      pair<GlobalIndexType,unsigned> neighborInfo = child->getNeighborInfo(childSideOrdinal);
+      pair<GlobalIndexType,unsigned> neighborInfo = child->getNeighborInfo(childSideOrdinal, mesh->getTopology());
       GlobalIndexType neighborCellID = neighborInfo.first;
       if (neighborCellID != -1)   // not boundary
       {
         CellPtr neighbor = mesh->getTopology()->getCell(neighborCellID);
-        pair<GlobalIndexType,unsigned> neighborNeighborInfo = neighbor->getNeighborInfo(neighborInfo.second);
+        pair<GlobalIndexType,unsigned> neighborNeighborInfo = neighbor->getNeighborInfo(neighborInfo.second, mesh->getTopology());
         bool neighborIsPeer = neighborNeighborInfo.first == child->cellIndex();
         if (!neighborIsPeer)   // then by refining this cell, we induce a 2-irregular mesh
         {

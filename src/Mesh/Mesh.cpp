@@ -312,7 +312,7 @@ vector< ElementPtr > Mesh::activeElements()
 ElementPtr Mesh::ancestralNeighborForSide(ElementPtr elem, int sideIndex, int &elemSideIndexInNeighbor)
 {
   CellPtr cell = _meshTopology->getCell(elem->cellID());
-  pair<GlobalIndexType, unsigned> neighborInfo = cell->getNeighborInfo(sideIndex);
+  pair<GlobalIndexType, unsigned> neighborInfo = cell->getNeighborInfo(sideIndex, _meshTopology);
   elemSideIndexInNeighbor = neighborInfo.second;
 
   if (neighborInfo.first == -1) return Teuchos::rcp( (Element*) NULL );
@@ -444,22 +444,20 @@ void Mesh::enforceOneIrregularity()
     set< GlobalIndexType > activeCellIDs = _meshTopology->getActiveCellIndices();
     set< GlobalIndexType >::iterator cellIDIt;
 
-    for (cellIDIt = activeCellIDs.begin(); cellIDIt != activeCellIDs.end(); cellIDIt++)
+    for (GlobalIndexType cellID : activeCellIDs)
     {
-      GlobalIndexType cellID = *cellIDIt;
-
       CellPtr cell = _meshTopology->getCell(cellID);
       bool isIrregular = false;
       int sideCount = cell->getSideCount();
       for (int sideOrdinal=0; sideOrdinal < sideCount; sideOrdinal++)
       {
-        pair<GlobalIndexType, unsigned> neighborInfo = cell->getNeighborInfo(sideOrdinal);
+        pair<GlobalIndexType, unsigned> neighborInfo = cell->getNeighborInfo(sideOrdinal, _meshTopology);
         unsigned mySideIndexInNeighbor = neighborInfo.second;
 
         if (neighborInfo.first != -1)
         {
           CellPtr neighbor = _meshTopology->getCell(neighborInfo.first);
-          int numNeighborsOnSide = neighbor->getDescendantsForSide(mySideIndexInNeighbor).size();
+          int numNeighborsOnSide = neighbor->getDescendantsForSide(mySideIndexInNeighbor, _meshTopology).size();
           if (spaceDim==2)
           {
             if (numNeighborsOnSide > 2) isIrregular=true;

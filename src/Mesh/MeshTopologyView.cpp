@@ -37,7 +37,8 @@ MeshTopologyView::MeshTopologyView()
 MeshTopologyView::MeshTopologyView(MeshTopologyPtr meshTopoPtr, const std::set<IndexType> &activeCellIDs)
 {
   _meshTopo = meshTopoPtr;
-  _activeCellIDs = activeCellIDs;
+  _activeCells = activeCellIDs;
+  buildLookups();
 }
 
 // ! This method only gets within a factor of 2 or so, but can give a rough estimate
@@ -45,15 +46,16 @@ long long MeshTopologyView::approximateMemoryFootprint()
 {
   // size of pointers plus size of sets:
   long long footprint = sizeof(_meshTopo);
-  footprint += approximateSetSizeLLVM(_activeCellIDs);
-  footprint += approximateSetSizeLLVM(_rootCellIndices);
+  footprint += approximateSetSizeLLVM(_activeCells);
+  footprint += approximateSetSizeLLVM(_rootCells);
+  footprint += approximateSetSizeLLVM(_allKnownCells);
   footprint += sizeof(_gda);
   return  footprint;
 }
 
 IndexType MeshTopologyView::cellCount()
 {
-  return _activeCellIDs.size();
+  return _activeCells.size();
 }
 
 std::vector<IndexType> MeshTopologyView::cellIDsForPoints(const Intrepid::FieldContainer<double> &physicalPoints)
@@ -62,7 +64,7 @@ std::vector<IndexType> MeshTopologyView::cellIDsForPoints(const Intrepid::FieldC
   vector<IndexType> myIDs;
   for (IndexType descendentCellID : descendentIDs)
   {
-    while ((descendentCellID != -1) && (_activeCellIDs.find(descendentCellID) == _activeCellIDs.end()))
+    while ((descendentCellID != -1) && (_activeCells.find(descendentCellID) == _activeCells.end()))
     {
       CellPtr descendentCell = _meshTopo->getCell(descendentCellID);
       CellPtr parentCell = descendentCell->getParent();
@@ -74,6 +76,27 @@ std::vector<IndexType> MeshTopologyView::cellIDsForPoints(const Intrepid::FieldC
     myIDs.push_back(descendentCellID);
   }
   return myIDs;
+}
+
+void MeshTopologyView::buildLookups()
+{
+  set<IndexType> visitedIndices;
+  for (IndexType cellID : _activeCells)
+  {
+    CellPtr cell = _meshTopo->getCell(cellID);
+    while ((cell->getParent() != Teuchos::null) && (visitedIndices.find(cellID) != visitedIndices.end()))
+    {
+      visitedIndices.insert(cellID);
+      cell = cell->getParent();
+      cellID = cell->cellIndex();
+    }
+    if (cell->getParent() == Teuchos::null)
+    {
+      _rootCells.insert(cellID);
+    }
+  }
+  _allKnownCells.insert(_rootCells.begin(),_rootCells.end());
+  _allKnownCells.insert(visitedIndices.begin(),visitedIndices.end());
 }
 
 // ! creates a copy of this, deep-copying each Cell and all lookup tables (but does not deep copy any other objects, e.g. PeriodicBCPtrs).  Not supported for MeshTopologyViews with _meshTopo defined (i.e. those that are themselves defined in terms of another MeshTopology object).
@@ -89,7 +112,7 @@ bool MeshTopologyView::entityIsAncestor(unsigned d, IndexType ancestor, IndexTyp
 
 const set<IndexType> &MeshTopologyView::getActiveCellIndices()
 {
-  return _activeCellIDs;
+  return _activeCells;
 }
 
 vector< pair<IndexType,unsigned> > MeshTopologyView::getActiveCellIndices(unsigned d, IndexType entityIndex)
@@ -117,7 +140,7 @@ vector<IndexType> MeshTopologyView::getActiveCellsForSide(IndexType sideEntityIn
 {
   vector<IndexType> activeCells;
   IndexType cellIndex = _meshTopo->getFirstCellForSide(sideEntityIndex).first;
-  if ((cellIndex != -1) && (_activeCellIDs.find(cellIndex) != _activeCellIDs.end())) activeCells.push_back(cellIndex);
+  if ((cellIndex != -1) && (_activeCells.find(cellIndex) != _activeCells.end())) activeCells.push_back(cellIndex);
   cellIndex = _meshTopo->getSecondCellForSide(sideEntityIndex).first;
   if (cellIndex != -1) activeCells.push_back(cellIndex);
   return activeCells;
@@ -125,11 +148,13 @@ vector<IndexType> MeshTopologyView::getActiveCellsForSide(IndexType sideEntityIn
 
 CellPtr MeshTopologyView::getCell(IndexType cellIndex)
 {
+  TEUCHOS_TEST_FOR_EXCEPTION(!isValidCellIndex(cellIndex), std::invalid_argument, "Invalid cellIndex!");
   return _meshTopo->getCell(cellIndex);
 }
 
 vector<double> MeshTopologyView::getCellCentroid(IndexType cellIndex)
 {
+  TEUCHOS_TEST_FOR_EXCEPTION(!isValidCellIndex(cellIndex), std::invalid_argument, "Invalid cellIndex!");
   return _meshTopo->getCellCentroid(cellIndex);
 }
 
@@ -338,35 +363,13 @@ std::vector<IndexType> MeshTopologyView::getEntityVertexIndices(unsigned d, Inde
   return _meshTopo->getEntityVertexIndices(d,entityIndex);
 }
 
-IndexType MeshTopologyView::getMaximumCellIndex()
-{
-  if (_activeCellIDs.size() == 0) return 0;
-  std::set<IndexType>::iterator it = _activeCellIDs.end();
-  --it;
-  return *it;
-}
-
 const set<IndexType> & MeshTopologyView::getRootCellIndices()
 {
-  if (_rootCellIndices.size() == 0)
+  if (_rootCells.size() == 0)
   {
-    set<IndexType> visitedIndices;
-    for (IndexType cellID : _activeCellIDs)
-    {
-      CellPtr cell = _meshTopo->getCell(cellID);
-      while ((cell->getParent() != Teuchos::null) && (visitedIndices.find(cellID) != visitedIndices.end()))
-      {
-        visitedIndices.insert(cellID);
-        cell = cell->getParent();
-        cellID = cell->cellIndex();
-      }
-      if (cell->getParent() == Teuchos::null)
-      {
-        _rootCellIndices.insert(cellID);
-      }
-    }
+    buildLookups(); // but for the present, we do this on construction anyway
   }
-  return _rootCellIndices;
+  return _rootCells;
 }
 
 std::vector< IndexType > MeshTopologyView::getSidesContainingEntity(unsigned d, IndexType entityIndex)
@@ -384,6 +387,17 @@ const std::vector<double>& MeshTopologyView::getVertex(IndexType vertexIndex)
 bool MeshTopologyView::getVertexIndex(const vector<double> &vertex, IndexType &vertexIndex, double tol)
 {
   return _meshTopo->getVertexIndex(vertex, vertexIndex, tol);
+}
+
+bool MeshTopologyView::isParent(IndexType cellIndex)
+{
+  TEUCHOS_TEST_FOR_EXCEPTION(!isValidCellIndex(cellIndex), std::invalid_argument, "cellIndex is invalid!");
+  return _activeCells.find(cellIndex) == _activeCells.end();
+}
+
+bool MeshTopologyView::isValidCellIndex(IndexType cellIndex)
+{
+  return _allKnownCells.find(cellIndex) != _allKnownCells.end();
 }
 
 Intrepid::FieldContainer<double> MeshTopologyView::physicalCellNodesForCell(unsigned cellIndex, bool includeCellDimension)

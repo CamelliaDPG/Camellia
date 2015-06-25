@@ -498,7 +498,7 @@ bool MeshTestUtility::determineRefTestPointsForNeighbors(MeshTopologyViewPtr mes
     CamelliaCellTools::refCellNodesForTopology(lineRefNodes, line);
 
     fineCellRefPoints[0] = lineRefNodes[sideOrdinal];
-    unsigned neighborSideOrdinal = fineCell->getNeighborInfo(sideOrdinal).second;
+    unsigned neighborSideOrdinal = fineCell->getNeighborInfo(sideOrdinal, meshTopo).second;
     if (neighborSideOrdinal != -1)
     {
       coarseCellRefPoints[0] = lineRefNodes[neighborSideOrdinal];
@@ -509,7 +509,7 @@ bool MeshTestUtility::determineRefTestPointsForNeighbors(MeshTopologyViewPtr mes
       return false;
     }
   }
-  pair<GlobalIndexType, unsigned> neighborInfo = fineCell->getNeighborInfo(sideOrdinal);
+  pair<GlobalIndexType, unsigned> neighborInfo = fineCell->getNeighborInfo(sideOrdinal, meshTopo);
   if (neighborInfo.first == -1)
   {
     // boundary
@@ -565,14 +565,14 @@ bool MeshTestUtility::determineRefTestPointsForNeighbors(MeshTopologyViewPtr mes
 
   CellTopoPtr coarseSideTopo = neighborCell->topology()->getSubcell(sideDim, neighborInfo.second);
 
-  unsigned fineSideAncestorPermutation = fineCell->ancestralPermutationForSubcell(sideDim, sideOrdinal);
+  unsigned fineSideAncestorPermutation = fineCell->ancestralPermutationForSubcell(sideDim, sideOrdinal, meshTopo);
   unsigned coarseSidePermutation = neighborCell->subcellPermutation(sideDim, neighborInfo.second);
 
   unsigned coarseSideAncestorPermutationInverse = CamelliaCellTools::permutationInverse(coarseSideTopo, coarseSidePermutation);
 
   unsigned composedPermutation = CamelliaCellTools::permutationComposition(coarseSideTopo, coarseSideAncestorPermutationInverse, fineSideAncestorPermutation); // goes from coarse ordering to fine.
 
-  RefinementBranch fineRefBranch = fineCell->refinementBranchForSide(sideOrdinal);
+  RefinementBranch fineRefBranch = fineCell->refinementBranchForSide(sideOrdinal, meshTopo);
 
   FieldContainer<double> fineSideNodes(fineSideTopo->getNodeCount(), sideDim);  // relative to the ancestral cell whose neighbor is compatible
   if (fineRefBranch.size() == 0)
@@ -663,7 +663,7 @@ bool MeshTestUtility::neighborBasesAgreeOnSides(Teuchos::RCP<Mesh> mesh, Epetra_
       bool hasCoarserNeighbor = determineRefTestPointsForNeighbors(meshTopo, cell, sideOrdinal, fineSideRefPoints, fineCellRefPoints, coarseSideRefPoints, coarseCellRefPoints);
       if (!hasCoarserNeighbor) continue;
 
-      pair<GlobalIndexType, unsigned> neighborInfo = cell->getNeighborInfo(sideOrdinal);
+      pair<GlobalIndexType, unsigned> neighborInfo = cell->getNeighborInfo(sideOrdinal, meshTopo);
 
       CellPtr neighborCell = meshTopo->getCell(neighborInfo.first);
 

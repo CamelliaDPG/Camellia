@@ -76,7 +76,7 @@ void GDAMinimumRule::didHRefine(const set<GlobalIndexType> &parentCellIDs)
       unsigned childSideCount = childCell->getSideCount();
       for (int childSideOrdinal=0; childSideOrdinal<childSideCount; childSideOrdinal++)
       {
-        GlobalIndexType neighborCellID = childCell->getNeighborInfo(childSideOrdinal).first;
+        GlobalIndexType neighborCellID = childCell->getNeighborInfo(childSideOrdinal, _meshTopology).first;
         if (neighborCellID != -1)
         {
           neighborsOfNewElements.insert(neighborCellID);
@@ -1162,9 +1162,9 @@ BasisMap GDAMinimumRule::getBasisMapExperimentalConstraintTree(GlobalIndexType c
           
           SubBasisReconciliationWeights composedWeights;
           
-          CellPtr ancestralCell = nodeCell->ancestralCellForSubcell(subcellDim, subcellOrdinalInCell);
+          CellPtr ancestralCell = nodeCell->ancestralCellForSubcell(subcellDim, subcellOrdinalInCell, _meshTopology);
           
-          RefinementBranch volumeRefinements = nodeCell->refinementBranchForSubcell(subcellDim, subcellOrdinalInCell);
+          RefinementBranch volumeRefinements = nodeCell->refinementBranchForSubcell(subcellDim, subcellOrdinalInCell, _meshTopology);
           if (volumeRefinements.size()==0)
           {
             // could be, we'd do better to revise Cell::refinementBranchForSubcell() to ensure that we always have a refinement, but for now
@@ -1173,7 +1173,7 @@ BasisMap GDAMinimumRule::getBasisMapExperimentalConstraintTree(GlobalIndexType c
             volumeRefinements = {{noRefinementPattern.get(),0}};
           }
           
-          pair<unsigned, unsigned> ancestralSubcell = nodeCell->ancestralSubcellOrdinalAndDimension(subcellDim, subcellOrdinalInCell);
+          pair<unsigned, unsigned> ancestralSubcell = nodeCell->ancestralSubcellOrdinalAndDimension(subcellDim, subcellOrdinalInCell, _meshTopology);
           
           unsigned ancestralSubcellOrdinal = ancestralSubcell.first;
           unsigned ancestralSubcellDimension = ancestralSubcell.second;
@@ -1803,9 +1803,9 @@ BasisMap GDAMinimumRule::getBasisMapOld(GlobalIndexType cellID, SubCellDofIndexI
 
         SubBasisReconciliationWeights composedWeights;
 
-        CellPtr ancestralCell = appliedConstraintCell->ancestralCellForSubcell(d, subcordInAppliedConstraintCell);
+        CellPtr ancestralCell = appliedConstraintCell->ancestralCellForSubcell(d, subcordInAppliedConstraintCell, _meshTopology);
 
-        RefinementBranch volumeRefinements = appliedConstraintCell->refinementBranchForSubcell(d, subcordInAppliedConstraintCell);
+        RefinementBranch volumeRefinements = appliedConstraintCell->refinementBranchForSubcell(d, subcordInAppliedConstraintCell, _meshTopology);
         if (volumeRefinements.size()==0)
         {
           // could be, we'd do better to revise Cell::refinementBranchForSubcell() to ensure that we always have a refinement, but for now
@@ -1814,7 +1814,7 @@ BasisMap GDAMinimumRule::getBasisMapOld(GlobalIndexType cellID, SubCellDofIndexI
           volumeRefinements = {{noRefinementPattern.get(),0}};
         }
 
-        pair<unsigned, unsigned> ancestralSubcell = appliedConstraintCell->ancestralSubcellOrdinalAndDimension(d, subcordInAppliedConstraintCell);
+        pair<unsigned, unsigned> ancestralSubcell = appliedConstraintCell->ancestralSubcellOrdinalAndDimension(d, subcordInAppliedConstraintCell, _meshTopology);
 
         unsigned ancestralSubcellOrdinal = ancestralSubcell.first;
         unsigned ancestralSubcellDimension = ancestralSubcell.second;
@@ -2564,9 +2564,9 @@ CellConstraints GDAMinimumRule::getCellConstraints(GlobalIndexType cellID)
 unsigned GDAMinimumRule::getConstraintPermutation(GlobalIndexType cellID, unsigned subcdim, unsigned subcord)
 {
   CellPtr cell = _meshTopology->getCell(cellID);
-  CellPtr ancestralCell = cell->ancestralCellForSubcell(subcdim, subcord);
+  CellPtr ancestralCell = cell->ancestralCellForSubcell(subcdim, subcord, _meshTopology);
 
-  pair<unsigned, unsigned> ancestralSubcell = cell->ancestralSubcellOrdinalAndDimension(subcdim, subcord);
+  pair<unsigned, unsigned> ancestralSubcell = cell->ancestralSubcellOrdinalAndDimension(subcdim, subcord, _meshTopology);
 
   unsigned ancestralSubcellOrdinal = ancestralSubcell.first;
   unsigned ancestralSubcellDimension = ancestralSubcell.second;
@@ -2873,7 +2873,7 @@ set<GlobalIndexType> GDAMinimumRule::getGlobalDofIndicesForIntegralContribution(
   set<GlobalIndexType> indices;
 
   CellPtr cell = _meshTopology->getCell(cellID);
-  bool ownsSide = cell->ownsSide(sideOrdinal);
+  bool ownsSide = cell->ownsSide(sideOrdinal, _meshTopology);
 
   if (ownsSide)
   {

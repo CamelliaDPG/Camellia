@@ -745,9 +745,9 @@ MeshGeometryPtr MeshFactory::shiftedSquareCylinderGeometry(double xLeft, double 
   vector< vector<unsigned> > elementVertices;
   vector< CellTopoPtr > cellTopos;
   CellTopoPtr quad_4 = Camellia::CellTopology::quad();
-  for (int j=0; j < 3; j++)
+  for (unsigned j=0; j < 3; j++)
   {
-    for (int i=0; i < 3; i++)
+    for (unsigned i=0; i < 3; i++)
     {
       vector<unsigned> elVertex;
       elVertex.push_back(4*j+i);

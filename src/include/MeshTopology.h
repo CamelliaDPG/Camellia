@@ -56,8 +56,6 @@ class MeshTopology : public MeshTopologyView
   vector< vector< Camellia::CellTopologyKey > > _entityCellTopologyKeys;
 
   vector< CellPtr > _cells;
-  set< IndexType > _activeCells;
-  set< IndexType > _rootCells; // cells without parents
 
   // these guys presently only support 2D:
   set< IndexType > _cellIDsWithCurves;
@@ -176,6 +174,7 @@ public:
   const vector<double>& getVertex(IndexType vertexIndex);
   
   bool isBoundarySide(IndexType sideEntityIndex);
+  bool isValidCellIndex(IndexType cellIndex);
   
   Intrepid::FieldContainer<double> physicalCellNodesForCell(unsigned cellIndex, bool includeCellDimension = false);
   void refineCell(IndexType cellIndex, RefinementPatternPtr refPattern);
@@ -189,8 +188,6 @@ public:
   const set<IndexType> &getActiveCellIndices();
   set< pair<IndexType, unsigned> > getActiveBoundaryCells(); // (cellIndex, sideOrdinal)
   vector<double> getCellCentroid(IndexType cellIndex);
-
-  virtual IndexType getMaximumCellIndex();
   
   const set<IndexType> &getRootCellIndices();
 

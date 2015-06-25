@@ -59,7 +59,7 @@ public:
   bool testMultiCellMesh();
   bool testSingleCellMesh();
 
-  bool test1IrregularityEnforcement();
+//  bool test1IrregularityEnforcement();
   bool testHRefinements();
 
   bool testHangingNodePoissonTriangle();

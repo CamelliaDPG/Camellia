@@ -249,7 +249,7 @@ void MeshTransferFunction::rebuildMaps()
       }
       else
       {
-        vector< pair< GlobalIndexType, unsigned> > descendants = originalCell->getDescendantsForSide(originalCellSide.second);
+        vector< pair< GlobalIndexType, unsigned> > descendants = originalCell->getDescendantsForSide(originalCellSide.second, _originalMesh->getTopology());
         for (vector< pair< GlobalIndexType, unsigned> >::iterator entryIt = descendants.begin(); entryIt != descendants.end(); entryIt++)
         {
           cellsToImport.push_back(entryIt->first);

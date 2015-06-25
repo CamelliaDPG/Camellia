@@ -52,12 +52,12 @@ public:
   Cell(CellTopoPtr cellTopo, const vector<unsigned> &vertices, const vector< vector< unsigned > > &subcellPermutations,
        IndexType cellIndex, MeshTopology* meshTopo);
 
-  Teuchos::RCP<Cell> ancestralCellForSubcell(unsigned subcdim, unsigned subcord);
+  Teuchos::RCP<Cell> ancestralCellForSubcell(unsigned subcdim, unsigned subcord, MeshTopologyViewPtr meshTopoViewForCellValidity);
 
-  unsigned ancestralPermutationForSubcell(unsigned subcdim, unsigned subcord);
+  unsigned ancestralPermutationForSubcell(unsigned subcdim, unsigned subcord, MeshTopologyViewPtr meshTopoViewForCellValidity);
   //  unsigned ancestralPermutationForSideSubcell(unsigned sideOrdinal, unsigned subcdim, unsigned subcord);
 
-  pair<unsigned, unsigned> ancestralSubcellOrdinalAndDimension(unsigned subcdim, unsigned subcord); // (subcord, subcdim) into the cell returned by ancestralCellForSubcell
+  pair<unsigned, unsigned> ancestralSubcellOrdinalAndDimension(unsigned subcdim, unsigned subcord, MeshTopologyViewPtr meshTopoViewForCellValidity); // (subcord, subcdim) into the cell returned by ancestralCellForSubcell
 
   long long approximateMemoryFootprint(); // in bytes
 
@@ -70,8 +70,8 @@ public:
   vector< pair<IndexType, unsigned> > childrenForSide(unsigned sideOrdinal);
   int numChildren();
 
-  set<IndexType> getDescendants(bool leafNodesOnly = true);
-  vector< pair< IndexType, unsigned> > getDescendantsForSide(int sideOrdinal, bool leafNodesOnly = true);
+  set<IndexType> getDescendants(MeshTopologyViewPtr meshTopoViewForCellValidity, bool leafNodesOnly = true);
+  vector< pair< IndexType, unsigned> > getDescendantsForSide(int sideOrdinal, MeshTopologyViewPtr meshTopoViewForCellValidity, bool leafNodesOnly = true);
   unsigned entityIndex(unsigned subcdim, unsigned subcord);
   vector<unsigned> getEntityIndices(unsigned subcdim);
 
@@ -89,14 +89,14 @@ public:
 
   MeshTopology* meshTopology();
 
-  bool ownsSide(unsigned sideOrdinal);
+  bool ownsSide(unsigned sideOrdinal, MeshTopologyViewPtr meshTopoViewForCellValidity);
 
   RefinementPatternPtr refinementPattern();
   void setRefinementPattern(RefinementPatternPtr refPattern);
 
-  RefinementBranch refinementBranchForSide(unsigned sideOrdinal);
+  RefinementBranch refinementBranchForSide(unsigned sideOrdinal, MeshTopologyViewPtr meshTopoViewForCellValidity);
 
-  RefinementBranch refinementBranchForSubcell(unsigned subcdim, unsigned subcord);
+  RefinementBranch refinementBranchForSubcell(unsigned subcdim, unsigned subcord, MeshTopologyViewPtr meshTopoViewForCellValidity);
 
   //! Returns the number of sides of the cell; that is, subcells of dimension 1 lower than the cell.  In 1D, returns the number of vertices.
   /*!
@@ -113,10 +113,10 @@ public:
 
   CellTopoPtr topology();
 
-  Teuchos::RCP<Cell> getNeighbor(unsigned sideOrdinal);
-  pair<GlobalIndexType, unsigned> getNeighborInfo(unsigned sideOrdinal); // (neighborCellIndex, neighborSideOrdinal)
+  Teuchos::RCP<Cell> getNeighbor(unsigned sideOrdinal, MeshTopologyViewPtr meshTopoViewForCellValidity);
+  pair<GlobalIndexType, unsigned> getNeighborInfo(unsigned sideOrdinal, MeshTopologyViewPtr meshTopoViewForCellValidity); // (neighborCellIndex, neighborSideOrdinal)
   void setNeighbor(unsigned sideOrdinal, GlobalIndexType neighborCellIndex, unsigned neighborSideOrdinal);
-  std::vector< Teuchos::RCP<Cell> > getNeighbors();
+  std::vector< Teuchos::RCP<Cell> > getNeighbors(MeshTopologyViewPtr meshTopoViewForCellValidity);
 
   void printApproximateMemoryReport(); // in bytes
 

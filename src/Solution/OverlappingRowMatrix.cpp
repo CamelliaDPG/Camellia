@@ -59,7 +59,7 @@ void OverlappingRowMatrix::BuildMap(int OverlapLevel_in, MeshPtr mesh, Teuchos::
         int numSides = cell->getSideCount();
         for (int sideOrdinal=0; sideOrdinal<numSides; sideOrdinal++)
         {
-          pair<GlobalIndexType, unsigned> neighborInfo = cell->getNeighborInfo(sideOrdinal);
+          pair<GlobalIndexType, unsigned> neighborInfo = cell->getNeighborInfo(sideOrdinal,mesh->getTopology());
           if (neighborInfo.first != -1)   // -1 indicates boundary/no neighbor
           {
             cellNeighbors.insert(neighborInfo.first);
@@ -101,7 +101,7 @@ void OverlappingRowMatrix::BuildMap(int OverlapLevel_in, MeshPtr mesh, Teuchos::
     {
       GlobalIndexType cellID = *cellIDIt;
       CellPtr cell = mesh->getTopology()->getCell(cellID);
-      std::set<GlobalIndexType> descendants = cell->getDescendants();
+      std::set<GlobalIndexType> descendants = cell->getDescendants(mesh->getTopology());
       allCells.insert(descendants.begin(),descendants.end());
     }
   }
