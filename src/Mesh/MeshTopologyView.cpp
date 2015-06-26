@@ -55,7 +55,7 @@ long long MeshTopologyView::approximateMemoryFootprint()
 
 IndexType MeshTopologyView::cellCount()
 {
-  return _activeCells.size();
+  return _allKnownCells.size();
 }
 
 std::vector<IndexType> MeshTopologyView::cellIDsForPoints(const Intrepid::FieldContainer<double> &physicalPoints)
@@ -84,7 +84,7 @@ void MeshTopologyView::buildLookups()
   for (IndexType cellID : _activeCells)
   {
     CellPtr cell = _meshTopo->getCell(cellID);
-    while ((cell->getParent() != Teuchos::null) && (visitedIndices.find(cellID) != visitedIndices.end()))
+    while ((cell->getParent() != Teuchos::null) && (visitedIndices.find(cellID) == visitedIndices.end()))
     {
       visitedIndices.insert(cellID);
       cell = cell->getParent();
@@ -120,7 +120,7 @@ vector< pair<IndexType,unsigned> > MeshTopologyView::getActiveCellIndices(unsign
   // first entry in pair is the cellIndex, the second is the ordinal of the entity in that cell (the subcord).
   set<pair<IndexType,unsigned>> activeCellIndicesSet;
   
-  vector<IndexType> sideIndices = _meshTopo->getSidesContainingEntity(d, entityIndex);
+  vector<IndexType> sideIndices = this->getSidesContainingEntity(d, entityIndex);
   for (IndexType sideEntityIndex : sideIndices)
   {
     vector<IndexType> cells = this->getActiveCellsForSide(sideEntityIndex);
@@ -142,7 +142,7 @@ vector<IndexType> MeshTopologyView::getActiveCellsForSide(IndexType sideEntityIn
   IndexType cellIndex = _meshTopo->getFirstCellForSide(sideEntityIndex).first;
   if ((cellIndex != -1) && (_activeCells.find(cellIndex) != _activeCells.end())) activeCells.push_back(cellIndex);
   cellIndex = _meshTopo->getSecondCellForSide(sideEntityIndex).first;
-  if (cellIndex != -1) activeCells.push_back(cellIndex);
+  if ((cellIndex != -1) && (_activeCells.find(cellIndex) != _activeCells.end())) activeCells.push_back(cellIndex);
   return activeCells;
 }
 
@@ -183,6 +183,7 @@ set< pair<IndexType, unsigned> > MeshTopologyView::getCellsContainingEntity(unsi
       CellPtr cell = _meshTopo->getCell(cellIndex);
       unsigned sideSubcord = cell->findSubcellOrdinal(sideDim, sideEntityIndex);
       cells.insert({cellIndex,sideSubcord});
+      cellIndices.insert(cellIndex);
     }
   }
   return cells;
@@ -192,9 +193,9 @@ vector<IndexType> MeshTopologyView::getCellsForSide(IndexType sideEntityIndex)
 {
   vector<IndexType> cells;
   IndexType cellIndex = _meshTopo->getFirstCellForSide(sideEntityIndex).first;
-  if (cellIndex != -1) cells.push_back(cellIndex);
+  if (isValidCellIndex(cellIndex)) cells.push_back(cellIndex);
   cellIndex = _meshTopo->getSecondCellForSide(sideEntityIndex).first;
-  if (cellIndex != -1) cells.push_back(cellIndex);
+  if (isValidCellIndex(cellIndex)) cells.push_back(cellIndex);
   return cells;
 }
 
@@ -372,11 +373,22 @@ const set<IndexType> & MeshTopologyView::getRootCellIndices()
   return _rootCells;
 }
 
-std::vector< IndexType > MeshTopologyView::getSidesContainingEntity(unsigned d, IndexType entityIndex)
+vector<IndexType> MeshTopologyView::getSidesContainingEntity(unsigned d, IndexType entityIndex)
 {
   unsigned sideDim = getDimension() - 1;
-  if (d == sideDim) return {entityIndex};
-  return _meshTopo->getSidesContainingEntity(d, entityIndex);
+  vector<IndexType> meshTopoSides;
+  if (d == sideDim) meshTopoSides = {entityIndex};
+  else meshTopoSides = _meshTopo->getSidesContainingEntity(d, entityIndex);
+  
+  vector<IndexType> viewSides; // meshTopoSides, filtered for sides that belong to valid cells
+  for (IndexType topoSideIndex : meshTopoSides)
+  {
+    if (this->getCellsForSide(topoSideIndex).size() > 0)
+    {
+      viewSides.push_back(topoSideIndex);
+    }
+  }
+  return viewSides;
 }
 
 const std::vector<double>& MeshTopologyView::getVertex(IndexType vertexIndex)
@@ -432,8 +444,8 @@ std::pair<IndexType,IndexType> MeshTopologyView::owningCellIndexForConstrainingE
       // get this entity's immediate children, in case we don't find an active cell on this tier
       vector<IndexType> immediateChildren = _meshTopo->getChildEntities(d,constrainedEntityIndex);
       nextTierConstrainedEntities.insert(immediateChildren.begin(), immediateChildren.end());
-
-      vector<IndexType> sideEntityIndices = getSidesContainingEntity(d, constrainingEntityIndex);
+      
+      vector<IndexType> sideEntityIndices = getSidesContainingEntity(d, constrainedEntityIndex);
       if (sideEntityIndices.size() == 0)
       {
         cout << "ERROR: no side containing entityIndex " << constrainingEntityIndex << " of dimension " << d << " found." << endl;

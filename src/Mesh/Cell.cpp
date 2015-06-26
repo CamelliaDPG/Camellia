@@ -328,7 +328,7 @@ Teuchos::RCP<Cell> Cell::getParent()
 
 void Cell::setParent(Teuchos::RCP<Cell> parent)
 {
-  _parent = parent;
+  _parent = Teuchos::rcp(parent.get(),false); // make weak reference
 }
 
 bool Cell::isParent()

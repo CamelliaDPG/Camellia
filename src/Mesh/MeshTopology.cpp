@@ -1384,6 +1384,16 @@ CellPtr MeshTopology::getCell(unsigned cellIndex)
   return _cells[cellIndex];
 }
 
+vector<IndexType> MeshTopology::getCellsForSide(IndexType sideEntityIndex)
+{
+  vector<IndexType> cells;
+  IndexType cellIndex = this->getFirstCellForSide(sideEntityIndex).first;
+  if (cellIndex != -1) cells.push_back(cellIndex);
+  cellIndex = this->getSecondCellForSide(sideEntityIndex).first;
+  if (cellIndex != -1) cells.push_back(cellIndex);
+  return cells;
+}
+
 unsigned MeshTopology::getEntityCount(unsigned int d)
 {
   if (d==0) return _vertices.size();

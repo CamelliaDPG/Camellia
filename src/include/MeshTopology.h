@@ -162,6 +162,7 @@ public:
   vector<IndexType> getCanonicalEntityNodesViaPeriodicBCs(unsigned d, const vector<IndexType> &myEntityNodes); // if there are periodic BCs for this entity, this converts the provided nodes to the ones listed in the canonical ordering (allows permutation determination) -- this method is meant to be called internally, and from Cell.
 
   set< pair<IndexType, unsigned> > getCellsContainingEntity(unsigned d, IndexType entityIndex);
+  vector<IndexType> getCellsForSide(IndexType sideEntityIndex);
   vector< IndexType > getSidesContainingEntity(unsigned d, IndexType entityIndex);
 
   RefinementBranch getSideConstraintRefinementBranch(IndexType sideEntityIndex); // Returns a RefinementBranch that goes from the constraining side to the side indicated.
