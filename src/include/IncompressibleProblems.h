@@ -232,25 +232,26 @@ class CylinderProblem : public IncompressibleProblem
 {
   private:
     double _radius = 0.5;
-    // double _xLeft = -3;
-    // double _xRight = 9;
-    // double _meshHeight = 6;
-    double _xLeft = -60;
-    double _xRight = 180;
-    double _meshHeight = 120;
+    double _xLeft = -3;
+    double _xRight = 9;
+    double _meshHeight = 9;
+    // double _xLeft = -60;
+    // double _xRight = 180;
+    // double _meshHeight = 120;
     double _yBottom = -_meshHeight/2;
     double _yTop = _meshHeight/2;
   public:
     CylinderProblem(bool steady, double Re, int numSlabs=1)
     {
       _steady = steady;
-      if (!_steady)
-        _u1_exact = Function::min(Function::tn(1),Function::constant(1));
-      else
-        _u1_exact = Function::constant(1);
+      // if (!_steady)
+      //   _u1_exact = Function::min(Function::tn(1),Function::constant(1));
+      // else
+      //   _u1_exact = Function::constant(1);
+      _u1_exact = Function::constant(1);
       _u2_exact = Function::zero();
-      // _sigma1_exact = 1./Re*_u1_exact->grad();
-      // _sigma2_exact = 1./Re*_u2_exact->grad();
+      _sigma1_exact = 1./Re*_u1_exact->grad();
+      _sigma2_exact = 1./Re*_u2_exact->grad();
       _sigma1_exact = Function::zero();
       _sigma2_exact = Function::zero();
 
@@ -461,12 +462,12 @@ class SquareCylinderProblem : public CylinderProblem
 {
   private:
     double _radius = 0.5;
-    // double _xLeft = -3;
-    // double _xRight = 9;
-    // double _meshHeight = 6;
-    double _xLeft = -60;
-    double _xRight = 180;
-    double _meshHeight = 120;
+    double _xLeft = -3;
+    double _xRight = 9;
+    double _meshHeight = 6;
+    // double _xLeft = -60;
+    // double _xRight = 180;
+    // double _meshHeight = 120;
     double _yBottom = -_meshHeight/2;
     double _yTop = _meshHeight/2;
   public:

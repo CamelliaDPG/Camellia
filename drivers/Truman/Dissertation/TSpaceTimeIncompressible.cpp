@@ -125,7 +125,10 @@ int main(int argc, char *argv[])
       cout << "Solving time slab [" << problem->currentT0() << ", " << problem->currentT1() << "]" << endl;
 
     ostringstream problemName;
-    problemName << problemChoice << spaceDim << "D_slab" << problem->currentStep() << "_" << norm << "_" << Re << "_p" << p << "_" << solverChoice;
+    string isSteady = "Steady";
+    if (!steady)
+      isSteady = "Transient";
+    problemName << isSteady << problemChoice << spaceDim << "D_slab" << problem->currentStep() << "_" << norm << "_" << Re << "_p" << p << "_" << solverChoice;
     if (tag != "")
       problemName << "_" << tag;
     ostringstream saveDir;
