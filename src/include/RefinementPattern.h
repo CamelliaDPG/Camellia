@@ -64,6 +64,8 @@ namespace Camellia {
                                                       unsigned &childSubcellPermutation, unsigned &subcellRefChild,
                                                       unsigned subcdim, unsigned subcord, unsigned childOrdinal,
                                                       bool preferSubcellsBelongingToVolumeChild);
+    
+    static RefinementPatternPtr refPatternExtrudedInTime(RefinementPatternPtr spaceRefPattern);
   public:
     RefinementPattern(CellTopoPtr cellTopoPtr, Intrepid::FieldContainer<double> refinedNodes,
                       vector< Teuchos::RCP<RefinementPattern> > sideRefinementPatterns);
@@ -91,6 +93,9 @@ namespace Camellia {
   static Teuchos::RCP<RefinementPattern> regularRefinementPattern(Camellia::CellTopologyKey cellTopoKey);
   static Teuchos::RCP<RefinementPattern> xAnisotropicRefinementPatternQuad(); // vertical cut
   static Teuchos::RCP<RefinementPattern> yAnisotropicRefinementPatternQuad(); // horizontal cut
+    
+  static RefinementPatternPtr xAnisotropicRefinementPatternQuadTimeExtruded();
+  static RefinementPatternPtr yAnisotropicRefinementPatternQuadTimeExtruded();
 
   unsigned childOrdinalForPoint(const std::vector<double> &pointParentCoords); // returns -1 if no hit
 

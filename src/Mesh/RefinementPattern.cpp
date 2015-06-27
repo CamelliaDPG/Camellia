@@ -1231,6 +1231,89 @@ unsigned RefinementPattern::numChildren()
   return _nodes.dimension(0);
 }
 
+RefinementPatternPtr RefinementPattern::refPatternExtrudedInTime(RefinementPatternPtr spaceRefPattern)
+{
+  CellTopoPtr spaceTopo = spaceRefPattern->parentTopology();
+  
+  int tensorialDegree = 1;
+  RefinementPatternPtr lineRefPattern = noRefinementPatternLine();
+  
+  FieldContainer<double> tensorRefNodes = spaceRefPattern->refinedNodes();
+  FieldContainer<double> lineRefNodes = lineRefPattern->refinedNodes();
+  
+  int numChildrenForTensor = tensorRefNodes.dimension(0);
+  int nodesPerTensorChild = tensorRefNodes.dimension(1);
+  int spaceDimForTensor = tensorRefNodes.dimension(2);
+  int numChildrenForLine = lineRefNodes.dimension(0);
+  int nodesPerLineChild = lineRefNodes.dimension(1);
+  int spaceDimForLine = lineRefNodes.dimension(2);
+  FieldContainer<double> newTensorRefNodes(numChildrenForTensor*numChildrenForLine,
+                                           nodesPerTensorChild*nodesPerLineChild,
+                                           spaceDimForTensor + spaceDimForLine);
+  for (int tensorChildOrdinal=0; tensorChildOrdinal<numChildrenForTensor; tensorChildOrdinal++)
+  {
+    for (int lineChildOrdinal=0; lineChildOrdinal<numChildrenForLine; lineChildOrdinal++)
+    {
+      int newTensorChildOrdinal = lineChildOrdinal * numChildrenForTensor + tensorChildOrdinal;
+      for (int tensorNodeOrdinal=0; tensorNodeOrdinal<nodesPerTensorChild; tensorNodeOrdinal++)
+      {
+        for (int lineNodeOrdinal=0; lineNodeOrdinal<nodesPerLineChild; lineNodeOrdinal++)
+        {
+          int newTensorNodeOrdinal = lineNodeOrdinal * nodesPerTensorChild + tensorNodeOrdinal;
+          for (int d_tensor = 0; d_tensor<spaceDimForTensor; d_tensor++)
+          {
+            newTensorRefNodes(newTensorChildOrdinal, newTensorNodeOrdinal, d_tensor) = tensorRefNodes(tensorChildOrdinal, tensorNodeOrdinal, d_tensor);
+          }
+          for (int d_line = 0; d_line<spaceDimForLine; d_line++)
+          {
+            newTensorRefNodes(newTensorChildOrdinal, newTensorNodeOrdinal, d_line + spaceDimForTensor) = lineRefNodes(lineChildOrdinal, lineNodeOrdinal, d_line);
+          }
+        }
+      }
+    }
+  }
+  
+  CellTopoPtr tensorTopo = CellTopology::cellTopology(spaceTopo, tensorialDegree);
+  
+  tensorRefNodes = newTensorRefNodes;
+  
+  vector< RefinementPatternPtr > sideRefPatterns;
+  
+  int sideDim = tensorTopo->getDimension() - 1;
+  if ( sideDim > 0)
+  {
+    int sideCount = tensorTopo->getSideCount();
+    
+    sideRefPatterns.resize(sideCount);
+    for (int sideOrdinal=0; sideOrdinal<sideCount; sideOrdinal++)
+    {
+      if (tensorTopo->sideIsSpatial(sideOrdinal))
+      {
+        if (spaceTopo->getDimension() == 1)
+        {
+          CellTopoPtr nodeTensorTime = CellTopology::cellTopology(CellTopology::point(), 1);
+          sideRefPatterns[sideOrdinal] = noRefinementPattern(nodeTensorTime);
+        }
+        else
+        {
+          // then we want to extrude the refinement for the spaceRefPattern's side in time
+          int spaceSideOrdinal = tensorTopo->getSpatialComponentSideOrdinal(sideOrdinal);
+          RefinementPatternPtr spaceSideRefPattern = spaceRefPattern->sideRefinementPatterns()[spaceSideOrdinal];
+          sideRefPatterns[sideOrdinal] = refPatternExtrudedInTime(spaceSideRefPattern);
+        }
+      }
+      else
+      {
+        // temporal side: we have the spaceRefPattern on this side
+        sideRefPatterns[sideOrdinal] = spaceRefPattern;
+      }
+    }
+  }
+  
+  RefinementPatternPtr refPattern = Teuchos::rcp( new RefinementPattern(tensorTopo,tensorRefNodes,sideRefPatterns) );
+  return refPattern;
+}
+
 RefinementPatternPtr RefinementPattern::regularRefinementPatternPoint()
 {
   static RefinementPatternPtr refPattern;
@@ -1573,6 +1656,20 @@ Teuchos::RCP<RefinementPattern> RefinementPattern::xAnisotropicRefinementPattern
   return refPattern;
 }
 
+// cuts a quad x time vertically (x-refines the element), leaving y and t untouched
+RefinementPatternPtr RefinementPattern::xAnisotropicRefinementPatternQuadTimeExtruded()
+{
+  static RefinementPatternPtr refPattern;
+
+  if (refPattern.get() == NULL)
+  {
+    RefinementPatternPtr spaceRefPattern = xAnisotropicRefinementPatternQuad();
+    refPattern = refPatternExtrudedInTime(spaceRefPattern);
+  }
+  
+  return refPattern;
+}
+
 // cuts a quad horizontally (y-refines the element)
 Teuchos::RCP<RefinementPattern> RefinementPattern::yAnisotropicRefinementPatternQuad()
 {
@@ -1611,6 +1708,21 @@ Teuchos::RCP<RefinementPattern> RefinementPattern::yAnisotropicRefinementPattern
   }
   return refPattern;
 }
+
+// cuts a quad x time horizontally (y-refines the element), leaving x and t untouched
+RefinementPatternPtr RefinementPattern::yAnisotropicRefinementPatternQuadTimeExtruded()
+{
+  static RefinementPatternPtr refPattern;
+  
+  if (refPattern.get() == NULL)
+  {
+    RefinementPatternPtr spaceRefPattern = yAnisotropicRefinementPatternQuad();
+    refPattern = refPatternExtrudedInTime(spaceRefPattern);
+  }
+  
+  return refPattern;
+}
+
 
 CellTopoPtr RefinementPattern::parentTopology()
 {
