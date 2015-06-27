@@ -369,7 +369,8 @@ void MeshTransformationFunction::values(FieldContainer<double> &values, BasisCac
   vector<GlobalIndexType> cellIDs = basisCache->cellIDs();
   // identity map is the right thing most of the time
   // we'll do something different only where necessary
-  int spaceDim = basisCache->getSpaceDim();
+  int spaceDim = values.dimension(2);
+  TEUCHOS_TEST_FOR_EXCEPTION(basisCache->cellTopology()->getDimension() != spaceDim, std::invalid_argument, "cellTopology dimension does not match the shape of the values container");
   if (_op == OP_VALUE)
   {
     values = basisCache->getPhysicalCubaturePoints(); // identity
