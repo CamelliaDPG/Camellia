@@ -95,23 +95,26 @@ RefinementPatternPtr RefinementHistory::refPatternForRefType(RefinementType refT
   else if (refType==NULL_REFINEMENT) return RefinementPattern::noRefinementPattern(cellTopo);
   else
   {
-    if (cellTopo->getTensorialDegree() > 0)
+    if (cellTopo->getTensorialDegree() > 1)
     {
-      TEUCHOS_TEST_FOR_EXCEPTION(true, std::invalid_argument, "tensorial degree > 0 not handled for anisotropic refinements");
+      TEUCHOS_TEST_FOR_EXCEPTION(true, std::invalid_argument, "tensorial degree > 1 not handled for anisotropic refinements");
     }
     if ((refType==H_X_REFINEMENT) && (cellTopo->getKey().first == shards::Quadrilateral<4>::key))
     {
-      return RefinementPattern::xAnisotropicRefinementPatternQuad();
+      if (cellTopo->getKey().second == 0)
+        return RefinementPattern::xAnisotropicRefinementPatternQuad();
+      else if (cellTopo->getKey().second == 1)
+        return RefinementPattern::xAnisotropicRefinementPatternQuadTimeExtruded();
     }
     else if ((refType==H_Y_REFINEMENT) && (cellTopo->getKey().second == shards::Quadrilateral<4>::key))
     {
-      return RefinementPattern::yAnisotropicRefinementPatternQuad();
-    }
-    else
-    {
-      TEUCHOS_TEST_FOR_EXCEPTION(true, std::invalid_argument, "Unhandled refinement type");
+      if (cellTopo->getKey().second == 0)
+        return RefinementPattern::yAnisotropicRefinementPatternQuad();
+      else if (cellTopo->getKey().second == 1)
+        return RefinementPattern::yAnisotropicRefinementPatternQuadTimeExtruded();
     }
   }
+  TEUCHOS_TEST_FOR_EXCEPTION(true, std::invalid_argument, "Unhandled refinement type");
 }
 
 void RefinementHistory::hRefine(const set<GlobalIndexType> &cellIDs, Teuchos::RCP<RefinementPattern> refPattern)
@@ -162,9 +165,43 @@ void RefinementHistory::hRefine(const set<GlobalIndexType> &cellIDs, Teuchos::RC
     {
       refType = H_REFINEMENT;
     }
-    else
+    else if (refPattern->parentTopology()->getTensorialDegree() == 0)
     {
       TEUCHOS_TEST_FOR_EXCEPTION(true, std::invalid_argument, "RefinementHistory does not yet support anisotropic refinements in 3D.");
+    }
+    else
+    {
+      // get the spatial refinement pattern (on a temporal side)
+      int sideCount = refPattern->parentTopology()->getSideCount();
+      RefinementPatternPtr spatialRefPattern;
+      for (int sideOrdinal=0; sideOrdinal<sideCount; sideOrdinal++)
+      {
+        if (!refPattern->parentTopology()->sideIsSpatial(sideOrdinal))
+        {
+          spatialRefPattern = refPattern->sideRefinementPatterns()[sideOrdinal];
+          break;
+        }
+      }
+      if (spatialRefPattern->numChildren() != 2)
+      {
+        TEUCHOS_TEST_FOR_EXCEPTION(true, std::invalid_argument, "RefinementHistory does not recognize this refinement pattern.");
+      }
+      else
+      {
+        if (spatialRefPattern->refinedNodes()(0,3,1) == 0.0)
+        {
+          // yAnisotropic: horizontal cut
+          refType = H_Y_REFINEMENT;
+        }
+        else if (refPattern->refinedNodes()(1,0,0)==0.0)
+        {
+          refType = H_X_REFINEMENT;
+        }
+        else
+        {
+          TEUCHOS_TEST_FOR_EXCEPTION(true, std::invalid_argument, "RefinementHistory does not recognize this refinement pattern.");
+        }
+      }
     }
   }
   else
