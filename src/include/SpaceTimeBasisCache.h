@@ -69,8 +69,6 @@ public:
   BasisCachePtr getSpatialBasisCache();
   BasisCachePtr getTemporalBasisCache();
 
-  // for now, setRefCellPoints() will throw an exception: we need to get ref cell points for
-  // space and time separately.
   virtual void setRefCellPoints(const Intrepid::FieldContainer<double> &pointsRefCell);
   virtual void setRefCellPoints(const Intrepid::FieldContainer<double> &pointsRefCell,
                                 const Intrepid::FieldContainer<double> &cubatureWeights);
