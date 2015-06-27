@@ -255,6 +255,8 @@ public:
   int getSideIndex() const; // -1 if not sideCache
 
   virtual int getSpaceDim();
+  
+  bool cellTopologyIsSpaceTime();
 
   void setMaxCubatureDegree(int value);
 

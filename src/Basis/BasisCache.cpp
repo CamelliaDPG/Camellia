@@ -509,7 +509,7 @@ void BasisCache::cubatureDegreeForElementType(ElementTypePtr elemType, bool test
     if (_transformationFxn.get())
     {
       // assuming isoparametric:
-      cubatureDegreeForMesh += _maxTestDegree;
+      cubatureDegreeForMesh += maxTestDegree;
     }
     // at least for now, what the Mesh's transformation function does is transform from a straight-lined mesh to
     // one with potentially curved edges...
@@ -518,6 +518,11 @@ void BasisCache::cubatureDegreeForElementType(ElementTypePtr elemType, bool test
 
   int maxTrialDegree = testVsTest ? maxTestDegree : elemType->trialOrderPtr->maxBasisDegree();
   cubatureDegree = maxTrialDegree + maxTestDegree + cubatureDegreeForMesh;
+}
+
+bool BasisCache::cellTopologyIsSpaceTime()
+{
+  return (_cellTopo->getTensorialDegree() > 0) && (_cellTopo->getDimension() > _spaceDim);
 }
 
 void BasisCache::cubatureDegreeForElementType(ElementTypePtr elemType, bool testVsTest, int &cubatureDegreeSpace, int &cubatureDegreeTime)
@@ -1150,6 +1155,7 @@ void BasisCache::determineJacobian()
       FieldContainer<double> fxnJacobian(_numCells,numCubPoints,cellDim,cellDim);
       // a little quirky, but since _transformationFxn calls BasisCache in its values determination,
       // we disable the _transformationFxn during the call to grad()->values()
+      // TODO: consider moving this logic (turning on/off the BasisCache's transformation function during the values call for gradients) into MeshTransformationFunction.  It seems like that's better from an encapsulation point of view.  Unless it is the case that sometimes we *do* want the transformationFunction gradient to be transformed according to some BasisCache's transformation function.  But that seems unlikely.
       TFunctionPtr<double> fxnCopy = _transformationFxn;
       _transformationFxn = TFunction<double>::null();
       fxnCopy->grad()->values( fxnJacobian, thisPtr );
