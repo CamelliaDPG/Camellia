@@ -203,6 +203,9 @@ public:
    */
   static const Intrepid::FieldContainer<double>& getSubcellParametrization(const int subcellDim, CellTopoPtr parentCell);
 
+  // ! Returns true if the Jacobian is orthogonal in the dimensions provided (i.e., entries for (d1,d2) and (d2,d1) are below tolerance).
+  static bool jacobianIsOrthogonal(const Intrepid::FieldContainer<double> &cellJacobian, int d1, int d2, double tol=1e-13);
+  
   static void refCellNodesForTopology(Intrepid::FieldContainer<double> &cellNodes, const shards::CellTopology &cellTopo, unsigned permutation = 0); // 0 permutation is the identity
 
   static void refCellNodesForTopology(Intrepid::FieldContainer<double> &cellNodes, CellTopoPtr cellTopo, unsigned permutation = 0); // 0 permutation is the identity
