@@ -1225,6 +1225,8 @@ void runMany(ProblemChoice problemChoice, int spaceDim, int delta_k, int minCell
       filename << "_coarseSolver_" << Solver::solverChoiceString(coarseSolverChoice);
     if (useStaticCondensation)
       filename << "_withStaticCondensation";
+    if (conformingTraces)
+      filename << "_conformingTraces";
     filename << "_results.dat";
     ofstream fout(filename.str().c_str());
     fout << results.str();
