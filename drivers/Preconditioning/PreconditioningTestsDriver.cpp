@@ -627,7 +627,7 @@ void initializeSolutionAndCoarseMesh(SolutionPtr &solution, MeshPtr &coarseMesh,
 
   // coarse and fine mesh share a MeshTopology.  This means that they should not be further refined (they won't be, here)
   int H1Order_coarse = 0 + 1;
-  coarseMesh = Teuchos::rcp(new Mesh(mesh->getTopology(), bf->varFactory(), H1Order_coarse, delta_k));
+  coarseMesh = Teuchos::rcp(new Mesh(mesh->getTopology(), bf, H1Order_coarse, delta_k));
   
   graphNorm = bf->graphNorm();
 
