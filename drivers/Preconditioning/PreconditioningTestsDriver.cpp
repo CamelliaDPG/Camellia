@@ -608,20 +608,11 @@ void initializeSolutionAndCoarseMesh(SolutionPtr &solution, MeshPtr &coarseMesh,
     }
   }
 
-  int H1Order_coarse = 0 + 1;
-  coarseMesh = MeshFactory::rectilinearMesh(bf, dimensions, elementCounts, H1Order_coarse, delta_k, x0);
-
-  // get a sample cell topology:
-  CellTopoPtr cellTopo = coarseMesh->getTopology()->getCell(0)->topology();
-  RefinementPatternPtr refPattern = RefinementPattern::regularRefinementPattern(cellTopo);
-
   int meshWidthCells = rootMeshNumCells;
   while (meshWidthCells < numCells)
   {
     set<IndexType> activeCellIDs = mesh->getActiveCellIDs(); // should match between coarseMesh and mesh
-    mesh->hRefine(activeCellIDs, refPattern);
-    coarseMesh->hRefine(activeCellIDs, refPattern);
-
+    mesh->hRefine(activeCellIDs);
     meshWidthCells *= 2;
   }
 
@@ -634,6 +625,10 @@ void initializeSolutionAndCoarseMesh(SolutionPtr &solution, MeshPtr &coarseMesh,
     }
   }
 
+  // coarse and fine mesh share a MeshTopology.  This means that they should not be further refined (they won't be, here)
+  int H1Order_coarse = 0 + 1;
+  coarseMesh = Teuchos::rcp(new Mesh(mesh->getTopology(), bf->varFactory(), H1Order_coarse, delta_k));
+  
   graphNorm = bf->graphNorm();
 
   solution = Solution::solution(mesh, bc, rhs, graphNorm);
