@@ -686,7 +686,8 @@ void run(ProblemChoice problemChoice, int &iterationCount, int spaceDim, int num
   if (hOnly)
   {
     // then replace the k0Mesh with the h-coarsened mesh:
-    MeshTopologyPtr coarseMeshTopo = mesh->getTopology()->getRootMeshTopology();
+    MeshTopology* meshTopo = dynamic_cast<MeshTopology*>(mesh->getTopology().get());
+    MeshTopologyPtr coarseMeshTopo = meshTopo->getRootMeshTopology();
     int H1OrderP0 = k + 1;
     k0Mesh = Teuchos::rcp( new Mesh(coarseMeshTopo, mesh->bilinearForm(), H1OrderP0, delta_k) );
   }
@@ -740,7 +741,9 @@ void run(ProblemChoice problemChoice, int &iterationCount, int spaceDim, int num
     else
     {
       initializationTimer.ResetStartTime();
-      MeshTopologyPtr coarsestMeshTopo = k0Mesh->getTopology()->getRootMeshTopology();
+      MeshTopology* k0MeshTopo = dynamic_cast<MeshTopology*>(k0Mesh->getTopology().get());
+      MeshTopologyPtr coarseMeshTopo = k0MeshTopo->getRootMeshTopology();
+      MeshTopologyPtr coarsestMeshTopo = k0MeshTopo->getRootMeshTopology();
       int H1OrderP0 = 0 + 1;
       MeshPtr coarsestMesh = Teuchos::rcp( new Mesh(coarsestMeshTopo, k0Mesh->bilinearForm(), H1OrderP0, delta_k) );
       
@@ -884,7 +887,7 @@ void run(ProblemChoice problemChoice, int &iterationCount, int spaceDim, int num
     }
     else
     {
-      GMGOperator* op = &((GMGSolver*)solver.get())->gmgOperator();
+      Teuchos::RCP<GMGOperator> op = ((GMGSolver*)solver.get())->gmgOperator();
 
       Teuchos::RCP< Epetra_CrsMatrix > A_coarse = op->getCoarseStiffnessMatrix();
       if (rank==0) cout << "writing A_coarse to A_coarse.dat.\n";
@@ -1220,6 +1223,8 @@ void runMany(ProblemChoice problemChoice, int spaceDim, int delta_k, int minCell
     // if coarse solver is not direct, then include in the file name:
     if ((coarseSolverChoice != Solver::KLU) && (coarseSolverChoice != Solver::MUMPS) && (coarseSolverChoice != Solver::SuperLUDist))
       filename << "_coarseSolver_" << Solver::solverChoiceString(coarseSolverChoice);
+    if (useStaticCondensation)
+      filename << "_withStaticCondensation";
     filename << "_results.dat";
     ofstream fout(filename.str().c_str());
     fout << results.str();

@@ -292,10 +292,10 @@ void initializeSolutionAndCoarseMesh(SolutionPtr &solution, vector<MeshPtr> &mes
 
 long long approximateMemoryCostsForMeshTopologies(vector<MeshPtr> meshes)
 {
-  map<MeshTopology*, long long> meshTopologyCosts; // pointer as key ensures we only count each MeshTopology once, even if they are shared
+  map<MeshTopologyView*, long long> meshTopologyCosts; // pointer as key ensures we only count each MeshTopology once, even if they are shared
   for (MeshPtr mesh : meshes)
   {
-    MeshTopologyPtr meshTopo = mesh->getTopology();
+    MeshTopologyViewPtr meshTopo = mesh->getTopology();
     long long memoryCost = meshTopo->approximateMemoryFootprint();
     meshTopologyCosts[meshTopo.get()] = memoryCost;
   }
@@ -402,7 +402,7 @@ int main(int argc, char *argv[])
 
   if (rank==0)
   {
-    cout << "Solving " << spaceDim << "D " << problemChoiceString << " problem on " << numProcs << " MPI ranks.  Initializing meshes...\n";
+    cout << "Solving " << spaceDim << "D " << problemChoiceString << " problem with k = " << k << " on " << numProcs << " MPI ranks.  Initializing meshes...\n";
   }
   
   Epetra_Time timer(Comm);
