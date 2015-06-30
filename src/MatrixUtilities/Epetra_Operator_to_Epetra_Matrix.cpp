@@ -7,6 +7,7 @@
 //
 
 #include "Epetra_Operator_to_Epetra_Matrix.h"
+#include "Epetra_FECrsMatrix.h"
 #include "Epetra_SerialComm.h"
 #include "Epetra_Vector.h"
 
@@ -18,7 +19,7 @@ namespace Camellia
 Teuchos::RCP<Epetra_CrsMatrix> Epetra_Operator_to_Epetra_Matrix::constructInverseMatrix(const Epetra_Operator &op, const Epetra_Map &map)
 {
   int numEntriesPerRow = 0;
-  Teuchos::RCP<Epetra_CrsMatrix> matrix = Teuchos::rcp(new Epetra_CrsMatrix(::Copy, map, numEntriesPerRow));
+  Teuchos::RCP<Epetra_FECrsMatrix> matrix = Teuchos::rcp(new Epetra_FECrsMatrix(::Copy, map, numEntriesPerRow));
 
   int numRows = map.NumGlobalElements();
 
@@ -54,7 +55,7 @@ Teuchos::RCP<Epetra_CrsMatrix> Epetra_Operator_to_Epetra_Matrix::constructInvers
     matrix->InsertGlobalValues(rowIndex, values.size(), &values[0], &indices[0]);
   }
 
-  matrix->FillComplete();
+  matrix->GlobalAssemble();
   return matrix;
 }
 }
