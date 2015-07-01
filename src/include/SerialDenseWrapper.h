@@ -239,13 +239,16 @@ public:
       Intrepid::FieldContainer<int> localColIDs(numCols);
       Intrepid::FieldContainer<double> values(numCols);
       int numColsExtracted = 0;
-      A.ExtractMyRowCopy(myRow,numCols,numColsExtracted,&values[0],&localColIDs[0]);
-      TEUCHOS_TEST_FOR_EXCEPTION(numCols != numColsExtracted, std::invalid_argument, "");
-      for (int colOrdinal=0; colOrdinal < numColsExtracted; colOrdinal++)
+      if (numCols > 0)
       {
-        int localColID = localColIDs(colOrdinal);
-        int j = A.RowMatrixColMap().GID(localColID);
-        A_fc(i,j) = values(colOrdinal);
+        A.ExtractMyRowCopy(myRow,numCols,numColsExtracted,&values[0],&localColIDs[0]);
+        TEUCHOS_TEST_FOR_EXCEPTION(numCols != numColsExtracted, std::invalid_argument, "");
+        for (int colOrdinal=0; colOrdinal < numColsExtracted; colOrdinal++)
+        {
+          int localColID = localColIDs(colOrdinal);
+          int j = A.RowMatrixColMap().GID(localColID);
+          A_fc(i,j) = values(colOrdinal);
+        }
       }
     }
     MPIWrapper::entryWiseSum<double>(A.Comm(),A_fc);
@@ -800,6 +803,8 @@ public:
       {
         //        std::cout << "maxSingularValue is zero for matrix:\n" << A;
       }
+//      std::cout << "minSingularValue: " << minSingularValue << std::endl;
+//      std::cout << "maxSingularValue: " << maxSingularValue << std::endl;
       return maxSingularValue / minSingularValue;
     }
     else
@@ -808,30 +813,43 @@ public:
       return -1.0;
     }
   }
-  
-  //! Returns true if all the eigenvalues are greater than zero
-  /*!
-   \param A In
-   A rank-2 FieldContainer with equal first and second dimensions.
-   
-   \return true if all the eigenvalues are positive; false otherwise.
-   */
-  static bool matrixIsPositiveDefinite(Intrepid::FieldContainer<double> &A)
-  {
-    return getMatrixConditionNumber2Norm(A, false) > 0.0;
-  }
-  
-  //! Returns true if all the eigenvalues are greater than or equal to zero
-  /*!
-   \param A In
-   A rank-2 FieldContainer with equal first and second dimensions.
-   
-   \return true if all the eigenvalues are non-negative; false otherwise.
-   */
-  static bool matrixIsPositiveSemiDefinite(Intrepid::FieldContainer<double> &A)
-  {
-    return getMatrixConditionNumber2Norm(A, true) > 0.0;
-  }
+
+  // These methods for testing positive (semi)definiteness do not work.  As noted in comments below, need to do an eigenvalue solve.
+//  //! Returns true if all the eigenvalues are greater than zero
+//  /*!
+//   \param A In
+//   A rank-2 FieldContainer with equal first and second dimensions.
+//   
+//   \return true if all the eigenvalues are positive; false otherwise.
+//   */
+//  static bool matrixIsPositiveDefinite(Intrepid::FieldContainer<double> &A)
+//  {
+//    cout << "WARNING: matrixIsPositiveDefinite() does not work.  Need to set up an eigenvalue solve, not an SVD!\n";
+//    /*
+//     See:
+//     http://www.physics.orst.edu/~rubin/nacphy/lapack/eigen.html
+//     dsytrd - Reduces a symmetric/Hermitian matrix to real symmetric tridiagonal form by an orthogonal/unitary similarity transformation
+//     dsteqr - Computes all eigenvalues and eigenvectors of a real	symmetric tridiagonal matrix, using the implicit QL or QR algorithm
+//     
+//     See also:
+//     http://www.netlib.org/lapack/lug/node70.html
+//     
+//     */
+//    return getMatrixConditionNumber2Norm(A, false) > 0.0;
+//  }
+//  
+//  //! Returns true if all the eigenvalues are greater than or equal to zero
+//  /*!
+//   \param A In
+//   A rank-2 FieldContainer with equal first and second dimensions.
+//   
+//   \return true if all the eigenvalues are non-negative; false otherwise.
+//   */
+//  static bool matrixIsPositiveSemiDefinite(Intrepid::FieldContainer<double> &A)
+//  {
+//    cout << "WARNING: matrixIsPositiveSemiDefinite() does not work.  Need to set up an eigenvalue solve, not an SVD!\n";
+//    return getMatrixConditionNumber2Norm(A, true) > 0.0;
+//  }
 
   static void writeMatrixToMatlabFile(const std::string& filePath, Intrepid::FieldContainer<double> &A)
   {
