@@ -1270,6 +1270,7 @@ void MeshTopology::deepCopyCells()
     if (oldParent != Teuchos::null)
     {
       CellPtr newParent = _cells[oldParent->cellIndex()];
+      newParent->setRefinementPattern(oldParent->refinementPattern());
       _cells[cellOrdinal]->setParent(newParent);
     }
     vector<CellPtr> children;
