@@ -170,6 +170,7 @@ void CamelliaCellTools::computeSideMeasure(FieldContainer<double> &weightedMeasu
   }
   else     // tensorialDegree > 0
   {
+    // TODO: rewrite the below to eliminate the requirement that the transformation preserves orthogonality of space and time.
     // for the below to work, we require the transformation preserves orthogonality of space and time.  Check that the Jacobian provided satisfies this:
     FieldContainer<double> spatialCellJacobian(numCells,numPoints,spaceDim-1,spaceDim-1);
     FieldContainer<double> temporalCellJacobianAbs(numCells,numPoints);
@@ -350,6 +351,7 @@ void CamelliaCellTools::getUnitSideNormals(FieldContainer<double> &unitSideNorma
     {
       FieldContainer<double> spaceUnitSideNormals(numCells,numPoints,spaceDim-1);
       CellTopoPtr spaceTopo = CellTopology::cellTopology(parentCell->getShardsTopology(), parentCell->getTensorialDegree()-1);
+      // TODO: rewrite the below to eliminate the requirement that the transformation preserves orthogonality of space and time.
       // for the below to work, we require the transformation preserves orthogonality of space and time.  Check that the Jacobian provided satisfies this:
       unsigned spatialSideOrdinal = parentCell->getSpatialComponentSideOrdinal(sideOrdinal);
       FieldContainer<double> spatialCellJacobian(numCells,numPoints,spaceDim-1,spaceDim-1);
