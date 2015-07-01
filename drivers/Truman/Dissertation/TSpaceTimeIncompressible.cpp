@@ -152,8 +152,17 @@ int main(int argc, char *argv[])
     string saveFilePrefix = rootDir + "/" + saveDir.str() + "/" + problemName.str();
     if (saveSolution && commRank == 0) cout << "Saving to " << saveFilePrefix << endl;
 
-    SpaceTimeIncompressibleFormulationPtr form = Teuchos::rcp(new SpaceTimeIncompressibleFormulation(spaceDim, steady, 1./Re,
-          useConformingTraces, problem, p, delta_p, numTElems, norm, loadFilePrefix));
+    Teuchos::ParameterList parameters;
+    parameters.set("spaceDim", spaceDim);
+    parameters.set("steady", steady);
+    parameters.set("mu", 1./Re);
+    parameters.set("useConformingTraces", useConformingTraces);
+    parameters.set("fieldPolyOrder", p);
+    parameters.set("delta_p", delta_p);
+    parameters.set("numTElems", numTElems);
+    parameters.set("norm", norm);
+    parameters.set("savedSolutionAndMeshPrefix", loadFilePrefix);
+    SpaceTimeIncompressibleFormulationPtr form = Teuchos::rcp(new SpaceTimeIncompressibleFormulation(problem, parameters));
 
     MeshPtr mesh = form->solutionUpdate()->mesh();
     MeshPtr k0Mesh = Teuchos::rcp( new Mesh (mesh->getTopology()->deepCopy(), form->bf(), 1, delta_p) );

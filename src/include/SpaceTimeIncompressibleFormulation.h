@@ -57,13 +57,8 @@ class SpaceTimeIncompressibleFormulation
   static const string s_tau3;
   static const string s_q;
 
-  // // ! initialize the Solution object(s) using the provided MeshTopology
-  // void initializeSolution(MeshTopologyPtr meshTopo, int fieldPolyOrder, int delta_k, string norm,
-  //                         LinearTermPtr forcingTerm, std::string fileToLoadPrefix);
 public:
-  SpaceTimeIncompressibleFormulation(int spaceDim, bool steady, double mu, bool useConformingTraces,
-    Teuchos::RCP<IncompressibleProblem> problem, int fieldPolyOrder, int delta_k, int numTElems, string norm,
-    string savedSolutionAndMeshPrefix);
+  SpaceTimeIncompressibleFormulation(Teuchos::RCP<IncompressibleProblem> problem, Teuchos::ParameterList &parameters);
 
   // ! the formulation's variable factory
   VarFactoryPtr vf();
@@ -73,14 +68,6 @@ public:
 
   // ! the formulation's bilinear form
   IPPtr ip(string normName);
-
-  // // ! initialize the Solution object(s) using the provided MeshTopology
-  // void initializeSolution(MeshTopologyPtr meshTopo, int fieldPolyOrder, int delta_k = 1, string norm = "Graph",
-  //                         LinearTermPtr forcingTerm = Teuchos::null);
-
-  // // ! initialize the Solution object(s) from file
-  // void initializeSolution(std::string filePrefix, int fieldPolyOrder, int delta_k = 1, string norm = "Graph",
-  //                         LinearTermPtr forcingTerm = Teuchos::null);
 
   // ! Loads the mesh and solution from disk, if they were previously saved using save().  In the present
   // ! implementation, assumes that the constructor arguments provided to SpaceTimeIncompressibleFormulation were the same
