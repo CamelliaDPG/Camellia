@@ -381,6 +381,8 @@ public:
   template <typename Scalar>
   void unregisterSolution(TSolutionPtr<Scalar> solution);
 
+  VarFactoryPtr varFactory() const;
+  
   void writeMeshPartitionsToFile(const string & fileName);
 
   double getCellMeasure(GlobalIndexType cellID);

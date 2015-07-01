@@ -447,33 +447,25 @@ void Mesh::enforceOneIrregularity()
     for (GlobalIndexType cellID : activeCellIDs)
     {
       CellPtr cell = _meshTopology->getCell(cellID);
-      bool isIrregular = false;
       int sideCount = cell->getSideCount();
       for (int sideOrdinal=0; sideOrdinal < sideCount; sideOrdinal++)
       {
         pair<GlobalIndexType, unsigned> neighborInfo = cell->getNeighborInfo(sideOrdinal, _meshTopology);
-        unsigned mySideIndexInNeighbor = neighborInfo.second;
 
         if (neighborInfo.first != -1)
         {
-          CellPtr neighbor = _meshTopology->getCell(neighborInfo.first);
-          int numNeighborsOnSide = neighbor->getDescendantsForSide(mySideIndexInNeighbor, _meshTopology).size();
-          if (spaceDim==2)
+          if (spaceDim > 1)
           {
-            if (numNeighborsOnSide > 2) isIrregular=true;
-          }
-          else if (spaceDim==3)
-          {
-            // TODO: fix this criterion so that it will be correct for anisotropic refinements (consider two vertical cuts: could have as few as 3 neighbors and still be 2-irregular).  The right criterion is the depth of the side's refinement tree: this should be at most 1.  (This holds in general dimensions, not just 3.)
-            if (numNeighborsOnSide > 4) isIrregular=true;
+            CellPtr neighbor = _meshTopology->getCell(neighborInfo.first);
+            RefinementBranch myRefinementBranch = cell->refinementBranchForSide(sideOrdinal, _meshTopology);
+            if (myRefinementBranch.size() > 1)
+            {
+              // then *neighbor* is irregular
+              irregularCellIDs[neighbor->topology()->getKey()].insert(neighborInfo.first);
+//              cout << neighborInfo.first << " is irregular.\n";
+            }
           }
         }
-      }
-
-      if (isIrregular)
-      {
-//        if (rank==0) cout << "cellID " << cellID << " is irregular.\n";
-        irregularCellIDs[cell->topology()->getKey()].insert(cellID);
       }
     }
     if (irregularCellIDs.size() > 0)
@@ -1290,6 +1282,11 @@ bool Mesh::usePatchBasis()
 MeshTopologyViewPtr Mesh::getTopology()
 {
   return _meshTopology;
+}
+
+VarFactoryPtr Mesh::varFactory() const
+{
+  return _varFactory;
 }
 
 vector<unsigned> Mesh::vertexIndicesForCell(GlobalIndexType cellID)
