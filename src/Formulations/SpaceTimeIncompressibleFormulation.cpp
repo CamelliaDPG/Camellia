@@ -45,10 +45,18 @@ const string SpaceTimeIncompressibleFormulation::s_tau2 = "tau2";
 const string SpaceTimeIncompressibleFormulation::s_tau3 = "tau3";
 const string SpaceTimeIncompressibleFormulation::s_q = "q";
 
-SpaceTimeIncompressibleFormulation::SpaceTimeIncompressibleFormulation(int spaceDim, bool steady, double mu, bool useConformingTraces,
-    Teuchos::RCP<IncompressibleProblem> problem, int fieldPolyOrder, int delta_k, int numTElems, string norm,
-    string savedSolutionAndMeshPrefix)
+SpaceTimeIncompressibleFormulation::SpaceTimeIncompressibleFormulation(Teuchos::RCP<IncompressibleProblem> problem, Teuchos::ParameterList &parameters)
 {
+  int spaceDim = parameters.get<int>("spaceDim", 2);
+  bool steady = parameters.get<bool>("steady", true);
+  double mu = parameters.get<double>("mu", 1e-2);
+  bool useConformingTraces = parameters.get<bool>("useConformingTraces", false);
+  int fieldPolyOrder = parameters.get<int>("fieldPolyOrder", 2);
+  int delta_p = parameters.get<int>("delta_p", 2);
+  int numTElems = parameters.get<int>("numTElems", 2);
+  string norm = parameters.get<string>("norm", "Graph");
+  string savedSolutionAndMeshPrefix = parameters.get<string>("savedSolutionAndMeshPrefix", "");
+
   _spaceDim = spaceDim;
   _steady = steady;
   _mu = mu;
@@ -197,8 +205,8 @@ SpaceTimeIncompressibleFormulation::SpaceTimeIncompressibleFormulation(int space
   H1Order[1] = fieldPolyOrder + 1; // for now, use same poly. degree for temporal bases...
   if (savedSolutionAndMeshPrefix == "")
   {
-    MeshPtr proxyMesh = Teuchos::rcp( new Mesh(meshTopo->deepCopy(), _bf, H1Order, delta_k) ) ;
-    _mesh = Teuchos::rcp( new Mesh(meshTopo, _bf, H1Order, delta_k) ) ;
+    MeshPtr proxyMesh = Teuchos::rcp( new Mesh(meshTopo->deepCopy(), _bf, H1Order, delta_p) ) ;
+    _mesh = Teuchos::rcp( new Mesh(meshTopo, _bf, H1Order, delta_p) ) ;
     if (meshGeometry != Teuchos::null)
       _mesh->setEdgeToCurveMap(meshGeometry->edgeToCurveMap());
     proxyMesh->registerObserver(_mesh);
