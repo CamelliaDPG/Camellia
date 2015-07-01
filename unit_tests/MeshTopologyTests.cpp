@@ -164,6 +164,7 @@ void testConstraints( MeshTopology* mesh, unsigned entityDim, map<unsigned,pair<
   
   void testNeighbors(MeshTopologyPtr mesh, Teuchos::FancyOStream &out, bool &success)
   {
+    // Worth noting: while the assertions this makes are necessary, they aren't sufficient for correctness of neighbor relationships.
     set<IndexType> activeCellIndices = mesh->getActiveCellIndices();
     for (IndexType activeCellIndex : activeCellIndices)
     {
@@ -485,6 +486,8 @@ TEUCHOS_UNIT_TEST(MeshTopology, GetRootMeshTopology)
     MeshTopologyPtr meshTopo = constructIrregularMeshTopology(irregularity);
     IndexType irregularCellIndex = -1;
     set<IndexType> activeCells = meshTopo->getActiveCellIndices();
+    IndexType activeCellWithLargeNeighbor;
+    IndexType activeCellWithLargeNeighborSideOrdinal; // the side shared with the irregular cell
     for (IndexType activeCellIndex : activeCells)
     {
       CellPtr activeCell = meshTopo->getCell(activeCellIndex);
@@ -494,16 +497,32 @@ TEUCHOS_UNIT_TEST(MeshTopology, GetRootMeshTopology)
         if (sideRefBranch.size() == irregularity)
         {
           irregularCellIndex = activeCell->getNeighborInfo(sideOrdinal, meshTopo).first;
+          activeCellWithLargeNeighbor = activeCellIndex;
+          activeCellWithLargeNeighborSideOrdinal = sideOrdinal;
+          break;
         }
       }
+      if (irregularCellIndex != -1) break;
     }
     TEST_ASSERT(irregularCellIndex != -1);
+    
+    CellPtr smallCell = meshTopo->getCell(activeCellWithLargeNeighbor);
+    // before refinement, small cell should have irregular cell index as its neighbor on the side:
+    TEST_EQUALITY(smallCell->getNeighborInfo(activeCellWithLargeNeighborSideOrdinal, meshTopo).first,
+                  irregularCellIndex);
     
     // test neighbors before and after refinement
     testNeighbors(meshTopo, out, success);
     
     RefinementPatternPtr refPattern = RefinementPattern::regularRefinementPattern(meshTopo->getCell(irregularCellIndex)->topology());
     meshTopo->refineCell(irregularCellIndex, refPattern);
+
+    // after refinement, small cell should no longer have irregular cell index as its neighbor on the side:
+    GlobalIndexType smallCellNeighborCellIndex = smallCell->getNeighborInfo(activeCellWithLargeNeighborSideOrdinal, meshTopo).first;
+    TEST_INEQUALITY(smallCellNeighborCellIndex, irregularCellIndex);
+    // instead, the neighbor should be one of the irregular cell's children
+    CellPtr smallCellNeighbor = meshTopo->getCell(smallCell->getNeighborInfo(activeCellWithLargeNeighborSideOrdinal, meshTopo).first);
+    TEST_EQUALITY(smallCellNeighbor->getParent()->cellIndex(), irregularCellIndex);
     
     testNeighbors(meshTopo, out, success);
   }
