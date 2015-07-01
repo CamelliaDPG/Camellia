@@ -314,13 +314,13 @@ namespace
       // x + D^-1 b
       directValue.Multiply(1.0, rhsVectorCopy2, *diagA_inv, 1.0);
     }
-    else
-    {
-      // DEBUGGING multiplicative option:
-      gmgSolver->gmgOperator()->setDebugMode(true);
-      
-      cout << "x:\n" << directValue;
-    }
+//    else
+//    {
+//      // DEBUGGING multiplicative option:
+//      gmgSolver->gmgOperator()->setDebugMode(true);
+//      
+//      cout << "x:\n" << directValue;
+//    }
     
     gmgSolver->gmgOperator()->setSmootherType(GMGOperator::POINT_JACOBI);
     
