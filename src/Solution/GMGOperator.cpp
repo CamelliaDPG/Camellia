@@ -71,9 +71,10 @@ _finePartitionMap(finePartitionMap), _br(true)
 
   _schwarzBlockFactorizationType = Direct;
 
-  // false values for these would imply a two-level operator
-  _smoothBeforeCoarseSolve = false;
-  _smoothAfterCoarseSolve = false;
+  // additive implies a two-level operator.  In principle, it seems to me MULTIPLICATIVE should be the better choice (in terms of iteration counts), but
+  // there may be a bug, or a failure of my understanding -- this is not what we see in general.  (In some cases multiplicative is indeed better, but in
+  // others it fails dramatically.)
+  _smootherApplicationType = ADDITIVE;
 
   _levelOfFill = 2;
   _fillRatio = 5.0;
@@ -452,6 +453,11 @@ Teuchos::RCP<DofInterpreter> GMGOperator::getFineDofInterpreter()
   return _fineDofInterpreter;
 }
 
+Epetra_CrsMatrix* GMGOperator::getFineStiffnessMatrix()
+{
+  return _fineStiffnessMatrix;
+}
+
 LocalDofMapperPtr GMGOperator::getLocalCoefficientMap(GlobalIndexType fineCellID) const
 {
   const set<IndexType>* coarseCellIDs = &_coarseMesh->getTopology()->getActiveCellIndices();
@@ -709,12 +715,17 @@ LocalDofMapperPtr GMGOperator::getLocalCoefficientMap(GlobalIndexType fineCellID
   return dofMapper;
 }
 
+GMGOperator::SmootherChoice GMGOperator::getSmootherType()
+{
+  return _smootherType;
+}
+
 int GMGOperator::Apply(const Epetra_MultiVector& X, Epetra_MultiVector& Y) const
 {
   TEUCHOS_TEST_FOR_EXCEPTION(true, std::invalid_argument, "Unsupported method.");
 }
 
-// new version replaces a two-level operator with one that applies the smoother before passing to coarse solve
+// newest version applies a supposedly equivalent operator in the case _smoothBeforeCoarseSolve and _smoothAfterCoarseSolve are true
 int GMGOperator::ApplyInverse(const Epetra_MultiVector& X_in, Epetra_MultiVector& Y) const
 {
   narrate("ApplyInverse");
@@ -722,44 +733,148 @@ int GMGOperator::ApplyInverse(const Epetra_MultiVector& X_in, Epetra_MultiVector
   int rank = Teuchos::GlobalMPISession::getRank();
   bool printVerboseOutput = (rank==0) && _debugMode;
   
+  if (_debugMode) printMapSummary(_P->RangeMap(), "_P range map");
+  if (_debugMode) printMapSummary(_P->DomainMap(), "_P domain map");
+  
   Epetra_Time timer(Comm());
   
-//  cout << "X_in:\n" << X_in;
+  if (_debugMode)
+  {
+    if (printVerboseOutput) cout << "X_in:\n";
+    X_in.Comm().Barrier();
+    cout << X_in;
+  }
   
-  Epetra_MultiVector X(X_in); // looks like Y may be stored in the same location as X_in, so that changing Y will change X, too...
-  Epetra_MultiVector X_original(X_in); // this one we won't change
+  Epetra_MultiVector res(X_in); // Res: residual.  Starting with Y = 0, then this is just the RHS
+  Epetra_MultiVector f(X_in);   // f: the RHS.  Don't change this.
+  Epetra_MultiVector B1_f(Y.Map(), Y.NumVectors()); // B1_f: the smoother applied to f.
+  
+  // initialize Y (important to do this after X_in has been copied--X and Y can be in the same location)
+  Y.PutScalar(0.0);
+  
   if (_smootherType != NONE)
   {
-    // if we have a smoother S, set Y = S^-1 X
+    // if we have a smoother S, set Y = S^-1 f =: B1 * f
     narrate("smoother->ApplyInverse()");
     timer.ResetStartTime();
-    int err = _smoother->ApplyInverse(X, Y);
+    int err = _smoother->ApplyInverse(f, B1_f);
+    Y.Update(1.0, B1_f, 1.0);
+    _timeApplySmoother += timer.ElapsedTime();
+    if (err != 0)
+    {
+      cout << "_smoother->ApplyInverse returned non-zero error code " << err << endl;
+    }
+    if (_debugMode)
+    {
+      if (printVerboseOutput) cout << "B1 * f:\n";
+      B1_f.Comm().Barrier();
+      cout << B1_f;
+    }
+    
+    if (_smootherApplicationType == MULTIPLICATIVE)
+    {
+      // compute a new residual: res := f - A*Y = res - A*Y
+      timer.ResetStartTime();
+      Epetra_MultiVector A_Y(Y.Map(), Y.NumVectors());
+      err = _fineStiffnessMatrix->Apply(B1_f, A_Y);
+      if (err != 0)
+      {
+        cout << "_fineStiffnessMatrix->Apply returned non-zero error code " << err << endl;
+      }
+      _timeApplyFineStiffness += timer.ElapsedTime();
+      res.Update(-1.0, A_Y, 1.0);
+      
+      if (_debugMode)
+      {
+        if (printVerboseOutput) cout << "Updated residual after smoother application:\n";
+        res.Comm().Barrier();
+        cout << res;
+      }
+    }
+  }
+  
+  Epetra_MultiVector Y2(Y.Map(), Y.NumVectors());
+
+  this->ApplyInverseCoarseOperator(res, Y2);  // Y2 = B2 * res = B2 * (I - A * B1) * f
+  
+  if (_debugMode)
+  {
+    if (printVerboseOutput) cout << "Y2 after applyCoarseInverseOperator:\n";
+    Y2.Comm().Barrier();
+    cout << Y2;
+  }
+  
+  Y.Update(1.0, Y2, 1.0);
+  if (_debugMode)
+  {
+    if (printVerboseOutput) cout << "Y:\n";
+    Y.Comm().Barrier();
+    cout << Y;
+  }
+  
+  if ((_smootherType != NONE) && (_smootherApplicationType == MULTIPLICATIVE))
+  {
+    // compute Y + B1 * (f - A*y)
+    timer.ResetStartTime();
+    Epetra_MultiVector A_Y(Y.Map(), Y.NumVectors());
+    int err = _fineStiffnessMatrix->Apply(Y, A_Y);
+    if (err != 0)
+    {
+      cout << "_fineStiffnessMatrix->Apply returned non-zero error code " << err << endl;
+    }
+    _timeApplyFineStiffness += timer.ElapsedTime();
+    res = f;
+    res.Update(-1.0, A_Y, 1.0);
+    
+    Epetra_MultiVector B1_res(Y.Map(), Y.NumVectors());
+    timer.ResetStartTime();
+    err = _smoother->ApplyInverse(res, B1_res);
     _timeApplySmoother += timer.ElapsedTime();
     if (err != 0)
     {
       cout << "_smoother->ApplyInverse returned non-zero error code " << err << endl;
     }
     
-    if (_smoothBeforeCoarseSolve)
+    Y.Update(1.0, B1_res, 1.0);
+    
+    if (_debugMode)
     {
-      // compute a new residual: X := X - A*Y
-      timer.ResetStartTime();
-      Epetra_MultiVector A_Y(Y.Map(), Y.NumVectors());
-      err = _fineStiffnessMatrix->Apply(Y, A_Y);
-      if (err != 0)
-      {
-        cout << "_fineStiffnessMatrix->Apply returned non-zero error code " << err << endl;
-      }
-      _timeApplyFineStiffness += timer.ElapsedTime();
-      X.Update(-1.0, A_Y, 1.0);
+      if (printVerboseOutput) cout << "Y:\n";
+      Y.Comm().Barrier();
+      cout << Y;
     }
   }
-  else
+  
+  /*
+   We zero out the lagrange multiplier solutions on the fine mesh, because we're relying on the coarse solve to impose these;
+   we just use an identity block in the lower right of the fine matrix for the Lagrange constraints themselves.
+   
+   The argument for this, at least for zero mean constraints:
+   If the coarse solution has zero mean, then the fact that the prolongation operator is exact (i.e. coarse mesh solution is
+   exactly reproduced on fine mesh) means that the fine mesh solution will have zero mean.
+   
+   This neglects the smoothing operator.  If the smoothing operator isn't guaranteed to produce an update with zero mean,
+   then this may not work.
+   */
+  GlobalIndexType firstFineConstraintRowIndex = _fineDofInterpreter->globalDofCount();
+  for (GlobalIndexTypeToCast fineRowIndex=firstFineConstraintRowIndex; fineRowIndex<Y.GlobalLength(); fineRowIndex++)
   {
-    // initialize Y:
-    Y.PutScalar(0.0);
+    int LID = Y.Map().LID(fineRowIndex);
+    if (LID != -1)
+    {
+      Y[0][LID] = 0.0;
+    }
   }
   
+  return 0;
+}
+
+
+int GMGOperator::ApplyInverseCoarseOperator(const Epetra_MultiVector &res, Epetra_MultiVector &Y) const
+{
+  int rank = Teuchos::GlobalMPISession::getRank();
+  bool printVerboseOutput = (rank==0) && _debugMode;
+
   Teuchos::RCP<Epetra_FEVector> coarseRHSVector = _coarseSolution->getRHSVector();
   
   if (coarseRHSVector->GlobalLength() != _P->NumGlobalCols())
@@ -768,12 +883,26 @@ int GMGOperator::ApplyInverse(const Epetra_MultiVector& X_in, Epetra_MultiVector
     TEUCHOS_TEST_FOR_EXCEPTION(true, std::invalid_argument, "coarseRHSVector->GlobalLength() != _P->NumGlobalCols()");
   }
   
-  timer.ResetStartTime();
+  Epetra_Time timer(Comm());
   
   narrate("multiply _P * coarseRHSVector");
-  if (printVerboseOutput) cout << "calling _P->Multiply(true, X, *coarseRHSVector);\n";
-  _P->Multiply(true, X, *coarseRHSVector);
+  if (printVerboseOutput) cout << "calling _P->Multiply(true, res, *coarseRHSVector);\n";
+  if (_debugMode)
+  {
+    if (rank==0) cout << "res:\n";
+    res.Comm().Barrier();
+    cout << res;
+    res.Comm().Barrier();
+  }
+  _P->Multiply(true, res, *coarseRHSVector);
   if (printVerboseOutput) cout << "finished _P->Multiply(true, X, *coarseRHSVector);\n";
+  if (_debugMode)
+  {
+    if (rank==0) cout << "coarseRHSVector:\n";
+    coarseRHSVector->Comm().Barrier();
+    cout << *coarseRHSVector;
+    coarseRHSVector->Comm().Barrier();
+  }
   _timeMapFineToCoarse += timer.ElapsedTime();
   
   Teuchos::RCP<Epetra_FEVector> coarseLHSVector;
@@ -809,80 +938,236 @@ int GMGOperator::ApplyInverse(const Epetra_MultiVector& X_in, Epetra_MultiVector
   if (printVerboseOutput) cout << "calling _coarseSolution->getLHSVector()\n";
   coarseLHSVector = _coarseSolution->getLHSVector();
   
+  if (_debugMode)
+  {
+    if (rank==0) cout << "coarseLHSVector:\n";
+    coarseLHSVector->Comm().Barrier();
+    cout << *coarseLHSVector;
+    coarseLHSVector->Comm().Barrier();
+  }
+  
   if (printVerboseOutput) cout << "finished _coarseSolution->getLHSVector()\n";
   if (printVerboseOutput) cout << "calling _P->Multiply(false, *coarseLHSVector, Y)\n";
   narrate("multiply _P * coarseLHSVector");
-  Epetra_MultiVector Y2(Y.Map(), Y.NumVectors());
-  _P->Multiply(false, *coarseLHSVector, Y2);
+
+  _P->Multiply(false, *coarseLHSVector, Y);
   if (printVerboseOutput) cout << "finished _P->Multiply(false, *coarseLHSVector, Y)\n";
   _timeMapCoarseToFine += timer.ElapsedTime();
   
-//  cout << "Y2:\n" << Y2;
-  
-  Y.Update(1.0, Y2, 1.0);
-
-//  cout << "Y:\n" << Y;
-  
-  if ((_smootherType != NONE) && _smoothAfterCoarseSolve)
+  if (_debugMode)
   {
-    // first compute the new residual X := X - A*Y
-    timer.ResetStartTime();
-    Epetra_MultiVector A_Y(Y.Map(), Y.NumVectors());
-    int err = _fineStiffnessMatrix->Apply(Y, A_Y);
-    if (err != 0)
-    {
-      cout << "_fineStiffnessMatrix->Apply returned non-zero error code " << err << endl;
-    }
-    _timeApplyFineStiffness += timer.ElapsedTime();
-    X = X_original; // copy
-    X.Update(-1.0, A_Y, 1.0);
-    
-//    cout << "X_original:\n" << X_original;
-//    
-//    cout << "Y so far:\n" << Y;
-//    
-//    cout << "A_Y:\n" << A_Y;
-//    
-//    cout << "new residual:\n" << X;
-    
-    // if we have a smoother S, set Y2 = S^-1 X
-    narrate("smoother->ApplyInverse()");
-    timer.ResetStartTime();
-    err = _smoother->ApplyInverse(X, Y2);
-    _timeApplySmoother += timer.ElapsedTime();
-    if (err != 0)
-    {
-      cout << "_smoother->ApplyInverse returned non-zero error code " << err << endl;
-    }
-    
-    Y.Update(1.0, Y2, 1.0);
-    
-//    cout << "Y:\n" << Y;
+    if (rank==0) cout << "_P * coarseLHSVector:\n";
+    Y.Comm().Barrier();
+    cout << Y;
+    Y.Comm().Barrier();
   }
-  
-  /*
-   We zero out the lagrange multiplier solutions on the fine mesh, because we're relying on the coarse solve to impose these;
-   we just use an identity block in the lower right of the fine matrix for the Lagrange constraints themselves.
-   
-   The argument for this, at least for zero mean constraints:
-   If the coarse solution has zero mean, then the fact that the prolongation operator is exact (i.e. coarse mesh solution is
-   exactly reproduced on fine mesh) means that the fine mesh solution will have zero mean.
-   
-   This neglects the smoothing operator.  If the smoothing operator isn't guaranteed to produce an update with zero mean,
-   then this may not work.
-   */
-  GlobalIndexType firstFineConstraintRowIndex = _fineDofInterpreter->globalDofCount();
-  for (GlobalIndexTypeToCast fineRowIndex=firstFineConstraintRowIndex; fineRowIndex<Y.GlobalLength(); fineRowIndex++)
-  {
-    int LID = Y.Map().LID(fineRowIndex);
-    if (LID != -1)
-    {
-      Y[0][LID] = 0.0;
-    }
-  }
-  
   return 0;
 }
+
+
+//// new version replaces a two-level operator with one that can apply the smoother before passing to coarse solve
+//int GMGOperator::ApplyInverse(const Epetra_MultiVector& X_in, Epetra_MultiVector& Y) const
+//{
+//  narrate("ApplyInverse");
+//  //  cout << "GMGOperator::ApplyInverse.\n";
+//  int rank = Teuchos::GlobalMPISession::getRank();
+//  bool printVerboseOutput = (rank==0) && _debugMode;
+//  
+//  if (_debugMode) printMapSummary(_P->RangeMap(), "_P range map");
+//  if (_debugMode) printMapSummary(_P->DomainMap(), "_P domain map");
+//  
+//  Epetra_Time timer(Comm());
+//  
+////  cout << "X_in:\n" << X_in;
+//  
+//  Epetra_MultiVector res(X_in); // Res: residual.  Starting with Y = 0, then this is just the RHS
+//  Epetra_MultiVector f(X_in);   // f: the RHS.  Don't change this.
+//  if (_smootherType != NONE)
+//  {
+//    // if we have a smoother S, set Y = S^-1 f
+//    narrate("smoother->ApplyInverse()");
+//    timer.ResetStartTime();
+//    int err = _smoother->ApplyInverse(f, Y);
+//    _timeApplySmoother += timer.ElapsedTime();
+//    if (err != 0)
+//    {
+//      cout << "_smoother->ApplyInverse returned non-zero error code " << err << endl;
+//    }
+//    
+//    if (_smoothBeforeCoarseSolve)
+//    {
+//      // compute a new residual: res := f - A*Y = res - A*Y
+//      timer.ResetStartTime();
+//      Epetra_MultiVector A_Y(Y.Map(), Y.NumVectors());
+//      err = _fineStiffnessMatrix->Apply(Y, A_Y);
+//      if (err != 0)
+//      {
+//        cout << "_fineStiffnessMatrix->Apply returned non-zero error code " << err << endl;
+//      }
+//      _timeApplyFineStiffness += timer.ElapsedTime();
+//      res.Update(-1.0, A_Y, 1.0);
+//    }
+//  }
+//  else
+//  {
+//    // initialize Y:
+//    Y.PutScalar(0.0);
+//  }
+//  
+//  Teuchos::RCP<Epetra_FEVector> coarseRHSVector = _coarseSolution->getRHSVector();
+//  
+//  if (coarseRHSVector->GlobalLength() != _P->NumGlobalCols())
+//  {
+//    // TODO: add support for coarseRHSVector that may have lagrange/zmc constraints applied even though fine solution neglects these...
+//    TEUCHOS_TEST_FOR_EXCEPTION(true, std::invalid_argument, "coarseRHSVector->GlobalLength() != _P->NumGlobalCols()");
+//  }
+//  
+//  timer.ResetStartTime();
+//  
+//  narrate("multiply _P * coarseRHSVector");
+//  if (printVerboseOutput) cout << "calling _P->Multiply(true, res, *coarseRHSVector);\n";
+//  if (_debugMode)
+//  {
+//    if (rank==0) cout << "res:\n";
+//    res.Comm().Barrier();
+//    cout << res;
+//    res.Comm().Barrier();
+//  }
+//  _P->Multiply(true, res, *coarseRHSVector);
+//  if (printVerboseOutput) cout << "finished _P->Multiply(true, X, *coarseRHSVector);\n";
+//  if (_debugMode)
+//  {
+//    if (rank==0) cout << "coarseRHSVector:\n";
+//    coarseRHSVector->Comm().Barrier();
+//    cout << *coarseRHSVector;
+//    coarseRHSVector->Comm().Barrier();
+//  }
+//  _timeMapFineToCoarse += timer.ElapsedTime();
+//  
+//  Teuchos::RCP<Epetra_FEVector> coarseLHSVector;
+//  
+//  timer.ResetStartTime();
+//  if (_coarseSolver == Teuchos::null)
+//  {
+//    // then we must be at a finer level than the coarsest, and the appropriate thing is to simply apply
+//    // our _coarseOperator
+//    TEUCHOS_TEST_FOR_EXCEPTION(_coarseOperator == Teuchos::null, std::invalid_argument, "GMGOperator internal error: _coarseOperator and _coarseSolver are both null");
+//    _coarseOperator->ApplyInverse(*coarseRHSVector, *_coarseSolution->getLHSVector());
+//  }
+//  else if (!_haveSolvedOnCoarseMesh)
+//  {
+//    if (printVerboseOutput) cout << "solving on coarse mesh\n";
+//    narrate("_coarseSolution->solveWithPrepopulatedStiffnessAndLoad(_coarseSolver, false)");
+//    _coarseSolution->setProblem(_coarseSolver);
+//    _coarseSolution->solveWithPrepopulatedStiffnessAndLoad(_coarseSolver, false);
+//    if (printVerboseOutput) cout << "finished solving on coarse mesh\n";
+//    _haveSolvedOnCoarseMesh = true;
+//  }
+//  else
+//  {
+//    if (printVerboseOutput) cout << "re-solving on coarse mesh\n";
+//    narrate("_coarseSolution->solveWithPrepopulatedStiffnessAndLoad(_coarseSolver, true)");
+//    _coarseSolver->setRHS(coarseRHSVector);
+//    _coarseSolution->solveWithPrepopulatedStiffnessAndLoad(_coarseSolver, true); // call resolve() instead of solve() -- reuse factorization
+//    if (printVerboseOutput) cout << "finished re-solving on coarse mesh\n";
+//  }
+//  _timeCoarseSolve += timer.ElapsedTime();
+//  
+//  timer.ResetStartTime();
+//  if (printVerboseOutput) cout << "calling _coarseSolution->getLHSVector()\n";
+//  coarseLHSVector = _coarseSolution->getLHSVector();
+//  
+//  if (_debugMode)
+//  {
+//    if (rank==0) cout << "coarseLHSVector:\n";
+//    coarseLHSVector->Comm().Barrier();
+//    cout << *coarseLHSVector;
+//    coarseLHSVector->Comm().Barrier();
+//  }
+//  
+//  if (printVerboseOutput) cout << "finished _coarseSolution->getLHSVector()\n";
+//  if (printVerboseOutput) cout << "calling _P->Multiply(false, *coarseLHSVector, Y)\n";
+//  narrate("multiply _P * coarseLHSVector");
+//  Epetra_MultiVector Y2(Y.Map(), Y.NumVectors());
+//  _P->Multiply(false, *coarseLHSVector, Y2);
+//  if (printVerboseOutput) cout << "finished _P->Multiply(false, *coarseLHSVector, Y)\n";
+//  _timeMapCoarseToFine += timer.ElapsedTime();
+//  
+//  if (_debugMode)
+//  {
+//    if (rank==0) cout << "_P * coarseLHSVector:\n";
+//    Y2.Comm().Barrier();
+//    cout << Y2;
+//    Y2.Comm().Barrier();
+//  }
+//  
+////  cout << "Y2:\n" << Y2;
+//  
+//  Y.Update(1.0, Y2, 1.0);
+//
+////  cout << "Y:\n" << Y;
+//  
+//  if ((_smootherType != NONE) && _smoothAfterCoarseSolve)
+//  {
+//    // first compute the new residual X := X - A*Y
+//    timer.ResetStartTime();
+//    Epetra_MultiVector A_Y(Y.Map(), Y.NumVectors());
+//    int err = _fineStiffnessMatrix->Apply(Y, A_Y);
+//    if (err != 0)
+//    {
+//      cout << "_fineStiffnessMatrix->Apply returned non-zero error code " << err << endl;
+//    }
+//    _timeApplyFineStiffness += timer.ElapsedTime();
+//    
+//    res = f; // copy
+//    res.Update(-1.0, A_Y, 1.0);
+//    
+////    cout << "X_original:\n" << X_original;
+////    
+////    cout << "Y so far:\n" << Y;
+////    
+////    cout << "A_Y:\n" << A_Y;
+////    
+////    cout << "new residual:\n" << X;
+//    
+//    // if we have a smoother S, set Y2 = S^-1 * res
+//    narrate("smoother->ApplyInverse()");
+//    timer.ResetStartTime();
+//    err = _smoother->ApplyInverse(res, Y2);
+//    _timeApplySmoother += timer.ElapsedTime();
+//    if (err != 0)
+//    {
+//      cout << "_smoother->ApplyInverse returned non-zero error code " << err << endl;
+//    }
+//    
+//    Y.Update(1.0, Y2, 1.0);
+//    
+////    cout << "Y:\n" << Y;
+//  }
+//  
+//  /*
+//   We zero out the lagrange multiplier solutions on the fine mesh, because we're relying on the coarse solve to impose these;
+//   we just use an identity block in the lower right of the fine matrix for the Lagrange constraints themselves.
+//   
+//   The argument for this, at least for zero mean constraints:
+//   If the coarse solution has zero mean, then the fact that the prolongation operator is exact (i.e. coarse mesh solution is
+//   exactly reproduced on fine mesh) means that the fine mesh solution will have zero mean.
+//   
+//   This neglects the smoothing operator.  If the smoothing operator isn't guaranteed to produce an update with zero mean,
+//   then this may not work.
+//   */
+//  GlobalIndexType firstFineConstraintRowIndex = _fineDofInterpreter->globalDofCount();
+//  for (GlobalIndexTypeToCast fineRowIndex=firstFineConstraintRowIndex; fineRowIndex<Y.GlobalLength(); fineRowIndex++)
+//  {
+//    int LID = Y.Map().LID(fineRowIndex);
+//    if (LID != -1)
+//    {
+//      Y[0][LID] = 0.0;
+//    }
+//  }
+//  
+//  return 0;
+//}
 
 // the below does "two-level" updates; the above newer version applies smoothing prior to computing the coarse grid residual
 //int GMGOperator::ApplyInverse(const Epetra_MultiVector& X_in, Epetra_MultiVector& Y) const
@@ -1240,41 +1525,9 @@ void GMGOperator::setSchwarzFactorizationType(FactorType choice)
   _schwarzBlockFactorizationType = choice;
 }
 
-void GMGOperator::setStiffnessDiagonal(Teuchos::RCP< Epetra_MultiVector> diagonal)
+void GMGOperator::setSmootherApplicationType(SmootherApplicationType applicationType)
 {
-  // this should be the true diagonal (before scaling) of the fine stiffness matrix.
-  _diag = diagonal;
-  if (diagonal.get() != NULL)
-  {
-    // construct inverse, too.
-    const Epetra_BlockMap* map = &_diag->Map();
-    _diag_inv = Teuchos::rcp( new Epetra_MultiVector(*map, 1) );
-    _diag_sqrt = Teuchos::rcp( new Epetra_MultiVector(*map, 1) );
-    if (map->NumMyElements() > 0)
-    {
-      for (int lid = map->MinLID(); lid <= map->MaxLID(); lid++)
-      {
-        (*_diag_inv)[0][lid] = 1.0 / (*_diag)[0][lid];
-        (*_diag_sqrt)[0][lid] = sqrt((*_diag)[0][lid]);
-      }
-    }
-  }
-  else
-  {
-    _diag_inv = Teuchos::rcp( (Epetra_MultiVector*) NULL);
-    _diag_sqrt = Teuchos::rcp( (Epetra_MultiVector*) NULL);
-  }
-
-}
-
-void GMGOperator::setSmoothBeforeCoarseSolve(bool value)
-{
-  _smoothBeforeCoarseSolve = value;
-}
-
-void GMGOperator::setSmoothAfterCoarseSolve(bool value)
-{
-  _smoothAfterCoarseSolve = value;
+  _smootherApplicationType = applicationType;
 }
 
 void GMGOperator::setSmootherOverlap(int overlap)
