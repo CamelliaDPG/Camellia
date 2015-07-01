@@ -174,7 +174,7 @@ void CamelliaCellTools::computeSideMeasure(FieldContainer<double> &weightedMeasu
     // for the below to work, we require the transformation preserves orthogonality of space and time.  Check that the Jacobian provided satisfies this:
     FieldContainer<double> spatialCellJacobian(numCells,numPoints,spaceDim-1,spaceDim-1);
     FieldContainer<double> temporalCellJacobianAbs(numCells,numPoints);
-    
+
     for (int d1=0; d1<spaceDim-1; d1++)
     {
       int d2 = spaceDim - 1;
@@ -186,7 +186,7 @@ void CamelliaCellTools::computeSideMeasure(FieldContainer<double> &weightedMeasu
         TEUCHOS_TEST_FOR_EXCEPTION(true, std::invalid_argument, "CamelliaCellTools::computeSideMeasure requires the transformation to be orthogonal in space and time.");
       }
     }
-    
+
     for (int cellOrdinal=0; cellOrdinal<numCells; cellOrdinal++)
     {
       for (int ptOrdinal=0; ptOrdinal<numPoints; ptOrdinal++)
@@ -363,7 +363,7 @@ void CamelliaCellTools::getUnitSideNormals(FieldContainer<double> &unitSideNorma
           for (int d1=0; d1<spaceDim-1; d1++)
           {
             int d2 = spaceDim - 1;
-            const double tol = 1e-14;
+            const double tol = 1e-13;
             if ((abs(inCellJacobian(cellOrdinal,ptOrdinal,d1,d2)) > tol) || (abs(inCellJacobian(cellOrdinal,ptOrdinal,d2,d1)) > tol))
             {
               cout << "CamelliaCellTools::getUnitSideNormals requires the transformation to be orthogonal in space and time.\n";
@@ -1020,7 +1020,7 @@ void CamelliaCellTools::setJacobian(FieldContainer<double> &jacobian, const Fiel
     TEUCHOS_TEST_FOR_EXCEPTION( !( (points.rank() == 2) && (points.rank() == 3) ), std::invalid_argument,
                                 ">>> ERROR (CamelliaCellTools::setJacobian): rank 2 or 3 required for points array. ");
   }//switch
-  
+
   // DEBUGGING
 //  if (cellTopo->getTensorialDegree() == 1)
 //  {
@@ -1037,7 +1037,7 @@ void CamelliaCellTools::setJacobian(FieldContainer<double> &jacobian, const Fiel
 //      }
 //    }
 //  }
-  
+
 }
 
 const FieldContainer<double>& CamelliaCellTools::getSubcellParametrization(const int subcellDim, CellTopoPtr parentCell)

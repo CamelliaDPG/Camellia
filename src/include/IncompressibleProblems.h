@@ -462,12 +462,12 @@ class SquareCylinderProblem : public CylinderProblem
 {
   private:
     double _radius = 0.5;
-    double _xLeft = -3;
-    double _xRight = 9;
-    double _meshHeight = 6;
-    // double _xLeft = -60;
-    // double _xRight = 180;
-    // double _meshHeight = 120;
+    // double _xLeft = -3;
+    // double _xRight = 9;
+    // double _meshHeight = 6;
+    double _xLeft = -60;
+    double _xRight = 180;
+    double _meshHeight = 120;
     double _yBottom = -_meshHeight/2;
     double _yTop = _meshHeight/2;
   public:
