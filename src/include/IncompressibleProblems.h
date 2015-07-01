@@ -520,10 +520,24 @@ class SquareCylinderProblem : public CylinderProblem
       vector< GlobalIndexType > horizontalBandCellIDs = hemkerMeshNoCurves->cellIDsForPoints(horizontalBandPoints, false);
       vector< GlobalIndexType > verticalBandCellIDs = hemkerMeshNoCurves->cellIDsForPoints(verticalBandPoints, false);
 
-      Teuchos::RCP<RefinementPattern> verticalCut = RefinementPattern::xAnisotropicRefinementPatternQuadTimeExtruded();
-      Teuchos::RCP<RefinementPattern> horizontalCut = RefinementPattern::yAnisotropicRefinementPatternQuadTimeExtruded();
+      Teuchos::RCP<RefinementPattern> verticalCut, horizontalCut;
+      
+      if (!_steady)
+      {
+        verticalCut = RefinementPattern::xAnisotropicRefinementPatternQuadTimeExtruded();
+        horizontalCut = RefinementPattern::yAnisotropicRefinementPatternQuadTimeExtruded();
+      }
+      else
+      {
+        verticalCut = RefinementPattern::xAnisotropicRefinementPatternQuad();
+        horizontalCut = RefinementPattern::yAnisotropicRefinementPatternQuad();
+      }
 
       Intrepid::FieldContainer<double> vertices(8,3);
+      if (_steady)
+      {
+        vertices.resize(4,2);
+      }
 
       // horizontal bands want vertical cuts, and vice versa
       for (vector<GlobalIndexType>::iterator cellIDIt = horizontalBandCellIDs.begin();
