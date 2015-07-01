@@ -94,6 +94,8 @@ namespace Camellia {
     virtual void setGlobalDofAssignment(GlobalDofAssignment* gda); // for cubature degree lookups
     
     virtual void verticesForCell(Intrepid::FieldContainer<double>& vertices, IndexType cellID);
+    
+    virtual MeshTopologyViewPtr getView(const std::set<IndexType> &activeCellIndices);
   };
 
 }

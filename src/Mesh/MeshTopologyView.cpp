@@ -493,3 +493,8 @@ void MeshTopologyView::verticesForCell(Intrepid::FieldContainer<double>& vertice
 {
   _meshTopo->verticesForCell(vertices, cellID);
 }
+
+MeshTopologyViewPtr MeshTopologyView::getView(const set<IndexType> &activeCells)
+{
+  return Teuchos::rcp( new MeshTopologyView(_meshTopo, activeCells) );
+}
