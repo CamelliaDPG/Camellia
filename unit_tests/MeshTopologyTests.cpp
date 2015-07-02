@@ -19,6 +19,42 @@ using namespace Intrepid;
 
 namespace
 {
+  MeshTopologyPtr constructIrregularMeshTopology(int irregularity)
+  {
+    int spaceDim = 2;
+    int meshWidth = 2;
+    vector<double> dimensions(spaceDim,1.0);
+    vector<int> elementCounts(spaceDim,meshWidth);
+    
+    MeshTopologyPtr meshTopo = MeshFactory::rectilinearMeshTopology(dimensions, elementCounts);
+
+    // pick arbitrary cell to refine:
+    GlobalIndexType activeCellWithBigNeighbor = 1;
+    unsigned sharedSideOrdinal = -1;
+    CellPtr activeCell = meshTopo->getCell(activeCellWithBigNeighbor);
+    for (int sideOrdinal=0; sideOrdinal<activeCell->getSideCount(); sideOrdinal++)
+    {
+      if (activeCell->getNeighbor(sideOrdinal, meshTopo) != Teuchos::null)
+      {
+        sharedSideOrdinal = sideOrdinal;
+      }
+    }
+    for (int i=0; i<irregularity; i++)
+    {
+      CellPtr cellToRefine = meshTopo->getCell(activeCellWithBigNeighbor);
+      RefinementPatternPtr refPattern = RefinementPattern::regularRefinementPattern(cellToRefine->topology());
+      meshTopo->refineCell(activeCellWithBigNeighbor, refPattern);
+      
+      // setup for the next refinement, if any:
+      auto childEntry = cellToRefine->childrenForSide(sharedSideOrdinal)[0];
+      GlobalIndexType childWithNeighborCellID = childEntry.first;
+      sharedSideOrdinal = childEntry.second;
+      activeCellWithBigNeighbor = childWithNeighborCellID;
+    }
+    
+    return meshTopo;
+  }
+  
 void testConstraints( MeshTopology* mesh, unsigned entityDim, map<unsigned,pair<IndexType,unsigned> > &expectedConstraints, Teuchos::FancyOStream &out, bool &success)
 {
 
@@ -125,6 +161,63 @@ void testConstraints( MeshTopology* mesh, unsigned entityDim, map<unsigned,pair<
     }
   }
 }
+  
+  void testNeighbors(MeshTopologyPtr mesh, Teuchos::FancyOStream &out, bool &success)
+  {
+    // Worth noting: while the assertions this makes are necessary, they aren't sufficient for correctness of neighbor relationships.
+    set<IndexType> activeCellIndices = mesh->getActiveCellIndices();
+    for (IndexType activeCellIndex : activeCellIndices)
+    {
+      CellPtr cell = mesh->getCell(activeCellIndex);
+      for (int sideOrdinal = 0; sideOrdinal < cell->getSideCount(); sideOrdinal++)
+      {
+        pair<GlobalIndexType,unsigned> neighborInfo = cell->getNeighborInfo(sideOrdinal, mesh);
+        if (neighborInfo.first != -1)
+        {
+          CellPtr neighbor = mesh->getCell(neighborInfo.first);
+          int sideOrdinalInNeighbor = neighborInfo.second;
+          bool activeCellsOnly = true;
+          vector< pair< GlobalIndexType, unsigned> > neighborDescendants = neighbor->getDescendantsForSide(sideOrdinalInNeighbor, mesh, activeCellsOnly);
+          
+          for (pair<GlobalIndexType,unsigned> descendantInfo : neighborDescendants)
+          {
+            // neighbor's descendant's neighbor on the side should be this cell, or this cell's ancestor:
+            if (neighborDescendants.size() == 1)
+            {
+              pair<GlobalIndexType,unsigned> neighborNeighborInfo = neighbor->getNeighborInfo(sideOrdinalInNeighbor, mesh);              
+              IndexType cellAncestorIndex = activeCellIndex;
+              while ((cellAncestorIndex != -1) && (cellAncestorIndex != neighborNeighborInfo.first))
+              {
+                CellPtr ancestor = mesh->getCell(cellAncestorIndex);
+                if (ancestor->getParent() != Teuchos::null)
+                {
+                  cellAncestorIndex = ancestor->getParent()->cellIndex();
+                }
+                else
+                {
+                  cellAncestorIndex = -1;
+                }
+              }
+              TEST_EQUALITY(cellAncestorIndex, neighborNeighborInfo.first);
+            }
+            else
+            {
+              // neighbor's descendant's neighbor on the side should be this cell
+              CellPtr descendant = mesh->getCell(descendantInfo.first);
+              pair<GlobalIndexType,unsigned> descendantNeighborInfo = descendant->getNeighborInfo(descendantInfo.second, mesh);
+              TEST_EQUALITY(activeCellIndex, descendantNeighborInfo.first);
+            }
+          }
+        }
+        else // if no neighbor, then this should be a boundary side
+        {
+          int sideDim = mesh->getDimension() - 1;
+          IndexType sideEntityIndex = cell->entityIndex(sideDim, sideOrdinal);
+          TEUCHOS_ASSERT(mesh->isBoundarySide(sideEntityIndex));
+        }
+      }
+    }
+  }
 
 TEUCHOS_UNIT_TEST( MeshTopology, InitialMeshEntitiesActiveCellCount)
 {
@@ -386,6 +479,53 @@ TEUCHOS_UNIT_TEST(MeshTopology, GetRootMeshTopology)
     }
   }
 }
+  
+  TEUCHOS_UNIT_TEST( MeshTopology, UpdateNeighborsAfterTwoIrregularMeshRefined )
+  {
+    int irregularity = 2;
+    MeshTopologyPtr meshTopo = constructIrregularMeshTopology(irregularity);
+    IndexType irregularCellIndex = -1;
+    set<IndexType> activeCells = meshTopo->getActiveCellIndices();
+    IndexType activeCellWithLargeNeighbor;
+    IndexType activeCellWithLargeNeighborSideOrdinal; // the side shared with the irregular cell
+    for (IndexType activeCellIndex : activeCells)
+    {
+      CellPtr activeCell = meshTopo->getCell(activeCellIndex);
+      for (int sideOrdinal=0; sideOrdinal<activeCell->getSideCount(); sideOrdinal++)
+      {
+        RefinementBranch sideRefBranch = activeCell->refinementBranchForSide(sideOrdinal, meshTopo);
+        if (sideRefBranch.size() == irregularity)
+        {
+          irregularCellIndex = activeCell->getNeighborInfo(sideOrdinal, meshTopo).first;
+          activeCellWithLargeNeighbor = activeCellIndex;
+          activeCellWithLargeNeighborSideOrdinal = sideOrdinal;
+          break;
+        }
+      }
+      if (irregularCellIndex != -1) break;
+    }
+    TEST_ASSERT(irregularCellIndex != -1);
+    
+    CellPtr smallCell = meshTopo->getCell(activeCellWithLargeNeighbor);
+    // before refinement, small cell should have irregular cell index as its neighbor on the side:
+    TEST_EQUALITY(smallCell->getNeighborInfo(activeCellWithLargeNeighborSideOrdinal, meshTopo).first,
+                  irregularCellIndex);
+    
+    // test neighbors before and after refinement
+    testNeighbors(meshTopo, out, success);
+    
+    RefinementPatternPtr refPattern = RefinementPattern::regularRefinementPattern(meshTopo->getCell(irregularCellIndex)->topology());
+    meshTopo->refineCell(irregularCellIndex, refPattern);
+
+    // after refinement, small cell should no longer have irregular cell index as its neighbor on the side:
+    GlobalIndexType smallCellNeighborCellIndex = smallCell->getNeighborInfo(activeCellWithLargeNeighborSideOrdinal, meshTopo).first;
+    TEST_INEQUALITY(smallCellNeighborCellIndex, irregularCellIndex);
+    // instead, the neighbor should be one of the irregular cell's children
+    CellPtr smallCellNeighbor = meshTopo->getCell(smallCell->getNeighborInfo(activeCellWithLargeNeighborSideOrdinal, meshTopo).first);
+    TEST_EQUALITY(smallCellNeighbor->getParent()->cellIndex(), irregularCellIndex);
+    
+    testNeighbors(meshTopo, out, success);
+  }
 
 TEUCHOS_UNIT_TEST( MeshTopology, UnrefinedSpaceTimeMeshTopologyIsUnconstrained )
 {

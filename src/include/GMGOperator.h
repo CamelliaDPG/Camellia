@@ -38,6 +38,24 @@ struct TimeStatistics
 
 class GMGOperator : public Epetra_Operator, public Narrator
 {
+public:
+  enum SmootherChoice
+  {
+    POINT_JACOBI,
+    POINT_SYMMETRIC_GAUSS_SEIDEL,
+    BLOCK_JACOBI,
+    BLOCK_SYMMETRIC_GAUSS_SEIDEL,
+    IFPACK_ADDITIVE_SCHWARZ,
+    CAMELLIA_ADDITIVE_SCHWARZ,
+    NONE
+  };
+  
+  enum SmootherApplicationType
+  {
+    ADDITIVE,
+    MULTIPLICATIVE
+  };
+private:
   bool _debugMode; // in debug mode, output verbose info about what we're doing on rank 0
 
   bool _hierarchicalNeighborsForSchwarz; // Applies only to Camellia Additive Schwarz
@@ -47,8 +65,7 @@ class GMGOperator : public Epetra_Operator, public Narrator
   bool _useStaticCondensation; // for both coarse and fine solves
   Teuchos::RCP<DofInterpreter> _fineDofInterpreter;
 
-  bool _smoothBeforeCoarseSolve;
-  bool _smoothAfterCoarseSolve;
+  SmootherApplicationType _smootherApplicationType;
   
   MeshPtr _fineMesh, _coarseMesh;
   Epetra_Map _finePartitionMap;
@@ -62,10 +79,6 @@ class GMGOperator : public Epetra_Operator, public Narrator
 
   mutable BasisReconciliation _br;
   mutable map< pair< pair<int,int>, RefinementBranch >, LocalDofMapperPtr > _localCoefficientMap; // pair(fineH1Order,coarseH1Order)
-
-  Teuchos::RCP<Epetra_MultiVector> _diag; // diagonal of the fine (global) stiffness matrix
-  Teuchos::RCP<Epetra_MultiVector> _diag_sqrt; // square root of the diagonal of the fine (global) stiffness matrix
-  Teuchos::RCP<Epetra_MultiVector> _diag_inv; // inverse of the diagonal
 
   Epetra_CrsMatrix* _fineStiffnessMatrix;
   
@@ -126,15 +139,6 @@ public:
   int SetUseTranspose(bool UseTranspose);
   //@}
 
-  //! Diagonal of the stiffness matrix
-  /*!
-
-   \param In
-   diagonal - diagonal of the stiffness matrix
-
-   */
-  void setStiffnessDiagonal(Teuchos::RCP<Epetra_MultiVector> diagonal);
-
   //! Set new fine mesh
   /*!
 
@@ -170,6 +174,17 @@ public:
    \return Integer error code, set to 0 if successful.
    */
   int Apply(const Epetra_MultiVector& X, Epetra_MultiVector& Y) const;
+  
+  //! Returns the result of a the coarse operator (either the coarse solver or the coarse GMGOperator) applied to a Epetra_MultiVector X in Y.
+  /*!
+   \param In
+   X - A Epetra_MultiVector of dimension NumVectors to multiply with matrix.
+   \param Out
+   Y -A Epetra_MultiVector of dimension NumVectors containing result.
+   
+   \return Integer error code, set to 0 if successful.
+   */
+  int ApplyInverseCoarseOperator(const Epetra_MultiVector& X, Epetra_MultiVector& Y) const;
 
   //! Returns the result of a Epetra_Operator inverse applied to an Epetra_MultiVector X in Y.
   /*!
@@ -233,24 +248,12 @@ public:
   void setCoarseSolver(SolverPtr coarseSolver);
 
   void setSchwarzFactorizationType(FactorType choice);
-
-  enum SmootherChoice
-  {
-    POINT_JACOBI,
-    POINT_SYMMETRIC_GAUSS_SEIDEL,
-    BLOCK_JACOBI,
-    BLOCK_SYMMETRIC_GAUSS_SEIDEL,
-    IFPACK_ADDITIVE_SCHWARZ,
-    CAMELLIA_ADDITIVE_SCHWARZ,
-    NONE
-  };
   
-  // ! When set to true, will compute the new residual after coarse solve, and smooth that.  Note that in general this will not preserve symmetry, so this option should not generally be used with conjugate gradient iterations.  Off by default.
-  void setSmoothAfterCoarseSolve(bool value);
+  // ! When set to MULTIPLICATIVE, will compute new residuals before and after the coarse solve.  Done in such a way as to preserve symmetry.
+  void setSmootherApplicationType(SmootherApplicationType value);
   
-  // ! When set to true, will smooth and apply the coarse operator to the new residual.  Note that in general this will not preserve symmetry, so this option should not generally be used with conjugate gradient iterations.  Off by default.
-  void setSmoothBeforeCoarseSolve(bool value);
-
+  SmootherChoice getSmootherType();
+  
   void setSmootherType(SmootherChoice smootherType);
   void setSmootherOverlap(int overlap);
 
@@ -263,6 +266,9 @@ public:
   void setUseHierarchicalNeighborsForSchwarz(bool value);
   //@}
 
+  //! Returns the fine stiffness matrix
+  Epetra_CrsMatrix* getFineStiffnessMatrix();
+  
   //! Computes an Epetra_CrsMatrix representation of this operator.  Note that this can be an expensive operation, and is primarily intended for testing.
   Teuchos::RCP<Epetra_CrsMatrix> getMatrixRepresentation();
   

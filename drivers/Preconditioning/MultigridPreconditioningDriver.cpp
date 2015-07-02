@@ -249,26 +249,22 @@ void initializeSolutionAndCoarseMesh(SolutionPtr &solution, vector<MeshPtr> &mes
     }
   }
   
-  int H1Order_coarse = 0 + 1;
-  MeshPtr k0Mesh = MeshFactory::rectilinearMesh(bf, dimensions, elementCounts, H1Order_coarse, delta_k, x0);
-
-  
-  // get a sample cell topology:
-  CellTopoPtr cellTopo = k0Mesh->getTopology()->getCell(0)->topology();
-  RefinementPatternPtr refPattern = RefinementPattern::regularRefinementPattern(cellTopo);
-  
   meshesCoarseToFine.clear();
+  
+  MeshTopologyViewPtr meshTopoView = mesh->getTopology()->getView(mesh->getActiveCellIDs());
+  int H1Order_coarse = 0 + 1;
+  MeshPtr k0Mesh = Teuchos::rcp(new Mesh(meshTopoView, bf, H1Order_coarse, delta_k));
   meshesCoarseToFine.push_back(k0Mesh);
   
   int meshWidthCells = rootMeshNumCells;
   while (meshWidthCells < numCells)
   {
-    k0Mesh = k0Mesh->deepCopy();
-    
     set<IndexType> activeCellIDs = mesh->getActiveCellIDs(); // should match between coarseMesh and mesh
-    mesh->hRefine(activeCellIDs, refPattern);
-    k0Mesh->hRefine(activeCellIDs, refPattern);
+    mesh->hRefine(activeCellIDs);
 
+    MeshTopologyViewPtr meshTopoView = mesh->getTopology()->getView(mesh->getActiveCellIDs());
+    MeshPtr k0Mesh = Teuchos::rcp(new Mesh(meshTopoView, bf, H1Order_coarse, delta_k));
+    
     meshesCoarseToFine.push_back(k0Mesh);
     meshWidthCells *= 2;
   }

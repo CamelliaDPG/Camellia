@@ -223,19 +223,6 @@ int GMGSolver::solve(bool buildCoarseStiffness)
 
   const Epetra_Map* map = &A->RowMatrixRowMap();
 
-  Epetra_Vector diagA(*map);
-  A->ExtractDiagonalCopy(diagA);
-
-  //  EpetraExt::MultiVectorToMatlabFile("/tmp/diagA.dat",diagA);
-  //
-  Epetra_Vector scale_vector(*map);
-  Epetra_Vector diagA_sqrt_inv(*map);
-  Epetra_Vector diagA_inv(*map);
-
-  Teuchos::RCP<Epetra_MultiVector> diagA_ptr = Teuchos::rcp( &diagA, false );
-
-  _gmgOperator->setStiffnessDiagonal(diagA_ptr);
-
   if (buildCoarseStiffness)
   {
     _gmgOperator->setFineStiffnessMatrix(A);
@@ -319,9 +306,7 @@ int GMGSolver::solve(bool buildCoarseStiffness)
       break;
     }
   }
-
-  _gmgOperator->setStiffnessDiagonal(Teuchos::rcp((Epetra_MultiVector*) NULL ));
-
+  
   _iterationCountLog.push_back(_iterationCount);
 
   return solveResult;

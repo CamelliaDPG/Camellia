@@ -1247,12 +1247,19 @@ void MeshTopology::deepCopyCells()
   vector<CellPtr> oldCells = _cells;
 
   int numCells = oldCells.size();
+  
+  Teuchos::RCP<MeshTopology> thisPtr = Teuchos::rcp(this,false);
 
   // first pass: construct cells
   for (int cellOrdinal=0; cellOrdinal<numCells; cellOrdinal++)
   {
     CellPtr oldCell = oldCells[cellOrdinal];
     _cells[cellOrdinal] = Teuchos::rcp( new Cell(oldCell->topology(), oldCell->vertices(), oldCell->subcellPermutations(), oldCell->cellIndex(), this) );
+    for (int sideOrdinal=0; sideOrdinal<oldCell->getSideCount(); sideOrdinal++)
+    {
+      pair<GlobalIndexType, unsigned> neighborInfo = oldCell->getNeighborInfo(sideOrdinal, thisPtr);
+      _cells[cellOrdinal]->setNeighbor(sideOrdinal, neighborInfo.first, neighborInfo.second);
+    }
   }
 
   // second pass: establish parent-child relationships
@@ -1263,6 +1270,7 @@ void MeshTopology::deepCopyCells()
     if (oldParent != Teuchos::null)
     {
       CellPtr newParent = _cells[oldParent->cellIndex()];
+      newParent->setRefinementPattern(oldParent->refinementPattern());
       _cells[cellOrdinal]->setParent(newParent);
     }
     vector<CellPtr> children;
@@ -2856,4 +2864,10 @@ void MeshTopology::verticesForCell(FieldContainer<double>& vertices, GlobalIndex
       vertices(vertexOrdinal,d) = getVertex(vertexIndices[vertexOrdinal])[d];
     }
   }
+}
+
+MeshTopologyViewPtr MeshTopology::getView(const set<IndexType> &activeCells)
+{
+  MeshTopologyPtr thisPtr = Teuchos::rcp(this,false);
+  return Teuchos::rcp( new MeshTopologyView(thisPtr, activeCells) );
 }
