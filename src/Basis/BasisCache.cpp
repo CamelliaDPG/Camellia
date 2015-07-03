@@ -1146,7 +1146,7 @@ void BasisCache::determineJacobian()
 ////  cout << "On rank " << Teuchos::GlobalMPISession::getRank() << ", about to compute jacobian inverse for cellJacobian of size: " << _cellJacobian.size() << endl;
 //  CellTools::setJacobianInv(_cellJacobInv, _cellJacobian );
 
-  if (! TFunction<double>::isNull(_transformationFxn) )
+  if (_transformationFxn != Teuchos::null )
   {
     BasisCachePtr thisPtr = Teuchos::rcp(this,false);
     if (_composeTransformationFxnWithMeshTransformation)
