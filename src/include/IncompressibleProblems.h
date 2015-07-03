@@ -282,9 +282,7 @@ class CylinderProblem : public IncompressibleProblem
       double radius = _radius;
       bool enforceOneIrregularity = true;
 
-      Intrepid::FieldContainer<double> horizontalBandPoints(6,2);
-      if (!_steady)
-        horizontalBandPoints.resize(6,3);
+      Intrepid::FieldContainer<double> horizontalBandPoints(6,hemkerMeshNoCurves->getDimension());
       // ESE band
       horizontalBandPoints(0,0) =   radius * 3;
       horizontalBandPoints(0,1) = - radius / 2;
@@ -305,9 +303,7 @@ class CylinderProblem : public IncompressibleProblem
       horizontalBandPoints(5,0) =   radius * 3;
       horizontalBandPoints(5,1) = - radius * 3;
 
-      Intrepid::FieldContainer<double> verticalBandPoints(4,2);
-      if (!_steady)
-        verticalBandPoints.resize(6,3);
+      Intrepid::FieldContainer<double> verticalBandPoints(4,hemkerMeshNoCurves->getDimension());
       // NNE band
       verticalBandPoints(0,0) =   radius / 2;
       verticalBandPoints(0,1) =   radius * 3;
@@ -320,14 +316,52 @@ class CylinderProblem : public IncompressibleProblem
       // SSE band
       verticalBandPoints(3,0) = - radius / 2;
       verticalBandPoints(3,1) = - radius * 3;
-
+      
+      if (!_steady)
+      {
+        // TODO: (for Truman) consider what happens if _numSlabs != 1
+        double temporalMidpoint = (_tInit + _tFinal) / 2.0;
+        int d_time = hemkerMeshNoCurves->getDimension() - 1;
+        int numHorizontalPoints = horizontalBandPoints.dimension(1);
+        for (int pointOrdinal=0; pointOrdinal<numHorizontalPoints; pointOrdinal++)
+        {
+          horizontalBandPoints(pointOrdinal,d_time) = temporalMidpoint;
+        }
+        int numVerticalPoints = verticalBandPoints.dimension(1);
+        for (int pointOrdinal=0; pointOrdinal<numVerticalPoints; pointOrdinal++)
+        {
+          verticalBandPoints(pointOrdinal,d_time) = temporalMidpoint;
+        }
+      }
+      
       vector< GlobalIndexType > horizontalBandCellIDs = hemkerMeshNoCurves->cellIDsForPoints(horizontalBandPoints, false);
       vector< GlobalIndexType > verticalBandCellIDs = hemkerMeshNoCurves->cellIDsForPoints(verticalBandPoints, false);
 
-      Teuchos::RCP<RefinementPattern> verticalCut = RefinementPattern::xAnisotropicRefinementPatternQuad();
-      Teuchos::RCP<RefinementPattern> horizontalCut = RefinementPattern::yAnisotropicRefinementPatternQuad();
-
-      Intrepid::FieldContainer<double> vertices(4,2);
+      // check results
+      for (GlobalIndexType cellID : horizontalBandCellIDs)
+      {
+        TEUCHOS_TEST_FOR_EXCEPTION(cellID == -1, std::invalid_argument, "horizontal band cell not found!");
+      }
+      for (GlobalIndexType cellID : verticalBandCellIDs)
+      {
+        TEUCHOS_TEST_FOR_EXCEPTION(cellID == -1, std::invalid_argument, "vertical band cell not found!");
+      }
+      
+      RefinementPatternPtr verticalCut, horizontalCut;
+      Intrepid::FieldContainer<double> vertices;
+      
+      if (!_steady)
+      {
+        verticalCut = RefinementPattern::xAnisotropicRefinementPatternQuadTimeExtruded();
+        horizontalCut = RefinementPattern::yAnisotropicRefinementPatternQuadTimeExtruded();
+        vertices.resize(8,3);
+      }
+      else
+      {
+        verticalCut = RefinementPattern::xAnisotropicRefinementPatternQuad();
+        horizontalCut = RefinementPattern::yAnisotropicRefinementPatternQuad();
+        vertices.resize(4,2);
+      }
 
       // horizontal bands want vertical cuts, and vice versa
       for (vector<GlobalIndexType>::iterator cellIDIt = horizontalBandCellIDs.begin();
