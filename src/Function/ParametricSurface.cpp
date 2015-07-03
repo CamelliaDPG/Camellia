@@ -323,10 +323,34 @@ void ParametricSurface::basisWeightsForProjectedInterpolant(FieldContainer<doubl
   TEUCHOS_TEST_FOR_EXCEPTION(maxTestDegree < 1, std::invalid_argument, "Constant test spaces unsupported.");
 
   int cubatureDegree = std::max(maxTestDegree*2,15); // chosen to match that used in edge projection.
-  int cubatureEnrichment = std::max(cubatureDegree-maxTestDegree*2,0);
-  BasisCachePtr basisCache = BasisCache::basisCacheForCell(mesh, cellID, true, cubatureEnrichment); // true: testVsTest
-  // because we're determining the transformation function, disable it inside basisCache!
-  basisCache->setTransformationFunction(Function::null());
+  
+  FieldContainer<double> physicalCellNodes;
+  CellTopoPtr cellTopo = mesh->getElementType(cellID)->cellTopoPtr;
+  if (cellTopo->getDimension() == 2)
+  {
+    physicalCellNodes = mesh->physicalCellNodesForCell(cellID);
+  }
+  if ((cellTopo->getDimension() == 3) && (cellTopo->getTensorialDegree() > 0))
+  {
+    // then we interpret this as space-time, and we just treat the first temporal side:
+    unsigned temporalSideOrdinal = cellTopo->getTemporalSideOrdinal(0);
+    FieldContainer<double> spaceTimePhysicalNodes = mesh->physicalCellNodesForCell(cellID);
+    int sideDim = cellTopo->getDimension() - 1;
+    int nodeCount = cellTopo->getNodeCount(sideDim, temporalSideOrdinal);
+    physicalCellNodes.resize(1,nodeCount,sideDim);
+    for (int node=0; node<nodeCount; node++)
+    {
+      int spaceTimeNode = cellTopo->getNodeMap(sideDim, temporalSideOrdinal, node);
+      for (int d=0; d<sideDim; d++)
+      {
+        physicalCellNodes(0,node,d) = spaceTimePhysicalNodes(0,spaceTimeNode,d);
+      }
+    }
+    // replace space-time cell topology with the purely spatial one:
+    cellTopo = cellTopo->getSide(temporalSideOrdinal);
+  }
+  
+  BasisCachePtr basisCache = BasisCache::basisCacheForCellTopology(cellTopo, cubatureDegree, physicalCellNodes);
 
   // project, skipping edgeNodeFieldIndices:
   Projector<double>::projectFunctionOntoBasis(basisCoefficients, TFunctionPtr<double>(exactSurface)-edgeInterpolant, basis, basisCache, H1, v, edgeFieldIndices);
@@ -337,7 +361,6 @@ void ParametricSurface::basisWeightsForProjectedInterpolant(FieldContainer<doubl
   {
     basisCoefficients[i] += edgeInterpolationCoefficients[i];
   }
-
 }
 
 TFunctionPtr<double> ParametricSurface::dt1()
