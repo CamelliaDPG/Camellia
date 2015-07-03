@@ -480,6 +480,87 @@ TEUCHOS_UNIT_TEST(MeshTopology, GetRootMeshTopology)
   }
 }
   
+  TEUCHOS_UNIT_TEST( MeshTopology, UpdateNeighborsAfterAnisotropicRefinements)
+  {
+    // set up MeshGeometry sorta like what we have in Hemker meshes:
+
+    bool testSpaceTime = true;
+    
+    // cell 0:
+    vector<double> A = {-60,-60}, B = {-0.5,-60}, C = {-0.5,-0.5}, D = {-60,-0.5};
+    vector<vector<double>> vertices = {A, B, C, D};
+    vector<vector<IndexType>> elementVertices = {{0,1,2,3}};
+    // cell 1:
+    vector<double> E = {0.5,-60}, F = {0.5,-0.5};
+    vertices.push_back(E);
+    vertices.push_back(F);
+    elementVertices.push_back({1,4,5,2});
+    // cell 2:
+    vector<double> G = {-0.5,0.5}, H = {-60,0.5};
+    vertices.push_back(G);
+    vertices.push_back(H);
+    elementVertices.push_back({3,2,6,7});
+    vector<CellTopoPtr> cellTopos(3,CellTopology::quad());
+    MeshGeometryPtr geometry = Teuchos::rcp(new MeshGeometry(vertices,elementVertices,cellTopos));
+    
+    // create meshTopology:
+    MeshTopologyPtr meshTopo = Teuchos::rcp(new MeshTopology(geometry));
+
+    RefinementPatternPtr verticalCut = RefinementPattern::xAnisotropicRefinementPatternQuad();
+    RefinementPatternPtr horizontalCut = RefinementPattern::yAnisotropicRefinementPatternQuad();
+    
+    if (testSpaceTime)
+    {
+      double t0 = 0.0, t1 = 12.0;
+      meshTopo = MeshFactory::spaceTimeMeshTopology(meshTopo, t0, t1);
+      verticalCut = RefinementPattern::xAnisotropicRefinementPatternQuadTimeExtruded();
+      horizontalCut = RefinementPattern::yAnisotropicRefinementPatternQuadTimeExtruded();
+    }
+    
+    set<GlobalIndexType> cellsToCutVertically = {1};
+    set<GlobalIndexType> cellsToCutHorizontally = {2};
+    
+    // cut 5 times
+    int cutCycles = 5;
+    for (int i=0; i<cutCycles; i++)
+    {
+      set<GlobalIndexType> newCells;
+      for (GlobalIndexType cellIndex : cellsToCutVertically)
+      {
+        meshTopo->refineCell(cellIndex, verticalCut);
+        CellPtr cell = meshTopo->getCell(cellIndex);
+        vector<IndexType> childCellIndices = cell->getChildIndices();
+        newCells.insert(childCellIndices.begin(),childCellIndices.end());
+      }
+      cellsToCutVertically = newCells;
+    }
+    
+    for (int i=0; i<cutCycles; i++)
+    {
+      set<GlobalIndexType> newCells;
+      for (GlobalIndexType cellIndex : cellsToCutHorizontally)
+      {
+        meshTopo->refineCell(cellIndex, horizontalCut);
+        CellPtr cell = meshTopo->getCell(cellIndex);
+        vector<IndexType> childCellIndices = cell->getChildIndices();
+        newCells.insert(childCellIndices.begin(),childCellIndices.end());
+      }
+      cellsToCutHorizontally = newCells;
+    }
+    
+    int spaceDim = 2;
+    bool conformingTraces = false;
+    PoissonFormulation formulation(spaceDim, conformingTraces);
+    BFPtr bf = formulation.bf();
+    
+    int H1Order = 1, delta_k = 1;
+    MeshPtr mesh = Teuchos::rcp( new Mesh(meshTopo, bf, H1Order, delta_k) );
+                                
+    mesh->enforceOneIrregularity();
+    
+    testNeighbors(meshTopo, out, success);
+  }
+  
   TEUCHOS_UNIT_TEST( MeshTopology, UpdateNeighborsAfterTwoIrregularMeshRefined )
   {
     int irregularity = 2;
