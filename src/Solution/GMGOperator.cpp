@@ -57,6 +57,8 @@ GMGOperator::GMGOperator(BCPtr zeroBCs, MeshPtr coarseMesh, IPPtr coarseIP,
 Narrator("GMGOperator"),
 _finePartitionMap(finePartitionMap), _br(true)
 {
+  int rank = Teuchos::GlobalMPISession::getRank();
+  
   if (useStaticCondensation)
   {
     TEUCHOS_TEST_FOR_EXCEPTION(coarseIP == Teuchos::null, std::invalid_argument, "GMGOperator: coarseIP is required when useStaticCondensation = true");
@@ -78,6 +80,7 @@ _finePartitionMap(finePartitionMap), _br(true)
 
   _levelOfFill = 2;
   _fillRatio = 5.0;
+  _smootherWeight = 1.0;
 
   clearTimings();
 
@@ -94,7 +97,22 @@ _finePartitionMap(finePartitionMap), _br(true)
   _coarseMesh = coarseMesh;
   _bc = zeroBCs;
   _coarseSolution = Teuchos::rcp( new TSolution<double>(coarseMesh, zeroBCs, zeroRHS, coarseIP) );
-  _coarseSolution->setUseCondensedSolve(useStaticCondensation);
+  
+  set<GlobalIndexType> offRankCellsToInclude; // ignored (and empty) when useStaticCondensation is false
+  if (useStaticCondensation)
+  {
+    const set<GlobalIndexType>* fineCellIDsForRank = &_fineMesh->globalDofAssignment()->cellsInPartition(rank);
+    const set<GlobalIndexType>* coarseCellIDsForRank = &_coarseMesh->globalDofAssignment()->cellsInPartition(rank);
+    for (GlobalIndexType fineCellID : *fineCellIDsForRank)
+    {
+      GlobalIndexType coarseCellID = getCoarseCellID(fineCellID);
+      if (coarseCellIDsForRank->find(coarseCellID) == coarseCellIDsForRank->end())
+      {
+        offRankCellsToInclude.insert(coarseCellID);
+      }
+    }
+  }
+  _coarseSolution->setUseCondensedSolve(useStaticCondensation, offRankCellsToInclude);
 
   _coarseSolver = coarseSolver;
   _haveSolvedOnCoarseMesh = false;
@@ -758,7 +776,7 @@ int GMGOperator::ApplyInverse(const Epetra_MultiVector& X_in, Epetra_MultiVector
     narrate("smoother->ApplyInverse()");
     timer.ResetStartTime();
     int err = _smoother->ApplyInverse(f, B1_f);
-    Y.Update(1.0, B1_f, 1.0);
+    Y.Update(_smootherWeight, B1_f, 1.0);
     _timeApplySmoother += timer.ElapsedTime();
     if (err != 0)
     {
@@ -776,7 +794,7 @@ int GMGOperator::ApplyInverse(const Epetra_MultiVector& X_in, Epetra_MultiVector
       // compute a new residual: res := f - A*Y = res - A*Y
       timer.ResetStartTime();
       Epetra_MultiVector A_Y(Y.Map(), Y.NumVectors());
-      err = _fineStiffnessMatrix->Apply(B1_f, A_Y);
+      err = _fineStiffnessMatrix->Apply(Y, A_Y);
       if (err != 0)
       {
         cout << "_fineStiffnessMatrix->Apply returned non-zero error code " << err << endl;
@@ -795,7 +813,7 @@ int GMGOperator::ApplyInverse(const Epetra_MultiVector& X_in, Epetra_MultiVector
   
   Epetra_MultiVector Y2(Y.Map(), Y.NumVectors());
 
-  this->ApplyInverseCoarseOperator(res, Y2);  // Y2 = B2 * res = B2 * (I - A * B1) * f
+  this->ApplyInverseCoarseOperator(res, Y2);
   
   if (_debugMode)
   {
@@ -835,7 +853,7 @@ int GMGOperator::ApplyInverse(const Epetra_MultiVector& X_in, Epetra_MultiVector
       cout << "_smoother->ApplyInverse returned non-zero error code " << err << endl;
     }
     
-    Y.Update(1.0, B1_res, 1.0);
+    Y.Update(_smootherWeight, B1_res, 1.0);
     
     if (_debugMode)
     {
@@ -1538,6 +1556,11 @@ void GMGOperator::setSmootherOverlap(int overlap)
 void GMGOperator::setSmootherType(GMGOperator::SmootherChoice smootherType)
 {
   _smootherType = smootherType;
+}
+
+void GMGOperator::setSmootherWeight(double weight)
+{
+  _smootherWeight = weight;
 }
 
 void GMGOperator::setUpSmoother(Epetra_CrsMatrix *fineStiffnessMatrix)

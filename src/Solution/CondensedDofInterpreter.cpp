@@ -31,7 +31,10 @@ using namespace Intrepid;
 using namespace Camellia;
 
 template <typename Scalar>
-CondensedDofInterpreter<Scalar>::CondensedDofInterpreter(MeshPtr mesh, TIPPtr<Scalar> ip, TRHSPtr<Scalar> rhs, LagrangeConstraints* lagrangeConstraints, const set<int> &fieldIDsToExclude, bool storeLocalStiffnessMatrices) : DofInterpreter(mesh)
+CondensedDofInterpreter<Scalar>::CondensedDofInterpreter(MeshPtr mesh, TIPPtr<Scalar> ip, TRHSPtr<Scalar> rhs,
+                                                         LagrangeConstraints* lagrangeConstraints,
+                                                         const set<int> &fieldIDsToExclude, bool storeLocalStiffnessMatrices,
+                                                         set<GlobalIndexType> offRankCellsToInclude ) : DofInterpreter(mesh)
 {
   _mesh = mesh;
   _ip = ip;
@@ -39,6 +42,7 @@ CondensedDofInterpreter<Scalar>::CondensedDofInterpreter(MeshPtr mesh, TIPPtr<Sc
   _lagrangeConstraints = lagrangeConstraints;
   _storeLocalStiffnessMatrices = storeLocalStiffnessMatrices;
   _uncondensibleVarIDs.insert(fieldIDsToExclude.begin(),fieldIDsToExclude.end());
+  _offRankCellsToInclude = offRankCellsToInclude;
 
   int numGlobalConstraints = lagrangeConstraints->numGlobalConstraints();
   for (int i=0; i<numGlobalConstraints; i++)
@@ -54,6 +58,11 @@ CondensedDofInterpreter<Scalar>::CondensedDofInterpreter(MeshPtr mesh, TIPPtr<Sc
     _uncondensibleVarIDs.insert(constrainedVars.begin(), constrainedVars.end());
   }
 
+  if (offRankCellsToInclude.size() > 0)
+  {
+    cout << "Note: CondensedDofInterpreter initialized with offRankCellsToInclude.size() > 0.  This is still experimental, and may have bugs (TODO: add tests to GMGSolverTests and/or GMGOperatorTests).\n";
+  }
+  
   initializeGlobalDofIndices();
 }
 
@@ -242,8 +251,9 @@ bool CondensedDofInterpreter<Scalar>::varDofsAreCondensible(int varID, int sideO
   return (isDiscontinuous) && (sideCount==1) && (_uncondensibleVarIDs.find(varID) == _uncondensibleVarIDs.end());
 }
 
+// ! cellsForFluxInterpretation indicates on which cells we need to be able to interpret fluxes.
 template <typename Scalar>
-map<GlobalIndexType, IndexType> CondensedDofInterpreter<Scalar>::interpretedFluxMapForPartition(PartitionIndexType partition, bool storeFluxDofIndices)   // add the partitionDofOffset to get the globalDofIndices
+map<GlobalIndexType, GlobalIndexType> CondensedDofInterpreter<Scalar>::interpretedFluxMapForPartition(PartitionIndexType partition, const set<GlobalIndexType> &cellsForFluxInterpretation)   // add the partitionDofOffset to get the globalDofIndices
 {
 
   map<GlobalIndexType, IndexType> interpretedFluxMap; // from the interpreted dofs (the global dof indices as seen by mesh) to the partition-local condensed IDs
@@ -262,6 +272,8 @@ map<GlobalIndexType, IndexType> CondensedDofInterpreter<Scalar>::interpretedFlux
   for (cellIDIt=localCellIDs.begin(); cellIDIt!=localCellIDs.end(); cellIDIt++)
   {
     GlobalIndexType cellID = *cellIDIt;
+    
+    bool storeFluxDofIndices = cellsForFluxInterpretation.find(cellID) != cellsForFluxInterpretation.end();
 
     DofOrderingPtr trialOrder = _mesh->getElementType(cellID)->trialOrderPtr;
 
@@ -331,7 +343,9 @@ void CondensedDofInterpreter<Scalar>::initializeGlobalDofIndices()
   _interpretedDofIndicesForBasis.clear();
 
   PartitionIndexType rank = Teuchos::GlobalMPISession::getRank();
-  map<GlobalIndexType, IndexType> partitionLocalFluxMap = interpretedFluxMapForPartition(rank, true);
+  set<GlobalIndexType> cellsForFluxStorage = _mesh->globalDofAssignment()->cellsInPartition(rank);
+  cellsForFluxStorage.insert(_offRankCellsToInclude.begin(),_offRankCellsToInclude.end());
+  map<GlobalIndexType, IndexType> partitionLocalFluxMap = interpretedFluxMapForPartition(rank, cellsForFluxStorage);
 
   int numRanks = Teuchos::GlobalMPISession::getNProc();
   FieldContainer<GlobalIndexType> fluxDofCountForRank(numRanks);
@@ -356,6 +370,28 @@ void CondensedDofInterpreter<Scalar>::initializeGlobalDofIndices()
 
   map< PartitionIndexType, map<GlobalIndexType, GlobalIndexType> > partitionInterpretedFluxMap;
 
+  // now, ensure that _interpretedDofIndices includes all the off-rank cells we're interested in:
+  for (GlobalIndexType offRankCell : _offRankCellsToInclude)
+  {
+    PartitionIndexType owningPartition = _mesh->partitionForCellID(offRankCell);
+    if (partitionInterpretedFluxMap.find(owningPartition) == partitionInterpretedFluxMap.end())
+    {
+      partitionLocalFluxMap = interpretedFluxMapForPartition(owningPartition, cellsForFluxStorage);
+      GlobalIndexType owningPartitionDofOffset = 0;
+      for (int i=0; i<owningPartition; i++)
+      {
+        owningPartitionDofOffset += fluxDofCountForRank(i);
+      }
+      map<GlobalIndexType, GlobalIndexType> owningPartitionInterpretedToGlobalDofIndexMap;
+      for (map<GlobalIndexType, IndexType>::iterator entryIt = partitionLocalFluxMap.begin(); entryIt != partitionLocalFluxMap.end(); entryIt++)
+      {
+        owningPartitionInterpretedToGlobalDofIndexMap[entryIt->first] = entryIt->second + owningPartitionDofOffset;
+      }
+      partitionInterpretedFluxMap[owningPartition] = owningPartitionInterpretedToGlobalDofIndexMap;
+    }
+  }
+  
+  set<GlobalIndexType> noCells;
   // fill in the guys we don't own but do see
   for (set<GlobalIndexType>::iterator interpretedFluxIt=_interpretedFluxDofIndices.begin(); interpretedFluxIt != _interpretedFluxDofIndices.end(); interpretedFluxIt++)
   {
@@ -366,7 +402,7 @@ void CondensedDofInterpreter<Scalar>::initializeGlobalDofIndices()
       PartitionIndexType owningPartition = _mesh->partitionForGlobalDofIndex(interpretedFlux);
       if (partitionInterpretedFluxMap.find(owningPartition) == partitionInterpretedFluxMap.end())
       {
-        partitionLocalFluxMap = interpretedFluxMapForPartition(owningPartition, false);
+        partitionLocalFluxMap = interpretedFluxMapForPartition(owningPartition, noCells);
         GlobalIndexType owningPartitionDofOffset = 0;
         for (int i=0; i<owningPartition; i++)
         {
@@ -422,12 +458,13 @@ template <typename Scalar>
 void CondensedDofInterpreter<Scalar>::interpretLocalBasisCoefficients(GlobalIndexType cellID, int varID, int sideOrdinal, const FieldContainer<Scalar> &basisCoefficients,
     FieldContainer<Scalar> &globalCoefficients, FieldContainer<GlobalIndexType> &globalDofIndices)
 {
-  // NOTE: cellID *MUST* belong to this partition.
+  // NOTE: cellID MUST belong to this partition, or have been included in "offRankCellsToInclude" constructor argument
   int rank = Teuchos::GlobalMPISession::getRank();
-  if (_mesh->partitionForCellID(cellID) != rank)
+  if ((_offRankCellsToInclude.find(cellID) == _offRankCellsToInclude.end()) && (_mesh->partitionForCellID(cellID) != rank))
   {
-    cout << "cellID " << cellID << " does not belong to partition " << rank << ".\n";
-    TEUCHOS_TEST_FOR_EXCEPTION(true, std::invalid_argument, "cellID does not belong to partition");
+    cout << "cellID " << cellID << " does not belong to partition " << rank;
+    cout << ", and was not included in CondensedDofInterpreter constructor's offRankCellsToInclude argument.\n";
+    TEUCHOS_TEST_FOR_EXCEPTION(true, std::invalid_argument, "cellID does not belong to partition, and isn't in offRankCellsToInclude");
   }
 
   FieldContainer<Scalar> interpretedCoefficients;
@@ -507,12 +544,13 @@ void CondensedDofInterpreter<Scalar>::interpretLocalData(GlobalIndexType cellID,
     FieldContainer<Scalar> &globalStiffnessData, FieldContainer<Scalar> &globalLoadData,
     FieldContainer<GlobalIndexType> &globalDofIndices)
 {
-  // NOTE: cellID *MUST* belong to this partition.
+  // NOTE: cellID MUST belong to this partition, or have been included in "offRankCellsToInclude" constructor argument
   int rank = Teuchos::GlobalMPISession::getRank();
-  if (_mesh->partitionForCellID(cellID) != rank)
+  if ((_offRankCellsToInclude.find(cellID) == _offRankCellsToInclude.end()) && (_mesh->partitionForCellID(cellID) != rank))
   {
-    cout << "cellID " << cellID << " does not belong to partition " << rank << ".\n";
-    TEUCHOS_TEST_FOR_EXCEPTION(true, std::invalid_argument, "cellID does not belong to partition");
+    cout << "cellID " << cellID << " does not belong to partition " << rank;
+    cout << ", and was not included in CondensedDofInterpreter constructor's offRankCellsToInclude argument.\n";
+    TEUCHOS_TEST_FOR_EXCEPTION(true, std::invalid_argument, "cellID does not belong to partition, and isn't in offRankCellsToInclude");
   }
 
 //  if (cellID==14) {

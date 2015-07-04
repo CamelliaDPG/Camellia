@@ -40,6 +40,9 @@ private:
   TRHSPtr<Scalar> _rhs;
   LagrangeConstraints* _lagrangeConstraints;
   set<int> _uncondensibleVarIDs;
+  
+  std::set<GlobalIndexType> _offRankCellsToInclude;
+  
   map<GlobalIndexType, Intrepid::FieldContainer<Scalar> > _localStiffnessMatrices; // will be used by interpretGlobalData if _storeLocalStiffnessMatrices is true
   map<GlobalIndexType, Intrepid::FieldContainer<GlobalIndexType> > _localInterpretedDofIndices;       // will be used by interpretGlobalData if _storeLocalStiffnessMatrices is true
 
@@ -59,13 +62,14 @@ private:
   void getSubvectors(set<int> fieldIndices, set<int> fluxIndices, const Intrepid::FieldContainer<Scalar> &b, Epetra_SerialDenseVector &b_field, Epetra_SerialDenseVector &b_flux);
 
   void initializeGlobalDofIndices();
-  map<GlobalIndexType, GlobalIndexType> interpretedFluxMapForPartition(PartitionIndexType partition, bool storeFluxDofIndices);
+  map<GlobalIndexType, GlobalIndexType> interpretedFluxMapForPartition(PartitionIndexType partition,
+                                                                       const set<GlobalIndexType> &cellsForFluxInterpretation);
 
   void computeAndStoreLocalStiffnessAndLoad(GlobalIndexType cellID);
 
   void getLocalData(GlobalIndexType cellID, Intrepid::FieldContainer<Scalar> &stiffness, Intrepid::FieldContainer<Scalar> &load, Intrepid::FieldContainer<GlobalIndexType> &interpretedDofIndices);
 public:
-  CondensedDofInterpreter(MeshPtr mesh, TIPPtr<Scalar> ip, TRHSPtr<Scalar> rhs, LagrangeConstraints* lagrangeConstraints, const set<int> &fieldIDsToExclude, bool storeLocalStiffnessMatrices);
+  CondensedDofInterpreter(MeshPtr mesh, TIPPtr<Scalar> ip, TRHSPtr<Scalar> rhs, LagrangeConstraints* lagrangeConstraints, const set<int> &fieldIDsToExclude, bool storeLocalStiffnessMatrices, std::set<GlobalIndexType> offRankCellsToInclude);
 
   void addSolution(CondensedDofInterpreter* otherSolnDofInterpreter, Scalar weight);
 

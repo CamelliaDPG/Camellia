@@ -641,7 +641,7 @@ void run(ProblemChoice problemChoice, int &iterationCount, int spaceDim, int num
          int schwarzOverlap, GMGOperator::FactorType schwarzBlockFactorization, int schwarzLevelOfFill, double schwarzFillRatio,
          Solver::SolverChoice coarseSolverChoice, double cgTol, int cgMaxIterations, int AztecOutputLevel,
          bool reportTimings, double &solveTime, bool reportEnergyError, int numCellsRootMesh, bool hOnly, bool useZeroMeanConstraints,
-         bool writeAndExit, GMGOperator::SmootherApplicationType comboType)
+         bool writeAndExit, GMGOperator::SmootherApplicationType comboType, double smootherWeight)
 {
   int rank = Teuchos::GlobalMPISession::getRank();
 
@@ -778,6 +778,7 @@ void run(ProblemChoice problemChoice, int &iterationCount, int spaceDim, int num
       coarseSolverGMG->gmgOperator()->setSmootherType(GMGOperator::CAMELLIA_ADDITIVE_SCHWARZ);
       coarseSolverGMG->gmgOperator()->setSmootherOverlap(coarseSolverSmootherOverlap);
       coarseSolverGMG->gmgOperator()->setSmootherApplicationType(comboType);
+      coarseSolverGMG->gmgOperator()->setSmootherWeight(smootherWeight);
     }
 
     gmgSolver->gmgOperator()->setCoarseSolver(coarseSolver);
@@ -805,6 +806,7 @@ void run(ProblemChoice problemChoice, int &iterationCount, int spaceDim, int num
     gmgSolver->gmgOperator()->setSmootherType(smootherType);
     gmgSolver->gmgOperator()->setSmootherOverlap(schwarzOverlap);
     gmgSolver->gmgOperator()->setSmootherApplicationType(comboType);
+    gmgSolver->gmgOperator()->setSmootherWeight(smootherWeight);
     
     gmgSolver->gmgOperator()->setDebugMode(runGMGOperatorInDebugMode);
     solver = Teuchos::rcp( gmgSolver ); // we use "new" above, so we can let this RCP own the memory
@@ -924,7 +926,7 @@ void runMany(ProblemChoice problemChoice, int spaceDim, int delta_k, int minCell
              Solver::SolverChoice coarseSolverChoice,
              double cgTol, int cgMaxIterations, int aztecOutputLevel, RunManyPreconditionerChoices preconditionerChoices,
              int k, int overlapLevel, int numCellsRootMesh, bool reportTimings, bool hOnly, int maxCells,
-             bool useZeroMeanConstraints, GMGOperator::SmootherApplicationType comboType)
+             bool useZeroMeanConstraints, GMGOperator::SmootherApplicationType comboType, double smootherWeight)
 {
   int rank = Teuchos::GlobalMPISession::getRank();
 
@@ -1180,7 +1182,7 @@ void runMany(ProblemChoice problemChoice, int spaceDim, int delta_k, int minCell
                   useStaticCondensation, precondition, schwarzOnly, smoother, overlapValue,
                   schwarzBlockFactorization, schwarzLevelOfFill, schwarzFillRatio, coarseSolverChoice,
                   cgTol, cgMaxIterations, aztecOutputLevel, reportTimings, solveTime,
-                  reportEnergyError, numCellsRootMesh, hOnly, useZeroMeanConstraints, writeAndExit, comboType);
+                  reportEnergyError, numCellsRootMesh, hOnly, useZeroMeanConstraints, writeAndExit, comboType, smootherWeight);
 
               int numCells = pow((double)numCells1D, spaceDim);
 
@@ -1278,6 +1280,8 @@ int main(int argc, char *argv[])
   int cgMaxIterations = 25000;
   int schwarzOverlap = -1;
 
+  double smootherWeight = -1.0;
+  
   int spaceDim = 1;
 
   bool useCondensedSolve = false;
@@ -1344,6 +1348,8 @@ int main(int argc, char *argv[])
   cmdp.setOption("overlap", &schwarzOverlap, "Schwarz overlap level");
 
   cmdp.setOption("spaceDim", &spaceDim, "space dimensions (1, 2, or 3)");
+  
+  cmdp.setOption("smootherWeight", &smootherWeight, "smoother weight for GMGOperator.");
 
   cmdp.setOption("azOutput", &AztecOutputLevel, "Aztec output level");
   cmdp.setOption("numCells", &numCells, "number of cells in the mesh");
@@ -1447,6 +1453,14 @@ int main(int argc, char *argv[])
   }
   
   GMGOperator::SmootherApplicationType comboType = additiveComboType ? GMGOperator::ADDITIVE : GMGOperator::MULTIPLICATIVE;
+  if (comboType == GMGOperator::MULTIPLICATIVE) // default to a weight of 0.5 for smoother
+  {
+    if (smootherWeight == -1.0) smootherWeight = 0.5;
+  }
+  else if (comboType == GMGOperator::ADDITIVE)
+  {
+    if (smootherWeight == -1.0) smootherWeight = 1.0;
+  }
 
   Solver::SolverChoice coarseSolverChoice = Solver::solverChoiceFromString(coarseSolverChoiceString);
 
@@ -1519,7 +1533,7 @@ int main(int argc, char *argv[])
         useCondensedSolve, precondition, schwarzOnly, smootherChoice, schwarzOverlap,
         schwarzFactorType, levelOfFill, fillRatio, coarseSolverChoice,
         cgTol, cgMaxIterations, AztecOutputLevel, reportTimings, solveTime,
-        reportEnergyError, numCellsRootMesh, hOnly, useZeroMeanConstraints, writeAndExit, comboType);
+        reportEnergyError, numCellsRootMesh, hOnly, useZeroMeanConstraints, writeAndExit, comboType, smootherWeight);
 
     if (rank==0) cout << "Iteration count: " << iterationCount << "; solve time " << solveTime << " seconds." << endl;
   }
@@ -1546,7 +1560,7 @@ int main(int argc, char *argv[])
             schwarzFactorType, levelOfFill, fillRatio,
             coarseSolverChoice,
             cgTol, cgMaxIterations, AztecOutputLevel,
-            runManySubsetChoice, k, schwarzOverlap, numCellsRootMesh, reportTimings, hOnly, maxCells, useZeroMeanConstraints, comboType);
+            runManySubsetChoice, k, schwarzOverlap, numCellsRootMesh, reportTimings, hOnly, maxCells, useZeroMeanConstraints, comboType, smootherWeight);
   }
   return 0;
 }

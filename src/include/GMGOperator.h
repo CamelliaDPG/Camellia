@@ -90,6 +90,7 @@ private:
   Teuchos::RCP<Epetra_CrsMatrix> _P; // prolongation operator
 
   Teuchos::RCP<Epetra_Operator> _smoother;
+  double _smootherWeight;
 public: // promoted these two to public for testing purposes:
   LocalDofMapperPtr getLocalCoefficientMap(GlobalIndexType fineCellID) const;
   GlobalIndexType getCoarseCellID(GlobalIndexType fineCellID) const;
@@ -230,9 +231,6 @@ public:
   //! Returns the Epetra_Map object associated with the range of this operator.
   const Epetra_Map & OperatorRangeMap() const;
 
-  //! sets debug mode for verbose console output on rank 0.
-  void setDebugMode(bool value);
-
   //! factorization choices for Schwarz blocks, when a Schwarz smoother is used.
   enum FactorType
   {
@@ -246,6 +244,9 @@ public:
   
   //! set the coarse Solver
   void setCoarseSolver(SolverPtr coarseSolver);
+  
+  //! sets debug mode for verbose console output on rank 0.
+  void setDebugMode(bool value);
 
   void setSchwarzFactorizationType(FactorType choice);
   
@@ -256,6 +257,11 @@ public:
   
   void setSmootherType(SmootherChoice smootherType);
   void setSmootherOverlap(int overlap);
+
+  // ! smoother weight is applied to each application of the smoother. Default = 1.0
+  double getSmootherWeight();
+  // ! smoother weight is applied to each application of the smoother. Default = 1.0
+  void setSmootherWeight(double weight);
 
   void setLevelOfFill(int fillLevel);
   void setFillRatio(double fillRatio);
