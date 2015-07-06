@@ -639,15 +639,16 @@ void MeshTopology::addEdgeCurve(pair<unsigned,unsigned> edge, ParametricCurvePtr
   }
 
   _edgeToCurveMap[edge] = curve;
+  pair<IndexType,IndexType> reverseEdge = {edge.second,edge.first};
+  _edgeToCurveMap[reverseEdge] = ParametricCurve::reverse(curve);
 
-  vector< pair<unsigned, unsigned> > cellIDsForEdge = _activeCellsForEntities[edgeDim][edgeIndex];
-  //  (cellIndex, entityIndexInCell)
-  if (cellIDsForEdge.size() != 1)
+  vector< pair<IndexType, unsigned> > cellsForEdge = _activeCellsForEntities[edgeDim][edgeIndex];
+  //  (cellIndex, entityOrdinalInCell)
+  for (auto cellForEdge : cellsForEdge)
   {
-    TEUCHOS_TEST_FOR_EXCEPTION(true, std::invalid_argument, "right now, only edges belonging to exactly one cell are supported by curvilinear geometry...");
+    IndexType cellIndex = cellForEdge.first;
+    _cellIDsWithCurves.insert(cellIndex);
   }
-  unsigned cellID = cellIDsForEdge[0].first;
-  _cellIDsWithCurves.insert(cellID);
 }
 
 unsigned MeshTopology::addEntity(CellTopoPtr entityTopo, const vector<unsigned> &entityVertices, unsigned &entityPermutation)
@@ -2314,9 +2315,28 @@ vector< ParametricCurvePtr > MeshTopology::parametricEdgesForCell(unsigned cellI
 {
   vector< ParametricCurvePtr > edges;
   CellPtr cell = getCell(cellIndex);
-  int numNodes = cell->vertices().size();
-  TEUCHOS_TEST_FOR_EXCEPTION(_spaceDim != 2, std::invalid_argument, "Only 2D supported right now.");
-  vector<unsigned> vertices = cell->vertices();
+  
+  vector<unsigned> vertices;
+  if (cell->topology()->getTensorialDegree() == 0)
+  {
+    TEUCHOS_TEST_FOR_EXCEPTION(_spaceDim != 2, std::invalid_argument, "Only 2D supported right now.");
+    vertices = cell->vertices();
+  }
+  else
+  {
+    // for space-time, we assume that:
+    // (a) only the pure-spatial edges (i.e. those that have no temporal extension) are curved
+    // (b) the vertices and parametric curves at both time nodes are identical (so that the curves are independent of time)
+    // At some point, it would be desirable to revisit these assumptions.  Having moving meshes, including mesh movement
+    // that follows a curved path, would be pretty neat.
+    // we take the first temporal side:
+    unsigned temporalSideOrdinal = cell->topology()->getTemporalSideOrdinal(0);
+    int sideDim = _spaceDim - 1;
+    vertices = cell->getEntityVertexIndices(sideDim, temporalSideOrdinal);
+  }
+  
+  int numNodes = vertices.size();
+  
   for (int nodeIndex=0; nodeIndex<numNodes; nodeIndex++)
   {
     int v0_index = vertices[nodeIndex];
@@ -2343,8 +2363,7 @@ vector< ParametricCurvePtr > MeshTopology::parametricEdgesForCell(unsigned cellI
     }
     else if ( _edgeToCurveMap.find(reverse_edge) != _edgeToCurveMap.end() )
     {
-      TEUCHOS_TEST_FOR_EXCEPTION(true, std::invalid_argument, "No support yet for curved edges outside mesh boundary.");
-      // TODO: make ParametricCurves reversible (swap t=0 and t=1)
+      TEUCHOS_TEST_FOR_EXCEPTION(true, std::invalid_argument, "Internal error: reverse_edge found, but edge not found in edgeToCurveMap.");
     }
     else
     {

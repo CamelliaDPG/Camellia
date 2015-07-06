@@ -3599,7 +3599,8 @@ void TSolution<Scalar>::setWriteRHSToMatrixMarketFile(bool value, const string &
 }
 
 template <typename Scalar>
-void TSolution<Scalar>::condensedSolve(TSolverPtr<Scalar> globalSolver, bool reduceMemoryFootprint)
+void TSolution<Scalar>::condensedSolve(TSolverPtr<Scalar> globalSolver, bool reduceMemoryFootprint,
+                                       set<GlobalIndexType> offRankCellsToInclude)
 {
   // when reduceMemoryFootprint is true, local stiffness matrices will be computed twice, rather than stored for reuse
   vector<int> trialIDs;
@@ -3621,7 +3622,7 @@ void TSolution<Scalar>::condensedSolve(TSolverPtr<Scalar> globalSolver, bool red
   // override reduceMemoryFootprint for now (since CondensedDofInterpreter doesn't yet support a true value)
   reduceMemoryFootprint = false;
 
-  Teuchos::RCP<DofInterpreter> dofInterpreter = Teuchos::rcp(new CondensedDofInterpreter<Scalar>(_mesh, _ip, _rhs, _lagrangeConstraints.get(), fieldsToExclude, !reduceMemoryFootprint) );
+  Teuchos::RCP<DofInterpreter> dofInterpreter = Teuchos::rcp(new CondensedDofInterpreter<Scalar>(_mesh, _ip, _rhs, _lagrangeConstraints.get(), fieldsToExclude, !reduceMemoryFootprint, offRankCellsToInclude) );
 
   Teuchos::RCP<DofInterpreter> oldDofInterpreter = _dofInterpreter;
 
@@ -4792,7 +4793,7 @@ void TSolution<Scalar>::setGlobalSolutionFromCellLocalCoefficients()
 }
 
 template <typename Scalar>
-void TSolution<Scalar>::setUseCondensedSolve(bool value)
+void TSolution<Scalar>::setUseCondensedSolve(bool value, set<GlobalIndexType> offRankCellsToInclude)
 {
   if (value)
   {
@@ -4820,7 +4821,7 @@ void TSolution<Scalar>::setUseCondensedSolve(bool value)
 
       _oldDofInterpreter = _dofInterpreter;
 
-      Teuchos::RCP<DofInterpreter> dofInterpreter = Teuchos::rcp(new CondensedDofInterpreter<Scalar>(_mesh, _ip, _rhs, _lagrangeConstraints.get(), fieldsToExclude, !reduceMemoryFootprint) );
+      Teuchos::RCP<DofInterpreter> dofInterpreter = Teuchos::rcp(new CondensedDofInterpreter<Scalar>(_mesh, _ip, _rhs, _lagrangeConstraints.get(), fieldsToExclude, !reduceMemoryFootprint, offRankCellsToInclude) );
 
       setDofInterpreter(dofInterpreter);
     }

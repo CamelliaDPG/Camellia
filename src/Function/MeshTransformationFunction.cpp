@@ -19,6 +19,9 @@
 #include "SerialDenseMatrixUtility.h"
 #include "GnuPlotUtil.h"
 #include "ParametricSurface.h"
+#include "Projector.h"
+#include "SpaceTimeBasisCache.h"
+#include "TensorBasis.h"
 
 #include "CamelliaCellTools.h"
 
@@ -33,7 +36,16 @@ VectorBasisPtr basisForTransformation(ElementTypePtr cellType)
 {
   int polyOrder = std::max(cellType->trialOrderPtr->maxBasisDegree(), cellType->testOrderPtr->maxBasisDegree());
 
-  BasisPtr basis = BasisFactory::basisFactory()->getBasis(polyOrder, cellType->cellTopoPtr, Camellia::FUNCTION_SPACE_VECTOR_HGRAD);
+  CellTopoPtr cellTopo = cellType->cellTopoPtr;
+  if (cellTopo->getTensorialDegree() > 0)
+  {
+    // for now, we assume that this means space-time.  (At some point, we may support tensor-product spatial cell topologies for
+    // things like fast quadrature support, and this would need revisiting then.)
+    // we also assume that the curvilinearity is purely spatial (and in fact, just 2D for now).
+    cellTopo = CellTopology::cellTopology(cellTopo->getShardsTopology(), cellTopo->getTensorialDegree() - 1);
+  }
+  
+  BasisPtr basis = BasisFactory::basisFactory()->getBasis(polyOrder, cellTopo, Camellia::FUNCTION_SPACE_VECTOR_HGRAD);
   VectorBasisPtr vectorBasis = Teuchos::rcp( (VectorizedBasis<> *)basis.get(),false); // dynamic cast would be better
   return vectorBasis;
 }
@@ -133,8 +145,8 @@ public:
   {
     _cellIndex = -1;
     _op = OP_VALUE;
-    ElementPtr cell = mesh->getElement(cellID);
-    _basis = basisForTransformation(cell->elementType());
+    ElementTypePtr elementType = mesh->getElementType(cellID);
+    _basis = basisForTransformation(elementType);
     ParametricSurface::basisWeightsForProjectedInterpolant(_basisCoefficients, _basis, mesh, cellID);
   }
 
@@ -145,14 +157,21 @@ public:
 
 //    cout << "_basisCoefficients:\n" << _basisCoefficients;
 
+    BasisCachePtr spaceTimeBasisCache;
+    if (basisCache->cellTopologyIsSpaceTime())
+    {
+      // then we require that the basisCache provided be a space-time basis cache
+      SpaceTimeBasisCache* spaceTimeCache = dynamic_cast<SpaceTimeBasisCache*>(basisCache.get());
+      TEUCHOS_TEST_FOR_EXCEPTION(!spaceTimeCache, std::invalid_argument, "space-time requires a SpaceTimeBasisCache");
+      spaceTimeBasisCache = basisCache;
+      basisCache = spaceTimeCache->getSpatialBasisCache();
+    }
+    
     int numDofs = _basis->getCardinality();
-
     int spaceDim = basisCache->getSpaceDim();
 
     bool basisIsVolumeBasis = (spaceDim == _basis->domainTopology()->getDimension());
-
     bool useCubPointsSideRefCell = basisIsVolumeBasis && basisCache->isSideCache();
-
     constFCPtr transformedValues = basisCache->getTransformedValues(_basis, _op, useCubPointsSideRefCell);
 
     // transformedValues has dimensions (C,F,P,[D,D])
@@ -160,8 +179,6 @@ public:
     int rank = transformedValues->rank() - 3;
     TEUCHOS_TEST_FOR_EXCEPTION(rank != values.rank()-2, std::invalid_argument, "values rank is incorrect.");
 
-
-    int numCells = values.dimension(0);
     int numPoints = values.dimension(1);
 
     // initialize the values we're responsible for setting
@@ -171,72 +188,23 @@ public:
       {
         values(_cellIndex,ptIndex,d) = 0.0;
       }
+      if (spaceTimeBasisCache != Teuchos::null)
+      {
+        values(_cellIndex,ptIndex,spaceDim) = spaceTimeBasisCache->getRefCellPoints()(ptIndex,spaceDim);
+      }
     }
 
-    int entriesPerPoint = values.size() / (numCells * numPoints);
     for (int i=0; i<numDofs; i++)
     {
       double weight = _basisCoefficients(i);
       for (int ptIndex=0; ptIndex<numPoints; ptIndex++)
       {
-        int valueIndex = (_cellIndex*numPoints + ptIndex)*entriesPerPoint;
-        int basisValueIndex = (_cellIndex*numPoints*numDofs + i*numPoints + ptIndex) * entriesPerPoint;
-        double *value = &values[valueIndex];
-        const double *basisValue = &((*transformedValues)[basisValueIndex]);
-        for (int j=0; j<entriesPerPoint; j++)
+        for (int d=0; d<spaceDim; d++)
         {
-          *value++ += *basisValue++ * weight;
+          values(_cellIndex,ptIndex,d) += weight * (*transformedValues)(_cellIndex,i,ptIndex,d);
         }
       }
     }
-
-    // original implementation follows
-    // (the above adapted from BasisSumFunction)
-//    if (_op == OP_VALUE) {
-//      // here, we depend on the fact that our basis (HGRAD_transform_VALUE) doesn't actually change under transformation
-//      int cardinality = _basis->getCardinality();
-//      const FieldContainer<double>* refCellPoints;
-//      if (basisCache->isSideCache()) {
-//        refCellPoints = &basisCache->getSideRefCellPointsInVolumeCoordinates();
-//      } else {
-//        refCellPoints = &basisCache->getRefCellPoints();
-//      }
-//      int numPoints = refCellPoints->dimension(0);
-//      int spaceDim = basisCache->getSpaceDim();
-//      FieldContainer<double> basisValues(cardinality,numPoints,spaceDim);  // (F,P,D)
-//      _basis->getValues(basisValues, *refCellPoints, Intrepid::OPERATOR_VALUE);
-//      basisValues.resize(1,cardinality,numPoints,spaceDim);
-//      transformedValues = Teuchos::rcp(new FieldContainer<double>(basisValues));
-//      transformedCellIndex = 0; // we're in our own transformed container, so locally 0 is our cellIndex.
-//    } else {
-//      bool useSideRefCellPoints = basisCache->isSideCache();
-//      transformedValues = basisCache->getTransformedValues(_basis, _op, useSideRefCellPoints);
-////      cout << "transformedValues:\n" << *transformedValues;
-//    }
-//    // (C,F,P,D)
-//
-//    // NOTE that it would be possible to refactor the below using pointer arithmetic to support _op values that don't
-//    // result in vector values (e.g. OP_X, OP_DIV).  But since there isn't any clear need for these as yet, we leave it for
-//    // later...
-//
-//    int cardinality = _basisCoefficients.size();
-//    int numPoints = values.dimension(1);
-//    int spaceDim = values.dimension(2);
-//
-//    // initialize the values we're responsible for setting
-//    for (int ptIndex=0; ptIndex<numPoints; ptIndex++) {
-//      for (int d=0; d<spaceDim; d++) {
-//        values(_cellIndex,ptIndex,d) = 0.0;
-//      }
-//    }
-//
-//    for (int i=0; i<cardinality; i++) {
-//      for (int ptIndex=0; ptIndex<numPoints; ptIndex++) {
-//        for (int d=0; d<spaceDim; d++) {
-//          values(_cellIndex,ptIndex,d) += _basisCoefficients(i) * (*transformedValues)(transformedCellIndex,i,ptIndex,d);
-//        }
-//      }
-//    }
   }
 
   int basisDegree()
@@ -305,19 +273,40 @@ bool MeshTransformationFunction::mapRefCellPointsUsingExactGeometry(FieldContain
 //
 //  cout << "cellPoints prior to mapRefCellPointsUsingExactGeometry():\n" << cellPoints;
 
-  CellTopoPtr cellTopo = _mesh->getElement(cellID)->elementType()->cellTopoPtr;
+  int numPoints = refCellPoints.dimension(0);
+  int spaceDim = refCellPoints.dimension(1);
+
+  CellTopoPtr cellTopo = _mesh->getElementType(cellID)->cellTopoPtr;
+  bool spaceTime = false;
+  CellTopoPtr spaceTimeTopo;
+  FieldContainer<double> refCellPointsSpaceTime, refCellPointsSpace;
   if (cellTopo->getTensorialDegree() > 0)
   {
-    TEUCHOS_TEST_FOR_EXCEPTION(true, std::invalid_argument, "mapRefCellPointsUsingExactGeometry does not support tensorial degree > 0.");
+    spaceDim = spaceDim - 1;
+    spaceTime = true;
+    spaceTimeTopo = cellTopo;
+    cellTopo = CellTopology::cellTopology(cellTopo->getShardsTopology(), cellTopo->getTensorialDegree() - 1);
+    refCellPointsSpaceTime = refCellPoints;
+    // copy out the spatial points:
+    refCellPointsSpace.resize(numPoints, spaceDim);
+    for (int ptOrdinal=0; ptOrdinal<numPoints; ptOrdinal++)
+    {
+      for (int d=0; d<spaceDim; d++)
+      {
+        refCellPointsSpace(ptOrdinal,d) = refCellPointsSpaceTime(ptOrdinal,d);
+      }
+    }
+  }
+  else
+  {
+    refCellPointsSpace = refCellPoints;  // would be possible to avoid this copy by e.g. using a pointer in the call to mapToPhysicalFrame() below
   }
   if (cellTopo->getKey().first == shards::Quadrilateral<4>::key)
   {
-    int numPoints = refCellPoints.dimension(0);
-    int spaceDim = refCellPoints.dimension(1);
     TEUCHOS_TEST_FOR_EXCEPTION(spaceDim != 2, std::invalid_argument, "points must be in 2D for the quad!");
     FieldContainer<double> parametricPoints(numPoints,spaceDim); // map to (t1,t2) space
     int whichCell = 0;
-    CamelliaCellTools::mapToPhysicalFrame(parametricPoints,refCellPoints,
+    CamelliaCellTools::mapToPhysicalFrame(parametricPoints,refCellPointsSpace,
                                           ParametricSurface::parametricQuadNodes(),
                                           cellTopo,whichCell);
 
@@ -338,15 +327,19 @@ bool MeshTransformationFunction::mapRefCellPointsUsingExactGeometry(FieldContain
 
       cellPoints(ptIndex,0) = x;
       cellPoints(ptIndex,1) = y;
+      if (spaceTime)
+      {
+        // per our assumptions on mesh transformations, we don't change the temporal components here:
+        cellPoints(ptIndex,2) = refCellPoints(ptIndex,2);
+      }
     }
-
   }
   else
   {
     // TODO: work out what to do for triangles (or perhaps even a general polygon)
     TEUCHOS_TEST_FOR_EXCEPTION(true, std::invalid_argument, "Unhandled cell type");
   }
-
+  
 //  cout << "cellPoints after to mapRefCellPointsUsingExactGeometry():\n" << cellPoints;
 
   return true;

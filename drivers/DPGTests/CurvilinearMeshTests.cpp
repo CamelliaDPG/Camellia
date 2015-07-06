@@ -1289,18 +1289,18 @@ bool CurvilinearMeshTests::testPointsRemainInsideElement()
 
     mesh->setEdgeToCurveMap(edgeToCurveMap);
 
-    GnuPlotUtil::writeExactMeshSkeleton("/tmp/halfCircles.dat", mesh, 15);
+//    GnuPlotUtil::writeExactMeshSkeleton("/tmp/halfCircles.dat", mesh, 15);
 
     BasisCachePtr basisCache = BasisCache::basisCacheForCell(mesh, cellID);
     int pointsInLine = 15;
     FieldContainer<double> refPoints;
     lineAcrossQuadRefCell(refPoints, pointsInLine, false);
     basisCache->setRefCellPoints(refPoints);
-    GnuPlotUtil::writeXYPoints("/tmp/halfCircles_vertical_line.dat", basisCache->getPhysicalCubaturePoints());
+//    GnuPlotUtil::writeXYPoints("/tmp/halfCircles_vertical_line.dat", basisCache->getPhysicalCubaturePoints());
     // now, a horizontal line
     lineAcrossQuadRefCell(refPoints, pointsInLine, true);
     basisCache->setRefCellPoints(refPoints);
-    GnuPlotUtil::writeXYPoints("/tmp/halfCircles_horizontal_line.dat", basisCache->getPhysicalCubaturePoints());
+//    GnuPlotUtil::writeXYPoints("/tmp/halfCircles_horizontal_line.dat", basisCache->getPhysicalCubaturePoints());
   }
 
   for (int H1Order=1; H1Order < 5; H1Order++)

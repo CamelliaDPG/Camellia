@@ -463,6 +463,8 @@ void Mesh::enforceOneIrregularity()
               // then *neighbor* is irregular
               irregularCellIDs[neighbor->topology()->getKey()].insert(neighborInfo.first);
 //              cout << neighborInfo.first << " is irregular.\n";
+              TEUCHOS_TEST_FOR_EXCEPTION(activeCellIDs.find(neighborInfo.first) == activeCellIDs.end(),
+                                         std::invalid_argument, "Internal error: 'irregular' cell is not active!");
             }
           }
         }
@@ -767,7 +769,7 @@ void Mesh::hRefine(const set<GlobalIndexType> &cellIDs, Teuchos::RCP<RefinementP
       cout << "cellID " << cellID << " is not active, but Mesh received request for h-refinement.\n";
       TEUCHOS_TEST_FOR_EXCEPTION(true, std::invalid_argument, "inactive cell");
     }
-
+    
     writableMeshTopology->refineCell(cellID, refPattern);
 
     // TODO: figure out what it is that breaks in GDAMaximumRule when we use didHRefine to notify about all cells together outside this loop
