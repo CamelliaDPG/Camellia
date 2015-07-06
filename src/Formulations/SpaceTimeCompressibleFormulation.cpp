@@ -84,6 +84,8 @@ SpaceTimeCompressibleFormulation::SpaceTimeCompressibleFormulation(Teuchos::RCP<
   double Cp = problem->Cp();
   double Cv = problem->Cv();
 
+  cout << Pr << " " << gamma << " " << R << endl;
+
   if (!steady)
   {
     TEUCHOS_TEST_FOR_EXCEPTION(meshTopo->getDimension() != _spaceDim + 1, std::invalid_argument, "MeshTopo must be space-time mesh for transient");
@@ -140,64 +142,64 @@ SpaceTimeCompressibleFormulation::SpaceTimeCompressibleFormulation(Teuchos::RCP<
   te = _vf->fluxVar(s_te);
   vc = _vf->testVar(s_vc, HGRAD);
   ve = _vf->testVar(s_ve, HGRAD);
-  if (spaceDim == 1)
+  switch (spaceDim)
   {
-    u1 = _vf->fieldVar(s_u1);
-    D11 = _vf->fieldVar(s_D11);
-    q1 = _vf->fieldVar(s_q1);
-    // u1hat = _vf->traceVarSpaceOnly(s_u1hat, 1.0 * u1, traceSpace);
-    u1hat = _vf->traceVar(s_u1hat, 1.0 * u1, traceSpace);
-    tm1 = _vf->fluxVar(s_tm1);
-    vm1 = _vf->testVar(s_vm1, HGRAD);
-    S11 = _vf->testVar(s_S11, HGRAD); // scalar
-    tau = _vf->testVar(s_tau, HGRAD); // scalar
-  }
-  if (spaceDim == 2)
-  {
-    u1 = _vf->fieldVar(s_u1);
-    u2 = _vf->fieldVar(s_u2);
-    D11 = _vf->fieldVar(s_D11);
-    D12 = _vf->fieldVar(s_D12);
-    q1 = _vf->fieldVar(s_q1);
-    q2 = _vf->fieldVar(s_q2);
-    u1hat = _vf->traceVarSpaceOnly(s_u1hat, 1.0 * u1, traceSpace);
-    u2hat = _vf->traceVarSpaceOnly(s_u2hat, 1.0 * u2, traceSpace);
-    tm1 = _vf->fluxVar(s_tm1);
-    tm2hat = _vf->fluxVar(s_tm2hat);
-    vm1 = _vf->testVar(s_vm1, HGRAD);
-    vm2 = _vf->testVar(s_vm2, HGRAD);
-    S11 = _vf->testVar(s_S11, HGRAD); // scalar
-    S12 = _vf->testVar(s_S12, HGRAD); // scalar
-    tau = _vf->testVar(s_tau, HDIV); // vector
-  }
-  if (spaceDim == 3)
-  {
-    u1 = _vf->fieldVar(s_u1);
-    u2 = _vf->fieldVar(s_u2);
-    u3 = _vf->fieldVar(s_u3);
-    D11 = _vf->fieldVar(s_D11);
-    D12 = _vf->fieldVar(s_D12);
-    D13 = _vf->fieldVar(s_D13);
-    D22 = _vf->fieldVar(s_D22);
-    D23 = _vf->fieldVar(s_D23);
-    q1 = _vf->fieldVar(s_q1);
-    q2 = _vf->fieldVar(s_q2);
-    q3 = _vf->fieldVar(s_q3);
-    u1hat = _vf->traceVarSpaceOnly(s_u1hat, 1.0 * u1, traceSpace);
-    u2hat = _vf->traceVarSpaceOnly(s_u2hat, 1.0 * u2, traceSpace);
-    u3hat = _vf->traceVarSpaceOnly(s_u3hat, 1.0 * u3, traceSpace);
-    tm1 = _vf->fluxVar(s_tm1);
-    tm2hat = _vf->fluxVar(s_tm2hat);
-    tm3hat = _vf->fluxVar(s_tm3hat);
-    vm1 = _vf->testVar(s_vm1, HGRAD);
-    vm2 = _vf->testVar(s_vm2, HGRAD);
-    vm3 = _vf->testVar(s_vm3, HGRAD);
-    S11 = _vf->testVar(s_S11, HGRAD); // scalar
-    S12 = _vf->testVar(s_S12, HGRAD); // scalar
-    S13 = _vf->testVar(s_S13, HGRAD); // scalar
-    S22 = _vf->testVar(s_S22, HGRAD); // scalar
-    S23 = _vf->testVar(s_S23, HGRAD); // scalar
-    tau = _vf->testVar(s_tau, HDIV); // vector
+    case 1:
+      u1 = _vf->fieldVar(s_u1);
+      D11 = _vf->fieldVar(s_D11);
+      q1 = _vf->fieldVar(s_q1);
+      // u1hat = _vf->traceVarSpaceOnly(s_u1hat, 1.0 * u1, traceSpace);
+      u1hat = _vf->traceVar(s_u1hat, 1.0 * u1, traceSpace);
+      tm1 = _vf->fluxVar(s_tm1);
+      vm1 = _vf->testVar(s_vm1, HGRAD);
+      S11 = _vf->testVar(s_S11, HGRAD); // scalar
+      tau = _vf->testVar(s_tau, HGRAD); // scalar
+      break;
+    case 2:
+      u1 = _vf->fieldVar(s_u1);
+      u2 = _vf->fieldVar(s_u2);
+      D11 = _vf->fieldVar(s_D11);
+      D12 = _vf->fieldVar(s_D12);
+      q1 = _vf->fieldVar(s_q1);
+      q2 = _vf->fieldVar(s_q2);
+      u1hat = _vf->traceVarSpaceOnly(s_u1hat, 1.0 * u1, traceSpace);
+      u2hat = _vf->traceVarSpaceOnly(s_u2hat, 1.0 * u2, traceSpace);
+      tm1 = _vf->fluxVar(s_tm1);
+      tm2hat = _vf->fluxVar(s_tm2hat);
+      vm1 = _vf->testVar(s_vm1, HGRAD);
+      vm2 = _vf->testVar(s_vm2, HGRAD);
+      S11 = _vf->testVar(s_S11, HGRAD); // scalar
+      S12 = _vf->testVar(s_S12, HGRAD); // scalar
+      tau = _vf->testVar(s_tau, HDIV); // vector
+      break;
+    case 3:
+      u1 = _vf->fieldVar(s_u1);
+      u2 = _vf->fieldVar(s_u2);
+      u3 = _vf->fieldVar(s_u3);
+      D11 = _vf->fieldVar(s_D11);
+      D12 = _vf->fieldVar(s_D12);
+      D13 = _vf->fieldVar(s_D13);
+      D22 = _vf->fieldVar(s_D22);
+      D23 = _vf->fieldVar(s_D23);
+      q1 = _vf->fieldVar(s_q1);
+      q2 = _vf->fieldVar(s_q2);
+      q3 = _vf->fieldVar(s_q3);
+      u1hat = _vf->traceVarSpaceOnly(s_u1hat, 1.0 * u1, traceSpace);
+      u2hat = _vf->traceVarSpaceOnly(s_u2hat, 1.0 * u2, traceSpace);
+      u3hat = _vf->traceVarSpaceOnly(s_u3hat, 1.0 * u3, traceSpace);
+      tm1 = _vf->fluxVar(s_tm1);
+      tm2hat = _vf->fluxVar(s_tm2hat);
+      tm3hat = _vf->fluxVar(s_tm3hat);
+      vm1 = _vf->testVar(s_vm1, HGRAD);
+      vm2 = _vf->testVar(s_vm2, HGRAD);
+      vm3 = _vf->testVar(s_vm3, HGRAD);
+      S11 = _vf->testVar(s_S11, HGRAD); // scalar
+      S12 = _vf->testVar(s_S12, HGRAD); // scalar
+      S13 = _vf->testVar(s_S13, HGRAD); // scalar
+      S22 = _vf->testVar(s_S22, HGRAD); // scalar
+      S23 = _vf->testVar(s_S23, HGRAD); // scalar
+      tau = _vf->testVar(s_tau, HDIV); // vector
+      break;
   }
 
   // LinearTermPtr tc_lt;

@@ -256,7 +256,7 @@ class CylinderProblem : public IncompressibleProblem
       _sigma2_exact = Function::zero();
 
       _tInit = 0.0;
-      _tFinal = 12.0;
+      _tFinal = 1.0;
       _numSlabs = numSlabs;
       _pureVelocityBCs = false;
     }
@@ -462,19 +462,19 @@ class SquareCylinderProblem : public CylinderProblem
 {
   private:
     double _radius = 0.5;
-    // double _xLeft = -3;
-    // double _xRight = 9;
-    // double _meshHeight = 6;
-    double _xLeft = -60;
-    double _xRight = 180;
-    double _meshHeight = 120;
+    double _xLeft = -3;
+    double _xRight = 9;
+    double _meshHeight = 9;
+    // double _xLeft = -60;
+    // double _xRight = 180;
+    // double _meshHeight = 120;
     double _yBottom = -_meshHeight/2;
     double _yTop = _meshHeight/2;
   public:
     SquareCylinderProblem(bool steady, double Re, int numSlabs=1) : CylinderProblem(steady, Re, numSlabs)
     {
       _tInit = 0.0;
-      _tFinal = 12.0;
+      _tFinal = 1.0;
     }
     virtual MeshGeometryPtr meshGeometry()
     {
@@ -521,7 +521,7 @@ class SquareCylinderProblem : public CylinderProblem
       vector< GlobalIndexType > verticalBandCellIDs = hemkerMeshNoCurves->cellIDsForPoints(verticalBandPoints, false);
 
       Teuchos::RCP<RefinementPattern> verticalCut, horizontalCut;
-      
+
       if (!_steady)
       {
         verticalCut = RefinementPattern::xAnisotropicRefinementPatternQuadTimeExtruded();
