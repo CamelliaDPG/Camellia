@@ -107,7 +107,7 @@ private:
   void integrateBasisFunctions(Intrepid::FieldContainer<GlobalIndexTypeToCast> &globalIndices,
                                Intrepid::FieldContainer<Scalar> &values, int trialID);
   void integrateBasisFunctions(Intrepid::FieldContainer<Scalar> &values, ElementTypePtr elemTypePtr, int trialID);
-  
+
   // statistics for the last solve:
   double _totalTimeLocalStiffness, _totalTimeGlobalAssembly, _totalTimeBCImposition, _totalTimeSolve, _totalTimeDistributeSolution;
   double _meanTimeLocalStiffness, _meanTimeGlobalAssembly, _meanTimeBCImposition, _meanTimeSolve, _meanTimeDistributeSolution;
@@ -183,7 +183,7 @@ public:
   void importSolution(); // imports for all rank-local cellIDs
   void importSolutionForOffRankCells(std::set<GlobalIndexType> cellIDs);
   void importGlobalSolution(); // imports (and interprets!) global solution.  NOT scalable.
-  
+
   int solve();
 
   int solve(bool useMumps);
@@ -305,7 +305,8 @@ public:
   void condensedSolve(TSolverPtr<Scalar> globalSolver = Teuchos::rcp(new MumpsSolver()), bool reduceMemoryFootprint = false,
                       std::set<GlobalIndexType> offRankCellsToInclude = std::set<GlobalIndexType>()); // when reduceMemoryFootprint is true, local stiffness matrices will be computed twice, rather than stored for reuse
 #else
-  void condensedSolve(TSolverPtr<Scalar> globalSolver = Teuchos::rcp(new TAmesos2Solver<Scalar>()), bool reduceMemoryFootprint = false); // when reduceMemoryFootprint is true, local stiffness matrices will be computed twice, rather than stored for reuse
+  void condensedSolve(TSolverPtr<Scalar> globalSolver = Teuchos::rcp(new TAmesos2Solver<Scalar>()), bool reduceMemoryFootprint = false,
+                      std::set<GlobalIndexType> offRankCellsToInclude = std::set<GlobalIndexType>()); // when reduceMemoryFootprint is true, local stiffness matrices will be computed twice, rather than stored for reuse
 #endif
   void readFromFile(const std::string &filePath);
   void writeToFile(const std::string &filePath);
