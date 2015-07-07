@@ -91,6 +91,7 @@ private:
 
   Teuchos::RCP<Epetra_Operator> _smoother;
   double _smootherWeight;
+  Teuchos::RCP<Epetra_MultiVector> _smootherWeight_sqrt;
 public: // promoted these two to public for testing purposes:
   LocalDofMapperPtr getLocalCoefficientMap(GlobalIndexType fineCellID) const;
   GlobalIndexType getCoarseCellID(GlobalIndexType fineCellID) const;
@@ -201,6 +202,17 @@ public:
    */
   int ApplyInverse(const Epetra_MultiVector& X, Epetra_MultiVector& Y) const;
 
+  //! Returns the result of the smoother, using any scalar or vector weights that are set, applied to a Epetra_MultiVector X in Y.
+  /*!
+   \param In
+   X - A Epetra_MultiVector of dimension NumVectors to multiply with matrix.
+   \param Out
+   Y -A Epetra_MultiVector of dimension NumVectors containing result.
+   
+   \return Integer error code, set to 0 if successful.
+   */
+  int ApplySmoother(const Epetra_MultiVector& X, Epetra_MultiVector& Y) const;
+  
   //! Returns the infinity norm of the global matrix.
   /* Returns the quantity \f$ \| A \|_\infty\f$ such that
    \f[\| A \|_\infty = \max_{1\lei\lem} \sum_{j=1}^n |a_{ij}| \f].
