@@ -73,9 +73,7 @@ _finePartitionMap(finePartitionMap), _br(true)
 
   _schwarzBlockFactorizationType = Direct;
 
-  // additive implies a two-level operator.  In principle, it seems to me MULTIPLICATIVE should be the better choice (in terms of iteration counts), but
-  // there may be a bug, or a failure of my understanding -- this is not what we see in general.  (In some cases multiplicative is indeed better, but in
-  // others it fails dramatically.)
+  // additive implies a two-level operator.
   _smootherApplicationType = ADDITIVE;
 
   _levelOfFill = 2;
