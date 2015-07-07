@@ -1,6 +1,7 @@
 #include "AdditiveSchwarz.h"
 #include "CamelliaDebugUtility.h"
 #include "ExpFunction.h"
+#include "GDAMinimumRule.h"
 #include "GMGOperator.h"
 #include "GnuPlotUtil.h"
 #include "HDF5Exporter.h"
@@ -678,6 +679,13 @@ void run(ProblemChoice problemChoice, int &iterationCount, int spaceDim, int num
   MeshPtr mesh = solution->mesh();
   BCPtr bc = solution->bc();
 
+  {
+    // DEBUGGING
+    GDAMinimumRule* minRule = dynamic_cast<GDAMinimumRule*>(mesh->globalDofAssignment().get());
+    if (rank==0)
+      minRule->printGlobalDofInfo();
+  }
+  
   if (hOnly)
   {
     // then replace the k0Mesh with the h-coarsened mesh:
@@ -695,6 +703,9 @@ void run(ProblemChoice problemChoice, int &iterationCount, int spaceDim, int num
     cout << "Solution (" << numFineGlobalDofs << " fine global dofs) and k0 mesh (";
     cout << numCoarseGlobalDofs << " coarse global dofs) initialized in " << initializationTime << " seconds.\n";
   }
+  
+  // to be fairer to preconditioners whose construction is cheap, we include construction time in the solve time (this is a change, made 7-7-15)
+  Epetra_Time solveTimer(Comm);
   
   Teuchos::RCP<Solver> solver;
   if (!precondition)
@@ -816,8 +827,6 @@ void run(ProblemChoice problemChoice, int &iterationCount, int spaceDim, int num
 //    if (rank==0) cout << "Writing fine Stokes matrix to /tmp/A_stokes.dat.\n";
 //    solution->setWriteMatrixToFile(true, "/tmp/A_stokes.dat");
 //  }
-  
-  Epetra_Time solveTimer(Comm);
 
   int result = solution->solve(solver);
 
@@ -906,6 +915,13 @@ void run(ProblemChoice problemChoice, int &iterationCount, int spaceDim, int num
       Teuchos::RCP< Epetra_CrsMatrix > S = op->getSmootherAsMatrix();
       EpetraExt::RowMatrixToMatrixMarketFile("S.dat",*S, NULL, NULL, false);
 
+      if (op->getSmootherWeightVector() != Teuchos::null)
+      {
+        if (rank==0) cout << "writing smoother weight vector to w.dat\n";
+        Teuchos::RCP<Epetra_MultiVector> w = op->getSmootherWeightVector();
+        EpetraExt::MultiVectorToMatrixMarketFile("w.dat", *w, NULL, NULL, false);
+      }
+      
       return;
     }
   }
