@@ -852,7 +852,10 @@ const Epetra_Map & AdditiveSchwarz<T>::OperatorRangeMap() const
   template<typename T>
   const Epetra_Map & AdditiveSchwarz<T>::OverlapMap() const
   {
-    return(OverlappingMatrix_->OperatorRangeMap());
+    if (IsOverlapping_)
+      return OverlappingMatrix_->OperatorRangeMap();
+    else
+      return Matrix_->OperatorRangeMap();
   }
   
 //==============================================================================
