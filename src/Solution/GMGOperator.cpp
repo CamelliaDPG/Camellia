@@ -73,9 +73,7 @@ _finePartitionMap(finePartitionMap), _br(true)
 
   _schwarzBlockFactorizationType = Direct;
 
-  // additive implies a two-level operator.  In principle, it seems to me MULTIPLICATIVE should be the better choice (in terms of iteration counts), but
-  // there may be a bug, or a failure of my understanding -- this is not what we see in general.  (In some cases multiplicative is indeed better, but in
-  // others it fails dramatically.)
+  // additive implies a two-level operator.
   _smootherApplicationType = ADDITIVE;
 
   _levelOfFill = 2;
@@ -773,15 +771,8 @@ int GMGOperator::ApplyInverse(const Epetra_MultiVector& X_in, Epetra_MultiVector
   if (_smootherType != NONE)
   {
     // if we have a smoother S, set Y = S^-1 f =: B1 * f
-    narrate("smoother->ApplyInverse()");
-    timer.ResetStartTime();
-    int err = _smoother->ApplyInverse(f, B1_f);
-    Y.Update(_smootherWeight, B1_f, 1.0);
-    _timeApplySmoother += timer.ElapsedTime();
-    if (err != 0)
-    {
-      cout << "_smoother->ApplyInverse returned non-zero error code " << err << endl;
-    }
+    int err = ApplySmoother(f, B1_f); // B1_f is scaled!
+    Y.Update(1.0, B1_f, 1.0);
     if (_debugMode)
     {
       if (printVerboseOutput) cout << "B1 * f:\n";
@@ -845,15 +836,18 @@ int GMGOperator::ApplyInverse(const Epetra_MultiVector& X_in, Epetra_MultiVector
     res.Update(-1.0, A_Y, 1.0);
     
     Epetra_MultiVector B1_res(Y.Map(), Y.NumVectors());
-    timer.ResetStartTime();
-    err = _smoother->ApplyInverse(res, B1_res);
-    _timeApplySmoother += timer.ElapsedTime();
-    if (err != 0)
-    {
-      cout << "_smoother->ApplyInverse returned non-zero error code " << err << endl;
-    }
-    
-    Y.Update(_smootherWeight, B1_res, 1.0);
+//    timer.ResetStartTime();
+//    err = _smoother->ApplyInverse(res, B1_res);
+//    _timeApplySmoother += timer.ElapsedTime();
+//    if (err != 0)
+//    {
+//      cout << "_smoother->ApplyInverse returned non-zero error code " << err << endl;
+//    }
+//    
+//    Y.Update(_smootherWeight, B1_res, 1.0);
+
+    err = ApplySmoother(res, B1_res); // B1_res is scaled!
+    Y.Update(1.0, B1_res, 1.0);
     
     if (_debugMode)
     {
@@ -982,6 +976,42 @@ int GMGOperator::ApplyInverseCoarseOperator(const Epetra_MultiVector &res, Epetr
   return 0;
 }
 
+int GMGOperator::ApplySmoother(const Epetra_MultiVector &res, Epetra_MultiVector &Y) const
+{
+  
+  narrate("ApplySmoother()");
+  Epetra_Time timer(Comm());
+  
+  int err;
+
+  if (_smootherWeight_sqrt == Teuchos::null)
+  {
+    err = _smoother->ApplyInverse(res, Y);
+    Y.Scale(_smootherWeight);
+  }
+  else
+  {
+//    cout << *_smootherWeight_sqrt;
+//    cout << res;
+    Epetra_MultiVector temp(res.Map(),res.NumVectors());
+    temp.Multiply(1.0, res, *_smootherWeight_sqrt, 0.0);
+//    cout << temp;
+    
+    err = _smoother->ApplyInverse(temp, Y);
+//    cout << Y;
+    
+    temp = Y;
+    Y.Multiply(1.0, temp, *_smootherWeight_sqrt, 0.0);
+//    cout << Y;
+  }
+  _timeApplySmoother += timer.ElapsedTime();
+  
+  if (err != 0)
+  {
+    cout << "_smoother->ApplyInverse returned non-zero error code " << err << endl;
+  }
+  return err;
+}
 
 //// new version replaces a two-level operator with one that can apply the smoother before passing to coarse solve
 //int GMGOperator::ApplyInverse(const Epetra_MultiVector& X_in, Epetra_MultiVector& Y) const
@@ -1297,6 +1327,8 @@ int GMGOperator::ApplyInverseCoarseOperator(const Epetra_MultiVector &res, Epetr
 //
 //  return 0;
 //}
+
+
 
 double GMGOperator::NormInf() const
 {
@@ -1663,16 +1695,25 @@ void GMGOperator::setUpSmoother(Epetra_CrsMatrix *fineStiffnessMatrix)
     {
       switch (_schwarzBlockFactorizationType)
       {
-      case Direct:
-        smoother = Teuchos::rcp(new Ifpack_AdditiveSchwarz<Ifpack_Amesos>(fineStiffnessMatrix, OverlapLevel) );
+        case Direct:
+        {
+          Ifpack_AdditiveSchwarz<Ifpack_Amesos>* ifpackSmoother = new Ifpack_AdditiveSchwarz<Ifpack_Amesos>(fineStiffnessMatrix, OverlapLevel);
+          smoother = Teuchos::rcp( ifpackSmoother );
+        }
         break;
       case ILU:
-        smoother = Teuchos::rcp(new Ifpack_AdditiveSchwarz<Ifpack_ILU>(fineStiffnessMatrix, OverlapLevel) );
-        List.set("fact: level-of-fill", _levelOfFill);
+        {
+          Ifpack_AdditiveSchwarz<Ifpack_ILU>* ifpackSmoother = new Ifpack_AdditiveSchwarz<Ifpack_ILU>(fineStiffnessMatrix, OverlapLevel);
+          smoother = Teuchos::rcp( ifpackSmoother );
+          List.set("fact: level-of-fill", _levelOfFill);
+        }
         break;
       case IC:
-        smoother = Teuchos::rcp(new Ifpack_AdditiveSchwarz<Ifpack_IC>(fineStiffnessMatrix, OverlapLevel) );
-        List.set("fact: ict level-of-fill", _fillRatio);
+        {
+          Ifpack_AdditiveSchwarz<Ifpack_IC>* ifpackSmoother = new Ifpack_AdditiveSchwarz<Ifpack_IC>(fineStiffnessMatrix, OverlapLevel);
+          smoother = Teuchos::rcp( ifpackSmoother );
+          List.set("fact: ict level-of-fill", _fillRatio);
+        }
         break;
       default:
         break;
@@ -1683,17 +1724,24 @@ void GMGOperator::setUpSmoother(Epetra_CrsMatrix *fineStiffnessMatrix)
       switch (_schwarzBlockFactorizationType)
       {
       case Direct:
-        smoother = Teuchos::rcp(new Camellia::AdditiveSchwarz<Ifpack_Amesos>(fineStiffnessMatrix, OverlapLevel, _fineMesh, _fineDofInterpreter, _hierarchicalNeighborsForSchwarz) );
+        {
+          Camellia::AdditiveSchwarz<Ifpack_Amesos>* camelliaSmoother = new Camellia::AdditiveSchwarz<Ifpack_Amesos>(fineStiffnessMatrix, OverlapLevel, _fineMesh, _fineDofInterpreter, _hierarchicalNeighborsForSchwarz);
+          smoother = Teuchos::rcp( camelliaSmoother );
+        }
         break;
       case ILU:
-        smoother = Teuchos::rcp(new Camellia::AdditiveSchwarz<Ifpack_ILU>(fineStiffnessMatrix, OverlapLevel, _fineMesh, _fineDofInterpreter, _hierarchicalNeighborsForSchwarz) );
-        List.set("fact: level-of-fill", _levelOfFill);
+        {
+          Camellia::AdditiveSchwarz<Ifpack_ILU>* camelliaSmoother = new Camellia::AdditiveSchwarz<Ifpack_ILU>(fineStiffnessMatrix, OverlapLevel, _fineMesh, _fineDofInterpreter, _hierarchicalNeighborsForSchwarz);
+          List.set("fact: level-of-fill", _levelOfFill);
+          smoother = Teuchos::rcp( camelliaSmoother );
+        }
         break;
       case IC:
-        smoother = Teuchos::rcp(new Camellia::AdditiveSchwarz<Ifpack_IC>(fineStiffnessMatrix, OverlapLevel, _fineMesh, _fineDofInterpreter, _hierarchicalNeighborsForSchwarz) );
-        List.set("fact: ict level-of-fill", _fillRatio);
-        break;
-      default:
+        {
+          Camellia::AdditiveSchwarz<Ifpack_IC>* camelliaSmoother = new Camellia::AdditiveSchwarz<Ifpack_IC>(fineStiffnessMatrix, OverlapLevel, _fineMesh, _fineDofInterpreter, _hierarchicalNeighborsForSchwarz);
+          List.set("fact: ict level-of-fill", _fillRatio);
+          smoother = Teuchos::rcp( camelliaSmoother );
+        }
         break;
       }
     }
@@ -1736,6 +1784,51 @@ void GMGOperator::setUpSmoother(Epetra_CrsMatrix *fineStiffnessMatrix)
     cout << "WARNING: In GMGOperator, smoother->Compute() returned with err = " << err << endl;
   }
 
+  if (choice == CAMELLIA_ADDITIVE_SCHWARZ)
+  {
+    // setup weight vector:
+    const Epetra_Map* rangeMap = NULL;
+    switch (_schwarzBlockFactorizationType)
+    {
+      case Direct:
+      {
+        Camellia::AdditiveSchwarz<Ifpack_Amesos>* camelliaSmoother = dynamic_cast<Camellia::AdditiveSchwarz<Ifpack_Amesos>*>(smoother.get());
+        rangeMap = &camelliaSmoother->OverlapMap();
+      }
+        break;
+      case ILU:
+      {
+        Camellia::AdditiveSchwarz<Ifpack_ILU>* camelliaSmoother = dynamic_cast<Camellia::AdditiveSchwarz<Ifpack_ILU>*>(smoother.get());
+        rangeMap = &camelliaSmoother->OverlapMap();
+      }
+        break;
+      case IC:
+      {
+        Camellia::AdditiveSchwarz<Ifpack_IC>* camelliaSmoother = dynamic_cast<Camellia::AdditiveSchwarz<Ifpack_IC>*>(smoother.get());
+        rangeMap = &camelliaSmoother->OverlapMap();
+      }
+        break;
+    }
+    
+    Epetra_FEVector multiplicities(fineStiffnessMatrix->RowMap(),1);
+    vector<GlobalIndexTypeToCast> overlappingEntries(rangeMap->NumMyElements());
+    rangeMap->MyGlobalElements(&overlappingEntries[0]);
+    vector<double> myOverlappingValues(overlappingEntries.size(),1.0);
+    multiplicities.SumIntoGlobalValues(myOverlappingValues.size(), &overlappingEntries[0], &myOverlappingValues[0]);
+    multiplicities.GlobalAssemble();
+    _smootherWeight_sqrt = Teuchos::rcp(new Epetra_MultiVector(fineStiffnessMatrix->RowMap(), 1) );
+    GlobalIndexTypeToCast numMyElements = fineStiffnessMatrix->RowMap().NumMyElements();
+    for (int LID=0; LID < numMyElements; LID++)
+    {
+      double value = multiplicities[0][LID];
+      TEUCHOS_TEST_FOR_EXCEPTION(value == 0.0, std::invalid_argument, "internal error: value should never be 0");
+      (*_smootherWeight_sqrt)[0][LID] = sqrt(1.0/value);
+    }
+    // debugging:
+//    printMapSummary(*rangeMap, "Schwarz matrix range map");
+//    cout << *_smootherWeight_sqrt;
+  }
+  
   _smoother = smoother;
   _timeSetUpSmoother = smootherSetupTimer.ElapsedTime();
 }
