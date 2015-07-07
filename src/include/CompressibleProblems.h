@@ -222,7 +222,8 @@ class TrivialCompressible : public AnalyticalCompressibleProblem
       _R = _Cp-_Cv;
       _rho_exact = Function::constant(rho0);
       _u1_exact = Function::constant(u0);
-      _T_exact = Function::constant(p0/(rho0*_R));
+      // _T_exact = Function::constant(p0/(rho0*_R));
+      _T_exact = Function::constant(1);
 
       _x0.push_back(0);
       // _x0.push_back(0);
@@ -232,6 +233,70 @@ class TrivialCompressible : public AnalyticalCompressibleProblem
       // _elementCounts.push_back(2);
       _tInit = 0.0;
       _tFinal = 0.5;
+    }
+};
+
+class SimpleRarefaction : public AnalyticalCompressibleProblem
+{
+  private:
+  public:
+    SimpleRarefaction(bool steady, double Re)
+    {
+      _steady = steady;
+      _gamma = 1.4;
+      double p0 = 1;
+      double rho0 = 1;
+      double u0 = 1;
+      double a0 = sqrt(_gamma*p0/rho0);
+      double M_inf = u0/a0;
+      _Cv = 1./(_gamma*(_gamma-1)*M_inf*M_inf);
+      _Cp = _gamma*_Cv;
+      _R = _Cp-_Cv;
+      _rho_exact = Function::constant(rho0);
+      _T_exact = Function::constant(p0/(rho0*_R));
+      _u1_exact = Function::heaviside(0.5);
+      // _T_exact = Function::constant(1);
+
+      _x0.push_back(0);
+      // _x0.push_back(0);
+      _dimensions.push_back(1);
+      // _dimensions.push_back(1);
+      _elementCounts.push_back(8);
+      // _elementCounts.push_back(2);
+      _tInit = 0.0;
+      _tFinal = 0.1;
+    }
+};
+
+class SimpleShock : public AnalyticalCompressibleProblem
+{
+  private:
+  public:
+    SimpleShock(bool steady, double Re)
+    {
+      _steady = steady;
+      _gamma = 1.4;
+      double p0 = 1;
+      double rho0 = 1;
+      double u0 = 1;
+      double a0 = sqrt(_gamma*p0/rho0);
+      double M_inf = u0/a0;
+      _Cv = 1./(_gamma*(_gamma-1)*M_inf*M_inf);
+      _Cp = _gamma*_Cv;
+      _R = _Cp-_Cv;
+      _rho_exact = Function::constant(rho0);
+      _T_exact = Function::constant(p0/(rho0*_R));
+      _u1_exact = Function::constant(1) - Function::heaviside(0.5);
+      // _T_exact = Function::constant(1);
+
+      _x0.push_back(0);
+      // _x0.push_back(0);
+      _dimensions.push_back(1);
+      // _dimensions.push_back(1);
+      _elementCounts.push_back(8);
+      // _elementCounts.push_back(2);
+      _tInit = 0.0;
+      _tFinal = 0.1;
     }
 };
 

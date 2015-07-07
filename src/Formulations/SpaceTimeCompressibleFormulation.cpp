@@ -84,8 +84,6 @@ SpaceTimeCompressibleFormulation::SpaceTimeCompressibleFormulation(Teuchos::RCP<
   double Cp = problem->Cp();
   double Cv = problem->Cv();
 
-  cout << Pr << " " << gamma << " " << R << endl;
-
   if (!steady)
   {
     TEUCHOS_TEST_FOR_EXCEPTION(meshTopo->getDimension() != _spaceDim + 1, std::invalid_argument, "MeshTopo must be space-time mesh for transient");
@@ -136,8 +134,8 @@ SpaceTimeCompressibleFormulation::SpaceTimeCompressibleFormulation(Teuchos::RCP<
 
   rho = _vf->fieldVar(s_rho);
   T = _vf->fieldVar(s_T);
-  // That = _vf->traceVarSpaceOnly(s_That, 1.0 * T, traceSpace);
-  That = _vf->traceVar(s_That, 1.0 * T, traceSpace);
+  That = _vf->traceVarSpaceOnly(s_That, 1.0 * T, traceSpace);
+  // That = _vf->traceVar(s_That, 1.0 * T, traceSpace);
   tc = _vf->fluxVar(s_tc);
   te = _vf->fluxVar(s_te);
   vc = _vf->testVar(s_vc, HGRAD);
@@ -148,8 +146,8 @@ SpaceTimeCompressibleFormulation::SpaceTimeCompressibleFormulation(Teuchos::RCP<
       u1 = _vf->fieldVar(s_u1);
       D11 = _vf->fieldVar(s_D11);
       q1 = _vf->fieldVar(s_q1);
-      // u1hat = _vf->traceVarSpaceOnly(s_u1hat, 1.0 * u1, traceSpace);
-      u1hat = _vf->traceVar(s_u1hat, 1.0 * u1, traceSpace);
+      u1hat = _vf->traceVarSpaceOnly(s_u1hat, 1.0 * u1, traceSpace);
+      // u1hat = _vf->traceVar(s_u1hat, 1.0 * u1, traceSpace);
       tm1 = _vf->fluxVar(s_tm1);
       vm1 = _vf->testVar(s_vm1, HGRAD);
       S11 = _vf->testVar(s_S11, HGRAD); // scalar
@@ -428,12 +426,12 @@ SpaceTimeCompressibleFormulation::SpaceTimeCompressibleFormulation(Teuchos::RCP<
       // S terms:
       _bf->addTerm( MD11_dU, S11 );
       _bf->addTerm( GD1_dU, S11->dx() );
-      _bf->addTerm( -2*u1hat, S11->times_normal_x() );
+      _bf->addTerm( -2*u1hat, S11*n_x->x() );
 
       // tau terms:
       _bf->addTerm( Mq1_dU, tau );
       _bf->addTerm( Gq_dU, tau->dx() );
-      _bf->addTerm( That, tau->times_normal_x());
+      _bf->addTerm( That, tau*n_x->x() );
 
       // vc terms:
       _bf->addTerm( -Fc1_dU, vc->dx());
