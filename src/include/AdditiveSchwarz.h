@@ -229,6 +229,10 @@ public:
   virtual const Epetra_Map & OperatorRangeMap() const;
   //@}
 
+  //! Returns the Epetra_Map object for the overlapping row matrix associated with this operator.
+  const Epetra_Map & OverlapMap() const;
+  //@}
+
   //! Returns \c true if the preconditioner has been successfully initialized.
   virtual bool IsInitialized() const
   {
@@ -844,12 +848,19 @@ const Epetra_Map & AdditiveSchwarz<T>::OperatorRangeMap() const
   return(Matrix_->OperatorRangeMap());
 }
 
+  //==============================================================================
+  template<typename T>
+  const Epetra_Map & AdditiveSchwarz<T>::OverlapMap() const
+  {
+    return(OverlappingMatrix_->OperatorRangeMap());
+  }
+  
 //==============================================================================
 template<typename T>
 int AdditiveSchwarz<T>::
 ApplyInverse(const Epetra_MultiVector& X, Epetra_MultiVector& Y) const
 {
-  // compute the preconditioner is not done by the user
+  // compute the preconditioner if not done by the user
   if (!IsComputed())
     IFPACK_CHK_ERR(-3);
 
