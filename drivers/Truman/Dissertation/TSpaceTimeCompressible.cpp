@@ -106,6 +106,8 @@ int main(int argc, char *argv[])
 
   map<string, Teuchos::RCP<CompressibleProblem>> problems;
   problems["TrivialCompressible"] = Teuchos::rcp(new TrivialCompressible(steady, Re));
+  problems["SimpleShock"] = Teuchos::rcp(new SimpleShock(steady, Re));
+  problems["SimpleRarefaction"] = Teuchos::rcp(new SimpleRarefaction(steady, Re));
   // problems["TaylorGreen"] = Teuchos::rcp(new TaylorGreenProblem(steady, Re, numXElems, numSlabs));
   // problems["Cylinder"] = Teuchos::rcp(new CylinderProblem(steady, Re, numSlabs));
   // problems["SquareCylinder"] = Teuchos::rcp(new SquareCylinderProblem(steady, Re, numSlabs));
