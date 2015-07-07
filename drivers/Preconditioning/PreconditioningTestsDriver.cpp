@@ -679,12 +679,12 @@ void run(ProblemChoice problemChoice, int &iterationCount, int spaceDim, int num
   MeshPtr mesh = solution->mesh();
   BCPtr bc = solution->bc();
 
-  {
-    // DEBUGGING
-    GDAMinimumRule* minRule = dynamic_cast<GDAMinimumRule*>(mesh->globalDofAssignment().get());
-    if (rank==0)
-      minRule->printGlobalDofInfo();
-  }
+//  {
+//    // DEBUGGING
+//    GDAMinimumRule* minRule = dynamic_cast<GDAMinimumRule*>(mesh->globalDofAssignment().get());
+//    if (rank==0)
+//      minRule->printGlobalDofInfo();
+//  }
   
   if (hOnly)
   {
