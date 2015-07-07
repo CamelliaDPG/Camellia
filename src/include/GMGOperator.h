@@ -275,6 +275,9 @@ public:
   // ! smoother weight is applied to each application of the smoother. Default = 1.0
   void setSmootherWeight(double weight);
 
+  // ! smoother weight vector (used for Camellia additive Schwarz; may be null in other cases)
+  Teuchos::RCP<Epetra_MultiVector> getSmootherWeightVector();
+  
   void setLevelOfFill(int fillLevel);
   void setFillRatio(double fillRatio);
   
