@@ -1851,6 +1851,16 @@ void GMGOperator::setUpSmoother(Epetra_CrsMatrix *fineStiffnessMatrix)
   _timeSetUpSmoother = smootherSetupTimer.ElapsedTime();
 }
 
+void GMGOperator::setUseSchwarzDiagonalWeight(bool value)
+{
+  _useSchwarzDiagonalWeight = value;
+}
+
+void GMGOperator::setUseSchwarzScalingWeight(bool value)
+{
+  _useSchwarzScalingWeight = value;
+}
+
 std::string GMGOperator::smootherString(SmootherChoice choice)
 {
   switch(choice)

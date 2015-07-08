@@ -332,7 +332,7 @@ int main(int argc, char *argv[])
   bool conformingTraces = false;
 
   int numCells = -1;
-  int numCellsRootMesh = 1;
+  int numCellsRootMesh = -1;
   int spaceDim = 1;
   bool useCondensedSolve = false;
 
@@ -341,6 +341,7 @@ int main(int argc, char *argv[])
 
   bool reportTimings = false;
   bool useZeroMeanConstraints = false;
+  bool useConjugateGradient = true;
 
   string problemChoiceString = "Poisson";
   string coarseSolverChoiceString = "KLU";
@@ -355,6 +356,7 @@ int main(int argc, char *argv[])
   cmdp.setOption("combineAdditive", "combineMultiplicative", &additiveComboType);
 
   cmdp.setOption("useCondensedSolve", "useStandardSolve", &useCondensedSolve);
+  cmdp.setOption("CG", "GMRES", &useConjugateGradient);
 
   cmdp.setOption("spaceDim", &spaceDim, "space dimensions (1, 2, or 3)");
 
@@ -402,6 +404,18 @@ int main(int argc, char *argv[])
     MPI_Finalize();
 #endif
     return -1;
+  }
+  
+  if (numCellsRootMesh == -1)
+  {
+    if (!useZeroMeanConstraints && (problemChoice == Stokes))
+    {
+      numCellsRootMesh = 2;
+    }
+    else
+    {
+      numCellsRootMesh = 1;
+    }
   }
 
   if (rank==0)
@@ -465,6 +479,7 @@ int main(int argc, char *argv[])
   bool reuseFactorization = true;
   SolverPtr coarseSolver = Solver::getDirectSolver(reuseFactorization);
   Teuchos::RCP<GMGSolver> gmgSolver = Teuchos::rcp(new GMGSolver(solution, meshesCoarseToFine, cgMaxIterations, cgTol, coarseSolver, useCondensedSolve));
+  gmgSolver->setUseConjugateGradient(useConjugateGradient);
   gmgSolver->setAztecOutput(10);
   
   double gmgSolverInitializationTime = timer.ElapsedTime();
