@@ -140,11 +140,16 @@ vector< pair<IndexType,unsigned> > MeshTopologyView::getActiveCellIndices(unsign
 
 vector<IndexType> MeshTopologyView::getActiveCellsForSide(IndexType sideEntityIndex)
 {
+  vector<IndexType> cellsForSide = getCellsForSide(sideEntityIndex);
+  
   vector<IndexType> activeCells;
-  IndexType cellIndex = _meshTopo->getFirstCellForSide(sideEntityIndex).first;
-  if ((cellIndex != -1) && (_activeCells.find(cellIndex) != _activeCells.end())) activeCells.push_back(cellIndex);
-  cellIndex = _meshTopo->getSecondCellForSide(sideEntityIndex).first;
-  if ((cellIndex != -1) && (_activeCells.find(cellIndex) != _activeCells.end())) activeCells.push_back(cellIndex);
+  for (IndexType cellIndex : cellsForSide)
+  {
+    if (_activeCells.find(cellIndex) != _activeCells.end())
+    {
+      activeCells.push_back(cellIndex);
+    }
+  }
   return activeCells;
 }
 
