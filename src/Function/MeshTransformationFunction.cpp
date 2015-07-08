@@ -172,6 +172,28 @@ public:
 
     bool basisIsVolumeBasis = (spaceDim == _basis->domainTopology()->getDimension());
     bool useCubPointsSideRefCell = basisIsVolumeBasis && basisCache->isSideCache();
+    
+    int numPoints = values.dimension(1);
+
+    // check if we're taking a temporal derivative
+    int component;
+    Intrepid::EOperator relatedOp = BasisEvaluation::relatedOperator(_op, _basis->functionSpace(), component);
+    if ((relatedOp == Intrepid::OPERATOR_GRAD) && (component==spaceDim)) {
+      // then we are taking the temporal part of the Jacobian of the reference to curvilinear-reference space
+      // based on our assumptions that curvilinearity is just in the spatial direction (and is orthogonally extruded in the
+      // temporal direction), this is always the identity.
+      for (int ptIndex=0; ptIndex<numPoints; ptIndex++)
+      {
+        for (int d=0; d<values.dimension(2); d++)
+        {
+          if (d < spaceDim)
+            values(_cellIndex,ptIndex,d) = 0.0;
+          else
+            values(_cellIndex,ptIndex,d) = 1.0;
+        }
+      }
+      return;
+    }
     constFCPtr transformedValues = basisCache->getTransformedValues(_basis, _op, useCubPointsSideRefCell);
 
     // transformedValues has dimensions (C,F,P,[D,D])
@@ -179,29 +201,77 @@ public:
     int rank = transformedValues->rank() - 3;
     TEUCHOS_TEST_FOR_EXCEPTION(rank != values.rank()-2, std::invalid_argument, "values rank is incorrect.");
 
-    int numPoints = values.dimension(1);
-
+    int spaceTimeSideOrdinal = (spaceTimeBasisCache != Teuchos::null) ? spaceTimeBasisCache->getSideIndex() : -1;
+    
     // initialize the values we're responsible for setting
-    for (int ptIndex=0; ptIndex<numPoints; ptIndex++)
+    if (_op == OP_VALUE)
     {
-      for (int d=0; d<spaceDim; d++)
+      for (int ptIndex=0; ptIndex<numPoints; ptIndex++)
       {
-        values(_cellIndex,ptIndex,d) = 0.0;
-      }
-      if (spaceTimeBasisCache != Teuchos::null)
-      {
-        values(_cellIndex,ptIndex,spaceDim) = spaceTimeBasisCache->getRefCellPoints()(ptIndex,spaceDim);
+        for (int d=0; d<values.dimension(2); d++)
+        {
+          if (d < spaceDim)
+            values(_cellIndex,ptIndex,d) = 0.0;
+          else if ((spaceTimeBasisCache != Teuchos::null) && (spaceTimeSideOrdinal == -1))
+            values(_cellIndex,ptIndex,spaceDim) = spaceTimeBasisCache->getRefCellPoints()(ptIndex,spaceDim);
+          else if ((spaceTimeBasisCache != Teuchos::null) && (spaceTimeSideOrdinal != -1))
+          {
+            if (spaceTimeBasisCache->cellTopology()->sideIsSpatial(spaceTimeSideOrdinal))
+            {
+              // TODO: check this -- pretty sure it's right, but need to check.
+              values(_cellIndex,ptIndex,spaceDim) = spaceTimeBasisCache->getRefCellPoints()(ptIndex,spaceDim-1);
+            }
+            else
+            {
+              double temporalPoint;
+              unsigned temporalNode = spaceTimeBasisCache->cellTopology()->getTemporalComponentSideOrdinal(spaceTimeSideOrdinal);
+              if (temporalNode==0)
+                temporalPoint = -1.0;
+              else
+                temporalPoint = 1.0;
+              values(_cellIndex,ptIndex,spaceDim) = temporalPoint;
+            }
+          }
+        }
       }
     }
+    else if ((_op == OP_DX) || (_op == OP_DY) || (_op == OP_DZ))
+    {
+      for (int ptIndex=0; ptIndex<numPoints; ptIndex++)
+      {
+        for (int d=0; d<values.dimension(2); d++)
+        {
+          if (d < spaceDim)
+            values(_cellIndex,ptIndex,d) = 0.0;
+          else
+            if (_op == OP_DZ)
+              values(_cellIndex,ptIndex,d) = 1.0;
+            else
+              values(_cellIndex,ptIndex,d) = 0.0;
+        }
+      }
+    }
+    else
+    {
+      TEUCHOS_TEST_FOR_EXCEPTION(true, std::invalid_argument, "Unhandled _op");
+    }
 
+    int numSpatialPoints = transformedValues->dimension(2);
+    int numTemporalPoints = numPoints / numSpatialPoints;
+    TEUCHOS_TEST_FOR_EXCEPTION(numTemporalPoints * numSpatialPoints != numPoints, std::invalid_argument, "numPoints is not evenly divisible by numSpatialPoints");
+    
     for (int i=0; i<numDofs; i++)
     {
       double weight = _basisCoefficients(i);
-      for (int ptIndex=0; ptIndex<numPoints; ptIndex++)
+      for (int timePointOrdinal=0; timePointOrdinal<numTemporalPoints; timePointOrdinal++)
       {
-        for (int d=0; d<spaceDim; d++)
+        for (int spacePointOrdinal=0; spacePointOrdinal<numSpatialPoints; spacePointOrdinal++)
         {
-          values(_cellIndex,ptIndex,d) += weight * (*transformedValues)(_cellIndex,i,ptIndex,d);
+          int spaceTimePointOrdinal = TENSOR_POINT_ORDINAL(spacePointOrdinal, timePointOrdinal, numSpatialPoints);
+          for (int d=0; d<spaceDim; d++)
+          {
+            values(_cellIndex,spaceTimePointOrdinal,d) += weight * (*transformedValues)(_cellIndex,i,spacePointOrdinal,d);
+          }
         }
       }
     }
