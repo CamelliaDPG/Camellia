@@ -992,7 +992,6 @@ int GMGOperator::ApplySmoother(const Epetra_MultiVector &res, Epetra_MultiVector
   if (_smootherWeight_sqrt == Teuchos::null)
   {
     err = _smoother->ApplyInverse(res, Y);
-    Y.Scale(_smootherWeight);
   }
   else
   {
@@ -1009,6 +1008,7 @@ int GMGOperator::ApplySmoother(const Epetra_MultiVector &res, Epetra_MultiVector
     Y.Multiply(1.0, temp, *_smootherWeight_sqrt, 0.0);
 //    cout << Y;
   }
+  Y.Scale(_smootherWeight);
   _timeApplySmoother += timer.ElapsedTime();
   
   if (err != 0)
@@ -1826,7 +1826,7 @@ void GMGOperator::setUpSmoother(Epetra_CrsMatrix *fineStiffnessMatrix)
     _smootherWeight = 1.0 / _smootherWeight;
     
     // disabling this for now because we don't seem to maintain the max eig. = 1 with this, where we can with _smootherWeight as defined above
-    bool useSmootherWeightVector = false;
+    bool useSmootherWeightVector = (_smootherApplicationType==ADDITIVE);
     if (useSmootherWeightVector)
     {
       _smootherWeight_sqrt = Teuchos::rcp(new Epetra_MultiVector(fineStiffnessMatrix->RowMap(), 1) );
@@ -1837,6 +1837,7 @@ void GMGOperator::setUpSmoother(Epetra_CrsMatrix *fineStiffnessMatrix)
         TEUCHOS_TEST_FOR_EXCEPTION(value == 0.0, std::invalid_argument, "internal error: value should never be 0");
         (*_smootherWeight_sqrt)[0][LID] = sqrt(1.0/value);
       }
+//      _smootherWeight = 1.0;
     }
     // debugging:
 //    printMapSummary(*rangeMap, "Schwarz matrix range map");
