@@ -318,8 +318,7 @@ class Noh : public AnalyticalCompressibleProblem
       _R = _Cp-_Cv;
       _rho_exact = Function::constant(rho0);
       // _T_exact = Function::constant(p0/(rho0*_R));
-      // _T_exact = Function::constant(0);
-      _T_exact = Function::constant(1e-1);
+      _T_exact = Function::constant(0);
       _u1_exact = Function::constant(1) - 2*Function::heaviside(0.0);
       // _T_exact = Function::constant(1);
 
