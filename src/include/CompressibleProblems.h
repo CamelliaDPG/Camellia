@@ -208,7 +208,7 @@ class TrivialCompressible : public AnalyticalCompressibleProblem
 {
   private:
   public:
-    TrivialCompressible(bool steady, double Re)
+    TrivialCompressible(bool steady, double Re, int spaceDim)
     {
       _steady = steady;
       _gamma = 1.4;
@@ -240,7 +240,7 @@ class SimpleRarefaction : public AnalyticalCompressibleProblem
 {
   private:
   public:
-    SimpleRarefaction(bool steady, double Re)
+    SimpleRarefaction(bool steady, double Re, int spaceDim)
     {
       _steady = steady;
       _gamma = 1.4;
@@ -272,7 +272,7 @@ class SimpleShock : public AnalyticalCompressibleProblem
 {
   private:
   public:
-    SimpleShock(bool steady, double Re)
+    SimpleShock(bool steady, double Re, int spaceDim)
     {
       _steady = steady;
       _gamma = 1.4;
@@ -297,6 +297,39 @@ class SimpleShock : public AnalyticalCompressibleProblem
       // _elementCounts.push_back(2);
       _tInit = 0.0;
       _tFinal = 0.1;
+    }
+};
+
+class Noh : public AnalyticalCompressibleProblem
+{
+  private:
+  public:
+    Noh(bool steady, double Re, int spaceDim)
+    {
+      _steady = steady;
+      _gamma = 5./3;
+      double p0 = 1;
+      double rho0 = 1;
+      double u0 = 1;
+      double a0 = sqrt(_gamma*p0/rho0);
+      double M_inf = u0/a0;
+      _Cv = 1./(_gamma*(_gamma-1)*M_inf*M_inf);
+      _Cp = _gamma*_Cv;
+      _R = _Cp-_Cv;
+      _rho_exact = Function::constant(rho0);
+      // _T_exact = Function::constant(p0/(rho0*_R));
+      _T_exact = Function::constant(0);
+      _u1_exact = Function::constant(1) - 2*Function::heaviside(0.0);
+      // _T_exact = Function::constant(1);
+
+      _x0.push_back(-.5);
+      // _x0.push_back(0);
+      _dimensions.push_back(1);
+      // _dimensions.push_back(1);
+      _elementCounts.push_back(2);
+      // _elementCounts.push_back(2);
+      _tInit = 0.0;
+      _tFinal = 0.5;
     }
 };
 

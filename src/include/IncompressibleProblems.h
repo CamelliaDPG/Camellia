@@ -248,7 +248,14 @@ class CylinderProblem : public IncompressibleProblem
       //   _u1_exact = Function::min(Function::tn(1),Function::constant(1));
       // else
       //   _u1_exact = Function::constant(1);
-      _u1_exact = Function::constant(1);
+      double pi = atan(1)*4;
+      FunctionPtr decay = Teuchos::rcp(new Exp_at(-10));
+      FunctionPtr perturbation = Teuchos::rcp(new Sin_ay(2*pi/_meshHeight));
+
+      if (steady)
+        _u1_exact = Function::constant(1);
+      else
+        _u1_exact = Function::constant(1) + 0.01*decay*perturbation;
       _u2_exact = Function::zero();
       _sigma1_exact = 1./Re*_u1_exact->grad();
       _sigma2_exact = 1./Re*_u2_exact->grad();
@@ -316,7 +323,7 @@ class CylinderProblem : public IncompressibleProblem
       // SSE band
       verticalBandPoints(3,0) = - radius / 2;
       verticalBandPoints(3,1) = - radius * 3;
-      
+
       if (!_steady)
       {
         // TODO: (for Truman) consider what happens if _numSlabs != 1
@@ -333,7 +340,7 @@ class CylinderProblem : public IncompressibleProblem
           verticalBandPoints(pointOrdinal,d_time) = temporalMidpoint;
         }
       }
-      
+
       vector< GlobalIndexType > horizontalBandCellIDs = hemkerMeshNoCurves->cellIDsForPoints(horizontalBandPoints, false);
       vector< GlobalIndexType > verticalBandCellIDs = hemkerMeshNoCurves->cellIDsForPoints(verticalBandPoints, false);
 
@@ -346,10 +353,10 @@ class CylinderProblem : public IncompressibleProblem
       {
         TEUCHOS_TEST_FOR_EXCEPTION(cellID == -1, std::invalid_argument, "vertical band cell not found!");
       }
-      
+
       RefinementPatternPtr verticalCut, horizontalCut;
       Intrepid::FieldContainer<double> vertices;
-      
+
       if (!_steady)
       {
         verticalCut = RefinementPattern::xAnisotropicRefinementPatternQuadTimeExtruded();
