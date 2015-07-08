@@ -616,7 +616,7 @@ void MeshTopology::addEdgeCurve(pair<unsigned,unsigned> edge, ParametricCurvePtr
   vector<double> v0 = getVertex(edge.first);
   vector<double> v1 = getVertex(edge.second);
 
-  int spaceDim = v0.size();
+  int spaceDim = 2; // v0.size();
   FieldContainer<double> curve0(spaceDim);
   FieldContainer<double> curve1(spaceDim);
   curve->value(0, curve0(0), curve0(1));
