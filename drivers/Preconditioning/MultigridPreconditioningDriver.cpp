@@ -44,6 +44,8 @@ void initializeSolutionAndCoarseMesh(SolutionPtr &solution, vector<MeshPtr> &mes
                                      int spaceDim, bool conformingTraces, bool useStaticCondensation, int numCells, int k, int delta_k,
                                      int rootMeshNumCells, bool useZeroMeanConstraints = false)
 {
+  int rank = Teuchos::GlobalMPISession::getRank();
+  
   BFPtr bf;
   BCPtr bc;
   RHSPtr rhs;
@@ -251,7 +253,7 @@ void initializeSolutionAndCoarseMesh(SolutionPtr &solution, vector<MeshPtr> &mes
   
   meshesCoarseToFine.clear();
   
-  MeshTopologyViewPtr meshTopoView = mesh->getTopology()->getView(mesh->getActiveCellIDs());
+  MeshTopologyViewPtr meshTopoView = mesh->getTopology()->deepCopy(); //->getView(mesh->getActiveCellIDs());
   int H1Order_coarse = 0 + 1;
   MeshPtr k0Mesh = Teuchos::rcp(new Mesh(meshTopoView, bf, H1Order_coarse, delta_k));
   meshesCoarseToFine.push_back(k0Mesh);
@@ -261,8 +263,12 @@ void initializeSolutionAndCoarseMesh(SolutionPtr &solution, vector<MeshPtr> &mes
   {
     set<IndexType> activeCellIDs = mesh->getActiveCellIDs(); // should match between coarseMesh and mesh
     mesh->hRefine(activeCellIDs);
-
-    MeshTopologyViewPtr meshTopoView = mesh->getTopology()->getView(mesh->getActiveCellIDs());
+    if (rank==0)
+    {
+      print("h-refining cells", activeCellIDs);
+    }
+    
+    MeshTopologyViewPtr meshTopoView = mesh->getTopology()->deepCopy(); //->getView(mesh->getActiveCellIDs());
     MeshPtr k0Mesh = Teuchos::rcp(new Mesh(meshTopoView, bf, H1Order_coarse, delta_k));
     
     meshesCoarseToFine.push_back(k0Mesh);
@@ -272,7 +278,6 @@ void initializeSolutionAndCoarseMesh(SolutionPtr &solution, vector<MeshPtr> &mes
   
   if (meshWidthCells != numCells)
   {
-    int rank = Teuchos::GlobalMPISession::getRank();
     if (rank == 0)
     {
       cout << "Warning: may have overrefined mesh; mesh has width " << meshWidthCells << ", not " << numCells << endl;
@@ -323,10 +328,11 @@ int main(int argc, char *argv[])
   int k = 1; // poly order for field variables
   int delta_k = 1;   // test space enrichment
 
+  bool additiveComboType = true;
   bool conformingTraces = false;
 
   int numCells = -1;
-  int numCellsRootMesh = 2;
+  int numCellsRootMesh = 1;
   int spaceDim = 1;
   bool useCondensedSolve = false;
 
@@ -346,6 +352,7 @@ int main(int argc, char *argv[])
   cmdp.setOption("delta_k", &delta_k, "test space polynomial order enrichment");
 
   cmdp.setOption("coarseSolver", &coarseSolverChoiceString, "coarse solver choice: KLU, MUMPS, SuperLUDist, SimpleML");
+  cmdp.setOption("combineAdditive", "combineMultiplicative", &additiveComboType);
 
   cmdp.setOption("useCondensedSolve", "useStandardSolve", &useCondensedSolve);
 
@@ -457,7 +464,7 @@ int main(int argc, char *argv[])
   timer.ResetStartTime();
   bool reuseFactorization = true;
   SolverPtr coarseSolver = Solver::getDirectSolver(reuseFactorization);
-  Teuchos::RCP<GMGSolver> gmgSolver = Teuchos::rcp(new GMGSolver(solution, meshesCoarseToFine, cgMaxIterations, cgTol, coarseSolver));
+  Teuchos::RCP<GMGSolver> gmgSolver = Teuchos::rcp(new GMGSolver(solution, meshesCoarseToFine, cgMaxIterations, cgTol, coarseSolver, useCondensedSolve));
   gmgSolver->setAztecOutput(10);
   
   double gmgSolverInitializationTime = timer.ElapsedTime();
