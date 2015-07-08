@@ -311,7 +311,7 @@ SpaceTimeCompressibleFormulation::SpaceTimeCompressibleFormulation(Teuchos::RCP<
       q3_prev = Function::solution(q3, _solutionBackground);
   }
 
-  // FunctionPtr u_prev = Function::vectorize(u1_prev, u2_prev);
+  // FunctionPtr u1_prev = Function::vectorize(u1_prev, u2_prev);
 
   // Nonlinear Residual Terms
   FunctionPtr Cc;
@@ -381,6 +381,47 @@ SpaceTimeCompressibleFormulation::SpaceTimeCompressibleFormulation(Teuchos::RCP<
   LinearTermPtr GD2_dU = Teuchos::rcp( new LinearTerm );
   LinearTermPtr GD3_dU = Teuchos::rcp( new LinearTerm );
   LinearTermPtr Gq_dU = Teuchos::rcp( new LinearTerm );
+  // Adjoint Terms
+  LinearTermPtr adj_Cc = Teuchos::rcp( new LinearTerm );
+  LinearTermPtr adj_Cm1 = Teuchos::rcp( new LinearTerm );
+  LinearTermPtr adj_Cm2 = Teuchos::rcp( new LinearTerm );
+  LinearTermPtr adj_Cm3 = Teuchos::rcp( new LinearTerm );
+  LinearTermPtr adj_Ce = Teuchos::rcp( new LinearTerm );
+  LinearTermPtr adj_Fc = Teuchos::rcp( new LinearTerm );
+  LinearTermPtr adj_Fm1 = Teuchos::rcp( new LinearTerm );
+  LinearTermPtr adj_Fm2 = Teuchos::rcp( new LinearTerm );
+  LinearTermPtr adj_Fm3 = Teuchos::rcp( new LinearTerm );
+  LinearTermPtr adj_Fe = Teuchos::rcp( new LinearTerm );
+  LinearTermPtr adj_KD11 = Teuchos::rcp( new LinearTerm );
+  LinearTermPtr adj_KD12 = Teuchos::rcp( new LinearTerm );
+  LinearTermPtr adj_KD13 = Teuchos::rcp( new LinearTerm );
+  LinearTermPtr adj_KD21 = Teuchos::rcp( new LinearTerm );
+  LinearTermPtr adj_KD22 = Teuchos::rcp( new LinearTerm );
+  LinearTermPtr adj_KD23 = Teuchos::rcp( new LinearTerm );
+  LinearTermPtr adj_KD31 = Teuchos::rcp( new LinearTerm );
+  LinearTermPtr adj_KD32 = Teuchos::rcp( new LinearTerm );
+  LinearTermPtr adj_KD33 = Teuchos::rcp( new LinearTerm );
+  LinearTermPtr adj_Kq1 = Teuchos::rcp( new LinearTerm );
+  LinearTermPtr adj_Kq2 = Teuchos::rcp( new LinearTerm );
+  LinearTermPtr adj_Kq3 = Teuchos::rcp( new LinearTerm );
+  LinearTermPtr adj_MD11 = Teuchos::rcp( new LinearTerm );
+  LinearTermPtr adj_MD12 = Teuchos::rcp( new LinearTerm );
+  LinearTermPtr adj_MD13 = Teuchos::rcp( new LinearTerm );
+  LinearTermPtr adj_MD21 = Teuchos::rcp( new LinearTerm );
+  LinearTermPtr adj_MD22 = Teuchos::rcp( new LinearTerm );
+  LinearTermPtr adj_MD23 = Teuchos::rcp( new LinearTerm );
+  LinearTermPtr adj_MD31 = Teuchos::rcp( new LinearTerm );
+  LinearTermPtr adj_MD32 = Teuchos::rcp( new LinearTerm );
+  LinearTermPtr adj_MD33 = Teuchos::rcp( new LinearTerm );
+  LinearTermPtr adj_Mq1 = Teuchos::rcp( new LinearTerm );
+  LinearTermPtr adj_Mq2 = Teuchos::rcp( new LinearTerm );
+  LinearTermPtr adj_Mq3 = Teuchos::rcp( new LinearTerm );
+  LinearTermPtr adj_Gc = Teuchos::rcp( new LinearTerm );
+  LinearTermPtr adj_Gm1 = Teuchos::rcp( new LinearTerm );
+  LinearTermPtr adj_Gm2 = Teuchos::rcp( new LinearTerm );
+  LinearTermPtr adj_Gm3 = Teuchos::rcp( new LinearTerm );
+  LinearTermPtr adj_Ge = Teuchos::rcp( new LinearTerm );
+  LinearTermPtr adj_vm = Teuchos::rcp( new LinearTerm );
   switch (_spaceDim)
   {
     case 1:
@@ -397,6 +438,7 @@ SpaceTimeCompressibleFormulation::SpaceTimeCompressibleFormulation(Teuchos::RCP<
       Mq1 = Pr/(Cp*mu)*q1_prev;
       GD1 = 2*u1_prev;
       Gq = -T_prev;
+
       // Linearized Terms
       Cc_dU->addTerm( 1*rho );
       Cm1_dU->addTerm( rho_prev*u1 + u1_prev*rho );
@@ -412,6 +454,23 @@ SpaceTimeCompressibleFormulation::SpaceTimeCompressibleFormulation(Teuchos::RCP<
       Mq1_dU->addTerm( Pr/(Cp*mu)*q1 );
       GD1_dU->addTerm( 2*u1 );
       Gq_dU->addTerm( -T );
+
+      // Adjoint Terms
+      adj_Cc->addTerm( vc->dt() + u1_prev*vm1->dt() + Cv*T_prev*ve->dt() + 0.5*u1_prev*u1_prev*ve->dt() );
+      adj_Cm1->addTerm( rho_prev*vm1->dt() + rho_prev*u1_prev*ve->dt() );
+      adj_Ce->addTerm( Cv*rho_prev*ve->dt() );
+      adj_Fc->addTerm( u1_prev*vc->dx() + u1_prev*u1_prev*vm1->dx() + R*T_prev*vm1->dx() + Cv*T_prev*u1_prev*ve->dx()
+        + 0.5*u1_prev*u1_prev*u1_prev*ve->dx() + R*T_prev*u1_prev*ve->dx() );
+      adj_Fm1->addTerm( rho_prev*vc->dx() + 2*rho_prev*u1_prev*vm1->dx() + Cv*T_prev*rho_prev*ve->dx()
+        + 0.5*rho_prev*u1_prev*u1_prev*ve->dx() + rho_prev*u1_prev*u1_prev*ve->dx() + R*T_prev*rho_prev*ve->dx() - D11_prev*ve->dx() );
+      adj_Fe->addTerm( R*rho_prev*vm1->dx() + Cv*rho_prev*u1_prev*ve->dx() + R*rho_prev*u1_prev*ve->dx() );
+      adj_KD11->addTerm( vm1->dx() + u1_prev*ve->dx() );
+      adj_Kq1->addTerm( -ve->dx() );
+      adj_MD11->addTerm( 1./mu*S11 );
+      adj_Mq1->addTerm( Pr/(Cp*mu)*tau );
+      adj_Gm1->addTerm( 2*S11->dx() );
+      adj_Ge->addTerm( -tau->dx() );
+      adj_vm->addTerm( one*vm1 );
       break;
     case 2:
       break;
@@ -488,64 +547,71 @@ SpaceTimeCompressibleFormulation::SpaceTimeCompressibleFormulation(Teuchos::RCP<
 
   _ips["Graph"] = _bf->graphNorm();
 
-  // _ips["CoupledRobust"] = Teuchos::rcp(new IP);
-  // // _ips["CoupledRobust"]->addTerm(_beta*v->grad());
-  // _ips["CoupledRobust"]->addTerm(u_prev*v1->grad());
-  // _ips["CoupledRobust"]->addTerm(u_prev*v2->grad());
-  // _ips["CoupledRobust"]->addTerm(u1_prev*v1->dx() + u2_prev*v2->dx());
-  // _ips["CoupledRobust"]->addTerm(u1_prev*v1->dy() + u2_prev*v2->dy());
-  // // _ips["CoupledRobust"]->addTerm(Function::min(one/Function::h(),Function::constant(1./sqrt(_mu)))*tau);
-  // _ips["CoupledRobust"]->addTerm(Function::min(one/Function::h(),Function::constant(1./sqrt(_mu)))*tau1);
-  // _ips["CoupledRobust"]->addTerm(Function::min(one/Function::h(),Function::constant(1./sqrt(_mu)))*tau2);
-  // // _ips["CoupledRobust"]->addTerm(sqrt(_mu)*v->grad());
-  // _ips["CoupledRobust"]->addTerm(sqrt(_mu)*v1->grad());
-  // _ips["CoupledRobust"]->addTerm(sqrt(_mu)*v2->grad());
-  // // _ips["CoupledRobust"]->addTerm(Function::min(sqrt(_mu)*one/Function::h(),one)*v);
-  // _ips["CoupledRobust"]->addTerm(Function::min(sqrt(_mu)*one/Function::h(),one)*v1);
-  // _ips["CoupledRobust"]->addTerm(Function::min(sqrt(_mu)*one/Function::h(),one)*v2);
-  // // _ips["CoupledRobust"]->addTerm(tau->div() - v->dt() - beta*v->grad());
-  // if (!steady)
-  // {
-  //   _ips["CoupledRobust"]->addTerm(tau1->div() -v1->dt() - u_prev*v1->grad() - u1_prev*v1->dx() - u2_prev*v2->dx());
-  //   _ips["CoupledRobust"]->addTerm(tau2->div() -v2->dt() - u_prev*v2->grad() - u1_prev*v1->dy() - u2_prev*v2->dy());
-  // }
-  // else
-  // {
-  //   _ips["CoupledRobust"]->addTerm(tau1->div() - u_prev*v1->grad() - u1_prev*v1->dx() - u2_prev*v2->dx());
-  //   _ips["CoupledRobust"]->addTerm(tau2->div() - u_prev*v2->grad() - u1_prev*v1->dy() - u2_prev*v2->dy());
-  // }
-  // // _ips["CoupledRobust"]->addTerm(v1->dx() + v2->dy());
-  // _ips["CoupledRobust"]->addTerm(q->grad());
-  // _ips["CoupledRobust"]->addTerm(q);
+  _ips["ManualGraph"] = Teuchos::rcp(new IP);
+  _ips["ManualGraph"]->addTerm( adj_MD11 + adj_KD11 );
+  _ips["ManualGraph"]->addTerm( adj_Mq1 + adj_Kq1 );
+  _ips["ManualGraph"]->addTerm( adj_Gc - adj_Fc - adj_Cc );
+  _ips["ManualGraph"]->addTerm( adj_Gm1 - adj_Fm1 - adj_Cm1 );
+  _ips["ManualGraph"]->addTerm( adj_Ge - adj_Fe - adj_Ce );
+  _ips["ManualGraph"]->addTerm( vc );
+  _ips["ManualGraph"]->addTerm( vm1 );
+  _ips["ManualGraph"]->addTerm( ve );
+  _ips["ManualGraph"]->addTerm( S11 );
+  _ips["ManualGraph"]->addTerm( tau );
 
+  _ips["CoupledRobust"] = Teuchos::rcp(new IP);
+  _ips["CoupledRobust"]->addTerm( Function::min(one/Function::h(),Function::constant(1./sqrt(_mu)))*mu*adj_MD11);
+  _ips["CoupledRobust"]->addTerm( Function::min(one/Function::h(),Function::constant(1./sqrt(_mu)))*Cp*mu/Pr*adj_Mq1);
+  _ips["CoupledRobust"]->addTerm( sqrt(mu)*one*adj_KD11 );
+  _ips["CoupledRobust"]->addTerm( sqrt(Cp*mu/Pr)*one*adj_Kq1 );
+  _ips["CoupledRobust"]->addTerm( adj_Gc - adj_Fc - adj_Cc );
+  _ips["CoupledRobust"]->addTerm( adj_Gm1 - adj_Fm1 - adj_Cm1 );
+  _ips["CoupledRobust"]->addTerm( adj_Ge - adj_Fe - adj_Ce );
+  _ips["CoupledRobust"]->addTerm( adj_Fc );
+  _ips["CoupledRobust"]->addTerm( adj_Fm1 );
+  _ips["CoupledRobust"]->addTerm( adj_Fe );
+  _ips["CoupledRobust"]->addTerm( vc );
+  _ips["CoupledRobust"]->addTerm( vm1 );
+  _ips["CoupledRobust"]->addTerm( ve );
 
-  // _ips["NSDecoupledH1"] = Teuchos::rcp(new IP);
-  // // _ips["NSDecoupledH1"]->addTerm(one/Function::h()*tau);
-  // _ips["NSDecoupledH1"]->addTerm(one/Function::h()*tau1);
-  // _ips["NSDecoupledH1"]->addTerm(one/Function::h()*tau2);
-  // // _ips["NSDecoupledH1"]->addTerm(v->grad());
-  // _ips["NSDecoupledH1"]->addTerm(v1->grad());
-  // _ips["NSDecoupledH1"]->addTerm(v2->grad());
-  // // _ips["NSDecoupledH1"]->addTerm(_beta*v->grad()+v->dt());
-  // if (!steady)
-  // {
-  //   _ips["NSDecoupledH1"]->addTerm(v1->dt() + u_prev*v1->grad() + u1_prev*v1->dx() + u2_prev*v2->dx());
-  //   _ips["NSDecoupledH1"]->addTerm(v2->dt() + u_prev*v2->grad() + u1_prev*v1->dy() + u2_prev*v2->dy());
-  // }
-  // else
-  // {
-  //   _ips["NSDecoupledH1"]->addTerm(u_prev*v1->grad() + u1_prev*v1->dx() + u2_prev*v2->dx());
-  //   _ips["NSDecoupledH1"]->addTerm(u_prev*v2->grad() + u1_prev*v1->dy() + u2_prev*v2->dy());
-  // }
-  // // _ips["NSDecoupledH1"]->addTerm(tau->div());
-  // _ips["NSDecoupledH1"]->addTerm(tau1->div());
-  // _ips["NSDecoupledH1"]->addTerm(tau2->div());
-  // // _ips["NSDecoupledH1"]->addTerm(v);
-  // _ips["NSDecoupledH1"]->addTerm(v1);
-  // _ips["NSDecoupledH1"]->addTerm(v2);
-  // // _ips["CoupledRobust"]->addTerm(v1->dx() + v2->dy());
-  // _ips["NSDecoupledH1"]->addTerm(q->grad());
-  // _ips["NSDecoupledH1"]->addTerm(q);
+  _ips["NSDecoupledH1"] = Teuchos::rcp(new IP);
+  _ips["NSDecoupledH1"]->addTerm( mu/Function::h()*adj_MD11 );
+  _ips["NSDecoupledH1"]->addTerm( mu/Function::h()*adj_MD12 );
+  _ips["NSDecoupledH1"]->addTerm( mu/Function::h()*adj_MD13 );
+  _ips["NSDecoupledH1"]->addTerm( mu/Function::h()*adj_MD21 );
+  _ips["NSDecoupledH1"]->addTerm( mu/Function::h()*adj_MD22 );
+  _ips["NSDecoupledH1"]->addTerm( mu/Function::h()*adj_MD23 );
+  _ips["NSDecoupledH1"]->addTerm( mu/Function::h()*adj_MD31 );
+  _ips["NSDecoupledH1"]->addTerm( mu/Function::h()*adj_MD32 );
+  _ips["NSDecoupledH1"]->addTerm( mu/Function::h()*adj_MD33 );
+  _ips["NSDecoupledH1"]->addTerm( Cp*mu/Pr/Function::h()*adj_Mq1 );
+  _ips["NSDecoupledH1"]->addTerm( Cp*mu/Pr/Function::h()*adj_Mq2 );
+  _ips["NSDecoupledH1"]->addTerm( Cp*mu/Pr/Function::h()*adj_Mq3 );
+  _ips["NSDecoupledH1"]->addTerm( adj_KD11 );
+  _ips["NSDecoupledH1"]->addTerm( adj_KD12 );
+  _ips["NSDecoupledH1"]->addTerm( adj_KD13 );
+  _ips["NSDecoupledH1"]->addTerm( adj_KD21 );
+  _ips["NSDecoupledH1"]->addTerm( adj_KD22 );
+  _ips["NSDecoupledH1"]->addTerm( adj_KD23 );
+  _ips["NSDecoupledH1"]->addTerm( adj_KD31 );
+  _ips["NSDecoupledH1"]->addTerm( adj_KD32 );
+  _ips["NSDecoupledH1"]->addTerm( adj_KD33 );
+  _ips["NSDecoupledH1"]->addTerm( adj_Kq1 );
+  _ips["NSDecoupledH1"]->addTerm( adj_Kq2 );
+  _ips["NSDecoupledH1"]->addTerm( adj_Kq3 );
+  _ips["NSDecoupledH1"]->addTerm( adj_Fc + adj_Cc );
+  _ips["NSDecoupledH1"]->addTerm( adj_Fm1 + adj_Cm1 );
+  _ips["NSDecoupledH1"]->addTerm( adj_Fm2 + adj_Cm2 );
+  _ips["NSDecoupledH1"]->addTerm( adj_Fm3 + adj_Cm3 );
+  _ips["NSDecoupledH1"]->addTerm( adj_Fe + adj_Ce );
+  _ips["NSDecoupledH1"]->addTerm( adj_Gc );
+  _ips["NSDecoupledH1"]->addTerm( adj_Gm1 );
+  _ips["NSDecoupledH1"]->addTerm( adj_Gm2 );
+  _ips["NSDecoupledH1"]->addTerm( adj_Gm3 );
+  _ips["NSDecoupledH1"]->addTerm( adj_Ge );
+  _ips["NSDecoupledH1"]->addTerm( vc );
+  _ips["NSDecoupledH1"]->addTerm( adj_vm );
+  _ips["NSDecoupledH1"]->addTerm( ve );
 
   IPPtr ip = _ips.at(norm);
   if (problem->forcingTerm != Teuchos::null)
@@ -874,13 +940,50 @@ SolutionPtr SpaceTimeCompressibleFormulation::solutionBackground()
 
 void SpaceTimeCompressibleFormulation::updateSolution()
 {
-  double alpha = 1;
   vector<int> trialIDs = _vf->trialIDs();
   set<int> trialIDSet(trialIDs.begin(), trialIDs.end());
   set<int> nlVars = nonlinearVars();
   set<int> lVars;
   set_difference(trialIDSet.begin(), trialIDSet.end(), nlVars.begin(), nlVars.end(),
       std::inserter(lVars, lVars.end()));
+
+  vector<FunctionPtr> positiveFunctions;
+    vector<FunctionPtr> positiveUpdates;
+  positiveFunctions.push_back(Function::solution(rho(),_solutionBackground));
+  positiveUpdates.push_back(Function::solution(rho(),_solutionUpdate));
+  // positiveFunctions.push_back(Function::solution(T(),_solutionBackground));
+  // positiveUpdates.push_back(Function::solution(T(),_solutionUpdate));
+
+  double alpha = 1;
+  bool useLineSearch = true;
+  int posEnrich = 5;
+  if (useLineSearch)
+  {
+    double lineSearchFactor = .5;
+    double eps = .001;
+    bool isPositive=true;
+    for (int i=0; i < positiveFunctions.size(); i++)
+    {
+      FunctionPtr temp = positiveFunctions[i] + alpha*positiveUpdates[i] - Function::constant(eps);
+      isPositive = isPositive and temp->isPositive(_solutionUpdate->mesh(),posEnrich);
+    }
+    int iter = 0; int maxIter = 20;
+    while (!isPositive && iter < maxIter)
+    {
+      alpha = alpha*lineSearchFactor;
+      isPositive = true;
+      for (int i=0; i < positiveFunctions.size(); i++)
+      {
+        FunctionPtr temp = positiveFunctions[i] + alpha*positiveUpdates[i] - Function::constant(eps);
+        isPositive = isPositive and temp->isPositive(_solutionUpdate->mesh(),posEnrich);
+      }
+      iter++;
+    }
+    int commRank = Teuchos::GlobalMPISession::getRank();
+    if (commRank==0 && alpha < 1.0){
+      cout << "Line search factor alpha = " << alpha << endl;
+    }
+  }
   _solutionBackground->addReplaceSolution(_solutionUpdate, alpha, nlVars, lVars);
 }
 
