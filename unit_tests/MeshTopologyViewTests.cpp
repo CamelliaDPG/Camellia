@@ -293,6 +293,28 @@ namespace
     testMeshTopologyAgreesWithView(meshTopo, topoView, out, success);
   }
   
+  TEUCHOS_UNIT_TEST(MeshTopologyView, CellsContainingVertex_1D)
+  {
+    double xLeft=0.0, xRight=1.0;
+    int numElements = 2;
+    MeshTopologyPtr meshTopo = MeshFactory::intervalMeshTopology(xLeft, xRight, numElements);
+    
+    IndexType vertexIndex;
+    bool vertexFound = meshTopo->getVertexIndex({xLeft}, vertexIndex);
+    TEST_ASSERT(vertexFound);
+    
+    IndexType cellIndex = 0;
+    meshTopo->refineCell(cellIndex, RefinementPattern::regularRefinementPatternLine());
+    
+    unsigned vertexDim = 0;
+    set<pair<IndexType,unsigned>> cellEntriesMesh = meshTopo->getCellsContainingEntity(vertexDim, vertexIndex);
+    TEST_ASSERT(cellEntriesMesh.size() == 1);
+    
+    MeshTopologyViewPtr meshTopoView = meshTopo->getView({0});
+    set<pair<IndexType,unsigned>> cellEntriesView = meshTopoView->getCellsContainingEntity(vertexDim, vertexIndex);
+    TEST_ASSERT(cellEntriesView.size() == 1);
+  }
+  
   TEUCHOS_UNIT_TEST( MeshTopologyView, OneElementMeshIdentityAgrees_1D )
   {
     int spaceDim = 1;
