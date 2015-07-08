@@ -115,8 +115,10 @@ _finePartitionMap(finePartitionMap), _br(true)
   _coarseSolver = coarseSolver;
   _haveSolvedOnCoarseMesh = false;
 
-  setSmootherType(IFPACK_ADDITIVE_SCHWARZ); // default
+  setSmootherType(CAMELLIA_ADDITIVE_SCHWARZ); // default
   _smootherOverlap = 0;
+  _useSchwarzDiagonalWeight = false;
+  _useSchwarzScalingWeight = true;
 
   if (( coarseMesh->meshUsesMaximumRule()) || (! fineMesh->meshUsesMinimumRule()) )
   {
@@ -1823,11 +1825,13 @@ void GMGOperator::setUpSmoother(Epetra_CrsMatrix *fineStiffnessMatrix)
     multiplicities.GlobalAssemble();
     
     multiplicities.MaxValue(&_smootherWeight);
-    _smootherWeight = 1.0 / _smootherWeight;
+    if (_useSchwarzScalingWeight)
+    {
+      _smootherWeight = 1.0 / _smootherWeight;
+    }
     
     // disabling this for now because we don't seem to maintain the max eig. = 1 with this, where we can with _smootherWeight as defined above
-    bool useSmootherWeightVector = (_smootherApplicationType==ADDITIVE);
-    if (useSmootherWeightVector)
+    if (_useSchwarzDiagonalWeight)
     {
       _smootherWeight_sqrt = Teuchos::rcp(new Epetra_MultiVector(fineStiffnessMatrix->RowMap(), 1) );
       GlobalIndexTypeToCast numMyElements = fineStiffnessMatrix->RowMap().NumMyElements();
@@ -1837,7 +1841,6 @@ void GMGOperator::setUpSmoother(Epetra_CrsMatrix *fineStiffnessMatrix)
         TEUCHOS_TEST_FOR_EXCEPTION(value == 0.0, std::invalid_argument, "internal error: value should never be 0");
         (*_smootherWeight_sqrt)[0][LID] = sqrt(1.0/value);
       }
-//      _smootherWeight = 1.0;
     }
     // debugging:
 //    printMapSummary(*rangeMap, "Schwarz matrix range map");
