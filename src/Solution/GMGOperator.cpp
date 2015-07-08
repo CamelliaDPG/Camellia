@@ -736,6 +736,11 @@ GMGOperator::SmootherChoice GMGOperator::getSmootherType()
   return _smootherType;
 }
 
+Teuchos::RCP<Epetra_MultiVector> GMGOperator::getSmootherWeightVector()
+{
+  return _smootherWeight_sqrt;
+}
+
 int GMGOperator::Apply(const Epetra_MultiVector& X, Epetra_MultiVector& Y) const
 {
   TEUCHOS_TEST_FOR_EXCEPTION(true, std::invalid_argument, "Unsupported method.");
@@ -1816,13 +1821,22 @@ void GMGOperator::setUpSmoother(Epetra_CrsMatrix *fineStiffnessMatrix)
     vector<double> myOverlappingValues(overlappingEntries.size(),1.0);
     multiplicities.SumIntoGlobalValues(myOverlappingValues.size(), &overlappingEntries[0], &myOverlappingValues[0]);
     multiplicities.GlobalAssemble();
-    _smootherWeight_sqrt = Teuchos::rcp(new Epetra_MultiVector(fineStiffnessMatrix->RowMap(), 1) );
-    GlobalIndexTypeToCast numMyElements = fineStiffnessMatrix->RowMap().NumMyElements();
-    for (int LID=0; LID < numMyElements; LID++)
+    
+    multiplicities.MaxValue(&_smootherWeight);
+    _smootherWeight = 1.0 / _smootherWeight;
+    
+    // disabling this for now because we don't seem to maintain the max eig. = 1 with this, where we can with _smootherWeight as defined above
+    bool useSmootherWeightVector = false;
+    if (useSmootherWeightVector)
     {
-      double value = multiplicities[0][LID];
-      TEUCHOS_TEST_FOR_EXCEPTION(value == 0.0, std::invalid_argument, "internal error: value should never be 0");
-      (*_smootherWeight_sqrt)[0][LID] = sqrt(1.0/value);
+      _smootherWeight_sqrt = Teuchos::rcp(new Epetra_MultiVector(fineStiffnessMatrix->RowMap(), 1) );
+      GlobalIndexTypeToCast numMyElements = fineStiffnessMatrix->RowMap().NumMyElements();
+      for (int LID=0; LID < numMyElements; LID++)
+      {
+        double value = multiplicities[0][LID];
+        TEUCHOS_TEST_FOR_EXCEPTION(value == 0.0, std::invalid_argument, "internal error: value should never be 0");
+        (*_smootherWeight_sqrt)[0][LID] = sqrt(1.0/value);
+      }
     }
     // debugging:
 //    printMapSummary(*rangeMap, "Schwarz matrix range map");

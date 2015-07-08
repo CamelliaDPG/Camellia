@@ -428,6 +428,7 @@ FCPtr BasisEvaluation::getComponentOfInterest(constFCPtr values, Camellia::EOper
   int spaceDim = dimensions[dimensions.size()-1];
   dimensions.pop_back(); // get rid of last, spatial dimension
   result = Teuchos::rcp(new FieldContainer<double>(dimensions));
+  TEUCHOS_TEST_FOR_EXCEPTION(componentOfInterest >= spaceDim, std::invalid_argument, "componentOfInterest is out of bounds!");
 //  int numPoints = dimensions[0];
 //  int basisCardinality = dimensions[1];
   int size = result->size();

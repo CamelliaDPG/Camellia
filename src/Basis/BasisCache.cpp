@@ -372,8 +372,20 @@ BasisCache::BasisCache(int fakeSideOrdinal, BasisCachePtr volumeCache, const Fie
   _cellJacobian.resize(numCells, numPoints, cellDim, cellDim);
   _cellJacobInv.resize(numCells, numPoints, cellDim, cellDim);
   _cellJacobDet.resize(numCells, numPoints);
-  _cellJacobian.initialize(1.0);
-  _cellJacobInv.initialize(1.0);
+  _cellJacobian.initialize(0.0);
+  _cellJacobInv.initialize(0.0);
+  for (int cellOrdinal=0; cellOrdinal<numCells; cellOrdinal++)
+  {
+    for (int pointOrdinal=0; pointOrdinal<numPoints; pointOrdinal++)
+    {
+      for (int d=0; d<cellDim; d++)
+      {
+        _cellJacobian(cellOrdinal,pointOrdinal,d,d) = 1.0;
+        _cellJacobInv(cellOrdinal,pointOrdinal,d,d) = 1.0;
+      }
+    }
+  }
+  
   _cellJacobDet.initialize(1.0);
 }
 

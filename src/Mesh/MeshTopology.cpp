@@ -2717,7 +2717,10 @@ void MeshTopology::refineCellEntities(CellPtr cell, RefinementPatternPtr refPatt
           CellTopoPtr childTopo = cellTopo->getSubcell(d, subcord);
           unsigned childEntityIndex = addEntity(childTopo, childEntityVertices, entityPermutation);
           //          cout << "for d=" << d << ", entity index " << childEntityIndex << " is child of " << parentIndex << endl;
-          _parentEntities[d][childEntityIndex] = vector< pair<unsigned,unsigned> >(1, make_pair(parentIndex,0)); // TODO: this is where we want to fill in a proper list of possible parents once we work through recipes
+          if (childEntityIndex != parentIndex) // anisotropic and null refinements can leave the entity unrefined
+          {
+            _parentEntities[d][childEntityIndex] = vector< pair<unsigned,unsigned> >(1, make_pair(parentIndex,0)); // TODO: this is where we want to fill in a proper list of possible parents once we work through recipes
+          }
           childEntityIndices[childIndex] = childEntityIndex;
           vector< pair<unsigned, unsigned> > parentActiveCells = _activeCellsForEntities[d][parentIndex];
           // TODO: ?? do something with parentActiveCells?  Seems like we just trailed off here...
@@ -2849,6 +2852,7 @@ void MeshTopology::setGlobalDofAssignment(GlobalDofAssignment* gda)   // for cub
 
 void MeshTopology::setEntityGeneralizedParent(unsigned entityDim, IndexType entityIndex, unsigned parentDim, IndexType parentEntityIndex)
 {
+  TEUCHOS_TEST_FOR_EXCEPTION((entityDim==parentDim) && (parentEntityIndex==entityIndex), std::invalid_argument, "entity cannot be its own parent!");
   _generalizedParentEntities[entityDim][entityIndex] = make_pair(parentEntityIndex,parentDim);
   if (entityDim == 0)   // vertex --> should set parent relationships for any vertices that are equivalent via periodic BCs
   {
