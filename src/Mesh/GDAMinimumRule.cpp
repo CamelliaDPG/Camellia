@@ -2378,6 +2378,8 @@ CellConstraints GDAMinimumRule::getCellConstraints(GlobalIndexType cellID)
 
           set< CellPair > cellsForSubcell = _meshTopology->getCellsContainingEntity(constrainingEntityDimension, constrainingEntityIndex);
 
+          TEUCHOS_TEST_FOR_EXCEPTION(cellsForSubcell.size() == 0, std::invalid_argument, "no cells found that match constraining entity");
+          
           // for now, we just use the first component of H1Order; this should be OK so long as refinements are isotropic,
           // but if / when we support anisotropic refinements, we'll want to revisit this (probably we need a notion of the
           // appropriate order along the *interface* in question)
@@ -2402,6 +2404,7 @@ CellConstraints GDAMinimumRule::getCellConstraints(GlobalIndexType cellID)
               TEUCHOS_TEST_FOR_EXCEPTION(true, std::invalid_argument, "No cells found for constraining subside entity.");
             }
           }
+            
           CellPair constrainingCellPair = *cellsWithLeastH1Order.begin(); // first one will have the earliest cell ID, given the sorting of set/pair.
           constrainingSubcellInfo[d][subcord].cellID = constrainingCellPair.first;
 

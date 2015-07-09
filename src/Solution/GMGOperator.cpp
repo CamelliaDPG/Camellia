@@ -115,8 +115,10 @@ _finePartitionMap(finePartitionMap), _br(true)
   _coarseSolver = coarseSolver;
   _haveSolvedOnCoarseMesh = false;
 
-  setSmootherType(IFPACK_ADDITIVE_SCHWARZ); // default
+  setSmootherType(CAMELLIA_ADDITIVE_SCHWARZ); // default
   _smootherOverlap = 0;
+  _useSchwarzDiagonalWeight = false;
+  _useSchwarzScalingWeight = true;
 
   if (( coarseMesh->meshUsesMaximumRule()) || (! fineMesh->meshUsesMinimumRule()) )
   {
@@ -992,7 +994,6 @@ int GMGOperator::ApplySmoother(const Epetra_MultiVector &res, Epetra_MultiVector
   if (_smootherWeight_sqrt == Teuchos::null)
   {
     err = _smoother->ApplyInverse(res, Y);
-    Y.Scale(_smootherWeight);
   }
   else
   {
@@ -1009,6 +1010,7 @@ int GMGOperator::ApplySmoother(const Epetra_MultiVector &res, Epetra_MultiVector
     Y.Multiply(1.0, temp, *_smootherWeight_sqrt, 0.0);
 //    cout << Y;
   }
+  Y.Scale(_smootherWeight);
   _timeApplySmoother += timer.ElapsedTime();
   
   if (err != 0)
@@ -1823,11 +1825,13 @@ void GMGOperator::setUpSmoother(Epetra_CrsMatrix *fineStiffnessMatrix)
     multiplicities.GlobalAssemble();
     
     multiplicities.MaxValue(&_smootherWeight);
-    _smootherWeight = 1.0 / _smootherWeight;
+    if (_useSchwarzScalingWeight)
+    {
+      _smootherWeight = 1.0 / _smootherWeight;
+    }
     
     // disabling this for now because we don't seem to maintain the max eig. = 1 with this, where we can with _smootherWeight as defined above
-    bool useSmootherWeightVector = false;
-    if (useSmootherWeightVector)
+    if (_useSchwarzDiagonalWeight)
     {
       _smootherWeight_sqrt = Teuchos::rcp(new Epetra_MultiVector(fineStiffnessMatrix->RowMap(), 1) );
       GlobalIndexTypeToCast numMyElements = fineStiffnessMatrix->RowMap().NumMyElements();
@@ -1845,6 +1849,16 @@ void GMGOperator::setUpSmoother(Epetra_CrsMatrix *fineStiffnessMatrix)
   
   _smoother = smoother;
   _timeSetUpSmoother = smootherSetupTimer.ElapsedTime();
+}
+
+void GMGOperator::setUseSchwarzDiagonalWeight(bool value)
+{
+  _useSchwarzDiagonalWeight = value;
+}
+
+void GMGOperator::setUseSchwarzScalingWeight(bool value)
+{
+  _useSchwarzScalingWeight = value;
 }
 
 std::string GMGOperator::smootherString(SmootherChoice choice)

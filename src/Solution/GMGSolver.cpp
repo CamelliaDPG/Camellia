@@ -152,6 +152,8 @@ Teuchos::RCP<GMGOperator> GMGSolver::gmgOperatorFromMeshSequence(const std::vect
     }
     coarseOperator->setSmootherType(GMGOperator::CAMELLIA_ADDITIVE_SCHWARZ);
     coarseOperator->setSmootherApplicationType(GMGOperator::MULTIPLICATIVE);
+    coarseOperator->setUseSchwarzDiagonalWeight(true);
+    coarseOperator->setUseSchwarzScalingWeight(true);
     bool hRefined = fineMesh->numActiveElements() > coarseMesh->numActiveElements();
     coarseOperator->setUseHierarchicalNeighborsForSchwarz(hRefined);
     if (hRefined) coarseOperator->setSmootherOverlap(1);
@@ -222,7 +224,7 @@ int GMGSolver::solve(bool buildCoarseStiffness)
   //  Epetra_MultiVector *x = problem().GetLHS();
   //  EpetraExt::MultiVectorToMatlabFile("/tmp/x_initial_guess.dat",*x);
 
-  const Epetra_Map* map = &A->RowMatrixRowMap();
+//  const Epetra_Map* map = &A->RowMatrixRowMap();
 
   if (buildCoarseStiffness)
   {

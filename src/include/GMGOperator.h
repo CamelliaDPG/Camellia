@@ -92,6 +92,8 @@ private:
   Teuchos::RCP<Epetra_Operator> _smoother;
   double _smootherWeight;
   Teuchos::RCP<Epetra_MultiVector> _smootherWeight_sqrt;
+  bool _useSchwarzDiagonalWeight, _useSchwarzScalingWeight; // when true, will set _smootherWeight_sqrt and _smootherWeight during setUpSmoother()
+  
 public: // promoted these two to public for testing purposes:
   LocalDofMapperPtr getLocalCoefficientMap(GlobalIndexType fineCellID) const;
   GlobalIndexType getCoarseCellID(GlobalIndexType fineCellID) const;
@@ -264,6 +266,12 @@ public:
   
   // ! When set to MULTIPLICATIVE, will compute new residuals before and after the coarse solve.  Done in such a way as to preserve symmetry.
   void setSmootherApplicationType(SmootherApplicationType value);
+  
+  // ! When set to true, will weight (symmetrically) according to the inverse of the number of Schwarz blocks each dof participates in.  Currently only supported for CAMELLIA_ADDITIVE_SCHWARZ smoothers.
+  void setUseSchwarzDiagonalWeight(bool value);
+  
+  // ! When set to true, will scale using the inverse of the maximum eigenvalue of the Schwarz smoother times the fine matrix.  Currently only supported for CAMELLIA_ADDITIVE_SCHWARZ smoothers.
+  void setUseSchwarzScalingWeight(bool value);
   
   SmootherChoice getSmootherType();
   

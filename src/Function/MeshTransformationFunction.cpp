@@ -201,7 +201,20 @@ public:
     int rank = transformedValues->rank() - 3;
     TEUCHOS_TEST_FOR_EXCEPTION(rank != values.rank()-2, std::invalid_argument, "values rank is incorrect.");
 
+    
     int spaceTimeSideOrdinal = (spaceTimeBasisCache != Teuchos::null) ? spaceTimeBasisCache->getSideIndex() : -1;
+    // I'm pretty sure much of this treatment of the time dimension could be simplified by taking advantage of SpaceTimeBasisCache::getTemporalBasisCache()...
+    double t0 = -1, t1 = -1;
+    if ((spaceTimeSideOrdinal != -1) && (!spaceTimeBasisCache->cellTopology()->sideIsSpatial(spaceTimeSideOrdinal)))
+    {
+      unsigned sideTime0 = spaceTimeBasisCache->cellTopology()->getTemporalSideOrdinal(0);
+      unsigned sideTime1 = spaceTimeBasisCache->cellTopology()->getTemporalSideOrdinal(1);
+      // get first node of each of the time-orthogonal sides, and use that to determine t0 and t1:
+      unsigned spaceTimeNodeTime0 = spaceTimeBasisCache->cellTopology()->getNodeMap(spaceDim, sideTime0, 0);
+      unsigned spaceTimeNodeTime1 = spaceTimeBasisCache->cellTopology()->getNodeMap(spaceDim, sideTime1, 0);
+      t0 = spaceTimeBasisCache->getPhysicalCellNodes()(_cellIndex,spaceTimeNodeTime0,spaceDim);
+      t1 = spaceTimeBasisCache->getPhysicalCellNodes()(_cellIndex,spaceTimeNodeTime1,spaceDim);
+    }
     
     // initialize the values we're responsible for setting
     if (_op == OP_VALUE)
@@ -213,22 +226,21 @@ public:
           if (d < spaceDim)
             values(_cellIndex,ptIndex,d) = 0.0;
           else if ((spaceTimeBasisCache != Teuchos::null) && (spaceTimeSideOrdinal == -1))
-            values(_cellIndex,ptIndex,spaceDim) = spaceTimeBasisCache->getRefCellPoints()(ptIndex,spaceDim);
+            values(_cellIndex,ptIndex,spaceDim) = spaceTimeBasisCache->getPhysicalCubaturePoints()(_cellIndex,ptIndex,spaceDim);
           else if ((spaceTimeBasisCache != Teuchos::null) && (spaceTimeSideOrdinal != -1))
           {
             if (spaceTimeBasisCache->cellTopology()->sideIsSpatial(spaceTimeSideOrdinal))
             {
-              // TODO: check this -- pretty sure it's right, but need to check.
-              values(_cellIndex,ptIndex,spaceDim) = spaceTimeBasisCache->getRefCellPoints()(ptIndex,spaceDim-1);
+              values(_cellIndex,ptIndex,spaceDim) = spaceTimeBasisCache->getPhysicalCubaturePoints()(_cellIndex,ptIndex,spaceDim-1);
             }
             else
             {
               double temporalPoint;
               unsigned temporalNode = spaceTimeBasisCache->cellTopology()->getTemporalComponentSideOrdinal(spaceTimeSideOrdinal);
               if (temporalNode==0)
-                temporalPoint = -1.0;
+                temporalPoint = t0;
               else
-                temporalPoint = 1.0;
+                temporalPoint = t1;
               values(_cellIndex,ptIndex,spaceDim) = temporalPoint;
             }
           }
