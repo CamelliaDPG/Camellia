@@ -222,15 +222,17 @@ class TrivialCompressible : public AnalyticalCompressibleProblem
       _R = _Cp-_Cv;
       _rho_exact = Function::constant(rho0);
       _u1_exact = Function::constant(u0);
+      _u2_exact = Function::zero();
+      _u3_exact = Function::zero();
       // _T_exact = Function::constant(p0/(rho0*_R));
       _T_exact = Function::constant(1);
 
-      _x0.push_back(0);
-      // _x0.push_back(0);
-      _dimensions.push_back(1);
-      // _dimensions.push_back(1);
-      _elementCounts.push_back(2);
-      // _elementCounts.push_back(2);
+      for (int d=0; d < spaceDim; d++)
+      {
+        _x0.push_back(0);
+        _dimensions.push_back(1);
+        _elementCounts.push_back(2);
+      }
       _tInit = 0.0;
       _tFinal = 0.5;
     }
@@ -255,14 +257,16 @@ class SimpleRarefaction : public AnalyticalCompressibleProblem
       _rho_exact = Function::constant(rho0);
       _T_exact = Function::constant(p0/(rho0*_R));
       _u1_exact = Function::heaviside(0.5);
+      _u2_exact = Function::zero();
+      _u3_exact = Function::zero();
       // _T_exact = Function::constant(1);
 
-      _x0.push_back(0);
-      // _x0.push_back(0);
-      _dimensions.push_back(1);
-      // _dimensions.push_back(1);
-      _elementCounts.push_back(8);
-      // _elementCounts.push_back(2);
+      for (int d=0; d < spaceDim; d++)
+      {
+        _x0.push_back(0);
+        _dimensions.push_back(1);
+        _elementCounts.push_back(8);
+      }
       _tInit = 0.0;
       _tFinal = 0.1;
     }
@@ -289,12 +293,12 @@ class SimpleShock : public AnalyticalCompressibleProblem
       _u1_exact = Function::constant(1) - Function::heaviside(0.5);
       // _T_exact = Function::constant(1);
 
-      _x0.push_back(0);
-      // _x0.push_back(0);
-      _dimensions.push_back(1);
-      // _dimensions.push_back(1);
-      _elementCounts.push_back(8);
-      // _elementCounts.push_back(2);
+      for (int d=0; d < spaceDim; d++)
+      {
+        _x0.push_back(0);
+        _dimensions.push_back(1);
+        _elementCounts.push_back(8);
+      }
       _tInit = 0.0;
       _tFinal = 0.1;
     }
@@ -319,15 +323,20 @@ class Noh : public AnalyticalCompressibleProblem
       _rho_exact = Function::constant(rho0);
       // _T_exact = Function::constant(p0/(rho0*_R));
       _T_exact = Function::constant(0);
-      _u1_exact = Function::constant(1) - 2*Function::heaviside(0.0);
+      if (spaceDim == 1)
+        _u1_exact = Function::constant(1) - 2*Function::heaviside(0.0);
+      else if (spaceDim == 2)
+      {
+        _u1_exact = Function::constant(1) - 2*Function::heaviside(0.0);
+      }
       // _T_exact = Function::constant(1);
 
-      _x0.push_back(-.5);
-      // _x0.push_back(0);
-      _dimensions.push_back(1);
-      // _dimensions.push_back(1);
-      _elementCounts.push_back(2);
-      // _elementCounts.push_back(2);
+      for (int d=0; d < spaceDim; d++)
+      {
+        _x0.push_back(-.5);
+        _dimensions.push_back(1);
+        _elementCounts.push_back(2);
+      }
       _tInit = 0.0;
       _tFinal = 0.5;
     }

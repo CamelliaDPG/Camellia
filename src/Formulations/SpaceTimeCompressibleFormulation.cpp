@@ -40,8 +40,8 @@ const string SpaceTimeCompressibleFormulation::s_u3hat = "u3hat";
 const string SpaceTimeCompressibleFormulation::s_That = "That";
 const string SpaceTimeCompressibleFormulation::s_tc = "tc";
 const string SpaceTimeCompressibleFormulation::s_tm1 = "tm1";
-const string SpaceTimeCompressibleFormulation::s_tm2hat = "tm2hat";
-const string SpaceTimeCompressibleFormulation::s_tm3hat = "tm3hat";
+const string SpaceTimeCompressibleFormulation::s_tm2 = "tm2";
+const string SpaceTimeCompressibleFormulation::s_tm3 = "tm3";
 const string SpaceTimeCompressibleFormulation::s_te = "te";
 
 const string SpaceTimeCompressibleFormulation::s_vc = "vc";
@@ -111,7 +111,8 @@ SpaceTimeCompressibleFormulation::SpaceTimeCompressibleFormulation(Teuchos::RCP<
   VarPtr rho;
   VarPtr u1, u2, u3;
   VarPtr D11, D12, D13;
-  VarPtr D22, D23;
+  VarPtr D21, D22, D23;
+  VarPtr D31, D32, D33;
   VarPtr T;
   VarPtr q1, q2, q3;
 
@@ -119,7 +120,7 @@ SpaceTimeCompressibleFormulation::SpaceTimeCompressibleFormulation(Teuchos::RCP<
   VarPtr u1hat, u2hat, u3hat;
   VarPtr That;
   VarPtr tc;
-  VarPtr tm1, tm2hat, tm3hat;
+  VarPtr tm1, tm2, tm3;
   VarPtr te;
 
   // tests
@@ -127,15 +128,18 @@ SpaceTimeCompressibleFormulation::SpaceTimeCompressibleFormulation(Teuchos::RCP<
   VarPtr vm1, vm2, vm3;
   VarPtr ve;
   VarPtr S11, S12, S13;
-  VarPtr S22, S23;
+  VarPtr S21, S22, S23;
+  VarPtr S31, S32, S33;
   VarPtr tau;
 
   _vf = VarFactory::varFactory();
 
   rho = _vf->fieldVar(s_rho);
   T = _vf->fieldVar(s_T);
-  That = _vf->traceVarSpaceOnly(s_That, 1.0 * T, traceSpace);
-  // That = _vf->traceVar(s_That, 1.0 * T, traceSpace);
+  if (steady)
+    That = _vf->traceVar(s_That, 1.0 * T, traceSpace);
+  else
+    That = _vf->traceVarSpaceOnly(s_That, 1.0 * T, traceSpace);
   tc = _vf->fluxVar(s_tc);
   te = _vf->fluxVar(s_te);
   vc = _vf->testVar(s_vc, HGRAD);
@@ -146,8 +150,10 @@ SpaceTimeCompressibleFormulation::SpaceTimeCompressibleFormulation(Teuchos::RCP<
       u1 = _vf->fieldVar(s_u1);
       D11 = _vf->fieldVar(s_D11);
       q1 = _vf->fieldVar(s_q1);
-      u1hat = _vf->traceVarSpaceOnly(s_u1hat, 1.0 * u1, traceSpace);
-      // u1hat = _vf->traceVar(s_u1hat, 1.0 * u1, traceSpace);
+      if (steady)
+        u1hat = _vf->traceVar(s_u1hat, 1.0 * u1, traceSpace);
+      else
+        u1hat = _vf->traceVarSpaceOnly(s_u1hat, 1.0 * u1, traceSpace);
       tm1 = _vf->fluxVar(s_tm1);
       vm1 = _vf->testVar(s_vm1, HGRAD);
       S11 = _vf->testVar(s_S11, HGRAD); // scalar
@@ -158,16 +164,28 @@ SpaceTimeCompressibleFormulation::SpaceTimeCompressibleFormulation(Teuchos::RCP<
       u2 = _vf->fieldVar(s_u2);
       D11 = _vf->fieldVar(s_D11);
       D12 = _vf->fieldVar(s_D12);
+      D21 = D12;
+      // D22 = _vf->fieldVar(s_D22);
       q1 = _vf->fieldVar(s_q1);
       q2 = _vf->fieldVar(s_q2);
-      u1hat = _vf->traceVarSpaceOnly(s_u1hat, 1.0 * u1, traceSpace);
-      u2hat = _vf->traceVarSpaceOnly(s_u2hat, 1.0 * u2, traceSpace);
+      if (steady)
+      {
+        u1hat = _vf->traceVar(s_u1hat, 1.0 * u1, traceSpace);
+        u2hat = _vf->traceVar(s_u2hat, 1.0 * u2, traceSpace);
+      }
+      else
+      {
+        u1hat = _vf->traceVarSpaceOnly(s_u1hat, 1.0 * u1, traceSpace);
+        u2hat = _vf->traceVarSpaceOnly(s_u2hat, 1.0 * u2, traceSpace);
+      }
       tm1 = _vf->fluxVar(s_tm1);
-      tm2hat = _vf->fluxVar(s_tm2hat);
+      tm2 = _vf->fluxVar(s_tm2);
       vm1 = _vf->testVar(s_vm1, HGRAD);
       vm2 = _vf->testVar(s_vm2, HGRAD);
       S11 = _vf->testVar(s_S11, HGRAD); // scalar
       S12 = _vf->testVar(s_S12, HGRAD); // scalar
+      S21 = S12;
+      // S22 = _vf->testVar(s_S22, HGRAD); // scalar
       tau = _vf->testVar(s_tau, HDIV); // vector
       break;
     case 3:
@@ -182,12 +200,21 @@ SpaceTimeCompressibleFormulation::SpaceTimeCompressibleFormulation(Teuchos::RCP<
       q1 = _vf->fieldVar(s_q1);
       q2 = _vf->fieldVar(s_q2);
       q3 = _vf->fieldVar(s_q3);
-      u1hat = _vf->traceVarSpaceOnly(s_u1hat, 1.0 * u1, traceSpace);
-      u2hat = _vf->traceVarSpaceOnly(s_u2hat, 1.0 * u2, traceSpace);
-      u3hat = _vf->traceVarSpaceOnly(s_u3hat, 1.0 * u3, traceSpace);
+      if (steady)
+      {
+        u1hat = _vf->traceVar(s_u1hat, 1.0 * u1, traceSpace);
+        u2hat = _vf->traceVar(s_u2hat, 1.0 * u2, traceSpace);
+        u3hat = _vf->traceVar(s_u3hat, 1.0 * u3, traceSpace);
+      }
+      else
+      {
+        u1hat = _vf->traceVarSpaceOnly(s_u1hat, 1.0 * u1, traceSpace);
+        u2hat = _vf->traceVarSpaceOnly(s_u2hat, 1.0 * u2, traceSpace);
+        u3hat = _vf->traceVarSpaceOnly(s_u3hat, 1.0 * u3, traceSpace);
+      }
       tm1 = _vf->fluxVar(s_tm1);
-      tm2hat = _vf->fluxVar(s_tm2hat);
-      tm3hat = _vf->fluxVar(s_tm3hat);
+      tm2 = _vf->fluxVar(s_tm2);
+      tm3 = _vf->fluxVar(s_tm3);
       vm1 = _vf->testVar(s_vm1, HGRAD);
       vm2 = _vf->testVar(s_vm2, HGRAD);
       vm3 = _vf->testVar(s_vm3, HGRAD);
@@ -293,6 +320,7 @@ SpaceTimeCompressibleFormulation::SpaceTimeCompressibleFormulation(Teuchos::RCP<
       D22_prev = -Function::solution(D11, _solutionBackground);
       q1_prev = Function::solution(q1, _solutionBackground);
       q2_prev = Function::solution(q2, _solutionBackground);
+      break;
     case 3:
       u1_prev = Function::solution(u1, _solutionBackground);
       u2_prev = Function::solution(u2, _solutionBackground);
@@ -309,6 +337,7 @@ SpaceTimeCompressibleFormulation::SpaceTimeCompressibleFormulation(Teuchos::RCP<
       q1_prev = Function::solution(q1, _solutionBackground);
       q2_prev = Function::solution(q2, _solutionBackground);
       q3_prev = Function::solution(q3, _solutionBackground);
+      break;
   }
 
   // FunctionPtr u1_prev = Function::vectorize(u1_prev, u2_prev);
@@ -422,6 +451,8 @@ SpaceTimeCompressibleFormulation::SpaceTimeCompressibleFormulation(Teuchos::RCP<
   LinearTermPtr adj_Gm3 = Teuchos::rcp( new LinearTerm );
   LinearTermPtr adj_Ge = Teuchos::rcp( new LinearTerm );
   LinearTermPtr adj_vm = Teuchos::rcp( new LinearTerm );
+  vector<double> e1 = {1,0};
+  vector<double> e2 = {0,1};
   switch (_spaceDim)
   {
     case 1:
@@ -473,6 +504,111 @@ SpaceTimeCompressibleFormulation::SpaceTimeCompressibleFormulation(Teuchos::RCP<
       adj_vm->addTerm( one*vm1 );
       break;
     case 2:
+      // Nonlinear Residual Terms
+      Cc = rho_prev;
+      Cm1 = rho_prev*u1_prev;
+      Cm2 = rho_prev*u2_prev;
+      Ce = Cv*rho_prev*T_prev + 0.5*rho_prev*(u1_prev*u1_prev+u2_prev*u2_prev);
+      Fc1 = rho_prev*u1_prev;
+      Fc2 = rho_prev*u2_prev;
+      Fm11 = rho_prev*u1_prev*u1_prev + R*rho_prev*T_prev;
+      Fm12 = rho_prev*u1_prev*u2_prev;
+      Fm21 = rho_prev*u2_prev*u1_prev;
+      Fm22 = rho_prev*u2_prev*u2_prev + R*rho_prev*T_prev;
+      Fe1 = Cv*rho_prev*u1_prev*T_prev + 0.5*rho_prev*u1_prev*(u1_prev*u1_prev+u2_prev*u2_prev) + R*rho_prev*u1_prev*T_prev;
+      Fe2 = Cv*rho_prev*u2_prev*T_prev + 0.5*rho_prev*u2_prev*(u1_prev*u1_prev+u2_prev*u2_prev) + R*rho_prev*u2_prev*T_prev;
+      Km11 = D11_prev;
+      Km12 = D12_prev;
+      Km21 = D21_prev;
+      Km22 = D22_prev;
+      Ke1 = -q1_prev + u1_prev*D11_prev + u2_prev*D12_prev;
+      Ke2 = -q2_prev + u1_prev*D21_prev + u2_prev*D22_prev;
+      MD11 = 1./mu*D11_prev;
+      MD12 = 1./mu*D12_prev;
+      MD21 = 1./mu*D21_prev;
+      MD22 = 1./mu*D22_prev;
+      Mq1 = Pr/(Cp*mu)*q1_prev;
+      Mq2 = Pr/(Cp*mu)*q2_prev;
+      GD1 = 2*u1_prev;
+      GD2 = 2*u2_prev;
+      Gq = -T_prev;
+
+      // Linearized Terms
+      Cc_dU->addTerm( 1*rho );
+      Cm1_dU->addTerm( rho_prev*u1 + u1_prev*rho );
+      Cm2_dU->addTerm( rho_prev*u2 + u2_prev*rho );
+      Ce_dU->addTerm( Cv*T_prev*rho + Cv*rho_prev*T + 0.5*(u1_prev*u1_prev+u2_prev*u2_prev)*rho + rho_prev*(u1_prev*u1+u2_prev*u2) );
+      Fc1_dU->addTerm( u1_prev*rho + rho_prev*u1 );
+      Fc2_dU->addTerm( u2_prev*rho + rho_prev*u2 );
+      Fm11_dU->addTerm( u1_prev*u1_prev*rho + 2*rho_prev*u1_prev*u1 + R*T_prev*rho + R*rho_prev*T );
+      Fm12_dU->addTerm( u1_prev*u2_prev*rho + 2*rho_prev*u1_prev*u2 );
+      Fm21_dU->addTerm( u2_prev*u1_prev*rho + 2*rho_prev*u2_prev*u1 );
+      Fm22_dU->addTerm( u2_prev*u2_prev*rho + 2*rho_prev*u2_prev*u2 + R*T_prev*rho + R*rho_prev*T );
+      Fe1_dU->addTerm( Cv*u1_prev*T_prev*rho + Cv*rho_prev*T_prev*u1 + Cv*rho_prev*u1_prev*T
+            + 0.5*u1_prev*(u1_prev*u1_prev+u2_prev*u2_prev)*rho + 0.5*rho_prev*(u1_prev*u1_prev+u2_prev*u2_prev)*u1
+            + rho_prev*u1_prev*(u1_prev*u1+u2_prev*u2)
+            + R*rho_prev*T_prev*u1 + R*u1_prev*T_prev*rho + R*rho_prev*u1_prev*T );
+      Fe2_dU->addTerm( Cv*u2_prev*T_prev*rho + Cv*rho_prev*T_prev*u2 + Cv*rho_prev*u2_prev*T
+            + 0.5*u2_prev*(u1_prev*u1_prev+u2_prev*u2_prev)*rho + 0.5*rho_prev*(u1_prev*u1_prev+u2_prev*u2_prev)*u2
+            + rho_prev*u2_prev*(u1_prev*u1+u2_prev*u2)
+            + R*rho_prev*T_prev*u2 + R*u2_prev*T_prev*rho + R*rho_prev*u2_prev*T );
+      Km11_dU->addTerm( 1*D11 );
+      Km12_dU->addTerm( 1*D12 );
+      Km21_dU->addTerm( 1*D21 );
+      Km22_dU->addTerm( -1*D11 );
+      Ke1_dU->addTerm( -q1 + D11_prev*u1 + D12_prev*u2 + u1_prev*D11 + u2_prev*D21 );
+      Ke1_dU->addTerm( -q2 + D21_prev*u1 + D22_prev*u2 + u1_prev*D12 + -u2_prev*D11 );
+      MD11_dU->addTerm( 1./mu*D11 );
+      MD12_dU->addTerm( 1./mu*D12 );
+      MD21_dU->addTerm( 1./mu*D21 );
+      MD22_dU->addTerm( -1./mu*D11 );
+      Mq1_dU->addTerm( Pr/(Cp*mu)*q1 );
+      Mq2_dU->addTerm( Pr/(Cp*mu)*q2 );
+      GD1_dU->addTerm( 2*u1 );
+      GD2_dU->addTerm( 2*u2 );
+      Gq_dU->addTerm( -T );
+
+      // Adjoint Terms
+      adj_Cc->addTerm( vc->dt() + u1_prev*vm1->dt() + u2_prev*vm2->dt() + Cv*T_prev*ve->dt() + 0.5*(u1_prev*u1_prev+u2_prev*u2_prev)*ve->dt() );
+      adj_Cm1->addTerm( rho_prev*vm1->dt() + rho_prev*u1_prev*ve->dt() );
+      adj_Cm2->addTerm( rho_prev*vm2->dt() + rho_prev*u2_prev*ve->dt() );
+      adj_Ce->addTerm( Cv*rho_prev*ve->dt() );
+      adj_Fc->addTerm( u1_prev*vc->dx() + u2_prev*vc->dy()
+          + u1_prev*u1_prev*vm1->dx() + u1_prev*u2_prev*vm1->dy() + u2_prev*u1_prev*vm2->dx() + u1_prev*u2_prev*vm2->dy()
+          + R*T_prev*vm1->dx() + R*T_prev*vm2->dy()
+          + Cv*T_prev*u1_prev*ve->dx() + Cv*T_prev*u2_prev*ve->dy()
+          + 0.5*(u1_prev*u1_prev+u2_prev*u2_prev)*(u1_prev*ve->dx() + u2_prev*ve->dy())
+          + R*T_prev*u1_prev*ve->dx() + R*T_prev*u2_prev*ve->dy() );
+      adj_Fm1->addTerm( rho_prev*vc->dx()
+          + 2*rho_prev*u1_prev*vm1->dx() + rho_prev*u2_prev*vm1->dy() + rho_prev*u2_prev*vm2->dx()
+          + Cv*T_prev*rho_prev*ve->dx()
+          + 0.5*rho_prev*(u1_prev*u1_prev+u2_prev*u2_prev)*ve->dx()
+          + rho_prev*u1_prev*(u1_prev*ve->dx() + u2_prev*ve->dy()) + R*T_prev*rho_prev*ve->dx()
+          - D11_prev*ve->dx() - D12_prev*ve->dy() );
+      adj_Fm2->addTerm( rho_prev*vc->dy()
+          + rho_prev*u1_prev*vm1->dy() + rho_prev*u1_prev*vm2->dx()+ 2*rho_prev*u2_prev*vm2->dy()
+          + Cv*T_prev*rho_prev*ve->dy()
+          + 0.5*rho_prev*(u1_prev*u1_prev+u2_prev*u2_prev)*ve->dy()
+          + rho_prev*u2_prev*(u1_prev*ve->dx() + u2_prev*ve->dy()) + R*T_prev*rho_prev*ve->dy()
+          - D21_prev*ve->dx() - D22_prev*ve->dy() );
+      adj_Fe->addTerm( R*rho_prev*(vm1->dx() + vm2->dy()) + Cv*rho_prev*(u1_prev*ve->dx()+u2_prev*ve->dy())
+          + R*rho_prev*(u1_prev*ve->dx()+u2_prev*ve->dy()) );
+      adj_KD11->addTerm( vm1->dx() + u1_prev*ve->dx() );
+      adj_KD12->addTerm( vm1->dy() + u1_prev*ve->dy() );
+      adj_KD21->addTerm( vm2->dx() + u2_prev*ve->dx() );
+      adj_KD22->addTerm( vm2->dy() + u2_prev*ve->dy() );
+      adj_Kq1->addTerm( -ve->dx() );
+      adj_Kq2->addTerm( -ve->dy() );
+      adj_MD11->addTerm( 1./mu*S11 );
+      adj_MD12->addTerm( 1./mu*S12 );
+      adj_MD21->addTerm( 1./mu*S21 );
+      adj_MD22->addTerm( -1./mu*S11 );
+      adj_Mq1->addTerm( Pr/(Cp*mu)*tau->x() );
+      adj_Mq2->addTerm( Pr/(Cp*mu)*tau->y() );
+      adj_Gm1->addTerm( 2*S11->dx() + 2*S12->dy() );
+      adj_Gm2->addTerm( 2*S21->dx() + -2*S11->dy() );
+      adj_Ge->addTerm( -tau->div() );
+      adj_vm->addTerm( e1*vm1+e2*vm2 );
       break;
     case 3:
       break;
@@ -539,6 +675,97 @@ SpaceTimeCompressibleFormulation::SpaceTimeCompressibleFormulation(Teuchos::RCP<
         _rhs->addTerm( Ce * ve->dt() );
       break;
     case 2:
+      // Bilinear Form
+      // S terms:
+      _bf->addTerm( MD11_dU, S11 );
+      _bf->addTerm( MD12_dU, S12 );
+      _bf->addTerm( MD21_dU, S21 );
+      _bf->addTerm( MD22_dU, -S11 );
+      _bf->addTerm( GD1_dU, S11->dx() + S12->dy() );
+      _bf->addTerm( GD2_dU, S21->dx() + -S11->dy() );
+      _bf->addTerm( -2*u1hat, S11*n_x->x() + S12*n_x->y() );
+
+      // tau terms:
+      _bf->addTerm( Mq1_dU, tau->x() );
+      _bf->addTerm( Mq2_dU, tau->y() );
+      _bf->addTerm( Gq_dU, tau->div() );
+      _bf->addTerm( That, tau->x()*n_x->x() + tau->y()*n_x->y() );
+
+      // vc terms:
+      _bf->addTerm( -Fc1_dU, vc->dx());
+      _bf->addTerm( -Fc2_dU, vc->dy());
+      if (!steady)
+        _bf->addTerm( -Cc_dU, vc->dt());
+      _bf->addTerm( tc, vc);
+
+      // vm terms:
+      _bf->addTerm( -Fm11_dU, vm1->dx());
+      _bf->addTerm( -Fm12_dU, vm1->dy());
+      _bf->addTerm( -Fm21_dU, vm2->dx());
+      _bf->addTerm( -Fm22_dU, vm2->dy());
+      _bf->addTerm( Km11_dU, vm1->dx());
+      _bf->addTerm( Km12_dU, vm1->dy());
+      _bf->addTerm( Km21_dU, vm2->dx());
+      _bf->addTerm( Km22_dU, vm2->dy());
+      if (!steady)
+      {
+        _bf->addTerm( -Cm1_dU, vm1->dt());
+        _bf->addTerm( -Cm2_dU, vm2->dt());
+      }
+      _bf->addTerm( tm1, vm1);
+      _bf->addTerm( tm2, vm2);
+
+      // ve terms:
+      _bf->addTerm( -Fe1_dU, ve->dx());
+      _bf->addTerm( -Fe2_dU, ve->dy());
+      _bf->addTerm( Ke1_dU, ve->dx());
+      _bf->addTerm( Ke2_dU, ve->dy());
+      if (!steady)
+        _bf->addTerm( -Ce_dU, ve->dt());
+      _bf->addTerm( te, ve);
+
+      // Residual
+      // S terms:
+      _rhs->addTerm( -MD11 * S11 );
+      _rhs->addTerm( -MD12 * S12 );
+      _rhs->addTerm( -MD21 * S21 );
+      _rhs->addTerm( -MD22 * -S11 );
+      _rhs->addTerm( -GD1 * (S11->dx() + S12->dy()) );
+      _rhs->addTerm( -GD2 * (S21->dx() + -S11->dy()) );
+
+      // tau terms:
+      _rhs->addTerm( -Mq1 * tau->x() );
+      _rhs->addTerm( -Mq2 * tau->y() );
+      _rhs->addTerm( -Gq * tau->div() );
+
+      // vc terms:
+      _rhs->addTerm( Fc1 * vc->dx() );
+      _rhs->addTerm( Fc2 * vc->dy() );
+      if (!steady)
+        _rhs->addTerm( Cc * vc->dt() );
+
+      // vm terms:
+      _rhs->addTerm( Fm11 * vm1->dx() );
+      _rhs->addTerm( Fm12 * vm1->dy() );
+      _rhs->addTerm( Fm21 * vm2->dx() );
+      _rhs->addTerm( Fm22 * vm2->dy() );
+      _rhs->addTerm( -Km11 * vm1->dx() );
+      _rhs->addTerm( -Km12 * vm1->dy() );
+      _rhs->addTerm( -Km21 * vm2->dx() );
+      _rhs->addTerm( -Km22 * vm2->dy() );
+      if (!steady)
+      {
+        _rhs->addTerm( Cm1 * vm1->dt() );
+        _rhs->addTerm( Cm2 * vm2->dt() );
+      }
+
+      // ve terms:
+      _rhs->addTerm( Fe1 * ve->dx() );
+      _rhs->addTerm( Fe2 * ve->dy() );
+      _rhs->addTerm( -Ke1 * ve->dx() );
+      _rhs->addTerm( -Ke2 * ve->dy() );
+      if (!steady)
+        _rhs->addTerm( Ce * ve->dt() );
       break;
     case 3:
       break;
@@ -547,32 +774,33 @@ SpaceTimeCompressibleFormulation::SpaceTimeCompressibleFormulation(Teuchos::RCP<
 
   _ips["Graph"] = _bf->graphNorm();
 
-  _ips["ManualGraph"] = Teuchos::rcp(new IP);
-  _ips["ManualGraph"]->addTerm( adj_MD11 + adj_KD11 );
-  _ips["ManualGraph"]->addTerm( adj_Mq1 + adj_Kq1 );
-  _ips["ManualGraph"]->addTerm( adj_Gc - adj_Fc - adj_Cc );
-  _ips["ManualGraph"]->addTerm( adj_Gm1 - adj_Fm1 - adj_Cm1 );
-  _ips["ManualGraph"]->addTerm( adj_Ge - adj_Fe - adj_Ce );
-  _ips["ManualGraph"]->addTerm( vc );
-  _ips["ManualGraph"]->addTerm( vm1 );
-  _ips["ManualGraph"]->addTerm( ve );
-  _ips["ManualGraph"]->addTerm( S11 );
-  _ips["ManualGraph"]->addTerm( tau );
+  // _ips["ManualGraph"] = Teuchos::rcp(new IP);
+  // _ips["ManualGraph"]->addTerm( adj_MD11 + adj_KD11 );
+  // _ips["ManualGraph"]->addTerm( adj_Mq1 + adj_Kq1 );
+  // _ips["ManualGraph"]->addTerm( adj_Mq2 + adj_Kq2 );
+  // _ips["ManualGraph"]->addTerm( adj_Gc - adj_Fc - adj_Cc );
+  // _ips["ManualGraph"]->addTerm( adj_Gm1 - adj_Fm1 - adj_Cm1 );
+  // _ips["ManualGraph"]->addTerm( adj_Ge - adj_Fe - adj_Ce );
+  // _ips["ManualGraph"]->addTerm( vc );
+  // _ips["ManualGraph"]->addTerm( vm1 );
+  // _ips["ManualGraph"]->addTerm( ve );
+  // _ips["ManualGraph"]->addTerm( S11 );
+  // _ips["ManualGraph"]->addTerm( tau );
 
-  _ips["CoupledRobust"] = Teuchos::rcp(new IP);
-  _ips["CoupledRobust"]->addTerm( Function::min(one/Function::h(),Function::constant(1./sqrt(_mu)))*mu*adj_MD11);
-  _ips["CoupledRobust"]->addTerm( Function::min(one/Function::h(),Function::constant(1./sqrt(_mu)))*Cp*mu/Pr*adj_Mq1);
-  _ips["CoupledRobust"]->addTerm( sqrt(mu)*one*adj_KD11 );
-  _ips["CoupledRobust"]->addTerm( sqrt(Cp*mu/Pr)*one*adj_Kq1 );
-  _ips["CoupledRobust"]->addTerm( adj_Gc - adj_Fc - adj_Cc );
-  _ips["CoupledRobust"]->addTerm( adj_Gm1 - adj_Fm1 - adj_Cm1 );
-  _ips["CoupledRobust"]->addTerm( adj_Ge - adj_Fe - adj_Ce );
-  _ips["CoupledRobust"]->addTerm( adj_Fc );
-  _ips["CoupledRobust"]->addTerm( adj_Fm1 );
-  _ips["CoupledRobust"]->addTerm( adj_Fe );
-  _ips["CoupledRobust"]->addTerm( vc );
-  _ips["CoupledRobust"]->addTerm( vm1 );
-  _ips["CoupledRobust"]->addTerm( ve );
+  // _ips["CoupledRobust"] = Teuchos::rcp(new IP);
+  // _ips["CoupledRobust"]->addTerm( Function::min(one/Function::h(),Function::constant(1./sqrt(_mu)))*mu*adj_MD11);
+  // _ips["CoupledRobust"]->addTerm( Function::min(one/Function::h(),Function::constant(1./sqrt(_mu)))*Cp*mu/Pr*adj_Mq1);
+  // _ips["CoupledRobust"]->addTerm( sqrt(mu)*one*adj_KD11 );
+  // _ips["CoupledRobust"]->addTerm( sqrt(Cp*mu/Pr)*one*adj_Kq1 );
+  // _ips["CoupledRobust"]->addTerm( adj_Gc - adj_Fc - adj_Cc );
+  // _ips["CoupledRobust"]->addTerm( adj_Gm1 - adj_Fm1 - adj_Cm1 );
+  // _ips["CoupledRobust"]->addTerm( adj_Ge - adj_Fe - adj_Ce );
+  // _ips["CoupledRobust"]->addTerm( adj_Fc );
+  // _ips["CoupledRobust"]->addTerm( adj_Fm1 );
+  // _ips["CoupledRobust"]->addTerm( adj_Fe );
+  // _ips["CoupledRobust"]->addTerm( vc );
+  // _ips["CoupledRobust"]->addTerm( vm1 );
+  // _ips["CoupledRobust"]->addTerm( ve );
 
   _ips["NSDecoupledH1"] = Teuchos::rcp(new IP);
   _ips["NSDecoupledH1"]->addTerm( mu/Function::h()*adj_MD11 );
@@ -623,10 +851,11 @@ SpaceTimeCompressibleFormulation::SpaceTimeCompressibleFormulation(Teuchos::RCP<
   _mesh->registerSolution(_solutionBackground);
   _mesh->registerSolution(_solutionUpdate);
 
-  LinearTermPtr residual = _rhs->linearTerm() - _bf->testFunctional(_solutionUpdate,false); // false: don't exclude boundary terms
+  // LinearTermPtr residual = _rhs->linearTerm() - _bf->testFunctional(_solutionUpdate,false); // false: don't exclude boundary terms
 
   double energyThreshold = 0.2;
-  _refinementStrategy = Teuchos::rcp( new RefinementStrategy( _mesh, residual, ip, energyThreshold ) );
+  // _refinementStrategy = Teuchos::rcp( new RefinementStrategy( _mesh, residual, ip, energyThreshold ) );
+  _refinementStrategy = Teuchos::rcp( new RefinementStrategy( _solutionUpdate, energyThreshold ) );
 }
 
 int SpaceTimeCompressibleFormulation::spaceDim()
@@ -775,11 +1004,20 @@ VarPtr SpaceTimeCompressibleFormulation::uhat(int i)
   switch (i)
   {
     case 1:
-      return _vf->traceVarSpaceOnly(s_u1hat);
+      if (_steady)
+        return _vf->traceVar(s_u1hat);
+      else
+        return _vf->traceVarSpaceOnly(s_u1hat);
     case 2:
-      return _vf->traceVarSpaceOnly(s_u2hat);
+      if (_steady)
+        return _vf->traceVar(s_u2hat);
+      else
+        return _vf->traceVarSpaceOnly(s_u2hat);
     case 3:
-      return _vf->traceVarSpaceOnly(s_u3hat);
+      if (_steady)
+        return _vf->traceVar(s_u3hat);
+      else
+        return _vf->traceVarSpaceOnly(s_u3hat);
   }
   TEUCHOS_TEST_FOR_EXCEPTION(true, std::invalid_argument, "unhandled i value");
 }
@@ -787,7 +1025,10 @@ VarPtr SpaceTimeCompressibleFormulation::uhat(int i)
 // traces:
 VarPtr SpaceTimeCompressibleFormulation::That()
 {
-  return _vf->traceVarSpaceOnly(s_That);
+  if (_steady)
+    return _vf->traceVar(s_That);
+  else
+    return _vf->traceVarSpaceOnly(s_That);
 }
 
 VarPtr SpaceTimeCompressibleFormulation::tc()
@@ -802,9 +1043,9 @@ VarPtr SpaceTimeCompressibleFormulation::tm(int i)
     case 1:
       return _vf->fluxVar(s_tm1);
     case 2:
-      return _vf->fluxVar(s_tm2hat);
+      return _vf->fluxVar(s_tm2);
     case 3:
-      return _vf->fluxVar(s_tm3hat);
+      return _vf->fluxVar(s_tm3);
   }
   TEUCHOS_TEST_FOR_EXCEPTION(true, std::invalid_argument, "unhandled i value");
 }

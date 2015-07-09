@@ -53,7 +53,7 @@ class SpaceTimeCompressibleFormulation
   static const string s_u1hat, s_u2hat, s_u3hat;
   static const string s_That;
   static const string s_tc;
-  static const string s_tm1, s_tm2hat, s_tm3hat;
+  static const string s_tm1, s_tm2, s_tm3;
   static const string s_te;
 
   static const string s_vc;
