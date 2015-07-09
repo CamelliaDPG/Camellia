@@ -109,9 +109,6 @@ int main(int argc, char *argv[])
   problems["SimpleShock"] = Teuchos::rcp(new SimpleShock(steady, Re, spaceDim));
   problems["SimpleRarefaction"] = Teuchos::rcp(new SimpleRarefaction(steady, Re, spaceDim));
   problems["Noh"] = Teuchos::rcp(new Noh(steady, Re, spaceDim));
-  // problems["TaylorGreen"] = Teuchos::rcp(new TaylorGreenProblem(steady, Re, numXElems, numSlabs));
-  // problems["Cylinder"] = Teuchos::rcp(new CylinderProblem(steady, Re, numSlabs));
-  // problems["SquareCylinder"] = Teuchos::rcp(new SquareCylinderProblem(steady, Re, numSlabs));
   Teuchos::RCP<CompressibleProblem> problem = problems.at(problemChoice);
 
   // if (commRank == 0)
