@@ -143,12 +143,13 @@ Teuchos::RCP<GMGOperator> GMGSolver::gmgOperatorFromMeshSequence(const std::vect
     MeshPtr coarseMesh = meshesCoarseToFine[i-1];
     if (i>1)
     {
-      coarseOperator = Teuchos::rcp(new GMGOperator(zeroBCs, coarseMesh, fineMesh, fineDofInterpreter, finePartitionMap));
+      coarseOperator = Teuchos::rcp(new GMGOperator(zeroBCs, coarseMesh, ip, fineMesh, fineDofInterpreter, finePartitionMap,
+                                                    useStaticCondensationInCoarseSolve));
     }
     else
     {
-      coarseOperator = Teuchos::rcp(new GMGOperator(zeroBCs,coarseMesh,ip,fineMesh,fineDofInterpreter,
-                                                    finePartitionMap, coarseSolver, useStaticCondensationInCoarseSolve));
+      coarseOperator = Teuchos::rcp(new GMGOperator(zeroBCs, coarseMesh, ip, fineMesh, fineDofInterpreter, finePartitionMap,
+                                                    coarseSolver, useStaticCondensationInCoarseSolve));
     }
     coarseOperator->setSmootherType(GMGOperator::CAMELLIA_ADDITIVE_SCHWARZ);
     coarseOperator->setSmootherApplicationType(GMGOperator::MULTIPLICATIVE);

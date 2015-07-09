@@ -124,7 +124,8 @@ public:
   //! Constructor
   /*! This constructor is intended for any multigrid operators finer than the coarsest mesh.
    */
-  GMGOperator(BCPtr zeroBCs, MeshPtr coarseMesh, MeshPtr fineMesh, Teuchos::RCP<DofInterpreter> fineDofInterpreter, Epetra_Map finePartitionMap);
+  GMGOperator(BCPtr zeroBCs, MeshPtr coarseMesh, IPPtr coarseIP, MeshPtr fineMesh,
+              Teuchos::RCP<DofInterpreter> fineDofInterpreter, Epetra_Map finePartitionMap, bool useStaticCondensation);
   //@}
 
   //! @name Attribute set methods

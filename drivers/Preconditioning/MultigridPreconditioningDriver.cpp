@@ -342,6 +342,7 @@ int main(int argc, char *argv[])
   bool reportTimings = false;
   bool useZeroMeanConstraints = false;
   bool useConjugateGradient = true;
+  bool logFineOperator = false;
 
   string problemChoiceString = "Poisson";
   string coarseSolverChoiceString = "KLU";
@@ -355,8 +356,12 @@ int main(int argc, char *argv[])
   cmdp.setOption("coarseSolver", &coarseSolverChoiceString, "coarse solver choice: KLU, MUMPS, SuperLUDist, SimpleML");
   cmdp.setOption("combineAdditive", "combineMultiplicative", &additiveComboType);
 
-  cmdp.setOption("useCondensedSolve", "useStandardSolve", &useCondensedSolve);
   cmdp.setOption("CG", "GMRES", &useConjugateGradient);
+  
+  cmdp.setOption("logFineOperator", "dontLogFineOperator", &logFineOperator);
+  
+  cmdp.setOption("useCondensedSolve", "useStandardSolve", &useCondensedSolve);
+
 
   cmdp.setOption("spaceDim", &spaceDim, "space dimensions (1, 2, or 3)");
 
@@ -481,6 +486,7 @@ int main(int argc, char *argv[])
   Teuchos::RCP<GMGSolver> gmgSolver = Teuchos::rcp(new GMGSolver(solution, meshesCoarseToFine, cgMaxIterations, cgTol, coarseSolver, useCondensedSolve));
   gmgSolver->setUseConjugateGradient(useConjugateGradient);
   gmgSolver->setAztecOutput(10);
+  gmgSolver->gmgOperator()->setNarrateOnRankZero(logFineOperator,"finest GMGOperator");
   
   double gmgSolverInitializationTime = timer.ElapsedTime();
   if (rank==0)

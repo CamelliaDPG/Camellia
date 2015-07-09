@@ -129,14 +129,14 @@ _finePartitionMap(finePartitionMap), _br(true)
   _coarseSolution->initializeLHSVector();
   _coarseSolution->initializeStiffnessAndLoad(); // actually don't need to initialize stiffness anymore; we'll do this in computeCoarseStiffnessMatrix
 
-  constructProlongationOperator();
+//  constructProlongationOperator();
 
   _timeConstruction += constructionTimer.ElapsedTime();
 }
 
-GMGOperator::GMGOperator(BCPtr zeroBCs, MeshPtr coarseMesh, MeshPtr fineMesh,
-                         Teuchos::RCP<DofInterpreter> fineDofInterpreter, Epetra_Map finePartitionMap)
-: GMGOperator(zeroBCs,coarseMesh,Teuchos::null, fineMesh,fineDofInterpreter, finePartitionMap, Teuchos::null, false) {}
+GMGOperator::GMGOperator(BCPtr zeroBCs, MeshPtr coarseMesh, IPPtr coarseIP, MeshPtr fineMesh,
+                         Teuchos::RCP<DofInterpreter> fineDofInterpreter, Epetra_Map finePartitionMap, bool useStaticCondensation)
+: GMGOperator(zeroBCs, coarseMesh, coarseIP, fineMesh,fineDofInterpreter, finePartitionMap, Teuchos::null, useStaticCondensation) {}
 
 void GMGOperator::clearTimings()
 {
