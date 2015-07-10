@@ -362,6 +362,7 @@ bool MeshTransformationFunction::mapRefCellPointsUsingExactGeometry(FieldContain
   bool spaceTime = false;
   CellTopoPtr spaceTimeTopo;
   FieldContainer<double> refCellPointsSpaceTime, refCellPointsSpace;
+  double time0, time1;
   if (cellTopo->getTensorialDegree() > 0)
   {
     spaceDim = spaceDim - 1;
@@ -378,6 +379,16 @@ bool MeshTransformationFunction::mapRefCellPointsUsingExactGeometry(FieldContain
         refCellPointsSpace(ptOrdinal,d) = refCellPointsSpaceTime(ptOrdinal,d);
       }
     }
+    // determine the temporal bounds:
+    unsigned sideOrdinal_t0 = spaceTimeTopo->getTemporalSideOrdinal(0);
+    unsigned sideOrdinal_t1 = spaceTimeTopo->getTemporalSideOrdinal(1);
+    unsigned sampleVertexOrdinal_t0 = spaceTimeTopo->getNodeMap(spaceDim, sideOrdinal_t0, 0);
+    unsigned sampleVertexOrdinal_t1 = spaceTimeTopo->getNodeMap(spaceDim, sideOrdinal_t1, 0);
+    CellPtr cell = _mesh->getTopology()->getCell(cellID);
+    IndexType sampleVertexIndex_t0 = cell->vertices()[sampleVertexOrdinal_t0];
+    IndexType sampleVertexIndex_t1 = cell->vertices()[sampleVertexOrdinal_t1];
+    time0 = _mesh->getTopology()->getVertex(sampleVertexIndex_t0)[spaceDim];
+    time1 = _mesh->getTopology()->getVertex(sampleVertexIndex_t1)[spaceDim];
   }
   else
   {
@@ -394,6 +405,8 @@ bool MeshTransformationFunction::mapRefCellPointsUsingExactGeometry(FieldContain
 
 //    cout << "parametricPoints in mapRefCellPointsUsingExactGeometry():\n" << parametricPoints;
 
+    // for space-time, this is a bit fragile.  Would be better to do something manually in terms of the first temporal side...
+    // (one could do this in Mesh or MeshTopology, and that would be OK)
     vector< ParametricCurvePtr > edgeFunctions = _mesh->parametricEdgesForCell(cellID);
 
     ParametricSurfacePtr interpolant = ParametricSurface::transfiniteInterpolant(edgeFunctions);
@@ -411,8 +424,10 @@ bool MeshTransformationFunction::mapRefCellPointsUsingExactGeometry(FieldContain
       cellPoints(ptIndex,1) = y;
       if (spaceTime)
       {
-        // per our assumptions on mesh transformations, we don't change the temporal components here:
-        cellPoints(ptIndex,2) = refCellPoints(ptIndex,2);
+        // per our assumptions on mesh transformations, we do a linear transform in time dimension
+        double t_reference = refCellPoints(ptIndex,2); // goes from -1 to 1
+        double t_physical = time0 + (t_reference + 1.0) * (time1-time0) / 2.0;
+        cellPoints(ptIndex,2) = t_physical;
       }
     }
   }

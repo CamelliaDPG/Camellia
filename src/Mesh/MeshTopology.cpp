@@ -658,6 +658,8 @@ unsigned MeshTopology::addEntity(CellTopoPtr entityTopo, const vector<unsigned> 
 
   if (nodeSet.size() != entityVertices.size())
   {
+    for (IndexType vertexIndex : entityVertices)
+      printVertex(vertexIndex);
     TEUCHOS_TEST_FOR_EXCEPTION(true, std::invalid_argument, "Entities may not have repeated vertices");
   }
   unsigned d  = entityTopo->getDimension();
@@ -2590,34 +2592,60 @@ void MeshTopology::refineCell(unsigned cellIndex, RefinementPatternPtr refPatter
     vector< vector< pair< unsigned, unsigned> > > childrenForSides = refPattern->childrenForSides(); // outer vector: indexed by parent's sides; inner vector: (child index in children, index of child's side shared with parent)
     // handle any broken curved edges
     //    set<int> childrenWithCurvedEdges;
-    vector<unsigned> parentVertices = cell->vertices();
-    int numVertices = parentVertices.size();
-    for (int edgeIndex=0; edgeIndex < numVertices; edgeIndex++)
+    int edgeCount = cell->topology()->getEdgeCount();
+    int edgeDim = 1;
+    for (int edgeOrdinal=0; edgeOrdinal < edgeCount; edgeOrdinal++)
     {
-      int numChildrenForSide = childrenForSides[edgeIndex].size();
-      if (numChildrenForSide==1) continue; // unbroken edge: no treatment necessary
-      int v0 = parentVertices[edgeIndex];
-      int v1 = parentVertices[ (edgeIndex+1) % numVertices];
+      IndexType edgeEntityIndex = cell->entityIndex(edgeDim, edgeOrdinal);
+      if (!entityHasChildren(edgeDim, edgeEntityIndex)) continue; // unbroken edge: no treatment necessary
+      
+      vector<IndexType> childEntities = getChildEntities(edgeDim, edgeEntityIndex);
+      int edgeChildCount = childEntities.size();
+      TEUCHOS_TEST_FOR_EXCEPTION(edgeChildCount != 2, std::invalid_argument, "unexpected number of edge children");
+      
+      vector<IndexType> parentEdgeVertexIndices = getEntityVertexIndices(edgeDim, edgeEntityIndex);
+      int v0 = parentEdgeVertexIndices[0];
+      int v1 = parentEdgeVertexIndices[1];
       pair<int,int> edge = make_pair(v0, v1);
       if (_edgeToCurveMap.find(edge) != _edgeToCurveMap.end())
       {
         // then define the new curves
-        double child_t0 = 0.0;
-        double increment = 1.0 / numChildrenForSide;
-        for (int i=0; i<numChildrenForSide; i++)
+        for (int i=0; i<edgeChildCount; i++)
         {
-          int childIndex = childrenForSides[edgeIndex][i].first;
-          int childSideIndex = childrenForSides[edgeIndex][i].second;
-          int childCellIndex = cell->getChildIndices()[childIndex];
-          CellPtr child = getCell(childCellIndex);
-          // here, we rely on the fact that childrenForSides[sideIndex] goes in order from parent's v0 to parent's v1
+          IndexType childEdgeEntityIndex = childEntities[i];
+          vector<IndexType> childEdgeVertexIndices = getEntityVertexIndices(edgeDim, childEdgeEntityIndex);
+          double child_t0, child_t1;
+          if (childEdgeVertexIndices[0] == parentEdgeVertexIndices[0])
+          {
+            child_t0 = 0.0;
+            child_t1 = 1.0 / edgeChildCount;
+          }
+          else if (childEdgeVertexIndices[0] == parentEdgeVertexIndices[1])
+          {
+            child_t0 = 1.0;
+            child_t1 = 1.0 / edgeChildCount;
+          }
+          else if (childEdgeVertexIndices[1] == parentEdgeVertexIndices[0])
+          {
+            child_t0 = 1.0 / edgeChildCount;
+            child_t1 = 0.0;
+          }
+          else if (childEdgeVertexIndices[1] == parentEdgeVertexIndices[1])
+          {
+            child_t0 = 1.0 / edgeChildCount;
+            child_t1 = 1.0;
+          }
+          else
+          {
+            printAllEntities();
+            TEUCHOS_TEST_FOR_EXCEPTION(true, std::invalid_argument, "child edge not in expected relationship to parent");
+          }
+          
           ParametricCurvePtr parentCurve = _edgeToCurveMap[edge];
-          ParametricCurvePtr childCurve = ParametricCurve::subCurve(parentCurve, child_t0, child_t0 + increment);
-          vector<unsigned> childVertices = child->vertices();
-          pair<unsigned, unsigned> childEdge = make_pair( childVertices[childSideIndex], childVertices[(childSideIndex+1)% childVertices.size()] );
+          ParametricCurvePtr childCurve = ParametricCurve::subCurve(parentCurve, child_t0, child_t1);
+          
+          pair<unsigned, unsigned> childEdge = {childEdgeVertexIndices[0],childEdgeVertexIndices[1]};
           addEdgeCurve(childEdge, childCurve);
-          //          childrenWithCurvedEdges.insert(childCellIndex);
-          child_t0 += increment;
         }
       }
     }
@@ -2713,6 +2741,9 @@ void MeshTopology::refineCellEntities(CellPtr cell, RefinementPatternPtr refPatt
           physicalNodes.resize(nodeCount,_spaceDim);
           vector<unsigned> childEntityVertices = getVertexIndices(physicalNodes); // key: index in physicalNodes; value: index in _vertices
 
+//          cout << "nodesOnRefCell:\n" << nodesOnRefCell;
+//          cout << "physicalNodes:\n" << physicalNodes;
+          
           unsigned entityPermutation;
           CellTopoPtr childTopo = cellTopo->getSubcell(d, subcord);
           unsigned childEntityIndex = addEntity(childTopo, childEntityVertices, entityPermutation);
