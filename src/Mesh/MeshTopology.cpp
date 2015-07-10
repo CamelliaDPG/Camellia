@@ -648,6 +648,74 @@ void MeshTopology::addEdgeCurve(pair<unsigned,unsigned> edge, ParametricCurvePtr
   {
     IndexType cellIndex = cellForEdge.first;
     _cellIDsWithCurves.insert(cellIndex);
+    
+    if (this->getDimension() == 3)
+    {
+      pair<unsigned,unsigned> otherEdge;
+      // then we must be doing space-time, and we should check that the corresponding edge on the
+      // other side gets the same curve
+      CellPtr cell = getCell(cellIndex);
+      unsigned spaceTimeEdgeOrdinal = cell->findSubcellOrdinal(edgeDim, edgeIndex);
+      
+      vector<IndexType> cellEdgeVertexNodes = cell->getEntityVertexIndices(edgeDim, spaceTimeEdgeOrdinal);
+      bool swapped; // in cell relative to the edge we got called with
+      if ((cellEdgeVertexNodes[0] == edge.first) && (cellEdgeVertexNodes[1] == edge.second))
+      {
+        swapped = false;
+      }
+      else if ((cellEdgeVertexNodes[1] == edge.first) && (cellEdgeVertexNodes[0] == edge.second))
+      {
+        swapped = true;
+      }
+      else
+      {
+        TEUCHOS_TEST_FOR_EXCEPTION(true, std::invalid_argument, "internal error: cellEdgeVertexNodes do not match edge");
+      }
+      
+      CellTopoPtr spaceTopo = cell->topology()->getTensorialComponent();
+
+      int spaceDim = this->getDimension() - 1;
+      unsigned vertexOrdinal0 = cell->topology()->getNodeMap(edgeDim, spaceTimeEdgeOrdinal, 0);
+      unsigned vertexOrdinal1 = cell->topology()->getNodeMap(edgeDim, spaceTimeEdgeOrdinal, 1);
+
+      bool atTimeZero = (vertexOrdinal0 < spaceTopo->getNodeCount()); // a bit hackish: uses knowledge of how the vertices are numbered in CellTopology
+      
+      TEUCHOS_TEST_FOR_EXCEPTION(atTimeZero && (vertexOrdinal1 >= spaceTopo->getNodeCount()), std::invalid_argument, "Looks like a curvilinear edge goes from one temporal side to a different one.  This is not allowed!");
+      
+      TEUCHOS_TEST_FOR_EXCEPTION(!atTimeZero && (vertexOrdinal1 < spaceTopo->getNodeCount()), std::invalid_argument, "Looks like a curvilinear edge goes from one temporal side to a different one.  This is not allowed!");
+      
+      unsigned timeSide0 = cell->topology()->getTemporalSideOrdinal(0);
+      unsigned timeSide1 = cell->topology()->getTemporalSideOrdinal(1);
+      
+      int vertexDim = 0;
+      
+      unsigned otherVertexOrdinal0InSpaceTimeTopology, otherVertexOrdinal1InSpaceTimeTopology;
+      if (atTimeZero)
+      {
+        unsigned vertexOrdinal0InTimeSide = CamelliaCellTools::subcellReverseOrdinalMap(cell->topology(), spaceDim, timeSide0, vertexDim, vertexOrdinal0);
+        unsigned vertexOrdinal1InTimeSide = CamelliaCellTools::subcellReverseOrdinalMap(cell->topology(), spaceDim, timeSide0, vertexDim, vertexOrdinal1);
+        otherVertexOrdinal0InSpaceTimeTopology = CamelliaCellTools::subcellOrdinalMap(cell->topology(), spaceDim, timeSide1, vertexDim, vertexOrdinal0InTimeSide);
+        otherVertexOrdinal1InSpaceTimeTopology = CamelliaCellTools::subcellOrdinalMap(cell->topology(), spaceDim, timeSide1, vertexDim, vertexOrdinal1InTimeSide);
+      }
+      else
+      {
+        unsigned vertexOrdinal0InTimeSide = CamelliaCellTools::subcellReverseOrdinalMap(cell->topology(), spaceDim, timeSide1, vertexDim, vertexOrdinal0);
+        unsigned vertexOrdinal1InTimeSide = CamelliaCellTools::subcellReverseOrdinalMap(cell->topology(), spaceDim, timeSide1, vertexDim, vertexOrdinal1);
+        otherVertexOrdinal0InSpaceTimeTopology = CamelliaCellTools::subcellOrdinalMap(cell->topology(), spaceDim, timeSide0, vertexDim, vertexOrdinal0InTimeSide);
+        otherVertexOrdinal1InSpaceTimeTopology = CamelliaCellTools::subcellOrdinalMap(cell->topology(), spaceDim, timeSide0, vertexDim, vertexOrdinal1InTimeSide);
+      }
+      IndexType otherVertex0EntityIndex = cell->entityIndex(vertexDim, otherVertexOrdinal0InSpaceTimeTopology);
+      IndexType otherVertex1EntityIndex = cell->entityIndex(vertexDim, otherVertexOrdinal1InSpaceTimeTopology);
+      otherEdge = {otherVertex0EntityIndex,otherVertex1EntityIndex};
+      if (swapped)
+      {
+        otherEdge = {otherEdge.second,otherEdge.first};
+      }
+      if (_edgeToCurveMap.find(otherEdge) == _edgeToCurveMap.end())
+      {
+        addEdgeCurve(otherEdge, curve);
+      }
+    }
   }
 }
 
