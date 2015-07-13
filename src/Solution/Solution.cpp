@@ -1081,14 +1081,6 @@ int TSolution<Scalar>::solveWithPrepopulatedStiffnessAndLoad(TSolverPtr<Scalar> 
   Epetra_SerialComm Comm;
 #endif
 
-  set<GlobalIndexType> myGlobalIndicesSet = _dofInterpreter->globalDofIndicesForPartition(rank);
-//  cout << "rank " << rank << " has " << myGlobalIndicesSet.size() << " locally-owned dof indices.\n";
-  Epetra_Map partMap = getPartitionMap();
-
-  vector< ElementTypePtr > elementTypes = _mesh->elementTypes(rank);
-  vector< ElementTypePtr >::iterator elemTypeIt;
-
-  //cout << "process " << rank << " about to loop over elementTypes.\n";
   int indexBase = 0;
   Epetra_Map timeMap(numProcs,indexBase,Comm);
   Epetra_Time timer(Comm);
@@ -1108,14 +1100,6 @@ int TSolution<Scalar>::solveWithPrepopulatedStiffnessAndLoad(TSolverPtr<Scalar> 
 
   timer.ResetStartTime();
 
-//  GlobalIndexType dofInterpreterGlobalDofCount = _dofInterpreter->globalDofCount();
-//  GlobalIndexType meshGlobalDofCount = _mesh->globalDofCount();
-//  if (rank==0) cout << "About to call global solver with " << dofInterpreterGlobalDofCount << " global dof count.\n";
-//  if (rank==0) cout << "(Mesh sees " << meshGlobalDofCount << " dofs.)\n";
-
-//  cout << "On rank " << rank << ", about to call global solver with " << _dofInterpreter->globalDofCount() << " global dof count.\n";
-//  cout << "(On rank " << rank << ", mesh sees " << _mesh->globalDofCount() << " dofs.)\n";
-
   int solveSuccess;
   if (!callResolveInsteadOfSolve)
   {
@@ -1125,8 +1109,6 @@ int TSolution<Scalar>::solveWithPrepopulatedStiffnessAndLoad(TSolverPtr<Scalar> 
   {
     solveSuccess = solver->resolve();
   }
-
-//  if (rank==0) cout << "Returned from global solver.\n";
 
   if (solveSuccess != 0 )
   {
