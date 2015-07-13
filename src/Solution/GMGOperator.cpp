@@ -135,7 +135,8 @@ _finePartitionMap(finePartitionMap), _br(true)
 }
 
 GMGOperator::GMGOperator(BCPtr zeroBCs, MeshPtr coarseMesh, IPPtr coarseIP, MeshPtr fineMesh,
-                         Teuchos::RCP<DofInterpreter> fineDofInterpreter, Epetra_Map finePartitionMap, bool useStaticCondensation)
+                         Teuchos::RCP<DofInterpreter> fineDofInterpreter, Epetra_Map finePartitionMap,
+                         bool useStaticCondensation)
 : GMGOperator(zeroBCs, coarseMesh, coarseIP, fineMesh,fineDofInterpreter, finePartitionMap, Teuchos::null, useStaticCondensation) {}
 
 void GMGOperator::clearTimings()
@@ -258,9 +259,20 @@ Teuchos::RCP<Epetra_CrsMatrix> GMGOperator::constructProlongationOperator()
   // row indices belong to the fine grid, columns to the coarse
   // maps coefficients from coarse to fine
 //  _globalStiffMatrix = Teuchos::rcp(new Epetra_FECrsMatrix(::Copy, partMap, maxRowSize));
-
+  
   int maxRowSizeToPrescribe = _coarseMesh->rowSizeUpperBound();
-
+  
+  CondensedDofInterpreter<double>* condensedDofInterpreterCoarse = NULL;
+  CondensedDofInterpreter<double>* condensedDofInterpreterFine = NULL;
+  
+  if (_useStaticCondensation)
+  {
+    condensedDofInterpreterCoarse = dynamic_cast<CondensedDofInterpreter<double>*>(_coarseSolution->getDofInterpreter().get());
+    condensedDofInterpreterCoarse->setCanSkipLocalFieldInInterpretGlobalCoefficients(true);
+    condensedDofInterpreterFine = dynamic_cast<CondensedDofInterpreter<double>*>(_fineDofInterpreter.get());
+    condensedDofInterpreterFine->setCanSkipLocalFieldInInterpretGlobalCoefficients(true);
+  }
+  
   Teuchos::RCP<Epetra_FECrsMatrix> P = Teuchos::rcp( new Epetra_FECrsMatrix(::Copy, _finePartitionMap, maxRowSizeToPrescribe) );
 
   // by convention, all constraints come at the end.  (Element and global lagrange constraints, zero-mean constraints.)
@@ -274,7 +286,7 @@ Teuchos::RCP<Epetra_CrsMatrix> GMGOperator::constructProlongationOperator()
   //           we then determine the coarse mesh coefficients for X.
   //           This is a row of the matrix P.
   set<GlobalIndexType> cellsInPartition = _fineMesh->globalDofAssignment()->cellsInPartition(-1); // rank-local
-
+  
   {
     Epetra_SerialComm SerialComm; // rank-local map
     
@@ -334,7 +346,6 @@ Teuchos::RCP<Epetra_CrsMatrix> GMGOperator::constructProlongationOperator()
       }
       else
       {
-        
         set<GlobalIndexType> cells = cellsForGlobalDofOrdinal[globalRow];
         for (set<GlobalIndexType>::iterator cellIDIt=cells.begin(); cellIDIt != cells.end(); cellIDIt++)
         {
@@ -342,9 +353,6 @@ Teuchos::RCP<Epetra_CrsMatrix> GMGOperator::constructProlongationOperator()
           int fineDofCount = _fineMesh->getElementType(fineCellID)->trialOrderPtr->totalDofs();
           FieldContainer<double> fineCellData(fineDofCount);
           _fineDofInterpreter->interpretGlobalCoefficients(fineCellID, fineCellData, *XLocal);
-          //        if (globalRow==1) {
-          //          cout << "fineCellData:\n" << fineCellData;
-          //        }
           LocalDofMapperPtr fineMapper = getLocalCoefficientMap(fineCellID);
           GlobalIndexType coarseCellID = getCoarseCellID(fineCellID);
           int coarseDofCount = _coarseMesh->getElementType(coarseCellID)->trialOrderPtr->totalDofs();
@@ -356,6 +364,10 @@ Teuchos::RCP<Epetra_CrsMatrix> GMGOperator::constructProlongationOperator()
           int sideCount = fineCell->getSideCount();
           for (int sideOrdinal=0; sideOrdinal<sideCount; sideOrdinal++)
           {
+            // this here, combined with the fact that we're calling *data* mapping rather than
+            // coefficient mapping methods, is the reason we do not right now support continuous trace variables.
+            // (This is basically a hack to avoid accumulating twice for dofs on a side.  But with continuous
+            //  trace variables, sides can share degrees of freedom with sides other than those they face directly.)
             if (fineCell->ownsSide(sideOrdinal,_fineMesh->getTopology()))
             {
               //        cout << "fine cell " << fineCellID << " owns side " << sideOrdinal << endl;
@@ -372,6 +384,7 @@ Teuchos::RCP<Epetra_CrsMatrix> GMGOperator::constructProlongationOperator()
             GlobalIndexType coarseDofIndex = mappedCoarseDofIndices[mappedCoarseDofOrdinal];
             coarseCellData[coarseDofIndex] = mappedCoarseCellData[mappedCoarseDofOrdinal];
           }
+          
           FieldContainer<double> interpretedCoarseData;
           FieldContainer<GlobalIndexType> interpretedGlobalDofIndices;
           _coarseSolution->getDofInterpreter()->interpretLocalData(coarseCellID, coarseCellData, interpretedCoarseData, interpretedGlobalDofIndices);
@@ -427,6 +440,11 @@ Teuchos::RCP<Epetra_CrsMatrix> GMGOperator::constructProlongationOperator()
   ostringstream prolongationTimingReport;
   prolongationTimingReport << "Prolongation operator constructed in " << _timeProlongationOperatorConstruction << " seconds.";
   narrate(prolongationTimingReport.str());
+  
+  if (condensedDofInterpreterFine != NULL)
+  {
+    condensedDofInterpreterFine->setCanSkipLocalFieldInInterpretGlobalCoefficients(false); //just true while in this call
+  }
   
   return _P;
 }
@@ -1456,25 +1474,20 @@ TimeStatistics GMGOperator::getStatistics(double timeValue) const
 
 void GMGOperator::reportTimings(StatisticChoice whichStat) const
 {
+  reportTimings(whichStat,false);
+}
+
+void GMGOperator::reportTimings(StatisticChoice whichStat, bool sumAllOperators) const
+{
   //   mutable double _timeMapFineToCoarse, _timeMapCoarseToFine, _timeCoarseImport, _timeConstruction, _timeCoarseSolve;  // totals over the life of the object
   int rank = Teuchos::GlobalMPISession::getRank();
-
-  map<string, double> reportValues;
-  reportValues["apply fine stiffness"] = _timeApplyFineStiffness;
-  reportValues["apply smoother"] = _timeApplySmoother;
-  reportValues["total construction time"] = _timeConstruction;
-  reportValues["construct prolongation operator"] = _timeProlongationOperatorConstruction;
-  reportValues["construct local coefficient maps"] = _timeLocalCoefficientMapConstruction;
-  reportValues["coarse import"] = _timeCoarseImport;
-  reportValues["coarse solve"] = _timeCoarseSolve;
-  reportValues["map coarse to fine"] = _timeMapCoarseToFine;
-  reportValues["map fine to coarse"] = _timeMapFineToCoarse;
-  reportValues["compute coarse stiffness matrix"] = _timeComputeCoarseStiffnessMatrix;
-  reportValues["set up smoother"] = _timeSetUpSmoother;
-  reportValues["update coarse operator"] = _timeUpdateCoarseOperator;
-
+  
+  map<string, double> reportValues = sumAllOperators ? timingReportSumOfOperators() : timingReport() ;
+  
   if (rank == 0)
   {
+    if (sumAllOperators)
+      cout << "Sum of all grid levels, ";
     switch (whichStat)
     {
       case MIN:
@@ -1524,6 +1537,53 @@ void GMGOperator::reportTimings(StatisticChoice whichStat) const
       }
     }
   }
+}
+
+void GMGOperator::reportTimingsSumOfOperators(StatisticChoice whichStat) const
+{
+  reportTimings(whichStat,true);
+}
+
+std::map<string, double> GMGOperator::timingReport() const
+{
+  map<string, double> reportValues;
+  reportValues["apply fine stiffness"] = _timeApplyFineStiffness;
+  reportValues["apply smoother"] = _timeApplySmoother;
+  reportValues["total construction time"] = _timeConstruction;
+  reportValues["construct prolongation operator"] = _timeProlongationOperatorConstruction;
+  reportValues["construct local coefficient maps"] = _timeLocalCoefficientMapConstruction;
+  reportValues["coarse import"] = _timeCoarseImport;
+  reportValues["coarse solve"] = _timeCoarseSolve;
+  reportValues["map coarse to fine"] = _timeMapCoarseToFine;
+  reportValues["map fine to coarse"] = _timeMapFineToCoarse;
+  reportValues["compute coarse stiffness matrix"] = _timeComputeCoarseStiffnessMatrix;
+  reportValues["set up smoother"] = _timeSetUpSmoother;
+  reportValues["update coarse operator"] = _timeUpdateCoarseOperator;
+  return reportValues;
+}
+
+std::map<string, double> GMGOperator::timingReportSumOfOperators() const
+{
+  map<string, double> reportValues = timingReport();
+  Teuchos::RCP<GMGOperator> coarseOperator = _coarseOperator;
+  while (coarseOperator != Teuchos::null)
+  {
+    map<string,double> coarseReportValues = coarseOperator->timingReport();
+    for (pair<string,double> entry : coarseReportValues)
+    {
+      // the "coarse solve" entry we should take from the coarsest operator, and not sum
+      if (entry.first != "coarse solve")
+      {
+        reportValues[entry.first] += entry.second;
+      }
+      else
+      {
+        reportValues[entry.first] = entry.second;
+      }
+    }
+    coarseOperator = coarseOperator->getCoarseOperator();
+  }
+  return reportValues;
 }
 
 void GMGOperator::setCoarseOperator(Teuchos::RCP<GMGOperator> coarseOperator)

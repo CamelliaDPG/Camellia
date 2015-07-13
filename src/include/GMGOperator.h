@@ -94,6 +94,8 @@ private:
   Teuchos::RCP<Epetra_MultiVector> _smootherWeight_sqrt;
   bool _useSchwarzDiagonalWeight, _useSchwarzScalingWeight; // when true, will set _smootherWeight_sqrt and _smootherWeight during setUpSmoother()
   
+  void reportTimings(StatisticChoice whichStat, bool sumAllOperators) const;
+  
 public: // promoted these two to public for testing purposes:
   LocalDofMapperPtr getLocalCoefficientMap(GlobalIndexType fineCellID) const;
   GlobalIndexType getCoarseCellID(GlobalIndexType fineCellID) const;
@@ -159,6 +161,9 @@ public:
 
   void clearTimings();
   void reportTimings(StatisticChoice stat = ALL) const;
+  void reportTimingsSumOfOperators(StatisticChoice whichStat) const;
+  std::map<string, double> timingReport() const;
+  std::map<string, double> timingReportSumOfOperators() const;
 
   void constructLocalCoefficientMaps(); // we'll do this lazily if this is not called; this is mostly a way to separate out the time costs
 

@@ -43,6 +43,7 @@ CondensedDofInterpreter<Scalar>::CondensedDofInterpreter(MeshPtr mesh, TIPPtr<Sc
   _storeLocalStiffnessMatrices = storeLocalStiffnessMatrices;
   _uncondensibleVarIDs.insert(fieldIDsToExclude.begin(),fieldIDsToExclude.end());
   _offRankCellsToInclude = offRankCellsToInclude;
+  _skipLocalFields = false;
 
   int numGlobalConstraints = lagrangeConstraints->numGlobalConstraints();
   for (int i=0; i<numGlobalConstraints; i++)
@@ -111,6 +112,65 @@ void CondensedDofInterpreter<Scalar>::getLocalData(GlobalIndexType cellID, Field
   stiffness = _localStiffnessMatrices[cellID];
   load = _localLoadVectors[cellID];
   interpretedDofIndices = _localInterpretedDofIndices[cellID];
+}
+
+template <typename Scalar>
+void CondensedDofInterpreter<Scalar>::getLocalData(GlobalIndexType cellID, Teuchos::RCP<Epetra_SerialDenseSolver> &fieldSolver,
+                                                   Epetra_SerialDenseMatrix &B, Epetra_SerialDenseMatrix &D, Epetra_SerialDenseVector &b_field,
+                                                   FieldContainer<GlobalIndexType> &interpretedDofIndices, set<int> &fieldIndices, set<int> &fluxIndices)
+{
+  if (_localStiffnessMatrices.find(cellID) == _localStiffnessMatrices.end())
+  {
+    computeAndStoreLocalStiffnessAndLoad(cellID);
+  }
+  
+  // TODO: add caching of fieldSolver, B, b_field
+  // (NOTE: when we do this, need to copy b_field before returning; it's modified by caller)
+  
+  FieldContainer<double> K = _localStiffnessMatrices[cellID];
+  FieldContainer<double> rhs = _localLoadVectors[cellID];
+  interpretedDofIndices = _localInterpretedDofIndices[cellID];
+  
+//  cout << "rhs for cell " << cellID << ":\n" << rhs;
+  
+  DofOrderingPtr trialOrder = _mesh->getElementType(cellID)->trialOrderPtr;
+  
+  set<int> trialIDs = trialOrder->getVarIDs();
+  for (set<int>::iterator trialIDIt = trialIDs.begin(); trialIDIt != trialIDs.end(); trialIDIt++)
+  {
+    int trialID = *trialIDIt;
+    const vector<int>* sides = &trialOrder->getSidesForVarID(trialID);
+    for (vector<int>::const_iterator sideIt = sides->begin(); sideIt != sides->end(); sideIt++)
+    {
+      int sideOrdinal = *sideIt;
+      vector<int> varIndices = trialOrder->getDofIndices(trialID, sideOrdinal);
+      if (varDofsAreCondensible(trialID, sideOrdinal, trialOrder))
+      {
+        fieldIndices.insert(varIndices.begin(), varIndices.end());
+      }
+      else
+      {
+        fluxIndices.insert(varIndices.begin(),varIndices.end());
+      }
+    }
+  }
+  
+  Epetra_SerialDenseMatrix fluxMat;
+  Epetra_SerialDenseVector b_flux;
+  getSubmatrices(fieldIndices, fluxIndices, K, D, B, fluxMat);
+  
+//  cout << "rhs for cell " << cellID << ":\n" << rhs;
+//  print("fieldIndices",fieldIndices);
+//  print("fluxIndices",fluxIndices);
+  
+  getSubvectors(fieldIndices, fluxIndices, rhs, b_field, b_flux);
+  
+//  cout << "b_field:\n" << b_field;
+//  cout << "b_flux:\n" << b_flux;
+  
+  // solve for field dofs
+  fieldSolver = Teuchos::rcp( new Epetra_SerialDenseSolver());
+  fieldSolver->SetMatrix(D);
 }
 
 template <typename Scalar>
@@ -697,57 +757,55 @@ void CondensedDofInterpreter<Scalar>::interpretLocalData(GlobalIndexType cellID,
   }
 }
 
+// new version:
 template <typename Scalar>
 void CondensedDofInterpreter<Scalar>::interpretGlobalCoefficients(GlobalIndexType cellID, FieldContainer<Scalar> &localCoefficients,
-    const Epetra_MultiVector &globalCoefficients)
+                                                                  const Epetra_MultiVector &globalCoefficients)
 {
   // here, globalCoefficients correspond to *flux* dofs
-
+  
 //  cout << "CondensedDofInterpreter<Scalar>::interpretGlobalCoefficients for cell " << cellID << endl;
-
+  
   // get elem data and submatrix data
+  set<int> fieldIndices, fluxIndices; // which are fields and which are fluxes in the local cell coefficients
+
+  Epetra_SerialDenseVector b_field;
+  
   FieldContainer<Scalar> K,rhs;
   FieldContainer<GlobalIndexType> interpretedDofIndices;
+  
+  Teuchos::RCP<Epetra_SerialDenseSolver> fieldSolver;
+  Epetra_SerialDenseMatrix B, D;
+  if (! _skipLocalFields)
+    getLocalData(cellID, fieldSolver, B, D, b_field, interpretedDofIndices, fieldIndices, fluxIndices);
+  else
+  {
+    if (_localStiffnessMatrices.find(cellID) == _localStiffnessMatrices.end())
+    {
+      computeAndStoreLocalStiffnessAndLoad(cellID);
+    }
+    interpretedDofIndices = _localInterpretedDofIndices[cellID];
+  }
+    
+  
+//  cout << "Got local data.\n";
+  
+  int fieldCount = fieldIndices.size();
+  int fluxCount = fluxIndices.size();
 
-  getLocalData(cellID, K, rhs, interpretedDofIndices);
-
-//  cout << "CondensedDofInterpreter<Scalar>::interpretGlobalCoefficients, K:\n" << K;
-//  cout << "CondensedDofInterpreter<Scalar>::interpretGlobalCoefficients, rhs:\n" << rhs;
-
-//  if (! _storeLocalStiffnessMatrices ){
-//    // getElemData(elem,K,rhs);
-//    TEUCHOS_TEST_FOR_EXCEPTION(true, std::invalid_argument, "CondensedDofInterpreter<Scalar>::interpretGlobalData() doesn't yet support _storeLocalStiffnessMatrices = false");
-//  } else {
-//    if (_localStiffnessMatrices.find(cellID) == _localStiffnessMatrices.end()) {
-//      cout << "Local stiffness entry for cellID " << cellID << " not found!\n";
-//      TEUCHOS_TEST_FOR_EXCEPTION(true, std::invalid_argument, "Local stiffness entry for cellID not found!");
-//    }
-//    if (_localLoadVectors.find(cellID) == _localLoadVectors.end()) {
-//      cout << "Local load entry for cellID " << cellID << " not found!\n";
-//      TEUCHOS_TEST_FOR_EXCEPTION(true, std::invalid_argument, "Local load entry for cellID not found!");
-//    }
-//    if (_localInterpretedDofIndices.find(cellID) == _localInterpretedDofIndices.end()) {
-//      cout << "Local interpreted dof indices entry for cellID " << cellID << " not found!\n";
-//      TEUCHOS_TEST_FOR_EXCEPTION(true, std::invalid_argument, "Local interpreted dof indices entry for cellID not found!");
-//    }
-//    K = _localStiffnessMatrices[cellID];
-//    rhs = _localLoadVectors[cellID];
-//    interpretedDofIndices = _localInterpretedDofIndices[cellID];
-//  }
-
-//  cout << "interpretedDofIndices for cell " << cellID << ":\n" << interpretedDofIndices;
-
+  Epetra_SerialDenseVector field_dofs(fieldCount);
+  
   FieldContainer<GlobalIndexTypeToCast> interpretedDofIndicesCast(interpretedDofIndices.size());
   for (int i=0; i<interpretedDofIndices.size(); i++)
   {
     interpretedDofIndicesCast[i] = (GlobalIndexTypeToCast) interpretedDofIndices[i];
   }
-
+  
   // construct map for interpretedCoefficients:
   Epetra_SerialComm SerialComm; // rank-local map
   Epetra_Map    interpretedFluxIndicesMap((GlobalIndexTypeToCast)-1, (GlobalIndexTypeToCast)interpretedDofIndices.size(), &interpretedDofIndicesCast[0], 0, SerialComm);
   Epetra_MultiVector interpretedCoefficients(interpretedFluxIndicesMap, 1);
-
+  
   for (int i=0; i<interpretedDofIndices.size(); i++)
   {
     GlobalIndexTypeToCast interpretedDofIndex = interpretedDofIndicesCast[i];
@@ -757,89 +815,69 @@ void CondensedDofInterpreter<Scalar>::interpretGlobalCoefficients(GlobalIndexTyp
       GlobalIndexTypeToCast globalDofIndex = _interpretedToGlobalDofIndexMap[interpretedDofIndex];
       int lID_global = globalCoefficients.Map().LID(globalDofIndex);
       interpretedCoefficients[0][lID_interpreted] = globalCoefficients[0][lID_global];
-//      cout << "globalCoefficient for globalDofIndex " << globalDofIndex << ": " << globalCoefficients[0][lID_global] << endl;
+      //      cout << "globalCoefficient for globalDofIndex " << globalDofIndex << ": " << globalCoefficients[0][lID_global] << endl;
     }
     else
     {
       interpretedCoefficients[0][lID_interpreted] = 0; // zeros for fields, for now
     }
   }
-
+  
   DofOrderingPtr trialOrder = _mesh->getElementType(cellID)->trialOrderPtr;
-
+  
   _mesh->interpretGlobalCoefficients(cellID, localCoefficients, interpretedCoefficients); // *only* fills in fluxes in localCoefficients (fields are zeros).  We still need to back out the fields
-
-//  cout << "localCoefficients for cellID " << cellID << ":\n" << localCoefficients;
-
-  set<int> fieldIndices, fluxIndices; // which are fields and which are fluxes in the local cell coefficients
-  set<int> trialIDs = trialOrder->getVarIDs();
-  for (set<int>::iterator trialIDIt = trialIDs.begin(); trialIDIt != trialIDs.end(); trialIDIt++)
-  {
-    int trialID = *trialIDIt;
-    const vector<int>* sides = &trialOrder->getSidesForVarID(trialID);
-    for (vector<int>::const_iterator sideIt = sides->begin(); sideIt != sides->end(); sideIt++)
-    {
-      int sideOrdinal = *sideIt;
-      vector<int> varIndices = trialOrder->getDofIndices(trialID, sideOrdinal);
-      if (varDofsAreCondensible(trialID, sideOrdinal, trialOrder))
-      {
-        fieldIndices.insert(varIndices.begin(), varIndices.end());
-      }
-      else
-      {
-        fluxIndices.insert(varIndices.begin(),varIndices.end());
-      }
-    }
-  }
-
-  int fieldCount = fieldIndices.size();
-  int fluxCount = fluxIndices.size();
-
+  
+  //  cout << "localCoefficients for cellID " << cellID << ":\n" << localCoefficients;
+  
+  if (_skipLocalFields) return; // then we are done...
+  
   Epetra_SerialDenseVector flux_dofs(fluxCount);
-
+  
   int fluxOrdinal=0;
   for (set<int>::iterator fluxIt = fluxIndices.begin(); fluxIt != fluxIndices.end(); fluxIt++, fluxOrdinal++)
   {
     flux_dofs[fluxOrdinal] = localCoefficients[*fluxIt];
   }
-
-  Epetra_SerialDenseMatrix D, B, fluxMat;
-  Epetra_SerialDenseVector b_field, b_flux, field_dofs(fieldCount);
-  getSubmatrices(fieldIndices, fluxIndices, K, D, B, fluxMat);
-  getSubvectors(fieldIndices, fluxIndices, rhs, b_field, b_flux);
-
-//  cout << "K:\n" << K;
-//  cout << "D:\n" << D;
+  
+  //  cout << "K:\n" << K;
+  //  cout << "D:\n" << D;
 //  cout << "B:\n" << B;
-//  cout << "fluxMat:\n" << fluxMat;
-//
-//  cout << "b_field:\n" << b_field;
-//  cout << "b_flux:\n" << b_flux;
-
+//  cout << "flux_dofs:\n" << flux_dofs;
+//  cout << "b_field before multiplication:\n" << b_field;
+  //  cout << "fluxMat:\n" << fluxMat;
+  //
+  
   b_field.Multiply('N','N',-1.0,B,flux_dofs,1.0);
-
+  
   // solve for field dofs
-  Epetra_SerialDenseSolver solver;
-  solver.SetMatrix(D);
-  solver.SetVectors(field_dofs,b_field);
+  fieldSolver->SetVectors(field_dofs,b_field);
   bool equilibrated = false;
-  if ( solver.ShouldEquilibrate() )
+  if ( fieldSolver->ShouldEquilibrate() )
   {
-    solver.EquilibrateMatrix();
-    solver.EquilibrateRHS();
+    fieldSolver->EquilibrateMatrix();
+    fieldSolver->EquilibrateRHS();
     equilibrated = true;
   }
-  solver.Solve();
+  fieldSolver->Solve();
   if (equilibrated)
-    solver.UnequilibrateLHS();
-
+    fieldSolver->UnequilibrateLHS();
+  
   int fieldOrdinal = 0; // index into field_dofs
   for (set<int>::iterator fieldIt = fieldIndices.begin(); fieldIt != fieldIndices.end(); fieldIt++, fieldOrdinal++)
   {
     localCoefficients[*fieldIt] = field_dofs[fieldOrdinal];
   }
-
+  
+//  cout << "******* b_field:\n" << b_field;
+//  cout << "******* flux_dofs:\n" << flux_dofs;
 //  cout << "field_dofs:\n" << field_dofs;
+//  cout << "localCoefficients:\n" << localCoefficients;
+}
+
+template <typename Scalar>
+void CondensedDofInterpreter<Scalar>::setCanSkipLocalFieldInInterpretGlobalCoefficients(bool value)
+{
+  _skipLocalFields = value;
 }
 
 template <typename Scalar>
