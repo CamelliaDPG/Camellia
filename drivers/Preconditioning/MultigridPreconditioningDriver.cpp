@@ -42,7 +42,7 @@ enum ProblemChoice
 
 void initializeSolutionAndCoarseMesh(SolutionPtr &solution, vector<MeshPtr> &meshesCoarseToFine, IPPtr &graphNorm, ProblemChoice problemChoice,
                                      int spaceDim, bool conformingTraces, bool useStaticCondensation, int numCells, int k, int delta_k,
-                                     int rootMeshNumCells, bool useZeroMeanConstraints = false)
+                                     int k_coarse, int rootMeshNumCells, bool useZeroMeanConstraints)
 {
   int rank = Teuchos::GlobalMPISession::getRank();
   
@@ -251,10 +251,17 @@ void initializeSolutionAndCoarseMesh(SolutionPtr &solution, vector<MeshPtr> &mes
     }
   }
   
+  bool useLightWeightViews = true; // flag added to allow checking whether any pure MeshTopologyViews are at issue in issues that might arise...
+  
   meshesCoarseToFine.clear();
   
-  MeshTopologyViewPtr meshTopoView = mesh->getTopology()->deepCopy(); //->getView(mesh->getActiveCellIDs());
-  int H1Order_coarse = 0 + 1;
+  MeshTopologyViewPtr meshTopoView;
+  if (useLightWeightViews)
+    meshTopoView = mesh->getTopology()->getView(mesh->getActiveCellIDs());
+  else
+    meshTopoView = mesh->getTopology()->deepCopy();
+  
+  int H1Order_coarse = k_coarse + 1;
   MeshPtr k0Mesh = Teuchos::rcp(new Mesh(meshTopoView, bf, H1Order_coarse, delta_k));
   meshesCoarseToFine.push_back(k0Mesh);
   
@@ -268,7 +275,12 @@ void initializeSolutionAndCoarseMesh(SolutionPtr &solution, vector<MeshPtr> &mes
       print("h-refining cells", activeCellIDs);
     }
     
-    MeshTopologyViewPtr meshTopoView = mesh->getTopology()->deepCopy(); //->getView(mesh->getActiveCellIDs());
+    MeshTopologyViewPtr meshTopoView;
+    if (useLightWeightViews)
+      meshTopoView = mesh->getTopology()->getView(mesh->getActiveCellIDs());
+    else
+      meshTopoView = mesh->getTopology()->deepCopy();
+        
     MeshPtr k0Mesh = Teuchos::rcp(new Mesh(meshTopoView, bf, H1Order_coarse, delta_k));
     
     meshesCoarseToFine.push_back(k0Mesh);
@@ -327,6 +339,7 @@ int main(int argc, char *argv[])
 
   int k = 1; // poly order for field variables
   int delta_k = 1;   // test space enrichment
+  int k_coarse = 0; // coarse poly order
 
   bool additiveComboType = true;
   bool conformingTraces = false;
@@ -343,6 +356,8 @@ int main(int argc, char *argv[])
   bool useZeroMeanConstraints = false;
   bool useConjugateGradient = true;
   bool logFineOperator = false;
+  
+  bool pauseOnRankZero = false;
 
   string problemChoiceString = "Poisson";
   string coarseSolverChoiceString = "KLU";
@@ -352,6 +367,7 @@ int main(int argc, char *argv[])
   cmdp.setOption("numCells",&numCells,"mesh width");
   cmdp.setOption("polyOrder",&k,"polynomial order for field variable u");
   cmdp.setOption("delta_k", &delta_k, "test space polynomial order enrichment");
+  cmdp.setOption("coarsePolyOrder", &k_coarse, "polynomial order for field variables on coarse grid");
 
   cmdp.setOption("coarseSolver", &coarseSolverChoiceString, "coarse solver choice: KLU, MUMPS, SuperLUDist, SimpleML");
   cmdp.setOption("combineAdditive", "combineMultiplicative", &additiveComboType);
@@ -361,13 +377,14 @@ int main(int argc, char *argv[])
   cmdp.setOption("logFineOperator", "dontLogFineOperator", &logFineOperator);
   
   cmdp.setOption("useCondensedSolve", "useStandardSolve", &useCondensedSolve);
-
+  cmdp.setOption("useConformingTraces", "useNonConformingTraces", &conformingTraces);
 
   cmdp.setOption("spaceDim", &spaceDim, "space dimensions (1, 2, or 3)");
 
   cmdp.setOption("maxIterations", &cgMaxIterations, "maximum number of CG iterations");
   cmdp.setOption("cgTol", &cgTol, "CG convergence tolerance");
 
+  cmdp.setOption("pause","dontPause",&pauseOnRankZero, "pause (to allow attachment by tracer, e.g.), waiting for user to press a key");
   cmdp.setOption("reportTimings", "dontReportTimings", &reportTimings, "Report timings in Solution");
 
   cmdp.setOption("useZeroMeanConstraint", "usePointConstraint", &useZeroMeanConstraints, "Use a zero-mean constraint for the pressure (otherwise, use a vertex constraint at the origin)");
@@ -378,6 +395,16 @@ int main(int argc, char *argv[])
     MPI_Finalize();
 #endif
     return -1;
+  }
+  
+  if (pauseOnRankZero)
+  {
+    if (rank==0)
+    {
+      cout << "Press Enter to continue.\n";
+      cin.get();
+    }
+    Comm.Barrier();
   }
 
   ProblemChoice problemChoice;
@@ -441,7 +468,7 @@ int main(int argc, char *argv[])
   
   vector<MeshPtr> meshesCoarseToFine;
   initializeSolutionAndCoarseMesh(solution, meshesCoarseToFine, ip, problemChoice, spaceDim, conformingTraces, useCondensedSolve,
-                                  numCells, k, delta_k, numCellsRootMesh, useZeroMeanConstraints);
+                                  numCells, k, delta_k, k_coarse, numCellsRootMesh, useZeroMeanConstraints);
   
   double meshInitializationTime = timer.ElapsedTime();
 
@@ -504,7 +531,7 @@ int main(int argc, char *argv[])
     cout << "Solve completed in " << solveTime << " seconds.\n";
     cout << "Finest GMGOperator, timing report:\n";
   }
-  gmgSolver->gmgOperator()->reportTimings(StatisticChoice::MAX);
+  gmgSolver->gmgOperator()->reportTimingsSumOfOperators(StatisticChoice::MAX);
   
   return 0;
 }
