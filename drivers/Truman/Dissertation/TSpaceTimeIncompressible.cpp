@@ -59,7 +59,7 @@ int main(int argc, char *argv[])
   string solverChoice = "KLU";
   double solverTolerance = 1e-8;
   double nonlinearTolerance = 1e-5;
-  int maxLinearIterations = 1000;
+  int maxLinearIterations = 10000;
   int maxNonlinearIterations = 20;
   bool computeL2Error = false;
   bool exportSolution = false;

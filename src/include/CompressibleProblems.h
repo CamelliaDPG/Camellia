@@ -143,6 +143,37 @@ class AnalyticalCompressibleProblem : public CompressibleProblem
           }
           break;
         case 2:
+          bc->addDirichlet(form->tc(),   leftX,  -_rho_exact*_u1_exact );
+          bc->addDirichlet(form->tc(),   rightX,  _rho_exact*_u1_exact );
+          bc->addDirichlet(form->tc(),   leftY,  -_rho_exact*_u2_exact );
+          bc->addDirichlet(form->tc(),   rightY,  _rho_exact*_u2_exact );
+          bc->addDirichlet(form->tm(1),  leftX, -(_rho_exact*_u1_exact*_u1_exact+_R*_rho_exact*_T_exact));
+          bc->addDirichlet(form->tm(1),  rightX, (_rho_exact*_u1_exact*_u1_exact+_R*_rho_exact*_T_exact));
+          bc->addDirichlet(form->tm(2),  leftX, -(_rho_exact*_u1_exact*_u2_exact));
+          bc->addDirichlet(form->tm(2),  rightX, (_rho_exact*_u1_exact*_u2_exact));
+          bc->addDirichlet(form->tm(1),  leftY, -(_rho_exact*_u1_exact*_u2_exact));
+          bc->addDirichlet(form->tm(1),  rightY, (_rho_exact*_u1_exact*_u2_exact));
+          bc->addDirichlet(form->tm(2),  leftY, -(_rho_exact*_u2_exact*_u2_exact+_R*_rho_exact*_T_exact));
+          bc->addDirichlet(form->tm(2),  rightY, (_rho_exact*_u2_exact*_u2_exact+_R*_rho_exact*_T_exact));
+          bc->addDirichlet(form->te(),   leftX, -(_rho_exact*_Cv*_T_exact+0.5*_rho_exact*(_u1_exact*_u1_exact+_u2_exact*_u2_exact)+_R*_rho_exact*_T_exact)*_u1_exact);
+          bc->addDirichlet(form->te(),   rightX, (_rho_exact*_Cv*_T_exact+0.5*_rho_exact*(_u1_exact*_u1_exact+_u2_exact*_u2_exact)+_R*_rho_exact*_T_exact)*_u1_exact);
+          bc->addDirichlet(form->te(),   leftY, -(_rho_exact*_Cv*_T_exact+0.5*_rho_exact*(_u1_exact*_u1_exact+_u2_exact*_u2_exact)+_R*_rho_exact*_T_exact)*_u2_exact);
+          bc->addDirichlet(form->te(),   rightY, (_rho_exact*_Cv*_T_exact+0.5*_rho_exact*(_u1_exact*_u1_exact+_u2_exact*_u2_exact)+_R*_rho_exact*_T_exact)*_u2_exact);
+
+          if (!_steady)
+          {
+            FunctionPtr rho_init = _exactMap[form->rho()->ID()];
+            FunctionPtr u1_init  = _exactMap[form->u(1)->ID()];
+            FunctionPtr u2_init  = _exactMap[form->u(2)->ID()];
+            FunctionPtr T_init   = _exactMap[form->T()->ID()];
+            FunctionPtr m1_init = rho_init*u1_init;
+            FunctionPtr m2_init = rho_init*u2_init;
+            FunctionPtr E_init = rho_init*(_Cv*T_init + 0.5*(u1_init*u1_init+u2_init*u2_init));
+            bc->addDirichlet(form->tc(), initTime,-rho_init);
+            bc->addDirichlet(form->tm(1),initTime,-m1_init);
+            bc->addDirichlet(form->tm(2),initTime,-m2_init);
+            bc->addDirichlet(form->te(), initTime,-E_init);
+          }
           // bc->addDirichlet(form->rho(),   leftX,    _exactMap[form->rho()->ID()]);
           // bc->addDirichlet(form->rho(),   rightX,   _exactMap[form->rho()->ID()]);
           // bc->addDirichlet(form->rho(),   leftY,    _exactMap[form->rho()->ID()]);
@@ -212,20 +243,23 @@ class TrivialCompressible : public AnalyticalCompressibleProblem
     {
       _steady = steady;
       _gamma = 1.4;
-      double p0 = 1;
+      // double p0 = 1;
       double rho0 = 1;
       double u0 = 1;
-      double a0 = sqrt(_gamma*p0/rho0);
-      double M_inf = u0/a0;
-      _Cv = 1./(_gamma*(_gamma-1)*M_inf*M_inf);
+      // double a0 = sqrt(_gamma*p0/rho0);
+      // double M_inf = u0/a0;
+      // _Cv = 1./(_gamma*(_gamma-1)*M_inf*M_inf);
+      _Cv = 1;
       _Cp = _gamma*_Cv;
       _R = _Cp-_Cv;
       _rho_exact = Function::constant(rho0);
       _u1_exact = Function::constant(u0);
+      // _u1_exact = Function::zero();
       _u2_exact = Function::zero();
       _u3_exact = Function::zero();
       // _T_exact = Function::constant(p0/(rho0*_R));
       _T_exact = Function::constant(1);
+      // _T_exact = Function::zero();
 
       for (int d=0; d < spaceDim; d++)
       {
