@@ -68,6 +68,8 @@ public:
   void setChildren(vector< Teuchos::RCP< Cell > > children);
   vector<IndexType> getChildIndices();
   vector< pair<IndexType, unsigned> > childrenForSide(unsigned sideOrdinal);
+  // !! returns the ordinal of the specified child in the parent's children container (which matches the order in RefinementPattern).  Returns -1 if the cell has no child with the specified cellIndex.
+  int findChildOrdinal(IndexType childCellIndex);
   int numChildren();
 
   set<IndexType> getDescendants(MeshTopologyViewPtr meshTopoViewForCellValidity, bool leafNodesOnly = true);
