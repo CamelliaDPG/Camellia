@@ -254,9 +254,11 @@ class TrivialCompressible : public AnalyticalCompressibleProblem
       _R = _Cp-_Cv;
       _rho_exact = Function::constant(rho0);
       _u1_exact = Function::constant(u0);
+      _u2_exact = Function::constant(2*u0);
+      _u3_exact = Function::constant(3*u0);
       // _u1_exact = Function::zero();
-      _u2_exact = Function::zero();
-      _u3_exact = Function::zero();
+      // _u2_exact = Function::zero();
+      // _u3_exact = Function::zero();
       // _T_exact = Function::constant(p0/(rho0*_R));
       _T_exact = Function::constant(1);
       // _T_exact = Function::zero();

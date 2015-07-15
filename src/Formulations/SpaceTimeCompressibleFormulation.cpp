@@ -567,9 +567,10 @@ SpaceTimeCompressibleFormulation::SpaceTimeCompressibleFormulation(Teuchos::RCP<
       Fm12_dU->addTerm( u1_prev*u2_prev*rho + rho_prev*u2_prev*u1 + rho_prev*u1_prev*u2 );
       Fm21_dU->addTerm( u2_prev*u1_prev*rho + rho_prev*u2_prev*u1 + rho_prev*u1_prev*u2 );
       // Fm22_dU->addTerm( u2_prev*u2_prev*rho + 2*rho_prev*u2_prev*u2 + R*T_prev*rho + R*rho_prev*T );
-      Fm22_dU->addTerm( R*rho_prev*T );
+      // Fm22_dU->addTerm( R*T_prev*rho );
+      // Fm22_dU->addTerm( R*rho_prev*T );
       // Fm22_dU->addTerm( R*T_prev*rho + R*rho_prev*T );
-      // Fm22_dU->addTerm( u2_prev*u2_prev*rho + R*T_prev*rho + R*rho_prev*T );
+      Fm22_dU->addTerm( u2_prev*u2_prev*rho + 2*rho_prev*u2_prev*u2 + R*T_prev*rho + R*rho_prev*T );
       Fe1_dU->addTerm( Cv*u1_prev*T_prev*rho + Cv*rho_prev*T_prev*u1 + Cv*rho_prev*u1_prev*T
             + 0.5*u1_prev*(u1_prev*u1_prev+u2_prev*u2_prev)*rho + 0.5*rho_prev*(u1_prev*u1_prev+u2_prev*u2_prev)*u1
             + rho_prev*u1_prev*(u1_prev*u1+u2_prev*u2)
