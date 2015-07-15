@@ -5,10 +5,13 @@
 //  Created by Nate Roberts on 2/4/15.
 //
 //
+
+#include "EpetraExt_RowMatrixOut.h"
 #include "Teuchos_UnitTestHarness.hpp"
 
 #include "CamelliaDebugUtility.h"
 #include "CamelliaTestingHelpers.h"
+#include "GDAMinimumRule.h"
 #include "GMGOperator.h"
 #include "MeshFactory.h"
 #include "PoissonFormulation.h"
@@ -19,6 +22,125 @@ using namespace Intrepid;
 
 namespace
 {
+  void testEpetraMatrixIsIdentity(Teuchos::RCP<Epetra_CrsMatrix> P, Teuchos::FancyOStream &out, bool &success)
+  {
+    int myRowCount = P->Map().NumMyElements();
+    
+    GlobalIndexTypeToCast globalEntryCount = P->Map().NumGlobalElements();
+    Intrepid::FieldContainer<GlobalIndexTypeToCast> colIndices(globalEntryCount);
+    Intrepid::FieldContainer<double> colValues(globalEntryCount);
+    
+    for (int localRowIndex=0; localRowIndex<myRowCount; localRowIndex++)
+    {
+      GlobalIndexTypeToCast globalRowIndex = P->Map().GID(localRowIndex);
+      int numEntries;
+      P->ExtractMyRowCopy(localRowIndex, globalEntryCount, numEntries, &colValues(0), &colIndices(0));
+      bool diagEntryFound = false;
+      
+      double tol=1e-15;
+      for (int colEntryOrdinal=0; colEntryOrdinal<numEntries; colEntryOrdinal++)
+      {
+        GlobalIndexTypeToCast colIndex = colIndices(colEntryOrdinal);
+        double expectedValue;
+        double actualValue = colValues(colEntryOrdinal);
+        if (colIndex != globalRowIndex)
+        {
+          // expect 0 for off-diagonals
+          TEST_COMPARE(abs(actualValue), <, tol);
+        }
+        else
+        {
+          // expect 1 on the diagonal
+          expectedValue = 1.0;
+          TEST_FLOATING_EQUALITY(expectedValue, actualValue, tol);
+          diagEntryFound = true;
+        }
+      }
+      TEST_ASSERT(diagEntryFound);
+    }
+    
+    { // DEBUGGING: export to disk
+      EpetraExt::RowMatrixToMatrixMarketFile("/tmp/P.dat",*P,NULL,NULL,false);
+      int rank = Teuchos::GlobalMPISession::getRank();
+      if (rank==0) cout << "wrote prolongation operator matrix to /tmp/P.dat\n";
+    }
+
+  }
+
+  TEUCHOS_UNIT_TEST( GMGOperator, IdentityProlongationOperatorHangingNode_2D)
+  {
+    // take a mesh with a hanging node, using the same mesh for coarse and fine in a GMGOperator.
+    // test that the prolongation operator is the identity
+    int spaceDim = 2;
+    bool useConformingTraces = true;
+    int H1Order = useConformingTraces ? 1 : 2; // make trace variables linear
+    bool useStaticCondensation = false;
+    vector<int> cellCounts = {1,2}; // two elements
+    PoissonFormulation form(spaceDim, useConformingTraces);
+    BFPtr bf = form.bf();
+    
+    int delta_k = spaceDim;
+    vector<double> dimensions(spaceDim,1.0);
+    MeshPtr mesh = MeshFactory::rectilinearMesh(bf, dimensions, cellCounts, H1Order, delta_k);
+    
+    // refine element 0:
+    set<GlobalIndexType> cellsToRefine = {0};
+    mesh->hRefine(cellsToRefine);
+    
+    BCPtr bc = BC::bc();
+    IPPtr ip = bf->graphNorm();
+    RHSPtr rhs = RHS::rhs();
+    
+    SolutionPtr fineSoln = Solution::solution(mesh);
+    fineSoln->setIP(ip);
+    fineSoln->setRHS(rhs);
+    fineSoln->setBC(bc);
+    fineSoln->setUseCondensedSolve(useStaticCondensation);
+    
+    SolverPtr coarseSolver = Solver::getSolver(Solver::KLU, true);
+    
+    GMGOperator gmgOperator(bc,mesh,ip,mesh,fineSoln->getDofInterpreter(),
+                            fineSoln->getPartitionMap(),coarseSolver, useStaticCondensation);
+    gmgOperator.constructProlongationOperator();
+    
+    Teuchos::RCP<Epetra_CrsMatrix> P = gmgOperator.getProlongationOperator();
+    testEpetraMatrixIsIdentity(P, out, success);
+  }
+  
+  TEUCHOS_UNIT_TEST( GMGOperator, IdentityProlongationOperatorUniform_2D)
+  {
+    // take a uniform mesh, using the same mesh for coarse and fine in a GMGOperator.
+    // test that the prolongation operator is the identity
+    int spaceDim = 2;
+    bool useConformingTraces = true;
+    int H1Order = useConformingTraces ? 1 : 2; // make trace variables linear
+    bool useStaticCondensation = false;
+    vector<int> cellCounts(spaceDim,2);
+    PoissonFormulation form(spaceDim, useConformingTraces);
+    BFPtr bf = form.bf();
+    
+    int delta_k = spaceDim;
+    vector<double> dimensions(spaceDim,1.0);
+    MeshPtr mesh = MeshFactory::rectilinearMesh(bf, dimensions, cellCounts, H1Order, delta_k);
+    
+    BCPtr bc = BC::bc();
+    IPPtr ip = bf->graphNorm();
+    RHSPtr rhs = RHS::rhs();
+    
+    SolutionPtr fineSoln = Solution::solution(mesh);
+    fineSoln->setIP(ip);
+    fineSoln->setRHS(rhs);
+    
+    SolverPtr coarseSolver = Solver::getSolver(Solver::KLU, true);
+    
+    GMGOperator gmgOperator(bc,mesh,ip,mesh,fineSoln->getDofInterpreter(),
+                            fineSoln->getPartitionMap(),coarseSolver, useStaticCondensation);
+    gmgOperator.constructProlongationOperator();
+    
+    Teuchos::RCP<Epetra_CrsMatrix> P = gmgOperator.getProlongationOperator();
+    testEpetraMatrixIsIdentity(P, out, success);
+  }
+  
 TEUCHOS_UNIT_TEST( GMGOperator, ProlongationOperatorLine )
 {
   /*
@@ -42,7 +164,9 @@ TEUCHOS_UNIT_TEST( GMGOperator, ProlongationOperatorLine )
   int coarseElementCount = 1;
   int H1Order = 3, delta_k = spaceDim;
   MeshPtr mesh = MeshFactory::intervalMesh(bf, xLeft, xRight, coarseElementCount, H1Order, delta_k);
-
+  // for debugging, do a refinement first:
+  mesh->hRefine(mesh->getActiveCellIDs());
+  
   SolutionPtr coarseSoln = Solution::solution(mesh);
 
   VarPtr q = form.q();
@@ -69,11 +193,11 @@ TEUCHOS_UNIT_TEST( GMGOperator, ProlongationOperatorLine )
   // sanity check: our exact solution should give us 0 energy error
   double tol = 1e-14;
   TEST_COMPARE(energyError, <, tol);
-
+  
   MeshPtr fineMesh = mesh->deepCopy();
 
   fineMesh->hRefine(fineMesh->getActiveCellIDs());
-  fineMesh->hRefine(fineMesh->getActiveCellIDs());
+//  fineMesh->hRefine(fineMesh->getActiveCellIDs());
 
   SolutionPtr fineSoln = Solution::solution(fineMesh);
   fineSoln->setIP(ip);
@@ -81,6 +205,15 @@ TEUCHOS_UNIT_TEST( GMGOperator, ProlongationOperatorLine )
 
   // again, a sanity check, now on the fine solution:
   fineSoln->projectOntoMesh(exactSolnMap);
+  bool warnAboutOffRank = false;
+  set<GlobalIndexType> myCellIDs = fineSoln->mesh()->cellIDsInPartition();
+  for (GlobalIndexType cellID : myCellIDs) {
+    FieldContainer<double> coefficients = fineSoln->allCoefficientsForCellID(cellID, warnAboutOffRank);
+    out << "\n\n******************** Dofs for cell " << cellID << " (exactSoln) ********************\n\n";
+    DofOrderingPtr trialOrder = fineMesh->getElementType(cellID)->trialOrderPtr;
+    printLabeledDofCoefficients(out, form.bf()->varFactory(), trialOrder, coefficients);
+  }
+  
   energyError = fineSoln->energyErrorTotal();
   TEST_COMPARE(energyError, <, tol);
 
@@ -105,6 +238,25 @@ TEUCHOS_UNIT_TEST( GMGOperator, ProlongationOperatorLine )
 
   energyError = fineSoln->energyErrorTotal();
   TEST_COMPARE(energyError, <, tol);
+
+//  for (GlobalIndexType cellID : myCellIDs) {
+//    FieldContainer<double> coefficients = fineSoln->allCoefficientsForCellID(cellID, warnAboutOffRank);
+//    out << "\n\n******************** Dofs for cell " << cellID << " (fineSoln) ********************\n\n";
+//    DofOrderingPtr trialOrder = fineMesh->getElementType(cellID)->trialOrderPtr;
+//    printLabeledDofCoefficients(out, form.bf()->varFactory(), trialOrder, coefficients);
+//  }
+//  
+//  { // DEBUGGING: export to disk
+//    EpetraExt::RowMatrixToMatrixMarketFile("/tmp/P.dat",*P,NULL,NULL,false);
+//    int rank = Teuchos::GlobalMPISession::getRank();
+//    if (rank==0) cout << "wrote prolongation operator matrix to /tmp/P.dat\n";
+//    
+//    GDAMinimumRule* fineGDA = dynamic_cast<GDAMinimumRule*>(fineMesh->globalDofAssignment().get());
+//    fineGDA->printGlobalDofInfo();
+//    
+//    GDAMinimumRule* coarseGDA = dynamic_cast<GDAMinimumRule*>(mesh->globalDofAssignment().get());
+//    coarseGDA->printGlobalDofInfo();
+//  }
 }
 
 TEUCHOS_UNIT_TEST( GMGOperator, ProlongationOperatorQuad_Simple )
