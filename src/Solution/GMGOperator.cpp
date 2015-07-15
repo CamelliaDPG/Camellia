@@ -185,12 +185,19 @@ void GMGOperator::computeCoarseStiffnessMatrix(Epetra_CrsMatrix *fineStiffnessMa
     cout << "ERROR: EpetraExt::MatrixMatrix::Multiply returned an error during computeCoarseStiffnessMatrix's computation of A * P.\n";
     TEUCHOS_TEST_FOR_EXCEPTION(true, std::invalid_argument, "EpetraExt::MatrixMatrix::Multiply returned an error during computeCoarseStiffnessMatrix's computation of A * P.");
   }
+  
+  // DEBUGGING:
 //  EpetraExt::RowMatrixToMatrixMarketFile("/tmp/AP.dat", AP, NULL, NULL, false); // false: don't write header
+//  string P_path = "/tmp/P.dat";
+//  cout << "Writing P to disk at " << P_path << endl;
+//  EpetraExt::RowMatrixToMatrixMarketFile(P_path.c_str(),*_P, NULL, NULL, false); // false: don't write header
 
+  
   Epetra_Map domain_P = _P->DomainMap();
   Teuchos::RCP<Epetra_CrsMatrix> PT_A_P = Teuchos::rcp( new Epetra_CrsMatrix(::Copy, domain_P, maxRowSize) );
 
   // compute P^T * A * P
+  // For MultigridPreconditioningDriver with Stokes and static condensation, we crash on this line.  Is the domain_P argument above problematic in this case??
   err = EpetraExt::MatrixMatrix::Multiply(*_P, true, AP, false, *PT_A_P);
   if (err != 0)
   {
@@ -351,49 +358,83 @@ Teuchos::RCP<Epetra_CrsMatrix> GMGOperator::constructProlongationOperator()
         {
           GlobalIndexType fineCellID = *cellIDIt;
           int fineDofCount = _fineMesh->getElementType(fineCellID)->trialOrderPtr->totalDofs();
-          FieldContainer<double> fineCellData(fineDofCount);
-          _fineDofInterpreter->interpretGlobalCoefficients(fineCellID, fineCellData, *XLocal);
+          FieldContainer<double> fineCellCoefficients(fineDofCount);
+          _fineDofInterpreter->interpretGlobalCoefficients(fineCellID, fineCellCoefficients, *XLocal);
           LocalDofMapperPtr fineMapper = getLocalCoefficientMap(fineCellID);
           GlobalIndexType coarseCellID = getCoarseCellID(fineCellID);
           int coarseDofCount = _coarseMesh->getElementType(coarseCellID)->trialOrderPtr->totalDofs();
-          FieldContainer<double> coarseCellData(coarseDofCount);
-          FieldContainer<double> mappedCoarseCellData(fineMapper->globalIndices().size());
-          fineMapper->mapLocalDataVolume(fineCellData, mappedCoarseCellData, false);
+          FieldContainer<double> coarseCellCoefficients(coarseDofCount);
+          FieldContainer<double> mappedCoarseCellCoefficients(fineMapper->globalIndices().size());
           
-          CellPtr fineCell = _fineMesh->getTopology()->getCell(fineCellID);
-          int sideCount = fineCell->getSideCount();
-          for (int sideOrdinal=0; sideOrdinal<sideCount; sideOrdinal++)
+          // fitting attempt:
+          
           {
-            // this here, combined with the fact that we're calling *data* mapping rather than
-            // coefficient mapping methods, is the reason we do not right now support continuous trace variables.
-            // (This is basically a hack to avoid accumulating twice for dofs on a side.  But with continuous
-            //  trace variables, sides can share degrees of freedom with sides other than those they face directly.)
-            if (fineCell->ownsSide(sideOrdinal,_fineMesh->getTopology()))
-            {
-              //        cout << "fine cell " << fineCellID << " owns side " << sideOrdinal << endl;
-              fineMapper->mapLocalDataSide(fineCellData, mappedCoarseCellData, false, sideOrdinal);
-            }
+//            FieldContainer<double> fittedCoarseCellCoefficients = fineMapper->fitLocalCoefficients(fineCellCoefficients);
+//            vector<GlobalIndexType> fittableCoarseDofIndices = fineMapper->fittableGlobalIndices(); // "global" here means the coarse local
+//            
+//            int fittedCoarseDofOrdinal=0; // index into fittedCoarseCellCoefficients
+//            double tol = 1e-15;
+//            for (GlobalIndexType coarseDofIndex : fittableCoarseDofIndices)
+//            {
+//              if (abs(fittedCoarseCellCoefficients[fittedCoarseDofOrdinal]) > tol)
+//              {
+//                coarseCellCoefficients[coarseDofIndex] = fittedCoarseCellCoefficients[fittedCoarseDofOrdinal];
+//              }
+//              fittedCoarseDofOrdinal++;
+//            }
           }
           
-          //        if (globalRow==1) {
-          //          cout << "mappedCoarseCellData:\n" << mappedCoarseCellData;
-          //        }
-          vector<GlobalIndexType> mappedCoarseDofIndices = fineMapper->globalIndices(); // "global" here means the coarse local
-          for (int mappedCoarseDofOrdinal = 0; mappedCoarseDofOrdinal < mappedCoarseDofIndices.size(); mappedCoarseDofOrdinal++)
+          // non-fitting attempt:
           {
-            GlobalIndexType coarseDofIndex = mappedCoarseDofIndices[mappedCoarseDofOrdinal];
-            coarseCellData[coarseDofIndex] = mappedCoarseCellData[mappedCoarseDofOrdinal];
+            coarseCellCoefficients = fineMapper->mapLocalData(fineCellCoefficients, true);
           }
           
+//          CellPtr fineCell = _fineMesh->getTopology()->getCell(fineCellID);
+//          int sideCount = fineCell->getSideCount();
+//          for (int sideOrdinal=0; sideOrdinal<sideCount; sideOrdinal++)
+//          {
+//            // this here, combined with the fact that we're calling *data* mapping rather than
+//            // coefficient mapping methods, is the reason we do not right now support continuous trace variables.
+//            // (This is basically a hack to avoid accumulating twice for dofs on a side.  But with continuous
+//            //  trace variables, sides can share degrees of freedom with sides other than those they face directly.)
+//            if (fineCell->ownsSide(sideOrdinal,_fineMesh->getTopology()))
+//            {
+//              //        cout << "fine cell " << fineCellID << " owns side " << sideOrdinal << endl;
+//              fineMapper->mapLocalDataSide(fineCellData, mappedCoarseCellData, false, sideOrdinal);
+//            }
+//          }
+//          
+//          //        if (globalRow==1) {
+//          //          cout << "mappedCoarseCellData:\n" << mappedCoarseCellData;
+//          //        }
+//          vector<GlobalIndexType> mappedCoarseDofIndices = fineMapper->globalIndices(); // "global" here means the coarse local
+//          for (int mappedCoarseDofOrdinal = 0; mappedCoarseDofOrdinal < mappedCoarseDofIndices.size(); mappedCoarseDofOrdinal++)
+//          {
+//            GlobalIndexType coarseDofIndex = mappedCoarseDofIndices[mappedCoarseDofOrdinal];
+//            coarseCellData[coarseDofIndex] = mappedCoarseCellData[mappedCoarseDofOrdinal];
+//          }
+          
+//          FieldContainer<double> interpretedCoarseData;
+//          FieldContainer<GlobalIndexType> interpretedGlobalDofIndices;
+//          _coarseSolution->getDofInterpreter()->interpretLocalData(coarseCellID, coarseCellData, interpretedCoarseData, interpretedGlobalDofIndices);
+
           FieldContainer<double> interpretedCoarseData;
-          FieldContainer<GlobalIndexType> interpretedGlobalDofIndices;
-          _coarseSolution->getDofInterpreter()->interpretLocalData(coarseCellID, coarseCellData, interpretedCoarseData, interpretedGlobalDofIndices);
+          map<GlobalIndexType,double> fittedGlobalCoefficients;
+          _coarseSolution->getDofInterpreter()->interpretLocalCoefficients(coarseCellID, coarseCellCoefficients, fittedGlobalCoefficients,
+                                                                           _useStaticCondensation);
           
-          for (int interpretedCoarseGlobalDofOrdinal=0; interpretedCoarseGlobalDofOrdinal < interpretedGlobalDofIndices.size(); interpretedCoarseGlobalDofOrdinal++)
+          for (auto globalEntry : fittedGlobalCoefficients)
           {
-            GlobalIndexType globalDofIndex = interpretedGlobalDofIndices[interpretedCoarseGlobalDofOrdinal];
-            coarseXVectorLocal[globalDofIndex] += interpretedCoarseData[interpretedCoarseGlobalDofOrdinal];
+            GlobalIndexType globalDofIndex = globalEntry.first;
+            double value = globalEntry.second;
+            coarseXVectorLocal[globalDofIndex] = value;
           }
+            
+//          for (int interpretedCoarseGlobalDofOrdinal=0; interpretedCoarseGlobalDofOrdinal < interpretedGlobalDofIndices.size(); interpretedCoarseGlobalDofOrdinal++)
+//          {
+//            GlobalIndexType globalDofIndex = interpretedGlobalDofIndices[interpretedCoarseGlobalDofOrdinal];
+//            coarseXVectorLocal[globalDofIndex] += interpretedCoarseData[interpretedCoarseGlobalDofOrdinal];
+//          }
         }
       }
       
@@ -568,6 +609,10 @@ LocalDofMapperPtr GMGOperator::getLocalCoefficientMap(GlobalIndexType fineCellID
 
     set<int> trialIDs = coarseTrialOrdering->getVarIDs();
 
+    // set up fittability: which coarse dof ordinals have support on volume and each side
+    set<GlobalIndexType> fittableGlobalDofOrdinalsInVolume;
+    vector< set<GlobalIndexType> > fittableGlobalDofOrdinalsOnSides(fineSideCount);
+    
     // for the moment, we skip the mapping from traces to fields based on traceTerm
     unsigned vertexNodePermutation = 0; // because we're "reconciling" to an ancestor, the views of the cells and sides are necessarily the same
     for (set<int>::iterator trialIDIt = trialIDs.begin(); trialIDIt != trialIDs.end(); trialIDIt++)
@@ -581,7 +626,7 @@ LocalDofMapperPtr GMGOperator::getLocalCoefficientMap(GlobalIndexType fineCellID
       {
         int rank = Teuchos::GlobalMPISession::getRank();
         if (rank == 0)
-          cout << "WARNING: function space for var " << trialVar->name() << " is not discontinuous, and GMGOperator does not yet support continuous variables, even continuous trace variables (i.e. all trace variables must be in L^2 or some other discontinuous space, like HGRAD_DISC).\n";
+          cout << "WARNING: function space for var " << trialVar->name() << " is not discontinuous, and GMGOperator does not yet support continuous variables, even continuous trace variables (i.e. all trace variables must be in L^2 or some other discontinuous space, like HGRAD_DISC).  Can correct this by reworking setCoarseRHSVector() to imitate constructProlongationOperator's treatment of mappings... (see TODO in setCoarseRHSVector).\n";
       }
 
       if (coarseTrialOrdering->getSidesForVarID(trialID).size() == 1)   // field variable
@@ -619,13 +664,14 @@ LocalDofMapperPtr GMGOperator::getLocalCoefficientMap(GlobalIndexType fineCellID
           unsigned coarseSideOrdinal = ancestralSideOrdinals[sideOrdinal];
           BasisPtr coarseBasis, fineBasis;
           BasisMap basisMap;
+          bool useTermTracedIfAvailable = true; // TODO: turn this back on
           if (coarseSideOrdinal == -1)   // the fine side falls inside a coarse volume
           {
             // we map trace to field using the traceTerm LinearTermPtr
             VarPtr trialVar = vf->trial(trialID);
 
             LinearTermPtr termTraced = trialVar->termTraced();
-            if (termTraced.get() == NULL) // nothing we can do if we don't know what term we're tracing
+            if (!useTermTracedIfAvailable || (termTraced.get() == NULL)) // nothing we can do if we don't know what term we're tracing
               continue;
 
             if (! fineTrialOrdering->hasBasisEntry(trialID, sideOrdinal) ) continue;
@@ -650,6 +696,8 @@ LocalDofMapperPtr GMGOperator::getLocalCoefficientMap(GlobalIndexType fineCellID
               {
                 unsigned coarseDofIndex = coarseTrialOrdering->getDofIndex(varTracedID, *coarseOrdinalIt);
                 coarseDofIndices.push_back(coarseDofIndex);
+                fittableGlobalDofOrdinalsOnSides[sideOrdinal].insert(coarseDofIndex);
+//                cout << "termTraced weights:\n" << weights.weights;
               }
 
               basisMap.push_back(SubBasisDofMapper::subBasisDofMapper(fineDofOrdinals, coarseDofIndices, weights.weights));
@@ -693,14 +741,54 @@ LocalDofMapperPtr GMGOperator::getLocalCoefficientMap(GlobalIndexType fineCellID
     {
       allCoarseDofs.insert(coarseOrdinal);
     }
+    
+    // set up side maps from fine to coarse cell
+    map<int,int> fineSideToCoarseSide;
+    int fineSideCount = _fineMesh->getElementType(fineCellID)->cellTopoPtr->getSideCount();
+    for (int fineSideOrdinal=0; fineSideOrdinal < fineSideCount; fineSideOrdinal++)
+    {
+      // is there a corresponding coarse side ordinal?
+      RefinementBranch refBranch;
+      GlobalIndexType ancestralCellID = fineCellID;
+      while (ancestralCellID != coarseCellID) {
+        CellPtr ancestralCell = _fineMesh->getTopology()->getCell(ancestralCellID);
+        int childOrdinal = ancestralCell->getParent()->findChildOrdinal(ancestralCellID);
+        TEUCHOS_TEST_FOR_EXCEPTION(childOrdinal==-1, std::invalid_argument, "internal error: cell not found in its own parent");
+        refBranch.insert(refBranch.begin(),{ancestralCell->getParent()->refinementPattern().get(), childOrdinal});
+        ancestralCellID = ancestralCell->getParent()->cellIndex();
+      }
+      int coarseSideOrdinal = RefinementPattern::mapSideOrdinalFromLeafToAncestor(fineSideOrdinal, refBranch);
+      fineSideToCoarseSide[fineSideOrdinal] = coarseSideOrdinal; // -1 if there isn't a corresponding coarse side ordinal
+    }
+    
+    for (int trialID : trialIDs)
+    {
+      VarPtr trialVar = vf->trial(trialID);
 
-    // I don't think we need to do any fitting, so we leave the "fittable" containers for LocalDofMapper empty
-
-    set<GlobalIndexType> fittableGlobalDofOrdinalsInVolume;
-    vector< set<GlobalIndexType> > fittableGlobalDofOrdinalsOnSides(fineSideCount);
+      const vector<int>* fineSidesForVarID = &fineTrialOrdering->getSidesForVarID(trialID);
+      if (fineSidesForVarID->size() == 1)   // field variable
+      {
+        vector<int> dofIndices = coarseTrialOrdering->getDofIndices(trialID);
+        fittableGlobalDofOrdinalsInVolume.insert(dofIndices.begin(),dofIndices.end());
+      }
+      else
+      {
+        for (int fineSideOrdinal : *fineSidesForVarID)
+        {
+          int coarseSideOrdinal = fineSideToCoarseSide[fineSideOrdinal];
+          if (coarseSideOrdinal != -1)
+          {
+            vector<int> dofIndices = coarseTrialOrdering->getDofIndices(trialID,coarseSideOrdinal);
+            fittableGlobalDofOrdinalsOnSides[fineSideOrdinal].insert(dofIndices.begin(),dofIndices.end());
+          }
+        }
+      }
+    }
 
     LocalDofMapperPtr dofMapper = Teuchos::rcp( new LocalDofMapper(fineTrialOrdering, volumeMaps, fittableGlobalDofOrdinalsInVolume,
                                   sideMaps, fittableGlobalDofOrdinalsOnSides, allCoarseDofs) );
+    
+//    dofMapper->printMappingReport();
     _localCoefficientMap[key] = dofMapper;
   }
 
@@ -720,6 +808,7 @@ LocalDofMapperPtr GMGOperator::getLocalCoefficientMap(GlobalIndexType fineCellID
       if (coarseParity != fineParity)
       {
         fineSidesToCorrect.insert(fineSideOrdinal);
+//        cout << "fine side to correct on cell " << fineCellID << ": " << fineSideOrdinal << endl;
       }
     }
     else
@@ -730,7 +819,10 @@ LocalDofMapperPtr GMGOperator::getLocalCoefficientMap(GlobalIndexType fineCellID
 
       double fineParity = fineCellSideParities(0,fineSideOrdinal);
       if (fineParity < 0)
+      {
         fineSidesToCorrect.insert(fineSideOrdinal);
+//        cout << "fine side to correct on cell " << fineCellID << ": " << fineSideOrdinal << endl;
+      }
     }
   }
 
@@ -1411,6 +1503,8 @@ set<GlobalIndexTypeToCast> GMGOperator::setCoarseRHSVector(const Epetra_MultiVec
   {
     GlobalIndexType fineCellID = *cellIDIt;
     int fineDofCount = _fineMesh->getElementType(fineCellID)->trialOrderPtr->totalDofs();
+    
+    // TODO: change this to use coefficient maps rather than data maps -- imitate what constructProlongationOperator does
     FieldContainer<double> fineCellData(fineDofCount);
     _fineDofInterpreter->interpretGlobalCoefficients(fineCellID, fineCellData, X);
 //    cout << "fineCellData:\n" << fineCellData;
