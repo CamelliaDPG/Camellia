@@ -340,6 +340,16 @@ SpaceTimeCompressibleFormulation::SpaceTimeCompressibleFormulation(Teuchos::RCP<
       break;
   }
 
+  // u1_prev = Function::zero();
+  // u2_prev = Function::zero();
+  // // T_prev = Function::zero();
+  // D11_prev = Function::zero();
+  // D12_prev = Function::zero();
+  // D21_prev = Function::zero();
+  // D22_prev = Function::zero();
+  // q1_prev = Function::zero();
+  // q2_prev = Function::zero();
+
   // FunctionPtr u1_prev = Function::vectorize(u1_prev, u2_prev);
 
   // Nonlinear Residual Terms
@@ -509,12 +519,16 @@ SpaceTimeCompressibleFormulation::SpaceTimeCompressibleFormulation(Teuchos::RCP<
       Cm1 = rho_prev*u1_prev;
       Cm2 = rho_prev*u2_prev;
       Ce = Cv*rho_prev*T_prev + 0.5*rho_prev*(u1_prev*u1_prev+u2_prev*u2_prev);
+      // Ce = Cv*rho_prev*T_prev;
       Fc1 = rho_prev*u1_prev;
       Fc2 = rho_prev*u2_prev;
       Fm11 = rho_prev*u1_prev*u1_prev + R*rho_prev*T_prev;
+      // Fm11 = R*rho_prev*T_prev;
       Fm12 = rho_prev*u1_prev*u2_prev;
       Fm21 = rho_prev*u2_prev*u1_prev;
       Fm22 = rho_prev*u2_prev*u2_prev + R*rho_prev*T_prev;
+      // Fm22 = rho_prev*u2_prev*u2_prev + R*rho_prev*T_prev;
+      // Fm22 = R*rho_prev*T_prev;
       Fe1 = Cv*rho_prev*u1_prev*T_prev + 0.5*rho_prev*u1_prev*(u1_prev*u1_prev+u2_prev*u2_prev) + R*rho_prev*u1_prev*T_prev;
       Fe2 = Cv*rho_prev*u2_prev*T_prev + 0.5*rho_prev*u2_prev*(u1_prev*u1_prev+u2_prev*u2_prev) + R*rho_prev*u2_prev*T_prev;
       Km11 = D11_prev;
@@ -523,6 +537,8 @@ SpaceTimeCompressibleFormulation::SpaceTimeCompressibleFormulation(Teuchos::RCP<
       Km22 = D22_prev;
       Ke1 = -q1_prev + u1_prev*D11_prev + u2_prev*D12_prev;
       Ke2 = -q2_prev + u1_prev*D21_prev + u2_prev*D22_prev;
+      // Ke1 = -q1_prev + u1_prev*D11_prev + u1_prev*D12_prev;
+      // Ke2 = -q2_prev + u2_prev*D21_prev + u2_prev*D22_prev;
       MD11 = 1./mu*D11_prev;
       MD12 = 1./mu*D12_prev;
       MD21 = 1./mu*D21_prev;
@@ -536,28 +552,45 @@ SpaceTimeCompressibleFormulation::SpaceTimeCompressibleFormulation(Teuchos::RCP<
       // Linearized Terms
       Cc_dU->addTerm( 1*rho );
       Cm1_dU->addTerm( rho_prev*u1 + u1_prev*rho );
+      Cm1_dU->addTerm( rho_prev*u1 );
       Cm2_dU->addTerm( rho_prev*u2 + u2_prev*rho );
+      Cm2_dU->addTerm( rho_prev*u2 );
       Ce_dU->addTerm( Cv*T_prev*rho + Cv*rho_prev*T + 0.5*(u1_prev*u1_prev+u2_prev*u2_prev)*rho + rho_prev*(u1_prev*u1+u2_prev*u2) );
+      // Ce_dU->addTerm( Cv*T_prev*rho + Cv*rho_prev*T );
       Fc1_dU->addTerm( u1_prev*rho + rho_prev*u1 );
+      // Fc1_dU->addTerm( rho_prev*u1 );
       Fc2_dU->addTerm( u2_prev*rho + rho_prev*u2 );
+      // Fc2_dU->addTerm( rho_prev*u2 );
+      // Fm11_dU->addTerm( u1_prev*u1_prev*rho + 2*rho_prev*u1_prev*u1 + R*T_prev*rho + R*rho_prev*T );
+      // Fm11_dU->addTerm( R*T_prev*rho + R*rho_prev*T );
       Fm11_dU->addTerm( u1_prev*u1_prev*rho + 2*rho_prev*u1_prev*u1 + R*T_prev*rho + R*rho_prev*T );
-      Fm12_dU->addTerm( u1_prev*u2_prev*rho + 2*rho_prev*u1_prev*u2 );
-      Fm21_dU->addTerm( u2_prev*u1_prev*rho + 2*rho_prev*u2_prev*u1 );
+      Fm12_dU->addTerm( u1_prev*u2_prev*rho + rho_prev*u2_prev*u1 + rho_prev*u1_prev*u2 );
+      Fm21_dU->addTerm( u2_prev*u1_prev*rho + rho_prev*u2_prev*u1 + rho_prev*u1_prev*u2 );
+      // Fm22_dU->addTerm( u2_prev*u2_prev*rho + 2*rho_prev*u2_prev*u2 + R*T_prev*rho + R*rho_prev*T );
+      // Fm22_dU->addTerm( R*T_prev*rho );
+      // Fm22_dU->addTerm( R*rho_prev*T );
+      // Fm22_dU->addTerm( R*T_prev*rho + R*rho_prev*T );
       Fm22_dU->addTerm( u2_prev*u2_prev*rho + 2*rho_prev*u2_prev*u2 + R*T_prev*rho + R*rho_prev*T );
       Fe1_dU->addTerm( Cv*u1_prev*T_prev*rho + Cv*rho_prev*T_prev*u1 + Cv*rho_prev*u1_prev*T
             + 0.5*u1_prev*(u1_prev*u1_prev+u2_prev*u2_prev)*rho + 0.5*rho_prev*(u1_prev*u1_prev+u2_prev*u2_prev)*u1
             + rho_prev*u1_prev*(u1_prev*u1+u2_prev*u2)
             + R*rho_prev*T_prev*u1 + R*u1_prev*T_prev*rho + R*rho_prev*u1_prev*T );
+      // Fe1_dU->addTerm( Cv*rho_prev*T_prev*u1
+      //       + R*rho_prev*T_prev*u1 );
       Fe2_dU->addTerm( Cv*u2_prev*T_prev*rho + Cv*rho_prev*T_prev*u2 + Cv*rho_prev*u2_prev*T
             + 0.5*u2_prev*(u1_prev*u1_prev+u2_prev*u2_prev)*rho + 0.5*rho_prev*(u1_prev*u1_prev+u2_prev*u2_prev)*u2
             + rho_prev*u2_prev*(u1_prev*u1+u2_prev*u2)
             + R*rho_prev*T_prev*u2 + R*u2_prev*T_prev*rho + R*rho_prev*u2_prev*T );
+      // Fe2_dU->addTerm( Cv*rho_prev*T_prev*u2
+      //       + R*rho_prev*T_prev*u2 );
       Km11_dU->addTerm( 1*D11 );
       Km12_dU->addTerm( 1*D12 );
       Km21_dU->addTerm( 1*D21 );
       Km22_dU->addTerm( -1*D11 );
       Ke1_dU->addTerm( -q1 + D11_prev*u1 + D12_prev*u2 + u1_prev*D11 + u2_prev*D21 );
-      Ke1_dU->addTerm( -q2 + D21_prev*u1 + D22_prev*u2 + u1_prev*D12 + -u2_prev*D11 );
+      // Ke1_dU->addTerm( -q1 );
+      Ke2_dU->addTerm( -q2 + D21_prev*u1 + D22_prev*u2 + u1_prev*D12 + -u2_prev*D11 );
+      // Ke2_dU->addTerm( -q2 );
       MD11_dU->addTerm( 1./mu*D11 );
       MD12_dU->addTerm( 1./mu*D12 );
       MD21_dU->addTerm( 1./mu*D21 );
@@ -568,47 +601,47 @@ SpaceTimeCompressibleFormulation::SpaceTimeCompressibleFormulation(Teuchos::RCP<
       GD2_dU->addTerm( 2*u2 );
       Gq_dU->addTerm( -T );
 
-      // Adjoint Terms
-      adj_Cc->addTerm( vc->dt() + u1_prev*vm1->dt() + u2_prev*vm2->dt() + Cv*T_prev*ve->dt() + 0.5*(u1_prev*u1_prev+u2_prev*u2_prev)*ve->dt() );
-      adj_Cm1->addTerm( rho_prev*vm1->dt() + rho_prev*u1_prev*ve->dt() );
-      adj_Cm2->addTerm( rho_prev*vm2->dt() + rho_prev*u2_prev*ve->dt() );
-      adj_Ce->addTerm( Cv*rho_prev*ve->dt() );
-      adj_Fc->addTerm( u1_prev*vc->dx() + u2_prev*vc->dy()
-          + u1_prev*u1_prev*vm1->dx() + u1_prev*u2_prev*vm1->dy() + u2_prev*u1_prev*vm2->dx() + u1_prev*u2_prev*vm2->dy()
-          + R*T_prev*vm1->dx() + R*T_prev*vm2->dy()
-          + Cv*T_prev*u1_prev*ve->dx() + Cv*T_prev*u2_prev*ve->dy()
-          + 0.5*(u1_prev*u1_prev+u2_prev*u2_prev)*(u1_prev*ve->dx() + u2_prev*ve->dy())
-          + R*T_prev*u1_prev*ve->dx() + R*T_prev*u2_prev*ve->dy() );
-      adj_Fm1->addTerm( rho_prev*vc->dx()
-          + 2*rho_prev*u1_prev*vm1->dx() + rho_prev*u2_prev*vm1->dy() + rho_prev*u2_prev*vm2->dx()
-          + Cv*T_prev*rho_prev*ve->dx()
-          + 0.5*rho_prev*(u1_prev*u1_prev+u2_prev*u2_prev)*ve->dx()
-          + rho_prev*u1_prev*(u1_prev*ve->dx() + u2_prev*ve->dy()) + R*T_prev*rho_prev*ve->dx()
-          - D11_prev*ve->dx() - D12_prev*ve->dy() );
-      adj_Fm2->addTerm( rho_prev*vc->dy()
-          + rho_prev*u1_prev*vm1->dy() + rho_prev*u1_prev*vm2->dx()+ 2*rho_prev*u2_prev*vm2->dy()
-          + Cv*T_prev*rho_prev*ve->dy()
-          + 0.5*rho_prev*(u1_prev*u1_prev+u2_prev*u2_prev)*ve->dy()
-          + rho_prev*u2_prev*(u1_prev*ve->dx() + u2_prev*ve->dy()) + R*T_prev*rho_prev*ve->dy()
-          - D21_prev*ve->dx() - D22_prev*ve->dy() );
-      adj_Fe->addTerm( R*rho_prev*(vm1->dx() + vm2->dy()) + Cv*rho_prev*(u1_prev*ve->dx()+u2_prev*ve->dy())
-          + R*rho_prev*(u1_prev*ve->dx()+u2_prev*ve->dy()) );
-      adj_KD11->addTerm( vm1->dx() + u1_prev*ve->dx() );
-      adj_KD12->addTerm( vm1->dy() + u1_prev*ve->dy() );
-      adj_KD21->addTerm( vm2->dx() + u2_prev*ve->dx() );
-      adj_KD22->addTerm( vm2->dy() + u2_prev*ve->dy() );
-      adj_Kq1->addTerm( -ve->dx() );
-      adj_Kq2->addTerm( -ve->dy() );
-      adj_MD11->addTerm( 1./mu*S11 );
-      adj_MD12->addTerm( 1./mu*S12 );
-      adj_MD21->addTerm( 1./mu*S21 );
-      adj_MD22->addTerm( -1./mu*S11 );
-      adj_Mq1->addTerm( Pr/(Cp*mu)*tau->x() );
-      adj_Mq2->addTerm( Pr/(Cp*mu)*tau->y() );
-      adj_Gm1->addTerm( 2*S11->dx() + 2*S12->dy() );
-      adj_Gm2->addTerm( 2*S21->dx() + -2*S11->dy() );
-      adj_Ge->addTerm( -tau->div() );
-      adj_vm->addTerm( e1*vm1+e2*vm2 );
+      // // Adjoint Terms
+      // adj_Cc->addTerm( vc->dt() + u1_prev*vm1->dt() + u2_prev*vm2->dt() + Cv*T_prev*ve->dt() + 0.5*(u1_prev*u1_prev+u2_prev*u2_prev)*ve->dt() );
+      // adj_Cm1->addTerm( rho_prev*vm1->dt() + rho_prev*u1_prev*ve->dt() );
+      // adj_Cm2->addTerm( rho_prev*vm2->dt() + rho_prev*u2_prev*ve->dt() );
+      // adj_Ce->addTerm( Cv*rho_prev*ve->dt() );
+      // adj_Fc->addTerm( u1_prev*vc->dx() + u2_prev*vc->dy()
+      //     + u1_prev*u1_prev*vm1->dx() + u1_prev*u2_prev*vm1->dy() + u2_prev*u1_prev*vm2->dx() + u2_prev*u2_prev*vm2->dy()
+      //     + R*T_prev*vm1->dx() + R*T_prev*vm2->dy()
+      //     + Cv*T_prev*u1_prev*ve->dx() + Cv*T_prev*u2_prev*ve->dy()
+      //     + 0.5*(u1_prev*u1_prev+u2_prev*u2_prev)*(u1_prev*ve->dx() + u2_prev*ve->dy())
+      //     + R*T_prev*u1_prev*ve->dx() + R*T_prev*u2_prev*ve->dy() );
+      // adj_Fm1->addTerm( rho_prev*vc->dx()
+      //     + 2*rho_prev*u1_prev*vm1->dx() + rho_prev*u2_prev*vm1->dy() + rho_prev*u2_prev*vm2->dx()
+      //     + Cv*T_prev*rho_prev*ve->dx()
+      //     + 0.5*rho_prev*(u1_prev*u1_prev+u2_prev*u2_prev)*ve->dx()
+      //     + rho_prev*u1_prev*(u1_prev*ve->dx() + u2_prev*ve->dy()) + R*T_prev*rho_prev*ve->dx()
+      //     - D11_prev*ve->dx() - D12_prev*ve->dy() );
+      // adj_Fm2->addTerm( rho_prev*vc->dy()
+      //     + rho_prev*u1_prev*vm1->dy() + rho_prev*u1_prev*vm2->dx()+ 2*rho_prev*u2_prev*vm2->dy()
+      //     + Cv*T_prev*rho_prev*ve->dy()
+      //     + 0.5*rho_prev*(u1_prev*u1_prev+u2_prev*u2_prev)*ve->dy()
+      //     + rho_prev*u2_prev*(u1_prev*ve->dx() + u2_prev*ve->dy()) + R*T_prev*rho_prev*ve->dy()
+      //     - D21_prev*ve->dx() - D22_prev*ve->dy() );
+      // adj_Fe->addTerm( R*rho_prev*(vm1->dx() + vm2->dy()) + Cv*rho_prev*(u1_prev*ve->dx()+u2_prev*ve->dy())
+      //     + R*rho_prev*(u1_prev*ve->dx()+u2_prev*ve->dy()) );
+      // adj_KD11->addTerm( vm1->dx() + u1_prev*ve->dx() );
+      // adj_KD12->addTerm( vm1->dy() + u1_prev*ve->dy() );
+      // adj_KD21->addTerm( vm2->dx() + u2_prev*ve->dx() );
+      // adj_KD22->addTerm( vm2->dy() + u2_prev*ve->dy() );
+      // adj_Kq1->addTerm( -ve->dx() );
+      // adj_Kq2->addTerm( -ve->dy() );
+      // adj_MD11->addTerm( 1./mu*S11 );
+      // adj_MD12->addTerm( 1./mu*S12 );
+      // adj_MD21->addTerm( 1./mu*S21 );
+      // adj_MD22->addTerm( -1./mu*S11 );
+      // adj_Mq1->addTerm( Pr/(Cp*mu)*tau->x() );
+      // adj_Mq2->addTerm( Pr/(Cp*mu)*tau->y() );
+      // adj_Gm1->addTerm( 2*S11->dx() + 2*S12->dy() );
+      // adj_Gm2->addTerm( 2*S21->dx() + -2*S11->dy() );
+      // adj_Ge->addTerm( -tau->div() );
+      // adj_vm->addTerm( e1*vm1+e2*vm2 );
       break;
     case 3:
       break;
@@ -684,6 +717,7 @@ SpaceTimeCompressibleFormulation::SpaceTimeCompressibleFormulation(Teuchos::RCP<
       _bf->addTerm( GD1_dU, S11->dx() + S12->dy() );
       _bf->addTerm( GD2_dU, S21->dx() + -S11->dy() );
       _bf->addTerm( -2*u1hat, S11*n_x->x() + S12*n_x->y() );
+      _bf->addTerm( -2*u2hat, S21*n_x->x() - S11*n_x->y() );
 
       // tau terms:
       _bf->addTerm( Mq1_dU, tau->x() );
@@ -771,6 +805,19 @@ SpaceTimeCompressibleFormulation::SpaceTimeCompressibleFormulation(Teuchos::RCP<
       break;
   }
 
+  cout << _bf->displayString() << endl;
+  vector<VarPtr> missingTestVars = _bf->missingTestVars();
+  vector<VarPtr> missingTrialVars = _bf->missingTrialVars();
+  for (int i=0; i < missingTestVars.size(); i++)
+  {
+    VarPtr var = missingTestVars[i];
+    cout << var->displayString() << endl;
+  }
+  for (int i=0; i < missingTrialVars.size(); i++)
+  {
+    VarPtr var = missingTrialVars[i];
+    cout << var->displayString() << endl;
+  }
 
   _ips["Graph"] = _bf->graphNorm();
 

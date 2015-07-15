@@ -251,19 +251,21 @@ class CylinderProblem : public IncompressibleProblem
       double pi = atan(1)*4;
       FunctionPtr decay = Teuchos::rcp(new Exp_at(-10));
       FunctionPtr perturbation = Teuchos::rcp(new Sin_ay(2*pi/_meshHeight));
+      FunctionPtr perturbed = Function::constant(1) + 0.01*decay*perturbation;
 
       if (steady)
         _u1_exact = Function::constant(1);
       else
-        _u1_exact = Function::constant(1) + 0.01*decay*perturbation;
+        _u1_exact = Function::min(Function::tn(1),Function::constant(1))*perturbed;
+        // _u1_exact = Function::min(perturbed, Function::tn(1)*perturbed);
       _u2_exact = Function::zero();
-      _sigma1_exact = 1./Re*_u1_exact->grad();
-      _sigma2_exact = 1./Re*_u2_exact->grad();
+      // _sigma1_exact = 1./Re*_u1_exact->grad();
+      // _sigma2_exact = 1./Re*_u2_exact->grad();
       _sigma1_exact = Function::zero();
       _sigma2_exact = Function::zero();
 
       _tInit = 0.0;
-      _tFinal = 1.0;
+      _tFinal = 4.0;
       _numSlabs = numSlabs;
       _pureVelocityBCs = false;
     }
