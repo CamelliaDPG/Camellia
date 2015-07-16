@@ -271,6 +271,21 @@ GlobalIndexType CondensedDofInterpreter<Scalar>::condensedGlobalIndex(GlobalInde
 }
 
 template <typename Scalar>
+set<int> CondensedDofInterpreter<Scalar>::condensibleVariableIDs()
+{
+  set<int> condensibleVariableIDs;
+  vector<VarPtr> fields = _mesh->varFactory()->fieldVars();
+  for (VarPtr fieldVar : fields)
+  {
+    if (_uncondensibleVarIDs.find(fieldVar->ID()) == _uncondensibleVarIDs.end())
+    {
+      condensibleVariableIDs.insert(fieldVar->ID());
+    }
+  }
+  return condensibleVariableIDs;
+}
+
+template <typename Scalar>
 set<GlobalIndexType> CondensedDofInterpreter<Scalar>::globalDofIndicesForCell(GlobalIndexType cellID)
 {
   set<GlobalIndexType> interpretedDofIndicesForCell = _mesh->globalDofIndicesForCell(cellID);

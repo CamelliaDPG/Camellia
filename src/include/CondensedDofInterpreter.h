@@ -104,6 +104,8 @@ public:
 
   GlobalIndexType condensedGlobalIndex(GlobalIndexType meshGlobalIndex); // meshGlobalIndex aka interpretedGlobalIndex
 
+  set<int> condensibleVariableIDs();
+  
   bool varDofsAreCondensible(int varID, int sideOrdinal, DofOrderingPtr dofOrdering);
 
   void setCanSkipLocalFieldInInterpretGlobalCoefficients(bool value);
