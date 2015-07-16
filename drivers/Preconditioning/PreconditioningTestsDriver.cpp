@@ -789,7 +789,10 @@ void run(ProblemChoice problemChoice, int &iterationCount, int spaceDim, int num
       coarseSolverGMG->gmgOperator()->setSmootherType(GMGOperator::CAMELLIA_ADDITIVE_SCHWARZ);
       coarseSolverGMG->gmgOperator()->setSmootherOverlap(coarseSolverSmootherOverlap);
       coarseSolverGMG->gmgOperator()->setSmootherApplicationType(comboType);
-      coarseSolverGMG->gmgOperator()->setSmootherWeight(smootherWeight);
+      if (smootherWeight != -1)
+        coarseSolverGMG->gmgOperator()->setSmootherWeight(smootherWeight);
+      else
+        coarseSolverGMG->gmgOperator()->setUseSchwarzScalingWeight(true);
     }
 
     gmgSolver->gmgOperator()->setCoarseSolver(coarseSolver);
@@ -817,7 +820,10 @@ void run(ProblemChoice problemChoice, int &iterationCount, int spaceDim, int num
     gmgSolver->gmgOperator()->setSmootherType(smootherType);
     gmgSolver->gmgOperator()->setSmootherOverlap(schwarzOverlap);
     gmgSolver->gmgOperator()->setSmootherApplicationType(comboType);
-    gmgSolver->gmgOperator()->setSmootherWeight(smootherWeight);
+    if (smootherWeight != -1)
+      gmgSolver->gmgOperator()->setSmootherWeight(smootherWeight);
+    else
+      gmgSolver->gmgOperator()->setUseSchwarzScalingWeight(true);
     
     gmgSolver->gmgOperator()->setDebugMode(runGMGOperatorInDebugMode);
     solver = Teuchos::rcp( gmgSolver ); // we use "new" above, so we can let this RCP own the memory
@@ -859,7 +865,9 @@ void run(ProblemChoice problemChoice, int &iterationCount, int spaceDim, int num
   if (fineSolver != NULL)
   {
     if (rank==0) cout << "************   Fine GMG Solver, timings   *************\n";
-    fineSolver->gmgOperator()->reportTimings();
+    fineSolver->gmgOperator()->reportTimingsSumOfOperators(StatisticChoice::MAX);
+
+//    fineSolver->gmgOperator()->reportTimings();
 
     GMGSolver* coarseSolver = dynamic_cast<GMGSolver*>(fineSolver->gmgOperator()->getCoarseSolver().get());
     if (coarseSolver != NULL)
@@ -1469,14 +1477,14 @@ int main(int argc, char *argv[])
   }
   
   GMGOperator::SmootherApplicationType comboType = additiveComboType ? GMGOperator::ADDITIVE : GMGOperator::MULTIPLICATIVE;
-  if (comboType == GMGOperator::MULTIPLICATIVE) // default to a weight of 0.5 for smoother
-  {
-    if (smootherWeight == -1.0) smootherWeight = 0.5;
-  }
-  else if (comboType == GMGOperator::ADDITIVE)
-  {
-    if (smootherWeight == -1.0) smootherWeight = 1.0;
-  }
+//  if (comboType == GMGOperator::MULTIPLICATIVE) // default to a weight of 0.5 for smoother
+//  {
+//    if (smootherWeight == -1.0) smootherWeight = 0.5;
+//  }
+//  else if (comboType == GMGOperator::ADDITIVE)
+//  {
+//    if (smootherWeight == -1.0) smootherWeight = 1.0;
+//  }
 
   Solver::SolverChoice coarseSolverChoice = Solver::solverChoiceFromString(coarseSolverChoiceString);
 
