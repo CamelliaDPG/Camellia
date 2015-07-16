@@ -157,6 +157,7 @@ public:
   static TFunctionPtr<double> h();
   // ! implements Heaviside step function, shifted right by xValue
   static TFunctionPtr<double> heaviside(double xValue);
+  static TFunctionPtr<double> heavisideY(double yValue);
 
   static TFunctionPtr<double> meshBoundaryCharacteristic(); // 1 on mesh boundary, 0 elsewhere
   static TFunctionPtr<double> meshSkeletonCharacteristic(); // 1 on mesh skeleton, 0 elsewhere

@@ -108,6 +108,7 @@ int main(int argc, char *argv[])
   problems["TrivialCompressible"] = Teuchos::rcp(new TrivialCompressible(steady, Re, spaceDim));
   problems["SimpleShock"] = Teuchos::rcp(new SimpleShock(steady, Re, spaceDim));
   problems["SimpleRarefaction"] = Teuchos::rcp(new SimpleRarefaction(steady, Re, spaceDim));
+  problems["Sedov"] = Teuchos::rcp(new Sedov(steady, Re, spaceDim));
   problems["Noh"] = Teuchos::rcp(new Noh(steady, Re, spaceDim));
   Teuchos::RCP<CompressibleProblem> problem = problems.at(problemChoice);
 
