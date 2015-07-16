@@ -641,14 +641,6 @@ LocalDofMapperPtr GMGOperator::getLocalCoefficientMap(GlobalIndexType fineCellID
       int trialID = *trialIDIt;
 
       VarPtr trialVar = vf->trialVars().find(trialID)->second;
-      Space varSpace = trialVar->space();
-      Camellia::EFunctionSpace varFS = efsForSpace(varSpace);
-      if (! Camellia::functionSpaceIsDiscontinuous(varFS))
-      {
-        int rank = Teuchos::GlobalMPISession::getRank();
-        if (rank == 0)
-          cout << "WARNING: function space for var " << trialVar->name() << " is not discontinuous, and GMGOperator does not yet support continuous variables, even continuous trace variables (i.e. all trace variables must be in L^2 or some other discontinuous space, like HGRAD_DISC).  Can correct this by reworking setCoarseRHSVector() to imitate constructProlongationOperator's treatment of mappings... (see TODO in setCoarseRHSVector).\n";
-      }
 
       if (coarseTrialOrdering->getSidesForVarID(trialID).size() == 1)   // field variable
       {
@@ -1557,64 +1549,6 @@ const Epetra_Map & GMGOperator::OperatorDomainMap() const
 const Epetra_Map & GMGOperator::OperatorRangeMap() const
 {
   return _finePartitionMap;
-}
-
-set<GlobalIndexTypeToCast> GMGOperator::setCoarseRHSVector(const Epetra_MultiVector &X, Epetra_FEVector &coarseRHSVector) const
-{
-  narrate("setCoarseRHSVector()");
-  // the data coming in (X) is in global dofs defined on the fine mesh.  First thing we'd like to do is map it to the fine mesh's local cells
-  set<GlobalIndexType> cellsInPartition = _fineMesh->globalDofAssignment()->cellsInPartition(-1); // rank-local
-
-  coarseRHSVector.PutScalar(0); // clear
-  set<GlobalIndexTypeToCast> coarseDofIndicesToImport; // keep track of the coarse dof indices that this partition's fine cells talk to
-  for (set<GlobalIndexType>::iterator cellIDIt=cellsInPartition.begin(); cellIDIt != cellsInPartition.end(); cellIDIt++)
-  {
-    GlobalIndexType fineCellID = *cellIDIt;
-    int fineDofCount = _fineMesh->getElementType(fineCellID)->trialOrderPtr->totalDofs();
-    
-    // TODO: change this to use coefficient maps rather than data maps -- imitate what constructProlongationOperator does
-    FieldContainer<double> fineCellData(fineDofCount);
-    _fineDofInterpreter->interpretGlobalCoefficients(fineCellID, fineCellData, X);
-//    cout << "fineCellData:\n" << fineCellData;
-    LocalDofMapperPtr fineMapper = getLocalCoefficientMap(fineCellID);
-    GlobalIndexType coarseCellID = getCoarseCellID(fineCellID);
-    int coarseDofCount = _coarseMesh->getElementType(coarseCellID)->trialOrderPtr->totalDofs();
-    FieldContainer<double> coarseCellData(coarseDofCount);
-    FieldContainer<double> mappedCoarseCellData(fineMapper->globalIndices().size());
-    fineMapper->mapLocalDataVolume(fineCellData, mappedCoarseCellData, false);
-
-    CellPtr fineCell = _fineMesh->getTopology()->getCell(fineCellID);
-    int sideCount = fineCell->getSideCount();
-    for (int sideOrdinal=0; sideOrdinal<sideCount; sideOrdinal++)
-    {
-      if (fineCell->ownsSide(sideOrdinal,_fineMesh->getTopology()))
-      {
-//        cout << "fine cell " << fineCellID << " owns side " << sideOrdinal << endl;
-        fineMapper->mapLocalDataSide(fineCellData, mappedCoarseCellData, false, sideOrdinal);
-      }
-    }
-
-//    cout << "mappedCoarseCellData:\n" << mappedCoarseCellData;
-    vector<GlobalIndexType> mappedCoarseDofIndices = fineMapper->globalIndices(); // "global" here means the coarse local
-    for (int mappedCoarseDofOrdinal = 0; mappedCoarseDofOrdinal < mappedCoarseDofIndices.size(); mappedCoarseDofOrdinal++)
-    {
-      GlobalIndexType coarseDofIndex = mappedCoarseDofIndices[mappedCoarseDofOrdinal];
-      coarseCellData[coarseDofIndex] = mappedCoarseCellData[mappedCoarseDofOrdinal];
-    }
-    FieldContainer<double> interpretedCoarseData;
-    FieldContainer<GlobalIndexType> interpretedGlobalDofIndices;
-    _coarseSolution->getDofInterpreter()->interpretLocalData(coarseCellID, coarseCellData, interpretedCoarseData, interpretedGlobalDofIndices);
-//    cout << "interpretedCoarseData:\n" << interpretedCoarseData;
-    FieldContainer<GlobalIndexTypeToCast> interpretedGlobalDofIndicesCast(interpretedGlobalDofIndices.size());
-    for (int interpretedDofOrdinal=0; interpretedDofOrdinal < interpretedGlobalDofIndices.size(); interpretedDofOrdinal++)
-    {
-      interpretedGlobalDofIndicesCast[interpretedDofOrdinal] = (GlobalIndexTypeToCast) interpretedGlobalDofIndices[interpretedDofOrdinal];
-      coarseDofIndicesToImport.insert(interpretedGlobalDofIndicesCast[interpretedDofOrdinal]);
-    }
-    coarseRHSVector.SumIntoGlobalValues(interpretedCoarseData.size(), &interpretedGlobalDofIndicesCast[0], &interpretedCoarseData[0]);
-  }
-  coarseRHSVector.GlobalAssemble();
-  return coarseDofIndicesToImport;
 }
 
 TimeStatistics GMGOperator::getStatistics(double timeValue) const

@@ -100,8 +100,6 @@ public: // promoted these two to public for testing purposes:
   LocalDofMapperPtr getLocalCoefficientMap(GlobalIndexType fineCellID) const;
   GlobalIndexType getCoarseCellID(GlobalIndexType fineCellID) const;
 
-  set<GlobalIndexTypeToCast> setCoarseRHSVector(const Epetra_MultiVector &X, Epetra_FEVector &coarseRHSVector) const;
-
   void setUpSmoother(Epetra_CrsMatrix *fineStiffnessMatrix);
 public:
   //! @name Destructor
