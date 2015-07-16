@@ -283,13 +283,13 @@ TEUCHOS_UNIT_TEST( GMGOperator, ProlongationOperatorLine )
   energyError = fineSoln->energyErrorTotal();
   TEST_COMPARE(energyError, <, tol);
 
-//  for (GlobalIndexType cellID : myCellIDs) {
-//    FieldContainer<double> coefficients = fineSoln->allCoefficientsForCellID(cellID, warnAboutOffRank);
-//    out << "\n\n******************** Dofs for cell " << cellID << " (fineSoln) ********************\n\n";
-//    DofOrderingPtr trialOrder = fineMesh->getElementType(cellID)->trialOrderPtr;
-//    printLabeledDofCoefficients(out, form.bf()->varFactory(), trialOrder, coefficients);
-//  }
-//  
+  for (GlobalIndexType cellID : myCellIDs) {
+    FieldContainer<double> coefficients = fineSoln->allCoefficientsForCellID(cellID, warnAboutOffRank);
+    out << "\n\n******************** Dofs for cell " << cellID << " (fineSoln) ********************\n\n";
+    DofOrderingPtr trialOrder = fineMesh->getElementType(cellID)->trialOrderPtr;
+    printLabeledDofCoefficients(out, form.bf()->varFactory(), trialOrder, coefficients);
+  }
+//
 //  { // DEBUGGING: export to disk
 //    EpetraExt::RowMatrixToMatrixMarketFile("/tmp/P.dat",*P,NULL,NULL,false);
 //    int rank = Teuchos::GlobalMPISession::getRank();
