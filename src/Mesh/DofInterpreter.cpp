@@ -28,7 +28,7 @@ using namespace Intrepid;
 using namespace Camellia;
 
 void DofInterpreter::interpretLocalCoefficients(GlobalIndexType cellID, const Intrepid::FieldContainer<double> &localCoefficients,
-                                                map<GlobalIndexType,double> &fittedGlobalCoefficients, bool traceVarsOnly)
+                                                map<GlobalIndexType,double> &fittedGlobalCoefficients, const set<int> &trialIDsToExclude)
 {
   DofOrderingPtr trialOrder = _mesh->getElementType(cellID)->trialOrderPtr;
   FieldContainer<double> basisCoefficients; // declared here so that we can sometimes avoid mallocs, if we get lucky in terms of the resize()
@@ -39,7 +39,7 @@ void DofInterpreter::interpretLocalCoefficients(GlobalIndexType cellID, const In
   for (int trialID : trialIDs)
   {
     const vector<int>* sides = &trialOrder->getSidesForVarID(trialID);
-    if ((sides->size() == 1) && traceVarsOnly) continue; // skip field
+    if (trialIDsToExclude.find(trialID) != trialIDsToExclude.end()) continue; // skip field
     for (vector<int>::const_iterator sideIt = sides->begin(); sideIt != sides->end(); sideIt++)
     {
       int sideOrdinal = *sideIt;

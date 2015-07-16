@@ -66,7 +66,8 @@ public:
   
   //!! Determines global coefficients corresponding to the provided local coefficients; in the case of minimum-rule meshes, this will be computed using a least-squares fit.
   virtual void interpretLocalCoefficients(GlobalIndexType cellID, const Intrepid::FieldContainer<double> &localCoefficients,
-                                          std::map<GlobalIndexType,double> &fittedGlobalCoefficients, bool traceVarsOnly=false);
+                                          std::map<GlobalIndexType,double> &fittedGlobalCoefficients,
+                                          const std::set<int> &trialIDsToExclude);
 
   virtual void interpretLocalBasisCoefficients(GlobalIndexType cellID, int varID, int sideOrdinal, const Intrepid::FieldContainer<double> &basisCoefficients,
       Intrepid::FieldContainer<double> &globalCoefficients, Intrepid::FieldContainer<GlobalIndexType> &globalDofIndices) = 0;

@@ -174,7 +174,7 @@ void GMGOperator::computeCoarseStiffnessMatrix(Epetra_CrsMatrix *fineStiffnessMa
 
 //  EpetraExt::RowMatrixToMatrixMarketFile("/tmp/P.dat",*_P, NULL, NULL, false); // false: don't write header
 
-  int maxRowSize = _P->MaxNumEntries();
+  int maxRowSize = 0; // _P->MaxNumEntries();
 
   // compute A * P
   Epetra_CrsMatrix AP(::Copy, _finePartitionMap, maxRowSize);
@@ -186,18 +186,37 @@ void GMGOperator::computeCoarseStiffnessMatrix(Epetra_CrsMatrix *fineStiffnessMa
     TEUCHOS_TEST_FOR_EXCEPTION(true, std::invalid_argument, "EpetraExt::MatrixMatrix::Multiply returned an error during computeCoarseStiffnessMatrix's computation of A * P.");
   }
   
-  // DEBUGGING:
-//  EpetraExt::RowMatrixToMatrixMarketFile("/tmp/AP.dat", AP, NULL, NULL, false); // false: don't write header
-//  string P_path = "/tmp/P.dat";
-//  cout << "Writing P to disk at " << P_path << endl;
-//  EpetraExt::RowMatrixToMatrixMarketFile(P_path.c_str(),*_P, NULL, NULL, false); // false: don't write header
-
-  
   Epetra_Map domain_P = _P->DomainMap();
   Teuchos::RCP<Epetra_CrsMatrix> PT_A_P = Teuchos::rcp( new Epetra_CrsMatrix(::Copy, domain_P, maxRowSize) );
 
   // compute P^T * A * P
   // For MultigridPreconditioningDriver with Stokes and static condensation, we crash on this line.  Is the domain_P argument above problematic in this case??
+//  {
+//    //DEBUGGING
+//    Camellia::printMapSummary(_P->DomainMap(), "_P->DomainMap()");
+//
+//    // DEBUGGING:
+//    string AP_path = "/tmp/AP.dat";
+//    cout << "Writing AP to disk at " << AP_path << endl;
+//    EpetraExt::RowMatrixToMatrixMarketFile(AP_path.c_str(), AP, NULL, NULL, false); // false: don't write header
+//    string P_path = "/tmp/P.dat";
+//    cout << "Writing P to disk at " << P_path << endl;
+//    EpetraExt::RowMatrixToMatrixMarketFile(P_path.c_str(),*_P, NULL, NULL, false); // false: don't write header
+//    
+//    // try doing things sorta like the multiply below, but swapping out one of the matrices in question for each
+//    Teuchos::RCP<Epetra_CrsMatrix> AP_2 = Teuchos::rcp( new Epetra_CrsMatrix(::Copy, _finePartitionMap, maxRowSize) );
+//    err = EpetraExt::MatrixMatrix::Multiply(AP, false, AP, true, *AP_2);
+//    
+//    Teuchos::RCP<Epetra_CrsMatrix> P_2 = Teuchos::rcp( new Epetra_CrsMatrix(::Copy, _finePartitionMap, maxRowSize) );
+//    err = EpetraExt::MatrixMatrix::Multiply(*_P, false, *_P, true, *P_2);
+//    
+//    Teuchos::RCP<Epetra_CrsMatrix> PT_2 = Teuchos::rcp( new Epetra_CrsMatrix(::Copy, domain_P, maxRowSize) );
+//    err = EpetraExt::MatrixMatrix::Multiply(*_P, true, *_P, false, *PT_2);
+//    
+//    Teuchos::RCP<Epetra_CrsMatrix> PTAT_2 = Teuchos::rcp( new Epetra_CrsMatrix(::Copy, domain_P, maxRowSize) );
+//    err = EpetraExt::MatrixMatrix::Multiply(AP, true, AP, false, *PTAT_2);
+//  }
+  
   err = EpetraExt::MatrixMatrix::Multiply(*_P, true, AP, false, *PT_A_P);
   if (err != 0)
   {
@@ -272,12 +291,14 @@ Teuchos::RCP<Epetra_CrsMatrix> GMGOperator::constructProlongationOperator()
   CondensedDofInterpreter<double>* condensedDofInterpreterCoarse = NULL;
   CondensedDofInterpreter<double>* condensedDofInterpreterFine = NULL;
   
+  set<int> varsToExclude;
   if (_useStaticCondensation)
   {
     condensedDofInterpreterCoarse = dynamic_cast<CondensedDofInterpreter<double>*>(_coarseSolution->getDofInterpreter().get());
     condensedDofInterpreterCoarse->setCanSkipLocalFieldInInterpretGlobalCoefficients(true);
     condensedDofInterpreterFine = dynamic_cast<CondensedDofInterpreter<double>*>(_fineDofInterpreter.get());
     condensedDofInterpreterFine->setCanSkipLocalFieldInInterpretGlobalCoefficients(true);
+    varsToExclude = condensedDofInterpreterCoarse->condensibleVariableIDs();
   }
   
   Teuchos::RCP<Epetra_FECrsMatrix> P = Teuchos::rcp( new Epetra_FECrsMatrix(::Copy, _finePartitionMap, maxRowSizeToPrescribe) );
@@ -421,7 +442,7 @@ Teuchos::RCP<Epetra_CrsMatrix> GMGOperator::constructProlongationOperator()
           FieldContainer<double> interpretedCoarseData;
           map<GlobalIndexType,double> fittedGlobalCoefficients;
           _coarseSolution->getDofInterpreter()->interpretLocalCoefficients(coarseCellID, coarseCellCoefficients, fittedGlobalCoefficients,
-                                                                           _useStaticCondensation);
+                                                                           varsToExclude);
           
           for (auto globalEntry : fittedGlobalCoefficients)
           {
@@ -647,8 +668,10 @@ LocalDofMapperPtr GMGOperator::getLocalCoefficientMap(GlobalIndexType fineCellID
           unsigned coarseDofIndex = coarseTrialOrdering->getDofIndex(trialID, *coarseOrdinalIt);
           coarseDofIndices.push_back(coarseDofIndex);
         }
+        fittableGlobalDofOrdinalsInVolume.insert(coarseDofIndices.begin(),coarseDofIndices.end());
         BasisMap basisMap(1,SubBasisDofMapper::subBasisDofMapper(fineDofOrdinals, coarseDofIndices, weights.weights));
         volumeMaps[trialID] = basisMap;
+//        cout << "weights for trial ID " << trialID << ":\n" << weights.weights;
       }
       else     // flux/trace
       {
@@ -664,7 +687,7 @@ LocalDofMapperPtr GMGOperator::getLocalCoefficientMap(GlobalIndexType fineCellID
           unsigned coarseSideOrdinal = ancestralSideOrdinals[sideOrdinal];
           BasisPtr coarseBasis, fineBasis;
           BasisMap basisMap;
-          bool useTermTracedIfAvailable = true; // TODO: turn this back on
+          bool useTermTracedIfAvailable = true; // flag for debugging purposes (true is the production setting)
           if (coarseSideOrdinal == -1)   // the fine side falls inside a coarse volume
           {
             // we map trace to field using the traceTerm LinearTermPtr
@@ -691,16 +714,60 @@ LocalDofMapperPtr GMGOperator::getLocalCoefficientMap(GlobalIndexType fineCellID
                                                       ancestor->topology(),
                                                       spaceDim, coarseBasis, coarseSubcellOrdinal, coarseDomainOrdinal, coarseSubcellPermutation);
               set<unsigned> fineDofOrdinals(weights.fineOrdinals.begin(),weights.fineOrdinals.end());
-              vector<GlobalIndexType> coarseDofIndices;
-              for (set<int>::iterator coarseOrdinalIt=weights.coarseOrdinals.begin(); coarseOrdinalIt != weights.coarseOrdinals.end(); coarseOrdinalIt++)
+              
+              if (condensedDofInterpreter == NULL)
               {
-                unsigned coarseDofIndex = coarseTrialOrdering->getDofIndex(varTracedID, *coarseOrdinalIt);
-                coarseDofIndices.push_back(coarseDofIndex);
-                fittableGlobalDofOrdinalsOnSides[sideOrdinal].insert(coarseDofIndex);
-//                cout << "termTraced weights:\n" << weights.weights;
-              }
+                vector<GlobalIndexType> coarseDofIndices;
+                for (set<int>::iterator coarseOrdinalIt=weights.coarseOrdinals.begin(); coarseOrdinalIt != weights.coarseOrdinals.end(); coarseOrdinalIt++)
+                {
+                  unsigned coarseDofIndex = coarseTrialOrdering->getDofIndex(varTracedID, *coarseOrdinalIt);
+                  coarseDofIndices.push_back(coarseDofIndex);
+                  fittableGlobalDofOrdinalsOnSides[sideOrdinal].insert(coarseDofIndex);
+  //                cout << "termTraced weights:\n" << weights.weights;
+                }
 
-              basisMap.push_back(SubBasisDofMapper::subBasisDofMapper(fineDofOrdinals, coarseDofIndices, weights.weights));
+                basisMap.push_back(SubBasisDofMapper::subBasisDofMapper(fineDofOrdinals, coarseDofIndices, weights.weights));
+              }
+              else
+              {
+                // if we're doing static condensation, map back from field to fluxes
+                BasisPtr volumeBasis = coarseBasis; // relabel for clarity -- "coarse" basis now acts as fine
+                CellTopoPtr volumeTopo = volumeBasis->domainTopology();
+                int sideCount = volumeTopo->getSideCount();
+                
+                int volumeDim = volumeTopo->getDimension();
+                RefinementPatternPtr noRefinementPattern = RefinementPattern::noRefinementPattern(volumeTopo);
+                RefinementBranch noRefinementBranch = {{noRefinementPattern.get(), 0}};
+                for (int sideOrdinal=0; sideOrdinal < sideCount; sideOrdinal++)
+                {
+                  BasisPtr sideBasis = coarseTrialOrdering->getBasis(trialID,sideOrdinal);
+                  SubBasisReconciliationWeights sideWeights = _br.computeConstrainedWeights(volumeDim, volumeBasis, 0,
+                                                                                            noRefinementBranch, 0,
+                                                                                            volumeTopo, volumeDim-1,
+                                                                                            sideBasis, 0, sideOrdinal, 0);
+                  SubBasisReconciliationWeights composedWeights = _br.composedSubBasisReconciliationWeights(weights, sideWeights);
+                  
+                  if (composedWeights.coarseOrdinals.size() > 0)
+                  {
+                    set<unsigned> fineDofOrdinals(composedWeights.fineOrdinals.begin(),composedWeights.fineOrdinals.end());
+
+                    vector<GlobalIndexType> coarseDofIndices;
+                    for (int coarseOrdinal : composedWeights.coarseOrdinals)
+                    {
+                      unsigned coarseDofIndex = coarseTrialOrdering->getDofIndex(varTracedID, coarseOrdinal);
+                      coarseDofIndices.push_back(coarseDofIndex);
+                      fittableGlobalDofOrdinalsOnSides[sideOrdinal].insert(coarseDofIndex);
+                    }
+                    cout << "termTraced weights mapped to side " << sideOrdinal << ":\n" << composedWeights.weights;
+                    
+                    basisMap.push_back(SubBasisDofMapper::subBasisDofMapper(fineDofOrdinals, coarseDofIndices,
+                                                                            composedWeights.weights));
+                  }
+                }
+                
+                // TODO: finish this
+                
+              }
             }
           }
           else     // fine side maps to a coarse side
@@ -768,8 +835,9 @@ LocalDofMapperPtr GMGOperator::getLocalCoefficientMap(GlobalIndexType fineCellID
       const vector<int>* fineSidesForVarID = &fineTrialOrdering->getSidesForVarID(trialID);
       if (fineSidesForVarID->size() == 1)   // field variable
       {
-        vector<int> dofIndices = coarseTrialOrdering->getDofIndices(trialID);
-        fittableGlobalDofOrdinalsInVolume.insert(dofIndices.begin(),dofIndices.end());
+//        if ((condensedDofInterpreter == NULL) || (condensedDofInterpreter->varDofsAreCondensible(trialID, 0, ))
+//        vector<int> dofIndices = coarseTrialOrdering->getDofIndices(trialID);
+//        fittableGlobalDofOrdinalsInVolume.insert(dofIndices.begin(),dofIndices.end());
       }
       else
       {
