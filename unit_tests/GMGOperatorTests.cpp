@@ -16,12 +16,17 @@
 #include "MeshFactory.h"
 #include "PoissonFormulation.h"
 #include "RHS.h"
+#include "StokesVGPFormulation.h"
 
 using namespace Camellia;
 using namespace Intrepid;
 
 namespace
 {
+  enum FormulationChoice {
+    Poisson, Stokes
+  };
+  
   void testEpetraMatrixIsIdentity(Teuchos::RCP<Epetra_CrsMatrix> P, Teuchos::FancyOStream &out, bool &success)
   {
     int myRowCount = P->Map().NumMyElements();
@@ -29,6 +34,8 @@ namespace
     GlobalIndexTypeToCast globalEntryCount = P->Map().NumGlobalElements();
     Intrepid::FieldContainer<GlobalIndexTypeToCast> colIndices(globalEntryCount);
     Intrepid::FieldContainer<double> colValues(globalEntryCount);
+    
+//    printMapSummary(P->Map(), "P->Map()");
     
     for (int localRowIndex=0; localRowIndex<myRowCount; localRowIndex++)
     {
@@ -40,10 +47,11 @@ namespace
       double tol=1e-15;
       for (int colEntryOrdinal=0; colEntryOrdinal<numEntries; colEntryOrdinal++)
       {
-        GlobalIndexTypeToCast colIndex = colIndices(colEntryOrdinal);
+        GlobalIndexTypeToCast localColIndex = colIndices(colEntryOrdinal);
+        GlobalIndexTypeToCast globalColIndex = P->DomainMap().GID(localColIndex);
         double expectedValue;
         double actualValue = colValues(colEntryOrdinal);
-        if (colIndex != globalRowIndex)
+        if (globalColIndex != globalRowIndex)
         {
           // expect 0 for off-diagonals
           TEST_COMPARE(abs(actualValue), <, tol);
@@ -56,15 +64,20 @@ namespace
           diagEntryFound = true;
         }
       }
+      if (!diagEntryFound)
+      {
+        int rank = Teuchos::GlobalMPISession::getRank();
+        cout << "on rank " << rank << ", no diagonal entry found for global row " << globalRowIndex;
+        cout << " (num col entries: " << numEntries << ")\n";
+      }
       TEST_ASSERT(diagEntryFound);
     }
     
-    { // DEBUGGING: export to disk
-      EpetraExt::RowMatrixToMatrixMarketFile("/tmp/P.dat",*P,NULL,NULL,false);
-      int rank = Teuchos::GlobalMPISession::getRank();
-      if (rank==0) cout << "wrote prolongation operator matrix to /tmp/P.dat\n";
-    }
-
+//    { // DEBUGGING: export to disk
+//      EpetraExt::RowMatrixToMatrixMarketFile("/tmp/P.dat",*P,NULL,NULL,false);
+//      int rank = Teuchos::GlobalMPISession::getRank();
+//      if (rank==0) cout << "wrote prolongation operator matrix to /tmp/P.dat\n";
+//    }
   }
 
   TEUCHOS_UNIT_TEST( GMGOperator, IdentityProlongationOperatorHangingNode_2D)
@@ -107,29 +120,42 @@ namespace
     testEpetraMatrixIsIdentity(P, out, success);
   }
   
-  TEUCHOS_UNIT_TEST( GMGOperator, IdentityProlongationOperatorUniform_2D)
+  void testIdentityProlongationOperatorUniform(FormulationChoice formChoice, int spaceDim,
+                                               bool useConformingTraces, bool useStaticCondensation,
+                                               Teuchos::FancyOStream &out, bool &success)
   {
     // take a uniform mesh, using the same mesh for coarse and fine in a GMGOperator.
     // test that the prolongation operator is the identity
-    int spaceDim = 2;
-    bool useConformingTraces = true;
-    int H1Order = useConformingTraces ? 1 : 2; // make trace variables linear
-    bool useStaticCondensation = false;
+//    int H1Order = useConformingTraces ? 1 : 2; // make trace variables linear
+    int H1Order = 1;
+
     vector<int> cellCounts(spaceDim,2);
-    PoissonFormulation form(spaceDim, useConformingTraces);
-    BFPtr bf = form.bf();
+    BFPtr bf;
+    BCPtr bc = BC::bc();
+    if (formChoice == Poisson)
+    {
+      PoissonFormulation form(spaceDim, useConformingTraces);
+      bf = form.bf();
+    }
+    else
+    {
+      StokesVGPFormulation form(spaceDim, useConformingTraces);
+      bf = form.bf();
+      bc->addSinglePointBC(form.p()->ID(), 0.0);
+    }
     
     int delta_k = spaceDim;
     vector<double> dimensions(spaceDim,1.0);
     MeshPtr mesh = MeshFactory::rectilinearMesh(bf, dimensions, cellCounts, H1Order, delta_k);
     
-    BCPtr bc = BC::bc();
     IPPtr ip = bf->graphNorm();
     RHSPtr rhs = RHS::rhs();
     
     SolutionPtr fineSoln = Solution::solution(mesh);
+    fineSoln->setBC(bc);
     fineSoln->setIP(ip);
     fineSoln->setRHS(rhs);
+    fineSoln->setUseCondensedSolve(useStaticCondensation);
     
     SolverPtr coarseSolver = Solver::getSolver(Solver::KLU, true);
     
@@ -139,6 +165,24 @@ namespace
     
     Teuchos::RCP<Epetra_CrsMatrix> P = gmgOperator.getProlongationOperator();
     testEpetraMatrixIsIdentity(P, out, success);
+  }
+  
+  TEUCHOS_UNIT_TEST( GMGOperator, IdentityProlongationOperatorUniform_2D )
+  {
+    int spaceDim = 2;
+    bool useConformingTraces = true;
+    bool useStaticCondensation = false;
+
+    testIdentityProlongationOperatorUniform(Poisson, spaceDim, useConformingTraces, useStaticCondensation, out, success);
+  }
+  
+  TEUCHOS_UNIT_TEST( GMGOperator, IdentityProlongationOperatorUniform_StokesCondensed2D )
+  {
+    int spaceDim = 2;
+    bool useConformingTraces = false;
+    bool useStaticCondensation = true;
+    
+    testIdentityProlongationOperatorUniform(Stokes, spaceDim, useConformingTraces, useStaticCondensation, out, success);
   }
   
 TEUCHOS_UNIT_TEST( GMGOperator, ProlongationOperatorLine )
