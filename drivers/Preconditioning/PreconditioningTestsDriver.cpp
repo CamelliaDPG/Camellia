@@ -401,7 +401,7 @@ string smootherString(GMGOperator::SmootherChoice smoother)
 }
 
 void initializeSolutionAndCoarseMesh(SolutionPtr &solution, MeshPtr &coarseMesh, IPPtr &graphNorm, ProblemChoice problemChoice,
-                                     int spaceDim, bool conformingTraces, bool useStaticCondensation, int numCells, int k, int delta_k,
+                                     int spaceDim, bool conformingTraces, bool useStaticCondensation, int numCells, int k, int delta_k, int k_coarse,
                                      int rootMeshNumCells, bool useZeroMeanConstraints = false)
 {
   BFPtr bf;
@@ -627,7 +627,7 @@ void initializeSolutionAndCoarseMesh(SolutionPtr &solution, MeshPtr &coarseMesh,
   }
 
   // coarse and fine mesh share a MeshTopology.  This means that they should not be further refined (they won't be, here)
-  int H1Order_coarse = 0 + 1;
+  int H1Order_coarse = k_coarse + 1;
   coarseMesh = Teuchos::rcp(new Mesh(mesh->getTopology(), bf, H1Order_coarse, delta_k));
   
   graphNorm = bf->graphNorm();
@@ -637,7 +637,7 @@ void initializeSolutionAndCoarseMesh(SolutionPtr &solution, MeshPtr &coarseMesh,
   solution->setZMCsAsGlobalLagrange(false); // fine grid solution shouldn't impose ZMCs (should be handled in coarse grid solve)
 }
 
-void run(ProblemChoice problemChoice, int &iterationCount, int spaceDim, int numCells, int k, int delta_k, bool conformingTraces,
+void run(ProblemChoice problemChoice, int &iterationCount, int spaceDim, int numCells, int k, int delta_k, int k_coarse, bool conformingTraces,
          bool useStaticCondensation, bool precondition, bool schwarzOnly, GMGOperator::SmootherChoice smootherType,
          int schwarzOverlap, GMGOperator::FactorType schwarzBlockFactorization, int schwarzLevelOfFill, double schwarzFillRatio,
          Solver::SolverChoice coarseSolverChoice, double cgTol, int cgMaxIterations, int AztecOutputLevel,
@@ -673,7 +673,7 @@ void run(ProblemChoice problemChoice, int &iterationCount, int spaceDim, int num
   MeshPtr k0Mesh;
   IPPtr graphNorm;
   initializeSolutionAndCoarseMesh(solution, k0Mesh, graphNorm, problemChoice, spaceDim, conformingTraces, useStaticCondensation,
-                                  numCells, k, delta_k, numCellsRootMesh, useZeroMeanConstraints);
+                                  numCells, k, delta_k, k_coarse, numCellsRootMesh, useZeroMeanConstraints);
   solution->setNarrateOnRankZero(narrateSolution, "fine Solution");
   
   MeshPtr mesh = solution->mesh();
@@ -949,7 +949,7 @@ void runMany(ProblemChoice problemChoice, int spaceDim, int delta_k, int minCell
              GMGOperator::FactorType schwarzBlockFactorization, int schwarzLevelOfFill, double schwarzFillRatio,
              Solver::SolverChoice coarseSolverChoice,
              double cgTol, int cgMaxIterations, int aztecOutputLevel, RunManyPreconditionerChoices preconditionerChoices,
-             int k, int overlapLevel, int numCellsRootMesh, bool reportTimings, bool hOnly, int maxCells,
+             int k, int k_coarse, int overlapLevel, int numCellsRootMesh, bool reportTimings, bool hOnly, int maxCells,
              bool useZeroMeanConstraints, GMGOperator::SmootherApplicationType comboType, double smootherWeight)
 {
   int rank = Teuchos::GlobalMPISession::getRank();
@@ -1102,11 +1102,17 @@ void runMany(ProblemChoice problemChoice, int spaceDim, int delta_k, int minCell
   vector<int> kValues;
   if (k == -1)
   {
-    kValues.push_back(1);
-    kValues.push_back(2);
+    if (k_coarse < 1)
+      kValues.push_back(1);
+    if (k_coarse < 2)
+      kValues.push_back(2);
     if (spaceDim < 3) kValues.push_back(4);
     if (spaceDim < 2) kValues.push_back(8);
     if (spaceDim < 2) kValues.push_back(16);
+    if ((kValues.size() == 0) && !hOnly)
+      kValues = {k_coarse + 1};
+    else if ((kValues.size() == 0) && hOnly)
+      kValues = {k_coarse};
   }
   else
   {
@@ -1202,7 +1208,7 @@ void runMany(ProblemChoice problemChoice, int spaceDim, int delta_k, int minCell
               bool reportEnergyError = false;
               double solveTime;
               bool writeAndExit = false; // not supported for runMany (since it always writes to the same disk location)
-              run(problemChoice, iterationCount, spaceDim, numCells1D, k, delta_k, conformingTraces,
+              run(problemChoice, iterationCount, spaceDim, numCells1D, k, delta_k, k_coarse, conformingTraces,
                   useStaticCondensation, precondition, schwarzOnly, smoother, overlapValue,
                   schwarzBlockFactorization, schwarzLevelOfFill, schwarzFillRatio, coarseSolverChoice,
                   cgTol, cgMaxIterations, aztecOutputLevel, reportTimings, solveTime,
@@ -1241,6 +1247,8 @@ void runMany(ProblemChoice problemChoice, int spaceDim, int delta_k, int minCell
     {
       filename << "_k" << k;
     }
+    if (k_coarse != 0)
+      filename << "_kCoarse" << k_coarse;
 
     if (hOnly)
     {
@@ -1287,7 +1295,8 @@ int main(int argc, char *argv[])
 
   Teuchos::CommandLineProcessor cmdp(false,true); // false: don't throw exceptions; true: do return errors for unrecognized options
 
-  int k = -1; // poly order for field variables
+  int k = -1; // poly order for field variables (-1 for a range of values)
+  int k_coarse = 0; // poly order for field variables on the coarse mesh
   int delta_k = -1;   // test space enrichment; -1 for default detection (defaults to spaceDim)
 
   bool conformingTraces = false;
@@ -1351,6 +1360,7 @@ int main(int argc, char *argv[])
   cmdp.setOption("delta_k", &delta_k, "test space polynomial order enrichment");
 
   cmdp.setOption("coarseSolver", &coarseSolverChoiceString, "coarse solver choice: KLU, MUMPS, SuperLUDist, SimpleML");
+  cmdp.setOption("coarsePolyOrder", &k_coarse, "polynomial order for field variables on coarse grid");
 
   cmdp.setOption("combineAdditive", "combineMultiplicative", &additiveComboType);
   cmdp.setOption("useCondensedSolve", "useStandardSolve", &useCondensedSolve);
@@ -1530,6 +1540,10 @@ int main(int argc, char *argv[])
   {
     runManySubsetChoice = GMGPointJacobi;
   }
+  else if (runManySubsetString == "GMGBlockJacobi")
+  {
+    runManySubsetChoice = GMGBlockJacobi;
+  }
   else
   {
     if (rank==0) cout << "Run many subset string not recognized.\n";
@@ -1553,7 +1567,7 @@ int main(int argc, char *argv[])
 
     double solveTime;
 
-    run(problemChoice, iterationCount, spaceDim, numCells, k, delta_k, conformingTraces,
+    run(problemChoice, iterationCount, spaceDim, numCells, k, delta_k, k_coarse, conformingTraces,
         useCondensedSolve, precondition, schwarzOnly, smootherChoice, schwarzOverlap,
         schwarzFactorType, levelOfFill, fillRatio, coarseSolverChoice,
         cgTol, cgMaxIterations, AztecOutputLevel, reportTimings, solveTime,
@@ -1584,7 +1598,7 @@ int main(int argc, char *argv[])
             schwarzFactorType, levelOfFill, fillRatio,
             coarseSolverChoice,
             cgTol, cgMaxIterations, AztecOutputLevel,
-            runManySubsetChoice, k, schwarzOverlap, numCellsRootMesh, reportTimings, hOnly, maxCells, useZeroMeanConstraints, comboType, smootherWeight);
+            runManySubsetChoice, k, k_coarse, schwarzOverlap, numCellsRootMesh, reportTimings, hOnly, maxCells, useZeroMeanConstraints, comboType, smootherWeight);
   }
   return 0;
 }
