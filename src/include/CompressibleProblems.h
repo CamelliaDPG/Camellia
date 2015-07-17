@@ -466,26 +466,29 @@ class Sedov : public AnalyticalCompressibleProblem
     {
       _steady = steady;
       _gamma = 5./3.;
-      double p0 = 1e-3;
+      // double p0 = 1e-3;
       double rho0 = 1;
       double u0 = 1;
-      double a0 = sqrt(_gamma*p0/rho0);
-      double M_inf = u0/a0;
-      _Cv = 1./(_gamma*(_gamma-1)*M_inf*M_inf);
+      // double a0 = sqrt(_gamma*p0/rho0);
+      // double M_inf = u0/a0;
+      // _Cv = 1./(_gamma*(_gamma-1)*M_inf*M_inf);
+      _Cv = 1;
       _Cp = _gamma*_Cv;
       _R = _Cp-_Cv;
-      double T0 = p0/(rho0*_R);
+      // double T0 = p0/(rho0*_R);
       _rho_exact = Function::constant(rho0);
-      double pulse = 32;
+      double pulseStrength = 32;
+      FunctionPtr pulseX = (Function::constant(1) - Function::heaviside(1./pulseStrength))*Function::heaviside(-1./pulseStrength);
+      FunctionPtr pulseY = (Function::constant(1) - Function::heavisideY(1./pulseStrength))*Function::heavisideY(-1./pulseStrength);
+      FunctionPtr smoothX = Function::constant(1)-pulseStrength*pulseStrength*Function::xn(2);
+      FunctionPtr smoothXY = Function::constant(1)-pulseStrength*pulseStrength*(Function::xn(2)+Function::yn(2));
       if (spaceDim == 1)
-        // _T_exact = Function::max(Function::constant(1)-2*Function::xn(2)-2*Function::yn(2), Function::constant(T0));
-        _T_exact = pulse*(Function::constant(1)-sqrt(pulse)*Function::xn(2))*(Function::constant(1) - Function::heaviside(1./pulse))*Function::heaviside(-1./pulse);
+        _T_exact = pulseStrength*smoothX*pulseX + Function::constant(1e-3);
       else
-        _T_exact = Function::max(Function::constant(1)-2*Function::xn(2), Function::constant(T0));
+        _T_exact = pulseStrength*smoothXY*pulseX*pulseY + Function::constant(1e-3);
       _u1_exact = Function::zero();
       _u2_exact = Function::zero();
       _u3_exact = Function::zero();
-      // _T_exact = Function::constant(1);
 
       for (int d=0; d < spaceDim; d++)
       {

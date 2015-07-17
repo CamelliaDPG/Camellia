@@ -1288,7 +1288,7 @@ SolutionPtr SpaceTimeCompressibleFormulation::solutionBackground()
   return _solutionBackground;
 }
 
-void SpaceTimeCompressibleFormulation::updateSolution()
+double SpaceTimeCompressibleFormulation::updateSolution()
 {
   vector<int> trialIDs = _vf->trialIDs();
   set<int> trialIDSet(trialIDs.begin(), trialIDs.end());
@@ -1335,6 +1335,7 @@ void SpaceTimeCompressibleFormulation::updateSolution()
     }
   }
   _solutionBackground->addReplaceSolution(_solutionUpdate, alpha, nlVars, lVars);
+  return alpha;
 }
 
 // ! Solves
