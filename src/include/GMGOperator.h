@@ -55,6 +55,14 @@ public:
     ADDITIVE,
     MULTIPLICATIVE
   };
+  
+  enum MultigridStrategy
+  {
+    TWO_LEVEL, // aka ADDITIVE
+    V_CYCLE,
+    W_CYCLE,
+    FULL_MULTIGRID
+  };
 private:
   bool _debugMode; // in debug mode, output verbose info about what we're doing on rank 0
 
@@ -87,12 +95,16 @@ private:
 
   mutable bool _haveSolvedOnCoarseMesh; // if this is true, then we can call resolve() instead of solve().
 
+  MultigridStrategy _multigridStrategy;
   Teuchos::RCP<Epetra_CrsMatrix> _P; // prolongation operator
 
   Teuchos::RCP<Epetra_Operator> _smoother;
   double _smootherWeight;
   Teuchos::RCP<Epetra_MultiVector> _smootherWeight_sqrt;
   bool _useSchwarzDiagonalWeight, _useSchwarzScalingWeight; // when true, will set _smootherWeight_sqrt and _smootherWeight during setUpSmoother()
+  
+  // ! res should hold the RHS on entry, Y the current solution.  On exit, res will have the updated residual, and A_Y A * Y
+  void computeResidual(const Epetra_MultiVector& Y, Epetra_MultiVector& res, Epetra_MultiVector& A_Y) const;
   
   void reportTimings(StatisticChoice whichStat, bool sumAllOperators) const;
   
@@ -292,6 +304,9 @@ public:
   
   void setLevelOfFill(int fillLevel);
   void setFillRatio(double fillRatio);
+  
+  //! Set the multigrid strategy: two-level (additive), V-cycle, W-cycle, or full multigrid.
+  void setMultigridStrategy(MultigridStrategy choice);
   
   static std::string smootherString(SmootherChoice choice);
 

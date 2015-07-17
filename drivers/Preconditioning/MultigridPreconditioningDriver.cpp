@@ -251,7 +251,7 @@ void initializeSolutionAndCoarseMesh(SolutionPtr &solution, vector<MeshPtr> &mes
     }
   }
   
-  bool useLightWeightViews = true; // flag added to allow checking whether any pure MeshTopologyViews are at issue in issues that might arise...
+  bool useLightWeightViews = false; // flag added to allow checking whether any pure MeshTopologyViews are at issue in issues that might arise...
   
   meshesCoarseToFine.clear();
   
@@ -322,7 +322,7 @@ long long approximateMemoryCostsForMeshTopologies(vector<MeshPtr> meshes)
 
 int main(int argc, char *argv[])
 {
-  Teuchos::GlobalMPISession mpiSession(&argc, &argv, 0);
+  Teuchos::GlobalMPISession mpiSession(&argc, &argv, NULL);
   int rank = Teuchos::GlobalMPISession::getRank();
   int numProcs = Teuchos::GlobalMPISession::getNProc();
 
@@ -341,7 +341,6 @@ int main(int argc, char *argv[])
   int delta_k = 1;   // test space enrichment
   int k_coarse = 0; // coarse poly order
 
-  bool additiveComboType = true;
   bool conformingTraces = false;
 
   int numCells = -1;
@@ -357,6 +356,8 @@ int main(int argc, char *argv[])
   bool useConjugateGradient = true;
   bool logFineOperator = false;
   
+  string multigridStrategyString = "W-cycle";
+  
   bool pauseOnRankZero = false;
 
   string problemChoiceString = "Poisson";
@@ -370,11 +371,11 @@ int main(int argc, char *argv[])
   cmdp.setOption("coarsePolyOrder", &k_coarse, "polynomial order for field variables on coarse grid");
 
   cmdp.setOption("coarseSolver", &coarseSolverChoiceString, "coarse solver choice: KLU, MUMPS, SuperLUDist, SimpleML");
-  cmdp.setOption("combineAdditive", "combineMultiplicative", &additiveComboType);
 
   cmdp.setOption("CG", "GMRES", &useConjugateGradient);
   
   cmdp.setOption("logFineOperator", "dontLogFineOperator", &logFineOperator);
+  cmdp.setOption("multigridStrategy", &multigridStrategyString, "Multigrid strategy: V-cycle, W-cycle, Full, or Two-level");
   
   cmdp.setOption("useCondensedSolve", "useStandardSolve", &useCondensedSolve);
   cmdp.setOption("useConformingTraces", "useNonConformingTraces", &conformingTraces);
@@ -437,6 +438,28 @@ int main(int argc, char *argv[])
 #endif
     return -1;
   }
+
+  GMGOperator::MultigridStrategy multigridStrategy;
+  if (multigridStrategyString == "Two-level")
+  {
+    multigridStrategy = GMGOperator::TWO_LEVEL;
+  }
+  else if (multigridStrategyString == "W-cycle")
+  {
+    multigridStrategy = GMGOperator::W_CYCLE;
+  }
+  else if (multigridStrategyString == "V-cycle")
+  {
+    multigridStrategy = GMGOperator::V_CYCLE;
+  }
+  else if (multigridStrategyString == "Full")
+  {
+    multigridStrategy = GMGOperator::FULL_MULTIGRID;
+  }
+  else
+  {
+    TEUCHOS_TEST_FOR_EXCEPTION(true, std::invalid_argument, "unrecognized multigrid strategy");
+  }
   
   if (numCellsRootMesh == -1)
   {
@@ -473,6 +496,7 @@ int main(int argc, char *argv[])
   double meshInitializationTime = timer.ElapsedTime();
 
   int numDofs = solution->mesh()->numGlobalDofs();
+  int numTraceDofs = solution->mesh()->numFluxDofs();
   int numElements = solution->mesh()->numActiveElements();
   
   long long approximateMemoryCostInBytes = approximateMemoryCostsForMeshTopologies(meshesCoarseToFine);
@@ -490,6 +514,11 @@ int main(int argc, char *argv[])
   double K_denseMatrixSize = (totalTrialDofs * totalTrialDofs * doubleSizeInBytes) / bytesPerMB;
 
   BFPtr bf = solution->mesh()->bilinearForm();
+//  bf->setUseSPDSolveForOptimalTestFunctions(true);
+  
+  int coarseMeshGlobalDofs = meshesCoarseToFine[0]->numGlobalDofs();
+  int coarseMeshNumElements = meshesCoarseToFine[0]->numElements();
+  int coarseMeshTraceDofs = meshesCoarseToFine[0]->numFluxDofs();
   
   double B_sparseMatrixSize = ( bf->nonZeroEntryCount(sampleElementType->trialOrderPtr, sampleElementType->testOrderPtr) * doubleSizeInBytes) / bytesPerMB;
   double G_sparseMatrixSize = ( ip->nonZeroEntryCount(sampleElementType->testOrderPtr) * doubleSizeInBytes) / bytesPerMB;
@@ -498,7 +527,8 @@ int main(int argc, char *argv[])
   {
     cout << setprecision(2);
     cout << "Mesh initialization completed in " << meshInitializationTime << " seconds.  Fine mesh has " << numDofs;
-    cout << " global degrees of freedom on " << numElements << " elements.\n";
+    cout << " global degrees of freedom (" << numTraceDofs << " trace dofs) on " << numElements << " elements.\n";
+    cout << "Coarsest mesh has " << coarseMeshGlobalDofs << " global degrees of freedom (" << coarseMeshTraceDofs << " trace dofs) on " << coarseMeshNumElements << " elements.\n";
     cout << "Approximate (correct within a factor of 2 or so) memory cost for all mesh topologies: " << memoryCostInMB << " MB.\n";
     cout << "Approximate memory cost per element (assuming dense storage): G = " << G_denseMatrixSize << " MB, B = " << B_denseMatrixSize << " MB, K = ";
     cout << K_denseMatrixSize << " MB.\n";
@@ -510,7 +540,7 @@ int main(int argc, char *argv[])
   timer.ResetStartTime();
   bool reuseFactorization = true;
   SolverPtr coarseSolver = Solver::getDirectSolver(reuseFactorization);
-  Teuchos::RCP<GMGSolver> gmgSolver = Teuchos::rcp(new GMGSolver(solution, meshesCoarseToFine, cgMaxIterations, cgTol, coarseSolver, useCondensedSolve));
+  Teuchos::RCP<GMGSolver> gmgSolver = Teuchos::rcp(new GMGSolver(solution, meshesCoarseToFine, cgMaxIterations, cgTol, multigridStrategy, coarseSolver, useCondensedSolve));
   gmgSolver->setUseConjugateGradient(useConjugateGradient);
   gmgSolver->setAztecOutput(10);
   gmgSolver->gmgOperator()->setNarrateOnRankZero(logFineOperator,"finest GMGOperator");

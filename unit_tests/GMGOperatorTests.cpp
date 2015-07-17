@@ -316,6 +316,7 @@ TEUCHOS_UNIT_TEST( GMGOperator, ProlongationOperatorQuad_Simple )
 
   int spaceDim = 2;
   bool useConformingTraces = false;
+  bool useStaticCondensation = false;
   PoissonFormulation form(spaceDim, useConformingTraces);
   BFPtr bf = form.bf();
   VarPtr phi = form.phi(), psi = form.psi(), phi_hat = form.phi_hat(), psi_n_hat = form.psi_n_hat();
@@ -333,7 +334,13 @@ TEUCHOS_UNIT_TEST( GMGOperator, ProlongationOperatorQuad_Simple )
   vector<int> elementCounts(2,coarseElementCount);
   MeshPtr mesh = MeshFactory::rectilinearMesh(bf, dimensions, elementCounts, H1Order, delta_k);
 
+  BCPtr bc = BC::bc();
+  RHSPtr rhs = RHS::rhs();
   SolutionPtr coarseSoln = Solution::solution(mesh);
+  coarseSoln->setBC(bc);
+  coarseSoln->setIP(bf->graphNorm());
+  coarseSoln->setRHS(rhs);
+  coarseSoln->setUseCondensedSolve(useStaticCondensation);
 
   map<int, FunctionPtr> exactSolnMap;
   exactSolnMap[phi->ID()] = phi_exact;
@@ -354,10 +361,12 @@ TEUCHOS_UNIT_TEST( GMGOperator, ProlongationOperatorQuad_Simple )
   exactSoln->projectOntoMesh(exactSolnMap);
 
   SolutionPtr fineSoln = Solution::solution(fineMesh);
-
-  BCPtr bc = BC::bc();
+  fineSoln->setBC(bc);
+  fineSoln->setIP(bf->graphNorm());
+  fineSoln->setRHS(rhs);
+  fineSoln->setUseCondensedSolve(useStaticCondensation);
+  
   SolverPtr coarseSolver = Solver::getSolver(Solver::KLU, true);
-  bool useStaticCondensation = false;
   GMGOperator gmgOperator(bc,mesh,bf->graphNorm(),fineMesh,fineSoln->getDofInterpreter(),
                           fineSoln->getPartitionMap(),coarseSolver, useStaticCondensation);
 
@@ -412,6 +421,8 @@ TEUCHOS_UNIT_TEST( GMGOperator, ProlongationOperatorQuad_Simple )
 
   fineSoln->importSolutionForOffRankCells(cellIDs);
   
+//  success = false; // DEBUGGING/checking: just to trigger the above output
+  
   double tol = 1e-14;
   for (GlobalIndexType cellID : cellIDs) {
     FieldContainer<double> coefficients = fineSoln->allCoefficientsForCellID(cellID, false);
@@ -438,6 +449,7 @@ TEUCHOS_UNIT_TEST( GMGOperator, ProlongationOperatorQuad_Slow )
 
   int spaceDim = 2;
   bool useConformingTraces = false;
+  bool useStaticCondensation = false;
   PoissonFormulation form(spaceDim, useConformingTraces);
   BFPtr bf = form.bf();
   VarPtr phi = form.phi(), psi = form.psi(), phi_hat = form.phi_hat(), psi_n_hat = form.psi_n_hat();
@@ -454,6 +466,9 @@ TEUCHOS_UNIT_TEST( GMGOperator, ProlongationOperatorQuad_Slow )
   MeshPtr mesh = MeshFactory::rectilinearMesh(bf, dimensions, elementCounts, H1Order, delta_k);
 
   SolutionPtr coarseSoln = Solution::solution(mesh);
+  BCPtr bc = BC::bc();
+  coarseSoln->setBC(bc);
+  coarseSoln->setUseCondensedSolve(useStaticCondensation);
 
   VarPtr q = form.q();
   RHSPtr rhs = RHS::rhs();
@@ -494,14 +509,14 @@ TEUCHOS_UNIT_TEST( GMGOperator, ProlongationOperatorQuad_Slow )
   exactSoln->projectOntoMesh(exactSolnMap);
   energyError = exactSoln->energyErrorTotal();
   TEST_COMPARE(energyError, <, tol);
-
+  
   SolutionPtr fineSoln = Solution::solution(fineMesh);
+  fineSoln->setBC(bc);
   fineSoln->setIP(ip);
   fineSoln->setRHS(rhs);
+  fineSoln->setUseCondensedSolve(useStaticCondensation);
 
-  BCPtr bc = BC::bc();
   SolverPtr coarseSolver = Solver::getSolver(Solver::KLU, true);
-  bool useStaticCondensation = false;
   GMGOperator gmgOperator(bc,mesh,ip,fineMesh,fineSoln->getDofInterpreter(),
                           fineSoln->getPartitionMap(),coarseSolver, useStaticCondensation);
 

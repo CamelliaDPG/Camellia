@@ -94,7 +94,7 @@ _finePartitionMap(fineSolution->getPartitionMap())
 }
 
 GMGSolver::GMGSolver(TSolutionPtr<double> fineSolution, const std::vector<MeshPtr> &meshesCoarseToFine, int maxIters,
-                     double tol, Teuchos::RCP<Solver> coarseSolver, bool useStaticCondensation) :
+                     double tol, GMGOperator::MultigridStrategy multigridStrategy, Teuchos::RCP<Solver> coarseSolver, bool useStaticCondensation) :
 Narrator("GMGSolver"),
 _finePartitionMap(fineSolution->getPartitionMap())
 {
@@ -108,7 +108,7 @@ _finePartitionMap(fineSolution->getPartitionMap())
   _useCG = true;
   _azConvergenceOption = AZ_rhs;
   
-  _gmgOperator = gmgOperatorFromMeshSequence(meshesCoarseToFine, fineSolution, coarseSolver, useStaticCondensation);
+  _gmgOperator = gmgOperatorFromMeshSequence(meshesCoarseToFine, fineSolution, multigridStrategy, coarseSolver, useStaticCondensation);
 }
 
 double GMGSolver::condest()
@@ -127,6 +127,7 @@ int GMGSolver::iterationCount()
 }
 
 Teuchos::RCP<GMGOperator> GMGSolver::gmgOperatorFromMeshSequence(const std::vector<MeshPtr> &meshesCoarseToFine, SolutionPtr fineSolution,
+                                                                 GMGOperator::MultigridStrategy multigridStrategy,
                                                                  SolverPtr coarseSolver, bool useStaticCondensationInCoarseSolve)
 {
   TEUCHOS_TEST_FOR_EXCEPTION(meshesCoarseToFine.size() < 2, std::invalid_argument, "meshesCoarseToFine must have at least two meshes");
@@ -152,9 +153,9 @@ Teuchos::RCP<GMGOperator> GMGSolver::gmgOperatorFromMeshSequence(const std::vect
                                                     coarseSolver, useStaticCondensationInCoarseSolve));
     }
     coarseOperator->setSmootherType(GMGOperator::CAMELLIA_ADDITIVE_SCHWARZ);
-    coarseOperator->setSmootherApplicationType(GMGOperator::MULTIPLICATIVE);
     coarseOperator->setUseSchwarzDiagonalWeight(true);
     coarseOperator->setUseSchwarzScalingWeight(true);
+    coarseOperator->setMultigridStrategy(multigridStrategy);
     bool hRefined = fineMesh->numActiveElements() > coarseMesh->numActiveElements();
     coarseOperator->setUseHierarchicalNeighborsForSchwarz(hRefined);
     if (hRefined) coarseOperator->setSmootherOverlap(1);

@@ -261,6 +261,8 @@ namespace
     turnOffSuperLUDistOutput(gmgSolver);
     gmgSolver->setComputeConditionNumberEstimate(false);
     
+//    gmgSolver->gmgOperator()->setDebugMode(true);
+    
     // before we test the solve proper, let's check that with smoothing off, ApplyInverse acts just like the standard solve
     //        exactPoissonSolution->setWriteMatrixToFile(true, "/tmp/A_direct.dat");
     //        exactPoissonSolution->setWriteRHSToMatrixMarketFile(true, "/tmp/b_direct.dat");
