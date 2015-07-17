@@ -45,7 +45,7 @@ PoissonFormulation::PoissonFormulation(int spaceDim, bool useConformingTraces)
   if (spaceDim > 1)
     phi_hat = vf->traceVar(S_PHI_HAT, phi, phi_hat_space);
   else
-    phi_hat = vf->fluxVar(S_PHI_HAT, phi, phi_hat_space); // for spaceDim==1, the "normal" component is in the flux-ness of phi_hat (it's a plus or minus 1)
+    phi_hat = vf->fluxVar(S_PHI_HAT, phi * Function::normal_1D(), phi_hat_space); // for spaceDim==1, the "normal" component is in the flux-ness of phi_hat (it's a plus or minus 1)
 
   TFunctionPtr<double> n = TFunction<double>::normal();
   TFunctionPtr<double> parity = TFunction<double>::sideParity();
@@ -53,7 +53,7 @@ PoissonFormulation::PoissonFormulation(int spaceDim, bool useConformingTraces)
   if (spaceDim > 1)
     psi_n_hat = vf->fluxVar(S_PSI_N_HAT, psi * (n * parity));
   else
-    psi_n_hat = vf->fluxVar(S_PSI_N_HAT, psi);
+    psi_n_hat = vf->fluxVar(S_PSI_N_HAT, psi * Function::normal_1D());
 
   q = vf->testVar(S_Q, HGRAD);
   tau = vf->testVar(S_TAU, tauSpace);
