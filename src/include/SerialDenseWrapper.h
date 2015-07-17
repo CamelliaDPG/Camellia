@@ -67,28 +67,6 @@ class SerialDenseWrapper
     double * firstEntry = (double *) &A(0,0); // again, casting away the const.  OK since we copy below.
     A_fc = Intrepid::FieldContainer<double>(dim,firstEntry,true); // true: copy
   }
-
-  static void transposeMatrix(Intrepid::FieldContainer<double> &A)
-  {
-    int n = A.dimension(0);
-    int m = A.dimension(1);
-    if (n==m)
-    {
-      transposeSquareMatrix(A);
-    }
-    else
-    {
-      Intrepid::FieldContainer<double> A_copy = A;
-      A.resize(m,n);
-      for (int i=0; i<n; i++)
-      {
-        for (int j=0; j<m; j++)
-        {
-          A(j,i) = A_copy(i,j);
-        }
-      }
-    }
-  }
 public:
   // gives X = scalarA*A+scalarB*B (overwrites A)
   static void add(Intrepid::FieldContainer<double> &X, const Intrepid::FieldContainer<double> &A, const Intrepid::FieldContainer<double> &B, double scalarA = 1.0, double scalarB = 1.0)
@@ -742,6 +720,28 @@ public:
     return result;
   }
 
+  static void transposeMatrix(Intrepid::FieldContainer<double> &A)
+  {
+    int n = A.dimension(0);
+    int m = A.dimension(1);
+    if (n==m)
+    {
+      transposeSquareMatrix(A);
+    }
+    else
+    {
+      Intrepid::FieldContainer<double> A_copy = A;
+      A.resize(m,n);
+      for (int i=0; i<n; i++)
+      {
+        for (int j=0; j<m; j++)
+        {
+          A(j,i) = A_copy(i,j);
+        }
+      }
+    }
+  }
+  
   //! Returns the reciprocal of the 1-norm condition number of the matrix in A
   /*!
    \param A In
