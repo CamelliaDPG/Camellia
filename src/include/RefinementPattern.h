@@ -59,6 +59,7 @@ namespace Camellia {
     double distance(const vector<double> &v1, const vector<double> &v2);
 
     static map< pair<unsigned,unsigned>, Teuchos::RCP<RefinementPattern> > _refPatternForKeyTensorialDegree;
+    static map< pair<unsigned,unsigned>, Teuchos::RCP<RefinementPattern> > _timeExtrudedRefPatternForKeyTensorialDegree;
     
     void determineChildSubcellInfoInSubcellRefinement(unsigned &childSubcellDimension, unsigned &childSubcellOrdinal,
                                                       unsigned &childSubcellPermutation, unsigned &subcellRefChild,
@@ -91,6 +92,7 @@ namespace Camellia {
   static Teuchos::RCP<RefinementPattern> regularRefinementPattern(unsigned cellTopoKey);
   static Teuchos::RCP<RefinementPattern> regularRefinementPattern(CellTopoPtr cellTopo);
   static Teuchos::RCP<RefinementPattern> regularRefinementPattern(Camellia::CellTopologyKey cellTopoKey);
+  static RefinementPatternPtr timeExtrudedRegularRefinementPattern(CellTopoPtr cellTopo);
   static Teuchos::RCP<RefinementPattern> xAnisotropicRefinementPatternQuad(); // vertical cut
   static Teuchos::RCP<RefinementPattern> yAnisotropicRefinementPatternQuad(); // horizontal cut
     
