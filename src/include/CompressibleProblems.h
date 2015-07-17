@@ -3,6 +3,7 @@
 #include "SpatialFilter.h"
 #include "ExpFunction.h"
 #include "TrigFunctions.h"
+#include "PolarizedFunction.h"
 #include "PenaltyConstraints.h"
 #include "SpaceTimeCompressibleFormulation.h"
 
@@ -420,6 +421,28 @@ class SimpleShock : public AnalyticalCompressibleProblem
     }
 };
 
+class Noh_u1 : public SimpleFunction<double>
+{
+public:
+  Noh_u1() {}
+  double value(double x, double y)
+  {
+    double theta = atan2(y, x);
+    return -cos(theta);
+  }
+};
+
+class Noh_u2 : public SimpleFunction<double>
+{
+public:
+  Noh_u2() {}
+  double value(double x, double y)
+  {
+    double theta = atan2(y, x);
+    return -sin(theta);
+  }
+};
+
 class Noh : public AnalyticalCompressibleProblem
 {
   private:
@@ -443,7 +466,16 @@ class Noh : public AnalyticalCompressibleProblem
         _u1_exact = Function::constant(1) - 2*Function::heaviside(0.0);
       else if (spaceDim == 2)
       {
-        _u1_exact = Function::constant(1) - 2*Function::heaviside(0.0);
+        _u1_exact = Teuchos::rcp( new Noh_u1() );
+        _u2_exact = Teuchos::rcp( new Noh_u2() );
+        // _u1_exact = Function::constant(1) - 2*Function::heaviside(0.0);
+        // FunctionPtr minusOne = Teuchos::rcp(new PolarizedFunction<double>(Function::constant(1)));
+        // FunctionPtr cos_theta = PolarizedFunction<double>::cos_theta();
+        // FunctionPtr sin_theta = PolarizedFunction<double>::sin_theta();
+        // _u1_exact = minusOne*cos_theta;
+        // _u2_exact = minusOne*sin_theta;
+        // _u1_exact = minusOne*PolarizedFunction<double>::cos_theta();
+        // _u2_exact = minusOne*PolarizedFunction<double>::sin_theta();
       }
       // _T_exact = Function::constant(1);
 
@@ -451,10 +483,81 @@ class Noh : public AnalyticalCompressibleProblem
       {
         _x0.push_back(-.5);
         _dimensions.push_back(1);
-        _elementCounts.push_back(2);
+        _elementCounts.push_back(8);
       }
       _tInit = 0.0;
-      _tFinal = 0.5;
+      _tFinal = 0.1;
+    }
+
+    void setBCs(SpaceTimeCompressibleFormulationPtr form)
+    {
+      initializeExactMap(form);
+
+      BCPtr bc = form->solutionUpdate()->bc();
+      SpatialFilterPtr initTime = SpatialFilter::matchingT(_tInit);
+      SpatialFilterPtr leftX  = SpatialFilter::matchingX(_x0[0]);
+      SpatialFilterPtr rightX = SpatialFilter::matchingX(_x0[0]+_dimensions[0]);
+      SpatialFilterPtr leftY  = SpatialFilter::matchingY(_x0[1]);
+      SpatialFilterPtr rightY = SpatialFilter::matchingY(_x0[1]+_dimensions[1]);
+      FunctionPtr one = Function::constant(1);
+      switch (form->spaceDim())
+      {
+        case 1:
+          bc->addDirichlet(form->tc(),   leftX,  -_rho_exact*_u1_exact );
+          bc->addDirichlet(form->tc(),   rightX,  _rho_exact*_u1_exact );
+          bc->addDirichlet(form->uhat(1),  leftX, -_u1_exact);
+          bc->addDirichlet(form->uhat(1),  rightX, _u1_exact);
+          bc->addDirichlet(form->te(),   leftX, -(_rho_exact*_Cv*_T_exact+0.5*_rho_exact*_u1_exact*_u1_exact+_R*_rho_exact*_T_exact)*_u1_exact);
+          bc->addDirichlet(form->te(),   rightX, (_rho_exact*_Cv*_T_exact+0.5*_rho_exact*_u1_exact*_u1_exact+_R*_rho_exact*_T_exact)*_u1_exact);
+
+          if (!_steady)
+          {
+            FunctionPtr rho_init = _exactMap[form->rho()->ID()];
+            FunctionPtr u1_init  = _exactMap[form->u(1)->ID()];
+            FunctionPtr T_init   = _exactMap[form->T()->ID()];
+            FunctionPtr m1_init = rho_init*u1_init;
+            FunctionPtr E_init = rho_init*(_Cv*T_init + 0.5*u1_init*u1_init);
+            bc->addDirichlet(form->tc(), initTime,-rho_init);
+            bc->addDirichlet(form->tm(1),initTime,-m1_init);
+            bc->addDirichlet(form->te(), initTime,-E_init);
+          }
+          break;
+        case 2:
+          bc->addDirichlet(form->tc(),   leftX,  -_rho_exact*_u1_exact );
+          bc->addDirichlet(form->tc(),   rightX,  _rho_exact*_u1_exact );
+          bc->addDirichlet(form->tc(),   leftY,  -_rho_exact*_u2_exact );
+          bc->addDirichlet(form->tc(),   rightY,  _rho_exact*_u2_exact );
+          bc->addDirichlet(form->uhat(1),  leftX, -_u1_exact);
+          bc->addDirichlet(form->uhat(1),  rightX, _u1_exact);
+          bc->addDirichlet(form->uhat(2),  leftX, -_u2_exact);
+          bc->addDirichlet(form->uhat(2),  rightX, _u2_exact);
+          bc->addDirichlet(form->uhat(1),  leftY, -_u1_exact);
+          bc->addDirichlet(form->uhat(1),  rightY, _u1_exact);
+          bc->addDirichlet(form->uhat(2),  leftY, -_u2_exact);
+          bc->addDirichlet(form->uhat(2),  rightY, _u2_exact);
+          bc->addDirichlet(form->te(),   leftX, -(_rho_exact*_Cv*_T_exact+0.5*_rho_exact*(_u1_exact*_u1_exact+_u2_exact*_u2_exact)+_R*_rho_exact*_T_exact)*_u1_exact);
+          bc->addDirichlet(form->te(),   rightX, (_rho_exact*_Cv*_T_exact+0.5*_rho_exact*(_u1_exact*_u1_exact+_u2_exact*_u2_exact)+_R*_rho_exact*_T_exact)*_u1_exact);
+          bc->addDirichlet(form->te(),   leftY, -(_rho_exact*_Cv*_T_exact+0.5*_rho_exact*(_u1_exact*_u1_exact+_u2_exact*_u2_exact)+_R*_rho_exact*_T_exact)*_u2_exact);
+          bc->addDirichlet(form->te(),   rightY, (_rho_exact*_Cv*_T_exact+0.5*_rho_exact*(_u1_exact*_u1_exact+_u2_exact*_u2_exact)+_R*_rho_exact*_T_exact)*_u2_exact);
+
+          if (!_steady)
+          {
+            FunctionPtr rho_init = _exactMap[form->rho()->ID()];
+            FunctionPtr u1_init  = _exactMap[form->u(1)->ID()];
+            FunctionPtr u2_init  = _exactMap[form->u(2)->ID()];
+            FunctionPtr T_init   = _exactMap[form->T()->ID()];
+            FunctionPtr m1_init = rho_init*u1_init;
+            FunctionPtr m2_init = rho_init*u2_init;
+            FunctionPtr E_init = rho_init*(_Cv*T_init + 0.5*(u1_init*u1_init+u2_init*u2_init));
+            bc->addDirichlet(form->tc(), initTime,-rho_init);
+            bc->addDirichlet(form->tm(1),initTime,-m1_init);
+            bc->addDirichlet(form->tm(2),initTime,-m2_init);
+            bc->addDirichlet(form->te(), initTime,-E_init);
+          }
+          break;
+        case 3:
+          break;
+      }
     }
 };
 

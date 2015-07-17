@@ -263,6 +263,7 @@ int main(int argc, char *argv[])
           << " \tEnergy Error: " << energyError
           << " \tL2 Error: " << l2Error
           << " \tSolve Time: " << solveTime
+          << " \tTotal Time: " << totalTimer->stop()
           // << " \tIteration Count: " << iterationCount
           << endl;
         dataFile << refIndex
@@ -271,6 +272,7 @@ int main(int argc, char *argv[])
           << " " << energyError
           << " " << l2Error
           << " " << solveTime
+          << " " << totalTimer->stop()
           // << " " << iterationCount
           << endl;
       }
