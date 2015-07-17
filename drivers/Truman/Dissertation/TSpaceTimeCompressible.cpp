@@ -108,6 +108,7 @@ int main(int argc, char *argv[])
   problems["TrivialCompressible"] = Teuchos::rcp(new TrivialCompressible(steady, Re, spaceDim));
   problems["SimpleShock"] = Teuchos::rcp(new SimpleShock(steady, Re, spaceDim));
   problems["SimpleRarefaction"] = Teuchos::rcp(new SimpleRarefaction(steady, Re, spaceDim));
+  problems["Sedov"] = Teuchos::rcp(new Sedov(steady, Re, spaceDim));
   problems["Noh"] = Teuchos::rcp(new Noh(steady, Re, spaceDim));
   Teuchos::RCP<CompressibleProblem> problem = problems.at(problemChoice);
 
@@ -209,7 +210,8 @@ int main(int argc, char *argv[])
       double l2Update = 1e10;
       int iterCount = 0;
       solverTime->start(true);
-      while (l2Update > nonlinearTolerance && iterCount < maxNonlinearIterations)
+      double linestepSize = 1;
+      while (l2Update > nonlinearTolerance && iterCount < maxNonlinearIterations && linestepSize > 0.01)
       {
         Teuchos::RCP<GMGSolver> gmgSolver;
         if (solverChoice[0] == 'G')
@@ -242,7 +244,7 @@ int main(int argc, char *argv[])
         if (commRank == 0)
           cout << "Nonlinear Update:\t " << l2Update << endl;
 
-        form->updateSolution();
+        linestepSize = form->updateSolution();
         iterCount++;
       }
       double solveTime = solverTime->stop();

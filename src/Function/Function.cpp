@@ -121,6 +121,20 @@ public:
   }
 };
 
+class HeavisideFunctionY : public SimpleFunction<double>
+{
+  double _yShift;
+public:
+  HeavisideFunctionY(double yShift=0.0)
+  {
+    _yShift = yShift;
+  }
+  double value(double x, double y)
+  {
+    return (y < _yShift) ? 0.0 : 1.0;
+  }
+};
+
 class MeshBoundaryCharacteristicFunction : public TFunction<double>
 {
 public:
@@ -650,6 +664,12 @@ template <typename Scalar>
 TFunctionPtr<double> TFunction<Scalar>::heaviside(double xShift)
 {
   return Teuchos::rcp( new HeavisideFunction(xShift) );
+}
+
+template <typename Scalar>
+TFunctionPtr<double> TFunction<Scalar>::heavisideY(double yShift)
+{
+  return Teuchos::rcp( new HeavisideFunctionY(yShift) );
 }
 
 template <typename Scalar>
@@ -1762,7 +1782,7 @@ TFunctionPtr<Scalar> operator*(TFunctionPtr<Scalar> f1, TFunctionPtr<Scalar> f2)
       return Function::constant(f1_constant->value() * f2_constant->value());
     }
   }
-  
+
   return Teuchos::rcp( new ProductFunction<Scalar>(f1,f2) );
 }
 
@@ -1783,7 +1803,7 @@ TFunctionPtr<Scalar> operator/(TFunctionPtr<Scalar> f1, TFunctionPtr<Scalar> sca
       return Function::constant(f1_constant->value() / scalarDivisor_constant->value());
     }
   }
-  
+
   return Teuchos::rcp( new QuotientFunction<Scalar>(f1,scalarDivisor) );
 }
 
@@ -1868,7 +1888,7 @@ TFunctionPtr<Scalar> operator+(TFunctionPtr<Scalar> f1, TFunctionPtr<Scalar> f2)
       return Function::constant(f1_constant->value() + f2_constant->value());
     }
   }
-  
+
   return Teuchos::rcp( new SumFunction<Scalar>(f1, f2) );
 }
 

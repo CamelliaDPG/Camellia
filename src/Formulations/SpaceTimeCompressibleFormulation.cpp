@@ -552,45 +552,28 @@ SpaceTimeCompressibleFormulation::SpaceTimeCompressibleFormulation(Teuchos::RCP<
       // Linearized Terms
       Cc_dU->addTerm( 1*rho );
       Cm1_dU->addTerm( rho_prev*u1 + u1_prev*rho );
-      Cm1_dU->addTerm( rho_prev*u1 );
       Cm2_dU->addTerm( rho_prev*u2 + u2_prev*rho );
-      Cm2_dU->addTerm( rho_prev*u2 );
       Ce_dU->addTerm( Cv*T_prev*rho + Cv*rho_prev*T + 0.5*(u1_prev*u1_prev+u2_prev*u2_prev)*rho + rho_prev*(u1_prev*u1+u2_prev*u2) );
-      // Ce_dU->addTerm( Cv*T_prev*rho + Cv*rho_prev*T );
       Fc1_dU->addTerm( u1_prev*rho + rho_prev*u1 );
-      // Fc1_dU->addTerm( rho_prev*u1 );
       Fc2_dU->addTerm( u2_prev*rho + rho_prev*u2 );
-      // Fc2_dU->addTerm( rho_prev*u2 );
-      // Fm11_dU->addTerm( u1_prev*u1_prev*rho + 2*rho_prev*u1_prev*u1 + R*T_prev*rho + R*rho_prev*T );
-      // Fm11_dU->addTerm( R*T_prev*rho + R*rho_prev*T );
       Fm11_dU->addTerm( u1_prev*u1_prev*rho + 2*rho_prev*u1_prev*u1 + R*T_prev*rho + R*rho_prev*T );
       Fm12_dU->addTerm( u1_prev*u2_prev*rho + rho_prev*u2_prev*u1 + rho_prev*u1_prev*u2 );
       Fm21_dU->addTerm( u2_prev*u1_prev*rho + rho_prev*u2_prev*u1 + rho_prev*u1_prev*u2 );
-      // Fm22_dU->addTerm( u2_prev*u2_prev*rho + 2*rho_prev*u2_prev*u2 + R*T_prev*rho + R*rho_prev*T );
-      // Fm22_dU->addTerm( R*T_prev*rho );
-      // Fm22_dU->addTerm( R*rho_prev*T );
-      // Fm22_dU->addTerm( R*T_prev*rho + R*rho_prev*T );
       Fm22_dU->addTerm( u2_prev*u2_prev*rho + 2*rho_prev*u2_prev*u2 + R*T_prev*rho + R*rho_prev*T );
       Fe1_dU->addTerm( Cv*u1_prev*T_prev*rho + Cv*rho_prev*T_prev*u1 + Cv*rho_prev*u1_prev*T
             + 0.5*u1_prev*(u1_prev*u1_prev+u2_prev*u2_prev)*rho + 0.5*rho_prev*(u1_prev*u1_prev+u2_prev*u2_prev)*u1
             + rho_prev*u1_prev*(u1_prev*u1+u2_prev*u2)
             + R*rho_prev*T_prev*u1 + R*u1_prev*T_prev*rho + R*rho_prev*u1_prev*T );
-      // Fe1_dU->addTerm( Cv*rho_prev*T_prev*u1
-      //       + R*rho_prev*T_prev*u1 );
       Fe2_dU->addTerm( Cv*u2_prev*T_prev*rho + Cv*rho_prev*T_prev*u2 + Cv*rho_prev*u2_prev*T
             + 0.5*u2_prev*(u1_prev*u1_prev+u2_prev*u2_prev)*rho + 0.5*rho_prev*(u1_prev*u1_prev+u2_prev*u2_prev)*u2
             + rho_prev*u2_prev*(u1_prev*u1+u2_prev*u2)
             + R*rho_prev*T_prev*u2 + R*u2_prev*T_prev*rho + R*rho_prev*u2_prev*T );
-      // Fe2_dU->addTerm( Cv*rho_prev*T_prev*u2
-      //       + R*rho_prev*T_prev*u2 );
       Km11_dU->addTerm( 1*D11 );
       Km12_dU->addTerm( 1*D12 );
       Km21_dU->addTerm( 1*D21 );
       Km22_dU->addTerm( -1*D11 );
       Ke1_dU->addTerm( -q1 + D11_prev*u1 + D12_prev*u2 + u1_prev*D11 + u2_prev*D21 );
-      // Ke1_dU->addTerm( -q1 );
       Ke2_dU->addTerm( -q2 + D21_prev*u1 + D22_prev*u2 + u1_prev*D12 + -u2_prev*D11 );
-      // Ke2_dU->addTerm( -q2 );
       MD11_dU->addTerm( 1./mu*D11 );
       MD12_dU->addTerm( 1./mu*D12 );
       MD21_dU->addTerm( 1./mu*D21 );
@@ -601,46 +584,51 @@ SpaceTimeCompressibleFormulation::SpaceTimeCompressibleFormulation(Teuchos::RCP<
       GD2_dU->addTerm( 2*u2 );
       Gq_dU->addTerm( -T );
 
-      // // Adjoint Terms
-      // adj_Cc->addTerm( vc->dt() + u1_prev*vm1->dt() + u2_prev*vm2->dt() + Cv*T_prev*ve->dt() + 0.5*(u1_prev*u1_prev+u2_prev*u2_prev)*ve->dt() );
-      // adj_Cm1->addTerm( rho_prev*vm1->dt() + rho_prev*u1_prev*ve->dt() );
-      // adj_Cm2->addTerm( rho_prev*vm2->dt() + rho_prev*u2_prev*ve->dt() );
-      // adj_Ce->addTerm( Cv*rho_prev*ve->dt() );
-      // adj_Fc->addTerm( u1_prev*vc->dx() + u2_prev*vc->dy()
-      //     + u1_prev*u1_prev*vm1->dx() + u1_prev*u2_prev*vm1->dy() + u2_prev*u1_prev*vm2->dx() + u2_prev*u2_prev*vm2->dy()
-      //     + R*T_prev*vm1->dx() + R*T_prev*vm2->dy()
-      //     + Cv*T_prev*u1_prev*ve->dx() + Cv*T_prev*u2_prev*ve->dy()
-      //     + 0.5*(u1_prev*u1_prev+u2_prev*u2_prev)*(u1_prev*ve->dx() + u2_prev*ve->dy())
-      //     + R*T_prev*u1_prev*ve->dx() + R*T_prev*u2_prev*ve->dy() );
-      // adj_Fm1->addTerm( rho_prev*vc->dx()
-      //     + 2*rho_prev*u1_prev*vm1->dx() + rho_prev*u2_prev*vm1->dy() + rho_prev*u2_prev*vm2->dx()
-      //     + Cv*T_prev*rho_prev*ve->dx()
-      //     + 0.5*rho_prev*(u1_prev*u1_prev+u2_prev*u2_prev)*ve->dx()
-      //     + rho_prev*u1_prev*(u1_prev*ve->dx() + u2_prev*ve->dy()) + R*T_prev*rho_prev*ve->dx()
-      //     - D11_prev*ve->dx() - D12_prev*ve->dy() );
-      // adj_Fm2->addTerm( rho_prev*vc->dy()
-      //     + rho_prev*u1_prev*vm1->dy() + rho_prev*u1_prev*vm2->dx()+ 2*rho_prev*u2_prev*vm2->dy()
-      //     + Cv*T_prev*rho_prev*ve->dy()
-      //     + 0.5*rho_prev*(u1_prev*u1_prev+u2_prev*u2_prev)*ve->dy()
-      //     + rho_prev*u2_prev*(u1_prev*ve->dx() + u2_prev*ve->dy()) + R*T_prev*rho_prev*ve->dy()
-      //     - D21_prev*ve->dx() - D22_prev*ve->dy() );
-      // adj_Fe->addTerm( R*rho_prev*(vm1->dx() + vm2->dy()) + Cv*rho_prev*(u1_prev*ve->dx()+u2_prev*ve->dy())
-      //     + R*rho_prev*(u1_prev*ve->dx()+u2_prev*ve->dy()) );
-      // adj_KD11->addTerm( vm1->dx() + u1_prev*ve->dx() );
-      // adj_KD12->addTerm( vm1->dy() + u1_prev*ve->dy() );
-      // adj_KD21->addTerm( vm2->dx() + u2_prev*ve->dx() );
-      // adj_KD22->addTerm( vm2->dy() + u2_prev*ve->dy() );
-      // adj_Kq1->addTerm( -ve->dx() );
-      // adj_Kq2->addTerm( -ve->dy() );
-      // adj_MD11->addTerm( 1./mu*S11 );
-      // adj_MD12->addTerm( 1./mu*S12 );
-      // adj_MD21->addTerm( 1./mu*S21 );
-      // adj_MD22->addTerm( -1./mu*S11 );
-      // adj_Mq1->addTerm( Pr/(Cp*mu)*tau->x() );
-      // adj_Mq2->addTerm( Pr/(Cp*mu)*tau->y() );
-      // adj_Gm1->addTerm( 2*S11->dx() + 2*S12->dy() );
-      // adj_Gm2->addTerm( 2*S21->dx() + -2*S11->dy() );
-      // adj_Ge->addTerm( -tau->div() );
+      // Adjoint Terms
+      adj_Cc->addTerm( vc->dt() + u1_prev*vm1->dt() + u2_prev*vm2->dt() + Cv*T_prev*ve->dt() + 0.5*(u1_prev*u1_prev+u2_prev*u2_prev)*ve->dt() );
+      adj_Cm1->addTerm( rho_prev*vm1->dt() + rho_prev*u1_prev*ve->dt() );
+      adj_Cm2->addTerm( rho_prev*vm2->dt() + rho_prev*u2_prev*ve->dt() );
+      adj_Ce->addTerm( Cv*rho_prev*ve->dt() );
+      adj_Fc->addTerm( u1_prev*vc->dx() + u2_prev*vc->dy()
+          + u1_prev*u1_prev*vm1->dx() + u1_prev*u2_prev*vm1->dy() + u2_prev*u1_prev*vm2->dx() + u2_prev*u2_prev*vm2->dy()
+          + R*T_prev*vm1->dx() + R*T_prev*vm2->dy()
+          + Cv*T_prev*u1_prev*ve->dx() + Cv*T_prev*u2_prev*ve->dy()
+          + 0.5*(u1_prev*u1_prev+u2_prev*u2_prev)*(u1_prev*ve->dx() + u2_prev*ve->dy())
+          + R*T_prev*u1_prev*ve->dx() + R*T_prev*u2_prev*ve->dy() );
+      // This may be just vc->dx(), verify
+      adj_Fm1->addTerm( rho_prev*vc->dx()
+          + 2*rho_prev*u1_prev*vm1->dx() + rho_prev*u2_prev*vm1->dy() + rho_prev*u2_prev*vm2->dx()
+          + Cv*T_prev*rho_prev*ve->dx()
+          + 0.5*rho_prev*(u1_prev*u1_prev+u2_prev*u2_prev)*ve->dx()
+          + rho_prev*u1_prev*(u1_prev*ve->dx() + u2_prev*ve->dy()) + R*T_prev*rho_prev*ve->dx()
+          - D11_prev*ve->dx() - D12_prev*ve->dy() );
+          // - D11_prev*ve->dx() - D12_prev*ve->dx() );
+      adj_Fm2->addTerm( rho_prev*vc->dy()
+          + rho_prev*u1_prev*vm1->dy() + rho_prev*u1_prev*vm2->dx()+ 2*rho_prev*u2_prev*vm2->dy()
+          + Cv*T_prev*rho_prev*ve->dy()
+          + 0.5*rho_prev*(u1_prev*u1_prev+u2_prev*u2_prev)*ve->dy()
+          + rho_prev*u2_prev*(u1_prev*ve->dx() + u2_prev*ve->dy()) + R*T_prev*rho_prev*ve->dy()
+          - D21_prev*ve->dx() - D22_prev*ve->dy() );
+          // - D21_prev*ve->dx() - D22_prev*ve->dx() );
+      adj_Fe->addTerm( R*rho_prev*(vm1->dx() + vm2->dy()) + Cv*rho_prev*(u1_prev*ve->dx()+u2_prev*ve->dy())
+          + R*rho_prev*(u1_prev*ve->dx()+u2_prev*ve->dy()) );
+      adj_KD11->addTerm( vm1->dx() + u1_prev*ve->dx() );
+      adj_KD12->addTerm( vm1->dy() + u1_prev*ve->dy() );
+      // adj_KD12->addTerm( vm1->dy() + u2_prev*ve->dx() );
+      adj_KD21->addTerm( vm2->dx() + u2_prev*ve->dx() );
+      // adj_KD21->addTerm( vm2->dx() + u1_prev*ve->dy() );
+      adj_KD22->addTerm( vm2->dy() + u2_prev*ve->dy() );
+      adj_Kq1->addTerm( -ve->dx() );
+      adj_Kq2->addTerm( -ve->dy() );
+      adj_MD11->addTerm( 1./mu*S11 );
+      adj_MD12->addTerm( 1./mu*S12 );
+      adj_MD21->addTerm( 1./mu*S21 );
+      adj_MD22->addTerm( -1./mu*S11 );
+      adj_Mq1->addTerm( Pr/(Cp*mu)*tau->x() );
+      adj_Mq2->addTerm( Pr/(Cp*mu)*tau->y() );
+      adj_Gm1->addTerm( 2*S11->dx() + 2*S12->dy() );
+      adj_Gm2->addTerm( 2*S21->dx() + -2*S11->dy() );
+      adj_Ge->addTerm( -tau->div() );
       // adj_vm->addTerm( e1*vm1+e2*vm2 );
       break;
     case 3:
@@ -805,7 +793,7 @@ SpaceTimeCompressibleFormulation::SpaceTimeCompressibleFormulation(Teuchos::RCP<
       break;
   }
 
-  cout << _bf->displayString() << endl;
+  // cout << _bf->displayString() << endl;
   vector<VarPtr> missingTestVars = _bf->missingTestVars();
   vector<VarPtr> missingTrialVars = _bf->missingTrialVars();
   for (int i=0; i < missingTestVars.size(); i++)
@@ -821,72 +809,146 @@ SpaceTimeCompressibleFormulation::SpaceTimeCompressibleFormulation(Teuchos::RCP<
 
   _ips["Graph"] = _bf->graphNorm();
 
-  // _ips["ManualGraph"] = Teuchos::rcp(new IP);
-  // _ips["ManualGraph"]->addTerm( adj_MD11 + adj_KD11 );
-  // _ips["ManualGraph"]->addTerm( adj_Mq1 + adj_Kq1 );
-  // _ips["ManualGraph"]->addTerm( adj_Mq2 + adj_Kq2 );
-  // _ips["ManualGraph"]->addTerm( adj_Gc - adj_Fc - adj_Cc );
-  // _ips["ManualGraph"]->addTerm( adj_Gm1 - adj_Fm1 - adj_Cm1 );
-  // _ips["ManualGraph"]->addTerm( adj_Ge - adj_Fe - adj_Ce );
-  // _ips["ManualGraph"]->addTerm( vc );
-  // _ips["ManualGraph"]->addTerm( vm1 );
-  // _ips["ManualGraph"]->addTerm( ve );
-  // _ips["ManualGraph"]->addTerm( S11 );
-  // _ips["ManualGraph"]->addTerm( tau );
+  switch (_spaceDim)
+  {
+    case 1:
+      _ips["ManualGraph"] = Teuchos::rcp(new IP);
+      _ips["ManualGraph"]->addTerm( adj_MD11 + adj_KD11 );
+      _ips["ManualGraph"]->addTerm( adj_Mq1 + adj_Kq1 );
+      if (steady)
+      {
+        _ips["ManualGraph"]->addTerm( adj_Gc - adj_Fc );
+        _ips["ManualGraph"]->addTerm( adj_Gm1 - adj_Fm1 );
+        _ips["ManualGraph"]->addTerm( adj_Ge - adj_Fe );
+      }
+      else
+      {
+        _ips["ManualGraph"]->addTerm( adj_Gc - adj_Fc - adj_Cc );
+        _ips["ManualGraph"]->addTerm( adj_Gm1 - adj_Fm1 - adj_Cm1 );
+        _ips["ManualGraph"]->addTerm( adj_Ge - adj_Fe - adj_Ce );
+      }
+      _ips["ManualGraph"]->addTerm( vc );
+      _ips["ManualGraph"]->addTerm( vm1 );
+      _ips["ManualGraph"]->addTerm( ve );
+      _ips["ManualGraph"]->addTerm( S11 );
+      _ips["ManualGraph"]->addTerm( tau );
 
-  // _ips["CoupledRobust"] = Teuchos::rcp(new IP);
-  // _ips["CoupledRobust"]->addTerm( Function::min(one/Function::h(),Function::constant(1./sqrt(_mu)))*mu*adj_MD11);
-  // _ips["CoupledRobust"]->addTerm( Function::min(one/Function::h(),Function::constant(1./sqrt(_mu)))*Cp*mu/Pr*adj_Mq1);
-  // _ips["CoupledRobust"]->addTerm( sqrt(mu)*one*adj_KD11 );
-  // _ips["CoupledRobust"]->addTerm( sqrt(Cp*mu/Pr)*one*adj_Kq1 );
-  // _ips["CoupledRobust"]->addTerm( adj_Gc - adj_Fc - adj_Cc );
-  // _ips["CoupledRobust"]->addTerm( adj_Gm1 - adj_Fm1 - adj_Cm1 );
-  // _ips["CoupledRobust"]->addTerm( adj_Ge - adj_Fe - adj_Ce );
-  // _ips["CoupledRobust"]->addTerm( adj_Fc );
-  // _ips["CoupledRobust"]->addTerm( adj_Fm1 );
-  // _ips["CoupledRobust"]->addTerm( adj_Fe );
-  // _ips["CoupledRobust"]->addTerm( vc );
-  // _ips["CoupledRobust"]->addTerm( vm1 );
-  // _ips["CoupledRobust"]->addTerm( ve );
+      _ips["CoupledRobust"] = Teuchos::rcp(new IP);
+      _ips["CoupledRobust"]->addTerm( Function::min(one/Function::h(),Function::constant(1./sqrt(_mu)))*mu*adj_MD11);
+      _ips["CoupledRobust"]->addTerm( Function::min(one/Function::h(),Function::constant(1./sqrt(_mu)))*Cp*mu/Pr*adj_Mq1);
+      _ips["CoupledRobust"]->addTerm( sqrt(mu)*one*adj_KD11 );
+      _ips["CoupledRobust"]->addTerm( sqrt(Cp*mu/Pr)*one*adj_Kq1 );
+      _ips["CoupledRobust"]->addTerm( adj_Gc - adj_Fc - adj_Cc );
+      _ips["CoupledRobust"]->addTerm( adj_Gm1 - adj_Fm1 - adj_Cm1 );
+      _ips["CoupledRobust"]->addTerm( adj_Ge - adj_Fe - adj_Ce );
+      _ips["CoupledRobust"]->addTerm( adj_Fc );
+      _ips["CoupledRobust"]->addTerm( adj_Fm1 );
+      _ips["CoupledRobust"]->addTerm( adj_Fe );
+      _ips["CoupledRobust"]->addTerm( vc );
+      _ips["CoupledRobust"]->addTerm( vm1 );
+      _ips["CoupledRobust"]->addTerm( ve );
 
-  _ips["NSDecoupledH1"] = Teuchos::rcp(new IP);
-  _ips["NSDecoupledH1"]->addTerm( mu/Function::h()*adj_MD11 );
-  _ips["NSDecoupledH1"]->addTerm( mu/Function::h()*adj_MD12 );
-  _ips["NSDecoupledH1"]->addTerm( mu/Function::h()*adj_MD13 );
-  _ips["NSDecoupledH1"]->addTerm( mu/Function::h()*adj_MD21 );
-  _ips["NSDecoupledH1"]->addTerm( mu/Function::h()*adj_MD22 );
-  _ips["NSDecoupledH1"]->addTerm( mu/Function::h()*adj_MD23 );
-  _ips["NSDecoupledH1"]->addTerm( mu/Function::h()*adj_MD31 );
-  _ips["NSDecoupledH1"]->addTerm( mu/Function::h()*adj_MD32 );
-  _ips["NSDecoupledH1"]->addTerm( mu/Function::h()*adj_MD33 );
-  _ips["NSDecoupledH1"]->addTerm( Cp*mu/Pr/Function::h()*adj_Mq1 );
-  _ips["NSDecoupledH1"]->addTerm( Cp*mu/Pr/Function::h()*adj_Mq2 );
-  _ips["NSDecoupledH1"]->addTerm( Cp*mu/Pr/Function::h()*adj_Mq3 );
-  _ips["NSDecoupledH1"]->addTerm( adj_KD11 );
-  _ips["NSDecoupledH1"]->addTerm( adj_KD12 );
-  _ips["NSDecoupledH1"]->addTerm( adj_KD13 );
-  _ips["NSDecoupledH1"]->addTerm( adj_KD21 );
-  _ips["NSDecoupledH1"]->addTerm( adj_KD22 );
-  _ips["NSDecoupledH1"]->addTerm( adj_KD23 );
-  _ips["NSDecoupledH1"]->addTerm( adj_KD31 );
-  _ips["NSDecoupledH1"]->addTerm( adj_KD32 );
-  _ips["NSDecoupledH1"]->addTerm( adj_KD33 );
-  _ips["NSDecoupledH1"]->addTerm( adj_Kq1 );
-  _ips["NSDecoupledH1"]->addTerm( adj_Kq2 );
-  _ips["NSDecoupledH1"]->addTerm( adj_Kq3 );
-  _ips["NSDecoupledH1"]->addTerm( adj_Fc + adj_Cc );
-  _ips["NSDecoupledH1"]->addTerm( adj_Fm1 + adj_Cm1 );
-  _ips["NSDecoupledH1"]->addTerm( adj_Fm2 + adj_Cm2 );
-  _ips["NSDecoupledH1"]->addTerm( adj_Fm3 + adj_Cm3 );
-  _ips["NSDecoupledH1"]->addTerm( adj_Fe + adj_Ce );
-  _ips["NSDecoupledH1"]->addTerm( adj_Gc );
-  _ips["NSDecoupledH1"]->addTerm( adj_Gm1 );
-  _ips["NSDecoupledH1"]->addTerm( adj_Gm2 );
-  _ips["NSDecoupledH1"]->addTerm( adj_Gm3 );
-  _ips["NSDecoupledH1"]->addTerm( adj_Ge );
-  _ips["NSDecoupledH1"]->addTerm( vc );
-  _ips["NSDecoupledH1"]->addTerm( adj_vm );
-  _ips["NSDecoupledH1"]->addTerm( ve );
+      _ips["NSDecoupledH1"] = Teuchos::rcp(new IP);
+      _ips["NSDecoupledH1"]->addTerm( mu/Function::h()*adj_MD11 );
+      _ips["NSDecoupledH1"]->addTerm( Cp*mu/Pr/Function::h()*adj_Mq1 );
+      _ips["NSDecoupledH1"]->addTerm( adj_KD11 );
+      _ips["NSDecoupledH1"]->addTerm( adj_Kq1 );
+      _ips["NSDecoupledH1"]->addTerm( adj_Fc + adj_Cc );
+      _ips["NSDecoupledH1"]->addTerm( adj_Fm1 + adj_Cm1 );
+      _ips["NSDecoupledH1"]->addTerm( adj_Fe + adj_Ce );
+      _ips["NSDecoupledH1"]->addTerm( adj_Gc );
+      _ips["NSDecoupledH1"]->addTerm( adj_Gm1 );
+      _ips["NSDecoupledH1"]->addTerm( adj_Ge );
+      _ips["NSDecoupledH1"]->addTerm( vc );
+      _ips["NSDecoupledH1"]->addTerm( vm1 );
+      _ips["NSDecoupledH1"]->addTerm( ve );
+      break;
+    case 2:
+      _ips["ManualGraph"] = Teuchos::rcp(new IP);
+      _ips["ManualGraph"]->addTerm( adj_MD11 + adj_KD11 );
+      _ips["ManualGraph"]->addTerm( adj_MD12 + adj_KD12 );
+      _ips["ManualGraph"]->addTerm( adj_MD21 + adj_KD21 );
+      _ips["ManualGraph"]->addTerm( adj_MD22 + adj_KD22 );
+      _ips["ManualGraph"]->addTerm( adj_Mq1 + adj_Kq1 );
+      _ips["ManualGraph"]->addTerm( adj_Mq2 + adj_Kq2 );
+      if (steady)
+      {
+        _ips["ManualGraph"]->addTerm( adj_Gc - adj_Fc );
+        _ips["ManualGraph"]->addTerm( adj_Gm1 - adj_Fm1 );
+        _ips["ManualGraph"]->addTerm( adj_Gm2 - adj_Fm2 );
+        _ips["ManualGraph"]->addTerm( adj_Ge - adj_Fe );
+      }
+      else
+      {
+        _ips["ManualGraph"]->addTerm( adj_Gc - adj_Fc - adj_Cc );
+        _ips["ManualGraph"]->addTerm( adj_Gm1 - adj_Fm1 - adj_Cm1 );
+        _ips["ManualGraph"]->addTerm( adj_Gm2 - adj_Fm2 - adj_Cm2 );
+        _ips["ManualGraph"]->addTerm( adj_Ge - adj_Fe - adj_Ce );
+      }
+      _ips["ManualGraph"]->addTerm( vc );
+      _ips["ManualGraph"]->addTerm( vm1 );
+      _ips["ManualGraph"]->addTerm( vm2 );
+      _ips["ManualGraph"]->addTerm( ve );
+      _ips["ManualGraph"]->addTerm( S11 );
+      _ips["ManualGraph"]->addTerm( S12 );
+      _ips["ManualGraph"]->addTerm( S21 );
+      _ips["ManualGraph"]->addTerm( -S11 );
+      _ips["ManualGraph"]->addTerm( tau );
+
+      _ips["CoupledRobust"] = Teuchos::rcp(new IP);
+      _ips["CoupledRobust"]->addTerm( Function::min(one/Function::h(),Function::constant(1./sqrt(_mu)))*mu*adj_MD11);
+      _ips["CoupledRobust"]->addTerm( Function::min(one/Function::h(),Function::constant(1./sqrt(_mu)))*mu*adj_MD12);
+      _ips["CoupledRobust"]->addTerm( Function::min(one/Function::h(),Function::constant(1./sqrt(_mu)))*mu*adj_MD21);
+      _ips["CoupledRobust"]->addTerm( Function::min(one/Function::h(),Function::constant(1./sqrt(_mu)))*mu*adj_MD22);
+      _ips["CoupledRobust"]->addTerm( Function::min(one/Function::h(),Function::constant(1./sqrt(_mu)))*Cp*mu/Pr*adj_Mq1);
+      _ips["CoupledRobust"]->addTerm( Function::min(one/Function::h(),Function::constant(1./sqrt(_mu)))*Cp*mu/Pr*adj_Mq2);
+      _ips["CoupledRobust"]->addTerm( sqrt(mu)*one*adj_KD11 );
+      _ips["CoupledRobust"]->addTerm( sqrt(mu)*one*adj_KD12 );
+      _ips["CoupledRobust"]->addTerm( sqrt(mu)*one*adj_KD21 );
+      _ips["CoupledRobust"]->addTerm( sqrt(mu)*one*adj_KD22 );
+      _ips["CoupledRobust"]->addTerm( sqrt(Cp*mu/Pr)*one*adj_Kq1 );
+      _ips["CoupledRobust"]->addTerm( sqrt(Cp*mu/Pr)*one*adj_Kq2 );
+      _ips["CoupledRobust"]->addTerm( adj_Gc - adj_Fc - adj_Cc );
+      _ips["CoupledRobust"]->addTerm( adj_Gm1 - adj_Fm1 - adj_Cm1 );
+      _ips["CoupledRobust"]->addTerm( adj_Gm2 - adj_Fm2 - adj_Cm2 );
+      _ips["CoupledRobust"]->addTerm( adj_Ge - adj_Fe - adj_Ce );
+      _ips["CoupledRobust"]->addTerm( adj_Fc );
+      _ips["CoupledRobust"]->addTerm( adj_Fm1 );
+      _ips["CoupledRobust"]->addTerm( adj_Fm2 );
+      _ips["CoupledRobust"]->addTerm( adj_Fe );
+      _ips["CoupledRobust"]->addTerm( vc );
+      _ips["CoupledRobust"]->addTerm( vm1 );
+      _ips["CoupledRobust"]->addTerm( vm2 );
+      _ips["CoupledRobust"]->addTerm( ve );
+
+      _ips["NSDecoupledH1"] = Teuchos::rcp(new IP);
+      _ips["NSDecoupledH1"]->addTerm( mu/Function::h()*adj_MD11 );
+      _ips["NSDecoupledH1"]->addTerm( mu/Function::h()*adj_MD12 );
+      _ips["NSDecoupledH1"]->addTerm( mu/Function::h()*adj_MD21 );
+      _ips["NSDecoupledH1"]->addTerm( mu/Function::h()*adj_MD22 );
+      _ips["NSDecoupledH1"]->addTerm( Cp*mu/Pr/Function::h()*adj_Mq1 );
+      _ips["NSDecoupledH1"]->addTerm( Cp*mu/Pr/Function::h()*adj_Mq2 );
+      _ips["NSDecoupledH1"]->addTerm( adj_KD11 );
+      _ips["NSDecoupledH1"]->addTerm( adj_KD12 );
+      _ips["NSDecoupledH1"]->addTerm( adj_KD21 );
+      _ips["NSDecoupledH1"]->addTerm( adj_KD22 );
+      _ips["NSDecoupledH1"]->addTerm( adj_Kq1 );
+      _ips["NSDecoupledH1"]->addTerm( adj_Kq2 );
+      _ips["NSDecoupledH1"]->addTerm( adj_Fc + adj_Cc );
+      _ips["NSDecoupledH1"]->addTerm( adj_Fm1 + adj_Cm1 );
+      _ips["NSDecoupledH1"]->addTerm( adj_Fm2 + adj_Cm2 );
+      _ips["NSDecoupledH1"]->addTerm( adj_Fe + adj_Ce );
+      _ips["NSDecoupledH1"]->addTerm( adj_Gc );
+      _ips["NSDecoupledH1"]->addTerm( adj_Gm1 );
+      _ips["NSDecoupledH1"]->addTerm( adj_Gm2 );
+      _ips["NSDecoupledH1"]->addTerm( adj_Ge );
+      _ips["NSDecoupledH1"]->addTerm( vc );
+      _ips["NSDecoupledH1"]->addTerm( vm1 );
+      _ips["NSDecoupledH1"]->addTerm( vm2 );
+      _ips["NSDecoupledH1"]->addTerm( ve );
+      break;
+  }
+
 
   IPPtr ip = _ips.at(norm);
   if (problem->forcingTerm != Teuchos::null)
@@ -1226,7 +1288,7 @@ SolutionPtr SpaceTimeCompressibleFormulation::solutionBackground()
   return _solutionBackground;
 }
 
-void SpaceTimeCompressibleFormulation::updateSolution()
+double SpaceTimeCompressibleFormulation::updateSolution()
 {
   vector<int> trialIDs = _vf->trialIDs();
   set<int> trialIDSet(trialIDs.begin(), trialIDs.end());
@@ -1273,6 +1335,7 @@ void SpaceTimeCompressibleFormulation::updateSolution()
     }
   }
   _solutionBackground->addReplaceSolution(_solutionUpdate, alpha, nlVars, lVars);
+  return alpha;
 }
 
 // ! Solves

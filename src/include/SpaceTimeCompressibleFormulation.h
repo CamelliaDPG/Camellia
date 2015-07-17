@@ -112,7 +112,7 @@ public:
   // ! Returns the solution (at current time)
   SolutionPtr solutionUpdate();
   SolutionPtr solutionBackground();
-  void updateSolution();
+  double updateSolution();
 
   // ! Solves
   void solve();
