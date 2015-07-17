@@ -1087,29 +1087,29 @@ int GMGOperator::ApplyInverse(const Epetra_MultiVector& X_in, Epetra_MultiVector
   int numApplications = 1;
   if (_multigridStrategy == W_CYCLE) numApplications = 2;
   
-  for (int applicationOrdinal = 0; applicationOrdinal < numApplications; applicationOrdinal++)
+  if (_smootherType != NONE)
   {
-    if (_smootherType != NONE)
+    // if we have a smoother S, set Y = S^-1 f =: B1 * f
+    Epetra_MultiVector B1_res(Y.Map(), Y.NumVectors()); // B1_res: the smoother applied to res.
+    ApplySmoother(res, B1_res); // B1_f is scaled!
+    Y.Update(1.0, B1_res, 1.0);
+    if (_debugMode)
     {
-      // if we have a smoother S, set Y = S^-1 f =: B1 * f
-      Epetra_MultiVector B1_res(Y.Map(), Y.NumVectors()); // B1_res: the smoother applied to res.
-      ApplySmoother(res, B1_res); // B1_f is scaled!
-      Y.Update(1.0, B1_res, 1.0);
-      if (_debugMode)
-      {
-        if (printVerboseOutput) cout << "B1 * res:\n";
-        B1_res.Comm().Barrier();
-        cout << B1_res;
-      }
-      
-      if (_multigridStrategy != TWO_LEVEL)
-      {
-        // compute a new residual: res := f - A*Y = res - A*Y
-        res = f;
-        computeResidual(Y,res,A_Y);
-      }
+      if (printVerboseOutput) cout << "B1 * res:\n";
+      B1_res.Comm().Barrier();
+      cout << B1_res;
     }
     
+    if (_multigridStrategy != TWO_LEVEL)
+    {
+      // compute a new residual: res := f - A*Y = res - A*Y
+      res = f;
+      computeResidual(Y,res,A_Y);
+    }
+  }
+  
+  for (int applicationOrdinal = 0; applicationOrdinal < numApplications; applicationOrdinal++)
+  {
     Epetra_MultiVector Y2(Y.Map(), Y.NumVectors());
     this->ApplyInverseCoarseOperator(res, Y2);
     Y.Update(1.0, Y2, 1.0);
