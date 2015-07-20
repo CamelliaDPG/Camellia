@@ -103,6 +103,8 @@ public:
    */
   const Teuchos::RCP< Camellia::Basis<Scalar, ArrayScalar> > getTemporalBasis() const;
 
+  bool isNodal() const;      // true if both spatial and temporal basis are nodal
+  
   /** \brief  Returns the range dimension--i.e. 3 for vectors or tensors in 3D, 2 in 2D, etc.
               For scalar-valued bases, returns the dimension of the domain.
    */
