@@ -61,12 +61,12 @@ int main(int argc, char *argv[])
   bool useCondensedSolve = false;
   bool useConjugateGradient = true;
   bool logFineOperator = false;
-  double solverTolerance = 1e-8;
+  // double solverTolerance = 1e-8;
   double nonlinearTolerance = 1e-5;
-  int maxLinearIterations = 10000;
+  // int maxLinearIterations = 10000;
   int maxNonlinearIterations = 20;
-  int cgMaxIterations = 2000;
-  double cgTol = 1e-10;
+  int cgMaxIterations = 10000;
+  double cgTol = 1e-8;
   bool computeL2Error = false;
   bool exportSolution = false;
   bool saveSolution = false;
@@ -93,9 +93,9 @@ int main(int argc, char *argv[])
   cmdp.setOption("useCondensedSolve", "useStandardSolve", &useCondensedSolve);
   cmdp.setOption("logFineOperator", "dontLogFineOperator", &logFineOperator);
   cmdp.setOption("CG", "GMRES", &useConjugateGradient);
-  cmdp.setOption("solverTolerance", &solverTolerance, "iterative solver tolerance");
+  // cmdp.setOption("solverTolerance", &solverTolerance, "iterative solver tolerance");
   cmdp.setOption("nonlinearTolerance", &nonlinearTolerance, "nonlinear solver tolerance");
-  cmdp.setOption("maxLinearIterations", &maxLinearIterations, "maximum number of iterations for linear solver");
+  // cmdp.setOption("maxLinearIterations", &maxLinearIterations, "maximum number of iterations for linear solver");
   cmdp.setOption("maxNonlinearIterations", &maxNonlinearIterations, "maximum number of iterations for Newton solver");
   cmdp.setOption("outputDir", &rootDir, "output directory");
   cmdp.setOption("computeL2Error", "skipL2Error", &computeL2Error, "compute L2 error");
