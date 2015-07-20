@@ -57,10 +57,16 @@ int main(int argc, char *argv[])
   int numSlabs = 1;
   bool useConformingTraces = false;
   string solverChoice = "KLU";
+  string multigridStrategyString = "W-cycle";
+  bool useCondensedSolve = false;
+  bool useConjugateGradient = true;
+  bool logFineOperator = false;
   double solverTolerance = 1e-8;
   double nonlinearTolerance = 1e-5;
   int maxLinearIterations = 10000;
   int maxNonlinearIterations = 20;
+  int cgMaxIterations = 2000;
+  double cgTol = 1e-10;
   bool computeL2Error = false;
   bool exportSolution = false;
   bool saveSolution = false;
@@ -83,6 +89,10 @@ int main(int argc, char *argv[])
   cmdp.setOption("norm", &norm, "norm");
   cmdp.setOption("conformingTraces", "nonconformingTraces", &useConformingTraces, "use conforming traces");
   cmdp.setOption("solver", &solverChoice, "KLU, SuperLU, MUMPS, GMG-Direct, GMG-ILU, GMG-IC");
+  cmdp.setOption("multigridStrategy", &multigridStrategyString, "Multigrid strategy: V-cycle, W-cycle, Full, or Two-level");
+  cmdp.setOption("useCondensedSolve", "useStandardSolve", &useCondensedSolve);
+  cmdp.setOption("logFineOperator", "dontLogFineOperator", &logFineOperator);
+  cmdp.setOption("CG", "GMRES", &useConjugateGradient);
   cmdp.setOption("solverTolerance", &solverTolerance, "iterative solver tolerance");
   cmdp.setOption("nonlinearTolerance", &nonlinearTolerance, "nonlinear solver tolerance");
   cmdp.setOption("maxLinearIterations", &maxLinearIterations, "maximum number of iterations for linear solver");
@@ -165,8 +175,11 @@ int main(int argc, char *argv[])
     SpaceTimeIncompressibleFormulationPtr form = Teuchos::rcp(new SpaceTimeIncompressibleFormulation(problem, parameters));
 
     MeshPtr mesh = form->solutionUpdate()->mesh();
+    vector<MeshPtr> meshesCoarseToFine;
     MeshPtr k0Mesh = Teuchos::rcp( new Mesh (mesh->getTopology()->deepCopy(), form->bf(), 1, delta_p) );
-    mesh->registerObserver(k0Mesh);
+    meshesCoarseToFine.push_back(k0Mesh);
+    meshesCoarseToFine.push_back(mesh);
+    // mesh->registerObserver(k0Mesh);
 
     // Set up boundary conditions
     problem->setBCs(form);
@@ -191,7 +204,29 @@ int main(int argc, char *argv[])
     solvers["MUMPS"] = Solver::getSolver(Solver::MUMPS, true);
 #endif
     bool useStaticCondensation = false;
-    int azOutput = 20; // print residual every 20 CG iterations
+
+    GMGOperator::MultigridStrategy multigridStrategy;
+    if (multigridStrategyString == "Two-level")
+    {
+      multigridStrategy = GMGOperator::TWO_LEVEL;
+    }
+    else if (multigridStrategyString == "W-cycle")
+    {
+      multigridStrategy = GMGOperator::W_CYCLE;
+    }
+    else if (multigridStrategyString == "V-cycle")
+    {
+      multigridStrategy = GMGOperator::V_CYCLE;
+    }
+    else if (multigridStrategyString == "Full")
+    {
+      multigridStrategy = GMGOperator::FULL_MULTIGRID;
+    }
+    else
+    {
+      TEUCHOS_TEST_FOR_EXCEPTION(true, std::invalid_argument, "unrecognized multigrid strategy");
+    }
+
     ofstream dataFile(dataFileLocation);
     dataFile << "ref\t " << "elements\t " << "dofs\t " << "energy\t " << "l2\t " << "solvetime\t" << "iterations\t " << endl;
 
@@ -209,21 +244,30 @@ int main(int argc, char *argv[])
       double l2Update = 1e10;
       int iterCount = 0;
       solverTime->start(true);
+      Teuchos::RCP<GMGSolver> gmgSolver;
+      if (solverChoice[0] == 'G')
+      {
+        // gmgSolver = Teuchos::rcp( new GMGSolver(solutionUpdate, k0Mesh, maxLinearIterations, solverTolerance, Solver::getDirectSolver(true), useStaticCondensation));
+        bool reuseFactorization = true;
+        SolverPtr coarseSolver = Solver::getDirectSolver(reuseFactorization);
+        gmgSolver = Teuchos::rcp(new GMGSolver(solutionUpdate, meshesCoarseToFine, cgMaxIterations, cgTol, multigridStrategy, coarseSolver, useCondensedSolve));
+        gmgSolver->setUseConjugateGradient(useConjugateGradient);
+        int azOutput = 20; // print residual every 20 CG iterations
+        gmgSolver->setAztecOutput(azOutput);
+        gmgSolver->gmgOperator()->setNarrateOnRankZero(logFineOperator,"finest GMGOperator");
+
+        // gmgSolver->setAztecOutput(azOutput);
+        // if (solverChoice == "GMG-Direct")
+        //   gmgSolver->gmgOperator()->setSchwarzFactorizationType(GMGOperator::Direct);
+        // if (solverChoice == "GMG-ILU")
+        //   gmgSolver->gmgOperator()->setSchwarzFactorizationType(GMGOperator::ILU);
+        // if (solverChoice == "GMG-IC")
+        //   gmgSolver->gmgOperator()->setSchwarzFactorizationType(GMGOperator::IC);
+      }
       while (l2Update > nonlinearTolerance && iterCount < maxNonlinearIterations)
       {
-        Teuchos::RCP<GMGSolver> gmgSolver;
         if (solverChoice[0] == 'G')
-        {
-          gmgSolver = Teuchos::rcp( new GMGSolver(solutionUpdate, k0Mesh, maxLinearIterations, solverTolerance, Solver::getDirectSolver(true), useStaticCondensation));
-          gmgSolver->setAztecOutput(azOutput);
-          if (solverChoice == "GMG-Direct")
-            gmgSolver->gmgOperator()->setSchwarzFactorizationType(GMGOperator::Direct);
-          if (solverChoice == "GMG-ILU")
-            gmgSolver->gmgOperator()->setSchwarzFactorizationType(GMGOperator::ILU);
-          if (solverChoice == "GMG-IC")
-            gmgSolver->gmgOperator()->setSchwarzFactorizationType(GMGOperator::IC);
           solutionUpdate->solve(gmgSolver);
-        }
         else
           solutionUpdate->condensedSolve(solvers[solverChoice]);
 
@@ -278,7 +322,12 @@ int main(int argc, char *argv[])
       }
 
       if (refIndex != numRefs)
+      {
+        // k0Mesh = Teuchos::rcp( new Mesh (mesh->getTopology()->deepCopy(), form->bf(), 1, delta_p) );
+        // meshesCoarseToFine.push_back(k0Mesh);
         refStrategy->refine();
+        meshesCoarseToFine.push_back(mesh);
+      }
     }
     dataFile.close();
   }

@@ -209,7 +209,7 @@ SpaceTimeIncompressibleFormulation::SpaceTimeIncompressibleFormulation(Teuchos::
     _mesh = Teuchos::rcp( new Mesh(meshTopo, _bf, H1Order, delta_p) ) ;
     if (meshGeometry != Teuchos::null)
       _mesh->setEdgeToCurveMap(meshGeometry->edgeToCurveMap());
-    problem->preprocessMesh(_mesh);
+    // problem->preprocessMesh(_mesh);
     // proxyMesh->registerObserver(_mesh);
     // problem->preprocessMesh(proxyMesh);
     // _mesh->enforceOneIrregularity();

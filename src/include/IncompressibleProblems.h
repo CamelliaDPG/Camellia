@@ -265,7 +265,7 @@ class CylinderProblem : public IncompressibleProblem
       _sigma2_exact = Function::zero();
 
       _tInit = 0.0;
-      _tFinal = 1.0;
+      _tFinal = 4.0;
       _numSlabs = numSlabs;
       _pureVelocityBCs = false;
     }
