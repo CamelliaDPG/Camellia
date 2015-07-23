@@ -14,6 +14,7 @@
 #include "BasisSumFunction.h"
 #include "CamelliaCellTools.h"
 #include "CondensedDofInterpreter.h"
+#include "CubatureFactory.h"
 #include "GDAMinimumRule.h"
 #include "SerialDenseWrapper.h"
 
@@ -74,7 +75,8 @@ _finePartitionMap(finePartitionMap), _br(true)
   _schwarzBlockFactorizationType = Direct;
 
   // additive implies a two-level operator.
-  _smootherApplicationType = ADDITIVE;
+  _smootherApplicationType = MULTIPLICATIVE; // this field is deprecated
+  _multigridStrategy = V_CYCLE;  // we might want to change to V_CYCLE
 
   _levelOfFill = 2;
   _fillRatio = 5.0;
@@ -117,7 +119,7 @@ _finePartitionMap(finePartitionMap), _br(true)
 
   setSmootherType(CAMELLIA_ADDITIVE_SCHWARZ); // default
   _smootherOverlap = 0;
-  _useSchwarzDiagonalWeight = false;
+  _useSchwarzDiagonalWeight = true;
   _useSchwarzScalingWeight = true;
 
   if (( coarseMesh->meshUsesMaximumRule()) || (! fineMesh->meshUsesMinimumRule()) )
@@ -406,57 +408,8 @@ Teuchos::RCP<Epetra_CrsMatrix> GMGOperator::constructProlongationOperator()
           FieldContainer<double> coarseCellCoefficients(coarseDofCount);
           FieldContainer<double> mappedCoarseCellCoefficients(fineMapper->globalIndices().size());
           
-          // fitting attempt:
-          
-          {
-//            FieldContainer<double> fittedCoarseCellCoefficients = fineMapper->fitLocalCoefficients(fineCellCoefficients);
-//            vector<GlobalIndexType> fittableCoarseDofIndices = fineMapper->fittableGlobalIndices(); // "global" here means the coarse local
-//            
-//            int fittedCoarseDofOrdinal=0; // index into fittedCoarseCellCoefficients
-//            double tol = 1e-15;
-//            for (GlobalIndexType coarseDofIndex : fittableCoarseDofIndices)
-//            {
-//              if (abs(fittedCoarseCellCoefficients[fittedCoarseDofOrdinal]) > tol)
-//              {
-//                coarseCellCoefficients[coarseDofIndex] = fittedCoarseCellCoefficients[fittedCoarseDofOrdinal];
-//              }
-//              fittedCoarseDofOrdinal++;
-//            }
-          }
-          
-          // non-fitting attempt:
-          {
-            coarseCellCoefficients = fineMapper->mapLocalData(fineCellCoefficients, true);
-          }
-          
-//          CellPtr fineCell = _fineMesh->getTopology()->getCell(fineCellID);
-//          int sideCount = fineCell->getSideCount();
-//          for (int sideOrdinal=0; sideOrdinal<sideCount; sideOrdinal++)
-//          {
-//            // this here, combined with the fact that we're calling *data* mapping rather than
-//            // coefficient mapping methods, is the reason we do not right now support continuous trace variables.
-//            // (This is basically a hack to avoid accumulating twice for dofs on a side.  But with continuous
-//            //  trace variables, sides can share degrees of freedom with sides other than those they face directly.)
-//            if (fineCell->ownsSide(sideOrdinal,_fineMesh->getTopology()))
-//            {
-//              //        cout << "fine cell " << fineCellID << " owns side " << sideOrdinal << endl;
-//              fineMapper->mapLocalDataSide(fineCellData, mappedCoarseCellData, false, sideOrdinal);
-//            }
-//          }
-//          
-//          //        if (globalRow==1) {
-//          //          cout << "mappedCoarseCellData:\n" << mappedCoarseCellData;
-//          //        }
-//          vector<GlobalIndexType> mappedCoarseDofIndices = fineMapper->globalIndices(); // "global" here means the coarse local
-//          for (int mappedCoarseDofOrdinal = 0; mappedCoarseDofOrdinal < mappedCoarseDofIndices.size(); mappedCoarseDofOrdinal++)
-//          {
-//            GlobalIndexType coarseDofIndex = mappedCoarseDofIndices[mappedCoarseDofOrdinal];
-//            coarseCellData[coarseDofIndex] = mappedCoarseCellData[mappedCoarseDofOrdinal];
-//          }
-          
-//          FieldContainer<double> interpretedCoarseData;
-//          FieldContainer<GlobalIndexType> interpretedGlobalDofIndices;
-//          _coarseSolution->getDofInterpreter()->interpretLocalData(coarseCellID, coarseCellData, interpretedCoarseData, interpretedGlobalDofIndices);
+
+          coarseCellCoefficients = fineMapper->mapLocalData(fineCellCoefficients, true);
 
           FieldContainer<double> interpretedCoarseData;
           map<GlobalIndexType,double> fittedGlobalCoefficients;
@@ -469,12 +422,6 @@ Teuchos::RCP<Epetra_CrsMatrix> GMGOperator::constructProlongationOperator()
             double value = globalEntry.second;
             coarseXVectorLocal[globalDofIndex] = value;
           }
-            
-//          for (int interpretedCoarseGlobalDofOrdinal=0; interpretedCoarseGlobalDofOrdinal < interpretedGlobalDofIndices.size(); interpretedCoarseGlobalDofOrdinal++)
-//          {
-//            GlobalIndexType globalDofIndex = interpretedGlobalDofIndices[interpretedCoarseGlobalDofOrdinal];
-//            coarseXVectorLocal[globalDofIndex] += interpretedCoarseData[interpretedCoarseGlobalDofOrdinal];
-//          }
         }
       }
       
@@ -575,32 +522,6 @@ Epetra_CrsMatrix* GMGOperator::getFineStiffnessMatrix()
   return _fineStiffnessMatrix;
 }
 
-void mergeSetsAndCreateLookups(const set<int> &setA, const set<int> &setB, set<int> &mergedSet,
-                               map<int,int> &setALookup, map<int,int> &setBLookup, map<int,int> &mergedLookup)
-{
-  setALookup.clear();
-  setBLookup.clear();
-  mergedLookup.clear();
-  mergedSet.clear();
-  int ordinal = 0;
-  for (int index : setA)
-  {
-    setALookup[index] = ordinal++;
-  }
-  ordinal = 0;
-  for (int index : setB)
-  {
-    setBLookup[index] = ordinal++;
-  }
-  mergedSet.insert(setA.begin(),setA.end());
-  mergedSet.insert(setB.begin(),setB.end());
-  ordinal = 0;
-  for (int index : mergedSet)
-  {
-    mergedLookup[index] = ordinal++;
-  }
-}
-
 LocalDofMapperPtr GMGOperator::getLocalCoefficientMap(GlobalIndexType fineCellID) const
 {
   const set<IndexType>* coarseCellIDs = &_coarseMesh->getTopology()->getActiveCellIndices();
@@ -649,6 +570,13 @@ LocalDofMapperPtr GMGOperator::getLocalCoefficientMap(GlobalIndexType fineCellID
   {
     condensedDofInterpreter = dynamic_cast<CondensedDofInterpreter<double>*>(_fineDofInterpreter.get());
   }
+  
+  // When doing static condensation for h-multigrid, the prolongation operator involves inversion of the
+  // coarse local stiffness matrix to determine the fields on the coarse element; we take the traces of
+  // these fields to determine the fine traces on the interior of the element.  Since these computations
+  // may be spatially dependent, we can't reuse the prolongation that we determined for some other cell whose
+  // refinement branch and element types match ours.
+  bool cellProlongationCanMatchPatterns = (coarseCellID == fineCellID) || (condensedDofInterpreter == NULL);
 
   int fineSideCount = fineCell->getSideCount();
   int spaceDim = _fineMesh->getTopology()->getDimension();
@@ -664,8 +592,24 @@ LocalDofMapperPtr GMGOperator::getLocalCoefficientMap(GlobalIndexType fineCellID
     }
   }
 
-  if (_localCoefficientMap.find(key) == _localCoefficientMap.end())
+  LocalDofMapperPtr dofMapper;
+  if (cellProlongationCanMatchPatterns && (_localCoefficientMap.find(key) != _localCoefficientMap.end()))
   {
+    dofMapper = _localCoefficientMap[key];
+  }
+  else
+  {
+    Teuchos::RCP<Epetra_SerialDenseMatrix> coarseFluxToFieldMapMatrix;
+    vector<int> fluxOrdinalToLocalDofIndex;
+    if (!cellProlongationCanMatchPatterns)
+    {
+      // then we're doing static condensation in context of h-refinement: we'll need to compute coarseFluxToFieldMap
+      coarseFluxToFieldMapMatrix = condensedDofInterpreter->fluxToFieldMapForIterativeSolves(coarseCellID);
+      fluxOrdinalToLocalDofIndex = condensedDofInterpreter->fluxIndexLookupLocalCell(coarseCellID);
+      
+//      cout << "coarseFluxToFieldMapMatrix:\n" << *coarseFluxToFieldMapMatrix;
+    }
+    
     VarFactoryPtr vf = _fineMesh->bilinearForm()->varFactory();
 
     typedef vector< SubBasisDofMapperPtr > BasisMap; // taken together, these maps map a whole basis
@@ -678,6 +622,11 @@ LocalDofMapperPtr GMGOperator::getLocalCoefficientMap(GlobalIndexType fineCellID
     // set up fittability: which coarse dof ordinals have support on volume and each side
     set<GlobalIndexType> fittableGlobalDofOrdinalsInVolume;
     vector< set<GlobalIndexType> > fittableGlobalDofOrdinalsOnSides(fineSideCount);
+    
+    int coarseSideCount = coarseTrialOrdering->cellTopology()->getSideCount();
+    
+    vector<vector<double>> fineSideReferenceUnitNormals(fineSideCount);   // lazily filled for interior sides when static condensation is enabled
+    vector<vector<double>> coarseSideReferenceUnitNormals(coarseSideCount); // lazily filled for interior sides when static condensation is enabled
     
     // for the moment, we skip the mapping from traces to fields based on traceTerm
     unsigned vertexNodePermutation = 0; // because we're "reconciling" to an ancestor, the views of the cells and sides are necessarily the same
@@ -721,6 +670,8 @@ LocalDofMapperPtr GMGOperator::getLocalCoefficientMap(GlobalIndexType fineCellID
           {
             if (condensedDofInterpreter->varDofsAreCondensible(trialID, sideOrdinal, fineTrialOrdering)) continue;
           }
+          FunctionPtr sideParity = Function::sideParity();
+          
           unsigned coarseSideOrdinal = ancestralSideOrdinals[sideOrdinal];
           BasisPtr coarseBasis, fineBasis;
           BasisMap basisMap;
@@ -737,6 +688,8 @@ LocalDofMapperPtr GMGOperator::getLocalCoefficientMap(GlobalIndexType fineCellID
             if (! fineTrialOrdering->hasBasisEntry(trialID, sideOrdinal) ) continue;
             fineBasis = fineTrialOrdering->getBasis(trialID, sideOrdinal);
 
+//            cout << "Processing termTraced for variable " << trialVar->name() << endl;
+            
             set<int> varsTraced = termTraced->varIDs();
             for (set<int>::iterator varTracedIt = varsTraced.begin(); varTracedIt != varsTraced.end(); varTracedIt++)
             {
@@ -768,136 +721,89 @@ LocalDofMapperPtr GMGOperator::getLocalCoefficientMap(GlobalIndexType fineCellID
               }
               else
               {
-                // if we're doing static condensation, map from flux to field, back to fluxes
-                SubBasisReconciliationWeights mergedWeights; // collect weights here
-                
-                if (fineCell->getParent()->cellIndex() != coarseCellID)
-                {
-                  // might want to warn here -- we won't weight things properly in this case.
-                }
-
-                // NOTE: I now doubt the below comment -- I think the redundancy comes from the number of coarse sides
-//                // the strategy here will map "redundantly" from all interior sides to the outside sides.  E.g. if you have a refined quad,
-//                // there will be four interior edges, each seen by two elements.
-//                RefinementPatternPtr refPattern = fineCell->getParent()->refinementPattern();
-//                // there may be a better way of doing this
-//                int interiorSideCount = 0;
-//                int childCount = refPattern->numChildren();
-//                for (int childOrdinal=0; childOrdinal<childCount; childOrdinal++)
-//                {
-//                  map<unsigned,unsigned> childSideLookup = refPattern->parentSideLookupForChild(childOrdinal); // keys are child side ordinals
-//                  int childSideCount = refPattern->childTopology(childOrdinal)->getSideCount();
-//                  for (int childSideOrdinal=0; childSideOrdinal<childSideCount; childSideOrdinal++)
-//                  {
-//                    if (childSideLookup.find(childSideOrdinal) == childSideLookup.end())
-//                    {
-//                      // side not shared with parent: interior
-//                      interiorSideCount++;
-//                    }
-//                  }
-//                }
+                // If we're doing static condensation, map from coarse flux to coarse field using CondensedDofInterpreter, then
+                // back to fluxes using termTraced.
                 
                 BasisPtr volumeBasis = coarseTrialOrdering->getBasis(varTracedID);
-                
-                // upgrade volumeBasis to match the order of the fineBasis
-                int delta_p = fineBasis->getDegree() - volumeBasis->getDegree();
-                volumeBasis = BasisFactory::basisFactory()->addToPolyOrder(volumeBasis, delta_p);
-                
                 CellTopoPtr volumeTopo = volumeBasis->domainTopology();
-
-                unsigned volumeSubcellOrdinal = 0, volumeDomainOrdinal = 0; // the volume
+                
+                unsigned volumeSubcellOrdinal = 0, volumeDomainOrdinal = 0;
                 unsigned volumeSubcellPermutation = 0;
                 unsigned fineSubcellOrdinalInFineDomain = 0; // the side is the whole fine domain...
-                SubBasisReconciliationWeights fieldWeights = _br.computeConstrainedWeightsForTermTraced(termTraced, varTracedID,
-                                                                                                   sideDim, fineBasis, fineSubcellOrdinalInFineDomain, refBranch, sideOrdinal,
-                                                                                                   volumeTopo,
-                                                                                                   spaceDim, volumeBasis, volumeSubcellOrdinal, volumeDomainOrdinal, volumeSubcellPermutation);
-                
+                SubBasisReconciliationWeights fieldInteriorWeights = _br.computeConstrainedWeightsForTermTraced(termTraced, varTracedID,
+                                                                                                                sideDim, fineBasis, fineSubcellOrdinalInFineDomain, refBranch, sideOrdinal,
+                                                                                                                volumeTopo,
+                                                                                                                spaceDim, volumeBasis, volumeSubcellOrdinal, volumeDomainOrdinal, volumeSubcellPermutation);
 
-                int sideCount = volumeTopo->getSideCount();
+                fieldInteriorWeights = BasisReconciliation::filterOutZeroRowsAndColumns(fieldInteriorWeights);
                 
-                RefinementPatternPtr noRefinementPattern = RefinementPattern::noRefinementPattern(volumeTopo);
-                RefinementBranch noRefinementBranch = {{noRefinementPattern.get(), 0}};
-                for (int coarseSideOrdinal=0; coarseSideOrdinal < sideCount; coarseSideOrdinal++)
+                // TODO: treat the case (as with pressure in Stokes VGP) where termTraced includes some field variables that are not condensible.
+                
+//                print("fieldInteriorWeights, fineOrdinals", fieldInteriorWeights.fineOrdinals);
+//                print("fieldInteriorWeights, coarseOrdinals", fieldInteriorWeights.coarseOrdinals);
+//                cout << "fieldInteriorWeights, weights:\n" << fieldInteriorWeights.weights;
+                
+                // extract a Epetra_SerialDenseMatrix corresponding to just the varTracedID dofs
+                set<int> volumeBasisOrdinals = fieldInteriorWeights.coarseOrdinals;
+                Epetra_SerialDenseMatrix coarseFluxToFieldTraced(volumeBasisOrdinals.size(),coarseFluxToFieldMapMatrix->ColDim()); // columns here correspond to our coarse dof indices -- what we map to
+                vector<int> fieldTracedIndices = condensedDofInterpreter->fieldRowIndices(coarseCellID, varTracedID);
+                int reducedRowIndex = 0;
+                for (int volumeBasisOrdinal : volumeBasisOrdinals)
                 {
-                  BasisPtr sideBasis = coarseTrialOrdering->getBasis(trialID,sideOrdinal);
-                  int sideSubcellOrdinalinSide = 0;
-                  SubBasisReconciliationWeights fluxWeightsTransposed = _br.computeConstrainedWeightsForTermTraced(termTraced, varTracedID,
-                                                                                                                   sideDim, sideBasis, sideSubcellOrdinalinSide, noRefinementBranch, coarseSideOrdinal,
-                                                                                                                   volumeTopo,
-                                                                                                                   spaceDim, volumeBasis, volumeSubcellOrdinal, volumeDomainOrdinal, volumeSubcellPermutation);
-                  SubBasisReconciliationWeights fluxWeights;
-                  fluxWeights.fineOrdinals = fluxWeightsTransposed.coarseOrdinals;
-                  fluxWeights.coarseOrdinals = fluxWeightsTransposed.fineOrdinals;
-                  fluxWeights.weights = fluxWeightsTransposed.weights;
-                  SerialDenseWrapper::transposeMatrix(fluxWeights.weights);
-                  SubBasisReconciliationWeights composedWeights = _br.composedSubBasisReconciliationWeights(fieldWeights, fluxWeights);
-                  
-                  if (mergedWeights.weights.size() == 0)
+                  int fieldTracedIndex = fieldTracedIndices[volumeBasisOrdinal];
+                  int numCols = coarseFluxToFieldMapMatrix->ColDim();
+                  for (int col = 0; col < numCols; col++)
                   {
-                    mergedWeights = composedWeights;
+                    coarseFluxToFieldTraced(reducedRowIndex,col) = (*coarseFluxToFieldMapMatrix)(fieldTracedIndex,col);
                   }
-                  else
+                  reducedRowIndex++;
+                }
+                // data movement below has to do with the fact that SDM does col-major and FC does row-major.  Might check whether SDM.SetUseTranspose() would help here.
+                int n = fieldInteriorWeights.weights.dimension(0);
+                int m = fieldInteriorWeights.weights.dimension(1);
+                double *firstEntry = (double *) &fieldInteriorWeights.weights[0];
+                Epetra_SerialDenseMatrix fineBasisToCoarseFieldMatrix(::Copy,firstEntry,m,m,n);
+                fineBasisToCoarseFieldMatrix.SetUseTranspose(true); // use transpose, because SDM is column-major, while FC is row-major
+                
+                Epetra_SerialDenseMatrix fineBasisToCoarseFluxMatrix(fieldInteriorWeights.fineOrdinals.size(),coarseFluxToFieldTraced.ColDim());
+                fineBasisToCoarseFieldMatrix.Apply(coarseFluxToFieldTraced, fineBasisToCoarseFluxMatrix);
+
+                vector<GlobalIndexType> coarseDofIndicesVector;
+                
+                // Look for zero columns in fineBasisToCoarseFluxMatrix
+                vector<unsigned> nonZeroColumnIndices;
+                double tol = 1e-15;
+                for (int j=0; j<fineBasisToCoarseFluxMatrix.ColDim(); j++)
+                {
+                  bool nonZero = false;
+                  for (int i=0; i<fineBasisToCoarseFluxMatrix.RowDim(); i++)
                   {
-                    SubBasisReconciliationWeights previousWeights = mergedWeights;
-                    // we could probably come up with a more efficient way to do the below:
-                    map<int,int> fineOrdinalLookupPrevious, fineOrdinalLookupComposed, fineOrdinalLookupMerged;
-                    map<int,int> coarseOrdinalLookupPrevious, coarseOrdinalLookupComposed, coarseOrdinalLookupMerged;
-                    
-                    mergeSetsAndCreateLookups(previousWeights.fineOrdinals, composedWeights.fineOrdinals, mergedWeights.fineOrdinals,
-                                              fineOrdinalLookupPrevious, fineOrdinalLookupComposed, fineOrdinalLookupMerged);
-                    mergeSetsAndCreateLookups(previousWeights.coarseOrdinals, composedWeights.coarseOrdinals, mergedWeights.coarseOrdinals,
-                                              coarseOrdinalLookupPrevious, coarseOrdinalLookupComposed, coarseOrdinalLookupMerged);
-                    
-                    mergedWeights.weights.resize(mergedWeights.fineOrdinals.size(),mergedWeights.coarseOrdinals.size());
-                    for (int fineBasisOrdinal : previousWeights.fineOrdinals)
+                    if (abs(fineBasisToCoarseFluxMatrix(i,j)) > tol)
                     {
-                      int fineIndexPrevious = fineOrdinalLookupPrevious[fineBasisOrdinal];
-                      int fineIndexMerged = fineOrdinalLookupMerged[fineBasisOrdinal];
-                      for (int coarseBasisOrdinal : previousWeights.coarseOrdinals)
-                      {
-                        int coarseIndexPrevious = coarseOrdinalLookupPrevious[coarseBasisOrdinal];
-                        int coarseIndexMerged = coarseOrdinalLookupMerged[coarseBasisOrdinal];
-                        double value = previousWeights.weights(fineIndexPrevious,coarseIndexPrevious);
-                        mergedWeights.weights(fineIndexMerged,coarseIndexMerged) = value;
-                      }
-                    }
-                    
-                    for (int fineBasisOrdinal : composedWeights.fineOrdinals)
-                    {
-                      int fineIndexComposed = fineOrdinalLookupComposed[fineBasisOrdinal];
-                      int fineIndexMerged = fineOrdinalLookupMerged[fineBasisOrdinal];
-                      for (int coarseBasisOrdinal : composedWeights.coarseOrdinals)
-                      {
-                        int coarseIndexComposed = coarseOrdinalLookupComposed[coarseBasisOrdinal];
-                        int coarseIndexMerged = coarseOrdinalLookupMerged[coarseBasisOrdinal];
-                        double value = composedWeights.weights(fineIndexComposed,coarseIndexComposed);
-                        mergedWeights.weights(fineIndexMerged,coarseIndexMerged) = value;
-                      }
+                      nonZero = true;
+                      nonZeroColumnIndices.push_back(j);
+                      coarseDofIndicesVector.push_back(fluxOrdinalToLocalDofIndex[j]);
+                      break;
                     }
                   }
                 }
-
-                if (mergedWeights.coarseOrdinals.size() > 0)
+                
+                FieldContainer<double> fineBasisToCoarseFluxMatrixFC(fineBasisToCoarseFluxMatrix.RowDim(),nonZeroColumnIndices.size());
+                for (int i=0; i<fineBasisToCoarseFluxMatrixFC.dimension(0); i++)
                 {
-                  set<unsigned> fineDofOrdinals(mergedWeights.fineOrdinals.begin(),mergedWeights.fineOrdinals.end());
-                  
-                  vector<GlobalIndexType> coarseDofIndices;
-                  for (int coarseOrdinal : mergedWeights.coarseOrdinals)
+                  for (int j=0; j<fineBasisToCoarseFluxMatrixFC.dimension(1); j++)
                   {
-                    unsigned coarseDofIndex = coarseTrialOrdering->getDofIndex(varTracedID, coarseOrdinal);
-                    coarseDofIndices.push_back(coarseDofIndex);
-                    fittableGlobalDofOrdinalsOnSides[sideOrdinal].insert(coarseDofIndex);
+                    fineBasisToCoarseFluxMatrixFC(i,j) = fineBasisToCoarseFluxMatrix(i,nonZeroColumnIndices[j]);
                   }
-                  // before we record the map, divide weights by coarseSideCount -- account for multiplicity
-                  for (int i=0; i<mergedWeights.weights.size(); i++)
-                  {
-                    mergedWeights.weights[i] /= sideCount;
-                  }
-                  
-                  basisMap.push_back(SubBasisDofMapper::subBasisDofMapper(fineDofOrdinals, coarseDofIndices,
-                                                                          mergedWeights.weights));
                 }
+                
+//                print("non-zero columns", nonZeroColumnIndices);
+//                print("coarseDofIndices", coarseDofIndicesVector);
+//                cout << "weights:\n" << fineBasisToCoarseFluxMatrixFC;
+                
+                set<unsigned> fineOrdinalsUnsigned(fieldInteriorWeights.fineOrdinals.begin(),fieldInteriorWeights.fineOrdinals.end());
+                basisMap.push_back(SubBasisDofMapper::subBasisDofMapper(fineOrdinalsUnsigned, coarseDofIndicesVector, fineBasisToCoarseFluxMatrixFC));
+                fittableGlobalDofOrdinalsOnSides[sideOrdinal].insert(coarseDofIndicesVector.begin(),coarseDofIndicesVector.end());
               }
             }
           }
@@ -986,18 +892,18 @@ LocalDofMapperPtr GMGOperator::getLocalCoefficientMap(GlobalIndexType fineCellID
       }
     }
 
-    LocalDofMapperPtr dofMapper = Teuchos::rcp( new LocalDofMapper(fineTrialOrdering, volumeMaps, fittableGlobalDofOrdinalsInVolume,
-                                  sideMaps, fittableGlobalDofOrdinalsOnSides, allCoarseDofs) );
+    dofMapper = Teuchos::rcp( new LocalDofMapper(fineTrialOrdering, volumeMaps, fittableGlobalDofOrdinalsInVolume,
+                                                 sideMaps, fittableGlobalDofOrdinalsOnSides, allCoarseDofs) );
     
 //    dofMapper->printMappingReport();
-    _localCoefficientMap[key] = dofMapper;
+    if (cellProlongationCanMatchPatterns)
+      _localCoefficientMap[key] = dofMapper;
   }
-
-  LocalDofMapperPtr dofMapper = _localCoefficientMap[key];
 
   // now, correct side parities in dofMapper if the ref space situation differs from the physical space one.
   FieldContainer<double> coarseCellSideParities = _coarseMesh->globalDofAssignment()->cellSideParitiesForCell(coarseCellID);
   FieldContainer<double> fineCellSideParities = _fineMesh->globalDofAssignment()->cellSideParitiesForCell(fineCellID);
+//  cout << "fineCell parities:\n" << fineCellSideParities;
   set<unsigned> fineSidesToCorrect;
   for (unsigned fineSideOrdinal=0; fineSideOrdinal<fineSideCount; fineSideOrdinal++)
   {
@@ -1022,7 +928,7 @@ LocalDofMapperPtr GMGOperator::getLocalCoefficientMap(GlobalIndexType fineCellID
       if (fineParity < 0)
       {
         fineSidesToCorrect.insert(fineSideOrdinal);
-//        cout << "fine side to correct on cell " << fineCellID << ": " << fineSideOrdinal << endl;
+        //        cout << "fine side to correct on cell " << fineCellID << ": " << fineSideOrdinal << endl;
       }
     }
   }
@@ -1296,323 +1202,6 @@ int GMGOperator::ApplySmoother(const Epetra_MultiVector &res, Epetra_MultiVector
   return err;
 }
 
-//// new version replaces a two-level operator with one that can apply the smoother before passing to coarse solve
-//int GMGOperator::ApplyInverse(const Epetra_MultiVector& X_in, Epetra_MultiVector& Y) const
-//{
-//  narrate("ApplyInverse");
-//  //  cout << "GMGOperator::ApplyInverse.\n";
-//  int rank = Teuchos::GlobalMPISession::getRank();
-//  bool printVerboseOutput = (rank==0) && _debugMode;
-//  
-//  if (_debugMode) printMapSummary(_P->RangeMap(), "_P range map");
-//  if (_debugMode) printMapSummary(_P->DomainMap(), "_P domain map");
-//  
-//  Epetra_Time timer(Comm());
-//  
-////  cout << "X_in:\n" << X_in;
-//  
-//  Epetra_MultiVector res(X_in); // Res: residual.  Starting with Y = 0, then this is just the RHS
-//  Epetra_MultiVector f(X_in);   // f: the RHS.  Don't change this.
-//  if (_smootherType != NONE)
-//  {
-//    // if we have a smoother S, set Y = S^-1 f
-//    narrate("smoother->ApplyInverse()");
-//    timer.ResetStartTime();
-//    int err = _smoother->ApplyInverse(f, Y);
-//    _timeApplySmoother += timer.ElapsedTime();
-//    if (err != 0)
-//    {
-//      cout << "_smoother->ApplyInverse returned non-zero error code " << err << endl;
-//    }
-//    
-//    if (_smoothBeforeCoarseSolve)
-//    {
-//      // compute a new residual: res := f - A*Y = res - A*Y
-//      timer.ResetStartTime();
-//      Epetra_MultiVector A_Y(Y.Map(), Y.NumVectors());
-//      err = _fineStiffnessMatrix->Apply(Y, A_Y);
-//      if (err != 0)
-//      {
-//        cout << "_fineStiffnessMatrix->Apply returned non-zero error code " << err << endl;
-//      }
-//      _timeApplyFineStiffness += timer.ElapsedTime();
-//      res.Update(-1.0, A_Y, 1.0);
-//    }
-//  }
-//  else
-//  {
-//    // initialize Y:
-//    Y.PutScalar(0.0);
-//  }
-//  
-//  Teuchos::RCP<Epetra_FEVector> coarseRHSVector = _coarseSolution->getRHSVector();
-//  
-//  if (coarseRHSVector->GlobalLength() != _P->NumGlobalCols())
-//  {
-//    // TODO: add support for coarseRHSVector that may have lagrange/zmc constraints applied even though fine solution neglects these...
-//    TEUCHOS_TEST_FOR_EXCEPTION(true, std::invalid_argument, "coarseRHSVector->GlobalLength() != _P->NumGlobalCols()");
-//  }
-//  
-//  timer.ResetStartTime();
-//  
-//  narrate("multiply _P * coarseRHSVector");
-//  if (printVerboseOutput) cout << "calling _P->Multiply(true, res, *coarseRHSVector);\n";
-//  if (_debugMode)
-//  {
-//    if (rank==0) cout << "res:\n";
-//    res.Comm().Barrier();
-//    cout << res;
-//    res.Comm().Barrier();
-//  }
-//  _P->Multiply(true, res, *coarseRHSVector);
-//  if (printVerboseOutput) cout << "finished _P->Multiply(true, X, *coarseRHSVector);\n";
-//  if (_debugMode)
-//  {
-//    if (rank==0) cout << "coarseRHSVector:\n";
-//    coarseRHSVector->Comm().Barrier();
-//    cout << *coarseRHSVector;
-//    coarseRHSVector->Comm().Barrier();
-//  }
-//  _timeMapFineToCoarse += timer.ElapsedTime();
-//  
-//  Teuchos::RCP<Epetra_FEVector> coarseLHSVector;
-//  
-//  timer.ResetStartTime();
-//  if (_coarseSolver == Teuchos::null)
-//  {
-//    // then we must be at a finer level than the coarsest, and the appropriate thing is to simply apply
-//    // our _coarseOperator
-//    TEUCHOS_TEST_FOR_EXCEPTION(_coarseOperator == Teuchos::null, std::invalid_argument, "GMGOperator internal error: _coarseOperator and _coarseSolver are both null");
-//    _coarseOperator->ApplyInverse(*coarseRHSVector, *_coarseSolution->getLHSVector());
-//  }
-//  else if (!_haveSolvedOnCoarseMesh)
-//  {
-//    if (printVerboseOutput) cout << "solving on coarse mesh\n";
-//    narrate("_coarseSolution->solveWithPrepopulatedStiffnessAndLoad(_coarseSolver, false)");
-//    _coarseSolution->setProblem(_coarseSolver);
-//    _coarseSolution->solveWithPrepopulatedStiffnessAndLoad(_coarseSolver, false);
-//    if (printVerboseOutput) cout << "finished solving on coarse mesh\n";
-//    _haveSolvedOnCoarseMesh = true;
-//  }
-//  else
-//  {
-//    if (printVerboseOutput) cout << "re-solving on coarse mesh\n";
-//    narrate("_coarseSolution->solveWithPrepopulatedStiffnessAndLoad(_coarseSolver, true)");
-//    _coarseSolver->setRHS(coarseRHSVector);
-//    _coarseSolution->solveWithPrepopulatedStiffnessAndLoad(_coarseSolver, true); // call resolve() instead of solve() -- reuse factorization
-//    if (printVerboseOutput) cout << "finished re-solving on coarse mesh\n";
-//  }
-//  _timeCoarseSolve += timer.ElapsedTime();
-//  
-//  timer.ResetStartTime();
-//  if (printVerboseOutput) cout << "calling _coarseSolution->getLHSVector()\n";
-//  coarseLHSVector = _coarseSolution->getLHSVector();
-//  
-//  if (_debugMode)
-//  {
-//    if (rank==0) cout << "coarseLHSVector:\n";
-//    coarseLHSVector->Comm().Barrier();
-//    cout << *coarseLHSVector;
-//    coarseLHSVector->Comm().Barrier();
-//  }
-//  
-//  if (printVerboseOutput) cout << "finished _coarseSolution->getLHSVector()\n";
-//  if (printVerboseOutput) cout << "calling _P->Multiply(false, *coarseLHSVector, Y)\n";
-//  narrate("multiply _P * coarseLHSVector");
-//  Epetra_MultiVector Y2(Y.Map(), Y.NumVectors());
-//  _P->Multiply(false, *coarseLHSVector, Y2);
-//  if (printVerboseOutput) cout << "finished _P->Multiply(false, *coarseLHSVector, Y)\n";
-//  _timeMapCoarseToFine += timer.ElapsedTime();
-//  
-//  if (_debugMode)
-//  {
-//    if (rank==0) cout << "_P * coarseLHSVector:\n";
-//    Y2.Comm().Barrier();
-//    cout << Y2;
-//    Y2.Comm().Barrier();
-//  }
-//  
-////  cout << "Y2:\n" << Y2;
-//  
-//  Y.Update(1.0, Y2, 1.0);
-//
-////  cout << "Y:\n" << Y;
-//  
-//  if ((_smootherType != NONE) && _smoothAfterCoarseSolve)
-//  {
-//    // first compute the new residual X := X - A*Y
-//    timer.ResetStartTime();
-//    Epetra_MultiVector A_Y(Y.Map(), Y.NumVectors());
-//    int err = _fineStiffnessMatrix->Apply(Y, A_Y);
-//    if (err != 0)
-//    {
-//      cout << "_fineStiffnessMatrix->Apply returned non-zero error code " << err << endl;
-//    }
-//    _timeApplyFineStiffness += timer.ElapsedTime();
-//    
-//    res = f; // copy
-//    res.Update(-1.0, A_Y, 1.0);
-//    
-////    cout << "X_original:\n" << X_original;
-////    
-////    cout << "Y so far:\n" << Y;
-////    
-////    cout << "A_Y:\n" << A_Y;
-////    
-////    cout << "new residual:\n" << X;
-//    
-//    // if we have a smoother S, set Y2 = S^-1 * res
-//    narrate("smoother->ApplyInverse()");
-//    timer.ResetStartTime();
-//    err = _smoother->ApplyInverse(res, Y2);
-//    _timeApplySmoother += timer.ElapsedTime();
-//    if (err != 0)
-//    {
-//      cout << "_smoother->ApplyInverse returned non-zero error code " << err << endl;
-//    }
-//    
-//    Y.Update(1.0, Y2, 1.0);
-//    
-////    cout << "Y:\n" << Y;
-//  }
-//  
-//  /*
-//   We zero out the lagrange multiplier solutions on the fine mesh, because we're relying on the coarse solve to impose these;
-//   we just use an identity block in the lower right of the fine matrix for the Lagrange constraints themselves.
-//   
-//   The argument for this, at least for zero mean constraints:
-//   If the coarse solution has zero mean, then the fact that the prolongation operator is exact (i.e. coarse mesh solution is
-//   exactly reproduced on fine mesh) means that the fine mesh solution will have zero mean.
-//   
-//   This neglects the smoothing operator.  If the smoothing operator isn't guaranteed to produce an update with zero mean,
-//   then this may not work.
-//   */
-//  GlobalIndexType firstFineConstraintRowIndex = _fineDofInterpreter->globalDofCount();
-//  for (GlobalIndexTypeToCast fineRowIndex=firstFineConstraintRowIndex; fineRowIndex<Y.GlobalLength(); fineRowIndex++)
-//  {
-//    int LID = Y.Map().LID(fineRowIndex);
-//    if (LID != -1)
-//    {
-//      Y[0][LID] = 0.0;
-//    }
-//  }
-//  
-//  return 0;
-//}
-
-// the below does "two-level" updates; the above newer version applies smoothing prior to computing the coarse grid residual
-//int GMGOperator::ApplyInverse(const Epetra_MultiVector& X_in, Epetra_MultiVector& Y) const
-//{
-//  narrate("ApplyInverse");
-////  cout << "GMGOperator::ApplyInverse.\n";
-//  int rank = Teuchos::GlobalMPISession::getRank();
-//  bool printVerboseOutput = (rank==0) && _debugMode;
-//  
-//  Epetra_Time timer(Comm());
-//
-//  Epetra_MultiVector X(X_in); // looks like Y may be stored in the same location as X_in, so that changing Y will change X, too...
-//  
-//  Teuchos::RCP<Epetra_FEVector> coarseRHSVector = _coarseSolution->getRHSVector();
-//
-//  if (coarseRHSVector->GlobalLength() != _P->NumGlobalCols())
-//  {
-//    // TODO: add support for coarseRHSVector that may have lagrange/zmc constraints applied even though fine solution neglects these...
-//    TEUCHOS_TEST_FOR_EXCEPTION(true, std::invalid_argument, "coarseRHSVector->GlobalLength() != _P->NumGlobalCols()");
-//  }
-//
-//  timer.ResetStartTime();
-//  
-//  narrate("multiply _P * coarseRHSVector");
-//  if (printVerboseOutput) cout << "calling _P->Multiply(true, X, *coarseRHSVector);\n";
-//  _P->Multiply(true, X, *coarseRHSVector);
-//  if (printVerboseOutput) cout << "finished _P->Multiply(true, X, *coarseRHSVector);\n";
-//  _timeMapFineToCoarse += timer.ElapsedTime();
-//
-//  Teuchos::RCP<Epetra_FEVector> coarseLHSVector;
-//  
-//  timer.ResetStartTime();
-//  if (_coarseSolver == Teuchos::null)
-//  {
-//    // then we must be at a finer level than the coarsest, and the appropriate thing is to simply apply
-//    // our _coarseOperator
-//    TEUCHOS_TEST_FOR_EXCEPTION(_coarseOperator == Teuchos::null, std::invalid_argument, "GMGOperator internal error: _coarseOperator and _coarseSolver are both null");
-//    _coarseOperator->ApplyInverse(*coarseRHSVector, *_coarseSolution->getLHSVector());
-//  }
-//  else if (!_haveSolvedOnCoarseMesh)
-//  {
-//    if (printVerboseOutput) cout << "solving on coarse mesh\n";
-//    narrate("_coarseSolution->solveWithPrepopulatedStiffnessAndLoad(_coarseSolver, false)");
-//    _coarseSolution->setProblem(_coarseSolver);
-//    _coarseSolution->solveWithPrepopulatedStiffnessAndLoad(_coarseSolver, false);
-//    if (printVerboseOutput) cout << "finished solving on coarse mesh\n";
-//    _haveSolvedOnCoarseMesh = true;
-//  }
-//  else
-//  {
-//    if (printVerboseOutput) cout << "re-solving on coarse mesh\n";
-//    narrate("_coarseSolution->solveWithPrepopulatedStiffnessAndLoad(_coarseSolver, true)");
-//    _coarseSolver->setRHS(coarseRHSVector);
-//    _coarseSolution->solveWithPrepopulatedStiffnessAndLoad(_coarseSolver, true); // call resolve() instead of solve() -- reuse factorization
-//    if (printVerboseOutput) cout << "finished re-solving on coarse mesh\n";
-//  }
-//  _timeCoarseSolve += timer.ElapsedTime();
-//
-//  timer.ResetStartTime();
-//  if (printVerboseOutput) cout << "calling _coarseSolution->getLHSVector()\n";
-//  coarseLHSVector = _coarseSolution->getLHSVector();
-//
-//  if (printVerboseOutput) cout << "finished _coarseSolution->getLHSVector()\n";
-//  if (printVerboseOutput) cout << "calling _P->Multiply(false, *coarseLHSVector, Y)\n";
-//  narrate("multiply _P * coarseLHSVector");
-//  _P->Multiply(false, *coarseLHSVector, Y);
-//  if (printVerboseOutput) cout << "finished _P->Multiply(false, *coarseLHSVector, Y)\n";
-//  _timeMapCoarseToFine += timer.ElapsedTime();
-//
-//  // if _applySmoothingOperator is set, add S^(-1)X to Y.
-//  if (_applySmoothingOperator && (_smootherType != NONE))
-//  {
-//    if (printVerboseOutput) cout << "copying X into X2\n";
-//    Epetra_MultiVector X2(X); // copy, since I'm not sure ApplyInverse is generally OK with X and Y in same location (though Aztec seems to make that assumption, so it probably is OK).
-//    if (printVerboseOutput) cout << "finished copying X into X2\n";
-//    if (printVerboseOutput) cout << "calling _smoother->ApplyInverse(X2, X)\n";
-//    narrate("smoother->ApplyInverse()");
-//    int err = _smoother->ApplyInverse(X2, X);
-//    if (err != 0)
-//    {
-//      cout << "_smoother->ApplyInverse returned non-zero error code " << err << endl;
-//    }
-//    if (printVerboseOutput) cout << "finished _smoother->ApplyInverse(X2, X)\n";
-//    if (printVerboseOutput) cout << "calling Y.Update(1.0, X, 1.0)\n";
-//    Y.Update(1.0, X, 1.0);
-//    if (printVerboseOutput) cout << "finished Y.Update(1.0, X, 1.0)\n";
-//  }
-//  
-//  /*
-//   We zero out the lagrange multiplier solutions on the fine mesh, because we're relying on the coarse solve to impose these;
-//   we just use an identity block in the lower right of the fine matrix for the Lagrange constraints themselves.
-//
-//   The argument for this, at least for zero mean constraints:
-//   If the coarse solution has zero mean, then the fact that the prolongation operator is exact (i.e. coarse mesh solution is
-//   exactly reproduced on fine mesh) means that the fine mesh solution will have zero mean.
-//
-//   This neglects the smoothing operator.  If the smoothing operator isn't guaranteed to produce an update with zero mean,
-//   then this may not work.
-//   */
-//  GlobalIndexType firstFineConstraintRowIndex = _fineDofInterpreter->globalDofCount();
-//  for (GlobalIndexTypeToCast fineRowIndex=firstFineConstraintRowIndex; fineRowIndex<Y.GlobalLength(); fineRowIndex++)
-//  {
-//    int LID = Y.Map().LID(fineRowIndex);
-//    if (LID != -1)
-//    {
-//      Y[0][LID] = 0.0;
-//    }
-//  }
-//
-//  return 0;
-//}
-
-
-
 double GMGOperator::NormInf() const
 {
   TEUCHOS_TEST_FOR_EXCEPTION(true, std::invalid_argument, "Unsupported method.");
@@ -1785,6 +1374,8 @@ std::map<string, double> GMGOperator::timingReportSumOfOperators() const
     }
     coarseOperator = coarseOperator->getCoarseOperator();
   }
+  
+  reportValues.erase("update coarse operator"); // this one's costs are accounted for in other entries from the coarse operators (set up smoother and compute coarse stiffness)
   return reportValues;
 }
 
@@ -1823,7 +1414,7 @@ void GMGOperator::setFineStiffnessMatrix(Epetra_CrsMatrix *fineStiffness)
     Epetra_Time coarseOperatorTimer(Comm());
     // then our changed coarse matrix is coarse operator's fine matrix, and we need to ask coarse operator recompute *its* coarse matrix and smoother
     _coarseOperator->setFineStiffnessMatrix(getCoarseStiffnessMatrix().get());
-    _timeUpdateCoarseOperator = coarseOperatorTimer.ElapsedTime();
+    _timeUpdateCoarseOperator += coarseOperatorTimer.ElapsedTime();
   }
 }
 
