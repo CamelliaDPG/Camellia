@@ -1130,6 +1130,8 @@ template <typename Scalar>
 void TBF<Scalar>::setUseSPDSolveForOptimalTestFunctions(bool value)
 {
   _useSPDSolveForOptimalTestFunctions = value;
+  if (_useSPDSolveForOptimalTestFunctions)
+    _useQRSolveForOptimalTestFunctions = false;
 }
 
 template <typename Scalar>
