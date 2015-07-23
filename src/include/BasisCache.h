@@ -283,6 +283,8 @@ public:
       bool tensorProductTopologyMeansSpaceTime=true);
   static BasisCachePtr basisCacheForRefinedReferenceCell(CellTopoPtr cellTopo, int cubatureDegree, RefinementBranch refinementBranch,
       bool createSideCacheToo=false, bool tensorProductTopologyMeansSpaceTime=true);
+  
+  static BasisCachePtr basisCacheForRefinedReferenceCell(int cubatureDegree, RefinementBranch refinementBranch, bool createSideCacheToo = false, bool tensorProductTopologyMeansSpaceTime=true);
 
   static BasisCachePtr quadBasisCache(double width, double height, int cubDegree, bool createSideCacheToo=false);
 

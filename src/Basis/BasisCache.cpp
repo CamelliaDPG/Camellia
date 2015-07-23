@@ -58,6 +58,8 @@ using namespace Camellia;
 
 typedef FunctionSpaceTools fst;
 
+const static bool CACHE_TRANSFORMED_VALUES = false; // save some memory by not caching these
+
 // TODO: add exceptions for side cache arguments to methods that don't make sense
 // (e.g. useCubPointsSideRefCell==true when _isSideCache==false)
 
@@ -882,7 +884,8 @@ constFCPtr BasisCache::getTransformedValues(BasisPtr basis, Camellia::EOperator 
       TEUCHOS_TEST_FOR_EXCEPTION(true, std::invalid_argument, "Unhandled op.");
     }
   }
-  _knownValuesTransformed[key] = result;
+  if (CACHE_TRANSFORMED_VALUES)
+    _knownValuesTransformed[key] = result;
   return result;
 }
 
@@ -899,7 +902,8 @@ constFCPtr BasisCache::getTransformedWeightedValues(BasisPtr basis, Camellia::EO
   unWeightedValues->dimensions(dimensions);
   Teuchos::RCP< FieldContainer<double> > weightedValues = Teuchos::rcp( new FieldContainer<double>(dimensions) );
   fst::multiplyMeasure<double>(*weightedValues, _weightedMeasure, *unWeightedValues);
-  _knownValuesTransformedWeighted[key] = weightedValues;
+  if (CACHE_TRANSFORMED_VALUES)
+    _knownValuesTransformedWeighted[key] = weightedValues;
   return weightedValues;
 }
 
@@ -1525,6 +1529,17 @@ BasisCachePtr BasisCache::basisCacheForRefinedReferenceCell(shards::CellTopology
 
   cellNodes.resize(1,cellNodes.dimension(0),cellNodes.dimension(1));
   BasisCachePtr basisCache = Teuchos::rcp(new BasisCache(cellNodes,cellTopo,cubatureDegree,createSideCacheToo));
+  return basisCache;
+}
+
+BasisCachePtr BasisCache::basisCacheForRefinedReferenceCell(int cubatureDegree, RefinementBranch refinementBranch,
+                                                            bool createSideCacheToo, bool tensorProductTopologyMeansSpaceTime)
+{
+  CellTopoPtr cellTopo = RefinementPattern::descendantTopology(refinementBranch);
+  FieldContainer<double> cellNodes = RefinementPattern::descendantNodesRelativeToAncestorReferenceCell(refinementBranch);
+  
+  cellNodes.resize(1,cellNodes.dimension(0),cellNodes.dimension(1));
+  BasisCachePtr basisCache = Teuchos::rcp(new BasisCache(cellNodes,cellTopo,cubatureDegree,createSideCacheToo,tensorProductTopologyMeansSpaceTime));
   return basisCache;
 }
 
