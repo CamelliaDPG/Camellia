@@ -211,7 +211,7 @@ SubBasisReconciliationWeights BasisReconciliation::composedSubBasisReconciliatio
   }
   SubBasisReconciliationWeights cWeights;
   cWeights.weights = FieldContainer<double>(aWeights.fineOrdinals.size(), bWeights.coarseOrdinals.size());
-  if (cWeights.weights.size() != 0)
+  if ((cWeights.weights.size() != 0) && (aWeights.weights.size() != 0) && (bWeights.weights.size() != 0))
   {
     FieldContainer<double> aMatrix = aWeights.weights;
     FieldContainer<double> bMatrix = bWeights.weights;
