@@ -564,11 +564,11 @@ LocalDofMapperPtr GMGOperator::getLocalCoefficientMap(GlobalIndexType fineCellID
 
   pair< pair<int,int>, RefinementBranch > key = make_pair(make_pair(fineOrder, coarseOrder), refBranch);
 
-  CondensedDofInterpreter<double>* condensedDofInterpreter = NULL;
+  CondensedDofInterpreter<double>* condensedDofInterpreterCoarse = NULL;
 
   if (_useStaticCondensation)
   {
-    condensedDofInterpreter = dynamic_cast<CondensedDofInterpreter<double>*>(_fineDofInterpreter.get());
+    condensedDofInterpreterCoarse = dynamic_cast<CondensedDofInterpreter<double>*>(_coarseSolution->getDofInterpreter().get());
   }
   
   // When doing static condensation for h-multigrid, the prolongation operator involves inversion of the
@@ -576,7 +576,7 @@ LocalDofMapperPtr GMGOperator::getLocalCoefficientMap(GlobalIndexType fineCellID
   // these fields to determine the fine traces on the interior of the element.  Since these computations
   // may be spatially dependent, we can't reuse the prolongation that we determined for some other cell whose
   // refinement branch and element types match ours.
-  bool cellProlongationCanMatchPatterns = (coarseCellID == fineCellID) || (condensedDofInterpreter == NULL);
+  bool cellProlongationCanMatchPatterns = (coarseCellID == fineCellID) || (condensedDofInterpreterCoarse == NULL);
 
   int fineSideCount = fineCell->getSideCount();
   int spaceDim = _fineMesh->getTopology()->getDimension();
@@ -601,12 +601,13 @@ LocalDofMapperPtr GMGOperator::getLocalCoefficientMap(GlobalIndexType fineCellID
   {
     Teuchos::RCP<Epetra_SerialDenseMatrix> coarseFluxToFieldMapMatrix;
     vector<int> fluxOrdinalToLocalDofIndex;
+    set<int> condensibleVarIDs;
     if (!cellProlongationCanMatchPatterns)
     {
       // then we're doing static condensation in context of h-refinement: we'll need to compute coarseFluxToFieldMap
-      coarseFluxToFieldMapMatrix = condensedDofInterpreter->fluxToFieldMapForIterativeSolves(coarseCellID);
-      fluxOrdinalToLocalDofIndex = condensedDofInterpreter->fluxIndexLookupLocalCell(coarseCellID);
-      
+      coarseFluxToFieldMapMatrix = condensedDofInterpreterCoarse->fluxToFieldMapForIterativeSolves(coarseCellID);
+      fluxOrdinalToLocalDofIndex = condensedDofInterpreterCoarse->fluxIndexLookupLocalCell(coarseCellID);
+      condensibleVarIDs = condensedDofInterpreterCoarse->condensibleVariableIDs();
 //      cout << "coarseFluxToFieldMapMatrix:\n" << *coarseFluxToFieldMapMatrix;
     }
     
@@ -638,9 +639,9 @@ LocalDofMapperPtr GMGOperator::getLocalCoefficientMap(GlobalIndexType fineCellID
 
       if (coarseTrialOrdering->getSidesForVarID(trialID).size() == 1)   // field variable
       {
-        if (condensedDofInterpreter != NULL)
+        if (condensedDofInterpreterCoarse != NULL)
         {
-          if (condensedDofInterpreter->varDofsAreCondensible(trialID, 0, fineTrialOrdering)) continue;
+          if (condensedDofInterpreterCoarse->varDofsAreCondensible(trialID, 0, coarseTrialOrdering)) continue;
         }
 //        cout << "Warning: for debugging purposes, skipping projection of fields in GMGOperator.\n";
         BasisPtr coarseBasis = coarseTrialOrdering->getBasis(trialID);
@@ -666,9 +667,9 @@ LocalDofMapperPtr GMGOperator::getLocalCoefficientMap(GlobalIndexType fineCellID
         {
           if (! fineTrialOrdering->hasBasisEntry(trialID, sideOrdinal)) continue;
           
-          if (condensedDofInterpreter != NULL)
+          if (condensedDofInterpreterCoarse != NULL)
           {
-            if (condensedDofInterpreter->varDofsAreCondensible(trialID, sideOrdinal, fineTrialOrdering)) continue;
+            if (condensedDofInterpreterCoarse->varDofsAreCondensible(trialID, sideOrdinal, coarseTrialOrdering)) continue;
           }
           FunctionPtr sideParity = Function::sideParity();
           
@@ -695,7 +696,7 @@ LocalDofMapperPtr GMGOperator::getLocalCoefficientMap(GlobalIndexType fineCellID
             {
               int varTracedID = *varTracedIt;
               
-              if (condensedDofInterpreter == NULL)
+              if ((condensedDofInterpreterCoarse == NULL) || (condensibleVarIDs.find(varTracedID) == condensibleVarIDs.end())) // the latter case is like the pressure for Stokes VGP
               {
                 coarseBasis = coarseTrialOrdering->getBasis(varTracedID);
                 
@@ -746,7 +747,8 @@ LocalDofMapperPtr GMGOperator::getLocalCoefficientMap(GlobalIndexType fineCellID
                 // extract a Epetra_SerialDenseMatrix corresponding to just the varTracedID dofs
                 set<int> volumeBasisOrdinals = fieldInteriorWeights.coarseOrdinals;
                 Epetra_SerialDenseMatrix coarseFluxToFieldTraced(volumeBasisOrdinals.size(),coarseFluxToFieldMapMatrix->ColDim()); // columns here correspond to our coarse dof indices -- what we map to
-                vector<int> fieldTracedIndices = condensedDofInterpreter->fieldRowIndices(coarseCellID, varTracedID);
+                
+                vector<int> fieldTracedIndices = condensedDofInterpreterCoarse->fieldRowIndices(coarseCellID, varTracedID);
                 int reducedRowIndex = 0;
                 for (int volumeBasisOrdinal : volumeBasisOrdinals)
                 {
@@ -758,7 +760,6 @@ LocalDofMapperPtr GMGOperator::getLocalCoefficientMap(GlobalIndexType fineCellID
                   }
                   reducedRowIndex++;
                 }
-                // data movement below has to do with the fact that SDM does col-major and FC does row-major.  Might check whether SDM.SetUseTranspose() would help here.
                 int n = fieldInteriorWeights.weights.dimension(0);
                 int m = fieldInteriorWeights.weights.dimension(1);
                 double *firstEntry = (double *) &fieldInteriorWeights.weights[0];
@@ -872,7 +873,7 @@ LocalDofMapperPtr GMGOperator::getLocalCoefficientMap(GlobalIndexType fineCellID
       const vector<int>* fineSidesForVarID = &fineTrialOrdering->getSidesForVarID(trialID);
       if (fineSidesForVarID->size() == 1)   // field variable
       {
-        if ((condensedDofInterpreter == NULL) || (condensedDofInterpreter->varDofsAreCondensible(trialID, 0, fineTrialOrdering)))
+        if ((condensedDofInterpreterCoarse == NULL) || (condensedDofInterpreterCoarse->varDofsAreCondensible(trialID, 0, fineTrialOrdering)))
         {
           vector<int> dofIndices = coarseTrialOrdering->getDofIndices(trialID);
           fittableGlobalDofOrdinalsInVolume.insert(dofIndices.begin(),dofIndices.end());
