@@ -249,6 +249,8 @@ const set< GlobalIndexType > & GlobalDofAssignment::cellsInPartition(PartitionIn
 
 FieldContainer<double> GlobalDofAssignment::cellSideParitiesForCell( GlobalIndexType cellID )
 {
+  TEUCHOS_TEST_FOR_EXCEPTION(_cellSideParitiesForCellID.find(cellID) == _cellSideParitiesForCellID.end(),
+                             std::invalid_argument, "_cellSideParities is not set for the provided cell!");
   vector<int> parities = _cellSideParitiesForCellID[cellID];
   int numSides = parities.size();
   FieldContainer<double> cellSideParities(1,numSides);
