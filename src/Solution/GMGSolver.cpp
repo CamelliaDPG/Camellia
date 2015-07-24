@@ -158,7 +158,7 @@ Teuchos::RCP<GMGOperator> GMGSolver::gmgOperatorFromMeshSequence(const std::vect
     coarseOperator->setMultigridStrategy(multigridStrategy);
     bool hRefined = fineMesh->numActiveElements() > coarseMesh->numActiveElements();
     coarseOperator->setUseHierarchicalNeighborsForSchwarz(hRefined);
-    if (hRefined) coarseOperator->setSmootherOverlap(0); // changed 7-23-15: I'd rather do 0 overlap everywhere (condensed solve actually does worse with 1 overlap--may be a bug)
+    if (hRefined) coarseOperator->setSmootherOverlap(1);
 
     if (finerOperator != Teuchos::null)
     {
