@@ -1064,6 +1064,8 @@ const FieldContainer<double> & BasisCache::getCellSideParities()
 
 void BasisCache::setCellSideParities(const FieldContainer<double> &cellSideParities)
 {
+  TEUCHOS_TEST_FOR_EXCEPTION((cellSideParities.rank() != 2) || (cellSideParities.dimension(1) != _cellTopo->getSideCount()),
+                             std::invalid_argument, "Incorrectly sized cellSideParities");
   _cellSideParities = cellSideParities;
 }
 
