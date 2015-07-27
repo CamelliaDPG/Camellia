@@ -642,7 +642,7 @@ void run(ProblemChoice problemChoice, int &iterationCount, int spaceDim, int num
          int schwarzOverlap, GMGOperator::FactorType schwarzBlockFactorization, int schwarzLevelOfFill, double schwarzFillRatio,
          Solver::SolverChoice coarseSolverChoice, double cgTol, int cgMaxIterations, int AztecOutputLevel,
          bool reportTimings, double &solveTime, bool reportEnergyError, int numCellsRootMesh, bool hOnly, bool useZeroMeanConstraints,
-         bool writeAndExit, GMGOperator::SmootherApplicationType comboType, double smootherWeight)
+         bool writeAndExit, GMGOperator::SmootherApplicationType comboType, double smootherWeight, bool useWeightMatrixForSchwarz)
 {
   int rank = Teuchos::GlobalMPISession::getRank();
 
@@ -654,6 +654,11 @@ void run(ProblemChoice problemChoice, int &iterationCount, int spaceDim, int num
     {
       cout << "Too few cells in root mesh.  Aborting.\n";
       exit(1);
+    }
+    int rank = Teuchos::GlobalMPISession::getRank();
+    if (rank == 0)
+    {
+      cout << "Setting numCellsRootMesh = " << numCellsRootMesh << endl;
     }
   }
   else if (numCellsRootMesh == -1)
@@ -801,7 +806,7 @@ void run(ProblemChoice problemChoice, int &iterationCount, int spaceDim, int num
     {
       // then use hierarchical neighbor relationship
       gmgSolver->gmgOperator()->setUseHierarchicalNeighborsForSchwarz(true);
-      if (rank==0) cout << "using new hierarchical Schwarz neighbors option";
+      if (rank==0) cout << "using new hierarchical Schwarz neighbors option\n";
     }
 
 //    GMGSolver* gmgSolver = new GMGSolver(zeroBCs, k0Mesh, graphNorm, mesh, solution->getDofInterpreter(),
@@ -824,6 +829,8 @@ void run(ProblemChoice problemChoice, int &iterationCount, int spaceDim, int num
       gmgSolver->gmgOperator()->setSmootherWeight(smootherWeight);
     else
       gmgSolver->gmgOperator()->setUseSchwarzScalingWeight(true);
+    
+    gmgSolver->gmgOperator()->setUseSchwarzDiagonalWeight(useWeightMatrixForSchwarz);
     
     gmgSolver->gmgOperator()->setDebugMode(runGMGOperatorInDebugMode);
     solver = Teuchos::rcp( gmgSolver ); // we use "new" above, so we can let this RCP own the memory
@@ -950,7 +957,8 @@ void runMany(ProblemChoice problemChoice, int spaceDim, int delta_k, int minCell
              Solver::SolverChoice coarseSolverChoice,
              double cgTol, int cgMaxIterations, int aztecOutputLevel, RunManyPreconditionerChoices preconditionerChoices,
              int k, int k_coarse, int overlapLevel, int numCellsRootMesh, bool reportTimings, bool hOnly, int maxCells,
-             bool useZeroMeanConstraints, GMGOperator::SmootherApplicationType comboType, double smootherWeight)
+             bool useZeroMeanConstraints, GMGOperator::SmootherApplicationType comboType, double smootherWeight,
+             bool useWeightMatrixForSchwarz)
 {
   int rank = Teuchos::GlobalMPISession::getRank();
 
@@ -1212,7 +1220,8 @@ void runMany(ProblemChoice problemChoice, int spaceDim, int delta_k, int minCell
                   useStaticCondensation, precondition, schwarzOnly, smoother, overlapValue,
                   schwarzBlockFactorization, schwarzLevelOfFill, schwarzFillRatio, coarseSolverChoice,
                   cgTol, cgMaxIterations, aztecOutputLevel, reportTimings, solveTime,
-                  reportEnergyError, numCellsRootMesh, hOnly, useZeroMeanConstraints, writeAndExit, comboType, smootherWeight);
+                  reportEnergyError, numCellsRootMesh, hOnly, useZeroMeanConstraints, writeAndExit, comboType,
+                  smootherWeight, useWeightMatrixForSchwarz);
 
               int numCells = pow((double)numCells1D, spaceDim);
 
@@ -1279,7 +1288,7 @@ int main(int argc, char *argv[])
   _MM_SET_EXCEPTION_MASK(_MM_GET_EXCEPTION_MASK() & ~_MM_MASK_INVALID);
 #endif
 
-  Teuchos::GlobalMPISession mpiSession(&argc, &argv, 0);
+  Teuchos::GlobalMPISession mpiSession(&argc, &argv, NULL);
   int rank = Teuchos::GlobalMPISession::getRank();
 
   runGMGOperatorInDebugMode = false;
@@ -1319,7 +1328,9 @@ int main(int argc, char *argv[])
 
   bool useCondensedSolve = false;
 
-  string smootherChoiceStr = "IfPack-Schwarz";
+  bool useWeightMatrixForSchwarz = true;
+  
+  string smootherChoiceStr = "Camellia-Schwarz";
 
   bool schwarzOnly = false;
 
@@ -1403,6 +1414,8 @@ int main(int argc, char *argv[])
   cmdp.setOption("runManyMaxCells", &maxCells, "Maximum number of cells to use for mesh width");
 
   cmdp.setOption("writeAndExit", "runNormally", &writeAndExit, "Write A, A_coarse, P, and S to disk, and exit without computing anything.");
+  
+  cmdp.setOption("useWeightedSchwarz","useUnweightedSchwarz",&useWeightMatrixForSchwarz, "Use weight matrix ('W' in Fischer and Lottes) to scale Schwarz smoother according to multiplicities.  Only applies to GMG geometric Schwarz.");
 
   cmdp.setOption("useZeroMeanConstraint", "usePointConstraint", &useZeroMeanConstraints, "Use a zero-mean constraint for the pressure (otherwise, use a vertex constraint at the origin)");
 
@@ -1571,7 +1584,8 @@ int main(int argc, char *argv[])
         useCondensedSolve, precondition, schwarzOnly, smootherChoice, schwarzOverlap,
         schwarzFactorType, levelOfFill, fillRatio, coarseSolverChoice,
         cgTol, cgMaxIterations, AztecOutputLevel, reportTimings, solveTime,
-        reportEnergyError, numCellsRootMesh, hOnly, useZeroMeanConstraints, writeAndExit, comboType, smootherWeight);
+        reportEnergyError, numCellsRootMesh, hOnly, useZeroMeanConstraints, writeAndExit, comboType, smootherWeight,
+        useWeightMatrixForSchwarz);
 
     if (rank==0) cout << "Iteration count: " << iterationCount << "; solve time " << solveTime << " seconds." << endl;
   }
@@ -1598,7 +1612,7 @@ int main(int argc, char *argv[])
             schwarzFactorType, levelOfFill, fillRatio,
             coarseSolverChoice,
             cgTol, cgMaxIterations, AztecOutputLevel,
-            runManySubsetChoice, k, k_coarse, schwarzOverlap, numCellsRootMesh, reportTimings, hOnly, maxCells, useZeroMeanConstraints, comboType, smootherWeight);
+            runManySubsetChoice, k, k_coarse, schwarzOverlap, numCellsRootMesh, reportTimings, hOnly, maxCells, useZeroMeanConstraints, comboType, smootherWeight, useWeightMatrixForSchwarz);
   }
   return 0;
 }
