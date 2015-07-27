@@ -61,7 +61,8 @@ public:
     TWO_LEVEL, // aka ADDITIVE
     V_CYCLE,
     W_CYCLE,
-    FULL_MULTIGRID
+    FULL_MULTIGRID_V,
+    FULL_MULTIGRID_W
   };
 private:
   bool _debugMode; // in debug mode, output verbose info about what we're doing on rank 0

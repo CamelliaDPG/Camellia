@@ -986,13 +986,30 @@ int GMGOperator::ApplyInverse(const Epetra_MultiVector& X_in, Epetra_MultiVector
   Epetra_MultiVector res(X_in); // Res: residual.  Starting with Y = 0, then this is just the RHS
   Epetra_MultiVector f(X_in);   // f: the RHS.  Don't change this.
   
-  // initialize Y (important to do this after X_in has been copied--X and Y can be in the same location)
+  // initialize Y (important to do this only after X_in has been copied--X and Y can be in the same location)
   Y.PutScalar(0.0);
-  
   Epetra_MultiVector A_Y(Y.Map(), Y.NumVectors());
   
-  int numApplications = 1;
-  if (_multigridStrategy == W_CYCLE) numApplications = 2;
+  if ((_multigridStrategy == FULL_MULTIGRID_V) || (_multigridStrategy == FULL_MULTIGRID_W))
+  {
+    // full multigrid takes the coarse operator applied to the RHS as its initial guess
+    Epetra_MultiVector Y2(Y.Map(), Y.NumVectors());
+    this->ApplyInverseCoarseOperator(res, Y2);
+    Y.Update(1.0, Y2, 1.0);
+    // recompute residual:
+    res = f;
+    computeResidual(Y,res,A_Y);
+  }
+  
+  int numApplications;
+  if ((_multigridStrategy == W_CYCLE) || (_multigridStrategy == FULL_MULTIGRID_W))
+  {
+    numApplications = 2;
+  }
+  else
+  {
+    numApplications = 1;
+  }
   
   if (_smootherType != NONE)
   {

@@ -452,9 +452,13 @@ int main(int argc, char *argv[])
   {
     multigridStrategy = GMGOperator::V_CYCLE;
   }
-  else if (multigridStrategyString == "Full")
+  else if (multigridStrategyString == "Full-W")
   {
-    multigridStrategy = GMGOperator::FULL_MULTIGRID;
+    multigridStrategy = GMGOperator::FULL_MULTIGRID_W;
+  }
+  else if (multigridStrategyString == "Full-V")
+  {
+    multigridStrategy = GMGOperator::FULL_MULTIGRID_V;
   }
   else
   {
@@ -535,6 +539,8 @@ int main(int argc, char *argv[])
     cout << totalTrialDofs << " trial dofs per element; " << totalTestDofs << " test dofs.\n";
     
     cout << "Approximate memory cost per element (assuming sparse storage): G = " << G_sparseMatrixSize << " MB, B = " << B_sparseMatrixSize << " MB.\n";
+    
+    cout << "Multigrid strategy: " << multigridStrategyString << endl;
   }
   
   timer.ResetStartTime();
