@@ -15,6 +15,8 @@
 #include "AztecOO.h"
 
 #include "Epetra_Operator_to_Epetra_Matrix.h"
+#include "Epetra_SerialComm.h"
+
 #include "EpetraExt_MatrixMatrix.h"
 #include "EpetraExt_RowMatrixOut.h"
 #include "EpetraExt_MultiVectorOut.h"
@@ -932,9 +934,68 @@ void run(ProblemChoice problemChoice, int &iterationCount, int spaceDim, int num
 
       if (op->getSmootherWeightVector() != Teuchos::null)
       {
-        if (rank==0) cout << "writing smoother weight vector to w.dat\n";
+        if (rank==0) cout << "writing smoother weight vector to w_vector.dat\n";
         Teuchos::RCP<Epetra_MultiVector> w = op->getSmootherWeightVector();
-        EpetraExt::MultiVectorToMatrixMarketFile("w.dat", *w, NULL, NULL, false);
+        EpetraExt::MultiVectorToMatrixMarketFile("w_vector.dat", *w, NULL, NULL, false);
+      }
+      
+      // for now, we just do this on rank 0.  For a big mesh, we might want to distribute this
+      set<GlobalIndexType> myCellIndices = mesh->globalDofAssignment()->cellsInPartition(-1);
+      vector<GlobalIndexTypeToCast> myCellIndicesVector(myCellIndices.begin(),myCellIndices.end());
+      Epetra_MpiComm Comm(MPI_COMM_WORLD);
+      
+      Epetra_Map elemMap(-1, myCellIndicesVector.size(), &myCellIndicesVector[0], 0, Comm);
+      Epetra_CrsMatrix E(::Copy, elemMap, 0);
+      
+      for (GlobalIndexType cellIndex : myCellIndices)
+      {
+        CellPtr cell = mesh->getTopology()->getCell(cellIndex);
+        vector<CellPtr> neighbors = cell->getNeighbors(mesh->getTopology());
+        neighbors.push_back(cell); // for connectivity, cell counts as its own neighbor
+        
+        vector<double> values(neighbors.size(),1.0);
+        vector<GlobalIndexTypeToCast> neighborIndices;
+        for (CellPtr neighbor : neighbors)
+        {
+          neighborIndices.push_back(neighbor->cellIndex());
+        }
+        E.InsertGlobalValues(cellIndex, values.size(), &values[0], &neighborIndices[0]);
+      }
+      E.FillComplete();
+      EpetraExt::RowMatrixToMatrixMarketFile("E.dat",E, NULL, NULL, false);
+      if (rank==0) cout << "wrote fine mesh element connectivity matrix to E.dat.\n";
+      
+      {
+      // some debugging stuff:
+//        Epetra_CrsMatrix identity(::Copy, A->RowMap(), 0);
+        Epetra_CrsMatrix identity(::Copy, A->RowMap(), A->ColMap(), 0);
+        int myRows = identity.RowMap().NumMyElements();
+        int myCols = identity.ColMap().NumMyElements();
+        FieldContainer<GlobalIndexTypeToCast> colLIDs(myCols);
+        for (int LID=0; LID<myCols; LID++)
+        {
+          colLIDs[LID] = LID;
+        }
+        for (int LID=0; LID<myRows; LID++)
+        {
+          FieldContainer<double> myData(myCols);
+          for (int j=0; j<myCols; j++)
+          {
+            if (j==LID) myData(j) = 1.0;
+            else myData(j) = 0.0;
+          }
+          identity.InsertMyValues(LID, myCols, &myData[0], &colLIDs[0]);
+//          cout << "on rank " << rank << ", inserting 1.0 at (" << myGIDs[LID] << "," << myGIDs[LID] << ")\n";
+        }
+        identity.FillComplete();
+        
+        if (rank==0) cout << "writing identity to I.dat.\n";
+        EpetraExt::RowMatrixToMatrixMarketFile("I.dat",identity, NULL, NULL, false);
+        op->setFineStiffnessMatrix(&identity);
+
+        if (rank==0) cout << "writing smoother for identity to W.dat.\n";
+        Teuchos::RCP< Epetra_CrsMatrix > W = op->getSmootherAsMatrix();
+        EpetraExt::RowMatrixToMatrixMarketFile("W.dat",*W, NULL, NULL, false);
       }
       
       return;
@@ -1245,7 +1306,14 @@ void runMany(ProblemChoice problemChoice, int spaceDim, int delta_k, int minCell
   {
     ostringstream filename;
     filename << problemChoiceString << "Driver" << spaceDim << "D_";
-    filename << preconditionerChoiceString;
+    if ((preconditionerChoiceString == "GMGGeometricSchwarz") && !useWeightMatrixForSchwarz)
+    {
+      filename << "GMGGeometricSchwarzUnweighted";
+    }
+    else
+    {
+      filename << preconditionerChoiceString;
+    }
     if (schwarzBlockFactorization != GMGOperator::Direct)
       filename << "_schwarzFactorization_" << getFactorizationTypeString(schwarzBlockFactorization);
     if (overlapLevel != -1)
