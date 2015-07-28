@@ -180,6 +180,7 @@ void GMGOperator::computeCoarseStiffnessMatrix(Epetra_CrsMatrix *fineStiffnessMa
 
   // compute A * P
   Epetra_CrsMatrix AP(::Copy, _finePartitionMap, maxRowSize);
+//  Epetra_CrsMatrix AP(::Copy, fineStiffnessMatrix->RowMap(), maxRowSize);
 
   int err = EpetraExt::MatrixMatrix::Multiply(*fineStiffnessMatrix, false, *_P, false, AP);
   if (err != 0)
@@ -515,6 +516,11 @@ SolverPtr GMGOperator::getCoarseSolver()
 Teuchos::RCP<DofInterpreter> GMGOperator::getFineDofInterpreter()
 {
   return _fineDofInterpreter;
+}
+
+MeshPtr GMGOperator::getFineMesh() const
+{
+  return _fineMesh;
 }
 
 Epetra_CrsMatrix* GMGOperator::getFineStiffnessMatrix()
@@ -1191,7 +1197,7 @@ int GMGOperator::ApplySmoother(const Epetra_MultiVector &res, Epetra_MultiVector
   
   int err;
 
-  if (_smootherWeight_sqrt == Teuchos::null)
+  if ((_smootherWeight_sqrt == Teuchos::null) || !_useSchwarzDiagonalWeight)
   {
     err = _smoother->ApplyInverse(res, Y);
   }
@@ -1726,6 +1732,37 @@ void GMGOperator::setUpSmoother(Epetra_CrsMatrix *fineStiffnessMatrix)
     // debugging:
 //    printMapSummary(*rangeMap, "Schwarz matrix range map");
 //    cout << *_smootherWeight_sqrt;
+  }
+
+  if (_useSchwarzScalingWeight)
+  {
+    int rank = Teuchos::GlobalMPISession::getRank();
+    static bool haveWarned = false;
+    if (!haveWarned && (rank==0))
+    {
+      cout << "NOTE: using new approach to Schwarz scaling weight, based on Nate's conjecture regarding the spectral radius of the element connectivity matrix and some results in Smith et al.\n";
+      haveWarned = true;
+    }
+    
+    // Suppose that E is a matrix with rows and columns corresponding to the elements, with 0s for disconnected elements, and 1s for
+    // connected elements (an element is connected to itself and its face neighbors).
+    // Conjecture: rho(E) is bounded above by the maximum side count of an element plus 1.
+    // Based on results in Smith et al., I *think* that we can bound the maximum eigenvalue of S*A by 1 + rho(E)
+    set<GlobalIndexType> myCellIndices = _fineMesh->globalDofAssignment()->cellsInPartition(-1);
+    Epetra_MpiComm Comm(MPI_COMM_WORLD);
+    
+    int localMaxNeighbors = 0;
+    for (GlobalIndexType cellIndex : myCellIndices)
+    {
+      CellPtr cell = _fineMesh->getTopology()->getCell(cellIndex);
+      vector<CellPtr> neighbors = cell->getNeighbors(_fineMesh->getTopology());
+      neighbors.push_back(cell); // for connectivity, cell counts as its own neighbor
+      localMaxNeighbors = max(localMaxNeighbors,(int)neighbors.size());
+    }
+    int globalMaxNeighbors;
+    Comm.MaxAll(&localMaxNeighbors, &globalMaxNeighbors, 1);
+    
+    _smootherWeight = 1.0 / (globalMaxNeighbors + 1); // aiming for a weight that guarantees max eig of weight * S * A is 1.0
   }
   
   _smoother = smoother;

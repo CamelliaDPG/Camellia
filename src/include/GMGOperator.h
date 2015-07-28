@@ -315,6 +315,9 @@ public:
   void setUseHierarchicalNeighborsForSchwarz(bool value);
   //@}
 
+  //! Returns the fine mesh
+  MeshPtr getFineMesh() const;
+  
   //! Returns the fine stiffness matrix
   Epetra_CrsMatrix* getFineStiffnessMatrix();
   
