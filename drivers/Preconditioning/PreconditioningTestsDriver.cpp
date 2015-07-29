@@ -1165,10 +1165,14 @@ void runMany(ProblemChoice problemChoice, int spaceDim, int delta_k, int minCell
   {
   case Poisson:
     problemChoiceString = "Poisson";
-    break;
-  case ConvectionDiffusion:
-    problemChoiceString = "ConvectionDiffusion";
-    break;
+      break;
+    case ConvectionDiffusion:
+      problemChoiceString = "ConvectionDiffusion";
+      break;
+      
+    case ConvectionDiffusionExperimental:
+      problemChoiceString = "ConvectionDiffusionExperimental";
+      break;
   case Stokes:
     problemChoiceString = "Stokes";
     break;
