@@ -1736,14 +1736,6 @@ void GMGOperator::setUpSmoother(Epetra_CrsMatrix *fineStiffnessMatrix)
 
   if (_useSchwarzScalingWeight)
   {
-    int rank = Teuchos::GlobalMPISession::getRank();
-    static bool haveWarned = false;
-    if (!haveWarned && (rank==0))
-    {
-      cout << "NOTE: using new approach to Schwarz scaling weight, based on Nate's conjecture regarding the spectral radius of the element connectivity matrix and some results in Smith et al.\n";
-      haveWarned = true;
-    }
-    
     // Suppose that E is a matrix with rows and columns corresponding to the elements, with 0s for disconnected elements, and 1s for
     // connected elements (an element is connected to itself and its face neighbors).
     // Conjecture: rho(E) is bounded above by the maximum side count of an element plus 1.
@@ -1755,14 +1747,50 @@ void GMGOperator::setUpSmoother(Epetra_CrsMatrix *fineStiffnessMatrix)
     for (GlobalIndexType cellIndex : myCellIndices)
     {
       CellPtr cell = _fineMesh->getTopology()->getCell(cellIndex);
-      vector<CellPtr> neighbors = cell->getNeighbors(_fineMesh->getTopology());
-      neighbors.push_back(cell); // for connectivity, cell counts as its own neighbor
+      vector<CellPtr> neighborCells = cell->getNeighbors(_fineMesh->getTopology());
+      neighborCells.push_back(cell); // for connectivity, cell counts as its own neighbor
+      
+      set<GlobalIndexType> neighbors;
+      // initial neighbors
+      for (CellPtr neighbor : neighborCells)
+      {
+        neighbors.insert(neighbor->cellIndex());
+      }
+      
+      if (_smootherOverlap > 0)
+      {
+        for (int distance=0; distance<_smootherOverlap; distance++)
+        {
+          set<GlobalIndexType> newNeighbors;
+          for (GlobalIndexType cellID : neighbors)
+          {
+            newNeighbors.insert(cellID);
+            CellPtr cell = _fineMesh->getTopology()->getCell(cellID);
+            vector<CellPtr> neighbors = cell->getNeighbors(_fineMesh->getTopology());
+            for (CellPtr neighbor : neighbors)
+            {
+              newNeighbors.insert(neighbor->cellIndex());
+            }
+          }
+          neighbors = newNeighbors;
+        }
+      }
+      
       localMaxNeighbors = max(localMaxNeighbors,(int)neighbors.size());
     }
     int globalMaxNeighbors;
     Comm.MaxAll(&localMaxNeighbors, &globalMaxNeighbors, 1);
     
     _smootherWeight = 1.0 / (globalMaxNeighbors + 1); // aiming for a weight that guarantees max eig of weight * S * A is 1.0
+    
+    int rank = Teuchos::GlobalMPISession::getRank();
+    static bool haveWarned = false;
+    if (!haveWarned && (rank==0))
+    {
+      cout << "NOTE: using new approach to Schwarz scaling weight, based on Nate's conjecture regarding the spectral radius of the element connectivity matrix and some results in Smith et al.";
+      cout << " (first _smootherWeight value: " << _smootherWeight << ").\n";
+      haveWarned = true;
+    }
   }
   
   _smoother = smoother;
