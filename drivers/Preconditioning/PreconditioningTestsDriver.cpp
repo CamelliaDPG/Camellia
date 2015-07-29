@@ -359,6 +359,7 @@ enum ProblemChoice
 {
   Poisson,
   ConvectionDiffusion,
+  ConvectionDiffusionExperimental,
   Stokes,
   NavierStokes
 };
@@ -411,6 +412,8 @@ void initializeSolutionAndCoarseMesh(SolutionPtr &solution, MeshPtr &coarseMesh,
   RHSPtr rhs;
   MeshPtr mesh;
 
+  int rank = Teuchos::GlobalMPISession::getRank();
+  
   double width = 1.0; // in each dimension
   vector<double> x0(spaceDim,0); // origin is the default
 
@@ -491,6 +494,139 @@ void initializeSolutionAndCoarseMesh(SolutionPtr &solution, MeshPtr &coarseMesh,
       bc->addDirichlet(tc, inflowZ, -3*.25*(one-x)*(one-y));
       bc->addDirichlet(uhat, outflowZ, zero);
     }
+    
+//    if (rank==0) cout << "NOTE: TRYING SOMETHING IN ConvectionDiffusion's IP.\n";
+//    
+//    VarPtr tau = formulation.tau();
+//    map<int,double> trialWeights; // leave empty for unit weights (default)
+//    map<int,double> testL2Weights;
+//    testL2Weights[v->ID()] = 1.0;
+//    testL2Weights[tau->ID()] = 1.0 / epsilon;
+//    graphNorm = bf->graphNorm(trialWeights,testL2Weights);
+//    if (rank==0)
+//    {
+//      bf->printTrialTestInteractions();
+//      cout << "RHS: " << rhs->linearTerm()->displayString() << endl;
+//    }
+  }
+  else if (problemChoice == ConvectionDiffusionExperimental)
+  {
+    double epsilon = 1e-2;
+    FunctionPtr beta;
+    FunctionPtr beta_x = Function::constant(1);
+    FunctionPtr beta_y = Function::constant(2);
+    FunctionPtr beta_z = Function::constant(3);
+    if (spaceDim == 1)
+      beta = beta_x;
+    else if (spaceDim == 2)
+      beta = Function::vectorize(beta_x, beta_y);
+    else if (spaceDim == 3)
+      beta = Function::vectorize(beta_x, beta_y, beta_z);
+
+    FunctionPtr zero = Function::zero();
+    FunctionPtr one = Function::constant(1);
+    
+    Space tauSpace = (spaceDim > 1) ? HDIV : HGRAD;
+    Space uhat_space = conformingTraces ? HGRAD : L2;
+    Space vSpace = (spaceDim > 1) ? VECTOR_L2 : L2;
+    
+    // fields
+    VarPtr u;
+    VarPtr sigma;
+    
+    // traces
+    VarPtr uhat, tc;
+    
+    // tests
+    VarPtr v;
+    VarPtr tau;
+    
+    VarFactoryPtr vf = VarFactory::varFactory();
+    u = vf->fieldVar("u");
+    sigma = vf->fieldVar("sigma", vSpace);
+    
+    TFunctionPtr<double> n = TFunction<double>::normal();
+    TFunctionPtr<double> parity = TFunction<double>::sideParity();
+    
+    if (spaceDim > 1)
+      uhat = vf->traceVar("uhat", u, uhat_space);
+    else
+      uhat = vf->fluxVar("uhat", u * (parity * Function::normal_1D()), uhat_space); // for spaceDim==1, the "normal" component is in the flux-ness of uhat (it's a plus or minus 1)
+    
+    
+    if (spaceDim > 1)
+      tc = vf->fluxVar("tc", (beta*u-sigma) * (n * parity));
+    else
+      tc = vf->fluxVar("tc", (beta*u-sigma) * (parity * Function::normal_1D()));
+    
+    v = vf->testVar("v", HGRAD);
+    tau = vf->testVar("tau", tauSpace);
+    
+    bf = Teuchos::rcp( new BF(vf) );
+    
+    if (spaceDim==1)
+    {
+      // for spaceDim==1, the "normal" component is in the flux-ness of uhat (it's a plus or minus 1)
+      bf->addTerm(sigma, tau);
+      bf->addTerm(u * epsilon, tau->dx());
+      bf->addTerm(-epsilon * uhat, tau);
+      
+      bf->addTerm(-beta*u + sigma, v->dx());
+      bf->addTerm(tc, v);
+    }
+    else
+    {
+      // compared with the standard formulation, we multiply all tau terms by epsilon (tau doesn't enter RHS)
+      bf->addTerm(sigma, tau);
+      bf->addTerm(u * epsilon, tau->div());
+      bf->addTerm(-epsilon * uhat, tau->dot_normal());
+      
+      bf->addTerm(-beta*u + sigma, v->grad());
+      bf->addTerm(tc, v);
+    }
+    
+    rhs = RHS::rhs();
+    FunctionPtr f = Function::constant(1.0);
+    
+    rhs->addTerm( f * v );
+    
+    bc = BC::bc();
+    SpatialFilterPtr inflowX = SpatialFilter::matchingX(-1);
+    SpatialFilterPtr inflowY = SpatialFilter::matchingY(-1);
+    SpatialFilterPtr inflowZ = SpatialFilter::matchingZ(-1);
+    SpatialFilterPtr outflowX = SpatialFilter::matchingX(1);
+    SpatialFilterPtr outflowY = SpatialFilter::matchingY(1);
+    SpatialFilterPtr outflowZ = SpatialFilter::matchingZ(1);
+    FunctionPtr x = Function::xn(1);
+    FunctionPtr y = Function::yn(1);
+    FunctionPtr z = Function::zn(1);
+    if (spaceDim == 1)
+    {
+      bc->addDirichlet(tc, inflowX, -one);
+      bc->addDirichlet(uhat, outflowX, zero);
+    }
+    if (spaceDim == 2)
+    {
+      bc->addDirichlet(tc, inflowX, -1*.5*(one-y));
+      bc->addDirichlet(uhat, outflowX, zero);
+      bc->addDirichlet(tc, inflowY, -2*.5*(one-x));
+      bc->addDirichlet(uhat, outflowY, zero);
+    }
+    if (spaceDim == 3)
+    {
+      bc->addDirichlet(tc, inflowX, -1*.25*(one-y)*(one-z));
+      bc->addDirichlet(uhat, outflowX, zero);
+      bc->addDirichlet(tc, inflowY, -2*.25*(one-x)*(one-z));
+      bc->addDirichlet(uhat, outflowY, zero);
+      bc->addDirichlet(tc, inflowZ, -3*.25*(one-x)*(one-y));
+      bc->addDirichlet(uhat, outflowZ, zero);
+    }
+    
+//    if (rank==0)
+//    {
+//      bf->printTrialTestInteractions();
+//      cout << "RHS: " << rhs->linearTerm()->displayString() << endl;
+//    }
   }
   else if (problemChoice == Stokes)
   {
@@ -632,7 +768,8 @@ void initializeSolutionAndCoarseMesh(SolutionPtr &solution, MeshPtr &coarseMesh,
   int H1Order_coarse = k_coarse + 1;
   coarseMesh = Teuchos::rcp(new Mesh(mesh->getTopology(), bf, H1Order_coarse, delta_k));
   
-  graphNorm = bf->graphNorm();
+  if (graphNorm == Teuchos::null) // if set previously, honor that...
+    graphNorm = bf->graphNorm();
 
   solution = Solution::solution(mesh, bc, rhs, graphNorm);
   solution->setUseCondensedSolve(useStaticCondensation);
@@ -1506,6 +1643,10 @@ int main(int argc, char *argv[])
   else if (problemChoiceString == "ConvectionDiffusion")
   {
     problemChoice = ConvectionDiffusion;
+  }
+  else if (problemChoiceString == "ConvectionDiffusionExperimental")
+  {
+    problemChoice = ConvectionDiffusionExperimental;
   }
   else if (problemChoiceString == "Stokes")
   {
