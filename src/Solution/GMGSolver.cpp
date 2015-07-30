@@ -153,7 +153,7 @@ Teuchos::RCP<GMGOperator> GMGSolver::gmgOperatorFromMeshSequence(const std::vect
                                                     coarseSolver, useStaticCondensationInCoarseSolve));
     }
     coarseOperator->setSmootherType(GMGOperator::CAMELLIA_ADDITIVE_SCHWARZ);
-    coarseOperator->setUseSchwarzDiagonalWeight(true);
+    coarseOperator->setUseSchwarzDiagonalWeight(false);
     coarseOperator->setUseSchwarzScalingWeight(true);
     coarseOperator->setMultigridStrategy(multigridStrategy);
     bool hRefined = fineMesh->numActiveElements() > coarseMesh->numActiveElements();
