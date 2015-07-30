@@ -1746,37 +1746,58 @@ void GMGOperator::setUpSmoother(Epetra_CrsMatrix *fineStiffnessMatrix)
     int localMaxNeighbors = 0;
     for (GlobalIndexType cellIndex : myCellIndices)
     {
-      CellPtr cell = _fineMesh->getTopology()->getCell(cellIndex);
-      vector<CellPtr> neighborCells = cell->getNeighbors(_fineMesh->getTopology());
-      neighborCells.push_back(cell); // for connectivity, cell counts as its own neighbor
-      
-      set<GlobalIndexType> neighbors;
-      // initial neighbors
-      for (CellPtr neighbor : neighborCells)
+      set<GlobalIndexType> subdomainCellsAndNeighbors;
+      // first, fill in the subdomain cells
+      if (!_hierarchicalNeighborsForSchwarz)
       {
-        neighbors.insert(neighbor->cellIndex());
-      }
-      
-      if (_smootherOverlap > 0)
-      {
-        for (int distance=0; distance<_smootherOverlap; distance++)
+        subdomainCellsAndNeighbors = {cellIndex};
+        set<GlobalIndexType> newNeighbors = {cellIndex};
+        for (int overlapLevel=0; overlapLevel<_smootherOverlap; overlapLevel++)
         {
-          set<GlobalIndexType> newNeighbors;
-          for (GlobalIndexType cellID : neighbors)
+          set<GlobalIndexType> lastNeighbors = newNeighbors;
+          newNeighbors.clear();
+          for (GlobalIndexType neighborCellIndex : lastNeighbors)
           {
-            newNeighbors.insert(cellID);
-            CellPtr cell = _fineMesh->getTopology()->getCell(cellID);
-            vector<CellPtr> neighbors = cell->getNeighbors(_fineMesh->getTopology());
-            for (CellPtr neighbor : neighbors)
+            CellPtr lastNeighborCell = _fineMesh->getTopology()->getCell(neighborCellIndex);
+            vector<CellPtr> newNeighborCells = lastNeighborCell->getNeighbors(_fineMesh->getTopology());
+            for (CellPtr neighbor : newNeighborCells)
             {
               newNeighbors.insert(neighbor->cellIndex());
             }
           }
-          neighbors = newNeighbors;
+          subdomainCellsAndNeighbors.insert(newNeighbors.begin(),newNeighbors.end());
+        }
+      }
+      else
+      {
+        CellPtr ancestralCell = _fineMesh->getTopology()->getCell(cellIndex);
+        for (int overlapLevel=0; overlapLevel<_smootherOverlap; overlapLevel++)
+        {
+          if (ancestralCell->getParent() != Teuchos::null)
+          {
+            ancestralCell = ancestralCell->getParent();
+          }
+          else
+          {
+            break;
+          }
+        }
+        subdomainCellsAndNeighbors = ancestralCell->getDescendants(_fineMesh->getTopology(), true); // true: leaf nodes only
+      }
+      
+      set<GlobalIndexType> subdomainNeighbors;
+      for (GlobalIndexType subdomainCellIndex : subdomainCellsAndNeighbors)
+      {
+        CellPtr subdomainCell = _fineMesh->getTopology()->getCell(subdomainCellIndex);
+        vector<CellPtr> neighborCells = subdomainCell->getNeighbors(_fineMesh->getTopology());
+        for (CellPtr neighbor : neighborCells)
+        {
+          subdomainNeighbors.insert(neighbor->cellIndex());
         }
       }
       
-      localMaxNeighbors = max(localMaxNeighbors,(int)neighbors.size());
+      subdomainCellsAndNeighbors.insert(subdomainNeighbors.begin(),subdomainNeighbors.end());
+      localMaxNeighbors = max(localMaxNeighbors,(int)subdomainNeighbors.size());
     }
     int globalMaxNeighbors;
     Comm.MaxAll(&localMaxNeighbors, &globalMaxNeighbors, 1);
@@ -1787,8 +1808,8 @@ void GMGOperator::setUpSmoother(Epetra_CrsMatrix *fineStiffnessMatrix)
     static bool haveWarned = false;
     if (!haveWarned && (rank==0))
     {
-      cout << "NOTE: using new approach to Schwarz scaling weight, based on Nate's conjecture regarding the spectral radius of the element connectivity matrix and some results in Smith et al.";
-      cout << " (first _smootherWeight value: " << _smootherWeight << ").\n";
+      cout << "NOTE: using new approach to Schwarz scaling weight, based on Nate's conjecture regarding the spectral radius of the subdomain connectivity matrix and some results in Smith et al.  (We do assume that cells generate their own Schwarz subdomains, which is not yet true when there is more than one cell per MPI rank.  The intent is to add this to Camellia's AdditiveSchwarz soon.)";
+      cout << " First _smootherWeight value: " << _smootherWeight << ".\n";
       haveWarned = true;
     }
   }
