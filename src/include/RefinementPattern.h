@@ -61,6 +61,8 @@ namespace Camellia {
     static map< pair<unsigned,unsigned>, Teuchos::RCP<RefinementPattern> > _refPatternForKeyTensorialDegree;
     static map< pair<unsigned,unsigned>, Teuchos::RCP<RefinementPattern> > _timeExtrudedRefPatternForKeyTensorialDegree;
     
+    static map< pair< RefinementBranch, unsigned> , Intrepid::FieldContainer<double> > _descendantNodesRelativeToPermutedReferenceCell;
+    
     void determineChildSubcellInfoInSubcellRefinement(unsigned &childSubcellDimension, unsigned &childSubcellOrdinal,
                                                       unsigned &childSubcellPermutation, unsigned &subcellRefChild,
                                                       unsigned subcdim, unsigned subcord, unsigned childOrdinal,
@@ -144,7 +146,8 @@ namespace Camellia {
 
   static unsigned descendantSubcellOrdinal(RefinementBranch &refBranch, unsigned subcdim, unsigned ancestralSubcord);
 
-  static Intrepid::FieldContainer<double> descendantNodesRelativeToAncestorReferenceCell(RefinementBranch refinementBranch, unsigned ancestorReferenceCellPermutation=0);
+  static Intrepid::FieldContainer<double> descendantNodesRelativeToAncestorReferenceCell(RefinementBranch refinementBranch, unsigned ancestorReferenceCellPermutation=0,
+                                                                                         bool cacheResults = true);
 
   static Intrepid::FieldContainer<double> descendantNodes(RefinementBranch refinementBranch, const Intrepid::FieldContainer<double> &ancestorNodes);
 

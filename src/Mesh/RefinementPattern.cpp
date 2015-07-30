@@ -46,6 +46,8 @@ using namespace Camellia;
 map< CellTopologyKey, RefinementPatternPtr > RefinementPattern::_refPatternForKeyTensorialDegree;
 map< CellTopologyKey, RefinementPatternPtr > RefinementPattern::_timeExtrudedRefPatternForKeyTensorialDegree;
 
+map< pair<RefinementBranch, unsigned>, FieldContainer<double> > RefinementPattern::_descendantNodesRelativeToPermutedReferenceCell;
+
 RefinementPattern::RefinementPattern(CellTopoPtr cellTopoPtr, FieldContainer<double> refinedNodes, vector< RefinementPatternPtr > sideRefinementPatterns)
 {
   _cellTopoPtr = cellTopoPtr;
@@ -1864,17 +1866,27 @@ RefinementBranch RefinementPattern::subcellRefinementBranch(RefinementBranch &vo
 }
 
 FieldContainer<double> RefinementPattern::descendantNodesRelativeToAncestorReferenceCell(RefinementBranch refinementBranch,
-    unsigned ancestorReferenceCellPermutation)
+                                                                                         unsigned ancestorReferenceCellPermutation, bool cacheResults)
 {
+  if (_descendantNodesRelativeToPermutedReferenceCell.find({refinementBranch,ancestorReferenceCellPermutation}) != _descendantNodesRelativeToPermutedReferenceCell.end())
+    return _descendantNodesRelativeToPermutedReferenceCell[{refinementBranch,ancestorReferenceCellPermutation}];
+  
+  
   CellTopoPtr parentTopo = refinementBranch[0].first->parentTopology();
   FieldContainer<double> ancestorNodes(parentTopo->getNodeCount(), parentTopo->getDimension());
   CamelliaCellTools::refCellNodesForTopology(ancestorNodes, parentTopo, ancestorReferenceCellPermutation);
 
-  return descendantNodes(refinementBranch, ancestorNodes);
+  FieldContainer<double> nodes = descendantNodes(refinementBranch, ancestorNodes);
+  if (cacheResults)
+  {
+    _descendantNodesRelativeToPermutedReferenceCell[{refinementBranch,ancestorReferenceCellPermutation}] = nodes;
+  }
+  return nodes;
 }
 
 FieldContainer<double> RefinementPattern::descendantNodes(RefinementBranch refinementBranch, const FieldContainer<double> &ancestorNodes)
 {
+  // NOTE: this is definitely not the most efficient way to compute this...
   vector< vector<double> > vertices;
   vector< vector<unsigned> > elementVertices;
   int numNodes = ancestorNodes.dimension(0);
