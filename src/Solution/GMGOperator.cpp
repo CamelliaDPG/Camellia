@@ -1734,8 +1734,11 @@ void GMGOperator::setUpSmoother(Epetra_CrsMatrix *fineStiffnessMatrix)
 //    cout << *_smootherWeight_sqrt;
   }
 
-  if (_useSchwarzScalingWeight)
+  if ((_useSchwarzScalingWeight) && ((_smootherType == CAMELLIA_ADDITIVE_SCHWARZ) || (_smootherType == IFPACK_ADDITIVE_SCHWARZ)))
   {
+    // (For IfPack, this weight may not be exactly correct, but it's probably kinda close.  Likely we will deprecate support for
+    // IFPACK_ADDITIVE_SCHWARZ soon.)
+    
     // Suppose that E is a matrix with rows and columns corresponding to the elements, with 0s for disconnected elements, and 1s for
     // connected elements (an element is connected to itself and its face neighbors).
     // Conjecture: rho(E) is bounded above by the maximum side count of an element plus 1.
