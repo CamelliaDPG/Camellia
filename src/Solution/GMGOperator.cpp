@@ -1747,7 +1747,19 @@ void GMGOperator::setUpSmoother(Epetra_CrsMatrix *fineStiffnessMatrix)
 //    cout << *_smootherWeight_sqrt;
   }
 
-  if ((_useSchwarzScalingWeight) && ((_smootherType == CAMELLIA_ADDITIVE_SCHWARZ) || (_smootherType == IFPACK_ADDITIVE_SCHWARZ)))
+  static bool haveWarnedAboutOldSchwarzWeight = false;
+  if (!_hierarchicalNeighborsForSchwarz && ((_useSchwarzScalingWeight) && ((_smootherType == CAMELLIA_ADDITIVE_SCHWARZ) || (_smootherType == IFPACK_ADDITIVE_SCHWARZ))))
+  {
+    int rank = Teuchos::GlobalMPISession::getRank();
+    if ((rank==0) && !haveWarnedAboutOldSchwarzWeight)
+    {
+      cout << "Note: as an experiment, trying Fischer & Lottes's Schwarz scaling when _hierarchicalNeighborsForSchwarz is false.\n";
+      haveWarnedAboutOldSchwarzWeight = true;
+    }
+
+  }
+  
+  if ((_useSchwarzScalingWeight && _hierarchicalNeighborsForSchwarz) && ((_smootherType == CAMELLIA_ADDITIVE_SCHWARZ) || (_smootherType == IFPACK_ADDITIVE_SCHWARZ)))
   {
     // (For IfPack, this weight may not be exactly correct, but it's probably kinda close.  Likely we will deprecate support for
     // IFPACK_ADDITIVE_SCHWARZ soon.)
