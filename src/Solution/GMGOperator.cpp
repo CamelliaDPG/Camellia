@@ -1070,6 +1070,19 @@ int GMGOperator::ApplyInverse(const Epetra_MultiVector& X_in, Epetra_MultiVector
     }
   }
 
+  // to ensure symmetry of our full multigrid operator, we apply coarse operator to the residual:
+  if ((_multigridStrategy == FULL_MULTIGRID_V) || (_multigridStrategy == FULL_MULTIGRID_W))
+  {
+    // full multigrid takes the coarse operator applied to the RHS as its initial guess
+    Epetra_MultiVector Y2(Y.Map(), Y.NumVectors());
+    // recompute residual:
+    res = f;
+    computeResidual(Y,res,A_Y);
+
+    this->ApplyInverseCoarseOperator(res, Y2);
+    Y.Update(1.0, Y2, 1.0);
+  }
+  
   /*
    We zero out the lagrange multiplier solutions on the fine mesh, because we're relying on the coarse solve to impose these;
    we just use an identity block in the lower right of the fine matrix for the Lagrange constraints themselves.
