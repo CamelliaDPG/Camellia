@@ -360,7 +360,7 @@ int main(int argc, char *argv[])
   bool reportTimings = false;
   bool useZeroMeanConstraints = false;
   bool useConjugateGradient = true;
-  bool useDiagonalSchwarzWeighting = true;
+  bool useDiagonalSchwarzWeighting = false;
   bool logFineOperator = false;
   
   bool writeOpToFile = false;
