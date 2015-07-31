@@ -1069,19 +1069,6 @@ int GMGOperator::ApplyInverse(const Epetra_MultiVector& X_in, Epetra_MultiVector
       computeResidual(Y, res, A_Y);
     }
   }
-
-  // to ensure symmetry of our full multigrid operator, we apply coarse operator to the residual:
-  if ((_multigridStrategy == FULL_MULTIGRID_V) || (_multigridStrategy == FULL_MULTIGRID_W))
-  {
-    // full multigrid takes the coarse operator applied to the RHS as its initial guess
-    Epetra_MultiVector Y2(Y.Map(), Y.NumVectors());
-    // recompute residual:
-    res = f;
-    computeResidual(Y,res,A_Y);
-
-    this->ApplyInverseCoarseOperator(res, Y2);
-    Y.Update(1.0, Y2, 1.0);
-  }
   
   /*
    We zero out the lagrange multiplier solutions on the fine mesh, because we're relying on the coarse solve to impose these;
@@ -1772,6 +1759,8 @@ void GMGOperator::setUpSmoother(Epetra_CrsMatrix *fineStiffnessMatrix)
     set<GlobalIndexType> myCellIndices = _fineMesh->globalDofAssignment()->cellsInPartition(-1);
     Epetra_MpiComm Comm(MPI_COMM_WORLD);
     
+    double oldSmootherWeight = _smootherWeight;
+    
     int localMaxNeighbors = 0;
     for (GlobalIndexType cellIndex : myCellIndices)
     {
@@ -1838,7 +1827,7 @@ void GMGOperator::setUpSmoother(Epetra_CrsMatrix *fineStiffnessMatrix)
     if (!haveWarned && (rank==0))
     {
       cout << "NOTE: using new approach to Schwarz scaling weight, based on Nate's conjecture regarding the spectral radius of the subdomain connectivity matrix and some results in Smith et al.  (We do assume that cells generate their own Schwarz subdomains, which is not yet true when there is more than one cell per MPI rank.  The intent is to add this to Camellia's AdditiveSchwarz soon.)";
-      cout << " First _smootherWeight value: " << _smootherWeight << ".\n";
+      cout << " First _smootherWeight value: " << _smootherWeight << " (old weight was " << oldSmootherWeight << ").\n";
       haveWarned = true;
     }
   }

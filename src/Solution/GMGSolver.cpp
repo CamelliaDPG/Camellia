@@ -105,7 +105,10 @@ _finePartitionMap(fineSolution->getPartitionMap())
   _computeCondest = true;
   _azOutput = AZ_warnings;
   
-  _useCG = true;
+  if ((multigridStrategy == GMGOperator::FULL_MULTIGRID_V) && (multigridStrategy == GMGOperator::FULL_MULTIGRID_W))
+    _useCG = false; // Full multigrid is not symmetric
+  else
+    _useCG = true;
   _azConvergenceOption = AZ_rhs;
   
   _gmgOperator = gmgOperatorFromMeshSequence(meshesCoarseToFine, fineSolution, multigridStrategy, coarseSolver, useStaticCondensation);
@@ -153,12 +156,20 @@ Teuchos::RCP<GMGOperator> GMGSolver::gmgOperatorFromMeshSequence(const std::vect
                                                     coarseSolver, useStaticCondensationInCoarseSolve));
     }
     coarseOperator->setSmootherType(GMGOperator::CAMELLIA_ADDITIVE_SCHWARZ);
-    coarseOperator->setUseSchwarzDiagonalWeight(false);
     coarseOperator->setUseSchwarzScalingWeight(true);
     coarseOperator->setMultigridStrategy(multigridStrategy);
     bool hRefined = fineMesh->numActiveElements() > coarseMesh->numActiveElements();
     coarseOperator->setUseHierarchicalNeighborsForSchwarz(hRefined);
-    if (hRefined) coarseOperator->setSmootherOverlap(1);
+    if (hRefined)
+    {
+      coarseOperator->setSmootherOverlap(1);
+      coarseOperator->setUseSchwarzDiagonalWeight(false); // empirically, this doesn't work well for h-multigrid
+    }
+    else
+    {
+      coarseOperator->setUseSchwarzDiagonalWeight(false); // not sure which is better; use false for now
+    }
+    
 
     if (finerOperator != Teuchos::null)
     {

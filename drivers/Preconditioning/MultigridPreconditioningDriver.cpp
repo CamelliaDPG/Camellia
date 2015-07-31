@@ -382,7 +382,7 @@ int main(int argc, char *argv[])
   
   cmdp.setOption("azOutput", &azOutput);
   cmdp.setOption("logFineOperator", "dontLogFineOperator", &logFineOperator);
-  cmdp.setOption("multigridStrategy", &multigridStrategyString, "Multigrid strategy: V-cycle, W-cycle, Full, or Two-level");
+  cmdp.setOption("multigridStrategy", &multigridStrategyString, "Multigrid strategy: V-cycle, W-cycle, Full-V, Full-W, or Two-level");
   
   cmdp.setOption("useCondensedSolve", "useStandardSolve", &useCondensedSolve);
   cmdp.setOption("useConformingTraces", "useNonConformingTraces", &conformingTraces);
@@ -464,10 +464,12 @@ int main(int argc, char *argv[])
   else if (multigridStrategyString == "Full-W")
   {
     multigridStrategy = GMGOperator::FULL_MULTIGRID_W;
+    useConjugateGradient = false; // not symmetric
   }
   else if (multigridStrategyString == "Full-V")
   {
     multigridStrategy = GMGOperator::FULL_MULTIGRID_V;
+    useConjugateGradient = false; // not symmetric
   }
   else
   {
