@@ -102,7 +102,7 @@ private:
   Teuchos::RCP<Epetra_Operator> _smoother;
   double _smootherWeight;
   int _smootherApplicationCount; // default to 1, but 2 may often be a better choice (especially when doing more than 2 levels)
-  Teuchos::RCP<Epetra_MultiVector> _smootherWeight_sqrt;
+  Teuchos::RCP<Epetra_MultiVector> _smootherDiagonalWeight;
   bool _useSchwarzDiagonalWeight, _useSchwarzScalingWeight; // when true, will set _smootherWeight_sqrt and _smootherWeight during setUpSmoother()
   
   // ! res should hold the RHS on entry, Y the current solution.  On exit, res will have the updated residual, and A_Y A * Y
@@ -231,7 +231,7 @@ public:
    
    \return Integer error code, set to 0 if successful.
    */
-  int ApplySmoother(const Epetra_MultiVector& X, Epetra_MultiVector& Y) const;
+  int ApplySmoother(const Epetra_MultiVector& X, Epetra_MultiVector& Y, bool weightOnLeft) const;
   
   //! Returns the infinity norm of the global matrix.
   /* Returns the quantity \f$ \| A \|_\infty\f$ such that

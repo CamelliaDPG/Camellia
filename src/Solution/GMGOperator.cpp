@@ -195,33 +195,6 @@ void GMGOperator::computeCoarseStiffnessMatrix(Epetra_CrsMatrix *fineStiffnessMa
   Teuchos::RCP<Epetra_CrsMatrix> PT_A_P = Teuchos::rcp( new Epetra_CrsMatrix(::Copy, domain_P, maxRowSize) );
 
   // compute P^T * A * P
-  // For MultigridPreconditioningDriver with Stokes and static condensation, we crash on this line.  Is the domain_P argument above problematic in this case??
-//  {
-//    //DEBUGGING
-//    Camellia::printMapSummary(_P->DomainMap(), "_P->DomainMap()");
-//
-//    // DEBUGGING:
-//    string AP_path = "/tmp/AP.dat";
-//    cout << "Writing AP to disk at " << AP_path << endl;
-//    EpetraExt::RowMatrixToMatrixMarketFile(AP_path.c_str(), AP, NULL, NULL, false); // false: don't write header
-//    string P_path = "/tmp/P.dat";
-//    cout << "Writing P to disk at " << P_path << endl;
-//    EpetraExt::RowMatrixToMatrixMarketFile(P_path.c_str(),*_P, NULL, NULL, false); // false: don't write header
-//    
-//    // try doing things sorta like the multiply below, but swapping out one of the matrices in question for each
-//    Teuchos::RCP<Epetra_CrsMatrix> AP_2 = Teuchos::rcp( new Epetra_CrsMatrix(::Copy, _finePartitionMap, maxRowSize) );
-//    err = EpetraExt::MatrixMatrix::Multiply(AP, false, AP, true, *AP_2);
-//    
-//    Teuchos::RCP<Epetra_CrsMatrix> P_2 = Teuchos::rcp( new Epetra_CrsMatrix(::Copy, _finePartitionMap, maxRowSize) );
-//    err = EpetraExt::MatrixMatrix::Multiply(*_P, false, *_P, true, *P_2);
-//    
-//    Teuchos::RCP<Epetra_CrsMatrix> PT_2 = Teuchos::rcp( new Epetra_CrsMatrix(::Copy, domain_P, maxRowSize) );
-//    err = EpetraExt::MatrixMatrix::Multiply(*_P, true, *_P, false, *PT_2);
-//    
-//    Teuchos::RCP<Epetra_CrsMatrix> PTAT_2 = Teuchos::rcp( new Epetra_CrsMatrix(::Copy, domain_P, maxRowSize) );
-//    err = EpetraExt::MatrixMatrix::Multiply(AP, true, AP, false, *PTAT_2);
-//  }
-  
   err = EpetraExt::MatrixMatrix::Multiply(*_P, true, AP, false, *PT_A_P);
   if (err != 0)
   {
@@ -971,7 +944,7 @@ GMGOperator::SmootherChoice GMGOperator::getSmootherType()
 
 Teuchos::RCP<Epetra_MultiVector> GMGOperator::getSmootherWeightVector()
 {
-  return _smootherWeight_sqrt;
+  return _smootherDiagonalWeight;
 }
 
 int GMGOperator::Apply(const Epetra_MultiVector& X, Epetra_MultiVector& Y) const
@@ -1029,7 +1002,7 @@ int GMGOperator::ApplyInverse(const Epetra_MultiVector& X_in, Epetra_MultiVector
     for (int i=0; i<_smootherApplicationCount; i++)
     {
       // if we have a smoother S, set Y = S^-1 f =: B1 * f
-      ApplySmoother(res, B1_res); // B1_f is scaled!
+      ApplySmoother(res, B1_res, true); // true: apply weight on left
       Y.Update(1.0, B1_res, 1.0);
       if (_debugMode)
       {
@@ -1038,15 +1011,21 @@ int GMGOperator::ApplyInverse(const Epetra_MultiVector& X_in, Epetra_MultiVector
         cout << B1_res;
       }
       
-      if (_multigridStrategy != TWO_LEVEL)
+      if (_multigridStrategy == TWO_LEVEL)
+      {
+        if (_useSchwarzDiagonalWeight && (_smootherDiagonalWeight != Teuchos::null))
+        {
+          // then we need to average the left-application we already did with an application on the right
+          ApplySmoother(res, B1_res, false); // false: apply weight on right
+          Y.Update(0.5, B1_res, 0.5); // 0.5: average
+        }
+        break; // don't apply multiple times if doing two-level (no point...)
+      }
+      else
       {
         // compute a new residual: res := f - A*Y = res - A*Y
         res = f;
         computeResidual(Y,res,A_Y);
-      }
-      else
-      {
-        break; // only do one application for two-level
       }
     }
   }
@@ -1067,8 +1046,23 @@ int GMGOperator::ApplyInverse(const Epetra_MultiVector& X_in, Epetra_MultiVector
         res = f;
         computeResidual(Y, res, A_Y);
         
-        ApplySmoother(res, B1_res); // B1_res is scaled
-        Y.Update(1.0, B1_res, 1.0);
+        if (((_useSchwarzDiagonalWeight && (_smootherDiagonalWeight != Teuchos::null)))
+            && (numApplications > 1) && (applicationOrdinal < numApplications-1))
+        {
+          // then, to maintain symmetry, apply smoother twice, once with left weighting, and once with right:
+          ApplySmoother(res, B1_res, true);
+          Y.Update(1.0, B1_res, 1.0);
+          res = f;
+          computeResidual(Y, res, A_Y);
+          ApplySmoother(res, B1_res, false);
+          Y.Update(1.0, B1_res, 1.0);
+        }
+        else
+        {
+          // just apply once, on the right
+          ApplySmoother(res, B1_res, false);
+          Y.Update(1.0, B1_res, 1.0);
+        }
       }
     }
     
@@ -1205,7 +1199,7 @@ int GMGOperator::ApplyInverseCoarseOperator(const Epetra_MultiVector &res, Epetr
   return 0;
 }
 
-int GMGOperator::ApplySmoother(const Epetra_MultiVector &res, Epetra_MultiVector &Y) const
+int GMGOperator::ApplySmoother(const Epetra_MultiVector &res, Epetra_MultiVector &Y, bool weightOnLeft) const
 {
   
   narrate("ApplySmoother()");
@@ -1213,24 +1207,42 @@ int GMGOperator::ApplySmoother(const Epetra_MultiVector &res, Epetra_MultiVector
   
   int err;
 
-  if ((_smootherWeight_sqrt == Teuchos::null) || !_useSchwarzDiagonalWeight)
+  if ((_smootherDiagonalWeight == Teuchos::null) || !_useSchwarzDiagonalWeight)
   {
     err = _smoother->ApplyInverse(res, Y);
   }
   else
   {
-//    cout << *_smootherWeight_sqrt;
+//    cout << "_smootherDiagonalWeight:\n";
+//    Comm().Barrier();
+//    cout << *_smootherDiagonalWeight;
+//    Comm().Barrier();
+//    cout << "res:\n";
 //    cout << res;
     Epetra_MultiVector temp(res.Map(),res.NumVectors());
-    temp.Multiply(1.0, res, *_smootherWeight_sqrt, 0.0);
+    if (!weightOnLeft)
+      temp.Multiply(1.0, res, *_smootherDiagonalWeight, 0.0);
+    else
+      temp = res;
+    
+//    cout << "temp:\n";
+//    Comm().Barrier();
 //    cout << temp;
     
     err = _smoother->ApplyInverse(temp, Y);
+//    cout << "Y after ApplyInverse:\n";
+//    Comm().Barrier();
 //    cout << Y;
     
-    temp = Y;
-    Y.Multiply(1.0, temp, *_smootherWeight_sqrt, 0.0);
+    if (weightOnLeft)
+    {
+      temp = Y;
+      Y.Multiply(1.0, temp, *_smootherDiagonalWeight, 0.0);
+    }
+//    cout << "Y:\n";
+//    Comm().Barrier();
 //    cout << Y;
+//    Comm().Barrier();
   }
   Y.Scale(_smootherWeight);
   _timeApplySmoother += timer.ElapsedTime();
@@ -1741,13 +1753,13 @@ void GMGOperator::setUpSmoother(Epetra_CrsMatrix *fineStiffnessMatrix)
     
     if (_useSchwarzDiagonalWeight)
     {
-      _smootherWeight_sqrt = Teuchos::rcp(new Epetra_MultiVector(fineStiffnessMatrix->RowMap(), 1) );
+      _smootherDiagonalWeight = Teuchos::rcp(new Epetra_MultiVector(fineStiffnessMatrix->RowMap(), 1) );
       GlobalIndexTypeToCast numMyElements = fineStiffnessMatrix->RowMap().NumMyElements();
       for (int LID=0; LID < numMyElements; LID++)
       {
         double value = multiplicities[0][LID];
         TEUCHOS_TEST_FOR_EXCEPTION(value == 0.0, std::invalid_argument, "internal error: value should never be 0");
-        (*_smootherWeight_sqrt)[0][LID] = sqrt(1.0/value);
+        (*_smootherDiagonalWeight)[0][LID] = 1.0/value;
       }
     }
     // debugging:
