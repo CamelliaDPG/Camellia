@@ -286,13 +286,15 @@ void initializeSolutionAndCoarseMesh(SolutionPtr &solution, vector<MeshPtr> &mes
     meshesCoarseToFine.push_back(k0Mesh);
     meshWidthCells *= 2;
   }
-  meshesCoarseToFine.push_back(mesh);
+  
+  if (k_coarse != k) // if k_coarse == k, then we already have mesh represented...
+    meshesCoarseToFine.push_back(mesh);
   
   if (meshWidthCells != numCells)
   {
     if (rank == 0)
     {
-      cout << "Warning: may have overrefined mesh; mesh has width " << meshWidthCells << ", not " << numCells << endl;
+      cout << "Warning: may have over-refined mesh; mesh has width " << meshWidthCells << ", not " << numCells << endl;
     }
   }
   
@@ -356,10 +358,14 @@ int main(int argc, char *argv[])
   bool useConjugateGradient = true;
   bool logFineOperator = false;
   
+  bool writeOpToFile = false;
+  
   string multigridStrategyString = "W-cycle";
   
   bool pauseOnRankZero = false;
 
+  int azOutput = 10;
+  
   string problemChoiceString = "Poisson";
   string coarseSolverChoiceString = "KLU";
 
@@ -374,6 +380,7 @@ int main(int argc, char *argv[])
 
   cmdp.setOption("CG", "GMRES", &useConjugateGradient);
   
+  cmdp.setOption("azOutput", &azOutput);
   cmdp.setOption("logFineOperator", "dontLogFineOperator", &logFineOperator);
   cmdp.setOption("multigridStrategy", &multigridStrategyString, "Multigrid strategy: V-cycle, W-cycle, Full, or Two-level");
   
@@ -389,6 +396,8 @@ int main(int argc, char *argv[])
   cmdp.setOption("reportTimings", "dontReportTimings", &reportTimings, "Report timings in Solution");
 
   cmdp.setOption("useZeroMeanConstraint", "usePointConstraint", &useZeroMeanConstraints, "Use a zero-mean constraint for the pressure (otherwise, use a vertex constraint at the origin)");
+  
+  cmdp.setOption("writeOpToFile", "dontWriteOpToFile", &writeOpToFile);
 
   if (cmdp.parse(argc,argv) != Teuchos::CommandLineProcessor::PARSE_SUCCESSFUL)
   {
@@ -548,7 +557,7 @@ int main(int argc, char *argv[])
   SolverPtr coarseSolver = Solver::getDirectSolver(reuseFactorization);
   Teuchos::RCP<GMGSolver> gmgSolver = Teuchos::rcp(new GMGSolver(solution, meshesCoarseToFine, cgMaxIterations, cgTol, multigridStrategy, coarseSolver, useCondensedSolve));
   gmgSolver->setUseConjugateGradient(useConjugateGradient);
-  gmgSolver->setAztecOutput(10);
+  gmgSolver->setAztecOutput(azOutput);
   gmgSolver->gmgOperator()->setNarrateOnRankZero(logFineOperator,"finest GMGOperator");
   
   double gmgSolverInitializationTime = timer.ElapsedTime();
@@ -568,6 +577,13 @@ int main(int argc, char *argv[])
     cout << "Finest GMGOperator, timing report:\n";
   }
   gmgSolver->gmgOperator()->reportTimingsSumOfOperators(StatisticChoice::MAX);
+  
+  if (writeOpToFile)
+  {
+    Teuchos::RCP<GMGOperator> op = gmgSolver->gmgOperator();
+    if (rank==0) cout << "writing op to op.dat.\n";
+    EpetraExt::RowMatrixToMatrixMarketFile("op.dat",*op->getMatrixRepresentation(), NULL, NULL, false);
+  }
   
   return 0;
 }
