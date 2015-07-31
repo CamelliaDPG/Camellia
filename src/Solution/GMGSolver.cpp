@@ -183,7 +183,7 @@ Teuchos::RCP<GMGOperator> GMGSolver::gmgOperatorFromMeshSequence(const std::vect
     finePartitionMap = finerOperator->getCoarseSolution()->getPartitionMap();
     fineDofInterpreter = finerOperator->getCoarseSolution()->getDofInterpreter();
   }
-  finestOperator->setSmootherApplicationCount(2);
+//  finestOperator->setSmootherApplicationCount(2);
   return finestOperator;
 }
 

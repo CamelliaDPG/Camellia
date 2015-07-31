@@ -287,8 +287,12 @@ void initializeSolutionAndCoarseMesh(SolutionPtr &solution, vector<MeshPtr> &mes
     meshWidthCells *= 2;
   }
   
-  if (k_coarse != k) // if k_coarse == k, then we already have mesh represented...
-    meshesCoarseToFine.push_back(mesh);
+  // a new experiment: duplicate the finest h-mesh, so that we get a smoother application
+  // that involves just the fine k0 elements.
+  if (k_coarse != k)
+    meshesCoarseToFine.push_back(k0Mesh);
+    
+  meshesCoarseToFine.push_back(mesh);
   
   if (meshWidthCells != numCells)
   {
