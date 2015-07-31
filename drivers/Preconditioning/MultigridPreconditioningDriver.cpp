@@ -281,7 +281,7 @@ void initializeSolutionAndCoarseMesh(SolutionPtr &solution, vector<MeshPtr> &mes
     else
       meshTopoView = mesh->getTopology()->deepCopy();
         
-    MeshPtr k0Mesh = Teuchos::rcp(new Mesh(meshTopoView, bf, H1Order_coarse, delta_k));
+    k0Mesh = Teuchos::rcp(new Mesh(meshTopoView, bf, H1Order_coarse, delta_k));
     
     meshesCoarseToFine.push_back(k0Mesh);
     meshWidthCells *= 2;
