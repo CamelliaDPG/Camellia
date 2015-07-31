@@ -360,6 +360,7 @@ int main(int argc, char *argv[])
   bool reportTimings = false;
   bool useZeroMeanConstraints = false;
   bool useConjugateGradient = true;
+  bool useDiagonalSchwarzWeighting = true;
   bool logFineOperator = false;
   
   bool writeOpToFile = false;
@@ -399,6 +400,7 @@ int main(int argc, char *argv[])
   cmdp.setOption("pause","dontPause",&pauseOnRankZero, "pause (to allow attachment by tracer, e.g.), waiting for user to press a key");
   cmdp.setOption("reportTimings", "dontReportTimings", &reportTimings, "Report timings in Solution");
 
+  cmdp.setOption("useDiagonalSchwarzWeighting","dontUseDiagonalSchwarzWeighting",&useDiagonalSchwarzWeighting);
   cmdp.setOption("useZeroMeanConstraint", "usePointConstraint", &useZeroMeanConstraints, "Use a zero-mean constraint for the pressure (otherwise, use a vertex constraint at the origin)");
   
   cmdp.setOption("writeOpToFile", "dontWriteOpToFile", &writeOpToFile);
@@ -556,12 +558,19 @@ int main(int argc, char *argv[])
     cout << "Approximate memory cost per element (assuming sparse storage): G = " << G_sparseMatrixSize << " MB, B = " << B_sparseMatrixSize << " MB.\n";
     
     cout << "Multigrid strategy: " << multigridStrategyString << endl;
+    
+    if (useDiagonalSchwarzWeighting)
+    {
+      cout << "***********************************************************************************************************\n";
+      cout << "** NOTE: USING DIAGONAL SCHWARZ WEIGHTING.  THIS IS EXPERIMENTAL, AS PREVIOUS TESTS HAVE NOT WORKED WELL. *\n";
+      cout << "***********************************************************************************************************\n";
+    }
   }
   
   timer.ResetStartTime();
   bool reuseFactorization = true;
   SolverPtr coarseSolver = Solver::getDirectSolver(reuseFactorization);
-  Teuchos::RCP<GMGSolver> gmgSolver = Teuchos::rcp(new GMGSolver(solution, meshesCoarseToFine, cgMaxIterations, cgTol, multigridStrategy, coarseSolver, useCondensedSolve));
+  Teuchos::RCP<GMGSolver> gmgSolver = Teuchos::rcp(new GMGSolver(solution, meshesCoarseToFine, cgMaxIterations, cgTol, multigridStrategy, coarseSolver, useCondensedSolve,useDiagonalSchwarzWeighting));
   gmgSolver->setUseConjugateGradient(useConjugateGradient);
   gmgSolver->setAztecOutput(azOutput);
   gmgSolver->gmgOperator()->setNarrateOnRankZero(logFineOperator,"finest GMGOperator");
@@ -589,6 +598,9 @@ int main(int argc, char *argv[])
     Teuchos::RCP<GMGOperator> op = gmgSolver->gmgOperator();
     if (rank==0) cout << "writing op to op.dat.\n";
     EpetraExt::RowMatrixToMatrixMarketFile("op.dat",*op->getMatrixRepresentation(), NULL, NULL, false);
+    
+    if (rank==0) cout << "writing fine stiffness to A.dat.\n";
+    EpetraExt::RowMatrixToMatrixMarketFile("A.dat",*solution->getStiffnessMatrix(), NULL, NULL, false);
   }
   
   return 0;
