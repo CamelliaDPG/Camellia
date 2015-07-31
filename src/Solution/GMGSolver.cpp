@@ -169,7 +169,7 @@ Teuchos::RCP<GMGOperator> GMGSolver::gmgOperatorFromMeshSequence(const std::vect
     {
       coarseOperator->setUseSchwarzDiagonalWeight(false); // not sure which is better; use false for now
     }
-    
+    coarseOperator->setSmootherApplicationCount(2);
 
     if (finerOperator != Teuchos::null)
     {

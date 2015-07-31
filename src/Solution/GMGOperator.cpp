@@ -74,6 +74,8 @@ _finePartitionMap(finePartitionMap), _br(true)
 
   _schwarzBlockFactorizationType = Direct;
 
+  _smootherApplicationCount = 1;
+  
   // additive implies a two-level operator.
   _smootherApplicationType = MULTIPLICATIVE; // this field is deprecated
   _multigridStrategy = V_CYCLE;  // we might want to change to V_CYCLE
@@ -957,6 +959,11 @@ LocalDofMapperPtr GMGOperator::getLocalCoefficientMap(GlobalIndexType fineCellID
   return dofMapper;
 }
 
+int GMGOperator::getSmootherApplicationCount() const
+{
+  return _smootherApplicationCount;
+}
+
 GMGOperator::SmootherChoice GMGOperator::getSmootherType()
 {
   return _smootherType;
@@ -972,7 +979,6 @@ int GMGOperator::Apply(const Epetra_MultiVector& X, Epetra_MultiVector& Y) const
   TEUCHOS_TEST_FOR_EXCEPTION(true, std::invalid_argument, "Unsupported method.");
 }
 
-// newest version applies a supposedly equivalent operator in the case _smoothBeforeCoarseSolve and _smoothAfterCoarseSolve are true
 int GMGOperator::ApplyInverse(const Epetra_MultiVector& X_in, Epetra_MultiVector& Y) const
 {
   narrate("ApplyInverse");
@@ -1019,22 +1025,25 @@ int GMGOperator::ApplyInverse(const Epetra_MultiVector& X_in, Epetra_MultiVector
   
   if (_smootherType != NONE)
   {
-    // if we have a smoother S, set Y = S^-1 f =: B1 * f
-    Epetra_MultiVector B1_res(Y.Map(), Y.NumVectors()); // B1_res: the smoother applied to res.
-    ApplySmoother(res, B1_res); // B1_f is scaled!
-    Y.Update(1.0, B1_res, 1.0);
-    if (_debugMode)
+    for (int i=0; i<_smootherApplicationCount; i++)
     {
-      if (printVerboseOutput) cout << "B1 * res:\n";
-      B1_res.Comm().Barrier();
-      cout << B1_res;
-    }
-    
-    if (_multigridStrategy != TWO_LEVEL)
-    {
-      // compute a new residual: res := f - A*Y = res - A*Y
-      res = f;
-      computeResidual(Y,res,A_Y);
+      // if we have a smoother S, set Y = S^-1 f =: B1 * f
+      Epetra_MultiVector B1_res(Y.Map(), Y.NumVectors()); // B1_res: the smoother applied to res.
+      ApplySmoother(res, B1_res); // B1_f is scaled!
+      Y.Update(1.0, B1_res, 1.0);
+      if (_debugMode)
+      {
+        if (printVerboseOutput) cout << "B1 * res:\n";
+        B1_res.Comm().Barrier();
+        cout << B1_res;
+      }
+      
+      if (_multigridStrategy != TWO_LEVEL)
+      {
+        // compute a new residual: res := f - A*Y = res - A*Y
+        res = f;
+        computeResidual(Y,res,A_Y);
+      }
     }
   }
   
@@ -1044,16 +1053,19 @@ int GMGOperator::ApplyInverse(const Epetra_MultiVector& X_in, Epetra_MultiVector
     this->ApplyInverseCoarseOperator(res, Y2);
     Y.Update(1.0, Y2, 1.0);
     
-    if ((_smootherType != NONE) && (_multigridStrategy != TWO_LEVEL))
+    for (int i=0; i<_smootherApplicationCount; i++)
     {
-      // compute Y + B1 * (f - A*y)
-      res = f;
-      computeResidual(Y, res, A_Y);
-      
-      Epetra_MultiVector B1_res(Y.Map(), Y.NumVectors());
-      
-      ApplySmoother(res, B1_res); // B1_res is scaled
-      Y.Update(1.0, B1_res, 1.0);
+      if ((_smootherType != NONE) && (_multigridStrategy != TWO_LEVEL))
+      {
+        // compute Y + B1 * (f - A*y)
+        res = f;
+        computeResidual(Y, res, A_Y);
+        
+        Epetra_MultiVector B1_res(Y.Map(), Y.NumVectors());
+        
+        ApplySmoother(res, B1_res); // B1_res is scaled
+        Y.Update(1.0, B1_res, 1.0);
+      }
     }
     
     if (_debugMode)
@@ -1462,6 +1474,11 @@ void GMGOperator::setMultigridStrategy(MultigridStrategy choice)
 void GMGOperator::setSchwarzFactorizationType(FactorType choice)
 {
   _schwarzBlockFactorizationType = choice;
+}
+
+void GMGOperator::setSmootherApplicationCount(int count)
+{
+  _smootherApplicationCount = count;
 }
 
 void GMGOperator::setSmootherApplicationType(SmootherApplicationType applicationType)
