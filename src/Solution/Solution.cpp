@@ -4529,8 +4529,16 @@ void TSolution<Scalar>::projectOldCellOntoNewCells(GlobalIndexType cellID,
       // which BasisCache to use depends on whether we want the BasisCache's notion of "physical" space to be in the volume or on the side:
       // we want it to be on the side if parent shares the side (and we therefore have proper trace data)
       // and on the volume in parent doesn't share the side (in which case we use the interior trace map).
-      BasisCachePtr basisCacheForSide = (parentSideOrdinal != -1) ? sideBasisCache[sideOrdinal] : volumeBasisCache->getSideBasisCache(sideOrdinal);
-
+      BasisCachePtr basisCacheForSide;
+      
+      if (parentSideOrdinal != -1)
+      {
+        basisCacheForSide = sideBasisCache[sideOrdinal];
+      }
+      else
+      {
+        basisCacheForSide = volumeBasisCache->getSideBasisCache(sideOrdinal);
+      }
       basisCacheForSide->setCellSideParities(_mesh->cellSideParitiesForCell(childID));
 
       for (typename map<int,TFunctionPtr<Scalar>>::iterator traceFxnIt=traceMapForSide->begin(); traceFxnIt != traceMapForSide->end(); traceFxnIt++)
