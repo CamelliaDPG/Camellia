@@ -169,7 +169,6 @@ Teuchos::RCP<GMGOperator> GMGSolver::gmgOperatorFromMeshSequence(const std::vect
     {
       coarseOperator->setUseSchwarzDiagonalWeight(false); // not sure which is better; use false for now
     }
-    coarseOperator->setSmootherApplicationCount(2);
 
     if (finerOperator != Teuchos::null)
     {
@@ -184,6 +183,7 @@ Teuchos::RCP<GMGOperator> GMGSolver::gmgOperatorFromMeshSequence(const std::vect
     finePartitionMap = finerOperator->getCoarseSolution()->getPartitionMap();
     fineDofInterpreter = finerOperator->getCoarseSolution()->getDofInterpreter();
   }
+  finestOperator->setSmootherApplicationCount(2);
   return finestOperator;
 }
 
