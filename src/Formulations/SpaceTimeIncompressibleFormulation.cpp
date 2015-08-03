@@ -205,8 +205,13 @@ SpaceTimeIncompressibleFormulation::SpaceTimeIncompressibleFormulation(Teuchos::
   H1Order[1] = fieldPolyOrder + 1; // for now, use same poly. degree for temporal bases...
   if (savedSolutionAndMeshPrefix == "")
   {
+    map<int,int> trialOrderEnhancements;
+    trialOrderEnhancements[tm1hat->ID()] = fieldPolyOrder;
+    trialOrderEnhancements[tm2hat->ID()] = fieldPolyOrder;
+    // trialOrderEnhancements[u1hat->ID()] = fieldPolyOrder;
+    // trialOrderEnhancements[u2hat->ID()] = fieldPolyOrder;
     MeshPtr proxyMesh = Teuchos::rcp( new Mesh(meshTopo->deepCopy(), _bf, H1Order, delta_p) ) ;
-    _mesh = Teuchos::rcp( new Mesh(meshTopo, _bf, H1Order, delta_p) ) ;
+    _mesh = Teuchos::rcp( new Mesh(meshTopo, _bf, H1Order, delta_p, trialOrderEnhancements) ) ;
     if (meshGeometry != Teuchos::null)
       _mesh->setEdgeToCurveMap(meshGeometry->edgeToCurveMap());
     proxyMesh->registerObserver(_mesh);
@@ -274,6 +279,10 @@ SpaceTimeIncompressibleFormulation::SpaceTimeIncompressibleFormulation(Teuchos::
 
     _bf->addTerm(tm1hat, v1);
     _bf->addTerm(tm2hat, v2);
+    // _bf->addTerm(2*u1_prev*u1hat*n_x->x(), v1);
+    // _bf->addTerm((u2_prev*u1hat+u1_prev*u2hat)*n_x->y(), v1);
+    // _bf->addTerm((u2_prev*u1hat+u1_prev*u2hat)*n_x->x(), v2);
+    // _bf->addTerm(2*u2_prev*u2hat*n_x->y(), v2);
 
     // continuity equation
     _bf->addTerm(-u1, q->dx());
@@ -301,6 +310,11 @@ SpaceTimeIncompressibleFormulation::SpaceTimeIncompressibleFormulation(Teuchos::
   _rhs->addTerm( u1_prev * u2_prev*v1->dy() );
   _rhs->addTerm( u2_prev * u1_prev*v2->dx() );
   _rhs->addTerm( u2_prev * u2_prev*v2->dy() );
+
+  // _rhs->addTerm( u1_prev*u1_prev*n_x->x() * v1 );
+  // _rhs->addTerm( u2_prev*u1_prev*n_x->y() * v1 );
+  // _rhs->addTerm( u2_prev*u1_prev*n_x->x() * v2 );
+  // _rhs->addTerm( u2_prev*u2_prev*n_x->y() * v2 );
 
   // continuity equation
   _rhs->addTerm( u1_prev*q->dx());
@@ -375,8 +389,8 @@ SpaceTimeIncompressibleFormulation::SpaceTimeIncompressibleFormulation(Teuchos::
   _solutionUpdate->setIP(ip);
 
   // impose zero mean constraint
-  if (problem->imposeZeroMeanPressure())
-    _solutionUpdate->bc()->imposeZeroMeanConstraint(p->ID());
+  // if (problem->imposeZeroMeanPressure())
+  //   _solutionUpdate->bc()->imposeZeroMeanConstraint(p->ID());
   // _solutionUpdate->bc()->singlePointBC(p->ID());
 
   _mesh->registerSolution(_solutionBackground);
@@ -384,7 +398,8 @@ SpaceTimeIncompressibleFormulation::SpaceTimeIncompressibleFormulation(Teuchos::
 
   LinearTermPtr residual = _rhs->linearTerm() - _bf->testFunctional(_solutionUpdate,false); // false: don't exclude boundary terms
 
-  double energyThreshold = 0.2;
+  // double energyThreshold = 0.2;
+  double energyThreshold = 0;
   _refinementStrategy = Teuchos::rcp( new RefinementStrategy( _mesh, residual, ip, energyThreshold ) );
 }
 

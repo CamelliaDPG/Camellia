@@ -94,6 +94,7 @@ class AnalyticalIncompressibleProblem : public IncompressibleProblem
       bc->addDirichlet(form->uhat(2), leftY,    _exactMap[form->uhat(2)->ID()]);
       bc->addDirichlet(form->uhat(1), rightY,   _exactMap[form->uhat(1)->ID()]);
       bc->addDirichlet(form->uhat(2), rightY,   _exactMap[form->uhat(2)->ID()]);
+      bc->addZeroMeanConstraint(form->p());
       if (!_steady)
       {
         bc->addDirichlet(form->tmhat(1),initTime,-_exactMap[form->uhat(1)->ID()]);
@@ -131,6 +132,8 @@ class AnalyticalIncompressibleProblem : public IncompressibleProblem
       sigma21_l2 = sigma21_sqr->integrate(solutionBackground->mesh(), 5);
       sigma22_l2 = sigma22_sqr->integrate(solutionBackground->mesh(), 5);
       double l2Error = sqrt(u1_l2+u2_l2+sigma11_l2+sigma12_l2+sigma21_l2+sigma22_l2);
+      // double l2Error = sqrt(u1_l2+u2_l2);
+      // double l2Error = sqrt(sigma11_l2+sigma12_l2+sigma21_l2+sigma22_l2);
       return l2Error;
     }
 };
