@@ -42,8 +42,9 @@
 using namespace Intrepid;
 using namespace Camellia;
 
-// define our static map:
+// define our static maps:
 map< CellTopologyKey, RefinementPatternPtr > RefinementPattern::_refPatternForKeyTensorialDegree;
+map< CellTopologyKey, RefinementPatternPtr > RefinementPattern::_timeExtrudedRefPatternForKeyTensorialDegree;
 
 RefinementPattern::RefinementPattern(CellTopoPtr cellTopoPtr, FieldContainer<double> refinedNodes, vector< RefinementPatternPtr > sideRefinementPatterns)
 {
@@ -1615,6 +1616,16 @@ RefinementPatternPtr RefinementPattern::regularRefinementPattern(Camellia::CellT
 RefinementPatternPtr RefinementPattern::regularRefinementPattern(CellTopoPtr cellTopo)
 {
   return regularRefinementPattern(cellTopo->getKey());
+}
+
+RefinementPatternPtr RefinementPattern::timeExtrudedRegularRefinementPattern(CellTopoPtr cellTopo)
+{
+  if (_timeExtrudedRefPatternForKeyTensorialDegree.find(cellTopo->getKey()) == _timeExtrudedRefPatternForKeyTensorialDegree.end())
+  {
+    RefinementPatternPtr regularRefPattern = regularRefinementPattern(cellTopo);
+    _timeExtrudedRefPatternForKeyTensorialDegree[cellTopo->getKey()] = refPatternExtrudedInTime(regularRefPattern);
+  }
+  return _timeExtrudedRefPatternForKeyTensorialDegree[cellTopo->getKey()];
 }
 
 // cuts a quad vertically (x-refines the element)

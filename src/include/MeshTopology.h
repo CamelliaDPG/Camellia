@@ -218,6 +218,8 @@ public:
 
   // ! Fills the provided container with the vertices for the requested cell
   void verticesForCell(Intrepid::FieldContainer<double>& vertices, IndexType cellID);
+  
+  MeshTopologyViewPtr getView(const std::set<IndexType> &activeCells);
 };
 }
 

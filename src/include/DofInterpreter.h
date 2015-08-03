@@ -6,6 +6,16 @@
 //
 //
 
+/*
+ //@HEADER
+ // ***********************************************************************
+ //
+ //                          DofInterpreter
+ //
+ // ***********************************************************************
+ //@HEADER
+ */
+
 #ifndef Camellia_debug_DofInterpreter_h
 #define Camellia_debug_DofInterpreter_h
 
@@ -17,6 +27,22 @@
 #include <set>
 
 using namespace std;
+
+//! DofInterpreter: an abstract class defining methods for converting between element-local and global representations of finite element coefficients and data.
+
+/*!
+
+ In finite elements we have element-local representations of finite element basis functions, as well as global representations of those functions.  The relationship between these representations depends on how the elements are reconciled where the local discretizations differ---two classical choices are the maximum rule and the minimum rule.  Camellia includes GDAMaximumRule2D which implements the maximum rule in two spatial dimensions, as well as GDAMinimumRule, which implements the minimum rule in arbitrary dimensions, including support for space-time elements.  (As of this writing, the support for space-time is limited to nonconforming discretizations---specifically, discretizations that only enforce continuities along element faces.)
+ 
+ DofInterpreter defines methods that allow conversion between the local and global representations---we call this interpretation.  We make a distinction between interpreting data and interpreting coefficients.  Data refers to integral quantities that depend on the corresponding basis functions, while coefficients are weights on those functions, which may represent solutions in terms of those functions.  Camellia employs data interpretation to construct the global stiffness and load vectors from local stiffness and load vectors, and coefficient interpretation to construct element-local solutions from a global solution.  Thus interpretLocalData can be understood as the transpose of interpretGlobalCoefficients.
+ 
+ Additionally, DofInterpreter provides two local coefficient interpretation methods, interpretLocalCoefficients and interpretLocalBasisCoefficients.  These allow the determination of a set of global coefficients which best fits (in the sense of a least-squares fit) the functions represented by the local coefficients.  The usual use of interpretLocalBasisCoefficients is for determining coefficients imposed by boundary conditions.
+ 
+ \author Nathan V. Roberts, ALCF.
+ 
+ \date Last modified on 13-Jul-2015.
+ */
+
 
 namespace Camellia
 {
@@ -34,7 +60,14 @@ public:
 
   virtual void interpretLocalData(GlobalIndexType cellID, const Intrepid::FieldContainer<double> &localStiffnessData, const Intrepid::FieldContainer<double> &localLoadData,
                                   Intrepid::FieldContainer<double> &globalStiffnessData, Intrepid::FieldContainer<double> &globalLoadData, Intrepid::FieldContainer<GlobalIndexType> &globalDofIndices);
+  
+  //!! Determines global coefficients corresponding to the provided local coefficients; in the case of minimum-rule meshes, this will be computed using a least-squares fit.  If some of the corresponding global coefficients are off-rank in globalCoefficients, these will be ignored.  (See the version of interpretLocalCoefficients that takes an STL map for an alternative that will include all global coefficients, regardless of data distribution.)
   virtual void interpretLocalCoefficients(GlobalIndexType cellID, const Intrepid::FieldContainer<double> &localCoefficients, Epetra_MultiVector &globalCoefficients);
+  
+  //!! Determines global coefficients corresponding to the provided local coefficients; in the case of minimum-rule meshes, this will be computed using a least-squares fit.
+  virtual void interpretLocalCoefficients(GlobalIndexType cellID, const Intrepid::FieldContainer<double> &localCoefficients,
+                                          std::map<GlobalIndexType,double> &fittedGlobalCoefficients,
+                                          const std::set<int> &trialIDsToExclude);
 
   virtual void interpretLocalBasisCoefficients(GlobalIndexType cellID, int varID, int sideOrdinal, const Intrepid::FieldContainer<double> &basisCoefficients,
       Intrepid::FieldContainer<double> &globalCoefficients, Intrepid::FieldContainer<GlobalIndexType> &globalDofIndices) = 0;

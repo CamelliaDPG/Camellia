@@ -51,7 +51,7 @@ namespace Camellia
                                    bool trialSpaceDofs = true);
   
   // ! Prints out a summary of the rank-local map information.  Not an MPI collective operation.
-  void printMapSummary(const Epetra_Map &map, std::string mapName);
+  void printMapSummary(const Epetra_BlockMap &map, std::string mapName);
 }
 
 #endif

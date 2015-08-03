@@ -213,9 +213,18 @@ namespace Camellia
     out.copyfmt(oldFormatState);
   }
   
-  void printMapSummary(const Epetra_Map &map, string mapName = "map")
+  void printMapSummary(const Epetra_BlockMap &map, string mapName = "map")
   {
     int rank = MPIWrapper::rank();
-    cout << "On rank " << rank << ", " << mapName << " has " << map.NumMyElements() << " of " << map.NumGlobalElements() << " global elements.\n";
+    cout << "On rank " << rank << ", " << mapName << " has " << map.NumMyElements() << " of " << map.NumGlobalElements() << " global elements: ";
+    for (int elementOrdinal=0; elementOrdinal<map.NumMyElements(); elementOrdinal++)
+    {
+      cout << "{ " << elementOrdinal << " -> " << map.GID(elementOrdinal) << " }";
+      if (elementOrdinal != map.NumMyElements() - 1)
+      {
+        cout << ", ";
+      }
+    }
+    cout << endl;
   }
 }

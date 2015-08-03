@@ -616,7 +616,7 @@ void MeshTopology::addEdgeCurve(pair<unsigned,unsigned> edge, ParametricCurvePtr
   vector<double> v0 = getVertex(edge.first);
   vector<double> v1 = getVertex(edge.second);
 
-  int spaceDim = v0.size();
+  int spaceDim = 2; // v0.size();
   FieldContainer<double> curve0(spaceDim);
   FieldContainer<double> curve1(spaceDim);
   curve->value(0, curve0(0), curve0(1));
@@ -639,15 +639,84 @@ void MeshTopology::addEdgeCurve(pair<unsigned,unsigned> edge, ParametricCurvePtr
   }
 
   _edgeToCurveMap[edge] = curve;
+  pair<IndexType,IndexType> reverseEdge = {edge.second,edge.first};
+  _edgeToCurveMap[reverseEdge] = ParametricCurve::reverse(curve);
 
-  vector< pair<unsigned, unsigned> > cellIDsForEdge = _activeCellsForEntities[edgeDim][edgeIndex];
-  //  (cellIndex, entityIndexInCell)
-  if (cellIDsForEdge.size() != 1)
+  vector< pair<IndexType, unsigned> > cellsForEdge = _activeCellsForEntities[edgeDim][edgeIndex];
+  //  (cellIndex, entityOrdinalInCell)
+  for (auto cellForEdge : cellsForEdge)
   {
-    TEUCHOS_TEST_FOR_EXCEPTION(true, std::invalid_argument, "right now, only edges belonging to exactly one cell are supported by curvilinear geometry...");
+    IndexType cellIndex = cellForEdge.first;
+    _cellIDsWithCurves.insert(cellIndex);
+    
+    if (this->getDimension() == 3)
+    {
+      pair<unsigned,unsigned> otherEdge;
+      // then we must be doing space-time, and we should check that the corresponding edge on the
+      // other side gets the same curve
+      CellPtr cell = getCell(cellIndex);
+      unsigned spaceTimeEdgeOrdinal = cell->findSubcellOrdinal(edgeDim, edgeIndex);
+      
+      vector<IndexType> cellEdgeVertexNodes = cell->getEntityVertexIndices(edgeDim, spaceTimeEdgeOrdinal);
+      bool swapped; // in cell relative to the edge we got called with
+      if ((cellEdgeVertexNodes[0] == edge.first) && (cellEdgeVertexNodes[1] == edge.second))
+      {
+        swapped = false;
+      }
+      else if ((cellEdgeVertexNodes[1] == edge.first) && (cellEdgeVertexNodes[0] == edge.second))
+      {
+        swapped = true;
+      }
+      else
+      {
+        TEUCHOS_TEST_FOR_EXCEPTION(true, std::invalid_argument, "internal error: cellEdgeVertexNodes do not match edge");
+      }
+      
+      CellTopoPtr spaceTopo = cell->topology()->getTensorialComponent();
+
+      int spaceDim = this->getDimension() - 1;
+      unsigned vertexOrdinal0 = cell->topology()->getNodeMap(edgeDim, spaceTimeEdgeOrdinal, 0);
+      unsigned vertexOrdinal1 = cell->topology()->getNodeMap(edgeDim, spaceTimeEdgeOrdinal, 1);
+
+      bool atTimeZero = (vertexOrdinal0 < spaceTopo->getNodeCount()); // a bit hackish: uses knowledge of how the vertices are numbered in CellTopology
+      
+      TEUCHOS_TEST_FOR_EXCEPTION(atTimeZero && (vertexOrdinal1 >= spaceTopo->getNodeCount()), std::invalid_argument, "Looks like a curvilinear edge goes from one temporal side to a different one.  This is not allowed!");
+      
+      TEUCHOS_TEST_FOR_EXCEPTION(!atTimeZero && (vertexOrdinal1 < spaceTopo->getNodeCount()), std::invalid_argument, "Looks like a curvilinear edge goes from one temporal side to a different one.  This is not allowed!");
+      
+      unsigned timeSide0 = cell->topology()->getTemporalSideOrdinal(0);
+      unsigned timeSide1 = cell->topology()->getTemporalSideOrdinal(1);
+      
+      int vertexDim = 0;
+      
+      unsigned otherVertexOrdinal0InSpaceTimeTopology, otherVertexOrdinal1InSpaceTimeTopology;
+      if (atTimeZero)
+      {
+        unsigned vertexOrdinal0InTimeSide = CamelliaCellTools::subcellReverseOrdinalMap(cell->topology(), spaceDim, timeSide0, vertexDim, vertexOrdinal0);
+        unsigned vertexOrdinal1InTimeSide = CamelliaCellTools::subcellReverseOrdinalMap(cell->topology(), spaceDim, timeSide0, vertexDim, vertexOrdinal1);
+        otherVertexOrdinal0InSpaceTimeTopology = CamelliaCellTools::subcellOrdinalMap(cell->topology(), spaceDim, timeSide1, vertexDim, vertexOrdinal0InTimeSide);
+        otherVertexOrdinal1InSpaceTimeTopology = CamelliaCellTools::subcellOrdinalMap(cell->topology(), spaceDim, timeSide1, vertexDim, vertexOrdinal1InTimeSide);
+      }
+      else
+      {
+        unsigned vertexOrdinal0InTimeSide = CamelliaCellTools::subcellReverseOrdinalMap(cell->topology(), spaceDim, timeSide1, vertexDim, vertexOrdinal0);
+        unsigned vertexOrdinal1InTimeSide = CamelliaCellTools::subcellReverseOrdinalMap(cell->topology(), spaceDim, timeSide1, vertexDim, vertexOrdinal1);
+        otherVertexOrdinal0InSpaceTimeTopology = CamelliaCellTools::subcellOrdinalMap(cell->topology(), spaceDim, timeSide0, vertexDim, vertexOrdinal0InTimeSide);
+        otherVertexOrdinal1InSpaceTimeTopology = CamelliaCellTools::subcellOrdinalMap(cell->topology(), spaceDim, timeSide0, vertexDim, vertexOrdinal1InTimeSide);
+      }
+      IndexType otherVertex0EntityIndex = cell->entityIndex(vertexDim, otherVertexOrdinal0InSpaceTimeTopology);
+      IndexType otherVertex1EntityIndex = cell->entityIndex(vertexDim, otherVertexOrdinal1InSpaceTimeTopology);
+      otherEdge = {otherVertex0EntityIndex,otherVertex1EntityIndex};
+      if (swapped)
+      {
+        otherEdge = {otherEdge.second,otherEdge.first};
+      }
+      if (_edgeToCurveMap.find(otherEdge) == _edgeToCurveMap.end())
+      {
+        addEdgeCurve(otherEdge, curve);
+      }
+    }
   }
-  unsigned cellID = cellIDsForEdge[0].first;
-  _cellIDsWithCurves.insert(cellID);
 }
 
 unsigned MeshTopology::addEntity(CellTopoPtr entityTopo, const vector<unsigned> &entityVertices, unsigned &entityPermutation)
@@ -657,6 +726,8 @@ unsigned MeshTopology::addEntity(CellTopoPtr entityTopo, const vector<unsigned> 
 
   if (nodeSet.size() != entityVertices.size())
   {
+    for (IndexType vertexIndex : entityVertices)
+      printVertex(vertexIndex);
     TEUCHOS_TEST_FOR_EXCEPTION(true, std::invalid_argument, "Entities may not have repeated vertices");
   }
   unsigned d  = entityTopo->getDimension();
@@ -1247,12 +1318,19 @@ void MeshTopology::deepCopyCells()
   vector<CellPtr> oldCells = _cells;
 
   int numCells = oldCells.size();
+  
+  Teuchos::RCP<MeshTopology> thisPtr = Teuchos::rcp(this,false);
 
   // first pass: construct cells
   for (int cellOrdinal=0; cellOrdinal<numCells; cellOrdinal++)
   {
     CellPtr oldCell = oldCells[cellOrdinal];
     _cells[cellOrdinal] = Teuchos::rcp( new Cell(oldCell->topology(), oldCell->vertices(), oldCell->subcellPermutations(), oldCell->cellIndex(), this) );
+    for (int sideOrdinal=0; sideOrdinal<oldCell->getSideCount(); sideOrdinal++)
+    {
+      pair<GlobalIndexType, unsigned> neighborInfo = oldCell->getNeighborInfo(sideOrdinal, thisPtr);
+      _cells[cellOrdinal]->setNeighbor(sideOrdinal, neighborInfo.first, neighborInfo.second);
+    }
   }
 
   // second pass: establish parent-child relationships
@@ -1263,6 +1341,7 @@ void MeshTopology::deepCopyCells()
     if (oldParent != Teuchos::null)
     {
       CellPtr newParent = _cells[oldParent->cellIndex()];
+      newParent->setRefinementPattern(oldParent->refinementPattern());
       _cells[cellOrdinal]->setParent(newParent);
     }
     vector<CellPtr> children;
@@ -2306,9 +2385,28 @@ vector< ParametricCurvePtr > MeshTopology::parametricEdgesForCell(unsigned cellI
 {
   vector< ParametricCurvePtr > edges;
   CellPtr cell = getCell(cellIndex);
-  int numNodes = cell->vertices().size();
-  TEUCHOS_TEST_FOR_EXCEPTION(_spaceDim != 2, std::invalid_argument, "Only 2D supported right now.");
-  vector<unsigned> vertices = cell->vertices();
+  
+  vector<unsigned> vertices;
+  if (cell->topology()->getTensorialDegree() == 0)
+  {
+    TEUCHOS_TEST_FOR_EXCEPTION(_spaceDim != 2, std::invalid_argument, "Only 2D supported right now.");
+    vertices = cell->vertices();
+  }
+  else
+  {
+    // for space-time, we assume that:
+    // (a) only the pure-spatial edges (i.e. those that have no temporal extension) are curved
+    // (b) the vertices and parametric curves at both time nodes are identical (so that the curves are independent of time)
+    // At some point, it would be desirable to revisit these assumptions.  Having moving meshes, including mesh movement
+    // that follows a curved path, would be pretty neat.
+    // we take the first temporal side:
+    unsigned temporalSideOrdinal = cell->topology()->getTemporalSideOrdinal(0);
+    int sideDim = _spaceDim - 1;
+    vertices = cell->getEntityVertexIndices(sideDim, temporalSideOrdinal);
+  }
+  
+  int numNodes = vertices.size();
+  
   for (int nodeIndex=0; nodeIndex<numNodes; nodeIndex++)
   {
     int v0_index = vertices[nodeIndex];
@@ -2335,8 +2433,7 @@ vector< ParametricCurvePtr > MeshTopology::parametricEdgesForCell(unsigned cellI
     }
     else if ( _edgeToCurveMap.find(reverse_edge) != _edgeToCurveMap.end() )
     {
-      TEUCHOS_TEST_FOR_EXCEPTION(true, std::invalid_argument, "No support yet for curved edges outside mesh boundary.");
-      // TODO: make ParametricCurves reversible (swap t=0 and t=1)
+      TEUCHOS_TEST_FOR_EXCEPTION(true, std::invalid_argument, "Internal error: reverse_edge found, but edge not found in edgeToCurveMap.");
     }
     else
     {
@@ -2563,34 +2660,60 @@ void MeshTopology::refineCell(unsigned cellIndex, RefinementPatternPtr refPatter
     vector< vector< pair< unsigned, unsigned> > > childrenForSides = refPattern->childrenForSides(); // outer vector: indexed by parent's sides; inner vector: (child index in children, index of child's side shared with parent)
     // handle any broken curved edges
     //    set<int> childrenWithCurvedEdges;
-    vector<unsigned> parentVertices = cell->vertices();
-    int numVertices = parentVertices.size();
-    for (int edgeIndex=0; edgeIndex < numVertices; edgeIndex++)
+    int edgeCount = cell->topology()->getEdgeCount();
+    int edgeDim = 1;
+    for (int edgeOrdinal=0; edgeOrdinal < edgeCount; edgeOrdinal++)
     {
-      int numChildrenForSide = childrenForSides[edgeIndex].size();
-      if (numChildrenForSide==1) continue; // unbroken edge: no treatment necessary
-      int v0 = parentVertices[edgeIndex];
-      int v1 = parentVertices[ (edgeIndex+1) % numVertices];
+      IndexType edgeEntityIndex = cell->entityIndex(edgeDim, edgeOrdinal);
+      if (!entityHasChildren(edgeDim, edgeEntityIndex)) continue; // unbroken edge: no treatment necessary
+      
+      vector<IndexType> childEntities = getChildEntities(edgeDim, edgeEntityIndex);
+      int edgeChildCount = childEntities.size();
+      TEUCHOS_TEST_FOR_EXCEPTION(edgeChildCount != 2, std::invalid_argument, "unexpected number of edge children");
+      
+      vector<IndexType> parentEdgeVertexIndices = getEntityVertexIndices(edgeDim, edgeEntityIndex);
+      int v0 = parentEdgeVertexIndices[0];
+      int v1 = parentEdgeVertexIndices[1];
       pair<int,int> edge = make_pair(v0, v1);
       if (_edgeToCurveMap.find(edge) != _edgeToCurveMap.end())
       {
         // then define the new curves
-        double child_t0 = 0.0;
-        double increment = 1.0 / numChildrenForSide;
-        for (int i=0; i<numChildrenForSide; i++)
+        for (int i=0; i<edgeChildCount; i++)
         {
-          int childIndex = childrenForSides[edgeIndex][i].first;
-          int childSideIndex = childrenForSides[edgeIndex][i].second;
-          int childCellIndex = cell->getChildIndices()[childIndex];
-          CellPtr child = getCell(childCellIndex);
-          // here, we rely on the fact that childrenForSides[sideIndex] goes in order from parent's v0 to parent's v1
+          IndexType childEdgeEntityIndex = childEntities[i];
+          vector<IndexType> childEdgeVertexIndices = getEntityVertexIndices(edgeDim, childEdgeEntityIndex);
+          double child_t0, child_t1;
+          if (childEdgeVertexIndices[0] == parentEdgeVertexIndices[0])
+          {
+            child_t0 = 0.0;
+            child_t1 = 1.0 / edgeChildCount;
+          }
+          else if (childEdgeVertexIndices[0] == parentEdgeVertexIndices[1])
+          {
+            child_t0 = 1.0;
+            child_t1 = 1.0 / edgeChildCount;
+          }
+          else if (childEdgeVertexIndices[1] == parentEdgeVertexIndices[0])
+          {
+            child_t0 = 1.0 / edgeChildCount;
+            child_t1 = 0.0;
+          }
+          else if (childEdgeVertexIndices[1] == parentEdgeVertexIndices[1])
+          {
+            child_t0 = 1.0 / edgeChildCount;
+            child_t1 = 1.0;
+          }
+          else
+          {
+            printAllEntities();
+            TEUCHOS_TEST_FOR_EXCEPTION(true, std::invalid_argument, "child edge not in expected relationship to parent");
+          }
+          
           ParametricCurvePtr parentCurve = _edgeToCurveMap[edge];
-          ParametricCurvePtr childCurve = ParametricCurve::subCurve(parentCurve, child_t0, child_t0 + increment);
-          vector<unsigned> childVertices = child->vertices();
-          pair<unsigned, unsigned> childEdge = make_pair( childVertices[childSideIndex], childVertices[(childSideIndex+1)% childVertices.size()] );
+          ParametricCurvePtr childCurve = ParametricCurve::subCurve(parentCurve, child_t0, child_t1);
+          
+          pair<unsigned, unsigned> childEdge = {childEdgeVertexIndices[0],childEdgeVertexIndices[1]};
           addEdgeCurve(childEdge, childCurve);
-          //          childrenWithCurvedEdges.insert(childCellIndex);
-          child_t0 += increment;
         }
       }
     }
@@ -2686,11 +2809,17 @@ void MeshTopology::refineCellEntities(CellPtr cell, RefinementPatternPtr refPatt
           physicalNodes.resize(nodeCount,_spaceDim);
           vector<unsigned> childEntityVertices = getVertexIndices(physicalNodes); // key: index in physicalNodes; value: index in _vertices
 
+//          cout << "nodesOnRefCell:\n" << nodesOnRefCell;
+//          cout << "physicalNodes:\n" << physicalNodes;
+          
           unsigned entityPermutation;
           CellTopoPtr childTopo = cellTopo->getSubcell(d, subcord);
           unsigned childEntityIndex = addEntity(childTopo, childEntityVertices, entityPermutation);
           //          cout << "for d=" << d << ", entity index " << childEntityIndex << " is child of " << parentIndex << endl;
-          _parentEntities[d][childEntityIndex] = vector< pair<unsigned,unsigned> >(1, make_pair(parentIndex,0)); // TODO: this is where we want to fill in a proper list of possible parents once we work through recipes
+          if (childEntityIndex != parentIndex) // anisotropic and null refinements can leave the entity unrefined
+          {
+            _parentEntities[d][childEntityIndex] = vector< pair<unsigned,unsigned> >(1, make_pair(parentIndex,0)); // TODO: this is where we want to fill in a proper list of possible parents once we work through recipes
+          }
           childEntityIndices[childIndex] = childEntityIndex;
           vector< pair<unsigned, unsigned> > parentActiveCells = _activeCellsForEntities[d][parentIndex];
           // TODO: ?? do something with parentActiveCells?  Seems like we just trailed off here...
@@ -2822,6 +2951,7 @@ void MeshTopology::setGlobalDofAssignment(GlobalDofAssignment* gda)   // for cub
 
 void MeshTopology::setEntityGeneralizedParent(unsigned entityDim, IndexType entityIndex, unsigned parentDim, IndexType parentEntityIndex)
 {
+  TEUCHOS_TEST_FOR_EXCEPTION((entityDim==parentDim) && (parentEntityIndex==entityIndex), std::invalid_argument, "entity cannot be its own parent!");
   _generalizedParentEntities[entityDim][entityIndex] = make_pair(parentEntityIndex,parentDim);
   if (entityDim == 0)   // vertex --> should set parent relationships for any vertices that are equivalent via periodic BCs
   {
@@ -2856,4 +2986,10 @@ void MeshTopology::verticesForCell(FieldContainer<double>& vertices, GlobalIndex
       vertices(vertexOrdinal,d) = getVertex(vertexIndices[vertexOrdinal])[d];
     }
   }
+}
+
+MeshTopologyViewPtr MeshTopology::getView(const set<IndexType> &activeCells)
+{
+  MeshTopologyPtr thisPtr = Teuchos::rcp(this,false);
+  return Teuchos::rcp( new MeshTopologyView(thisPtr, activeCells) );
 }

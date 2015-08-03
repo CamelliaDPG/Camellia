@@ -138,7 +138,7 @@ int main(int argc, char *argv[])
   FunctionPtr one = Function::constant(1);
 
   LinearTermPtr forcingTerm = Teuchos::null;
-  form.initializeSolution(spaceTimeMeshTopo, p+1, delta_p, norm, forcingTerm);
+  form.initializeSolution(spaceTimeMeshTopo, p, delta_p, norm, forcingTerm);
 
   MeshPtr mesh = form.solution()->mesh();
   MeshPtr k0Mesh = Teuchos::rcp( new Mesh (spaceTimeMeshTopo->deepCopy(), form.bf(), 1, delta_p) );
@@ -215,11 +215,11 @@ int main(int argc, char *argv[])
       gmgSolver = Teuchos::rcp( new GMGSolver(soln, k0Mesh, maxLinearIterations, solverTolerance, Solver::getDirectSolver(true), useStaticCondensation));
       gmgSolver->setAztecOutput(azOutput);
       if (solverChoice == "GMG-Direct")
-        gmgSolver->gmgOperator().setSchwarzFactorizationType(GMGOperator::Direct);
+        gmgSolver->gmgOperator()->setSchwarzFactorizationType(GMGOperator::Direct);
       if (solverChoice == "GMG-ILU")
-        gmgSolver->gmgOperator().setSchwarzFactorizationType(GMGOperator::ILU);
+        gmgSolver->gmgOperator()->setSchwarzFactorizationType(GMGOperator::ILU);
       if (solverChoice == "GMG-IC")
-        gmgSolver->gmgOperator().setSchwarzFactorizationType(GMGOperator::IC);
+        gmgSolver->gmgOperator()->setSchwarzFactorizationType(GMGOperator::IC);
       soln->solve(gmgSolver);
     }
     else

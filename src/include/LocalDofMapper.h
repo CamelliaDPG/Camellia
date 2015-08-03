@@ -42,6 +42,8 @@ class LocalDofMapper   // maps a whole trial ordering
 
   Intrepid::FieldContainer<double> _localCoefficientsFitMatrix; // used for fitLocalCoefficients
 
+  // the following is used by LocalDofMappers that have varIDToMap = -1 when fitLocalCoefficients() is called
+  map<pair<int,int>, Teuchos::RCP<LocalDofMapper>> _localDofMapperForVarIDAndSide;
 public:
   LocalDofMapper(DofOrderingPtr dofOrdering, map< int, BasisMap > volumeMaps,
                  set<GlobalIndexType> fittableGlobalDofOrdinalsInVolume,

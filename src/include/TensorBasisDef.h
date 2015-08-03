@@ -283,6 +283,13 @@ void TensorBasis<Scalar,ArrayScalar>::getTensorValues(ArrayScalar& outputValues,
   }
 }
 
+  // range info for basis values:
+  template<class Scalar, class ArrayScalar>
+  bool TensorBasis<Scalar,ArrayScalar>::isNodal() const
+  {
+    return _spatialBasis->isNodal() && _temporalBasis->isNodal();
+  }
+  
 // range info for basis values:
 template<class Scalar, class ArrayScalar>
 int TensorBasis<Scalar,ArrayScalar>::rangeDimension() const

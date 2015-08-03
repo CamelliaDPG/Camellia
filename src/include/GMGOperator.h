@@ -38,6 +38,32 @@ struct TimeStatistics
 
 class GMGOperator : public Epetra_Operator, public Narrator
 {
+public:
+  enum SmootherChoice
+  {
+    POINT_JACOBI,
+    POINT_SYMMETRIC_GAUSS_SEIDEL,
+    BLOCK_JACOBI,
+    BLOCK_SYMMETRIC_GAUSS_SEIDEL,
+    IFPACK_ADDITIVE_SCHWARZ,
+    CAMELLIA_ADDITIVE_SCHWARZ,
+    NONE
+  };
+  
+  enum SmootherApplicationType
+  {
+    ADDITIVE,
+    MULTIPLICATIVE
+  };
+  
+  enum MultigridStrategy
+  {
+    TWO_LEVEL, // aka ADDITIVE
+    V_CYCLE,
+    W_CYCLE,
+    FULL_MULTIGRID
+  };
+private:
   bool _debugMode; // in debug mode, output verbose info about what we're doing on rank 0
 
   bool _hierarchicalNeighborsForSchwarz; // Applies only to Camellia Additive Schwarz
@@ -47,8 +73,7 @@ class GMGOperator : public Epetra_Operator, public Narrator
   bool _useStaticCondensation; // for both coarse and fine solves
   Teuchos::RCP<DofInterpreter> _fineDofInterpreter;
 
-  bool _smoothBeforeCoarseSolve;
-  bool _smoothAfterCoarseSolve;
+  SmootherApplicationType _smootherApplicationType;
   
   MeshPtr _fineMesh, _coarseMesh;
   Epetra_Map _finePartitionMap;
@@ -63,10 +88,6 @@ class GMGOperator : public Epetra_Operator, public Narrator
   mutable BasisReconciliation _br;
   mutable map< pair< pair<int,int>, RefinementBranch >, LocalDofMapperPtr > _localCoefficientMap; // pair(fineH1Order,coarseH1Order)
 
-  Teuchos::RCP<Epetra_MultiVector> _diag; // diagonal of the fine (global) stiffness matrix
-  Teuchos::RCP<Epetra_MultiVector> _diag_sqrt; // square root of the diagonal of the fine (global) stiffness matrix
-  Teuchos::RCP<Epetra_MultiVector> _diag_inv; // inverse of the diagonal
-
   Epetra_CrsMatrix* _fineStiffnessMatrix;
   
   mutable double _timeMapFineToCoarse, _timeMapCoarseToFine, _timeCoarseImport, _timeConstruction, _timeCoarseSolve, _timeLocalCoefficientMapConstruction, _timeComputeCoarseStiffnessMatrix, _timeProlongationOperatorConstruction,
@@ -74,14 +95,22 @@ class GMGOperator : public Epetra_Operator, public Narrator
 
   mutable bool _haveSolvedOnCoarseMesh; // if this is true, then we can call resolve() instead of solve().
 
+  MultigridStrategy _multigridStrategy;
   Teuchos::RCP<Epetra_CrsMatrix> _P; // prolongation operator
 
   Teuchos::RCP<Epetra_Operator> _smoother;
+  double _smootherWeight;
+  Teuchos::RCP<Epetra_MultiVector> _smootherWeight_sqrt;
+  bool _useSchwarzDiagonalWeight, _useSchwarzScalingWeight; // when true, will set _smootherWeight_sqrt and _smootherWeight during setUpSmoother()
+  
+  // ! res should hold the RHS on entry, Y the current solution.  On exit, res will have the updated residual, and A_Y A * Y
+  void computeResidual(const Epetra_MultiVector& Y, Epetra_MultiVector& res, Epetra_MultiVector& A_Y) const;
+  
+  void reportTimings(StatisticChoice whichStat, bool sumAllOperators) const;
+  
 public: // promoted these two to public for testing purposes:
   LocalDofMapperPtr getLocalCoefficientMap(GlobalIndexType fineCellID) const;
   GlobalIndexType getCoarseCellID(GlobalIndexType fineCellID) const;
-
-  set<GlobalIndexTypeToCast> setCoarseRHSVector(const Epetra_MultiVector &X, Epetra_FEVector &coarseRHSVector) const;
 
   void setUpSmoother(Epetra_CrsMatrix *fineStiffnessMatrix);
 public:
@@ -107,7 +136,8 @@ public:
   //! Constructor
   /*! This constructor is intended for any multigrid operators finer than the coarsest mesh.
    */
-  GMGOperator(BCPtr zeroBCs, MeshPtr coarseMesh, MeshPtr fineMesh, Teuchos::RCP<DofInterpreter> fineDofInterpreter, Epetra_Map finePartitionMap);
+  GMGOperator(BCPtr zeroBCs, MeshPtr coarseMesh, IPPtr coarseIP, MeshPtr fineMesh,
+              Teuchos::RCP<DofInterpreter> fineDofInterpreter, Epetra_Map finePartitionMap, bool useStaticCondensation);
   //@}
 
   //! @name Attribute set methods
@@ -126,15 +156,6 @@ public:
   int SetUseTranspose(bool UseTranspose);
   //@}
 
-  //! Diagonal of the stiffness matrix
-  /*!
-
-   \param In
-   diagonal - diagonal of the stiffness matrix
-
-   */
-  void setStiffnessDiagonal(Teuchos::RCP<Epetra_MultiVector> diagonal);
-
   //! Set new fine mesh
   /*!
 
@@ -150,6 +171,9 @@ public:
 
   void clearTimings();
   void reportTimings(StatisticChoice stat = ALL) const;
+  void reportTimingsSumOfOperators(StatisticChoice whichStat) const;
+  std::map<string, double> timingReport() const;
+  std::map<string, double> timingReportSumOfOperators() const;
 
   void constructLocalCoefficientMaps(); // we'll do this lazily if this is not called; this is mostly a way to separate out the time costs
 
@@ -170,6 +194,17 @@ public:
    \return Integer error code, set to 0 if successful.
    */
   int Apply(const Epetra_MultiVector& X, Epetra_MultiVector& Y) const;
+  
+  //! Returns the result of a the coarse operator (either the coarse solver or the coarse GMGOperator) applied to a Epetra_MultiVector X in Y.
+  /*!
+   \param In
+   X - A Epetra_MultiVector of dimension NumVectors to multiply with matrix.
+   \param Out
+   Y -A Epetra_MultiVector of dimension NumVectors containing result.
+   
+   \return Integer error code, set to 0 if successful.
+   */
+  int ApplyInverseCoarseOperator(const Epetra_MultiVector& X, Epetra_MultiVector& Y) const;
 
   //! Returns the result of a Epetra_Operator inverse applied to an Epetra_MultiVector X in Y.
   /*!
@@ -185,6 +220,17 @@ public:
    */
   int ApplyInverse(const Epetra_MultiVector& X, Epetra_MultiVector& Y) const;
 
+  //! Returns the result of the smoother, using any scalar or vector weights that are set, applied to a Epetra_MultiVector X in Y.
+  /*!
+   \param In
+   X - A Epetra_MultiVector of dimension NumVectors to multiply with matrix.
+   \param Out
+   Y -A Epetra_MultiVector of dimension NumVectors containing result.
+   
+   \return Integer error code, set to 0 if successful.
+   */
+  int ApplySmoother(const Epetra_MultiVector& X, Epetra_MultiVector& Y) const;
+  
   //! Returns the infinity norm of the global matrix.
   /* Returns the quantity \f$ \| A \|_\infty\f$ such that
    \f[\| A \|_\infty = \max_{1\lei\lem} \sum_{j=1}^n |a_{ij}| \f].
@@ -215,9 +261,6 @@ public:
   //! Returns the Epetra_Map object associated with the range of this operator.
   const Epetra_Map & OperatorRangeMap() const;
 
-  //! sets debug mode for verbose console output on rank 0.
-  void setDebugMode(bool value);
-
   //! factorization choices for Schwarz blocks, when a Schwarz smoother is used.
   enum FactorType
   {
@@ -231,31 +274,39 @@ public:
   
   //! set the coarse Solver
   void setCoarseSolver(SolverPtr coarseSolver);
+  
+  //! sets debug mode for verbose console output on rank 0.
+  void setDebugMode(bool value);
 
   void setSchwarzFactorizationType(FactorType choice);
-
-  enum SmootherChoice
-  {
-    POINT_JACOBI,
-    POINT_SYMMETRIC_GAUSS_SEIDEL,
-    BLOCK_JACOBI,
-    BLOCK_SYMMETRIC_GAUSS_SEIDEL,
-    IFPACK_ADDITIVE_SCHWARZ,
-    CAMELLIA_ADDITIVE_SCHWARZ,
-    NONE
-  };
   
-  // ! When set to true, will compute the new residual after coarse solve, and smooth that.  Note that in general this will not preserve symmetry, so this option should not generally be used with conjugate gradient iterations.  Off by default.
-  void setSmoothAfterCoarseSolve(bool value);
+  // ! When set to MULTIPLICATIVE, will compute new residuals before and after the coarse solve.  Done in such a way as to preserve symmetry.
+  void setSmootherApplicationType(SmootherApplicationType value);
   
-  // ! When set to true, will smooth and apply the coarse operator to the new residual.  Note that in general this will not preserve symmetry, so this option should not generally be used with conjugate gradient iterations.  Off by default.
-  void setSmoothBeforeCoarseSolve(bool value);
-
+  // ! When set to true, will weight (symmetrically) according to the inverse of the number of Schwarz blocks each dof participates in.  Currently only supported for CAMELLIA_ADDITIVE_SCHWARZ smoothers.
+  void setUseSchwarzDiagonalWeight(bool value);
+  
+  // ! When set to true, will scale using the inverse of the maximum eigenvalue of the Schwarz smoother times the fine matrix.  Currently only supported for CAMELLIA_ADDITIVE_SCHWARZ smoothers.
+  void setUseSchwarzScalingWeight(bool value);
+  
+  SmootherChoice getSmootherType();
+  
   void setSmootherType(SmootherChoice smootherType);
   void setSmootherOverlap(int overlap);
 
+  // ! smoother weight is applied to each application of the smoother. Default = 1.0
+  double getSmootherWeight();
+  // ! smoother weight is applied to each application of the smoother. Default = 1.0
+  void setSmootherWeight(double weight);
+
+  // ! smoother weight vector (used for Camellia additive Schwarz; may be null in other cases)
+  Teuchos::RCP<Epetra_MultiVector> getSmootherWeightVector();
+  
   void setLevelOfFill(int fillLevel);
   void setFillRatio(double fillRatio);
+  
+  //! Set the multigrid strategy: two-level (additive), V-cycle, W-cycle, or full multigrid.
+  void setMultigridStrategy(MultigridStrategy choice);
   
   static std::string smootherString(SmootherChoice choice);
 
@@ -263,6 +314,9 @@ public:
   void setUseHierarchicalNeighborsForSchwarz(bool value);
   //@}
 
+  //! Returns the fine stiffness matrix
+  Epetra_CrsMatrix* getFineStiffnessMatrix();
+  
   //! Computes an Epetra_CrsMatrix representation of this operator.  Note that this can be an expensive operation, and is primarily intended for testing.
   Teuchos::RCP<Epetra_CrsMatrix> getMatrixRepresentation();
   

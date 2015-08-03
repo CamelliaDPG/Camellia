@@ -94,7 +94,7 @@ _finePartitionMap(fineSolution->getPartitionMap())
 }
 
 GMGSolver::GMGSolver(TSolutionPtr<double> fineSolution, const std::vector<MeshPtr> &meshesCoarseToFine, int maxIters,
-                     double tol, Teuchos::RCP<Solver> coarseSolver, bool useStaticCondensation) :
+                     double tol, GMGOperator::MultigridStrategy multigridStrategy, Teuchos::RCP<Solver> coarseSolver, bool useStaticCondensation) :
 Narrator("GMGSolver"),
 _finePartitionMap(fineSolution->getPartitionMap())
 {
@@ -108,7 +108,7 @@ _finePartitionMap(fineSolution->getPartitionMap())
   _useCG = true;
   _azConvergenceOption = AZ_rhs;
   
-  _gmgOperator = gmgOperatorFromMeshSequence(meshesCoarseToFine, fineSolution, coarseSolver, useStaticCondensation);
+  _gmgOperator = gmgOperatorFromMeshSequence(meshesCoarseToFine, fineSolution, multigridStrategy, coarseSolver, useStaticCondensation);
 }
 
 double GMGSolver::condest()
@@ -127,6 +127,7 @@ int GMGSolver::iterationCount()
 }
 
 Teuchos::RCP<GMGOperator> GMGSolver::gmgOperatorFromMeshSequence(const std::vector<MeshPtr> &meshesCoarseToFine, SolutionPtr fineSolution,
+                                                                 GMGOperator::MultigridStrategy multigridStrategy,
                                                                  SolverPtr coarseSolver, bool useStaticCondensationInCoarseSolve)
 {
   TEUCHOS_TEST_FOR_EXCEPTION(meshesCoarseToFine.size() < 2, std::invalid_argument, "meshesCoarseToFine must have at least two meshes");
@@ -143,14 +144,18 @@ Teuchos::RCP<GMGOperator> GMGSolver::gmgOperatorFromMeshSequence(const std::vect
     MeshPtr coarseMesh = meshesCoarseToFine[i-1];
     if (i>1)
     {
-      coarseOperator = Teuchos::rcp(new GMGOperator(zeroBCs, coarseMesh, fineMesh, fineDofInterpreter, finePartitionMap));
+      coarseOperator = Teuchos::rcp(new GMGOperator(zeroBCs, coarseMesh, ip, fineMesh, fineDofInterpreter, finePartitionMap,
+                                                    useStaticCondensationInCoarseSolve));
     }
     else
     {
-      coarseOperator = Teuchos::rcp(new GMGOperator(zeroBCs,coarseMesh,ip,fineMesh,fineDofInterpreter,
-                                                    finePartitionMap, coarseSolver, useStaticCondensationInCoarseSolve));
+      coarseOperator = Teuchos::rcp(new GMGOperator(zeroBCs, coarseMesh, ip, fineMesh, fineDofInterpreter, finePartitionMap,
+                                                    coarseSolver, useStaticCondensationInCoarseSolve));
     }
     coarseOperator->setSmootherType(GMGOperator::CAMELLIA_ADDITIVE_SCHWARZ);
+    coarseOperator->setUseSchwarzDiagonalWeight(true);
+    coarseOperator->setUseSchwarzScalingWeight(true);
+    coarseOperator->setMultigridStrategy(multigridStrategy);
     bool hRefined = fineMesh->numActiveElements() > coarseMesh->numActiveElements();
     coarseOperator->setUseHierarchicalNeighborsForSchwarz(hRefined);
     if (hRefined) coarseOperator->setSmootherOverlap(1);
@@ -221,20 +226,7 @@ int GMGSolver::solve(bool buildCoarseStiffness)
   //  Epetra_MultiVector *x = problem().GetLHS();
   //  EpetraExt::MultiVectorToMatlabFile("/tmp/x_initial_guess.dat",*x);
 
-  const Epetra_Map* map = &A->RowMatrixRowMap();
-
-  Epetra_Vector diagA(*map);
-  A->ExtractDiagonalCopy(diagA);
-
-  //  EpetraExt::MultiVectorToMatlabFile("/tmp/diagA.dat",diagA);
-  //
-  Epetra_Vector scale_vector(*map);
-  Epetra_Vector diagA_sqrt_inv(*map);
-  Epetra_Vector diagA_inv(*map);
-
-  Teuchos::RCP<Epetra_MultiVector> diagA_ptr = Teuchos::rcp( &diagA, false );
-
-  _gmgOperator->setStiffnessDiagonal(diagA_ptr);
+//  const Epetra_Map* map = &A->RowMatrixRowMap();
 
   if (buildCoarseStiffness)
   {
@@ -319,9 +311,7 @@ int GMGSolver::solve(bool buildCoarseStiffness)
       break;
     }
   }
-
-  _gmgOperator->setStiffnessDiagonal(Teuchos::rcp((Epetra_MultiVector*) NULL ));
-
+  
   _iterationCountLog.push_back(_iterationCount);
 
   return solveResult;

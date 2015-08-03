@@ -36,6 +36,8 @@ MeshTopologyView::MeshTopologyView()
 // ! Constructor that defines a view in terms of an existing MeshTopology and a set of cells selected to be active.
 MeshTopologyView::MeshTopologyView(MeshTopologyPtr meshTopoPtr, const std::set<IndexType> &activeCellIDs)
 {
+  // for now (at least), we disallow empty MeshTopologyViews:
+  TEUCHOS_TEST_FOR_EXCEPTION(activeCellIDs.size() == 0, std::invalid_argument, "Empty activeCellIDs is not allowed in MeshTopologyView constructor!");
   _meshTopo = meshTopoPtr;
   _activeCells = activeCellIDs;
   buildLookups();
@@ -138,11 +140,16 @@ vector< pair<IndexType,unsigned> > MeshTopologyView::getActiveCellIndices(unsign
 
 vector<IndexType> MeshTopologyView::getActiveCellsForSide(IndexType sideEntityIndex)
 {
+  vector<IndexType> cellsForSide = getCellsForSide(sideEntityIndex);
+  
   vector<IndexType> activeCells;
-  IndexType cellIndex = _meshTopo->getFirstCellForSide(sideEntityIndex).first;
-  if ((cellIndex != -1) && (_activeCells.find(cellIndex) != _activeCells.end())) activeCells.push_back(cellIndex);
-  cellIndex = _meshTopo->getSecondCellForSide(sideEntityIndex).first;
-  if ((cellIndex != -1) && (_activeCells.find(cellIndex) != _activeCells.end())) activeCells.push_back(cellIndex);
+  for (IndexType cellIndex : cellsForSide)
+  {
+    if (_activeCells.find(cellIndex) != _activeCells.end())
+    {
+      activeCells.push_back(cellIndex);
+    }
+  }
   return activeCells;
 }
 
@@ -192,10 +199,34 @@ set< pair<IndexType, unsigned> > MeshTopologyView::getCellsContainingEntity(unsi
 vector<IndexType> MeshTopologyView::getCellsForSide(IndexType sideEntityIndex)
 {
   vector<IndexType> cells;
-  IndexType cellIndex = _meshTopo->getFirstCellForSide(sideEntityIndex).first;
-  if (isValidCellIndex(cellIndex)) cells.push_back(cellIndex);
-  cellIndex = _meshTopo->getSecondCellForSide(sideEntityIndex).first;
-  if (isValidCellIndex(cellIndex)) cells.push_back(cellIndex);
+  for (int whichCell=0; whichCell<2; whichCell++)
+  {
+    IndexType cellIndex;
+    if (whichCell == 0)
+      cellIndex = _meshTopo->getFirstCellForSide(sideEntityIndex).first;
+    else
+      cellIndex =  _meshTopo->getSecondCellForSide(sideEntityIndex).first;
+    while ((cellIndex != -1) && !isValidCellIndex(cellIndex))
+    {
+      // we should check whether there is a valid ancestor of the cell that also contains the side
+      // (this can happen both in 1D and with anisotropic refinements)
+      CellPtr cell = _meshTopo->getCell(cellIndex);
+      CellPtr parent = cell->getParent();
+      if (parent != Teuchos::null)
+      {
+        // check whether the parent contains the side:
+        int sideDim = _meshTopo->getDimension() - 1;
+        unsigned sideOrdinal = parent->findSubcellOrdinal(sideDim, sideEntityIndex);
+        if (sideOrdinal != -1) cellIndex = parent->cellIndex();
+        else cellIndex = -1;
+      }
+      else
+      {
+        cellIndex = -1;
+      }
+    }
+    if (isValidCellIndex(cellIndex)) cells.push_back(cellIndex);
+  }
   return cells;
 }
 
@@ -492,4 +523,9 @@ void MeshTopologyView::setGlobalDofAssignment(GlobalDofAssignment* gda)
 void MeshTopologyView::verticesForCell(Intrepid::FieldContainer<double>& vertices, IndexType cellID)
 {
   _meshTopo->verticesForCell(vertices, cellID);
+}
+
+MeshTopologyViewPtr MeshTopologyView::getView(const set<IndexType> &activeCells)
+{
+  return Teuchos::rcp( new MeshTopologyView(_meshTopo, activeCells) );
 }

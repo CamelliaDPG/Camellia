@@ -23,6 +23,34 @@ using namespace Camellia;
 
 namespace
 {
+  void writeOperatorsToDisk(Teuchos::RCP<GMGOperator> op)
+  {
+    int rank = Teuchos::GlobalMPISession::getRank();
+
+    Teuchos::RCP<Epetra_RowMatrix> opMatrix = op->getMatrixRepresentation();
+    EpetraExt::RowMatrixToMatrixMarketFile("/tmp/op.dat",*opMatrix,NULL,NULL,false);
+    if (rank==0) cout << "wrote op matrix to /tmp/op.dat\n";
+    
+    Teuchos::RCP<Epetra_RowMatrix> P = op->getProlongationOperator();
+    EpetraExt::RowMatrixToMatrixMarketFile("/tmp/P.dat",*P,NULL,NULL,false);
+    if (rank==0) cout << "wrote prolongation operator matrix to /tmp/P.dat\n";
+    
+    Teuchos::RCP<Epetra_RowMatrix> coarseMatrix = op->getCoarseStiffnessMatrix();
+    EpetraExt::RowMatrixToMatrixMarketFile("/tmp/coarse.dat",*coarseMatrix,NULL,NULL,false);
+    if (rank==0) cout << "wrote coarse stiffness matrix to /tmp/coarse.dat\n";
+    
+    if (op->getSmootherType() != GMGOperator::NONE)
+    {
+      Teuchos::RCP<Epetra_RowMatrix> smoother = op->getSmootherAsMatrix();
+      EpetraExt::RowMatrixToMatrixMarketFile("/tmp/smoother.dat",*smoother,NULL,NULL,false);
+      if (rank==0) cout << "wrote smoother matrix to /tmp/smoother.dat\n";
+    }
+  
+    string fineStiffnessLocation = "/tmp/A.dat";
+    EpetraExt::RowMatrixToMatrixMarketFile(fineStiffnessLocation.c_str(),*op->getFineStiffnessMatrix(),NULL,NULL,false);
+    if (rank==0) cout << "wrote fine stiffness matrix to " << fineStiffnessLocation << endl;
+  }
+  
   void turnOffSuperLUDistOutput(Teuchos::RCP<GMGSolver> gmgSolver)
   {
     Teuchos::RCP<GMGOperator> gmgOperator = gmgSolver->gmgOperator();
@@ -181,11 +209,9 @@ namespace
   // ! In this test, the prolongation operator is the identity: we have the same mesh for coarse and fine.
   void testIdentity(int spaceDim, bool useRefinedMeshes, int refinementNumber, int meshWidth,
                     bool useConformingTraces, bool useStaticCondensation,
-                    bool applySmootherBeforeCoarseSolve, bool applySmootherAfterCoarseSolve,
+                    GMGOperator::SmootherApplicationType smootherApplicationType,
                     Teuchos::FancyOStream &out, bool &success)
   {
-    // if applySmootherBeforeCoarseSolve is true, we apply smoother first, compute residual, and apply the coarse operator to the residual
-    // the consequence here being applySmootherBeforeCoarseSolve == true --> one iteration should nail the exact solution
     PoissonFormulation form(spaceDim, useConformingTraces);
     vector<int> cellCount;
     for (int d=0; d<spaceDim; d++)
@@ -235,6 +261,8 @@ namespace
     turnOffSuperLUDistOutput(gmgSolver);
     gmgSolver->setComputeConditionNumberEstimate(false);
     
+//    gmgSolver->gmgOperator()->setDebugMode(true);
+    
     // before we test the solve proper, let's check that with smoothing off, ApplyInverse acts just like the standard solve
     //        exactPoissonSolution->setWriteMatrixToFile(true, "/tmp/A_direct.dat");
     //        exactPoissonSolution->setWriteRHSToMatrixMarketFile(true, "/tmp/b_direct.dat");
@@ -260,7 +288,7 @@ namespace
     Teuchos::RCP<Epetra_Vector> diagA = Teuchos::rcp( new Epetra_Vector(*map) );
     A->ExtractDiagonalCopy(*diagA);
     
-    gmgSolver->gmgOperator()->setStiffnessDiagonal(diagA);
+//    gmgSolver->gmgOperator()->setStiffnessDiagonal(diagA);
     
     Teuchos::RCP<Epetra_Vector> diagA_inv = Teuchos::rcp( new Epetra_Vector(*map, 1) );
     Teuchos::RCP<Epetra_Vector> diagA_sqrt_inv = Teuchos::rcp( new Epetra_Vector(*map, 1) );
@@ -283,59 +311,23 @@ namespace
     // If smoother is not applied before coarse solve and not after (i.e. a strict two-level operator),  then we expect iterative = exact + D^-1 b
     // If smoother is not applied before coarse solve but is applied after,  then we expect iterative = exact + D^-1 b - D^-1 A D^-1 b
     Epetra_MultiVector directValue(*lhsVector); // x
-    if (!applySmootherBeforeCoarseSolve && !applySmootherAfterCoarseSolve)
+    if (smootherApplicationType == GMGOperator::ADDITIVE)
     {
       // x + D^-1 b
       directValue.Multiply(1.0, rhsVectorCopy2, *diagA_inv, 1.0);
     }
-    else if (!applySmootherBeforeCoarseSolve && applySmootherAfterCoarseSolve)
-    {
-      // in this case, the coarse solve gets us to the exact solution
-      // then, since we're doing a "two-level" scheme, we add D^-1 b to it.
-      // finally, we compute a new residual, and apply D^-1 to that.
-      
-      // (This isn't necessarily a case that will be very relevant in practice.  This is largely
-      //  about test coverage.)
-      
-      // x + D^-1(b - A D^-1 b)
-    
-//      cout << "expected X:\n"  << rhsVectorCopy2;
-      
-      // compute D^-1 b
-      Epetra_MultiVector scaledB(rhsVectorCopy.Map(),1);
-      scaledB.Multiply(1.0, *diagA_inv, rhsVectorCopy2, 0.0);
-      
-      // compute Y_so_far = exact + D^-1 b
-      Epetra_MultiVector Y_so_far = directValue;
-      Y_so_far.Update(1.0, scaledB, 1.0);
-//      cout << "expected Y so far:\n" << Y_so_far;
-      
-      // compute A Y
-      Epetra_MultiVector A_Y(rhsVectorCopy.Map(),1);
-      A->Apply(Y_so_far, A_Y);
-//      cout << "expected A_Y:\n" << A_Y;
-      
-      // compute new residual
-      Epetra_MultiVector residual = rhsVectorCopy2;
-      residual.Update(-1.0,A_Y,1.0);
-      
-//      cout << "expected new residual:\n" << residual;
+//    else
+//    {
+//      // DEBUGGING multiplicative option:
+//      gmgSolver->gmgOperator()->setDebugMode(true);
 //      
-//      cout << "diagA_inv:\n" << *diagA_inv;
-      
-      // compute Y_so_far + D^-1 * residual
-      Y_so_far.Multiply(1.0, residual, *diagA_inv, 1.0);
-      
-      directValue = Y_so_far;
-//      cout << "expected Y:\n";
-//      cout << directValue;
-    }
+//      cout << "x:\n" << directValue;
+//    }
     
     gmgSolver->gmgOperator()->setSmootherType(GMGOperator::POINT_JACOBI);
     
     gmgSolver->gmgOperator()->setFineStiffnessMatrix(A);
-    gmgSolver->gmgOperator()->setSmoothBeforeCoarseSolve(applySmootherBeforeCoarseSolve);
-    gmgSolver->gmgOperator()->setSmoothAfterCoarseSolve(applySmootherAfterCoarseSolve);
+    gmgSolver->gmgOperator()->setSmootherApplicationType(smootherApplicationType);
     gmgSolver->gmgOperator()->ApplyInverse(rhsVectorCopy2, gmg_lhsVector);
     
     double tol = 1e-10;
@@ -354,9 +346,13 @@ namespace
         success = false;
       }
     }
+//    if (!success)
+//    {
+//      writeOperatorsToDisk(gmgSolver->gmgOperator());
+//    }
     
     // do "multi" grid between mesh and itself.  Solution should match phiExact.
-    maxIters = applySmootherBeforeCoarseSolve ? 1 : 100; // if smoother applied before coarse solve, then GMG should recover exactly the direct solution, in 1 iteration
+    maxIters = (smootherApplicationType == GMGOperator::MULTIPLICATIVE) ? 1 : 100; // if smoother applied multiplicatively, then GMG should recover exactly the direct solution, in 1 iteration
     
     if (useStaticCondensation)
     {
@@ -373,8 +369,7 @@ namespace
     
     turnOffSuperLUDistOutput(gmgSolver);
     gmgSolver->setComputeConditionNumberEstimate(false);
-    gmgSolver->gmgOperator()->setSmoothBeforeCoarseSolve(applySmootherBeforeCoarseSolve);
-    gmgSolver->gmgOperator()->setSmoothAfterCoarseSolve(applySmootherAfterCoarseSolve);
+    gmgSolver->gmgOperator()->setSmootherApplicationType(smootherApplicationType);
     
     Teuchos::RCP<Solver> fineSolver = gmgSolver;
     
@@ -392,64 +387,42 @@ namespace
     if (l2_diff > tol)
     {
       success = false;
-      out << "FAILURE: For mesh width = " << meshWidth << " in " << spaceDim << "D, with applySmootherBeforeCoarseSolve = ";
-      if (applySmootherBeforeCoarseSolve)
-        out << "true";
+      out << "FAILURE: For mesh width = " << meshWidth << " in " << spaceDim << "D, with smootherApplicationType = ";
+      if (smootherApplicationType == GMGOperator::ADDITIVE)
+        out << "additive";
       else
-        out << "false";
-      out << ", applySmootherAfterCoarseSolve = ";
-      if (applySmootherAfterCoarseSolve)
-        out << "true";
-      else
-        out << "false";
-        
+        out << "multiplicative";
+      
       out << ", GMG solver and direct differ with L^2 norm of the difference = " << l2_diff << ".\n";
       
       Teuchos::RCP<GMGOperator> op = gmgSolver->gmgOperator();
-      Intrepid::FieldContainer<double> denseMatrix;
-      Teuchos::RCP<Epetra_RowMatrix> opMatrix = op->getMatrixRepresentation();
-      SerialDenseWrapper::extractFCFromEpetra_RowMatrix(*opMatrix, denseMatrix);
-      
-      EpetraExt::RowMatrixToMatrixMarketFile("/tmp/op.dat",*opMatrix,NULL,NULL,false);
-      out << "wrote op matrix to /tmp/op.dat\n";
-      
-      Teuchos::RCP<Epetra_RowMatrix> P = op->getProlongationOperator();
-      EpetraExt::RowMatrixToMatrixMarketFile("/tmp/P.dat",*P,NULL,NULL,false);
-      out << "wrote prolongation operator matrix to /tmp/P.dat\n";
-      
-      Teuchos::RCP<Epetra_RowMatrix> coarseMatrix = op->getCoarseStiffnessMatrix();
-      EpetraExt::RowMatrixToMatrixMarketFile("/tmp/coarse.dat",*coarseMatrix,NULL,NULL,false);
-      out << "wrote coarse stiffness matrix to /tmp/coarse.dat\n";
-      
-      Teuchos::RCP<Epetra_RowMatrix> smoother = op->getSmootherAsMatrix();
-      EpetraExt::RowMatrixToMatrixMarketFile("/tmp/smoother.dat",*smoother,NULL,NULL,false);
-      out << "wrote smoother matrix to /tmp/smoother.dat\n";
+      writeOperatorsToDisk(op);
     }
   }
   
   // ! This test adapted from one that used to reside in GMGTests (testGMGSolverIdentityUniformMeshes)
   // ! In this test, the prolongation operator is the identity: we have the same mesh for coarse and fine.
   void testIdentityUniformMeshes(int spaceDim, int meshWidth, bool useConformingTraces, bool useStaticCondensation,
-                                 bool applySmootherBeforeCoarseSolve, bool applySmootherAfterCoarseSolve,
+                                 GMGOperator::SmootherApplicationType smootherApplicationType,
                                  Teuchos::FancyOStream &out, bool &success)
   {
     bool useRefinedMeshes = false;
     int refinementNumber = -1;
     testIdentity(spaceDim, useRefinedMeshes, refinementNumber, meshWidth, useConformingTraces,
-                 useStaticCondensation, applySmootherBeforeCoarseSolve, applySmootherAfterCoarseSolve, out, success);
+                 useStaticCondensation, smootherApplicationType, out, success);
   }
   
   // ! This test adapted from one that used to reside in GMGTests (testGMGSolverIdentityUniformMeshes)
   // ! In this test, the prolongation operator is the identity: we have the same mesh for coarse and fine.
   void testIdentityRefined2DMeshes(int refinementSequence, bool useConformingTraces, bool useStaticCondensation,
-                                   bool applySmootherBeforeCoarseSolve, bool applySmootherAfterCoarseSolve,
+                                   GMGOperator::SmootherApplicationType smootherApplicationType,
                                    Teuchos::FancyOStream &out, bool &success)
   {
     bool useRefinedMeshes = true;
     int spaceDim = 2;
     int meshWidth = 2;
     testIdentity(spaceDim, useRefinedMeshes, refinementSequence, meshWidth, useConformingTraces,
-                 useStaticCondensation, applySmootherBeforeCoarseSolve, applySmootherAfterCoarseSolve, out, success);
+                 useStaticCondensation, smootherApplicationType, out, success);
   }
   
   void testOperatorIsSPD(Teuchos::RCP<GMGOperator> op, Teuchos::FancyOStream &out, bool &success)
@@ -473,27 +446,21 @@ namespace
       }
       // out << "full matrix:\n" << denseMatrix;
       
-      EpetraExt::RowMatrixToMatrixMarketFile("/tmp/op.dat",*opMatrix,NULL,NULL,false);
-      out << "wrote op matrix to /tmp/op.dat\n";
-      
-      Teuchos::RCP<Epetra_RowMatrix> P = op->getProlongationOperator();
-      EpetraExt::RowMatrixToMatrixMarketFile("/tmp/P.dat",*P,NULL,NULL,false);
-      out << "wrote prolongation operator matrix to /tmp/P.dat\n";
-      
-      Teuchos::RCP<Epetra_RowMatrix> coarseMatrix = op->getCoarseStiffnessMatrix();
-      EpetraExt::RowMatrixToMatrixMarketFile("/tmp/coarse.dat",*coarseMatrix,NULL,NULL,false);
-      out << "wrote coarse stiffness matrix to /tmp/coarse.dat\n";
-      
-      Teuchos::RCP<Epetra_RowMatrix> smoother = op->getSmootherAsMatrix();
-      EpetraExt::RowMatrixToMatrixMarketFile("/tmp/smoother.dat",*smoother,NULL,NULL,false);
-      out << "wrote smoother matrix to /tmp/smoother.dat\n";
+      writeOperatorsToDisk(op);
     }
-    
-    if (! SerialDenseWrapper::matrixIsPositiveDefinite(denseMatrix))
-    {
-      success = false;
-      out << "matrix is not positive definite:\n" << denseMatrix;
-    }
+//    else
+//    {
+//      int rank = Teuchos::GlobalMPISession::getRank();
+//      if (rank==0) cout << "even though we pass the test, for debugging, writing things out to disk\n";
+//      writeOperatorsToDisk(op);
+//    }
+
+    // TODO: implement SerialDenseWrapper::matrixIsPositiveDefinite() using eigenvalue solve
+//    if (! SerialDenseWrapper::matrixIsPositiveDefinite(denseMatrix))
+//    {
+//      success = false;
+//      out << "matrix is not positive definite:\n" << denseMatrix;
+//    }
   }
   
   TEUCHOS_UNIT_TEST( GMGSolver, UniformIdentity_1D_Slow)
@@ -502,8 +469,7 @@ namespace
     bool useConformingTraces = false;
     
     vector<bool> staticCondensationChoices = {false, true};
-    vector<bool> applySmootherBeforeCoarseSolveChoices = {false, true};
-    vector<bool> applySmootherAfterCoarseSolveChoices = {false, true};
+    vector<GMGOperator::SmootherApplicationType> smootherApplicationTypes = {GMGOperator::ADDITIVE, GMGOperator::MULTIPLICATIVE};
     vector<int> meshWidths = {1,2};
 //    vector<bool> staticCondensationChoices = {false};
 //    vector<bool> applySmootherBeforeCoarseSolveChoices = {false};
@@ -512,17 +478,13 @@ namespace
     
     for (bool useStaticCondensation : staticCondensationChoices)
     {
-      for (bool applySmootherBeforeCoarseSolve : applySmootherBeforeCoarseSolveChoices)
+      for (GMGOperator::SmootherApplicationType smootherApplicationType : smootherApplicationTypes)
       {
-        for (bool applySmootherAfterCoarseSolve : applySmootherAfterCoarseSolveChoices)
-        {
           for (int meshWidth : meshWidths)
           {
             testIdentityUniformMeshes(spaceDim, meshWidth, useConformingTraces, useStaticCondensation,
-                                      applySmootherBeforeCoarseSolve, applySmootherAfterCoarseSolve,
-                                      out, success);
+                                      smootherApplicationType, out, success);
           }
-        }
       }
     }
   }
@@ -533,25 +495,19 @@ namespace
     bool useConformingTraces = false;
  
     vector<bool> staticCondensationChoices = {false, true};
-    // to make the test faster, just use the most common choices for applying smoother (corresponds to two-level)
-    vector<bool> applySmootherBeforeCoarseSolveChoices = {false};
-    vector<bool> applySmootherAfterCoarseSolveChoices = {false};
-//    vector<bool> applySmootherBeforeCoarseSolveChoices = {false, true};
-//    vector<bool> applySmootherAfterCoarseSolveChoices = {false, true};
+    // to make the test faster, just use the most common choice for applying smoother (corresponds to two-level)
+    vector<GMGOperator::SmootherApplicationType> smootherApplicationTypes = {GMGOperator::ADDITIVE};
+
     vector<int> meshWidths = {2};
     
     for (bool useStaticCondensation : staticCondensationChoices)
     {
-      for (bool applySmootherBeforeCoarseSolve : applySmootherBeforeCoarseSolveChoices)
+      for (GMGOperator::SmootherApplicationType smootherApplicationType : smootherApplicationTypes)
       {
-        for (bool applySmootherAfterCoarseSolve : applySmootherAfterCoarseSolveChoices)
+        for (int meshWidth : meshWidths)
         {
-          for (int meshWidth : meshWidths)
-          {
-            testIdentityUniformMeshes(spaceDim, meshWidth, useConformingTraces, useStaticCondensation,
-                                      applySmootherBeforeCoarseSolve, applySmootherAfterCoarseSolve,
-                                      out, success);
-          }
+          testIdentityUniformMeshes(spaceDim, meshWidth, useConformingTraces, useStaticCondensation,
+                                    smootherApplicationType, out, success);
         }
       }
     }
@@ -562,22 +518,17 @@ namespace
     bool useConformingTraces = false;
     
     vector<bool> staticCondensationChoices = {false, true};
-    vector<bool> applySmootherBeforeCoarseSolveChoices = {false};
-    vector<bool> applySmootherAfterCoarseSolveChoices = {false};
+    vector<GMGOperator::SmootherApplicationType> smootherApplicationTypes = {GMGOperator::ADDITIVE};
     vector<int> refinementSequences = {0,1,2,3};
     
     for (bool useStaticCondensation : staticCondensationChoices)
     {
-      for (bool applySmootherBeforeCoarseSolve : applySmootherBeforeCoarseSolveChoices)
+      for (GMGOperator::SmootherApplicationType smootherApplicationType : smootherApplicationTypes)
       {
-        for (bool applySmootherAfterCoarseSolve : applySmootherAfterCoarseSolveChoices)
+        for (int refinementSequence : refinementSequences)
         {
-          for (int refinementSequence : refinementSequences)
-          {
-            testIdentityRefined2DMeshes(refinementSequence, useConformingTraces, useStaticCondensation,
-                                        applySmootherBeforeCoarseSolve, applySmootherAfterCoarseSolve,
-                                        out, success);
-          }
+          testIdentityRefined2DMeshes(refinementSequence, useConformingTraces, useStaticCondensation,
+                                      smootherApplicationType, out, success);
         }
       }
     }
@@ -590,27 +541,24 @@ namespace
     
     vector<bool> staticCondensationChoices = {false}; // to keep test cost down, we'll consider testing static condensation in 1D and 2D good enough.
       // to make the test faster, just use the most common choices for applying smoother (corresponds to two-level)
-    vector<bool> applySmootherBeforeCoarseSolveChoices = {false};
-    vector<bool> applySmootherAfterCoarseSolveChoices = {false};
+    vector<GMGOperator::SmootherApplicationType> smootherApplicationTypes = {GMGOperator::ADDITIVE};
+
     vector<int> meshWidths = {2};
     
     for (bool useStaticCondensation : staticCondensationChoices)
     {
-      for (bool applySmootherBeforeCoarseSolve : applySmootherBeforeCoarseSolveChoices)
+      for (GMGOperator::SmootherApplicationType smootherApplicationType : smootherApplicationTypes)
       {
-        for (bool applySmootherAfterCoarseSolve : applySmootherAfterCoarseSolveChoices)
+        for (int meshWidth : meshWidths)
         {
-          for (int meshWidth : meshWidths)
-          {
-            testIdentityUniformMeshes(spaceDim, meshWidth, useConformingTraces, useStaticCondensation,
-                                      applySmootherBeforeCoarseSolve, applySmootherAfterCoarseSolve,
-                                      out, success);
-          }
+          testIdentityUniformMeshes(spaceDim, meshWidth, useConformingTraces, useStaticCondensation,
+                                    smootherApplicationType, out, success);
         }
+        
       }
     }
   }
-  
+
   void setupPoissonGMGSolver_TwoGrid_h(Teuchos::RCP<GMGSolver> &gmgSolver, SolutionPtr &fineSolution,
                                        int spaceDim, FunctionPtr phi_exact)
   {
@@ -676,11 +624,10 @@ namespace
   }
   
   void setupPoissonGMGSolver_ThreeGrid(Teuchos::RCP<GMGSolver> &gmgSolver, SolutionPtr &fineSolution,
-                                       int spaceDim, FunctionPtr phi_exact)
+                                       int spaceDim, FunctionPtr phi_exact, int coarseElementCount)
   {
     bool useConformingTraces = false;
     PoissonFormulation form(spaceDim, useConformingTraces);
-    int coarseElementCount = 1;
     int H1Order_fine = 2, delta_k = 1;
     int H1Order_coarse = 1;
     int H1Order_coarsest = 1;
@@ -713,10 +660,11 @@ namespace
   enum GridType {
     TwoGrid_h,
     TwoGrid_p,
-    ThreeGrid
+    ThreeGrid,
+    ThreeGrid_Width_2
   };
   
-  void testOperatorIsSPD(int spaceDim, GridType gridType, Teuchos::FancyOStream &out, bool &success)
+void testOperatorIsSPD(int spaceDim, GridType gridType, GMGOperator::SmootherApplicationType smootherApplicationType, Teuchos::FancyOStream &out, bool &success)
   {
     FunctionPtr phiExact;
     if (spaceDim == 1)
@@ -748,7 +696,10 @@ namespace
         setupPoissonGMGSolver_TwoGrid_p(solver, fineSolution, spaceDim, phiExact);
         break;
       case ThreeGrid:
-        setupPoissonGMGSolver_ThreeGrid(solver, fineSolution, spaceDim, phiExact);
+        setupPoissonGMGSolver_ThreeGrid(solver, fineSolution, spaceDim, phiExact, 1);
+        break;
+      case ThreeGrid_Width_2:
+        setupPoissonGMGSolver_ThreeGrid(solver, fineSolution, spaceDim, phiExact, 2);
         break;
     }
     
@@ -757,18 +708,8 @@ namespace
     fineSolution->populateStiffnessAndLoad();
     solver->gmgOperator()->setFineStiffnessMatrix(fineSolution->getStiffnessMatrix().get());
 
-    // looks like maybe Ifpack can't maintain symmetry -- we'll skip testing it for now
-    vector<GMGOperator::SmootherChoice> smootherChoices = {GMGOperator::IFPACK_ADDITIVE_SCHWARZ, GMGOperator::CAMELLIA_ADDITIVE_SCHWARZ, GMGOperator::NONE};
+    vector<GMGOperator::SmootherChoice> smootherChoices = {GMGOperator::NONE, GMGOperator::IFPACK_ADDITIVE_SCHWARZ, GMGOperator::CAMELLIA_ADDITIVE_SCHWARZ};
     
-//    vector<GMGOperator::SmootherChoice> smootherChoices = {GMGOperator::CAMELLIA_ADDITIVE_SCHWARZ, GMGOperator::NONE};
-    
-    // since generally multiplication of two symmetric operators does not result in a symmetric operator,
-    // we should turn off both the "smoother before" and the "smoother after" options, both of which involve
-    // such multiplications.
-    vector<bool> smootherBeforeCoarseChoices = {false};
-    vector<bool> smootherAfterCoarseChoices = {false};
-    
-    //    vector<GMGOperator::SmootherChoice> smootherChoices = {GMGOperator::NONE};
     for (GMGOperator::SmootherChoice smoother : smootherChoices)
     {
       string smootherString = GMGOperator::smootherString(smoother);
@@ -781,32 +722,16 @@ namespace
       }
       else
       {
-        for (bool smootherBefore : smootherBeforeCoarseChoices)
+        solver->gmgOperator()->setSmootherApplicationType(smootherApplicationType);
+        if (smootherApplicationType == GMGOperator::ADDITIVE)
         {
-          solver->gmgOperator()->setSmoothBeforeCoarseSolve(smootherBefore);
-          for (bool smootherAfter : smootherAfterCoarseChoices)
-          {
-            if (smootherAfter && smootherBefore)
-            {
-              out << "          *** Testing smootherAfter && smootherBefore ***" << endl;
-            }
-            else if (!smootherAfter && smootherBefore)
-            {
-              out << "          *** Testing !smootherAfter && smootherBefore ***" << endl;
-            }
-            else if (!smootherAfter && !smootherBefore)
-            {
-              out << "          *** Testing !smootherAfter && !smootherBefore ***" << endl;
-            }
-            else if (!smootherAfter && smootherBefore)
-            {
-              out << "          *** Testing !smootherAfter && smootherBefore ***" << endl;
-            }
-
-            solver->gmgOperator()->setSmoothAfterCoarseSolve(smootherAfter);
-            testOperatorIsSPD(solver->gmgOperator(), out, success);
-          }
+          out << "          *** Testing smootherApplicationType = ADDITIVE ***" << endl;
         }
+        else
+        {
+          out << "          *** Testing smootherApplicationType = MULTIPLICATIVE ***" << endl;
+        }
+        testOperatorIsSPD(solver->gmgOperator(), out, success);
       }
     }
   }
@@ -814,56 +739,222 @@ namespace
   TEUCHOS_UNIT_TEST( GMGSolver, PoissonTwoGridOperatorIsSPD_1D_h )
   {
     int spaceDim = 1;
-    testOperatorIsSPD(spaceDim, TwoGrid_h, out, success);
+    GMGOperator::SmootherApplicationType smootherApplicationType = GMGOperator::ADDITIVE;
+    GridType gridType = TwoGrid_h;
+    testOperatorIsSPD(spaceDim, gridType, smootherApplicationType, out, success);
+  }
+  
+  TEUCHOS_UNIT_TEST( GMGSolver, PoissonTwoGridOperatorIsSPD_1D_h_multiplicative )
+  {
+    int spaceDim = 1;
+    GMGOperator::SmootherApplicationType smootherApplicationType = GMGOperator::MULTIPLICATIVE;
+    GridType gridType = TwoGrid_h;
+    testOperatorIsSPD(spaceDim, gridType, smootherApplicationType, out, success);
   }
   
   TEUCHOS_UNIT_TEST( GMGSolver, PoissonTwoGridOperatorIsSPD_1D_p )
   {
     int spaceDim = 1;
-    testOperatorIsSPD(spaceDim, TwoGrid_p, out, success);
+    GMGOperator::SmootherApplicationType smootherApplicationType = GMGOperator::ADDITIVE;
+    GridType gridType = TwoGrid_p;
+    testOperatorIsSPD(spaceDim, gridType, smootherApplicationType, out, success);
+  }
+  
+  TEUCHOS_UNIT_TEST( GMGSolver, PoissonTwoGridOperatorIsSPD_1D_p_multiplicative )
+  {
+    int spaceDim = 1;
+    GMGOperator::SmootherApplicationType smootherApplicationType = GMGOperator::MULTIPLICATIVE;
+    GridType gridType = TwoGrid_p;
+    testOperatorIsSPD(spaceDim, gridType, smootherApplicationType, out, success);
   }
   
   TEUCHOS_UNIT_TEST( GMGSolver, PoissonThreeGridOperatorIsSPD_1D )
   {
     int spaceDim = 1;
-    testOperatorIsSPD(spaceDim, ThreeGrid, out, success);
+    GMGOperator::SmootherApplicationType smootherApplicationType = GMGOperator::ADDITIVE;
+    GridType gridType = ThreeGrid;
+    testOperatorIsSPD(spaceDim, gridType, smootherApplicationType, out, success);
   }
   
   TEUCHOS_UNIT_TEST( GMGSolver, PoissonTwoGridOperatorIsSPD_2D_h )
   {
     int spaceDim = 2;
-    testOperatorIsSPD(spaceDim, TwoGrid_h, out, success);
+    GMGOperator::SmootherApplicationType smootherApplicationType = GMGOperator::ADDITIVE;
+    GridType gridType = TwoGrid_h;
+    testOperatorIsSPD(spaceDim, gridType, smootherApplicationType, out, success);
   }
   
   TEUCHOS_UNIT_TEST( GMGSolver, PoissonTwoGridOperatorIsSPD_2D_p )
   {
     int spaceDim = 2;
-    testOperatorIsSPD(spaceDim, TwoGrid_p, out, success);
+    GMGOperator::SmootherApplicationType smootherApplicationType = GMGOperator::ADDITIVE;
+    GridType gridType = TwoGrid_p;
+    testOperatorIsSPD(spaceDim, gridType, smootherApplicationType, out, success);
+  }
+  
+  TEUCHOS_UNIT_TEST( GMGSolver, PoissonTwoGridOperatorIsSPD_2D_p_multiplicative )
+  {
+    int spaceDim = 2;
+    GMGOperator::SmootherApplicationType smootherApplicationType = GMGOperator::MULTIPLICATIVE;
+    GridType gridType = TwoGrid_p;
+    testOperatorIsSPD(spaceDim, gridType, smootherApplicationType, out, success);
+  }
+  
+  TEUCHOS_UNIT_TEST( GMGSolver, PoissonTwoGridOperatorIsSPD_2D_h_multiplicative )
+  {
+    int spaceDim = 2;
+    GMGOperator::SmootherApplicationType smootherApplicationType = GMGOperator::MULTIPLICATIVE;
+    GridType gridType = TwoGrid_h;
+    testOperatorIsSPD(spaceDim, gridType, smootherApplicationType, out, success);
   }
   
   TEUCHOS_UNIT_TEST( GMGSolver, PoissonThreeGridOperatorIsSPD_2D_Slow )
   {
     int spaceDim = 2;
-    testOperatorIsSPD(spaceDim, ThreeGrid, out, success);
+    GMGOperator::SmootherApplicationType smootherApplicationType = GMGOperator::ADDITIVE;
+    GridType gridType = ThreeGrid;
+    testOperatorIsSPD(spaceDim, gridType, smootherApplicationType, out, success);
+  }
+  
+  
+  TEUCHOS_UNIT_TEST( GMGSolver, PoissonThreeGridOperatorIsSPD_2D_Multiplicative_Slow )
+  {
+    int spaceDim = 2;
+    GMGOperator::SmootherApplicationType smootherApplicationType = GMGOperator::MULTIPLICATIVE;
+    GridType gridType = ThreeGrid;
+    testOperatorIsSPD(spaceDim, gridType, smootherApplicationType, out, success);
+  }
+  
+  TEUCHOS_UNIT_TEST( GMGSolver, PoissonThreeGridWidth2OperatorIsSPD_2D_Multiplicative_Slow )
+  {
+    int spaceDim = 2;
+    GMGOperator::SmootherApplicationType smootherApplicationType = GMGOperator::MULTIPLICATIVE;
+    GridType gridType = ThreeGrid_Width_2;
+    testOperatorIsSPD(spaceDim, gridType, smootherApplicationType, out, success);
   }
   
   TEUCHOS_UNIT_TEST( GMGSolver, PoissonTwoGridOperatorIsSPD_3D_h_Slow )
   {
     int spaceDim = 3;
-    testOperatorIsSPD(spaceDim, TwoGrid_h, out, success);
+    GMGOperator::SmootherApplicationType smootherApplicationType = GMGOperator::ADDITIVE;
+    GridType gridType = TwoGrid_h;
+    testOperatorIsSPD(spaceDim, gridType, smootherApplicationType, out, success);
   }
   
   TEUCHOS_UNIT_TEST( GMGSolver, PoissonTwoGridOperatorIsSPD_3D_p_Slow )
   {
     int spaceDim = 3;
-    testOperatorIsSPD(spaceDim, TwoGrid_p, out, success);
+    GMGOperator::SmootherApplicationType smootherApplicationType = GMGOperator::ADDITIVE;
+    GridType gridType = TwoGrid_p;
+    testOperatorIsSPD(spaceDim, gridType, smootherApplicationType, out, success);
   }
   
   TEUCHOS_UNIT_TEST( GMGSolver, PoissonThreeGridOperatorIsSPD_3D_Slow )
   {
     int spaceDim = 3;
-    testOperatorIsSPD(spaceDim, ThreeGrid, out, success);
+    GMGOperator::SmootherApplicationType smootherApplicationType = GMGOperator::ADDITIVE;
+    GridType gridType = ThreeGrid;
+    testOperatorIsSPD(spaceDim, gridType, smootherApplicationType, out, success);
   }
+  
+//  TEUCHOS_UNIT_TEST( GMGSolver, DebuggingOperatorApplyInverse )
+//  {
+//    int rank = Teuchos::GlobalMPISession::getRank();
+//    int spaceDim = 1;
+//    bool useConformingTraces = false;
+//    GMGOperator::SmootherChoice smoother = GMGOperator::CAMELLIA_ADDITIVE_SCHWARZ;
+//    GMGOperator::SmootherApplicationType smootherApplicationType = GMGOperator::MULTIPLICATIVE;
+//    
+//    PoissonFormulation form(spaceDim, useConformingTraces);
+//    int coarseElementCount = 1;
+//    int H1Order_fine = 1, delta_k = 1;
+//    int H1Order_coarse = 1;
+//    vector<double> dimensions(spaceDim,1.0);
+//    vector<int> elementCounts(spaceDim,coarseElementCount);
+//    BFPtr bf = form.bf();
+//    
+//    MeshPtr coarseMesh = MeshFactory::rectilinearMesh(bf, dimensions, elementCounts, H1Order_coarse, delta_k);
+//    MeshPtr fineMesh = MeshFactory::rectilinearMesh(bf, dimensions, elementCounts, H1Order_fine, delta_k);
+//    
+//    fineMesh->hRefine(set<GlobalIndexType>({0}));
+//    
+//    FunctionPtr phi_exact = getPhiExact(spaceDim);
+//    
+//    RHSPtr rhs = RHS::rhs();
+//    if (spaceDim==1)
+//      rhs->addTerm(phi_exact->dx()->dx() * form.q());
+//    else if (spaceDim==3)
+//      rhs->addTerm((phi_exact->dx()->dx() + phi_exact->dy()->dy()) * form.q());
+//    else if (spaceDim==3)
+//      rhs->addTerm((phi_exact->dx()->dx() + phi_exact->dy()->dy() + phi_exact->dz()->dz())  * form.q());
+//    BCPtr bc = BC::bc();
+//    bc->addDirichlet(form.phi_hat(), SpatialFilter::allSpace(), phi_exact);
+//    SolutionPtr fineSolution = Solution::solution(fineMesh, bc, rhs, bf->graphNorm());
+//    int maxIters = 1000;
+//    double tol = 1e-6;
+//    Teuchos::RCP<GMGSolver> gmgSolver = Teuchos::rcp( new GMGSolver(fineSolution,{coarseMesh, fineMesh},maxIters,tol) );
+//    turnOffSuperLUDistOutput(gmgSolver);
+//    
+//    Teuchos::RCP<GMGOperator> op = gmgSolver->gmgOperator();
+//    op->setSmootherType(smoother);
+//    op->setSmootherApplicationType(smootherApplicationType);
+//    op->setDebugMode(false);
+//    
+//    fineSolution->initializeLHSVector();
+//    fineSolution->initializeStiffnessAndLoad();
+//    fineSolution->populateStiffnessAndLoad();
+//    op->setFineStiffnessMatrix(fineSolution->getStiffnessMatrix().get());
+//    
+//    Intrepid::FieldContainer<double> denseMatrix;
+//    Teuchos::RCP<Epetra_RowMatrix> opMatrix = op->getMatrixRepresentation();
+//    SerialDenseWrapper::extractFCFromEpetra_RowMatrix(*opMatrix, denseMatrix);
+//    
+//    if (rank==0) cout << "For debugging, writing things out to disk\n";
+//    EpetraExt::RowMatrixToMatrixMarketFile("/tmp/op.dat",*opMatrix,NULL,NULL,false);
+//    if (rank==0) cout << "wrote op matrix to /tmp/op.dat\n";
+//    
+//    Teuchos::RCP<Epetra_RowMatrix> P = op->getProlongationOperator();
+//    EpetraExt::RowMatrixToMatrixMarketFile("/tmp/P.dat",*P,NULL,NULL,false);
+//    if (rank==0) cout << "wrote prolongation operator matrix to /tmp/P.dat\n";
+//    
+//    Teuchos::RCP<Epetra_RowMatrix> coarseMatrix = op->getCoarseStiffnessMatrix();
+//    EpetraExt::RowMatrixToMatrixMarketFile("/tmp/coarse.dat",*coarseMatrix,NULL,NULL,false);
+//    if (rank==0) cout << "wrote coarse stiffness matrix to /tmp/coarse.dat\n";
+//    
+//    if (op->getSmootherType() != GMGOperator::NONE)
+//    {
+//      Teuchos::RCP<Epetra_RowMatrix> smoother = op->getSmootherAsMatrix();
+//      EpetraExt::RowMatrixToMatrixMarketFile("/tmp/smoother.dat",*smoother,NULL,NULL,false);
+//      if (rank==0) cout << "wrote smoother matrix to /tmp/smoother.dat\n";
+//    }
+//    
+//    string fineStiffnessLocation = "/tmp/A.dat";
+//    EpetraExt::RowMatrixToMatrixMarketFile(fineStiffnessLocation.c_str(),*op->getFineStiffnessMatrix(),NULL,NULL,false);
+//    if (rank==0) cout << "wrote fine stiffness matrix to " << fineStiffnessLocation << endl;
+//    
+//    int GID = 0;
+//    cout << "setting up fine vector for testing, with global ordinal " << GID << " --> 1";
+//    op->setDebugMode(true);
+//    
+//    Epetra_MultiVector v(P->RowMatrixRowMap(), 1);
+//    int lid = v.Map().LID(GID);
+//    if (lid != -1)
+//    {
+//      v[0][lid] = 1.0;
+//    }
+//    Epetra_MultiVector y(P->RowMatrixRowMap(), 1);
+//    op->ApplyInverse(v, y);
+//    cout << "y:\n";
+//    y.Comm().Barrier();
+//    cout << y;
+//    y.Comm().Barrier();
+//    
+//    opMatrix->Apply(v, y);
+//    cout << "y from opMatrix:\n";
+//    y.Comm().Barrier();
+//    cout << y;
+//    y.Comm().Barrier();
+//  }
   
   // for the moment, disabling the tests below.  They do pass (at least when doing two-level) in the sense of achieving the required tolerance, but I'd like to
   // get clearer on what exactly I am testing with them.

@@ -38,6 +38,7 @@
 #include "Intrepid_FunctionSpaceTools.hpp"
 #include "Mesh.h"
 #include "Function.h"
+#include "TensorBasis.h"
 #include "VarFactory.h"
 
 #include "BasisFactory.h"
@@ -345,15 +346,39 @@ void Boundary::bcsToImpose( map<  GlobalIndexType, Scalar > &globalDofIndicesAnd
 
     if (basis->getCardinality() > 1)
     {
+      TensorBasis<>* tensorBasis = dynamic_cast<TensorBasis<>*>(basis.get());
+
       // upgrade basis to continuous one of the same cardinality, if it is discontinuous.
-      if ((basis->functionSpace() == Camellia::FUNCTION_SPACE_HVOL) || (basis->functionSpace() == Camellia::FUNCTION_SPACE_HVOL_DISC))
+      if (tensorBasis)
+      {
+        BasisPtr spatialBasis = tensorBasis->getSpatialBasis();
+        BasisPtr temporalBasis = tensorBasis->getTemporalBasis();
+        
+        Camellia::EFunctionSpace continuousSpatialFS;
+        if ((spatialBasis->functionSpace() == Camellia::FUNCTION_SPACE_HVOL) ||
+            (spatialBasis->functionSpace() == Camellia::FUNCTION_SPACE_HVOL_DISC))
+        {
+          continuousSpatialFS = Camellia::FUNCTION_SPACE_HGRAD;
+        }
+        else
+        {
+          continuousSpatialFS = Camellia::continuousSpaceForDiscontinuous(spatialBasis->functionSpace());
+        }
+        Camellia::EFunctionSpace continuousTemporalFS = Camellia::FUNCTION_SPACE_HGRAD;
+        
+        vector<int> H1Orders = {spatialBasis->getDegree(),temporalBasis->getDegree()};
+        basis = BasisFactory::basisFactory()->getBasis(H1Orders, basis->domainTopology(), continuousSpatialFS, continuousTemporalFS);
+      }
+      else if ((basis->functionSpace() == Camellia::FUNCTION_SPACE_HVOL) ||
+               (basis->functionSpace() == Camellia::FUNCTION_SPACE_HVOL_DISC))
       {
         basis = BasisFactory::basisFactory()->getBasis(basis->getDegree(), basis->domainTopology(), Camellia::FUNCTION_SPACE_HGRAD);
       }
       else if (Camellia::functionSpaceIsDiscontinuous(basis->functionSpace()))
       {
         Camellia::EFunctionSpace fsContinuous = Camellia::continuousSpaceForDiscontinuous((basis->functionSpace()));
-        basis = BasisFactory::basisFactory()->getBasis(basis->getDegree(), basis->domainTopology(), fsContinuous);
+        basis = BasisFactory::basisFactory()->getBasis(basis->getDegree(), basis->domainTopology(), fsContinuous,
+                                                       Camellia::FUNCTION_SPACE_HGRAD);
       }
 
       std::set<int> dofOrdinals = basis->dofOrdinalsForVertex(vertexOrdinal);

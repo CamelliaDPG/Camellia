@@ -372,8 +372,20 @@ BasisCache::BasisCache(int fakeSideOrdinal, BasisCachePtr volumeCache, const Fie
   _cellJacobian.resize(numCells, numPoints, cellDim, cellDim);
   _cellJacobInv.resize(numCells, numPoints, cellDim, cellDim);
   _cellJacobDet.resize(numCells, numPoints);
-  _cellJacobian.initialize(1.0);
-  _cellJacobInv.initialize(1.0);
+  _cellJacobian.initialize(0.0);
+  _cellJacobInv.initialize(0.0);
+  for (int cellOrdinal=0; cellOrdinal<numCells; cellOrdinal++)
+  {
+    for (int pointOrdinal=0; pointOrdinal<numPoints; pointOrdinal++)
+    {
+      for (int d=0; d<cellDim; d++)
+      {
+        _cellJacobian(cellOrdinal,pointOrdinal,d,d) = 1.0;
+        _cellJacobInv(cellOrdinal,pointOrdinal,d,d) = 1.0;
+      }
+    }
+  }
+  
   _cellJacobDet.initialize(1.0);
 }
 
@@ -1146,7 +1158,7 @@ void BasisCache::determineJacobian()
 ////  cout << "On rank " << Teuchos::GlobalMPISession::getRank() << ", about to compute jacobian inverse for cellJacobian of size: " << _cellJacobian.size() << endl;
 //  CellTools::setJacobianInv(_cellJacobInv, _cellJacobian );
 
-  if (! TFunction<double>::isNull(_transformationFxn) )
+  if (_transformationFxn != Teuchos::null )
   {
     BasisCachePtr thisPtr = Teuchos::rcp(this,false);
     if (_composeTransformationFxnWithMeshTransformation)

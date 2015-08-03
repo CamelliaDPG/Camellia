@@ -27,8 +27,46 @@
 using namespace Intrepid;
 using namespace Camellia;
 
+void DofInterpreter::interpretLocalCoefficients(GlobalIndexType cellID, const Intrepid::FieldContainer<double> &localCoefficients,
+                                                map<GlobalIndexType,double> &fittedGlobalCoefficients, const set<int> &trialIDsToExclude)
+{
+  DofOrderingPtr trialOrder = _mesh->getElementType(cellID)->trialOrderPtr;
+  FieldContainer<double> basisCoefficients; // declared here so that we can sometimes avoid mallocs, if we get lucky in terms of the resize()
+  
+  fittedGlobalCoefficients.clear();
+  
+  set<int> trialIDs = trialOrder->getVarIDs();
+  for (int trialID : trialIDs)
+  {
+    const vector<int>* sides = &trialOrder->getSidesForVarID(trialID);
+    if (trialIDsToExclude.find(trialID) != trialIDsToExclude.end()) continue; // skip field
+    for (vector<int>::const_iterator sideIt = sides->begin(); sideIt != sides->end(); sideIt++)
+    {
+      int sideOrdinal = *sideIt;
+      int basisCardinality = trialOrder->getBasisCardinality(trialID, sideOrdinal);
+      basisCoefficients.resize(basisCardinality);
+      vector<int> localDofIndices = trialOrder->getDofIndices(trialID, sideOrdinal);
+      for (int basisOrdinal=0; basisOrdinal<basisCardinality; basisOrdinal++)
+      {
+        int localDofIndex = localDofIndices[basisOrdinal];
+        basisCoefficients[basisOrdinal] = localCoefficients[localDofIndex];
+      }
+      FieldContainer<double> fittedGlobalCoefficientsFC;
+      FieldContainer<GlobalIndexType> fittedGlobalDofIndices;
+      interpretLocalBasisCoefficients(cellID, trialID, sideOrdinal, basisCoefficients, fittedGlobalCoefficientsFC,
+                                      fittedGlobalDofIndices);
+      for (int i=0; i<fittedGlobalCoefficientsFC.size(); i++)
+      {
+        GlobalIndexType globalDofIndex = fittedGlobalDofIndices[i];
+        fittedGlobalCoefficients[globalDofIndex] = fittedGlobalCoefficientsFC[i];
+      }
+    }
+  }
+}
+
 void DofInterpreter::interpretLocalCoefficients(GlobalIndexType cellID, const FieldContainer<double> &localCoefficients, Epetra_MultiVector &globalCoefficients)
 {
+  // TODO: make this method call the one above, which takes an STL map as argument.
   DofOrderingPtr trialOrder = _mesh->getElementType(cellID)->trialOrderPtr;
   FieldContainer<double> basisCoefficients; // declared here so that we can sometimes avoid mallocs, if we get lucky in terms of the resize()
   for (set<int>::iterator trialIDIt = trialOrder->getVarIDs().begin(); trialIDIt != trialOrder->getVarIDs().end(); trialIDIt++)

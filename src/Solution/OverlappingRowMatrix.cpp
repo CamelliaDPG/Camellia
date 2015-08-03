@@ -157,6 +157,7 @@ void OverlappingRowMatrix::BuildMap(int OverlapLevel_in, const set<GlobalIndexTy
     }
 
     int size = ColMap->NumMyElements() - RowMap->NumMyElements();
+    TEUCHOS_TEST_FOR_EXCEPTION(size < 0, std::invalid_argument, "size may not be negative");
     std::vector<int_type> list(size);
 
     int count = 0;

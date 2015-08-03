@@ -1081,14 +1081,6 @@ int TSolution<Scalar>::solveWithPrepopulatedStiffnessAndLoad(TSolverPtr<Scalar> 
   Epetra_SerialComm Comm;
 #endif
 
-  set<GlobalIndexType> myGlobalIndicesSet = _dofInterpreter->globalDofIndicesForPartition(rank);
-//  cout << "rank " << rank << " has " << myGlobalIndicesSet.size() << " locally-owned dof indices.\n";
-  Epetra_Map partMap = getPartitionMap();
-
-  vector< ElementTypePtr > elementTypes = _mesh->elementTypes(rank);
-  vector< ElementTypePtr >::iterator elemTypeIt;
-
-  //cout << "process " << rank << " about to loop over elementTypes.\n";
   int indexBase = 0;
   Epetra_Map timeMap(numProcs,indexBase,Comm);
   Epetra_Time timer(Comm);
@@ -1108,14 +1100,6 @@ int TSolution<Scalar>::solveWithPrepopulatedStiffnessAndLoad(TSolverPtr<Scalar> 
 
   timer.ResetStartTime();
 
-//  GlobalIndexType dofInterpreterGlobalDofCount = _dofInterpreter->globalDofCount();
-//  GlobalIndexType meshGlobalDofCount = _mesh->globalDofCount();
-//  if (rank==0) cout << "About to call global solver with " << dofInterpreterGlobalDofCount << " global dof count.\n";
-//  if (rank==0) cout << "(Mesh sees " << meshGlobalDofCount << " dofs.)\n";
-
-//  cout << "On rank " << rank << ", about to call global solver with " << _dofInterpreter->globalDofCount() << " global dof count.\n";
-//  cout << "(On rank " << rank << ", mesh sees " << _mesh->globalDofCount() << " dofs.)\n";
-
   int solveSuccess;
   if (!callResolveInsteadOfSolve)
   {
@@ -1125,8 +1109,6 @@ int TSolution<Scalar>::solveWithPrepopulatedStiffnessAndLoad(TSolverPtr<Scalar> 
   {
     solveSuccess = solver->resolve();
   }
-
-//  if (rank==0) cout << "Returned from global solver.\n";
 
   if (solveSuccess != 0 )
   {
@@ -1990,75 +1972,48 @@ double TSolution<Scalar>::InfNormOfSolution(int trialID)
 template <typename Scalar>
 double TSolution<Scalar>::L2NormOfSolutionGlobal(int trialID)
 {
-  int numProcs=1;
-  int rank=0;
-
-#ifdef HAVE_MPI
-  rank     = Teuchos::GlobalMPISession::getRank();
-  numProcs = Teuchos::GlobalMPISession::getNProc();
-  Epetra_MpiComm Comm(MPI_COMM_WORLD);
-  //cout << "rank: " << rank << " of " << numProcs << endl;
-#else
-  Epetra_SerialComm Comm;
-#endif
-
-  int indexBase = 0;
-  Epetra_Map procMap(numProcs,indexBase,Comm);
-  double localL2Norm = L2NormOfSolution(trialID);
-  Epetra_Vector l2NormVector(procMap);
-  l2NormVector[0] = localL2Norm;
-  double globalL2Norm;
-  int errCode = l2NormVector.Norm1( &globalL2Norm );
-  if (errCode!=0)
-  {
-    cout << "Error in L2NormOfSolutionGlobal, errCode = " << errCode << endl;
-  }
-  return globalL2Norm;
-}
-
-template <typename Scalar>
-double TSolution<Scalar>::L2NormOfSolutionInCell(int trialID, GlobalIndexType cellID)
-{
-  double value = 0.0;
-  ElementTypePtr elemTypePtr = _mesh->getElement(cellID)->elementType();
-  int numCells = 1;
-  // note: basisCache below will use a greater cubature degree than strictly necessary
-  //       (it'll use maxTrialDegree + maxTestDegree, when it only needs maxTrialDegree * 2)
-  BasisCachePtr basisCache = Teuchos::rcp(new BasisCache(elemTypePtr,_mesh));
-
-  // get cellIDs for basisCache
-  vector<GlobalIndexType> cellIDs;
-  cellIDs.push_back(cellID);
-
-  Intrepid::FieldContainer<double> physicalCellNodes = _mesh->physicalCellNodesForCell(cellID);
-
-  bool createSideCacheToo = false;
-  basisCache->setPhysicalCellNodes(physicalCellNodes,cellIDs,createSideCacheToo);
-
-  int numPoints = basisCache->getPhysicalCubaturePoints().dimension(1);
-  Intrepid::FieldContainer<Scalar> values(numCells,numPoints);
-  bool weightForCubature = false;
-  solutionValues(values, trialID, basisCache, weightForCubature);
-  Intrepid::FieldContainer<Scalar> weightedValues(numCells,numPoints);
-  weightForCubature = true;
-  solutionValues(weightedValues, trialID, basisCache, weightForCubature);
-
-  for (int cellIndex=0; cellIndex<numCells; cellIndex++)
-  {
-    for (int ptIndex=0; ptIndex<numPoints; ptIndex++)
-    {
-      value += values(cellIndex,ptIndex)*weightedValues(cellIndex,ptIndex);
-    }
-  }
-
-  return value;
+  VarPtr var = _mesh->varFactory()->trial(trialID);
+  SolutionPtr thisPtr = Teuchos::rcp(this,false);
+  FunctionPtr solnFxn = Function::solution(var, thisPtr);
+  return solnFxn->l2norm(_mesh);
+  
+//  int numProcs=1;
+//  int rank=0;
+//
+//#ifdef HAVE_MPI
+//  rank     = Teuchos::GlobalMPISession::getRank();
+//  numProcs = Teuchos::GlobalMPISession::getNProc();
+//  Epetra_MpiComm Comm(MPI_COMM_WORLD);
+//  //cout << "rank: " << rank << " of " << numProcs << endl;
+//#else
+//  Epetra_SerialComm Comm;
+//#endif
+//
+//  int indexBase = 0;
+//  Epetra_Map procMap(numProcs,indexBase,Comm);
+//  double localL2Norm = L2NormOfSolution(trialID);
+//  Epetra_Vector l2NormVector(procMap);
+//  l2NormVector[0] = localL2Norm;
+//  double globalL2Norm;
+//  int errCode = l2NormVector.Norm1( &globalL2Norm );
+//  if (errCode!=0)
+//  {
+//    cout << "Error in L2NormOfSolutionGlobal, errCode = " << errCode << endl;
+//  }
+//  return sqrt(globalL2Norm);
 }
 
 template <typename Scalar>
 double TSolution<Scalar>::L2NormOfSolution(int trialID)
 {
-
-  int numProcs=1;
+  // at this point, this does precisely what L2NormOfSolutionGlobal does.
+  // probably the two should be merged.
+  VarPtr var = _mesh->varFactory()->trial(trialID);
+  SolutionPtr thisPtr = Teuchos::rcp(this,false);
+  FunctionPtr solnFxn = Function::solution(var, thisPtr);
+  return solnFxn->l2norm(_mesh);
+  
+/*  int numProcs=1;
   int rank=0;
 
 #ifdef HAVE_MPI
@@ -2111,8 +2066,8 @@ double TSolution<Scalar>::L2NormOfSolution(int trialID)
     }
   }
 
-  return value;
-
+  return sqrt(value);
+*/
 }
 
 template <typename Scalar>
@@ -3599,7 +3554,8 @@ void TSolution<Scalar>::setWriteRHSToMatrixMarketFile(bool value, const string &
 }
 
 template <typename Scalar>
-void TSolution<Scalar>::condensedSolve(TSolverPtr<Scalar> globalSolver, bool reduceMemoryFootprint)
+void TSolution<Scalar>::condensedSolve(TSolverPtr<Scalar> globalSolver, bool reduceMemoryFootprint,
+                                       set<GlobalIndexType> offRankCellsToInclude)
 {
   // when reduceMemoryFootprint is true, local stiffness matrices will be computed twice, rather than stored for reuse
   vector<int> trialIDs;
@@ -3621,7 +3577,7 @@ void TSolution<Scalar>::condensedSolve(TSolverPtr<Scalar> globalSolver, bool red
   // override reduceMemoryFootprint for now (since CondensedDofInterpreter doesn't yet support a true value)
   reduceMemoryFootprint = false;
 
-  Teuchos::RCP<DofInterpreter> dofInterpreter = Teuchos::rcp(new CondensedDofInterpreter<Scalar>(_mesh, _ip, _rhs, _lagrangeConstraints.get(), fieldsToExclude, !reduceMemoryFootprint) );
+  Teuchos::RCP<DofInterpreter> dofInterpreter = Teuchos::rcp(new CondensedDofInterpreter<Scalar>(_mesh, _ip, _rhs, _lagrangeConstraints.get(), fieldsToExclude, !reduceMemoryFootprint, offRankCellsToInclude) );
 
   Teuchos::RCP<DofInterpreter> oldDofInterpreter = _dofInterpreter;
 
@@ -4792,7 +4748,7 @@ void TSolution<Scalar>::setGlobalSolutionFromCellLocalCoefficients()
 }
 
 template <typename Scalar>
-void TSolution<Scalar>::setUseCondensedSolve(bool value)
+void TSolution<Scalar>::setUseCondensedSolve(bool value, set<GlobalIndexType> offRankCellsToInclude)
 {
   if (value)
   {
@@ -4820,7 +4776,7 @@ void TSolution<Scalar>::setUseCondensedSolve(bool value)
 
       _oldDofInterpreter = _dofInterpreter;
 
-      Teuchos::RCP<DofInterpreter> dofInterpreter = Teuchos::rcp(new CondensedDofInterpreter<Scalar>(_mesh, _ip, _rhs, _lagrangeConstraints.get(), fieldsToExclude, !reduceMemoryFootprint) );
+      Teuchos::RCP<DofInterpreter> dofInterpreter = Teuchos::rcp(new CondensedDofInterpreter<Scalar>(_mesh, _ip, _rhs, _lagrangeConstraints.get(), fieldsToExclude, !reduceMemoryFootprint, offRankCellsToInclude) );
 
       setDofInterpreter(dofInterpreter);
     }

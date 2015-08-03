@@ -206,17 +206,18 @@ SpaceTimeIncompressibleFormulation::SpaceTimeIncompressibleFormulation(Teuchos::
   if (savedSolutionAndMeshPrefix == "")
   {
     map<int,int> trialOrderEnhancements;
-    trialOrderEnhancements[tm1hat->ID()] = fieldPolyOrder;
-    trialOrderEnhancements[tm2hat->ID()] = fieldPolyOrder;
+    // trialOrderEnhancements[tm1hat->ID()] = fieldPolyOrder;
+    // trialOrderEnhancements[tm2hat->ID()] = fieldPolyOrder;
     // trialOrderEnhancements[u1hat->ID()] = fieldPolyOrder;
     // trialOrderEnhancements[u2hat->ID()] = fieldPolyOrder;
-    MeshPtr proxyMesh = Teuchos::rcp( new Mesh(meshTopo->deepCopy(), _bf, H1Order, delta_p) ) ;
+    // MeshPtr proxyMesh = Teuchos::rcp( new Mesh(meshTopo->deepCopy(), _bf, H1Order, delta_p) ) ;
     _mesh = Teuchos::rcp( new Mesh(meshTopo, _bf, H1Order, delta_p, trialOrderEnhancements) ) ;
     if (meshGeometry != Teuchos::null)
       _mesh->setEdgeToCurveMap(meshGeometry->edgeToCurveMap());
-    proxyMesh->registerObserver(_mesh);
-    problem->preprocessMesh(proxyMesh);
-    _mesh->enforceOneIrregularity();
+    // problem->preprocessMesh(_mesh);
+    // proxyMesh->registerObserver(_mesh);
+    // problem->preprocessMesh(proxyMesh);
+    // _mesh->enforceOneIrregularity();
 
     _solutionUpdate = Solution::solution(_bf, _mesh, bc);
     _solutionBackground = Solution::solution(_bf, _mesh, bc);

@@ -22,6 +22,7 @@ static const std::string & S_OP_Z = "\\bf{k} \\cdot ";
 static const std::string & S_OP_DX = "\\frac{\\partial}{\\partial x} ";
 static const std::string & S_OP_DY = "\\frac{\\partial}{\\partial y} ";
 static const std::string & S_OP_DZ = "\\frac{\\partial}{\\partial z} ";
+static const std::string & S_OP_DT = "\\frac{\\partial}{\\partial t} ";
 static const std::string & S_OP_CROSS_NORMAL = "\\times \\widehat{n} ";
 static const std::string & S_OP_DOT_NORMAL = "\\cdot \\widehat{n} ";
 static const std::string & S_OP_TIMES_NORMAL = " \\widehat{n} \\cdot ";
@@ -238,6 +239,9 @@ const std::string & Camellia::operatorName(Camellia::EOperator op)
     break;
   case Camellia::OP_DZ:
     return S_OP_DZ;
+    break;
+  case Camellia::OP_DT:
+    return S_OP_DT;
     break;
   case Camellia::OP_CROSS_NORMAL:
     return S_OP_CROSS_NORMAL;

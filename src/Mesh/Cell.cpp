@@ -298,6 +298,15 @@ vector<unsigned> Cell::getEntityIndices(unsigned subcdim)
   return cellEntityIndices;
 }
 
+int Cell::findChildOrdinal(IndexType cellIndex)
+{
+  for (int childOrdinal=0; childOrdinal < _children.size(); childOrdinal++)
+  {
+    if (_children[childOrdinal]->cellIndex() == cellIndex) return childOrdinal;
+  }
+  return -1;
+}
+
 unsigned Cell::findSubcellOrdinal(unsigned subcdim, IndexType subcEntityIndex)
 {
   // this is pretty brute force right now

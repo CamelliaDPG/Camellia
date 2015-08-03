@@ -42,8 +42,10 @@ enum ProblemChoice
 
 void initializeSolutionAndCoarseMesh(SolutionPtr &solution, vector<MeshPtr> &meshesCoarseToFine, IPPtr &graphNorm, ProblemChoice problemChoice,
                                      int spaceDim, bool conformingTraces, bool useStaticCondensation, int numCells, int k, int delta_k,
-                                     int rootMeshNumCells, bool useZeroMeanConstraints = false)
+                                     int k_coarse, int rootMeshNumCells, bool useZeroMeanConstraints)
 {
+  int rank = Teuchos::GlobalMPISession::getRank();
+  
   BFPtr bf;
   BCPtr bc;
   RHSPtr rhs;
@@ -249,26 +251,38 @@ void initializeSolutionAndCoarseMesh(SolutionPtr &solution, vector<MeshPtr> &mes
     }
   }
   
-  int H1Order_coarse = 0 + 1;
-  MeshPtr k0Mesh = MeshFactory::rectilinearMesh(bf, dimensions, elementCounts, H1Order_coarse, delta_k, x0);
-
-  
-  // get a sample cell topology:
-  CellTopoPtr cellTopo = k0Mesh->getTopology()->getCell(0)->topology();
-  RefinementPatternPtr refPattern = RefinementPattern::regularRefinementPattern(cellTopo);
+  bool useLightWeightViews = false; // flag added to allow checking whether any pure MeshTopologyViews are at issue in issues that might arise...
   
   meshesCoarseToFine.clear();
+  
+  MeshTopologyViewPtr meshTopoView;
+  if (useLightWeightViews)
+    meshTopoView = mesh->getTopology()->getView(mesh->getActiveCellIDs());
+  else
+    meshTopoView = mesh->getTopology()->deepCopy();
+  
+  int H1Order_coarse = k_coarse + 1;
+  MeshPtr k0Mesh = Teuchos::rcp(new Mesh(meshTopoView, bf, H1Order_coarse, delta_k));
   meshesCoarseToFine.push_back(k0Mesh);
   
   int meshWidthCells = rootMeshNumCells;
   while (meshWidthCells < numCells)
   {
-    k0Mesh = k0Mesh->deepCopy();
-    
     set<IndexType> activeCellIDs = mesh->getActiveCellIDs(); // should match between coarseMesh and mesh
-    mesh->hRefine(activeCellIDs, refPattern);
-    k0Mesh->hRefine(activeCellIDs, refPattern);
-
+    mesh->hRefine(activeCellIDs);
+    if (rank==0)
+    {
+      print("h-refining cells", activeCellIDs);
+    }
+    
+    MeshTopologyViewPtr meshTopoView;
+    if (useLightWeightViews)
+      meshTopoView = mesh->getTopology()->getView(mesh->getActiveCellIDs());
+    else
+      meshTopoView = mesh->getTopology()->deepCopy();
+        
+    MeshPtr k0Mesh = Teuchos::rcp(new Mesh(meshTopoView, bf, H1Order_coarse, delta_k));
+    
     meshesCoarseToFine.push_back(k0Mesh);
     meshWidthCells *= 2;
   }
@@ -276,7 +290,6 @@ void initializeSolutionAndCoarseMesh(SolutionPtr &solution, vector<MeshPtr> &mes
   
   if (meshWidthCells != numCells)
   {
-    int rank = Teuchos::GlobalMPISession::getRank();
     if (rank == 0)
     {
       cout << "Warning: may have overrefined mesh; mesh has width " << meshWidthCells << ", not " << numCells << endl;
@@ -309,7 +322,7 @@ long long approximateMemoryCostsForMeshTopologies(vector<MeshPtr> meshes)
 
 int main(int argc, char *argv[])
 {
-  Teuchos::GlobalMPISession mpiSession(&argc, &argv, 0);
+  Teuchos::GlobalMPISession mpiSession(&argc, &argv, NULL);
   int rank = Teuchos::GlobalMPISession::getRank();
   int numProcs = Teuchos::GlobalMPISession::getNProc();
 
@@ -326,11 +339,12 @@ int main(int argc, char *argv[])
 
   int k = 1; // poly order for field variables
   int delta_k = 1;   // test space enrichment
+  int k_coarse = 0; // coarse poly order
 
   bool conformingTraces = false;
 
   int numCells = -1;
-  int numCellsRootMesh = 2;
+  int numCellsRootMesh = -1;
   int spaceDim = 1;
   bool useCondensedSolve = false;
 
@@ -339,24 +353,39 @@ int main(int argc, char *argv[])
 
   bool reportTimings = false;
   bool useZeroMeanConstraints = false;
+  bool useConjugateGradient = true;
+  bool logFineOperator = false;
+  
+  string multigridStrategyString = "W-cycle";
+  
+  bool pauseOnRankZero = false;
 
   string problemChoiceString = "Poisson";
   string coarseSolverChoiceString = "KLU";
 
   cmdp.setOption("problem",&problemChoiceString,"problem choice: Poisson, ConvectionDiffusion, Stokes, Navier-Stokes");
 
+  cmdp.setOption("numCells",&numCells,"mesh width");
   cmdp.setOption("polyOrder",&k,"polynomial order for field variable u");
   cmdp.setOption("delta_k", &delta_k, "test space polynomial order enrichment");
+  cmdp.setOption("coarsePolyOrder", &k_coarse, "polynomial order for field variables on coarse grid");
 
   cmdp.setOption("coarseSolver", &coarseSolverChoiceString, "coarse solver choice: KLU, MUMPS, SuperLUDist, SimpleML");
 
+  cmdp.setOption("CG", "GMRES", &useConjugateGradient);
+  
+  cmdp.setOption("logFineOperator", "dontLogFineOperator", &logFineOperator);
+  cmdp.setOption("multigridStrategy", &multigridStrategyString, "Multigrid strategy: V-cycle, W-cycle, Full, or Two-level");
+  
   cmdp.setOption("useCondensedSolve", "useStandardSolve", &useCondensedSolve);
+  cmdp.setOption("useConformingTraces", "useNonConformingTraces", &conformingTraces);
 
   cmdp.setOption("spaceDim", &spaceDim, "space dimensions (1, 2, or 3)");
 
   cmdp.setOption("maxIterations", &cgMaxIterations, "maximum number of CG iterations");
   cmdp.setOption("cgTol", &cgTol, "CG convergence tolerance");
 
+  cmdp.setOption("pause","dontPause",&pauseOnRankZero, "pause (to allow attachment by tracer, e.g.), waiting for user to press a key");
   cmdp.setOption("reportTimings", "dontReportTimings", &reportTimings, "Report timings in Solution");
 
   cmdp.setOption("useZeroMeanConstraint", "usePointConstraint", &useZeroMeanConstraints, "Use a zero-mean constraint for the pressure (otherwise, use a vertex constraint at the origin)");
@@ -367,6 +396,16 @@ int main(int argc, char *argv[])
     MPI_Finalize();
 #endif
     return -1;
+  }
+  
+  if (pauseOnRankZero)
+  {
+    if (rank==0)
+    {
+      cout << "Press Enter to continue.\n";
+      cin.get();
+    }
+    Comm.Barrier();
   }
 
   ProblemChoice problemChoice;
@@ -400,6 +439,40 @@ int main(int argc, char *argv[])
     return -1;
   }
 
+  GMGOperator::MultigridStrategy multigridStrategy;
+  if (multigridStrategyString == "Two-level")
+  {
+    multigridStrategy = GMGOperator::TWO_LEVEL;
+  }
+  else if (multigridStrategyString == "W-cycle")
+  {
+    multigridStrategy = GMGOperator::W_CYCLE;
+  }
+  else if (multigridStrategyString == "V-cycle")
+  {
+    multigridStrategy = GMGOperator::V_CYCLE;
+  }
+  else if (multigridStrategyString == "Full")
+  {
+    multigridStrategy = GMGOperator::FULL_MULTIGRID;
+  }
+  else
+  {
+    TEUCHOS_TEST_FOR_EXCEPTION(true, std::invalid_argument, "unrecognized multigrid strategy");
+  }
+  
+  if (numCellsRootMesh == -1)
+  {
+    if (!useZeroMeanConstraints && (problemChoice == Stokes))
+    {
+      numCellsRootMesh = 2;
+    }
+    else
+    {
+      numCellsRootMesh = 1;
+    }
+  }
+
   if (rank==0)
   {
     cout << "Solving " << spaceDim << "D " << problemChoiceString << " problem with k = " << k << " on " << numProcs << " MPI ranks.  Initializing meshes...\n";
@@ -418,11 +491,12 @@ int main(int argc, char *argv[])
   
   vector<MeshPtr> meshesCoarseToFine;
   initializeSolutionAndCoarseMesh(solution, meshesCoarseToFine, ip, problemChoice, spaceDim, conformingTraces, useCondensedSolve,
-                                  numCells, k, delta_k, numCellsRootMesh, useZeroMeanConstraints);
+                                  numCells, k, delta_k, k_coarse, numCellsRootMesh, useZeroMeanConstraints);
   
   double meshInitializationTime = timer.ElapsedTime();
 
   int numDofs = solution->mesh()->numGlobalDofs();
+  int numTraceDofs = solution->mesh()->numFluxDofs();
   int numElements = solution->mesh()->numActiveElements();
   
   long long approximateMemoryCostInBytes = approximateMemoryCostsForMeshTopologies(meshesCoarseToFine);
@@ -440,6 +514,11 @@ int main(int argc, char *argv[])
   double K_denseMatrixSize = (totalTrialDofs * totalTrialDofs * doubleSizeInBytes) / bytesPerMB;
 
   BFPtr bf = solution->mesh()->bilinearForm();
+//  bf->setUseSPDSolveForOptimalTestFunctions(true);
+  
+  int coarseMeshGlobalDofs = meshesCoarseToFine[0]->numGlobalDofs();
+  int coarseMeshNumElements = meshesCoarseToFine[0]->numElements();
+  int coarseMeshTraceDofs = meshesCoarseToFine[0]->numFluxDofs();
   
   double B_sparseMatrixSize = ( bf->nonZeroEntryCount(sampleElementType->trialOrderPtr, sampleElementType->testOrderPtr) * doubleSizeInBytes) / bytesPerMB;
   double G_sparseMatrixSize = ( ip->nonZeroEntryCount(sampleElementType->testOrderPtr) * doubleSizeInBytes) / bytesPerMB;
@@ -448,7 +527,8 @@ int main(int argc, char *argv[])
   {
     cout << setprecision(2);
     cout << "Mesh initialization completed in " << meshInitializationTime << " seconds.  Fine mesh has " << numDofs;
-    cout << " global degrees of freedom on " << numElements << " elements.\n";
+    cout << " global degrees of freedom (" << numTraceDofs << " trace dofs) on " << numElements << " elements.\n";
+    cout << "Coarsest mesh has " << coarseMeshGlobalDofs << " global degrees of freedom (" << coarseMeshTraceDofs << " trace dofs) on " << coarseMeshNumElements << " elements.\n";
     cout << "Approximate (correct within a factor of 2 or so) memory cost for all mesh topologies: " << memoryCostInMB << " MB.\n";
     cout << "Approximate memory cost per element (assuming dense storage): G = " << G_denseMatrixSize << " MB, B = " << B_denseMatrixSize << " MB, K = ";
     cout << K_denseMatrixSize << " MB.\n";
@@ -460,8 +540,10 @@ int main(int argc, char *argv[])
   timer.ResetStartTime();
   bool reuseFactorization = true;
   SolverPtr coarseSolver = Solver::getDirectSolver(reuseFactorization);
-  Teuchos::RCP<GMGSolver> gmgSolver = Teuchos::rcp(new GMGSolver(solution, meshesCoarseToFine, cgMaxIterations, cgTol, coarseSolver));
+  Teuchos::RCP<GMGSolver> gmgSolver = Teuchos::rcp(new GMGSolver(solution, meshesCoarseToFine, cgMaxIterations, cgTol, multigridStrategy, coarseSolver, useCondensedSolve));
+  gmgSolver->setUseConjugateGradient(useConjugateGradient);
   gmgSolver->setAztecOutput(10);
+  gmgSolver->gmgOperator()->setNarrateOnRankZero(logFineOperator,"finest GMGOperator");
   
   double gmgSolverInitializationTime = timer.ElapsedTime();
   if (rank==0)
@@ -479,7 +561,7 @@ int main(int argc, char *argv[])
     cout << "Solve completed in " << solveTime << " seconds.\n";
     cout << "Finest GMGOperator, timing report:\n";
   }
-  gmgSolver->gmgOperator()->reportTimings(StatisticChoice::MAX);
+  gmgSolver->gmgOperator()->reportTimingsSumOfOperators(StatisticChoice::MAX);
   
   return 0;
 }

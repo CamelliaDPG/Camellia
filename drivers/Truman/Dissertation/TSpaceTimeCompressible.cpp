@@ -19,8 +19,8 @@
 #include "BF.h"
 #include "RefinementStrategy.h"
 #include "GMGSolver.h"
-#include "SpaceTimeIncompressibleFormulation.h"
-#include "IncompressibleProblems.h"
+#include "SpaceTimeCompressibleFormulation.h"
+#include "CompressibleProblems.h"
 
 #include <unistd.h>
 #include <sys/types.h>
@@ -46,10 +46,10 @@ int main(int argc, char *argv[])
   Teuchos::CommandLineProcessor cmdp(false,true); // false: don't throw exceptions; true: do return errors for unrecognized options
 
   // problem parameters:
-  int spaceDim = 2;
+  int spaceDim = 1;
   double Re = 40;
   bool steady = false;
-  string problemChoice = "TaylorGreen";
+  string problemChoice = "TrivialCompressible";
   int numRefs = 1;
   int p = 2, delta_p = 2;
   int numXElems = 1;
@@ -57,16 +57,10 @@ int main(int argc, char *argv[])
   int numSlabs = 1;
   bool useConformingTraces = false;
   string solverChoice = "KLU";
-  string multigridStrategyString = "W-cycle";
-  bool useCondensedSolve = false;
-  bool useConjugateGradient = true;
-  bool logFineOperator = false;
-  // double solverTolerance = 1e-8;
+  double solverTolerance = 1e-8;
   double nonlinearTolerance = 1e-5;
-  // int maxLinearIterations = 10000;
+  int maxLinearIterations = 1000;
   int maxNonlinearIterations = 20;
-  int cgMaxIterations = 10000;
-  double cgTol = 1e-8;
   bool computeL2Error = false;
   bool exportSolution = false;
   bool saveSolution = false;
@@ -79,7 +73,7 @@ int main(int argc, char *argv[])
   cmdp.setOption("spaceDim", &spaceDim, "spatial dimension");
   cmdp.setOption("Re", &Re, "Re");
   cmdp.setOption("steady", "transient", &steady, "use steady incompressible Navier-Stokes");
-  cmdp.setOption("problem", &problemChoice, "Kovasznay, TaylorGreen");
+  cmdp.setOption("problem", &problemChoice, "TrivialCompressible, TaylorGreen");
   cmdp.setOption("polyOrder",&p,"polynomial order for field variable u");
   cmdp.setOption("delta_p", &delta_p, "test space polynomial order enrichment");
   cmdp.setOption("numRefs",&numRefs,"number of refinements");
@@ -89,13 +83,9 @@ int main(int argc, char *argv[])
   cmdp.setOption("norm", &norm, "norm");
   cmdp.setOption("conformingTraces", "nonconformingTraces", &useConformingTraces, "use conforming traces");
   cmdp.setOption("solver", &solverChoice, "KLU, SuperLU, MUMPS, GMG-Direct, GMG-ILU, GMG-IC");
-  cmdp.setOption("multigridStrategy", &multigridStrategyString, "Multigrid strategy: V-cycle, W-cycle, Full, or Two-level");
-  cmdp.setOption("useCondensedSolve", "useStandardSolve", &useCondensedSolve);
-  cmdp.setOption("logFineOperator", "dontLogFineOperator", &logFineOperator);
-  cmdp.setOption("CG", "GMRES", &useConjugateGradient);
-  // cmdp.setOption("solverTolerance", &solverTolerance, "iterative solver tolerance");
+  cmdp.setOption("solverTolerance", &solverTolerance, "iterative solver tolerance");
   cmdp.setOption("nonlinearTolerance", &nonlinearTolerance, "nonlinear solver tolerance");
-  // cmdp.setOption("maxLinearIterations", &maxLinearIterations, "maximum number of iterations for linear solver");
+  cmdp.setOption("maxLinearIterations", &maxLinearIterations, "maximum number of iterations for linear solver");
   cmdp.setOption("maxNonlinearIterations", &maxNonlinearIterations, "maximum number of iterations for Newton solver");
   cmdp.setOption("outputDir", &rootDir, "output directory");
   cmdp.setOption("computeL2Error", "skipL2Error", &computeL2Error, "compute L2 error");
@@ -114,12 +104,13 @@ int main(int argc, char *argv[])
     return -1;
   }
 
-  map<string, Teuchos::RCP<IncompressibleProblem>> problems;
-  problems["Kovasznay"] = Teuchos::rcp(new KovasznayProblem(steady, Re));
-  problems["TaylorGreen"] = Teuchos::rcp(new TaylorGreenProblem(steady, Re, numXElems, numSlabs));
-  problems["Cylinder"] = Teuchos::rcp(new CylinderProblem(steady, Re, numSlabs));
-  problems["SquareCylinder"] = Teuchos::rcp(new SquareCylinderProblem(steady, Re, numSlabs));
-  Teuchos::RCP<IncompressibleProblem> problem = problems.at(problemChoice);
+  map<string, Teuchos::RCP<CompressibleProblem>> problems;
+  problems["TrivialCompressible"] = Teuchos::rcp(new TrivialCompressible(steady, Re, spaceDim));
+  problems["SimpleShock"] = Teuchos::rcp(new SimpleShock(steady, Re, spaceDim));
+  problems["SimpleRarefaction"] = Teuchos::rcp(new SimpleRarefaction(steady, Re, spaceDim));
+  problems["Sedov"] = Teuchos::rcp(new Sedov(steady, Re, spaceDim));
+  problems["Noh"] = Teuchos::rcp(new Noh(steady, Re, spaceDim));
+  Teuchos::RCP<CompressibleProblem> problem = problems.at(problemChoice);
 
   // if (commRank == 0)
   // {
@@ -172,14 +163,11 @@ int main(int argc, char *argv[])
     parameters.set("numTElems", numTElems);
     parameters.set("norm", norm);
     parameters.set("savedSolutionAndMeshPrefix", loadFilePrefix);
-    SpaceTimeIncompressibleFormulationPtr form = Teuchos::rcp(new SpaceTimeIncompressibleFormulation(problem, parameters));
+    SpaceTimeCompressibleFormulationPtr form = Teuchos::rcp(new SpaceTimeCompressibleFormulation(problem, parameters));
 
     MeshPtr mesh = form->solutionUpdate()->mesh();
-    vector<MeshPtr> meshesCoarseToFine;
     MeshPtr k0Mesh = Teuchos::rcp( new Mesh (mesh->getTopology()->deepCopy(), form->bf(), 1, delta_p) );
-    meshesCoarseToFine.push_back(k0Mesh);
-    meshesCoarseToFine.push_back(mesh);
-    // mesh->registerObserver(k0Mesh);
+    mesh->registerObserver(k0Mesh);
 
     // Set up boundary conditions
     problem->setBCs(form);
@@ -187,7 +175,7 @@ int main(int argc, char *argv[])
     // Set up solution
     SolutionPtr solutionUpdate = form->solutionUpdate();
     SolutionPtr solutionBackground = form->solutionBackground();
-    // dynamic_cast<AnalyticalIncompressibleProblem*>(problem.get())->projectExactSolution(solutionBackground);
+    // dynamic_cast<AnalyticalCompressibleProblem*>(problem.get())->projectExactSolution(solutionBackground);
 
     RefinementStrategyPtr refStrategy = form->getRefinementStrategy();
     Teuchos::RCP<HDF5Exporter> exporter;
@@ -204,29 +192,7 @@ int main(int argc, char *argv[])
     solvers["MUMPS"] = Solver::getSolver(Solver::MUMPS, true);
 #endif
     bool useStaticCondensation = false;
-
-    GMGOperator::MultigridStrategy multigridStrategy;
-    if (multigridStrategyString == "Two-level")
-    {
-      multigridStrategy = GMGOperator::TWO_LEVEL;
-    }
-    else if (multigridStrategyString == "W-cycle")
-    {
-      multigridStrategy = GMGOperator::W_CYCLE;
-    }
-    else if (multigridStrategyString == "V-cycle")
-    {
-      multigridStrategy = GMGOperator::V_CYCLE;
-    }
-    else if (multigridStrategyString == "Full")
-    {
-      multigridStrategy = GMGOperator::FULL_MULTIGRID;
-    }
-    else
-    {
-      TEUCHOS_TEST_FOR_EXCEPTION(true, std::invalid_argument, "unrecognized multigrid strategy");
-    }
-
+    int azOutput = 20; // print residual every 20 CG iterations
     ofstream dataFile(dataFileLocation);
     dataFile << "ref\t " << "elements\t " << "dofs\t " << "energy\t " << "l2\t " << "solvetime\t" << "iterations\t " << endl;
 
@@ -244,41 +210,41 @@ int main(int argc, char *argv[])
       double l2Update = 1e10;
       int iterCount = 0;
       solverTime->start(true);
-      Teuchos::RCP<GMGSolver> gmgSolver;
-      if (solverChoice[0] == 'G')
+      double linestepSize = 1;
+      while (l2Update > nonlinearTolerance && iterCount < maxNonlinearIterations && linestepSize > 0.01)
       {
-        // gmgSolver = Teuchos::rcp( new GMGSolver(solutionUpdate, k0Mesh, maxLinearIterations, solverTolerance, Solver::getDirectSolver(true), useStaticCondensation));
-        bool reuseFactorization = true;
-        SolverPtr coarseSolver = Solver::getDirectSolver(reuseFactorization);
-        gmgSolver = Teuchos::rcp(new GMGSolver(solutionUpdate, meshesCoarseToFine, cgMaxIterations, cgTol, multigridStrategy, coarseSolver, useCondensedSolve));
-        gmgSolver->setUseConjugateGradient(useConjugateGradient);
-        int azOutput = 20; // print residual every 20 CG iterations
-        gmgSolver->setAztecOutput(azOutput);
-        gmgSolver->gmgOperator()->setNarrateOnRankZero(logFineOperator,"finest GMGOperator");
-
-        // gmgSolver->setAztecOutput(azOutput);
-        // if (solverChoice == "GMG-Direct")
-        //   gmgSolver->gmgOperator()->setSchwarzFactorizationType(GMGOperator::Direct);
-        // if (solverChoice == "GMG-ILU")
-        //   gmgSolver->gmgOperator()->setSchwarzFactorizationType(GMGOperator::ILU);
-        // if (solverChoice == "GMG-IC")
-        //   gmgSolver->gmgOperator()->setSchwarzFactorizationType(GMGOperator::IC);
-      }
-      while (l2Update > nonlinearTolerance && iterCount < maxNonlinearIterations)
-      {
+        Teuchos::RCP<GMGSolver> gmgSolver;
         if (solverChoice[0] == 'G')
+        {
+          gmgSolver = Teuchos::rcp( new GMGSolver(solutionUpdate, k0Mesh, maxLinearIterations, solverTolerance, Solver::getDirectSolver(true), useStaticCondensation));
+          gmgSolver->setAztecOutput(azOutput);
+          if (solverChoice == "GMG-Direct")
+            gmgSolver->gmgOperator()->setSchwarzFactorizationType(GMGOperator::Direct);
+          if (solverChoice == "GMG-ILU")
+            gmgSolver->gmgOperator()->setSchwarzFactorizationType(GMGOperator::ILU);
+          if (solverChoice == "GMG-IC")
+            gmgSolver->gmgOperator()->setSchwarzFactorizationType(GMGOperator::IC);
           solutionUpdate->solve(gmgSolver);
+        }
         else
           solutionUpdate->condensedSolve(solvers[solverChoice]);
 
         // Compute L2 norm of update
+        double rhoL2Update = solutionUpdate->L2NormOfSolutionGlobal(form->rho()->ID());
         double u1L2Update = solutionUpdate->L2NormOfSolutionGlobal(form->u(1)->ID());
-        double u2L2Update = solutionUpdate->L2NormOfSolutionGlobal(form->u(2)->ID());
-        l2Update = sqrt(u1L2Update*u1L2Update + u2L2Update*u2L2Update);
+        double u2L2Update = 0, u3L2Update = 0;
+        if (spaceDim > 1)
+          u2L2Update = solutionUpdate->L2NormOfSolutionGlobal(form->u(2)->ID());
+        if (spaceDim > 2)
+          u3L2Update = solutionUpdate->L2NormOfSolutionGlobal(form->u(3)->ID());
+        double TL2Update = solutionUpdate->L2NormOfSolutionGlobal(form->T()->ID());
+        l2Update = sqrt(rhoL2Update*rhoL2Update
+            + u1L2Update*u1L2Update + u2L2Update*u2L2Update + u3L2Update*u3L2Update
+            + TL2Update*TL2Update);
         if (commRank == 0)
           cout << "Nonlinear Update:\t " << l2Update << endl;
 
-        form->updateSolution();
+        linestepSize = form->updateSolution();
         iterCount++;
       }
       double solveTime = solverTime->stop();
@@ -322,12 +288,7 @@ int main(int argc, char *argv[])
       }
 
       if (refIndex != numRefs)
-      {
-        // k0Mesh = Teuchos::rcp( new Mesh (mesh->getTopology()->deepCopy(), form->bf(), 1, delta_p) );
-        // meshesCoarseToFine.push_back(k0Mesh);
         refStrategy->refine();
-        meshesCoarseToFine.push_back(mesh);
-      }
     }
     dataFile.close();
   }

@@ -63,6 +63,39 @@ vector<double> makeVertex(double v0, double v1, double v2, double v3)
   v.push_back(v3);
   return v;
 }
+  
+  TEUCHOS_UNIT_TEST( Solution, CondensedSolve )
+  {
+    // very simple problem: Poisson with unit load and zero BCs
+    int spaceDim = 1;
+    bool conformingTraces = false;
+    PoissonFormulation form(spaceDim, conformingTraces);
+    double xLeft = 0, xRight = 1;
+    
+    int numCells = 2;
+    int H1Order = 3, delta_k = 1;
+    MeshPtr mesh = MeshFactory::intervalMesh(form.bf(), xLeft, xRight, numCells, H1Order, delta_k);
+
+    RHSPtr rhs = RHS::rhs();
+    rhs->addTerm(1.0 * form.tau());
+    
+    BCPtr bc = BC::bc();
+    bc->addDirichlet(form.phi_hat(), SpatialFilter::allSpace(), Function::zero());
+    
+    SolutionPtr soln = Solution::solution(mesh,bc,rhs,form.bf()->graphNorm());
+    SolutionPtr solnCondensed = Solution::solution(mesh,bc,rhs,form.bf()->graphNorm());
+    solnCondensed->setUseCondensedSolve(true);
+    
+    soln->solve();
+    solnCondensed->solve();
+    
+    FunctionPtr phi = Function::solution(form.phi(), soln);
+    FunctionPtr phiCondensed = Function::solution(form.phi(), solnCondensed);
+    
+    double diff_l2 = (phi - phiCondensed)->l2norm(mesh);
+    double tol = 1e-14;
+    TEST_COMPARE(diff_l2, <, tol);
+  }
 
 TEUCHOS_UNIT_TEST( Solution, ImportOffRankCellData )
 {
