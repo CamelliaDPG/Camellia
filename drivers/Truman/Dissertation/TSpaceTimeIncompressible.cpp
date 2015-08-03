@@ -218,9 +218,13 @@ int main(int argc, char *argv[])
     {
       multigridStrategy = GMGOperator::V_CYCLE;
     }
-    else if (multigridStrategyString == "Full")
+    else if (multigridStrategyString == "Full-V")
     {
-      multigridStrategy = GMGOperator::FULL_MULTIGRID;
+      multigridStrategy = GMGOperator::FULL_MULTIGRID_V;
+    }
+    else if (multigridStrategyString == "Full-W")
+    {
+      multigridStrategy = GMGOperator::FULL_MULTIGRID_W;
     }
     else
     {
