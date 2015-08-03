@@ -70,17 +70,26 @@ private:
   
   // new version:
   void getLocalData(GlobalIndexType cellID, Teuchos::RCP<Epetra_SerialDenseSolver> &fieldSolver,
-                    Epetra_SerialDenseMatrix &D, Epetra_SerialDenseMatrix &B, Epetra_SerialDenseVector &b_field,
+                    Epetra_SerialDenseMatrix &FieldField, Epetra_SerialDenseMatrix &FluxField, Epetra_SerialDenseVector &b_field,
                     Intrepid::FieldContainer<GlobalIndexType> &interpretedDofIndices, set<int> &fieldIndices, set<int> &fluxIndices);
 public:
   CondensedDofInterpreter(MeshPtr mesh, TIPPtr<Scalar> ip, TRHSPtr<Scalar> rhs, LagrangeConstraints* lagrangeConstraints, const set<int> &fieldIDsToExclude, bool storeLocalStiffnessMatrices, std::set<GlobalIndexType> offRankCellsToInclude);
 
   void addSolution(CondensedDofInterpreter* otherSolnDofInterpreter, Scalar weight);
-
-  void computeAndStoreLocalStiffnessAndLoad(GlobalIndexType cellID);
   
-  void reinitialize(); // clear stiffness matrices, etc., and rebuild global dof index map
+  void computeAndStoreLocalStiffnessAndLoad(GlobalIndexType cellID);
 
+  // ! Returns a matrix with shape field x flux for specified cellID, which allows determination of field
+  // ! coefficients from flux coefficients, under the assumption that the field portion of the RHS is 0
+  // ! (a reasonable supposition when doing an iterative solve).
+  Teuchos::RCP<Epetra_SerialDenseMatrix> fluxToFieldMapForIterativeSolves(GlobalIndexType cellID);
+  
+  // ! returns row indices as found in e.g. fluxToFieldMap for the specified field ID
+  std::vector<int> fieldRowIndices(GlobalIndexType cellID, int condensibleVarID);
+  
+  // ! returns a map whose keys are flux indices -- e.g. the column indices of fluxToFieldMap -- and whose values are the corresponding dof indices in the (uncondensed) local cell
+  std::vector<int> fluxIndexLookupLocalCell(GlobalIndexType cellID);
+  
   GlobalIndexType globalDofCount();
   set<GlobalIndexType> globalDofIndicesForPartition(PartitionIndexType rank);
 
@@ -105,9 +114,8 @@ public:
   GlobalIndexType condensedGlobalIndex(GlobalIndexType meshGlobalIndex); // meshGlobalIndex aka interpretedGlobalIndex
 
   set<int> condensibleVariableIDs();
-  
-  bool varDofsAreCondensible(int varID, int sideOrdinal, DofOrderingPtr dofOrdering);
 
+  void reinitialize(); // clear stiffness matrices, etc., and rebuild global dof index map
   void setCanSkipLocalFieldInInterpretGlobalCoefficients(bool value);
   
   void storeLoadForCell(GlobalIndexType cellID, const Intrepid::FieldContainer<Scalar> &load);
@@ -115,6 +123,8 @@ public:
 
   const Intrepid::FieldContainer<Scalar> & storedLocalLoadForCell(GlobalIndexType cellID);
   const Intrepid::FieldContainer<Scalar> & storedLocalStiffnessForCell(GlobalIndexType cellID);
+  
+  bool varDofsAreCondensible(int varID, int sideOrdinal, DofOrderingPtr dofOrdering);
 };
 
 extern template class CondensedDofInterpreter<double>;

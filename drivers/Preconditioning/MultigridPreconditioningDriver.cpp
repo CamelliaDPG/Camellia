@@ -281,18 +281,24 @@ void initializeSolutionAndCoarseMesh(SolutionPtr &solution, vector<MeshPtr> &mes
     else
       meshTopoView = mesh->getTopology()->deepCopy();
         
-    MeshPtr k0Mesh = Teuchos::rcp(new Mesh(meshTopoView, bf, H1Order_coarse, delta_k));
+    k0Mesh = Teuchos::rcp(new Mesh(meshTopoView, bf, H1Order_coarse, delta_k));
     
     meshesCoarseToFine.push_back(k0Mesh);
     meshWidthCells *= 2;
   }
+  
+  // a new experiment: duplicate the finest h-mesh, so that we get a smoother application
+  // that involves just the fine k0 elements.
+  if (k_coarse != k)
+    meshesCoarseToFine.push_back(k0Mesh);
+    
   meshesCoarseToFine.push_back(mesh);
   
   if (meshWidthCells != numCells)
   {
     if (rank == 0)
     {
-      cout << "Warning: may have overrefined mesh; mesh has width " << meshWidthCells << ", not " << numCells << endl;
+      cout << "Warning: may have over-refined mesh; mesh has width " << meshWidthCells << ", not " << numCells << endl;
     }
   }
   
@@ -354,12 +360,17 @@ int main(int argc, char *argv[])
   bool reportTimings = false;
   bool useZeroMeanConstraints = false;
   bool useConjugateGradient = true;
+  bool useDiagonalSchwarzWeighting = false;
   bool logFineOperator = false;
+  
+  bool writeOpToFile = false;
   
   string multigridStrategyString = "W-cycle";
   
   bool pauseOnRankZero = false;
 
+  int azOutput = 10;
+  
   string problemChoiceString = "Poisson";
   string coarseSolverChoiceString = "KLU";
 
@@ -374,8 +385,9 @@ int main(int argc, char *argv[])
 
   cmdp.setOption("CG", "GMRES", &useConjugateGradient);
   
+  cmdp.setOption("azOutput", &azOutput);
   cmdp.setOption("logFineOperator", "dontLogFineOperator", &logFineOperator);
-  cmdp.setOption("multigridStrategy", &multigridStrategyString, "Multigrid strategy: V-cycle, W-cycle, Full, or Two-level");
+  cmdp.setOption("multigridStrategy", &multigridStrategyString, "Multigrid strategy: V-cycle, W-cycle, Full-V, Full-W, or Two-level");
   
   cmdp.setOption("useCondensedSolve", "useStandardSolve", &useCondensedSolve);
   cmdp.setOption("useConformingTraces", "useNonConformingTraces", &conformingTraces);
@@ -388,7 +400,10 @@ int main(int argc, char *argv[])
   cmdp.setOption("pause","dontPause",&pauseOnRankZero, "pause (to allow attachment by tracer, e.g.), waiting for user to press a key");
   cmdp.setOption("reportTimings", "dontReportTimings", &reportTimings, "Report timings in Solution");
 
+  cmdp.setOption("useDiagonalSchwarzWeighting","dontUseDiagonalSchwarzWeighting",&useDiagonalSchwarzWeighting);
   cmdp.setOption("useZeroMeanConstraint", "usePointConstraint", &useZeroMeanConstraints, "Use a zero-mean constraint for the pressure (otherwise, use a vertex constraint at the origin)");
+  
+  cmdp.setOption("writeOpToFile", "dontWriteOpToFile", &writeOpToFile);
 
   if (cmdp.parse(argc,argv) != Teuchos::CommandLineProcessor::PARSE_SUCCESSFUL)
   {
@@ -452,9 +467,15 @@ int main(int argc, char *argv[])
   {
     multigridStrategy = GMGOperator::V_CYCLE;
   }
-  else if (multigridStrategyString == "Full")
+  else if (multigridStrategyString == "Full-W")
   {
-    multigridStrategy = GMGOperator::FULL_MULTIGRID;
+    multigridStrategy = GMGOperator::FULL_MULTIGRID_W;
+    useConjugateGradient = false; // not symmetric
+  }
+  else if (multigridStrategyString == "Full-V")
+  {
+    multigridStrategy = GMGOperator::FULL_MULTIGRID_V;
+    useConjugateGradient = false; // not symmetric
   }
   else
   {
@@ -535,14 +556,23 @@ int main(int argc, char *argv[])
     cout << totalTrialDofs << " trial dofs per element; " << totalTestDofs << " test dofs.\n";
     
     cout << "Approximate memory cost per element (assuming sparse storage): G = " << G_sparseMatrixSize << " MB, B = " << B_sparseMatrixSize << " MB.\n";
+    
+    cout << "Multigrid strategy: " << multigridStrategyString << endl;
+    
+    if (useDiagonalSchwarzWeighting)
+    {
+      cout << "***********************************************************************************************************\n";
+      cout << "** NOTE: USING DIAGONAL SCHWARZ WEIGHTING.  THIS IS EXPERIMENTAL, AS PREVIOUS TESTS HAVE NOT WORKED WELL. *\n";
+      cout << "***********************************************************************************************************\n";
+    }
   }
   
   timer.ResetStartTime();
   bool reuseFactorization = true;
   SolverPtr coarseSolver = Solver::getDirectSolver(reuseFactorization);
-  Teuchos::RCP<GMGSolver> gmgSolver = Teuchos::rcp(new GMGSolver(solution, meshesCoarseToFine, cgMaxIterations, cgTol, multigridStrategy, coarseSolver, useCondensedSolve));
+  Teuchos::RCP<GMGSolver> gmgSolver = Teuchos::rcp(new GMGSolver(solution, meshesCoarseToFine, cgMaxIterations, cgTol, multigridStrategy, coarseSolver, useCondensedSolve,useDiagonalSchwarzWeighting));
   gmgSolver->setUseConjugateGradient(useConjugateGradient);
-  gmgSolver->setAztecOutput(10);
+  gmgSolver->setAztecOutput(azOutput);
   gmgSolver->gmgOperator()->setNarrateOnRankZero(logFineOperator,"finest GMGOperator");
   
   double gmgSolverInitializationTime = timer.ElapsedTime();
@@ -562,6 +592,16 @@ int main(int argc, char *argv[])
     cout << "Finest GMGOperator, timing report:\n";
   }
   gmgSolver->gmgOperator()->reportTimingsSumOfOperators(StatisticChoice::MAX);
+  
+  if (writeOpToFile)
+  {
+    Teuchos::RCP<GMGOperator> op = gmgSolver->gmgOperator();
+    if (rank==0) cout << "writing op to op.dat.\n";
+    EpetraExt::RowMatrixToMatrixMarketFile("op.dat",*op->getMatrixRepresentation(), NULL, NULL, false);
+    
+    if (rank==0) cout << "writing fine stiffness to A.dat.\n";
+    EpetraExt::RowMatrixToMatrixMarketFile("A.dat",*solution->getStiffnessMatrix(), NULL, NULL, false);
+  }
   
   return 0;
 }

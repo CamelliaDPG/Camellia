@@ -3511,13 +3511,19 @@ void TSolution<Scalar>::setSolnCoeffsForCellID(Intrepid::FieldContainer<Scalar> 
     int localDofIndex = trialOrder->getDofIndex(trialID, dofOrdinal, sideIndex);
     _solutionForCellIDGlobal[cellID](localDofIndex) = solnCoeffsToSet[dofOrdinal];
   }
-  Intrepid::FieldContainer<Scalar> globalCoefficients;
-  Intrepid::FieldContainer<GlobalIndexType> globalDofIndices;
-  _mesh->interpretLocalBasisCoefficients(cellID, trialID, sideIndex, solnCoeffsToSet, globalCoefficients, globalDofIndices);
-
-  for (int i=0; i<globalCoefficients.size(); i++)
+  
+  // non-null _oldDofInterpreter is a proxy for having a condensation interpreter
+  // if using static condensation, we skip storing field values
+  if ((_oldDofInterpreter.get() == NULL) || (trialOrder->getNumSidesForVarID(trialID) != 1))
   {
-    _lhsVector->ReplaceGlobalValue((GlobalIndexTypeToCast)globalDofIndices[i], 0, globalCoefficients[i]);
+    Intrepid::FieldContainer<Scalar> globalCoefficients;
+    Intrepid::FieldContainer<GlobalIndexType> globalDofIndices;
+    _dofInterpreter->interpretLocalBasisCoefficients(cellID, trialID, sideIndex, solnCoeffsToSet, globalCoefficients, globalDofIndices);
+
+    for (int i=0; i<globalCoefficients.size(); i++)
+    {
+      _lhsVector->ReplaceGlobalValue((GlobalIndexTypeToCast)globalDofIndices[i], 0, globalCoefficients[i]);
+    }
   }
 
   // could stand to be more granular, maybe, but if we're changing the solution, the present
@@ -4523,8 +4529,16 @@ void TSolution<Scalar>::projectOldCellOntoNewCells(GlobalIndexType cellID,
       // which BasisCache to use depends on whether we want the BasisCache's notion of "physical" space to be in the volume or on the side:
       // we want it to be on the side if parent shares the side (and we therefore have proper trace data)
       // and on the volume in parent doesn't share the side (in which case we use the interior trace map).
-      BasisCachePtr basisCacheForSide = (parentSideOrdinal != -1) ? sideBasisCache[sideOrdinal] : volumeBasisCache->getSideBasisCache(sideOrdinal);
-
+      BasisCachePtr basisCacheForSide;
+      
+      if (parentSideOrdinal != -1)
+      {
+        basisCacheForSide = sideBasisCache[sideOrdinal];
+      }
+      else
+      {
+        basisCacheForSide = volumeBasisCache->getSideBasisCache(sideOrdinal);
+      }
       basisCacheForSide->setCellSideParities(_mesh->cellSideParitiesForCell(childID));
 
       for (typename map<int,TFunctionPtr<Scalar>>::iterator traceFxnIt=traceMapForSide->begin(); traceFxnIt != traceMapForSide->end(); traceFxnIt++)

@@ -15,6 +15,8 @@
 #include "AztecOO.h"
 
 #include "Epetra_Operator_to_Epetra_Matrix.h"
+#include "Epetra_SerialComm.h"
+
 #include "EpetraExt_MatrixMatrix.h"
 #include "EpetraExt_RowMatrixOut.h"
 #include "EpetraExt_MultiVectorOut.h"
@@ -357,6 +359,7 @@ enum ProblemChoice
 {
   Poisson,
   ConvectionDiffusion,
+  ConvectionDiffusionExperimental,
   Stokes,
   NavierStokes
 };
@@ -409,6 +412,8 @@ void initializeSolutionAndCoarseMesh(SolutionPtr &solution, MeshPtr &coarseMesh,
   RHSPtr rhs;
   MeshPtr mesh;
 
+  int rank = Teuchos::GlobalMPISession::getRank();
+  
   double width = 1.0; // in each dimension
   vector<double> x0(spaceDim,0); // origin is the default
 
@@ -489,6 +494,139 @@ void initializeSolutionAndCoarseMesh(SolutionPtr &solution, MeshPtr &coarseMesh,
       bc->addDirichlet(tc, inflowZ, -3*.25*(one-x)*(one-y));
       bc->addDirichlet(uhat, outflowZ, zero);
     }
+    
+//    if (rank==0) cout << "NOTE: TRYING SOMETHING IN ConvectionDiffusion's IP.\n";
+//    
+//    VarPtr tau = formulation.tau();
+//    map<int,double> trialWeights; // leave empty for unit weights (default)
+//    map<int,double> testL2Weights;
+//    testL2Weights[v->ID()] = 1.0;
+//    testL2Weights[tau->ID()] = 1.0 / epsilon;
+//    graphNorm = bf->graphNorm(trialWeights,testL2Weights);
+//    if (rank==0)
+//    {
+//      bf->printTrialTestInteractions();
+//      cout << "RHS: " << rhs->linearTerm()->displayString() << endl;
+//    }
+  }
+  else if (problemChoice == ConvectionDiffusionExperimental)
+  {
+    double epsilon = 1e-2;
+    FunctionPtr beta;
+    FunctionPtr beta_x = Function::constant(1);
+    FunctionPtr beta_y = Function::constant(2);
+    FunctionPtr beta_z = Function::constant(3);
+    if (spaceDim == 1)
+      beta = beta_x;
+    else if (spaceDim == 2)
+      beta = Function::vectorize(beta_x, beta_y);
+    else if (spaceDim == 3)
+      beta = Function::vectorize(beta_x, beta_y, beta_z);
+
+    FunctionPtr zero = Function::zero();
+    FunctionPtr one = Function::constant(1);
+    
+    Space tauSpace = (spaceDim > 1) ? HDIV : HGRAD;
+    Space uhat_space = conformingTraces ? HGRAD : L2;
+    Space vSpace = (spaceDim > 1) ? VECTOR_L2 : L2;
+    
+    // fields
+    VarPtr u;
+    VarPtr sigma;
+    
+    // traces
+    VarPtr uhat, tc;
+    
+    // tests
+    VarPtr v;
+    VarPtr tau;
+    
+    VarFactoryPtr vf = VarFactory::varFactory();
+    u = vf->fieldVar("u");
+    sigma = vf->fieldVar("sigma", vSpace);
+    
+    TFunctionPtr<double> n = TFunction<double>::normal();
+    TFunctionPtr<double> parity = TFunction<double>::sideParity();
+    
+    if (spaceDim > 1)
+      uhat = vf->traceVar("uhat", u, uhat_space);
+    else
+      uhat = vf->fluxVar("uhat", u * (parity * Function::normal_1D()), uhat_space); // for spaceDim==1, the "normal" component is in the flux-ness of uhat (it's a plus or minus 1)
+    
+    
+    if (spaceDim > 1)
+      tc = vf->fluxVar("tc", (beta*u-sigma) * (n * parity));
+    else
+      tc = vf->fluxVar("tc", (beta*u-sigma) * (parity * Function::normal_1D()));
+    
+    v = vf->testVar("v", HGRAD);
+    tau = vf->testVar("tau", tauSpace);
+    
+    bf = Teuchos::rcp( new BF(vf) );
+    
+    if (spaceDim==1)
+    {
+      // for spaceDim==1, the "normal" component is in the flux-ness of uhat (it's a plus or minus 1)
+      bf->addTerm(sigma, tau);
+      bf->addTerm(u * epsilon, tau->dx());
+      bf->addTerm(-epsilon * uhat, tau);
+      
+      bf->addTerm(-beta*u + sigma, v->dx());
+      bf->addTerm(tc, v);
+    }
+    else
+    {
+      // compared with the standard formulation, we multiply all tau terms by epsilon (tau doesn't enter RHS)
+      bf->addTerm(sigma, tau);
+      bf->addTerm(u * epsilon, tau->div());
+      bf->addTerm(-epsilon * uhat, tau->dot_normal());
+      
+      bf->addTerm(-beta*u + sigma, v->grad());
+      bf->addTerm(tc, v);
+    }
+    
+    rhs = RHS::rhs();
+    FunctionPtr f = Function::constant(1.0);
+    
+    rhs->addTerm( f * v );
+    
+    bc = BC::bc();
+    SpatialFilterPtr inflowX = SpatialFilter::matchingX(-1);
+    SpatialFilterPtr inflowY = SpatialFilter::matchingY(-1);
+    SpatialFilterPtr inflowZ = SpatialFilter::matchingZ(-1);
+    SpatialFilterPtr outflowX = SpatialFilter::matchingX(1);
+    SpatialFilterPtr outflowY = SpatialFilter::matchingY(1);
+    SpatialFilterPtr outflowZ = SpatialFilter::matchingZ(1);
+    FunctionPtr x = Function::xn(1);
+    FunctionPtr y = Function::yn(1);
+    FunctionPtr z = Function::zn(1);
+    if (spaceDim == 1)
+    {
+      bc->addDirichlet(tc, inflowX, -one);
+      bc->addDirichlet(uhat, outflowX, zero);
+    }
+    if (spaceDim == 2)
+    {
+      bc->addDirichlet(tc, inflowX, -1*.5*(one-y));
+      bc->addDirichlet(uhat, outflowX, zero);
+      bc->addDirichlet(tc, inflowY, -2*.5*(one-x));
+      bc->addDirichlet(uhat, outflowY, zero);
+    }
+    if (spaceDim == 3)
+    {
+      bc->addDirichlet(tc, inflowX, -1*.25*(one-y)*(one-z));
+      bc->addDirichlet(uhat, outflowX, zero);
+      bc->addDirichlet(tc, inflowY, -2*.25*(one-x)*(one-z));
+      bc->addDirichlet(uhat, outflowY, zero);
+      bc->addDirichlet(tc, inflowZ, -3*.25*(one-x)*(one-y));
+      bc->addDirichlet(uhat, outflowZ, zero);
+    }
+    
+//    if (rank==0)
+//    {
+//      bf->printTrialTestInteractions();
+//      cout << "RHS: " << rhs->linearTerm()->displayString() << endl;
+//    }
   }
   else if (problemChoice == Stokes)
   {
@@ -630,7 +768,8 @@ void initializeSolutionAndCoarseMesh(SolutionPtr &solution, MeshPtr &coarseMesh,
   int H1Order_coarse = k_coarse + 1;
   coarseMesh = Teuchos::rcp(new Mesh(mesh->getTopology(), bf, H1Order_coarse, delta_k));
   
-  graphNorm = bf->graphNorm();
+  if (graphNorm == Teuchos::null) // if set previously, honor that...
+    graphNorm = bf->graphNorm();
 
   solution = Solution::solution(mesh, bc, rhs, graphNorm);
   solution->setUseCondensedSolve(useStaticCondensation);
@@ -642,7 +781,7 @@ void run(ProblemChoice problemChoice, int &iterationCount, int spaceDim, int num
          int schwarzOverlap, GMGOperator::FactorType schwarzBlockFactorization, int schwarzLevelOfFill, double schwarzFillRatio,
          Solver::SolverChoice coarseSolverChoice, double cgTol, int cgMaxIterations, int AztecOutputLevel,
          bool reportTimings, double &solveTime, bool reportEnergyError, int numCellsRootMesh, bool hOnly, bool useZeroMeanConstraints,
-         bool writeAndExit, GMGOperator::SmootherApplicationType comboType, double smootherWeight)
+         bool writeAndExit, GMGOperator::SmootherApplicationType comboType, double smootherWeight, bool useWeightMatrixForSchwarz)
 {
   int rank = Teuchos::GlobalMPISession::getRank();
 
@@ -654,6 +793,11 @@ void run(ProblemChoice problemChoice, int &iterationCount, int spaceDim, int num
     {
       cout << "Too few cells in root mesh.  Aborting.\n";
       exit(1);
+    }
+    int rank = Teuchos::GlobalMPISession::getRank();
+    if (rank == 0)
+    {
+      cout << "Setting numCellsRootMesh = " << numCellsRootMesh << endl;
     }
   }
   else if (numCellsRootMesh == -1)
@@ -801,7 +945,7 @@ void run(ProblemChoice problemChoice, int &iterationCount, int spaceDim, int num
     {
       // then use hierarchical neighbor relationship
       gmgSolver->gmgOperator()->setUseHierarchicalNeighborsForSchwarz(true);
-      if (rank==0) cout << "using new hierarchical Schwarz neighbors option";
+      if (rank==0) cout << "using new hierarchical Schwarz neighbors option\n";
     }
 
 //    GMGSolver* gmgSolver = new GMGSolver(zeroBCs, k0Mesh, graphNorm, mesh, solution->getDofInterpreter(),
@@ -824,6 +968,8 @@ void run(ProblemChoice problemChoice, int &iterationCount, int spaceDim, int num
       gmgSolver->gmgOperator()->setSmootherWeight(smootherWeight);
     else
       gmgSolver->gmgOperator()->setUseSchwarzScalingWeight(true);
+    
+    gmgSolver->gmgOperator()->setUseSchwarzDiagonalWeight(useWeightMatrixForSchwarz);
     
     gmgSolver->gmgOperator()->setDebugMode(runGMGOperatorInDebugMode);
     solver = Teuchos::rcp( gmgSolver ); // we use "new" above, so we can let this RCP own the memory
@@ -925,9 +1071,68 @@ void run(ProblemChoice problemChoice, int &iterationCount, int spaceDim, int num
 
       if (op->getSmootherWeightVector() != Teuchos::null)
       {
-        if (rank==0) cout << "writing smoother weight vector to w.dat\n";
+        if (rank==0) cout << "writing smoother weight vector to w_vector.dat\n";
         Teuchos::RCP<Epetra_MultiVector> w = op->getSmootherWeightVector();
-        EpetraExt::MultiVectorToMatrixMarketFile("w.dat", *w, NULL, NULL, false);
+        EpetraExt::MultiVectorToMatrixMarketFile("w_vector.dat", *w, NULL, NULL, false);
+      }
+      
+      // for now, we just do this on rank 0.  For a big mesh, we might want to distribute this
+      set<GlobalIndexType> myCellIndices = mesh->globalDofAssignment()->cellsInPartition(-1);
+      vector<GlobalIndexTypeToCast> myCellIndicesVector(myCellIndices.begin(),myCellIndices.end());
+      Epetra_MpiComm Comm(MPI_COMM_WORLD);
+      
+      Epetra_Map elemMap(-1, myCellIndicesVector.size(), &myCellIndicesVector[0], 0, Comm);
+      Epetra_CrsMatrix E(::Copy, elemMap, 0);
+      
+      for (GlobalIndexType cellIndex : myCellIndices)
+      {
+        CellPtr cell = mesh->getTopology()->getCell(cellIndex);
+        vector<CellPtr> neighbors = cell->getNeighbors(mesh->getTopology());
+        neighbors.push_back(cell); // for connectivity, cell counts as its own neighbor
+        
+        vector<double> values(neighbors.size(),1.0);
+        vector<GlobalIndexTypeToCast> neighborIndices;
+        for (CellPtr neighbor : neighbors)
+        {
+          neighborIndices.push_back(neighbor->cellIndex());
+        }
+        E.InsertGlobalValues(cellIndex, values.size(), &values[0], &neighborIndices[0]);
+      }
+      E.FillComplete();
+      EpetraExt::RowMatrixToMatrixMarketFile("E.dat",E, NULL, NULL, false);
+      if (rank==0) cout << "wrote fine mesh element connectivity matrix to E.dat.\n";
+      
+      {
+      // some debugging stuff:
+//        Epetra_CrsMatrix identity(::Copy, A->RowMap(), 0);
+        Epetra_CrsMatrix identity(::Copy, A->RowMap(), A->ColMap(), 0);
+        int myRows = identity.RowMap().NumMyElements();
+        int myCols = identity.ColMap().NumMyElements();
+        FieldContainer<GlobalIndexTypeToCast> colLIDs(myCols);
+        for (int LID=0; LID<myCols; LID++)
+        {
+          colLIDs[LID] = LID;
+        }
+        for (int LID=0; LID<myRows; LID++)
+        {
+          FieldContainer<double> myData(myCols);
+          for (int j=0; j<myCols; j++)
+          {
+            if (j==LID) myData(j) = 1.0;
+            else myData(j) = 0.0;
+          }
+          identity.InsertMyValues(LID, myCols, &myData[0], &colLIDs[0]);
+//          cout << "on rank " << rank << ", inserting 1.0 at (" << myGIDs[LID] << "," << myGIDs[LID] << ")\n";
+        }
+        identity.FillComplete();
+        
+        if (rank==0) cout << "writing identity to I.dat.\n";
+        EpetraExt::RowMatrixToMatrixMarketFile("I.dat",identity, NULL, NULL, false);
+        op->setFineStiffnessMatrix(&identity);
+
+        if (rank==0) cout << "writing smoother for identity to W.dat.\n";
+        Teuchos::RCP< Epetra_CrsMatrix > W = op->getSmootherAsMatrix();
+        EpetraExt::RowMatrixToMatrixMarketFile("W.dat",*W, NULL, NULL, false);
       }
       
       return;
@@ -950,7 +1155,8 @@ void runMany(ProblemChoice problemChoice, int spaceDim, int delta_k, int minCell
              Solver::SolverChoice coarseSolverChoice,
              double cgTol, int cgMaxIterations, int aztecOutputLevel, RunManyPreconditionerChoices preconditionerChoices,
              int k, int k_coarse, int overlapLevel, int numCellsRootMesh, bool reportTimings, bool hOnly, int maxCells,
-             bool useZeroMeanConstraints, GMGOperator::SmootherApplicationType comboType, double smootherWeight)
+             bool useZeroMeanConstraints, GMGOperator::SmootherApplicationType comboType, double smootherWeight,
+             bool useWeightMatrixForSchwarz)
 {
   int rank = Teuchos::GlobalMPISession::getRank();
 
@@ -959,10 +1165,14 @@ void runMany(ProblemChoice problemChoice, int spaceDim, int delta_k, int minCell
   {
   case Poisson:
     problemChoiceString = "Poisson";
-    break;
-  case ConvectionDiffusion:
-    problemChoiceString = "ConvectionDiffusion";
-    break;
+      break;
+    case ConvectionDiffusion:
+      problemChoiceString = "ConvectionDiffusion";
+      break;
+      
+    case ConvectionDiffusionExperimental:
+      problemChoiceString = "ConvectionDiffusionExperimental";
+      break;
   case Stokes:
     problemChoiceString = "Stokes";
     break;
@@ -1212,7 +1422,8 @@ void runMany(ProblemChoice problemChoice, int spaceDim, int delta_k, int minCell
                   useStaticCondensation, precondition, schwarzOnly, smoother, overlapValue,
                   schwarzBlockFactorization, schwarzLevelOfFill, schwarzFillRatio, coarseSolverChoice,
                   cgTol, cgMaxIterations, aztecOutputLevel, reportTimings, solveTime,
-                  reportEnergyError, numCellsRootMesh, hOnly, useZeroMeanConstraints, writeAndExit, comboType, smootherWeight);
+                  reportEnergyError, numCellsRootMesh, hOnly, useZeroMeanConstraints, writeAndExit, comboType,
+                  smootherWeight, useWeightMatrixForSchwarz);
 
               int numCells = pow((double)numCells1D, spaceDim);
 
@@ -1236,7 +1447,14 @@ void runMany(ProblemChoice problemChoice, int spaceDim, int delta_k, int minCell
   {
     ostringstream filename;
     filename << problemChoiceString << "Driver" << spaceDim << "D_";
-    filename << preconditionerChoiceString;
+    if ((preconditionerChoiceString == "GMGGeometricSchwarz") && !useWeightMatrixForSchwarz)
+    {
+      filename << "GMGGeometricSchwarzUnweighted";
+    }
+    else
+    {
+      filename << preconditionerChoiceString;
+    }
     if (schwarzBlockFactorization != GMGOperator::Direct)
       filename << "_schwarzFactorization_" << getFactorizationTypeString(schwarzBlockFactorization);
     if (overlapLevel != -1)
@@ -1279,7 +1497,7 @@ int main(int argc, char *argv[])
   _MM_SET_EXCEPTION_MASK(_MM_GET_EXCEPTION_MASK() & ~_MM_MASK_INVALID);
 #endif
 
-  Teuchos::GlobalMPISession mpiSession(&argc, &argv, 0);
+  Teuchos::GlobalMPISession mpiSession(&argc, &argv, NULL);
   int rank = Teuchos::GlobalMPISession::getRank();
 
   runGMGOperatorInDebugMode = false;
@@ -1319,7 +1537,9 @@ int main(int argc, char *argv[])
 
   bool useCondensedSolve = false;
 
-  string smootherChoiceStr = "IfPack-Schwarz";
+  bool useWeightMatrixForSchwarz = true;
+  
+  string smootherChoiceStr = "Camellia-Schwarz";
 
   bool schwarzOnly = false;
 
@@ -1403,6 +1623,8 @@ int main(int argc, char *argv[])
   cmdp.setOption("runManyMaxCells", &maxCells, "Maximum number of cells to use for mesh width");
 
   cmdp.setOption("writeAndExit", "runNormally", &writeAndExit, "Write A, A_coarse, P, and S to disk, and exit without computing anything.");
+  
+  cmdp.setOption("useWeightedSchwarz","useUnweightedSchwarz",&useWeightMatrixForSchwarz, "Use weight matrix ('W' in Fischer and Lottes) to scale Schwarz smoother according to multiplicities.  Only applies to GMG geometric Schwarz.");
 
   cmdp.setOption("useZeroMeanConstraint", "usePointConstraint", &useZeroMeanConstraints, "Use a zero-mean constraint for the pressure (otherwise, use a vertex constraint at the origin)");
 
@@ -1425,6 +1647,10 @@ int main(int argc, char *argv[])
   else if (problemChoiceString == "ConvectionDiffusion")
   {
     problemChoice = ConvectionDiffusion;
+  }
+  else if (problemChoiceString == "ConvectionDiffusionExperimental")
+  {
+    problemChoice = ConvectionDiffusionExperimental;
   }
   else if (problemChoiceString == "Stokes")
   {
@@ -1571,7 +1797,8 @@ int main(int argc, char *argv[])
         useCondensedSolve, precondition, schwarzOnly, smootherChoice, schwarzOverlap,
         schwarzFactorType, levelOfFill, fillRatio, coarseSolverChoice,
         cgTol, cgMaxIterations, AztecOutputLevel, reportTimings, solveTime,
-        reportEnergyError, numCellsRootMesh, hOnly, useZeroMeanConstraints, writeAndExit, comboType, smootherWeight);
+        reportEnergyError, numCellsRootMesh, hOnly, useZeroMeanConstraints, writeAndExit, comboType, smootherWeight,
+        useWeightMatrixForSchwarz);
 
     if (rank==0) cout << "Iteration count: " << iterationCount << "; solve time " << solveTime << " seconds." << endl;
   }
@@ -1598,7 +1825,7 @@ int main(int argc, char *argv[])
             schwarzFactorType, levelOfFill, fillRatio,
             coarseSolverChoice,
             cgTol, cgMaxIterations, AztecOutputLevel,
-            runManySubsetChoice, k, k_coarse, schwarzOverlap, numCellsRootMesh, reportTimings, hOnly, maxCells, useZeroMeanConstraints, comboType, smootherWeight);
+            runManySubsetChoice, k, k_coarse, schwarzOverlap, numCellsRootMesh, reportTimings, hOnly, maxCells, useZeroMeanConstraints, comboType, smootherWeight, useWeightMatrixForSchwarz);
   }
   return 0;
 }

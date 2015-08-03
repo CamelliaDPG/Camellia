@@ -74,6 +74,7 @@ public:
 
   TIPPtr<Scalar> graphNorm(double weightForL2TestTerms = 1.0);
   TIPPtr<Scalar> graphNorm(const map<int, double> &varWeights, double weightForL2TestTerms = 1.0);
+  TIPPtr<Scalar> graphNorm(const map<int, double> &trialVarWeights, const map<int, double> &testVarL2TermWeights);
   TIPPtr<Scalar> l2Norm();
   TIPPtr<Scalar> naiveNorm(int spaceDim);
 

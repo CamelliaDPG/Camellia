@@ -46,7 +46,7 @@ class GMGSolver : public Solver, public Narrator
   
   static Teuchos::RCP<GMGOperator> gmgOperatorFromMeshSequence(const std::vector<MeshPtr> &meshesCoarseToFine, SolutionPtr fineSolution,
                                                                GMGOperator::MultigridStrategy multigridStrategy, SolverPtr coarseSolver,
-                                                               bool useStaticCondensationInCoarseSolve);
+                                                               bool useStaticCondensationInCoarseSolve, bool useDiagonalSchwarzWeighting);
 public:
   GMGSolver(BCPtr zeroBCs, MeshPtr coarseMesh, IPPtr coarseIP, MeshPtr fineMesh, Teuchos::RCP<DofInterpreter> fineDofInterpreter,
             Epetra_Map finePartitionMap, int maxIters, double tol, Teuchos::RCP<Solver> coarseSolver, bool useStaticCondensation);
@@ -55,7 +55,8 @@ public:
             Teuchos::RCP<Solver> coarseSolver = Solver::getDirectSolver(true), bool useStaticCondensation = false);
   GMGSolver(TSolutionPtr<double> fineSolution, const std::vector<MeshPtr> &meshesCoarseToFine, int maxIters, double tol,
             GMGOperator::MultigridStrategy multigridStrategy = GMGOperator::W_CYCLE,
-            Teuchos::RCP<Solver> coarseSolver = Solver::getDirectSolver(true), bool useStaticCondensation = false);
+            Teuchos::RCP<Solver> coarseSolver = Solver::getDirectSolver(true), bool useStaticCondensation = false,
+            bool useDiagonalSchwarzWeighting = false);
 
   double condest();
 

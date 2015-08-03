@@ -61,7 +61,8 @@ public:
     TWO_LEVEL, // aka ADDITIVE
     V_CYCLE,
     W_CYCLE,
-    FULL_MULTIGRID
+    FULL_MULTIGRID_V,
+    FULL_MULTIGRID_W
   };
 private:
   bool _debugMode; // in debug mode, output verbose info about what we're doing on rank 0
@@ -100,7 +101,8 @@ private:
 
   Teuchos::RCP<Epetra_Operator> _smoother;
   double _smootherWeight;
-  Teuchos::RCP<Epetra_MultiVector> _smootherWeight_sqrt;
+  int _smootherApplicationCount; // default to 1, but 2 may often be a better choice (especially when doing more than 2 levels)
+  Teuchos::RCP<Epetra_MultiVector> _smootherDiagonalWeight;
   bool _useSchwarzDiagonalWeight, _useSchwarzScalingWeight; // when true, will set _smootherWeight_sqrt and _smootherWeight during setUpSmoother()
   
   // ! res should hold the RHS on entry, Y the current solution.  On exit, res will have the updated residual, and A_Y A * Y
@@ -229,7 +231,7 @@ public:
    
    \return Integer error code, set to 0 if successful.
    */
-  int ApplySmoother(const Epetra_MultiVector& X, Epetra_MultiVector& Y) const;
+  int ApplySmoother(const Epetra_MultiVector& X, Epetra_MultiVector& Y, bool weightOnLeft) const;
   
   //! Returns the infinity norm of the global matrix.
   /* Returns the quantity \f$ \| A \|_\infty\f$ such that
@@ -279,6 +281,9 @@ public:
   void setDebugMode(bool value);
 
   void setSchwarzFactorizationType(FactorType choice);
+
+  // ! Sets the number of times the smoother will be applied when it is applied.  (For multigrid strategies other than TWO_LEVEL, it is applied this many times before and after each application of the coarse operator.)
+  void setSmootherApplicationCount(int count);
   
   // ! When set to MULTIPLICATIVE, will compute new residuals before and after the coarse solve.  Done in such a way as to preserve symmetry.
   void setSmootherApplicationType(SmootherApplicationType value);
@@ -314,6 +319,9 @@ public:
   void setUseHierarchicalNeighborsForSchwarz(bool value);
   //@}
 
+  //! Returns the fine mesh
+  MeshPtr getFineMesh() const;
+  
   //! Returns the fine stiffness matrix
   Epetra_CrsMatrix* getFineStiffnessMatrix();
   
@@ -325,6 +333,9 @@ public:
 
   //! Constructs and returns an Epetra_CrsMatrix for the smoother.  Note that this can be an expensive operation.  Primarily intended for testing.
   Teuchos::RCP<Epetra_CrsMatrix> getSmootherAsMatrix();
+  
+  //! Returns the number of times the smoother will be applied when it is applied.
+  int getSmootherApplicationCount() const;
 
   //! Returns the coarse stiffness matrix (an Epetra_CrsMatrix).
   Teuchos::RCP<Epetra_CrsMatrix> getCoarseStiffnessMatrix();

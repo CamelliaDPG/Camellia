@@ -344,7 +344,8 @@ void Boundary::bcsToImpose( map<  GlobalIndexType, Scalar > &globalDofIndicesAnd
 
     int dofOrdinal;
 
-    if (basis->getCardinality() > 1)
+    int basisCardinality = basis->getCardinality();
+    if (basisCardinality > 1)
     {
       TensorBasis<>* tensorBasis = dynamic_cast<TensorBasis<>*>(basis.get());
 
@@ -381,6 +382,8 @@ void Boundary::bcsToImpose( map<  GlobalIndexType, Scalar > &globalDofIndicesAnd
                                                        Camellia::FUNCTION_SPACE_HGRAD);
       }
 
+      TEUCHOS_TEST_FOR_EXCEPTION(basis->getCardinality() != basisCardinality, std::invalid_argument, "internal error: continuous basis cardinality differs from that of the original basis");
+      
       std::set<int> dofOrdinals = basis->dofOrdinalsForVertex(vertexOrdinal);
       if (dofOrdinals.size() != 1)
       {
@@ -393,7 +396,6 @@ void Boundary::bcsToImpose( map<  GlobalIndexType, Scalar > &globalDofIndicesAnd
     {
       dofOrdinal = 0;
     }
-    int basisCardinality = basis->getCardinality();
     FieldContainer<double> basisCoefficients(basisCardinality);
     basisCoefficients[dofOrdinal] = 1.0;
     FieldContainer<double> globalCoefficients; // we'll ignore this

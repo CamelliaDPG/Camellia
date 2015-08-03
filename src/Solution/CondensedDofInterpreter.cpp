@@ -61,7 +61,8 @@ CondensedDofInterpreter<Scalar>::CondensedDofInterpreter(MeshPtr mesh, TIPPtr<Sc
 
   if (offRankCellsToInclude.size() > 0)
   {
-    cout << "Note: CondensedDofInterpreter initialized with offRankCellsToInclude.size() > 0.  This is still experimental, and may have bugs (TODO: add tests to GMGSolverTests and/or GMGOperatorTests).\n";
+    // 7-23-15: turning off this warning.  We do now have a couple tests in GMGOperator which exercise this when run on multiple MPI ranks.  (These pass.)
+//    cout << "Note: CondensedDofInterpreter initialized with offRankCellsToInclude.size() > 0.  This is still experimental, and may have bugs (TODO: add tests to GMGSolverTests and/or GMGOperatorTests).\n";
   }
   
   initializeGlobalDofIndices();
@@ -116,7 +117,7 @@ void CondensedDofInterpreter<Scalar>::getLocalData(GlobalIndexType cellID, Field
 
 template <typename Scalar>
 void CondensedDofInterpreter<Scalar>::getLocalData(GlobalIndexType cellID, Teuchos::RCP<Epetra_SerialDenseSolver> &fieldSolver,
-                                                   Epetra_SerialDenseMatrix &B, Epetra_SerialDenseMatrix &D, Epetra_SerialDenseVector &b_field,
+                                                   Epetra_SerialDenseMatrix &FieldField, Epetra_SerialDenseMatrix &FieldFlux, Epetra_SerialDenseVector &b_field,
                                                    FieldContainer<GlobalIndexType> &interpretedDofIndices, set<int> &fieldIndices, set<int> &fluxIndices)
 {
   if (_localStiffnessMatrices.find(cellID) == _localStiffnessMatrices.end())
@@ -157,7 +158,7 @@ void CondensedDofInterpreter<Scalar>::getLocalData(GlobalIndexType cellID, Teuch
   
   Epetra_SerialDenseMatrix fluxMat;
   Epetra_SerialDenseVector b_flux;
-  getSubmatrices(fieldIndices, fluxIndices, K, D, B, fluxMat);
+  getSubmatrices(fieldIndices, fluxIndices, K, FieldField, FieldFlux, fluxMat);
   
 //  cout << "rhs for cell " << cellID << ":\n" << rhs;
 //  print("fieldIndices",fieldIndices);
@@ -168,9 +169,10 @@ void CondensedDofInterpreter<Scalar>::getLocalData(GlobalIndexType cellID, Teuch
 //  cout << "b_field:\n" << b_field;
 //  cout << "b_flux:\n" << b_flux;
   
-  // solve for field dofs
   fieldSolver = Teuchos::rcp( new Epetra_SerialDenseSolver());
-  fieldSolver->SetMatrix(D);
+  fieldSolver->SetMatrix(FieldField);
+  
+//  cout << "FieldField:\n" << FieldField;
 }
 
 template <typename Scalar>
@@ -184,31 +186,25 @@ void CondensedDofInterpreter<Scalar>::getSubmatrices(set<int> fieldIndices, set<
   K_flux.Reshape(numFluxDofs,numFluxDofs);
   K_coupl.Reshape(numFieldDofs,numFluxDofs); // upper right hand corner matrix - symmetry gets the other
 
-  set<int>::iterator dofIt1;
-  set<int>::iterator dofIt2;
-
   int i,j,j_flux,j_field;
   i = 0;
-  for (dofIt1 = fieldIndices.begin(); dofIt1!=fieldIndices.end(); dofIt1++)
+  for (int fieldRowIndex : fieldIndices)
   {
-    int rowInd = *dofIt1;
     j_flux = 0;
     j_field = 0;
 
     // get block field matrices
-    for (dofIt2 = fieldIndices.begin(); dofIt2!=fieldIndices.end(); dofIt2++)
+    for (int fieldColIndex : fieldIndices)
     {
-      int colInd = *dofIt2;
       //      cout << "rowInd, colInd = " << rowInd << ", " << colInd << endl;
-      K_field(i,j_field) = K(rowInd,colInd);
+      K_field(i,j_field) = K(fieldRowIndex,fieldColIndex);
       j_field++;
     }
 
     // get field/flux couplings
-    for (dofIt2 = fluxIndices.begin(); dofIt2!=fluxIndices.end(); dofIt2++)
+    for (int fluxColIndex : fluxIndices)
     {
-      int colInd = *dofIt2;
-      K_coupl(i,j_flux) = K(rowInd,colInd);
+      K_coupl(i,j_flux) = K(fieldRowIndex,fluxColIndex);
       j_flux++;
     }
     i++;
@@ -216,14 +212,12 @@ void CondensedDofInterpreter<Scalar>::getSubmatrices(set<int> fieldIndices, set<
 
   // get flux coupling terms
   i = 0;
-  for (dofIt1 = fluxIndices.begin(); dofIt1!=fluxIndices.end(); dofIt1++)
+  for (int fluxRowIndex : fluxIndices)
   {
-    int rowInd = *dofIt1;
     j = 0;
-    for (dofIt2 = fluxIndices.begin(); dofIt2!=fluxIndices.end(); dofIt2++)
+    for (int fluxColIndex : fluxIndices)
     {
-      int colInd = *dofIt2;
-      K_flux(i,j) = K(rowInd,colInd);
+      K_flux(i,j) = K(fluxRowIndex,fluxColIndex);
       j++;
     }
     i++;
@@ -283,6 +277,126 @@ set<int> CondensedDofInterpreter<Scalar>::condensibleVariableIDs()
     }
   }
   return condensibleVariableIDs;
+}
+
+template <typename Scalar>
+vector<int> CondensedDofInterpreter<Scalar>::fieldRowIndices(GlobalIndexType cellID, int condensibleVarID)
+{
+  // this is not a particularly efficient way of doing this, but it's not likely to add up to much total expense
+  DofOrderingPtr trialOrder = _mesh->getElementType(cellID)->trialOrderPtr;
+
+  // the way we order field dof indices is according to their index order in the local uncondensed stiffness matrix
+  
+  set<int> fieldIndices; // all field indices for the cell
+  set<int> trialIDs = trialOrder->getVarIDs();
+  for (int trialID : trialIDs)
+  {
+    const vector<int>* sides = &trialOrder->getSidesForVarID(trialID);
+    for (vector<int>::const_iterator sideIt = sides->begin(); sideIt != sides->end(); sideIt++)
+    {
+      int sideOrdinal = *sideIt;
+      vector<int> varIndices = trialOrder->getDofIndices(trialID, sideOrdinal);
+      if (varDofsAreCondensible(trialID, sideOrdinal, trialOrder))
+      {
+        fieldIndices.insert(varIndices.begin(), varIndices.end());
+      }
+    }
+  }
+
+  vector<int> rowIndices;
+  const vector<int>* sides = &trialOrder->getSidesForVarID(condensibleVarID);
+  TEUCHOS_TEST_FOR_EXCEPTION(sides->size() != 1, std::invalid_argument, "got request for condensible var ID with multiple sides");
+  for (int sideOrdinal : *sides)
+  {
+    vector<int> varIndices = trialOrder->getDofIndices(condensibleVarID, sideOrdinal);
+    for (int dofIndexForBasisOrdinal : varIndices)
+    {
+      int row = 0;
+      for (int fieldDofIndex : fieldIndices)
+      {
+        if (fieldDofIndex == dofIndexForBasisOrdinal)
+        {
+          rowIndices.push_back(row);
+          break;
+        }
+        row++;
+      }
+    }
+    TEUCHOS_TEST_FOR_EXCEPTION(rowIndices.size() != varIndices.size(), std::invalid_argument, "Internal error: number of rowIndices does not match the number of varIndices");
+  }
+  return rowIndices;
+}
+
+
+template <typename Scalar>
+std::vector<int> CondensedDofInterpreter<Scalar>::fluxIndexLookupLocalCell(GlobalIndexType cellID)
+{
+  DofOrderingPtr trialOrder = _mesh->getElementType(cellID)->trialOrderPtr;
+  
+  // the way we order field dof indices is according to their index order in the local uncondensed stiffness matrix
+  set<int> fluxIndices; // all field indices for the cell
+  set<int> trialIDs = trialOrder->getVarIDs();
+  for (int trialID : trialIDs)
+  {
+    const vector<int>* sides = &trialOrder->getSidesForVarID(trialID);
+    for (vector<int>::const_iterator sideIt = sides->begin(); sideIt != sides->end(); sideIt++)
+    {
+      int sideOrdinal = *sideIt;
+      vector<int> varIndices = trialOrder->getDofIndices(trialID, sideOrdinal);
+      if (!varDofsAreCondensible(trialID, sideOrdinal, trialOrder))
+      {
+        fluxIndices.insert(varIndices.begin(), varIndices.end());
+      }
+    }
+  }
+  
+  vector<int> fluxIndicesVector(fluxIndices.begin(),fluxIndices.end());
+  return fluxIndicesVector;
+}
+
+template <typename Scalar>
+Teuchos::RCP<Epetra_SerialDenseMatrix> CondensedDofInterpreter<Scalar>::fluxToFieldMapForIterativeSolves(GlobalIndexType cellID)
+{
+  // if K_11 is the field-field part of the local stiffness matrix, and K_12 is the field-flux part,
+  // return -K_11^(-1) * K_12
+  set<int> fieldIndices, fluxIndices; // which are fields and which are fluxes in the local cell coefficients
+  
+  Epetra_SerialDenseVector b_field;
+  
+  FieldContainer<Scalar> K,rhs;
+  FieldContainer<GlobalIndexType> interpretedDofIndices;
+  
+  Teuchos::RCP<Epetra_SerialDenseSolver> fieldSolver;
+  Epetra_SerialDenseMatrix FieldField, FieldFlux;
+  
+  getLocalData(cellID, fieldSolver, FieldField, FieldFlux, b_field, interpretedDofIndices, fieldIndices, fluxIndices);
+  
+  Teuchos::RCP<Epetra_SerialDenseMatrix> fluxToFieldMap = Teuchos::rcp( new Epetra_SerialDenseMatrix(fieldIndices.size(),fluxIndices.size()) );
+
+  fieldSolver->SetVectors(*fluxToFieldMap, FieldFlux);
+  
+  bool didEquilibriate = false;
+  if (fieldSolver->ShouldEquilibrate())
+  {
+    fieldSolver->EquilibrateMatrix();
+    fieldSolver->EquilibrateRHS();
+    didEquilibriate = true;
+  }
+  
+  int err = fieldSolver->Solve();
+  if (err != 0)
+  {
+    cout << "WARNING: in CondensedDofInterpreter, fieldSolver returned error code " << err << endl;
+  }
+  if (didEquilibriate)
+  {
+    fieldSolver->UnequilibrateLHS();
+  }
+  
+  // negate
+  fluxToFieldMap->Scale(-1.0);
+  
+  return fluxToFieldMap;
 }
 
 template <typename Scalar>
@@ -792,7 +906,7 @@ void CondensedDofInterpreter<Scalar>::interpretGlobalCoefficients(GlobalIndexTyp
   Teuchos::RCP<Epetra_SerialDenseSolver> fieldSolver;
   Epetra_SerialDenseMatrix B, D;
   if (! _skipLocalFields)
-    getLocalData(cellID, fieldSolver, B, D, b_field, interpretedDofIndices, fieldIndices, fluxIndices);
+    getLocalData(cellID, fieldSolver, D, B, b_field, interpretedDofIndices, fieldIndices, fluxIndices);
   else
   {
     if (_localStiffnessMatrices.find(cellID) == _localStiffnessMatrices.end())

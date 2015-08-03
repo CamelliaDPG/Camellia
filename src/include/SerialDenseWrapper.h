@@ -233,6 +233,26 @@ public:
     return 0;
   }
   
+  static void filterMatrix(Intrepid::FieldContainer<double> &filteredMatrix, const Intrepid::FieldContainer<double> &matrix,
+                           const std::set<int> &rowOrdinals, const std::set<int> &colOrdinals)
+  {
+    TEUCHOS_TEST_FOR_EXCEPTION(matrix.rank() != 2, std::invalid_argument, "matrix must have rank 2");
+    
+    filteredMatrix.resize(rowOrdinals.size(), colOrdinals.size());
+    
+    int i=0;
+    for (int rowOrdinal : rowOrdinals)
+    {
+      int j=0;
+      for (int colOrdinal : colOrdinals)
+      {
+        filteredMatrix(i,j) = matrix(rowOrdinal,colOrdinal);
+        j++;
+      }
+      i++;
+    }
+  }
+  
   static bool matrixIsSymmetric(Intrepid::FieldContainer<double> &A, double relTol = 1e-12, double absTol = 1e-14)
   {
     TEUCHOS_TEST_FOR_EXCEPTION(A.rank() != 2, std::invalid_argument, "A must have rank 2");
