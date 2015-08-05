@@ -105,6 +105,7 @@ SpaceTimeIncompressibleFormulation::SpaceTimeIncompressibleFormulation(Teuchos::
 
   _vf = VarFactory::varFactory();
 
+
   if (spaceDim == 1)
   {
     u1 = _vf->fieldVar(s_u1);
@@ -127,8 +128,15 @@ SpaceTimeIncompressibleFormulation::SpaceTimeIncompressibleFormulation(Teuchos::
     p = _vf->fieldVar(s_p);
     u1hat = _vf->traceVarSpaceOnly(s_u1hat, 1.0 * u1, uHatSpace);
     u2hat = _vf->traceVarSpaceOnly(s_u2hat, 1.0 * u2, uHatSpace);
+
+    // LinearTermPtr tm1_lt, tm2_lt;
+    // tm1_lt = p * n_x->x() - sigma11 * n_x->x() - sigma12 * n_x->y();
+    // tm2_lt = p * n_x->y() - sigma21 * n_x->x() - sigma22 * n_x->y();
+    // tm1hat = _vf->fluxVar(s_tm1hat, tm1_lt);
+    // tm2hat = _vf->fluxVar(s_tm2hat, tm2_lt);
     tm1hat = _vf->fluxVar(s_tm1hat);
     tm2hat = _vf->fluxVar(s_tm2hat);
+
     v1 = _vf->testVar(s_v1, HGRAD);
     v2 = _vf->testVar(s_v2, HGRAD);
     tau1 = _vf->testVar(s_tau1, HDIV); // vector
@@ -326,10 +334,10 @@ SpaceTimeIncompressibleFormulation::SpaceTimeIncompressibleFormulation(Teuchos::
   _rhs->addTerm( u2_prev * u1_prev*v2->dx() );
   _rhs->addTerm( u2_prev * u2_prev*v2->dy() );
 
-  // _rhs->addTerm( u1_prev*u1_prev*n_x->x() * v1 );
-  // _rhs->addTerm( u2_prev*u1_prev*n_x->y() * v1 );
-  // _rhs->addTerm( u2_prev*u1_prev*n_x->x() * v2 );
-  // _rhs->addTerm( u2_prev*u2_prev*n_x->y() * v2 );
+  // _rhs->addTerm( -u1_prev*u1_prev*n_x->x() * v1 );
+  // _rhs->addTerm( -u2_prev*u1_prev*n_x->y() * v1 );
+  // _rhs->addTerm( -u2_prev*u1_prev*n_x->x() * v2 );
+  // _rhs->addTerm( -u2_prev*u2_prev*n_x->y() * v2 );
 
   // continuity equation
   _rhs->addTerm( u1_prev*q->dx());
@@ -414,7 +422,7 @@ SpaceTimeIncompressibleFormulation::SpaceTimeIncompressibleFormulation(Teuchos::
   _mesh->registerSolution(_solutionBackground);
   _mesh->registerSolution(_solutionUpdate);
 
-  LinearTermPtr residual = _rhs->linearTerm() - _bf->testFunctional(_solutionUpdate,false); // false: don't exclude boundary terms
+  LinearTermPtr residual = _rhs->linearTerm() - _bf->testFunctional(_solutionUpdate, false); // false: don't exclude boundary terms
 
   // double energyThreshold = 0.2;
   double energyThreshold = 0;

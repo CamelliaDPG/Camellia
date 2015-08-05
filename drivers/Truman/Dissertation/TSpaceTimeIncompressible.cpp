@@ -115,7 +115,7 @@ int main(int argc, char *argv[])
   }
 
   map<string, Teuchos::RCP<IncompressibleProblem>> problems;
-  problems["ManufacturedSolution"] = Teuchos::rcp(new ManufacturedSolution(steady, Re));
+  problems["ManufacturedSolution"] = Teuchos::rcp(new IncompressibleManufacturedSolution(steady, Re));
   problems["Kovasznay"] = Teuchos::rcp(new KovasznayProblem(steady, Re));
   problems["TaylorGreen"] = Teuchos::rcp(new TaylorGreenProblem(steady, Re, numXElems, numSlabs));
   problems["Cylinder"] = Teuchos::rcp(new CylinderProblem(steady, Re, numSlabs));

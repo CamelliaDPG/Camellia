@@ -1,4 +1,5 @@
 
+#include "MeshFactory.h"
 #include "Function.h"
 #include "SpatialFilter.h"
 #include "ExpFunction.h"
@@ -143,13 +144,14 @@ class AnalyticalIncompressibleProblem : public IncompressibleProblem
     }
 };
 
-class ManufacturedSolution : public AnalyticalIncompressibleProblem
+class IncompressibleManufacturedSolution : public AnalyticalIncompressibleProblem
 {
   private:
   public:
-    ManufacturedSolution(bool steady, double Re)
+    IncompressibleManufacturedSolution(bool steady, double Re)
     {
       _steady = steady;
+      FunctionPtr zero = Function::zero();
       FunctionPtr x = Function::xn(1);
       FunctionPtr y = Function::yn(1);
       _u1_exact = x * x * y;
