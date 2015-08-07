@@ -105,6 +105,7 @@ SpaceTimeIncompressibleFormulation::SpaceTimeIncompressibleFormulation(Teuchos::
 
   _vf = VarFactory::varFactory();
 
+
   if (spaceDim == 1)
   {
     u1 = _vf->fieldVar(s_u1);
@@ -127,8 +128,15 @@ SpaceTimeIncompressibleFormulation::SpaceTimeIncompressibleFormulation(Teuchos::
     p = _vf->fieldVar(s_p);
     u1hat = _vf->traceVarSpaceOnly(s_u1hat, 1.0 * u1, uHatSpace);
     u2hat = _vf->traceVarSpaceOnly(s_u2hat, 1.0 * u2, uHatSpace);
+
+    // LinearTermPtr tm1_lt, tm2_lt;
+    // tm1_lt = p * n_x->x() - sigma11 * n_x->x() - sigma12 * n_x->y();
+    // tm2_lt = p * n_x->y() - sigma21 * n_x->x() - sigma22 * n_x->y();
+    // tm1hat = _vf->fluxVar(s_tm1hat, tm1_lt);
+    // tm2hat = _vf->fluxVar(s_tm2hat, tm2_lt);
     tm1hat = _vf->fluxVar(s_tm1hat);
     tm2hat = _vf->fluxVar(s_tm2hat);
+
     v1 = _vf->testVar(s_v1, HGRAD);
     v2 = _vf->testVar(s_v2, HGRAD);
     tau1 = _vf->testVar(s_tau1, HDIV); // vector
@@ -205,8 +213,13 @@ SpaceTimeIncompressibleFormulation::SpaceTimeIncompressibleFormulation(Teuchos::
   H1Order[1] = fieldPolyOrder + 1; // for now, use same poly. degree for temporal bases...
   if (savedSolutionAndMeshPrefix == "")
   {
+    map<int,int> trialOrderEnhancements;
+    // trialOrderEnhancements[tm1hat->ID()] = fieldPolyOrder;
+    // trialOrderEnhancements[tm2hat->ID()] = fieldPolyOrder;
+    // trialOrderEnhancements[u1hat->ID()] = fieldPolyOrder;
+    // trialOrderEnhancements[u2hat->ID()] = fieldPolyOrder;
     // MeshPtr proxyMesh = Teuchos::rcp( new Mesh(meshTopo->deepCopy(), _bf, H1Order, delta_p) ) ;
-    _mesh = Teuchos::rcp( new Mesh(meshTopo, _bf, H1Order, delta_p) ) ;
+    _mesh = Teuchos::rcp( new Mesh(meshTopo, _bf, H1Order, delta_p, trialOrderEnhancements) ) ;
     if (meshGeometry != Teuchos::null)
       _mesh->setEdgeToCurveMap(meshGeometry->edgeToCurveMap());
     // problem->preprocessMesh(_mesh);
@@ -219,6 +232,20 @@ SpaceTimeIncompressibleFormulation::SpaceTimeIncompressibleFormulation(Teuchos::
     map<int, FunctionPtr> initialGuess;
     initialGuess[u(1)->ID()] = problem->u1_exact();
     initialGuess[u(2)->ID()] = problem->u2_exact();
+    initialGuess[sigma(1,1)->ID()] = problem->sigma1_exact()->x();
+    initialGuess[sigma(1,2)->ID()] = problem->sigma1_exact()->y();
+    initialGuess[sigma(2,1)->ID()] = problem->sigma2_exact()->x();
+    initialGuess[sigma(2,2)->ID()] = problem->sigma2_exact()->y();
+    initialGuess[p()->ID()] = problem->p_exact();
+    initialGuess[uhat(1)->ID()] = problem->u1_exact();
+    initialGuess[uhat(2)->ID()] = problem->u2_exact();
+    initialGuess[tmhat(1)->ID()] =
+      (problem->u1_exact()*problem->u1_exact()-problem->sigma1_exact()->x()+problem->p_exact())*n_x->x()
+      + (problem->u1_exact()*problem->u2_exact()-problem->sigma1_exact()->y())*n_x->y();
+    initialGuess[tmhat(2)->ID()] =
+      (problem->u1_exact()*problem->u2_exact()-problem->sigma2_exact()->x())*n_x->x()
+      + (problem->u2_exact()*problem->u2_exact()-problem->sigma2_exact()->y()+problem->p_exact())*n_x->y();
+
     _solutionBackground->projectOntoMesh(initialGuess);
   }
   else
@@ -275,6 +302,10 @@ SpaceTimeIncompressibleFormulation::SpaceTimeIncompressibleFormulation(Teuchos::
 
     _bf->addTerm(tm1hat, v1);
     _bf->addTerm(tm2hat, v2);
+    // _bf->addTerm(2*u1_prev*u1hat*n_x->x(), v1);
+    // _bf->addTerm((u2_prev*u1hat+u1_prev*u2hat)*n_x->y(), v1);
+    // _bf->addTerm((u2_prev*u1hat+u1_prev*u2hat)*n_x->x(), v2);
+    // _bf->addTerm(2*u2_prev*u2hat*n_x->y(), v2);
 
     // continuity equation
     _bf->addTerm(-u1, q->dx());
@@ -302,6 +333,11 @@ SpaceTimeIncompressibleFormulation::SpaceTimeIncompressibleFormulation(Teuchos::
   _rhs->addTerm( u1_prev * u2_prev*v1->dy() );
   _rhs->addTerm( u2_prev * u1_prev*v2->dx() );
   _rhs->addTerm( u2_prev * u2_prev*v2->dy() );
+
+  // _rhs->addTerm( -u1_prev*u1_prev*n_x->x() * v1 );
+  // _rhs->addTerm( -u2_prev*u1_prev*n_x->y() * v1 );
+  // _rhs->addTerm( -u2_prev*u1_prev*n_x->x() * v2 );
+  // _rhs->addTerm( -u2_prev*u2_prev*n_x->y() * v2 );
 
   // continuity equation
   _rhs->addTerm( u1_prev*q->dx());
@@ -369,23 +405,27 @@ SpaceTimeIncompressibleFormulation::SpaceTimeIncompressibleFormulation(Teuchos::
   _ips["NSDecoupledH1"]->addTerm(q);
 
   IPPtr ip = _ips.at(norm);
-  if (problem->forcingTerm != Teuchos::null)
-    _rhs->addTerm(problem->forcingTerm);
+  if (problem->forcingFunction != Teuchos::null)
+  {
+    _rhs->addTerm(problem->forcingFunction->x() * v1);
+    _rhs->addTerm(problem->forcingFunction->y() * v2);
+  }
 
   _solutionUpdate->setRHS(_rhs);
   _solutionUpdate->setIP(ip);
 
   // impose zero mean constraint
-  if (problem->imposeZeroMeanPressure())
-    _solutionUpdate->bc()->imposeZeroMeanConstraint(p->ID());
+  // if (problem->imposeZeroMeanPressure())
+  //   _solutionUpdate->bc()->imposeZeroMeanConstraint(p->ID());
   // _solutionUpdate->bc()->singlePointBC(p->ID());
 
   _mesh->registerSolution(_solutionBackground);
   _mesh->registerSolution(_solutionUpdate);
 
-  LinearTermPtr residual = _rhs->linearTerm() - _bf->testFunctional(_solutionUpdate,false); // false: don't exclude boundary terms
+  LinearTermPtr residual = _rhs->linearTerm() - _bf->testFunctional(_solutionUpdate, false); // false: don't exclude boundary terms
 
-  double energyThreshold = 0.2;
+  // double energyThreshold = 0.2;
+  double energyThreshold = 0;
   _refinementStrategy = Teuchos::rcp( new RefinementStrategy( _mesh, residual, ip, energyThreshold ) );
 }
 

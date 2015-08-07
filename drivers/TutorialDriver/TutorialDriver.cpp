@@ -14,8 +14,11 @@
 #endif
 
 #include "BF.h"
+#include "RHS.h"
 
 #include "RefinementStrategy.h"
+
+using namespace Camellia;
 
 int main(int argc, char *argv[])
 {

@@ -97,7 +97,7 @@ int main(int argc, char *argv[])
   cmdp.setOption("nonlinearTolerance", &nonlinearTolerance, "nonlinear solver tolerance");
   // cmdp.setOption("maxLinearIterations", &maxLinearIterations, "maximum number of iterations for linear solver");
   cmdp.setOption("maxNonlinearIterations", &maxNonlinearIterations, "maximum number of iterations for Newton solver");
-  cmdp.setOption("outputDir", &rootDir, "output directory");
+  cmdp.setOption("exportDir", &rootDir, "export directory");
   cmdp.setOption("computeL2Error", "skipL2Error", &computeL2Error, "compute L2 error");
   cmdp.setOption("exportSolution", "skipExport", &exportSolution, "export solution to HDF5");
   cmdp.setOption("saveSolution", "skipSave", &saveSolution, "save mesh and solution to HDF5");
@@ -115,6 +115,7 @@ int main(int argc, char *argv[])
   }
 
   map<string, Teuchos::RCP<IncompressibleProblem>> problems;
+  problems["ManufacturedSolution"] = Teuchos::rcp(new IncompressibleManufacturedSolution(steady, Re));
   problems["Kovasznay"] = Teuchos::rcp(new KovasznayProblem(steady, Re));
   problems["TaylorGreen"] = Teuchos::rcp(new TaylorGreenProblem(steady, Re, numXElems, numSlabs));
   problems["Cylinder"] = Teuchos::rcp(new CylinderProblem(steady, Re, numSlabs));
@@ -218,9 +219,13 @@ int main(int argc, char *argv[])
     {
       multigridStrategy = GMGOperator::V_CYCLE;
     }
-    else if (multigridStrategyString == "Full")
+    else if (multigridStrategyString == "Full-V")
     {
-      multigridStrategy = GMGOperator::FULL_MULTIGRID;
+      multigridStrategy = GMGOperator::FULL_MULTIGRID_V;
+    }
+    else if (multigridStrategyString == "Full-W")
+    {
+      multigridStrategy = GMGOperator::FULL_MULTIGRID_W;
     }
     else
     {

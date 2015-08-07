@@ -1,10 +1,12 @@
 
+#include "MeshFactory.h"
 #include "Function.h"
 #include "SpatialFilter.h"
 #include "ExpFunction.h"
 #include "TrigFunctions.h"
 #include "PenaltyConstraints.h"
 #include "SpaceTimeIncompressibleFormulation.h"
+#include "NavierStokesVGPFormulation.h"
 
 namespace Camellia
 {
@@ -16,6 +18,7 @@ class IncompressibleProblem
     FunctionPtr _u2_exact;
     FunctionPtr _sigma1_exact;
     FunctionPtr _sigma2_exact;
+    FunctionPtr _p_exact;
     double _tInit;
     double _tFinal;
     int _numSlabs = 1;
@@ -23,9 +26,12 @@ class IncompressibleProblem
     bool _steady;
     bool _pureVelocityBCs = true;
   public:
-    LinearTermPtr forcingTerm = Teuchos::null;
+    FunctionPtr forcingFunction = Teuchos::null;
     FunctionPtr u1_exact() { return _u1_exact; }
     FunctionPtr u2_exact() { return _u2_exact; }
+    FunctionPtr sigma1_exact() { return _sigma1_exact; }
+    FunctionPtr sigma2_exact() { return _sigma2_exact; }
+    FunctionPtr p_exact() { return _p_exact; }
     virtual MeshTopologyPtr meshTopology(int temporalDivisions=1) = 0;
     virtual MeshGeometryPtr meshGeometry() { return Teuchos::null; }
     virtual void preprocessMesh(MeshPtr proxyMesh) {};
@@ -94,6 +100,7 @@ class AnalyticalIncompressibleProblem : public IncompressibleProblem
       bc->addDirichlet(form->uhat(2), leftY,    _exactMap[form->uhat(2)->ID()]);
       bc->addDirichlet(form->uhat(1), rightY,   _exactMap[form->uhat(1)->ID()]);
       bc->addDirichlet(form->uhat(2), rightY,   _exactMap[form->uhat(2)->ID()]);
+      bc->addZeroMeanConstraint(form->p());
       if (!_steady)
       {
         bc->addDirichlet(form->tmhat(1),initTime,-_exactMap[form->uhat(1)->ID()]);
@@ -131,7 +138,37 @@ class AnalyticalIncompressibleProblem : public IncompressibleProblem
       sigma21_l2 = sigma21_sqr->integrate(solutionBackground->mesh(), 5);
       sigma22_l2 = sigma22_sqr->integrate(solutionBackground->mesh(), 5);
       double l2Error = sqrt(u1_l2+u2_l2+sigma11_l2+sigma12_l2+sigma21_l2+sigma22_l2);
+      // double l2Error = sqrt(u1_l2+u2_l2);
+      // double l2Error = sqrt(sigma11_l2+sigma12_l2+sigma21_l2+sigma22_l2);
       return l2Error;
+    }
+};
+
+class IncompressibleManufacturedSolution : public AnalyticalIncompressibleProblem
+{
+  private:
+  public:
+    IncompressibleManufacturedSolution(bool steady, double Re)
+    {
+      _steady = steady;
+      FunctionPtr zero = Function::zero();
+      FunctionPtr x = Function::xn(1);
+      FunctionPtr y = Function::yn(1);
+      _u1_exact = x * x * y;
+      _u2_exact = -x * y * y;
+      _sigma1_exact = 1./Re*_u1_exact->grad();
+      _sigma2_exact = 1./Re*_u2_exact->grad();
+      _p_exact = y * y * y;
+      forcingFunction = NavierStokesVGPFormulation::forcingFunction(2, Re, Function::vectorize(_u1_exact,_u2_exact), _p_exact);
+
+      _x0.push_back(-.5);
+      _x0.push_back(-.5);
+      _dimensions.push_back(1.);
+      _dimensions.push_back(1.);
+      _elementCounts.push_back(2);
+      _elementCounts.push_back(2);
+      _tInit = 0.0;
+      _tFinal = 0.5;
     }
 };
 
