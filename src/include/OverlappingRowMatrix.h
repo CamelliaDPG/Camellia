@@ -403,6 +403,9 @@ public:
                         Epetra_MultiVector& X,
                         Epetra_CombineMode CM = Add);
 
+  // ! returns the set of cells that overlap the provided cell
+  static std::set<GlobalIndexType> overlappingCells(GlobalIndexType cellID, MeshPtr mesh, int overlapLevel, bool hierarchical);
+  
 private:
   inline const Epetra_RowMatrix& A() const
   {
@@ -447,11 +450,14 @@ private:
   void BuildMap(int OverlapLevel_in);
 
   template<typename int_type>
+  void BuildMap(const set<GlobalIndexType> &rowIndices); // new, experimental: setup a map for all rows indicated...
+  
+  template<typename int_type>
   void BuildMap(int OverlapLevel_in, const set<GlobalIndexType> &rowIndices, bool filterByRowIndices = true);
 
   template<typename int_type>
   void BuildMap(int OverlapLevel_in, MeshPtr mesh, Teuchos::RCP<DofInterpreter> dofInterpreter, bool hierarchical);
-
+  
 }; // class OverlappingRowMatrix
 
 } // namespace Camellia
