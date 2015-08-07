@@ -80,6 +80,9 @@ public:
   //!! MPI-communicating method.  Must be called on all ranks.
   virtual std::set<GlobalIndexType> importGlobalIndicesForCells(const std::vector<GlobalIndexType> &cellIDs);
 
+  //!! MPI-communicating method.  Must be called on all ranks.  Keys are cellIDs (the ones requested), values the global dof indices with support on that cell.
+  virtual std::map<GlobalIndexType,std::set<GlobalIndexType>> importGlobalIndicesMap(const std::set<GlobalIndexType> &cellIDs);
+  
   virtual ~DofInterpreter() {}
 };
 }
