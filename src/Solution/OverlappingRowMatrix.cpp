@@ -47,30 +47,27 @@ void OverlappingRowMatrix::BuildMap(int OverlapLevel_in, MeshPtr mesh, Teuchos::
 {
   // Camellia revision/addition: determine the cell neighbors according to the overlap level
   std::set<GlobalIndexType> allCells = mesh->cellIDsInPartition();
-  if (! hierarchical)
+  std::set<GlobalIndexType> lastNeighbors = allCells;
+  for (int overlap = 0 ; overlap < OverlapLevel_in ; ++overlap)
   {
-    std::set<GlobalIndexType> lastNeighbors = allCells;
-    for (int overlap = 0 ; overlap < OverlapLevel_in ; ++overlap)
+    std::set<GlobalIndexType> cellNeighbors;
+    for (std::set<GlobalIndexType>::iterator cellIDIt = lastNeighbors.begin(); cellIDIt != lastNeighbors.end(); cellIDIt++)
     {
-      std::set<GlobalIndexType> cellNeighbors;
-      for (std::set<GlobalIndexType>::iterator cellIDIt = lastNeighbors.begin(); cellIDIt != lastNeighbors.end(); cellIDIt++)
+      CellPtr cell = mesh->getTopology()->getCell(*cellIDIt);
+      int numSides = cell->getSideCount();
+      for (int sideOrdinal=0; sideOrdinal<numSides; sideOrdinal++)
       {
-        CellPtr cell = mesh->getTopology()->getCell(*cellIDIt);
-        int numSides = cell->getSideCount();
-        for (int sideOrdinal=0; sideOrdinal<numSides; sideOrdinal++)
+        pair<GlobalIndexType, unsigned> neighborInfo = cell->getNeighborInfo(sideOrdinal,mesh->getTopology());
+        if (neighborInfo.first != -1)   // -1 indicates boundary/no neighbor
         {
-          pair<GlobalIndexType, unsigned> neighborInfo = cell->getNeighborInfo(sideOrdinal,mesh->getTopology());
-          if (neighborInfo.first != -1)   // -1 indicates boundary/no neighbor
-          {
-            cellNeighbors.insert(neighborInfo.first);
-          }
+          cellNeighbors.insert(neighborInfo.first);
         }
       }
-      allCells.insert(cellNeighbors.begin(), cellNeighbors.end());
-      lastNeighbors = cellNeighbors;
     }
+    allCells.insert(cellNeighbors.begin(), cellNeighbors.end());
+    lastNeighbors = cellNeighbors;
   }
-  else
+  if (hierarchical)
   {
     // get ancestors up to overlap level above our cells:
     std::set<GlobalIndexType> ancestors = allCells;
@@ -95,14 +92,24 @@ void OverlappingRowMatrix::BuildMap(int OverlapLevel_in, MeshPtr mesh, Teuchos::
       previousAncestors = ancestors;
     }
     // now, get all the descendants in ancestors:
-    allCells.clear();
+    set<GlobalIndexType> descendantCells;
     for (std::set<GlobalIndexType>::iterator cellIDIt = ancestors.begin(); cellIDIt != ancestors.end();
          cellIDIt++)
     {
       GlobalIndexType cellID = *cellIDIt;
       CellPtr cell = mesh->getTopology()->getCell(cellID);
       std::set<GlobalIndexType> descendants = cell->getDescendants(mesh->getTopology());
-      allCells.insert(descendants.begin(),descendants.end());
+      descendantCells.insert(descendants.begin(),descendants.end());
+    }
+    // finally, INTERSECT with the allCells given by standard neighbor thing
+    set<GlobalIndexType> neighborCells = allCells;
+    allCells.clear();
+    for (GlobalIndexType descendantCell : descendantCells)
+    {
+      if (neighborCells.find(descendantCell) != neighborCells.end())
+      {
+        allCells.insert(descendantCell);
+      }
     }
   }
   std::vector<GlobalIndexType> allCellsVector(allCells.begin(),allCells.end());
@@ -313,30 +320,29 @@ std::set<GlobalIndexType> OverlappingRowMatrix::overlappingCells(GlobalIndexType
                                                                  int overlapLevel, bool hierarchical)
 {
   set<GlobalIndexType> cells = {cellID};
-  if (! hierarchical)
+  
+  // new version
+  std::set<GlobalIndexType> lastNeighbors = cells;
+  for (int overlap = 0 ; overlap < overlapLevel ; ++overlap)
   {
-    std::set<GlobalIndexType> lastNeighbors = cells;
-    for (int overlap = 0 ; overlap < overlapLevel ; ++overlap)
+    std::set<GlobalIndexType> cellNeighbors;
+    for (std::set<GlobalIndexType>::iterator cellIDIt = lastNeighbors.begin(); cellIDIt != lastNeighbors.end(); cellIDIt++)
     {
-      std::set<GlobalIndexType> cellNeighbors;
-      for (std::set<GlobalIndexType>::iterator cellIDIt = lastNeighbors.begin(); cellIDIt != lastNeighbors.end(); cellIDIt++)
+      CellPtr cell = mesh->getTopology()->getCell(*cellIDIt);
+      int numSides = cell->getSideCount();
+      for (int sideOrdinal=0; sideOrdinal<numSides; sideOrdinal++)
       {
-        CellPtr cell = mesh->getTopology()->getCell(*cellIDIt);
-        int numSides = cell->getSideCount();
-        for (int sideOrdinal=0; sideOrdinal<numSides; sideOrdinal++)
+        pair<GlobalIndexType, unsigned> neighborInfo = cell->getNeighborInfo(sideOrdinal,mesh->getTopology());
+        if (neighborInfo.first != -1)   // -1 indicates boundary/no neighbor
         {
-          pair<GlobalIndexType, unsigned> neighborInfo = cell->getNeighborInfo(sideOrdinal,mesh->getTopology());
-          if (neighborInfo.first != -1)   // -1 indicates boundary/no neighbor
-          {
-            cellNeighbors.insert(neighborInfo.first);
-          }
+          cellNeighbors.insert(neighborInfo.first);
         }
       }
-      cells.insert(cellNeighbors.begin(), cellNeighbors.end());
-      lastNeighbors = cellNeighbors;
     }
+    cells.insert(cellNeighbors.begin(), cellNeighbors.end());
+    lastNeighbors = cellNeighbors;
   }
-  else
+  if (hierarchical)
   {
     // get ancestors up to overlap level above our cells:
     std::set<GlobalIndexType> ancestors = cells;
@@ -361,14 +367,24 @@ std::set<GlobalIndexType> OverlappingRowMatrix::overlappingCells(GlobalIndexType
       previousAncestors = ancestors;
     }
     // now, get all the descendants in ancestors:
-    cells.clear();
+    set<GlobalIndexType> descendantCells;
     for (std::set<GlobalIndexType>::iterator cellIDIt = ancestors.begin(); cellIDIt != ancestors.end();
          cellIDIt++)
     {
       GlobalIndexType cellID = *cellIDIt;
       CellPtr cell = mesh->getTopology()->getCell(cellID);
       std::set<GlobalIndexType> descendants = cell->getDescendants(mesh->getTopology());
-      cells.insert(descendants.begin(),descendants.end());
+      descendantCells.insert(descendants.begin(),descendants.end());
+    }
+    // finally, INTERSECT with the allCells given by standard neighbor thing
+    set<GlobalIndexType> neighborCells = cells;
+    cells.clear();
+    for (GlobalIndexType descendantCell : descendantCells)
+    {
+      if (neighborCells.find(descendantCell) != neighborCells.end())
+      {
+        cells.insert(descendantCell);
+      }
     }
   }
   return cells;
