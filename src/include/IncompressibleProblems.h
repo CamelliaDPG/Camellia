@@ -148,7 +148,7 @@ class IncompressibleManufacturedSolution : public AnalyticalIncompressibleProble
 {
   private:
   public:
-    IncompressibleManufacturedSolution(bool steady, double Re)
+    IncompressibleManufacturedSolution(bool steady, double Re, int numXElems)
     {
       _steady = steady;
       FunctionPtr zero = Function::zero();
@@ -165,8 +165,8 @@ class IncompressibleManufacturedSolution : public AnalyticalIncompressibleProble
       _x0.push_back(-.5);
       _dimensions.push_back(1.);
       _dimensions.push_back(1.);
-      _elementCounts.push_back(2);
-      _elementCounts.push_back(2);
+      _elementCounts.push_back(numXElems);
+      _elementCounts.push_back(numXElems);
       _tInit = 0.0;
       _tFinal = 0.5;
     }
