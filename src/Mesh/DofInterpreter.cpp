@@ -234,3 +234,58 @@ std::set<GlobalIndexType> DofInterpreter::importGlobalIndicesForCells(const std:
 
   return dofIndicesSet;
 }
+
+map<GlobalIndexType,set<GlobalIndexType>> DofInterpreter::importGlobalIndicesMap(const set<GlobalIndexType> &cellIDs)
+{
+  /*
+   First implementation of this calls importGlobalIndicesForCells repeatedly (with max. one cell requested per rank).
+   
+   This is not optimal, but it's relatively easy to get right, and in initial use this method will not likely
+   be a bottleneck.  (The better way would be to do it all in one go, and have a data format that indicates which
+   global indices belong to which cells.  But that would be more effort to implement.)
+   
+   */
+  
+#ifdef HAVE_MPI
+  Epetra_MpiComm Comm(MPI_COMM_WORLD);
+#else
+  Epetra_SerialComm Comm;
+#endif
+  
+  map<GlobalIndexType,set<GlobalIndexType>> globalIndicesMap;
+  
+  int myCount, maxGlobalCount; // always 0 or 1: how many cells we're asking for, whether anyone is still asking for a cell
+  
+  set<GlobalIndexType>::iterator cellIDIt = cellIDs.begin();
+  
+  do {
+    GlobalIndexType cellID;
+    vector<GlobalIndexType> myRequest;
+    if (cellIDIt != cellIDs.end())
+    {
+      myCount = 1;
+      cellID = *cellIDIt++;
+      myRequest = {cellID};
+    }
+    else
+    {
+      myCount = 0;
+      myRequest = {};
+    }
+    Comm.MaxAll(&myCount, &maxGlobalCount, 1);
+    
+    if (maxGlobalCount > 0)
+    {
+      set<GlobalIndexType> globalIndicesForMyCell = this->importGlobalIndicesForCells(myRequest);
+//      { // DEBUGGING
+//        int rank = Teuchos::GlobalMPISession::getRank();
+//        ostringstream label;
+//        label << "rank " << rank << ", cell " << cellID << " globalDofIndices received";
+//        print(label.str(), globalIndicesForMyCell);
+//      }
+      if (myCount > 0) globalIndicesMap[cellID] = globalIndicesForMyCell;
+    }
+  } while (maxGlobalCount > 0);
+  
+  return globalIndicesMap;
+}

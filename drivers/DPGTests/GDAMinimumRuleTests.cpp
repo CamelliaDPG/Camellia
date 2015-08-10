@@ -774,12 +774,7 @@ bool GDAMinimumRuleTests::subTestCompatibleSolutionsAgree(int horizontalCells, i
       maxRuleSoln->mesh()->hRefine(cellIDsMaxRule, RefinementPattern::regularRefinementPatternQuad());
     }
 
-    minRuleSoln->mesh()->bilinearForm()->setUseSPDSolveForOptimalTestFunctions(true); // trying something... (we're seeing a floating point exception when this is false, presumably due to a division by zero...)
-
     minRuleSoln->solve();
-
-    maxRuleSoln->mesh()->bilinearForm()->setUseSPDSolveForOptimalTestFunctions(true); // trying something... (we're seeing a floating point exception when this is false, presumably due to a division by zero...)
-
     maxRuleSoln->solve();
 
     VarFactoryPtr vf = maxRuleSoln->mesh()->bilinearForm()->varFactory();
