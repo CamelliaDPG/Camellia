@@ -1152,7 +1152,7 @@ void HDF5Exporter::getPoints(Intrepid::FieldContainer<double> &points, CellTopoP
 
   points.resize(numPoints,topoDim);
   if (topoDim == 0)
-    points.resize(numPoints);
+    points.resize(numPoints,1);
   switch (cellTopoKey)
   {
   case shards::Node::key:
