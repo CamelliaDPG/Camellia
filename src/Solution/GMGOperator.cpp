@@ -684,10 +684,15 @@ LocalDofMapperPtr GMGOperator::getLocalCoefficientMap(GlobalIndexType fineCellID
                 unsigned coarseSubcellOrdinal = 0, coarseDomainOrdinal = 0; // the volume
                 unsigned coarseSubcellPermutation = 0;
                 unsigned fineSubcellOrdinalInFineDomain = 0; // the side is the whole fine domain...
-                SubBasisReconciliationWeights weights = _br.computeConstrainedWeightsForTermTraced(termTraced, varTracedID,
-                                                                                                   sideDim, fineBasis, fineSubcellOrdinalInFineDomain, refBranch, sideOrdinal,
-                                                                                                   ancestor->topology(),
-                                                                                                   spaceDim, coarseBasis, coarseSubcellOrdinal, coarseDomainOrdinal, coarseSubcellPermutation);
+                SubBasisReconciliationWeights weights = _br.constrainedWeightsForTermTraced(termTraced, varTracedID,
+                                                                                            sideDim, fineBasis, fineSubcellOrdinalInFineDomain, refBranch, sideOrdinal,
+                                                                                            ancestor->topology(),
+                                                                                            spaceDim, coarseBasis, coarseSubcellOrdinal, coarseDomainOrdinal, coarseSubcellPermutation);
+
+//                SubBasisReconciliationWeights weights = _br.computeConstrainedWeightsForTermTraced(termTraced, varTracedID,
+//                                                                                                   sideDim, fineBasis, fineSubcellOrdinalInFineDomain, refBranch, sideOrdinal,
+//                                                                                                   ancestor->topology(),
+//                                                                                                   spaceDim, coarseBasis, coarseSubcellOrdinal, coarseDomainOrdinal, coarseSubcellPermutation);
                 set<unsigned> fineDofOrdinals(weights.fineOrdinals.begin(),weights.fineOrdinals.end());
                 
                 vector<GlobalIndexType> coarseDofIndices;
@@ -1596,7 +1601,7 @@ void GMGOperator::setUpSmoother(Epetra_CrsMatrix *fineStiffnessMatrix)
 
     List.set("relaxation: type", "symmetric Gauss-Seidel");
     List.set("relaxation: sweeps", sweeps);
-    List.set("amesos: solver type", "Amesos_Klu");
+    List.set("amesos: solver type", "Amesos_Klu"); // default
 
     List.set("partitioner: overlap", overlapBlocks);
 #ifdef HAVE_IFPACK_METIS
@@ -1619,6 +1624,8 @@ void GMGOperator::setUpSmoother(Epetra_CrsMatrix *fineStiffnessMatrix)
 //      cout << "Using additive Schwarz smoother.\n";
     int OverlapLevel = _smootherOverlap;
 
+//    List.set("amesos: solver type", "Amesos_Lapack");
+    
     if (choice==IFPACK_ADDITIVE_SCHWARZ)
     {
       switch (_schwarzBlockFactorizationType)
@@ -1913,6 +1920,11 @@ void GMGOperator::setUseHierarchicalNeighborsForSchwarz(bool value)
 Teuchos::RCP<Epetra_CrsMatrix> GMGOperator::getProlongationOperator()
 {
   return _P;
+}
+
+Teuchos::RCP<Epetra_Operator> GMGOperator::getSmoother() const
+{
+  return _smoother;
 }
 
 Teuchos::RCP<Epetra_CrsMatrix> GMGOperator::getSmootherAsMatrix()

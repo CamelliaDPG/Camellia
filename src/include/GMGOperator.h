@@ -105,9 +105,6 @@ private:
   Teuchos::RCP<Epetra_MultiVector> _smootherDiagonalWeight;
   bool _useSchwarzDiagonalWeight, _useSchwarzScalingWeight; // when true, will set _smootherWeight_sqrt and _smootherWeight during setUpSmoother()
   
-  // ! res should hold the RHS on entry, Y the current solution.  On exit, res will have the updated residual, and A_Y A * Y
-  void computeResidual(const Epetra_MultiVector& Y, Epetra_MultiVector& res, Epetra_MultiVector& A_Y) const;
-  
   void reportTimings(StatisticChoice whichStat, bool sumAllOperators) const;
   
 public: // promoted these two to public for testing purposes:
@@ -176,7 +173,10 @@ public:
   void reportTimingsSumOfOperators(StatisticChoice whichStat) const;
   std::map<string, double> timingReport() const;
   std::map<string, double> timingReportSumOfOperators() const;
-
+  
+  // ! res should hold the RHS on entry, Y the current solution.  On exit, res will have the updated residual, and A_Y will have A * Y
+  void computeResidual(const Epetra_MultiVector& Y, Epetra_MultiVector& res, Epetra_MultiVector& A_Y) const;
+  
   void constructLocalCoefficientMaps(); // we'll do this lazily if this is not called; this is mostly a way to separate out the time costs
 
   void computeCoarseStiffnessMatrix(Epetra_CrsMatrix *fineStiffnessMatrix);
@@ -293,6 +293,8 @@ public:
   
   // ! When set to true, will scale using the inverse of the maximum eigenvalue of the Schwarz smoother times the fine matrix.  Currently only supported for CAMELLIA_ADDITIVE_SCHWARZ smoothers.
   void setUseSchwarzScalingWeight(bool value);
+  
+  Teuchos::RCP<Epetra_Operator> getSmoother() const;
   
   SmootherChoice getSmootherType();
   
