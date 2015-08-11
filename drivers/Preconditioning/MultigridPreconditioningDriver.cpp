@@ -591,7 +591,7 @@ int main(int argc, char *argv[])
   if (rank==0)
   {
     cout << "Solve completed in " << solveTime << " seconds.\n";
-    cout << "Total time, including GMGSolver initialization (but not mesh construction): " << solveTime + gmgSolverInitializationTime << "seconds.\n";
+    cout << "Total time, including GMGSolver initialization (but not mesh construction): " << solveTime + gmgSolverInitializationTime << " seconds.\n";
     cout << "Finest GMGOperator, timing report:\n";
   }
   gmgSolver->gmgOperator()->reportTimingsSumOfOperators(StatisticChoice::MAX);
