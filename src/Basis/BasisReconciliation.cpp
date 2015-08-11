@@ -441,7 +441,7 @@ SubBasisReconciliationWeights BasisReconciliation::computeConstrainedWeights(uns
 
 //  SerialDenseMatrixUtility::solveSystemMultipleRHS(weights.weights, lhsValues, rhsValues);
   
-  int err = SerialDenseWrapper::solveSystemMultipleRHS(weights.weights, lhsValues, rhsValues);
+  int err = SerialDenseWrapper::solveSPDSystemMultipleRHS(weights.weights, lhsValues, rhsValues);
   if (err != 0)
   {
     cout << "ERROR: solve for BasisReconciliation returned error code " << err << endl;
@@ -537,7 +537,7 @@ SubBasisReconciliationWeights BasisReconciliation::computeConstrainedWeights(uns
 
 //  SerialDenseMatrixUtility::solveSystemMultipleRHS(weights.weights, lhsValues, rhsValues);
   
-  int err = SerialDenseWrapper::solveSystemMultipleRHS(weights.weights, lhsValues, rhsValues);
+  int err = SerialDenseWrapper::solveSPDSystemMultipleRHS(weights.weights, lhsValues, rhsValues);
   if (err != 0)
   {
     cout << "ERROR: solve for BasisReconciliation returned error code " << err << endl;
@@ -654,7 +654,7 @@ SubBasisReconciliationWeights BasisReconciliation::computeConstrainedWeightsForT
 
 //  SerialDenseMatrixUtility::solveSystemMultipleRHS(weights.weights, lhsValues, rhsValues);
   
-  int err = SerialDenseWrapper::solveSystemMultipleRHS(weights.weights, lhsValues, rhsValues);
+  int err = SerialDenseWrapper::solveSPDSystemMultipleRHS(weights.weights, lhsValues, rhsValues);
   if (err != 0)
   {
     cout << "ERROR: solve for BasisReconciliation returned error code " << err << endl;
