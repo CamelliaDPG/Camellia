@@ -49,17 +49,25 @@ private:
   // this is the only map that actually needs to remain, after the code simplification described above...
   map< pair< SubcellRefinedBasisPair, Permutation> , SubBasisReconciliationWeights > _subcellReconcilationWeights;
 
-  // trace to field reconciliation:
-  // we do need a separate container for maps from fields to traces, because each can have a distinct LinearTerm describing
-  // the relationship of the trace to the fields
-  // in the _termTracedSubcellReconcilationWeights map below, notes:
-  // - key to outer map is the pointer contained in termTraced.
-  // - key to the inner map:
-  //   - key.first: the variable ID of the field variable in the LinearTerm.
-  //   - key.second.first: the SubcellRefinedBasisPair
-  //   - key.second.second: the permutation of the fine cell's ancestor relative to what is seen by the coarse basis
-  map< LinearTerm*, map< pair<int, pair< SubcellRefinedBasisPair, Permutation > >, SubBasisReconciliationWeights > > _termTracedSubcellReconcilationWeights;
+//  // trace to field reconciliation:
+//  // we do need a separate container for maps from fields to traces, because each can have a distinct LinearTerm describing
+//  // the relationship of the trace to the fields
+//  // in the _termTracedSubcellReconcilationWeights map below, notes:
+//  // - key to outer map is the pointer contained in termTraced.
+//  // - key to the inner map:
+//  //   - key.first: the variable ID of the field variable in the LinearTerm.
+//  //   - key.second.first: the SubcellRefinedBasisPair
+//  //   - key.second.second: the permutation of the fine cell's ancestor relative to what is seen by the coarse basis
+//  map< LinearTerm*, map< pair<int, pair< SubcellRefinedBasisPair, Permutation > >, SubBasisReconciliationWeights > > _termTracedSubcellReconcilationWeights;
 
+  // trying something else for trace to field, to allow more reuse when multiple linear terms are in the same relationship to fields and traces:
+  typedef pair< SubcellRefinedBasisPair, Permutation> PermutedRefinedBasisPair;
+  typedef pair<unsigned, unsigned> FineCoarseDomainOrdinalPair;
+  typedef pair< PermutedRefinedBasisPair, FineCoarseDomainOrdinalPair > PermutedRefinedBasisPairDomainOrdinals;
+  typedef vector<pair<Function*, Camellia::EOperator>> FieldOps; // the Function* thing is *NOT* perfectly safe; this is a reason that BasisReconciliation's cache should not live too long -- Function could change underneath (as with Solution functions) or could even be deleted and replaced by a different function in the same memory location.
+  typedef pair<PermutedRefinedBasisPairDomainOrdinals, FieldOps> TermTracedCacheKey;
+  map<TermTracedCacheKey, SubBasisReconciliationWeights> _termsTraced;
+  
   static Intrepid::FieldContainer<double> filterBasisValues(const Intrepid::FieldContainer<double> &basisValues, std::set<int> &filter);
 
   static SubBasisReconciliationWeights filterToInclude(std::set<int> &rowOrdinals, std::set<int> &colOrdinals, SubBasisReconciliationWeights &weights);
@@ -83,6 +91,18 @@ public:
       RefinementBranch &refinements,
       BasisPtr coarserBasis, unsigned coarserBasisSubcellOrdinal,
       unsigned vertexNodePermutation);  // vertexNodePermutation: how to permute the subcell vertices as seen by finerBasis to get the one seen by coarserBasis.
+  
+  const SubBasisReconciliationWeights &constrainedWeightsForTermTraced(LinearTermPtr termTraced, int fieldID,
+                                                                       unsigned fineSubcellDimension,
+                                                                       BasisPtr finerBasis,
+                                                                       unsigned fineSubcellOrdinalInFineDomain,
+                                                                       RefinementBranch &cellRefinementBranch, // i.e. ref. branch is in volume, even for skeleton domains
+                                                                       unsigned fineDomainOrdinalInRefinementLeaf,
+                                                                       CellTopoPtr coarseCellTopo,
+                                                                       unsigned coarseSubcellDimension,
+                                                                       BasisPtr coarserBasis, unsigned coarseSubcellOrdinalInCoarseDomain,
+                                                                       unsigned coarseDomainOrdinalInCoarseCellTopo, // we use the coarserBasis's domain topology to determine the domain's space dimension
+                                                                       unsigned coarseSubcellPermutation);
 
   // static workhorse methods:
   static SubBasisReconciliationWeights computeConstrainedWeights(unsigned subcellDimension,

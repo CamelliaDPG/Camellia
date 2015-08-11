@@ -728,6 +728,59 @@ const SubBasisReconciliationWeights & BasisReconciliation::constrainedWeights(un
   return _subcellReconcilationWeights[cacheKey];
 }
 
+const SubBasisReconciliationWeights &BasisReconciliation::constrainedWeightsForTermTraced(LinearTermPtr termTraced, int fieldID,
+                                                                                          unsigned fineSubcellDimension,
+                                                                                          BasisPtr finerBasis,
+                                                                                          unsigned fineSubcellOrdinalInFineDomain,
+                                                                                          RefinementBranch &cellRefinementBranch, // i.e. ref. branch is in volume, even for skeleton domains
+                                                                                          unsigned fineDomainOrdinalInRefinementLeaf,
+                                                                                          CellTopoPtr coarseCellTopo,
+                                                                                          unsigned coarseSubcellDimension,
+                                                                                          BasisPtr coarserBasis, unsigned coarseSubcellOrdinalInCoarseDomain,
+                                                                                          unsigned coarseDomainOrdinalInCoarseCellTopo, // we use the coarserBasis's domain topology to determine the domain's space dimension
+                                                                                          unsigned coarseSubcellPermutation)
+{
+  typedef pair< SubcellRefinedBasisPair, Permutation> PermutedRefinedBasisPair;
+  typedef pair<unsigned, unsigned> FineCoarseDomainOrdinalPair;
+  typedef pair< PermutedRefinedBasisPair, FineCoarseDomainOrdinalPair > PermutedRefinedBasisPairDomainOrdinals;
+  typedef vector<pair<Function*, Camellia::EOperator>> FieldOps;
+  typedef pair<PermutedRefinedBasisPairDomainOrdinals, FieldOps> TermTracedCacheKey;
+  
+  SubcellBasisRestriction fineBasisRestriction = make_pair(finerBasis.get(), make_pair(fineSubcellDimension, fineSubcellOrdinalInFineDomain) );
+  SubcellBasisRestriction coarseBasisRestriction = make_pair(coarserBasis.get(), make_pair(coarseSubcellDimension, coarseSubcellOrdinalInCoarseDomain) );
+  SubcellRefinedBasisPair refinedBasisPair = {{fineBasisRestriction, coarseBasisRestriction}, cellRefinementBranch};
+  
+  PermutedRefinedBasisPair permutedRefinedBasisPair = make_pair(refinedBasisPair, coarseSubcellPermutation);
+  FineCoarseDomainOrdinalPair domainOrdinals = {fineDomainOrdinalInRefinementLeaf,coarseDomainOrdinalInCoarseCellTopo};
+  PermutedRefinedBasisPairDomainOrdinals permutedRefinedBasisPairDomainOrdinals = {permutedRefinedBasisPair, domainOrdinals};
+  
+  vector<TLinearSummand<double>> summands = termTraced->summands();
+  vector<pair<Function*, Camellia::EOperator>> fieldOps; // the functions by which field is multiplied, and the operators that apply to it
+  for (TLinearSummand<double> summand : summands)
+  {
+    if (summand.second->ID() == fieldID)
+    {
+      fieldOps.push_back({summand.first.get(),summand.second->op()});
+    }
+  }
+
+  TermTracedCacheKey cacheKey = {permutedRefinedBasisPairDomainOrdinals,fieldOps};
+  
+  if (_termsTraced.find(cacheKey) == _termsTraced.end())
+  {
+    SubBasisReconciliationWeights weights = computeConstrainedWeightsForTermTraced(termTraced, fieldID, fineSubcellDimension,
+                                                                                   finerBasis, fineSubcellOrdinalInFineDomain,
+                                                                                   cellRefinementBranch,
+                                                                                   fineDomainOrdinalInRefinementLeaf,
+                                                                                   coarseCellTopo, coarseSubcellDimension,
+                                                                                   coarserBasis, coarseSubcellOrdinalInCoarseDomain,
+                                                                                   coarseDomainOrdinalInCoarseCellTopo,
+                                                                                   coarseSubcellPermutation);
+    _termsTraced[cacheKey] = weights;
+  }
+  return _termsTraced[cacheKey];
+}
+
 FieldContainer<double> BasisReconciliation::filterBasisValues(const FieldContainer<double> &basisValues, set<int> &filter)
 {
   Teuchos::Array<int> dim;
