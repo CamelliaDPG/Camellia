@@ -367,7 +367,19 @@ public:
     // since SDMs are transposed relative to FCs, reverse the transposal
     char transposeAMatrix = (TransposeA=='T') ? 'N' : 'T';
     char transposeBMatrix = (TransposeB=='T') ? 'N' : 'T';
-
+    
+//    std::cout << "transposeA = " << TransposeA << std::endl;
+//    std::cout << "transposeB = " << TransposeB << std::endl;
+//    std::cout << "A.M() = " << AMatrix.M() << std::endl;
+//    std::cout << "A.N() = " << AMatrix.N() << std::endl;
+//    std::cout << "B.M() = " << BMatrix.M() << std::endl;
+//    std::cout << "B.N() = " << BMatrix.N() << std::endl;
+//    std::cout << "X.M() = " << XMatrix.M() << std::endl;
+//    std::cout << "X.N() = " << XMatrix.N() << std::endl;
+//    std::cout << "AMatrix.LDA() = " << AMatrix.LDA() << std::endl;
+//    std::cout << "BMatrix.LDA() = " << BMatrix.LDA() << std::endl;
+//    std::cout << "XMatrix.LDA() = " << XMatrix.LDA() << std::endl;
+    
     int success = XMatrix.Multiply(transposeAMatrix,transposeBMatrix,ScalarAB,AMatrix,BMatrix,ScalarThis);
 
     transposeMatrix(X); // SDMs are transposed relative to FCs
@@ -701,8 +713,10 @@ public:
     Epetra_SerialSymDenseMatrix AMatrix(::Copy, &A_SPD(0,0),
                                         N, // stride -- fc stores in row-major order (a.o.t. SDM)
                                         N);
-
+    
+    transposeMatrix(b); // a bit lame that we need to do this...
     Epetra_SerialDenseMatrix bVectors = convertFCToSDM(b);
+    transposeMatrix(b); // restore data to be nice to caller (again, a bit lame)
     Epetra_SerialDenseMatrix xVectors(N,nRHS);
 
     solver.SetMatrix(AMatrix);
@@ -736,6 +750,8 @@ public:
     }
 
     convertSDMToFC(x,xVectors);
+    
+    transposeMatrix(x); // perhaps we should change the expected inputs so we don't have to do this?
 
     return result;
   }
