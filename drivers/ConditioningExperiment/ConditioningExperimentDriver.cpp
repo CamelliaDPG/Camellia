@@ -10,23 +10,21 @@
 
 #include <Teuchos_GlobalMPISession.hpp>
 
-#include "VarFactory.h"
-#include "IP.h"
-#include "Function.h"
+#include "BasisFactory.h"
 #include "BF.h"
-#include "MeshFactory.h"
 #include "DataIO.h"
+#include "Function.h"
+#include "hFunction.h"
+#include "IP.h"
+#include "MeshFactory.h"
 #include "MeshUtilities.h"
+#include "SerialDenseMatrixUtility.h"
+#include "VarFactory.h"
 
 #include "Legendre.hpp"
 #include "Lobatto.hpp"
 
-#include "BasisFactory.h"
-
-#include "choice.hpp"
-#include "mpi_choice.hpp"
-
-#include "SerialDenseMatrixUtility.h"
+#include "Teuchos_CommandLineProcessor.hpp"
 
 enum TestType
 {
@@ -35,8 +33,12 @@ enum TestType
   FullNorm
 };
 
+using namespace Camellia;
+using namespace Intrepid;
+
 void setupHCurlTest(TestType testType, VarFactory &varFactory, VarPtr &var, IPPtr &ip)
 {
+  int spaceDim = 2;
   var = varFactory.testVar("\\omega", HCURL);
   ip = Teuchos::rcp( new IP );
   if (testType==Mass)
@@ -47,11 +49,11 @@ void setupHCurlTest(TestType testType, VarFactory &varFactory, VarPtr &var, IPPt
   {
     FunctionPtr h = Teuchos::rcp( new hFunction );
     ip->addTerm(var);
-    ip->addTerm(h * var->curl());
+    ip->addTerm(h * var->curl(spaceDim));
   }
   else if (testType==Stiffness)
   {
-    ip->addTerm(var->curl());
+    ip->addTerm(var->curl(spaceDim));
   }
 }
 
@@ -95,34 +97,34 @@ void setupHGradTest(TestType testType, VarFactory &varFactory, VarPtr &var, IPPt
   }
 }
 
-void setupHGradStiffness(VarFactory &varFactory, VarPtr &var, IPPtr &ip)
+void setupHGradStiffness(VarFactoryPtr &varFactory, VarPtr &var, IPPtr &ip)
 {
-  varFactory = VarFactory();
-  var = varFactory.testVar("q", HGRAD);
+  varFactory = Teuchos::rcp( new VarFactory() );
+  var = varFactory->testVar("q", HGRAD);
   ip = Teuchos::rcp( new IP );
   ip->addTerm(var->grad());
 }
 
-void setupHDivStiffness(VarFactory &varFactory, VarPtr &var, IPPtr &ip)
+void setupHDivStiffness(VarFactoryPtr &varFactory, VarPtr &var, IPPtr &ip)
 {
-  varFactory = VarFactory();
-  var = varFactory.testVar("q", HDIV);
+  varFactory = Teuchos::rcp( new VarFactory() );
+  var = varFactory->testVar("q", HDIV);
   ip = Teuchos::rcp( new IP );
   ip->addTerm(var->div());
 }
 
-void setupHDivMass(VarFactory &varFactory, VarPtr &var, IPPtr &ip)
+void setupHDivMass(VarFactoryPtr &varFactory, VarPtr &var, IPPtr &ip)
 {
-  varFactory = VarFactory();
-  var = varFactory.testVar("q", HDIV);
+  varFactory = Teuchos::rcp( new VarFactory() );
+  var = varFactory->testVar("q", HDIV);
   ip = Teuchos::rcp( new IP );
   ip->addTerm(var);
 }
 
 void printLobattoL2norm()
 {
-  VarFactory varFactory;
-  VarPtr u = varFactory.fieldVar("u"); // we don't really care about the trial space
+  VarFactoryPtr varFactory = Teuchos::rcp(new VarFactory);
+  VarPtr u = varFactory->fieldVar("u"); // we don't really care about the trial space
   BFPtr bf = Teuchos::rcp( new BF(varFactory) );
 
   int maxOrder = 20;
@@ -160,30 +162,27 @@ string testTypeName(TestType testType)
 
 int main(int argc, char *argv[])
 {
-  int maxTestOrder;
-  bool useLobatto;
-  double h;
+  int maxTestOrder = 15;
+  bool useLobatto = false;
+  double h = 1.0;
 
   Teuchos::GlobalMPISession mpiSession(&argc, &argv,0);
 
+  Teuchos::CommandLineProcessor cmdp(false,true); // false: don't throw exceptions; true: do return errors for unrecognized options
+  
+  // read args:
+  cmdp.setOption("maxOrder", &maxTestOrder, "test space polynomial order enrichment");
+  cmdp.setOption("useLobatto", "useIntrepid", &useLobatto, "Use Lobatto basis (otherwise will use Intrepid's nodal basis)");
+  cmdp.setOption("h", &h, "mesh width");
+
+  if (cmdp.parse(argc,argv) != Teuchos::CommandLineProcessor::PARSE_SUCCESSFUL)
+  {
 #ifdef HAVE_MPI
-  choice::MpiArgs args( argc, argv );
-#else
-  choice::Args args(argc, argv );
+    MPI_Finalize();
 #endif
-
-  try
-  {
-    // read args:
-    maxTestOrder = args.Input<int>("--maxOrder", "maximum basis polynomial order", 15);
-    useLobatto = args.Input<bool>("--useLobatto", "Use Lobatto basis (otherwise will use Intrepid's nodal basis)", false);
-    h = args.Input<double>("--h", "mesh width", 1.0);
+    return -1;
   }
-  catch ( choice::ArgException& e )
-  {
-    exit(1);
-  }
-
+  
   cout << "maxOrder = " << maxTestOrder << endl;
   if (useLobatto)
   {
@@ -194,8 +193,8 @@ int main(int argc, char *argv[])
     cout << "Using Intrepid's HGRAD, HDIV, HCURL bases.\n";
   }
 
-  BasisFactory::setUseLobattoForQuadHDiv(useLobatto);
-  BasisFactory::setUseLobattoForQuadHGrad(useLobatto);
+  BasisFactory::basisFactory()->setUseLobattoForQuadHDiv(useLobatto);
+  BasisFactory::basisFactory()->setUseLobattoForQuadHGrad(useLobatto);
 
 //  printLobattoL2norm();
 
@@ -230,27 +229,27 @@ int main(int argc, char *argv[])
     for (vector< Space >::iterator spaceIt = spaces.begin(); spaceIt != spaces.end(); spaceIt++)
     {
       Space space = *spaceIt;
-      VarFactory varFactory;
+      VarFactoryPtr varFactory = Teuchos::rcp(new VarFactory);
       VarPtr var;
       IPPtr ip;
       string spaceName;
       if (space==HGRAD)
       {
         spaceName = "grad";
-        setupHGradTest(testType, varFactory, var, ip);
+        setupHGradTest(testType, *varFactory, var, ip);
       }
       else if (space==HDIV)
       {
         spaceName = "div";
-        setupHDivTest(testType, varFactory, var, ip);
+        setupHDivTest(testType, *varFactory, var, ip);
       }
       else if (space==HCURL)
       {
         spaceName = "curl";
-        setupHCurlTest(testType, varFactory, var, ip);
+        setupHCurlTest(testType, *varFactory, var, ip);
       }
       cout << spaceName << ":\n";
-      VarPtr u = varFactory.fieldVar("u"); // we don't really care about the trial space
+      VarPtr u = varFactory->fieldVar("u"); // we don't really care about the trial space
       BFPtr bf = Teuchos::rcp( new BF(varFactory) );
       int pToAdd = 0;
       for (int testOrder=1; testOrder<=maxTestOrder; testOrder++)
@@ -268,11 +267,11 @@ int main(int argc, char *argv[])
 
     // finally, write out the HGrad stiffness matrix to disk:
 
-    map<string, VarFactory > varFactories;
+    map<string, VarFactoryPtr > varFactories;
     map<string, IPPtr > ips;
     map<string, VarPtr > vars;
 
-    VarFactory varFactory;
+    VarFactoryPtr varFactory;
     VarPtr var;
     IPPtr ip;
     setupHGradStiffness(varFactory, var, ip);
@@ -291,13 +290,13 @@ int main(int argc, char *argv[])
     ips[HDIV_STIFFNESS] = ip;
     vars[HDIV_STIFFNESS] = var;
 
-    for (map<string, VarFactory >::iterator varFactoryIt = varFactories.begin(); varFactoryIt != varFactories.end(); varFactoryIt++)
+    for (auto namedVarFactory : varFactories)
     {
-      string name = varFactoryIt->first;
-      varFactory = varFactoryIt->second;
+      string name = namedVarFactory.first;
+      varFactory = namedVarFactory.second;
       var = vars[name];
       ip = ips[name];
-      VarPtr u = varFactory.fieldVar("u"); // we don't really care about the trial space
+      VarPtr u = varFactory->fieldVar("u"); // we don't really care about the trial space
       BFPtr bf = Teuchos::rcp( new BF(varFactory) );
 
       int testOrder = 5;
