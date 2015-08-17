@@ -465,7 +465,7 @@ unsigned MeshTopology::addCell(CellTopoPtr cellTopo, const vector<unsigned> &cel
       }
       // if the pre-existing neighbor is refined, set its descendants to have the appropriate neighbor.
       MeshTopologyPtr thisPtr = Teuchos::rcp(this,false);
-      if (firstCell->isParent())
+      if (firstCell->isParent(thisPtr))
       {
         vector< pair< GlobalIndexType, unsigned> > firstCellDescendants = firstCell->getDescendantsForSide(firstNeighbor.second, thisPtr);
         for (vector< pair< GlobalIndexType, unsigned> >::iterator descIt = firstCellDescendants.begin(); descIt != firstCellDescendants.end(); descIt++)
@@ -475,7 +475,7 @@ unsigned MeshTopology::addCell(CellTopoPtr cellTopo, const vector<unsigned> &cel
           getCell(childCellIndex)->setNeighbor(childSideIndex, secondNeighbor.first, secondNeighbor.second);
         }
       }
-      if (secondCell->isParent())   // I don't think we should ever get here
+      if (secondCell->isParent(thisPtr))   // I don't think we should ever get here
       {
         vector< pair< GlobalIndexType, unsigned> > secondCellDescendants = secondCell->getDescendantsForSide(secondNeighbor.first, thisPtr);
         for (vector< pair< GlobalIndexType, unsigned> >::iterator descIt = secondCellDescendants.begin(); descIt != secondCellDescendants.end(); descIt++)
@@ -971,7 +971,8 @@ vector<IndexType> MeshTopology::cellIDsForPoints(const FieldContainer<double> &p
     }
     if (cell.get() != NULL)
     {
-      while ( cell->isParent() )
+      MeshTopologyPtr thisPtr = Teuchos::rcp(this,false);
+      while ( cell->isParent(thisPtr) )
       {
         int numChildren = cell->numChildren();
         bool foundMatchingChild = false;
@@ -1876,7 +1877,8 @@ vector<IndexType> MeshTopology::getChildEntities(unsigned int d, IndexType entit
   if (d==0) return childIndices;
   if (d==_spaceDim)
   {
-    return getCell(entityIndex)->getChildIndices();
+    MeshTopologyPtr thisPtr = Teuchos::rcp(this,false);
+    return getCell(entityIndex)->getChildIndices(thisPtr);
   }
   if (_childEntities[d].find(entityIndex) == _childEntities[d].end()) return childIndices;
   vector< pair< RefinementPatternPtr, vector<unsigned> > > childEntries = _childEntities[d][entityIndex];

@@ -529,7 +529,7 @@ TEUCHOS_UNIT_TEST(MeshTopology, GetRootMeshTopology)
       {
         meshTopo->refineCell(cellIndex, verticalCut);
         CellPtr cell = meshTopo->getCell(cellIndex);
-        vector<IndexType> childCellIndices = cell->getChildIndices();
+        vector<IndexType> childCellIndices = cell->getChildIndices(meshTopo);
         newCells.insert(childCellIndices.begin(),childCellIndices.end());
       }
       cellsToCutVertically = newCells;
@@ -542,7 +542,7 @@ TEUCHOS_UNIT_TEST(MeshTopology, GetRootMeshTopology)
       {
         meshTopo->refineCell(cellIndex, horizontalCut);
         CellPtr cell = meshTopo->getCell(cellIndex);
-        vector<IndexType> childCellIndices = cell->getChildIndices();
+        vector<IndexType> childCellIndices = cell->getChildIndices(meshTopo);
         newCells.insert(childCellIndices.begin(),childCellIndices.end());
       }
       cellsToCutHorizontally = newCells;

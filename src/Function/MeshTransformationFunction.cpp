@@ -557,7 +557,7 @@ void MeshTransformationFunction::didHRefine(const set<GlobalIndexType> &cellIDs)
   for (set<GlobalIndexType>::iterator cellIDIt = cellIDs.begin(); cellIDIt != cellIDs.end(); cellIDIt++)
   {
     GlobalIndexType parentCellID = *cellIDIt;
-    vector<IndexType> childCells = topology->getCell(parentCellID)->getChildIndices();
+    vector<IndexType> childCells = topology->getCell(parentCellID)->getChildIndices(_mesh->getTopology());
     for (vector<IndexType>::iterator childCellIt = childCells.begin(); childCellIt != childCells.end(); childCellIt++)
     {
       unsigned childCellID = *childCellIt;

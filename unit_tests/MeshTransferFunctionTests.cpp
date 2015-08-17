@@ -323,7 +323,7 @@ TEUCHOS_UNIT_TEST( MeshTransferFunction, CellMapUnderRefinement)
 
     CellPtr topCell = topMesh->getTopology()->getCell(cellID_top);
     vector< pair<GlobalIndexType, unsigned> > topCellSides;
-    if (topCell->isParent())
+    if (topCell->isParent(topMesh->getTopology()))
     {
       topCellSides = topCell->childrenForSide(topCellsSideOrdinal);
     }

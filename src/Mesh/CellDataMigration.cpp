@@ -176,7 +176,7 @@ void CellDataMigration::unpackData(Mesh *mesh, GlobalIndexType cellID, const cha
       CellPtr cell = mesh->getTopology()->getCell(cellID);
       CellPtr parent = cell->getParent();
       int childOrdinal = -1;
-      vector<IndexType> childIndices = parent->getChildIndices();
+      vector<IndexType> childIndices = parent->getChildIndices(mesh->getTopology());
       for (int i=0; i<childIndices.size(); i++)
       {
         if (childIndices[i]==cellID) childOrdinal = i;

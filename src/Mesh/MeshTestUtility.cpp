@@ -516,7 +516,7 @@ bool MeshTestUtility::determineRefTestPointsForNeighbors(MeshTopologyViewPtr mes
     return false;
   }
   CellPtr neighborCell = meshTopo->getCell(neighborInfo.first);
-  if (neighborCell->isParent())
+  if (neighborCell->isParent(meshTopo))
   {
     return false; // fineCell isn't the finer of the two...
   }

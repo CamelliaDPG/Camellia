@@ -108,7 +108,7 @@ vector< pair< GlobalIndexType, unsigned> > Cell::getDescendantsForSide(int sideI
       // (            leaf node              ) || ...
       descendantsForSide.push_back( {_children[childOrdinal]->cellIndex(), childSideOrdinal} );
     }
-    if ( _children[childOrdinal]->isParent() )
+    if ( _children[childOrdinal]->isParent(meshTopoViewForCellValidity) )
     {
       vector< pair<GlobalIndexType,unsigned> > childDescendants = _children[childOrdinal]->getDescendantsForSide(childSideOrdinal,meshTopoViewForCellValidity,leafNodesOnly);
 //      descendantsForSide.insert(descendantsForSide.end(), childDescendants.begin(), childDescendants.end());
@@ -217,8 +217,11 @@ void Cell::setChildren(vector< Teuchos::RCP< Cell > > children)
   }
 }
 
-vector<unsigned> Cell::getChildIndices()
+vector<unsigned> Cell::getChildIndices(MeshTopologyViewPtr meshTopoViewForCellValidity)
 {
+  if (! isParent(meshTopoViewForCellValidity))
+    return vector<unsigned>();
+  // if we are a parent, then assumption is *all* children are valid.
   vector<unsigned> indices(_children.size());
   for (unsigned childOrdinal=0; childOrdinal<_children.size(); childOrdinal++)
   {
@@ -340,9 +343,11 @@ void Cell::setParent(Teuchos::RCP<Cell> parent)
   _parent = Teuchos::rcp(parent.get(),false); // make weak reference
 }
 
-bool Cell::isParent()
+bool Cell::isParent(MeshTopologyViewPtr meshTopoViewForCellValidity)
 {
-  return _children.size() > 0;
+  if (_children.size() == 0) return false;
+  return meshTopoViewForCellValidity->isValidCellIndex(_children[0]->cellIndex()); // if first child is not valid, then presumably not a parent from this MeshTopo's point of view
+//  return _children.size() > 0;
 }
 
 RefinementBranch Cell::refinementBranchForSide(unsigned sideOrdinal, MeshTopologyViewPtr meshTopoViewForCellValidity)
@@ -565,7 +570,7 @@ bool Cell::ownsSide(unsigned int sideOrdinal, MeshTopologyViewPtr meshTopoViewFo
     CellPtr neighborCell = _meshTopo->getCell(neighborCellID);
     bool isPeer = neighborCell->getNeighborInfo(neighborSideOrdinal, meshTopoViewForCellValidity).first == _cellIndex;
 
-    if (isPeer && !neighborCell->isParent())   // then the lower cellID owns
+    if (isPeer && !neighborCell->isParent(meshTopoViewForCellValidity))   // then the lower cellID owns
     {
       ownsSide = (_cellIndex < neighborCellID);
     }
@@ -574,7 +579,7 @@ bool Cell::ownsSide(unsigned int sideOrdinal, MeshTopologyViewPtr meshTopoViewFo
       // neighbor is parent (inactive), but we are peers: we own the side
       ownsSide = true;
     }
-    else if (!neighborCell->isParent())
+    else if (!neighborCell->isParent(meshTopoViewForCellValidity))
     {
       // neighbor is unbroken, and we are not peers: neighbor owns
       ownsSide = false;

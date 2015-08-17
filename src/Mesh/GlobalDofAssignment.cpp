@@ -180,9 +180,9 @@ void GlobalDofAssignment::assignParities( GlobalIndexType cellID )
   _cellSideParitiesForCellID[cellID] = cellParities;
 
   // if this cell is a parent, then we should treat its children as well (children without peer neighbors will inherit any parity flips)
-  if (cell->isParent())
+  if (cell->isParent(_meshTopology))
   {
-    vector<GlobalIndexType> childIndices = cell->getChildIndices();
+    vector<GlobalIndexType> childIndices = cell->getChildIndices(_meshTopology);
     for (vector<GlobalIndexType>::iterator childIndexIt = childIndices.begin(); childIndexIt != childIndices.end(); childIndexIt++)
     {
       assignParities(*childIndexIt);
@@ -330,7 +330,7 @@ void GlobalDofAssignment::didHRefine(const set<GlobalIndexType> &parentCellIDs) 
     if (partitionForParent != -1) // this check allows us to be robust against getting the notification twice.
     {
       CellPtr parent = _meshTopology->getCell(parentID);
-      vector<GlobalIndexType> childIDs = parent->getChildIndices();
+      vector<GlobalIndexType> childIDs = parent->getChildIndices(_meshTopology);
       _partitions[partitionForParent].insert(childIDs.begin(),childIDs.end());
       for (GlobalIndexType childID : childIDs)
       {
@@ -578,7 +578,7 @@ void GlobalDofAssignment::projectParentCoefficientsOntoUnsetChildren()
       if (! soln->cellHasCoefficientsAssigned(parentCellID)) continue;
 
       int childOrdinal = -1;
-      vector<IndexType> childIndices = parent->getChildIndices();
+      vector<IndexType> childIndices = parent->getChildIndices(_meshTopology);
       for (int i=0; i<childIndices.size(); i++)
       {
         if (childIndices[i]==cellID) childOrdinal = i;

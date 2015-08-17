@@ -572,7 +572,7 @@ set<GlobalIndexType> ZoltanMeshPartitionPolicy::getRankLocalCellIDs(Mesh *mesh)
   for (set<GlobalIndexType>::iterator cellIDIt = rankLocalCells.begin(); cellIDIt != rankLocalCells.end(); cellIDIt++)
   {
     CellPtr cell = meshTopo->getCell(*cellIDIt);
-    if (cell->isParent())
+    if (cell->isParent(meshTopo))
     {
       parentCellIDs.insert(*cellIDIt);
     }
@@ -581,7 +581,7 @@ set<GlobalIndexType> ZoltanMeshPartitionPolicy::getRankLocalCellIDs(Mesh *mesh)
   {
     rankLocalCells.erase(*parentIDIt);
     CellPtr parent = meshTopo->getCell(*parentIDIt);
-    vector<IndexType> childIDs = parent->getChildIndices();
+    vector<IndexType> childIDs = parent->getChildIndices(meshTopo);
     for (vector<IndexType>::iterator childIDIt = childIDs.begin(); childIDIt != childIDs.end(); childIDIt++)
     {
       rankLocalCells.insert(*childIDIt);

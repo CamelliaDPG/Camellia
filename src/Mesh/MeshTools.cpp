@@ -167,12 +167,12 @@ MeshPtr MeshTools::timeSliceMesh(MeshPtr spaceTimeMesh, double t,
 
     CellPtr sliceCell = sliceTopo->getCell(sliceCellID);
     CellPtr spaceTimeCell = meshTopo->getCell(sliceCellIDToSpaceTimeCellID[sliceCellID]);
-    if (spaceTimeCell->isParent())
+    if (spaceTimeCell->isParent(spaceTimeMesh->getTopology()))
     {
       set<GlobalIndexType> cellsToRefine;
       cellsToRefine.insert(sliceCellID);
       sliceMesh->hRefine(cellsToRefine, RefinementPattern::regularRefinementPattern(sliceCell->topology()));
-      vector<IndexType> spaceTimeChildren = spaceTimeCell->getChildIndices();
+      vector<IndexType> spaceTimeChildren = spaceTimeCell->getChildIndices(spaceTimeMesh->getTopology());
       for (int childOrdinal=0; childOrdinal<spaceTimeChildren.size(); childOrdinal++)
       {
         IndexType childID = spaceTimeChildren[childOrdinal];

@@ -57,7 +57,7 @@ Element::Element(Mesh* mesh, GlobalIndexType cellID, Teuchos::RCP< ElementType >
 
 Teuchos::RCP< Element > Element::getChild(int childOrdinal)
 {
-  return _mesh->getElement( _cell->getChildIndices()[childOrdinal] );
+  return _mesh->getElement( _cell->getChildIndices(_mesh->getTopology())[childOrdinal] );
 }
 
 void Element::getSidePointsInNeighborRefCoords(FieldContainer<double> &neighborRefPoints, int sideIndex,
@@ -231,12 +231,12 @@ vector< pair< int, int> > Element::getDescendantsForSide(int sideIndex, bool lea
     unsigned childOrdinal = (*entryIt).first;
     unsigned childSideOrdinal = (*entryIt).second;
     CellPtr childCell = _cell->children()[childOrdinal];
-    if ( (! childCell->isParent()) || (! leafNodesOnly ) )
+    if ( (! childCell->isParent(_mesh->getTopology())) || (! leafNodesOnly ) )
     {
       // (            leaf node              ) || ...
       descendantsForSide.push_back( make_pair( childCell->cellIndex(), childSideOrdinal) );
     }
-    if ( childCell->isParent() )
+    if ( childCell->isParent(_mesh->getTopology()) )
     {
       ElementPtr childElement = _mesh->getElement(childCell->cellIndex());
       vector< pair<int,int> > childDescendants = childElement->getDescendantsForSide(childSideOrdinal,leafNodesOnly);
@@ -321,7 +321,7 @@ bool Element::isActive()
 
 bool Element::isParent()
 {
-  return _cell->isParent();
+  return _cell->isParent(_mesh->getTopology());
 }
 
 //destructor:

@@ -243,7 +243,7 @@ void MeshTransferFunction::rebuildMaps()
     {
       // off-rank or parent; record for import:
       CellPtr originalCell = _originalMesh->getTopology()->getCell(originalCellSide.first);
-      if (!originalCell->isParent())
+      if (!originalCell->isParent(_originalMesh->getTopology()))
       {
         cellsToImport.push_back(originalCellSide.first);
       }
@@ -394,7 +394,7 @@ void MeshTransferFunction::values(FieldContainer<double> &values, BasisCachePtr 
 
     // in originalMesh, may have to map downward to descendants
     CellPtr cell = _originalMesh->getTopology()->getCell(originalMeshAncestralCellSide.first);
-    if (! cell->isParent())
+    if (! cell->isParent(_originalMesh->getTopology()))
     {
       BasisCachePtr originalBasisCache = BasisCache::basisCacheForCell(_originalMesh, originalMeshAncestralCellSide.first);
       BasisCachePtr originalBasisCacheSide = originalBasisCache->getSideBasisCache(originalMeshAncestralCellSide.second);
@@ -426,7 +426,7 @@ void MeshTransferFunction::values(FieldContainer<double> &values, BasisCachePtr 
         vector<unsigned> branch;
         unsigned sideOrdinal = originalMeshAncestralCellSide.second;
 
-        while (descendantCell->isParent())
+        while (descendantCell->isParent(_originalMesh->getTopology()))
         {
           RefinementPatternPtr refPattern = descendantCell->refinementPattern();
           RefinementPatternPtr sideRefPattern = refPattern->sideRefinementPatterns()[sideOrdinal];

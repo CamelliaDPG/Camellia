@@ -177,7 +177,7 @@ RefinementPattern::RefinementPattern(CellTopoPtr cellTopoPtr, FieldContainer<dou
     }
 //    print("sideChildEntities", sideChildEntities);
     // search for these entities within the (volume) children
-    vector<unsigned> childCellIndices = parentCell->getChildIndices();
+    vector<unsigned> childCellIndices = parentCell->getChildIndices(_refinementTopology);
 //    print("childCellIndices", childCellIndices);
     for (int childIndexInParent = 0; childIndexInParent<childCellIndices.size(); childIndexInParent++)
     {
@@ -211,7 +211,7 @@ RefinementPattern::RefinementPattern(CellTopoPtr cellTopoPtr, FieldContainer<dou
     {
       unsigned sideChildEntityIndex = *sideEntityIndexIt;
       // need to find the volume child that has this side
-      vector<unsigned> childCellIndices = parentCell->getChildIndices();
+      vector<unsigned> childCellIndices = parentCell->getChildIndices(_refinementTopology);
       for (int childIndexInParent = 0; childIndexInParent<childCellIndices.size(); childIndexInParent++)
       {
         unsigned childCellIndex = childCellIndices[childIndexInParent];
@@ -1918,7 +1918,7 @@ FieldContainer<double> RefinementPattern::descendantNodes(RefinementBranch refin
     RefinementPatternPtr tempRefPatternPtr = Teuchos::rcp(refinementBranch[refIndex].first, false);
     mesh->refineCell(cellIndex, tempRefPatternPtr);
     unsigned childOrdinal = refinementBranch[refIndex].second;
-    cellIndex = mesh->getCell(cellIndex)->getChildIndices()[childOrdinal];
+    cellIndex = mesh->getCell(cellIndex)->getChildIndices(mesh)[childOrdinal];
   }
 
   return mesh->physicalCellNodesForCell(cellIndex);

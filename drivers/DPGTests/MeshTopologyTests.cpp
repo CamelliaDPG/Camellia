@@ -983,7 +983,7 @@ bool MeshTopologyTests::testEntityConstraints()
   {
     justCellsForVertex.push_back(entryIt->first);
   }
-  vector<unsigned> childCellIndices = mesh3D->getCell(cellToRefine3D)->getChildIndices();
+  vector<unsigned> childCellIndices = mesh3D->getCell(cellToRefine3D)->getChildIndices(mesh3D);
   std::sort(childCellIndices.begin(), childCellIndices.end());
   vector<unsigned> matches(childCellIndices.size() + cellsForVertex.size());
   vector<unsigned>::iterator matchEnd = std::set_intersection(justCellsForVertex.begin(), justCellsForVertex.end(), childCellIndices.begin(), childCellIndices.end(), matches.begin());

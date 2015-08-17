@@ -40,7 +40,15 @@ map<int,int> MeshFactory::_emptyIntIntMap;
 #ifdef HAVE_EPETRAEXT_HDF5
 MeshPtr MeshFactory::loadFromHDF5(TBFPtr<double> bf, string filename)
 {
+  // 8-13-15 modified to use MPI communicator instead of serial.  This should give
+  // HDF5 a chance to do smart things with I/O and the network (e.g. read in on rank 0,
+  // and broadcast to all).  (Though the fact that it has a *chance* to do smart things
+  // doesn't mean it will.)
+#ifdef HAVE_MPI
+  Epetra_MpiComm Comm(MPI_COMM_WORLD);
+#else
   Epetra_SerialComm Comm;
+#endif
   EpetraExt::HDF5 hdf5(Comm);
   hdf5.Open(filename);
   int vertexIndicesSize, topoKeysSize, verticesSize, trialOrderEnhancementsSize, testOrderEnhancementsSize, histArraySize, H1OrderSize;
@@ -1388,7 +1396,7 @@ MeshTopologyPtr MeshFactory::spaceTimeMeshTopology(MeshTopologyPtr spatialMeshTo
       {
         IndexType spatialCellIndex = cellIDMap[spaceTimeCellIndex];
         CellPtr spatialCell = spatialMeshTopology->getCell(spatialCellIndex);
-        if (spatialCell->isParent())
+        if (spatialCell->isParent(spatialMeshTopology))
         {
           noCellsToRefine = false; // indicate we refined some on this pass...
 

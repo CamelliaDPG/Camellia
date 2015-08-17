@@ -401,7 +401,7 @@ void GDAMaximumRule2D::determineDofPairings()
     CellPtr cell = _meshTopology->getCell(cellID);
     ElementTypePtr elemTypePtr = _elementTypeForCell[cellID];
 
-    if ( cell->isParent() )
+    if ( cell->isParent(_meshTopology) )
     {
       TEUCHOS_TEST_FOR_EXCEPTION(true,std::invalid_argument,"elemPtr is in _activeElements, but is a parent...");
     }
@@ -426,10 +426,10 @@ void GDAMaximumRule2D::determineDofPairings()
           {
             CellPtr neighbor = _meshTopology->getCell(neighborCellID);
             // check that the bases agree in #dofs:
-            bool hasMultiBasis = neighbor->isParent();
+            bool hasMultiBasis = neighbor->isParent(_meshTopology);
 
             unsigned neighborCellID = neighbor->cellIndex();
-            if ( ! neighbor->isParent() )
+            if ( ! neighbor->isParent(_meshTopology) )
             {
               int neighborNumDofs = _elementTypeForCell[neighborCellID]->trialOrderPtr->getBasisCardinality(trialID,mySideIndexInNeighbor);
               if ( !hasMultiBasis && (myNumDofs != neighborNumDofs) )   // neither a multi-basis, and we differ: a problem
@@ -625,7 +625,7 @@ void GDAMaximumRule2D::didHRefine(const set<GlobalIndexType> &parentCellIDs)
          solutionIt != _registeredSolutions.end(); solutionIt++)
     {
       // do projection
-      vector<IndexType> childIDsLocalIndexType = _meshTopology->getCell(parentCellID)->getChildIndices();
+      vector<IndexType> childIDsLocalIndexType = _meshTopology->getCell(parentCellID)->getChildIndices(_meshTopology);
       vector<GlobalIndexType> childIDs(childIDsLocalIndexType.begin(),childIDsLocalIndexType.end());
       (*solutionIt)->processSideUpgrades(_cellSideUpgrades,parentCellIDs); // cellIDs argument: skip these...
       (*solutionIt)->projectOldCellOntoNewCells(parentCellID,elemType,childIDs);
@@ -1083,8 +1083,8 @@ void GDAMaximumRule2D::matchNeighbor(GlobalIndexType cellID, int sideIndex)
   }
 
   // h-refinement handling:
-  bool neighborIsBroken = (neighbor->isParent() && (neighbor->childrenForSide(sideIndexInNeighbor).size() > 1));
-  bool elementIsBroken  = (cell->isParent() && (cell->childrenForSide(sideIndex).size() > 1));
+  bool neighborIsBroken = (neighbor->isParent(_meshTopology) && (neighbor->childrenForSide(sideIndexInNeighbor).size() > 1));
+  bool elementIsBroken  = (cell->isParent(_meshTopology) && (cell->childrenForSide(sideIndex).size() > 1));
   if ( neighborIsBroken || elementIsBroken )
   {
     bool bothBroken = ( neighborIsBroken && elementIsBroken );
@@ -1247,14 +1247,14 @@ map< int, BasisPtr > GDAMaximumRule2D::multiBasisUpgradeMap(CellPtr parent, unsi
     int childSideIndex = (*entryIt).second;
     CellPtr childCell = _meshTopology->getCell(childCellIndex);
 
-    while (childCell->isParent() && (childCell->childrenForSide(childSideIndex).size() == 1) )
+    while (childCell->isParent(_meshTopology) && (childCell->childrenForSide(childSideIndex).size() == 1) )
     {
       pair<unsigned, unsigned> childEntry = childCell->childrenForSide(childSideIndex)[0];
       childSideIndex = childEntry.second;
       childCell = _meshTopology->getCell(childEntry.first);
     }
 
-    if ( childCell->isParent() && (childCell->childrenForSide(childSideIndex).size() > 1))
+    if ( childCell->isParent(_meshTopology) && (childCell->childrenForSide(childSideIndex).size() > 1))
     {
       childVarIDsToUpgrade.push_back( multiBasisUpgradeMap(childCell,childSideIndex,bigNeighborPolyOrder) );
     }

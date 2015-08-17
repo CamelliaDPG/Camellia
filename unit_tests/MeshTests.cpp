@@ -213,7 +213,8 @@ TEUCHOS_UNIT_TEST( Mesh, SaveAndLoadStokesConforming )
 {
   int spaceDim = 2;
   bool conformingTraces = true;
-  StokesVGPFormulation form(spaceDim,conformingTraces);
+  double mu = 1.0;
+  StokesVGPFormulation form = StokesVGPFormulation::steadyFormulation(spaceDim,mu,conformingTraces);
   testSaveAndLoad2D(form.bf(), out, success);
 }
 } // namespace

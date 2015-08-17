@@ -62,7 +62,7 @@ void GDAMinimumRule::didHRefine(const set<GlobalIndexType> &parentCellIDs)
     GlobalIndexType parentCellID = *cellIDIt;
 //    cout << "GDAMinimumRule: h-refining " << parentCellID << endl;
     CellPtr parentCell = _meshTopology->getCell(parentCellID);
-    vector<IndexType> childIDs = parentCell->getChildIndices();
+    vector<IndexType> childIDs = parentCell->getChildIndices(_meshTopology);
     vector<int> parentH1Order = _cellH1Orders[parentCellID];
     for (vector<IndexType>::iterator childIDIt = childIDs.begin(); childIDIt != childIDs.end(); childIDIt++)
     {
@@ -115,7 +115,7 @@ void GDAMinimumRule::didPRefine(const set<GlobalIndexType> &cellIDs, int deltaP)
     CellPtr parent = cell->getParent();
     while (parent.get() != NULL)
     {
-      vector<IndexType> childIndices = parent->getChildIndices();
+      vector<IndexType> childIndices = parent->getChildIndices(_meshTopology);
       vector<int> minH1Order = _cellH1Orders[*cellIDIt];
       for (int childOrdinal=0; childOrdinal<childIndices.size(); childOrdinal++)
       {
