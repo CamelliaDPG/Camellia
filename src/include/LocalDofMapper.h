@@ -39,6 +39,9 @@ class LocalDofMapper   // maps a whole trial ordering
   void addReverseSubBasisMapVectorContribution(int varID, int sideOrdinal, BasisMap basisMap, const Intrepid::FieldContainer<double> &globalData, Intrepid::FieldContainer<double> &localData);
   //  void addReverseSubBasisMapMatrixContribution(int varID, int sideOrdinal, BasisMap basisMap, const Intrepid::FieldContainer<double> &globalData, Intrepid::FieldContainer<double> &localData);
   Intrepid::FieldContainer<double> mapLocalDataMatrix(const Intrepid::FieldContainer<double> &localData, bool fittableGlobalDofsOnly);
+  
+  void mapLocalDataVector(const Intrepid::FieldContainer<double> &localData, bool fittableGlobalDofsOnly,
+                          Intrepid::FieldContainer<double> &mappedDataVector);
 
   Intrepid::FieldContainer<double> _localCoefficientsFitMatrix; // used for fitLocalCoefficients
 
