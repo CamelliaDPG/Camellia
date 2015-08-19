@@ -364,6 +364,12 @@ bool Basis<Scalar,ArrayScalar>::isConforming() const
 }
 
 template<class Scalar, class ArrayScalar>
+bool Basis<Scalar,ArrayScalar>::isModal() const
+{
+  return false;
+}
+  
+template<class Scalar, class ArrayScalar>
 bool Basis<Scalar,ArrayScalar>::isNodal() const
 {
   return false;

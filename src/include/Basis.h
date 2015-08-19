@@ -95,6 +95,7 @@ public:
 
   // methods identifying the type of basis:
   virtual bool isConforming() const; // defaults to false (true for the Intrepid bases)
+  virtual bool isModal() const; // defaults to false (true for the Lobatto bases)
   virtual bool isNodal() const; // defaults to false (true for the Intrepid bases)
 
   // range info for basis values:
