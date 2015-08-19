@@ -86,6 +86,8 @@ public:
   void setPrintIterationCount(bool value);
 
   vector<int> getIterationCountLog();
+  
+  static std::vector<MeshPtr> meshesForMultigrid(MeshPtr fineMesh, int kCoarse, int delta_k);
 };
 }
 

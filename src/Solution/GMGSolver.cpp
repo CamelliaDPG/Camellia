@@ -190,6 +190,61 @@ Teuchos::RCP<GMGOperator> GMGSolver::gmgOperatorFromMeshSequence(const std::vect
   return finestOperator;
 }
 
+std::vector<MeshPtr> GMGSolver::meshesForMultigrid(MeshPtr fineMesh, int kCoarse, int delta_k)
+{
+  // for now, we do the following (later, we may introduce a ParameterList to give finer-grained control):
+  /*
+   coarsest h-mesh with k=kCoarse
+   once-refined h-mesh with k=kCoarse (not necessarily uniformly refined--maximally within fine mesh)
+   twice-refined h-mesh with k=kCoarse
+   ...
+   fine h-mesh with k=kCoarse
+   fine h-mesh with k=kCoarse (yes, duplicated: gives two kinds of smoother)
+   fine h-mesh with k=kFine
+   */
+  MeshTopologyViewPtr fineMeshTopo = fineMesh->getTopology();
+  set<GlobalIndexType> thisLevelCellIndices = fineMeshTopo->getRootCellIndices();
+  
+  GlobalIndexType fineMeshNumCells = fineMeshTopo->getRootCellIndices().size();
+  
+  vector<MeshPtr> meshesCoarseToFine;
+  
+  int H1Order_coarse = kCoarse + 1;
+  BFPtr bf = fineMesh->bilinearForm();
+  do {
+    MeshTopologyViewPtr thisLevelMeshTopo = fineMeshTopo->getView(thisLevelCellIndices);
+    
+    // create the actual Mesh object:
+    MeshPtr thisLevelMesh = Teuchos::rcp(new Mesh(thisLevelMeshTopo, bf, H1Order_coarse, delta_k));
+    meshesCoarseToFine.push_back(thisLevelMesh);
+    
+    set<GlobalIndexType> nextLevelCellIndices;
+    for (GlobalIndexType cellIndex : thisLevelCellIndices)
+    {
+      CellPtr cell = fineMeshTopo->getCell(cellIndex);
+      if (cell->isParent(fineMeshTopo))
+      {
+        vector<IndexType> childIndices = cell->getChildIndices(fineMeshTopo);
+        nextLevelCellIndices.insert(childIndices.begin(),childIndices.end());
+      }
+      else
+      {
+        nextLevelCellIndices.insert(cellIndex);
+      }
+    }
+    
+    thisLevelCellIndices = nextLevelCellIndices;
+  } while (fineMeshNumCells > thisLevelCellIndices.size());
+  
+  // repeat the last one:
+  meshesCoarseToFine.push_back(meshesCoarseToFine[meshesCoarseToFine.size()-1]);
+  
+  // add the fine mesh:
+  meshesCoarseToFine.push_back(fineMesh);
+
+  return meshesCoarseToFine;
+}
+
 void GMGSolver::setFineMesh(MeshPtr fineMesh, Epetra_Map finePartitionMap)
 {
   _gmgOperator->setFineMesh(fineMesh, finePartitionMap);
