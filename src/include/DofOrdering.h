@@ -47,6 +47,7 @@
 
 namespace Camellia
 {
+  const static int VOLUME_INTERIOR_SIDE_ORDINAL = 0; // sometime, want to change this to -1 for clearer distinction between side and interior degrees of freedom.
 class DofOrdering
 {
   int _indexNeedsToBeRebuilt;
@@ -67,7 +68,7 @@ class DofOrdering
 public:
   DofOrdering(CellTopoPtr cellTopo = Teuchos::null); // constructor
 
-  void addEntry(int varID, BasisPtr basis, int basisRank, int sideIndex = 0);
+  void addEntry(int varID, BasisPtr basis, int basisRank, int sideIndex = VOLUME_INTERIOR_SIDE_ORDINAL);
 
   bool hasBasisEntry(int varID, int sideIndex);
   bool hasSideVarIDs();
@@ -76,9 +77,9 @@ public:
                              const Intrepid::FieldContainer<double> &oldValues );
 
   // get the varIndex variable's dof with basis ordinal dofId in the Dof ordering:
-  int getDofIndex(int varID, int basisDofOrdinal, int sideIndex=0, int subSideIndex = -1);
+  int getDofIndex(int varID, int basisDofOrdinal, int sideIndex=VOLUME_INTERIOR_SIDE_ORDINAL, int subSideIndex = -1);
 
-  const std::vector<int> & getDofIndices(int varID, int sideIndex=0);
+  const std::vector<int> & getDofIndices(int varID, int sideIndex=VOLUME_INTERIOR_SIDE_ORDINAL);
 
   const std::set<int> & getVarIDs();
 
@@ -86,7 +87,7 @@ public:
 
   int getBasisCardinality(int varID, int sideIndex);
 
-  BasisPtr getBasis(int varID, int sideIndex = 0);
+  BasisPtr getBasis(int varID, int sideIndex = VOLUME_INTERIOR_SIDE_ORDINAL);
 
   int getBasisRank(int varID)
   {
