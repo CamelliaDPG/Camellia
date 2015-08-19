@@ -1072,7 +1072,7 @@ void TLinearTerm<Scalar>::values(Intrepid::FieldContainer<Scalar> &values, int v
   int numCells = values.dimension(0);
   int numFields = values.dimension(1);
   int numPoints = values.dimension(2);
-  int basisRangeDimension = basis->rangeDimension();
+  int spaceDim = basisCache->getSpaceDim();
 
   values.initialize(0.0);
   Teuchos::Array<int> scalarFunctionValueDim;
@@ -1083,9 +1083,9 @@ void TLinearTerm<Scalar>::values(Intrepid::FieldContainer<Scalar> &values, int v
   Intrepid::FieldContainer<Scalar> fValues;
 
   Teuchos::Array<int> vectorFunctionValueDim = scalarFunctionValueDim;
-  vectorFunctionValueDim.append(basisRangeDimension);
+  vectorFunctionValueDim.append(spaceDim);
   Teuchos::Array<int> tensorFunctionValueDim = vectorFunctionValueDim;
-  tensorFunctionValueDim.append(basisRangeDimension);
+  tensorFunctionValueDim.append(spaceDim);
 
   TEUCHOS_TEST_FOR_EXCEPTION( numCells != basisCache->getPhysicalCubaturePoints().dimension(0),
                               std::invalid_argument, "values FC numCells disagrees with cubature points container");
@@ -1172,7 +1172,7 @@ void TLinearTerm<Scalar>::values(Intrepid::FieldContainer<Scalar> &values, int v
         Teuchos::Array<int> fDim = tensorFunctionValueDim;
         for (int d=3; d < ls.first->rank(); d++)
         {
-          fDim.append(basisRangeDimension);
+          fDim.append(spaceDim);
         }
         fValues.resize(fDim);
       }
@@ -1209,7 +1209,7 @@ void TLinearTerm<Scalar>::values(Intrepid::FieldContainer<Scalar> &values, int v
         int fRank = ls.first->rank();
         for (int d=0; d<fRank; d++)
         {
-          entriesPerPoint *= basisRangeDimension;
+          entriesPerPoint *= spaceDim;
         }
 
         for (int cellIndex=0; cellIndex<numCells; cellIndex++)
@@ -1270,7 +1270,7 @@ void TLinearTerm<Scalar>::values(Intrepid::FieldContainer<Scalar> &values, int v
         int resultRank = scalarF ? ls.second->rank() : ls.first->rank();
         for (int d=0; d<resultRank; d++)
         {
-          entriesPerPoint *= basisRangeDimension;
+          entriesPerPoint *= spaceDim;
         }
         Teuchos::Array<int> vDim( values.rank() );
         for (int cellIndex=0; cellIndex<numCells; cellIndex++)
