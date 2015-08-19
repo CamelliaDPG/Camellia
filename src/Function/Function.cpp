@@ -1537,7 +1537,7 @@ TFunctionPtr<Scalar> TFunction<Scalar>::constant(Scalar value)
 }
 
 template <typename Scalar>
-TFunctionPtr<Scalar> TFunction<Scalar>::constant(vector<Scalar> &value)
+TFunctionPtr<Scalar> TFunction<Scalar>::constant(vector<Scalar> value)
 {
   return Teuchos::rcp( new ConstantVectorFunction<Scalar>(value) );
 }

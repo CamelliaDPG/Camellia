@@ -145,7 +145,7 @@ public:
   // static Function construction methods:
   static TFunctionPtr<double> composedFunction( TFunctionPtr<double> f, TFunctionPtr<double> arg_g); // note: SLOW! avoid when possible...
   static TFunctionPtr<Scalar> constant(Scalar value);
-  static TFunctionPtr<Scalar> constant(vector<Scalar> &value);
+  static TFunctionPtr<Scalar> constant(vector<Scalar> value);
 
   static TFunctionPtr<double> min(TFunctionPtr<double> f1, TFunctionPtr<double> f2);
   static TFunctionPtr<double> min(TFunctionPtr<double> f1, double value);
