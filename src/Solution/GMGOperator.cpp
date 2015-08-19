@@ -121,7 +121,7 @@ _finePartitionMap(finePartitionMap), _br(true)
 
   setSmootherType(CAMELLIA_ADDITIVE_SCHWARZ); // default
   _smootherOverlap = 0;
-  _useSchwarzDiagonalWeight = true;
+  _useSchwarzDiagonalWeight = false;
   _useSchwarzScalingWeight = true;
 
   if (( coarseMesh->meshUsesMaximumRule()) || (! fineMesh->meshUsesMinimumRule()) )
@@ -689,10 +689,6 @@ LocalDofMapperPtr GMGOperator::getLocalCoefficientMap(GlobalIndexType fineCellID
                                                                                             ancestor->topology(),
                                                                                             spaceDim, coarseBasis, coarseSubcellOrdinal, coarseDomainOrdinal, coarseSubcellPermutation);
 
-//                SubBasisReconciliationWeights weights = _br.computeConstrainedWeightsForTermTraced(termTraced, varTracedID,
-//                                                                                                   sideDim, fineBasis, fineSubcellOrdinalInFineDomain, refBranch, sideOrdinal,
-//                                                                                                   ancestor->topology(),
-//                                                                                                   spaceDim, coarseBasis, coarseSubcellOrdinal, coarseDomainOrdinal, coarseSubcellPermutation);
                 set<unsigned> fineDofOrdinals(weights.fineOrdinals.begin(),weights.fineOrdinals.end());
                 
                 vector<GlobalIndexType> coarseDofIndices;
@@ -717,7 +713,7 @@ LocalDofMapperPtr GMGOperator::getLocalCoefficientMap(GlobalIndexType fineCellID
                 unsigned volumeSubcellOrdinal = 0, volumeDomainOrdinal = 0;
                 unsigned volumeSubcellPermutation = 0;
                 unsigned fineSubcellOrdinalInFineDomain = 0; // the side is the whole fine domain...
-                SubBasisReconciliationWeights fieldInteriorWeights = _br.computeConstrainedWeightsForTermTraced(termTraced, varTracedID,
+                SubBasisReconciliationWeights fieldInteriorWeights = _br.constrainedWeightsForTermTraced(termTraced, varTracedID,
                                                                                                                 sideDim, fineBasis, fineSubcellOrdinalInFineDomain, refBranch, sideOrdinal,
                                                                                                                 volumeTopo,
                                                                                                                 spaceDim, volumeBasis, volumeSubcellOrdinal, volumeDomainOrdinal, volumeSubcellPermutation);
@@ -1521,6 +1517,11 @@ void GMGOperator::setSmootherOverlap(int overlap)
 void GMGOperator::setSmootherType(GMGOperator::SmootherChoice smootherType)
 {
   _smootherType = smootherType;
+}
+
+double GMGOperator::getSmootherWeight()
+{
+  return _smootherWeight;
 }
 
 void GMGOperator::setSmootherWeight(double weight)
