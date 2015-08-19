@@ -50,6 +50,14 @@ TensorBasis<Scalar,ArrayScalar>::TensorBasis(Teuchos::RCP< Camellia::Basis<Scala
     // on line topologies, HVOL and HGRAD are the only ones for which we'll use this...
     this->_functionSpace = _spatialBasis->functionSpace();
   }
+  else if ((_spatialBasis->functionSpace() == FUNCTION_SPACE_HGRAD) && (_temporalBasis->functionSpace() == FUNCTION_SPACE_HVOL))
+  {
+    this->_functionSpace = FUNCTION_SPACE_HGRAD_SPACE_HVOL_TIME;
+  }
+  else if ((_spatialBasis->functionSpace() == FUNCTION_SPACE_HVOL) && (_temporalBasis->functionSpace() == FUNCTION_SPACE_HGRAD))
+  {
+    this->_functionSpace = FUNCTION_SPACE_HVOL_SPACE_HGRAD_TIME;
+  }
   else
   {
     this->_functionSpace = FUNCTION_SPACE_UNKNOWN;

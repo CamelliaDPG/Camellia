@@ -521,6 +521,12 @@ pair<TIPPtr<Scalar>, VarPtr> TIP<Scalar>::standardInnerProductForFunctionSpace(C
   case Camellia::FUNCTION_SPACE_HDIV:
     ip->addTerm(var->div());
     break;
+      // space-time:
+    case Camellia::FUNCTION_SPACE_HGRAD_SPACE_HVOL_TIME:
+      ip->addTerm(var->grad()); // by default, grad means spatial gradient
+      // space-time:
+    case Camellia::FUNCTION_SPACE_HVOL_SPACE_HGRAD_TIME:
+      ip->addTerm(var->dt());
   case Camellia::FUNCTION_SPACE_REAL_SCALAR:
     break;
 

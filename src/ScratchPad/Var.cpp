@@ -124,7 +124,11 @@ Space Camellia::spaceForEFS(Camellia::EFunctionSpace efs)
   case Camellia::FUNCTION_SPACE_VECTOR_HGRAD_DISC:
     return VECTOR_HGRAD_DISC;
 
-  //    case TENSOR_HGRAD:
+  // space-time:
+    case Camellia::FUNCTION_SPACE_HGRAD_SPACE_HVOL_TIME:
+      return HGRAD_SPACE_HVOL_TIME;
+    case Camellia::FUNCTION_SPACE_HVOL_SPACE_HGRAD_TIME:
+      return HVOL_SPACE_HGRAD_TIME;
 
   case Camellia::FUNCTION_SPACE_HDIV_FREE:
     return HDIV_FREE;
@@ -390,21 +394,39 @@ VarPtr Var::t() const
   return Teuchos::rcp( new Var(_id, _rank-1, _name, OP_T, UNKNOWN_FS, _varType ) );
 }
 
-VarPtr Var::cross_normal() const
+LinearTermPtr Var::cross_normal(int spaceDim) const
 {
   TEUCHOS_TEST_FOR_EXCEPTION( _op !=  Camellia::OP_VALUE, std::invalid_argument, "operators can only be applied to raw vars, not vars that have been operated on.");
   TEUCHOS_TEST_FOR_EXCEPTION( _rank != 1, std::invalid_argument, "cross_normal() only supported for vars of rank 1.");
-  return Teuchos::rcp( new Var(_id, _rank-1, _name, OP_CROSS_NORMAL, UNKNOWN_FS, _varType ) );
+  
+  VarPtr var = Teuchos::rcp( new Var(_id, _rank, _name, _op, _fs, _varType ) );
+  
+  FunctionPtr n = Function::normal();
+  if (spaceDim == 2)
+  {
+    return var->x() * n->y() - var->y() * n->x();
+  }
+  else if (spaceDim == 3)
+  {
+    FunctionPtr x_comp = TFunction<double>::constant({1,0,0});
+    FunctionPtr y_comp = TFunction<double>::constant({0,1,0});
+    FunctionPtr z_comp = TFunction<double>::constant({0,0,1});
+    return x_comp * (var->y() * n->z() - var->z() * n->y()) + y_comp * (var->z() * n->x() - var->x() * n->z())
+         + z_comp * (var->x() * n->y() - var->y() * n->x());
+  }
+  TEUCHOS_TEST_FOR_EXCEPTION(true, std::invalid_argument, "invalid space dimension for cross_normal()");
 }
 
-VarPtr Var::dot_normal() const
+LinearTermPtr Var::dot_normal() const
 {
   TEUCHOS_TEST_FOR_EXCEPTION( _rank != 1, std::invalid_argument, "dot_normal() only supported for vars of rank 1.");
   TEUCHOS_TEST_FOR_EXCEPTION( _op !=  Camellia::OP_VALUE, std::invalid_argument, "operators can only be applied to raw vars, not vars that have been operated on.");
-  return Teuchos::rcp( new Var(_id, _rank-1, _name, OP_DOT_NORMAL, UNKNOWN_FS, _varType ) );
+  VarPtr var = Teuchos::rcp( new Var(_id, _rank, _name, _op, _fs, _varType ) );
+  FunctionPtr n = Function::normal();
+  return var * n;
 }
 
-VarPtr Var::times_normal() const
+LinearTermPtr Var::times_normal() const
 {
   TEUCHOS_TEST_FOR_EXCEPTION( _op !=  Camellia::OP_VALUE, std::invalid_argument, "operators can only be applied to raw vars, not vars that have been operated on.");
   VarType newType;
@@ -418,29 +440,39 @@ VarPtr Var::times_normal() const
   {
     newType = _varType;
   }
-  return Teuchos::rcp( new Var(_id, _rank + 1, _name, OP_TIMES_NORMAL, UNKNOWN_FS, newType ) );
+  VarPtr var = Teuchos::rcp( new Var(_id, _rank, _name, _op, _fs, _varType ) );
+  FunctionPtr n = Function::normal();
+  return var * n;
 }
 
-VarPtr Var::times_normal_x() const
+LinearTermPtr Var::times_normal_x() const
 {
   TEUCHOS_TEST_FOR_EXCEPTION( _op !=  Camellia::OP_VALUE, std::invalid_argument, "operators can only be applied to raw vars, not vars that have been operated on.");
-  return Teuchos::rcp( new Var(_id, _rank, _name, OP_TIMES_NORMAL_X, UNKNOWN_FS, _varType ) );
+  VarPtr var = Teuchos::rcp( new Var(_id, _rank, _name, _op, _fs, _varType ) );
+  FunctionPtr n = Function::normal();
+  return var * n->x();
 }
 
-VarPtr Var::times_normal_y() const
+LinearTermPtr Var::times_normal_y() const
 {
   TEUCHOS_TEST_FOR_EXCEPTION( _op !=  Camellia::OP_VALUE, std::invalid_argument, "operators can only be applied to raw vars, not vars that have been operated on.");
-  return Teuchos::rcp( new Var(_id, _rank, _name, OP_TIMES_NORMAL_Y, UNKNOWN_FS, _varType ) );
+  VarPtr var = Teuchos::rcp( new Var(_id, _rank, _name, _op, _fs, _varType ) );
+  FunctionPtr n = Function::normal();
+  return var * n->y();
 }
 
-VarPtr Var::times_normal_z() const
+LinearTermPtr Var::times_normal_z() const
 {
   TEUCHOS_TEST_FOR_EXCEPTION( _op !=  Camellia::OP_VALUE, std::invalid_argument, "operators can only be applied to raw vars, not vars that have been operated on.");
-  return Teuchos::rcp( new Var(_id, _rank, _name, OP_TIMES_NORMAL_Z, UNKNOWN_FS, _varType ) );
+  VarPtr var = Teuchos::rcp( new Var(_id, _rank, _name, _op, _fs, _varType ) );
+  FunctionPtr n = Function::normal();
+  return var * n->z();
 }
 
-VarPtr Var::times_normal_t() const
+LinearTermPtr Var::times_normal_t() const
 {
   TEUCHOS_TEST_FOR_EXCEPTION( _op !=  Camellia::OP_VALUE, std::invalid_argument, "operators can only be applied to raw vars, not vars that have been operated on.");
-  return Teuchos::rcp( new Var(_id, _rank, _name, OP_TIMES_NORMAL_T, UNKNOWN_FS, _varType ) );
+  VarPtr var = Teuchos::rcp( new Var(_id, _rank, _name, _op, _fs, _varType ) );
+  FunctionPtr n = Function::normalSpaceTime();
+  return var * n->t();
 }

@@ -323,7 +323,7 @@ public:
     // construct bilinear form:
     _bf = Teuchos::rcp( new BF(varFactory) );
     // v terms:
-    _bf->addTerm(mu * omega_hat, v->cross_normal());
+    _bf->addTerm(mu * omega_hat, v->cross_normal(_spaceDim));
     _bf->addTerm(- p_hat,v->dot_normal()); // (sigma1, tau1)
     _bf->addTerm(mu * omega,v->curl(_spaceDim));
     _bf->addTerm(p, v->div());

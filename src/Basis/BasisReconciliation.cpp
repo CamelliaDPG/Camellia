@@ -1080,6 +1080,12 @@ unsigned BasisReconciliation::minimumSubcellDimension(BasisPtr basis)
   case Camellia::FUNCTION_SPACE_VECTOR_HGRAD_DISC:
     minSubcellDimension = d; // i.e. no continuities enforced
     break;
+  case Camellia::FUNCTION_SPACE_HGRAD_SPACE_HVOL_TIME:
+    minSubcellDimension = 1; // vertices extruded
+    break;
+  case Camellia::FUNCTION_SPACE_HVOL_SPACE_HGRAD_TIME:
+    minSubcellDimension = d-1; // temporal faces
+    break;
   case Camellia::FUNCTION_SPACE_REAL_SCALAR:
     minSubcellDimension = 0;
     break;

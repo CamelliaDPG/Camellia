@@ -17,7 +17,7 @@
 
 namespace Camellia
 {
-enum Space { HGRAD, HCURL, HDIV, HGRAD_DISC, HCURL_DISC, HDIV_DISC, HDIV_FREE, L2, CONSTANT_SCALAR, VECTOR_HGRAD, VECTOR_HGRAD_DISC, VECTOR_L2, UNKNOWN_FS };
+enum Space { HGRAD, HCURL, HDIV, HGRAD_DISC, HCURL_DISC, HDIV_DISC, HDIV_FREE, L2, CONSTANT_SCALAR, VECTOR_HGRAD, VECTOR_HGRAD_DISC, VECTOR_L2, HGRAD_SPACE_HVOL_TIME, HVOL_SPACE_HGRAD_TIME, UNKNOWN_FS };
 enum VarType { TEST, FIELD, TRACE, FLUX, UNKNOWN_TYPE, MIXED_TYPE };
 
 Camellia::EFunctionSpace efsForSpace(Space space);
@@ -60,13 +60,13 @@ public:
   VarPtr z() const;
   VarPtr t() const;
 
-  VarPtr cross_normal() const;
-  VarPtr dot_normal() const;
-  VarPtr times_normal() const;
-  VarPtr times_normal_x() const;
-  VarPtr times_normal_y() const;
-  VarPtr times_normal_z() const;
-  VarPtr times_normal_t() const;
+  LinearTermPtr cross_normal(int spaceDim) const;
+  LinearTermPtr dot_normal() const;
+  LinearTermPtr times_normal() const;
+  LinearTermPtr times_normal_x() const;
+  LinearTermPtr times_normal_y() const;
+  LinearTermPtr times_normal_z() const;
+  LinearTermPtr times_normal_t() const;
 
   LinearTermPtr termTraced() const;
 
