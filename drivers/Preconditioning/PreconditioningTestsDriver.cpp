@@ -439,6 +439,8 @@ void initializeSolutionAndCoarseMesh(SolutionPtr &solution, MeshPtr &coarseMesh,
   else if (problemChoice == ConvectionDiffusion)
   {
     double epsilon = 1e-2;
+    x0 = vector<double>(spaceDim,-1.0);
+
     FunctionPtr beta;
     FunctionPtr beta_x = Function::constant(1);
     FunctionPtr beta_y = Function::constant(2);
@@ -512,6 +514,8 @@ void initializeSolutionAndCoarseMesh(SolutionPtr &solution, MeshPtr &coarseMesh,
   else if (problemChoice == ConvectionDiffusionExperimental)
   {
     double epsilon = 1e-2;
+    x0 = vector<double>(spaceDim,-1.0);
+
     FunctionPtr beta;
     FunctionPtr beta_x = Function::constant(1);
     FunctionPtr beta_y = Function::constant(2);
@@ -1804,6 +1808,11 @@ int main(int argc, char *argv[])
   }
   else
   {
+    if (maxCells == -1)
+    {
+      maxCells = Teuchos::GlobalMPISession::getNProc(); // by default, ensure max of 1 cell per MPI node
+    }
+    
     if (rank==0)
     {
       cout << "Running " << problemChoiceString << " solver in automatic mode (subset: ";
@@ -1816,10 +1825,6 @@ int main(int argc, char *argv[])
       cout << "CG tolerance = " << cgTol << ", max iterations = " << cgMaxIterations << endl;
     }
 
-    if (maxCells == -1)
-    {
-      maxCells = Teuchos::GlobalMPISession::getNProc(); // by default, ensure max of 1 cell per MPI node
-    }
     runMany(problemChoice, spaceDim, delta_k, runManyMinCells,
             conformingTraces, useCondensedSolve,
             schwarzFactorType, levelOfFill, fillRatio,

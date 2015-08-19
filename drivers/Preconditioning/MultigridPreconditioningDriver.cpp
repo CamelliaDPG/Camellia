@@ -76,6 +76,8 @@ void initializeSolutionAndCoarseMesh(SolutionPtr &solution, vector<MeshPtr> &mes
   else if (problemChoice == ConvectionDiffusion)
   {
     double epsilon = 1e-2;
+    x0 = vector<double>(spaceDim,-1.0);
+
     FunctionPtr beta;
     FunctionPtr beta_x = Function::constant(1);
     FunctionPtr beta_y = Function::constant(2);
@@ -293,7 +295,20 @@ void initializeSolutionAndCoarseMesh(SolutionPtr &solution, vector<MeshPtr> &mes
   // that involves just the fine k0 elements.
   if (k_coarse != k)
     meshesCoarseToFine.push_back(k0Mesh);
+  
+  if ((k_coarse == 0) && (k > 1))
+  {
+    MeshTopologyViewPtr meshTopoView;
+    if (useLightWeightViews)
+      meshTopoView = k0Mesh->getTopology()->getView(mesh->getActiveCellIDs());
+    else
+      meshTopoView = k0Mesh->getTopology()->deepCopy();
     
+    MeshPtr k1Mesh = Teuchos::rcp(new Mesh(meshTopoView, bf, H1Order_coarse + 1, delta_k));
+
+    meshesCoarseToFine.push_back(k1Mesh);
+  }
+  
   meshesCoarseToFine.push_back(mesh);
   
   if (meshWidthCells != numCells)
