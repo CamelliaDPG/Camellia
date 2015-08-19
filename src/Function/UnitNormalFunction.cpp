@@ -28,6 +28,7 @@ TFunctionPtr<double> UnitNormalFunction::z()
 
 TFunctionPtr<double> UnitNormalFunction::t()
 {
+  TEUCHOS_TEST_FOR_EXCEPTION(!_spaceTime, std::invalid_argument, "t() component of normal only supported for space-time normals");
   return Teuchos::rcp( new UnitNormalFunction(-2,_spaceTime) );
 }
 
@@ -55,6 +56,10 @@ string UnitNormalFunction::displayString()
     if (_comp == 2)
     {
       return " n_z ";
+    }
+    if (_comp == -2)
+    {
+      return " n_t ";
     }
     return "UnitNormalFunction with unexpected component";
   }
