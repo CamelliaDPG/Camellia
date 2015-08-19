@@ -821,6 +821,16 @@ unsigned CellTopology::getSpatialComponentSideOrdinal(unsigned int thisSideOrdin
   return thisSideOrdinal - 2;
 }
 
+unsigned CellTopology::getSpatialSideOrdinal(unsigned sideOrdinalInSpatialComponentTopology)
+{
+  if (!sideIsSpatial(sideOrdinalInSpatialComponentTopology + 2))
+  {
+    TEUCHOS_TEST_FOR_EXCEPTION(true, std::invalid_argument, "sideOrdinalInSpatialComponentTopology appears not to be a valid side in spatial component topology");
+  }
+  // TODO: if/when we change the subcell node ordering, change this to return thisSideOrdinal
+  return sideOrdinalInSpatialComponentTopology + 2;
+}
+
 unsigned CellTopology::getTemporalComponentSideOrdinal(unsigned int thisSideOrdinal)
 {
   if (sideIsSpatial(thisSideOrdinal))

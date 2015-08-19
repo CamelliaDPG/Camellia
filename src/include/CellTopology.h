@@ -152,6 +152,11 @@ public:
    */
   unsigned getSpatialComponentSideOrdinal(unsigned thisSideOrdinal);
 
+  /** \brief  Returns the side corresponding to the provided side ordinal in the tensorial component topology.
+   *  \param  sideOrdinalInSpatialComponentTopology      [in]  - the side ordinal in spatialTopology, where "this" is spatialTopology x Line_2
+   */
+  unsigned getSpatialSideOrdinal(unsigned sideOrdinalInSpatialComponentTopology);
+  
   /** \brief  Mapping from this CellTopology's side ordinal of dimension d-1 to the corresponding
    *          node ordinal in the Line_2 topology; that is, if
    *              this = (shardsTopo x Line_2 x Line_2 ...) x Line_2,
