@@ -94,35 +94,35 @@ void testOverlapDofOrdinals(bool hierarchical, Teuchos::FancyOStream &out, bool 
     for (int overlap=0; overlap<3; overlap++)
     {
       set<GlobalIndexType> cells = mesh->cellIDsInPartition();
-      if (!hierarchical)
+
+      // go outward #overlap levels of cells
+      set<GlobalIndexType> ghostCells;
+      set<GlobalIndexType> lastGhostCells = cells;
+      for (int i=0; i<overlap; i++)
       {
+        for (set<GlobalIndexType>::iterator cellIDIt = lastGhostCells.begin(); cellIDIt != lastGhostCells.end(); cellIDIt++)
         {
-          // go outward #overlap levels of cells
-          set<GlobalIndexType> ghostCells;
-          set<GlobalIndexType> lastGhostCells = cells;
-          for (int i=0; i<overlap; i++)
+          GlobalIndexType cellID = *cellIDIt;
+          CellPtr cell = mesh->getTopology()->getCell(cellID);
+          vector< CellPtr > neighbors = cell->getNeighbors(mesh->getTopology());
+          for (vector< CellPtr >::iterator neighborIt = neighbors.begin(); neighborIt != neighbors.end(); neighborIt++)
           {
-            for (set<GlobalIndexType>::iterator cellIDIt = lastGhostCells.begin(); cellIDIt != lastGhostCells.end(); cellIDIt++)
+            CellPtr neighbor = *neighborIt;
+            if (cells.find(neighbor->cellIndex()) == cells.end())
             {
-              GlobalIndexType cellID = *cellIDIt;
-              CellPtr cell = mesh->getTopology()->getCell(cellID);
-              vector< CellPtr > neighbors = cell->getNeighbors(mesh->getTopology());
-              for (vector< CellPtr >::iterator neighborIt = neighbors.begin(); neighborIt != neighbors.end(); neighborIt++)
-              {
-                CellPtr neighbor = *neighborIt;
-                if (cells.find(neighbor->cellIndex()) == cells.end())
-                {
-                  ghostCells.insert(neighbor->cellIndex());
-                  cells.insert(neighbor->cellIndex());
-                }
-              }
+              ghostCells.insert(neighbor->cellIndex());
+              cells.insert(neighbor->cellIndex());
             }
-            lastGhostCells = ghostCells;
           }
         }
+        lastGhostCells = ghostCells;
       }
-      else
+      
+      if (hierarchical)
       {
+        set<GlobalIndexType> neighborCells = cells;
+        set<GlobalIndexType> cells = mesh->cellIDsInPartition();
+        
         // go upward #overlap levels of cells:
         set<GlobalIndexType> ancestralCells = cells;
         set<GlobalIndexType> lastAncestralCells = cells;
@@ -157,7 +157,14 @@ void testOverlapDofOrdinals(bool hierarchical, Teuchos::FancyOStream &out, bool 
           GlobalIndexType cellID = *cellIDIt;
           CellPtr cell = mesh->getTopology()->getCell(cellID);
           set<IndexType> descendants = cell->getDescendants(mesh->getTopology());
-          cells.insert(descendants.begin(),descendants.end());
+          
+          for (IndexType descendant : descendants)
+          {
+            if (neighborCells.find(descendant) != neighborCells.end())
+            {
+              cells.insert(descendant);
+            }
+          }
         }
 //          Camellia::print("cells", cells);
       }
@@ -206,7 +213,7 @@ TEUCHOS_UNIT_TEST( OverlappingRowMatrix, OverlapDofOrdinalsTest )
   testOverlapDofOrdinals(hierarchical, out, success);
 }
 
-TEUCHOS_UNIT_TEST( OverlappingRowMatrix, HierarchicalOverlapDofOrdinalsTest )
+TEUCHOS_UNIT_TEST( OverlappingRowMatrix, HierarchicalOverlapDofOrdinals )
 {
   bool hierarchical = true;
   testOverlapDofOrdinals(hierarchical, out, success);
