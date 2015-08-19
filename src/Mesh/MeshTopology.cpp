@@ -1765,6 +1765,43 @@ bool MeshTopology::getVertexIndex(const vector<double> &vertex, IndexType &verte
   }
 }
 
+// Here, we assume that the initial coordinates provided are exactly equal (no round-off error) to the ones sought
+vector<IndexType> MeshTopology::getVertexIndicesMatching(const vector<double> &vertexInitialCoordinates, double tol)
+{
+  int numCoords = vertexInitialCoordinates.size();
+  vector<double> vertexForLowerBound;
+  for (int d=0; d<numCoords; d++)
+  {
+    vertexForLowerBound.push_back(vertexInitialCoordinates[d]-tol);
+  }
+  
+  double xDist = 0; // xDist because vector<double> sorts according to the first entry: so we'll end up looking at
+  // all the vertices that are near (x,...) in x...
+  
+  map< vector<double>, unsigned >::iterator lowerBoundIt = _vertexMap.lower_bound(vertexInitialCoordinates);
+  vector<IndexType> matches;
+  while (lowerBoundIt != _vertexMap.end() && (xDist < tol))
+  {
+    double dist = 0; // distance in the first numCoords coordinates
+    for (int d=0; d<numCoords; d++)
+    {
+      double ddist = (lowerBoundIt->first[d] - vertexInitialCoordinates[d]);
+      dist += ddist * ddist;
+    }
+    dist = sqrt( dist );
+    
+    if (dist < tol) // counts as a match
+    {
+      IndexType matchIndex = lowerBoundIt->second;
+      matches.push_back(matchIndex);
+    }
+    
+    xDist = abs(lowerBoundIt->first[0] - vertexInitialCoordinates[0]);
+    lowerBoundIt++;
+  }
+  return matches;
+}
+
 unsigned MeshTopology::getVertexIndexAdding(const vector<double> &vertex, double tol)
 {
   unsigned vertexIndex;

@@ -20,7 +20,7 @@ class TBC
 {
   bool _legacyBCSubclass;
   set< int > _zeroMeanConstraints; // variables on which ZMCs imposed
-  map< int, pair<GlobalIndexType,Scalar> > _singlePointBCs; // variables on which single-point conditions imposed
+  map< int, pair< vector<double>, Scalar> > _singlePointBCs; // variables on which single-point conditions imposed
   map< int, TDirichletBC<Scalar> > _dirichletBCs; // key: trialID
 protected:
   map< int, TDirichletBC<Scalar> > &dirichletBCs();
@@ -39,9 +39,9 @@ public:
 
   virtual bool singlePointBC(int varID); // override if you want to implement a BC at a single, arbitrary point (and nowhere else).
   virtual Scalar valueForSinglePointBC(int varID);
-  virtual GlobalIndexType vertexForSinglePointBC(int varID); // returns -1 when no vertex was specified for the imposition
+  virtual vector<double> pointForSpatialPointBC(int varID);
 
-  virtual bool imposeZeroMeanConstraint(int varID);
+  virtual bool shouldImposeZeroMeanConstraint(int varID);
 
   bool isLegacySubclass();
 
@@ -51,8 +51,18 @@ public:
   virtual ~TBC() {}
 
   void addDirichlet( VarPtr traceOrFlux, SpatialFilterPtr spatialPoints, TFunctionPtr<Scalar> valueFunction );
-  void addSinglePointBC( int fieldID, Scalar value, GlobalIndexType meshVertexNumber = -1 );
+  
+  // ! Adds point constraint at the specified vertex number in the specified spatial mesh.  Deprecated; use addSpatialPointBC instead (even for pure-spatial meshes).
+  void addSinglePointBC( int fieldID, Scalar value, MeshPtr spatialMesh, GlobalIndexType meshVertexNumber = -1 );
+  
+  // ! Adds point constraint at the specified spatial point (which must correspond to a vertex in the mesh).  Deprecated; use addSpatialPointBC instead (even for pure-spatial meshes).  For space-time meshes, indicates that the value should be imposed at every temporal degree of freedom corresponding to the spatial point.
+  void addSpatialPointBC(int fieldID, Scalar value, vector<double> spatialPoint);
+  // ! Remove the specified point constraint.
+  void removeSpatialPointBC(int fieldID);
+
+  // ! Remove the specified point constraint.  Deprecated version; use removeSpatialPointBC() instead.
   void removeSinglePointBC( int fieldID );
+  
   void addZeroMeanConstraint( VarPtr field );
   void removeZeroMeanConstraint( int fieldID );
 

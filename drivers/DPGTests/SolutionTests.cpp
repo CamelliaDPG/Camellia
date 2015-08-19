@@ -2201,7 +2201,8 @@ bool SolutionTests::testCondensationSolveWithSinglePointConstraint()
 
   int spaceDim = 2;
   bool conformingTraces = false; // false mostly because I want to do cavity flow with non-H^1 BCs
-  StokesVGPFormulation stokesForm(spaceDim,conformingTraces);
+  double mu = 1.0;
+  StokesVGPFormulation stokesForm = StokesVGPFormulation::steadyFormulation(spaceDim, mu, conformingTraces);
 
   VarPtr u1 = stokesForm.u(1);
   VarPtr u2 = stokesForm.u(2);
@@ -2219,18 +2220,6 @@ bool SolutionTests::testCondensationSolveWithSinglePointConstraint()
 
   RHSPtr rhs = RHS::rhs(); // zero RHS
 
-  ////////////////////   CREATE BCs   ///////////////////////
-  // cavity flow
-  BCPtr bc = BC::bc();
-  SpatialFilterPtr topBoundary = SpatialFilter::matchingY(1.0);
-  SpatialFilterPtr wallBoundary = SpatialFilter::negatedFilter(topBoundary);
-
-  FunctionPtr n = Function::normal();
-
-  bc->addDirichlet(u1hat, topBoundary, Function::constant(1.0));
-  bc->addDirichlet(u1hat, wallBoundary, Function::zero());
-  bc->addDirichlet(u2hat, wallBoundary, Function::zero());
-  bc->addSinglePointBC(p->ID(), 0);
 
   ////////////////////   BUILD MESH   ///////////////////////
 
@@ -2240,6 +2229,19 @@ bool SolutionTests::testCondensationSolveWithSinglePointConstraint()
   // first, single-element mesh
   MeshPtr mesh = MeshUtilities::buildUnitQuadMesh(1, bf, H1Order, H1Order+pToAdd);
 
+  ////////////////////   CREATE BCs   ///////////////////////
+  // cavity flow
+  BCPtr bc = BC::bc();
+  SpatialFilterPtr topBoundary = SpatialFilter::matchingY(1.0);
+  SpatialFilterPtr wallBoundary = SpatialFilter::negatedFilter(topBoundary);
+  
+  FunctionPtr n = Function::normal();
+  
+  bc->addDirichlet(u1hat, topBoundary, Function::constant(1.0));
+  bc->addDirichlet(u1hat, wallBoundary, Function::zero());
+  bc->addDirichlet(u2hat, wallBoundary, Function::zero());
+  bc->addSinglePointBC(p->ID(), 0.0, mesh);
+  
   ////////////////////   REFINE & SOLVE   ///////////////////////
   SolutionPtr solution = Teuchos::rcp( new Solution(mesh, bc, rhs, ip) );
   SolutionPtr condensedSolution = Teuchos::rcp( new Solution(mesh, bc, rhs, ip) );
@@ -2447,7 +2449,8 @@ bool SolutionTests::testCondensationSolveWithZeroMeanConstraint()
 
   int spaceDim = 2;
   bool conformingTraces = false; // false mostly because I want to do cavity flow with non-H^1 BCs
-  StokesVGPFormulation stokesForm(spaceDim,conformingTraces);
+  double mu = 1.0;
+  StokesVGPFormulation stokesForm = StokesVGPFormulation::steadyFormulation(spaceDim, mu, conformingTraces);
 
   VarPtr u1 = stokesForm.u(1);
   VarPtr u2 = stokesForm.u(2);

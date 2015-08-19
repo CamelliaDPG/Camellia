@@ -32,6 +32,7 @@ class NavierStokesVGPFormulation
   Teuchos::RCP<ParameterFunction> _dt; // use a ParameterFunction so that we can set value later and references (in BF, e.g.) automatically pick this up
   Teuchos::RCP<ParameterFunction> _theta; // selector for time step method; 0.5 is Crank-Nicolson
 
+  BCPtr _bc, _zeroBC; // _zeroBC used when _neglectFluxesOnRHS = false, as it needs to be for GMG solves
   RHSPtr _rhsForSolve, _rhsForResidual;
 
   LinearTermPtr _t1, _t2, _t3; // tractions
@@ -132,6 +133,9 @@ public:
   // ! set the RefinementStrategy to use for driving refinements
   void setRefinementStrategy(RefinementStrategyPtr refStrategy);
 
+  // ! set the Solver for the linear updates
+  void setSolver(SolverPtr solver);
+  
   // ! the Stokes bilinear form
   BFPtr stokesBF();
 

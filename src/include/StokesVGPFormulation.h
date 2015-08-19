@@ -9,6 +9,8 @@
 #ifndef Camellia_StokesVGPFormulation_h
 #define Camellia_StokesVGPFormulation_h
 
+#include <Teuchos_ParameterList.hpp>
+
 #include "TypeDefs.h"
 
 #include "VarFactory.h"
@@ -30,7 +32,8 @@ class StokesVGPFormulation
   bool _useConformingTraces;
   double _mu;
   double _time;
-  bool _transient;
+  bool _timeStepping;
+  bool _spaceTime;
 
   bool _haveOutflowConditionsImposed; // used to track whether we should impose point/zero mean conditions on pressure
 
@@ -68,8 +71,9 @@ class StokesVGPFormulation
                           TFunctionPtr<double> forcingFunction, std::string fileToLoadPrefix);
 
 public:
-  StokesVGPFormulation(int spaceDim, bool useConformingTraces, double mu = 1.0,
-                       bool transient = false, double dt = 1.0);
+  StokesVGPFormulation(Teuchos::ParameterList &parameters);
+//  StokesVGPFormulation(int spaceDim, bool useConformingTraces, double mu = 1.0,
+//                       bool transient = false, double dt = 1.0);
 
   // ! the Stokes VGP formulation bilinear form
   BFPtr bf();
@@ -97,6 +101,15 @@ public:
   void initializeSolution(std::string filePrefix, int fieldPolyOrder, int delta_k = 1,
                           TFunctionPtr<double> forcingFunction = Teuchos::null);
 
+  // ! returns true if this is a space-time formulation; false otherwise.
+  bool isSpaceTime() const;
+  
+  // ! returns true if this is a steady formulation; false otherwise.
+  bool isSteady() const;
+  
+  // ! returns true if this is a time-stepping formulation; false otherwise.
+  bool isTimeStepping() const;
+  
   // ! L^2 norm of the difference in u1, u2, and p from previous time step
   double L2NormOfTimeStep();
 
@@ -141,6 +154,9 @@ public:
   // ! Solves
   void solve();
 
+  // ! Returns the spatial dimension.
+  int spaceDim();
+  
   // ! Returns a reference to the Poisson formulation used for the stream solution.
   PoissonFormulation &streamFormulation();
 
@@ -173,7 +189,13 @@ public:
   VarPtr tau(int i);
   VarPtr v(int i);
 
-  static TFunctionPtr<double> forcingFunction(int spaceDim, double mu, TFunctionPtr<double> u, TFunctionPtr<double> p);
+  // ! returns the forcing function for this formulation if u and p are the exact solutions.
+  TFunctionPtr<double> forcingFunction(TFunctionPtr<double> u, TFunctionPtr<double> p);
+  
+  static StokesVGPFormulation steadyFormulation(int spaceDim, double mu, bool useConformingTraces);
+  static StokesVGPFormulation spaceTimeFormulation(int spaceDim, double mu, bool useConformingTraces);
+  
+  static StokesVGPFormulation timeSteppingFormulation(int spaceDim, double mu, double dt, bool useConformingTraces);
 };
 }
 

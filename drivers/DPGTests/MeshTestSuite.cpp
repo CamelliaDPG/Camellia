@@ -1434,7 +1434,7 @@ bool MeshTestSuite::testHRefinement()
   }
   FunctionPtr phiExact = exactSolution.exactFunctions().find(phi->ID())->second;
   double value = Function::evaluate(phiExact, zeroPoint[0], zeroPoint[1]);
-  fineMeshBC->addSinglePointBC(phi->ID(), value, fineMeshVertexIndex); // replaces existing
+  fineMeshBC->addSinglePointBC(phi->ID(), value, fineMesh, fineMeshVertexIndex); // replaces existing
 
   origSolution = Solution::solution(fineMesh, fineMeshBC, exactSolution.ExactSolution::rhs(), ip);
   origSolution->solve();

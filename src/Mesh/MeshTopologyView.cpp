@@ -432,6 +432,11 @@ bool MeshTopologyView::getVertexIndex(const vector<double> &vertex, IndexType &v
   return _meshTopo->getVertexIndex(vertex, vertexIndex, tol);
 }
 
+vector<IndexType> MeshTopologyView::getVertexIndicesMatching(const vector<double> &vertexInitialCoordinates, double tol)
+{
+  return _meshTopo->getVertexIndicesMatching(vertexInitialCoordinates, tol);
+}
+
 bool MeshTopologyView::isParent(IndexType cellIndex)
 {
   TEUCHOS_TEST_FOR_EXCEPTION(!isValidCellIndex(cellIndex), std::invalid_argument, "cellIndex is invalid!");

@@ -84,6 +84,8 @@ namespace Camellia {
     virtual const std::vector<double>& getVertex(IndexType vertexIndex);
     
     virtual bool getVertexIndex(const std::vector<double> &vertex, IndexType &vertexIndex, double tol=1e-14);
+    
+    virtual std::vector<IndexType> getVertexIndicesMatching(const std::vector<double> &vertexInitialCoordinates, double tol=1e-14);
 
     virtual Intrepid::FieldContainer<double> physicalCellNodesForCell(unsigned cellIndex, bool includeCellDimension = false);
     

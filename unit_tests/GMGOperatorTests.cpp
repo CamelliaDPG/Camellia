@@ -44,7 +44,7 @@ namespace
       P->ExtractMyRowCopy(localRowIndex, globalEntryCount, numEntries, &colValues(0), &colIndices(0));
       bool diagEntryFound = false;
       
-      double tol=1e-15;
+      double tol=1e-14;
       for (int colEntryOrdinal=0; colEntryOrdinal<numEntries; colEntryOrdinal++)
       {
         GlobalIndexTypeToCast localColIndex = colIndices(colEntryOrdinal);
@@ -132,21 +132,24 @@ namespace
     vector<int> cellCounts(spaceDim,2);
     BFPtr bf;
     BCPtr bc = BC::bc();
+    MeshPtr mesh;
+    int delta_k = spaceDim;
+    vector<double> dimensions(spaceDim,1.0);
+
     if (formChoice == Poisson)
     {
       PoissonFormulation form(spaceDim, useConformingTraces);
       bf = form.bf();
+      mesh = MeshFactory::rectilinearMesh(bf, dimensions, cellCounts, H1Order, delta_k);
     }
     else
     {
-      StokesVGPFormulation form(spaceDim, useConformingTraces);
+      double mu = 1.0;
+      StokesVGPFormulation form = StokesVGPFormulation::steadyFormulation(spaceDim,mu,useConformingTraces);
       bf = form.bf();
-      bc->addSinglePointBC(form.p()->ID(), 0.0);
+      mesh = MeshFactory::rectilinearMesh(bf, dimensions, cellCounts, H1Order, delta_k);
+      bc->addSinglePointBC(form.p()->ID(), 0.0, mesh);
     }
-    
-    int delta_k = spaceDim;
-    vector<double> dimensions(spaceDim,1.0);
-    MeshPtr mesh = MeshFactory::rectilinearMesh(bf, dimensions, cellCounts, H1Order, delta_k);
     
     IPPtr ip = bf->graphNorm();
     RHSPtr rhs = RHS::rhs();

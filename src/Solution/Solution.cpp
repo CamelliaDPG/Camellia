@@ -3574,7 +3574,7 @@ void TSolution<Scalar>::condensedSolve(TSolverPtr<Scalar> globalSolver, bool red
   for (vector< int >::iterator trialIt = trialIDs.begin(); trialIt != trialIDs.end(); trialIt++)
   {
     int trialID = *trialIt;
-    if (_bc->imposeZeroMeanConstraint(trialID) || _bc->singlePointBC(trialID) )
+    if (_bc->shouldImposeZeroMeanConstraint(trialID) || _bc->singlePointBC(trialID) )
     {
       fieldsToExclude.insert(trialID);
     }
@@ -4667,6 +4667,15 @@ Teuchos::RCP< TSolution<Scalar> > TSolution<Scalar>::load(TBFPtr<Scalar> bf, str
 template <typename Scalar>
 void TSolution<Scalar>::saveToHDF5(string filename)
 {
+  // Note that the format here assumes *identical* partitioning of the mesh, since
+  // global dof numbering depends on the mesh partitioning.
+  
+  // This is not an especially good idea.  It would be better (though not optimal,
+  // in terms of storage size and conversion cost) to store local coefficients for
+  // each cell.  One possibility would be to store *both* -- that would trade more
+  // storage cost and the headache of figuring out whether it's safe to use the
+  // vector representation, for the computational savings of not having to reconstruct
+  // the global vector from the local representation.
   int commRank = Teuchos::GlobalMPISession::getRank();
   int nProcs = Teuchos::GlobalMPISession::getNProc();
 
@@ -4726,7 +4735,7 @@ vector<int> TSolution<Scalar>::getZeroMeanConstraints()
   for (vector< int >::iterator trialIt = trialIDs.begin(); trialIt != trialIDs.end(); trialIt++)
   {
     int trialID = *trialIt;
-    if (_bc->imposeZeroMeanConstraint(trialID))
+    if (_bc->shouldImposeZeroMeanConstraint(trialID))
     {
       zeroMeanConstraints.push_back(trialID);
     }
@@ -4779,7 +4788,7 @@ void TSolution<Scalar>::setUseCondensedSolve(bool value, set<GlobalIndexType> of
       for (vector< int >::iterator trialIt = trialIDs.begin(); trialIt != trialIDs.end(); trialIt++)
       {
         int trialID = *trialIt;
-        if (_bc->imposeZeroMeanConstraint(trialID) || _bc->singlePointBC(trialID) )
+        if (_bc->shouldImposeZeroMeanConstraint(trialID) || _bc->singlePointBC(trialID) )
         {
           fieldsToExclude.insert(trialID);
         }

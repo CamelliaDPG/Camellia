@@ -416,7 +416,7 @@ SpaceTimeIncompressibleFormulation::SpaceTimeIncompressibleFormulation(Teuchos::
 
   // impose zero mean constraint
   // if (problem->imposeZeroMeanPressure())
-  //   _solutionUpdate->bc()->imposeZeroMeanConstraint(p->ID());
+  //   _solutionUpdate->bc()->shouldImposeZeroMeanConstraint(p->ID());
   // _solutionUpdate->bc()->singlePointBC(p->ID());
 
   _mesh->registerSolution(_solutionBackground);

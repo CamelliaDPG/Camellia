@@ -24,7 +24,7 @@ void projectExactSolution(StokesVGPFormulation &form, SolutionPtr stokesSolution
   double mu = form.mu();
 
   FunctionPtr u1, u2, u3, sigma1, sigma2, sigma3;
-  int spaceDim = stokesSolution->mesh()->getDimension();
+  int spaceDim = form.spaceDim();
 
   u1 = u->x();
   u2 = u->y();
@@ -82,14 +82,18 @@ void projectExactSolution(StokesVGPFormulation &form, SolutionPtr stokesSolution
 void setupExactSolution(StokesVGPFormulation &form, FunctionPtr u, FunctionPtr p,
                         MeshTopologyPtr meshTopo, int fieldPolyOrder, int delta_k)
 {
-  int spaceDim = meshTopo->getDimension();
-  double mu = form.mu();
-
-  FunctionPtr forcingFunction = StokesVGPFormulation::forcingFunction(spaceDim, mu, u, p);
+  FunctionPtr forcingFunction = form.forcingFunction(u, p);
 
   form.initializeSolution(meshTopo, fieldPolyOrder, delta_k, forcingFunction);
 
-  form.addZeroMeanPressureCondition();
+  if (form.isSpaceTime())
+  {
+    form.addPointPressureCondition();
+  }
+  else
+  {
+    form.addZeroMeanPressureCondition();
+  }
   form.addInflowCondition(SpatialFilter::allSpace(), u);
 }
 
@@ -123,8 +127,9 @@ void testStokesConsistencySteady(int spaceDim, Teuchos::FancyOStream &out, bool 
   }
 
   bool useConformingTraces = true;
-  StokesVGPFormulation form(spaceDim, useConformingTraces, 1.0 / Re);
-
+  double mu = 1.0 / Re;
+  StokesVGPFormulation form = StokesVGPFormulation::steadyFormulation(spaceDim,mu,useConformingTraces);
+  
   setupExactSolution(form, u, p, meshTopo, fieldPolyOrder, delta_k);
   projectExactSolution(form, form.solution(), u, p);
 
@@ -172,8 +177,10 @@ TEUCHOS_UNIT_TEST( StokesVGPFormulation, StreamFormulationConsistency )
   FunctionPtr p = y * y * y; // zero average
 
   bool useConformingTraces = true;
-  StokesVGPFormulation form(spaceDim, useConformingTraces, 1.0 / Re);
+  double mu = 1.0 / Re;
+  StokesVGPFormulation form = StokesVGPFormulation::steadyFormulation(spaceDim,mu,useConformingTraces);
 
+  
   setupExactSolution(form, u, p, meshTopo, fieldPolyOrder, delta_k);
 
   SolutionPtr streamSoln = form.streamSolution();
@@ -210,7 +217,85 @@ TEUCHOS_UNIT_TEST( StokesVGPFormulation, StreamFormulationConsistency )
   TEST_COMPARE(energyError, <, tol);
 }
 
-TEUCHOS_UNIT_TEST( StokesVGPFormulation, Consistency_2D_Transient )
+  TEUCHOS_UNIT_TEST( StokesVGPFormulation, Consistency_2D_SpaceTime_Slow )
+  {
+    int spaceDim = 2;
+    vector<double> dimensions(spaceDim,2.0); // 2x2 square domain
+    vector<int> elementCounts(spaceDim,1); // 1 x 1 mesh
+    vector<double> x0(spaceDim,-1.0);
+    MeshTopologyPtr spatialMeshTopo = MeshFactory::rectilinearMeshTopology(dimensions, elementCounts, x0);
+    double t0 = 0.0, t1 = 0.1;
+    MeshTopologyPtr meshTopo = MeshFactory::spaceTimeMeshTopology(spatialMeshTopo, t0, t1);
+    double Re = 1.0;
+    int fieldPolyOrder = 3, delta_k = 1;
+    
+    // testing space-time formulation consistency goes much as with the steady state;
+    // if we project a steady solution onto the space-time mesh, we should have a zero residual
+    // (would also be worth checking that an exactly-recoverable transient solution has zero residual)
+    
+    bool useConformingTraces = false;
+    double mu = 1.0 / Re;
+    StokesVGPFormulation form = StokesVGPFormulation::spaceTimeFormulation(spaceDim, mu, useConformingTraces);
+    
+    vector<pair<FunctionPtr, FunctionPtr>> exactSolutions; // (u,p) pairs
+    
+    FunctionPtr x = Function::xn(1);
+    FunctionPtr y = Function::yn(1);
+    FunctionPtr t = Function::tn(1);
+    
+//    FunctionPtr u1 = x;
+//    FunctionPtr u2 = -y; // divergence 0
+//    FunctionPtr u = Function::vectorize(u1,u2);
+//    FunctionPtr p = Function::zero(); // y * y * y; // zero average
+//    exactSolutions.push_back({u,p});
+//    
+//    u1 = 2 * x * y;
+//    u2 = -y * y; // divergence 0
+//    u = Function::vectorize(u1,u2);
+//    p = Function::zero(); // zero average
+//    exactSolutions.push_back({u,p});
+    
+    FunctionPtr u1 = x * t;
+    FunctionPtr u2 = -y * t; // divergence 0
+    FunctionPtr u = Function::vectorize(u1,u2);
+    FunctionPtr p = (y * y * y + 1.0) * t; // zero at (-1,-1), which is where the point constraint happens to be imposed...
+    exactSolutions.push_back({u,p});
+    
+    for (auto exactSolution : exactSolutions)
+    {
+      u = exactSolution.first;
+      p = exactSolution.second;
+
+      setupExactSolution(form, u, p, meshTopo, fieldPolyOrder, delta_k);
+      projectExactSolution(form, form.solution(), u, p);
+//      form.addPointPressureCondition();
+      
+      double energyError = form.solution()->energyErrorTotal();
+      
+      double tol = 1e-13;
+      TEST_COMPARE(energyError, <, tol);
+      
+//      {         // DEBUGGING:
+//        form.bf()->printTrialTestInteractions();
+//        FunctionPtr f = form.forcingFunction(u, p);
+//        cout << "forcing function: " << f->displayString() << endl;
+//        HDF5Exporter exporter(form.solution()->mesh(),"StokesSpaceTimeForcingFunction","/tmp");
+//        FunctionPtr f_padded = Function::vectorize(f->x(), f->y(), Function::zero());
+//        exporter.exportFunction(f_padded, "forcing function", 0.0, 5);
+//        
+//        HDF5Exporter solutionExporter(form.solution()->mesh(),"StokesSpaceTimeSolution","/tmp");
+//        // export the projected solution at "time" 0
+//        solutionExporter.exportSolution(form.solution(), 0.0, 10);
+//        
+//        // solve, and export the solution at "time" 1
+//        form.solve();
+//        solutionExporter.exportSolution(form.solution(), 1.0, 10);
+//        cout << "Exported solution.\n";
+//      }
+    }
+  }
+  
+  TEUCHOS_UNIT_TEST( StokesVGPFormulation, Consistency_2D_TimeStepping )
 {
   int spaceDim = 2;
   vector<double> dimensions(spaceDim,2.0); // 2x2 square domain
@@ -232,10 +317,10 @@ TEUCHOS_UNIT_TEST( StokesVGPFormulation, Consistency_2D_Transient )
   FunctionPtr p = y * y * y; // zero average
 
   bool useConformingTraces = true;
-  bool transient = true;
+  double mu = 1.0 / Re;
   double dt = 1.0;
-  StokesVGPFormulation form(spaceDim, useConformingTraces, 1.0 / Re, transient, dt);
-
+  StokesVGPFormulation form = StokesVGPFormulation::timeSteppingFormulation(spaceDim, mu, dt, useConformingTraces);
+  
   setupExactSolution(form, u, p, meshTopo, fieldPolyOrder, delta_k);
   projectExactSolution(form, form.solution(), u, p);
   projectExactSolution(form, form.solutionPreviousTimeStep(), u, p);
@@ -255,8 +340,11 @@ TEUCHOS_UNIT_TEST( StokesVGPFormulation, ForcingFunction_2D)
   vector<int> elementCounts(spaceDim,1); // 1 x 1 mesh
   vector<double> x0(spaceDim,-1.0);
   MeshTopologyPtr meshTopo = MeshFactory::rectilinearMeshTopology(dimensions, elementCounts, x0);
+
   bool useConformingTraces = true;
-  StokesVGPFormulation form(spaceDim, useConformingTraces, 1.0 / Re);
+  double mu = 1.0 / Re;
+  StokesVGPFormulation form = StokesVGPFormulation::steadyFormulation(spaceDim, mu, useConformingTraces);
+  
   int fieldPolyOrder = 1;
   int delta_k = 1;
   MeshPtr stokesMesh = Teuchos::rcp( new Mesh(meshTopo,form.bf(),fieldPolyOrder+1, delta_k) );
@@ -274,13 +362,97 @@ TEUCHOS_UNIT_TEST( StokesVGPFormulation, ForcingFunction_2D)
   FunctionPtr forcingFunction_y = p->dy() - (1.0/Re) * (u2->dx()->dx() + u2->dy()->dy());
   FunctionPtr forcingFunctionExpected = Function::vectorize(forcingFunction_x, forcingFunction_y);
 
-  FunctionPtr forcingFunctionActual = StokesVGPFormulation::forcingFunction(spaceDim, 1.0 / Re, Function::vectorize(u1, u2), p);
+  FunctionPtr forcingFunctionActual = form.forcingFunction(Function::vectorize(u1, u2), p);
 
   double tol = 1e-13;
   double err = (forcingFunctionExpected - forcingFunctionActual)->l2norm(stokesMesh);
   TEST_COMPARE(err, <, tol);
 }
 
+  TEUCHOS_UNIT_TEST( StokesVGPFormulation, ForcingFunction_2D_SpaceTime )
+  {
+    int spaceDim = 2;
+    vector<double> dimensions(spaceDim,2.0); // 2x2 square domain
+    vector<int> elementCounts(spaceDim,1); // 1 x 1 mesh
+    vector<double> x0(spaceDim,-1.0);
+    MeshTopologyPtr spatialMeshTopo = MeshFactory::rectilinearMeshTopology(dimensions, elementCounts, x0);
+    double t0 = 0.0, t1 = 1.0;
+    MeshTopologyPtr meshTopo = MeshFactory::spaceTimeMeshTopology(spatialMeshTopo, t0, t1);
+    double Re = 1.0;
+    int fieldPolyOrder = 3, delta_k = 1;
+    
+    bool useConformingTraces = true;
+    double mu = 1.0 / Re;
+    StokesVGPFormulation form = StokesVGPFormulation::spaceTimeFormulation(spaceDim, mu, useConformingTraces);
+    
+    // testing space-time formulation consistency goes much as with the steady state;
+    // if we project a steady solution onto the space-time mesh, we should have a zero residual
+    // We also check that an exactly-recoverable transient solution has zero residual.
+    
+    vector<pair<FunctionPtr, FunctionPtr>> exactSolutions; // (u,p) pairs
+    vector<FunctionPtr> analyticForcingFunctions; // hand-computed
+    
+    FunctionPtr x = Function::xn(1);
+    FunctionPtr y = Function::yn(1);
+    FunctionPtr u1 = x;
+    FunctionPtr u2 = -y; // divergence 0
+    FunctionPtr u = Function::vectorize(u1,u2);
+    FunctionPtr p = y * y * y; // zero average
+    FunctionPtr f_x = Function::zero();
+    FunctionPtr f_y = 3 * y * y; // p->dy()
+    
+    analyticForcingFunctions.push_back(Function::vectorize(f_x, f_y));
+    exactSolutions.push_back({u,p});
+    
+    FunctionPtr t = Function::tn(1);
+    u1 = x * t;
+    u2 = -y * t; // divergence 0
+    u = Function::vectorize(u1,u2);
+    p = y * y * y * t; // zero average
+    f_x = x;                 // p->dx() + u1->dt()
+    f_y = 3 * y * y * t - y; // p->dy() + u2->dt()
+    
+    analyticForcingFunctions.push_back(Function::vectorize(f_x, f_y));
+    exactSolutions.push_back({u,p});
+    
+    u1 = Function::zero();
+    u2 = -t; // divergence 0
+    u = Function::vectorize(u1,u2);
+    p = Function::zero(); // zero average
+    f_x = Function::zero();  // u1->dt()
+    f_y = Function::constant(-1.0); // u2->dt()
+    
+    analyticForcingFunctions.push_back(Function::vectorize(f_x, f_y));
+    exactSolutions.push_back({u,p});
+    
+    for (int i=0; i<exactSolutions.size(); i++)
+    {
+      auto exactSolution = exactSolutions[i];
+      auto f_analytic = analyticForcingFunctions[i];
+      u = exactSolution.first;
+      p = exactSolution.second;
+      setupExactSolution(form, u, p, meshTopo, fieldPolyOrder, delta_k);
+      
+      FunctionPtr f_actual = form.forcingFunction(u, p);
+      FunctionPtr f_expected_x = p->dx() - mu * (u->x()->dx()->dx() + u->x()->dy()->dy()) + u->x()->dt();
+      FunctionPtr f_expected_y = p->dy() - mu * (u->y()->dx()->dx() + u->y()->dy()->dy()) + u->y()->dt();
+      
+      MeshPtr mesh = form.solution()->mesh();
+      
+      double tol = 1e-14;
+      double diff_x = (f_expected_x - f_actual->x())->l2norm(mesh);
+      double diff_y = (f_expected_y - f_actual->y())->l2norm(mesh);
+      TEST_COMPARE(diff_x, <, tol);
+      TEST_COMPARE(diff_y, <, tol);
+      
+      double diff_x_analytic = (f_expected_x - f_analytic->x())->l2norm(mesh);
+      double diff_y_analytic = (f_expected_y - f_analytic->y())->l2norm(mesh);
+      TEST_COMPARE(diff_x_analytic, <, tol);
+      TEST_COMPARE(diff_y_analytic, <, tol);
+    }
+  }
+
+  
 TEUCHOS_UNIT_TEST( StokesVGPFormulation, Projection_2D_Slow )
 {
   int spaceDim = 2;
@@ -303,7 +475,8 @@ TEUCHOS_UNIT_TEST( StokesVGPFormulation, Projection_2D_Slow )
   FunctionPtr p = x + y;
 
   bool useConformingTraces = true;
-  StokesVGPFormulation form(spaceDim, useConformingTraces, 1.0 / Re);
+  double mu = 1.0 / Re;
+  StokesVGPFormulation form = StokesVGPFormulation::steadyFormulation(spaceDim, mu, useConformingTraces);
   setupExactSolution(form,u,p,meshTopo,fieldPolyOrder,delta_k);
 
   MeshPtr stokesMesh = form.solution()->mesh();
@@ -350,7 +523,7 @@ TEUCHOS_UNIT_TEST( StokesVGPFormulation, SaveAndLoad )
 
   double mu = 1.0;
   bool useConformingTraces = true;
-  StokesVGPFormulation form(spaceDim, useConformingTraces, mu);
+  StokesVGPFormulation form = StokesVGPFormulation::steadyFormulation(spaceDim, mu, useConformingTraces);
 
   MeshTopologyPtr meshTopo = MeshFactory::rectilinearMeshTopology(dimensions, elementCounts, x0);
 
@@ -361,7 +534,8 @@ TEUCHOS_UNIT_TEST( StokesVGPFormulation, SaveAndLoad )
   string savePrefix = "StokesVGPTest";
   form.save(savePrefix);
 
-  StokesVGPFormulation loadedForm(meshTopo->getDimension(),useConformingTraces, mu);
+  StokesVGPFormulation loadedForm = StokesVGPFormulation::steadyFormulation(meshTopo->getDimension(), mu, useConformingTraces);
+
   loadedForm.initializeSolution(savePrefix,fieldPolyOrder,delta_k);
 
   // delete the files we created

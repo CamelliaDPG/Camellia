@@ -149,36 +149,34 @@ void Boundary::bcsToImpose(FieldContainer<GlobalIndexType> &globalIndices,
 
   // first, let's check for any singletons (one-point BCs)
   map<IndexType, set < pair<int, unsigned> > > singletonsForCell;
-
+  
   vector< int > trialIDs = _mesh->bilinearForm()->trialIDs();
   for (vector< int >::iterator trialIt = trialIDs.begin(); trialIt != trialIDs.end(); trialIt++)
   {
     int trialID = *trialIt;
     if (bc.singlePointBC(trialID))
     {
-      GlobalIndexType vertexNumberForImposition = bc.vertexForSinglePointBC(trialID);
-      if (vertexNumberForImposition == -1) vertexNumberForImposition = 0; // just pick the first point in the mesh.  This should never be a hanging node.
+      vector<double> spatialVertex = bc.pointForSpatialPointBC(trialID);
+      vector<IndexType> matchingVertices = _mesh->getTopology()->getVertexIndicesMatching(spatialVertex);
+      
       unsigned vertexDim = 0;
-      IndexType leastActiveCellIndex = -1;
-      set< pair<IndexType, unsigned> > cellsForVertex = _mesh->getTopology()->getCellsContainingEntity(vertexDim, vertexNumberForImposition);
-      for (set< pair<IndexType, unsigned> >::iterator cellEntryIt = cellsForVertex.begin(); cellEntryIt != cellsForVertex.end(); cellEntryIt++)
+      for (IndexType vertexIndex : matchingVertices)
       {
-        IndexType cellIndex = cellEntryIt->first;
-        if (_mesh->getTopology()->getActiveCellIndices().find(cellIndex) != _mesh->getTopology()->getActiveCellIndices().end())
+        set< pair<IndexType, unsigned> > cellsForVertex = _mesh->getTopology()->getCellsContainingEntity(vertexDim, vertexIndex);
+        for (pair<IndexType, unsigned> cellForVertex : cellsForVertex)
         {
-          leastActiveCellIndex = cellIndex;
-          break;
-        }
-      }
-      if (rankLocalCells.find(leastActiveCellIndex) != rankLocalCells.end())   // we own this cell, so we're responsible for imposing the singleton BC
-      {
-        CellPtr cell = _mesh->getTopology()->getCell(leastActiveCellIndex);
-        int vertexCount = cell->vertices().size();
-        for (int vertexOrdinal=0; vertexOrdinal<vertexCount; vertexOrdinal++)
-        {
-          if (vertexNumberForImposition == cell->vertices()[vertexOrdinal])
+          if (_mesh->getTopology()->getActiveCellIndices().find(cellForVertex.first) != _mesh->getTopology()->getActiveCellIndices().end())
           {
-            singletonsForCell[leastActiveCellIndex].insert(make_pair(trialID, vertexOrdinal));
+            // active cell
+            IndexType matchingCellID = cellForVertex.first;
+            
+            if (rankLocalCells.find(matchingCellID) != rankLocalCells.end())   // we own this cell, so we're responsible for imposing the singleton BC
+            {
+              CellPtr cell = _mesh->getTopology()->getCell(matchingCellID);
+              unsigned vertexOrdinal = cell->findSubcellOrdinal(vertexDim, vertexIndex);
+              TEUCHOS_TEST_FOR_EXCEPTION(vertexOrdinal == -1, std::invalid_argument, "Internal error: vertexOrdinal not found for cell to which it supposedly belongs");
+              singletonsForCell[matchingCellID].insert(make_pair(trialID, vertexOrdinal));
+            }
           }
         }
       }
@@ -288,12 +286,58 @@ void Boundary::bcsToImpose( map<  GlobalIndexType, Scalar > &globalDofIndicesAnd
     }
   }
 
-  for (set<pair<int, unsigned> >::iterator singletonIt = singletons.begin(); singletonIt != singletons.end(); singletonIt++)
+  map<int, vector<unsigned> > vertexOrdinalsForTrialID;
+  for (pair<int, unsigned> trialVertexPair : singletons)
   {
-    int trialID = singletonIt->first;
-    unsigned vertexOrdinalInCell = singletonIt->second;
-
+    vertexOrdinalsForTrialID[trialVertexPair.first].push_back(trialVertexPair.second);
+  }
+  
+  for (auto trialVertexOrdinals : vertexOrdinalsForTrialID)
+  {
+    int trialID = trialVertexOrdinals.first;
+    vector<unsigned> vertexOrdinalsInCell = trialVertexOrdinals.second;
+    
     CellTopoPtr cellTopo = elemType->cellTopoPtr;
+    CellTopoPtr spatialCellTopo;
+    
+    bool spaceTime;
+    int vertexOrdinalInSpatialCell;
+    if (vertexOrdinalsInCell.size() == 2)
+    {
+      // we'd better be doing space-time in this case, and the vertices should be the same spatially
+      spaceTime = (cellTopo->getTensorialDegree() > 0);
+      TEUCHOS_TEST_FOR_EXCEPTION(!spaceTime, std::invalid_argument, "multiple vertices for spatial point only supported for space-time");
+      
+      spatialCellTopo = cellTopo->getTensorialComponent();
+      
+      vertexOrdinalInSpatialCell = -1;
+      for (unsigned spatialVertexOrdinal = 0; spatialVertexOrdinal < spatialCellTopo->getNodeCount(); spatialVertexOrdinal++)
+      {
+        vector<unsigned> tensorComponentNodes = {spatialVertexOrdinal,0};
+        unsigned spaceTimeVertexOrdinal_t0 = cellTopo->getNodeFromTensorialComponentNodes(tensorComponentNodes);
+        if ((spaceTimeVertexOrdinal_t0 == vertexOrdinalsInCell[0]) || (spaceTimeVertexOrdinal_t0 == vertexOrdinalsInCell[1]))
+        {
+          // then this should be our match.  Confirm this:
+          tensorComponentNodes = {spatialVertexOrdinal,1};
+          unsigned spaceTimeVertexOrdinal_t1 = cellTopo->getNodeFromTensorialComponentNodes(tensorComponentNodes);
+          bool t1VertexMatches = (spaceTimeVertexOrdinal_t1 == vertexOrdinalsInCell[0]) || (spaceTimeVertexOrdinal_t1 == vertexOrdinalsInCell[1]);
+          TEUCHOS_TEST_FOR_EXCEPTION(!t1VertexMatches, std::invalid_argument, "Internal error: space-time vertices do not belong to the same spatial vertex");
+          vertexOrdinalInSpatialCell = spatialVertexOrdinal;
+          break;
+        }
+      }
+      TEUCHOS_TEST_FOR_EXCEPTION(vertexOrdinalInSpatialCell == -1, std::invalid_argument, "Internal error: spatial vertex ordinal not found");
+    }
+    else if (vertexOrdinalsInCell.size() == 1)
+    {
+      spaceTime = false;
+      spatialCellTopo = cellTopo;
+      vertexOrdinalInSpatialCell = vertexOrdinalsInCell[0];
+    }
+    else
+    {
+      TEUCHOS_TEST_FOR_EXCEPTION(true, std::invalid_argument, "vertexOrdinalsInCell must have 1 or 2 vertices");
+    }
 
     // in some ways less nice than the previous version of singleton BC imposition; we don't impose a non-zero value (because
     // we don't figure out physical points, etc.), and we also neglect any spatial filtering.
@@ -303,151 +347,190 @@ void Boundary::bcsToImpose( map<  GlobalIndexType, Scalar > &globalDofIndicesAnd
     set<GlobalIndexType> globalIndicesForVariable;
     DofOrderingPtr trialOrderingPtr = elemType->trialOrderPtr;
 
-    IndexType vertexIndex = cell->vertices()[vertexOrdinalInCell];
-    int numSides = cell->getSideCount();
+    int numSpatialSides = spatialCellTopo->getSideCount();
 
-    int vertexOrdinal;
-
-    int sideForVertex = -1;
-    int sideDim = cellTopo->getDimension() - 1;
+    vector<unsigned> spatialSidesForVertex;
+    vector<unsigned> sideVertexOrdinals; // same index in this container as spatialSidesForVertex: gets the node ordinal of the vertex in that side
+    int sideDim = spatialCellTopo->getDimension() - 1;
     if (!_mesh->bilinearForm()->isFluxOrTrace(trialID))
     {
-      vertexOrdinal = vertexOrdinalInCell;
-      sideForVertex = 0; // for volume trialIDs, the "side" in DofOrdering is 0
+      spatialSidesForVertex.push_back(0); // for volume trialIDs, the "side" in DofOrdering is 0
+      sideVertexOrdinals.push_back(vertexOrdinalInSpatialCell);
     }
     else
     {
-      int vertexOrdinalInSide = -1;
-      for (int sideOrdinal=0; sideOrdinal < numSides; sideOrdinal++)
+      for (int spatialSideOrdinal=0; spatialSideOrdinal < numSpatialSides; spatialSideOrdinal++)
       {
-        if (! cellTopo->sideIsSpatial(sideOrdinal)) continue; // because some fluxes are only defined on spatial sides, skip any that are not (i.e., we insist that sideForVertex is a spatial side).
-        vector<IndexType> vertexIndicesForSide = cell->getEntityVertexIndices(sideDim, sideOrdinal);
-        for (int vertexOrdinal=0; vertexOrdinal < vertexIndicesForSide.size(); vertexOrdinal++)
+        CellTopoPtr sideTopo = spatialCellTopo->getSide(spatialSideOrdinal);
+        for (unsigned sideVertexOrdinal = 0; sideVertexOrdinal < sideTopo->getNodeCount(); sideVertexOrdinal++)
         {
-          if (vertexIndicesForSide[vertexOrdinal] == vertexIndex)
+          unsigned spatialVertexOrdinal = spatialCellTopo->getNodeMap(sideDim, spatialSideOrdinal, sideVertexOrdinal);
+          if (spatialVertexOrdinal == vertexOrdinalInSpatialCell)
           {
-            sideForVertex = sideOrdinal;
-            vertexOrdinalInSide = vertexOrdinal;
-            break;
+            spatialSidesForVertex.push_back(spatialSideOrdinal);
+            sideVertexOrdinals.push_back(sideVertexOrdinal);
+            break; // this is the only match we should find on this side
           }
         }
-        if (sideForVertex != -1) break;
       }
-      if (sideForVertex == -1)
+      if (spatialSidesForVertex.size() == 0)
       {
-        cout << "ERROR: sideForVertex not found during singleton BC imposition.\n";
-        TEUCHOS_TEST_FOR_EXCEPTION(true, std::invalid_argument, "sideForVertex not found during singleton BC imposition");
+        cout << "ERROR: no spatial side for vertex found during singleton BC imposition.\n";
+        TEUCHOS_TEST_FOR_EXCEPTION(true, std::invalid_argument, "no spatial side for vertex found during singleton BC imposition");
       }
-      vertexOrdinal = vertexOrdinalInSide;
     }
-    BasisPtr basis = trialOrderingPtr->getBasis(trialID,sideForVertex);
-
-    int dofOrdinal;
-
-    int basisCardinality = basis->getCardinality();
-    if (basisCardinality > 1)
+    for (int i=0; i<spatialSidesForVertex.size(); i++)
     {
-      TensorBasis<>* tensorBasis = dynamic_cast<TensorBasis<>*>(basis.get());
-
-      // upgrade basis to continuous one of the same cardinality, if it is discontinuous.
-      if (tensorBasis)
+      unsigned spatialSideOrdinal = spatialSidesForVertex[i];
+      unsigned vertexOrdinalInSide = sideVertexOrdinals[i];
+      unsigned sideForImposition;
+      
+      BasisPtr spatialBasis, temporalBasis, spaceTimeBasis, basisForImposition;
+      if (!spaceTime)
       {
-        BasisPtr spatialBasis = tensorBasis->getSpatialBasis();
-        BasisPtr temporalBasis = tensorBasis->getTemporalBasis();
-        
-        Camellia::EFunctionSpace continuousSpatialFS;
-        if ((spatialBasis->functionSpace() == Camellia::FUNCTION_SPACE_HVOL) ||
-            (spatialBasis->functionSpace() == Camellia::FUNCTION_SPACE_HVOL_DISC))
+        spatialBasis = trialOrderingPtr->getBasis(trialID,spatialSideOrdinal);
+        sideForImposition = spatialSideOrdinal;
+      }
+      else
+      {
+        unsigned spaceTimeSideOrdinal;
+        if (!_mesh->bilinearForm()->isFluxOrTrace(trialID))
         {
-          continuousSpatialFS = Camellia::FUNCTION_SPACE_HGRAD;
+          spaceTimeSideOrdinal = 0;
         }
         else
         {
-          continuousSpatialFS = Camellia::continuousSpaceForDiscontinuous(spatialBasis->functionSpace());
+          spaceTimeSideOrdinal = cellTopo->getSpatialSideOrdinal(spatialSideOrdinal);
         }
-        Camellia::EFunctionSpace continuousTemporalFS = Camellia::FUNCTION_SPACE_HGRAD;
+        spaceTimeBasis = trialOrderingPtr->getBasis(trialID,spaceTimeSideOrdinal);
         
-        vector<int> H1Orders = {spatialBasis->getDegree(),temporalBasis->getDegree()};
-        basis = BasisFactory::basisFactory()->getBasis(H1Orders, basis->domainTopology(), continuousSpatialFS, continuousTemporalFS);
+        sideForImposition = spaceTimeSideOrdinal;
+        
+        TensorBasis<>* tensorBasis = dynamic_cast<TensorBasis<>*>(spaceTimeBasis.get());
+        
+        TEUCHOS_TEST_FOR_EXCEPTION(!tensorBasis, std::invalid_argument, "space-time basis must be a subclass of TensorBasis");
+        if (tensorBasis)
+        {
+          spatialBasis = tensorBasis->getSpatialBasis();
+          temporalBasis = tensorBasis->getTemporalBasis();
+        }
       }
-      else if ((basis->functionSpace() == Camellia::FUNCTION_SPACE_HVOL) ||
-               (basis->functionSpace() == Camellia::FUNCTION_SPACE_HVOL_DISC))
+      // upgrade bases to continuous ones of the same cardinality, if they is discontinuous.
+
+      if ((spatialBasis->functionSpace() == Camellia::FUNCTION_SPACE_HVOL) ||
+          (spatialBasis->functionSpace() == Camellia::FUNCTION_SPACE_HVOL_DISC))
       {
-        basis = BasisFactory::basisFactory()->getBasis(basis->getDegree(), basis->domainTopology(), Camellia::FUNCTION_SPACE_HGRAD);
+        spatialBasis = BasisFactory::basisFactory()->getBasis(spatialBasis->getDegree(), spatialBasis->domainTopology(), Camellia::FUNCTION_SPACE_HGRAD);
       }
-      else if (Camellia::functionSpaceIsDiscontinuous(basis->functionSpace()))
+      else if (Camellia::functionSpaceIsDiscontinuous(spatialBasis->functionSpace()))
       {
-        Camellia::EFunctionSpace fsContinuous = Camellia::continuousSpaceForDiscontinuous((basis->functionSpace()));
-        basis = BasisFactory::basisFactory()->getBasis(basis->getDegree(), basis->domainTopology(), fsContinuous,
+        Camellia::EFunctionSpace fsContinuous = Camellia::continuousSpaceForDiscontinuous((spatialBasis->functionSpace()));
+        spatialBasis = BasisFactory::basisFactory()->getBasis(spatialBasis->getDegree(), spatialBasis->domainTopology(), fsContinuous,
                                                        Camellia::FUNCTION_SPACE_HGRAD);
       }
-
-      TEUCHOS_TEST_FOR_EXCEPTION(basis->getCardinality() != basisCardinality, std::invalid_argument, "internal error: continuous basis cardinality differs from that of the original basis");
-      
-      std::set<int> dofOrdinals = basis->dofOrdinalsForVertex(vertexOrdinal);
-      if (dofOrdinals.size() != 1)
+      if (temporalBasis.get())
       {
-        cout << "ERROR: dofOrdinals.size() != 1 during singleton BC imposition.\n";
-        TEUCHOS_TEST_FOR_EXCEPTION(true, std::invalid_argument, "dofOrdinals.size() != 1 during singleton BC imposition");
+        if ((temporalBasis->functionSpace() == Camellia::FUNCTION_SPACE_HVOL) ||
+            (temporalBasis->functionSpace() == Camellia::FUNCTION_SPACE_HVOL_DISC))
+        {
+          temporalBasis = BasisFactory::basisFactory()->getBasis(temporalBasis->getDegree(), temporalBasis->domainTopology(), Camellia::FUNCTION_SPACE_HGRAD);
+        }
+        else if (Camellia::functionSpaceIsDiscontinuous(temporalBasis->functionSpace()))
+        {
+          Camellia::EFunctionSpace fsContinuous = Camellia::continuousSpaceForDiscontinuous((temporalBasis->functionSpace()));
+          temporalBasis = BasisFactory::basisFactory()->getBasis(temporalBasis->getDegree(), temporalBasis->domainTopology(), fsContinuous,
+                                                                 Camellia::FUNCTION_SPACE_HGRAD);
+        }
       }
-      dofOrdinal = *dofOrdinals.begin();
-    }
-    else
-    {
-      dofOrdinal = 0;
-    }
-    FieldContainer<double> basisCoefficients(basisCardinality);
-    basisCoefficients[dofOrdinal] = 1.0;
-    FieldContainer<double> globalCoefficients; // we'll ignore this
-    FieldContainer<GlobalIndexType> globalDofIndices;
-    dofInterpreter->interpretLocalBasisCoefficients(cellID, trialID, sideForVertex, basisCoefficients,
-        globalCoefficients, globalDofIndices);
-    double tol = 1e-14;
-    int nonzeroEntryOrdinal = -1;
-    for (int fieldOrdinal=0; fieldOrdinal < globalCoefficients.size(); fieldOrdinal++)
-    {
-      if (abs(globalCoefficients[fieldOrdinal]) > tol)
+      if (spaceTime)
       {
-        if (nonzeroEntryOrdinal != -1)
-        {
-          // previous nonzero entry found; this is a problem--it means we have multiple global coefficients that depend on this vertex
-          // (could happen if user specified a hanging node)
-          cout << "Error: vertex for single-point imposition has multiple global degrees of freedom.\n";
-          TEUCHOS_TEST_FOR_EXCEPTION(true, std::invalid_argument, "Error: vertex for single-point imposition has multiple global degrees of freedom.");
-        }
-        // nonzero entry: store the fact, and impose the constraint
-        nonzeroEntryOrdinal = fieldOrdinal;
+        vector<int> H1Orders = {spatialBasis->getDegree(),temporalBasis->getDegree()};
+        spaceTimeBasis = BasisFactory::basisFactory()->getBasis(H1Orders, spaceTimeBasis->domainTopology(), spatialBasis->functionSpace(), temporalBasis->functionSpace());
+        basisForImposition = spaceTimeBasis;
+      }
+      else
+      {
+        basisForImposition = spatialBasis;
+      }
+      set<int> spatialDofOrdinalsForVertex = spatialBasis->dofOrdinalsForVertex(vertexOrdinalInSide);
+      if (spatialDofOrdinalsForVertex.size() != 1)
+      {
+        cout << "ERROR: spatialDofOrdinalsForVertex.size() != 1 during singleton BC imposition.\n";
+        TEUCHOS_TEST_FOR_EXCEPTION(true, std::invalid_argument, "spatialDofOrdinalsForVertex.size() != 1 during singleton BC imposition");
+      }
 
-        // NOTE (NVR, 4-29-15): Pretty sure we can simplify the below and eliminate the globalDofMap argument if we simply do:
-        /*        set<GlobalIndexType> rankLocalDofIndices = dofInterpreter->globalDofIndicesForPartition(-1); // current rank
-                if (rankLocalDofIndices.find(globalDofIndices[fieldOrdinal]) != rankLocalDofIndices.end()) {
-                  globalDofIndicesAndValues[globalDofIndices[fieldOrdinal]] = bc.valueForSinglePointBC(trialID) * globalCoefficients[fieldOrdinal];;
-                } else {
-                  TEUCHOS_TEST_FOR_EXCEPTION(true, std::invalid_argument, "ERROR: global dof index for single-point BC is not locally owned");
-                }*/
-
-        if (globalDofMap != NULL)
+      int spatialDofOrdinalForVertex = *spatialDofOrdinalsForVertex.begin();
+      vector<int> basisDofOrdinals;
+      if (!spaceTime)
+      {
+        basisDofOrdinals.push_back(spatialDofOrdinalForVertex);
+      }
+      else
+      {
+        int temporalBasisCardinality = temporalBasis->getCardinality();
+        TensorBasis<>* tensorBasis = dynamic_cast<TensorBasis<>*>(spaceTimeBasis.get());
+        for (int temporalBasisOrdinal=0; temporalBasisOrdinal<temporalBasisCardinality; temporalBasisOrdinal++)
         {
-          if (globalDofMap->LID((GlobalIndexTypeToCast)globalDofIndices[fieldOrdinal]) != -1)
-          {
-            globalDofIndicesAndValues[globalDofIndices[fieldOrdinal]] = bc.valueForSinglePointBC(trialID) * globalCoefficients[fieldOrdinal];
-          }
-          else
-          {
-            TEUCHOS_TEST_FOR_EXCEPTION(true, std::invalid_argument, "ERROR: global dof index for single-point BC is not locally owned");
-          }
+          basisDofOrdinals.push_back(tensorBasis->getDofOrdinalFromComponentDofOrdinals({spatialDofOrdinalForVertex, temporalBasisOrdinal}));
         }
-        else
+      }
+      
+      for (int dofOrdinal : basisDofOrdinals)
+      {
+        FieldContainer<double> basisCoefficients(basisForImposition->getCardinality());
+        basisCoefficients[dofOrdinal] = 1.0;
+        FieldContainer<double> globalCoefficients; // we'll ignore this
+        FieldContainer<GlobalIndexType> globalDofIndices;
+        dofInterpreter->interpretLocalBasisCoefficients(cellID, trialID, sideForImposition, basisCoefficients,
+                                                        globalCoefficients, globalDofIndices);
+        double tol = 1e-14;
+        int nonzeroEntryOrdinal = -1;
+        for (int fieldOrdinal=0; fieldOrdinal < globalCoefficients.size(); fieldOrdinal++)
         {
-          // _globalDofMap not set, so presumably mesh->GDA sees an accurate picture of the global dofs.
-          set<GlobalIndexType> rankLocalDofIndices = _mesh->globalDofAssignment()->globalDofIndicesForPartition(-1); // current rank
-          if (rankLocalDofIndices.find(globalDofIndices[fieldOrdinal]) != rankLocalDofIndices.end())
+          if (abs(globalCoefficients[fieldOrdinal]) > tol)
           {
-            globalDofIndicesAndValues[globalDofIndices[fieldOrdinal]] = 0.0;
-          }
-          else
-          {
-            TEUCHOS_TEST_FOR_EXCEPTION(true, std::invalid_argument, "ERROR: global dof index for single-point BC is not locally owned");
+            if (nonzeroEntryOrdinal != -1)
+            {
+              // previous nonzero entry found; this is a problem--it means we have multiple global coefficients that depend on this vertex
+              // (could happen if user specified a hanging node)
+              cout << "Error: vertex for single-point imposition has multiple global degrees of freedom.\n";
+              TEUCHOS_TEST_FOR_EXCEPTION(true, std::invalid_argument, "Error: vertex for single-point imposition has multiple global degrees of freedom.");
+            }
+            // nonzero entry: store the fact, and impose the constraint
+            nonzeroEntryOrdinal = fieldOrdinal;
+            
+            // NOTE (NVR, 4-29-15): Pretty sure we can simplify the below and eliminate the globalDofMap argument if we simply do:
+            /*        set<GlobalIndexType> rankLocalDofIndices = dofInterpreter->globalDofIndicesForPartition(-1); // current rank
+             if (rankLocalDofIndices.find(globalDofIndices[fieldOrdinal]) != rankLocalDofIndices.end()) {
+             globalDofIndicesAndValues[globalDofIndices[fieldOrdinal]] = bc.valueForSinglePointBC(trialID) * globalCoefficients[fieldOrdinal];;
+             } else {
+             TEUCHOS_TEST_FOR_EXCEPTION(true, std::invalid_argument, "ERROR: global dof index for single-point BC is not locally owned");
+             }*/
+            
+            if (globalDofMap != NULL)
+            {
+              if (globalDofMap->LID((GlobalIndexTypeToCast)globalDofIndices[fieldOrdinal]) != -1)
+              {
+                globalDofIndicesAndValues[globalDofIndices[fieldOrdinal]] = bc.valueForSinglePointBC(trialID) * globalCoefficients[fieldOrdinal];
+              }
+              else
+              {
+                TEUCHOS_TEST_FOR_EXCEPTION(true, std::invalid_argument, "ERROR: global dof index for single-point BC is not locally owned");
+              }
+            }
+            else
+            {
+              // _globalDofMap not set, so presumably mesh->GDA sees an accurate picture of the global dofs.
+              set<GlobalIndexType> rankLocalDofIndices = _mesh->globalDofAssignment()->globalDofIndicesForPartition(-1); // current rank
+              if (rankLocalDofIndices.find(globalDofIndices[fieldOrdinal]) != rankLocalDofIndices.end())
+              {
+                globalDofIndicesAndValues[globalDofIndices[fieldOrdinal]] = 0.0;
+              }
+              else
+              {
+                TEUCHOS_TEST_FOR_EXCEPTION(true, std::invalid_argument, "ERROR: global dof index for single-point BC is not locally owned");
+              }
+            }
           }
         }
       }
@@ -512,29 +595,27 @@ void Boundary::bcsToImpose2(FieldContainer<GlobalIndexType> &globalIndices,
     int trialID = *trialIt;
     if (bc.singlePointBC(trialID))
     {
-      GlobalIndexType vertexNumberForImposition = bc.vertexForSinglePointBC(trialID);
-      if (vertexNumberForImposition == -1) vertexNumberForImposition = 0; // just pick the first point in the mesh.  This should never be a hanging node.
+      vector<double> spatialVertex = bc.pointForSpatialPointBC(trialID);
+      vector<IndexType> matchingVertices = _mesh->getTopology()->getVertexIndicesMatching(spatialVertex);
+      
       unsigned vertexDim = 0;
-      IndexType leastActiveCellIndex = -1;
-      set< pair<IndexType, unsigned> > cellsForVertex = _mesh->getTopology()->getCellsContainingEntity(vertexDim, vertexNumberForImposition);
-      for (set< pair<IndexType, unsigned> >::iterator cellEntryIt = cellsForVertex.begin(); cellEntryIt != cellsForVertex.end(); cellEntryIt++)
+      for (IndexType vertexIndex : matchingVertices)
       {
-        IndexType cellIndex = cellEntryIt->first;
-        if (_mesh->getTopology()->getActiveCellIndices().find(cellIndex) != _mesh->getTopology()->getActiveCellIndices().end())
+        set< pair<IndexType, unsigned> > cellsForVertex = _mesh->getTopology()->getCellsContainingEntity(vertexDim, vertexIndex);
+        for (pair<IndexType, unsigned> cellForVertex : cellsForVertex)
         {
-          leastActiveCellIndex = cellIndex;
-          break;
-        }
-      }
-      if (rankLocalCells.find(leastActiveCellIndex) != rankLocalCells.end())   // we own this cell, so we're responsible for imposing the singleton BC
-      {
-        CellPtr cell = _mesh->getTopology()->getCell(leastActiveCellIndex);
-        int vertexCount = cell->vertices().size();
-        for (int vertexOrdinal=0; vertexOrdinal<vertexCount; vertexOrdinal++)
-        {
-          if (vertexNumberForImposition == cell->vertices()[vertexOrdinal])
+          if (_mesh->getTopology()->getActiveCellIndices().find(cellForVertex.first) != _mesh->getTopology()->getActiveCellIndices().end())
           {
-            singletonsForCell[leastActiveCellIndex].insert(make_pair(trialID, vertexOrdinal));
+            // active cell
+            IndexType matchingCellID = cellForVertex.first;
+            
+            if (rankLocalCells.find(matchingCellID) != rankLocalCells.end())   // we own this cell, so we're responsible for imposing the singleton BC
+            {
+              CellPtr cell = _mesh->getTopology()->getCell(matchingCellID);
+              unsigned vertexOrdinal = cell->findSubcellOrdinal(vertexDim, vertexIndex);
+              TEUCHOS_TEST_FOR_EXCEPTION(vertexOrdinal != -1, std::invalid_argument, "Internal error: vertexOrdinal not found for cell to which it supposedly belongs");
+              singletonsForCell[matchingCellID].insert(make_pair(trialID, vertexOrdinal));
+            }
           }
         }
       }
@@ -586,7 +667,7 @@ void Boundary::bcsToImpose2( map<  GlobalIndexType, Scalar > &globalDofIndicesAn
                              DofInterpreter* dofInterpreter, const MapPtr globalDofMap)
 {
   CellPtr cell = _mesh->getTopology()->getCell(cellID);
-
+  
   // define a couple of important inner products:
   TIPPtr<Scalar> ipL2 = Teuchos::rcp( new TIP<Scalar> );
   TIPPtr<Scalar> ipH1 = Teuchos::rcp( new TIP<Scalar> );
@@ -599,7 +680,7 @@ void Boundary::bcsToImpose2( map<  GlobalIndexType, Scalar > &globalDofIndicesAn
   ElementTypePtr elemType = _mesh->getElementType(cellID);
   DofOrderingPtr trialOrderingPtr = elemType->trialOrderPtr;
   vector< int > trialIDs = _mesh->bilinearForm()->trialIDs();
-
+  
   vector<unsigned> boundarySides = cell->boundarySides();
   if (boundarySides.size() > 0)
   {
@@ -643,141 +724,252 @@ void Boundary::bcsToImpose2( map<  GlobalIndexType, Scalar > &globalDofIndicesAn
       }
     }
   }
-
-  for (set<pair<int, unsigned> >::iterator singletonIt = singletons.begin(); singletonIt != singletons.end(); singletonIt++)
+  
+  map<int, vector<unsigned> > vertexOrdinalsForTrialID;
+  for (pair<int, unsigned> trialVertexPair : singletons)
   {
-    int trialID = singletonIt->first;
-    unsigned vertexOrdinalInCell = singletonIt->second;
-
+    vertexOrdinalsForTrialID[trialVertexPair.first].push_back(trialVertexPair.second);
+  }
+  
+  for (auto trialVertexOrdinals : vertexOrdinalsForTrialID)
+  {
+    int trialID = trialVertexOrdinals.first;
+    vector<unsigned> vertexOrdinalsInCell = trialVertexOrdinals.second;
+    
     CellTopoPtr cellTopo = elemType->cellTopoPtr;
-
+    CellTopoPtr spatialCellTopo;
+    
+    bool spaceTime;
+    int vertexOrdinalInSpatialCell;
+    if (vertexOrdinalsInCell.size() == 2)
+    {
+      // we'd better be doing space-time in this case, and the vertices should be the same spatially
+      spaceTime = (cellTopo->getTensorialDegree() > 0);
+      TEUCHOS_TEST_FOR_EXCEPTION(!spaceTime, std::invalid_argument, "multiple vertices for spatial point only supported for space-time");
+      
+      spatialCellTopo = cellTopo->getTensorialComponent();
+      
+      vertexOrdinalInSpatialCell = -1;
+      for (unsigned spatialVertexOrdinal = 0; spatialVertexOrdinal < spatialCellTopo->getNodeCount(); spatialVertexOrdinal++)
+      {
+        vector<unsigned> tensorComponentNodes = {spatialVertexOrdinal,0};
+        unsigned spaceTimeVertexOrdinal_t0 = cellTopo->getNodeFromTensorialComponentNodes(tensorComponentNodes);
+        if ((spaceTimeVertexOrdinal_t0 == vertexOrdinalsInCell[0]) || (spaceTimeVertexOrdinal_t0 == vertexOrdinalsInCell[1]))
+        {
+          // then this should be our match.  Confirm this:
+          tensorComponentNodes = {spatialVertexOrdinal,1};
+          unsigned spaceTimeVertexOrdinal_t1 = cellTopo->getNodeFromTensorialComponentNodes(tensorComponentNodes);
+          bool t1VertexMatches = (spaceTimeVertexOrdinal_t1 == vertexOrdinalsInCell[0]) || (spaceTimeVertexOrdinal_t1 == vertexOrdinalsInCell[1]);
+          TEUCHOS_TEST_FOR_EXCEPTION(!t1VertexMatches, std::invalid_argument, "Internal error: space-time vertices do not belong to the same spatial vertex");
+          vertexOrdinalInSpatialCell = spatialVertexOrdinal;
+          break;
+        }
+      }
+      TEUCHOS_TEST_FOR_EXCEPTION(vertexOrdinalInSpatialCell == -1, std::invalid_argument, "Internal error: spatial vertex ordinal not found");
+    }
+    else if (vertexOrdinalsInCell.size() == 1)
+    {
+      spaceTime = false;
+      spatialCellTopo = cellTopo;
+      vertexOrdinalInSpatialCell = vertexOrdinalsInCell[0];
+    }
+    else
+    {
+      TEUCHOS_TEST_FOR_EXCEPTION(true, std::invalid_argument, "vertexOrdinalsInCell must have 1 or 2 vertices");
+    }
+    
     // in some ways less nice than the previous version of singleton BC imposition; we don't impose a non-zero value (because
     // we don't figure out physical points, etc.), and we also neglect any spatial filtering.
-
+    
     // OTOH, here we do support traces and fluxes for single-point BCs, and this is significantly simpler
-
+    
     set<GlobalIndexType> globalIndicesForVariable;
     DofOrderingPtr trialOrderingPtr = elemType->trialOrderPtr;
-
-    IndexType vertexIndex = cell->vertices()[vertexOrdinalInCell];
-    int numSides = cell->getSideCount();
-
-    int vertexOrdinal;
-
-    int sideForVertex = -1;
-    int sideDim = cellTopo->getDimension() - 1;
+    
+    int numSpatialSides = spatialCellTopo->getSideCount();
+    
+    vector<unsigned> spatialSidesForVertex;
+    vector<unsigned> sideVertexOrdinals; // same index in this container as spatialSidesForVertex: gets the node ordinal of the vertex in that side
+    int sideDim = spatialCellTopo->getDimension() - 1;
     if (!_mesh->bilinearForm()->isFluxOrTrace(trialID))
     {
-      vertexOrdinal = vertexOrdinalInCell;
-      sideForVertex = 0; // for volume trialIDs, the "side" in DofOrdering is 0
+      spatialSidesForVertex.push_back(0); // for volume trialIDs, the "side" in DofOrdering is 0
+      sideVertexOrdinals.push_back(vertexOrdinalInSpatialCell);
     }
     else
     {
-      int vertexOrdinalInSide = -1;
-      for (int sideOrdinal=0; sideOrdinal < numSides; sideOrdinal++)
+      for (int spatialSideOrdinal=0; spatialSideOrdinal < numSpatialSides; spatialSideOrdinal++)
       {
-        if (! cellTopo->sideIsSpatial(sideOrdinal)) continue; // because some fluxes are only defined on spatial sides, skip any that are not (i.e., we insist that sideForVertex is a spatial side).
-        vector<IndexType> vertexIndicesForSide = cell->getEntityVertexIndices(sideDim, sideOrdinal);
-        for (int vertexOrdinal=0; vertexOrdinal < vertexIndicesForSide.size(); vertexOrdinal++)
+        CellTopoPtr sideTopo = spatialCellTopo->getSide(spatialSideOrdinal);
+        for (unsigned sideVertexOrdinal = 0; sideVertexOrdinal < sideTopo->getNodeCount(); sideVertexOrdinal++)
         {
-          if (vertexIndicesForSide[vertexOrdinal] == vertexIndex)
+          unsigned spatialVertexOrdinal = spatialCellTopo->getNodeMap(sideDim, spatialSideOrdinal, sideVertexOrdinal);
+          if (spatialVertexOrdinal == vertexOrdinalInSpatialCell)
           {
-            sideForVertex = sideOrdinal;
-            vertexOrdinalInSide = vertexOrdinal;
-            break;
+            spatialSidesForVertex.push_back(spatialSideOrdinal);
+            sideVertexOrdinals.push_back(sideVertexOrdinal);
+            break; // this is the only match we should find on this side
           }
         }
-        if (sideForVertex != -1) break;
       }
-      if (sideForVertex == -1)
+      if (spatialSidesForVertex.size() == 0)
       {
-        cout << "ERROR: sideForVertex not found during singleton BC imposition.\n";
-        TEUCHOS_TEST_FOR_EXCEPTION(true, std::invalid_argument, "sideForVertex not found during singleton BC imposition");
+        cout << "ERROR: no spatial side for vertex found during singleton BC imposition.\n";
+        TEUCHOS_TEST_FOR_EXCEPTION(true, std::invalid_argument, "no spatial side for vertex found during singleton BC imposition");
       }
-      vertexOrdinal = vertexOrdinalInSide;
     }
-    BasisPtr basis = trialOrderingPtr->getBasis(trialID,sideForVertex);
-
-    int dofOrdinal;
-
-    if (basis->getCardinality() > 1)
+    for (int i=0; i<spatialSidesForVertex.size(); i++)
     {
-      // upgrade basis to continuous one of the same cardinality, if it is discontinuous.
-      if ((basis->functionSpace() == Camellia::FUNCTION_SPACE_HVOL) || (basis->functionSpace() == Camellia::FUNCTION_SPACE_HVOL_DISC))
+      unsigned spatialSideOrdinal = spatialSidesForVertex[i];
+      unsigned vertexOrdinalInSide = sideVertexOrdinals[i];
+      unsigned sideForImposition;
+      
+      BasisPtr spatialBasis, temporalBasis, spaceTimeBasis, basisForImposition;
+      if (!spaceTime)
       {
-        basis = BasisFactory::basisFactory()->getBasis(basis->getDegree(), basis->domainTopology(), Camellia::FUNCTION_SPACE_HGRAD);
+        spatialBasis = trialOrderingPtr->getBasis(trialID,spatialSideOrdinal);
+        sideForImposition = spatialSideOrdinal;
       }
-      else if (Camellia::functionSpaceIsDiscontinuous(basis->functionSpace()))
+      else
       {
-        Camellia::EFunctionSpace fsContinuous = Camellia::continuousSpaceForDiscontinuous((basis->functionSpace()));
-        basis = BasisFactory::basisFactory()->getBasis(basis->getDegree(), basis->domainTopology(), fsContinuous);
-      }
-
-      std::set<int> dofOrdinals = basis->dofOrdinalsForVertex(vertexOrdinal);
-      if (dofOrdinals.size() != 1)
-      {
-        cout << "ERROR: dofOrdinals.size() != 1 during singleton BC imposition.\n";
-        TEUCHOS_TEST_FOR_EXCEPTION(true, std::invalid_argument, "dofOrdinals.size() != 1 during singleton BC imposition");
-      }
-      dofOrdinal = *dofOrdinals.begin();
-    }
-    else
-    {
-      dofOrdinal = 0;
-    }
-    int basisCardinality = basis->getCardinality();
-    FieldContainer<double> basisCoefficients(basisCardinality);
-    basisCoefficients[dofOrdinal] = 1.0;
-    FieldContainer<double> globalCoefficients; // we'll ignore this
-    FieldContainer<GlobalIndexType> globalDofIndices;
-    dofInterpreter->interpretLocalBasisCoefficients(cellID, trialID, sideForVertex, basisCoefficients,
-        globalCoefficients, globalDofIndices);
-    double tol = 1e-14;
-    int nonzeroEntryOrdinal = -1;
-    for (int fieldOrdinal=0; fieldOrdinal < globalCoefficients.size(); fieldOrdinal++)
-    {
-      if (abs(globalCoefficients[fieldOrdinal]) > tol)
-      {
-        if (nonzeroEntryOrdinal != -1)
+        unsigned spaceTimeSideOrdinal;
+        if (!_mesh->bilinearForm()->isFluxOrTrace(trialID))
         {
-          // previous nonzero entry found; this is a problem--it means we have multiple global coefficients that depend on this vertex
-          // (could happen if user specified a hanging node)
-          cout << "Error: vertex for single-point imposition has multiple global degrees of freedom.\n";
-          TEUCHOS_TEST_FOR_EXCEPTION(true, std::invalid_argument, "Error: vertex for single-point imposition has multiple global degrees of freedom.");
-        }
-        // nonzero entry: store the fact, and impose the constraint
-        nonzeroEntryOrdinal = fieldOrdinal;
-
-        // NOTE (NVR, 4-29-15): Pretty sure we can simplify the below and eliminate the globalDofMap argument if we simply do:
-        /*        set<GlobalIndexType> rankLocalDofIndices = dofInterpreter->globalDofIndicesForPartition(-1); // current rank
-                if (rankLocalDofIndices.find(globalDofIndices[fieldOrdinal]) != rankLocalDofIndices.end()) {
-                  globalDofIndicesAndValues[globalDofIndices[fieldOrdinal]] = bc.valueForSinglePointBC(trialID) * globalCoefficients[fieldOrdinal];;
-                } else {
-                  TEUCHOS_TEST_FOR_EXCEPTION(true, std::invalid_argument, "ERROR: global dof index for single-point BC is not locally owned");
-                }*/
-
-        if (globalDofMap != Teuchos::null)
-        {
-          if (globalDofMap->getLocalElement(globalDofIndices[fieldOrdinal]) != Teuchos::OrdinalTraits<IndexType>::invalid())
-          {
-            globalDofIndicesAndValues[globalDofIndices[fieldOrdinal]] = bc.valueForSinglePointBC(trialID) * globalCoefficients[fieldOrdinal];
-          }
-          else
-          {
-            TEUCHOS_TEST_FOR_EXCEPTION(true, std::invalid_argument, "ERROR: global dof index for single-point BC is not locally owned");
-          }
+          spaceTimeSideOrdinal = 0;
         }
         else
         {
-          // _globalDofMap not set, so presumably mesh->GDA sees an accurate picture of the global dofs.
-          set<GlobalIndexType> rankLocalDofIndices = _mesh->globalDofAssignment()->globalDofIndicesForPartition(-1); // current rank
-          if (rankLocalDofIndices.find(globalDofIndices[fieldOrdinal]) != rankLocalDofIndices.end())
+          spaceTimeSideOrdinal = cellTopo->getSpatialSideOrdinal(spatialSideOrdinal);
+        }
+        spaceTimeBasis = trialOrderingPtr->getBasis(trialID,spaceTimeSideOrdinal);
+        
+        sideForImposition = spaceTimeSideOrdinal;
+        
+        TensorBasis<>* tensorBasis = dynamic_cast<TensorBasis<>*>(spaceTimeBasis.get());
+        
+        TEUCHOS_TEST_FOR_EXCEPTION(!tensorBasis, std::invalid_argument, "space-time basis must be a subclass of TensorBasis");
+        if (tensorBasis)
+        {
+          spatialBasis = tensorBasis->getSpatialBasis();
+          temporalBasis = tensorBasis->getTemporalBasis();
+        }
+      }
+      // upgrade bases to continuous ones of the same cardinality, if they is discontinuous.
+      
+      if ((spatialBasis->functionSpace() == Camellia::FUNCTION_SPACE_HVOL) ||
+          (spatialBasis->functionSpace() == Camellia::FUNCTION_SPACE_HVOL_DISC))
+      {
+        spatialBasis = BasisFactory::basisFactory()->getBasis(spatialBasis->getDegree(), spatialBasis->domainTopology(), Camellia::FUNCTION_SPACE_HGRAD);
+      }
+      else if (Camellia::functionSpaceIsDiscontinuous(spatialBasis->functionSpace()))
+      {
+        Camellia::EFunctionSpace fsContinuous = Camellia::continuousSpaceForDiscontinuous((spatialBasis->functionSpace()));
+        spatialBasis = BasisFactory::basisFactory()->getBasis(spatialBasis->getDegree(), spatialBasis->domainTopology(), fsContinuous,
+                                                              Camellia::FUNCTION_SPACE_HGRAD);
+      }
+      if (temporalBasis.get())
+      {
+        if ((temporalBasis->functionSpace() == Camellia::FUNCTION_SPACE_HVOL) ||
+            (temporalBasis->functionSpace() == Camellia::FUNCTION_SPACE_HVOL_DISC))
+        {
+          temporalBasis = BasisFactory::basisFactory()->getBasis(temporalBasis->getDegree(), temporalBasis->domainTopology(), Camellia::FUNCTION_SPACE_HGRAD);
+        }
+        else if (Camellia::functionSpaceIsDiscontinuous(temporalBasis->functionSpace()))
+        {
+          Camellia::EFunctionSpace fsContinuous = Camellia::continuousSpaceForDiscontinuous((temporalBasis->functionSpace()));
+          temporalBasis = BasisFactory::basisFactory()->getBasis(temporalBasis->getDegree(), temporalBasis->domainTopology(), fsContinuous,
+                                                                 Camellia::FUNCTION_SPACE_HGRAD);
+        }
+      }
+      if (spaceTime)
+      {
+        vector<int> H1Orders = {spatialBasis->getDegree(),temporalBasis->getDegree()};
+        spaceTimeBasis = BasisFactory::basisFactory()->getBasis(H1Orders, spaceTimeBasis->domainTopology(), spatialBasis->functionSpace(), temporalBasis->functionSpace());
+        basisForImposition = spaceTimeBasis;
+      }
+      else
+      {
+        basisForImposition = spatialBasis;
+      }
+      set<int> spatialDofOrdinalsForVertex = spatialBasis->dofOrdinalsForVertex(vertexOrdinalInSide);
+      if (spatialDofOrdinalsForVertex.size() != 1)
+      {
+        cout << "ERROR: spatialDofOrdinalsForVertex.size() != 1 during singleton BC imposition.\n";
+        TEUCHOS_TEST_FOR_EXCEPTION(true, std::invalid_argument, "spatialDofOrdinalsForVertex.size() != 1 during singleton BC imposition");
+      }
+      
+      int spatialDofOrdinalForVertex = *spatialDofOrdinalsForVertex.begin();
+      vector<int> basisDofOrdinals;
+      if (!spaceTime)
+      {
+        basisDofOrdinals.push_back(spatialDofOrdinalForVertex);
+      }
+      else
+      {
+        int temporalBasisCardinality = temporalBasis->getCardinality();
+        TensorBasis<>* tensorBasis = dynamic_cast<TensorBasis<>*>(spaceTimeBasis.get());
+        for (int temporalBasisOrdinal=0; temporalBasisOrdinal<temporalBasisCardinality; temporalBasisOrdinal++)
+        {
+          basisDofOrdinals.push_back(tensorBasis->getDofOrdinalFromComponentDofOrdinals({spatialDofOrdinalForVertex, temporalBasisOrdinal}));
+        }
+      }
+      
+      for (int dofOrdinal : basisDofOrdinals)
+      {
+        FieldContainer<double> basisCoefficients(basisForImposition->getCardinality());
+        basisCoefficients[dofOrdinal] = 1.0;
+        FieldContainer<double> globalCoefficients; // we'll ignore this
+        FieldContainer<GlobalIndexType> globalDofIndices;
+        dofInterpreter->interpretLocalBasisCoefficients(cellID, trialID, sideForImposition, basisCoefficients,
+                                                        globalCoefficients, globalDofIndices);
+        double tol = 1e-14;
+        int nonzeroEntryOrdinal = -1;
+        for (int fieldOrdinal=0; fieldOrdinal < globalCoefficients.size(); fieldOrdinal++)
+        {
+          if (abs(globalCoefficients[fieldOrdinal]) > tol)
           {
-            globalDofIndicesAndValues[globalDofIndices[fieldOrdinal]] = 0.0;
-          }
-          else
-          {
-            TEUCHOS_TEST_FOR_EXCEPTION(true, std::invalid_argument, "ERROR: global dof index for single-point BC is not locally owned");
+            if (nonzeroEntryOrdinal != -1)
+            {
+              // previous nonzero entry found; this is a problem--it means we have multiple global coefficients that depend on this vertex
+              // (could happen if user specified a hanging node)
+              cout << "Error: vertex for single-point imposition has multiple global degrees of freedom.\n";
+              TEUCHOS_TEST_FOR_EXCEPTION(true, std::invalid_argument, "Error: vertex for single-point imposition has multiple global degrees of freedom.");
+            }
+            // nonzero entry: store the fact, and impose the constraint
+            nonzeroEntryOrdinal = fieldOrdinal;
+
+            // NOTE (NVR, 4-29-15): Pretty sure we can simplify the below and eliminate the globalDofMap argument if we simply do:
+            /*        set<GlobalIndexType> rankLocalDofIndices = dofInterpreter->globalDofIndicesForPartition(-1); // current rank
+             if (rankLocalDofIndices.find(globalDofIndices[fieldOrdinal]) != rankLocalDofIndices.end()) {
+             globalDofIndicesAndValues[globalDofIndices[fieldOrdinal]] = bc.valueForSinglePointBC(trialID) * globalCoefficients[fieldOrdinal];;
+             } else {
+             TEUCHOS_TEST_FOR_EXCEPTION(true, std::invalid_argument, "ERROR: global dof index for single-point BC is not locally owned");
+             }*/
+            
+            if (globalDofMap != Teuchos::null)
+            {
+              if (globalDofMap->getLocalElement(globalDofIndices[fieldOrdinal]) != Teuchos::OrdinalTraits<IndexType>::invalid())
+              {
+                globalDofIndicesAndValues[globalDofIndices[fieldOrdinal]] = bc.valueForSinglePointBC(trialID) * globalCoefficients[fieldOrdinal];
+              }
+              else
+              {
+                TEUCHOS_TEST_FOR_EXCEPTION(true, std::invalid_argument, "ERROR: global dof index for single-point BC is not locally owned");
+              }
+            }
+            else
+            {
+              // _globalDofMap not set, so presumably mesh->GDA sees an accurate picture of the global dofs.
+              set<GlobalIndexType> rankLocalDofIndices = _mesh->globalDofAssignment()->globalDofIndicesForPartition(-1); // current rank
+              if (rankLocalDofIndices.find(globalDofIndices[fieldOrdinal]) != rankLocalDofIndices.end())
+              {
+                globalDofIndicesAndValues[globalDofIndices[fieldOrdinal]] = 0.0;
+              }
+              else
+              {
+                TEUCHOS_TEST_FOR_EXCEPTION(true, std::invalid_argument, "ERROR: global dof index for single-point BC is not locally owned");
+              }
+            }
           }
         }
       }

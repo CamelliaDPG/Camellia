@@ -246,17 +246,24 @@ void NavierStokesVGPFormulation::initialize(MeshTopologyPtr meshTopology, std::s
   // set the RHS:
   if (forcingFunction == Teuchos::null)
   {
-    int vectorRank = 1;
-    forcingFunction = TFunction<double>::zero(vectorRank);
+    FunctionPtr scalarZero = Function::zero();
+    if (spaceDim == 1)
+      forcingFunction = scalarZero;
+    else if (spaceDim == 2)
+      forcingFunction = Function::vectorize(scalarZero, scalarZero);
+    else if (spaceDim == 3)
+      forcingFunction = Function::vectorize(scalarZero, scalarZero, scalarZero);
+    else
+      TEUCHOS_TEST_FOR_EXCEPTION(true, std::invalid_argument, "Unsupported space dimension");
   }
 
   _rhsForSolve = this->rhs(forcingFunction, _neglectFluxesOnRHS);
   _rhsForResidual = this->rhs(forcingFunction, false);
   _solnIncrement->setRHS(_rhsForSolve);
 
-  BCPtr bcSolnIncrement = BC::bc();
+  _bc = BC::bc();
 
-  _solnIncrement->setBC(bcSolnIncrement);
+  _solnIncrement->setBC(_bc);
 
   // define tractions (used in outflow conditions)
   // definition of traction: _mu * ( (\nabla u) + (\nabla u)^T ) n - p n
@@ -398,21 +405,31 @@ void NavierStokesVGPFormulation::addInflowCondition(SpatialFilterPtr inflowRegio
   VarPtr u3_hat;
   if (spaceDim==3) u3_hat = this->u_hat(3);
 
-  TFunctionPtr<double> u_incr;
   if (_neglectFluxesOnRHS)
   {
     // this also governs how we accumulate in the fluxes and traces, and hence whether we should use zero BCs or the true BCs for solution increment
-    u_incr = u;
+    _solnIncrement->bc()->addDirichlet(u1_hat, inflowRegion, u->x());
+    _solnIncrement->bc()->addDirichlet(u2_hat, inflowRegion, u->y());
+    if (spaceDim==3) _solnIncrement->bc()->addDirichlet(u3_hat, inflowRegion, u->z());
   }
   else
   {
     // we assume that _neglectFluxesOnRHS = true, in that we always use the full BCs, not their zero-imposing counterparts, when solving for solution increment
-    TEUCHOS_TEST_FOR_EXCEPTION(true, std::invalid_argument, "_neglectFluxesOnRHS = true assumed various places");
+//    TEUCHOS_TEST_FOR_EXCEPTION(true, std::invalid_argument, "_neglectFluxesOnRHS = true assumed various places");
+    
+    TSolutionPtr<double> backgroundFlowWeakReference = Teuchos::rcp(_backgroundFlow.get(), false );
+    
+    TFunctionPtr<double> u1_hat_prev = TFunction<double>::solution(u1_hat,backgroundFlowWeakReference);
+    TFunctionPtr<double> u2_hat_prev = TFunction<double>::solution(u2_hat,backgroundFlowWeakReference);
+    TFunctionPtr<double> u3_hat_prev;
+    if (spaceDim == 3) u3_hat_prev = TFunction<double>::solution(u3_hat,backgroundFlowWeakReference);
+    
+    _solnIncrement->bc()->addDirichlet(u1_hat, inflowRegion, u->x() - u1_hat_prev);
+    _solnIncrement->bc()->addDirichlet(u2_hat, inflowRegion, u->y() - u2_hat_prev);
+    if (spaceDim==3) _solnIncrement->bc()->addDirichlet(u3_hat, inflowRegion, u->z() - u3_hat_prev);
   }
 
-  _solnIncrement->bc()->addDirichlet(u1_hat, inflowRegion, u_incr->x());
-  _solnIncrement->bc()->addDirichlet(u2_hat, inflowRegion, u_incr->y());
-  if (spaceDim==3) _solnIncrement->bc()->addDirichlet(u3_hat, inflowRegion, u_incr->z());
+
 }
 
 void NavierStokesVGPFormulation::addOutflowCondition(SpatialFilterPtr outflowRegion)
@@ -453,9 +470,9 @@ void NavierStokesVGPFormulation::addPointPressureCondition()
 {
   VarPtr p = this->p();
 
-  _solnIncrement->bc()->addSinglePointBC(p->ID(), 0.0);
+  _solnIncrement->bc()->addSinglePointBC(p->ID(), 0.0, _solnIncrement->mesh());
 
-  if (_solnIncrement->bc()->imposeZeroMeanConstraint(p->ID()))
+  if (_solnIncrement->bc()->shouldImposeZeroMeanConstraint(p->ID()))
   {
     _solnIncrement->bc()->removeZeroMeanConstraint(p->ID());
   }
@@ -514,7 +531,7 @@ Teuchos::RCP<ExactSolution<double>> NavierStokesVGPFormulation::exactSolution(TF
   if (spaceDim==3) sigma3 = this->sigma(3);
 
   BCPtr bc = BC::bc();
-  bc->addSinglePointBC(p->ID(), 0.0);
+  bc->addSinglePointBC(p->ID(), 0.0, _backgroundFlow->mesh());
   SpatialFilterPtr boundary = SpatialFilter::allSpace();
   bc->addDirichlet(u1_hat, boundary, u1_exact);
   bc->addDirichlet(u2_hat, boundary, u2_exact);
@@ -744,6 +761,7 @@ TSolutionPtr<double> NavierStokesVGPFormulation::solutionIncrement()
 void NavierStokesVGPFormulation::solveAndAccumulate(double weight)
 {
   _solnIncrement->solve(_solver);
+  
   bool allowEmptyCells = false;
   _backgroundFlow->addSolution(_solnIncrement, weight, allowEmptyCells, _neglectFluxesOnRHS);
   _nonlinearIterationCount++;
@@ -783,6 +801,11 @@ TSolutionPtr<double> NavierStokesVGPFormulation::streamSolution()
     cout << "ERROR: stream function is only supported on 2D solutions.  Returning null.\n";
     return Teuchos::null;
   }
+}
+
+void NavierStokesVGPFormulation::setSolver(SolverPtr solver)
+{
+  _solver = solver;
 }
 
 void NavierStokesVGPFormulation::setTimeStep(double dt)

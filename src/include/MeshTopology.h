@@ -172,7 +172,8 @@ public:
   IndexType getSubEntityIndex(unsigned d, IndexType entityIndex, unsigned subEntityDim, unsigned subEntityOrdinal);
   unsigned getSubEntityPermutation(unsigned d, IndexType entityIndex, unsigned subEntityDim, unsigned subEntityOrdinal);
   bool getVertexIndex(const vector<double> &vertex, IndexType &vertexIndex, double tol=1e-14);
-  const vector<double>& getVertex(IndexType vertexIndex);
+  std::vector<IndexType> getVertexIndicesMatching(const vector<double> &vertexInitialCoordinates, double tol=1e-14);
+  const std::vector<double>& getVertex(IndexType vertexIndex);
   
   bool isBoundarySide(IndexType sideEntityIndex);
   bool isValidCellIndex(IndexType cellIndex);

@@ -155,9 +155,31 @@ void TBC<Scalar>::removeZeroMeanConstraint( int fieldID )
 }
 
 template <typename Scalar>
-void TBC<Scalar>::addSinglePointBC( int fieldID, Scalar value, GlobalIndexType vertexNumber )
+void TBC<Scalar>::addSinglePointBC( int fieldID, Scalar value, MeshPtr mesh, GlobalIndexType vertexNumber )
 {
-  _singlePointBCs[ fieldID ] = make_pair(vertexNumber, value);
+  if (vertexNumber == -1) vertexNumber = 0;
+  FieldContainer<double> vertexCoords = mesh->vertexCoordinates(vertexNumber);
+  vector<double> vertex(vertexCoords.size());
+  for (int i=0; i<vertex.size(); i++)
+    vertex[i] = vertexCoords[i];
+  this->addSpatialPointBC(fieldID,value,vertex);
+}
+
+// ! Adds point constraint at the specified spatial point (which must correspond to a vertex in the mesh).  Deprecated; use addSpatialPointBC instead (even for pure-spatial meshes).  For space-time meshes, indicates that the value should be imposed at every temporal degree of freedom corresponding to the spatial point.
+template <typename Scalar>
+void TBC<Scalar>::addSpatialPointBC(int fieldID, Scalar value, vector<double> spatialPoint)
+{
+  _singlePointBCs[ fieldID ] = make_pair(spatialPoint, value);
+}
+
+// ! Remove the specified point constraint.
+template <typename Scalar>
+void TBC<Scalar>::removeSpatialPointBC(int fieldID)
+{
+  if (_singlePointBCs.find(fieldID) != _singlePointBCs.end())
+  {
+    _singlePointBCs.erase(fieldID);
+  }
 }
 
 template <typename Scalar>
@@ -178,12 +200,12 @@ TBCPtr<Scalar> TBC<Scalar>::copyImposingZero()
     bcIt->second.second = TFunction<Scalar>::zero();
   }
 
-  for (typename map< int, pair<GlobalIndexType,Scalar> >::iterator singlePointIt = _singlePointBCs.begin(); singlePointIt != _singlePointBCs.end(); singlePointIt++)
+  for (auto spatialPointBC : _singlePointBCs)
   {
-    int trialID = singlePointIt->first;
-    GlobalIndexType vertexNumber = singlePointIt->second.first;
+    int trialID = spatialPointBC.first;
+    vector<double> vertex = spatialPointBC.second.first;
     Scalar zero = 0.0;
-    zeroBC->addSinglePointBC(trialID, zero, vertexNumber);
+    zeroBC->addSpatialPointBC(trialID, zero, vertex);
   }
 
   return zeroBC;
@@ -349,7 +371,7 @@ bool TBC<Scalar>::singlePointBC(int varID)   // override if you want to implemen
 }
 
 template <typename Scalar>
-bool TBC<Scalar>::imposeZeroMeanConstraint(int varID)
+bool TBC<Scalar>::shouldImposeZeroMeanConstraint(int varID)
 {
   if (_legacyBCSubclass)
   {
@@ -400,14 +422,13 @@ Scalar TBC<Scalar>::valueForSinglePointBC(int varID)
     return -1;
 }
 
-
 template <typename Scalar>
-GlobalIndexType TBC<Scalar>::vertexForSinglePointBC(int varID)
+vector<double> TBC<Scalar>::pointForSpatialPointBC(int varID)
 {
   if (_singlePointBCs.find(varID) != _singlePointBCs.end())
     return _singlePointBCs[varID].first;
   else
-    return -1;
+    TEUCHOS_TEST_FOR_EXCEPTION(true, std::invalid_argument, "No spatial point BC imposed for variable");
 }
 
 template <typename Scalar>
