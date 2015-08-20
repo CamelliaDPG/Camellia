@@ -1510,7 +1510,7 @@ BasisCachePtr BasisCache::basisCacheForReferenceCell(CellTopoPtr cellTopo, int c
   CamelliaCellTools::refCellNodesForTopology(cellNodes, cellTopo);
   cellNodes.resize(1,cellNodes.dimension(0),cellNodes.dimension(1));
 
-  BasisCachePtr basisCache = Teuchos::rcp(new BasisCache(cellNodes,cellTopo,cubatureDegree,createSideCacheToo, tensorProductTopologyMeansSpaceTime));
+  BasisCachePtr basisCache = BasisCache::basisCacheForCellTopology(cellTopo, cubatureDegree, cellNodes, createSideCacheToo, tensorProductTopologyMeansSpaceTime);
   return basisCache;
 }
 
@@ -1520,7 +1520,9 @@ BasisCachePtr BasisCache::basisCacheForRefinedReferenceCell(CellTopoPtr cellTopo
   FieldContainer<double> cellNodes = RefinementPattern::descendantNodesRelativeToAncestorReferenceCell(refinementBranch);
 
   cellNodes.resize(1,cellNodes.dimension(0),cellNodes.dimension(1));
-  BasisCachePtr basisCache = Teuchos::rcp(new BasisCache(cellNodes,cellTopo,cubatureDegree,createSideCacheToo,tensorProductTopologyMeansSpaceTime));
+  
+  BasisCachePtr basisCache = BasisCache::basisCacheForCellTopology(cellTopo, cubatureDegree, cellNodes, createSideCacheToo, tensorProductTopologyMeansSpaceTime);
+
   return basisCache;
 }
 
@@ -1541,7 +1543,7 @@ BasisCachePtr BasisCache::basisCacheForRefinedReferenceCell(int cubatureDegree, 
   FieldContainer<double> cellNodes = RefinementPattern::descendantNodesRelativeToAncestorReferenceCell(refinementBranch);
   
   cellNodes.resize(1,cellNodes.dimension(0),cellNodes.dimension(1));
-  BasisCachePtr basisCache = Teuchos::rcp(new BasisCache(cellNodes,cellTopo,cubatureDegree,createSideCacheToo,tensorProductTopologyMeansSpaceTime));
+  BasisCachePtr basisCache = BasisCache::basisCacheForCellTopology(cellTopo, cubatureDegree, cellNodes, createSideCacheToo, tensorProductTopologyMeansSpaceTime);
   return basisCache;
 }
 
