@@ -57,40 +57,44 @@ int Camellia::rankForSpace(Space space)
 {
   switch (space)
   {
-  case HDIV:
-    return 1;
-  case HGRAD:
-    return 0;
-  case HCURL:
-    return 1;
-  case L2:
-    return 0;
-  case CONSTANT_SCALAR:
-    return 0;
-
-  case HDIV_DISC:
-    return 1;
-  case HGRAD_DISC:
-    return 0;
-  case HCURL_DISC:
-    return 1;
-
-  case VECTOR_HGRAD:
-    return 1;
-  case VECTOR_L2:
-    return 1;
-
-  case VECTOR_HGRAD_DISC:
-    return 1;
-
-  //    case TENSOR_HGRAD:
-
-  case HDIV_FREE:
-    return 1;
-
-  default:
-    TEUCHOS_TEST_FOR_EXCEPTION(true, std::invalid_argument, "Unknown function space.");
-    return Camellia::FUNCTION_SPACE_UNKNOWN;
+    case HDIV:
+      return 1;
+    case HGRAD:
+      return 0;
+    case HCURL:
+      return 1;
+    case L2:
+      return 0;
+    case CONSTANT_SCALAR:
+      return 0;
+      
+    case HGRAD_SPACE_HVOL_TIME:
+    case HVOL_SPACE_HGRAD_TIME:
+      return 0;
+      
+    case HDIV_DISC:
+      return 1;
+    case HGRAD_DISC:
+      return 0;
+    case HCURL_DISC:
+      return 1;
+      
+    case VECTOR_HGRAD:
+      return 1;
+    case VECTOR_L2:
+      return 1;
+      
+    case VECTOR_HGRAD_DISC:
+      return 1;
+      
+      //    case TENSOR_HGRAD:
+      
+    case HDIV_FREE:
+      return 1;
+      
+    default:
+      TEUCHOS_TEST_FOR_EXCEPTION(true, std::invalid_argument, "Unknown function space.");
+      return Camellia::FUNCTION_SPACE_UNKNOWN;
   }
 }
 
