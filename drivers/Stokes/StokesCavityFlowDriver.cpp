@@ -17,8 +17,6 @@
 #include "PenaltyConstraints.h"
 #include "Solver.h"
 
-#include "MLSolver.h"
-//#include "CGSolver.h"
 #include "MPIWrapper.h"
 
 #include <Teuchos_GlobalMPISession.hpp>
@@ -394,7 +392,6 @@ int main(int argc, char *argv[])
   bool reportPerCellErrors  = true;
   bool useMumps = true;
   bool useCG = false;
-  bool useML = false;
   bool compareWithOverkillMesh = false;
   bool useDivergenceFreeVelocity = false;
   bool useWeightedGraphNorm = false;
@@ -428,10 +425,6 @@ int main(int argc, char *argv[])
       cout << "useMumps = true, but HAVE_AMESOS_MUMPS is unset.  Exiting...\n";
     exit(1);
 #endif
-  }
-  else if (useML)
-  {
-    solver = Teuchos::rcp( new MLSolver );
   }
   else
   {

@@ -9,7 +9,6 @@
 #include "Teuchos_ParameterList.hpp"
 
 #include "CGSolver.h"
-#include "MLSolver.h"
 #include "GMGSolver.h"
 
 #ifdef ENABLE_INTEL_FLOATING_POINT_EXCEPTIONS

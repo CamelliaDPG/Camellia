@@ -6,7 +6,6 @@
 #include "GnuPlotUtil.h"
 
 #include "CGSolver.h"
-#include "MLSolver.h"
 #include "GMGSolver.h"
 
 #ifdef ENABLE_INTEL_FLOATING_POINT_EXCEPTIONS
