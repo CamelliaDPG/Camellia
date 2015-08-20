@@ -10,7 +10,6 @@
 
 #include "GMGSolver.h"
 #include "Mesh.h"
-#include "SimpleMLSolver.h"
 #include "Solution.h"
 #include "SuperLUDistSolver.h"
 
@@ -27,7 +26,6 @@ void TSolver<Scalar>::printAvailableSolversReport()
 #ifdef HAVE_AMESOS_MUMPS
   cout << solverChoiceString(MUMPS) << endl;
 #endif
-  cout << solverChoiceString(SimpleML) << endl;
   cout << solverChoiceString(GMGSolver_1_Level_h) << endl;
 }
 
@@ -51,9 +49,7 @@ TSolverPtr<Scalar> TSolver<Scalar>::getSolver(SolverChoice choice, bool saveFact
   case MUMPS:
     return Teuchos::rcp( new MumpsSolver(saveFactorization) );
 #endif
-  case SimpleML:
-    return Teuchos::rcp( new SimpleMLSolver(saveFactorization, residualTolerance, maxIterations) );
-
+      
   case GMGSolver_1_Level_h:
   {
     // false below: don't use condensed solve...

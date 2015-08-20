@@ -107,7 +107,6 @@ public:
     KLU,
     SuperLUDist,
     MUMPS,
-    SimpleML,
     GMGSolver_1_Level_h
   };
   
@@ -125,7 +124,6 @@ public:
     if (choiceString=="KLU") return KLU;
     if (choiceString=="SuperLUDist") return SuperLUDist;
     if (choiceString=="MUMPS") return MUMPS;
-    if (choiceString=="SimpleML") return SimpleML;
     if (choiceString=="GMGSolver_1_Level_h") return GMGSolver_1_Level_h;
     TEUCHOS_TEST_FOR_EXCEPTION(true, std::invalid_argument, "choiceString not recognized!");
   }
@@ -134,7 +132,6 @@ public:
     if (choice==KLU) return "KLU";
     if (choice==SuperLUDist) return "SuperLUDist";
     if (choice==MUMPS) return "MUMPS";
-    if (choice==SimpleML) return "SimpleML";
     if (choice==GMGSolver_1_Level_h) return "GMGSolver_1_Level_h";
     TEUCHOS_TEST_FOR_EXCEPTION(true, std::invalid_argument, "choice not recognized!");
   }
