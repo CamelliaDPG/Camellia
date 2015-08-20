@@ -103,6 +103,8 @@ class MeshTopology : public MeshTopologyView
 public:
   MeshTopology(unsigned spaceDim, vector<PeriodicBCPtr> periodicBCs=vector<PeriodicBCPtr>());
   MeshTopology(MeshGeometryPtr meshGeometry, vector<PeriodicBCPtr> periodicBCs=vector<PeriodicBCPtr>());
+  virtual ~MeshTopology() {}
+  
   CellPtr addCell(CellTopoPtr cellTopo, const vector< vector<double> > &cellVertices);
   CellPtr addCell(CellTopoPtr cellTopo, const Intrepid::FieldContainer<double> &cellVertices);
 

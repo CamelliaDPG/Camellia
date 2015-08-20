@@ -46,6 +46,9 @@ namespace Camellia {
     // ! Constructor that defines a view in terms of an existing MeshTopology and a set of cells selected to be active.
     MeshTopologyView(MeshTopologyPtr meshTopoPtr, const std::set<IndexType> &activeCellIDs);
     
+    // ! Destructor
+    virtual ~MeshTopologyView() {}
+    
     // ! This method only gets within a factor of 2 or so, but can give a rough estimate
     virtual long long approximateMemoryFootprint();
     
