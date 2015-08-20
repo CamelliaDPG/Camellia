@@ -3,12 +3,14 @@
 #include "Function.h"
 #include "HDF5Exporter.h"
 #include "MeshFactory.h"
+#include "SimpleFunction.h"
 #include "StokesVGPFormulation.h"
+#include "TimeSteppingConstants.h"
 
 using namespace Camellia;
 
 // this Function will work for both 2D and 3D cavity flow top BC (matching y = 1)
-class RampBoundaryFunction_U1 : public SimpleFunction
+class RampBoundaryFunction_U1 : public SimpleFunction<double>
 {
   double _eps; // ramp width
 public:
@@ -72,14 +74,79 @@ public:
   }
 };
 
-class TimeRamp : public SimpleFunction
+// this Function will work for both 2D and 3D cavity flow top BC (matching y = 1)
+class SpaceTimeRampBoundaryFunction_U1 : public SimpleFunction<double>
+{
+  double _eps; // ramp width
+public:
+  SpaceTimeRampBoundaryFunction_U1(double eps)
+  {
+    _eps = eps;
+  }
+  double value(double x, double y, double t)
+  {
+    double tol = 1e-14;
+    if (abs(y-1.0) < tol)   // top boundary
+    {
+      if ( (abs(x) < _eps) )   // top left
+      {
+        return x / _eps;
+      }
+      else if ( abs(1.0-x) < _eps)     // top right
+      {
+        return (1.0-x) / _eps;
+      }
+      else     // top middle
+      {
+        return 1;
+      }
+    }
+    else     // not top boundary: 0.0
+    {
+      return 0.0;
+    }
+  }
+  double value(double x, double y, double z, double t)
+  {
+    // bilinear interpolation with ramp of width _eps around top edges
+    double tol = 1e-14;
+    if (abs(y-1.0) <tol)
+    {
+      double xFactor = 1.0;
+      double zFactor = 1.0;
+      if ( (abs(x) < _eps) )   // top left
+      {
+        xFactor = x / _eps;
+      }
+      else if ( abs(1.0-x) < _eps)     // top right
+      {
+        xFactor = (1.0-x) / _eps;
+      }
+      if ( (abs(z) < _eps) )   // top back
+      {
+        zFactor = z / _eps;
+      }
+      else if ( abs(1.0-z) < _eps)     // top front
+      {
+        zFactor = (1.0-z) / _eps;
+      }
+      return xFactor * zFactor;
+    }
+    else
+    {
+      return 0.0;
+    }
+  }
+};
+
+class TimeRamp : public SimpleFunction<double>
 {
   FunctionPtr _time;
   double _timeScale;
   double getTimeValue()
   {
     ParameterFunction* timeParamFxn = dynamic_cast<ParameterFunction*>(_time.get());
-    SimpleFunction* timeFxn = dynamic_cast<SimpleFunction*>(timeParamFxn->getValue().get());
+    SimpleFunction<double>* timeFxn = dynamic_cast<SimpleFunction<double>*>(timeParamFxn->getValue().get());
     return timeFxn->value(0);
   }
 public:
@@ -102,6 +169,50 @@ public:
   }
 };
 
+// TODO: add this Function to the core Camellia library.
+class TimeRampSpaceTime : public SimpleFunction<double>
+{
+  double _timeScale;
+public:
+  TimeRampSpaceTime(double timeScale)
+  {
+    _timeScale = timeScale;
+  }
+  double value(double x, double t)
+  {
+    if (t >= _timeScale)
+    {
+      return 1.0;
+    }
+    else
+    {
+      return t / _timeScale;
+    }
+  }
+  double value(double x, double y, double t)
+  {
+    if (t >= _timeScale)
+    {
+      return 1.0;
+    }
+    else
+    {
+      return t / _timeScale;
+    }
+  }
+  double value(double x, double y, double z, double t)
+  {
+    if (t >= _timeScale)
+    {
+      return 1.0;
+    }
+    else
+    {
+      return t / _timeScale;
+    }
+  }
+};
+
 using namespace std;
 
 int main(int argc, char *argv[])
@@ -109,13 +220,16 @@ int main(int argc, char *argv[])
   Teuchos::GlobalMPISession mpiSession(&argc, &argv); // initialize MPI
   int rank = Teuchos::GlobalMPISession::getRank();
 
+  Epetra_MpiComm Comm(MPI_COMM_WORLD);
+  Comm.Barrier(); // set breakpoint here to allow debugger attachment to other MPI processes than the one you automatically attached to.
+  
   int spaceDim = 2;
 
   double eps = 1.0 / 64.0;
 
   bool useConformingTraces = true;
   double mu = 1.0;
-  StokesVGPFormulation form(spaceDim, useConformingTraces, mu);
+  StokesVGPFormulation form = StokesVGPFormulation::steadyFormulation(spaceDim, mu, useConformingTraces);
 
   vector<double> dims(spaceDim,1.0);
   vector<int> numElements(spaceDim,2);
@@ -152,7 +266,7 @@ int main(int argc, char *argv[])
   MeshPtr mesh = form.solution()->mesh();
   double energyError = form.solution()->energyErrorTotal();
   int globalDofs = mesh->globalDofCount();
-  int activeElements = mesh->getTopology()->activeCellCount();
+  int activeElements = mesh->getTopology()->getActiveCellIndices().size();
   if (rank==0) cout << "Initial energy error: " << energyError;
   if (rank==0) cout << " (mesh has " << activeElements << " elements and " << globalDofs << " global dofs)." << endl;
 
@@ -168,13 +282,13 @@ int main(int argc, char *argv[])
     form.solve();
 
     ostringstream exportName;
-    exportName << "stokesCavityFlowSolution_ref" << refNumber + 1;
+    exportName << "stokesCavityFlowSolution_ref" << refNumber;
     HDF5Exporter exporter(form.solution()->mesh(), exportName.str(), ".");
     exporter.exportSolution(form.solution());
 
     energyError = form.solution()->energyErrorTotal();
     globalDofs = mesh->globalDofCount();
-    activeElements = mesh->getTopology()->activeCellCount();
+    activeElements = mesh->getTopology()->getActiveCellIndices().size();
     if (rank==0) cout << "Energy error for refinement " << refNumber << ": " << energyError;
     if (rank==0) cout << " (mesh has " << activeElements << " elements and " << globalDofs << " global dofs)." << endl;
   }
@@ -182,16 +296,17 @@ int main(int argc, char *argv[])
 
   // save the formulation for possible later reloading:
   string savePrefix = "stokesExample";
-  cout << "Saving to " << savePrefix << endl;
+  if (rank==0) cout << "Saving to " << savePrefix << endl;
   form.save(savePrefix);
-  cout << "...saved.\n";
+  if (rank==0) cout << "...saved.\n";
 
   // try loading:
-  cout << "loading saved solution...\n";
+  if (rank==0) cout << "loading saved solution...\n";
   form.initializeSolution(savePrefix, polyOrder, delta_k);
-  cout << "...loaded.\n";
+  if (rank==0) cout << "...loaded.\n";
   FunctionPtr u1_steady = Function::solution(form.u(1), form.solution());
-  cout << "u1(0.5, 0.5) = " << u1_steady->evaluate(0.5, 0.5) << endl;
+  double centerValue = u1_steady->evaluate(form.solution()->mesh(), 0.5, 0.5); // MUST call this on every MPI rank -- MPI collective method.
+  if (rank==0) cout << "u1(0.5, 0.5) = " << centerValue << endl;
 
   // now solve for the stream function on the fine mesh:
   form.streamSolution()->solve();
@@ -204,9 +319,9 @@ int main(int argc, char *argv[])
    */
 
   double totalTime = 3;
-  double dt = 0.1;
+  double dt = 0.5;
   int numTimeSteps = ceil(totalTime / dt);
-  StokesVGPFormulation transientForm(spaceDim, useConformingTraces, mu, true, dt);
+  StokesVGPFormulation transientForm = StokesVGPFormulation::timeSteppingFormulation(spaceDim, mu, dt, useConformingTraces, BACKWARD_EULER);
 
   FunctionPtr t = transientForm.getTimeFunction();
   FunctionPtr timeRamp = Teuchos::rcp(new TimeRamp(t,1.0));
@@ -222,46 +337,20 @@ int main(int argc, char *argv[])
   for (int timeStep=0; timeStep<numTimeSteps; timeStep++)
   {
     transientForm.solve();
-    double L2_step = transientForm.L2NormOfTimeStep();
+    double L2_step = transientForm.relativeL2NormOfTimeStep();
     transientExporter.exportSolution(transientForm.solution(),transientForm.getTime());
 
     transientForm.takeTimeStep();
     if (rank==0) cout << "time step " << timeStep << " completed (L^2 norm of difference from prev: " << L2_step << ").\n";
   }
 
-  {
-    // trying the same thing as below, but computing it differently:
-    FunctionPtr  p_transient = Function::solution( transientForm.p(), transientForm.solution());
-    FunctionPtr u1_transient = Function::solution(transientForm.u(1), transientForm.solution());
-    FunctionPtr u2_transient = Function::solution(transientForm.u(2), transientForm.solution());
-    FunctionPtr  p_steady = Function::solution( form.p(), form.solution());
-    FunctionPtr u1_steady = Function::solution(form.u(1), form.solution());
-    FunctionPtr u2_steady = Function::solution(form.u(2), form.solution());
-
-    FunctionPtr squaredDiff = (p_transient-p_steady) * (p_transient-p_steady) + (u1_transient-u1_steady) * (u1_transient-u1_steady) + (u2_transient - u2_steady) * (u2_transient - u2_steady);
-    double valSquared = squaredDiff->integrate(form.solution()->mesh());
-    if (rank==0) cout << "L^2 norm of difference between converged transient and steady state solution (computed differently): " << sqrt(valSquared) << endl;
-
-    FunctionPtr p_diff_squared  =   (p_transient-p_steady) *   (p_transient-p_steady);
-    FunctionPtr u1_diff_squared = (u1_transient-u1_steady) * (u1_transient-u1_steady);
-    FunctionPtr u2_diff_squared = (u2_transient-u2_steady) * (u2_transient-u2_steady);
-
-    double p_diff_L2 = sqrt(p_diff_squared->integrate(form.solution()->mesh()));
-    double u1_diff_L2 = sqrt(u1_diff_squared->integrate(form.solution()->mesh()));
-    double u2_diff_L2 = sqrt(u2_diff_squared->integrate(form.solution()->mesh()));
-
-    if (rank==0) cout << "L^2 norm (computed differently) for p: " << p_diff_L2 << endl;
-    if (rank==0) cout << "L^2 norm (computed differently) for u1: " << u1_diff_L2 << endl;
-    if (rank==0) cout << "L^2 norm (computed differently) for u2: " << u2_diff_L2 << endl;
-  }
-
   // by this point, we should have recovered something close to the steady solution.  Did we?
   SolutionPtr transientSolution = transientForm.solution();
   transientSolution->addSolution(form.solution(), -1.0);
 
-  double u1_diff_L2 = sqrt(transientSolution->L2NormOfSolutionGlobal(form.u(1)->ID()));
-  double u2_diff_L2 = sqrt(transientSolution->L2NormOfSolutionGlobal(form.u(2)->ID()));
-  double p_diff_L2 = sqrt(transientSolution->L2NormOfSolutionGlobal(form.p()->ID()));
+  double u1_diff_L2 = transientSolution->L2NormOfSolutionGlobal(form.u(1)->ID());
+  double u2_diff_L2 = transientSolution->L2NormOfSolutionGlobal(form.u(2)->ID());
+  double p_diff_L2 = transientSolution->L2NormOfSolutionGlobal(form.p()->ID());
 
   double diff_L2 = sqrt(u1_diff_L2 * u1_diff_L2 + u2_diff_L2 * u2_diff_L2 + p_diff_L2 * p_diff_L2);
 
@@ -271,5 +360,70 @@ int main(int argc, char *argv[])
   if (rank==0) cout << "L^2 norm for u1: " << u1_diff_L2 << endl;
   if (rank==0) cout << "L^2 norm for u2: " << u2_diff_L2 << endl;
 
+  // finally, let's try a space-time formulation:
+  // Conforming traces aren't yet supported for space-time elements.  The issue has to do with
+  // certain assumptions made in GDAMinimumRule -- basically it assumes that traces will be defined on each
+  // side of the element, which isn't true for space-time.  For various reasons this is not an issue when
+  // the only continuity being enforced is through the sides.
+  useConformingTraces = false;
+  StokesVGPFormulation spaceTimeForm = StokesVGPFormulation::spaceTimeFormulation(spaceDim, mu, useConformingTraces);
+
+  double t0 = 0;
+  MeshTopologyPtr spaceTimeMeshTopo = MeshFactory::spaceTimeMeshTopology(meshTopo, t0, totalTime, (int)totalTime);
+  spaceTimeForm.initializeSolution(spaceTimeMeshTopo, polyOrder, delta_k);
+  
+  // redefine the time ramp:
+  timeRamp = Teuchos::rcp(new TimeRampSpaceTime(1.0));
+
+  spaceTimeForm.addZeroInitialCondition(t0);
+  SpatialFilterPtr initialTime = SpatialFilter::matchingT(t0);
+  SpatialFilterPtr notInitialTime = SpatialFilter::negatedFilter(initialTime);
+  topBoundary = SpatialFilter::matchingY(1) & notInitialTime;
+  notTopBoundary = (!SpatialFilter::matchingY(1)) & notInitialTime;
+  spaceTimeForm.addWallCondition(notTopBoundary);
+  FunctionPtr u1_topRampSpaceTime = Teuchos::rcp(new SpaceTimeRampBoundaryFunction_U1(eps));
+  FunctionPtr u_topRampSpaceTime;
+  if (spaceDim == 2)
+  {
+    u_topRampSpaceTime = Function::vectorize(u1_topRampSpaceTime,zero);
+  }
+  else
+  {
+    u_topRampSpaceTime = Function::vectorize(u1_topRampSpaceTime,zero,zero);
+  }
+
+  spaceTimeForm.addInflowCondition(topBoundary, timeRamp * u_topRampSpaceTime);
+  spaceTimeForm.addPointPressureCondition({0.5,1.0});
+
+  MeshPtr spaceTimeMesh = spaceTimeForm.solution()->mesh();
+  spaceTimeForm.solve();
+  
+  energyError = spaceTimeForm.solution()->energyErrorTotal();
+  globalDofs = spaceTimeMesh->globalDofCount();
+  activeElements = spaceTimeMesh->getTopology()->getActiveCellIndices().size();
+  if (rank==0) cout << "Initial energy error for space-time mesh: " << energyError;
+  if (rank==0) cout << " (mesh has " << activeElements << " elements and " << globalDofs << " global dofs)." << endl;
+  
+  HDF5Exporter spaceTimeExporter(spaceTimeMesh, "stokesSpaceTimeCavityFlow", ".");
+  spaceTimeExporter.exportSolution(spaceTimeForm.solution(), 0);
+  
+  tol = 8e-1;
+  refNumber = 0;
+  do
+  {
+    refNumber++;
+    spaceTimeForm.refine();
+    spaceTimeForm.solve();
+    
+    spaceTimeExporter.exportSolution(spaceTimeForm.solution(), refNumber);
+    
+    energyError = spaceTimeForm.solution()->energyErrorTotal();
+    globalDofs = spaceTimeMesh->globalDofCount();
+    activeElements = spaceTimeMesh->getTopology()->getActiveCellIndices().size();
+    if (rank==0) cout << "Energy error for refinement " << refNumber << ": " << energyError;
+    if (rank==0) cout << " (mesh has " << activeElements << " elements and " << globalDofs << " global dofs)." << endl;
+  }
+  while (energyError > tol);
+  
   return 0;
 }
