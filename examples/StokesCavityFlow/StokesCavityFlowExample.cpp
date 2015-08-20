@@ -361,14 +361,16 @@ int main(int argc, char *argv[])
   if (rank==0) cout << "L^2 norm for u2: " << u2_diff_L2 << endl;
 
   // finally, let's try a space-time formulation:
-  // Conforming traces aren't yet supported for space-time elements.  The issue has to do with
-  // certain assumptions made in GDAMinimumRule -- basically it assumes that traces will be defined on each
-  // side of the element, which isn't true for space-time.  For various reasons this is not an issue when
-  // the only continuity being enforced is through the sides.
-  useConformingTraces = false;
+  // Conforming traces are supported for space-time elements, under the assumption that no higher-continuity
+  // trace variables (e.g. H^1-conforming ones) vanish on temporal interfaces.  This is the case for our Stokes
+  // VGP formulation -- the t_n variables vanish on temporal interfaces, but these are fluxes and have only face
+  // continuity enforced.
+  useConformingTraces = true;
   StokesVGPFormulation spaceTimeForm = StokesVGPFormulation::spaceTimeFormulation(spaceDim, mu, useConformingTraces);
 
   double t0 = 0;
+  // get a new mesh:
+  meshTopo = MeshFactory::rectilinearMeshTopology(dims,numElements,x0);
   MeshTopologyPtr spaceTimeMeshTopo = MeshFactory::spaceTimeMeshTopology(meshTopo, t0, totalTime, (int)totalTime);
   spaceTimeForm.initializeSolution(spaceTimeMeshTopo, polyOrder, delta_k);
   
