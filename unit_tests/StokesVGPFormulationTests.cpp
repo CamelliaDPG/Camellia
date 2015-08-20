@@ -319,7 +319,7 @@ TEUCHOS_UNIT_TEST( StokesVGPFormulation, StreamFormulationConsistency )
   bool useConformingTraces = true;
   double mu = 1.0 / Re;
   double dt = 1.0;
-  StokesVGPFormulation form = StokesVGPFormulation::timeSteppingFormulation(spaceDim, mu, dt, useConformingTraces);
+  StokesVGPFormulation form = StokesVGPFormulation::timeSteppingFormulation(spaceDim, mu, dt, useConformingTraces, BACKWARD_EULER);
   
   setupExactSolution(form, u, p, meshTopo, fieldPolyOrder, delta_k);
   projectExactSolution(form, form.solution(), u, p);
