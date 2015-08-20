@@ -9,6 +9,7 @@
 #include "StokesVGPFormulation.h"
 
 #include "Constraint.h"
+#include "HDF5Exporter.h"
 #include "MeshFactory.h"
 #include "PenaltyConstraints.h"
 #include "PoissonFormulation.h"
@@ -68,7 +69,7 @@ StokesVGPFormulation StokesVGPFormulation::spaceTimeFormulation(int spaceDim, do
 }
 
 StokesVGPFormulation StokesVGPFormulation::timeSteppingFormulation(int spaceDim, double mu, double dt,
-                                                                   bool useConformingTraces)
+                                                                   bool useConformingTraces, TimeStepType timeStepType)
 {
   Teuchos::ParameterList parameters;
   
@@ -78,6 +79,7 @@ StokesVGPFormulation StokesVGPFormulation::timeSteppingFormulation(int spaceDim,
   parameters.set("useTimeStepping", true);
   parameters.set("useSpaceTime", false);
   parameters.set("dt", dt);
+  parameters.set("timeStepType", timeStepType);
   
   return StokesVGPFormulation(parameters);
 }
@@ -93,6 +95,7 @@ StokesVGPFormulation::StokesVGPFormulation(Teuchos::ParameterList &parameters)
   bool useTimeStepping = parameters.get<bool>("useTimeStepping",false);
   double dt = parameters.get<double>("dt",1.0);
   bool useSpaceTime = parameters.get<bool>("useSpaceTime",false);
+  TimeStepType timeStepType = parameters.get<TimeStepType>("timeStepType", BACKWARD_EULER); // Backward Euler is immune to oscillations (which Crank-Nicolson can/does exhibit)
 
   _spaceDim = spaceDim;
   _useConformingTraces = useConformingTraces;
@@ -100,7 +103,20 @@ StokesVGPFormulation::StokesVGPFormulation(Teuchos::ParameterList &parameters)
   _dt = ParameterFunction::parameterFunction(dt);
   _t = ParameterFunction::parameterFunction(0);
   
-  _theta = ParameterFunction::parameterFunction(0.5); // Crank-Nicolson
+  double thetaValue;
+  switch (timeStepType) {
+    case FORWARD_EULER:
+      thetaValue = 0.0;
+      break;
+    case CRANK_NICOLSON:
+      thetaValue = 0.5;
+      break;
+    case BACKWARD_EULER:
+      thetaValue = 1.0;
+      break;
+  }
+  
+  _theta = ParameterFunction::parameterFunction(thetaValue);
   _timeStepping = useTimeStepping;
   _spaceTime = useSpaceTime;
   
@@ -627,7 +643,7 @@ void StokesVGPFormulation::addOutflowCondition(SpatialFilterPtr outflowRegion)
   }
 }
 
-void StokesVGPFormulation::addPointPressureCondition()
+void StokesVGPFormulation::addPointPressureCondition(vector<double> vertex)
 {
   if (_haveOutflowConditionsImposed)
   {
@@ -637,13 +653,24 @@ void StokesVGPFormulation::addPointPressureCondition()
 
   VarPtr p = this->p();
 
-  vector<double> vertex0 = _solution->mesh()->getTopology()->getVertex(0);
-  if (_spaceTime) // then the last coordinate is time; drop it
+  if (vertex.size() == 0)
   {
-    vertex0.pop_back();
+    vertex = _solution->mesh()->getTopology()->getVertex(0);
+    if (_spaceTime) // then the last coordinate is time; drop it
+    {
+      vertex.pop_back();
+    }
   }
-  _solution->bc()->addSpatialPointBC(p->ID(), 0.0, vertex0);
+  _solution->bc()->addSpatialPointBC(p->ID(), 0.0, vertex);
 
+  cout << "setting point pressure condition at point (";
+  for (int d=0; d<vertex.size(); d++)
+  {
+    cout << vertex[d];
+    if (d < vertex.size() - 1) cout << ", ";
+  }
+  cout << ")\n";
+  
   if (_solution->bc()->shouldImposeZeroMeanConstraint(p->ID()))
   {
     _solution->bc()->removeZeroMeanConstraint(p->ID());
@@ -654,6 +681,22 @@ void StokesVGPFormulation::addWallCondition(SpatialFilterPtr wall)
 {
   vector<double> zero(_spaceDim, 0.0);
   addInflowCondition(wall, TFunction<double>::constant(zero));
+}
+
+void StokesVGPFormulation::addZeroInitialCondition(double t0)
+{
+  TEUCHOS_TEST_FOR_EXCEPTION(!_spaceTime, std::invalid_argument, "This method only supported for space-time formulations");
+  
+  SpatialFilterPtr initialTime = SpatialFilter::matchingT(t0);
+  vector<double> zero(_spaceDim, 0.0);
+  addInflowCondition(initialTime, TFunction<double>::constant(zero));
+
+  VarPtr t1_hat = this->tn_hat(1), t2_hat = this->tn_hat(2);
+  VarPtr t3_hat;
+  if (_spaceDim==3) t3_hat = this->tn_hat(3);
+  _solution->bc()->addDirichlet(t1_hat, initialTime, Function::zero());
+  _solution->bc()->addDirichlet(t2_hat, initialTime, Function::zero());
+  if (_spaceDim==3) _solution->bc()->addDirichlet(t3_hat, initialTime, Function::zero());
 }
 
 void StokesVGPFormulation::addZeroMeanPressureCondition()
@@ -868,7 +911,7 @@ bool StokesVGPFormulation::isTimeStepping() const
   return _timeStepping;
 }
 
-double StokesVGPFormulation::L2NormOfTimeStep()
+double StokesVGPFormulation::relativeL2NormOfTimeStep()
 {
   TFunctionPtr<double>  p_current = TFunction<double>::solution( p(), _solution);
   TFunctionPtr<double> u1_current = TFunction<double>::solution(u(1), _solution);
@@ -876,10 +919,41 @@ double StokesVGPFormulation::L2NormOfTimeStep()
   TFunctionPtr<double>  p_prev = TFunction<double>::solution( p(), _previousSolution);
   TFunctionPtr<double> u1_prev = TFunction<double>::solution(u(1), _previousSolution);
   TFunctionPtr<double> u2_prev = TFunction<double>::solution(u(2), _previousSolution);
-
+  
+  TFunctionPtr<double> squaredSum = (p_current+p_prev) * (p_current+p_prev) + (u1_current+u1_prev) * (u1_current+u1_prev) + (u2_current + u2_prev) * (u2_current + u2_prev);
+  // average would be each summand divided by 4
+  double L2OfAverage = sqrt( 0.25 * squaredSum->integrate(_solution->mesh()));
+//  double L2OfAverage_p = sqrt( 0.25 * ((p_current+p_prev) * (p_current+p_prev))->integrate(_solution->mesh()));
+//  double L2OfAverage_u1 = sqrt( 0.25 * ((u1_current+u1_prev) * (u1_current+u1_prev))->integrate(_solution->mesh()));
+//  double L2OfAverage_u2 = sqrt( 0.25 * ((u2_current + u2_prev) * (u2_current + u2_prev))->integrate(_solution->mesh()));
+  
   TFunctionPtr<double> squaredDiff = (p_current-p_prev) * (p_current-p_prev) + (u1_current-u1_prev) * (u1_current-u1_prev) + (u2_current - u2_prev) * (u2_current - u2_prev);
+  
+//  double L2OfDifference_p = sqrt( ((p_current-p_prev) * (p_current-p_prev))->integrate(_solution->mesh()));
+//  double L2OfDifference_u1 = sqrt( ((u1_current - u1_prev) * (u1_current - u1_prev))->integrate(_solution->mesh()));
+//  double L2OfDifference_u2 = sqrt( ((u2_current - u2_prev) * (u2_current - u2_prev))->integrate(_solution->mesh()));
+//  
+//  { // DEBUGGING
+//    cout << "relative L^2(p): " << L2OfDifference_p / L2OfAverage_p << endl;
+//    cout << "relative L^2(u1): " << L2OfDifference_u1 / L2OfAverage_u1 << endl;
+//    cout << "relative L^2(u2): " << L2OfDifference_u2 / L2OfAverage_u2 << endl;
+//  }
+//  
+//  { // debugging:
+//    static HDF5Exporter stokesSolution(_solution->mesh(), "StokesSolutionDebugging", ".");
+//    stokesSolution.exportSolution(_solution,_time);
+//    static HDF5Exporter stokesPreviousSolution(_previousSolution->mesh(), "StokesPreviousSolutionDebugging", ".");
+//    double previousTime = _time - ((ConstantScalarFunction<double>*)_dt->getValue().get())->value();
+//    stokesPreviousSolution.exportSolution(_solution, previousTime);
+//    
+//    static HDF5Exporter timeStepSquared(_previousSolution->mesh(), "StokesTimeStepDebugging", ".");
+//    timeStepSquared.exportFunction(squaredDiff,"squaredDifference",_time);
+//  }
+  
   double valSquared = squaredDiff->integrate(_solution->mesh());
-  return sqrt(valSquared);
+  if (L2OfAverage < 1e-15) return sqrt(valSquared);
+  
+  return sqrt(valSquared) / L2OfAverage;
 }
 
 double StokesVGPFormulation::mu()

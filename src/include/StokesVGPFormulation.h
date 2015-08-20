@@ -20,6 +20,7 @@
 #include "RefinementStrategy.h"
 #include "ParameterFunction.h"
 #include "PoissonFormulation.h"
+#include "TimeSteppingConstants.h"
 
 namespace Camellia
 {
@@ -81,14 +82,17 @@ public:
   // ! sets a wall boundary condition
   void addWallCondition(SpatialFilterPtr wall);
 
-  // ! sets an inflow velocity boundary condition; in 2D and 3D, u should be a vector-valued function.
+  // ! sets an inflow velocity boundary condition; u should be a vector-valued function.
   void addInflowCondition(SpatialFilterPtr inflowRegion, TFunctionPtr<double> u);
+  
+  // ! sets a zero initial condition for space-time.
+  void addZeroInitialCondition(double t0);
 
   // ! sets an outflow velocity boundary condition
   void addOutflowCondition(SpatialFilterPtr outflowRegion);
 
   // ! set a pressure condition at a point
-  void addPointPressureCondition();
+  void addPointPressureCondition(vector<double> point = vector<double>());
 
   // ! set a pressure condition at a point
   void addZeroMeanPressureCondition();
@@ -110,8 +114,8 @@ public:
   // ! returns true if this is a time-stepping formulation; false otherwise.
   bool isTimeStepping() const;
   
-  // ! L^2 norm of the difference in u1, u2, and p from previous time step
-  double L2NormOfTimeStep();
+  // ! L^2 norm of the difference in u1, u2, and p from previous time step, normalized
+  double relativeL2NormOfTimeStep();
 
   // ! Loads the mesh and solution from disk, if they were previously saved using save().  In the present
   // ! implementation, assumes that the constructor arguments provided to StokesVGPFormulation were the same
@@ -195,7 +199,7 @@ public:
   static StokesVGPFormulation steadyFormulation(int spaceDim, double mu, bool useConformingTraces);
   static StokesVGPFormulation spaceTimeFormulation(int spaceDim, double mu, bool useConformingTraces);
   
-  static StokesVGPFormulation timeSteppingFormulation(int spaceDim, double mu, double dt, bool useConformingTraces);
+  static StokesVGPFormulation timeSteppingFormulation(int spaceDim, double mu, double dt, bool useConformingTraces, TimeStepType timeStepType);
 };
 }
 
