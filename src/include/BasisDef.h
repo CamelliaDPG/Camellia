@@ -356,6 +356,40 @@ Camellia::EFunctionSpace Basis<Scalar,ArrayScalar>::functionSpace(int tensorialR
   else
     TEUCHOS_TEST_FOR_EXCEPTION(true,std::invalid_argument,"tensorialRank exceeds the tensorial degree of the basis");
 }
+  
+  template<class Scalar, class ArrayScalar>
+  Camellia::EFunctionSpace Basis<Scalar,ArrayScalar>::functionSpace(int subcDim, int subcOrdinal) const
+  {
+    switch (this->_functionSpace)
+    {
+      case FUNCTION_SPACE_HGRAD_SPACE_HVOL_TIME:
+      case FUNCTION_SPACE_HVOL_SPACE_HGRAD_TIME:
+      {
+        TEUCHOS_TEST_FOR_EXCEPTION(this->_domainTopology()->getTensorialDegree() == 0, std::invalid_argument, "mixed function spaces only supported for tensorial domains");
+        CellTopoPtr subcell= this->_domainTopology()->getSubcell(subcDim,subcOrdinal);
+        if (subcell->getTensorialDegree() < this->_domainTopology()->getTensorialDegree())
+        {
+          // then this is the spatial part
+          return this->functionSpace(0); // 0: tensorial rank of spatial part
+        }
+        else
+        {
+          // any tensorial subcell other than Node x Line_2 has a mixed function space; Node x Line_2 has the temporal function space
+          if (subcell->getNodeCount() == 2)
+          {
+            return this->functionSpace(1); // 1: tensorial rank of temporal part
+          }
+          else
+          {
+            return this->_functionSpace;
+          }
+        }
+      }
+        break;
+      default:
+        return this->_functionSpace;
+    }
+  }
 
 template<class Scalar, class ArrayScalar>
 bool Basis<Scalar,ArrayScalar>::isConforming() const

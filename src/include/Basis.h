@@ -92,6 +92,7 @@ public:
 
   virtual Camellia::EFunctionSpace functionSpace() const;
   virtual Camellia::EFunctionSpace functionSpace(int tensorialRank) const; // 0 for space, 1 for time, in space-time bases
+  virtual Camellia::EFunctionSpace functionSpace(int subcDim, int subcellOrdinal) const; // particularly relevant for space-time bases
 
   // methods identifying the type of basis:
   virtual bool isConforming() const; // defaults to false (true for the Intrepid bases)
