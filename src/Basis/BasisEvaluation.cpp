@@ -197,8 +197,10 @@ FCPtr BasisEvaluation::getTransformedValuesWithBasisValues(BasisPtr basis, Camel
     case Camellia::FUNCTION_SPACE_HDIV_DISC:
     case Camellia::FUNCTION_SPACE_HDIV_FREE:
       fst::HDIVtransformVALUE<double>(*transformedValues,cellJacobian,cellJacobianDet,*referenceValues);
-      break;
-    case Camellia::FUNCTION_SPACE_HVOL:
+        break;
+      case Camellia::FUNCTION_SPACE_HVOL:
+      case Camellia::FUNCTION_SPACE_HVOL_SPACE_HGRAD_TIME:
+      case Camellia::FUNCTION_SPACE_HGRAD_SPACE_HVOL_TIME:
 //        {
 //          static bool haveWarned = false;
 //          if (!haveWarned) {
