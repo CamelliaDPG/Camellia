@@ -467,9 +467,8 @@ SubBasisReconciliationWeights BasisReconciliation::computeConstrainedWeights(uns
 {
   SubBasisReconciliationWeights weights;
 
-  // use the functionSpace to determine what continuities should be enforced:
-  Camellia::EFunctionSpace fs = finerBasis->functionSpace();
-  TEUCHOS_TEST_FOR_EXCEPTION(fs != coarserBasis->functionSpace(), std::invalid_argument, "Bases must agree on functionSpace().");
+//  Camellia::EFunctionSpace fs = finerBasis->functionSpace();
+//  TEUCHOS_TEST_FOR_EXCEPTION(fs != coarserBasis->functionSpace(), std::invalid_argument, "Bases must agree on functionSpace().");
 
   int domainDim = finerBasis->domainTopology()->getDimension();
   if (domainDim != coarserBasis->domainTopology()->getDimension())
