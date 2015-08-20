@@ -9,6 +9,15 @@
 #ifndef Camellia_TimeSteppingConstants_h
 #define Camellia_TimeSteppingConstants_h
 
+namespace Camellia
+{
+  enum TimeStepType
+  {
+    FORWARD_EULER,
+    CRANK_NICOLSON,
+    BACKWARD_EULER
+  };
+}
 
 
 #endif
