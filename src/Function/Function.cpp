@@ -329,7 +329,6 @@ template <typename Scalar>
 Scalar TFunction<Scalar>::evaluate(MeshPtr mesh, double x)
 {
   int spaceDim = 1;
-  Intrepid::FieldContainer<Scalar> value(1,1); // (C,P)
   Intrepid::FieldContainer<double> physPoint(1,spaceDim);
 
   if (this->rank() != 0)
@@ -343,30 +342,19 @@ Scalar TFunction<Scalar>::evaluate(MeshPtr mesh, double x)
 
   physPoint(0,0) = x;
 
-  vector<GlobalIndexType> cellIDs = mesh->cellIDsForPoints(physPoint);
+  vector<GlobalIndexType> cellIDs = mesh->cellIDsForPoints(physPoint, true);
   if (cellIDs.size() == 0)
   {
     TEUCHOS_TEST_FOR_EXCEPTION(true, std::invalid_argument, "point not found in mesh");
   }
-  GlobalIndexType cellID = cellIDs[0];
-  BasisCachePtr basisCache = BasisCache::basisCacheForCell(mesh, cellID);
-
-  Intrepid::FieldContainer<double> refPoint(1,1,spaceDim);
-  physPoint.resize(1,1,spaceDim);
-  CamelliaCellTools::mapToReferenceFrame(refPoint, physPoint, mesh->getTopology(), cellID, basisCache->cubatureDegree());
-  refPoint.resize(1,spaceDim);
-
-  basisCache->setRefCellPoints(refPoint);
-
-  this->values(value,basisCache);
-  return value[0];
+  Scalar value = evaluateAtMeshPoint(mesh,cellIDs[0],physPoint);
+  return MPIWrapper::sum(value);
 }
 
 template <typename Scalar>
 Scalar TFunction<Scalar>::evaluate(MeshPtr mesh, double x, double y)
 {
   int spaceDim = 2;
-  Intrepid::FieldContainer<Scalar> value(1,1); // (C,P)
   Intrepid::FieldContainer<double> physPoint(1,spaceDim);
 
   if (this->rank() != 0)
@@ -381,30 +369,19 @@ Scalar TFunction<Scalar>::evaluate(MeshPtr mesh, double x, double y)
   physPoint(0,0) = x;
   physPoint(0,1) = y;
 
-  vector<GlobalIndexType> cellIDs = mesh->cellIDsForPoints(physPoint);
+  vector<GlobalIndexType> cellIDs = mesh->cellIDsForPoints(physPoint, true);
   if (cellIDs.size() == 0)
   {
     TEUCHOS_TEST_FOR_EXCEPTION(true, std::invalid_argument, "point not found in mesh");
   }
-  GlobalIndexType cellID = cellIDs[0];
-  BasisCachePtr basisCache = BasisCache::basisCacheForCell(mesh, cellID);
-
-  Intrepid::FieldContainer<double> refPoint(1,1,spaceDim);
-  physPoint.resize(1,1,spaceDim);
-  CamelliaCellTools::mapToReferenceFrame(refPoint, physPoint, mesh->getTopology(), cellID, basisCache->cubatureDegree());
-  refPoint.resize(1,spaceDim);
-
-  basisCache->setRefCellPoints(refPoint);
-
-  this->values(value,basisCache);
-  return value[0];
+  Scalar value = evaluateAtMeshPoint(mesh,cellIDs[0],physPoint);
+  return MPIWrapper::sum(value);
 }
 
 template <typename Scalar>
 Scalar TFunction<Scalar>::evaluate(MeshPtr mesh, double x, double y, double z)
 {
   int spaceDim = 3;
-  Intrepid::FieldContainer<Scalar> value(1,1); // (C,P)
   Intrepid::FieldContainer<double> physPoint(1,spaceDim);
 
   if (this->rank() != 0)
@@ -420,24 +397,41 @@ Scalar TFunction<Scalar>::evaluate(MeshPtr mesh, double x, double y, double z)
   physPoint(0,1) = y;
   physPoint(0,2) = z;
 
-  vector<GlobalIndexType> cellIDs = mesh->cellIDsForPoints(physPoint);
+  vector<GlobalIndexType> cellIDs = mesh->cellIDsForPoints(physPoint, true);
   if (cellIDs.size() == 0)
   {
     TEUCHOS_TEST_FOR_EXCEPTION(true, std::invalid_argument, "point not found in mesh");
   }
-  GlobalIndexType cellID = cellIDs[0];
-  BasisCachePtr basisCache = BasisCache::basisCacheForCell(mesh, cellID);
-
-  Intrepid::FieldContainer<double> refPoint(1,1,spaceDim);
-
-  physPoint.resize(1,1,spaceDim);
-  CamelliaCellTools::mapToReferenceFrame(refPoint, physPoint, mesh->getTopology(), cellID, basisCache->cubatureDegree());
-  refPoint.resize(1,spaceDim);
-  basisCache->setRefCellPoints(refPoint);
-
-  this->values(value,basisCache);
-  return value[0];
+  Scalar value = evaluateAtMeshPoint(mesh,cellIDs[0],physPoint);
+  return MPIWrapper::sum(value);
 }
+  
+  template <typename Scalar>
+  Scalar TFunction<Scalar>::evaluateAtMeshPoint(MeshPtr mesh, GlobalIndexType cellID, Intrepid::FieldContainer<double> &physicalPoint)
+  {
+    Scalar value;
+    int spaceDim = mesh->getDimension();
+    if (cellID != -1)
+    {
+      BasisCachePtr basisCache = BasisCache::basisCacheForCell(mesh, cellID);
+      
+      Intrepid::FieldContainer<double> refPoint(1,1,spaceDim);
+      
+      physicalPoint.resize(1,1,spaceDim);
+      CamelliaCellTools::mapToReferenceFrame(refPoint, physicalPoint, mesh->getTopology(), cellID, basisCache->cubatureDegree());
+      refPoint.resize(1,spaceDim);
+      basisCache->setRefCellPoints(refPoint);
+      
+      Intrepid::FieldContainer<Scalar> valueFC(1,1); // (C,P)
+      this->values(valueFC,basisCache);
+      value = valueFC[0];
+    }
+    else
+    {
+      value = 0;
+    }
+    return value;
+  }
 
 template <typename Scalar>
 Scalar TFunction<Scalar>::evaluate(double x)
@@ -469,6 +463,7 @@ Scalar TFunction<Scalar>::evaluate(double x, double y)
   static Teuchos::RCP<PhysicalPointCache> dummyCache = Teuchos::rcp( new PhysicalPointCache(physPoint) );
   dummyCache->writablePhysicalCubaturePoints()(0,0,0) = x;
   dummyCache->writablePhysicalCubaturePoints()(0,0,1) = y;
+  
   if (this->rank() != 0)
   {
     TEUCHOS_TEST_FOR_EXCEPTION(true, std::invalid_argument, "TFunction<Scalar>::evaluate requires a rank 0 Function.");

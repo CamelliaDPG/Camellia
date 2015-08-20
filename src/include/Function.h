@@ -25,6 +25,8 @@ class TFunction
 {
 private:
   enum FunctionModificationType { MULTIPLY, DIVIDE }; // private, used by scalarModify[.*]Values
+  
+  Scalar evaluateAtMeshPoint(MeshPtr mesh, GlobalIndexType cellID, Intrepid::FieldContainer<double> &physicalPoint);
 protected:
   int _rank;
   string _displayString; // this is here mostly for identifying functions in the debugger
@@ -132,8 +134,11 @@ public:
   virtual Scalar evaluate(double x, double y);
   virtual Scalar evaluate(double x, double y, double z);
 
+  // ! MPI-collective method. Evaluates this on the rank that owns the cell that matches the specified point.
   virtual Scalar evaluate(Teuchos::RCP<Mesh> mesh, double x);
+  // ! MPI-collective method. Evaluates this on the rank that owns the cell that matches the specified point.
   virtual Scalar evaluate(Teuchos::RCP<Mesh> mesh, double x, double y);
+  // ! MPI-collective method. Evaluates this on the rank that owns the cell that matches the specified point.
   virtual Scalar evaluate(Teuchos::RCP<Mesh> mesh, double x, double y, double z);
 
   static Scalar evaluate(TFunctionPtr<Scalar> f, double x); // for testing
