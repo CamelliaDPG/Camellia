@@ -431,10 +431,11 @@ vector<ElementPtr> Mesh::elementsForPoints(const FieldContainer<double> &physica
   return elemsForPoints;
 }
 
-void Mesh::enforceOneIrregularity()
+void Mesh::enforceOneIrregularity(bool repartitionAndMigrate)
 {
   int rank = Teuchos::GlobalMPISession::getRank();
   bool meshIsNotRegular = true; // assume it's not regular and check elements
+  bool meshChanged = false;
   while (meshIsNotRegular)
   {
     int spaceDim = _meshTopology->getDimension();
@@ -476,14 +477,20 @@ void Mesh::enforceOneIrregularity()
            mapIt != irregularCellIDs.end(); mapIt++)
       {
         Camellia::CellTopologyKey cellKey = mapIt->first;
-        hRefine(mapIt->second, RefinementPattern::regularRefinementPattern(cellKey));
+        hRefine(mapIt->second, RefinementPattern::regularRefinementPattern(cellKey), false); // false: don't repartition and rebuild, yet.
       }
       irregularCellIDs.clear();
+      meshChanged = true;
     }
     else
     {
       meshIsNotRegular=false;
     }
+  }
+  if (meshChanged && repartitionAndMigrate)
+  {
+    // then repartition and migrate now
+    repartitionAndRebuild();
   }
 }
 
@@ -797,14 +804,7 @@ void Mesh::hRefine(const set<GlobalIndexType> &cellIDs, Teuchos::RCP<RefinementP
 
   if (repartitionAndRebuild)
   {
-    _gda->repartitionAndMigrate();
-    _boundary.buildLookupTables();
-
-    for (vector< Teuchos::RCP<RefinementObserver> >::iterator observerIt = _registeredObservers.begin();
-         observerIt != _registeredObservers.end(); observerIt++)
-    {
-      (*observerIt)->didRepartition(writableMeshTopology);
-    }
+    this->repartitionAndRebuild();
   }
 }
 
@@ -1089,6 +1089,24 @@ void Mesh::registerSolution(TSolutionPtr<Scalar> solution)
   _gda->registerSolution(solution);
 }
 
+void Mesh::repartitionAndRebuild()
+{
+  _gda->repartitionAndMigrate();
+  _boundary.buildLookupTables();
+  
+  MeshTopology* meshTopologyInstance = dynamic_cast<MeshTopology*>(_meshTopology.get());
+  
+  TEUCHOS_TEST_FOR_EXCEPTION(!meshTopologyInstance, std::invalid_argument, "Mesh::hRefine() called when _meshTopology is not an instance of MeshTopology--likely Mesh initialized with a pure MeshTopologyView, which cannot be h-refined.");
+  
+  MeshTopologyPtr writableMeshTopology = Teuchos::rcp(meshTopologyInstance, false);
+  
+  for (vector< Teuchos::RCP<RefinementObserver> >::iterator observerIt = _registeredObservers.begin();
+       observerIt != _registeredObservers.end(); observerIt++)
+  {
+    (*observerIt)->didRepartition(writableMeshTopology);
+  }
+}
+
 void Mesh::unregisterObserver(RefinementObserver* observer)
 {
   for (vector< Teuchos::RCP<RefinementObserver> >::iterator meshIt = _registeredObservers.begin();
@@ -1130,7 +1148,7 @@ void Mesh::pRefine(const set<GlobalIndexType> &cellIDsForPRefinements)
   pRefine(cellIDsForPRefinements,1);
 }
 
-void Mesh::pRefine(const set<GlobalIndexType> &cellIDsForPRefinements, int pToAdd)
+void Mesh::pRefine(const set<GlobalIndexType> &cellIDsForPRefinements, int pToAdd, bool repartitionAndRebuild)
 {
   if (cellIDsForPRefinements.size() == 0) return;
 
@@ -1149,8 +1167,10 @@ void Mesh::pRefine(const set<GlobalIndexType> &cellIDsForPRefinements, int pToAd
     _meshTopology->transformationFunction()->didPRefine(cellIDsForPRefinements);
   }
 
-  _gda->repartitionAndMigrate();
-  _boundary.buildLookupTables();
+  if (repartitionAndRebuild)
+  {
+    this->repartitionAndRebuild();
+  }
 }
 
 int Mesh::condensedRowSizeUpperBound()
