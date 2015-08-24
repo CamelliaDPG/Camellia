@@ -151,7 +151,8 @@ protected:
 
   // protected "fake" side cache constructor:
   BasisCache(int fakeSideOrdinal, BasisCachePtr volumeCache, const Intrepid::FieldContainer<double> &volumeRefPoints,
-             const Intrepid::FieldContainer<double> &sideNormals, const Intrepid::FieldContainer<double> &cellSideParities);
+             const Intrepid::FieldContainer<double> &sideNormals, const Intrepid::FieldContainer<double> &cellSideParities,
+             Intrepid::FieldContainer<double> sideNormalsSpaceTime = Intrepid::FieldContainer<double>());
 
   // protected constructor basically for the sake of the SpaceTimeBasisCache subclass, which wants to disable side cache creation during construction.
   BasisCache(ElementTypePtr elemType, MeshPtr mesh, bool testVsTest,
@@ -295,7 +296,8 @@ public:
 
   // ! As the name suggests, this method is not meant for widespread use.  Intended mainly for flux-to-field mappings
   static BasisCachePtr fakeSideCache(int fakeSideOrdinal, BasisCachePtr volumeCache, const Intrepid::FieldContainer<double> &volumeRefPoints,
-                                     const Intrepid::FieldContainer<double> &sideNormals, const Intrepid::FieldContainer<double> &cellSideParities);
+                                     const Intrepid::FieldContainer<double> &sideNormals, const Intrepid::FieldContainer<double> &cellSideParities,
+                                     Intrepid::FieldContainer<double> sideNormalsSpaceTime = Intrepid::FieldContainer<double>());
 };
 }
 

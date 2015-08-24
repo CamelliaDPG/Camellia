@@ -610,9 +610,13 @@ SubBasisReconciliationWeights BasisReconciliation::computeConstrainedWeightsForT
   int numSides = fineDomainCache->cellTopology()->getSideCount();
   FieldContainer<double> cellSideParities(oneCell,numSides);
   cellSideParities.initialize(1.0);
+  FieldContainer<double> fineDomainSideNormalsSpaceTime;
+  if (fineDomainCache->cellTopology()->getTensorialDegree() > 0)
+    fineDomainSideNormalsSpaceTime = fineDomainCache->getSideNormalsSpaceTime();
   BasisCachePtr fakeSideCache = BasisCache::fakeSideCache(fineDomainCache->getSideIndex(), coarseDomainCache,
-                                coarseDomainCache->getRefCellPoints(),
-                                fineDomainCache->getSideNormals(), cellSideParities);
+                                                          coarseDomainCache->getRefCellPoints(),
+                                                          fineDomainCache->getSideNormals(), cellSideParities,
+                                                          fineDomainSideNormalsSpaceTime);
   termTraced->values(coarserBasisValues, fieldID, coarserBasis, fakeSideCache);
 
   // reshape to get rid of cell dimension:

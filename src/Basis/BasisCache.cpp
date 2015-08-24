@@ -347,13 +347,14 @@ BasisCache::BasisCache(const FieldContainer<double> &physicalCellNodes, CellTopo
 
 // "fake" side constructor
 BasisCache::BasisCache(int fakeSideOrdinal, BasisCachePtr volumeCache, const FieldContainer<double> &volumeRefPoints,
-                       const FieldContainer<double> &sideNormals, const FieldContainer<double> &cellSideParities)
+                       const FieldContainer<double> &sideNormals, const FieldContainer<double> &cellSideParities,
+                       FieldContainer<double> sideNormalsSpaceTime)
 {
   _cellTopo = volumeCache->cellTopology(); // VOLUME cell topo.
   _isSideCache = true;
   _sideIndex = fakeSideOrdinal;
   _basisCacheVolume = volumeCache;
-  _spaceDim = _cellTopo->getDimension();
+  _spaceDim = volumeCache->getSpaceDim();
 
   _cubPoints.resize(0); // force an exception if true side reference points are ever accessed in fake side BasisCache
 
@@ -362,6 +363,7 @@ BasisCache::BasisCache(int fakeSideOrdinal, BasisCachePtr volumeCache, const Fie
   _physCubPoints.resize(numCells,numPoints,_spaceDim);
   _cubPointsSideRefCell = volumeRefPoints;
   _sideNormals = sideNormals;
+  _sideNormalsSpaceTime = sideNormalsSpaceTime;
   _cellSideParities = cellSideParities;
   _maxPointsPerCubaturePhase = -1; // default: -1 (infinite)
   _cubaturePhase = 0; // index of the cubature phase; defaults to 0
@@ -1707,13 +1709,13 @@ BasisCachePtr BasisCache::sideBasisCache(Teuchos::RCP<BasisCache> volumeCache, i
 
 // ! As the name suggests, this method is not meant for widespread use.  Intended mainly for flux-to-field mappings
 BasisCachePtr BasisCache::fakeSideCache(int fakeSideOrdinal, BasisCachePtr volumeCache, const FieldContainer<double> &volumeRefPoints,
-                                        const FieldContainer<double> &sideNormals, const FieldContainer<double> &cellSideParities)
+                                        const FieldContainer<double> &sideNormals, const FieldContainer<double> &cellSideParities,
+                                        FieldContainer<double> fakeSideNormalsSpaceTime)
 {
-  int spaceDim = volumeCache->cellTopology()->getDimension();
   int numSides = volumeCache->cellTopology()->getSideCount();
 
   TEUCHOS_TEST_FOR_EXCEPTION(fakeSideOrdinal >= numSides, std::invalid_argument, "fakeSideOrdinal out of range");
 
-  BasisCachePtr sideCache = Teuchos::rcp( new BasisCache(fakeSideOrdinal, volumeCache, volumeRefPoints, sideNormals, cellSideParities));
+  BasisCachePtr sideCache = Teuchos::rcp( new BasisCache(fakeSideOrdinal, volumeCache, volumeRefPoints, sideNormals, cellSideParities, fakeSideNormalsSpaceTime));
   return sideCache;
 }
