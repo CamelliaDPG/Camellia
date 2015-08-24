@@ -151,16 +151,21 @@ void testIntegrateSpaceVaryingFunctionSides(int spaceDim, Teuchos::FancyOStream 
     
     SolutionPtr solution = Solution::solution(mesh->bilinearForm(), mesh);
     
+    set<GlobalIndexType> rankLocalCells = mesh->cellIDsInPartition();
+    
     // set 1 values for time 0 children
     projectionMap[spaceTimeTrace->ID()] = Function::constant(1.0);
     for (auto childEntry : childrenTime0)
     {
       GlobalIndexType childCellID = childEntry.first;
-      for (unsigned sideOrdinal=0; sideOrdinal < cell->getSideCount(); sideOrdinal++)
+      if (rankLocalCells.find(childCellID) == rankLocalCells.end())
       {
-        if (cell->topology()->sideIsSpatial(sideOrdinal))
+        for (unsigned sideOrdinal=0; sideOrdinal < cell->getSideCount(); sideOrdinal++)
         {
-          solution->projectOntoCell(projectionMap, childCellID, sideOrdinal);
+          if (cell->topology()->sideIsSpatial(sideOrdinal))
+          {
+            solution->projectOntoCell(projectionMap, childCellID, sideOrdinal);
+          }
         }
       }
     }
@@ -171,11 +176,14 @@ void testIntegrateSpaceVaryingFunctionSides(int spaceDim, Teuchos::FancyOStream 
     for (auto childEntry : childrenTime1)
     {
       GlobalIndexType childCellID = childEntry.first;
-      for (unsigned sideOrdinal=0; sideOrdinal < cell->getSideCount(); sideOrdinal++)
+      if (rankLocalCells.find(childCellID) == rankLocalCells.end())
       {
-        if (cell->topology()->sideIsSpatial(sideOrdinal))
+        for (unsigned sideOrdinal=0; sideOrdinal < cell->getSideCount(); sideOrdinal++)
         {
-          solution->projectOntoCell(projectionMap, childCellID, sideOrdinal);
+          if (cell->topology()->sideIsSpatial(sideOrdinal))
+          {
+            solution->projectOntoCell(projectionMap, childCellID, sideOrdinal);
+          }
         }
       }
     }
@@ -212,10 +220,18 @@ void testIntegrateSpaceVaryingFunctionSides(int spaceDim, Teuchos::FancyOStream 
           sideBasisCacheTime1->setRefCellPoints(refPointTime1);
           Intrepid::FieldContainer<double> valuesTime0(1,1), valuesTime1(1,1);
           
-          solnFxn->values(valuesTime0, sideBasisCacheTime0);
-          solnFxn->values(valuesTime1, sideBasisCacheTime1);
+          if (rankLocalCells.find(cellIDTime0) != rankLocalCells.end())
+          {
+            solnFxn->values(valuesTime0, sideBasisCacheTime0);
+          }
+          if (rankLocalCells.find(cellIDTime1) != rankLocalCells.end())
+          {
+            solnFxn->values(valuesTime1, sideBasisCacheTime1);
+          }
           
           double valueTime0 = valuesTime0[0], valueTime1 = valuesTime1[0];
+          valueTime0 = MPIWrapper::sum(valueTime0);
+          valueTime1 = MPIWrapper::sum(valueTime1);
           
           double tol = 1e-15;
           TEUCHOS_TEST_FLOATING_EQUALITY(valueTime0, valueTime1, tol, out, success);
