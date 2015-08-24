@@ -47,6 +47,12 @@ Camellia::EFunctionSpace Camellia::efsForSpace(Space space)
   case HDIV_FREE:
     return Camellia::FUNCTION_SPACE_HDIV_FREE;
 
+  // space-time:
+  case HGRAD_SPACE_L2_TIME:
+    return Camellia::FUNCTION_SPACE_HGRAD_SPACE_HVOL_TIME;
+  case L2_SPACE_HGRAD_TIME:
+    return Camellia::FUNCTION_SPACE_HVOL_SPACE_HGRAD_TIME;
+      
   default:
     TEUCHOS_TEST_FOR_EXCEPTION(true, std::invalid_argument, "Unknown function space.");
     return Camellia::FUNCTION_SPACE_UNKNOWN;
