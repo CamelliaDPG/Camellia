@@ -318,9 +318,9 @@ int main(int argc, char *argv[])
    *   We expect to recover the steady solution.
    */
 
-  double totalTime = 3;
+  double t_0 = 0, t_final = 3;
   double dt = 0.5;
-  int numTimeSteps = ceil(totalTime / dt);
+  int numTimeSteps = ceil((t_final-t_0) / dt);
   StokesVGPFormulation transientForm = StokesVGPFormulation::timeSteppingFormulation(spaceDim, mu, dt, useConformingTraces, BACKWARD_EULER);
 
   FunctionPtr t = transientForm.getTimeFunction();
@@ -361,28 +361,31 @@ int main(int argc, char *argv[])
   if (rank==0) cout << "L^2 norm for u2: " << u2_diff_L2 << endl;
 
   // finally, let's try a space-time formulation:
-  // Conforming traces are supported for space-time elements, under the assumption that no higher-continuity
-  // trace variables (e.g. H^1-conforming ones) vanish on temporal interfaces.  This is the case for our Stokes
-  // VGP formulation -- the t_n variables vanish on temporal interfaces, but these are fluxes and have only face
-  // continuity enforced.
-  useConformingTraces = true;
   StokesVGPFormulation spaceTimeForm = StokesVGPFormulation::spaceTimeFormulation(spaceDim, mu, useConformingTraces);
 
-  double t0 = 0;
   // get a new mesh:
   meshTopo = MeshFactory::rectilinearMeshTopology(dims,numElements,x0);
-  MeshTopologyPtr spaceTimeMeshTopo = MeshFactory::spaceTimeMeshTopology(meshTopo, t0, totalTime, (int)totalTime);
+  MeshTopologyPtr spaceTimeMeshTopo = MeshFactory::spaceTimeMeshTopology(meshTopo, t_0, t_final, (int)t_final);
   spaceTimeForm.initializeSolution(spaceTimeMeshTopo, polyOrder, delta_k);
   
   // redefine the time ramp:
   timeRamp = Teuchos::rcp(new TimeRampSpaceTime(1.0));
 
-  spaceTimeForm.addZeroInitialCondition(t0);
-  SpatialFilterPtr initialTime = SpatialFilter::matchingT(t0);
-  SpatialFilterPtr notInitialTime = SpatialFilter::negatedFilter(initialTime);
-  topBoundary = SpatialFilter::matchingY(1) & notInitialTime;
-  notTopBoundary = (!SpatialFilter::matchingY(1)) & notInitialTime;
-  spaceTimeForm.addWallCondition(notTopBoundary);
+  spaceTimeForm.addZeroInitialCondition(t_0);
+  SpatialFilterPtr initialTime = SpatialFilter::matchingT(t_0);
+  SpatialFilterPtr finalTime = SpatialFilter::matchingT(t_final);
+  SpatialFilterPtr notInitialOrFinalTime = SpatialFilter::negatedFilter(initialTime | finalTime);
+  topBoundary = SpatialFilter::matchingY(1) & notInitialOrFinalTime;
+  SpatialFilterPtr sideAndBottomWalls;
+  if (spaceDim == 2)
+  {
+    sideAndBottomWalls = SpatialFilter::matchingX(0.0) | SpatialFilter::matchingX(1.0) | SpatialFilter::matchingY(0.0);
+  }
+  else if (spaceDim == 3)
+  {
+    sideAndBottomWalls = SpatialFilter::matchingX(0.0) | SpatialFilter::matchingX(1.0) | SpatialFilter::matchingY(0.0) | SpatialFilter::matchingZ(0.0) | SpatialFilter::matchingZ(1.0);
+  }
+  spaceTimeForm.addWallCondition(sideAndBottomWalls | initialTime); // also impose 0 values at initial time
   FunctionPtr u1_topRampSpaceTime = Teuchos::rcp(new SpaceTimeRampBoundaryFunction_U1(eps));
   FunctionPtr u_topRampSpaceTime;
   if (spaceDim == 2)
@@ -395,7 +398,7 @@ int main(int argc, char *argv[])
   }
 
   spaceTimeForm.addInflowCondition(topBoundary, timeRamp * u_topRampSpaceTime);
-  spaceTimeForm.addPointPressureCondition({0.5,1.0});
+  spaceTimeForm.addPointPressureCondition({0.5,0.5});
 
   MeshPtr spaceTimeMesh = spaceTimeForm.solution()->mesh();
   spaceTimeForm.solve();
