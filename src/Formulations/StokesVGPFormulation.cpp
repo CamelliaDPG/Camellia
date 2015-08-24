@@ -711,32 +711,8 @@ double StokesVGPFormulation::relativeL2NormOfTimeStep()
   TFunctionPtr<double> squaredSum = (p_current+p_prev) * (p_current+p_prev) + (u1_current+u1_prev) * (u1_current+u1_prev) + (u2_current + u2_prev) * (u2_current + u2_prev);
   // average would be each summand divided by 4
   double L2OfAverage = sqrt( 0.25 * squaredSum->integrate(_solution->mesh()));
-//  double L2OfAverage_p = sqrt( 0.25 * ((p_current+p_prev) * (p_current+p_prev))->integrate(_solution->mesh()));
-//  double L2OfAverage_u1 = sqrt( 0.25 * ((u1_current+u1_prev) * (u1_current+u1_prev))->integrate(_solution->mesh()));
-//  double L2OfAverage_u2 = sqrt( 0.25 * ((u2_current + u2_prev) * (u2_current + u2_prev))->integrate(_solution->mesh()));
   
   TFunctionPtr<double> squaredDiff = (p_current-p_prev) * (p_current-p_prev) + (u1_current-u1_prev) * (u1_current-u1_prev) + (u2_current - u2_prev) * (u2_current - u2_prev);
-  
-//  double L2OfDifference_p = sqrt( ((p_current-p_prev) * (p_current-p_prev))->integrate(_solution->mesh()));
-//  double L2OfDifference_u1 = sqrt( ((u1_current - u1_prev) * (u1_current - u1_prev))->integrate(_solution->mesh()));
-//  double L2OfDifference_u2 = sqrt( ((u2_current - u2_prev) * (u2_current - u2_prev))->integrate(_solution->mesh()));
-//  
-//  { // DEBUGGING
-//    cout << "relative L^2(p): " << L2OfDifference_p / L2OfAverage_p << endl;
-//    cout << "relative L^2(u1): " << L2OfDifference_u1 / L2OfAverage_u1 << endl;
-//    cout << "relative L^2(u2): " << L2OfDifference_u2 / L2OfAverage_u2 << endl;
-//  }
-//  
-//  { // debugging:
-//    static HDF5Exporter stokesSolution(_solution->mesh(), "StokesSolutionDebugging", ".");
-//    stokesSolution.exportSolution(_solution,_time);
-//    static HDF5Exporter stokesPreviousSolution(_previousSolution->mesh(), "StokesPreviousSolutionDebugging", ".");
-//    double previousTime = _time - ((ConstantScalarFunction<double>*)_dt->getValue().get())->value();
-//    stokesPreviousSolution.exportSolution(_solution, previousTime);
-//    
-//    static HDF5Exporter timeStepSquared(_previousSolution->mesh(), "StokesTimeStepDebugging", ".");
-//    timeStepSquared.exportFunction(squaredDiff,"squaredDifference",_time);
-//  }
   
   double valSquared = squaredDiff->integrate(_solution->mesh());
   if (L2OfAverage < 1e-15) return sqrt(valSquared);
