@@ -154,12 +154,21 @@ StokesVGPFormulation::StokesVGPFormulation(Teuchos::ParameterList &parameters)
     sigma3 = _vf->fieldVar(S_SIGMA3, VECTOR_L2);
   }
   
-  Space uHatSpace = useConformingTraces ? HGRAD : L2;
-  
   FunctionPtr one = Function::constant(1.0); // reuse Function to take advantage of accelerated BasisReconciliation (probably this is not the cleanest way to do this, but it should work)
-  if (spaceDim > 0) u1_hat = _vf->traceVar(S_U1_HAT, one * u1, uHatSpace);
-  if (spaceDim > 1) u2_hat = _vf->traceVar(S_U2_HAT, one * u2, uHatSpace);
-  if (spaceDim > 2) u3_hat = _vf->traceVar(S_U3_HAT, one * u3, uHatSpace);
+  if (! _spaceTime)
+  {
+    Space uHatSpace = useConformingTraces ? HGRAD : L2;
+    if (spaceDim > 0) u1_hat = _vf->traceVar(S_U1_HAT, one * u1, uHatSpace);
+    if (spaceDim > 1) u2_hat = _vf->traceVar(S_U2_HAT, one * u2, uHatSpace);
+    if (spaceDim > 2) u3_hat = _vf->traceVar(S_U3_HAT, one * u3, uHatSpace);
+  }
+  else
+  {
+    Space uHatSpace = useConformingTraces ? HGRAD_SPACE_L2_TIME : L2;
+    if (spaceDim > 0) u1_hat = _vf->traceVarSpaceOnly(S_U1_HAT, one * u1, uHatSpace);
+    if (spaceDim > 1) u2_hat = _vf->traceVarSpaceOnly(S_U2_HAT, one * u2, uHatSpace);
+    if (spaceDim > 2) u3_hat = _vf->traceVarSpaceOnly(S_U3_HAT, one * u3, uHatSpace);
+  }
   
   TFunctionPtr<double> n = TFunction<double>::normal();
   TFunctionPtr<double> n_parity = n * TFunction<double>::sideParity();
@@ -171,17 +180,28 @@ StokesVGPFormulation::StokesVGPFormulation(Teuchos::ParameterList &parameters)
   if (spaceDim > 1) t2n_lt = p * n_parity->y() + sigma2 * minus_n_parity;
   if (spaceDim > 2) t3n_lt = p * n_parity->z() + sigma3 * minus_n_parity;
 
+  if (_spaceTime)
+  {
+    TFunctionPtr<double> n_spaceTime = TFunction<double>::normalSpaceTime();
+    TFunctionPtr<double> n_t_parity = n_spaceTime->t() * TFunction<double>::sideParity();
+    
+    if (spaceDim > 0) t1n_lt = t1n_lt + u1 * n_t_parity;
+    if (spaceDim > 1) t2n_lt = t2n_lt + u2 * n_t_parity;
+    if (spaceDim > 2) t3n_lt = t3n_lt + u3 * n_t_parity;
+  }
+
   if (!_spaceTime)
+  {
+    // as an experiment, try continuity in time.
+    if (spaceDim > 0) t1n = _vf->fluxVar(S_TN1_HAT, t1n_lt, L2_SPACE_HGRAD_TIME);
+    if (spaceDim > 1) t2n = _vf->fluxVar(S_TN2_HAT, t2n_lt, L2_SPACE_HGRAD_TIME);
+    if (spaceDim > 2) t3n = _vf->fluxVar(S_TN3_HAT, t3n_lt, L2_SPACE_HGRAD_TIME);
+  }
+  else
   {
     if (spaceDim > 0) t1n = _vf->fluxVar(S_TN1_HAT, t1n_lt);
     if (spaceDim > 1) t2n = _vf->fluxVar(S_TN2_HAT, t2n_lt);
     if (spaceDim > 2) t3n = _vf->fluxVar(S_TN3_HAT, t3n_lt);
-  }
-  else
-  {
-    if (spaceDim > 0) t1n = _vf->fluxVarSpaceOnly(S_TN1_HAT, t1n_lt);
-    if (spaceDim > 1) t2n = _vf->fluxVarSpaceOnly(S_TN2_HAT, t2n_lt);
-    if (spaceDim > 2) t3n = _vf->fluxVarSpaceOnly(S_TN3_HAT, t3n_lt);
   }
   
   if (spaceDim > 0) v1 = _vf->testVar(S_V1, HGRAD);
@@ -321,17 +341,14 @@ StokesVGPFormulation::StokesVGPFormulation(Teuchos::ParameterList &parameters)
     
     // v1:
     _stokesBF->addTerm(-u1, v1->dt());
-    _stokesBF->addTerm(u1_hat * n_spaceTime->t(), v1);
     
     // v2:
     _stokesBF->addTerm(-u2, v2->dt());
-    _stokesBF->addTerm(u2_hat * n_spaceTime->t(), v2);
     
     // v3:
     if (_spaceDim == 3)
     {
       _stokesBF->addTerm(-u3, v3->dt());
-      _stokesBF->addTerm(u3_hat * n_spaceTime->t(), v3);
     }
   }
   
@@ -711,32 +728,8 @@ double StokesVGPFormulation::relativeL2NormOfTimeStep()
   TFunctionPtr<double> squaredSum = (p_current+p_prev) * (p_current+p_prev) + (u1_current+u1_prev) * (u1_current+u1_prev) + (u2_current + u2_prev) * (u2_current + u2_prev);
   // average would be each summand divided by 4
   double L2OfAverage = sqrt( 0.25 * squaredSum->integrate(_solution->mesh()));
-//  double L2OfAverage_p = sqrt( 0.25 * ((p_current+p_prev) * (p_current+p_prev))->integrate(_solution->mesh()));
-//  double L2OfAverage_u1 = sqrt( 0.25 * ((u1_current+u1_prev) * (u1_current+u1_prev))->integrate(_solution->mesh()));
-//  double L2OfAverage_u2 = sqrt( 0.25 * ((u2_current + u2_prev) * (u2_current + u2_prev))->integrate(_solution->mesh()));
   
   TFunctionPtr<double> squaredDiff = (p_current-p_prev) * (p_current-p_prev) + (u1_current-u1_prev) * (u1_current-u1_prev) + (u2_current - u2_prev) * (u2_current - u2_prev);
-  
-//  double L2OfDifference_p = sqrt( ((p_current-p_prev) * (p_current-p_prev))->integrate(_solution->mesh()));
-//  double L2OfDifference_u1 = sqrt( ((u1_current - u1_prev) * (u1_current - u1_prev))->integrate(_solution->mesh()));
-//  double L2OfDifference_u2 = sqrt( ((u2_current - u2_prev) * (u2_current - u2_prev))->integrate(_solution->mesh()));
-//  
-//  { // DEBUGGING
-//    cout << "relative L^2(p): " << L2OfDifference_p / L2OfAverage_p << endl;
-//    cout << "relative L^2(u1): " << L2OfDifference_u1 / L2OfAverage_u1 << endl;
-//    cout << "relative L^2(u2): " << L2OfDifference_u2 / L2OfAverage_u2 << endl;
-//  }
-//  
-//  { // debugging:
-//    static HDF5Exporter stokesSolution(_solution->mesh(), "StokesSolutionDebugging", ".");
-//    stokesSolution.exportSolution(_solution,_time);
-//    static HDF5Exporter stokesPreviousSolution(_previousSolution->mesh(), "StokesPreviousSolutionDebugging", ".");
-//    double previousTime = _time - ((ConstantScalarFunction<double>*)_dt->getValue().get())->value();
-//    stokesPreviousSolution.exportSolution(_solution, previousTime);
-//    
-//    static HDF5Exporter timeStepSquared(_previousSolution->mesh(), "StokesTimeStepDebugging", ".");
-//    timeStepSquared.exportFunction(squaredDiff,"squaredDifference",_time);
-//  }
   
   double valSquared = squaredDiff->integrate(_solution->mesh());
   if (L2OfAverage < 1e-15) return sqrt(valSquared);

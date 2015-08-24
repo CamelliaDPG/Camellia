@@ -204,9 +204,13 @@ void TRefinementStrategy<Scalar>::refine(bool printToConsole)
   refineCells(cellsToRefine);
   pRefineCells(mesh, cellsToPRefine);
 
+  bool repartitionAndRebuild = false;
   if (_enforceOneIrregularity)
-    mesh->enforceOneIrregularity();
+    mesh->enforceOneIrregularity(repartitionAndRebuild);
 
+  // now, repartition and rebuild:
+  mesh->repartitionAndRebuild();
+  
   if (printToConsole)
   {
     cout << "Prior to refinement, energy error: " << totalEnergyError << endl;
@@ -261,13 +265,16 @@ void TRefinementStrategy<Scalar>::refineCells(vector<GlobalIndexType> &cellIDs)
 template <typename Scalar>
 void TRefinementStrategy<Scalar>::pRefineCells(MeshPtr mesh, const vector<GlobalIndexType> &cellIDs)
 {
-  mesh->pRefine(cellIDs);
+  bool repartitionAndRebuild = false;
+  int pToAdd = 1;
+  set<GlobalIndexType> cellIDSet(cellIDs.begin(),cellIDs.end());
+  mesh->pRefine(cellIDSet, pToAdd, repartitionAndRebuild);
 }
 
 template <typename Scalar>
 void TRefinementStrategy<Scalar>::hRefineCells(MeshPtr mesh, const vector<GlobalIndexType> &cellIDs)
 {
-  map< Camellia::CellTopologyKey, vector<GlobalIndexType> > topologyCellsToRefine;
+  map< Camellia::CellTopologyKey, set<GlobalIndexType> > topologyCellsToRefine;
 
   MeshTopologyViewPtr meshTopology = mesh->getTopology();
 
@@ -279,20 +286,17 @@ void TRefinementStrategy<Scalar>::hRefineCells(MeshPtr mesh, const vector<Global
     CellPtr cell = meshTopology->getCell(cellID);
     Camellia::CellTopologyKey topoKey = cell->topology()->getKey();
 
-    topologyCellsToRefine[topoKey].push_back(cellID);
+    topologyCellsToRefine[topoKey].insert(cellID);
   }
 
-  for (map< Camellia::CellTopologyKey, vector<GlobalIndexType> >::iterator topoEntry = topologyCellsToRefine.begin();
+  bool repartitionAndRebuild = false;
+  for (map< Camellia::CellTopologyKey, set<GlobalIndexType> >::iterator topoEntry = topologyCellsToRefine.begin();
        topoEntry != topologyCellsToRefine.end(); topoEntry++)
   {
     Camellia::CellTopologyKey topoKey = topoEntry->first;
     RefinementPatternPtr refPattern = RefinementPattern::regularRefinementPattern(topoKey);
-    mesh->hRefine(topoEntry->second, refPattern);
+    mesh->hRefine(topoEntry->second, refPattern, repartitionAndRebuild);
   }
-
-//  mesh->hRefine(triangleCellsToRefine,RefinementPattern::regularRefinementPatternTriangle());
-//  mesh->hRefine(quadCellsToRefine,RefinementPattern::regularRefinementPatternQuad());
-//  mesh->hRefine(hexCellsToRefine,RefinementPattern::regularRefinementPatternHexahedron());
 }
 
 template <typename Scalar>

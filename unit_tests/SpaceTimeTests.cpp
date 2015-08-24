@@ -17,7 +17,7 @@ using namespace Camellia;
 
 namespace
 {
-MeshPtr singleElementSpaceTimeMesh(int spaceDim, int H1Order)
+MeshPtr singleElementSpaceTimeMesh(int spaceDim, int H1Order, bool conforming = false)
 {
   vector<double> dimensions(spaceDim,2.0); // 2.0^d hypercube domain
   vector<int> elementCounts(spaceDim,1);   // 1^d mesh
@@ -28,7 +28,7 @@ MeshPtr singleElementSpaceTimeMesh(int spaceDim, int H1Order)
   MeshTopologyPtr spaceTimeMeshTopo = MeshFactory::spaceTimeMeshTopology(spatialMeshTopo, t0, t1);
 
   double epsilon = 1.0;
-  SpaceTimeHeatFormulation form(spaceDim, epsilon);
+  SpaceTimeHeatFormulation form(spaceDim, epsilon, conforming);
   int delta_k = 1;
   vector<int> H1OrderVector(2);
   H1OrderVector[0] = H1Order;
@@ -70,7 +70,7 @@ void testIntegrateTimeVaryingFunctionVolume(int spaceDim, Teuchos::FancyOStream 
   double actualIntegral = t->integrate(mesh);
   double temporalIntegral = 0.5;
   double expectedIntegral = pow(2.0,spaceDim) * temporalIntegral;
-  TEST_FLOATING_EQUALITY(actualIntegral, expectedIntegral, 1e-15);
+  TEST_FLOATING_EQUALITY(actualIntegral, expectedIntegral, 1e-14);
 }
 
 void testIntegrateTimeVaryingFunctionSides(int spaceDim, Teuchos::FancyOStream &out, bool &success)
@@ -97,7 +97,7 @@ void testIntegrateSpaceVaryingFunctionVolume(int spaceDim, Teuchos::FancyOStream
   double temporalExtent = 1.0;
   double expectedIntegral_f_x = 2.0 / 3.0;
   double expectedIntegral = pow(2.0,spaceDim-1) * expectedIntegral_f_x * temporalExtent;
-  TEST_FLOATING_EQUALITY(actualIntegral, expectedIntegral, 1e-15);
+  TEST_FLOATING_EQUALITY(actualIntegral, expectedIntegral, 1e-14);
 }
 
 void testIntegrateSpaceVaryingFunctionSides(int spaceDim, Teuchos::FancyOStream &out, bool &success)
@@ -122,6 +122,123 @@ void testIntegrateSpaceVaryingFunctionSides(int spaceDim, Teuchos::FancyOStream 
                             + expectedIntegralSides_varying_x * numSides_varying_x;
   TEST_FLOATING_EQUALITY(actualIntegral, expectedIntegral, 1e-15);
 }
+  
+  TEUCHOS_UNIT_TEST( SpaceTime, ConformingSpaceTimeTracesAreContinuousInTime )
+  {
+    // When a trace is in HGRAD and is not purely spatial, we expect it to be continuous in time.
+    int spaceDim = 1;
+    int H1Order = 2;
+    double epsilon = 1.0;
+    bool conforming = true; // will use HGRAD for the trace
+    
+    SpaceTimeHeatFormulation form(spaceDim, epsilon, conforming);
+    VarPtr spaceTimeTrace = form.u_hat();
+    
+    MeshPtr mesh = singleElementSpaceTimeMesh(spaceDim, H1Order, conforming);
+    GlobalIndexType cellID0 = 0;
+    CellPtr cell = mesh->getTopology()->getCell(cellID0);
+    
+    unsigned sideOrdinal_t0 = cell->topology()->getTemporalSideOrdinal(0);
+    unsigned sideOrdinal_t1 = cell->topology()->getTemporalSideOrdinal(1);
+    
+    // refine to produce 4 cells, two for time interval [0.0,0.5], two for [0.5,1.0]
+    mesh->hRefine(vector<GlobalIndexType>{cellID0});
+    
+    // determine which children are the earlier-time ones:
+    vector< pair<GlobalIndexType, unsigned> > childrenTime0 = cell->childrenForSide(sideOrdinal_t0);
+    
+    map<int,FunctionPtr> projectionMap;
+    
+    SolutionPtr solution = Solution::solution(mesh->bilinearForm(), mesh);
+    
+    set<GlobalIndexType> rankLocalCells = mesh->cellIDsInPartition();
+    
+    // set 1 values for time 0 children
+    projectionMap[spaceTimeTrace->ID()] = Function::constant(1.0);
+    for (auto childEntry : childrenTime0)
+    {
+      GlobalIndexType childCellID = childEntry.first;
+      if (rankLocalCells.find(childCellID) == rankLocalCells.end())
+      {
+        for (unsigned sideOrdinal=0; sideOrdinal < cell->getSideCount(); sideOrdinal++)
+        {
+          if (cell->topology()->sideIsSpatial(sideOrdinal))
+          {
+            solution->projectOntoCell(projectionMap, childCellID, sideOrdinal);
+          }
+        }
+      }
+    }
+    
+    // set 2.0 values for time 1 children
+    vector< pair<GlobalIndexType, unsigned> > childrenTime1 = cell->childrenForSide(sideOrdinal_t1);
+    projectionMap[spaceTimeTrace->ID()] = Function::constant(2.0);
+    for (auto childEntry : childrenTime1)
+    {
+      GlobalIndexType childCellID = childEntry.first;
+      if (rankLocalCells.find(childCellID) == rankLocalCells.end())
+      {
+        for (unsigned sideOrdinal=0; sideOrdinal < cell->getSideCount(); sideOrdinal++)
+        {
+          if (cell->topology()->sideIsSpatial(sideOrdinal))
+          {
+            solution->projectOntoCell(projectionMap, childCellID, sideOrdinal);
+          }
+        }
+      }
+    }
+    
+    // initialize LHS vector will use existing local coefficients to determine global representation
+    solution->initializeLHSVector();
+    
+    // import solution then uses the LHS vector to determine local coefficients
+    solution->importSolution();
+    
+    FunctionPtr solnFxn = Function::solution(spaceTimeTrace, solution);
+    for (auto childEntry : childrenTime0)
+    {
+      GlobalIndexType cellIDTime0 = childEntry.first;
+      CellPtr cellTime0 = mesh->getTopology()->getCell(cellIDTime0);
+      CellPtr cellTime1 = cellTime0->getNeighbor(sideOrdinal_t1, mesh->getTopology());
+      GlobalIndexType cellIDTime1 = cellTime1->cellIndex();
+      Intrepid::FieldContainer<double> refPointTime0(1,spaceDim); // spaceDim because spatial side x time
+      Intrepid::FieldContainer<double> refPointTime1(1,spaceDim);
+      // we don't really care what point we're talking about, so long as the time coordinate is right
+      refPointTime0(0,spaceDim-1) = 1.0; // time 0 should get rightmost time (1.0 in ref space)
+      refPointTime1(0,spaceDim-1) = -1.0; // time 1 should get leftmost time (-1.0 in ref space)
+      
+      BasisCachePtr basisCacheTime0 = BasisCache::basisCacheForCell(mesh, cellIDTime0);
+      BasisCachePtr basisCacheTime1 = BasisCache::basisCacheForCell(mesh, cellIDTime1);
+      
+      for (unsigned sideOrdinal=0; sideOrdinal < cell->getSideCount(); sideOrdinal++)
+      {
+        if (cell->topology()->sideIsSpatial(sideOrdinal))
+        {
+          BasisCachePtr sideBasisCacheTime0 = basisCacheTime0->getSideBasisCache(sideOrdinal);
+          BasisCachePtr sideBasisCacheTime1 = basisCacheTime1->getSideBasisCache(sideOrdinal);
+          sideBasisCacheTime0->setRefCellPoints(refPointTime0);
+          sideBasisCacheTime1->setRefCellPoints(refPointTime1);
+          Intrepid::FieldContainer<double> valuesTime0(1,1), valuesTime1(1,1);
+          
+          if (rankLocalCells.find(cellIDTime0) != rankLocalCells.end())
+          {
+            solnFxn->values(valuesTime0, sideBasisCacheTime0);
+          }
+          if (rankLocalCells.find(cellIDTime1) != rankLocalCells.end())
+          {
+            solnFxn->values(valuesTime1, sideBasisCacheTime1);
+          }
+          
+          double valueTime0 = valuesTime0[0], valueTime1 = valuesTime1[0];
+          valueTime0 = MPIWrapper::sum(valueTime0);
+          valueTime1 = MPIWrapper::sum(valueTime1);
+          
+          double tol = 1e-15;
+          TEUCHOS_TEST_FLOATING_EQUALITY(valueTime0, valueTime1, tol, out, success);
+        }
+      } 
+    }
+  }
 
 TEUCHOS_UNIT_TEST( SpaceTime, IntegrateConstantFunctionSides_1D )
 {
@@ -213,6 +330,7 @@ TEUCHOS_UNIT_TEST( SpaceTime, IntegrateSpaceVaryingFunctionSides_3D )
   int spaceDim = 3;
   testIntegrateSpaceVaryingFunctionSides(spaceDim, out, success);
 }
+  
   TEUCHOS_UNIT_TEST( SpaceTime, UnitNormalTime_1D )
   {
     int spaceDim = 1;

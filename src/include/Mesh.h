@@ -237,7 +237,7 @@ public:
   int cellPolyOrder(GlobalIndexType cellID);
   vector<int> cellTensorPolyOrder(GlobalIndexType cellID);
 
-  void enforceOneIrregularity();
+  void enforceOneIrregularity(bool repartitionAndMigrate = true);
   //  void enforceOneIrregularity(vector< TSolutionPtr<double> > solutions);
 
   vector<double> getCellCentroid(GlobalIndexType cellID);
@@ -319,7 +319,10 @@ public:
 
   GlobalIndexType numActiveElements();
 
+  // ! Returns the number of degrees of freedom on the mesh skeleton.  Involves MPI collective communication.  Must be called on every rank.
   GlobalIndexType numFluxDofs();
+  
+  // ! Returns the number of degrees of freedom belonging to field (volume) variables.  Involves MPI collective communication.  Must be called on every rank.
   GlobalIndexType numFieldDofs();
 
   GlobalIndexType numGlobalDofs();
@@ -343,7 +346,7 @@ public:
   void pRefine(const vector<GlobalIndexType> &cellIDsForPRefinements);
   void pRefine(const vector<GlobalIndexType> &cellIDsForPRefinements, int pToAdd);
   void pRefine(const set<GlobalIndexType> &cellIDsForPRefinements);
-  void pRefine(const set<GlobalIndexType> &cellIDsForPRefinements, int pToAdd); // added by jesse
+  void pRefine(const set<GlobalIndexType> &cellIDsForPRefinements, int pToAdd, bool repartitionAndRebuild = true);
   void printLocalToGlobalMap(); // for debugging
 
   void rebuildLookups();
@@ -353,6 +356,9 @@ public:
   template <typename Scalar>
   void registerSolution(TSolutionPtr<Scalar> solution);
 
+  // ! Repartition elements, migrating data as necessary, and rebuild local-to-global degree of freedom maps.
+  void repartitionAndRebuild();
+  
   int condensedRowSizeUpperBound();
   int rowSizeUpperBound(); // accounts for multiplicity, but isn't a tight bound
 

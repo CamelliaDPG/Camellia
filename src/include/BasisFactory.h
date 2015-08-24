@@ -82,6 +82,8 @@ private:
   map< pair< Camellia::Basis<>*, vector<double> >, PatchBasisPtr > _patchBases;
   set< Camellia::Basis<>* > _patchBasisSet;
 
+  int _defaultTemporalPolyOrder;
+  
   bool _useEnrichedTraces; // i.e. p+1, not p (default is true: this is what we need to prove optimal convergence)
   bool _useLobattoForQuadHGRAD;
   bool _useLobattoForQuadHDIV;
@@ -95,7 +97,7 @@ public:
                     FSE functionSpaceForTemporalTopology = Camellia::FUNCTION_SPACE_HVOL);
 
   // This version of getBasis handles 0 or 1 temporal dimensions; calls the other version:
-  BasisPtr getBasis(int H1Order, CellTopoPtr cellTopo, FSE functionSpaceForSpatialTopology, int temporalH1Order = 2,
+  BasisPtr getBasis(int H1Order, CellTopoPtr cellTopo, FSE functionSpaceForSpatialTopology, int temporalH1Order = -1,
                     FSE functionSpaceForTemporalTopology = Camellia::FUNCTION_SPACE_HVOL);
   BasisPtr getBasis( int polyOrder, unsigned cellTopoKey, FSE fs);
 
@@ -104,7 +106,7 @@ public:
                               FSE functionSpaceForTemporalTopology = Camellia::FUNCTION_SPACE_HVOL);
 
   BasisPtr getConformingBasis( int polyOrder, unsigned cellTopoKey, FSE fs );
-  BasisPtr getConformingBasis( int polyOrder, CellTopoPtr cellTopo, FSE fs, int temporalPolyOrder = 1,
+  BasisPtr getConformingBasis( int polyOrder, CellTopoPtr cellTopo, FSE fs, int temporalPolyOrder = -1,
                                FSE functionSpaceForTemporalTopology = Camellia::FUNCTION_SPACE_HVOL);
 
   BasisPtr getNodalBasisForCellTopology(CellTopoPtr cellTopo);

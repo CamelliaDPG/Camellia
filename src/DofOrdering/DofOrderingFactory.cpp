@@ -154,13 +154,33 @@ DofOrderingPtr DofOrderingFactory::trialOrdering(vector<int> &polyOrder,
     VarType varType = _varFactory->trial(trialID)->varType();
     if ((varType == FLUX) || (varType == TRACE))
     {
-      Camellia::EFunctionSpace temporalFS = (fs == FUNCTION_SPACE_HGRAD) ? FUNCTION_SPACE_HGRAD : FUNCTION_SPACE_HVOL;
+      // 8/20/15: changed the below, but it doesn't seem to make any difference (at least in Stokes cavity flow driver).  This seems weird.  Maybe we're missing something in GDAMinimumRule.
+      Camellia::EFunctionSpace temporalFS = FUNCTION_SPACE_HVOL;
+      Camellia::EFunctionSpace spatialFS = fs; // default to using fs for the spatial component
+      if (fs == FUNCTION_SPACE_HGRAD)
+      {
+        temporalFS = FUNCTION_SPACE_HGRAD;
+      }
+      else if (fs == FUNCTION_SPACE_HVOL)
+      {
+        temporalFS = FUNCTION_SPACE_HVOL;
+      }
+      else if (fs == FUNCTION_SPACE_HVOL_SPACE_HGRAD_TIME)
+      {
+        spatialFS = FUNCTION_SPACE_HVOL;
+        temporalFS = FUNCTION_SPACE_HGRAD;
+      }
+      else if (fs == FUNCTION_SPACE_HGRAD_SPACE_HVOL_TIME)
+      {
+        spatialFS = FUNCTION_SPACE_HGRAD;
+        temporalFS = FUNCTION_SPACE_HVOL;
+      }
       int sideDim = cellTopo->getDimension() - 1;
       int numSides = cellTopo->getSideCount();
       for (int sideOrdinal=0; sideOrdinal<numSides; sideOrdinal++)
       {
         CellTopoPtr sideTopo = cellTopo->getSubcell(sideDim, sideOrdinal);
-        basis = BasisFactory::basisFactory()->getConformingBasis( trialIDPolyOrder, sideTopo, fs, temporalFS );
+        basis = BasisFactory::basisFactory()->getConformingBasis( trialIDPolyOrder, sideTopo, spatialFS, temporalFS );
         basisRank = basis->rangeRank();
 
         bool temporalSide = ! cellTopo->sideIsSpatial(sideOrdinal);

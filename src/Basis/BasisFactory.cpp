@@ -66,6 +66,8 @@ using namespace Camellia;
 
 BasisFactory::BasisFactory()
 {
+  _defaultTemporalPolyOrder = 1; // linear in time by default
+  
   _useEnrichedTraces = true;
   _useLobattoForQuadHGRAD = false;
   _useLobattoForQuadHDIV = false;
@@ -103,6 +105,15 @@ BasisPtr BasisFactory::getBasis(int H1Order, CellTopoPtr cellTopo, Camellia::EFu
   {
     cout << "BasisFactory::getBasis() only handles 0 or 1 tensorial degree elements.\n";
     TEUCHOS_TEST_FOR_EXCEPTION(true, std::invalid_argument, "BasisFactory::getBasis() only handles 0 or 1 tensorial degree elements.");
+  }
+
+  if (temporalH1Order == -1)
+  {
+    temporalH1Order = _defaultTemporalPolyOrder;
+    if (functionSpaceForTemporalTopology == FUNCTION_SPACE_HVOL)
+    {
+      temporalH1Order++;
+    }
   }
 
   BasisPtr basisForShardsTopo = getBasis(H1Order, cellTopo->getShardsTopology().getKey(), functionSpaceForSpatialTopology);
@@ -428,7 +439,8 @@ BasisPtr BasisFactory::getConformingBasis(std::vector<int> &H1Order, CellTopoPtr
   }
   if (H1Order.size() == 1)
   {
-    return getConformingBasis(H1Order[0], cellTopo, functionSpaceForSpatialTopology);
+    return getConformingBasis(H1Order[0], cellTopo, functionSpaceForSpatialTopology,
+                              _defaultTemporalPolyOrder, functionSpaceForTemporalTopology);
   }
   else
   {
@@ -441,6 +453,11 @@ BasisPtr BasisFactory::getConformingBasis( int polyOrder, CellTopoPtr cellTopo, 
 {
   // this method is fairly redundant with getBasis(), but it provides the chance to offer different bases when a conforming basis is
   // required.
+  
+  if (temporalPolyOrder == -1)
+  {
+    temporalPolyOrder = _defaultTemporalPolyOrder;
+  }
 
   BasisPtr basisForShardsTopo = getConformingBasis(polyOrder, cellTopo->getShardsTopology().getKey(), fs);
 
@@ -453,7 +470,15 @@ BasisPtr BasisFactory::getConformingBasis( int polyOrder, CellTopoPtr cellTopo, 
 
   if (_conformingSpaceTimeBases.find(key) != _conformingSpaceTimeBases.end()) return _conformingSpaceTimeBases[key];
 
-  BasisPtr temporalBasis = getConformingBasis(temporalPolyOrder + 1, lineKey, functionSpaceForTemporalTopology);
+  BasisPtr temporalBasis;
+  if (functionSpaceForTemporalTopology == FUNCTION_SPACE_HVOL)
+  {
+    temporalBasis = getConformingBasis(temporalPolyOrder + 1, lineKey, functionSpaceForTemporalTopology);
+  }
+  else
+  {
+    temporalBasis = getConformingBasis(temporalPolyOrder, lineKey, functionSpaceForTemporalTopology);
+  }
 
   typedef Camellia::TensorBasis<double, Intrepid::FieldContainer<double> > TensorBasis;
   Teuchos::RCP<TensorBasis> tensorBasis = Teuchos::rcp( new TensorBasis(basisForShardsTopo, temporalBasis) );

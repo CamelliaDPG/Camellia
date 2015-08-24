@@ -245,9 +245,9 @@ public:
   // this caches the lookup tables it builds.  Well worth it, since we'll have just one per cell topology
   static unsigned subcellOrdinalMap(const shards::CellTopology &cellTopo, unsigned subcdim, unsigned subcord, unsigned subsubcdim, unsigned subsubcord);
 
-  static unsigned subcellReverseOrdinalMap(CellTopoPtr cellTopo, unsigned subcdim, unsigned subcord, unsigned subsubcdim, unsigned subsubcordInCell);
+  static unsigned subcellReverseOrdinalMap(CellTopoPtr cellTopo, unsigned subcdim, unsigned subcord, unsigned subsubcdim, unsigned subsubcordInCell, bool assertContainment=true);
 
-  static unsigned subcellReverseOrdinalMap(const shards::CellTopology &cellTopo, unsigned subcdim, unsigned subcord, unsigned subsubcdim, unsigned subsubcordInCell);
+  static unsigned subcellReverseOrdinalMap(const shards::CellTopology &cellTopo, unsigned subcdim, unsigned subcord, unsigned subsubcdim, unsigned subsubcordInCell, bool assertContainment=true);
 
   static void getTensorPoints(Intrepid::FieldContainer<double>& tensorPoints, const Intrepid::FieldContainer<double> & spatialPoints,
                               const Intrepid::FieldContainer<double> & temporalPoints);

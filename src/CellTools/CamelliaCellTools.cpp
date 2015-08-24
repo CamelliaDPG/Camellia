@@ -1344,7 +1344,7 @@ unsigned CamelliaCellTools::subcellOrdinalMap(const shards::CellTopology &cellTo
   }
 }
 
-unsigned CamelliaCellTools::subcellReverseOrdinalMap(CellTopoPtr cellTopo, unsigned subcdim, unsigned subcord, unsigned subsubcdim, unsigned subsubcordInCell)
+unsigned CamelliaCellTools::subcellReverseOrdinalMap(CellTopoPtr cellTopo, unsigned subcdim, unsigned subcord, unsigned subsubcdim, unsigned subsubcordInCell, bool assertContainment)
 {
   // looks for the ordinal of a sub-sub-cell in the subcell
   CellTopoPtr subcellTopo = cellTopo->getSubcell(subcdim, subcord);
@@ -1360,15 +1360,18 @@ unsigned CamelliaCellTools::subcellReverseOrdinalMap(CellTopoPtr cellTopo, unsig
       return subsubcOrdinal;
     }
   }
-  cout << "ERROR: subcell " << subsubcordInCell << " not found in subcellReverseOrdinalMap.\n";
-  cout << "For topology " << cellTopo->getName() << ", looking for subcell of dimension " << subsubcdim << " with ordinal " << subsubcordInCell << " in cell.\n";
-  cout << "Looking in subcell of dimension " << subcdim << " with ordinal " << subcord << ".\n";
+  if (assertContainment)
+  {
+    cout << "ERROR: subcell " << subsubcordInCell << " not found in subcellReverseOrdinalMap.\n";
+    cout << "For topology " << cellTopo->getName() << ", looking for subcell of dimension " << subsubcdim << " with ordinal " << subsubcordInCell << " in cell.\n";
+    cout << "Looking in subcell of dimension " << subcdim << " with ordinal " << subcord << ".\n";
 
-  TEUCHOS_TEST_FOR_EXCEPTION(true, std::invalid_argument, "subcell not found in subcellReverseOrdinalMap.");
+    TEUCHOS_TEST_FOR_EXCEPTION(true, std::invalid_argument, "subcell not found in subcellReverseOrdinalMap.");
+  }
   return -1; // NOT FOUND
 }
 
-unsigned CamelliaCellTools::subcellReverseOrdinalMap(const shards::CellTopology &cellTopo, unsigned subcdim, unsigned subcord, unsigned subsubcdim, unsigned subsubcordInCell)
+unsigned CamelliaCellTools::subcellReverseOrdinalMap(const shards::CellTopology &cellTopo, unsigned subcdim, unsigned subcord, unsigned subsubcdim, unsigned subsubcordInCell, bool assertContainment)
 {
   // looks for the ordinal of a sub-sub-cell in the subcell
   const shards::CellTopology subcellTopo = cellTopo.getCellTopologyData(subcdim, subcord);
@@ -1384,11 +1387,14 @@ unsigned CamelliaCellTools::subcellReverseOrdinalMap(const shards::CellTopology 
       return subsubcOrdinal;
     }
   }
-  cout << "ERROR: subcell " << subsubcordInCell << " not found in subcellReverseOrdinalMap.\n";
-  cout << "For topology " << cellTopo.getName() << ", looking for subcell of dimension " << subsubcdim << " with ordinal " << subsubcordInCell << " in cell.\n";
-  cout << "Looking in subcell of dimension " << subcdim << " with ordinal " << subcord << ".\n";
+  if (assertContainment)
+  {
+    cout << "ERROR: subcell " << subsubcordInCell << " not found in subcellReverseOrdinalMap.\n";
+    cout << "For topology " << cellTopo.getName() << ", looking for subcell of dimension " << subsubcdim << " with ordinal " << subsubcordInCell << " in cell.\n";
+    cout << "Looking in subcell of dimension " << subcdim << " with ordinal " << subcord << ".\n";
 
-  TEUCHOS_TEST_FOR_EXCEPTION(true, std::invalid_argument, "subcell not found in subcellReverseOrdinalMap.");
+    TEUCHOS_TEST_FOR_EXCEPTION(true, std::invalid_argument, "subcell not found in subcellReverseOrdinalMap.");
+  }
   return -1; // NOT FOUND
 }
 
