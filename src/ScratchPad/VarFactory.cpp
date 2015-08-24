@@ -216,7 +216,7 @@ VarPtr VarFactory::traceVar(string name, LinearTermPtr termTraced, Space fs, int
   {
     return _trialVars[name];
   }
-  int rank = ((fs == HGRAD) || (fs == L2) || (fs == CONSTANT_SCALAR) || (fs == HGRAD_SPACE_HVOL_TIME) || (fs == HVOL_SPACE_HGRAD_TIME)) ? 0 : 1;
+  int rank = ((fs == HGRAD) || (fs == L2) || (fs == CONSTANT_SCALAR) || (fs == HGRAD_SPACE_L2_TIME) || (fs == L2_SPACE_HGRAD_TIME)) ? 0 : 1;
   ID = getTrialID(ID);
   _trialVars[name] = Teuchos::rcp( new Var( ID, rank, name,
                                    Camellia::OP_VALUE, fs, TRACE, termTraced) );

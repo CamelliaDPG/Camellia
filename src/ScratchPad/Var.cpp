@@ -68,8 +68,8 @@ int Camellia::rankForSpace(Space space)
     case CONSTANT_SCALAR:
       return 0;
       
-    case HGRAD_SPACE_HVOL_TIME:
-    case HVOL_SPACE_HGRAD_TIME:
+    case HGRAD_SPACE_L2_TIME:
+    case L2_SPACE_HGRAD_TIME:
       return 0;
       
     case HDIV_DISC:
@@ -130,9 +130,9 @@ Space Camellia::spaceForEFS(Camellia::EFunctionSpace efs)
 
   // space-time:
     case Camellia::FUNCTION_SPACE_HGRAD_SPACE_HVOL_TIME:
-      return HGRAD_SPACE_HVOL_TIME;
+      return HGRAD_SPACE_L2_TIME;
     case Camellia::FUNCTION_SPACE_HVOL_SPACE_HGRAD_TIME:
-      return HVOL_SPACE_HGRAD_TIME;
+      return L2_SPACE_HGRAD_TIME;
 
   case Camellia::FUNCTION_SPACE_HDIV_FREE:
     return HDIV_FREE;
