@@ -1867,7 +1867,7 @@ void GMGOperator::setUpSmoother(Epetra_CrsMatrix *fineStiffnessMatrix)
     static bool haveWarned = false;
     if (!haveWarned && (rank==0))
     {
-      cout << "NOTE: using new approach to Schwarz scaling weight, based on Nate's conjecture regarding the spectral radius of the subdomain connectivity matrix and some results in Smith et al.  (We do assume that cells generate their own Schwarz subdomains, which is not yet true when there is more than one cell per MPI rank.  The intent is to add this to Camellia's AdditiveSchwarz soon.)";
+      cout << "NOTE: using new approach to Schwarz scaling weight, based on Nate's conjecture regarding the spectral radius of the subdomain connectivity matrix and some results in Smith et al.";
       cout << " First _smootherWeight value: " << _smootherWeight << " (old weight was " << oldSmootherWeight << ").\n";
       haveWarned = true;
     }
