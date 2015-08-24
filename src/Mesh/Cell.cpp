@@ -330,7 +330,8 @@ unsigned Cell::findSubcellOrdinalInSide(unsigned int subcdim, IndexType subcEnti
   unsigned subcOrdinalInCell = findSubcellOrdinal(subcdim, subcEntityIndex);
   int sideDim = _cellTopo->getDimension() - 1;
   if (subcOrdinalInCell == -1) return -1;
-  return CamelliaCellTools::subcellReverseOrdinalMap(topology(), sideDim, sideOrdinal, subcdim, subcOrdinalInCell);
+  bool assertContainment = false; // don't throw exception if not found (return -1)
+  return CamelliaCellTools::subcellReverseOrdinalMap(topology(), sideDim, sideOrdinal, subcdim, subcOrdinalInCell, assertContainment);
 }
 
 Teuchos::RCP<Cell> Cell::getParent()
