@@ -319,7 +319,10 @@ public:
 
   GlobalIndexType numActiveElements();
 
+  // ! Returns the number of degrees of freedom on the mesh skeleton.  Involves MPI collective communication.  Must be called on every rank.
   GlobalIndexType numFluxDofs();
+  
+  // ! Returns the number of degrees of freedom belonging to field (volume) variables.  Involves MPI collective communication.  Must be called on every rank.
   GlobalIndexType numFieldDofs();
 
   GlobalIndexType numGlobalDofs();
