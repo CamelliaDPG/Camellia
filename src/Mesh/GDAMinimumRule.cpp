@@ -2411,9 +2411,34 @@ CellConstraints GDAMinimumRule::getCellConstraints(GlobalIndexType cellID)
           unsigned constrainingCellID = constrainingCellPair.first;
           unsigned constrainingSideOrdinal = constrainingCellPair.second;
 
-          constrainingSubcellInfo[d][subcord].sideOrdinal = constrainingSideOrdinal;
           CellPtr constrainingCell = _meshTopology->getCell(constrainingCellID);
+          CellTopoPtr constrainingCellTopo = constrainingCell->topology();
+          if (constrainingCellTopo->getTensorialDegree() > 0)
+          {
+            // presumption is space-time.  In this case, we prefer spatial sides when we have a choice
+            // (because some trace/flux variables are only defined on spatial sides)
+            if (constrainingEntityDimension < sideDim) // if constrainingEntityDimension == sideDim, then the constraining entity is a side, so there isn't another side on constrainingCell that contains the constraining entity
+            {
+              if (! constrainingCellTopo->sideIsSpatial(constrainingSideOrdinal))
+              {
+                for (unsigned newSideOrdinal=0; newSideOrdinal<constrainingCellTopo->getSideCount(); newSideOrdinal++)
+                {
+                  if (constrainingCellTopo->sideIsSpatial(newSideOrdinal))
+                  {
+                    // spatial side.  Does it contain the constraining entity?
+                    unsigned subcellOrdinalInSide = constrainingCell->findSubcellOrdinalInSide(constrainingEntityDimension, constrainingEntityIndex, newSideOrdinal);
+                    if (subcellOrdinalInSide != -1)
+                    {
+                      constrainingSideOrdinal = newSideOrdinal;
+                      break;
+                    }
+                  }
+                }
+              }
+            }
+          }
 
+          constrainingSubcellInfo[d][subcord].sideOrdinal = constrainingSideOrdinal;
           unsigned subcellOrdinalInConstrainingSide = constrainingCell->findSubcellOrdinalInSide(constrainingEntityDimension, constrainingEntityIndex, constrainingSideOrdinal);
 
           constrainingSubcellInfo[d][subcord].subcellOrdinal = subcellOrdinalInConstrainingSide;
