@@ -77,7 +77,6 @@ TEUCHOS_UNIT_TEST( DofOrderingFactory, SpaceTimeTracesTimeBasisCardinality )
   DofOrderingFactory factory(bf);
 
   int spacePolyOrder = 2;
-  int H1Order = spacePolyOrder + 1;
   vector<int> polyOrder(2); // space, time
   polyOrder[0] = spacePolyOrder;
   polyOrder[1] = spacePolyOrder;
@@ -98,8 +97,8 @@ TEUCHOS_UNIT_TEST( DofOrderingFactory, SpaceTimeTracesTimeBasisCardinality )
       TensorBasis<double>* uHatTensorBasis = dynamic_cast< TensorBasis<double>* >(uHatBasis.get());
       TEUCHOS_TEST_FOR_EXCEPTION(uHatTensorBasis == NULL, std::invalid_argument, "uHatBasis is not a TensorBasis instance");
       BasisPtr uHatTemporalBasis = uHatTensorBasis->getTemporalBasis();
-      TEST_EQUALITY(uHatTemporalBasis->getDegree(), H1Order);
-      TEST_EQUALITY(uHatTemporalBasis->getCardinality(), H1Order+1);
+      TEST_EQUALITY(uHatTemporalBasis->getDegree(), polyOrder[1]);
+      TEST_EQUALITY(uHatTemporalBasis->getCardinality(), polyOrder[1]+1);
     }
     else
     {
