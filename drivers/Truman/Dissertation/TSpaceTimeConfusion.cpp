@@ -141,8 +141,12 @@ int main(int argc, char *argv[])
   form.initializeSolution(spaceTimeMeshTopo, p, delta_p, norm, forcingTerm);
 
   MeshPtr mesh = form.solution()->mesh();
-  MeshPtr k0Mesh = Teuchos::rcp( new Mesh (spaceTimeMeshTopo->deepCopy(), form.bf(), 1, delta_p) );
-  mesh->registerObserver(k0Mesh);
+  vector<MeshPtr> meshesCoarseToFine;
+  MeshPtr k0Mesh = Teuchos::rcp( new Mesh (mesh->getTopology()->deepCopy(), form.bf(), 1, delta_p) );
+  meshesCoarseToFine.push_back(k0Mesh);
+  meshesCoarseToFine.push_back(mesh);
+  // MeshPtr k0Mesh = Teuchos::rcp( new Mesh (spaceTimeMeshTopo->deepCopy(), form.bf(), 1, delta_p) );
+  // mesh->registerObserver(k0Mesh);
 
   // Set up boundary conditions
   BCPtr bc = form.solution()->bc();
@@ -212,14 +216,26 @@ int main(int argc, char *argv[])
     Teuchos::RCP<GMGSolver> gmgSolver;
     if (solverChoice[0] == 'G')
     {
-      gmgSolver = Teuchos::rcp( new GMGSolver(soln, k0Mesh, maxLinearIterations, solverTolerance, Solver::getDirectSolver(true), useStaticCondensation));
+      bool reuseFactorization = true;
+      GMGOperator::MultigridStrategy multigridStrategy = GMGOperator::TWO_LEVEL;
+      bool useCondensedSolve = false;
+      bool useConjugateGradient = true;
+      bool logFineOperator = false;
+      SolverPtr coarseSolver = Solver::getDirectSolver(reuseFactorization);
+      gmgSolver = Teuchos::rcp(new GMGSolver(soln, meshesCoarseToFine, maxLinearIterations, solverTolerance, multigridStrategy, coarseSolver, useCondensedSolve));
+      gmgSolver->setUseConjugateGradient(useConjugateGradient);
+      int azOutput = 20; // print residual every 20 CG iterations
       gmgSolver->setAztecOutput(azOutput);
-      if (solverChoice == "GMG-Direct")
-        gmgSolver->gmgOperator()->setSchwarzFactorizationType(GMGOperator::Direct);
-      if (solverChoice == "GMG-ILU")
-        gmgSolver->gmgOperator()->setSchwarzFactorizationType(GMGOperator::ILU);
-      if (solverChoice == "GMG-IC")
-        gmgSolver->gmgOperator()->setSchwarzFactorizationType(GMGOperator::IC);
+      gmgSolver->gmgOperator()->setNarrateOnRankZero(logFineOperator,"finest GMGOperator");
+
+      // gmgSolver = Teuchos::rcp( new GMGSolver(soln, k0Mesh, maxLinearIterations, solverTolerance, Solver::getDirectSolver(true), useStaticCondensation));
+      // gmgSolver->setAztecOutput(azOutput);
+      // if (solverChoice == "GMG-Direct")
+      //   gmgSolver->gmgOperator()->setSchwarzFactorizationType(GMGOperator::Direct);
+      // if (solverChoice == "GMG-ILU")
+      //   gmgSolver->gmgOperator()->setSchwarzFactorizationType(GMGOperator::ILU);
+      // if (solverChoice == "GMG-IC")
+      //   gmgSolver->gmgOperator()->setSchwarzFactorizationType(GMGOperator::IC);
       soln->solve(gmgSolver);
     }
     else
@@ -283,7 +299,10 @@ int main(int argc, char *argv[])
       exporter->exportSolution(soln, refIndex);
 
     if (refIndex != numRefs)
+    {
       refStrategy.refine();
+      // meshesCoarseToFine.push_back(mesh);
+    }
   }
   dataFile.close();
 

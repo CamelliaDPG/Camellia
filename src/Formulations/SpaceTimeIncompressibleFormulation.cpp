@@ -236,15 +236,15 @@ SpaceTimeIncompressibleFormulation::SpaceTimeIncompressibleFormulation(Teuchos::
     initialGuess[sigma(1,2)->ID()] = problem->sigma1_exact()->y();
     initialGuess[sigma(2,1)->ID()] = problem->sigma2_exact()->x();
     initialGuess[sigma(2,2)->ID()] = problem->sigma2_exact()->y();
-    initialGuess[p()->ID()] = problem->p_exact();
+    // initialGuess[p()->ID()] = problem->p_exact();
     initialGuess[uhat(1)->ID()] = problem->u1_exact();
     initialGuess[uhat(2)->ID()] = problem->u2_exact();
-    initialGuess[tmhat(1)->ID()] =
-      (problem->u1_exact()*problem->u1_exact()-problem->sigma1_exact()->x()+problem->p_exact())*n_x->x()
-      + (problem->u1_exact()*problem->u2_exact()-problem->sigma1_exact()->y())*n_x->y();
-    initialGuess[tmhat(2)->ID()] =
-      (problem->u1_exact()*problem->u2_exact()-problem->sigma2_exact()->x())*n_x->x()
-      + (problem->u2_exact()*problem->u2_exact()-problem->sigma2_exact()->y()+problem->p_exact())*n_x->y();
+    // initialGuess[tmhat(1)->ID()] =
+    //   (problem->u1_exact()*problem->u1_exact()-problem->sigma1_exact()->x()+problem->p_exact())*n_x->x()
+    //   + (problem->u1_exact()*problem->u2_exact()-problem->sigma1_exact()->y())*n_x->y();
+    // initialGuess[tmhat(2)->ID()] =
+    //   (problem->u1_exact()*problem->u2_exact()-problem->sigma2_exact()->x())*n_x->x()
+    //   + (problem->u2_exact()*problem->u2_exact()-problem->sigma2_exact()->y()+problem->p_exact())*n_x->y();
 
     _solutionBackground->projectOntoMesh(initialGuess);
   }
