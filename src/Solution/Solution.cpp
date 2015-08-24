@@ -3512,17 +3512,20 @@ void TSolution<Scalar>::setSolnCoeffsForCellID(Intrepid::FieldContainer<Scalar> 
     _solutionForCellIDGlobal[cellID](localDofIndex) = solnCoeffsToSet[dofOrdinal];
   }
   
-  // non-null _oldDofInterpreter is a proxy for having a condensation interpreter
-  // if using static condensation, we skip storing field values
-  if ((_oldDofInterpreter.get() == NULL) || (trialOrder->getNumSidesForVarID(trialID) != 1))
+  if (_lhsVector != Teuchos::null) // if _lhsVector hasn't been initialized, don't map back to global solution vector
   {
-    Intrepid::FieldContainer<Scalar> globalCoefficients;
-    Intrepid::FieldContainer<GlobalIndexType> globalDofIndices;
-    _dofInterpreter->interpretLocalBasisCoefficients(cellID, trialID, sideIndex, solnCoeffsToSet, globalCoefficients, globalDofIndices);
-
-    for (int i=0; i<globalCoefficients.size(); i++)
+    // non-null _oldDofInterpreter is a proxy for having a condensation interpreter
+    // if using static condensation, we skip storing field values
+    if ((_oldDofInterpreter.get() == NULL) || (trialOrder->getNumSidesForVarID(trialID) != 1))
     {
-      _lhsVector->ReplaceGlobalValue((GlobalIndexTypeToCast)globalDofIndices[i], 0, globalCoefficients[i]);
+      Intrepid::FieldContainer<Scalar> globalCoefficients;
+      Intrepid::FieldContainer<GlobalIndexType> globalDofIndices;
+      _dofInterpreter->interpretLocalBasisCoefficients(cellID, trialID, sideIndex, solnCoeffsToSet, globalCoefficients, globalDofIndices);
+
+      for (int i=0; i<globalCoefficients.size(); i++)
+      {
+        _lhsVector->ReplaceGlobalValue((GlobalIndexTypeToCast)globalDofIndices[i], 0, globalCoefficients[i]);
+      }
     }
   }
 
