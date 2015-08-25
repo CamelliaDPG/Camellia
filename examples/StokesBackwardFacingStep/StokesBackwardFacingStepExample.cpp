@@ -4,12 +4,14 @@
 #include "Function.h"
 #include "HDF5Exporter.h"
 #include "MeshFactory.h"
+#include "ParameterFunction.h"
 #include "PreviousSolutionFunction.h"
+#include "SimpleFunction.h"
 #include "StokesVGPFormulation.h"
 
 using namespace Camellia;
 
-class TimeRamp : public SimpleFunction
+class TimeRamp : public SimpleFunction<double>
 {
   FunctionPtr _time;
   double _timeScale;
@@ -50,7 +52,7 @@ int main(int argc, char *argv[])
 
   bool useConformingTraces = false;
   double mu = 1.0;
-  StokesVGPFormulation form(spaceDim, useConformingTraces, mu);
+  StokesVGPFormulation form = StokesVGPFormulation::steadyFormulation(spaceDim, mu, useConformingTraces);
 
   // set up a mesh topology for the region east of the step: 2 x 2 elements, bottom left corner at (4,0)
   static double X_LEFT = 0.0;
@@ -129,7 +131,7 @@ int main(int argc, char *argv[])
   MeshPtr mesh = form.solution()->mesh();
   double energyError = form.solution()->energyErrorTotal();
   int globalDofs = mesh->globalDofCount();
-  int activeElements = mesh->getTopology()->activeCellCount();
+  int activeElements = mesh->numActiveElements();
   if (rank==0) cout << "Initial energy error: " << energyError;
   if (rank==0) cout << " (mesh has " << activeElements << " elements and " << globalDofs << " global dofs)." << endl;
 
@@ -152,7 +154,7 @@ int main(int argc, char *argv[])
 
     energyError = form.solution()->energyErrorTotal();
     globalDofs = mesh->globalDofCount();
-    activeElements = mesh->getTopology()->activeCellCount();
+    activeElements = mesh->numActiveElements();
     if (rank==0) cout << "Energy error for refinement " << refNumber << ": " << energyError;
     if (rank==0) cout << " (mesh has " << activeElements << " elements and " << globalDofs << " global dofs)." << endl;
   }
@@ -163,9 +165,7 @@ int main(int argc, char *argv[])
   HDF5Exporter steadyStreamExporter(form.streamSolution()->mesh(), "stokesSteadyBackwardStepStreamSolution", ".");
   steadyStreamExporter.exportSolution(form.streamSolution());
 
-  VarPtr u1 = form.u(1), u2 = form.u(2);
-
-  FunctionPtr vorticity = Teuchos::rcp( new PreviousSolutionFunction(form.solution(), - u1->dy() + u2->dx()) );
+  FunctionPtr vorticity = form.getVorticity();
 
   HDF5Exporter exporterVorticity(form.solution()->mesh(), "stokesSteadyBackwardStepVorticity", ".");
   exporterVorticity.exportFunction(vorticity, "vorticity");
@@ -178,7 +178,7 @@ int main(int argc, char *argv[])
   double totalTime = 2;
   double dt = 1e-1;
   int numTimeSteps = ceil(totalTime / dt);
-  StokesVGPFormulation transientForm(spaceDim, useConformingTraces, mu, true, dt);
+  StokesVGPFormulation transientForm = StokesVGPFormulation::timeSteppingFormulation(spaceDim, mu, dt, useConformingTraces, BACKWARD_EULER);
 
   FunctionPtr t = transientForm.getTimeFunction();
   FunctionPtr timeRamp = Teuchos::rcp(new TimeRamp(t,1.0));
@@ -188,7 +188,7 @@ int main(int argc, char *argv[])
   transientForm.addWallCondition(wall);
   transientForm.addOutflowCondition(outflow);
 
-  bool debugging = true;
+  bool debugging = false;
   if (debugging)
   {
     // DEBUGGING: try projecting the steady pressure onto the previous time step
@@ -210,7 +210,7 @@ int main(int argc, char *argv[])
   for (int timeStep=0; timeStep<numTimeSteps; timeStep++)
   {
     transientForm.solve();
-    double L2_step = transientForm.L2NormOfTimeStep();
+    double L2_step = transientForm.relativeL2NormOfTimeStep();
     transientExporter.exportSolution(transientForm.solution(),transientForm.getTime());
 
     transientForm.takeTimeStep();

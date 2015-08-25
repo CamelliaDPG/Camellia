@@ -994,6 +994,7 @@ TSolutionPtr<double> StokesVGPFormulation::streamSolution()
 // ! Takes a time step (assumes you have called solve() first)
 void StokesVGPFormulation::takeTimeStep()
 {
+  TEUCHOS_TEST_FOR_EXCEPTION(!_timeStepping, std::invalid_argument, "takeTimeStep() only supported for time-stepping formulation.");
   ConstantScalarFunction<double>* dtValueFxn = dynamic_cast<ConstantScalarFunction<double>*>(_dt->getValue().get());
 
   double dt = dtValueFxn->value(0);
@@ -1032,4 +1033,13 @@ VarPtr StokesVGPFormulation::v(int i)
     return _vf->testVar(S_V3, HGRAD);
   }
   TEUCHOS_TEST_FOR_EXCEPTION(true, std::invalid_argument, "unhandled i value");
+}
+
+TFunctionPtr<double> StokesVGPFormulation::getVorticity()
+{
+  LinearTermPtr u1_dy = (1.0 / _mu) * this->sigma(1)->y();
+  LinearTermPtr u2_dx = (1.0 / _mu) * this->sigma(2)->x();
+  
+  TFunctionPtr<double> vorticity = Teuchos::rcp( new PreviousSolutionFunction<double>(_solution, u2_dx - u1_dy) );
+  return vorticity;
 }
