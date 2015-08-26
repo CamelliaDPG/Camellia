@@ -1,10 +1,5 @@
 project(MOABReaderExamples)
 
-# hard-code MOAB location, for now:
-SET(MOAB_PATH "/Users/nroberts/lib/moab")
-
-MESSAGE(" Looking for MOAB in ${MOAB_PATH}/lib")
-
 # Find MOAB
 find_package(MOAB PATHS ${MOAB_PATH}/lib)
 

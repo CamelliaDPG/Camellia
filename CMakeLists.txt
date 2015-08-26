@@ -24,6 +24,10 @@ if (ZLIB_LIB)
   link_libraries(${ZLIB_LIB})
 endif()
 
+if (EXTRA_INCLUDE)
+  include_directories(${EXTRA_INCLUDE})
+endif()
+
 if (OMP_INCLUDE)
   include_directories(${OMP_INCLUDE})
 endif()
@@ -103,7 +107,7 @@ ENDIF()
 # If you haven't already set the C++ compiler, use the same compiler
 # that was used to build Trilinos on your machine.  
 IF(NOT CMAKE_CXX_COMPILER)
-  MESSAGE("Setting CXX compiler.")
+  MESSAGE("Setting CXX compiler to ${Trilinos_CXX_COMPILER}.")
   SET(CMAKE_CXX_COMPILER ${Trilinos_CXX_COMPILER})
 ENDIF()
 
@@ -148,6 +152,18 @@ IF(NOT BUILD_SHARED_LIBS)
   MESSAGE("Setting BUILD_SHARED_LIBS to ${Trilinos_BUILD_SHARED_LIBS}")
   SET(BUILD_SHARED_LIBS ${Trilinos_BUILD_SHARED_LIBS})
 ENDIF()
+
+# Find MOAB
+find_package(MOAB PATHS ${MOAB_PATH}/lib)
+
+if (MOAB_FOUND)
+  include_directories(
+    ${MOAB_INCLUDE_DIRS}
+  )
+  SET(ADDITIONAL_LIBRARIES ${ADDITIONAL_LIBRARIES} ${MOAB_LIBRARIES})
+else()
+  MESSAGE("MOAB not found; MOAB_PATH = ${MOAB_PATH}.")
+endif(MOAB_FOUND)
 
 project(Camellia)
 
