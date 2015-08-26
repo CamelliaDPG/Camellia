@@ -415,9 +415,13 @@ void Boundary::bcsToImpose( map<  GlobalIndexType, Scalar > &globalDofIndicesAnd
           temporalBasis = tensorBasis->getTemporalBasis();
         }
       }
-      // upgrade bases to continuous ones of the same cardinality, if they is discontinuous.
-
-      if ((spatialBasis->functionSpace() == Camellia::FUNCTION_SPACE_HVOL) ||
+      bool constantSpatialBasis = false;
+      // upgrade bases to continuous ones of the same cardinality, if they are discontinuous.
+      if (spatialBasis->getDegree() == 0)
+      {
+        constantSpatialBasis = true;
+      }
+      else if ((spatialBasis->functionSpace() == Camellia::FUNCTION_SPACE_HVOL) ||
           (spatialBasis->functionSpace() == Camellia::FUNCTION_SPACE_HVOL_DISC))
       {
         spatialBasis = BasisFactory::basisFactory()->getBasis(spatialBasis->getDegree(), spatialBasis->domainTopology(), Camellia::FUNCTION_SPACE_HGRAD);
@@ -444,15 +448,22 @@ void Boundary::bcsToImpose( map<  GlobalIndexType, Scalar > &globalDofIndicesAnd
       }
       if (spaceTime)
       {
-        vector<int> H1Orders = {spatialBasis->getDegree(),temporalBasis->getDegree()};
-        spaceTimeBasis = BasisFactory::basisFactory()->getBasis(H1Orders, spaceTimeBasis->domainTopology(), spatialBasis->functionSpace(), temporalBasis->functionSpace());
-        basisForImposition = spaceTimeBasis;
+        if (constantSpatialBasis)
+        { // then use the original basis for imposition
+          basisForImposition = spaceTimeBasis;
+        }
+        else
+        {
+          vector<int> H1Orders = {spatialBasis->getDegree(),temporalBasis->getDegree()};
+          spaceTimeBasis = BasisFactory::basisFactory()->getBasis(H1Orders, spaceTimeBasis->domainTopology(), spatialBasis->functionSpace(), temporalBasis->functionSpace());
+          basisForImposition = spaceTimeBasis;
+        }
       }
       else
       {
         basisForImposition = spatialBasis;
       }
-      set<int> spatialDofOrdinalsForVertex = spatialBasis->dofOrdinalsForVertex(vertexOrdinalInSide);
+      set<int> spatialDofOrdinalsForVertex = constantSpatialBasis ? set<int>{0} : spatialBasis->dofOrdinalsForVertex(vertexOrdinalInSide);
       if (spatialDofOrdinalsForVertex.size() != 1)
       {
         cout << "ERROR: spatialDofOrdinalsForVertex.size() != 1 during singleton BC imposition.\n";
