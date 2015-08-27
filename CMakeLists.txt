@@ -157,6 +157,7 @@ ENDIF()
 find_package(MOAB PATHS ${MOAB_PATH}/lib)
 
 if (MOAB_FOUND)
+  ADD_DEFINITIONS(-DHAVE_MOAB)
   include_directories(
     ${MOAB_INCLUDE_DIRS}
   )
