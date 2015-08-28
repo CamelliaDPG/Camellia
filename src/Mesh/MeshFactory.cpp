@@ -12,6 +12,7 @@
 #include "CamelliaDebugUtility.h"
 #include "GlobalDofAssignment.h"
 #include "GnuPlotUtil.h"
+#include "MOABReader.h"
 #include "ParametricCurve.h"
 #include "RefinementHistory.h"
 
@@ -534,6 +535,11 @@ MeshPtr MeshFactory::hemkerMesh(double meshWidth, double meshHeight, double cyli
                                 TBFPtr<double> bilinearForm, int H1Order, int pToAddTest)
 {
   return shiftedHemkerMesh(-meshWidth/2, meshWidth/2, meshHeight, cylinderRadius, bilinearForm, H1Order, pToAddTest);
+}
+
+MeshTopologyPtr MeshFactory::importMOABMesh(string filePath)
+{
+  return MOABReader::readMOABMesh(filePath);
 }
 
 MeshPtr MeshFactory::intervalMesh(TBFPtr<double> bf, double xLeft, double xRight, int numElements, int H1Order, int delta_k)

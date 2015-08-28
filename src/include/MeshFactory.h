@@ -61,6 +61,8 @@ public:
                                      TBFPtr<double> bilinearForm,
                                      int H1Order, int pTest, bool useConformingTraces);
 
+  static MeshTopologyPtr importMOABMesh(string filePath);
+  
   static MeshPtr intervalMesh(TBFPtr<double> bf, double xLeft, double xRight, int numElements, int H1Order, int delta_k); // 1D equispaced
 
   static MeshTopologyPtr intervalMeshTopology(double xLeft, double xRight, int numElements); // 1D equispaced
