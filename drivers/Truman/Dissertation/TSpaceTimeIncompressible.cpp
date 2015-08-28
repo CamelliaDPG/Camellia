@@ -91,8 +91,8 @@ int main(int argc, char *argv[])
   cmdp.setOption("solver", &solverChoice, "KLU, SuperLU, MUMPS, GMG-Direct, GMG-ILU, GMG-IC");
   cmdp.setOption("multigridStrategy", &multigridStrategyString, "Multigrid strategy: V-cycle, W-cycle, Full, or Two-level");
   cmdp.setOption("useCondensedSolve", "useStandardSolve", &useCondensedSolve);
-  cmdp.setOption("logFineOperator", "dontLogFineOperator", &logFineOperator);
   cmdp.setOption("CG", "GMRES", &useConjugateGradient);
+  cmdp.setOption("logFineOperator", "dontLogFineOperator", &logFineOperator);
   // cmdp.setOption("solverTolerance", &solverTolerance, "iterative solver tolerance");
   cmdp.setOption("nonlinearTolerance", &nonlinearTolerance, "nonlinear solver tolerance");
   // cmdp.setOption("maxLinearIterations", &maxLinearIterations, "maximum number of iterations for linear solver");

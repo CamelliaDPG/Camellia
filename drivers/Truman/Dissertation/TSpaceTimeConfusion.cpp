@@ -23,6 +23,7 @@
 #include "SpaceTimeConvectionDiffusionFormulation.h"
 #include "SpatiallyFilteredFunction.h"
 #include "ExpFunction.h"
+#include "TrigFunctions.h"
 
 using namespace Camellia;
 
@@ -51,7 +52,11 @@ int main(int argc, char *argv[])
   int numXElems = 1;
   bool useConformingTraces = false;
   string solverChoice = "KLU";
-  double solverTolerance = 1e-8;
+  string multigridStrategyString = "W-cycle";
+  bool useCondensedSolve = false;
+  bool useConjugateGradient = true;
+  bool logFineOperator = false;
+  double solverTolerance = 1e-10;
   int maxLinearIterations = 10000;
   bool computeL2Error = false;
   bool exportSolution = false;
@@ -67,6 +72,10 @@ int main(int argc, char *argv[])
   cmdp.setOption("norm", &norm, "norm");
   cmdp.setOption("conformingTraces", "nonconformingTraces", &useConformingTraces, "use conforming traces");
   cmdp.setOption("solver", &solverChoice, "KLU, SuperLU, MUMPS, GMG-Direct, GMG-ILU, GMG-IC");
+  cmdp.setOption("multigridStrategy", &multigridStrategyString, "Multigrid strategy: V-cycle, W-cycle, Full, or Two-level");
+  cmdp.setOption("useCondensedSolve", "useStandardSolve", &useCondensedSolve);
+  cmdp.setOption("CG", "GMRES", &useConjugateGradient);
+  cmdp.setOption("logFineOperator", "dontLogFineOperator", &logFineOperator);
   cmdp.setOption("solverTolerance", &solverTolerance, "iterative solver tolerance");
   cmdp.setOption("maxLinearIterations", &maxLinearIterations, "maximum number of iterations for linear solver");
   cmdp.setOption("outputDir", &outputDir, "output directory");
@@ -82,19 +91,34 @@ int main(int argc, char *argv[])
     return -1;
   }
 
+  Teuchos::RCP<Time> totalTimer = Teuchos::TimeMonitor::getNewCounter("Total Time");
+  totalTimer->start(true);
+
   // Exact solution
   // FunctionPtr uExact1D = Teuchos::rcp(new ExactU1D(epsilon));
   // FunctionPtr uExact2D = Teuchos::rcp(new ExactU2D(epsilon));
-  double l = 1;
+  double l = 4;
   double k = 1;
   double lambda1 = (-1+sqrt(1-4*epsilon*l))/(-2*epsilon);
   double lambda2 = (-1-sqrt(1-4*epsilon*l))/(-2*epsilon);
+  double pi = 2.0*acos(0.0);
+  double nu1 = pi*pi*epsilon;
+  double r1 = (1+sqrt(1+4*epsilon*nu1))/(2*epsilon);
+  double s1 = (1-sqrt(1+4*epsilon*nu1))/(2*epsilon);
   FunctionPtr explt = Teuchos::rcp(new Exp_at(-l));
   FunctionPtr explambda1x = Teuchos::rcp(new Exp_ax(lambda1));
   FunctionPtr explambda2x = Teuchos::rcp(new Exp_ax(lambda2));
-  FunctionPtr u_exact = explt*(explambda1x-explambda2x);
+  FunctionPtr exp1lambdax = Teuchos::rcp(new Exp_ax(1./epsilon));
+  FunctionPtr expr1x = Teuchos::rcp(new Exp_ax(r1));
+  FunctionPtr exps1x = Teuchos::rcp(new Exp_ax(s1));
+  FunctionPtr cospiy = Teuchos::rcp(new Cos_ay(pi));
+  FunctionPtr u_steady;
+  if (spaceDim == 1)
+    u_steady = Function::constant(1)-exp1lambdax;
   if (spaceDim == 2)
-    u_exact = u_exact*Function::yn(1);
+    u_steady = 0.1*(exps1x-expr1x)/(r1*exp(-r1)-s1*exp(-s1))*cospiy;
+
+  FunctionPtr u_exact = u_steady + explt*(explambda1x-explambda2x);
   FunctionPtr sigma_exact = epsilon*u_exact->grad();
 
   FunctionPtr beta;
@@ -145,8 +169,6 @@ int main(int argc, char *argv[])
   MeshPtr k0Mesh = Teuchos::rcp( new Mesh (mesh->getTopology()->deepCopy(), form.bf(), 1, delta_p) );
   meshesCoarseToFine.push_back(k0Mesh);
   meshesCoarseToFine.push_back(mesh);
-  // MeshPtr k0Mesh = Teuchos::rcp( new Mesh (spaceTimeMeshTopo->deepCopy(), form.bf(), 1, delta_p) );
-  // mesh->registerObserver(k0Mesh);
 
   // Set up boundary conditions
   BCPtr bc = form.solution()->bc();
@@ -181,7 +203,7 @@ int main(int argc, char *argv[])
   RefinementStrategy refStrategy(soln, threshold);
 
   ostringstream solnName;
-  solnName << "spacetimeConfusion" << spaceDim << "D_" << norm << "_" << epsilon << "_p" << p << "_" << solverChoice;
+  solnName << "TransientConfusion" << spaceDim << "D_" << norm << "_" << epsilon << "_p" << p << "_" << solverChoice << "_" << multigridStrategyString;
   if (tag != "")
     solnName << "_" << tag;
   Teuchos::RCP<HDF5Exporter> exporter;
@@ -203,6 +225,32 @@ int main(int argc, char *argv[])
   bool useStaticCondensation = false;
   int azOutput = 20; // print residual every 20 CG iterations
 
+  GMGOperator::MultigridStrategy multigridStrategy;
+  if (multigridStrategyString == "Two-level")
+  {
+    multigridStrategy = GMGOperator::TWO_LEVEL;
+  }
+  else if (multigridStrategyString == "W-cycle")
+  {
+    multigridStrategy = GMGOperator::W_CYCLE;
+  }
+  else if (multigridStrategyString == "V-cycle")
+  {
+    multigridStrategy = GMGOperator::V_CYCLE;
+  }
+  else if (multigridStrategyString == "Full-V")
+  {
+    multigridStrategy = GMGOperator::FULL_MULTIGRID_V;
+  }
+  else if (multigridStrategyString == "Full-W")
+  {
+    multigridStrategy = GMGOperator::FULL_MULTIGRID_W;
+  }
+  else
+  {
+    TEUCHOS_TEST_FOR_EXCEPTION(true, std::invalid_argument, "unrecognized multigrid strategy");
+  }
+
   string dataFileLocation;
   if (exportSolution)
     dataFileLocation = outputDir+"/"+solnName.str()+"/"+solnName.str()+".txt";
@@ -217,10 +265,6 @@ int main(int argc, char *argv[])
     if (solverChoice[0] == 'G')
     {
       bool reuseFactorization = true;
-      GMGOperator::MultigridStrategy multigridStrategy = GMGOperator::TWO_LEVEL;
-      bool useCondensedSolve = false;
-      bool useConjugateGradient = true;
-      bool logFineOperator = false;
       SolverPtr coarseSolver = Solver::getDirectSolver(reuseFactorization);
       gmgSolver = Teuchos::rcp(new GMGSolver(soln, meshesCoarseToFine, maxLinearIterations, solverTolerance, multigridStrategy, coarseSolver, useCondensedSolve));
       gmgSolver->setUseConjugateGradient(useConjugateGradient);
@@ -230,12 +274,12 @@ int main(int argc, char *argv[])
 
       // gmgSolver = Teuchos::rcp( new GMGSolver(soln, k0Mesh, maxLinearIterations, solverTolerance, Solver::getDirectSolver(true), useStaticCondensation));
       // gmgSolver->setAztecOutput(azOutput);
-      // if (solverChoice == "GMG-Direct")
-      //   gmgSolver->gmgOperator()->setSchwarzFactorizationType(GMGOperator::Direct);
-      // if (solverChoice == "GMG-ILU")
-      //   gmgSolver->gmgOperator()->setSchwarzFactorizationType(GMGOperator::ILU);
-      // if (solverChoice == "GMG-IC")
-      //   gmgSolver->gmgOperator()->setSchwarzFactorizationType(GMGOperator::IC);
+      if (solverChoice == "GMG-Direct")
+        gmgSolver->gmgOperator()->setSchwarzFactorizationType(GMGOperator::Direct);
+      if (solverChoice == "GMG-ILU")
+        gmgSolver->gmgOperator()->setSchwarzFactorizationType(GMGOperator::ILU);
+      if (solverChoice == "GMG-IC")
+        gmgSolver->gmgOperator()->setSchwarzFactorizationType(GMGOperator::IC);
       soln->solve(gmgSolver);
     }
     else
@@ -283,6 +327,7 @@ int main(int argc, char *argv[])
         << " \tEnergy Error: " << energyError
         << " \tL2 Error: " << l2Error
         << " \tSolve Time: " << solveTime
+        << " \tTotal Time: " << totalTimer->totalElapsedTime(true)
         << " \tIteration Count: " << iterationCount
         << endl;
       dataFile << refIndex
@@ -291,6 +336,7 @@ int main(int argc, char *argv[])
         << " " << energyError
         << " " << l2Error
         << " " << solveTime
+        << " " << totalTimer->totalElapsedTime(true)
         << " " << iterationCount
         << endl;
     }
@@ -305,6 +351,9 @@ int main(int argc, char *argv[])
     }
   }
   dataFile.close();
+  double totalTime = totalTimer->stop();
+  if (commRank == 0)
+    cout << "Total time = " << totalTime << endl;
 
   return 0;
 }
