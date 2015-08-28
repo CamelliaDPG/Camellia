@@ -118,7 +118,7 @@ int main(int argc, char *argv[])
   if (spaceDim == 2)
     u_steady = 0.1*(exps1x-expr1x)/(r1*exp(-r1)-s1*exp(-s1))*cospiy;
 
-  FunctionPtr u_exact = u_steady + explt*(explambda1x-explambda2x);
+  FunctionPtr u_exact = u_steady + 4*explt*(explambda1x-explambda2x);
   FunctionPtr sigma_exact = epsilon*u_exact->grad();
 
   FunctionPtr beta;
@@ -203,7 +203,9 @@ int main(int argc, char *argv[])
   RefinementStrategy refStrategy(soln, threshold);
 
   ostringstream solnName;
-  solnName << "TransientConfusion" << spaceDim << "D_" << norm << "_" << epsilon << "_p" << p << "_" << solverChoice << "_" << multigridStrategyString;
+  solnName << "TransientConfusion" << spaceDim << "D_" << norm << "_" << epsilon << "_p" << p << "_" << solverChoice;// << "_" << multigridStrategyString;
+  if (solverChoice[0] == 'G')
+    solnName << "_" << multigridStrategyString;
   if (tag != "")
     solnName << "_" << tag;
   Teuchos::RCP<HDF5Exporter> exporter;
