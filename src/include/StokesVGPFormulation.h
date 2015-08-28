@@ -54,6 +54,8 @@ class StokesVGPFormulation
 
   RefinementStrategyPtr _refinementStrategy, _hRefinementStrategy, _pRefinementStrategy;
 
+  std::map<int,int> _trialVariablePolyOrderAdjustments;
+  
   VarFactoryPtr _vf;
 
   static const string S_U1, S_U2, S_U3;
@@ -195,6 +197,9 @@ public:
 
   // ! returns the forcing function for this formulation if u and p are the exact solutions.
   TFunctionPtr<double> forcingFunction(TFunctionPtr<double> u, TFunctionPtr<double> p);
+  
+  // ! returns the vorticity (which depends on the solution)
+  TFunctionPtr<double> getVorticity();
   
   static StokesVGPFormulation steadyFormulation(int spaceDim, double mu, bool useConformingTraces);
   static StokesVGPFormulation spaceTimeFormulation(int spaceDim, double mu, bool useConformingTraces);
