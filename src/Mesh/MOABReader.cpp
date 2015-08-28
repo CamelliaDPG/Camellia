@@ -16,6 +16,7 @@
 
 using namespace Camellia;
 
+#ifdef HAVE_MOAB
 CellTopoPtr MOABReader::cellTopoForMOABType(moab::EntityType entityType)
 {
   switch (entityType) {
@@ -35,6 +36,7 @@ CellTopoPtr MOABReader::cellTopoForMOABType(moab::EntityType entityType)
       TEUCHOS_TEST_FOR_EXCEPTION(true, std::invalid_argument, "Unsupported entity type");
   }
 }
+#endif
 
 MeshTopologyPtr MOABReader::readMOABMesh(string filePath)
 {
