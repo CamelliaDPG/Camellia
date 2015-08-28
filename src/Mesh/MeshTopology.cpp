@@ -6,17 +6,13 @@
 //
 //
 
+#include "CamelliaCellTools.h"
+#include "CellTopology.h"
+#include "GlobalDofAssignment.h"
 #include "MeshTopology.h"
-
 #include "MeshTransformationFunction.h"
 
-#include "CamelliaCellTools.h"
-
 #include "Intrepid_CellTools.hpp"
-
-#include "GlobalDofAssignment.h"
-
-#include "CellTopology.h"
 
 #include <algorithm>
 
