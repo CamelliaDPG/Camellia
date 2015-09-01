@@ -154,6 +154,16 @@ SpaceTimeConvectionDiffusionFormulation::SpaceTimeConvectionDiffusionFormulation
     _ips["NSDecoupledH1"]->addTerm(tau->dx());
   _ips["NSDecoupledH1"]->addTerm(v);
 
+  _ips["NSDecoupledMin"] = Teuchos::rcp(new IP);
+  _ips["NSDecoupledMin"]->addTerm(Function::min(one/Function::h(), one/Function::constant(sqrt(_epsilon)))*tau);
+  _ips["NSDecoupledMin"]->addTerm(v->grad());
+  _ips["NSDecoupledMin"]->addTerm(_beta*v->grad()+v->dt());
+  if (spaceDim > 1)
+    _ips["NSDecoupledMin"]->addTerm(tau->div());
+  else
+    _ips["NSDecoupledMin"]->addTerm(tau->dx());
+  _ips["NSDecoupledMin"]->addTerm(v);
+
   _rhs = RHS::rhs();
 }
 

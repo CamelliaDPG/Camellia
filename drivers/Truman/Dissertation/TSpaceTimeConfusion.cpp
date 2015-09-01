@@ -308,10 +308,10 @@ int main(int argc, char *argv[])
       if (spaceDim == 2)
         sigma2_sqr = sigma2_diff*sigma2_diff;
       double u_l2, sigma1_l2, sigma2_l2;
-      u_l2 = u_sqr->integrate(mesh, 5);
-      sigma1_l2 = sigma1_sqr->integrate(mesh, 5);
+      u_l2 = u_sqr->integrate(mesh, 10);
+      sigma1_l2 = sigma1_sqr->integrate(mesh, 10);
       if (spaceDim == 2)
-        sigma2_l2 = sigma2_sqr->integrate(mesh, 5);
+        sigma2_l2 = sigma2_sqr->integrate(mesh, 10);
       else
         sigma2_l2 = 0;
       l2Error = sqrt(u_l2+sigma1_l2+sigma2_l2);
