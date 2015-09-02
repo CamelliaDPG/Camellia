@@ -204,8 +204,9 @@ std::vector<MeshPtr> GMGSolver::meshesForMultigrid(MeshPtr fineMesh, int kCoarse
    */
   MeshTopologyViewPtr fineMeshTopo = fineMesh->getTopology();
   set<GlobalIndexType> thisLevelCellIndices = fineMeshTopo->getRootCellIndices();
+  GlobalIndexType thisLevelNumCells = thisLevelCellIndices.size();
   
-  GlobalIndexType fineMeshNumCells = fineMeshTopo->getRootCellIndices().size();
+  GlobalIndexType fineMeshNumCells = fineMeshTopo->getActiveCellIndices().size();
   
   vector<MeshPtr> meshesCoarseToFine;
   
@@ -233,8 +234,10 @@ std::vector<MeshPtr> GMGSolver::meshesForMultigrid(MeshPtr fineMesh, int kCoarse
       }
     }
     
+    thisLevelNumCells = thisLevelCellIndices.size();
+    
     thisLevelCellIndices = nextLevelCellIndices;
-  } while (fineMeshNumCells > thisLevelCellIndices.size());
+  } while (fineMeshNumCells > thisLevelNumCells);
   
   // repeat the last one:
   meshesCoarseToFine.push_back(meshesCoarseToFine[meshesCoarseToFine.size()-1]);

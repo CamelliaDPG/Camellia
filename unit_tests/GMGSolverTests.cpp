@@ -465,6 +465,58 @@ namespace
 //    }
   }
 
+  TEUCHOS_UNIT_TEST( GMGSolver, MeshesForMultigrid)
+  {
+    int spaceDim = 1;
+    bool useConformingTraces = true;
+    PoissonFormulation form(spaceDim, useConformingTraces);
+    
+    int delta_k = spaceDim;
+    vector<double> dimensions(spaceDim,1.0);
+    vector<int> cellCounts(spaceDim,1);
+    
+    int k_coarse = 0;
+    int H1Order_coarse = k_coarse + 1;
+    MeshPtr mesh = MeshFactory::rectilinearMesh(form.bf(), dimensions, cellCounts, H1Order_coarse, delta_k);
+    
+    vector<GlobalIndexType> expectedDofCounts;
+    expectedDofCounts.push_back(mesh->numGlobalDofs());
+    
+    int numHRefs = 3;
+    for (int i=0; i<numHRefs; i++)
+    {
+      mesh->hRefine(mesh->getActiveCellIDs());
+      expectedDofCounts.push_back(mesh->numGlobalDofs());
+    }
+    
+    expectedDofCounts.push_back(mesh->numGlobalDofs()); // expect to have the fine h mesh twice
+    
+    int H1Order_fine = 5;
+    int numPRefs = H1Order_fine - H1Order_coarse;
+    for (int i=0; i< numPRefs; i++)
+    {
+      mesh->pRefine(mesh->getActiveCellIDs());
+    }
+    
+    expectedDofCounts.push_back(mesh->numGlobalDofs());
+    
+    vector<MeshPtr> meshes = GMGSolver::meshesForMultigrid(mesh, k_coarse, delta_k);
+    
+    vector<GlobalIndexType> actualDofCounts;
+    for (MeshPtr mesh : meshes)
+    {
+      actualDofCounts.push_back(mesh->numGlobalDofs());
+    }
+    
+    TEST_COMPARE_ARRAYS(actualDofCounts, expectedDofCounts);
+    
+    if (!success)
+    {
+      Camellia::print("actualDofCounts", actualDofCounts);
+      Camellia::print("expectedDofCounts", expectedDofCounts);
+    }
+  }
+  
   TEUCHOS_UNIT_TEST( GMGSolver, UniformIdentity_1D_Slow)
   {
     int spaceDim = 1;
