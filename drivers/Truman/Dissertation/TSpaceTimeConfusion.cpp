@@ -49,7 +49,7 @@ int main(int argc, char *argv[])
   double epsilon = 1;
   int numRefs = 1;
   int p = 2, delta_p = 2;
-  int numXElems = 1;
+  int numXElems = 2;
   bool useConformingTraces = false;
   string solverChoice = "KLU";
   string multigridStrategyString = "W-cycle";
@@ -156,7 +156,7 @@ int main(int argc, char *argv[])
   }
   MeshTopologyPtr spatialMeshTopo = MeshFactory::rectilinearMeshTopology(dimensions, elementCounts, x0);
   double t0 = 0.0, t1 = 1.0;
-  MeshTopologyPtr spaceTimeMeshTopo = MeshFactory::spaceTimeMeshTopology(spatialMeshTopo, t0, t1);
+  MeshTopologyPtr spaceTimeMeshTopo = MeshFactory::spaceTimeMeshTopology(spatialMeshTopo, t0, t1, numXElems);
 
   FunctionPtr zero = Function::zero();
   FunctionPtr one = Function::constant(1);
@@ -165,10 +165,10 @@ int main(int argc, char *argv[])
   form.initializeSolution(spaceTimeMeshTopo, p, delta_p, norm, forcingTerm);
 
   MeshPtr mesh = form.solution()->mesh();
-  vector<MeshPtr> meshesCoarseToFine;
+  // vector<MeshPtr> meshesCoarseToFine;
   MeshPtr k0Mesh = Teuchos::rcp( new Mesh (mesh->getTopology()->deepCopy(), form.bf(), 1, delta_p) );
-  meshesCoarseToFine.push_back(k0Mesh);
-  meshesCoarseToFine.push_back(mesh);
+  // meshesCoarseToFine.push_back(k0Mesh);
+  // meshesCoarseToFine.push_back(mesh);
 
   // Set up boundary conditions
   BCPtr bc = form.solution()->bc();
@@ -268,7 +268,10 @@ int main(int argc, char *argv[])
     {
       bool reuseFactorization = true;
       SolverPtr coarseSolver = Solver::getDirectSolver(reuseFactorization);
-      gmgSolver = Teuchos::rcp(new GMGSolver(soln, meshesCoarseToFine, maxLinearIterations, solverTolerance, multigridStrategy, coarseSolver, useCondensedSolve));
+      int kCoarse = 0;
+      vector<MeshPtr> meshSequence = GMGSolver::meshesForMultigrid(mesh, kCoarse, delta_p);
+      // cout << "size " << meshSequence.size() << endl;
+      gmgSolver = Teuchos::rcp(new GMGSolver(soln, meshSequence, maxLinearIterations, solverTolerance, multigridStrategy, coarseSolver, useCondensedSolve));
       gmgSolver->setUseConjugateGradient(useConjugateGradient);
       int azOutput = 20; // print residual every 20 CG iterations
       gmgSolver->setAztecOutput(azOutput);
