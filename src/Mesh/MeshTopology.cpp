@@ -2177,10 +2177,8 @@ unsigned MeshTopology::getEntityParentForSide(unsigned d, unsigned entityIndex,
 
 unsigned MeshTopology::getEntityParentCount(unsigned d, IndexType entityIndex)
 {
-  if ((d >= _parentEntities.size()) || (entityIndex >= _parentEntities[d].size()))
-  {
-    TEUCHOS_TEST_FOR_EXCEPTION(true, std::invalid_argument, "entityIndex or dimension is out of bounds");
-  }
+  TEUCHOS_TEST_FOR_EXCEPTION(d >= _parentEntities.size(), std::invalid_argument, "dimension is out of bounds");
+  TEUCHOS_TEST_FOR_EXCEPTION(_parentEntities[d].find(entityIndex) == _parentEntities[d].end(), std::invalid_argument, "entityIndex not found in _parentEntities[d]");
   return _parentEntities[d][entityIndex].size();
 }
 
