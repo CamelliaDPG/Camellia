@@ -1,0 +1,6 @@
+project(ConditioningExperiment)
+
+add_executable(ConditioningExperimentDriver ConditioningExperimentDriver.cpp)
+target_link_libraries(ConditioningExperimentDriver
+  Camellia
+)
