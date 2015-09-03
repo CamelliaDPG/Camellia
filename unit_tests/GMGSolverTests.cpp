@@ -10,6 +10,7 @@
 
 #include "EpetraExt_RowMatrixOut.h"
 
+#include "CamelliaDebugUtility.h"
 #include "GDAMinimumRule.h"
 #include "GMGSolver.h"
 #include "MeshFactory.h"
