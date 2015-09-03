@@ -268,9 +268,17 @@ int main(int argc, char *argv[])
     {
       bool reuseFactorization = true;
       SolverPtr coarseSolver = Solver::getDirectSolver(reuseFactorization);
-      int kCoarse = 0;
+      int kCoarse = 1;
       vector<MeshPtr> meshSequence = GMGSolver::meshesForMultigrid(mesh, kCoarse, delta_p);
-      // cout << "size " << meshSequence.size() << endl;
+      for (int i=0; i < meshSequence.size(); i++)
+      {
+        // if (commRank == 0)
+        //   cout << meshSequence[i]->numGlobalDofs() << endl;
+      }
+      while (meshSequence[0]->numGlobalDofs() < 2000 && meshSequence.size() > 2)
+        meshSequence.erase(meshSequence.begin());
+      // if (commRank == 0)
+      //   cout << "size " << meshSequence.size() << endl;
       gmgSolver = Teuchos::rcp(new GMGSolver(soln, meshSequence, maxLinearIterations, solverTolerance, multigridStrategy, coarseSolver, useCondensedSolve));
       gmgSolver->setUseConjugateGradient(useConjugateGradient);
       int azOutput = 20; // print residual every 20 CG iterations
