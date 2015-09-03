@@ -72,8 +72,6 @@ int main(int argc, char *argv[])
     exporter.exportSolution(form.solution(), refinement);
 
     double energyError = form.solution()->energyErrorTotal();
-    int globalDofs = mesh->globalDofCount();
-    int activeElements = mesh->getTopology()->activeCellCount();
 
     FunctionPtr u = Function::solution(form.u(), form.solution());
     double u_error_L2 = (u_exact - u)->l2norm(mesh, cubEnrichment);
