@@ -9,7 +9,9 @@ template <typename Scalar>
 string ProductFunction<Scalar>::displayString()
 {
   ostringstream ss;
-  ss << _f1->displayString() << " \\cdot " << _f2->displayString();
+  string times_string = " * ";
+  if ((_f1->rank() == 1) && _f2->rank() == 1) times_string = " \\cdot ";
+  ss << _f1->displayString() << times_string << _f2->displayString();
   return ss.str();
 }
 
