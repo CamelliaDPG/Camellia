@@ -65,6 +65,9 @@ StokesVGPFormulation StokesVGPFormulation::spaceTimeFormulation(int spaceDim, do
   parameters.set("useTimeStepping", false);
   parameters.set("useSpaceTime", true);
   
+  parameters.set("includeVelocityTracesInFluxTerm",false);
+  parameters.set("t0",0.0);
+  
 //  {
 //    // DEBUGGING:
 //    cout << "StokesVGPFormulation: adding 1 to the tn1hat poly order.\n";
@@ -109,6 +112,8 @@ StokesVGPFormulation::StokesVGPFormulation(Teuchos::ParameterList &parameters)
   _mu = mu;
   _dt = ParameterFunction::parameterFunction(dt);
   _t = ParameterFunction::parameterFunction(0);
+  _includeVelocityTracesInFluxTerm = parameters.get<bool>("includeVelocityTracesInFluxTerm",true);
+  _t0 = parameters.get<double>("t0",0);
   
   double thetaValue;
   switch (timeStepType) {
@@ -171,15 +176,20 @@ StokesVGPFormulation::StokesVGPFormulation(Teuchos::ParameterList &parameters)
   }
   else
   {
-    Space uHatSpace = useConformingTraces ? HGRAD : L2;
-    if (spaceDim > 0) u1_hat = _vf->traceVar(S_U1_HAT, one * u1, uHatSpace);
-    if (spaceDim > 1) u2_hat = _vf->traceVar(S_U2_HAT, one * u2, uHatSpace);
-    if (spaceDim > 2) u3_hat = _vf->traceVar(S_U3_HAT, one * u3, uHatSpace);
-
-//    Space uHatSpace = useConformingTraces ? HGRAD_SPACE_L2_TIME : L2;
-//    if (spaceDim > 0) u1_hat = _vf->traceVarSpaceOnly(S_U1_HAT, one * u1, uHatSpace);
-//    if (spaceDim > 1) u2_hat = _vf->traceVarSpaceOnly(S_U2_HAT, one * u2, uHatSpace);
-//    if (spaceDim > 2) u3_hat = _vf->traceVarSpaceOnly(S_U3_HAT, one * u3, uHatSpace);
+    if (_includeVelocityTracesInFluxTerm)
+    {
+      Space uHatSpace = useConformingTraces ? HGRAD_SPACE_L2_TIME : L2;
+      if (spaceDim > 0) u1_hat = _vf->traceVarSpaceOnly(S_U1_HAT, one * u1, uHatSpace);
+      if (spaceDim > 1) u2_hat = _vf->traceVarSpaceOnly(S_U2_HAT, one * u2, uHatSpace);
+      if (spaceDim > 2) u3_hat = _vf->traceVarSpaceOnly(S_U3_HAT, one * u3, uHatSpace);
+    }
+    else
+    {
+      Space uHatSpace = useConformingTraces ? HGRAD : L2;
+      if (spaceDim > 0) u1_hat = _vf->traceVar(S_U1_HAT, one * u1, uHatSpace);
+      if (spaceDim > 1) u2_hat = _vf->traceVar(S_U2_HAT, one * u2, uHatSpace);
+      if (spaceDim > 2) u3_hat = _vf->traceVar(S_U3_HAT, one * u3, uHatSpace);
+    }
   }
   
   TFunctionPtr<double> n = TFunction<double>::normal();
@@ -192,21 +202,30 @@ StokesVGPFormulation::StokesVGPFormulation(Teuchos::ParameterList &parameters)
   if (spaceDim > 1) t2n_lt = p * n_parity->y() + sigma2 * minus_n_parity;
   if (spaceDim > 2) t3n_lt = p * n_parity->z() + sigma3 * minus_n_parity;
 
-//  if (_spaceTime)
-//  {
-//    TFunctionPtr<double> n_spaceTime = TFunction<double>::normalSpaceTime();
-//    TFunctionPtr<double> n_t_parity = n_spaceTime->t() * TFunction<double>::sideParity();
-//    
-//    if (spaceDim > 0) t1n_lt = t1n_lt + u1 * n_t_parity;
-//    if (spaceDim > 1) t2n_lt = t2n_lt + u2 * n_t_parity;
-//    if (spaceDim > 2) t3n_lt = t3n_lt + u3 * n_t_parity;
-//  }
+  if (_spaceTime && _includeVelocityTracesInFluxTerm)
+  {
+    TFunctionPtr<double> n_spaceTime = TFunction<double>::normalSpaceTime();
+    TFunctionPtr<double> n_t_parity = n_spaceTime->t() * TFunction<double>::sideParity();
+    
+    if (spaceDim > 0) t1n_lt = t1n_lt + u1 * n_t_parity;
+    if (spaceDim > 1) t2n_lt = t2n_lt + u2 * n_t_parity;
+    if (spaceDim > 2) t3n_lt = t3n_lt + u3 * n_t_parity;
+  }
 
   if (_spaceTime)
   {
-    if (spaceDim > 0) t1n = _vf->fluxVarSpaceOnly(S_TN1_HAT, t1n_lt);
-    if (spaceDim > 1) t2n = _vf->fluxVarSpaceOnly(S_TN2_HAT, t2n_lt);
-    if (spaceDim > 2) t3n = _vf->fluxVarSpaceOnly(S_TN3_HAT, t3n_lt);
+    if (_includeVelocityTracesInFluxTerm)
+    {
+      if (spaceDim > 0) t1n = _vf->fluxVar(S_TN1_HAT, t1n_lt);
+      if (spaceDim > 1) t2n = _vf->fluxVar(S_TN2_HAT, t2n_lt);
+      if (spaceDim > 2) t3n = _vf->fluxVar(S_TN3_HAT, t3n_lt);
+    }
+    else
+    {
+      if (spaceDim > 0) t1n = _vf->fluxVarSpaceOnly(S_TN1_HAT, t1n_lt);
+      if (spaceDim > 1) t2n = _vf->fluxVarSpaceOnly(S_TN2_HAT, t2n_lt);
+      if (spaceDim > 2) t3n = _vf->fluxVarSpaceOnly(S_TN3_HAT, t3n_lt);
+    }
   }
   else
   {
@@ -240,21 +259,21 @@ StokesVGPFormulation::StokesVGPFormulation(Teuchos::ParameterList &parameters)
   
   _steadyStokesBF = Teuchos::rcp( new BF(_vf) );
   // tau1 terms:
-  _steadyStokesBF->addTerm(u1, tau1->div());
-  _steadyStokesBF->addTerm((1.0/_mu) * sigma1, tau1); // (sigma1, tau1)
-  _steadyStokesBF->addTerm(-u1_hat, tau1->dot_normal());
+  _steadyStokesBF->addTerm(_mu * u1, tau1->div());
+  _steadyStokesBF->addTerm(sigma1, tau1); // (sigma1, tau1)
+  _steadyStokesBF->addTerm(-_mu * u1_hat, tau1->dot_normal());
   
   // tau2 terms:
-  _steadyStokesBF->addTerm(u2, tau2->div());
-  _steadyStokesBF->addTerm((1.0/_mu) * sigma2, tau2);
-  _steadyStokesBF->addTerm(-u2_hat, tau2->dot_normal());
+  _steadyStokesBF->addTerm(_mu * u2, tau2->div());
+  _steadyStokesBF->addTerm(sigma2, tau2);
+  _steadyStokesBF->addTerm(-_mu * u2_hat, tau2->dot_normal());
 
   // tau3:
   if (spaceDim > 2)
   {
-    _steadyStokesBF->addTerm(u3, tau3->div());
-    _steadyStokesBF->addTerm((1.0/_mu) * sigma3, tau3);
-    _steadyStokesBF->addTerm(-u3_hat, tau3->dot_normal());
+    _steadyStokesBF->addTerm(_mu * u3, tau3->div());
+    _steadyStokesBF->addTerm(sigma3, tau3);
+    _steadyStokesBF->addTerm(-_mu * u3_hat, tau3->dot_normal());
   }
   
   // v1:
@@ -365,17 +384,21 @@ StokesVGPFormulation::StokesVGPFormulation(Teuchos::ParameterList &parameters)
     
     // v1:
     _stokesBF->addTerm(-u1, v1->dt());
-    _stokesBF->addTerm(u1_hat * n_spaceTime->t(), v1);
     
     // v2:
     _stokesBF->addTerm(-u2, v2->dt());
-    _stokesBF->addTerm(u2_hat * n_spaceTime->t(), v2);
     
     // v3:
     if (_spaceDim == 3)
     {
       _stokesBF->addTerm(-u3, v3->dt());
-      _stokesBF->addTerm(u3_hat * n_spaceTime->t(), v2);
+    }
+    
+    if (!_includeVelocityTracesInFluxTerm)
+    {
+      _stokesBF->addTerm(u1_hat * n_spaceTime->t(), v1);
+      _stokesBF->addTerm(u2_hat * n_spaceTime->t(), v2);
+      if (_spaceDim == 3) _stokesBF->addTerm(u3_hat * n_spaceTime->t(), v3);
     }
   }
   
@@ -406,8 +429,20 @@ void StokesVGPFormulation::addInflowCondition(SpatialFilterPtr inflowRegion, TFu
     _solution->bc()->addDirichlet(u1_hat, inflowRegion, u->x());
     _solution->bc()->addDirichlet(u2_hat, inflowRegion, u->y());
     if (_spaceDim==3) _solution->bc()->addDirichlet(u3_hat, inflowRegion, u->z());
+    
+    if (_spaceTime && _includeVelocityTracesInFluxTerm)
+    {
+      SpatialFilterPtr initialTime = SpatialFilter::matchingT(_t0);
+      VarPtr t1_hat = this->tn_hat(1), t2_hat = this->tn_hat(2);
+      VarPtr t3_hat;
+      if (_spaceDim == 3) t3_hat = this->tn_hat(3);
+      FunctionPtr n_t = Function::normalSpaceTime()->t();
+      _solution->bc()->addDirichlet(t1_hat, inflowRegion & initialTime, u->x() * n_t);
+      _solution->bc()->addDirichlet(t2_hat, inflowRegion & initialTime, u->y() * n_t);
+      if (_spaceDim==3) _solution->bc()->addDirichlet(t3_hat, inflowRegion & initialTime, u->z() * n_t);
+    }
   }
-  else
+  else // _timeStepping
   {
     TFunctionPtr<double> u1_hat_prev, u2_hat_prev, u3_hat_prev;
     TSolutionPtr<double> prevSolnWeakRef = Teuchos::rcp( _previousSolution.get(), false ); // avoid circular references
@@ -1060,6 +1095,52 @@ VarPtr StokesVGPFormulation::v(int i)
     return _vf->testVar(S_V3, HGRAD);
   }
   TEUCHOS_TEST_FOR_EXCEPTION(true, std::invalid_argument, "unhandled i value");
+}
+
+LinearTermPtr StokesVGPFormulation::getTraction(int i)
+{
+  if (i > _spaceDim)
+  {
+    TEUCHOS_TEST_FOR_EXCEPTION(true, std::invalid_argument, "i must be less than or equal to _spaceDim");
+  }
+  switch (i)
+  {
+    case 1:
+      return _t1;
+    case 2:
+      return _t2;
+    case 3:
+      return _t3;
+  }
+  TEUCHOS_TEST_FOR_EXCEPTION(true, std::invalid_argument, "unhandled i value");
+}
+
+TFunctionPtr<double> StokesVGPFormulation::getPressureSolution()
+{
+  TFunctionPtr<double> p_soln = Function::solution(p(), _solution);
+  return p_soln;
+}
+
+const std::map<int,int> & StokesVGPFormulation::getTrialVariablePolyOrderAdjustments()
+{
+  return _trialVariablePolyOrderAdjustments;
+}
+
+TFunctionPtr<double> StokesVGPFormulation::getVelocitySolution()
+{
+  if (_spaceDim == 2)
+  {
+    TFunctionPtr<double> u1 = Function::solution(u(1), _solution);
+    TFunctionPtr<double> u2 = Function::solution(u(2), _solution);
+    return Function::vectorize(u1, u2);
+  }
+  else
+  {
+    TFunctionPtr<double> u1 = Function::solution(u(1), _solution);
+    TFunctionPtr<double> u2 = Function::solution(u(2), _solution);
+    TFunctionPtr<double> u3 = Function::solution(u(3), _solution);
+    return Function::vectorize(u1, u2, u3);
+  }
 }
 
 TFunctionPtr<double> StokesVGPFormulation::getVorticity()

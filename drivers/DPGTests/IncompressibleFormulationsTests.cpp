@@ -851,14 +851,15 @@ bool IncompressibleFormulationsTests::testVVPStokesFormulationGraphNorm()
 bool IncompressibleFormulationsTests::testVGPNavierStokesFormulationConsistency()
 {
   bool success = true;
-  bool printToConsole = false;
+  bool printToConsole = true;
 
   // consistency: check that solving using the BF, RHS, BCs, etc. in the Formulation
   //              gives the ExactSolution specified by the Formulation
 
-  double nonlinearTol = 1e-11;
+  double nonlinearTol = 1e-12;
   double tol = 2e-11;
 
+  int spaceDim = 2;
   // exact solution functions: store these as vector< pair< Function, int > >
   // in the order u1, u2, p, where the paired int is the polynomial degree of the function
 
@@ -909,10 +910,11 @@ bool IncompressibleFormulationsTests::testVGPNavierStokesFormulationConsistency(
           double Re = 1 / mu;
 
 //          int delta_k = 2; // spaceDim
-          FunctionPtr forcingFunction = NavierStokesVGPFormulation::forcingFunction(meshTopo->getDimension(), Re, u_exact, p_exact);
-          bool transientFormulation = false;
+          FunctionPtr forcingFunction = NavierStokesVGPFormulation::forcingFunctionSteady(meshTopo->getDimension(), Re, u_exact, p_exact);
           bool useConformingTraces = true;
-          NavierStokesVGPFormulation formulation(meshTopo, Re, H1Order-1, pToAdd, forcingFunction, transientFormulation, useConformingTraces);
+          NavierStokesVGPFormulation formulation = NavierStokesVGPFormulation::steadyFormulation(spaceDim, Re, useConformingTraces,
+                                                                                                 meshTopo, maxPolyOrder, pToAdd);
+          formulation.setForcingFunction(forcingFunction);
 
           // impose Dirichlet conditions on the whole boundary
           formulation.addInflowCondition(SpatialFilter::allSpace(), u_exact);
@@ -936,7 +938,7 @@ bool IncompressibleFormulationsTests::testVGPNavierStokesFormulationConsistency(
           Teuchos::RCP<ExactSolution<double>> exactSolution = formulation.exactSolution(u_exact, p_exact);
           MeshPtr mesh = backgroundFlow->mesh();
 
-          int maxIters = 20;
+          int maxIters = 40;
 
           FunctionPtr u1_incr = Function::solution(formulation.u(1), solnIncrement);
           FunctionPtr u2_incr = Function::solution(formulation.u(2), solnIncrement);
@@ -955,7 +957,7 @@ bool IncompressibleFormulationsTests::testVGPNavierStokesFormulationConsistency(
           while ( (l2_incr_norm > nonlinearTol) && (formulation.nonlinearIterationCount() < maxIters) );
           if (printToConsole)
           {
-            cout << "with Re = " << 1.0 / mu;
+            cout << "with Re = " << Re;
             cout << ", # iters to converge: " << formulation.nonlinearIterationCount() << endl;
           }
 

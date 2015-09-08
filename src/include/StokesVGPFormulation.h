@@ -35,6 +35,8 @@ class StokesVGPFormulation
   double _time;
   bool _timeStepping;
   bool _spaceTime;
+  bool _includeVelocityTracesInFluxTerm; // distinguishes between two space-time formulation options
+  double _t0; // used in space-time
 
   bool _haveOutflowConditionsImposed; // used to track whether we should impose point/zero mean conditions on pressure
 
@@ -150,6 +152,9 @@ public:
 
   // ! set current time step used for transient solve
   void setTimeStep(double dt);
+  
+  // ! Returns the specified component of the traction, expressed as a LinearTerm involving field variables.
+  LinearTermPtr getTraction(int i);
 
   // ! Returns the solution (at current time)
   TSolutionPtr<double> solution();
@@ -197,14 +202,22 @@ public:
 
   // ! returns the forcing function for this formulation if u and p are the exact solutions.
   TFunctionPtr<double> forcingFunction(TFunctionPtr<double> u, TFunctionPtr<double> p);
+
+  // ! returns the pressure (which depends on the solution)
+  TFunctionPtr<double> getPressureSolution();
+
+  // ! returns a map indicating any trial variables that have adjusted polynomial orders relative to the standard poly order for the element.  Keys are variable IDs, values the difference between the indicated variable and the standard polynomial order.
+  const std::map<int,int> &getTrialVariablePolyOrderAdjustments();
+  
+  // ! returns the velocity (which depends on the solution)
+  TFunctionPtr<double> getVelocitySolution();
   
   // ! returns the vorticity (which depends on the solution)
   TFunctionPtr<double> getVorticity();
   
   static StokesVGPFormulation steadyFormulation(int spaceDim, double mu, bool useConformingTraces);
   static StokesVGPFormulation spaceTimeFormulation(int spaceDim, double mu, bool useConformingTraces);
-  
-  static StokesVGPFormulation timeSteppingFormulation(int spaceDim, double mu, double dt, bool useConformingTraces, TimeStepType timeStepType);
+  static StokesVGPFormulation timeSteppingFormulation(int spaceDim, double mu, double dt, bool useConformingTraces, TimeStepType timeStepType = BACKWARD_EULER);
 };
 }
 

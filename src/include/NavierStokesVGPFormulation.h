@@ -17,25 +17,21 @@
 #include "RefinementStrategy.h"
 #include "Solution.h"
 #include "Solver.h"
+#include "StokesVGPFormulation.h"
 #include "VarFactory.h"
 
 namespace Camellia
 {
 class NavierStokesVGPFormulation
 {
-  BFPtr _navierStokesBF, _stokesBF;
+  Teuchos::RCP<StokesVGPFormulation> _stokesForm;
+  BFPtr _navierStokesBF;
   bool _useConformingTraces;
 
   int _spaceDim;
 
-  double _mu;
-  Teuchos::RCP<ParameterFunction> _dt; // use a ParameterFunction so that we can set value later and references (in BF, e.g.) automatically pick this up
-  Teuchos::RCP<ParameterFunction> _theta; // selector for time step method; 0.5 is Crank-Nicolson
-
   BCPtr _bc, _zeroBC; // _zeroBC used when _neglectFluxesOnRHS = false, as it needs to be for GMG solves
   RHSPtr _rhsForSolve, _rhsForResidual;
-
-  LinearTermPtr _t1, _t2, _t3; // tractions
 
   SolverPtr _solver;
 
@@ -46,42 +42,33 @@ class NavierStokesVGPFormulation
   TSolutionPtr<double> _streamSolution;
   Teuchos::RCP<PoissonFormulation> _streamFormulation;
 
-  RefinementStrategyPtr _refinementStrategy, _hRefinementStrategy, _pRefinementStrategy;;
+  RefinementStrategyPtr _refinementStrategy, _hRefinementStrategy, _pRefinementStrategy;
 
   bool _neglectFluxesOnRHS;
 
   int _nonlinearIterationCount; // starts at 0, increases for each iterate
 
-  static const string S_U1, S_U2, S_U3;
-  static const string S_P;
-  static const string S_SIGMA1, S_SIGMA2, S_SIGMA3;
-
-  static const string S_U1_HAT, S_U2_HAT, S_U3_HAT;
-  static const string S_TN1_HAT, S_TN2_HAT, S_TN3_HAT;
-
-  static const string S_V1, S_V2, S_V3;
-  static const string S_Q;
-  static const string S_TAU1, S_TAU2, S_TAU3;
-
-  void initialize(MeshTopologyPtr meshTopology, std::string filePrefix,
-                  int spaceDim, double Re, int fieldPolyOrder, int delta_k,
-                  TFunctionPtr<double> forcingFunction, bool transientFormulation, bool useConformingTraces);
+//  void initialize(MeshTopologyPtr meshTopology, std::string filePrefix,
+//                  int spaceDim, double Re, int fieldPolyOrder, int delta_k,
+//                  TFunctionPtr<double> forcingFunction, bool transientFormulation, bool useConformingTraces);
 
   void refine(RefinementStrategyPtr refStrategy);
 public:
-  NavierStokesVGPFormulation(MeshTopologyPtr meshTopology, double Re,
-                             int fieldPolyOrder,
-                             int delta_k = 1,
-                             TFunctionPtr<double> forcingFunction = Teuchos::null,
-                             bool transientFormulation = false,
-                             bool useConformingTraces = false);
+//  NavierStokesVGPFormulation(MeshTopologyPtr meshTopology, double Re,
+//                             int fieldPolyOrder,
+//                             int delta_k = 1,
+//                             TFunctionPtr<double> forcingFunction = Teuchos::null,
+//                             bool transientFormulation = false,
+//                             bool useConformingTraces = false);
+//
+//  NavierStokesVGPFormulation(std::string filePrefix, int spaceDim, double Re,
+//                             int fieldPolyOrder, int delta_k = 1,
+//                             TFunctionPtr<double> forcingFunction = Teuchos::null,
+//                             bool transientFormulation = false,
+//                             bool useConformingTraces = false);
 
-  NavierStokesVGPFormulation(std::string filePrefix, int spaceDim, double Re,
-                             int fieldPolyOrder, int delta_k = 1,
-                             TFunctionPtr<double> forcingFunction = Teuchos::null,
-                             bool transientFormulation = false,
-                             bool useConformingTraces = false);
-
+  NavierStokesVGPFormulation(MeshTopologyPtr meshTopology, Teuchos::ParameterList &parameters);
+  
   // ! sets a wall boundary condition
   void addWallCondition(SpatialFilterPtr wall);
 
@@ -100,6 +87,12 @@ public:
   // ! return an ExactTSolutionPtr<double> corresponding to specified velocity (a rank 1 Function) and pressure.
   Teuchos::RCP<ExactSolution<double>> exactSolution(TFunctionPtr<double> u, TFunctionPtr<double> p);
 
+  // ! returns the forcing function corresponding to the indicated exact solution
+  TFunctionPtr<double> forcingFunction(int spaceDim, double Re, TFunctionPtr<double> u, TFunctionPtr<double> p);
+  
+  // ! Set the forcing function for Navier-Stokes.  Should be a vector-valued function, with number of components equal to the spatial dimension.
+  void setForcingFunction(TFunctionPtr<double> f);
+  
   // ! returns the L^2 norm of the incremental solution
   double L2NormSolutionIncrement();
 
@@ -172,8 +165,25 @@ public:
   // test variables:
   VarPtr tau(int i);
   VarPtr v(int i);
+  
+  // static utility functions:
+  
+  static NavierStokesVGPFormulation steadyFormulation(int spaceDim, double Re, bool useConformingTraces,
+                                                      MeshTopologyPtr meshTopo, int polyOrder, int delta_k);
+  static NavierStokesVGPFormulation spaceTimeFormulation(int spaceDim, double Re, bool useConformingTraces,
+                                                         MeshTopologyPtr meshTopo, int spatialPolyOrder, int temporalPolyOrder, int delta_k);
+  static NavierStokesVGPFormulation timeSteppingFormulation(int spaceDim, double Re, bool useConformingTraces,
+                                                            MeshTopologyPtr meshTopo, int polyOrder, int delta_k,
+                                                            double dt, TimeStepType timeStepType = BACKWARD_EULER);
 
-  static TFunctionPtr<double> forcingFunction(int spaceDim, double Re, TFunctionPtr<double> u, TFunctionPtr<double> p);
+  // ! returns the convective term (u dot grad u) corresponding to the provided velocity function
+  static FunctionPtr convectiveTerm(int spcaeDim, FunctionPtr u_exact);
+  
+  // ! returns the forcing function for steady-state Navier-Stokes corresponding to the indicated exact solution
+  static TFunctionPtr<double> forcingFunctionSteady(int spaceDim, double Re, TFunctionPtr<double> u, TFunctionPtr<double> p);
+  
+  // ! returns the forcing function for space-time Navier-Stokes corresponding to the indicated exact solution
+  static TFunctionPtr<double> forcingFunctionSpaceTime(int spaceDim, double Re, TFunctionPtr<double> u, TFunctionPtr<double> p);
 };
 }
 
