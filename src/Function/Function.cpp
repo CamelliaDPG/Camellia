@@ -179,15 +179,23 @@ public:
   //  }
 };
 
-class MeshSkeletonCharacteristicFunction : public ConstantScalarFunction<double>
+class MeshSkeletonCharacteristicFunction : public SimpleFunction<double>
 {
 public:
-  MeshSkeletonCharacteristicFunction() : ConstantScalarFunction<double>(1, "|_{\\Gamma_h}")
+  MeshSkeletonCharacteristicFunction()
   {
   }
   bool boundaryValueOnly()
   {
     return true;
+  }
+  string displayString()
+  {
+    return "|_{\\Gamma_h}";
+  }
+  double value(double x)
+  {
+    return 1.0;
   }
 };
 
@@ -1767,18 +1775,80 @@ TFunctionPtr<Scalar> operator*(TFunctionPtr<Scalar> f1, TFunctionPtr<Scalar> f2)
       TEUCHOS_TEST_FOR_EXCEPTION(true,std::invalid_argument,"functions have incompatible rank for product.");
     }
   }
+  
+  ProductFunction<Scalar>* f1_product = dynamic_cast<ProductFunction<Scalar>*> (f1.get());
+  ProductFunction<Scalar>* f2_product = dynamic_cast<ProductFunction<Scalar>*> (f2.get());;
+  
   ConstantScalarFunction<Scalar>* f1_constant = dynamic_cast<ConstantScalarFunction<Scalar>*> (f1.get());
   if (f1_constant)
   {
-    // then check if f2 is constant, too:
-    ConstantScalarFunction<Scalar>* f2_constant = dynamic_cast<ConstantScalarFunction<Scalar>*> (f2.get());
-    if (f2_constant)
+    // check if it's 1.0; then the product will be just f2
+    if (f1_constant->value() == 1)
     {
-      return Function::constant(f1_constant->value() * f2_constant->value());
+      return f2;
     }
   }
-
-  return Teuchos::rcp( new ProductFunction<Scalar>(f1,f2) );
+  
+  ConstantScalarFunction<Scalar>* f2_constant = dynamic_cast<ConstantScalarFunction<Scalar>*> (f2.get());
+  if (f2_constant)
+  {
+    if (f2_constant->value() == 1)
+    {
+      return f1;
+    }
+  }
+  
+  if (f1_constant && f2_constant)
+  {
+    return Function::constant(f1_constant->value() * f2_constant->value());
+  }
+  
+  // if one multiplicand is a constant scalar, put that one in front:
+  if (f2_constant)
+  {
+    if (f1_product)
+    {
+      TFunctionPtr<Scalar> f11 = f1_product->f1();
+      TFunctionPtr<Scalar> f12 = f1_product->f2();
+      // since we put constants in front, if one of f11 or f12 is constant, f11 will be
+      // multiplying like so gives a chance to combine the constants:
+      return (f2 * f11) * f12;
+    }
+    else
+      return Teuchos::rcp( new ProductFunction<Scalar>(f2,f1) );
+  }
+  else if (f1_constant)
+  {
+    if (f2_product)
+    {
+      TFunctionPtr<Scalar> f21 = f2_product->f1();
+      TFunctionPtr<Scalar> f22 = f2_product->f2();
+      // since we put constants in front, if one of f21 or f22 is constant, f21 will be
+      // multiplying like so gives a chance to combine the constants:
+      return (f1 * f21) * f22;
+    }
+    else
+      return Teuchos::rcp( new ProductFunction<Scalar>(f1,f2) );
+  }
+  else
+  {
+    if (f1_product && f2_product)
+    {
+      // let's check whether their first multiplicands are constants:
+      TFunctionPtr<Scalar> f11 = f1_product->f1();
+      TFunctionPtr<Scalar> f12 = f1_product->f2();
+      TFunctionPtr<Scalar> f21 = f2_product->f1();
+      TFunctionPtr<Scalar> f22 = f2_product->f2();
+      
+      ConstantScalarFunction<Scalar>* f11_constant = dynamic_cast<ConstantScalarFunction<Scalar>*> (f11.get());
+      ConstantScalarFunction<Scalar>* f21_constant = dynamic_cast<ConstantScalarFunction<Scalar>*> (f21.get());
+      if (f11_constant && f21_constant)
+      {
+        return (f11_constant->value() * f21_constant->value()) * (f12 * f22);
+      }
+    }
+    return Teuchos::rcp( new ProductFunction<Scalar>(f1,f2) );
+  }
 }
 
 template <typename Scalar>

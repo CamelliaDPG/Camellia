@@ -24,6 +24,9 @@ public:
   void values(Intrepid::FieldContainer<Scalar> &values, BasisCachePtr basisCache);
   virtual bool boundaryValueOnly();
 
+  TFunctionPtr<Scalar> f1();
+  TFunctionPtr<Scalar> f2();
+  
   TFunctionPtr<Scalar> x();
   TFunctionPtr<Scalar> y();
   TFunctionPtr<Scalar> z();

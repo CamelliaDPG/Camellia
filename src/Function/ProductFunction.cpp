@@ -1,6 +1,7 @@
 #include "ProductFunction.h"
 
 #include "BasisCache.h"
+#include "ConstantScalarFunction.h"
 
 using namespace Camellia;
 using namespace Intrepid;
@@ -11,7 +12,17 @@ string ProductFunction<Scalar>::displayString()
   ostringstream ss;
   string times_string = " * ";
   if ((_f1->rank() == 1) && _f2->rank() == 1) times_string = " \\cdot ";
-  ss << _f1->displayString() << times_string << _f2->displayString();
+  
+  ConstantScalarFunction<Scalar>* f1_constant = dynamic_cast<ConstantScalarFunction<Scalar>*> (_f1.get());
+  if (f1_constant && (f1_constant->value() == -1.0))
+  {
+    // then just show "-f2"
+    ss << "-" << _f2->displayString();
+  }
+  else
+  {
+    ss << _f1->displayString() << times_string << _f2->displayString();
+  }
   return ss.str();
 }
 
@@ -57,6 +68,18 @@ TFunctionPtr<Scalar> ProductFunction<Scalar>::dt()
   }
   // otherwise, apply product rule:
   return _f1 * _f2->dt() + _f2 * _f1->dt();
+}
+
+template <typename Scalar>
+TFunctionPtr<Scalar> ProductFunction<Scalar>::f1()
+{
+  return _f1;
+}
+
+template <typename Scalar>
+TFunctionPtr<Scalar> ProductFunction<Scalar>::f2()
+{
+  return _f2;
 }
 
 template <typename Scalar>
