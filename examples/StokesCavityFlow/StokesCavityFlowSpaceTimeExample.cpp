@@ -136,24 +136,27 @@ int main(int argc, char *argv[])
 
   bool useConformingTraces = true;
   double mu = 1.0;
-  
-  vector<double> dims(spaceDim,1.0);
-  vector<int> numElements(spaceDim,2);
-  vector<double> x0(spaceDim,0.0);
 
   int polyOrder = 2, delta_k = 1;
   double t_0 = 0, t_final = 3;
   
   bool writeStiffnessMatrixAndExit = false;
   int numTimeElementsInitialMesh = -1;
+  int spatialMeshWidth = 2;
 
+  double energyErrorTarget = 1e-1;
+  int maxRefinements = 4;
+  
   cmdp.setOption("useConformingTraces", "useNonconformingTraces", &useConformingTraces);
+  cmdp.setOption("errorTarget", &energyErrorTarget);
+  cmdp.setOption("maxRefs", &maxRefinements);
   cmdp.setOption("mu", &mu);
   cmdp.setOption("rampWidthForLidBC", &eps);
   cmdp.setOption("spaceDim", &spaceDim);
   cmdp.setOption("polyOrder", &polyOrder);
   cmdp.setOption("writeStiffnessMatrixAndExit", "solveNormally", &writeStiffnessMatrixAndExit);
   cmdp.setOption("timeElementsInitial", &numTimeElementsInitialMesh, "# elements in time direction in initial mesh (default: 1 per unit time)");
+  cmdp.setOption("spatialMeshWidth", &spatialMeshWidth, "# elements in each spatial direction in initial mesh");
   
   if (cmdp.parse(argc,argv) != Teuchos::CommandLineProcessor::PARSE_SUCCESSFUL)
   {
@@ -162,6 +165,10 @@ int main(int argc, char *argv[])
 #endif
     return -1;
   }
+  
+  vector<double> dims(spaceDim,1.0);
+  vector<int> numElements(spaceDim,spatialMeshWidth);
+  vector<double> x0(spaceDim,0.0);
   
   StokesVGPFormulation spaceTimeForm = StokesVGPFormulation::spaceTimeFormulation(spaceDim, mu, useConformingTraces);
 
@@ -207,7 +214,7 @@ int main(int argc, char *argv[])
   spaceTimeForm.addZeroInitialCondition(t_0);
   spaceTimeForm.addWallCondition(sideAndBottomWalls);
   spaceTimeForm.addInflowCondition(topBoundary, timeRamp * u_topRampSpaceTime);
-  spaceTimeForm.addPointPressureCondition({0.5,0.0});
+  spaceTimeForm.addPointPressureCondition({0.0,0.0});
   
   if (writeStiffnessMatrixAndExit)
   {
@@ -217,7 +224,10 @@ int main(int argc, char *argv[])
     solution->populateStiffnessAndLoad();
     
     int numFieldDofs = solution->mesh()->numFieldDofs();
+    int numFluxDofs = solution->mesh()->numFluxDofs();
+    
     if (rank==0) cout << "# field dofs: " << numFieldDofs << endl;
+    if (rank==0) cout << "# flux/trace dofs: " << numFluxDofs << endl;
     
     Teuchos::RCP<Epetra_CrsMatrix> A = solution->getStiffnessMatrix();
     string fileName = "A.dat";
@@ -238,9 +248,8 @@ int main(int argc, char *argv[])
   HDF5Exporter spaceTimeExporter(spaceTimeMesh, "stokesSpaceTimeCavityFlow", ".");
   spaceTimeExporter.exportSolution(spaceTimeForm.solution(), 0);
   
-  double tol = 8e-1;
   int refNumber = 0;
-  do
+  while ((energyError > energyErrorTarget) && (refNumber < maxRefinements))
   {
     refNumber++;
     spaceTimeForm.refine();
@@ -254,7 +263,6 @@ int main(int argc, char *argv[])
     if (rank==0) cout << "Energy error for refinement " << refNumber << ": " << energyError;
     if (rank==0) cout << " (mesh has " << activeElements << " elements and " << globalDofs << " global dofs)." << endl;
   }
-  while (energyError > tol);
   
   return 0;
 }
