@@ -1288,18 +1288,18 @@ MeshPtr MeshFactory::shiftedHemkerMesh(double xLeft, double xRight, double meshH
 MeshPtr MeshFactory::spaceTimeMesh(MeshTopologyPtr spatialMeshTopology, double t0, double t1,
                                    TBFPtr<double> bf, int spatialH1Order, int temporalH1Order, int pToAdd)
 {
-  MeshTopologyPtr meshTopology = spaceTimeMeshTopology(spatialMeshTopology, t0, t1);
+  MeshTopologyPtr meshTopology = spaceTimeMeshTopology(spatialMeshTopology, t0, t1); // for refined spatial topologies, this can be more than 1-irregular--we enforce 1-irregularity below.
 
   vector<int> H1Order(2);
   H1Order[0] = spatialH1Order;
   H1Order[1] = temporalH1Order;
 
   MeshPtr mesh = Teuchos::rcp( new Mesh (meshTopology, bf, H1Order, pToAdd) );
-
+  mesh->enforceOneIrregularity();
+  
   return mesh;
 }
 
-// TODO: test this!
 MeshTopologyPtr MeshFactory::spaceTimeMeshTopology(MeshTopologyPtr spatialMeshTopology, double t0, double t1, int temporalDivisions)
 {
   // we allow spatialMeshTopology to have been refined; we start with a coarse space-time topology matching the root spatial topology,
@@ -1387,6 +1387,20 @@ MeshTopologyPtr MeshFactory::spaceTimeMeshTopology(MeshTopologyPtr spatialMeshTo
       if (timeSubdivision==0) cellIDMap[spaceTimeCell->cellIndex()] = cellIndex;
     }
   }
+  
+  // construct the initial time entity set:
+  // cellIDMap keys are the space-time cell IDs that match the initial time
+  // we want the sides that correspond to the initial time
+  EntitySetPtr initialTimeSet = spaceTimeTopology->createEntitySet();
+  for (auto entry : cellIDMap)
+  {
+    IndexType initialTimeCellID = entry.first;
+    CellPtr spaceTimeCell = spaceTimeTopology->getCell(initialTimeCellID);
+    unsigned sideOrdinal = spaceTimeCell->topology()->getTemporalSideOrdinal(0);
+    IndexType sideEntityIndex = spaceTimeCell->entityIndex(spaceDim, sideOrdinal);
+    initialTimeSet->addEntity(spaceDim, sideEntityIndex);
+  }
+  spaceTimeTopology->setEntitySetInitialTime(initialTimeSet);
 
   bool noCellsToRefine = false;
 

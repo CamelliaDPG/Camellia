@@ -26,7 +26,7 @@ bool TestingUtilities::isBCDof(GlobalIndexType globalDofIndex, TSolutionPtr<doub
 {
   FieldContainer<GlobalIndexType> globalIndices;
   FieldContainer<double> globalValues;
-  solution->mesh()->boundary().bcsToImpose(globalIndices, globalValues, *(solution->bc()), NULL, NULL);
+  solution->mesh()->boundary().bcsToImpose(globalIndices, globalValues, *(solution->bc()), NULL);
   for (int i = 0; i < globalIndices.size(); i++)
   {
     if (globalIndices[i]==globalDofIndex)

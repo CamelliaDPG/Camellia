@@ -1209,6 +1209,12 @@ EntitySetPtr MeshTopology::getEntitySet(EntityHandle entitySetHandle) const
   return entry->second;
 }
 
+EntitySetPtr MeshTopology::getEntitySetInitialTime() const
+{
+  if (_initialTimeEntityHandle == -1) return Teuchos::null;
+  return getEntitySet(_initialTimeEntityHandle);
+}
+
 pair<IndexType, unsigned> MeshTopology::getFirstCellForSide(IndexType sideEntityIndex)
 {
   return _cellsForSideEntities[sideEntityIndex].first;
@@ -3044,6 +3050,11 @@ void MeshTopology::setEntityGeneralizedParent(unsigned entityDim, IndexType enti
       }
     }
   }
+}
+
+void MeshTopology::setEntitySetInitialTime(EntitySetPtr entitySet)
+{
+  _initialTimeEntityHandle = entitySet->getHandle();
 }
 
 Teuchos::RCP<MeshTransformationFunction> MeshTopology::transformationFunction()
