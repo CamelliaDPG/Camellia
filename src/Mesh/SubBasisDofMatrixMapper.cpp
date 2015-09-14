@@ -174,6 +174,29 @@ vector<GlobalIndexType> SubBasisDofMatrixMapper::mappedGlobalDofOrdinals()
   return _mappedGlobalDofOrdinals;
 }
 
+set<GlobalIndexType> SubBasisDofMatrixMapper::mappedGlobalDofOrdinalsForBasisOrdinals(set<unsigned> &basisDofOrdinals)
+{
+  int i=0;
+  set<GlobalIndexType> globalIndices;
+  for (unsigned myBasisDofOrdinal : _basisDofOrdinalFilter)
+  {
+    if (basisDofOrdinals.find(myBasisDofOrdinal) != basisDofOrdinals.end())
+    {
+      // then examine the constraint matrix entries corresponding to the dof ordinal; nonzero entries should be recorded
+      double tol = 1e-15;
+      for (int j=0; j<_constraintMatrix.dimension(1); j++)
+      {
+        if (abs(_constraintMatrix(i,j)) > tol)
+        {
+          globalIndices.insert(_mappedGlobalDofOrdinals[j]);
+        }
+      }
+    }
+    i++;
+  }
+  return globalIndices;
+}
+
 SubBasisDofMapperPtr SubBasisDofMatrixMapper::negatedDofMapper()
 {
   FieldContainer<double> negatedConstraintMatrix = _constraintMatrix;

@@ -811,6 +811,41 @@ set<GlobalIndexType> GDAMaximumRule2D::globalDofIndicesForCell(GlobalIndexType c
   return dofIndices;
 }
 
+set<GlobalIndexType> GDAMaximumRule2D::globalDofIndicesForVarOnSubcell(int varID, GlobalIndexType cellID, unsigned dim, unsigned subcellOrdinal)
+{
+  set<GlobalIndexType> dofIndices;
+  
+  ElementTypePtr elemType = elementType(cellID);
+  vector<int> sides = elemType->trialOrderPtr->getSidesForVarID(varID);
+  
+  for (int sideOrdinal : sides)
+  {
+    BasisPtr basis = BasisFactory::basisFactory()->getContinuousBasis(elementType(cellID)->trialOrderPtr->getBasis(varID,sideOrdinal));
+    
+    int domainSubcellOrdinal;
+    if (sides.size() == 1) // volume variable, we assume: domain is the cell
+    {
+      domainSubcellOrdinal = subcellOrdinal;
+    }
+    else
+    {
+      CellTopoPtr cellTopo = elemType->cellTopoPtr;
+      unsigned sideDim = cellTopo->getDimension() - 1;
+      domainSubcellOrdinal = CamelliaCellTools::subcellReverseOrdinalMap(elemType->cellTopoPtr, sideDim, sideOrdinal, dim, subcellOrdinal);
+      if (domainSubcellOrdinal == -1) continue; // skip this side: subcell doesn't belong to it.
+    }
+    
+    set<int> basisDofOrdinals = basis->dofOrdinalsForSubcell(dim, domainSubcellOrdinal, 0);
+    for (int basisDofOrdinal : basisDofOrdinals)
+    {
+      int localDofOrdinal = elementType(cellID)->trialOrderPtr->getDofIndex(varID, basisDofOrdinal, sideOrdinal);
+      dofIndices.insert(globalDofIndex(cellID, localDofOrdinal));
+    }
+  }
+  
+  return dofIndices;
+}
+
 set<GlobalIndexType> GDAMaximumRule2D::globalDofIndicesForPartition(PartitionIndexType partitionNumber)
 {
   return _partitionedGlobalDofIndices[partitionNumber];
@@ -1326,8 +1361,13 @@ PartitionIndexType GDAMaximumRule2D::partitionForGlobalDofIndex( GlobalIndexType
   return _partitionForGlobalDofIndex[ globalDofIndex ];
 }
 
-IndexType GDAMaximumRule2D::partitionLocalCellIndex(GlobalIndexType cellID)
+IndexType GDAMaximumRule2D::partitionLocalCellIndex(GlobalIndexType cellID, int partitionNumber) // partitionNumber == -1 means use MPI rank as partitionNumber
 {
+  if (partitionNumber != Teuchos::GlobalMPISession::getRank())
+  {
+    if (partitionNumber != -1)
+      TEUCHOS_TEST_FOR_EXCEPTION(true, std::invalid_argument, "GDAMaximumRule2D does not support off-rank partitionNumbers in partitionLocalCellIndex.");
+  }
   return _partitionLocalCellIndices[cellID];
 }
 

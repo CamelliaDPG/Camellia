@@ -93,6 +93,8 @@ public:
 
   GlobalIndexType globalDofIndex(GlobalIndexType cellID, IndexType localDofIndex);
   set<GlobalIndexType> globalDofIndicesForCell(GlobalIndexType cellID);
+  //!! Returns the global dof indices for the indicated subcell.  Only guaranteed to provide correct values for cells that belong to the local partition.
+  set<GlobalIndexType> globalDofIndicesForVarOnSubcell(int varID, GlobalIndexType cellID, unsigned dim, unsigned subcellOrdinal);
   set<GlobalIndexType> globalDofIndicesForPartition(PartitionIndexType partitionNumber);
 
   GlobalIndexType globalDofCount();
@@ -102,7 +104,7 @@ public:
   void interpretGlobalCoefficients(GlobalIndexType cellID, Intrepid::FieldContainer<double> &localCoefficients, const Epetra_MultiVector &globalCoefficients);
   IndexType localDofCount(); // local to the MPI node
 
-  IndexType partitionLocalCellIndex(GlobalIndexType cellID);
+  IndexType partitionLocalCellIndex(GlobalIndexType cellID, int partitionNumber = -1); // partitionNumber == -1 means use MPI rank as partitionNumber
   GlobalIndexType globalCellIndex(GlobalIndexType cellID);
 
   PartitionIndexType partitionForGlobalDofIndex( GlobalIndexType globalDofIndex );

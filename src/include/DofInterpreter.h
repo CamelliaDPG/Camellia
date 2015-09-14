@@ -76,6 +76,9 @@ public:
 
   //!! Returns the global dof indices for the cell.  Only guaranteed to provide correct values for cells that belong to the local partition.
   virtual set<GlobalIndexType> globalDofIndicesForCell(GlobalIndexType cellID) = 0;
+  
+  //!! Returns the global dof indices for the indicated subcell.  Only guaranteed to provide correct values for cells that belong to the local partition.
+  virtual set<GlobalIndexType> globalDofIndicesForVarOnSubcell(int varID, GlobalIndexType cellID, unsigned dim, unsigned subcellOrdinal) = 0;
 
   //!! MPI-communicating method.  Must be called on all ranks.
   virtual std::set<GlobalIndexType> importGlobalIndicesForCells(const std::vector<GlobalIndexType> &cellIDs);

@@ -64,6 +64,7 @@ public:
 
   vector<GlobalIndexType> fittableGlobalIndices();
   vector<GlobalIndexType> globalIndices();
+  set<GlobalIndexType> globalIndicesForSubcell(int varID, unsigned d, unsigned subcord);
 
   void printMappingReport();
 

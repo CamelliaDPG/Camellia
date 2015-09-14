@@ -128,6 +128,21 @@ vector<GlobalIndexType> SubBasisDofPermutationMapper::mappedGlobalDofOrdinals()
   return _globalDofOrdinals;
 }
 
+set<GlobalIndexType> SubBasisDofPermutationMapper::mappedGlobalDofOrdinalsForBasisOrdinals(set<unsigned> &basisDofOrdinals)
+{
+  int i=0;
+  set<GlobalIndexType> globalIndices;
+  for (unsigned myBasisDofOrdinal : _basisDofOrdinalFilter)
+  {
+    if (basisDofOrdinals.find(myBasisDofOrdinal) != basisDofOrdinals.end())
+    {
+      globalIndices.insert(_globalDofOrdinals[i]);
+    }
+    i++;
+  }
+  return globalIndices;
+}
+
 SubBasisDofMapperPtr SubBasisDofPermutationMapper::negatedDofMapper()
 {
   return Teuchos::rcp( new SubBasisDofPermutationMapper(_basisDofOrdinalFilter, _globalDofOrdinals, !_negate) );

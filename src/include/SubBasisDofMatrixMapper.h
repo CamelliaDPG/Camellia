@@ -33,6 +33,7 @@ public:
                                   bool fittableDofsOnly, const std::set<GlobalIndexType> &fittableDofIndices, Intrepid::FieldContainer<double> &globalData);
 
   std::vector<GlobalIndexType> mappedGlobalDofOrdinals();
+  std::set<GlobalIndexType> mappedGlobalDofOrdinalsForBasisOrdinals(std::set<unsigned> &basisDofOrdinals);
 
   SubBasisDofMapperPtr negatedDofMapper();
 

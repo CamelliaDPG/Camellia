@@ -26,7 +26,9 @@ public:
   void mapDataIntoGlobalContainer(const Intrepid::FieldContainer<double> &wholeBasisData, const map<GlobalIndexType, unsigned> &globalIndexToOrdinal,
                                   bool fittableDofsOnly, const set<GlobalIndexType> &fittableDofIndices, Intrepid::FieldContainer<double> &globalData);
 
-  vector<GlobalIndexType> mappedGlobalDofOrdinals();
+  std::vector<GlobalIndexType> mappedGlobalDofOrdinals();
+  std::set<GlobalIndexType> mappedGlobalDofOrdinalsForBasisOrdinals(std::set<unsigned> &basisDofOrdinals);
+  
   Intrepid::FieldContainer<double> getConstraintMatrix();
 
   SubBasisDofMapperPtr negatedDofMapper(); // this mapper, but negated.

@@ -273,6 +273,10 @@ public:
 
   int getDimension(); // spatial dimension of the mesh
   set<GlobalIndexType> globalDofIndicesForCell(GlobalIndexType cellID);
+  
+  //!! Returns the global dof indices for the indicated subcell.  Only guaranteed to provide correct values for cells that belong to the local partition.
+  set<GlobalIndexType> globalDofIndicesForVarOnSubcell(int varID, GlobalIndexType cellID, unsigned dim, unsigned subcellOrdinal);
+  
   DofOrderingFactory & getDofOrderingFactory();
 
   ElementTypeFactory & getElementTypeFactory();

@@ -424,6 +424,30 @@ set<GlobalIndexType> CondensedDofInterpreter<Scalar>::globalDofIndicesForCell(Gl
 }
 
 template <typename Scalar>
+set<GlobalIndexType> CondensedDofInterpreter<Scalar>::globalDofIndicesForVarOnSubcell(int varID, GlobalIndexType cellID, unsigned dim, unsigned subcellOrdinal)
+{
+  set<GlobalIndexType> interpretedDofIndicesForCell = _mesh->globalDofIndicesForVarOnSubcell(varID, cellID, dim, subcellOrdinal);
+  set<GlobalIndexType> globalDofIndices;
+  
+  for (set<GlobalIndexType>::iterator interpretedDofIndexIt = interpretedDofIndicesForCell.begin();
+       interpretedDofIndexIt != interpretedDofIndicesForCell.end(); interpretedDofIndexIt++)
+  {
+    GlobalIndexType interpretedDofIndex = *interpretedDofIndexIt;
+    if (_interpretedToGlobalDofIndexMap.find(interpretedDofIndex) == _interpretedToGlobalDofIndexMap.end())
+    {
+      // that's OK; we skip the fields...
+    }
+    else
+    {
+      GlobalIndexType globalDofIndex = _interpretedToGlobalDofIndexMap[interpretedDofIndex];
+      globalDofIndices.insert(globalDofIndex);
+    }
+  }
+  
+  return globalDofIndices;
+}
+
+template <typename Scalar>
 bool CondensedDofInterpreter<Scalar>::varDofsAreCondensible(int varID, int sideOrdinal, DofOrderingPtr dofOrdering)
 {
   // eventually it would be nice to determine which sub-basis ordinals can be condensed, but right now we only

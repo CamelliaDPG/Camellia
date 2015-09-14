@@ -291,6 +291,15 @@ set<GlobalIndexType> GDAMinimumRule::globalDofIndicesForCell(GlobalIndexType cel
   return globalDofIndices;
 }
 
+set<GlobalIndexType> GDAMinimumRule::globalDofIndicesForVarOnSubcell(int varID, GlobalIndexType cellID, unsigned int dim, unsigned int subcellOrdinal)
+{
+  CellConstraints constraints = getCellConstraints(cellID);
+  LocalDofMapperPtr dofMapper = getDofMapper(cellID, constraints);
+  set<GlobalIndexType> globalDofIndices = dofMapper->globalIndicesForSubcell(varID, dim, subcellOrdinal);
+  
+  return globalDofIndices;
+}
+
 set<GlobalIndexType> GDAMinimumRule::globalDofIndicesForPartition(PartitionIndexType partitionNumber)
 {
   int rank = Teuchos::GlobalMPISession::getRank();
@@ -603,23 +612,10 @@ void GDAMinimumRule::interpretLocalBasisCoefficients(GlobalIndexType cellID, int
   CellConstraints constraints = getCellConstraints(cellID);
   LocalDofMapperPtr dofMapper = getDofMapper(cellID, constraints, varID, sideOrdinal);
 
-//  cout << "interpretLocalBasisCoefficients, mapping report for cell " << cellID << ":\n";
-//  dofMapper->printMappingReport();
-
-  // DEBUGGING:
-//  if ((cellID==0) && (varID==2) && (sideOrdinal==3)) {
-//    cout << "(cellID==2) && (varID==0) && (sideOrdinal==3).\n";
-//    dofMapper->printMappingReport();
-//  }
-
-  // the new, right way to do this:
   globalCoefficients = dofMapper->fitLocalCoefficients(basisCoefficients);
   vector<GlobalIndexType> globalIndexVector = dofMapper->fittableGlobalIndices();
   globalDofIndices.resize(globalIndexVector.size());
-  // DEBUGGING
-//  cout << "cellID " << cellID << ", side " << sideOrdinal << ", var " << varID;
-//  Camellia::print(", globalIndexVector", globalIndexVector);
-//  cout << "globalCoefficients:\n" << globalCoefficients;
+
   for (int i=0; i<globalIndexVector.size(); i++)
   {
     globalDofIndices(i) = globalIndexVector[i];

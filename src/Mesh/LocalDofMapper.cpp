@@ -9,11 +9,11 @@
 #include "LocalDofMapper.h"
 #include <Teuchos_GlobalMPISession.hpp>
 
+#include "BasisFactory.h"
+#include "CamelliaCellTools.h"
 #include "CamelliaDebugUtility.h"
-
-#include "SubBasisDofMatrixMapper.h"
-
 #include "SerialDenseWrapper.h"
+#include "SubBasisDofMatrixMapper.h"
 
 using namespace Intrepid;
 using namespace Camellia;
@@ -189,6 +189,66 @@ vector<GlobalIndexType> LocalDofMapper::globalIndices()
   }
   return indices;
 }
+
+set<GlobalIndexType> LocalDofMapper::globalIndicesForSubcell(int varID, unsigned d, unsigned subcord)
+{
+//  typedef vector< SubBasisDofMapperPtr > BasisMap; // taken together, these maps map a whole basis
+//  map< int, BasisMap > _volumeMaps; // keys are var IDs (fields)
+//  vector< map< int, BasisMap > > _sideMaps; // outer index is side ordinal; map keys are var IDs
+
+  CellTopoPtr volumeTopo = _dofOrdering->cellTopology();
+
+  set<GlobalIndexType> indexSet; // guarantee uniqueness using set
+  
+  for (auto entry : _volumeMaps)
+  {
+    BasisMap volumeMap  = entry.second;
+    if (entry.first != varID) continue;
+    
+    BasisPtr volumeBasis = BasisFactory::basisFactory()->getContinuousBasis(_dofOrdering->getBasis(varID));
+    
+    set<int> dofOrdinalsInt = volumeBasis->dofOrdinalsForSubcell(d, subcord, 0);
+    set<unsigned> dofOrdinals(dofOrdinalsInt.begin(), dofOrdinalsInt.end());
+    
+    for (auto subBasisMap : volumeMap)
+    {
+      set<GlobalIndexType> subIndexSet = subBasisMap->mappedGlobalDofOrdinalsForBasisOrdinals(dofOrdinals);
+      indexSet.insert(subIndexSet.begin(),subIndexSet.end());
+    }
+  }
+  
+  int sideDim = volumeTopo->getDimension() - 1;
+  for (int sideOrdinal = 0; sideOrdinal < _sideMaps.size(); sideOrdinal++)
+  {
+    bool assertContainment = false;
+    unsigned sideSubcellOrdinal = CamelliaCellTools::subcellReverseOrdinalMap(volumeTopo, sideDim, sideOrdinal, d, subcord,
+                                                                              assertContainment);
+    if (sideSubcellOrdinal == -1) continue; // subcell not found
+    
+    for (auto entry : _sideMaps[sideOrdinal])
+    {
+      BasisMap sideMap  = entry.second;
+      if (entry.first != varID) continue;
+      
+      if (!_dofOrdering->hasBasisEntry(varID, sideOrdinal)) continue;
+      
+      BasisPtr sideBasis = BasisFactory::basisFactory()->getContinuousBasis(_dofOrdering->getBasis(varID,sideOrdinal));
+      
+      set<int> dofOrdinalsInt = sideBasis->dofOrdinalsForSubcell(d, sideSubcellOrdinal, 0);
+      set<unsigned> dofOrdinals(dofOrdinalsInt.begin(), dofOrdinalsInt.end());
+      
+      for (auto subBasisMap : sideMap)
+      {
+        set<GlobalIndexType> subIndexSet = subBasisMap->mappedGlobalDofOrdinalsForBasisOrdinals(dofOrdinals);
+        indexSet.insert(subIndexSet.begin(),subIndexSet.end());
+      }
+    }
+  }
+  
+  return indexSet;
+}
+
+
 
 vector<GlobalIndexType> LocalDofMapper::fittableGlobalIndices()
 {

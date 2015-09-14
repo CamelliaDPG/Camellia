@@ -702,6 +702,11 @@ set<GlobalIndexType> Mesh::globalDofIndicesForCell(GlobalIndexType cellID)
   return _gda->globalDofIndicesForCell(cellID);
 }
 
+set<GlobalIndexType> Mesh::globalDofIndicesForVarOnSubcell(int varID, GlobalIndexType cellID, unsigned dim, unsigned subcellOrdinal)
+{
+  return _gda->globalDofIndicesForVarOnSubcell(varID, cellID, dim, subcellOrdinal);
+}
+
 set<GlobalIndexType> Mesh::globalDofIndicesForPartition(PartitionIndexType partitionNumber)
 {
   return _gda->globalDofIndicesForPartition(partitionNumber);

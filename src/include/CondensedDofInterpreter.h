@@ -110,6 +110,7 @@ public:
   void interpretGlobalCoefficients(GlobalIndexType cellID, Intrepid::FieldContainer<Scalar> &localDofs, const Epetra_MultiVector &globalDofs);
 
   set<GlobalIndexType> globalDofIndicesForCell(GlobalIndexType cellID);
+  set<GlobalIndexType> globalDofIndicesForVarOnSubcell(int varID, GlobalIndexType cellID, unsigned dim, unsigned subcellOrdinal);
 
   GlobalIndexType condensedGlobalIndex(GlobalIndexType meshGlobalIndex); // meshGlobalIndex aka interpretedGlobalIndex
 

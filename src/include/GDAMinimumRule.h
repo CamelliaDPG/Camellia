@@ -118,7 +118,14 @@ public:
   ElementTypePtr elementType(GlobalIndexType cellID);
 
   GlobalIndexType globalDofCount();
+  
+  //!! Returns the global dof indices for the indicated cell.  Only guaranteed to provide correct values for cells that belong to the local partition.
   set<GlobalIndexType> globalDofIndicesForCell(GlobalIndexType cellID);
+  
+  //!! Returns the global dof indices for the indicated subcell.  Only guaranteed to provide correct values for cells that belong to the local partition.
+  set<GlobalIndexType> globalDofIndicesForVarOnSubcell(int varID, GlobalIndexType cellID, unsigned dim, unsigned subcellOrdinal);
+  
+  //!! Returns the global dof indices for the partition.
   set<GlobalIndexType> globalDofIndicesForPartition(PartitionIndexType partitionNumber);
 
   set<GlobalIndexType> ownedGlobalDofIndicesForCell(GlobalIndexType cellID);
