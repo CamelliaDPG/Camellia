@@ -613,34 +613,34 @@ TEUCHOS_UNIT_TEST( StokesVGPFormulation, SaveAndLoad )
     double energyError = spaceTimeForm.solution()->energyErrorTotal();
     TEUCHOS_TEST_COMPARE(energyError, <, tol, out, success);
     
-    {         // DEBUGGING:
-      {
-        SolutionPtr solution = spaceTimeForm.solution();
-        solution->initializeLHSVector();
-        solution->initializeStiffnessAndLoad();
-        solution->populateStiffnessAndLoad();
-        
-        Teuchos::RCP<Epetra_CrsMatrix> A = solution->getStiffnessMatrix();
-        string fileName = "/tmp/A.dat";
-        EpetraExt::RowMatrixToMatrixMarketFile(fileName.c_str(),*A, NULL, NULL, false);
-      }
-      cout << "bf:\n";
-      spaceTimeForm.bf()->printTrialTestInteractions();
-      
-      cout << "forcing function: " << f->displayString() << endl;
-      HDF5Exporter exporter(spaceTimeForm.solution()->mesh(),"StokesSpaceTimeForcingFunction","/tmp");
-      FunctionPtr f_padded = Function::vectorize(f->x(), f->y(), Function::zero());
-      exporter.exportFunction(f_padded, "forcing function", 0.0, 5);
-
-      HDF5Exporter solutionExporter(spaceTimeForm.solution()->mesh(),"StokesSpaceTimeSolution","/tmp");
-      // export the projected solution at "time" 0
-      solutionExporter.exportSolution(spaceTimeForm.solution(), 0.0, 5);
-
-      // solve, and export the solution at "time" 1
-      spaceTimeForm.solve();
-      solutionExporter.exportSolution(spaceTimeForm.solution(), 1.0, 5);
-      cout << "Exported solution.\n";
-    }
+//    {         // DEBUGGING:
+//      {
+//        SolutionPtr solution = spaceTimeForm.solution();
+//        solution->initializeLHSVector();
+//        solution->initializeStiffnessAndLoad();
+//        solution->populateStiffnessAndLoad();
+//        
+//        Teuchos::RCP<Epetra_CrsMatrix> A = solution->getStiffnessMatrix();
+//        string fileName = "/tmp/A.dat";
+//        EpetraExt::RowMatrixToMatrixMarketFile(fileName.c_str(),*A, NULL, NULL, false);
+//      }
+//      cout << "bf:\n";
+//      spaceTimeForm.bf()->printTrialTestInteractions();
+//      
+//      cout << "forcing function: " << f->displayString() << endl;
+//      HDF5Exporter exporter(spaceTimeForm.solution()->mesh(),"StokesSpaceTimeForcingFunction","/tmp");
+//      FunctionPtr f_padded = Function::vectorize(f->x(), f->y(), Function::zero());
+//      exporter.exportFunction(f_padded, "forcing function", 0.0, 5);
+//
+//      HDF5Exporter solutionExporter(spaceTimeForm.solution()->mesh(),"StokesSpaceTimeSolution","/tmp");
+//      // export the projected solution at "time" 0
+//      solutionExporter.exportSolution(spaceTimeForm.solution(), 0.0, 5);
+//
+//      // solve, and export the solution at "time" 1
+//      spaceTimeForm.solve();
+//      solutionExporter.exportSolution(spaceTimeForm.solution(), 1.0, 5);
+//      cout << "Exported solution.\n";
+//    }
   }
   
   TEUCHOS_UNIT_TEST( StokesVGPFormulation, SpaceTime2D_FreeStreamSolve_Slow )
@@ -704,33 +704,33 @@ TEUCHOS_UNIT_TEST( StokesVGPFormulation, SaveAndLoad )
     double energyError = spaceTimeForm.solution()->energyErrorTotal();
     TEUCHOS_TEST_COMPARE(energyError, <, tol, out, success);
     
-    {         // DEBUGGING:
-      {
-        SolutionPtr solution = spaceTimeForm.solution();
-        solution->initializeLHSVector();
-        solution->initializeStiffnessAndLoad();
-        solution->populateStiffnessAndLoad();
-        
-        Teuchos::RCP<Epetra_CrsMatrix> A = solution->getStiffnessMatrix();
-        string fileName = "/tmp/A.dat";
-        EpetraExt::RowMatrixToMatrixMarketFile(fileName.c_str(),*A, NULL, NULL, false);
-      }
-      cout << "bf:\n";
-      spaceTimeForm.bf()->printTrialTestInteractions();
-      
-      cout << "forcing function: " << f->displayString() << endl;
-      HDF5Exporter exporter(spaceTimeForm.solution()->mesh(),"StokesSpaceTimeForcingFunction","/tmp");
-      FunctionPtr f_padded = Function::vectorize(f->x(), f->y(), Function::zero());
-      exporter.exportFunction(f_padded, "forcing function", 0.0, 5);
-      
-      HDF5Exporter solutionExporter(spaceTimeForm.solution()->mesh(),"StokesSpaceTimeSolution","/tmp");
-      // export the projected solution at "time" 0
-      solutionExporter.exportSolution(spaceTimeForm.solution(), 0.0, 5);
-      
-      // solve, and export the solution at "time" 1
-      spaceTimeForm.solve();
-      solutionExporter.exportSolution(spaceTimeForm.solution(), 1.0, 5);
-      cout << "Exported solution.\n";
-    }
+//    {         // DEBUGGING:
+//      {
+//        SolutionPtr solution = spaceTimeForm.solution();
+//        solution->initializeLHSVector();
+//        solution->initializeStiffnessAndLoad();
+//        solution->populateStiffnessAndLoad();
+//        
+//        Teuchos::RCP<Epetra_CrsMatrix> A = solution->getStiffnessMatrix();
+//        string fileName = "/tmp/A.dat";
+//        EpetraExt::RowMatrixToMatrixMarketFile(fileName.c_str(),*A, NULL, NULL, false);
+//      }
+//      cout << "bf:\n";
+//      spaceTimeForm.bf()->printTrialTestInteractions();
+//      
+//      cout << "forcing function: " << f->displayString() << endl;
+//      HDF5Exporter exporter(spaceTimeForm.solution()->mesh(),"StokesSpaceTimeForcingFunction","/tmp");
+//      FunctionPtr f_padded = Function::vectorize(f->x(), f->y(), Function::zero());
+//      exporter.exportFunction(f_padded, "forcing function", 0.0, 5);
+//      
+//      HDF5Exporter solutionExporter(spaceTimeForm.solution()->mesh(),"StokesSpaceTimeSolution","/tmp");
+//      // export the projected solution at "time" 0
+//      solutionExporter.exportSolution(spaceTimeForm.solution(), 0.0, 5);
+//      
+//      // solve, and export the solution at "time" 1
+//      spaceTimeForm.solve();
+//      solutionExporter.exportSolution(spaceTimeForm.solution(), 1.0, 5);
+//      cout << "Exported solution.\n";
+//    }
   }
 } // namespace
