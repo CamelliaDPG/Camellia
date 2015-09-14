@@ -24,6 +24,12 @@ typedef unsigned GlobalIndexType;
 typedef unsigned PartitionIndexType; // for partition numbering
 typedef unsigned CellIDType;
 typedef int GlobalIndexTypeToCast; // for constructing Epetra_Maps, etc.  (these like either int or long long)
+  
+// MOAB-compatible definitions:
+#define DIRICHLET_SET_TAG_NAME   "DIRICHLET_SET" // identical to MOAB's DIRICHLET_SET_TAG_NAME
+#define MATERIAL_SET_TAG_NAME   "MATERIAL_SET"
+#define NEUMANN_SET_TAG_NAME   "NEUMANN_SET"
+typedef unsigned long EntityHandle; // identical to MOAB's EntityHandle type.  We define our own because we don't want to require MOAB, at least not yet.
 
 // Trilinos typedefs
 typedef Teuchos::RCP< Intrepid::FieldContainer<double> > FCPtr;
@@ -37,6 +43,7 @@ class DofOrdering;
 class DofOrderingFactory;
 class Element;
 class ElementType;
+class EntitySet;
 class GlobalDofAssignment;
 class LagrangeConstraints;
 class Mesh;
@@ -77,6 +84,7 @@ typedef Teuchos::RCP<DofOrdering> DofOrderingPtr;
 typedef Teuchos::RCP<DofOrderingFactory> DofOrderingFactoryPtr;
 typedef Teuchos::RCP<Element> ElementPtr;
 typedef Teuchos::RCP<ElementType> ElementTypePtr;
+typedef Teuchos::RCP<EntitySet> EntitySetPtr;
 typedef Teuchos::RCP<GlobalDofAssignment> GlobalDofAssignmentPtr;
 typedef Teuchos::RCP<Mesh> MeshPtr;
 typedef Teuchos::RCP<MeshPartitionPolicy> MeshPartitionPolicyPtr;

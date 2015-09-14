@@ -43,7 +43,7 @@ void testSpaceTimeTraceBCFunction(int spaceDim, Teuchos::FancyOStream &out, bool
   VarPtr u_hat = form.u_hat();
   bool isTrace = true;
   BCPtr bc = form.solution()->bc();
-  bc->addDirichlet(u_hat, SpatialFilter::allSpace(), u);
+  bc->addDirichlet(u_hat, SpatialFilter::allSpace() | SpatialFilter::matchingT(t0) | SpatialFilter::matchingT(t1), u);
 
   MeshPtr mesh = form.solution()->mesh();
 
@@ -72,10 +72,106 @@ void testSpaceTimeTraceBCFunction(int spaceDim, Teuchos::FancyOStream &out, bool
     }
   }
 }
+  void testTagCoefficientsMatchLegacy(int spaceDim, Teuchos::FancyOStream &out, bool &success)
+  {
+    // test that the coefficients determined for a BC object that uses the new tag-based BCs
+    // matches those determined by SpatialFilters
+    bool conformingTraces = true;
+    PoissonFormulation form(spaceDim,conformingTraces);
 
-TEUCHOS_UNIT_TEST( BC, SpaceTimeTraceBCCoefficients )
-{
-  int spaceDim = 1;
-  testSpaceTimeTraceBCFunction(spaceDim, out, success);
-}
+    int H1Order = 3, delta_k = 1;
+    MeshTopologyPtr meshTopo = MeshFactory::rectilinearMeshTopology(vector<double>(spaceDim,1.0), vector<int>(spaceDim,1));
+    MeshPtr mesh = Teuchos::rcp( new Mesh(meshTopo, form.bf(), H1Order, delta_k) );
+    
+    // add a tag for the Dirichlet BC region (all the sides of the single cell in the mesh)
+    int tagID = 34;
+    EntitySetPtr allSides = meshTopo->createEntitySet();
+    CellPtr cell = meshTopo->getCell(0);
+    int sideCount = cell->getSideCount();
+    int sideDim = spaceDim - 1;
+    for (int sideOrdinal=0; sideOrdinal<sideCount; sideOrdinal++)
+    {
+      IndexType sideEntityIndex = cell->entityIndex(sideDim, sideOrdinal);
+      allSides->addEntity(sideDim, sideEntityIndex);
+    }
+    meshTopo->applyTag(DIRICHLET_SET_TAG_NAME, tagID, allSides);
+
+    FunctionPtr x = Function::xn(1);
+    
+    FunctionPtr phi_value = x * x + 1;
+    BCPtr legacyBC = BC::bc();
+    legacyBC->addDirichlet(form.phi_hat(), SpatialFilter::allSpace(), phi_value);
+    SolutionPtr legacySoln = Solution::solution(form.bf(), mesh, legacyBC);
+    
+    BCPtr tagBC = BC::bc();
+    tagBC->addDirichlet(form.phi_hat(), tagID, phi_value);
+    SolutionPtr soln = Solution::solution(form.bf(), mesh, tagBC);
+    
+    int rank     = Teuchos::GlobalMPISession::getRank();
+    Intrepid::FieldContainer<GlobalIndexType> bcGlobalIndicesLegacy, bcGlobalIndicesTags;
+    Intrepid::FieldContainer<double> bcGlobalValuesLegacy, bcGlobalValuesTags;
+    
+    // we can safely assume that the two Solution objects have equivalent DofInterpreter, partition map
+    Teuchos::RCP<DofInterpreter> dofInterpreter = legacySoln->getDofInterpreter();
+    
+    set<GlobalIndexType> myGlobalIndicesSet = dofInterpreter->globalDofIndicesForPartition(rank);
+    Epetra_Map partMap = legacySoln->getPartitionMap();
+    
+    mesh->boundary().bcsToImpose(bcGlobalIndicesLegacy,bcGlobalValuesLegacy,*legacyBC, myGlobalIndicesSet, dofInterpreter.get(), &partMap);
+    
+    mesh->boundary().bcsToImpose(bcGlobalIndicesTags,bcGlobalValuesTags,*tagBC, myGlobalIndicesSet, dofInterpreter.get(), &partMap);
+    
+    map<GlobalIndexType,double> bcValueMapLegacy;
+    for (int i=0; i<bcGlobalIndicesLegacy.size(); i++)
+    {
+      bcValueMapLegacy[bcGlobalIndicesLegacy[i]] = bcGlobalValuesLegacy[i];
+    }
+    map<GlobalIndexType,double> bcValueMapTags;
+    for (int i=0; i<bcGlobalIndicesTags.size(); i++)
+    {
+      bcValueMapTags[bcGlobalIndicesTags[i]] = bcGlobalValuesTags[i];
+    }
+    
+    TEST_EQUALITY(bcValueMapLegacy.size(), bcValueMapTags.size());
+    
+    double tol = 1e-15;
+    for (int i=0; i<bcGlobalIndicesLegacy.size(); i++)
+    {
+      GlobalIndexType legacyDofIndex = bcGlobalIndicesLegacy[i];
+      double legacyValue = bcValueMapLegacy[legacyDofIndex];
+      if (bcValueMapTags.find(legacyDofIndex) == bcValueMapTags.end())
+      {
+        out << "Dof Index " << legacyDofIndex << " not found in bcValueMapTags.\n";
+        success = false;
+      }
+      else
+      {
+        double tagValue = bcValueMapTags[legacyDofIndex];
+        double diff = abs(legacyValue - tagValue);
+        if ((diff > tol) && (diff > tol * min(abs(tagValue),abs(legacyValue))))
+        {
+          success = false;
+          out << "legacy value != tag value (" << legacyValue << " != " << tagValue << ")\n";
+        }
+      }
+    }
+  }
+
+  TEUCHOS_UNIT_TEST( BC, SpaceTimeTraceBCCoefficients )
+  {
+    int spaceDim = 1;
+    testSpaceTimeTraceBCFunction(spaceDim, out, success);
+  }
+  
+  TEUCHOS_UNIT_TEST( BC, TagCoefficientsMatchLegacy_1D )
+  {
+    int spaceDim = 1;
+    testTagCoefficientsMatchLegacy(spaceDim, out, success);
+  }
+  
+  TEUCHOS_UNIT_TEST( BC, TagCoefficientsMatchLegacy_2D )
+  {
+    int spaceDim = 2;
+    testTagCoefficientsMatchLegacy(spaceDim, out, success);
+  }
 } // namespace

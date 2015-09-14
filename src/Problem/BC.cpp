@@ -112,6 +112,12 @@ public:
   }
 };
 
+template <typename Scalar>
+void TBC<Scalar>::addDirichlet(VarPtr var, int tagID, TFunctionPtr<Scalar> valueFunction)
+{
+  _dirichletTagBCs[tagID].push_back({var,valueFunction});
+}
+
 template class BCLogicalOrFunction<double>;
 
 template <typename Scalar>
@@ -208,6 +214,17 @@ TBCPtr<Scalar> TBC<Scalar>::copyImposingZero()
     zeroBC->addSpatialPointBC(trialID, zero, vertex);
   }
 
+  // TODO: copy geometric BC entries...
+//  for (auto geometricBCEntry : _geometricBCs)
+//  {
+//    int varID = geometricBCEntry.first;
+//    auto geometricPrescriptions = geometricBCEntry.second;
+//    for (auto geometricPrescription : geometricPrescriptions)
+//    {
+//      zeroBC->addDirichlet();
+//    }
+//  }
+  
   return zeroBC;
 }
 
@@ -220,6 +237,12 @@ pair< SpatialFilterPtr, TFunctionPtr<Scalar> > TBC<Scalar>::getDirichletBC(int v
     TEUCHOS_TEST_FOR_EXCEPTION(true, std::invalid_argument, "No Dirichlet BC for the indicated variable...");
   }
   return _dirichletBCs[varID];
+}
+
+template <typename Scalar>
+map< int, vector<pair<VarPtr, TFunctionPtr<Scalar>>>> TBC<Scalar>::getDirichletTagBCs() const
+{
+  return _dirichletTagBCs;
 }
 
 template <typename Scalar>
@@ -307,9 +330,27 @@ void TBC<Scalar>::imposeBC(FieldContainer<Scalar> &dirichletValues, FieldContain
     SpatialFilterPtr filter = bc.first;
     TFunctionPtr<Scalar> f = bc.second;
 
-    filter->matchesPoints(imposeHere,basisCache);
-
-    f->values(dirichletValues,basisCache);
+    if (basisCache->isSideCache())
+    {
+      unsigned sideOrdinal = basisCache->getSideIndex();
+      // for non-space-time BasisCaches, every side is spatial
+      bool isSpatialSide = !basisCache->cellTopologyIsSpaceTime() || basisCache->cellTopology()->sideIsSpatial(sideOrdinal);
+      if (isSpatialSide && filter->matchesSpatialSides())
+      {
+        filter->matchesPoints(imposeHere,basisCache);
+        f->values(dirichletValues,basisCache);
+      }
+      else if (!isSpatialSide && filter->matchesTemporalSides())
+      {
+        filter->matchesPoints(imposeHere,basisCache);
+        f->values(dirichletValues,basisCache);
+      }
+    }
+    else
+    {
+      filter->matchesPoints(imposeHere,basisCache);
+      f->values(dirichletValues,basisCache);
+    }
   }
 }
 

@@ -20,8 +20,13 @@ class TBC
 {
   bool _legacyBCSubclass;
   set< int > _zeroMeanConstraints; // variables on which ZMCs imposed
-  map< int, pair< vector<double>, Scalar> > _singlePointBCs; // variables on which single-point conditions imposed
+  
   map< int, TDirichletBC<Scalar> > _dirichletBCs; // key: trialID
+  
+  map< int, vector<pair<VarPtr, TFunctionPtr<Scalar>>>> _dirichletTagBCs; // key: tag ID
+  
+  map< int, pair< vector<double>, Scalar> > _singlePointBCs; // variables on which single-point conditions imposed
+
 protected:
   map< int, TDirichletBC<Scalar> > &dirichletBCs();
   double _time;
@@ -52,16 +57,22 @@ public:
 
   void addDirichlet( VarPtr traceOrFlux, SpatialFilterPtr spatialPoints, TFunctionPtr<Scalar> valueFunction );
   
+  // ! Adds a Dirichlet constraint for the indicated variable for any MeshTopology entities that are marked with a tag that has the conventional name for Dirichlet constraints and value tagID.  Intended to support field variables as well as fluxes and traces.
+  void addDirichlet(VarPtr var, int tagID, TFunctionPtr<Scalar> valueFunction);
+  
   // ! Adds point constraint at the specified vertex number in the specified spatial mesh.  Deprecated; use addSpatialPointBC instead (even for pure-spatial meshes).
   void addSinglePointBC( int fieldID, Scalar value, MeshPtr spatialMesh, GlobalIndexType meshVertexNumber = -1 );
   
-  // ! Adds point constraint at the specified spatial point (which must correspond to a vertex in the mesh).  Deprecated; use addSpatialPointBC instead (even for pure-spatial meshes).  For space-time meshes, indicates that the value should be imposed at every temporal degree of freedom corresponding to the spatial point.
+  // ! Adds point constraint at the specified spatial point (which must correspond to a vertex in the mesh).  For space-time meshes, indicates that the value should be imposed at every temporal degree of freedom corresponding to the spatial point.
   void addSpatialPointBC(int fieldID, Scalar value, vector<double> spatialPoint);
-  // ! Remove the specified point constraint.
-  void removeSpatialPointBC(int fieldID);
 
+  map< int, vector<pair<VarPtr, TFunctionPtr<Scalar>>>> getDirichletTagBCs() const;
+  
   // ! Remove the specified point constraint.  Deprecated version; use removeSpatialPointBC() instead.
   void removeSinglePointBC( int fieldID );
+  
+  // ! Remove the specified point constraint.
+  void removeSpatialPointBC(int fieldID);
   
   void addZeroMeanConstraint( VarPtr field );
   void removeZeroMeanConstraint( int fieldID );

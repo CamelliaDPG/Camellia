@@ -33,26 +33,23 @@
 //
 // @HEADER
 
-#include "Boundary.h"
+
 #include "Intrepid_PointTools.hpp"
 #include "Intrepid_FunctionSpaceTools.hpp"
-#include "Mesh.h"
-#include "Function.h"
-#include "TensorBasis.h"
-#include "VarFactory.h"
-
-#include "BasisFactory.h"
-
-#include "BC.h"
-#include "BCFunction.h"
-
 #include "Teuchos_GlobalMPISession.hpp"
 
+#include "BasisFactory.h"
+#include "BC.h"
+#include "BCFunction.h"
+#include "Boundary.h"
 #include "CamelliaCellTools.h"
-
-#include "GlobalDofAssignment.h"
-
 #include "CamelliaDebugUtility.h"
+#include "Function.h"
+#include "GlobalDofAssignment.h"
+#include "Mesh.h"
+#include "Projector.h"
+#include "TensorBasis.h"
+#include "VarFactory.h"
 
 using namespace Intrepid;
 using namespace Camellia;
@@ -60,7 +57,7 @@ using namespace std;
 
 Boundary::Boundary()
 {
-  _mesh = Teuchos::rcp((Mesh*)NULL);
+  _mesh = Teuchos::null;
 }
 
 void Boundary::setMesh(MeshPtr mesh)
@@ -197,29 +194,129 @@ void Boundary::bcsToImpose(FieldContainer<GlobalIndexType> &globalIndices,
       bcsToImpose(bcGlobalIndicesAndValues, bc, *cellIDIt, noSingletons, dofInterpreter, globalDofMap);
     }
   }
-
+  
+  // ****** New, tag-based BC imposition follows ******
+  map< GlobalIndexType, double> bcTagGlobalIndicesAndValues;
+  
+  map< int, vector<pair<VarPtr, TFunctionPtr<Scalar>>>> tagBCs = bc.getDirichletTagBCs(); // keys are tags
+  
+  MeshTopology* meshTopo = dynamic_cast<MeshTopology*>(_mesh->getTopology().get());
+  
+  TEUCHOS_TEST_FOR_EXCEPTION(!meshTopo, std::invalid_argument, "pure MeshTopologyViews are not yet supported by new tag-based BC imposition");
+  
+  for (auto tagBC : tagBCs)
+  {
+    int tagID = tagBC.first;
+    
+    vector<EntitySetPtr> entitySets = meshTopo->getEntitySetsForTagID(DIRICHLET_SET_TAG_NAME, tagID);
+    for (EntitySetPtr entitySet : entitySets)
+    {
+      // get rank-local cells that match the entity set:
+      set<IndexType> matchingCellIDs = entitySet->cellIDsThatMatch(_mesh->getTopology(), rankLocalCells);
+      for (IndexType cellID : matchingCellIDs)
+      {
+        ElementTypePtr elemType = _mesh->getElementType(cellID);
+        BasisCachePtr basisCache = BasisCache::basisCacheForCell(_mesh, cellID);
+        
+        for (auto varFunctionPair : tagBC.second)
+        {
+          VarPtr var = varFunctionPair.first;
+          FunctionPtr f = varFunctionPair.second;
+          
+          vector<int> sideOrdinals = elemType->trialOrderPtr->getSidesForVarID(var->ID());
+          
+          for (int sideOrdinal : sideOrdinals)
+          {
+            BasisPtr basis = elemType->trialOrderPtr->getBasis(var->ID(), sideOrdinal);
+            bool isVolume = basis->domainTopology()->getDimension() == _mesh->getDimension();
+            for (int d=0; d<_mesh->getDimension(); d++)
+            {
+              vector<unsigned> matchingSubcells;
+              if (isVolume)
+                matchingSubcells = entitySet->subcellOrdinals(_mesh->getTopology(), cellID, d);
+              else
+              {
+                CellTopoPtr cellTopo = elemType->cellTopoPtr;
+                int sideDim = cellTopo->getDimension() - 1;
+                vector<unsigned> matchingSubcellsOnSide = entitySet->subcellOrdinalsOnSide(_mesh->getTopology(), cellID, sideOrdinal, d);
+                for (unsigned sideSubcellOrdinal : matchingSubcellsOnSide)
+                {
+                  unsigned cellSubcellOrdinal = CamelliaCellTools::subcellOrdinalMap(cellTopo, sideDim, sideOrdinal, d, sideSubcellOrdinal);
+                  matchingSubcells.push_back(cellSubcellOrdinal);
+                }
+              }
+              
+              /*
+               What follows - projecting the function onto the basis on the whole domain - is more expensive than necessary,
+               in the general case: we can do the projection on just the matching subcells, and if we had a way of taking the
+               restriction of a basis to a subcell of the domain, then we could avoid computing the whole basis as well.
+               
+               But for now, this should work, and it's simple to implement.
+               */
+              BasisCachePtr basisCacheForImposition = isVolume ? basisCache : basisCache->getSideBasisCache(sideOrdinal);
+              int numCells = 1;
+              FieldContainer<double> basisCoefficients(numCells,basis->getCardinality());
+              Projector<double>::projectFunctionOntoBasisInterpolating(basisCoefficients, f, basis, basisCacheForImposition);
+              basisCoefficients.resize(basis->getCardinality());
+              
+              BasisPtr basisForImposition = BasisFactory::basisFactory()->getContinuousBasis(basis);
+//              FieldContainer<double> basisCoefficientsToImpose;
+              set<GlobalIndexType> matchingGlobalIndices;
+              for (unsigned matchingSubcell : matchingSubcells)
+              {
+//                set<int> dofOrdinals = basisForImposition->dofOrdinalsForSubcell(d, matchingSubcell, 0); // 0: include all sub-subcells
+//                for (int dofOrdinal : dofOrdinals)
+//                {
+//                  basisCoefficientsToImpose[dofOrdinal] = basisCoefficients[dofOrdinal];
+//                }
+                set<GlobalIndexType> subcellGlobalIndices = dofInterpreter->globalDofIndicesForVarOnSubcell(var->ID(),cellID,d,matchingSubcell);
+                matchingGlobalIndices.insert(subcellGlobalIndices.begin(),subcellGlobalIndices.end());
+              }
+              
+              FieldContainer<double> globalData;
+              FieldContainer<GlobalIndexType> globalDofIndices;
+//              dofInterpreter->interpretLocalBasisCoefficients(cellID, var->ID(), sideOrdinal, basisCoefficientsToImpose, globalData, globalDofIndices);
+              dofInterpreter->interpretLocalBasisCoefficients(cellID, var->ID(), sideOrdinal, basisCoefficients, globalData, globalDofIndices);
+              for (int globalDofOrdinal=0; globalDofOrdinal<globalDofIndices.size(); globalDofOrdinal++)
+              {
+                GlobalIndexType globalDofIndex = globalDofIndices(globalDofOrdinal);
+                if (matchingGlobalIndices.find(globalDofIndex) != matchingGlobalIndices.end())
+                  bcTagGlobalIndicesAndValues[globalDofIndex] = globalData(globalDofOrdinal);
+              }
+            }
+          }
+        }
+      }
+    }
+  }
+  
+  // merge tag-based and legacy BC maps
+  double tol = 1e-15;
+  for (auto tagEntry : bcTagGlobalIndicesAndValues)
+  {
+    if (bcGlobalIndicesAndValues.find(tagEntry.first) != bcGlobalIndicesAndValues.end())
+    {
+      // then check that they match, within tolerance
+      double diff = abs(bcGlobalIndicesAndValues[tagEntry.first] - tagEntry.second);
+      TEUCHOS_TEST_FOR_EXCEPTION(diff > tol, std::invalid_argument, "Incompatible BC entries encountered");
+    }
+    else
+    {
+      bcGlobalIndicesAndValues[tagEntry.first] = tagEntry.second;
+    }
+  }
+  
   globalIndices.resize(bcGlobalIndicesAndValues.size());
   globalValues.resize(bcGlobalIndicesAndValues.size());
   globalIndices.initialize(0);
   globalValues.initialize(0.0);
   int entryOrdinal = 0;
-  for (map< GlobalIndexType, double>::iterator bcEntry = bcGlobalIndicesAndValues.begin(); bcEntry != bcGlobalIndicesAndValues.end(); bcEntry++, entryOrdinal++)
+  for (auto bcEntry : bcGlobalIndicesAndValues)
   {
-    globalIndices[entryOrdinal] = bcEntry->first;
-    globalValues[entryOrdinal] = bcEntry->second;
+    globalIndices[entryOrdinal] = bcEntry.first;
+    globalValues[entryOrdinal] = bcEntry.second;
+    entryOrdinal++;
   }
-
-//  // check to make sure all our singleton BCs got imposed:
-//  for (vector< int >::iterator trialIt = trialIDs.begin(); trialIt != trialIDs.end(); trialIt++) {
-//    int trialID = *trialIt;
-//    if ((isSingleton[trialID]) && _imposeSingletonBCsOnThisRank) {
-//      // that means that it was NOT imposed: warn the user
-//      cout << "WARNING: singleton BC requested for trial variable " << _mesh->bilinearForm()->trialName(trialID);
-//      cout << ", but no BC was imposed for this variable (possibly because imposeHere never returned true for any point)." << endl;
-//    }
-//  }
-
-  //cout << "bcsToImpose: globalIndices:" << endl << globalIndices;
 }
 
 template <typename Scalar>
@@ -227,6 +324,7 @@ void Boundary::bcsToImpose( map<  GlobalIndexType, Scalar > &globalDofIndicesAnd
                             GlobalIndexType cellID, set < pair<int, unsigned> > &singletons,
                             DofInterpreter* dofInterpreter, const Epetra_Map *globalDofMap)
 {
+  // this is where we actually compute the BCs; the other bcsToImpose variants call this one.
   CellPtr cell = _mesh->getTopology()->getCell(cellID);
 
   // define a couple of important inner products:
@@ -253,6 +351,9 @@ void Boundary::bcsToImpose( map<  GlobalIndexType, Scalar > &globalDofIndicesAnd
       // we assume if it's not a trace, then it's a flux (i.e. L2 projection is appropriate)
       if ( bc.bcsImposed(trialID) )
       {
+//        // DEBUGGING: keep track of which sides we impose BCs on:
+//        set<unsigned> bcImposedSides;
+//        
         // Determine global dof indices and values, in one pass per side
         for (int i=0; i<boundarySides.size(); i++)
         {
@@ -279,9 +380,16 @@ void Boundary::bcsToImpose( map<  GlobalIndexType, Scalar > &globalDofIndicesAnd
                 GlobalIndexType globalDofIndex = globalDofIndices(globalDofOrdinal);
                 globalDofIndicesAndValues[globalDofIndex] = globalData(globalDofOrdinal);
               }
+//              if (globalDofIndices.size() > 0) bcImposedSides.insert(sideOrdinal);
             }
           }
         }
+//        { // DEBUGGING:
+//          ostringstream trialNameStream;
+//          trialNameStream << "Side for variable " << _mesh->bilinearForm()->varFactory()->trial(trialID)->name();
+//          trialNameStream << " BCs";
+//          print(trialNameStream.str(), bcImposedSides);
+//        }
       }
     }
   }
@@ -338,12 +446,7 @@ void Boundary::bcsToImpose( map<  GlobalIndexType, Scalar > &globalDofIndicesAnd
     {
       TEUCHOS_TEST_FOR_EXCEPTION(true, std::invalid_argument, "vertexOrdinalsInCell must have 1 or 2 vertices");
     }
-
-    // in some ways less nice than the previous version of singleton BC imposition; we don't impose a non-zero value (because
-    // we don't figure out physical points, etc.), and we also neglect any spatial filtering.
-
-    // OTOH, here we do support traces and fluxes for single-point BCs, and this is significantly simpler
-
+    
     set<GlobalIndexType> globalIndicesForVariable;
     DofOrderingPtr trialOrderingPtr = elemType->trialOrderPtr;
 
@@ -490,7 +593,7 @@ void Boundary::bcsToImpose( map<  GlobalIndexType, Scalar > &globalDofIndicesAnd
       {
         FieldContainer<double> basisCoefficients(basisForImposition->getCardinality());
         basisCoefficients[dofOrdinal] = 1.0;
-        FieldContainer<double> globalCoefficients; // we'll ignore this
+        FieldContainer<double> globalCoefficients;
         FieldContainer<GlobalIndexType> globalDofIndices;
         dofInterpreter->interpretLocalBasisCoefficients(cellID, trialID, sideForImposition, basisCoefficients,
                                                         globalCoefficients, globalDofIndices);
@@ -523,6 +626,7 @@ void Boundary::bcsToImpose( map<  GlobalIndexType, Scalar > &globalDofIndicesAnd
               if (globalDofMap->LID((GlobalIndexTypeToCast)globalDofIndices[fieldOrdinal]) != -1)
               {
                 globalDofIndicesAndValues[globalDofIndices[fieldOrdinal]] = bc.valueForSinglePointBC(trialID) * globalCoefficients[fieldOrdinal];
+                cout << "Imposing singleton BC for var ID " << trialID << " on global dof index " << globalDofIndices[fieldOrdinal] << endl;
               }
               else
               {
@@ -535,7 +639,7 @@ void Boundary::bcsToImpose( map<  GlobalIndexType, Scalar > &globalDofIndicesAnd
               set<GlobalIndexType> rankLocalDofIndices = _mesh->globalDofAssignment()->globalDofIndicesForPartition(-1); // current rank
               if (rankLocalDofIndices.find(globalDofIndices[fieldOrdinal]) != rankLocalDofIndices.end())
               {
-                globalDofIndicesAndValues[globalDofIndices[fieldOrdinal]] = 0.0;
+                globalDofIndicesAndValues[globalDofIndices[fieldOrdinal]] = bc.valueForSinglePointBC(trialID) * globalCoefficients[fieldOrdinal];
               }
               else
               {

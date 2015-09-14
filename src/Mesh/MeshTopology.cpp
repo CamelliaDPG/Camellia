@@ -770,26 +770,19 @@ void MeshTopology::addChildren(CellPtr parentCell, const vector< CellTopoPtr > &
     _rootCells.erase(cellIndex);
   }
   parentCell->setChildren(children);
-
-  // now, set children's neighbors to agree with parent, if the children don't have their own peer neighbors
-
-  //  unsigned numSides = CamelliaCellTools::getSideCount(*parentCell->topology());
-  ////  unsigned sideDim = _spaceDim - 1;
-  //  for (int sideOrdinal=0; sideOrdinal<numSides; sideOrdinal++) {
-  //    vector< pair<unsigned, unsigned> > childrenForSide = parentCell->childrenForSide(sideOrdinal);
-  //    for (vector< pair<unsigned, unsigned> >::iterator childIt = childrenForSide.begin(); childIt != childrenForSide.end(); childIt++) {
-  //      unsigned childIndex = childIt->first;
-  //      unsigned childSideOrdinal = childIt->second;
-  //      CellPtr child = _cells[childIndex];
-  ////      unsigned childSideEntityIndex = child->entityIndex(sideDim, childSideOrdinal);
-  ////      if (_activeCellsForEntities[sideDim][childSideEntityIndex].size()==1) {
-  //      if (child->getNeighborInfo(childSideOrdinal).first == -1) { // i.e. child hasn't yet had a neighbor set here...
-  //        // then child should inherit neighbor relationship from parent
-  //        pair< unsigned, unsigned > neighborInfo = parentCell->getNeighborInfo(sideOrdinal);
-  //        child->setNeighbor(childSideOrdinal, neighborInfo.first, neighborInfo.second);
-  //      }
-  //    }
-  //  }
+  
+  // if any entity sets contain parent cell, add child cells, too
+  for (auto entry : _entitySets)
+  {
+    EntitySetPtr entitySet = entry.second;
+    if (entitySet->containsEntity(this->getDimension(), parentCell->cellIndex()))
+    {
+      for (CellPtr child : children)
+      {
+        entitySet->addEntity(this->getDimension(), child->cellIndex());
+      }
+    }
+  }
 }
 
 void MeshTopology::addSideForEntity(unsigned int entityDim, IndexType entityIndex, IndexType sideEntityIndex)
@@ -810,6 +803,11 @@ void MeshTopology::addVertex(const vector<double> &vertex)
 {
   double tol = 1e-15;
   getVertexIndexAdding(vertex, tol);
+}
+
+void MeshTopology::applyTag(std::string tagName, int tagID, EntitySetPtr entitySet)
+{
+  _tagSetsInteger[tagName].push_back({entitySet->getHandle(), tagID});
 }
 
 vector<IndexType> MeshTopology::getCanonicalEntityNodesViaPeriodicBCs(unsigned d, const vector<IndexType> &myEntityNodes)
@@ -1050,6 +1048,18 @@ vector<IndexType> MeshTopology::cellIDsForPoints(const FieldContainer<double> &p
   return cellIDs;
 }
 
+EntitySetPtr MeshTopology::createEntitySet()
+{
+  // at some point, we might want to use MOAB for entity sets, etc., but for now, we just use an
+  // EntityHandle equal to the ordinal of the entity set: start at 0 and increment as new ones are created...
+  EntityHandle handle = _entitySets.size();
+  
+  EntitySetPtr entitySet = Teuchos::rcp( new EntitySet(handle) );
+  _entitySets[handle] = entitySet;
+  
+  return entitySet;
+}
+
 CellPtr MeshTopology::findCellWithVertices(const vector< vector<double> > &cellVertices)
 {
   CellPtr cell;
@@ -1173,6 +1183,30 @@ unsigned MeshTopology::getCellCountForSide(IndexType sideEntityIndex)
       return 2;
     }
   }
+}
+
+vector<EntitySetPtr> MeshTopology::getEntitySetsForTagID(string tagName, int tagID)
+{
+  if (_tagSetsInteger.find(tagName) == _tagSetsInteger.end()) return vector<EntitySetPtr>();
+  
+  vector<EntitySetPtr> entitySets;
+  vector<pair<EntityHandle,int>> tagEntries = _tagSetsInteger[tagName];
+  for (pair<EntityHandle,int> tagEntry : tagEntries)
+  {
+    if (tagEntry.second == tagID)
+    {
+      entitySets.push_back(getEntitySet(tagEntry.first));
+    }
+  }
+  
+  return entitySets;
+}
+
+EntitySetPtr MeshTopology::getEntitySet(EntityHandle entitySetHandle) const
+{
+  auto entry = _entitySets.find(entitySetHandle);
+  if (entry == _entitySets.end()) return Teuchos::null;
+  return entry->second;
 }
 
 pair<IndexType, unsigned> MeshTopology::getFirstCellForSide(IndexType sideEntityIndex)
@@ -2795,6 +2829,13 @@ void MeshTopology::refineCellEntities(CellPtr cell, RefinementPatternPtr refPatt
       //      cout << "Refined nodes:\n" << refinedNodes;
 
       unsigned parentIndex = cell->entityIndex(d, subcord);
+      // determine matching EntitySets--we add to these on refinement
+      vector<EntitySetPtr> parentEntitySets;
+      for (auto entry : _entitySets)
+      {
+        if (entry.second->containsEntity(d, parentIndex)) parentEntitySets.push_back(entry.second);
+      }
+      
       // if we ever allow multiple parentage, then we'll need to record things differently in both _childEntities and _parentEntities
       // (and the if statement just below will need to change in a corresponding way, indexed by the particular refPattern in question maybe
       if (_childEntities[d].find(parentIndex) == _childEntities[d].end())
@@ -2858,6 +2899,12 @@ void MeshTopology::refineCellEntities(CellPtr cell, RefinementPatternPtr refPatt
           // TODO: ?? do something with parentActiveCells?  Seems like we just trailed off here...
         }
         _childEntities[d][parentIndex] = vector< pair<RefinementPatternPtr,vector<unsigned> > >(1, make_pair(subcellRefPattern, childEntityIndices) ); // TODO: this also needs to change when we work through recipes.  Note that the correct parent will vary here...  i.e. in the anisotropic case, the child we're ultimately interested in will have an anisotropic parent, and *its* parent would be the bigger guy referred to here.
+
+        // add the child entities to the parent's entity sets
+        for (EntitySetPtr entitySet : parentEntitySets)
+          for (IndexType childEntityIndex : childEntityIndices)
+            entitySet->addEntity(d, childEntityIndex);
+        
         if (d==_spaceDim-1)   // side
         {
           if (_boundarySides.find(parentIndex) != _boundarySides.end())   // parent is a boundary side, so children are, too

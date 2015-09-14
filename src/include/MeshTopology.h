@@ -9,19 +9,16 @@
 #ifndef Camellia_debug_MeshTopology_h
 #define Camellia_debug_MeshTopology_h
 
-#include "TypeDefs.h"
-
 #include "Shards_CellTopology.hpp"
 #include "Intrepid_FieldContainer.hpp"
 
+#include "Cell.h"
+#include "EntitySet.h"
 #include "MeshGeometry.h"
 #include "MeshTopologyView.h"
-
-#include "RefinementPattern.h"
-
-#include "Cell.h"
-
 #include "PeriodicBC.h"
+#include "RefinementPattern.h"
+#include "TypeDefs.h"
 
 using namespace std;
 
@@ -37,6 +34,9 @@ class MeshTopology : public MeshTopologyView
   map< vector<double>, IndexType > _vertexMap; // maps into indices in the vertices list -- here just for vertex identification (i.e. so we don't add the same vertex twice)
   vector< vector<double> > _vertices; // vertex locations
 
+  map< EntityHandle, EntitySetPtr > _entitySets;
+  map< string, vector<pair<EntityHandle, int> > > _tagSetsInteger; // tags with integer value, applied to EntitySets.
+  
   vector< PeriodicBCPtr > _periodicBCs;
   map<IndexType, set< pair<int, int> > > _periodicBCIndicesMatchingNode; // pair: first = index in _periodicBCs; second: 0 or 1, indicating first or second part of the identification matches.  IndexType is the vertex index.
   map< pair<IndexType, pair<int,int> >, IndexType > _equivalentNodeViaPeriodicBC;
@@ -112,9 +112,14 @@ public:
 
   void addVertex(const std::vector<double>& vertex);
 
+  void applyTag(std::string tagName, int tagID, EntitySetPtr entitySet);
+  
   // ! This method only gets within a factor of 2 or so, but can give a rough estimate
   long long approximateMemoryFootprint();
 
+  EntitySetPtr createEntitySet();
+  EntitySetPtr getEntitySet(EntityHandle entitySetHandle) const;
+  
   // ! creates a copy of this, deep-copying each Cell and all lookup tables (but does not deep copy any other objects, e.g. PeriodicBCPtrs and the
   Teuchos::RCP<MeshTopology> deepCopy();
 
@@ -194,6 +199,8 @@ public:
   vector<double> getCellCentroid(IndexType cellIndex);
   
   const set<IndexType> &getRootCellIndices();
+  
+  vector<EntitySetPtr> getEntitySetsForTagID(string tagName, int tagID);
 
   // ! maxConstraint made public for the sake of MeshTopologyView; not intended for general use
   IndexType maxConstraint(unsigned d, IndexType entityIndex1, IndexType entityIndex2);
