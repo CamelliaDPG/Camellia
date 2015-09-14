@@ -42,6 +42,8 @@ const string StokesVGPFormulation::S_TAU2 = "\\tau_{2}";
 const string StokesVGPFormulation::S_TAU3 = "\\tau_{3}";
 const string StokesVGPFormulation::S_Q = "q";
 
+static const int INITIAL_CONDITION_TAG = 1;
+
 StokesVGPFormulation StokesVGPFormulation::steadyFormulation(int spaceDim, double mu, bool useConformingTraces)
 {
   Teuchos::ParameterList parameters;
@@ -65,7 +67,7 @@ StokesVGPFormulation StokesVGPFormulation::spaceTimeFormulation(int spaceDim, do
   parameters.set("useTimeStepping", false);
   parameters.set("useSpaceTime", true);
   
-  parameters.set("includeVelocityTracesInFluxTerm",false);
+  parameters.set("includeVelocityTracesInFluxTerm",true); // there may be bugs associated with the "true" option here (there may also be bugs associated with the "false" option!)
   parameters.set("t0",0.0);
   
 //  {
@@ -157,7 +159,10 @@ StokesVGPFormulation::StokesVGPFormulation(Teuchos::ParameterList &parameters)
   u2 = _vf->fieldVar(S_U2);
   if (spaceDim==3) u3 = _vf->fieldVar(S_U3);
   
-  p = _vf->fieldVar(S_P);
+//  if (!_spaceTime)
+    p = _vf->fieldVar(S_P);
+//  else // GDAMinimumRule doesn't yet support non-L^2 fields
+//    p = _vf->fieldVar(S_P, L2_SPACE_HGRAD_TIME);
   
   sigma1 = _vf->fieldVar(S_SIGMA1, VECTOR_L2);
   sigma2 = _vf->fieldVar(S_SIGMA2, VECTOR_L2);
@@ -176,7 +181,7 @@ StokesVGPFormulation::StokesVGPFormulation(Teuchos::ParameterList &parameters)
   }
   else
   {
-    if (_includeVelocityTracesInFluxTerm)
+    if (_includeVelocityTracesInFluxTerm) 
     {
       Space uHatSpace = useConformingTraces ? HGRAD_SPACE_L2_TIME : L2;
       if (spaceDim > 0) u1_hat = _vf->traceVarSpaceOnly(S_U1_HAT, one * u1, uHatSpace);
@@ -259,7 +264,7 @@ StokesVGPFormulation::StokesVGPFormulation(Teuchos::ParameterList &parameters)
   
   _steadyStokesBF = Teuchos::rcp( new BF(_vf) );
   // tau1 terms:
-  _steadyStokesBF->addTerm(_mu * u1, tau1->div());
+  _steadyStokesBF->addTerm(_mu * u1, tau1->div()); // sigma1 = _mu * grad u1
   _steadyStokesBF->addTerm(sigma1, tau1); // (sigma1, tau1)
   _steadyStokesBF->addTerm(-_mu * u1_hat, tau1->dot_normal());
   
@@ -429,18 +434,6 @@ void StokesVGPFormulation::addInflowCondition(SpatialFilterPtr inflowRegion, TFu
     _solution->bc()->addDirichlet(u1_hat, inflowRegion, u->x());
     _solution->bc()->addDirichlet(u2_hat, inflowRegion, u->y());
     if (_spaceDim==3) _solution->bc()->addDirichlet(u3_hat, inflowRegion, u->z());
-    
-    if (_spaceTime && _includeVelocityTracesInFluxTerm)
-    {
-      SpatialFilterPtr initialTime = SpatialFilter::matchingT(_t0);
-      VarPtr t1_hat = this->tn_hat(1), t2_hat = this->tn_hat(2);
-      VarPtr t3_hat;
-      if (_spaceDim == 3) t3_hat = this->tn_hat(3);
-      FunctionPtr n_t = Function::normalSpaceTime()->t();
-      _solution->bc()->addDirichlet(t1_hat, inflowRegion & initialTime, u->x() * n_t);
-      _solution->bc()->addDirichlet(t2_hat, inflowRegion & initialTime, u->y() * n_t);
-      if (_spaceDim==3) _solution->bc()->addDirichlet(t3_hat, inflowRegion & initialTime, u->z() * n_t);
-    }
   }
   else // _timeStepping
   {
@@ -457,7 +450,7 @@ void StokesVGPFormulation::addInflowCondition(SpatialFilterPtr inflowRegion, TFu
   }
 }
 
-void StokesVGPFormulation::addOutflowCondition(SpatialFilterPtr outflowRegion)
+void StokesVGPFormulation::addOutflowCondition(SpatialFilterPtr outflowRegion, bool usePhysicalTractions)
 {
 //  for (int d=0; d<spaceDim; d++) {
 //    VarPtr tn_hat = this->tn_hat(d+1);
@@ -480,33 +473,44 @@ void StokesVGPFormulation::addOutflowCondition(SpatialFilterPtr outflowRegion)
     _solution->bc()->removeSinglePointBC(p->ID());
   }
 
-  // my favorite way to do outflow conditions is via penalty constraints imposing a zero traction
-  Teuchos::RCP<LocalStiffnessMatrixFilter> filter_incr = _solution->filter();
-
-  Teuchos::RCP< PenaltyConstraints > pcRCP;
-  PenaltyConstraints* pc;
-
-  if (filter_incr.get() != NULL)
+  if (usePhysicalTractions)
   {
-    pc = dynamic_cast<PenaltyConstraints*>(filter_incr.get());
-    if (pc == NULL)
+    // my favorite way to do outflow conditions is via penalty constraints imposing a zero traction
+    Teuchos::RCP<LocalStiffnessMatrixFilter> filter_incr = _solution->filter();
+
+    Teuchos::RCP< PenaltyConstraints > pcRCP;
+    PenaltyConstraints* pc;
+
+    if (filter_incr.get() != NULL)
     {
-      TEUCHOS_TEST_FOR_EXCEPTION(true, std::invalid_argument, "Can't add PenaltyConstraints when a non-PenaltyConstraints LocalStiffnessMatrixFilter already in place");
+      pc = dynamic_cast<PenaltyConstraints*>(filter_incr.get());
+      if (pc == NULL)
+      {
+        TEUCHOS_TEST_FOR_EXCEPTION(true, std::invalid_argument, "Can't add PenaltyConstraints when a non-PenaltyConstraints LocalStiffnessMatrixFilter already in place");
+      }
+    }
+    else
+    {
+      pcRCP = Teuchos::rcp( new PenaltyConstraints );
+      pc = pcRCP.get();
+    }
+    TFunctionPtr<double> zero = TFunction<double>::zero();
+    pc->addConstraint(_t1==zero, outflowRegion);
+    pc->addConstraint(_t2==zero, outflowRegion);
+    if (_spaceDim==3) pc->addConstraint(_t3==zero, outflowRegion);
+
+    if (pcRCP != Teuchos::null)   // i.e., we're not just adding to a prior PenaltyConstraints object
+    {
+      _solution->setFilter(pcRCP);
     }
   }
   else
   {
-    pcRCP = Teuchos::rcp( new PenaltyConstraints );
-    pc = pcRCP.get();
-  }
-  TFunctionPtr<double> zero = TFunction<double>::zero();
-  pc->addConstraint(_t1==zero, outflowRegion);
-  pc->addConstraint(_t2==zero, outflowRegion);
-  if (_spaceDim==3) pc->addConstraint(_t3==zero, outflowRegion);
-
-  if (pcRCP != Teuchos::null)   // i.e., we're not just adding to a prior PenaltyConstraints object
-  {
-    _solution->setFilter(pcRCP);
+    TFunctionPtr<double> zero = TFunction<double>::zero();
+    for (int d=1; d<=_spaceDim; d++)
+    {
+      _solution->bc()->addDirichlet(tn_hat(d), outflowRegion, zero);
+    }
   }
 }
 
@@ -550,20 +554,44 @@ void StokesVGPFormulation::addWallCondition(SpatialFilterPtr wall)
   addInflowCondition(wall, TFunction<double>::constant(zero));
 }
 
-void StokesVGPFormulation::addZeroInitialCondition(double t0)
+void StokesVGPFormulation::addInitialCondition(double t0, vector<FunctionPtr> u0, FunctionPtr p0)
 {
   TEUCHOS_TEST_FOR_EXCEPTION(!_spaceTime, std::invalid_argument, "This method only supported for space-time formulations");
   
-  SpatialFilterPtr initialTime = SpatialFilter::matchingT(t0);
-  vector<double> zero(_spaceDim, 0.0);
-  addInflowCondition(initialTime, TFunction<double>::constant(zero));
+  TEUCHOS_TEST_FOR_EXCEPTION(u0.size() != _spaceDim, std::invalid_argument, "u0 should have length equal to the number of spatial dimensions");
 
-  VarPtr t1_hat = this->tn_hat(1), t2_hat = this->tn_hat(2);
-  VarPtr t3_hat;
-  if (_spaceDim==3) t3_hat = this->tn_hat(3);
-  _solution->bc()->addDirichlet(t1_hat, initialTime, Function::zero());
-  _solution->bc()->addDirichlet(t2_hat, initialTime, Function::zero());
-  if (_spaceDim==3) _solution->bc()->addDirichlet(t3_hat, initialTime, Function::zero());
+  SpatialFilterPtr initialTime = SpatialFilter::matchingT(t0);
+  if (!_includeVelocityTracesInFluxTerm)
+  {
+    vector<double> zero(_spaceDim, 0.0);
+    if (_spaceDim == 2)
+      addInflowCondition(initialTime, Function::vectorize(u0[0], u0[1]));
+    else
+      addInflowCondition(initialTime, Function::vectorize(u0[0], u0[1], u0[2]));
+  }
+  else
+  {
+    for (int d=0; d<_spaceDim; d++)
+    {
+      VarPtr td_hat = this->tn_hat(d+1);
+      FunctionPtr n_t = Function::normalSpaceTime()->t();  // under usual circumstances, n_t = -1
+      _solution->bc()->addDirichlet(td_hat, initialTime, u0[d] * n_t);
+    }
+  }
+  
+  if (p0 != Teuchos::null)
+  {
+    MeshTopology* meshTopo = dynamic_cast<MeshTopology*>(_solution->mesh()->getTopology().get());
+    TEUCHOS_TEST_FOR_EXCEPTION(!meshTopo, std::invalid_argument, "For the present, StokesFormulation only supports true MeshTopologies for its Solution object");
+    meshTopo->applyTag(DIRICHLET_SET_TAG_NAME, INITIAL_CONDITION_TAG, meshTopo->getEntitySetInitialTime());
+    _solution->bc()->addDirichlet(p(), INITIAL_CONDITION_TAG, p0);
+  }
+}
+
+void StokesVGPFormulation::addZeroInitialCondition(double t0)
+{
+  vector<FunctionPtr> zero(_spaceDim, Function::zero());
+  addInitialCondition(t0, zero, Function::zero());
 }
 
 void StokesVGPFormulation::addZeroMeanPressureCondition()

@@ -6,6 +6,7 @@
 //
 //
 
+#include "EpetraExt_RowMatrixOut.h"
 #include "Teuchos_UnitTestHarness.hpp"
 
 #include "StokesVGPFormulation.h"
@@ -225,7 +226,8 @@ TEUCHOS_UNIT_TEST( StokesVGPFormulation, StreamFormulationConsistency )
     vector<double> x0(spaceDim,-1.0);
     MeshTopologyPtr spatialMeshTopo = MeshFactory::rectilinearMeshTopology(dimensions, elementCounts, x0);
     double t0 = 0.0, t1 = 0.1;
-    MeshTopologyPtr meshTopo = MeshFactory::spaceTimeMeshTopology(spatialMeshTopo, t0, t1);
+    int numTimeElements = 1;
+    MeshTopologyPtr meshTopo = MeshFactory::spaceTimeMeshTopology(spatialMeshTopo, t0, t1, numTimeElements);
     double Re = 1.0;
     int fieldPolyOrder = 3, delta_k = 1;
     
@@ -233,7 +235,7 @@ TEUCHOS_UNIT_TEST( StokesVGPFormulation, StreamFormulationConsistency )
     // if we project a steady solution onto the space-time mesh, we should have a zero residual
     // (would also be worth checking that an exactly-recoverable transient solution has zero residual)
     
-    bool useConformingTraces = false;
+    bool useConformingTraces = true;
     double mu = 1.0 / Re;
     StokesVGPFormulation form = StokesVGPFormulation::spaceTimeFormulation(spaceDim, mu, useConformingTraces);
     
@@ -548,4 +550,187 @@ TEUCHOS_UNIT_TEST( StokesVGPFormulation, SaveAndLoad )
 //    loadedForm.solution()->mesh()->pRefine(cellsToRefine);
 }
 
+  TEUCHOS_UNIT_TEST( StokesVGPFormulation, SpaceTime2D_PureDirichletSolve_Slow )
+  {
+    int spaceDim = 2;
+    double mu = 1.0;
+    bool useConformingTraces = true;
+    StokesVGPFormulation spaceTimeForm = StokesVGPFormulation::spaceTimeFormulation(spaceDim, mu, useConformingTraces);
+    
+    // build a 1 x 1 x T box, single element
+    MeshTopologyPtr spatialMeshTopo = MeshFactory::rectilinearMeshTopology({1.0,1.0}, {1,1});
+    double t_0 = 0.0;
+    double t_final = 1.0;
+    int numTimeElements = 1;
+    MeshTopologyPtr meshTopo = MeshFactory::spaceTimeMeshTopology(spatialMeshTopo, t_0, t_final, numTimeElements);
+
+    // choose exact solution that matches 0 at time 0
+    FunctionPtr t = Function::tn(1);
+//    FunctionPtr u1 = t * t;
+//    FunctionPtr u2 = t;
+//    FunctionPtr p = t;
+    
+    FunctionPtr u1 = t;
+    FunctionPtr u2 = Function::zero();
+    FunctionPtr p = Function::zero();
+    
+    FunctionPtr u = Function::vectorize(u1, u2);
+    
+    FunctionPtr f = spaceTimeForm.forcingFunction(u, p);
+    
+    int polyOrder = 2, delta_k = 1;
+    spaceTimeForm.initializeSolution(meshTopo, polyOrder, delta_k, f);
+    
+    SpatialFilterPtr spatialBoundary = SpatialFilter::allSpace();
+    
+    // just checking something
+//    cout << "Experimentally, using spatialBoundary = allSpace in test, just to see if that fixes things.\n";
+//    spatialBoundary = SpatialFilter::allSpace();
+    
+    spaceTimeForm.addInflowCondition(spatialBoundary, u);
+    spaceTimeForm.addZeroInitialCondition(t_0);
+    spaceTimeForm.addPointPressureCondition({0.0,0.0});
+    
+    spaceTimeForm.solve();
+    
+    FunctionPtr pSoln = spaceTimeForm.getPressureSolution();
+    FunctionPtr uSoln = spaceTimeForm.getVelocitySolution();
+    
+    double pSoln_mean = pSoln->integrate(spaceTimeForm.solution()->mesh());
+    // the true pSoln is one with zero average
+    pSoln = pSoln - pSoln_mean;
+    
+    double p_mean = p->integrate(spaceTimeForm.solution()->mesh()); // zero, for our present p
+    p = p - p_mean;
+    
+    double tol = 1e-12;
+    double pErr = (pSoln - p)->l2norm(spaceTimeForm.solution()->mesh());
+    double uErr = (uSoln - u)->l2norm(spaceTimeForm.solution()->mesh());
+    
+    TEUCHOS_TEST_COMPARE(pErr, <, tol, out, success);
+    TEUCHOS_TEST_COMPARE(uErr, <, tol, out, success);
+    
+    double energyError = spaceTimeForm.solution()->energyErrorTotal();
+    TEUCHOS_TEST_COMPARE(energyError, <, tol, out, success);
+    
+    {         // DEBUGGING:
+      {
+        SolutionPtr solution = spaceTimeForm.solution();
+        solution->initializeLHSVector();
+        solution->initializeStiffnessAndLoad();
+        solution->populateStiffnessAndLoad();
+        
+        Teuchos::RCP<Epetra_CrsMatrix> A = solution->getStiffnessMatrix();
+        string fileName = "/tmp/A.dat";
+        EpetraExt::RowMatrixToMatrixMarketFile(fileName.c_str(),*A, NULL, NULL, false);
+      }
+      cout << "bf:\n";
+      spaceTimeForm.bf()->printTrialTestInteractions();
+      
+      cout << "forcing function: " << f->displayString() << endl;
+      HDF5Exporter exporter(spaceTimeForm.solution()->mesh(),"StokesSpaceTimeForcingFunction","/tmp");
+      FunctionPtr f_padded = Function::vectorize(f->x(), f->y(), Function::zero());
+      exporter.exportFunction(f_padded, "forcing function", 0.0, 5);
+
+      HDF5Exporter solutionExporter(spaceTimeForm.solution()->mesh(),"StokesSpaceTimeSolution","/tmp");
+      // export the projected solution at "time" 0
+      solutionExporter.exportSolution(spaceTimeForm.solution(), 0.0, 5);
+
+      // solve, and export the solution at "time" 1
+      spaceTimeForm.solve();
+      solutionExporter.exportSolution(spaceTimeForm.solution(), 1.0, 5);
+      cout << "Exported solution.\n";
+    }
+  }
+  
+  TEUCHOS_UNIT_TEST( StokesVGPFormulation, SpaceTime2D_FreeStreamSolve_Slow )
+  {
+    // try a constant-velocity horizontal flow, with inflow conditions on the left, outflow conditions on right and top/bottom
+    
+    int spaceDim = 2;
+    double mu = 1.0;
+    bool useConformingTraces = true;
+    StokesVGPFormulation spaceTimeForm = StokesVGPFormulation::spaceTimeFormulation(spaceDim, mu, useConformingTraces);
+    
+    // build a 1 x 1 x T box, single element
+    MeshTopologyPtr spatialMeshTopo = MeshFactory::rectilinearMeshTopology({1.0,1.0}, {1,1});
+    double t_0 = 0.0;
+    double t_final = 1.0;
+    int numTimeElements = 1;
+    MeshTopologyPtr meshTopo = MeshFactory::spaceTimeMeshTopology(spatialMeshTopo, t_0, t_final, numTimeElements);
+    
+    // choose exact solution that matches 0 at time 0
+    FunctionPtr t = Function::tn(1);
+    //    FunctionPtr u1 = t * t;
+    //    FunctionPtr u2 = t;
+    //    FunctionPtr p = t;
+    
+    FunctionPtr u1 = Function::constant(1.0);
+    FunctionPtr u2 = Function::zero();
+    FunctionPtr p = Function::zero();
+    
+    FunctionPtr u = Function::vectorize(u1, u2);
+    
+    FunctionPtr f = spaceTimeForm.forcingFunction(u, p);
+    
+    int polyOrder = 2, delta_k = 1;
+    spaceTimeForm.initializeSolution(meshTopo, polyOrder, delta_k, f);
+    
+    SpatialFilterPtr outflowBoundary = SpatialFilter::matchingX(1.0) | SpatialFilter::matchingY(0) | SpatialFilter::matchingY(1);
+    
+    spaceTimeForm.addOutflowCondition(outflowBoundary, false);
+    spaceTimeForm.addInflowCondition(SpatialFilter::matchingX(0), u);
+    spaceTimeForm.addInitialCondition(t_0, {u1,u2}, Function::zero());
+    
+    spaceTimeForm.solve();
+    
+    FunctionPtr pSoln = spaceTimeForm.getPressureSolution();
+    FunctionPtr uSoln = spaceTimeForm.getVelocitySolution();
+    
+    double pSoln_mean = pSoln->integrate(spaceTimeForm.solution()->mesh());
+    // the true pSoln is one with zero average
+    pSoln = pSoln - pSoln_mean;
+    
+    double p_mean = p->integrate(spaceTimeForm.solution()->mesh()); // zero, for our present p
+    p = p - p_mean;
+    
+    double tol = 1e-11;
+    double pErr = (pSoln - p)->l2norm(spaceTimeForm.solution()->mesh());
+    double uErr = (uSoln - u)->l2norm(spaceTimeForm.solution()->mesh());
+    
+    TEUCHOS_TEST_COMPARE(pErr, <, tol, out, success);
+    TEUCHOS_TEST_COMPARE(uErr, <, tol, out, success);
+    
+    double energyError = spaceTimeForm.solution()->energyErrorTotal();
+    TEUCHOS_TEST_COMPARE(energyError, <, tol, out, success);
+    
+    {         // DEBUGGING:
+      {
+        SolutionPtr solution = spaceTimeForm.solution();
+        solution->initializeLHSVector();
+        solution->initializeStiffnessAndLoad();
+        solution->populateStiffnessAndLoad();
+        
+        Teuchos::RCP<Epetra_CrsMatrix> A = solution->getStiffnessMatrix();
+        string fileName = "/tmp/A.dat";
+        EpetraExt::RowMatrixToMatrixMarketFile(fileName.c_str(),*A, NULL, NULL, false);
+      }
+      cout << "bf:\n";
+      spaceTimeForm.bf()->printTrialTestInteractions();
+      
+      cout << "forcing function: " << f->displayString() << endl;
+      HDF5Exporter exporter(spaceTimeForm.solution()->mesh(),"StokesSpaceTimeForcingFunction","/tmp");
+      FunctionPtr f_padded = Function::vectorize(f->x(), f->y(), Function::zero());
+      exporter.exportFunction(f_padded, "forcing function", 0.0, 5);
+      
+      HDF5Exporter solutionExporter(spaceTimeForm.solution()->mesh(),"StokesSpaceTimeSolution","/tmp");
+      // export the projected solution at "time" 0
+      solutionExporter.exportSolution(spaceTimeForm.solution(), 0.0, 5);
+      
+      // solve, and export the solution at "time" 1
+      spaceTimeForm.solve();
+      solutionExporter.exportSolution(spaceTimeForm.solution(), 1.0, 5);
+      cout << "Exported solution.\n";
+    }
+  }
 } // namespace

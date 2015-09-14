@@ -88,12 +88,16 @@ public:
 
   // ! sets an inflow velocity boundary condition; u should be a vector-valued function.
   void addInflowCondition(SpatialFilterPtr inflowRegion, TFunctionPtr<double> u);
+
+  // ! Sets an initial condition for space-time.  u0 should have a number of components equal to the spatial dimension.
+  // ! If a null pressure is provided (the default), no initial condition will be imposed on the pressure.
+  void addInitialCondition(double t0, vector<FunctionPtr> u0, FunctionPtr p0 = Teuchos::null);
   
   // ! sets a zero initial condition for space-time.
   void addZeroInitialCondition(double t0);
 
-  // ! sets an outflow velocity boundary condition
-  void addOutflowCondition(SpatialFilterPtr outflowRegion);
+  // ! sets an outflow velocity boundary condition.  If usePhysicalTractions is true, imposes zero-traction outflow conditions using penalty constraints.  Otherwise, imposes zero values on the "traction" arising from integration by parts on the (pI - sigma) term.
+  void addOutflowCondition(SpatialFilterPtr outflowRegion, bool usePhysicalTractions);
 
   // ! set a pressure condition at a point
   void addPointPressureCondition(vector<double> point = vector<double>());
