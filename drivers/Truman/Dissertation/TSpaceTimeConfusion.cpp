@@ -116,7 +116,7 @@ int main(int argc, char *argv[])
   if (spaceDim == 1)
     u_steady = Function::constant(1)-exp1lambdax;
   if (spaceDim == 2)
-    u_steady = 0.1*(exps1x-expr1x)/(r1*exp(-r1)-s1*exp(-s1))*cospiy;
+    u_steady = 10*epsilon*(exps1x-expr1x)/(r1*exp(-r1)-s1*exp(-s1))*cospiy;
 
   FunctionPtr u_exact = u_steady + 4*explt*(explambda1x-explambda2x);
   FunctionPtr sigma_exact = epsilon*u_exact->grad();
@@ -259,7 +259,7 @@ int main(int argc, char *argv[])
   else
     dataFileLocation = outputDir+"/"+solnName.str()+".txt";
   ofstream dataFile(dataFileLocation);
-  dataFile << "ref\t " << "elements\t " << "dofs\t " << "energy\t " << "l2\t " << "solvetime\t" << "iterations\t " << endl;
+  dataFile << "ref\t " << "elements\t " << "dofs\t " << "energy\t " << "l2\t " << "solvetime\t" << "elapsed\t" << "iterations\t " << endl;
   for (int refIndex=0; refIndex <= numRefs; refIndex++)
   {
     solverTime->start(true);
@@ -325,7 +325,8 @@ int main(int argc, char *argv[])
         sigma2_l2 = sigma2_sqr->integrate(mesh, 10);
       else
         sigma2_l2 = 0;
-      l2Error = sqrt(u_l2+sigma1_l2+sigma2_l2);
+      // l2Error = sqrt(u_l2+sigma1_l2+sigma2_l2);
+      l2Error = sqrt(u_l2);
     }
     if (commRank == 0)
     {
