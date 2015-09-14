@@ -1494,7 +1494,7 @@ void TSolution<Scalar>::imposeBCs()
   //  cout << "rank " << rank << " has " << myGlobalIndicesSet.size() << " locally-owned dof indices.\n";
   Epetra_Map partMap = getPartitionMap();
 
-  _mesh->boundary().bcsToImpose(bcGlobalIndices,bcGlobalValues,*(_bc.get()), myGlobalIndicesSet, _dofInterpreter.get(), &partMap);
+  _mesh->boundary().bcsToImpose(bcGlobalIndices,bcGlobalValues,*(_bc.get()), myGlobalIndicesSet, _dofInterpreter.get());
   int numBCs = bcGlobalIndices.size();
 
   Intrepid::FieldContainer<GlobalIndexTypeToCast> bcGlobalIndicesCast;

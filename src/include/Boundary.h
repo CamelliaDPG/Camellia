@@ -63,10 +63,10 @@ public:
   template <typename Scalar>
   void bcsToImpose(Intrepid::FieldContainer<GlobalIndexType> &globalIndices, Intrepid::FieldContainer<Scalar> &globalValues,
                    TBC<Scalar> &bc, std::set<GlobalIndexType> &globalIndexFilter,
-                   DofInterpreter* dofInterpreter, const Epetra_Map *globalDofMap);
+                   DofInterpreter* dofInterpreter);
   template <typename Scalar>
   void bcsToImpose(Intrepid::FieldContainer<GlobalIndexType> &globalIndices, Intrepid::FieldContainer<Scalar> &globalValues, TBC<Scalar> &bc,
-                   DofInterpreter* dofInterpreter, const Epetra_Map *globalDofMap);
+                   DofInterpreter* dofInterpreter);
   //! Determine values to impose on a single cell.
   /*!
    \param globalDofIndicesAndValues - (Out) keys are the global degree-of-freedom indices, values are their coefficients (weights).
@@ -74,21 +74,10 @@ public:
    \param cellID - (In) the cell on which boundary conditions are requested
    \param singletons - (In) "point" boundary conditions (e.g., a point condition on a pressure variable); pairs are (trialID, vertexOrdinalInCell).
    \param dofInterpreter - (In) the DofInterpreter
-   \param globalDofMap  - (In) the Epetra_Map; may be NULL
    */
   template <typename Scalar>
   void bcsToImpose(std::map<GlobalIndexType,Scalar> &globalDofIndicesAndValues, TBC<Scalar> &bc, GlobalIndexType cellID,
-                   std::set<std::pair<int, unsigned>> &singletons, DofInterpreter* dofInterpreter, const Epetra_Map *globalDofMap);
-  template <typename Scalar>
-  void bcsToImpose2(Intrepid::FieldContainer<GlobalIndexType> &globalIndices, Intrepid::FieldContainer<Scalar> &globalValues,
-                    TBC<Scalar> &bc, std::set<GlobalIndexType> &globalIndexFilter,
-                    DofInterpreter* dofInterpreter, const MapPtr globalDofMap);
-  template <typename Scalar>
-  void bcsToImpose2(Intrepid::FieldContainer<GlobalIndexType> &globalIndices, Intrepid::FieldContainer<Scalar> &globalValues, TBC<Scalar> &bc,
-                    DofInterpreter* dofInterpreter, const MapPtr globalDofMap);
-  template <typename Scalar>
-  void bcsToImpose2(std::map<GlobalIndexType,Scalar> &globalDofIndicesAndValues, TBC<Scalar> &bc, GlobalIndexType cellID,
-                    std::set<std::pair<int, unsigned>> &singletons, DofInterpreter* dofInterpreter, const MapPtr globalDofMap);
+                   std::set<std::pair<int, unsigned>> &singletons, DofInterpreter* dofInterpreter);
   void buildLookupTables();
 };
 }
