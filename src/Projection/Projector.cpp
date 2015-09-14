@@ -7,6 +7,7 @@
 #include "BasisSumFunction.h"
 #include "CamelliaCellTools.h"
 #include "Function.h"
+#include "SerialDenseWrapper.h"
 #include "VarFactory.h"
 
 #include <stdlib.h>
@@ -20,13 +21,6 @@
 #include "Intrepid_FieldContainer.hpp"
 // Teuchos includes
 #include "Teuchos_RCP.hpp"
-
-#include <Epetra_SerialDenseVector.h>
-#include <Epetra_SerialDenseMatrix.h>
-#include <Epetra_LAPACK.h>
-#include "Epetra_SerialDenseMatrix.h"
-#include "Epetra_SerialDenseSolver.h"
-#include "Epetra_DataAccess.h"
 
 using namespace Intrepid;
 using namespace Camellia;
@@ -141,58 +135,28 @@ void Projector<Scalar>::projectFunctionOntoBasis(FieldContainer<Scalar> &basisCo
 
   for (int cellIndex=0; cellIndex<numCells; cellIndex++)
   {
-
-    // TODO: rewrite to take advantage of SerialDenseWrapper...
-    Epetra_SerialDenseSolver solver;
-
-    Epetra_SerialDenseMatrix A(Copy,
-                               &gramMatrix(cellIndex,0,0),
-                               gramMatrix.dimension(2),
-                               gramMatrix.dimension(2),
-                               gramMatrix.dimension(1)); // stride -- fc stores in row-major order (a.o.t. SDM)
-
-    Epetra_SerialDenseVector b(Copy,
-                               &ipVector(cellIndex,0),
-                               ipVector.dimension(1));
-
-    Epetra_SerialDenseVector x(gramMatrix.dimension(1));
-
-    solver.SetMatrix(A);
-    int info = solver.SetVectors(x,b);
-    if (info!=0)
+    Teuchos::Array<int> localIPDim(2);
+    localIPDim[0] = gramMatrix.dimension(1);
+    localIPDim[1] = gramMatrix.dimension(2);
+    Teuchos::Array<int> rhsDim(2);
+    rhsDim[0] = ipVector.dimension(1);
+    rhsDim[1] = 1;
+    
+    FieldContainer<Scalar> cellIPMatrix(localIPDim, &gramMatrix(cellIndex,0,0));
+    FieldContainer<Scalar> cellRHS(rhsDim, &ipVector(cellIndex,0));
+    FieldContainer<Scalar> x(gramMatrix.dimension(1),1); // 1: number of RHSes in our current solve
+    int result = SerialDenseWrapper::solveSPDSystemMultipleRHS(x, cellIPMatrix, cellRHS);
+    if (result != 0)
     {
-      cout << "projectFunctionOntoBasis: failed to SetVectors with error " << info << endl;
+      cout << "WARNING: in Projector, SerialDenseWrapper::solveSPDSystemMultipleRHS returned result code " << result << endl;
     }
-
-    bool equilibrated = false;
-    if (solver.ShouldEquilibrate())
-    {
-      solver.EquilibrateMatrix();
-      solver.EquilibrateRHS();
-      equilibrated = true;
-    }
-
-    info = solver.Solve();
-    if (info!=0)
-    {
-      cout << "projectFunctionOntoBasis: failed to solve with error " << info << endl;
-    }
-
-    if (equilibrated)
-    {
-      int successLocal = solver.UnequilibrateLHS();
-      if (successLocal != 0)
-      {
-        cout << "projection: unequilibration FAILED with error: " << successLocal << endl;
-      }
-    }
-
+    
     basisCoefficients.resize(numCells,cardinality);
     for (int i=0; i<cardinality; i++)
     {
       if (fieldIndicesToSkip.size()==0)
       {
-        basisCoefficients(cellIndex,i) = x(i);
+        basisCoefficients(cellIndex,i) = x(i,0);
       }
       else
       {
@@ -203,11 +167,10 @@ void Projector<Scalar>::projectFunctionOntoBasis(FieldContainer<Scalar> &basisCo
         }
         else
         {
-          basisCoefficients(cellIndex,i) = x(i_filtered);
+          basisCoefficients(cellIndex,i) = x(i_filtered,0);
         }
       }
     }
-
   }
 }
 

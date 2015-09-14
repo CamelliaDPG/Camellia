@@ -1,13 +1,16 @@
 #include "Teuchos_GlobalMPISession.hpp"
 #include "NavierStokesVGPFormulation.h"
 #include "Function.h"
+#include "GMGSolver.h"
 #include "MeshFactory.h"
+#include "SimpleFunction.h"
+#include "SuperLUDistSolver.h"
 #include "HDF5Exporter.h"
 
 using namespace Camellia;
 
 // this Function will work for both 2D and 3D cavity flow top BC (matching y = 1)
-class RampBoundaryFunction_U1 : public SimpleFunction
+class RampBoundaryFunction_U1 : public SimpleFunction<double>
 {
   double _eps; // ramp width
 public:
@@ -71,14 +74,14 @@ public:
   }
 };
 
-class TimeRamp : public SimpleFunction
+class TimeRamp : public SimpleFunction<double>
 {
   FunctionPtr _time;
   double _timeScale;
   double getTimeValue()
   {
     ParameterFunction* timeParamFxn = dynamic_cast<ParameterFunction*>(_time.get());
-    SimpleFunction* timeFxn = dynamic_cast<SimpleFunction*>(timeParamFxn->getValue().get());
+    SimpleFunction<double>* timeFxn = dynamic_cast<SimpleFunction<double>*>(timeParamFxn->getValue().get());
     return timeFxn->value(0);
   }
 public:
@@ -103,6 +106,36 @@ public:
 
 using namespace std;
 
+void setDirectSolver(NavierStokesVGPFormulation &form)
+{
+  Teuchos::RCP<Solver> coarseSolver = Solver::getDirectSolver(true);
+#if defined(HAVE_AMESOS_SUPERLUDIST) || defined(HAVE_AMESOS2_SUPERLUDIST)
+  SuperLUDistSolver* superLUSolver = dynamic_cast<SuperLUDistSolver*>(coarseSolver.get());
+  if (superLUSolver)
+  {
+    superLUSolver->setRunSilent(true);
+  }
+#endif
+  form.setSolver(coarseSolver);
+}
+
+void setGMGSolver(NavierStokesVGPFormulation &form, vector<MeshPtr> &meshesCoarseToFine,
+                                     int cgMaxIters, double cgTol, bool useCondensedSolve)
+{
+  Teuchos::RCP<Solver> coarseSolver = Solver::getDirectSolver(true);
+  Teuchos::RCP<GMGSolver> gmgSolver = Teuchos::rcp( new GMGSolver(form.solutionIncrement(), meshesCoarseToFine, cgMaxIters, cgTol,
+                                                                  GMGOperator::W_CYCLE, coarseSolver, useCondensedSolve) );
+  gmgSolver->setAztecOutput(1);
+#if defined(HAVE_AMESOS_SUPERLUDIST) || defined(HAVE_AMESOS2_SUPERLUDIST)
+  SuperLUDistSolver* superLUSolver = dynamic_cast<SuperLUDistSolver*>(coarseSolver.get());
+  if (superLUSolver)
+  {
+    superLUSolver->setRunSilent(true);
+  }
+#endif
+  form.setSolver(gmgSolver);
+}
+
 int main(int argc, char *argv[])
 {
   Teuchos::GlobalMPISession mpiSession(&argc, &argv); // initialize MPI
@@ -112,20 +145,30 @@ int main(int argc, char *argv[])
 
   double eps = 1.0 / 64.0;
 
-  bool useConformingTraces = true;
-  double Re = 1000.0;
+  bool useDirectSolver = false; // something is broken when this is true
+//  bool useConformingTraces = false;
+  bool useCondensedSolve = false;
+  double Re = 100.0;
 
+  int meshWidth = 1;
   vector<double> dims(spaceDim,1.0);
-  vector<int> numElements(spaceDim,2);
+  vector<int> numElements(spaceDim,meshWidth);
   vector<double> x0(spaceDim,0.0);
 
   MeshTopologyPtr meshTopo = MeshFactory::rectilinearMeshTopology(dims,numElements,x0);
 
-  int polyOrder = 3, delta_k = 1;
+  int polyOrder = 1, delta_k = 2;
 
-  NavierStokesVGPFormulation form(meshTopo, Re, polyOrder);
-
+  bool useConformingTraces = true;
+  NavierStokesVGPFormulation form = NavierStokesVGPFormulation::steadyFormulation(spaceDim, Re, useConformingTraces, meshTopo, polyOrder, delta_k);
+  form.solutionIncrement()->setUseCondensedSolve(useCondensedSolve);
   form.addZeroMeanPressureCondition();
+  
+  int polyOrderCoarse = 0;
+  double cgTol = 1e-6;
+  int cgMaxIters = 2000;
+  MeshPtr mesh = form.solutionIncrement()->mesh();
+  vector<MeshPtr> meshesCoarseToFine = GMGSolver::meshesForMultigrid(mesh, polyOrderCoarse, delta_k);
 
   VarPtr u1_hat = form.u_hat(1), u2_hat = form.u_hat(2);
 
@@ -147,25 +190,31 @@ int main(int argc, char *argv[])
   form.addInflowCondition(topBoundary, u_topRamp);
 
   double nonlinearThreshold = 1e-3;
-  double maxNonlinearIterations = 10;
+  int maxNonlinearIterations = 1;
+  int maxRefinements = 1;
   double l2NormOfIncrement = 1.0;
   int stepNumber = 0;
+  
+  if (useDirectSolver)
+    setDirectSolver(form);
+  else
+    setGMGSolver(form, meshesCoarseToFine, cgMaxIters, cgTol, useCondensedSolve);
+  
   while ((l2NormOfIncrement > nonlinearThreshold) && (stepNumber < maxNonlinearIterations))
   {
     form.solveAndAccumulate();
     l2NormOfIncrement = form.L2NormSolutionIncrement();
     stepNumber++;
-    cout << "L^2 norm of increment: " << l2NormOfIncrement << endl;
+    if (rank==0) cout << "L^2 norm of increment: " << l2NormOfIncrement << endl;
   }
 
-  MeshPtr mesh = form.solution()->mesh();
   string outputDir = "/tmp";
   HDF5Exporter exporter(mesh, "navierStokesInitialSolution", outputDir);
   exporter.exportSolution(form.solution());
 
   double energyError = form.solutionIncrement()->energyErrorTotal();
   int globalDofs = mesh->globalDofCount();
-  int activeElements = mesh->getTopology()->activeCellCount();
+  int activeElements = mesh->getTopology()->getActiveCellIndices().size();
   if (rank==0) cout << "Initial energy error: " << energyError;
   if (rank==0) cout << " (mesh has " << activeElements << " elements and " << globalDofs << " global dofs)." << endl;
 
@@ -175,14 +224,22 @@ int main(int argc, char *argv[])
   {
     refNumber++;
     form.refine();
+    
+    meshesCoarseToFine = GMGSolver::meshesForMultigrid(mesh, polyOrderCoarse, delta_k);
+    
     double l2NormOfIncrement = 1.0;
     int stepNumber = 0;
     while ((l2NormOfIncrement > nonlinearThreshold) && (stepNumber < maxNonlinearIterations))
     {
+      if (!useDirectSolver)
+        setGMGSolver(form, meshesCoarseToFine, cgMaxIters, cgTol, useCondensedSolve);
+      else
+        setDirectSolver(form);
+      
       form.solveAndAccumulate();
       l2NormOfIncrement = form.L2NormSolutionIncrement();
       stepNumber++;
-      cout << "Refinement " << refNumber << ", L^2 norm of increment: " << l2NormOfIncrement << endl;
+      if (rank==0) cout << "Refinement " << refNumber << ", L^2 norm of increment: " << l2NormOfIncrement << endl;
     }
 
     ostringstream exportName;
@@ -192,19 +249,22 @@ int main(int argc, char *argv[])
 
     energyError = form.solutionIncrement()->energyErrorTotal();
     globalDofs = mesh->globalDofCount();
-    activeElements = mesh->getTopology()->activeCellCount();
+    activeElements = mesh->getTopology()->getActiveCellIndices().size();
     if (rank==0) cout << "Energy error for refinement " << refNumber << ": " << energyError;
     if (rank==0) cout << " (mesh has " << activeElements << " elements and " << globalDofs << " global dofs)." << endl;
   }
-  while (energyError > tol);
+  while ((energyError > tol) && (refNumber < maxRefinements));
 
   FunctionPtr u1_steady = Function::solution(form.u(1), form.solution());
-  cout << "u1(0.5, 0.5) = " << u1_steady->evaluate(0.5, 0.5) << endl;
+  if (rank==0) cout << "u1(0.5, 0.5) = " << u1_steady->evaluate(0.5, 0.5) << endl;
 
   // now solve for the stream function on the fine mesh:
-  form.streamSolution()->solve();
-  HDF5Exporter steadyStreamExporter(form.streamSolution()->mesh(), "navierStokesSteadyCavityFlowStreamSolution", outputDir);
-  steadyStreamExporter.exportSolution(form.streamSolution());
+  if (spaceDim == 2)
+  {
+    form.streamSolution()->solve();
+    HDF5Exporter steadyStreamExporter(form.streamSolution()->mesh(), "navierStokesSteadyCavityFlowStreamSolution", outputDir);
+    steadyStreamExporter.exportSolution(form.streamSolution());
+  }
 
 //  /*   Now that we have a fine mesh, try the same problem, but transient, starting with a zero initial
 //   *   state, and with boundary conditions that "ramp up" in time (and which also are zero at time 0).

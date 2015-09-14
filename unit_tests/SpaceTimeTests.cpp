@@ -330,6 +330,37 @@ TEUCHOS_UNIT_TEST( SpaceTime, IntegrateSpaceVaryingFunctionSides_3D )
   int spaceDim = 3;
   testIntegrateSpaceVaryingFunctionSides(spaceDim, out, success);
 }
+
+  TEUCHOS_UNIT_TEST( SpaceTime, TimeFunctionEqualsLastDimension ) // tn == zn in 2D
+  {
+    for (int spaceDim = 1; spaceDim < 3; spaceDim++)
+    {
+      int H1Order = 2;
+      MeshPtr mesh = singleElementSpaceTimeMesh(spaceDim, H1Order);
+
+      FunctionPtr t = Function::tn(1);
+      FunctionPtr f;
+      if (spaceDim == 1) {
+        f = Function::yn(1);
+      }
+      else
+      {
+        f = Function::zn(1);
+      }
+      
+      double tol = 1e-15;
+
+      // volume first:
+      FunctionPtr volumeDiff = f - t;
+      double volumeErr = volumeDiff->l2norm(mesh);
+      TEUCHOS_TEST_COMPARE(volumeErr, <, tol, out, success);
+      
+      // boundary (skeleton):
+      FunctionPtr boundaryDiff = (f - t) * Function::meshSkeletonCharacteristic();
+      double boundaryErr = boundaryDiff->l2norm(mesh);
+      TEUCHOS_TEST_COMPARE(boundaryErr, <, tol, out, success);
+    }
+  }
   
   TEUCHOS_UNIT_TEST( SpaceTime, UnitNormalTime_1D )
   {
@@ -367,5 +398,29 @@ TEUCHOS_UNIT_TEST( SpaceTime, IntegrateSpaceVaryingFunctionSides_3D )
     double tol = 1e-15;
     TEUCHOS_TEST_FLOATING_EQUALITY(value_t0_actual, value_t0_expected, tol, out, success);
     TEUCHOS_TEST_FLOATING_EQUALITY(value_t1_actual, value_t1_expected, tol, out, success);
+    
+    // next, try spatial side ordinals -- expect 0 values here
+    unsigned sideOrdinal_x0 = cell->topology()->getSpatialSideOrdinal(0);
+    unsigned sideOrdinal_x1 = cell->topology()->getSpatialSideOrdinal(1);
+    
+    BasisCachePtr sideCache_x0 = basisCache->getSideBasisCache(sideOrdinal_x0);
+    BasisCachePtr sideCache_x1 = basisCache->getSideBasisCache(sideOrdinal_x1);
+    
+    sideCache_x0->setRefCellPoints(refPoint);
+    sideCache_x1->setRefCellPoints(refPoint);
+    
+    Intrepid::FieldContainer<double> values_x0(numCells,numPoints);
+    n_spaceTime->t()->values(values_x0, sideCache_x0);
+    Intrepid::FieldContainer<double> values_x1(numCells,numPoints);
+    n_spaceTime->t()->values(values_x1, sideCache_x1);
+    
+    double value_x0_actual = values_x0[0];
+    double value_x1_actual = values_x1[0];
+    
+    double value_x0_expected = 0.0;
+    double value_x1_expected = 0.0;
+    
+    TEUCHOS_TEST_FLOATING_EQUALITY(value_x0_actual, value_x0_expected, tol, out, success);
+    TEUCHOS_TEST_FLOATING_EQUALITY(value_x1_actual, value_x1_expected, tol, out, success);
   }
 } // namespace

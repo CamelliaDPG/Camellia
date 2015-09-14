@@ -159,7 +159,7 @@ class IncompressibleManufacturedSolution : public AnalyticalIncompressibleProble
       _sigma1_exact = 1./Re*_u1_exact->grad();
       _sigma2_exact = 1./Re*_u2_exact->grad();
       _p_exact = y * y * y;
-      forcingFunction = NavierStokesVGPFormulation::forcingFunction(2, Re, Function::vectorize(_u1_exact,_u2_exact), _p_exact);
+      forcingFunction = NavierStokesVGPFormulation::forcingFunctionSteady(2, Re, Function::vectorize(_u1_exact,_u2_exact), _p_exact);
 
       _x0.push_back(-.5);
       _x0.push_back(-.5);
