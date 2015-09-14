@@ -109,6 +109,9 @@ public:
   BasisPtr getConformingBasis( int polyOrder, CellTopoPtr cellTopo, FSE fs, int temporalPolyOrder = -1,
                                FSE functionSpaceForTemporalTopology = Camellia::FUNCTION_SPACE_HVOL);
 
+  // ! For L^2 bases that wrap an H^1-conforming basis, returns the H^1-conforming basis.
+  BasisPtr getContinuousBasis( BasisPtr basis );
+  
   BasisPtr getNodalBasisForCellTopology(CellTopoPtr cellTopo);
   BasisPtr getNodalBasisForCellTopology(unsigned cellTopoKey);
 

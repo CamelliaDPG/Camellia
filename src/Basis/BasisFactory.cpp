@@ -516,10 +516,17 @@ BasisPtr BasisFactory::getConformingBasis( int polyOrder, unsigned cellTopoKey, 
   }
 
   int spaceDim;
+  bool threeD = (cellTopoKey == shards::Hexahedron<8>::key) || (cellTopoKey == shards::Tetrahedron<4>::key);
   bool twoD = (cellTopoKey == shards::Quadrilateral<4>::key) || (cellTopoKey == shards::Triangle<3>::key);
   bool oneD = (cellTopoKey == shards::Line<2>::key);
   bool zeroD = (cellTopoKey == shards::Node::key);
 
+  if (threeD)
+  {
+    // for now, we don't have any Lobatto, etc. implemented in 3D, so we just return whatever getBasis returns.
+    return getBasis(polyOrder, cellTopoKey, fs);
+  }
+  
   if (zeroD)
   {
     spaceDim = 0;
@@ -728,6 +735,82 @@ BasisPtr BasisFactory::getConformingBasis( int polyOrder, unsigned cellTopoKey, 
   _functionSpaces[basis.get()] = fs;
   _cellTopoKeys[basis.get()] = cellTopoKey;
   return basis;
+}
+
+BasisPtr BasisFactory::getContinuousBasis(BasisPtr basis)
+{
+  TensorBasis<>* tensorBasis = dynamic_cast<TensorBasis<>*>(basis.get());
+  
+  bool spaceTime;
+  if (tensorBasis)
+    spaceTime = true;
+  else
+    spaceTime = false;
+  
+  BasisPtr spatialBasis, temporalBasis, spaceTimeBasis, basisForImposition;
+  if (!spaceTime)
+  {
+    spatialBasis = basis;
+  }
+  else
+  {
+    spaceTimeBasis = basis;
+    
+    if (tensorBasis)
+    {
+      spatialBasis = tensorBasis->getSpatialBasis();
+      temporalBasis = tensorBasis->getTemporalBasis();
+    }
+  }
+  bool constantSpatialBasis = false;
+  // upgrade bases to continuous ones of the same cardinality, if they are discontinuous.
+  if (spatialBasis->getDegree() == 0)
+  {
+    constantSpatialBasis = true;
+  }
+  else if ((spatialBasis->functionSpace() == Camellia::FUNCTION_SPACE_HVOL) ||
+           (spatialBasis->functionSpace() == Camellia::FUNCTION_SPACE_HVOL_DISC))
+  {
+    spatialBasis = getBasis(spatialBasis->getDegree(), spatialBasis->domainTopology(), Camellia::FUNCTION_SPACE_HGRAD);
+  }
+  else if (Camellia::functionSpaceIsDiscontinuous(spatialBasis->functionSpace()))
+  {
+    Camellia::EFunctionSpace fsContinuous = Camellia::continuousSpaceForDiscontinuous((spatialBasis->functionSpace()));
+    spatialBasis = getBasis(spatialBasis->getDegree(), spatialBasis->domainTopology(), fsContinuous,
+                                                          Camellia::FUNCTION_SPACE_HGRAD);
+  }
+  if (temporalBasis.get())
+  {
+    if ((temporalBasis->functionSpace() == Camellia::FUNCTION_SPACE_HVOL) ||
+        (temporalBasis->functionSpace() == Camellia::FUNCTION_SPACE_HVOL_DISC))
+    {
+      temporalBasis = getBasis(temporalBasis->getDegree(), temporalBasis->domainTopology(), Camellia::FUNCTION_SPACE_HGRAD);
+    }
+    else if (Camellia::functionSpaceIsDiscontinuous(temporalBasis->functionSpace()))
+    {
+      Camellia::EFunctionSpace fsContinuous = Camellia::continuousSpaceForDiscontinuous((temporalBasis->functionSpace()));
+      temporalBasis = getBasis(temporalBasis->getDegree(), temporalBasis->domainTopology(), fsContinuous,
+                                                             Camellia::FUNCTION_SPACE_HGRAD);
+    }
+  }
+  if (spaceTime)
+  {
+    if (constantSpatialBasis)
+    { // then use the original basis for imposition
+      basisForImposition = spaceTimeBasis;
+    }
+    else
+    {
+      vector<int> H1Orders = {spatialBasis->getDegree(),temporalBasis->getDegree()};
+      spaceTimeBasis = getBasis(H1Orders, spaceTimeBasis->domainTopology(), spatialBasis->functionSpace(), temporalBasis->functionSpace());
+      basisForImposition = spaceTimeBasis;
+    }
+  }
+  else
+  {
+    basisForImposition = spatialBasis;
+  }
+  return basisForImposition;
 }
 
 MultiBasisPtr BasisFactory::getMultiBasis(vector< BasisPtr > &bases)
