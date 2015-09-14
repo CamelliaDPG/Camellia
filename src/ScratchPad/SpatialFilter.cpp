@@ -96,10 +96,12 @@ class SpatialFilterMatchingT : public SpatialFilter
 {
   double _tol;
   double _tToMatch;
+  bool _matchSpatialSides;
 public:
-  SpatialFilterMatchingT(double tToMatch, double tol=1e-14)
+  SpatialFilterMatchingT(double tToMatch, bool matchSpatialSides, double tol=1e-14)
   {
     _tToMatch = tToMatch;
+    _matchSpatialSides = matchSpatialSides;
     _tol = tol;
   }
   bool matchesPoint(double x, double t)
@@ -134,6 +136,14 @@ public:
     {
       return false;
     }
+  }
+  bool matchesSpatialSides()
+  {
+    return _matchSpatialSides;
+  }
+  bool matchesTemporalSides()
+  {
+    return true;
   }
 };
 
@@ -299,6 +309,16 @@ public:
   }
 };
 
+bool SpatialFilter::matchesSpatialSides()
+{
+  return true;
+}
+
+bool SpatialFilter::matchesTemporalSides()
+{
+  return false;
+}
+
 bool SpatialFilter::matchesPoint(double x)
 {
   cout << "matchesPoint(x) unimplemented.\n";
@@ -362,6 +382,20 @@ bool SpatialFilter::matchesPoints(FieldContainer<bool> &pointsMatch, BasisCacheP
   TEUCHOS_TEST_FOR_EXCEPTION(spaceDim > 3, std::invalid_argument, "matchesPoints supports 1D, 2D, and 3D only.");
   pointsMatch.initialize(false);
   bool somePointMatches = false;
+  
+  if (basisCache->isSideCache())
+  {
+    // then check whether we have space-time cell topology
+    // if so, make sure that the side type (temporal/spatial) is one we match
+    if (basisCache->cellTopologyIsSpaceTime())
+    {
+      int sideOrdinal = basisCache->getSideIndex();
+      int sideIsSpatial = basisCache->cellTopology()->sideIsSpatial(sideOrdinal);
+      if (!matchesSpatialSides() && sideIsSpatial) return false; // no match
+      if (!matchesTemporalSides() && !sideIsSpatial) return false; // no match
+    }
+  }
+  
   for (int cellIndex=0; cellIndex<numCells; cellIndex++)
   {
     for (int ptIndex=0; ptIndex<numPoints; ptIndex++)
@@ -441,9 +475,9 @@ SpatialFilterPtr SpatialFilter::matchingZ(double z)
   return Teuchos::rcp( new SpatialFilterMatchingZ(z) );
 }
 
-SpatialFilterPtr SpatialFilter::matchingT(double t)
+SpatialFilterPtr SpatialFilter::matchingT(double t, bool matchSpatialSides)
 {
-  return Teuchos::rcp( new SpatialFilterMatchingT(t) );
+  return Teuchos::rcp( new SpatialFilterMatchingT(t, matchSpatialSides) );
 }
 
 SpatialFilterPtr SpatialFilter::lessThanX(double x)
@@ -536,6 +570,16 @@ bool SpatialFilterLogicalOr::matchesPoints(FieldContainer<bool> &pointsMatch, Ba
   }
 }
 
+bool SpatialFilterLogicalOr::matchesSpatialSides()
+{
+  return _sf1->matchesSpatialSides() || _sf2->matchesSpatialSides();
+}
+
+bool SpatialFilterLogicalOr::matchesTemporalSides()
+{
+  return _sf1->matchesTemporalSides() || _sf2->matchesTemporalSides();
+}
+
 SpatialFilterLogicalAnd::SpatialFilterLogicalAnd(SpatialFilterPtr sf1, SpatialFilterPtr sf2)
 {
   _sf1 = sf1;
@@ -590,6 +634,16 @@ bool SpatialFilterLogicalAnd::matchesPoints(FieldContainer<bool> &pointsMatch, B
   return samePointsMatch;
 }
 
+bool SpatialFilterLogicalAnd::matchesSpatialSides()
+{
+  return _sf1->matchesSpatialSides() && _sf2->matchesSpatialSides();
+}
+
+bool SpatialFilterLogicalAnd::matchesTemporalSides()
+{
+  return _sf1->matchesTemporalSides() && _sf2->matchesTemporalSides();
+}
+
 NegatedSpatialFilter::NegatedSpatialFilter(SpatialFilterPtr filterToNegate)
 {
   _filterToNegate = filterToNegate;
@@ -630,6 +684,16 @@ bool NegatedSpatialFilter::matchesPoints(FieldContainer<bool> &pointsMatch, Basi
     }
   }
   return somePointMatches;
+}
+
+bool NegatedSpatialFilter::matchesSpatialSides()
+{
+  return _filterToNegate->matchesSpatialSides();
+}
+
+bool NegatedSpatialFilter::matchesTemporalSides()
+{
+  return _filterToNegate->matchesTemporalSides();
 }
 
 namespace Camellia

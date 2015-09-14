@@ -28,6 +28,9 @@ public:
   virtual bool matchesPoint(double x, double y, double z, double t);
   virtual bool matchesPoint(vector<double>&point);
   virtual bool matchesPoints(Intrepid::FieldContainer<bool> &pointsMatch, BasisCachePtr basisCache);
+  
+  virtual bool matchesSpatialSides(); // default: true
+  virtual bool matchesTemporalSides(); // default: false
 
   static SpatialFilterPtr allSpace();
   static SpatialFilterPtr unionFilter(SpatialFilterPtr a, SpatialFilterPtr b);
@@ -38,7 +41,8 @@ public:
   static SpatialFilterPtr matchingX(double x);
   static SpatialFilterPtr matchingY(double y);
   static SpatialFilterPtr matchingZ(double z);
-  static SpatialFilterPtr matchingT(double t);
+  
+  static SpatialFilterPtr matchingT(double t, bool matchSpatialSides = false); // matchesSpatialSides() is false; matchesTemporalSides() is true
 
   static SpatialFilterPtr lessThanX(double x);
   static SpatialFilterPtr lessThanY(double y);
@@ -75,6 +79,9 @@ public:
   virtual bool matchesPoint(double x, double y);
   virtual bool matchesPoint(double x, double y, double z);
   virtual bool matchesPoint(double x, double y, double z, double t);
+  
+  virtual bool matchesSpatialSides();
+  virtual bool matchesTemporalSides();
 };
 
 class SpatialFilterLogicalAnd : public SpatialFilter
@@ -91,6 +98,9 @@ public:
   virtual bool matchesPoint(double x, double y);
   virtual bool matchesPoint(double x, double y, double z);
   virtual bool matchesPoint(double x, double y, double z, double t);
+  
+  virtual bool matchesSpatialSides();
+  virtual bool matchesTemporalSides();
 };
 
 class NegatedSpatialFilter : public SpatialFilter
@@ -104,6 +114,12 @@ public:
   virtual bool matchesPoint(double x, double y);
   virtual bool matchesPoint(double x, double y, double z);
   virtual bool matchesPoint(double x, double y, double z, double t);
+  
+  // ! Returns the same result as _filterToNegate; the negation is understood to happen in space or time, not both
+  virtual bool matchesSpatialSides();
+  
+  // ! Returns the same result as _filterToNegate; the negation is understood to happen in space or time, not both
+  virtual bool matchesTemporalSides();
 };
 
 SpatialFilterPtr operator!(SpatialFilterPtr sf);

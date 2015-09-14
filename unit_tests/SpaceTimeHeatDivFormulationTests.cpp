@@ -251,10 +251,11 @@ namespace
 
     VarPtr uhat = form.uhat();
     VarPtr tc = form.tc();
-    bool isTrace = true;
+
     BCPtr bc = form.solution()->bc();
-    // bc->addDirichlet(uhat, SpatialFilter::allSpace(), u);
-    bc->addDirichlet(tc, SpatialFilter::allSpace(), -sigma*n_x + u*n_xt->t());
+
+    SpatialFilterPtr allTime = SpatialFilter::matchingT(t0) | SpatialFilter::matchingT(t1);
+    bc->addDirichlet(tc, SpatialFilter::allSpace() | allTime, -sigma*n_x + u*n_xt->t());
 
     MeshPtr mesh = form.solution()->mesh();
 
@@ -338,8 +339,9 @@ namespace
       VarPtr uhat = form.uhat();
       VarPtr tc = form.tc();
       BCPtr bc = form.solution()->bc();
-      // bc->addDirichlet(uhat, SpatialFilter::allSpace(), u);
-      bc->addDirichlet(tc, SpatialFilter::allSpace(), -sigma*n_x + u*n_xt->t());
+
+      SpatialFilterPtr allTime = SpatialFilter::matchingT(t0) | SpatialFilter::matchingT(t1);
+      bc->addDirichlet(tc, SpatialFilter::allSpace() | allTime, -sigma*n_x + u*n_xt->t());
     }
 
     form.solution()->solve();

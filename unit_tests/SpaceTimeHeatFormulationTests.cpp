@@ -246,9 +246,10 @@ namespace
     setupExactSolution(form, u, spaceTimeMeshTopo, fieldPolyOrder, delta_k);
     
     VarPtr u_hat = form.u_hat();
-    bool isTrace = true;
     BCPtr bc = form.solution()->bc();
-    bc->addDirichlet(u_hat, SpatialFilter::allSpace(), u);
+    
+    SpatialFilterPtr allTime = SpatialFilter::matchingT(t0) | SpatialFilter::matchingT(t1);
+    bc->addDirichlet(u_hat, SpatialFilter::allSpace() | allTime, u);
     
     MeshPtr mesh = form.solution()->mesh();
     
@@ -328,7 +329,8 @@ namespace
     {
       VarPtr u_hat = form.u_hat();
       BCPtr bc = form.solution()->bc();
-      bc->addDirichlet(u_hat, SpatialFilter::allSpace(), u);
+      SpatialFilterPtr allTime = SpatialFilter::matchingT(t0) | SpatialFilter::matchingT(t1);
+      bc->addDirichlet(u_hat, SpatialFilter::allSpace() | allTime, u);
     }
     
     form.solution()->solve();
