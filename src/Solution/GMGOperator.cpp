@@ -131,7 +131,7 @@ _finePartitionMap(finePartitionMap), _br(true)
   }
 
   _coarseSolution->initializeLHSVector();
-  _coarseSolution->initializeStiffnessAndLoad(); // actually don't need to initialize stiffness anymore; we'll do this in computeCoarseStiffnessMatrix
+  _coarseSolution->initializeLoad(); // don't need to initialize stiffness anymore; we'll do this in computeCoarseStiffnessMatrix
 
 //  constructProlongationOperator();
 
@@ -283,7 +283,7 @@ Teuchos::RCP<Epetra_CrsMatrix> GMGOperator::constructProlongationOperator()
   // maps coefficients from coarse to fine
 //  _globalStiffMatrix = Teuchos::rcp(new Epetra_FECrsMatrix(::Copy, partMap, maxRowSize));
   
-  int maxRowSizeToPrescribe = _coarseMesh->rowSizeUpperBound();
+  int maxRowSizeToPrescribe = 0; //_coarseMesh->rowSizeUpperBound();
   
   CondensedDofInterpreter<double>* condensedDofInterpreterCoarse = NULL;
   CondensedDofInterpreter<double>* condensedDofInterpreterFine = NULL;
@@ -714,9 +714,8 @@ LocalDofMapperPtr GMGOperator::getLocalCoefficientMap(GlobalIndexType fineCellID
                 unsigned volumeSubcellPermutation = 0;
                 unsigned fineSubcellOrdinalInFineDomain = 0; // the side is the whole fine domain...
                 SubBasisReconciliationWeights fieldInteriorWeights = _br.constrainedWeightsForTermTraced(termTraced, varTracedID,
-                                                                                                                sideDim, fineBasis, fineSubcellOrdinalInFineDomain, refBranch, sideOrdinal,
-                                                                                                                volumeTopo,
-                                                                                                                spaceDim, volumeBasis, volumeSubcellOrdinal, volumeDomainOrdinal, volumeSubcellPermutation);
+                                                                                                         sideDim, fineBasis, fineSubcellOrdinalInFineDomain, refBranch, sideOrdinal, volumeTopo,
+                                                                                                         spaceDim, volumeBasis, volumeSubcellOrdinal, volumeDomainOrdinal, volumeSubcellPermutation);
 
                 fieldInteriorWeights = BasisReconciliation::filterOutZeroRowsAndColumns(fieldInteriorWeights);
                 
@@ -744,6 +743,10 @@ LocalDofMapperPtr GMGOperator::getLocalCoefficientMap(GlobalIndexType fineCellID
                 }
                 int n = fieldInteriorWeights.weights.dimension(0);
                 int m = fieldInteriorWeights.weights.dimension(1);
+                if ((n==0) || (m==0))
+                {
+                  continue;
+                }
                 double *firstEntry = (double *) &fieldInteriorWeights.weights[0];
                 Epetra_SerialDenseMatrix fineBasisToCoarseFieldMatrix(::Copy,firstEntry,m,m,n);
                 fineBasisToCoarseFieldMatrix.SetUseTranspose(true); // use transpose, because SDM is column-major, while FC is row-major
