@@ -244,6 +244,8 @@ void Boundary::bcsToImpose(FieldContainer<GlobalIndexType> &globalIndices,
                 }
               }
               
+              if (matchingSubcells.size() == 0) continue; // nothing to impose
+              
               /*
                What follows - projecting the function onto the basis on the whole domain - is more expensive than necessary,
                in the general case: we can do the projection on just the matching subcells, and if we had a way of taking the
@@ -353,7 +355,7 @@ void Boundary::bcsToImpose( map<  GlobalIndexType, Scalar > &globalDofIndicesAnd
       {
 //        // DEBUGGING: keep track of which sides we impose BCs on:
 //        set<unsigned> bcImposedSides;
-//        
+//
         // Determine global dof indices and values, in one pass per side
         for (int i=0; i<boundarySides.size(); i++)
         {
