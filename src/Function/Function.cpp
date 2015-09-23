@@ -529,6 +529,25 @@ TFunctionPtr<Scalar> TFunction<Scalar>::t()
 {
   return TFunction<Scalar>::null();
 }
+  template <typename Scalar>
+  TFunctionPtr<Scalar> TFunction<Scalar>::spatialComponent(int d)
+  {
+    switch (d) {
+      case 1:
+        return x();
+        break;
+      case 2:
+        return y();
+        break;
+      case 3:
+        return z();
+        break;
+        
+      default:
+        TEUCHOS_TEST_FOR_EXCEPTION(true, std::invalid_argument, "Unsupported spatial component number.");
+        break;
+    }
+  }
 
 template <typename Scalar>
 TFunctionPtr<Scalar> TFunction<Scalar>::dx()
@@ -1614,13 +1633,19 @@ TFunctionPtr<Scalar> TFunction<Scalar>::solution(VarPtr var, TSolutionPtr<Scalar
 template <typename Scalar>
 TFunctionPtr<Scalar> TFunction<Scalar>::vectorize(TFunctionPtr<Scalar> f1, TFunctionPtr<Scalar> f2)
 {
-  return Teuchos::rcp( new VectorizedFunction<Scalar>(f1,f2) );
+  return vectorize({f1,f2});
 }
 
 template <typename Scalar>
 TFunctionPtr<Scalar> TFunction<Scalar>::vectorize(TFunctionPtr<Scalar> f1, TFunctionPtr<Scalar> f2, TFunctionPtr<Scalar> f3)
 {
-  return Teuchos::rcp( new VectorizedFunction<Scalar>(f1,f2,f3) );
+  return vectorize({f1,f2,f3});// Teuchos::rcp( new VectorizedFunction<Scalar>(f1,f2,f3) );
+}
+  
+template <typename Scalar>
+TFunctionPtr<Scalar> TFunction<Scalar>::vectorize(vector<TFunctionPtr<Scalar>> components)
+{
+  return Teuchos::rcp( new VectorizedFunction<Scalar>(components) );
 }
 
 template <typename Scalar>
