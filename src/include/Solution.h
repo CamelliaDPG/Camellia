@@ -115,6 +115,7 @@ private:
   double _minTimeLocalStiffness, _minTimeGlobalAssembly, _minTimeBCImposition, _minTimeSolve, _minTimeDistributeSolution;
 
   bool _reportConditionNumber, _reportTimingResults;
+  bool _saveMeshOnSolveError = true; // if there is a solve error, save the mesh to disk for potential analysis
   bool _writeMatrixToMatlabFile;
   bool _writeMatrixToMatrixMarketFile;
   bool _writeRHSToMatrixMarketFile;
@@ -174,6 +175,7 @@ public:
 
   // solve steps:
   void initializeLHSVector();
+  void initializeLoad(); // to be used if setStiffnessMatrix() will be called...
   void initializeStiffnessAndLoad();
   void populateStiffnessAndLoad();
   void imposeBCs();
@@ -356,6 +358,8 @@ public:
   // ! offRankCellsToInclude: the ones that the condensed dof interpreter needs to know how to interpret.  (Comes up in context of h-multigrid in particular.)
   void setUseCondensedSolve(bool value, std::set<GlobalIndexType> offRankCellsToInclude = std::set<GlobalIndexType>());
 
+  bool usesCondensedSolve() const;
+  
   void writeStatsToFile(const std::string &filePath, int precision=4);
 
   std::vector<int> getZeroMeanConstraints();
