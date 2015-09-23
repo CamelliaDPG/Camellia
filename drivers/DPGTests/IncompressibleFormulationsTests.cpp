@@ -926,8 +926,10 @@ bool IncompressibleFormulationsTests::testVGPNavierStokesFormulationConsistency(
           vgpFields.clear();
           vgpFields.push_back(formulation.u(1));
           vgpFields.push_back(formulation.u(2));
-          vgpFields.push_back(formulation.sigma(1));
-          vgpFields.push_back(formulation.sigma(2));
+          vgpFields.push_back(formulation.sigma(1,1));
+          vgpFields.push_back(formulation.sigma(1,2));
+          vgpFields.push_back(formulation.sigma(2,1));
+          vgpFields.push_back(formulation.sigma(2,2));
           vgpFields.push_back(formulation.p());
 
           SolutionPtr solnIncrement = formulation.solutionIncrement();
