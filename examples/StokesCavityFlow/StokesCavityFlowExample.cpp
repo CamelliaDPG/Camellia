@@ -163,8 +163,8 @@ int main(int argc, char *argv[])
 
   HDF5Exporter exporter(mesh, "stokesInitialSolution", ".");
   exporter.exportSolution(form.solution());
-
-  double tol = 8e-1;
+  
+  double tol = 1e-2;
   int refNumber = 0;
   do
   {

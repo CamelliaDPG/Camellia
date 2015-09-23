@@ -11,16 +11,16 @@
 
 #include <Teuchos_ParameterList.hpp>
 
-#include "TypeDefs.h"
-
-#include "VarFactory.h"
 #include "BF.h"
-#include "SpatialFilter.h"
-#include "Solution.h"
-#include "RefinementStrategy.h"
+#include "GMGSolver.h"
 #include "ParameterFunction.h"
 #include "PoissonFormulation.h"
+#include "RefinementStrategy.h"
+#include "Solution.h"
+#include "SpatialFilter.h"
 #include "TimeSteppingConstants.h"
+#include "TypeDefs.h"
+#include "VarFactory.h"
 
 namespace Camellia
 {
@@ -62,7 +62,7 @@ class StokesVGPFormulation
 
   static const string S_U1, S_U2, S_U3;
   static const string S_P;
-  static const string S_SIGMA1, S_SIGMA2, S_SIGMA3;
+  static const string S_SIGMA11, S_SIGMA12, S_SIGMA13, S_SIGMA21, S_SIGMA22, S_SIGMA23, S_SIGMA31, S_SIGMA32, S_SIGMA33;
 
   static const string S_U1_HAT, S_U2_HAT, S_U3_HAT;
   static const string S_TN1_HAT, S_TN2_HAT, S_TN3_HAT;
@@ -71,10 +71,14 @@ class StokesVGPFormulation
   static const string S_Q;
   static const string S_TAU1, S_TAU2, S_TAU3;
 
+  void CHECK_VALID_COMPONENT(int i); // throws exception on bad component value (should be between 1 and _spaceDim, inclusive)
+  
   // ! initialize the Solution object(s) using the provided MeshTopology
   void initializeSolution(MeshTopologyPtr meshTopo, int fieldPolyOrder, int delta_k,
-                          TFunctionPtr<double> forcingFunction, std::string fileToLoadPrefix);
+                          TFunctionPtr<double> forcingFunction, std::string fileToLoadPrefix,
+                          int temporalPolyOrder);
 
+  void turnOffSuperLUDistOutput(Teuchos::RCP<GMGSolver> gmgSolver);
 public:
   StokesVGPFormulation(Teuchos::ParameterList &parameters);
 //  StokesVGPFormulation(int spaceDim, bool useConformingTraces, double mu = 1.0,
@@ -107,11 +111,13 @@ public:
 
   // ! initialize the Solution object(s) using the provided MeshTopology
   void initializeSolution(MeshTopologyPtr meshTopo, int fieldPolyOrder, int delta_k = 1,
-                          TFunctionPtr<double> forcingFunction = Teuchos::null);
+                          TFunctionPtr<double> forcingFunction = Teuchos::null,
+                          int temporalPolyOrder = 1);
 
   // ! initialize the Solution object(s) using the provided MeshTopology
   void initializeSolution(std::string filePrefix, int fieldPolyOrder, int delta_k = 1,
-                          TFunctionPtr<double> forcingFunction = Teuchos::null);
+                          TFunctionPtr<double> forcingFunction = Teuchos::null,
+                          int temporalPolyOrder = 1);
 
   // ! returns true if this is a space-time formulation; false otherwise.
   bool isSpaceTime() const;
@@ -168,6 +174,9 @@ public:
 
   // ! Solves
   void solve();
+  
+  // ! Solves iteratively
+  void solveIteratively(int maxIters, double cgTol, int azOutputLevel = 0, bool suppressSuperLUOutput = true);
 
   // ! Returns the spatial dimension.
   int spaceDim();
@@ -192,7 +201,7 @@ public:
   TFunctionPtr<double> getTimeFunction();
 
   // field variables:
-  VarPtr sigma(int i);
+  VarPtr sigma(int i, int j); // sigma_ij is the Reynolds-weighted derivative of u_i in the j dimension
   VarPtr u(int i);
   VarPtr p();
 
@@ -220,7 +229,9 @@ public:
   TFunctionPtr<double> getVorticity();
   
   static StokesVGPFormulation steadyFormulation(int spaceDim, double mu, bool useConformingTraces);
-  static StokesVGPFormulation spaceTimeFormulation(int spaceDim, double mu, bool useConformingTraces);
+  
+  // ! when includeVelocityTracesInFluxTerm is true, u1_hat, etc. only defined on spatial interfaces; the temporal velocities are the spatially-normal components of tn_hat.
+  static StokesVGPFormulation spaceTimeFormulation(int spaceDim, double mu, bool useConformingTraces, bool includeVelocityTracesInFluxTerm = true);
   static StokesVGPFormulation timeSteppingFormulation(int spaceDim, double mu, double dt, bool useConformingTraces, TimeStepType timeStepType = BACKWARD_EULER);
 };
 }
