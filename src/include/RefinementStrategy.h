@@ -54,6 +54,7 @@ protected:
 public:
   TRefinementStrategy( TSolutionPtr<Scalar> solution, double relativeEnergyThreshold, double min_h = 0, int max_p = 10, bool preferPRefinements = false);
   TRefinementStrategy( MeshPtr mesh, TLinearTermPtr<Scalar> residual, TIPPtr<Scalar> ip, double relativeEnergyThreshold, double min_h = 0, int max_p = 10, bool preferPRefinements = false);
+  
   void setEnforceOneIrregularity(bool value);
   void setAnisotropicThreshhold(double value);
   void setMaxAspectRatio(double value);
@@ -79,6 +80,8 @@ public:
   double getEnergyError(int refinementNumber);
   GlobalIndexType getNumElements(int refinementNumber);
   GlobalIndexType getNumDofs(int refinementNumber);
+  
+  virtual ~TRefinementStrategy() {}
 };
 
 extern template class TRefinementStrategy<double>;
