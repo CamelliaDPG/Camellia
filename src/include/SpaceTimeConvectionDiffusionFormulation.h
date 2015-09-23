@@ -24,6 +24,7 @@ namespace Camellia
 class SpaceTimeConvectionDiffusionFormulation
 {
 
+  bool _steady;
   int _spaceDim;
   bool _useConformingTraces;
   double _epsilon;
@@ -51,7 +52,8 @@ class SpaceTimeConvectionDiffusionFormulation
   void initializeSolution(MeshTopologyPtr meshTopo, int fieldPolyOrder, int delta_k, string norm,
                           TLinearTermPtr<double> forcingTerm, std::string fileToLoadPrefix);
 public:
-  SpaceTimeConvectionDiffusionFormulation(int spaceDim, double epsilon, TFunctionPtr<double> beta, bool useConformingTraces = false);
+  // SpaceTimeConvectionDiffusionFormulation(int spaceDim, double epsilon, TFunctionPtr<double> beta, bool useConformingTraces = false);
+  SpaceTimeConvectionDiffusionFormulation(Teuchos::ParameterList &parameters, TFunctionPtr<double> beta);
 
   // ! the formulation's variable factory
   VarFactoryPtr vf();

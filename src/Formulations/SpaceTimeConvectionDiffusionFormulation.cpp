@@ -25,14 +25,25 @@ const string SpaceTimeConvectionDiffusionFormulation::s_tc = "tc";
 const string SpaceTimeConvectionDiffusionFormulation::s_v = "v";
 const string SpaceTimeConvectionDiffusionFormulation::s_tau = "tau";
 
-SpaceTimeConvectionDiffusionFormulation::SpaceTimeConvectionDiffusionFormulation(int spaceDim, double epsilon, TFunctionPtr<double> beta, bool useConformingTraces)
+// SpaceTimeConvectionDiffusionFormulation::SpaceTimeConvectionDiffusionFormulation(int spaceDim, double epsilon, TFunctionPtr<double> beta, bool useConformingTraces)
+SpaceTimeConvectionDiffusionFormulation::SpaceTimeConvectionDiffusionFormulation(Teuchos::ParameterList &parameters, TFunctionPtr<double> beta)
 {
-  TEUCHOS_TEST_FOR_EXCEPTION(epsilon==0, std::invalid_argument, "epsilon may not be 0!");
+  int spaceDim = parameters.get<int>("spaceDim", 1);
+  bool steady = parameters.get<bool>("steady", true);
+  double epsilon = parameters.get<double>("epsilon", 1e-2);
+  bool useConformingTraces = parameters.get<bool>("useConformingTraces", false);
+  int fieldPolyOrder = parameters.get<int>("fieldPolyOrder", 2);
+  int delta_p = parameters.get<int>("delta_p", 2);
+  int numTElems = parameters.get<int>("numTElems", 1);
+  string norm = parameters.get<string>("norm", "Graph");
+  string savedSolutionAndMeshPrefix = parameters.get<string>("savedSolutionAndMeshPrefix", "");
 
   _spaceDim = spaceDim;
+  _steady = steady;
   _epsilon = epsilon;
   _beta = beta;
   _useConformingTraces = useConformingTraces;
+  TEUCHOS_TEST_FOR_EXCEPTION(epsilon==0, std::invalid_argument, "epsilon may not be 0!");
 
   FunctionPtr zero = Function::constant(1);
   FunctionPtr one = Function::constant(1);

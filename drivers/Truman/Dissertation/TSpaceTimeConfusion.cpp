@@ -45,11 +45,13 @@ int main(int argc, char *argv[])
   Teuchos::CommandLineProcessor cmdp(false,true); // false: don't throw exceptions; true: do return errors for unrecognized options
 
   // problem parameters:
+  bool steady = false;
   int spaceDim = 2;
   double epsilon = 1;
   int numRefs = 1;
   int p = 2, delta_p = 2;
   int numXElems = 2;
+  int numTElems = 1;
   bool useConformingTraces = false;
   string solverChoice = "KLU";
   string multigridStrategyString = "W-cycle";
@@ -63,6 +65,7 @@ int main(int argc, char *argv[])
   string norm = "Graph";
   string outputDir = ".";
   string tag="";
+  cmdp.setOption("steady", "unsteady", &steady);
   cmdp.setOption("spaceDim", &spaceDim, "spatial dimension");
   cmdp.setOption("polyOrder",&p,"polynomial order for field variable u");
   cmdp.setOption("delta_p", &delta_p, "test space polynomial order enrichment");
@@ -95,8 +98,6 @@ int main(int argc, char *argv[])
   totalTimer->start(true);
 
   // Exact solution
-  // FunctionPtr uExact1D = Teuchos::rcp(new ExactU1D(epsilon));
-  // FunctionPtr uExact2D = Teuchos::rcp(new ExactU2D(epsilon));
   double l = 4;
   double k = 1;
   double lambda1 = (-1+sqrt(1-4*epsilon*l))/(-2*epsilon);
@@ -125,14 +126,20 @@ int main(int argc, char *argv[])
   FunctionPtr beta_x = Function::constant(1);
   FunctionPtr beta_y = Function::constant(0);
   FunctionPtr beta_z = Function::constant(0);
-  // if (spaceDim == 1)
-  //   beta = beta_x;
-  // else if (spaceDim == 2)
-  //   beta = Function::vectorize(beta_x, beta_y);
-  // else if (spaceDim == 3)
-    beta = Function::vectorize(beta_x, beta_y, beta_z);
+  beta = Function::vectorize(beta_x, beta_y, beta_z);
 
-  SpaceTimeConvectionDiffusionFormulation form(spaceDim, epsilon, beta, useConformingTraces);
+  Teuchos::ParameterList parameters;
+  parameters.set("steady", steady);
+  parameters.set("spaceDim", spaceDim);
+  parameters.set("epsilon", epsilon);
+  parameters.set("useConformingTraces", useConformingTraces);
+  parameters.set("fieldPolyOrder", p);
+  parameters.set("delta_p", delta_p);
+  parameters.set("numTElems", numTElems);
+  parameters.set("norm", norm);
+  // parameters.set("savedSolutionAndMeshPrefix", loadFilePrefix);
+  SpaceTimeConvectionDiffusionFormulation form(parameters, beta);
+  // SpaceTimeConvectionDiffusionFormulationPtr form = Teuchos::rcp(new SpaceTimeConvectionDiffusionFormulation(problem, parameters));
 
   map<int, FunctionPtr> exactMap;
   exactMap[form.u()->ID()] = u_exact;
@@ -165,10 +172,6 @@ int main(int argc, char *argv[])
   form.initializeSolution(spaceTimeMeshTopo, p, delta_p, norm, forcingTerm);
 
   MeshPtr mesh = form.solution()->mesh();
-  // vector<MeshPtr> meshesCoarseToFine;
-  MeshPtr k0Mesh = Teuchos::rcp( new Mesh (mesh->getTopology()->deepCopy(), form.bf(), 1, delta_p) );
-  // meshesCoarseToFine.push_back(k0Mesh);
-  // meshesCoarseToFine.push_back(mesh);
 
   // Set up boundary conditions
   BCPtr bc = form.solution()->bc();
@@ -277,16 +280,12 @@ int main(int argc, char *argv[])
       }
       while (meshSequence[0]->numGlobalDofs() < 2000 && meshSequence.size() > 2)
         meshSequence.erase(meshSequence.begin());
-      // if (commRank == 0)
-      //   cout << "size " << meshSequence.size() << endl;
       gmgSolver = Teuchos::rcp(new GMGSolver(soln, meshSequence, maxLinearIterations, solverTolerance, multigridStrategy, coarseSolver, useCondensedSolve));
       gmgSolver->setUseConjugateGradient(useConjugateGradient);
       int azOutput = 20; // print residual every 20 CG iterations
       gmgSolver->setAztecOutput(azOutput);
       gmgSolver->gmgOperator()->setNarrateOnRankZero(logFineOperator,"finest GMGOperator");
 
-      // gmgSolver = Teuchos::rcp( new GMGSolver(soln, k0Mesh, maxLinearIterations, solverTolerance, Solver::getDirectSolver(true), useStaticCondensation));
-      // gmgSolver->setAztecOutput(azOutput);
       if (solverChoice == "GMG-Direct")
         gmgSolver->gmgOperator()->setSchwarzFactorizationType(GMGOperator::Direct);
       if (solverChoice == "GMG-ILU")
@@ -359,10 +358,7 @@ int main(int argc, char *argv[])
       exporter->exportSolution(soln, refIndex);
 
     if (refIndex != numRefs)
-    {
       refStrategy.refine();
-      // meshesCoarseToFine.push_back(mesh);
-    }
   }
   dataFile.close();
   double totalTime = totalTimer->stop();
