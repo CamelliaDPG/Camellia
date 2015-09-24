@@ -389,6 +389,8 @@ int main(int argc, char *argv[])
   bool useDiagonalSchwarzWeighting = false;
   bool logFineOperator = false;
   
+  bool solveDirectly = false;
+  
   bool writeOpToFile = false;
   
   string multigridStrategyString = "W-cycle";
@@ -427,6 +429,8 @@ int main(int argc, char *argv[])
 
   cmdp.setOption("pause","dontPause",&pauseOnRankZero, "pause (to allow attachment by tracer, e.g.), waiting for user to press a key");
   cmdp.setOption("reportTimings", "dontReportTimings", &reportTimings, "Report timings in Solution");
+  
+  cmdp.setOption("solveDirectly", "solveIteratively", &solveDirectly);
 
   cmdp.setOption("useDiagonalSchwarzWeighting","dontUseDiagonalSchwarzWeighting",&useDiagonalSchwarzWeighting);
   cmdp.setOption("useZeroMeanConstraint", "usePointConstraint", &useZeroMeanConstraints, "Use a zero-mean constraint for the pressure (otherwise, use a vertex constraint at the origin)");
@@ -587,7 +591,10 @@ int main(int argc, char *argv[])
     
     cout << "Approximate memory cost per element (assuming sparse storage): G = " << G_sparseMatrixSize << " MB, B = " << B_sparseMatrixSize << " MB.\n";
     
-    cout << "Multigrid strategy: " << multigridStrategyString << endl;
+    if (solveDirectly)
+      cout << "******* Using direct solve in place of multigrid-preconditioned iterative solve ****** \n";
+    else
+      cout << "Multigrid strategy: " << multigridStrategyString << endl;
     
     if (useDiagonalSchwarzWeighting)
     {
@@ -597,44 +604,64 @@ int main(int argc, char *argv[])
     }
   }
   
+  double gmgSolverInitializationTime = 0, solveTime;
+  
   timer.ResetStartTime();
-  bool reuseFactorization = true;
-  SolverPtr coarseSolver = Solver::getDirectSolver(reuseFactorization);
-  
-  Teuchos::RCP<GMGSolver> gmgSolver = Teuchos::rcp(new GMGSolver(solution, meshesCoarseToFine, cgMaxIterations, cgTol,
-                                                                 multigridStrategy, coarseSolver, useCondensedSolve,
-                                                                 useDiagonalSchwarzWeighting));
-  gmgSolver->setUseConjugateGradient(useConjugateGradient);
-  gmgSolver->setAztecOutput(azOutput);
-  gmgSolver->gmgOperator()->setNarrateOnRankZero(logFineOperator,"finest GMGOperator");
-  
-  double gmgSolverInitializationTime = timer.ElapsedTime();
-  if (rank==0)
+  if (!solveDirectly)
   {
-    cout << "GMGSolver initialized in " << gmgSolverInitializationTime << " seconds.\n";
-  }
-
-  timer.ResetStartTime();
-  solution->solve(gmgSolver);
-
-  double solveTime = timer.ElapsedTime();
-  
-  if (rank==0)
-  {
-    cout << "Solve completed in " << solveTime << " seconds.\n";
-    cout << "Total time, including GMGSolver initialization (but not mesh construction): " << solveTime + gmgSolverInitializationTime << " seconds.\n";
-    cout << "Finest GMGOperator, timing report:\n";
-  }
-  gmgSolver->gmgOperator()->reportTimingsSumOfOperators(StatisticChoice::MAX);
-  
-  if (writeOpToFile)
-  {
-    Teuchos::RCP<GMGOperator> op = gmgSolver->gmgOperator();
-    if (rank==0) cout << "writing op to op.dat.\n";
-    EpetraExt::RowMatrixToMatrixMarketFile("op.dat",*op->getMatrixRepresentation(), NULL, NULL, false);
+    bool reuseFactorization = true;
+    SolverPtr coarseSolver = Solver::getDirectSolver(reuseFactorization);
     
-    if (rank==0) cout << "writing fine stiffness to A.dat.\n";
-    EpetraExt::RowMatrixToMatrixMarketFile("A.dat",*solution->getStiffnessMatrix(), NULL, NULL, false);
+    Teuchos::RCP<GMGSolver> gmgSolver = Teuchos::rcp(new GMGSolver(solution, meshesCoarseToFine, cgMaxIterations, cgTol,
+                                                                   multigridStrategy, coarseSolver, useCondensedSolve,
+                                                                   useDiagonalSchwarzWeighting));
+    gmgSolver->setUseConjugateGradient(useConjugateGradient);
+    gmgSolver->setAztecOutput(azOutput);
+    gmgSolver->gmgOperator()->setNarrateOnRankZero(logFineOperator,"finest GMGOperator");
+    
+    gmgSolverInitializationTime = timer.ElapsedTime();
+    if (rank==0)
+    {
+      cout << "GMGSolver initialized in " << gmgSolverInitializationTime << " seconds.\n";
+    }
+
+    timer.ResetStartTime();
+    solution->solve(gmgSolver);
+    solveTime = timer.ElapsedTime();
+
+    if (rank==0) cout << "Finest GMGOperator, timing report:\n";
+    gmgSolver->gmgOperator()->reportTimingsSumOfOperators(StatisticChoice::MAX);
+    
+    if (writeOpToFile)
+    {
+      Teuchos::RCP<GMGOperator> op = gmgSolver->gmgOperator();
+      if (rank==0) cout << "writing op to op.dat.\n";
+      EpetraExt::RowMatrixToMatrixMarketFile("op.dat",*op->getMatrixRepresentation(), NULL, NULL, false);
+      
+      if (rank==0) cout << "writing fine stiffness to A.dat.\n";
+      EpetraExt::RowMatrixToMatrixMarketFile("A.dat",*solution->getStiffnessMatrix(), NULL, NULL, false);
+    }
+  }
+  else
+  {
+    timer.ResetStartTime();
+    solution->solve(Solver::getDirectSolver());
+    solveTime = timer.ElapsedTime();
+  }
+
+  
+  if (rank==0)
+  {
+    double totalTime = solveTime + gmgSolverInitializationTime + meshInitializationTime;
+    cout << "Total time: " << totalTime << " seconds.\n";
+    int tabWidth = 15;
+    cout << setw(tabWidth) << "Mesh Init." << setw(tabWidth) << "GMG Init." << setw(tabWidth) << "Solve" << endl;
+    if (gmgSolverInitializationTime ==  0)
+      cout << setw(tabWidth) << meshInitializationTime << setw(tabWidth) << "-" << setw(tabWidth) << solveTime << endl;
+    else
+      cout << setw(tabWidth) << meshInitializationTime << setw(tabWidth) << gmgSolverInitializationTime << setw(tabWidth) << solveTime << endl;
+//    cout << "Solve completed in " << solveTime << " seconds.\n";
+//    cout << "Total time, including GMGSolver initialization (but not mesh construction): " << solveTime + gmgSolverInitializationTime << " seconds.\n";
   }
   
   return 0;
