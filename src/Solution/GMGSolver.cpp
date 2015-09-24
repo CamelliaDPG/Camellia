@@ -266,6 +266,9 @@ vector<MeshPtr> GMGSolver::meshesForMultigrid(MeshPtr fineMesh, Teuchos::Paramet
     //       support; essentially, for this to work, you need to have the same temporal poly order as spatial.
     MeshPtr meshToPRefine = Teuchos::rcp(new Mesh(fineMesh->getTopology()->deepCopy(), bf, H1Order_coarse, delta_k));
     
+    MeshPartitionPolicyPtr inducedPartitionPolicy = MeshPartitionPolicy::inducedPartitionPolicy(meshToPRefine,fineMesh);
+    meshToPRefine->setPartitionPolicy(inducedPartitionPolicy);
+    
     bool someCellWasRefined = true;
     
     while (someCellWasRefined)
