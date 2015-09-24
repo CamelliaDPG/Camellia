@@ -142,7 +142,7 @@ void OverlappingRowMatrix::BuildMap(int OverlapLevel_in, MeshPtr mesh, Teuchos::
 
 template<typename int_type>
 void OverlappingRowMatrix::BuildMap(const set<GlobalIndexType> &rowIndices)
-{// new, experimental: setup a map for all rows indicated...
+{// set up a map for all rows indicated...
   
   std::vector<int_type> ExtElements;
   int count = 0;
@@ -159,6 +159,12 @@ void OverlappingRowMatrix::BuildMap(const set<GlobalIndexType> &rowIndices)
       }
     }
   }
+  
+//  { // DEBUGGING:
+//    int rank = Teuchos::GlobalMPISession::getRank();
+//    if (rank==3)
+//      Camellia::print("rank 3 ExtElements", ExtElements);
+//  }
   
   // build the map containing all the nodes (original
   // matrix + extended matrix)
@@ -435,7 +441,7 @@ OverlappingRowMatrix(const Teuchos::RCP<const Epetra_RowMatrix>& Matrix_in, int 
   long long NumMyNonzeros_tmp = NumMyNonzeros_;
   Comm().SumAll(&NumMyNonzeros_tmp,&NumGlobalNonzeros_,1);
   MaxNumEntries_ = A().MaxNumEntries();
-
+  
   if (MaxNumEntries_ < B().MaxNumEntries())
     MaxNumEntries_ = B().MaxNumEntries();
 }
@@ -545,10 +551,14 @@ OverlappingRowMatrix(const RCP<const Epetra_RowMatrix>& Matrix_in,
 
   if (MaxNumEntries_ < B().MaxNumEntries())
     MaxNumEntries_ = B().MaxNumEntries();
-
+  
 //  { // DEBUGGING
 //
-//   int rank = Teuchos::GlobalMPISession::getRank();
+//    int rank = Teuchos::GlobalMPISession::getRank();
+//    
+//    EpetraExt::RowMatrixToMatrixMarketFile("A.dat",A(), NULL, NULL, false); // false: don't write header
+//    printMapSummary(*ExtMap_, "ExtMap_");
+//    printMapSummary(*Map_, "Map_");
 //
 //    cout << "On rank " << rank << ", ExtImporter_->NumSameIDs = " << ExtImporter_->NumSameIDs() << endl;
 //    cout << "On rank " << rank << ", ExtImporter_->NumRemoteIDs = " << ExtImporter_->NumRemoteIDs() << endl;
@@ -557,7 +567,7 @@ OverlappingRowMatrix(const RCP<const Epetra_RowMatrix>& Matrix_in,
 //    cout << "On rank " << rank << ", Importer_->NumRemoteIDs = " << Importer_->NumRemoteIDs() << endl;
 //    cout << "OverlappingRowMatrix outputting on rank " << rank << endl;
 //
-//    if (rank==4) {
+//    if ((rank==3) && (NumMyRows_==11)) {
 //      Epetra_SerialComm SerialComm;
 //      Epetra_Map    localMap(NumMyRows_, 0, SerialComm);
 //
