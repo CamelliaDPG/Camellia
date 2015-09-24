@@ -354,6 +354,9 @@ public:
   //! Returns the Solution object used in the coarse solve.
   TSolutionPtr<double> getCoarseSolution();
   
+  //! returns the operator level, counting from 0 (the coarsest level, where the coarse solver is defined).
+  int getOperatorLevel() const;
+  
   //! Returns the fine dof interpreter
   Teuchos::RCP<DofInterpreter> getFineDofInterpreter();
 private:
