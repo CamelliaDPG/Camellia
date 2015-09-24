@@ -113,13 +113,22 @@ int main(int argc, char *argv[])
   FunctionPtr expr1x = Teuchos::rcp(new Exp_ax(r1));
   FunctionPtr exps1x = Teuchos::rcp(new Exp_ax(s1));
   FunctionPtr cospiy = Teuchos::rcp(new Cos_ay(pi));
-  FunctionPtr u_steady;
+  FunctionPtr sinpiy = Teuchos::rcp(new Sin_ay(pi));
+  FunctionPtr u_steady = Function::zero();
   if (spaceDim == 1)
     u_steady = Function::constant(1)-exp1lambdax;
   if (spaceDim == 2)
-    u_steady = 10*epsilon*(exps1x-expr1x)/(r1*exp(-r1)-s1*exp(-s1))*cospiy;
+    for (int n = 1; n <= 20; n++)
+    {
+      double Cn = 0;
+      if (n % 2 == 0)
+        Cn = 200*epsilon/(n*pi);
+      FunctionPtr sinnpiy = Teuchos::rcp(new Sin_ay(n*pi));
+      u_steady = u_steady + Cn*(exps1x-expr1x)/(r1*exp(-r1)-s1*exp(-s1))*sinnpiy;
+    }
+    // u_steady = 10*epsilon*(exps1x-expr1x)/(r1*exp(-r1)-s1*exp(-s1))*cospiy;
 
-  FunctionPtr u_exact = u_steady + 4*explt*(explambda1x-explambda2x);
+  FunctionPtr u_exact = u_steady + 4*explt*(explambda1x-explambda2x)*Function::yn(1);
   FunctionPtr sigma_exact = epsilon*u_exact->grad();
 
   FunctionPtr beta;
