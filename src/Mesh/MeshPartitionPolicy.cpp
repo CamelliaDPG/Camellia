@@ -9,12 +9,16 @@
 #include <iostream>
 
 #include "MeshPartitionPolicy.h"
+
+#include "InducedMeshPartitionPolicy.h"
+#include "MeshTools.h"
 #include "ZoltanMeshPartitionPolicy.h"
 
 #include "GlobalDofAssignment.h"
 
 using namespace Intrepid;
 using namespace Camellia;
+using namespace std;
 
 void MeshPartitionPolicy::partitionMesh(Mesh *mesh, PartitionIndexType numPartitions)
 {
@@ -40,6 +44,16 @@ void MeshPartitionPolicy::partitionMesh(Mesh *mesh, PartitionIndexType numPartit
     }
   }
   mesh->globalDofAssignment()->setPartitions(partitionedActiveCells);
+}
+
+MeshPartitionPolicyPtr MeshPartitionPolicy::inducedPartitionPolicy(MeshPtr thisMesh, MeshPtr otherMesh)
+{
+  return InducedMeshPartitionPolicy::inducedMeshPartitionPolicy(thisMesh, otherMesh);
+}
+
+MeshPartitionPolicyPtr MeshPartitionPolicy::inducedPartitionPolicy(MeshPtr thisMesh, MeshPtr otherMesh, const map<GlobalIndexType,GlobalIndexType> &cellIDMap)
+{
+  return InducedMeshPartitionPolicy::inducedMeshPartitionPolicy(thisMesh, otherMesh, cellIDMap);
 }
 
 MeshPartitionPolicyPtr MeshPartitionPolicy::standardPartitionPolicy()
