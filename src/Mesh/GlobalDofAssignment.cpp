@@ -629,6 +629,19 @@ void GlobalDofAssignment::setPartitions(FieldContainer<GlobalIndexType> &partiti
       _activeCellOffset += partition.size();
     }
   }
+  
+//  { // DEBUGGING
+//    if (partitionNumber == 0)
+//    {
+//      for (int i=0; i<_partitions.size(); i++)
+//      {
+//        ostringstream label;
+//        label << "partition " << i;
+//        print(label.str().c_str(),_partitions[i]);
+//      }
+//    }
+//  }
+  
   constructActiveCellMap();
   projectParentCoefficientsOntoUnsetChildren();
   rebuildLookups();
