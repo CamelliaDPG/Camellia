@@ -532,9 +532,6 @@ int AdditiveSchwarz<T>::Setup()
         globalDofIndices.insert(globalIndicesForCells[overlapCell].begin(), globalIndicesForCells[overlapCell].end());
       }
       
-//      print("globalDofIndices",globalDofIndices);
-//      printMapSummary(OverlapMap(), "OverlapMap");
-      
       // find corresponding local rows
       vector<int> localRows;
       for (GlobalIndexType globalDofIndex : globalDofIndices)
@@ -545,7 +542,7 @@ int AdditiveSchwarz<T>::Setup()
       Teuchos::RCP<LocalFilter> localizedMatrix;
       
       if (OverlappingMatrix_ != Teuchos::null)
-      {
+      {        
         localizedMatrix = Teuchos::rcp( new LocalFilter(OverlappingMatrix_, localRows) );
       }
       else
@@ -714,9 +711,20 @@ int AdditiveSchwarz<T>::Compute()
   Condest_ = -1.0;
 
   string inverseLabel;
-  for (Teuchos::RCP<T> Inverse : _Inverses)
+  for (int i=0; i<_Inverses.size(); i++)
   {
-    IFPACK_CHK_ERR(Inverse->Compute());
+    Teuchos::RCP<T> Inverse = _Inverses[i];
+    int err = Inverse->Compute();
+    if (err != 0)
+    {
+      Teuchos::RCP<LocalFilter> localizedMatrix = _LocalizedMatrices[i];
+      ostringstream matrixLocation;
+      matrixLocation << Teuchos::GlobalMPISession::getRank() << "." << i << ".dat";
+      EpetraExt::RowMatrixToMatrixMarketFile(matrixLocation.str().c_str(),*localizedMatrix, NULL, NULL, false); // false: don't write header
+      cout << "AdditiveSchwarz: inverse computation returned error on rank " << Teuchos::GlobalMPISession::getRank() << ", local matrix number " << i;
+      cout << "; wrote matrix to " << matrixLocation.str() << endl;
+    }
+    IFPACK_CHK_ERR(err);
     inverseLabel = Inverse->Label();
   }
   
