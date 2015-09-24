@@ -258,7 +258,7 @@ namespace
     std::map<GlobalIndexType, double> globalDofIndicesAndValues;
     GlobalIndexType cellID = 0;
     set<pair<int, unsigned>> singletons;
-    boundary.bcsToImpose<double>(globalDofIndicesAndValues, *bc, cellID, singletons, dofInterpreter, NULL);
+    boundary.bcsToImpose<double>(globalDofIndicesAndValues, *bc, cellID, singletons, dofInterpreter);
     
     // use our knowledge that we have a one-element mesh: every last dof for u_hat should be present, and have coefficient CONST_VALUE
     DofOrderingPtr trialOrder = mesh->getElementType(cellID)->trialOrderPtr;

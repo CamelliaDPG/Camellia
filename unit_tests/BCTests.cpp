@@ -111,15 +111,13 @@ void testSpaceTimeTraceBCFunction(int spaceDim, Teuchos::FancyOStream &out, bool
     Intrepid::FieldContainer<GlobalIndexType> bcGlobalIndicesLegacy, bcGlobalIndicesTags;
     Intrepid::FieldContainer<double> bcGlobalValuesLegacy, bcGlobalValuesTags;
     
-    // we can safely assume that the two Solution objects have equivalent DofInterpreter, partition map
+    // we can safely assume that the two Solution objects have equivalent DofInterpreter
     Teuchos::RCP<DofInterpreter> dofInterpreter = legacySoln->getDofInterpreter();
     
     set<GlobalIndexType> myGlobalIndicesSet = dofInterpreter->globalDofIndicesForPartition(rank);
-    Epetra_Map partMap = legacySoln->getPartitionMap();
     
-    mesh->boundary().bcsToImpose(bcGlobalIndicesLegacy,bcGlobalValuesLegacy,*legacyBC, myGlobalIndicesSet, dofInterpreter.get(), &partMap);
-    
-    mesh->boundary().bcsToImpose(bcGlobalIndicesTags,bcGlobalValuesTags,*tagBC, myGlobalIndicesSet, dofInterpreter.get(), &partMap);
+    mesh->boundary().bcsToImpose(bcGlobalIndicesLegacy,bcGlobalValuesLegacy,*legacyBC, myGlobalIndicesSet, dofInterpreter.get());
+    mesh->boundary().bcsToImpose(bcGlobalIndicesTags,bcGlobalValuesTags,*tagBC, myGlobalIndicesSet, dofInterpreter.get());
     
     map<GlobalIndexType,double> bcValueMapLegacy;
     for (int i=0; i<bcGlobalIndicesLegacy.size(); i++)

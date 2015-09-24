@@ -47,6 +47,7 @@ void LocalDofMapper::addSubBasisMapVectorContribution(int varID, int sideOrdinal
                                                       FieldContainer<double> &globalData,
                                                       bool fittableGlobalDofsOnly)
 {
+  if (!_dofOrdering->hasBasisEntry(varID, sideOrdinal)) return; // no contribution
   FieldContainer<double> basisData(_dofOrdering->getDofIndices(varID, sideOrdinal).size());
   if (_varIDToMap == -1)
   {

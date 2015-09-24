@@ -6,6 +6,7 @@
 //
 //
 
+#include "GDAMinimumRule.h"
 #include "GMGSolver.h"
 #include "MPIWrapper.h"
 
@@ -190,7 +191,19 @@ Teuchos::RCP<GMGOperator> GMGSolver::gmgOperatorFromMeshSequence(const std::vect
   return finestOperator;
 }
 
-std::vector<MeshPtr> GMGSolver::meshesForMultigrid(MeshPtr fineMesh, int kCoarse, int delta_k)
+
+vector<MeshPtr> GMGSolver::meshesForMultigrid(MeshPtr fineMesh, int kCoarse, int delta_k)
+{
+  Teuchos::ParameterList pl;
+  
+  pl.set("kCoarse", kCoarse);
+  pl.set("delta_k", delta_k);
+  pl.set("jumpToCoarsePolyOrder",true);
+  
+  return meshesForMultigrid(fineMesh, pl);
+}
+
+vector<MeshPtr> GMGSolver::meshesForMultigrid(MeshPtr fineMesh, Teuchos::ParameterList &parameters)
 {
   // for now, we do the following (later, we may introduce a ParameterList to give finer-grained control):
   /*
@@ -202,6 +215,11 @@ std::vector<MeshPtr> GMGSolver::meshesForMultigrid(MeshPtr fineMesh, int kCoarse
    fine h-mesh with k=kCoarse (yes, duplicated: gives two kinds of smoother)
    fine h-mesh with k=kFine
    */
+  
+  bool jumpToCoarsePolyOrder = parameters.get<bool>("jumpToCoarsePolyOrder",true);
+  int kCoarse = parameters.get<int>("kCoarse", 0);
+  int delta_k = parameters.get<int>("delta_k",1);
+  
   MeshTopologyViewPtr fineMeshTopo = fineMesh->getTopology();
   set<GlobalIndexType> thisLevelCellIndices = fineMeshTopo->getRootCellIndices();
   GlobalIndexType thisLevelNumCells = thisLevelCellIndices.size();
@@ -242,9 +260,62 @@ std::vector<MeshPtr> GMGSolver::meshesForMultigrid(MeshPtr fineMesh, int kCoarse
   // repeat the last one:
   meshesCoarseToFine.push_back(meshesCoarseToFine[meshesCoarseToFine.size()-1]);
   
-  // add the fine mesh:
-  meshesCoarseToFine.push_back(fineMesh);
-
+  if (! jumpToCoarsePolyOrder)
+  {
+    // NOTE: this option is not very well-supported for space-time meshes, because of our lack of anisotropic p-refinement
+    //       support; essentially, for this to work, you need to have the same temporal poly order as spatial.
+    MeshPtr meshToPRefine = Teuchos::rcp(new Mesh(fineMesh->getTopology()->deepCopy(), bf, H1Order_coarse, delta_k));
+    
+    MeshPartitionPolicyPtr inducedPartitionPolicy = MeshPartitionPolicy::inducedPartitionPolicy(meshToPRefine,fineMesh);
+    meshToPRefine->setPartitionPolicy(inducedPartitionPolicy);
+    
+    bool someCellWasRefined = true;
+    
+    while (someCellWasRefined)
+    {
+      someCellWasRefined = false;
+      
+      set<GlobalIndexType> fineCellIndices = fineMeshTopo->getActiveCellIndices();
+      for (GlobalIndexType cellIndex : fineCellIndices)
+      {
+        ElementTypePtr coarseElemType = meshToPRefine->getElementType(cellIndex);
+        int kForCoarseCell = coarseElemType->trialOrderPtr->maxBasisDegreeForVolume();
+        
+        ElementTypePtr fineElemType = fineMesh->getElementType(cellIndex);
+        int kForFineCell = fineElemType->trialOrderPtr->maxBasisDegreeForVolume();
+        
+        if (kForCoarseCell < kForFineCell)
+        {
+          int kToAdd;
+          // we go up doubling kCoarse until we hit the fine k
+          // but if kCoarse is 0, then refine by polyOrder 1
+          if (kForCoarseCell == 0)
+          {
+            kToAdd = 1;
+          }
+          else
+          {
+            kToAdd = min(kForCoarseCell,kForFineCell - kForCoarseCell);
+          }
+          meshToPRefine->pRefine(set<GlobalIndexType>{cellIndex},kToAdd,false); // false: don't repartition and rebuild yet
+          someCellWasRefined = true;
+        }
+      }
+      
+      if (someCellWasRefined)
+      {
+        meshToPRefine->repartitionAndRebuild();
+        meshesCoarseToFine.push_back(meshToPRefine);
+        meshToPRefine = meshToPRefine->deepCopy(); // a bit wasteful, in that we really could share the MeshTopology object
+      }
+    }
+  }
+  else
+  {
+    // add the fine mesh:
+    meshesCoarseToFine.push_back(fineMesh);
+  }
+  
   return meshesCoarseToFine;
 }
 

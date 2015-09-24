@@ -51,8 +51,10 @@ namespace
     exactMap[form.u(1)->ID()] = u1;
     exactMap[form.u(2)->ID()] = u2;
     exactMap[form.p()->ID() ] =  p;
-    exactMap[form.sigma(1)->ID()] = sigma1;
-    exactMap[form.sigma(2)->ID()] = sigma2;
+    exactMap[form.sigma(1,1)->ID()] = sigma1->x();
+    exactMap[form.sigma(1,2)->ID()] = sigma1->y();
+    exactMap[form.sigma(2,1)->ID()] = sigma2->x();
+    exactMap[form.sigma(2,2)->ID()] = sigma2->y();
     
     // fluxes:
     // use the exact field variable solution together with the termTraced to determine the flux traced
@@ -127,8 +129,10 @@ namespace
     exactMap[form.u(1)->ID()] = u1;
     exactMap[form.u(2)->ID()] = u2;
     exactMap[form.p()->ID() ] =  p;
-    exactMap[form.sigma(1)->ID()] = sigma1;
-    exactMap[form.sigma(2)->ID()] = sigma2;
+    exactMap[form.sigma(1,1)->ID()] = sigma1->x();
+    exactMap[form.sigma(1,2)->ID()] = sigma1->y();
+    exactMap[form.sigma(2,1)->ID()] = sigma2->x();
+    exactMap[form.sigma(2,2)->ID()] = sigma2->y();
     
     // fluxes:
     // use the exact field variable solution together with the termTraced to determine the flux traced
@@ -297,8 +301,10 @@ namespace
     exactMap[form.u(1)->ID()] = u1;
     exactMap[form.u(2)->ID()] = u2;
     exactMap[form.p()->ID() ] =  p;
-    exactMap[form.sigma(1)->ID()] = sigma1;
-    exactMap[form.sigma(2)->ID()] = sigma2;
+    exactMap[form.sigma(1,1)->ID()] = sigma1->x();
+    exactMap[form.sigma(1,2)->ID()] = sigma1->y();
+    exactMap[form.sigma(2,1)->ID()] = sigma2->x();
+    exactMap[form.sigma(2,2)->ID()] = sigma2->y();
     
     // fluxes:
     // use the exact field variable solution together with the termTraced to determine the flux traced

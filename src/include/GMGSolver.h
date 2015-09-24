@@ -14,6 +14,8 @@
 #include "GMGOperator.h"
 #include "Narrator.h"
 
+#include "Teuchos_ParameterList.hpp"
+
 namespace Camellia
 {
 class GMGSolver : public Solver, public Narrator
@@ -88,6 +90,9 @@ public:
   vector<int> getIterationCountLog();
   
   static std::vector<MeshPtr> meshesForMultigrid(MeshPtr fineMesh, int kCoarse, int delta_k);
+  
+  // ! "kCoarse", "delta_k", "jumpToCoarsePolyOrder"
+  static std::vector<MeshPtr> meshesForMultigrid(MeshPtr fineMesh, Teuchos::ParameterList &parameters);
 };
 }
 

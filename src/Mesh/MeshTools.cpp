@@ -24,46 +24,6 @@
 using namespace Intrepid;
 using namespace Camellia;
 
-class InducedMeshPartitionPolicy : public MeshPartitionPolicy
-{
-  // (note that the induced partition policy will break if either mesh is refined, since the cellID map will change...)
-
-  map<GlobalIndexType, GlobalIndexType> _cellIDMap; // keys are this mesh's cellIDs; values are otherMesh's
-  MeshPtr _otherMesh;
-public:
-  InducedMeshPartitionPolicy(MeshPtr otherMesh, const map<GlobalIndexType, GlobalIndexType> & cellIDMap)
-  {
-    _otherMesh = otherMesh;
-    _cellIDMap = cellIDMap; // copy
-  }
-
-  virtual void partitionMesh(Mesh *mesh, PartitionIndexType numPartitions)
-  {
-    int otherPartitionCount = _otherMesh->globalDofAssignment()->getPartitionCount();
-    if (numPartitions < otherPartitionCount)
-    {
-      TEUCHOS_TEST_FOR_EXCEPTION(true, std::invalid_argument, "Induced partition count must be greater than or equal to otherMesh's");
-    }
-
-    set<GlobalIndexType> activeCellIDs = mesh->getActiveCellIDs();
-    vector< set<GlobalIndexType> > partitions(numPartitions);
-
-    for (set<GlobalIndexType>::iterator myCellIDIt = activeCellIDs.begin(); myCellIDIt != activeCellIDs.end(); myCellIDIt++)
-    {
-      GlobalIndexType myCellID = *myCellIDIt;
-      if (_cellIDMap.find(myCellID) == _cellIDMap.end())
-      {
-        TEUCHOS_TEST_FOR_EXCEPTION(true, std::invalid_argument, "cellID not found in _cellIDMap");
-      }
-      GlobalIndexType otherCellID = _cellIDMap[myCellID];
-      int otherPartitionNumber = _otherMesh->globalDofAssignment()->partitionForCellID(otherCellID);
-      partitions[otherPartitionNumber].insert(myCellID);
-    }
-
-    mesh->globalDofAssignment()->setPartitions(partitions);
-  }
-};
-
 // time slice utilities assume a tensor product cell in the time dimension
 // and further assume that if there are nodeCount vertices in the spatial element, then the nodes in space-time
 // will be ordered such that nodes(i) and nodes(i+nodeCount) correspond to each other
@@ -188,7 +148,7 @@ MeshPtr MeshTools::timeSliceMesh(MeshPtr spaceTimeMesh, double t,
     }
   }
 
-  MeshPartitionPolicyPtr partitionPolicy = Teuchos::rcp( new InducedMeshPartitionPolicy(spaceTimeMesh, sliceCellIDToSpaceTimeCellID) );
+  MeshPartitionPolicyPtr partitionPolicy = MeshPartitionPolicy::inducedPartitionPolicy(sliceMesh, spaceTimeMesh, sliceCellIDToSpaceTimeCellID);
 
   sliceMesh->setPartitionPolicy(partitionPolicy);
 

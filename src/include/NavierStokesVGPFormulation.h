@@ -154,7 +154,7 @@ public:
   BFPtr bf();
 
   // field variables:
-  VarPtr sigma(int i);
+  VarPtr sigma(int i, int j);
   VarPtr u(int i);
   VarPtr p();
 

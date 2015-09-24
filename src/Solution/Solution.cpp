@@ -579,13 +579,23 @@ void TSolution<Scalar>::initializeLHSVector()
 }
 
 template <typename Scalar>
+void TSolution<Scalar>::initializeLoad()
+{
+  narrate("initializeLoad");
+  Epetra_Map partMap = getPartitionMap();
+
+  _rhsVector = Teuchos::rcp(new Epetra_FEVector(partMap));
+}
+
+template <typename Scalar>
 void TSolution<Scalar>::initializeStiffnessAndLoad()
 {
   narrate("initializeStiffnessAndLoad");
   Epetra_Map partMap = getPartitionMap();
-
-  int maxRowSize = _mesh->rowSizeUpperBound();
-
+  
+//  int maxRowSize = _mesh->rowSizeUpperBound();
+  int maxRowSize = 0; // will cause more mallocs during insertion into the CrsMatrix, but will minimize the amount of memory allocated now.
+  
   _globalStiffMatrix = Teuchos::rcp(new Epetra_FECrsMatrix(::Copy, partMap, maxRowSize));
   _rhsVector = Teuchos::rcp(new Epetra_FEVector(partMap));
 }
@@ -1112,9 +1122,13 @@ int TSolution<Scalar>::solveWithPrepopulatedStiffnessAndLoad(TSolverPtr<Scalar> 
 
   if (solveSuccess != 0 )
   {
-//    EpetraExt::RowMatrixToMatrixMarketFile("/tmp/failing_globalStiffness.dat",*_globalStiffMatrix);
-
     if (rank==0) cout << "**** WARNING: in Solution.solve(), solver->solve() failed with error code " << solveSuccess << ". ****\n";
+    if (_saveMeshOnSolveError)
+    {
+      string savePrefix = "solveFailure";
+      if (rank==0) cout << "**** Outputting solution and mesh with prefix " << savePrefix << ". ****\n";
+      save(savePrefix);
+    }
   }
 
   double timeSolve = timer.ElapsedTime();
@@ -1494,7 +1508,7 @@ void TSolution<Scalar>::imposeBCs()
   //  cout << "rank " << rank << " has " << myGlobalIndicesSet.size() << " locally-owned dof indices.\n";
   Epetra_Map partMap = getPartitionMap();
 
-  _mesh->boundary().bcsToImpose(bcGlobalIndices,bcGlobalValues,*(_bc.get()), myGlobalIndicesSet, _dofInterpreter.get(), &partMap);
+  _mesh->boundary().bcsToImpose(bcGlobalIndices,bcGlobalValues,*(_bc.get()), myGlobalIndicesSet, _dofInterpreter.get());
   int numBCs = bcGlobalIndices.size();
 
   Intrepid::FieldContainer<GlobalIndexTypeToCast> bcGlobalIndicesCast;
@@ -4827,6 +4841,20 @@ template <typename Scalar>
 double TSolution<Scalar>::zeroMeanConstraintRho()
 {
   return _zmcRho;
+}
+
+template <typename Scalar>
+bool TSolution<Scalar>::usesCondensedSolve() const
+{
+  if (_oldDofInterpreter.get() != NULL)   // proxy for having a condensation interpreter
+  {
+    CondensedDofInterpreter<Scalar>* condensedDofInterpreter = dynamic_cast<CondensedDofInterpreter<Scalar>*>(_dofInterpreter.get());
+    if (condensedDofInterpreter != NULL)
+    {
+      return true;
+    }
+  }
+  return false;
 }
 
 template <typename Scalar>

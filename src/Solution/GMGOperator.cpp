@@ -131,7 +131,7 @@ _finePartitionMap(finePartitionMap), _br(true)
   }
 
   _coarseSolution->initializeLHSVector();
-  _coarseSolution->initializeStiffnessAndLoad(); // actually don't need to initialize stiffness anymore; we'll do this in computeCoarseStiffnessMatrix
+  _coarseSolution->initializeLoad(); // don't need to initialize stiffness anymore; we'll do this in computeCoarseStiffnessMatrix
 
 //  constructProlongationOperator();
 
@@ -172,6 +172,14 @@ void GMGOperator::computeCoarseStiffnessMatrix(Epetra_CrsMatrix *fineStiffnessMa
 //  cout << "Writing fine stiffness to disk before setting up smoother.\n";
 //  EpetraExt::RowMatrixToMatrixMarketFile("/tmp/A.dat",*fineStiffnessMatrix, NULL, NULL, false); // false: don't write header
   
+//  { // DEBUGGING
+//    if (this->getOperatorLevel() == 2)
+//    {
+//      cout << "Writing fine stiffness to disk before setting up smoother.\n";
+//      EpetraExt::RowMatrixToMatrixMarketFile("A_fine.dat",*fineStiffnessMatrix, NULL, NULL, false); // false: don't write header
+//    }
+//  }
+  
   Epetra_Time coarseStiffnessTimer(Comm());
 
 //  EpetraExt::RowMatrixToMatrixMarketFile("/tmp/A.dat",*fineStiffnessMatrix, NULL, NULL, false); // false: don't write header
@@ -204,6 +212,16 @@ void GMGOperator::computeCoarseStiffnessMatrix(Epetra_CrsMatrix *fineStiffnessMa
 
   PT_A_P->FillComplete();
 
+//  { // DEBUGGING
+//    if (this->getOperatorLevel() == 2)
+//    {
+//      cout << "Writing AP to disk.\n";
+//      EpetraExt::RowMatrixToMatrixMarketFile("AP.dat",AP, NULL, NULL, false); // false: don't write header
+//      cout << "Writing PT_A_P to disk.\n";
+//      EpetraExt::RowMatrixToMatrixMarketFile("PT_A_P.dat",*PT_A_P, NULL, NULL, false); // false: don't write header
+//    }
+//  }
+  
 //  string PT_A_P_path = "/tmp/PT_AP.dat";
 //  cout << "Writing P^T * (A * P) to disk at " << PT_A_P_path << endl;
 //  EpetraExt::RowMatrixToMatrixMarketFile(PT_A_P_path.c_str(), *PT_A_P, NULL, NULL, false); // false: don't write header
@@ -283,7 +301,7 @@ Teuchos::RCP<Epetra_CrsMatrix> GMGOperator::constructProlongationOperator()
   // maps coefficients from coarse to fine
 //  _globalStiffMatrix = Teuchos::rcp(new Epetra_FECrsMatrix(::Copy, partMap, maxRowSize));
   
-  int maxRowSizeToPrescribe = _coarseMesh->rowSizeUpperBound();
+  int maxRowSizeToPrescribe = 0; //_coarseMesh->rowSizeUpperBound();
   
   CondensedDofInterpreter<double>* condensedDofInterpreterCoarse = NULL;
   CondensedDofInterpreter<double>* condensedDofInterpreterFine = NULL;
@@ -435,9 +453,13 @@ Teuchos::RCP<Epetra_CrsMatrix> GMGOperator::constructProlongationOperator()
 
   _P = P;
 
-//  EpetraExt::RowMatrixToMatrixMarketFile("/tmp/P.dat",*_P, NULL, NULL, false); // false: don't write header
-
-//  cout << "after FillComplete(),  _P has " << _P->NumGlobalRows64() << " rows and " << _P->NumGlobalCols64() << " columns.\n";
+//  { // DEBUGGING
+//    if (this->getOperatorLevel() == 2)
+//    {
+//      EpetraExt::RowMatrixToMatrixMarketFile("P.dat",*_P, NULL, NULL, false); // false: don't write header
+//      cout << "*************** after GlobalAssemble(),  _P has " << _P->NumGlobalRows64() << " rows and " << _P->NumGlobalCols64() << " columns. ******************\n";
+//    }
+//  }
 
   _timeProlongationOperatorConstruction = prolongationTimer.ElapsedTime();
   
@@ -714,9 +736,8 @@ LocalDofMapperPtr GMGOperator::getLocalCoefficientMap(GlobalIndexType fineCellID
                 unsigned volumeSubcellPermutation = 0;
                 unsigned fineSubcellOrdinalInFineDomain = 0; // the side is the whole fine domain...
                 SubBasisReconciliationWeights fieldInteriorWeights = _br.constrainedWeightsForTermTraced(termTraced, varTracedID,
-                                                                                                                sideDim, fineBasis, fineSubcellOrdinalInFineDomain, refBranch, sideOrdinal,
-                                                                                                                volumeTopo,
-                                                                                                                spaceDim, volumeBasis, volumeSubcellOrdinal, volumeDomainOrdinal, volumeSubcellPermutation);
+                                                                                                         sideDim, fineBasis, fineSubcellOrdinalInFineDomain, refBranch, sideOrdinal, volumeTopo,
+                                                                                                         spaceDim, volumeBasis, volumeSubcellOrdinal, volumeDomainOrdinal, volumeSubcellPermutation);
 
                 fieldInteriorWeights = BasisReconciliation::filterOutZeroRowsAndColumns(fieldInteriorWeights);
                 
@@ -744,6 +765,10 @@ LocalDofMapperPtr GMGOperator::getLocalCoefficientMap(GlobalIndexType fineCellID
                 }
                 int n = fieldInteriorWeights.weights.dimension(0);
                 int m = fieldInteriorWeights.weights.dimension(1);
+                if ((n==0) || (m==0))
+                {
+                  continue;
+                }
                 double *firstEntry = (double *) &fieldInteriorWeights.weights[0];
                 Epetra_SerialDenseMatrix fineBasisToCoarseFieldMatrix(::Copy,firstEntry,m,m,n);
                 fineBasisToCoarseFieldMatrix.SetUseTranspose(true); // use transpose, because SDM is column-major, while FC is row-major
@@ -931,6 +956,14 @@ LocalDofMapperPtr GMGOperator::getLocalCoefficientMap(GlobalIndexType fineCellID
   }
 
   return dofMapper;
+}
+
+int GMGOperator::getOperatorLevel() const
+{
+  if (_coarseOperator != Teuchos::null)
+    return _coarseOperator->getOperatorLevel() + 1;
+  else
+    return 0;
 }
 
 int GMGOperator::getSmootherApplicationCount() const
@@ -1714,10 +1747,10 @@ void GMGOperator::setUpSmoother(Epetra_CrsMatrix *fineStiffnessMatrix)
   err = smoother->Compute();
 //  cout << "smoother->Compute() completed\n";
 
-
+  int myLevel = getOperatorLevel();
   if (err != 0)
   {
-    cout << "WARNING: In GMGOperator, smoother->Compute() returned with err = " << err << endl;
+    cout << "WARNING: In GMGOperator (level " << myLevel << "), smoother->Compute() returned with err = " << err << endl;
   }
 
   if (choice == CAMELLIA_ADDITIVE_SCHWARZ)

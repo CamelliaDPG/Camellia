@@ -42,7 +42,7 @@ enum ProblemChoice
 
 void initializeSolutionAndCoarseMesh(SolutionPtr &solution, vector<MeshPtr> &meshesCoarseToFine, IPPtr &graphNorm, ProblemChoice problemChoice,
                                      int spaceDim, bool conformingTraces, bool useStaticCondensation, int numCells, int k, int delta_k,
-                                     int k_coarse, int rootMeshNumCells, bool useZeroMeanConstraints)
+                                     int k_coarse, int rootMeshNumCells, bool useZeroMeanConstraints, bool jumpToCoarsePolyOrder)
 {
   int rank = Teuchos::GlobalMPISession::getRank();
   
@@ -136,8 +136,9 @@ void initializeSolutionAndCoarseMesh(SolutionPtr &solution, vector<MeshPtr> &mes
   }
   else if (problemChoice == Stokes)
   {
+    double mu = 1.0;
     
-    StokesVGPFormulation formulation(spaceDim, conformingTraces);
+    StokesVGPFormulation formulation = StokesVGPFormulation::steadyFormulation(spaceDim, mu, conformingTraces);
     
     p = formulation.p();
     
@@ -171,11 +172,6 @@ void initializeSolutionAndCoarseMesh(SolutionPtr &solution, vector<MeshPtr> &mes
       u2_exact = exp_x * y * sin_y + exp_z * y * cos_y;
       u3_exact = - exp_z * (cos_y - y * sin_y);
       p_exact = 2.0 * exp_x * sin_y + 2.0 * exp_z * cos_y;
-      // DEBUGGING:
-      //      u1_exact = Function::zero();
-      //      u2_exact = Function::zero();
-      //      u3_exact = x;
-      //      p_exact = Function::zero();
     }
     
     // to ensure zero mean for p, need the domain carefully defined:
@@ -184,40 +180,18 @@ void initializeSolutionAndCoarseMesh(SolutionPtr &solution, vector<MeshPtr> &mes
     width = 2.0;
     
     bc = BC::bc();
-    // our usual way of adding in the zero mean constraint results in a negative eigenvalue
-    // therefore, for now, we use a single-point BC
-    //    bc->addZeroMeanConstraint(formulation.p());
+
     SpatialFilterPtr boundary = SpatialFilter::allSpace();
     bc->addDirichlet(formulation.u_hat(1), boundary, u1_exact);
     bc->addDirichlet(formulation.u_hat(2), boundary, u2_exact);
     if (spaceDim==3) bc->addDirichlet(formulation.u_hat(3), boundary, u3_exact);
     
-    double mu = 1.0;
+    vector<FunctionPtr> uVector = (spaceDim==2) ? vector<FunctionPtr>{u1_exact,u2_exact} : vector<FunctionPtr>{u1_exact,u2_exact,u3_exact};
+    FunctionPtr u_exact = Function::vectorize(uVector);
     
-    FunctionPtr f1, f2, f3;
-    if (spaceDim==2)
-    {
-      f1 = -p_exact->dx() + mu * (u1_exact->dx()->dx() + u1_exact->dy()->dy());
-      f2 = -p_exact->dy() + mu * (u2_exact->dx()->dx() + u2_exact->dy()->dy());
-    }
-    else
-    {
-      f1 = -p_exact->dx() + mu * (u1_exact->dx()->dx() + u1_exact->dy()->dy() + u1_exact->dz()->dz());
-      f2 = -p_exact->dy() + mu * (u2_exact->dx()->dx() + u2_exact->dy()->dy() + u2_exact->dz()->dz());
-      f3 = -p_exact->dz() + mu * (u3_exact->dx()->dx() + u3_exact->dy()->dy() + u3_exact->dz()->dz());
-    }
+    FunctionPtr forcingFunction = formulation.forcingFunction(u_exact, p_exact);
     
-    VarPtr v1 = formulation.v(1);
-    VarPtr v2 = formulation.v(2);
-    
-    VarPtr v3;
-    if (spaceDim==3) v3 = formulation.v(3);
-    
-    RHSPtr rhs = RHS::rhs();
-    if (spaceDim==2)
-      rhs->addTerm(f1 * v1 + f2 * v2);
-    else
-      rhs->addTerm(f1 * v1 + f2 * v2 + f3 * v3);
+    rhs = formulation.rhs(forcingFunction);
   }
   
   int H1Order = k + 1;
@@ -247,7 +221,7 @@ void initializeSolutionAndCoarseMesh(SolutionPtr &solution, vector<MeshPtr> &mes
       {
         TEUCHOS_TEST_FOR_EXCEPTION(true, std::invalid_argument, "origin vertex not found");
       }
-      bc->addSinglePointBC(p->ID(), 0, vertexIndex);
+      bc->addSpatialPointBC(p->ID(), 0, origin);
     }
     else
     {
@@ -259,63 +233,88 @@ void initializeSolutionAndCoarseMesh(SolutionPtr &solution, vector<MeshPtr> &mes
   
   meshesCoarseToFine.clear();
   
-  MeshTopologyViewPtr meshTopoView;
-  if (useLightWeightViews)
-    meshTopoView = mesh->getTopology()->getView(mesh->getActiveCellIDs());
-  else
-    meshTopoView = mesh->getTopology()->deepCopy();
-  
-  int H1Order_coarse = k_coarse + 1;
-  MeshPtr k0Mesh = Teuchos::rcp(new Mesh(meshTopoView, bf, H1Order_coarse, delta_k));
-  meshesCoarseToFine.push_back(k0Mesh);
-  
-  int meshWidthCells = rootMeshNumCells;
-  while (meshWidthCells < numCells)
+  bool useGMGSolverForMeshes = true; // use static method from GMGSolver to generate meshesCoarseToFine
+  if (useGMGSolverForMeshes)
   {
-    set<IndexType> activeCellIDs = mesh->getActiveCellIDs(); // should match between coarseMesh and mesh
-    mesh->hRefine(activeCellIDs);
-    if (rank==0)
+    int meshWidthCells = rootMeshNumCells;
+    while (meshWidthCells < numCells)
     {
-      print("h-refining cells", activeCellIDs);
+      set<IndexType> activeCellIDs = mesh->getActiveCellIDs(); // should match between coarseMesh and mesh
+      mesh->hRefine(activeCellIDs);
+      if (rank==0)
+      {
+        print("h-refining cells", activeCellIDs);
+      }
+      meshWidthCells *= 2;
     }
-    
+    if (meshWidthCells != numCells)
+    {
+      if (rank == 0)
+      {
+        cout << "Warning: may have over-refined mesh; mesh has width " << meshWidthCells << ", not " << numCells << endl;
+      }
+    }
+  }
+  else
+  {
     MeshTopologyViewPtr meshTopoView;
     if (useLightWeightViews)
       meshTopoView = mesh->getTopology()->getView(mesh->getActiveCellIDs());
     else
       meshTopoView = mesh->getTopology()->deepCopy();
-        
-    k0Mesh = Teuchos::rcp(new Mesh(meshTopoView, bf, H1Order_coarse, delta_k));
     
+    int H1Order_coarse = k_coarse + 1;
+    MeshPtr k0Mesh = Teuchos::rcp(new Mesh(meshTopoView, bf, H1Order_coarse, delta_k));
     meshesCoarseToFine.push_back(k0Mesh);
-    meshWidthCells *= 2;
-  }
-  
-  // a new experiment: duplicate the finest h-mesh, so that we get a smoother application
-  // that involves just the fine k0 elements.
-  if (k_coarse != k)
-    meshesCoarseToFine.push_back(k0Mesh);
-  
-  if ((k_coarse == 0) && (k > 1))
-  {
-    MeshTopologyViewPtr meshTopoView;
-    if (useLightWeightViews)
-      meshTopoView = k0Mesh->getTopology()->getView(mesh->getActiveCellIDs());
-    else
-      meshTopoView = k0Mesh->getTopology()->deepCopy();
     
-    MeshPtr k1Mesh = Teuchos::rcp(new Mesh(meshTopoView, bf, H1Order_coarse + 1, delta_k));
-
-    meshesCoarseToFine.push_back(k1Mesh);
-  }
-  
-  meshesCoarseToFine.push_back(mesh);
-  
-  if (meshWidthCells != numCells)
-  {
-    if (rank == 0)
+    int meshWidthCells = rootMeshNumCells;
+    while (meshWidthCells < numCells)
     {
-      cout << "Warning: may have over-refined mesh; mesh has width " << meshWidthCells << ", not " << numCells << endl;
+      set<IndexType> activeCellIDs = mesh->getActiveCellIDs(); // should match between coarseMesh and mesh
+      mesh->hRefine(activeCellIDs);
+      if (rank==0)
+      {
+        print("h-refining cells", activeCellIDs);
+      }
+      
+      MeshTopologyViewPtr meshTopoView;
+      if (useLightWeightViews)
+        meshTopoView = mesh->getTopology()->getView(mesh->getActiveCellIDs());
+      else
+        meshTopoView = mesh->getTopology()->deepCopy();
+          
+      k0Mesh = Teuchos::rcp(new Mesh(meshTopoView, bf, H1Order_coarse, delta_k));
+      
+      meshesCoarseToFine.push_back(k0Mesh);
+      meshWidthCells *= 2;
+    }
+    
+    // a new experiment: duplicate the finest h-mesh, so that we get a smoother application
+    // that involves just the fine k0 elements.
+    if (k_coarse != k)
+      meshesCoarseToFine.push_back(k0Mesh);
+    
+    if ((k_coarse == 0) && (k > 1))
+    {
+      MeshTopologyViewPtr meshTopoView;
+      if (useLightWeightViews)
+        meshTopoView = k0Mesh->getTopology()->getView(mesh->getActiveCellIDs());
+      else
+        meshTopoView = k0Mesh->getTopology()->deepCopy();
+      
+      MeshPtr k1Mesh = Teuchos::rcp(new Mesh(meshTopoView, bf, H1Order_coarse + 1, delta_k));
+
+      meshesCoarseToFine.push_back(k1Mesh);
+    }
+    
+    meshesCoarseToFine.push_back(mesh);
+    
+    if (meshWidthCells != numCells)
+    {
+      if (rank == 0)
+      {
+        cout << "Warning: may have over-refined mesh; mesh has width " << meshWidthCells << ", not " << numCells << endl;
+      }
     }
   }
   
@@ -324,6 +323,15 @@ void initializeSolutionAndCoarseMesh(SolutionPtr &solution, vector<MeshPtr> &mes
   solution = Solution::solution(mesh, bc, rhs, graphNorm);
   solution->setUseCondensedSolve(useStaticCondensation);
   solution->setZMCsAsGlobalLagrange(false); // fine grid solution shouldn't impose ZMCs (should be handled in coarse grid solve)
+  
+  if (useGMGSolverForMeshes)
+  {
+    Teuchos::ParameterList pl;
+    pl.set("kCoarse", k_coarse);
+    pl.set("delta_k", delta_k);
+    pl.set("jumpToCoarsePolyOrder",jumpToCoarsePolyOrder);
+    meshesCoarseToFine = GMGSolver::meshesForMultigrid(solution->mesh(), pl);
+  }
 }
 
 long long approximateMemoryCostsForMeshTopologies(vector<MeshPtr> meshes)
@@ -363,6 +371,7 @@ int main(int argc, char *argv[])
   int k = 1; // poly order for field variables
   int delta_k = 1;   // test space enrichment
   int k_coarse = 0; // coarse poly order
+  bool jumpToCoarsePolyOrder = false;
 
   bool conformingTraces = false;
 
@@ -398,6 +407,8 @@ int main(int argc, char *argv[])
   cmdp.setOption("delta_k", &delta_k, "test space polynomial order enrichment");
   cmdp.setOption("coarsePolyOrder", &k_coarse, "polynomial order for field variables on coarse grid");
 
+  cmdp.setOption("jumpToCoarsePolyOrder","dontJumpToCoarsePolyOrder",&jumpToCoarsePolyOrder);
+  
   cmdp.setOption("coarseSolver", &coarseSolverChoiceString, "coarse solver choice: KLU, MUMPS, SuperLUDist, SimpleML");
 
   cmdp.setOption("CG", "GMRES", &useConjugateGradient);
@@ -529,7 +540,7 @@ int main(int argc, char *argv[])
   
   vector<MeshPtr> meshesCoarseToFine;
   initializeSolutionAndCoarseMesh(solution, meshesCoarseToFine, ip, problemChoice, spaceDim, conformingTraces, useCondensedSolve,
-                                  numCells, k, delta_k, k_coarse, numCellsRootMesh, useZeroMeanConstraints);
+                                  numCells, k, delta_k, k_coarse, numCellsRootMesh, useZeroMeanConstraints, jumpToCoarsePolyOrder);
   
   double meshInitializationTime = timer.ElapsedTime();
 
@@ -563,11 +574,13 @@ int main(int argc, char *argv[])
   
   if (rank==0)
   {
+    int numLevels = meshesCoarseToFine.size();
     cout << setprecision(2);
     cout << "Mesh initialization completed in " << meshInitializationTime << " seconds.  Fine mesh has " << numDofs;
     cout << " global degrees of freedom (" << numTraceDofs << " trace dofs) on " << numElements << " elements.\n";
     cout << "Coarsest mesh has " << coarseMeshGlobalDofs << " global degrees of freedom (" << coarseMeshTraceDofs << " trace dofs) on " << coarseMeshNumElements << " elements.\n";
     cout << "Approximate (correct within a factor of 2 or so) memory cost for all mesh topologies: " << memoryCostInMB << " MB.\n";
+    cout << "Number of mesh levels: " << numLevels << ".\n";
     cout << "Approximate memory cost per element (assuming dense storage): G = " << G_denseMatrixSize << " MB, B = " << B_denseMatrixSize << " MB, K = ";
     cout << K_denseMatrixSize << " MB.\n";
     cout << totalTrialDofs << " trial dofs per element; " << totalTestDofs << " test dofs.\n";
@@ -587,7 +600,10 @@ int main(int argc, char *argv[])
   timer.ResetStartTime();
   bool reuseFactorization = true;
   SolverPtr coarseSolver = Solver::getDirectSolver(reuseFactorization);
-  Teuchos::RCP<GMGSolver> gmgSolver = Teuchos::rcp(new GMGSolver(solution, meshesCoarseToFine, cgMaxIterations, cgTol, multigridStrategy, coarseSolver, useCondensedSolve,useDiagonalSchwarzWeighting));
+  
+  Teuchos::RCP<GMGSolver> gmgSolver = Teuchos::rcp(new GMGSolver(solution, meshesCoarseToFine, cgMaxIterations, cgTol,
+                                                                 multigridStrategy, coarseSolver, useCondensedSolve,
+                                                                 useDiagonalSchwarzWeighting));
   gmgSolver->setUseConjugateGradient(useConjugateGradient);
   gmgSolver->setAztecOutput(azOutput);
   gmgSolver->gmgOperator()->setNarrateOnRankZero(logFineOperator,"finest GMGOperator");

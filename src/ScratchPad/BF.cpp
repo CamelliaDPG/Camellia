@@ -38,8 +38,8 @@ namespace Camellia
     {
       TEUCHOS_TEST_FOR_EXCEPTION(true, std::invalid_argument, "This constructor is for legacy subclasses only!  Call a VarFactory version instead");
     }
-    _useQRSolveForOptimalTestFunctions = true;
-    _useSPDSolveForOptimalTestFunctions = false;
+    _useQRSolveForOptimalTestFunctions = false;
+    _useSPDSolveForOptimalTestFunctions = true;
     _useIterativeRefinementsWithSPDSolve = false;
     _warnAboutZeroRowsAndColumns = true;
     
@@ -1114,7 +1114,7 @@ namespace Camellia
         if (result != 0)
         {
           // may be that we're not SPD numerically
-          cout << "During optimal test weight solution, encountered IP matrix that's not numerically SPD.  Solving with LU factorization instead of Cholesky.\n";
+          cout << "During optimal test weight solution, SPD solve returned error " << result << ".  Solving with LU factorization instead of SPD solve.\n";
           result = SerialDenseWrapper::solveSystemMultipleRHS(optimalWeightsT, cellIPMatrix, cellStiffness);
         }
       }

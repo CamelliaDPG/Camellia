@@ -61,6 +61,7 @@ public:
   virtual TFunctionPtr<Scalar> y();
   virtual TFunctionPtr<Scalar> z();
   virtual TFunctionPtr<Scalar> t(); // defined to be the last dimension in a space-time context
+  virtual TFunctionPtr<Scalar> spatialComponent(int d); // 1 for x(), 2 for y(), 3 for z().
 
   virtual TFunctionPtr<Scalar> dx();
   virtual TFunctionPtr<Scalar> dy();
@@ -169,6 +170,7 @@ public:
   static TFunctionPtr<Scalar> polarize(TFunctionPtr<Scalar> f);
   static TFunctionPtr<Scalar> vectorize(TFunctionPtr<Scalar> f1, TFunctionPtr<Scalar> f2);
   static TFunctionPtr<Scalar> vectorize(TFunctionPtr<Scalar> f1, TFunctionPtr<Scalar> f2, TFunctionPtr<Scalar> f3);
+  static TFunctionPtr<Scalar> vectorize(std::vector<TFunctionPtr<Scalar>> components);
   static TFunctionPtr<double> normal();    // unit outward-facing normal on each element boundary
   static TFunctionPtr<double> normal_1D(); // -1 at left side of element, +1 at right
   static TFunctionPtr<double> normalSpaceTime();

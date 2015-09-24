@@ -276,6 +276,7 @@ Mesh::Mesh(MeshTopologyViewPtr meshTopology, Teuchos::RCP<GlobalDofAssignment> g
   _meshTopology = meshTopology;
   _gda = gda;
   _bilinearForm = bf;
+  _varFactory = bf->varFactory();
   _pToAddToTest = pToAddToTest;
   _useConformingTraces = useConformingTraces;
   _usePatchBasis = usePatchBasis;
@@ -1161,7 +1162,7 @@ void Mesh::pRefine(const set<GlobalIndexType> &cellIDsForPRefinements, int pToAd
   for (vector< Teuchos::RCP<RefinementObserver> >::iterator meshIt = _registeredObservers.begin();
        meshIt != _registeredObservers.end(); meshIt++)
   {
-    (*meshIt)->pRefine(cellIDsForPRefinements);
+    (*meshIt)->pRefine(cellIDsForPRefinements); // TODO: add pToAdd argument!
   }
 
   _gda->didPRefine(cellIDsForPRefinements, pToAdd);

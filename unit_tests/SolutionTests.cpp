@@ -97,6 +97,255 @@ vector<double> makeVertex(double v0, double v1, double v2, double v3)
     TEST_COMPARE(diff_l2, <, tol);
   }
 
+  TEUCHOS_UNIT_TEST( Solution, CondensedSolveWithPointConstraint_Slow )
+  {
+    /*
+     This test copied over, more or less wholesale, from the legacy DPGTests::SolutionTests.
+     It's not particularly granular; a refactoring to split into several tests might be useful.
+     */
+    double tol = 1e-11;
+    
+    int rank = Teuchos::GlobalMPISession::getRank();;
+    
+    int spaceDim = 2;
+    bool conformingTraces = false; // false mostly because I want to do cavity flow with non-H^1 BCs
+    double mu = 1.0;
+    StokesVGPFormulation stokesForm = StokesVGPFormulation::steadyFormulation(spaceDim, mu, conformingTraces);
+    
+    VarPtr u1 = stokesForm.u(1);
+    VarPtr u2 = stokesForm.u(2);
+    VarPtr p = stokesForm.p();
+    
+    VarPtr u1hat = stokesForm.u_hat(1);
+    VarPtr u2hat = stokesForm.u_hat(2);
+    
+    BFPtr bf = stokesForm.bf();
+    
+    // robust test norm
+    IPPtr ip = bf->graphNorm();
+    
+    ////////////////////   SPECIFY RHS   ///////////////////////
+    
+    RHSPtr rhs = RHS::rhs(); // zero RHS
+    
+    ////////////////////   BUILD MESH   ///////////////////////
+    
+    int H1Order = 2;
+    int pToAdd = 2;
+    
+    // first, single-element mesh
+    MeshPtr mesh = MeshFactory::quadMesh(bf, H1Order);
+    
+    ////////////////////   CREATE BCs   ///////////////////////
+    // cavity flow
+    BCPtr bc = BC::bc();
+    SpatialFilterPtr topBoundary = SpatialFilter::matchingY(1.0);
+    SpatialFilterPtr wallBoundary = SpatialFilter::negatedFilter(topBoundary);
+    
+    FunctionPtr n = Function::normal();
+    
+    bc->addDirichlet(u1hat, topBoundary, Function::constant(1.0));
+    bc->addDirichlet(u1hat, wallBoundary, Function::zero());
+    bc->addDirichlet(u2hat, wallBoundary, Function::zero());
+    bc->addSinglePointBC(p->ID(), 0.0, mesh);
+    
+    ////////////////////   REFINE & SOLVE   ///////////////////////
+    SolutionPtr solution = Teuchos::rcp( new Solution(mesh, bc, rhs, ip) );
+    SolutionPtr condensedSolution = Teuchos::rcp( new Solution(mesh, bc, rhs, ip) );
+    
+    //  condensedSolution->setWriteMatrixToFile(true, "/tmp/condensed_legacy_single_element_max_rule.dat");
+    //  condensedSolution->setWriteRHSToMatrixMarketFile(true, "/tmp/rhs_legacy.dat");
+    
+    solution->solve(false);
+    condensedSolution->condensedSolve();
+    
+    //  out << "legacy interface, coefficients for cell 0:\n" << condensedSolution->allCoefficientsForCellID(0);
+    //  out << "legacy interface, coefficients for cell 0 (uncondensed solve):\n" << solution->allCoefficientsForCellID(0);
+    
+    FunctionPtr u1_soln = Function::solution(u1,solution);
+    FunctionPtr u1_condensed_soln = Function::solution(u1,condensedSolution);
+    double diff = (u1_soln-u1_condensed_soln)->l2norm(mesh,H1Order);
+    if (diff > tol)
+    {
+      out << "Failing test: Condensed solve with single-point constraint on single-element max rule mesh does not match regular solve" << endl;
+      out << "L2 norm of difference is " << diff << "; tol is " << tol << endl;
+      success=false;
+    }
+    FunctionPtr p_soln = Function::solution(p,solution);
+    FunctionPtr p_condensed_soln = Function::solution(p,condensedSolution);
+    diff = (p_soln-p_condensed_soln)->l2norm(mesh,H1Order);
+    if (diff > tol)
+    {
+      out << "Failing test: Condensed solve pressure solution with single-point constraint on single-element max rule mesh does not match regular solve" << endl;
+      out << "L2 norm of difference is " << diff << "; tol is " << tol << endl;
+      success=false;
+    }
+    
+    // repeat, but now with the newer interface for condensed solve:
+    solution = Teuchos::rcp( new Solution(mesh, bc, rhs, ip) );
+    condensedSolution = Teuchos::rcp( new Solution(mesh, bc, rhs, ip) );
+    condensedSolution->setUseCondensedSolve(true);
+    
+    //  condensedSolution->setWriteMatrixToFile(true, "/tmp/condensed_new_interface_single_element_max_rule.dat");
+    //  condensedSolution->setWriteRHSToMatrixMarketFile(true, "/tmp/rhs_new.dat");
+    
+    solution->solve(false);
+    condensedSolution->solve(false);
+    
+    //  out << "new interface, coefficients for cell 0:\n" << condensedSolution->allCoefficientsForCellID(0);
+    //  out << "new interface, coefficients for cell 0 (uncondensed solve):\n" << solution->allCoefficientsForCellID(0);
+    
+    u1_soln = Function::solution(u1,solution);
+    u1_condensed_soln = Function::solution(u1,condensedSolution);
+    diff = (u1_soln-u1_condensed_soln)->l2norm(mesh,H1Order);
+    if (diff > tol)
+    {
+      out << "Failing test: Condensed solve with single-point constraint on single-element max rule mesh does not match regular solve";
+      out << " when using newer setUseCondensedSolve() method." << endl;
+      out << "L2 norm of difference is " << diff << "; tol is " << tol << endl;
+      success=false;
+    }
+    p_soln = Function::solution(p,solution);
+    p_condensed_soln = Function::solution(p,condensedSolution);
+    diff = (p_soln-p_condensed_soln)->l2norm(mesh,H1Order);
+    if (diff > tol)
+    {
+      out << "Failing test: Condensed solve pressure solution with single-point constraint on single-element max rule mesh does not match regular solve";
+      out << " when using newer setUseCondensedSolve() method." << endl;
+      out << "L2 norm of difference is " << diff << "; tol is " << tol << endl;
+      success=false;
+    }
+    
+    // now, same thing, but with a single-element minimum-rule mesh:
+    mesh = MeshFactory::quadMeshMinRule(bf, H1Order, pToAdd, 1.0, 1.0, 1, 1);
+    
+    solution = Teuchos::rcp( new Solution(mesh, bc, rhs, ip) );
+    condensedSolution = Teuchos::rcp( new Solution(mesh, bc, rhs, ip) );
+    //  condensedSolution->setUseCondensedSolve(true);
+    
+    solution->solve(false);
+    condensedSolution->condensedSolve();
+    u1_soln = Function::solution(u1,solution);
+    u1_condensed_soln = Function::solution(u1,condensedSolution);
+    diff = (u1_soln-u1_condensed_soln)->l2norm(mesh,H1Order);
+    if (diff>tol)
+    {
+      out << "Failing test: Condensed solve with single-point constraint on single-element min rule mesh does not match regular solve" << endl;
+      out << "L2 norm of difference is " << diff << "; tol is " << tol << endl;
+      success=false;
+    }
+    p_soln = Function::solution(p,solution);
+    p_condensed_soln = Function::solution(p,condensedSolution);
+    diff = (p_soln-p_condensed_soln)->l2norm(mesh,H1Order);
+    if (diff > tol)
+    {
+      out << "Failing test: Condensed solve pressure solution with single-point constraint on single-element min rule mesh does not match regular solve" << endl;
+      out << "L2 norm of difference is " << diff << "; tol is " << tol << endl;
+      success=false;
+    }
+    
+    int numCells = 2;
+    // MAX RULE, multi-element refined mesh
+    mesh = MeshFactory::quadMesh(bf, H1Order);
+    
+    set<GlobalIndexType> cell0;
+    cell0.insert(0);
+    mesh->hRefine(cell0, RefinementPattern::regularRefinementPatternQuad());
+    
+    solution = Teuchos::rcp( new Solution(mesh, bc, rhs, ip) );
+    condensedSolution = Teuchos::rcp( new Solution(mesh, bc, rhs, ip) );
+    solution->solve(false);
+    condensedSolution->condensedSolve();
+    u1_soln = Function::solution(u1,solution);
+    u1_condensed_soln = Function::solution(u1,condensedSolution);
+    diff = (u1_soln-u1_condensed_soln)->l2norm(mesh,H1Order);
+    
+    if (diff>tol)
+    {
+      out << "Failing test: Condensed solve with single-point constraint on refined max rule mesh does not match regular solve" << endl;
+      out << "L2 norm of difference is " << diff << "; tol is " << tol << endl;
+      success=false;
+    }
+    p_soln = Function::solution(p,solution);
+    p_condensed_soln = Function::solution(p,condensedSolution);
+    diff = (p_soln-p_condensed_soln)->l2norm(mesh,H1Order);
+    if (diff > tol)
+    {
+      out << "Failing test: Condensed solve pressure solution with single-point constraint on refined max rule mesh does not match regular solve" << endl;
+      out << "L2 norm of difference is " << diff << "; tol is " << tol << endl;
+      success=false;
+    }
+    
+    // MIN RULE, multi-element compatible mesh
+    mesh = MeshFactory::quadMeshMinRule(bf, H1Order, pToAdd, 1.0, 1.0, numCells, numCells);
+    
+    solution = Teuchos::rcp( new Solution(mesh, bc, rhs, ip) );
+    condensedSolution = Teuchos::rcp( new Solution(mesh, bc, rhs, ip) );
+    solution->solve(false);
+    condensedSolution->condensedSolve();
+    u1_soln = Function::solution(u1,solution);
+    u1_condensed_soln = Function::solution(u1,condensedSolution);
+    diff = (u1_soln-u1_condensed_soln)->l2norm(mesh,H1Order);
+    if (diff>tol)
+    {
+      out << "Failing test: Condensed solve with single-point constraint on multi-element (compatible) min rule mesh does not match regular solve" << endl;
+      out << "L2 norm of difference is " << diff << "; tol is " << tol << endl;
+      success=false;
+#ifdef HAVE_EPETRAEXT_HDF5
+      ostringstream dir_name;
+      dir_name << "multiElementMinRuleMeshStandardVsCondensedSolve";
+      HDF5Exporter exporter(mesh,dir_name.str());
+      VarFactoryPtr vf = bf->varFactory();
+      exporter.exportSolution(solution,vf,0);
+      exporter.exportSolution(condensedSolution,vf,1);
+#endif
+    }
+    p_soln = Function::solution(p,solution);
+    p_condensed_soln = Function::solution(p,condensedSolution);
+    diff = (p_soln-p_condensed_soln)->l2norm(mesh,H1Order);
+    if (diff > tol)
+    {
+      out << "Failing test: Condensed solve pressure solution with single-point constraint on multi-element (compatible) min rule mesh does not match regular solve" << endl;
+      out << "L2 norm of difference is " << diff << "; tol is " << tol << endl;
+      success=false;
+    }
+    
+    
+    // MIN RULE, multi-element refined mesh
+    mesh->hRefine(cell0, RefinementPattern::regularRefinementPatternQuad());
+    
+    solution = Teuchos::rcp( new Solution(mesh, bc, rhs, ip) );
+    condensedSolution = Teuchos::rcp( new Solution(mesh, bc, rhs, ip) );
+    solution->solve(false);
+    condensedSolution->condensedSolve();
+    u1_soln = Function::solution(u1,solution);
+    u1_condensed_soln = Function::solution(u1,condensedSolution);
+    diff = (u1_soln-u1_condensed_soln)->l2norm(mesh,H1Order);
+    if (diff>tol)
+    {
+      out << "Failing test: Condensed solve with single-point constraint on refined min rule mesh does not match regular solve" << endl;
+      out << "L2 norm of difference is " << diff << "; tol is " << tol << endl;
+      success=false;
+      int cellID = 6;
+      FieldContainer<double> cell6coeffs_standard = solution->allCoefficientsForCellID(cellID, false); // false: don't warn if off-rank
+      FieldContainer<double> cell6coeffs_condensed = condensedSolution->allCoefficientsForCellID(cellID, false); // false: don't warn if off-rank
+      if (rank==0)
+      {
+        out << "cell " << cellID << ", standard solution coefficients:\n" << cell6coeffs_standard;
+        out << "cell " << cellID << ", condensed solution coefficients:\n" << cell6coeffs_condensed;
+      }
+    }
+    p_soln = Function::solution(p,solution);
+    p_condensed_soln = Function::solution(p,condensedSolution);
+    diff = (p_soln-p_condensed_soln)->l2norm(mesh,H1Order);
+    if (diff > tol)
+    {
+      out << "Failing test: Condensed solve pressure solution with single-point constraint on refined min rule mesh does not match regular solve" << endl;
+      out << "L2 norm of difference is " << diff << "; tol is " << tol << endl;
+      success=false;
+    }
+  }
+  
 TEUCHOS_UNIT_TEST( Solution, ImportOffRankCellData )
 {
   int numCells = 8;

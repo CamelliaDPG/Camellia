@@ -34,6 +34,8 @@ class MeshTopology : public MeshTopologyView
   map< vector<double>, IndexType > _vertexMap; // maps into indices in the vertices list -- here just for vertex identification (i.e. so we don't add the same vertex twice)
   vector< vector<double> > _vertices; // vertex locations
 
+  EntityHandle _initialTimeEntityHandle = -1; // for space-time MeshTopologies: track the handle for the entity set corresponding to the space-time sides at the initial time.
+  
   map< EntityHandle, EntitySetPtr > _entitySets;
   map< string, vector<pair<EntityHandle, int> > > _tagSetsInteger; // tags with integer value, applied to EntitySets.
   
@@ -201,6 +203,12 @@ public:
   const set<IndexType> &getRootCellIndices();
   
   vector<EntitySetPtr> getEntitySetsForTagID(string tagName, int tagID);
+  
+  // ! Returns an EntitySet corresponding to the initial time, for a space-time MeshTopology.  Requires that setEntitySetInitialTime() has been called previously.  (This is usually done in MeshFactory.)
+  EntitySetPtr getEntitySetInitialTime() const;
+  
+  // ! Specifies an EntitySet corresponding to the initial time, for a space-time MeshTopology.  Called by MeshFactory.
+  void setEntitySetInitialTime(EntitySetPtr entitySet);
 
   // ! maxConstraint made public for the sake of MeshTopologyView; not intended for general use
   IndexType maxConstraint(unsigned d, IndexType entityIndex1, IndexType entityIndex2);
