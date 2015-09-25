@@ -1838,44 +1838,47 @@ void GMGOperator::setUpSmoother(Epetra_CrsMatrix *fineStiffnessMatrix)
     int localMaxNeighbors = 0;
     for (GlobalIndexType cellIndex : myCellIndices)
     {
-      set<GlobalIndexType> subdomainCellsAndNeighbors;
-      // first, fill in the subdomain cells
-      if (!_hierarchicalNeighborsForSchwarz)
-      {
-        subdomainCellsAndNeighbors = {cellIndex};
-        set<GlobalIndexType> newNeighbors = {cellIndex};
-        for (int overlapLevel=0; overlapLevel<_smootherOverlap; overlapLevel++)
-        {
-          set<GlobalIndexType> lastNeighbors = newNeighbors;
-          newNeighbors.clear();
-          for (GlobalIndexType neighborCellIndex : lastNeighbors)
-          {
-            CellPtr lastNeighborCell = _fineMesh->getTopology()->getCell(neighborCellIndex);
-            vector<CellPtr> newNeighborCells = lastNeighborCell->getNeighbors(_fineMesh->getTopology());
-            for (CellPtr neighbor : newNeighborCells)
-            {
-              newNeighbors.insert(neighbor->cellIndex());
-            }
-          }
-          subdomainCellsAndNeighbors.insert(newNeighbors.begin(),newNeighbors.end());
-        }
-      }
-      else
-      {
-        CellPtr ancestralCell = _fineMesh->getTopology()->getCell(cellIndex);
-        for (int overlapLevel=0; overlapLevel<_smootherOverlap; overlapLevel++)
-        {
-          if (ancestralCell->getParent() != Teuchos::null)
-          {
-            ancestralCell = ancestralCell->getParent();
-          }
-          else
-          {
-            break;
-          }
-        }
-        subdomainCellsAndNeighbors = ancestralCell->getDescendants(_fineMesh->getTopology(), true); // true: leaf nodes only
-      }
+      set<GlobalIndexType> subdomainCellsAndNeighbors = OverlappingRowMatrix::overlappingCells(cellIndex, _fineMesh, _smootherOverlap,
+                                                                                              _hierarchicalNeighborsForSchwarz);
+      
+//      set<GlobalIndexType> subdomainCellsAndNeighbors;
+//      // first, fill in the subdomain cells
+//      if (!_hierarchicalNeighborsForSchwarz)
+//      {
+//        subdomainCellsAndNeighbors = {cellIndex};
+//        set<GlobalIndexType> newNeighbors = {cellIndex};
+//        for (int overlapLevel=0; overlapLevel<_smootherOverlap; overlapLevel++)
+//        {
+//          set<GlobalIndexType> lastNeighbors = newNeighbors;
+//          newNeighbors.clear();
+//          for (GlobalIndexType neighborCellIndex : lastNeighbors)
+//          {
+//            CellPtr lastNeighborCell = _fineMesh->getTopology()->getCell(neighborCellIndex);
+//            vector<CellPtr> newNeighborCells = lastNeighborCell->getNeighbors(_fineMesh->getTopology());
+//            for (CellPtr neighbor : newNeighborCells)
+//            {
+//              newNeighbors.insert(neighbor->cellIndex());
+//            }
+//          }
+//          subdomainCellsAndNeighbors.insert(newNeighbors.begin(),newNeighbors.end());
+//        }
+//      }
+//      else
+//      {
+//        CellPtr ancestralCell = _fineMesh->getTopology()->getCell(cellIndex);
+//        for (int overlapLevel=0; overlapLevel<_smootherOverlap; overlapLevel++)
+//        {
+//          if (ancestralCell->getParent() != Teuchos::null)
+//          {
+//            ancestralCell = ancestralCell->getParent();
+//          }
+//          else
+//          {
+//            break;
+//          }
+//        }
+//        subdomainCellsAndNeighbors = ancestralCell->getDescendants(_fineMesh->getTopology(), true); // true: leaf nodes only
+//      }
       
       set<GlobalIndexType> subdomainNeighbors;
       for (GlobalIndexType subdomainCellIndex : subdomainCellsAndNeighbors)
