@@ -304,7 +304,6 @@ void GlobalDofAssignment::constructActiveCellMap2()
 void GlobalDofAssignment::repartitionAndMigrate()
 {
   _partitionPolicy->partitionMesh(_mesh.get(),_numPartitions);
-  rebuildLookups();
   for (vector< TSolutionPtr<double> >::iterator solutionIt = _registeredSolutions.begin();
        solutionIt != _registeredSolutions.end(); solutionIt++)
   {
