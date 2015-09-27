@@ -405,6 +405,7 @@ int main(int argc, char *argv[])
   cmdp.setOption("problem",&problemChoiceString,"problem choice: Poisson, ConvectionDiffusion, Stokes, Navier-Stokes");
 
   cmdp.setOption("numCells",&numCells,"mesh width");
+  cmdp.setOption("numCellsRootMesh",&numCellsRootMesh,"mesh width of root mesh");
   cmdp.setOption("polyOrder",&k,"polynomial order for field variable u");
   cmdp.setOption("delta_k", &delta_k, "test space polynomial order enrichment");
   cmdp.setOption("coarsePolyOrder", &k_coarse, "polynomial order for field variables on coarse grid");
