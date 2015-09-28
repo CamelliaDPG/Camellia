@@ -654,6 +654,11 @@ bool Mesh::meshUsesMinimumRule()
   return (minRule != NULL);
 }
 
+set<GlobalIndexType> Mesh::getGlobalDofIndices(GlobalIndexType cellID, int varID, int sideOrdinal)
+{
+  return _gda->getGlobalDofIndices(cellID,varID,sideOrdinal);
+}
+
 map<IndexType, GlobalIndexType> Mesh::getGlobalVertexIDs(const FieldContainer<double> &vertices)
 {
   double tol = 1e-12; // tolerance for vertex equality

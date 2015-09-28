@@ -26,6 +26,32 @@
 
 using namespace Intrepid;
 using namespace Camellia;
+using namespace std;
+
+set<GlobalIndexType> DofInterpreter::getGlobalDofIndices(GlobalIndexType cellID, int varID, int sideOrdinal)
+{
+  CellTopoPtr topo = _mesh->getElementType(cellID)->cellTopoPtr;
+  int spaceDim = topo->getDimension();
+  
+  map<int, VarPtr> trialVars = _mesh->varFactory()->trialVars();
+  
+  VarPtr var = trialVars[varID];
+  
+  int subcellDim, subcellOrdinal;
+  set<GlobalIndexType> fittableIndexSet;
+  if ((var->varType() == FLUX) || (var->varType() == TRACE))
+  {
+    subcellDim = spaceDim - 1;
+    subcellOrdinal = sideOrdinal;
+  }
+  else
+  {
+    subcellDim = spaceDim;
+    subcellOrdinal = 0;
+  }
+  
+  return this->globalDofIndicesForVarOnSubcell(varID, cellID, subcellDim, subcellOrdinal);
+}
 
 void DofInterpreter::interpretLocalCoefficients(GlobalIndexType cellID, const Intrepid::FieldContainer<double> &localCoefficients,
                                                 map<GlobalIndexType,double> &fittedGlobalCoefficients, const set<int> &trialIDsToExclude)

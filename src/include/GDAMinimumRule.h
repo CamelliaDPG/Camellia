@@ -76,9 +76,13 @@ class GDAMinimumRule : public GlobalDofAssignment
 
   BasisMap getBasisMapExperimental(GlobalIndexType cellID, SubCellDofIndexInfo& dofOwnershipInfo, VarPtr var, int sideOrdinal);
 
+  void getGlobalDofIndices(GlobalIndexType cellID, int varID, int sideOrdinal,
+                           Intrepid::FieldContainer<GlobalIndexType> &globalDofIndices);
+  
   SubCellDofIndexInfo getOwnedGlobalDofIndices(GlobalIndexType cellID, CellConstraints &cellConstraints);
 
-  set<GlobalIndexType> getFittableGlobalDofIndices(GlobalIndexType cellID, CellConstraints &constraints, int sideOrdinal); // returns the global dof indices for basis functions which have support on the given side (i.e. their support intersected with the side has positive measure).  This is determined by taking the union of the global dof indices defined on all the constraining sides for the given side (the constraining sides are by definition unconstrained).
+  set<GlobalIndexType> getFittableGlobalDofIndices(GlobalIndexType cellID, CellConstraints &constraints, int sideOrdinal,
+                                                   int varID = -1); // returns the global dof indices for basis functions which have support on the given side (i.e. their support intersected with the side has positive measure).  This is determined by taking the union of the global dof indices defined on all the constraining sides for the given side (the constraining sides are by definition unconstrained).  If varID of -1 is specified, returns dof indices corresponding to all variables; otherwise, returns dof indices only for the specified variable.
 
   vector<int> H1Order(GlobalIndexType cellID, unsigned sideOrdinal); // this is meant to track the cell's interior idea of what the H^1 order is along that side.  We're isotropic for now, but eventually we might want to allow anisotropy in p...
 
@@ -114,9 +118,12 @@ public:
   void didHUnrefine(const set<GlobalIndexType> &parentCellIDs);
 
   void didChangePartitionPolicy();
+  
 
   ElementTypePtr elementType(GlobalIndexType cellID);
 
+  std::set<GlobalIndexType> getGlobalDofIndices(GlobalIndexType cellID, int varID, int sideOrdinal);
+  
   GlobalIndexType globalDofCount();
   
   //!! Returns the global dof indices for the indicated cell.  Only guaranteed to provide correct values for cells that belong to the local partition.
@@ -135,13 +142,18 @@ public:
   set<GlobalIndexType> partitionOwnedGlobalTraceIndices();
   set<GlobalIndexType> partitionOwnedIndicesForVariables(set<int> varIDs);
 
-  void interpretLocalData(GlobalIndexType cellID, const Intrepid::FieldContainer<double> &localData, Intrepid::FieldContainer<double> &globalData,
+  void interpretLocalData(GlobalIndexType cellID, const Intrepid::FieldContainer<double> &localData,
+                          Intrepid::FieldContainer<double> &globalData,
                           Intrepid::FieldContainer<GlobalIndexType> &globalDofIndices);
-  void interpretLocalBasisCoefficients(GlobalIndexType cellID, int varID, int sideOrdinal, const Intrepid::FieldContainer<double> &basisCoefficients,
-                                       Intrepid::FieldContainer<double> &globalCoefficients, Intrepid::FieldContainer<GlobalIndexType> &globalDofIndices);
-  void interpretGlobalCoefficients(GlobalIndexType cellID, Intrepid::FieldContainer<double> &localCoefficients, const Epetra_MultiVector &globalCoefficients);
+  void interpretLocalBasisCoefficients(GlobalIndexType cellID, int varID, int sideOrdinal,
+                                       const Intrepid::FieldContainer<double> &basisCoefficients,
+                                       Intrepid::FieldContainer<double> &globalCoefficients,
+                                       Intrepid::FieldContainer<GlobalIndexType> &globalDofIndices);
+  void interpretGlobalCoefficients(GlobalIndexType cellID, Intrepid::FieldContainer<double> &localCoefficients,
+                                   const Epetra_MultiVector &globalCoefficients);
   template <typename Scalar>
-  void interpretGlobalCoefficients2(GlobalIndexType cellID, Intrepid::FieldContainer<Scalar> &localCoefficients, const TVectorPtr<Scalar> globalCoefficients);
+  void interpretGlobalCoefficients2(GlobalIndexType cellID, Intrepid::FieldContainer<Scalar> &localCoefficients,
+                                    const TVectorPtr<Scalar> globalCoefficients);
   IndexType localDofCount(); // local to the MPI node
 
   PartitionIndexType partitionForGlobalDofIndex( GlobalIndexType globalDofIndex );
