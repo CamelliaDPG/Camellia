@@ -207,7 +207,7 @@ void initializeSolutionAndCoarseMesh(SolutionPtr &solution, vector<MeshPtr> &mes
     dimensions.push_back(width);
     elementCounts.push_back(rootMeshNumCells);
   }
-  mesh = MeshFactory::rectilinearMesh(bf, dimensions, elementCounts, H1Order, delta_k, x0);
+  int H1Order_coarse = k_coarse + 1;
   
   // now that we have mesh, add pressure constraint for Stokes (imposing zero at origin--want to aim for center of mesh)
   if ((problemChoice == Stokes) || (problemChoice==NavierStokes))
@@ -236,11 +236,17 @@ void initializeSolutionAndCoarseMesh(SolutionPtr &solution, vector<MeshPtr> &mes
   bool useGMGSolverForMeshes = true; // use static method from GMGSolver to generate meshesCoarseToFine
   if (useGMGSolverForMeshes)
   {
+    MeshTopologyPtr meshTopo = MeshFactory::rectilinearMeshTopology(dimensions, elementCounts);
+
     int meshWidthCells = rootMeshNumCells;
     while (meshWidthCells < numCells)
     {
       set<IndexType> activeCellIDs = mesh->getActiveCellIDs(); // should match between coarseMesh and mesh
-      mesh->hRefine(activeCellIDs);
+      for (IndexType activeCellID : activeCellIDs)
+      {
+        CellTopoPtr cellTopo = meshTopo->getCell(activeCellID)->topology();
+        meshTopo->refineCell(activeCellID, RefinementPattern::regularRefinementPattern(cellTopo));
+      }
       if (rank==0)
       {
         print("h-refining cells", activeCellIDs);
@@ -254,9 +260,12 @@ void initializeSolutionAndCoarseMesh(SolutionPtr &solution, vector<MeshPtr> &mes
         cout << "Warning: may have over-refined mesh; mesh has width " << meshWidthCells << ", not " << numCells << endl;
       }
     }
+    MeshPtr mesh = Teuchos::rcp(new Mesh(meshTopo, bf, H1Order, delta_k));
   }
   else
   {
+    mesh = MeshFactory::rectilinearMesh(bf, dimensions, elementCounts, H1Order, delta_k, x0);
+    
     MeshTopologyViewPtr meshTopoView;
     if (useLightWeightViews)
       meshTopoView = mesh->getTopology()->getView(mesh->getActiveCellIDs());
