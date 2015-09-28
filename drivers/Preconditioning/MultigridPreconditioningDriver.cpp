@@ -207,7 +207,8 @@ void initializeSolutionAndCoarseMesh(SolutionPtr &solution, vector<MeshPtr> &mes
     dimensions.push_back(width);
     elementCounts.push_back(rootMeshNumCells);
   }
-  int H1Order_coarse = k_coarse + 1;
+  
+  MeshTopologyPtr meshTopo = MeshFactory::rectilinearMeshTopology(dimensions, elementCounts);
   
   // now that we have mesh, add pressure constraint for Stokes (imposing zero at origin--want to aim for center of mesh)
   if ((problemChoice == Stokes) || (problemChoice==NavierStokes))
@@ -217,7 +218,7 @@ void initializeSolutionAndCoarseMesh(SolutionPtr &solution, vector<MeshPtr> &mes
       vector<double> origin(spaceDim,0);
       IndexType vertexIndex;
       
-      if (!mesh->getTopology()->getVertexIndex(origin, vertexIndex))
+      if (!meshTopo->getVertexIndex(origin, vertexIndex))
       {
         TEUCHOS_TEST_FOR_EXCEPTION(true, std::invalid_argument, "origin vertex not found");
       }
@@ -236,20 +237,24 @@ void initializeSolutionAndCoarseMesh(SolutionPtr &solution, vector<MeshPtr> &mes
   bool useGMGSolverForMeshes = true; // use static method from GMGSolver to generate meshesCoarseToFine
   if (useGMGSolverForMeshes)
   {
-    MeshTopologyPtr meshTopo = MeshFactory::rectilinearMeshTopology(dimensions, elementCounts);
-
+#ifdef HAVE_MPI
+    Epetra_MpiComm Comm(MPI_COMM_WORLD);
+#else
+    Epetra_SerialComm Comm;
+#endif
+    Epetra_Time hRefinementTimer(Comm);
     int meshWidthCells = rootMeshNumCells;
     while (meshWidthCells < numCells)
     {
-      set<IndexType> activeCellIDs = mesh->getActiveCellIDs(); // should match between coarseMesh and mesh
+      set<IndexType> activeCellIDs = meshTopo->getActiveCellIndices();
+      if (rank==0)
+      {
+        print("h-refining cells", activeCellIDs);
+      }
       for (IndexType activeCellID : activeCellIDs)
       {
         CellTopoPtr cellTopo = meshTopo->getCell(activeCellID)->topology();
         meshTopo->refineCell(activeCellID, RefinementPattern::regularRefinementPattern(cellTopo));
-      }
-      if (rank==0)
-      {
-        print("h-refining cells", activeCellIDs);
       }
       meshWidthCells *= 2;
     }
@@ -260,7 +265,12 @@ void initializeSolutionAndCoarseMesh(SolutionPtr &solution, vector<MeshPtr> &mes
         cout << "Warning: may have over-refined mesh; mesh has width " << meshWidthCells << ", not " << numCells << endl;
       }
     }
-    MeshPtr mesh = Teuchos::rcp(new Mesh(meshTopo, bf, H1Order, delta_k));
+    mesh = Teuchos::rcp(new Mesh(meshTopo, bf, H1Order, delta_k));
+    if (rank==0)
+    {
+      int refinementTime = hRefinementTimer.ElapsedTime();
+      cout << "h refinements completed in " << refinementTime << " seconds.\n";
+    }
   }
   else
   {
