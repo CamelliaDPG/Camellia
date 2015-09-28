@@ -612,7 +612,12 @@ int main(int argc, char *argv[])
   }
   
   if (setUpMeshesAndQuit)
+  {
+#ifdef HAVE_MPI
+    MPI_Finalize();
+#endif
     exit(0);
+  }
   
   double gmgSolverInitializationTime = 0, solveTime;
   
