@@ -9,7 +9,6 @@
 #include "SpaceTimeIncompressibleFormulation.h"
 #include "MeshFactory.h"
 #include "PenaltyConstraints.h"
-#include "PoissonFormulation.h"
 #include "PreviousSolutionFunction.h"
 #include "IncompressibleProblems.h"
 #include <algorithm>
