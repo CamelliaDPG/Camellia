@@ -831,7 +831,7 @@ set<GlobalIndexType> GDAMaximumRule2D::globalDofIndicesForVarOnSubcell(int varID
     {
       CellTopoPtr cellTopo = elemType->cellTopoPtr;
       unsigned sideDim = cellTopo->getDimension() - 1;
-      domainSubcellOrdinal = CamelliaCellTools::subcellReverseOrdinalMap(elemType->cellTopoPtr, sideDim, sideOrdinal, dim, subcellOrdinal);
+      domainSubcellOrdinal = CamelliaCellTools::subcellReverseOrdinalMap(elemType->cellTopoPtr, sideDim, sideOrdinal, dim, subcellOrdinal, false);
       if (domainSubcellOrdinal == -1) continue; // skip this side: subcell doesn't belong to it.
     }
     
