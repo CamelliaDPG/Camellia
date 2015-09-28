@@ -52,7 +52,7 @@ private:
 
   set<GlobalIndexType> _interpretedFluxDofIndices; // the "global" dof indices prior to condensation
 
-  map< GlobalIndexType, map< pair<int, int>, Intrepid::FieldContainer<GlobalIndexType> > > _interpretedDofIndicesForBasis; // outer map: cellID is index.  Inner: (varID, sideOrdinal)
+//  map< GlobalIndexType, map< pair<int, int>, Intrepid::FieldContainer<GlobalIndexType> > > _interpretedDofIndicesForBasis; // outer map: cellID is index.  Inner: (varID, sideOrdinal)
 
   map<GlobalIndexType, GlobalIndexType> _interpretedToGlobalDofIndexMap; // maps from the interpreted dof indices to the new ("outer") global dof indices (we only store the ones that are seen by the local MPI rank)
 

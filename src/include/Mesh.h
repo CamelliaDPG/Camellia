@@ -248,6 +248,8 @@ public:
   ElementPtr getElement(GlobalIndexType cellID);
   ElementTypePtr getElementType(GlobalIndexType cellID);
 
+  std::set<GlobalIndexType> getGlobalDofIndices(GlobalIndexType cellID, int varID, int sideOrdinal);
+  
   const map< pair<GlobalIndexType,IndexType> , GlobalIndexType>& getLocalToGlobalMap();
   //  map< int, pair<int,int> > getGlobalToLocalMap();
 

@@ -80,6 +80,9 @@ public:
   //!! Returns the global dof indices for the indicated subcell.  Only guaranteed to provide correct values for cells that belong to the local partition.
   virtual set<GlobalIndexType> globalDofIndicesForVarOnSubcell(int varID, GlobalIndexType cellID, unsigned dim, unsigned subcellOrdinal) = 0;
 
+  // ! get the global dof indices corresponding to the specified cellID/varID/sideOrdinal.  GDAMinimumRule's implementation overrides to return only "fittable" dof indices, as required by CondensedDofInterpreter.
+  virtual std::set<GlobalIndexType> getGlobalDofIndices(GlobalIndexType cellID, int varID, int sideOrdinal);
+  
   //!! MPI-communicating method.  Must be called on all ranks.
   virtual std::set<GlobalIndexType> importGlobalIndicesForCells(const std::vector<GlobalIndexType> &cellIDs);
 

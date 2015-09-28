@@ -466,8 +466,9 @@ bool CondensedDofInterpreter<Scalar>::varDofsAreCondensible(int varID, int sideO
 
 // ! cellsForFluxInterpretation indicates on which cells we need to be able to interpret fluxes.
 template <typename Scalar>
-map<GlobalIndexType, GlobalIndexType> CondensedDofInterpreter<Scalar>::interpretedFluxMapForPartition(PartitionIndexType partition, const set<GlobalIndexType> &cellsForFluxInterpretation)   // add the partitionDofOffset to get the globalDofIndices
-{
+map<GlobalIndexType, GlobalIndexType> CondensedDofInterpreter<Scalar>::interpretedFluxMapForPartition(PartitionIndexType partition,
+                                                                                                      const set<GlobalIndexType> &cellsForFluxInterpretation)
+{ // add the partitionDofOffset to get the globalDofIndices
 
   map<GlobalIndexType, IndexType> interpretedFluxMap; // from the interpreted dofs (the global dof indices as seen by mesh) to the partition-local condensed IDs
 
@@ -501,25 +502,12 @@ map<GlobalIndexType, GlobalIndexType> CondensedDofInterpreter<Scalar>::interpret
         if ( !trialOrder->hasBasisEntry(trialID, sideOrdinal) ) continue;
         BasisPtr basis = trialOrder->getBasis(trialID, sideOrdinal);
 
-        FieldContainer<Scalar> dummyLocalBasisData(basis->getCardinality());
-        FieldContainer<Scalar> dummyGlobalData;
-        FieldContainer<GlobalIndexType> interpretedDofIndicesForBasis;
-        vector< int > localDofIndicesForBasis = trialOrder->getDofIndices(trialID,sideOrdinal);
-
-        _mesh->interpretLocalBasisCoefficients(cellID, trialID, sideOrdinal, dummyLocalBasisData, dummyGlobalData, interpretedDofIndicesForBasis);
-
-        if (storeFluxDofIndices)
-        {
-          pair< int, int > basisIdentifier = make_pair(trialID,sideOrdinal);
-          _interpretedDofIndicesForBasis[cellID][basisIdentifier] = interpretedDofIndicesForBasis; // not currently used anywhere
-        }
+        set<GlobalIndexType> interpretedDofIndices = _mesh->getGlobalDofIndices(cellID, trialID, sideOrdinal);
 
         bool isCondensible = varDofsAreCondensible(trialID, sideOrdinal, trialOrder);
 
-        for (int dofOrdinal=0; dofOrdinal < interpretedDofIndicesForBasis.size(); dofOrdinal++)
+        for (GlobalIndexType interpretedDofIndex : interpretedDofIndices)
         {
-          GlobalIndexType interpretedDofIndex = interpretedDofIndicesForBasis(dofOrdinal);
-
           bool isOwnedByThisPartition = (interpretedDofIndicesForPartition.find(interpretedDofIndex) != interpretedDofIndicesForPartition.end());
 
           if (!isCondensible)
@@ -553,7 +541,7 @@ void CondensedDofInterpreter<Scalar>::initializeGlobalDofIndices()
 {
   _interpretedFluxDofIndices.clear();
   _interpretedToGlobalDofIndexMap.clear();
-  _interpretedDofIndicesForBasis.clear();
+//  _interpretedDofIndicesForBasis.clear();
 
   PartitionIndexType rank = Teuchos::GlobalMPISession::getRank();
   set<GlobalIndexType> cellsForFluxStorage = _mesh->globalDofAssignment()->cellsInPartition(rank);
