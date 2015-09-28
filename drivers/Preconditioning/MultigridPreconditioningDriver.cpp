@@ -393,6 +393,8 @@ int main(int argc, char *argv[])
   
   bool writeOpToFile = false;
   
+  bool setUpMeshesAndQuit = false;
+  
   string multigridStrategyString = "W-cycle";
   
   bool pauseOnRankZero = false;
@@ -431,6 +433,7 @@ int main(int argc, char *argv[])
   cmdp.setOption("pause","dontPause",&pauseOnRankZero, "pause (to allow attachment by tracer, e.g.), waiting for user to press a key");
   cmdp.setOption("reportTimings", "dontReportTimings", &reportTimings, "Report timings in Solution");
   
+  cmdp.setOption("setUpMeshesAndQuit", "setUpMeshesAndRunNormally", &setUpMeshesAndQuit);
   cmdp.setOption("solveDirectly", "solveIteratively", &solveDirectly);
 
   cmdp.setOption("useDiagonalSchwarzWeighting","dontUseDiagonalSchwarzWeighting",&useDiagonalSchwarzWeighting);
@@ -592,6 +595,9 @@ int main(int argc, char *argv[])
     
     cout << "Approximate memory cost per element (assuming sparse storage): G = " << G_sparseMatrixSize << " MB, B = " << B_sparseMatrixSize << " MB.\n";
     
+    if (setUpMeshesAndQuit)
+      cout << "***** setUpMeshesAndQuit option selected; now exiting *****\n";
+    
     if (solveDirectly)
       cout << "******* Using direct solve in place of multigrid-preconditioned iterative solve ****** \n";
     else
@@ -604,6 +610,9 @@ int main(int argc, char *argv[])
       cout << "***********************************************************************************************************\n";
     }
   }
+  
+  if (setUpMeshesAndQuit)
+    exit(0);
   
   double gmgSolverInitializationTime = 0, solveTime;
   
