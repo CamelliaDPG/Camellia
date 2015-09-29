@@ -2731,8 +2731,6 @@ SubCellDofIndexInfo GDAMinimumRule::getOwnedGlobalDofIndices(GlobalIndexType cel
 
   CellTopoPtr topo = _elementTypeForCell[cellID]->cellTopoPtr;
 
-  typedef vector< SubBasisDofMapperPtr > BasisMap;
-
   DofOrderingPtr trialOrdering = _elementTypeForCell[cellID]->trialOrderPtr;
   map<int, VarPtr> trialVars = _varFactory->trialVars();
 
@@ -2855,43 +2853,48 @@ void printDofIndexInfo(GlobalIndexType cellID, SubCellDofIndexInfo &dofIndexInfo
 
 SubCellDofIndexInfo GDAMinimumRule::getGlobalDofIndices(GlobalIndexType cellID, CellConstraints &constraints)
 {
-  /**************** ESTABLISH OWNERSHIP ****************/
-  SubCellDofIndexInfo dofIndexInfo = getOwnedGlobalDofIndices(cellID, constraints);
-
-  CellPtr cell = _meshTopology->getCell(cellID);
-  CellTopoPtr topo = _elementTypeForCell[cellID]->cellTopoPtr;
-
-  int spaceDim = topo->getDimension();
-
-  // fill in the other global dof indices (the ones not owned by this cell):
-  map< GlobalIndexType, SubCellDofIndexInfo > otherDofIndexInfoCache; // local lookup, to avoid a bunch of redundant calls to getOwnedGlobalDofIndices
-  for (int d=0; d<=spaceDim; d++)
+  if (_globalDofIndicesForCellCache.find(cellID) == _globalDofIndicesForCellCache.end())
   {
-    int scCount = topo->getSubcellCount(d);
-    for (int scord=0; scord<scCount; scord++)
+    
+    /**************** ESTABLISH OWNERSHIP ****************/
+    SubCellDofIndexInfo dofIndexInfo = getOwnedGlobalDofIndices(cellID, constraints);
+    
+    CellPtr cell = _meshTopology->getCell(cellID);
+    CellTopoPtr topo = _elementTypeForCell[cellID]->cellTopoPtr;
+    
+    int spaceDim = topo->getDimension();
+    
+    // fill in the other global dof indices (the ones not owned by this cell):
+    map< GlobalIndexType, SubCellDofIndexInfo > otherDofIndexInfoCache; // local lookup, to avoid a bunch of redundant calls to getOwnedGlobalDofIndices
+    for (int d=0; d<=spaceDim; d++)
     {
-      if (dofIndexInfo[d].find(scord) == dofIndexInfo[d].end())   // this one not yet filled in
+      int scCount = topo->getSubcellCount(d);
+      for (int scord=0; scord<scCount; scord++)
       {
-        OwnershipInfo owningCellInfo = constraints.owningCellIDForSubcell[d][scord];
-        GlobalIndexType owningCellID = owningCellInfo.cellID;
-        CellConstraints owningConstraints = getCellConstraints(owningCellID);
-        GlobalIndexType scEntityIndex = owningCellInfo.owningSubcellEntityIndex;
-        CellPtr owningCell = _meshTopology->getCell(owningCellID);
-        unsigned owningCellScord = owningCell->findSubcellOrdinal(owningCellInfo.dimension, scEntityIndex);
-        if (otherDofIndexInfoCache.find(owningCellID) == otherDofIndexInfoCache.end())
+        if (dofIndexInfo[d].find(scord) == dofIndexInfo[d].end())   // this one not yet filled in
         {
-          otherDofIndexInfoCache[owningCellID] = getOwnedGlobalDofIndices(owningCellID, owningConstraints);
+          OwnershipInfo owningCellInfo = constraints.owningCellIDForSubcell[d][scord];
+          GlobalIndexType owningCellID = owningCellInfo.cellID;
+          CellConstraints owningConstraints = getCellConstraints(owningCellID);
+          GlobalIndexType scEntityIndex = owningCellInfo.owningSubcellEntityIndex;
+          CellPtr owningCell = _meshTopology->getCell(owningCellID);
+          unsigned owningCellScord = owningCell->findSubcellOrdinal(owningCellInfo.dimension, scEntityIndex);
+          if (otherDofIndexInfoCache.find(owningCellID) == otherDofIndexInfoCache.end())
+          {
+            otherDofIndexInfoCache[owningCellID] = getOwnedGlobalDofIndices(owningCellID, owningConstraints);
+          }
+          SubCellDofIndexInfo owningDofIndexInfo = otherDofIndexInfoCache[owningCellID];
+          dofIndexInfo[d][scord] = owningDofIndexInfo[owningCellInfo.dimension][owningCellScord];
         }
-        SubCellDofIndexInfo owningDofIndexInfo = otherDofIndexInfoCache[owningCellID];
-        dofIndexInfo[d][scord] = owningDofIndexInfo[owningCellInfo.dimension][owningCellScord];
       }
     }
+    _globalDofIndicesForCellCache[cellID] = dofIndexInfo;
   }
-
+  
   // DEBUGGING
 //  printDofIndexInfo(cellID, dofIndexInfo);
 
-  return dofIndexInfo;
+  return _globalDofIndicesForCellCache[cellID];
 }
 
 set<GlobalIndexType> GDAMinimumRule::getGlobalDofIndicesForIntegralContribution(GlobalIndexType cellID, int sideOrdinal)   // assuming an integral is being done over the whole mesh skeleton, returns either an empty set or the global dof indices associated with the given side, depending on whether the cell "owns" the side for the purpose of such contributions.
@@ -3135,6 +3138,7 @@ void GDAMinimumRule::rebuildLookups()
   _dofMapperCache.clear();
   _dofMapperForVariableOnSideCache.clear();
   _ownedGlobalDofIndicesCache.clear();
+  _globalDofIndicesForCellCache.clear();
 
   _partitionFluxIndexOffsets.clear();
   _partitionTraceIndexOffsets.clear();

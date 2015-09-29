@@ -62,6 +62,7 @@ class GDAMinimumRule : public GlobalDofAssignment
   map< GlobalIndexType, LocalDofMapperPtr > _dofMapperCache;
   map< GlobalIndexType, map<int, map<int, LocalDofMapperPtr> > > _dofMapperForVariableOnSideCache; // cellID --> side --> variable --> LocalDofMapper
   map< GlobalIndexType, SubCellDofIndexInfo> _ownedGlobalDofIndicesCache; // (cellID --> SubCellDofIndexInfo)
+  map< GlobalIndexType, SubCellDofIndexInfo> _globalDofIndicesForCellCache; // (cellID --> SubCellDofIndexInfo) -- this has a lot of overlap in its data with the _ownedGlobalDofIndicesCache; could save some memory by only storing the difference
 
   vector<unsigned> allBasisDofOrdinalsVector(int basisCardinality);
 
