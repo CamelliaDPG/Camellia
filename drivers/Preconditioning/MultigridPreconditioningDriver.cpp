@@ -234,14 +234,15 @@ void initializeSolutionAndCoarseMesh(SolutionPtr &solution, vector<MeshPtr> &mes
   
   meshesCoarseToFine.clear();
   
+#ifdef HAVE_MPI
+  Epetra_MpiComm Comm(MPI_COMM_WORLD);
+#else
+  Epetra_SerialComm Comm;
+#endif
+  
   bool useGMGSolverForMeshes = true; // use static method from GMGSolver to generate meshesCoarseToFine
   if (useGMGSolverForMeshes)
   {
-#ifdef HAVE_MPI
-    Epetra_MpiComm Comm(MPI_COMM_WORLD);
-#else
-    Epetra_SerialComm Comm;
-#endif
     Epetra_Time hRefinementTimer(Comm);
     int meshWidthCells = rootMeshNumCells;
     while (meshWidthCells < numCells)
@@ -265,11 +266,17 @@ void initializeSolutionAndCoarseMesh(SolutionPtr &solution, vector<MeshPtr> &mes
         cout << "Warning: may have over-refined mesh; mesh has width " << meshWidthCells << ", not " << numCells << endl;
       }
     }
-    mesh = Teuchos::rcp(new Mesh(meshTopo, bf, H1Order, delta_k));
     if (rank==0)
     {
       int refinementTime = hRefinementTimer.ElapsedTime();
-      cout << "h refinements completed in " << refinementTime << " seconds.\n";
+      cout << "h refinements (MeshTopology) completed in " << refinementTime << " seconds.\n";
+      hRefinementTimer.ResetStartTime();
+    }
+    mesh = Teuchos::rcp(new Mesh(meshTopo, bf, H1Order, delta_k));
+    if (rank==0)
+    {
+      int meshConstructionTime = hRefinementTimer.ElapsedTime();
+      cout << "Mesh construction completed in " << meshConstructionTime << " seconds.\n";
     }
   }
   else
@@ -339,9 +346,14 @@ void initializeSolutionAndCoarseMesh(SolutionPtr &solution, vector<MeshPtr> &mes
   
   graphNorm = bf->graphNorm();
   
+  Epetra_Time timer(Comm);
   solution = Solution::solution(mesh, bc, rhs, graphNorm);
   solution->setUseCondensedSolve(useStaticCondensation);
   solution->setZMCsAsGlobalLagrange(false); // fine grid solution shouldn't impose ZMCs (should be handled in coarse grid solve)
+  
+  int solutionConstructionTime = timer.ElapsedTime();
+  if (rank==0)
+    cout << "Solution constructed in " << solutionConstructionTime << " seconds.\n";
   
   if (useGMGSolverForMeshes)
   {
@@ -349,7 +361,11 @@ void initializeSolutionAndCoarseMesh(SolutionPtr &solution, vector<MeshPtr> &mes
     pl.set("kCoarse", k_coarse);
     pl.set("delta_k", delta_k);
     pl.set("jumpToCoarsePolyOrder",jumpToCoarsePolyOrder);
+    timer.ResetStartTime();
     meshesCoarseToFine = GMGSolver::meshesForMultigrid(solution->mesh(), pl);
+    int meshesForMultigridExecutionTime = timer.ElapsedTime();
+    if (rank==0)
+      cout << "meshesForMultigrid() executed in " << meshesForMultigridExecutionTime << " seconds.\n";
   }
 }
 
