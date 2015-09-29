@@ -787,11 +787,16 @@ void run(ProblemChoice problemChoice, int &iterationCount, int spaceDim, int num
   int rank = Teuchos::GlobalMPISession::getRank();
   if (k_coarse == -1)
   {
-    // then set k_coarse to be ceil(k/2) unless k == 1, in which case do k=0
-    if (k == 1)
-      k_coarse = 0;
+    if (hOnly)
+      k_coarse = k;
     else
-      k_coarse = ceil(k / 2.0);
+    {
+      // then set k_coarse to be ceil(k/2) unless k == 1, in which case do k=0
+      if (k == 1)
+        k_coarse = 0;
+      else
+        k_coarse = ceil(k / 2.0);
+    }
   }
 
   if ((numCellsRootMesh == -1) && (hOnly || (coarseSolverChoice == Solver::GMGSolver_1_Level_h)))
