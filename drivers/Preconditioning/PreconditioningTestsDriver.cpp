@@ -634,8 +634,8 @@ void initializeSolutionAndCoarseMesh(SolutionPtr &solution, MeshPtr &coarseMesh,
   }
   else if (problemChoice == Stokes)
   {
-
-    StokesVGPFormulation formulation(spaceDim, conformingTraces);
+    double mu = 1.0;
+    StokesVGPFormulation formulation = StokesVGPFormulation::steadyFormulation(spaceDim, mu, conformingTraces);
 
     p = formulation.p();
 
@@ -690,8 +690,6 @@ void initializeSolutionAndCoarseMesh(SolutionPtr &solution, MeshPtr &coarseMesh,
     bc->addDirichlet(formulation.u_hat(2), boundary, u2_exact);
     if (spaceDim==3) bc->addDirichlet(formulation.u_hat(3), boundary, u3_exact);
 
-    double mu = 1.0;
-
     FunctionPtr f1, f2, f3;
     if (spaceDim==2)
     {
@@ -738,12 +736,11 @@ void initializeSolutionAndCoarseMesh(SolutionPtr &solution, MeshPtr &coarseMesh,
     {
       vector<double> origin(spaceDim,0);
       IndexType vertexIndex;
-
       if (!mesh->getTopology()->getVertexIndex(origin, vertexIndex))
       {
         TEUCHOS_TEST_FOR_EXCEPTION(true, std::invalid_argument, "origin vertex not found");
       }
-      bc->addSinglePointBC(p->ID(), 0, vertexIndex);
+      bc->addSpatialPointBC(p->ID(), 0.0, origin);
     }
     else
     {
@@ -788,6 +785,19 @@ void run(ProblemChoice problemChoice, int &iterationCount, int spaceDim, int num
          bool writeAndExit, GMGOperator::SmootherApplicationType comboType, double smootherWeight, bool useWeightMatrixForSchwarz)
 {
   int rank = Teuchos::GlobalMPISession::getRank();
+  if (k_coarse == -1)
+  {
+    if (hOnly)
+      k_coarse = k;
+    else
+    {
+      // then set k_coarse to be ceil(k/2) unless k == 1, in which case do k=0
+      if (k == 1)
+        k_coarse = 0;
+      else
+        k_coarse = ceil(k / 2.0);
+    }
+  }
 
   if ((numCellsRootMesh == -1) && (hOnly || (coarseSolverChoice == Solver::GMGSolver_1_Level_h)))
   {
@@ -1518,7 +1528,7 @@ int main(int argc, char *argv[])
   Teuchos::CommandLineProcessor cmdp(false,true); // false: don't throw exceptions; true: do return errors for unrecognized options
 
   int k = -1; // poly order for field variables (-1 for a range of values)
-  int k_coarse = 0; // poly order for field variables on the coarse mesh
+  int k_coarse = -1; // poly order for field variables on the coarse mesh
   int delta_k = -1;   // test space enrichment; -1 for default detection (defaults to spaceDim)
 
   bool conformingTraces = false;

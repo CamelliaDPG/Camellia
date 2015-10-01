@@ -124,14 +124,20 @@ public:
   virtual set<GlobalIndexType> partitionOwnedGlobalFluxIndices() = 0;
   virtual set<GlobalIndexType> partitionOwnedGlobalTraceIndices() = 0;
 
-  virtual void interpretLocalData(GlobalIndexType cellID, const Intrepid::FieldContainer<double> &localData, Intrepid::FieldContainer<double> &globalData,
+  virtual void interpretLocalData(GlobalIndexType cellID, const Intrepid::FieldContainer<double> &localData,
+                                  Intrepid::FieldContainer<double> &globalData,
                                   Intrepid::FieldContainer<GlobalIndexType> &globalDofIndices) = 0;
-  void interpretLocalCoefficients(GlobalIndexType cellID, const Intrepid::FieldContainer<double> &localCoefficients, Epetra_MultiVector &globalCoefficients);
+  void interpretLocalCoefficients(GlobalIndexType cellID, const Intrepid::FieldContainer<double> &localCoefficients,
+                                  Epetra_MultiVector &globalCoefficients);
   template <typename Scalar>
-  void interpretLocalCoefficients(GlobalIndexType cellID, const Intrepid::FieldContainer<Scalar> &localCoefficients, TVectorPtr<Scalar> globalCoefficients);
-  virtual void interpretLocalBasisCoefficients(GlobalIndexType cellID, int varID, int sideOrdinal, const Intrepid::FieldContainer<double> &basisCoefficients,
-      Intrepid::FieldContainer<double> &globalCoefficients, Intrepid::FieldContainer<GlobalIndexType> &globalDofIndices) = 0;
-  virtual void interpretGlobalCoefficients(GlobalIndexType cellID, Intrepid::FieldContainer<double> &localCoefficients, const Epetra_MultiVector &globalCoefficients) = 0;
+  void interpretLocalCoefficients(GlobalIndexType cellID, const Intrepid::FieldContainer<Scalar> &localCoefficients,
+                                  TVectorPtr<Scalar> globalCoefficients);
+  virtual void interpretLocalBasisCoefficients(GlobalIndexType cellID, int varID, int sideOrdinal,
+                                               const Intrepid::FieldContainer<double> &basisCoefficients,
+                                               Intrepid::FieldContainer<double> &globalCoefficients,
+                                               Intrepid::FieldContainer<GlobalIndexType> &globalDofIndices) = 0;
+  virtual void interpretGlobalCoefficients(GlobalIndexType cellID, Intrepid::FieldContainer<double> &localCoefficients,
+                                           const Epetra_MultiVector &globalCoefficients) = 0;
   // template <typename Scalar>
   //   virtual void interpretGlobalCoefficients(GlobalIndexType cellID, Intrepid::FieldContainer<Scalar> &localCoefficients, const TVectorPtr<Scalar> globalCoefficients) = 0;
 

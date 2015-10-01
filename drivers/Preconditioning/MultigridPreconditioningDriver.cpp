@@ -207,7 +207,8 @@ void initializeSolutionAndCoarseMesh(SolutionPtr &solution, vector<MeshPtr> &mes
     dimensions.push_back(width);
     elementCounts.push_back(rootMeshNumCells);
   }
-  mesh = MeshFactory::rectilinearMesh(bf, dimensions, elementCounts, H1Order, delta_k, x0);
+  
+  MeshTopologyPtr meshTopo = MeshFactory::rectilinearMeshTopology(dimensions, elementCounts);
   
   // now that we have mesh, add pressure constraint for Stokes (imposing zero at origin--want to aim for center of mesh)
   if ((problemChoice == Stokes) || (problemChoice==NavierStokes))
@@ -217,7 +218,7 @@ void initializeSolutionAndCoarseMesh(SolutionPtr &solution, vector<MeshPtr> &mes
       vector<double> origin(spaceDim,0);
       IndexType vertexIndex;
       
-      if (!mesh->getTopology()->getVertexIndex(origin, vertexIndex))
+      if (!meshTopo->getVertexIndex(origin, vertexIndex))
       {
         TEUCHOS_TEST_FOR_EXCEPTION(true, std::invalid_argument, "origin vertex not found");
       }
@@ -233,17 +234,28 @@ void initializeSolutionAndCoarseMesh(SolutionPtr &solution, vector<MeshPtr> &mes
   
   meshesCoarseToFine.clear();
   
+#ifdef HAVE_MPI
+  Epetra_MpiComm Comm(MPI_COMM_WORLD);
+#else
+  Epetra_SerialComm Comm;
+#endif
+  
   bool useGMGSolverForMeshes = true; // use static method from GMGSolver to generate meshesCoarseToFine
   if (useGMGSolverForMeshes)
   {
+    Epetra_Time hRefinementTimer(Comm);
     int meshWidthCells = rootMeshNumCells;
     while (meshWidthCells < numCells)
     {
-      set<IndexType> activeCellIDs = mesh->getActiveCellIDs(); // should match between coarseMesh and mesh
-      mesh->hRefine(activeCellIDs);
+      set<IndexType> activeCellIDs = meshTopo->getActiveCellIndices();
       if (rank==0)
       {
         print("h-refining cells", activeCellIDs);
+      }
+      for (IndexType activeCellID : activeCellIDs)
+      {
+        CellTopoPtr cellTopo = meshTopo->getCell(activeCellID)->topology();
+        meshTopo->refineCell(activeCellID, RefinementPattern::regularRefinementPattern(cellTopo));
       }
       meshWidthCells *= 2;
     }
@@ -254,9 +266,23 @@ void initializeSolutionAndCoarseMesh(SolutionPtr &solution, vector<MeshPtr> &mes
         cout << "Warning: may have over-refined mesh; mesh has width " << meshWidthCells << ", not " << numCells << endl;
       }
     }
+    if (rank==0)
+    {
+      int refinementTime = hRefinementTimer.ElapsedTime();
+      cout << "h refinements (MeshTopology) completed in " << refinementTime << " seconds.\n";
+      hRefinementTimer.ResetStartTime();
+    }
+    mesh = Teuchos::rcp(new Mesh(meshTopo, bf, H1Order, delta_k));
+    if (rank==0)
+    {
+      int meshConstructionTime = hRefinementTimer.ElapsedTime();
+      cout << "Mesh construction completed in " << meshConstructionTime << " seconds.\n";
+    }
   }
   else
   {
+    mesh = MeshFactory::rectilinearMesh(bf, dimensions, elementCounts, H1Order, delta_k, x0);
+    
     MeshTopologyViewPtr meshTopoView;
     if (useLightWeightViews)
       meshTopoView = mesh->getTopology()->getView(mesh->getActiveCellIDs());
@@ -320,9 +346,14 @@ void initializeSolutionAndCoarseMesh(SolutionPtr &solution, vector<MeshPtr> &mes
   
   graphNorm = bf->graphNorm();
   
+  Epetra_Time timer(Comm);
   solution = Solution::solution(mesh, bc, rhs, graphNorm);
   solution->setUseCondensedSolve(useStaticCondensation);
   solution->setZMCsAsGlobalLagrange(false); // fine grid solution shouldn't impose ZMCs (should be handled in coarse grid solve)
+  
+  int solutionConstructionTime = timer.ElapsedTime();
+  if (rank==0)
+    cout << "Solution constructed in " << solutionConstructionTime << " seconds.\n";
   
   if (useGMGSolverForMeshes)
   {
@@ -330,7 +361,11 @@ void initializeSolutionAndCoarseMesh(SolutionPtr &solution, vector<MeshPtr> &mes
     pl.set("kCoarse", k_coarse);
     pl.set("delta_k", delta_k);
     pl.set("jumpToCoarsePolyOrder",jumpToCoarsePolyOrder);
+    timer.ResetStartTime();
     meshesCoarseToFine = GMGSolver::meshesForMultigrid(solution->mesh(), pl);
+    int meshesForMultigridExecutionTime = timer.ElapsedTime();
+    if (rank==0)
+      cout << "meshesForMultigrid() executed in " << meshesForMultigridExecutionTime << " seconds.\n";
   }
 }
 

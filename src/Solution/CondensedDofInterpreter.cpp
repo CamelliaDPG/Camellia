@@ -58,12 +58,6 @@ CondensedDofInterpreter<Scalar>::CondensedDofInterpreter(MeshPtr mesh, TIPPtr<Sc
     set<int> constrainedVars = lagrangeConstraints->getElementConstraint(i).linearTerm()->varIDs();
     _uncondensibleVarIDs.insert(constrainedVars.begin(), constrainedVars.end());
   }
-
-  if (offRankCellsToInclude.size() > 0)
-  {
-    // 7-23-15: turning off this warning.  We do now have a couple tests in GMGOperator which exercise this when run on multiple MPI ranks.  (These pass.)
-//    cout << "Note: CondensedDofInterpreter initialized with offRankCellsToInclude.size() > 0.  This is still experimental, and may have bugs (TODO: add tests to GMGSolverTests and/or GMGOperatorTests).\n";
-  }
   
   initializeGlobalDofIndices();
 }
@@ -621,7 +615,8 @@ void CondensedDofInterpreter<Scalar>::initializeGlobalDofIndices()
     }
   }
 
-//  cout << "_interpretedToGlobalDofIndexMap.size() = " << _interpretedToGlobalDofIndexMap.size() << endl;
+//  cout << "Rank " << rank << " partitionInterpretedFluxMap.size() = " << partitionInterpretedFluxMap.size() << endl;
+//  cout << "Rank " << rank << " _interpretedToGlobalDofIndexMap.size() = " << _interpretedToGlobalDofIndexMap.size() << endl;
 }
 
 template <typename Scalar>
