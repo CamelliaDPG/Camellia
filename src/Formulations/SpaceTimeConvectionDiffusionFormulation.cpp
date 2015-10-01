@@ -32,6 +32,7 @@ SpaceTimeConvectionDiffusionFormulation::SpaceTimeConvectionDiffusionFormulation
   bool steady = parameters.get<bool>("steady", true);
   double epsilon = parameters.get<double>("epsilon", 1e-2);
   bool useConformingTraces = parameters.get<bool>("useConformingTraces", false);
+  bool fluxLinearTerm = parameters.get<bool>("fluxLinearTerm", true);
   int fieldPolyOrder = parameters.get<int>("fieldPolyOrder", 2);
   int delta_p = parameters.get<int>("delta_p", 2);
   int numTElems = parameters.get<int>("numTElems", 1);
@@ -110,7 +111,10 @@ SpaceTimeConvectionDiffusionFormulation::SpaceTimeConvectionDiffusionFormulation
       - sigma3 * n_x_parity->z()
       + u*n_xt_parity->t();
   }
-  tc = _vf->fluxVar(s_tc, tc_lt);
+  if (fluxLinearTerm)
+    tc = _vf->fluxVar(s_tc, tc_lt);
+  else
+    tc = _vf->fluxVar(s_tc);
 
   v = _vf->testVar(s_v, HGRAD);
 

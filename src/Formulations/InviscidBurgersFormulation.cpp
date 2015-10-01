@@ -15,12 +15,14 @@ using namespace Camellia;
 
 const string InviscidBurgersFormulation::s_u = "u";
 const string InviscidBurgersFormulation::s_tc = "tc";
+const string InviscidBurgersFormulation::s_uhat = "uhat";
 const string InviscidBurgersFormulation::s_v = "v";
 
 // InviscidBurgersFormulation::InviscidBurgersFormulation(int spaceDim, double epsilon, TFunctionPtr<double> beta, bool useConformingTraces)
 InviscidBurgersFormulation::InviscidBurgersFormulation(MeshTopologyPtr meshTopo, Teuchos::ParameterList &parameters)
 {
   int spaceDim = parameters.get<int>("spaceDim", 1);
+  bool linearTrace = parameters.get<bool>("linearTrace", false);
   bool useConformingTraces = parameters.get<bool>("useConformingTraces", false);
   int fieldPolyOrder = parameters.get<int>("fieldPolyOrder", 2);
   int delta_p = parameters.get<int>("delta_p", 2);
@@ -29,6 +31,7 @@ InviscidBurgersFormulation::InviscidBurgersFormulation(MeshTopologyPtr meshTopo,
   string savedSolutionAndMeshPrefix = parameters.get<string>("savedSolutionAndMeshPrefix", "");
 
   _spaceDim = spaceDim;
+  _linearTrace = linearTrace;
   _useConformingTraces = useConformingTraces;
 
   FunctionPtr zero = Function::constant(1);
@@ -45,6 +48,7 @@ InviscidBurgersFormulation::InviscidBurgersFormulation(MeshTopologyPtr meshTopo,
 
   // traces
   VarPtr tc;
+  VarPtr uhat;
 
   // tests
   VarPtr v;
@@ -83,7 +87,11 @@ InviscidBurgersFormulation::InviscidBurgersFormulation(MeshTopologyPtr meshTopo,
   //     + u*n_xt_parity->t();
   // }
   // tc = _vf->fluxVar(s_tc, tc_lt);
-  tc = _vf->fluxVar(s_tc);
+  if (!linearTrace)
+    tc = _vf->fluxVar(s_tc);
+  else
+    // uhat = _vf->fluxVar(s_uhat);
+    uhat = _vf->traceVar(s_uhat, 1.0 * u, L2);
 
   v = _vf->testVar(s_v, HGRAD);
 
@@ -99,13 +107,16 @@ InviscidBurgersFormulation::InviscidBurgersFormulation(MeshTopologyPtr meshTopo,
   if (savedSolutionAndMeshPrefix == "")
   {
     map<int,int> trialOrderEnhancements;
+    // if (linearTrace)
+    //   trialOrderEnhancements[uhat->ID()] = 3;
     _mesh = Teuchos::rcp( new Mesh(meshTopo, _bf, H1Order, delta_p, trialOrderEnhancements) ) ;
 
     _solutionUpdate = Solution::solution(_bf, _mesh, bc);
     _solutionBackground = Solution::solution(_bf, _mesh, bc);
     map<int, FunctionPtr> initialGuess;
-    // initialGuess[u()->ID()] = problem->u_exact();
-    // initialGuess[u()->ID()] = zero;
+    initialGuess[u()->ID()] = Function::constant(1);
+    if (linearTrace)
+      initialGuess[uhat()->ID()] = Function::constant(1);
 
     _solutionBackground->projectOntoMesh(initialGuess);
   }
@@ -120,7 +131,9 @@ InviscidBurgersFormulation::InviscidBurgersFormulation(MeshTopologyPtr meshTopo,
   }
 
   FunctionPtr u_prev = Function::solution(u, _solutionBackground);
-
+  FunctionPtr uhat_prev;
+  if (linearTrace)
+    uhat_prev = Function::solution(uhat, _solutionBackground);
 
 
 
@@ -128,13 +141,44 @@ InviscidBurgersFormulation::InviscidBurgersFormulation(MeshTopologyPtr meshTopo,
   // v terms
   _bf->addTerm(-u, v->dt());
   _bf->addTerm(-u_prev*u, v->dx());
-  _bf->addTerm(tc, v);
+  if (!linearTrace)
+    _bf->addTerm(tc, v);
+  else
+  {
+    // _bf->addTerm(uhat, v);
+    _bf->addTerm(uhat_prev*uhat*n_xt->x(), v);
+    _bf->addTerm(uhat*n_xt->t(), v);
+    // _bf->addTerm(uhat_prev*uhat*n_x_parity->x(), v);
+    // _bf->addTerm(uhat*n_xt_parity->t(), v);
+    // _bf->addTerm(uhat_prev*uhat*n_x->x(), v);
+    // _bf->addTerm(uhat*n_xt->t(), v);
+    // _bf->addTerm(uhat_prev*uhat, v);
+    // _bf->addTerm(uhat, v);
+  }
 
   // Add residual to RHS
   _rhs = RHS::rhs();
   // v terms
   _rhs->addTerm( u_prev * v->dt());
   _rhs->addTerm( 0.5*u_prev*u_prev * v->dx());
+  if (linearTrace)
+  {
+    _rhs->addTerm( -0.5*uhat_prev*uhat_prev*n_xt->x() * v);
+    _rhs->addTerm( -uhat_prev*n_xt->t() * v);
+  }
+
+  vector<VarPtr> missingTestVars = _bf->missingTestVars();
+  vector<VarPtr> missingTrialVars = _bf->missingTrialVars();
+  for (int i=0; i < missingTestVars.size(); i++)
+  {
+    VarPtr var = missingTestVars[i];
+    cout << var->displayString() << endl;
+  }
+  for (int i=0; i < missingTrialVars.size(); i++)
+  {
+    VarPtr var = missingTrialVars[i];
+    cout << var->displayString() << endl;
+  }
 
   _ips["Graph"] = _bf->graphNorm();
 
@@ -293,6 +337,12 @@ VarPtr InviscidBurgersFormulation::tc()
   return _vf->fluxVar(s_tc);
 }
 
+VarPtr InviscidBurgersFormulation::uhat()
+{
+  // return _vf->fluxVar(s_uhat);
+  return _vf->traceVar(s_uhat);
+}
+
 // ! Saves the solution(s) and mesh to an HDF5 format.
 void InviscidBurgersFormulation::save(std::string prefixString)
 {
@@ -315,6 +365,8 @@ set<int> InviscidBurgersFormulation::nonlinearVars()
 {
   set<int> nonlinearVars;
   nonlinearVars.insert(u()->ID());
+  if (_linearTrace)
+    nonlinearVars.insert(uhat()->ID());
   return nonlinearVars;
 }
 

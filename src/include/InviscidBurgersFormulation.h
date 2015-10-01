@@ -25,6 +25,7 @@ class InviscidBurgersFormulation
 {
 
   bool _steady;
+  bool _linearTrace;
   int _spaceDim;
   bool _useConformingTraces;
 
@@ -42,6 +43,7 @@ class InviscidBurgersFormulation
   static const string s_u;
 
   static const string s_tc;
+  static const string s_uhat;
 
   static const string s_v;
 
@@ -101,6 +103,7 @@ public:
 
   // traces:
   VarPtr tc();
+  VarPtr uhat();
 
   // test variables:
   VarPtr v();

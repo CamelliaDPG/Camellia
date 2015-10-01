@@ -53,8 +53,9 @@ int main(int argc, char *argv[])
   int numXElems = 2;
   int numTElems = 1;
   bool useConformingTraces = false;
+  bool fluxLinearTerm = true;
   string solverChoice = "KLU";
-  string multigridStrategyString = "W-cycle";
+  string multigridStrategyString = "V-cycle";
   bool useCondensedSolve = false;
   bool useConjugateGradient = true;
   bool logFineOperator = false;
@@ -74,6 +75,7 @@ int main(int argc, char *argv[])
   cmdp.setOption("epsilon", &epsilon, "epsilon");
   cmdp.setOption("norm", &norm, "norm");
   cmdp.setOption("conformingTraces", "nonconformingTraces", &useConformingTraces, "use conforming traces");
+  cmdp.setOption("fluxLinearTerm", "fluxZero", &fluxLinearTerm, "define linear term for flux (useful for multigrid)");
   cmdp.setOption("solver", &solverChoice, "KLU, SuperLU, MUMPS, GMG-Direct, GMG-ILU, GMG-IC");
   cmdp.setOption("multigridStrategy", &multigridStrategyString, "Multigrid strategy: V-cycle, W-cycle, Full, or Two-level");
   cmdp.setOption("useCondensedSolve", "useStandardSolve", &useCondensedSolve);
@@ -118,15 +120,15 @@ int main(int argc, char *argv[])
   if (spaceDim == 1)
     u_steady = Function::constant(1)-exp1lambdax;
   if (spaceDim == 2)
-    for (int n = 1; n <= 20; n++)
-    {
-      double Cn = 0;
-      if (n % 2 == 0)
-        Cn = 200*epsilon/(n*pi);
-      FunctionPtr sinnpiy = Teuchos::rcp(new Sin_ay(n*pi));
-      u_steady = u_steady + Cn*(exps1x-expr1x)/(r1*exp(-r1)-s1*exp(-s1))*sinnpiy;
-    }
-    // u_steady = 10*epsilon*(exps1x-expr1x)/(r1*exp(-r1)-s1*exp(-s1))*cospiy;
+    // for (int n = 1; n <= 20; n++)
+    // {
+    //   double Cn = 0;
+    //   if (n % 2 == 0)
+    //     Cn = 200*epsilon/(n*pi);
+    //   FunctionPtr sinnpiy = Teuchos::rcp(new Sin_ay(n*pi));
+    //   u_steady = u_steady + Cn*(exps1x-expr1x)/(r1*exp(-r1)-s1*exp(-s1))*sinnpiy;
+    // }
+    u_steady = 10*epsilon*(exps1x-expr1x)/(r1*exp(-r1)-s1*exp(-s1))*cospiy;
 
   FunctionPtr u_exact = u_steady + 4*explt*(explambda1x-explambda2x)*Function::yn(1);
   FunctionPtr sigma_exact = epsilon*u_exact->grad();
@@ -142,6 +144,7 @@ int main(int argc, char *argv[])
   parameters.set("spaceDim", spaceDim);
   parameters.set("epsilon", epsilon);
   parameters.set("useConformingTraces", useConformingTraces);
+  parameters.set("fluxLinearTerm", fluxLinearTerm);
   parameters.set("fieldPolyOrder", p);
   parameters.set("delta_p", delta_p);
   parameters.set("numTElems", numTElems);
@@ -155,8 +158,8 @@ int main(int argc, char *argv[])
   exactMap[form.sigma(1)->ID()] = sigma_exact->x();
   if (spaceDim == 2)
     exactMap[form.sigma(2)->ID()] = sigma_exact->y();
-  exactMap[form.tc()->ID()] = form.tc()->termTraced()->evaluate(exactMap);
-  exactMap[form.uhat()->ID()] = form.uhat()->termTraced()->evaluate(exactMap);
+  // exactMap[form.tc()->ID()] = form.tc()->termTraced()->evaluate(exactMap);
+  // exactMap[form.uhat()->ID()] = form.uhat()->termTraced()->evaluate(exactMap);
 
   // Build mesh
   vector<double> x0;// = vector<double>(spaceDim,-1);
@@ -201,11 +204,17 @@ int main(int argc, char *argv[])
     SpatialFilterPtr rightX = SpatialFilter::matchingX(x0[0]+width);
     SpatialFilterPtr leftY  = SpatialFilter::matchingY(x0[1]);
     SpatialFilterPtr rightY = SpatialFilter::matchingY(x0[1]+width);
-    bc->addDirichlet(tc,   leftX,    exactMap[form.tc()->ID()]);
-    bc->addDirichlet(uhat, rightX,   exactMap[form.uhat()->ID()]);
-    bc->addDirichlet(tc, leftY,    exactMap[form.tc()->ID()]);
-    bc->addDirichlet(tc, rightY,   exactMap[form.tc()->ID()]);
-    bc->addDirichlet(tc,   initTime, exactMap[form.tc()->ID()]);
+    // bc->addDirichlet(tc,   leftX,    exactMap[form.tc()->ID()]);
+    // bc->addDirichlet(uhat, rightX,   exactMap[form.uhat()->ID()]);
+    // bc->addDirichlet(tc, leftY,    exactMap[form.tc()->ID()]);
+    // bc->addDirichlet(tc, rightY,   exactMap[form.tc()->ID()]);
+    // bc->addDirichlet(tc,   initTime, exactMap[form.tc()->ID()]);
+    FunctionPtr n = Function::normalSpaceTime();
+    bc->addDirichlet(tc,   leftX,  beta->x()*n->x()*u_exact-sigma_exact->x()*n->x());
+    bc->addDirichlet(uhat, rightX, beta->x()*n->x()*u_exact-sigma_exact->x()*n->x());
+    bc->addDirichlet(tc, leftY,    beta->x()*n->x()*u_exact-sigma_exact->x()*n->x());
+    bc->addDirichlet(tc, rightY,   beta->x()*n->x()*u_exact-sigma_exact->x()*n->x());
+    bc->addDirichlet(tc,   initTime, -u_exact);
   }
 
   // Set up solution

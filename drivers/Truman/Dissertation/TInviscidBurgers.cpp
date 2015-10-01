@@ -62,10 +62,12 @@ int main(int argc, char *argv[])
   int maxLinearIterations = 10000;
   bool computeL2Error = false;
   bool exportSolution = false;
+  bool linearTrace = false;
   string norm = "Graph";
   string outputDir = ".";
   string tag="";
   cmdp.setOption("spaceDim", &spaceDim, "spatial dimension");
+  cmdp.setOption("linearTrace", "nonlinearTrace", &linearTrace, "use linearized trace formulation");
   cmdp.setOption("polyOrder",&p,"polynomial order for field variable u");
   cmdp.setOption("delta_p", &delta_p, "test space polynomial order enrichment");
   cmdp.setOption("numRefs",&numRefs,"number of refinements");
@@ -116,6 +118,7 @@ int main(int argc, char *argv[])
 
   Teuchos::ParameterList parameters;
   parameters.set("spaceDim", spaceDim);
+  parameters.set("linearTrace", linearTrace);
   parameters.set("useConformingTraces", useConformingTraces);
   parameters.set("fieldPolyOrder", p);
   parameters.set("delta_p", delta_p);
@@ -126,26 +129,43 @@ int main(int argc, char *argv[])
 
   MeshPtr mesh = form.solutionUpdate()->mesh();
 
-  map<int, FunctionPtr> exactMap;
-  exactMap[form.u()->ID()] = u_exact;
+  // map<int, FunctionPtr> exactMap;
+  // exactMap[form.u()->ID()] = u_exact;
   // exactMap[form.tc()->ID()] = form.tc()->termTraced()->evaluate(exactMap);
+
+  // Set up solution
+  SolutionPtr solutionUpdate = form.solutionUpdate();
+  SolutionPtr solutionBackground = form.solutionBackground();
 
   // Set up boundary conditions
   BCPtr bc = form.solutionUpdate()->bc();
-  VarPtr tc = form.tc();
+  VarPtr tc, uhat;
+  if (linearTrace)
+    uhat = form.uhat();
+  else
+    tc = form.tc();
   SpatialFilterPtr initTime = SpatialFilter::matchingT(0);
   if (spaceDim == 1)
   {
     SpatialFilterPtr leftX  = SpatialFilter::matchingX(x0[0]);
     SpatialFilterPtr rightX = SpatialFilter::matchingX(x0[0]+width);
-    bc->addDirichlet(tc,   leftX,    -0.5*u_exact*u_exact);
-    bc->addDirichlet(tc,   rightX,    0.5*u_exact*u_exact);
-    bc->addDirichlet(tc,   initTime, -u_exact);
+    if (!linearTrace)
+    {
+      bc->addDirichlet(tc,   leftX,    -0.5*u_exact*u_exact);
+      bc->addDirichlet(tc,   rightX,    0.5*u_exact*u_exact);
+      bc->addDirichlet(tc,   initTime, -u_exact);
+    }
+    else
+    {
+      FunctionPtr uhat_prev = Function::solution(uhat, solutionBackground);
+      bc->addDirichlet(uhat, leftX,    u_exact-uhat_prev);
+      bc->addDirichlet(uhat, rightX,   u_exact-uhat_prev);
+      bc->addDirichlet(uhat, initTime, u_exact-uhat_prev);
+      // bc->addDirichlet(uhat,   leftX,    -0.5*u_exact*u_exact);
+      // bc->addDirichlet(uhat,   rightX,    0.5*u_exact*u_exact);
+      // bc->addDirichlet(uhat,   initTime, -u_exact);
+    }
   }
-
-  // Set up solution
-  SolutionPtr solutionUpdate = form.solutionUpdate();
-  SolutionPtr solutionBackground = form.solutionBackground();
 
   ostringstream solnName;
   solnName << "InviscidBurgers" << "_" << norm << "_p" << p << "_" << solverChoice;// << "_" << multigridStrategyString;
@@ -303,6 +323,7 @@ int main(int argc, char *argv[])
 
     if (exportSolution)
       exporter->exportSolution(solutionBackground, refIndex);
+      // exporter->exportSolution(solutionUpdate, refIndex);
 
     if (refIndex != numRefs)
       refStrategy->refine();
