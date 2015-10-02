@@ -232,11 +232,27 @@ vector<unsigned> Cell::getChildIndices(MeshTopologyViewPtr meshTopoViewForCellVa
 
 unsigned Cell::entityIndex(unsigned subcdim, unsigned subcord)
 {
-  if ((subcdim == _cellTopo->getDimension()) && (subcord == 0))
+  int spaceDim = _cellTopo->getDimension();
+  if ((subcdim == spaceDim) && (subcord == 0))
   {
     return _cellIndex;
   }
+  
+  if (_entityIndices.size() == 0)
+  {
+    _entityIndices = vector< vector<IndexType> >(spaceDim);
+  }
 
+  if (_entityIndices[subcdim].size() == 0)
+  {
+    _entityIndices[subcdim] = vector<IndexType>(_cellTopo->getSubcellCount(subcdim), -2); // -2 indicates not yet looked for; -1 indicates looked for and not found.
+  }
+  
+  if (_entityIndices[subcdim][subcord] != -2)
+  {
+    return _entityIndices[subcdim][subcord];
+  }
+  
   set< unsigned > nodes;
   if (subcdim != 0)
   {
@@ -251,7 +267,9 @@ unsigned Cell::entityIndex(unsigned subcdim, unsigned subcord)
   {
     nodes.insert(_vertices[subcord]);
   }
-  return _meshTopo->getEntityIndex(subcdim, nodes);
+  _entityIndices[subcdim][subcord] = _meshTopo->getEntityIndex(subcdim, nodes);
+  
+  return _entityIndices[subcdim][subcord];
 }
 
 vector<unsigned> Cell::getEntityVertexIndices(unsigned int subcdim, unsigned int subcord)

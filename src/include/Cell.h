@@ -30,6 +30,7 @@ class Cell
   CellTopoPtr _cellTopo;
   vector< unsigned > _vertices;
   vector< vector< unsigned > > _subcellPermutations; // permutation to get from local ordering to the canonical one
+  vector<vector<IndexType>> _entityIndices;
 
   MeshTopology* _meshTopo;
 
