@@ -136,7 +136,6 @@ private:
   void gatherSolutionData(); // get all solution data onto every node (not what we should do in the end)
 protected:
   Intrepid::FieldContainer<Scalar> solutionForElementTypeGlobal(ElementTypePtr elemType); // probably should be deprecated…
-  ElementTypePtr getEquivalentElementType(MeshPtr otherMesh, ElementTypePtr elemType);
 public:
   TSolution(TBFPtr<Scalar> bf, MeshPtr mesh, TBCPtr<Scalar> bc = Teuchos::null,
             TRHSPtr<Scalar> rhs = Teuchos::null, TIPPtr<Scalar> ip = Teuchos::null);
