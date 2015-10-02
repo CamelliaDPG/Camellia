@@ -596,7 +596,7 @@ void GlobalDofAssignment::projectParentCoefficientsOntoUnsetChildren()
 
 void GlobalDofAssignment::setPartitions(FieldContainer<GlobalIndexType> &partitionedMesh)
 {
-  set<unsigned> activeCellIDs = _meshTopology->getActiveCellIndices();
+//  set<unsigned> activeCellIDs = _meshTopology->getActiveCellIndices();
 
   int partitionNumber     = Teuchos::GlobalMPISession::getRank();
   int partitionCount      = Teuchos::GlobalMPISession::getNProc();
