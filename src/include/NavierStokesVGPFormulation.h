@@ -29,6 +29,7 @@ class NavierStokesVGPFormulation
   bool _useConformingTraces;
 
   int _spaceDim;
+  bool _conservationFormulation;
 
   BCPtr _bc, _zeroBC; // _zeroBC used when _neglectFluxesOnRHS = false, as it needs to be for GMG solves
   RHSPtr _rhsForSolve, _rhsForResidual;
@@ -68,7 +69,7 @@ public:
 //                             bool useConformingTraces = false);
 
   NavierStokesVGPFormulation(MeshTopologyPtr meshTopology, Teuchos::ParameterList &parameters);
-  
+
   // ! sets a wall boundary condition
   void addWallCondition(SpatialFilterPtr wall);
 
@@ -89,10 +90,10 @@ public:
 
   // ! returns the forcing function corresponding to the indicated exact solution
   TFunctionPtr<double> forcingFunction(int spaceDim, double Re, TFunctionPtr<double> u, TFunctionPtr<double> p);
-  
+
   // ! Set the forcing function for Navier-Stokes.  Should be a vector-valued function, with number of components equal to the spatial dimension.
   void setForcingFunction(TFunctionPtr<double> f);
-  
+
   // ! returns the L^2 norm of the incremental solution
   double L2NormSolutionIncrement();
 
@@ -128,7 +129,7 @@ public:
 
   // ! set the Solver for the linear updates
   void setSolver(SolverPtr solver);
-  
+
   // ! the Stokes bilinear form
   BFPtr stokesBF();
 
@@ -165,12 +166,16 @@ public:
   // test variables:
   VarPtr tau(int i);
   VarPtr v(int i);
-  
+
   // static utility functions:
-  
+
   static NavierStokesVGPFormulation steadyFormulation(int spaceDim, double Re, bool useConformingTraces,
                                                       MeshTopologyPtr meshTopo, int polyOrder, int delta_k);
   static NavierStokesVGPFormulation spaceTimeFormulation(int spaceDim, double Re, bool useConformingTraces,
+                                                         MeshTopologyPtr meshTopo, int spatialPolyOrder, int temporalPolyOrder, int delta_k);
+  static NavierStokesVGPFormulation steadyConservationFormulation(int spaceDim, double Re, bool useConformingTraces,
+                                                      MeshTopologyPtr meshTopo, int polyOrder, int delta_k);
+  static NavierStokesVGPFormulation spaceTimeConservationFormulation(int spaceDim, double Re, bool useConformingTraces,
                                                          MeshTopologyPtr meshTopo, int spatialPolyOrder, int temporalPolyOrder, int delta_k);
   static NavierStokesVGPFormulation timeSteppingFormulation(int spaceDim, double Re, bool useConformingTraces,
                                                             MeshTopologyPtr meshTopo, int polyOrder, int delta_k,
@@ -178,10 +183,10 @@ public:
 
   // ! returns the convective term (u dot grad u) corresponding to the provided velocity function
   static FunctionPtr convectiveTerm(int spcaeDim, FunctionPtr u_exact);
-  
+
   // ! returns the forcing function for steady-state Navier-Stokes corresponding to the indicated exact solution
   static TFunctionPtr<double> forcingFunctionSteady(int spaceDim, double Re, TFunctionPtr<double> u, TFunctionPtr<double> p);
-  
+
   // ! returns the forcing function for space-time Navier-Stokes corresponding to the indicated exact solution
   static TFunctionPtr<double> forcingFunctionSpaceTime(int spaceDim, double Re, TFunctionPtr<double> u, TFunctionPtr<double> p);
 };
