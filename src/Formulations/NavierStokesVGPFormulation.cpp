@@ -207,12 +207,12 @@ NavierStokesVGPFormulation::NavierStokesVGPFormulation(MeshTopologyPtr meshTopo,
       {
         VarPtr u_j = _stokesForm->u(comp_j);
         VarPtr sigma_ij = _stokesForm->sigma(comp_i, comp_j);
-
+        
         FunctionPtr sigma_prev_ij = TFunction<double>::solution(sigma_ij, backgroundFlowWeakReference);
         FunctionPtr u_prev_j = TFunction<double>::solution(u_j, backgroundFlowWeakReference);
-
-        _navierStokesBF->addTerm( - Re * sigma_prev_ij * u_j, v_i);
-        _navierStokesBF->addTerm( - Re * u_prev_j * sigma_ij, v_i);
+        
+        _navierStokesBF->addTerm( Re * sigma_prev_ij * u_j, v_i);
+        _navierStokesBF->addTerm( Re * u_prev_j * sigma_ij, v_i);
       }
     }
   }
@@ -978,7 +978,7 @@ Teuchos::RCP<ExactSolution<double>> NavierStokesVGPFormulation::exactSolution(TF
 TFunctionPtr<double> NavierStokesVGPFormulation::forcingFunction(int spaceDim, double Re, TFunctionPtr<double> u_exact, TFunctionPtr<double> p_exact)
 {
   FunctionPtr convectiveTerm = NavierStokesVGPFormulation::convectiveTerm(spaceDim, u_exact);
-  return _stokesForm->forcingFunction(u_exact, p_exact) - convectiveTerm;
+  return _stokesForm->forcingFunction(u_exact, p_exact) + convectiveTerm;
 }
 
 void NavierStokesVGPFormulation::setForcingFunction(FunctionPtr forcingFunction)
@@ -1007,8 +1007,8 @@ TFunctionPtr<double> NavierStokesVGPFormulation::forcingFunctionSteady(int space
 {
   bool useConformingTraces = false; // doesn't matter for this
   StokesVGPFormulation stokesForm = StokesVGPFormulation::steadyFormulation(spaceDim, 1.0 / Re, useConformingTraces);
-
-  return stokesForm.forcingFunction(u, p) - NavierStokesVGPFormulation::convectiveTerm(spaceDim, u);
+  
+  return stokesForm.forcingFunction(u, p) + NavierStokesVGPFormulation::convectiveTerm(spaceDim, u);
 }
 
 // ! returns the forcing function for space-time Navier-Stokes corresponding to the indicated exact solution
@@ -1016,8 +1016,8 @@ TFunctionPtr<double> NavierStokesVGPFormulation::forcingFunctionSpaceTime(int sp
 {
   bool useConformingTraces = false; // doesn't matter for this
   StokesVGPFormulation stokesForm = StokesVGPFormulation::spaceTimeFormulation(spaceDim, 1.0 / Re, useConformingTraces);
-
-  return stokesForm.forcingFunction(u, p) - NavierStokesVGPFormulation::convectiveTerm(spaceDim, u);
+  
+  return stokesForm.forcingFunction(u, p) + NavierStokesVGPFormulation::convectiveTerm(spaceDim, u);
 }
 
 double NavierStokesVGPFormulation::L2NormSolution()
@@ -1120,7 +1120,7 @@ RHSPtr NavierStokesVGPFormulation::rhs(TFunctionPtr<double> f, bool excludeFluxe
         TFunctionPtr<double> uj_prev = TFunction<double>::solution(uj,backgroundFlowWeakReference);
         VarPtr sigma_ij = this->sigma(comp_i, comp_j);
         TFunctionPtr<double> sigma_ij_prev = TFunction<double>::solution(sigma_ij, backgroundFlowWeakReference);
-        rhs->addTerm((Re * uj_prev * sigma_ij_prev) * vi);
+        rhs->addTerm((-Re * uj_prev * sigma_ij_prev) * vi);
       }
     }
   }
