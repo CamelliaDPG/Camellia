@@ -281,19 +281,18 @@ vector<MeshPtr> GMGSolver::meshesForMultigrid(MeshPtr fineMesh, Teuchos::Paramet
         ElementTypePtr fineElemType = fineMesh->getElementType(cellIndex);
         int kForFineCell = fineElemType->trialOrderPtr->maxBasisDegreeForVolume();
         
-        if (kForCoarseCell < kForFineCell)
+        int kToAdd;
+        if (kForCoarseCell == 0)
         {
-          int kToAdd;
-          // we go up doubling kCoarse until we hit the fine k
-          // but if kCoarse is 0, then refine by polyOrder 1
-          if (kForCoarseCell == 0)
-          {
-            kToAdd = 1;
-          }
-          else
-          {
-            kToAdd = min(kForCoarseCell,kForFineCell - kForCoarseCell);
-          }
+          kToAdd = 1;
+        }
+        else
+        {
+          kToAdd = min(kForCoarseCell,kForFineCell - kForCoarseCell);
+        }
+        
+        if (kForCoarseCell + kToAdd < kForFineCell) // if kForCoarseCell + kToAdd == kForFineCell, then the fine mesh will do the job
+        {
           meshToPRefine->pRefine(set<GlobalIndexType>{cellIndex},kToAdd,false); // false: don't repartition and rebuild yet
           someCellWasRefined = true;
         }

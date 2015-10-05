@@ -1710,26 +1710,6 @@ void TSolution<Scalar>::setDofInterpreter(Teuchos::RCP<DofInterpreter> dofInterp
 }
 
 template <typename Scalar>
-ElementTypePtr TSolution<Scalar>::getEquivalentElementType(Teuchos::RCP<Mesh> otherMesh, ElementTypePtr elemType)
-{
-  DofOrderingPtr otherTrial = elemType->trialOrderPtr;
-  DofOrderingPtr otherTest = elemType->testOrderPtr;
-  DofOrderingPtr myTrial = _mesh->getDofOrderingFactory().getTrialOrdering(*otherTrial);
-  DofOrderingPtr myTest = _mesh->getDofOrderingFactory().getTestOrdering(*otherTest);
-  CellTopoPtr otherCellTopo = elemType->cellTopoPtr;
-  CellTopoPtr myCellTopo;
-  for (int i=0; i<_mesh->activeElements().size(); i++)
-  {
-    myCellTopo = _mesh->activeElements()[i]->elementType()->cellTopoPtr;
-    if (myCellTopo->getKey() == otherCellTopo->getKey() )
-    {
-      break; // out of for loop
-    }
-  }
-  return _mesh->getElementTypeFactory().getElementType(myTrial,myTest,myCellTopo);
-}
-
-template <typename Scalar>
 Epetra_MultiVector* TSolution<Scalar>::getGlobalCoefficients()
 {
   return (*_lhsVector)(0);

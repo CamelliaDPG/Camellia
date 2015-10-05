@@ -128,12 +128,15 @@ private:
       return false;
     }
   };
-  set<DofOrderingPtr, Comparator > _testOrderings;
-  set<DofOrderingPtr, Comparator > _trialOrderings;
+  set<DofOrderingPtr, Comparator > _testOrderingsSet;
+  set<DofOrderingPtr, Comparator > _trialOrderingsSet;
 
   map<DofOrdering*, DofOrderingPtr > _fieldOrderingForTrial;
   map<DofOrdering*, DofOrderingPtr > _traceOrderingForTrial;
-
+  
+  map<pair<pair<vector<int>,CellTopologyKey>,bool>, DofOrderingPtr> _trialOrderings; // bool: "conforming" (used by GDAMaximumRule2D)
+  map<pair<vector<int>,CellTopologyKey>, DofOrderingPtr> _testOrderings;
+  
   VarFactoryPtr _varFactory;
   map<DofOrdering*,bool> _isConforming;
   map<int, int> _testOrderEnhancements;
@@ -169,12 +172,9 @@ public:
 
   DofOrderingPtr setSidePolyOrder(DofOrderingPtr dofOrdering, int sideIndexToSet, int newPolyOrder, bool replacePatchBasis);
 
-  DofOrderingPtr getRelabeledDofOrdering(DofOrderingPtr dofOrdering, map<int,int> &oldKeysNewValues);
+//  DofOrderingPtr getRelabeledDofOrdering(DofOrderingPtr dofOrdering, map<int,int> &oldKeysNewValues);
 
   DofOrderingPtr setBasisDegree(DofOrderingPtr dofOrdering, int basisDegree, bool replaceDiscontinuousFSWithContinuous); // sets all basis functions to have the same poly. degree, without regard for the function space they belong to.  ("polyOrder" in DofOrderingFactory usually is relative to the H^1 order, so that L^2 bases have degree 1 less.)
-
-  DofOrderingPtr getTrialOrdering(DofOrdering &ordering);
-  DofOrderingPtr getTestOrdering(DofOrdering &ordering);
 
   DofOrderingPtr getFieldOrdering(DofOrderingPtr trialOrdering); // the sub-ordering that contains only the fields
   DofOrderingPtr getTraceOrdering(DofOrderingPtr trialOrdering); // the sub-ordering that contains only the traces

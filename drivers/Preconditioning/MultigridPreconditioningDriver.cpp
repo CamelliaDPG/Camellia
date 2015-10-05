@@ -248,10 +248,10 @@ void initializeSolutionAndCoarseMesh(SolutionPtr &solution, vector<MeshPtr> &mes
     while (meshWidthCells < numCells)
     {
       set<IndexType> activeCellIDs = meshTopo->getActiveCellIndices();
-      if (rank==0)
-      {
-        print("h-refining cells", activeCellIDs);
-      }
+//      if (rank==0)
+//      {
+//        print("h-refining cells", activeCellIDs);
+//      }
       for (IndexType activeCellID : activeCellIDs)
       {
         CellTopoPtr cellTopo = meshTopo->getCell(activeCellID)->topology();

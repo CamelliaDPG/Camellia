@@ -103,7 +103,8 @@ public:
     int testDegreeInterior = maxDegreeField + _virtualTerms.getTestEnrichment();
     int testDegreeTrace = testDegreeInterior + 2;
     
-    DofOrderingPtr testOrderInterior = mesh->getDofOrderingFactory().getRelabeledDofOrdering(fieldOrder, fieldTestMap);
+    cout << "ERROR in Virtual: getRelabeledDofOrdering() is commented out in DofOrderingFactory.  Need to rewrite for the new caching scheme.\n";
+    DofOrderingPtr testOrderInterior; // = mesh->getDofOrderingFactory().getRelabeledDofOrdering(fieldOrder, fieldTestMap);
     testOrderInterior = mesh->getDofOrderingFactory().setBasisDegree(testOrderInterior, testDegreeInterior, false);
     DofOrderingPtr testOrderTrace = mesh->getDofOrderingFactory().setBasisDegree(testOrderInterior, testDegreeTrace, true); // this has a bunch of extra dofs (interior guys)
     

@@ -3146,7 +3146,7 @@ void GDAMinimumRule::rebuildLookups()
 
   int rank = Teuchos::GlobalMPISession::getRank();
 //  cout << "GDAMinimumRule: Rebuilding lookups on rank " << rank << endl;
-  set<GlobalIndexType> myCellIDs = _partitions[rank];
+  set<GlobalIndexType>* myCellIDs = &_partitions[rank];
 
   map<int, VarPtr> trialVars = _varFactory->trialVars();
 
@@ -3161,9 +3161,8 @@ void GDAMinimumRule::rebuildLookups()
   // But in the interest of avoiding wasting development time on premature optimization, I'm leaving it as is for now...
 
   _partitionDofCount = 0; // how many dofs we own locally
-  for (set<GlobalIndexType>::iterator cellIDIt = myCellIDs.begin(); cellIDIt != myCellIDs.end(); cellIDIt++)
+  for (GlobalIndexType cellID : *myCellIDs)
   {
-    GlobalIndexType cellID = *cellIDIt;
     _cellDofOffsets[cellID] = _partitionDofCount;
     CellPtr cell = _meshTopology->getCell(cellID);
     CellTopoPtr topo = cell->topology();
@@ -3279,9 +3278,9 @@ void GDAMinimumRule::rebuildLookups()
   // fill in our _cellDofOffsets:
 
   int i=0;
-  for (set<GlobalIndexType>::iterator cellIDIt = myCellIDs.begin(); cellIDIt != myCellIDs.end(); cellIDIt++)
+  for (GlobalIndexType cellID : *myCellIDs)
   {
-    globalCellIDDofOffsets[partitionCellOffset+i] = _cellDofOffsets[*cellIDIt] + _partitionDofOffset;
+    globalCellIDDofOffsets[partitionCellOffset+i] = _cellDofOffsets[cellID] + _partitionDofOffset;
     i++;
   }
   // global copy:

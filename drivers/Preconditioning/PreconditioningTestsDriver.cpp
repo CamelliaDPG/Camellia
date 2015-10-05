@@ -1551,7 +1551,7 @@ int main(int argc, char *argv[])
 
   bool useCondensedSolve = false;
 
-  bool useWeightMatrixForSchwarz = true;
+  bool useWeightMatrixForSchwarz = false;
   
   string smootherChoiceStr = "Camellia-Schwarz";
 
