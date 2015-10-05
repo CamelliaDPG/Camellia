@@ -249,26 +249,26 @@ NavierStokesVGPFormulation::NavierStokesVGPFormulation(MeshTopologyPtr meshTopo,
       FunctionPtr u_prev_2 = TFunction<double>::solution(u_2, backgroundFlowWeakReference);
       FunctionPtr u_prev_3 = TFunction<double>::solution(u_3, backgroundFlowWeakReference);
 
-      _navierStokesBF->addTerm(-u_prev_1*u_1, v_1->dx());
-      _navierStokesBF->addTerm(-u_prev_1*u_1, v_1->dx());
-      _navierStokesBF->addTerm(-u_prev_2*u_1, v_1->dy());
-      _navierStokesBF->addTerm(-u_prev_1*u_2, v_1->dy());
-      _navierStokesBF->addTerm(-u_prev_3*u_1, v_1->dz());
-      _navierStokesBF->addTerm(-u_prev_1*u_3, v_1->dz());
+      _navierStokesBF->addTerm(u_prev_1*u_1, v_1->dx());
+      _navierStokesBF->addTerm(u_prev_1*u_1, v_1->dx());
+      _navierStokesBF->addTerm(u_prev_2*u_1, v_1->dy());
+      _navierStokesBF->addTerm(u_prev_1*u_2, v_1->dy());
+      _navierStokesBF->addTerm(u_prev_3*u_1, v_1->dz());
+      _navierStokesBF->addTerm(u_prev_1*u_3, v_1->dz());
 
-      _navierStokesBF->addTerm(-u_prev_1*u_2, v_2->dx());
-      _navierStokesBF->addTerm(-u_prev_2*u_1, v_2->dx());
-      _navierStokesBF->addTerm(-u_prev_2*u_2, v_2->dy());
-      _navierStokesBF->addTerm(-u_prev_2*u_2, v_2->dy());
-      _navierStokesBF->addTerm(-u_prev_3*u_2, v_2->dz());
-      _navierStokesBF->addTerm(-u_prev_2*u_3, v_2->dz());
+      _navierStokesBF->addTerm(u_prev_1*u_2, v_2->dx());
+      _navierStokesBF->addTerm(u_prev_2*u_1, v_2->dx());
+      _navierStokesBF->addTerm(u_prev_2*u_2, v_2->dy());
+      _navierStokesBF->addTerm(u_prev_2*u_2, v_2->dy());
+      _navierStokesBF->addTerm(u_prev_3*u_2, v_2->dz());
+      _navierStokesBF->addTerm(u_prev_2*u_3, v_2->dz());
 
-      _navierStokesBF->addTerm(-u_prev_1*u_3, v_3->dx());
-      _navierStokesBF->addTerm(-u_prev_3*u_1, v_3->dx());
-      _navierStokesBF->addTerm(-u_prev_2*u_3, v_3->dy());
-      _navierStokesBF->addTerm(-u_prev_3*u_2, v_3->dy());
-      _navierStokesBF->addTerm(-u_prev_3*u_3, v_3->dz());
-      _navierStokesBF->addTerm(-u_prev_3*u_3, v_3->dz());
+      _navierStokesBF->addTerm(u_prev_1*u_3, v_3->dx());
+      _navierStokesBF->addTerm(u_prev_3*u_1, v_3->dx());
+      _navierStokesBF->addTerm(u_prev_2*u_3, v_3->dy());
+      _navierStokesBF->addTerm(u_prev_3*u_2, v_3->dy());
+      _navierStokesBF->addTerm(u_prev_3*u_3, v_3->dz());
+      _navierStokesBF->addTerm(u_prev_3*u_3, v_3->dz());
     }
   }
 
@@ -978,7 +978,7 @@ Teuchos::RCP<ExactSolution<double>> NavierStokesVGPFormulation::exactSolution(TF
 TFunctionPtr<double> NavierStokesVGPFormulation::forcingFunction(int spaceDim, double Re, TFunctionPtr<double> u_exact, TFunctionPtr<double> p_exact)
 {
   FunctionPtr convectiveTerm = NavierStokesVGPFormulation::convectiveTerm(spaceDim, u_exact);
-  return _stokesForm->forcingFunction(u_exact, p_exact) - convectiveTerm;
+  return _stokesForm->forcingFunction(u_exact, p_exact) + convectiveTerm;
 }
 
 void NavierStokesVGPFormulation::setForcingFunction(FunctionPtr forcingFunction)
@@ -1008,7 +1008,7 @@ TFunctionPtr<double> NavierStokesVGPFormulation::forcingFunctionSteady(int space
   bool useConformingTraces = false; // doesn't matter for this
   StokesVGPFormulation stokesForm = StokesVGPFormulation::steadyFormulation(spaceDim, 1.0 / Re, useConformingTraces);
 
-  return stokesForm.forcingFunction(u, p) - NavierStokesVGPFormulation::convectiveTerm(spaceDim, u);
+  return stokesForm.forcingFunction(u, p) + NavierStokesVGPFormulation::convectiveTerm(spaceDim, u);
 }
 
 // ! returns the forcing function for space-time Navier-Stokes corresponding to the indicated exact solution
@@ -1017,7 +1017,7 @@ TFunctionPtr<double> NavierStokesVGPFormulation::forcingFunctionSpaceTime(int sp
   bool useConformingTraces = false; // doesn't matter for this
   StokesVGPFormulation stokesForm = StokesVGPFormulation::spaceTimeFormulation(spaceDim, 1.0 / Re, useConformingTraces);
 
-  return stokesForm.forcingFunction(u, p) - NavierStokesVGPFormulation::convectiveTerm(spaceDim, u);
+  return stokesForm.forcingFunction(u, p) + NavierStokesVGPFormulation::convectiveTerm(spaceDim, u);
 }
 
 double NavierStokesVGPFormulation::L2NormSolution()
@@ -1138,6 +1138,29 @@ RHSPtr NavierStokesVGPFormulation::rhs(TFunctionPtr<double> f, bool excludeFluxe
       rhs->addTerm( u1_prev * u2_prev * v1->dy() );
       rhs->addTerm( u2_prev * u1_prev * v2->dx() );
       rhs->addTerm( u2_prev * u2_prev * v2->dy() );
+    }
+    else if (spaceDim == 3)
+    {
+      VarPtr u1 = this->u(1);
+      VarPtr u2 = this->u(2);
+      VarPtr u3 = this->u(3);
+      VarPtr v1 = this->v(1);
+      VarPtr v2 = this->v(2);
+      VarPtr v3 = this->v(3);
+      TFunctionPtr<double> u1_prev = TFunction<double>::solution(u1,backgroundFlowWeakReference);
+      TFunctionPtr<double> u2_prev = TFunction<double>::solution(u2,backgroundFlowWeakReference);
+      TFunctionPtr<double> u3_prev = TFunction<double>::solution(u3,backgroundFlowWeakReference);
+      rhs->addTerm( u1_prev * u1_prev * v1->dx() );
+      rhs->addTerm( u1_prev * u2_prev * v1->dy() );
+      rhs->addTerm( u1_prev * u3_prev * v1->dz() );
+
+      rhs->addTerm( u2_prev * u1_prev * v2->dx() );
+      rhs->addTerm( u2_prev * u2_prev * v2->dy() );
+      rhs->addTerm( u2_prev * u3_prev * v2->dz() );
+
+      rhs->addTerm( u3_prev * u1_prev * v3->dx() );
+      rhs->addTerm( u3_prev * u2_prev * v3->dy() );
+      rhs->addTerm( u3_prev * u3_prev * v3->dz() );
     }
   }
   // cout << endl <<endl << rhs->linearTerm()->displayString() << endl;
