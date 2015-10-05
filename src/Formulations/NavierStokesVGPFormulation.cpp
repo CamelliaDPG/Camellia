@@ -211,8 +211,8 @@ NavierStokesVGPFormulation::NavierStokesVGPFormulation(MeshTopologyPtr meshTopo,
         FunctionPtr sigma_prev_ij = TFunction<double>::solution(sigma_ij, backgroundFlowWeakReference);
         FunctionPtr u_prev_j = TFunction<double>::solution(u_j, backgroundFlowWeakReference);
 
-        _navierStokesBF->addTerm( - Re * sigma_prev_ij * u_j, v_i);
-        _navierStokesBF->addTerm( - Re * u_prev_j * sigma_ij, v_i);
+        _navierStokesBF->addTerm( Re * sigma_prev_ij * u_j, v_i);
+        _navierStokesBF->addTerm( Re * u_prev_j * sigma_ij, v_i);
       }
     }
   }
@@ -1120,7 +1120,7 @@ RHSPtr NavierStokesVGPFormulation::rhs(TFunctionPtr<double> f, bool excludeFluxe
         TFunctionPtr<double> uj_prev = TFunction<double>::solution(uj,backgroundFlowWeakReference);
         VarPtr sigma_ij = this->sigma(comp_i, comp_j);
         TFunctionPtr<double> sigma_ij_prev = TFunction<double>::solution(sigma_ij, backgroundFlowWeakReference);
-        rhs->addTerm((Re * uj_prev * sigma_ij_prev) * vi);
+        rhs->addTerm((-Re * uj_prev * sigma_ij_prev) * vi);
       }
     }
   }

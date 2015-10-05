@@ -449,10 +449,10 @@ namespace
     bool useConformingTraces = true;
     NavierStokesVGPFormulation form = NavierStokesVGPFormulation::steadyFormulation(spaceDim, Re, useConformingTraces, meshTopo, fieldPolyOrder, delta_k);
     FunctionPtr forcingFunction = form.forcingFunction(spaceDim, Re, Function::vectorize(u1,u2), p);
-
-    FunctionPtr expectedForcingFunction_x = p->dx() - (1.0 / Re) * (u1->dx()->dx() + u1->dy()->dy()) - u1 * u1->dx() - u2 * u1->dy();
-    FunctionPtr expectedForcingFunction_y = p->dy() - (1.0 / Re) * (u2->dx()->dx() + u2->dy()->dy()) - u1 * u2->dx() - u2 * u2->dy();
-
+    
+    FunctionPtr expectedForcingFunction_x = p->dx() - (1.0 / Re) * (u1->dx()->dx() + u1->dy()->dy()) + u1 * u1->dx() + u2 * u1->dy();
+    FunctionPtr expectedForcingFunction_y = p->dy() - (1.0 / Re) * (u2->dx()->dx() + u2->dy()->dy()) + u1 * u2->dx() + u2 * u2->dy();
+    
     double err_x = (expectedForcingFunction_x - forcingFunction->x())->l2norm(form.solution()->mesh());
     double err_y = (expectedForcingFunction_y - forcingFunction->y())->l2norm(form.solution()->mesh());
 
