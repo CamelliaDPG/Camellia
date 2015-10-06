@@ -2939,7 +2939,6 @@ set<GlobalIndexType> GDAMinimumRule::getGlobalDofIndices(GlobalIndexType cellID,
   
   CellPtr cell = _meshTopology->getCell(cellID);
   CellTopoPtr topo = _elementTypeForCell[cellID]->cellTopoPtr;
-  int sideCount = topo->getSideCount();
   int spaceDim = topo->getDimension();
   
   DofOrderingPtr trialOrdering = _elementTypeForCell[cellID]->trialOrderPtr;
