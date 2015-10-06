@@ -49,7 +49,6 @@ public:
   bool testSolutionsAreConsistent();
   bool testCondensationSolve();
   bool testCondensationSolveNonlinear();
-  bool testCondensationSolveWithZeroMeanConstraint();
 
   static bool solutionCoefficientsAreConsistent(Teuchos::RCP<Solution> soln, bool printDetailsToConsole = false);
 };
