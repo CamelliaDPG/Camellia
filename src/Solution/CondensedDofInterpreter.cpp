@@ -477,21 +477,18 @@ map<GlobalIndexType, GlobalIndexType> CondensedDofInterpreter<Scalar>::interpret
 
   IndexType partitionLocalDofIndex = 0;
 
-  for (cellIDIt=localCellIDs.begin(); cellIDIt!=localCellIDs.end(); cellIDIt++)
+  for (GlobalIndexType cellID : localCellIDs)
   {
-    GlobalIndexType cellID = *cellIDIt;
-    
     bool storeFluxDofIndices = cellsForFluxInterpretation.find(cellID) != cellsForFluxInterpretation.end();
 
     DofOrderingPtr trialOrder = _mesh->getElementType(cellID)->trialOrderPtr;
 
-    int sideCount = _mesh->getElementType(cellID)->cellTopoPtr->getSideCount();
-
     for (vector<int>::iterator idIt = trialIDs.begin(); idIt!=trialIDs.end(); idIt++)
     {
       int trialID = *idIt;
+      const vector<int>* sidesForTrial = &trialOrder->getSidesForVarID(trialID);
 
-      for (int sideOrdinal=0; sideOrdinal<sideCount; sideOrdinal++)
+      for (int sideOrdinal : *sidesForTrial)
       {
         if ( !trialOrder->hasBasisEntry(trialID, sideOrdinal) ) continue;
         BasisPtr basis = trialOrder->getBasis(trialID, sideOrdinal);
