@@ -280,7 +280,7 @@ int main(int argc, char *argv[])
   else
     dataFileLocation = outputDir+"/"+solnName.str()+".txt";
   ofstream dataFile(dataFileLocation);
-  dataFile << "ref\t " << "elements\t " << "dofs\t " << "energy\t " << "l2\t " << "solvetime\t" << "elapsed\t" << "iterations\t " << endl;
+  dataFile << "ref\t " << "elements\t " << "dofs\t " << "energy\t " << "ul2\t " << "sigmal2\t " << "solvetime\t" << "elapsed\t" << "iterations\t " << endl;
   for (int refIndex=0; refIndex <= numRefs; refIndex++)
   {
     solverTime->start(true);
