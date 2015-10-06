@@ -160,7 +160,6 @@ SpaceTimeConvectionDiffusionFormulation::SpaceTimeConvectionDiffusionFormulation
     _ips["Robust"]->addTerm(tau->dx());
 
   _ips["CoupledRobust"] = Teuchos::rcp(new IP);
-  // _ips["CoupledRobust"]->addTerm(_beta*v->grad());
   _ips["CoupledRobust"]->addTerm(Function::min(one/Function::h(),Function::constant(1./sqrt(_epsilon)))*tau);
   _ips["CoupledRobust"]->addTerm(sqrt(_epsilon)*v->grad());
   _ips["CoupledRobust"]->addTerm(Function::min(sqrt(_epsilon)*one/Function::h(),one)*v);
