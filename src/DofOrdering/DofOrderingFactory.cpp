@@ -102,9 +102,9 @@ DofOrderingPtr DofOrderingFactory::testOrdering(vector<int> &polyOrder, CellTopo
     int basisRank = basis->rangeRank();
     testOrder->addEntry(testID,basis,basisRank);
   }
-
+  
+  testOrder = *(_testOrderingsSet.insert(testOrder).first);
   _testOrderings[key] = testOrder;
-  _testOrderingsSet.insert(testOrder);
   return testOrder;
 }
 
@@ -220,15 +220,16 @@ DofOrderingPtr DofOrderingFactory::trialOrdering(vector<int> &polyOrder,
   trialOrder->rebuildIndex();
   traceOrder->rebuildIndex();
   fieldOrder->rebuildIndex();
+  trialOrder = *(_trialOrderingsSet.insert(trialOrder).first);
+  traceOrder = *(_trialOrderingsSet.insert(traceOrder).first);
+  fieldOrder = *(_trialOrderingsSet.insert(fieldOrder).first);
   _isConforming[trialOrder.get()] = conformingVertices;
   _isConforming[traceOrder.get()] = conformingVertices;
   _isConforming[fieldOrder.get()] = conformingVertices;
   _traceOrderingForTrial[trialOrder.get()] = traceOrder;
   _fieldOrderingForTrial[trialOrder.get()] = fieldOrder;
   _trialOrderings[key] = trialOrder;
-  _trialOrderingsSet.insert(trialOrder);
-  _trialOrderingsSet.insert(traceOrder);
-  _trialOrderingsSet.insert(fieldOrder);
+
   return trialOrder;
 }
 
