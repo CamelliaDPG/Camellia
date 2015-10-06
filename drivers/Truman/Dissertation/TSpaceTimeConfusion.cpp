@@ -318,6 +318,7 @@ int main(int argc, char *argv[])
 
     double energyError = soln->energyErrorTotal();
     double l2Error = 0;
+    double u_l2 = 0, sigma1_l2 = 0, sigma2_l2 = 0;
     if (computeL2Error)
     {
       FunctionPtr u_soln, sigma1_soln, sigma2_soln,
@@ -335,15 +336,14 @@ int main(int argc, char *argv[])
       sigma1_sqr = sigma1_diff*sigma1_diff;
       if (spaceDim == 2)
         sigma2_sqr = sigma2_diff*sigma2_diff;
-      double u_l2, sigma1_l2, sigma2_l2;
       u_l2 = u_sqr->integrate(mesh, 10);
       sigma1_l2 = sigma1_sqr->integrate(mesh, 10);
       if (spaceDim == 2)
         sigma2_l2 = sigma2_sqr->integrate(mesh, 10);
       else
         sigma2_l2 = 0;
-      // l2Error = sqrt(u_l2+sigma1_l2+sigma2_l2);
-      l2Error = sqrt(u_l2);
+      l2Error = sqrt(u_l2+sigma1_l2+sigma2_l2);
+      // l2Error = sqrt(u_l2);
     }
     if (commRank == 0)
     {
@@ -356,7 +356,8 @@ int main(int argc, char *argv[])
         << " \tElements: " << mesh->numActiveElements()
         << " \tDOFs: " << mesh->numGlobalDofs()
         << " \tEnergy Error: " << energyError
-        << " \tL2 Error: " << l2Error
+        << " \tu L2 Error: " << sqrt(u_l2)
+        << " \tsigma L2 Error: " << sqrt(sigma1_l2+sigma2_l2)
         << " \tSolve Time: " << solveTime
         << " \tTotal Time: " << totalTimer->totalElapsedTime(true)
         << " \tIteration Count: " << iterationCount
@@ -365,7 +366,8 @@ int main(int argc, char *argv[])
         << " " << mesh->numActiveElements()
         << " " << mesh->numGlobalDofs()
         << " " << energyError
-        << " " << l2Error
+        << " " << sqrt(u_l2)
+        << " " << sqrt(sigma1_l2 + sigma2_l2)
         << " " << solveTime
         << " " << totalTimer->totalElapsedTime(true)
         << " " << iterationCount
