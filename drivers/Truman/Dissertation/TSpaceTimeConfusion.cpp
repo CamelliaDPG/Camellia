@@ -105,9 +105,8 @@ int main(int argc, char *argv[])
   double lambda1 = (-1+sqrt(1-4*epsilon*l))/(-2*epsilon);
   double lambda2 = (-1-sqrt(1-4*epsilon*l))/(-2*epsilon);
   double pi = 2.0*acos(0.0);
-  double nu1 = pi*pi*epsilon;
-  double r1 = (1+sqrt(1+4*epsilon*nu1))/(2*epsilon);
-  double s1 = (1-sqrt(1+4*epsilon*nu1))/(2*epsilon);
+  double r1 = (1+sqrt(1+4*epsilon*epsilon*pi*pi))/(2*epsilon);
+  double s1 = (1-sqrt(1+4*epsilon*epsilon*pi*pi))/(2*epsilon);
   FunctionPtr explt = Teuchos::rcp(new Exp_at(-l));
   FunctionPtr explambda1x = Teuchos::rcp(new Exp_ax(lambda1));
   FunctionPtr explambda2x = Teuchos::rcp(new Exp_ax(lambda2));
@@ -120,6 +119,7 @@ int main(int argc, char *argv[])
   if (spaceDim == 1)
     u_steady = Function::constant(1)-exp1lambdax;
   if (spaceDim == 2)
+    u_steady = 10*epsilon*(exps1x-expr1x)/(r1*exp(-r1)-s1*exp(-s1))*cospiy;
     // for (int n = 1; n <= 20; n++)
     // {
     //   double Cn = 0;
@@ -128,9 +128,9 @@ int main(int argc, char *argv[])
     //   FunctionPtr sinnpiy = Teuchos::rcp(new Sin_ay(n*pi));
     //   u_steady = u_steady + Cn*(exps1x-expr1x)/(r1*exp(-r1)-s1*exp(-s1))*sinnpiy;
     // }
-    u_steady = 10*epsilon*(exps1x-expr1x)/(r1*exp(-r1)-s1*exp(-s1))*cospiy;
 
-  FunctionPtr u_exact = u_steady + 4*explt*(explambda1x-explambda2x)*Function::yn(1);
+  FunctionPtr u_exact = u_steady + 4*explt*(explambda1x-explambda2x);
+  // FunctionPtr u_exact = u_steady + 4*explt*(explambda1x-explambda2x)*Function::yn(1);
   FunctionPtr sigma_exact = epsilon*u_exact->grad();
 
   FunctionPtr beta;
