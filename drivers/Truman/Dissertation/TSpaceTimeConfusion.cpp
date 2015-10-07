@@ -158,8 +158,8 @@ int main(int argc, char *argv[])
   exactMap[form.sigma(1)->ID()] = sigma_exact->x();
   if (spaceDim == 2)
     exactMap[form.sigma(2)->ID()] = sigma_exact->y();
-  // exactMap[form.tc()->ID()] = form.tc()->termTraced()->evaluate(exactMap);
-  // exactMap[form.uhat()->ID()] = form.uhat()->termTraced()->evaluate(exactMap);
+  exactMap[form.tc()->ID()] = form.tc()->termTraced()->evaluate(exactMap);
+  exactMap[form.uhat()->ID()] = form.uhat()->termTraced()->evaluate(exactMap);
 
   // Build mesh
   vector<double> x0;// = vector<double>(spaceDim,-1);
@@ -204,17 +204,17 @@ int main(int argc, char *argv[])
     SpatialFilterPtr rightX = SpatialFilter::matchingX(x0[0]+width);
     SpatialFilterPtr leftY  = SpatialFilter::matchingY(x0[1]);
     SpatialFilterPtr rightY = SpatialFilter::matchingY(x0[1]+width);
-    // bc->addDirichlet(tc,   leftX,    exactMap[form.tc()->ID()]);
-    // bc->addDirichlet(uhat, rightX,   exactMap[form.uhat()->ID()]);
-    // bc->addDirichlet(tc, leftY,    exactMap[form.tc()->ID()]);
-    // bc->addDirichlet(tc, rightY,   exactMap[form.tc()->ID()]);
-    // bc->addDirichlet(tc,   initTime, exactMap[form.tc()->ID()]);
-    FunctionPtr n = Function::normalSpaceTime();
-    bc->addDirichlet(tc,   leftX,  beta->x()*n->x()*u_exact-sigma_exact->x()*n->x());
-    bc->addDirichlet(uhat, rightX, beta->x()*n->x()*u_exact-sigma_exact->x()*n->x());
-    bc->addDirichlet(tc, leftY,    beta->x()*n->x()*u_exact-sigma_exact->x()*n->x());
-    bc->addDirichlet(tc, rightY,   beta->x()*n->x()*u_exact-sigma_exact->x()*n->x());
-    bc->addDirichlet(tc,   initTime, -u_exact);
+    bc->addDirichlet(tc,   leftX,    exactMap[form.tc()->ID()]);
+    bc->addDirichlet(uhat, rightX,   exactMap[form.uhat()->ID()]);
+    bc->addDirichlet(tc, leftY,    exactMap[form.tc()->ID()]);
+    bc->addDirichlet(tc, rightY,   exactMap[form.tc()->ID()]);
+    bc->addDirichlet(tc,   initTime, exactMap[form.tc()->ID()]);
+    // FunctionPtr n = Function::normalSpaceTime();
+    // bc->addDirichlet(tc, leftX,  beta*n*u_exact-sigma_exact*n);
+    // bc->addDirichlet(tc, rightX, beta*n*u_exact-sigma_exact*n);
+    // bc->addDirichlet(tc, leftY,  beta*n*u_exact-sigma_exact*n);
+    // bc->addDirichlet(tc, rightY, beta*n*u_exact-sigma_exact*n);
+    // bc->addDirichlet(tc, initTime, -u_exact);
   }
 
   // Set up solution
