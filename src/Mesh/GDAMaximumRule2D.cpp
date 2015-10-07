@@ -760,6 +760,20 @@ vector< Teuchos::RCP< ElementType > > GDAMaximumRule2D::elementTypes(PartitionIn
   }
 }
 
+// ! get the global dof indices corresponding to the specified cellID/varID/sideOrdinal.  GDAMinimumRule's implementation overrides to return only "fittable" dof indices, as required by CondensedDofInterpreter.
+set<GlobalIndexType> GDAMaximumRule2D::getGlobalDofIndices(GlobalIndexType cellID, int varID, int sideOrdinal)
+{
+  DofOrderingPtr trialOrdering = _elementTypeForCell[cellID]->trialOrderPtr;
+  int numDofs = trialOrdering->getBasisCardinality(varID, sideOrdinal);
+  set<GlobalIndexType> globalDofIndices;
+  for (int basisDofOrdinal=0; basisDofOrdinal<numDofs; basisDofOrdinal++)
+  {
+    int cellDofIndex = trialOrdering->getDofIndex(varID, basisDofOrdinal, sideOrdinal);
+    globalDofIndices.insert(globalDofIndex(cellID, cellDofIndex));
+  }
+  return globalDofIndices;
+}
+
 vector<int> GDAMaximumRule2D::getH1Order(GlobalIndexType cellID)
 {
   return vector<int>(1,cellPolyOrder(cellID));
@@ -786,8 +800,8 @@ GlobalIndexType GDAMaximumRule2D::globalCellIndex(GlobalIndexType cellID)
 
 GlobalIndexType GDAMaximumRule2D::globalDofIndex(GlobalIndexType cellID, IndexType localDofIndex)
 {
-  pair<GlobalIndexType,IndexType> key = make_pair(cellID, localDofIndex);
-  map< pair<GlobalIndexType,IndexType>, GlobalIndexType >::iterator mapEntryIt = _localToGlobalMap.find(key);
+  pair<GlobalIndexType,IndexType> key = {cellID, localDofIndex};
+  auto mapEntryIt = _localToGlobalMap.find(key);
   if ( mapEntryIt == _localToGlobalMap.end() )
   {
     TEUCHOS_TEST_FOR_EXCEPTION(true, std::invalid_argument, "entry not found.");

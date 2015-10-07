@@ -18,11 +18,13 @@
 #include "HDF5Exporter.h"
 #include "MeshFactory.h"
 #include "MeshTools.h"
+#include "MeshUtilities.h"
 #include "PoissonFormulation.h"
+#include "Projector.h"
 #include "RHS.h"
 #include "Solution.h"
 #include "StokesVGPFormulation.h"
-#include "Projector.h"
+#include "Var.h"
 
 using namespace Camellia;
 using namespace Intrepid;
@@ -63,6 +65,128 @@ vector<double> makeVertex(double v0, double v1, double v2, double v3)
   v.push_back(v3);
   return v;
 }
+  
+  void testCondensedSolveZeroMeanConstraint(bool minRule, Teuchos::FancyOStream &out, bool &success)
+  {
+    double tol = 1e-12;
+    
+    int rank = Teuchos::GlobalMPISession::getRank();;
+    
+    int spaceDim = 2;
+    bool conformingTraces = false; // false mostly because I want to do cavity flow with non-H^1 BCs
+    double mu = 1.0;
+    StokesVGPFormulation stokesForm = StokesVGPFormulation::steadyFormulation(spaceDim, mu, conformingTraces);
+    
+    VarPtr u1 = stokesForm.u(1);
+    VarPtr u2 = stokesForm.u(2);
+    VarPtr p = stokesForm.p();
+    
+    VarPtr u1hat = stokesForm.u_hat(1);
+    VarPtr u2hat = stokesForm.u_hat(2);
+    
+    BFPtr bf = stokesForm.bf();
+    
+    // robust test norm
+    IPPtr ip = bf->graphNorm();
+    
+    ////////////////////   SPECIFY RHS   ///////////////////////
+    
+    RHSPtr rhs = RHS::rhs(); // zero RHS
+    
+    ////////////////////   CREATE BCs   ///////////////////////
+    // cavity flow
+    BCPtr bc = BC::bc();
+    SpatialFilterPtr topBoundary = SpatialFilter::matchingY(1.0);
+    SpatialFilterPtr wallBoundary = SpatialFilter::negatedFilter(topBoundary);
+    
+    FunctionPtr n = Function::normal();
+    
+    bc->addDirichlet(u1hat, topBoundary, Function::constant(1.0));
+    bc->addDirichlet(u1hat, wallBoundary, Function::zero());
+    bc->addDirichlet(u2hat, wallBoundary, Function::zero());
+    bc->addZeroMeanConstraint(p);
+    
+    ////////////////////   BUILD MESH   ///////////////////////
+    int H1Order = 2;
+    int pToAdd = 2;
+    
+    // first, single-element mesh
+    MeshPtr mesh;
+    if (!minRule)
+      mesh = MeshUtilities::buildUnitQuadMesh(1, bf, H1Order, H1Order+pToAdd);
+    else
+      mesh = MeshFactory::quadMeshMinRule(bf, H1Order, pToAdd, 1.0, 1.0, 1, 1);
+    
+    ////////////////////   REFINE & SOLVE   ///////////////////////
+    SolutionPtr solution = Teuchos::rcp( new Solution(mesh, bc, rhs, ip) );
+    SolutionPtr condensedSolution = Teuchos::rcp( new Solution(mesh, bc, rhs, ip) );
+    condensedSolution->setUseCondensedSolve(true);
+    
+    solution->solve(false);
+    condensedSolution->solve(false);
+    condensedSolution->setUseCondensedSolve(false); // not sure if this makes a difference, or why it should (just trying something)
+    FunctionPtr u1_soln = Function::solution(u1,solution);
+    FunctionPtr u1_condensed_soln = Function::solution(u1,condensedSolution);
+    double diff = (u1_soln-u1_condensed_soln)->l2norm(mesh,H1Order);
+    if (diff > tol)
+    {
+      out << "Failing test: Condensed solve with zero-mean constraint on single-element mesh does not match regular solve" << endl;
+      out << "L2 norm of difference is " << diff << "; tol is " << tol << endl;
+      success=false;
+    }
+    FunctionPtr p_soln = Function::solution(p,solution);
+    FunctionPtr p_condensed_soln = Function::solution(p,condensedSolution);
+    diff = (p_soln-p_condensed_soln)->l2norm(mesh,H1Order);
+    if (diff > tol)
+    {
+      cout << "Failing test: Condensed solve pressure solution with zero-mean constraint on single-element mesh does not match regular solve" << endl;
+      cout << "L2 norm of difference is " << diff << "; tol is " << tol << endl;
+      success=false;
+    }
+    
+    int numCells = 2;
+    if (!minRule)
+      mesh = MeshUtilities::buildUnitQuadMesh(numCells, bf, H1Order, H1Order+pToAdd);
+    else
+      mesh = MeshFactory::quadMeshMinRule(bf, H1Order, pToAdd, 1.0, 1.0, numCells, numCells);
+    mesh->hRefine(set<GlobalIndexType>{0});
+    
+    solution = Teuchos::rcp( new Solution(mesh, bc, rhs, ip) );
+    condensedSolution = Teuchos::rcp( new Solution(mesh, bc, rhs, ip) );
+    solution->solve(false);
+    condensedSolution->condensedSolve();
+    u1_soln = Function::solution(u1,solution);
+    u1_condensed_soln = Function::solution(u1,condensedSolution);
+    diff = (u1_soln-u1_condensed_soln)->l2norm(mesh,H1Order);
+    
+    if (diff>tol)
+    {
+      cout << "Failing test: Condensed solve with zero-mean constraint on refined (hanging-node) mesh does not match regular solve" << endl;
+      cout << "L2 norm of difference is " << diff << "; tol is " << tol << endl;
+      
+#ifdef HAVE_EPETRAEXT_HDF5
+      ostringstream dir_name;
+      if (minRule)
+        dir_name << "refinedMaxRuleMeshStandardVsCondensedSolve";
+      else
+        dir_name << "refinedMinRuleMeshStandardVsCondensedSolve";
+      HDF5Exporter exporter(mesh,dir_name.str());
+      VarFactoryPtr vf = bf->varFactory();
+      exporter.exportSolution(solution,0);
+      exporter.exportSolution(condensedSolution,1);
+#endif
+      success=false;
+    }
+    p_soln = Function::solution(p,solution);
+    p_condensed_soln = Function::solution(p,condensedSolution);
+    diff = (p_soln-p_condensed_soln)->l2norm(mesh,H1Order);
+    if (diff > tol)
+    {
+      cout << "Failing test: Condensed solve pressure solution with zero-mean constraint on refined (hanging-node) mesh does not match regular solve" << endl;
+      cout << "L2 norm of difference is " << diff << "; tol is " << tol << endl;
+      success=false;
+    }
+  }
   
   TEUCHOS_UNIT_TEST( Solution, CondensedSolve )
   {
@@ -344,6 +468,18 @@ vector<double> makeVertex(double v0, double v1, double v2, double v3)
       out << "L2 norm of difference is " << diff << "; tol is " << tol << endl;
       success=false;
     }
+  }
+  
+  TEUCHOS_UNIT_TEST( Solution, CondensedSolveWithZeroMeanConstraintMaxRule_Slow)
+  {
+    bool minRule = false;
+    testCondensedSolveZeroMeanConstraint(minRule, out, success);
+  }
+  
+  TEUCHOS_UNIT_TEST( Solution, CondensedSolveWithZeroMeanConstraintMinRule_Slow)
+  {
+    bool minRule = false;
+    testCondensedSolveZeroMeanConstraint(minRule, out, success);
   }
   
 TEUCHOS_UNIT_TEST( Solution, ImportOffRankCellData )
