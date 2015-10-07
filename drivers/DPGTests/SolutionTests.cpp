@@ -1253,10 +1253,14 @@ bool SolutionTests::testProjectSolutionOntoOtherMesh()
   double tol = 1e-14;
   int rank = Teuchos::GlobalMPISession::getRank();
 
+  _poissonSolution_1x1->importGlobalSolution(); // get a copy of solution coefficients on every rank
   _poissonSolution_1x1->projectFieldVariablesOntoOtherSolution(_poissonSolution);
+  
   _poissonSolution->importGlobalSolution();
-
   _poissonSolution->projectFieldVariablesOntoOtherSolution(_poissonSolution_1x1_unsolved);
+  
+  _poissonSolution_1x1_unsolved->importGlobalSolution();
+  _poissonSolution_1x1->importGlobalSolution();
   // difference should be zero:
   _poissonSolution_1x1_unsolved->addSolution(_poissonSolution_1x1,-1.0);
   // test for all field variables:
@@ -1265,15 +1269,34 @@ bool SolutionTests::testProjectSolutionOntoOtherMesh()
   for (vector<int>::iterator fieldIDIt=fieldIDs.begin(); fieldIDIt != fieldIDs.end(); fieldIDIt++)
   {
     int fieldID = *fieldIDIt;
-    double diffL2 = _poissonSolution_1x1_unsolved->L2NormOfSolutionGlobal(fieldID);
+    double diffL2 = _poissonSolution_1x1_unsolved->L2NormOfSolution(fieldID);
     if (diffL2 > tol)
     {
       string varName = _poissonSolution_1x1->mesh()->bilinearForm()->trialName(fieldID);
       cout << "testProjectSolutionOntoOtherMesh: Failure for trial ID " << varName << ": ";
       cout << "coarse solution projected onto fine mesh then back onto coarse differs from original by L2 norm of " << diffL2 << endl;
-      cout << "L2 norm of original solution: " << _poissonSolution_1x1->L2NormOfSolutionGlobal(fieldID) << endl;
+      cout << "L2 norm of original solution: " << _poissonSolution_1x1->L2NormOfSolution(fieldID) << endl;
       success = false;
     }
+  }
+  
+  success = allSuccess(success);
+  
+  if (!success)
+  {
+#ifdef HAVE_EPETRAEXT_HDF5
+    ostringstream dir_name;
+    dir_name << "poissonProjectedSolution";
+    HDF5Exporter exporter(_poissonSolution->mesh(),dir_name.str());
+    exporter.exportSolution(_poissonSolution,0);
+    if (rank==0) cout << "exported projected solution to " << dir_name.str() << endl;
+    
+    dir_name.clear();
+    dir_name << "poissonProjectedSolutionDifference";
+    HDF5Exporter exporter2(_poissonSolution_1x1_unsolved->mesh(),dir_name.str());
+    exporter2.exportSolution(_poissonSolution_1x1_unsolved,0);
+    if (rank==0) cout << "exported projected solution difference to " << dir_name.str() << endl;
+#endif
   }
 
   return success;
