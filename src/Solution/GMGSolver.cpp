@@ -309,11 +309,7 @@ vector<MeshPtr> GMGSolver::meshesForMultigrid(MeshPtr fineMesh, Teuchos::Paramet
       }
     }
   }
-  else
-  {
-    // add the fine mesh:
-    meshesCoarseToFine.push_back(fineMesh);
-  }
+  meshesCoarseToFine.push_back(fineMesh);
   
   return meshesCoarseToFine;
 }
