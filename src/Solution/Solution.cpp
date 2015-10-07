@@ -1970,31 +1970,6 @@ double TSolution<Scalar>::L2NormOfSolutionGlobal(int trialID)
   SolutionPtr thisPtr = Teuchos::rcp(this,false);
   FunctionPtr solnFxn = Function::solution(var, thisPtr);
   return solnFxn->l2norm(_mesh);
-  
-//  int numProcs=1;
-//  int rank=0;
-//
-//#ifdef HAVE_MPI
-//  rank     = Teuchos::GlobalMPISession::getRank();
-//  numProcs = Teuchos::GlobalMPISession::getNProc();
-//  Epetra_MpiComm Comm(MPI_COMM_WORLD);
-//  //cout << "rank: " << rank << " of " << numProcs << endl;
-//#else
-//  Epetra_SerialComm Comm;
-//#endif
-//
-//  int indexBase = 0;
-//  Epetra_Map procMap(numProcs,indexBase,Comm);
-//  double localL2Norm = L2NormOfSolution(trialID);
-//  Epetra_Vector l2NormVector(procMap);
-//  l2NormVector[0] = localL2Norm;
-//  double globalL2Norm;
-//  int errCode = l2NormVector.Norm1( &globalL2Norm );
-//  if (errCode!=0)
-//  {
-//    cout << "Error in L2NormOfSolutionGlobal, errCode = " << errCode << endl;
-//  }
-//  return sqrt(globalL2Norm);
 }
 
 template <typename Scalar>
@@ -2006,62 +1981,6 @@ double TSolution<Scalar>::L2NormOfSolution(int trialID)
   SolutionPtr thisPtr = Teuchos::rcp(this,false);
   FunctionPtr solnFxn = Function::solution(var, thisPtr);
   return solnFxn->l2norm(_mesh);
-  
-/*  int numProcs=1;
-  int rank=0;
-
-#ifdef HAVE_MPI
-  rank     = Teuchos::GlobalMPISession::getRank();
-  numProcs = Teuchos::GlobalMPISession::getNProc();
-  Epetra_MpiComm Comm(MPI_COMM_WORLD);
-#else
-  Epetra_SerialComm Comm;
-#endif
-
-  double value = 0.0;
-  vector<ElementTypePtr> elemTypes = _mesh->elementTypes(rank);
-  vector<ElementTypePtr>::iterator elemTypeIt;
-  for (elemTypeIt = elemTypes.begin(); elemTypeIt != elemTypes.end(); elemTypeIt++)
-  {
-    ElementTypePtr elemTypePtr = *(elemTypeIt);
-    vector< ElementPtr > cells = _mesh->elementsOfType(rank,elemTypePtr);
-    int numCells = cells.size();
-    // note: basisCache below will use a greater cubature degree than strictly necessary
-    //       (it'll use maxTrialDegree + maxTestDegree, when it only needs maxTrialDegree * 2)
-    BasisCachePtr basisCache = Teuchos::rcp(new BasisCache(elemTypePtr,_mesh));
-
-    // get cellIDs for basisCache
-    vector<GlobalIndexType> cellIDs;
-    for (int cellIndex=0; cellIndex<numCells; cellIndex++)
-    {
-      GlobalIndexType cellID = cells[cellIndex]->cellID();
-      cellIDs.push_back(cellID);
-    }
-
-    Intrepid::FieldContainer<double> physicalCellNodes = _mesh->physicalCellNodes(elemTypePtr);
-
-    bool createSideCacheToo = false;
-    basisCache->setPhysicalCellNodes(physicalCellNodes,cellIDs,createSideCacheToo);
-
-    int numPoints = basisCache->getPhysicalCubaturePoints().dimension(1);
-    Intrepid::FieldContainer<Scalar> values(numCells,numPoints);
-    bool weightForCubature = false;
-    solutionValues(values, trialID, basisCache, weightForCubature);
-    Intrepid::FieldContainer<Scalar> weightedValues(numCells,numPoints);
-    weightForCubature = true;
-    solutionValues(weightedValues, trialID, basisCache, weightForCubature);
-
-    for (int cellIndex=0; cellIndex<numCells; cellIndex++)
-    {
-      for (int ptIndex=0; ptIndex<numPoints; ptIndex++)
-      {
-        value += values(cellIndex,ptIndex)*weightedValues(cellIndex,ptIndex);
-      }
-    }
-  }
-
-  return sqrt(value);
-*/
 }
 
 template <typename Scalar>
@@ -4210,9 +4129,8 @@ void TSolution<Scalar>::projectOntoMesh(const map<int, TFunctionPtr<Scalar> > &f
   }
 
   set<GlobalIndexType> cellIDs = _mesh->globalDofAssignment()->cellsInPartition(-1);
-  for (set<GlobalIndexType>::iterator cellIDIt = cellIDs.begin(); cellIDIt != cellIDs.end(); cellIDIt++)
+  for (GlobalIndexType cellID : cellIDs)
   {
-    GlobalIndexType cellID = *cellIDIt;
     projectOntoCell(functionMap,cellID);
   }
 }
@@ -4220,7 +4138,6 @@ void TSolution<Scalar>::projectOntoMesh(const map<int, TFunctionPtr<Scalar> > &f
 template <typename Scalar>
 void TSolution<Scalar>::projectOntoCell(const map<int, TFunctionPtr<Scalar> > &functionMap, GlobalIndexType cellID, int side)
 {
-  Intrepid::FieldContainer<double> physicalCellNodes = _mesh->physicalCellNodesForCell(cellID);
   vector<GlobalIndexType> cellIDs(1,cellID);
 
   VarFactoryPtr vf;
@@ -4313,18 +4230,8 @@ void TSolution<Scalar>::projectOntoCell(const map<int, TFunctionPtr<Scalar> > &f
 template <typename Scalar>
 void TSolution<Scalar>::projectFieldVariablesOntoOtherSolution(Teuchos::RCP< TSolution<Scalar> > otherSoln)
 {
-  vector< int > fieldIDs;
-  if (_bf != Teuchos::null)
-    fieldIDs = _bf->trialVolumeIDs();
-  else
-    fieldIDs = _mesh->bilinearForm()->trialVolumeIDs();
-  vector< VarPtr > fieldVars;
-  for (vector<int>::iterator fieldIt = fieldIDs.begin(); fieldIt != fieldIDs.end(); fieldIt++)
-  {
-    int fieldID = *fieldIt;
-    VarPtr var = Teuchos::rcp( new Var(fieldID, 0, "unspecified") );
-    fieldVars.push_back(var);
-  }
+  vector< VarPtr > fieldVars = _mesh->bilinearForm()->varFactory()->fieldVars();
+
   Teuchos::RCP< TSolution<Scalar> > thisPtr = Teuchos::rcp(this, false);
   map<int, TFunctionPtr<Scalar> > solnMap = PreviousSolutionFunction<Scalar>::functionMap(fieldVars, thisPtr);
   otherSoln->projectOntoMesh(solnMap);
@@ -4335,7 +4242,7 @@ void TSolution<Scalar>::projectOldCellOntoNewCells(GlobalIndexType cellID,
     ElementTypePtr oldElemType,
     const vector<GlobalIndexType> &childIDs)
 {
-  int rank = Teuchos::GlobalMPISession::getRank();
+//  int rank = Teuchos::GlobalMPISession::getRank();
 
   if (_solutionForCellIDGlobal.find(cellID) == _solutionForCellIDGlobal.end())
   {
