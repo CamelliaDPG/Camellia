@@ -390,9 +390,8 @@ Teuchos::RCP<Epetra_CrsMatrix> GMGOperator::constructProlongationOperator()
       else
       {
         set<GlobalIndexType> cells = cellsForGlobalDofOrdinal[globalRow];
-        for (set<GlobalIndexType>::iterator cellIDIt=cells.begin(); cellIDIt != cells.end(); cellIDIt++)
+        for (GlobalIndexType fineCellID : cells)
         {
-          GlobalIndexType fineCellID = *cellIDIt;
           int fineDofCount = _fineMesh->getElementType(fineCellID)->trialOrderPtr->totalDofs();
           FieldContainer<double> fineCellCoefficients(fineDofCount);
           _fineDofInterpreter->interpretGlobalCoefficients(fineCellID, fineCellCoefficients, *XLocal);
@@ -402,7 +401,6 @@ Teuchos::RCP<Epetra_CrsMatrix> GMGOperator::constructProlongationOperator()
           FieldContainer<double> coarseCellCoefficients(coarseDofCount);
           FieldContainer<double> mappedCoarseCellCoefficients(fineMapper->globalIndices().size());
           
-
           coarseCellCoefficients = fineMapper->mapLocalData(fineCellCoefficients, true);
 
           FieldContainer<double> interpretedCoarseData;
