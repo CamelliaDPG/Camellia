@@ -694,57 +694,6 @@ void TSolution<Scalar>::populateStiffnessAndLoad()
       ipBasisCache->setPhysicalCellNodes(physicalCellNodes,cellIDs,true);//_ip->hasBoundaryTerms()); // create side cache if ip has boundary values
       ipBasisCache->setCellSideParities(cellSideParities); // I don't anticipate these being needed, though
 
-      //int numCells = physicalCellNodes.dimension(0);
-//      CellTopoPtrLegacy cellTopoPtr = elemTypePtr->cellTopoPtr;
-//
-//      //      { // this block is not necessary for the solution.  Here just to produce debugging output
-//      //        Intrepid::FieldContainer<double> preStiffness(numCells,numTestDofs,numTrialDofs );
-//      //
-//      //        BilinearFormUtility::computeStiffnessMatrix(preStiffness, _mesh->bilinearForm(),
-//      //                                                    trialOrderingPtr, testOrderingPtr, *(cellTopoPtr.get()),
-//      //                                                    physicalCellNodes, cellSideParities);
-//      //        Intrepid::FieldContainer<double> preStiffnessTransposed(numCells,numTrialDofs,numTestDofs );
-//      //        BilinearFormUtility::transposeFCMatrices(preStiffnessTransposed,preStiffness);
-//      //
-//      ////        cout << "preStiffness:\n" << preStiffness;
-//      //      }
-//
-//      subTimer.ResetStartTime();
-//
-//      Intrepid::FieldContainer<double> ipMatrix(numCells,numTestDofs,numTestDofs);
-//
-//      _ip->computeInnerProductMatrix(ipMatrix,testOrderingPtr, ipBasisCache);
-//
-//      testMatrixAssemblyTime += subTimer.ElapsedTime();
-//
-//      //      cout << "ipMatrix:\n" << ipMatrix;
-//
-//      subTimer.ResetStartTime();
-//      Intrepid::FieldContainer<double> optTestCoeffs(numCells,numTrialDofs,numTestDofs);
-//
-//      int optSuccess = _mesh->bilinearForm()->optimalTestWeights(optTestCoeffs, ipMatrix, elemTypePtr,
-//                                                                 cellSideParities, basisCache);
-//      testMatrixInversionTime += subTimer.ElapsedTime();
-////      cout << "optTestCoeffs:\n" << optTestCoeffs;
-//
-//      if ( optSuccess != 0 ) {
-//        cout << "**** WARNING: in Solution.solve(), optimal test function computation failed with error code " << optSuccess << ". ****\n";
-//      }
-//
-//      //cout << "optTestCoeffs\n" << optTestCoeffs;
-//
-//      subTimer.ResetStartTime();
-//      Intrepid::FieldContainer<double> finalStiffness(numCells,numTrialDofs,numTrialDofs);
-//
-//      BilinearFormUtility::computeStiffnessMatrix(finalStiffness,ipMatrix,optTestCoeffs);
-//      localStiffnessDeterminationFromTestsTime += subTimer.ElapsedTime();
-////      cout << "finalStiffness:\n" << finalStiffness;
-//
-//      subTimer.ResetStartTime();
-//      Intrepid::FieldContainer<double> localRHSVector(numCells, numTrialDofs);
-//      _rhs->integrateAgainstOptimalTests(localRHSVector, optTestCoeffs, testOrderingPtr, basisCache);
-//      rhsIntegrationAgainstOptimalTestsTime += subTimer.ElapsedTime();
-
       Intrepid::FieldContainer<Scalar> localStiffness(numCells,numTrialDofs,numTrialDofs);
       Intrepid::FieldContainer<Scalar> localRHSVector(numCells,numTrialDofs);
 
