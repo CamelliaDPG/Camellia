@@ -1762,6 +1762,15 @@ const vector<double>& MeshTopology::getVertex(unsigned vertexIndex)
 
 bool MeshTopology::getVertexIndex(const vector<double> &vertex, IndexType &vertexIndex, double tol)
 {
+  if (_vertexMap.find(vertex) != _vertexMap.end())
+  {
+    vertexIndex = _vertexMap[vertex];
+    return true;
+  }
+  
+  // if we don't have an exact match, we look for one that meets the tolerance.
+  // (this is inefficient, and perhaps should be revisited.)
+  
   vector<double> vertexForLowerBound;
   for (int d=0; d<_spaceDim; d++)
   {
@@ -1773,6 +1782,7 @@ bool MeshTopology::getVertexIndex(const vector<double> &vertex, IndexType &verte
   double bestMatchDistance = tol;
   double xDist = 0; // xDist because vector<double> sorts according to the first entry: so we'll end up looking at
   // all the vertices that are near (x,...) in x...
+  
   while ((lowerBoundIt != _vertexMap.end()) && (xDist < tol))
   {
     double dist = 0;
