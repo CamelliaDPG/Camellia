@@ -819,7 +819,7 @@ void Mesh::hRefine(const set<GlobalIndexType> &cellIDs, Teuchos::RCP<RefinementP
   }
 }
 
-void Mesh::hUnrefine(const set<GlobalIndexType> &cellIDs)
+void Mesh::hUnrefine(const set<GlobalIndexType> &cellIDs, bool repartitionAndRebuild)
 {
   if (cellIDs.size() == 0) return;
 
@@ -915,14 +915,16 @@ void Mesh::hUnrefine(const set<GlobalIndexType> &cellIDs)
   _gda->didHUnrefine(cellIDs);
 
   // notify observers that of the unrefinement that just happened
-  for (vector< Teuchos::RCP<RefinementObserver> >::iterator meshIt = _registeredObservers.begin();
-       meshIt != _registeredObservers.end(); meshIt++)
+  for (Teuchos::RCP<RefinementObserver> refinementObserver : _registeredObservers)
   {
-    (*meshIt)->didHUnrefine(writableMeshTopology,cellIDs);
+    refinementObserver->didHUnrefine(writableMeshTopology,cellIDs);
   }
 
-  _gda->repartitionAndMigrate();
-  _boundary.buildLookupTables();
+  if (repartitionAndRebuild)
+  {
+    _gda->repartitionAndMigrate();
+    _boundary.buildLookupTables();
+  }
 }
 
 void Mesh::interpretGlobalCoefficients(GlobalIndexType cellID, FieldContainer<double> &localCoefficients, const Epetra_MultiVector &globalCoefficients)
