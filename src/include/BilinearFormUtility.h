@@ -65,15 +65,6 @@ public:
 
   static void computeStiffnessMatrixForCell(Intrepid::FieldContainer<Scalar> &stiffness, Teuchos::RCP<Mesh> mesh, int cellID);
 
-  // final (square) stiffness methods, with optimal test functions applied:
-  // the following is meant for testing; the three-argument computeStiffnessMatrix below will be more efficient...
-  static void computeOptimalStiffnessMatrix(Intrepid::FieldContainer<Scalar> &stiffness,
-      Intrepid::FieldContainer<Scalar> &optimalTestWeights,
-      TBFPtr<Scalar> bilinearForm,
-      Teuchos::RCP<DofOrdering> trialOrdering, Teuchos::RCP<DofOrdering> testOrdering,
-      CellTopoPtr cellTopo, Intrepid::FieldContainer<double> &physicalCellNodes,
-      Intrepid::FieldContainer<double> &cellSideParities);
-
   static void computeStiffnessMatrix(Intrepid::FieldContainer<Scalar> &stiffness, Intrepid::FieldContainer<Scalar> &innerProductMatrix,
                                      Intrepid::FieldContainer<Scalar> &optimalTestWeights);
 
