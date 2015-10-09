@@ -221,10 +221,10 @@ void TIP<Scalar>::computeInnerProductMatrix(FieldContainer<Scalar> &innerProduct
   {
 
     // innerProduct FC is sized as (C,F,F)
-    FieldContainer<double> physicalCubaturePoints = basisCache->getPhysicalCubaturePoints();
+    const FieldContainer<double>* physicalCubaturePoints = &basisCache->getPhysicalCubaturePoints();
 
-    unsigned numCells = physicalCubaturePoints.dimension(0);
-    unsigned numPoints = physicalCubaturePoints.dimension(1);
+    unsigned numCells = physicalCubaturePoints->dimension(0);
+    unsigned numPoints = physicalCubaturePoints->dimension(1);
     //  unsigned spaceDim = physicalCubaturePoints.dimension(2);
     unsigned numDofs = dofOrdering->totalDofs();
 
@@ -235,14 +235,14 @@ void TIP<Scalar>::computeInnerProductMatrix(FieldContainer<Scalar> &innerProduct
 
     innerProduct.initialize(0.0);
 
-    int totalBasisCardinality = dofOrdering->getTotalBasisCardinality();
+//    int totalBasisCardinality = dofOrdering->getTotalBasisCardinality();
     // want to fit all basis values in 256K with a little room to spare -- 32768 doubles would be no room to spare
     // 256K is the size of Sandy Bridge's L2 cache.  Blue Gene Q has 32 MB shared L2 cache, so maybe there we could go bigger
     // (fitting within L1 is likely a non-starter for 3D DPG)
 //    int maxValuesAllowed = 30000;
 //    int maxPointsPerPhase = std::max(2, maxValuesAllowed / totalBasisCardinality); // minimally, compute 2 points at once
 
-    //  basisCache->setMaxPointsPerCubaturePhase(maxPointsPerPhase);
+//    basisCache->setMaxPointsPerCubaturePhase(maxPointsPerPhase);
 //    basisCache->setMaxPointsPerCubaturePhase(-1); // old behavior
 
 //    for (int phase=0; phase < basisCache->getCubaturePhaseCount(); phase++) {
