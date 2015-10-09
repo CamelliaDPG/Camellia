@@ -17,6 +17,7 @@
 
 using namespace Camellia;
 using namespace Intrepid;
+using namespace std;
 
 namespace
 {
@@ -133,6 +134,28 @@ namespace
     
     double tol = 1e-15;
     TEST_COMPARE_FLOATING_ARRAYS(X, X_expected, tol);
+  }
+  
+  TEUCHOS_UNIT_TEST( SerialDenseWrapper, Transpose )
+  {
+    // X = A * B
+    int m = 20;
+    int n = 30;
+    FieldContainer<double> A(m,n);
+    FieldContainer<double> A_T(n,m);
+    
+    for (int i=0; i<A.size(); i++)
+    {
+      A[i] = i;
+    }
+    
+    for (int i=0; i<m; i++)
+      for (int j=0; j<n; j++)
+        A_T(j,i) = A(i,j);
+    
+    SerialDenseWrapper::transposeMatrix(A);
+    
+    TEST_COMPARE_ARRAYS(A, A_T);
   }
   
 //  TEUCHOS_UNIT_TEST( SerialDenseWrapper, Multiply_HUGE_CommentMeOut_Slow )
