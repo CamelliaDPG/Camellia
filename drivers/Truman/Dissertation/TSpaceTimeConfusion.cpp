@@ -128,9 +128,11 @@ int main(int argc, char *argv[])
     //   FunctionPtr sinnpiy = Teuchos::rcp(new Sin_ay(n*pi));
     //   u_steady = u_steady + Cn*(exps1x-expr1x)/(r1*exp(-r1)-s1*exp(-s1))*sinnpiy;
     // }
-
-  FunctionPtr u_exact = u_steady + 4*explt*(explambda1x-explambda2x);
   // FunctionPtr u_exact = u_steady + 4*explt*(explambda1x-explambda2x)*Function::yn(1);
+
+  // FunctionPtr u_exact = u_steady + 4*explt*(explambda1x-explambda2x);
+  // FunctionPtr u_exact = u_steady + 4*explt*(explambda1x-explambda2x);
+  FunctionPtr u_exact = 4*explt*(explambda1x-explambda2x);
   FunctionPtr sigma_exact = epsilon*u_exact->grad();
 
   FunctionPtr beta;
@@ -171,7 +173,10 @@ int main(int argc, char *argv[])
   for (int d=0; d<spaceDim; d++)
   {
     dimensions.push_back(width);
-    elementCounts.push_back(numXElems);
+    if (d == 0)
+      elementCounts.push_back(numXElems);
+    else
+      elementCounts.push_back(1);
   }
   MeshTopologyPtr spatialMeshTopo = MeshFactory::rectilinearMeshTopology(dimensions, elementCounts, x0);
   double t0 = 0.0, t1 = 1.0;

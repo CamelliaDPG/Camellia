@@ -153,7 +153,7 @@ SpaceTimeConvectionDiffusionFormulation::SpaceTimeConvectionDiffusionFormulation
   _ips["Robust"]->addTerm(Function::min(one/Function::h(),Function::constant(1./sqrt(_epsilon)))*tau);
   _ips["Robust"]->addTerm(sqrt(_epsilon)*v->grad());
   _ips["Robust"]->addTerm(Function::min(sqrt(_epsilon)*one/Function::h(),one)*v);
-  _ips["Robust"]->addTerm(v->dt() + _beta*v->grad());
+  _ips["Robust"]->addTerm(v->dt() + beta*v->grad());
   if (spaceDim > 1)
     _ips["Robust"]->addTerm(tau->div());
   else
@@ -171,7 +171,7 @@ SpaceTimeConvectionDiffusionFormulation::SpaceTimeConvectionDiffusionFormulation
   _ips["NSDecoupledH1"] = Teuchos::rcp(new IP);
   _ips["NSDecoupledH1"]->addTerm(one/Function::h()*tau);
   _ips["NSDecoupledH1"]->addTerm(v->grad());
-  _ips["NSDecoupledH1"]->addTerm(_beta*v->grad()+v->dt());
+  _ips["NSDecoupledH1"]->addTerm(beta*v->grad()+v->dt());
   if (spaceDim > 1)
     _ips["NSDecoupledH1"]->addTerm(tau->div());
   else
@@ -181,7 +181,7 @@ SpaceTimeConvectionDiffusionFormulation::SpaceTimeConvectionDiffusionFormulation
   _ips["NSDecoupledMin"] = Teuchos::rcp(new IP);
   _ips["NSDecoupledMin"]->addTerm(Function::min(one/Function::h(), one/Function::constant(sqrt(_epsilon)))*tau);
   _ips["NSDecoupledMin"]->addTerm(v->grad());
-  _ips["NSDecoupledMin"]->addTerm(_beta*v->grad()+v->dt());
+  _ips["NSDecoupledMin"]->addTerm(beta*v->grad()+v->dt());
   if (spaceDim > 1)
     _ips["NSDecoupledMin"]->addTerm(tau->div());
   else
