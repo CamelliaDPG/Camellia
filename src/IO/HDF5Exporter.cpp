@@ -101,7 +101,7 @@ void HDF5Exporter::exportSolution(TSolutionPtr<double> solution, double timeVal,
   for (int i=0; i < traceTrialIDs.size(); i++)
   {
     traceVars.push_back(varFactory->trial(traceTrialIDs[i]));
-    TFunctionPtr<double> traceFunction = TFunction<double>::solution(traceVars[i], solution);
+    TFunctionPtr<double> traceFunction = TFunction<double>::solution(traceVars[i], solution, false); // false: don't weight by sideParity
     string traceFunctionName = traceVars[i]->name();
     traceFunctions.push_back(traceFunction);
     traceFunctionNames.push_back(traceFunctionName);
