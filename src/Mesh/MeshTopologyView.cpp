@@ -230,7 +230,7 @@ vector<IndexType> MeshTopologyView::getCellsForSide(IndexType sideEntityIndex)
   return cells;
 }
 
-std::pair<IndexType, unsigned> MeshTopologyView::getConstrainingEntity(unsigned d, IndexType entityIndex)
+pair<IndexType, unsigned> MeshTopologyView::getConstrainingEntity(unsigned d, IndexType entityIndex)
 {
   // copying from MeshTopology's implementation:
   unsigned sideDim = getDimension() - 1;

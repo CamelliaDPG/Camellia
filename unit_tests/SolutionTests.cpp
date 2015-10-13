@@ -68,7 +68,7 @@ vector<double> makeVertex(double v0, double v1, double v2, double v3)
   
   void testCondensedSolveZeroMeanConstraint(bool minRule, Teuchos::FancyOStream &out, bool &success)
   {
-    double tol = 1e-12;
+    double tol = 1e-11;
     
     int rank = Teuchos::GlobalMPISession::getRank();;
     

@@ -42,7 +42,8 @@ enum ProblemChoice
 
 void initializeSolutionAndCoarseMesh(SolutionPtr &solution, vector<MeshPtr> &meshesCoarseToFine, IPPtr &graphNorm, ProblemChoice problemChoice,
                                      int spaceDim, bool conformingTraces, bool useStaticCondensation, int numCells, int k, int delta_k,
-                                     int k_coarse, int rootMeshNumCells, bool useZeroMeanConstraints, bool jumpToCoarsePolyOrder)
+                                     int k_coarse, int rootMeshNumCells, bool useZeroMeanConstraints, bool jumpToCoarsePolyOrder,
+                                     bool setupMeshTopologyAndQuit)
 {
   int rank = Teuchos::GlobalMPISession::getRank();
   
@@ -198,7 +199,7 @@ void initializeSolutionAndCoarseMesh(SolutionPtr &solution, vector<MeshPtr> &mes
   
   BFPtr bilinearForm = bf;
   
-  bf->setUseSPDSolveForOptimalTestFunctions(true);
+//  bf->setUseSPDSolveForOptimalTestFunctions(true);
   
   vector<double> dimensions;
   vector<int> elementCounts;
@@ -272,6 +273,7 @@ void initializeSolutionAndCoarseMesh(SolutionPtr &solution, vector<MeshPtr> &mes
       cout << "h refinements (MeshTopology) completed in " << refinementTime << " seconds.\n";
       hRefinementTimer.ResetStartTime();
     }
+    if (setupMeshTopologyAndQuit) return;
     mesh = Teuchos::rcp(new Mesh(meshTopo, bf, H1Order, delta_k));
     if (rank==0)
     {
@@ -429,6 +431,7 @@ int main(int argc, char *argv[])
   bool writeOpToFile = false;
   
   bool setUpMeshesAndQuit = false;
+  bool setUpMeshTopologyAndQuit = false;
   
   string multigridStrategyString = "W-cycle";
   
@@ -467,7 +470,8 @@ int main(int argc, char *argv[])
 
   cmdp.setOption("pause","dontPause",&pauseOnRankZero, "pause (to allow attachment by tracer, e.g.), waiting for user to press a key");
   cmdp.setOption("reportTimings", "dontReportTimings", &reportTimings, "Report timings in Solution");
-  
+
+  cmdp.setOption("setUpMeshTopologyAndQuit", "setUpMeshTopologyAndContinue", &setUpMeshTopologyAndQuit);
   cmdp.setOption("setUpMeshesAndQuit", "setUpMeshesAndRunNormally", &setUpMeshesAndQuit);
   cmdp.setOption("solveDirectly", "solveIteratively", &solveDirectly);
 
@@ -583,7 +587,16 @@ int main(int argc, char *argv[])
   
   vector<MeshPtr> meshesCoarseToFine;
   initializeSolutionAndCoarseMesh(solution, meshesCoarseToFine, ip, problemChoice, spaceDim, conformingTraces, useCondensedSolve,
-                                  numCells, k, delta_k, k_coarse, numCellsRootMesh, useZeroMeanConstraints, jumpToCoarsePolyOrder);
+                                  numCells, k, delta_k, k_coarse, numCellsRootMesh, useZeroMeanConstraints, jumpToCoarsePolyOrder,
+                                  setUpMeshTopologyAndQuit);
+  
+  if (setUpMeshTopologyAndQuit)
+  {
+#ifdef HAVE_MPI
+    MPI_Finalize();
+#endif
+    exit(0);
+  }
   
   double meshInitializationTime = timer.ElapsedTime();
 
