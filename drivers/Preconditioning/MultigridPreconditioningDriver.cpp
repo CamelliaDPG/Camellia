@@ -41,7 +41,8 @@ enum ProblemChoice
 };
 
 void initializeSolutionAndCoarseMesh(SolutionPtr &solution, vector<MeshPtr> &meshesCoarseToFine, IPPtr &graphNorm, ProblemChoice problemChoice,
-                                     int spaceDim, bool conformingTraces, bool useStaticCondensation, int numCells, int k, int delta_k,
+                                     int spaceDim, bool conformingTraces, bool enhanceFieldsForH1TracesWhenConforming,
+                                     bool useStaticCondensation, int numCells, int k, int delta_k,
                                      int k_coarse, int rootMeshNumCells, bool useZeroMeanConstraints, bool jumpToCoarsePolyOrder,
                                      bool setupMeshTopologyAndQuit)
 {
@@ -56,6 +57,8 @@ void initializeSolutionAndCoarseMesh(SolutionPtr &solution, vector<MeshPtr> &mes
   vector<double> x0(spaceDim,0); // origin is the default
   
   VarPtr p; // pressure
+  
+  map<int,int> trialOrderEnhancements;
   
   if (problemChoice == Poisson)
   {
@@ -73,6 +76,11 @@ void initializeSolutionAndCoarseMesh(SolutionPtr &solution, vector<MeshPtr> &mes
     SpatialFilterPtr boundary = SpatialFilter::allSpace();
     VarPtr phi_hat = formulation.phi_hat();
     bc->addDirichlet(phi_hat, boundary, Function::zero());
+    
+    if (conformingTraces && enhanceFieldsForH1TracesWhenConforming)
+    {
+      trialOrderEnhancements[formulation.phi()->ID()] = 1;
+    }
   }
   else if (problemChoice == ConvectionDiffusion)
   {
@@ -90,6 +98,11 @@ void initializeSolutionAndCoarseMesh(SolutionPtr &solution, vector<MeshPtr> &mes
     else if (spaceDim == 3)
       beta = Function::vectorize(beta_x, beta_y, beta_z);
     ConvectionDiffusionFormulation formulation(spaceDim, conformingTraces, beta, epsilon);
+    
+    if (conformingTraces && enhanceFieldsForH1TracesWhenConforming)
+    {
+      trialOrderEnhancements[formulation.u()->ID()] = 1;
+    }
     
     bf = formulation.bf();
     
@@ -140,6 +153,12 @@ void initializeSolutionAndCoarseMesh(SolutionPtr &solution, vector<MeshPtr> &mes
     double mu = 1.0;
     
     StokesVGPFormulation formulation = StokesVGPFormulation::steadyFormulation(spaceDim, mu, conformingTraces);
+    
+    if (conformingTraces && enhanceFieldsForH1TracesWhenConforming)
+    {
+      for (int d=0; d<spaceDim; d++)
+        trialOrderEnhancements[formulation.u(d+1)->ID()] = 1;
+    }
     
     p = formulation.p();
     
@@ -274,7 +293,7 @@ void initializeSolutionAndCoarseMesh(SolutionPtr &solution, vector<MeshPtr> &mes
       hRefinementTimer.ResetStartTime();
     }
     if (setupMeshTopologyAndQuit) return;
-    mesh = Teuchos::rcp(new Mesh(meshTopo, bf, H1Order, delta_k));
+    mesh = Teuchos::rcp(new Mesh(meshTopo, bf, H1Order, delta_k, trialOrderEnhancements));
     if (rank==0)
     {
       int meshConstructionTime = hRefinementTimer.ElapsedTime();
@@ -411,6 +430,7 @@ int main(int argc, char *argv[])
   bool jumpToCoarsePolyOrder = false;
 
   bool conformingTraces = false;
+  bool enhanceFieldsForH1TracesWhenConforming = true;
 
   int numCells = -1;
   int numCellsRootMesh = -1;
@@ -462,6 +482,7 @@ int main(int argc, char *argv[])
   
   cmdp.setOption("useCondensedSolve", "useStandardSolve", &useCondensedSolve);
   cmdp.setOption("useConformingTraces", "useNonConformingTraces", &conformingTraces);
+  cmdp.setOption("enhanceFieldsForH1TracesWhenConforming", "equalOrderFieldsForH1TracesWhenConforming", &enhanceFieldsForH1TracesWhenConforming);
 
   cmdp.setOption("spaceDim", &spaceDim, "space dimensions (1, 2, or 3)");
 
@@ -586,8 +607,8 @@ int main(int argc, char *argv[])
   }
   
   vector<MeshPtr> meshesCoarseToFine;
-  initializeSolutionAndCoarseMesh(solution, meshesCoarseToFine, ip, problemChoice, spaceDim, conformingTraces, useCondensedSolve,
-                                  numCells, k, delta_k, k_coarse, numCellsRootMesh, useZeroMeanConstraints, jumpToCoarsePolyOrder,
+  initializeSolutionAndCoarseMesh(solution, meshesCoarseToFine, ip, problemChoice, spaceDim, conformingTraces, enhanceFieldsForH1TracesWhenConforming,
+                                  useCondensedSolve, numCells, k, delta_k, k_coarse, numCellsRootMesh, useZeroMeanConstraints, jumpToCoarsePolyOrder,
                                   setUpMeshTopologyAndQuit);
   
   if (setUpMeshTopologyAndQuit)

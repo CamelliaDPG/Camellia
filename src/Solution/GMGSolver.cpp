@@ -85,9 +85,7 @@ _finePartitionMap(fineSolution->getPartitionMap())
   MeshPtr mesh_pCoarsened = Teuchos::rcp( new Mesh(fineMesh->getTopology(), vf, H1OrderCoarse, delta_k) );
   
   meshesCoarseToFine.insert(meshesCoarseToFine.begin(), mesh_pCoarsened);
-  
-  
-  
+
   // TODO: finish implementing this
   TEUCHOS_TEST_FOR_EXCEPTION(true, std::invalid_argument, "This GMGSolver constructor not yet completed!");
   
@@ -191,7 +189,6 @@ Teuchos::RCP<GMGOperator> GMGSolver::gmgOperatorFromMeshSequence(const std::vect
   return finestOperator;
 }
 
-
 vector<MeshPtr> GMGSolver::meshesForMultigrid(MeshPtr fineMesh, int kCoarse, int delta_k)
 {
   Teuchos::ParameterList pl;
@@ -228,13 +225,15 @@ vector<MeshPtr> GMGSolver::meshesForMultigrid(MeshPtr fineMesh, Teuchos::Paramet
   
   vector<MeshPtr> meshesCoarseToFine;
   
+  map<int,int> trialOrderEnhancements = fineMesh->getDofOrderingFactory().getTrialOrderEnhancements();
+  
   int H1Order_coarse = kCoarse + 1;
   BFPtr bf = fineMesh->bilinearForm();
   do {
     MeshTopologyViewPtr thisLevelMeshTopo = fineMeshTopo->getView(thisLevelCellIndices);
     
     // create the actual Mesh object:
-    MeshPtr thisLevelMesh = Teuchos::rcp(new Mesh(thisLevelMeshTopo, bf, H1Order_coarse, delta_k));
+    MeshPtr thisLevelMesh = Teuchos::rcp(new Mesh(thisLevelMeshTopo, bf, H1Order_coarse, delta_k, trialOrderEnhancements));
     meshesCoarseToFine.push_back(thisLevelMesh);
     
     set<GlobalIndexType> nextLevelCellIndices;
@@ -264,7 +263,7 @@ vector<MeshPtr> GMGSolver::meshesForMultigrid(MeshPtr fineMesh, Teuchos::Paramet
   {
     // NOTE: this option is not very well-supported for space-time meshes, because of our lack of anisotropic p-refinement
     //       support; essentially, for this to work, you need to have the same temporal poly order as spatial.
-    MeshPtr meshToPRefine = Teuchos::rcp(new Mesh(fineMesh->getTopology()->deepCopy(), bf, H1Order_coarse, delta_k));
+    MeshPtr meshToPRefine = Teuchos::rcp(new Mesh(fineMesh->getTopology()->deepCopy(), bf, H1Order_coarse, delta_k, trialOrderEnhancements));
     
     bool someCellWasRefined = true;
     
