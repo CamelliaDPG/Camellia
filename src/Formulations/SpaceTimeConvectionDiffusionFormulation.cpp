@@ -149,6 +149,16 @@ SpaceTimeConvectionDiffusionFormulation::SpaceTimeConvectionDiffusionFormulation
 
   _ips["Graph"] = _bf->graphNorm();
 
+  _ips["Math"] = Teuchos::rcp(new IP);
+  _ips["Math"]->addTerm(v);
+  _ips["Math"]->addTerm(v->grad());
+  _ips["Math"]->addTerm(v->dt());
+  _ips["Math"]->addTerm(tau);
+  if (spaceDim > 1)
+    _ips["Math"]->addTerm(tau->div());
+  else
+    _ips["Math"]->addTerm(tau->dx());
+
   _ips["Robust"] = Teuchos::rcp(new IP);
   _ips["Robust"]->addTerm(Function::min(one/Function::h(),Function::constant(1./sqrt(_epsilon)))*tau);
   _ips["Robust"]->addTerm(sqrt(_epsilon)*v->grad());

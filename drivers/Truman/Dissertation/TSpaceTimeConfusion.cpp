@@ -132,8 +132,8 @@ int main(int argc, char *argv[])
 
   // FunctionPtr u_exact = u_steady + 4*explt*(explambda1x-explambda2x);
   // FunctionPtr u_exact = u_steady + 4*explt*(explambda1x-explambda2x);
-  // FunctionPtr u_exact = 4*explt*(explambda1x-explambda2x);
-  FunctionPtr u_exact = Function::xn(2);
+  FunctionPtr u_exact = 4*explt*(explambda1x-explambda2x);
+  // FunctionPtr u_exact = Function::xn(2);
   FunctionPtr sigma_exact = epsilon*u_exact->grad();
 
   FunctionPtr beta;
@@ -186,8 +186,8 @@ int main(int argc, char *argv[])
   FunctionPtr zero = Function::zero();
   FunctionPtr one = Function::constant(1);
 
-  // LinearTermPtr forcingTerm = Teuchos::null;
-  FunctionPtr forcingTerm = form.forcingFunction(u_exact);
+  FunctionPtr forcingTerm = Teuchos::null;
+  // FunctionPtr forcingTerm = form.forcingFunction(u_exact);
   form.initializeSolution(spaceTimeMeshTopo, p, delta_p, norm, forcingTerm);
 
   MeshPtr mesh = form.solution()->mesh();
@@ -397,30 +397,30 @@ int main(int argc, char *argv[])
 
     if (refIndex != numRefs)
     {
-      set<GlobalIndexType> activeCellIndices = mesh->getTopology()->getActiveCellIndices();
-      for (set<GlobalIndexType>::iterator it = activeCellIndices.begin(); it != activeCellIndices.end(); ++it)
-      {
-        GlobalIndexType n = *it;
-        if (n % 2 == 0)
-        {
-          // ++it;
-        }
-        else
-        {
-          activeCellIndices.erase(it);
-        }
-      }
-      mesh->hRefine(activeCellIndices);
-      // refStrategy.refine();
+      // set<GlobalIndexType> activeCellIndices = mesh->getTopology()->getActiveCellIndices();
+      // for (set<GlobalIndexType>::iterator it = activeCellIndices.begin(); it != activeCellIndices.end(); ++it)
+      // {
+      //   GlobalIndexType n = *it;
+      //   if (n % 2 == 0)
+      //   {
+      //     // ++it;
+      //   }
+      //   else
+      //   {
+      //     activeCellIndices.erase(it);
+      //   }
+      // }
+      // mesh->hRefine(activeCellIndices);
+      refStrategy.refine();
     }
-    else
-    {
-      mesh->hRefine(mesh->getTopology()->getActiveCellIndices());
-      energyError = soln->energyErrorTotal();
-      if (commRank == 0)
-        cout << "Refined energy error " << energyError << endl;
-      exporter->exportSolution(soln, refIndex+1);
-    }
+    // else
+    // {
+    //   mesh->hRefine(mesh->getTopology()->getActiveCellIndices());
+    //   energyError = soln->energyErrorTotal();
+    //   if (commRank == 0)
+    //     cout << "Refined energy error " << energyError << endl;
+    //   exporter->exportSolution(soln, refIndex+1);
+    // }
   }
   dataFile.close();
   double totalTime = totalTimer->stop();
