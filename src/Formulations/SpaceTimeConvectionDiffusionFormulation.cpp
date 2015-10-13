@@ -207,19 +207,19 @@ IPPtr SpaceTimeConvectionDiffusionFormulation::ip(string normName)
 }
 
 void SpaceTimeConvectionDiffusionFormulation::initializeSolution(MeshTopologyPtr meshTopo, int fieldPolyOrder, int delta_k, string norm,
-    TLinearTermPtr<double> forcingTerm)
+    FunctionPtr forcingFunction)
 {
-  this->initializeSolution(meshTopo, fieldPolyOrder, delta_k, norm, forcingTerm, "");
+  this->initializeSolution(meshTopo, fieldPolyOrder, delta_k, norm, forcingFunction, "");
 }
 
 void SpaceTimeConvectionDiffusionFormulation::initializeSolution(std::string filePrefix, int fieldPolyOrder, int delta_k, string norm,
-    TLinearTermPtr<double> forcingTerm)
+    FunctionPtr forcingFunction)
 {
-  this->initializeSolution(Teuchos::null, fieldPolyOrder, delta_k, norm, forcingTerm, filePrefix);
+  this->initializeSolution(Teuchos::null, fieldPolyOrder, delta_k, norm, forcingFunction, filePrefix);
 }
 
 void SpaceTimeConvectionDiffusionFormulation::initializeSolution(MeshTopologyPtr meshTopo, int fieldPolyOrder, int delta_k, string norm,
-    TLinearTermPtr<double> forcingTerm, string savedSolutionAndMeshPrefix)
+    FunctionPtr forcingFunction, string savedSolutionAndMeshPrefix)
 {
   TEUCHOS_TEST_FOR_EXCEPTION(meshTopo->getDimension() != _spaceDim + 1, std::invalid_argument, "MeshTopo must be space-time mesh");
 
@@ -243,8 +243,8 @@ void SpaceTimeConvectionDiffusionFormulation::initializeSolution(MeshTopologyPtr
 
   IPPtr ip = _ips.at(norm);
   // RHSPtr rhs = this->rhs(forcingFunction); // in transient case, this will refer to _previousSolution
-  if (forcingTerm != Teuchos::null)
-    _rhs->addTerm(forcingTerm);
+  if (forcingFunction != Teuchos::null)
+    _rhs->addTerm(forcingFunction*this->v());
 
   _solution->setRHS(_rhs);
   _solution->setIP(ip);
@@ -358,4 +358,10 @@ void SpaceTimeConvectionDiffusionFormulation::solve()
 VarPtr SpaceTimeConvectionDiffusionFormulation::v()
 {
   return _vf->testVar(s_v, HGRAD);
+}
+
+FunctionPtr SpaceTimeConvectionDiffusionFormulation::forcingFunction(FunctionPtr u_exact)
+{
+  FunctionPtr f = u_exact->dt() + _beta*u_exact->grad() - _epsilon*u_exact->grad()->div();
+  return f;
 }
