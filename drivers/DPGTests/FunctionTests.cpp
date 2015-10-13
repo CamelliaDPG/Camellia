@@ -292,7 +292,7 @@ bool FunctionTests::testBasisSumFunction()
         soln->setSolnCoeffsForCellID(basisCoefficients, cellID, trialID, sideIndex);
 
         VarPtr v = Var::varForTrialID(trialID, spectralConfusionMesh->bilinearForm());
-        FunctionPtr solnFxn = Function::solution(v, soln);
+        FunctionPtr solnFxn = Function::solution(v, soln, false);
         FunctionPtr basisSumFxn = Teuchos::rcp( new BasisSumFunction(basis, basisCoefficients, Teuchos::rcp((BasisCache*)NULL), OP_VALUE, boundaryValued) );
         if (!boundaryValued)
         {
