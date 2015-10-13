@@ -1037,100 +1037,6 @@ namespace Camellia
   }
   
   template <typename Scalar>
-  int TBF<Scalar>::optimalTestWeights(FieldContainer<Scalar> &optimalTestWeights,
-                                      FieldContainer<Scalar> &innerProductMatrix,
-                                      ElementTypePtr elemType,
-                                      FieldContainer<double> &cellSideParities,
-                                      BasisCachePtr stiffnessBasisCache)
-  {
-    DofOrderingPtr trialOrdering = elemType->trialOrderPtr;
-    DofOrderingPtr testOrdering = elemType->testOrderPtr;
-    
-    // all arguments are as in computeStiffnessMatrix, except:
-    // optimalTestWeights, which has dimensions (numCells, numTrialDofs, numTestDofs)
-    // innerProduct: the inner product which defines the sense in which these test functions are optimal
-    int numCells = stiffnessBasisCache->getPhysicalCubaturePoints().dimension(0);
-    int numTestDofs = testOrdering->totalDofs();
-    int numTrialDofs = trialOrdering->totalDofs();
-    
-    // check that optimalTestWeights is properly dimensioned....
-    TEUCHOS_TEST_FOR_EXCEPTION( ( optimalTestWeights.dimension(0) != numCells ),
-                               std::invalid_argument,
-                               "physicalCellNodes.dimension(0) and optimalTestWeights.dimension(0) (numCells) do not match.");
-    TEUCHOS_TEST_FOR_EXCEPTION( ( optimalTestWeights.dimension(1) != numTrialDofs ),
-                               std::invalid_argument,
-                               "trialOrdering->totalDofs() and optimalTestWeights.dimension(1) do not match.");
-    TEUCHOS_TEST_FOR_EXCEPTION( ( optimalTestWeights.dimension(2) != numTestDofs ),
-                               std::invalid_argument,
-                               "testOrdering->totalDofs() and optimalTestWeights.dimension(2) do not match.");
-    
-    FieldContainer<Scalar> stiffnessMatrix(numCells,numTestDofs,numTrialDofs);
-    //  FieldContainer<double> stiffnessMatrixT(numCells,numTrialDofs,numTestDofs);
-    
-    // RHS:
-    this->stiffnessMatrix(stiffnessMatrix, elemType, cellSideParities, stiffnessBasisCache);
-    //  cout << "trialOrdering:\n" << *trialOrdering;
-    
-    //  BilinearFormUtility::transposeFCMatrices(stiffnessMatrixT, stiffnessMatrix);
-    
-    //cout << "stiffnessMatrixT: " << stiffnessMatrixT << endl;
-    //cout << "stiffnessMatrix:" << stiffnessMatrix << endl;
-    
-    int solvedAll = 0;
-    
-    FieldContainer<Scalar> optimalWeightsT(numTestDofs, numTrialDofs);
-    Teuchos::Array<int> localIPDim(2);
-    localIPDim[0] = numTestDofs;
-    localIPDim[1] = numTestDofs;
-    Teuchos::Array<int> localStiffnessDim(2);
-    localStiffnessDim[0] = stiffnessMatrix.dimension(1);
-    localStiffnessDim[1] = stiffnessMatrix.dimension(2);
-    
-    for (int cellIndex=0; cellIndex < numCells; cellIndex++)
-    {
-      int result = 0;
-      FieldContainer<Scalar> cellIPMatrix(localIPDim, &innerProductMatrix(cellIndex,0,0));
-      FieldContainer<Scalar> cellStiffness(localStiffnessDim, &stiffnessMatrix(cellIndex,0,0));
-      if (_useQRSolveForOptimalTestFunctions)
-      {
-        bool useIPTranspose = true; // true value may allow less memory to be used during solveSystemUsingQR() (maybe only if we can get overwriting to work, below)
-        bool allowIPOverwrite = false; // should be able to use true here (and save memory), but there seem to be bugs...
-        result = SerialDenseWrapper::solveSystemUsingQR(optimalWeightsT, cellIPMatrix, cellStiffness, useIPTranspose, allowIPOverwrite);
-//        result = SerialDenseWrapper::solveSystemUsingQR(optimalWeightsT, cellIPMatrix, cellStiffness);
-      }
-      else if (_useSPDSolveForOptimalTestFunctions)
-      {
-        result = SerialDenseWrapper::solveSPDSystemMultipleRHS(optimalWeightsT, cellIPMatrix, cellStiffness);
-        if (result != 0)
-        {
-          // may be that we're not SPD numerically
-          cout << "During optimal test weight solution, SPD solve returned error " << result << ".  Solving with LU factorization instead of SPD solve.\n";
-          result = SerialDenseWrapper::solveSystemMultipleRHS(optimalWeightsT, cellIPMatrix, cellStiffness);
-        }
-      }
-      else
-      {
-        SerialDenseWrapper::solveSystemMultipleRHS(optimalWeightsT, cellIPMatrix, cellStiffness);
-      }
-      // copy/transpose the optimal test weights
-      for (int i=0; i<optimalTestWeights.dimension(1); i++)
-      {
-        for (int j=0; j<optimalTestWeights.dimension(2); j++)
-        {
-          optimalTestWeights(cellIndex,i,j) = optimalWeightsT(j,i);
-        }
-      }
-      if (result != 0)
-      {
-        solvedAll = result;
-      }
-    }
-    
-    return solvedAll;
-  }
-  
-  
-  template <typename Scalar>
   int TBF<Scalar>::optimalTestWeightsAndStiffness(FieldContainer<Scalar> &optimalTestWeights,
                                                   FieldContainer<Scalar> &stiffnessMatrix,
                                                   ElementTypePtr elemType,
@@ -1204,7 +1110,8 @@ namespace Camellia
       }
       else if (_useSPDSolveForOptimalTestFunctions)
       {
-        result = SerialDenseWrapper::solveSPDSystemMultipleRHS(cellOptimalWeightsT, cellIPMatrix, cellRectangularStiffness);
+        bool allowIPOverwrite = false; // assert that we won't be using cellIPMatrix again
+        result = SerialDenseWrapper::solveSPDSystemMultipleRHS(cellOptimalWeightsT, cellIPMatrix, cellRectangularStiffness, allowIPOverwrite);
         if (result != 0)
         {
           // may be that we're not SPD numerically

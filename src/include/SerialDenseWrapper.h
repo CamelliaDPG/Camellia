@@ -73,7 +73,7 @@ namespace Camellia
                                   bool allowOverwriteOfA = false);
     
     static int solveSPDSystemMultipleRHS(Intrepid::FieldContainer<double> &x, Intrepid::FieldContainer<double> &A_SPD,
-                                         Intrepid::FieldContainer<double> &b);
+                                         Intrepid::FieldContainer<double> &b, bool allowOverwriteOfA = false);
     
     static void transposeMatrix(Intrepid::FieldContainer<double> &A);
     

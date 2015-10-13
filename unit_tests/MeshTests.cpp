@@ -200,6 +200,60 @@ void testSaveAndLoad2D(BFPtr bf, Teuchos::FancyOStream &out, bool &success)
   cellsToRefine.insert(0);
   loadedMesh->pRefine(cellsToRefine);
 }
+  
+  TEUCHOS_UNIT_TEST( Mesh, ProjectSolutionOnRefinement )
+  {
+    int spaceDim = 2;
+    bool conformingTraces = true;
+    PoissonFormulation form(spaceDim,conformingTraces);
+    
+    int H1Order = 2;
+    vector<int> elemCounts = {3,2};
+    
+    MeshPtr mesh = MeshFactory::rectilinearMesh(form.bf(), {1.0,2.0}, elemCounts, H1Order);
+
+    SolutionPtr solution = Solution::solution(form.bf(), mesh);
+    mesh->registerSolution(solution);
+    
+    map<int, FunctionPtr> solutionMap;
+    FunctionPtr x = Function::xn();
+    solutionMap[form.phi()->ID()] = x;
+    solutionMap[form.psi()->ID()] = Function::constant({1.0,0.0});
+    solutionMap[form.phi_hat()->ID()] = x;
+    FunctionPtr n = Function::normal();
+    FunctionPtr n_parity = Function::normal() * Function::sideParity();
+    solutionMap[form.psi_n_hat()->ID()] = Function::constant({1.0,0.0}) * n_parity;
+    
+    solution->projectOntoMesh(solutionMap);
+    
+    // sanity check: make sure that the difference *before* refinement is 0
+    double tol = 1e-14;
+    for (auto entry : solutionMap)
+    {
+      int varID = entry.first;
+      FunctionPtr exactFxn = entry.second;
+      VarPtr var = form.bf()->varFactory()->trial(varID);
+      FunctionPtr solnFxn = Function::solution(var, solution, false);
+      double err = (solnFxn - exactFxn)->l2norm(mesh);
+      TEUCHOS_TEST_COMPARE(err, <, tol, out, success);
+      out << "Before refinement, err for variable " << var->name() << ": " << err << endl;
+    }
+    
+    // now, refine uniformly:
+    RefinementStrategy::hRefineUniformly(mesh);
+    
+    for (auto entry : solutionMap)
+    {
+      int varID = entry.first;
+      FunctionPtr exactFxn = entry.second;
+      VarPtr var = form.bf()->varFactory()->trial(varID);
+      FunctionPtr solnFxn = Function::solution(var, solution, false);
+      double err = (solnFxn - exactFxn)->l2norm(mesh);
+      TEUCHOS_TEST_COMPARE(err, <, tol, out, success);
+      out << "After refinement, err for variable " << var->name() << ": " << err << endl;
+    }
+  }
+  
 
 TEUCHOS_UNIT_TEST( Mesh, SaveAndLoadPoissonConforming )
 {
