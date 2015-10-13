@@ -52,7 +52,7 @@ public:
                                      Intrepid::FieldContainer<Scalar> &trialValues, Intrepid::FieldContainer<Scalar> &testValues,
                                      const Intrepid::FieldContainer<double> &points)
   {
-    TEUCHOS_TEST_FOR_EXCEPTION(true, std::invalid_argument, "You must override either some version of applyBilinearFormData!");
+    TEUCHOS_TEST_FOR_EXCEPTION(true, std::invalid_argument, "You must override some version of applyBilinearFormData!");
   }
 
   virtual void applyBilinearFormData(Intrepid::FieldContainer<Scalar> &trialValues, Intrepid::FieldContainer<Scalar> &testValues,
@@ -99,10 +99,6 @@ public:
                                              ElementTypePtr elemType, Intrepid::FieldContainer<double> &cellSideParities,
                                              BasisCachePtr stiffnessBasisCache,
                                              IPPtr ip, BasisCachePtr ipBasisCache);
-  
-  virtual int optimalTestWeights(Intrepid::FieldContainer<Scalar> &optimalTestWeights, Intrepid::FieldContainer<Scalar> &innerProductMatrix,
-                                 ElementTypePtr elemType, Intrepid::FieldContainer<double> &cellSideParities,
-                                 BasisCachePtr stiffnessBasisCache);
 
   void printTrialTestInteractions();
 
