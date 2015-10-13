@@ -150,6 +150,7 @@ bool CurvilinearMeshTests::testCylinderMesh()
     allCells.insert(i);
   }
 
+  bool printToConsole = false;
   double tol = 1e-10;
   cout << setprecision(15);
   // test p-convergence of mesh area
@@ -159,7 +160,7 @@ bool CurvilinearMeshTests::testCylinderMesh()
   {
     double approximateArea = one->integrate(mesh,5);
     double impliedPi = (width * height - approximateArea) / (r*r);
-    if (rank==0)
+    if ((rank==0) && printToConsole)
     {
       cout << "For k=" << i << ", implied value of pi: " << impliedPi;
       cout << " (error " << abs(PI-impliedPi) << ")\n";
@@ -218,7 +219,7 @@ bool CurvilinearMeshTests::testCylinderMesh()
   {
     double approximateArea = one->integrate(mesh);
     double impliedPi = (width * height - approximateArea) / (r*r);
-    if (rank==0)
+    if ((rank==0) && printToConsole)
     {
       cout << "For h-refinement " << i << ", implied value of pi: " << impliedPi;
       cout << " (error " << abs(PI-impliedPi) << ")\n";
@@ -641,12 +642,13 @@ bool CurvilinearMeshTests::testEdgeLength()
   double previousError = 1000;
 
   numPRefinements = 3;
+  bool printToConsole = false;
   for (int i=1; i<=numPRefinements; i++)
   {
     perimeter = oneOnBoundary->integrate(mesh);
     //    cout << "perimeter: " << perimeter << endl;
     double impliedPi = (perimeter - straightEdgePerimeter) / (2 * radius);
-    if (rank==0)
+    if ((rank==0) && printToConsole)
     {
       cout << "For p=" << i << ", implied value of pi: " << impliedPi << endl;
     }
@@ -683,7 +685,7 @@ bool CurvilinearMeshTests::testEdgeLength()
 
     //    cout << "perimeter: " << perimeter << endl;
     double impliedPi = (perimeter - straightEdgePerimeter) / (2 * radius);
-    if (rank==0)
+    if ((rank==0) && printToConsole)
     {
       cout << "For h-refinement " << i << ", implied value of pi: " << impliedPi << endl;
     }
