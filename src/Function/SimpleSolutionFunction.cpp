@@ -10,10 +10,12 @@ using namespace Intrepid;
 using namespace std;
 
 template <typename Scalar>
-SimpleSolutionFunction<Scalar>::SimpleSolutionFunction(VarPtr var, TSolutionPtr<Scalar> soln) : TFunction<Scalar>(var->rank())
+SimpleSolutionFunction<Scalar>::SimpleSolutionFunction(VarPtr var, TSolutionPtr<Scalar> soln,
+                                                       bool weightFluxesBySideParity) : TFunction<Scalar>(var->rank())
 {
   _var = var;
   _soln = soln;
+  _weightFluxesBySideParity = weightFluxesBySideParity;
 }
 
 template <typename Scalar>
@@ -50,7 +52,7 @@ template <typename Scalar>
 void SimpleSolutionFunction<Scalar>::values(Intrepid::FieldContainer<Scalar> &values, BasisCachePtr basisCache)
 {
   bool dontWeightForCubature = false;
-  if (basisCache->mesh().get() != NULL)   // then we assume that the BasisCache is appropriate for solution's mesh...
+  if (basisCache->mesh() != Teuchos::null)   // then we assume that the BasisCache is appropriate for solution's mesh...
   {
     _soln->solutionValues(values, _var->ID(), basisCache, dontWeightForCubature, _var->op());
   }
@@ -103,9 +105,12 @@ void SimpleSolutionFunction<Scalar>::values(Intrepid::FieldContainer<Scalar> &va
       }
     }
   }
-  if (_var->varType()==FLUX)   // weight by sideParity
+  if (_weightFluxesBySideParity) // makes for non-uniquely-valued Functions.
   {
-    this->sideParity()->scalarMultiplyFunctionValues(values, basisCache);
+    if (_var->varType()==FLUX)
+    {
+      Function::sideParity()->scalarMultiplyFunctionValues(values, basisCache);
+    }
   }
 }
 
@@ -118,7 +123,7 @@ TFunctionPtr<Scalar> SimpleSolutionFunction<Scalar>::dx()
   }
   else
   {
-    return TFunction<Scalar>::solution(_var->dx(), _soln);
+    return TFunction<Scalar>::solution(_var->dx(), _soln, _weightFluxesBySideParity);
   }
 }
 
@@ -131,7 +136,7 @@ TFunctionPtr<Scalar> SimpleSolutionFunction<Scalar>::dy()
   }
   else
   {
-    return TFunction<Scalar>::solution(_var->dy(), _soln);
+    return TFunction<Scalar>::solution(_var->dy(), _soln, _weightFluxesBySideParity);
   }
 }
 
@@ -144,7 +149,7 @@ TFunctionPtr<Scalar> SimpleSolutionFunction<Scalar>::dz()
   }
   else
   {
-    return TFunction<Scalar>::solution(_var->dz(), _soln);
+    return TFunction<Scalar>::solution(_var->dz(), _soln, _weightFluxesBySideParity);
   }
 }
 
@@ -157,7 +162,7 @@ TFunctionPtr<Scalar> SimpleSolutionFunction<Scalar>::x()
   }
   else
   {
-    return TFunction<Scalar>::solution(_var->x(), _soln);
+    return TFunction<Scalar>::solution(_var->x(), _soln, _weightFluxesBySideParity);
   }
 }
 
@@ -170,7 +175,7 @@ TFunctionPtr<Scalar> SimpleSolutionFunction<Scalar>::y()
   }
   else
   {
-    return TFunction<Scalar>::solution(_var->y(), _soln);
+    return TFunction<Scalar>::solution(_var->y(), _soln, _weightFluxesBySideParity);
   }
 }
 
@@ -183,7 +188,7 @@ TFunctionPtr<Scalar> SimpleSolutionFunction<Scalar>::z()
   }
   else
   {
-    return TFunction<Scalar>::solution(_var->z(), _soln);
+    return TFunction<Scalar>::solution(_var->z(), _soln, _weightFluxesBySideParity);
   }
 }
 

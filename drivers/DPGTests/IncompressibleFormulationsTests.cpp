@@ -851,7 +851,7 @@ bool IncompressibleFormulationsTests::testVVPStokesFormulationGraphNorm()
 bool IncompressibleFormulationsTests::testVGPNavierStokesFormulationConsistency()
 {
   bool success = true;
-  bool printToConsole = true;
+  bool printToConsole = false;
 
   // consistency: check that solving using the BF, RHS, BCs, etc. in the Formulation
   //              gives the ExactSolution specified by the Formulation
@@ -1207,17 +1207,13 @@ bool IncompressibleFormulationsTests::testVGPNavierStokesFormulationCorrectness(
           int varID = varIt->first;
           VarPtr var = vgpVarFactory->trial(varID);
           FunctionPtr exactSoln = varIt->second;
-          FunctionPtr projectedSoln = Function::solution(var, backgroundFlow);
-
-          if (var->varType() == FLUX)   // then there will be an extra parity factor from Function::solution()
-          {
-            projectedSoln = projectedSoln * Function::sideParity();
-          }
+          FunctionPtr projectedSoln = Function::solution(var, backgroundFlow, false);
 
           double tol = 1e-13;
           if (!functionsAgree(exactSoln - projectedSoln, zero, mesh, tol) )
           {
             cout << "Projection of exact polynomial function failed for var " << var->displayString() << " != " << exactSoln->displayString() << endl;
+            success = false;
           }
           else
           {
@@ -1734,8 +1730,8 @@ bool IncompressibleFormulationsTests::testVGPNavierStokesFormulationKovasnayConv
 
           FunctionPtr u1hat_incr = Function::solution(u1hat_vgp, solnIncrement);
           FunctionPtr u2hat_incr = Function::solution(u2hat_vgp, solnIncrement);
-          FunctionPtr t1n_incr = Function::solution(t1n_vgp, solnIncrement);
-          FunctionPtr t2n_incr = Function::solution(t2n_vgp, solnIncrement);
+          FunctionPtr t1n_incr = Function::solution(t1n_vgp, solnIncrement, false); // false: don't multiply solution value by side parity
+          FunctionPtr t2n_incr = Function::solution(t2n_vgp, solnIncrement, false);
 
           FunctionPtr l2_incr = u1_incr * u1_incr + u2_incr * u2_incr + p_incr * p_incr;
 
