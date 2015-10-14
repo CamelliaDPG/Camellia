@@ -34,16 +34,15 @@ class LocalDofMapper   // maps a whole trial ordering
   int _varIDToMap;
 
   void filterData(const vector<int> dofIndices, const Intrepid::FieldContainer<double> &data, Intrepid::FieldContainer<double> &filteredData);
-  void addSubBasisMapVectorContribution(int varID, int sideIndex, BasisMap basisMap, const Intrepid::FieldContainer<double> &localData, Intrepid::FieldContainer<double> &globalData, bool fittableGlobalDofsOnly);
-  //  void addSubBasisMapMatrixContribution(int varID, int sideOrdinal, BasisMap basisMap, const Intrepid::FieldContainer<double> &localData, Intrepid::FieldContainer<double> &globalData);
-  void addReverseSubBasisMapVectorContribution(int varID, int sideOrdinal, BasisMap basisMap, const Intrepid::FieldContainer<double> &globalData, Intrepid::FieldContainer<double> &localData);
-  //  void addReverseSubBasisMapMatrixContribution(int varID, int sideOrdinal, BasisMap basisMap, const Intrepid::FieldContainer<double> &globalData, Intrepid::FieldContainer<double> &localData);
+  void addSubBasisMapVectorContribution(int varID, int sideIndex, BasisMap &basisMap, const Intrepid::FieldContainer<double> &localData, Intrepid::FieldContainer<double> &globalData, bool fittableGlobalDofsOnly);
+  void addReverseSubBasisMapVectorContribution(int varID, int sideOrdinal, BasisMap &basisMap, const Intrepid::FieldContainer<double> &globalData, Intrepid::FieldContainer<double> &localData);
   Intrepid::FieldContainer<double> mapLocalDataMatrix(const Intrepid::FieldContainer<double> &localData, bool fittableGlobalDofsOnly);
   
   void mapLocalDataVector(const Intrepid::FieldContainer<double> &localData, bool fittableGlobalDofsOnly,
                           Intrepid::FieldContainer<double> &mappedDataVector);
 
   Intrepid::FieldContainer<double> _localCoefficientsFitMatrix; // used for fitLocalCoefficients
+  vector<GlobalIndexType> _globalIndices;
 
   // the following is used by LocalDofMappers that have varIDToMap = -1 when fitLocalCoefficients() is called
   map<pair<int,int>, Teuchos::RCP<LocalDofMapper>> _localDofMapperForVarIDAndSide;
@@ -63,7 +62,7 @@ public:
   Intrepid::FieldContainer<double> mapGlobalCoefficients(const Intrepid::FieldContainer<double> &globalCoefficients);
 
   vector<GlobalIndexType> fittableGlobalIndices();
-  vector<GlobalIndexType> globalIndices();
+  const vector<GlobalIndexType> &globalIndices();
   set<GlobalIndexType> globalIndicesForSubcell(int varID, unsigned d, unsigned subcord);
 
   void printMappingReport();

@@ -22,11 +22,22 @@ class SubBasisDofPermutationMapper : public SubBasisDofMapper
 public:
   SubBasisDofPermutationMapper(const set<unsigned> &basisDofOrdinalFilter, const vector<GlobalIndexType> &globalDofOrdinals, bool negate=false);
   const set<unsigned> &basisDofOrdinalFilter();
+  
+  //! returns true if the sub basis map is a simple permutation, negated
+  bool isNegatedPermutation();
+  
+  //! returns true if the sub basis map is a simple permutation -- always true for SubBasisDofPermutationMapper
+  bool isPermutation();
+  
   Intrepid::FieldContainer<double> mapData(bool transposeConstraint, Intrepid::FieldContainer<double> &localData, bool applyOnLeftOnly = false);
+  
+  void mapDataIntoGlobalContainer(const Intrepid::FieldContainer<double> &allLocalData, const vector<int> &basisOrdinalsInLocalData,
+                                  const map<GlobalIndexType, unsigned> &globalIndexToOrdinal,
+                                  bool fittableDofsOnly, const set<GlobalIndexType> &fittableDofIndices, Intrepid::FieldContainer<double> &globalData);
   void mapDataIntoGlobalContainer(const Intrepid::FieldContainer<double> &wholeBasisData, const map<GlobalIndexType, unsigned> &globalIndexToOrdinal,
                                   bool fittableDofsOnly, const set<GlobalIndexType> &fittableDofIndices, Intrepid::FieldContainer<double> &globalData);
 
-  std::vector<GlobalIndexType> mappedGlobalDofOrdinals();
+  const std::vector<GlobalIndexType> &mappedGlobalDofOrdinals();
   std::set<GlobalIndexType> mappedGlobalDofOrdinalsForBasisOrdinals(std::set<unsigned> &basisDofOrdinals);
   
   Intrepid::FieldContainer<double> getConstraintMatrix();

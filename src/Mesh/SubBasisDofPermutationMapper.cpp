@@ -92,6 +92,7 @@ FieldContainer<double> SubBasisDofPermutationMapper::mapData(bool transposeConst
     return dataPermuted;
   }
 }
+
 void SubBasisDofPermutationMapper::mapDataIntoGlobalContainer(const FieldContainer<double> &wholeBasisData, const map<GlobalIndexType, unsigned int> &globalIndexToOrdinal,
     bool fittableDofsOnly, const set<GlobalIndexType> &fittableDofIndices, FieldContainer<double> &globalData)
 {
@@ -109,6 +110,25 @@ void SubBasisDofPermutationMapper::mapDataIntoGlobalContainer(const FieldContain
   }
 }
 
+void SubBasisDofPermutationMapper::mapDataIntoGlobalContainer(const Intrepid::FieldContainer<double> &allLocalData, const vector<int> &basisOrdinalsInLocalData,
+                                                              const map<GlobalIndexType, unsigned> &globalIndexToOrdinal,
+                                                              bool fittableDofsOnly, const set<GlobalIndexType> &fittableDofIndices,
+                                                              Intrepid::FieldContainer<double> &globalData)
+{
+  // like calling mapData, above, with transposeConstraintMatrix = true
+  
+  const set<unsigned>* basisOrdinalFilter = &this->basisDofOrdinalFilter();
+  vector<unsigned> dofIndices(basisOrdinalFilter->begin(),basisOrdinalFilter->end());
+  
+  for (int sbGlobalOrdinal_i=0; sbGlobalOrdinal_i<_globalDofOrdinals.size(); sbGlobalOrdinal_i++)
+  {
+    GlobalIndexType globalIndex_i = _globalDofOrdinals[sbGlobalOrdinal_i];
+    if (fittableDofsOnly && (fittableDofIndices.find(globalIndex_i) == fittableDofIndices.end())) continue; // skip this one
+    unsigned globalOrdinal_i = globalIndexToOrdinal.find(globalIndex_i)->second;
+    globalData[globalOrdinal_i] += allLocalData[basisOrdinalsInLocalData[dofIndices[sbGlobalOrdinal_i]]];
+  }
+}
+
 FieldContainer<double> SubBasisDofPermutationMapper::getConstraintMatrix()
 {
   // identity (permutation comes by virtue of ordering in globalDofOrdinals)
@@ -123,7 +143,17 @@ FieldContainer<double> SubBasisDofPermutationMapper::getConstraintMatrix()
   return matrix;
 }
 
-vector<GlobalIndexType> SubBasisDofPermutationMapper::mappedGlobalDofOrdinals()
+bool SubBasisDofPermutationMapper::isNegatedPermutation()
+{
+  return _negate;
+}
+
+bool SubBasisDofPermutationMapper::isPermutation()
+{
+  return true;
+}
+
+const vector<GlobalIndexType> & SubBasisDofPermutationMapper::mappedGlobalDofOrdinals()
 {
   return _globalDofOrdinals;
 }
