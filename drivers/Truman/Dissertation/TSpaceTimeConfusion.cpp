@@ -130,9 +130,9 @@ int main(int argc, char *argv[])
     // }
   // FunctionPtr u_exact = u_steady + 4*explt*(explambda1x-explambda2x)*Function::yn(1);
 
+  FunctionPtr u_exact = u_steady + 4*explt*(explambda1x-explambda2x);
   // FunctionPtr u_exact = u_steady + 4*explt*(explambda1x-explambda2x);
-  // FunctionPtr u_exact = u_steady + 4*explt*(explambda1x-explambda2x);
-  FunctionPtr u_exact = 4*explt*(explambda1x-explambda2x);
+  // FunctionPtr u_exact = 4*explt*(explambda1x-explambda2x);
   // FunctionPtr u_exact = Function::xn(2);
   FunctionPtr sigma_exact = epsilon*u_exact->grad();
 
