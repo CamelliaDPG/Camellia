@@ -50,7 +50,7 @@ class SpaceTimeConvectionDiffusionFormulation
 
   // ! initialize the Solution object(s) using the provided MeshTopology
   void initializeSolution(MeshTopologyPtr meshTopo, int fieldPolyOrder, int delta_k, string norm,
-                          TLinearTermPtr<double> forcingTerm, std::string fileToLoadPrefix);
+                          FunctionPtr forcingFunction, std::string fileToLoadPrefix);
 public:
   // SpaceTimeConvectionDiffusionFormulation(int spaceDim, double epsilon, TFunctionPtr<double> beta, bool useConformingTraces = false);
   SpaceTimeConvectionDiffusionFormulation(Teuchos::ParameterList &parameters, TFunctionPtr<double> beta);
@@ -66,11 +66,11 @@ public:
 
   // ! initialize the Solution object(s) using the provided MeshTopology
   void initializeSolution(MeshTopologyPtr meshTopo, int fieldPolyOrder, int delta_k = 1, string norm = "Graph",
-                          TLinearTermPtr<double> forcingTerm = Teuchos::null);
+                          FunctionPtr forcingFunction = Teuchos::null);
 
   // ! initialize the Solution object(s) from file
   void initializeSolution(std::string filePrefix, int fieldPolyOrder, int delta_k = 1, string norm = "Graph",
-                          TLinearTermPtr<double> forcingTerm = Teuchos::null);
+                          FunctionPtr forcingFunction = Teuchos::null);
 
   // ! Loads the mesh and solution from disk, if they were previously saved using save().  In the present
   // ! implementation, assumes that the constructor arguments provided to SpaceTimeConvectionDiffusionFormulation were the same
@@ -117,6 +117,7 @@ public:
   VarPtr tau();
 
   // static TFunctionPtr<double> forcingFunction(int spaceDim, double epsilon, TFunctionPtr<double> u);
+  FunctionPtr forcingFunction(FunctionPtr u_exact);
 };
 }
 

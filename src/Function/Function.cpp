@@ -1172,12 +1172,12 @@ Scalar TFunction<Scalar>::integrate(MeshPtr mesh, int cubatureDegreeEnrichment, 
   Scalar integral = 0;
 
   set<GlobalIndexType> cellIDs = mesh->cellIDsInPartition();
-  for (set<GlobalIndexType>::iterator cellIDIt = cellIDs.begin(); cellIDIt != cellIDs.end(); cellIDIt++)
+  for (GlobalIndexType cellID : cellIDs)
   {
-    BasisCachePtr basisCache = BasisCache::basisCacheForCell(mesh, *cellIDIt, testVsTest, cubatureDegreeEnrichment);
+    BasisCachePtr basisCache = BasisCache::basisCacheForCell(mesh, cellID, testVsTest, cubatureDegreeEnrichment);
     if ( this->boundaryValueOnly() )
     {
-      ElementTypePtr elemType = mesh->getElementType(*cellIDIt);
+      ElementTypePtr elemType = mesh->getElementType(cellID);
       int numSides = elemType->cellTopoPtr->getSideCount();
 
       for (int sideOrdinal=0; sideOrdinal<numSides; sideOrdinal++)
@@ -1623,11 +1623,19 @@ TFunctionPtr<Scalar> TFunction<Scalar>::restrictToCellBoundary(TFunctionPtr<Scal
 {
   return Teuchos::rcp( new CellBoundaryRestrictedFunction<Scalar>(f) );
 }
-
+  
 template <typename Scalar>
 TFunctionPtr<Scalar> TFunction<Scalar>::solution(VarPtr var, TSolutionPtr<Scalar> soln)
 {
-  return Teuchos::rcp( new SimpleSolutionFunction<Scalar>(var, soln) );
+  TEUCHOS_TEST_FOR_EXCEPTION(var->varType() == FLUX, std::invalid_argument, "For flux variables, must provide a weightFluxesBySideParity argument");
+  bool weightFluxesBySideParity = false; // inconsequential for non-fluxes
+  return Teuchos::rcp( new SimpleSolutionFunction<Scalar>(var, soln, weightFluxesBySideParity) );
+}
+
+template <typename Scalar>
+TFunctionPtr<Scalar> TFunction<Scalar>::solution(VarPtr var, TSolutionPtr<Scalar> soln, bool weightFluxesBySideParity)
+{
+  return Teuchos::rcp( new SimpleSolutionFunction<Scalar>(var, soln, weightFluxesBySideParity) );
 }
 
 template <typename Scalar>

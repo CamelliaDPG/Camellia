@@ -788,8 +788,8 @@ bool GDAMinimumRuleTests::subTestCompatibleSolutionsAgree(int horizontalCells, i
       VarPtr var = vf->trial(varID);
       string varName = var->name();
 
-      FunctionPtr maxRuleSolnFxn = Function::solution(var, maxRuleSoln); //Teuchos::rcp( new PreviousSolutionFunction( maxRuleSoln, var ));
-      FunctionPtr minRuleSolnFxn = Function::solution(var, minRuleSoln); //Teuchos::rcp( new PreviousSolutionFunction( minRuleSoln, var ));
+      FunctionPtr maxRuleSolnFxn = Function::solution(var, maxRuleSoln, false); //Teuchos::rcp( new PreviousSolutionFunction( maxRuleSoln, var ));
+      FunctionPtr minRuleSolnFxn = Function::solution(var, minRuleSoln, false); //Teuchos::rcp( new PreviousSolutionFunction( minRuleSoln, var ));
 
       //    ((PreviousSolutionFunction*) maxRuleSolnFxn.get())->setOverrideMeshCheck(true);
       //    ((PreviousSolutionFunction*) minRuleSolnFxn.get())->setOverrideMeshCheck(true);
@@ -1154,7 +1154,7 @@ bool GDAMinimumRuleTests::testHangingNodePoisson(bool useQuads)
 
 //  GnuPlotUtil::writeComputationalMeshSkeleton("/tmp/hangingNodeTestMesh", mesh, true); // true: label cells
 
-  double tol = 6e-12; // relaxed for vesta, then relaxed again for BLAS integration
+  double tol = 1e-10; // relaxed for vesta, then relaxed again for BLAS integration, and again for some other change
   double phi_err_l2 = phi_err->l2norm(mesh);
   if (phi_err_l2 > tol)
   {
@@ -1510,10 +1510,10 @@ bool GDAMinimumRuleTests::testMultiCellMesh()
       soln->solve();
 
       VarPtr phi = poissonForm.phi();
-      VarPtr phi_hat = poissonForm.phi_hat();
+//      VarPtr phi_hat = poissonForm.phi_hat();
 
       FunctionPtr phi_soln = Function::solution(phi, soln);
-      FunctionPtr phi_hat_soln = Function::solution(phi_hat, soln);
+//      FunctionPtr phi_hat_soln = Function::solution(phi_hat, soln, false);
 
       double tol = 1e-12;
       double err = (phi_soln-phi_exact)->l2norm(mesh);

@@ -646,73 +646,80 @@ namespace Camellia {
       TEUCHOS_TEST_FOR_EXCEPTION(true, std::invalid_argument, "x and b's first dimension must match the dimension of A!");
     }
     
-    int N = A.dimension(0);
-    int nRHS = b.dimension(1); // M
-    
-    int numCols = N;
-    int numRows = N;
-    int rowStride = numCols;
-    
-    Teuchos::DataAccess dataAccessFieldContainer;
-    if (!allowOverwriteOfA)
+    // by wrapping the below in braces, we allow the things we allocate there to go out of scope
+    // before the transpose of the x FieldContainer, which as presently implemented copies x.  This can
+    // take a sizable chunk of memory for higher-order computations, so being able to reclaim the memory
+    // allocated for bSDM--which is the same size as x--actually guarantees that we won't run out of memory
+    // during the transposition (we would have run out when allocating bSDM if we were that constrained).
     {
-      // we want one copy to be made, into the SDM we actually use in QR solve
-      if (!useATranspose)
+      int N = A.dimension(0);
+      int nRHS = b.dimension(1); // M
+      
+      int numCols = N;
+      int numRows = N;
+      int rowStride = numCols;
+      
+      Teuchos::DataAccess dataAccessFieldContainer;
+      if (!allowOverwriteOfA)
       {
-        dataAccessFieldContainer = Teuchos::View; // will copy during transpose (creation of ASDM)
+        // we want one copy to be made, into the SDM we actually use in QR solve
+        if (!useATranspose)
+        {
+          dataAccessFieldContainer = Teuchos::View; // will copy during transpose (creation of ASDM)
+        }
+        else
+        {
+          dataAccessFieldContainer = Teuchos::Copy; // won't compute transpose: copy now
+        }
       }
       else
       {
-        dataAccessFieldContainer = Teuchos::Copy; // won't compute transpose: copy now
+        dataAccessFieldContainer = Teuchos::View;
       }
-    }
-    else
-    {
-      dataAccessFieldContainer = Teuchos::View;
-    }
-    
-    Teuchos::SerialDenseMatrix<int, double> ATranspose(dataAccessFieldContainer, &A(0,0), rowStride,
-                                                       numCols, numRows); // this is the transpose of A because SDM is column-major
-    Teuchos::RCP<Teuchos::SerialDenseMatrix<int, double>> ASDM;
-    if (!useATranspose) // avoid transpose computation when useATranspose = true
-      ASDM = Teuchos::rcp(new Teuchos::SerialDenseMatrix<int, double>( ATranspose, Teuchos::TRANS));
-    
-    Teuchos::SerialDenseMatrix<int, double> bTranspose( Teuchos::View, &b(0,0), nRHS, nRHS, N);
-    Teuchos::SerialDenseMatrix<int, double> bSDM( bTranspose, Teuchos::TRANS);  // transpose the RHS matrix
-    
-    // transpose x since SDM is transposed relative to FC:
-    x.resize(nRHS,N);
-    Teuchos::SerialDenseMatrix<int, double> xSDM( Teuchos::View, &x(0,0), N, N, nRHS);
-    
-    Teuchos::SerialQRDenseSolver<int,double> qrSolver;
-    
-    int info = 0;
-    if (useATranspose)
-    {
-      qrSolver.setMatrix( Teuchos::rcp( &ATranspose, false ) );
-    }
-    else
-    {
-      qrSolver.setMatrix( ASDM );
-    }
-    qrSolver.setVectors( Teuchos::rcp( &xSDM, false ), Teuchos::rcp( &bSDM, false ) );
-    info = qrSolver.factor();
-    if (info != 0)
-    {
-      std::cout << "Teuchos::SerialQRDenseSolver::factor() returned : " << info << std::endl;
-      return info;
-    }
-    
-    info = qrSolver.solve();
-    if (info != 0)
-    {
-      std::cout << "Teuchos::SerialQRDenseSolver::solve() returned : " << info << std::endl;
-      writeMatrixToMatlabFile("/tmp/A.dat", A);
-      writeMatrixToMatlabFile("/tmp/b.dat", b);
-      std::cout << "wrote matrices to /tmp/A.dat, /tmp/b.dat.\n";
-      //      std::cout << "A:\n" << A;
-      //      std::cout << "b:\n" << b;
-      return info;
+      
+      Teuchos::SerialDenseMatrix<int, double> ATranspose(dataAccessFieldContainer, &A(0,0), rowStride,
+                                                         numCols, numRows); // this is the transpose of A because SDM is column-major
+      Teuchos::RCP<Teuchos::SerialDenseMatrix<int, double>> ASDM;
+      if (!useATranspose) // avoid transpose computation when useATranspose = true
+        ASDM = Teuchos::rcp(new Teuchos::SerialDenseMatrix<int, double>( ATranspose, Teuchos::TRANS));
+      
+      Teuchos::SerialDenseMatrix<int, double> bTranspose( Teuchos::View, &b(0,0), nRHS, nRHS, N);
+      Teuchos::SerialDenseMatrix<int, double> bSDM( bTranspose, Teuchos::TRANS);  // transpose the RHS matrix
+      
+      // transpose x since SDM is transposed relative to FC:
+      x.resize(nRHS,N);
+      Teuchos::SerialDenseMatrix<int, double> xSDM( Teuchos::View, &x(0,0), N, N, nRHS);
+      
+      Teuchos::SerialQRDenseSolver<int,double> qrSolver;
+      
+      int info = 0;
+      if (useATranspose)
+      {
+        qrSolver.setMatrix( Teuchos::rcp( &ATranspose, false ) );
+      }
+      else
+      {
+        qrSolver.setMatrix( ASDM );
+      }
+      qrSolver.setVectors( Teuchos::rcp( &xSDM, false ), Teuchos::rcp( &bSDM, false ) );
+      info = qrSolver.factor();
+      if (info != 0)
+      {
+        std::cout << "Teuchos::SerialQRDenseSolver::factor() returned : " << info << std::endl;
+        return info;
+      }
+      
+      info = qrSolver.solve();
+      if (info != 0)
+      {
+        std::cout << "Teuchos::SerialQRDenseSolver::solve() returned : " << info << std::endl;
+        writeMatrixToMatlabFile("/tmp/A.dat", A);
+        writeMatrixToMatlabFile("/tmp/b.dat", b);
+        std::cout << "wrote matrices to /tmp/A.dat, /tmp/b.dat.\n";
+        //      std::cout << "A:\n" << A;
+        //      std::cout << "b:\n" << b;
+        return info;
+      }
     }
   
     // the SDM computation for x has put things in there transposed relative to caller's expectations; transpose
@@ -720,9 +727,9 @@ namespace Camellia {
     
     return 0;
   }
-  
+
   int SerialDenseWrapper::solveSPDSystemMultipleRHS(Intrepid::FieldContainer<double> &x, Intrepid::FieldContainer<double> &A_SPD,
-                                                    Intrepid::FieldContainer<double> &b)
+                                                    Intrepid::FieldContainer<double> &b, bool allowOverwriteOfA)
   {
     // solves Ax = b, where
     // A = (N,N)
@@ -734,9 +741,12 @@ namespace Camellia {
     
     int result = 0;
     
-    Epetra_SerialSymDenseMatrix AMatrix(::Copy, &A_SPD(0,0),
+    Epetra_DataAccess A_dataAccess = allowOverwriteOfA ? ::View : ::Copy;
+
+    Epetra_SerialSymDenseMatrix AMatrix(A_dataAccess, &A_SPD(0,0),
                                         N, // stride -- fc stores in row-major order (a.o.t. SDM)
                                         N);
+
     
     transposeMatrix(b); // a bit lame that we need to do this...
     Epetra_SerialDenseMatrix bVectors = convertFCToSDM(b);
@@ -779,6 +789,68 @@ namespace Camellia {
     
     return result;
   }
+  
+//  int SerialDenseWrapper::solveSPDSystemMultipleRHS(Intrepid::FieldContainer<double> &x, Intrepid::FieldContainer<double> &A_SPD,
+//                                                    Intrepid::FieldContainer<double> &b, bool allowOverwriteOfA)
+//  {
+//    // solves Ax = b, where
+//    // A = (N,N)
+//    // x, b = (N)
+//    Epetra_SerialSpdDenseSolver solver;
+//    
+//    x.resize(x.dimension(1),x.dimension(0)); // transpose without moving data (we'll overwrite) -- we'll transpose back (with data movement) below
+//    
+//    int N = A_SPD.dimension(0);
+//    int nRHS = b.dimension(1);
+//    
+//    int result = 0;
+//    
+//    Epetra_DataAccess A_dataAccess = allowOverwriteOfA ? ::View : ::Copy;
+//    
+//    Epetra_SerialSymDenseMatrix AMatrix(A_dataAccess, &A_SPD(0,0),
+//                                        N, // stride -- fc stores in row-major order (a.o.t. SDM)
+//                                        N);
+//
+//    transposeMatrix(b); // a bit lame that we need to do this...
+//    Epetra_SerialDenseMatrix bVectors = convertFCToSDM(b);
+//    transposeMatrix(b); // restore data to be nice to caller (again, a bit lame)
+//    
+//    Epetra_SerialDenseMatrix xTranspose(::View, &x(0,0), N, N, nRHS);
+//    
+//    solver.SetMatrix(AMatrix);
+//    int info = solver.SetVectors(xTranspose,bVectors);
+//    if (info!=0)
+//    {
+//      result = info;
+//      std::cout << "solveSPDSystemMultipleRHS: failed to SetVectors with error " << info << std::endl;
+//      return result;
+//    }
+//    
+//    if ( solver.ShouldEquilibrate() )
+//    {
+//      solver.FactorWithEquilibration(true);
+//      solver.SolveToRefinedSolution(false); // false: don't use iterative refinements...
+//    }
+//    info = solver.Factor();
+//    if (info != 0)
+//    {
+//      result = info;
+//      std::cout << "solveSPDSystemMultipleRHS: Factor failed with code " << result << std::endl;
+//      return result;
+//    }
+//    
+//    info = solver.Solve();
+//    
+//    if (info != 0)
+//    {
+//      std::cout << "BilinearForm::optimalTestWeights: Solve FAILED with error: " << info << std::endl;
+//      result = info;
+//    }
+//    
+//    transposeMatrix(x); // perhaps we should change the expected inputs so we don't have to do this?
+//    
+//    return result;
+//  }
   
   void SerialDenseWrapper::transposeMatrix(Intrepid::FieldContainer<double> &A)
   {

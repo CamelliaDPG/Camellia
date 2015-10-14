@@ -176,7 +176,11 @@ public:
   static TFunctionPtr<double> normalSpaceTime();
   static TFunctionPtr<Scalar> null();
   static TFunctionPtr<double> sideParity();
+
+  // ! Will throw an exception if var is a flux variable (should call the one with the boolean weightFluxesBySideParity argument in this case)
   static TFunctionPtr<Scalar> solution(VarPtr var, TSolutionPtr<Scalar> soln);
+  // ! When weightFluxesBySideParity = true, the solution function will be non-uniquely-valued
+  static TFunctionPtr<Scalar> solution(VarPtr var, TSolutionPtr<Scalar> soln, bool weightFluxesBySideParity);
   static TFunctionPtr<double> zero(int rank=0);
   static TFunctionPtr<Scalar> restrictToCellBoundary(TFunctionPtr<Scalar> f);
 

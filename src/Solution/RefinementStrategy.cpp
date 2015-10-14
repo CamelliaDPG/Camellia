@@ -302,15 +302,17 @@ void TRefinementStrategy<Scalar>::hRefineCells(MeshPtr mesh, const vector<Global
 template <typename Scalar>
 void TRefinementStrategy<Scalar>::hRefineUniformly(MeshPtr mesh)
 {
-  vector<GlobalIndexType> cellsToRefine;
-  vector< Teuchos::RCP< Element > > activeElements = mesh->activeElements();
-  for (vector< Teuchos::RCP< Element > >::iterator activeElemIt = activeElements.begin();
-       activeElemIt != activeElements.end(); activeElemIt++)
-  {
-    Teuchos::RCP< Element > current_element = *(activeElemIt);
-    cellsToRefine.push_back(current_element->cellID());
-  }
-  hRefineCells(mesh, cellsToRefine);
+  set<GlobalIndexType> cellsToRefine = mesh->getTopology()->getActiveCellIndices();
+//  vector< Teuchos::RCP< Element > > activeElements = mesh->activeElements();
+//  for (vector< Teuchos::RCP< Element > >::iterator activeElemIt = activeElements.begin();
+//       activeElemIt != activeElements.end(); activeElemIt++)
+//  {
+//    Teuchos::RCP< Element > current_element = *(activeElemIt);
+//    cellsToRefine.push_back(current_element->cellID());
+//  }
+  vector<GlobalIndexType> cellsToRefineVector(cellsToRefine.begin(),cellsToRefine.end());
+  hRefineCells(mesh, cellsToRefineVector);
+  mesh->repartitionAndRebuild();
 }
 
 template <typename Scalar>

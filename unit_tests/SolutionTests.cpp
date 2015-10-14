@@ -630,6 +630,47 @@ TEUCHOS_UNIT_TEST( Solution, ProjectFluxOnOneElementTensorMesh1D )
   testProjectTraceOnTensorMesh(CellTopology::line(), H1Order, f, FLUX, out, success);
 }
 
+  TEUCHOS_UNIT_TEST( Solution, ProjectFluxOnTwoElements2D )
+  {
+    int spaceDim = 2;
+    bool conformingTraces = true;
+    PoissonFormulation form(spaceDim,conformingTraces);
+    
+    int H1Order = 1;
+    vector<int> elemCounts = {2,1};
+    
+    MeshPtr mesh = MeshFactory::rectilinearMesh(form.bf(), {2.0,1.0}, elemCounts, H1Order);
+    
+    SolutionPtr solution = Solution::solution(form.bf(), mesh);
+    
+    map<int, FunctionPtr> solutionMap;
+    FunctionPtr n = Function::normal();
+    FunctionPtr n_parity = Function::normal() * Function::sideParity();
+    FunctionPtr exactFxn = n_parity->x();
+    VarPtr psi_n_hat = form.psi_n_hat();
+    solutionMap[psi_n_hat->ID()] = exactFxn;
+    
+    solution->projectOntoMesh(solutionMap);
+    
+    double tol = 1e-14;
+    FunctionPtr solnFxn = Function::solution(psi_n_hat, solution, false);
+    
+    double err = (solnFxn - exactFxn)->l2norm(mesh);
+    TEUCHOS_TEST_COMPARE(err, <, tol, out, success);
+    
+    if (!success)
+    {
+      set<GlobalIndexType> cellIDs = mesh->getTopology()->getActiveCellIndices();
+      for (GlobalIndexType cellID : cellIDs)
+      {
+        FieldContainer<double> coefficients;
+        int sideOrdinal = 3;
+        solution->solnCoeffsForCellID(coefficients, cellID, psi_n_hat->ID(), sideOrdinal);
+        out << "coefficients for side ordinal 3: \n" << coefficients;
+      }
+    }
+  }
+  
 TEUCHOS_UNIT_TEST( Solution, ProjectOnTensorMesh1D )
 {
   int tensorialDegree = 1;
@@ -713,16 +754,8 @@ TEUCHOS_UNIT_TEST( Solution, ProjectOnTensorMesh1D )
     int trialID = entryIt->first;
     VarPtr trialVar = varFactory->trial(trialID);
     FunctionPtr f_expected = entryIt->second;
-    FunctionPtr f_actual = Function::solution(trialVar, spaceTimeSolution);
-    if (trialVar->varType() == FLUX)
-    {
-      // then Function::solution() will have included a parity weight, basically on the idea that we're also multiplying by normals
-      // in our usage of the solution data.  (It may be that this is not the best way to do this.)
-
-      // For this test, though, we want to reverse that:
-      f_actual = parity * f_actual;
-    }
-
+    FunctionPtr f_actual = Function::solution(trialVar, spaceTimeSolution, false);
+    
     int cubDegreeEnrichment = 0;
     bool spatialSidesOnly = false;
 
@@ -876,16 +909,7 @@ TEUCHOS_UNIT_TEST( Solution, ProjectOnTensorMesh2D_Slow )
     int trialID = entryIt->first;
     VarPtr trialVar = varFactory->trial(trialID);
     FunctionPtr f_expected = entryIt->second;
-    FunctionPtr f_actual = Function::solution(trialVar, spaceTimeSolution);
-
-    if (trialVar->varType() == FLUX)
-    {
-      // then Function::solution() will have included a parity weight, basically on the idea that we're also multiplying by normals
-      // in our usage of the solution data.  (It may be that this is not the best way to do this.)
-
-      // For this test, though, we want to reverse that:
-      f_actual = parity * f_actual;
-    }
+    FunctionPtr f_actual = Function::solution(trialVar, spaceTimeSolution, false);
 
     double err_L2 = (f_actual - f_expected)->l2norm(spaceTimeMesh);
     TEST_COMPARE(err_L2, <, tol);
@@ -1006,16 +1030,7 @@ TEUCHOS_UNIT_TEST( Solution, ProjectOnTensorMesh3D_Slow )
     int trialID = entryIt->first;
     VarPtr trialVar = varFactory->trial(trialID);
     FunctionPtr f_expected = entryIt->second;
-    FunctionPtr f_actual = Function::solution(trialVar, spaceTimeSolution);
-
-    if (trialVar->varType() == FLUX)
-    {
-      // then Function::solution() will have included a parity weight, basically on the idea that we're also multiplying by normals
-      // in our usage of the solution data.  (It may be that this is not the best way to do this.)
-
-      // For this test, though, we want to reverse that:
-      f_actual = parity * f_actual;
-    }
+    FunctionPtr f_actual = Function::solution(trialVar, spaceTimeSolution, false);
 
     double err_L2 = (f_actual - f_expected)->l2norm(spaceTimeMesh);
     TEST_COMPARE(err_L2, <, tol);

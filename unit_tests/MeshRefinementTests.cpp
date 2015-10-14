@@ -128,7 +128,7 @@ TEUCHOS_UNIT_TEST( MeshRefinement, TraceTermProjection )
   FunctionPtr psi_n_exact = psi_n->termTraced()->evaluate(psiMap);
 
   FunctionPtr psi_soln = Function::solution(psi, solution);
-  FunctionPtr psi_n_soln = Function::solution(psi_n, solution); // includes (correction for) parity weighting
+  FunctionPtr psi_n_soln = Function::solution(psi_n, solution, false); // false: don't weight fluxes by parity
   FunctionPtr phi_hat_soln = Function::solution(phi_hat, solution);
 
   FunctionPtr psi_err = psi_exact - psi_soln;

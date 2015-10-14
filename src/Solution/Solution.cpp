@@ -2243,102 +2243,6 @@ void TSolution<Scalar>::solutionValues(Intrepid::FieldContainer<Scalar> &values,
     }
   }
 }
-/*
-   template <typename Scalar>
- double TSolution<Scalar>::totalRHSNorm(){
- vector< Teuchos::RCP< Element > > activeElements = _mesh->activeElements();
- vector< Teuchos::RCP< Element > >::iterator activeElemIt;
-
- map<int,double> rhsNormMap;
- rhsNorm(rhsNormMap);
- double totalNorm = 0.0;
- for (activeElemIt = activeElements.begin();activeElemIt != activeElements.end(); activeElemIt++){
- Teuchos::RCP< Element > current_element = *(activeElemIt);
- totalNorm += rhsNormMap[current_element->cellID()];
- }
- return totalNorm;
- }
-
-
- template <typename Scalar>
- void TSolution<Scalar>::rhsNorm(map<int,double> &rhsNormMap){
- int numProcs=1;
- int rank=0;
-
- #ifdef HAVE_MPI
- rank     = Teuchos::GlobalMPISession::getRank();
- numProcs = Teuchos::GlobalMPISession::getNProc();
- Epetra_MpiComm Comm(MPI_COMM_WORLD);
- //cout << "rank: " << rank << " of " << numProcs << endl;
- #else
- Epetra_SerialComm Comm;
- #endif
-
- int numActiveElements = _mesh->activeElements().size();
-
- computeErrorRepresentation();
-
- // initialize error array to -1 (cannot have negative index...)
- int localCellIDArray[numActiveElements];
- double localNormArray[numActiveElements];
- for (int globalCellIndex=0;globalCellIndex<numActiveElements;globalCellIndex++){
- localCellIDArray[globalCellIndex] = -1;
- localNormArray[globalCellIndex] = -1.0;
- }
-
- vector<ElementTypePtr> elemTypes = _mesh->elementTypes(rank);
- vector<ElementTypePtr>::iterator elemTypeIt;
- int cellIndStart = 0;
- for (elemTypeIt = elemTypes.begin(); elemTypeIt != elemTypes.end(); elemTypeIt++) {
- ElementTypePtr elemTypePtr = *(elemTypeIt);
-
- vector< Teuchos::RCP< Element > > elemsInPartitionOfType = _mesh->elementsOfType(rank, elemTypePtr);
-
- Intrepid::FieldContainer<double> rhs = _rhsForElementType[elemTypePtr.get()];
- Intrepid::FieldContainer<double> rhsReps = _rhsRepresentationForElementType[elemTypePtr.get()];
- int numTestDofs = rhs.dimension(1);
- int numCells = rhs.dimension(0);
- TEUCHOS_TEST_FOR_EXCEPTION( numCells!=elemsInPartitionOfType.size(), std::invalid_argument, "In rhsNorm::numCells does not match number of elems in partition.");
-
- for (int cellIndex=cellIndStart;cellIndex<numCells;cellIndex++){
- double normSquared = 0.0;
- for (int i=0; i<numTestDofs; i++) {
- normSquared += rhs(cellIndex,i) * rhsReps(cellIndex,i);
- }
- localNormArray[cellIndex] = sqrt(normSquared);
- int cellID = _mesh->cellID(elemTypePtr,cellIndex,rank);
- localCellIDArray[cellIndex] = cellID;
- }
- cellIndStart += numCells; // increment to go to the next set of element types
- } // end of loop thru element types
-
- // mpi communicate all energy norms
- double normArray[numProcs][numActiveElements];
- int cellIDArray[numProcs][numActiveElements];
- #ifdef HAVE_MPI
- if (numProcs>1){
- MPI::COMM_WORLD.Allgather(localNormArray,numActiveElements, MPI::DOUBLE, normArray, numActiveElements , MPI::DOUBLE);
- MPI::COMM_WORLD.Allgather(localCellIDArray,numActiveElements, MPI::INT, cellIDArray, numActiveElements , MPI::INT);
- }else{
- #else
- #endif
- for (int globalCellIndex=0;globalCellIndex<numActiveElements;globalCellIndex++){
- cellIDArray[0][globalCellIndex] = localCellIDArray[globalCellIndex];
- normArray[0][globalCellIndex] = localNormArray[globalCellIndex];
- }
- #ifdef HAVE_MPI
- }
- #endif
- // copy back to rhsNorm map
- for (int procIndex=0;procIndex<numProcs;procIndex++){
- for (int globalCellIndex=0;globalCellIndex<numActiveElements;globalCellIndex++){
- if (cellIDArray[procIndex][globalCellIndex]!=-1){
- rhsNormMap[cellIDArray[procIndex][globalCellIndex]] = normArray[procIndex][globalCellIndex];
- }
- }
- }
- }
- */
 
 template <typename Scalar>
 double TSolution<Scalar>::energyErrorTotal()
@@ -4251,7 +4155,7 @@ void TSolution<Scalar>::projectOldCellOntoNewCells(GlobalIndexType cellID,
     }
   }
 
-  TFunctionPtr<Scalar> sideParity = TFunction<double>::sideParity();
+//  TFunctionPtr<Scalar> sideParity = TFunction<double>::sideParity();
   map<int,TFunctionPtr<Scalar>> interiorTraceMap; // functions to use on parent interior to represent traces there
   for (set<int>::iterator trialIDIt = trialIDs.begin(); trialIDIt != trialIDs.end(); trialIDIt++)
   {
@@ -4264,10 +4168,10 @@ void TSolution<Scalar>::projectOldCellOntoNewCells(GlobalIndexType cellID,
       if (termTraced.get() != NULL)
       {
         TFunctionPtr<Scalar> fieldTrace = termTraced->evaluate(fieldMap, true) + termTraced->evaluate(fieldMap, false);
-        if (var->varType() == FLUX)   // then we do need to include side parity here
-        {
-          fieldTrace = sideParity * fieldTrace;
-        }
+//        if (var->varType() == FLUX)   // then we do need to include side parity here
+//        {
+//          fieldTrace = sideParity * fieldTrace;
+//        }
         interiorTraceMap[trialID] = fieldTrace;
       }
     }
