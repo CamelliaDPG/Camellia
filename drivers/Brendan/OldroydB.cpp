@@ -339,17 +339,17 @@ int main(int argc, char *argv[])
   rhs->addTerm(-rho*(bL11*bu1+bL12*bu2)*v1);
   rhs->addTerm(-rho*(bL21*bu1+bL22*bu2)*v2);
   //
-  rhs->addTerm(-mu0*2*bL11*v1->x());
-  rhs->addTerm(-mu0*bL12*v1->y()-mu0*bL21*v1->y());
-  rhs->addTerm(-mu0*bL12*v2->x()-mu0*bL21*v2->x());
+  rhs->addTerm(-mu0*2*bL11*v1->dx());
+  rhs->addTerm(-mu0*bL12*v1->dy()-mu0*bL21*v1->dy());
+  rhs->addTerm(-mu0*bL12*v2->dx()-mu0*bL21*v2->dx());
   // rhs->addTerm(-mu0*(bL12+bL21)*v1->y());
   // rhs->addTerm(-mu0*(bL12+bL21)*v2->x());
-  rhs->addTerm(-mu0*2*bL22*v2->y());
+  rhs->addTerm(-mu0*2*bL22*v2->dy());
   //
-  rhs->addTerm(-bT11*v1->x());
-  rhs->addTerm(-bT12*v1->y());
-  rhs->addTerm(-bT12*v2->x());
-  rhs->addTerm(-bT22*v2->y());
+  rhs->addTerm(-bT11*v1->dx());
+  rhs->addTerm(-bT12*v1->dy());
+  rhs->addTerm(-bT12*v2->dx());
+  rhs->addTerm(-bT22*v2->dy());
 
 
   //  3. Constitutive Law
@@ -372,8 +372,8 @@ int main(int argc, char *argv[])
   bf->addTerm(dT12,-2*lambda*bu1*S12->dx()-2*lambda*bu2*S12->dy());
   bf->addTerm(dT22,-lambda*bu1*S22->dx()-lambda*bu2*S22->dy());
   //
-  bf->addTerm(du->x(),-lambda*bT11*S11->x()-lambda*2*bT12*S12->x()-lambda*bT22*S22->x());
-  bf->addTerm(du->y(),-lambda*bT11*S11->y()-lambda*2*bT12*S12->y()-lambda*bT22*S22->y());
+  bf->addTerm(du->x(),-lambda*bT11*S11->dx()-lambda*2*bT12*S12->dx()-lambda*bT22*S22->dx());
+  bf->addTerm(du->y(),-lambda*bT11*S11->dy()-lambda*2*bT12*S12->dy()-lambda*bT22*S22->dy());
   //
   bf->addTerm(TtensU_n11hat, lambda*S11);
   bf->addTerm(TtensU_n12hat, 2*lambda*S12);
@@ -437,7 +437,7 @@ int main(int argc, char *argv[])
   mesh->registerSolution(solnBackground);
 
   ostringstream refName;
-  refName << "OldroyB";
+  refName << "OldroydB";
   HDF5Exporter exporter(mesh,refName.str());
 
   double threshold = 0.25;
