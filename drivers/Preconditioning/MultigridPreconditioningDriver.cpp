@@ -450,6 +450,7 @@ int main(int argc, char *argv[])
   
   bool writeOpToFile = false;
   
+  bool constructProlongationOperatorAndQuit = false;
   bool setUpMeshesAndQuit = false;
   bool setUpMeshTopologyAndQuit = false;
   
@@ -492,6 +493,7 @@ int main(int argc, char *argv[])
   cmdp.setOption("pause","dontPause",&pauseOnRankZero, "pause (to allow attachment by tracer, e.g.), waiting for user to press a key");
   cmdp.setOption("reportTimings", "dontReportTimings", &reportTimings, "Report timings in Solution");
 
+  cmdp.setOption("constructProlongationOperatorAndQuit", "constructProlongationOperatorAndContinue", &constructProlongationOperatorAndQuit);
   cmdp.setOption("setUpMeshTopologyAndQuit", "setUpMeshTopologyAndContinue", &setUpMeshTopologyAndQuit);
   cmdp.setOption("setUpMeshesAndQuit", "setUpMeshesAndRunNormally", &setUpMeshesAndQuit);
   cmdp.setOption("solveDirectly", "solveIteratively", &solveDirectly);
@@ -710,6 +712,27 @@ int main(int argc, char *argv[])
     }
 
     timer.ResetStartTime();
+    gmgSolver->gmgOperator()->constructProlongationOperator();
+    double gmgFineProlongationOperatorConstructionTime = timer.ElapsedTime();
+    if (rank==0)
+    {
+      cout << "fine GMG prolongation operator constructed in " << gmgFineProlongationOperatorConstructionTime << " seconds.\n";
+    }
+    
+    if (constructProlongationOperatorAndQuit)
+    {
+      if (rank==0)
+      {
+        cout << "--constructProlongationOperatorAndQuit passed in; now exiting.\n";
+      }
+#ifdef HAVE_MPI
+      MPI_Finalize();
+#endif
+      exit(0);
+    }
+    
+    timer.ResetStartTime();
+    
     solution->solve(gmgSolver);
     solveTime = timer.ElapsedTime();
 
@@ -733,10 +756,13 @@ int main(int argc, char *argv[])
     solveTime = timer.ElapsedTime();
   }
 
+  double maxTimeLocalStiffness = solution->maxTimeLocalStiffness();
   
   if (rank==0)
   {
     double totalTime = solveTime + gmgSolverInitializationTime + meshInitializationTime;
+    cout << "Max time spent determining local stiffness contributions (included in Solve, below): " << maxTimeLocalStiffness << " seconds.\n";
+    
     cout << "Total time: " << totalTime << " seconds.\n";
     int tabWidth = 15;
     cout << setw(tabWidth) << "Mesh Init." << setw(tabWidth) << "GMG Init." << setw(tabWidth) << "Solve" << endl;
