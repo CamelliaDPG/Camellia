@@ -711,18 +711,14 @@ int main(int argc, char *argv[])
       cout << "GMGSolver initialized in " << gmgSolverInitializationTime << " seconds.\n";
     }
 
-    timer.ResetStartTime();
-    gmgSolver->gmgOperator()->constructProlongationOperator();
-    double gmgFineProlongationOperatorConstructionTime = timer.ElapsedTime();
-    if (rank==0)
-    {
-      cout << "fine GMG prolongation operator constructed in " << gmgFineProlongationOperatorConstructionTime << " seconds.\n";
-    }
-    
     if (constructProlongationOperatorAndQuit)
     {
+      timer.ResetStartTime();
+      gmgSolver->gmgOperator()->constructProlongationOperator();
+      double gmgFineProlongationOperatorConstructionTime = timer.ElapsedTime();
       if (rank==0)
       {
+        cout << "fine GMG prolongation operator constructed in " << gmgFineProlongationOperatorConstructionTime << " seconds.\n";
         cout << "--constructProlongationOperatorAndQuit passed in; now exiting.\n";
       }
 #ifdef HAVE_MPI
@@ -730,6 +726,8 @@ int main(int argc, char *argv[])
 #endif
       exit(0);
     }
+    
+
     
     timer.ResetStartTime();
     
