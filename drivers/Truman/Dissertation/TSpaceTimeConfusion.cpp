@@ -119,7 +119,7 @@ int main(int argc, char *argv[])
   if (spaceDim == 1)
     u_steady = Function::constant(1)-exp1lambdax;
   if (spaceDim == 2)
-    u_steady = 10*epsilon*(exps1x-expr1x)/(r1*exp(-r1)-s1*exp(-s1))*cospiy;
+    u_steady = 10*epsilon*(exps1x-expr1x)/(exp(-s1)-exp(-r1))*cospiy;
     // for (int n = 1; n <= 20; n++)
     // {
     //   double Cn = 0;
@@ -213,8 +213,10 @@ int main(int argc, char *argv[])
     SpatialFilterPtr rightY = SpatialFilter::matchingY(x0[1]+width);
     bc->addDirichlet(tc,   leftX,    exactMap[form.tc()->ID()]);
     bc->addDirichlet(uhat, rightX,   exactMap[form.uhat()->ID()]);
-    bc->addDirichlet(tc, leftY,    exactMap[form.tc()->ID()]);
-    bc->addDirichlet(tc, rightY,   exactMap[form.tc()->ID()]);
+    // bc->addDirichlet(tc, leftY,    exactMap[form.tc()->ID()]);
+    // bc->addDirichlet(tc, rightY,   exactMap[form.tc()->ID()]);
+    bc->addDirichlet(uhat, leftY,    exactMap[form.uhat()->ID()]);
+    bc->addDirichlet(uhat, rightY,   exactMap[form.uhat()->ID()]);
     bc->addDirichlet(tc,   initTime, exactMap[form.tc()->ID()]);
     // FunctionPtr n = Function::normalSpaceTime();
     // bc->addDirichlet(tc, leftX,  beta*n*u_exact-sigma_exact*n);
