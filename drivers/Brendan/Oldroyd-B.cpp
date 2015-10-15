@@ -20,6 +20,7 @@
 #include "HDF5Exporter.h"
 #endif
 
+#include "SimpleFunction.h"
 #include "BF.h"
 
 #include "RefinementStrategy.h"
@@ -36,26 +37,20 @@ public:
   }
 };
 
-class RampBoundaryFunction_U1 : public SimpleFunction
-{
+class RampBoundaryFunction_U1 : public SimpleFunction<double> {
   double _eps; // ramp width
 public:
-  RampBoundaryFunction_U1(double eps)
-  {
+  RampBoundaryFunction_U1(double eps) {
     _eps = eps;
   }
-  double value(double x, double y)
-  {
-    if ( (abs(x) < _eps) )   // top left
-    {
+  double value(double x, double y) {
+    if ( (abs(x) < _eps) ) {   // top left
       return x / _eps;
     }
-    else if ( abs(1.0-x) < _eps)     // top right
-    {
+    else if ( abs(1.0-x) < _eps) {     // top right
       return (1.0-x) / _eps;
     }
-    else     // top middle
-    {
+    else {     // top middle
       return 1;
     }
   }
@@ -72,7 +67,7 @@ int main(int argc, char *argv[])
   Epetra_SerialComm Comm;
 #endif
 
-  int commRank = Teuchos::GlobalMPISession::getRank();
+  int rank = Teuchos::GlobalMPISession::getRank();
 
   Comm.Barrier(); // set breakpoint here to allow debugger attachment to other MPI processes than the one you automatically attached to.
 
@@ -90,6 +85,7 @@ int main(int argc, char *argv[])
   int loadRefinementNumber = -1; // -1 means don't load from file
   double nonlinearTolerance = 1e-5;
   int maxNonlinearIterations = 20;
+  bool saveToFile = false;
   string norm = "Graph";
   string solverChoice = "KLU";
   string savePrefix = "OldroydB_ref";
@@ -115,6 +111,10 @@ int main(int argc, char *argv[])
 #endif
     return -1;
   }
+
+  Teuchos::RCP<Time> totalTimer = Teuchos::TimeMonitor::getNewCounter("Total Time");
+  totalTimer->start(true);
+
   //////////////////////////////////////////////////////////////////////
   ///////////////////  MISCELLANEOUS LOCAL VARIABLES  //////////////////
   //////////////////////////////////////////////////////////////////////
@@ -127,7 +127,17 @@ int main(int argc, char *argv[])
   //////////////////////////////////////////////////////////////////////
   ////////////////////////////  INITIALIZE  ////////////////////////////
   //////////////////////////////////////////////////////////////////////
-  VarFactory vf;
+  VarFactoryPtr vf = VarFactory::varFactory();
+
+  // Pointers for linear solve
+  BFPtr bf   = Teuchos::rcp( new BF(vf) );
+  RHSPtr rhs = RHS::rhs();
+  BCPtr bc   = BC::bc();
+
+  // Pointers for background approximations
+  RHSPtr nullRHS = Teuchos::rcp((RHS*)NULL);
+  BCPtr nullBC   = Teuchos::rcp((BC*)NULL);
+  IPPtr nullIP   = Teuchos::rcp((IP*)NULL);
 
   //////////////////////////   DECLARE MESH   //////////////////////////
   int H1Order = k+1;
@@ -136,55 +146,47 @@ int main(int argc, char *argv[])
   MeshPtr mesh = MeshFactory::quadMesh(bf, H1Order, delta_k, width, height,
                                        horizontalCells, verticalCells);
 
-  // Pointers for linear solve
-  BFPtr bf   = Teuchos::rcp( new BF(vf) );
-  RHSPtr rhs = RHS::rhs();
-  BCPtr bc   = BC::bc();
+  // Solution pointers
   SolutionPtr solnUpdate = Solution::solution(bf, mesh, bc); // RHS+IP have to be reset after each iteration
-
-  // Pointers for background approximations
-  RHSPtr nullRHS = Teuchos::rcp((RHS*)NULL);
-  BCPtr nullBC   = Teuchos::rcp((BC*)NULL);
-  IPPtr nullIP   = Teuchos::rcp((IP*)NULL);
   SolutionPtr solnBackground = Teuchos::rcp(new Solution(mesh, nullBC, nullRHS, nullIP) );
 
 
   ///////////////////////   DECLARE VARIABLES   ////////////////////////
   // TRIAL VARIABLES:
   // fields:
-  VarPtr du   = vf.fieldVar("u",    VECTOR_L2);
-  VarPtr p    = vf.fieldVar("p",    L2);
-  VarPtr dL11 = vf.fieldVar("dL11", L2);
-  VarPtr dL12 = vf.fieldVar("dL12", L2);
-  VarPtr dL21 = vf.fieldVar("dL21", L2);
-  VarPtr dL22 = vf.fieldVar("dL22", L2);
-  VarPtr dT11 = vf.fieldVar("dT11", L2);
-  VarPtr dT12 = vf.fieldVar("dT12", L2);
-  VarPtr dT22 = vf.fieldVar("dT22", L2);
+  VarPtr du   = vf->fieldVar("u",    VECTOR_L2);
+  VarPtr p    = vf->fieldVar("p",    L2);
+  VarPtr dL11 = vf->fieldVar("dL11", L2);
+  VarPtr dL12 = vf->fieldVar("dL12", L2);
+  VarPtr dL21 = vf->fieldVar("dL21", L2);
+  VarPtr dL22 = vf->fieldVar("dL22", L2);
+  VarPtr dT11 = vf->fieldVar("dT11", L2);
+  VarPtr dT12 = vf->fieldVar("dT12", L2);
+  VarPtr dT22 = vf->fieldVar("dT22", L2);
   // traces:
-  VarPtr u1hat        = vf.traceVar("\\hat{u_1}");
-  VarPtr u2hat        = vf.traceVar("\\hat{u_2}");
-  // VarPtr u_nhat        = vf.fluxVar("\\hat{u_n}");
-  VarPtr sigma_n1hat   = vf.fluxVar("\\hat{\\sigma_{n_1}}");
-  VarPtr sigma_n2hat   = vf.fluxVar("\\hat{\\sigma_{n_2}}");
-  VarPtr TtensU_n11hat = vf.fluxVar("\\hat{(T\\otimes u)_{n_{11}}}");
-  VarPtr TtensU_n12hat = vf.fluxVar("\\hat{(T\\otimes u)_{n_{12}}}");
-  // VarPtr TtensU_n21hat = vf.fluxVar("\\hat{(T\\otimes u)_{n_{21}}}");
-  VarPtr TtensU_n22hat = vf.fluxVar("\\hat{(T\\otimes u)_{n_{22}}}");
+  VarPtr u1hat        = vf->traceVar("\\hat{u_1}");
+  VarPtr u2hat        = vf->traceVar("\\hat{u_2}");
+  // VarPtr u_nhat        = vf->fluxVar("\\hat{u_n}");
+  VarPtr sigma_n1hat   = vf->fluxVar("\\hat{\\sigma_{n_1}}");
+  VarPtr sigma_n2hat   = vf->fluxVar("\\hat{\\sigma_{n_2}}");
+  VarPtr TtensU_n11hat = vf->fluxVar("\\hat{(T\\otimes u)_{n_{11}}}");
+  VarPtr TtensU_n12hat = vf->fluxVar("\\hat{(T\\otimes u)_{n_{12}}}");
+  // VarPtr TtensU_n21hat = vf->fluxVar("\\hat{(T\\otimes u)_{n_{21}}}");
+  VarPtr TtensU_n22hat = vf->fluxVar("\\hat{(T\\otimes u)_{n_{22}}}");
 
   // TEST VARIABLES:
-  VarPtr v1  = vf.testVar("v_1",    HGRAD);
-  VarPtr v2  = vf.testVar("v_2",    HGRAD);
-  VarPtr q   = vf.testVar("q",      HGRAD);
-  VarPtr S11 = vf.testVar("S_{11}", HGRAD);
-  VarPtr S12 = vf.testVar("S_{12}", HGRAD);
-  VarPtr S22 = vf.testVar("S_{22}", HGRAD);
-  VarPtr M1  = vf.testVar("\\vec{M}_{1}", HDIV);
-  VarPtr M2  = vf.testVar("\\vec{M}_{2}", HDIV);
+  VarPtr v1  = vf->testVar("v_1",    HGRAD);
+  VarPtr v2  = vf->testVar("v_2",    HGRAD);
+  VarPtr q   = vf->testVar("q",      HGRAD);
+  VarPtr S11 = vf->testVar("S_{11}", HGRAD);
+  VarPtr S12 = vf->testVar("S_{12}", HGRAD);
+  VarPtr S22 = vf->testVar("S_{22}", HGRAD);
+  VarPtr M1  = vf->testVar("\\vec{M}_{1}", HDIV);
+  VarPtr M2  = vf->testVar("\\vec{M}_{2}", HDIV);
 
   // BACKGROUND TRIAL VARIABLES
-  FunctionPtr bu1  = Function::solution(u->x(), solnBackground);
-  FunctionPtr bu2  = Function::solution(u->y(), solnBackground);
+  FunctionPtr bu1  = Function::solution(du->x(), solnBackground);
+  FunctionPtr bu2  = Function::solution(du->y(), solnBackground);
   FunctionPtr bL11 = Function::solution(dL11,   solnBackground);
   FunctionPtr bL12 = Function::solution(dL12,   solnBackground);
   FunctionPtr bL21 = Function::solution(dL21,   solnBackground);
@@ -196,8 +198,8 @@ int main(int argc, char *argv[])
 
   //////////////////////  DECLARE INITIAL GUESSES  /////////////////////
   map<int, Teuchos::RCP<Function> > functionMap;
-  functionMap[bu1->ID()] = Function::constant(0.0);
-  functionMap[bu2->ID()] = Function::constant(0.0);
+  // functionMap[bu1->ID()] = Function::constant(0.0);
+  // functionMap[bu2->ID()] = Function::constant(0.0);
   // everything else = 0
   solnBackground->projectOntoMesh(functionMap);
 
@@ -286,7 +288,7 @@ int main(int argc, char *argv[])
   bf->addTerm(du->y(), q->dy());
   //
   // bf->addTerm(u_nhat, q);
-  bf->addTerm(u1hat*n->x()+u2hat*n->y(),q);
+  bf->addTerm(u1hat*n->x()+u2hat*n->y(), q);
   //
   // RHS:
   rhs->addTerm(-bu1*q->dx());
@@ -306,25 +308,25 @@ int main(int argc, char *argv[])
   //    = (\rho f, v) - (\rho bL bu, v) - (\mu_0( bL + bL^T ), \nabla v) - (bT, \nabla v) + H.O.T.
   //
   // BF:
-  bf->addTerm(du->x(), rho*(bL11*v1 + bL21*v2));
-  bf->addTerm(du->y(), rho*(bL12*v1 + bL22*v2));
+  bf->addTerm(du->x(), rho*bL11*v1+rho*bL21*v2);
+  bf->addTerm(du->y(), rho*bL12*v1+rho*bL22*v2);
   //
-  bf->addTerm(dL11, rho*(v1*bu1));
-  bf->addTerm(dL12, rho*(v1*bu2));
-  bf->addTerm(dL21, rho*(v2*bu1));
-  bf->addTerm(dL22, rho*(v2*bu2));
+  bf->addTerm(dL11, rho*v1*bu1);
+  bf->addTerm(dL12, rho*v1*bu2);
+  bf->addTerm(dL21, rho*v2*bu1);
+  bf->addTerm(dL22, rho*v2*bu2);
   //
   bf->addTerm(p,-v1->dx());
   bf->addTerm(p,-v2->dy());
   //
   bf->addTerm(dL11, mu0*2*v1->dx());
-  bf->addTerm(dL12, mu0*(v1->dy()+v2->dx()));
-  bf->addTerm(dL21, mu0*(v1->dy()+v2->dx()));
+  bf->addTerm(dL12, mu0*v1->dy()+mu0*v2->dx());
+  bf->addTerm(dL21, mu0*v1->dy()+mu0*v2->dx());
   bf->addTerm(dL22, mu0*2*v2->dy());
   //
   bf->addTerm(dT11, v1->dx());
   bf->addTerm(dT12, v1->dy());
-  bf->addTerm(dT21, v2->dx());
+  bf->addTerm(dT12, v2->dx());
   bf->addTerm(dT22, v2->dy());
   //
   bf->addTerm(sigma_n1hat,-v1);
@@ -338,8 +340,10 @@ int main(int argc, char *argv[])
   rhs->addTerm(-rho*(bL21*bu1+bL22*bu2)*v2);
   //
   rhs->addTerm(-mu0*2*bL11*v1->x());
-  rhs->addTerm(-mu0*(bL12+bL21)*v1->y());
-  rhs->addTerm(-mu0*(bL12+bL21)*v2->x());
+  rhs->addTerm(-mu0*bL12*v1->y()-mu0*bL21*v1->y());
+  rhs->addTerm(-mu0*bL12*v2->x()-mu0*bL21*v2->x());
+  // rhs->addTerm(-mu0*(bL12+bL21)*v1->y());
+  // rhs->addTerm(-mu0*(bL12+bL21)*v2->x());
   rhs->addTerm(-mu0*2*bL22*v2->y());
   //
   rhs->addTerm(-bT11*v1->x());
@@ -364,26 +368,26 @@ int main(int argc, char *argv[])
   bf->addTerm(dT12, 2*S12);
   bf->addTerm(dT22, S22);
   //
-  bf->addTerm(dT11,-lambda*(bu1*S11->dx()+bu2*S11->dy()));
-  bf->addTerm(dT12,-2*lambda*(bu1*S12->dx()+bu2*S12->dy()));
-  bf->addTerm(dT22,-lambda*(bu1*S22->dx()+bu2*S22->dy()));
+  bf->addTerm(dT11,-lambda*bu1*S11->dx()-lambda*bu2*S11->dy());
+  bf->addTerm(dT12,-2*lambda*bu1*S12->dx()-2*lambda*bu2*S12->dy());
+  bf->addTerm(dT22,-lambda*bu1*S22->dx()-lambda*bu2*S22->dy());
   //
-  bf->addTerm(du->x(),-lambda*(bT11*S11->x()+2*bT12*S12->x()+bT22*S22->x()));
-  bf->addTerm(du->y(),-lambda*(bT11*S11->y()+2*bT12*S12->y()+bT22*S22->y()));
+  bf->addTerm(du->x(),-lambda*bT11*S11->x()-lambda*2*bT12*S12->x()-lambda*bT22*S22->x());
+  bf->addTerm(du->y(),-lambda*bT11*S11->y()-lambda*2*bT12*S12->y()-lambda*bT22*S22->y());
   //
   bf->addTerm(TtensU_n11hat, lambda*S11);
   bf->addTerm(TtensU_n12hat, 2*lambda*S12);
   bf->addTerm(TtensU_n22hat, lambda*S22);
   //
-  bf->addTerm(dL11,-2*lambda*(bT11*S11+bT12*S12));
-  bf->addTerm(dL12,-2*lambda*(bT11*S12+bT12*S22));
-  bf->addTerm(dL21,-2*lambda*(bT12*S11+bT22*S12));
-  bf->addTerm(dL22,-2*lambda*(bT12*S12+bT22*S22));
+  bf->addTerm(dL11,-2*lambda*bT11*S11-2*lambda*bT12*S12);
+  bf->addTerm(dL12,-2*lambda*bT11*S12-2*lambda*bT12*S22);
+  bf->addTerm(dL21,-2*lambda*bT12*S11-2*lambda*bT22*S12);
+  bf->addTerm(dL22,-2*lambda*bT12*S12-2*lambda*bT22*S22);
   //
-  bf->addTerm(dT11,-2*lambda*(bL11*S11+bL21*S12));
-  bf->addTerm(dT12,-2*lambda*(bL11*S12+bL21*S22));
-  bf->addTerm(dT12,-2*lambda*(bL12*S11+bL22*S12));
-  bf->addTerm(dT22,-2*lambda*(bL12*S12+bL22*S22));
+  bf->addTerm(dT11,-2*lambda*bL11*S11-2*lambda*bL21*S12);
+  bf->addTerm(dT12,-2*lambda*bL11*S12-2*lambda*bL21*S22);
+  bf->addTerm(dT12,-2*lambda*bL12*S11-2*lambda*bL22*S12);
+  bf->addTerm(dT22,-2*lambda*bL12*S12-2*lambda*bL22*S22);
   //
   bf->addTerm(dL11,-2*mu1*S11);
   bf->addTerm(dL12,-2*mu1*S12);
@@ -395,12 +399,12 @@ int main(int argc, char *argv[])
   rhs->addTerm(2*bT12*S12);
   rhs->addTerm(bT22*S22);
   //
-  rhs->addTerm(lambda*(bT11*bu1)*S11->dx());
-  rhs->addTerm(lambda*(bT11*bu2)*S11->dy());
-  rhs->addTerm(2*lambda*(bT12*bu1)*S12->dx());
-  rhs->addTerm(2*lambda*(bT12*bu2)*S12->dy());
-  rhs->addTerm(lambda*(bT22*bu1)*S22->dx());
-  rhs->addTerm(lambda*(bT22*bu2)*S22->dy());
+  rhs->addTerm(lambda*bT11*bu1*S11->dx());
+  rhs->addTerm(lambda*bT11*bu2*S11->dy());
+  rhs->addTerm(2*lambda*bT12*bu1*S12->dx());
+  rhs->addTerm(2*lambda*bT12*bu2*S12->dy());
+  rhs->addTerm(lambda*bT22*bu1*S22->dx());
+  rhs->addTerm(lambda*bT22*bu2*S22->dy());
   //
   rhs->addTerm(2*(bL11*bT11+bL12*bT12)*S11);
   rhs->addTerm(2*(bL11*bT12+bL12*bT22)*S12);
@@ -489,7 +493,7 @@ int main(int argc, char *argv[])
       double incrSquaredInt = incrSquared->integrate(solnUpdate->mesh());
       l2Update = sqrt(incrSquaredInt);
 
-      if (commRank == 0)
+      if (rank == 0)
         cout << "Nonlinear Update:\t " << l2Update << endl;
 
       // Update solution
@@ -515,7 +519,7 @@ int main(int argc, char *argv[])
       lVars.insert(TtensU_n12hat->ID());
       lVars.insert(TtensU_n22hat->ID());
 
-      solutionBackground->addReplaceSolution(solnUpdate, alpha, nlVars, lVars);
+      solnBackground->addReplaceSolution(solnUpdate, alpha, nlVars, lVars);
 
       iterCount++;
     }
@@ -523,7 +527,7 @@ int main(int argc, char *argv[])
     // double solveTime = solverTime->stop();
     double energyError = solnUpdate->energyErrorTotal();
 
-    if (commRank == 0)
+    if (rank == 0)
     {
       cout << "Refinement: " << refIndex
         << " \tElements: " << mesh->numActiveElements()
@@ -548,10 +552,10 @@ int main(int argc, char *argv[])
     {
       ostringstream filePrefix;
       filePrefix << savePrefix << refIndex;
-      solutionBackground->save(filePrefix.str());
+      solnBackground->save(filePrefix.str());
     }
 
-    exporter.exportSolution(solutionBackground, refIndex);
+    exporter.exportSolution(solnBackground, refIndex);
 
     if (refIndex != numRefs)
     {
@@ -561,7 +565,7 @@ int main(int argc, char *argv[])
   }
 
   double totalTime = totalTimer->stop();
-  if (commRank == 0)
+  if (rank == 0)
     cout << "Total time = " << totalTime << endl;
 
   return 0;
