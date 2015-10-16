@@ -20,12 +20,43 @@
 #include "Function.h"
 #include "RefinementStrategy.h"
 #include "GMGSolver.h"
-#include "OldroydBFormulation.h"
+// #include "OldroydBFormulation.h"
+// #include "StokesVGPFormulation.h"
+#include "NavierStokesVGPFormulation.h"
 #include "SpatiallyFilteredFunction.h"
 #include "ExpFunction.h"
 #include "TrigFunctions.h"
 
 using namespace Camellia;
+
+class TopBoundary : public SpatialFilter
+{
+public:
+  bool matchesPoint(double x, double y)
+  {
+    double tol = 1e-14;
+    return (abs(y-1.0) < tol);
+  }
+};
+
+class RampBoundaryFunction_U1 : public SimpleFunction<double> {
+  double _eps; // ramp width
+public:
+  RampBoundaryFunction_U1(double eps) {
+    _eps = eps;
+  }
+  double value(double x, double y) {
+    if ( (abs(x) < _eps) ) {   // top left
+      return x / _eps;
+    }
+    else if ( abs(1.0-x) < _eps) {     // top right
+      return (1.0-x) / _eps;
+    }
+    else {     // top middle
+      return 1;
+    }
+  }
+};
 
 int main(int argc, char *argv[])
 {
@@ -44,12 +75,19 @@ int main(int argc, char *argv[])
 
   Teuchos::CommandLineProcessor cmdp(false,true); // false: don't throw exceptions; true: do return errors for unrecognized options
 
-  // problem parameters:
-  int spaceDim = 1;
+  //////////////////////////////////////////////////////////////////////
+  ///////////////////////  COMMAND LINE PARAMETERS  ////////////////////
+  //////////////////////////////////////////////////////////////////////
+  string problemChoice = "LidDriven";
+  double rho = 1;
+  double lambda = 1;
+  double mu0 = 1;
+  double mu1 = 1;
+  // int spaceDim = 2;
   int numRefs = 1;
-  int p = 2, delta_p = 2;
+  int k = 2, delta_k = 2;
   int numXElems = 2;
-  int numTElems = 1;
+  int numYElems = 2;
   bool useConformingTraces = false;
   string solverChoice = "KLU";
   string multigridStrategyString = "V-cycle";
@@ -60,16 +98,22 @@ int main(int argc, char *argv[])
   int maxNonlinearIterations = 20;
   double nonlinearTolerance = 1e-5;
   int maxLinearIterations = 10000;
-  bool computeL2Error = false;
+  // bool computeL2Error = false;
   bool exportSolution = false;
   string norm = "Graph";
   string outputDir = ".";
   string tag="";
-  cmdp.setOption("spaceDim", &spaceDim, "spatial dimension");
-  cmdp.setOption("polyOrder",&p,"polynomial order for field variable u");
-  cmdp.setOption("delta_p", &delta_p, "test space polynomial order enrichment");
+  cmdp.setOption("problem", &problemChoice, "LidDriven, HemkerCylinder");
+  cmdp.setOption("rho", &rho, "rho");
+  cmdp.setOption("lambda", &lambda, "lambda");
+  cmdp.setOption("mu0", &mu0, "mu0");
+  cmdp.setOption("mu1", &mu1, "mu1");
+  // cmdp.setOption("spaceDim", &spaceDim, "spatial dimension");
+  cmdp.setOption("polyOrder",&k,"polynomial order for field variable u");
+  cmdp.setOption("delta_k", &delta_k, "test space polynomial order enrichment");
   cmdp.setOption("numRefs",&numRefs,"number of refinements");
   cmdp.setOption("numXElems",&numXElems,"number of elements in x direction");
+  cmdp.setOption("numYElems",&numYElems,"number of elements in y direction");
   cmdp.setOption("norm", &norm, "norm");
   cmdp.setOption("conformingTraces", "nonconformingTraces", &useConformingTraces, "use conforming traces");
   cmdp.setOption("solver", &solverChoice, "KLU, SuperLU, MUMPS, GMG-Direct, GMG-ILU, GMG-IC");
@@ -80,7 +124,7 @@ int main(int argc, char *argv[])
   cmdp.setOption("solverTolerance", &solverTolerance, "iterative solver tolerance");
   cmdp.setOption("maxLinearIterations", &maxLinearIterations, "maximum number of iterations for linear solver");
   cmdp.setOption("outputDir", &outputDir, "output directory");
-  cmdp.setOption("computeL2Error", "skipL2Error", &computeL2Error, "compute L2 error");
+  // cmdp.setOption("computeL2Error", "skipL2Error", &computeL2Error, "compute L2 error");
   cmdp.setOption("exportSolution", "skipExport", &exportSolution, "export solution to HDF5");
   cmdp.setOption("tag", &tag, "output tag");
 
@@ -95,58 +139,103 @@ int main(int argc, char *argv[])
   Teuchos::RCP<Time> totalTimer = Teuchos::TimeMonitor::getNewCounter("Total Time");
   totalTimer->start(true);
 
-  // Exact solution
-  FunctionPtr u_exact = Function::constant(1) - 2*Function::xn(1);
+  //////////////////////////////////////////////////////////////////////
+  ///////////////////  MISCELLANEOUS LOCAL VARIABLES  //////////////////
+  //////////////////////////////////////////////////////////////////////
+  FunctionPtr one  = Function::constant(1);
+  FunctionPtr zero = Function::zero();
+  FunctionPtr x    = Function::xn(1);
+  FunctionPtr y    = Function::yn(1);
+  FunctionPtr n    = Function::normal();
 
-  // Build mesh
-  vector<double> x0;// = vector<double>(spaceDim,-1);
-  x0.push_back(0);
-  // x0.push_back(0);
-  double width = 1.0;
-  vector<double> dimensions;
-  vector<int> elementCounts;
-  for (int d=0; d<spaceDim; d++)
-  {
-    dimensions.push_back(width);
-    elementCounts.push_back(numXElems);
-  }
-  MeshTopologyPtr spatialMeshTopo = MeshFactory::rectilinearMeshTopology(dimensions, elementCounts, x0);
-  double t0 = 0.0, t1 = 1.0;
-  MeshTopologyPtr spaceTimeMeshTopo = MeshFactory::spaceTimeMeshTopology(spatialMeshTopo, t0, t1, numXElems);
+  //////////////////////////////////////////////////////////////////////
+  ////////////////////////////  INITIALIZE  ////////////////////////////
+  //////////////////////////////////////////////////////////////////////
 
+  ///////////////////////  SET PROBLEM PARAMETERS  /////////////////////
   Teuchos::ParameterList parameters;
-  parameters.set("spaceDim", spaceDim);
-  parameters.set("useConformingTraces", useConformingTraces);
-  parameters.set("fieldPolyOrder", p);
-  parameters.set("delta_p", delta_p);
-  parameters.set("numTElems", numTElems);
+  parameters.set("spaceDim", 2);
+  parameters.set("spatialPolyOrder", k);
+  parameters.set("delta_k", delta_k);
   parameters.set("norm", norm);
-  // parameters.set("savedSolutionAndMeshPrefix", loadFilePrefix);
-  OldroydBFormulation form(spaceTimeMeshTopo, parameters);
+  // parameters.set("rho", rho);
+  // parameters.set("lambda", lambda);
+  parameters.set("mu", mu0);
+  // parameters.set("mu1", mu1);
+  parameters.set("useConformingTraces", useConformingTraces);
+  parameters.set("useConservationFormulation",false);
+  parameters.set("useTimeStepping", false);
+  parameters.set("useSpaceTime", false);
 
-  MeshPtr mesh = form.solutionUpdate()->mesh();
 
-  // map<int, FunctionPtr> exactMap;
-  // exactMap[form.u()->ID()] = u_exact;
-  // exactMap[form.tc()->ID()] = form.tc()->termTraced()->evaluate(exactMap);
+  //////////////////////  DECLARE EXACT SOLUTION  //////////////////////
+  // FunctionPtr u_exact = Function::constant(1) - 2*Function::xn(1);
 
-  // Set up solution
-  SolutionPtr solutionUpdate = form.solutionUpdate();
-  SolutionPtr solutionBackground = form.solutionBackground();
 
-  // Set up boundary conditions
-  BCPtr bc = form.solutionUpdate()->bc();
-  VarPtr tc, uhat;
-  tc = form.tc();
-  SpatialFilterPtr initTime = SpatialFilter::matchingT(0);
-  if (spaceDim == 1)
+  ///////////////////////////  DECLARE MESH  ///////////////////////////
+
+  // if (problemChoice == "LidDriven")
+  // {
+    // LID-DRIVEN CAVITY FLOW
+    double x0 = 0.0, y0 = 0.0;
+    double width = 1.0, height = 1.0;
+    int horizontalCells = 2, verticalCells = 2;
+    MeshTopologyPtr spatialMeshTopo =  MeshFactory::quadMeshTopology(width, height, horizontalCells, verticalCells,
+                                                                     false, x0, y0);
+  // }
+  // else
+  // {
+  //   // FLOW PAST A CYLINDER
+
+  //   cout << "ERROR: Problem type not currently supported. Returning null.\n";
+  //   return Teuchos::null;
+  // }
+
+  NavierStokesVGPFormulation form(spatialMeshTopo, parameters);
+  // OldroydBFormulation form(spatialMeshTopo, parameters);
+
+  MeshPtr mesh = form.solutionIncrement()->mesh();
+
+
+  /////////////////////  DECLARE SOLUTION POINTERS /////////////////////
+  SolutionPtr solutionIncrement = form.solutionIncrement();
+  SolutionPtr solutionBackground = form.solution();
+
+
+  ///////////////////////////  DECLARE BC'S  ///////////////////////////
+  BCPtr bc = form.solutionIncrement()->bc();
+  VarPtr u1hat, u2hat, p;
+  u1hat = form.u_hat(1);
+  u2hat = form.u_hat(2);
+  p     = form.p();
+
+  if (problemChoice== "LidDriven")
   {
-    SpatialFilterPtr leftX  = SpatialFilter::matchingX(x0[0]);
-    SpatialFilterPtr rightX = SpatialFilter::matchingX(x0[0]+width);
-    bc->addDirichlet(tc,   leftX,    -0.5*u_exact*u_exact);
-    bc->addDirichlet(tc,   rightX,    0.5*u_exact*u_exact);
-    bc->addDirichlet(tc,   initTime, -u_exact);
+    // LID-DRIVEN CAVITY FLOW
+    SpatialFilterPtr topBoundary = Teuchos::rcp( new TopBoundary );
+    SpatialFilterPtr otherBoundary = SpatialFilter::negatedFilter(topBoundary);
+
+    //   top boundary:
+    FunctionPtr u1_bc_fxn = Teuchos::rcp( new RampBoundaryFunction_U1(1.0/64) );
+    bc->addDirichlet(u1hat, topBoundary, u1_bc_fxn);
+    bc->addDirichlet(u2hat, topBoundary, zero);
+
+    //   everywhere else:
+    bc->addDirichlet(u1hat, otherBoundary, zero);
+    bc->addDirichlet(u2hat, otherBoundary, zero);
+
+    //   zero-mean constraint
+    bc->addZeroMeanConstraint(p);
   }
+  else
+  {
+    cout << "ERROR: Problem type not currently supported. Returning null.\n";
+    return Teuchos::null;
+  }
+
+  //////////////////////////////////////////////////////////////////////
+  ///////////////////////////////  SOLVE  //////////////////////////////
+  //////////////////////////////////////////////////////////////////////
 
   ostringstream solnName;
   solnName << "OldroydB" << "_" << norm << "_p" << p << "_" << solverChoice;// << "_" << multigridStrategyString;
@@ -220,15 +309,15 @@ int main(int argc, char *argv[])
       bool reuseFactorization = true;
       SolverPtr coarseSolver = Solver::getDirectSolver(reuseFactorization);
       int kCoarse = 1;
-      vector<MeshPtr> meshSequence = GMGSolver::meshesForMultigrid(mesh, kCoarse, delta_p);
-      for (int i=0; i < meshSequence.size(); i++)
-      {
-        // if (commRank == 0)
-        //   cout << meshSequence[i]->numGlobalDofs() << endl;
-      }
+      vector<MeshPtr> meshSequence = GMGSolver::meshesForMultigrid(mesh, kCoarse, delta_k);
+      // for (int i=0; i < meshSequence.size(); i++)
+      // {
+      //   if (commRank == 0)
+      //     cout << meshSequence[i]->numGlobalDofs() << endl;
+      // }
       while (meshSequence[0]->numGlobalDofs() < 2000 && meshSequence.size() > 2)
         meshSequence.erase(meshSequence.begin());
-      gmgSolver = Teuchos::rcp(new GMGSolver(solutionUpdate, meshSequence, maxLinearIterations, solverTolerance, multigridStrategy, coarseSolver, useCondensedSolve));
+      gmgSolver = Teuchos::rcp(new GMGSolver(solutionIncrement, meshSequence, maxLinearIterations, solverTolerance, multigridStrategy, coarseSolver, useCondensedSolve));
       gmgSolver->setUseConjugateGradient(useConjugateGradient);
       int azOutput = 20; // print residual every 20 CG iterations
       gmgSolver->setAztecOutput(azOutput);
@@ -250,43 +339,68 @@ int main(int argc, char *argv[])
     {
       if (solverChoice[0] == 'G')
       {
-        solutionUpdate->solve(gmgSolver);
+        solutionIncrement->solve(gmgSolver);
         iterationCount += gmgSolver->iterationCount();
       }
       else
-        solutionUpdate->condensedSolve(solvers[solverChoice]);
+        solutionIncrement->condensedSolve(solvers[solverChoice]);
 
-        // Compute L2 norm of update
-        l2Update = solutionUpdate->L2NormOfSolutionGlobal(form.u()->ID());
+      // Compute L2 norm of update
+      l2Update = form.L2NormSolutionIncrement();
 
-        if (commRank == 0)
-          cout << "Nonlinear Update:\t " << l2Update << endl;
+      if (commRank == 0)
+        cout << "Nonlinear Update:\t " << l2Update << endl;
 
-        form.updateSolution();
-        iterCount++;
+      // form.updateSolution();
+      set<int> nonlinearVars;
+      nonlinearVars.insert(form.u(1)->ID());
+      nonlinearVars.insert(form.u(2)->ID());
+      nonlinearVars.insert(form.sigma(1,1)->ID());
+      nonlinearVars.insert(form.sigma(1,2)->ID());
+      nonlinearVars.insert(form.sigma(2,2)->ID());
+      nonlinearVars.insert(form.sigma(2,2)->ID());
+
+      set<int> linearVars;
+      nonlinearVars.insert(form.p()->ID());
+      nonlinearVars.insert(form.u_hat(1)->ID());
+      nonlinearVars.insert(form.u_hat(2)->ID());
+      nonlinearVars.insert(form.tn_hat(1)->ID());
+      nonlinearVars.insert(form.tn_hat(2)->ID());
+
+      double alpha = 1;
+      // vector<int> trialIDs = _vf->trialIDs();
+      // set<int> trialIDSet(trialIDs.begin(), trialIDs.end());
+      // set<int> nlVars = nonlinearVars();
+      // set<int> lVars;
+      // set_difference(trialIDSet.begin(), trialIDSet.end(), nlVars.begin(), nlVars.end(),
+      //     std::inserter(lVars, lVars.end()));
+
+      solutionBackground->addReplaceSolution(solutionIncrement, alpha, nonlinearVars, linearVars);
+
+      iterCount++;
     }
 
     double solveTime = solverTime->stop();
 
-    double energyError = solutionUpdate->energyErrorTotal();
-    double l2Error = 0;
-    if (computeL2Error)
-    {
-      FunctionPtr u_soln;
-      u_soln = Function::solution(form.u(), solutionBackground);
-      FunctionPtr u_diff = u_soln - u_exact;
-      FunctionPtr u_sqr = u_diff*u_diff;
-      double u_l2;
-      u_l2 = u_sqr->integrate(mesh, 10);
-      l2Error = sqrt(u_l2);
-    }
+    double energyError = solutionIncrement->energyErrorTotal();
+    // double l2Error = 0;
+    // if (computeL2Error)
+    // {
+    //   FunctionPtr u_soln;
+    //   u_soln = Function::solution(form.u(), solutionBackground);
+    //   FunctionPtr u_diff = u_soln - u_exact;
+    //   FunctionPtr u_sqr = u_diff*u_diff;
+    //   double u_l2;
+    //   u_l2 = u_sqr->integrate(mesh, 10);
+    //   l2Error = sqrt(u_l2);
+    // }
     if (commRank == 0)
     {
       cout << "Refinement: " << refIndex
         << " \tElements: " << mesh->numActiveElements()
         << " \tDOFs: " << mesh->numGlobalDofs()
         << " \tEnergy Error: " << energyError
-        << " \tL2 Error: " << l2Error
+        // << " \tL2 Error: " << l2Error
         << " \tSolve Time: " << solveTime
         << " \tTotal Time: " << totalTimer->totalElapsedTime(true)
         << " \tIteration Count: " << iterationCount
@@ -295,7 +409,7 @@ int main(int argc, char *argv[])
         << " " << mesh->numActiveElements()
         << " " << mesh->numGlobalDofs()
         << " " << energyError
-        << " " << l2Error
+        // << " " << l2Error
         << " " << solveTime
         << " " << totalTimer->totalElapsedTime(true)
         << " " << iterationCount
@@ -304,7 +418,7 @@ int main(int argc, char *argv[])
 
     if (exportSolution)
       exporter->exportSolution(solutionBackground, refIndex);
-      // exporter->exportSolution(solutionUpdate, refIndex);
+      // exporter->exportSolution(solutionIncrement, refIndex);
 
     if (refIndex != numRefs)
       refStrategy->refine();
