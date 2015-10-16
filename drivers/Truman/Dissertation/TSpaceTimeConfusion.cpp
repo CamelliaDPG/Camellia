@@ -119,7 +119,7 @@ int main(int argc, char *argv[])
   if (spaceDim == 1)
     u_steady = Function::constant(1)-exp1lambdax;
   if (spaceDim == 2)
-    u_steady = 10*epsilon*(exps1x-expr1x)/(exp(-s1)-exp(-r1))*cospiy;
+    u_steady = (exps1x-expr1x)/(exp(-s1)-exp(-r1))*cospiy;
     // for (int n = 1; n <= 20; n++)
     // {
     //   double Cn = 0;
@@ -130,7 +130,7 @@ int main(int argc, char *argv[])
     // }
   // FunctionPtr u_exact = u_steady + 4*explt*(explambda1x-explambda2x)*Function::yn(1);
 
-  FunctionPtr u_exact = u_steady + 4*explt*(explambda1x-explambda2x);
+  FunctionPtr u_exact = u_steady + explt*(explambda1x-explambda2x);
   // FunctionPtr u_exact = u_steady + 4*explt*(explambda1x-explambda2x);
   // FunctionPtr u_exact = 4*explt*(explambda1x-explambda2x);
   // FunctionPtr u_exact = Function::xn(2);
