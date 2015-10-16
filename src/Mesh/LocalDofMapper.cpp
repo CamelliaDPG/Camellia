@@ -42,22 +42,13 @@ void LocalDofMapper::filterData(const vector<int> dofIndices, const FieldContain
   }
 }
 
-void LocalDofMapper::addSubBasisMapVectorContribution(int varID, int sideOrdinal, BasisMap basisMap,
+void LocalDofMapper::addSubBasisMapVectorContribution(int varID, int sideOrdinal, BasisMap &basisMap,
                                                       const FieldContainer<double> &localData,
                                                       FieldContainer<double> &globalData,
                                                       bool fittableGlobalDofsOnly)
 {
   if (!_dofOrdering->hasBasisEntry(varID, sideOrdinal)) return; // no contribution
-  FieldContainer<double> basisData(_dofOrdering->getDofIndices(varID, sideOrdinal).size());
-  if (_varIDToMap == -1)
-  {
-    vector<int> varDofIndices = _dofOrdering->getDofIndices(varID, sideOrdinal);
-    filterData(varDofIndices, localData, basisData);
-  }
-  else
-  {
-    basisData = localData;
-  }
+  
   set<GlobalIndexType> *fittableDofs;
   if (_volumeMaps.find(varID) != _volumeMaps.end())
   {
@@ -67,14 +58,89 @@ void LocalDofMapper::addSubBasisMapVectorContribution(int varID, int sideOrdinal
   {
     fittableDofs = &_fittableGlobalDofOrdinalsOnSides[sideOrdinal];
   }
-  for (vector<SubBasisDofMapperPtr>::iterator subBasisMapIt = basisMap.begin(); subBasisMapIt != basisMap.end(); subBasisMapIt++)
+  
+  for (SubBasisDofMapperPtr subBasisDofMapper : basisMap)
   {
-    SubBasisDofMapperPtr subBasisDofMapper = *subBasisMapIt;
-    subBasisDofMapper->mapDataIntoGlobalContainer(basisData, _globalIndexToOrdinal, fittableGlobalDofsOnly, *fittableDofs, globalData);
+    if (subBasisDofMapper->isPermutation())
+    {
+      // this does make a couple assumptions about the implementation of the permutation mapper.  If that changes, it could break the below.
+      
+      const vector<GlobalIndexType>* globalDofIndices = &subBasisDofMapper->mappedGlobalDofOrdinals();
+      const set<unsigned> *basisDofOrdinals = &subBasisDofMapper->basisDofOrdinalFilter();
+      const vector<int>* varDofIndices = &_dofOrdering->getDofIndices(varID, sideOrdinal);
+
+      bool negate = subBasisDofMapper->isNegatedPermutation();
+      
+      int i=-1; // loop counter; start at -1 because I want the i++ at the top of the loop, for code clarity
+      for (unsigned basisDofOrdinal_i : *basisDofOrdinals)
+      {
+        i++;
+        GlobalIndexType globalDofIndex_i = (*globalDofIndices)[i];
+        if (fittableGlobalDofsOnly && (fittableDofs->find(globalDofIndex_i) == fittableDofs->end()))
+        {
+          continue; // this basis dof ordinal does not correspond to a fittable global dof -- I'm not sure this will ever happen for a permutation, but logically this is correct
+        }
+        
+        unsigned localDofIndex_i;
+        if (_varIDToMap == -1)
+          localDofIndex_i = (*varDofIndices)[basisDofOrdinal_i];
+        else
+          localDofIndex_i = basisDofOrdinal_i;
+        
+        if (localData.rank()==1)
+        {
+          if (!negate)
+            globalData(_globalIndexToOrdinal[globalDofIndex_i]) += localData(localDofIndex_i);
+          else
+            globalData(_globalIndexToOrdinal[globalDofIndex_i]) += -localData(localDofIndex_i);
+        }
+        else
+        {
+          TEUCHOS_TEST_FOR_EXCEPTION(true, std::invalid_argument, "addSubBasisMapVectorContribution only supports rank 1 basis data");
+
+          // the below might be OK for treating 2D data, but it's not getting invoked, so I'm commenting it out for now.
+//          int j=0;
+//          for (set<unsigned>::iterator basisDofOrdinalIt_j = basisDofOrdinals->begin(); basisDofOrdinalIt_j != basisDofOrdinals->end(); basisDofOrdinalIt_j++, j++)
+//          {
+//            GlobalIndexType globalDofIndex_j = (*globalDofIndices)[j];
+//            if (fittableGlobalDofsOnly && (fittableDofs->find(globalDofIndex_j) == fittableDofs->end()))
+//            {
+//              continue; // this basis dof ordinal does not correspond to a fittable global dof -- I'm not sure this will ever happen for a permutation, but logically this is correct
+//            }
+//            
+//            unsigned basisDofOrdinal_j = *basisDofOrdinalIt_j;
+//            unsigned localDofIndex_j;
+//            if (_varIDToMap == -1)
+//              localDofIndex_j = (*varDofIndices)[basisDofOrdinal_j];
+//            else
+//              localDofIndex_j = basisDofOrdinal_j;
+//            
+//            if (!negate)
+//              globalData(_globalIndexToOrdinal[globalDofIndex_i], _globalIndexToOrdinal[globalDofIndex_j]) += localData(localDofIndex_i, localDofIndex_j);
+//            else
+//              globalData(_globalIndexToOrdinal[globalDofIndex_i], _globalIndexToOrdinal[globalDofIndex_j]) += -localData(localDofIndex_i, localDofIndex_j);
+//          }
+        }
+      }
+    }
+    else
+    {
+      if (_varIDToMap == -1)
+      {
+        const vector<int>* varDofIndices = &_dofOrdering->getDofIndices(varID, sideOrdinal);
+        subBasisDofMapper->mapDataIntoGlobalContainer(localData, *varDofIndices, _globalIndexToOrdinal, fittableGlobalDofsOnly, *fittableDofs, globalData);
+//          basisData = new FieldContainer<double>(varDofIndices->size());
+//          filterData(*varDofIndices, localData, *basisData);
+      }
+      else
+      {
+        subBasisDofMapper->mapDataIntoGlobalContainer(localData, _globalIndexToOrdinal, fittableGlobalDofsOnly, *fittableDofs, globalData);
+      }
+    }
   }
 }
 
-void LocalDofMapper::addReverseSubBasisMapVectorContribution(int varID, int sideOrdinal, BasisMap basisMap,
+void LocalDofMapper::addReverseSubBasisMapVectorContribution(int varID, int sideOrdinal, BasisMap &basisMap,
                                                              const FieldContainer<double> &globalCoefficients, FieldContainer<double> &localCoefficients)
 {
   bool transposeConstraint = false; // global to local
@@ -89,39 +155,87 @@ void LocalDofMapper::addReverseSubBasisMapVectorContribution(int varID, int side
   
   //  cout << "*************  varID: " << varID << ", side " << sideOrdinal << "  *************" << endl;
   
-  vector<GlobalIndexType> globalIndices = this->globalIndices();
-  for (vector<SubBasisDofMapperPtr>::iterator subBasisMapIt = basisMap.begin(); subBasisMapIt != basisMap.end(); subBasisMapIt++)
+  for (SubBasisDofMapperPtr subBasisDofMapper : basisMap)
   {
-    SubBasisDofMapperPtr subBasisDofMapper = *subBasisMapIt;
-    vector<int> globalOrdinalFilter;
-    vector<GlobalIndexType> globalDofIndices = subBasisDofMapper->mappedGlobalDofOrdinals();
-    for (int subBasisGlobalDofOrdinal=0; subBasisGlobalDofOrdinal<globalDofIndices.size(); subBasisGlobalDofOrdinal++)
-    {
-      globalOrdinalFilter.push_back(_globalIndexToOrdinal[ globalDofIndices[subBasisGlobalDofOrdinal] ]);
-    }
-    FieldContainer<double> filteredSubBasisData;
-    filterData(globalOrdinalFilter, globalCoefficients, filteredSubBasisData);
-    FieldContainer<double> mappedSubBasisData = (*subBasisMapIt)->mapData(transposeConstraint, filteredSubBasisData, applyOnLeftOnly);
-    set<unsigned> localDofOrdinals = subBasisDofMapper->basisDofOrdinalFilter();
+    const vector<GlobalIndexType>* globalDofIndices = &subBasisDofMapper->mappedGlobalDofOrdinals();
+//    vector<int> globalOrdinalFilter(globalDofIndices->size());
+//    for (int subBasisGlobalDofOrdinal=0; subBasisGlobalDofOrdinal<globalDofIndices->size(); subBasisGlobalDofOrdinal++)
+//    {
+//      globalOrdinalFilter[subBasisGlobalDofOrdinal] = _globalIndexToOrdinal[ (*globalDofIndices)[subBasisGlobalDofOrdinal] ];
+//    }
     
-    int i=0;
-    for (set<unsigned>::iterator localDofOrdinalIt_i = localDofOrdinals.begin(); localDofOrdinalIt_i != localDofOrdinals.end(); localDofOrdinalIt_i++, i++)
+    // define lambda for globalOrdinal lookup:
+    auto globalOrdinal = [&globalDofIndices, this] (int i) -> int
     {
-      unsigned localDofOrdinal_i = *localDofOrdinalIt_i;
-      unsigned localDofIndex_i = _dofOrdering->getDofIndex(varID, localDofOrdinal_i, sideOrdinal);
+      return _globalIndexToOrdinal[ (*globalDofIndices)[i] ];
+    };
+    
+    if (subBasisDofMapper->isPermutation())
+    {
+      // this does make a couple assumptions about the implementation of the permutation mapper.  If that changes, it could break the below.
       
-      if (localCoefficients.rank()==1)
+      const set<unsigned> *localDofOrdinals = &subBasisDofMapper->basisDofOrdinalFilter();
+      bool negate = subBasisDofMapper->isNegatedPermutation();
+      
+      int i=0;
+      for (set<unsigned>::iterator localDofOrdinalIt_i = localDofOrdinals->begin(); localDofOrdinalIt_i != localDofOrdinals->end(); localDofOrdinalIt_i++, i++)
       {
-        localCoefficients(localDofIndex_i) += mappedSubBasisData(i);
-      }
-      else if (localCoefficients.rank()==2)
-      {
-        int j=0;
-        for (set<unsigned>::iterator localDofOrdinalIt_j = localDofOrdinals.begin(); localDofOrdinalIt_j != localDofOrdinals.end(); localDofOrdinalIt_j++, j++)
+        unsigned localDofOrdinal_i = *localDofOrdinalIt_i;
+        unsigned localDofIndex_i = _dofOrdering->getDofIndex(varID, localDofOrdinal_i, sideOrdinal);
+        
+        if (localCoefficients.rank()==1)
         {
-          unsigned localDofOrdinal_j = *localDofOrdinalIt_j;
-          unsigned localDofIndex_j = _dofOrdering->getDofIndex(varID, localDofOrdinal_j, sideOrdinal);
-          localCoefficients(localDofIndex_i, localDofIndex_j) += mappedSubBasisData(i,j);
+          if (!negate)
+            localCoefficients(localDofIndex_i) += globalCoefficients(globalOrdinal(i));
+          else
+            localCoefficients(localDofIndex_i) += -globalCoefficients(globalOrdinal(i));
+        }
+        else
+        {
+          int j=0;
+          for (set<unsigned>::iterator localDofOrdinalIt_j = localDofOrdinals->begin(); localDofOrdinalIt_j != localDofOrdinals->end(); localDofOrdinalIt_j++, j++)
+          {
+            unsigned localDofOrdinal_j = *localDofOrdinalIt_j;
+            unsigned localDofIndex_j = _dofOrdering->getDofIndex(varID, localDofOrdinal_j, sideOrdinal);
+            if (! negate)
+              localCoefficients(localDofIndex_i, localDofIndex_j) += globalCoefficients(globalOrdinal(i),globalOrdinal(j));
+            else
+              localCoefficients(localDofIndex_i, localDofIndex_j) += -globalCoefficients(globalOrdinal(i),globalOrdinal(j));
+          }
+        }
+      }
+    }
+    else
+    {
+      FieldContainer<double> filteredSubBasisData;
+      vector<int> globalOrdinalFilter(globalDofIndices->size());
+      for (int subBasisGlobalDofOrdinal=0; subBasisGlobalDofOrdinal<globalDofIndices->size(); subBasisGlobalDofOrdinal++)
+      {
+        globalOrdinalFilter[subBasisGlobalDofOrdinal] = _globalIndexToOrdinal[ (*globalDofIndices)[subBasisGlobalDofOrdinal] ];
+      }
+      filterData(globalOrdinalFilter, globalCoefficients, filteredSubBasisData);
+      FieldContainer<double> mappedSubBasisData = subBasisDofMapper->mapData(transposeConstraint, filteredSubBasisData, applyOnLeftOnly);
+      set<unsigned> localDofOrdinals = subBasisDofMapper->basisDofOrdinalFilter();
+      
+      int i=0;
+      for (set<unsigned>::iterator localDofOrdinalIt_i = localDofOrdinals.begin(); localDofOrdinalIt_i != localDofOrdinals.end(); localDofOrdinalIt_i++, i++)
+      {
+        unsigned localDofOrdinal_i = *localDofOrdinalIt_i;
+        unsigned localDofIndex_i = _dofOrdering->getDofIndex(varID, localDofOrdinal_i, sideOrdinal);
+        
+        if (localCoefficients.rank()==1)
+        {
+          localCoefficients(localDofIndex_i) += mappedSubBasisData(i);
+        }
+        else if (localCoefficients.rank()==2)
+        {
+          int j=0;
+          for (set<unsigned>::iterator localDofOrdinalIt_j = localDofOrdinals.begin(); localDofOrdinalIt_j != localDofOrdinals.end(); localDofOrdinalIt_j++, j++)
+          {
+            unsigned localDofOrdinal_j = *localDofOrdinalIt_j;
+            unsigned localDofIndex_j = _dofOrdering->getDofIndex(varID, localDofOrdinal_j, sideOrdinal);
+            localCoefficients(localDofIndex_i, localDofIndex_j) += mappedSubBasisData(i,j);
+          }
         }
       }
     }
@@ -177,18 +291,24 @@ LocalDofMapper::LocalDofMapper(DofOrderingPtr dofOrdering, map< int, BasisMap > 
   }
 }
 
-vector<GlobalIndexType> LocalDofMapper::globalIndices()
+const vector<GlobalIndexType> &LocalDofMapper::globalIndices()
 {
-  // the implementation does not assume that the global indices will be in numerical order (which they currently are)
-  vector<GlobalIndexType> indices(_globalIndexToOrdinal.size());
-  
-  for (map<GlobalIndexType, unsigned>::iterator globalIndexIt=_globalIndexToOrdinal.begin(); globalIndexIt != _globalIndexToOrdinal.end(); globalIndexIt++)
+    // the implementation does not assume that the global indices will be in numerical order (which they currently are)
+
+  // we store these lazily
+  if (_globalIndices.size() != _globalIndexToOrdinal.size())
   {
-    GlobalIndexType globalIndex = globalIndexIt->first;
-    unsigned ordinal = globalIndexIt->second;
-    indices[ordinal] = globalIndex;
+    _globalIndices = vector<GlobalIndexType>(_globalIndexToOrdinal.size());
+    
+    for (pair<GlobalIndexType, unsigned> globalIndexEntry : _globalIndexToOrdinal)
+    {
+      GlobalIndexType globalIndex = globalIndexEntry.first;
+      unsigned ordinal = globalIndexEntry.second;
+      _globalIndices[ordinal] = globalIndex;
+    }
   }
-  return indices;
+  
+  return _globalIndices;
 }
 
 set<GlobalIndexType> LocalDofMapper::globalIndicesForSubcell(int varID, unsigned d, unsigned subcord)
@@ -249,14 +369,12 @@ set<GlobalIndexType> LocalDofMapper::globalIndicesForSubcell(int varID, unsigned
   return indexSet;
 }
 
-
-
 vector<GlobalIndexType> LocalDofMapper::fittableGlobalIndices()
 {
   if (_fittableGlobalIndices.size() == 0)   // then we have not previously set these...
   {
     // the implementation does not assume that the global indices will be in numerical order (which they currently are)
-    vector<GlobalIndexType> allGlobalIndices = globalIndices();
+    const vector<GlobalIndexType>* allGlobalIndices = &globalIndices();
     
     set<GlobalIndexType> fittableIndicesSet;
     for (int sideOrdinal=0; sideOrdinal<_fittableGlobalDofOrdinalsOnSides.size(); sideOrdinal++)
@@ -267,9 +385,8 @@ vector<GlobalIndexType> LocalDofMapper::fittableGlobalIndices()
     fittableIndicesSet.insert(_fittableGlobalDofOrdinalsInVolume.begin(),_fittableGlobalDofOrdinalsInVolume.end());
     
     vector<GlobalIndexType> fittableIndices;
-    for (vector<GlobalIndexType>::iterator globalIndexIt=allGlobalIndices.begin(); globalIndexIt != allGlobalIndices.end(); globalIndexIt++)
+    for (GlobalIndexType globalIndex : *allGlobalIndices)
     {
-      GlobalIndexType globalIndex = *globalIndexIt;
       if (fittableIndicesSet.find(globalIndex) != fittableIndicesSet.end())
       {
         fittableIndices.push_back(globalIndex);
@@ -719,9 +836,9 @@ FieldContainer<double> LocalDofMapper::mapGlobalCoefficients(const FieldContaine
     int varID = volumeMapIt->first;
     bool skipVar = (_varIDToMap != -1) && (varID != _varIDToMap);
     if (skipVar) continue;
-    BasisMap basisMap = volumeMapIt->second;
+    BasisMap* basisMap = &volumeMapIt->second;
     int volumeSideOrdinal = 0;
-    addReverseSubBasisMapVectorContribution(varID, volumeSideOrdinal, basisMap, globalCoefficients, localCoefficients);
+    addReverseSubBasisMapVectorContribution(varID, volumeSideOrdinal, *basisMap, globalCoefficients, localCoefficients);
   }
   
   // map side data
@@ -735,8 +852,8 @@ FieldContainer<double> LocalDofMapper::mapGlobalCoefficients(const FieldContaine
       int varID = sideMapIt->first;
       bool skipVar = (_varIDToMap != -1) && (varID != _varIDToMap);
       if (skipVar) continue;
-      BasisMap basisMap = sideMapIt->second;
-      addReverseSubBasisMapVectorContribution(varID, sideOrdinal, basisMap, globalCoefficients, localCoefficients);
+      BasisMap* basisMap = &sideMapIt->second;
+      addReverseSubBasisMapVectorContribution(varID, sideOrdinal, *basisMap, globalCoefficients, localCoefficients);
     }
   }
   return localCoefficients;

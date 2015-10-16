@@ -721,6 +721,9 @@ const SubBasisReconciliationWeights & BasisReconciliation::constrainedWeights(un
   {
     _subcellReconcilationWeights[cacheKey] = computeConstrainedWeights(subcellDimension, finerBasis, finerBasisSubcellOrdinal, refinements,
                                                                        coarserBasis, coarserBasisSubcellOrdinal, vertexNodePermutation);
+    
+    // 10-14-15 added filtering:
+    _subcellReconcilationWeights[cacheKey] = filterOutZeroRowsAndColumns(_subcellReconcilationWeights[cacheKey]);
     // unnecessary copy added for debugging purposes:
 //    SubBasisReconciliationWeights weights = computeConstrainedWeights(subcellDimension, finerBasis, finerBasisSubcellOrdinal, refinements,
 //                                                                      coarserBasis, coarserBasisSubcellOrdinal, vertexNodePermutation);
@@ -779,7 +782,8 @@ const SubBasisReconciliationWeights &BasisReconciliation::constrainedWeightsForT
                                                                                    coarserBasis, coarseSubcellOrdinalInCoarseDomain,
                                                                                    coarseDomainOrdinalInCoarseCellTopo,
                                                                                    coarseSubcellPermutation);
-    _termsTraced[cacheKey] = weights;
+    _termsTraced[cacheKey] = filterOutZeroRowsAndColumns(weights); // 10-14-15 added zero-row-and-column filtering
+//    _termsTraced[cacheKey] = weights;
   }
   return _termsTraced[cacheKey];
 }

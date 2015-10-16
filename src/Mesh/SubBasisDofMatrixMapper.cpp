@@ -8,6 +8,7 @@
 
 #include "SubBasisDofMatrixMapper.h"
 
+#include "CamelliaDebugUtility.h"
 #include "SerialDenseWrapper.h"
 
 using namespace std;
@@ -32,19 +33,121 @@ SubBasisDofMatrixMapper::SubBasisDofMatrixMapper(const set<unsigned> &basisDofOr
     cout << "ERROR: constraint matrix column dimension must match the number of mapped global dof ordinals.\n";
     TEUCHOS_TEST_FOR_EXCEPTION(true, std::invalid_argument, "constraint matrix column dimension must match the number of mapped global dof ordinals");
   }
-  // int constraintCols = _constraintMatrix.dimension(1);
+
+//  { // CHECKING THE STRUCTURE OF THE CONSTRAINT MATRIX:
+//    static bool havePrintedOne = false;
+//    if (!havePrintedOne)
+//    {
+//      havePrintedOne = true;
+//      
+//      set<int> visitedRows;
+//      set<int> visitedColumns;
+//      
+//      vector<pair<set<int>,set<int>>> blocks;
+//
+//      auto newColumnsForRow = [this, &visitedColumns] (int row, set<int> &previousColumns) -> set<int>
+//      {
+//        set<int> newColumns;
+//        for (int j=0; j<_constraintMatrix.dimension(1); j++)
+//        {
+//          if (visitedColumns.find(j) != visitedColumns.end()) continue;
+//          if (previousColumns.find(j) != previousColumns.end()) continue;
+//          if (abs(_constraintMatrix(row,j)) > 0)
+//          {
+//            newColumns.insert(j);
+//          }
+//        }
+//        return newColumns;
+//      };
+//      
+//      auto newRowsForColumn = [this, &visitedRows] (int col, set<int> &previousRows) -> set<int>
+//      {
+//        set<int> newRows;
+//        for (int i=0; i<_constraintMatrix.dimension(0); i++)
+//        {
+//          if (visitedRows.find(i) != visitedRows.end()) continue;
+//          if (previousRows.find(i) != previousRows.end()) continue;
+//          if (abs(_constraintMatrix(i,col)) > 0)
+//          {
+//            newRows.insert(i);
+//          }
+//        }
+//        return newRows;
+//      };
+//      
+//      for (int i=0; i<_constraintMatrix.dimension(0); i++)
+//      {
+//        if (visitedRows.find(i) != visitedRows.end()) continue;
+//       
+//        pair<set<int>,set<int>> block; // the block that includes i
+//        
+//        set<int> newRows = {i};
+//        while (newRows.size() > 0)
+//        {
+//          block.first.insert(newRows.begin(),newRows.end());
+//        
+//          set<int> previousNewRows = newRows;
+//          newRows.clear();
+//          for (int row : previousNewRows)
+//          {
+//            set<int> newColumns = newColumnsForRow(row,block.second);
+//            if (newColumns.size() > 0)
+//            {
+//              block.second.insert(newColumns.begin(),newColumns.end());
+//            }
+//            
+//            for (int col : newColumns)
+//            {
+//              set<int> newRowsForCol = newRowsForColumn(col,block.first);
+//              newRows.insert(newRowsForCol.begin(), newRowsForCol.end());
+//            }
+//          }
+//        }
+//        blocks.push_back(block);
+//        visitedRows.insert(block.first.begin(),block.first.end());
+//        visitedColumns.insert(block.second.begin(),block.second.end());
+//      }
+//      
+//      cout << "first _constraintMatrix has " << blocks.size() << " blocks.\n";
+//      int i = 0;
+//      for (auto block : blocks)
+//      {
+//        cout << "BLOCK " << i << ":\n";
+//        print("rows", block.first);
+//        print("columns", block.second);
+//        i++;
+//      }
+////      cout << "first _constraintMatrix (nonzeros only):\n";
+////      if (abs(_constraintMatrix(i,j)) > 0)
+////        cout << setw(10) << i << setw(10) << j << setw(10) << _constraintMatrix(i,j) << endl;
+//
+//    }
+//  }
 }
+
 const set<unsigned> & SubBasisDofMatrixMapper::basisDofOrdinalFilter()
 {
   return _basisDofOrdinalFilter;
 }
+
 const FieldContainer<double> &SubBasisDofMatrixMapper::constraintMatrix()
 {
   return _constraintMatrix;
 }
+
 FieldContainer<double> SubBasisDofMatrixMapper::getConstraintMatrix()
 {
   return _constraintMatrix;
+}
+
+bool SubBasisDofMatrixMapper::isNegatedPermutation()
+{
+  return false;
+}
+
+bool SubBasisDofMatrixMapper::isPermutation()
+{
+  return false;
 }
 
 FieldContainer<double> SubBasisDofMatrixMapper::mapData(bool transposeConstraint, FieldContainer<double> &localData, bool applyOnLeftOnly)
@@ -111,6 +214,33 @@ FieldContainer<double> SubBasisDofMatrixMapper::mapData(bool transposeConstraint
   return result;
 }
 
+void SubBasisDofMatrixMapper::mapDataIntoGlobalContainer(const Intrepid::FieldContainer<double> &allLocalData, const vector<int> &basisOrdinalsInLocalData,
+                                                         const map<GlobalIndexType, unsigned> &globalIndexToOrdinal,
+                                                         bool fittableDofsOnly, const set<GlobalIndexType> &fittableDofIndices, Intrepid::FieldContainer<double> &globalData)
+{
+  const set<unsigned>* basisOrdinalFilter = &this->basisDofOrdinalFilter();
+  vector<unsigned> dofIndices(basisOrdinalFilter->begin(),basisOrdinalFilter->end());
+  FieldContainer<double> subBasisData(basisOrdinalFilter->size());
+  int dofCount = basisOrdinalFilter->size();
+  if (allLocalData.rank()==1)
+  {
+    for (int i=0; i<dofCount; i++)
+    {
+      subBasisData[i] = allLocalData[basisOrdinalsInLocalData[dofIndices[i]]];
+    }
+  }
+  else
+  {
+    TEUCHOS_TEST_FOR_EXCEPTION(true, std::invalid_argument, "mapDataIntoGlobalContainer only supports rank 1 basis data");
+  }
+  
+  // subBasisData must be rank 2, and must have the same size as FilteredLocalDofOrdinals in its first dimension
+  // reshape as a rank 2 container (column vector as a matrix):
+  subBasisData.resize(subBasisData.dimension(0),1);
+  
+  this->mapSubBasisDataIntoGlobalContainer(subBasisData, globalIndexToOrdinal, fittableDofsOnly, fittableDofIndices, globalData);
+}
+
 void SubBasisDofMatrixMapper::mapDataIntoGlobalContainer(const FieldContainer<double> &wholeBasisData, const map<GlobalIndexType, unsigned> &globalIndexToOrdinal,
     bool fittableDofsOnly, const set<GlobalIndexType> &fittableDofIndices, FieldContainer<double> &globalData)
 {
@@ -135,16 +265,25 @@ void SubBasisDofMatrixMapper::mapDataIntoGlobalContainer(const FieldContainer<do
   // subBasisData must be rank 2, and must have the same size as FilteredLocalDofOrdinals in its first dimension
   // reshape as a rank 2 container (column vector as a matrix):
   subBasisData.resize(subBasisData.dimension(0),1);
+
+  this->mapSubBasisDataIntoGlobalContainer(subBasisData, globalIndexToOrdinal, fittableDofsOnly, fittableDofIndices, globalData);
+}
+
+void SubBasisDofMatrixMapper::mapSubBasisDataIntoGlobalContainer(const FieldContainer<double> &subBasisData, const map<GlobalIndexType, unsigned> &globalIndexToOrdinal,
+                                                                 bool fittableDofsOnly, const set<GlobalIndexType> &fittableDofIndices, FieldContainer<double> &globalData)
+{
+  // like calling mapData, above, with transposeConstraint = true
+  
   int constraintRows = _constraintMatrix.dimension(1);
   int constraintCols = _constraintMatrix.dimension(0);
   int dataCols = subBasisData.dimension(1);
   int dataRows = subBasisData.dimension(0);
-
+  
   if ((dataCols==0) || (dataRows==0) || (constraintRows==0) || (constraintCols==0))
   {
     cout << "degenerate matrix encountered.\n";
   }
-
+  
   // given the multiplication we'll do, we need constraint columns = data rows
   if (constraintCols != dataRows)
   {
@@ -152,14 +291,14 @@ void SubBasisDofMatrixMapper::mapDataIntoGlobalContainer(const FieldContainer<do
     TEUCHOS_TEST_FOR_EXCEPTION(true, std::invalid_argument, "Missized container in SubBasisDofMatrixMapper::mapData().");
   }
   // (could also test that the dimensions match what we expect in terms of the size of the mapped global dof ordinals or basisDofOrdinal filter)
-
+  
   FieldContainer<double> result1(constraintRows,dataCols);
-
+  
   char constraintTransposeFlag = 'T';
   char dataTransposeFlag = 'N';
-
+  
   SerialDenseWrapper::multiply(result1,_constraintMatrix,subBasisData,constraintTransposeFlag,dataTransposeFlag);
-
+  
   for (int i=0; i<result1.size(); i++)
   {
     GlobalIndexType globalIndex_i = _mappedGlobalDofOrdinals[i];
@@ -169,7 +308,7 @@ void SubBasisDofMatrixMapper::mapDataIntoGlobalContainer(const FieldContainer<do
   }
 }
 
-vector<GlobalIndexType> SubBasisDofMatrixMapper::mappedGlobalDofOrdinals()
+const vector<GlobalIndexType> & SubBasisDofMatrixMapper::mappedGlobalDofOrdinals()
 {
   return _mappedGlobalDofOrdinals;
 }
