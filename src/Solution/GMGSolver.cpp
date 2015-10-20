@@ -143,6 +143,12 @@ Teuchos::RCP<GMGOperator> GMGSolver::gmgOperatorFromMeshSequence(const std::vect
   BCPtr zeroBCs = fineSolution->bc()->copyImposingZero();
   Epetra_Map finePartitionMap = fineSolution->getPartitionMap();
   
+  // for now, leaving these two parameters as the historical defaults (1 and 1)
+  // it may be that iteration counts would remain more stable under refinements if we increased these
+  // (but our major expense is constructing prolongation operator, so this is not likely to make a big difference in runtime)
+  int coarseSmootherApplications = 1;
+  int fineSmootherApplications = 1;
+  
   for (int i=meshesCoarseToFine.size()-1; i>0; i--)
   {
     MeshPtr fineMesh = meshesCoarseToFine[i];
@@ -171,6 +177,8 @@ Teuchos::RCP<GMGOperator> GMGSolver::gmgOperatorFromMeshSequence(const std::vect
     {
       coarseOperator->setUseSchwarzDiagonalWeight(useDiagonalSchwarzWeighting); // not sure which is better; use false for now
     }
+    
+    coarseOperator->setSmootherApplicationCount(coarseSmootherApplications);
 
     if (finerOperator != Teuchos::null)
     {
@@ -185,7 +193,7 @@ Teuchos::RCP<GMGOperator> GMGSolver::gmgOperatorFromMeshSequence(const std::vect
     finePartitionMap = finerOperator->getCoarseSolution()->getPartitionMap();
     fineDofInterpreter = finerOperator->getCoarseSolution()->getDofInterpreter();
   }
-//  finestOperator->setSmootherApplicationCount(2);
+  finestOperator->setSmootherApplicationCount(fineSmootherApplications);
   return finestOperator;
 }
 
@@ -311,11 +319,6 @@ vector<MeshPtr> GMGSolver::meshesForMultigrid(MeshPtr fineMesh, Teuchos::Paramet
   meshesCoarseToFine.push_back(fineMesh);
   
   return meshesCoarseToFine;
-}
-
-void GMGSolver::setFineMesh(MeshPtr fineMesh, Epetra_Map finePartitionMap)
-{
-  _gmgOperator->setFineMesh(fineMesh, finePartitionMap);
 }
 
 void GMGSolver::setPrintToConsole(bool printToConsole)

@@ -56,7 +56,7 @@ public:
   GMGSolver(TSolutionPtr<double> fineSolution, int maxIters, double tol, int H1OrderCoarse = 1,
             Teuchos::RCP<Solver> coarseSolver = Solver::getDirectSolver(true), bool useStaticCondensation = false);
   GMGSolver(TSolutionPtr<double> fineSolution, const std::vector<MeshPtr> &meshesCoarseToFine, int maxIters, double tol,
-            GMGOperator::MultigridStrategy multigridStrategy = GMGOperator::W_CYCLE,
+            GMGOperator::MultigridStrategy multigridStrategy = GMGOperator::V_CYCLE,
             Teuchos::RCP<Solver> coarseSolver = Solver::getDirectSolver(true), bool useStaticCondensation = false,
             bool useDiagonalSchwarzWeighting = false);
 
@@ -80,8 +80,6 @@ public:
 
   void setAztecConvergenceOption(int value);
   void setAztecOutput(int value);
-
-  void setFineMesh(MeshPtr fineMesh, Epetra_Map finePartitionMap);
 
   void setUseConjugateGradient(bool value); // otherwise will use GMRES
 

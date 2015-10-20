@@ -107,6 +107,13 @@ private:
   
   void reportTimings(StatisticChoice whichStat, bool sumAllOperators) const;
   
+  // ! private method; allows us to swap the fine and coarse roles in certain circumstances.
+  Teuchos::RCP<Epetra_FECrsMatrix> constructProlongationOperator(Teuchos::RCP<DofInterpreter> coarseDofInterpreter,
+                                                                 Teuchos::RCP<DofInterpreter> fineDofInterpreter,
+                                                                 bool useStaticCondensation,
+                                                                 Epetra_Map &coarseMap, Epetra_Map &fineMap,
+                                                                 MeshPtr coarseMesh, MeshPtr fineMesh);
+  
 public: // promoted these two to public for testing purposes:
   LocalDofMapperPtr getLocalCoefficientMap(GlobalIndexType fineCellID) const;
   GlobalIndexType getCoarseCellID(GlobalIndexType fineCellID) const;
@@ -154,19 +161,6 @@ public:
    */
   int SetUseTranspose(bool UseTranspose);
   //@}
-
-  //! Set new fine mesh
-  /*!
-
-   \param In
-   fineMesh - new fine mesh
-
-
-   \param In
-   finePartitionMap - partition map for the new fine mesh
-
-   */
-  void setFineMesh(MeshPtr fineMesh, Epetra_Map finePartitionMap);
 
   void clearTimings();
   void reportTimings(StatisticChoice stat = ALL) const;
