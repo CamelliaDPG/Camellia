@@ -201,14 +201,14 @@ int DofOrdering::getDofIndex(int varID, int basisDofOrdinal, int sideIndex, int 
   }
 }
 
-const vector<int> & DofOrdering::getDofIndices(int varID, int sideIndex)
+const vector<int> & DofOrdering::getDofIndices(int varID, int sideIndex) const
 {
   TEUCHOS_TEST_FOR_EXCEPTION( ( _indexNeedsToBeRebuilt ),
                               std::invalid_argument,
                               "getDofIndices called when _indexNeedsToBeRebuilt = true.  Call rebuildIndex() first.");
 
   pair<int,int> key = make_pair(varID, sideIndex);
-  map< pair<int,int>, vector<int> >::iterator entryIt = indices.find(key);
+  const map< pair<int,int>, vector<int> >::const_iterator entryIt = indices.find(key);
   if ( entryIt == indices.end() )
   {
     TEUCHOS_TEST_FOR_EXCEPTION(true, std::invalid_argument, "No entry found for DofIndex.");
@@ -267,7 +267,7 @@ set<int> DofOrdering::getTraceDofIndices()
   return traceDofIndices;
 }
 
-const set<int> & DofOrdering::getVarIDs()
+const set<int> & DofOrdering::getVarIDs() const
 {
   return varIDs;
 }
@@ -394,6 +394,39 @@ void DofOrdering::rebuildIndex()
   _nextIndex -= numIdentificationsProcessed;
   //cout << "index rebuilt; _nextIndex = " << _nextIndex << "; numIdentificationsProcessed: " << numIdentificationsProcessed << endl;
   _indexNeedsToBeRebuilt = false;
+}
+
+vector<pair<int,vector<int>>> DofOrdering::variablesWithNonZeroEntries(const Intrepid::FieldContainer<double> &localCoefficients, double tol) const
+{
+  TEUCHOS_TEST_FOR_EXCEPTION(localCoefficients.size() != this->totalDofs(), std::invalid_argument, "localCoefficients must have size == totalDofs()");
+  bool varFound = false;
+  int varID; // there should be only one
+  set<int> localDofIndicesCounted;
+  const set<int>* trialIDs = &this->getVarIDs();
+
+  vector<pair<int,vector<int>>> results;
+  for (int trialID : *trialIDs)
+  {
+    const vector<int>* trialSides = &this->getSidesForVarID(trialID);
+    vector<int> matchingSides; // there may be several
+    for (int trialSide : *trialSides)
+    {
+      const vector<int>* trialLocalDofIndices = &this->getDofIndices(trialID,trialSide);
+      for (int trialLocalDofIndex : *trialLocalDofIndices)
+      {
+        if (abs(localCoefficients[trialLocalDofIndex]) > tol)
+        {
+          matchingSides.push_back(trialSide);
+          break;
+        }
+      }
+    }
+    if (matchingSides.size() > 0)
+    {
+      results.push_back({trialID,matchingSides});
+    }
+  }
+  return results;
 }
 
 std::ostream& operator << (std::ostream& os, DofOrdering& dofOrdering)

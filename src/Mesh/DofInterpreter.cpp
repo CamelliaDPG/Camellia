@@ -70,11 +70,35 @@ void DofInterpreter::interpretLocalCoefficients(GlobalIndexType cellID, const In
     {
       int sideOrdinal = *sideIt;
       int basisCardinality = trialOrder->getBasisCardinality(trialID, sideOrdinal);
-      basisCoefficients.resize(basisCardinality);
-      vector<int> localDofIndices = trialOrder->getDofIndices(trialID, sideOrdinal);
+      
+      // check for non-zeros
+      const vector<int>* localDofIndices = &trialOrder->getDofIndices(trialID, sideOrdinal);
+      bool nonZeroFound = false;
       for (int basisOrdinal=0; basisOrdinal<basisCardinality; basisOrdinal++)
       {
-        int localDofIndex = localDofIndices[basisOrdinal];
+        int localDofIndex = (*localDofIndices)[basisOrdinal];
+        if (localCoefficients[localDofIndex] != 0.0)
+        {
+          nonZeroFound = true;
+          break;
+        }
+      }
+      if (!nonZeroFound)
+      {
+        // then all zeros should be mapped; only question is which global dof indices get zeros
+        std::set<GlobalIndexType> globalDofIndices = this->getGlobalDofIndices(cellID, trialID, sideOrdinal);
+        for (GlobalIndexType globalDofIndex : globalDofIndices)
+        {
+          fittedGlobalCoefficients[globalDofIndex] = 0.0;
+        }
+        continue;
+      }
+      
+      basisCoefficients.resize(basisCardinality);
+      
+      for (int basisOrdinal=0; basisOrdinal<basisCardinality; basisOrdinal++)
+      {
+        int localDofIndex = (*localDofIndices)[basisOrdinal];
         basisCoefficients[basisOrdinal] = localCoefficients[localDofIndex];
       }
       FieldContainer<double> fittedGlobalCoefficientsFC;

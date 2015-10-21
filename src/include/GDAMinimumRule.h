@@ -63,7 +63,8 @@ class GDAMinimumRule : public GlobalDofAssignment
   map< GlobalIndexType, map<int, map<int, LocalDofMapperPtr> > > _dofMapperForVariableOnSideCache; // cellID --> side --> variable --> LocalDofMapper
   map< GlobalIndexType, SubCellDofIndexInfo> _ownedGlobalDofIndicesCache; // (cellID --> SubCellDofIndexInfo)
   map< GlobalIndexType, SubCellDofIndexInfo> _globalDofIndicesForCellCache; // (cellID --> SubCellDofIndexInfo) -- this has a lot of overlap in its data with the _ownedGlobalDofIndicesCache; could save some memory by only storing the difference
-
+  map< pair<GlobalIndexType,pair<int,unsigned>>, set<GlobalIndexType>> _fittableGlobalIndicesCache; // keys: (cellID,(varID,sideOrdinal))
+  
   vector<unsigned> allBasisDofOrdinalsVector(int basisCardinality);
 
   static string annotatedEntityToString(AnnotatedEntity &entity);
@@ -99,7 +100,7 @@ public:
   
   CellConstraints getCellConstraints(GlobalIndexType cellID);
   LocalDofMapperPtr getDofMapper(GlobalIndexType cellID, CellConstraints &constraints, int varIDToMap = -1, int sideOrdinalToMap = -1);
-  SubCellDofIndexInfo getGlobalDofIndices(GlobalIndexType cellID, CellConstraints &cellConstraints);
+  SubCellDofIndexInfo& getGlobalDofIndices(GlobalIndexType cellID, CellConstraints &cellConstraints);
   set<GlobalIndexType> getGlobalDofIndicesForIntegralContribution(GlobalIndexType cellID, int sideOrdinal); // assuming an integral is being done over the whole mesh skeleton, returns either an empty set or the global dof indices associated with the given side, depending on whether the cell "owns" the side for the purpose of such contributions.
   // ! returns the permutation that goes from the indicated cell's view of the subcell to the constraining cell's view.
   unsigned getConstraintPermutation(GlobalIndexType cellID, unsigned subcdim, unsigned subcord);

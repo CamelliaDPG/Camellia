@@ -114,6 +114,9 @@ private:
                                                                  Epetra_Map &coarseMap, Epetra_Map &fineMap,
                                                                  MeshPtr coarseMesh, MeshPtr fineMesh);
   
+  int prolongationRowCount() const;
+  int prolongationColCount() const;
+  
 public: // promoted these two to public for testing purposes:
   LocalDofMapperPtr getLocalCoefficientMap(GlobalIndexType fineCellID) const;
   GlobalIndexType getCoarseCellID(GlobalIndexType fineCellID) const;
@@ -353,9 +356,18 @@ public:
   
   //! Returns the fine dof interpreter
   Teuchos::RCP<DofInterpreter> getFineDofInterpreter();
+  
+  //! When true, the roles of fine and coarse are swapped during prolongation operator construction,
+  //! and the transpose of the prolongation operator is used.
+  bool getFineCoarseRolesSwapped() const;
+  
+  //! When true, the roles of fine and coarse are swapped during prolongation operator construction,
+  //! and the transpose of the prolongation operator is used.
+  void setFineCoarseRolesSwapped(bool value);
 private:
   SmootherChoice _smootherType;
   int _smootherOverlap;
+  bool _fineCoarseRolesSwapped;
 
   FactorType _schwarzBlockFactorizationType;
   int _levelOfFill;

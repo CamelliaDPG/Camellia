@@ -79,9 +79,9 @@ public:
   // get the varIndex variable's dof with basis ordinal dofId in the Dof ordering:
   int getDofIndex(int varID, int basisDofOrdinal, int sideIndex=VOLUME_INTERIOR_SIDE_ORDINAL, int subSideIndex = -1);
 
-  const std::vector<int> & getDofIndices(int varID, int sideIndex=VOLUME_INTERIOR_SIDE_ORDINAL);
+  const std::vector<int> & getDofIndices(int varID, int sideIndex=VOLUME_INTERIOR_SIDE_ORDINAL) const;
 
-  const std::set<int> & getVarIDs();
+  const std::set<int> & getVarIDs() const;
 
   std::set<int> getTraceDofIndices(); // returns dof indices corresponding to variables with numSides > 1.
 
@@ -110,12 +110,15 @@ public:
   int maxBasisDegree();
   int maxBasisDegreeForVolume();
 
-  int totalDofs()
+  int totalDofs() const
   {
     return _nextIndex;
   }
 
   void rebuildIndex();
+  
+  // ! Returns vector containing (varID,vector<sideOrdinal>) entries corresponding to variables with nonzero coefficients in the provided container
+  vector<pair<int,vector<int>>> variablesWithNonZeroEntries(const Intrepid::FieldContainer<double> &localCoefficients, double tol = 0.0) const;
 };
 }
 

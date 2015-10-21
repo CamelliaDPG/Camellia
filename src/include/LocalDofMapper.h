@@ -40,7 +40,10 @@ class LocalDofMapper   // maps a whole trial ordering
   
   void mapLocalDataVector(const Intrepid::FieldContainer<double> &localData, bool fittableGlobalDofsOnly,
                           Intrepid::FieldContainer<double> &mappedDataVector);
-
+  void mapLocalDataVector(const Intrepid::FieldContainer<double> &localData, bool fittableGlobalDofsOnly,
+                          const std::vector<std::pair<int,std::vector<int>>> &varIDsAndSideOrdinalsToMap,
+                          Intrepid::FieldContainer<double> &mappedDataVector);
+  
   Intrepid::FieldContainer<double> _localCoefficientsFitMatrix; // used for fitLocalCoefficients
   vector<GlobalIndexType> _globalIndices;
 
@@ -55,6 +58,10 @@ public:
                  int varIDToMap = -1, int sideOrdinalToMap = -1);
 
   Intrepid::FieldContainer<double> mapLocalData(const Intrepid::FieldContainer<double> &localData, bool fittableGlobalDofsOnly);
+  
+  Intrepid::FieldContainer<double> mapLocalData(const Intrepid::FieldContainer<double> &localData, bool fittableGlobalDofsOnly,
+                                                const std::vector<std::pair<int,std::vector<int>>> &varIDsAndSideOrdinalsToMap);
+  
   void mapLocalDataSide(const Intrepid::FieldContainer<double> &localData, Intrepid::FieldContainer<double> &mappedData, bool fittableGlobalDofsOnly, int sideOrdinal);
   void mapLocalDataVolume(const Intrepid::FieldContainer<double> &localData, Intrepid::FieldContainer<double> &mappedData, bool fittableGlobalDofsOnly);
 

@@ -418,7 +418,8 @@ vector<int> GDAMinimumRule::H1Order(GlobalIndexType cellID, unsigned sideOrdinal
   return _cellH1Orders[cellID];
 }
 
-void GDAMinimumRule::interpretGlobalCoefficients(GlobalIndexType cellID, Intrepid::FieldContainer<double> &localCoefficients, const Epetra_MultiVector &globalCoefficients)
+void GDAMinimumRule::interpretGlobalCoefficients(GlobalIndexType cellID, Intrepid::FieldContainer<double> &localCoefficients,
+                                                 const Epetra_MultiVector &globalCoefficients)
 {
   CellConstraints constraints = getCellConstraints(cellID);
   LocalDofMapperPtr dofMapper = getDofMapper(cellID, constraints);
@@ -1756,12 +1757,22 @@ BasisMap GDAMinimumRule::getBasisMapOld(GlobalIndexType cellID, SubCellDofIndexI
         DofOrderingPtr appliedConstraintTrialOrdering = _elementTypeForCell[subcellInfo.cellID]->trialOrderPtr;
         BasisPtr appliedConstraintBasis = appliedConstraintTrialOrdering->getBasis(var->ID(), subcellInfo.sideOrdinal);
 
-        CellConstraints cellConstraints = getCellConstraints(subcellInfo.cellID);
-        AnnotatedEntity subcellConstraint = cellConstraints.subcellConstraints[d][subcordInAppliedConstraintCell];
-
-        CellPtr constrainingCell = _meshTopology->getCell(subcellConstraint.cellID);
+//        CellConstraints cellConstraints = getCellConstraints(subcellInfo.cellID);
+        AnnotatedEntity subcellConstraint = getCellConstraints(subcellInfo.cellID).subcellConstraints[d][subcordInAppliedConstraintCell];
 
         DofOrderingPtr constrainingTrialOrdering = _elementTypeForCell[subcellConstraint.cellID]->trialOrderPtr;
+        
+//        if (! constrainingTrialOrdering->hasBasisEntry(var->ID(), subcellConstraint.sideOrdinal))
+//        {
+//          // assumption is, "conforming" space-time trace that's not supported on the temporal side.  We should treat this guy as
+//          // self-constrained:
+//          subcellConstraint = subcellInfo;
+//          // TODO: check if this is reasonably treated below...
+//          cout << "WARNING: constrainingTrialOrdering->hasBasisEntry(var->ID(), subcellConstraint.sideOrdinal) returned false.\n";
+//          constrainingTrialOrdering = _elementTypeForCell[subcellConstraint.sideOrdinal]->trialOrderPtr;
+//        }
+        
+        CellPtr constrainingCell = _meshTopology->getCell(subcellConstraint.cellID);
         BasisPtr constrainingBasis = constrainingTrialOrdering->getBasis(var->ID(), subcellConstraint.sideOrdinal);
 
 
@@ -2635,6 +2646,12 @@ typedef vector< SubCellOrdinalToMap > SubCellDofIndexInfo; // index to vector: s
 set<GlobalIndexType> GDAMinimumRule::getFittableGlobalDofIndices(GlobalIndexType cellID, CellConstraints &constraints, int sideOrdinal,
                                                                  int varID)
 {
+  pair<GlobalIndexType,pair<int,unsigned>> key = {cellID,{varID,sideOrdinal}};
+  if (_fittableGlobalIndicesCache.find(key) != _fittableGlobalIndicesCache.end())
+  {
+    return _fittableGlobalIndicesCache[key];
+  }
+  
   // returns the global dof indices for basis functions which have support on the given side.  This is determined by taking the union of the global dof indices defined on all the constraining sides for the given side (the constraining sides are by definition unconstrained).
   SubCellDofIndexInfo dofIndexInfo = getGlobalDofIndices(cellID, constraints);
   CellPtr cell = _meshTopology->getCell(cellID);
@@ -2712,6 +2729,7 @@ set<GlobalIndexType> GDAMinimumRule::getFittableGlobalDofIndices(GlobalIndexType
       }
     }
   }
+  _fittableGlobalIndicesCache[key] = fittableDofIndices;
   return fittableDofIndices;
 }
 
@@ -2851,7 +2869,7 @@ void printDofIndexInfo(GlobalIndexType cellID, SubCellDofIndexInfo &dofIndexInfo
   }
 }
 
-SubCellDofIndexInfo GDAMinimumRule::getGlobalDofIndices(GlobalIndexType cellID, CellConstraints &constraints)
+SubCellDofIndexInfo& GDAMinimumRule::getGlobalDofIndices(GlobalIndexType cellID, CellConstraints &constraints)
 {
   if (_globalDofIndicesForCellCache.find(cellID) == _globalDofIndicesForCellCache.end())
   {
@@ -2949,12 +2967,12 @@ set<GlobalIndexType> GDAMinimumRule::getGlobalDofIndices(GlobalIndexType cellID,
   set<GlobalIndexType> fittableIndexSet;
   if ((var->varType() == FLUX) || (var->varType() == TRACE))
   {
-    fittableIndexSet = getFittableGlobalDofIndices(cellID, constraints, sideOrdinal, varID);
+    return getFittableGlobalDofIndices(cellID, constraints, sideOrdinal, varID);
   }
   else
   {
-    SubCellDofIndexInfo dofIndexInfo = getGlobalDofIndices(cellID, constraints);
-    fittableIndexSet.insert(dofIndexInfo[spaceDim][0][var->ID()].begin(),dofIndexInfo[spaceDim][0][var->ID()].end());
+    SubCellDofIndexInfo* dofIndexInfo = &getGlobalDofIndices(cellID, constraints);
+    fittableIndexSet.insert((*dofIndexInfo)[spaceDim][0][varID].begin(),(*dofIndexInfo)[spaceDim][0][varID].end());
   }
   
   return fittableIndexSet;
@@ -3138,6 +3156,7 @@ void GDAMinimumRule::rebuildLookups()
   _dofMapperForVariableOnSideCache.clear();
   _ownedGlobalDofIndicesCache.clear();
   _globalDofIndicesForCellCache.clear();
+  _fittableGlobalIndicesCache.clear();
 
   _partitionFluxIndexOffsets.clear();
   _partitionTraceIndexOffsets.clear();
