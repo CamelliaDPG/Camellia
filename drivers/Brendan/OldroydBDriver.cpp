@@ -29,13 +29,59 @@
 
 using namespace Camellia;
 
-class TopBoundary : public SpatialFilter
+class TopLidBoundary : public SpatialFilter
 {
 public:
   bool matchesPoint(double x, double y)
   {
     double tol = 1e-14;
     return (abs(y-1.0) < tol);
+  }
+};
+
+// class LeftHemkerBoundary : public SpatialFilter
+// {
+// public:
+//   bool matchesPoint(double x, double y)
+//   {
+//     double tol = 1e-14;
+//     return (abs(x-0.0) < tol);
+//   }
+// };
+
+// class RightHemkerBoundary : public SpatialFilter
+// {
+// public:
+//   bool matchesPoint(double x, double y)
+//   {
+//     double tol = 1e-14;
+//     return (abs(x-6.0) < tol);
+//   }
+// };
+
+// class LeftRightHemkerBoundary : public SpatialFilter
+// {
+// public:
+//   bool matchesPoint(double x, double y)
+//   {
+//     double tol = 1e-14;
+//     return ((abs(x-0.0) < tol) || (abs(x-6.0) < tol));
+//   }
+// };
+
+class CylinderBoundary : public SpatialFilter
+{
+  double _radius;
+public:
+  CylinderBoundary(double radius)
+  {
+    _radius = radius;
+  }
+  // CylinderBoundary(double radius) : _radius(radius) {}
+  bool matchesPoint(double x, double y)
+  {
+    double tol = 5e-1; // be generous b/c dealing with parametric curve
+    return (sqrt(x*x+y*y) < _radius+tol);
   }
 };
 
@@ -55,6 +101,17 @@ public:
     else {     // top middle
       return 1;
     }
+  }
+};
+
+class ParabolicInflowFunction_U1 : public SimpleFunction<double> {
+  double _height; // ramp width
+public:
+  ParabolicInflowFunction_U1(double height) {
+    _height = height;
+  }
+  double value(double x, double y) {
+    return (_height/2+y)*(_height/2-y);
   }
 };
 
@@ -96,7 +153,7 @@ int main(int argc, char *argv[])
   bool logFineOperator = false;
   double solverTolerance = 1e-10;
   int maxNonlinearIterations = 20;
-  double nonlinearTolerance = 1e-5;
+  double nonlinearTolerance = 1e-6;
   int maxLinearIterations = 10000;
   // bool computeL2Error = false;
   bool exportSolution = false;
@@ -174,22 +231,38 @@ int main(int argc, char *argv[])
 
   ///////////////////////////  DECLARE MESH  ///////////////////////////
 
-  // if (problemChoice == "LidDriven")
-  // {
+  MeshTopologyPtr spatialMeshTopo;
+  double xLeft, xRight, height, cylinderRadius;
+
+  if (problemChoice == "LidDriven")
+  {
     // LID-DRIVEN CAVITY FLOW
     double x0 = 0.0, y0 = 0.0;
-    double width = 1.0, height = 1.0;
+    double width = 1.0;
+    height = 1.0;
     int horizontalCells = 2, verticalCells = 2;
-    MeshTopologyPtr spatialMeshTopo =  MeshFactory::quadMeshTopology(width, height, horizontalCells, verticalCells,
+    spatialMeshTopo =  MeshFactory::quadMeshTopology(width, height, horizontalCells, verticalCells,
                                                                      false, x0, y0);
-  // }
-  // else
-  // {
-  //   // FLOW PAST A CYLINDER
-
-  //   cout << "ERROR: Problem type not currently supported. Returning null.\n";
-  //   return Teuchos::null;
-  // }
+  }
+  else if (problemChoice == "HemkerCylinder")
+  {
+    // FLOW PAST A CYLINDER
+    xLeft = -3.0, xRight = 9.0;
+    height = 6.0;
+    cylinderRadius = 1.0;
+    MeshGeometryPtr HemkerGeometry = MeshFactory::shiftedHemkerGeometry(xLeft, xRight, height, cylinderRadius);
+    spatialMeshTopo = Teuchos::rcp( new MeshTopology(HemkerGeometry) );
+  }
+  else if (problemChoice == "Test 1")
+  {
+    cout << "ERROR: Problem type not currently supported. Returning null.\n";
+    return Teuchos::null;
+  }
+  else
+  {
+    cout << "ERROR: Problem type not currently supported. Returning null.\n";
+    return Teuchos::null;
+  }
 
   NavierStokesVGPFormulation form(spatialMeshTopo, parameters);
   // OldroydBFormulation form(spatialMeshTopo, parameters);
@@ -209,10 +282,10 @@ int main(int argc, char *argv[])
   u2hat = form.u_hat(2);
   p     = form.p();
 
-  if (problemChoice== "LidDriven")
+  if (problemChoice == "LidDriven")
   {
     // LID-DRIVEN CAVITY FLOW
-    SpatialFilterPtr topBoundary = Teuchos::rcp( new TopBoundary );
+    SpatialFilterPtr topBoundary = Teuchos::rcp( new TopLidBoundary );
     SpatialFilterPtr otherBoundary = SpatialFilter::negatedFilter(topBoundary);
 
     //   top boundary:
@@ -227,6 +300,48 @@ int main(int argc, char *argv[])
     //   zero-mean constraint
     bc->addZeroMeanConstraint(p);
   }
+  else if (problemChoice == "HemkerCylinder")
+  {
+    // FLOW PAST A CYLINDER
+    // SpatialFilterPtr leftBoundary = Teuchos::rcp( new LeftHemkerBoundary );
+    SpatialFilterPtr leftBoundary = SpatialFilter::matchingX(xLeft);
+    SpatialFilterPtr rightBoundary = SpatialFilter::matchingX(xRight);
+    SpatialFilterPtr topBoundary = SpatialFilter::matchingY(height/2);
+    SpatialFilterPtr bottomBoundary = SpatialFilter::matchingY(-height/2);
+    SpatialFilterPtr cylinderBoundary = Teuchos::rcp( new CylinderBoundary(cylinderRadius));
+    // SpatialFilterPtr rightBoundary = Teuchos::rcp( new RightHemkerBoundary );
+    // SpatialFilterPtr leftRightBoundary = Teuchos::rcp( new LeftRightHemkerBoundary );
+    // SpatialFilterPtr otherBoundary = SpatialFilter::negatedFilter(leftRightBoundary);
+
+    // inflow on left boundary
+    FunctionPtr u1_inflowFunction = Teuchos::rcp( new ParabolicInflowFunction_U1(height) );
+    FunctionPtr u2_inflowFunction = zero;
+    FunctionPtr u = Function::vectorize(u1_inflowFunction,u2_inflowFunction);
+
+    form.addInflowCondition(leftBoundary, u);
+
+    // top+bottom
+    // form.addOutflowCondition(topBoundary);
+    // form.addOutflowCondition(bottomBoundary);
+    form.addWallCondition(topBoundary);
+    form.addWallCondition(bottomBoundary);
+
+
+
+    // outflow on right boundary
+    form.addOutflowCondition(rightBoundary);
+
+    // no slip on cylinder
+    form.addWallCondition(cylinderBoundary);
+
+    // cout << "ERROR: Problem type not currently supported. Returning null.\n";
+    // return Teuchos::null;
+  }
+  else if (problemChoice == "Test 1")
+  {
+    cout << "ERROR: Problem type not currently supported. Returning null.\n";
+    return Teuchos::null;
+  }
   else
   {
     cout << "ERROR: Problem type not currently supported. Returning null.\n";
@@ -238,13 +353,13 @@ int main(int argc, char *argv[])
   //////////////////////////////////////////////////////////////////////
 
   ostringstream solnName;
-  solnName << "OldroydB" << "_" << norm << "_p" << p << "_" << solverChoice;// << "_" << multigridStrategyString;
+  solnName << "OldroydB" << "_" << norm << "_k" << k << "_" << solverChoice;// << "_" << multigridStrategyString;
   if (solverChoice[0] == 'G')
     solnName << "_" << multigridStrategyString;
   if (tag != "")
     solnName << "_" << tag;
 
-  RefinementStrategyPtr refStrategy = form.getRefinementStrategy();
+  // RefinementStrategyPtr refStrategy = form.getRefinementStrategy();
   Teuchos::RCP<HDF5Exporter> exporter;
   if (exportSolution)
     exporter = Teuchos::rcp(new HDF5Exporter(mesh,solnName.str(), outputDir));
@@ -333,17 +448,19 @@ int main(int argc, char *argv[])
     }
     // else
     //   soln->condensedSolve(solvers[solverChoice]);
-
+    double alpha = 1.0;
     int iterationCount = 0;
     while (l2Update > nonlinearTolerance && iterCount < maxNonlinearIterations)
     {
       if (solverChoice[0] == 'G')
       {
-        solutionIncrement->solve(gmgSolver);
+        // solutionIncrement->solve(gmgSolver);
+        form.solveAndAccumulate(alpha);
         iterationCount += gmgSolver->iterationCount();
       }
       else
-        solutionIncrement->condensedSolve(solvers[solverChoice]);
+        form.solveAndAccumulate(alpha);
+        // solutionIncrement->condensedSolve(solvers[solverChoice]);
 
       // Compute L2 norm of update
       l2Update = form.L2NormSolutionIncrement();
@@ -351,23 +468,23 @@ int main(int argc, char *argv[])
       if (commRank == 0)
         cout << "Nonlinear Update:\t " << l2Update << endl;
 
-      // form.updateSolution();
-      set<int> nonlinearVars;
-      nonlinearVars.insert(form.u(1)->ID());
-      nonlinearVars.insert(form.u(2)->ID());
-      nonlinearVars.insert(form.sigma(1,1)->ID());
-      nonlinearVars.insert(form.sigma(1,2)->ID());
-      nonlinearVars.insert(form.sigma(2,2)->ID());
-      nonlinearVars.insert(form.sigma(2,2)->ID());
+      // // form.updateSolution();
+      // set<int> nonlinearVars;
+      // nonlinearVars.insert(form.u(1)->ID());
+      // nonlinearVars.insert(form.u(2)->ID());
+      // nonlinearVars.insert(form.sigma(1,1)->ID());
+      // nonlinearVars.insert(form.sigma(1,2)->ID());
+      // nonlinearVars.insert(form.sigma(2,2)->ID());
+      // nonlinearVars.insert(form.sigma(2,2)->ID());
 
-      set<int> linearVars;
-      nonlinearVars.insert(form.p()->ID());
-      nonlinearVars.insert(form.u_hat(1)->ID());
-      nonlinearVars.insert(form.u_hat(2)->ID());
-      nonlinearVars.insert(form.tn_hat(1)->ID());
-      nonlinearVars.insert(form.tn_hat(2)->ID());
+      // set<int> linearVars;
+      // nonlinearVars.insert(form.p()->ID());
+      // nonlinearVars.insert(form.u_hat(1)->ID());
+      // nonlinearVars.insert(form.u_hat(2)->ID());
+      // nonlinearVars.insert(form.tn_hat(1)->ID());
+      // nonlinearVars.insert(form.tn_hat(2)->ID());
 
-      double alpha = 1;
+      // double alpha = 1;
       // vector<int> trialIDs = _vf->trialIDs();
       // set<int> trialIDSet(trialIDs.begin(), trialIDs.end());
       // set<int> nlVars = nonlinearVars();
@@ -375,7 +492,7 @@ int main(int argc, char *argv[])
       // set_difference(trialIDSet.begin(), trialIDSet.end(), nlVars.begin(), nlVars.end(),
       //     std::inserter(lVars, lVars.end()));
 
-      solutionBackground->addReplaceSolution(solutionIncrement, alpha, nonlinearVars, linearVars);
+      // solutionBackground->addReplaceSolution(solutionIncrement, alpha, nonlinearVars, linearVars);
 
       iterCount++;
     }
@@ -421,7 +538,8 @@ int main(int argc, char *argv[])
       // exporter->exportSolution(solutionIncrement, refIndex);
 
     if (refIndex != numRefs)
-      refStrategy->refine();
+      form.refine();
+      // refStrategy->refine();
   }
   dataFile.close();
   double totalTime = totalTimer->stop();
