@@ -73,7 +73,7 @@ public:
   // ! this version of mapGlobalCoefficients should be more efficient when the number of global coefficients in the map is small (i.e. there would be lots of zeroes in the FieldContainer version)
   Intrepid::FieldContainer<double> mapGlobalCoefficients(const std::map<GlobalIndexType,double> &globalCoefficients);
   
-  vector<GlobalIndexType> fittableGlobalIndices();
+  const vector<GlobalIndexType> &fittableGlobalIndices();
   const vector<GlobalIndexType> &globalIndices();
   set<GlobalIndexType> globalIndicesForSubcell(int varID, unsigned d, unsigned subcord);
 

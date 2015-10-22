@@ -484,7 +484,7 @@ set<GlobalIndexType> LocalDofMapper::globalIndicesForSubcell(int varID, unsigned
   return indexSet;
 }
 
-vector<GlobalIndexType> LocalDofMapper::fittableGlobalIndices()
+const vector<GlobalIndexType>& LocalDofMapper::fittableGlobalIndices()
 {
   if (_fittableGlobalIndices.size() == 0)   // then we have not previously set these...
   {

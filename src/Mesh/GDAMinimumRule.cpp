@@ -636,12 +636,12 @@ void GDAMinimumRule::interpretLocalBasisCoefficients(GlobalIndexType cellID, int
   LocalDofMapperPtr dofMapper = getDofMapper(cellID, constraints, varID, sideOrdinal);
 
   globalCoefficients = dofMapper->fitLocalCoefficients(basisCoefficients);
-  vector<GlobalIndexType> globalIndexVector = dofMapper->fittableGlobalIndices();
-  globalDofIndices.resize(globalIndexVector.size());
+  const vector<GlobalIndexType>* globalIndexVector = &dofMapper->fittableGlobalIndices();
+  globalDofIndices.resize(globalIndexVector->size());
 
-  for (int i=0; i<globalIndexVector.size(); i++)
+  for (int i=0; i<globalIndexVector->size(); i++)
   {
-    globalDofIndices(i) = globalIndexVector[i];
+    globalDofIndices(i) = (*globalIndexVector)[i];
   }
 }
 
