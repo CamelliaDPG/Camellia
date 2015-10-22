@@ -447,6 +447,15 @@ Teuchos::RCP<Epetra_FECrsMatrix> GMGOperator::constructProlongationOperator(Teuc
     Epetra_Map    localXMap(myGlobalIndices.size(), myGlobalIndices.size(), &myGlobalIndices[0], 0, SerialComm);
     Teuchos::RCP<Epetra_Vector> XLocal = Teuchos::rcp( new Epetra_Vector(localXMap) );
     
+    // to (possibly) reduce the cost of allocating these containers, declare them outside and resize inside as needed
+    FieldContainer<GlobalIndexTypeToCast> coarseGlobalIndices;
+    FieldContainer<double> coarseGlobalValues;
+    FieldContainer<double> coarseCellCoefficients;
+    FieldContainer<double> mappedCoarseCellCoefficients;
+    FieldContainer<double> globalCoefficients;
+    FieldContainer<GlobalIndexType> globalDofIndices;
+    FieldContainer<double> fineCellCoefficients;
+    
     for (int localID=0; localID < fineMap.NumMyElements(); localID++)
     {
       GlobalIndexTypeToCast globalRow = fineMap.GID(localID);
@@ -469,12 +478,11 @@ Teuchos::RCP<Epetra_FECrsMatrix> GMGOperator::constructProlongationOperator(Teuc
       }
       else
       {
-        set<GlobalIndexType> cells = cellsForGlobalDofOrdinal[globalRow];
-        for (GlobalIndexType fineCellID : cells)
+        for (GlobalIndexType fineCellID : cellsForGlobalDofOrdinal[globalRow])
         {
           DofOrderingPtr fineTrialOrdering = fineMesh->getElementType(fineCellID)->trialOrderPtr;
           int fineDofCount = fineTrialOrdering->totalDofs();
-          FieldContainer<double> fineCellCoefficients(fineDofCount);
+          fineCellCoefficients.resize(fineDofCount);
         
           /*
            The following is a bit backwards; it should be that DofInterpreter itself could tell us which variables
@@ -497,8 +505,8 @@ Teuchos::RCP<Epetra_FECrsMatrix> GMGOperator::constructProlongationOperator(Teuc
           }
           DofOrderingPtr coarseTrialOrdering = coarseMesh->getElementType(coarseCellID)->trialOrderPtr;
           int coarseDofCount = coarseMesh->getElementType(coarseCellID)->trialOrderPtr->totalDofs();
-          FieldContainer<double> coarseCellCoefficients(coarseDofCount);
-          FieldContainer<double> mappedCoarseCellCoefficients(fineMapper->globalIndices().size());
+          coarseCellCoefficients.resize(coarseDofCount);
+          mappedCoarseCellCoefficients.resize(fineMapper->globalIndices().size());
           
           coarseCellCoefficients = fineMapper->mapLocalData(fineCellCoefficients, true, fineNonZeroVarIDs);
           
@@ -516,8 +524,6 @@ Teuchos::RCP<Epetra_FECrsMatrix> GMGOperator::constructProlongationOperator(Teuc
               {
                 basisCoefficients[basisOrdinal] = coarseCellCoefficients[(*localDofIndices)[basisOrdinal]];
               }
-              FieldContainer<double> globalCoefficients;
-              FieldContainer<GlobalIndexType> globalDofIndices;
               coarseDofInterpreter->interpretLocalBasisCoefficients(coarseCellID, varID, sideOrdinal, basisCoefficients,
                                                                     globalCoefficients, globalDofIndices);
               for (int i=0; i<globalCoefficients.size(); i++)
@@ -550,8 +556,8 @@ Teuchos::RCP<Epetra_FECrsMatrix> GMGOperator::constructProlongationOperator(Teuc
         }
       }
       
-      FieldContainer<GlobalIndexTypeToCast> coarseGlobalIndices(coarseXVectorLocal.size());
-      FieldContainer<double> coarseGlobalValues(coarseXVectorLocal.size());
+      coarseGlobalIndices.resize(coarseXVectorLocal.size());
+      coarseGlobalValues.resize(coarseXVectorLocal.size());
       int nnz = 0; // nonzero entries
       //      cout << "P global row " << globalRow << ": ";
       for (map<GlobalIndexTypeToCast, double>::iterator coarseXIt=coarseXVectorLocal.begin(); coarseXIt != coarseXVectorLocal.end(); coarseXIt++)

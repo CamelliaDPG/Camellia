@@ -70,7 +70,7 @@ public:
                                           const std::set<int> &trialIDsToExclude);
 
   virtual void interpretLocalBasisCoefficients(GlobalIndexType cellID, int varID, int sideOrdinal, const Intrepid::FieldContainer<double> &basisCoefficients,
-      Intrepid::FieldContainer<double> &globalCoefficients, Intrepid::FieldContainer<GlobalIndexType> &globalDofIndices) = 0;
+                                               Intrepid::FieldContainer<double> &globalCoefficients, Intrepid::FieldContainer<GlobalIndexType> &globalDofIndices) = 0;
 
   virtual void interpretGlobalCoefficients(GlobalIndexType cellID, Intrepid::FieldContainer<double> &localDofs, const Epetra_MultiVector &globalDofs) = 0;
 

@@ -25,6 +25,7 @@ class LocalDofMapper   // maps a whole trial ordering
   map< int, BasisMap > _volumeMaps; // keys are var IDs (fields)
   vector< map< int, BasisMap > > _sideMaps; // outer index is side ordinal; map keys are var IDs
   map< GlobalIndexType, unsigned > _globalIndexToOrdinal; // maps from GlobalIndex to the ordinal in our globalData container (on the present implementation, the global indices will always be in numerical order)
+  map< GlobalIndexType, vector<int> > _globalIndexToVarIDs; // maps from GlobalIndex to its var IDs (determined by which var ID has a map to a given global index) -- one GlobalIndex may have multiple varIDs in the case of traces that map to fields.
 
   vector< set<GlobalIndexType> > _fittableGlobalDofOrdinalsOnSides;
   set<GlobalIndexType> _fittableGlobalDofOrdinalsInVolume;
@@ -36,6 +37,7 @@ class LocalDofMapper   // maps a whole trial ordering
   void filterData(const vector<int> dofIndices, const Intrepid::FieldContainer<double> &data, Intrepid::FieldContainer<double> &filteredData);
   void addSubBasisMapVectorContribution(int varID, int sideIndex, BasisMap &basisMap, const Intrepid::FieldContainer<double> &localData, Intrepid::FieldContainer<double> &globalData, bool fittableGlobalDofsOnly);
   void addReverseSubBasisMapVectorContribution(int varID, int sideOrdinal, BasisMap &basisMap, const Intrepid::FieldContainer<double> &globalData, Intrepid::FieldContainer<double> &localData);
+  void addReverseSubBasisMapVectorContribution(int varID, int sideOrdinal, BasisMap &basisMap, const std::map<GlobalIndexType,double> &globalCoefficients, Intrepid::FieldContainer<double> &localCoefficients);
   Intrepid::FieldContainer<double> mapLocalDataMatrix(const Intrepid::FieldContainer<double> &localData, bool fittableGlobalDofsOnly);
   
   void mapLocalDataVector(const Intrepid::FieldContainer<double> &localData, bool fittableGlobalDofsOnly,
@@ -68,7 +70,10 @@ public:
   Intrepid::FieldContainer<double> fitLocalCoefficients(const Intrepid::FieldContainer<double> &localCoefficients); // solves normal equations (if the localCoefficients are in the range of the global-to-local operator, then the returned coefficients will be the preimage of localCoefficients under that operator)
   Intrepid::FieldContainer<double> mapGlobalCoefficients(const Intrepid::FieldContainer<double> &globalCoefficients);
 
-  vector<GlobalIndexType> fittableGlobalIndices();
+  // ! this version of mapGlobalCoefficients should be more efficient when the number of global coefficients in the map is small (i.e. there would be lots of zeroes in the FieldContainer version)
+  Intrepid::FieldContainer<double> mapGlobalCoefficients(const std::map<GlobalIndexType,double> &globalCoefficients);
+  
+  const vector<GlobalIndexType> &fittableGlobalIndices();
   const vector<GlobalIndexType> &globalIndices();
   set<GlobalIndexType> globalIndicesForSubcell(int varID, unsigned d, unsigned subcord);
 
