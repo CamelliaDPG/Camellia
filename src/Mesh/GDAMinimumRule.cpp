@@ -433,23 +433,45 @@ void GDAMinimumRule::interpretGlobalCoefficients(GlobalIndexType cellID, Intrepi
 
   if (globalCoefficients.NumVectors() == 1)
   {
-    Intrepid::FieldContainer<double> globalCoefficientsFC(globalIndexVector.size());
-    Epetra_BlockMap partMap = globalCoefficients.Map();
-    for (int i=0; i<globalIndexVector.size(); i++)
+    bool useFieldContainer = false;
+    
+    if (useFieldContainer)
     {
-      GlobalIndexTypeToCast globalIndex = globalIndexVector[i];
-      int localIndex = partMap.LID(globalIndex);
-      if (localIndex != -1)
+      Intrepid::FieldContainer<double> globalCoefficientsFC(globalIndexVector.size());
+      Epetra_BlockMap partMap = globalCoefficients.Map();
+      for (int i=0; i<globalIndexVector.size(); i++)
       {
-        globalCoefficientsFC[i] = globalCoefficients[0][localIndex];
+        GlobalIndexTypeToCast globalIndex = globalIndexVector[i];
+        int localIndex = partMap.LID(globalIndex);
+        if (localIndex != -1)
+        {
+          globalCoefficientsFC[i] = globalCoefficients[0][localIndex];
+        }
+        else
+        {
+          // non-local coefficient: ignore
+          globalCoefficientsFC[i] = 0;
+        }
       }
-      else
-      {
-        // non-local coefficient: ignore
-        globalCoefficientsFC[i] = 0;
-      }
+      localCoefficients = dofMapper->mapGlobalCoefficients(globalCoefficientsFC);
     }
-    localCoefficients = dofMapper->mapGlobalCoefficients(globalCoefficientsFC);
+    else
+    {
+      Epetra_BlockMap partMap = globalCoefficients.Map();
+      map<GlobalIndexType,double> globalCoefficientsToMap;
+      for (int i=0; i<globalIndexVector.size(); i++)
+      {
+        GlobalIndexTypeToCast globalIndex = globalIndexVector[i];
+        int localIndex = partMap.LID(globalIndex);
+        if (localIndex != -1)
+        {
+          if (globalCoefficients[0][localIndex] != 0.0)
+            globalCoefficientsToMap[globalIndex] = globalCoefficients[0][localIndex];
+        }
+      }
+//      if (globalCoefficientsToMap.size() == 0) cout << "***********************  Empty globalCoefficientsToMap **************************\n";
+      localCoefficients = dofMapper->mapGlobalCoefficients(globalCoefficientsToMap);
+    }
   }
   else
   {
