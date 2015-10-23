@@ -455,6 +455,7 @@ Teuchos::RCP<Epetra_FECrsMatrix> GMGOperator::constructProlongationOperator(Teuc
     FieldContainer<double> globalCoefficients;
     FieldContainer<GlobalIndexType> globalDofIndices;
     FieldContainer<double> fineCellCoefficients;
+    FieldContainer<double> basisCoefficients;
     
     for (int localID=0; localID < fineMap.NumMyElements(); localID++)
     {
@@ -519,7 +520,7 @@ Teuchos::RCP<Epetra_FECrsMatrix> GMGOperator::constructProlongationOperator(Teuc
             for (int sideOrdinal : varIDSidesEntry.second)
             {
               const vector<int>* localDofIndices = &coarseTrialOrdering->getDofIndices(varID,sideOrdinal);
-              FieldContainer<double> basisCoefficients(localDofIndices->size());
+              basisCoefficients.resize(localDofIndices->size());
               for (int basisOrdinal=0; basisOrdinal < localDofIndices->size(); basisOrdinal++)
               {
                 basisCoefficients[basisOrdinal] = coarseCellCoefficients[(*localDofIndices)[basisOrdinal]];
