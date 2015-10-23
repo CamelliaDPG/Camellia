@@ -26,19 +26,27 @@ namespace Camellia {
     bool _saveFactorization;
     bool _havePrintedStatus;
     bool _runSilent; // false by default -- true outputs when reuse is requested
+    int _maxProcsToUse;
   public:
     SuperLUDistSolver(bool saveFactorization)
     {
       _saveFactorization = saveFactorization;
       _havePrintedStatus = false;
       _runSilent = false;
+      _maxProcsToUse = 256;
+    }
+    
+    // ! Positive number will be the maximum number used.  -3 means all processors will be used; -2 means square root of the number of processors available will be used
+    void setMaxProcsToUse(int maxProcs)
+    {
+      _maxProcsToUse = maxProcs;
     }
     
     int solve() {
       Teuchos::ParameterList paramList;
       
       int numRanks = this->_stiffnessMatrix->Comm().NumProc();
-      int maxProcs = min(numRanks,256);
+      int maxProcs = min(numRanks,_maxProcsToUse);
       paramList.set("MaxProcs",maxProcs); // -3 means all processors will be used; -2 means square root of the number of processors available will be used
       
 //      if (!_havePrintedStatus)

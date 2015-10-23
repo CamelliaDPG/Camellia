@@ -11,9 +11,11 @@
 #include "RefinementStrategy.h"
 #include "Solver.h"
 #include "StokesVGPFormulation.h"
+#include "SuperLUDistSolver.h"
 #include "TrigFunctions.h"
 #include "TypeDefs.h"
 
+#include "Amesos_config.h"
 #include "AztecOO.h"
 
 #include "Epetra_Operator_to_Epetra_Matrix.h"
@@ -750,7 +752,16 @@ int main(int argc, char *argv[])
   else
   {
     timer.ResetStartTime();
-    solution->solve(Solver::getDirectSolver());
+    SolverPtr solver = Solver::getDirectSolver();
+#if defined(HAVE_AMESOS_SUPERLUDIST) || defined(HAVE_AMESOS2_SUPERLUDIST)
+    // if we are solving directly using SuperLU_Dist, there's a good chance we're memory-bound.  Let's use as many processors as are available
+    SuperLUDistSolver* superLUSolver = dynamic_cast<SuperLUDistSolver*>(solver.get());
+    if (superLUSolver)
+    {
+      superLUSolver->setMaxProcsToUse(-3);
+    }
+#endif
+    solution->solve();
     solveTime = timer.ElapsedTime();
   }
 
