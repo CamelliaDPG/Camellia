@@ -761,7 +761,7 @@ int main(int argc, char *argv[])
       superLUSolver->setMaxProcsToUse(-3);
     }
 #endif
-    solution->solve();
+    solution->solve(superLUSolver);
     solveTime = timer.ElapsedTime();
   }
 
