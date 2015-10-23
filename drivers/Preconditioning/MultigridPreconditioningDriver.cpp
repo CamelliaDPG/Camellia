@@ -759,6 +759,8 @@ int main(int argc, char *argv[])
     if (superLUSolver)
     {
       superLUSolver->setMaxProcsToUse(-3);
+      if (rank==0)
+        cout << "****** Set SuperLUDistSolver to use all available processors (for direct solve). ***** \n";
     }
 #endif
     solution->solve(superLUSolver);
