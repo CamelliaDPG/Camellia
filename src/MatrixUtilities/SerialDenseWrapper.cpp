@@ -646,15 +646,20 @@ namespace Camellia {
       TEUCHOS_TEST_FOR_EXCEPTION(true, std::invalid_argument, "x and b's first dimension must match the dimension of A!");
     }
     
+    int N = A.dimension(0);
+    int nRHS = b.dimension(1); // M
+    
+    int info = 0; // default return value
+    
+    // transpose data in b container (we'll transpose it back before we return)
+    transposeMatrix(b);
+    
     // by wrapping the below in braces, we allow the things we allocate there to go out of scope
     // before the transpose of the x FieldContainer, which as presently implemented copies x.  This can
     // take a sizable chunk of memory for higher-order computations, so being able to reclaim the memory
     // allocated for bSDM--which is the same size as x--actually guarantees that we won't run out of memory
     // during the transposition (we would have run out when allocating bSDM if we were that constrained).
     {
-      int N = A.dimension(0);
-      int nRHS = b.dimension(1); // M
-      
       int numCols = N;
       int numRows = N;
       int rowStride = numCols;
@@ -683,8 +688,7 @@ namespace Camellia {
       if (!useATranspose) // avoid transpose computation when useATranspose = true
         ASDM = Teuchos::rcp(new Teuchos::SerialDenseMatrix<int, double>( ATranspose, Teuchos::TRANS));
       
-      Teuchos::SerialDenseMatrix<int, double> bTranspose( Teuchos::View, &b(0,0), nRHS, nRHS, N);
-      Teuchos::SerialDenseMatrix<int, double> bSDM( bTranspose, Teuchos::TRANS);  // transpose the RHS matrix
+      Teuchos::SerialDenseMatrix<int, double> bSDM( Teuchos::View, &b(0,0), N, N, nRHS);
       
       // transpose x since SDM is transposed relative to FC:
       x.resize(nRHS,N);
@@ -692,7 +696,6 @@ namespace Camellia {
       
       Teuchos::SerialQRDenseSolver<int,double> qrSolver;
       
-      int info = 0;
       if (useATranspose)
       {
         qrSolver.setMatrix( Teuchos::rcp( &ATranspose, false ) );
@@ -706,24 +709,34 @@ namespace Camellia {
       if (info != 0)
       {
         std::cout << "Teuchos::SerialQRDenseSolver::factor() returned : " << info << std::endl;
+        // we transposed b above; transpose back
+        transposeMatrix(b);
+
         return info;
       }
       
       info = qrSolver.solve();
       if (info != 0)
       {
+        // we transposed b above; transpose back before returning
+        transposeMatrix(b);
+        
         std::cout << "Teuchos::SerialQRDenseSolver::solve() returned : " << info << std::endl;
         writeMatrixToMatlabFile("/tmp/A.dat", A);
         writeMatrixToMatlabFile("/tmp/b.dat", b);
         std::cout << "wrote matrices to /tmp/A.dat, /tmp/b.dat.\n";
         //      std::cout << "A:\n" << A;
         //      std::cout << "b:\n" << b;
+
         return info;
       }
     }
   
     // the SDM computation for x has put things in there transposed relative to caller's expectations; transpose
     transposeMatrix(x);
+    
+    // we transposed b above; transpose back
+    transposeMatrix(b);
     
     return 0;
   }
