@@ -26,14 +26,13 @@ void TSolver<Scalar>::printAvailableSolversReport()
 #ifdef HAVE_AMESOS_MUMPS
   cout << solverChoiceString(MUMPS) << endl;
 #endif
-  cout << solverChoiceString(GMGSolver_1_Level_h) << endl;
+//  cout << solverChoiceString(GMG) << endl;
 }
 
 template <typename Scalar>
 TSolverPtr<Scalar> TSolver<Scalar>::getSolver(SolverChoice choice, bool saveFactorization,
     double residualTolerance, int maxIterations,
-    TSolutionPtr<double> fineSolution, MeshPtr coarseMesh,
-    TSolverPtr<Scalar> coarseSolver)
+    TSolutionPtr<double> fineSolution, TSolverPtr<Scalar> coarseSolver)
 {
   switch (choice)
   {
@@ -50,15 +49,20 @@ TSolverPtr<Scalar> TSolver<Scalar>::getSolver(SolverChoice choice, bool saveFact
     return Teuchos::rcp( new MumpsSolver(saveFactorization) );
 #endif
       
-  case GMGSolver_1_Level_h:
+  case GMG:
   {
-    // false below: don't use condensed solve...
-    bool useCondensedSolve = false;
-    GMGSolver* gmgSolver = new GMGSolver(fineSolution, coarseMesh, maxIterations, residualTolerance, coarseSolver, useCondensedSolve);
+    Teuchos::ParameterList pl;
+    pl.set("kCoarse", 0);
+    pl.set("delta_k", 1); // this should not really matter in this context
+    pl.set("jumpToCoarsePolyOrder", false); //, k_coarse == 1); // due to an apparent issue in meshesForMultigrid, "jump" from 1 to 0
+    vector<MeshPtr> meshesCoarseToFine = GMGSolver::meshesForMultigrid(fineSolution->mesh(), pl);
+    Teuchos::RCP<GMGSolver> gmgSolver = Teuchos::rcp(new GMGSolver(fineSolution, meshesCoarseToFine, maxIterations, residualTolerance, GMGOperator::V_CYCLE,
+                                                                   coarseSolver, fineSolution->usesCondensedSolve(), false));
+    
+    gmgSolver->setAztecOutput(0);
+    gmgSolver->setComputeConditionNumberEstimate(false);
 
-    gmgSolver->setComputeConditionNumberEstimate(false); // faster if we don't compute it
-
-    return Teuchos::rcp(gmgSolver);
+    return gmgSolver;
   }
   default:
     cout << "Solver choice " << solverChoiceString(choice) << " not recognized.\n";
@@ -69,11 +73,11 @@ TSolverPtr<Scalar> TSolver<Scalar>::getSolver(SolverChoice choice, bool saveFact
 template <typename Scalar>
 TSolverPtr<Scalar> TSolver<Scalar>::getDirectSolver(bool saveFactorization) {
 #if defined(HAVE_AMESOS_SUPERLUDIST) || defined(HAVE_AMESOS2_SUPERLUDIST)
-  return getSolver(TSolver<Scalar>::SuperLUDist, saveFactorization);
+  return TSolver<Scalar>::getSolver(TSolver<Scalar>::SuperLUDist, saveFactorization);
 #elif defined(HAVE_AMESOS_MUMPS)
-  return getSolver(TSolver<Scalar>::MUMPS, saveFactorization);
+  return TSolver<Scalar>::getSolver(TSolver<Scalar>::MUMPS, saveFactorization);
 #else
-  return getSolver(TSolver<Scalar>::KLU, saveFactorization);
+  return TSolver<Scalar>::getSolver(TSolver<Scalar>::KLU, saveFactorization);
 #endif
 }
 
