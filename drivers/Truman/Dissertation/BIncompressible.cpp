@@ -184,7 +184,8 @@ int main(int argc, char *argv[])
   //                                                                    false, x0, y0);
   // }
 
-  NavierStokesVGPFormulation form(spatialMeshTopo, parameters);
+  // NavierStokesVGPFormulation form(spatialMeshTopo, parameters);
+  NavierStokesVGPFormulation form = NavierStokesVGPFormulation::steadyFormulation(2, 1./mu, false, spatialMeshTopo, k, delta_k);
   // OldroydBFormulation form(spatialMeshTopo, parameters);
 
   MeshPtr mesh = form.solutionIncrement()->mesh();
