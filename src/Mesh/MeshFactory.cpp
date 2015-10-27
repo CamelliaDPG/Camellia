@@ -576,7 +576,8 @@ MeshTopologyPtr MeshFactory::intervalMeshTopology(double xLeft, double xRight, i
   return meshTopology;
 }
 
-MeshPtr MeshFactory::rectilinearMesh(TBFPtr<double> bf, vector<double> dimensions, vector<int> elementCounts, int H1Order, int pToAddTest, vector<double> x0)
+MeshPtr MeshFactory::rectilinearMesh(TBFPtr<double> bf, vector<double> dimensions, vector<int> elementCounts, int H1Order, int pToAddTest, vector<double> x0,
+                                     map<int,int> trialOrderEnhancements, map<int,int> testOrderEnhancements)
 {
   int spaceDim = dimensions.size();
   if (pToAddTest==-1)
@@ -586,7 +587,7 @@ MeshPtr MeshFactory::rectilinearMesh(TBFPtr<double> bf, vector<double> dimension
 
   MeshTopologyPtr meshTopology = rectilinearMeshTopology(dimensions, elementCounts, x0);
 
-  return Teuchos::rcp( new Mesh(meshTopology, bf, H1Order, pToAddTest) );
+  return Teuchos::rcp( new Mesh(meshTopology, bf, H1Order, pToAddTest, trialOrderEnhancements, testOrderEnhancements) );
 }
 
 MeshTopologyPtr MeshFactory::rectilinearMeshTopology(vector<double> dimensions, vector<int> elementCounts, vector<double> x0)
