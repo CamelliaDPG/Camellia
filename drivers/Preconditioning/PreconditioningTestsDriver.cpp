@@ -990,8 +990,8 @@ void run(ProblemChoice problemChoice, int &iterationCount, int spaceDim, int num
     GMGSolver* coarseSolver = dynamic_cast<GMGSolver*>(fineSolver->gmgOperator()->getCoarseSolver().get());
     if (coarseSolver != NULL)
     {
-      if (rank==0) cout << "************   Coarse GMG Solver, timings   *************\n";
-      coarseSolver->gmgOperator()->reportTimings();
+      if (rank==0) cout << "\n************   Coarse GMG Solver, timings   *************\n";
+      coarseSolver->gmgOperator()->reportTimingsSumOfOperators(StatisticChoice::MAX);
       vector<int> iterationCountLog = coarseSolver->getIterationCountLog();
       if (rank==0) Camellia::print("coarseSolver iteration counts:",iterationCountLog);
       double totalIterationCount = 0;
@@ -999,7 +999,7 @@ void run(ProblemChoice problemChoice, int &iterationCount, int spaceDim, int num
       {
         totalIterationCount += iterationCountLog[i];
       }
-      if (rank==0) cout << "Average coarse solver iteration count: " << totalIterationCount / iterationCountLog.size() << endl;
+      if (rank==0) cout << "Average coarse solver iteration count: " << totalIterationCount / iterationCountLog.size() << "\n\n";
     }
   }
 
