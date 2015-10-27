@@ -361,7 +361,8 @@ enum ProblemChoice
   ConvectionDiffusion,
   ConvectionDiffusionExperimental,
   Stokes,
-  NavierStokes
+  NavierStokes,
+  LinearElasticity
 };
 
 enum RunManyPreconditionerChoices
@@ -405,7 +406,7 @@ string smootherString(GMGOperator::SmootherChoice smoother)
 
 void initializeSolutionAndCoarseMesh(SolutionPtr &solution, MeshPtr &coarseMesh, IPPtr &graphNorm, ProblemChoice problemChoice,
                                      int spaceDim, bool conformingTraces, bool useStaticCondensation, int numCells, int k, int delta_k, int k_coarse,
-                                     int rootMeshNumCells, bool useZeroMeanConstraints = false)
+                                     int rootMeshNumCells, bool useZeroMeanConstraints, bool enhanceFieldsForH1TracesWhenConforming)
 {
   BFPtr bf;
   BCPtr bc;
@@ -420,6 +421,8 @@ void initializeSolutionAndCoarseMesh(SolutionPtr &solution, MeshPtr &coarseMesh,
 
   VarPtr p; // pressure
 
+  map<int,int> trialOrderEnhancements;
+  
   if (problemChoice == Poisson)
   {
     PoissonFormulation formulation(spaceDim, conformingTraces);
@@ -436,6 +439,11 @@ void initializeSolutionAndCoarseMesh(SolutionPtr &solution, MeshPtr &coarseMesh,
     SpatialFilterPtr boundary = SpatialFilter::allSpace();
     VarPtr phi_hat = formulation.phi_hat();
     bc->addDirichlet(phi_hat, boundary, Function::zero());
+    
+    if (conformingTraces && enhanceFieldsForH1TracesWhenConforming)
+    {
+      trialOrderEnhancements[formulation.phi()->ID()] = 1;
+    }
   }
   else if (problemChoice == ConvectionDiffusion)
   {
@@ -511,6 +519,11 @@ void initializeSolutionAndCoarseMesh(SolutionPtr &solution, MeshPtr &coarseMesh,
 //      bf->printTrialTestInteractions();
 //      cout << "RHS: " << rhs->linearTerm()->displayString() << endl;
 //    }
+    
+    if (conformingTraces && enhanceFieldsForH1TracesWhenConforming)
+    {
+      trialOrderEnhancements[formulation.u()->ID()] = 1;
+    }
   }
   else if (problemChoice == ConvectionDiffusionExperimental)
   {
@@ -627,6 +640,11 @@ void initializeSolutionAndCoarseMesh(SolutionPtr &solution, MeshPtr &coarseMesh,
       bc->addDirichlet(uhat, outflowZ, zero);
     }
     
+    if (conformingTraces && enhanceFieldsForH1TracesWhenConforming)
+    {
+      trialOrderEnhancements[u->ID()] = 1;
+    }
+    
 //    if (rank==0)
 //    {
 //      bf->printTrialTestInteractions();
@@ -715,6 +733,17 @@ void initializeSolutionAndCoarseMesh(SolutionPtr &solution, MeshPtr &coarseMesh,
       rhs->addTerm(f1 * v1 + f2 * v2);
     else
       rhs->addTerm(f1 * v1 + f2 * v2 + f3 * v3);
+    
+    if (conformingTraces && enhanceFieldsForH1TracesWhenConforming)
+    {
+      for (int d=0; d<spaceDim; d++)
+        trialOrderEnhancements[formulation.u(d+1)->ID()] = 1;
+    }
+  }
+  else if (problemChoice == LinearElasticity)
+  {
+    cout << "LinearElasticity not yet supported!\n";
+    TEUCHOS_TEST_FOR_EXCEPTION(true, std::invalid_argument, "LinearElasticity not yet supported!");
   }
 
   int H1Order = k + 1;
@@ -727,7 +756,7 @@ void initializeSolutionAndCoarseMesh(SolutionPtr &solution, MeshPtr &coarseMesh,
     dimensions.push_back(width);
     elementCounts.push_back(rootMeshNumCells);
   }
-  mesh = MeshFactory::rectilinearMesh(bf, dimensions, elementCounts, H1Order, delta_k, x0);
+  mesh = MeshFactory::rectilinearMesh(bf, dimensions, elementCounts, H1Order, delta_k, x0, trialOrderEnhancements);
 
   // now that we have mesh, add pressure constraint for Stokes (imposing zero at origin--want to aim for center of mesh)
   if ((problemChoice == Stokes) || (problemChoice==NavierStokes))
@@ -767,7 +796,7 @@ void initializeSolutionAndCoarseMesh(SolutionPtr &solution, MeshPtr &coarseMesh,
 
   // coarse and fine mesh share a MeshTopology.  This means that they should not be further refined (they won't be, here)
   int H1Order_coarse = k_coarse + 1;
-  coarseMesh = Teuchos::rcp(new Mesh(mesh->getTopology(), bf, H1Order_coarse, delta_k, coarseMeshTrialSpaceEnhancements));
+  coarseMesh = Teuchos::rcp(new Mesh(mesh->getTopology(), bf, H1Order_coarse, delta_k, trialOrderEnhancements));
   
   if (graphNorm == Teuchos::null) // if set previously, honor that...
     graphNorm = bf->graphNorm();
@@ -782,7 +811,8 @@ void run(ProblemChoice problemChoice, int &iterationCount, int spaceDim, int num
          int schwarzOverlap, GMGOperator::FactorType schwarzBlockFactorization, int schwarzLevelOfFill, double schwarzFillRatio,
          Solver::SolverChoice coarseSolverChoice, double cgTol, int cgMaxIterations, int AztecOutputLevel,
          bool reportTimings, double &solveTime, bool reportEnergyError, int numCellsRootMesh, bool hOnly, bool useZeroMeanConstraints,
-         bool writeAndExit, GMGOperator::SmootherApplicationType comboType, double smootherWeight, bool useWeightMatrixForSchwarz)
+         bool writeAndExit, GMGOperator::SmootherApplicationType comboType, double smootherWeight, bool useWeightMatrixForSchwarz,
+         bool enhanceFieldsForH1TracesWhenConforming)
 {
   int rank = Teuchos::GlobalMPISession::getRank();
   if (k_coarse == -1)
@@ -847,7 +877,7 @@ void run(ProblemChoice problemChoice, int &iterationCount, int spaceDim, int num
   MeshPtr k0Mesh;
   IPPtr graphNorm;
   initializeSolutionAndCoarseMesh(solution, k0Mesh, graphNorm, problemChoice, spaceDim, conformingTraces, useStaticCondensation,
-                                  numCells, k, delta_k, k_coarse, numCellsRootMesh, useZeroMeanConstraints);
+                                  numCells, k, delta_k, k_coarse, numCellsRootMesh, useZeroMeanConstraints, enhanceFieldsForH1TracesWhenConforming);
   solution->setNarrateOnRankZero(narrateSolution, "fine Solution");
   
   MeshPtr mesh = solution->mesh();
@@ -1128,7 +1158,7 @@ void runMany(ProblemChoice problemChoice, int spaceDim, int delta_k, int minCell
              double cgTol, int cgMaxIterations, int aztecOutputLevel, RunManyPreconditionerChoices preconditionerChoices,
              int k, int k_coarse, int overlapLevel, int numCellsRootMesh, bool reportTimings, bool hOnly, int maxCells,
              bool useZeroMeanConstraints, GMGOperator::SmootherApplicationType comboType, double smootherWeight,
-             bool useWeightMatrixForSchwarz)
+             bool useWeightMatrixForSchwarz, bool enhanceFieldsForH1TracesWhenConforming)
 {
   int rank = Teuchos::GlobalMPISession::getRank();
 
@@ -1395,7 +1425,7 @@ void runMany(ProblemChoice problemChoice, int spaceDim, int delta_k, int minCell
                   schwarzBlockFactorization, schwarzLevelOfFill, schwarzFillRatio, coarseSolverChoice,
                   cgTol, cgMaxIterations, aztecOutputLevel, reportTimings, solveTime,
                   reportEnergyError, numCellsRootMesh, hOnly, useZeroMeanConstraints, writeAndExit, comboType,
-                  smootherWeight, useWeightMatrixForSchwarz);
+                  smootherWeight, useWeightMatrixForSchwarz, enhanceFieldsForH1TracesWhenConforming);
 
               int numCells = pow((double)numCells1D, spaceDim);
 
@@ -1422,6 +1452,10 @@ void runMany(ProblemChoice problemChoice, int spaceDim, int delta_k, int minCell
     if ((preconditionerChoiceString == "GMGGeometricSchwarz") && !useWeightMatrixForSchwarz)
     {
       filename << "GMGGeometricSchwarzUnweighted";
+    }
+    else if ((preconditionerChoiceString == "GMGGeometricSchwarz") && useWeightMatrixForSchwarz)
+    {
+      filename << "GMGGeometricSchwarzWEIGHTED";
     }
     else
     {
@@ -1523,6 +1557,8 @@ int main(int argc, char *argv[])
   bool runAutomatic = false;
 
   bool reportTimings = false;
+  
+  bool enhanceFieldsForH1TracesWhenConforming = true; // new 10-27-15
 
   bool hOnly = false;
   
@@ -1562,6 +1598,8 @@ int main(int argc, char *argv[])
 
   cmdp.setOption("hOnly", "notHOnly", &hOnly);
 
+  cmdp.setOption("enhanceFieldsForH1TracesWhenConforming", "equalOrderFieldsForH1TracesWhenConforming", &enhanceFieldsForH1TracesWhenConforming);
+  
   cmdp.setOption("schwarzFactorization", &schwarzFactorizationTypeString, "Schwarz block factorization strategy: Direct, IC, ILU");
   cmdp.setOption("schwarzFillRatio", &fillRatio, "Schwarz block factorization: fill ratio for IC");
   cmdp.setOption("schwarzLevelOfFill", &levelOfFill, "Schwarz block factorization: level of fill for ILU");
@@ -1770,7 +1808,7 @@ int main(int argc, char *argv[])
         schwarzFactorType, levelOfFill, fillRatio, coarseSolverChoice,
         cgTol, cgMaxIterations, AztecOutputLevel, reportTimings, solveTime,
         reportEnergyError, numCellsRootMesh, hOnly, useZeroMeanConstraints, writeAndExit, comboType, smootherWeight,
-        useWeightMatrixForSchwarz);
+        useWeightMatrixForSchwarz, enhanceFieldsForH1TracesWhenConforming);
 
     if (rank==0) cout << "Iteration count: " << iterationCount << "; solve time " << solveTime << " seconds." << endl;
   }
@@ -1810,7 +1848,7 @@ int main(int argc, char *argv[])
             coarseSolverChoice,
             cgTol, cgMaxIterations, AztecOutputLevel,
             runManySubsetChoice, k, k_coarse, schwarzOverlap, numCellsRootMesh, reportTimings, hOnly, maxCells,
-            useZeroMeanConstraints, comboType, smootherWeight, useWeightMatrixForSchwarz);
+            useZeroMeanConstraints, comboType, smootherWeight, useWeightMatrixForSchwarz, enhanceFieldsForH1TracesWhenConforming);
   }
   return 0;
 }
