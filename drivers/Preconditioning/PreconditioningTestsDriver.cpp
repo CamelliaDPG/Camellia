@@ -411,6 +411,7 @@ void initializeSolutionAndCoarseMesh(SolutionPtr &solution, MeshPtr &coarseMesh,
   BCPtr bc;
   RHSPtr rhs;
   MeshPtr mesh;
+  map<int,int> coarseMeshTrialSpaceEnhancements;
 
   int rank = Teuchos::GlobalMPISession::getRank();
   
@@ -424,7 +425,7 @@ void initializeSolutionAndCoarseMesh(SolutionPtr &solution, MeshPtr &coarseMesh,
     PoissonFormulation formulation(spaceDim, conformingTraces);
 
     bf = formulation.bf();
-
+    
     rhs = RHS::rhs();
     FunctionPtr f = Function::constant(1.0);
 
@@ -454,7 +455,7 @@ void initializeSolutionAndCoarseMesh(SolutionPtr &solution, MeshPtr &coarseMesh,
     ConvectionDiffusionFormulation formulation(spaceDim, conformingTraces, beta, epsilon);
 
     bf = formulation.bf();
-
+    
     rhs = RHS::rhs();
     FunctionPtr f = Function::constant(1.0);
 
@@ -641,7 +642,7 @@ void initializeSolutionAndCoarseMesh(SolutionPtr &solution, MeshPtr &coarseMesh,
 
     bf = formulation.bf();
     graphNorm = bf->graphNorm();
-
+    
     rhs = RHS::rhs();
 
     FunctionPtr cos_y = Teuchos::rcp( new Cos_y );
@@ -718,10 +719,9 @@ void initializeSolutionAndCoarseMesh(SolutionPtr &solution, MeshPtr &coarseMesh,
 
   int H1Order = k + 1;
 
-  BFPtr bilinearForm = bf;
-
   vector<double> dimensions;
   vector<int> elementCounts;
+  
   for (int d=0; d<spaceDim; d++)
   {
     dimensions.push_back(width);
@@ -767,7 +767,7 @@ void initializeSolutionAndCoarseMesh(SolutionPtr &solution, MeshPtr &coarseMesh,
 
   // coarse and fine mesh share a MeshTopology.  This means that they should not be further refined (they won't be, here)
   int H1Order_coarse = k_coarse + 1;
-  coarseMesh = Teuchos::rcp(new Mesh(mesh->getTopology(), bf, H1Order_coarse, delta_k));
+  coarseMesh = Teuchos::rcp(new Mesh(mesh->getTopology(), bf, H1Order_coarse, delta_k, coarseMeshTrialSpaceEnhancements));
   
   if (graphNorm == Teuchos::null) // if set previously, honor that...
     graphNorm = bf->graphNorm();
@@ -799,7 +799,7 @@ void run(ProblemChoice problemChoice, int &iterationCount, int spaceDim, int num
     }
   }
 
-  if ((numCellsRootMesh == -1) && (hOnly || (coarseSolverChoice == Solver::GMGSolver_1_Level_h)))
+  if ((numCellsRootMesh == -1) && hOnly)
   {
     // then use a single level of h-coarsening as the root mesh.
     numCellsRootMesh = numCells / 2;
@@ -816,7 +816,23 @@ void run(ProblemChoice problemChoice, int &iterationCount, int spaceDim, int num
   }
   else if (numCellsRootMesh == -1)
   {
+    int evenDivisor = numCells;
+    
+    while ((evenDivisor/2) * 2 == evenDivisor)
+    {
+      evenDivisor /= 2;
+    }
+    
     numCellsRootMesh = numCells;
+    if (problemChoice == Stokes)
+    {
+      // need origin to be a vertex in root mesh; this is true if the number of root cells is even
+      numCellsRootMesh = (evenDivisor % 2 == 0) ? evenDivisor : evenDivisor * 2;
+    }
+    else
+    {
+      numCellsRootMesh = max(evenDivisor,1);
+    }
   }
   
 #ifdef HAVE_MPI
@@ -850,7 +866,7 @@ void run(ProblemChoice problemChoice, int &iterationCount, int spaceDim, int num
     MeshTopology* meshTopo = dynamic_cast<MeshTopology*>(mesh->getTopology().get());
     MeshTopologyPtr coarseMeshTopo = meshTopo->getRootMeshTopology();
     int H1OrderP0 = k + 1;
-    k0Mesh = Teuchos::rcp( new Mesh(coarseMeshTopo, mesh->bilinearForm(), H1OrderP0, delta_k) );
+    k0Mesh = Teuchos::rcp( new Mesh(coarseMeshTopo, k0Mesh->bilinearForm(), H1OrderP0, delta_k) );
   }
 
   double initializationTime = initializationTimer.ElapsedTime();
@@ -889,72 +905,19 @@ void run(ProblemChoice problemChoice, int &iterationCount, int spaceDim, int num
   {
     BCPtr zeroBCs = bc->copyImposingZero();
     bool saveFactorization = true;
-    int coarseSolverSmootherOverlap = 1; // for h-multigrid on k=0 meshes, this seems the minimal sensible overlap level--and for a coarse mesh composed of the parent cells of the fine mesh cells, it seems likely the exactly right choice.
-
-    Teuchos::RCP<Solver> coarseSolver = Teuchos::null;
-    GMGSolver* gmgSolver = new GMGSolver(solution, k0Mesh, cgMaxIterations, cgTol, coarseSolver, useStaticCondensation);
+    
+    GMGSolver* gmgSolver = new GMGSolver(solution, k0Mesh, cgMaxIterations, cgTol, Teuchos::null, useStaticCondensation);
     gmgSolver->setNarrateOnRankZero(narrateSolution, "fine GMGSolver");
     gmgSolver->gmgOperator()->setNarrateOnRankZero(narrateSolution, "fine GMGOperator");
     gmgSolver->gmgOperator()->getCoarseSolution()->setNarrateOnRankZero(narrateCoarseSolution, "coarse solution");
 
-    if (coarseSolverChoice != Solver::GMGSolver_1_Level_h)
-    {
-      coarseSolver = Solver::getSolver(coarseSolverChoice, saveFactorization,
-                                       coarseCGTol, coarseMaxIterations);
-    }
-    else
-    {
-      initializationTimer.ResetStartTime();
-      MeshTopology* k0MeshTopo = dynamic_cast<MeshTopology*>(k0Mesh->getTopology().get());
-      MeshTopologyPtr coarseMeshTopo = k0MeshTopo->getRootMeshTopology();
-      MeshTopologyPtr coarsestMeshTopo = k0MeshTopo->getRootMeshTopology();
-      int H1OrderP0 = 0 + 1;
-      MeshPtr coarsestMesh = Teuchos::rcp( new Mesh(coarsestMeshTopo, k0Mesh->bilinearForm(), H1OrderP0, delta_k) );
-      
-      int numGlobalDofs = coarsestMesh->numGlobalDofs();
-      initializationTime = initializationTimer.ElapsedTime();
-      if (narrateSolution && (rank==0))
-      {
-        cout << "coarsest mesh (" << numGlobalDofs << " dofs) constructed in " << initializationTime << " seconds.\n";
-      }
-
-      // debugging:
-      // if (rank==0) cout << "coarsest mesh, dof count: " << numGlobalDofs << endl;
-      // put all coarsest mesh cells on rank 0, where KLU will solve anyway:
-      // (turning off for now because this seems to slow things down significantly on BG/Q)
-//      coarsestMesh->setPartitionPolicy(MeshPartitionPolicy::oneRankPartitionPolicy(0));
-
-      SolverPtr coarsestSolver;
-
-      if (numGlobalDofs <= maxDofsForKLU)
-      {
-        coarsestSolver = Solver::getSolver(Solver::KLU, saveFactorization);
-      }
-      else
-      {
-        coarsestSolver = Solver::getSolver(Solver::SuperLUDist, saveFactorization);
-      }
-
-      coarseSolver = Solver::getSolver(coarseSolverChoice, saveFactorization,
-                                       coarseCGTol, coarseMaxIterations,
-                                       gmgSolver->gmgOperator()->getCoarseSolution(),
-                                       coarsestMesh, coarsestSolver);
-      GMGSolver* coarseSolverGMG = static_cast<GMGSolver*>( coarseSolver.get() );
-      coarseSolverGMG->setNarrateOnRankZero(narrateCoarseSolution, "coarse GMGSolver");
-      coarseSolverGMG->gmgOperator()->setNarrateOnRankZero(narrateCoarseSolution, "coarse GMGOperator");
-      coarseSolverGMG->gmgOperator()->getCoarseSolution()->setNarrateOnRankZero(narrateCoarseSolution, "coarsest solution");
-
-      coarseSolverGMG->gmgOperator()->setSmootherType(GMGOperator::CAMELLIA_ADDITIVE_SCHWARZ);
-      coarseSolverGMG->gmgOperator()->setSmootherOverlap(coarseSolverSmootherOverlap);
-      coarseSolverGMG->gmgOperator()->setSmootherApplicationType(comboType);
-      if (smootherWeight != -1)
-        coarseSolverGMG->gmgOperator()->setSmootherWeight(smootherWeight);
-      else
-        coarseSolverGMG->gmgOperator()->setUseSchwarzScalingWeight(true);
-    }
+    Teuchos::RCP<Solver> coarseSolver = Teuchos::null;
+    
+    coarseSolver = Solver::getSolver(coarseSolverChoice, saveFactorization, coarseCGTol, coarseMaxIterations, gmgSolver->gmgOperator()->getCoarseSolution(),
+                                     Solver::getDirectSolver(saveFactorization));
 
     gmgSolver->gmgOperator()->setCoarseSolver(coarseSolver);
-
+    
     if ((smootherType == GMGOperator::CAMELLIA_ADDITIVE_SCHWARZ) && hOnly)
     {
       // then use hierarchical neighbor relationship
@@ -962,12 +925,7 @@ void run(ProblemChoice problemChoice, int &iterationCount, int spaceDim, int num
       if (rank==0) cout << "using new hierarchical Schwarz neighbors option\n";
     }
 
-//    GMGSolver* gmgSolver = new GMGSolver(zeroBCs, k0Mesh, graphNorm, mesh, solution->getDofInterpreter(),
-//                                         solution->getPartitionMap(), cgMaxIterations, cgTol, coarseSolver,
-//                                         useStaticCondensation);
     gmgSolver->setAztecOutput(AztecOutputLevel);
-//    gmgSolver->setComputeConditionNumberEstimate(false);
-
     gmgSolver->setUseConjugateGradient(true);
     gmgSolver->setComputeConditionNumberEstimate(false);
     gmgSolver->gmgOperator()->setSchwarzFactorizationType(schwarzBlockFactorization);
@@ -1345,7 +1303,7 @@ void runMany(ProblemChoice problemChoice, int spaceDim, int delta_k, int minCell
 
   vector<int> numCellsValues;
   int numCells = minCells;
-  while (pow((double)numCells,spaceDim) <= maxCells)
+  while (numCells <= maxCells)
   {
     // want to do as many as we can with just one cell per processor
     numCellsValues.push_back(numCells);
@@ -1538,7 +1496,7 @@ int main(int argc, char *argv[])
   int numCellsRootMesh = -1;
 
   maxDofsForKLU = 2000; // used when defining coarsest solve on 3-level solver -- will use SuperLUDist if not KLU
-  coarseCGTol = 1e-6;
+  coarseCGTol = 1e-10;
   coarseMaxIterations = 2000;
 
   int AztecOutputLevel = 1;
@@ -1579,7 +1537,7 @@ int main(int argc, char *argv[])
 
   string problemChoiceString = "Poisson";
 
-  string coarseSolverChoiceString = "KLU";
+  string coarseSolverChoiceString = "GMG";
 
   string runManySubsetString = "All";
 
@@ -1637,7 +1595,7 @@ int main(int argc, char *argv[])
   cmdp.setOption("runManyMaxCells", &maxCells, "Maximum number of cells to use for mesh width");
 
   cmdp.setOption("writeAndExit", "runNormally", &writeAndExit, "Write A, A_coarse, P, and S to disk, and exit without computing anything.");
-  
+
   cmdp.setOption("useWeightedSchwarz","useUnweightedSchwarz",&useWeightMatrixForSchwarz, "Use weight matrix ('W' in Fischer and Lottes) to scale Schwarz smoother according to multiplicities.  Only applies to GMG geometric Schwarz.");
 
   cmdp.setOption("useZeroMeanConstraint", "usePointConstraint", &useZeroMeanConstraints, "Use a zero-mean constraint for the pressure (otherwise, use a vertex constraint at the origin)");
@@ -1820,7 +1778,18 @@ int main(int argc, char *argv[])
   {
     if (maxCells == -1)
     {
-      maxCells = Teuchos::GlobalMPISession::getNProc(); // by default, ensure max of 1 cell per MPI node
+      // by default, ensure max of 1 cell per MPI node
+      int nProc = Teuchos::GlobalMPISession::getNProc();
+      maxCells = 1;
+      while (maxCells*2 <= nProc)
+      {
+        maxCells *= 2;
+      }
+    }
+    if (problemChoice == Stokes)
+    {
+      maxCells = max(maxCells,2);
+      runManyMinCells = max(runManyMinCells,2);
     }
     
     if (rank==0)
@@ -1840,7 +1809,8 @@ int main(int argc, char *argv[])
             schwarzFactorType, levelOfFill, fillRatio,
             coarseSolverChoice,
             cgTol, cgMaxIterations, AztecOutputLevel,
-            runManySubsetChoice, k, k_coarse, schwarzOverlap, numCellsRootMesh, reportTimings, hOnly, maxCells, useZeroMeanConstraints, comboType, smootherWeight, useWeightMatrixForSchwarz);
+            runManySubsetChoice, k, k_coarse, schwarzOverlap, numCellsRootMesh, reportTimings, hOnly, maxCells,
+            useZeroMeanConstraints, comboType, smootherWeight, useWeightMatrixForSchwarz);
   }
   return 0;
 }
