@@ -1007,7 +1007,7 @@ void run(ProblemChoice problemChoice, int &iterationCount, int spaceDim, int num
   }
 
   if (reportTimings) solution->reportTimings();
-  double energyErrorTotal = solution->energyErrorTotal();
+  double energyErrorTotal = reportEnergyError ? solution->energyErrorTotal() : -1;
 
   GMGSolver* fineSolver = dynamic_cast<GMGSolver*>(solver.get());
   if (fineSolver != NULL)
