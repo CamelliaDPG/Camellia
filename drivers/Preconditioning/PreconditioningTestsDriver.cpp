@@ -406,7 +406,7 @@ string smootherString(GMGOperator::SmootherChoice smoother)
 
 void initializeSolutionAndCoarseMesh(SolutionPtr &solution, MeshPtr &coarseMesh, IPPtr &graphNorm, ProblemChoice problemChoice,
                                      int spaceDim, bool conformingTraces, bool useStaticCondensation, int numCells, int k, int delta_k, int k_coarse,
-                                     int rootMeshNumCells, bool useZeroMeanConstraints, bool enhanceFieldsForH1TracesWhenConforming)
+                                     int rootMeshNumCells, bool hOnly, bool useZeroMeanConstraints, bool enhanceFieldsForH1TracesWhenConforming)
 {
   BFPtr bf;
   BCPtr bc;
@@ -757,6 +757,9 @@ void initializeSolutionAndCoarseMesh(SolutionPtr &solution, MeshPtr &coarseMesh,
     elementCounts.push_back(rootMeshNumCells);
   }
   mesh = MeshFactory::rectilinearMesh(bf, dimensions, elementCounts, H1Order, delta_k, x0, trialOrderEnhancements);
+  
+  int H1Order_coarse = k_coarse + 1;
+  if (hOnly) coarseMesh = MeshFactory::rectilinearMesh(bf, dimensions, elementCounts, H1Order_coarse, delta_k, x0, trialOrderEnhancements);
 
   // now that we have mesh, add pressure constraint for Stokes (imposing zero at origin--want to aim for center of mesh)
   if ((problemChoice == Stokes) || (problemChoice==NavierStokes))
@@ -783,6 +786,8 @@ void initializeSolutionAndCoarseMesh(SolutionPtr &solution, MeshPtr &coarseMesh,
     set<IndexType> activeCellIDs = mesh->getActiveCellIDs(); // should match between coarseMesh and mesh
     mesh->hRefine(activeCellIDs);
     meshWidthCells *= 2;
+    if (hOnly && (meshWidthCells < numCells))
+      coarseMesh->hRefine(activeCellIDs); // coarseMesh gets 1 less h-refinement
   }
 
   if (meshWidthCells != numCells)
@@ -795,8 +800,8 @@ void initializeSolutionAndCoarseMesh(SolutionPtr &solution, MeshPtr &coarseMesh,
   }
 
   // coarse and fine mesh share a MeshTopology.  This means that they should not be further refined (they won't be, here)
-  int H1Order_coarse = k_coarse + 1;
-  coarseMesh = Teuchos::rcp(new Mesh(mesh->getTopology(), bf, H1Order_coarse, delta_k, trialOrderEnhancements));
+  if (!hOnly)
+    coarseMesh = Teuchos::rcp(new Mesh(mesh->getTopology(), bf, H1Order_coarse, delta_k, trialOrderEnhancements));
   
   if (graphNorm == Teuchos::null) // if set previously, honor that...
     graphNorm = bf->graphNorm();
@@ -829,22 +834,23 @@ void run(ProblemChoice problemChoice, int &iterationCount, int spaceDim, int num
     }
   }
 
-  if ((numCellsRootMesh == -1) && hOnly)
-  {
-    // then use a single level of h-coarsening as the root mesh.
-    numCellsRootMesh = numCells / 2;
-    if (numCellsRootMesh == 0)
-    {
-      cout << "Too few cells in root mesh.  Aborting.\n";
-      exit(1);
-    }
-    int rank = Teuchos::GlobalMPISession::getRank();
-    if (rank == 0)
-    {
-      cout << "Setting numCellsRootMesh = " << numCellsRootMesh << endl;
-    }
-  }
-  else if (numCellsRootMesh == -1)
+//  if ((numCellsRootMesh == -1) && hOnly)
+//  {
+//    // then use a single level of h-coarsening as the root mesh.
+//    numCellsRootMesh = numCells / 2;
+//    if (numCellsRootMesh == 0)
+//    {
+//      cout << "Too few cells in root mesh.  Aborting.\n";
+//      exit(1);
+//    }
+//    int rank = Teuchos::GlobalMPISession::getRank();
+//    if (rank == 0)
+//    {
+//      cout << "Setting numCellsRootMesh = " << numCellsRootMesh << endl;
+//    }
+//  }
+//  else if (numCellsRootMesh == -1)
+  if (numCellsRootMesh == -1)
   {
     int evenDivisor = numCells;
     
@@ -864,6 +870,11 @@ void run(ProblemChoice problemChoice, int &iterationCount, int spaceDim, int num
       numCellsRootMesh = max(evenDivisor,1);
     }
   }
+  if (numCellsRootMesh == numCells)
+  {
+    cout << "Too few cells in root mesh.  Aborting.\n";
+    exit(1);
+  }
   
 #ifdef HAVE_MPI
   Epetra_MpiComm Comm(MPI_COMM_WORLD);
@@ -877,12 +888,21 @@ void run(ProblemChoice problemChoice, int &iterationCount, int spaceDim, int num
   MeshPtr k0Mesh;
   IPPtr graphNorm;
   initializeSolutionAndCoarseMesh(solution, k0Mesh, graphNorm, problemChoice, spaceDim, conformingTraces, useStaticCondensation,
-                                  numCells, k, delta_k, k_coarse, numCellsRootMesh, useZeroMeanConstraints, enhanceFieldsForH1TracesWhenConforming);
+                                  numCells, k, delta_k, k_coarse, numCellsRootMesh, hOnly, useZeroMeanConstraints, enhanceFieldsForH1TracesWhenConforming);
   solution->setNarrateOnRankZero(narrateSolution, "fine Solution");
   
   MeshPtr mesh = solution->mesh();
   BCPtr bc = solution->bc();
 
+  int coarseElements = k0Mesh->getActiveCellIDs().size(), fineElements = mesh->getActiveCellIDs().size();
+  int fineDofs = mesh->numGlobalDofs(), coarseDofs = k0Mesh->numGlobalDofs();
+  if (rank == 0)
+  {
+    cout << "fine mesh has " << fineElements << " active elements and " << fineDofs << " degrees of freedom.\n";
+    cout << "coarse mesh has " << coarseElements << " active elements and " << coarseDofs << " degrees of freedom.\n";
+  }
+  
+  
 //  {
 //    // DEBUGGING
 //    GDAMinimumRule* minRule = dynamic_cast<GDAMinimumRule*>(mesh->globalDofAssignment().get());
@@ -890,14 +910,21 @@ void run(ProblemChoice problemChoice, int &iterationCount, int spaceDim, int num
 //      minRule->printGlobalDofInfo();
 //  }
   
-  if (hOnly)
-  {
-    // then replace the k0Mesh with the h-coarsened mesh:
-    MeshTopology* meshTopo = dynamic_cast<MeshTopology*>(mesh->getTopology().get());
-    MeshTopologyPtr coarseMeshTopo = meshTopo->getRootMeshTopology();
-    int H1OrderP0 = k + 1;
-    k0Mesh = Teuchos::rcp( new Mesh(coarseMeshTopo, k0Mesh->bilinearForm(), H1OrderP0, delta_k) );
-  }
+//  if (hOnly)
+//  {
+//    // then replace the k0Mesh with the h-coarsened mesh:
+//    Teuchos::ParameterList pl;
+//    pl.set("kCoarse", 0);
+//    pl.set("delta_k", 1); // this should not really matter in this context
+//    pl.set("jumpToCoarsePolyOrder", false);
+//    vector<MeshPtr> meshesCoarseToFine = GMGSolver::meshesForMultigrid(mesh, pl); // not the most efficient way to do this, but it should work...
+//
+//    k0Mesh = meshesCoarseToFine[meshesCoarseToFine.size()-2];
+////    MeshTopology* meshTopo = dynamic_cast<MeshTopology*>(mesh->getTopology().get());
+////    MeshTopologyPtr coarseMeshTopo = meshTopo->getRootMeshTopology();
+////    int H1OrderP0 = k + 1;
+////    k0Mesh = Teuchos::rcp( new Mesh(coarseMeshTopo, k0Mesh->bilinearForm(), H1OrderP0, delta_k) );
+//  }
 
   double initializationTime = initializationTimer.ElapsedTime();
   int numCoarseGlobalDofs = k0Mesh->numGlobalDofs();
