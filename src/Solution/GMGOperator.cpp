@@ -150,6 +150,11 @@ void GMGOperator::clearTimings()
   _timeSetUpSmoother = 0, _timeUpdateCoarseOperator = 0, _timeApplyFineStiffness = 0, _timeApplySmoother = 0;
 }
 
+void GMGOperator::setClearFinestCondensedDofInterpreterAfterProlongation(bool value)
+{
+  _clearFinestCondensedDofInterpreterAfterProlongation = value;
+}
+
 void GMGOperator::computeCoarseStiffnessMatrix(Epetra_CrsMatrix *fineStiffnessMatrix)
 {
   narrate("computeCoarseStiffnessMatrix");
@@ -455,6 +460,7 @@ Teuchos::RCP<Epetra_FECrsMatrix> GMGOperator::constructProlongationOperator(Teuc
     FieldContainer<double> globalCoefficients;
     FieldContainer<GlobalIndexType> globalDofIndices;
     FieldContainer<double> fineCellCoefficients;
+    FieldContainer<double> basisCoefficients;
     
     for (int localID=0; localID < fineMap.NumMyElements(); localID++)
     {
@@ -519,7 +525,7 @@ Teuchos::RCP<Epetra_FECrsMatrix> GMGOperator::constructProlongationOperator(Teuc
             for (int sideOrdinal : varIDSidesEntry.second)
             {
               const vector<int>* localDofIndices = &coarseTrialOrdering->getDofIndices(varID,sideOrdinal);
-              FieldContainer<double> basisCoefficients(localDofIndices->size());
+              basisCoefficients.resize(localDofIndices->size());
               for (int basisOrdinal=0; basisOrdinal < localDofIndices->size(); basisOrdinal++)
               {
                 basisCoefficients[basisOrdinal] = coarseCellCoefficients[(*localDofIndices)[basisOrdinal]];
@@ -587,6 +593,8 @@ Teuchos::RCP<Epetra_FECrsMatrix> GMGOperator::constructProlongationOperator(Teuc
   if (condensedDofInterpreterFine != NULL)
   {
     condensedDofInterpreterFine->setCanSkipLocalFieldInInterpretGlobalCoefficients(false); //just true while in this call
+    if (!_isFinest || _clearFinestCondensedDofInterpreterAfterProlongation)
+      condensedDofInterpreterFine->clearStiffnessAndLoad();
   }
   
   if (condensedDofInterpreterCoarse != NULL)
@@ -1642,6 +1650,7 @@ std::map<string, double> GMGOperator::timingReportSumOfOperators() const
 void GMGOperator::setCoarseOperator(Teuchos::RCP<GMGOperator> coarseOperator)
 {
   _coarseOperator = coarseOperator;
+  _coarseOperator->setIsFinest(false);
 }
 
 void GMGOperator::setCoarseSolver(SolverPtr coarseSolver)
@@ -1693,6 +1702,11 @@ void GMGOperator::setFillRatio(double fillRatio)
 {
   _fillRatio = fillRatio;
 //  cout << "fill ratio set to " << fillRatio << endl;
+}
+
+void GMGOperator::setIsFinest(bool value)
+{
+  _isFinest = value;
 }
 
 void GMGOperator::setLevelOfFill(int fillLevel)

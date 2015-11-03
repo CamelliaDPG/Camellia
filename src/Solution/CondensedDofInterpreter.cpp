@@ -73,6 +73,30 @@ void CondensedDofInterpreter<Scalar>::reinitialize()
 }
 
 template <typename Scalar>
+long long CondensedDofInterpreter<Scalar>::approximateStiffnessAndLoadMemoryCost()
+{
+  long long memoryCost = 0;
+  for (auto entry : _localLoadVectors)
+  {
+    memoryCost += entry.second.size() * sizeof(Scalar);
+  }
+  
+  for (auto entry : _localStiffnessMatrices)
+  {
+    memoryCost += entry.second.size() * sizeof(Scalar);
+  }
+  return memoryCost;
+}
+
+template <typename Scalar>
+void CondensedDofInterpreter<Scalar>::clearStiffnessAndLoad()
+{
+  _localLoadVectors.clear();
+  _localStiffnessMatrices.clear();
+}
+
+
+template <typename Scalar>
 void CondensedDofInterpreter<Scalar>::computeAndStoreLocalStiffnessAndLoad(GlobalIndexType cellID)
 {
 //  cout << "CondensedDofInterpreter: computing stiffness and load for cell " << cellID << endl;

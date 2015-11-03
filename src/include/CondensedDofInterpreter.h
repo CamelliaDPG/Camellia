@@ -77,6 +77,11 @@ public:
 
   void addSolution(CondensedDofInterpreter* otherSolnDofInterpreter, Scalar weight);
   
+  // ! Storage cost in bytes.  (This neglects the STL map overhead.)
+  long long approximateStiffnessAndLoadMemoryCost();
+  
+  void clearStiffnessAndLoad();
+  
   void computeAndStoreLocalStiffnessAndLoad(GlobalIndexType cellID);
 
   // ! Returns a matrix with shape field x flux for specified cellID, which allows determination of field

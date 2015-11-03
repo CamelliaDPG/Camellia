@@ -107,15 +107,15 @@ public:
     KLU,
     SuperLUDist,
     MUMPS,
-    GMGSolver_1_Level_h
+    GMG
   };
+  
+  static TSolverPtr<Scalar> getDirectSolver(bool saveFactorization=false);
   
   static TSolverPtr<Scalar> getSolver(SolverChoice choice, bool saveFactorization,
                                       double residualTolerance = 1e-12, int maxIterations = 50000,
-                                      TSolutionPtr<double> fineSolution = Teuchos::null, MeshPtr coarseMesh = Teuchos::null,
+                                      TSolutionPtr<double> fineSolution = Teuchos::null,
                                       TSolverPtr<Scalar> coarseSolver = Teuchos::null);
-
-  static TSolverPtr<Scalar> getDirectSolver(bool saveFactorization=false);
   
   static void printAvailableSolversReport();
   
@@ -124,7 +124,7 @@ public:
     if (choiceString=="KLU") return KLU;
     if (choiceString=="SuperLUDist") return SuperLUDist;
     if (choiceString=="MUMPS") return MUMPS;
-    if (choiceString=="GMGSolver_1_Level_h") return GMGSolver_1_Level_h;
+    if (choiceString=="GMG") return GMG;
     TEUCHOS_TEST_FOR_EXCEPTION(true, std::invalid_argument, "choiceString not recognized!");
   }
   static std::string solverChoiceString(SolverChoice choice)
@@ -132,7 +132,7 @@ public:
     if (choice==KLU) return "KLU";
     if (choice==SuperLUDist) return "SuperLUDist";
     if (choice==MUMPS) return "MUMPS";
-    if (choice==GMGSolver_1_Level_h) return "GMGSolver_1_Level_h";
+    if (choice==GMG) return "GMG";
     TEUCHOS_TEST_FOR_EXCEPTION(true, std::invalid_argument, "choice not recognized!");
   }
 };

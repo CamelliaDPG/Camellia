@@ -68,6 +68,9 @@ private:
   bool _debugMode; // in debug mode, output verbose info about what we're doing on rank 0
 
   bool _hierarchicalNeighborsForSchwarz; // Applies only to Camellia Additive Schwarz
+  
+  bool _isFinest = true;
+  bool _clearFinestCondensedDofInterpreterAfterProlongation = false;
 
   TSolutionPtr<double> _coarseSolution;
 
@@ -165,6 +168,9 @@ public:
   int SetUseTranspose(bool UseTranspose);
   //@}
 
+  // ! When set to true, will clear the stored local stiffness matrices and load vectors after prolongation operator is constructed.  This may save a good deal of memory, but at the expense of further computation during interpretation of the condensed solution.
+  void setClearFinestCondensedDofInterpreterAfterProlongation(bool value);
+  
   void clearTimings();
   void reportTimings(StatisticChoice stat = ALL) const;
   void reportTimingsSumOfOperators(StatisticChoice whichStat) const;
@@ -356,6 +362,9 @@ public:
   
   //! Returns the fine dof interpreter
   Teuchos::RCP<DofInterpreter> getFineDofInterpreter();
+  
+  //! Informs the GMGOperator whether it is the finest one.  (If not, can freely discard local stiffness matrices stored in CondensedDofInterpreter, e.g.).  Default value is true.
+  void setIsFinest(bool value);
   
   //! When true, the roles of fine and coarse are swapped during prolongation operator construction,
   //! and the transpose of the prolongation operator is used.
