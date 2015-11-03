@@ -5,6 +5,7 @@
 #include "GMGOperator.h"
 #include "GnuPlotUtil.h"
 #include "HDF5Exporter.h"
+#include "LinearElasticityFormulation.h"
 #include "MeshFactory.h"
 #include "PreviousSolutionFunction.h"
 #include "RefinementStrategy.h"
@@ -742,8 +743,99 @@ void initializeSolutionAndCoarseMesh(SolutionPtr &solution, MeshPtr &coarseMesh,
   }
   else if (problemChoice == LinearElasticity)
   {
-    cout << "LinearElasticity not yet supported!\n";
-    TEUCHOS_TEST_FOR_EXCEPTION(true, std::invalid_argument, "LinearElasticity not yet supported!");
+//    cout << "LinearElasticity not yet supported!\n";
+//    TEUCHOS_TEST_FOR_EXCEPTION(true, std::invalid_argument, "LinearElasticity not yet supported!");
+    TEUCHOS_TEST_FOR_EXCEPTION(spaceDim != 2, std::invalid_argument, "only spaceDim = 2 is supported");
+    
+    double mu = 1.0, lambda = 1.0;
+    LinearElasticityFormulation formulation = LinearElasticityFormulation::steadyFormulation(spaceDim, lambda, mu, conformingTraces);
+    
+    bf = formulation.bf();
+    graphNorm = bf->graphNorm();
+    
+    const static double PI  = 3.141592653589793238462;
+    
+    FunctionPtr sin_pi_x = Teuchos::rcp( new Sin_ax(PI) );
+    FunctionPtr sin_pi_y = Teuchos::rcp( new Sin_ay(PI) );
+        
+    FunctionPtr u1_exact, u2_exact, u3_exact;
+    
+    if (spaceDim == 2)
+    {
+      // u_x = sin (pi x) sin (pi y)
+      // u_y = sin (pi x) sin (pi y)
+      
+      u1_exact = sin_pi_x * sin_pi_y;
+      u2_exact = sin_pi_x * sin_pi_y;
+    }
+    else
+    {
+      // TODO: define an exact solution for 3D
+    }
+    
+    x0 = vector<double>(spaceDim,0.0); // origin
+    
+    width = 1.0;
+    
+    bc = BC::bc();
+
+    FunctionPtr zero = Function::zero();
+    SpatialFilterPtr boundary = SpatialFilter::allSpace();
+    bc->addDirichlet(formulation.u_hat(1), boundary, zero);
+    bc->addDirichlet(formulation.u_hat(2), boundary, zero);
+    if (spaceDim==3) bc->addDirichlet(formulation.u_hat(3), boundary, zero);
+    
+    vector<FunctionPtr> f_vector(spaceDim, zero);
+    for (int i=1; i<= spaceDim; i++)
+    {
+      for (int j=1; j<= spaceDim; j++)
+      {
+        for (int k=1; k<= spaceDim; k++)
+        {
+          FunctionPtr u_k;
+          switch (k) {
+            case 1:
+              u_k = u1_exact;
+              break;
+            case 2:
+              u_k = u2_exact;
+              break;
+            case 3:
+              u_k = u3_exact;
+            default:
+              break;
+          }
+          for (int l=1; l<= spaceDim; l++)
+          {
+            FunctionPtr u_k_lj = u_k->grad()->spatialComponent(l)->grad()->spatialComponent(j);
+            double E_ijkl = formulation.E(i, j, k, l);
+//            cout << i << ", " << j << ", " << k << ", " << l << ": ";
+//            cout << -C_ijkl << " * " << u_k_lj->displayString() << endl;
+            if (E_ijkl == 0) f_vector[i-1] = f_vector[i-1] + zero;
+            else f_vector[i-1] = f_vector[i-1] -E_ijkl * u_k_lj;
+//            cout << f_vector[i-1]->displayString() << endl;
+          }
+        }
+      }
+      
+//      cout << "f[" << i << "]: " << f_vector[i-1]->displayString() << endl;
+    }
+    
+    FunctionPtr f = Function::vectorize(f_vector);
+    
+    VarPtr v1 = formulation.v(1);
+    VarPtr v2 = formulation.v(2);
+    
+    VarPtr v3;
+    if (spaceDim==3) v3 = formulation.v(3);
+    
+    rhs = formulation.rhs(f);
+
+    if (conformingTraces && enhanceFieldsForH1TracesWhenConforming)
+    {
+      for (int d=0; d<spaceDim; d++)
+        trialOrderEnhancements[formulation.u(d+1)->ID()] = 1;
+    }
   }
 
   int H1Order = k + 1;
@@ -809,6 +901,16 @@ void initializeSolutionAndCoarseMesh(SolutionPtr &solution, MeshPtr &coarseMesh,
   solution = Solution::solution(mesh, bc, rhs, graphNorm);
   solution->setUseCondensedSolve(useStaticCondensation);
   solution->setZMCsAsGlobalLagrange(false); // fine grid solution shouldn't impose ZMCs (should be handled in coarse grid solve)
+  
+//  {
+//    cout << "DEBUGGING: outputting sin_pi_x_sin_pi_y to disk at /tmp/.\n";
+//    const static double PI  = 3.141592653589793238462;
+//    
+//    FunctionPtr sin_pi_x = Teuchos::rcp( new Sin_ax(PI) );
+//    FunctionPtr sin_pi_y = Teuchos::rcp( new Sin_ay(PI) );
+//    
+//    HDF5Exporter::exportFunction("/tmp/", "sin_pi_x_sin_pi_y", sin_pi_x * sin_pi_y, mesh);
+//  }
 }
 
 void run(ProblemChoice problemChoice, int &iterationCount, int spaceDim, int numCells, int k, int delta_k, int k_coarse, bool conformingTraces,
@@ -870,7 +972,7 @@ void run(ProblemChoice problemChoice, int &iterationCount, int spaceDim, int num
       numCellsRootMesh = max(evenDivisor,1);
     }
   }
-  if (numCellsRootMesh == numCells)
+  if ((numCellsRootMesh == numCells) && hOnly)
   {
     cout << "Too few cells in root mesh.  Aborting.\n";
     exit(1);
@@ -1169,7 +1271,7 @@ void run(ProblemChoice problemChoice, int &iterationCount, int spaceDim, int num
   }
 
 //  if (rank==0) cout << "NOTE: Exported solution for debugging.\n";
-//  HDF5Exporter::exportSolution("/tmp/testSolution", "testSolution", solution);
+//  HDF5Exporter::exportSolution("/tmp/", "testSolution", solution);
 //
 //  solution->solve();
 //  if (rank==0) cout << "NOTE: Exported direct solution for debugging.\n";
@@ -1201,6 +1303,9 @@ void runMany(ProblemChoice problemChoice, int spaceDim, int delta_k, int minCell
       
     case ConvectionDiffusionExperimental:
       problemChoiceString = "ConvectionDiffusionExperimental";
+      break;
+    case LinearElasticity:
+      problemChoiceString = "LinearElasticity";
       break;
   case Stokes:
     problemChoiceString = "Stokes";
@@ -1513,6 +1618,8 @@ void runMany(ProblemChoice problemChoice, int spaceDim, int delta_k, int minCell
       filename << "_withStaticCondensation";
     if (conformingTraces)
       filename << "_conformingTraces";
+    if (conformingTraces && enhanceFieldsForH1TracesWhenConforming)
+      filename << "_enhancedFields";
     if (comboType == GMGOperator::MULTIPLICATIVE)
       filename << "_multiplicative";
     filename << "_results.dat";
@@ -1530,7 +1637,7 @@ int main(int argc, char *argv[])
   _MM_SET_EXCEPTION_MASK(_MM_GET_EXCEPTION_MASK() & ~_MM_MASK_INVALID);
 #endif
 
-  Teuchos::GlobalMPISession mpiSession(&argc, &argv, NULL);
+  Teuchos::GlobalMPISession mpiSession(&argc, &argv, 0);
   int rank = Teuchos::GlobalMPISession::getRank();
 
   runGMGOperatorInDebugMode = false;
@@ -1585,7 +1692,7 @@ int main(int argc, char *argv[])
 
   bool reportTimings = false;
   
-  bool enhanceFieldsForH1TracesWhenConforming = true; // new 10-27-15
+  bool enhanceFieldsForH1TracesWhenConforming = false; // new 10-27-15
 
   bool hOnly = false;
   
@@ -1609,7 +1716,7 @@ int main(int argc, char *argv[])
   
   bool additiveComboType = true;
 
-  cmdp.setOption("problem",&problemChoiceString,"problem choice: Poisson, ConvectionDiffusion, Stokes, Navier-Stokes");
+  cmdp.setOption("problem",&problemChoiceString,"problem choice: Poisson, ConvectionDiffusion, LinearElasticity, Stokes, Navier-Stokes");
 
   cmdp.setOption("polyOrder",&k,"polynomial order for field variable u");
   cmdp.setOption("delta_k", &delta_k, "test space polynomial order enrichment");
@@ -1688,6 +1795,10 @@ int main(int argc, char *argv[])
   else if (problemChoiceString == "ConvectionDiffusionExperimental")
   {
     problemChoice = ConvectionDiffusionExperimental;
+  }
+  else if (problemChoiceString == "LinearElasticity")
+  {
+    problemChoice = LinearElasticity;
   }
   else if (problemChoiceString == "Stokes")
   {
