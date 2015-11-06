@@ -773,7 +773,7 @@ void NavierStokesVGPFormulation::addInflowCondition(SpatialFilterPtr inflowRegio
   }
 }
 
-void NavierStokesVGPFormulation::addOutflowCondition(SpatialFilterPtr outflowRegion)
+void NavierStokesVGPFormulation::addOutflowCondition(SpatialFilterPtr outflowRegion, bool usePhysicalTractions)
 {
   int spaceDim = _backgroundFlow->mesh()->getTopology()->getDimension();
 
@@ -783,27 +783,38 @@ void NavierStokesVGPFormulation::addOutflowCondition(SpatialFilterPtr outflowReg
   Teuchos::RCP< PenaltyConstraints > pcRCP;
   PenaltyConstraints* pc;
 
-  if (filter_incr.get() != NULL)
+  if (usePhysicalTractions)
   {
-    pc = dynamic_cast<PenaltyConstraints*>(filter_incr.get());
-    if (pc == NULL)
+    if (filter_incr.get() != NULL)
     {
-      TEUCHOS_TEST_FOR_EXCEPTION(true, std::invalid_argument, "Can't add PenaltyConstraints when a non-PenaltyConstraints LocalStiffnessMatrixFilter already in place");
+      pc = dynamic_cast<PenaltyConstraints*>(filter_incr.get());
+      if (pc == NULL)
+      {
+        TEUCHOS_TEST_FOR_EXCEPTION(true, std::invalid_argument, "Can't add PenaltyConstraints when a non-PenaltyConstraints LocalStiffnessMatrixFilter already in place");
+      }
+    }
+    else
+    {
+      pcRCP = Teuchos::rcp( new PenaltyConstraints );
+      pc = pcRCP.get();
+    }
+    TFunctionPtr<double> zero = TFunction<double>::zero();
+    pc->addConstraint(_stokesForm->getTraction(1)==zero, outflowRegion);
+    pc->addConstraint(_stokesForm->getTraction(2)==zero, outflowRegion);
+    if (spaceDim==3) pc->addConstraint(_stokesForm->getTraction(3)==zero, outflowRegion);
+
+    if (pcRCP != Teuchos::null)   // i.e., we're not just adding to a prior PenaltyConstraints object
+    {
+      _solnIncrement->setFilter(pcRCP);
     }
   }
   else
   {
-    pcRCP = Teuchos::rcp( new PenaltyConstraints );
-    pc = pcRCP.get();
-  }
-  TFunctionPtr<double> zero = TFunction<double>::zero();
-  pc->addConstraint(_stokesForm->getTraction(1)==zero, outflowRegion);
-  pc->addConstraint(_stokesForm->getTraction(2)==zero, outflowRegion);
-  if (spaceDim==3) pc->addConstraint(_stokesForm->getTraction(3)==zero, outflowRegion);
-
-  if (pcRCP != Teuchos::null)   // i.e., we're not just adding to a prior PenaltyConstraints object
-  {
-    _solnIncrement->setFilter(pcRCP);
+    TFunctionPtr<double> zero = TFunction<double>::zero();
+    for (int d=1; d<=_spaceDim; d++)
+    {
+      _solnIncrement->bc()->addDirichlet(_stokesForm->tn_hat(d), outflowRegion, zero);
+    }
   }
 }
 

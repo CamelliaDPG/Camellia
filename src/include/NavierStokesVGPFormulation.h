@@ -77,7 +77,7 @@ public:
   void addInflowCondition(SpatialFilterPtr inflowRegion, TFunctionPtr<double> u);
 
   // ! sets an outflow velocity boundary condition
-  void addOutflowCondition(SpatialFilterPtr outflowRegion);
+  void addOutflowCondition(SpatialFilterPtr outflowRegion, bool usePhysicalTractions);
 
   // ! set a pressure condition at a point
   void addPointPressureCondition();

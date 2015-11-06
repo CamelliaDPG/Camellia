@@ -21,8 +21,9 @@
 #include "RefinementStrategy.h"
 #include "GMGSolver.h"
 // #include "OldroydBFormulation.h"
+#include "OldroydBFormulation2.h"
 // #include "StokesVGPFormulation.h"
-#include "NavierStokesVGPFormulation.h"
+// #include "NavierStokesVGPFormulation.h"
 #include "SpatiallyFilteredFunction.h"
 #include "ExpFunction.h"
 #include "TrigFunctions.h"
@@ -135,8 +136,10 @@ int main(int argc, char *argv[])
   //////////////////////////////////////////////////////////////////////
   ///////////////////////  COMMAND LINE PARAMETERS  ////////////////////
   //////////////////////////////////////////////////////////////////////
+  string formulation = "OldroydB";
+  // string formulation = "NavierStokes";
   string problemChoice = "LidDriven";
-  double rho = 1;
+  // double rho = 1;
   double lambda = 1;
   double mu0 = 1;
   double mu1 = 1;
@@ -145,14 +148,14 @@ int main(int argc, char *argv[])
   int k = 2, delta_k = 2;
   int numXElems = 2;
   int numYElems = 2;
-  bool useConformingTraces = false;
+  bool useConformingTraces = true;
   string solverChoice = "KLU";
   string multigridStrategyString = "V-cycle";
   bool useCondensedSolve = false;
   bool useConjugateGradient = true;
   bool logFineOperator = false;
   double solverTolerance = 1e-10;
-  int maxNonlinearIterations = 20;
+  int maxNonlinearIterations = 50;
   double nonlinearTolerance = 1e-6;
   int maxLinearIterations = 10000;
   // bool computeL2Error = false;
@@ -160,8 +163,9 @@ int main(int argc, char *argv[])
   string norm = "Graph";
   string outputDir = ".";
   string tag="";
+  cmdp.setOption("formulation", &formulation, "OldroydB, NavierStokes");
   cmdp.setOption("problem", &problemChoice, "LidDriven, HemkerCylinder");
-  cmdp.setOption("rho", &rho, "rho");
+  // cmdp.setOption("rho", &rho, "rho");
   cmdp.setOption("lambda", &lambda, "lambda");
   cmdp.setOption("mu0", &mu0, "mu0");
   cmdp.setOption("mu1", &mu1, "mu1");
@@ -215,14 +219,21 @@ int main(int argc, char *argv[])
   parameters.set("spatialPolyOrder", k);
   parameters.set("delta_k", delta_k);
   parameters.set("norm", norm);
-  // parameters.set("rho", rho);
-  // parameters.set("lambda", lambda);
-  parameters.set("mu", mu0);
-  // parameters.set("mu1", mu1);
   parameters.set("useConformingTraces", useConformingTraces);
   parameters.set("useConservationFormulation",false);
   parameters.set("useTimeStepping", false);
   parameters.set("useSpaceTime", false);
+  // if (formulation == "NavierStokes")
+  // {
+  //   parameters.set("mu", mu0);
+  // }
+  // else
+  // {
+    // parameters.set("rho", rho);
+    parameters.set("lambda", lambda);
+    parameters.set("mu", mu0);
+    parameters.set("mu1", mu1);
+  // }
 
 
   //////////////////////  DECLARE EXACT SOLUTION  //////////////////////
@@ -232,8 +243,9 @@ int main(int argc, char *argv[])
   ///////////////////////////  DECLARE MESH  ///////////////////////////
 
   MeshTopologyPtr spatialMeshTopo;
-  double xLeft, xRight, height, cylinderRadius;
+  map< pair<GlobalIndexType, GlobalIndexType>, ParametricCurvePtr > globalEdgeToCurveMap;
 
+  double xLeft, xRight, height, cylinderRadius;
   if (problemChoice == "LidDriven")
   {
     // LID-DRIVEN CAVITY FLOW
@@ -247,10 +259,12 @@ int main(int argc, char *argv[])
   else if (problemChoice == "HemkerCylinder")
   {
     // FLOW PAST A CYLINDER
-    xLeft = -3.0, xRight = 9.0;
-    height = 6.0;
+    xLeft = -10.0, xRight = 20.0;
+    height = 16.0;
     cylinderRadius = 1.0;
     MeshGeometryPtr HemkerGeometry = MeshFactory::shiftedHemkerGeometry(xLeft, xRight, height, cylinderRadius);
+    map< pair<IndexType, IndexType>, ParametricCurvePtr > localEdgeToCurveMap = HemkerGeometry->edgeToCurveMap();
+    globalEdgeToCurveMap = map< pair<GlobalIndexType, GlobalIndexType>, ParametricCurvePtr >(localEdgeToCurveMap.begin(),localEdgeToCurveMap.end());
     spatialMeshTopo = Teuchos::rcp( new MeshTopology(HemkerGeometry) );
   }
   else if (problemChoice == "Test 1")
@@ -264,10 +278,29 @@ int main(int argc, char *argv[])
     return Teuchos::null;
   }
 
-  NavierStokesVGPFormulation form(spatialMeshTopo, parameters);
+
+
+  // form = NULL;
+  // if (formulation == "NavierStokes")
+  // {
+  //   NavierStokesVGPFormulation form(spatialMeshTopo, parameters);
+  // }
+  // else
+  // {
+    // OldroydBFormulation form(spatialMeshTopo, parameters);
+  // }
+  // NavierStokesVGPFormulation form(spatialMeshTopo, parameters);
   // OldroydBFormulation form(spatialMeshTopo, parameters);
+  OldroydBFormulation2 form(spatialMeshTopo, parameters);
+  // StokesVGPFormulation form(spatialMeshTopo, parameters);
+
+
 
   MeshPtr mesh = form.solutionIncrement()->mesh();
+  if (globalEdgeToCurveMap.size() > 0)
+  {
+    mesh->setEdgeToCurveMap(globalEdgeToCurveMap);
+  }
 
 
   /////////////////////  DECLARE SOLUTION POINTERS /////////////////////
@@ -314,22 +347,24 @@ int main(int argc, char *argv[])
     // SpatialFilterPtr otherBoundary = SpatialFilter::negatedFilter(leftRightBoundary);
 
     // inflow on left boundary
-    FunctionPtr u1_inflowFunction = Teuchos::rcp( new ParabolicInflowFunction_U1(height) );
+    // FunctionPtr u1_inflowFunction = Teuchos::rcp( new ParabolicInflowFunction_U1(height) );
+    FunctionPtr u1_inflowFunction = one;
     FunctionPtr u2_inflowFunction = zero;
     FunctionPtr u = Function::vectorize(u1_inflowFunction,u2_inflowFunction);
 
     form.addInflowCondition(leftBoundary, u);
 
     // top+bottom
-    // form.addOutflowCondition(topBoundary);
-    // form.addOutflowCondition(bottomBoundary);
+    // form.addOutflowCondition(topBoundary, false);
+    // form.addOutflowCondition(bottomBoundary, false);
     form.addWallCondition(topBoundary);
     form.addWallCondition(bottomBoundary);
 
 
 
     // outflow on right boundary
-    form.addOutflowCondition(rightBoundary);
+    // form.addOutflowCondition(rightBoundary, true); // true to impose zero traction by penalty
+    form.addOutflowCondition(rightBoundary, false); // false for zero flux variable
 
     // no slip on cylinder
     form.addWallCondition(cylinderBoundary);
@@ -467,32 +502,6 @@ int main(int argc, char *argv[])
 
       if (commRank == 0)
         cout << "Nonlinear Update:\t " << l2Update << endl;
-
-      // // form.updateSolution();
-      // set<int> nonlinearVars;
-      // nonlinearVars.insert(form.u(1)->ID());
-      // nonlinearVars.insert(form.u(2)->ID());
-      // nonlinearVars.insert(form.sigma(1,1)->ID());
-      // nonlinearVars.insert(form.sigma(1,2)->ID());
-      // nonlinearVars.insert(form.sigma(2,2)->ID());
-      // nonlinearVars.insert(form.sigma(2,2)->ID());
-
-      // set<int> linearVars;
-      // nonlinearVars.insert(form.p()->ID());
-      // nonlinearVars.insert(form.u_hat(1)->ID());
-      // nonlinearVars.insert(form.u_hat(2)->ID());
-      // nonlinearVars.insert(form.tn_hat(1)->ID());
-      // nonlinearVars.insert(form.tn_hat(2)->ID());
-
-      // double alpha = 1;
-      // vector<int> trialIDs = _vf->trialIDs();
-      // set<int> trialIDSet(trialIDs.begin(), trialIDs.end());
-      // set<int> nlVars = nonlinearVars();
-      // set<int> lVars;
-      // set_difference(trialIDSet.begin(), trialIDSet.end(), nlVars.begin(), nlVars.end(),
-      //     std::inserter(lVars, lVars.end()));
-
-      // solutionBackground->addReplaceSolution(solutionIncrement, alpha, nonlinearVars, linearVars);
 
       iterCount++;
     }
