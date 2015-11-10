@@ -54,7 +54,7 @@ TSolverPtr<Scalar> TSolver<Scalar>::getSolver(SolverChoice choice, bool saveFact
     Teuchos::ParameterList pl;
     pl.set("kCoarse", 0);
     pl.set("delta_k", 1); // this should not really matter in this context
-    pl.set("jumpToCoarsePolyOrder", false); //, k_coarse == 1); // due to an apparent issue in meshesForMultigrid, "jump" from 1 to 0
+    pl.set("jumpToCoarsePolyOrder", false);
     vector<MeshPtr> meshesCoarseToFine = GMGSolver::meshesForMultigrid(fineSolution->mesh(), pl);
     Teuchos::RCP<GMGSolver> gmgSolver = Teuchos::rcp(new GMGSolver(fineSolution, meshesCoarseToFine, maxIterations, residualTolerance, GMGOperator::V_CYCLE,
                                                                    coarseSolver, fineSolution->usesCondensedSolve(), false));
