@@ -267,52 +267,35 @@ void LinearElasticityFormulation::CHECK_VALID_COMPONENT(int i) // throws excepti
   }
 }
 
-//TFunctionPtr<double> LinearElasticityFormulation::forcingFunction(TFunctionPtr<double> u_exact, TFunctionPtr<double> p_exact)
-//{
-//  // f1 and f2 are those for Navier-Stokes, but without the u \cdot \grad u term
-//  TFunctionPtr<double> u1_exact = u_exact->x();
-//  TFunctionPtr<double> u2_exact = u_exact->y();
-//  TFunctionPtr<double> u3_exact = u_exact->z();
-//
-//  TFunctionPtr<double> f;
-//
-//  if (_spaceDim == 2)
-//  {
-//    TFunctionPtr<double> f1, f2;
-//    f1 = p_exact->dx() - _mu * (u1_exact->dx()->dx() + u1_exact->dy()->dy());
-//    f2 = p_exact->dy() - _mu * (u2_exact->dx()->dx() + u2_exact->dy()->dy());
-//    if (_spaceTime)
-//    {
-//      f1 = f1 + u1_exact->dt();
-//      f2 = f2 + u2_exact->dt();
-//    }
-//    else if (_timeStepping)
-//    {
-//      // leave as is, for now.  The rhs() method will add some terms; this may be the right thing.
-//    }
-//    f = TFunction<double>::vectorize(f1, f2);
-//  }
-//  else
-//  {
-//    TFunctionPtr<double> f1, f2, f3;
-//    f1 = p_exact->dx() - _mu * (u1_exact->dx()->dx() + u1_exact->dy()->dy() + u1_exact->dz()->dz());
-//    f2 = p_exact->dy() - _mu * (u2_exact->dx()->dx() + u2_exact->dy()->dy() + u2_exact->dz()->dz());
-//    f3 = p_exact->dz() - _mu * (u3_exact->dx()->dx() + u3_exact->dy()->dy() + u3_exact->dz()->dz());
-//    if (_spaceTime)
-//    {
-//      f1 = f1 + u1_exact->dt();
-//      f2 = f2 + u2_exact->dt();
-//      f3 = f3 + u3_exact->dt();
-//    }
-//    else if (_timeStepping)
-//    {
-//      // leave as is, for now.  The rhs() method will add some terms; this may be the right thing.
-//    }
-//    
-//    f = TFunction<double>::vectorize(f1, f2, f3);
-//  }
-//  return f;
-//}
+TFunctionPtr<double> LinearElasticityFormulation::forcingFunction(TFunctionPtr<double> u_exact)
+{
+  vector<FunctionPtr> f_vector(_spaceDim, Function::zero());
+  for (int i=1; i<= _spaceDim; i++)
+  {
+    for (int j=1; j<= _spaceDim; j++)
+    {
+      for (int k=1; k<= _spaceDim; k++)
+      {
+        FunctionPtr u_k = u_exact->spatialComponent(k);
+        for (int l=1; l<= _spaceDim; l++)
+        {
+          FunctionPtr u_k_lj = u_k->grad()->spatialComponent(l)->grad()->spatialComponent(j);
+          double E_ijkl = this->E(i, j, k, l);
+          //            cout << i << ", " << j << ", " << k << ", " << l << ": ";
+          //            cout << -C_ijkl << " * " << u_k_lj->displayString() << endl;
+          if (E_ijkl != 0)
+            f_vector[i-1] = f_vector[i-1] -E_ijkl * u_k_lj;
+          //            cout << f_vector[i-1]->displayString() << endl;
+        }
+      }
+    }
+    
+    //      cout << "f[" << i << "]: " << f_vector[i-1]->displayString() << endl;
+  }
+  
+  FunctionPtr f = Function::vectorize(f_vector);
+  return f;
+}
 
 double LinearElasticityFormulation::lambda()
 {

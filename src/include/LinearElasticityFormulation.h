@@ -133,8 +133,8 @@ namespace Camellia
     VarPtr tau(int i);
     VarPtr v(int i);
     
-    // ! returns the forcing function for this formulation if u and p are the exact solutions.
-    // TFunctionPtr<double> forcingFunction(TFunctionPtr<double> u, TFunctionPtr<double> w);
+    // ! returns the forcing function for this formulation if u is the exact solution.
+    TFunctionPtr<double> forcingFunction(TFunctionPtr<double> u);
     
     // ! returns a map indicating any trial variables that have adjusted polynomial orders relative to the standard poly order for the element.  Keys are variable IDs, values the difference between the indicated variable and the standard polynomial order.
     const std::map<int,int> &getTrialVariablePolyOrderAdjustments();
