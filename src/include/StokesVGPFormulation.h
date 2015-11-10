@@ -37,6 +37,8 @@ class StokesVGPFormulation
   bool _spaceTime;
   bool _includeVelocityTracesInFluxTerm; // distinguishes between two space-time formulation options
   double _t0; // used in space-time
+  
+  bool _useStrongConservation; // experimental option to eliminate one scalar from the tensor velocity gradient using the mass conservation law
 
   bool _haveOutflowConditionsImposed; // used to track whether we should impose point/zero mean conditions on pressure
 
@@ -71,7 +73,9 @@ class StokesVGPFormulation
   static const string S_Q;
   static const string S_TAU1, S_TAU2, S_TAU3;
 
-  void CHECK_VALID_COMPONENT(int i); // throws exception on bad component value (should be between 1 and _spaceDim, inclusive)
+  double computeMassFlux(bool takeAbsoluteValuesOnEachCell) const;
+  
+  void CHECK_VALID_COMPONENT(int i) const; // throws exception on bad component value (should be between 1 and _spaceDim, inclusive)
   
   // ! initialize the Solution object(s) using the provided MeshTopology
   void initializeSolution(MeshTopologyPtr meshTopo, int fieldPolyOrder, int delta_k,
@@ -167,10 +171,10 @@ public:
   LinearTermPtr getTraction(int i);
 
   // ! Returns the solution (at current time)
-  TSolutionPtr<double> solution();
+  TSolutionPtr<double> solution() const;
 
   // ! Returns the solution (at previous time)
-  TSolutionPtr<double> solutionPreviousTimeStep();
+  TSolutionPtr<double> solutionPreviousTimeStep() const;
 
   // ! Solves
   void solve();
@@ -201,17 +205,17 @@ public:
   TFunctionPtr<double> getTimeFunction();
 
   // field variables:
-  VarPtr sigma(int i, int j); // sigma_ij is the Reynolds-weighted derivative of u_i in the j dimension
-  VarPtr u(int i);
-  VarPtr p();
+  VarPtr sigma(int i, int j) const; // sigma_ij is the Reynolds-weighted derivative of u_i in the j dimension
+  VarPtr u(int i) const;
+  VarPtr p() const;
 
   // traces:
-  VarPtr tn_hat(int i);
-  VarPtr u_hat(int i);
+  VarPtr tn_hat(int i) const;
+  VarPtr u_hat(int i) const;
 
   // test variables:
-  VarPtr tau(int i);
-  VarPtr v(int i);
+  VarPtr tau(int i) const;
+  VarPtr v(int i) const;
 
   // ! returns the forcing function for this formulation if u and p are the exact solutions.
   TFunctionPtr<double> forcingFunction(TFunctionPtr<double> u, TFunctionPtr<double> p);
@@ -228,11 +232,35 @@ public:
   // ! returns the vorticity (which depends on the solution)
   TFunctionPtr<double> getVorticity();
   
+  // ! returns the sum of the absolute value of the mass flux through each element
+  double absoluteMassFlux() const;
+  
+  // ! returns the sum of the signed mass flux through each element
+  double netMassFlux() const;
+  
   static StokesVGPFormulation steadyFormulation(int spaceDim, double mu, bool useConformingTraces);
+  
+  // ! Returns a steady StokesVGPFormulation that enforces conservation (in the sense of the diagonal of the gradient
+  // ! sigma summing to zero) strongly.  Note that this is as of this writing (08-Nov-15) still experimental.
+  static StokesVGPFormulation steadyFormulationStrongConservation(int spaceDim, double mu, bool useConformingTraces);
   
   // ! when includeVelocityTracesInFluxTerm is true, u1_hat, etc. only defined on spatial interfaces; the temporal velocities are the spatially-normal components of tn_hat.
   static StokesVGPFormulation spaceTimeFormulation(int spaceDim, double mu, bool useConformingTraces, bool includeVelocityTracesInFluxTerm = true);
-  static StokesVGPFormulation timeSteppingFormulation(int spaceDim, double mu, double dt, bool useConformingTraces, TimeStepType timeStepType = BACKWARD_EULER);
+
+  // ! Returns a steady StokesVGPFormulation that enforces conservation (in the sense of the diagonal of the gradient
+  // ! sigma summing to zero) strongly.  Note that this is as of this writing (08-Nov-15) still experimental.
+  // ! when includeVelocityTracesInFluxTerm is true, u1_hat, etc. only defined on spatial interfaces; the temporal velocities are the spatially-normal components of tn_hat.
+  static StokesVGPFormulation spaceTimeFormulationStrongConservation(int spaceDim, double mu, bool useConformingTraces,
+                                                                     bool includeVelocityTracesInFluxTerm = true);
+  
+  
+  static StokesVGPFormulation timeSteppingFormulation(int spaceDim, double mu, double dt, bool useConformingTraces,
+                                                      TimeStepType timeStepType = BACKWARD_EULER);
+  
+  // ! Returns a steady StokesVGPFormulation that enforces conservation (in the sense of the diagonal of the gradient
+  // ! sigma summing to zero) strongly.  Note that this is as of this writing (08-Nov-15) still experimental.
+  static StokesVGPFormulation timeSteppingFormulationStrongConservation(int spaceDim, double mu, double dt, bool useConformingTraces,
+                                                                        TimeStepType timeStepType = BACKWARD_EULER);
 };
 }
 
