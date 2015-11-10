@@ -116,7 +116,7 @@ public:
 
   void applyTag(std::string tagName, int tagID, EntitySetPtr entitySet);
   
-  // ! This method only gets within a factor of 2 or so, but can give a rough estimate
+  // ! This method only gets within a factor of 2 or so, but can give a rough estimate (in bytes)
   long long approximateMemoryFootprint();
 
   EntitySetPtr createEntitySet();
