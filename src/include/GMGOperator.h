@@ -68,6 +68,7 @@ private:
   bool _debugMode; // in debug mode, output verbose info about what we're doing on rank 0
 
   bool _hierarchicalNeighborsForSchwarz; // Applies only to Camellia Additive Schwarz
+  int _dimensionForSchwarzNeighborRelationship; // Applies only to Camellia Additive Schwarz
   
   bool _isFinest = true;
   bool _clearFinestCondensedDofInterpreterAfterProlongation = false;
@@ -283,6 +284,12 @@ public:
   //! sets debug mode for verbose console output on rank 0.
   void setDebugMode(bool value);
 
+  //! Dimension that will be used for neighbor relationships for Schwarz blocks, if CAMELLIA_ADDITIVE_SCHWARZ is the smoother choice.
+  int getDimensionForSchwarzNeighborRelationship();
+
+  //! Set dimension to use for neighbor relationships for Schwarz blocks.  Requires CAMELLIA_ADDITIVE_SCHWARZ as the smoother choice.
+  void setDimensionForSchwarzNeighborRelationship(int value);
+  
   void setSchwarzFactorizationType(FactorType choice);
 
   // ! Sets the number of times the smoother will be applied when it is applied.  (For multigrid strategies other than TWO_LEVEL, it is applied this many times before and after each application of the coarse operator.)

@@ -145,11 +145,14 @@ public:
    * dofInterpreter - (In) the dofInterpreter for the problem
    *
    * \param
-   * hierarchical - (In) if true, use parent relationships (as opposed to neighbor relationships) to define Schwarz blocks.
+   * hierarchical - (In) if true, use parent relationships (in addition to neighbor relationships) to define Schwarz blocks.
+   *
+   * \param
+   * dimensionForNeighborRelationship - (In) what dimension is used to determine neighbor relationship: 0 for vertex neighbors, d-1 for side neighbors, etc.
    *
    */
   AdditiveSchwarz(Epetra_RowMatrix* Matrix_in, int OverlapLevel_in, MeshPtr mesh, Teuchos::RCP<DofInterpreter> dofInterpreter,
-                  bool hierarchical);
+                  bool hierarchical, int dimensionForNeighborRelationship);
 
   //! Destructor
   virtual ~AdditiveSchwarz() {};
@@ -394,6 +397,9 @@ protected:
   //! Camellia addition: whether to use "hierarchical" overlap definition
   bool hierarchical_;
 
+  //! Camellia addition: what dimension subcells to use to define neighbors
+  int dimensionForNeighborRelationship_;
+
   //! Pointers to the matrix to be preconditioned.
   Teuchos::RCP<const Epetra_RowMatrix> Matrix_;
   //! Pointers to the overlapping matrix.
@@ -458,10 +464,12 @@ protected:
 template<typename T>
 AdditiveSchwarz<T>::
 AdditiveSchwarz(Epetra_RowMatrix* Matrix_in, int OverlapLevel_in, MeshPtr mesh,
-                Teuchos::RCP<DofInterpreter> dofInterpreter, bool hierarchical) :
+                Teuchos::RCP<DofInterpreter> dofInterpreter, bool hierarchical,
+                int dimensionForNeighborRelationship) :
   mesh_(mesh),
   dofInterpreter_(dofInterpreter),
   hierarchical_(hierarchical),
+  dimensionForNeighborRelationship_(dimensionForNeighborRelationship),
   IsInitialized_(false),
   IsComputed_(false),
   UseTranspose_(false),
@@ -513,7 +521,8 @@ int AdditiveSchwarz<T>::Setup()
     // find the overlap region for each cell.
     for (GlobalIndexType cellID : myCellIDs)
     {
-      set<GlobalIndexType> cellsInOverlap = OverlappingRowMatrix::overlappingCells(cellID, mesh_, OverlapLevel_, hierarchical_);
+      set<GlobalIndexType> cellsInOverlap = OverlappingRowMatrix::overlappingCells(cellID, mesh_, OverlapLevel_, hierarchical_,
+                                                                                   dimensionForNeighborRelationship_);
       overlapCellsForCell[cellID] = cellsInOverlap;
       allCellsOfInterestToMe.insert(cellsInOverlap.begin(), cellsInOverlap.end());
     }

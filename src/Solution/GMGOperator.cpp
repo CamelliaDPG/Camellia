@@ -69,7 +69,8 @@ _finePartitionMap(finePartitionMap), _br(true)
   _fineDofInterpreter = fineDofInterpreter;
   _fineCoarseRolesSwapped = false; //default
 
-  _hierarchicalNeighborsForSchwarz = false;
+  _hierarchicalNeighborsForSchwarz = false; // default; can be overridden later
+  _dimensionForSchwarzNeighborRelationship = fineMesh->getTopology()->getDimension() - 1; // side dimension default
 
   _debugMode = false;
 
@@ -630,6 +631,18 @@ Teuchos::RCP<Epetra_CrsMatrix> GMGOperator::constructProlongationOperator()
   narrate(prolongationTimingReport.str());
   
   return _P;
+}
+
+//! Dimension that will be used for neighbor relationships for Schwarz blocks, if CAMELLIA_ADDITIVE_SCHWARZ is the smoother choice.
+int GMGOperator::getDimensionForSchwarzNeighborRelationship()
+{
+  return _dimensionForSchwarzNeighborRelationship;
+}
+
+//! Set dimension to use for neighbor relationships for Schwarz blocks.  Requires CAMELLIA_ADDITIVE_SCHWARZ as the smoother choice.
+void GMGOperator::setDimensionForSchwarzNeighborRelationship(int value)
+{
+  _dimensionForSchwarzNeighborRelationship = value;
 }
 
 GlobalIndexType GMGOperator::getCoarseCellID(GlobalIndexType fineCellID) const
@@ -1893,20 +1906,20 @@ void GMGOperator::setUpSmoother(Epetra_CrsMatrix *fineStiffnessMatrix)
       {
       case Direct:
         {
-          Camellia::AdditiveSchwarz<Ifpack_Amesos>* camelliaSmoother = new Camellia::AdditiveSchwarz<Ifpack_Amesos>(fineStiffnessMatrix, OverlapLevel, _fineMesh, _fineDofInterpreter, _hierarchicalNeighborsForSchwarz);
+          Camellia::AdditiveSchwarz<Ifpack_Amesos>* camelliaSmoother = new Camellia::AdditiveSchwarz<Ifpack_Amesos>(fineStiffnessMatrix, OverlapLevel, _fineMesh, _fineDofInterpreter, _hierarchicalNeighborsForSchwarz, _dimensionForSchwarzNeighborRelationship);
           smoother = Teuchos::rcp( camelliaSmoother );
         }
         break;
       case ILU:
         {
-          Camellia::AdditiveSchwarz<Ifpack_ILU>* camelliaSmoother = new Camellia::AdditiveSchwarz<Ifpack_ILU>(fineStiffnessMatrix, OverlapLevel, _fineMesh, _fineDofInterpreter, _hierarchicalNeighborsForSchwarz);
+          Camellia::AdditiveSchwarz<Ifpack_ILU>* camelliaSmoother = new Camellia::AdditiveSchwarz<Ifpack_ILU>(fineStiffnessMatrix, OverlapLevel, _fineMesh, _fineDofInterpreter, _hierarchicalNeighborsForSchwarz, _dimensionForSchwarzNeighborRelationship);
           List.set("fact: level-of-fill", _levelOfFill);
           smoother = Teuchos::rcp( camelliaSmoother );
         }
         break;
       case IC:
         {
-          Camellia::AdditiveSchwarz<Ifpack_IC>* camelliaSmoother = new Camellia::AdditiveSchwarz<Ifpack_IC>(fineStiffnessMatrix, OverlapLevel, _fineMesh, _fineDofInterpreter, _hierarchicalNeighborsForSchwarz);
+          Camellia::AdditiveSchwarz<Ifpack_IC>* camelliaSmoother = new Camellia::AdditiveSchwarz<Ifpack_IC>(fineStiffnessMatrix, OverlapLevel, _fineMesh, _fineDofInterpreter, _hierarchicalNeighborsForSchwarz, _dimensionForSchwarzNeighborRelationship);
           List.set("fact: ict level-of-fill", _fillRatio);
           smoother = Teuchos::rcp( camelliaSmoother );
         }
@@ -2038,46 +2051,8 @@ void GMGOperator::setUpSmoother(Epetra_CrsMatrix *fineStiffnessMatrix)
     for (GlobalIndexType cellIndex : myCellIndices)
     {
       set<GlobalIndexType> subdomainCellsAndNeighbors = OverlappingRowMatrix::overlappingCells(cellIndex, _fineMesh, _smootherOverlap,
-                                                                                              _hierarchicalNeighborsForSchwarz);
-      
-//      set<GlobalIndexType> subdomainCellsAndNeighbors;
-//      // first, fill in the subdomain cells
-//      if (!_hierarchicalNeighborsForSchwarz)
-//      {
-//        subdomainCellsAndNeighbors = {cellIndex};
-//        set<GlobalIndexType> newNeighbors = {cellIndex};
-//        for (int overlapLevel=0; overlapLevel<_smootherOverlap; overlapLevel++)
-//        {
-//          set<GlobalIndexType> lastNeighbors = newNeighbors;
-//          newNeighbors.clear();
-//          for (GlobalIndexType neighborCellIndex : lastNeighbors)
-//          {
-//            CellPtr lastNeighborCell = _fineMesh->getTopology()->getCell(neighborCellIndex);
-//            vector<CellPtr> newNeighborCells = lastNeighborCell->getNeighbors(_fineMesh->getTopology());
-//            for (CellPtr neighbor : newNeighborCells)
-//            {
-//              newNeighbors.insert(neighbor->cellIndex());
-//            }
-//          }
-//          subdomainCellsAndNeighbors.insert(newNeighbors.begin(),newNeighbors.end());
-//        }
-//      }
-//      else
-//      {
-//        CellPtr ancestralCell = _fineMesh->getTopology()->getCell(cellIndex);
-//        for (int overlapLevel=0; overlapLevel<_smootherOverlap; overlapLevel++)
-//        {
-//          if (ancestralCell->getParent() != Teuchos::null)
-//          {
-//            ancestralCell = ancestralCell->getParent();
-//          }
-//          else
-//          {
-//            break;
-//          }
-//        }
-//        subdomainCellsAndNeighbors = ancestralCell->getDescendants(_fineMesh->getTopology(), true); // true: leaf nodes only
-//      }
+                                                                                              _hierarchicalNeighborsForSchwarz,
+                                                                                               _dimensionForSchwarzNeighborRelationship);
       
       set<GlobalIndexType> subdomainNeighbors;
       for (GlobalIndexType subdomainCellIndex : subdomainCellsAndNeighbors)

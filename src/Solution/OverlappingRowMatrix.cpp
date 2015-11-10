@@ -323,7 +323,8 @@ void OverlappingRowMatrix::BuildMap(int OverlapLevel_in)
 }
 
 std::set<GlobalIndexType> OverlappingRowMatrix::overlappingCells(GlobalIndexType cellID, MeshPtr mesh,
-                                                                 int overlapLevel, bool hierarchical)
+                                                                 int overlapLevel, bool hierarchical,
+                                                                 int dimensionForNeighborRelation)
 {
   set<GlobalIndexType> cells = {cellID};
   
@@ -335,13 +336,34 @@ std::set<GlobalIndexType> OverlappingRowMatrix::overlappingCells(GlobalIndexType
     for (std::set<GlobalIndexType>::iterator cellIDIt = lastNeighbors.begin(); cellIDIt != lastNeighbors.end(); cellIDIt++)
     {
       CellPtr cell = mesh->getTopology()->getCell(*cellIDIt);
-      int numSides = cell->getSideCount();
-      for (int sideOrdinal=0; sideOrdinal<numSides; sideOrdinal++)
+      
+      bool useOldSideBasedNeighborRelation = false;
+      
+      if (useOldSideBasedNeighborRelation)
       {
-        pair<GlobalIndexType, unsigned> neighborInfo = cell->getNeighborInfo(sideOrdinal,mesh->getTopology());
-        if (neighborInfo.first != -1)   // -1 indicates boundary/no neighbor
+        int numSides = cell->getSideCount();
+        for (int sideOrdinal=0; sideOrdinal<numSides; sideOrdinal++)
         {
-          cellNeighbors.insert(neighborInfo.first);
+          pair<GlobalIndexType, unsigned> neighborInfo = cell->getNeighborInfo(sideOrdinal,mesh->getTopology());
+          if (neighborInfo.first != -1)   // -1 indicates boundary/no neighbor
+          {
+            cellNeighbors.insert(neighborInfo.first);
+          }
+        }
+      }
+      else
+      {
+        // if dimensionForNeighborRelation < 0, then use sideDim.
+        if (dimensionForNeighborRelation < 0) dimensionForNeighborRelation = cell->topology()->getDimension() - 1;
+        int numSubcells = cell->topology()->getSubcellCount(dimensionForNeighborRelation);
+        for (int subcellOrdinal=0; subcellOrdinal<numSubcells; subcellOrdinal++)
+        {
+          IndexType subcellEntityIndex = cell->entityIndex(dimensionForNeighborRelation, subcellOrdinal);
+          set< pair<IndexType, unsigned> > cellPairs = mesh->getTopology()->getCellsContainingEntity(dimensionForNeighborRelation, subcellEntityIndex);
+          for (pair<IndexType, unsigned> cellPair : cellPairs)
+          {
+            cellNeighbors.insert(cellPair.first);
+          }
         }
       }
     }
@@ -351,7 +373,7 @@ std::set<GlobalIndexType> OverlappingRowMatrix::overlappingCells(GlobalIndexType
   if (hierarchical)
   {
     // get ancestors up to overlap level above our cells:
-    std::set<GlobalIndexType> ancestors = cells;
+    std::set<GlobalIndexType> ancestors = {cellID};
     for (int overlap = 0 ; overlap < overlapLevel ; ++overlap)
     {
       std::set<GlobalIndexType> previousAncestors = ancestors;
@@ -393,6 +415,7 @@ std::set<GlobalIndexType> OverlappingRowMatrix::overlappingCells(GlobalIndexType
       }
     }
   }
+//  print("cells",cells);
   return cells;
 }
 

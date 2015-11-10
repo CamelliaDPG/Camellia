@@ -404,7 +404,7 @@ public:
                         Epetra_CombineMode CM = Add);
 
   // ! returns the set of cells that overlap the provided cell
-  static std::set<GlobalIndexType> overlappingCells(GlobalIndexType cellID, MeshPtr mesh, int overlapLevel, bool hierarchical);
+  static std::set<GlobalIndexType> overlappingCells(GlobalIndexType cellID, MeshPtr mesh, int overlapLevel, bool hierarchical, int dimensionForNeighborRelation);
   
 private:
   inline const Epetra_RowMatrix& A() const
