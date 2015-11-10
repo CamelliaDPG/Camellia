@@ -278,7 +278,9 @@ NavierStokesVGPFormulation::NavierStokesVGPFormulation(MeshTopologyPtr meshTopo,
   // TODO: make this more general (pass norm name in via parameters)
   setIP( _navierStokesBF->graphNorm() );
 
-  this->setForcingFunction(Teuchos::null); // will default to zero
+  int vectorRank = 1;
+  FunctionPtr forcingFunction = parameters.get<FunctionPtr>("forcingFunction",Function::zero(vectorRank));
+  this->setForcingFunction(forcingFunction); // will default to zero
 
   _bc = BC::bc();
 
