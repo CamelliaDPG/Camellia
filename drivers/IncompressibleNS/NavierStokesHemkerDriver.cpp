@@ -6,46 +6,40 @@
 //  Copyright (c) 2012 __MyCompanyName__. All rights reserved.
 //
 
-#include "HConvergenceStudy.h"
-#include "InnerProductScratchPad.h"
-#include "PreviousSolutionFunction.h"
-#include "LagrangeConstraints.h"
 #include "BasisFactory.h"
 #include "GnuPlotUtil.h"
-#include <Teuchos_GlobalMPISession.hpp>
-
-#include "NavierStokesFormulation.h"
-
+#include "HConvergenceStudy.h"
 #include "InnerProductScratchPad.h"
-#include "RefinementStrategy.h"
-//#include "LidDrivenFlowRefinementStrategy.h"
-#include "RefinementPattern.h"
-#include "RefinementHistory.h"
-#include "PreviousSolutionFunction.h"
 #include "LagrangeConstraints.h"
+#include "MassFluxFunction.h"
+#include "MeshFactory.h"
 #include "MeshPolyOrderFunction.h"
 #include "MeshTestUtility.h"
+#include "NavierStokesFormulation.h"
 #include "NonlinearSolveStrategy.h"
-#include "PenaltyConstraints.h"
-
 #include "ParameterFunction.h"
+#include "PenaltyConstraints.h"
+#include "PreviousSolutionFunction.h"
+#include "RefinementHistory.h"
+#include "RefinementPattern.h"
+#include "RefinementStrategy.h"
+#include "SimpleFunction.h"
+#include "Solver.h"
 
-#include "MeshFactory.h"
-
-#include "SolutionExporter.h"
-
-#include "MassFluxFunction.h"
-
-#include "StreamDriverUtil.h"
+#include "../Stokes/StreamDriverUtil.h"
 
 #include "choice.hpp"
 #include "mpi_choice.hpp"
+
+#include <Teuchos_GlobalMPISession.hpp>
 
 #include "EpetraExt_ConfigDefs.h"
 #ifdef HAVE_EPETRAEXT_HDF5
 #include "HDF5Exporter.h"
 #endif
 
+using namespace Camellia;
+using namespace Intrepid;
 using namespace std;
 
 const static double PI  = 3.141592653589793238462;
@@ -176,7 +170,7 @@ public:
   }
 };
 
-class BoundaryVelocity : public SimpleFunction
+class BoundaryVelocity : public SimpleFunction<double>
 {
   double _left, _right, _top, _bottom, _radius;
   int _comp;
@@ -319,7 +313,7 @@ FunctionPtr friction(SolutionPtr soln)
   LinearTermPtr f_lt = n->y() * (sigma11->times_normal_x() + sigma12->times_normal_y())
                        - n->x() * (sigma21->times_normal_x() + sigma22->times_normal_y());
 
-  FunctionPtr f = Teuchos::rcp( new PreviousSolutionFunction(soln, f_lt) );
+  FunctionPtr f = Teuchos::rcp( new PreviousSolutionFunction<double>(soln, f_lt) );
   return f;
 }
 
@@ -332,7 +326,7 @@ double dragCoefficient(SolutionPtr soln, double radius, bool neglectPressure = f
 
   FunctionPtr frictionFxn = friction(soln);
 
-  FunctionPtr pressure = Teuchos::rcp( new PreviousSolutionFunction(soln, p) );
+  FunctionPtr pressure = Teuchos::rcp( new PreviousSolutionFunction<double>(soln, p) );
 
   if (neglectPressure)
   {
@@ -344,7 +338,7 @@ double dragCoefficient(SolutionPtr soln, double radius, bool neglectPressure = f
 
   // taken from Schäfer and Turek.  We negate everything because our normals are relative to
   // elements, whereas the normal in the formula is going out from the cylinder...
-  FunctionPtr dF_D = Teuchos::rcp( new SpatiallyFilteredFunction( (- frictionFxn * n->y() + pressure * n->x()) * boundaryRestriction,
+  FunctionPtr dF_D = Teuchos::rcp( new SpatiallyFilteredFunction<double>( (- frictionFxn * n->y() + pressure * n->x()) * boundaryRestriction,
                                    nearCylinder));
 
   double F_D = dF_D->integrate(soln->mesh());
@@ -361,7 +355,7 @@ double liftCoefficient(SolutionPtr soln, double radius, bool neglectPressure = f
 
   FunctionPtr frictionFxn = friction(soln);
 
-  FunctionPtr pressure = Teuchos::rcp( new PreviousSolutionFunction(soln, p) );
+  FunctionPtr pressure = Teuchos::rcp( new PreviousSolutionFunction<double>(soln, p) );
 
   if (neglectPressure)
   {
@@ -373,7 +367,7 @@ double liftCoefficient(SolutionPtr soln, double radius, bool neglectPressure = f
 
   // taken from Schäfer and Turek.  We negate everything because our normals are relative to
   // elements, whereas the normal in the formula is going out from the cylinder...
-  FunctionPtr dF_L = Teuchos::rcp( new SpatiallyFilteredFunction( (frictionFxn * n->x() + pressure * n->y()) * boundaryRestriction,
+  FunctionPtr dF_L = Teuchos::rcp( new SpatiallyFilteredFunction<double>( (frictionFxn * n->x() + pressure * n->y()) * boundaryRestriction,
                                    nearCylinder));
 
   double F_L = dF_L->integrate(soln->mesh());
@@ -922,7 +916,7 @@ int main(int argc, char *argv[])
     }
     else
     {
-      solver = Teuchos::rcp(new KluSolver());
+      solver = Solver::getDirectSolver();
     }
 
 //    // usage: polyOrder [numRefinements]
@@ -1000,25 +994,25 @@ int main(int argc, char *argv[])
     int H1Order = polyOrder + 1;
 
     // get variable definitions:
-    VarFactory varFactory = VGPStokesFormulation::vgpVarFactory();
-    u1 = varFactory.fieldVar(VGP_U1_S);
-    u2 = varFactory.fieldVar(VGP_U2_S);
-    sigma11 = varFactory.fieldVar(VGP_SIGMA11_S);
-    sigma12 = varFactory.fieldVar(VGP_SIGMA12_S);
-    sigma21 = varFactory.fieldVar(VGP_SIGMA21_S);
-    sigma22 = varFactory.fieldVar(VGP_SIGMA22_S);
-    p = varFactory.fieldVar(VGP_P_S);
+    VarFactoryPtr varFactory = VGPStokesFormulation::vgpVarFactory();
+    u1 = varFactory->fieldVar(VGP_U1_S);
+    u2 = varFactory->fieldVar(VGP_U2_S);
+    sigma11 = varFactory->fieldVar(VGP_SIGMA11_S);
+    sigma12 = varFactory->fieldVar(VGP_SIGMA12_S);
+    sigma21 = varFactory->fieldVar(VGP_SIGMA21_S);
+    sigma22 = varFactory->fieldVar(VGP_SIGMA22_S);
+    p = varFactory->fieldVar(VGP_P_S);
 
-    u1hat = varFactory.traceVar(VGP_U1HAT_S);
-    u2hat = varFactory.traceVar(VGP_U2HAT_S);
-    t1n = varFactory.fluxVar(VGP_T1HAT_S);
-    t2n = varFactory.fluxVar(VGP_T2HAT_S);
+    u1hat = varFactory->traceVar(VGP_U1HAT_S);
+    u2hat = varFactory->traceVar(VGP_U2HAT_S);
+    t1n = varFactory->fluxVar(VGP_T1HAT_S);
+    t2n = varFactory->fluxVar(VGP_T2HAT_S);
 
-    v1 = varFactory.testVar(VGP_V1_S, HGRAD);
-    v2 = varFactory.testVar(VGP_V2_S, HGRAD);
-    tau1 = varFactory.testVar(VGP_TAU1_S, HDIV);
-    tau2 = varFactory.testVar(VGP_TAU2_S, HDIV);
-    q = varFactory.testVar(VGP_Q_S, HGRAD);
+    v1 = varFactory->testVar(VGP_V1_S, HGRAD);
+    v2 = varFactory->testVar(VGP_V2_S, HGRAD);
+    tau1 = varFactory->testVar(VGP_TAU1_S, HDIV);
+    tau2 = varFactory->testVar(VGP_TAU2_S, HDIV);
+    q = varFactory->testVar(VGP_Q_S, HGRAD);
 
     FunctionPtr zero = Function::zero();
 
@@ -1143,14 +1137,14 @@ int main(int argc, char *argv[])
     }
 
     // define bilinear form for stream function:
-    VarFactory streamVarFactory;
-    phi_hat = streamVarFactory.traceVar("\\widehat{\\phi}");
-    VarPtr psin_hat = streamVarFactory.fluxVar("\\widehat{\\psi}_n");
-    VarPtr psi_1 = streamVarFactory.fieldVar("\\psi_1");
-    VarPtr psi_2 = streamVarFactory.fieldVar("\\psi_2");
-    VarPtr phi = streamVarFactory.fieldVar("\\phi");
-    VarPtr q_s = streamVarFactory.testVar("q_s", HGRAD);
-    VarPtr v_s = streamVarFactory.testVar("v_s", HDIV);
+    VarFactoryPtr streamVarFactory;
+    phi_hat = streamVarFactory->traceVar("\\widehat{\\phi}");
+    VarPtr psin_hat = streamVarFactory->fluxVar("\\widehat{\\psi}_n");
+    VarPtr psi_1 = streamVarFactory->fieldVar("\\psi_1");
+    VarPtr psi_2 = streamVarFactory->fieldVar("\\psi_2");
+    VarPtr phi = streamVarFactory->fieldVar("\\phi");
+    VarPtr q_s = streamVarFactory->testVar("q_s", HGRAD);
+    VarPtr v_s = streamVarFactory->testVar("v_s", HDIV);
     BFPtr streamBF = Teuchos::rcp( new BF(streamVarFactory) );
     streamBF->addTerm(psi_1, q_s->dx());
     streamBF->addTerm(psi_2, q_s->dy());
@@ -1243,10 +1237,10 @@ int main(int argc, char *argv[])
 
     ////////////////////   SOLVE & REFINE   ///////////////////////
 
-    //  FunctionPtr vorticity = Teuchos::rcp( new PreviousSolutionFunction(solution, - u1->dy() + u2->dx() ) );
+    //  FunctionPtr vorticity = Teuchos::rcp( new PreviousSolutionFunction<double>(solution, - u1->dy() + u2->dx() ) );
     if (rank==0) cout << "using sigma-based vorticity definition.\n";
-    FunctionPtr vorticity = Teuchos::rcp( new PreviousSolutionFunction(solution, - Re * sigma12 + Re * sigma21 ) ); // Re because sigma = 1/Re grad u
-    FunctionPtr p_prev = Teuchos::rcp( new PreviousSolutionFunction(solution, p) );
+    FunctionPtr vorticity = Teuchos::rcp( new PreviousSolutionFunction<double>(solution, - Re * sigma12 + Re * sigma21 ) ); // Re because sigma = 1/Re grad u
+    FunctionPtr p_prev = Teuchos::rcp( new PreviousSolutionFunction<double>(solution, p) );
 
     double delta = pressureDifference(p_prev, radius, mesh);
     if (rank==0) cout << "computed pressure delta on initial solution as " << delta << endl;
@@ -1579,14 +1573,14 @@ int main(int argc, char *argv[])
     {
       FunctionPtr u1_sq = u1_prev * u1_prev;
       FunctionPtr u_dot_u = u1_sq + (u2_prev * u2_prev);
-      FunctionPtr u_div = Teuchos::rcp( new PreviousSolutionFunction(solution, u1->dx() + u2->dy() ) );
+      FunctionPtr u_div = Teuchos::rcp( new PreviousSolutionFunction<double>(solution, u1->dx() + u2->dy() ) );
 
       // check that the zero mean pressure is being correctly imposed:
       double p_avg = p_prev->integrate(mesh);
       if (rank==0)
         cout << "Integral of pressure: " << p_avg << endl;
 
-      FunctionPtr u_n = Teuchos::rcp( new PreviousSolutionFunction(solution, u1hat->times_normal_x() + u2hat->times_normal_y()) );
+      FunctionPtr u_n = Teuchos::rcp( new PreviousSolutionFunction<double>(solution, u1hat->times_normal_x() + u2hat->times_normal_y()) );
 
       FunctionPtr massFlux = Teuchos::rcp( new MassFluxFunction(u_n) );
       FunctionPtr absMassFlux = Teuchos::rcp( new MassFluxFunction(u_n,true) );
@@ -1658,9 +1652,9 @@ int main(int argc, char *argv[])
     {
       RHSPtr streamRHS = RHS::rhs();
       streamRHS->addTerm(vorticity * q_s);
-      ((PreviousSolutionFunction*) vorticity.get())->setOverrideMeshCheck(true);
-      ((PreviousSolutionFunction*) u1_prev.get())->setOverrideMeshCheck(true);
-      ((PreviousSolutionFunction*) u2_prev.get())->setOverrideMeshCheck(true);
+      ((PreviousSolutionFunction<double>*) vorticity.get())->setOverrideMeshCheck(true);
+      ((PreviousSolutionFunction<double>*) u1_prev.get())->setOverrideMeshCheck(true);
+      ((PreviousSolutionFunction<double>*) u2_prev.get())->setOverrideMeshCheck(true);
 
       recreateStreamBCs();
 

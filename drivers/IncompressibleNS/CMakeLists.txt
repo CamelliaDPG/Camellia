@@ -33,3 +33,8 @@ target_link_libraries(NavierStokesStudy
 target_link_libraries(OseenStudyDriver
   Camellia
 )
+
+add_executable(NavierStokesStudyModernFormulation NavierStokesStudyModernFormulation.cpp)
+target_link_libraries(NavierStokesStudyModernFormulation 
+  Camellia
+)

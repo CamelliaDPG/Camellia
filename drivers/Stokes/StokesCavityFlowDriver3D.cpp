@@ -1,7 +1,6 @@
 #include "RefinementStrategy.h"
 #include "PreviousSolutionFunction.h"
 #include "MeshFactory.h"
-#include "SolutionExporter.h"
 #include <Teuchos_GlobalMPISession.hpp>
 #include "GnuPlotUtil.h"
 

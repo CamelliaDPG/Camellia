@@ -11,7 +11,9 @@
 
 #include "ParametricCurve.h"
 
-FieldContainer<double> pointGrid(double xMin, double xMax, double yMin, double yMax, int numPoints)
+using namespace Camellia;
+
+Intrepid::FieldContainer<double> pointGrid(double xMin, double xMax, double yMin, double yMax, int numPoints)
 {
   vector<double> points1D_x, points1D_y;
   for (int i=0; i<numPoints; i++)
@@ -20,7 +22,7 @@ FieldContainer<double> pointGrid(double xMin, double xMax, double yMin, double y
     points1D_y.push_back( yMin + (yMax - yMin) * ((double) i) / (numPoints-1) );
   }
   int spaceDim = 2;
-  FieldContainer<double> points(numPoints*numPoints,spaceDim);
+  Intrepid::FieldContainer<double> points(numPoints*numPoints,spaceDim);
   for (int i=0; i<numPoints; i++)
   {
     for (int j=0; j<numPoints; j++)
@@ -33,7 +35,7 @@ FieldContainer<double> pointGrid(double xMin, double xMax, double yMin, double y
   return points;
 }
 
-set<double> diagonalContourLevels(FieldContainer<double> &pointData, int pointsPerLevel=1)
+set<double> diagonalContourLevels(Intrepid::FieldContainer<double> &pointData, int pointsPerLevel=1)
 {
   // traverse diagonal of (i*numPoints + j) data from solutionData()
   int numPoints = sqrt(pointData.dimension(0));
@@ -45,13 +47,13 @@ set<double> diagonalContourLevels(FieldContainer<double> &pointData, int pointsP
   return levels;
 }
 
-FieldContainer<double> solutionData(FieldContainer<double> &points, SolutionPtr solution, VarPtr u1)
+Intrepid::FieldContainer<double> solutionData(Intrepid::FieldContainer<double> &points, SolutionPtr solution, VarPtr u1)
 {
   int numPoints = points.dimension(0);
-  FieldContainer<double> values(numPoints);
+  Intrepid::FieldContainer<double> values(numPoints);
   solution->solutionValues(values, u1->ID(), points);
 
-  FieldContainer<double> xyzData(numPoints, 3);
+  Intrepid::FieldContainer<double> xyzData(numPoints, 3);
   for (int ptIndex=0; ptIndex<numPoints; ptIndex++)
   {
     xyzData(ptIndex,0) = points(ptIndex,0);
@@ -72,7 +74,7 @@ void writePatchValues(double xMin, double xMax, double yMin, double yMax,
     points1D_y.push_back( yMin + (yMax - yMin) * ((double) i) / (numPoints-1) );
   }
   int spaceDim = 2;
-  FieldContainer<double> points(numPoints*numPoints,spaceDim);
+  Intrepid::FieldContainer<double> points(numPoints*numPoints,spaceDim);
   for (int i=0; i<numPoints; i++)
   {
     for (int j=0; j<numPoints; j++)
@@ -82,8 +84,8 @@ void writePatchValues(double xMin, double xMax, double yMin, double yMax,
       points(pointIndex,1) = points1D_y[j];
     }
   }
-  FieldContainer<double> values1(numPoints*numPoints);
-  FieldContainer<double> values2(numPoints*numPoints);
+  Intrepid::FieldContainer<double> values1(numPoints*numPoints);
+  Intrepid::FieldContainer<double> values2(numPoints*numPoints);
   solution->solutionValues(values1, u1->ID(), points);
   ofstream fout(filename.c_str());
   fout << setprecision(15);
@@ -114,8 +116,8 @@ void writePatchValues(double xMin, double xMax, double yMin, double yMax,
 double getSolutionValueAtPoint(double x, double y, SolutionPtr soln, VarPtr var)
 {
   double spaceDim = 2;
-  FieldContainer<double> point(1,spaceDim);
-  FieldContainer<double> value(1); // one value
+  Intrepid::FieldContainer<double> point(1,spaceDim);
+  Intrepid::FieldContainer<double> value(1); // one value
   point(0,0) = x;
   point(0,1) = y;
   soln->solutionValues(value, var->ID(), point);
@@ -124,14 +126,14 @@ double getSolutionValueAtPoint(double x, double y, SolutionPtr soln, VarPtr var)
 
 double getFunctionValueAtPoint(FunctionPtr scalarFunction, double x, double y, MeshPtr mesh)
 {
-  static FieldContainer<double> value(1,1);
-  static FieldContainer<double> physPoint(1,2);
+  static Intrepid::FieldContainer<double> value(1,1);
+  static Intrepid::FieldContainer<double> physPoint(1,2);
   physPoint[0] = x;
   physPoint[1] = y;
 
   ElementPtr elem = mesh->elementsForPoints(physPoint)[0];
   BasisCachePtr basisCache = BasisCache::basisCacheForCell(mesh, elem->cellID());
-  FieldContainer<double> refPoint = basisCache->getRefCellPointsForPhysicalPoints(physPoint);
+  Intrepid::FieldContainer<double> refPoint = basisCache->getRefCellPointsForPhysicalPoints(physPoint);
   basisCache->setRefCellPoints(refPoint);
 
   if (scalarFunction->rank() != 0)

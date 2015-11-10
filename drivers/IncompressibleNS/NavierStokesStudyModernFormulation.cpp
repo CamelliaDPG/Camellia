@@ -1,7 +1,12 @@
 /*
  *  NavierStokesStudy.cpp
  *
- *  Created by Nathan Roberts on 11/15/12.
+ *  Created by Nathan Roberts on 11/9/15.
+ 
+ The idea here is simply to do the same thing as the old NavierStokesStudy, substituting the new
+ NavierStokesVGPFormulation for the old formulation implementation.  These are intended to be identical
+ mathematically, so any differences should be investigated...
+ 
  *
  */
 
@@ -24,6 +29,10 @@
 #include <Teuchos_GlobalMPISession.hpp>
 
 #include "NavierStokesFormulation.h"
+
+#include "NavierStokesVGPFormulation.h"
+
+#include "StokesVGPFormulation.h"
 
 #include "MeshUtilities.h"
 
@@ -51,7 +60,6 @@ int main(int argc, char *argv[])
   int minLogElements = args.Input<int>("--minLogElements", "base 2 log of the minimum number of elements in one mesh direction", 0);
   int maxLogElements = args.Input<int>("--maxLogElements", "base 2 log of the maximum number of elements in one mesh direction", 4);
   double Re = args.Input<double>("--Re", "Reynolds number", 40);
-  bool longDoubleGramInversion = args.Input<bool>("--longDoubleGramInversion", "use long double Cholesky factorization for Gram matrix", false);
 //  bool outputStiffnessMatrix = args.Input<bool>("--writeFinalStiffnessToDisk", "write the final stiffness matrix to disk.", false);
   bool computeMaxConditionNumber = args.Input<bool>("--computeMaxConditionNumber", "compute the maximum Gram matrix condition number for final mesh.", false);
   int maxIters = args.Input<int>("--maxIters", "maximum number of Newton-Raphson iterations to take to try to match tolerance", 50);
@@ -107,35 +115,20 @@ int main(int argc, char *argv[])
     cout << "pToAdd = " << pToAdd << endl;
     cout << "useTriangles = "    << (useTriangles   ? "true" : "false") << "\n";
     cout << "norm = " << normChoice << endl;
-    cout << "longDoubleGramInversion = "  << (longDoubleGramInversion ? "true" : "false") << "\n";
   }
 
   // define Kovasznay domain:
   FieldContainer<double> quadPointsKovasznay(4,2);
   // domain from Cockburn Kanschat for Stokes:
-  quadPointsKovasznay(0,0) = -0.5; // x1
-  quadPointsKovasznay(0,1) =  0.0; // y1
-  quadPointsKovasznay(1,0) =  1.5;
-  quadPointsKovasznay(1,1) =  0.0;
-  quadPointsKovasznay(2,0) =  1.5;
-  quadPointsKovasznay(2,1) =  2.0;
-  quadPointsKovasznay(3,0) = -0.5;
-  quadPointsKovasznay(3,1) =  2.0;
-
-  // Domain from Evans Hughes for Navier-Stokes:
-//  quadPointsKovasznay(0,0) =  0.0; // x1
-//  quadPointsKovasznay(0,1) = -0.5; // y1
-//  quadPointsKovasznay(1,0) =  1.0;
-//  quadPointsKovasznay(1,1) = -0.5;
-//  quadPointsKovasznay(2,0) =  1.0;
-//  quadPointsKovasznay(2,1) =  0.5;
-//  quadPointsKovasznay(3,0) =  0.0;
-//  quadPointsKovasznay(3,1) =  0.5;
-
-//  double Re = 10.0;  // Cockburn Kanschat Stokes
-//  double Re = 40.0; // Evans Hughes Navier-Stokes
-//  double Re = 1000.0;
-
+//  quadPointsKovasznay(0,0) = -0.5; // x1
+//  quadPointsKovasznay(0,1) =  0.0; // y1
+//  quadPointsKovasznay(1,0) =  1.5;
+//  quadPointsKovasznay(1,1) =  0.0;
+//  quadPointsKovasznay(2,0) =  1.5;
+//  quadPointsKovasznay(2,1) =  2.0;
+//  quadPointsKovasznay(3,0) = -0.5;
+//  quadPointsKovasznay(3,1) =  2.0;
+  
   string formulationTypeStr = "vgp";
 
   FunctionPtr u1_exact, u2_exact, p_exact;
@@ -143,39 +136,28 @@ int main(int argc, char *argv[])
   int numCellsFineMesh = 20; // for computing a zero-mean pressure
   int H1OrderFineMesh = 5;
 
-//  VGPNavierStokesProblem(double Re, Intrepid::FieldContainer<double> &quadPoints, int horizontalCells,
-//                         int verticalCells, int H1Order, int pToAdd,
-//                         TFunctionPtr<double> u1_0, TFunctionPtr<double> u2_0, TFunctionPtr<double> f1, TFunctionPtr<double> f2,
-//                         bool enrichVelocity = false, bool enhanceFluxes = false)
+  StokesVGPFormulation stokesForm = StokesVGPFormulation::steadyFormulation(spaceDim, 1.0/Re, useEnrichedTraces);
   
-  FunctionPtr zero = Function::zero();
-  VGPNavierStokesProblem zeroProblem = VGPNavierStokesProblem(Re, quadPointsKovasznay,
-                                       numCellsFineMesh, numCellsFineMesh,
-                                       H1OrderFineMesh, pToAdd,
-                                       zero, zero, zero, useCompliantNorm || useStokesCompliantNorm);
+  VarPtr u1_vgp = stokesForm.u(1);
+  VarPtr u2_vgp = stokesForm.u(2);
+  VarPtr sigma11_vgp = stokesForm.sigma(1,1);
+  VarPtr sigma12_vgp = stokesForm.sigma(1,2);
+  VarPtr sigma21_vgp = stokesForm.sigma(2,1);
+  VarPtr sigma22_vgp = stokesForm.sigma(2,2);
+  VarPtr p_vgp = stokesForm.p();
 
-  VarFactoryPtr varFactory = VGPStokesFormulation::vgpVarFactory();
-  VarPtr u1_vgp = varFactory->fieldVar(VGP_U1_S);
-  VarPtr u2_vgp = varFactory->fieldVar(VGP_U2_S);
-  VarPtr sigma11_vgp = varFactory->fieldVar(VGP_SIGMA11_S);
-  VarPtr sigma12_vgp = varFactory->fieldVar(VGP_SIGMA12_S);
-  VarPtr sigma21_vgp = varFactory->fieldVar(VGP_SIGMA21_S);
-  VarPtr sigma22_vgp = varFactory->fieldVar(VGP_SIGMA22_S);
-  VarPtr p_vgp = varFactory->fieldVar(VGP_P_S);
+  VarPtr v1_vgp = stokesForm.v(1);
+  VarPtr v2_vgp = stokesForm.v(2);
+  
+  StokesVGPFormulation stokesFormFineMesh = StokesVGPFormulation::steadyFormulation(spaceDim, 1.0/Re, useEnrichedTraces);
+  MeshTopologyPtr fineMeshTopo = MeshFactory::rectilinearMeshTopology({2.0,2.0}, {numCellsFineMesh, numCellsFineMesh}, {-0.5,0.0});
+  stokesFormFineMesh.initializeSolution(fineMeshTopo, H1OrderFineMesh-1);
+  MeshPtr fineMesh = stokesFormFineMesh.solution()->mesh();
+  NavierStokesFormulation::setKovasznay(Re, fineMesh, u1_exact, u2_exact, p_exact);
 
-
-  VarPtr v1_vgp = varFactory->testVar(VGP_V1_S, HGRAD);
-  VarPtr v2_vgp = varFactory->testVar(VGP_V2_S, HGRAD);
-
-//  if (rank==0) {
-//    cout << "bilinear form with zero background flow:\n";
-//    zeroProblem.bf()->printTrialTestInteractions();
-//  }
-
-  VGPStokesFormulation stokesForm(1/Re);
-
-  NavierStokesFormulation::setKovasznay(Re, zeroProblem.mesh(), u1_exact, u2_exact, p_exact);
-
+  cout << "NOTE: have not finished writing this for the modern formulation.\n";
+  exit(1);
+  
   map< string, string > convergenceDataForMATLAB; // key: field file name
 
   for (int polyOrder = minPolyOrder; polyOrder <= maxPolyOrder; polyOrder++)
@@ -196,11 +178,10 @@ int main(int argc, char *argv[])
     do
     {
       VGPNavierStokesProblem problem = VGPNavierStokesProblem(Re,quadPointsKovasznay,
-                                       numCells1D,numCells1D,
-                                       H1Order, pToAdd,
-                                       u1_exact, u2_exact, p_exact, useCompliantNorm || useStokesCompliantNorm);
-
-      problem.bf()->setUseExtendedPrecisionSolveForOptimalTestFunctions(longDoubleGramInversion);
+                                                              numCells1D,numCells1D,
+                                                              H1Order, pToAdd,
+                                                              u1_exact, u2_exact, p_exact,
+                                                              useCompliantNorm || useStokesCompliantNorm);
 
       problem.backgroundFlow()->setCubatureEnrichmentDegree(kovasznayCubatureEnrichment);
       problem.solutionIncrement()->setCubatureEnrichmentDegree(kovasznayCubatureEnrichment);

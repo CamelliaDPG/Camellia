@@ -10,7 +10,11 @@
 
 #include "LidDrivenFlowRefinementStrategy.h"
 
-#include "IndexType.h"
+#include "TypeDefs.h"
+
+using namespace std;
+using namespace Camellia;
+using namespace Intrepid;
 
 set<GlobalIndexType> LidDrivenFlowRefinementStrategy::symmetricCellIDs(set<GlobalIndexType> &cellIDs)
 {

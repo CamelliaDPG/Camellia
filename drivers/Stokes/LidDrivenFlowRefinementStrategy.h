@@ -12,7 +12,9 @@
 #include "Solution.h"
 #include "RefinementStrategy.h"
 
-#include "IndexType.h"
+#include "TypeDefs.h"
+
+using namespace Camellia;
 
 class LidDrivenFlowRefinementStrategy : public RefinementStrategy
 {
