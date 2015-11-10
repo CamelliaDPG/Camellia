@@ -1259,15 +1259,18 @@ void HDF5Exporter::getPoints(Intrepid::FieldContainer<double> &points, CellTopoP
   }
 }
 
-map<int,int> cellIDToSubdivision(MeshPtr mesh, unsigned int subdivisionFactor, set<GlobalIndexType> cellIndices)
-{
-  if (cellIndices.size()==0) cellIndices = mesh->getTopology()->getActiveCellIndices();
-  map<int,int> cellIDToPolyOrder;
-  for (set<GlobalIndexType>::iterator cellIt = cellIndices.begin(); cellIt != cellIndices.end(); cellIt++)
+namespace Camellia {
+  // TODO: move this into HDF5Exporter class??  Weird to have it sitting in the plain Camellia namespace, I think.
+  map<int,int> cellIDToSubdivision(MeshPtr mesh, unsigned int subdivisionFactor, set<GlobalIndexType> cellIndices)
   {
-    cellIDToPolyOrder[*cellIt] =  (subdivisionFactor*(mesh->cellPolyOrder(*cellIt)-2)+1);
+    if (cellIndices.size()==0) cellIndices = mesh->getTopology()->getActiveCellIndices();
+    map<int,int> cellIDToPolyOrder;
+    for (set<GlobalIndexType>::iterator cellIt = cellIndices.begin(); cellIt != cellIndices.end(); cellIt++)
+    {
+      cellIDToPolyOrder[*cellIt] =  (subdivisionFactor*(mesh->cellPolyOrder(*cellIt)-2)+1);
+    }
+    return cellIDToPolyOrder;
   }
-  return cellIDToPolyOrder;
 }
 
 // end HAVE_EPETRAEXT_HDF5 include guard
