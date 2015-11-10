@@ -59,6 +59,12 @@ public:
   VarPtr y() const;
   VarPtr z() const;
   VarPtr t() const;
+  
+  // ! i is 1-based ordinal; 1 for x, 2 for y, 3 for z
+  VarPtr spatialComponent(int i) const;
+  
+  // ! i is 1-based ordinal; 1 for dx, 2 for dy, 3 for dz
+  VarPtr di(int i) const;
 
   LinearTermPtr cross_normal(int spaceDim) const;
   LinearTermPtr dot_normal() const;

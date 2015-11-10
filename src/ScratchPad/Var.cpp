@@ -348,6 +348,22 @@ VarPtr Var::curl(int spaceDim) const
   }
 }
 
+// ! i is 1-based ordinal; 1 for dx, 2 for dy, 3 for dz
+VarPtr Var::di(int i) const
+{
+  switch (i)
+  {
+    case 1:
+      return this->dx();
+    case 2:
+      return this->dy();
+    case 3:
+      return this->dz();
+    default:
+      TEUCHOS_TEST_FOR_EXCEPTION(true, std::invalid_argument, "Unsupported value of i");
+  }
+}
+
 VarPtr Var::dx() const
 {
   TEUCHOS_TEST_FOR_EXCEPTION( _op !=  Camellia::OP_VALUE, std::invalid_argument, "operators can only be applied to raw vars, not vars that have been operated on.");
@@ -434,6 +450,24 @@ LinearTermPtr Var::dot_normal() const
   VarPtr var = Teuchos::rcp( new Var(_id, _rank, _name, _op, _fs, _varType ) );
   FunctionPtr n = Function::normal();
   return var * n;
+}
+
+
+
+// ! i is 1-based ordinal; 1 for x, 2 for y, 3 for z
+VarPtr Var::spatialComponent(int i) const
+{
+  switch (i)
+  {
+    case 1:
+      return this->x();
+    case 2:
+      return this->y();
+    case 3:
+      return this->z();
+    default:
+      TEUCHOS_TEST_FOR_EXCEPTION(true, std::invalid_argument, "Unsupported value of i");
+  }
 }
 
 LinearTermPtr Var::times_normal() const
