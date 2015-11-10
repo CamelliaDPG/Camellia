@@ -1054,6 +1054,17 @@ namespace Camellia
     int numTestDofs = testOrdering->totalDofs();
     int numTrialDofs = trialOrdering->totalDofs();
     
+#ifdef HAVE_MPI
+    Epetra_MpiComm Comm(MPI_COMM_WORLD);
+    //cout << "rank: " << rank << " of " << numProcs << endl;
+#else
+    Epetra_SerialComm Comm;
+#endif
+    
+    Epetra_Time timer(Comm);
+    
+    double timeG, timeB, timeT; // time to compute Gram matrix, the right-hand side B, and time to solve GT = B
+    
     // check that optimalTestWeights is properly dimensioned....
     TEUCHOS_TEST_FOR_EXCEPTION( ( optimalTestWeights.dimension(0) != numCells ),
                                std::invalid_argument,
@@ -1071,8 +1082,10 @@ namespace Camellia
     FieldContainer<Scalar> rectangularStiffnessMatrix(numCells,numTestDofs,numTrialDofs);
     //  FieldContainer<double> stiffnessMatrixT(numCells,numTrialDofs,numTestDofs);
     
+    timer.ResetStartTime();
     // RHS:
     this->stiffnessMatrix(rectangularStiffnessMatrix, elemType, cellSideParities, stiffnessBasisCache);
+    timeB = timer.ElapsedTime();
     
     int solvedAll = 0;
     
@@ -1092,8 +1105,11 @@ namespace Camellia
     
     FieldContainer<Scalar> ipMatrix(numCells,numTestDofs,numTestDofs);
     DofOrderingPtr testOrder = elemType->testOrderPtr;
+    timer.ResetStartTime();
     ip->computeInnerProductMatrix(ipMatrix, testOrder, ipBasisCache);
+    timeG = timer.ElapsedTime();
     
+    timer.ResetStartTime();
     for (int cellIndex=0; cellIndex < numCells; cellIndex++)
     {
       int result = 0;
@@ -1135,7 +1151,13 @@ namespace Camellia
         solvedAll = result;
       }
     }
-    
+    timeT = timer.ElapsedTime();
+   
+    bool printTimings = false;
+    if (printTimings)
+    {
+      cout << "BF timings: computed G in " << timeG << " seconds, B in " << timeB << "; solve for T in " << timeT << endl;
+    }
     return solvedAll;
   }
   
