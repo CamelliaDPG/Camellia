@@ -50,7 +50,7 @@ public:
 
     //    Intrepid::FieldContainer<double> cellIntegralsOnSide(numCells); // DEBUGGING
 
-    int numSides = CamelliaCellTools::getSideCount(basisCache->cellTopology());
+    int numSides = basisCache->cellTopology()->getSideCount();
 
     bool sumInto = true;
     for (int sideIndex = 0; sideIndex < numSides; sideIndex++)
