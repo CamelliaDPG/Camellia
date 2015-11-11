@@ -372,12 +372,12 @@ StokesVGPFormulation::StokesVGPFormulation(Teuchos::ParameterList &parameters)
   vector<VarPtr> tau = {tau1,tau2,tau3};
   for (int d1=1; d1<=spaceDim; d1++)
   {
-    _steadyStokesBF->addTerm(_mu * u[d1-1], tau[d1-1]->div()); // sigma_d1 = _mu * grad u_d1
+    _steadyStokesBF->addTerm(u[d1-1], tau[d1-1]->div()); // (1/mu) * sigma_1 = grad u_1
     for (int d2=1; d2<=spaceDim; d2++)
     {
-      _steadyStokesBF->addTerm(sigma[d1-1][d2-1], tau[d1-1]->spatialComponent(d2)); // (sigma_d1, tau_d1)
+      _steadyStokesBF->addTerm(Function::constant(1.0 / _mu) * sigma[d1-1][d2-1], tau[d1-1]->spatialComponent(d2)); // (sigma_1, tau_1)
     }
-    _steadyStokesBF->addTerm(-_mu * u_hat[d1-1], tau[d1-1] * n);
+    _steadyStokesBF->addTerm(-u_hat[d1-1], tau[d1-1] * n);
   }
   
   vector<VarPtr> v = {v1,v2,v3};
@@ -425,16 +425,17 @@ StokesVGPFormulation::StokesVGPFormulation(Teuchos::ParameterList &parameters)
     }
     
     TFunctionPtr<double> dtFxn = _dt; // cast to allow use of TFunctionPtr<double> operator overloads
-
+    TFunctionPtr<double> thetaFxn = _theta;
+    
     for (int d1=1; d1<=spaceDim; d1++)
     {
-      _stokesBF->addTerm(u[d1-1] / dtFxn, v[d1-1]);
-      _stokesBF->addTerm(_theta * (-p), v[d1-1]->di(d1) );
+      _stokesBF->addTerm((1.0 / dtFxn) * u[d1-1], v[d1-1]);
+      _stokesBF->addTerm(-thetaFxn * p, v[d1-1]->di(d1) );
       _stokesBF->addTerm( tn[d1-1], v[d1-1] );
       
       for (int d2=1; d2<=spaceDim; d2++)
       {
-        _stokesBF->addTerm(_theta * sigma[d1-1][d2-1],v[d1-1]->di(d2)); // (sigma1, grad v1)
+        _stokesBF->addTerm(thetaFxn * sigma[d1-1][d2-1],v[d1-1]->di(d2)); // (sigma1, grad v1)
       }
     }
     
