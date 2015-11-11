@@ -51,7 +51,6 @@ int main(int argc, char *argv[])
   int minLogElements = args.Input<int>("--minLogElements", "base 2 log of the minimum number of elements in one mesh direction", 0);
   int maxLogElements = args.Input<int>("--maxLogElements", "base 2 log of the maximum number of elements in one mesh direction", 4);
   double Re = args.Input<double>("--Re", "Reynolds number", 40);
-  bool longDoubleGramInversion = args.Input<bool>("--longDoubleGramInversion", "use long double Cholesky factorization for Gram matrix", false);
 //  bool outputStiffnessMatrix = args.Input<bool>("--writeFinalStiffnessToDisk", "write the final stiffness matrix to disk.", false);
   bool computeMaxConditionNumber = args.Input<bool>("--computeMaxConditionNumber", "compute the maximum Gram matrix condition number for final mesh.", false);
   int maxIters = args.Input<int>("--maxIters", "maximum number of Newton-Raphson iterations to take to try to match tolerance", 50);
@@ -107,7 +106,6 @@ int main(int argc, char *argv[])
     cout << "pToAdd = " << pToAdd << endl;
     cout << "useTriangles = "    << (useTriangles   ? "true" : "false") << "\n";
     cout << "norm = " << normChoice << endl;
-    cout << "longDoubleGramInversion = "  << (longDoubleGramInversion ? "true" : "false") << "\n";
   }
 
   // define Kovasznay domain:
@@ -176,6 +174,8 @@ int main(int argc, char *argv[])
 
   NavierStokesFormulation::setKovasznay(Re, zeroProblem.mesh(), u1_exact, u2_exact, p_exact);
 
+//  if (rank==0) cout << "Stokes bilinearForm: " << stokesForm.bf()->displayString() << endl;
+  
   map< string, string > convergenceDataForMATLAB; // key: field file name
 
   for (int polyOrder = minPolyOrder; polyOrder <= maxPolyOrder; polyOrder++)
@@ -199,8 +199,6 @@ int main(int argc, char *argv[])
                                        numCells1D,numCells1D,
                                        H1Order, pToAdd,
                                        u1_exact, u2_exact, p_exact, useCompliantNorm || useStokesCompliantNorm);
-
-      problem.bf()->setUseExtendedPrecisionSolveForOptimalTestFunctions(longDoubleGramInversion);
 
       problem.backgroundFlow()->setCubatureEnrichmentDegree(kovasznayCubatureEnrichment);
       problem.solutionIncrement()->setCubatureEnrichmentDegree(kovasznayCubatureEnrichment);
@@ -278,6 +276,10 @@ int main(int argc, char *argv[])
       FunctionPtr sigma22_incr = Function::solution(sigma22_vgp, solnIncrement);
       FunctionPtr p_incr = Function::solution(p_vgp, solnIncrement);
 
+//      LinearTermPtr rhsLT = problem->backgroundFlow()->rhs()->linearTerm();
+//      if (rank==0) cout << "bilinearForm: " << problems[0].mesh()->bilinearForm()->displayString() << endl;
+//      if (rank==0) cout << "RHS: " << rhsLT->displayString() << endl;
+      
       FunctionPtr l2_incr = u1_incr * u1_incr + u2_incr * u2_incr + p_incr * p_incr
                             + sigma11_incr * sigma11_incr + sigma12_incr * sigma12_incr
                             + sigma21_incr * sigma21_incr + sigma22_incr * sigma22_incr;

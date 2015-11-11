@@ -78,7 +78,6 @@ int main(int argc, char *argv[])
   args.Process();
 
   int pToAdd = 2; // for optimal test function approximation
-  bool useLineSearch = false;
   bool computeRelativeErrors = true; // we'll say false when one of the exact solution components is 0
   bool useEnrichedTraces = true; // enriched traces are the right choice, mathematically speaking
   BasisFactory::basisFactory()->setUseEnrichedTraces(useEnrichedTraces);
@@ -145,6 +144,9 @@ int main(int argc, char *argv[])
   VarPtr sigma21_vgp = stokesForm.sigma(2,1);
   VarPtr sigma22_vgp = stokesForm.sigma(2,2);
   VarPtr p_vgp = stokesForm.p();
+  
+  VarPtr u1hat_vgp = stokesForm.u_hat(1);
+  VarPtr u2hat_vgp = stokesForm.u_hat(2);
 
   VarPtr v1_vgp = stokesForm.v(1);
   VarPtr v2_vgp = stokesForm.v(2);
@@ -154,9 +156,20 @@ int main(int argc, char *argv[])
   stokesFormFineMesh.initializeSolution(fineMeshTopo, H1OrderFineMesh-1);
   MeshPtr fineMesh = stokesFormFineMesh.solution()->mesh();
   NavierStokesFormulation::setKovasznay(Re, fineMesh, u1_exact, u2_exact, p_exact);
-
-  cout << "NOTE: have not finished writing this for the modern formulation.\n";
-  exit(1);
+  
+  FunctionPtr u_exact = Function::vectorize({u1_exact,u2_exact});
+  FunctionPtr forcingFunction = NavierStokesVGPFormulation::forcingFunctionSteady(spaceDim, Re, u_exact, p_exact);
+  
+//  if (rank==0) cout << "forcingFunction: " << forcingFunction->displayString() << endl;
+  
+  Teuchos::RCP<ExactSolution<double>> exactSolution = Teuchos::rcp(new ExactSolution<double>());
+  exactSolution->setSolutionFunction(u1_vgp, u1_exact);
+  exactSolution->setSolutionFunction(u2_vgp, u2_exact);
+  exactSolution->setSolutionFunction(p_vgp, p_exact);
+  exactSolution->setSolutionFunction(sigma11_vgp, (1.0/Re) * u1_exact->dx());
+  exactSolution->setSolutionFunction(sigma12_vgp, (1.0/Re) * u1_exact->dy());
+  exactSolution->setSolutionFunction(sigma21_vgp, (1.0/Re) * u2_exact->dx());
+  exactSolution->setSolutionFunction(sigma22_vgp, (1.0/Re) * u2_exact->dy());
   
   map< string, string > convergenceDataForMATLAB; // key: field file name
 
@@ -174,72 +187,85 @@ int main(int argc, char *argv[])
 
     int kovasznayCubatureEnrichment = 20; // 20 is better than 10 for accurately measuring error on the coarser meshes.
 
-    vector< VGPNavierStokesProblem > problems;
+    vector< NavierStokesVGPFormulation > navierStokesForms;
     do
     {
-      VGPNavierStokesProblem problem = VGPNavierStokesProblem(Re,quadPointsKovasznay,
-                                                              numCells1D,numCells1D,
-                                                              H1Order, pToAdd,
-                                                              u1_exact, u2_exact, p_exact,
-                                                              useCompliantNorm || useStokesCompliantNorm);
+      MeshTopologyPtr meshTopo = MeshFactory::rectilinearMeshTopology({2.0,2.0}, {numCells1D, numCells1D}, {-0.5,0.0});
+      NavierStokesVGPFormulation form = NavierStokesVGPFormulation::steadyFormulation(spaceDim, Re, useEnrichedTraces, meshTopo,
+                                                                                      H1Order-1, pToAdd);
+      
+      form.addInflowCondition(SpatialFilter::allSpace(), u_exact);
+      form.setForcingFunction(forcingFunction);
+      form.addZeroMeanPressureCondition();
+      
+      form.solution()->setCubatureEnrichmentDegree(kovasznayCubatureEnrichment);
+      form.solutionIncrement()->setCubatureEnrichmentDegree(kovasznayCubatureEnrichment);
 
-      problem.backgroundFlow()->setCubatureEnrichmentDegree(kovasznayCubatureEnrichment);
-      problem.solutionIncrement()->setCubatureEnrichmentDegree(kovasznayCubatureEnrichment);
-
-      problem.backgroundFlow()->setZeroMeanConstraintRho(zmcRho);
-      problem.solutionIncrement()->setZeroMeanConstraintRho(zmcRho);
-
+      form.solution()->setZeroMeanConstraintRho(zmcRho);
+      form.solutionIncrement()->setZeroMeanConstraintRho(zmcRho);
+      
+//      form.solution()->setUseCondensedSolve(useCondensedSolve);
+      form.solutionIncrement()->setUseCondensedSolve(useCondensedSolve);
+      
       FunctionPtr dt_inv;
 
       if (artificialTimeStepping)
       {
         //    // LHS gets u_inc / dt:
-        BFPtr bf = problem.bf();
+        BFPtr bf = form.bf();
         dt_inv = ParameterFunction::parameterFunction(1.0 / dt); //Teuchos::rcp( new ConstantScalarFunction(1.0 / dt, "\\frac{1}{dt}") );
         bf->addTerm(-dt_inv * u1_vgp, v1_vgp);
         bf->addTerm(-dt_inv * u2_vgp, v2_vgp);
-        problem.setIP( bf->graphNorm() ); // graph norm has changed...
+        form.solution()->setIP( bf->graphNorm() ); // graph norm has changed...
+        form.solutionIncrement()->setIP( bf->graphNorm() ); // graph norm has changed...
       }
       else
       {
         dt_inv = Function::zero();
       }
 
-      problems.push_back(problem);
+      navierStokesForms.push_back(form);
       if ( useCompliantNorm )
       {
-        problem.setIP(problem.vgpNavierStokesFormulation()->scaleCompliantGraphNorm(dt_inv));
+        TEUCHOS_TEST_FOR_EXCEPTION(true, std::invalid_argument, "Unsupported option");
+        // problem.setIP(problem.vgpNavierStokesFormulation()->scaleCompliantGraphNorm(dt_inv));
       }
       else if (useStokesCompliantNorm)
       {
-        VGPStokesFormulation stokesForm(1.0); // pretend Re = 1 in the graph norm
-        problem.setIP(stokesForm.scaleCompliantGraphNorm());
+        TEUCHOS_TEST_FOR_EXCEPTION(true, std::invalid_argument, "Unsupported option");
+//        VGPStokesFormulation stokesForm(1.0); // pretend Re = 1 in the graph norm
+//        problem.setIP(stokesForm.scaleCompliantGraphNorm());
       }
       else if (useStokesGraphNorm)
       {
-        VGPStokesFormulation stokesForm(1.0); // pretend Re = 1 in the graph norm
-        problem.setIP(stokesForm.graphNorm());
+        TEUCHOS_TEST_FOR_EXCEPTION(true, std::invalid_argument, "Unsupported option");
+//        VGPStokesFormulation stokesForm(1.0); // pretend Re = 1 in the graph norm
+//        problem.setIP(stokesForm.graphNorm());
       }
       else if (! useGraphNorm )
       {
         // then use the naive:
-        problem.setIP(problem.bf()->naiveNorm(spaceDim));
+        TEUCHOS_TEST_FOR_EXCEPTION(true, std::invalid_argument, "Unsupported option");
+//        problem.setIP(problem.bf()->naiveNorm(spaceDim));
       }
       if (rank==0)
       {
-        cout << numCells1D << " x " << numCells1D << ": " << problem.mesh()->numGlobalDofs() << " dofs " << endl;
+        cout << numCells1D << " x " << numCells1D << ": " << form.solution()->mesh()->numGlobalDofs() << " dofs " << endl;
       }
       numCells1D *= 2;
     }
     while (pow(2.0,maxLogElements) >= numCells1D);
-
+    
+    bool neglectFluxesOnRHS = false; // right now, this is hard-coded into NavierStokesVGPFormulation
+    RHSPtr rhsForSolve = navierStokesForms[0].rhs(forcingFunction, neglectFluxesOnRHS);
+    
     // note that rhs and bilinearForm aren't really going to be right here, since they
     // involve a background flow which varies over the various problems...
-    HConvergenceStudy study(problems[0].exactSolution(),
-                            problems[0].mesh()->bilinearForm(),
-                            problems[0].exactSolution()->rhs(),
-                            problems[0].backgroundFlow()->bc(),
-                            problems[0].bf()->graphNorm(),
+    HConvergenceStudy study(exactSolution,
+                            navierStokesForms[0].bf(),
+                            rhsForSolve,
+                            navierStokesForms[0].solution()->bc(),
+                            navierStokesForms[0].bf()->graphNorm(),
                             minLogElements, maxLogElements,
                             H1Order, pToAdd, false, useTriangles, false);
     study.setReportRelativeErrors(computeRelativeErrors);
@@ -247,10 +273,9 @@ int main(int argc, char *argv[])
 
     vector< SolutionPtr > solutions;
     numCells1D = pow(2.0,minLogElements);
-    for (vector< VGPNavierStokesProblem >::iterator problem = problems.begin();
-         problem != problems.end(); problem++)
+    for (auto form : navierStokesForms)
     {
-      SolutionPtr solnIncrement = problem->solutionIncrement();
+      SolutionPtr solnIncrement = form.solutionIncrement();
       FunctionPtr u1_incr = Function::solution(u1_vgp, solnIncrement);
       FunctionPtr u2_incr = Function::solution(u2_vgp, solnIncrement);
       FunctionPtr sigma11_incr = Function::solution(sigma11_vgp, solnIncrement);
@@ -262,23 +287,29 @@ int main(int argc, char *argv[])
       FunctionPtr l2_incr = u1_incr * u1_incr + u2_incr * u2_incr + p_incr * p_incr
                             + sigma11_incr * sigma11_incr + sigma12_incr * sigma12_incr
                             + sigma21_incr * sigma21_incr + sigma22_incr * sigma22_incr;
-      double weight = 1.0;
+      MeshPtr mesh = form.solution()->mesh();
+
+//      if (rank==0) cout << "mesh->bilinearForm(): " << mesh->bilinearForm()->displayString() << endl;
+//      if (rank==0) cout << "form.bf(): " << form.bf()->displayString() << endl;
+//      
+//      if (rank==0) cout << "RHS: " << solnIncrement->rhs()->linearTerm()->displayString() << endl;
+      
       do
       {
-        weight = problem->iterate(useLineSearch, useCondensedSolve);
+        form.solveAndAccumulate(); // problem->iterate(useLineSearch, useCondensedSolve);
 
-        LinearTermPtr rhsLT = problem->backgroundFlow()->rhs()->linearTerm();
-        RieszRep rieszRep(problem->backgroundFlow()->mesh(), problem->backgroundFlow()->ip(), rhsLT);
-        rieszRep.computeRieszRep();
-        double costFunction = rieszRep.getNorm();
-        double incr_norm = sqrt(l2_incr->integrate(problem->mesh()));
+//        LinearTermPtr rhsLT = problem->backgroundFlow()->rhs()->linearTerm();
+//        RieszRep rieszRep(problem->backgroundFlow()->mesh(), problem->backgroundFlow()->ip(), rhsLT);
+//        rieszRep.computeRieszRep();
+//        double costFunction = rieszRep.getNorm();
+        double incr_norm = sqrt(l2_incr->integrate(mesh));
 
         if (rank==0)
         {
           cout << setprecision(6) << scientific;
           cout << "\x1B[2K"; // Erase the entire current line.
           cout << "\x1B[0E"; // Move to the beginning of the current line.
-          cout << "Iteration: " << problem->iterationCount() << "; L^2(incr) = " << incr_norm;
+          cout << "Iteration: " << form.nonlinearIterationCount() << "; L^2(incr) = " << incr_norm;
           flush(cout);
 //          cout << setprecision(6) << scientific;
 //          cout << "Took " << weight << "-weighted step for " << numCells1D;
@@ -287,11 +318,11 @@ int main(int argc, char *argv[])
 //          cout << " iterations; cost function " << costFunction << endl;
         }
       }
-      while ((sqrt(l2_incr->integrate(problem->mesh())) > minL2Increment ) && (problem->iterationCount() < maxIters) && (weight != 0));
+      while ((sqrt(l2_incr->integrate(mesh)) > minL2Increment ) && (form.nonlinearIterationCount() < maxIters));
 
       if (rank==0) cout << endl;
 
-      solutions.push_back( problem->backgroundFlow() );
+      solutions.push_back( form.solution() );
 
       // set the IP to the naive norm for clearer comparison with the best approximation energy error
 //      problem->backgroundFlow()->setIP(problem->bf()->naiveNorm());
@@ -311,15 +342,10 @@ int main(int argc, char *argv[])
     for (int i=0; i<=maxLogElements-minLogElements; i++)
     {
       SolutionPtr bestApproximation = study.bestApproximations()[i];
-      VGPNavierStokesFormulation nsFormBest = VGPNavierStokesFormulation(Re, bestApproximation);
-      SpatialFilterPtr entireBoundary = Teuchos::rcp( new SpatialFilterUnfiltered ); // SpatialFilterUnfiltered returns true everywhere
-      Teuchos::RCP<ExactSolution<double>> exact = nsFormBest.exactSolution(u1_exact, u2_exact, p_exact, entireBoundary);
-//      bestApproximation->setIP( nsFormBest.bf()->naiveNorm() );
-//      bestApproximation->setRHS( exact->rhs() );
 
-      // use backgroundFlow's IP so that they're comparable
-      IPPtr ip = problems[i].backgroundFlow()->ip();
-      LinearTermPtr rhsLT = exact->rhs()->linearTerm();
+      // use solution's IP so that they're comparable
+      IPPtr ip = navierStokesForms[i].solutionIncrement()->ip();
+      LinearTermPtr rhsLT = navierStokesForms[i].rhs(forcingFunction, false)->linearTerm(); // false: don't exclude fluxes and traces
       RieszRep rieszRep(bestApproximation->mesh(), ip, rhsLT);
       rieszRep.computeRieszRep();
 
@@ -426,14 +452,43 @@ int main(int argc, char *argv[])
       DataIO::outputTableToFile(tableHeaders,dataTable,fileNameStream.str());
     }
 
+    /*
+     // corr. ID == -1 if there isn't one
+     int NONE = -1;
+     fieldIDs.clear();
+     correspondingTraceIDs.clear();
+     fileFriendlyNames.clear();
+     fieldIDs.push_back(u1->ID());
+     fileFriendlyNames.push_back("u1");
+     correspondingTraceIDs.push_back(u1hat->ID());
+     fieldIDs.push_back(u2->ID());
+     fileFriendlyNames.push_back("u2");
+     correspondingTraceIDs.push_back(u2hat->ID());
+     fieldIDs.push_back(p->ID());
+     fileFriendlyNames.push_back("pressure");
+     correspondingTraceIDs.push_back(NONE);
+     fieldIDs.push_back(sigma11->ID());
+     fileFriendlyNames.push_back("sigma11");
+     correspondingTraceIDs.push_back(NONE);
+     fieldIDs.push_back(sigma12->ID());
+     fileFriendlyNames.push_back("sigma12");
+     correspondingTraceIDs.push_back(NONE);
+     fieldIDs.push_back(sigma21->ID());
+     fileFriendlyNames.push_back("sigma21");
+     correspondingTraceIDs.push_back(NONE);
+     fieldIDs.push_back(sigma22->ID());
+     fileFriendlyNames.push_back("sigma22");
+     correspondingTraceIDs.push_back(NONE);
+     */
+    
     if (rank == 0)
     {
       cout << study.TeXErrorRateTable();
-      vector<int> primaryVariables;
-      stokesForm.primaryTrialIDs(primaryVariables);
-      vector<int> fieldIDs,traceIDs;
-      vector<string> fieldFileNames;
-      stokesForm.trialIDs(fieldIDs,traceIDs,fieldFileNames);
+      vector<int> primaryVariables = {u1_vgp->ID(), u2_vgp->ID(), p_vgp->ID()};
+      vector<int> fieldIDs = {u1_vgp->ID(), u2_vgp->ID(), p_vgp->ID(),
+        sigma11_vgp->ID(), sigma12_vgp->ID(), sigma21_vgp->ID(), sigma22_vgp->ID()};
+      vector<int> traceIDs = {u1hat_vgp->ID(), u2hat_vgp->ID(), -1, -1, -1, -1, -1};
+      vector<string> fieldFileNames = {"u1","u2","pressure","sigma11","sigma12","sigma21","sigma22"};
       cout << "******** Best Approximation comparison: ********\n";
       cout << study.TeXBestApproximationComparisonTable(primaryVariables);
 
