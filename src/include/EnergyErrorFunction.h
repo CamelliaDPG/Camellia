@@ -11,4 +11,20 @@
 
 #include <iostream>
 
+#include "Function.h"
+#include "TypeDefs.h"
+
+namespace Camellia
+{
+  class EnergyErrorFunction : public TFunction<double>
+  {
+    SolutionPtr _soln;
+  public:
+    EnergyErrorFunction(SolutionPtr soln);
+    
+    virtual void values(Intrepid::FieldContainer<double> &values, BasisCachePtr basisCache);
+    
+    static FunctionPtr energyErrorFunction(SolutionPtr soln);
+  };
+}
 #endif /* defined(__Camellia__EnergyErrorFunction__) */
