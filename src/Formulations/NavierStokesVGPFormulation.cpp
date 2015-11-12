@@ -847,6 +847,12 @@ TSolutionPtr<double> NavierStokesVGPFormulation::solutionIncrement()
 
 void NavierStokesVGPFormulation::solveAndAccumulate(double weight)
 {
+  // before we solve, clear out the solnIncrement:
+  _solnIncrement->clear(); // only clears the local cell coefficients, not the global solution vector
+  if (_solnIncrement->getLHSVector().get() != NULL)
+    _solnIncrement->getLHSVector()->PutScalar(0); // this clears global solution vector
+  // (this matters for iterative solvers; otherwise we'd start with a bad initial guess after the first Newton step)
+  
   RHSPtr savedRHS = _solnIncrement->rhs();
   _solnIncrement->setRHS(_rhsForSolve);
   _solnIncrement->solve(_solver);
@@ -855,6 +861,8 @@ void NavierStokesVGPFormulation::solveAndAccumulate(double weight)
   bool allowEmptyCells = false;
   _backgroundFlow->addSolution(_solnIncrement, weight, allowEmptyCells, _neglectFluxesOnRHS);
   _nonlinearIterationCount++;
+  
+
 }
 
 VarPtr NavierStokesVGPFormulation::streamPhi()
@@ -891,6 +899,11 @@ TSolutionPtr<double> NavierStokesVGPFormulation::streamSolution()
     cout << "ERROR: stream function is only supported on 2D solutions.  Returning null.\n";
     return Teuchos::null;
   }
+}
+
+SolverPtr NavierStokesVGPFormulation::getSolver()
+{
+  return _solver;
 }
 
 void NavierStokesVGPFormulation::setSolver(SolverPtr solver)

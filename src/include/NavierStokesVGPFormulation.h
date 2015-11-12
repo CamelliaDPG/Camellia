@@ -126,7 +126,10 @@ public:
 
   // ! set the RefinementStrategy to use for driving refinements
   void setRefinementStrategy(RefinementStrategyPtr refStrategy);
-
+  
+  // ! get the Solver used for the linear updates
+  SolverPtr getSolver();
+  
   // ! set the Solver for the linear updates
   void setSolver(SolverPtr solver);
 
