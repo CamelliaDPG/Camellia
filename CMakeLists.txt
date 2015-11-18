@@ -116,4 +116,3 @@ link_libraries(
 
 # Build Drivers
 add_subdirectory(drivers)
-add_subdirectory(tests)

@@ -329,18 +329,20 @@ enum NormType
   Graph,
   ManualGraph,
   Robust,
-  hRobust,
-  hRobust2,
-  RobustL2Scaling,
-  NSDecoupled,
-  NSDecoupledL2Scaling,
+  CoupledRobust,
+  // hRobust,
+  // hRobust2,
+  // RobustL2Scaling,
+  // NSDecoupled,
+  // NSDecoupledL2Scaling,
   h1NSDecoupled,
-  hCoupled,
-  hCoupled2,
-  hAltNSDecoupled,
-  hAlt2NSDecoupled,
-  hAlt3NSDecoupled,
-  MinNSDecoupled,
+  EntropyNSDecoupled,
+  // hCoupled,
+  // hCoupled2,
+  // hAltNSDecoupled,
+  // hAlt2NSDecoupled,
+  // hAlt3NSDecoupled,
+  // MinNSDecoupled,
 };
 
 int main(int argc, char *argv[]) {
@@ -380,18 +382,20 @@ int main(int argc, char *argv[]) {
   stringToNorm["Graph"] = Graph;
   stringToNorm["ManualGraph"] = ManualGraph;
   stringToNorm["Robust"] = Robust;
-  stringToNorm["hRobust"] = hRobust;
-  stringToNorm["hRobust2"] = hRobust2;
-  stringToNorm["RobustL2Scaling"] = RobustL2Scaling;
-  stringToNorm["NSDecoupled"] = NSDecoupled;
-  stringToNorm["NSDecoupledL2Scaling"] = NSDecoupledL2Scaling;
+  stringToNorm["CoupledRobust"] = CoupledRobust;
+  // stringToNorm["hRobust"] = hRobust;
+  // stringToNorm["hRobust2"] = hRobust2;
+  // stringToNorm["RobustL2Scaling"] = RobustL2Scaling;
+  // stringToNorm["NSDecoupled"] = NSDecoupled;
+  // stringToNorm["NSDecoupledL2Scaling"] = NSDecoupledL2Scaling;
   stringToNorm["h1NSDecoupled"] = h1NSDecoupled;
-  stringToNorm["hCoupled"] = hCoupled;
-  stringToNorm["hCoupled2"] = hCoupled2;
-  stringToNorm["hAltNSDecoupled"] = hAltNSDecoupled;
-  stringToNorm["hAlt2NSDecoupled"] = hAlt2NSDecoupled;
-  stringToNorm["hAlt3NSDecoupled"] = hAlt3NSDecoupled;
-  stringToNorm["MinNSDecoupled"] = MinNSDecoupled;
+  stringToNorm["EntropyNSDecoupled"] = EntropyNSDecoupled;
+  // stringToNorm["hCoupled"] = hCoupled;
+  // stringToNorm["hCoupled2"] = hCoupled2;
+  // stringToNorm["hAltNSDecoupled"] = hAltNSDecoupled;
+  // stringToNorm["hAlt2NSDecoupled"] = hAlt2NSDecoupled;
+  // stringToNorm["hAlt3NSDecoupled"] = hAlt3NSDecoupled;
+  // stringToNorm["MinNSDecoupled"] = MinNSDecoupled;
   NormType norm = stringToNorm[normString];
 
    ////////////////////   PROBLEM DEFINITIONS   ///////////////////////
@@ -815,15 +819,14 @@ int main(int argc, char *argv[]) {
     // LinearTermPtr G_exGradPsi = Teuchos::rcp( new LinearTerm );
 
     // Entropy Scaling
-    // FunctionPtr T_sqrt = Teuchos::rcp( new BoundedSqrtFunction(T_prev, 1e-2) );
-    // FunctionPtr rho_sqrt = Teuchos::rcp( new BoundedSqrtFunction(rho_prev, 1e-2) );
-    // FunctionPtr A0p_c = sqrt(gamma-1)/rho_sqrt;
-    // FunctionPtr A0p_m = rho_sqrt/(sqrt(Cv)*T_sqrt);
-    // FunctionPtr A0p_e = rho_sqrt/(T_sqrt*T_sqrt);
-    // // FunctionPtr A0p_e = rho_sqrt/(T_sqrt*T_sqrt);
-    // // FunctionPtr invA0p_c = rho_sqrt/sqrt(gamma-1);
-    // // FunctionPtr invA0p_m = (sqrt(Cv)*T_sqrt)/rho_sqrt;
-    // // FunctionPtr invA0p_e = T_prev/rho_sqrt;
+    FunctionPtr T_sqrt = Teuchos::rcp( new BoundedSqrtFunction(T_prev, 1e-2) );
+    FunctionPtr rho_sqrt = Teuchos::rcp( new BoundedSqrtFunction(rho_prev, 1e-2) );
+    FunctionPtr A0p_c = sqrt(gamma-1)/rho_sqrt;
+    FunctionPtr A0p_m = rho_sqrt/(sqrt(Cv)*T_sqrt);
+    FunctionPtr A0p_e = rho_sqrt/(T_sqrt*T_sqrt);
+    FunctionPtr invA0p_c = rho_sqrt/sqrt(gamma-1);
+    FunctionPtr invA0p_m = (sqrt(Cv)*T_sqrt)/rho_sqrt;
+    FunctionPtr invA0p_e = T_prev/rho_sqrt;
     // FunctionPtr invA0p_c = 1./A0p_c;
     // FunctionPtr invA0p_m = 1./A0p_m;
     // FunctionPtr invA0p_e = 1./A0p_e;
@@ -1122,126 +1125,144 @@ int main(int argc, char *argv[]) {
       // Robust Norm
       // Good for Sod
       case Robust:
-      ip->addTerm( mu*visc_scaling*adj_MD );
-      ip->addTerm( Cp*mu/Pr*temp_scaling*adj_Mq );
+      ip->addTerm( adj_Fc + adj_Cc );
+      ip->addTerm( adj_Fm + adj_Cm );
+      ip->addTerm( adj_Fe + adj_Ce );
       ip->addTerm( sqrt(mu)*one*adj_KD );
       ip->addTerm( sqrt(Cp*mu/Pr)*one*adj_Kq );
-      ip->addTerm( adj_Gc - adj_Fc - adj_Cc );
-      ip->addTerm( adj_Gm - adj_Fm - adj_Cm );
-      ip->addTerm( adj_Ge - adj_Fe - adj_Ce );
-      ip->addTerm( adj_Fc );
-      ip->addTerm( adj_Fm );
-      ip->addTerm( adj_Fe );
-      ip->addTerm( vc );
-      ip->addTerm( vm );
-      ip->addTerm( ve );
-      break;
-
-      // Original Coupled Robust with full L2 scaling
-      case RobustL2Scaling:
-      ip->addTerm( mu*visc_scaling*adj_MD );
-      ip->addTerm( Cp*mu/Pr*temp_scaling*adj_Mq );
-      ip->addTerm( sqrt(mu)*one*adj_KD );
-      ip->addTerm( sqrt(Cp*mu/Pr)*one*adj_Kq );
-      ip->addTerm( adj_Gc - adj_Fc - adj_Cc );
-      ip->addTerm( adj_Gm - adj_Fm - adj_Cm );
-      ip->addTerm( adj_Ge - adj_Fe - adj_Ce );
-      ip->addTerm( adj_Fc );
-      ip->addTerm( adj_Fm );
-      ip->addTerm( adj_Fe );
       ip->addTerm( sqrt(mu)*visc_scaling*vc );
       ip->addTerm( sqrt(mu)*visc_scaling*vm );
       ip->addTerm( sqrt(mu)*visc_scaling*ve );
+      ip->addTerm( adj_Gc );
+      ip->addTerm( adj_Gm );
+      ip->addTerm( adj_Ge );
+      ip->addTerm( mu*visc_scaling*adj_MD );
+      ip->addTerm( Cp*mu/Pr*temp_scaling*adj_Mq );
       break;
 
       // Robust Norm
       // Good for Sod
-      case hRobust:
-      ip->addTerm( mu/Function::h()*adj_MD );
-      ip->addTerm( Cp*mu/Pr/Function::h()*adj_Mq );
-      ip->addTerm( Function::h()*adj_KD );
-      ip->addTerm( Function::h()*adj_Kq );
-      ip->addTerm( adj_Gc - adj_Fc - adj_Cc );
-      ip->addTerm( adj_Gm - adj_Fm - adj_Cm );
-      ip->addTerm( adj_Ge - adj_Fe - adj_Ce );
-      ip->addTerm( adj_Fc );
-      ip->addTerm( adj_Fm );
-      ip->addTerm( adj_Fe );
-      ip->addTerm( vc );
-      ip->addTerm( vm );
-      ip->addTerm( ve );
-      break;
-
-      // Robust Norm
-      // Good for Sod
-      case hRobust2:
-      ip->addTerm( sqrt(mu)/Function::h()*adj_MD );
-      ip->addTerm( sqrt(Cp*mu/Pr)/Function::h()*adj_Mq );
-      ip->addTerm( sqrt(mu)/Function::h()*adj_KD );
-      ip->addTerm( sqrt(Cp*mu/Pr)/Function::h()*adj_Kq );
-      ip->addTerm( adj_Gc - adj_Fc - adj_Cc );
-      ip->addTerm( adj_Gm - adj_Fm - adj_Cm );
-      ip->addTerm( adj_Ge - adj_Fe - adj_Ce );
-      ip->addTerm( adj_Fc );
-      ip->addTerm( adj_Fm );
-      ip->addTerm( adj_Fe );
-      ip->addTerm( vc );
-      ip->addTerm( vm );
-      ip->addTerm( ve );
-      break;
-
-      // Decoupled Norm
-      // Good for Sod and Noh
-      case NSDecoupled:
-      ip->addTerm( adj_MD );
-      ip->addTerm( adj_Mq );
-      ip->addTerm( adj_KD );
-      ip->addTerm( adj_Kq );
+      case CoupledRobust:
       ip->addTerm( adj_Fc + adj_Cc );
       ip->addTerm( adj_Fm + adj_Cm );
       ip->addTerm( adj_Fe + adj_Ce );
-      ip->addTerm( adj_Gc );
-      ip->addTerm( adj_Gm );
-      ip->addTerm( adj_Ge );
-      ip->addTerm( vc );
-      ip->addTerm( vm );
-      ip->addTerm( ve );
-      break;
-
-      // Decoupled Norm with L2 scaling
-      case NSDecoupledL2Scaling:
-      ip->addTerm( adj_MD );
-      ip->addTerm( adj_Mq );
-      ip->addTerm( adj_KD );
-      ip->addTerm( adj_Kq );
-      ip->addTerm( adj_Fc + adj_Cc );
-      ip->addTerm( adj_Fm + adj_Cm );
-      ip->addTerm( adj_Fe + adj_Ce );
-      ip->addTerm( adj_Gc );
-      ip->addTerm( adj_Gm );
-      ip->addTerm( adj_Ge );
+      ip->addTerm( sqrt(mu)*one*adj_KD );
+      ip->addTerm( sqrt(Cp*mu/Pr)*one*adj_Kq );
       ip->addTerm( sqrt(mu)*visc_scaling*vc );
       ip->addTerm( sqrt(mu)*visc_scaling*vm );
       ip->addTerm( sqrt(mu)*visc_scaling*ve );
+      ip->addTerm( adj_Gc - adj_Fc - adj_Cc );
+      ip->addTerm( adj_Gm - adj_Fm - adj_Cm );
+      ip->addTerm( adj_Ge - adj_Fe - adj_Ce );
+      ip->addTerm( mu*visc_scaling*adj_MD );
+      ip->addTerm( Cp*mu/Pr*temp_scaling*adj_Mq );
       break;
 
-      // Decoupled Norm
-      // Good for Sod and Noh
-      case MinNSDecoupled:
-      ip->addTerm( mu*visc_scaling*visc_scaling*adj_MD );
-      ip->addTerm( Cp*mu/Pr*temp_scaling*temp_scaling*adj_Mq );
-      ip->addTerm( adj_KD );
-      ip->addTerm( adj_Kq );
-      ip->addTerm( adj_Fc + adj_Cc );
-      ip->addTerm( adj_Fm + adj_Cm );
-      ip->addTerm( adj_Fe + adj_Ce );
-      ip->addTerm( adj_Gc );
-      ip->addTerm( adj_Gm );
-      ip->addTerm( adj_Ge );
-      ip->addTerm( vc );
-      ip->addTerm( vm );
-      ip->addTerm( ve );
-      break;
+      // // Original Coupled Robust with full L2 scaling
+      // case RobustL2Scaling:
+      // ip->addTerm( mu*visc_scaling*adj_MD );
+      // ip->addTerm( Cp*mu/Pr*temp_scaling*adj_Mq );
+      // ip->addTerm( sqrt(mu)*one*adj_KD );
+      // ip->addTerm( sqrt(Cp*mu/Pr)*one*adj_Kq );
+      // ip->addTerm( adj_Gc - adj_Fc - adj_Cc );
+      // ip->addTerm( adj_Gm - adj_Fm - adj_Cm );
+      // ip->addTerm( adj_Ge - adj_Fe - adj_Ce );
+      // ip->addTerm( adj_Fc );
+      // ip->addTerm( adj_Fm );
+      // ip->addTerm( adj_Fe );
+      // ip->addTerm( sqrt(mu)*visc_scaling*vc );
+      // ip->addTerm( sqrt(mu)*visc_scaling*vm );
+      // ip->addTerm( sqrt(mu)*visc_scaling*ve );
+      // break;
+
+      // // Robust Norm
+      // // Good for Sod
+      // case hRobust:
+      // ip->addTerm( mu/Function::h()*adj_MD );
+      // ip->addTerm( Cp*mu/Pr/Function::h()*adj_Mq );
+      // ip->addTerm( Function::h()*adj_KD );
+      // ip->addTerm( Function::h()*adj_Kq );
+      // ip->addTerm( adj_Gc - adj_Fc - adj_Cc );
+      // ip->addTerm( adj_Gm - adj_Fm - adj_Cm );
+      // ip->addTerm( adj_Ge - adj_Fe - adj_Ce );
+      // ip->addTerm( adj_Fc );
+      // ip->addTerm( adj_Fm );
+      // ip->addTerm( adj_Fe );
+      // ip->addTerm( vc );
+      // ip->addTerm( vm );
+      // ip->addTerm( ve );
+      // break;
+
+      // // Robust Norm
+      // // Good for Sod
+      // case hRobust2:
+      // ip->addTerm( sqrt(mu)/Function::h()*adj_MD );
+      // ip->addTerm( sqrt(Cp*mu/Pr)/Function::h()*adj_Mq );
+      // ip->addTerm( sqrt(mu)/Function::h()*adj_KD );
+      // ip->addTerm( sqrt(Cp*mu/Pr)/Function::h()*adj_Kq );
+      // ip->addTerm( adj_Gc - adj_Fc - adj_Cc );
+      // ip->addTerm( adj_Gm - adj_Fm - adj_Cm );
+      // ip->addTerm( adj_Ge - adj_Fe - adj_Ce );
+      // ip->addTerm( adj_Fc );
+      // ip->addTerm( adj_Fm );
+      // ip->addTerm( adj_Fe );
+      // ip->addTerm( vc );
+      // ip->addTerm( vm );
+      // ip->addTerm( ve );
+      // break;
+
+      // // Decoupled Norm
+      // // Good for Sod and Noh
+      // case NSDecoupled:
+      // ip->addTerm( adj_MD );
+      // ip->addTerm( adj_Mq );
+      // ip->addTerm( adj_KD );
+      // ip->addTerm( adj_Kq );
+      // ip->addTerm( adj_Fc + adj_Cc );
+      // ip->addTerm( adj_Fm + adj_Cm );
+      // ip->addTerm( adj_Fe + adj_Ce );
+      // ip->addTerm( adj_Gc );
+      // ip->addTerm( adj_Gm );
+      // ip->addTerm( adj_Ge );
+      // ip->addTerm( vc );
+      // ip->addTerm( vm );
+      // ip->addTerm( ve );
+      // break;
+
+      // // Decoupled Norm with L2 scaling
+      // case NSDecoupledL2Scaling:
+      // ip->addTerm( adj_MD );
+      // ip->addTerm( adj_Mq );
+      // ip->addTerm( adj_KD );
+      // ip->addTerm( adj_Kq );
+      // ip->addTerm( adj_Fc + adj_Cc );
+      // ip->addTerm( adj_Fm + adj_Cm );
+      // ip->addTerm( adj_Fe + adj_Ce );
+      // ip->addTerm( adj_Gc );
+      // ip->addTerm( adj_Gm );
+      // ip->addTerm( adj_Ge );
+      // ip->addTerm( sqrt(mu)*visc_scaling*vc );
+      // ip->addTerm( sqrt(mu)*visc_scaling*vm );
+      // ip->addTerm( sqrt(mu)*visc_scaling*ve );
+      // break;
+
+      // // Decoupled Norm
+      // // Good for Sod and Noh
+      // case MinNSDecoupled:
+      // ip->addTerm( mu*visc_scaling*visc_scaling*adj_MD );
+      // ip->addTerm( Cp*mu/Pr*temp_scaling*temp_scaling*adj_Mq );
+      // ip->addTerm( adj_KD );
+      // ip->addTerm( adj_Kq );
+      // ip->addTerm( adj_Fc + adj_Cc );
+      // ip->addTerm( adj_Fm + adj_Cm );
+      // ip->addTerm( adj_Fe + adj_Ce );
+      // ip->addTerm( adj_Gc );
+      // ip->addTerm( adj_Gm );
+      // ip->addTerm( adj_Ge );
+      // ip->addTerm( vc );
+      // ip->addTerm( vm );
+      // ip->addTerm( ve );
+      // break;
 
       // Decoupled Norm
       // Good for Sod and Noh
@@ -1263,73 +1284,91 @@ int main(int argc, char *argv[]) {
 
       // Decoupled Norm
       // Good for Sod and Noh
-      case hCoupled:
+      case EntropyNSDecoupled:
       ip->addTerm( mu/Function::h()*adj_MD );
       ip->addTerm( Cp*mu/Pr/Function::h()*adj_Mq );
       ip->addTerm( adj_KD );
       ip->addTerm( adj_Kq );
-      ip->addTerm( adj_Gc - adj_Fc + adj_Cc );
-      ip->addTerm( adj_Gc - adj_Fm + adj_Cm );
-      ip->addTerm( adj_Gc - adj_Fe + adj_Ce );
+      ip->addTerm( invA0p_c*(adj_Fc + adj_Cc) );
+      ip->addTerm( invA0p_m*(adj_Fm + adj_Cm) );
+      ip->addTerm( invA0p_e*(adj_Fe + adj_Ce) );
+      ip->addTerm( invA0p_c*(adj_Gc) );
+      ip->addTerm( invA0p_m*(adj_Gm) );
+      ip->addTerm( invA0p_e*(adj_Ge) );
+      ip->addTerm( A0p_c*vc );
+      ip->addTerm( A0p_m*vm );
+      ip->addTerm( A0p_e*ve );
+      break;
+
+      // // Decoupled Norm
+      // // Good for Sod and Noh
+      // case hCoupled:
+      // ip->addTerm( mu/Function::h()*adj_MD );
+      // ip->addTerm( Cp*mu/Pr/Function::h()*adj_Mq );
+      // ip->addTerm( adj_KD );
+      // ip->addTerm( adj_Kq );
+      // ip->addTerm( adj_Gc - adj_Fc + adj_Cc );
+      // ip->addTerm( adj_Gc - adj_Fm + adj_Cm );
+      // ip->addTerm( adj_Gc - adj_Fe + adj_Ce );
+      // // ip->addTerm( adj_Gc );
+      // // ip->addTerm( adj_Gm );
+      // // ip->addTerm( adj_Ge );
+      // ip->addTerm( vc );
+      // ip->addTerm( vm );
+      // ip->addTerm( ve );
+      // break;
+
+      // // Decoupled Norm
+      // // Good for Sod and Noh
+      // case hCoupled2:
+      // ip->addTerm( mu/Function::h()*adj_MD );
+      // ip->addTerm( Cp*mu/Pr/Function::h()*adj_Mq );
+      // ip->addTerm( adj_KD );
+      // ip->addTerm( adj_Kq );
+      // ip->addTerm( adj_Gc - adj_Fc + adj_Cc );
+      // ip->addTerm( adj_Gc - adj_Fm + adj_Cm );
+      // ip->addTerm( adj_Gc - adj_Fe + adj_Ce );
       // ip->addTerm( adj_Gc );
       // ip->addTerm( adj_Gm );
       // ip->addTerm( adj_Ge );
-      ip->addTerm( vc );
-      ip->addTerm( vm );
-      ip->addTerm( ve );
-      break;
+      // ip->addTerm( vc );
+      // ip->addTerm( vm );
+      // ip->addTerm( ve );
+      // break;
 
-      // Decoupled Norm
-      // Good for Sod and Noh
-      case hCoupled2:
-      ip->addTerm( mu/Function::h()*adj_MD );
-      ip->addTerm( Cp*mu/Pr/Function::h()*adj_Mq );
-      ip->addTerm( adj_KD );
-      ip->addTerm( adj_Kq );
-      ip->addTerm( adj_Gc - adj_Fc + adj_Cc );
-      ip->addTerm( adj_Gc - adj_Fm + adj_Cm );
-      ip->addTerm( adj_Gc - adj_Fe + adj_Ce );
-      ip->addTerm( adj_Gc );
-      ip->addTerm( adj_Gm );
-      ip->addTerm( adj_Ge );
-      ip->addTerm( vc );
-      ip->addTerm( vm );
-      ip->addTerm( ve );
-      break;
+      // // Decoupled Norm
+      // case hAlt2NSDecoupled:
+      // ip->addTerm( mu/Function::h()*adj_MD );
+      // ip->addTerm( Cp*mu/Pr/Function::h()*adj_Mq );
+      // ip->addTerm( 1./Function::h()*adj_KD );
+      // ip->addTerm( 1./Function::h()*adj_Kq );
+      // ip->addTerm( adj_Fc + adj_Cc );
+      // ip->addTerm( adj_Fm + adj_Cm );
+      // ip->addTerm( adj_Fe + adj_Ce );
+      // ip->addTerm( adj_Gc );
+      // ip->addTerm( adj_Gm );
+      // ip->addTerm( adj_Ge );
+      // ip->addTerm( vc );
+      // ip->addTerm( vm );
+      // ip->addTerm( ve );
+      // break;
 
-      // Decoupled Norm
-      case hAlt2NSDecoupled:
-      ip->addTerm( mu/Function::h()*adj_MD );
-      ip->addTerm( Cp*mu/Pr/Function::h()*adj_Mq );
-      ip->addTerm( 1./Function::h()*adj_KD );
-      ip->addTerm( 1./Function::h()*adj_Kq );
-      ip->addTerm( adj_Fc + adj_Cc );
-      ip->addTerm( adj_Fm + adj_Cm );
-      ip->addTerm( adj_Fe + adj_Ce );
-      ip->addTerm( adj_Gc );
-      ip->addTerm( adj_Gm );
-      ip->addTerm( adj_Ge );
-      ip->addTerm( vc );
-      ip->addTerm( vm );
-      ip->addTerm( ve );
-      break;
-
-      // Decoupled Norm
-      case hAlt3NSDecoupled:
-      ip->addTerm( sqrt(mu)/Function::h()*adj_MD );
-      ip->addTerm( sqrt(Cp*mu/Pr)/Function::h()*adj_Mq );
-      ip->addTerm( sqrt(mu)/Function::h()*adj_KD );
-      ip->addTerm( sqrt(Cp*mu/Pr)/Function::h()*adj_Kq );
-      ip->addTerm( adj_Fc + adj_Cc );
-      ip->addTerm( adj_Fm + adj_Cm );
-      ip->addTerm( adj_Fe + adj_Ce );
-      ip->addTerm( adj_Gc );
-      ip->addTerm( adj_Gm );
-      ip->addTerm( adj_Ge );
-      ip->addTerm( vc );
-      ip->addTerm( vm );
-      ip->addTerm( ve );
-      break;
+      // // Decoupled Norm
+      // case hAlt3NSDecoupled:
+      // ip->addTerm( sqrt(mu)/Function::h()*adj_MD );
+      // ip->addTerm( sqrt(Cp*mu/Pr)/Function::h()*adj_Mq );
+      // ip->addTerm( sqrt(mu)/Function::h()*adj_KD );
+      // ip->addTerm( sqrt(Cp*mu/Pr)/Function::h()*adj_Kq );
+      // ip->addTerm( adj_Fc + adj_Cc );
+      // ip->addTerm( adj_Fm + adj_Cm );
+      // ip->addTerm( adj_Fe + adj_Ce );
+      // ip->addTerm( adj_Gc );
+      // ip->addTerm( adj_Gm );
+      // ip->addTerm( adj_Ge );
+      // ip->addTerm( vc );
+      // ip->addTerm( vm );
+      // ip->addTerm( ve );
+      // break;
 
       // // Min max scaling
       // case MinMaxL2Scaling:
@@ -1392,6 +1431,7 @@ int main(int argc, char *argv[]) {
   // FunctionPtr Fc_prev;
   // FunctionPtr Fm_prev;
   // FunctionPtr Fe_prev;
+  FunctionPtr rhoInit, momInit, EInit;
   for (int slab=0; slab < numSlabs; slab++)
   {
     Teuchos::RCP<BCEasy> bc = Teuchos::rcp( new BCEasy );
@@ -1399,14 +1439,14 @@ int main(int argc, char *argv[]) {
     SpatialFilterPtr right = Teuchos::rcp( new ConstantXBoundary(xmax) );
     SpatialFilterPtr init = Teuchos::rcp( new ConstantYBoundary(tmins[slab]) );
     SpatialFilterPtr piston = Teuchos::rcp( new PistonBoundary() );
-    FunctionPtr rho0  = Teuchos::rcp( new DiscontinuousInitialCondition(xint, rhoL, rhoR) );
-    FunctionPtr mom0 = Teuchos::rcp( new DiscontinuousInitialCondition(xint, uL*rhoL, uR*rhoR) );
-    FunctionPtr E0    = Teuchos::rcp( new DiscontinuousInitialCondition(xint, (rhoL*Cv*TL+0.5*rhoL*uL*uL), (rhoR*Cv*TR+0.5*rhoR*uR*uR)) );
-    if (problem == 6)
-      E0 = Teuchos::rcp( new PulseInitialCondition(1./128, 1, 0, Function::h()) );
-    // FunctionPtr rho0  = Teuchos::rcp( new RampedInitialCondition(xint, rhoL, rhoR, (xmax-xmin)/numX) );
-    // FunctionPtr mom0 = Teuchos::rcp( new RampedInitialCondition(xint, uL*rhoL, uR*rhoR, (xmax-xmin)/numX) );
-    // FunctionPtr E0    = Teuchos::rcp( new RampedInitialCondition(xint, (rhoL*Cv*TL+0.5*rhoL*uL*uL), (rhoR*Cv*TR+0.5*rhoR*uR*uR), (xmax-xmin)/numX) );
+    rhoInit  = Teuchos::rcp( new DiscontinuousInitialCondition(xint, rhoL, rhoR) );
+    momInit = Teuchos::rcp( new DiscontinuousInitialCondition(xint, uL*rhoL, uR*rhoR) );
+    EInit    = Teuchos::rcp( new DiscontinuousInitialCondition(xint, (rhoL*Cv*TL+0.5*rhoL*uL*uL), (rhoR*Cv*TR+0.5*rhoR*uR*uR)) );
+    // if (problem == 6)
+    //   EInit = Teuchos::rcp( new PulseInitialCondition(1./128, 1, 0, Function::h()) );
+    // rhoInit  = Teuchos::rcp( new RampedInitialCondition(xint, rhoL, rhoR, (xmax-xmin)/numX) );
+    // momInit = Teuchos::rcp( new RampedInitialCondition(xint, uL*rhoL, uR*rhoR, (xmax-xmin)/numX) );
+    // EInit    = Teuchos::rcp( new RampedInitialCondition(xint, (rhoL*Cv*TL+0.5*rhoL*uL*uL), (rhoR*Cv*TR+0.5*rhoR*uR*uR), (xmax-xmin)/numX) );
     FunctionPtr Uc_prev = Function::solution(Uc, backgroundFlows[slab]);
     FunctionPtr Um_prev   = Function::solution(Um, backgroundFlows[slab]);
     FunctionPtr Ue_prev   = Function::solution(Ue, backgroundFlows[slab]);
@@ -1451,9 +1491,9 @@ int main(int argc, char *argv[]) {
     // cout << "left " << rhoL*uL << " " << (rhoL*uL*uL+R*rhoL*TL) << " " << (rhoL*Cv*TL+0.5*rhoL*uL*uL+R*Cv*TL)*uL << endl;
     if (slab == 0)
     {
-      bc->addDirichlet(tc, init, -rho0);
-      bc->addDirichlet(tm, init, -mom0);
-      bc->addDirichlet(te, init, -E0);
+      bc->addDirichlet(tc, init, -rhoInit);
+      bc->addDirichlet(tm, init, -momInit);
+      bc->addDirichlet(te, init, -EInit);
     }
     bcs.push_back(bc);
   }
@@ -1496,7 +1536,7 @@ int main(int argc, char *argv[]) {
         bcs[slab]->addDirichlet(tc, init, alpha*Ue_prev);
         bcs[slab]->addDirichlet(tm, init, -alpha*Um_prev);
         bcs[slab]->addDirichlet(te, init, -alpha*(one-0.5*Um_prev*Um_prev/Ue_prev));
-        break;        
+        break;
       }
     }
     meshes[slab]->registerSolution(backgroundFlows[slab]);
@@ -1643,9 +1683,9 @@ int main(int argc, char *argv[]) {
         // dynamic_cast< RampedInitialCondition* >(initialGuess[rho->ID()].get())->setH(newRamp);
         // dynamic_cast< RampedInitialCondition* >(initialGuess[u->ID()].get())->setH(newRamp);
         // dynamic_cast< RampedInitialCondition* >(initialGuess[T->ID()].get())->setH(newRamp);
-        // dynamic_cast< RampedInitialCondition* >(rho0.get())->setH(newRamp);
-        // dynamic_cast< RampedInitialCondition* >(mom0.get())->setH(newRamp);
-        // dynamic_cast< RampedInitialCondition* >(E0.get())->setH(newRamp);
+        // dynamic_cast< RampedInitialCondition* >(rhoInit.get())->setH(newRamp);
+        // dynamic_cast< RampedInitialCondition* >(momInit.get())->setH(newRamp);
+        // dynamic_cast< RampedInitialCondition* >(EInit.get())->setH(newRamp);
         // backgroundFlow->projectOntoMesh(initialGuess);
       }
     }
