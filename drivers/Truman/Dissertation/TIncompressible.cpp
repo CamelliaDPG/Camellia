@@ -145,23 +145,53 @@ int main(int argc, char *argv[])
   Teuchos::GlobalMPISession mpiSession(&argc, &argv); // initialize MPI
   int rank = Teuchos::GlobalMPISession::getRank();
 
+#ifdef HAVE_MPI
+  Epetra_MpiComm Comm(MPI_COMM_WORLD);
+#else
+  Epetra_SerialComm Comm;
+#endif
+  Comm.Barrier(); // set breakpoint here to allow debugger attachment to other MPI processes than the one you automatically attached to.
+
+  Teuchos::CommandLineProcessor cmdp(false,true); // false: don't throw exceptions; true: do return errors for unrecognized options
+
   // Set Parameters
   string problemName = "Kovasznay";
-  // string problemName = "LidDriven";
+  cmdp.setOption("problem", &problemName, "LidDriven, HemkerCylinder");
   string outputDir = ".";
+  cmdp.setOption("outputDir", &outputDir, "output directory");
   int spaceDim = 2;
-  double Re = 1e1;
+  cmdp.setOption("spaceDim", &spaceDim, "spatial dimension");
+  double Re = 1e2;
+  cmdp.setOption("Re", &Re, "Re");
   string norm = "Graph";
+  cmdp.setOption("norm", &norm, "norm");
   bool useDirectSolver = false; // false has an issue during GMGOperator::setFineStiffnessMatrix's call to GMGOperator::computeCoarseStiffnessMatrix().  I'm not yet clear on the nature of this isssue.
+  cmdp.setOption("useDirectSolver", "useIterativeSolver", &useDirectSolver, "use direct solver");
   bool useCondensedSolve = false;
+  cmdp.setOption("useCondensedSolve", "useStandardSolve", &useCondensedSolve);
   bool useConformingTraces = false;
+  cmdp.setOption("conformingTraces", "nonconformingTraces", &useConformingTraces, "use conforming traces");
   int polyOrder = 4, delta_k = 2;
+  cmdp.setOption("polyOrder",&polyOrder,"polynomial order for field variable u");
   int polyOrderCoarse = 1;
   double cgTol = 1e-6;
+  cmdp.setOption("cgTol", &cgTol, "iterative solver tolerance");
   int cgMaxIters = 2000;
-  double nonlinearThreshold = 1e-6;
-  int maxNonlinearIterations = 10;
-  int maxRefinements = 10;
+  cmdp.setOption("cgMaxIters", &cgMaxIters, "maximum number of iterations for linear solver");
+  double nlTol = 1e-6;
+  cmdp.setOption("nlTol", &nlTol, "Newton iteration tolerance");
+  int nlMaxIters = 10;
+  cmdp.setOption("nlMaxIters", &nlMaxIters, "maximum number of iterations for Newton solve");
+  int numRefs = 10;
+  cmdp.setOption("numRefs",&numRefs,"number of refinements");
+
+  if (cmdp.parse(argc,argv) != Teuchos::CommandLineProcessor::PARSE_SUCCESSFUL)
+  {
+#ifdef HAVE_MPI
+    MPI_Finalize();
+#endif
+    return -1;
+  }
 
   // Construct Mesh
   MeshTopologyPtr meshTopo;
@@ -187,7 +217,8 @@ int main(int argc, char *argv[])
     meshTopo = MeshFactory::rectilinearMeshTopology(dims,numElements,x0);
   }
 
-  NavierStokesVGPFormulation form = NavierStokesVGPFormulation::steadyFormulation(spaceDim, Re, useConformingTraces, meshTopo, polyOrder, delta_k);
+  // NavierStokesVGPFormulation form = NavierStokesVGPFormulation::steadyFormulation(spaceDim, Re, useConformingTraces, meshTopo, polyOrder, delta_k);
+  NavierStokesVGPFormulation form = NavierStokesVGPFormulation::steadyConservationFormulation(spaceDim, Re, useConformingTraces, meshTopo, polyOrder, delta_k);
   form.solutionIncrement()->setUseCondensedSolve(useCondensedSolve);
   if (problemName == "LidDriven")
     form.addZeroMeanPressureCondition();
@@ -248,7 +279,7 @@ int main(int argc, char *argv[])
 
   cout << setprecision(2) << scientific;
 
-  while ((l2NormOfIncrement > nonlinearThreshold) && (stepNumber < maxNonlinearIterations))
+  while ((l2NormOfIncrement > nlTol) && (stepNumber < nlMaxIters))
   {
     if (useDirectSolver)
       setDirectSolver(form);
@@ -313,7 +344,7 @@ int main(int argc, char *argv[])
 
     double l2NormOfIncrement = 1.0;
     int stepNumber = 0;
-    while ((l2NormOfIncrement > nonlinearThreshold) && (stepNumber < maxNonlinearIterations))
+    while ((l2NormOfIncrement > nlTol) && (stepNumber < nlMaxIters))
     {
       if (!useDirectSolver)
         setGMGSolver(form, meshesCoarseToFine, cgMaxIters, cgTol, useCondensedSolve);
@@ -348,7 +379,7 @@ int main(int argc, char *argv[])
     if (rank==0) cout << "Energy error for refinement " << refNumber << ": " << energyError;
     if (rank==0) cout << " (mesh has " << activeElements << " elements and " << globalDofs << " global dofs)." << endl;
   }
-  while ((energyError > tol) && (refNumber < maxRefinements));
+  while ((energyError > tol) && (refNumber < numRefs));
 
   FunctionPtr u1_steady = Function::solution(form.u(1), form.solution());
   if (rank==0) cout << "u1(0.5, 0.5) = " << u1_steady->evaluate(0.5, 0.5) << endl;
