@@ -7,9 +7,12 @@
 //
 
 #include "NavierStokesVGPFormulation.h"
+
+#include "ExpFunction.h"
 #include "MeshFactory.h"
 #include "PenaltyConstraints.h"
 #include "PreviousSolutionFunction.h"
+#include "TrigFunctions.h"
 
 using namespace Camellia;
 
@@ -134,7 +137,7 @@ NavierStokesVGPFormulation::NavierStokesVGPFormulation(MeshTopologyPtr meshTopo,
   _stokesForm = Teuchos::rcp( new StokesVGPFormulation(parameters) );
   _spaceDim = parameters.get<int>("spaceDim");
   _conservationFormulation = parameters.get<bool>("useConservationFormulation");
-  _neglectFluxesOnRHS = false;
+  _neglectFluxesOnRHS = true; // DEBUGGING: changed to true to check something 11-19-15 (weird refinement patterns in cavity flow example for conforming traces)...
 
   int spatialPolyOrder = parameters.get<int>("spatialPolyOrder");
   int temporalPolyOrder = parameters.get<int>("temporalPolyOrder", 1);
@@ -282,7 +285,7 @@ NavierStokesVGPFormulation::NavierStokesVGPFormulation(MeshTopologyPtr meshTopo,
 
   int vectorRank = 1;
   FunctionPtr forcingFunction = parameters.get<FunctionPtr>("forcingFunction",Function::zero(vectorRank));
-  this->setForcingFunction(forcingFunction); // will default to zero
+  this->setForcingFunction(forcingFunction); // default to zero
 
   _bc = BC::bc();
 
@@ -463,9 +466,21 @@ void NavierStokesVGPFormulation::addOutflowCondition(SpatialFilterPtr outflowReg
 void NavierStokesVGPFormulation::addPointPressureCondition()
 {
   VarPtr p = this->p();
-
+  
   _solnIncrement->bc()->addSinglePointBC(p->ID(), 0.0, _solnIncrement->mesh());
+  
+  if (_solnIncrement->bc()->shouldImposeZeroMeanConstraint(p->ID()))
+  {
+    _solnIncrement->bc()->removeZeroMeanConstraint(p->ID());
+  }
+}
 
+void NavierStokesVGPFormulation::addPointPressureCondition(vector<double> vertex)
+{
+  VarPtr p = this->p();
+  
+  _solnIncrement->bc()->addSpatialPointBC(p->ID(), 0.0, vertex);
+  
   if (_solnIncrement->bc()->shouldImposeZeroMeanConstraint(p->ID()))
   {
     _solnIncrement->bc()->removeZeroMeanConstraint(p->ID());
@@ -652,7 +667,7 @@ void NavierStokesVGPFormulation::setForcingFunction(FunctionPtr forcingFunction)
 
   _rhsForSolve = this->rhs(forcingFunction, _neglectFluxesOnRHS);
   _rhsForResidual = this->rhs(forcingFunction, false);
-  _solnIncrement->setRHS(_rhsForSolve);
+  _solnIncrement->setRHS(_rhsForResidual);
 }
 
 // ! returns the forcing function for steady-state Navier-Stokes corresponding to the indicated exact solution
@@ -671,6 +686,22 @@ TFunctionPtr<double> NavierStokesVGPFormulation::forcingFunctionSpaceTime(int sp
   StokesVGPFormulation stokesForm = StokesVGPFormulation::spaceTimeFormulation(spaceDim, 1.0 / Re, useConformingTraces);
 
   return stokesForm.forcingFunction(u, p) + NavierStokesVGPFormulation::convectiveTerm(spaceDim, u);
+}
+
+void NavierStokesVGPFormulation::getKovasznaySolution(double Re, TFunctionPtr<double> &u1_exact, TFunctionPtr<double> &u2_exact, TFunctionPtr<double> &p_exact)
+{
+  const double PI  = 3.141592653589793238462;
+  double lambda = Re / 2 - sqrt ( (Re / 2) * (Re / 2) + (2 * PI) * (2 * PI) );
+  
+  TFunctionPtr<double> exp_lambda_x = Teuchos::rcp( new Exp_ax( lambda ) );
+  TFunctionPtr<double> exp_2lambda_x = Teuchos::rcp( new Exp_ax( 2 * lambda ) );
+  TFunctionPtr<double> sin_2pi_y = Teuchos::rcp( new Sin_ay( 2 * PI ) );
+  TFunctionPtr<double> cos_2pi_y = Teuchos::rcp( new Cos_ay( 2 * PI ) );
+  
+  u1_exact = TFunction<double>::constant(1.0) - exp_lambda_x * cos_2pi_y;
+  u2_exact = (lambda / (2 * PI)) * exp_lambda_x * sin_2pi_y;
+  
+  p_exact = 0.5 * exp_2lambda_x;
 }
 
 double NavierStokesVGPFormulation::L2NormSolution()
@@ -697,6 +728,7 @@ VarPtr NavierStokesVGPFormulation::p()
 
 void NavierStokesVGPFormulation::setIP(IPPtr ip)
 {
+  _backgroundFlow->setIP(ip);
   _solnIncrement->setIP(ip);
 }
 
@@ -845,7 +877,7 @@ TSolutionPtr<double> NavierStokesVGPFormulation::solutionIncrement()
   return _solnIncrement;
 }
 
-void NavierStokesVGPFormulation::solveAndAccumulate(double weight)
+int NavierStokesVGPFormulation::solveAndAccumulate(double weight)
 {
   // before we solve, clear out the solnIncrement:
   _solnIncrement->clear(); // only clears the local cell coefficients, not the global solution vector
@@ -855,14 +887,14 @@ void NavierStokesVGPFormulation::solveAndAccumulate(double weight)
   
   RHSPtr savedRHS = _solnIncrement->rhs();
   _solnIncrement->setRHS(_rhsForSolve);
-  _solnIncrement->solve(_solver);
+  int result = _solnIncrement->solve(_solver);
   _solnIncrement->setRHS(savedRHS);
 
   bool allowEmptyCells = false;
   _backgroundFlow->addSolution(_solnIncrement, weight, allowEmptyCells, _neglectFluxesOnRHS);
   _nonlinearIterationCount++;
   
-
+  return result;
 }
 
 VarPtr NavierStokesVGPFormulation::streamPhi()

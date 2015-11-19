@@ -78,9 +78,12 @@ public:
 
   // ! sets an outflow velocity boundary condition
   void addOutflowCondition(SpatialFilterPtr outflowRegion, bool usePhysicalTractions);
-
+  
   // ! set a pressure condition at a point
   void addPointPressureCondition();
+  
+  // ! set a pressure condition at a point
+  void addPointPressureCondition(std::vector<double> vertex);
 
   // ! set a pressure condition at a point
   void addZeroMeanPressureCondition();
@@ -94,6 +97,9 @@ public:
   // ! Set the forcing function for Navier-Stokes.  Should be a vector-valued function, with number of components equal to the spatial dimension.
   void setForcingFunction(TFunctionPtr<double> f);
 
+  // ! Returns the classical Kovasznay solution in the provided FunctionPtr objects
+  static void getKovasznaySolution(double Re, TFunctionPtr<double> &u1, TFunctionPtr<double> &u2, TFunctionPtr<double> &p);
+  
   // ! returns the L^2 norm of the incremental solution
   double L2NormSolutionIncrement();
 
@@ -146,7 +152,7 @@ public:
   TSolutionPtr<double> solutionIncrement();
 
   // ! The first time this is called, calls solution()->solve(), and the weight argument is ignored.  After the first call, solves for the next iterate, and adds to background flow with the specified weight.
-  void solveAndAccumulate(double weight=1.0);
+  int solveAndAccumulate(double weight=1.0);
 
   // ! Returns the variable in the stream solution that represents the stream function.
   VarPtr streamPhi();
