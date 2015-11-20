@@ -133,10 +133,14 @@ NavierStokesVGPFormulation NavierStokesVGPFormulation::timeSteppingFormulation(i
 
 NavierStokesVGPFormulation::NavierStokesVGPFormulation(MeshTopologyPtr meshTopo, Teuchos::ParameterList &parameters)
 {
+  _ctorParameters = parameters;
+  
   _stokesForm = Teuchos::rcp( new StokesVGPFormulation(parameters) );
   _spaceDim = parameters.get<int>("spaceDim");
   _conservationFormulation = parameters.get<bool>("useConservationFormulation");
-  _neglectFluxesOnRHS = false;
+  _neglectFluxesOnRHS = parameters.get<bool>("neglectFluxesOnRHS", false);
+  
+  _useConformingTraces = parameters.get<bool>("useConformingTraces");
 
   int spatialPolyOrder = parameters.get<int>("spatialPolyOrder");
   int temporalPolyOrder = parameters.get<int>("temporalPolyOrder", 1);
@@ -547,6 +551,11 @@ void NavierStokesVGPFormulation::clearSolutionIncrement()
   if (_solnIncrement->getLHSVector().get() != NULL)
     _solnIncrement->getLHSVector()->PutScalar(0); // this clears global solution vector
   _solnIncrement->clearComputedResiduals();
+}
+
+Teuchos::ParameterList NavierStokesVGPFormulation::getConstructorParameters() const
+{
+  return _ctorParameters;
 }
 
 FunctionPtr NavierStokesVGPFormulation::convectiveTerm(int spaceDim, FunctionPtr u_exact)

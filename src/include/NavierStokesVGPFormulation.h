@@ -45,6 +45,8 @@ class NavierStokesVGPFormulation
 
   RefinementStrategyPtr _refinementStrategy, _hRefinementStrategy, _pRefinementStrategy;
 
+  Teuchos::ParameterList _ctorParameters;
+  
   bool _neglectFluxesOnRHS;
 
   int _nonlinearIterationCount; // starts at 0, increases for each iterate
@@ -93,6 +95,8 @@ public:
 
   // ! zeros out the solution increment
   void clearSolutionIncrement();
+  
+  Teuchos::ParameterList getConstructorParameters() const;
 
   // ! return an ExactTSolutionPtr<double> corresponding to specified velocity (a rank 1 Function) and pressure.
   Teuchos::RCP<ExactSolution<double>> exactSolution(TFunctionPtr<double> u, TFunctionPtr<double> p);
