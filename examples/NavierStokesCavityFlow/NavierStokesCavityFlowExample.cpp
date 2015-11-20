@@ -147,8 +147,7 @@ int main(int argc, char *argv[])
 
   double eps = 1.0 / 64.0;
 
-  bool useDirectSolver = false; // false has an issue during GMGOperator::setFineStiffnessMatrix's call to GMGOperator::computeCoarseStiffnessMatrix().  I'm not yet clear on the nature of this isssue.
-//  bool useConformingTraces = false;
+  bool useDirectSolver = false;
   bool useCondensedSolve = false;
   double Re = 1e3;
 
@@ -161,10 +160,10 @@ int main(int argc, char *argv[])
 
   int polyOrder = 4, delta_k = 2;
 
-  bool useConformingTraces = true;
+  bool useConformingTraces = false;
   NavierStokesVGPFormulation form = NavierStokesVGPFormulation::steadyFormulation(spaceDim, Re, useConformingTraces, meshTopo, polyOrder, delta_k);
+  form.addPointPressureCondition({0.5,0.5});
   form.solutionIncrement()->setUseCondensedSolve(useCondensedSolve);
-  form.addZeroMeanPressureCondition();
   
   int polyOrderCoarse = 1;
   double cgTol = 1e-6;
@@ -222,7 +221,7 @@ int main(int argc, char *argv[])
     }
     else
     {
-      cout << endl;
+      if (rank==0) cout << endl;
     }
   }
   
@@ -245,7 +244,7 @@ int main(int argc, char *argv[])
   if (rank==0) cout << "Initial energy error: " << energyError;
   if (rank==0) cout << " (mesh has " << activeElements << " elements and " << globalDofs << " global dofs)." << endl;
 
-  bool truncateMultigridMeshes = true; // for getting a "fair" sense of how iteration counts vary with h.
+  bool truncateMultigridMeshes = false; // true aims to get a "fair" sense of how iteration counts vary with h.
   
   double tol = 1e-5;
   int refNumber = 0;
@@ -253,6 +252,12 @@ int main(int argc, char *argv[])
   {
     refNumber++;
     form.refine();
+    
+    // update nonlinear threshold according to last energyError:
+    nonlinearThreshold = 1e-3 * energyError;
+    
+    // update cgTol, too:
+    cgTol = 1e-6 * energyError;
     
     if (rank==0) cout << " ****** Refinement " << refNumber << " ****** " << endl;
     
@@ -288,7 +293,7 @@ int main(int argc, char *argv[])
       }
       else
       {
-        cout << endl;
+        if (rank==0) cout << endl;
       }
     }
 
