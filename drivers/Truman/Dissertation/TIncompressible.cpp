@@ -195,6 +195,8 @@ int main(int argc, char *argv[])
     return -1;
   }
 
+  vector<double> pressureConstraintPoint;
+  
   // Construct Mesh
   MeshTopologyPtr meshTopo;
   if (problemName == "Trivial")
@@ -203,6 +205,9 @@ int main(int argc, char *argv[])
     vector<double> dims(spaceDim,1.0);
     vector<int> numElements(spaceDim,meshWidth);
     vector<double> x0(spaceDim,0.0);
+    
+    pressureConstraintPoint = {0.5,0.5};
+    
     meshTopo = MeshFactory::rectilinearMeshTopology(dims,numElements,x0);
     if (!steady)
     {
@@ -218,6 +223,7 @@ int main(int argc, char *argv[])
     vector<double> dims(spaceDim,1.0);
     vector<int> numElements(spaceDim,meshWidth);
     vector<double> x0(spaceDim,0.0);
+    pressureConstraintPoint = {0.5,0.5};
     meshTopo = MeshFactory::rectilinearMeshTopology(dims,numElements,x0);
     if (!steady)
     {
@@ -238,6 +244,7 @@ int main(int argc, char *argv[])
     dims.push_back(2.0);
     numElements.push_back(3);
     numElements.push_back(4);
+    pressureConstraintPoint = x0;
     meshTopo = MeshFactory::rectilinearMeshTopology(dims,numElements,x0);
     if (!steady)
     {
@@ -256,11 +263,11 @@ int main(int argc, char *argv[])
 
   form.solutionIncrement()->setUseCondensedSolve(useCondensedSolve);
   if (problemName == "Trivial")
-    form.addZeroMeanPressureCondition();
+    form.addPointPressureCondition(pressureConstraintPoint);
   if (problemName == "LidDriven")
-    form.addZeroMeanPressureCondition();
+    form.addPointPressureCondition(pressureConstraintPoint);
   if (problemName == "Kovasznay")
-    form.addZeroMeanPressureCondition();
+    form.addPointPressureCondition(pressureConstraintPoint);
 
   MeshPtr mesh = form.solutionIncrement()->mesh();
   vector<MeshPtr> meshesCoarseToFine = GMGSolver::meshesForMultigrid(mesh, polyOrderCoarse, delta_k);
@@ -466,15 +473,15 @@ int main(int argc, char *argv[])
   while ((energyError > tol) && (refNumber < numRefs));
 
   FunctionPtr u1_steady = Function::solution(form.u(1), form.solution());
-  if (rank==0) cout << "u1(0.5, 0.5) = " << u1_steady->evaluate(0.5, 0.5) << endl;
+  if (rank==0) cout << "u1(0.5, 0.5) @ t=0.5 = " << u1_steady->evaluate(0.5, 0.5, 0.5) << endl;
 
   // now solve for the stream function on the fine mesh:
-  if (spaceDim == 2)
-  {
-    form.streamSolution()->solve();
-    HDF5Exporter steadyStreamExporter(form.streamSolution()->mesh(), "navierStokesSteadyCavityFlowStreamSolution", outputDir);
-    steadyStreamExporter.exportSolution(form.streamSolution());
-  }
+//  if (spaceDim == 2)
+//  {
+//    form.streamSolution()->solve();
+//    HDF5Exporter steadyStreamExporter(form.streamSolution()->mesh(), "navierStokesSteadyCavityFlowStreamSolution", outputDir);
+//    steadyStreamExporter.exportSolution(form.streamSolution());
+//  }
 
 //  /*   Now that we have a fine mesh, try the same problem, but transient, starting with a zero initial
 //   *   state, and with boundary conditions that "ramp up" in time (and which also are zero at time 0).
