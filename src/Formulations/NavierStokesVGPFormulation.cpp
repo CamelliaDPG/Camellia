@@ -402,9 +402,6 @@ void NavierStokesVGPFormulation::addInflowCondition(SpatialFilterPtr inflowRegio
   }
   else
   {
-    // we assume that _neglectFluxesOnRHS = true, in that we always use the full BCs, not their zero-imposing counterparts, when solving for solution increment
-//    TEUCHOS_TEST_FOR_EXCEPTION(true, std::invalid_argument, "_neglectFluxesOnRHS = true assumed various places");
-
     TSolutionPtr<double> backgroundFlowWeakReference = Teuchos::rcp(_backgroundFlow.get(), false );
 
     TFunctionPtr<double> u1_hat_prev = TFunction<double>::solution(u1_hat,backgroundFlowWeakReference);
@@ -898,7 +895,8 @@ int NavierStokesVGPFormulation::solveAndAccumulate(double weight)
   _solnIncrement->setRHS(savedRHS);
 
   bool allowEmptyCells = false;
-  _backgroundFlow->addSolution(_solnIncrement, weight, allowEmptyCells, _neglectFluxesOnRHS);
+  bool replaceBoundaryTerms = _neglectFluxesOnRHS;
+  _backgroundFlow->addSolution(_solnIncrement, weight, allowEmptyCells, replaceBoundaryTerms);
   _nonlinearIterationCount++;
   
   return result;
