@@ -87,6 +87,9 @@ public:
 
   // ! set a pressure condition at a point
   void addZeroMeanPressureCondition();
+  
+  // ! zeros out the solution increment
+  void clearSolutionIncrement();
 
   // ! return an ExactTSolutionPtr<double> corresponding to specified velocity (a rank 1 Function) and pressure.
   Teuchos::RCP<ExactSolution<double>> exactSolution(TFunctionPtr<double> u, TFunctionPtr<double> p);

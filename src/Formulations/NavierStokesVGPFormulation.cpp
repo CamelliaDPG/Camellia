@@ -137,7 +137,7 @@ NavierStokesVGPFormulation::NavierStokesVGPFormulation(MeshTopologyPtr meshTopo,
   _stokesForm = Teuchos::rcp( new StokesVGPFormulation(parameters) );
   _spaceDim = parameters.get<int>("spaceDim");
   _conservationFormulation = parameters.get<bool>("useConservationFormulation");
-  _neglectFluxesOnRHS = true; // DEBUGGING: changed to true to check something 11-19-15 (weird refinement patterns in cavity flow example for conforming traces)...
+  _neglectFluxesOnRHS = false;
 
   int spatialPolyOrder = parameters.get<int>("spatialPolyOrder");
   int temporalPolyOrder = parameters.get<int>("temporalPolyOrder", 1);
@@ -511,6 +511,14 @@ BFPtr NavierStokesVGPFormulation::bf()
   return _navierStokesBF;
 }
 
+void NavierStokesVGPFormulation::clearSolutionIncrement()
+{
+  _solnIncrement->clear(); // only clears the local cell coefficients, not the global solution vector
+  if (_solnIncrement->getLHSVector().get() != NULL)
+    _solnIncrement->getLHSVector()->PutScalar(0); // this clears global solution vector
+  _solnIncrement->clearComputedResiduals();
+}
+
 FunctionPtr NavierStokesVGPFormulation::convectiveTerm(int spaceDim, FunctionPtr u_exact)
 {
   TEUCHOS_TEST_FOR_EXCEPTION((spaceDim != 2) && (spaceDim != 3), std::invalid_argument, "spaceDim must be 2 or 3");
@@ -753,6 +761,7 @@ void NavierStokesVGPFormulation::refine(RefinementStrategyPtr refStrategy)
 void NavierStokesVGPFormulation::refine()
 {
   _nonlinearIterationCount = 0;
+  this->clearSolutionIncrement();
   _solnIncrement->setRHS(_rhsForResidual);
   _refinementStrategy->refine();
   _solnIncrement->setRHS(_rhsForSolve);
@@ -880,9 +889,7 @@ TSolutionPtr<double> NavierStokesVGPFormulation::solutionIncrement()
 int NavierStokesVGPFormulation::solveAndAccumulate(double weight)
 {
   // before we solve, clear out the solnIncrement:
-  _solnIncrement->clear(); // only clears the local cell coefficients, not the global solution vector
-  if (_solnIncrement->getLHSVector().get() != NULL)
-    _solnIncrement->getLHSVector()->PutScalar(0); // this clears global solution vector
+  clearSolutionIncrement();
   // (this matters for iterative solvers; otherwise we'd start with a bad initial guess after the first Newton step)
   
   RHSPtr savedRHS = _solnIncrement->rhs();
