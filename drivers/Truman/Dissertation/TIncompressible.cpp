@@ -255,11 +255,14 @@ int main(int argc, char *argv[])
     }
   }
 
-  NavierStokesVGPFormulation form = NavierStokesVGPFormulation::steadyConservationFormulation(spaceDim, Re, useConformingTraces, meshTopo, polyOrder, delta_k);
-  // StokesVGPFormulation form = StokesVGPFormulation::steadyFormulation(spaceDim, Re, useConformingTraces, meshTopo, polyOrder, delta_k);
-  if (!steady)
-    form = NavierStokesVGPFormulation::spaceTimeConservationFormulation(spaceDim, Re, useConformingTraces, meshTopo, polyOrder, polyOrder, delta_k);
-    // form = StokesVGPFormulation::spaceTimeFormulation(spaceDim, Re, useConformingTraces, meshTopo, polyOrder, polyOrder, delta_k);
+  Teuchos::ParameterList nsParameters;
+  if (steady)
+    nsParameters = NavierStokesVGPFormulation::steadyConservationFormulation(spaceDim, Re, useConformingTraces, meshTopo, polyOrder, delta_k).getConstructorParameters();
+  else
+    nsParameters = NavierStokesVGPFormulation::spaceTimeConservationFormulation(spaceDim, Re, useConformingTraces, meshTopo, polyOrder, polyOrder, delta_k).getConstructorParameters();
+  
+  nsParameters.set("neglectFluxesOnRHS", false);
+  NavierStokesVGPFormulation form(meshTopo, nsParameters);
 
   form.solutionIncrement()->setUseCondensedSolve(useCondensedSolve);
   if (problemName == "Trivial")
@@ -390,7 +393,8 @@ int main(int argc, char *argv[])
       cout << endl;
     }
   }
-
+  form.clearSolutionIncrement(); // need to clear before evaluating energy error
+  
   FunctionPtr energyErrorFunction = EnergyErrorFunction::energyErrorFunction(form.solutionIncrement());
 
   ostringstream exportName;
@@ -459,6 +463,8 @@ int main(int argc, char *argv[])
         cout << endl;
       }
     }
+    
+    form.clearSolutionIncrement(); // need to clear before evaluating energy error
 
     exporter.exportSolution(form.solution(), refNumber);
     // energyErrorExporter.exportFunction({energyErrorFunction}, {"energy error"}, refNumber);
@@ -472,8 +478,19 @@ int main(int argc, char *argv[])
   }
   while ((energyError > tol) && (refNumber < numRefs));
 
-  FunctionPtr u1_steady = Function::solution(form.u(1), form.solution());
-  if (rank==0) cout << "u1(0.5, 0.5) @ t=0.5 = " << u1_steady->evaluate(0.5, 0.5, 0.5) << endl;
+  FunctionPtr u1_soln = Function::solution(form.u(1), form.solution());
+  double value;
+  if (steady)
+  {
+    value = u1_soln->evaluate(0.5,0.5);
+    if (rank==0) cout << "u1(0.5, 0.5) = " << value << endl;
+  }
+  else
+  {
+    value = u1_soln->evaluate(0.5,0.5,0.5);
+    if (rank==0) cout << "u1(0.5, 0.5) @ t=0.5 = " << value << endl;
+  }
+
 
   // now solve for the stream function on the fine mesh:
 //  if (spaceDim == 2)
