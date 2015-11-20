@@ -78,16 +78,19 @@ public:
 
   // ! sets an outflow velocity boundary condition
   void addOutflowCondition(SpatialFilterPtr outflowRegion, bool usePhysicalTractions);
-  
+
+  // ! sets an flux boundary condition; in 2D and 3D, u should be a vector-valued function.
+  void addFluxCondition(SpatialFilterPtr fluxRegion, TFunctionPtr<double> tn);
+
   // ! set a pressure condition at a point
   void addPointPressureCondition();
-  
+
   // ! set a pressure condition at a point
   void addPointPressureCondition(std::vector<double> vertex);
 
   // ! set a pressure condition at a point
   void addZeroMeanPressureCondition();
-  
+
   // ! zeros out the solution increment
   void clearSolutionIncrement();
 
@@ -102,7 +105,7 @@ public:
 
   // ! Returns the classical Kovasznay solution in the provided FunctionPtr objects
   static void getKovasznaySolution(double Re, TFunctionPtr<double> &u1, TFunctionPtr<double> &u2, TFunctionPtr<double> &p);
-  
+
   // ! returns the L^2 norm of the incremental solution
   double L2NormSolutionIncrement();
 
@@ -135,10 +138,10 @@ public:
 
   // ! set the RefinementStrategy to use for driving refinements
   void setRefinementStrategy(RefinementStrategyPtr refStrategy);
-  
+
   // ! get the Solver used for the linear updates
   SolverPtr getSolver();
-  
+
   // ! set the Solver for the linear updates
   void setSolver(SolverPtr solver);
 

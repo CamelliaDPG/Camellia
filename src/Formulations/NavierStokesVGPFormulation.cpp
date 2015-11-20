@@ -93,7 +93,6 @@ NavierStokesVGPFormulation NavierStokesVGPFormulation::spaceTimeConservationForm
   parameters.set("useTimeStepping", false);
   parameters.set("useSpaceTime", true);
 
-  parameters.set("includeVelocityTracesInFluxTerm",false);
   parameters.set("t0",0.0);
 
   parameters.set("spatialPolyOrder", spatialPolyOrder);
@@ -276,7 +275,7 @@ NavierStokesVGPFormulation::NavierStokesVGPFormulation(MeshTopologyPtr meshTopo,
   }
 
   mesh->setBilinearForm(_navierStokesBF);
-  
+
   // cout << endl << _navierStokesBF->displayString() << endl;
 
   // set the inner product to the graph norm:
@@ -388,6 +387,8 @@ NavierStokesVGPFormulation::NavierStokesVGPFormulation(MeshTopologyPtr meshTopo,
 void NavierStokesVGPFormulation::addInflowCondition(SpatialFilterPtr inflowRegion, TFunctionPtr<double> u)
 {
   int spaceDim = _backgroundFlow->mesh()->getTopology()->getDimension();
+  if (_stokesForm->isSpaceTime())
+    spaceDim = spaceDim - 1;
 
   VarPtr u1_hat = this->u_hat(1), u2_hat = this->u_hat(2);
   VarPtr u3_hat;
@@ -460,12 +461,44 @@ void NavierStokesVGPFormulation::addOutflowCondition(SpatialFilterPtr outflowReg
   }
 }
 
+void NavierStokesVGPFormulation::addFluxCondition(SpatialFilterPtr fluxRegion, TFunctionPtr<double> tn)
+{
+  int spaceDim = _backgroundFlow->mesh()->getTopology()->getDimension();
+  if (_stokesForm->isSpaceTime())
+    spaceDim = spaceDim - 1;
+
+  VarPtr tn1_hat = this->tn_hat(1), tn2_hat = this->tn_hat(2);
+  VarPtr tn3_hat;
+  if (spaceDim==3) tn3_hat = this->tn_hat(3);
+
+  if (_neglectFluxesOnRHS)
+  {
+    // this also governs how we accumulate in the fluxes and traces, and hence whether we should use zero BCs or the true BCs for solution increment
+    _solnIncrement->bc()->addDirichlet(tn1_hat, fluxRegion, tn->x());
+    _solnIncrement->bc()->addDirichlet(tn2_hat, fluxRegion, tn->y());
+    if (spaceDim==3) _solnIncrement->bc()->addDirichlet(tn3_hat, fluxRegion, tn->z());
+  }
+  else
+  {
+    TSolutionPtr<double> backgroundFlowWeakReference = Teuchos::rcp(_backgroundFlow.get(), false );
+
+    TFunctionPtr<double> tn1_hat_prev = TFunction<double>::solution(tn1_hat,backgroundFlowWeakReference, false);
+    TFunctionPtr<double> tn2_hat_prev = TFunction<double>::solution(tn2_hat,backgroundFlowWeakReference, false);
+    TFunctionPtr<double> tn3_hat_prev;
+    if (spaceDim == 3) tn3_hat_prev = TFunction<double>::solution(tn3_hat,backgroundFlowWeakReference, false);
+
+    _solnIncrement->bc()->addDirichlet(tn1_hat, fluxRegion, tn->x() - tn1_hat_prev);
+    _solnIncrement->bc()->addDirichlet(tn2_hat, fluxRegion, tn->y() - tn2_hat_prev);
+    if (spaceDim==3) _solnIncrement->bc()->addDirichlet(tn3_hat, fluxRegion, tn->z() - tn3_hat_prev);
+  }
+}
+
 void NavierStokesVGPFormulation::addPointPressureCondition()
 {
   VarPtr p = this->p();
-  
+
   _solnIncrement->bc()->addSinglePointBC(p->ID(), 0.0, _solnIncrement->mesh());
-  
+
   if (_solnIncrement->bc()->shouldImposeZeroMeanConstraint(p->ID()))
   {
     _solnIncrement->bc()->removeZeroMeanConstraint(p->ID());
@@ -475,9 +508,9 @@ void NavierStokesVGPFormulation::addPointPressureCondition()
 void NavierStokesVGPFormulation::addPointPressureCondition(vector<double> vertex)
 {
   VarPtr p = this->p();
-  
+
   _solnIncrement->bc()->addSpatialPointBC(p->ID(), 0.0, vertex);
-  
+
   if (_solnIncrement->bc()->shouldImposeZeroMeanConstraint(p->ID()))
   {
     _solnIncrement->bc()->removeZeroMeanConstraint(p->ID());
@@ -697,15 +730,15 @@ void NavierStokesVGPFormulation::getKovasznaySolution(double Re, TFunctionPtr<do
 {
   const double PI  = 3.141592653589793238462;
   double lambda = Re / 2 - sqrt ( (Re / 2) * (Re / 2) + (2 * PI) * (2 * PI) );
-  
+
   TFunctionPtr<double> exp_lambda_x = Teuchos::rcp( new Exp_ax( lambda ) );
   TFunctionPtr<double> exp_2lambda_x = Teuchos::rcp( new Exp_ax( 2 * lambda ) );
   TFunctionPtr<double> sin_2pi_y = Teuchos::rcp( new Sin_ay( 2 * PI ) );
   TFunctionPtr<double> cos_2pi_y = Teuchos::rcp( new Cos_ay( 2 * PI ) );
-  
+
   u1_exact = TFunction<double>::constant(1.0) - exp_lambda_x * cos_2pi_y;
   u2_exact = (lambda / (2 * PI)) * exp_lambda_x * sin_2pi_y;
-  
+
   p_exact = 0.5 * exp_2lambda_x;
 }
 
@@ -888,7 +921,7 @@ int NavierStokesVGPFormulation::solveAndAccumulate(double weight)
   // before we solve, clear out the solnIncrement:
   clearSolutionIncrement();
   // (this matters for iterative solvers; otherwise we'd start with a bad initial guess after the first Newton step)
-  
+
   RHSPtr savedRHS = _solnIncrement->rhs();
   _solnIncrement->setRHS(_rhsForSolve);
   int result = _solnIncrement->solve(_solver);
@@ -898,7 +931,7 @@ int NavierStokesVGPFormulation::solveAndAccumulate(double weight)
   bool replaceBoundaryTerms = _neglectFluxesOnRHS;
   _backgroundFlow->addSolution(_solnIncrement, weight, allowEmptyCells, replaceBoundaryTerms);
   _nonlinearIterationCount++;
-  
+
   return result;
 }
 

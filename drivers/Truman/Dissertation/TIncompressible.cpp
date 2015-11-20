@@ -155,8 +155,10 @@ int main(int argc, char *argv[])
   Teuchos::CommandLineProcessor cmdp(false,true); // false: don't throw exceptions; true: do return errors for unrecognized options
 
   // Set Parameters
-  string problemName = "Kovasznay";
+  string problemName = "Trivial";
   cmdp.setOption("problem", &problemName, "LidDriven, HemkerCylinder");
+  bool steady = true;
+  cmdp.setOption("steady", "unsteady", &steady, "steady");
   string outputDir = ".";
   cmdp.setOption("outputDir", &outputDir, "output directory");
   int spaceDim = 2;
@@ -171,7 +173,7 @@ int main(int argc, char *argv[])
   cmdp.setOption("useCondensedSolve", "useStandardSolve", &useCondensedSolve);
   bool useConformingTraces = false;
   cmdp.setOption("conformingTraces", "nonconformingTraces", &useConformingTraces, "use conforming traces");
-  int polyOrder = 4, delta_k = 2;
+  int polyOrder = 2, delta_k = 2;
   cmdp.setOption("polyOrder",&polyOrder,"polynomial order for field variable u");
   int polyOrderCoarse = 1;
   double cgTol = 1e-6;
@@ -195,13 +197,35 @@ int main(int argc, char *argv[])
 
   // Construct Mesh
   MeshTopologyPtr meshTopo;
-  if (problemName == "LidDriven")
+  if (problemName == "Trivial")
   {
     int meshWidth = 2;
     vector<double> dims(spaceDim,1.0);
     vector<int> numElements(spaceDim,meshWidth);
     vector<double> x0(spaceDim,0.0);
     meshTopo = MeshFactory::rectilinearMeshTopology(dims,numElements,x0);
+    if (!steady)
+    {
+      double t0 = 0;
+      double t1 = 1;
+      int temporalDivisions = 2;
+      meshTopo = MeshFactory::spaceTimeMeshTopology(meshTopo, t0, t1, temporalDivisions);
+    }
+  }
+  else if (problemName == "LidDriven")
+  {
+    int meshWidth = 2;
+    vector<double> dims(spaceDim,1.0);
+    vector<int> numElements(spaceDim,meshWidth);
+    vector<double> x0(spaceDim,0.0);
+    meshTopo = MeshFactory::rectilinearMeshTopology(dims,numElements,x0);
+    if (!steady)
+    {
+      double t0 = 0;
+      double t1 = 1;
+      int temporalDivisions = 2;
+      meshTopo = MeshFactory::spaceTimeMeshTopology(meshTopo, t0, t1, temporalDivisions);
+    }
   }
   else if (problemName == "Kovasznay")
   {
@@ -215,11 +239,24 @@ int main(int argc, char *argv[])
     numElements.push_back(3);
     numElements.push_back(4);
     meshTopo = MeshFactory::rectilinearMeshTopology(dims,numElements,x0);
+    if (!steady)
+    {
+      double t0 = 0;
+      double t1 = 1;
+      int temporalDivisions = 2;
+      meshTopo = MeshFactory::spaceTimeMeshTopology(meshTopo, t0, t1, temporalDivisions);
+    }
   }
 
-  // NavierStokesVGPFormulation form = NavierStokesVGPFormulation::steadyFormulation(spaceDim, Re, useConformingTraces, meshTopo, polyOrder, delta_k);
   NavierStokesVGPFormulation form = NavierStokesVGPFormulation::steadyConservationFormulation(spaceDim, Re, useConformingTraces, meshTopo, polyOrder, delta_k);
+  // StokesVGPFormulation form = StokesVGPFormulation::steadyFormulation(spaceDim, Re, useConformingTraces, meshTopo, polyOrder, delta_k);
+  if (!steady)
+    form = NavierStokesVGPFormulation::spaceTimeConservationFormulation(spaceDim, Re, useConformingTraces, meshTopo, polyOrder, polyOrder, delta_k);
+    // form = StokesVGPFormulation::spaceTimeFormulation(spaceDim, Re, useConformingTraces, meshTopo, polyOrder, polyOrder, delta_k);
+
   form.solutionIncrement()->setUseCondensedSolve(useCondensedSolve);
+  if (problemName == "Trivial")
+    form.addZeroMeanPressureCondition();
   if (problemName == "LidDriven")
     form.addZeroMeanPressureCondition();
   if (problemName == "Kovasznay")
@@ -233,7 +270,28 @@ int main(int argc, char *argv[])
   VarPtr u1_hat = form.u_hat(1), u2_hat = form.u_hat(2);
   VarPtr tn1_hat = form.tn_hat(1), tn2_hat = form.tn_hat(2);
 
-  if (problemName == "LidDriven")
+  if (problemName == "Trivial")
+  {
+    BCPtr bc = form.solutionIncrement()->bc();
+
+    SpatialFilterPtr leftX  = SpatialFilter::matchingX(0);
+    SpatialFilterPtr rightX = SpatialFilter::matchingX(1);
+    SpatialFilterPtr leftY  = SpatialFilter::matchingY(0);
+    SpatialFilterPtr rightY = SpatialFilter::matchingY(1);
+    SpatialFilterPtr t0  = SpatialFilter::matchingT(0);
+
+    FunctionPtr u1_exact = Function::constant(1);
+    FunctionPtr u2_exact = Function::zero();
+    FunctionPtr u_exact = Function::vectorize(u1_exact,u2_exact);
+    form.addInflowCondition(leftX,  u_exact);
+    form.addInflowCondition(rightX, u_exact);
+    form.addInflowCondition(leftY,  u_exact);
+    form.addInflowCondition(rightY, u_exact);
+
+    if (!steady)
+      form.addFluxCondition(t0, -u_exact);
+  }
+  else if (problemName == "LidDriven")
   {
     SpatialFilterPtr topBoundary = SpatialFilter::matchingY(1);
     SpatialFilterPtr notTopBoundary = SpatialFilter::negatedFilter(topBoundary);
@@ -255,11 +313,14 @@ int main(int argc, char *argv[])
   }
   else if (problemName == "Kovasznay")
   {
+    BCPtr bc = form.solutionIncrement()->bc();
+
     SpatialFilterPtr leftX  = SpatialFilter::matchingX(-.5);
     SpatialFilterPtr rightX = SpatialFilter::matchingX(1);
     SpatialFilterPtr leftY  = SpatialFilter::matchingY(-.5);
     SpatialFilterPtr rightY = SpatialFilter::matchingY(1.5);
-    SpatialFilterPtr allSpace = SpatialFilter::allSpace();
+    // SpatialFilterPtr allSpace = SpatialFilter::allSpace();
+    SpatialFilterPtr t0  = SpatialFilter::matchingT(0);
 
     double pi = atan(1)*4;
     double lambda = Re/2-sqrt(Re*Re/4+4*pi*pi);
@@ -270,8 +331,27 @@ int main(int argc, char *argv[])
     FunctionPtr u2_exact = lambda/(2*pi)*explambdaX*sin2piY;
     FunctionPtr sigma1_exact = 1./Re*u1_exact->grad();
     FunctionPtr sigma2_exact = 1./Re*u2_exact->grad();
+
     FunctionPtr u_exact = Function::vectorize(u1_exact,u2_exact);
-    form.addInflowCondition(allSpace, u_exact);
+    // form.addInflowCondition(allSpace, u_exact);
+    form.addInflowCondition(leftX,  u_exact);
+    form.addInflowCondition(rightX, u_exact);
+    form.addInflowCondition(leftY,  u_exact);
+    form.addInflowCondition(rightY, u_exact);
+
+    if (!steady)
+      form.addFluxCondition(t0, -u_exact);
+    // bc->addDirichlet(u1_hat, leftX,  u1_exact);
+    // bc->addDirichlet(u2_hat, leftX,  u2_exact);
+    // bc->addDirichlet(u1_hat, rightX, u1_exact);
+    // bc->addDirichlet(u2_hat, rightX, u2_exact);
+    // bc->addDirichlet(u1_hat, leftY,  u1_exact);
+    // bc->addDirichlet(u2_hat, leftY,  u2_exact);
+    // bc->addDirichlet(u1_hat, rightY, u1_exact);
+    // bc->addDirichlet(u2_hat, rightY, u2_exact);
+
+    // bc->addDirichlet(u1_hat, allSpace,  u1_exact);
+    // bc->addDirichlet(u2_hat, allSpace,  u2_exact);
   }
 
   double l2NormOfIncrement = 1.0;
@@ -307,6 +387,10 @@ int main(int argc, char *argv[])
   FunctionPtr energyErrorFunction = EnergyErrorFunction::energyErrorFunction(form.solutionIncrement());
 
   ostringstream exportName;
+  if (steady)
+    exportName << "Steady";
+  else
+    exportName << "Transient";
   exportName << problemName << "_Re" << Re << "_" << norm << "_k" << polyOrder;// << "_" << solverChoice;// << "_" << multigridStrategyString;
   HDF5Exporter exporter(form.solution()->mesh(), exportName.str(), outputDir);
 
