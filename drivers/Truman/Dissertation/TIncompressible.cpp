@@ -10,6 +10,7 @@
 #include "SuperLUDistSolver.h"
 
 #include "Teuchos_GlobalMPISession.hpp"
+#include "Teuchos_TimeMonitor.hpp"
 
 using namespace Camellia;
 
@@ -140,6 +141,44 @@ void setGMGSolver(NavierStokesVGPFormulation &form, vector<MeshPtr> &meshesCoars
   form.setSolver(gmgSolver);
 }
 
+double computeL2Error(NavierStokesVGPFormulation &form, FunctionPtr u_exact, MeshPtr mesh, double Re)
+{
+  FunctionPtr sigma1_exact = 1./Re*u_exact->x()->grad();
+  FunctionPtr sigma2_exact = 1./Re*u_exact->y()->grad();
+
+  // double l2Error = 0;
+  double u1_l2 = 0, u2_l2, sigma11_l2 = 0, sigma12_l2 = 0, sigma21_l2 = 0, sigma22_l2 = 0;
+  FunctionPtr u1_soln, u2_soln, sigma11_soln, sigma12_soln, sigma21_soln, sigma22_soln,
+              u1_diff, u2_diff, sigma11_diff, sigma12_diff, sigma21_diff, sigma22_diff,
+              u1_sqr, u2_sqr, sigma11_sqr, sigma12_sqr, sigma21_sqr, sigma22_sqr;
+  u1_soln = Function::solution(form.u(1), form.solution());
+  u2_soln = Function::solution(form.u(2), form.solution());
+  sigma11_soln = Function::solution(form.sigma(1,1), form.solution());
+  sigma12_soln = Function::solution(form.sigma(1,2), form.solution());
+  sigma21_soln = Function::solution(form.sigma(2,1), form.solution());
+  sigma22_soln = Function::solution(form.sigma(2,2), form.solution());
+  u1_diff = u1_soln - u_exact->x();
+  u2_diff = u2_soln - u_exact->y();
+  sigma11_diff = sigma11_soln - sigma1_exact->x();
+  sigma12_diff = sigma12_soln - sigma1_exact->y();
+  sigma21_diff = sigma21_soln - sigma2_exact->x();
+  sigma22_diff = sigma22_soln - sigma2_exact->y();
+  u1_sqr = u1_diff*u1_diff;
+  u2_sqr = u2_diff*u2_diff;
+  sigma11_sqr = sigma11_diff*sigma11_diff;
+  sigma12_sqr = sigma12_diff*sigma12_diff;
+  sigma21_sqr = sigma21_diff*sigma21_diff;
+  sigma22_sqr = sigma22_diff*sigma22_diff;
+  u1_l2 = u1_sqr->integrate(mesh, 10);
+  u2_l2 = u2_sqr->integrate(mesh, 10);
+  sigma11_l2 = sigma11_sqr->integrate(mesh, 10);
+  sigma12_l2 = sigma12_sqr->integrate(mesh, 10);
+  sigma21_l2 = sigma21_sqr->integrate(mesh, 10);
+  sigma22_l2 = sigma22_sqr->integrate(mesh, 10);
+  return sqrt(u1_l2+sigma11_l2+sigma12_l2+sigma21_l2+sigma22_l2);
+  // l2Error = sqrt(u_l2);
+}
+
 int main(int argc, char *argv[])
 {
   Teuchos::GlobalMPISession mpiSession(&argc, &argv); // initialize MPI
@@ -186,6 +225,12 @@ int main(int argc, char *argv[])
   cmdp.setOption("nlMaxIters", &nlMaxIters, "maximum number of iterations for Newton solve");
   int numRefs = 10;
   cmdp.setOption("numRefs",&numRefs,"number of refinements");
+  bool exportHDF5 = false;
+  cmdp.setOption("exportHDF5", "skipHDF5", &exportHDF5, "export solution to HDF5");
+  bool computeL2 = false;
+  cmdp.setOption("computeL2Error", "skipL2Error", &computeL2, "compute L2 Error");
+  string tag="";
+  cmdp.setOption("tag", &tag, "output tag");
 
   if (cmdp.parse(argc,argv) != Teuchos::CommandLineProcessor::PARSE_SUCCESSFUL)
   {
@@ -195,8 +240,12 @@ int main(int argc, char *argv[])
     return -1;
   }
 
+  Teuchos::RCP<Time> totalTimer = Teuchos::TimeMonitor::getNewCounter("Total Time");
+  Teuchos::RCP<Time> solverTime = Teuchos::TimeMonitor::getNewCounter("Solve Time");
+  totalTimer->start(true);
+
   vector<double> pressureConstraintPoint;
-  
+
   // Construct Mesh
   MeshTopologyPtr meshTopo;
   if (problemName == "Trivial")
@@ -205,9 +254,9 @@ int main(int argc, char *argv[])
     vector<double> dims(spaceDim,1.0);
     vector<int> numElements(spaceDim,meshWidth);
     vector<double> x0(spaceDim,0.0);
-    
+
     pressureConstraintPoint = {0.5,0.5};
-    
+
     meshTopo = MeshFactory::rectilinearMeshTopology(dims,numElements,x0);
     if (!steady)
     {
@@ -244,6 +293,28 @@ int main(int argc, char *argv[])
     dims.push_back(2.0);
     numElements.push_back(3);
     numElements.push_back(4);
+    pressureConstraintPoint = {0,0};
+    meshTopo = MeshFactory::rectilinearMeshTopology(dims,numElements,x0);
+    if (!steady)
+    {
+      double t0 = 0;
+      double t1 = 1;
+      int temporalDivisions = 2;
+      meshTopo = MeshFactory::spaceTimeMeshTopology(meshTopo, t0, t1, temporalDivisions);
+    }
+  }
+  else if (problemName == "TaylorGreen")
+  {
+    double pi = atan(1)*4;
+    vector<double> x0;
+    vector<double> dims;
+    vector<int> numElements;
+    x0.push_back(0);
+    x0.push_back(0);
+    dims.push_back(2*pi);
+    dims.push_back(2*pi);
+    numElements.push_back(2);
+    numElements.push_back(2);
     pressureConstraintPoint = x0;
     meshTopo = MeshFactory::rectilinearMeshTopology(dims,numElements,x0);
     if (!steady)
@@ -260,7 +331,7 @@ int main(int argc, char *argv[])
     nsParameters = NavierStokesVGPFormulation::steadyConservationFormulation(spaceDim, Re, useConformingTraces, meshTopo, polyOrder, delta_k).getConstructorParameters();
   else
     nsParameters = NavierStokesVGPFormulation::spaceTimeConservationFormulation(spaceDim, Re, useConformingTraces, meshTopo, polyOrder, polyOrder, delta_k).getConstructorParameters();
-  
+
   nsParameters.set("neglectFluxesOnRHS", false);
   NavierStokesVGPFormulation form(meshTopo, nsParameters);
 
@@ -271,6 +342,8 @@ int main(int argc, char *argv[])
     form.addPointPressureCondition(pressureConstraintPoint);
   if (problemName == "Kovasznay")
     form.addPointPressureCondition(pressureConstraintPoint);
+  if (problemName == "TaylorGreen")
+    form.addPointPressureCondition(pressureConstraintPoint);
 
   MeshPtr mesh = form.solutionIncrement()->mesh();
   vector<MeshPtr> meshesCoarseToFine = GMGSolver::meshesForMultigrid(mesh, polyOrderCoarse, delta_k);
@@ -280,6 +353,9 @@ int main(int argc, char *argv[])
   VarPtr u1_hat = form.u_hat(1), u2_hat = form.u_hat(2);
   VarPtr tn1_hat = form.tn_hat(1), tn2_hat = form.tn_hat(2);
 
+  FunctionPtr u1_exact = Function::zero();
+  FunctionPtr u2_exact = Function::zero();
+  FunctionPtr u_exact = Function::vectorize(u1_exact,u2_exact);
   if (problemName == "Trivial")
   {
     BCPtr bc = form.solutionIncrement()->bc();
@@ -290,9 +366,9 @@ int main(int argc, char *argv[])
     SpatialFilterPtr rightY = SpatialFilter::matchingY(1);
     SpatialFilterPtr t0  = SpatialFilter::matchingT(0);
 
-    FunctionPtr u1_exact = Function::constant(1);
-    FunctionPtr u2_exact = Function::zero();
-    FunctionPtr u_exact = Function::vectorize(u1_exact,u2_exact);
+    u1_exact = Function::constant(1);
+    u2_exact = Function::zero();
+    u_exact = Function::vectorize(u1_exact,u2_exact);
     form.addInflowCondition(leftX,  u_exact);
     form.addInflowCondition(rightX, u_exact);
     form.addInflowCondition(leftY,  u_exact);
@@ -329,7 +405,6 @@ int main(int argc, char *argv[])
     SpatialFilterPtr rightX = SpatialFilter::matchingX(1);
     SpatialFilterPtr leftY  = SpatialFilter::matchingY(-.5);
     SpatialFilterPtr rightY = SpatialFilter::matchingY(1.5);
-    // SpatialFilterPtr allSpace = SpatialFilter::allSpace();
     SpatialFilterPtr t0  = SpatialFilter::matchingT(0);
 
     double pi = atan(1)*4;
@@ -337,13 +412,10 @@ int main(int argc, char *argv[])
     FunctionPtr explambdaX = Teuchos::rcp(new Exp_ax(lambda));
     FunctionPtr cos2piY = Teuchos::rcp(new Cos_ay(2*pi));
     FunctionPtr sin2piY = Teuchos::rcp(new Sin_ay(2*pi));
-    FunctionPtr u1_exact = 1 - explambdaX*cos2piY;
-    FunctionPtr u2_exact = lambda/(2*pi)*explambdaX*sin2piY;
-    FunctionPtr sigma1_exact = 1./Re*u1_exact->grad();
-    FunctionPtr sigma2_exact = 1./Re*u2_exact->grad();
+    u1_exact = 1 - explambdaX*cos2piY;
+    u2_exact = lambda/(2*pi)*explambdaX*sin2piY;
 
-    FunctionPtr u_exact = Function::vectorize(u1_exact,u2_exact);
-    // form.addInflowCondition(allSpace, u_exact);
+    u_exact = Function::vectorize(u1_exact,u2_exact);
     form.addInflowCondition(leftX,  u_exact);
     form.addInflowCondition(rightX, u_exact);
     form.addInflowCondition(leftY,  u_exact);
@@ -351,17 +423,34 @@ int main(int argc, char *argv[])
 
     if (!steady)
       form.addFluxCondition(t0, -u_exact);
-    // bc->addDirichlet(u1_hat, leftX,  u1_exact);
-    // bc->addDirichlet(u2_hat, leftX,  u2_exact);
-    // bc->addDirichlet(u1_hat, rightX, u1_exact);
-    // bc->addDirichlet(u2_hat, rightX, u2_exact);
-    // bc->addDirichlet(u1_hat, leftY,  u1_exact);
-    // bc->addDirichlet(u2_hat, leftY,  u2_exact);
-    // bc->addDirichlet(u1_hat, rightY, u1_exact);
-    // bc->addDirichlet(u2_hat, rightY, u2_exact);
+  }
+  else if (problemName == "TaylorGreen")
+  {
+    BCPtr bc = form.solutionIncrement()->bc();
 
-    // bc->addDirichlet(u1_hat, allSpace,  u1_exact);
-    // bc->addDirichlet(u2_hat, allSpace,  u2_exact);
+    double pi = atan(1)*4;
+    SpatialFilterPtr leftX  = SpatialFilter::matchingX(0);
+    SpatialFilterPtr rightX = SpatialFilter::matchingX(2*pi);
+    SpatialFilterPtr leftY  = SpatialFilter::matchingY(0);
+    SpatialFilterPtr rightY = SpatialFilter::matchingY(2*pi);
+    SpatialFilterPtr t0  = SpatialFilter::matchingT(0);
+
+    FunctionPtr temporalDecay = Teuchos::rcp(new Exp_at(-2./Re));
+    FunctionPtr sinX = Teuchos::rcp(new Sin_x());
+    FunctionPtr cosX = Teuchos::rcp(new Cos_x());
+    FunctionPtr sinY = Teuchos::rcp(new Sin_y());
+    FunctionPtr cosY = Teuchos::rcp(new Cos_y());
+    u1_exact = sinX*cosY*temporalDecay;
+    u2_exact = -cosX*sinY*temporalDecay;
+
+    u_exact = Function::vectorize(u1_exact,u2_exact);
+    form.addInflowCondition(leftX,  u_exact);
+    form.addInflowCondition(rightX, u_exact);
+    form.addInflowCondition(leftY,  u_exact);
+    form.addInflowCondition(rightY, u_exact);
+
+    if (!steady)
+      form.addFluxCondition(t0, -u_exact);
   }
 
   double l2NormOfIncrement = 1.0;
@@ -369,6 +458,8 @@ int main(int argc, char *argv[])
 
   cout << setprecision(2) << scientific;
 
+  solverTime->start(true);
+  int totalIterationCount = 0;
   while ((l2NormOfIncrement > nlTol) && (stepNumber < nlMaxIters))
   {
     if (useDirectSolver)
@@ -386,15 +477,17 @@ int main(int argc, char *argv[])
     {
       Teuchos::RCP<GMGSolver> gmgSolver = Teuchos::rcp(dynamic_cast<GMGSolver*>(form.getSolver().get()), false);
       int iterationCount = gmgSolver->iterationCount();
+      totalIterationCount += iterationCount;
       if (rank==0) cout << " (" << iterationCount << " GMG iterations)\n";
     }
     else
     {
-      cout << endl;
+      if (rank==0) cout << endl;
     }
   }
   form.clearSolutionIncrement(); // need to clear before evaluating energy error
-  
+  double solveTime = solverTime->stop();
+
   FunctionPtr energyErrorFunction = EnergyErrorFunction::energyErrorFunction(form.solutionIncrement());
 
   ostringstream exportName;
@@ -403,19 +496,53 @@ int main(int argc, char *argv[])
   else
     exportName << "Transient";
   exportName << problemName << "_Re" << Re << "_" << norm << "_k" << polyOrder;// << "_" << solverChoice;// << "_" << multigridStrategyString;
-  HDF5Exporter exporter(form.solution()->mesh(), exportName.str(), outputDir);
+  if (tag != "")
+    exportName << "_" << tag;
 
-  exportName << "_energyError";
-  HDF5Exporter energyErrorExporter(form.solution()->mesh(), exportName.str(), outputDir);
+  string dataFileLocation;
+  dataFileLocation = outputDir+"/"+exportName.str()+".txt";
+  ofstream dataFile(dataFileLocation);
+  dataFile << "ref\t " << "elements\t " << "dofs\t " << "energy\t " << "l2\t " << "solvetime\t" << "elapsed\t" << "iterations\t " << endl;
 
-  exporter.exportSolution(form.solution(), 0);
-  energyErrorExporter.exportFunction(energyErrorFunction, "energy error", 0);
+  Teuchos::RCP<HDF5Exporter> exporter;
+  if (exportHDF5)
+  {
+    exporter = Teuchos::rcp(new HDF5Exporter(mesh, exportName.str(), outputDir));
+    exporter->exportSolution(form.solution(), 0);
+  }
+  // HDF5Exporter exporter(form.solution()->mesh(), exportName.str(), outputDir);
+
+  // exportName << "_energyError";
+  // HDF5Exporter energyErrorExporter(form.solution()->mesh(), exportName.str(), outputDir);
+
+  // energyErrorExporter.exportFunction(energyErrorFunction, "energy error", 0);
 
   double energyError = form.solutionIncrement()->energyErrorTotal();
+  double l2Error = 0;
+  if (computeL2)
+    l2Error = computeL2Error(form, u_exact, mesh, Re);
   int globalDofs = mesh->globalDofCount();
-  int activeElements = mesh->getTopology()->getActiveCellIndices().size();
-  if (rank==0) cout << "Initial energy error: " << energyError;
-  if (rank==0) cout << " (mesh has " << activeElements << " elements and " << globalDofs << " global dofs)." << endl;
+  // int activeElements = mesh->getTopology()->getActiveCellIndices().size();
+  // if (rank==0) cout << "Initial energy error: " << energyError;
+  // if (rank==0) cout << " (mesh has " << activeElements << " elements and " << globalDofs << " global dofs)." << endl;
+  if (rank==0) cout << "Refinement: " << 0
+                    << " \tElements: " << mesh->numActiveElements()
+                    << " \tDOFs: " << mesh->numGlobalDofs()
+                    << " \tEnergy Error: " << energyError
+                    << " \tL2 Error: " << l2Error
+                    << " \tSolve Time: " << solveTime
+                    << " \tTotal Time: " << totalTimer->totalElapsedTime(true)
+                    << " \tIteration Count: " << totalIterationCount
+                    << endl;
+  dataFile << 0
+           << " " << mesh->numActiveElements()
+           << " " << mesh->numGlobalDofs()
+           << " " << energyError
+           << " " << l2Error
+           << " " << solveTime
+           << " " << totalTimer->totalElapsedTime(true)
+           << " " << totalIterationCount
+           << " " << endl;
 
   bool truncateMultigridMeshes = true; // for getting a "fair" sense of how iteration counts vary with h.
 
@@ -439,6 +566,8 @@ int main(int argc, char *argv[])
 
     double l2NormOfIncrement = 1.0;
     int stepNumber = 0;
+    solverTime->start(true);
+    totalIterationCount = 0;
     while ((l2NormOfIncrement > nlTol) && (stepNumber < nlMaxIters))
     {
       if (!useDirectSolver)
@@ -456,40 +585,68 @@ int main(int argc, char *argv[])
       {
         Teuchos::RCP<GMGSolver> gmgSolver = Teuchos::rcp(dynamic_cast<GMGSolver*>(form.getSolver().get()), false);
         int iterationCount = gmgSolver->iterationCount();
+        totalIterationCount += iterationCount;
         if (rank==0) cout << " (" << iterationCount << " GMG iterations)\n";
       }
       else
       {
-        cout << endl;
+        if (rank==0) cout << endl;
       }
     }
-    
+
     form.clearSolutionIncrement(); // need to clear before evaluating energy error
-
-    exporter.exportSolution(form.solution(), refNumber);
-    // energyErrorExporter.exportFunction({energyErrorFunction}, {"energy error"}, refNumber);
-    energyErrorExporter.exportFunction(energyErrorFunction, "energy error", refNumber);
-
     energyError = form.solutionIncrement()->energyErrorTotal();
-    globalDofs = mesh->globalDofCount();
-    activeElements = mesh->getTopology()->getActiveCellIndices().size();
-    if (rank==0) cout << "Energy error for refinement " << refNumber << ": " << energyError;
-    if (rank==0) cout << " (mesh has " << activeElements << " elements and " << globalDofs << " global dofs)." << endl;
+    if (computeL2)
+      l2Error = computeL2Error(form, u_exact, mesh, Re);
+
+    solveTime = solverTime->stop();
+
+    if (rank==0) cout << "Refinement: " << refNumber
+      << " \tElements: " << mesh->numActiveElements()
+        << " \tDOFs: " << mesh->numGlobalDofs()
+        << " \tEnergy Error: " << energyError
+        << " \tL2 Error: " << l2Error
+        << " \tSolve Time: " << solveTime
+        << " \tTotal Time: " << totalTimer->totalElapsedTime(true)
+        << " \tIteration Count: " << totalIterationCount
+        << endl;
+    dataFile << refNumber
+             << " " << mesh->numActiveElements()
+             << " " << mesh->numGlobalDofs()
+             << " " << energyError
+             << " " << l2Error
+             << " " << solveTime
+             << " " << totalTimer->totalElapsedTime(true)
+             << " " << totalIterationCount
+             << " " << endl;
+
+    if (exportHDF5)
+      exporter->exportSolution(form.solution(), refNumber);
+    // energyErrorExporter.exportFunction({energyErrorFunction}, {"energy error"}, refNumber);
+    // energyErrorExporter.exportFunction(energyErrorFunction, "energy error", refNumber);
+
+    // energyError = form.solutionIncrement()->energyErrorTotal();
+    // globalDofs = mesh->globalDofCount();
+    // activeElements = mesh->getTopology()->getActiveCellIndices().size();
+    // if (rank==0) cout << "Energy error for refinement " << refNumber << ": " << energyError;
+    // if (rank==0) cout << " (mesh has " << activeElements << " elements and " << globalDofs << " global dofs)." << endl;
   }
   while ((energyError > tol) && (refNumber < numRefs));
 
-  FunctionPtr u1_soln = Function::solution(form.u(1), form.solution());
-  double value;
-  if (steady)
-  {
-    value = u1_soln->evaluate(0.5,0.5);
-    if (rank==0) cout << "u1(0.5, 0.5) = " << value << endl;
-  }
-  else
-  {
-    value = u1_soln->evaluate(0.5,0.5,0.5);
-    if (rank==0) cout << "u1(0.5, 0.5) @ t=0.5 = " << value << endl;
-  }
+  dataFile.close();
+
+  // FunctionPtr u1_soln = Function::solution(form.u(1), form.solution());
+  // double value;
+  // if (steady)
+  // {
+  //   value = u1_soln->evaluate(0.5,0.5);
+  //   if (rank==0) cout << "u1(0.5, 0.5) = " << value << endl;
+  // }
+  // else
+  // {
+  //   value = u1_soln->evaluate(0.5,0.5,0.5);
+  //   if (rank==0) cout << "u1(0.5, 0.5) @ t=0.5 = " << value << endl;
+  // }
 
 
   // now solve for the stream function on the fine mesh:
