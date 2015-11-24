@@ -375,7 +375,8 @@ int main(int argc, char *argv[])
     form.addInflowCondition(rightY, u_exact);
 
     if (!steady)
-      form.addFluxCondition(t0, -u_exact);
+      form.addInitialCondition(0, u_exact);
+      // form.addFluxCondition(t0, -u_exact);
   }
   else if (problemName == "LidDriven")
   {
@@ -422,7 +423,8 @@ int main(int argc, char *argv[])
     form.addInflowCondition(rightY, u_exact);
 
     if (!steady)
-      form.addFluxCondition(t0, -u_exact);
+      form.addInitialCondition(0, u_exact);
+      // form.addFluxCondition(t0, -u_exact);
   }
   else if (problemName == "TaylorGreen")
   {
@@ -450,7 +452,8 @@ int main(int argc, char *argv[])
     form.addInflowCondition(rightY, u_exact);
 
     if (!steady)
-      form.addFluxCondition(t0, -u_exact);
+      form.addInitialCondition(0, u_exact);
+      // form.addFluxCondition(t0, -u_exact);
   }
 
   double l2NormOfIncrement = 1.0;

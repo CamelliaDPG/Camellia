@@ -30,6 +30,8 @@ class NavierStokesVGPFormulation
 
   int _spaceDim;
   bool _conservationFormulation;
+  bool _spaceTime;
+  bool _includeVelocityTracesInFluxTerm; // distinguishes between two space-time formulation options
 
   BCPtr _bc, _zeroBC; // _zeroBC used when _neglectFluxesOnRHS = false, as it needs to be for GMG solves
   RHSPtr _rhsForSolve, _rhsForResidual;
@@ -46,7 +48,7 @@ class NavierStokesVGPFormulation
   RefinementStrategyPtr _refinementStrategy, _hRefinementStrategy, _pRefinementStrategy;
 
   Teuchos::ParameterList _ctorParameters;
-  
+
   bool _neglectFluxesOnRHS;
 
   int _nonlinearIterationCount; // starts at 0, increases for each iterate
@@ -84,6 +86,9 @@ public:
   // ! sets an flux boundary condition; in 2D and 3D, u should be a vector-valued function.
   void addFluxCondition(SpatialFilterPtr fluxRegion, TFunctionPtr<double> tn);
 
+  // ! Sets an initial condition for space-time.  u0 should have a number of components equal to the spatial dimension.
+  void addInitialCondition(double t0, FunctionPtr u0);
+
   // ! set a pressure condition at a point
   void addPointPressureCondition();
 
@@ -95,7 +100,7 @@ public:
 
   // ! zeros out the solution increment
   void clearSolutionIncrement();
-  
+
   Teuchos::ParameterList getConstructorParameters() const;
 
   // ! return an ExactTSolutionPtr<double> corresponding to specified velocity (a rank 1 Function) and pressure.

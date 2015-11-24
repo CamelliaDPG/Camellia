@@ -16,6 +16,8 @@
 
 using namespace Camellia;
 
+static const int INITIAL_CONDITION_TAG = 1;
+
 NavierStokesVGPFormulation NavierStokesVGPFormulation::steadyFormulation(int spaceDim, double Re, bool useConformingTraces,
                                                                          MeshTopologyPtr meshTopo, int polyOrder, int delta_k)
 {
@@ -134,12 +136,14 @@ NavierStokesVGPFormulation NavierStokesVGPFormulation::timeSteppingFormulation(i
 NavierStokesVGPFormulation::NavierStokesVGPFormulation(MeshTopologyPtr meshTopo, Teuchos::ParameterList &parameters)
 {
   _ctorParameters = parameters;
-  
+
   _stokesForm = Teuchos::rcp( new StokesVGPFormulation(parameters) );
   _spaceDim = parameters.get<int>("spaceDim");
   _conservationFormulation = parameters.get<bool>("useConservationFormulation");
+  _spaceTime = parameters.get<bool>("useSpaceTime",false);
+  _includeVelocityTracesInFluxTerm = parameters.get<bool>("includeVelocityTracesInFluxTerm",true);
   _neglectFluxesOnRHS = parameters.get<bool>("neglectFluxesOnRHS", false);
-  
+
   _useConformingTraces = parameters.get<bool>("useConformingTraces");
 
   int spatialPolyOrder = parameters.get<int>("spatialPolyOrder");
@@ -494,6 +498,43 @@ void NavierStokesVGPFormulation::addFluxCondition(SpatialFilterPtr fluxRegion, T
     _solnIncrement->bc()->addDirichlet(tn1_hat, fluxRegion, tn->x() - tn1_hat_prev);
     _solnIncrement->bc()->addDirichlet(tn2_hat, fluxRegion, tn->y() - tn2_hat_prev);
     if (spaceDim==3) _solnIncrement->bc()->addDirichlet(tn3_hat, fluxRegion, tn->z() - tn3_hat_prev);
+  }
+}
+
+void NavierStokesVGPFormulation::addInitialCondition(double t0, FunctionPtr u0)
+{
+  TEUCHOS_TEST_FOR_EXCEPTION(!_spaceTime, std::invalid_argument, "This method only supported for space-time formulations");
+  // TEUCHOS_TEST_FOR_EXCEPTION(u0.size() != _spaceDim, std::invalid_argument, "u0 should have length equal to the number of spatial dimensions");
+
+  MeshTopology* meshTopo = dynamic_cast<MeshTopology*>(_solnIncrement->mesh()->getTopology().get());
+  TEUCHOS_TEST_FOR_EXCEPTION(!meshTopo, std::invalid_argument, "For the present, NavierStokesVGPFormulation only supports true MeshTopologies for its Solution object");
+  meshTopo->applyTag(DIRICHLET_SET_TAG_NAME, INITIAL_CONDITION_TAG, meshTopo->getEntitySetInitialTime());
+
+  for (int d=1; d<=_spaceDim; d++)
+  {
+    VarPtr var;
+    FunctionPtr functionToImpose;
+    if (!_includeVelocityTracesInFluxTerm)
+    {
+      var = this->u_hat(d);
+      functionToImpose = u0->spatialComponent(d);
+    }
+    else
+    {
+      var = this->tn_hat(d);
+      FunctionPtr n_t = Function::normalSpaceTime()->t();  // under usual circumstances, n_t = -1
+      functionToImpose = u0->spatialComponent(d) * n_t;
+    }
+    if (_neglectFluxesOnRHS)
+    {
+      _solnIncrement->bc()->addDirichlet(var, INITIAL_CONDITION_TAG, functionToImpose);
+    }
+    else
+    {
+      TSolutionPtr<double> backgroundFlowWeakReference = Teuchos::rcp(_backgroundFlow.get(), false );
+      TFunctionPtr<double> var_prev = TFunction<double>::solution(var,backgroundFlowWeakReference, false);
+      _solnIncrement->bc()->addDirichlet(var, INITIAL_CONDITION_TAG, functionToImpose - var_prev);
+    }
   }
 }
 
