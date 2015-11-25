@@ -143,6 +143,7 @@ NavierStokesVGPFormulation::NavierStokesVGPFormulation(MeshTopologyPtr meshTopo,
   _spaceTime = parameters.get<bool>("useSpaceTime",false);
   _includeVelocityTracesInFluxTerm = parameters.get<bool>("includeVelocityTracesInFluxTerm",true);
   _neglectFluxesOnRHS = parameters.get<bool>("neglectFluxesOnRHS", false);
+  string normName = parameters.get<string>("norm", "Graph");
 
   _useConformingTraces = parameters.get<bool>("useConformingTraces");
 
@@ -201,7 +202,7 @@ NavierStokesVGPFormulation::NavierStokesVGPFormulation(MeshTopologyPtr meshTopo,
   TSolutionPtr<double> backgroundFlowWeakReference = Teuchos::rcp(_backgroundFlow.get(), false );
 
   // convective terms:
-  vector<FunctionPtr> sigma_prev, u_prev;
+  // vector<FunctionPtr> sigma_prev, u_prev;
 
   double Re = 1.0 / _stokesForm->mu();
 
@@ -286,9 +287,93 @@ NavierStokesVGPFormulation::NavierStokesVGPFormulation(MeshTopologyPtr meshTopo,
 
   // cout << endl << _navierStokesBF->displayString() << endl;
 
+  _ips["Graph"] = _navierStokesBF->graphNorm();
+
+  if (_spaceDim == 2)
+  {
+    VarPtr u1 = this->u(1);
+    VarPtr u2 = this->u(2);
+    VarPtr v1 = this->v(1);
+    VarPtr v2 = this->v(2);
+    VarPtr tau1 = this->tau(1);
+    VarPtr tau2 = this->tau(2);
+    VarPtr q = this->q();
+    FunctionPtr u1_prev = TFunction<double>::solution(u1, backgroundFlowWeakReference);
+    FunctionPtr u2_prev = TFunction<double>::solution(u2, backgroundFlowWeakReference);
+    FunctionPtr u_prev = Function::vectorize(u1_prev, u2_prev);
+    FunctionPtr one = Function::constant(1);
+
+
+    _ips["Robust"] = Teuchos::rcp(new IP);
+    // _ips["Robust"]->addTerm(_beta*v->grad());
+    if (_spaceTime)
+    {
+      _ips["Robust"]->addTerm(u_prev*v1->grad() + u1_prev*v1->dx() + u2_prev*v2->dx() + v1->dt());
+      _ips["Robust"]->addTerm(u_prev*v2->grad() + u1_prev*v1->dy() + u2_prev*v2->dy() + v2->dt());
+    }
+    else
+    {
+      _ips["Robust"]->addTerm(u_prev*v1->grad() + u1_prev*v1->dx() + u2_prev*v2->dx());
+      _ips["Robust"]->addTerm(u_prev*v2->grad() + u1_prev*v1->dy() + u2_prev*v2->dy());
+    }
+    // _ips["Robust"]->addTerm(sqrt(_mu)*v->grad());
+    _ips["Robust"]->addTerm(1./sqrt(Re)*v1->grad());
+    _ips["Robust"]->addTerm(1./sqrt(Re)*v2->grad());
+    // _ips["Robust"]->addTerm(Function::min(sqrt(_mu)*one/Function::h(),one)*v);
+    _ips["Robust"]->addTerm(Function::min(one/(sqrt(Re)*Function::h()),one)*v1);
+    _ips["Robust"]->addTerm(Function::min(one/(sqrt(Re)*Function::h()),one)*v2);
+    // _ips["Robust"]->addTerm(tau->div());
+    _ips["Robust"]->addTerm(tau1->div());
+    _ips["Robust"]->addTerm(tau2->div());
+    // _ips["Robust"]->addTerm(Function::min(one/Function::h(),Function::constant(1./sqrt(_mu)))*tau);
+    _ips["Robust"]->addTerm(Function::min(one/Function::h(),Function::constant(sqrt(Re)))*tau1);
+    _ips["Robust"]->addTerm(Function::min(one/Function::h(),Function::constant(sqrt(Re)))*tau2);
+    // _ips["Robust"]->addTerm(v1->dx() + v2->dy());
+    _ips["Robust"]->addTerm(q->grad());
+    _ips["Robust"]->addTerm(q);
+
+
+    _ips["CoupledRobust"] = Teuchos::rcp(new IP);
+    // _ips["CoupledRobust"]->addTerm(_beta*v->grad());
+    if (_spaceTime)
+    {
+      _ips["CoupledRobust"]->addTerm(u_prev*v1->grad() + u1_prev*v1->dx() + u2_prev*v2->dx() + v1->dt());
+      _ips["CoupledRobust"]->addTerm(u_prev*v2->grad() + u1_prev*v1->dy() + u2_prev*v2->dy() + v2->dt());
+    }
+    else
+    {
+      _ips["CoupledRobust"]->addTerm(u_prev*v1->grad() + u1_prev*v1->dx() + u2_prev*v2->dx());
+      _ips["CoupledRobust"]->addTerm(u_prev*v2->grad() + u1_prev*v1->dy() + u2_prev*v2->dy());
+    }
+    // _ips["CoupledRobust"]->addTerm(sqrt(_mu)*v->grad());
+    _ips["CoupledRobust"]->addTerm(1./sqrt(Re)*v1->grad());
+    _ips["CoupledRobust"]->addTerm(1./sqrt(Re)*v2->grad());
+    // _ips["CoupledRobust"]->addTerm(Function::min(sqrt(_mu)*one/Function::h(),one)*v);
+    _ips["CoupledRobust"]->addTerm(Function::min(one/(sqrt(Re)*Function::h()),one)*v1);
+    _ips["CoupledRobust"]->addTerm(Function::min(one/(sqrt(Re)*Function::h()),one)*v2);
+    // _ips["CoupledRobust"]->addTerm(tau->div() - v->dt() - beta*v->grad());
+    if (_spaceTime)
+    {
+      _ips["CoupledRobust"]->addTerm(tau1->div() -v1->dt() - u_prev*v1->grad() - u1_prev*v1->dx() - u2_prev*v2->dx());
+      _ips["CoupledRobust"]->addTerm(tau2->div() -v2->dt() - u_prev*v2->grad() - u1_prev*v1->dy() - u2_prev*v2->dy());
+    }
+    else
+    {
+      _ips["CoupledRobust"]->addTerm(tau1->div() - u_prev*v1->grad() - u1_prev*v1->dx() - u2_prev*v2->dx());
+      _ips["CoupledRobust"]->addTerm(tau2->div() - u_prev*v2->grad() - u1_prev*v1->dy() - u2_prev*v2->dy());
+    }
+    // _ips["CoupledRobust"]->addTerm(Function::min(one/Function::h(),Function::constant(1./sqrt(_mu)))*tau);
+    _ips["CoupledRobust"]->addTerm(Function::min(one/Function::h(),Function::constant(sqrt(Re)))*tau1);
+    _ips["CoupledRobust"]->addTerm(Function::min(one/Function::h(),Function::constant(sqrt(Re)))*tau2);
+    // _ips["CoupledRobust"]->addTerm(v1->dx() + v2->dy());
+    _ips["CoupledRobust"]->addTerm(q->grad());
+    _ips["CoupledRobust"]->addTerm(q);
+  }
+
   // set the inner product to the graph norm:
   // TODO: make this more general (pass norm name in via parameters)
-  setIP( _navierStokesBF->graphNorm() );
+  // setIP( _navierStokesBF->graphNorm() );
+  setIP( _ips[normName] );
 
   int vectorRank = 1;
   FunctionPtr forcingFunction = parameters.get<FunctionPtr>("forcingFunction",Function::zero(vectorRank));
@@ -820,6 +905,11 @@ void NavierStokesVGPFormulation::setIP(IPPtr ip)
   _solnIncrement->setIP(ip);
 }
 
+void NavierStokesVGPFormulation::setIP(string normName)
+{
+  setIP( _ips[normName] );
+}
+
 RefinementStrategyPtr NavierStokesVGPFormulation::getRefinementStrategy()
 {
   return _refinementStrategy;
@@ -1071,4 +1161,9 @@ VarPtr NavierStokesVGPFormulation::tau(int i)
 VarPtr NavierStokesVGPFormulation::v(int i)
 {
   return _stokesForm->v(i);
+}
+
+VarPtr NavierStokesVGPFormulation::q()
+{
+  return _stokesForm->q();
 }

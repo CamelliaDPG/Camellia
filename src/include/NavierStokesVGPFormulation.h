@@ -38,6 +38,8 @@ class NavierStokesVGPFormulation
 
   SolverPtr _solver;
 
+  map<string, IPPtr> _ips;
+
   TFunctionPtr<double> _L2IncrementFunction, _L2SolutionFunction;
 
   TSolutionPtr<double> _backgroundFlow, _solnIncrement;
@@ -130,6 +132,8 @@ public:
   // ! set the inner product to use during solve and during energy error determination
   void setIP( IPPtr ip );
 
+  void setIP( string normName );
+
   // ! refine according to energy error in the accumulated solution
   void refine();
 
@@ -190,6 +194,7 @@ public:
   // test variables:
   VarPtr tau(int i);
   VarPtr v(int i);
+  VarPtr q();
 
   // static utility functions:
 

@@ -335,6 +335,8 @@ int main(int argc, char *argv[])
   nsParameters.set("neglectFluxesOnRHS", false);
   NavierStokesVGPFormulation form(meshTopo, nsParameters);
 
+  form.setIP( norm );
+
   form.solutionIncrement()->setUseCondensedSolve(useCondensedSolve);
   if (problemName == "Trivial")
     form.addPointPressureCondition(pressureConstraintPoint);
@@ -505,7 +507,7 @@ int main(int argc, char *argv[])
   string dataFileLocation;
   dataFileLocation = outputDir+"/"+exportName.str()+".txt";
   ofstream dataFile(dataFileLocation);
-  dataFile << "ref\t " << "elements\t " << "dofs\t " << "energy\t " << "l2\t " << "solvetime\t" << "elapsed\t" << "iterations\t " << endl;
+  if (rank==0) dataFile << "ref\t " << "elements\t " << "dofs\t " << "energy\t " << "l2\t " << "solvetime\t" << "elapsed\t" << "iterations\t " << endl;
 
   Teuchos::RCP<HDF5Exporter> exporter;
   if (exportHDF5)
@@ -525,9 +527,6 @@ int main(int argc, char *argv[])
   if (computeL2)
     l2Error = computeL2Error(form, u_exact, mesh, Re);
   int globalDofs = mesh->globalDofCount();
-  // int activeElements = mesh->getTopology()->getActiveCellIndices().size();
-  // if (rank==0) cout << "Initial energy error: " << energyError;
-  // if (rank==0) cout << " (mesh has " << activeElements << " elements and " << globalDofs << " global dofs)." << endl;
   if (rank==0) cout << "Refinement: " << 0
                     << " \tElements: " << mesh->numActiveElements()
                     << " \tDOFs: " << mesh->numGlobalDofs()
@@ -537,7 +536,7 @@ int main(int argc, char *argv[])
                     << " \tTotal Time: " << totalTimer->totalElapsedTime(true)
                     << " \tIteration Count: " << totalIterationCount
                     << endl;
-  dataFile << 0
+  if (rank==0) dataFile << 0
            << " " << mesh->numActiveElements()
            << " " << mesh->numGlobalDofs()
            << " " << energyError
@@ -613,7 +612,7 @@ int main(int argc, char *argv[])
         << " \tTotal Time: " << totalTimer->totalElapsedTime(true)
         << " \tIteration Count: " << totalIterationCount
         << endl;
-    dataFile << refNumber
+    if (rank==0) dataFile << refNumber
              << " " << mesh->numActiveElements()
              << " " << mesh->numGlobalDofs()
              << " " << energyError
@@ -625,111 +624,12 @@ int main(int argc, char *argv[])
 
     if (exportHDF5)
       exporter->exportSolution(form.solution(), refNumber);
-    // energyErrorExporter.exportFunction({energyErrorFunction}, {"energy error"}, refNumber);
     // energyErrorExporter.exportFunction(energyErrorFunction, "energy error", refNumber);
 
-    // energyError = form.solutionIncrement()->energyErrorTotal();
-    // globalDofs = mesh->globalDofCount();
-    // activeElements = mesh->getTopology()->getActiveCellIndices().size();
-    // if (rank==0) cout << "Energy error for refinement " << refNumber << ": " << energyError;
-    // if (rank==0) cout << " (mesh has " << activeElements << " elements and " << globalDofs << " global dofs)." << endl;
   }
   while ((energyError > tol) && (refNumber < numRefs));
 
-  dataFile.close();
-
-  // FunctionPtr u1_soln = Function::solution(form.u(1), form.solution());
-  // double value;
-  // if (steady)
-  // {
-  //   value = u1_soln->evaluate(0.5,0.5);
-  //   if (rank==0) cout << "u1(0.5, 0.5) = " << value << endl;
-  // }
-  // else
-  // {
-  //   value = u1_soln->evaluate(0.5,0.5,0.5);
-  //   if (rank==0) cout << "u1(0.5, 0.5) @ t=0.5 = " << value << endl;
-  // }
-
-
-  // now solve for the stream function on the fine mesh:
-//  if (spaceDim == 2)
-//  {
-//    form.streamSolution()->solve();
-//    HDF5Exporter steadyStreamExporter(form.streamSolution()->mesh(), "navierStokesSteadyCavityFlowStreamSolution", outputDir);
-//    steadyStreamExporter.exportSolution(form.streamSolution());
-//  }
-
-//  /*   Now that we have a fine mesh, try the same problem, but transient, starting with a zero initial
-//   *   state, and with boundary conditions that "ramp up" in time (and which also are zero at time 0).
-//   *   We expect to recover the steady solution.
-//   */
-//
-//  double totalTime = 3;
-//  double dt = 0.1;
-//  int numTimeSteps = ceil(totalTime / dt);
-//  StokesVGPFormulation transientForm(spaceDim, useConformingTraces, mu, true, dt);
-//
-//  FunctionPtr t = transientForm.getTimeFunction();
-//  FunctionPtr timeRamp = Teuchos::rcp(new TimeRamp(t,1.0));
-//
-//  transientForm.initializeSolution(meshTopo, polyOrder, delta_k);
-//  transientForm.addZeroMeanPressureCondition();
-//  transientForm.addWallCondition(notTopBoundary);
-//  transientForm.addInflowCondition(topBoundary, timeRamp * u_topRamp);
-//
-//  MeshPtr transientMesh = transientForm.solution()->mesh();
-//  HDF5Exporter transientExporter(transientMesh, "stokesTransientSolution", ".");
-//
-//  for (int timeStep=0; timeStep<numTimeSteps; timeStep++) {
-//    transientForm.solve();
-//    double L2_step = transientForm.L2NormOfTimeStep();
-//    transientExporter.exportSolution(transientForm.solution(),transientForm.getTime());
-//
-//    transientForm.takeTimeStep();
-//    if (rank==0) cout << "time step " << timeStep << " completed (L^2 norm of difference from prev: " << L2_step << ").\n";
-//  }
-//
-//  { // trying the same thing as below, but computing it differently:
-//    FunctionPtr  p_transient = Function::solution( transientForm.p(), transientForm.solution());
-//    FunctionPtr u1_transient = Function::solution(transientForm.u(1), transientForm.solution());
-//    FunctionPtr u2_transient = Function::solution(transientForm.u(2), transientForm.solution());
-//    FunctionPtr  p_steady = Function::solution( form.p(), form.solution());
-//    FunctionPtr u1_steady = Function::solution(form.u(1), form.solution());
-//    FunctionPtr u2_steady = Function::solution(form.u(2), form.solution());
-//
-//    FunctionPtr squaredDiff = (p_transient-p_steady) * (p_transient-p_steady) + (u1_transient-u1_steady) * (u1_transient-u1_steady) + (u2_transient - u2_steady) * (u2_transient - u2_steady);
-//    double valSquared = squaredDiff->integrate(form.solution()->mesh());
-//    if (rank==0) cout << "L^2 norm of difference between converged transient and steady state solution (computed differently): " << sqrt(valSquared) << endl;
-//
-//    FunctionPtr p_diff_squared  =   (p_transient-p_steady) *   (p_transient-p_steady);
-//    FunctionPtr u1_diff_squared = (u1_transient-u1_steady) * (u1_transient-u1_steady);
-//    FunctionPtr u2_diff_squared = (u2_transient-u2_steady) * (u2_transient-u2_steady);
-//
-//    double p_diff_L2 = sqrt(p_diff_squared->integrate(form.solution()->mesh()));
-//    double u1_diff_L2 = sqrt(u1_diff_squared->integrate(form.solution()->mesh()));
-//    double u2_diff_L2 = sqrt(u2_diff_squared->integrate(form.solution()->mesh()));
-//
-//    if (rank==0) cout << "L^2 norm (computed differently) for p: " << p_diff_L2 << endl;
-//    if (rank==0) cout << "L^2 norm (computed differently) for u1: " << u1_diff_L2 << endl;
-//    if (rank==0) cout << "L^2 norm (computed differently) for u2: " << u2_diff_L2 << endl;
-//  }
-//
-//  // by this point, we should have recovered something close to the steady solution.  Did we?
-//  SolutionPtr transientSolution = transientForm.solution();
-//  transientSolution->addSolution(form.solution(), -1.0);
-//
-//  double u1_diff_L2 = sqrt(transientSolution->L2NormOfSolutionGlobal(form.u(1)->ID()));
-//  double u2_diff_L2 = sqrt(transientSolution->L2NormOfSolutionGlobal(form.u(2)->ID()));
-//  double p_diff_L2 = sqrt(transientSolution->L2NormOfSolutionGlobal(form.p()->ID()));
-//
-//  double diff_L2 = sqrt(u1_diff_L2 * u1_diff_L2 + u2_diff_L2 * u2_diff_L2 + p_diff_L2 * p_diff_L2);
-//
-//  if (rank==0) cout << "L^2 norm of difference between converged transient and steady state solution: " << diff_L2 << endl;
-//
-//  if (rank==0) cout << "L^2 norm for p: " << p_diff_L2 << endl;
-//  if (rank==0) cout << "L^2 norm for u1: " << u1_diff_L2 << endl;
-//  if (rank==0) cout << "L^2 norm for u2: " << u2_diff_L2 << endl;
+  if (rank==0) dataFile.close();
 
   return 0;
 }
