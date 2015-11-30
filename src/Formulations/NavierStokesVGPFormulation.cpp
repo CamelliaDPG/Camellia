@@ -323,14 +323,15 @@ NavierStokesVGPFormulation::NavierStokesVGPFormulation(MeshTopologyPtr meshTopo,
     _ips["Robust"]->addTerm(Function::min(one/(sqrt(Re)*Function::h()),one)*v1);
     _ips["Robust"]->addTerm(Function::min(one/(sqrt(Re)*Function::h()),one)*v2);
     // _ips["Robust"]->addTerm(tau->div());
-    _ips["Robust"]->addTerm(tau1->div());
-    _ips["Robust"]->addTerm(tau2->div());
+    _ips["Robust"]->addTerm(tau1->div() - q->dx());
+    _ips["Robust"]->addTerm(tau2->div() - q->dy());
     // _ips["Robust"]->addTerm(Function::min(one/Function::h(),Function::constant(1./sqrt(_mu)))*tau);
     _ips["Robust"]->addTerm(Function::min(one/Function::h(),Function::constant(sqrt(Re)))*tau1);
     _ips["Robust"]->addTerm(Function::min(one/Function::h(),Function::constant(sqrt(Re)))*tau2);
-    // _ips["Robust"]->addTerm(v1->dx() + v2->dy());
-    _ips["Robust"]->addTerm(q->grad());
+    _ips["Robust"]->addTerm(v1->dx() + v2->dy());
+    // _ips["Robust"]->addTerm(Function::min(one/Function::h(),Function::constant(sqrt(Re)))*q);
     _ips["Robust"]->addTerm(q);
+    // _ips["Robust"]->addTerm(Function::min(one/(sqrt(Re)*Function::h()),one)*q);
 
 
     _ips["CoupledRobust"] = Teuchos::rcp(new IP);
@@ -354,20 +355,47 @@ NavierStokesVGPFormulation::NavierStokesVGPFormulation(MeshTopologyPtr meshTopo,
     // _ips["CoupledRobust"]->addTerm(tau->div() - v->dt() - beta*v->grad());
     if (_spaceTime)
     {
-      _ips["CoupledRobust"]->addTerm(tau1->div() -v1->dt() - u_prev*v1->grad() - u1_prev*v1->dx() - u2_prev*v2->dx());
-      _ips["CoupledRobust"]->addTerm(tau2->div() -v2->dt() - u_prev*v2->grad() - u1_prev*v1->dy() - u2_prev*v2->dy());
+      _ips["CoupledRobust"]->addTerm(tau1->div() - q->dx() - u_prev*v1->grad() - u1_prev*v1->dx() - u2_prev*v2->dx() - v1->dt());
+      _ips["CoupledRobust"]->addTerm(tau2->div() - q->dy() - u_prev*v2->grad() - u1_prev*v1->dy() - u2_prev*v2->dy() - v2->dt());
     }
     else
     {
-      _ips["CoupledRobust"]->addTerm(tau1->div() - u_prev*v1->grad() - u1_prev*v1->dx() - u2_prev*v2->dx());
-      _ips["CoupledRobust"]->addTerm(tau2->div() - u_prev*v2->grad() - u1_prev*v1->dy() - u2_prev*v2->dy());
+      _ips["CoupledRobust"]->addTerm(tau1->div() - q->dx() - u_prev*v1->grad() - u1_prev*v1->dx() - u2_prev*v2->dx());
+      _ips["CoupledRobust"]->addTerm(tau2->div() - q->dy() - u_prev*v2->grad() - u1_prev*v1->dy() - u2_prev*v2->dy());
     }
     // _ips["CoupledRobust"]->addTerm(Function::min(one/Function::h(),Function::constant(1./sqrt(_mu)))*tau);
     _ips["CoupledRobust"]->addTerm(Function::min(one/Function::h(),Function::constant(sqrt(Re)))*tau1);
     _ips["CoupledRobust"]->addTerm(Function::min(one/Function::h(),Function::constant(sqrt(Re)))*tau2);
-    // _ips["CoupledRobust"]->addTerm(v1->dx() + v2->dy());
-    _ips["CoupledRobust"]->addTerm(q->grad());
+    _ips["CoupledRobust"]->addTerm(v1->dx() + v2->dy());
     _ips["CoupledRobust"]->addTerm(q);
+
+
+    _ips["NSDecoupled"] = Teuchos::rcp(new IP);
+    // _ips["NSDecoupled"]->addTerm(_beta*v->grad());
+    if (_spaceTime)
+    {
+      _ips["NSDecoupled"]->addTerm(u_prev*v1->grad() + u1_prev*v1->dx() + u2_prev*v2->dx() + v1->dt());
+      _ips["NSDecoupled"]->addTerm(u_prev*v2->grad() + u1_prev*v1->dy() + u2_prev*v2->dy() + v2->dt());
+    }
+    else
+    {
+      _ips["NSDecoupled"]->addTerm(u_prev*v1->grad() + u1_prev*v1->dx() + u2_prev*v2->dx());
+      _ips["NSDecoupled"]->addTerm(u_prev*v2->grad() + u1_prev*v1->dy() + u2_prev*v2->dy());
+    }
+    // _ips["NSDecoupled"]->addTerm(v->grad());
+    _ips["NSDecoupled"]->addTerm(v1->grad());
+    _ips["NSDecoupled"]->addTerm(v2->grad());
+    // _ips["NSDecoupled"]->addTerm(v);
+    _ips["NSDecoupled"]->addTerm(v1);
+    _ips["NSDecoupled"]->addTerm(v2);
+    // _ips["NSDecoupled"]->addTerm(tau->div());
+    _ips["NSDecoupled"]->addTerm(tau1->div() - q->dx());
+    _ips["NSDecoupled"]->addTerm(tau2->div() - q->dy());
+    // _ips["NSDecoupled"]->addTerm(one/Function::h()*tau);
+    _ips["NSDecoupled"]->addTerm(one/Function::h()*tau1);
+    _ips["NSDecoupled"]->addTerm(one/Function::h()*tau2);
+    _ips["NSDecoupled"]->addTerm(v1->dx() + v2->dy());
+    _ips["NSDecoupled"]->addTerm(q);
   }
 
   // set the inner product to the graph norm:
