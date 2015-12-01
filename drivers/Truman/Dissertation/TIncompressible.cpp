@@ -7,6 +7,7 @@
 #include "SimpleFunction.h"
 #include "ExpFunction.h"
 #include "TrigFunctions.h"
+#include "PenaltyConstraints.h"
 #include "SuperLUDistSolver.h"
 
 #include "Teuchos_GlobalMPISession.hpp"
@@ -108,6 +109,205 @@ public:
     }
   }
 };
+
+class NearCylinder : public SpatialFilter
+{
+  double _enlarged_radius;
+public:
+  NearCylinder(double radius)
+  {
+    double enlargement_factor = 1.1*sqrt(2);
+    _enlarged_radius = radius * enlargement_factor;
+  }
+  bool matchesPoint(double x, double y)
+  {
+    if (x*x + y*y < _enlarged_radius * _enlarged_radius)
+    {
+      return true;
+    }
+    else
+    {
+      return false;
+    }
+  }
+  bool matchesPoint(double x, double y, double z)
+  {
+    if (x*x + y*y < _enlarged_radius * _enlarged_radius)
+    {
+      return true;
+    }
+    else
+    {
+      return false;
+    }
+  }
+};
+
+void preprocessHemkerMesh(MeshPtr hemkerMeshNoCurves, bool steady, double tFinal)
+{
+  double radius = 0.5;
+  bool enforceOneIrregularity = true;
+
+  Intrepid::FieldContainer<double> horizontalBandPoints(6,hemkerMeshNoCurves->getDimension());
+  // ESE band
+  horizontalBandPoints(0,0) =   radius * 3;
+  horizontalBandPoints(0,1) = - radius / 2;
+  // ENE band
+  horizontalBandPoints(1,0) =   radius * 3;
+  horizontalBandPoints(1,1) =   radius / 2;
+  // WSW band
+  horizontalBandPoints(2,0) = - radius * 3;
+  horizontalBandPoints(2,1) = - radius / 2;
+  // WNW band
+  horizontalBandPoints(3,0) = - radius * 3;
+  horizontalBandPoints(3,1) =   radius / 2;
+  // the bigger, fatter guys in the corners count as horizontal bands (because that's the direction of their anisotropy)
+  // NE big element
+  horizontalBandPoints(4,0) = radius * 3;
+  horizontalBandPoints(4,1) = radius * 3;
+  // SE big element
+  horizontalBandPoints(5,0) =   radius * 3;
+  horizontalBandPoints(5,1) = - radius * 3;
+
+  Intrepid::FieldContainer<double> verticalBandPoints(4,hemkerMeshNoCurves->getDimension());
+  // NNE band
+  verticalBandPoints(0,0) =   radius / 2;
+  verticalBandPoints(0,1) =   radius * 3;
+  // NNW band
+  verticalBandPoints(1,0) = - radius / 2;
+  verticalBandPoints(1,1) =   radius * 3;
+  // SSE band
+  verticalBandPoints(2,0) =   radius / 2;
+  verticalBandPoints(2,1) = - radius * 3;
+  // SSE band
+  verticalBandPoints(3,0) = - radius / 2;
+  verticalBandPoints(3,1) = - radius * 3;
+
+  if (!steady)
+  {
+    // TODO: (for Truman) consider what happens if _numSlabs != 1
+    double temporalMidpoint = (0 + tFinal) / 2.0;
+    int d_time = hemkerMeshNoCurves->getDimension() - 1;
+    int numHorizontalPoints = horizontalBandPoints.dimension(1);
+    for (int pointOrdinal=0; pointOrdinal<numHorizontalPoints; pointOrdinal++)
+    {
+      horizontalBandPoints(pointOrdinal,d_time) = temporalMidpoint;
+    }
+    int numVerticalPoints = verticalBandPoints.dimension(1);
+    for (int pointOrdinal=0; pointOrdinal<numVerticalPoints; pointOrdinal++)
+    {
+      verticalBandPoints(pointOrdinal,d_time) = temporalMidpoint;
+    }
+  }
+
+  vector< GlobalIndexType > horizontalBandCellIDs = hemkerMeshNoCurves->cellIDsForPoints(horizontalBandPoints, false);
+  vector< GlobalIndexType > verticalBandCellIDs = hemkerMeshNoCurves->cellIDsForPoints(verticalBandPoints, false);
+
+  // check results
+  for (GlobalIndexType cellID : horizontalBandCellIDs)
+  {
+    TEUCHOS_TEST_FOR_EXCEPTION(cellID == -1, std::invalid_argument, "horizontal band cell not found!");
+  }
+  for (GlobalIndexType cellID : verticalBandCellIDs)
+  {
+    TEUCHOS_TEST_FOR_EXCEPTION(cellID == -1, std::invalid_argument, "vertical band cell not found!");
+  }
+
+  RefinementPatternPtr verticalCut, horizontalCut;
+  Intrepid::FieldContainer<double> vertices;
+
+  if (!steady)
+  {
+    verticalCut = RefinementPattern::xAnisotropicRefinementPatternQuadTimeExtruded();
+    horizontalCut = RefinementPattern::yAnisotropicRefinementPatternQuadTimeExtruded();
+    vertices.resize(8,3);
+  }
+  else
+  {
+    verticalCut = RefinementPattern::xAnisotropicRefinementPatternQuad();
+    horizontalCut = RefinementPattern::yAnisotropicRefinementPatternQuad();
+    vertices.resize(4,2);
+  }
+
+  // horizontal bands want vertical cuts, and vice versa
+  for (vector<GlobalIndexType>::iterator cellIDIt = horizontalBandCellIDs.begin();
+      cellIDIt != horizontalBandCellIDs.end(); cellIDIt++)
+  {
+    int cellID = *cellIDIt;
+    // cout << "Refining cell " << cellID << endl;
+    //    cout << "Identified cell " << cellID << " as a horizontal band.\n";
+    // work out what the current aspect ratio is
+    hemkerMeshNoCurves->verticesForCell(vertices, cellID);
+    //    cout << "vertices for cell " << cellID << ":\n" << vertices;
+    // here, we use knowledge of the implementation of the hemker mesh generation:
+    // we know that the first edges are always horizontal...
+    double xDiff = abs(vertices(1,0)-vertices(0,0));
+    double yDiff = abs(vertices(2,1)-vertices(1,1));
+
+    //    cout << "xDiff: " << xDiff << endl;
+    //    cout << "yDiff: " << yDiff << endl;
+
+    set<GlobalIndexType> cellIDsToRefine;
+    cellIDsToRefine.insert(cellID);
+    double aspect = xDiff / yDiff;
+    while (aspect > 2.0)
+    {
+      //      cout << "aspect ratio: " << aspect << endl;
+      hemkerMeshNoCurves->hRefine(cellIDsToRefine, verticalCut);
+
+      // the next set of cellIDsToRefine are the children of the ones just refined
+      set<GlobalIndexType> childCellIDs;
+      for (set<GlobalIndexType>::iterator refinedCellIDIt = cellIDsToRefine.begin();
+          refinedCellIDIt != cellIDsToRefine.end(); refinedCellIDIt++)
+      {
+        int refinedCellID = *refinedCellIDIt;
+        set<GlobalIndexType> refinedCellChildren = hemkerMeshNoCurves->getTopology()->getCell(refinedCellID)->getDescendants(hemkerMeshNoCurves->getTopology());
+        childCellIDs.insert(refinedCellChildren.begin(),refinedCellChildren.end());
+      }
+
+      cellIDsToRefine = childCellIDs;
+      aspect /= 2;
+    }
+  }
+
+  // horizontal bands want vertical cuts, and vice versa
+  for (vector<GlobalIndexType>::iterator cellIDIt = verticalBandCellIDs.begin();
+      cellIDIt != verticalBandCellIDs.end(); cellIDIt++)
+  {
+    int cellID = *cellIDIt;
+    // cout << "Refining cell " << cellID << endl;
+    //    cout << "Identified cell " << cellID << " as a vertical band.\n";
+    // work out what the current aspect ratio is
+    hemkerMeshNoCurves->verticesForCell(vertices, cellID);
+    // here, we use knowledge of the implementation of the hemker mesh generation:
+    // we know that the first edges are always horizontal...
+    double xDiff = abs(vertices(1,0)-vertices(0,0));
+    double yDiff = abs(vertices(2,1)-vertices(1,1));
+
+    set<GlobalIndexType> cellIDsToRefine;
+    cellIDsToRefine.insert(cellID);
+    double aspect = yDiff / xDiff;
+    while (aspect > 2.0)
+    {
+      hemkerMeshNoCurves->hRefine(cellIDsToRefine, horizontalCut);
+
+      // the next set of cellIDsToRefine are the children of the ones just refined
+      set<GlobalIndexType> childCellIDs;
+      for (set<GlobalIndexType>::iterator refinedCellIDIt = cellIDsToRefine.begin();
+          refinedCellIDIt != cellIDsToRefine.end(); refinedCellIDIt++)
+      {
+        int refinedCellID = *refinedCellIDIt;
+        set<GlobalIndexType> refinedCellChildren = hemkerMeshNoCurves->getTopology()->getCell(refinedCellID)->getDescendants(hemkerMeshNoCurves->getTopology());
+        childCellIDs.insert(refinedCellChildren.begin(),refinedCellChildren.end());
+      }
+
+      cellIDsToRefine = childCellIDs;
+      aspect /= 2;
+    }
+  }
+  if (enforceOneIrregularity)
+    hemkerMeshNoCurves->enforceOneIrregularity();
+}
 
 using namespace std;
 
@@ -248,6 +448,7 @@ int main(int argc, char *argv[])
 
   // Construct Mesh
   MeshTopologyPtr meshTopo;
+  MeshGeometryPtr meshGeometry = Teuchos::null;
   if (problemName == "Trivial")
   {
     int meshWidth = 2;
@@ -325,6 +526,27 @@ int main(int argc, char *argv[])
       meshTopo = MeshFactory::spaceTimeMeshTopology(meshTopo, t0, t1, temporalDivisions);
     }
   }
+  else if (problemName == "Cylinder")
+  {
+    double radius = 0.5;
+    double xLeft = -3;
+    double xRight = 9;
+    double meshHeight = 9;
+    double embeddedSideLength = 3 * radius;
+    meshGeometry = MeshFactory::shiftedHemkerGeometry(xLeft, xRight, -meshHeight/2, meshHeight/2, radius, embeddedSideLength);
+    meshTopo = Teuchos::rcp(new MeshTopology(meshGeometry));
+    vector<double> x0;
+    x0.push_back(xLeft);
+    x0.push_back(0);
+    pressureConstraintPoint = x0;
+    if (!steady)
+    {
+      double t0 = 0;
+      double t1 = 1;
+      int temporalDivisions = 2;
+      meshTopo = MeshFactory::spaceTimeMeshTopology(meshTopo, t0, t1, temporalDivisions);
+    }
+  }
 
   Teuchos::ParameterList nsParameters;
   if (steady)
@@ -348,8 +570,12 @@ int main(int argc, char *argv[])
     form.addPointPressureCondition(pressureConstraintPoint);
 
   MeshPtr mesh = form.solutionIncrement()->mesh();
-  vector<MeshPtr> meshesCoarseToFine = GMGSolver::meshesForMultigrid(mesh, polyOrderCoarse, delta_k);
+  if (problemName == "Cylinder")
+    preprocessHemkerMesh(mesh, steady, 1);
+  if (meshGeometry != Teuchos::null)
+    mesh->setEdgeToCurveMap(meshGeometry->edgeToCurveMap());
 
+  vector<MeshPtr> meshesCoarseToFine = GMGSolver::meshesForMultigrid(mesh, polyOrderCoarse, delta_k);
   int numberOfMeshesForMultigrid = meshesCoarseToFine.size();
 
   VarPtr u1_hat = form.u_hat(1), u2_hat = form.u_hat(2);
@@ -457,6 +683,56 @@ int main(int argc, char *argv[])
       form.addInitialCondition(0, u_exact);
       // form.addFluxCondition(t0, -u_exact);
   }
+  else if (problemName == "Cylinder")
+  {
+    BCPtr bc = form.solutionIncrement()->bc();
+
+    FunctionPtr zero = Function::zero();
+    SpatialFilterPtr leftX  = SpatialFilter::matchingX(-3);
+    SpatialFilterPtr rightX = SpatialFilter::matchingX(9);
+    SpatialFilterPtr leftY  = SpatialFilter::matchingY(-4.5);
+    SpatialFilterPtr rightY = SpatialFilter::matchingY(4.5);
+    SpatialFilterPtr nearCylinder = Teuchos::rcp( new NearCylinder(0.5) );
+    SpatialFilterPtr t0  = SpatialFilter::matchingT(0);
+
+    double pi = atan(1)*4;
+    double meshHeight = 9;
+    FunctionPtr decay = Teuchos::rcp(new Exp_at(-10));
+    FunctionPtr perturbation = Teuchos::rcp(new Sin_ay(2*pi/meshHeight));
+    FunctionPtr perturbed = Function::constant(1) + 0.01*decay*perturbation;
+    if (steady)
+      u1_exact = Function::constant(1);
+    else
+      u1_exact = Function::min(Function::tn(1),Function::constant(1))*perturbed;
+    u2_exact = zero;
+
+    u_exact = Function::vectorize(u1_exact,u2_exact);
+    form.addInflowCondition(leftX,  u_exact);
+    form.addWallCondition(nearCylinder);
+
+    // define traction components in terms of field variables
+    FunctionPtr n = Function::normal();
+    VarPtr sigma11 = form.sigma(1,1);
+    VarPtr sigma12 = form.sigma(1,2);
+    VarPtr sigma21 = form.sigma(2,1);
+    VarPtr sigma22 = form.sigma(2,2);
+    VarPtr p = form.p();
+    LinearTermPtr t1 = n->x() * (2 * sigma11 - p) + n->y() * (sigma12 + sigma21);
+    LinearTermPtr t2 = n->x() * (sigma12 + sigma21) + n->y() * (2 * sigma22 - p);
+
+    Teuchos::RCP<PenaltyConstraints> pc = Teuchos::rcp(new PenaltyConstraints);
+    pc->addConstraint(t1==zero, rightX);
+    pc->addConstraint(t2==zero, rightX);
+    pc->addConstraint(t1==zero, leftY);
+    pc->addConstraint(t2==zero, leftY);
+    pc->addConstraint(t1==zero, rightY);
+    pc->addConstraint(t2==zero, rightY);
+
+    form.solutionIncrement()->setFilter(pc);
+
+    if (!steady)
+      form.addInitialCondition(0, u_exact);
+  }
 
   double l2NormOfIncrement = 1.0;
   int stepNumber = 0;
@@ -507,7 +783,7 @@ int main(int argc, char *argv[])
   string dataFileLocation;
   dataFileLocation = outputDir+"/"+exportName.str()+".txt";
   ofstream dataFile(dataFileLocation);
-  if (rank==0) dataFile << "ref\t " << "elements\t " << "dofs\t " << "energy\t " << "l2\t " << "solvetime\t" << "elapsed\t" << "iterations\t " << endl;
+  // if (rank==0) dataFile << "ref\t " << "elements\t " << "dofs\t " << "energy\t " << "l2\t " << "solvetime\t" << "elapsed\t" << "iterations\t " << endl;
 
   Teuchos::RCP<HDF5Exporter> exporter;
   if (exportHDF5)
