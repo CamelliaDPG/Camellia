@@ -225,6 +225,17 @@ vector<MeshPtr> GMGSolver::meshesForMultigrid(MeshPtr fineMesh, Teuchos::Paramet
   int kCoarse = parameters.get<int>("kCoarse", 0);
   int delta_k = parameters.get<int>("delta_k",1);
   
+  MeshPtr curvilinearFineMesh = Teuchos::null;
+  if (fineMesh->getTransformationFunction() != Teuchos::null)
+  {
+    curvilinearFineMesh = fineMesh;
+    fineMesh = curvilinearFineMesh->deepCopy();
+    map<pair<GlobalIndexType, GlobalIndexType>, ParametricCurvePtr> edgeToCurveMap;
+    fineMesh->setEdgeToCurveMap(edgeToCurveMap); // should result in a null transformation function (straight edges)
+    TEUCHOS_TEST_FOR_EXCEPTION(fineMesh->getTransformationFunction() != Teuchos::null, std::invalid_argument,
+                               "Internal error: attempt to set null transformation function failed");
+  }
+  
   MeshTopologyViewPtr fineMeshTopo = fineMesh->getTopology();
   set<GlobalIndexType> thisLevelCellIndices = fineMeshTopo->getRootCellIndices();
   GlobalIndexType thisLevelNumCells = thisLevelCellIndices.size();
@@ -237,6 +248,7 @@ vector<MeshPtr> GMGSolver::meshesForMultigrid(MeshPtr fineMesh, Teuchos::Paramet
   
   int H1Order_coarse = kCoarse + 1;
   BFPtr bf = fineMesh->bilinearForm();
+  
   do {
     MeshTopologyViewPtr thisLevelMeshTopo = fineMeshTopo->getView(thisLevelCellIndices);
     
@@ -317,6 +329,8 @@ vector<MeshPtr> GMGSolver::meshesForMultigrid(MeshPtr fineMesh, Teuchos::Paramet
     }
   }
   meshesCoarseToFine.push_back(fineMesh);
+  
+  if (curvilinearFineMesh != Teuchos::null) meshesCoarseToFine.push_back(curvilinearFineMesh);
   
   return meshesCoarseToFine;
 }
