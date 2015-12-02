@@ -315,6 +315,67 @@ namespace
     TEST_ASSERT(cellEntriesView.size() == 1);
   }
   
+  TEUCHOS_UNIT_TEST( MeshTopologyView, NeighborIsCorrectAnisotropicRefinement_OneLevel_2D )
+  {
+    int spaceDim = 2;
+    int elementWidth = 2;
+    int H1Order = 2;
+    bool useConformingTraces = true;
+    MeshPtr mesh = poissonUniformMesh(spaceDim, elementWidth, H1Order, useConformingTraces);
+    
+    GlobalIndexType cellIndex = 0;
+    CellPtr cell = mesh->getTopology()->getCell(cellIndex);
+    unsigned sideOrdinal = 1;
+    
+    GlobalIndexType neighborCellIndexToRefine = cell->getNeighbor(sideOrdinal, mesh->getTopology())->cellIndex();
+    mesh->hRefine(set<GlobalIndexType>{neighborCellIndexToRefine}, RefinementPattern::xAnisotropicRefinementPatternQuad());
+    
+    // now, cell 0 has neighbor that is child of its original neighbor
+    CellPtr newNeighbor = cell->getNeighbor(sideOrdinal, mesh->getTopology());
+    TEST_INEQUALITY(newNeighbor->cellIndex(), neighborCellIndexToRefine);
+    
+    // but if we use the root mesh topology view, we should recover the original neighbor
+    set<IndexType> rootCells = mesh->getTopology()->getRootCellIndices();
+    MeshTopologyViewPtr rootMeshTopoView = mesh->getTopology()->getView(rootCells);
+    CellPtr oldNeighbor = cell->getNeighbor(sideOrdinal, rootMeshTopoView);
+    TEST_EQUALITY(oldNeighbor->cellIndex(), neighborCellIndexToRefine);
+  }
+  
+  TEUCHOS_UNIT_TEST( MeshTopologyView, NeighborIsCorrectAnisotropicRefinement_TwoLevel_2D )
+  {
+    int spaceDim = 2;
+    int elementWidth = 2;
+    int H1Order = 2;
+    bool useConformingTraces = true;
+    MeshPtr mesh = poissonUniformMesh(spaceDim, elementWidth, H1Order, useConformingTraces);
+    
+    GlobalIndexType cellIndex = 0;
+    CellPtr cell = mesh->getTopology()->getCell(cellIndex);
+    unsigned sideOrdinal = 1;
+    
+    CellPtr neighbor = cell->getNeighbor(sideOrdinal, mesh->getTopology());
+    GlobalIndexType neighborCellIndexToRefine = neighbor->cellIndex();
+    mesh->hRefine(set<GlobalIndexType>{neighborCellIndexToRefine}, RefinementPattern::xAnisotropicRefinementPatternQuad());
+    
+    // now, cell 0 has a new neighbor that is child of its original neighbor
+    CellPtr newNeighbor = cell->getNeighbor(sideOrdinal, mesh->getTopology());
+    TEST_INEQUALITY(newNeighbor->cellIndex(), neighborCellIndexToRefine);
+    TEST_EQUALITY(newNeighbor->getParent()->cellIndex(), neighborCellIndexToRefine);
+    
+    mesh->hRefine(set<GlobalIndexType>{newNeighbor->cellIndex()}, RefinementPattern::xAnisotropicRefinementPatternQuad());
+
+    // now, cell 0 has another new neighbor that is the grandchild of its original neighbor
+    CellPtr newNewNeighbor = cell->getNeighbor(sideOrdinal, mesh->getTopology());
+    TEST_INEQUALITY(newNeighbor->cellIndex(), newNewNeighbor->cellIndex());
+    TEST_EQUALITY(newNewNeighbor->getParent()->cellIndex(), newNeighbor->cellIndex());
+    
+    // but if we use the root mesh topology view, we should recover the original neighbor
+    set<IndexType> rootCells = mesh->getTopology()->getRootCellIndices();
+    MeshTopologyViewPtr rootMeshTopoView = mesh->getTopology()->getView(rootCells);
+    CellPtr oldNeighbor = cell->getNeighbor(sideOrdinal, rootMeshTopoView);
+    TEST_EQUALITY(oldNeighbor->cellIndex(), neighborCellIndexToRefine);
+  }
+  
   TEUCHOS_UNIT_TEST( MeshTopologyView, OneElementMeshIdentityAgrees_1D )
   {
     int spaceDim = 1;
