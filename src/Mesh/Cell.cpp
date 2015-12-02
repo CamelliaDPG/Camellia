@@ -686,8 +686,39 @@ pair<GlobalIndexType, unsigned> Cell::getNeighborInfo(unsigned sideOrdinal, Mesh
   }
   if (meshTopoViewForCellValidity->isValidCellIndex(_neighbors[sideOrdinal].first))
     return _neighbors[sideOrdinal];
-  else
-    return {-1,-1};
+  else if (_meshTopo->isValidCellIndex(_neighbors[sideOrdinal].first))
+  {
+    // check whether _neighbors[sideOrdinal] might have an ancestor that *is* valid, and also a neighbor
+    pair<GlobalIndexType, unsigned> ancestralNeighborInfo = _neighbors[sideOrdinal];
+    while (_meshTopo->isValidCellIndex(ancestralNeighborInfo.first)) {
+      CellPtr neighbor = _meshTopo->getCell(ancestralNeighborInfo.first);
+      CellPtr neighborParent = neighbor->getParent();
+      if (neighborParent == Teuchos::null)
+        return {-1,-1};
+      ancestralNeighborInfo.first = neighborParent->cellIndex();
+      unsigned childOrdinal = neighborParent->findChildOrdinal(neighbor->cellIndex());
+      map< unsigned, unsigned > parentSideLookup = neighborParent->refinementPattern()->parentSideLookupForChild(childOrdinal);
+      if (parentSideLookup.find(ancestralNeighborInfo.second) == parentSideLookup.end())
+      {
+        // child side internal to parent
+        return {-1,-1};
+      }
+      ancestralNeighborInfo.second = parentSideLookup[ancestralNeighborInfo.second];
+      
+      MeshTopologyViewPtr meshTopoPtr = Teuchos::rcp(_meshTopo,false);
+      // check that the parent is still a neighbor
+      if (neighborParent->getNeighborInfo(ancestralNeighborInfo.second, meshTopoPtr).first != _cellIndex)
+      {
+        return {-1,-1};
+      }
+      if (meshTopoViewForCellValidity->isValidCellIndex(ancestralNeighborInfo.first))
+      {
+        return ancestralNeighborInfo;
+      }
+    }
+  }
+  
+  return {-1,-1};
 }
 
 vector<CellPtr> Cell::getNeighbors(MeshTopologyViewPtr meshTopoViewForCellValidity)
