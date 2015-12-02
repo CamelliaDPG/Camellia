@@ -153,12 +153,37 @@ void GlobalDofAssignment::assignParities( GlobalIndexType cellID )
     {
       CellPtr neighbor = _meshTopology->getCell(neighborCellID);
       pair<GlobalIndexType,unsigned> neighborNeighborInfo = neighbor->getNeighborInfo(neighborInfo.second, _meshTopology);
-      bool neighborIsPeer = neighborNeighborInfo.first == cellID;
-      if (neighborIsPeer)   // then the lower cellID gets the positive parity
+      bool cellParitySet = false;
+      
+      // if the neighbor sees us as its neighbor, then we're certainly peers
+      if (neighborNeighborInfo.first == cellID)
       {
+        // then the lower cellID gets the positive parity
         cellParities[sideOrdinal] = (cellID < neighborCellID) ? 1 : -1;
+        cellParitySet = true;
       }
       else
+      {
+        // If not, then it's still possible that we have a descendant that is peers with neighbor,
+        // in the case of anisotropic refinements.
+        
+        // Find the most refined descendant that shares the side:
+        unsigned sideDim = _meshTopology->getDimension() - 1;
+        IndexType sideEntityIndex = cell->entityIndex(sideDim, sideOrdinal);
+        vector<IndexType> cellIndicesForSide = _meshTopology->getCellsForSide(sideEntityIndex); // max 2 entries
+        for (IndexType cellIndexForSide : cellIndicesForSide)
+        {
+          if (cellIndexForSide == neighborCellID) continue; // skip the neighbor
+          if (cellIndexForSide == neighborNeighborInfo.first)
+          {
+            // a descendant that is a peer: we "inherit" parity of the descendant
+            // then the lower cellID gets the positive parity
+            cellParities[sideOrdinal] = (cellIndexForSide < neighborCellID) ? 1 : -1;
+            cellParitySet = true;
+          }
+        }
+      }
+      if (!cellParitySet)
       {
         CellPtr parent = cell->getParent();
         if (parent.get() == NULL)
