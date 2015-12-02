@@ -365,7 +365,7 @@ unsigned MeshTopology::addCell(CellTopoPtr cellTopo, const vector<unsigned> &cel
 {
   vector< vector< unsigned > > cellEntityPermutations;
   unsigned cellIndex = _cells.size();
-
+  
   vector< vector<unsigned> > cellEntityIndices(_spaceDim); // subcdim, subcord
   for (int d=0; d<_spaceDim; d++)   // start with vertices, and go up to sides
   {
@@ -3037,7 +3037,10 @@ void MeshTopology::setEdgeToCurveMap(const map< pair<IndexType, IndexType>, Para
   }
   // mesh transformation function expects global ID type
   set<GlobalIndexType> cellIDsGlobal(_cellIDsWithCurves.begin(),_cellIDsWithCurves.end());
-  _transformationFunction = Teuchos::rcp(new MeshTransformationFunction(mesh, cellIDsGlobal));
+  if (cellIDsGlobal.size() > 0)
+    _transformationFunction = Teuchos::rcp(new MeshTransformationFunction(mesh, cellIDsGlobal));
+  else
+    _transformationFunction = Teuchos::null;
 }
 
 void MeshTopology::setGlobalDofAssignment(GlobalDofAssignment* gda)   // for cubature degree lookups
