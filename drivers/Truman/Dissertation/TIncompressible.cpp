@@ -542,8 +542,8 @@ int main(int argc, char *argv[])
     if (!steady)
     {
       double t0 = 0;
-      double t1 = 1;
-      int temporalDivisions = 2;
+      double t1 = 10;
+      int temporalDivisions = 10;
       meshTopo = MeshFactory::spaceTimeMeshTopology(meshTopo, t0, t1, temporalDivisions);
     }
   }
@@ -570,8 +570,8 @@ int main(int argc, char *argv[])
     form.addPointPressureCondition(pressureConstraintPoint);
 
   MeshPtr mesh = form.solutionIncrement()->mesh();
-  if (problemName == "Cylinder")
-    preprocessHemkerMesh(mesh, steady, 1);
+  // if (problemName == "Cylinder")
+  //   preprocessHemkerMesh(mesh, steady, 1);
   if (meshGeometry != Teuchos::null)
     mesh->setEdgeToCurveMap(meshGeometry->edgeToCurveMap());
 
