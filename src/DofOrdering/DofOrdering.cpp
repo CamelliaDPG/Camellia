@@ -262,7 +262,7 @@ set<int> DofOrdering::getTraceDofIndices()
     {
       for (int sideOrdinal=0; sideOrdinal<numSidesForVarID[varID]; sideOrdinal++)
       {
-        if (hasEntryForVarID(varID,sideOrdinal))
+        if (hasBasisEntry(varID,sideOrdinal))
         {
           const vector<int> * indices = &getDofIndices(varID, sideOrdinal);
           traceDofIndices.insert(indices->begin(),indices->end());
