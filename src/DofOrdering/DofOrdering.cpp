@@ -104,9 +104,9 @@ void DofOrdering::addIdentification(int varID, int side1, int basisDofOrdinal1,
   dofIdentifications[make_pair(varID,sidePair2)] = sidePair1;
 }
 
-CellTopoPtr DofOrdering::cellTopology(int sideIndex)
+CellTopoPtr DofOrdering::cellTopology(int sideIndex) const
 {
-  return _cellTopologyForSide[sideIndex];
+  return _cellTopologyForSide.find(sideIndex)->second;
 }
 
 void DofOrdering::copyLikeCoefficients( FieldContainer<double> &newValues, Teuchos::RCP<DofOrdering> oldDofOrdering,
@@ -149,10 +149,10 @@ void DofOrdering::copyLikeCoefficients( FieldContainer<double> &newValues, Teuch
   }
 }
 
-BasisPtr DofOrdering::getBasis(int varID, int sideIndex)
+BasisPtr DofOrdering::getBasis(int varID, int sideIndex) const
 {
   pair<int,int> key = make_pair(varID,sideIndex);
-  map< pair<int,int>, BasisPtr >::iterator entry = bases.find(key);
+  map< pair<int,int>, BasisPtr >::const_iterator entry = bases.find(key);
   if (entry == bases.end())
   {
     //cout << *this;
@@ -211,6 +211,9 @@ const vector<int> & DofOrdering::getDofIndices(int varID, int sideIndex) const
   const map< pair<int,int>, vector<int> >::const_iterator entryIt = indices.find(key);
   if ( entryIt == indices.end() )
   {
+    cout << "No entry found for DofIndex " << varID << " on side " << sideIndex << endl;
+    cout << "DofOrdering has entries:\n";
+    cout << *this;
     TEUCHOS_TEST_FOR_EXCEPTION(true, std::invalid_argument, "No entry found for DofIndex.");
   }
   return (*entryIt).second;
@@ -259,8 +262,11 @@ set<int> DofOrdering::getTraceDofIndices()
     {
       for (int sideOrdinal=0; sideOrdinal<numSidesForVarID[varID]; sideOrdinal++)
       {
-        const vector<int> * indices = &getDofIndices(varID, sideOrdinal);
-        traceDofIndices.insert(indices->begin(),indices->end());
+        if (hasEntryForVarID(varID,sideOrdinal))
+        {
+          const vector<int> * indices = &getDofIndices(varID, sideOrdinal);
+          traceDofIndices.insert(indices->begin(),indices->end());
+        }
       }
     }
   }
@@ -272,10 +278,10 @@ const set<int> & DofOrdering::getVarIDs() const
   return varIDs;
 }
 
-bool DofOrdering::hasBasisEntry(int varID, int sideIndex)
+bool DofOrdering::hasBasisEntry(int varID, int sideIndex) const
 {
   pair<int,int> key = make_pair(varID,sideIndex);
-  map< pair<int,int>, BasisPtr >::iterator entry = bases.find(key);
+  map< pair<int,int>, BasisPtr >::const_iterator entry = bases.find(key);
   return entry != bases.end();
 }
 
@@ -429,7 +435,7 @@ vector<pair<int,vector<int>>> DofOrdering::variablesWithNonZeroEntries(const Int
   return results;
 }
 
-std::ostream& operator << (std::ostream& os, DofOrdering& dofOrdering)
+std::ostream& operator << (std::ostream& os, const DofOrdering& dofOrdering)
 {
   // Save the format state of the original ostream os.
   Teuchos::oblackholestream oldFormatState;

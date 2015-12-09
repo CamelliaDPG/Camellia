@@ -70,7 +70,7 @@ public:
 
   void addEntry(int varID, BasisPtr basis, int basisRank, int sideIndex = VOLUME_INTERIOR_SIDE_ORDINAL);
 
-  bool hasBasisEntry(int varID, int sideIndex);
+  bool hasBasisEntry(int varID, int sideIndex) const;
   bool hasSideVarIDs();
 
   void copyLikeCoefficients( Intrepid::FieldContainer<double> &newValues, Teuchos::RCP<DofOrdering> oldDofOrdering,
@@ -87,7 +87,7 @@ public:
 
   int getBasisCardinality(int varID, int sideIndex);
 
-  BasisPtr getBasis(int varID, int sideIndex = VOLUME_INTERIOR_SIDE_ORDINAL);
+  BasisPtr getBasis(int varID, int sideIndex = VOLUME_INTERIOR_SIDE_ORDINAL) const;
 
   int getBasisRank(int varID)
   {
@@ -105,7 +105,7 @@ public:
   void addIdentification(int varID, int side1, int basisDofOrdinal1,
                          int side2, int basisDofOrdinal2);
 
-  CellTopoPtr cellTopology(int sideIndex = -1);
+  CellTopoPtr cellTopology(int sideIndex = -1) const;
 
   int maxBasisDegree();
   int maxBasisDegreeForVolume();
@@ -122,6 +122,6 @@ public:
 };
 }
 
-std::ostream& operator << (std::ostream& os, Camellia::DofOrdering& dofOrdering);
+std::ostream& operator << (std::ostream& os, const Camellia::DofOrdering& dofOrdering);
 
 #endif
