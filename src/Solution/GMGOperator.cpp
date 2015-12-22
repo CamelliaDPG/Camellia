@@ -1772,6 +1772,12 @@ double GMGOperator::getSmootherWeight()
 void GMGOperator::setSmootherWeight(double weight)
 {
   _smootherWeight = weight;
+  if (_smootherWeight != -1.0)
+  {
+    // prevent overwriting this value later
+    cout << "Turning OFF _useSchwarzScalingWeight, because smootherWeight value is provided.\n";
+    setUseSchwarzScalingWeight(false);
+  }
 }
 
 void GMGOperator::setUpSmoother(Epetra_CrsMatrix *fineStiffnessMatrix)
@@ -1998,10 +2004,11 @@ void GMGOperator::setUpSmoother(Epetra_CrsMatrix *fineStiffnessMatrix)
     multiplicities.SumIntoGlobalValues(myOverlappingValues.size(), &overlappingEntries[0], &myOverlappingValues[0]);
     multiplicities.GlobalAssemble();
     
-    multiplicities.MaxValue(&_smootherWeight);
+    double maxMultiplicity = 0;
+    multiplicities.MaxValue(&maxMultiplicity);
     if (_useSchwarzScalingWeight)
     {
-      _smootherWeight = 1.0 / _smootherWeight;
+      _smootherWeight = 1.0 / maxMultiplicity;
     }
     
     if (_useSchwarzDiagonalWeight)
