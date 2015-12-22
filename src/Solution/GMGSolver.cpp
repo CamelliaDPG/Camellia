@@ -167,7 +167,7 @@ Teuchos::RCP<GMGOperator> GMGSolver::gmgOperatorFromMeshSequence(const std::vect
     coarseOperator->setUseSchwarzScalingWeight(true);
     coarseOperator->setMultigridStrategy(multigridStrategy);
     bool hRefined = fineMesh->numActiveElements() > coarseMesh->numActiveElements();
-    coarseOperator->setUseHierarchicalNeighborsForSchwarz(hRefined);
+    coarseOperator->setUseHierarchicalNeighborsForSchwarz(false); // changed Dec. 22 2015, after tests revealed that hiarchical truncation seems to be a uniformly bad idea...
     if (hRefined)
     {
       coarseOperator->setSmootherOverlap(1);
