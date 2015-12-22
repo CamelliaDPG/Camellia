@@ -7,6 +7,7 @@
 #include "HDF5Exporter.h"
 #include "LinearElasticityFormulation.h"
 #include "MeshFactory.h"
+#include "NavierStokesVGPFormulation.h"
 #include "PreviousSolutionFunction.h"
 #include "RefinementStrategy.h"
 #include "Solver.h"
@@ -71,19 +72,20 @@ Teuchos::RCP<Epetra_Operator> CamelliaAdditiveSchwarzPreconditioner(::Epetra_Row
     int levelOfFill, double fillRatio, bool hOnly)
 {
 
+  int sideDim = mesh->getTopology()->getDimension() - 1;
   Teuchos::RCP<Ifpack_Preconditioner> preconditioner;
   Teuchos::ParameterList List;
   switch (schwarzBlockFactorization)
   {
   case GMGOperator::Direct:
-    preconditioner = Teuchos::rcp(new AdditiveSchwarz<Ifpack_Amesos>(A, overlapLevel, mesh, dofInterpreter, hOnly) );
+    preconditioner = Teuchos::rcp(new AdditiveSchwarz<Ifpack_Amesos>(A, overlapLevel, mesh, dofInterpreter, hOnly, sideDim) );
     break;
   case GMGOperator::IC:
-    preconditioner = Teuchos::rcp(new AdditiveSchwarz<Ifpack_IC>(A, overlapLevel, mesh, dofInterpreter, hOnly) );
+    preconditioner = Teuchos::rcp(new AdditiveSchwarz<Ifpack_IC>(A, overlapLevel, mesh, dofInterpreter, hOnly, sideDim) );
     List.set("fact: ict level-of-fill", fillRatio);
     break;
   case GMGOperator::ILU:
-    preconditioner = Teuchos::rcp(new AdditiveSchwarz<Ifpack_ILU>(A, overlapLevel, mesh, dofInterpreter, hOnly) );
+    preconditioner = Teuchos::rcp(new AdditiveSchwarz<Ifpack_ILU>(A, overlapLevel, mesh, dofInterpreter, hOnly, sideDim) );
     List.set("fact: level-of-fill", levelOfFill);
     break;
   default:
@@ -382,6 +384,80 @@ enum RunManyPreconditionerChoices
   All         // All of the above, including the DontPrecondition option
 };
 
+Teuchos::RCP<GMGSolver> initializeGMGSolver(SolutionPtr solution, int AztecOutputLevel, GMGOperator::SmootherChoice smootherType,
+                                            int schwarzOverlap, GMGOperator::FactorType schwarzBlockFactorization, int schwarzLevelOfFill, double schwarzFillRatio,
+                                            bool useStaticCondensation, bool hOnly, bool useHierarchicalNeighborsForSchwarz,
+                                            MeshPtr coarseMesh,
+                                            Solver::SolverChoice coarseSolverChoice, int cgMaxIterations, double cgTol,
+                                            GMGOperator::SmootherApplicationType comboType, double smootherWeight, bool useWeightMatrixForSchwarz)
+{
+  int rank = Teuchos::GlobalMPISession::getRank();
+
+  GMGSolver* gmgSolver = new GMGSolver(solution, coarseMesh, cgMaxIterations, cgTol, Teuchos::null, useStaticCondensation);
+  gmgSolver->setNarrateOnRankZero(narrateSolution, "fine GMGSolver");
+  gmgSolver->gmgOperator()->setNarrateOnRankZero(narrateSolution, "fine GMGOperator");
+  gmgSolver->gmgOperator()->getCoarseSolution()->setNarrateOnRankZero(narrateCoarseSolution, "coarse solution");
+  
+  Teuchos::RCP<Solver> coarseSolver = Teuchos::null;
+  
+  bool saveFactorization = true;
+  coarseSolver = Solver::getSolver(coarseSolverChoice, saveFactorization, coarseCGTol, coarseMaxIterations, gmgSolver->gmgOperator()->getCoarseSolution(),
+                                   Solver::getDirectSolver(saveFactorization));
+  
+  gmgSolver->gmgOperator()->setCoarseSolver(coarseSolver);
+  
+  if ((smootherType == GMGOperator::CAMELLIA_ADDITIVE_SCHWARZ) && hOnly)
+  {
+    // then use hierarchical neighbor relationship
+    gmgSolver->gmgOperator()->setUseHierarchicalNeighborsForSchwarz(useHierarchicalNeighborsForSchwarz);
+    
+    if (rank==0)
+    {
+      if (useHierarchicalNeighborsForSchwarz)
+        cout << "using hierarchical Schwarz neighbors option\n";
+      else
+        cout << "NOT using hierarchical Schwarz neighbors option\n";
+    }
+
+//    {
+//      // DEBUGGING:
+//      gmgSolver->gmgOperator()->setUseHierarchicalNeighborsForSchwarz(false);
+//      if (rank==0) cout << "TEMPORARILY overriding NOT to use hierarchical neighbors for Schwarz.\n";
+//    }
+    
+    //      if (conformingTraces)
+    //      {
+    //        // then vertex neighbors should count as neighbors
+    //        gmgSolver->gmgOperator()->setDimensionForSchwarzNeighborRelationship(0);
+    //        if (rank==0) cout << "conforming and h-multigrid: using vertex neighbors for Schwarz\n";
+    //      }
+  }
+  
+  gmgSolver->setAztecOutput(AztecOutputLevel);
+  gmgSolver->setUseConjugateGradient(true);
+  gmgSolver->setComputeConditionNumberEstimate(false);
+  gmgSolver->gmgOperator()->setSchwarzFactorizationType(schwarzBlockFactorization);
+  gmgSolver->gmgOperator()->setLevelOfFill(schwarzLevelOfFill);
+  gmgSolver->gmgOperator()->setFillRatio(schwarzFillRatio);
+  //    cout << "Set GMGOperator level of fill to " << schwarzLevelOfFill << endl;
+  //    cout << "Set GMGOperator fill ratio to " << schwarzFillRatio << endl;
+  gmgSolver->gmgOperator()->setSmootherType(smootherType);
+  gmgSolver->gmgOperator()->setSmootherOverlap(schwarzOverlap);
+  gmgSolver->gmgOperator()->setSmootherApplicationType(comboType);
+  if (smootherWeight != -1)
+  {
+    gmgSolver->gmgOperator()->setSmootherWeight(smootherWeight);
+  }
+  else
+    gmgSolver->gmgOperator()->setUseSchwarzScalingWeight(true);
+  
+  gmgSolver->gmgOperator()->setUseSchwarzDiagonalWeight(useWeightMatrixForSchwarz);
+  
+  gmgSolver->gmgOperator()->setDebugMode(runGMGOperatorInDebugMode);
+  
+  return Teuchos::rcp(gmgSolver);
+}
+
 string smootherString(GMGOperator::SmootherChoice smoother)
 {
   switch (smoother)
@@ -405,9 +481,12 @@ string smootherString(GMGOperator::SmootherChoice smoother)
   }
 }
 
-void initializeSolutionAndCoarseMesh(SolutionPtr &solution, MeshPtr &coarseMesh, IPPtr &graphNorm, ProblemChoice problemChoice,
+void initializeSolutionAndCoarseMesh(SolutionPtr &solution, MeshPtr &coarseMesh, IPPtr &graphNorm, double graphNormBeta, ProblemChoice problemChoice,
                                      int spaceDim, bool conformingTraces, bool useStaticCondensation, int numCells, int k, int delta_k, int k_coarse,
-                                     int rootMeshNumCells, bool hOnly, bool useZeroMeanConstraints, bool enhanceFieldsForH1TracesWhenConforming)
+                                     int rootMeshNumCells, bool hOnly, bool useHierarchicalNeighborsForSchwarz, bool useZeroMeanConstraints,
+                                     bool enhanceFieldsForH1TracesWhenConforming,
+                                     Teuchos::RCP<NavierStokesVGPFormulation> &navierStokesFormulationFine,
+                                     Teuchos::RCP<NavierStokesVGPFormulation> &navierStokesFormulationCoarse)
 {
   BFPtr bf;
   BCPtr bc;
@@ -785,43 +864,46 @@ void initializeSolutionAndCoarseMesh(SolutionPtr &solution, MeshPtr &coarseMesh,
     bc->addDirichlet(formulation.u_hat(2), boundary, zero);
     if (spaceDim==3) bc->addDirichlet(formulation.u_hat(3), boundary, zero);
     
-    vector<FunctionPtr> f_vector(spaceDim, zero);
-    for (int i=1; i<= spaceDim; i++)
-    {
-      for (int j=1; j<= spaceDim; j++)
-      {
-        for (int k=1; k<= spaceDim; k++)
-        {
-          FunctionPtr u_k;
-          switch (k) {
-            case 1:
-              u_k = u1_exact;
-              break;
-            case 2:
-              u_k = u2_exact;
-              break;
-            case 3:
-              u_k = u3_exact;
-            default:
-              break;
-          }
-          for (int l=1; l<= spaceDim; l++)
-          {
-            FunctionPtr u_k_lj = u_k->grad()->spatialComponent(l)->grad()->spatialComponent(j);
-            double E_ijkl = formulation.E(i, j, k, l);
-//            cout << i << ", " << j << ", " << k << ", " << l << ": ";
-//            cout << -C_ijkl << " * " << u_k_lj->displayString() << endl;
-            if (E_ijkl == 0) f_vector[i-1] = f_vector[i-1] + zero;
-            else f_vector[i-1] = f_vector[i-1] -E_ijkl * u_k_lj;
-//            cout << f_vector[i-1]->displayString() << endl;
-          }
-        }
-      }
-      
-//      cout << "f[" << i << "]: " << f_vector[i-1]->displayString() << endl;
-    }
-    
-    FunctionPtr f = Function::vectorize(f_vector);
+//    vector<FunctionPtr> f_vector(spaceDim, zero);
+//    for (int i=1; i<= spaceDim; i++)
+//    {
+//      for (int j=1; j<= spaceDim; j++)
+//      {
+//        for (int k=1; k<= spaceDim; k++)
+//        {
+//          FunctionPtr u_k;
+//          switch (k) {
+//            case 1:
+//              u_k = u1_exact;
+//              break;
+//            case 2:
+//              u_k = u2_exact;
+//              break;
+//            case 3:
+//              u_k = u3_exact;
+//            default:
+//              break;
+//          }
+//          for (int l=1; l<= spaceDim; l++)
+//          {
+//            FunctionPtr u_k_lj = u_k->grad()->spatialComponent(l)->grad()->spatialComponent(j);
+//            double E_ijkl = formulation.E(i, j, k, l);
+////            cout << i << ", " << j << ", " << k << ", " << l << ": ";
+////            cout << -C_ijkl << " * " << u_k_lj->displayString() << endl;
+//            if (E_ijkl == 0) f_vector[i-1] = f_vector[i-1] + zero;
+//            else f_vector[i-1] = f_vector[i-1] -E_ijkl * u_k_lj;
+////            cout << f_vector[i-1]->displayString() << endl;
+//          }
+//        }
+//      }
+//      
+////      cout << "f[" << i << "]: " << f_vector[i-1]->displayString() << endl;
+//    }
+//    
+//    FunctionPtr f = Function::vectorize(f_vector);
+
+    FunctionPtr u_exact = (spaceDim == 2) ? Function::vectorize(u1_exact, u2_exact) : Function::vectorize(u1_exact, u2_exact, u3_exact);
+    FunctionPtr f = formulation.forcingFunction(u_exact);
     
     VarPtr v1 = formulation.v(1);
     VarPtr v2 = formulation.v(2);
@@ -836,6 +918,83 @@ void initializeSolutionAndCoarseMesh(SolutionPtr &solution, MeshPtr &coarseMesh,
       for (int d=0; d<spaceDim; d++)
         trialOrderEnhancements[formulation.u(d+1)->ID()] = 1;
     }
+  }
+  else if (problemChoice == NavierStokes)
+  {
+    if (spaceDim != 2)
+    {
+      TEUCHOS_TEST_FOR_EXCEPTION(true, std::invalid_argument, "Unsupported option for Navier-Stokes"); // we can add support for a 3D exact solution later...
+    }
+    
+    MeshTopologyPtr meshTopo = MeshFactory::rectilinearMeshTopology({2.0,2.0}, {rootMeshNumCells, rootMeshNumCells}, {-0.5,0.0});
+    MeshTopologyPtr coarseMeshTopo;
+    if (hOnly)
+    {
+      coarseMeshTopo = MeshFactory::rectilinearMeshTopology({2.0,2.0}, {rootMeshNumCells, rootMeshNumCells}, {-0.5,0.0});
+    }
+    else
+    {
+      coarseMeshTopo = meshTopo;
+    }
+    int meshWidthCells = rootMeshNumCells;
+    while (meshWidthCells < numCells)
+    {
+      set<IndexType> activeCellIDs = meshTopo->getActiveCellIndices(); // should match between coarseMesh and mesh
+      for (IndexType cellIndex : activeCellIDs)
+      {
+        CellTopoPtr cellTopo = meshTopo->getCell(cellIndex)->topology();
+        meshTopo->refineCell(cellIndex, RefinementPattern::regularRefinementPattern(cellTopo));
+        if (hOnly && (meshWidthCells * 2 < numCells))
+          coarseMeshTopo->refineCell(cellIndex, RefinementPattern::regularRefinementPattern(cellTopo)); // coarseMesh gets 1 less h-refinement
+      }
+      meshWidthCells *= 2;
+    }
+    
+    // set up classical Kovasznay flow solution:
+    double Re = 40.0;
+    navierStokesFormulationFine = Teuchos::rcp(new NavierStokesVGPFormulation(NavierStokesVGPFormulation::steadyFormulation(spaceDim, Re, conformingTraces, meshTopo, k, delta_k)));
+    navierStokesFormulationCoarse = Teuchos::rcp(new NavierStokesVGPFormulation(NavierStokesVGPFormulation::steadyFormulation(spaceDim, Re, conformingTraces, coarseMeshTopo, k_coarse, delta_k)));
+
+    FunctionPtr u1, u2, p;
+    NavierStokesVGPFormulation::getKovasznaySolution(Re, u1, u2, p);
+    
+    mesh = navierStokesFormulationFine->solutionIncrement()->mesh();
+    coarseMesh = navierStokesFormulationCoarse->solutionIncrement()->mesh();
+    
+    if (useZeroMeanConstraints)
+    {
+      navierStokesFormulationFine->addZeroMeanPressureCondition();
+      double p_mean = p->integrate(mesh);
+      p = p - p_mean;
+    }
+    else
+    {
+      navierStokesFormulationFine->addPointPressureCondition({0.5,1.0});
+      double p_center = p->evaluate(0.5, 1.0);
+      p = p - p_center;
+    }
+    
+    FunctionPtr u = Function::vectorize({u1, u2});
+    FunctionPtr forcingFunction = NavierStokesVGPFormulation::forcingFunctionSteady(spaceDim, Re, u, p);
+    
+    int kovasznayCubatureEnrichment = 20; // 20 is better than 10 for accurately measuring error on the coarser meshes.
+
+    navierStokesFormulationFine->addInflowCondition(SpatialFilter::allSpace(), u);
+    navierStokesFormulationFine->setForcingFunction(forcingFunction);
+    
+    navierStokesFormulationFine->solution()->setCubatureEnrichmentDegree(kovasznayCubatureEnrichment);
+    navierStokesFormulationFine->solutionIncrement()->setCubatureEnrichmentDegree(kovasznayCubatureEnrichment);
+    
+    if (conformingTraces && enhanceFieldsForH1TracesWhenConforming)
+    {
+      TEUCHOS_TEST_FOR_EXCEPTION(true, std::invalid_argument, "Unsupported option for Navier-Stokes"); // if it seems important, we can add support for this later...
+    }
+    
+    graphNorm = navierStokesFormulationFine->bf()->graphNorm();
+    
+    solution = navierStokesFormulationFine->solutionIncrement();
+    solution->setUseCondensedSolve(useStaticCondensation);
+    return; // return early for Navier-Stokes; we've already set up the Solution objects, etc.
   }
 
   int H1Order = k + 1;
@@ -854,7 +1013,7 @@ void initializeSolutionAndCoarseMesh(SolutionPtr &solution, MeshPtr &coarseMesh,
   if (hOnly) coarseMesh = MeshFactory::rectilinearMesh(bf, dimensions, elementCounts, H1Order_coarse, delta_k, x0, trialOrderEnhancements);
 
   // now that we have mesh, add pressure constraint for Stokes (imposing zero at origin--want to aim for center of mesh)
-  if ((problemChoice == Stokes) || (problemChoice==NavierStokes))
+  if (problemChoice == Stokes)
   {
     if (!useZeroMeanConstraints)
     {
@@ -917,9 +1076,10 @@ void run(ProblemChoice problemChoice, int &iterationCount, int spaceDim, int num
          bool useStaticCondensation, bool precondition, bool schwarzOnly, GMGOperator::SmootherChoice smootherType,
          int schwarzOverlap, GMGOperator::FactorType schwarzBlockFactorization, int schwarzLevelOfFill, double schwarzFillRatio,
          Solver::SolverChoice coarseSolverChoice, double cgTol, int cgMaxIterations, int AztecOutputLevel,
-         bool reportTimings, double &solveTime, bool reportEnergyError, int numCellsRootMesh, bool hOnly, bool useZeroMeanConstraints,
+         bool reportTimings, double &solveTime, bool reportEnergyError, int numCellsRootMesh,
+         bool hOnly, bool useHierarchicalNeighborsForSchwarz, bool useZeroMeanConstraints,
          bool writeAndExit, GMGOperator::SmootherApplicationType comboType, double smootherWeight, bool useWeightMatrixForSchwarz,
-         bool enhanceFieldsForH1TracesWhenConforming)
+         bool enhanceFieldsForH1TracesWhenConforming, double graphNormBeta)
 {
   int rank = Teuchos::GlobalMPISession::getRank();
   if (k_coarse == -1)
@@ -989,9 +1149,11 @@ void run(ProblemChoice problemChoice, int &iterationCount, int spaceDim, int num
   SolutionPtr solution;
   MeshPtr k0Mesh;
   IPPtr graphNorm;
-  initializeSolutionAndCoarseMesh(solution, k0Mesh, graphNorm, problemChoice, spaceDim, conformingTraces, useStaticCondensation,
-                                  numCells, k, delta_k, k_coarse, numCellsRootMesh, hOnly, useZeroMeanConstraints, enhanceFieldsForH1TracesWhenConforming);
-  solution->setNarrateOnRankZero(narrateSolution, "fine Solution");
+  Teuchos::RCP<NavierStokesVGPFormulation> navierStokesFormFine, navierStokesFormCoarse; // NULL if not doing Navier-Stokes
+  initializeSolutionAndCoarseMesh(solution, k0Mesh, graphNorm, graphNormBeta, problemChoice, spaceDim, conformingTraces, useStaticCondensation,
+                                  numCells, k, delta_k, k_coarse, numCellsRootMesh, hOnly, useHierarchicalNeighborsForSchwarz,
+                                  useZeroMeanConstraints, enhanceFieldsForH1TracesWhenConforming,
+                                  navierStokesFormFine, navierStokesFormCoarse);
   
   MeshPtr mesh = solution->mesh();
   BCPtr bc = solution->bc();
@@ -1062,48 +1224,11 @@ void run(ProblemChoice problemChoice, int &iterationCount, int spaceDim, int num
   }
   else
   {
-    BCPtr zeroBCs = bc->copyImposingZero();
-    bool saveFactorization = true;
-    
-    GMGSolver* gmgSolver = new GMGSolver(solution, k0Mesh, cgMaxIterations, cgTol, Teuchos::null, useStaticCondensation);
-    gmgSolver->setNarrateOnRankZero(narrateSolution, "fine GMGSolver");
-    gmgSolver->gmgOperator()->setNarrateOnRankZero(narrateSolution, "fine GMGOperator");
-    gmgSolver->gmgOperator()->getCoarseSolution()->setNarrateOnRankZero(narrateCoarseSolution, "coarse solution");
-
-    Teuchos::RCP<Solver> coarseSolver = Teuchos::null;
-    
-    coarseSolver = Solver::getSolver(coarseSolverChoice, saveFactorization, coarseCGTol, coarseMaxIterations, gmgSolver->gmgOperator()->getCoarseSolution(),
-                                     Solver::getDirectSolver(saveFactorization));
-
-    gmgSolver->gmgOperator()->setCoarseSolver(coarseSolver);
-    
-    if ((smootherType == GMGOperator::CAMELLIA_ADDITIVE_SCHWARZ) && hOnly)
-    {
-      // then use hierarchical neighbor relationship
-      gmgSolver->gmgOperator()->setUseHierarchicalNeighborsForSchwarz(true);
-      if (rank==0) cout << "using new hierarchical Schwarz neighbors option\n";
-    }
-
-    gmgSolver->setAztecOutput(AztecOutputLevel);
-    gmgSolver->setUseConjugateGradient(true);
-    gmgSolver->setComputeConditionNumberEstimate(false);
-    gmgSolver->gmgOperator()->setSchwarzFactorizationType(schwarzBlockFactorization);
-    gmgSolver->gmgOperator()->setLevelOfFill(schwarzLevelOfFill);
-    gmgSolver->gmgOperator()->setFillRatio(schwarzFillRatio);
-//    cout << "Set GMGOperator level of fill to " << schwarzLevelOfFill << endl;
-//    cout << "Set GMGOperator fill ratio to " << schwarzFillRatio << endl;
-    gmgSolver->gmgOperator()->setSmootherType(smootherType);
-    gmgSolver->gmgOperator()->setSmootherOverlap(schwarzOverlap);
-    gmgSolver->gmgOperator()->setSmootherApplicationType(comboType);
-    if (smootherWeight != -1)
-      gmgSolver->gmgOperator()->setSmootherWeight(smootherWeight);
-    else
-      gmgSolver->gmgOperator()->setUseSchwarzScalingWeight(true);
-    
-    gmgSolver->gmgOperator()->setUseSchwarzDiagonalWeight(useWeightMatrixForSchwarz);
-    
-    gmgSolver->gmgOperator()->setDebugMode(runGMGOperatorInDebugMode);
-    solver = Teuchos::rcp( gmgSolver ); // we use "new" above, so we can let this RCP own the memory
+    solver = initializeGMGSolver(solution, AztecOutputLevel, smootherType,
+                                 schwarzOverlap, schwarzBlockFactorization, schwarzLevelOfFill, schwarzFillRatio,
+                                 useStaticCondensation, hOnly, useHierarchicalNeighborsForSchwarz, k0Mesh, coarseSolverChoice,
+                                 cgMaxIterations, cgTol, comboType,
+                                 smootherWeight, useWeightMatrixForSchwarz);
   }
 
 //  if (problemChoice==Stokes) {
@@ -1111,7 +1236,28 @@ void run(ProblemChoice problemChoice, int &iterationCount, int spaceDim, int num
 //    solution->setWriteMatrixToFile(true, "/tmp/A_stokes.dat");
 //  }
 
-  int result = solution->solve(solver);
+  int result;
+  
+  if (problemChoice != NavierStokes)
+  {
+    result = solution->solve(solver);
+  }
+  else
+  {
+    result = 0;
+    if (rank==0) cout << "Navier-Stokes: doing two Newton steps, recording the results for the second\n";
+    
+    navierStokesFormFine->setSolver(solver);
+    result = navierStokesFormFine->solveAndAccumulate();
+    
+    solver = initializeGMGSolver(solution, AztecOutputLevel, smootherType,
+                                 schwarzOverlap, schwarzBlockFactorization, schwarzLevelOfFill, schwarzFillRatio,
+                                 useStaticCondensation, hOnly, useHierarchicalNeighborsForSchwarz, k0Mesh, coarseSolverChoice,
+                                 cgMaxIterations, cgTol, comboType,
+                                 smootherWeight, useWeightMatrixForSchwarz);
+    navierStokesFormFine->setSolver(solver);
+    result = navierStokesFormFine->solveAndAccumulate(); // second step has non-zero background flow (implying variable coefficients)
+  }
 
   solveTime = solveTimer.ElapsedTime();
 
@@ -1285,9 +1431,9 @@ void runMany(ProblemChoice problemChoice, int spaceDim, int delta_k, int minCell
              GMGOperator::FactorType schwarzBlockFactorization, int schwarzLevelOfFill, double schwarzFillRatio,
              Solver::SolverChoice coarseSolverChoice,
              double cgTol, int cgMaxIterations, int aztecOutputLevel, RunManyPreconditionerChoices preconditionerChoices,
-             int k, int k_coarse, int overlapLevel, int numCellsRootMesh, bool reportTimings, bool hOnly, int maxCells,
-             bool useZeroMeanConstraints, GMGOperator::SmootherApplicationType comboType, double smootherWeight,
-             bool useWeightMatrixForSchwarz, bool enhanceFieldsForH1TracesWhenConforming)
+             int k, int k_coarse, int overlapLevel, int numCellsRootMesh, bool reportTimings, bool hOnly, bool useHierarchicalNeighborsForSchwarz,
+             int maxCells, bool useZeroMeanConstraints, GMGOperator::SmootherApplicationType comboType, double smootherWeight,
+             bool useWeightMatrixForSchwarz, bool enhanceFieldsForH1TracesWhenConforming, double graphNormBeta)
 {
   int rank = Teuchos::GlobalMPISession::getRank();
 
@@ -1311,7 +1457,8 @@ void runMany(ProblemChoice problemChoice, int spaceDim, int delta_k, int minCell
     problemChoiceString = "Stokes";
     break;
   case NavierStokes:
-    problemChoiceString = "NavierStokes";
+    problemChoiceString = "Navier-Stokes";
+    break;
   default:
     TEUCHOS_TEST_FOR_EXCEPTION(true, std::invalid_argument, "Unhandled problem choice");
     break;
@@ -1556,8 +1703,8 @@ void runMany(ProblemChoice problemChoice, int spaceDim, int delta_k, int minCell
                   useStaticCondensation, precondition, schwarzOnly, smoother, overlapValue,
                   schwarzBlockFactorization, schwarzLevelOfFill, schwarzFillRatio, coarseSolverChoice,
                   cgTol, cgMaxIterations, aztecOutputLevel, reportTimings, solveTime,
-                  reportEnergyError, numCellsRootMesh, hOnly, useZeroMeanConstraints, writeAndExit, comboType,
-                  smootherWeight, useWeightMatrixForSchwarz, enhanceFieldsForH1TracesWhenConforming);
+                  reportEnergyError, numCellsRootMesh, hOnly, useHierarchicalNeighborsForSchwarz, useZeroMeanConstraints, writeAndExit, comboType,
+                  smootherWeight, useWeightMatrixForSchwarz, enhanceFieldsForH1TracesWhenConforming, graphNormBeta);
 
               int numCells = pow((double)numCells1D, spaceDim);
 
@@ -1603,14 +1750,19 @@ void runMany(ProblemChoice problemChoice, int spaceDim, int delta_k, int minCell
     {
       filename << "_k" << k;
     }
+    filename << "_deltak" << delta_k;
     if (k_coarse != 0)
       filename << "_kCoarse" << k_coarse;
 
     if (hOnly)
     {
       filename << "_hOnly";
+      if (useHierarchicalNeighborsForSchwarz)
+        filename << "TruncatedNeighbors";
+      else
+        filename << "StandardNeighbors";
     }
-
+    
     // if coarse solver is not direct, then include in the file name:
     if ((coarseSolverChoice != Solver::KLU) && (coarseSolverChoice != Solver::MUMPS) && (coarseSolverChoice != Solver::SuperLUDist))
       filename << "_coarseSolver_" << Solver::solverChoiceString(coarseSolverChoice);
@@ -1622,6 +1774,10 @@ void runMany(ProblemChoice problemChoice, int spaceDim, int delta_k, int minCell
       filename << "_enhancedFields";
     if (comboType == GMGOperator::MULTIPLICATIVE)
       filename << "_multiplicative";
+    if (graphNormBeta != 1.0)
+      filename << "_graphNormBeta" << graphNormBeta;
+    if (cgTol != 1e-10)
+      filename << "_cgTol" << cgTol;
     filename << "_results.dat";
     ofstream fout(filename.str().c_str());
     fout << results.str();
@@ -1696,6 +1852,8 @@ int main(int argc, char *argv[])
 
   bool hOnly = false;
   
+  bool useHierarchicalNeighborsForSchwarz = false; // new 12-22-15
+  
   narrateSolution = false;
   narrateCoarseSolution = false;
 
@@ -1710,6 +1868,8 @@ int main(int argc, char *argv[])
   string coarseSolverChoiceString = "GMG";
 
   string runManySubsetString = "All";
+  
+  double graphNormBeta = 1.0;
 
   int runManyMinCells = 2;
   int maxCells = -1;
@@ -1726,11 +1886,13 @@ int main(int argc, char *argv[])
 
   cmdp.setOption("combineAdditive", "combineMultiplicative", &additiveComboType);
   cmdp.setOption("useCondensedSolve", "useStandardSolve", &useCondensedSolve);
+  cmdp.setOption("graphNormBeta", &graphNormBeta);
 
   cmdp.setOption("useSchwarzPreconditioner", "useGMGPreconditioner", &schwarzOnly);
   cmdp.setOption("smoother", &smootherChoiceStr);
 
   cmdp.setOption("hOnly", "notHOnly", &hOnly);
+  cmdp.setOption("useHierarchicalNeighborsForSchwarz", "useNaturalNeighborsForSchwarz", &useHierarchicalNeighborsForSchwarz);
 
   cmdp.setOption("enhanceFieldsForH1TracesWhenConforming", "equalOrderFieldsForH1TracesWhenConforming", &enhanceFieldsForH1TracesWhenConforming);
   
@@ -1806,11 +1968,7 @@ int main(int argc, char *argv[])
   }
   else if (problemChoiceString == "Navier-Stokes")
   {
-    if (rank==0) cout << "Navier-Stokes not yet supported by this driver!\n";
-#ifdef HAVE_MPI
-    MPI_Finalize();
-#endif
-    return -1;
+    problemChoice = NavierStokes;
   }
   else
   {
@@ -1910,6 +2068,10 @@ int main(int argc, char *argv[])
   {
     runManySubsetChoice = GMGPointSymmetricGaussSeidel;
   }
+  else if (runManySubsetString == "GMGBlockGaussSeidel")
+  {
+    runManySubsetChoice = GMGBlockSymmetricGaussSeidel;
+  }
   else if (runManySubsetString == "GMGPointJacobi")
   {
     runManySubsetChoice = GMGPointJacobi;
@@ -1945,8 +2107,9 @@ int main(int argc, char *argv[])
         useCondensedSolve, precondition, schwarzOnly, smootherChoice, schwarzOverlap,
         schwarzFactorType, levelOfFill, fillRatio, coarseSolverChoice,
         cgTol, cgMaxIterations, AztecOutputLevel, reportTimings, solveTime,
-        reportEnergyError, numCellsRootMesh, hOnly, useZeroMeanConstraints, writeAndExit, comboType, smootherWeight,
-        useWeightMatrixForSchwarz, enhanceFieldsForH1TracesWhenConforming);
+        reportEnergyError, numCellsRootMesh, hOnly, useHierarchicalNeighborsForSchwarz,
+        useZeroMeanConstraints, writeAndExit, comboType, smootherWeight,
+        useWeightMatrixForSchwarz, enhanceFieldsForH1TracesWhenConforming, graphNormBeta);
 
     if (rank==0) cout << "Iteration count: " << iterationCount << "; solve time " << solveTime << " seconds." << endl;
   }
@@ -1985,8 +2148,10 @@ int main(int argc, char *argv[])
             schwarzFactorType, levelOfFill, fillRatio,
             coarseSolverChoice,
             cgTol, cgMaxIterations, AztecOutputLevel,
-            runManySubsetChoice, k, k_coarse, schwarzOverlap, numCellsRootMesh, reportTimings, hOnly, maxCells,
-            useZeroMeanConstraints, comboType, smootherWeight, useWeightMatrixForSchwarz, enhanceFieldsForH1TracesWhenConforming);
+            runManySubsetChoice, k, k_coarse, schwarzOverlap, numCellsRootMesh, reportTimings,
+            hOnly, useHierarchicalNeighborsForSchwarz, maxCells,
+            useZeroMeanConstraints, comboType, smootherWeight, useWeightMatrixForSchwarz, enhanceFieldsForH1TracesWhenConforming,
+            graphNormBeta);
   }
   return 0;
 }
