@@ -23,7 +23,7 @@ namespace Camellia {
     static CellTopoPtr cellTopoForMOABType(moab::EntityType entityType);
 #endif
   public:
-    static MeshTopologyPtr readMOABMesh(string filePath);
+    static MeshTopologyPtr readMOABMesh(string filePath, bool replicateCells=true); // true the only supported option right now, but eventually we will change the default here, once MeshTopology has a distributed data structure
   };
 }
 

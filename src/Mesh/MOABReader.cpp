@@ -38,10 +38,15 @@ CellTopoPtr MOABReader::cellTopoForMOABType(moab::EntityType entityType)
 }
 #endif
 
-MeshTopologyPtr MOABReader::readMOABMesh(string filePath)
+MeshTopologyPtr MOABReader::readMOABMesh(string filePath, bool replicateCells)
 {
 #ifdef HAVE_MOAB
-  string options = "PARALLEL=BCAST";
+  
+  string options;
+  if (!replicateCells) // right now, MeshTopology requires replicateCells to be true; this will be the case until we have a true parallel data structure for MeshTopology
+    options = "PARALLEL=READ_PART;PARTITION=PARALLEL_PARTITION;PARALLEL_RESOLVE_SHARED_ENTS";
+  else
+    options = "PARALLEL=BCAST";
   
   using namespace moab;
   
@@ -74,7 +79,12 @@ MeshTopologyPtr MOABReader::readMOABMesh(string filePath)
   static const int VERTICES_PER_POINT = 3;
   
   MeshTopologyPtr meshTopo = Teuchos::rcp( new MeshTopology(spaceDim) );
+
+  TEUCHOS_TEST_FOR_EXCEPTION(!replicateCells, std::invalid_argument,
+                             "MOABReader doesn't yet implement cell labeling for the case when replicateCells is false");
   
+  // if we get here, replicateCells is true, so every rank sees the same cells
+  GlobalIndexType cellID = 0;
   while (all_elements.size() > 0)
   {
     EntityHandle element = all_elements.pop_front();
@@ -97,7 +107,8 @@ MeshTopologyPtr MOABReader::readMOABMesh(string filePath)
         vertices[i][d] = vertexCoords[i*VERTICES_PER_POINT + d];
       }
     }
-    meshTopo->addCell(cellTopo, vertices);
+    meshTopo->addCell(cellID, cellTopo, vertices);
+    cellID++;
   }
   
   delete mb;

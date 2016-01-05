@@ -110,7 +110,8 @@ MeshPtr MeshTools::timeSliceMesh(MeshPtr spaceTimeMesh, double t,
     {
       vector< vector< double > > sliceNodes = timeSliceForCell(physicalNodes, t);
       CellTopoPtr cellTopo = getBottomTopology(meshTopo, rootCellID);
-      CellPtr sliceCell = sliceTopo->addCell(cellTopo, sliceNodes);
+      GlobalIndexType newCellID = sliceTopo->cellCount();
+      CellPtr sliceCell = sliceTopo->addCell(newCellID, cellTopo, sliceNodes); // for consistency, this is only valid if run on every MPI rank.
       sliceCellIDToSpaceTimeCellID[sliceCell->cellIndex()] = rootCellID;
     }
   }

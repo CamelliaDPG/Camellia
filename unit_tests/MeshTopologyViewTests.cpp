@@ -304,7 +304,8 @@ namespace
     TEST_ASSERT(vertexFound);
     
     IndexType cellIndex = 0;
-    meshTopo->refineCell(cellIndex, RefinementPattern::regularRefinementPatternLine());
+    GlobalIndexType nextCellID = meshTopo->cellCount();
+    meshTopo->refineCell(cellIndex, RefinementPattern::regularRefinementPatternLine(), nextCellID);
     
     unsigned vertexDim = 0;
     set<pair<IndexType,unsigned>> cellEntriesMesh = meshTopo->getCellsContainingEntity(vertexDim, vertexIndex);

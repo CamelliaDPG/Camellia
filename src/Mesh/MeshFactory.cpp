@@ -1384,7 +1384,8 @@ MeshTopologyPtr MeshFactory::spaceTimeMeshTopology(MeshTopologyPtr spatialMeshTo
       spaceTimeCellNodes.resize(spaceTimeCellTopology->getVertexCount(),spaceTimeDim);
       spaceTimeCellTopology->initializeNodes(componentNodes, spaceTimeCellNodes);
 
-      CellPtr spaceTimeCell = spaceTimeTopology->addCell(spaceTimeCellTopology, spaceTimeCellNodes);
+      IndexType newCellID = spaceTimeTopology->cellCount();
+      CellPtr spaceTimeCell = spaceTimeTopology->addCell(newCellID, spaceTimeCellTopology, spaceTimeCellNodes);
       if (timeSubdivision==0) cellIDMap[spaceTimeCell->cellIndex()] = cellIndex;
     }
   }
@@ -1405,6 +1406,8 @@ MeshTopologyPtr MeshFactory::spaceTimeMeshTopology(MeshTopologyPtr spatialMeshTo
 
   bool noCellsToRefine = false;
 
+  GlobalIndexType newCellID = spaceTimeTopology->cellCount();
+  
   while (!noCellsToRefine)
   {
     noCellsToRefine = true;
@@ -1423,7 +1426,9 @@ MeshTopologyPtr MeshFactory::spaceTimeMeshTopology(MeshTopologyPtr spatialMeshTo
 
           CellPtr spaceTimeCell = spaceTimeTopology->getCell(*cellIt);
           RefinementPatternPtr refPattern = RefinementPattern::regularRefinementPattern(spaceTimeCell->topology());
-          spaceTimeTopology->refineCell(spaceTimeCellIndex, refPattern);
+          spaceTimeTopology->refineCell(spaceTimeCellIndex, refPattern, newCellID);
+          
+          newCellID += refPattern->numChildren();
 
           vector<CellPtr> spatialChildren = spatialCell->children();
           for (int childOrdinal=0; childOrdinal<spatialChildren.size(); childOrdinal++)
@@ -1452,4 +1457,3 @@ MeshTopologyPtr MeshFactory::spaceTimeMeshTopology(MeshTopologyPtr spatialMeshTo
 
   return spaceTimeTopology;
 }
-

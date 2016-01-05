@@ -57,7 +57,8 @@ class MeshTopology : public MeshTopologyView
   vector< map< IndexType, vector< pair< RefinementPatternPtr, vector<IndexType> > > > > _childEntities; // map from parent to child entities, together with the RefinementPattern to get from one to the other.
   vector< vector< Camellia::CellTopologyKey > > _entityCellTopologyKeys;
 
-  vector< CellPtr > _cells;
+//  vector< CellPtr > _cells;
+  map<GlobalIndexType, CellPtr> _cells; // the cells known on this MPI rank.  Right now, all cells are stored on every rank; soon, this will not be true anymore.
 
   // these guys presently only support 2D:
   set< IndexType > _cellIDsWithCurves;
@@ -68,8 +69,8 @@ class MeshTopology : public MeshTopologyView
 
   //  set<IndexType> activeDescendants(IndexType d, IndexType entityIndex);
   //  set<IndexType> activeDescendantsNotInSet(IndexType d, IndexType entityIndex, const set<IndexType> &excludedSet);
-  IndexType addCell(CellTopoPtrLegacy cellTopo, const vector<IndexType> &cellVertices, IndexType parentCellIndex = -1);
-  IndexType addCell(CellTopoPtr cellTopo, const vector<IndexType> &cellVertices, IndexType parentCellIndex = -1);
+  IndexType addCell(IndexType cellIndex, CellTopoPtrLegacy cellTopo, const vector<IndexType> &cellVertices, IndexType parentCellIndex = -1);
+  IndexType addCell(IndexType cellIndex, CellTopoPtr cellTopo, const vector<IndexType> &cellVertices, IndexType parentCellIndex = -1);
   void addCellForSide(IndexType cellIndex, unsigned sideOrdinal, IndexType sideEntityIndex);
   void addEdgeCurve(pair<IndexType,IndexType> edge, ParametricCurvePtr curve);
   //  IndexType addEntity(const shards::CellTopology &entityTopo, const vector<IndexType> &entityVertices, unsigned &entityPermutation); // returns the entityIndex
@@ -79,7 +80,8 @@ class MeshTopology : public MeshTopologyView
   set<IndexType> descendants(unsigned d, IndexType entityIndex);
 
   //  pair< IndexType, set<IndexType> > determineEntityConstraints(unsigned d, IndexType entityIndex);
-  void addChildren(CellPtr cell, const vector< CellTopoPtr > &childTopos, const vector< vector<IndexType> > &childVertices);
+  void addChildren(IndexType firstChildCellIndex, CellPtr cell, const vector< CellTopoPtr > &childTopos,
+                   const vector< vector<IndexType> > &childVertices);
 
   void determineGeneralizedParentsForRefinement(CellPtr cell, RefinementPatternPtr refPattern);
 
@@ -107,10 +109,10 @@ public:
   MeshTopology(MeshGeometryPtr meshGeometry, vector<PeriodicBCPtr> periodicBCs=vector<PeriodicBCPtr>());
   virtual ~MeshTopology() {}
   
-  CellPtr addCell(CellTopoPtr cellTopo, const vector< vector<double> > &cellVertices);
-  CellPtr addCell(CellTopoPtr cellTopo, const Intrepid::FieldContainer<double> &cellVertices);
+  CellPtr addCell(IndexType cellIndex, CellTopoPtr cellTopo, const vector< vector<double> > &cellVertices);
+  CellPtr addCell(IndexType cellIndex, CellTopoPtr cellTopo, const Intrepid::FieldContainer<double> &cellVertices);
 
-  CellPtr addCell(CellTopoPtrLegacy cellTopo, const vector< vector<double> > &cellVertices);
+  CellPtr addCell(IndexType cellIndex, CellTopoPtrLegacy cellTopo, const vector< vector<double> > &cellVertices);
 
   void addVertex(const std::vector<double>& vertex);
 
@@ -188,7 +190,9 @@ public:
   bool isValidCellIndex(IndexType cellIndex);
   
   Intrepid::FieldContainer<double> physicalCellNodesForCell(unsigned cellIndex, bool includeCellDimension = false);
-  void refineCell(IndexType cellIndex, RefinementPatternPtr refPattern);
+  void refineCell(IndexType cellIndex, RefinementPatternPtr refPattern, IndexType firstChildCellIndex);
+  
+  // ! Returns the global cell count.  In the future, may become MPI-communicating method.
   IndexType cellCount();
   IndexType activeCellCount();
 

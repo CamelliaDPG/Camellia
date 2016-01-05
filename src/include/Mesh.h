@@ -234,6 +234,8 @@ public:
 
   set<GlobalIndexType> cellIDsInPartition(); // rank-local cellIDs
 
+  bool cellIsActive(GlobalIndexType cellID) const;
+  
   int cellPolyOrder(GlobalIndexType cellID);
   vector<int> cellTensorPolyOrder(GlobalIndexType cellID);
 

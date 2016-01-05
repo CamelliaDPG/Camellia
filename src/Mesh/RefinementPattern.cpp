@@ -157,9 +157,14 @@ RefinementPattern::RefinementPattern(CellTopoPtr cellTopoPtr, FieldContainer<dou
     refCellNodesVector.push_back(node);
   }
 
-  _refinementTopology->addCell(cellTopoPtr, refCellNodesVector);
+  GlobalIndexType newCellID = 0;
+  _refinementTopology->addCell(newCellID, cellTopoPtr, refCellNodesVector);
+  newCellID++;
   if (spaceDim != 0)
-    _refinementTopology->refineCell(0, thisPtr);
+  {
+    _refinementTopology->refineCell(0, thisPtr, newCellID);
+    newCellID += thisPtr->numChildren();
+  }
 
   CellPtr parentCell = _refinementTopology->getCell(0);
 
@@ -397,6 +402,110 @@ unsigned RefinementPattern::ancestralSubcellOrdinal(RefinementBranch &refBranch,
     if (ancestralSubcord == -1) return ancestralSubcord; // no more mapping to do, then!
   }
   return ancestralSubcord;
+}
+
+RefinementPatternPtr RefinementPattern::anisotropicRefinementPattern(CellTopoPtr cellTopo, std::vector<int> dimensionRefinementFlags)
+{
+  int spaceDim = dimensionRefinementFlags.size();
+  TEUCHOS_TEST_FOR_EXCEPTION(spaceDim != cellTopo->getDimension(), std::invalid_argument, "dimensionRefinementFlags must have the same length as the number of dimensions for cellTopo.");
+  
+  // TODO: create some sort of lookup mechanism.
+  RefinementPatternPtr refPattern;
+  
+  // first, check whether refinement pattern is regular or a no-refinement pattern:
+  int numRefinedDimensions = 0;
+  for (int refFlag : dimensionRefinementFlags)
+  {
+    if (refFlag != 0) numRefinedDimensions++;
+  }
+  
+  if (numRefinedDimensions == spaceDim) return RefinementPattern::regularRefinementPattern(cellTopo);
+  if (numRefinedDimensions == 0) return RefinementPattern::noRefinementPattern(cellTopo);
+  
+  int numChildren = 1 << numRefinedDimensions;
+  int nodeCount = cellTopo->getNodeCount();
+  FieldContainer<double> refinedNodes(numChildren,nodeCount,spaceDim);
+  
+  // supported cell topologies / refinement combinations:
+  // - hypercubes (any dimension combination)
+  // - tensor-product topologies (all or none in base topology, any combination of tensor-product dimensions, which come last)
+  
+  if (cellTopo->isHypercube())
+  {
+    RefinementPatternPtr lineRefPattern = regularRefinementPatternLine();
+    RefinementPatternPtr noRefinementLinePattern = noRefinementPatternLine();
+    int childOrdinal = 0;
+    FieldContainer<double> previousDimensionNodes;
+    int previousDimensionChildCount = 1;
+    int nodeCount = 1;
+    for (int d=0; d<spaceDim; d++)
+    {
+      nodeCount *= 2;
+      int refinementsInDimension = (dimensionRefinementFlags[d] == 0) ? 1 : 2;
+      int numChildren = previousDimensionChildCount * refinementsInDimension;
+      if (d == 0) // previousDimensionNodes not set
+      {
+        if (refinementsInDimension == 2)
+          previousDimensionNodes = lineRefPattern->refinedNodes();
+        else
+          previousDimensionNodes = noRefinementLinePattern->refinedNodes();
+      }
+      else
+      {
+        // If there is no refinement in this dimension, then the number of children
+        // remains the same as in the previous dimension; we just need to generate new
+        // nodes corresponding to this dimension, by duplicating the nodes from previous
+        // dimension, and adding to the first set the 0 node from noRefinementPatternLine
+        // and to the second set the 1 node from noRefinementPatternLine.
+        
+        // If there is a refinement in this dimension, then we need to double the
+        // number of children from previousDimensionNodes.
+        
+        // The general rule: take each previous child and combine it with the children
+        // in the present dimension (1 or 2 of them).
+        FieldContainer<double> thisDimensionNodes(numChildren,nodeCount,d+1);
+        // TODO: finish this
+        
+        previousDimensionNodes = thisDimensionNodes;
+      }
+    }
+  }
+  else
+  {
+    // for simplicity, right now we only consider tensorial degree 1, which is what we get in space-time
+    if (cellTopo->getTensorialDegree() != 1)
+    {
+      string message = "Error in RefinementPattern: for non-hypercube topologies, right now we only support tensorial degree 1 tensor-product topologies for anisotropic refinements.";
+      cout << message << endl;
+      TEUCHOS_TEST_FOR_EXCEPTION(cellTopo->getTensorialDegree() != 1, std::invalid_argument, message);
+    }
+    CellTopoPtr baseTopo = CellTopology::cellTopology(cellTopo->getShardsTopology());
+    int baseDim = baseTopo->getDimension();
+    int baseDimensionsToRefine = 0;
+    for (int d=0; d<baseDim; d++)
+    {
+      if (dimensionRefinementFlags[d] == 1)
+      {
+        baseDimensionsToRefine++;
+      }
+    }
+    // all or none:
+    if (baseDimensionsToRefine == baseDim) // all
+    {
+      // since we have treated the regular refinement case above, we must not be refining in temporal dimension
+      refPattern = refPatternExtrudedInTime(regularRefinementPattern(baseTopo));
+    }
+    else // none
+    {
+      // TODO: finish implementing this
+      // since we have treated the null refinement case above, we must be refining in temporal dimension
+      string message = "Error in RefinementPattern: have not completed implementation of this anisotropic refinement case.";
+      cout << message << endl;
+      TEUCHOS_TEST_FOR_EXCEPTION(true, std::invalid_argument, message);
+    }
+  }
+  
+  return refPattern;
 }
 
 unsigned RefinementPattern::descendantSubcellOrdinal(RefinementBranch &refBranch, unsigned int subcdim, unsigned int ancestralSubcord)
@@ -1910,18 +2019,20 @@ FieldContainer<double> RefinementPattern::descendantNodes(RefinementBranch refin
 
   MeshGeometryPtr meshGeometry = Teuchos::rcp( new MeshGeometry(vertices, elementVertices, cellTopos) );
 
-  MeshTopologyPtr mesh = Teuchos::rcp( new MeshTopology(meshGeometry) );
+  MeshTopologyPtr meshTopo = Teuchos::rcp( new MeshTopology(meshGeometry) );
 
   unsigned cellIndex = 0; // cellIndex of the current parent in the RefinementBranch
+  GlobalIndexType newCellID = meshTopo->cellCount();
   for (int refIndex=0; refIndex<refinementBranch.size(); refIndex++)
   {
     RefinementPatternPtr tempRefPatternPtr = Teuchos::rcp(refinementBranch[refIndex].first, false);
-    mesh->refineCell(cellIndex, tempRefPatternPtr);
+    meshTopo->refineCell(cellIndex, tempRefPatternPtr, newCellID);
+    newCellID += tempRefPatternPtr->numChildren();
     unsigned childOrdinal = refinementBranch[refIndex].second;
-    cellIndex = mesh->getCell(cellIndex)->getChildIndices(mesh)[childOrdinal];
+    cellIndex = meshTopo->getCell(cellIndex)->getChildIndices(meshTopo)[childOrdinal];
   }
 
-  return mesh->physicalCellNodesForCell(cellIndex);
+  return meshTopo->physicalCellNodesForCell(cellIndex);
 }
 
 CellTopoPtr RefinementPattern::descendantTopology(RefinementBranch &refinements)

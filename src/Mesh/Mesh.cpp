@@ -371,6 +371,11 @@ set<GlobalIndexType> Mesh::cellIDsInPartition()
   return _gda->cellsInPartition(-1);
 }
 
+bool Mesh::cellIsActive(GlobalIndexType cellID) const
+{
+  return _meshTopology->getActiveCellIndices().find(cellID) != _meshTopology->getActiveCellIndices().end();
+}
+
 int Mesh::cellPolyOrder(GlobalIndexType cellID)   // aka H1Order
 {
   return _gda->getH1Order(cellID)[0];
@@ -465,6 +470,14 @@ void Mesh::enforceOneIrregularity(bool repartitionAndMigrate)
               // then *neighbor* is irregular
               irregularCellIDs[neighbor->topology()->getKey()].insert(neighborInfo.first);
 //              cout << neighborInfo.first << " is irregular.\n";
+              { // DEBUGGING:
+                if (activeCellIDs.find(neighborInfo.first) == activeCellIDs.end())
+                {
+                  _meshTopology->printAllEntitiesInBaseMeshTopology();
+                  // repeat for entering in the debugger before the exception is thrown
+                  cell->getNeighborInfo(sideOrdinal, _meshTopology);
+                }
+              }
               TEUCHOS_TEST_FOR_EXCEPTION(activeCellIDs.find(neighborInfo.first) == activeCellIDs.end(),
                                          std::invalid_argument, "Internal error: 'irregular' cell is not active!");
             }
@@ -485,7 +498,7 @@ void Mesh::enforceOneIrregularity(bool repartitionAndMigrate)
     }
     else
     {
-      meshIsNotRegular=false;
+      meshIsNotRegular = false;
     }
   }
   if (meshChanged && repartitionAndMigrate)
@@ -778,6 +791,7 @@ void Mesh::hRefine(const set<GlobalIndexType> &cellIDs, Teuchos::RCP<RefinementP
 
   set<GlobalIndexType>::const_iterator cellIt;
 
+  GlobalIndexType nextCellID = writableMeshTopology->cellCount();
   for (cellIt = cellIDs.begin(); cellIt != cellIDs.end(); cellIt++)
   {
     GlobalIndexType cellID = *cellIt;
@@ -788,7 +802,8 @@ void Mesh::hRefine(const set<GlobalIndexType> &cellIDs, Teuchos::RCP<RefinementP
       TEUCHOS_TEST_FOR_EXCEPTION(true, std::invalid_argument, "inactive cell");
     }
     
-    writableMeshTopology->refineCell(cellID, refPattern);
+    writableMeshTopology->refineCell(cellID, refPattern, nextCellID); // TODO: establish nextCellID through a parallel scan so that we don't have to do the refinement on every MPI rank.
+    nextCellID += refPattern->numChildren();
 
     // TODO: figure out what it is that breaks in GDAMaximumRule when we use didHRefine to notify about all cells together outside this loop
     //       (and/or try moving outside the loop if and only if we are using the minimum rule)

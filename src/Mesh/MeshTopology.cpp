@@ -72,6 +72,7 @@ MeshTopology::MeshTopology(MeshGeometryPtr meshGeometry, vector<PeriodicBCPtr> p
 
   int numElements = meshGeometry->cellTopos().size();
 
+  GlobalIndexType cellID = 0;
   for (int i=0; i<numElements; i++)
   {
     CellTopoPtr cellTopo = meshGeometry->cellTopos()[i];
@@ -81,8 +82,8 @@ MeshTopology::MeshTopology(MeshGeometryPtr meshGeometry, vector<PeriodicBCPtr> p
     {
       cellVertices.push_back(myVertexIndexForMeshGeometryIndex[cellVerticesInMeshGeometry[j]]);
     }
-
-    addCell(cellTopo, cellVertices);
+    addCell(cellID, cellTopo, cellVertices);
+    cellID++;
   }
 }
 
@@ -286,12 +287,11 @@ map<string, long long> MeshTopology::approximateMemoryCosts()
   }
   variableCost["_entityCellTopologyKeys"] += VECTOR_OVERHEAD * (_entityCellTopologyKeys.capacity() - _entityCellTopologyKeys.size());
 
-  variableCost["_cells"] = VECTOR_OVERHEAD; // _cells vector
-  for (vector< CellPtr >::iterator entryIt = _cells.begin(); entryIt != _cells.end(); entryIt++)
+  variableCost["_cells"] = approximateMapSizeLLVM(_cells); // _cells map
+  for (auto cellEntry = _cells.begin(); cellEntry != _cells.end(); cellEntry++)
   {
-    variableCost["_cells"] += (*entryIt)->approximateMemoryFootprint();
+    variableCost["_cells"] += cellEntry->second->approximateMemoryFootprint();
   }
-  variableCost["_cells"] += sizeof(CellPtr) * (_cells.capacity() - _cells.size());
 
   variableCost["_activeCells"] = approximateSetSizeLLVM(_activeCells);
   variableCost["_rootCells"] = approximateSetSizeLLVM(_rootCells);
@@ -318,7 +318,7 @@ long long MeshTopology::approximateMemoryFootprint()
   return memSize;
 }
 
-CellPtr MeshTopology::addCell(CellTopoPtr cellTopo, const FieldContainer<double> &cellVertices)
+CellPtr MeshTopology::addCell(IndexType cellIndex, CellTopoPtr cellTopo, const FieldContainer<double> &cellVertices)
 {
   TEUCHOS_TEST_FOR_EXCEPTION(cellTopo->getDimension() != _spaceDim, std::invalid_argument, "cellTopo dimension must match mesh topology dimension");
   TEUCHOS_TEST_FOR_EXCEPTION(cellVertices.dimension(0) != cellTopo->getVertexCount(), std::invalid_argument, "cellVertices must have shape (P,D)");
@@ -333,10 +333,10 @@ CellPtr MeshTopology::addCell(CellTopoPtr cellTopo, const FieldContainer<double>
       cellVertexVector[vertexOrdinal][d] = cellVertices(vertexOrdinal,d);
     }
   }
-  return addCell(cellTopo, cellVertexVector);
+  return addCell(cellIndex, cellTopo, cellVertexVector);
 }
 
-CellPtr MeshTopology::addCell(CellTopoPtr cellTopo, const vector<vector<double> > &cellVertices)
+CellPtr MeshTopology::addCell(IndexType cellIndex, CellTopoPtr cellTopo, const vector<vector<double> > &cellVertices)
 {
   if (cellTopo->getNodeCount() != cellVertices.size())
   {
@@ -345,26 +345,27 @@ CellPtr MeshTopology::addCell(CellTopoPtr cellTopo, const vector<vector<double> 
   }
 
   vector<unsigned> vertexIndices = getVertexIndices(cellVertices);
-  unsigned cellIndex = addCell(cellTopo, vertexIndices);
+  addCell(cellIndex, cellTopo, vertexIndices);
   return _cells[cellIndex];
 }
 
-CellPtr MeshTopology::addCell(CellTopoPtrLegacy shardsTopo, const vector<vector<double> > &cellVertices)
+CellPtr MeshTopology::addCell(IndexType cellIndex, CellTopoPtrLegacy shardsTopo, const vector<vector<double> > &cellVertices)
 {
   CellTopoPtr cellTopo = CellTopology::cellTopology(*shardsTopo);
-  return addCell(cellTopo, cellVertices);
+  return addCell(cellIndex, cellTopo, cellVertices);
 }
 
-unsigned MeshTopology::addCell(CellTopoPtrLegacy shardsTopo, const vector<unsigned> &cellVertices, unsigned parentCellIndex)
+unsigned MeshTopology::addCell(IndexType cellIndex, CellTopoPtrLegacy shardsTopo, const vector<unsigned> &cellVertices, unsigned parentCellIndex)
 {
   CellTopoPtr cellTopo = CellTopology::cellTopology(*shardsTopo);
-  return addCell(cellTopo, cellVertices, parentCellIndex);
+  return addCell(cellIndex, cellTopo, cellVertices, parentCellIndex);
 }
 
-unsigned MeshTopology::addCell(CellTopoPtr cellTopo, const vector<unsigned> &cellVertices, unsigned parentCellIndex)
+unsigned MeshTopology::addCell(IndexType cellIndex, CellTopoPtr cellTopo, const vector<unsigned> &cellVertices, unsigned parentCellIndex)
 {
+  TEUCHOS_TEST_FOR_EXCEPTION(_cells.find(cellIndex) != _cells.end(), std::invalid_argument, "addCell: cell with specified cellIndex already exists!");
+  
   vector< vector< unsigned > > cellEntityPermutations;
-  unsigned cellIndex = _cells.size();
   
   vector< vector<unsigned> > cellEntityIndices(_spaceDim); // subcdim, subcord
   for (int d=0; d<_spaceDim; d++)   // start with vertices, and go up to sides
@@ -422,7 +423,7 @@ unsigned MeshTopology::addCell(CellTopoPtr cellTopo, const vector<unsigned> &cel
     }
   }
   CellPtr cell = Teuchos::rcp( new Cell(cellTopo, cellVertices, cellEntityPermutations, cellIndex, this) );
-  _cells.push_back(cell);
+  _cells[cellIndex] = cell;
   _activeCells.insert(cellIndex);
   _rootCells.insert(cellIndex); // will remove if a parent relationship is established
   if (parentCellIndex != -1)
@@ -758,16 +759,18 @@ unsigned MeshTopology::addEntity(CellTopoPtr entityTopo, const vector<unsigned> 
   return entityIndex;
 }
 
-void MeshTopology::addChildren(CellPtr parentCell, const vector< CellTopoPtr > &childTopos, const vector< vector<unsigned> > &childVertices)
+void MeshTopology::addChildren(IndexType firstChildIndex, CellPtr parentCell, const vector< CellTopoPtr > &childTopos, const vector< vector<unsigned> > &childVertices)
 {
   int numChildren = childTopos.size();
   TEUCHOS_TEST_FOR_EXCEPTION(numChildren != childVertices.size(), std::invalid_argument, "childTopos and childVertices must be the same size");
   vector< CellPtr > children;
+  IndexType cellIndex = firstChildIndex; // children get continguous cell indices
   for (int childIndex=0; childIndex<numChildren; childIndex++)
   {
-    unsigned cellIndex = addCell(childTopos[childIndex], childVertices[childIndex],parentCell->cellIndex());
+    addCell(cellIndex, childTopos[childIndex], childVertices[childIndex],parentCell->cellIndex());
     children.push_back(_cells[cellIndex]);
     _rootCells.erase(cellIndex);
+    cellIndex++;
   }
   parentCell->setChildren(children);
   
@@ -1352,34 +1355,35 @@ MeshTopologyPtr MeshTopology::deepCopy()
 
 void MeshTopology::deepCopyCells()
 {
-  vector<CellPtr> oldCells = _cells;
-
-  int numCells = oldCells.size();
+  map<IndexType, CellPtr> oldCells = _cells;
   
   Teuchos::RCP<MeshTopology> thisPtr = Teuchos::rcp(this,false);
 
   // first pass: construct cells
-  for (int cellOrdinal=0; cellOrdinal<numCells; cellOrdinal++)
+  for (auto oldCellEntry : oldCells)
   {
-    CellPtr oldCell = oldCells[cellOrdinal];
-    _cells[cellOrdinal] = Teuchos::rcp( new Cell(oldCell->topology(), oldCell->vertices(), oldCell->subcellPermutations(), oldCell->cellIndex(), this) );
+    CellPtr oldCell = oldCellEntry.second;
+    IndexType oldCellIndex = oldCellEntry.first;
+    _cells[oldCellIndex] = Teuchos::rcp( new Cell(oldCell->topology(), oldCell->vertices(), oldCell->subcellPermutations(), oldCell->cellIndex(), this) );
     for (int sideOrdinal=0; sideOrdinal<oldCell->getSideCount(); sideOrdinal++)
     {
       pair<GlobalIndexType, unsigned> neighborInfo = oldCell->getNeighborInfo(sideOrdinal, thisPtr);
-      _cells[cellOrdinal]->setNeighbor(sideOrdinal, neighborInfo.first, neighborInfo.second);
+      _cells[oldCellIndex]->setNeighbor(sideOrdinal, neighborInfo.first, neighborInfo.second);
     }
   }
 
   // second pass: establish parent-child relationships
-  for (int cellOrdinal=0; cellOrdinal<numCells; cellOrdinal++)
+  for (auto oldCellEntry : oldCells)
   {
-    CellPtr oldCell = oldCells[cellOrdinal];
+    IndexType oldCellIndex = oldCellEntry.first;
+    CellPtr oldCell = oldCellEntry.second;
+
     CellPtr oldParent = oldCell->getParent();
     if (oldParent != Teuchos::null)
     {
       CellPtr newParent = _cells[oldParent->cellIndex()];
       newParent->setRefinementPattern(oldParent->refinementPattern());
-      _cells[cellOrdinal]->setParent(newParent);
+      _cells[oldCellIndex]->setParent(newParent);
     }
     vector<CellPtr> children;
     for (int childOrdinal=0; childOrdinal<oldCell->children().size(); childOrdinal++)
@@ -1387,7 +1391,7 @@ void MeshTopology::deepCopyCells()
       CellPtr newChild = _cells[oldCell->children()[childOrdinal]->cellIndex()];
       children.push_back(newChild);
     }
-    _cells[cellOrdinal]->setChildren(children);
+    _cells[oldCellIndex]->setChildren(children);
   }
 }
 
@@ -2698,10 +2702,17 @@ FieldContainer<double> MeshTopology::physicalCellNodesForCell(unsigned int cellI
   return nodes;
 }
 
-void MeshTopology::refineCell(unsigned cellIndex, RefinementPatternPtr refPattern)
+void MeshTopology::refineCell(IndexType cellIndex, RefinementPatternPtr refPattern, IndexType firstChildCellIndex)
 {
   // TODO: worry about the case (currently unsupported in RefinementPattern) of children that do not share topology with the parent.  E.g. quad broken into triangles.  (3D has better examples.)
 
+//  { // DEBUGGING
+//    if (cellIndex == 39)
+//    {
+//      cout << "refining cell " << cellIndex << endl;
+//    }
+//  }
+  
   CellPtr cell = _cells[cellIndex];
   FieldContainer<double> cellNodes(cell->vertices().size(), _spaceDim);
 
@@ -2734,7 +2745,7 @@ void MeshTopology::refineCell(unsigned cellIndex, RefinementPatternPtr refPatter
   cell->setRefinementPattern(refPattern);
 
   deactivateCell(cell);
-  addChildren(cell, childTopos, childVertices);
+  addChildren(firstChildCellIndex, cell, childTopos, childVertices);
 
   determineGeneralizedParentsForRefinement(cell, refPattern);
 

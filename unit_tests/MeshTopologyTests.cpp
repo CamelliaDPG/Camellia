@@ -39,11 +39,13 @@ namespace
         sharedSideOrdinal = sideOrdinal;
       }
     }
+    GlobalIndexType nextCellID = meshTopo->cellCount();
     for (int i=0; i<irregularity; i++)
     {
       CellPtr cellToRefine = meshTopo->getCell(activeCellWithBigNeighbor);
       RefinementPatternPtr refPattern = RefinementPattern::regularRefinementPattern(cellToRefine->topology());
-      meshTopo->refineCell(activeCellWithBigNeighbor, refPattern);
+      meshTopo->refineCell(activeCellWithBigNeighbor, refPattern, nextCellID);
+      nextCellID += refPattern->numChildren();
       
       // setup for the next refinement, if any:
       auto childEntry = cellToRefine->childrenForSide(sharedSideOrdinal)[0];
@@ -363,7 +365,6 @@ TEUCHOS_UNIT_TEST( MeshTopology, ConstrainingSideAncestryUniformMesh)
 TEUCHOS_UNIT_TEST(MeshTopology, GetEntityGeneralizedParent_LineRefinement)
 {
   int spaceDim = 1;
-  MeshTopologyPtr meshTopo = Teuchos::rcp( new MeshTopology(spaceDim) );
 
   CellTopoPtr lineTopo = CellTopology::line();
 
@@ -373,14 +374,19 @@ TEUCHOS_UNIT_TEST(MeshTopology, GetEntityGeneralizedParent_LineRefinement)
   lineVertices.push_back(vector<double>(1, xLeft));
   lineVertices.push_back(vector<double>(1, xRight));
 
-  meshTopo->addCell(lineTopo, lineVertices); // cell from 0 to 1
+  MeshTopologyPtr meshTopo = Teuchos::rcp( new MeshTopology(spaceDim) );
+  
+  GlobalIndexType cellID = 0;
+  meshTopo->addCell(cellID, lineTopo, lineVertices); // cell from 0 to 1
 
-  int cellIndex = 0;
-  CellPtr cell = meshTopo->getCell(cellIndex);
+  CellPtr cell = meshTopo->getCell(cellID);
 
   RefinementPatternPtr refPattern = RefinementPattern::regularRefinementPattern(lineTopo);
 
-  meshTopo->refineCell(cellIndex, refPattern);
+  GlobalIndexType nextCellID = cellID + 1;
+  meshTopo->refineCell(cellID, refPattern, nextCellID);
+  
+  nextCellID += refPattern->numChildren();
 
   double xMiddle = (xLeft + xRight) / 2.0;
 
@@ -390,14 +396,14 @@ TEUCHOS_UNIT_TEST(MeshTopology, GetEntityGeneralizedParent_LineRefinement)
   int vertexDim = 0, lineDim = 1;
   pair<IndexType, unsigned> generalizedParent = meshTopo->getEntityGeneralizedParent(vertexDim, vertexOrdinal);
 
-  TEST_EQUALITY(generalizedParent.first, cellIndex);
+  TEST_EQUALITY(generalizedParent.first, cellID);
   TEST_EQUALITY(generalizedParent.second, lineDim);
 
   // try same for a child *cell*
-  CellPtr childCell = meshTopo->getCell(cellIndex)->children()[0];
+  CellPtr childCell = meshTopo->getCell(cellID)->children()[0];
   generalizedParent = meshTopo->getEntityGeneralizedParent(spaceDim, childCell->cellIndex());
 
-  TEST_EQUALITY(generalizedParent.first, cellIndex);
+  TEST_EQUALITY(generalizedParent.first, cellID);
   TEST_EQUALITY(generalizedParent.second, lineDim);
 }
 
@@ -520,6 +526,7 @@ TEUCHOS_UNIT_TEST(MeshTopology, GetRootMeshTopology)
     set<GlobalIndexType> cellsToCutVertically = {1};
     set<GlobalIndexType> cellsToCutHorizontally = {2};
     
+    GlobalIndexType nextCellID = meshTopo->cellCount();
     // cut 5 times
     int cutCycles = 5;
     for (int i=0; i<cutCycles; i++)
@@ -527,7 +534,9 @@ TEUCHOS_UNIT_TEST(MeshTopology, GetRootMeshTopology)
       set<GlobalIndexType> newCells;
       for (GlobalIndexType cellIndex : cellsToCutVertically)
       {
-        meshTopo->refineCell(cellIndex, verticalCut);
+        meshTopo->refineCell(cellIndex, verticalCut, nextCellID);
+        nextCellID += verticalCut->numChildren();
+        
         CellPtr cell = meshTopo->getCell(cellIndex);
         vector<IndexType> childCellIndices = cell->getChildIndices(meshTopo);
         newCells.insert(childCellIndices.begin(),childCellIndices.end());
@@ -540,7 +549,9 @@ TEUCHOS_UNIT_TEST(MeshTopology, GetRootMeshTopology)
       set<GlobalIndexType> newCells;
       for (GlobalIndexType cellIndex : cellsToCutHorizontally)
       {
-        meshTopo->refineCell(cellIndex, horizontalCut);
+        meshTopo->refineCell(cellIndex, horizontalCut, nextCellID);
+        nextCellID += horizontalCut->numChildren();
+        
         CellPtr cell = meshTopo->getCell(cellIndex);
         vector<IndexType> childCellIndices = cell->getChildIndices(meshTopo);
         newCells.insert(childCellIndices.begin(),childCellIndices.end());
@@ -595,8 +606,10 @@ TEUCHOS_UNIT_TEST(MeshTopology, GetRootMeshTopology)
     // test neighbors before and after refinement
     testNeighbors(meshTopo, out, success);
     
+    GlobalIndexType nextCellID = meshTopo->cellCount();
     RefinementPatternPtr refPattern = RefinementPattern::regularRefinementPattern(meshTopo->getCell(irregularCellIndex)->topology());
-    meshTopo->refineCell(irregularCellIndex, refPattern);
+    meshTopo->refineCell(irregularCellIndex, refPattern, nextCellID);
+    nextCellID += refPattern->numChildren();
 
     // after refinement, small cell should no longer have irregular cell index as its neighbor on the side:
     GlobalIndexType smallCellNeighborCellIndex = smallCell->getNeighborInfo(activeCellWithLargeNeighborSideOrdinal, meshTopo).first;
@@ -619,7 +632,9 @@ TEUCHOS_UNIT_TEST( MeshTopology, UnrefinedSpaceTimeMeshTopologyIsUnconstrained )
   CamelliaCellTools::refCellNodesForTopology(cellNodes, spaceTopo);
   vector<vector<double>> cellVerticesVector;
   CamelliaCellTools::pointsVectorFromFC(cellVerticesVector, cellNodes);
-  spatialMeshTopo->addCell(spaceTopo, cellVerticesVector);
+  
+  GlobalIndexType nextCellID = spatialMeshTopo->cellCount();
+  spatialMeshTopo->addCell(nextCellID, spaceTopo, cellVerticesVector);
 
   double t0 = 0.0, t1 = 1.0;
   MeshTopologyPtr spaceTimeMeshTopo = MeshFactory::spaceTimeMeshTopology(spatialMeshTopo, t0, t1);

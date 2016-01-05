@@ -75,6 +75,10 @@ namespace Camellia {
   //  RefinementPattern(Teuchos::RCP< shards::CellTopology > shardsTopoPtr, Intrepid::FieldContainer<double> refinedNodes,
   //                    vector< Teuchos::RCP<RefinementPattern> > sideRefinementPatterns);
 
+    //! dimensionRefinementFlags should be 0 for dimensions that are not refined, 1 for dimensions that are refined
+    //! NOTE THAT THIS IS STILL UNDER DEVELOPMENT, AND SHOULD NOT YET BE RELIED ON IN PRODUCTION CODE.
+    static RefinementPatternPtr anisotropicRefinementPattern(CellTopoPtr cellTopo, std::vector<int> dimensionRefinementFlags);
+    
   static Teuchos::RCP<RefinementPattern> noRefinementPattern(CellTopoPtr cellTopoPtr);
   static Teuchos::RCP<RefinementPattern> noRefinementPattern(CellTopoPtrLegacy shardsTopoPtr);
   static Teuchos::RCP<RefinementPattern> noRefinementPatternLine();
@@ -101,6 +105,8 @@ namespace Camellia {
   static RefinementPatternPtr xAnisotropicRefinementPatternQuadTimeExtruded();
   static RefinementPatternPtr yAnisotropicRefinementPatternQuadTimeExtruded();
 
+
+    
   unsigned childOrdinalForPoint(const std::vector<double> &pointParentCoords); // returns -1 if no hit
 
   static void initializeAnisotropicRelationships();
