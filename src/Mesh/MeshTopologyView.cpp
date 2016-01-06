@@ -453,6 +453,20 @@ Intrepid::FieldContainer<double> MeshTopologyView::physicalCellNodesForCell(unsi
   return _meshTopo->physicalCellNodesForCell(cellIndex,includeCellDimension);
 }
 
+void MeshTopologyView::printAllEntitiesInBaseMeshTopology()
+{
+  if (_meshTopo != Teuchos::null)
+  {
+    _meshTopo->printAllEntities();
+  }
+  else
+  {
+    // this must be a MeshTopology object
+    MeshTopology* meshTopo = dynamic_cast<MeshTopology*>(this);
+    meshTopo->printAllEntities();
+  }
+}
+
 Teuchos::RCP<MeshTransformationFunction> MeshTopologyView::transformationFunction()
 {
   return Teuchos::null; // pure MeshTopologyViews are defined to have straight-edge geometry only.

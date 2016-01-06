@@ -101,6 +101,8 @@ namespace Camellia {
     virtual void verticesForCell(Intrepid::FieldContainer<double>& vertices, IndexType cellID);
     
     virtual MeshTopologyViewPtr getView(const std::set<IndexType> &activeCellIndices);
+    
+    void printAllEntitiesInBaseMeshTopology();
   };
 
 }
