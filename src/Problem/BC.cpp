@@ -433,16 +433,6 @@ void TBC<Scalar>::coefficientsForBC(FieldContainer<double> &basisCoefficients, T
   TEUCHOS_TEST_FOR_EXCEPTION( basisCoefficients.dimension(1) != numFields, std::invalid_argument, "inconsistent basisCoefficients dimensions");
 
   Projector<double>::projectFunctionOntoBasisInterpolating(basisCoefficients, bcFxn, basis, sideBasisCache);
-
-//  if (!bcFxn->isTrace()) {
-//    // L^2 projection
-//    Projector<double>::projectFunctionOntoBasis(basisCoefficients, bcFxn, basis, sideBasisCache);
-//  } else {
-//    // TODO: projection-based interpolation
-//    // (start with L^2-projection-based interpolation; proceed to H^1 once we have a clear story on
-//    //  how to take derivatives of BCFunction)
-//    Projector<double>::projectFunctionOntoBasis(basisCoefficients, bcFxn, basis, sideBasisCache);
-//  }
 }
 
 template <typename Scalar>

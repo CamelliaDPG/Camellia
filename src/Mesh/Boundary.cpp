@@ -349,8 +349,6 @@ void Boundary::bcsToImpose( map<  GlobalIndexType, Scalar > &globalDofIndicesAnd
     for (vector< int >::iterator trialIt = trialIDs.begin(); trialIt != trialIDs.end(); trialIt++)
     {
       int trialID = *(trialIt);
-      bool isTrace = _mesh->bilinearForm()->functionSpaceForTrial(trialID) == Camellia::FUNCTION_SPACE_HGRAD;
-      // we assume if it's not a trace, then it's a flux (i.e. L2 projection is appropriate)
       if ( bc.bcsImposed(trialID) )
       {
 //        // DEBUGGING: keep track of which sides we impose BCs on:
@@ -360,6 +358,14 @@ void Boundary::bcsToImpose( map<  GlobalIndexType, Scalar > &globalDofIndicesAnd
         for (int i=0; i<boundarySides.size(); i++)
         {
           unsigned sideOrdinal = boundarySides[i];
+          // TODO: here, we need to treat the volume basis case.
+          /*
+           To do this:
+           1. Determine which dofs in the basis have support on the side.
+           2. Can probably leave dirichletValues sized for all dofs.
+           3. Within coefficientsForBC, or the projection method it calls, when it's a side cache, check whether the basis being projected has a higher dimension.  If so, do the same determination regarding the support of basis on the side as #1.  (Might need to add a method to Basis that does the right thing in the HGRAD_DISC case, e.g.)
+           */
+          
           if (! trialOrderingPtr->hasBasisEntry(trialID, sideOrdinal)) continue;
           BasisPtr basis = trialOrderingPtr->getBasis(trialID,sideOrdinal);
           int numDofs = basis->getCardinality();
@@ -369,7 +375,7 @@ void Boundary::bcsToImpose( map<  GlobalIndexType, Scalar > &globalDofIndicesAnd
             FieldContainer<double> dirichletValues(numCells,numDofs);
             // project bc function onto side basis:
             BCPtr bcPtr = Teuchos::rcp(&bc, false);
-            Teuchos::RCP<BCFunction<double>> bcFunction = BCFunction<double>::bcFunction(bcPtr, trialID, isTrace);
+            Teuchos::RCP<BCFunction<double>> bcFunction = BCFunction<double>::bcFunction(bcPtr, trialID);
             bcPtr->coefficientsForBC(dirichletValues, bcFunction, basis, basisCache->getSideBasisCache(sideOrdinal));
             dirichletValues.resize(numDofs);
             if (bcFunction->imposeOnCell(0))

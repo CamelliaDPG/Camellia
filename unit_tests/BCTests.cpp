@@ -41,7 +41,6 @@ void testSpaceTimeTraceBCFunction(int spaceDim, Teuchos::FancyOStream &out, bool
   form.initializeSolution(spaceTimeMeshTopo, fieldPolyOrder, delta_k, forcingFunction);
 
   VarPtr u_hat = form.u_hat();
-  bool isTrace = true;
   BCPtr bc = form.solution()->bc();
   bc->addDirichlet(u_hat, SpatialFilter::allSpace() | SpatialFilter::matchingT(t0) | SpatialFilter::matchingT(t1), u);
 
@@ -64,7 +63,7 @@ void testSpaceTimeTraceBCFunction(int spaceDim, Teuchos::FancyOStream &out, bool
     int numCells = 1;
     Intrepid::FieldContainer<double> dirichletValues(numCells,basis->getCardinality());
     // project bc function onto side basis:
-    Teuchos::RCP<BCFunction<double>> bcFunction = BCFunction<double>::bcFunction(bc, u_hat->ID(), isTrace);
+    Teuchos::RCP<BCFunction<double>> bcFunction = BCFunction<double>::bcFunction(bc, u_hat->ID());
     bc->coefficientsForBC(dirichletValues, bcFunction, basis, basisCache->getSideBasisCache(sideOrdinal));
     for (int basisOrdinal=0; basisOrdinal<dirichletValues.dimension(1); basisOrdinal++)
     {
