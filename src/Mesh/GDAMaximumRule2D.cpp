@@ -153,7 +153,7 @@ void GDAMaximumRule2D::buildLocalToGlobalMap()
       if (! isFluxOrTrace )
       {
         // then all these dofs are interior, so there's no overlap with other elements...
-        int numDofs = elemTypePtr->trialOrderPtr->getBasisCardinality(trialID,0);
+        int numDofs = elemTypePtr->trialOrderPtr->getBasisCardinality(trialID,VOLUME_INTERIOR_SIDE_ORDINAL);
         for (int dofOrdinal=0; dofOrdinal<numDofs; dofOrdinal++)
         {
           int localDofIndex = elemTypePtr->trialOrderPtr->getDofIndex(trialID,dofOrdinal,VOLUME_INTERIOR_SIDE_ORDINAL);
