@@ -197,7 +197,6 @@ void DPGTests::runTests()
   // setup our TestSuite tests:
   vector< Teuchos::RCP< TestSuite > > testSuites;
 
-  testSuites.push_back( Teuchos::rcp( new GMGTests ) );
 
   if (skipSlowTests)
   {
@@ -210,41 +209,26 @@ void DPGTests::runTests()
   {
     testSuites.push_back( Teuchos::rcp( new IncompressibleFormulationsTests(false) ) ); // false: turn "thorough" off
   }
-
-
-  testSuites.push_back( Teuchos::rcp( new GDAMinimumRuleTests ) );
-
-  testSuites.push_back( Teuchos::rcp( new LinearTermTests ) );
-
-  testSuites.push_back( Teuchos::rcp( new MeshRefinementTests ) );
-
-  testSuites.push_back( Teuchos::rcp( new SolutionTests ) );
-
-  testSuites.push_back( Teuchos::rcp( new MeshTopologyTests ) );
-
-  testSuites.push_back( Teuchos::rcp( new MeshTestSuite ) );
-
-  testSuites.push_back( Teuchos::rcp( new ScratchPadTests ) );
-
-  testSuites.push_back( Teuchos::rcp( new ElementTests ) );
-
-  testSuites.push_back( Teuchos::rcp( new MultiBasisTests ) );
-
-  testSuites.push_back( Teuchos::rcp( new FunctionTests ) );
-
+  
   testSuites.push_back( Teuchos::rcp( new CurvilinearMeshTests) );
-
-  testSuites.push_back( Teuchos::rcp( new SerialDenseMatrixUtilityTests) );
-
-
+  testSuites.push_back( Teuchos::rcp( new ElementTests ) );
+  testSuites.push_back( Teuchos::rcp( new FunctionTests ) );
+  testSuites.push_back( Teuchos::rcp( new GDAMinimumRuleTests ) );
+  testSuites.push_back( Teuchos::rcp( new GMGTests ) );
+  testSuites.push_back( Teuchos::rcp( new HConvergenceStudyTests ) );
+  testSuites.push_back( Teuchos::rcp( new LinearTermTests ) );
+  testSuites.push_back( Teuchos::rcp( new LobattoBasisTests ) );
+  testSuites.push_back( Teuchos::rcp( new MeshRefinementTests ) );
+  testSuites.push_back( Teuchos::rcp( new MeshTopologyTests ) );
+  testSuites.push_back( Teuchos::rcp( new MeshTestSuite ) );
+  testSuites.push_back( Teuchos::rcp( new MultiBasisTests ) );
   testSuites.push_back( Teuchos::rcp( new MPIWrapperTests) );
   testSuites.push_back( Teuchos::rcp( new ParametricCurveTests) );
   testSuites.push_back( Teuchos::rcp( new RHSTests ) );
+  testSuites.push_back( Teuchos::rcp( new ScratchPadTests ) );
+  testSuites.push_back( Teuchos::rcp( new SerialDenseMatrixUtilityTests) );
+  testSuites.push_back( Teuchos::rcp( new SolutionTests ) );
   testSuites.push_back( Teuchos::rcp( new VectorizedBasisTestSuite ) );
-
-  testSuites.push_back( Teuchos::rcp( new HConvergenceStudyTests ) );
-
-  testSuites.push_back( Teuchos::rcp( new LobattoBasisTests ) );
 
   //  testSuites.push_back( Teuchos::rcp( new IncompressibleFormulationsTests(true) ) ); // true: turn "thorough" on
   //  testSuites.push_back( Teuchos::rcp( new PatchBasisTests ) ); // skip until we have a proper GDAMinimumRule constructed
@@ -721,7 +705,7 @@ bool DPGTests::testComputeStiffnessTrace()
   BasisPtr testBasis = BasisFactory::basisFactory()->getBasis(C1_FAKE_POLY_ORDER,
                        quad_4, Camellia::FUNCTION_SPACE_HDIV);
 
-  testOrdering->addEntry(0,testBasis,1,0);
+  testOrdering->addEntry(0,testBasis,1,VOLUME_INTERIOR_SIDE_ORDINAL);
 
   int numTests = 1;  // 1. ref quad
 
@@ -1092,9 +1076,16 @@ bool DPGTests::testAnalyticBoundaryIntegral(bool conforming)
 
   TestBilinearFormAnalyticBoundaryIntegral::expectedOptTestWeightsForCubicsOnQuad(ipWeightsExpected,conforming);
 
-  int optSuccess = bilinearForm->optimalTestWeights(ipWeightsActual, ipMatrixExpected,
-                   elemType, cellSideParities, basisCache);
-
+  FieldContainer<double> finalStiffnessActual(numTests,trialOrdering->totalDofs(), trialOrdering->totalDofs() );
+  
+  MeshPtr nullMesh = Teuchos::null;
+  BasisCachePtr ipBasisCache = Teuchos::rcp(new BasisCache(elemType, nullMesh, true));
+  ipBasisCache->setPhysicalCellNodes(quadPoints,vector<GlobalIndexType>(), false);
+  
+  int optSuccess = bilinearForm->optimalTestWeightsAndStiffness(ipWeightsActual, finalStiffnessActual,
+                                                                elemType, cellSideParities,
+                                                                basisCache, ip, ipBasisCache);
+  
   string myNameIPWeights = "testAnalyticBoundaryIntegral.ipWeights";
 
   if (optSuccess != 0)
@@ -1118,19 +1109,11 @@ bool DPGTests::testAnalyticBoundaryIntegral(bool conforming)
     return false;
   }
 
-  FieldContainer<double> finalStiffnessExpected(numTests,trialOrdering->totalDofs(),
-      trialOrdering->totalDofs() );
-  FieldContainer<double> finalStiffnessActual1(numTests,trialOrdering->totalDofs(),
-      trialOrdering->totalDofs() );
-  FieldContainer<double> finalStiffnessActual2(numTests,trialOrdering->totalDofs(),
-      trialOrdering->totalDofs() );
-
+  FieldContainer<double> finalStiffnessExpected(numTests,trialOrdering->totalDofs(), trialOrdering->totalDofs() );
   TestBilinearFormAnalyticBoundaryIntegral::expectedFinalStiffnessForCubicsOnQuad(finalStiffnessExpected,conforming);
 
-  BilinearFormUtility<double>::computeStiffnessMatrix(finalStiffnessActual1,ipMatrixExpected,ipWeightsExpected);
-
   string myNameFinalByMultiplying = "testAnalyticBoundaryIntegral.finalStiffnessByMultiplying";
-  successLocal = fcsAgree(myNameFinalByMultiplying, finalStiffnessExpected, finalStiffnessActual1, tol);
+  successLocal = fcsAgree(myNameFinalByMultiplying, finalStiffnessExpected, finalStiffnessActual, tol);
 
   if (! successLocal)
   {

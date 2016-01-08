@@ -354,6 +354,27 @@ LocalDofMapper::LocalDofMapper(DofOrderingPtr dofOrdering, map< int, BasisMap > 
   _sideMaps = sideMaps;
   _fittableGlobalDofOrdinalsInVolume = fittableGlobalDofOrdinalsInVolume;
   _fittableGlobalDofOrdinalsOnSides = fittableGlobalDofOrdinalsOnSides;
+
+//  if ((_varIDToMap == -1) && (_sideOrdinalToMap == -1))
+//  {
+//    _mode = MAP_ALL;
+//  }
+//  else if ((_varIDToMap == -1) && (_sideOrdinalToMap != -1))
+//  {
+//    TEUCHOS_TEST_FOR_EXCEPTION(true, std::invalid_argument, "");
+//  }
+//  else if (volumeMaps.find(_varIDToMap) != volumeMaps.end())
+//  {
+//    _mode = (_sideOrdinalToMap == -1) ? MAP_VOLUME_VAR : MAP_VOLUME_VAR_SIDE;
+//  }
+//  else if (sideMaps.find(_varIDToMap) != sideMaps.end())
+//  {
+//    _mode = (_sideOrdinalToMap == -1) ? MAP_TRACE_VAR : MAP_TRACE_VAR_SIDE;
+//  }
+//  else
+//  {
+//    TEUCHOS_TEST_FOR_EXCEPTION(true, std::invalid_argument, "_varIDToMap != -1, but it isn't found in either volume or side maps");
+//  }
   
   map<GlobalIndexType,set<int>> globalIndexToVarIDSet; // use set for easy construction; in a moment we'll copy into vectors
   set<GlobalIndexType> globalIndices;
@@ -772,7 +793,7 @@ void LocalDofMapper::mapLocalDataVector(const FieldContainer<double> &localData,
     bool skipVar = (_varIDToMap != -1) && (varID != _varIDToMap);
     if (skipVar) continue;
     BasisMap basisMap = volumeMapIt->second;
-    int volumeSideIndex = 0;
+    int volumeSideIndex = VOLUME_INTERIOR_SIDE_ORDINAL;
     addSubBasisMapVectorContribution(varID, volumeSideIndex, basisMap, localData, mappedDataVector, fittableGlobalDofsOnly);
   }
   
@@ -839,6 +860,11 @@ FieldContainer<double> LocalDofMapper::mapLocalData(const FieldContainer<double>
   if (_varIDToMap == -1)
   {
     dofCount = _dofOrdering->totalDofs();
+  }
+  else if (_volumeMaps.find(_varIDToMap) != _volumeMaps.end())
+  {
+    // TODO: worry about volume bases being *restricted*
+    dofCount = _dofOrdering->getBasis(_varIDToMap)->getCardinality();
   }
   else
   {
@@ -996,7 +1022,7 @@ void LocalDofMapper::mapLocalDataVolume(const FieldContainer<double> &localData,
     bool skipVar = (_varIDToMap != -1) && (varID != _varIDToMap);
     if (skipVar) continue;
     BasisMap basisMap = volumeMapIt->second;
-    int volumeSideIndex = 0;
+    int volumeSideIndex = VOLUME_INTERIOR_SIDE_ORDINAL;
     addSubBasisMapVectorContribution(varID, volumeSideIndex, basisMap, localData, mappedData, fittableGlobalDofsOnly);
   }
 }
@@ -1035,7 +1061,7 @@ FieldContainer<double> LocalDofMapper::mapGlobalCoefficients(const FieldContaine
     bool skipVar = (_varIDToMap != -1) && (varID != _varIDToMap);
     if (skipVar) continue;
     BasisMap* basisMap = &volumeMapIt->second;
-    int volumeSideOrdinal = 0;
+    int volumeSideOrdinal = VOLUME_INTERIOR_SIDE_ORDINAL;
     addReverseSubBasisMapVectorContribution(varID, volumeSideOrdinal, *basisMap, globalCoefficients, localCoefficients);
   }
   
@@ -1080,7 +1106,7 @@ Intrepid::FieldContainer<double> LocalDofMapper::mapGlobalCoefficients(const std
     bool skipVar = (_varIDToMap != -1) && (varID != _varIDToMap);
     if (skipVar) continue;
     BasisMap* basisMap = &entry->second;
-    int volumeSideOrdinal = 0;
+    int volumeSideOrdinal = VOLUME_INTERIOR_SIDE_ORDINAL;
     addReverseSubBasisMapVectorContribution(varID, volumeSideOrdinal, *basisMap, globalCoefficients, localCoefficients);
   }
   

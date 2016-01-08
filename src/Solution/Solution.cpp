@@ -1974,7 +1974,7 @@ template <typename Scalar>
 void TSolution<Scalar>::integrateSolution(Intrepid::FieldContainer<Scalar> &values, ElementTypePtr elemTypePtr, int trialID)
 {
   int numCellsOfType = _mesh->numElementsOfType(elemTypePtr);
-  int sideIndex = 0;
+  int sideIndex = VOLUME_INTERIOR_SIDE_ORDINAL;
   int basisCardinality = elemTypePtr->trialOrderPtr->getBasisCardinality(trialID,sideIndex);
   TEUCHOS_TEST_FOR_EXCEPTION(values.dimension(0) != numCellsOfType,
                              std::invalid_argument, "values must have dimensions (_mesh.numCellsOfType(elemTypePtr))");
@@ -2049,9 +2049,9 @@ void TSolution<Scalar>::integrateFlux(Intrepid::FieldContainer<Scalar> &values, 
   DofOrdering dofOrdering = *(elemTypePtr->trialOrderPtr.get());
 
   CellTopoPtr cellTopo = elemTypePtr->cellTopoPtr;
-  int numSides = cellTopo->getSideCount();
 
-  for (int sideIndex=0; sideIndex<numSides; sideIndex++)
+  const vector<int>* sides = &dofOrdering.getSidesForVarID(trialID);
+  for (int sideIndex : *sides)
   {
     // Get numerical integration points and weights
     CubatureFactory  cubFactory;
@@ -4017,18 +4017,16 @@ void TSolution<Scalar>::projectOntoCell(const map<int, TFunctionPtr<Scalar> > &f
 
     if (fluxOrTrace)
     {
-      int firstSide, lastSide;
+      vector<int> sides;
       if (side == -1)   // handle all sides
       {
-        firstSide = 0;
-        lastSide = elemTypePtr->cellTopoPtr->getSideCount() - 1;
+        sides = elemTypePtr->trialOrderPtr->getSidesForVarID(trialID);
       }
       else
       {
-        firstSide = side;
-        lastSide = side;
+        sides = {side};
       }
-      for (int sideIndex=firstSide; sideIndex<=lastSide; sideIndex++)
+      for (int sideIndex : sides)
       {
         if (! elemTypePtr->trialOrderPtr->hasBasisEntry(trialID, sideIndex)) continue;
         BasisPtr basis = elemTypePtr->trialOrderPtr->getBasis(trialID, sideIndex);
@@ -4155,7 +4153,6 @@ void TSolution<Scalar>::projectOldCellOntoNewCells(GlobalIndexType cellID,
     }
   }
 
-//  TFunctionPtr<Scalar> sideParity = TFunction<double>::sideParity();
   map<int,TFunctionPtr<Scalar>> interiorTraceMap; // functions to use on parent interior to represent traces there
   for (set<int>::iterator trialIDIt = trialIDs.begin(); trialIDIt != trialIDs.end(); trialIDIt++)
   {
@@ -4168,10 +4165,6 @@ void TSolution<Scalar>::projectOldCellOntoNewCells(GlobalIndexType cellID,
       if (termTraced.get() != NULL)
       {
         TFunctionPtr<Scalar> fieldTrace = termTraced->evaluate(fieldMap, true) + termTraced->evaluate(fieldMap, false);
-//        if (var->varType() == FLUX)   // then we do need to include side parity here
-//        {
-//          fieldTrace = sideParity * fieldTrace;
-//        }
         interiorTraceMap[trialID] = fieldTrace;
       }
     }

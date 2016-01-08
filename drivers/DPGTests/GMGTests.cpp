@@ -566,14 +566,13 @@ bool GMGTests::testGMGOperatorP()
         fieldIDs.insert((*fieldIt)->ID());
       }
 
-      int sideCount = fineMesh->getElementType(cellID)->cellTopoPtr->getSideCount();
-
       set<int> varIDs = coarseOrdering->getVarIDs();
       for (set<int>::iterator varIDIt = varIDs.begin(); varIDIt != varIDs.end(); varIDIt++)
       {
         int varID = *varIDIt;
         if ((fieldIDs.find(varID) != fieldIDs.end()) && useStaticCondensation) continue; // skip field test for static condensation: these guys are mapped in that case...
-        for (int sideOrdinal=0; sideOrdinal<sideCount; sideOrdinal++)
+        const vector<int>* sides = &coarseOrdering->getSidesForVarID(varID);
+        for (int sideOrdinal : *sides)
         {
           if (coarseOrdering->hasBasisEntry(varID, sideOrdinal) != fineOrdering->hasBasisEntry(varID, sideOrdinal))
           {

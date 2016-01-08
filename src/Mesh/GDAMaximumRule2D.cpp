@@ -156,7 +156,7 @@ void GDAMaximumRule2D::buildLocalToGlobalMap()
         int numDofs = elemTypePtr->trialOrderPtr->getBasisCardinality(trialID,0);
         for (int dofOrdinal=0; dofOrdinal<numDofs; dofOrdinal++)
         {
-          int localDofIndex = elemTypePtr->trialOrderPtr->getDofIndex(trialID,dofOrdinal,0);
+          int localDofIndex = elemTypePtr->trialOrderPtr->getDofIndex(trialID,dofOrdinal,VOLUME_INTERIOR_SIDE_ORDINAL);
           _localToGlobalMap[make_pair(cellID,localDofIndex)] = globalIndex;
 //          cout << "added localToGlobalMap(cellID=" << cellID << ", localDofIndex=" << localDofIndex;
 //          cout << ") = " << globalIndex << "\n";
@@ -880,11 +880,10 @@ set<GlobalIndexType> GDAMaximumRule2D::partitionOwnedGlobalFieldIndices()
     for (fieldIt = fieldVars.begin(); fieldIt != fieldVars.end() ; fieldIt++)
     {
       int fieldID = (*fieldIt)->ID();
-      int sideOrdinal = 0;
-      int basisCardinality = elemTypePtr->trialOrderPtr->getBasisCardinality(fieldID,sideOrdinal);
+      int basisCardinality = elemTypePtr->trialOrderPtr->getBasis(fieldID)->getCardinality();
       for (int basisOrdinal = 0; basisOrdinal<basisCardinality; basisOrdinal++)
       {
-        int localDofIndex = elemTypePtr->trialOrderPtr->getDofIndex(fieldID, basisOrdinal, sideOrdinal);
+        int localDofIndex = elemTypePtr->trialOrderPtr->getDofIndex(fieldID, basisOrdinal);
         GlobalIndexType globalIndex = globalDofIndex(cellID, localDofIndex);
 
         if (partitionForGlobalDofIndex(globalIndex) == rank)
@@ -939,12 +938,12 @@ set<GlobalIndexType> GDAMaximumRule2D::partitionOwnedGlobalFluxIndices()
   {
     GlobalIndexType cellID = *cellIt;
     ElementTypePtr elemTypePtr = elementType(cellID);
-    int sideCount = elemTypePtr->cellTopoPtr->getSideCount();
     vector< VarPtr >::iterator fluxIt;
     for (fluxIt = fluxVars.begin(); fluxIt != fluxVars.end(); fluxIt++)
     {
       int fluxID = (*fluxIt)->ID();
-      for (int sideOrdinal = 0; sideOrdinal < sideCount; sideOrdinal++)
+      const vector<int>* sidesForVar = &elemTypePtr->trialOrderPtr->getSidesForVarID(fluxID);
+      for (int sideOrdinal : *sidesForVar)
       {
         int basisCardinality = elemTypePtr->trialOrderPtr->getBasisCardinality(fluxID,sideOrdinal);
         for (int basisOrdinal = 0; basisOrdinal<basisCardinality; basisOrdinal++)
@@ -978,7 +977,8 @@ set<GlobalIndexType> GDAMaximumRule2D::partitionOwnedGlobalTraceIndices()
     for (traceIt = traceVars.begin(); traceIt != traceVars.end(); traceIt++)
     {
       int traceID = (*traceIt)->ID();
-      for (int sideOrdinal = 0; sideOrdinal < sideCount; sideOrdinal++)
+      const vector<int>* sidesForVar = &elemTypePtr->trialOrderPtr->getSidesForVarID(traceID);
+      for (int sideOrdinal : *sidesForVar)
       {
         int basisCardinality = elemTypePtr->trialOrderPtr->getBasisCardinality(traceID,sideOrdinal);
         for (int basisOrdinal = 0; basisOrdinal<basisCardinality; basisOrdinal++)
@@ -1061,10 +1061,30 @@ void GDAMaximumRule2D::interpretLocalBasisCoefficients(GlobalIndexType cellID, i
   int numDofs = basisCoefficients.dimension(0);
   globalDofIndices.resize(numDofs);
   DofOrderingPtr trialOrdering = _elementTypeForCell[cellID]->trialOrderPtr;
-  for (int basisDofOrdinal=0; basisDofOrdinal<numDofs; basisDofOrdinal++)
+  
+  bool useSideRestrictionForVolumeBasis = false; // TODO: change this to true when converting the rest of the code to support BCs on volume (field) variables.
+  if ((trialOrdering->getNumSidesForVarID(varID) > 1) || !useSideRestrictionForVolumeBasis)
   {
-    int cellDofIndex = trialOrdering->getDofIndex(varID, basisDofOrdinal, sideOrdinal);
-    globalDofIndices[basisDofOrdinal] = globalDofIndex(cellID, cellDofIndex);
+    for (int basisDofOrdinal=0; basisDofOrdinal<numDofs; basisDofOrdinal++)
+    {
+      int cellDofIndex = trialOrdering->getDofIndex(varID, basisDofOrdinal, sideOrdinal);
+      globalDofIndices[basisDofOrdinal] = globalDofIndex(cellID, cellDofIndex);
+    }
+  }
+  else
+  {
+    // TODO: test this code.  Will get invoked when imposing BCs on volume variables (e.g. in a DG context).
+    BasisPtr basis = trialOrdering->getBasis(varID);
+    BasisPtr continuousBasis = BasisFactory::basisFactory()->getContinuousBasis(basis);
+    int sideDim = basis->domainTopology()->getDimension() - 1;
+    set<int> basisDofOrdinalsForSide = continuousBasis->dofOrdinalsForSubcell(sideDim, sideOrdinal, 0);
+    int ordinalInGlobalDofIndicesContainer = 0;
+    for (int basisDofOrdinal : basisDofOrdinalsForSide)
+    {
+      int cellDofIndex = trialOrdering->getDofIndex(varID, basisDofOrdinal);
+      globalDofIndices[ordinalInGlobalDofIndicesContainer] = globalDofIndex(cellID, cellDofIndex);
+      ordinalInGlobalDofIndicesContainer++;
+    }
   }
 }
 

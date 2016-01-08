@@ -213,7 +213,7 @@ void SpaceTimeBasisCache::getSpaceTimeCubatureDegrees(ElementTypePtr spaceTimeTy
 //
 //  then, do the same thing for trial IDs
 
-//  void addEntry(int varID, BasisPtr basis, int basisRank, int sideIndex = 0);
+//  void addEntry(int varID, BasisPtr basis, int basisRank, int sideIndex = VOLUME_INTERIOR_SIDE_ORDINAL);
 }
 
 BasisCachePtr SpaceTimeBasisCache::getSpatialBasisCache()

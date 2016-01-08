@@ -112,7 +112,7 @@ void TestingUtilities::getGlobalFieldFluxDofInds(MeshPtr mesh, map<GlobalIndexTy
     for (idIt = fieldIDs.begin(); idIt != fieldIDs.end(); idIt++)
     {
       int trialID = (*idIt);
-      indices = elemType->trialOrderPtr->getDofIndices(trialID, 0);
+      indices = elemType->trialOrderPtr->getDofIndices(trialID);
       for (int i = 0; i<indices.size(); ++i)
       {
         fieldIndices[cellID].insert(mesh->globalDofIndex(cellID,indices[i]));
@@ -166,7 +166,7 @@ void TestingUtilities::getFieldFluxDofInds(MeshPtr mesh, map<int,set<int> > &loc
     vector<int> inds;
     for (idIt = fieldIDs.begin(); idIt != fieldIDs.end(); idIt++){
       int trialID = (*idIt);
-      inds = elemType->trialOrderPtr->getDofIndices(trialID, 0);
+      inds = elemType->trialOrderPtr->getDofIndices(trialID, VOLUME_INTERIOR_SIDE_ORDINAL);
       for (int i = 0;i<inds.size();++i){
 	localFieldInds[cellID].insert(inds[i]);
       }
@@ -218,7 +218,7 @@ void TestingUtilities::getDofIndices(MeshPtr mesh, set<int> &allFluxInds, map<in
     vector<int> inds;
     for (idIt = fieldIDs.begin(); idIt != fieldIDs.end(); idIt++){
       int trialID = (*idIt);
-      inds = elemType->trialOrderPtr->getDofIndices(trialID, 0);
+      inds = elemType->trialOrderPtr->getDofIndices(trialID, VOLUME_INTERIOR_SIDE_ORDINAL);
       localFieldInds[cellID].insert(localFieldInds[cellID].end(), inds.begin(), inds.end());
     }
     inds.clear();

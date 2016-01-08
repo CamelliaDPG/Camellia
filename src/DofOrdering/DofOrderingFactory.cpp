@@ -213,8 +213,8 @@ DofOrderingPtr DofOrderingFactory::trialOrdering(vector<int> &polyOrder,
     {
       basis = BasisFactory::basisFactory()->getConformingBasis(trialIDPolyOrder, cellTopo, spatialFS, temporalFS);
       basisRank = basis->rangeRank();
-      trialOrder->addEntry(trialID,basis,basisRank,0);
-      fieldOrder->addEntry(trialID,basis,basisRank,0);
+      trialOrder->addEntry(trialID,basis,basisRank,VOLUME_INTERIOR_SIDE_ORDINAL);
+      fieldOrder->addEntry(trialID,basis,basisRank,VOLUME_INTERIOR_SIDE_ORDINAL);
     }
   }
   trialOrder->rebuildIndex();
@@ -577,7 +577,8 @@ DofOrderingPtr DofOrderingFactory::upgradeSide(DofOrderingPtr dofOrdering,
   for (idIt = varIDs.begin(); idIt != varIDs.end(); idIt++)
   {
     int varID = *idIt;
-    int numSides = dofOrdering->getSidesForVarID(varID).size();
+    const vector<int>* sidesForVar = &dofOrdering->getSidesForVarID(varID);
+    int numSides = sidesForVar->size();
     if ((varIDsToUpgrade.find(varID) != varIDsToUpgrade.end()) && numSides == 1)
     {
       TEUCHOS_TEST_FOR_EXCEPTION( true,
@@ -585,17 +586,15 @@ DofOrderingPtr DofOrderingFactory::upgradeSide(DofOrderingPtr dofOrdering,
                                   "upgradeSide requested for varID on interior.");
     }
     Camellia::EFunctionSpace fs;
-    int sideCount = dofOrdering->cellTopology()->getSideCount();
-    for (int sideIndex=0; sideIndex<sideCount; sideIndex++)
+    for (int sideOrdinal : *sidesForVar)
     {
-      if (! dofOrdering->hasBasisEntry(varID, sideIndex)) continue;
-      BasisPtr basis = dofOrdering->getBasis(varID,sideIndex);
+      BasisPtr basis = dofOrdering->getBasis(varID,sideOrdinal);
       fs = BasisFactory::basisFactory()->getBasisFunctionSpace(basis);
       int basisRank = BasisFactory::basisFactory()->getBasisRank(basis);
-      if ((varIDsToUpgrade.find(varID) == varIDsToUpgrade.end()) || (sideIndex != sideToUpgrade))
+      if ((varIDsToUpgrade.find(varID) == varIDsToUpgrade.end()) || (sideOrdinal != sideToUpgrade))
       {
         // use existing basis
-        newOrdering->addEntry(varID,basis,basisRank,sideIndex);
+        newOrdering->addEntry(varID,basis,basisRank,sideOrdinal);
       }
       else
       {
@@ -641,21 +640,20 @@ DofOrderingPtr DofOrderingFactory::pRefine(DofOrderingPtr dofOrdering, CellTopoP
     {
       newPolyOrderForVarID = newPolyOrder + _trialOrderEnhancements[varID];
     }
-    for (vector<int>::const_iterator sideIt = sidesForVar->begin(); sideIt != sidesForVar->end(); sideIt++)
+    for (int sideOrdinal : *sidesForVar)
     {
-      int sideIndex = *sideIt;
-      BasisPtr basis = dofOrdering->getBasis(varID,sideIndex);
+      BasisPtr basis = dofOrdering->getBasis(varID,sideOrdinal);
       fs = BasisFactory::basisFactory()->getBasisFunctionSpace(basis);
       int basisRank = BasisFactory::basisFactory()->getBasisRank(basis);
       if (BasisFactory::basisFactory()->basisPolyOrder(basis) >= newPolyOrderForVarID)
       {
-        newOrdering->addEntry(varID,basis,basisRank,sideIndex);
+        newOrdering->addEntry(varID,basis,basisRank,sideOrdinal);
       }
       else
       {
         // upgrade basis
         basis = BasisFactory::basisFactory()->setPolyOrder(basis, newPolyOrderForVarID);
-        newOrdering->addEntry(varID,basis,basisRank,sideIndex);
+        newOrdering->addEntry(varID,basis,basisRank,sideOrdinal);
       }
     }
     if ((numSides > 1) && (fs == Camellia::FUNCTION_SPACE_HGRAD) && (conforming))
@@ -722,12 +720,10 @@ DofOrderingPtr DofOrderingFactory::setBasisDegree(DofOrderingPtr dofOrdering, in
     int varID = *idIt;
     const vector<int>* sidesForVar = &dofOrdering->getSidesForVarID(varID);
     Camellia::EFunctionSpace fs;
-    for (vector<int>::const_iterator sideIt = sidesForVar->begin(); sideIt != sidesForVar->end(); sideIt++)
+    for (int sideOrdinal : *sidesForVar)
     {
-      int sideIndex = *sideIt;
-
-      if (! dofOrdering->hasBasisEntry(varID, sideIndex)) continue;
-      BasisPtr basis = dofOrdering->getBasis(varID,sideIndex);
+      if (! dofOrdering->hasBasisEntry(varID, sideOrdinal)) continue;
+      BasisPtr basis = dofOrdering->getBasis(varID,sideOrdinal);
 
       fs = BasisFactory::basisFactory()->getBasisFunctionSpace(basis);
       if (replaceDiscontinuousFSWithContinuous)
@@ -744,14 +740,14 @@ DofOrderingPtr DofOrderingFactory::setBasisDegree(DofOrderingPtr dofOrdering, in
       int currentPolyOrder = BasisFactory::basisFactory()->basisPolyOrder(basis);
 //      basis = BasisFactory::basisFactory()->setPolyOrder(basis, currentPolyOrder + delta_k );
       basis = BasisFactory::basisFactory()->getBasis( currentPolyOrder + delta_k, basis->domainTopology(), fs );
-      newOrdering->addEntry(varID,basis,basisRank,sideIndex);
+      newOrdering->addEntry(varID,basis,basisRank,sideOrdinal);
       if (sidesForVar->size() == 1)
       {
-        newFieldOrder->addEntry(varID, basis, basisRank, sideIndex);
+        newFieldOrder->addEntry(varID, basis, basisRank, sideOrdinal);
       }
       else
       {
-        newTraceOrder->addEntry(varID, basis, basisRank, sideIndex);
+        newTraceOrder->addEntry(varID, basis, basisRank, sideOrdinal);
       }
     }
     if ((sidesForVar->size() > 1) && (fs == Camellia::FUNCTION_SPACE_HGRAD) && (conforming))
@@ -788,12 +784,9 @@ DofOrderingPtr DofOrderingFactory::setSidePolyOrder(DofOrderingPtr dofOrdering, 
     int varID = *idIt;
     const vector<int>* sidesForVar = &dofOrdering->getSidesForVarID(varID);
     Camellia::EFunctionSpace fs;
-    for (vector<int>::const_iterator sideIt = sidesForVar->begin(); sideIt != sidesForVar->end(); sideIt++)
+    for (int sideOrdinal : *sidesForVar)
     {
-      int sideIndex = *sideIt;
-
-      if (! dofOrdering->hasBasisEntry(varID, sideIndex)) continue;
-      BasisPtr basis = dofOrdering->getBasis(varID,sideIndex);
+      BasisPtr basis = dofOrdering->getBasis(varID,sideOrdinal);
       if (replacePatchBasis)
       {
         if (BasisFactory::basisFactory()->isPatchBasis(basis))
@@ -805,12 +798,12 @@ DofOrderingPtr DofOrderingFactory::setSidePolyOrder(DofOrderingPtr dofOrdering, 
       fs = BasisFactory::basisFactory()->getBasisFunctionSpace(basis);
       int basisRank = BasisFactory::basisFactory()->getBasisRank(basis);
       int basisPolyOrder = BasisFactory::basisFactory()->basisPolyOrder(basis);
-      if ( (sidesForVar->size() > 1) && (sideIndex==sideIndexToSet) && (basisPolyOrder < newPolyOrder) )
+      if ( (sidesForVar->size() > 1) && (sideOrdinal==sideIndexToSet) && (basisPolyOrder < newPolyOrder) )
       {
         // upgrade basis
         basis = BasisFactory::basisFactory()->setPolyOrder(basis, newPolyOrder);
       }
-      newOrdering->addEntry(varID,basis,basisRank,sideIndex);
+      newOrdering->addEntry(varID,basis,basisRank,sideOrdinal);
     }
     if ((sidesForVar->size() > 1) && (fs == Camellia::FUNCTION_SPACE_HGRAD) && (conforming))
     {

@@ -210,16 +210,37 @@ void Projector<Scalar>::projectFunctionOntoBasis(FieldContainer<Scalar> &basisCo
 
 template <typename Scalar>
 void Projector<Scalar>::projectFunctionOntoBasisInterpolating(FieldContainer<Scalar> &basisCoefficients, TFunctionPtr<Scalar> fxn,
-    BasisPtr basis, BasisCachePtr domainBasisCache)
+                                                              BasisPtr basis, BasisCachePtr domainBasisCache)
 {
   basisCoefficients.initialize(0);
-  CellTopoPtr domainTopo = basis->domainTopology();
-  unsigned domainDim = domainTopo->getDimension();
+  CellTopoPtr basisDomainTopo = basis->domainTopology();
+  unsigned basisDomainDim = basisDomainTopo->getDimension();
 
   TIPPtr<Scalar> ip;
 
-  bool traceVar = domainBasisCache->isSideCache();
-
+  bool traceVar;
+  unsigned sideOrdinal = -1;
+  CellTopoPtr domainTopo;
+  if (!domainBasisCache->isSideCache())
+  {
+    domainTopo = domainBasisCache->cellTopology();
+    traceVar = false;
+  }
+  else
+  {
+    sideOrdinal = domainBasisCache->getSideIndex();
+    domainTopo = domainBasisCache->cellTopology()->getSide(sideOrdinal);
+    if (domainTopo->getDimension() == basisDomainDim)
+    {
+      traceVar = true; // side cache with a side basis
+    }
+    else
+    {
+      traceVar = false; // side cache with a volume basis
+    }
+  }
+  unsigned domainDim = domainTopo->getDimension();
+  
   pair<TIPPtr<Scalar>, VarPtr> ipVarPair = IP::standardInnerProductForFunctionSpace(basis->functionSpace(), traceVar, domainDim);
   ip = ipVarPair.first;
   VarPtr v = ipVarPair.second;
@@ -240,15 +261,44 @@ void Projector<Scalar>::projectFunctionOntoBasisInterpolating(FieldContainer<Sca
   {
     allDofs.insert(i);
   }
+  
+  BasisPtr continuousBasis = BasisFactory::basisFactory()->getContinuousBasis(basis);
 
+  basisCoefficients.initialize(0.0);
+  set<int> dofsForDomain;
+  if (basisDomainDim == domainDim)
+  {
+    dofsForDomain = allDofs;
+  }
+  else
+  {
+    unsigned sideOrdinal = domainBasisCache->getSideIndex();
+    int vertexDim = 0;
+    dofsForDomain = continuousBasis->dofOrdinalsForSubcell(domainDim, sideOrdinal, vertexDim);
+  }
+  
+  int numCells = basisCoefficients.dimension(0);
+  FieldContainer<Scalar> wholeBasisCoefficients(numCells, basisCardinality); // will include zeros for any coefficients belonging to other sides for a volume basis, e.g.
+  
   for (int d=0; d<=domainDim; d++)
   {
-    TFunctionPtr<Scalar> projectionThusFar = BasisSumFunction::basisSumFunction(basis, basisCoefficients);
+    TFunctionPtr<Scalar> projectionThusFar = BasisSumFunction::basisSumFunction(basis, wholeBasisCoefficients);
     TFunctionPtr<Scalar> fxnToApproximate = fxn - projectionThusFar;
     int subcellCount = domainTopo->getSubcellCount(d);
     for (int subcord=0; subcord<subcellCount; subcord++)
     {
-      set<int> subcellDofOrdinals = basis->dofOrdinalsForSubcell(d, subcord);
+      set<int> subcellDofOrdinals;
+      if (basisDomainDim == domainDim)
+      {
+        subcellDofOrdinals = basis->dofOrdinalsForSubcell(d, subcord); // could use continuousBasis here, for consistency with the volume basis case.
+      }
+      else
+      {
+        // need to map from the subcord on the side to the one the basis sees
+        int subcordBasis = CamelliaCellTools::subcellOrdinalMap(basisDomainTopo, domainDim, sideOrdinal, d, subcord);
+        subcellDofOrdinals = continuousBasis->dofOrdinalsForSubcell(d, subcordBasis);
+      }
+        
       if (subcellDofOrdinals.size() > 0)
       {
         FieldContainer<double> refCellPoints;
@@ -295,7 +345,7 @@ void Projector<Scalar>::projectFunctionOntoBasisInterpolating(FieldContainer<Sca
         {
           for (auto dofOrdinal : subcellDofOrdinals)
           {
-            basisCoefficients(cellOrdinal,dofOrdinal) = newBasisCoefficients(cellOrdinal,dofOrdinal);
+            wholeBasisCoefficients(cellOrdinal,dofOrdinal) = newBasisCoefficients(cellOrdinal,dofOrdinal);
 //            cout << "Assigned dofOrdinal " << dofOrdinal << " " << " coefficient " << newBasisCoefficients(cellOrdinal,dofOrdinal);
 //            cout << " (subcord,d) = (" << subcord << "," << d << ")" << endl;
           }
@@ -305,6 +355,17 @@ void Projector<Scalar>::projectFunctionOntoBasisInterpolating(FieldContainer<Sca
       {
 //        cout << "no dof ordinals found for subcell " << subcord << " of dimension " << d << endl;
       }
+    }
+  }
+  
+  // now, copy out values corresponding to dofsForDomain into the provided basisCoefficients container
+  for (int cellOrdinal = 0; cellOrdinal < numCells; cellOrdinal++)
+  {
+    int ordinalInBasisCoefficients = 0;
+    for (auto dofOrdinal : dofsForDomain)
+    {
+      basisCoefficients(cellOrdinal,ordinalInBasisCoefficients) = wholeBasisCoefficients(cellOrdinal,dofOrdinal);
+      ordinalInBasisCoefficients++;
     }
   }
 }

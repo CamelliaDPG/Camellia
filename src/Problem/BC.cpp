@@ -1,14 +1,13 @@
 #include "BC.h"
+
+#include "BasisFactory.h"
 #include "BCFunction.h"
-
-#include "BC.h"
-#include "Var.h"
 #include "Function.h"
-#include "Projector.h"
-
-#include "SpatiallyFilteredFunction.h"
-
 #include "PhysicalPointCache.h"
+#include "Projector.h"
+#include "SpatiallyFilteredFunction.h"
+#include "TypeDefs.h"
+#include "Var.h"
 
 using namespace Intrepid;
 using namespace Camellia;
@@ -429,8 +428,21 @@ template <typename Scalar>
 void TBC<Scalar>::coefficientsForBC(FieldContainer<double> &basisCoefficients, Teuchos::RCP<BCFunction<Scalar>> bcFxn,
                                     BasisPtr basis, BasisCachePtr sideBasisCache)
 {
-  int numFields = basis->getCardinality();
-  TEUCHOS_TEST_FOR_EXCEPTION( basisCoefficients.dimension(1) != numFields, std::invalid_argument, "inconsistent basisCoefficients dimensions");
+  int numFieldsExpected;
+  int sideDim = sideBasisCache->cellTopology()->getDimension() - 1;
+  if (sideDim == basis->domainTopology()->getDimension())
+  {
+    numFieldsExpected = basis->getCardinality();
+  }
+  else
+  {
+    unsigned sideOrdinal = sideBasisCache->getSideIndex();
+    BasisPtr continuousBasis = BasisFactory::basisFactory()->getContinuousBasis(basis);
+    int vertexDim = 0;
+    numFieldsExpected = continuousBasis->dofOrdinalsForSubcell(sideDim, sideOrdinal, vertexDim).size();
+  }
+  
+  TEUCHOS_TEST_FOR_EXCEPTION( basisCoefficients.dimension(1) != numFieldsExpected, std::invalid_argument, "inconsistent basisCoefficients dimensions");
 
   Projector<double>::projectFunctionOntoBasisInterpolating(basisCoefficients, bcFxn, basis, sideBasisCache);
 }

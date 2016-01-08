@@ -129,9 +129,9 @@ void DofOrdering::copyLikeCoefficients( FieldContainer<double> &newValues, Teuch
     if (! this->hasEntryForVarID(varID)) continue;
 
     const vector<int>* sides = &oldDofOrdering->getSidesForVarID(varID);
-    for (vector<int>::const_iterator sideIt = sides->begin(); sideIt != sides->end(); sideIt++)
+    for (int sideOrdinal : *sides)
     {
-      int sideOrdinal = *sideIt;
+      // these two checks *should* be unnecessary; we can probably remove them.
       if (!hasBasisEntry(varID, sideOrdinal)) continue;
       if (!oldDofOrdering->hasBasisEntry(varID, sideOrdinal)) continue;
       BasisPtr basis = getBasis(varID,sideOrdinal);

@@ -170,7 +170,7 @@ namespace
     vector<int> elementCounts(spaceDim,1); // 1 x 1 mesh
     vector<double> x0(spaceDim,-1.0);
     MeshTopologyPtr meshTopo = MeshFactory::rectilinearMeshTopology(dimensions, elementCounts, x0);
-    double Re = 1.0;
+    double Re = 1e2;
     int fieldPolyOrder = 3, delta_k = 1;
 
     FunctionPtr x = Function::xn(1);
@@ -238,7 +238,7 @@ namespace
 
     RHSPtr rhsWithBoundaryTerms = form.rhs(forcingFunction, false); // false: *include* boundary terms in the RHS -- important for computing energy error correctly
 
-    double tol = 1e-12;
+    double tol = 1e-10;
 
     // sanity/consistency check: is the energy error for a zero solutionIncrement zero?
     form.solutionIncrement()->projectOntoMesh(zeroMap);

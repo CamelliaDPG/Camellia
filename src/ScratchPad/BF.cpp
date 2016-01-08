@@ -697,8 +697,9 @@ namespace Camellia
             TEUCHOS_TEST_FOR_EXCEPTION( ( trialBasisRank != 0 ),
                                        std::invalid_argument,
                                        "Boundary trial variable (flux or trace) given with non-scalar basis.  Unsupported.");
+            const vector<int>* sidesForTrial = &trialOrdering->getSidesForVarID(trialID);
             
-            for (unsigned sideOrdinal=0; sideOrdinal<numSides; sideOrdinal++)
+            for (int sideOrdinal : *sidesForTrial)
             {
               trialBasis = trialOrdering->getBasis(trialID,sideOrdinal);
               testBasis = testOrdering->getBasis(testID);
@@ -929,7 +930,7 @@ namespace Camellia
                                                TIPPtr<Scalar> ip, BasisCachePtr ipBasisCache, TRHSPtr<Scalar> rhs, BasisCachePtr basisCache)
   {
     double testMatrixAssemblyTime = 0, localStiffnessDeterminationTime = 0;
-    double rhsIntegrationAgainstOptimalTestsTime = 0;
+    double rhsDeterminationTime = 0;
     
 #ifdef HAVE_MPI
     Epetra_MpiComm Comm(MPI_COMM_WORLD);
@@ -966,8 +967,6 @@ namespace Camellia
       TEUCHOS_TEST_FOR_EXCEPTION(true, std::invalid_argument, "localStiffness should have dimensions (C,numTrialFields,numTrialFields).");
     }
     
-    timer.ResetStartTime();
-    
     bool printTimings = false;
     
     if (printTimings)
@@ -977,32 +976,48 @@ namespace Camellia
       cout << "numTrialDofs: " << numTrialDofs << endl;
     }
     
-    //      cout << "ipMatrix:\n" << ipMatrix;
-    
     timer.ResetStartTime();
-    FieldContainer<Scalar> optTestCoeffs(numCells,numTrialDofs,numTestDofs);
     FieldContainer<double> cellSideParities = basisCache->getCellSideParities();
-    
-    int optSuccess = this->optimalTestWeightsAndStiffness(optTestCoeffs, localStiffness, elemType,
-                                                          cellSideParities, basisCache, ip, ipBasisCache);
 
-    localStiffnessDeterminationTime += timer.ElapsedTime();
-    //      cout << "optTestCoeffs:\n" << optTestCoeffs;
-    
-    if ( optSuccess != 0 )
+    if (ip == Teuchos::null)
     {
-      cout << "**** WARNING: in BilinearForm::localStiffnessMatrixAndRHS(), optimal test function computation failed with error code " << optSuccess << ". ****\n";
+      // can we interpret as a Bubnov-Galerkin setting?
+      TEUCHOS_TEST_FOR_EXCEPTION(numTestDofs != numTrialDofs, std::invalid_argument, "BF: ip is null, but the number of test dofs is different from the number of trial dofs (can't do Bubnov-Galerkin).");
+      this->stiffnessMatrix(localStiffness, elemType, cellSideParities, basisCache);
+      localStiffnessDeterminationTime += timer.ElapsedTime();
+
+      timer.ResetStartTime();
+      rhs->integrateAgainstStandardBasis(rhsVector, testOrder, basisCache);
+      rhsDeterminationTime += timer.ElapsedTime();
     }
-    
-    timer.ResetStartTime();
-    rhs->integrateAgainstOptimalTests(rhsVector, optTestCoeffs, testOrder, basisCache);
-    rhsIntegrationAgainstOptimalTestsTime += timer.ElapsedTime();
+    else
+    {
+      //      cout << "ipMatrix:\n" << ipMatrix;
+      
+      timer.ResetStartTime();
+      FieldContainer<Scalar> optTestCoeffs(numCells,numTrialDofs,numTestDofs);
+      
+      int optSuccess = this->optimalTestWeightsAndStiffness(optTestCoeffs, localStiffness, elemType,
+                                                            cellSideParities, basisCache, ip, ipBasisCache);
+
+      localStiffnessDeterminationTime += timer.ElapsedTime();
+      //      cout << "optTestCoeffs:\n" << optTestCoeffs;
+      
+      if ( optSuccess != 0 )
+      {
+        cout << "**** WARNING: in BilinearForm::localStiffnessMatrixAndRHS(), optimal test function computation failed with error code " << optSuccess << ". ****\n";
+      }
+      
+      timer.ResetStartTime();
+      rhs->integrateAgainstOptimalTests(rhsVector, optTestCoeffs, testOrder, basisCache);
+      rhsDeterminationTime += timer.ElapsedTime();
+    }
     
     if (printTimings)
     {
       cout << "testMatrixAssemblyTime: " << testMatrixAssemblyTime << " seconds.\n";
       cout << "localStiffnessDeterminationTime: " << localStiffnessDeterminationTime << " seconds.\n";
-      cout << "rhsIntegrationAgainstOptimalTestsTime: " << rhsIntegrationAgainstOptimalTestsTime << " seconds.\n";
+      cout << "rhsDeterminationTime: " << rhsDeterminationTime << " seconds.\n";
     }
   }
   

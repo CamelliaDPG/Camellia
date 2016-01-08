@@ -118,7 +118,7 @@ bool MeshTopologyTests::test1DMesh()
     cout << "After initialization, mesh doesn't have the expected number of active cells.\n";
   }
 
-  mesh.refineCell(0, lineRefPattern);
+  mesh.refineCell(0, lineRefPattern, mesh.cellCount());
   if (mesh.cellCount() != 4)
   {
     success = false;
@@ -131,7 +131,7 @@ bool MeshTopologyTests::test1DMesh()
     cout << "After refinement, mesh doesn't have the expected number of active cells.\n";
   }
 
-  mesh.refineCell(2, lineRefPattern);
+  mesh.refineCell(2, lineRefPattern, mesh.cellCount());
   if (mesh.cellCount() != 6)
   {
     success = false;
@@ -228,7 +228,7 @@ bool MeshTopologyTests::test2DMesh()
     cout << "After initialization, mesh doesn't have the expected number of active cells.\n";
   }
 
-  mesh.refineCell(0, quadRefPattern);
+  mesh.refineCell(0, quadRefPattern, mesh.cellCount());
 
   if (mesh.cellCount() != 6)
   {
@@ -242,7 +242,7 @@ bool MeshTopologyTests::test2DMesh()
     cout << "After quad refinement, mesh doesn't have the expected number of active cells.\n";
   }
 
-  mesh.refineCell(1, triangleRefPattern);
+  mesh.refineCell(1, triangleRefPattern, mesh.cellCount());
 
   if (mesh.cellCount() != 10)
   {
@@ -318,7 +318,7 @@ bool MeshTopologyTests::test3DMesh()
 
   RefinementPatternPtr hexRefPattern = RefinementPattern::regularRefinementPatternHexahedron();
 
-  mesh.refineCell(0, hexRefPattern);
+  mesh.refineCell(0, hexRefPattern, mesh.cellCount());
 
   if (mesh.cellCount() != 9)
   {
@@ -332,7 +332,7 @@ bool MeshTopologyTests::test3DMesh()
     cout << "After refinement, mesh doesn't have the expected number of active cells.\n";
   }
 
-  mesh.refineCell(1, hexRefPattern);
+  mesh.refineCell(1, hexRefPattern, mesh.cellCount());
 
   if (mesh.cellCount() != 17)
   {
@@ -383,6 +383,7 @@ MeshTopologyPtr MeshTopologyTests::makeRectMesh(double x0, double y0, double wid
   double dx = width / horizontalCells;
   double dy = height / verticalCells;
   CellTopoPtrLegacy quadTopo = Teuchos::rcp( new shards::CellTopology(shards::getCellTopologyData<shards::Quadrilateral<4> >() ) );
+  GlobalIndexType nextCellID = 0;
   for (unsigned i=0; i<horizontalCells; i++)
   {
     double x = x0 + dx * i;
@@ -390,7 +391,8 @@ MeshTopologyPtr MeshTopologyTests::makeRectMesh(double x0, double y0, double wid
     {
       double y = y0 + dy * j;
       vector< vector<double> > vertices = quadPoints(x, y, dx, dy);
-      mesh->addCell(quadTopo, vertices);
+      mesh->addCell(nextCellID, quadTopo, vertices);
+      nextCellID++;
     }
   }
   return mesh;
@@ -404,6 +406,7 @@ MeshTopologyPtr MeshTopologyTests::makeHexMesh(double x0, double y0, double z0, 
   double dx = width / horizontalCells;
   double dy = height / verticalCells;
   double dz = depth / depthCells;
+  GlobalIndexType nextCellID = 0;
   CellTopoPtrLegacy hexTopo = Teuchos::rcp( new shards::CellTopology(shards::getCellTopologyData<shards::Hexahedron<8> >() ) );
   for (unsigned i=0; i<horizontalCells; i++)
   {
@@ -415,7 +418,8 @@ MeshTopologyPtr MeshTopologyTests::makeHexMesh(double x0, double y0, double z0, 
       {
         double z = z0 + dz * k;
         vector< vector<double> > vertices = hexPoints(x, y, z, dx, dy, dz);
-        mesh->addCell(hexTopo, vertices);
+        mesh->addCell(nextCellID, hexTopo, vertices);
+        nextCellID++;
       }
     }
   }
@@ -752,8 +756,8 @@ bool MeshTopologyTests::testEntityConstraints()
 
   // now, make a single refinement in each mesh:
   unsigned cellToRefine2D = 0, cellToRefine3D = 3;
-  mesh2D->refineCell(cellToRefine2D, RefinementPattern::regularRefinementPatternQuad());
-  mesh3D->refineCell(cellToRefine3D, RefinementPattern::regularRefinementPatternHexahedron());
+  mesh2D->refineCell(cellToRefine2D, RefinementPattern::regularRefinementPatternQuad(), mesh2D->cellCount());
+  mesh3D->refineCell(cellToRefine3D, RefinementPattern::regularRefinementPatternHexahedron(), mesh3D->cellCount());
 
 //  printMeshInfo(mesh2D);
 
@@ -934,7 +938,7 @@ bool MeshTopologyTests::testEntityConstraints()
   }
 
   // refine the cell that matches (1,0):
-  mesh2D->refineCell(childCellForVertex, RefinementPattern::regularRefinementPatternQuad());
+  mesh2D->refineCell(childCellForVertex, RefinementPattern::regularRefinementPatternQuad(), mesh2D->cellCount());
 
   // now, fix the expected edge constraints, then check them...
   set<unsigned> childEdges = mesh2D->getChildEntitiesSet(edgeDim, childCellConstrainedEdge);
@@ -1025,7 +1029,7 @@ bool MeshTopologyTests::testEntityConstraints()
 //  Camellia::print("childInteriorUnconstrainedFaces", childInteriorUnconstrainedFaces);
 //  Camellia::print("childInteriorConstrainedFaces", childInteriorConstrainedFaces);
 
-  mesh3D->refineCell(childCellIndex, RefinementPattern::regularRefinementPatternHexahedron());
+  mesh3D->refineCell(childCellIndex, RefinementPattern::regularRefinementPatternHexahedron(), mesh3D->cellCount());
 
   // update expected face and edge constraints
 //  set<unsigned> edgeConstraintsToDrop;
@@ -1146,13 +1150,13 @@ bool MeshTopologyTests::testConstraintRelaxation()
   MeshTopologyPtr mesh3D = makeHexMesh(0.0, 0.0, 0.0, 2.0, 4.0, 3.0,
                                        2, 2, 1); // 4 initial elements
 
-  mesh2D->refineCell(0, RefinementPattern::regularRefinementPatternQuad());
-  mesh2D->refineCell(1, RefinementPattern::regularRefinementPatternQuad());
+  mesh2D->refineCell(0, RefinementPattern::regularRefinementPatternQuad(), mesh2D->cellCount());
+  mesh2D->refineCell(1, RefinementPattern::regularRefinementPatternQuad(), mesh2D->cellCount());
 
-  mesh3D->refineCell(0, RefinementPattern::regularRefinementPatternHexahedron());
-  mesh3D->refineCell(1, RefinementPattern::regularRefinementPatternHexahedron());
-  mesh3D->refineCell(2, RefinementPattern::regularRefinementPatternHexahedron());
-  mesh3D->refineCell(3, RefinementPattern::regularRefinementPatternHexahedron());
+  mesh3D->refineCell(0, RefinementPattern::regularRefinementPatternHexahedron(), mesh3D->cellCount());
+  mesh3D->refineCell(1, RefinementPattern::regularRefinementPatternHexahedron(), mesh3D->cellCount());
+  mesh3D->refineCell(2, RefinementPattern::regularRefinementPatternHexahedron(), mesh3D->cellCount());
+  mesh3D->refineCell(3, RefinementPattern::regularRefinementPatternHexahedron(), mesh3D->cellCount());
 
   // empty containers:
   map<unsigned,pair<IndexType,unsigned> > expectedEdgeConstraints2D;
@@ -1191,10 +1195,10 @@ bool MeshTopologyTests::testNeighborRelationships()
 
   // the following refinement sequence is interesting, in that the final refinement of cell 0
   // reduces a 2-irregular mesh to a 1-irregular one.  It's a nice test of our refinement logic
-  mesh2D->refineCell(1, RefinementPattern::regularRefinementPatternQuad());
-  mesh2D->refineCell(2, RefinementPattern::regularRefinementPatternQuad());
-  mesh2D->refineCell(3, RefinementPattern::regularRefinementPatternQuad());
-  mesh2D->refineCell(0, RefinementPattern::regularRefinementPatternQuad());
+  mesh2D->refineCell(1, RefinementPattern::regularRefinementPatternQuad(), mesh2D->cellCount());
+  mesh2D->refineCell(2, RefinementPattern::regularRefinementPatternQuad(), mesh2D->cellCount());
+  mesh2D->refineCell(3, RefinementPattern::regularRefinementPatternQuad(), mesh2D->cellCount());
+  mesh2D->refineCell(0, RefinementPattern::regularRefinementPatternQuad(), mesh2D->cellCount());
 
   // not worth going into the details, but cell 6's side 0 should point to cell 17's side 2.  cell 17's side 2 should point to cell 2, side 0 (an inactive peer).
   CellPtr cell6 = mesh2D->getCell(6);

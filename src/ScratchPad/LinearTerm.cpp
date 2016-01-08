@@ -478,7 +478,7 @@ void TLinearTerm<Scalar>::integrate(Epetra_CrsMatrix* valuesCrsMatrix, Intrepid:
     //    cout << "uID: " << uID << endl;
     // the DofOrdering needs a sideIndex argument; this is 0 for volume bases.
     bool uVolVar = (uOrdering->getNumSidesForVarID(uID) == 1);
-    int uSideIndex = uVolVar ? 0 : basisCache->getSideIndex();
+    int uSideIndex = uVolVar ? VOLUME_INTERIOR_SIDE_ORDINAL : basisCache->getSideIndex();
 
     if (! uOrdering->hasBasisEntry(uID, uSideIndex) && (uSideIndex == basisCache->getSideIndex()))
     {
@@ -531,7 +531,7 @@ void TLinearTerm<Scalar>::integrate(Epetra_CrsMatrix* valuesCrsMatrix, Intrepid:
       int vID = vIDVector[vOrdinal];
       //      cout << "vID: " << vID << endl;
       bool vVolVar = (vOrdering->getNumSidesForVarID(vID) == 1);
-      int vSideIndex = vVolVar ? 0 : basisCache->getSideIndex();
+      int vSideIndex = vVolVar ? VOLUME_INTERIOR_SIDE_ORDINAL : basisCache->getSideIndex();
       if (! vOrdering->hasBasisEntry(vID, vSideIndex) && (vSideIndex == basisCache->getSideIndex()))
       {
         // this variable doesn't live on this side, so its contribution is 0...
