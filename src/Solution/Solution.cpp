@@ -1683,7 +1683,7 @@ void TSolution<Scalar>::integrateBasisFunctions(Intrepid::FieldContainer<GlobalI
   int rank = Teuchos::GlobalMPISession::getRank();
 
   // only supports scalar-valued field bases right now...
-  int sideIndex = 0; // field variables only
+  int sideIndex = VOLUME_INTERIOR_SIDE_ORDINAL; // field variables only
   vector<ElementTypePtr> elemTypes = _mesh->elementTypes(rank);
   vector<ElementTypePtr>::iterator elemTypeIt;
   vector<GlobalIndexType> globalIndicesVector;
@@ -4028,7 +4028,7 @@ void TSolution<Scalar>::projectOntoCell(const map<int, TFunctionPtr<Scalar> > &f
       }
       for (int sideIndex : sides)
       {
-        if (! elemTypePtr->trialOrderPtr->hasBasisEntry(trialID, sideIndex)) continue;
+//        if (! elemTypePtr->trialOrderPtr->hasBasisEntry(trialID, sideIndex)) continue;
         BasisPtr basis = elemTypePtr->trialOrderPtr->getBasis(trialID, sideIndex);
         Intrepid::FieldContainer<Scalar> basisCoefficients(1,basis->getCardinality());
         Projector<Scalar>::projectFunctionOntoBasis(basisCoefficients, function, basis, basisCache->getSideBasisCache(sideIndex));
