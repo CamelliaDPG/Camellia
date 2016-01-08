@@ -1768,7 +1768,7 @@ void TSolution<Scalar>::integrateBasisFunctions(Intrepid::FieldContainer<Scalar>
     return;
   }
 
-  int sideIndex = 0;
+  int sideIndex = VOLUME_INTERIOR_SIDE_ORDINAL;
   int basisCardinality = elemTypePtr->trialOrderPtr->getBasisCardinality(trialID,sideIndex);
   TEUCHOS_TEST_FOR_EXCEPTION(values.dimension(0) != numCellsOfType,
                              std::invalid_argument, "values must have dimensions (_mesh.numCellsOfType(elemTypePtr), trialBasisCardinality)");
