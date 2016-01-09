@@ -514,7 +514,6 @@ map<GlobalIndexType, GlobalIndexType> CondensedDofInterpreter<Scalar>::interpret
 
       for (int sideOrdinal : *sidesForTrial)
       {
-        if ( !trialOrder->hasBasisEntry(trialID, sideOrdinal) ) continue;
         BasisPtr basis = trialOrder->getBasis(trialID, sideOrdinal);
 
         set<GlobalIndexType> interpretedDofIndices = _mesh->getGlobalDofIndices(cellID, trialID, sideOrdinal);

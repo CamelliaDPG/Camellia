@@ -236,8 +236,6 @@ void TLinearTerm<Scalar>::integrate(Intrepid::FieldContainer<Scalar> &values, Do
     int varID = *varIt;
     if (! boundaryTerm )
     {
-      vector<int> varDofIndices = thisOrdering->getDofIndices(varID);
-
       // first, compute volume integral
       int numPoints = basisCache->getPhysicalCubaturePoints().dimension(1);
 
@@ -245,8 +243,12 @@ void TLinearTerm<Scalar>::integrate(Intrepid::FieldContainer<Scalar> &values, Do
 
       bool applyCubatureWeights = true;
       int basisCardinality = -1;
+      vector<int> varDofIndices;
+      
       if (sidesForVar->size() == 1)   // volume variable
       {
+        varDofIndices = thisOrdering->getDofIndices(varID);
+        
         basis = thisOrdering->getBasis(varID);
         basisCardinality = basis->getCardinality();
         ltValueDim[1] = basisCardinality;
@@ -277,10 +279,10 @@ void TLinearTerm<Scalar>::integrate(Intrepid::FieldContainer<Scalar> &values, Do
           if (sidesForVar->size() > 1)
           {
             if (! thisOrdering->hasBasisEntry(varID, sideIndex)) continue;
+            varDofIndices = thisOrdering->getDofIndices(varID,sideIndex);
             basis = thisOrdering->getBasis(varID, sideIndex);
             basisCardinality = basis->getCardinality();
             ltValueDim[1] = basisCardinality;
-            varDofIndices = thisOrdering->getDofIndices(varID,sideIndex);
           }
           numPoints = sideBasisCache->getPhysicalCubaturePoints().dimension(1);
           ltValueDim[2] = numPoints;

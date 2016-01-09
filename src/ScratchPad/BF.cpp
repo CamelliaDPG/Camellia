@@ -767,7 +767,7 @@ namespace Camellia
               // copy goes from (cell,trial_basis_dof,test_basis_dof) to (cell,element_trial_dof,element_test_dof)
               for (int i=0; i < testBasis->getCardinality(); i++)
               {
-                int testDofIndex = testOrdering->getDofIndex(testID,i,0);
+                int testDofIndex = testOrdering->getDofIndex(testID,i);
                 for (int j=0; j < trialBasis->getCardinality(); j++)
                 {
                   int trialDofIndex = trialOrdering->getDofIndex(trialID,j,sideOrdinal);

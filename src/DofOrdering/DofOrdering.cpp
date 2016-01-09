@@ -132,8 +132,8 @@ void DofOrdering::copyLikeCoefficients( FieldContainer<double> &newValues, Teuch
     for (int sideOrdinal : *sides)
     {
       // these two checks *should* be unnecessary; we can probably remove them.
-      if (!hasBasisEntry(varID, sideOrdinal)) continue;
-      if (!oldDofOrdering->hasBasisEntry(varID, sideOrdinal)) continue;
+//      if (!hasBasisEntry(varID, sideOrdinal)) continue;
+//      if (!oldDofOrdering->hasBasisEntry(varID, sideOrdinal)) continue;
       BasisPtr basis = getBasis(varID,sideOrdinal);
       if (basis.get() == oldDofOrdering->getBasis(varID,sideOrdinal).get() )
       {
@@ -255,18 +255,15 @@ set<int> DofOrdering::getTraceDofIndices()
 {
   // returns dof indices corresponding to variables with numSides > 1.
   set<int> traceDofIndices;
-  for (set<int>::iterator varIDIt = varIDs.begin(); varIDIt != varIDs.end(); varIDIt++)
+  for (int varID : varIDs)
   {
-    int varID = *varIDIt;
-    if (numSidesForVarID[varID] > 1)
+    const vector<int> *sides = &getSidesForVarID(varID);
+    if (sides->size() > 1) // trace
     {
-      for (int sideOrdinal=0; sideOrdinal<numSidesForVarID[varID]; sideOrdinal++)
+      for (int sideOrdinal : *sides)
       {
-        if (hasBasisEntry(varID,sideOrdinal))
-        {
-          const vector<int> * indices = &getDofIndices(varID, sideOrdinal);
-          traceDofIndices.insert(indices->begin(),indices->end());
-        }
+        const vector<int> * indices = &getDofIndices(varID, sideOrdinal);
+        traceDofIndices.insert(indices->begin(),indices->end());
       }
     }
   }
@@ -326,14 +323,13 @@ int DofOrdering::maxBasisDegreeForVolume()   // max degree among the varIDs with
 {
 
   int maxBasisDegree = 0;
-  int volumeSideIndex = 0;
 
   for (set<int>::iterator varIt = varIDs.begin(); varIt != varIDs.end(); varIt++)
   {
     int varID = *varIt;
     if (numSidesForVarID[varID]==1)
     {
-      pair<int,int> key = make_pair(varID, volumeSideIndex);
+      pair<int,int> key = make_pair(varID, VOLUME_INTERIOR_SIDE_ORDINAL);
       int degree = bases[key]->getDegree();
       if (maxBasisDegree < degree )
       {
@@ -351,19 +347,14 @@ void DofOrdering::rebuildIndex()
     // nothing to do
     return;
   }
-  set<int>::iterator varIDIterator;
   int numIdentificationsProcessed = 0;
-  int sideCount = cellTopology()->getSideCount();
-  for (varIDIterator = varIDs.begin(); varIDIterator != varIDs.end(); varIDIterator++)
+  for (int varID : varIDs)
   {
-    int varID = *varIDIterator;
-    //cout << "rebuildIndex: varID=" << varID << endl;
-
-    for (int sideIndex=0; sideIndex<sideCount; sideIndex++)
+    const vector<int>* sides = &getSidesForVarID(varID);
+    for (int sideOrdinal : *sides)
     {
-      if (!hasBasisEntry(varID, sideIndex)) continue;
-      BasisPtr basis = getBasis(varID,sideIndex);
-      int cellTopoSideIndex = (numSidesForVarID[varID]==1) ? -1 : sideIndex;
+      BasisPtr basis = getBasis(varID,sideOrdinal);
+      int cellTopoSideIndex = (numSidesForVarID[varID]==1) ? -1 : sideOrdinal;
       if ( _cellTopologyForSide.find(cellTopoSideIndex) == _cellTopologyForSide.end() )
       {
         CellTopoPtr cellTopoPtr = basis->domainTopology();
@@ -371,7 +362,7 @@ void DofOrdering::rebuildIndex()
       }
       for (int dofOrdinal=0; dofOrdinal < basis->getCardinality(); dofOrdinal++)
       {
-        pair<int, pair<int,int> > key = make_pair(varID, make_pair(sideIndex,dofOrdinal));
+        pair<int, pair<int,int> > key = make_pair(varID, make_pair(sideOrdinal,dofOrdinal));
         pair<int, int> indexKey = make_pair(key.first,key.second.first); // key into indices container
         if ( dofIdentifications.find(key) != dofIdentifications.end() )
         {
@@ -467,8 +458,8 @@ std::ostream& operator << (std::ostream& os, const DofOrdering& dofOrdering)
     for (set<int>::iterator varIt = varIDs.begin(); varIt != varIDs.end(); varIt++)
     {
       int varID = *varIt;
-      int numSides = dofOrdering.cellTopology()->getSideCount();
-      for (int sideIndex=0; sideIndex<numSides; sideIndex++)
+      const vector<int>* sides = &dofOrdering.getSidesForVarID(varID);
+      for (int sideIndex : *sides)
       {
         if (! dofOrdering.hasBasisEntry(varID, sideIndex)) continue;
         os << "basis cardinality for varID=" << varID << ", side " << sideIndex << ": ";

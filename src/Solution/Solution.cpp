@@ -4064,7 +4064,7 @@ void TSolution<Scalar>::projectOntoCell(const map<int, TFunctionPtr<Scalar> > &f
     else
     {
       TEUCHOS_TEST_FOR_EXCEPTION(side != -1, std::invalid_argument, "sideIndex for fields must = -1");
-      if (! elemTypePtr->trialOrderPtr->hasBasisEntry(trialID, 0))   // DofOrdering uses side 0 for fields...
+      if (! elemTypePtr->trialOrderPtr->hasBasisEntry(trialID, VOLUME_INTERIOR_SIDE_ORDINAL))   // DofOrdering uses side VOLUME_INTERIOR_SIDE_ORDINAL for fields...
       {
         continue;
       }

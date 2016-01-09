@@ -722,7 +722,6 @@ DofOrderingPtr DofOrderingFactory::setBasisDegree(DofOrderingPtr dofOrdering, in
     Camellia::EFunctionSpace fs;
     for (int sideOrdinal : *sidesForVar)
     {
-      if (! dofOrdering->hasBasisEntry(varID, sideOrdinal)) continue;
       BasisPtr basis = dofOrdering->getBasis(varID,sideOrdinal);
 
       fs = BasisFactory::basisFactory()->getBasisFunctionSpace(basis);

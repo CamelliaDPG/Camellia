@@ -578,7 +578,6 @@ bool GMGTests::testGMGOperatorP()
           {
             TEUCHOS_TEST_FOR_EXCEPTION(true, std::invalid_argument, "coarse and fine orderings disagree on whether varID is defined on side sideOrdinal");
           }
-          if (! coarseOrdering->hasBasisEntry(varID, sideOrdinal)) continue;
 
           BasisPtr coarseBasis = coarseOrdering->getBasis(varID,sideOrdinal);
           BasisPtr fineBasis = fineOrdering->getBasis(varID,sideOrdinal);
