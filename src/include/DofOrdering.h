@@ -47,7 +47,7 @@
 
 namespace Camellia
 {
-  const static int VOLUME_INTERIOR_SIDE_ORDINAL = 0; // sometime, want to change this to -1 for clearer distinction between side and interior degrees of freedom.
+  const static int VOLUME_INTERIOR_SIDE_ORDINAL = -1;
 class DofOrdering
 {
   int _indexNeedsToBeRebuilt;
