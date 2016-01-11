@@ -34,6 +34,9 @@ class CompressibleNavierStokesFormulation
   int _spaceDim;
   bool _useConformingTraces;
   double _mu;
+  double _gamma;
+  double _Pr;
+  double _Cv;
   FunctionPtr _beta;
   int _spatialPolyOrder;
   int _temporalPolyOrder;
@@ -178,6 +181,21 @@ public:
 
   // ! Returns viscosity mu.
   double mu();
+
+  // ! Returns gamma
+  double gamma();
+
+  // ! Returns Pr
+  double Pr();
+
+  // ! Returns Cv
+  double Cv();
+
+  // ! Returns Cp
+  double Cp();
+
+  // ! Returns R
+  double R();
 
   // ! refine according to energy error in the solution
   void refine();

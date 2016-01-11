@@ -208,6 +208,8 @@ int main(int argc, char *argv[])
   // nsParameters.set("neglectFluxesOnRHS", false);
   CompressibleNavierStokesFormulation form(meshTopo, nsParameters);
 
+  // form.refine();
+
   form.setIP( norm );
 
   form.solutionIncrement()->setUseCondensedSolve(useCondensedSolve);
@@ -235,43 +237,78 @@ int main(int argc, char *argv[])
     FunctionPtr zero = Function::zero();
     FunctionPtr zeros = Function::vectorize(zero, zero);
     FunctionPtr one = Function::constant(1);
+    FunctionPtr onezero = Function::vectorize(one, zero);
+    FunctionPtr ones = Function::vectorize(one, one);
 
-    rho_exact = Function::constant(1);
-    u1_exact = Function::constant(1);
-    u2_exact = Function::constant(1);
-    T_exact = Function::constant(1);
-    // FunctionPtr exp1lambdax = Teuchos::rcp(new Exp_ax(Re));
-    // rho_exact = Function::constant(1)-exp1lambdax;
-    // u1_exact = Function::constant(1)-exp1lambdax;
-    // u2_exact = Function::constant(1)-exp1lambdax;
-    // T_exact = Function::constant(1)-exp1lambdax;
+    FunctionPtr rho_exact, u1_exact, u2_exact, T_exact;
+    // if (spaceDim == 1)
+    // {
+      rho_exact = Function::constant(1);
+      u1_exact = Function::constant(1);
+      u2_exact = Function::constant(1);
+      T_exact = Function::constant(1);
+    // }
+    // else
+    // {
+    //   FunctionPtr exp1lambdax = Teuchos::rcp(new Exp_ax(Re));
+    //   rho_exact = Function::constant(1)-exp1lambdax;
+    //   u1_exact = Function::constant(1)-exp1lambdax;
+    //   u2_exact = Function::constant(1)-exp1lambdax;
+    //   T_exact = Function::constant(1)-exp1lambdax;
+    // }
     FunctionPtr u_exact;
     if (spaceDim == 1)
       u_exact = u1_exact;
     else
       u_exact = Function::vectorize(u1_exact,u2_exact);
-    form.addMassFluxCondition(    leftX, rho_exact, u_exact, T_exact);
-    form.addMomentumFluxCondition(leftX, rho_exact, u_exact, T_exact);
-    form.addEnergyFluxCondition(  leftX, rho_exact, u_exact, T_exact);
-    if (spaceDim == 1)
-      form.addVelocityTraceCondition(   rightX, zero);
-    else
-      form.addVelocityTraceCondition(   rightX, zeros);
-    form.addTemperatureTraceCondition(rightX, zero);
-    // if (spaceDim >= 2)
-    // {
-    //   form.addVelocityTraceCondition(   leftY, u_exact);
-    //   form.addTemperatureTraceCondition(leftY, T_exact);
-    //   form.addVelocityTraceCondition(   rightY, u_exact);
-    //   form.addTemperatureTraceCondition(rightY, T_exact);
-    // }
-    // if (!steady)
-    // {
-    //   SpatialFilterPtr t0  = SpatialFilter::matchingT(0);
-    //   form.addMassFluxCondition(    t0,    rho_exact, u_exact, T_exact);
-    //   form.addMomentumFluxCondition(t0,    rho_exact, u_exact, T_exact);
-    //   form.addEnergyFluxCondition(  t0,    rho_exact, u_exact, T_exact);
-    // }
+
+    switch (spaceDim)
+    {
+      case 1:
+        form.addMassFluxCondition(        leftX, rho_exact, u_exact, T_exact);
+        form.addVelocityTraceCondition(   leftX, one);
+        form.addTemperatureTraceCondition(leftX, one);
+        form.addVelocityTraceCondition(   rightX, one);
+        form.addTemperatureTraceCondition(rightX, one);
+        break;
+      case 2:
+        // form.addMassFluxCondition(SpatialFilter::allSpace(), one, ones, one);
+        // form.addMomentumFluxCondition(SpatialFilter::allSpace(), one, ones, one);
+        // form.addEnergyFluxCondition(SpatialFilter::allSpace(), one, ones, one);
+        // form.addVelocityTraceCondition(SpatialFilter::allSpace(), ones);
+        // form.addTemperatureTraceCondition(SpatialFilter::allSpace(), one);
+        form.addMassFluxCondition(        leftX, rho_exact, u_exact, T_exact);
+        form.addMassFluxCondition(        leftY, rho_exact, u_exact, T_exact);
+        form.addVelocityTraceCondition(   leftX, ones);
+        form.addVelocityTraceCondition(   leftY, ones);
+        form.addVelocityTraceCondition(   rightX, ones);
+        form.addVelocityTraceCondition(   rightY, ones);
+        form.addTemperatureTraceCondition(leftX, one);
+        form.addTemperatureTraceCondition(leftY, one);
+        form.addTemperatureTraceCondition(rightX, one);
+        form.addTemperatureTraceCondition(rightY, one);
+        // form.addMomentumFluxCondition(    leftX, rho_exact, u_exact, T_exact);
+        // form.addMomentumFluxCondition(    leftY, rho_exact, u_exact, T_exact);
+        // form.addMomentumFluxCondition(    rightX, rho_exact, u_exact, T_exact);
+        // form.addMomentumFluxCondition(    rightY, rho_exact, u_exact, T_exact);
+        // form.addEnergyFluxCondition(      leftX, rho_exact, u_exact, T_exact);
+        // form.addEnergyFluxCondition(      leftY, rho_exact, u_exact, T_exact);
+        // form.addEnergyFluxCondition(      rightX, rho_exact, u_exact, T_exact);
+        // form.addEnergyFluxCondition(      rightY, rho_exact, u_exact, T_exact);
+        break;
+      case 3:
+        break;
+    }
+    if (!steady)
+    {
+      SpatialFilterPtr t0  = SpatialFilter::matchingT(0);
+      SpatialFilterPtr t1  = SpatialFilter::matchingT(1);
+      form.addMassFluxCondition(    t0,    rho_exact, u_exact, T_exact);
+      form.addMomentumFluxCondition(t0,    rho_exact, u_exact, T_exact);
+      form.addEnergyFluxCondition(  t0,    rho_exact, u_exact, T_exact);
+      // form.addVelocityTraceCondition(t1, ones);
+      // form.addTemperatureTraceCondition(t1, one);
+    }
   }
 
   double l2NormOfIncrement = 1.0;
@@ -316,7 +353,7 @@ int main(int argc, char *argv[])
     exportName << "Steady";
   else
     exportName << "Transient";
-  exportName << problemName << "_Re" << Re << "_" << norm << "_k" << polyOrder;// << "_" << solverChoice;// << "_" << multigridStrategyString;
+  exportName << problemName << spaceDim << "D" << "_Re" << Re << "_" << norm << "_k" << polyOrder;// << "_" << solverChoice;// << "_" << multigridStrategyString;
   if (tag != "")
     exportName << "_" << tag;
 
@@ -366,7 +403,7 @@ int main(int argc, char *argv[])
 
   double tol = 1e-5;
   int refNumber = 0;
-  do
+  while ((energyError > tol) && (refNumber < numRefs))
   {
     refNumber++;
     form.refine();
@@ -443,7 +480,6 @@ int main(int argc, char *argv[])
     // energyErrorExporter.exportFunction(energyErrorFunction, "energy error", refNumber);
 
   }
-  while ((energyError > tol) && (refNumber < numRefs));
 
   if (rank==0) dataFile.close();
 
