@@ -427,6 +427,68 @@ LocalDofMapper::LocalDofMapper(DofOrderingPtr dofOrdering, map< int, BasisMap > 
   }
 }
 
+map<int, GlobalIndexType> LocalDofMapper::getPermutationMap()
+{
+  TEUCHOS_TEST_FOR_EXCEPTION(! isPermutation(), std::invalid_argument, "getPermutionMap() requires that LocalDofMapper::isPermutation() return true");
+  
+  map<int, GlobalIndexType> permutationMap;
+  
+  for (auto volumeMapEntry : _volumeMaps)
+  {
+    int varID = volumeMapEntry.first;
+    BasisMap volumeMap = volumeMapEntry.second;
+    for (auto subBasisMap : volumeMap)
+    {
+      if (subBasisMap->isPermutation())
+      {
+        const set<unsigned>* basisDofOrdinals = &subBasisMap->basisDofOrdinalFilter();
+        const vector<GlobalIndexType>* globalDofOrdinals = &subBasisMap->mappedGlobalDofOrdinals();
+        
+        TEUCHOS_TEST_FOR_EXCEPTION(basisDofOrdinals->size() != globalDofOrdinals->size(), std::invalid_argument, "Internal error: sizes for permutation should match!");
+        
+        auto basisOrdinalIt = basisDofOrdinals->begin();
+        const vector<int>* dofIndices = &_dofOrdering->getDofIndices(varID);
+        for (GlobalIndexType globalDofOrdinal : *globalDofOrdinals)
+        {
+          unsigned basisDofOrdinal = *basisOrdinalIt;
+          int localDofIndex = (*dofIndices)[basisDofOrdinal];
+          permutationMap[localDofIndex] = globalDofOrdinal;
+          basisOrdinalIt++;
+        }
+      }
+    }
+  }
+  for (int sideOrdinal = 0; sideOrdinal < _sideMaps.size(); sideOrdinal++)
+  {
+    for (auto sideMapEntry : _sideMaps[sideOrdinal])
+    {
+      int varID = sideMapEntry.first;
+      BasisMap sideMap = sideMapEntry.second;
+      for (auto subBasisMap : sideMap)
+      {
+        if (subBasisMap->isPermutation())
+        {
+          const set<unsigned>* basisDofOrdinals = &subBasisMap->basisDofOrdinalFilter();
+          const vector<GlobalIndexType>* globalDofOrdinals = &subBasisMap->mappedGlobalDofOrdinals();
+          
+          TEUCHOS_TEST_FOR_EXCEPTION(basisDofOrdinals->size() != globalDofOrdinals->size(), std::invalid_argument, "Internal error: sizes for permutation should match!");
+          
+          auto basisOrdinalIt = basisDofOrdinals->begin();
+          const vector<int>* dofIndices = &_dofOrdering->getDofIndices(varID, sideOrdinal);
+          for (GlobalIndexType globalDofOrdinal : *globalDofOrdinals)
+          {
+            unsigned basisDofOrdinal = *basisOrdinalIt;
+            int localDofIndex = (*dofIndices)[basisDofOrdinal];
+            permutationMap[localDofIndex] = globalDofOrdinal;
+            basisOrdinalIt++;
+          }
+        }
+      }
+    }
+  }
+  return permutationMap;
+}
+
 const vector<GlobalIndexType> &LocalDofMapper::globalIndices()
 {
     // the implementation does not assume that the global indices will be in numerical order (which they currently are)
@@ -761,6 +823,36 @@ FieldContainer<double> LocalDofMapper::fitLocalCoefficients(const FieldContainer
   //  cout << "fittableGlobalCoefficients:\n" << fittableGlobalCoefficients;
   
   return fittableGlobalCoefficients;
+}
+
+bool LocalDofMapper::isPermutation() const
+{
+  for (auto volumeMapEntry : _volumeMaps)
+  {
+    BasisMap volumeMap = volumeMapEntry.second;
+    for (auto subBasisMap : volumeMap)
+    {
+      if (! subBasisMap->isPermutation())
+      {
+        return false;
+      }
+    }
+  }
+  for (auto sideEntry : _sideMaps)
+  {
+    for (auto sideMapEntry : sideEntry)
+    {
+      BasisMap sideMap = sideMapEntry.second;
+      for (auto subBasisMap : sideMap)
+      {
+        if (! subBasisMap->isPermutation())
+        {
+          return false;
+        }
+      }
+    }
+  }
+  return true;
 }
 
 void LocalDofMapper::mapLocalDataVector(const FieldContainer<double> &localData, bool fittableGlobalDofsOnly,

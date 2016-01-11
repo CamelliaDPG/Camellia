@@ -809,6 +809,22 @@ GlobalIndexType GDAMaximumRule2D::globalDofIndex(GlobalIndexType cellID, IndexTy
   return (*mapEntryIt).second;
 }
 
+vector<GlobalIndexType> GDAMaximumRule2D::globalDofIndices(GlobalIndexType cellID, const vector<IndexType> &localDofIndices)
+{
+  vector<GlobalIndexType> globalIndices;
+  for (IndexType localDofIndex : localDofIndices)
+  {
+    pair<GlobalIndexType,IndexType> key = {cellID, localDofIndex};
+    auto mapEntryIt = _localToGlobalMap.find(key);
+    if ( mapEntryIt == _localToGlobalMap.end() )
+    {
+      TEUCHOS_TEST_FOR_EXCEPTION(true, std::invalid_argument, "entry not found.");
+    }
+    globalIndices.push_back(mapEntryIt->second);
+  }
+  return globalIndices;
+}
+
 GlobalIndexType GDAMaximumRule2D::globalDofCount()
 {
   return _numGlobalDofs;
@@ -1061,9 +1077,8 @@ void GDAMaximumRule2D::interpretLocalBasisCoefficients(GlobalIndexType cellID, i
   int numDofs = basisCoefficients.dimension(0);
   globalDofIndices.resize(numDofs);
   DofOrderingPtr trialOrdering = _elementTypeForCell[cellID]->trialOrderPtr;
-  
-  bool useSideRestrictionForVolumeBasis = false; // TODO: change this to true when converting the rest of the code to support BCs on volume (field) variables.
-  if ((trialOrdering->getNumSidesForVarID(varID) > 1) || !useSideRestrictionForVolumeBasis)
+
+  if (trialOrdering->hasBasisEntry(varID, sideOrdinal))
   {
     for (int basisDofOrdinal=0; basisDofOrdinal<numDofs; basisDofOrdinal++)
     {

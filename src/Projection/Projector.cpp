@@ -64,13 +64,13 @@ void Projector<Scalar>::projectFunctionOntoBasis(FieldContainer<Scalar> &basisCo
 
   // fake a DofOrdering
   DofOrderingPtr dofOrdering = Teuchos::rcp( new DofOrdering(cellTopo) );
-  if (! basisCache->isSideCache())
+  if (basisCache->isSideCache() && ((v->varType()==FLUX) || (v->varType()==TRACE)))
   {
-    dofOrdering->addEntry(v->ID(), basis, v->rank());
+    dofOrdering->addEntry(v->ID(), basis, v->rank(), basisCache->getSideIndex());
   }
   else
   {
-    dofOrdering->addEntry(v->ID(), basis, v->rank(), basisCache->getSideIndex());
+    dofOrdering->addEntry(v->ID(), basis, v->rank());
   }
 
   ip->computeInnerProductMatrix(gramMatrix, dofOrdering, basisCache);

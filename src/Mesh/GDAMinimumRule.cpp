@@ -637,13 +637,60 @@ void GDAMinimumRule::interpretLocalBasisCoefficients(GlobalIndexType cellID, int
   CellConstraints constraints = getCellConstraints(cellID);
   LocalDofMapperPtr dofMapper = getDofMapper(cellID, constraints, varID, sideOrdinal);
 
-  globalCoefficients = dofMapper->fitLocalCoefficients(basisCoefficients);
-  const vector<GlobalIndexType>* globalIndexVector = &dofMapper->fittableGlobalIndices();
-  globalDofIndices.resize(globalIndexVector->size());
-
-  for (int i=0; i<globalIndexVector->size(); i++)
+  if (dofMapper->isPermutation())
   {
-    globalDofIndices(i) = (*globalIndexVector)[i];
+    map<int, GlobalIndexType> permutationMap = dofMapper->getPermutationMap();
+    int entryOrdinal = 0;
+    DofOrderingPtr dofOrdering = elementType(cellID)->trialOrderPtr;
+    if (dofOrdering->hasBasisEntry(varID, sideOrdinal))
+    {
+      // we are mapping the whole basis in this case
+      const vector<int>* localDofIndices = &dofOrdering->getDofIndices(varID, sideOrdinal);
+      TEUCHOS_TEST_FOR_EXCEPTION(localDofIndices->size() != basisCoefficients.size(), std::invalid_argument, "basisCoefficients should be sized to match either the basis cardinality (when whole bases are matched) or the cardinality of the restriction");
+      int numEntries = basisCoefficients.size();
+      globalCoefficients.resize(numEntries);
+      globalDofIndices.resize(numEntries);
+      for (int localDofIndex : *localDofIndices)
+      {
+        globalCoefficients[entryOrdinal] = basisCoefficients[entryOrdinal];
+        globalDofIndices[entryOrdinal] = permutationMap[localDofIndex];
+        entryOrdinal++;
+      }
+    }
+    else
+    {
+      // we are restricting a volume basis to the side indicated
+      TEUCHOS_TEST_FOR_EXCEPTION(!dofOrdering->hasBasisEntry(varID, VOLUME_INTERIOR_SIDE_ORDINAL), std::invalid_argument, "Basis not found");
+      BasisPtr volumeBasis = dofOrdering->getBasis(varID);
+      int sideDim = volumeBasis->domainTopology()->getDimension() - 1;
+      // get the continuous version of this so that the dof ordinals for side are correct
+      BasisPtr continuousBasis = BasisFactory::basisFactory()->getContinuousBasis(volumeBasis);
+      
+      set<int> basisDofOrdinals = continuousBasis->dofOrdinalsForSubcell(sideDim, sideOrdinal, 0);
+      TEUCHOS_TEST_FOR_EXCEPTION(basisDofOrdinals.size() != basisCoefficients.size(), std::invalid_argument, "basisCoefficients should be sized to match either the basis cardinality (when whole bases are matched) or the cardinality of the restriction");
+      const vector<int>* localDofIndices = &dofOrdering->getDofIndices(varID);
+      int numEntries = basisCoefficients.size();
+      globalCoefficients.resize(numEntries);
+      globalDofIndices.resize(numEntries);
+      for (int basisDofOrdinal : basisDofOrdinals)
+      {
+        int localDofIndex = (*localDofIndices)[basisDofOrdinal];
+        globalCoefficients[entryOrdinal] = basisCoefficients[entryOrdinal];
+        globalDofIndices[entryOrdinal] = permutationMap[localDofIndex];
+        entryOrdinal++;
+      }
+    }
+  }
+  else
+  {
+    globalCoefficients = dofMapper->fitLocalCoefficients(basisCoefficients);
+    const vector<GlobalIndexType>* globalIndexVector = &dofMapper->fittableGlobalIndices();
+    globalDofIndices.resize(globalIndexVector->size());
+
+    for (int i=0; i<globalIndexVector->size(); i++)
+    {
+      globalDofIndices(i) = (*globalIndexVector)[i];
+    }
   }
 }
 
@@ -3142,7 +3189,7 @@ LocalDofMapperPtr GDAMinimumRule::getDofMapper(GlobalIndexType cellID, CellConst
 
     if (varHasSupportOnVolume)
     {
-      bool allowVolumeRestrictionToSide = false; // TODO: change to true to allow BCs to be imposed...
+      bool allowVolumeRestrictionToSide = true; // TODO: change to true to allow BCs to be imposed...
 
       if ((sideOrdinalToMap == -1) || (!allowVolumeRestrictionToSide))
       {
