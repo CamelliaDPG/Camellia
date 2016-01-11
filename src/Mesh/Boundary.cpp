@@ -349,8 +349,6 @@ void Boundary::bcsToImpose( map<  GlobalIndexType, Scalar > &globalDofIndicesAnd
     for (vector< int >::iterator trialIt = trialIDs.begin(); trialIt != trialIDs.end(); trialIt++)
     {
       int trialID = *(trialIt);
-      bool isTrace = _mesh->bilinearForm()->functionSpaceForTrial(trialID) == Camellia::FUNCTION_SPACE_HGRAD;
-      // we assume if it's not a trace, then it's a flux (i.e. L2 projection is appropriate)
       if ( bc.bcsImposed(trialID) )
       {
 //        // DEBUGGING: keep track of which sides we impose BCs on:
@@ -360,18 +358,47 @@ void Boundary::bcsToImpose( map<  GlobalIndexType, Scalar > &globalDofIndicesAnd
         for (int i=0; i<boundarySides.size(); i++)
         {
           unsigned sideOrdinal = boundarySides[i];
-          if (! trialOrderingPtr->hasBasisEntry(trialID, sideOrdinal)) continue;
-          BasisPtr basis = trialOrderingPtr->getBasis(trialID,sideOrdinal);
-          int numDofs = basis->getCardinality();
+          // TODO: here, we need to treat the volume basis case.
+          /*
+           To do this:
+           1. (Determine which dofs in the basis have support on the side.)
+           2. (Probably should resize dirichletValues to match number of dofs with support on the side.)
+           3. (Within coefficientsForBC, and the projection method it calls, when it's a side cache, check whether the basis being projected has a higher dimension.  If so, do the same determination regarding the support of basis on the side as #1.)
+           4. DofInterpreter::interpretLocalBasisCoefficients() needs to handle the case that trialID has volume support, and in this case interpret the provided data appropriately.
+           */
+          
+          BasisPtr basis;
+          int numDofsSide;
+          if (trialOrderingPtr->getSidesForVarID(trialID).size() == 1)
+          {
+            // volume basis
+            basis = trialOrderingPtr->getBasis(trialID);
+            // get the continuous version of this so that the dof ordinals for side are correct
+            BasisPtr continuousBasis = BasisFactory::basisFactory()->getContinuousBasis(basis);
+            int sideDim = continuousBasis->domainTopology()->getDimension() - 1;
+            int vertexDim = 0;
+            set<int> dofOrdinals = continuousBasis->dofOrdinalsForSubcell(sideDim, sideOrdinal, vertexDim);
+            numDofsSide = dofOrdinals.size();
+          }
+          else if (! trialOrderingPtr->hasBasisEntry(trialID, sideOrdinal))
+          {
+            continue;
+          }
+          else
+          {
+            basis = trialOrderingPtr->getBasis(trialID,sideOrdinal);
+            numDofsSide = basis->getCardinality();
+          }
+          
           GlobalIndexType numCells = 1;
           if (numCells > 0)
           {
-            FieldContainer<double> dirichletValues(numCells,numDofs);
+            FieldContainer<double> dirichletValues(numCells,numDofsSide);
             // project bc function onto side basis:
             BCPtr bcPtr = Teuchos::rcp(&bc, false);
-            Teuchos::RCP<BCFunction<double>> bcFunction = BCFunction<double>::bcFunction(bcPtr, trialID, isTrace);
+            Teuchos::RCP<BCFunction<double>> bcFunction = BCFunction<double>::bcFunction(bcPtr, trialID);
             bcPtr->coefficientsForBC(dirichletValues, bcFunction, basis, basisCache->getSideBasisCache(sideOrdinal));
-            dirichletValues.resize(numDofs);
+            dirichletValues.resize(numDofsSide);
             if (bcFunction->imposeOnCell(0))
             {
               FieldContainer<double> globalData;
@@ -459,7 +486,7 @@ void Boundary::bcsToImpose( map<  GlobalIndexType, Scalar > &globalDofIndicesAnd
     int sideDim = spatialCellTopo->getDimension() - 1;
     if (!_mesh->bilinearForm()->isFluxOrTrace(trialID))
     {
-      spatialSidesForVertex.push_back(0); // for volume trialIDs, the "side" in DofOrdering is 0
+      spatialSidesForVertex.push_back(VOLUME_INTERIOR_SIDE_ORDINAL);
       sideVertexOrdinals.push_back(vertexOrdinalInSpatialCell);
     }
     else
@@ -501,7 +528,7 @@ void Boundary::bcsToImpose( map<  GlobalIndexType, Scalar > &globalDofIndicesAnd
         unsigned spaceTimeSideOrdinal;
         if (!_mesh->bilinearForm()->isFluxOrTrace(trialID))
         {
-          spaceTimeSideOrdinal = 0;
+          spaceTimeSideOrdinal = VOLUME_INTERIOR_SIDE_ORDINAL;
         }
         else
         {

@@ -59,6 +59,9 @@ public:
                  set<GlobalIndexType> unmappedGlobalDofOrdinals = set<GlobalIndexType>(), // extra dof ordinals which aren't mapped as such but should be included in the mapper (used in GMGOperator)
                  int varIDToMap = -1, int sideOrdinalToMap = -1);
 
+  // ! Returns an STL map from the local dof indices to the global dof indices.  Throws an exception if isPermutation() returns false.
+  std::map<int, GlobalIndexType> getPermutationMap();
+  
   Intrepid::FieldContainer<double> mapLocalData(const Intrepid::FieldContainer<double> &localData, bool fittableGlobalDofsOnly);
   
   Intrepid::FieldContainer<double> mapLocalData(const Intrepid::FieldContainer<double> &localData, bool fittableGlobalDofsOnly,
@@ -67,6 +70,9 @@ public:
   void mapLocalDataSide(const Intrepid::FieldContainer<double> &localData, Intrepid::FieldContainer<double> &mappedData, bool fittableGlobalDofsOnly, int sideOrdinal);
   void mapLocalDataVolume(const Intrepid::FieldContainer<double> &localData, Intrepid::FieldContainer<double> &mappedData, bool fittableGlobalDofsOnly);
 
+  //! Returns true if the action of the LocalDofMapper is equivalent to a relabeling of the local dofs as global dofs (i.e. it is one-to-one and all weights are unity.)
+  bool isPermutation() const;
+  
   Intrepid::FieldContainer<double> fitLocalCoefficients(const Intrepid::FieldContainer<double> &localCoefficients); // solves normal equations (if the localCoefficients are in the range of the global-to-local operator, then the returned coefficients will be the preimage of localCoefficients under that operator)
   Intrepid::FieldContainer<double> mapGlobalCoefficients(const Intrepid::FieldContainer<double> &globalCoefficients);
 

@@ -474,7 +474,7 @@ bool CondensedDofInterpreter<Scalar>::varDofsAreCondensible(int varID, int sideO
   int sideCount = dofOrdering->getSidesForVarID(varID).size();
   if (sideCount != 1) return false;
 
-  BasisPtr basis = dofOrdering->getBasis(varID); // sideOrdinal must be 0 since sideCount == 1
+  BasisPtr basis = dofOrdering->getBasis(varID);
   Camellia::EFunctionSpace fs = basis->functionSpace();
 
   bool isDiscontinuous = functionSpaceIsDiscontinuous(fs);
@@ -514,7 +514,6 @@ map<GlobalIndexType, GlobalIndexType> CondensedDofInterpreter<Scalar>::interpret
 
       for (int sideOrdinal : *sidesForTrial)
       {
-        if ( !trialOrder->hasBasisEntry(trialID, sideOrdinal) ) continue;
         BasisPtr basis = trialOrder->getBasis(trialID, sideOrdinal);
 
         set<GlobalIndexType> interpretedDofIndices = _mesh->getGlobalDofIndices(cellID, trialID, sideOrdinal);
@@ -1052,6 +1051,11 @@ void CondensedDofInterpreter<Scalar>::storeStiffnessForCell(GlobalIndexType cell
 template <typename Scalar>
 const FieldContainer<Scalar> & CondensedDofInterpreter<Scalar>::storedLocalLoadForCell(GlobalIndexType cellID)
 {
+  if (_localLoadVectors.find(cellID) == _localLoadVectors.end())
+  {
+    computeAndStoreLocalStiffnessAndLoad(cellID);
+  }
+  
   if (_localLoadVectors.find(cellID) != _localLoadVectors.end())
   {
     return _localLoadVectors[cellID];
@@ -1065,6 +1069,11 @@ const FieldContainer<Scalar> & CondensedDofInterpreter<Scalar>::storedLocalLoadF
 template <typename Scalar>
 const FieldContainer<Scalar> & CondensedDofInterpreter<Scalar>::storedLocalStiffnessForCell(GlobalIndexType cellID)
 {
+  if (_localStiffnessMatrices.find(cellID) == _localStiffnessMatrices.end())
+  {
+    computeAndStoreLocalStiffnessAndLoad(cellID);
+  }
+  
   if (_localStiffnessMatrices.find(cellID) != _localStiffnessMatrices.end())
   {
     return _localStiffnessMatrices[cellID];

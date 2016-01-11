@@ -218,8 +218,8 @@ public:
   void solutionValues(Intrepid::FieldContainer<Scalar> &values, int trialID, BasisCachePtr basisCache,
                       bool weightForCubature = false, Camellia::EOperator op = OP_VALUE);
 
-  void solnCoeffsForCellID(Intrepid::FieldContainer<Scalar> &solnCoeffs, GlobalIndexType cellID, int trialID, int sideIndex=0);
-  void setSolnCoeffsForCellID(Intrepid::FieldContainer<Scalar> &solnCoeffsToSet, GlobalIndexType cellID, int trialID, int sideIndex=0);
+  void solnCoeffsForCellID(Intrepid::FieldContainer<Scalar> &solnCoeffs, GlobalIndexType cellID, int trialID, int sideIndex=VOLUME_INTERIOR_SIDE_ORDINAL);
+  void setSolnCoeffsForCellID(Intrepid::FieldContainer<Scalar> &solnCoeffsToSet, GlobalIndexType cellID, int trialID, int sideIndex=VOLUME_INTERIOR_SIDE_ORDINAL);
   void setSolnCoeffsForCellID(Intrepid::FieldContainer<Scalar> &solnCoeffsToSet, GlobalIndexType cellID);
 
   const std::map< GlobalIndexType, Intrepid::FieldContainer<Scalar> > & solutionForCellIDGlobal() const;

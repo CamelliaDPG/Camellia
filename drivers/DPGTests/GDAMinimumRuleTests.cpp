@@ -988,9 +988,9 @@ bool GDAMinimumRuleTests::testLocalInterpretationConsistency()
     for (set<int>::iterator varIt = varIDs.begin(); varIt != varIDs.end(); varIt++)
     {
       int varID = *varIt;
-      for (int sideOrdinal=0; sideOrdinal<sideCount; sideOrdinal++)
+      const vector<int>* sidesForVar = &trialOrdering->getSidesForVarID(varID);
+      for (int sideOrdinal : *sidesForVar)
       {
-        if (! trialOrdering->hasBasisEntry(varID, sideOrdinal)) continue;
         BasisPtr basis = trialOrdering->getBasis(varID,sideOrdinal);
         FieldContainer<double> basisData(basis->getCardinality());
         // on the assumption that minimum rule does *not* enforce conformity locally, we can consistently pull basis data
@@ -1756,9 +1756,12 @@ bool GDAMinimumRuleTests::testPoissonCompatibleMeshWithHeterogeneousOrientations
   CellTopoPtrLegacy quadTopo = Teuchos::rcp( new shards::CellTopology(shards::getCellTopologyData<shards::Quadrilateral<4> >() ));
 
   cout << "Note: experimentally trying with both cells oriented CW.\n";
-  meshTopology->addCell(quadTopo, BAFE);
+  GlobalIndexType nextCellID = 0;
+  meshTopology->addCell(nextCellID, quadTopo, BAFE);
+  nextCellID++;
 //  meshTopology->addCell(quadTopo, ABEF);
-  meshTopology->addCell(quadTopo, CBED);
+  meshTopology->addCell(nextCellID, quadTopo, CBED);
+  nextCellID++;
 
   MeshPtr mesh = Teuchos::rcp( new Mesh(meshTopology, bf, H1Order, testSpaceEnrichment) );
 

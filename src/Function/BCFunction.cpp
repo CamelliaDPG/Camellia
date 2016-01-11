@@ -8,7 +8,7 @@ using namespace Intrepid;
 using namespace Camellia;
 
 template <typename Scalar>
-Teuchos::RCP<BCFunction<Scalar>> BCFunction<Scalar>::bcFunction(BCPtr bc, int varID, bool isTrace)
+Teuchos::RCP<BCFunction<Scalar>> BCFunction<Scalar>::bcFunction(BCPtr bc, int varID)
 {
   TFunctionPtr<Scalar> spatiallyFilteredFunction;
   int rank = 0;
@@ -18,15 +18,14 @@ Teuchos::RCP<BCFunction<Scalar>> BCFunction<Scalar>::bcFunction(BCPtr bc, int va
     rank = spatiallyFilteredFunction->rank();
   }
 
-  return Teuchos::rcp( new BCFunction<Scalar>(bc, varID, isTrace, spatiallyFilteredFunction, rank) );
+  return Teuchos::rcp( new BCFunction<Scalar>(bc, varID, spatiallyFilteredFunction, rank) );
 }
 
 template <typename Scalar>
-BCFunction<Scalar>::BCFunction(BCPtr bc, int varID, bool isTrace, TFunctionPtr<Scalar> spatiallyFilteredFunction, int rank) : TFunction<Scalar>(rank)
+BCFunction<Scalar>::BCFunction(BCPtr bc, int varID, TFunctionPtr<Scalar> spatiallyFilteredFunction, int rank) : TFunction<Scalar>(rank)
 {
   _bc = bc;
   _varID = varID;
-  _isTrace = isTrace;
   _spatiallyFilteredFunction = spatiallyFilteredFunction;
 }
 
@@ -51,12 +50,6 @@ bool BCFunction<Scalar>::imposeOnCell(int cellIndex)
     if (_imposeHere(cellIndex,ptIndex)) return true;
   }
   return false;
-}
-
-template <typename Scalar>
-bool BCFunction<Scalar>::isTrace()
-{
-  return _isTrace;
 }
 
 template <typename Scalar>

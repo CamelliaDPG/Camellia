@@ -339,7 +339,7 @@ void TRieszRep<Scalar>::computeRepresentationValues(FieldContainer<Scalar> &valu
   ElementPtr elem = _mesh->getElement(cellIDs[0]);
   ElementTypePtr elemTypePtr = elem->elementType();
   DofOrderingPtr testOrderingPtr = elemTypePtr->testOrderPtr;
-  int numTestDofsForVarID = testOrderingPtr->getBasisCardinality(testID, 0);
+  int numTestDofsForVarID = testOrderingPtr->getBasisCardinality(testID, VOLUME_INTERIOR_SIDE_ORDINAL);
   BasisPtr testBasis = testOrderingPtr->getBasis(testID);
 
   bool testBasisIsVolumeBasis = (spaceDim == testBasis->domainTopology()->getDimension());

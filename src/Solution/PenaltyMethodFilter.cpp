@@ -25,6 +25,9 @@ void PenaltyMethodFilter::filter(FieldContainer<double> &localStiffnessMatrix, F
                                  BasisCachePtr basisCache, Teuchos::RCP<Mesh> mesh, Teuchos::RCP<BC> bc)
 {
 
+  // TODO: rewrite this to support imposing penalty conditions on field variables.  It at least looks like this is
+  //       not presently supported.
+  
   // assumption: filter gets elements of all the same type
   TEUCHOS_TEST_FOR_EXCEPTION(basisCache->cellIDs().size()==0,std::invalid_argument,"no cell IDs given to filter");
 

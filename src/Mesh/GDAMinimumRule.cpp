@@ -8,6 +8,7 @@
 
 #include "GDAMinimumRule.h"
 
+#include "BasisFactory.h"
 #include "CamelliaCellTools.h"
 #include "CamelliaDebugUtility.h"
 #include "GDAMinimumRuleConstraints.h"
@@ -166,6 +167,7 @@ ElementTypePtr GDAMinimumRule::elementType(GlobalIndexType cellID)
   return _elementTypeForCell[cellID];
 }
 
+  // TODO: Looks like filterSubBasisConstraintData() is unused.  If not, should be deleted.
 void GDAMinimumRule::filterSubBasisConstraintData(set<unsigned> &basisDofOrdinals, vector<GlobalIndexType> &globalDofOrdinals,
     Intrepid::FieldContainer<double> &constraintMatrix, Intrepid::FieldContainer<bool> &processedDofs,
     DofOrderingPtr trialOrdering, VarPtr var, int sideOrdinal)
@@ -635,13 +637,60 @@ void GDAMinimumRule::interpretLocalBasisCoefficients(GlobalIndexType cellID, int
   CellConstraints constraints = getCellConstraints(cellID);
   LocalDofMapperPtr dofMapper = getDofMapper(cellID, constraints, varID, sideOrdinal);
 
-  globalCoefficients = dofMapper->fitLocalCoefficients(basisCoefficients);
-  const vector<GlobalIndexType>* globalIndexVector = &dofMapper->fittableGlobalIndices();
-  globalDofIndices.resize(globalIndexVector->size());
-
-  for (int i=0; i<globalIndexVector->size(); i++)
+  if (dofMapper->isPermutation())
   {
-    globalDofIndices(i) = (*globalIndexVector)[i];
+    map<int, GlobalIndexType> permutationMap = dofMapper->getPermutationMap();
+    int entryOrdinal = 0;
+    DofOrderingPtr dofOrdering = elementType(cellID)->trialOrderPtr;
+    if (dofOrdering->hasBasisEntry(varID, sideOrdinal))
+    {
+      // we are mapping the whole basis in this case
+      const vector<int>* localDofIndices = &dofOrdering->getDofIndices(varID, sideOrdinal);
+      TEUCHOS_TEST_FOR_EXCEPTION(localDofIndices->size() != basisCoefficients.size(), std::invalid_argument, "basisCoefficients should be sized to match either the basis cardinality (when whole bases are matched) or the cardinality of the restriction");
+      int numEntries = basisCoefficients.size();
+      globalCoefficients.resize(numEntries);
+      globalDofIndices.resize(numEntries);
+      for (int localDofIndex : *localDofIndices)
+      {
+        globalCoefficients[entryOrdinal] = basisCoefficients[entryOrdinal];
+        globalDofIndices[entryOrdinal] = permutationMap[localDofIndex];
+        entryOrdinal++;
+      }
+    }
+    else
+    {
+      // we are restricting a volume basis to the side indicated
+      TEUCHOS_TEST_FOR_EXCEPTION(!dofOrdering->hasBasisEntry(varID, VOLUME_INTERIOR_SIDE_ORDINAL), std::invalid_argument, "Basis not found");
+      BasisPtr volumeBasis = dofOrdering->getBasis(varID);
+      int sideDim = volumeBasis->domainTopology()->getDimension() - 1;
+      // get the continuous version of this so that the dof ordinals for side are correct
+      BasisPtr continuousBasis = BasisFactory::basisFactory()->getContinuousBasis(volumeBasis);
+      
+      set<int> basisDofOrdinals = continuousBasis->dofOrdinalsForSubcell(sideDim, sideOrdinal, 0);
+      TEUCHOS_TEST_FOR_EXCEPTION(basisDofOrdinals.size() != basisCoefficients.size(), std::invalid_argument, "basisCoefficients should be sized to match either the basis cardinality (when whole bases are matched) or the cardinality of the restriction");
+      const vector<int>* localDofIndices = &dofOrdering->getDofIndices(varID);
+      int numEntries = basisCoefficients.size();
+      globalCoefficients.resize(numEntries);
+      globalDofIndices.resize(numEntries);
+      for (int basisDofOrdinal : basisDofOrdinals)
+      {
+        int localDofIndex = (*localDofIndices)[basisDofOrdinal];
+        globalCoefficients[entryOrdinal] = basisCoefficients[entryOrdinal];
+        globalDofIndices[entryOrdinal] = permutationMap[localDofIndex];
+        entryOrdinal++;
+      }
+    }
+  }
+  else
+  {
+    globalCoefficients = dofMapper->fitLocalCoefficients(basisCoefficients);
+    const vector<GlobalIndexType>* globalIndexVector = &dofMapper->fittableGlobalIndices();
+    globalDofIndices.resize(globalIndexVector->size());
+
+    for (int i=0; i<globalIndexVector->size(); i++)
+    {
+      globalDofIndices(i) = (*globalIndexVector)[i];
+    }
   }
 }
 
@@ -819,6 +868,65 @@ BasisMap GDAMinimumRule::getBasisMap(GlobalIndexType cellID, SubCellDofIndexInfo
 //
 //    }
 //  }
+  return varVolumeMap;
+}
+
+BasisMap GDAMinimumRule::getBasisMapVolumeRestrictedToSide(GlobalIndexType cellID, SubCellDofIndexInfo& dofOwnershipInfo, VarPtr var, int sideOrdinal)
+{
+   BasisMap volumeMap = getBasisMap(cellID, dofOwnershipInfo, var); // this may be where we should add an argument to specify the side being requested...
+
+  // We're interested in the restriction of the map to the side
+  // for now, the only case we will support is the one where each volume dof is identified with a single global dof
+  // (this is the case when using discontinuous volume dofs, which is the case for ultraweak DPG as well as DG)
+    
+  // we assert that condition here:
+  {
+    for (SubBasisDofMapperPtr subBasisDofMapper : volumeMap)
+    {
+      TEUCHOS_TEST_FOR_EXCEPTION(!subBasisDofMapper->isPermutation(), std::invalid_argument, "getDofMapper() only supports side restrictions of volume variables in cases where the volume variables do not have any constraints imposed");
+    }
+  }
+  
+  DofOrderingPtr trialOrdering = _elementTypeForCell[cellID]->trialOrderPtr;
+  
+  BasisPtr basis = trialOrdering->getBasis(var->ID());
+  BasisPtr continuousBasis = BasisFactory::basisFactory()->getContinuousBasis(basis);
+  int sideDim = basis->domainTopology()->getDimension() - 1;
+  int vertexDim = 0;
+  set<int> basisDofOrdinalsForSide = continuousBasis->dofOrdinalsForSubcell(sideDim, sideOrdinal, vertexDim);
+
+  vector<GlobalIndexType> globalDofOrdinals;
+  for (int basisDofOrdinalForSide : basisDofOrdinalsForSide)
+  {
+    for (SubBasisDofMapperPtr subBasisDofMapper : volumeMap)
+    {
+      if (subBasisDofMapper->basisDofOrdinalFilter().find(basisDofOrdinalForSide) != subBasisDofMapper->basisDofOrdinalFilter().end())
+      {
+        // this dof mapper contains the guy we're looking for
+        set<unsigned> basisDofOrdinalSet = {(unsigned)basisDofOrdinalForSide};
+        set<GlobalIndexType> mappedGlobalDofOrdinals = subBasisDofMapper->mappedGlobalDofOrdinalsForBasisOrdinals(basisDofOrdinalSet);
+        if (mappedGlobalDofOrdinals.size() != 1)
+        {
+          TEUCHOS_TEST_FOR_EXCEPTION(true, std::invalid_argument, "getDofMapper() only supports side restrictions of volume variables if volume mapping is a permutation");
+        }
+        GlobalIndexType mappedGlobalDofOrdinal = *mappedGlobalDofOrdinals.begin();
+        
+        globalDofOrdinals.push_back(mappedGlobalDofOrdinal);
+        break; // break out of subBasisDofMapper iteration loop -- we found our guy
+      }
+    }
+  }
+  
+  TEUCHOS_TEST_FOR_EXCEPTION(globalDofOrdinals.size() != basisDofOrdinalsForSide.size(), std::invalid_argument, "Error: did not find globalDofOrdinals for all basisDofOrdinals on the side");
+  
+  BasisMap varVolumeMap;
+  
+  set<unsigned> basisDofOrdinalsForSideUnsigned(basisDofOrdinalsForSide.begin(),basisDofOrdinalsForSide.end());
+  if (basisDofOrdinalsForSide.size() > 0)
+  {
+    varVolumeMap.push_back(SubBasisDofMapper::subBasisDofMapper(basisDofOrdinalsForSideUnsigned, globalDofOrdinals));
+  }
+
   return varVolumeMap;
 }
 
@@ -3081,8 +3189,22 @@ LocalDofMapperPtr GDAMinimumRule::getDofMapper(GlobalIndexType cellID, CellConst
 
     if (varHasSupportOnVolume)
     {
-      volumeMap[var->ID()] = getBasisMap(cellID, dofIndexInfo, var); // this is where we should add an argument to specify the side being requested...
-      fittableGlobalDofOrdinalsInVolume.insert(dofIndexInfo[spaceDim][0][var->ID()].begin(),dofIndexInfo[spaceDim][0][var->ID()].end());
+      bool allowVolumeRestrictionToSide = true; // TODO: change to true to allow BCs to be imposed...
+
+      if ((sideOrdinalToMap == -1) || (!allowVolumeRestrictionToSide))
+      {
+        volumeMap[var->ID()] = getBasisMap(cellID, dofIndexInfo, var); // this may be where we should add an argument to specify the side being requested...
+        fittableGlobalDofOrdinalsInVolume.insert(dofIndexInfo[spaceDim][0][var->ID()].begin(),dofIndexInfo[spaceDim][0][var->ID()].end());
+      }
+      else
+      {
+        // then we're interested in the restriction of the map to the side
+        volumeMap[var->ID()] = getBasisMapVolumeRestrictedToSide(cellID, dofIndexInfo, var, sideOrdinalToMap);
+        for (auto subMap : volumeMap[var->ID()])
+        {
+          fittableGlobalDofOrdinalsInVolume.insert(subMap->mappedGlobalDofOrdinals().begin(),subMap->mappedGlobalDofOrdinals().end());
+        }
+      }
     }
     else
     {

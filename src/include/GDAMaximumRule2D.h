@@ -95,6 +95,7 @@ public:
   vector<int> getH1Order(GlobalIndexType cellID);
 
   GlobalIndexType globalDofIndex(GlobalIndexType cellID, IndexType localDofIndex);
+  std::vector<GlobalIndexType> globalDofIndices(GlobalIndexType cellID, const std::vector<IndexType> &localDofIndices);
   set<GlobalIndexType> globalDofIndicesForCell(GlobalIndexType cellID);
   //!! Returns the global dof indices for the indicated subcell.  Only guaranteed to provide correct values for cells that belong to the local partition.
   set<GlobalIndexType> globalDofIndicesForVarOnSubcell(int varID, GlobalIndexType cellID, unsigned dim, unsigned subcellOrdinal);

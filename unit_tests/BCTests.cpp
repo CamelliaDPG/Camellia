@@ -41,7 +41,6 @@ void testSpaceTimeTraceBCFunction(int spaceDim, Teuchos::FancyOStream &out, bool
   form.initializeSolution(spaceTimeMeshTopo, fieldPolyOrder, delta_k, forcingFunction);
 
   VarPtr u_hat = form.u_hat();
-  bool isTrace = true;
   BCPtr bc = form.solution()->bc();
   bc->addDirichlet(u_hat, SpatialFilter::allSpace() | SpatialFilter::matchingT(t0) | SpatialFilter::matchingT(t1), u);
 
@@ -64,7 +63,7 @@ void testSpaceTimeTraceBCFunction(int spaceDim, Teuchos::FancyOStream &out, bool
     int numCells = 1;
     Intrepid::FieldContainer<double> dirichletValues(numCells,basis->getCardinality());
     // project bc function onto side basis:
-    Teuchos::RCP<BCFunction<double>> bcFunction = BCFunction<double>::bcFunction(bc, u_hat->ID(), isTrace);
+    Teuchos::RCP<BCFunction<double>> bcFunction = BCFunction<double>::bcFunction(bc, u_hat->ID());
     bc->coefficientsForBC(dirichletValues, bcFunction, basis, basisCache->getSideBasisCache(sideOrdinal));
     for (int basisOrdinal=0; basisOrdinal<dirichletValues.dimension(1); basisOrdinal++)
     {
@@ -72,12 +71,15 @@ void testSpaceTimeTraceBCFunction(int spaceDim, Teuchos::FancyOStream &out, bool
     }
   }
 }
-  void testTagCoefficientsMatchLegacy(int spaceDim, Teuchos::FancyOStream &out, bool &success)
+  
+  void testTagCoefficientsMatchLegacy(int spaceDim, bool useFieldBCs, Teuchos::FancyOStream &out, bool &success)
   {
     // test that the coefficients determined for a BC object that uses the new tag-based BCs
     // matches those determined by SpatialFilters
     bool conformingTraces = true;
     PoissonFormulation form(spaceDim,conformingTraces);
+    
+    VarPtr var = useFieldBCs ? form.phi() : form.phi_hat();
 
     int H1Order = 3, delta_k = 1;
     MeshTopologyPtr meshTopo = MeshFactory::rectilinearMeshTopology(vector<double>(spaceDim,1.0), vector<int>(spaceDim,1));
@@ -100,11 +102,11 @@ void testSpaceTimeTraceBCFunction(int spaceDim, Teuchos::FancyOStream &out, bool
     
     FunctionPtr phi_value = x * x + 1;
     BCPtr legacyBC = BC::bc();
-    legacyBC->addDirichlet(form.phi_hat(), SpatialFilter::allSpace(), phi_value);
+    legacyBC->addDirichlet(var, SpatialFilter::allSpace(), phi_value);
     SolutionPtr legacySoln = Solution::solution(form.bf(), mesh, legacyBC);
     
     BCPtr tagBC = BC::bc();
-    tagBC->addDirichlet(form.phi_hat(), tagID, phi_value);
+    tagBC->addDirichlet(var, tagID, phi_value);
     SolutionPtr soln = Solution::solution(form.bf(), mesh, tagBC);
     
     int rank     = Teuchos::GlobalMPISession::getRank();
@@ -132,7 +134,7 @@ void testSpaceTimeTraceBCFunction(int spaceDim, Teuchos::FancyOStream &out, bool
     
     TEST_EQUALITY(bcValueMapLegacy.size(), bcValueMapTags.size());
     
-    double tol = 1e-15;
+    double tol = 1e-14;
     for (int i=0; i<bcGlobalIndicesLegacy.size(); i++)
     {
       GlobalIndexType legacyDofIndex = bcGlobalIndicesLegacy[i];
@@ -155,6 +157,28 @@ void testSpaceTimeTraceBCFunction(int spaceDim, Teuchos::FancyOStream &out, bool
     }
   }
 
+  TEUCHOS_UNIT_TEST( BC, FieldBCsMinRule_1D)
+  {
+    int spaceDim = 1;
+    bool useFieldBCs = true;
+    testTagCoefficientsMatchLegacy(spaceDim, useFieldBCs, out, success);
+    // ultimately, should check *correctness* of imposition, not just that the two types agree for field BCs
+  }
+  
+  TEUCHOS_UNIT_TEST( BC, FieldBCsMinRule_2D)
+  {
+    int spaceDim = 2;
+    bool useFieldBCs = true;
+    testTagCoefficientsMatchLegacy(spaceDim, useFieldBCs, out, success);
+  }
+  
+  TEUCHOS_UNIT_TEST( BC, FieldBCsMinRule_3D)
+  {
+    int spaceDim = 3;
+    bool useFieldBCs = true;
+    testTagCoefficientsMatchLegacy(spaceDim, useFieldBCs, out, success);
+  }
+  
   TEUCHOS_UNIT_TEST( BC, SpaceTimeTraceBCCoefficients )
   {
     int spaceDim = 1;
@@ -164,12 +188,14 @@ void testSpaceTimeTraceBCFunction(int spaceDim, Teuchos::FancyOStream &out, bool
   TEUCHOS_UNIT_TEST( BC, TagCoefficientsMatchLegacy_1D )
   {
     int spaceDim = 1;
-    testTagCoefficientsMatchLegacy(spaceDim, out, success);
+    bool useFieldBCs = false;
+    testTagCoefficientsMatchLegacy(spaceDim, useFieldBCs, out, success);
   }
   
   TEUCHOS_UNIT_TEST( BC, TagCoefficientsMatchLegacy_2D )
   {
     int spaceDim = 2;
-    testTagCoefficientsMatchLegacy(spaceDim, out, success);
+    bool useFieldBCs = false;
+    testTagCoefficientsMatchLegacy(spaceDim, useFieldBCs, out, success);
   }
 } // namespace

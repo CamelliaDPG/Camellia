@@ -93,7 +93,7 @@ public:
   virtual int H1Order(); // return -1 for non-polynomial solutions
   // TODO: Fix this for complex
   double L2NormOfError(TSolutionPtr<Scalar> solution, int trialID, int cubDegree=-1);
-  void L2NormOfError(Intrepid::FieldContainer<double> &errorSquaredPerCell, TSolutionPtr<Scalar> solution, ElementTypePtr elemTypePtr, int trialID, int sideIndex=0, int cubDegree=-1, double solutionLift=0.0);
+  void L2NormOfError(Intrepid::FieldContainer<double> &errorSquaredPerCell, TSolutionPtr<Scalar> solution, ElementTypePtr elemTypePtr, int trialID, int sideIndex=VOLUME_INTERIOR_SIDE_ORDINAL, int cubDegree=-1, double solutionLift=0.0);
 
   virtual ~ExactSolution() {}
 };

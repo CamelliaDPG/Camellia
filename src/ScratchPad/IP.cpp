@@ -509,16 +509,20 @@ pair<TIPPtr<Scalar>, VarPtr> TIP<Scalar>::standardInnerProductForFunctionSpace(C
   switch (fs)
   {
   case Camellia::FUNCTION_SPACE_HVOL:
+  case Camellia::FUNCTION_SPACE_HVOL_DISC:
   case Camellia::FUNCTION_SPACE_VECTOR_HVOL:
     break;
   case Camellia::FUNCTION_SPACE_HGRAD:
+  case Camellia::FUNCTION_SPACE_HGRAD_DISC:
   case Camellia::FUNCTION_SPACE_VECTOR_HGRAD:
     ip->addTerm(var->grad());
     break;
   case Camellia::FUNCTION_SPACE_HCURL:
+  case Camellia::FUNCTION_SPACE_HCURL_DISC:
     ip->addTerm(var->curl(spaceDim));
     break;
   case Camellia::FUNCTION_SPACE_HDIV:
+  case Camellia::FUNCTION_SPACE_HDIV_DISC:
     ip->addTerm(var->div());
     break;
       // space-time:

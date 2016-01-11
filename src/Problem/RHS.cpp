@@ -135,7 +135,7 @@ void TRHS<Scalar>::integrateAgainstStandardBasis(FieldContainer<Scalar> &rhsVect
           testValuesTransformedWeighted = basisCache->getTransformedWeightedValues(testBasis,testOperator);
           FieldContainer<double> physCubPoints = basisCache->getPhysicalCubaturePoints();
 
-          vector<int> testDofIndices = testOrdering->getDofIndices(testID,0);
+          vector<int> testDofIndices = testOrdering->getDofIndices(testID,VOLUME_INTERIOR_SIDE_ORDINAL);
 
           this->rhs(testID,operatorIndex,basisCache,rhsPointValues);
 

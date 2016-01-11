@@ -75,18 +75,9 @@ double ExactSolution<Scalar>::L2NormOfError(TSolutionPtr<Scalar> solution, int t
     int numCells = mesh->cellIDsOfType(elemTypePtr).size();
     FieldContainer<double> errorSquaredPerCell(numCells);
 
-    int numSides;
-
-    if (! solution->mesh()->bilinearForm()->isFluxOrTrace(trialID))
-    {
-      numSides = 1;
-    }
-    else
-    {
-      numSides = elemTypePtr->cellTopoPtr->getSideCount();
-    }
-
-    for (int sideIndex=0; sideIndex<numSides; sideIndex++)
+    const vector<int>* sides = &elemTypePtr->trialOrderPtr->getSidesForVarID(trialID);
+    
+    for (int sideIndex : *sides)
     {
       L2NormOfError(errorSquaredPerCell, solution, elemTypePtr,trialID,sideIndex, cubDegree, solutionLift);
 
