@@ -437,23 +437,23 @@ CompressibleNavierStokesFormulation::CompressibleNavierStokesFormulation(MeshTop
   switch (_spaceDim)
   {
     case 1:
-      _bf->addTerm(T, tau->dx()); // tau = Cp*mu/Pr * grad T
+      _bf->addTerm(-T, tau->dx()); // tau = Cp*mu/Pr * grad T
       _bf->addTerm(Pr()/(Cp()*mu()) * q1, tau); // (D1, S1)
-      _bf->addTerm(-T_hat, tau*n->x());
+      _bf->addTerm(T_hat, tau*n->x());
       break;
     case 2:
-      _bf->addTerm(T, tau->div()); // tau = Cp*mu/Pr * grad T
+      _bf->addTerm(-T, tau->div()); // tau = Cp*mu/Pr * grad T
       // _bf->addTerm(T, tau->x()->dx()+tau->y()->dy()); // tau = Cp*mu/Pr * grad T
       _bf->addTerm(Pr()/(Cp()*mu()) * q1, tau->x()); // (D1, S1)
       _bf->addTerm(Pr()/(Cp()*mu()) * q2, tau->y()); // (D1, S1)
-      _bf->addTerm(-T_hat, tau*n);
+      _bf->addTerm(T_hat, tau*n);
       break;
     case 3:
-      _bf->addTerm(T, tau->div()); // tau = Cp*mu/Pr * grad T
+      _bf->addTerm(-T, tau->div()); // tau = Cp*mu/Pr * grad T
       _bf->addTerm(Pr()/(Cp()*mu()) * q1, tau->x()); // (D1, S1)
       _bf->addTerm(Pr()/(Cp()*mu()) * q2, tau->y());
       _bf->addTerm(Pr()/(Cp()*mu()) * q3, tau->z());
-      _bf->addTerm(-T_hat, tau*n);
+      _bf->addTerm(T_hat, tau*n);
       break;
     default:
       break;
@@ -772,7 +772,194 @@ CompressibleNavierStokesFormulation::CompressibleNavierStokesFormulation(MeshTop
     cout << var->displayString() << endl;
   }
 
+  LinearTermPtr adj_Cc = Teuchos::rcp( new LinearTerm );
+  LinearTermPtr adj_Cm1 = Teuchos::rcp( new LinearTerm );
+  LinearTermPtr adj_Cm2 = Teuchos::rcp( new LinearTerm );
+  LinearTermPtr adj_Cm3 = Teuchos::rcp( new LinearTerm );
+  LinearTermPtr adj_Ce = Teuchos::rcp( new LinearTerm );
+  LinearTermPtr adj_Fc = Teuchos::rcp( new LinearTerm );
+  LinearTermPtr adj_Fm1 = Teuchos::rcp( new LinearTerm );
+  LinearTermPtr adj_Fm2 = Teuchos::rcp( new LinearTerm );
+  LinearTermPtr adj_Fm3 = Teuchos::rcp( new LinearTerm );
+  LinearTermPtr adj_Fe = Teuchos::rcp( new LinearTerm );
+  LinearTermPtr adj_KD11 = Teuchos::rcp( new LinearTerm );
+  LinearTermPtr adj_KD12 = Teuchos::rcp( new LinearTerm );
+  LinearTermPtr adj_KD13 = Teuchos::rcp( new LinearTerm );
+  LinearTermPtr adj_KD21 = Teuchos::rcp( new LinearTerm );
+  LinearTermPtr adj_KD22 = Teuchos::rcp( new LinearTerm );
+  LinearTermPtr adj_KD23 = Teuchos::rcp( new LinearTerm );
+  LinearTermPtr adj_KD31 = Teuchos::rcp( new LinearTerm );
+  LinearTermPtr adj_KD32 = Teuchos::rcp( new LinearTerm );
+  LinearTermPtr adj_KD33 = Teuchos::rcp( new LinearTerm );
+  LinearTermPtr adj_Kq1 = Teuchos::rcp( new LinearTerm );
+  LinearTermPtr adj_Kq2 = Teuchos::rcp( new LinearTerm );
+  LinearTermPtr adj_Kq3 = Teuchos::rcp( new LinearTerm );
+  LinearTermPtr adj_MD11 = Teuchos::rcp( new LinearTerm );
+  LinearTermPtr adj_MD12 = Teuchos::rcp( new LinearTerm );
+  LinearTermPtr adj_MD13 = Teuchos::rcp( new LinearTerm );
+  LinearTermPtr adj_MD21 = Teuchos::rcp( new LinearTerm );
+  LinearTermPtr adj_MD22 = Teuchos::rcp( new LinearTerm );
+  LinearTermPtr adj_MD23 = Teuchos::rcp( new LinearTerm );
+  LinearTermPtr adj_MD31 = Teuchos::rcp( new LinearTerm );
+  LinearTermPtr adj_MD32 = Teuchos::rcp( new LinearTerm );
+  LinearTermPtr adj_MD33 = Teuchos::rcp( new LinearTerm );
+  LinearTermPtr adj_Mq1 = Teuchos::rcp( new LinearTerm );
+  LinearTermPtr adj_Mq2 = Teuchos::rcp( new LinearTerm );
+  LinearTermPtr adj_Mq3 = Teuchos::rcp( new LinearTerm );
+  LinearTermPtr adj_Gc = Teuchos::rcp( new LinearTerm );
+  LinearTermPtr adj_Gm1 = Teuchos::rcp( new LinearTerm );
+  LinearTermPtr adj_Gm2 = Teuchos::rcp( new LinearTerm );
+  LinearTermPtr adj_Gm3 = Teuchos::rcp( new LinearTerm );
+  LinearTermPtr adj_Ge = Teuchos::rcp( new LinearTerm );
+  LinearTermPtr adj_vm = Teuchos::rcp( new LinearTerm );
+
   _ips["Graph"] = _bf->graphNorm();
+  // cout << "Graph" << endl;
+  // _ips["Graph"]->printInteractions();
+
+  switch (_spaceDim)
+  {
+    case 1:
+      adj_Cc->addTerm( vc->dt() + u1_prev*vm1->dt() + Cv()*T_prev*ve->dt() + 0.5*u1_prev*u1_prev*ve->dt() );
+      adj_Cm1->addTerm( rho_prev*vm1->dt() + rho_prev*u1_prev*ve->dt() );
+      adj_Ce->addTerm( Cv()*rho_prev*ve->dt() );
+      adj_Fc->addTerm( u1_prev*vc->dx() + u1_prev*u1_prev*vm1->dx() + R()*T_prev*vm1->dx() + Cv()*T_prev*u1_prev*ve->dx()
+          + 0.5*u1_prev*u1_prev*u1_prev*ve->dx() + R()*T_prev*u1_prev*ve->dx() );
+      adj_Fm1->addTerm( rho_prev*vc->dx() + 2*rho_prev*u1_prev*vm1->dx() + Cv()*T_prev*rho_prev*ve->dx()
+          + 0.5*rho_prev*u1_prev*u1_prev*ve->dx() + rho_prev*u1_prev*u1_prev*ve->dx() + R()*T_prev*rho_prev*ve->dx()
+          - D11_prev*ve->dx() - D11_prev*ve->dx() + 2./3*D11_prev*ve->dx() );
+      adj_Fe->addTerm( R()*rho_prev*vm1->dx() + Cv()*rho_prev*u1_prev*ve->dx() + R()*rho_prev*u1_prev*ve->dx() );
+      adj_KD11->addTerm( vm1->dx() + vm1->dx() - 2./3*vm1->dx() + u1_prev*ve->dx() + u1_prev*ve->dx() - 2./3*u1_prev*ve->dx() );
+      adj_Kq1->addTerm( -ve->dx() );
+      adj_MD11->addTerm( 1./mu()*S1 );
+      adj_Mq1->addTerm( Pr()/(Cp()*mu())*tau );
+      adj_Gm1->addTerm( one*S1->dx() );
+      adj_Ge->addTerm( -tau->dx() );
+
+      _ips["ManualGraph"] = Teuchos::rcp(new IP);
+      _ips["ManualGraph"]->addTerm( adj_MD11 + adj_KD11 );
+      _ips["ManualGraph"]->addTerm( adj_Mq1 + adj_Kq1 );
+      if (_spaceTime)
+      {
+        _ips["ManualGraph"]->addTerm( adj_Gc - adj_Fc - adj_Cc );
+        _ips["ManualGraph"]->addTerm( adj_Gm1 - adj_Fm1 - adj_Cm1 );
+        _ips["ManualGraph"]->addTerm( adj_Ge - adj_Fe - adj_Ce );
+      }
+      else
+      {
+        _ips["ManualGraph"]->addTerm( adj_Gc - adj_Fc );
+        _ips["ManualGraph"]->addTerm( adj_Gm1 - adj_Fm1 );
+        _ips["ManualGraph"]->addTerm( adj_Ge - adj_Fe );
+      }
+      _ips["ManualGraph"]->addTerm( vc );
+      _ips["ManualGraph"]->addTerm( vm1 );
+      _ips["ManualGraph"]->addTerm( ve );
+      _ips["ManualGraph"]->addTerm( S1 );
+      _ips["ManualGraph"]->addTerm( tau );
+
+      // cout << endl << "ManualGraph" << endl;
+      // _ips["ManualGraph"]->printInteractions();
+
+      _ips["Robust"] = Teuchos::rcp(new IP);
+      // _ips["Robust"]->addTerm(Function::min(one/Function::h(),Function::constant(1./sqrt(_mu)))*tau);
+      _ips["Robust"]->addTerm( Function::min(one/Function::h(),Function::constant(1./sqrt(mu())))*mu()*adj_MD11);
+      _ips["Robust"]->addTerm( Function::min(one/Function::h(),Function::constant(1./sqrt(mu())))*Cp()*mu()/Pr()*adj_Mq1);
+      // _ips["Robust"]->addTerm(sqrt(_mu)*v->grad());
+      _ips["Robust"]->addTerm( sqrt(mu())*one*adj_KD11 );
+      _ips["Robust"]->addTerm( sqrt(Cp()*mu()/Pr())*one*adj_Kq1 );
+      if (_spaceTime)
+      {
+        // _ips["Robust"]->addTerm(_beta*v->grad() + v->dt());
+        _ips["Robust"]->addTerm( adj_Fc + adj_Cc );
+        _ips["Robust"]->addTerm( adj_Fm1 + adj_Cm1 );
+        _ips["Robust"]->addTerm( adj_Fe + adj_Ce );
+      }
+      else
+      {
+        // _ips["Robust"]->addTerm(_beta*v->grad());
+        _ips["Robust"]->addTerm( adj_Fc );
+        _ips["Robust"]->addTerm( adj_Fm1 );
+        _ips["Robust"]->addTerm( adj_Fe );
+      }
+      // _ips["Robust"]->addTerm(tau->div());
+      _ips["Robust"]->addTerm( adj_Gc );
+      _ips["Robust"]->addTerm( adj_Gm1 );
+      _ips["Robust"]->addTerm( adj_Ge );
+      // _ips["Robust"]->addTerm(Function::min(sqrt(_mu)*one/Function::h(),one)*v);
+      _ips["Robust"]->addTerm( Function::min(sqrt(mu())*one/Function::h(),one)*vc );
+      _ips["Robust"]->addTerm( Function::min(sqrt(mu())*one/Function::h(),one)*vm1 );
+      _ips["Robust"]->addTerm( Function::min(sqrt(mu())*one/Function::h(),one)*ve );
+
+      _ips["CoupledRobust"] = Teuchos::rcp(new IP);
+      // _ips["CoupledRobust"]->addTerm(Function::min(one/Function::h(),Function::constant(1./sqrt(_mu)))*tau);
+      _ips["CoupledRobust"]->addTerm( Function::min(one/Function::h(),Function::constant(1./sqrt(mu())))*mu()*adj_MD11);
+      _ips["CoupledRobust"]->addTerm( Function::min(one/Function::h(),Function::constant(1./sqrt(mu())))*Cp()*mu()/Pr()*adj_Mq1);
+      // _ips["CoupledRobust"]->addTerm(sqrt(_mu)*v->grad());
+      _ips["CoupledRobust"]->addTerm( sqrt(mu())*one*adj_KD11 );
+      _ips["CoupledRobust"]->addTerm( sqrt(Cp()*mu()/Pr())*one*adj_Kq1 );
+      if (_spaceTime)
+      {
+        // _ips["CoupledRobust"]->addTerm(tau->div() - v->dt() - beta*v->grad());
+        _ips["CoupledRobust"]->addTerm( adj_Gc - adj_Fc - adj_Cc );
+        _ips["CoupledRobust"]->addTerm( adj_Gm1 - adj_Fm1 - adj_Cm1 );
+        _ips["CoupledRobust"]->addTerm( adj_Ge - adj_Fe - adj_Ce );
+        // _ips["CoupledRobust"]->addTerm(_beta*v->grad() + v->dt());
+        _ips["CoupledRobust"]->addTerm( adj_Fc + adj_Cc );
+        _ips["CoupledRobust"]->addTerm( adj_Fm1 + adj_Cm1 );
+        _ips["CoupledRobust"]->addTerm( adj_Fe + adj_Ce );
+      }
+      else
+      {
+        // _ips["CoupledRobust"]->addTerm(tau->div() - beta*v->grad());
+        _ips["CoupledRobust"]->addTerm( adj_Gc - adj_Fc );
+        _ips["CoupledRobust"]->addTerm( adj_Gm1 - adj_Fm1 );
+        _ips["CoupledRobust"]->addTerm( adj_Ge - adj_Fe );
+        // _ips["CoupledRobust"]->addTerm(_beta*v->grad());
+        _ips["CoupledRobust"]->addTerm( adj_Fc );
+        _ips["CoupledRobust"]->addTerm( adj_Fm1 );
+        _ips["CoupledRobust"]->addTerm( adj_Fe );
+      }
+      // _ips["CoupledRobust"]->addTerm(Function::min(sqrt(_mu)*one/Function::h(),one)*v);
+      _ips["CoupledRobust"]->addTerm( Function::min(sqrt(mu())*one/Function::h(),one)*vc );
+      _ips["CoupledRobust"]->addTerm( Function::min(sqrt(mu())*one/Function::h(),one)*vm1 );
+      _ips["CoupledRobust"]->addTerm( Function::min(sqrt(mu())*one/Function::h(),one)*ve );
+
+      _ips["NSDecoupled"] = Teuchos::rcp(new IP);
+      // _ips["NSDecoupled"]->addTerm(one/Function::h()*tau);
+      _ips["NSDecoupled"]->addTerm( mu()/Function::h()*adj_MD11 );
+      _ips["NSDecoupled"]->addTerm( Cp()*mu()/Pr()/Function::h()*adj_Mq1 );
+      // _ips["NSDecoupled"]->addTerm(tau->div());
+      _ips["NSDecoupled"]->addTerm( adj_KD11 );
+      _ips["NSDecoupled"]->addTerm( adj_Kq1 );
+      if (_spaceTime)
+      {
+        // _ips["NSDecoupled"]->addTerm(_beta*v->grad() + v->dt());
+        _ips["NSDecoupled"]->addTerm( adj_Fc + adj_Cc );
+        _ips["NSDecoupled"]->addTerm( adj_Fm1 + adj_Cm1 );
+        _ips["NSDecoupled"]->addTerm( adj_Fe + adj_Ce );
+      }
+      else
+      {
+        // _ips["NSDecoupled"]->addTerm(_beta*v->grad());
+        _ips["NSDecoupled"]->addTerm( adj_Fc );
+        _ips["NSDecoupled"]->addTerm( adj_Fm1 );
+        _ips["NSDecoupled"]->addTerm( adj_Fe );
+      }
+      // _ips["NSDecoupled"]->addTerm(v->grad());
+      _ips["NSDecoupled"]->addTerm( adj_Gc );
+      _ips["NSDecoupled"]->addTerm( adj_Gm1 );
+      _ips["NSDecoupled"]->addTerm( adj_Ge );
+      // _ips["NSDecoupled"]->addTerm(v);
+      _ips["NSDecoupled"]->addTerm( vc );
+      _ips["NSDecoupled"]->addTerm( vm1 );
+      _ips["NSDecoupled"]->addTerm( ve );
+      break;
+    case 2:
+    _ips["Robust"] = Teuchos::rcp(new IP);
+      break;
+    case 3:
+      break;
+  }
 
 
   // set the inner product to the graph norm:
@@ -1586,17 +1773,17 @@ RHSPtr CompressibleNavierStokesFormulation::rhs(FunctionPtr forcingFunction, boo
   switch (_spaceDim)
   {
     case 1:
-      rhs->addTerm(-T_prev * tau->dx()); // tau = Cp*_mu/Pr * grad T
+      rhs->addTerm( T_prev * tau->dx()); // tau = Cp*_mu/Pr * grad T
       rhs->addTerm(-Pr()/(Cp()*mu()) * q1_prev * tau); // (D1, S1)
       break;
     case 2:
-      rhs->addTerm(-T_prev * tau->div()); // tau = Cp*_mu/Pr * grad T
+      rhs->addTerm( T_prev * tau->div()); // tau = Cp*_mu/Pr * grad T
       // rhs->addTerm(-T_prev * (tau->x()->dx() + tau->y()->dy())); // tau = Cp*_mu/Pr * grad T
       rhs->addTerm(-Pr()/(Cp()*mu()) * q1_prev * tau->x()); // (D1, S1)
       rhs->addTerm(-Pr()/(Cp()*mu()) * q2_prev * tau->y());
       break;
     case 3:
-      rhs->addTerm(-T_prev * tau->div()); // tau = Cp*_mu/Pr * grad T
+      rhs->addTerm( T_prev * tau->div()); // tau = Cp*_mu/Pr * grad T
       rhs->addTerm(-Pr()/(Cp()*mu()) * q1_prev * tau->x()); // (D1, S1)
       rhs->addTerm(-Pr()/(Cp()*mu()) * q2_prev * tau->y());
       rhs->addTerm(-Pr()/(Cp()*mu()) * q3_prev * tau->z());

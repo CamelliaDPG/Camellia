@@ -150,7 +150,7 @@ int main(int argc, char *argv[])
   int polyOrder = 2, delta_k = 2;
   cmdp.setOption("polyOrder",&polyOrder,"polynomial order for field variable u");
   int polyOrderCoarse = 1;
-  double cgTol = 1e-6;
+  double cgTol = 1e-10;
   cmdp.setOption("cgTol", &cgTol, "iterative solver tolerance");
   int cgMaxIters = 2000;
   cmdp.setOption("cgMaxIters", &cgMaxIters, "maximum number of iterations for linear solver");
@@ -195,6 +195,22 @@ int main(int argc, char *argv[])
       double t0 = 0;
       double t1 = 1;
       int temporalDivisions = 2;
+      meshTopo = MeshFactory::spaceTimeMeshTopology(meshTopo, t0, t1, temporalDivisions);
+    }
+  }
+  if (problemName == "SimpleShock")
+  {
+    int meshWidth = 4;
+    vector<double> dims(spaceDim,1.0);
+    vector<int> numElements(spaceDim,meshWidth);
+    vector<double> x0(spaceDim,-0.5);
+
+    meshTopo = MeshFactory::rectilinearMeshTopology(dims,numElements,x0);
+    if (!steady)
+    {
+      double t0 = 0;
+      double t1 = 0.25;
+      int temporalDivisions = 1;
       meshTopo = MeshFactory::spaceTimeMeshTopology(meshTopo, t0, t1, temporalDivisions);
     }
   }
@@ -279,22 +295,22 @@ int main(int argc, char *argv[])
         // form.addTemperatureTraceCondition(SpatialFilter::allSpace(), one);
         form.addMassFluxCondition(        leftX, rho_exact, u_exact, T_exact);
         form.addMassFluxCondition(        leftY, rho_exact, u_exact, T_exact);
-        form.addVelocityTraceCondition(   leftX, ones);
-        form.addVelocityTraceCondition(   leftY, ones);
-        form.addVelocityTraceCondition(   rightX, ones);
-        form.addVelocityTraceCondition(   rightY, ones);
-        form.addTemperatureTraceCondition(leftX, one);
-        form.addTemperatureTraceCondition(leftY, one);
-        form.addTemperatureTraceCondition(rightX, one);
-        form.addTemperatureTraceCondition(rightY, one);
-        // form.addMomentumFluxCondition(    leftX, rho_exact, u_exact, T_exact);
-        // form.addMomentumFluxCondition(    leftY, rho_exact, u_exact, T_exact);
-        // form.addMomentumFluxCondition(    rightX, rho_exact, u_exact, T_exact);
-        // form.addMomentumFluxCondition(    rightY, rho_exact, u_exact, T_exact);
-        // form.addEnergyFluxCondition(      leftX, rho_exact, u_exact, T_exact);
-        // form.addEnergyFluxCondition(      leftY, rho_exact, u_exact, T_exact);
-        // form.addEnergyFluxCondition(      rightX, rho_exact, u_exact, T_exact);
-        // form.addEnergyFluxCondition(      rightY, rho_exact, u_exact, T_exact);
+        // form.addVelocityTraceCondition(   leftX, u_exact);
+        // form.addVelocityTraceCondition(   leftY, u_exact);
+        // form.addVelocityTraceCondition(   rightX, u_exact);
+        // form.addVelocityTraceCondition(   rightY, u_exact);
+        // form.addTemperatureTraceCondition(leftX, T_exact);
+        // form.addTemperatureTraceCondition(leftY, T_exact);
+        // form.addTemperatureTraceCondition(rightX, T_exact);
+        // form.addTemperatureTraceCondition(rightY, T_exact);
+        form.addMomentumFluxCondition(    leftX, rho_exact, u_exact, T_exact);
+        form.addMomentumFluxCondition(    leftY, rho_exact, u_exact, T_exact);
+        form.addMomentumFluxCondition(    rightX, rho_exact, u_exact, T_exact);
+        form.addMomentumFluxCondition(    rightY, rho_exact, u_exact, T_exact);
+        form.addEnergyFluxCondition(      leftX, rho_exact, u_exact, T_exact);
+        form.addEnergyFluxCondition(      leftY, rho_exact, u_exact, T_exact);
+        form.addEnergyFluxCondition(      rightX, rho_exact, u_exact, T_exact);
+        form.addEnergyFluxCondition(      rightY, rho_exact, u_exact, T_exact);
         break;
       case 3:
         break;
@@ -308,6 +324,84 @@ int main(int argc, char *argv[])
       form.addEnergyFluxCondition(  t0,    rho_exact, u_exact, T_exact);
       // form.addVelocityTraceCondition(t1, ones);
       // form.addTemperatureTraceCondition(t1, one);
+    }
+  }
+  if (problemName == "SimpleShock")
+  {
+    SpatialFilterPtr leftX  = SpatialFilter::matchingX(-0.5);
+    SpatialFilterPtr rightX = SpatialFilter::matchingX(0.5);
+    SpatialFilterPtr leftY  = SpatialFilter::matchingY(-0.5);
+    SpatialFilterPtr rightY = SpatialFilter::matchingY(0.5);
+
+    FunctionPtr zero = Function::zero();
+    FunctionPtr zeros = Function::vectorize(zero, zero);
+    FunctionPtr one = Function::constant(1);
+    FunctionPtr onezero = Function::vectorize(one, zero);
+    FunctionPtr ones = Function::vectorize(one, one);
+
+    FunctionPtr rho_exact, u1_exact, u2_exact, T_exact;
+    if (spaceDim == 1)
+    {
+      rho_exact = one + Function::heaviside(0);
+      u1_exact = Function::constant(0);
+      T_exact = Function::constant(1);
+    }
+    else
+    {
+      rho_exact = Function::constant(1);
+      u1_exact = Function::constant(0);
+      u2_exact = Function::constant(0);
+      T_exact = Function::constant(1);
+    }
+    FunctionPtr u_exact;
+    if (spaceDim == 1)
+      u_exact = u1_exact;
+    else
+      u_exact = Function::vectorize(u1_exact,u2_exact);
+
+    switch (spaceDim)
+    {
+      case 1:
+        form.addMassFluxCondition(        leftX, rho_exact, u_exact, T_exact);
+        form.addVelocityTraceCondition(   leftX, u_exact);
+        form.addTemperatureTraceCondition(leftX, T_exact);
+        form.addVelocityTraceCondition(   rightX, u_exact);
+        form.addTemperatureTraceCondition(rightX, T_exact);
+        break;
+      case 2:
+        // form.addMassFluxCondition(SpatialFilter::allSpace(), one, ones, one);
+        // form.addMomentumFluxCondition(SpatialFilter::allSpace(), one, ones, one);
+        // form.addEnergyFluxCondition(SpatialFilter::allSpace(), one, ones, one);
+        // form.addVelocityTraceCondition(SpatialFilter::allSpace(), ones);
+        // form.addTemperatureTraceCondition(SpatialFilter::allSpace(), one);
+        form.addMassFluxCondition(        leftX, rho_exact, u_exact, T_exact);
+        form.addMassFluxCondition(        leftY, rho_exact, u_exact, T_exact);
+        // form.addVelocityTraceCondition(   leftX, u_exact);
+        // form.addVelocityTraceCondition(   leftY, u_exact);
+        // form.addVelocityTraceCondition(   rightX, u_exact);
+        // form.addVelocityTraceCondition(   rightY, u_exact);
+        // form.addTemperatureTraceCondition(leftX, T_exact);
+        // form.addTemperatureTraceCondition(leftY, T_exact);
+        // form.addTemperatureTraceCondition(rightX, T_exact);
+        // form.addTemperatureTraceCondition(rightY, T_exact);
+        form.addMomentumFluxCondition(    leftX, rho_exact, u_exact, T_exact);
+        form.addMomentumFluxCondition(    leftY, rho_exact, u_exact, T_exact);
+        form.addMomentumFluxCondition(    rightX, rho_exact, u_exact, T_exact);
+        form.addMomentumFluxCondition(    rightY, rho_exact, u_exact, T_exact);
+        form.addEnergyFluxCondition(      leftX, rho_exact, u_exact, T_exact);
+        form.addEnergyFluxCondition(      leftY, rho_exact, u_exact, T_exact);
+        form.addEnergyFluxCondition(      rightX, rho_exact, u_exact, T_exact);
+        form.addEnergyFluxCondition(      rightY, rho_exact, u_exact, T_exact);
+        break;
+      case 3:
+        break;
+    }
+    if (!steady)
+    {
+      SpatialFilterPtr t0  = SpatialFilter::matchingT(0);
+      form.addMassFluxCondition(    t0, rho_exact, u_exact, T_exact);
+      form.addMomentumFluxCondition(t0, rho_exact, u_exact, T_exact);
+      form.addEnergyFluxCondition(  t0, rho_exact, u_exact, T_exact);
     }
   }
 
@@ -362,18 +456,17 @@ int main(int argc, char *argv[])
   ofstream dataFile(dataFileLocation);
   // if (rank==0) dataFile << "ref\t " << "elements\t " << "dofs\t " << "energy\t " << "l2\t " << "solvetime\t" << "elapsed\t" << "iterations\t " << endl;
 
-  Teuchos::RCP<HDF5Exporter> exporter;
+  Teuchos::RCP<HDF5Exporter> exporter, energyErrorExporter;
   if (exportHDF5)
   {
     exporter = Teuchos::rcp(new HDF5Exporter(mesh, exportName.str(), outputDir));
     exporter->exportSolution(form.solution(), 0);
+
+    exportName << "_energyError";
+    energyErrorExporter = Teuchos::rcp(new HDF5Exporter(mesh, exportName.str(), outputDir));
+    energyErrorExporter->exportFunction(energyErrorFunction, "energy error", 0);
   }
   // HDF5Exporter exporter(form.solution()->mesh(), exportName.str(), outputDir);
-
-  // exportName << "_energyError";
-  // HDF5Exporter energyErrorExporter(form.solution()->mesh(), exportName.str(), outputDir);
-
-  // energyErrorExporter.exportFunction(energyErrorFunction, "energy error", 0);
 
   double energyError = form.solutionIncrement()->energyErrorTotal();
   double l2Error = 0;
@@ -476,8 +569,10 @@ int main(int argc, char *argv[])
              << " " << endl;
 
     if (exportHDF5)
+    {
       exporter->exportSolution(form.solution(), refNumber);
-    // energyErrorExporter.exportFunction(energyErrorFunction, "energy error", refNumber);
+      energyErrorExporter->exportFunction(energyErrorFunction, "energy error", refNumber);
+    }
 
   }
 
