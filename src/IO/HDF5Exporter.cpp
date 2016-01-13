@@ -106,8 +106,10 @@ void HDF5Exporter::exportSolution(TSolutionPtr<double> solution, double timeVal,
     traceFunctions.push_back(traceFunction);
     traceFunctionNames.push_back(traceFunctionName);
   }
-  exportFunction(fieldFunctions, fieldFunctionNames, timeVal, defaultNum1DPts, cellIDToNum1DPts, cellIndices);
-  exportFunction(traceFunctions, traceFunctionNames, timeVal, defaultNum1DPts, cellIDToNum1DPts, cellIndices);
+  if (fieldFunctions.size() > 0)
+    exportFunction(fieldFunctions, fieldFunctionNames, timeVal, defaultNum1DPts, cellIDToNum1DPts, cellIndices);
+  if (traceFunctions.size() > 0)
+    exportFunction(traceFunctions, traceFunctionNames, timeVal, defaultNum1DPts, cellIDToNum1DPts, cellIndices);
 }
 
 void HDF5Exporter::exportSolution(TSolutionPtr<double> solution, VarFactoryPtr varFactory, double timeVal, unsigned int defaultNum1DPts, map<int, int> cellIDToNum1DPts, set<GlobalIndexType> cellIndices)
@@ -503,7 +505,7 @@ void HDF5Exporter::exportFunction(vector<TFunctionPtr<double>> functions, vector
     if (spaceDim == 3)
       connDimsf = 5*totalSubQuads + 4*totalSubTriangles;
   }
-  int connArray[connDimsf];
+  vector<int> connArray(connDimsf);
   Teuchos::XMLObject topoDataItem("DataItem");
   topology.addChild(topoDataItem);
   topoDataItem.addAttribute("ItemType", "Uniform");

@@ -262,8 +262,19 @@ void Projector<Scalar>::projectFunctionOntoBasisInterpolating(FieldContainer<Sca
     allDofs.insert(i);
   }
   
-  BasisPtr continuousBasis = BasisFactory::basisFactory()->getContinuousBasis(basis);
-
+  BasisPtr continuousBasis;
+  int startingDimensionForProjection; // 0 to start with vertices, e.g.
+  if (Camellia::functionSpaceIsDiscontinuous(basis->functionSpace()))
+  {
+    continuousBasis = BasisFactory::basisFactory()->getContinuousBasis(basis);
+    startingDimensionForProjection = domainDim;
+  }
+  else
+  {
+    continuousBasis = basis;
+    startingDimensionForProjection = 0;
+  }
+  
   basisCoefficients.initialize(0.0);
   set<int> dofsForDomain;
   if (basisDomainDim == domainDim)
@@ -280,7 +291,7 @@ void Projector<Scalar>::projectFunctionOntoBasisInterpolating(FieldContainer<Sca
   int numCells = basisCoefficients.dimension(0);
   FieldContainer<Scalar> wholeBasisCoefficients(numCells, basisCardinality); // will include zeros for any coefficients belonging to other sides for a volume basis, e.g.
   
-  for (int d=0; d<=domainDim; d++)
+  for (int d=startingDimensionForProjection; d<=domainDim; d++)
   {
     TFunctionPtr<Scalar> projectionThusFar = BasisSumFunction::basisSumFunction(basis, wholeBasisCoefficients);
     TFunctionPtr<Scalar> fxnToApproximate = fxn - projectionThusFar;
@@ -290,13 +301,19 @@ void Projector<Scalar>::projectFunctionOntoBasisInterpolating(FieldContainer<Sca
       set<int> subcellDofOrdinals;
       if (basisDomainDim == domainDim)
       {
-        subcellDofOrdinals = basis->dofOrdinalsForSubcell(d, subcord); // could use continuousBasis here, for consistency with the volume basis case.
+        if (d > startingDimensionForProjection)
+          subcellDofOrdinals = continuousBasis->dofOrdinalsForSubcell(d, subcord);
+        else
+          subcellDofOrdinals = continuousBasis->dofOrdinalsForSubcell(d, subcord, 0);
       }
       else
       {
         // need to map from the subcord on the side to the one the basis sees
         int subcordBasis = CamelliaCellTools::subcellOrdinalMap(basisDomainTopo, domainDim, sideOrdinal, d, subcord);
-        subcellDofOrdinals = continuousBasis->dofOrdinalsForSubcell(d, subcordBasis);
+        if (d > startingDimensionForProjection)
+          subcellDofOrdinals = continuousBasis->dofOrdinalsForSubcell(d, subcordBasis);
+        else
+          subcellDofOrdinals = continuousBasis->dofOrdinalsForSubcell(d, subcordBasis, 0);
       }
         
       if (subcellDofOrdinals.size() > 0)
