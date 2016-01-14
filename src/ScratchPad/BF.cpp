@@ -984,6 +984,15 @@ namespace Camellia
       // can we interpret as a Bubnov-Galerkin setting?
       TEUCHOS_TEST_FOR_EXCEPTION(numTestDofs != numTrialDofs, std::invalid_argument, "BF: ip is null, but the number of test dofs is different from the number of trial dofs (can't do Bubnov-Galerkin).");
       this->stiffnessMatrix(localStiffness, elemType, cellSideParities, basisCache);
+      
+      // the above stores in (trial, test) order; we want (test, trial) -- so we transpose cell-wise:
+      Teuchos::Array<int> dim = {numTrialDofs,numTrialDofs};
+      for (int cellOrdinal=0; cellOrdinal<numCells; cellOrdinal++)
+      {
+        FieldContainer<double> cellLocalStiffness(dim, &localStiffness(cellOrdinal,0,0));
+        SerialDenseWrapper::transposeSquareMatrix(cellLocalStiffness); // transposes data in place
+      }
+      
       localStiffnessDeterminationTime += timer.ElapsedTime();
 
       timer.ResetStartTime();
