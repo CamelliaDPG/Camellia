@@ -159,7 +159,7 @@ public:
   }
   bool matchesPoint(double x)
   {
-    if (x<=_xToMatch)
+    if (x<_xToMatch)
     {
       return true;
     }
@@ -190,7 +190,7 @@ public:
   }
   bool matchesPoint(double x, double y)
   {
-    if (y<=_yToMatch)
+    if (y<_yToMatch)
     {
       return true;
     }
@@ -217,7 +217,7 @@ public:
   }
   bool matchesPoint(double x, double y, double z)
   {
-    if (z<=_zToMatch)
+    if (z<_zToMatch)
     {
       return true;
     }
@@ -240,7 +240,7 @@ public:
   }
   bool matchesPoint(double x)
   {
-    if (x>=_xToMatch)
+    if (x>_xToMatch)
     {
       return true;
     }
@@ -271,7 +271,7 @@ public:
   }
   bool matchesPoint(double x, double y)
   {
-    if (y>=_yToMatch)
+    if (y>_yToMatch)
     {
       return true;
     }
@@ -298,7 +298,7 @@ public:
   }
   bool matchesPoint(double x, double y, double z)
   {
-    if (z>=_zToMatch)
+    if (z>_zToMatch)
     {
       return true;
     }
