@@ -201,6 +201,32 @@ void testSaveAndLoad2D(BFPtr bf, Teuchos::FancyOStream &out, bool &success)
   loadedMesh->pRefine(cellsToRefine);
 }
   
+  TEUCHOS_UNIT_TEST( Mesh, ProjectFieldSolution )
+  {
+    double tol = 1e-15;
+    int spaceDim = 2;
+    bool conformingTraces = true;
+    PoissonFormulation form(spaceDim,conformingTraces);
+    
+    int H1Order = 2;
+    vector<int> elemCounts = {3,2};
+    
+    MeshPtr mesh = MeshFactory::rectilinearMesh(form.bf(), {1.0,2.0}, elemCounts, H1Order);
+    
+    SolutionPtr solution = Solution::solution(form.bf(), mesh);
+    
+    map<int, FunctionPtr> solutionMap;
+    FunctionPtr exactFxn = Function::constant(1.0);
+    VarPtr phi = form.phi();
+    solutionMap[phi->ID()] = exactFxn;
+    
+    solution->projectOntoMesh(solutionMap);
+    
+    FunctionPtr solnFxn = Function::solution(phi, solution, false);
+    double err = (solnFxn - exactFxn)->l2norm(mesh);
+    TEUCHOS_TEST_COMPARE(err, <, tol, out, success);
+  }
+  
   TEUCHOS_UNIT_TEST( Mesh, ProjectSolutionOnRefinement )
   {
     int spaceDim = 2;
