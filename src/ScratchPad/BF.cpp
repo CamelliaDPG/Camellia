@@ -986,7 +986,10 @@ namespace Camellia
       this->stiffnessMatrix(localStiffness, elemType, cellSideParities, basisCache);
       
       // the above stores in (trial, test) order; we want (test, trial) -- so we transpose cell-wise:
-      Teuchos::Array<int> dim = {numTrialDofs,numTrialDofs};
+      Teuchos::Array<int> dim;
+      dim.push_back(numTrialDofs);
+      dim.push_back(numTrialDofs);
+      
       for (int cellOrdinal=0; cellOrdinal<numCells; cellOrdinal++)
       {
         FieldContainer<double> cellLocalStiffness(dim, &localStiffness(cellOrdinal,0,0));
