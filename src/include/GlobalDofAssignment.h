@@ -143,6 +143,10 @@ public:
 
   virtual set<GlobalIndexType> globalDofIndicesForCell(GlobalIndexType cellID) = 0;
 
+  // ! Returns the global dof indices, in the same order as the basis ordinals, for a discontinuous variable.
+  // ! For minimum-rule meshes, may throw an exception if invoked with a continuous variable's ID as argument.
+  virtual vector<GlobalIndexType> globalDofIndicesForFieldVariable(GlobalIndexType cellID, int varID) = 0;
+  
   virtual IndexType localDofCount() = 0; // local to the MPI node
 
   // ! method for setting mesh and meshTopology after a deep copy of GDA.  Doesn't rebuild anything!!

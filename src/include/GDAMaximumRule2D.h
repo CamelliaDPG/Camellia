@@ -92,7 +92,11 @@ public:
   // ! get the global dof indices corresponding to the specified cellID/varID/sideOrdinal.  GDAMinimumRule's implementation overrides to return only "fittable" dof indices, as required by CondensedDofInterpreter.
   std::set<GlobalIndexType> getGlobalDofIndices(GlobalIndexType cellID, int varID, int sideOrdinal);
   
-  vector<int> getH1Order(GlobalIndexType cellID);
+  // ! Returns the global dof indices, in the same order as the basis ordinals, for a discontinuous variable.
+  // ! For minimum-rule meshes, may throw an exception if invoked with a continuous variable's ID as argument.
+  std::vector<GlobalIndexType> globalDofIndicesForFieldVariable(GlobalIndexType cellID, int varID);
+  
+  std::vector<int> getH1Order(GlobalIndexType cellID);
 
   GlobalIndexType globalDofIndex(GlobalIndexType cellID, IndexType localDofIndex);
   std::vector<GlobalIndexType> globalDofIndices(GlobalIndexType cellID, const std::vector<IndexType> &localDofIndices);
