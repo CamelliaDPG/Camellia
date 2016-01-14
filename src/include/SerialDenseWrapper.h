@@ -18,7 +18,6 @@ namespace Camellia
 {
   class SerialDenseWrapper
   {
-    static void transposeSquareMatrix(Intrepid::FieldContainer<double> &A);
     static Epetra_SerialDenseMatrix convertFCToSDM(const Intrepid::FieldContainer<double> &A, Epetra_DataAccess CV = ::Copy);
     static void convertSDMToFC(Intrepid::FieldContainer<double>& A_fc, const Epetra_SerialDenseMatrix &A);
   public:
@@ -76,6 +75,8 @@ namespace Camellia
                                          Intrepid::FieldContainer<double> &b, bool allowOverwriteOfA = false);
     
     static void transposeMatrix(Intrepid::FieldContainer<double> &A);
+    
+    static void transposeSquareMatrix(Intrepid::FieldContainer<double> &A);
     
     //! Returns the reciprocal of the 1-norm condition number of the matrix in A
     /*!
