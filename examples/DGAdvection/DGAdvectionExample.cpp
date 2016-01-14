@@ -32,6 +32,7 @@
  */
 
 using namespace Camellia;
+using namespace Intrepid;
 using namespace std;
 
 // beta: 1/|x| (-x2, x1)
@@ -100,6 +101,7 @@ public:
 
 // method to apply the upwinding terms to soln's stiffness matrix:
 void applyUpwinding(SolutionPtr soln, VarPtr u, VarPtr v, FunctionPtr beta);
+void solveAndExport(SolutionPtr soln, VarPtr u, VarPtr v, FunctionPtr beta, HDF5Exporter exporter, int refNumber);
 
 // (implementations below main)
 
@@ -211,33 +213,16 @@ int main(int argc, char *argv[])
   
   RHSPtr rhs = RHS::rhs(); // zero forcing
   SolutionPtr soln = Solution::solution(mesh, bc, rhs);
-  
-  SolverPtr solver = Solver::getDirectSolver();
-  
-  soln->initializeLHSVector();
-  soln->initializeStiffnessAndLoad();
 
-  // this is where we want to accumulate any inter-element DG terms
-  applyUpwinding(soln, u, v, beta);
-  
-  // it is important to do the above accumulation before BCs are imposed, which they
-  // will be in populateStiffnessAndLoad().
-  soln->populateStiffnessAndLoad();
-  soln->setProblem(solver);
-  
-  int solveSuccess = soln->solveWithPrepopulatedStiffnessAndLoad(solver);
-  
-  if (solveSuccess != 0)
-    cout << "solve returned with error code " << solveSuccess << endl;
-  
-  soln->importSolution(); // determines element-local solution coefficients from the global solution vector
-  
   ostringstream name;
   name << "DGAdvectionExample_" << convectiveDirectionChoice;
-  
   HDF5Exporter exporter(mesh, name.str(), ".");
-  
-  exporter.exportSolution(soln,0); // 0 for the refinement number (or time step)
+
+  solveAndExport(soln, u, v, beta, exporter, 0);
+
+  // test code to see if h-refinements work:
+  mesh->hRefine(set<GlobalIndexType>{0});
+  solveAndExport(soln, u, v, beta, exporter, 1);
   
   return 0;
 }
@@ -349,22 +334,69 @@ void applyUpwinding(SolutionPtr soln, VarPtr u, VarPtr v, FunctionPtr beta)
       // On the peer assumption, the only transformation necessary is a possible permutation of the
       // side vertices.
       
-      vector<IndexType> mySideNodes, neighborSideNodes; // this will list the indices as seen by MeshTopology
       CellTopoPtr cellTopo = cell->topology();
-      CellTopoPtr sideTopo = cellTopo->getSide(sideOrdinal);
       CellTopoPtr neighborTopo = neighbor->topology();
-      int nodeCount = cellTopo->getSide(sideOrdinal)->getNodeCount();
-      for (int node=0; node<nodeCount; node++)
-      {
-        int nodeInCell = cellTopo->getNodeMap(sideDim, sideOrdinal, node);
-        mySideNodes.push_back(cell->vertices()[nodeInCell]);
-        int nodeInNeighborCell = neighborTopo->getNodeMap(sideDim, mySideOrdinalInNeighbor, node);
-        neighborSideNodes.push_back(neighbor->vertices()[nodeInNeighborCell]);
-      }
-      // now, we want to know what permutation of the side topology takes us from my order to neighbor's
-      // TODO: make sure I'm not going the wrong direction here; it's easy to get confused.
-      unsigned permutationFromMeToNeighbor = CamelliaCellTools::permutationMatchingOrder(sideTopo, mySideNodes, neighborSideNodes);
+      CellTopoPtr sideTopo = neighborTopo->getSide(mySideOrdinalInNeighbor); // for non-peers, this is my ancestor's cell topo
+      int nodeCount = sideTopo->getNodeCount();
+      
+      unsigned permutationFromMeToNeighbor;
       Intrepid::FieldContainer<double> myRefPoints = cellBasisCacheSide->getRefCellPoints();
+      
+      if (!neighborIsPeer) // then we have some refinements relative to neighbor
+      {
+        /*******   Map my ref points to my ancestor ******/
+        pair<GlobalIndexType,unsigned> ancestorInfo = neighbor->getNeighborInfo(mySideOrdinalInNeighbor, meshTopo);
+        GlobalIndexType ancestorCellIndex = ancestorInfo.first;
+        unsigned ancestorSideOrdinal = ancestorInfo.second;
+        
+        RefinementBranch refinementBranch = cell->refinementBranchForSide(sideOrdinal, meshTopo);
+        RefinementBranch sideRefinementBranch = RefinementPattern::sideRefinementBranch(refinementBranch, ancestorSideOrdinal);
+        FieldContainer<double> cellNodes = RefinementPattern::descendantNodesRelativeToAncestorReferenceCell(sideRefinementBranch);
+        
+        cellNodes.resize(1,cellNodes.dimension(0),cellNodes.dimension(1));
+        BasisCachePtr ancestralBasisCache = Teuchos::rcp(new BasisCache(cellNodes,sideTopo,cubaturePolyOrder*2,false)); // false: don't create side cache too
+        
+        ancestralBasisCache->setRefCellPoints(myRefPoints);
+        
+        // now, the "physical" points in ancestral cache are the ones we want
+        myRefPoints = ancestralBasisCache->getPhysicalCubaturePoints();
+        myRefPoints.resize(myRefPoints.dimension(1),myRefPoints.dimension(2)); // strip cell dimension
+        
+        /*******  Determine ancestor's permutation of the side relative to neighbor ******/
+        CellPtr ancestor = meshTopo->getCell(ancestorCellIndex);
+        vector<IndexType> ancestorSideNodes, neighborSideNodes; // this will list the indices as seen by MeshTopology
+        
+        CellTopoPtr sideTopo = ancestor->topology()->getSide(ancestorSideOrdinal);
+        nodeCount = sideTopo->getNodeCount();
+        
+        for (int node=0; node<nodeCount; node++)
+        {
+          int nodeInCell = cellTopo->getNodeMap(sideDim, sideOrdinal, node);
+          ancestorSideNodes.push_back(ancestor->vertices()[nodeInCell]);
+          int nodeInNeighborCell = neighborTopo->getNodeMap(sideDim, mySideOrdinalInNeighbor, node);
+          neighborSideNodes.push_back(neighbor->vertices()[nodeInNeighborCell]);
+        }
+        // now, we want to know what permutation of the side topology takes us from my order to neighbor's
+        // TODO: make sure I'm not going the wrong direction here; it's easy to get confused.
+        permutationFromMeToNeighbor = CamelliaCellTools::permutationMatchingOrder(sideTopo, ancestorSideNodes, neighborSideNodes);
+      }
+      else
+      {
+        nodeCount = cellTopo->getSide(sideOrdinal)->getNodeCount();
+
+        vector<IndexType> mySideNodes, neighborSideNodes; // this will list the indices as seen by MeshTopology
+        for (int node=0; node<nodeCount; node++)
+        {
+          int nodeInCell = cellTopo->getNodeMap(sideDim, sideOrdinal, node);
+          mySideNodes.push_back(cell->vertices()[nodeInCell]);
+          int nodeInNeighborCell = neighborTopo->getNodeMap(sideDim, mySideOrdinalInNeighbor, node);
+          neighborSideNodes.push_back(neighbor->vertices()[nodeInNeighborCell]);
+        }
+        // now, we want to know what permutation of the side topology takes us from my order to neighbor's
+        // TODO: make sure I'm not going the wrong direction here; it's easy to get confused.
+        permutationFromMeToNeighbor = CamelliaCellTools::permutationMatchingOrder(sideTopo, mySideNodes, neighborSideNodes);
+      }
+      
       Intrepid::FieldContainer<double> permutedRefNodes(nodeCount,sideDim);
       CamelliaCellTools::refCellNodesForTopology(permutedRefNodes, sideTopo, permutationFromMeToNeighbor);
       permutedRefNodes.resize(1,nodeCount,sideDim); // add cell dimension to make this a "physical" node container
@@ -459,4 +491,29 @@ void applyUpwinding(SolutionPtr soln, VarPtr u, VarPtr v, FunctionPtr beta)
       insertValues(neighborGlobalDofs_u,neighborGlobalDofs_u,integralValues_neighbor_neighbor);
     }
   }
+}
+
+void solveAndExport(SolutionPtr soln, VarPtr u, VarPtr v, FunctionPtr beta, HDF5Exporter exporter, int refNumber)
+{
+  SolverPtr solver = Solver::getDirectSolver();
+  
+  soln->initializeLHSVector();
+  soln->initializeStiffnessAndLoad();
+  
+  // this is where we want to accumulate any inter-element DG terms
+  applyUpwinding(soln, u, v, beta);
+  
+  // it is important to do the above accumulation before BCs are imposed, which they
+  // will be in populateStiffnessAndLoad().
+  soln->populateStiffnessAndLoad();
+  soln->setProblem(solver);
+  
+  int solveSuccess = soln->solveWithPrepopulatedStiffnessAndLoad(solver);
+  
+  if (solveSuccess != 0)
+    cout << "solve returned with error code " << solveSuccess << endl;
+  
+  soln->importSolution(); // determines element-local solution coefficients from the global solution vector
+  
+  exporter.exportSolution(soln,refNumber);
 }
