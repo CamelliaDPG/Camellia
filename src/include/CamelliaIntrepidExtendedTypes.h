@@ -67,7 +67,7 @@ enum EFunctionSpace   // the first four copied from Intrepid::EFunctionSpace
 
 bool functionSpaceIsVectorized(EFunctionSpace fs);
 bool functionSpaceIsDiscontinuous(EFunctionSpace fs);
-EFunctionSpace continuousSpaceForDiscontinuous(EFunctionSpace fs_disc);
+EFunctionSpace continuousSpaceForDiscontinuous(EFunctionSpace fs_disc, bool upgradeHVOL = true);
 EFunctionSpace discontinuousSpaceForContinuous(EFunctionSpace fs_continuous);
 
 const std::set<EOperator> & normalOperators();

@@ -91,14 +91,18 @@ EFunctionSpace Camellia::discontinuousSpaceForContinuous(Camellia::EFunctionSpac
   }
 }
 
-EFunctionSpace Camellia::continuousSpaceForDiscontinuous(Camellia::EFunctionSpace fs_disc)
+EFunctionSpace Camellia::continuousSpaceForDiscontinuous(Camellia::EFunctionSpace fs_disc, bool upgradeHVOL)
 {
+  // in a sense, HVOL spaces are both continuous and discontinuous: they conform to the fs, but the fs has no continuity.
+  // if upgradeHVOL is false, we return the HVOL space; otherwise, we return the corresponding H^1 space.
   switch (fs_disc)
   {
   case FUNCTION_SPACE_HVOL:
+      return upgradeHVOL ? FUNCTION_SPACE_HGRAD : FUNCTION_SPACE_HVOL;
   case FUNCTION_SPACE_VECTOR_HVOL:
+      return upgradeHVOL ? FUNCTION_SPACE_VECTOR_HGRAD : FUNCTION_SPACE_VECTOR_HVOL;
   case FUNCTION_SPACE_TENSOR_HVOL:
-    return fs_disc; // in a sense, these are both continuous and discontinuous: they conform to the fs, but the fs has no continuity.
+      return upgradeHVOL ? FUNCTION_SPACE_TENSOR_HGRAD : FUNCTION_SPACE_TENSOR_HVOL;
   case FUNCTION_SPACE_HGRAD_DISC:
     return FUNCTION_SPACE_HGRAD;
   case FUNCTION_SPACE_HCURL_DISC:
