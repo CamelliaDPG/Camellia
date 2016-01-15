@@ -30,6 +30,7 @@ namespace Camellia {
   
   void SerialDenseWrapper::transposeSquareMatrix(Intrepid::FieldContainer<double> &A)
   {
+    TEUCHOS_TEST_FOR_EXCEPTION(A.rank() != 2, std::invalid_argument, "A must be rank 2!");
     int rows = A.dimension(0), cols = A.dimension(1);
     TEUCHOS_TEST_FOR_EXCEPTION(rows != cols, std::invalid_argument, "matrix not square");
     for (int i=0; i<rows; i++)
@@ -499,6 +500,7 @@ namespace Camellia {
       x.resize(x.dimension(0),1);
       int result = solveSystemMultipleRHS(x, A, b, useATranspose);
       x.resize(x.dimension(0));
+      b.resize(b.dimension(0));
       return result;
     }
     return solveSystemMultipleRHS(x, A, b, useATranspose);
