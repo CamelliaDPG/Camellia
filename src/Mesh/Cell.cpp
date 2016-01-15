@@ -34,6 +34,26 @@ vector< pair<GlobalIndexType, unsigned> > Cell::childrenForSide(unsigned sideInd
   return childIndicesForSide;
 }
 
+set<GlobalIndexType> Cell::getActiveNeighborIndices(MeshTopologyViewPtr meshTopoViewForCellValidity)
+{
+  int sideCount = _cellTopo->getSideCount();
+  set<GlobalIndexType> neighborIndices;
+  for (int sideOrdinal=0; sideOrdinal<sideCount; sideOrdinal++)
+  {
+    pair<GlobalIndexType, unsigned> neighborInfo = getNeighborInfo(sideOrdinal,meshTopoViewForCellValidity);
+    GlobalIndexType neighborID  = neighborInfo.first;
+    if (neighborID == -1) continue; // no neighbor on this side
+    unsigned mySideOrdinalInNeighbor = neighborInfo.second;
+    CellPtr neighbor = meshTopoViewForCellValidity->getCell(neighborID);
+    vector< pair< GlobalIndexType, unsigned> > neighborDescendants = neighbor->getDescendantsForSide(mySideOrdinalInNeighbor, meshTopoViewForCellValidity); // descendants will be the active ones
+    for (auto entry : neighborDescendants)
+    {
+      neighborIndices.insert(entry.first);
+    }
+  }
+  return neighborIndices;
+}
+
 set<IndexType> Cell::getDescendants(MeshTopologyViewPtr meshTopoViewForCellValidity, bool leafNodesOnly)
 {
   TEUCHOS_TEST_FOR_EXCEPTION(!meshTopoViewForCellValidity->isValidCellIndex(_cellIndex), std::invalid_argument, "_cellIndex is not valid");
