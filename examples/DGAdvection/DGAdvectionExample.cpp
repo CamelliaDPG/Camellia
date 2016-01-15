@@ -11,6 +11,7 @@
 #include "Solution.h"
 #include "Solver.h"
 #include "SpatialFilter.h"
+#include "SpatiallyFilteredFunction.h"
 #include "VarFactory.h"
 
 #include "Epetra_FECrsMatrix.h"
@@ -63,6 +64,20 @@ public:
   }
 };
 
+class U_Exact_CCW : public SimpleFunction<double>
+{
+public:
+  double value(double x, double y)
+  {
+    // 1 inside the circle of radius 0.5 centered at the origin
+    const static double r = 0.5;
+    if (x*x + y*y <= r*r)
+      return 1.0;
+    else
+      return 0;
+  }
+};
+
 class UpwindIndicator : public TFunction<double>
 {
   FunctionPtr _beta;
@@ -101,6 +116,7 @@ public:
 
 // method to apply the upwinding terms to soln's stiffness matrix:
 void applyUpwinding(SolutionPtr soln, VarPtr u, VarPtr v, FunctionPtr beta);
+void computeApproximateGradients(SolutionPtr soln, VarPtr u, const vector<GlobalIndexType> &cells, vector<double> &gradient_l2_norm, double weightWithPowerOfH = 0);
 void solveAndExport(SolutionPtr soln, VarPtr u, VarPtr v, FunctionPtr beta, HDF5Exporter exporter, int refNumber);
 
 // (implementations below main)
@@ -112,11 +128,15 @@ int main(int argc, char *argv[])
   
   Teuchos::CommandLineProcessor cmdp(false,true); // false: don't throw exceptions; true: do return errors for unrecognized options
   
+  int spaceDim = 2;
+  
   int polyOrder = 1;
-  int horizontalElements = 2, verticalElements = 2;
+  int horizontalElements = 8, verticalElements = 8;
+  int numRefinements = 6;
   cmdp.setOption("polyOrder", &polyOrder);
   cmdp.setOption("horizontalElements", &horizontalElements);
   cmdp.setOption("verticalElements", &verticalElements);
+  cmdp.setOption("numRefinements", &numRefinements);
   
   string convectiveDirectionChoice = "CCW"; // counter-clockwise, the default.  Other options: left, right, up, down
   cmdp.setOption("convectiveDirection", &convectiveDirectionChoice);
@@ -133,6 +153,8 @@ int main(int argc, char *argv[])
   
   SpatialFilterPtr unitInflow, zeroInflow;
   
+  FunctionPtr u_exact;
+  
   if (convectiveDirectionChoice == "CCW")
   {
     beta_x = Teuchos::rcp( new BetaX );
@@ -143,6 +165,8 @@ int main(int argc, char *argv[])
     
     // set g = 0 on {1} x [0,1], (0.5,1.0] x {0}
     zeroInflow = SpatialFilter::matchingX(1) | (SpatialFilter::matchingY(0) & SpatialFilter::greaterThanX(0.5));
+    
+    u_exact = Teuchos::rcp(new U_Exact_CCW);
   }
   else if (convectiveDirectionChoice == "left")
   {
@@ -150,6 +174,8 @@ int main(int argc, char *argv[])
     beta_y = Function::zero();
     unitInflow = SpatialFilter::matchingX(1.0) & SpatialFilter::lessThanY(0.5);
     zeroInflow = SpatialFilter::matchingX(1.0) & !SpatialFilter::lessThanY(0.5);
+    
+    u_exact = Teuchos::rcp( new SpatiallyFilteredFunction<double>(Function::constant(1.0), SpatialFilter::lessThanY(0.5)) );
   }
   else if (convectiveDirectionChoice == "right")
   {
@@ -158,6 +184,8 @@ int main(int argc, char *argv[])
     
     unitInflow = SpatialFilter::matchingX(0.0) & SpatialFilter::lessThanY(0.5); // | SpatialFilter::matchingY(0.0);
     zeroInflow = SpatialFilter::matchingX(0.0) & !SpatialFilter::lessThanY(0.5);
+    
+    u_exact = Teuchos::rcp( new SpatiallyFilteredFunction<double>(Function::constant(1.0), SpatialFilter::lessThanY(0.5)) );
   }
   else if (convectiveDirectionChoice == "up")
   {
@@ -166,6 +194,8 @@ int main(int argc, char *argv[])
     
     unitInflow = SpatialFilter::matchingY(0.0);
     zeroInflow = !SpatialFilter::allSpace();
+    
+    u_exact = Teuchos::rcp( new SpatiallyFilteredFunction<double>(Function::constant(1.0), SpatialFilter::allSpace()) );
   }
   else if (convectiveDirectionChoice == "down")
   {
@@ -174,6 +204,8 @@ int main(int argc, char *argv[])
     
     unitInflow = SpatialFilter::matchingY(1.0) & SpatialFilter::lessThanX(0.5);
     zeroInflow = SpatialFilter::matchingY(1.0) & !SpatialFilter::lessThanX(0.5);
+    
+    u_exact = Teuchos::rcp( new SpatiallyFilteredFunction<double>(Function::constant(1.0), SpatialFilter::lessThanX(0.5)) );
   }
   else
   {
@@ -181,7 +213,7 @@ int main(int argc, char *argv[])
   }
   
   FunctionPtr beta = Function::vectorize(beta_x, beta_y);
-    
+  
   VarFactoryPtr vf = VarFactory::varFactory();
   
   VarPtr u = vf->fieldVar("u",HGRAD_DISC);
@@ -214,16 +246,83 @@ int main(int argc, char *argv[])
   RHSPtr rhs = RHS::rhs(); // zero forcing
   SolutionPtr soln = Solution::solution(mesh, bc, rhs);
 
-  ostringstream name;
-  name << "DGAdvectionExample_" << convectiveDirectionChoice;
-  HDF5Exporter exporter(mesh, name.str(), ".");
-
-  solveAndExport(soln, u, v, beta, exporter, 0);
-
-  // test code to see if h-refinements work:
-  mesh->hRefine(set<GlobalIndexType>{0});
-  solveAndExport(soln, u, v, beta, exporter, 1);
+  ostringstream report;
+  report << "elems\tdofs\ttrace_dofs\terr\n";
   
+  ostringstream name;
+  name << "DGAdvection_" << convectiveDirectionChoice << "_k" << polyOrder << "_" << numRefinements << "refs";
+  HDF5Exporter exporter(mesh, name.str(), ".");
+  
+  name << "_mesh";
+  HDF5Exporter mesh_exporter(mesh, name.str(), ".");
+  FunctionPtr meshFunction = Function::meshSkeletonCharacteristic();
+  mesh_exporter.exportFunction(meshFunction,"mesh",0);
+
+  FunctionPtr u_soln = Function::solution(u, soln);
+  FunctionPtr u_err = u_soln - u_exact;
+  
+  int numElements = mesh->getActiveCellIDs().size();
+  GlobalIndexType dofCount = mesh->numGlobalDofs();
+  
+  int cubatureEnrichment = 5;
+  solveAndExport(soln, u, v, beta, exporter, 0);
+  
+  double err = u_err->l2norm(mesh, cubatureEnrichment);
+
+  cout << "Initial mesh has " << numElements << " active elements and " << dofCount << " degrees of freedom; ";
+  cout << "L^2 error = " << err << ".\n";
+  
+  report << numElements << "\t" << dofCount << "\t" << 0 << "\t" << err << "\n";
+  
+  for (int refNumber=1; refNumber<=numRefinements; refNumber++)
+  {
+    vector<double> gradientValues;
+    double hPower = 1.0 + spaceDim / 2.0;
+    
+    set<GlobalIndexType> cellIDSet = mesh->getActiveCellIDs();
+    vector<GlobalIndexType> cellIDs(cellIDSet.begin(),cellIDSet.end());
+    
+    computeApproximateGradients(soln, u, cellIDs, gradientValues, hPower);
+    
+    // refine the top 30% of cells
+    int numCellsToRefine = 0.3 * cellIDs.size();
+    int numCellsNotToRefine = (cellIDs.size()-numCellsToRefine);
+    vector<double> gradientValuesCopy = gradientValues;
+    std::nth_element(gradientValues.begin(),gradientValues.begin() + numCellsNotToRefine, gradientValues.end());
+    
+    double threshold = gradientValues[numCellsNotToRefine-1];
+    vector<GlobalIndexType> cellsToRefine;
+    for (int i=0; i<cellIDs.size(); i++)
+    {
+      if (gradientValuesCopy[i] > threshold)
+      {
+        cellsToRefine.push_back(cellIDs[i]);
+      }
+    }
+    mesh->hRefine(cellsToRefine);
+    
+    int numElements = mesh->getActiveCellIDs().size();
+    GlobalIndexType dofCount = mesh->numGlobalDofs();
+    
+    mesh_exporter.exportFunction(meshFunction,"mesh",refNumber);
+    solveAndExport(soln, u, v, beta, exporter, refNumber);
+    
+    double err = u_err->l2norm(mesh, cubatureEnrichment);
+    
+    report << numElements << "\t" << dofCount << "\t" << 0 << "\t" << err << "\n";
+    
+    cout << "Ref. " << refNumber << " mesh has " << numElements << " active elements and " << dofCount << " degrees of freedom; ";
+    cout << "L^2 error = " << err << ".\n";
+  }
+  
+  ostringstream reportTitle;
+  reportTitle << "DGAdvection_" << convectiveDirectionChoice << "_k" << polyOrder << "_" << numRefinements << "refs.dat";
+  
+  ofstream fout(reportTitle.str().c_str());
+  fout << report.str();
+  fout.close();
+  cout << "Wrote results to " << reportTitle.str() << ".\n";
+
   return 0;
 }
 
@@ -489,6 +588,142 @@ void applyUpwinding(SolutionPtr soln, VarPtr u, VarPtr v, FunctionPtr beta)
       insertValues(myGlobalDofs_u,neighborGlobalDofs_u,integralValues_me_neighbor);
       insertValues(neighborGlobalDofs_u,myGlobalDofs_u,integralValues_neighbor_me);
       insertValues(neighborGlobalDofs_u,neighborGlobalDofs_u,integralValues_neighbor_neighbor);
+    }
+  }
+}
+
+void computeApproximateGradients(SolutionPtr soln, VarPtr u, const vector<GlobalIndexType> &cells,
+                                 vector<double> &gradient_l2_norm, double weightWithPowerOfH)
+{
+  // imitates https://dealii.org/developer/doxygen/deal.II/namespaceDerivativeApproximation.html
+
+  // we require that u be a scalar field variable
+  TEUCHOS_TEST_FOR_EXCEPTION(u->rank() != 0, std::invalid_argument, "u must be a scalar variable");
+  TEUCHOS_TEST_FOR_EXCEPTION(u->varType() != FIELD, std::invalid_argument, "u must be a field variable");
+  
+  int cellCount = cells.size();
+  gradient_l2_norm.resize(cells.size());
+  
+  int onePoint = 1;
+  MeshTopologyViewPtr meshTopo = soln->mesh()->getTopology();
+  int spaceDim = meshTopo->getDimension();
+
+  set<GlobalIndexType> cellsAndNeighborsSet;
+  for (int cellOrdinal=0; cellOrdinal<cellCount; cellOrdinal++)
+  {
+    cellsAndNeighborsSet.insert(cells[cellOrdinal]);
+    CellPtr cell = meshTopo->getCell(cells[cellOrdinal]);
+    set<GlobalIndexType> neighborIDs = cell->getActiveNeighborIndices(meshTopo);
+    cellsAndNeighborsSet.insert(neighborIDs.begin(),neighborIDs.end());
+  }
+  vector<GlobalIndexType> cellsAndNeighbors(cellsAndNeighborsSet.begin(),cellsAndNeighborsSet.end());
+  
+  int cellsAndNeighborsCount = cellsAndNeighbors.size();
+  
+  FieldContainer<double> cellValues(cellsAndNeighborsCount,onePoint); // values at cell centers
+  FieldContainer<double> cellCenters(cellsAndNeighborsCount,spaceDim);
+  FieldContainer<double> cellDiameter(cellsAndNeighborsCount,onePoint); // h-values
+  
+  map<CellTopologyKey,BasisCachePtr> basisCacheForTopology;
+  
+  FunctionPtr hFunction = Function::h();
+  FunctionPtr solnFunction = Function::solution(u, soln);
+  Teuchos::Array<int> cellValueDim;
+  cellValueDim.push_back(1);
+  cellValueDim.push_back(1);
+  
+  map<GlobalIndexType,int> cellIDToOrdinal; // lookup table for value access
+  
+  // setup: compute cell centers, and solution values at those points
+  for (int cellOrdinal=0; cellOrdinal<cellsAndNeighborsCount; cellOrdinal++)
+  {
+    GlobalIndexType cellID = cellsAndNeighbors[cellOrdinal];
+    cellIDToOrdinal[cellID] = cellOrdinal;
+    CellPtr cell = meshTopo->getCell(cellID);
+    CellTopoPtr cellTopo = cell->topology();
+    if (basisCacheForTopology.find(cellTopo->getKey()) == basisCacheForTopology.end())
+    {
+      FieldContainer<double> centroid(onePoint,spaceDim);
+      int nodeCount = cellTopo->getNodeCount();
+      FieldContainer<double> cellNodes(nodeCount,spaceDim);
+      CamelliaCellTools::refCellNodesForTopology(cellNodes, cellTopo);
+      for (int node=0; node<nodeCount; node++)
+      {
+        for (int d=0; d<spaceDim; d++)
+        {
+          centroid(0,d) += cellNodes(node,d);
+        }
+      }
+      for (int d=0; d<spaceDim; d++)
+      {
+        centroid(0,d) /= nodeCount;
+      }
+      basisCacheForTopology[cellTopo->getKey()] = BasisCache::basisCacheForReferenceCell(cellTopo, 0); // 0 cubature degree
+      basisCacheForTopology[cellTopo->getKey()]->setRefCellPoints(centroid);
+    }
+    BasisCachePtr basisCache = basisCacheForTopology[cellTopo->getKey()];
+    basisCache->setPhysicalCellNodes(soln->mesh()->physicalCellNodesForCell(cellID), {cellID}, false);
+    
+    FieldContainer<double> cellValue(cellValueDim,&cellValues(cellOrdinal,0));
+    solnFunction->values(cellValue, basisCache);
+    for (int d=0; d<spaceDim; d++)
+    {
+      cellCenters(cellOrdinal,d) = basisCache->getPhysicalCubaturePoints()(0,0,d);
+    }
+    if (weightWithPowerOfH != 0)
+    {
+      cellDiameter(cellOrdinal,0) = soln->mesh()->getCellMeasure(cellID);
+    }
+  }
+  
+  // now compute the gradients requested
+  FieldContainer<double> Y(spaceDim,spaceDim); // the matrix we'll invert to compute the gradient
+  FieldContainer<double> b(spaceDim); // RHS for matrix problem
+  FieldContainer<double> grad(spaceDim); // LHS for matrix problem
+  vector<double> distanceVector(spaceDim);
+  for (int cellOrdinal=0; cellOrdinal<cellCount; cellOrdinal++)
+  {
+    Y.initialize(0.0);
+    b.initialize(0.0);
+    GlobalIndexType cellID = cells[cellOrdinal];
+    CellPtr cell = meshTopo->getCell(cellID);
+    int myOrdinalInCellAndNeighbors = cellIDToOrdinal[cellID];
+    double myValue = cellValues(myOrdinalInCellAndNeighbors,0);
+    set<GlobalIndexType> neighborIDs = cell->getActiveNeighborIndices(meshTopo);
+    for (GlobalIndexType neighborID : neighborIDs)
+    {
+      int neighborOrdinalInCellAndNeighbors = cellIDToOrdinal[neighborID];
+      double neighborValue = cellValues(neighborOrdinalInCellAndNeighbors,0);
+      
+      double dist_squared = 0;
+      for (int d=0; d<spaceDim; d++)
+      {
+        distanceVector[d] = cellCenters(neighborOrdinalInCellAndNeighbors,d) - cellCenters(myOrdinalInCellAndNeighbors,d);
+        dist_squared += distanceVector[d] * distanceVector[d];
+      }
+      
+      for (int d1=0; d1<spaceDim; d1++)
+      {
+        b(d1) += distanceVector[d1] * (neighborValue - myValue) / dist_squared;
+        for (int d2=0; d2<spaceDim; d2++)
+        {
+          Y(d1,d2) += distanceVector[d1] * distanceVector[d2] / dist_squared;
+        }
+      }
+    }
+    SerialDenseWrapper::solveSystem(grad, Y, b);
+    double l2_value_squared = 0;
+    for (int d=0; d<spaceDim; d++)
+    {
+      l2_value_squared += grad(d) * grad(d);
+    }
+    if (weightWithPowerOfH == 0)
+    {
+      gradient_l2_norm[cellOrdinal] = sqrt(l2_value_squared);
+    }
+    else
+    {
+      gradient_l2_norm[cellOrdinal] = sqrt(l2_value_squared) * pow(cellDiameter(myOrdinalInCellAndNeighbors,0), weightWithPowerOfH);
     }
   }
 }
