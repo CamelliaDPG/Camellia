@@ -3108,6 +3108,28 @@ set<GlobalIndexType> GDAMinimumRule::getGlobalDofIndices(GlobalIndexType cellID,
   return fittableIndexSet;
 }
 
+vector<GlobalIndexType> GDAMinimumRule::globalDofIndicesForFieldVariable(GlobalIndexType cellID, int varID)
+{
+  CellConstraints constraints = getCellConstraints(cellID);
+  LocalDofMapperPtr dofMapper = getDofMapper(cellID, constraints, varID, VOLUME_INTERIOR_SIDE_ORDINAL);
+  
+  TEUCHOS_TEST_FOR_EXCEPTION(!dofMapper->isPermutation(), std::invalid_argument, "GDAMinimumRule only supports globalDofIndicesForFieldVariable() for discontinuous variables");
+  
+  map<int, GlobalIndexType> permutationMap = dofMapper->getPermutationMap();
+  DofOrderingPtr trialOrdering = elementType(cellID)->trialOrderPtr;
+  BasisPtr volumeBasis = trialOrdering->getBasis(varID);
+  
+  const vector<int>* localDofIndices = &trialOrdering->getDofIndices(varID);
+  vector<GlobalIndexType> globalIndices;
+  for (int localDofIndex : *localDofIndices)
+  {
+    TEUCHOS_TEST_FOR_EXCEPTION(permutationMap.find(localDofIndex) == permutationMap.end(), std::invalid_argument,
+                               "Error: permutation map does not contain localDofIndex");
+    globalIndices.push_back(permutationMap[localDofIndex]);
+  }
+  return globalIndices;
+}
+
 LocalDofMapperPtr GDAMinimumRule::getDofMapper(GlobalIndexType cellID, CellConstraints &constraints, int varIDToMap, int sideOrdinalToMap)
 {
 //  { // DEBUGGING

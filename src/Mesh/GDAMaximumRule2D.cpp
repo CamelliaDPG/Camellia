@@ -774,6 +774,21 @@ set<GlobalIndexType> GDAMaximumRule2D::getGlobalDofIndices(GlobalIndexType cellI
   return globalDofIndices;
 }
 
+// ! Returns the global dof indices, in the same order as the basis ordinals, for a discontinuous variable.
+// ! For minimum-rule meshes, may throw an exception if invoked with a continuous variable's ID as argument.
+vector<GlobalIndexType> GDAMaximumRule2D::globalDofIndicesForFieldVariable(GlobalIndexType cellID, int varID)
+{
+  DofOrderingPtr trialOrdering = _elementTypeForCell[cellID]->trialOrderPtr;
+  int numDofs = trialOrdering->getBasisCardinality(varID, VOLUME_INTERIOR_SIDE_ORDINAL);
+  vector<GlobalIndexType> globalDofIndices;
+  for (int basisDofOrdinal=0; basisDofOrdinal<numDofs; basisDofOrdinal++)
+  {
+    int cellDofIndex = trialOrdering->getDofIndex(varID, basisDofOrdinal);
+    globalDofIndices.push_back(globalDofIndex(cellID, cellDofIndex));
+  }
+  return globalDofIndices;
+}
+
 vector<int> GDAMaximumRule2D::getH1Order(GlobalIndexType cellID)
 {
   return vector<int>(1,cellPolyOrder(cellID));
