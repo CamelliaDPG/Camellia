@@ -116,7 +116,7 @@ void setGMGSolver(CompressibleNavierStokesFormulation &form, vector<MeshPtr> &me
 
 int main(int argc, char *argv[])
 {
-  Teuchos::GlobalMPISession mpiSession(&argc, &argv); // initialize MPI
+  Teuchos::GlobalMPISession mpiSession(&argc, &argv, 0); // initialize MPI
   int rank = Teuchos::GlobalMPISession::getRank();
 
 #ifdef HAVE_MPI
@@ -222,11 +222,12 @@ int main(int argc, char *argv[])
     nsParameters = CompressibleNavierStokesFormulation::spaceTimeFormulation(spaceDim, Re, useConformingTraces, meshTopo, polyOrder, polyOrder, delta_k).getConstructorParameters();
 
   // nsParameters.set("neglectFluxesOnRHS", false);
+  nsParameters.set("norm", norm);
   CompressibleNavierStokesFormulation form(meshTopo, nsParameters);
 
   // form.refine();
 
-  form.setIP( norm );
+  // form.setIP( norm );
 
   form.solutionIncrement()->setUseCondensedSolve(useCondensedSolve);
 
@@ -342,14 +343,17 @@ int main(int argc, char *argv[])
     FunctionPtr rho_exact, u1_exact, u2_exact, T_exact;
     if (spaceDim == 1)
     {
-      rho_exact = one + Function::heaviside(0);
+      rho_exact = 2*one - Function::heaviside(0);
       u1_exact = Function::constant(0);
+      // u1_exact = Function::constant(1) - Function::heaviside(0);
       T_exact = Function::constant(1);
     }
     else
     {
-      rho_exact = Function::constant(1);
+      // rho_exact = 2*one - Function::heaviside(0);
+      rho_exact = 2*one - Function::heavisideY(0);
       u1_exact = Function::constant(0);
+      // u1_exact = Function::constant(1) - Function::heaviside(0);
       u2_exact = Function::constant(0);
       T_exact = Function::constant(1);
     }
@@ -359,6 +363,13 @@ int main(int argc, char *argv[])
     else
       u_exact = Function::vectorize(u1_exact,u2_exact);
 
+    if (!steady)
+    {
+      SpatialFilterPtr t0  = SpatialFilter::matchingT(0);
+      form.addMassFluxCondition(    t0, rho_exact, u_exact, T_exact);
+      form.addMomentumFluxCondition(t0, rho_exact, u_exact, T_exact);
+      form.addEnergyFluxCondition(  t0, rho_exact, u_exact, T_exact);
+    }
     switch (spaceDim)
     {
       case 1:
@@ -396,13 +407,6 @@ int main(int argc, char *argv[])
       case 3:
         break;
     }
-    if (!steady)
-    {
-      SpatialFilterPtr t0  = SpatialFilter::matchingT(0);
-      form.addMassFluxCondition(    t0, rho_exact, u_exact, T_exact);
-      form.addMomentumFluxCondition(t0, rho_exact, u_exact, T_exact);
-      form.addEnergyFluxCondition(  t0, rho_exact, u_exact, T_exact);
-    }
   }
 
   double l2NormOfIncrement = 1.0;
@@ -437,10 +441,10 @@ int main(int argc, char *argv[])
       if (rank==0) cout << endl;
     }
   }
-  form.clearSolutionIncrement(); // need to clear before evaluating energy error
+  // form.clearSolutionIncrement(); // need to clear before evaluating energy error
   double solveTime = solverTime->stop();
 
-  FunctionPtr energyErrorFunction = EnergyErrorFunction::energyErrorFunction(form.solutionIncrement());
+  // FunctionPtr energyErrorFunction = EnergyErrorFunction::energyErrorFunction(form.solutionIncrement());
 
   ostringstream exportName;
   if (steady)
@@ -462,9 +466,9 @@ int main(int argc, char *argv[])
     exporter = Teuchos::rcp(new HDF5Exporter(mesh, exportName.str(), outputDir));
     exporter->exportSolution(form.solution(), 0);
 
-    exportName << "_energyError";
-    energyErrorExporter = Teuchos::rcp(new HDF5Exporter(mesh, exportName.str(), outputDir));
-    energyErrorExporter->exportFunction(energyErrorFunction, "energy error", 0);
+    // exportName << "_energyError";
+    // energyErrorExporter = Teuchos::rcp(new HDF5Exporter(mesh, exportName.str(), outputDir));
+    // energyErrorExporter->exportFunction(energyErrorFunction, "energy error", 0);
   }
   // HDF5Exporter exporter(form.solution()->mesh(), exportName.str(), outputDir);
 
@@ -496,7 +500,7 @@ int main(int argc, char *argv[])
 
   double tol = 1e-5;
   int refNumber = 0;
-  while ((energyError > tol) && (refNumber < numRefs))
+  while (refNumber < numRefs)
   {
     refNumber++;
     form.refine();
@@ -542,7 +546,7 @@ int main(int argc, char *argv[])
       }
     }
 
-    form.clearSolutionIncrement(); // need to clear before evaluating energy error
+    // form.clearSolutionIncrement(); // need to clear before evaluating energy error
     energyError = form.solutionIncrement()->energyErrorTotal();
     // if (computeL2)
     //   l2Error = computeL2Error(form, u_exact, mesh, Re);
@@ -571,7 +575,7 @@ int main(int argc, char *argv[])
     if (exportHDF5)
     {
       exporter->exportSolution(form.solution(), refNumber);
-      energyErrorExporter->exportFunction(energyErrorFunction, "energy error", refNumber);
+      // energyErrorExporter->exportFunction(energyErrorFunction, "energy error", refNumber);
     }
 
   }

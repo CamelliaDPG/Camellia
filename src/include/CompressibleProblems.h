@@ -74,29 +74,53 @@ class AnalyticalCompressibleProblem : public CompressibleProblem
 
     void initializeExactMap(SpaceTimeCompressibleFormulationPtr form)
     {
-      _exactMap[form->rho()->ID()] = _rho_exact;
-      _exactMap[form->T()->ID()] = _T_exact;
+      FunctionPtr one = Function::constant(1);
+      _exactMap[form->rho()->ID()] = one;
+      _exactMap[form->T()->ID()] = one;
       switch (form->spaceDim())
       {
         case 1:
-          _exactMap[form->u(1)->ID()] = _u1_exact;
-          _exactMap[form->uhat(1)->ID()] = form->uhat(1)->termTraced()->evaluate(_exactMap);
+          _exactMap[form->u(1)->ID()] = one;
+          // _exactMap[form->uhat(1)->ID()] = form->uhat(1)->termTraced()->evaluate(_exactMap);
           break;
         case 2:
-          _exactMap[form->u(1)->ID()] = _u1_exact;
-          _exactMap[form->u(2)->ID()] = _u2_exact;
-          _exactMap[form->uhat(1)->ID()] = form->uhat(1)->termTraced()->evaluate(_exactMap);
-          _exactMap[form->uhat(2)->ID()] = form->uhat(2)->termTraced()->evaluate(_exactMap);
+          _exactMap[form->u(1)->ID()] = one;
+          _exactMap[form->u(2)->ID()] = one;
+          // _exactMap[form->uhat(1)->ID()] = form->uhat(1)->termTraced()->evaluate(_exactMap);
+          // _exactMap[form->uhat(2)->ID()] = form->uhat(2)->termTraced()->evaluate(_exactMap);
           break;
         case 3:
-          _exactMap[form->u(1)->ID()] = _u1_exact;
-          _exactMap[form->u(2)->ID()] = _u2_exact;
-          _exactMap[form->u(3)->ID()] = _u3_exact;
-          _exactMap[form->uhat(1)->ID()] = form->uhat(1)->termTraced()->evaluate(_exactMap);
-          _exactMap[form->uhat(2)->ID()] = form->uhat(2)->termTraced()->evaluate(_exactMap);
-          _exactMap[form->uhat(3)->ID()] = form->uhat(3)->termTraced()->evaluate(_exactMap);
+          _exactMap[form->u(1)->ID()] = one;
+          _exactMap[form->u(2)->ID()] = one;
+          _exactMap[form->u(3)->ID()] = one;
+          // _exactMap[form->uhat(1)->ID()] = form->uhat(1)->termTraced()->evaluate(_exactMap);
+          // _exactMap[form->uhat(2)->ID()] = form->uhat(2)->termTraced()->evaluate(_exactMap);
+          // _exactMap[form->uhat(3)->ID()] = form->uhat(3)->termTraced()->evaluate(_exactMap);
           break;
       }
+      // _exactMap[form->rho()->ID()] = _rho_exact;
+      // _exactMap[form->T()->ID()] = _T_exact;
+      // switch (form->spaceDim())
+      // {
+      //   case 1:
+      //     _exactMap[form->u(1)->ID()] = _u1_exact;
+      //     _exactMap[form->uhat(1)->ID()] = form->uhat(1)->termTraced()->evaluate(_exactMap);
+      //     break;
+      //   case 2:
+      //     _exactMap[form->u(1)->ID()] = _u1_exact;
+      //     _exactMap[form->u(2)->ID()] = _u2_exact;
+      //     _exactMap[form->uhat(1)->ID()] = form->uhat(1)->termTraced()->evaluate(_exactMap);
+      //     _exactMap[form->uhat(2)->ID()] = form->uhat(2)->termTraced()->evaluate(_exactMap);
+      //     break;
+      //   case 3:
+      //     _exactMap[form->u(1)->ID()] = _u1_exact;
+      //     _exactMap[form->u(2)->ID()] = _u2_exact;
+      //     _exactMap[form->u(3)->ID()] = _u3_exact;
+      //     _exactMap[form->uhat(1)->ID()] = form->uhat(1)->termTraced()->evaluate(_exactMap);
+      //     _exactMap[form->uhat(2)->ID()] = form->uhat(2)->termTraced()->evaluate(_exactMap);
+      //     _exactMap[form->uhat(3)->ID()] = form->uhat(3)->termTraced()->evaluate(_exactMap);
+      //     break;
+      // }
     }
 
     void projectExactSolution(SolutionPtr solution)

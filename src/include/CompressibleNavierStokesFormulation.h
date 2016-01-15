@@ -30,6 +30,7 @@ namespace Camellia
 class CompressibleNavierStokesFormulation
 {
   BFPtr _bf;
+  RHSPtr _rhs;
 
   int _spaceDim;
   bool _useConformingTraces;
@@ -59,8 +60,8 @@ class CompressibleNavierStokesFormulation
 
   LinearTermPtr _t1, _t2, _t3; // tractions
 
-  BCPtr _bc, _zeroBC; // _zeroBC used when _neglectFluxesOnRHS = false, as it needs to be for GMG solves
-  RHSPtr _rhsForSolve, _rhsForResidual;
+  // BCPtr _bc, _zeroBC; // _zeroBC used when _neglectFluxesOnRHS = false, as it needs to be for GMG solves
+  // RHSPtr _rhsForSolve, _rhsForResidual;
 
   SolverPtr _solver;
 
@@ -70,7 +71,7 @@ class CompressibleNavierStokesFormulation
 
   SolutionPtr _backgroundFlow, _solnIncrement;
 
-  SolutionPtr _solution, _previousSolution; // solution at current and previous time steps
+  // SolutionPtr _solution, _previousSolution; // solution at current and previous time steps
 
   RefinementStrategyPtr _refinementStrategy, _hRefinementStrategy, _pRefinementStrategy;
 
@@ -210,7 +211,8 @@ public:
   RefinementStrategyPtr getRefinementStrategy();
 
   // ! Returns an RHSPtr corresponding to the vector forcing function f and the formulation.
-  RHSPtr rhs(FunctionPtr f, bool excludeFluxesAndTraces);
+  // RHSPtr rhs(FunctionPtr f, bool excludeFluxesAndTraces);
+  // RHSPtr rhs(bool excludeFluxesAndTraces);
 
   // ! Saves the solution(s) and mesh to an HDF5 format.
   void save(std::string prefixString);

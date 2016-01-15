@@ -240,25 +240,16 @@ CompressibleNavierStokesFormulation::CompressibleNavierStokesFormulation(MeshTop
   Space THatSpace = useConformingTraces ? HGRAD_SPACE_L2_TIME : L2;
   T_hat = _vf->traceVarSpaceOnly(S_T_hat, one * T, THatSpace);
 
-  FunctionPtr n = Function::normal();
+  // FunctionPtr n = Function::normal();
+  FunctionPtr n_x = TFunction<double>::normal(); // spatial normal
+  FunctionPtr n_xt = TFunction<double>::normalSpaceTime();
 
   // Too complicated at the moment to define where these other trace variables comes from
-  if (_spaceTime)
-  {
-    tc = _vf->fluxVar(S_tc);
-    tm1 = _vf->fluxVar(S_tm1);
-    if (spaceDim >= 2) tm2 = _vf->fluxVar(S_tm2);
-    if (spaceDim == 3) tm3 = _vf->fluxVar(S_tm3);
-    te = _vf->fluxVar(S_te);
-  }
-  else
-  {
-    tc = _vf->fluxVar(S_tc);
-    tm1 = _vf->fluxVar(S_tm1);
-    if (spaceDim >= 2) tm2 = _vf->fluxVar(S_tm2);
-    if (spaceDim == 3) tm3 = _vf->fluxVar(S_tm3);
-    te = _vf->fluxVar(S_te);
-  }
+  tc = _vf->fluxVar(S_tc);
+  tm1 = _vf->fluxVar(S_tm1);
+  if (spaceDim >= 2) tm2 = _vf->fluxVar(S_tm2);
+  if (spaceDim == 3) tm3 = _vf->fluxVar(S_tm3);
+  te = _vf->fluxVar(S_te);
 
   vc = _vf->testVar(S_vc, HGRAD);
   vm1 = _vf->testVar(S_vm1, HGRAD);
@@ -311,6 +302,7 @@ CompressibleNavierStokesFormulation::CompressibleNavierStokesFormulation(MeshTop
     _beta = Function::vectorize(beta_x, beta_y, beta_z);
 
   _bf = Teuchos::rcp( new BF(_vf) );
+  _rhs = RHS::rhs();
 
   vector<int> H1Order;
   if (_spaceTime)
@@ -323,12 +315,22 @@ CompressibleNavierStokesFormulation::CompressibleNavierStokesFormulation(MeshTop
   }
 
   MeshPtr mesh = Teuchos::rcp( new Mesh(meshTopo, _bf, H1Order, delta_k, _trialVariablePolyOrderAdjustments) ) ;
+  BCPtr bc = BC::bc();
 
-  _backgroundFlow = Solution::solution(mesh);
-  _solnIncrement = Solution::solution(mesh);
+  _backgroundFlow = Solution::solution(_bf, mesh, bc);
+  _solnIncrement = Solution::solution(_bf, mesh, bc);
 
-  mesh->registerSolution(_backgroundFlow);
-  mesh->registerSolution(_solnIncrement);
+  // Project ones as initial guess
+  map<int, FunctionPtr> initialGuess;
+  // FunctionPtr one = Function::constant(1);
+  initialGuess[this->rho()->ID()] = one;
+  initialGuess[this->u(1)->ID()] = one;
+  if (_spaceDim > 1)
+    initialGuess[this->u(2)->ID()] = one;
+  if (_spaceDim > 2)
+    initialGuess[this->u(3)->ID()] = one;
+  initialGuess[this->T()->ID()] = one;
+  _backgroundFlow->projectOntoMesh(initialGuess);
 
   // // Project ones as initial guess
   // map<int, FunctionPtr> initialGuess;
@@ -398,7 +400,10 @@ CompressibleNavierStokesFormulation::CompressibleNavierStokesFormulation(MeshTop
     case 1:
       _bf->addTerm(u1, S1->dx()); // D1 = _mu * grad u1
       _bf->addTerm(1./_mu * D11, S1); // (D1, S1)
-      _bf->addTerm(-u1_hat, S1*n->x());
+      _bf->addTerm(-u1_hat, S1*n_x->x());
+
+      _rhs->addTerm(-u1_prev * S1->dx()); // D1 = _mu * grad u1
+      _rhs->addTerm(-1./_mu * D11_prev * S1); // (D1, S1)
       break;
     case 2:
       _bf->addTerm(u1, S1->div()); // D1 = _mu * grad u1
@@ -409,8 +414,15 @@ CompressibleNavierStokesFormulation::CompressibleNavierStokesFormulation(MeshTop
       _bf->addTerm(1./_mu * D12, S1->y());
       _bf->addTerm(1./_mu * D21, S2->x()); // (D2, S2)
       _bf->addTerm(1./_mu * D22, S2->y());
-      _bf->addTerm(-u1_hat, S1*n);
-      _bf->addTerm(-u2_hat, S2*n);
+      _bf->addTerm(-u1_hat, S1*n_x);
+      _bf->addTerm(-u2_hat, S2*n_x);
+
+      _rhs->addTerm(-u1_prev * S1->div()); // D1 = _mu * grad u1
+      _rhs->addTerm(-u2_prev * S2->div()); // D2 = _mu * grad u2
+      _rhs->addTerm(-1./_mu * D11_prev * S1->x()); // (D1, S1)
+      _rhs->addTerm(-1./_mu * D12_prev * S1->y());
+      _rhs->addTerm(-1./_mu * D21_prev * S2->x()); // (D2, S2)
+      _rhs->addTerm(-1./_mu * D22_prev * S2->y());
       break;
     case 3:
       _bf->addTerm(u1, S1->div()); // D1 = _mu * grad u1
@@ -425,9 +437,22 @@ CompressibleNavierStokesFormulation::CompressibleNavierStokesFormulation(MeshTop
       _bf->addTerm(1./_mu * D31, S3->x()); // (D3, S3)
       _bf->addTerm(1./_mu * D32, S3->y());
       _bf->addTerm(1./_mu * D33, S3->z());
-      _bf->addTerm(-u1_hat, S1*n);
-      _bf->addTerm(-u2_hat, S2*n);
-      _bf->addTerm(-u3_hat, S3*n);
+      _bf->addTerm(-u1_hat, S1*n_x);
+      _bf->addTerm(-u2_hat, S2*n_x);
+      _bf->addTerm(-u3_hat, S3*n_x);
+
+      _rhs->addTerm(-u1_prev * S1->div()); // D1 = _mu * grad u1
+      _rhs->addTerm(-u2_prev * S2->div()); // D2 = _mu * grad u2
+      _rhs->addTerm(-u3_prev * S3->div()); // D3 = _mu * grad u3
+      _rhs->addTerm(-1./_mu * D11_prev * S1->x()); // (D1, S1)
+      _rhs->addTerm(-1./_mu * D12_prev * S1->y());
+      _rhs->addTerm(-1./_mu * D13_prev * S1->z());
+      _rhs->addTerm(-1./_mu * D21_prev * S2->x()); // (D2, S2)
+      _rhs->addTerm(-1./_mu * D22_prev * S2->y());
+      _rhs->addTerm(-1./_mu * D23_prev * S2->z());
+      _rhs->addTerm(-1./_mu * D31_prev * S3->x()); // (D3, S3)
+      _rhs->addTerm(-1./_mu * D32_prev * S3->y());
+      _rhs->addTerm(-1./_mu * D33_prev * S3->z());
       break;
     default:
       break;
@@ -439,21 +464,32 @@ CompressibleNavierStokesFormulation::CompressibleNavierStokesFormulation(MeshTop
     case 1:
       _bf->addTerm(-T, tau->dx()); // tau = Cp*mu/Pr * grad T
       _bf->addTerm(Pr()/(Cp()*mu()) * q1, tau); // (D1, S1)
-      _bf->addTerm(T_hat, tau*n->x());
+      _bf->addTerm(T_hat, tau*n_x->x());
+
+      _rhs->addTerm( T_prev * tau->dx()); // tau = Cp*_mu/Pr * grad T
+      _rhs->addTerm(-Pr()/(Cp()*mu()) * q1_prev * tau); // (D1, S1)
       break;
     case 2:
       _bf->addTerm(-T, tau->div()); // tau = Cp*mu/Pr * grad T
-      // _bf->addTerm(T, tau->x()->dx()+tau->y()->dy()); // tau = Cp*mu/Pr * grad T
       _bf->addTerm(Pr()/(Cp()*mu()) * q1, tau->x()); // (D1, S1)
       _bf->addTerm(Pr()/(Cp()*mu()) * q2, tau->y()); // (D1, S1)
-      _bf->addTerm(T_hat, tau*n);
+      _bf->addTerm(T_hat, tau*n_x);
+
+      _rhs->addTerm( T_prev * tau->div()); // tau = Cp*_mu/Pr * grad T
+      _rhs->addTerm(-Pr()/(Cp()*mu()) * q1_prev * tau->x()); // (D1, S1)
+      _rhs->addTerm(-Pr()/(Cp()*mu()) * q2_prev * tau->y());
       break;
     case 3:
       _bf->addTerm(-T, tau->div()); // tau = Cp*mu/Pr * grad T
       _bf->addTerm(Pr()/(Cp()*mu()) * q1, tau->x()); // (D1, S1)
       _bf->addTerm(Pr()/(Cp()*mu()) * q2, tau->y());
       _bf->addTerm(Pr()/(Cp()*mu()) * q3, tau->z());
-      _bf->addTerm(T_hat, tau*n);
+      _bf->addTerm(T_hat, tau*n_x);
+
+      _rhs->addTerm( T_prev * tau->div()); // tau = Cp*_mu/Pr * grad T
+      _rhs->addTerm(-Pr()/(Cp()*mu()) * q1_prev * tau->x()); // (D1, S1)
+      _rhs->addTerm(-Pr()/(Cp()*mu()) * q2_prev * tau->y());
+      _rhs->addTerm(-Pr()/(Cp()*mu()) * q3_prev * tau->z());
       break;
     default:
       break;
@@ -473,6 +509,10 @@ CompressibleNavierStokesFormulation::CompressibleNavierStokesFormulation(MeshTop
         _bf->addTerm(-rho, vc->dt());
       _bf->addTerm(-(u1_prev*rho+rho_prev*u1), vc->dx());
       _bf->addTerm(tc, vc);
+
+      if (_spaceTime)
+        _rhs->addTerm( rho_prev * vc->dt());
+      _rhs->addTerm( rho_prev*u1_prev * vc->dx());
       break;
     case 2:
       if (_spaceTime)
@@ -480,6 +520,11 @@ CompressibleNavierStokesFormulation::CompressibleNavierStokesFormulation(MeshTop
       _bf->addTerm(-(u1_prev*rho+rho_prev*u1), vc->dx());
       _bf->addTerm(-(u2_prev*rho+rho_prev*u2), vc->dy());
       _bf->addTerm(tc, vc);
+
+      if (_spaceTime)
+        _rhs->addTerm( rho_prev * vc->dt());
+      _rhs->addTerm( rho_prev*u1_prev * vc->dx());
+      _rhs->addTerm( rho_prev*u2_prev * vc->dy());
       break;
     case 3:
       if (_spaceTime)
@@ -488,6 +533,12 @@ CompressibleNavierStokesFormulation::CompressibleNavierStokesFormulation(MeshTop
       _bf->addTerm(-(u2_prev*rho+rho_prev*u2), vc->dy());
       _bf->addTerm(-(u3_prev*rho+rho_prev*u3), vc->dz());
       _bf->addTerm(tc, vc);
+
+      if (_spaceTime)
+        _rhs->addTerm( rho_prev * vc->dt());
+      _rhs->addTerm( rho_prev*u1_prev * vc->dx());
+      _rhs->addTerm( rho_prev*u2_prev * vc->dy());
+      _rhs->addTerm( rho_prev*u3_prev * vc->dz());
       break;
     default:
       break;
@@ -508,6 +559,14 @@ CompressibleNavierStokesFormulation::CompressibleNavierStokesFormulation(MeshTop
       _bf->addTerm(-R()*rho_prev*T, vm1->dx());
       _bf->addTerm( D11+D11-2./3*D11, vm1->dx());
       _bf->addTerm(tm1, vm1);
+
+      if (_spaceTime)
+      {
+        _rhs->addTerm(rho_prev*u1_prev * vm1->dt());
+      }
+      _rhs->addTerm( rho_prev*u1_prev*u1_prev * vm1->dx() );
+      _rhs->addTerm( R()*rho_prev*T_prev * vm1->dx() );
+      _rhs->addTerm(-(D11_prev+D11_prev-2./3*D11_prev) * vm1->dx() );
       break;
     case 2:
       if (_spaceTime)
@@ -537,6 +596,22 @@ CompressibleNavierStokesFormulation::CompressibleNavierStokesFormulation(MeshTop
       _bf->addTerm( D22+D22-2./3*D11-2./3*D22, vm2->dy());
       _bf->addTerm(tm1, vm1);
       _bf->addTerm(tm2, vm2);
+
+      if (_spaceTime)
+      {
+        _rhs->addTerm( rho_prev*u1_prev * vm1->dt() );
+        _rhs->addTerm( rho_prev*u2_prev * vm2->dt() );
+      }
+      _rhs->addTerm( rho_prev*u1_prev*u1_prev * vm1->dx());
+      _rhs->addTerm( rho_prev*u1_prev*u2_prev * vm1->dy());
+      _rhs->addTerm( rho_prev*u2_prev*u1_prev * vm2->dx());
+      _rhs->addTerm( rho_prev*u2_prev*u2_prev * vm2->dy());
+      _rhs->addTerm( R()*rho_prev*T_prev * vm1->dx());
+      _rhs->addTerm( R()*rho_prev*T_prev * vm2->dy());
+      _rhs->addTerm(-(D11_prev+D11_prev-2./3*D11_prev-2./3*D22_prev) * vm1->dx());
+      _rhs->addTerm(-(D12_prev+D21_prev) * vm1->dy());
+      _rhs->addTerm(-(D21_prev+D12_prev) * vm2->dx());
+      _rhs->addTerm(-(D22_prev+D22_prev-2./3*D11_prev-2./3*D22_prev) * vm2->dy());
       break;
     case 3:
       if (_spaceTime)
@@ -590,6 +665,34 @@ CompressibleNavierStokesFormulation::CompressibleNavierStokesFormulation(MeshTop
       _bf->addTerm(tm1, vm1);
       _bf->addTerm(tm2, vm2);
       _bf->addTerm(tm3, vm3);
+
+      if (_spaceTime)
+      {
+        _rhs->addTerm( rho_prev*u1_prev * vm1->dt() );
+        _rhs->addTerm( rho_prev*u2_prev * vm2->dt() );
+        _rhs->addTerm( rho_prev*u3_prev * vm3->dt() );
+      }
+      _rhs->addTerm( rho_prev*u1_prev*u1_prev * vm1->dx() );
+      _rhs->addTerm( rho_prev*u1_prev*u2_prev * vm1->dy() );
+      _rhs->addTerm( rho_prev*u1_prev*u3_prev * vm1->dz() );
+      _rhs->addTerm( rho_prev*u2_prev*u1_prev * vm2->dx() );
+      _rhs->addTerm( rho_prev*u2_prev*u2_prev * vm2->dy() );
+      _rhs->addTerm( rho_prev*u2_prev*u3_prev * vm2->dz() );
+      _rhs->addTerm( rho_prev*u3_prev*u1_prev * vm3->dx() );
+      _rhs->addTerm( rho_prev*u3_prev*u2_prev * vm3->dy() );
+      _rhs->addTerm( rho_prev*u3_prev*u3_prev * vm3->dz() );
+      _rhs->addTerm( R()*rho_prev*T_prev * vm1->dx());
+      _rhs->addTerm( R()*rho_prev*T_prev * vm2->dy());
+      _rhs->addTerm( R()*rho_prev*T_prev * vm3->dz());
+      _rhs->addTerm(-(D11_prev+D11_prev-2./3*D11_prev-2./3*D22_prev-2./3*D33_prev) * vm1->dx());
+      _rhs->addTerm(-(D12_prev+D21_prev) * vm1->dy());
+      _rhs->addTerm(-(D13_prev+D31_prev) * vm1->dz());
+      _rhs->addTerm(-(D21_prev+D12_prev) * vm2->dx());
+      _rhs->addTerm(-(D22_prev+D22_prev-2./3*D11_prev-2./3*D22_prev-2./3*D33_prev) * vm2->dy());
+      _rhs->addTerm(-(D23_prev+D32_prev) * vm2->dz());
+      _rhs->addTerm(-(D31_prev+D13_prev) * vm3->dx());
+      _rhs->addTerm(-(D32_prev+D23_prev) * vm3->dy());
+      _rhs->addTerm(-(D33_prev+D33_prev-2./3*D11_prev-2./3*D22_prev-2./3*D33_prev) * vm3->dz());
     default:
       break;
   }
@@ -650,6 +753,18 @@ CompressibleNavierStokesFormulation::CompressibleNavierStokesFormulation(MeshTop
       _bf->addTerm((D11_prev+D11_prev-2./3*D11_prev)*u1, ve->dx());
       _bf->addTerm(u1_prev*(D11+D11-2./3*D11), ve->dx());
       _bf->addTerm(te, ve);
+
+      if (_spaceTime)
+      {
+        _rhs->addTerm(Cv()*rho_prev*T_prev * ve->dt());
+        _rhs->addTerm(0.5*rho_prev*u1_prev*u1_prev * ve->dt());
+      }
+      _rhs->addTerm(Cv()*rho_prev*u1_prev*T_prev * ve->dx());
+      _rhs->addTerm(0.5*rho_prev*u1_prev*u1_prev*u1_prev * ve->dx());
+      _rhs->addTerm(R()*rho_prev*u1_prev*T_prev * ve->dx());
+      _rhs->addTerm(q1_prev * ve->dx());
+      _rhs->addTerm(-(D11_prev+D11_prev-2./3*D11_prev)*u1_prev * ve->dx());
+      _rhs->addTerm(-u1_prev*(D11_prev+D11_prev-2./3*D11_prev) * ve->dx());
       break;
     case 2:
       if (_spaceTime)
@@ -672,26 +787,6 @@ CompressibleNavierStokesFormulation::CompressibleNavierStokesFormulation(MeshTop
       _bf->addTerm(-(R()*rho_prev*T_prev*u2), ve->dy());
       _bf->addTerm(-(R()*u2_prev*T_prev*rho), ve->dy());
       _bf->addTerm(-(R()*rho_prev*u2_prev*T), ve->dy());
-      // if (_spaceTime)
-      // {
-      //   _bf->addTerm(-(Cv()*T_prev*rho+Cv()*rho_prev*T), ve->dt());
-      //   _bf->addTerm(-0.5*(u1_prev*u1_prev+u2_prev*u2_prev)*rho, ve->dt());
-      //   _bf->addTerm(-rho_prev*(u1_prev*u1+u2_prev*u2), ve->dt());
-      // }
-      // _bf->addTerm(-(Cv()*u1_prev*T_prev*rho+Cv()*rho_prev*T_prev*u1+Cv()*rho_prev*u1_prev*T), ve->dx());
-      // _bf->addTerm(-(Cv()*u2_prev*T_prev*rho+Cv()*rho_prev*T_prev*u2+Cv()*rho_prev*u2_prev*T), ve->dy());
-      // _bf->addTerm(-(0.5*(u1_prev*u1_prev+u2_prev*u2_prev)*u1_prev*rho), ve->dx());
-      // _bf->addTerm(-(0.5*(u1_prev*u1_prev+u2_prev*u2_prev)*u2_prev*rho), ve->dy());
-      // _bf->addTerm(-(0.5*rho_prev*(u1_prev*u1_prev+u2_prev*u2_prev)*u1), ve->dx());
-      // _bf->addTerm(-(0.5*rho_prev*(u1_prev*u1_prev+u2_prev*u2_prev)*u2), ve->dy());
-      // _bf->addTerm(-(rho_prev*u1_prev*(u1_prev*u1+u2_prev*u2)), ve->dx());
-      // _bf->addTerm(-(rho_prev*u2_prev*(u1_prev*u1+u2_prev*u2)), ve->dy());
-      // _bf->addTerm(-(R()*rho_prev*T_prev*u1), ve->dx());
-      // _bf->addTerm(-(R()*rho_prev*T_prev*u2), ve->dy());
-      // _bf->addTerm(-(R()*u1_prev*T_prev*rho), ve->dx());
-      // _bf->addTerm(-(R()*u2_prev*T_prev*rho), ve->dy());
-      // _bf->addTerm(-(R()*rho_prev*u1_prev*T), ve->dx());
-      // _bf->addTerm(-(R()*rho_prev*u2_prev*T), ve->dy());
       _bf->addTerm(-q1, ve->dx());
       _bf->addTerm(-q2, ve->dy());
       _bf->addTerm((D11_prev+D11_prev-2./3*(D11_prev+D22_prev))*u1, ve->dx());
@@ -703,6 +798,24 @@ CompressibleNavierStokesFormulation::CompressibleNavierStokesFormulation(MeshTop
       _bf->addTerm(u1_prev*(1*D21+1*D12), ve->dy());
       _bf->addTerm(u2_prev*(1*D22+1*D22-2./3*D11-2./3*D22), ve->dy());
       _bf->addTerm(te, ve);
+
+      if (_spaceTime)
+      {
+        _rhs->addTerm(Cv()*rho_prev*T_prev * ve->dt());
+        _rhs->addTerm(0.5*rho_prev*(u1_prev*u1_prev+u2_prev*u2_prev) * ve->dt());
+      }
+      _rhs->addTerm(Cv()*rho_prev*u1_prev*T_prev * ve->dx());
+      _rhs->addTerm(0.5*rho_prev*(u1_prev*u1_prev+u2_prev*u2_prev)*u1_prev * ve->dx());
+      _rhs->addTerm(R()*rho_prev*u1_prev*T_prev * ve->dx());
+      _rhs->addTerm(Cv()*rho_prev*u2_prev*T_prev * ve->dy());
+      _rhs->addTerm(0.5*rho_prev*(u1_prev*u1_prev+u2_prev*u2_prev)*u2_prev * ve->dy());
+      _rhs->addTerm(R()*rho_prev*u2_prev*T_prev * ve->dy());
+      _rhs->addTerm(q1_prev * ve->dx());
+      _rhs->addTerm(q2_prev * ve->dy());
+      _rhs->addTerm(-(D11_prev+D11_prev-2./3*(D11_prev+D22_prev))*u1_prev * ve->dx());
+      _rhs->addTerm(-(D12_prev+D21_prev)*u2_prev * ve->dx());
+      _rhs->addTerm(-(D21_prev+D12_prev)*u1_prev * ve->dy());
+      _rhs->addTerm(-(D22_prev+D22_prev-2./3*(D11_prev+D22_prev))*u2_prev * ve->dy());
       break;
     case 3:
       if (_spaceTime)
@@ -754,6 +867,33 @@ CompressibleNavierStokesFormulation::CompressibleNavierStokesFormulation(MeshTop
       _bf->addTerm(u2_prev*(D32+D23), ve->dz());
       _bf->addTerm(u3_prev*(D33+D33-2./3*D11-2./3*D22-2./3*D33), ve->dz());
       _bf->addTerm(te, ve);
+
+      if (_spaceTime)
+      {
+        _rhs->addTerm(Cv()*rho_prev*T_prev * ve->dt());
+        _rhs->addTerm(-0.5*rho_prev*(u1_prev*u1_prev+u2_prev*u2_prev+u3_prev*u3_prev) * ve->dt());
+      }
+      _rhs->addTerm(Cv()*rho_prev*u1_prev*T_prev * ve->dx());
+      _rhs->addTerm(Cv()*rho_prev*u2_prev*T_prev * ve->dy());
+      _rhs->addTerm(Cv()*rho_prev*u3_prev*T_prev * ve->dz());
+      _rhs->addTerm(0.5*rho_prev*(u1_prev*u1_prev+u2_prev*u2_prev+u3_prev*u3_prev)*u1_prev * ve->dx());
+      _rhs->addTerm(0.5*rho_prev*(u1_prev*u1_prev+u2_prev*u2_prev+u3_prev*u3_prev)*u2_prev * ve->dy());
+      _rhs->addTerm(0.5*rho_prev*(u1_prev*u1_prev+u2_prev*u2_prev+u3_prev*u3_prev)*u3_prev * ve->dz());
+      _rhs->addTerm(R()*rho_prev*u1_prev*T_prev * ve->dx());
+      _rhs->addTerm(R()*rho_prev*u2_prev*T_prev * ve->dy());
+      _rhs->addTerm(R()*rho_prev*u3_prev*T_prev * ve->dz());
+      _rhs->addTerm(q1_prev * ve->dx());
+      _rhs->addTerm(q2_prev * ve->dy());
+      _rhs->addTerm(q3_prev * ve->dz());
+      _rhs->addTerm(-(D11_prev+D11_prev-2./3*(D11_prev+D22_prev+D33_prev))*u1_prev * ve->dx());
+      _rhs->addTerm(-(D12_prev+D21_prev)*u2_prev * ve->dx());
+      _rhs->addTerm(-(D13_prev+D31_prev)*u3_prev * ve->dx());
+      _rhs->addTerm(-(D21_prev+D12_prev)*u1_prev * ve->dy());
+      _rhs->addTerm(-(D22_prev+D22_prev-2./3*(D11_prev+D22_prev+D33_prev))*u2_prev * ve->dy());
+      _rhs->addTerm(-(D31_prev+D13_prev)*u3_prev * ve->dy());
+      _rhs->addTerm(-(D31_prev+D13_prev)*u1_prev * ve->dz());
+      _rhs->addTerm(-(D32_prev+D23_prev)*u2_prev * ve->dz());
+      _rhs->addTerm(-(D33_prev+D33_prev-2./3*(D11_prev+D22_prev+D33_prev))*u3_prev * ve->dz());
       break;
     default:
       break;
@@ -886,9 +1026,12 @@ CompressibleNavierStokesFormulation::CompressibleNavierStokesFormulation(MeshTop
       _ips["Robust"]->addTerm( adj_Gm1 );
       _ips["Robust"]->addTerm( adj_Ge );
       // _ips["Robust"]->addTerm(Function::min(sqrt(_mu)*one/Function::h(),one)*v);
-      _ips["Robust"]->addTerm( Function::min(sqrt(mu())*one/Function::h(),one)*vc );
-      _ips["Robust"]->addTerm( Function::min(sqrt(mu())*one/Function::h(),one)*vm1 );
-      _ips["Robust"]->addTerm( Function::min(sqrt(mu())*one/Function::h(),one)*ve );
+      // _ips["Robust"]->addTerm( Function::min(sqrt(mu())*one/Function::h(),one)*vc );
+      // _ips["Robust"]->addTerm( Function::min(sqrt(mu())*one/Function::h(),one)*vm1 );
+      // _ips["Robust"]->addTerm( Function::min(sqrt(mu())*one/Function::h(),one)*ve );
+      _ips["Robust"]->addTerm( vc );
+      _ips["Robust"]->addTerm( vm1 );
+      _ips["Robust"]->addTerm( ve );
 
       _ips["CoupledRobust"] = Teuchos::rcp(new IP);
       // _ips["CoupledRobust"]->addTerm(Function::min(one/Function::h(),Function::constant(1./sqrt(_mu)))*tau);
@@ -920,9 +1063,12 @@ CompressibleNavierStokesFormulation::CompressibleNavierStokesFormulation(MeshTop
         _ips["CoupledRobust"]->addTerm( adj_Fe );
       }
       // _ips["CoupledRobust"]->addTerm(Function::min(sqrt(_mu)*one/Function::h(),one)*v);
-      _ips["CoupledRobust"]->addTerm( Function::min(sqrt(mu())*one/Function::h(),one)*vc );
-      _ips["CoupledRobust"]->addTerm( Function::min(sqrt(mu())*one/Function::h(),one)*vm1 );
-      _ips["CoupledRobust"]->addTerm( Function::min(sqrt(mu())*one/Function::h(),one)*ve );
+      // _ips["CoupledRobust"]->addTerm( Function::min(sqrt(mu())*one/Function::h(),one)*vc );
+      // _ips["CoupledRobust"]->addTerm( Function::min(sqrt(mu())*one/Function::h(),one)*vm1 );
+      // _ips["CoupledRobust"]->addTerm( Function::min(sqrt(mu())*one/Function::h(),one)*ve );
+      _ips["CoupledRobust"]->addTerm( vc );
+      _ips["CoupledRobust"]->addTerm( vm1 );
+      _ips["CoupledRobust"]->addTerm( ve );
 
       _ips["NSDecoupled"] = Teuchos::rcp(new IP);
       // _ips["NSDecoupled"]->addTerm(one/Function::h()*tau);
@@ -955,24 +1101,241 @@ CompressibleNavierStokesFormulation::CompressibleNavierStokesFormulation(MeshTop
       _ips["NSDecoupled"]->addTerm( ve );
       break;
     case 2:
-    _ips["Robust"] = Teuchos::rcp(new IP);
+      adj_Cc->addTerm( vc->dt() + u1_prev*vm1->dt() + u2_prev*vm2->dt() + Cv()*T_prev*ve->dt() + 0.5*(u1_prev*u1_prev+u2_prev*u2_prev)*ve->dt() );
+      adj_Cm1->addTerm( rho_prev*vm1->dt() + rho_prev*u1_prev*ve->dt() );
+      adj_Cm2->addTerm( rho_prev*vm2->dt() + rho_prev*u2_prev*ve->dt() );
+      adj_Ce->addTerm( Cv()*rho_prev*ve->dt() );
+      adj_Fc->addTerm( u1_prev*vc->dx() + u2_prev*vc->dy()
+          + u1_prev*u1_prev*vm1->dx() + u1_prev*u2_prev*vm1->dy() + u2_prev*u1_prev*vm2->dx() + u2_prev*u2_prev*vm2->dy()
+          + R()*T_prev*vm1->dx() + R()*T_prev*vm2->dy()
+          + Cv()*T_prev*u1_prev*ve->dx() + Cv()*T_prev*u2_prev*ve->dy()
+          + 0.5*(u1_prev*u1_prev+u2_prev*u2_prev)*(u1_prev*ve->dx() + u2_prev*ve->dy())
+          + R()*T_prev*u1_prev*ve->dx() + R()*T_prev*u2_prev*ve->dy() );
+      adj_Fm1->addTerm( rho_prev*vc->dx()
+          + 2*rho_prev*u1_prev*vm1->dx() + rho_prev*u2_prev*vm1->dy() + rho_prev*u2_prev*vm2->dx()
+          + Cv()*T_prev*rho_prev*ve->dx()
+          + 0.5*rho_prev*(u1_prev*u1_prev+u2_prev*u2_prev)*ve->dx()
+          + rho_prev*u1_prev*(u1_prev*ve->dx() + u2_prev*ve->dy()) + R()*T_prev*rho_prev*ve->dx()
+          - 2*D11_prev*ve->dx() - D12_prev*ve->dy() - D21_prev*ve->dy()
+          + 2./3*(D11_prev + D22_prev)*ve->dx() );
+      adj_Fm2->addTerm( rho_prev*vc->dy()
+          + rho_prev*u1_prev*vm1->dy() + rho_prev*u1_prev*vm2->dx()+ 2*rho_prev*u2_prev*vm2->dy()
+          + Cv()*T_prev*rho_prev*ve->dy()
+          + 0.5*rho_prev*(u1_prev*u1_prev+u2_prev*u2_prev)*ve->dy()
+          + rho_prev*u2_prev*(u1_prev*ve->dx() + u2_prev*ve->dy()) + R()*T_prev*rho_prev*ve->dy()
+          - D21_prev*ve->dx() - D12_prev*ve->dx() - 2*D22_prev*ve->dy()
+          + 2./3*(D11_prev + D22_prev)*ve->dy() );
+      adj_Fe->addTerm( R()*rho_prev*(vm1->dx() + vm2->dy()) + Cv()*rho_prev*(u1_prev*ve->dx()+u2_prev*ve->dy())
+          + R()*rho_prev*(u1_prev*ve->dx()+u2_prev*ve->dy()) );
+      adj_KD11->addTerm( vm1->dx() + vm1->dx() - 2./3*vm1->dx() - 2./3*vm2->dy()
+          + u1_prev*ve->dx() + u1_prev*ve->dx() - 2./3*u1_prev*ve->dx() - 2./3*u2_prev*ve->dy() );
+      adj_KD12->addTerm( vm1->dy() + vm2->dx() + u1_prev*ve->dy() + u2_prev*ve->dx() );
+      adj_KD21->addTerm( vm2->dx() + vm1->dy() + u2_prev*ve->dx() + u1_prev*ve->dy() );
+      adj_KD22->addTerm( vm2->dy() + vm2->dy() - 2./3*vm1->dx() - 2./3*vm2->dy()
+          + u2_prev*ve->dy() + u2_prev*ve->dy() - 2./3*u1_prev*ve->dx() - 2./3*u2_prev*ve->dy() );
+      adj_Kq1->addTerm( -ve->dx() );
+      adj_Kq2->addTerm( -ve->dy() );
+      adj_MD11->addTerm( 1./mu()*S1->x() );
+      adj_MD12->addTerm( 1./mu()*S1->y() );
+      adj_MD21->addTerm( 1./mu()*S2->x() );
+      adj_MD22->addTerm( 1./mu()*S2->y() );
+      adj_Mq1->addTerm( Pr()/(Cp()*mu())*tau->x() );
+      adj_Mq2->addTerm( Pr()/(Cp()*mu())*tau->y() );
+      adj_Gm1->addTerm( one*S1->div() );
+      adj_Gm2->addTerm( one*S2->div() );
+      adj_Ge->addTerm( -tau->div() );
+
+      _ips["ManualGraph"] = Teuchos::rcp(new IP);
+      _ips["ManualGraph"]->addTerm( adj_MD11 + adj_KD11 );
+      _ips["ManualGraph"]->addTerm( adj_MD12 + adj_KD12 );
+      _ips["ManualGraph"]->addTerm( adj_MD21 + adj_KD21 );
+      _ips["ManualGraph"]->addTerm( adj_MD22 + adj_KD22 );
+      _ips["ManualGraph"]->addTerm( adj_Mq1 + adj_Kq1 );
+      _ips["ManualGraph"]->addTerm( adj_Mq2 + adj_Kq2 );
+      if (_spaceTime)
+      {
+        _ips["ManualGraph"]->addTerm( adj_Gc - adj_Fc - adj_Cc );
+        _ips["ManualGraph"]->addTerm( adj_Gm1 - adj_Fm1 - adj_Cm1 );
+        _ips["ManualGraph"]->addTerm( adj_Gm2 - adj_Fm2 - adj_Cm2 );
+        _ips["ManualGraph"]->addTerm( adj_Ge - adj_Fe - adj_Ce );
+      }
+      else
+      {
+        _ips["ManualGraph"]->addTerm( adj_Gc - adj_Fc );
+        _ips["ManualGraph"]->addTerm( adj_Gm1 - adj_Fm1 );
+        _ips["ManualGraph"]->addTerm( adj_Gm2 - adj_Fm2 );
+        _ips["ManualGraph"]->addTerm( adj_Ge - adj_Fe );
+      }
+      _ips["ManualGraph"]->addTerm( vc );
+      _ips["ManualGraph"]->addTerm( vm1 );
+      _ips["ManualGraph"]->addTerm( vm2 );
+      _ips["ManualGraph"]->addTerm( ve );
+      _ips["ManualGraph"]->addTerm( S1);
+      _ips["ManualGraph"]->addTerm( S2 );
+      _ips["ManualGraph"]->addTerm( tau );
+
+      _ips["Robust"] = Teuchos::rcp(new IP);
+      // _ips["Robust"]->addTerm(Function::min(one/Function::h(),Function::constant(1./sqrt(_mu)))*tau);
+      _ips["Robust"]->addTerm( Function::min(one/Function::h(),Function::constant(1./sqrt(mu())))*mu()*adj_MD11);
+      _ips["Robust"]->addTerm( Function::min(one/Function::h(),Function::constant(1./sqrt(mu())))*mu()*adj_MD12);
+      _ips["Robust"]->addTerm( Function::min(one/Function::h(),Function::constant(1./sqrt(mu())))*mu()*adj_MD21);
+      _ips["Robust"]->addTerm( Function::min(one/Function::h(),Function::constant(1./sqrt(mu())))*mu()*adj_MD22);
+      _ips["Robust"]->addTerm( Function::min(one/Function::h(),Function::constant(1./sqrt(mu())))*Cp()*mu()/Pr()*adj_Mq1);
+      _ips["Robust"]->addTerm( Function::min(one/Function::h(),Function::constant(1./sqrt(mu())))*Cp()*mu()/Pr()*adj_Mq2);
+      // _ips["Robust"]->addTerm(sqrt(_mu)*v->grad());
+      _ips["Robust"]->addTerm( sqrt(mu())*one*adj_KD11 );
+      _ips["Robust"]->addTerm( sqrt(mu())*one*adj_KD12 );
+      _ips["Robust"]->addTerm( sqrt(mu())*one*adj_KD21 );
+      _ips["Robust"]->addTerm( sqrt(mu())*one*adj_KD22 );
+      _ips["Robust"]->addTerm( sqrt(Cp()*mu()/Pr())*one*adj_Kq1 );
+      _ips["Robust"]->addTerm( sqrt(Cp()*mu()/Pr())*one*adj_Kq2 );
+      if (_spaceTime)
+      {
+        // _ips["Robust"]->addTerm(_beta*v->grad() + v->dt());
+        _ips["Robust"]->addTerm( adj_Fc + adj_Cc );
+        _ips["Robust"]->addTerm( adj_Fm1 + adj_Cm1 );
+        _ips["Robust"]->addTerm( adj_Fm2 + adj_Cm2 );
+        _ips["Robust"]->addTerm( adj_Fe + adj_Ce );
+      }
+      else
+      {
+        // _ips["Robust"]->addTerm(_beta*v->grad());
+        _ips["Robust"]->addTerm( adj_Fc );
+        _ips["Robust"]->addTerm( adj_Fm1 );
+        _ips["Robust"]->addTerm( adj_Fm2 );
+        _ips["Robust"]->addTerm( adj_Fe );
+      }
+      // _ips["Robust"]->addTerm(tau->div());
+      _ips["Robust"]->addTerm( adj_Gc );
+      _ips["Robust"]->addTerm( adj_Gm1 );
+      _ips["Robust"]->addTerm( adj_Gm2 );
+      _ips["Robust"]->addTerm( adj_Ge );
+      // _ips["Robust"]->addTerm(Function::min(sqrt(_mu)*one/Function::h(),one)*v);
+      // _ips["Robust"]->addTerm( Function::min(sqrt(mu())*one/Function::h(),one)*vc );
+      // _ips["Robust"]->addTerm( Function::min(sqrt(mu())*one/Function::h(),one)*vm1 );
+      // _ips["Robust"]->addTerm( Function::min(sqrt(mu())*one/Function::h(),one)*vm2 );
+      // _ips["Robust"]->addTerm( Function::min(sqrt(mu())*one/Function::h(),one)*ve );
+      _ips["Robust"]->addTerm( vc );
+      _ips["Robust"]->addTerm( vm1 );
+      _ips["Robust"]->addTerm( vm2 );
+      _ips["Robust"]->addTerm( ve );
+
+      _ips["CoupledRobust"] = Teuchos::rcp(new IP);
+      // _ips["CoupledRobust"]->addTerm(Function::min(one/Function::h(),Function::constant(1./sqrt(_mu)))*tau);
+      _ips["CoupledRobust"]->addTerm( Function::min(one/Function::h(),Function::constant(1./sqrt(mu())))*mu()*adj_MD11);
+      _ips["CoupledRobust"]->addTerm( Function::min(one/Function::h(),Function::constant(1./sqrt(mu())))*mu()*adj_MD12);
+      _ips["CoupledRobust"]->addTerm( Function::min(one/Function::h(),Function::constant(1./sqrt(mu())))*mu()*adj_MD21);
+      _ips["CoupledRobust"]->addTerm( Function::min(one/Function::h(),Function::constant(1./sqrt(mu())))*mu()*adj_MD22);
+      _ips["CoupledRobust"]->addTerm( Function::min(one/Function::h(),Function::constant(1./sqrt(mu())))*Cp()*mu()/Pr()*adj_Mq1);
+      _ips["CoupledRobust"]->addTerm( Function::min(one/Function::h(),Function::constant(1./sqrt(mu())))*Cp()*mu()/Pr()*adj_Mq2);
+      // _ips["CoupledRobust"]->addTerm(sqrt(_mu)*v->grad());
+      _ips["CoupledRobust"]->addTerm( sqrt(mu())*one*adj_KD11 );
+      _ips["CoupledRobust"]->addTerm( sqrt(mu())*one*adj_KD12 );
+      _ips["CoupledRobust"]->addTerm( sqrt(mu())*one*adj_KD21 );
+      _ips["CoupledRobust"]->addTerm( sqrt(mu())*one*adj_KD22 );
+      _ips["CoupledRobust"]->addTerm( sqrt(Cp()*mu()/Pr())*one*adj_Kq1 );
+      _ips["CoupledRobust"]->addTerm( sqrt(Cp()*mu()/Pr())*one*adj_Kq2 );
+      if (_spaceTime)
+      {
+        // _ips["CoupledRobust"]->addTerm(tau->div() - v->dt() - beta*v->grad());
+        _ips["CoupledRobust"]->addTerm( adj_Gc - adj_Fc - adj_Cc );
+        _ips["CoupledRobust"]->addTerm( adj_Gm1 - adj_Fm1 - adj_Cm1 );
+        _ips["CoupledRobust"]->addTerm( adj_Gm2 - adj_Fm2 - adj_Cm2 );
+        _ips["CoupledRobust"]->addTerm( adj_Ge - adj_Fe - adj_Ce );
+        // _ips["CoupledRobust"]->addTerm(_beta*v->grad() + v->dt());
+        _ips["CoupledRobust"]->addTerm( adj_Fc + adj_Cc );
+        _ips["CoupledRobust"]->addTerm( adj_Fm1 + adj_Cm1 );
+        _ips["CoupledRobust"]->addTerm( adj_Fm2 + adj_Cm2 );
+        _ips["CoupledRobust"]->addTerm( adj_Fe + adj_Ce );
+      }
+      else
+      {
+        // _ips["CoupledRobust"]->addTerm(tau->div() - beta*v->grad());
+        _ips["CoupledRobust"]->addTerm( adj_Gc - adj_Fc );
+        _ips["CoupledRobust"]->addTerm( adj_Gm1 - adj_Fm1 );
+        _ips["CoupledRobust"]->addTerm( adj_Gm2 - adj_Fm2 );
+        _ips["CoupledRobust"]->addTerm( adj_Ge - adj_Fe );
+        // _ips["CoupledRobust"]->addTerm(_beta*v->grad());
+        _ips["CoupledRobust"]->addTerm( adj_Fc );
+        _ips["CoupledRobust"]->addTerm( adj_Fm1 );
+        _ips["CoupledRobust"]->addTerm( adj_Fm2 );
+        _ips["CoupledRobust"]->addTerm( adj_Fe );
+      }
+      // _ips["CoupledRobust"]->addTerm(Function::min(sqrt(_mu)*one/Function::h(),one)*v);
+      // _ips["CoupledRobust"]->addTerm( Function::min(sqrt(mu())*one/Function::h(),one)*vc );
+      // _ips["CoupledRobust"]->addTerm( Function::min(sqrt(mu())*one/Function::h(),one)*vm1 );
+      // _ips["CoupledRobust"]->addTerm( Function::min(sqrt(mu())*one/Function::h(),one)*vm2 );
+      // _ips["CoupledRobust"]->addTerm( Function::min(sqrt(mu())*one/Function::h(),one)*ve );
+      _ips["CoupledRobust"]->addTerm( vc );
+      _ips["CoupledRobust"]->addTerm( vm1 );
+      _ips["CoupledRobust"]->addTerm( vm2 );
+      _ips["CoupledRobust"]->addTerm( ve );
+
+      _ips["NSDecoupled"] = Teuchos::rcp(new IP);
+      _ips["NSDecoupled"]->addTerm( mu()/Function::h()*adj_MD11 );
+      _ips["NSDecoupled"]->addTerm( mu()/Function::h()*adj_MD12 );
+      _ips["NSDecoupled"]->addTerm( mu()/Function::h()*adj_MD21 );
+      _ips["NSDecoupled"]->addTerm( mu()/Function::h()*adj_MD22 );
+      _ips["NSDecoupled"]->addTerm( Cp()*mu()/Pr()/Function::h()*adj_Mq1 );
+      _ips["NSDecoupled"]->addTerm( Cp()*mu()/Pr()/Function::h()*adj_Mq2 );
+      _ips["NSDecoupled"]->addTerm( adj_KD11 );
+      _ips["NSDecoupled"]->addTerm( adj_KD12 );
+      _ips["NSDecoupled"]->addTerm( adj_KD21 );
+      _ips["NSDecoupled"]->addTerm( adj_KD22 );
+      _ips["NSDecoupled"]->addTerm( adj_Kq1 );
+      _ips["NSDecoupled"]->addTerm( adj_Kq2 );
+      if (_spaceTime)
+      {
+        _ips["NSDecoupled"]->addTerm( adj_Fc + adj_Cc );
+        _ips["NSDecoupled"]->addTerm( adj_Fm1 + adj_Cm1 );
+        _ips["NSDecoupled"]->addTerm( adj_Fm2 + adj_Cm2 );
+        _ips["NSDecoupled"]->addTerm( adj_Fe + adj_Ce );
+      }
+      else
+      {
+        _ips["NSDecoupled"]->addTerm( adj_Fc );
+        _ips["NSDecoupled"]->addTerm( adj_Fm1 );
+        _ips["NSDecoupled"]->addTerm( adj_Fm2 );
+        _ips["NSDecoupled"]->addTerm( adj_Fe );
+      }
+      _ips["NSDecoupled"]->addTerm( adj_Gc );
+      _ips["NSDecoupled"]->addTerm( adj_Gm1 );
+      _ips["NSDecoupled"]->addTerm( adj_Gm2 );
+      _ips["NSDecoupled"]->addTerm( adj_Ge );
+      _ips["NSDecoupled"]->addTerm( vc );
+      _ips["NSDecoupled"]->addTerm( vm1 );
+      _ips["NSDecoupled"]->addTerm( vm2 );
+      _ips["NSDecoupled"]->addTerm( ve );
       break;
     case 3:
       break;
   }
 
+  IPPtr ip = _ips.at(normName);
 
   // set the inner product to the graph norm:
-  setIP( _ips[normName] );
+  // setIP( _ips[normName] );
 
-  this->setForcingFunction(Teuchos::null); // will default to zero
+  // this->setForcingFunction(Teuchos::null); // will default to zero
+  // _rhsForSolve = this->rhs(_neglectFluxesOnRHS);
+  // _rhsForResidual = this->rhs(false);
+  // _solnIncrement->setRHS(_rhsForSolve);
 
-  _bc = BC::bc();
+  // _solnIncrement->setBC(bc);
+  _solnIncrement->setRHS(_rhs);
+  _solnIncrement->setIP(ip);
+  // _solnIncrement->setRHS(rhs);
 
-  _solnIncrement->setBC(_bc);
+  mesh->registerSolution(_backgroundFlow);
+  mesh->registerSolution(_solnIncrement);
+
+  // LinearTermPtr residual = rhs->linearTerm() - _bf->testFunctional(_solnIncrement,true); // false: don't exclude boundary terms
+  // LinearTermPtr residual = _rhsForResidual->linearTerm() - _bf->testFunctional(_solnIncrement,false); // false: don't exclude boundary terms
+  // LinearTermPtr residual = _rhsForSolve->linearTerm() - _bf->testFunctional(_solnIncrement,true); // false: don't exclude boundary terms
 
   double energyThreshold = 0.20;
   _refinementStrategy = Teuchos::rcp( new RefinementStrategy(_solnIncrement, energyThreshold) );
+  // _refinementStrategy = Teuchos::rcp( new RefinementStrategy( mesh, residual, _ips[normName], energyThreshold ) );
 
   double maxDouble = std::numeric_limits<double>::max();
   double maxP = 20;
@@ -1010,18 +1373,6 @@ CompressibleNavierStokesFormulation::CompressibleNavierStokesFormulation(MeshTop
   _solver = Solver::getDirectSolver();
 
   _nonlinearIterationCount = 0;
-
-  // Project ones as initial guess
-  map<int, FunctionPtr> initialGuess;
-  // FunctionPtr one = Function::constant(1);
-  initialGuess[this->rho()->ID()] = one;
-  initialGuess[this->u(1)->ID()] = one;
-  if (_spaceDim > 1)
-    initialGuess[this->u(2)->ID()] = one;
-  if (_spaceDim > 2)
-    initialGuess[this->u(3)->ID()] = one;
-  initialGuess[this->T()->ID()] = one;
-  _backgroundFlow->projectOntoMesh(initialGuess);
 
 }
 
@@ -1066,7 +1417,8 @@ void CompressibleNavierStokesFormulation::addTemperatureTraceCondition(SpatialFi
   }
   else
   {
-    SolutionPtr backgroundFlowWeakReference = Teuchos::rcp(_backgroundFlow.get(), false );
+    // SolutionPtr backgroundFlowWeakReference = Teuchos::rcp(_backgroundFlow.get(), false );
+    SolutionPtr backgroundFlowWeakReference = _backgroundFlow;
     FunctionPtr T_hat_prev = Function::solution(T_hat,backgroundFlowWeakReference);
     _solnIncrement->bc()->addDirichlet(T_hat, region, T_exact - T_hat_prev);
   }
@@ -1076,15 +1428,17 @@ void CompressibleNavierStokesFormulation::addMassFluxCondition(SpatialFilterPtr 
 {
   VarPtr tc = this->tc();
 
-  FunctionPtr n, n_x, n_y, n_z, n_t;
-  if (_spaceTime)
-    n = Function::normalSpaceTime();
-  else
-    n = Function::normal();
+  // if (_spaceTime)
+  //   n = Function::normalSpaceTime();
+  // else
+  //   n = Function::normal();
+  FunctionPtr n = TFunction<double>::normal(); // spatial normal
+  FunctionPtr n_xt = TFunction<double>::normalSpaceTime();
+  FunctionPtr n_x, n_y, n_z, n_t;
   n_x = n->x();
-  if (_spaceDim>=2) n_y = n->y();
-  if (_spaceDim==3) n_z = n->z();
-  if (_spaceTime) n_t = n->t();
+  if (_spaceDim>=2) n_y = n_x->y();
+  if (_spaceDim==3) n_z = n_x->z();
+  if (_spaceTime) n_t = n_xt->t();
 
   // FunctionPtr beta_x, beta_y, beta_z;
   // if (_spaceDim == 1)
@@ -1122,7 +1476,8 @@ void CompressibleNavierStokesFormulation::addMassFluxCondition(SpatialFilterPtr 
   }
   else
   {
-    SolutionPtr backgroundFlowWeakReference = Teuchos::rcp(_backgroundFlow.get(), false );
+    // SolutionPtr backgroundFlowWeakReference = Teuchos::rcp(_backgroundFlow.get(), false );
+    SolutionPtr backgroundFlowWeakReference = _backgroundFlow;
     FunctionPtr tc_prev = Function::solution(tc,backgroundFlowWeakReference);
     _solnIncrement->bc()->addDirichlet(tc, region, tc_exact - tc_prev);
   }
@@ -1135,15 +1490,17 @@ void CompressibleNavierStokesFormulation::addMomentumFluxCondition(SpatialFilter
   if (_spaceDim>=2) tm2 = this->tm(2);
   if (_spaceDim==3) tm3 = this->tm(3);
 
-  FunctionPtr n, n_x, n_y, n_z, n_t;
-  if (_spaceTime)
-    n = Function::normalSpaceTime();
-  else
-    n = Function::normal();
+  FunctionPtr n_x, n_y, n_z, n_t;
+  FunctionPtr n = TFunction<double>::normal(); // spatial normal
+  FunctionPtr n_xt = TFunction<double>::normalSpaceTime();
+  // if (_spaceTime)
+  //   n = Function::normalSpaceTime();
+  // else
+  //   n = Function::normal();
   n_x = n->x();
   if (_spaceDim>=2) n_y = n->y();
   if (_spaceDim==3) n_z = n->z();
-  if (_spaceTime) n_t = n->t();
+  if (_spaceTime) n_t = n_xt->t();
 
   FunctionPtr D1_exact, D2_exact, D3_exact;
   if (_spaceDim==1) D1_exact = u_exact->dx();
@@ -1188,8 +1545,9 @@ void CompressibleNavierStokesFormulation::addMomentumFluxCondition(SpatialFilter
   switch (_spaceDim)
   {
     case 1:
-      tm1_exact = (rho_exact*u_exact*u_exact + R()*rho_exact*T_exact
-          - (D1_exact+D1_exact-2./3*D1_exact))*n_x;
+      // tm1_exact = (rho_exact*u_exact*u_exact + R()*rho_exact*T_exact
+      //     - (D1_exact+D1_exact-2./3*D1_exact))*n_x;
+      tm1_exact = (rho_exact*u_exact*u_exact + R()*rho_exact*T_exact)*n_x;
       if (_spaceTime)
         tm1_exact = tm1_exact + rho_exact*u_exact*n_t;
       break;
@@ -1251,7 +1609,8 @@ void CompressibleNavierStokesFormulation::addMomentumFluxCondition(SpatialFilter
   }
   else
   {
-    SolutionPtr backgroundFlowWeakReference = Teuchos::rcp(_backgroundFlow.get(), false );
+    // SolutionPtr backgroundFlowWeakReference = Teuchos::rcp(_backgroundFlow.get(), false );
+    SolutionPtr backgroundFlowWeakReference = _backgroundFlow;
     FunctionPtr tm1_prev, tm2_prev, tm3_prev;
     tm1_prev = Function::solution(tm1, backgroundFlowWeakReference);
     if (_spaceDim >= 2) tm2_prev = Function::solution(tm2, backgroundFlowWeakReference);
@@ -1266,15 +1625,17 @@ void CompressibleNavierStokesFormulation::addEnergyFluxCondition(SpatialFilterPt
 {
   VarPtr te = this->te();
 
-  FunctionPtr n, n_x, n_y, n_z, n_t;
-  if (_spaceTime)
-    n = Function::normalSpaceTime();
-  else
-    n = Function::normal();
+  FunctionPtr n_x, n_y, n_z, n_t;
+  FunctionPtr n = TFunction<double>::normal(); // spatial normal
+  FunctionPtr n_xt = TFunction<double>::normalSpaceTime();
+  // if (_spaceTime)
+  //   n = Function::normalSpaceTime();
+  // else
+  //   n = Function::normal();
   n_x = n->x();
   if (_spaceDim>=2) n_y = n->y();
   if (_spaceDim==3) n_z = n->z();
-  if (_spaceTime) n_t = n->t();
+  if (_spaceTime) n_t = n_xt->t();
 
   // FunctionPtr beta_x, beta_y, beta_z;
   // if (_spaceDim == 1)
@@ -1302,8 +1663,9 @@ void CompressibleNavierStokesFormulation::addEnergyFluxCondition(SpatialFilterPt
   switch (_spaceDim)
   {
     case 1:
-      te_exact = (Cv()*rho_exact*u_exact*T_exact + 0.5*rho_exact*u_exact*u_exact*u_exact + R()*rho_exact*u_exact*T_exact
-          + q_exact - u_exact*(D1_exact+D1_exact-2./3*D1_exact))*n_x;
+      // te_exact = (Cv()*rho_exact*u_exact*T_exact + 0.5*rho_exact*u_exact*u_exact*u_exact + R()*rho_exact*u_exact*T_exact
+      //     + q_exact - u_exact*(D1_exact+D1_exact-2./3*D1_exact))*n_x;
+      te_exact = (Cv()*rho_exact*u_exact*T_exact + 0.5*rho_exact*u_exact*u_exact*u_exact + R()*rho_exact*u_exact*T_exact)*n_x;
       if (_spaceTime) te_exact = te_exact + (Cv()*rho_exact*T_exact+0.5*u_exact*u_exact)*n_t;
       break;
     case 2:
@@ -1358,7 +1720,8 @@ void CompressibleNavierStokesFormulation::addEnergyFluxCondition(SpatialFilterPt
   }
   else
   {
-    SolutionPtr backgroundFlowWeakReference = Teuchos::rcp(_backgroundFlow.get(), false );
+    // SolutionPtr backgroundFlowWeakReference = Teuchos::rcp(_backgroundFlow.get(), false );
+    SolutionPtr backgroundFlowWeakReference = _backgroundFlow;
     FunctionPtr te_prev = Function::solution(te,backgroundFlowWeakReference);
     _solnIncrement->bc()->addDirichlet(te, region, te_exact - te_prev);
   }
@@ -1422,83 +1785,25 @@ void CompressibleNavierStokesFormulation::CHECK_VALID_COMPONENT(int i) // throws
 //   return f_stokes + convectiveTerm;
 // }
 
-void CompressibleNavierStokesFormulation::setForcingFunction(FunctionPtr forcingFunction)
-{
-  // set the RHS:
-  if (forcingFunction == Teuchos::null)
-  {
-    FunctionPtr scalarZero = Function::zero();
-    if (_spaceDim == 1)
-      forcingFunction = scalarZero;
-    else if (_spaceDim == 2)
-      forcingFunction = Function::vectorize(scalarZero, scalarZero);
-    else if (_spaceDim == 3)
-      forcingFunction = Function::vectorize(scalarZero, scalarZero, scalarZero);
-    else
-      TEUCHOS_TEST_FOR_EXCEPTION(true, std::invalid_argument, "Unsupported space dimension");
-  }
-
-  _rhsForSolve = this->rhs(forcingFunction, _neglectFluxesOnRHS);
-  _rhsForResidual = this->rhs(forcingFunction, false);
-  _solnIncrement->setRHS(_rhsForSolve);
-}
-
-// void CompressibleNavierStokesFormulation::initializeSolution(MeshTopologyPtr meshTopo, int fieldPolyOrder, int delta_k,
-//     FunctionPtr forcingFunction, int temporalPolyOrder)
+// void CompressibleNavierStokesFormulation::setForcingFunction(FunctionPtr forcingFunction)
 // {
-//   this->initializeSolution(meshTopo, fieldPolyOrder, delta_k, forcingFunction, "", temporalPolyOrder);
-// }
-//
-// void CompressibleNavierStokesFormulation::initializeSolution(std::string filePrefix, int fieldPolyOrder, int delta_k,
-//     FunctionPtr forcingFunction, int temporalPolyOrder)
-// {
-//   this->initializeSolution(Teuchos::null, fieldPolyOrder, delta_k, forcingFunction, filePrefix, temporalPolyOrder);
-// }
-//
-// void CompressibleNavierStokesFormulation::initializeSolution(MeshTopologyPtr meshTopo, int fieldPolyOrder, int delta_k,
-//     FunctionPtr forcingFunction, string savedSolutionAndMeshPrefix, int temporalPolyOrder)
-// {
-//   _haveOutflowConditionsImposed = false;
-//   BCPtr bc = BC::bc();
-//
-//   vector<int> H1Order {fieldPolyOrder + 1};
-//   MeshPtr mesh;
-//   if (savedSolutionAndMeshPrefix == "")
+//   // set the RHS:
+//   if (forcingFunction == Teuchos::null)
 //   {
-//     if (_spaceTime) H1Order.push_back(temporalPolyOrder); // "H1Order" is a bit misleading for space-time; in fact in BasisFactory we ensure that the polynomial order in time is whatever goes in this slot, regardless of function space.  This is disanalogous to what happens in space, so we might want to revisit that at some point.
-//     mesh = Teuchos::rcp( new Mesh(meshTopo, _bf, H1Order, delta_k, _trialVariablePolyOrderAdjustments) ) ;
-//     _solution = Solution::solution(mesh,bc);
-//   }
-//   else
-//   {
-//     mesh = MeshFactory::loadFromHDF5(_bf, savedSolutionAndMeshPrefix+".mesh");
-//     _solution = Solution::solution(mesh, bc);
-//     _solution->loadFromHDF5(savedSolutionAndMeshPrefix+".soln");
+//     FunctionPtr scalarZero = Function::zero();
+//     if (_spaceDim == 1)
+//       forcingFunction = scalarZero;
+//     else if (_spaceDim == 2)
+//       forcingFunction = Function::vectorize(scalarZero, scalarZero);
+//     else if (_spaceDim == 3)
+//       forcingFunction = Function::vectorize(scalarZero, scalarZero, scalarZero);
+//     else
+//       TEUCHOS_TEST_FOR_EXCEPTION(true, std::invalid_argument, "Unsupported space dimension");
 //   }
 //
-//   RHSPtr rhs = this->rhs(forcingFunction, _neglectFluxesOnRHS); // in transient case, this will refer to _previousSolution
-//   IPPtr ip = _bf->graphNorm();
-//
-// //  cout << "graph norm for Stokes BF:\n";
-// //  ip->printInteractions();
-//
-//   _solution->setRHS(rhs);
-//   _solution->setIP(ip);
-//
-//   mesh->registerSolution(_solution); // will project both time steps during refinements...
-//
-//   LinearTermPtr residual = rhs->linearTerm() - _bf->testFunctional(_solution,false); // false: don't exclude boundary terms
-//
-//   double energyThreshold = 0.2;
-//   _refinementStrategy = Teuchos::rcp( new RefinementStrategy( mesh, residual, ip, energyThreshold ) );
-//
-//   double maxDouble = std::numeric_limits<double>::max();
-//   double maxP = 20;
-//   _hRefinementStrategy = Teuchos::rcp( new RefinementStrategy( mesh, residual, ip, energyThreshold, 0, 0, false ) );
-//   _pRefinementStrategy = Teuchos::rcp( new RefinementStrategy( mesh, residual, ip, energyThreshold, maxDouble, maxP, true ) );
-//
-//   _time = 0;
-//   _t->setTime(_time);
+//   _rhsForSolve = this->rhs(forcingFunction, _neglectFluxesOnRHS);
+//   _rhsForResidual = this->rhs(forcingFunction, false);
+//   _solnIncrement->setRHS(_rhsForSolve);
 // }
 
 bool CompressibleNavierStokesFormulation::isSpaceTime() const
@@ -1610,6 +1915,11 @@ void CompressibleNavierStokesFormulation::setRefinementStrategy(RefinementStrate
 void CompressibleNavierStokesFormulation::refine()
 {
   _refinementStrategy->refine();
+  // _nonlinearIterationCount = 0;
+  // this->clearSolutionIncrement();
+  // _solnIncrement->setRHS(_rhsForResidual);
+  // _refinementStrategy->refine();
+  // _solnIncrement->setRHS(_rhsForSolve);
 }
 
 void CompressibleNavierStokesFormulation::hRefine()
@@ -1632,374 +1942,437 @@ void CompressibleNavierStokesFormulation::setSolver(SolverPtr solver)
   _solver = solver;
 }
 
-RHSPtr CompressibleNavierStokesFormulation::rhs(FunctionPtr forcingFunction, bool excludeFluxesAndTraces)
-{
-
-  // TO DO : UPDATE THIS!
-  RHSPtr rhs = RHS::rhs();
-
-  // SolutionPtr backgroundFlowWeakReference = Teuchos::rcp(_backgroundFlow.get(), false);
-  SolutionPtr backgroundFlowWeakReference = _backgroundFlow;
-
-  FunctionPtr rho_prev;
-  FunctionPtr u1_prev, u2_prev, u3_prev;
-  FunctionPtr T_prev;
-  FunctionPtr D11_prev, D12_prev, D13_prev, D21_prev, D22_prev, D23_prev, D31_prev, D32_prev, D33_prev;
-  FunctionPtr q1_prev, q2_prev, q3_prev;
-
-  VarPtr vc;
-  VarPtr vm1, vm2, vm3;
-  VarPtr ve;
-  VarPtr S1, S2, S3;
-  VarPtr tau;
-
-  switch (_spaceDim)
-  {
-    case 1:
-      vc = this->vc();
-      vm1 = this->vm(1);
-      ve = this->ve();
-      S1 = this->S(1);
-      tau = this->tau();
-      rho_prev = Function::solution(this->rho(),backgroundFlowWeakReference);
-      u1_prev = Function::solution(this->u(1),backgroundFlowWeakReference);
-      T_prev  = Function::solution(this->T(),backgroundFlowWeakReference);
-      D11_prev = Function::solution(this->D(1,1),backgroundFlowWeakReference);
-      q1_prev = Function::solution(this->q(1),backgroundFlowWeakReference);
-      break;
-    case 2:
-      vc = this->vc();
-      vm1 = this->vm(1);
-      vm2 = this->vm(2);
-      ve = this->ve();
-      S1 = this->S(1);
-      S2 = this->S(2);
-      tau = this->tau();
-      rho_prev = Function::solution(this->rho(),backgroundFlowWeakReference);
-      u1_prev = Function::solution(this->u(1),backgroundFlowWeakReference);
-      u2_prev = Function::solution(this->u(2),backgroundFlowWeakReference);
-      T_prev  = Function::solution(this->T(),backgroundFlowWeakReference);
-      D11_prev = Function::solution(this->D(1,1),backgroundFlowWeakReference);
-      D12_prev = Function::solution(this->D(1,2),backgroundFlowWeakReference);
-      D21_prev = Function::solution(this->D(2,1),backgroundFlowWeakReference);
-      D22_prev = Function::solution(this->D(2,2),backgroundFlowWeakReference);
-      q1_prev = Function::solution(this->q(1),backgroundFlowWeakReference);
-      q2_prev = Function::solution(this->q(2),backgroundFlowWeakReference);
-      break;
-    case 3:
-      vc = this->vc();
-      vm1 = this->vm(1);
-      vm2 = this->vm(2);
-      vm3 = this->vm(3);
-      ve = this->ve();
-      S1 = this->S(1);
-      S2 = this->S(2);
-      S3 = this->S(3);
-      tau = this->tau();
-      rho_prev = Function::solution(this->rho(),backgroundFlowWeakReference);
-      u1_prev = Function::solution(this->u(1),backgroundFlowWeakReference);
-      u2_prev = Function::solution(this->u(2),backgroundFlowWeakReference);
-      u3_prev = Function::solution(this->u(3),backgroundFlowWeakReference);
-      T_prev  = Function::solution(this->T(),backgroundFlowWeakReference);
-      D11_prev = Function::solution(this->D(1,1),backgroundFlowWeakReference);
-      D12_prev = Function::solution(this->D(1,2),backgroundFlowWeakReference);
-      D13_prev = Function::solution(this->D(1,3),backgroundFlowWeakReference);
-      D21_prev = Function::solution(this->D(2,1),backgroundFlowWeakReference);
-      D22_prev = Function::solution(this->D(2,2),backgroundFlowWeakReference);
-      D23_prev = Function::solution(this->D(2,3),backgroundFlowWeakReference);
-      D31_prev = Function::solution(this->D(3,1),backgroundFlowWeakReference);
-      D32_prev = Function::solution(this->D(3,2),backgroundFlowWeakReference);
-      D33_prev = Function::solution(this->D(3,3),backgroundFlowWeakReference);
-      q1_prev = Function::solution(this->q(1),backgroundFlowWeakReference);
-      q2_prev = Function::solution(this->q(2),backgroundFlowWeakReference);
-      q3_prev = Function::solution(this->q(3),backgroundFlowWeakReference);
-      break;
-
-    default:
-      break;
-  }
-
-  // if (f != Teuchos::null)
-  // {
-  //   rhs->addTerm( f->x() * v1 );
-  //   rhs->addTerm( f->y() * v2 );
-  //   if (_spaceDim == 3) rhs->addTerm( f->z() * v3 );
-  // }
-
-  // FunctionPtr beta_x, beta_y, beta_z;
-  // if (_spaceDim == 1)
-  //   beta_x = _beta;
-  // else
-  //   beta_x = _beta->x();
-  // if (_spaceDim >= 2) beta_y = _beta->y();
-  // if (_spaceDim == 3) beta_z = _beta->z();
-
-  // S terms:
-  switch (_spaceDim)
-  {
-    case 1:
-      rhs->addTerm(-u1_prev * S1->dx()); // D1 = _mu * grad u1
-      rhs->addTerm(-1./_mu * D11_prev * S1); // (D1, S1)
-      break;
-    case 2:
-      rhs->addTerm(-u1_prev * S1->div()); // D1 = _mu * grad u1
-      rhs->addTerm(-u2_prev * S2->div()); // D2 = _mu * grad u2
-      // rhs->addTerm(-u1_prev * (S1->x()->dx() + S1->y()->dy())); // D1 = _mu * grad u1
-      // rhs->addTerm(-u2_prev * (S2->x()->dx() + S2->y()->dy())); // D2 = _mu * grad u2
-      rhs->addTerm(-1./_mu * D11_prev * S1->x()); // (D1, S1)
-      rhs->addTerm(-1./_mu * D12_prev * S1->y());
-      rhs->addTerm(-1./_mu * D21_prev * S2->x()); // (D2, S2)
-      rhs->addTerm(-1./_mu * D22_prev * S2->y());
-      break;
-    case 3:
-      rhs->addTerm(-u1_prev * S1->div()); // D1 = _mu * grad u1
-      rhs->addTerm(-u2_prev * S2->div()); // D2 = _mu * grad u2
-      rhs->addTerm(-u3_prev * S3->div()); // D3 = _mu * grad u3
-      rhs->addTerm(-1./_mu * D11_prev * S1->x()); // (D1, S1)
-      rhs->addTerm(-1./_mu * D12_prev * S1->y());
-      rhs->addTerm(-1./_mu * D13_prev * S1->z());
-      rhs->addTerm(-1./_mu * D21_prev * S2->x()); // (D2, S2)
-      rhs->addTerm(-1./_mu * D22_prev * S2->y());
-      rhs->addTerm(-1./_mu * D23_prev * S2->z());
-      rhs->addTerm(-1./_mu * D31_prev * S3->x()); // (D3, S3)
-      rhs->addTerm(-1./_mu * D32_prev * S3->y());
-      rhs->addTerm(-1./_mu * D33_prev * S3->z());
-      break;
-    default:
-      break;
-  }
-
-  // tau terms:
-  switch (_spaceDim)
-  {
-    case 1:
-      rhs->addTerm( T_prev * tau->dx()); // tau = Cp*_mu/Pr * grad T
-      rhs->addTerm(-Pr()/(Cp()*mu()) * q1_prev * tau); // (D1, S1)
-      break;
-    case 2:
-      rhs->addTerm( T_prev * tau->div()); // tau = Cp*_mu/Pr * grad T
-      // rhs->addTerm(-T_prev * (tau->x()->dx() + tau->y()->dy())); // tau = Cp*_mu/Pr * grad T
-      rhs->addTerm(-Pr()/(Cp()*mu()) * q1_prev * tau->x()); // (D1, S1)
-      rhs->addTerm(-Pr()/(Cp()*mu()) * q2_prev * tau->y());
-      break;
-    case 3:
-      rhs->addTerm( T_prev * tau->div()); // tau = Cp*_mu/Pr * grad T
-      rhs->addTerm(-Pr()/(Cp()*mu()) * q1_prev * tau->x()); // (D1, S1)
-      rhs->addTerm(-Pr()/(Cp()*mu()) * q2_prev * tau->y());
-      rhs->addTerm(-Pr()/(Cp()*mu()) * q3_prev * tau->z());
-      break;
-    default:
-      break;
-  }
-
-
-  // vc:
-  // if (_spaceTime)
-  //   rhs->addTerm(rho_prev * vc->dt());
-  // rhs->addTerm(beta_x*rho_prev * vc->dx());
-  // if (_spaceDim >= 2) rhs->addTerm(beta_y*rho_prev * vc->dy());
-  // if (_spaceDim == 3) rhs->addTerm(beta_z*rho_prev * vc->dz());
-  // // rhs->addTerm(-tc_prev * vc);
-  switch (_spaceDim)
-  {
-    case 1:
-      if (_spaceTime)
-        rhs->addTerm( rho_prev * vc->dt());
-      rhs->addTerm( rho_prev*u1_prev * vc->dx());
-      break;
-    case 2:
-      if (_spaceTime)
-        rhs->addTerm( rho_prev * vc->dt());
-      rhs->addTerm( rho_prev*u1_prev * vc->dx());
-      rhs->addTerm( rho_prev*u2_prev * vc->dy());
-      break;
-    case 3:
-      if (_spaceTime)
-        rhs->addTerm( rho_prev * vc->dt());
-      rhs->addTerm( rho_prev*u1_prev * vc->dx());
-      rhs->addTerm( rho_prev*u2_prev * vc->dy());
-      rhs->addTerm( rho_prev*u3_prev * vc->dz());
-      break;
-    default:
-      break;
-  }
-
-  // vm
-  switch (_spaceDim)
-  {
-    case 1:
-      if (_spaceTime)
-      {
-        rhs->addTerm(rho_prev*u1_prev * vm1->dt());
-      }
-      rhs->addTerm( rho_prev*u1_prev*u1_prev * vm1->dx() );
-      rhs->addTerm( R()*rho_prev*T_prev * vm1->dx() );
-      rhs->addTerm(-(D11_prev+D11_prev-2./3*D11_prev) * vm1->dx() );
-      break;
-    case 2:
-      if (_spaceTime)
-      {
-        rhs->addTerm( rho_prev*u1_prev * vm1->dt() );
-        rhs->addTerm( rho_prev*u2_prev * vm2->dt() );
-      }
-      rhs->addTerm( rho_prev*u1_prev*u1_prev * vm1->dx());
-      rhs->addTerm( rho_prev*u1_prev*u2_prev * vm1->dy());
-      rhs->addTerm( rho_prev*u2_prev*u1_prev * vm2->dx());
-      rhs->addTerm( rho_prev*u2_prev*u2_prev * vm2->dy());
-      rhs->addTerm( R()*rho_prev*T_prev * vm1->dx());
-      rhs->addTerm( R()*rho_prev*T_prev * vm2->dy());
-      rhs->addTerm(-(D11_prev+D11_prev-2./3*D11_prev-2./3*D22_prev) * vm1->dx());
-      rhs->addTerm(-(D12_prev+D21_prev) * vm1->dy());
-      rhs->addTerm(-(D21_prev+D12_prev) * vm2->dx());
-      rhs->addTerm(-(D22_prev+D22_prev-2./3*D11_prev-2./3*D22_prev) * vm2->dy());
-      break;
-    case 3:
-      if (_spaceTime)
-      {
-        rhs->addTerm( rho_prev*u1_prev * vm1->dt() );
-        rhs->addTerm( rho_prev*u2_prev * vm2->dt() );
-        rhs->addTerm( rho_prev*u3_prev * vm3->dt() );
-      }
-      rhs->addTerm( rho_prev*u1_prev*u1_prev * vm1->dx() );
-      rhs->addTerm( rho_prev*u1_prev*u2_prev * vm1->dy() );
-      rhs->addTerm( rho_prev*u1_prev*u3_prev * vm1->dz() );
-      rhs->addTerm( rho_prev*u2_prev*u1_prev * vm2->dx() );
-      rhs->addTerm( rho_prev*u2_prev*u2_prev * vm2->dy() );
-      rhs->addTerm( rho_prev*u2_prev*u3_prev * vm2->dz() );
-      rhs->addTerm( rho_prev*u3_prev*u1_prev * vm3->dx() );
-      rhs->addTerm( rho_prev*u3_prev*u2_prev * vm3->dy() );
-      rhs->addTerm( rho_prev*u3_prev*u3_prev * vm3->dz() );
-      rhs->addTerm( R()*rho_prev*T_prev * vm1->dx());
-      rhs->addTerm( R()*rho_prev*T_prev * vm2->dy());
-      rhs->addTerm( R()*rho_prev*T_prev * vm3->dz());
-      rhs->addTerm(-(D11_prev+D11_prev-2./3*D11_prev-2./3*D22_prev-2./3*D33_prev) * vm1->dx());
-      rhs->addTerm(-(D12_prev+D21_prev) * vm1->dy());
-      rhs->addTerm(-(D13_prev+D31_prev) * vm1->dz());
-      rhs->addTerm(-(D21_prev+D12_prev) * vm2->dx());
-      rhs->addTerm(-(D22_prev+D22_prev-2./3*D11_prev-2./3*D22_prev-2./3*D33_prev) * vm2->dy());
-      rhs->addTerm(-(D23_prev+D32_prev) * vm2->dz());
-      rhs->addTerm(-(D31_prev+D13_prev) * vm3->dx());
-      rhs->addTerm(-(D32_prev+D23_prev) * vm3->dy());
-      rhs->addTerm(-(D33_prev+D33_prev-2./3*D11_prev-2./3*D22_prev-2./3*D33_prev) * vm3->dz());
-    default:
-      break;
-  }
-  // // vm1:
-  // if (_spaceTime)
-  //   rhs->addTerm(u1_prev * vm1->dt());
-  // rhs->addTerm((beta_x*u1_prev - D11_prev) * vm1->dx());
-  // if (_spaceDim >= 2) rhs->addTerm((beta_y*u1_prev -D12_prev) * vm1->dy());
-  // if (_spaceDim == 3) rhs->addTerm((beta_z*u1_prev -D13_prev) * vm1->dz());
-  // // rhs->addTerm(-tm1_prev * vm1);
-
-  // // vm2:
-  // if (_spaceDim >= 2)
-  // {
-  //   if (_spaceTime)
-  //     rhs->addTerm(u2_prev * vm2->dt());
-  //   rhs->addTerm((beta_x*u2_prev - D21_prev) * vm2->dx());
-  //   rhs->addTerm((beta_y*u2_prev - D22_prev) * vm2->dy());
-  //   if (_spaceDim == 3) rhs->addTerm((beta_z*u2_prev - D23_prev) * vm2->dz());
-  //   // rhs->addTerm(-tm2_prev * vm2);
-  // }
-
-  // // vm3:
-  // if (_spaceDim == 3)
-  // {
-  //   if (_spaceTime)
-  //     rhs->addTerm(u3_prev * vm3->dt());
-  //   rhs->addTerm((beta_x*u3_prev -D31_prev) * vm3->dx());
-  //   rhs->addTerm((beta_y*u3_prev -D32_prev) * vm3->dy());
-  //   rhs->addTerm((beta_z*u3_prev -D33_prev) * vm3->dz());
-  //   // rhs->addTerm(-tm3_prev * vm3);
-  // }
-
-  // ve:
-  // if (_spaceTime)
-  //   rhs->addTerm(T_prev * ve->dt());
-  // rhs->addTerm((beta_x*T_prev - q1_prev) * ve->dx());
-  // if (_spaceDim >= 2) rhs->addTerm((beta_y*T_prev - q2_prev) * ve->dy());
-  // if (_spaceDim == 3) rhs->addTerm((beta_z*T_prev - q3_prev) * ve->dz());
-  // // rhs->addTerm(-te_prev * ve);
-  switch (_spaceDim)
-  {
-    case 1:
-      if (_spaceTime)
-      {
-        rhs->addTerm(Cv()*rho_prev*T_prev * ve->dt());
-        rhs->addTerm(0.5*rho_prev*u1_prev*u1_prev * ve->dt());
-      }
-      rhs->addTerm(Cv()*rho_prev*u1_prev*T_prev * ve->dx());
-      rhs->addTerm(0.5*rho_prev*u1_prev*u1_prev*u1_prev * ve->dx());
-      rhs->addTerm(R()*rho_prev*u1_prev*T_prev * ve->dx());
-      rhs->addTerm(q1_prev * ve->dx());
-      rhs->addTerm(-(D11_prev+D11_prev-2./3*D11_prev)*u1_prev * ve->dx());
-      rhs->addTerm(-u1_prev*(D11_prev+D11_prev-2./3*D11_prev) * ve->dx());
-      break;
-    case 2:
-      if (_spaceTime)
-      {
-        rhs->addTerm(Cv()*rho_prev*T_prev * ve->dt());
-        rhs->addTerm(0.5*rho_prev*(u1_prev*u1_prev+u2_prev*u2_prev) * ve->dt());
-      }
-      rhs->addTerm(Cv()*rho_prev*u1_prev*T_prev * ve->dx());
-      rhs->addTerm(0.5*rho_prev*(u1_prev*u1_prev+u2_prev*u2_prev)*u1_prev * ve->dx());
-      rhs->addTerm(R()*rho_prev*u1_prev*T_prev * ve->dx());
-      rhs->addTerm(Cv()*rho_prev*u2_prev*T_prev * ve->dy());
-      rhs->addTerm(0.5*rho_prev*(u1_prev*u1_prev+u2_prev*u2_prev)*u2_prev * ve->dy());
-      rhs->addTerm(R()*rho_prev*u2_prev*T_prev * ve->dy());
-      // if (_spaceTime)
-      // {
-      //   rhs->addTerm(Cv()*rho_prev*T_prev * ve->dt());
-      //   rhs->addTerm(0.5*rho_prev*(u1_prev*u1_prev+u2_prev*u2_prev) * ve->dt());
-      // }
-      // rhs->addTerm(Cv()*rho_prev*u1_prev*T_prev * ve->dx());
-      // rhs->addTerm(0.5*rho_prev*(u1_prev*u1_prev+u2_prev*u2_prev)*u1_prev * ve->dx());
-      // rhs->addTerm(0.5*rho_prev*(u1_prev*u1_prev+u2_prev*u2_prev)*u2_prev * ve->dy());
-      // rhs->addTerm(R()*rho_prev*u1_prev*T_prev * ve->dx());
-      // rhs->addTerm(R()*rho_prev*u2_prev*T_prev * ve->dy());
-      rhs->addTerm(q1_prev * ve->dx());
-      rhs->addTerm(q2_prev * ve->dy());
-      rhs->addTerm(-(D11_prev+D11_prev-2./3*(D11_prev+D22_prev))*u1_prev * ve->dx());
-      rhs->addTerm(-(D12_prev+D21_prev)*u2_prev * ve->dx());
-      rhs->addTerm(-(D21_prev+D12_prev)*u1_prev * ve->dy());
-      rhs->addTerm(-(D22_prev+D22_prev-2./3*(D11_prev+D22_prev))*u2_prev * ve->dy());
-      break;
-    case 3:
-      if (_spaceTime)
-      {
-        rhs->addTerm(Cv()*rho_prev*T_prev * ve->dt());
-        rhs->addTerm(-0.5*rho_prev*(u1_prev*u1_prev+u2_prev*u2_prev+u3_prev*u3_prev) * ve->dt());
-      }
-      rhs->addTerm(Cv()*rho_prev*u1_prev*T_prev * ve->dx());
-      rhs->addTerm(Cv()*rho_prev*u2_prev*T_prev * ve->dy());
-      rhs->addTerm(Cv()*rho_prev*u3_prev*T_prev * ve->dz());
-      rhs->addTerm(0.5*rho_prev*(u1_prev*u1_prev+u2_prev*u2_prev+u3_prev*u3_prev)*u1_prev * ve->dx());
-      rhs->addTerm(0.5*rho_prev*(u1_prev*u1_prev+u2_prev*u2_prev+u3_prev*u3_prev)*u2_prev * ve->dy());
-      rhs->addTerm(0.5*rho_prev*(u1_prev*u1_prev+u2_prev*u2_prev+u3_prev*u3_prev)*u3_prev * ve->dz());
-      rhs->addTerm(R()*rho_prev*u1_prev*T_prev * ve->dx());
-      rhs->addTerm(R()*rho_prev*u2_prev*T_prev * ve->dy());
-      rhs->addTerm(R()*rho_prev*u3_prev*T_prev * ve->dz());
-      rhs->addTerm(q1_prev * ve->dx());
-      rhs->addTerm(q2_prev * ve->dy());
-      rhs->addTerm(q3_prev * ve->dz());
-      rhs->addTerm(-(D11_prev+D11_prev-2./3*(D11_prev+D22_prev+D33_prev))*u1_prev * ve->dx());
-      rhs->addTerm(-(D12_prev+D21_prev)*u2_prev * ve->dx());
-      rhs->addTerm(-(D13_prev+D31_prev)*u3_prev * ve->dx());
-      rhs->addTerm(-(D21_prev+D12_prev)*u1_prev * ve->dy());
-      rhs->addTerm(-(D22_prev+D22_prev-2./3*(D11_prev+D22_prev+D33_prev))*u2_prev * ve->dy());
-      rhs->addTerm(-(D31_prev+D13_prev)*u3_prev * ve->dy());
-      rhs->addTerm(-(D31_prev+D13_prev)*u1_prev * ve->dz());
-      rhs->addTerm(-(D32_prev+D23_prev)*u2_prev * ve->dz());
-      rhs->addTerm(-(D33_prev+D33_prev-2./3*(D11_prev+D22_prev+D33_prev))*u3_prev * ve->dz());
-      break;
-    default:
-      break;
-  }
-
-
-  return rhs;
-}
+// RHSPtr CompressibleNavierStokesFormulation::rhs(FunctionPtr forcingFunction, bool excludeFluxesAndTraces)
+// RHSPtr CompressibleNavierStokesFormulation::rhs(bool excludeFluxesAndTraces)
+// {
+//
+//   // TO DO : UPDATE THIS!
+//   RHSPtr rhs = RHS::rhs();
+//
+//   // SolutionPtr backgroundFlowWeakReference = Teuchos::rcp(_backgroundFlow.get(), false);
+//   SolutionPtr backgroundFlowWeakReference = _backgroundFlow;
+//
+//   FunctionPtr rho_prev;
+//   FunctionPtr u1_prev, u2_prev, u3_prev;
+//   FunctionPtr T_prev;
+//   FunctionPtr D11_prev, D12_prev, D13_prev, D21_prev, D22_prev, D23_prev, D31_prev, D32_prev, D33_prev;
+//   FunctionPtr q1_prev, q2_prev, q3_prev;
+//   FunctionPtr tc_prev;
+//   FunctionPtr tm1_prev, tm2_prev, tm3_prev;
+//   FunctionPtr te_prev;
+//   FunctionPtr u1_hat_prev, u2_hat_prev, u3_hat_prev;
+//   FunctionPtr T_hat_prev;
+//
+//   VarPtr vc;
+//   VarPtr vm1, vm2, vm3;
+//   VarPtr ve;
+//   VarPtr S1, S2, S3;
+//   VarPtr tau;
+//
+//   FunctionPtr n;
+//   if (_spaceTime)
+//     n = Function::normalSpaceTime();
+//   else
+//     n = Function::normal();
+//
+//   switch (_spaceDim)
+//   {
+//     case 1:
+//       vc = this->vc();
+//       vm1 = this->vm(1);
+//       ve = this->ve();
+//       S1 = this->S(1);
+//       tau = this->tau();
+//       rho_prev = Function::solution(this->rho(),backgroundFlowWeakReference);
+//       u1_prev = Function::solution(this->u(1),backgroundFlowWeakReference);
+//       T_prev  = Function::solution(this->T(),backgroundFlowWeakReference);
+//       D11_prev = Function::solution(this->D(1,1),backgroundFlowWeakReference);
+//       q1_prev = Function::solution(this->q(1),backgroundFlowWeakReference);
+//       tc_prev = Function::solution(this->tc(),backgroundFlowWeakReference,true);
+//       tm1_prev = Function::solution(this->tm(1),backgroundFlowWeakReference,true);
+//       te_prev = Function::solution(this->te(),backgroundFlowWeakReference,true);
+//       u1_hat_prev = Function::solution(this->u_hat(1),backgroundFlowWeakReference);
+//       T_hat_prev = Function::solution(this->T_hat(),backgroundFlowWeakReference);
+//       // if (!excludeFluxesAndTraces)
+//       // {
+//       //   rhs->addTerm(-tc_prev * vc);
+//       //   rhs->addTerm(-tm1_prev * vm1);
+//       //   rhs->addTerm(-te_prev * ve);
+//       //   rhs->addTerm(u1_hat_prev * S1*n->x());
+//       //   rhs->addTerm(T_hat_prev * tau*n->x());
+//       // }
+//       break;
+//     case 2:
+//       vc = this->vc();
+//       vm1 = this->vm(1);
+//       vm2 = this->vm(2);
+//       ve = this->ve();
+//       S1 = this->S(1);
+//       S2 = this->S(2);
+//       tau = this->tau();
+//       rho_prev = Function::solution(this->rho(),backgroundFlowWeakReference);
+//       u1_prev = Function::solution(this->u(1),backgroundFlowWeakReference);
+//       u2_prev = Function::solution(this->u(2),backgroundFlowWeakReference);
+//       T_prev  = Function::solution(this->T(),backgroundFlowWeakReference);
+//       D11_prev = Function::solution(this->D(1,1),backgroundFlowWeakReference);
+//       D12_prev = Function::solution(this->D(1,2),backgroundFlowWeakReference);
+//       D21_prev = Function::solution(this->D(2,1),backgroundFlowWeakReference);
+//       D22_prev = Function::solution(this->D(2,2),backgroundFlowWeakReference);
+//       q1_prev = Function::solution(this->q(1),backgroundFlowWeakReference);
+//       q2_prev = Function::solution(this->q(2),backgroundFlowWeakReference);
+//       tc_prev = Function::solution(this->tc(),backgroundFlowWeakReference,true);
+//       tm1_prev = Function::solution(this->tm(1),backgroundFlowWeakReference,true);
+//       tm2_prev = Function::solution(this->tm(2),backgroundFlowWeakReference,true);
+//       te_prev = Function::solution(this->te(),backgroundFlowWeakReference,true);
+//       u1_hat_prev = Function::solution(this->u_hat(1),backgroundFlowWeakReference);
+//       u2_hat_prev = Function::solution(this->u_hat(2),backgroundFlowWeakReference);
+//       T_hat_prev = Function::solution(this->T_hat(),backgroundFlowWeakReference);
+//       // if (!excludeFluxesAndTraces)
+//       // {
+//       //   rhs->addTerm(-tc_prev * vc);
+//       //   rhs->addTerm(-tm1_prev * vm1);
+//       //   rhs->addTerm(-tm2_prev * vm2);
+//       //   rhs->addTerm(-te_prev * ve);
+//       //   rhs->addTerm(u1_hat_prev * S1*n->x());
+//       //   rhs->addTerm(u2_hat_prev * S2*n->x());
+//       //   rhs->addTerm(T_hat_prev * tau*n->x());
+//       // }
+//       break;
+//     case 3:
+//       vc = this->vc();
+//       vm1 = this->vm(1);
+//       vm2 = this->vm(2);
+//       vm3 = this->vm(3);
+//       ve = this->ve();
+//       S1 = this->S(1);
+//       S2 = this->S(2);
+//       S3 = this->S(3);
+//       tau = this->tau();
+//       rho_prev = Function::solution(this->rho(),backgroundFlowWeakReference);
+//       u1_prev = Function::solution(this->u(1),backgroundFlowWeakReference);
+//       u2_prev = Function::solution(this->u(2),backgroundFlowWeakReference);
+//       u3_prev = Function::solution(this->u(3),backgroundFlowWeakReference);
+//       T_prev  = Function::solution(this->T(),backgroundFlowWeakReference);
+//       D11_prev = Function::solution(this->D(1,1),backgroundFlowWeakReference);
+//       D12_prev = Function::solution(this->D(1,2),backgroundFlowWeakReference);
+//       D13_prev = Function::solution(this->D(1,3),backgroundFlowWeakReference);
+//       D21_prev = Function::solution(this->D(2,1),backgroundFlowWeakReference);
+//       D22_prev = Function::solution(this->D(2,2),backgroundFlowWeakReference);
+//       D23_prev = Function::solution(this->D(2,3),backgroundFlowWeakReference);
+//       D31_prev = Function::solution(this->D(3,1),backgroundFlowWeakReference);
+//       D32_prev = Function::solution(this->D(3,2),backgroundFlowWeakReference);
+//       D33_prev = Function::solution(this->D(3,3),backgroundFlowWeakReference);
+//       q1_prev = Function::solution(this->q(1),backgroundFlowWeakReference);
+//       q2_prev = Function::solution(this->q(2),backgroundFlowWeakReference);
+//       q3_prev = Function::solution(this->q(3),backgroundFlowWeakReference);
+//       tc_prev = Function::solution(this->tc(),backgroundFlowWeakReference,true);
+//       tm1_prev = Function::solution(this->tm(1),backgroundFlowWeakReference,true);
+//       tm2_prev = Function::solution(this->tm(2),backgroundFlowWeakReference,true);
+//       tm3_prev = Function::solution(this->tm(3),backgroundFlowWeakReference,true);
+//       te_prev = Function::solution(this->te(),backgroundFlowWeakReference,true);
+//       u1_hat_prev = Function::solution(this->u_hat(1),backgroundFlowWeakReference);
+//       u2_hat_prev = Function::solution(this->u_hat(2),backgroundFlowWeakReference);
+//       u3_hat_prev = Function::solution(this->u_hat(3),backgroundFlowWeakReference);
+//       T_hat_prev = Function::solution(this->T_hat(),backgroundFlowWeakReference);
+//       // if (!excludeFluxesAndTraces)
+//       // {
+//       //   rhs->addTerm(-tc_prev * vc);
+//       //   rhs->addTerm(-tm1_prev * vm1);
+//       //   rhs->addTerm(-tm2_prev * vm2);
+//       //   rhs->addTerm(-tm3_prev * vm3);
+//       //   rhs->addTerm(-te_prev * ve);
+//       //   rhs->addTerm(u1_hat_prev * S1*n->x());
+//       //   rhs->addTerm(u2_hat_prev * S2*n->x());
+//       //   rhs->addTerm(u3_hat_prev * S3*n->x());
+//       //   rhs->addTerm(T_hat_prev * tau*n->x());
+//       // }
+//       break;
+//
+//     default:
+//       break;
+//   }
+//
+//   // if (f != Teuchos::null)
+//   // {
+//   //   rhs->addTerm( f->x() * v1 );
+//   //   rhs->addTerm( f->y() * v2 );
+//   //   if (_spaceDim == 3) rhs->addTerm( f->z() * v3 );
+//   // }
+//
+//   // FunctionPtr beta_x, beta_y, beta_z;
+//   // if (_spaceDim == 1)
+//   //   beta_x = _beta;
+//   // else
+//   //   beta_x = _beta->x();
+//   // if (_spaceDim >= 2) beta_y = _beta->y();
+//   // if (_spaceDim == 3) beta_z = _beta->z();
+//
+//   // S terms:
+//   switch (_spaceDim)
+//   {
+//     case 1:
+//       rhs->addTerm(-u1_prev * S1->dx()); // D1 = _mu * grad u1
+//       rhs->addTerm(-1./_mu * D11_prev * S1); // (D1, S1)
+//       break;
+//     case 2:
+//       rhs->addTerm(-u1_prev * S1->div()); // D1 = _mu * grad u1
+//       rhs->addTerm(-u2_prev * S2->div()); // D2 = _mu * grad u2
+//       // rhs->addTerm(-u1_prev * (S1->x()->dx() + S1->y()->dy())); // D1 = _mu * grad u1
+//       // rhs->addTerm(-u2_prev * (S2->x()->dx() + S2->y()->dy())); // D2 = _mu * grad u2
+//       rhs->addTerm(-1./_mu * D11_prev * S1->x()); // (D1, S1)
+//       rhs->addTerm(-1./_mu * D12_prev * S1->y());
+//       rhs->addTerm(-1./_mu * D21_prev * S2->x()); // (D2, S2)
+//       rhs->addTerm(-1./_mu * D22_prev * S2->y());
+//       break;
+//     case 3:
+//       rhs->addTerm(-u1_prev * S1->div()); // D1 = _mu * grad u1
+//       rhs->addTerm(-u2_prev * S2->div()); // D2 = _mu * grad u2
+//       rhs->addTerm(-u3_prev * S3->div()); // D3 = _mu * grad u3
+//       rhs->addTerm(-1./_mu * D11_prev * S1->x()); // (D1, S1)
+//       rhs->addTerm(-1./_mu * D12_prev * S1->y());
+//       rhs->addTerm(-1./_mu * D13_prev * S1->z());
+//       rhs->addTerm(-1./_mu * D21_prev * S2->x()); // (D2, S2)
+//       rhs->addTerm(-1./_mu * D22_prev * S2->y());
+//       rhs->addTerm(-1./_mu * D23_prev * S2->z());
+//       rhs->addTerm(-1./_mu * D31_prev * S3->x()); // (D3, S3)
+//       rhs->addTerm(-1./_mu * D32_prev * S3->y());
+//       rhs->addTerm(-1./_mu * D33_prev * S3->z());
+//       break;
+//     default:
+//       break;
+//   }
+//
+//   // tau terms:
+//   switch (_spaceDim)
+//   {
+//     case 1:
+//       rhs->addTerm( T_prev * tau->dx()); // tau = Cp*_mu/Pr * grad T
+//       rhs->addTerm(-Pr()/(Cp()*mu()) * q1_prev * tau); // (D1, S1)
+//       break;
+//     case 2:
+//       rhs->addTerm( T_prev * tau->div()); // tau = Cp*_mu/Pr * grad T
+//       // rhs->addTerm(-T_prev * (tau->x()->dx() + tau->y()->dy())); // tau = Cp*_mu/Pr * grad T
+//       rhs->addTerm(-Pr()/(Cp()*mu()) * q1_prev * tau->x()); // (D1, S1)
+//       rhs->addTerm(-Pr()/(Cp()*mu()) * q2_prev * tau->y());
+//       break;
+//     case 3:
+//       rhs->addTerm( T_prev * tau->div()); // tau = Cp*_mu/Pr * grad T
+//       rhs->addTerm(-Pr()/(Cp()*mu()) * q1_prev * tau->x()); // (D1, S1)
+//       rhs->addTerm(-Pr()/(Cp()*mu()) * q2_prev * tau->y());
+//       rhs->addTerm(-Pr()/(Cp()*mu()) * q3_prev * tau->z());
+//       break;
+//     default:
+//       break;
+//   }
+//
+//
+//   // vc:
+//   // if (_spaceTime)
+//   //   rhs->addTerm(rho_prev * vc->dt());
+//   // rhs->addTerm(beta_x*rho_prev * vc->dx());
+//   // if (_spaceDim >= 2) rhs->addTerm(beta_y*rho_prev * vc->dy());
+//   // if (_spaceDim == 3) rhs->addTerm(beta_z*rho_prev * vc->dz());
+//   // // rhs->addTerm(-tc_prev * vc);
+//   switch (_spaceDim)
+//   {
+//     case 1:
+//       if (_spaceTime)
+//         rhs->addTerm( rho_prev * vc->dt());
+//       rhs->addTerm( rho_prev*u1_prev * vc->dx());
+//       break;
+//     case 2:
+//       if (_spaceTime)
+//         rhs->addTerm( rho_prev * vc->dt());
+//       rhs->addTerm( rho_prev*u1_prev * vc->dx());
+//       rhs->addTerm( rho_prev*u2_prev * vc->dy());
+//       break;
+//     case 3:
+//       if (_spaceTime)
+//         rhs->addTerm( rho_prev * vc->dt());
+//       rhs->addTerm( rho_prev*u1_prev * vc->dx());
+//       rhs->addTerm( rho_prev*u2_prev * vc->dy());
+//       rhs->addTerm( rho_prev*u3_prev * vc->dz());
+//       break;
+//     default:
+//       break;
+//   }
+//
+//   // vm
+//   switch (_spaceDim)
+//   {
+//     case 1:
+//       if (_spaceTime)
+//       {
+//         rhs->addTerm(rho_prev*u1_prev * vm1->dt());
+//       }
+//       rhs->addTerm( rho_prev*u1_prev*u1_prev * vm1->dx() );
+//       rhs->addTerm( R()*rho_prev*T_prev * vm1->dx() );
+//       rhs->addTerm(-(D11_prev+D11_prev-2./3*D11_prev) * vm1->dx() );
+//       break;
+//     case 2:
+//       if (_spaceTime)
+//       {
+//         rhs->addTerm( rho_prev*u1_prev * vm1->dt() );
+//         rhs->addTerm( rho_prev*u2_prev * vm2->dt() );
+//       }
+//       rhs->addTerm( rho_prev*u1_prev*u1_prev * vm1->dx());
+//       rhs->addTerm( rho_prev*u1_prev*u2_prev * vm1->dy());
+//       rhs->addTerm( rho_prev*u2_prev*u1_prev * vm2->dx());
+//       rhs->addTerm( rho_prev*u2_prev*u2_prev * vm2->dy());
+//       rhs->addTerm( R()*rho_prev*T_prev * vm1->dx());
+//       rhs->addTerm( R()*rho_prev*T_prev * vm2->dy());
+//       rhs->addTerm(-(D11_prev+D11_prev-2./3*D11_prev-2./3*D22_prev) * vm1->dx());
+//       rhs->addTerm(-(D12_prev+D21_prev) * vm1->dy());
+//       rhs->addTerm(-(D21_prev+D12_prev) * vm2->dx());
+//       rhs->addTerm(-(D22_prev+D22_prev-2./3*D11_prev-2./3*D22_prev) * vm2->dy());
+//       break;
+//     case 3:
+//       if (_spaceTime)
+//       {
+//         rhs->addTerm( rho_prev*u1_prev * vm1->dt() );
+//         rhs->addTerm( rho_prev*u2_prev * vm2->dt() );
+//         rhs->addTerm( rho_prev*u3_prev * vm3->dt() );
+//       }
+//       rhs->addTerm( rho_prev*u1_prev*u1_prev * vm1->dx() );
+//       rhs->addTerm( rho_prev*u1_prev*u2_prev * vm1->dy() );
+//       rhs->addTerm( rho_prev*u1_prev*u3_prev * vm1->dz() );
+//       rhs->addTerm( rho_prev*u2_prev*u1_prev * vm2->dx() );
+//       rhs->addTerm( rho_prev*u2_prev*u2_prev * vm2->dy() );
+//       rhs->addTerm( rho_prev*u2_prev*u3_prev * vm2->dz() );
+//       rhs->addTerm( rho_prev*u3_prev*u1_prev * vm3->dx() );
+//       rhs->addTerm( rho_prev*u3_prev*u2_prev * vm3->dy() );
+//       rhs->addTerm( rho_prev*u3_prev*u3_prev * vm3->dz() );
+//       rhs->addTerm( R()*rho_prev*T_prev * vm1->dx());
+//       rhs->addTerm( R()*rho_prev*T_prev * vm2->dy());
+//       rhs->addTerm( R()*rho_prev*T_prev * vm3->dz());
+//       rhs->addTerm(-(D11_prev+D11_prev-2./3*D11_prev-2./3*D22_prev-2./3*D33_prev) * vm1->dx());
+//       rhs->addTerm(-(D12_prev+D21_prev) * vm1->dy());
+//       rhs->addTerm(-(D13_prev+D31_prev) * vm1->dz());
+//       rhs->addTerm(-(D21_prev+D12_prev) * vm2->dx());
+//       rhs->addTerm(-(D22_prev+D22_prev-2./3*D11_prev-2./3*D22_prev-2./3*D33_prev) * vm2->dy());
+//       rhs->addTerm(-(D23_prev+D32_prev) * vm2->dz());
+//       rhs->addTerm(-(D31_prev+D13_prev) * vm3->dx());
+//       rhs->addTerm(-(D32_prev+D23_prev) * vm3->dy());
+//       rhs->addTerm(-(D33_prev+D33_prev-2./3*D11_prev-2./3*D22_prev-2./3*D33_prev) * vm3->dz());
+//     default:
+//       break;
+//   }
+//   // // vm1:
+//   // if (_spaceTime)
+//   //   rhs->addTerm(u1_prev * vm1->dt());
+//   // rhs->addTerm((beta_x*u1_prev - D11_prev) * vm1->dx());
+//   // if (_spaceDim >= 2) rhs->addTerm((beta_y*u1_prev -D12_prev) * vm1->dy());
+//   // if (_spaceDim == 3) rhs->addTerm((beta_z*u1_prev -D13_prev) * vm1->dz());
+//   // // rhs->addTerm(-tm1_prev * vm1);
+//
+//   // // vm2:
+//   // if (_spaceDim >= 2)
+//   // {
+//   //   if (_spaceTime)
+//   //     rhs->addTerm(u2_prev * vm2->dt());
+//   //   rhs->addTerm((beta_x*u2_prev - D21_prev) * vm2->dx());
+//   //   rhs->addTerm((beta_y*u2_prev - D22_prev) * vm2->dy());
+//   //   if (_spaceDim == 3) rhs->addTerm((beta_z*u2_prev - D23_prev) * vm2->dz());
+//   //   // rhs->addTerm(-tm2_prev * vm2);
+//   // }
+//
+//   // // vm3:
+//   // if (_spaceDim == 3)
+//   // {
+//   //   if (_spaceTime)
+//   //     rhs->addTerm(u3_prev * vm3->dt());
+//   //   rhs->addTerm((beta_x*u3_prev -D31_prev) * vm3->dx());
+//   //   rhs->addTerm((beta_y*u3_prev -D32_prev) * vm3->dy());
+//   //   rhs->addTerm((beta_z*u3_prev -D33_prev) * vm3->dz());
+//   //   // rhs->addTerm(-tm3_prev * vm3);
+//   // }
+//
+//   // ve:
+//   // if (_spaceTime)
+//   //   rhs->addTerm(T_prev * ve->dt());
+//   // rhs->addTerm((beta_x*T_prev - q1_prev) * ve->dx());
+//   // if (_spaceDim >= 2) rhs->addTerm((beta_y*T_prev - q2_prev) * ve->dy());
+//   // if (_spaceDim == 3) rhs->addTerm((beta_z*T_prev - q3_prev) * ve->dz());
+//   // // rhs->addTerm(-te_prev * ve);
+//   switch (_spaceDim)
+//   {
+//     case 1:
+//       if (_spaceTime)
+//       {
+//         rhs->addTerm(Cv()*rho_prev*T_prev * ve->dt());
+//         rhs->addTerm(0.5*rho_prev*u1_prev*u1_prev * ve->dt());
+//       }
+//       rhs->addTerm(Cv()*rho_prev*u1_prev*T_prev * ve->dx());
+//       rhs->addTerm(0.5*rho_prev*u1_prev*u1_prev*u1_prev * ve->dx());
+//       rhs->addTerm(R()*rho_prev*u1_prev*T_prev * ve->dx());
+//       rhs->addTerm(q1_prev * ve->dx());
+//       rhs->addTerm(-(D11_prev+D11_prev-2./3*D11_prev)*u1_prev * ve->dx());
+//       rhs->addTerm(-u1_prev*(D11_prev+D11_prev-2./3*D11_prev) * ve->dx());
+//       break;
+//     case 2:
+//       if (_spaceTime)
+//       {
+//         rhs->addTerm(Cv()*rho_prev*T_prev * ve->dt());
+//         rhs->addTerm(0.5*rho_prev*(u1_prev*u1_prev+u2_prev*u2_prev) * ve->dt());
+//       }
+//       rhs->addTerm(Cv()*rho_prev*u1_prev*T_prev * ve->dx());
+//       rhs->addTerm(0.5*rho_prev*(u1_prev*u1_prev+u2_prev*u2_prev)*u1_prev * ve->dx());
+//       rhs->addTerm(R()*rho_prev*u1_prev*T_prev * ve->dx());
+//       rhs->addTerm(Cv()*rho_prev*u2_prev*T_prev * ve->dy());
+//       rhs->addTerm(0.5*rho_prev*(u1_prev*u1_prev+u2_prev*u2_prev)*u2_prev * ve->dy());
+//       rhs->addTerm(R()*rho_prev*u2_prev*T_prev * ve->dy());
+//       // if (_spaceTime)
+//       // {
+//       //   rhs->addTerm(Cv()*rho_prev*T_prev * ve->dt());
+//       //   rhs->addTerm(0.5*rho_prev*(u1_prev*u1_prev+u2_prev*u2_prev) * ve->dt());
+//       // }
+//       // rhs->addTerm(Cv()*rho_prev*u1_prev*T_prev * ve->dx());
+//       // rhs->addTerm(0.5*rho_prev*(u1_prev*u1_prev+u2_prev*u2_prev)*u1_prev * ve->dx());
+//       // rhs->addTerm(0.5*rho_prev*(u1_prev*u1_prev+u2_prev*u2_prev)*u2_prev * ve->dy());
+//       // rhs->addTerm(R()*rho_prev*u1_prev*T_prev * ve->dx());
+//       // rhs->addTerm(R()*rho_prev*u2_prev*T_prev * ve->dy());
+//       rhs->addTerm(q1_prev * ve->dx());
+//       rhs->addTerm(q2_prev * ve->dy());
+//       rhs->addTerm(-(D11_prev+D11_prev-2./3*(D11_prev+D22_prev))*u1_prev * ve->dx());
+//       rhs->addTerm(-(D12_prev+D21_prev)*u2_prev * ve->dx());
+//       rhs->addTerm(-(D21_prev+D12_prev)*u1_prev * ve->dy());
+//       rhs->addTerm(-(D22_prev+D22_prev-2./3*(D11_prev+D22_prev))*u2_prev * ve->dy());
+//       break;
+//     case 3:
+//       if (_spaceTime)
+//       {
+//         rhs->addTerm(Cv()*rho_prev*T_prev * ve->dt());
+//         rhs->addTerm(-0.5*rho_prev*(u1_prev*u1_prev+u2_prev*u2_prev+u3_prev*u3_prev) * ve->dt());
+//       }
+//       rhs->addTerm(Cv()*rho_prev*u1_prev*T_prev * ve->dx());
+//       rhs->addTerm(Cv()*rho_prev*u2_prev*T_prev * ve->dy());
+//       rhs->addTerm(Cv()*rho_prev*u3_prev*T_prev * ve->dz());
+//       rhs->addTerm(0.5*rho_prev*(u1_prev*u1_prev+u2_prev*u2_prev+u3_prev*u3_prev)*u1_prev * ve->dx());
+//       rhs->addTerm(0.5*rho_prev*(u1_prev*u1_prev+u2_prev*u2_prev+u3_prev*u3_prev)*u2_prev * ve->dy());
+//       rhs->addTerm(0.5*rho_prev*(u1_prev*u1_prev+u2_prev*u2_prev+u3_prev*u3_prev)*u3_prev * ve->dz());
+//       rhs->addTerm(R()*rho_prev*u1_prev*T_prev * ve->dx());
+//       rhs->addTerm(R()*rho_prev*u2_prev*T_prev * ve->dy());
+//       rhs->addTerm(R()*rho_prev*u3_prev*T_prev * ve->dz());
+//       rhs->addTerm(q1_prev * ve->dx());
+//       rhs->addTerm(q2_prev * ve->dy());
+//       rhs->addTerm(q3_prev * ve->dz());
+//       rhs->addTerm(-(D11_prev+D11_prev-2./3*(D11_prev+D22_prev+D33_prev))*u1_prev * ve->dx());
+//       rhs->addTerm(-(D12_prev+D21_prev)*u2_prev * ve->dx());
+//       rhs->addTerm(-(D13_prev+D31_prev)*u3_prev * ve->dx());
+//       rhs->addTerm(-(D21_prev+D12_prev)*u1_prev * ve->dy());
+//       rhs->addTerm(-(D22_prev+D22_prev-2./3*(D11_prev+D22_prev+D33_prev))*u2_prev * ve->dy());
+//       rhs->addTerm(-(D31_prev+D13_prev)*u3_prev * ve->dy());
+//       rhs->addTerm(-(D31_prev+D13_prev)*u1_prev * ve->dz());
+//       rhs->addTerm(-(D32_prev+D23_prev)*u2_prev * ve->dz());
+//       rhs->addTerm(-(D33_prev+D33_prev-2./3*(D11_prev+D22_prev+D33_prev))*u3_prev * ve->dz());
+//       break;
+//     default:
+//       break;
+//   }
+//
+//
+//   return rhs;
+// }
 
 VarPtr CompressibleNavierStokesFormulation::rho()
 {
@@ -2134,10 +2507,10 @@ SolutionPtr CompressibleNavierStokesFormulation::solutionIncrement()
 
 void CompressibleNavierStokesFormulation::solveAndAccumulate(double weight)
 {
-  RHSPtr savedRHS = _solnIncrement->rhs();
-  _solnIncrement->setRHS(_rhsForSolve);
+  // RHSPtr savedRHS = _solnIncrement->rhs();
+  // _solnIncrement->setRHS(_rhsForSolve);
   _solnIncrement->solve(_solver);
-  _solnIncrement->setRHS(savedRHS);
+  // _solnIncrement->setRHS(savedRHS);
 
   bool allowEmptyCells = false;
   set<int> nlVars;
@@ -2200,10 +2573,10 @@ void CompressibleNavierStokesFormulation::solveAndAccumulate(double weight)
   _nonlinearIterationCount++;
 }
 // ! Returns the solution (at previous time)
-SolutionPtr CompressibleNavierStokesFormulation::solutionPreviousTimeStep()
-{
-  return _previousSolution;
-}
+// SolutionPtr CompressibleNavierStokesFormulation::solutionPreviousTimeStep()
+// {
+//   return _previousSolution;
+// }
 
 // ! Solves iteratively
 void CompressibleNavierStokesFormulation::solveIteratively(int maxIters, double cgTol, int azOutputLevel, bool suppressSuperLUOutput)
