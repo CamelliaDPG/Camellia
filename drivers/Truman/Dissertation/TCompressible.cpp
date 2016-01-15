@@ -350,7 +350,8 @@ int main(int argc, char *argv[])
     }
     else
     {
-      rho_exact = 2*one - Function::heaviside(0);
+      // rho_exact = 2*one - Function::heaviside(0);
+      rho_exact = 2*one - Function::heavisideY(0);
       u1_exact = Function::constant(0);
       // u1_exact = Function::constant(1) - Function::heaviside(0);
       u2_exact = Function::constant(0);
@@ -443,7 +444,7 @@ int main(int argc, char *argv[])
   // form.clearSolutionIncrement(); // need to clear before evaluating energy error
   double solveTime = solverTime->stop();
 
-  FunctionPtr energyErrorFunction = EnergyErrorFunction::energyErrorFunction(form.solutionIncrement());
+  // FunctionPtr energyErrorFunction = EnergyErrorFunction::energyErrorFunction(form.solutionIncrement());
 
   ostringstream exportName;
   if (steady)
@@ -465,9 +466,9 @@ int main(int argc, char *argv[])
     exporter = Teuchos::rcp(new HDF5Exporter(mesh, exportName.str(), outputDir));
     exporter->exportSolution(form.solution(), 0);
 
-    exportName << "_energyError";
-    energyErrorExporter = Teuchos::rcp(new HDF5Exporter(mesh, exportName.str(), outputDir));
-    energyErrorExporter->exportFunction(energyErrorFunction, "energy error", 0);
+    // exportName << "_energyError";
+    // energyErrorExporter = Teuchos::rcp(new HDF5Exporter(mesh, exportName.str(), outputDir));
+    // energyErrorExporter->exportFunction(energyErrorFunction, "energy error", 0);
   }
   // HDF5Exporter exporter(form.solution()->mesh(), exportName.str(), outputDir);
 
@@ -574,7 +575,7 @@ int main(int argc, char *argv[])
     if (exportHDF5)
     {
       exporter->exportSolution(form.solution(), refNumber);
-      energyErrorExporter->exportFunction(energyErrorFunction, "energy error", refNumber);
+      // energyErrorExporter->exportFunction(energyErrorFunction, "energy error", refNumber);
     }
 
   }
