@@ -259,16 +259,9 @@ void Boundary::bcsToImpose(FieldContainer<GlobalIndexType> &globalIndices,
               Projector<double>::projectFunctionOntoBasisInterpolating(basisCoefficients, f, basis, basisCacheForImposition);
               basisCoefficients.resize(basis->getCardinality());
               
-              BasisPtr basisForImposition = BasisFactory::basisFactory()->getContinuousBasis(basis);
-//              FieldContainer<double> basisCoefficientsToImpose;
               set<GlobalIndexType> matchingGlobalIndices;
               for (unsigned matchingSubcell : matchingSubcells)
               {
-//                set<int> dofOrdinals = basisForImposition->dofOrdinalsForSubcell(d, matchingSubcell, 0); // 0: include all sub-subcells
-//                for (int dofOrdinal : dofOrdinals)
-//                {
-//                  basisCoefficientsToImpose[dofOrdinal] = basisCoefficients[dofOrdinal];
-//                }
                 set<GlobalIndexType> subcellGlobalIndices = dofInterpreter->globalDofIndicesForVarOnSubcell(var->ID(),cellID,d,matchingSubcell);
                 matchingGlobalIndices.insert(subcellGlobalIndices.begin(),subcellGlobalIndices.end());
               }
@@ -373,12 +366,8 @@ void Boundary::bcsToImpose( map<  GlobalIndexType, Scalar > &globalDofIndicesAnd
           {
             // volume basis
             basis = trialOrderingPtr->getBasis(trialID);
-            // get the continuous version of this so that the dof ordinals for side are correct
-            BasisPtr continuousBasis = BasisFactory::basisFactory()->getContinuousBasis(basis);
-            int sideDim = continuousBasis->domainTopology()->getDimension() - 1;
-            int vertexDim = 0;
-            set<int> dofOrdinals = continuousBasis->dofOrdinalsForSubcell(sideDim, sideOrdinal, vertexDim);
-            numDofsSide = dofOrdinals.size();
+            // get the dof ordinals for the side (interpreted as a "continuous" basis)
+            numDofsSide = basis->dofOrdinalsForSide(sideOrdinal).size();
           }
           else if (! trialOrderingPtr->hasBasisEntry(trialID, sideOrdinal))
           {

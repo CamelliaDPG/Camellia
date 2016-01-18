@@ -1105,9 +1105,7 @@ void GDAMaximumRule2D::interpretLocalBasisCoefficients(GlobalIndexType cellID, i
   {
     // TODO: test this code.  Will get invoked when imposing BCs on volume variables (e.g. in a DG context).
     BasisPtr basis = trialOrdering->getBasis(varID);
-    BasisPtr continuousBasis = BasisFactory::basisFactory()->getContinuousBasis(basis);
-    int sideDim = basis->domainTopology()->getDimension() - 1;
-    set<int> basisDofOrdinalsForSide = continuousBasis->dofOrdinalsForSubcell(sideDim, sideOrdinal, 0);
+    set<int> basisDofOrdinalsForSide = basis->dofOrdinalsForSide(sideOrdinal);
     int ordinalInGlobalDofIndicesContainer = 0;
     for (int basisDofOrdinal : basisDofOrdinalsForSide)
     {

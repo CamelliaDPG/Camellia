@@ -436,10 +436,9 @@ void TBC<Scalar>::coefficientsForBC(FieldContainer<double> &basisCoefficients, T
   }
   else
   {
+    
     unsigned sideOrdinal = sideBasisCache->getSideIndex();
-    BasisPtr continuousBasis = BasisFactory::basisFactory()->getContinuousBasis(basis);
-    int vertexDim = 0;
-    numFieldsExpected = continuousBasis->dofOrdinalsForSubcell(sideDim, sideOrdinal, vertexDim).size();
+    numFieldsExpected = basis->dofOrdinalsForSide(sideOrdinal).size();
   }
   
   TEUCHOS_TEST_FOR_EXCEPTION( basisCoefficients.dimension(1) != numFieldsExpected, std::invalid_argument, "inconsistent basisCoefficients dimensions");

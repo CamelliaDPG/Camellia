@@ -662,11 +662,7 @@ void GDAMinimumRule::interpretLocalBasisCoefficients(GlobalIndexType cellID, int
       // we are restricting a volume basis to the side indicated
       TEUCHOS_TEST_FOR_EXCEPTION(!dofOrdering->hasBasisEntry(varID, VOLUME_INTERIOR_SIDE_ORDINAL), std::invalid_argument, "Basis not found");
       BasisPtr volumeBasis = dofOrdering->getBasis(varID);
-      int sideDim = volumeBasis->domainTopology()->getDimension() - 1;
-      // get the continuous version of this so that the dof ordinals for side are correct
-      BasisPtr continuousBasis = BasisFactory::basisFactory()->getContinuousBasis(volumeBasis);
-      
-      set<int> basisDofOrdinals = continuousBasis->dofOrdinalsForSubcell(sideDim, sideOrdinal, 0);
+      set<int> basisDofOrdinals = volumeBasis->dofOrdinalsForSide(sideOrdinal);
       TEUCHOS_TEST_FOR_EXCEPTION(basisDofOrdinals.size() != basisCoefficients.size(), std::invalid_argument, "basisCoefficients should be sized to match either the basis cardinality (when whole bases are matched) or the cardinality of the restriction");
       const vector<int>* localDofIndices = &dofOrdering->getDofIndices(varID);
       int numEntries = basisCoefficients.size();
@@ -890,10 +886,7 @@ BasisMap GDAMinimumRule::getBasisMapVolumeRestrictedToSide(GlobalIndexType cellI
   DofOrderingPtr trialOrdering = _elementTypeForCell[cellID]->trialOrderPtr;
   
   BasisPtr basis = trialOrdering->getBasis(var->ID());
-  BasisPtr continuousBasis = BasisFactory::basisFactory()->getContinuousBasis(basis);
-  int sideDim = basis->domainTopology()->getDimension() - 1;
-  int vertexDim = 0;
-  set<int> basisDofOrdinalsForSide = continuousBasis->dofOrdinalsForSubcell(sideDim, sideOrdinal, vertexDim);
+  set<int> basisDofOrdinalsForSide = basis->dofOrdinalsForSide(sideOrdinal);
 
   vector<GlobalIndexType> globalDofOrdinals;
   for (int basisDofOrdinalForSide : basisDofOrdinalsForSide)
