@@ -117,9 +117,15 @@ public:
 // method to apply the upwinding terms to soln's stiffness matrix:
 void applyUpwinding(SolutionPtr soln, VarPtr u, VarPtr v, FunctionPtr beta);
 void computeApproximateGradients(SolutionPtr soln, VarPtr u, const vector<GlobalIndexType> &cells, vector<double> &gradient_l2_norm, double weightWithPowerOfH = 0);
-void solveAndExport(SolutionPtr soln, VarPtr u, VarPtr v, FunctionPtr beta, HDF5Exporter exporter, int refNumber);
+void solveAndExport(SolutionPtr soln, VarPtr u, VarPtr v, FunctionPtr beta, HDF5Exporter exporter, int refNumber, bool exportVisualization);
 
 // (implementations below main)
+
+enum RefinementMode
+{
+  FIXED_REF_COUNT,
+  L2_ERR_TOL
+};
 
 int main(int argc, char *argv[])
 {
@@ -131,13 +137,20 @@ int main(int argc, char *argv[])
   int spaceDim = 2;
   
   int polyOrder = 1;
-  int horizontalElements = 8, verticalElements = 8;
-  int numRefinements = 6;
+  int horizontalElements = 2, verticalElements = 2;
+  int numRefinements = -1; // prefer using L^2 tolerance
+  double l2tol = 5e-2;
+  bool exportVisualization = false; // I think visualization might be segfaulting on finer meshes??
+  bool enforceOneIrregularity = true;
+  
   cmdp.setOption("polyOrder", &polyOrder);
   cmdp.setOption("horizontalElements", &horizontalElements);
   cmdp.setOption("verticalElements", &verticalElements);
   cmdp.setOption("numRefinements", &numRefinements);
-  
+  cmdp.setOption("errTol", &l2tol);
+  cmdp.setOption("exportVisualization", "dontExportVisualization", &exportVisualization);
+  cmdp.setOption("enforceOneIrregularity", "dontEnforceOneIrregularity", &enforceOneIrregularity);
+
   string convectiveDirectionChoice = "CCW"; // counter-clockwise, the default.  Other options: left, right, up, down
   cmdp.setOption("convectiveDirection", &convectiveDirectionChoice);
   
@@ -148,6 +161,8 @@ int main(int argc, char *argv[])
 #endif
     return -1;
   }
+  
+  RefinementMode refMode = (numRefinements==-1) ? L2_ERR_TOL : FIXED_REF_COUNT;
   
   FunctionPtr beta_x, beta_y;
   
@@ -264,8 +279,9 @@ int main(int argc, char *argv[])
   int numElements = mesh->getActiveCellIDs().size();
   GlobalIndexType dofCount = mesh->numGlobalDofs();
   
-  int cubatureEnrichment = 5;
-  solveAndExport(soln, u, v, beta, exporter, 0);
+  int cubatureEnrichment = 10;
+  int refNumber = 0;
+  solveAndExport(soln, u, v, beta, exporter, refNumber, exportVisualization);
   
   double err = u_err->l2norm(mesh, cubatureEnrichment);
 
@@ -274,8 +290,18 @@ int main(int argc, char *argv[])
   
   report << numElements << "\t" << dofCount << "\t" << 0 << "\t" << err << "\n";
   
-  for (int refNumber=1; refNumber<=numRefinements; refNumber++)
+  auto keepRefining = [refMode, &refNumber, numRefinements, &err, l2tol] () -> bool
   {
+    if (refMode == FIXED_REF_COUNT)
+      return (refNumber < numRefinements);
+    else
+      return (err > l2tol);
+  };
+  
+  while (keepRefining())
+  {
+    refNumber++;
+    
     vector<double> gradientValues;
     double hPower = 1.0 + spaceDim / 2.0;
     
@@ -300,14 +326,16 @@ int main(int argc, char *argv[])
       }
     }
     mesh->hRefine(cellsToRefine);
+    if (enforceOneIrregularity)
+      mesh->enforceOneIrregularity();
     
     int numElements = mesh->getActiveCellIDs().size();
     GlobalIndexType dofCount = mesh->numGlobalDofs();
     
     mesh_exporter.exportFunction(meshFunction,"mesh",refNumber);
-    solveAndExport(soln, u, v, beta, exporter, refNumber);
+    solveAndExport(soln, u, v, beta, exporter, refNumber, exportVisualization);
     
-    double err = u_err->l2norm(mesh, cubatureEnrichment);
+    err = u_err->l2norm(mesh, cubatureEnrichment);
     
     report << numElements << "\t" << dofCount << "\t" << 0 << "\t" << err << "\n";
     
@@ -356,13 +384,15 @@ void applyUpwinding(SolutionPtr soln, VarPtr u, VarPtr v, FunctionPtr beta)
     int sideCount = cell->getSideCount();
     
     vector<GlobalIndexType> myGlobalDofs_u_native = mesh->globalDofAssignment()->globalDofIndicesForFieldVariable(cellID, u->ID());
-    vector<GlobalIndexTypeToCast> myGlobalDofs_u(myGlobalDofs_u_native.begin(),myGlobalDofs_u_native.end());
     
 //    cout << "cell ID " << cellID;
 //    print("myGlobalDofs_u", myGlobalDofs_u);
     
     for (int sideOrdinal = 0; sideOrdinal < sideCount; sideOrdinal++)
     {
+      // we'll filter this down to match only the side dofs, so we need to do this inside the sideOrdinal loop:
+      vector<GlobalIndexTypeToCast> myGlobalDofs_u(myGlobalDofs_u_native.begin(),myGlobalDofs_u_native.end());
+      
       pair<GlobalIndexType,unsigned> neighborInfo = cell->getNeighborInfo(sideOrdinal, meshTopo);
       GlobalIndexType neighborCellID = neighborInfo.first;
       unsigned mySideOrdinalInNeighbor = neighborInfo.second;
@@ -420,18 +450,51 @@ void applyUpwinding(SolutionPtr soln, VarPtr u, VarPtr v, FunctionPtr beta)
       LinearTermPtr jumpTerm = v * beta * n;
       Intrepid::FieldContainer<double> jump_values(numCells, numFields, numPoints);
       jumpTerm->values(jump_values, v->ID(), vBasis, cellBasisCacheSide);
+
+      // filter to include only those members of uBasis that have support on the side
+      // (it might be nice to have LinearTerm::values() support this directly, via a basisDofOrdinal container argument...)
+      auto filterSideBasisValues = [] (BasisPtr basis, int sideOrdinal,
+                                       FieldContainer<double> &values) -> void
+      {
+        set<int> mySideBasisDofOrdinals = basis->dofOrdinalsForSide(sideOrdinal);
+        int numFilteredFields = mySideBasisDofOrdinals.size();
+        int numCells = values.dimension(0);
+        int numPoints = values.dimension(2);
+        FieldContainer<double> filteredValues(numCells,numFilteredFields,numPoints);
+        for (int cellOrdinal=0; cellOrdinal<numCells; cellOrdinal++)
+        {
+          int filteredDofOrdinal = 0;
+          for (int basisDofOrdinal : mySideBasisDofOrdinals)
+          {
+            for (int pointOrdinal=0; pointOrdinal<numPoints; pointOrdinal++)
+            {
+              filteredValues(cellOrdinal,filteredDofOrdinal,pointOrdinal) = values(cellOrdinal,basisDofOrdinal,pointOrdinal);
+            }
+            filteredDofOrdinal++;
+          }
+        }
+        values = filteredValues;
+      };
+      
+      auto filterGlobalDofOrdinals = [] (BasisPtr basis, int sideOrdinal,
+                                       vector<GlobalIndexTypeToCast> &globalDofOrdinals) -> void
+      {
+        set<int> mySideBasisDofOrdinals = basis->dofOrdinalsForSide(sideOrdinal);
+        vector<GlobalIndexTypeToCast> filteredGlobalDofOrdinals;
+        for (int basisDofOrdinal : mySideBasisDofOrdinals)
+        {
+          filteredGlobalDofOrdinals.push_back(globalDofOrdinals[basisDofOrdinal]);
+        }
+        globalDofOrdinals = filteredGlobalDofOrdinals;
+      };
+      
+      filterSideBasisValues(uBasis,sideOrdinal,u_values);
+      filterSideBasisValues(vBasis,sideOrdinal,jump_values);
+      filterGlobalDofOrdinals(uBasis,sideOrdinal,myGlobalDofs_u);
+      numFields = myGlobalDofs_u.size();
       
       // Now the geometrically challenging bit: we need to line up the physical points in
       // the cellBasisCacheSide with those in a BasisCache for the neighbor cell
-      
-      // For the moment, we make the assumption neighbor *is* a peer in terms of the h-refinements
-      // We can revisit this later; not too great a change is necessary, really; see particularly
-      // RefinementPattern::mapRefCellPointsToAncestor().  The strategy would be to use this on "my"
-      // side, and then use the permutation stuff below to transform into neighbor's reference space.
-      // (MAY EVEN BE ABLE TO USE BasisCache::basisCacheForRefinedReferenceCell() to make this simpler still.)
-      
-      // On the peer assumption, the only transformation necessary is a possible permutation of the
-      // side vertices.
       
       CellTopoPtr cellTopo = cell->topology();
       CellTopoPtr neighborTopo = neighbor->topology();
@@ -543,35 +606,29 @@ void applyUpwinding(SolutionPtr soln, VarPtr u, VarPtr v, FunctionPtr beta)
       Intrepid::FieldContainer<double> neighbor_jump_values(numCells, numNeighborFields, numPoints);
       jumpTerm->values(neighbor_jump_values, v->ID(), vBasisNeighbor, neighborSideCache);
       
+      int neighborSideOrdinal = neighborSideCache->getSideIndex();
+      filterSideBasisValues(uBasisNeighbor,neighborSideOrdinal,neighbor_u_values);
+      filterSideBasisValues(vBasisNeighbor,neighborSideOrdinal,neighbor_jump_values);
+      filterGlobalDofOrdinals(uBasisNeighbor,neighborSideOrdinal,neighborGlobalDofs_u);
+      numNeighborFields = neighborGlobalDofs_u.size();
+      
       // weight u_values containers using cubature weights defined in cellBasisCacheSide:
       Intrepid::FunctionSpaceTools::multiplyMeasure<double>(u_values, cellBasisCacheSide->getWeightedMeasures(), u_values);
       Intrepid::FunctionSpaceTools::multiplyMeasure<double>(neighbor_u_values, cellBasisCacheSide->getWeightedMeasures(), neighbor_u_values);
       
-      // now, we compute four integrals (test, trial)
-      Intrepid::FieldContainer<double> integralValues_me_me(numCells,numFields,numFields);
-      Intrepid::FunctionSpaceTools::integrate<double>(integralValues_me_me,jump_values,u_values,Intrepid::COMP_BLAS);
-//      cout << "integralValues_me_me:\n" << integralValues_me_me;
-      
-      Intrepid::FieldContainer<double> integralValues_neighbor_me(numCells,numNeighborFields,numFields);
-      Intrepid::FunctionSpaceTools::integrate<double>(integralValues_neighbor_me,neighbor_jump_values,u_values,Intrepid::COMP_BLAS);
-//      cout << "integralValues_me_neighbor:\n" << integralValues_me_neighbor;
-      
-      Intrepid::FieldContainer<double> integralValues_me_neighbor(numCells,numFields,numNeighborFields);
-      Intrepid::FunctionSpaceTools::integrate<double>(integralValues_me_neighbor,jump_values,neighbor_u_values,Intrepid::COMP_BLAS);
-//      cout << "integralValues_neighbor_me:\n" << integralValues_neighbor_me;
-      
-      Intrepid::FieldContainer<double> integralValues_neighbor_neighbor(numCells,numNeighborFields,numNeighborFields);
-      Intrepid::FunctionSpaceTools::integrate<double>(integralValues_neighbor_neighbor,neighbor_jump_values,neighbor_u_values,Intrepid::COMP_BLAS);
-//      cout << "integralValues_neighbor_neighbor:\n" << integralValues_neighbor_neighbor;
-
-      // because I don't trust Epetra in terms of the format, let's insert values one at a time
-      // define lambda for this
+      // now, we compute four integrals (test, trial) and insert into global stiffness
+      // define a lambda function for insertion
       auto insertValues = [stiffnessMatrix] (vector<int> &rowDofOrdinals, vector<int> &colDofOrdinals,
                                              Intrepid::FieldContainer<double> &values) -> void
       {
         // values container is (cell, test, trial)
         int rowCount = rowDofOrdinals.size();
         int colCount = colDofOrdinals.size();
+        
+        //        stiffnessMatrix->InsertGlobalValues(rowCount,&rowDofOrdinals[0],colCount,&colDofOrdinals[0],&values(0,0,0),
+        //                                            Epetra_FECrsMatrix::ROW_MAJOR); // COL_MAJOR is the right thing, actually, but for some reason does not work...
+        
+        // because I don't trust Epetra in terms of the format, let's insert values one at a time
         for (int i=0; i<rowCount; i++)
         {
           for (int j=0; j<colCount; j++)
@@ -579,15 +636,51 @@ void applyUpwinding(SolutionPtr soln, VarPtr u, VarPtr v, FunctionPtr beta)
             // rows in FieldContainer correspond to trial variables, cols to test
             // in stiffness matrix, it's the opposite.
             if (values(0,i,j) != 0) // skip 0's, which I believe Epetra should ignore anyway
+            {
+//              cout << "Inserting (" << rowDofOrdinals[i] << "," << colDofOrdinals[j] << ") = ";
+//              cout << values(0,i,j) << endl;
               stiffnessMatrix->InsertGlobalValues(1,&rowDofOrdinals[i],1,&colDofOrdinals[j],&values(0,i,j));
+            }
           }
         }
       };
+      
+      auto hasNonzeros = [] (Intrepid::FieldContainer<double> &values, double tol) -> bool
+      {
+        for (int i=0; i<values.size(); i++)
+        {
+          if (abs(values[i]) > tol) return true;
+        }
+        return false;
+      };
 
-      insertValues(myGlobalDofs_u,myGlobalDofs_u,integralValues_me_me);
-      insertValues(myGlobalDofs_u,neighborGlobalDofs_u,integralValues_me_neighbor);
-      insertValues(neighborGlobalDofs_u,myGlobalDofs_u,integralValues_neighbor_me);
-      insertValues(neighborGlobalDofs_u,neighborGlobalDofs_u,integralValues_neighbor_neighbor);
+      if (hasNonzeros(jump_values,0) && hasNonzeros(u_values,0))
+      {
+        Intrepid::FieldContainer<double> integralValues_me_me(numCells,numFields,numFields);
+        Intrepid::FunctionSpaceTools::integrate<double>(integralValues_me_me,jump_values,u_values,Intrepid::COMP_BLAS);
+        insertValues(myGlobalDofs_u,myGlobalDofs_u,integralValues_me_me);
+      }
+      
+      if (hasNonzeros(neighbor_jump_values,0) && hasNonzeros(u_values,0))
+      {
+        Intrepid::FieldContainer<double> integralValues_neighbor_me(numCells,numNeighborFields,numFields);
+        Intrepid::FunctionSpaceTools::integrate<double>(integralValues_neighbor_me,neighbor_jump_values,u_values,Intrepid::COMP_BLAS);
+        insertValues(neighborGlobalDofs_u,myGlobalDofs_u,integralValues_neighbor_me);
+      }
+
+      if (hasNonzeros(jump_values,0) && hasNonzeros(neighbor_u_values,0))
+      {
+        Intrepid::FieldContainer<double> integralValues_me_neighbor(numCells,numFields,numNeighborFields);
+        Intrepid::FunctionSpaceTools::integrate<double>(integralValues_me_neighbor,jump_values,neighbor_u_values,Intrepid::COMP_BLAS);
+        insertValues(myGlobalDofs_u,neighborGlobalDofs_u,integralValues_me_neighbor);
+      }
+      
+      if (hasNonzeros(neighbor_jump_values,0) && hasNonzeros(neighbor_u_values,0))
+      {
+        Intrepid::FieldContainer<double> integralValues_neighbor_neighbor(numCells,numNeighborFields,numNeighborFields);
+        Intrepid::FunctionSpaceTools::integrate<double>(integralValues_neighbor_neighbor,neighbor_jump_values,neighbor_u_values,Intrepid::COMP_BLAS);
+        insertValues(neighborGlobalDofs_u,neighborGlobalDofs_u,integralValues_neighbor_neighbor);
+      }
     }
   }
 }
@@ -728,7 +821,8 @@ void computeApproximateGradients(SolutionPtr soln, VarPtr u, const vector<Global
   }
 }
 
-void solveAndExport(SolutionPtr soln, VarPtr u, VarPtr v, FunctionPtr beta, HDF5Exporter exporter, int refNumber)
+void solveAndExport(SolutionPtr soln, VarPtr u, VarPtr v, FunctionPtr beta, HDF5Exporter exporter, int refNumber,
+                    bool exportVisualization)
 {
   SolverPtr solver = Solver::getDirectSolver();
   
@@ -750,5 +844,6 @@ void solveAndExport(SolutionPtr soln, VarPtr u, VarPtr v, FunctionPtr beta, HDF5
   
   soln->importSolution(); // determines element-local solution coefficients from the global solution vector
   
-  exporter.exportSolution(soln,refNumber);
+  if (exportVisualization)
+    exporter.exportSolution(soln,refNumber);
 }
