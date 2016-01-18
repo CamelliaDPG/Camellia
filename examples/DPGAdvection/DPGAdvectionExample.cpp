@@ -114,6 +114,12 @@ public:
 void computeApproximateGradients(SolutionPtr soln, VarPtr u, const vector<GlobalIndexType> &cells,
                                  vector<double> &gradient_l2_norm, double weightWithPowerOfH);
 
+enum RefinementMode
+{
+  FIXED_REF_COUNT,
+  L2_ERR_TOL
+};
+
 int main(int argc, char *argv[])
 {
   Teuchos::GlobalMPISession mpiSession(&argc, &argv, NULL); // initialize MPI
@@ -124,18 +130,24 @@ int main(int argc, char *argv[])
   int polyOrder = 1;
   int horizontalElements = 2, verticalElements = 2;
   int pToAddTest = 2; // using at least spaceDim seems to be important for pure convection
-  int numRefinements = 6;
+  int numRefinements = -1; // prefer using L^2 tolerance
+  double l2tol = 5e-2;
   int spaceDim = 2;
   bool useEnergyNormForRefinements = false;
   bool useCondensedSolve = false;
+  bool exportVisualization = false; // I think visualization might be segfaulting on finer meshes??
+  bool enforceOneIrregularity = true;
   
   cmdp.setOption("polyOrder", &polyOrder);
   cmdp.setOption("delta_k", &pToAddTest);
   cmdp.setOption("horizontalElements", &horizontalElements);
   cmdp.setOption("verticalElements", &verticalElements);
   cmdp.setOption("numRefinements", &numRefinements);
+  cmdp.setOption("errTol", &l2tol);
   cmdp.setOption("useEnergyError", "useGradientIndicator", &useEnergyNormForRefinements);
   cmdp.setOption("useCondensedSolve", "useStandardSolve", &useCondensedSolve);
+  cmdp.setOption("exportVisualization", "dontExportVisualization", &exportVisualization);
+  cmdp.setOption("enforceOneIrregularity", "dontEnforceOneIrregularity", &enforceOneIrregularity);
   
   string convectiveDirectionChoice = "CCW"; // counter-clockwise, the default.  Other options: left, right, up, down
   cmdp.setOption("convectiveDirection", &convectiveDirectionChoice);
@@ -147,6 +159,8 @@ int main(int argc, char *argv[])
 #endif
     return -1;
   }
+  
+  RefinementMode refMode = (numRefinements==-1) ? L2_ERR_TOL : FIXED_REF_COUNT;
   
   FunctionPtr beta_x, beta_y;
   
@@ -267,7 +281,9 @@ int main(int argc, char *argv[])
     name << "_gradientErrorIndicator";
   HDF5Exporter exporter(mesh, name.str(), ".");
   
-  exporter.exportSolution(soln,0); // 0 for the refinement number (or time step)
+  int refNumber = 0;
+  if (exportVisualization)
+    exporter.exportSolution(soln,refNumber);
   
   FunctionPtr u_soln = Function::solution(u, soln);
   FunctionPtr u_err = u_soln - u_exact;
@@ -276,25 +292,30 @@ int main(int argc, char *argv[])
   GlobalIndexType dofCount = mesh->numGlobalDofs();
   GlobalIndexType traceCount = mesh->numFluxDofs();
 
-//  set<GlobalIndexType> cellIDs = mesh->getActiveCellIDs();
-//  int cubatureEnrichment = 5;
-//  double l2_err_squared = 0;
-//  for (GlobalIndexType cellID : cellIDs)
-//  {
-//    BasisCachePtr basisCache = BasisCache::basisCacheForCell(mesh, cellID, false, cubatureEnrichment);
-//    l2_err_squared += (u_err * u_err)->integrate(basisCache);
-//  }
-//  double err = sqrt(l2_err_squared);
+  int DG_cubatureEnrichment = 10;
+  // polynomial orders for DPG are relative to H^1 order, leading to +1 on test and trial here;
+  // then we also enrich the test space:
+  int cubatureEnrichment = DG_cubatureEnrichment - 2 - pToAddTest;
   
-  double err = u_err->l2norm(mesh);
+  double err = u_err->l2norm(mesh, cubatureEnrichment);
   
   cout << "Initial mesh has " << numElements << " active elements and " << dofCount << " degrees of freedom; ";
   cout << "L^2 error = " << err << ".\n";
   
   report << numElements << "\t" << dofCount << "\t" << traceCount << "\t" << err << "\n";
   
-  for (int refNumber=1; refNumber<=numRefinements; refNumber++)
+  auto keepRefining = [refMode, &refNumber, numRefinements, &err, l2tol] () -> bool
   {
+    if (refMode == FIXED_REF_COUNT)
+      return (refNumber < numRefinements);
+    else
+      return (err > l2tol);
+  };
+  
+  while (keepRefining())
+  {
+    refNumber++;
+    
     vector<double> errorIndicatorValues;
     double hPower = 1.0 + spaceDim / 2.0;
     
@@ -334,7 +355,8 @@ int main(int argc, char *argv[])
       }
     }
     mesh->hRefine(cellsToRefine);
-//    mesh->enforceOneIrregularity();
+    if (enforceOneIrregularity)
+      mesh->enforceOneIrregularity();
     
     int numElements = mesh->getActiveCellIDs().size();
     GlobalIndexType dofCount = mesh->numGlobalDofs();
@@ -344,14 +366,15 @@ int main(int argc, char *argv[])
     if (solveSuccess != 0)
       cout << "solve returned with error code " << solveSuccess << endl;
 
-    double err = u_err->l2norm(mesh);
+    err = u_err->l2norm(mesh, cubatureEnrichment);
     
     cout << "Ref. " << refNumber << " mesh has " << numElements << " active elements and " << dofCount << " degrees of freedom; ";
     cout << "L^2 error = " << err << ".\n";
     
     report << numElements << "\t" << dofCount << "\t" << traceCount << "\t" << err << "\n";
     
-    exporter.exportSolution(soln,refNumber);
+    if (exportVisualization)
+      exporter.exportSolution(soln,refNumber);
   }
   
   ostringstream reportTitle;
