@@ -6,6 +6,7 @@
 #include "GlobalDofAssignment.h"
 #include "HDF5Exporter.h"
 #include "MeshFactory.h"
+#include "MPIWrapper.h"
 #include "RHS.h"
 #include "SerialDenseWrapper.h"
 #include "SimpleFunction.h"
@@ -120,10 +121,22 @@ enum RefinementMode
   L2_ERR_TOL
 };
 
+// most of these are cumulative "maximum" timings taken from Solution, with the exception of timeRefinements
+static double timeLocalStiffness = 0, timeOtherAssembly = 0, timeSolve = 0, timeRefinements = 0;
+
 int main(int argc, char *argv[])
 {
   Teuchos::GlobalMPISession mpiSession(&argc, &argv, NULL); // initialize MPI
   int rank = Teuchos::GlobalMPISession::getRank();
+  
+#ifdef HAVE_MPI
+  Epetra_MpiComm Comm(MPI_COMM_WORLD);
+  //cout << "rank: " << rank << " of " << numProcs << endl;
+#else
+  Epetra_SerialComm Comm;
+#endif
+  
+  Comm.Barrier(); // set breakpoint here to allow debugger attachment to other MPI processes than the one you automatically attached to.
   
   Teuchos::CommandLineProcessor cmdp(false,true); // false: don't throw exceptions; true: do return errors for unrecognized options
   
@@ -222,7 +235,7 @@ int main(int argc, char *argv[])
   }
   else
   {
-    cout << "convective direction " << convectiveDirectionChoice << " is not a supported option.\n";
+    if (rank==0) cout << "convective direction " << convectiveDirectionChoice << " is not a supported option.\n";
   }
   
   FunctionPtr beta = Function::vectorize(beta_x, beta_y);
@@ -268,7 +281,7 @@ int main(int argc, char *argv[])
   
   int solveSuccess = soln->solve(solver);
   if (solveSuccess != 0)
-    cout << "solve returned with error code " << solveSuccess << endl;
+    if (rank ==0) cout << "solve returned with error code " << solveSuccess << endl;
   
   ostringstream report;
   report << "elems\tdofs\ttrace_dofs\terr\n";
@@ -299,8 +312,11 @@ int main(int argc, char *argv[])
   
   double err = u_err->l2norm(mesh, cubatureEnrichment);
   
-  cout << "Initial mesh has " << numElements << " active elements and " << dofCount << " degrees of freedom; ";
-  cout << "L^2 error = " << err << ".\n";
+  if (rank == 0)
+  {
+    cout << "Initial mesh has " << numElements << " active elements and " << dofCount << " degrees of freedom; ";
+    cout << "L^2 error = " << err << ".\n";
+  }
   
   report << numElements << "\t" << dofCount << "\t" << traceCount << "\t" << err << "\n";
   
@@ -312,44 +328,65 @@ int main(int argc, char *argv[])
       return (err > l2tol);
   };
   
+  Epetra_Time refinementTimer(Comm);
+  
   while (keepRefining())
   {
     refNumber++;
     
-    vector<double> errorIndicatorValues;
+    refinementTimer.ResetStartTime();
+    
     double hPower = 1.0 + spaceDim / 2.0;
     
     set<GlobalIndexType> cellIDSet = mesh->getActiveCellIDs();
+    set<GlobalIndexType> myCellIDSet = mesh->cellIDsInPartition();
+    vector<GlobalIndexType> myCellIDs(myCellIDSet.begin(),myCellIDSet.end());
+    
     vector<GlobalIndexType> cellIDs(cellIDSet.begin(),cellIDSet.end());
   
+    vector<double> globalErrorIndicatorValues(cellIDs.size(),0);
+    
     if (useEnergyNormForRefinements)
     {
       const map<GlobalIndexType,double>* energyError = &soln->globalEnergyError();
-      errorIndicatorValues.resize(cellIDs.size());
       for (int cellOrdinal=0; cellOrdinal<cellIDs.size(); cellOrdinal++)
       {
         GlobalIndexType cellID = cellIDs[cellOrdinal];
-        errorIndicatorValues[cellOrdinal] = energyError->find(cellID)->second;
+        globalErrorIndicatorValues[cellOrdinal] = energyError->find(cellID)->second;
 //        cout << "energy error for cell " << cellID << ": " << errorIndicatorValues[cellOrdinal] << endl;
       }
     }
     else
     {
-      computeApproximateGradients(soln, u, cellIDs, errorIndicatorValues, hPower);
+      vector<double> myErrorIndicatorValues;
+      soln->importGlobalSolution(); // not ideal
+      computeApproximateGradients(soln, u, myCellIDs, myErrorIndicatorValues, hPower);
+      // now fill in the global error indicator values
+      int myCellOrdinal = 0;
+      for (int cellOrdinal=0; cellOrdinal<cellIDs.size(); cellOrdinal++)
+      {
+        GlobalIndexType cellID = cellIDs[cellOrdinal];
+        if (myCellIDSet.find(cellID) != myCellIDSet.end())
+        {
+          globalErrorIndicatorValues[cellOrdinal] = myErrorIndicatorValues[myCellOrdinal];
+          myCellOrdinal++;
+        }
+      }
+      MPIWrapper::entryWiseSum<double>(Comm,globalErrorIndicatorValues);
     }
     
     // refine the top 30% of cells
     int numCellsToRefine = 0.3 * cellIDs.size();
     int numCellsNotToRefine = (cellIDs.size()-numCellsToRefine);
-    vector<double> errorIndicatorValuesCopy = errorIndicatorValues;
-    std::nth_element(errorIndicatorValues.begin(),errorIndicatorValues.begin() + numCellsNotToRefine,
-                     errorIndicatorValues.end());
+    vector<double> globalErrorIndicatorValuesCopy = globalErrorIndicatorValues;
+    std::nth_element(globalErrorIndicatorValues.begin(),globalErrorIndicatorValues.begin() + numCellsNotToRefine,
+                     globalErrorIndicatorValues.end());
     
-    double threshold = errorIndicatorValues[numCellsNotToRefine-1];
+    double threshold = globalErrorIndicatorValues[numCellsNotToRefine-1];
     vector<GlobalIndexType> cellsToRefine;
     for (int i=0; i<cellIDs.size(); i++)
     {
-      if (errorIndicatorValuesCopy[i] > threshold)
+      if (globalErrorIndicatorValuesCopy[i] > threshold)
       {
         cellsToRefine.push_back(cellIDs[i]);
       }
@@ -358,18 +395,27 @@ int main(int argc, char *argv[])
     if (enforceOneIrregularity)
       mesh->enforceOneIrregularity();
     
+    timeRefinements += refinementTimer.ElapsedTime();
+    
     int numElements = mesh->getActiveCellIDs().size();
     GlobalIndexType dofCount = mesh->numGlobalDofs();
     GlobalIndexType traceCount = mesh->numFluxDofs();
     
     int solveSuccess = soln->solve(solver);
     if (solveSuccess != 0)
-      cout << "solve returned with error code " << solveSuccess << endl;
+      if (rank==0) cout << "solve returned with error code " << solveSuccess << endl;
 
+    timeSolve += soln->maxTimeSolve();
+    timeLocalStiffness += soln->maxTimeLocalStiffness();
+    timeOtherAssembly += soln->maxTimeGlobalAssembly();
+    
     err = u_err->l2norm(mesh, cubatureEnrichment);
     
-    cout << "Ref. " << refNumber << " mesh has " << numElements << " active elements and " << dofCount << " degrees of freedom; ";
-    cout << "L^2 error = " << err << ".\n";
+    if (rank==0)
+    {
+      cout << "Ref. " << refNumber << " mesh has " << numElements << " active elements and " << dofCount << " degrees of freedom; ";
+      cout << "L^2 error = " << err << ".\n";
+    }
     
     report << numElements << "\t" << dofCount << "\t" << traceCount << "\t" << err << "\n";
     
@@ -385,10 +431,19 @@ int main(int argc, char *argv[])
     reportTitle << "_gradientErrorIndicator";
   reportTitle << ".dat";
   
-  ofstream fout(reportTitle.str().c_str());
-  fout << report.str();
-  fout.close();
-  cout << "Wrote results to " << reportTitle.str() << ".\n";
+  if (rank == 0)
+  {
+    ofstream fout(reportTitle.str().c_str());
+    fout << report.str();
+    fout.close();
+    cout << "Wrote results to " << reportTitle.str() << ".\n";
+    
+    cout << "Timings:\n";
+    cout << "compute local stiffness: " << timeLocalStiffness << " secs.\n";
+    cout << "other assembly:          " << timeOtherAssembly << " secs.\n";
+    cout << "solve:                   " << timeSolve << " secs.\n";
+    cout << "refine:                  " << timeRefinements << " secs.\n";
+  }
   
   return 0;
 }
@@ -420,6 +475,10 @@ void computeApproximateGradients(SolutionPtr soln, VarPtr u, const vector<Global
     cellsAndNeighborsSet.insert(neighborIDs.begin(),neighborIDs.end());
   }
   vector<GlobalIndexType> cellsAndNeighbors(cellsAndNeighborsSet.begin(),cellsAndNeighborsSet.end());
+  
+  // get any off-rank solution data we may need:
+  soln->importGlobalSolution(); // not the most efficient, but the below is not working...
+//  soln->importSolutionForOffRankCells(cellsAndNeighborsSet);
   
   int cellsAndNeighborsCount = cellsAndNeighbors.size();
   
@@ -477,6 +536,26 @@ void computeApproximateGradients(SolutionPtr soln, VarPtr u, const vector<Global
     {
       cellDiameter(cellOrdinal,0) = soln->mesh()->getCellMeasure(cellID);
     }
+//    {
+//      // DEBUGGING
+//      int rank = Teuchos::GlobalMPISession::getRank();
+//      FieldContainer<double> solnCoeffs;
+//      soln->solnCoeffsForCellID(solnCoeffs, cellID, u->ID());
+//      vector<double> solnCoeffsVector(solnCoeffs.size());
+//
+//      cout << "rank " << rank << ", cell " << cellID << ", value at (";
+//      for (int d=0; d<spaceDim; d++)
+//      {
+//        cout << cellCenters(cellOrdinal,d);
+//        if (d<spaceDim-1) cout << ",";
+//      }
+//      cout << ") = " << cellValue[0] << "; coefficients: ";
+//      for (int i=0; i<solnCoeffs.size(); i++)
+//      {
+//        cout << solnCoeffs[i] << " ";
+//      }
+//      cout << endl;
+//    }
   }
   
   // now compute the gradients requested

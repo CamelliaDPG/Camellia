@@ -17,6 +17,7 @@
 #include "Epetra_FECrsMatrix.h"
 #include "EpetraExt_MultiVectorOut.h"
 #include "EpetraExt_RowMatrixOut.h"
+#include "Epetra_Time.h"
 
 #include "Intrepid_FunctionSpaceTools.hpp"
 
@@ -127,10 +128,19 @@ enum RefinementMode
   L2_ERR_TOL
 };
 
+// some static cumulative timing variables:
+static double timeApplyUpwinding = 0, timeOtherAssembly = 0, timeSolve = 0, timeRefinements = 0;
+
 int main(int argc, char *argv[])
 {
   Teuchos::GlobalMPISession mpiSession(&argc, &argv, NULL); // initialize MPI
   int rank = Teuchos::GlobalMPISession::getRank();
+  
+#ifdef HAVE_MPI
+  Epetra_MpiComm Comm(MPI_COMM_WORLD);
+#else
+  Epetra_SerialComm Comm;
+#endif
   
   Teuchos::CommandLineProcessor cmdp(false,true); // false: don't throw exceptions; true: do return errors for unrecognized options
   
@@ -224,7 +234,7 @@ int main(int argc, char *argv[])
   }
   else
   {
-    cout << "convective direction " << convectiveDirectionChoice << " is not a supported option.\n";
+    if (rank==0) cout << "convective direction " << convectiveDirectionChoice << " is not a supported option.\n";
   }
   
   FunctionPtr beta = Function::vectorize(beta_x, beta_y);
@@ -285,8 +295,11 @@ int main(int argc, char *argv[])
   
   double err = u_err->l2norm(mesh, cubatureEnrichment);
 
-  cout << "Initial mesh has " << numElements << " active elements and " << dofCount << " degrees of freedom; ";
-  cout << "L^2 error = " << err << ".\n";
+  if (rank==0)
+  {
+    cout << "Initial mesh has " << numElements << " active elements and " << dofCount << " degrees of freedom; ";
+    cout << "L^2 error = " << err << ".\n";
+  }
   
   report << numElements << "\t" << dofCount << "\t" << 0 << "\t" << err << "\n";
   
@@ -298,29 +311,49 @@ int main(int argc, char *argv[])
       return (err > l2tol);
   };
   
+  Epetra_Time refinementTimer(Comm);
+  
   while (keepRefining())
   {
     refNumber++;
     
-    vector<double> gradientValues;
+    refinementTimer.ResetStartTime();
+    
     double hPower = 1.0 + spaceDim / 2.0;
     
     set<GlobalIndexType> cellIDSet = mesh->getActiveCellIDs();
     vector<GlobalIndexType> cellIDs(cellIDSet.begin(),cellIDSet.end());
+    set<GlobalIndexType> myCellIDSet = mesh->cellIDsInPartition();
+    vector<GlobalIndexType> myCellIDs(myCellIDSet.begin(),myCellIDSet.end());
     
-    computeApproximateGradients(soln, u, cellIDs, gradientValues, hPower);
+    vector<double> globalErrorIndicatorValues(cellIDs.size(),0);
+    
+    vector<double> myErrorIndicatorValues;
+    computeApproximateGradients(soln, u, myCellIDs, myErrorIndicatorValues, hPower);
+    // now fill in the global error indicator values
+    int myCellOrdinal = 0;
+    for (int cellOrdinal=0; cellOrdinal<cellIDs.size(); cellOrdinal++)
+    {
+      GlobalIndexType cellID = cellIDs[cellOrdinal];
+      if (myCellIDSet.find(cellID) != myCellIDSet.end())
+      {
+        globalErrorIndicatorValues[cellOrdinal] = myErrorIndicatorValues[myCellOrdinal];
+        myCellOrdinal++;
+      }
+    }
+    MPIWrapper::entryWiseSum<double>(Comm,globalErrorIndicatorValues);
     
     // refine the top 30% of cells
     int numCellsToRefine = 0.3 * cellIDs.size();
     int numCellsNotToRefine = (cellIDs.size()-numCellsToRefine);
-    vector<double> gradientValuesCopy = gradientValues;
-    std::nth_element(gradientValues.begin(),gradientValues.begin() + numCellsNotToRefine, gradientValues.end());
+    vector<double> globalErrorIndicatorValuesCopy = globalErrorIndicatorValues;
+    std::nth_element(globalErrorIndicatorValues.begin(),globalErrorIndicatorValues.begin() + numCellsNotToRefine, globalErrorIndicatorValues.end());
     
-    double threshold = gradientValues[numCellsNotToRefine-1];
+    double threshold = globalErrorIndicatorValues[numCellsNotToRefine-1];
     vector<GlobalIndexType> cellsToRefine;
     for (int i=0; i<cellIDs.size(); i++)
     {
-      if (gradientValuesCopy[i] > threshold)
+      if (globalErrorIndicatorValuesCopy[i] > threshold)
       {
         cellsToRefine.push_back(cellIDs[i]);
       }
@@ -329,27 +362,43 @@ int main(int argc, char *argv[])
     if (enforceOneIrregularity)
       mesh->enforceOneIrregularity();
     
+    timeRefinements += refinementTimer.ElapsedTime();
+    
     int numElements = mesh->getActiveCellIDs().size();
     GlobalIndexType dofCount = mesh->numGlobalDofs();
     
-    mesh_exporter.exportFunction(meshFunction,"mesh",refNumber);
+    if (exportVisualization)
+      mesh_exporter.exportFunction(meshFunction,"mesh",refNumber);
+    
     solveAndExport(soln, u, v, beta, exporter, refNumber, exportVisualization);
     
     err = u_err->l2norm(mesh, cubatureEnrichment);
     
     report << numElements << "\t" << dofCount << "\t" << 0 << "\t" << err << "\n";
     
-    cout << "Ref. " << refNumber << " mesh has " << numElements << " active elements and " << dofCount << " degrees of freedom; ";
-    cout << "L^2 error = " << err << ".\n";
+    if (rank==0)
+    {
+      cout << "Ref. " << refNumber << " mesh has " << numElements << " active elements and " << dofCount << " degrees of freedom; ";
+      cout << "L^2 error = " << err << ".\n";
+    }
   }
   
   ostringstream reportTitle;
   reportTitle << "DGAdvection_" << convectiveDirectionChoice << "_k" << polyOrder << "_" << numRefinements << "refs.dat";
   
-  ofstream fout(reportTitle.str().c_str());
-  fout << report.str();
-  fout.close();
-  cout << "Wrote results to " << reportTitle.str() << ".\n";
+  if (rank==0)
+  {
+    ofstream fout(reportTitle.str().c_str());
+    fout << report.str();
+    fout.close();
+    cout << "Wrote results to " << reportTitle.str() << ".\n";
+    
+    cout << "Timings:\n";
+    cout << "apply upwinding: " << timeApplyUpwinding << " secs.\n";
+    cout << "other assembly : " << timeOtherAssembly << " secs.\n";
+    cout << "solve:           " << timeSolve << " secs.\n";
+    cout << "refine:          " << timeRefinements << " secs.\n";
+  }
 
   return 0;
 }
@@ -419,8 +468,6 @@ void applyUpwinding(SolutionPtr soln, VarPtr u, VarPtr v, FunctionPtr beta)
       // determine global dof indices:
       vector<GlobalIndexType> neighborGlobalDofs_u_native = mesh->globalDofAssignment()->globalDofIndicesForFieldVariable(neighborCellID, u->ID());
       vector<GlobalIndexTypeToCast> neighborGlobalDofs_u(neighborGlobalDofs_u_native.begin(),neighborGlobalDofs_u_native.end());
-      
-//      print("neighborGlobalDofs_u", neighborGlobalDofs_u);
       
       // figure out what the cubature degree should be
       DofOrderingPtr neighborTrialOrder = mesh->getElementType(neighborCellID)->trialOrderPtr;
@@ -711,6 +758,10 @@ void computeApproximateGradients(SolutionPtr soln, VarPtr u, const vector<Global
   }
   vector<GlobalIndexType> cellsAndNeighbors(cellsAndNeighborsSet.begin(),cellsAndNeighborsSet.end());
   
+  // get any off-rank solution data we may need:
+  soln->importGlobalSolution(); // not the most efficient, but the below is not working...
+  //  soln->importSolutionForOffRankCells(cellsAndNeighborsSet);
+  
   int cellsAndNeighborsCount = cellsAndNeighbors.size();
   
   FieldContainer<double> cellValues(cellsAndNeighborsCount,onePoint); // values at cell centers
@@ -829,15 +880,29 @@ void solveAndExport(SolutionPtr soln, VarPtr u, VarPtr v, FunctionPtr beta, HDF5
   soln->initializeLHSVector();
   soln->initializeStiffnessAndLoad();
   
+#ifdef HAVE_MPI
+  Epetra_MpiComm Comm(MPI_COMM_WORLD);
+#else
+  Epetra_SerialComm Comm;
+#endif
+  Epetra_Time timer(Comm);
   // this is where we want to accumulate any inter-element DG terms
   applyUpwinding(soln, u, v, beta);
+
+  timeApplyUpwinding += timer.ElapsedTime();
   
   // it is important to do the above accumulation before BCs are imposed, which they
   // will be in populateStiffnessAndLoad().
+  
+  timer.ResetStartTime();
   soln->populateStiffnessAndLoad();
+  timeOtherAssembly += timer.ElapsedTime();
+  
   soln->setProblem(solver);
   
+  timer.ResetStartTime();
   int solveSuccess = soln->solveWithPrepopulatedStiffnessAndLoad(solver);
+  timeSolve += timer.ElapsedTime();
   
   if (solveSuccess != 0)
     cout << "solve returned with error code " << solveSuccess << endl;
