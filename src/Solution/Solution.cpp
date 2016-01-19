@@ -1277,14 +1277,11 @@ void TSolution<Scalar>::importSolutionForOffRankCells(std::set<GlobalIndexType> 
   Epetra_SerialComm Comm;
 #endif
 
-  std::vector<GlobalIndexType> cellIDsVector(cellIDs.begin(),cellIDs.end());
-
   vector<int> myRequestOwners;
   vector<GlobalIndexTypeToCast> myRequest;
-  for (int cellOrdinal=0; cellOrdinal<cellIDs.size(); cellOrdinal++)
+  for (GlobalIndexType cellID : cellIDs)
   {
-    GlobalIndexType cellID = cellIDsVector[cellOrdinal];
-    int partitionForCell = _mesh->globalDofAssignment()->partitionForCellID(cellIDsVector[cellOrdinal]);
+    int partitionForCell = _mesh->globalDofAssignment()->partitionForCellID(cellID);
     if (partitionForCell == rank)
     {
       set<GlobalIndexType> dofIndicesForCell = _dofInterpreter->globalDofIndicesForCell(cellID);
