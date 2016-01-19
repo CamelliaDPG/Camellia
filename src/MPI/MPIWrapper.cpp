@@ -195,6 +195,7 @@ void MPIWrapper::entryWiseSum(FieldContainer<int> &values)
 #else
 #endif
 }
+
 // sum the contents of valuesToSum across all processors, and returns the result:
 // (valuesToSum may vary in length across processors)
 int MPIWrapper::sum(const FieldContainer<int> &valuesToSum)
