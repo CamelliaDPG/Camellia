@@ -1265,11 +1265,7 @@ void TSolution<Scalar>::importSolution()
 template <typename Scalar>
 void TSolution<Scalar>::importSolutionForOffRankCells(std::set<GlobalIndexType> cellIDs)
 {
-  // INITIAL, DRAFT implementation: aiming first for correctness.
-  // (that's to say, there may be a better way to do some of this)
   int rank = Teuchos::GlobalMPISession::getRank();
-
-  set<GlobalIndexType> dofIndicesSet;
 
 #ifdef HAVE_MPI
   Epetra_MpiComm Comm(MPI_COMM_WORLD);
@@ -1277,20 +1273,30 @@ void TSolution<Scalar>::importSolutionForOffRankCells(std::set<GlobalIndexType> 
   Epetra_SerialComm Comm;
 #endif
 
-  vector<int> myRequestOwners;
-  vector<GlobalIndexTypeToCast> myRequest;
+  // it appears to be important that the requests be sorted by MPI rank number
+  // the requestMap below accomplishes that.
+  
+  map<int, vector<GlobalIndexTypeToCast>> requestMap;
+  
   for (GlobalIndexType cellID : cellIDs)
   {
     int partitionForCell = _mesh->globalDofAssignment()->partitionForCellID(cellID);
-    if (partitionForCell == rank)
+    if (partitionForCell != rank)
     {
-      set<GlobalIndexType> dofIndicesForCell = _dofInterpreter->globalDofIndicesForCell(cellID);
-      dofIndicesSet.insert(dofIndicesForCell.begin(),dofIndicesForCell.end());
+      requestMap[partitionForCell].push_back(cellID);
     }
-    else
+  }
+  
+  vector<int> myRequestOwners;
+  vector<GlobalIndexTypeToCast> myRequest;
+
+  for (auto entry : requestMap)
+  {
+    int partition = entry.first;
+    for (auto cellIDInPartition : entry.second)
     {
-      myRequest.push_back(cellID);
-      myRequestOwners.push_back(partitionForCell);
+      myRequest.push_back(cellIDInPartition);
+      myRequestOwners.push_back(partition);
     }
   }
 
@@ -1316,7 +1322,7 @@ void TSolution<Scalar>::importSolutionForOffRankCells(std::set<GlobalIndexType> 
   distributor.CreateFromRecvs(myRequestCount, myRequestPtr, myRequestOwnersPtr, true, numCellsToExport, cellIDsToExport, exportRecipients);
 
   const std::set<GlobalIndexType>* myCells = &_mesh->globalDofAssignment()->cellsInPartition(-1);
-
+  
   vector<int> sizes(numCellsToExport);
   vector<Scalar> dataToExport;
   for (int cellOrdinal=0; cellOrdinal<numCellsToExport; cellOrdinal++)
