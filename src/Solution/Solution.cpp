@@ -1207,10 +1207,9 @@ void TSolution<Scalar>::importSolution()
 //  cout << "on rank " << rank << ", about to determine globalDofIndicesForPartition\n";
 
   set<GlobalIndexType> globalDofIndicesForMyCells;
-  set<GlobalIndexType> myCellIDs = _mesh->globalDofAssignment()->cellsInPartition(-1);
-  for (set<GlobalIndexType>::iterator cellIDIt = myCellIDs.begin(); cellIDIt != myCellIDs.end(); cellIDIt++)
+  const set<GlobalIndexType>* myCellIDs = &_mesh->globalDofAssignment()->cellsInPartition(-1);
+  for (GlobalIndexType cellID : *myCellIDs)
   {
-    GlobalIndexType cellID = *cellIDIt;
     set<GlobalIndexType> globalDofsForCell = _dofInterpreter->globalDofIndicesForCell(cellID);
 //    cout << "globalDofs for cell " << cellID << ":\n";
 //    Camellia::print("globalDofIndices", globalDofsForCell);
@@ -1239,9 +1238,8 @@ void TSolution<Scalar>::importSolution()
 //  cout << "on rank " << rank << ", returned from Import\n";
 
   // copy the dof coefficients into our data structure
-  for (set<GlobalIndexType>::iterator cellIDIt = myCellIDs.begin(); cellIDIt != myCellIDs.end(); cellIDIt++)
+  for (GlobalIndexType cellID : *myCellIDs)
   {
-    GlobalIndexType cellID = *cellIDIt;
 //    cout << "on rank " << rank << ", about to interpret data for cell " << cellID << "\n";
     Intrepid::FieldContainer<Scalar> cellDofs(_mesh->getElementType(cellID)->trialOrderPtr->totalDofs());
     _dofInterpreter->interpretGlobalCoefficients(cellID,cellDofs,solnCoeff);
