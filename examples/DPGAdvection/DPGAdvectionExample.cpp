@@ -128,6 +128,7 @@ int main(int argc, char *argv[])
 {
   Teuchos::GlobalMPISession mpiSession(&argc, &argv, NULL); // initialize MPI
   int rank = Teuchos::GlobalMPISession::getRank();
+  int numProcs = Teuchos::GlobalMPISession::getNProc();
   
 #ifdef HAVE_MPI
   Epetra_MpiComm Comm(MPI_COMM_WORLD);
@@ -147,6 +148,7 @@ int main(int argc, char *argv[])
   double l2tol = 5e-2;
   int spaceDim = 2;
   bool useEnergyNormForRefinements = false;
+  bool useGraphNorm = true;
   bool useCondensedSolve = false;
   bool exportVisualization = false; // I think visualization might be segfaulting on finer meshes??
   bool enforceOneIrregularity = true;
@@ -158,6 +160,7 @@ int main(int argc, char *argv[])
   cmdp.setOption("numRefinements", &numRefinements);
   cmdp.setOption("errTol", &l2tol);
   cmdp.setOption("useEnergyError", "useGradientIndicator", &useEnergyNormForRefinements);
+  cmdp.setOption("useGraphNorm", "useNaiveNorm", &useGraphNorm);
   cmdp.setOption("useCondensedSolve", "useStandardSolve", &useCondensedSolve);
   cmdp.setOption("exportVisualization", "dontExportVisualization", &exportVisualization);
   cmdp.setOption("enforceOneIrregularity", "dontEnforceOneIrregularity", &enforceOneIrregularity);
@@ -270,9 +273,19 @@ int main(int argc, char *argv[])
   RHSPtr rhs = RHS::rhs(); // zero forcing
   
   // manually construct "graph" norm to minimize L^2 error of (beta u).  (bf->graphNorm() minimizes L^2 error of u.)
-  IPPtr ip = IP::ip();
-  ip->addTerm(v->grad());
-  ip->addTerm(v);
+  IPPtr ip;
+  if (useGraphNorm)
+  {
+    ip = bf->graphNorm();
+//    if (rank==0) cout << "Trying something: adding v->grad() to the graph norm.\n";
+//    ip->addTerm(v->grad()); // for stability of the Gram solve?
+  }
+  else
+  {
+    ip = bf->naiveNorm(spaceDim);
+  }
+  
+  Epetra_Time totalTimer(Comm);
   
   SolutionPtr soln = Solution::solution(mesh, bc, rhs, ip);
   
@@ -284,7 +297,7 @@ int main(int argc, char *argv[])
     if (rank ==0) cout << "solve returned with error code " << solveSuccess << endl;
   
   ostringstream report;
-  report << "elems\tdofs\ttrace_dofs\terr\n";
+  report << "elems\tdofs\ttrace_dofs\terr\ttimeRefinement\ttimeAssembly\ttimeSolve\ttimeTotal\n";
   
   ostringstream name;
   name << "DPGAdvection_" << convectiveDirectionChoice << "_k" << polyOrder << "_" << numRefinements << "refs";
@@ -292,6 +305,12 @@ int main(int argc, char *argv[])
     name << "_energyErrorIndicator";
   else
     name << "_gradientErrorIndicator";
+  if (!enforceOneIrregularity)
+    name << "_irregular";
+  if (useGraphNorm)
+    name << "_graphNorm";
+  else
+    name << "_naiveNorm";
   HDF5Exporter exporter(mesh, name.str(), ".");
   
   int refNumber = 0;
@@ -318,7 +337,16 @@ int main(int argc, char *argv[])
     cout << "L^2 error = " << err << ".\n";
   }
   
-  report << numElements << "\t" << dofCount << "\t" << traceCount << "\t" << err << "\n";
+  double timeThisTotal = totalTimer.ElapsedTime();
+  Comm.MaxAll(&timeThisTotal, &timeThisTotal, 1);
+  
+  double timeThisSolve = soln->maxTimeSolve();
+  double timeThisAssembly = soln->maxTimeLocalStiffness() + soln->maxTimeGlobalAssembly();
+  double timeThisRefinement = 0;
+  
+  report << numElements << "\t" << dofCount << "\t" << traceCount << "\t" << err;
+  report << "\t" << timeThisRefinement << "\t" << timeThisAssembly << "\t" <<  timeThisSolve;
+  report << "\t" << timeThisTotal << "\n";
   
   auto keepRefining = [refMode, &refNumber, numRefinements, &err, l2tol] () -> bool
   {
@@ -335,6 +363,7 @@ int main(int argc, char *argv[])
     refNumber++;
     
     refinementTimer.ResetStartTime();
+    totalTimer.ResetStartTime();
     
     double hPower = 1.0 + spaceDim / 2.0;
     
@@ -359,7 +388,6 @@ int main(int argc, char *argv[])
     else
     {
       vector<double> myErrorIndicatorValues;
-      soln->importGlobalSolution(); // not ideal
       computeApproximateGradients(soln, u, myCellIDs, myErrorIndicatorValues, hPower);
       // now fill in the global error indicator values
       int myCellOrdinal = 0;
@@ -395,7 +423,9 @@ int main(int argc, char *argv[])
     if (enforceOneIrregularity)
       mesh->enforceOneIrregularity();
     
-    timeRefinements += refinementTimer.ElapsedTime();
+    double timeThisRefinement = refinementTimer.ElapsedTime();
+    Comm.MaxAll(&timeThisRefinement, &timeThisRefinement, 1);
+    timeRefinements += timeThisRefinement;
     
     int numElements = mesh->getActiveCellIDs().size();
     GlobalIndexType dofCount = mesh->numGlobalDofs();
@@ -411,25 +441,43 @@ int main(int argc, char *argv[])
     
     err = u_err->l2norm(mesh, cubatureEnrichment);
     
+    double timeThisSolve = soln->maxTimeSolve();
+    double timeThisAssembly = soln->maxTimeLocalStiffness() + soln->maxTimeGlobalAssembly();
+    
     if (rank==0)
     {
       cout << "Ref. " << refNumber << " mesh has " << numElements << " active elements and " << dofCount << " degrees of freedom; ";
       cout << "L^2 error = " << err << ".\n";
     }
     
-    report << numElements << "\t" << dofCount << "\t" << traceCount << "\t" << err << "\n";
+    timeThisTotal = totalTimer.ElapsedTime();
+    Comm.MaxAll(&timeThisTotal, &timeThisTotal, 1);
+    
+    report << numElements << "\t" << dofCount << "\t" << traceCount << "\t" << err;
+    report << "\t" << timeThisRefinement << "\t" << timeThisAssembly << "\t" <<  timeThisSolve;
+    report << "\t" << timeThisTotal << "\n";
     
     if (exportVisualization)
       exporter.exportSolution(soln,refNumber);
   }
   
   ostringstream reportTitle;
-  reportTitle << "DPGAdvection_" << convectiveDirectionChoice << "_k" << polyOrder << "_" << numRefinements << "refs";
+  reportTitle << "DPGAdvection_" << convectiveDirectionChoice << "_k" << polyOrder << "_";
+  if (numRefinements > 0)
+    reportTitle << numRefinements << "refs";
+  else
+    reportTitle << "tol" << l2tol;
   if (useEnergyNormForRefinements)
     reportTitle << "_energyErrorIndicator";
   else
     reportTitle << "_gradientErrorIndicator";
-  reportTitle << ".dat";
+  if (!enforceOneIrregularity)
+    reportTitle << "_irregular";
+  if (useGraphNorm)
+    reportTitle << "_graphNorm";
+  else
+    reportTitle << "_naiveNorm";
+  reportTitle << "_" << numProcs << "ranks.dat";
   
   if (rank == 0)
   {
@@ -477,8 +525,7 @@ void computeApproximateGradients(SolutionPtr soln, VarPtr u, const vector<Global
   vector<GlobalIndexType> cellsAndNeighbors(cellsAndNeighborsSet.begin(),cellsAndNeighborsSet.end());
   
   // get any off-rank solution data we may need:
-  soln->importGlobalSolution(); // not the most efficient, but the below is not working...
-//  soln->importSolutionForOffRankCells(cellsAndNeighborsSet);
+  soln->importSolutionForOffRankCells(cellsAndNeighborsSet);
   
   int cellsAndNeighborsCount = cellsAndNeighbors.size();
   

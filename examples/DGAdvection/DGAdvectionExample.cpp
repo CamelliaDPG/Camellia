@@ -131,10 +131,15 @@ enum RefinementMode
 // some static cumulative timing variables:
 static double timeApplyUpwinding = 0, timeOtherAssembly = 0, timeSolve = 0, timeRefinements = 0;
 
+// static timing of the last run
+static double timeThisApplyUpwinding = 0, timeThisOtherAssembly = 0, timeThisSolve = 0, timeThisRefinement = 0;
+
+
 int main(int argc, char *argv[])
 {
   Teuchos::GlobalMPISession mpiSession(&argc, &argv, NULL); // initialize MPI
   int rank = Teuchos::GlobalMPISession::getRank();
+  int numProcs = Teuchos::GlobalMPISession::getNProc();
   
 #ifdef HAVE_MPI
   Epetra_MpiComm Comm(MPI_COMM_WORLD);
@@ -269,10 +274,11 @@ int main(int argc, char *argv[])
                                               divideIntoTriangles, x0, y0);
   
   RHSPtr rhs = RHS::rhs(); // zero forcing
+  Epetra_Time totalTimer(Comm);
   SolutionPtr soln = Solution::solution(mesh, bc, rhs);
 
   ostringstream report;
-  report << "elems\tdofs\ttrace_dofs\terr\n";
+  report << "elems\tdofs\ttrace_dofs\terr\ttimeRefinement\ttimeAssembly\ttimeSolve\ttimeTotal\n";
   
   ostringstream name;
   name << "DGAdvection_" << convectiveDirectionChoice << "_k" << polyOrder << "_" << numRefinements << "refs";
@@ -301,7 +307,18 @@ int main(int argc, char *argv[])
     cout << "L^2 error = " << err << ".\n";
   }
   
-  report << numElements << "\t" << dofCount << "\t" << 0 << "\t" << err << "\n";
+  double timeThisTotal = totalTimer.ElapsedTime();
+  Comm.MaxAll(&timeThisTotal, &timeThisTotal, 1);
+  
+  double timeThisAssembly = timeThisOtherAssembly + timeThisApplyUpwinding;
+  Comm.MaxAll(&timeThisRefinement, &timeThisRefinement, 1);
+  timeRefinements += timeThisRefinement;
+  
+  int traceCount = 0;
+  
+  report << numElements << "\t" << dofCount << "\t" << traceCount << "\t" << err;
+  report << "\t" << timeThisRefinement << "\t" << timeThisAssembly << "\t" <<  timeThisSolve;
+  report << "\t" << timeThisTotal << "\n";
   
   auto keepRefining = [refMode, &refNumber, numRefinements, &err, l2tol] () -> bool
   {
@@ -318,6 +335,7 @@ int main(int argc, char *argv[])
     refNumber++;
     
     refinementTimer.ResetStartTime();
+    totalTimer.ResetStartTime();
     
     double hPower = 1.0 + spaceDim / 2.0;
     
@@ -362,7 +380,7 @@ int main(int argc, char *argv[])
     if (enforceOneIrregularity)
       mesh->enforceOneIrregularity();
     
-    timeRefinements += refinementTimer.ElapsedTime();
+    timeThisRefinement = refinementTimer.ElapsedTime();
     
     int numElements = mesh->getActiveCellIDs().size();
     GlobalIndexType dofCount = mesh->numGlobalDofs();
@@ -374,7 +392,16 @@ int main(int argc, char *argv[])
     
     err = u_err->l2norm(mesh, cubatureEnrichment);
     
-    report << numElements << "\t" << dofCount << "\t" << 0 << "\t" << err << "\n";
+    timeThisTotal = totalTimer.ElapsedTime();
+    Comm.MaxAll(&timeThisTotal, &timeThisTotal, 1);
+    
+    Comm.MaxAll(&timeThisRefinement, &timeThisRefinement, 1);
+    timeRefinements += timeThisRefinement;
+    timeThisAssembly = timeThisOtherAssembly + timeThisApplyUpwinding;
+    
+    report << numElements << "\t" << dofCount << "\t" << traceCount << "\t" << err;
+    report << "\t" << timeThisRefinement << "\t" << timeThisAssembly << "\t" <<  timeThisSolve;
+    report << "\t" << timeThisTotal << "\n";
     
     if (rank==0)
     {
@@ -384,7 +411,14 @@ int main(int argc, char *argv[])
   }
   
   ostringstream reportTitle;
-  reportTitle << "DGAdvection_" << convectiveDirectionChoice << "_k" << polyOrder << "_" << numRefinements << "refs.dat";
+  reportTitle << "DGAdvection_" << convectiveDirectionChoice << "_k" << polyOrder << "_";
+  if (numRefinements > 0)
+    reportTitle << numRefinements << "refs";
+  else
+    reportTitle << "tol" << l2tol;
+  if (!enforceOneIrregularity)
+    reportTitle << "_irregular";
+  reportTitle << "_" << numProcs << "ranks.dat";
   
   if (rank==0)
   {
@@ -759,8 +793,7 @@ void computeApproximateGradients(SolutionPtr soln, VarPtr u, const vector<Global
   vector<GlobalIndexType> cellsAndNeighbors(cellsAndNeighborsSet.begin(),cellsAndNeighborsSet.end());
   
   // get any off-rank solution data we may need:
-  soln->importGlobalSolution(); // not the most efficient, but the below is not working...
-  //  soln->importSolutionForOffRankCells(cellsAndNeighborsSet);
+  soln->importSolutionForOffRankCells(cellsAndNeighborsSet);
   
   int cellsAndNeighborsCount = cellsAndNeighbors.size();
   
@@ -889,20 +922,21 @@ void solveAndExport(SolutionPtr soln, VarPtr u, VarPtr v, FunctionPtr beta, HDF5
   // this is where we want to accumulate any inter-element DG terms
   applyUpwinding(soln, u, v, beta);
 
-  timeApplyUpwinding += timer.ElapsedTime();
+  timeThisApplyUpwinding = timer.ElapsedTime();
   
   // it is important to do the above accumulation before BCs are imposed, which they
   // will be in populateStiffnessAndLoad().
   
   timer.ResetStartTime();
   soln->populateStiffnessAndLoad();
-  timeOtherAssembly += timer.ElapsedTime();
+  timeThisOtherAssembly = timer.ElapsedTime();
   
   soln->setProblem(solver);
   
   timer.ResetStartTime();
   int solveSuccess = soln->solveWithPrepopulatedStiffnessAndLoad(solver);
-  timeSolve += timer.ElapsedTime();
+  
+  timeThisSolve = timer.ElapsedTime();
   
   if (solveSuccess != 0)
     cout << "solve returned with error code " << solveSuccess << endl;
@@ -911,4 +945,13 @@ void solveAndExport(SolutionPtr soln, VarPtr u, VarPtr v, FunctionPtr beta, HDF5
   
   if (exportVisualization)
     exporter.exportSolution(soln,refNumber);
+  
+  // accumulate timings:
+  Comm.MaxAll(&timeThisOtherAssembly, &timeThisOtherAssembly, 1);
+  Comm.MaxAll(&timeThisApplyUpwinding, &timeThisApplyUpwinding, 1);
+  Comm.MaxAll(&timeThisSolve, &timeThisSolve, 1);
+
+  timeOtherAssembly += timeThisOtherAssembly;
+  timeSolve += timeThisSolve;
+  timeApplyUpwinding += timeThisApplyUpwinding;
 }
