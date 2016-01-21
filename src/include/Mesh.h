@@ -232,7 +232,7 @@ public:
   vector< GlobalIndexType > cellIDsOfType(int partitionNumber, ElementTypePtr elemTypePtr);
   vector< GlobalIndexType > cellIDsOfTypeGlobal(ElementTypePtr elemTypePtr);
 
-  set<GlobalIndexType> cellIDsInPartition(); // rank-local cellIDs
+  const set<GlobalIndexType> & cellIDsInPartition(); // rank-local cellIDs
 
   bool cellIsActive(GlobalIndexType cellID) const;
   
