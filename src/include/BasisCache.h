@@ -110,7 +110,8 @@ private:
   void initCubatureDegree(int maxTrialDegree, int maxTestDegree);
   void initCubatureDegree(std::vector<int> &maxTrialDegrees, std::vector<int> &maxTestDegrees);
 
-  void init(bool createSideCacheToo, bool interpretTensorTopologyAsSpaceTime);
+  void initVolumeCache(bool createSideCacheToo, bool interpretTensorTopologyAsSpaceTime);
+  void initVolumeCache(const Intrepid::FieldContainer<double> &refPoints, const Intrepid::FieldContainer<double> &cubWeights);
 
   void determineJacobian();
   void determinePhysicalPoints();
@@ -173,11 +174,19 @@ public:
 
   BasisCache(const Intrepid::FieldContainer<double> &physicalCellNodes, shards::CellTopology &cellTopo, int cubDegree, bool createSideCacheToo = false);
   BasisCache(const Intrepid::FieldContainer<double> &physicalCellNodes, CellTopoPtr cellTopo, int cubDegree, bool createSideCacheToo = false, bool tensorProductTopologyMeansSpaceTime=true);
+  
+  // lighter weight volume constructor:
+  BasisCache(const Intrepid::FieldContainer<double> &physicalCellNodes, CellTopoPtr cellTopo,
+             const Intrepid::FieldContainer<double> &refCellPoints, const Intrepid::FieldContainer<double> &cubWeights, int cubatureDegree = 0);
+  // lighter weight side cache constructor:
+  BasisCache(int sideOrdinal, BasisCachePtr volumeCache, const Intrepid::FieldContainer<double> &refPoints,
+             const Intrepid::FieldContainer<double> &cubWeights, int cubatureDegree = 0);
 
   BasisCache(const Intrepid::FieldContainer<double> &physicalCellNodes, CellTopoPtr cellTopo,
              DofOrdering &trialOrdering, int maxTestDegree, bool createSideCacheToo = false, bool tensorProductTopologyMeansSpaceTime=true);
   BasisCache(const Intrepid::FieldContainer<double> &physicalCellNodes, shards::CellTopology &cellTopo,
              DofOrdering &trialOrdering, int maxTestDegree, bool createSideCacheToo = false);
+  
   virtual ~BasisCache() {}
 
   Intrepid::FieldContainer<double> & getWeightedMeasures();
@@ -197,6 +206,7 @@ public:
   BasisCachePtr getVolumeBasisCache(); // from sideCache
 
   const std::vector<GlobalIndexType> & cellIDs();
+  void setCellIDs(const std::vector<GlobalIndexType> &cellIDs);
 
   CellTopoPtr cellTopology();
 
@@ -251,15 +261,11 @@ public:
    */
   const Intrepid::FieldContainer<double> & getSideNormalsSpaceTime();
 
-  int getMaxCubatureDegree();
-
   int getSideIndex() const; // -1 if not sideCache
 
   virtual int getSpaceDim();
   
   bool cellTopologyIsSpaceTime();
-
-  void setMaxCubatureDegree(int value);
 
   void setTransformationFunction(TFunctionPtr<double> fxn, bool composeWithMeshTransformation = true);
 

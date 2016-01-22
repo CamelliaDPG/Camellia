@@ -118,8 +118,8 @@ void BasisCache::initCubatureDegree(std::vector<int> &maxTrialDegrees, std::vect
   }
 }
 
-// ! requires that initCubature() has been called
-void BasisCache::init(bool createSideCacheToo, bool tensorProductTopologyMeansSpaceTime)
+// ! requires that initCubatureDegree() has been called
+void BasisCache::initVolumeCache(bool createSideCacheToo, bool tensorProductTopologyMeansSpaceTime)
 {
   _sideIndex = -1;
   _spaceDim = _cellTopo->getDimension();
@@ -134,18 +134,30 @@ void BasisCache::init(bool createSideCacheToo, bool tensorProductTopologyMeansSp
   {
     CubatureFactory cubFactory;
     Teuchos::RCP<Cubature<double> > cellTopoCub;
+    
     if (_cubDegree >= 0)
       cellTopoCub = cubFactory.create(_cellTopo, _cubDegree);
-    else
+    else if (_cubDegrees.size() > 0)
       cellTopoCub = cubFactory.create(_cellTopo, _cubDegrees);
-
-    int cubDim       = cellTopoCub->getDimension();
-    int numCubPoints = cellTopoCub->getNumPoints();
+    
+    int cubDim, numCubPoints;
+    
+    if (cellTopoCub != Teuchos::null)
+    {
+      cubDim       = cellTopoCub->getDimension();
+      numCubPoints = cellTopoCub->getNumPoints();
+    }
+    else
+    {
+      cubDim = _cellTopo->getDimension();
+      numCubPoints = 0;
+    }
 
     _cubPoints = FieldContainer<double>(numCubPoints, cubDim);
     _cubWeights.resize(numCubPoints);
 
-    cellTopoCub->getCubature(_cubPoints, _cubWeights);
+    if (numCubPoints > 0)
+      cellTopoCub->getCubature(_cubPoints, _cubWeights);
   }
   else
   {
@@ -168,6 +180,22 @@ void BasisCache::init(bool createSideCacheToo, bool tensorProductTopologyMeansSp
   {
     this->createSideCaches();
   }
+}
+
+void BasisCache::initVolumeCache(const Intrepid::FieldContainer<double> &refPoints, const Intrepid::FieldContainer<double> &cubWeights)
+{
+  // lightweight guy for when the ref points are known in advance
+  _sideIndex = -1;
+  _spaceDim = _cellTopo->getDimension();
+  _isSideCache = false; // VOLUME constructor
+  
+  _cubPoints = refPoints;
+  _cubWeights = cubWeights;
+  
+  _maxPointsPerCubaturePhase = -1;
+  _cubaturePhase = 0;
+  _cubaturePhaseCount = 1;
+  _phasePointOrdinalOffsets.push_back(0);
 }
 
 void BasisCache::createSideCaches()
@@ -205,7 +233,7 @@ BasisCache::BasisCache(CellTopoPtr cellTopo, int cubDegree, bool createSideCache
 
   _isSideCache = false;
   initCubatureDegree(0, cubDegree);
-  init(createSideCacheToo, tensorProductTopologyMeansSpaceTime);
+  initVolumeCache(createSideCacheToo, tensorProductTopologyMeansSpaceTime);
 }
 
 BasisCache::BasisCache(ElementTypePtr elemType, MeshPtr mesh, bool testVsTest,
@@ -238,7 +266,7 @@ BasisCache::BasisCache(ElementTypePtr elemType, MeshPtr mesh, bool testVsTest,
 
   _isSideCache = false;
   initCubatureDegree(_maxTrialDegree, _maxTestDegree + cubatureDegreeEnrichment);
-  init(createSideCacheToo, tensorProductTopologyMeansSpaceTime);
+  initVolumeCache(createSideCacheToo, tensorProductTopologyMeansSpaceTime);
 }
 
 // protected constructor basically for the sake of the SpaceTimeBasisCache, which wants to disable side cache creation during construction.
@@ -271,7 +299,7 @@ BasisCache::BasisCache(ElementTypePtr elemType, MeshPtr mesh, bool testVsTest,
 
   _isSideCache = false;
   initCubatureDegree(_maxTrialDegree, _maxTestDegree + cubatureDegreeEnrichment);
-  init(createSideCacheToo, tensorProductTopologyMeansSpaceTime);
+  initVolumeCache(createSideCacheToo, tensorProductTopologyMeansSpaceTime);
 }
 
 BasisCache::BasisCache(const FieldContainer<double> &physicalCellNodes, CellTopoPtr cellTopo,
@@ -282,7 +310,7 @@ BasisCache::BasisCache(const FieldContainer<double> &physicalCellNodes, CellTopo
 
   _isSideCache = false;
   initCubatureDegree(trialOrdering.maxBasisDegree(), maxTestDegree);
-  init(createSideCacheToo, tensorProductTopologyMeansSpaceTime);
+  initVolumeCache(createSideCacheToo, tensorProductTopologyMeansSpaceTime);
   setPhysicalCellNodes(physicalCellNodes,vector<GlobalIndexType>(),createSideCacheToo);
 }
 
@@ -296,8 +324,19 @@ BasisCache::BasisCache(const FieldContainer<double> &physicalCellNodes,
   _isSideCache = false;
   initCubatureDegree(trialOrdering.maxBasisDegree(), maxTestDegree);
   bool tensorProductTopologyMeansSpaceTime = true; // doesn't matter for shards topologies (they're not tensor products)
-  init(createSideCacheToo, tensorProductTopologyMeansSpaceTime);
+  initVolumeCache(createSideCacheToo, tensorProductTopologyMeansSpaceTime);
   setPhysicalCellNodes(physicalCellNodes,vector<GlobalIndexType>(),createSideCacheToo);
+}
+
+BasisCache::BasisCache(const FieldContainer<double> &physicalCellNodes, CellTopoPtr cellTopo,
+                       const FieldContainer<double> &refCellPoints, const FieldContainer<double> &cubWeights, int cubatureDegree)
+{
+  _cellTopo = cellTopo;
+  _isSideCache = false;
+  initCubatureDegree(cubatureDegree,0);
+  
+  initVolumeCache(refCellPoints, cubWeights);
+  setPhysicalCellNodes(physicalCellNodes,vector<GlobalIndexType>(),false);
 }
 
 BasisCache::BasisCache(shards::CellTopology &cellTopo, int cubDegree, bool createSideCacheToo)
@@ -311,7 +350,7 @@ BasisCache::BasisCache(shards::CellTopology &cellTopo, int cubDegree, bool creat
   _isSideCache = false;
   initCubatureDegree(0, cubDegree);
   bool tensorProductTopologyMeansSpaceTime = true; // doesn't matter for shards topologies (they're not tensor products)
-  init(createSideCacheToo, tensorProductTopologyMeansSpaceTime);
+  initVolumeCache(createSideCacheToo, tensorProductTopologyMeansSpaceTime);
 }
 
 BasisCache::BasisCache(const FieldContainer<double> &physicalCellNodes, shards::CellTopology &cellTopo, int cubDegree, bool createSideCacheToo)
@@ -325,7 +364,7 @@ BasisCache::BasisCache(const FieldContainer<double> &physicalCellNodes, shards::
   _isSideCache = false;
   initCubatureDegree(0, cubDegree);
   bool tensorProductTopologyMeansSpaceTime = true; // doesn't matter for shards topologies (they're not tensor products)
-  init(createSideCacheToo, tensorProductTopologyMeansSpaceTime);
+  initVolumeCache(createSideCacheToo, tensorProductTopologyMeansSpaceTime);
 
   setPhysicalCellNodes(physicalCellNodes,vector<GlobalIndexType>(),createSideCacheToo);
 }
@@ -340,7 +379,7 @@ BasisCache::BasisCache(const FieldContainer<double> &physicalCellNodes, CellTopo
 
   _isSideCache = false;
   initCubatureDegree(0, cubDegree);
-  init(createSideCacheToo, tensorProductTopologyMeansSpaceTime);
+  initVolumeCache(createSideCacheToo, tensorProductTopologyMeansSpaceTime);
 
   setPhysicalCellNodes(physicalCellNodes,vector<GlobalIndexType>(),createSideCacheToo);
 }
@@ -421,15 +460,22 @@ BasisCache::BasisCache(int sideIndex, BasisCachePtr volumeCache, int trialDegree
     Teuchos::RCP<Cubature<double> > sideCub;
     if (_cubDegree >= 0)
       sideCub = cubFactory.create(side, _cubDegree);
-    else
+    else if (_cubDegrees.size() > 0)
       sideCub = cubFactory.create(side, _cubDegrees);
 
-    int numCubPointsSide = sideCub->getNumPoints();
+    int numCubPointsSide;
+    
+    if (sideCub != Teuchos::null)
+      numCubPointsSide = sideCub->getNumPoints();
+    else
+      numCubPointsSide = 0;
+    
     _cubPoints.resize(numCubPointsSide, sideDim); // cubature points from the pov of the side (i.e. a (d-1)-dimensional set)
     _cubWeights.resize(numCubPointsSide);
     if ( multiBasisIfAny.get() == NULL )
     {
-      sideCub->getCubature(_cubPoints, _cubWeights);
+      if (numCubPointsSide > 0)
+        sideCub->getCubature(_cubPoints, _cubWeights);
     }
     else
     {
@@ -442,7 +488,8 @@ BasisCache::BasisCache(int sideIndex, BasisCachePtr volumeCache, int trialDegree
     }
 
     _cubPointsSideRefCell.resize(numCubPointsSide, sideDim + 1); // cubPointsSide from the pov of the ref cell
-    CamelliaCellTools::mapToReferenceSubcell(_cubPointsSideRefCell, _cubPoints, sideDim, _sideIndex, _cellTopo);
+    if (numCubPointsSide > 0)
+      CamelliaCellTools::mapToReferenceSubcell(_cubPointsSideRefCell, _cubPoints, sideDim, _sideIndex, _cellTopo);
   }
   else
   {
@@ -462,6 +509,43 @@ BasisCache::BasisCache(int sideIndex, BasisCachePtr volumeCache, int trialDegree
   _cubaturePhase = 0; // index of the cubature phase; defaults to 0
   _cubaturePhaseCount = 1; // how many phases to get through all the points
   _phasePointOrdinalOffsets.push_back(0);
+}
+
+// side constructor with specific ref points
+BasisCache::BasisCache(int sideIndex, BasisCachePtr volumeCache, const FieldContainer<double> &refPoints,
+                       const FieldContainer<double> &cubWeights, int cubatureDegree)
+{
+  _cellTopo = volumeCache->cellTopology(); // VOLUME cell topo.
+  _isSideCache = true;
+  _sideIndex = sideIndex;
+  _basisCacheVolume = volumeCache;
+  if (volumeCache->mesh().get())
+  {
+    _transformationFxn = volumeCache->mesh()->getTransformationFunction();
+    // at least for now, what the Mesh's transformation function does is transform from a straight-lined mesh to
+    // one with potentially curved edges...
+    _composeTransformationFxnWithMeshTransformation = true;
+  }
+  _spaceDim = volumeCache->getSpaceDim();
+  int sideDim = _cellTopo->getDimension() - 1;
+  CellTopoPtr side = _cellTopo->getSubcell(sideDim,sideIndex); // create relevant subcell (side) topology
+  
+  initCubatureDegree(cubatureDegree, 0);
+
+  _cubPoints = refPoints;
+  _cubWeights = cubWeights;
+  
+  int numCubPointsSide = _cubPoints.dimension(0);
+  
+  _cubPointsSideRefCell.resize(numCubPointsSide, sideDim + 1); // cubPointsSide from the pov of the ref cell
+  CamelliaCellTools::mapToReferenceSubcell(_cubPointsSideRefCell, _cubPoints, sideDim, _sideIndex, _cellTopo);
+  
+  _maxPointsPerCubaturePhase = -1; // default: -1 (infinite)
+  _cubaturePhase = 0; // index of the cubature phase; defaults to 0
+  _cubaturePhaseCount = 1; // how many phases to get through all the points
+  _phasePointOrdinalOffsets.push_back(0);
+  
+  setPhysicalCellNodes(volumeCache->getPhysicalCellNodes(), volumeCache->cellIDs(), false); // false: don't create side caches...
 }
 
 const vector<GlobalIndexType> & BasisCache::cellIDs()
@@ -1064,6 +1148,11 @@ const FieldContainer<double> & BasisCache::getCellSideParities()
   return _cellSideParities;
 }
 
+void BasisCache::setCellIDs(const std::vector<GlobalIndexType> &cellIDs)
+{
+  _cellIDs = cellIDs;
+}
+
 void BasisCache::setCellSideParities(const FieldContainer<double> &cellSideParities)
 {
   TEUCHOS_TEST_FOR_EXCEPTION((cellSideParities.rank() != 2) || (cellSideParities.dimension(1) < _cellTopo->getSideCount()),
@@ -1090,13 +1179,16 @@ void BasisCache::determinePhysicalPoints()
     // _spaceDim for side cache refers to the volume cache's spatial dimension
     _physCubPoints.resize(_numCells, numPoints, cellDim);
 
-    if ( ! isSideCache() )
+    if (numPoints > 0)
     {
-      CamelliaCellTools::mapToPhysicalFrame(_physCubPoints,_cubPoints,_physicalCellNodes,_cellTopo);
-    }
-    else
-    {
-      CamelliaCellTools::mapToPhysicalFrame(_physCubPoints,_cubPointsSideRefCell,_physicalCellNodes,_cellTopo);
+      if ( ! isSideCache() )
+      {
+          CamelliaCellTools::mapToPhysicalFrame(_physCubPoints,_cubPoints,_physicalCellNodes,_cellTopo);
+      }
+      else
+      {
+        CamelliaCellTools::mapToPhysicalFrame(_physCubPoints,_cubPointsSideRefCell,_physicalCellNodes,_cellTopo);
+      }
     }
   }
   else
@@ -1151,6 +1243,7 @@ void BasisCache::determineJacobian()
   _cellJacobInv.resize(_numCells, numCubPoints, cellDim, cellDim);
   _cellJacobDet.resize(_numCells, numCubPoints);
 
+  if (numCubPoints == 0) return;
 
   if ( TFunction<double>::isNull(_transformationFxn) || _composeTransformationFxnWithMeshTransformation)
   {
