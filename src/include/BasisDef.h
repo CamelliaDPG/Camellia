@@ -152,6 +152,13 @@ const std::vector<std::vector<int> > & Basis<Scalar, ArrayScalar>::getAllDofTags
   return _ordinalToTag;
 }
 
+  template<class Scalar, class ArrayScalar>
+  std::set<int> Basis<Scalar,ArrayScalar>::dofOrdinalsForSide(int sideOrdinal) const
+  {
+    int sideDim = this->_domainTopology->getDimension() - 1;
+    return this->dofOrdinalsForSubcell(sideDim, sideOrdinal, 0);
+  }
+  
 template<class Scalar, class ArrayScalar>
 std::set<int> Basis<Scalar,ArrayScalar>::dofOrdinalsForSubcell(int subcellDim, int subcellIndex) const
 {
@@ -445,6 +452,16 @@ IntrepidBasisWrapper<Scalar,ArrayScalar>::IntrepidBasisWrapper(Teuchos::RCP< Int
   this->_basisCardinality = _intrepidBasis->getCardinality();
   this->_basisDegree = _intrepidBasis->getDegree();
   this->_domainTopology = CellTopology::cellTopology( _intrepidBasis->getBaseCellTopology() );
+
+  bool isDiscontinuous =  Camellia::functionSpaceIsDiscontinuous(this->_functionSpace);
+  
+  if (isDiscontinuous)
+  {
+    bool upgradeHVOL = true;
+    Camellia::EFunctionSpace continuousFS = Camellia::continuousSpaceForDiscontinuous(fs,upgradeHVOL);
+    this->_continuousBasis = Teuchos::rcp( new IntrepidBasisWrapper(intrepidBasis, rangeDimension,
+                                                                    rangeRank, continuousFS));
+  }
 }
 
 template<class Scalar, class ArrayScalar>
@@ -496,6 +513,20 @@ Teuchos::RCP< Intrepid::Basis<Scalar,ArrayScalar> > IntrepidBasisWrapper<Scalar,
   return _intrepidBasis;
 }
 
+  template<class Scalar, class ArrayScalar>
+  std::set<int> IntrepidBasisWrapper<Scalar,ArrayScalar>::dofOrdinalsForSide(int sideOrdinal) const
+  {
+    if (this->_continuousBasis == Teuchos::null)
+    {
+      int sideDim = this->_domainTopology->getDimension() - 1;
+      return this->dofOrdinalsForSubcell(sideDim, sideOrdinal, 0);
+    }
+    else
+    {
+      return this->_continuousBasis->dofOrdinalsForSide(sideOrdinal);
+    }
+  }
+  
 template<class Scalar, class ArrayScalar>
 void IntrepidBasisWrapper<Scalar,ArrayScalar>::getValues(ArrayScalar &values, const ArrayScalar &refPoints, Intrepid::EOperator operatorType) const
 {

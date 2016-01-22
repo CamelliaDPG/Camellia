@@ -366,7 +366,7 @@ vector< GlobalIndexType > Mesh::cellIDsOfTypeGlobal(ElementTypePtr elemTypePtr)
   return cellIDs;
 }
 
-set<GlobalIndexType> Mesh::cellIDsInPartition()
+const set<GlobalIndexType> & Mesh::cellIDsInPartition()
 {
   return _gda->cellsInPartition(-1);
 }
@@ -791,6 +791,10 @@ void Mesh::hRefine(const set<GlobalIndexType> &cellIDs, Teuchos::RCP<RefinementP
 
   set<GlobalIndexType>::const_iterator cellIt;
 
+  // we do something slightly different for max rule because it wants to know about each cell as it
+  // gets refined.  For reasons I'm not entirely clear on.
+  bool usingMaxRule = this->meshUsesMaximumRule();
+  
   GlobalIndexType nextCellID = writableMeshTopology->cellCount();
   for (cellIt = cellIDs.begin(); cellIt != cellIDs.end(); cellIt++)
   {
@@ -806,12 +810,19 @@ void Mesh::hRefine(const set<GlobalIndexType> &cellIDs, Teuchos::RCP<RefinementP
     nextCellID += refPattern->numChildren();
 
     // TODO: figure out what it is that breaks in GDAMaximumRule when we use didHRefine to notify about all cells together outside this loop
-    //       (and/or try moving outside the loop if and only if we are using the minimum rule)
-    set<GlobalIndexType> cellIDset;
-    cellIDset.insert(cellID);
+    if (usingMaxRule)
+    {
+      set<GlobalIndexType> cellIDset;
+      cellIDset.insert(cellID);
 
+      _gda->didHRefine(cellIDset);
+    }
+  }
+  
+  if (!usingMaxRule)
+  {
     // TODO: consider making GDA a refinementObserver, using that interface to send it the notification
-    _gda->didHRefine(cellIDset);
+    _gda->didHRefine(cellIDs);
   }
 
   // NVR 12/10/14 the code below moved from inside the loop above, where it was doing the below one cell at a time...

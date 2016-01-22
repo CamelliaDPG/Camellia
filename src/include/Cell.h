@@ -120,6 +120,8 @@ public:
   pair<GlobalIndexType, unsigned> getNeighborInfo(unsigned sideOrdinal, MeshTopologyViewPtr meshTopoViewForCellValidity); // (neighborCellIndex, neighborSideOrdinal)
   void setNeighbor(unsigned sideOrdinal, GlobalIndexType neighborCellIndex, unsigned neighborSideOrdinal);
   std::vector< Teuchos::RCP<Cell> > getNeighbors(MeshTopologyViewPtr meshTopoViewForCellValidity);
+  
+  std::set<GlobalIndexType> getActiveNeighborIndices(MeshTopologyViewPtr meshTopoViewForCellValidity);
 
   void printApproximateMemoryReport(); // in bytes
 

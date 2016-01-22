@@ -126,8 +126,8 @@ void CellDataMigration::unpackData(Mesh *mesh, GlobalIndexType cellID, const cha
   dataLocation += sizeof(parentDataPackedFlag);
   bool coefficientsBelongToParent = parentDataPackedFlag != 0;
 
-  set<GlobalIndexType> rankLocalCellIDs = mesh->cellIDsInPartition();
-  if (rankLocalCellIDs.find(cellID) == rankLocalCellIDs.end())
+  const set<GlobalIndexType>* rankLocalCellIDs = &mesh->cellIDsInPartition();
+  if (rankLocalCellIDs->find(cellID) == rankLocalCellIDs->end())
   {
     // it may be that when we do ghost cells, this shouldn't be an exception--or maybe the ghost cells will be packed in with the active cell
     cout << "unpackData called for a non-rank-local cellID\n";

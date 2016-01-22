@@ -1207,10 +1207,9 @@ void TSolution<Scalar>::importSolution()
 //  cout << "on rank " << rank << ", about to determine globalDofIndicesForPartition\n";
 
   set<GlobalIndexType> globalDofIndicesForMyCells;
-  set<GlobalIndexType> myCellIDs = _mesh->globalDofAssignment()->cellsInPartition(-1);
-  for (set<GlobalIndexType>::iterator cellIDIt = myCellIDs.begin(); cellIDIt != myCellIDs.end(); cellIDIt++)
+  const set<GlobalIndexType>* myCellIDs = &_mesh->globalDofAssignment()->cellsInPartition(-1);
+  for (GlobalIndexType cellID : *myCellIDs)
   {
-    GlobalIndexType cellID = *cellIDIt;
     set<GlobalIndexType> globalDofsForCell = _dofInterpreter->globalDofIndicesForCell(cellID);
 //    cout << "globalDofs for cell " << cellID << ":\n";
 //    Camellia::print("globalDofIndices", globalDofsForCell);
@@ -1239,9 +1238,8 @@ void TSolution<Scalar>::importSolution()
 //  cout << "on rank " << rank << ", returned from Import\n";
 
   // copy the dof coefficients into our data structure
-  for (set<GlobalIndexType>::iterator cellIDIt = myCellIDs.begin(); cellIDIt != myCellIDs.end(); cellIDIt++)
+  for (GlobalIndexType cellID : *myCellIDs)
   {
-    GlobalIndexType cellID = *cellIDIt;
 //    cout << "on rank " << rank << ", about to interpret data for cell " << cellID << "\n";
     Intrepid::FieldContainer<Scalar> cellDofs(_mesh->getElementType(cellID)->trialOrderPtr->totalDofs());
     _dofInterpreter->interpretGlobalCoefficients(cellID,cellDofs,solnCoeff);
@@ -1265,11 +1263,7 @@ void TSolution<Scalar>::importSolution()
 template <typename Scalar>
 void TSolution<Scalar>::importSolutionForOffRankCells(std::set<GlobalIndexType> cellIDs)
 {
-  // INITIAL, DRAFT implementation: aiming first for correctness.
-  // (that's to say, there may be a better way to do some of this)
   int rank = Teuchos::GlobalMPISession::getRank();
-
-  set<GlobalIndexType> dofIndicesSet;
 
 #ifdef HAVE_MPI
   Epetra_MpiComm Comm(MPI_COMM_WORLD);
@@ -1277,23 +1271,30 @@ void TSolution<Scalar>::importSolutionForOffRankCells(std::set<GlobalIndexType> 
   Epetra_SerialComm Comm;
 #endif
 
-  std::vector<GlobalIndexType> cellIDsVector(cellIDs.begin(),cellIDs.end());
-
+  // it appears to be important that the requests be sorted by MPI rank number
+  // the requestMap below accomplishes that.
+  
+  map<int, vector<GlobalIndexTypeToCast>> requestMap;
+  
+  for (GlobalIndexType cellID : cellIDs)
+  {
+    int partitionForCell = _mesh->globalDofAssignment()->partitionForCellID(cellID);
+    if (partitionForCell != rank)
+    {
+      requestMap[partitionForCell].push_back(cellID);
+    }
+  }
+  
   vector<int> myRequestOwners;
   vector<GlobalIndexTypeToCast> myRequest;
-  for (int cellOrdinal=0; cellOrdinal<cellIDs.size(); cellOrdinal++)
+
+  for (auto entry : requestMap)
   {
-    GlobalIndexType cellID = cellIDsVector[cellOrdinal];
-    int partitionForCell = _mesh->globalDofAssignment()->partitionForCellID(cellIDsVector[cellOrdinal]);
-    if (partitionForCell == rank)
+    int partition = entry.first;
+    for (auto cellIDInPartition : entry.second)
     {
-      set<GlobalIndexType> dofIndicesForCell = _dofInterpreter->globalDofIndicesForCell(cellID);
-      dofIndicesSet.insert(dofIndicesForCell.begin(),dofIndicesForCell.end());
-    }
-    else
-    {
-      myRequest.push_back(cellID);
-      myRequestOwners.push_back(partitionForCell);
+      myRequest.push_back(cellIDInPartition);
+      myRequestOwners.push_back(partition);
     }
   }
 
@@ -1319,7 +1320,7 @@ void TSolution<Scalar>::importSolutionForOffRankCells(std::set<GlobalIndexType> 
   distributor.CreateFromRecvs(myRequestCount, myRequestPtr, myRequestOwnersPtr, true, numCellsToExport, cellIDsToExport, exportRecipients);
 
   const std::set<GlobalIndexType>* myCells = &_mesh->globalDofAssignment()->cellsInPartition(-1);
-
+  
   vector<int> sizes(numCellsToExport);
   vector<Scalar> dataToExport;
   for (int cellOrdinal=0; cellOrdinal<numCellsToExport; cellOrdinal++)

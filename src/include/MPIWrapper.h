@@ -62,9 +62,17 @@ public:
   template<typename ScalarType>
   static void entryWiseSum(const Epetra_Comm &Comm, Intrepid::FieldContainer<ScalarType> &values);
   
+  //! sum values entry-wise across all processors in Comm
+  template<typename ScalarType>
+  static void entryWiseSum(const Epetra_Comm &Comm, std::vector<ScalarType> &values);
+  
   //! sum values entry-wise across all processors
   template<typename ScalarType>
   static void entryWiseSum(Intrepid::FieldContainer<ScalarType> &values);
+  
+  //! sum values entry-wise across all processors
+  template<typename ScalarType>
+  static void entryWiseSum(std::vector<ScalarType> &values);
   
   static void entryWiseSum(const Epetra_Comm &Comm, Intrepid::FieldContainer<double> &values); // sums values entry-wise across all processors
   
@@ -86,6 +94,25 @@ public:
   static GlobalIndexType sum(const Intrepid::FieldContainer<GlobalIndexType> &valuesToSum);
   static GlobalIndexType sum(GlobalIndexType myValue);
 };
+  
+  //! sum values entry-wise across all processors
+  template<typename ScalarType>
+  void MPIWrapper::entryWiseSum(std::vector<ScalarType> &values)
+  {
+#ifdef HAVE_MPI
+    Epetra_MpiComm Comm(MPI_COMM_WORLD);
+    entryWiseSum<ScalarType>(Comm,values);
+#else
+#endif
+  }
+  
+  //! sum values entry-wise across all processors in Comm
+  template<typename ScalarType>
+  void MPIWrapper::entryWiseSum(const Epetra_Comm &Comm, std::vector<ScalarType> &values)
+  {
+    std::vector<ScalarType> valuesCopy = values; // it appears this copy is necessary
+    Comm.SumAll(&valuesCopy[0], &values[0], values.size());
+  }
 }
 
 #endif /* defined(__Camellia_debug__MPIWrapper__) */

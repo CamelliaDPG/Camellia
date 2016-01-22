@@ -209,6 +209,52 @@ namespace
     }
   }
   
+  void testImportOffRankCellSolution(int spaceDim, int meshWidth, Teuchos::FancyOStream &out, bool &success)
+  {
+    // just want any bilinear form; we'll use Poisson
+    bool useConformingTraces = true;
+    int H1Order = 1;
+    MeshPtr mesh = poissonUniformMesh(spaceDim, meshWidth, H1Order, useConformingTraces);
+    SolutionPtr soln = Solution::solution(mesh);
+    
+    set<GlobalIndexType> myCells = mesh->cellIDsInPartition();
+    
+    int rank = Teuchos::GlobalMPISession::getRank();
+    
+    // set up some dummy data
+    for (GlobalIndexType cellID : myCells)
+    {
+      FieldContainer<double> cellDofs(mesh->getElementType(cellID)->trialOrderPtr->totalDofs());
+      cellDofs.initialize((double)rank);
+      soln->setLocalCoefficientsForCell(cellID, cellDofs);
+    }
+    
+    set<GlobalIndexType> myCellsAndNeighbors;
+    for (GlobalIndexType cellID : myCells)
+    {
+      myCellsAndNeighbors.insert(cellID);
+      CellPtr cell = mesh->getTopology()->getCell(cellID);
+      set<GlobalIndexType> neighbors = cell->getActiveNeighborIndices(mesh->getTopology());
+      myCellsAndNeighbors.insert(neighbors.begin(), neighbors.end());
+    }
+    
+    soln->importSolutionForOffRankCells(myCellsAndNeighbors);
+    
+    for (GlobalIndexType cellID : myCellsAndNeighbors)
+    {
+      FieldContainer<double> cellDofs = soln->allCoefficientsForCellID(cellID, false); // false: don't warn about off-rank requests
+      
+      TEST_ASSERT(cellDofs.size() == mesh->getElementType(cellID)->trialOrderPtr->totalDofs());
+      
+      PartitionIndexType rankForCell = soln->mesh()->partitionForCellID(cellID);
+      TEST_EQUALITY(cellDofs[0], rankForCell);
+      for (int i=1; i<cellDofs.size(); i++)
+      {
+        TEST_EQUALITY(cellDofs[i-1], cellDofs[i]);
+      }
+    }
+  }
+  
   TEUCHOS_UNIT_TEST( Solution, AddSolution )
   {
     bool useConformingTraces = true;
@@ -941,57 +987,29 @@ namespace
     testCondensedSolveZeroMeanConstraint(minRule, out, success);
   }
   
-  TEUCHOS_UNIT_TEST( Solution, ImportOffRankCellData )
+  TEUCHOS_UNIT_TEST( Solution, ImportOffRankCellData_1D )
   {
-    int numCells = 8;
     int spaceDim = 1;
-    // just want any bilinear form; we'll use Poisson
-    bool useConformingTraces = true;
-    PoissonFormulation form(spaceDim, useConformingTraces);
+    int meshWidth = 4;
     
-    double xLeft = 0, xRight = 1;
+    testImportOffRankCellSolution(spaceDim, meshWidth, out, success);
+  }
+  
+  TEUCHOS_UNIT_TEST( Solution, ImportOffRankCellData_2D )
+  {
+    int spaceDim = 2;
+    int meshWidth = 2;
     
-    int H1Order = 1, delta_k = 1;
-    MeshPtr mesh = MeshFactory::intervalMesh(form.bf(), xLeft, xRight, numCells, H1Order, delta_k);
+    testImportOffRankCellSolution(spaceDim, meshWidth, out, success);
+  }
+  
+  
+  TEUCHOS_UNIT_TEST( Solution, ImportOffRankCellData_3D )
+  {
+    int spaceDim = 3;
+    int meshWidth = 2;
     
-    SolutionPtr soln = Solution::solution(mesh);
-    
-    set<GlobalIndexType> myCells = mesh->cellIDsInPartition();
-    
-    int rank = Teuchos::GlobalMPISession::getRank();
-    
-    // set up some dummy data
-    for (set<GlobalIndexType>::iterator cellIDIt = myCells.begin(); cellIDIt != myCells.end(); cellIDIt++)
-    {
-      GlobalIndexType cellID = *cellIDIt;
-      FieldContainer<double> cellDofs(mesh->getElementType(cellID)->trialOrderPtr->totalDofs());
-      cellDofs.initialize((double)rank);
-      soln->setLocalCoefficientsForCell(cellID, cellDofs);
-    }
-    
-    int otherRank = Teuchos::GlobalMPISession::getNProc() - 1 - rank;
-    set<GlobalIndexType> cellIDsToRequest;
-    if (otherRank != rank)
-    {
-      cellIDsToRequest = mesh->globalDofAssignment()->cellsInPartition(otherRank);
-    }
-    
-    //    cout << "On rank " << rank << ", otherRank = " << otherRank << endl;
-    
-    soln->importSolutionForOffRankCells(cellIDsToRequest);
-    
-    for (set<GlobalIndexType>::iterator cellIDIt = cellIDsToRequest.begin(); cellIDIt != cellIDsToRequest.end(); cellIDIt++)
-    {
-      GlobalIndexType cellID = *cellIDIt;
-      FieldContainer<double> cellDofs = soln->allCoefficientsForCellID(cellID, false); // false: don't warn about off-rank requests
-      
-      TEST_ASSERT(cellDofs.size() == mesh->getElementType(cellID)->trialOrderPtr->totalDofs());
-      
-      for (int i=0; i<cellDofs.size(); i++)
-      {
-        TEST_ASSERT(otherRank == cellDofs[i]);
-      }
-    }
+    testImportOffRankCellSolution(spaceDim, meshWidth, out, success);
   }
   
   void testProjectTraceOnTensorMesh(CellTopoPtr spaceTopo, int H1Order, FunctionPtr f, VarType traceOrFlux,

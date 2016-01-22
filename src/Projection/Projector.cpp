@@ -283,9 +283,7 @@ void Projector<Scalar>::projectFunctionOntoBasisInterpolating(FieldContainer<Sca
   }
   else
   {
-    unsigned sideOrdinal = domainBasisCache->getSideIndex();
-    int vertexDim = 0;
-    dofsForDomain = continuousBasis->dofOrdinalsForSubcell(domainDim, sideOrdinal, vertexDim);
+    dofsForDomain = continuousBasis->dofOrdinalsForSide(sideOrdinal);
   }
   
   int numCells = basisCoefficients.dimension(0);

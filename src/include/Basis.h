@@ -80,6 +80,11 @@ public:
   virtual std::set<int> dofOrdinalsForVertices() const;
   virtual std::set<int> dofOrdinalsForSubcells(int subcellDim, bool includeLesserDimensions) const;
 
+  // ! includes lesser dimensions (e.g. vertices on the side), and is considered as a "continuous" basis;
+  // ! i.e., if you have HGRAD_DISC or HVOL, you'll get the dofs that have support on the side, even though
+  // ! continuity would not usually be enforced along the side for these.
+  virtual std::set<int> dofOrdinalsForSide(int sideOrdinal) const;
+  
   virtual std::set<int> dofOrdinalsForSubcell(int subcellDim, int subcellIndex, int minimumSubSubcellDimension) const; // e.g. can get vertex, edge, and face dofs for a side by specifying subcellDim=2, minimumSubSubcellDimension = 0
   virtual std::set<int> dofOrdinalsForSubcell(int subcellDim, int subcellIndex) const;
   virtual std::set<int> dofOrdinalsForVertex(int vertexIndex) const;
@@ -116,6 +121,7 @@ template<class Scalar, class ArrayScalar> class IntrepidBasisWrapper : public Ba
 {
 private:
   Teuchos::RCP< Intrepid::Basis<Scalar,ArrayScalar> > _intrepidBasis;
+  Teuchos::RCP< Camellia::Basis<Scalar,ArrayScalar> > _continuousBasis; // continuous version of the same basis, if this basis is discontinuous
 protected:
   void initializeTags() const;
 public:
@@ -127,6 +133,8 @@ public:
   virtual bool isConforming() const; // true for Intrepid bases
   virtual bool isNodal() const;      // true for the Intrepid bases
 
+  virtual std::set<int> dofOrdinalsForSide(int sideOrdinal) const;
+  
   void getValues(ArrayScalar &values, const ArrayScalar &refPoints, Intrepid::EOperator operatorType) const;
 };
 } // namespace Camellia

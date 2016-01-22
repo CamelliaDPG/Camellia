@@ -11,11 +11,13 @@
 #include "Solution.h"
 #include "Solver.h"
 #include "SpatialFilter.h"
+#include "SpatiallyFilteredFunction.h"
 #include "VarFactory.h"
 
 #include "Epetra_FECrsMatrix.h"
 #include "EpetraExt_MultiVectorOut.h"
 #include "EpetraExt_RowMatrixOut.h"
+#include "Epetra_Time.h"
 
 #include "Intrepid_FunctionSpaceTools.hpp"
 
@@ -63,6 +65,20 @@ public:
   }
 };
 
+class U_Exact_CCW : public SimpleFunction<double>
+{
+public:
+  double value(double x, double y)
+  {
+    // 1 inside the circle of radius 0.5 centered at the origin
+    const static double r = 0.5;
+    if (x*x + y*y <= r*r)
+      return 1.0;
+    else
+      return 0;
+  }
+};
+
 class UpwindIndicator : public TFunction<double>
 {
   FunctionPtr _beta;
@@ -101,23 +117,55 @@ public:
 
 // method to apply the upwinding terms to soln's stiffness matrix:
 void applyUpwinding(SolutionPtr soln, VarPtr u, VarPtr v, FunctionPtr beta);
-void solveAndExport(SolutionPtr soln, VarPtr u, VarPtr v, FunctionPtr beta, HDF5Exporter exporter, int refNumber);
+void computeApproximateGradients(SolutionPtr soln, VarPtr u, const vector<GlobalIndexType> &cells, vector<double> &gradient_l2_norm, double weightWithPowerOfH = 0);
+void solveAndExport(SolutionPtr soln, VarPtr u, VarPtr v, FunctionPtr beta, HDF5Exporter exporter, int refNumber, bool exportVisualization);
 
 // (implementations below main)
+
+enum RefinementMode
+{
+  FIXED_REF_COUNT,
+  L2_ERR_TOL
+};
+
+// some static cumulative timing variables:
+static double timeApplyUpwinding = 0, timeOtherAssembly = 0, timeSolve = 0, timeRefinements = 0;
+
+// static timing of the last run
+static double timeThisApplyUpwinding = 0, timeThisOtherAssembly = 0, timeThisSolve = 0, timeThisRefinement = 0;
+
 
 int main(int argc, char *argv[])
 {
   Teuchos::GlobalMPISession mpiSession(&argc, &argv, NULL); // initialize MPI
   int rank = Teuchos::GlobalMPISession::getRank();
+  int numProcs = Teuchos::GlobalMPISession::getNProc();
+  
+#ifdef HAVE_MPI
+  Epetra_MpiComm Comm(MPI_COMM_WORLD);
+#else
+  Epetra_SerialComm Comm;
+#endif
   
   Teuchos::CommandLineProcessor cmdp(false,true); // false: don't throw exceptions; true: do return errors for unrecognized options
   
+  int spaceDim = 2;
+  
   int polyOrder = 1;
   int horizontalElements = 2, verticalElements = 2;
+  int numRefinements = -1; // prefer using L^2 tolerance
+  double l2tol = 5e-2;
+  bool exportVisualization = false; // I think visualization might be segfaulting on finer meshes??
+  bool enforceOneIrregularity = true;
+  
   cmdp.setOption("polyOrder", &polyOrder);
   cmdp.setOption("horizontalElements", &horizontalElements);
   cmdp.setOption("verticalElements", &verticalElements);
-  
+  cmdp.setOption("numRefinements", &numRefinements);
+  cmdp.setOption("errTol", &l2tol);
+  cmdp.setOption("exportVisualization", "dontExportVisualization", &exportVisualization);
+  cmdp.setOption("enforceOneIrregularity", "dontEnforceOneIrregularity", &enforceOneIrregularity);
+
   string convectiveDirectionChoice = "CCW"; // counter-clockwise, the default.  Other options: left, right, up, down
   cmdp.setOption("convectiveDirection", &convectiveDirectionChoice);
   
@@ -129,9 +177,13 @@ int main(int argc, char *argv[])
     return -1;
   }
   
+  RefinementMode refMode = (numRefinements==-1) ? L2_ERR_TOL : FIXED_REF_COUNT;
+  
   FunctionPtr beta_x, beta_y;
   
   SpatialFilterPtr unitInflow, zeroInflow;
+  
+  FunctionPtr u_exact;
   
   if (convectiveDirectionChoice == "CCW")
   {
@@ -143,6 +195,8 @@ int main(int argc, char *argv[])
     
     // set g = 0 on {1} x [0,1], (0.5,1.0] x {0}
     zeroInflow = SpatialFilter::matchingX(1) | (SpatialFilter::matchingY(0) & SpatialFilter::greaterThanX(0.5));
+    
+    u_exact = Teuchos::rcp(new U_Exact_CCW);
   }
   else if (convectiveDirectionChoice == "left")
   {
@@ -150,6 +204,8 @@ int main(int argc, char *argv[])
     beta_y = Function::zero();
     unitInflow = SpatialFilter::matchingX(1.0) & SpatialFilter::lessThanY(0.5);
     zeroInflow = SpatialFilter::matchingX(1.0) & !SpatialFilter::lessThanY(0.5);
+    
+    u_exact = Teuchos::rcp( new SpatiallyFilteredFunction<double>(Function::constant(1.0), SpatialFilter::lessThanY(0.5)) );
   }
   else if (convectiveDirectionChoice == "right")
   {
@@ -158,6 +214,8 @@ int main(int argc, char *argv[])
     
     unitInflow = SpatialFilter::matchingX(0.0) & SpatialFilter::lessThanY(0.5); // | SpatialFilter::matchingY(0.0);
     zeroInflow = SpatialFilter::matchingX(0.0) & !SpatialFilter::lessThanY(0.5);
+    
+    u_exact = Teuchos::rcp( new SpatiallyFilteredFunction<double>(Function::constant(1.0), SpatialFilter::lessThanY(0.5)) );
   }
   else if (convectiveDirectionChoice == "up")
   {
@@ -166,6 +224,8 @@ int main(int argc, char *argv[])
     
     unitInflow = SpatialFilter::matchingY(0.0);
     zeroInflow = !SpatialFilter::allSpace();
+    
+    u_exact = Teuchos::rcp( new SpatiallyFilteredFunction<double>(Function::constant(1.0), SpatialFilter::allSpace()) );
   }
   else if (convectiveDirectionChoice == "down")
   {
@@ -174,14 +234,16 @@ int main(int argc, char *argv[])
     
     unitInflow = SpatialFilter::matchingY(1.0) & SpatialFilter::lessThanX(0.5);
     zeroInflow = SpatialFilter::matchingY(1.0) & !SpatialFilter::lessThanX(0.5);
+    
+    u_exact = Teuchos::rcp( new SpatiallyFilteredFunction<double>(Function::constant(1.0), SpatialFilter::lessThanX(0.5)) );
   }
   else
   {
-    cout << "convective direction " << convectiveDirectionChoice << " is not a supported option.\n";
+    if (rank==0) cout << "convective direction " << convectiveDirectionChoice << " is not a supported option.\n";
   }
   
   FunctionPtr beta = Function::vectorize(beta_x, beta_y);
-    
+  
   VarFactoryPtr vf = VarFactory::varFactory();
   
   VarPtr u = vf->fieldVar("u",HGRAD_DISC);
@@ -212,18 +274,166 @@ int main(int argc, char *argv[])
                                               divideIntoTriangles, x0, y0);
   
   RHSPtr rhs = RHS::rhs(); // zero forcing
+  Epetra_Time totalTimer(Comm);
   SolutionPtr soln = Solution::solution(mesh, bc, rhs);
 
-  ostringstream name;
-  name << "DGAdvectionExample_" << convectiveDirectionChoice;
-  HDF5Exporter exporter(mesh, name.str(), ".");
-
-  solveAndExport(soln, u, v, beta, exporter, 0);
-
-  // test code to see if h-refinements work:
-  mesh->hRefine(set<GlobalIndexType>{0});
-  solveAndExport(soln, u, v, beta, exporter, 1);
+  ostringstream report;
+  report << "elems\tdofs\ttrace_dofs\terr\ttimeRefinement\ttimeAssembly\ttimeSolve\ttimeTotal\n";
   
+  ostringstream name;
+  name << "DGAdvection_" << convectiveDirectionChoice << "_k" << polyOrder << "_" << numRefinements << "refs";
+  HDF5Exporter exporter(mesh, name.str(), ".");
+  
+  name << "_mesh";
+  HDF5Exporter mesh_exporter(mesh, name.str(), ".");
+  FunctionPtr meshFunction = Function::meshSkeletonCharacteristic();
+  mesh_exporter.exportFunction(meshFunction,"mesh",0);
+
+  FunctionPtr u_soln = Function::solution(u, soln);
+  FunctionPtr u_err = u_soln - u_exact;
+  
+  int numElements = mesh->getActiveCellIDs().size();
+  GlobalIndexType dofCount = mesh->numGlobalDofs();
+  
+  int cubatureEnrichment = 10;
+  int refNumber = 0;
+  solveAndExport(soln, u, v, beta, exporter, refNumber, exportVisualization);
+  
+  double err = u_err->l2norm(mesh, cubatureEnrichment);
+
+  if (rank==0)
+  {
+    cout << "Initial mesh has " << numElements << " active elements and " << dofCount << " degrees of freedom; ";
+    cout << "L^2 error = " << err << ".\n";
+  }
+  
+  double timeThisTotal = totalTimer.ElapsedTime();
+  Comm.MaxAll(&timeThisTotal, &timeThisTotal, 1);
+  
+  double timeThisAssembly = timeThisOtherAssembly + timeThisApplyUpwinding;
+  Comm.MaxAll(&timeThisRefinement, &timeThisRefinement, 1);
+  timeRefinements += timeThisRefinement;
+  
+  int traceCount = 0;
+  
+  report << numElements << "\t" << dofCount << "\t" << traceCount << "\t" << err;
+  report << "\t" << timeThisRefinement << "\t" << timeThisAssembly << "\t" <<  timeThisSolve;
+  report << "\t" << timeThisTotal << "\n";
+  
+  auto keepRefining = [refMode, &refNumber, numRefinements, &err, l2tol] () -> bool
+  {
+    if (refMode == FIXED_REF_COUNT)
+      return (refNumber < numRefinements);
+    else
+      return (err > l2tol);
+  };
+  
+  Epetra_Time refinementTimer(Comm);
+  
+  while (keepRefining())
+  {
+    refNumber++;
+    
+    refinementTimer.ResetStartTime();
+    totalTimer.ResetStartTime();
+    
+    double hPower = 1.0 + spaceDim / 2.0;
+    
+    set<GlobalIndexType> cellIDSet = mesh->getActiveCellIDs();
+    vector<GlobalIndexType> cellIDs(cellIDSet.begin(),cellIDSet.end());
+    set<GlobalIndexType> myCellIDSet = mesh->cellIDsInPartition();
+    vector<GlobalIndexType> myCellIDs(myCellIDSet.begin(),myCellIDSet.end());
+    
+    vector<double> globalErrorIndicatorValues(cellIDs.size(),0);
+    
+    vector<double> myErrorIndicatorValues;
+    computeApproximateGradients(soln, u, myCellIDs, myErrorIndicatorValues, hPower);
+    // now fill in the global error indicator values
+    int myCellOrdinal = 0;
+    for (int cellOrdinal=0; cellOrdinal<cellIDs.size(); cellOrdinal++)
+    {
+      GlobalIndexType cellID = cellIDs[cellOrdinal];
+      if (myCellIDSet.find(cellID) != myCellIDSet.end())
+      {
+        globalErrorIndicatorValues[cellOrdinal] = myErrorIndicatorValues[myCellOrdinal];
+        myCellOrdinal++;
+      }
+    }
+    MPIWrapper::entryWiseSum<double>(Comm,globalErrorIndicatorValues);
+    
+    // refine the top 30% of cells
+    int numCellsToRefine = 0.3 * cellIDs.size();
+    int numCellsNotToRefine = (cellIDs.size()-numCellsToRefine);
+    vector<double> globalErrorIndicatorValuesCopy = globalErrorIndicatorValues;
+    std::nth_element(globalErrorIndicatorValues.begin(),globalErrorIndicatorValues.begin() + numCellsNotToRefine, globalErrorIndicatorValues.end());
+    
+    double threshold = globalErrorIndicatorValues[numCellsNotToRefine-1];
+    vector<GlobalIndexType> cellsToRefine;
+    for (int i=0; i<cellIDs.size(); i++)
+    {
+      if (globalErrorIndicatorValuesCopy[i] > threshold)
+      {
+        cellsToRefine.push_back(cellIDs[i]);
+      }
+    }
+    mesh->hRefine(cellsToRefine);
+    if (enforceOneIrregularity)
+      mesh->enforceOneIrregularity();
+    
+    timeThisRefinement = refinementTimer.ElapsedTime();
+    
+    int numElements = mesh->getActiveCellIDs().size();
+    GlobalIndexType dofCount = mesh->numGlobalDofs();
+    
+    if (exportVisualization)
+      mesh_exporter.exportFunction(meshFunction,"mesh",refNumber);
+    
+    solveAndExport(soln, u, v, beta, exporter, refNumber, exportVisualization);
+    
+    err = u_err->l2norm(mesh, cubatureEnrichment);
+    
+    timeThisTotal = totalTimer.ElapsedTime();
+    Comm.MaxAll(&timeThisTotal, &timeThisTotal, 1);
+    
+    Comm.MaxAll(&timeThisRefinement, &timeThisRefinement, 1);
+    timeRefinements += timeThisRefinement;
+    timeThisAssembly = timeThisOtherAssembly + timeThisApplyUpwinding;
+    
+    report << numElements << "\t" << dofCount << "\t" << traceCount << "\t" << err;
+    report << "\t" << timeThisRefinement << "\t" << timeThisAssembly << "\t" <<  timeThisSolve;
+    report << "\t" << timeThisTotal << "\n";
+    
+    if (rank==0)
+    {
+      cout << "Ref. " << refNumber << " mesh has " << numElements << " active elements and " << dofCount << " degrees of freedom; ";
+      cout << "L^2 error = " << err << ".\n";
+    }
+  }
+  
+  ostringstream reportTitle;
+  reportTitle << "DGAdvection_" << convectiveDirectionChoice << "_k" << polyOrder << "_";
+  if (numRefinements > 0)
+    reportTitle << numRefinements << "refs";
+  else
+    reportTitle << "tol" << l2tol;
+  if (!enforceOneIrregularity)
+    reportTitle << "_irregular";
+  reportTitle << "_" << numProcs << "ranks.dat";
+  
+  if (rank==0)
+  {
+    ofstream fout(reportTitle.str().c_str());
+    fout << report.str();
+    fout.close();
+    cout << "Wrote results to " << reportTitle.str() << ".\n";
+    
+    cout << "Timings:\n";
+    cout << "apply upwinding: " << timeApplyUpwinding << " secs.\n";
+    cout << "other assembly : " << timeOtherAssembly << " secs.\n";
+    cout << "solve:           " << timeSolve << " secs.\n";
+    cout << "refine:          " << timeRefinements << " secs.\n";
+  }
+
   return 0;
 }
 
@@ -257,13 +467,15 @@ void applyUpwinding(SolutionPtr soln, VarPtr u, VarPtr v, FunctionPtr beta)
     int sideCount = cell->getSideCount();
     
     vector<GlobalIndexType> myGlobalDofs_u_native = mesh->globalDofAssignment()->globalDofIndicesForFieldVariable(cellID, u->ID());
-    vector<GlobalIndexTypeToCast> myGlobalDofs_u(myGlobalDofs_u_native.begin(),myGlobalDofs_u_native.end());
     
 //    cout << "cell ID " << cellID;
 //    print("myGlobalDofs_u", myGlobalDofs_u);
     
     for (int sideOrdinal = 0; sideOrdinal < sideCount; sideOrdinal++)
     {
+      // we'll filter this down to match only the side dofs, so we need to do this inside the sideOrdinal loop:
+      vector<GlobalIndexTypeToCast> myGlobalDofs_u(myGlobalDofs_u_native.begin(),myGlobalDofs_u_native.end());
+      
       pair<GlobalIndexType,unsigned> neighborInfo = cell->getNeighborInfo(sideOrdinal, meshTopo);
       GlobalIndexType neighborCellID = neighborInfo.first;
       unsigned mySideOrdinalInNeighbor = neighborInfo.second;
@@ -290,8 +502,6 @@ void applyUpwinding(SolutionPtr soln, VarPtr u, VarPtr v, FunctionPtr beta)
       // determine global dof indices:
       vector<GlobalIndexType> neighborGlobalDofs_u_native = mesh->globalDofAssignment()->globalDofIndicesForFieldVariable(neighborCellID, u->ID());
       vector<GlobalIndexTypeToCast> neighborGlobalDofs_u(neighborGlobalDofs_u_native.begin(),neighborGlobalDofs_u_native.end());
-      
-//      print("neighborGlobalDofs_u", neighborGlobalDofs_u);
       
       // figure out what the cubature degree should be
       DofOrderingPtr neighborTrialOrder = mesh->getElementType(neighborCellID)->trialOrderPtr;
@@ -321,18 +531,51 @@ void applyUpwinding(SolutionPtr soln, VarPtr u, VarPtr v, FunctionPtr beta)
       LinearTermPtr jumpTerm = v * beta * n;
       Intrepid::FieldContainer<double> jump_values(numCells, numFields, numPoints);
       jumpTerm->values(jump_values, v->ID(), vBasis, cellBasisCacheSide);
+
+      // filter to include only those members of uBasis that have support on the side
+      // (it might be nice to have LinearTerm::values() support this directly, via a basisDofOrdinal container argument...)
+      auto filterSideBasisValues = [] (BasisPtr basis, int sideOrdinal,
+                                       FieldContainer<double> &values) -> void
+      {
+        set<int> mySideBasisDofOrdinals = basis->dofOrdinalsForSide(sideOrdinal);
+        int numFilteredFields = mySideBasisDofOrdinals.size();
+        int numCells = values.dimension(0);
+        int numPoints = values.dimension(2);
+        FieldContainer<double> filteredValues(numCells,numFilteredFields,numPoints);
+        for (int cellOrdinal=0; cellOrdinal<numCells; cellOrdinal++)
+        {
+          int filteredDofOrdinal = 0;
+          for (int basisDofOrdinal : mySideBasisDofOrdinals)
+          {
+            for (int pointOrdinal=0; pointOrdinal<numPoints; pointOrdinal++)
+            {
+              filteredValues(cellOrdinal,filteredDofOrdinal,pointOrdinal) = values(cellOrdinal,basisDofOrdinal,pointOrdinal);
+            }
+            filteredDofOrdinal++;
+          }
+        }
+        values = filteredValues;
+      };
+      
+      auto filterGlobalDofOrdinals = [] (BasisPtr basis, int sideOrdinal,
+                                       vector<GlobalIndexTypeToCast> &globalDofOrdinals) -> void
+      {
+        set<int> mySideBasisDofOrdinals = basis->dofOrdinalsForSide(sideOrdinal);
+        vector<GlobalIndexTypeToCast> filteredGlobalDofOrdinals;
+        for (int basisDofOrdinal : mySideBasisDofOrdinals)
+        {
+          filteredGlobalDofOrdinals.push_back(globalDofOrdinals[basisDofOrdinal]);
+        }
+        globalDofOrdinals = filteredGlobalDofOrdinals;
+      };
+      
+      filterSideBasisValues(uBasis,sideOrdinal,u_values);
+      filterSideBasisValues(vBasis,sideOrdinal,jump_values);
+      filterGlobalDofOrdinals(uBasis,sideOrdinal,myGlobalDofs_u);
+      numFields = myGlobalDofs_u.size();
       
       // Now the geometrically challenging bit: we need to line up the physical points in
       // the cellBasisCacheSide with those in a BasisCache for the neighbor cell
-      
-      // For the moment, we make the assumption neighbor *is* a peer in terms of the h-refinements
-      // We can revisit this later; not too great a change is necessary, really; see particularly
-      // RefinementPattern::mapRefCellPointsToAncestor().  The strategy would be to use this on "my"
-      // side, and then use the permutation stuff below to transform into neighbor's reference space.
-      // (MAY EVEN BE ABLE TO USE BasisCache::basisCacheForRefinedReferenceCell() to make this simpler still.)
-      
-      // On the peer assumption, the only transformation necessary is a possible permutation of the
-      // side vertices.
       
       CellTopoPtr cellTopo = cell->topology();
       CellTopoPtr neighborTopo = neighbor->topology();
@@ -444,35 +687,29 @@ void applyUpwinding(SolutionPtr soln, VarPtr u, VarPtr v, FunctionPtr beta)
       Intrepid::FieldContainer<double> neighbor_jump_values(numCells, numNeighborFields, numPoints);
       jumpTerm->values(neighbor_jump_values, v->ID(), vBasisNeighbor, neighborSideCache);
       
+      int neighborSideOrdinal = neighborSideCache->getSideIndex();
+      filterSideBasisValues(uBasisNeighbor,neighborSideOrdinal,neighbor_u_values);
+      filterSideBasisValues(vBasisNeighbor,neighborSideOrdinal,neighbor_jump_values);
+      filterGlobalDofOrdinals(uBasisNeighbor,neighborSideOrdinal,neighborGlobalDofs_u);
+      numNeighborFields = neighborGlobalDofs_u.size();
+      
       // weight u_values containers using cubature weights defined in cellBasisCacheSide:
       Intrepid::FunctionSpaceTools::multiplyMeasure<double>(u_values, cellBasisCacheSide->getWeightedMeasures(), u_values);
       Intrepid::FunctionSpaceTools::multiplyMeasure<double>(neighbor_u_values, cellBasisCacheSide->getWeightedMeasures(), neighbor_u_values);
       
-      // now, we compute four integrals (test, trial)
-      Intrepid::FieldContainer<double> integralValues_me_me(numCells,numFields,numFields);
-      Intrepid::FunctionSpaceTools::integrate<double>(integralValues_me_me,jump_values,u_values,Intrepid::COMP_BLAS);
-//      cout << "integralValues_me_me:\n" << integralValues_me_me;
-      
-      Intrepid::FieldContainer<double> integralValues_neighbor_me(numCells,numNeighborFields,numFields);
-      Intrepid::FunctionSpaceTools::integrate<double>(integralValues_neighbor_me,neighbor_jump_values,u_values,Intrepid::COMP_BLAS);
-//      cout << "integralValues_me_neighbor:\n" << integralValues_me_neighbor;
-      
-      Intrepid::FieldContainer<double> integralValues_me_neighbor(numCells,numFields,numNeighborFields);
-      Intrepid::FunctionSpaceTools::integrate<double>(integralValues_me_neighbor,jump_values,neighbor_u_values,Intrepid::COMP_BLAS);
-//      cout << "integralValues_neighbor_me:\n" << integralValues_neighbor_me;
-      
-      Intrepid::FieldContainer<double> integralValues_neighbor_neighbor(numCells,numNeighborFields,numNeighborFields);
-      Intrepid::FunctionSpaceTools::integrate<double>(integralValues_neighbor_neighbor,neighbor_jump_values,neighbor_u_values,Intrepid::COMP_BLAS);
-//      cout << "integralValues_neighbor_neighbor:\n" << integralValues_neighbor_neighbor;
-
-      // because I don't trust Epetra in terms of the format, let's insert values one at a time
-      // define lambda for this
+      // now, we compute four integrals (test, trial) and insert into global stiffness
+      // define a lambda function for insertion
       auto insertValues = [stiffnessMatrix] (vector<int> &rowDofOrdinals, vector<int> &colDofOrdinals,
                                              Intrepid::FieldContainer<double> &values) -> void
       {
         // values container is (cell, test, trial)
         int rowCount = rowDofOrdinals.size();
         int colCount = colDofOrdinals.size();
+        
+        //        stiffnessMatrix->InsertGlobalValues(rowCount,&rowDofOrdinals[0],colCount,&colDofOrdinals[0],&values(0,0,0),
+        //                                            Epetra_FECrsMatrix::ROW_MAJOR); // COL_MAJOR is the right thing, actually, but for some reason does not work...
+        
+        // because I don't trust Epetra in terms of the format, let's insert values one at a time
         for (int i=0; i<rowCount; i++)
         {
           for (int j=0; j<colCount; j++)
@@ -480,40 +717,241 @@ void applyUpwinding(SolutionPtr soln, VarPtr u, VarPtr v, FunctionPtr beta)
             // rows in FieldContainer correspond to trial variables, cols to test
             // in stiffness matrix, it's the opposite.
             if (values(0,i,j) != 0) // skip 0's, which I believe Epetra should ignore anyway
+            {
+//              cout << "Inserting (" << rowDofOrdinals[i] << "," << colDofOrdinals[j] << ") = ";
+//              cout << values(0,i,j) << endl;
               stiffnessMatrix->InsertGlobalValues(1,&rowDofOrdinals[i],1,&colDofOrdinals[j],&values(0,i,j));
+            }
           }
         }
       };
+      
+      auto hasNonzeros = [] (Intrepid::FieldContainer<double> &values, double tol) -> bool
+      {
+        for (int i=0; i<values.size(); i++)
+        {
+          if (abs(values[i]) > tol) return true;
+        }
+        return false;
+      };
 
-      insertValues(myGlobalDofs_u,myGlobalDofs_u,integralValues_me_me);
-      insertValues(myGlobalDofs_u,neighborGlobalDofs_u,integralValues_me_neighbor);
-      insertValues(neighborGlobalDofs_u,myGlobalDofs_u,integralValues_neighbor_me);
-      insertValues(neighborGlobalDofs_u,neighborGlobalDofs_u,integralValues_neighbor_neighbor);
+      if (hasNonzeros(jump_values,0) && hasNonzeros(u_values,0))
+      {
+        Intrepid::FieldContainer<double> integralValues_me_me(numCells,numFields,numFields);
+        Intrepid::FunctionSpaceTools::integrate<double>(integralValues_me_me,jump_values,u_values,Intrepid::COMP_BLAS);
+        insertValues(myGlobalDofs_u,myGlobalDofs_u,integralValues_me_me);
+      }
+      
+      if (hasNonzeros(neighbor_jump_values,0) && hasNonzeros(u_values,0))
+      {
+        Intrepid::FieldContainer<double> integralValues_neighbor_me(numCells,numNeighborFields,numFields);
+        Intrepid::FunctionSpaceTools::integrate<double>(integralValues_neighbor_me,neighbor_jump_values,u_values,Intrepid::COMP_BLAS);
+        insertValues(neighborGlobalDofs_u,myGlobalDofs_u,integralValues_neighbor_me);
+      }
+
+      if (hasNonzeros(jump_values,0) && hasNonzeros(neighbor_u_values,0))
+      {
+        Intrepid::FieldContainer<double> integralValues_me_neighbor(numCells,numFields,numNeighborFields);
+        Intrepid::FunctionSpaceTools::integrate<double>(integralValues_me_neighbor,jump_values,neighbor_u_values,Intrepid::COMP_BLAS);
+        insertValues(myGlobalDofs_u,neighborGlobalDofs_u,integralValues_me_neighbor);
+      }
+      
+      if (hasNonzeros(neighbor_jump_values,0) && hasNonzeros(neighbor_u_values,0))
+      {
+        Intrepid::FieldContainer<double> integralValues_neighbor_neighbor(numCells,numNeighborFields,numNeighborFields);
+        Intrepid::FunctionSpaceTools::integrate<double>(integralValues_neighbor_neighbor,neighbor_jump_values,neighbor_u_values,Intrepid::COMP_BLAS);
+        insertValues(neighborGlobalDofs_u,neighborGlobalDofs_u,integralValues_neighbor_neighbor);
+      }
     }
   }
 }
 
-void solveAndExport(SolutionPtr soln, VarPtr u, VarPtr v, FunctionPtr beta, HDF5Exporter exporter, int refNumber)
+void computeApproximateGradients(SolutionPtr soln, VarPtr u, const vector<GlobalIndexType> &cells,
+                                 vector<double> &gradient_l2_norm, double weightWithPowerOfH)
+{
+  // imitates https://dealii.org/developer/doxygen/deal.II/namespaceDerivativeApproximation.html
+
+  // we require that u be a scalar field variable
+  TEUCHOS_TEST_FOR_EXCEPTION(u->rank() != 0, std::invalid_argument, "u must be a scalar variable");
+  TEUCHOS_TEST_FOR_EXCEPTION(u->varType() != FIELD, std::invalid_argument, "u must be a field variable");
+  
+  int cellCount = cells.size();
+  gradient_l2_norm.resize(cells.size());
+  
+  int onePoint = 1;
+  MeshTopologyViewPtr meshTopo = soln->mesh()->getTopology();
+  int spaceDim = meshTopo->getDimension();
+
+  set<GlobalIndexType> cellsAndNeighborsSet;
+  for (int cellOrdinal=0; cellOrdinal<cellCount; cellOrdinal++)
+  {
+    cellsAndNeighborsSet.insert(cells[cellOrdinal]);
+    CellPtr cell = meshTopo->getCell(cells[cellOrdinal]);
+    set<GlobalIndexType> neighborIDs = cell->getActiveNeighborIndices(meshTopo);
+    cellsAndNeighborsSet.insert(neighborIDs.begin(),neighborIDs.end());
+  }
+  vector<GlobalIndexType> cellsAndNeighbors(cellsAndNeighborsSet.begin(),cellsAndNeighborsSet.end());
+  
+  // get any off-rank solution data we may need:
+  soln->importSolutionForOffRankCells(cellsAndNeighborsSet);
+  
+  int cellsAndNeighborsCount = cellsAndNeighbors.size();
+  
+  FieldContainer<double> cellValues(cellsAndNeighborsCount,onePoint); // values at cell centers
+  FieldContainer<double> cellCenters(cellsAndNeighborsCount,spaceDim);
+  FieldContainer<double> cellDiameter(cellsAndNeighborsCount,onePoint); // h-values
+  
+  map<CellTopologyKey,BasisCachePtr> basisCacheForTopology;
+  
+  FunctionPtr hFunction = Function::h();
+  FunctionPtr solnFunction = Function::solution(u, soln);
+  Teuchos::Array<int> cellValueDim;
+  cellValueDim.push_back(1);
+  cellValueDim.push_back(1);
+  
+  map<GlobalIndexType,int> cellIDToOrdinal; // lookup table for value access
+  
+  // setup: compute cell centers, and solution values at those points
+  for (int cellOrdinal=0; cellOrdinal<cellsAndNeighborsCount; cellOrdinal++)
+  {
+    GlobalIndexType cellID = cellsAndNeighbors[cellOrdinal];
+    cellIDToOrdinal[cellID] = cellOrdinal;
+    CellPtr cell = meshTopo->getCell(cellID);
+    CellTopoPtr cellTopo = cell->topology();
+    if (basisCacheForTopology.find(cellTopo->getKey()) == basisCacheForTopology.end())
+    {
+      FieldContainer<double> centroid(onePoint,spaceDim);
+      int nodeCount = cellTopo->getNodeCount();
+      FieldContainer<double> cellNodes(nodeCount,spaceDim);
+      CamelliaCellTools::refCellNodesForTopology(cellNodes, cellTopo);
+      for (int node=0; node<nodeCount; node++)
+      {
+        for (int d=0; d<spaceDim; d++)
+        {
+          centroid(0,d) += cellNodes(node,d);
+        }
+      }
+      for (int d=0; d<spaceDim; d++)
+      {
+        centroid(0,d) /= nodeCount;
+      }
+      basisCacheForTopology[cellTopo->getKey()] = BasisCache::basisCacheForReferenceCell(cellTopo, 0); // 0 cubature degree
+      basisCacheForTopology[cellTopo->getKey()]->setRefCellPoints(centroid);
+    }
+    BasisCachePtr basisCache = basisCacheForTopology[cellTopo->getKey()];
+    basisCache->setPhysicalCellNodes(soln->mesh()->physicalCellNodesForCell(cellID), {cellID}, false);
+    
+    FieldContainer<double> cellValue(cellValueDim,&cellValues(cellOrdinal,0));
+    solnFunction->values(cellValue, basisCache);
+    for (int d=0; d<spaceDim; d++)
+    {
+      cellCenters(cellOrdinal,d) = basisCache->getPhysicalCubaturePoints()(0,0,d);
+    }
+    if (weightWithPowerOfH != 0)
+    {
+      cellDiameter(cellOrdinal,0) = soln->mesh()->getCellMeasure(cellID);
+    }
+  }
+  
+  // now compute the gradients requested
+  FieldContainer<double> Y(spaceDim,spaceDim); // the matrix we'll invert to compute the gradient
+  FieldContainer<double> b(spaceDim); // RHS for matrix problem
+  FieldContainer<double> grad(spaceDim); // LHS for matrix problem
+  vector<double> distanceVector(spaceDim);
+  for (int cellOrdinal=0; cellOrdinal<cellCount; cellOrdinal++)
+  {
+    Y.initialize(0.0);
+    b.initialize(0.0);
+    GlobalIndexType cellID = cells[cellOrdinal];
+    CellPtr cell = meshTopo->getCell(cellID);
+    int myOrdinalInCellAndNeighbors = cellIDToOrdinal[cellID];
+    double myValue = cellValues(myOrdinalInCellAndNeighbors,0);
+    set<GlobalIndexType> neighborIDs = cell->getActiveNeighborIndices(meshTopo);
+    for (GlobalIndexType neighborID : neighborIDs)
+    {
+      int neighborOrdinalInCellAndNeighbors = cellIDToOrdinal[neighborID];
+      double neighborValue = cellValues(neighborOrdinalInCellAndNeighbors,0);
+      
+      double dist_squared = 0;
+      for (int d=0; d<spaceDim; d++)
+      {
+        distanceVector[d] = cellCenters(neighborOrdinalInCellAndNeighbors,d) - cellCenters(myOrdinalInCellAndNeighbors,d);
+        dist_squared += distanceVector[d] * distanceVector[d];
+      }
+      
+      for (int d1=0; d1<spaceDim; d1++)
+      {
+        b(d1) += distanceVector[d1] * (neighborValue - myValue) / dist_squared;
+        for (int d2=0; d2<spaceDim; d2++)
+        {
+          Y(d1,d2) += distanceVector[d1] * distanceVector[d2] / dist_squared;
+        }
+      }
+    }
+    SerialDenseWrapper::solveSystem(grad, Y, b);
+    double l2_value_squared = 0;
+    for (int d=0; d<spaceDim; d++)
+    {
+      l2_value_squared += grad(d) * grad(d);
+    }
+    if (weightWithPowerOfH == 0)
+    {
+      gradient_l2_norm[cellOrdinal] = sqrt(l2_value_squared);
+    }
+    else
+    {
+      gradient_l2_norm[cellOrdinal] = sqrt(l2_value_squared) * pow(cellDiameter(myOrdinalInCellAndNeighbors,0), weightWithPowerOfH);
+    }
+  }
+}
+
+void solveAndExport(SolutionPtr soln, VarPtr u, VarPtr v, FunctionPtr beta, HDF5Exporter exporter, int refNumber,
+                    bool exportVisualization)
 {
   SolverPtr solver = Solver::getDirectSolver();
   
   soln->initializeLHSVector();
   soln->initializeStiffnessAndLoad();
   
+#ifdef HAVE_MPI
+  Epetra_MpiComm Comm(MPI_COMM_WORLD);
+#else
+  Epetra_SerialComm Comm;
+#endif
+  Epetra_Time timer(Comm);
   // this is where we want to accumulate any inter-element DG terms
   applyUpwinding(soln, u, v, beta);
+
+  timeThisApplyUpwinding = timer.ElapsedTime();
   
   // it is important to do the above accumulation before BCs are imposed, which they
   // will be in populateStiffnessAndLoad().
+  
+  timer.ResetStartTime();
   soln->populateStiffnessAndLoad();
+  timeThisOtherAssembly = timer.ElapsedTime();
+  
   soln->setProblem(solver);
   
+  timer.ResetStartTime();
   int solveSuccess = soln->solveWithPrepopulatedStiffnessAndLoad(solver);
+  
+  timeThisSolve = timer.ElapsedTime();
   
   if (solveSuccess != 0)
     cout << "solve returned with error code " << solveSuccess << endl;
   
   soln->importSolution(); // determines element-local solution coefficients from the global solution vector
   
-  exporter.exportSolution(soln,refNumber);
+  if (exportVisualization)
+    exporter.exportSolution(soln,refNumber);
+  
+  // accumulate timings:
+  Comm.MaxAll(&timeThisOtherAssembly, &timeThisOtherAssembly, 1);
+  Comm.MaxAll(&timeThisApplyUpwinding, &timeThisApplyUpwinding, 1);
+  Comm.MaxAll(&timeThisSolve, &timeThisSolve, 1);
+
+  timeOtherAssembly += timeThisOtherAssembly;
+  timeSolve += timeThisSolve;
+  timeApplyUpwinding += timeThisApplyUpwinding;
 }
