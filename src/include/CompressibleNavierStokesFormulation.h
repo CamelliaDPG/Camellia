@@ -53,7 +53,8 @@ class CompressibleNavierStokesFormulation
 
   bool _haveOutflowConditionsImposed; // used to track whether we should impose point/zero mean conditions on pressure
 
-  Teuchos::RCP<ParameterFunction> _dt; // use a ParameterFunction so that we can set value later and references (in BF, e.g.) automatically pick this up
+  // Teuchos::RCP<ParameterFunction> _dt; // use a ParameterFunction so that we can set value later and references (in BF, e.g.) automatically pick this up
+  FunctionPtr _dt; // use a ParameterFunction so that we can set value later and references (in BF, e.g.) automatically pick this up
   Teuchos::RCP<ParameterFunction> _t;  // use a ParameterFunction so that user can easily "ramp up" BCs in time...
 
   Teuchos::RCP<ParameterFunction> _theta; // selector for time step method; 0.5 is Crank-Nicolson
@@ -69,7 +70,7 @@ class CompressibleNavierStokesFormulation
 
   FunctionPtr _L2IncrementFunction, _L2SolutionFunction;
 
-  SolutionPtr _backgroundFlow, _solnIncrement;
+  SolutionPtr _backgroundFlow, _solnIncrement, _solnPrevTime;
 
   // SolutionPtr _solution, _previousSolution; // solution at current and previous time steps
 
@@ -113,12 +114,23 @@ public:
   // ! the Oldroyd-B VGP formulation bilinear form
   BFPtr bf();
 
+  void addXVelocityTraceCondition(SpatialFilterPtr region, FunctionPtr u1_exact);
+  void addYVelocityTraceCondition(SpatialFilterPtr region, FunctionPtr u2_exact);
+  void addZVelocityTraceCondition(SpatialFilterPtr region, FunctionPtr u3_exact);
   void addVelocityTraceCondition(SpatialFilterPtr region, FunctionPtr u_exact);
 
   void addTemperatureTraceCondition(SpatialFilterPtr region, FunctionPtr T_exact);
 
   void addMassFluxCondition(SpatialFilterPtr region, FunctionPtr rho_exact, FunctionPtr u_exact, FunctionPtr T_exact);
 
+  void addMassFluxCondition(SpatialFilterPtr region, FunctionPtr value);
+  void addXMomentumFluxCondition(SpatialFilterPtr region, FunctionPtr value);
+  void addYMomentumFluxCondition(SpatialFilterPtr region, FunctionPtr value);
+  void addZMomentumFluxCondition(SpatialFilterPtr region, FunctionPtr value);
+  void addEnergyFluxCondition(SpatialFilterPtr region, FunctionPtr value);
+  void addXMomentumFluxCondition(SpatialFilterPtr region, FunctionPtr rho_exact, FunctionPtr u_exact, FunctionPtr T_exact);
+  void addYMomentumFluxCondition(SpatialFilterPtr region, FunctionPtr rho_exact, FunctionPtr u_exact, FunctionPtr T_exact);
+  void addZMomentumFluxCondition(SpatialFilterPtr region, FunctionPtr rho_exact, FunctionPtr u_exact, FunctionPtr T_exact);
   void addMomentumFluxCondition(SpatialFilterPtr region, FunctionPtr rho_exact, FunctionPtr u_exact, FunctionPtr T_exact);
 
   void addEnergyFluxCondition(SpatialFilterPtr region, FunctionPtr rho_exact, FunctionPtr u_exact, FunctionPtr T_exact);
@@ -238,11 +250,14 @@ public:
   // ! Returns the latest solution increment (at current time)
   SolutionPtr solutionIncrement();
 
-  // ! The first time this is called, calls solution()->solve(), and the weight argument is ignored.  After the first call, solves for the next iterate, and adds to background flow with the specified weight.
-  void solveAndAccumulate(double weight=1.0);
-
   // ! Returns the solution (at previous time)
   SolutionPtr solutionPreviousTimeStep();
+
+  // ! The first time this is called, calls solution()->solve(), and the weight argument is ignored.  After the first call, solves for the next iterate, and adds to background flow with the specified weight.
+  double solveAndAccumulate();
+
+  // ! Returns the L2 norm of the time residual
+  double timeResidual();
 
   // ! Solves
   void solve();
@@ -254,13 +269,13 @@ public:
   int spaceDim();
 
   // ! Takes a time step
-  void takeTimeStep();
+  // void takeTimeStep();
 
   // ! Returns the sum of the time steps taken thus far.
-  double getTime();
+  // double getTime();
 
   // ! Returns a FunctionPtr which gets updated with the current time.  Useful for setting BCs that vary in time.
-  FunctionPtr getTimeFunction();
+  // FunctionPtr getTimeFunction();
 
   // field variables:
   VarPtr rho();
@@ -301,6 +316,8 @@ public:
   static CompressibleNavierStokesFormulation steadyFormulation(int spaceDim, double Re, bool useConformingTraces,
                                                       MeshTopologyPtr meshTopo, int polyOrder, int delta_k);
   static CompressibleNavierStokesFormulation spaceTimeFormulation(int spaceDim, double Re, bool useConformingTraces,
+                                                         MeshTopologyPtr meshTopo, int spatialPolyOrder, int temporalPolyOrder, int delta_k);
+  static CompressibleNavierStokesFormulation timeSteppingFormulation(int spaceDim, double Re, bool useConformingTraces,
                                                          MeshTopologyPtr meshTopo, int spatialPolyOrder, int temporalPolyOrder, int delta_k);
 };
 }
