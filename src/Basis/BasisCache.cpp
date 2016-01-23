@@ -1091,9 +1091,11 @@ void BasisCache::setRefCellPoints(const FieldContainer<double> &pointsRefCell)
   this->setRefCellPoints(pointsRefCell, cubWeights);
 }
 
-void BasisCache::setRefCellPoints(const FieldContainer<double> &pointsRefCell, const FieldContainer<double> &cubWeights)
+void BasisCache::setRefCellPoints(const FieldContainer<double> &pointsRefCell, const FieldContainer<double> &cubWeights,
+                                  int cubatureDegree, bool recomputePhysicalMeasures)
 {
   _cubPoints = pointsRefCell;
+  _cubDegree = cubatureDegree;
   int numPoints = pointsRefCell.dimension(0);
 
   if ( isSideCache() )   // then we need to map pointsRefCell (on side) into volume coordinates, and store in _cubPointsSideRefCell
@@ -1115,7 +1117,7 @@ void BasisCache::setRefCellPoints(const FieldContainer<double> &pointsRefCell, c
   _cubWeights = cubWeights;
 
   // allow reuse of physicalNode info; just map the new points...
-  if (_physCubPoints.size() > 0)
+  if ((_physCubPoints.size() > 0) && recomputePhysicalMeasures)
   {
     determinePhysicalPoints();
     determineJacobian();

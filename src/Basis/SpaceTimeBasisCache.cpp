@@ -153,7 +153,8 @@ SpaceTimeBasisCache::SpaceTimeBasisCache(int sideOrdinal, Teuchos::RCP<SpaceTime
     temporalNode(0,0) = getTemporalNodeCoordinateRefSpace();
     FieldContainer<double> temporalWeight(1);
     temporalWeight(0) = 1.0;
-    _temporalCache->setRefCellPoints(temporalNode, temporalWeight);
+    bool recomputePhysicalMeasures = false; // because we'll do so in a moment when we set the physical nodes
+    _temporalCache->setRefCellPoints(temporalNode, temporalWeight, temporalCacheVolume->cubatureDegree(), recomputePhysicalMeasures);
 
     bool createSideCache = true;
     vector<GlobalIndexType> cellIDs; //empty
@@ -397,7 +398,8 @@ void SpaceTimeBasisCache::setRefCellPoints(const Intrepid::FieldContainer<double
 }
 
 void SpaceTimeBasisCache::setRefCellPoints(const Intrepid::FieldContainer<double> &pointsRefCell,
-    const Intrepid::FieldContainer<double> &cubatureWeights)
+                                           const Intrepid::FieldContainer<double> &cubatureWeights,
+                                           int cubatureDegree, bool recomputePhysicalMeasures)
 {
   FieldContainer<double> spaceRefCellPoints, timeRefCellPoints;
 
@@ -406,8 +408,8 @@ void SpaceTimeBasisCache::setRefCellPoints(const Intrepid::FieldContainer<double
   if (spaceRefCellPoints.size() == 0)
   {
     // then the cubature weights belong just to the temporal points:
-    _temporalCache->setRefCellPoints(timeRefCellPoints, cubatureWeights);
-    this->BasisCache::setRefCellPoints(pointsRefCell, cubatureWeights);
+    _temporalCache->setRefCellPoints(timeRefCellPoints, cubatureWeights, cubatureDegree, recomputePhysicalMeasures);
+    this->BasisCache::setRefCellPoints(pointsRefCell, cubatureWeights, cubatureDegree, recomputePhysicalMeasures);
   }
   else
   {
@@ -452,11 +454,11 @@ void SpaceTimeBasisCache::setRefCellPoints(const Intrepid::FieldContainer<double
       }
     }
 
-    _spatialCache->setRefCellPoints(spaceRefCellPoints, cubatureWeightsSpace);
-    _temporalCache->setRefCellPoints(timeRefCellPoints, cubatureWeightsTime);
+    _spatialCache->setRefCellPoints(spaceRefCellPoints, cubatureWeightsSpace, cubatureDegree, recomputePhysicalMeasures);
+    _temporalCache->setRefCellPoints(timeRefCellPoints, cubatureWeightsTime, cubatureDegree, recomputePhysicalMeasures);
   }
 
-  this->BasisCache::setRefCellPoints(pointsRefCell, cubatureWeights);
+  this->BasisCache::setRefCellPoints(pointsRefCell, cubatureWeights, cubatureDegree, recomputePhysicalMeasures);
 }
 
 constFCPtr SpaceTimeBasisCache::getValues(BasisPtr basis, Camellia::EOperator op, bool useCubPointsSideRefCell)

@@ -244,7 +244,8 @@ public:
   // (this comes up in imposeBC)
   virtual void setRefCellPoints(const Intrepid::FieldContainer<double> &pointsRefCell);
   virtual void setRefCellPoints(const Intrepid::FieldContainer<double> &pointsRefCell,
-                                const Intrepid::FieldContainer<double> &cubatureWeights);
+                                const Intrepid::FieldContainer<double> &cubatureWeights,
+                                int cubatureDegree = -1, bool recomputePhysicalMeasures = true);
   const Intrepid::FieldContainer<double> &getRefCellPoints();
   const Intrepid::FieldContainer<double> &getSideRefCellPointsInVolumeCoordinates();
 

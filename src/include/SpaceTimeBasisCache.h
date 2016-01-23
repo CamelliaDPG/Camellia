@@ -71,7 +71,8 @@ public:
 
   virtual void setRefCellPoints(const Intrepid::FieldContainer<double> &pointsRefCell);
   virtual void setRefCellPoints(const Intrepid::FieldContainer<double> &pointsRefCell,
-                                const Intrepid::FieldContainer<double> &cubatureWeights);
+                                const Intrepid::FieldContainer<double> &cubatureWeights,
+                                int cubatureDegree = -1, bool recomputePhysicalMeasures = true);
 
   virtual void setPhysicalCellNodes(const Intrepid::FieldContainer<double> &physicalCellNodes,
                                     const std::vector<GlobalIndexType> &cellIDs, bool createSideCacheToo);
