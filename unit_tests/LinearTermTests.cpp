@@ -382,7 +382,7 @@ TEUCHOS_UNIT_TEST( LinearTerm, CompareFauxWithTrueSpaceTime_1D )
   BasisCachePtr fauxBasisCache = BasisCache::basisCacheForCell(fauxMesh, cellID);
   BasisCachePtr trueBasisCache = BasisCache::basisCacheForCell(trueMesh, cellID);
   // make sure the BasisCaches agree on which points and their ordering:
-  fauxBasisCache->setRefCellPoints(trueBasisCache->getRefCellPoints());
+  fauxBasisCache->setRefCellPoints(trueBasisCache->getRefCellPoints(), trueBasisCache->getCubatureWeights());
   int numPoints = fauxBasisCache->getRefCellPoints().dimension(0);
 
   // compare values:

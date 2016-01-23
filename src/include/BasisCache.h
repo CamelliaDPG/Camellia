@@ -88,7 +88,7 @@ private:
   Intrepid::FieldContainer<double> _physicalCellNodes;
 
   bool _cellJacobianIsValid, _cellJacobianInverseIsValid, _cellJacobianDeterminantIsValid;
-  bool _weightedMeasureIsValid, _physCubPointsIsValid;
+  bool _sideNormalsIsValid, _weightedMeasureIsValid, _physCubPointsIsValid;
   
   TFunctionPtr<double> _transformationFxn;
   bool _composeTransformationFxnWithMeshTransformation;

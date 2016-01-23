@@ -175,6 +175,13 @@ void BasisCache::initVolumeCache(bool createSideCacheToo, bool tensorProductTopo
   _cubaturePhaseCount = 1;
   _phasePointOrdinalOffsets.push_back(0);
 
+  _cellJacobianIsValid = false;
+  _cellJacobianInverseIsValid = false;
+  _cellJacobianDeterminantIsValid = false;
+  _weightedMeasureIsValid = false;
+  _sideNormalsIsValid = false;
+  _physCubPointsIsValid = false;
+  
   // now, create side caches
   if ( createSideCacheToo )
   {
@@ -196,6 +203,13 @@ void BasisCache::initVolumeCache(const Intrepid::FieldContainer<double> &refPoin
   _cubaturePhase = 0;
   _cubaturePhaseCount = 1;
   _phasePointOrdinalOffsets.push_back(0);
+  
+  _cellJacobianIsValid = false;
+  _cellJacobianInverseIsValid = false;
+  _cellJacobianDeterminantIsValid = false;
+  _weightedMeasureIsValid = false;
+  _sideNormalsIsValid = false;
+  _physCubPointsIsValid = false;
 }
 
 void BasisCache::createSideCaches()
@@ -433,6 +447,7 @@ BasisCache::BasisCache(int fakeSideOrdinal, BasisCachePtr volumeCache, const Fie
   _cellJacobianIsValid = true;
   _cellJacobianInverseIsValid = true;
   _cellJacobianDeterminantIsValid = true;
+  _sideNormalsIsValid = true;
   _physCubPointsIsValid = true; // I'm unclear whether this is a good idea; I don't think we ever use _physCubPoints in context of the "fake" side BasisCache...
 }
 
@@ -548,6 +563,13 @@ BasisCache::BasisCache(int sideIndex, BasisCachePtr volumeCache, const FieldCont
   _cubaturePhase = 0; // index of the cubature phase; defaults to 0
   _cubaturePhaseCount = 1; // how many phases to get through all the points
   _phasePointOrdinalOffsets.push_back(0);
+  
+  _cellJacobianIsValid = false;
+  _cellJacobianInverseIsValid = false;
+  _cellJacobianDeterminantIsValid = false;
+  _weightedMeasureIsValid = false;
+  _sideNormalsIsValid = false;
+  _physCubPointsIsValid = false;
   
   setPhysicalCellNodes(volumeCache->getPhysicalCellNodes(), volumeCache->cellIDs(), false); // false: don't create side caches...
 }
@@ -770,6 +792,7 @@ void BasisCache::discardPhysicalNodeInfo()
   _cellJacobianDeterminantIsValid = false;
   _weightedMeasureIsValid = false;
   _physCubPointsIsValid = false;
+  _sideNormalsIsValid = false;
 }
 
 FieldContainer<double> & BasisCache::getWeightedMeasures()
@@ -791,6 +814,7 @@ const FieldContainer<double> & BasisCache::getPhysicalCubaturePoints()
 
 FieldContainer<double> BasisCache::getCellMeasures()
 {
+  if (!_weightedMeasureIsValid) recomputeMeasures();
   int numCells = _weightedMeasure.dimension(0);
   int numPoints = _weightedMeasure.dimension(1);
   FieldContainer<double> cellMeasures(numCells);
@@ -952,13 +976,13 @@ constFCPtr BasisCache::getTransformedValues(BasisPtr basis, Camellia::EOperator 
     switch (op)
     {
     case OP_CROSS_NORMAL:
-      result = BasisEvaluation::getValuesCrossedWithNormals(relatedValuesTransformed,_sideNormals);
+      result = BasisEvaluation::getValuesCrossedWithNormals(relatedValuesTransformed,getSideNormals());
       break;
     case OP_DOT_NORMAL:
-      result = BasisEvaluation::getValuesDottedWithNormals(relatedValuesTransformed,_sideNormals);
+      result = BasisEvaluation::getValuesDottedWithNormals(relatedValuesTransformed,getSideNormals());
       break;
     case OP_TIMES_NORMAL:
-      result = BasisEvaluation::getValuesTimesNormals(relatedValuesTransformed,_sideNormals);
+      result = BasisEvaluation::getValuesTimesNormals(relatedValuesTransformed,getSideNormals());
       break;
     case OP_VECTORIZE_VALUE:
       result = BasisEvaluation::getVectorizedValues(relatedValuesTransformed,_spaceDim);
@@ -968,7 +992,7 @@ constFCPtr BasisCache::getTransformedValues(BasisPtr basis, Camellia::EOperator 
     case OP_TIMES_NORMAL_Z:
     {
       int normalComponent = op - OP_TIMES_NORMAL_X;
-      result = BasisEvaluation::getValuesTimesNormals(relatedValuesTransformed,_sideNormals,normalComponent);
+      result = BasisEvaluation::getValuesTimesNormals(relatedValuesTransformed,getSideNormals(),normalComponent);
     }
     break;
     case OP_TIMES_NORMAL_T:
@@ -978,7 +1002,7 @@ constFCPtr BasisCache::getTransformedValues(BasisPtr basis, Camellia::EOperator 
         TEUCHOS_TEST_FOR_EXCEPTION(true, std::invalid_argument, "temporal normals are not defined for pure spatial topologies");
       }
       int normalComponent = _cellTopo->getDimension() - 1; // time dimension is the last one
-      result = BasisEvaluation::getValuesTimesNormals(relatedValuesTransformed,_sideNormalsSpaceTime,normalComponent);
+      result = BasisEvaluation::getValuesTimesNormals(relatedValuesTransformed,getSideNormalsSpaceTime(),normalComponent);
     }
     default:
       TEUCHOS_TEST_FOR_EXCEPTION(true, std::invalid_argument, "Unhandled op.");
@@ -1001,7 +1025,7 @@ constFCPtr BasisCache::getTransformedWeightedValues(BasisPtr basis, Camellia::EO
   Teuchos::Array<int> dimensions;
   unWeightedValues->dimensions(dimensions);
   Teuchos::RCP< FieldContainer<double> > weightedValues = Teuchos::rcp( new FieldContainer<double>(dimensions) );
-  fst::multiplyMeasure<double>(*weightedValues, _weightedMeasure, *unWeightedValues);
+  fst::multiplyMeasure<double>(*weightedValues, getWeightedMeasures(), *unWeightedValues);
   if (CACHE_TRANSFORMED_VALUES)
     _knownValuesTransformedWeighted[key] = weightedValues;
   return weightedValues;
@@ -1065,7 +1089,7 @@ int BasisCache::getSideIndex() const
 
 const FieldContainer<double> & BasisCache::getSideUnitNormals(int sideOrdinal)
 {
-  return _basisCacheSides[sideOrdinal]->_sideNormals;
+  return _basisCacheSides[sideOrdinal]->getSideNormals();
 }
 
 const FieldContainer<double>& BasisCache::getRefCellPoints()
@@ -1130,23 +1154,32 @@ void BasisCache::setRefCellPoints(const FieldContainer<double> &pointsRefCell, c
 
   _cubWeights = cubWeights;
 
+  _cellJacobianIsValid = false;
+  _cellJacobianInverseIsValid = false;
+  _cellJacobianDeterminantIsValid = false;
+  _weightedMeasureIsValid = false;
+  _sideNormalsIsValid = false;
+  _physCubPointsIsValid = false;
+  
   // allow reuse of physicalNode info; just map the new points...
-  if ((_physCubPoints.size() > 0) && recomputePhysicalMeasures)
-  {
-    determinePhysicalPoints();
-    determineJacobian();
-
-    recomputeMeasures();
-  }
+//  if ((_physCubPoints.size() > 0) && recomputePhysicalMeasures)
+//  {
+//    determinePhysicalPoints();
+//    determineJacobian();
+//
+//    recomputeMeasures();
+//  }
 }
 
 const FieldContainer<double> & BasisCache::getSideNormals()
 {
+  if (!_sideNormalsIsValid) recomputeMeasures();
   return _sideNormals;
 }
 
 const FieldContainer<double> & BasisCache::getSideNormalsSpaceTime()
 {
+  if (!_sideNormalsIsValid) recomputeMeasures();
   if (_cellTopo->getTensorialDegree() == 0)
   {
     TEUCHOS_TEST_FOR_EXCEPTION(true, std::invalid_argument, "space-time side normals are only defined for cell topologies with tensorial degree > 0.");
@@ -1157,6 +1190,7 @@ const FieldContainer<double> & BasisCache::getSideNormalsSpaceTime()
 void BasisCache::setSideNormals(FieldContainer<double> &sideNormals)
 {
   _sideNormals = sideNormals;
+  _sideNormalsIsValid = true;
 }
 
 const FieldContainer<double> & BasisCache::getCellSideParities()
@@ -1181,8 +1215,16 @@ void BasisCache::setTransformationFunction(TFunctionPtr<double> fxn, bool compos
   _transformationFxn = fxn;
   _composeTransformationFxnWithMeshTransformation = composeWithMeshTransformation;
   // recompute physical points and jacobian values
-  determinePhysicalPoints();
-  determineJacobian();
+  
+  _cellJacobianIsValid = false;
+  _cellJacobianInverseIsValid = false;
+  _cellJacobianDeterminantIsValid = false;
+  _weightedMeasureIsValid = false;
+  _sideNormalsIsValid = false;
+  _physCubPointsIsValid = false;
+  
+//  determinePhysicalPoints();
+//  determineJacobian();
 }
 
 void BasisCache::determinePhysicalPoints()
@@ -1326,13 +1368,20 @@ void BasisCache::setPhysicalCellNodes(const FieldContainer<double> &physicalCell
   _cellIDs = cellIDs;
   // Compute cell Jacobians, their inverses and their determinants
 
-  // compute physicalCubaturePoints, the transformed cubature points on each cell:
-  determinePhysicalPoints(); // when using _transformationFxn, important to have physical points before Jacobian is computed
-//  cout << "physicalCellNodes:\n" << physicalCellNodes;
-  determineJacobian();
+  _cellJacobianIsValid = false;
+  _cellJacobianInverseIsValid = false;
+  _cellJacobianDeterminantIsValid = false;
+  _weightedMeasureIsValid = false;
+  _sideNormalsIsValid = false;
+  _physCubPointsIsValid = false;
+  
+//  // compute physicalCubaturePoints, the transformed cubature points on each cell:
+//  determinePhysicalPoints(); // when using _transformationFxn, important to have physical points before Jacobian is computed
+////  cout << "physicalCellNodes:\n" << physicalCellNodes;
+//  determineJacobian();
 
   // recompute weighted measure at the new physical points
-  recomputeMeasures();
+//  recomputeMeasures();
 
   if ( ! isSideCache() && createSideCacheToo )
   {
@@ -1678,6 +1727,7 @@ BasisCachePtr BasisCache::quadBasisCache(double width, double height, int cubDeg
 void BasisCache::recomputeMeasures()
 {
   _weightedMeasureIsValid = true; // will be true on return from this method
+  _sideNormalsIsValid = true;
   if (_cellTopo->getDimension() == 0)
   {
     // then we define the measure of the domain as 1...
