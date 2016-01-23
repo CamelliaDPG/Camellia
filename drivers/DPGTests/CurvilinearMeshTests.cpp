@@ -1016,7 +1016,7 @@ bool CurvilinearMeshTests::testH1Projection()
 
     BasisPtr basis = BasisFactory::basisFactory()->getBasis(H1Order, quad_4.getKey(), Camellia::FUNCTION_SPACE_VECTOR_HGRAD);
 
-    int cubatureEnrichment = mesh->getElement(cellID)->elementType()->testOrderPtr->maxBasisDegree();
+    int cubatureEnrichment = mesh->getElementType(cellID)->testOrderPtr->maxBasisDegree();
     BasisCachePtr basisCache = BasisCache::basisCacheForCell(mesh, cellID, testVsTest, cubatureEnrichment);
 
     FieldContainer<double> basisCoefficients;
@@ -1521,7 +1521,7 @@ bool CurvilinearMeshTests::testTransformationJacobian()
     int cellID = 0; // the only cell
 
     // add to cubature just as we'll need to do for the 'curvilinear' mesh
-    int cubatureEnrichment = mesh->getElement(cellID)->elementType()->testOrderPtr->maxBasisDegree();
+    int cubatureEnrichment = mesh->getElementType(cellID)->testOrderPtr->maxBasisDegree();
 
     // compute jacobians:
     bool testVsTest = false;
@@ -1545,7 +1545,7 @@ bool CurvilinearMeshTests::testTransformationJacobian()
 
     BasisCachePtr curvilinearMeshCache = BasisCache::basisCacheForCell(mesh, cellID);
 
-    int numSides = mesh->getElement(cellID)->numSides();
+    int numSides = mesh->getElementType(cellID)->cellTopoPtr->getSideCount();
     for (int sideIndex=-1; sideIndex<numSides; sideIndex++)
     {
       BasisCachePtr standardCache, curvilinearCache;
