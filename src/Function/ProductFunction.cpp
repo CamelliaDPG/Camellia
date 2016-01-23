@@ -71,6 +71,12 @@ TFunctionPtr<Scalar> ProductFunction<Scalar>::dt()
 }
 
 template <typename Scalar>
+bool ProductFunction<Scalar>::isZero(BasisCachePtr basisCache)
+{
+  return _f1->isZero(basisCache) || _f2->isZero(basisCache);
+}
+
+template <typename Scalar>
 TFunctionPtr<Scalar> ProductFunction<Scalar>::f1()
 {
   return _f1;
