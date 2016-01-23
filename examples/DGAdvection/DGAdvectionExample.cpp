@@ -2,6 +2,7 @@
 #include "BF.h"
 #include "CamelliaCellTools.h"
 #include "CamelliaDebugUtility.h"
+#include "CubatureFactory.h"
 #include "GlobalDofAssignment.h"
 #include "HDF5Exporter.h"
 #include "MeshFactory.h"
@@ -81,30 +82,93 @@ public:
 
 class UpwindIndicator : public TFunction<double>
 {
-  FunctionPtr _beta;
+  vector<FunctionPtr> _beta;
   bool _upwind;
+  vector<FieldContainer<double>> _valuesBuffers;
 public:
   UpwindIndicator(FunctionPtr beta, bool upwind)
   {
     // upwind = true  means this is the DG '-' operator  (beta * n > 0)
     // upwind = false means this is the DG '+' operator  (beta * n < 0)
-    _beta = beta;
+
+    _beta.push_back(beta->x());
+    if (beta->y() != Teuchos::null)
+    {
+      _beta.push_back(beta->y());
+      if (beta->z() != Teuchos::null)
+        _beta.push_back(beta->z());
+    }
     _upwind = upwind;
+    _valuesBuffers.resize(_beta.size());
+  }
+  
+  bool isZero(BasisCachePtr basisCache)
+  {
+    int numCells = basisCache->getPhysicalCubaturePoints().dimension(0);
+    int numPoints = basisCache->getPhysicalCubaturePoints().dimension(1);
+    int spaceDim = basisCache->getSpaceDim();
+    
+    TEUCHOS_TEST_FOR_EXCEPTION(spaceDim != _beta.size(), std::invalid_argument, "spaceDim and length of beta do not match");
+    
+    for (int d=0; d<spaceDim; d++)
+    {
+      _valuesBuffers[d].resize(numCells,numPoints);
+      _beta[d]->values(_valuesBuffers[d],basisCache);
+    }
+  
+    const Intrepid::FieldContainer<double> *sideNormals = &(basisCache->getSideNormals());
+
+    for (int cellOrdinal=0; cellOrdinal<numCells; cellOrdinal++)
+    {
+      for (int pointOrdinal=0; pointOrdinal<numPoints; pointOrdinal++)
+      {
+        double value = 0;
+        for (int d=0; d<spaceDim; d++)
+        {
+          value += _valuesBuffers[d](cellOrdinal,pointOrdinal) * (*sideNormals)(cellOrdinal,pointOrdinal,d);
+        }
+        if ((_upwind && (value > 0)) || (!_upwind && (value < 0)))
+        {
+          return false;
+        }
+      }
+    }
+    return true;
   }
   
   void values(Intrepid::FieldContainer<double> &values, BasisCachePtr basisCache)
   {
-    FunctionPtr n = Function::normal();
-    (_beta * n)->values(values, basisCache);
-    for (int i=0; i<values.size(); i++)
+    int numCells = basisCache->getPhysicalCubaturePoints().dimension(0);
+    int numPoints = basisCache->getPhysicalCubaturePoints().dimension(1);
+    int spaceDim = basisCache->getSpaceDim();
+    
+    TEUCHOS_TEST_FOR_EXCEPTION(spaceDim != _beta.size(), std::invalid_argument, "spaceDim and length of beta do not match");
+    
+    for (int d=0; d<spaceDim; d++)
     {
-      if (_upwind)
+      _valuesBuffers[d].resize(numCells,numPoints);
+      _beta[d]->values(_valuesBuffers[d],basisCache);
+    }
+    const Intrepid::FieldContainer<double> *sideNormals = &(basisCache->getSideNormals());
+    
+    for (int cellOrdinal=0; cellOrdinal<numCells; cellOrdinal++)
+    {
+      for (int pointOrdinal=0; pointOrdinal<numPoints; pointOrdinal++)
       {
-        values[i] = (values[i] > 0) ? 1.0 : 0.0;
-      }
-      else
-      {
-        values[i] = (values[i] < 0) ? 1.0 : 0.0;
+        double value = 0;
+        for (int d=0; d<spaceDim; d++)
+        {
+          value += _valuesBuffers[d](cellOrdinal,pointOrdinal) * (*sideNormals)(cellOrdinal,pointOrdinal,d);
+        }
+        if ((_upwind && (value > 0)) || (!_upwind && (value < 0)))
+        {
+          values(cellOrdinal,pointOrdinal) = 1;
+        }
+        else
+        {
+          values(cellOrdinal,pointOrdinal) = 0;
+        }
+
       }
     }
   }
@@ -154,7 +218,7 @@ int main(int argc, char *argv[])
   int polyOrder = 1;
   int horizontalElements = 2, verticalElements = 2;
   int numRefinements = -1; // prefer using L^2 tolerance
-  double l2tol = 5e-2;
+  double l2tol = 1e-2;
   bool exportVisualization = false; // I think visualization might be segfaulting on finer meshes??
   bool enforceOneIrregularity = true;
   
@@ -376,9 +440,10 @@ int main(int argc, char *argv[])
         cellsToRefine.push_back(cellIDs[i]);
       }
     }
-    mesh->hRefine(cellsToRefine);
+    mesh->hRefine(cellsToRefine, false);
     if (enforceOneIrregularity)
-      mesh->enforceOneIrregularity();
+      mesh->enforceOneIrregularity(false);
+    mesh->repartitionAndRebuild();
     
     timeThisRefinement = refinementTimer.ElapsedTime();
     
@@ -456,9 +521,27 @@ void applyUpwinding(SolutionPtr soln, VarPtr u, VarPtr v, FunctionPtr beta)
   set<GlobalIndexType> activeCellIDs = mesh->getActiveCellIDs();
   set<GlobalIndexType> myCellIDs = mesh->cellIDsInPartition();
   int sideDim = meshTopo->getDimension() - 1;
+  
+  FieldContainer<double> emptyRefPointsVolume(0,meshTopo->getDimension()); // (P,D)
+  FieldContainer<double> emptyRefPointsSide(0,sideDim); // (P,D)
+  FieldContainer<double> emptyCubWeights(1,0); // (C,P)
+  
+  map<pair<CellTopologyKey,int>, FieldContainer<double>> cubPointsForSideTopo;
+  map<pair<CellTopologyKey,int>, FieldContainer<double>> cubWeightsForSideTopo;
+  
+  CubatureFactory cubFactory;
+  
+  map<CellTopologyKey,BasisCachePtr> basisCacheForVolumeTopo; // used for "my" cells
+  map<CellTopologyKey,BasisCachePtr> basisCacheForNeighborVolumeTopo; // used for neighbor cells
+  map<pair<int,CellTopologyKey>,BasisCachePtr> basisCacheForSideOnVolumeTopo;
+  map<pair<int,CellTopologyKey>,BasisCachePtr> basisCacheForSideOnNeighborVolumeTopo; // these can have permuted cubature points (i.e. we need to set them every time, so we can't share with basisCacheForSideOnVolumeTopo, which tries to avoid this)
+  
+  map<CellTopologyKey,BasisCachePtr> basisCacheForReferenceCellTopo;
+  
   for (GlobalIndexType cellID : myCellIDs)
   {
     CellPtr cell = meshTopo->getCell(cellID);
+    CellTopoPtr cellTopo = cell->topology();
     ElementTypePtr elemType = mesh->getElementType(cellID);
     DofOrderingPtr trialOrder = elemType->trialOrderPtr;
     BasisPtr uBasis = trialOrder->getBasis(u->ID());
@@ -470,6 +553,23 @@ void applyUpwinding(SolutionPtr soln, VarPtr u, VarPtr v, FunctionPtr beta)
     
 //    cout << "cell ID " << cellID;
 //    print("myGlobalDofs_u", myGlobalDofs_u);
+    
+    // we'll use this basisCache unless
+//    BasisCachePtr cellBasisCacheVolume = BasisCache::basisCacheForCell(mesh, cellID);
+    
+    FieldContainer<double> physicalCellNodes = mesh->physicalCellNodesForCell(cellID);
+    BasisCachePtr cellBasisCacheVolume;
+    if (basisCacheForVolumeTopo.find(cellTopo->getKey()) == basisCacheForVolumeTopo.end())
+    {
+      basisCacheForVolumeTopo[cellTopo->getKey()] = Teuchos::rcp( new BasisCache(physicalCellNodes, cellTopo,
+                                                                                 emptyRefPointsVolume, emptyCubWeights) );
+    }
+    
+    cellBasisCacheVolume = basisCacheForVolumeTopo[cellTopo->getKey()];
+    cellBasisCacheVolume->setPhysicalCellNodes(physicalCellNodes, {cellID}, false);
+    
+    cellBasisCacheVolume->setCellIDs({cellID});
+    cellBasisCacheVolume->setMesh(mesh);
     
     for (int sideOrdinal = 0; sideOrdinal < sideCount; sideOrdinal++)
     {
@@ -510,10 +610,59 @@ void applyUpwinding(SolutionPtr soln, VarPtr u, VarPtr v, FunctionPtr beta)
       int neighborPolyOrder = uBasisNeighbor->getDegree();
       
       int cubaturePolyOrder = 2 * max(neighborPolyOrder, myPolyOrder);
-      int myCubatureEnrichment = cubaturePolyOrder - 2 * myPolyOrder;
       
-      BasisCachePtr cellBasisCacheVolume = BasisCache::basisCacheForCell(mesh, cellID, false, myCubatureEnrichment);
-      BasisCachePtr cellBasisCacheSide = cellBasisCacheVolume->getSideBasisCache(sideOrdinal);
+      // set up side basis cache
+      CellTopoPtr mySideTopo = cellTopo->getSide(sideOrdinal); // for non-peers, this is the descendant cell topo
+      
+      pair<int,CellTopologyKey> sideCacheKey{sideOrdinal,cellTopo->getKey()};
+      if (basisCacheForSideOnVolumeTopo.find(sideCacheKey) == basisCacheForSideOnVolumeTopo.end())
+      {
+        basisCacheForSideOnVolumeTopo[sideCacheKey] = Teuchos::rcp( new BasisCache(sideOrdinal, cellBasisCacheVolume,
+                                                                                   emptyRefPointsSide, emptyCubWeights, -1));
+      }
+      BasisCachePtr cellBasisCacheSide = basisCacheForSideOnVolumeTopo[sideCacheKey];
+      
+      pair<CellTopologyKey,int> cubKey{mySideTopo->getKey(),cubaturePolyOrder};
+      if (cubWeightsForSideTopo.find(cubKey) == cubWeightsForSideTopo.end())
+      {
+        int cubDegree = cubKey.second;
+        if (sideDim > 0)
+        {
+          Teuchos::RCP<Cubature<double> > sideCub;
+          if (cubDegree >= 0)
+            sideCub = cubFactory.create(mySideTopo, cubDegree);
+          
+          int numCubPointsSide;
+          
+          if (sideCub != Teuchos::null)
+            numCubPointsSide = sideCub->getNumPoints();
+          else
+            numCubPointsSide = 0;
+          
+          FieldContainer<double> cubPoints(numCubPointsSide, sideDim); // cubature points from the pov of the side (i.e. a (d-1)-dimensional set)
+          FieldContainer<double> cubWeights(numCubPointsSide);
+          if (numCubPointsSide > 0)
+            sideCub->getCubature(cubPoints, cubWeights);
+          cubPointsForSideTopo[cubKey] = cubPoints;
+          cubWeightsForSideTopo[cubKey] = cubWeights;
+        }
+        else
+        {
+          int numCubPointsSide = 1;
+          FieldContainer<double> cubPoints(numCubPointsSide, 1); // cubature points from the pov of the side (i.e. a (d-1)-dimensional set)
+          FieldContainer<double> cubWeights(numCubPointsSide);
+          
+          cubPoints.initialize(0.0);
+          cubWeights.initialize(1.0);
+          cubPointsForSideTopo[cubKey] = cubPoints;
+          cubWeightsForSideTopo[cubKey] = cubWeights;
+        }
+      }
+      if (cellBasisCacheSide->cubatureDegree() != cubaturePolyOrder)
+      {
+        cellBasisCacheSide->setRefCellPoints(cubPointsForSideTopo[cubKey], cubWeightsForSideTopo[cubKey], cubaturePolyOrder, false);
+      }
+      cellBasisCacheSide->setPhysicalCellNodes(cellBasisCacheVolume->getPhysicalCellNodes(), {cellID}, false);
       
       FunctionPtr minus_indicator = UpwindIndicator::upwindIndicator(beta, true);
       LinearTermPtr u_minus = u * minus_indicator;
@@ -577,7 +726,6 @@ void applyUpwinding(SolutionPtr soln, VarPtr u, VarPtr v, FunctionPtr beta)
       // Now the geometrically challenging bit: we need to line up the physical points in
       // the cellBasisCacheSide with those in a BasisCache for the neighbor cell
       
-      CellTopoPtr cellTopo = cell->topology();
       CellTopoPtr neighborTopo = neighbor->topology();
       CellTopoPtr sideTopo = neighborTopo->getSide(mySideOrdinalInNeighbor); // for non-peers, this is my ancestor's cell topo
       int nodeCount = sideTopo->getNodeCount();
@@ -597,9 +745,9 @@ void applyUpwinding(SolutionPtr soln, VarPtr u, VarPtr v, FunctionPtr beta)
         FieldContainer<double> cellNodes = RefinementPattern::descendantNodesRelativeToAncestorReferenceCell(sideRefinementBranch);
         
         cellNodes.resize(1,cellNodes.dimension(0),cellNodes.dimension(1));
-        BasisCachePtr ancestralBasisCache = Teuchos::rcp(new BasisCache(cellNodes,sideTopo,cubaturePolyOrder*2,false)); // false: don't create side cache too
+        BasisCachePtr ancestralBasisCache = Teuchos::rcp(new BasisCache(cellNodes,sideTopo,cubaturePolyOrder,false)); // false: don't create side cache too
         
-        ancestralBasisCache->setRefCellPoints(myRefPoints);
+        ancestralBasisCache->setRefCellPoints(myRefPoints, emptyCubWeights, cubaturePolyOrder, true);
         
         // now, the "physical" points in ancestral cache are the ones we want
         myRefPoints = ancestralBasisCache->getPhysicalCubaturePoints();
@@ -643,18 +791,36 @@ void applyUpwinding(SolutionPtr soln, VarPtr u, VarPtr v, FunctionPtr beta)
       Intrepid::FieldContainer<double> permutedRefNodes(nodeCount,sideDim);
       CamelliaCellTools::refCellNodesForTopology(permutedRefNodes, sideTopo, permutationFromMeToNeighbor);
       permutedRefNodes.resize(1,nodeCount,sideDim); // add cell dimension to make this a "physical" node container
-      BasisCachePtr referenceBasisCache = BasisCache::basisCacheForReferenceCell(sideTopo, 1);
-      referenceBasisCache->setRefCellPoints(myRefPoints);
+      if (basisCacheForReferenceCellTopo.find(sideTopo->getKey()) == basisCacheForReferenceCellTopo.end())
+      {
+        basisCacheForReferenceCellTopo[sideTopo->getKey()] = BasisCache::basisCacheForReferenceCell(sideTopo, -1);
+      }
+      BasisCachePtr referenceBasisCache = basisCacheForReferenceCellTopo[sideTopo->getKey()];
+      referenceBasisCache->setRefCellPoints(myRefPoints,emptyCubWeights,cubaturePolyOrder,false);
       std::vector<GlobalIndexType> cellIDs = {0}; // unused
       referenceBasisCache->setPhysicalCellNodes(permutedRefNodes, cellIDs, false);
       // now, the "physical" points are the ones we should use as ref points for the neighbor
       Intrepid::FieldContainer<double> neighborRefCellPoints = referenceBasisCache->getPhysicalCubaturePoints();
       neighborRefCellPoints.resize(numPoints,sideDim); // strip cell dimension to convert to a "reference" point container
       
-      BasisCachePtr neighborVolumeCache = BasisCache::basisCacheForCell(mesh, neighborCellID);
-      BasisCachePtr neighborSideCache = neighborVolumeCache->getSideBasisCache(mySideOrdinalInNeighbor);
+      FieldContainer<double> neighborCellNodes = mesh->physicalCellNodesForCell(neighborCellID);
+      if (basisCacheForNeighborVolumeTopo.find(neighborTopo->getKey()) == basisCacheForNeighborVolumeTopo.end())
+      {
+        basisCacheForNeighborVolumeTopo[neighborTopo->getKey()] = Teuchos::rcp( new BasisCache(neighborCellNodes, neighborTopo,
+                                                                                       emptyRefPointsVolume, emptyCubWeights) );
+      }
+      BasisCachePtr neighborVolumeCache = basisCacheForNeighborVolumeTopo[neighborTopo->getKey()];
+      neighborVolumeCache->setPhysicalCellNodes(neighborCellNodes, {neighborCellID}, false);
       
-      neighborSideCache->setRefCellPoints(neighborRefCellPoints);
+      pair<int,CellTopologyKey> neighborSideCacheKey{mySideOrdinalInNeighbor,neighborTopo->getKey()};
+      if (basisCacheForSideOnNeighborVolumeTopo.find(neighborSideCacheKey) == basisCacheForSideOnNeighborVolumeTopo.end())
+      {
+        basisCacheForSideOnNeighborVolumeTopo[neighborSideCacheKey]
+        = Teuchos::rcp( new BasisCache(mySideOrdinalInNeighbor, neighborVolumeCache, emptyRefPointsSide, emptyCubWeights, -1));
+      }
+      BasisCachePtr neighborSideCache = basisCacheForSideOnNeighborVolumeTopo[neighborSideCacheKey];
+      neighborSideCache->setRefCellPoints(neighborRefCellPoints, emptyCubWeights, cubaturePolyOrder, false);
+      neighborSideCache->setPhysicalCellNodes(neighborCellNodes, {neighborCellID}, false);
       {
         // Sanity check that the physical points agree:
         double tol = 1e-15;
@@ -676,7 +842,11 @@ void applyUpwinding(SolutionPtr soln, VarPtr u, VarPtr v, FunctionPtr beta)
         }
         
         if (!pointsMatch)
+        {
           cout << "ERROR: pointsMatch is false.\n";
+          cout << "myPhysicalPoints:\n" << myPhysicalPoints;
+          cout << "neighborPhysicalPoints:\n" << neighborPhysicalPoints;
+        }
       }
 
       int numNeighborFields = vBasisNeighbor->getCardinality();
@@ -837,6 +1007,7 @@ void computeApproximateGradients(SolutionPtr soln, VarPtr u, const vector<Global
       }
       basisCacheForTopology[cellTopo->getKey()] = BasisCache::basisCacheForReferenceCell(cellTopo, 0); // 0 cubature degree
       basisCacheForTopology[cellTopo->getKey()]->setRefCellPoints(centroid);
+      basisCacheForTopology[cellTopo->getKey()]->setMesh(soln->mesh());
     }
     BasisCachePtr basisCache = basisCacheForTopology[cellTopo->getKey()];
     basisCache->setPhysicalCellNodes(soln->mesh()->physicalCellNodesForCell(cellID), {cellID}, false);

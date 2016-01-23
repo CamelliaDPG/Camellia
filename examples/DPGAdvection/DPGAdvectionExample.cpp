@@ -272,13 +272,10 @@ int main(int argc, char *argv[])
                                               divideIntoTriangles, x0, y0);
   RHSPtr rhs = RHS::rhs(); // zero forcing
   
-  // manually construct "graph" norm to minimize L^2 error of (beta u).  (bf->graphNorm() minimizes L^2 error of u.)
   IPPtr ip;
   if (useGraphNorm)
   {
     ip = bf->graphNorm();
-//    if (rank==0) cout << "Trying something: adding v->grad() to the graph norm.\n";
-//    ip->addTerm(v->grad()); // for stability of the Gram solve?
   }
   else
   {
@@ -295,6 +292,10 @@ int main(int argc, char *argv[])
   int solveSuccess = soln->solve(solver);
   if (solveSuccess != 0)
     if (rank ==0) cout << "solve returned with error code " << solveSuccess << endl;
+  
+  timeSolve += soln->maxTimeSolve();
+  timeLocalStiffness += soln->maxTimeLocalStiffness();
+  timeOtherAssembly += soln->maxTimeGlobalAssembly();
   
   ostringstream report;
   report << "elems\tdofs\ttrace_dofs\terr\ttimeRefinement\ttimeAssembly\ttimeSolve\ttimeTotal\n";
@@ -419,9 +420,10 @@ int main(int argc, char *argv[])
         cellsToRefine.push_back(cellIDs[i]);
       }
     }
-    mesh->hRefine(cellsToRefine);
+    mesh->hRefine(cellsToRefine, false);
     if (enforceOneIrregularity)
-      mesh->enforceOneIrregularity();
+      mesh->enforceOneIrregularity(false);
+    mesh->repartitionAndRebuild();
     
     double timeThisRefinement = refinementTimer.ElapsedTime();
     Comm.MaxAll(&timeThisRefinement, &timeThisRefinement, 1);
@@ -569,6 +571,7 @@ void computeApproximateGradients(SolutionPtr soln, VarPtr u, const vector<Global
       }
       basisCacheForTopology[cellTopo->getKey()] = BasisCache::basisCacheForReferenceCell(cellTopo, 0); // 0 cubature degree
       basisCacheForTopology[cellTopo->getKey()]->setRefCellPoints(centroid);
+      basisCacheForTopology[cellTopo->getKey()]->setMesh(soln->mesh());
     }
     BasisCachePtr basisCache = basisCacheForTopology[cellTopo->getKey()];
     basisCache->setPhysicalCellNodes(soln->mesh()->physicalCellNodesForCell(cellID), {cellID}, false);
@@ -583,26 +586,6 @@ void computeApproximateGradients(SolutionPtr soln, VarPtr u, const vector<Global
     {
       cellDiameter(cellOrdinal,0) = soln->mesh()->getCellMeasure(cellID);
     }
-//    {
-//      // DEBUGGING
-//      int rank = Teuchos::GlobalMPISession::getRank();
-//      FieldContainer<double> solnCoeffs;
-//      soln->solnCoeffsForCellID(solnCoeffs, cellID, u->ID());
-//      vector<double> solnCoeffsVector(solnCoeffs.size());
-//
-//      cout << "rank " << rank << ", cell " << cellID << ", value at (";
-//      for (int d=0; d<spaceDim; d++)
-//      {
-//        cout << cellCenters(cellOrdinal,d);
-//        if (d<spaceDim-1) cout << ",";
-//      }
-//      cout << ") = " << cellValue[0] << "; coefficients: ";
-//      for (int i=0; i<solnCoeffs.size(); i++)
-//      {
-//        cout << solnCoeffs[i] << " ";
-//      }
-//      cout << endl;
-//    }
   }
   
   // now compute the gradients requested
