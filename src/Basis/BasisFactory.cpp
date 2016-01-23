@@ -872,119 +872,139 @@ MultiBasisPtr BasisFactory::getMultiBasis(vector< BasisPtr > &bases)
 
 BasisPtr BasisFactory::getNodalBasisForCellTopology(CellTopoPtr cellTopo)
 {
-  BasisPtr shardsNodalBasis = BasisFactory::basisFactory()->getNodalBasisForCellTopology(cellTopo->getShardsTopology().getKey());
-
-  if (cellTopo->getTensorialDegree() == 0) return shardsNodalBasis;
-
-  BasisPtr lineNodalBasis = BasisFactory::basisFactory()->getNodalBasisForCellTopology(shards::Line<2>::key);
-
-  typedef Camellia::TensorBasis<double, Intrepid::FieldContainer<double> > TensorBasis;
-
-  BasisPtr nodalBasis = shardsNodalBasis;
-  bool rangeDimensionIsSum = true;
-  for (int i=0; i<cellTopo->getTensorialDegree(); i++)
+  if (_nodalBasisForTopology.find(cellTopo->getKey()) == _nodalBasisForTopology.end())
   {
-    nodalBasis = Teuchos::rcp( new TensorBasis(nodalBasis, lineNodalBasis, rangeDimensionIsSum) );
+    BasisPtr shardsNodalBasis = BasisFactory::basisFactory()->getNodalBasisForCellTopology(cellTopo->getShardsTopology().getKey());
+    
+    if (cellTopo->getTensorialDegree() == 0)
+    {
+      _nodalBasisForTopology[cellTopo->getKey()] = shardsNodalBasis;
+    }
+    else
+    {
+      BasisPtr lineNodalBasis = BasisFactory::basisFactory()->getNodalBasisForCellTopology(shards::Line<2>::key);
+      
+      typedef Camellia::TensorBasis<double, Intrepid::FieldContainer<double> > TensorBasis;
+      
+      BasisPtr nodalBasis = shardsNodalBasis;
+      bool rangeDimensionIsSum = true;
+      for (int i=0; i<cellTopo->getTensorialDegree(); i++)
+      {
+        nodalBasis = Teuchos::rcp( new TensorBasis(nodalBasis, lineNodalBasis, rangeDimensionIsSum) );
+      }
+      _nodalBasisForTopology[cellTopo->getKey()] = nodalBasis;
+    }
   }
-  return nodalBasis;
+  return _nodalBasisForTopology[cellTopo->getKey()];
 }
 
 BasisPtr BasisFactory::getNodalBasisForCellTopology(unsigned int cellTopoKey)
 {
   // used by CamelliaCellTools for computing Jacobians, etc.
-  static const int ONE_D = 1, TWO_D = 2, THREE_D = 3;
-  static const int SCALAR_RANK = 0;
-  switch( cellTopoKey )
+  
+  if (_nodalBasisForShardsTopology.find(cellTopoKey) == _nodalBasisForShardsTopology.end())
   {
-  // Standard Base topologies (number of cellWorkset = number of vertices)
-  case shards::Node::key: // point topology
-    return Teuchos::rcp( new PointBasis<>() );
-  case shards::Line<2>::key:
-    return Teuchos::rcp( new IntrepidBasisWrapper<>( Teuchos::rcp( new Basis_HGRAD_LINE_C1_FEM<double, Intrepid::FieldContainer<double> >()),
-                         ONE_D, SCALAR_RANK, Camellia::FUNCTION_SPACE_HGRAD) );
-  case shards::Triangle<3>::key:
-    return Teuchos::rcp( new IntrepidBasisWrapper<>( Teuchos::rcp( new Basis_HGRAD_TRI_C1_FEM<double, Intrepid::FieldContainer<double> >()),
-                         TWO_D, SCALAR_RANK, Camellia::FUNCTION_SPACE_HGRAD) );
-  case shards::Quadrilateral<4>::key:
-    return Teuchos::rcp( new IntrepidBasisWrapper<>( Teuchos::rcp( new Basis_HGRAD_QUAD_C1_FEM<double, Intrepid::FieldContainer<double> >()),
-                         TWO_D, SCALAR_RANK, Camellia::FUNCTION_SPACE_HGRAD) );
-  case shards::Tetrahedron<4>::key:
-    return Teuchos::rcp( new IntrepidBasisWrapper<>( Teuchos::rcp( new Basis_HGRAD_TET_C1_FEM<double, Intrepid::FieldContainer<double> >()),
-                         THREE_D, SCALAR_RANK, Camellia::FUNCTION_SPACE_HGRAD) );
-  case shards::Hexahedron<8>::key:
-    return Teuchos::rcp( new IntrepidBasisWrapper<>( Teuchos::rcp( new Basis_HGRAD_HEX_C1_FEM<double, Intrepid::FieldContainer<double> >()),
-                         THREE_D, SCALAR_RANK, Camellia::FUNCTION_SPACE_HGRAD) );
-
-  /*
-      case shards::Wedge<6>::key:
-        HGRAD_Basis = Teuchos::rcp( new Basis_HGRAD_WEDGE_C1_FEM<Scalar, Intrepid::FieldContainer<Scalar> >() );
+    static const int ONE_D = 1, TWO_D = 2, THREE_D = 3;
+    static const int SCALAR_RANK = 0;
+    switch( cellTopoKey )
+    {
+        // Standard Base topologies (number of cellWorkset = number of vertices)
+      case shards::Node::key: // point topology
+        _nodalBasisForShardsTopology[cellTopoKey] = Teuchos::rcp( new PointBasis<>() );
         break;
-
-      case shards::Pyramid<5>::key:
-        HGRAD_Basis = Teuchos::rcp( new Basis_HGRAD_PYR_C1_FEM<Scalar, Intrepid::FieldContainer<Scalar> >() );
+      case shards::Line<2>::key:
+        _nodalBasisForShardsTopology[cellTopoKey] = Teuchos::rcp( new IntrepidBasisWrapper<>( Teuchos::rcp( new Basis_HGRAD_LINE_C1_FEM<double, Intrepid::FieldContainer<double> >()),
+                                                        ONE_D, SCALAR_RANK, Camellia::FUNCTION_SPACE_HGRAD) );
         break;
-
-        // Standard Extended topologies
-      case shards::Triangle<6>::key:
-        HGRAD_Basis = Teuchos::rcp( new Basis_HGRAD_TRI_C2_FEM<Scalar, Intrepid::FieldContainer<Scalar> >() );
+      case shards::Triangle<3>::key:
+        _nodalBasisForShardsTopology[cellTopoKey] = Teuchos::rcp( new IntrepidBasisWrapper<>( Teuchos::rcp( new Basis_HGRAD_TRI_C1_FEM<double, Intrepid::FieldContainer<double> >()),
+                                                        TWO_D, SCALAR_RANK, Camellia::FUNCTION_SPACE_HGRAD) );
         break;
-
-      case shards::Quadrilateral<9>::key:
-        HGRAD_Basis = Teuchos::rcp( new Basis_HGRAD_QUAD_C2_FEM<Scalar, Intrepid::FieldContainer<Scalar> >() );
+      case shards::Quadrilateral<4>::key:
+        _nodalBasisForShardsTopology[cellTopoKey] = Teuchos::rcp( new IntrepidBasisWrapper<>( Teuchos::rcp( new Basis_HGRAD_QUAD_C1_FEM<double, Intrepid::FieldContainer<double> >()),
+                                                        TWO_D, SCALAR_RANK, Camellia::FUNCTION_SPACE_HGRAD) );
         break;
-
-      case shards::Tetrahedron<10>::key:
-        HGRAD_Basis = Teuchos::rcp( new Basis_HGRAD_TET_C2_FEM<Scalar, Intrepid::FieldContainer<Scalar> >() );
+      case shards::Tetrahedron<4>::key:
+        _nodalBasisForShardsTopology[cellTopoKey] = Teuchos::rcp( new IntrepidBasisWrapper<>( Teuchos::rcp( new Basis_HGRAD_TET_C1_FEM<double, Intrepid::FieldContainer<double> >()),
+                                                        THREE_D, SCALAR_RANK, Camellia::FUNCTION_SPACE_HGRAD) );
         break;
-
-      case shards::Tetrahedron<11>::key:
-        HGRAD_Basis = Teuchos::rcp( new Basis_HGRAD_TET_COMP12_FEM<Scalar, Intrepid::FieldContainer<Scalar> >() );
+      case shards::Hexahedron<8>::key:
+        _nodalBasisForShardsTopology[cellTopoKey] = Teuchos::rcp( new IntrepidBasisWrapper<>( Teuchos::rcp( new Basis_HGRAD_HEX_C1_FEM<double, Intrepid::FieldContainer<double> >()),
+                                                        THREE_D, SCALAR_RANK, Camellia::FUNCTION_SPACE_HGRAD) );
         break;
-
-      case shards::Hexahedron<20>::key:
-        HGRAD_Basis = Teuchos::rcp( new Basis_HGRAD_HEX_I2_FEM<Scalar, Intrepid::FieldContainer<Scalar> >() );
-        break;
-
-      case shards::Hexahedron<27>::key:
-        HGRAD_Basis = Teuchos::rcp( new Basis_HGRAD_HEX_C2_FEM<Scalar, Intrepid::FieldContainer<Scalar> >() );
-        break;
-
-      case shards::Wedge<15>::key:
-        HGRAD_Basis = Teuchos::rcp( new Basis_HGRAD_WEDGE_I2_FEM<Scalar, Intrepid::FieldContainer<Scalar> >() );
-        break;
-
-      case shards::Wedge<18>::key:
-        HGRAD_Basis = Teuchos::rcp( new Basis_HGRAD_WEDGE_C2_FEM<Scalar, Intrepid::FieldContainer<Scalar> >() );
-        break;
-
-      case shards::Pyramid<13>::key:
-        HGRAD_Basis = Teuchos::rcp( new Basis_HGRAD_PYR_I2_FEM<Scalar, Intrepid::FieldContainer<Scalar> >() );
-        break;
-
-        // These extended topologies are not used for mapping purposes
-      case shards::Quadrilateral<8>::key:
-        TEUCHOS_TEST_FOR_EXCEPTION( (true), std::invalid_argument,
-                                   ">>> ERROR (Intrepid::CellTools::mapToPhysicalFrame): Cell topology not supported. ");
-        break;
-
-        // Base and Extended Line, Beam and Shell topologies
-      case shards::Line<3>::key:
-      case shards::Beam<2>::key:
-      case shards::Beam<3>::key:
-      case shards::ShellLine<2>::key:
-      case shards::ShellLine<3>::key:
-      case shards::ShellTriangle<3>::key:
-      case shards::ShellTriangle<6>::key:
-      case shards::ShellQuadrilateral<4>::key:
-      case shards::ShellQuadrilateral<8>::key:
-      case shards::ShellQuadrilateral<9>::key:
-        TEUCHOS_TEST_FOR_EXCEPTION( (true), std::invalid_argument,
-                                   ">>> ERROR (Intrepid::CellTools::mapToPhysicalFrame): Cell topology not supported. ");
-        break;*/
-  default:
-    TEUCHOS_TEST_FOR_EXCEPTION( true, std::invalid_argument,
-                                ">>> ERROR (BasisFactory::getNodalBasisForCellTopology): Cell topology not supported.");
-  }// switch
+        
+        /*
+         case shards::Wedge<6>::key:
+         HGRAD_Basis = Teuchos::rcp( new Basis_HGRAD_WEDGE_C1_FEM<Scalar, Intrepid::FieldContainer<Scalar> >() );
+         break;
+         
+         case shards::Pyramid<5>::key:
+         HGRAD_Basis = Teuchos::rcp( new Basis_HGRAD_PYR_C1_FEM<Scalar, Intrepid::FieldContainer<Scalar> >() );
+         break;
+         
+         // Standard Extended topologies
+         case shards::Triangle<6>::key:
+         HGRAD_Basis = Teuchos::rcp( new Basis_HGRAD_TRI_C2_FEM<Scalar, Intrepid::FieldContainer<Scalar> >() );
+         break;
+         
+         case shards::Quadrilateral<9>::key:
+         HGRAD_Basis = Teuchos::rcp( new Basis_HGRAD_QUAD_C2_FEM<Scalar, Intrepid::FieldContainer<Scalar> >() );
+         break;
+         
+         case shards::Tetrahedron<10>::key:
+         HGRAD_Basis = Teuchos::rcp( new Basis_HGRAD_TET_C2_FEM<Scalar, Intrepid::FieldContainer<Scalar> >() );
+         break;
+         
+         case shards::Tetrahedron<11>::key:
+         HGRAD_Basis = Teuchos::rcp( new Basis_HGRAD_TET_COMP12_FEM<Scalar, Intrepid::FieldContainer<Scalar> >() );
+         break;
+         
+         case shards::Hexahedron<20>::key:
+         HGRAD_Basis = Teuchos::rcp( new Basis_HGRAD_HEX_I2_FEM<Scalar, Intrepid::FieldContainer<Scalar> >() );
+         break;
+         
+         case shards::Hexahedron<27>::key:
+         HGRAD_Basis = Teuchos::rcp( new Basis_HGRAD_HEX_C2_FEM<Scalar, Intrepid::FieldContainer<Scalar> >() );
+         break;
+         
+         case shards::Wedge<15>::key:
+         HGRAD_Basis = Teuchos::rcp( new Basis_HGRAD_WEDGE_I2_FEM<Scalar, Intrepid::FieldContainer<Scalar> >() );
+         break;
+         
+         case shards::Wedge<18>::key:
+         HGRAD_Basis = Teuchos::rcp( new Basis_HGRAD_WEDGE_C2_FEM<Scalar, Intrepid::FieldContainer<Scalar> >() );
+         break;
+         
+         case shards::Pyramid<13>::key:
+         HGRAD_Basis = Teuchos::rcp( new Basis_HGRAD_PYR_I2_FEM<Scalar, Intrepid::FieldContainer<Scalar> >() );
+         break;
+         
+         // These extended topologies are not used for mapping purposes
+         case shards::Quadrilateral<8>::key:
+         TEUCHOS_TEST_FOR_EXCEPTION( (true), std::invalid_argument,
+         ">>> ERROR (Intrepid::CellTools::mapToPhysicalFrame): Cell topology not supported. ");
+         break;
+         
+         // Base and Extended Line, Beam and Shell topologies
+         case shards::Line<3>::key:
+         case shards::Beam<2>::key:
+         case shards::Beam<3>::key:
+         case shards::ShellLine<2>::key:
+         case shards::ShellLine<3>::key:
+         case shards::ShellTriangle<3>::key:
+         case shards::ShellTriangle<6>::key:
+         case shards::ShellQuadrilateral<4>::key:
+         case shards::ShellQuadrilateral<8>::key:
+         case shards::ShellQuadrilateral<9>::key:
+         TEUCHOS_TEST_FOR_EXCEPTION( (true), std::invalid_argument,
+         ">>> ERROR (Intrepid::CellTools::mapToPhysicalFrame): Cell topology not supported. ");
+         break;*/
+      default:
+        TEUCHOS_TEST_FOR_EXCEPTION( true, std::invalid_argument,
+                                   ">>> ERROR (BasisFactory::getNodalBasisForCellTopology): Cell topology not supported.");
+    }// switch
+  }
+  return _nodalBasisForShardsTopology[cellTopoKey];
 }
 
 PatchBasisPtr BasisFactory::getPatchBasis(BasisPtr parent, Intrepid::FieldContainer<double> &patchNodesInParentRefCell, unsigned cellTopoKey)
