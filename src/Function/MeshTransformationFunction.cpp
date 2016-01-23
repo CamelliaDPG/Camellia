@@ -53,7 +53,6 @@ VectorBasisPtr basisForTransformation(ElementTypePtr cellType)
 vector< ParametricCurvePtr > edgeLines(MeshPtr mesh, int cellID)
 {
   vector< ParametricCurvePtr > lines;
-  ElementPtr cell = mesh->getElement(cellID);
   vector<unsigned> vertexIndices = mesh->vertexIndicesForCell(cellID);
   for (int i=0; i<vertexIndices.size(); i++)
   {

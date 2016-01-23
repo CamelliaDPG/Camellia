@@ -319,7 +319,7 @@ void ParametricSurface::basisWeightsForProjectedInterpolant(FieldContainer<doubl
 //  H1->addTerm(v); // experiment: seminorm is a norm when the edge dofs are excluded--and this is what LD does
   H1->addTerm(v->grad());
 
-  int maxTestDegree = mesh->getElement(cellID)->elementType()->testOrderPtr->maxBasisDegree();
+  int maxTestDegree = mesh->getElementType(cellID)->testOrderPtr->maxBasisDegree();
   TEUCHOS_TEST_FOR_EXCEPTION(maxTestDegree < 1, std::invalid_argument, "Constant test spaces unsupported.");
 
   int cubatureDegree = std::max(maxTestDegree*2,15); // chosen to match that used in edge projection.

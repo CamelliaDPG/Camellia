@@ -336,8 +336,7 @@ void TRieszRep<Scalar>::computeRepresentationValues(FieldContainer<Scalar> &valu
   vector<GlobalIndexType> cellIDs = basisCache->cellIDs();
 
   // all elems coming in should be of same type
-  ElementPtr elem = _mesh->getElement(cellIDs[0]);
-  ElementTypePtr elemTypePtr = elem->elementType();
+  ElementTypePtr elemTypePtr = _mesh->getElementType(cellIDs[0]);
   DofOrderingPtr testOrderingPtr = elemTypePtr->testOrderPtr;
   int numTestDofsForVarID = testOrderingPtr->getBasisCardinality(testID, VOLUME_INTERIOR_SIDE_ORDINAL);
   BasisPtr testBasis = testOrderingPtr->getBasis(testID);
