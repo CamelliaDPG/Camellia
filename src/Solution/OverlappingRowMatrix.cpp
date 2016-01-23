@@ -360,9 +360,33 @@ std::set<GlobalIndexType> OverlappingRowMatrix::overlappingCells(GlobalIndexType
         {
           IndexType subcellEntityIndex = cell->entityIndex(dimensionForNeighborRelation, subcellOrdinal);
           set< pair<IndexType, unsigned> > cellPairs = mesh->getTopology()->getCellsContainingEntity(dimensionForNeighborRelation, subcellEntityIndex);
-          for (pair<IndexType, unsigned> cellPair : cellPairs)
+          while (cellPairs.size() > 0)
           {
-            cellNeighbors.insert(cellPair.first);
+            set< pair<IndexType, unsigned> > newPairs;
+            for (pair<IndexType, unsigned> cellPair : cellPairs)
+            {
+              GlobalIndexType neighborCellID = cellPair.first;
+              if (mesh->cellIsActive(neighborCellID))
+              {
+                cellNeighbors.insert(neighborCellID);
+              }
+              else
+              {
+                static bool haveWarned = false;
+                if (!haveWarned)
+                {
+                  haveWarned = true;
+                  cout << "WARNING: In OverlappingRowMatrix::overlappingCells(), encountered hanging node.  We still need to finish writing the code to find neighbors appropriately!\n";
+                }
+                // TODO: finish this
+                //       we need to proceed in two directions: find any descendants of subcellEntityIndex that have active cells that we haven't already seen, and any ancestors of subcellEntityIndex that have active cells that we haven't already seen.
+                // we insert all such neighbors into cellPairs.
+                // (to check what we've seen, should look both at cellNeighbors container and at cells container)
+                // NOTE: It may be worth implementing Cell::getActiveNeighborsForSubcell(subcdim, subcord);
+                //       -- This would allow us to replace everything to do with cellPairs above (though the new method would likely call getCellsContainingEntity)
+              }
+            }
+            cellPairs = newPairs;
           }
         }
       }
