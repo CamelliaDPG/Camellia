@@ -28,6 +28,43 @@ using namespace Intrepid;
 
 namespace
 {
+  void testNeighborRelationshipIsSymmetric(MeshPtr mesh, int dimensionToUseForNeighbor, int overlapLevel, bool hierarchical,
+                                          Teuchos::FancyOStream &out, bool &success)
+  {
+    set<GlobalIndexType> activeCells = mesh->getActiveCellIDs();
+    
+    GlobalIndexType maxCellID = *max_element(activeCells.begin(), activeCells.end());
+    
+    FieldContainer<int> adjacency(maxCellID+1,maxCellID+1); // we assume that in our tests we don't ever get too many cells!
+    
+    for (GlobalIndexType cellID : activeCells)
+    {
+      set<GlobalIndexType> neighbors = OverlappingRowMatrix::overlappingCells(cellID, mesh, overlapLevel,hierarchical,
+                                                                              dimensionToUseForNeighbor);
+      for (GlobalIndexType neighborID: neighbors)
+      {
+        adjacency(cellID,neighborID) = 1;
+      }
+    }
+    
+    for (int i=0; i<=maxCellID; i++)
+    {
+      for (int j=i; j<=maxCellID; j++)
+      {
+        TEST_EQUALITY(adjacency(i,j),adjacency(j,i));
+        
+        if (adjacency(i,j) != adjacency(j,i))
+        {
+          if (adjacency(i,j) == 1)
+            out << "cell " << i << " sees " << " cell " << j << " as a neighbor, but cell " << j << " doesn't agree!\n";
+          else
+            out << "cell " << j << " sees " << " cell " << i << " as a neighbor, but cell " << i << " doesn't agree!\n";
+        }
+      }
+    }
+  }
+
+  
 void testOverlapDofOrdinals(bool hierarchical, Teuchos::FancyOStream &out, bool &success)
 {
 
@@ -219,6 +256,47 @@ TEUCHOS_UNIT_TEST( OverlappingRowMatrix, HierarchicalOverlapDofOrdinals )
   testOverlapDofOrdinals(hierarchical, out, success);
 }
 
+  TEUCHOS_UNIT_TEST( OverlappingRowMatrix, OneNeighborsAreSymmetric )
+  {
+    int H1Order = 1;
+    int delta_k = 2;
+    int horizontalCells = 2;
+    int verticalCells = 1;
+    double width = 1.0;
+    double height = 1.0;
+    
+    int spaceDim = 2;
+    bool useConformingTraces = true;
+    PoissonFormulation form(spaceDim,useConformingTraces);
+
+    BFPtr poissonBilinearForm = form.bf();
+    
+    Teuchos::ParameterList pl;
+    pl.set("useMinRule", true);
+    pl.set("bf",poissonBilinearForm);
+    pl.set("H1Order", H1Order);
+    pl.set("delta_k", delta_k);
+    pl.set("horizontalElements", horizontalCells);
+    pl.set("verticalElements", verticalCells);
+    pl.set("divideIntoTriangles", false);
+    pl.set("useConformingTraces", useConformingTraces);
+    pl.set("x0",(double)0);
+    pl.set("y0",(double)0);
+    pl.set("width", width);
+    pl.set("height",height);
+    
+    MeshPtr mesh = MeshFactory::quadMesh(pl);
+
+    mesh->hRefine(set<GlobalIndexType>{1}); // create a hanging node
+    
+    int d = 1;
+    int overlapLevel = 1;
+    int hierarchical = false;
+    
+    // TODO: test some other cases...
+    testNeighborRelationshipIsSymmetric(mesh, d, overlapLevel, hierarchical, out, success);
+  }
+  
 TEUCHOS_UNIT_TEST( OverlappingRowMatrix, TestOverlapValues )
 {
   // test checks that the rows in the overlapping matrix match what's expected
