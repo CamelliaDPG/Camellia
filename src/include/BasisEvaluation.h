@@ -62,6 +62,8 @@ public:
                                     const Intrepid::FieldContainer<double> &refPoints,
                                     int numCells,
                                     BasisCache* basisCache);
+  
+  // ! Deprecated.  Will be deleted once MultiBasis no longer depends on this
   static FCPtr getTransformedValues(BasisPtr basis, Camellia::EOperator op,
                                     const Intrepid::FieldContainer<double> &refPoints,
                                     int numCells,
