@@ -430,6 +430,10 @@ BasisCache::BasisCache(int fakeSideOrdinal, BasisCachePtr volumeCache, const Fie
   }
   
   _cellJacobDet.initialize(1.0);
+  _cellJacobianIsValid = true;
+  _cellJacobianInverseIsValid = true;
+  _cellJacobianDeterminantIsValid = true;
+  _physCubPointsIsValid = true; // I'm unclear whether this is a good idea; I don't think we ever use _physCubPoints in context of the "fake" side BasisCache...
 }
 
 // side constructor
@@ -760,10 +764,17 @@ void BasisCache::discardPhysicalNodeInfo()
   _cellJacobDet.resize(0);
   _weightedMeasure.resize(0);
   _physCubPoints.resize(0);
+  
+  _cellJacobianIsValid = false;
+  _cellJacobianInverseIsValid = false;
+  _cellJacobianDeterminantIsValid = false;
+  _weightedMeasureIsValid = false;
+  _physCubPointsIsValid = false;
 }
 
 FieldContainer<double> & BasisCache::getWeightedMeasures()
 {
+  if (!_weightedMeasureIsValid) recomputeMeasures();
   return _weightedMeasure;
 }
 
@@ -774,6 +785,7 @@ const Intrepid::FieldContainer<double> &BasisCache::getPhysicalCellNodes()
 
 const FieldContainer<double> & BasisCache::getPhysicalCubaturePoints()
 {
+  if (!_physCubPointsIsValid) determinePhysicalPoints();
   return _physCubPoints;
 }
 
@@ -799,14 +811,17 @@ const Intrepid::FieldContainer<double> & BasisCache::getCubatureWeights()
 
 const FieldContainer<double> & BasisCache::getJacobian()
 {
+  if (!_cellJacobianIsValid) determineJacobian();
   return _cellJacobian;
 }
 const FieldContainer<double> & BasisCache::getJacobianDet()
 {
+  if (!_cellJacobianDeterminantIsValid) determineJacobian();
   return _cellJacobDet;
 }
 const FieldContainer<double> & BasisCache::getJacobianInv()
 {
+  if (!_cellJacobianInverseIsValid) determineJacobian();
   return _cellJacobInv;
 }
 
@@ -902,8 +917,8 @@ constFCPtr BasisCache::getTransformedValues(BasisPtr basis, Camellia::EOperator 
       constFCPtr referenceValues = getValues(basis,(Camellia::EOperator) relatedOp, useCubPointsSideRefCell);
 //      cout << "_cellJacobInv:\n" << _cellJacobInv;
 //      cout << "referenceValues:\n"  << *referenceValues;
-      // TODO: revisit the way we determine numCells....
-      int numCells = _physCubPoints.dimension(0);
+      // TODO: revisit the way we determine numCells??
+      int numCells = getPhysicalCubaturePoints().dimension(0);
       if (numCells == 0)   // can happen for certain BasisCaches used in SpaceTimeBasisCache
       {
         if (_physicalCellNodes.rank() > 0)
@@ -913,8 +928,7 @@ constFCPtr BasisCache::getTransformedValues(BasisPtr basis, Camellia::EOperator 
       }
       transformedValues =
         BasisEvaluation::getTransformedValuesWithBasisValues(basis, (Camellia::EOperator) relatedOp,
-            referenceValues, numCells, _cellJacobian,
-            _cellJacobInv,_cellJacobDet);
+            referenceValues, numCells, getJacobian(), getJacobianInv(),getJacobianDet());
 //      cout << "transformedValues:\n" << *transformedValues;
     }
     _knownValuesTransformed[relatedKey] = transformedValues;
@@ -1233,6 +1247,10 @@ void BasisCache::determinePhysicalPoints()
 
 void BasisCache::determineJacobian()
 {
+  _cellJacobianIsValid = true;
+  _cellJacobianInverseIsValid = true;
+  _cellJacobianDeterminantIsValid = true;
+  
   int cellDim = _cellTopo->getDimension();
 
   if (cellDim == 0) return;  // Jacobians not meaningful then...
@@ -1289,9 +1307,6 @@ void BasisCache::determineJacobian()
     }
 
     SerialDenseWrapper::determinantAndInverse(_cellJacobDet, _cellJacobInv, _cellJacobian);
-
-//    CellTools::setJacobianInv(_cellJacobInv, _cellJacobian );
-//    CellTools::setJacobianDet(_cellJacobDet, _cellJacobian );
   }
 }
 
@@ -1662,6 +1677,7 @@ BasisCachePtr BasisCache::quadBasisCache(double width, double height, int cubDeg
 
 void BasisCache::recomputeMeasures()
 {
+  _weightedMeasureIsValid = true; // will be true on return from this method
   if (_cellTopo->getDimension() == 0)
   {
     // then we define the measure of the domain as 1...
@@ -1678,7 +1694,7 @@ void BasisCache::recomputeMeasures()
     _weightedMeasure.resize(_numCells, numCubPoints);
     if (! isSideCache())
     {
-      fst::computeCellMeasure<double>(_weightedMeasure, _cellJacobDet, _cubWeights);
+      fst::computeCellMeasure<double>(_weightedMeasure, getJacobianDet(), _cubWeights);
     }
     else
     {
@@ -1689,31 +1705,9 @@ void BasisCache::recomputeMeasures()
       }
       else
       {
-        CamelliaCellTools::computeSideMeasure(_weightedMeasure, _cellJacobian, _cubWeights, _sideIndex, _cellTopo);
-      } /*else if (_cellTopo->getDimension()==2) {
-        if (_cellTopo->getTensorialDegree() == 0) {
-          // compute weighted edge measure
-          FunctionSpaceTools::computeEdgeMeasure<double>(_weightedMeasure,
-                                                         _cellJacobian,
-                                                         _cubWeights,
-                                                         _sideIndex,
-                                                         _cellTopo->getShardsTopology());
-        } else {
-          cout << "ERROR: BasisCache::recomputeMeasures() does not yet support tensorial degree > 0.\n";
-          TEUCHOS_TEST_FOR_EXCEPTION(true, std::invalid_argument, "recomputeMeasures() does not yet support tensorial degree > 0.");
-        }
-      } else if (_cellTopo->getDimension()==3) {
-        if (_cellTopo->getTensorialDegree() == 0) {
-          FunctionSpaceTools::computeFaceMeasure<double>(_weightedMeasure, _cellJacobian, _cubWeights, _sideIndex, _cellTopo->getShardsTopology());
-        } else {
-          cout << "ERROR: BasisCache::recomputeMeasures() does not yet support tensorial degree > 0.\n";
-          TEUCHOS_TEST_FOR_EXCEPTION(true, std::invalid_argument, "recomputeMeasures() does not yet support tensorial degree > 0.");
-        }
-      } else {
-        TEUCHOS_TEST_FOR_EXCEPTION(true, std::invalid_argument, "Unhandled space dimension.");
-      }*/
+        CamelliaCellTools::computeSideMeasure(_weightedMeasure, getJacobian(), _cubWeights, _sideIndex, _cellTopo);
+      }
     }
-
   }
 
   if ( isSideCache() )
@@ -1727,7 +1721,7 @@ void BasisCache::recomputeMeasures()
       {
         // recompute sideNormals
         _sideNormals.resize(_numCells, numPoints, _spaceDim);
-        Intrepid::CellTools<double>::getPhysicalSideNormals(_sideNormals, _cellJacobian, _sideIndex, _cellTopo->getShardsTopology());
+        Intrepid::CellTools<double>::getPhysicalSideNormals(_sideNormals, getJacobian(), _sideIndex, _cellTopo->getShardsTopology());
         // make unit length
         RealSpaceTools<double>::vectorNorm(normalLengths, _sideNormals, NORM_TWO);
         FunctionSpaceTools::scalarMultiplyDataData<double>(_sideNormals, normalLengths, _sideNormals, true);
@@ -1735,7 +1729,7 @@ void BasisCache::recomputeMeasures()
       else
       {
         _sideNormalsSpaceTime.resize(_numCells, numPoints, _cellTopo->getDimension());
-        CamelliaCellTools::getUnitSideNormals(_sideNormalsSpaceTime, _sideIndex, _cellJacobian, _cellTopo);
+        CamelliaCellTools::getUnitSideNormals(_sideNormalsSpaceTime, _sideIndex, getJacobian(), _cellTopo);
 
         // next, extract the pure-spatial part of the normal (this might not be unit length)
         _sideNormals.resize(_numCells, numPoints, _spaceDim);

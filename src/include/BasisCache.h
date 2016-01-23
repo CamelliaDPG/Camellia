@@ -87,6 +87,9 @@ private:
   Intrepid::FieldContainer<double> _cellSideParities;
   Intrepid::FieldContainer<double> _physicalCellNodes;
 
+  bool _cellJacobianIsValid, _cellJacobianInverseIsValid, _cellJacobianDeterminantIsValid;
+  bool _weightedMeasureIsValid, _physCubPointsIsValid;
+  
   TFunctionPtr<double> _transformationFxn;
   bool _composeTransformationFxnWithMeshTransformation;
   // bool: compose with existing ref-to-mesh-cell transformation. (false means that the function goes from ref to the physical geometry;
