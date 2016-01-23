@@ -40,7 +40,7 @@ public:
     double penaltyWeight = 1e7;
 
     // Assumes that all elements are of like type--but they'd have to be, to have a single localStiffness FC
-    ElementTypePtr elemType = mesh->getElement(basisCache->cellIDs()[0])->elementType();
+    ElementTypePtr elemType = mesh->getElementType(basisCache->cellIDs()[0]);
 
     Intrepid::FieldContainer<double> constraintMatrix(numCells,numFields,numFields);
     Intrepid::FieldContainer<double> constraintLoad(numCells,numFields);

@@ -39,7 +39,7 @@ public:
                                "localRHSVector.dim(1) != localStiffnessMatrix.dim(1)");
 
     // Assumes that all elements are of like type--but they'd have to be, to have a single localStiffness FC
-    ElementTypePtr elemType = mesh->getElement(basisCache->cellIDs()[0])->elementType();
+    ElementTypePtr elemType = mesh->getElementType(basisCache->cellIDs()[0]);
 
     Intrepid::FieldContainer<double> qoiLoad(numCells,numFields);
     _qoi->integrate(qoiLoad,elemType->trialOrderPtr,basisCache);
