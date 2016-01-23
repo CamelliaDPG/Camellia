@@ -779,13 +779,17 @@ void BasisCache::discardPhysicalNodeInfo()
   _knownValuesTransformedDottedWithNormal.clear();
   _knownValuesTransformedWeighted.clear();
 
-  // resize all the related fieldcontainers to reclaim their memory
-  _cellIDs.clear();
-  _cellJacobian.resize(0);
-  _cellJacobInv.resize(0);
-  _cellJacobDet.resize(0);
-  _weightedMeasure.resize(0);
-  _physCubPoints.resize(0);
+  // These resizings are a way of forcing exceptions, but otherwise
+  // probably not that useful.  Plus, if we are reusing a BasisCache
+  // it's not infrequently the case that the sizes next time we fill
+  // them will be the same...
+  // resize all the related FieldContainers to reclaim their memory
+//  _cellIDs.clear();
+//  _cellJacobian.resize(0);
+//  _cellJacobInv.resize(0);
+//  _cellJacobDet.resize(0);
+//  _weightedMeasure.resize(0);
+//  _physCubPoints.resize(0);
   
   _cellJacobianIsValid = false;
   _cellJacobianInverseIsValid = false;
@@ -840,12 +844,12 @@ const FieldContainer<double> & BasisCache::getJacobian()
 }
 const FieldContainer<double> & BasisCache::getJacobianDet()
 {
-  if (!_cellJacobianDeterminantIsValid) determineJacobian();
+  if (!_cellJacobianDeterminantIsValid) determineJacobianInverseAndDeterminant();
   return _cellJacobDet;
 }
 const FieldContainer<double> & BasisCache::getJacobianInv()
 {
-  if (!_cellJacobianInverseIsValid) determineJacobian();
+  if (!_cellJacobianInverseIsValid) determineJacobianInverseAndDeterminant();
   return _cellJacobInv;
 }
 
@@ -952,7 +956,7 @@ constFCPtr BasisCache::getTransformedValues(BasisPtr basis, Camellia::EOperator 
       }
       transformedValues =
         BasisEvaluation::getTransformedValuesWithBasisValues(basis, (Camellia::EOperator) relatedOp,
-            referenceValues, numCells, getJacobian(), getJacobianInv(),getJacobianDet());
+            referenceValues, numCells, this);
 //      cout << "transformedValues:\n" << *transformedValues;
     }
     _knownValuesTransformed[relatedKey] = transformedValues;
@@ -1160,26 +1164,17 @@ void BasisCache::setRefCellPoints(const FieldContainer<double> &pointsRefCell, c
   _weightedMeasureIsValid = false;
   _sideNormalsIsValid = false;
   _physCubPointsIsValid = false;
-  
-  // allow reuse of physicalNode info; just map the new points...
-//  if ((_physCubPoints.size() > 0) && recomputePhysicalMeasures)
-//  {
-//    determinePhysicalPoints();
-//    determineJacobian();
-//
-//    recomputeMeasures();
-//  }
 }
 
 const FieldContainer<double> & BasisCache::getSideNormals()
 {
-  if (!_sideNormalsIsValid) recomputeMeasures();
+  if (!_sideNormalsIsValid) determineSideNormals();
   return _sideNormals;
 }
 
 const FieldContainer<double> & BasisCache::getSideNormalsSpaceTime()
 {
-  if (!_sideNormalsIsValid) recomputeMeasures();
+  if (!_sideNormalsIsValid) determineSideNormals();
   if (_cellTopo->getTensorialDegree() == 0)
   {
     TEUCHOS_TEST_FOR_EXCEPTION(true, std::invalid_argument, "space-time side normals are only defined for cell topologies with tensorial degree > 0.");
@@ -1222,15 +1217,18 @@ void BasisCache::setTransformationFunction(TFunctionPtr<double> fxn, bool compos
   _weightedMeasureIsValid = false;
   _sideNormalsIsValid = false;
   _physCubPointsIsValid = false;
-  
-//  determinePhysicalPoints();
-//  determineJacobian();
 }
 
 void BasisCache::determinePhysicalPoints()
 {
   int cellDim = _cellTopo->getDimension();
-  if (cellDim==0) return; // physical points not meaningful then...
+  if (cellDim==0)
+  {
+    // physical points not meaningful then...
+    _physCubPointsIsValid = true;
+    _physCubPoints.resize(0);
+    return;
+  }
   int numPoints = isSideCache() ? _cubPointsSideRefCell.dimension(0) : _cubPoints.dimension(0);
   if ( TFunction<double>::isNull(_transformationFxn) || _composeTransformationFxnWithMeshTransformation)
   {
@@ -1289,23 +1287,26 @@ void BasisCache::determinePhysicalPoints()
 
 void BasisCache::determineJacobian()
 {
-  _cellJacobianIsValid = true;
-  _cellJacobianInverseIsValid = true;
-  _cellJacobianDeterminantIsValid = true;
-  
   int cellDim = _cellTopo->getDimension();
 
-  if (cellDim == 0) return;  // Jacobians not meaningful then...
+  if (cellDim == 0)
+  {
+    // Jacobians not meaningful then...
+    _cellJacobianIsValid = true;
+    return;
+  }
 
   // Compute cell Jacobians, their inverses and their determinants
   int numCubPoints = isSideCache() ? _cubPointsSideRefCell.dimension(0) : _cubPoints.dimension(0);
 
   // Containers for Jacobian
   _cellJacobian.resize(_numCells, numCubPoints, cellDim, cellDim);
-  _cellJacobInv.resize(_numCells, numCubPoints, cellDim, cellDim);
-  _cellJacobDet.resize(_numCells, numCubPoints);
 
-  if (numCubPoints == 0) return;
+  if (numCubPoints == 0)
+  {
+    _cellJacobianIsValid = true;
+    return;
+  }
 
   if ( TFunction<double>::isNull(_transformationFxn) || _composeTransformationFxnWithMeshTransformation)
   {
@@ -1314,12 +1315,7 @@ void BasisCache::determineJacobian()
     else
       CamelliaCellTools::setJacobian(_cellJacobian, _cubPointsSideRefCell, _physicalCellNodes, _cellTopo);
   }
-
-  SerialDenseWrapper::determinantAndInverse(_cellJacobDet, _cellJacobInv, _cellJacobian);
-
-//  CellTools::setJacobianDet(_cellJacobDet, _cellJacobian );
-////  cout << "On rank " << Teuchos::GlobalMPISession::getRank() << ", about to compute jacobian inverse for cellJacobian of size: " << _cellJacobian.size() << endl;
-//  CellTools::setJacobianInv(_cellJacobInv, _cellJacobian );
+  _cellJacobianIsValid = true;
 
   if (_transformationFxn != Teuchos::null )
   {
@@ -1347,9 +1343,29 @@ void BasisCache::determineJacobian()
     {
       _transformationFxn->grad()->values( _cellJacobian, thisPtr );
     }
-
-    SerialDenseWrapper::determinantAndInverse(_cellJacobDet, _cellJacobInv, _cellJacobian);
   }
+}
+
+void BasisCache::determineJacobianInverseAndDeterminant()
+{
+  int cellDim = _cellTopo->getDimension();
+  
+  if (cellDim == 0)
+  {
+    // Jacobians not meaningful then...
+    _cellJacobianInverseIsValid = true;
+    _cellJacobianDeterminantIsValid = true;
+    return;
+  }
+  
+  // Compute cell Jacobians, their inverses and their determinants
+  int numCubPoints = isSideCache() ? _cubPointsSideRefCell.dimension(0) : _cubPoints.dimension(0);
+  
+  _cellJacobInv.resize(_numCells, numCubPoints, cellDim, cellDim);
+  _cellJacobDet.resize(_numCells, numCubPoints);
+  SerialDenseWrapper::determinantAndInverse(_cellJacobDet, _cellJacobInv, getJacobian());
+  _cellJacobianInverseIsValid = true;
+  _cellJacobianDeterminantIsValid = true;
 }
 
 void BasisCache::setPhysicalCellNodes(const FieldContainer<double> &physicalCellNodes,
@@ -1724,49 +1740,15 @@ BasisCachePtr BasisCache::quadBasisCache(double width, double height, int cubDeg
   return Teuchos::rcp(new BasisCache(physicalCellNodes, quad_4, cubDegree, createSideCacheToo));
 }
 
-void BasisCache::recomputeMeasures()
+void BasisCache::determineSideNormals()
 {
-  _weightedMeasureIsValid = true; // will be true on return from this method
-  _sideNormalsIsValid = true;
-  if (_cellTopo->getDimension() == 0)
-  {
-    // then we define the measure of the domain as 1...
-    int numCubPoints = isSideCache() ? _cubPointsSideRefCell.dimension(0) : _cubPoints.dimension(0);
-    _weightedMeasure.resize(_numCells, numCubPoints);
-    _weightedMeasure.initialize(1.0);
-    return;
-  }
-  if (_cubWeights.size() > 0)
-  {
-    // a bit ugly: "_cubPoints" may not be cubature points at all, but just points of interest...  If they're not cubature points, then _cubWeights will be cleared out.  See setRefCellPoints, above.
-    int numCubPoints = isSideCache() ? _cubPointsSideRefCell.dimension(0) : _cubPoints.dimension(0);
-    // TODO: rename _cubPoints and related methods...
-    _weightedMeasure.resize(_numCells, numCubPoints);
-    if (! isSideCache())
-    {
-      fst::computeCellMeasure<double>(_weightedMeasure, getJacobianDet(), _cubWeights);
-    }
-    else
-    {
-      if (_cellTopo->getDimension()==1)
-      {
-        // TODO: determine whether this is the right thing:
-        _weightedMeasure.initialize(1.0); // not sure this is the right thing.
-      }
-      else
-      {
-        CamelliaCellTools::computeSideMeasure(_weightedMeasure, getJacobian(), _cubWeights, _sideIndex, _cellTopo);
-      }
-    }
-  }
-
   if ( isSideCache() )
   {
     int numPoints = _cubPointsSideRefCell.dimension(0);
     if (_cellTopo->getDimension() > 1)
     {
       FieldContainer<double> normalLengths(_numCells, numPoints);
-
+      
       if (_cellTopo->getTensorialDegree() == 0)
       {
         // recompute sideNormals
@@ -1780,7 +1762,7 @@ void BasisCache::recomputeMeasures()
       {
         _sideNormalsSpaceTime.resize(_numCells, numPoints, _cellTopo->getDimension());
         CamelliaCellTools::getUnitSideNormals(_sideNormalsSpaceTime, _sideIndex, getJacobian(), _cellTopo);
-
+        
         // next, extract the pure-spatial part of the normal (this might not be unit length)
         _sideNormals.resize(_numCells, numPoints, _spaceDim);
         for (int cellOrdinal=0; cellOrdinal<_numCells; cellOrdinal++)
@@ -1814,6 +1796,43 @@ void BasisCache::recomputeMeasures()
         // space-time mesh with point topology as the spatial part.  (Not sure this is important to handle.)
         _sideNormalsSpaceTime = _sideNormals;
         _sideNormals.resize(1,numPoints,0); // empty container: no spatial normals...
+      }
+    }
+  }
+  _sideNormalsIsValid = true;
+}
+
+void BasisCache::recomputeMeasures()
+{
+  _weightedMeasureIsValid = true; // will be true on return from this method
+  if (_cellTopo->getDimension() == 0)
+  {
+    // then we define the measure of the domain as 1...
+    int numCubPoints = isSideCache() ? _cubPointsSideRefCell.dimension(0) : _cubPoints.dimension(0);
+    _weightedMeasure.resize(_numCells, numCubPoints);
+    _weightedMeasure.initialize(1.0);
+    return;
+  }
+  if (_cubWeights.size() > 0)
+  {
+    // a bit ugly: "_cubPoints" may not be cubature points at all, but just points of interest...  If they're not cubature points, then _cubWeights will be cleared out.  See setRefCellPoints, above.
+    int numCubPoints = isSideCache() ? _cubPointsSideRefCell.dimension(0) : _cubPoints.dimension(0);
+    // TODO: rename _cubPoints and related methods...
+    _weightedMeasure.resize(_numCells, numCubPoints);
+    if (! isSideCache())
+    {
+      fst::computeCellMeasure<double>(_weightedMeasure, getJacobianDet(), _cubWeights);
+    }
+    else
+    {
+      if (_cellTopo->getDimension()==1)
+      {
+        // TODO: determine whether this is the right thing:
+        _weightedMeasure.initialize(1.0); // not sure this is the right thing.
+      }
+      else
+      {
+        CamelliaCellTools::computeSideMeasure(_weightedMeasure, getJacobian(), _cubWeights, _sideIndex, _cellTopo);
       }
     }
   }

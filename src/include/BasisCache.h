@@ -117,13 +117,15 @@ private:
   void initVolumeCache(const Intrepid::FieldContainer<double> &refPoints, const Intrepid::FieldContainer<double> &cubWeights);
 
   void determineJacobian();
+  void determineJacobianInverseAndDeterminant();
   void determinePhysicalPoints();
 
   int maxTestDegree();
 
   void findMaximumDegreeBasisForSides(DofOrdering &trialOrdering);
-
+  
   void recomputeMeasures();
+  void determineSideNormals();
 protected:
   BasisCache()
   {
