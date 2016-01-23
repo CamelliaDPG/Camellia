@@ -1108,6 +1108,11 @@ void TLinearTerm<Scalar>::values(Intrepid::FieldContainer<Scalar> &values, int v
     {
       continue;
     }
+    // skip if the function weighting this term can attest to being zero at each point in basisCache:
+    if (ls.first->isZero(basisCache))
+    {
+      continue;
+    }
     if (ls.second->ID() == varID)
     {
       constFCPtr basisValues;
