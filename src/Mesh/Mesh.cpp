@@ -735,13 +735,13 @@ set<GlobalIndexType> Mesh::globalDofIndicesForPartition(PartitionIndexType parti
 //  hRefine(cellIDs,refPattern,vector< TSolutionPtr<double> >());
 //}
 
-void Mesh::hRefine(const vector<GlobalIndexType> &cellIDs)
+void Mesh::hRefine(const vector<GlobalIndexType> &cellIDs, bool repartitionAndRebuild)
 {
   set<GlobalIndexType> cellSet(cellIDs.begin(),cellIDs.end());
-  hRefine(cellSet);
+  hRefine(cellSet, repartitionAndRebuild);
 }
 
-void Mesh::hRefine(const set<GlobalIndexType> &cellIDs)
+void Mesh::hRefine(const set<GlobalIndexType> &cellIDs, bool repartitionAndRebuild)
 {
   map< CellTopologyKey, set<GlobalIndexType> > cellIDsForTopo;
   for (set<GlobalIndexType>::iterator cellIDIt = cellIDs.begin(); cellIDIt != cellIDs.end();
@@ -757,7 +757,7 @@ void Mesh::hRefine(const set<GlobalIndexType> &cellIDs)
   {
     CellTopologyKey cellTopoKey = entryIt->first;
     RefinementPatternPtr refPattern = RefinementPattern::regularRefinementPattern(cellTopoKey);
-    hRefine(entryIt->second, refPattern);
+    hRefine(entryIt->second, refPattern, repartitionAndRebuild);
   }
 }
 
