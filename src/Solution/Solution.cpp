@@ -911,7 +911,7 @@ void TSolution<Scalar>::populateStiffnessAndLoad()
       // sample an element to make sure that the basis used for trialID is nodal
       // (this is assumed in our imposition mechanism)
       GlobalIndexType firstActiveCellID = *_mesh->getActiveCellIDs().begin();
-      ElementTypePtr elemTypePtr = _mesh->getElement(firstActiveCellID)->elementType();
+      ElementTypePtr elemTypePtr = _mesh->getElementType(firstActiveCellID);
       BasisPtr trialBasis = elemTypePtr->trialOrderPtr->getBasis(trialID);
       if (!trialBasis->isNodal())
       {
@@ -1553,7 +1553,7 @@ void TSolution<Scalar>::imposeZMCsUsingLagrange()
     // sample an element to make sure that the basis used for trialID is nodal
     // (this is assumed in our imposition mechanism)
     GlobalIndexType firstActiveCellID = *_mesh->getActiveCellIDs().begin();
-    ElementTypePtr elemTypePtr = _mesh->getElement(firstActiveCellID)->elementType();
+    ElementTypePtr elemTypePtr = _mesh->getElementType(firstActiveCellID);
     BasisPtr trialBasis = elemTypePtr->trialOrderPtr->getBasis(trialID);
     if (!trialBasis->isNodal())
     {
@@ -2583,7 +2583,7 @@ void TSolution<Scalar>::solutionValues(Intrepid::FieldContainer<Scalar> &values,
 
     Intrepid::FieldContainer<Scalar>* solnCoeffs = &_solutionForCellIDGlobal[cellID];
 
-    DofOrderingPtr trialOrder = _mesh->getElement(cellID)->elementType()->trialOrderPtr;
+    DofOrderingPtr trialOrder = _mesh->getElementType(cellID)->trialOrderPtr;
 
     BasisPtr basis;
     if (fluxOrTrace)
@@ -3150,7 +3150,7 @@ void TSolution<Scalar>::basisCoeffsForTrialOrder(Intrepid::FieldContainer<Scalar
 template <typename Scalar>
 void TSolution<Scalar>::solnCoeffsForCellID(Intrepid::FieldContainer<Scalar> &solnCoeffs, GlobalIndexType cellID, int trialID, int sideIndex)
 {
-  Teuchos::RCP< DofOrdering > trialOrder = _mesh->getElement(cellID)->elementType()->trialOrderPtr;
+  Teuchos::RCP< DofOrdering > trialOrder = _mesh->getElementType(cellID)->trialOrderPtr;
 
   if (_solutionForCellIDGlobal.find(cellID) == _solutionForCellIDGlobal.end() )
   {
@@ -3256,7 +3256,7 @@ void TSolution<Scalar>::setSolnCoeffsForCellID(Intrepid::FieldContainer<Scalar> 
 template <typename Scalar>
 void TSolution<Scalar>::setSolnCoeffsForCellID(Intrepid::FieldContainer<Scalar> &solnCoeffsToSet, GlobalIndexType cellID, int trialID, int sideIndex)
 {
-  ElementTypePtr elemTypePtr = _mesh->getElement(cellID)->elementType();
+  ElementTypePtr elemTypePtr = _mesh->getElementType(cellID);
 
   Teuchos::RCP< DofOrdering > trialOrder = elemTypePtr->trialOrderPtr;
   BasisPtr basis = trialOrder->getBasis(trialID,sideIndex);
@@ -3756,8 +3756,8 @@ Epetra_Map TSolution<Scalar>::getPartitionMap(PartitionIndexType rank, set<Globa
     int zeroMeanConstraintsSize, Epetra_Comm* Comm )
 {
   int numGlobalLagrange = _lagrangeConstraints->numGlobalConstraints();
-  vector< ElementPtr > elements = _mesh->elementsInPartition(rank);
-  IndexType numMyElements = elements.size();
+  const set<GlobalIndexType>* cellIDsInPartition = &_mesh->globalDofAssignment()->cellsInPartition(rank);
+  IndexType numMyElements = cellIDsInPartition->size();
   int numElementLagrange = _lagrangeConstraints->numElementConstraints() * numMyElements;
   int globalNumElementLagrange = _lagrangeConstraints->numElementConstraints() * _mesh->numActiveElements();
 
@@ -4334,7 +4334,7 @@ void TSolution<Scalar>::readFromFile(const string &filePath)
       cout << "No cellID " << cellID << endl;
       TEUCHOS_TEST_FOR_EXCEPTION(true, std::invalid_argument, "Could not find cellID in solution file in mesh.");
     }
-    ElementTypePtr elemType = _mesh->getElement(cellID)->elementType();
+    ElementTypePtr elemType = _mesh->getElementType(cellID);
     int numDofsExpected = elemType->trialOrderPtr->totalDofs();
 
     if ( linestream.good() )
