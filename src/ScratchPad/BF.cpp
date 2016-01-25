@@ -76,6 +76,12 @@ namespace Camellia
   }
   
   template <typename Scalar>
+  void TBF<Scalar>::addJumpTerm( TLinearTermPtr<Scalar> trialTerm, TLinearTermPtr<Scalar> testTerm )
+  {
+    _jumpTerms.push_back( make_pair( trialTerm, testTerm ) );
+  }
+  
+  template <typename Scalar>
   void TBF<Scalar>::addTerm( TLinearTermPtr<Scalar> trialTerm, TLinearTermPtr<Scalar> testTerm )
   {
     _terms.push_back( make_pair( trialTerm, testTerm ) );
@@ -910,6 +916,12 @@ namespace Camellia
     }
     
     return ip;
+  }
+  
+  template <typename Scalar>
+  const vector< TBilinearTerm<Scalar> > & TBF<Scalar>::getJumpTerms() const
+  {
+    return _jumpTerms;
   }
   
   template <typename Scalar>

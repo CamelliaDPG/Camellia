@@ -23,6 +23,8 @@ template <typename Scalar>
 class TBF
 {
   vector< TBilinearTerm<Scalar> > _terms;
+  vector< TBilinearTerm<Scalar> > _jumpTerms; // DG-style jump terms
+  
   VarFactoryPtr _varFactory;
 
   bool _isLegacySubclass;
@@ -46,6 +48,9 @@ public:
   void addTerm( VarPtr trialVar, TLinearTermPtr<Scalar> testTerm );
   void addTerm( VarPtr trialVar, VarPtr testVar );
   void addTerm( TLinearTermPtr<Scalar> trialTerm, VarPtr testVar);
+  
+  // ! Add a DG-style jump term.  Only applicable when running in Bubnov-Galerkin mode (i.e. a null IP in Solution).
+  void addJumpTerm( TLinearTermPtr<Scalar> trialTerm, TLinearTermPtr<Scalar> testTerm );
 
   // applyBilinearFormData() methods are all legacy methods
   virtual void applyBilinearFormData(int trialID, int testID,
@@ -80,6 +85,8 @@ public:
   TIPPtr<Scalar> naiveNorm(int spaceDim);
 
   string displayString();
+  
+  const std::vector< TBilinearTerm<Scalar> > & getJumpTerms() const;
 
   virtual void localStiffnessMatrixAndRHS(Intrepid::FieldContainer<Scalar> &localStiffness, Intrepid::FieldContainer<Scalar> &rhsVector,
                                           TIPPtr<Scalar> ip, BasisCachePtr ipBasisCache,
