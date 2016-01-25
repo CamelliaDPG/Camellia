@@ -87,6 +87,9 @@ private:
   Intrepid::FieldContainer<double> _cellSideParities;
   Intrepid::FieldContainer<double> _physicalCellNodes;
 
+  bool _cellJacobianIsValid, _cellJacobianInverseIsValid, _cellJacobianDeterminantIsValid;
+  bool _sideNormalsIsValid, _weightedMeasureIsValid, _physCubPointsIsValid;
+  
   TFunctionPtr<double> _transformationFxn;
   bool _composeTransformationFxnWithMeshTransformation;
   // bool: compose with existing ref-to-mesh-cell transformation. (false means that the function goes from ref to the physical geometry;
@@ -110,16 +113,19 @@ private:
   void initCubatureDegree(int maxTrialDegree, int maxTestDegree);
   void initCubatureDegree(std::vector<int> &maxTrialDegrees, std::vector<int> &maxTestDegrees);
 
-  void init(bool createSideCacheToo, bool interpretTensorTopologyAsSpaceTime);
+  void initVolumeCache(bool createSideCacheToo, bool interpretTensorTopologyAsSpaceTime);
+  void initVolumeCache(const Intrepid::FieldContainer<double> &refPoints, const Intrepid::FieldContainer<double> &cubWeights);
 
   void determineJacobian();
+  void determineJacobianInverseAndDeterminant();
   void determinePhysicalPoints();
 
   int maxTestDegree();
 
   void findMaximumDegreeBasisForSides(DofOrdering &trialOrdering);
-
+  
   void recomputeMeasures();
+  void determineSideNormals();
 protected:
   BasisCache()
   {
@@ -173,11 +179,19 @@ public:
 
   BasisCache(const Intrepid::FieldContainer<double> &physicalCellNodes, shards::CellTopology &cellTopo, int cubDegree, bool createSideCacheToo = false);
   BasisCache(const Intrepid::FieldContainer<double> &physicalCellNodes, CellTopoPtr cellTopo, int cubDegree, bool createSideCacheToo = false, bool tensorProductTopologyMeansSpaceTime=true);
+  
+  // lighter weight volume constructor:
+  BasisCache(const Intrepid::FieldContainer<double> &physicalCellNodes, CellTopoPtr cellTopo,
+             const Intrepid::FieldContainer<double> &refCellPoints, const Intrepid::FieldContainer<double> &cubWeights, int cubatureDegree = 0);
+  // lighter weight side cache constructor:
+  BasisCache(int sideOrdinal, BasisCachePtr volumeCache, const Intrepid::FieldContainer<double> &refPoints,
+             const Intrepid::FieldContainer<double> &cubWeights, int cubatureDegree = 0);
 
   BasisCache(const Intrepid::FieldContainer<double> &physicalCellNodes, CellTopoPtr cellTopo,
              DofOrdering &trialOrdering, int maxTestDegree, bool createSideCacheToo = false, bool tensorProductTopologyMeansSpaceTime=true);
   BasisCache(const Intrepid::FieldContainer<double> &physicalCellNodes, shards::CellTopology &cellTopo,
              DofOrdering &trialOrdering, int maxTestDegree, bool createSideCacheToo = false);
+  
   virtual ~BasisCache() {}
 
   Intrepid::FieldContainer<double> & getWeightedMeasures();
@@ -197,6 +211,7 @@ public:
   BasisCachePtr getVolumeBasisCache(); // from sideCache
 
   const std::vector<GlobalIndexType> & cellIDs();
+  void setCellIDs(const std::vector<GlobalIndexType> &cellIDs);
 
   CellTopoPtr cellTopology();
 
@@ -234,7 +249,8 @@ public:
   // (this comes up in imposeBC)
   virtual void setRefCellPoints(const Intrepid::FieldContainer<double> &pointsRefCell);
   virtual void setRefCellPoints(const Intrepid::FieldContainer<double> &pointsRefCell,
-                                const Intrepid::FieldContainer<double> &cubatureWeights);
+                                const Intrepid::FieldContainer<double> &cubatureWeights,
+                                int cubatureDegree = -1, bool recomputePhysicalMeasures = true);
   const Intrepid::FieldContainer<double> &getRefCellPoints();
   const Intrepid::FieldContainer<double> &getSideRefCellPointsInVolumeCoordinates();
 
@@ -251,15 +267,11 @@ public:
    */
   const Intrepid::FieldContainer<double> & getSideNormalsSpaceTime();
 
-  int getMaxCubatureDegree();
-
   int getSideIndex() const; // -1 if not sideCache
 
   virtual int getSpaceDim();
   
   bool cellTopologyIsSpaceTime();
-
-  void setMaxCubatureDegree(int value);
 
   void setTransformationFunction(TFunctionPtr<double> fxn, bool composeWithMeshTransformation = true);
 

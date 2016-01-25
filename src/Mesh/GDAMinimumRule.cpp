@@ -3103,23 +3103,36 @@ set<GlobalIndexType> GDAMinimumRule::getGlobalDofIndices(GlobalIndexType cellID,
 
 vector<GlobalIndexType> GDAMinimumRule::globalDofIndicesForFieldVariable(GlobalIndexType cellID, int varID)
 {
+  map<int, VarPtr> trialVars = _varFactory->trialVars();
+  VarPtr trialVar = trialVars[varID];
+  
+  EFunctionSpace fs = efsForSpace(trialVar->space());
+  TEUCHOS_TEST_FOR_EXCEPTION(!functionSpaceIsDiscontinuous(fs), std::invalid_argument, "globalDofIndicesForFieldVariable() only supports discontinuous field variables right now");
+  TEUCHOS_TEST_FOR_EXCEPTION(trialVar->varType() != FIELD, std::invalid_argument, "globalDofIndicesForFieldVariable() requires a discontinuous field variable");
+  
   CellConstraints constraints = getCellConstraints(cellID);
-  LocalDofMapperPtr dofMapper = getDofMapper(cellID, constraints, varID, VOLUME_INTERIOR_SIDE_ORDINAL);
+  SubCellDofIndexInfo dofIndexInfo = getOwnedGlobalDofIndices(cellID, constraints);
   
-  TEUCHOS_TEST_FOR_EXCEPTION(!dofMapper->isPermutation(), std::invalid_argument, "GDAMinimumRule only supports globalDofIndicesForFieldVariable() for discontinuous variables");
+  int spaceDim = _mesh->getTopology()->getDimension();
+  vector<GlobalIndexType> globalIndices(dofIndexInfo[spaceDim][0][trialVar->ID()].begin(),
+                                        dofIndexInfo[spaceDim][0][trialVar->ID()].end());
   
-  map<int, GlobalIndexType> permutationMap = dofMapper->getPermutationMap();
-  DofOrderingPtr trialOrdering = elementType(cellID)->trialOrderPtr;
-  BasisPtr volumeBasis = trialOrdering->getBasis(varID);
-  
-  const vector<int>* localDofIndices = &trialOrdering->getDofIndices(varID);
-  vector<GlobalIndexType> globalIndices;
-  for (int localDofIndex : *localDofIndices)
-  {
-    TEUCHOS_TEST_FOR_EXCEPTION(permutationMap.find(localDofIndex) == permutationMap.end(), std::invalid_argument,
-                               "Error: permutation map does not contain localDofIndex");
-    globalIndices.push_back(permutationMap[localDofIndex]);
-  }
+//  LocalDofMapperPtr dofMapper = getDofMapper(cellID, constraints, varID, VOLUME_INTERIOR_SIDE_ORDINAL);
+//  
+//  TEUCHOS_TEST_FOR_EXCEPTION(!dofMapper->isPermutation(), std::invalid_argument, "GDAMinimumRule only supports globalDofIndicesForFieldVariable() for discontinuous variables");
+//  
+//  map<int, GlobalIndexType> permutationMap = dofMapper->getPermutationMap();
+//  DofOrderingPtr trialOrdering = elementType(cellID)->trialOrderPtr;
+//  BasisPtr volumeBasis = trialOrdering->getBasis(varID);
+//  
+//  const vector<int>* localDofIndices = &trialOrdering->getDofIndices(varID);
+//  vector<GlobalIndexType> globalIndices;
+//  for (int localDofIndex : *localDofIndices)
+//  {
+//    TEUCHOS_TEST_FOR_EXCEPTION(permutationMap.find(localDofIndex) == permutationMap.end(), std::invalid_argument,
+//                               "Error: permutation map does not contain localDofIndex");
+//    globalIndices.push_back(permutationMap[localDofIndex]);
+//  }
   return globalIndices;
 }
 
@@ -3165,22 +3178,53 @@ LocalDofMapperPtr GDAMinimumRule::getDofMapper(GlobalIndexType cellID, CellConst
   DofOrderingPtr trialOrdering = _elementTypeForCell[cellID]->trialOrderPtr;
   map<int, VarPtr> trialVars = _varFactory->trialVars();
 
-//  printConstraintInfo(cellID);
-
-//  Intrepid::FieldContainer<bool> processedDofs(trialOrdering->totalDofs());
-//  processedDofs.initialize(false);
-
   typedef vector< SubBasisDofMapperPtr > BasisMap;
   map< int, BasisMap > volumeMap; // keys are variable IDs
   vector< map< int, BasisMap > > sideMaps(sideCount);
 
-  vector< set<GlobalIndexType> > fittableGlobalDofOrdinalsOnSides(sideCount);
-  for (int sideOrdinal=0; sideOrdinal<sideCount; sideOrdinal++)
+  bool determineFittableGlobalDofOrdinalsOnSides = false;
+  
+  if (varIDToMap != -1)
   {
-    if ((sideOrdinalToMap != -1) && (sideOrdinal != sideOrdinalToMap)) continue; // skip this side...
-    fittableGlobalDofOrdinalsOnSides[sideOrdinal] = getFittableGlobalDofIndices(cellID, constraints, sideOrdinal);
-//    cout << "sideOrdinal " << sideOrdinal;
-//    Camellia::print(", fittableGlobalDofIndices", fittableGlobalDofOrdinalsOnSides[sideOrdinal]);
+    // replace trialVars appropriately
+    map<int, VarPtr> oneEntryTrialVars;
+    oneEntryTrialVars[varIDToMap] = trialVars[varIDToMap];
+    trialVars = oneEntryTrialVars;
+  }
+  
+  for (auto varEntry : trialVars)
+  {
+    VarPtr var = varEntry.second;
+    bool varHasSupportOnVolume = (var->varType() == FIELD) || (var->varType() == TEST);
+    if (varHasSupportOnVolume)
+    {
+      // we will only care about this variable on the sides if it's not discontinuous
+      Camellia::EFunctionSpace fs = efsForSpace(var->space());
+      if (!functionSpaceIsDiscontinuous(fs))
+      {
+        determineFittableGlobalDofOrdinalsOnSides = true;
+        break;
+      }
+    }
+    else
+    {
+      // there is a trace variable of interest; we should determine fittable global dof ordinals on sides
+      determineFittableGlobalDofOrdinalsOnSides = true;
+      break;
+    }
+  }
+  
+  vector< set<GlobalIndexType> > fittableGlobalDofOrdinalsOnSides(sideCount);
+  
+  if (determineFittableGlobalDofOrdinalsOnSides)
+  {
+    for (int sideOrdinal=0; sideOrdinal<sideCount; sideOrdinal++)
+    {
+      if ((sideOrdinalToMap != -1) && (sideOrdinal != sideOrdinalToMap)) continue; // skip this side...
+      fittableGlobalDofOrdinalsOnSides[sideOrdinal] = getFittableGlobalDofIndices(cellID, constraints, sideOrdinal);
+  //    cout << "sideOrdinal " << sideOrdinal;
+  //    Camellia::print(", fittableGlobalDofIndices", fittableGlobalDofOrdinalsOnSides[sideOrdinal]);
+    }
   }
 
   set<GlobalIndexType> fittableGlobalDofOrdinalsInVolume; // just the interior dof ordinals
@@ -3194,17 +3238,10 @@ LocalDofMapperPtr GDAMinimumRule::getDofMapper(GlobalIndexType cellID, CellConst
   {
     VarPtr var = varIt->second;
     bool varHasSupportOnVolume = (var->varType() == FIELD) || (var->varType() == TEST);
-    bool omitVarEntry = (varIDToMap != -1) && (var->ID() != varIDToMap);
-
-    if (omitVarEntry) continue;
-
-//    if ((sideOrdinalToMap != -1) && varHasSupportOnVolume) {
-//      cout << "WARNING: looks like you're trying to impose BCs on a variable defined on the volume.  (For volume variables, we don't yet appropriately filter just the sides you're asking for--i.e. just the boundary--in getDofMapper).\n";
-//    }
 
     if (varHasSupportOnVolume)
     {
-      bool allowVolumeRestrictionToSide = true; // TODO: change to true to allow BCs to be imposed...
+      bool allowVolumeRestrictionToSide = true;
 
       if ((sideOrdinalToMap == -1) || (!allowVolumeRestrictionToSide))
       {

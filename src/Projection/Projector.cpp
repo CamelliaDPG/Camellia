@@ -347,7 +347,7 @@ void Projector<Scalar>::projectFunctionOntoBasisInterpolating(FieldContainer<Sca
                 subcord, domainTopo);
           }
         }
-        domainBasisCache->setRefCellPoints(refCellPoints, cubatureWeightsSubcell);
+        domainBasisCache->setRefCellPoints(refCellPoints, cubatureWeightsSubcell, domainBasisCache->cubatureDegree());
         TIPPtr<Scalar> ipForProjection = (d==0) ? ip_l2 : ip; // just use values at vertices (ignore derivatives)
         set<int> dofsToSkip = allDofs;
         for (auto dofOrdinal : subcellDofOrdinals)

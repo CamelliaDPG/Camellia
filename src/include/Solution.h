@@ -209,10 +209,6 @@ public:
 
   void setSolution(TSolutionPtr<Scalar> soln); // thisSoln = soln
 
-  void solutionValues(Intrepid::FieldContainer<Scalar> &values, ElementTypePtr elemTypePtr, int trialID,
-                      const Intrepid::FieldContainer<double> &physicalPoints,
-                      const Intrepid::FieldContainer<double> &sideRefCellPoints,
-                      int sideIndex);
   void solutionValues(Intrepid::FieldContainer<Scalar> &values, int trialID,
                       const Intrepid::FieldContainer<double> &physicalPoints); // searches for the elements that match the points provided
   void solutionValues(Intrepid::FieldContainer<Scalar> &values, int trialID, BasisCachePtr basisCache,
@@ -226,9 +222,6 @@ public:
 
   Scalar integrateSolution(int trialID);
   void integrateSolution(Intrepid::FieldContainer<Scalar> &values, ElementTypePtr elemTypePtr, int trialID);
-
-  void integrateFlux(Intrepid::FieldContainer<Scalar> &values, int trialID);
-  void integrateFlux(Intrepid::FieldContainer<Scalar> &values, ElementTypePtr elemTypePtr, int trialID);
 
   Scalar meanValue(int trialID);
   double meshMeasure();

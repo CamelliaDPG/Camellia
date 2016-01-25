@@ -1195,6 +1195,13 @@ Scalar TFunction<Scalar>::integrate(MeshPtr mesh, int cubatureDegreeEnrichment, 
   return MPIWrapper::sum(integral);
 }
 
+  template <typename Scalar>
+  bool TFunction<Scalar>::isZero(BasisCachePtr basisCache)
+  {
+    // default implementation: we only attest to being zero on basisCache if we are zero everywhere
+    return isZero();
+  }
+  
 template <typename Scalar>
 double TFunction<Scalar>::l2norm(Teuchos::RCP<Mesh> mesh, int cubatureDegreeEnrichment, bool spatialSidesOnly)
 {

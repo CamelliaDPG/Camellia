@@ -534,9 +534,25 @@ TEUCHOS_UNIT_TEST( StokesVGPFormulation, SaveAndLoad )
 
   loadedForm.initializeSolution(savePrefix,fieldPolyOrder,delta_k);
 
-  // delete the files we created
-  remove((savePrefix+".soln").c_str());
-  remove((savePrefix+".mesh").c_str());
+#ifdef HAVE_MPI
+  Epetra_MpiComm Comm(MPI_COMM_WORLD);
+  //cout << "rank: " << rank << " of " << numProcs << endl;
+#else
+  Epetra_SerialComm Comm;
+#endif
+  
+  Comm.Barrier(); // Barrier to make sure that everyone is done with the files before we delete them
+  
+  int rank = Teuchos::GlobalMPISession::getRank();
+  
+  if (rank == 0)
+  {
+    // delete the files we created
+    remove((savePrefix+".soln").c_str());
+    remove((savePrefix+".mesh").c_str());
+    remove((savePrefix+"_stream.soln").c_str());
+    remove((savePrefix+"_stream.mesh").c_str());
+  }
 
 //    GDAMinimumRule* minRule = dynamic_cast<GDAMinimumRule*> (loadedForm.solution()->mesh()->globalDofAssignment().get());
 

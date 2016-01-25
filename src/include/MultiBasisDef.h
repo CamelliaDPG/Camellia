@@ -287,10 +287,13 @@ void MultiBasis<Scalar, ArrayScalar>::getValues(ArrayScalar &outputValues, const
     computeCellJacobians(cellJacobian,cellJacobInv,cellJacobDet, inputPointsRefCell,refCellIndex);
 
     int numCells = 1;
+    // TODO: it would be nice to rewrite this to use BasisCache instead of BasisEvaluation.  This
+    //       is the only code that uses this version of BasisEvaluation::getTransformedValues(), which
+    //       is pretty redundant with the other version of BasisEvaluation::getTransformedValues().
     Teuchos::RCP< ArrayScalar > transformedValues = BasisEvaluation::getTransformedValues(basis,
-        (Camellia::EOperator)operatorType,
-        inputPointsRefCell, numCells,
-        cellJacobian, cellJacobInv, cellJacobDet);
+                                                                                          (Camellia::EOperator)operatorType,
+                                                                                          inputPointsRefCell, numCells,
+                                                                                          cellJacobian, cellJacobInv, cellJacobDet);
 
     //    cout << "transformedValues for basis " << basisIndex << ":\n" << *transformedValues;
     Teuchos::Array<int> basisValueLocation = outputValueLocation;

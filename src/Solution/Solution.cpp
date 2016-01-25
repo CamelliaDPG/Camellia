@@ -911,7 +911,7 @@ void TSolution<Scalar>::populateStiffnessAndLoad()
       // sample an element to make sure that the basis used for trialID is nodal
       // (this is assumed in our imposition mechanism)
       GlobalIndexType firstActiveCellID = *_mesh->getActiveCellIDs().begin();
-      ElementTypePtr elemTypePtr = _mesh->getElement(firstActiveCellID)->elementType();
+      ElementTypePtr elemTypePtr = _mesh->getElementType(firstActiveCellID);
       BasisPtr trialBasis = elemTypePtr->trialOrderPtr->getBasis(trialID);
       if (!trialBasis->isNodal())
       {
@@ -1553,7 +1553,7 @@ void TSolution<Scalar>::imposeZMCsUsingLagrange()
     // sample an element to make sure that the basis used for trialID is nodal
     // (this is assumed in our imposition mechanism)
     GlobalIndexType firstActiveCellID = *_mesh->getActiveCellIDs().begin();
-    ElementTypePtr elemTypePtr = _mesh->getElement(firstActiveCellID)->elementType();
+    ElementTypePtr elemTypePtr = _mesh->getElementType(firstActiveCellID);
     BasisPtr trialBasis = elemTypePtr->trialOrderPtr->getBasis(trialID);
     if (!trialBasis->isNodal())
     {
@@ -2018,234 +2018,6 @@ void TSolution<Scalar>::integrateSolution(Intrepid::FieldContainer<Scalar> &valu
 }
 
 template <typename Scalar>
-void TSolution<Scalar>::integrateFlux(Intrepid::FieldContainer<Scalar> &values, int trialID)
-{
-  vector<ElementTypePtr> elemTypes = _mesh->elementTypes();
-  vector<ElementTypePtr>::iterator elemTypeIt;
-  for (elemTypeIt = elemTypes.begin(); elemTypeIt != elemTypes.end(); elemTypeIt++)
-  {
-    ElementTypePtr elemTypePtr = *(elemTypeIt);
-    int numCellsOfType = _mesh->numElementsOfType(elemTypePtr);
-    Intrepid::FieldContainer<Scalar> valuesForType(numCellsOfType);
-    integrateFlux(valuesForType,elemTypePtr,trialID);
-    // copy into values:
-    for (int cellIndex=0; cellIndex<numCellsOfType; cellIndex++)
-    {
-      int cellID = _mesh->cellID(elemTypePtr,cellIndex);
-      values(cellID) = valuesForType(cellIndex);
-    }
-  }
-}
-
-template <typename Scalar>
-void TSolution<Scalar>::integrateFlux(Intrepid::FieldContainer<Scalar> &values, ElementTypePtr elemTypePtr, int trialID)
-{
-  values.initialize(0.0);
-
-  Intrepid::FieldContainer<double> physicalCellNodes = _mesh()->physicalCellNodesGlobal(elemTypePtr);
-
-  int numCells = physicalCellNodes.dimension(0);
-  unsigned spaceDim = physicalCellNodes.dimension(2);
-
-  DofOrdering dofOrdering = *(elemTypePtr->trialOrderPtr.get());
-
-  CellTopoPtr cellTopo = elemTypePtr->cellTopoPtr;
-
-  const vector<int>* sides = &dofOrdering.getSidesForVarID(trialID);
-  for (int sideIndex : *sides)
-  {
-    // Get numerical integration points and weights
-    CubatureFactory  cubFactory;
-    if (! dofOrdering.hasBasisEntry(trialID, sideIndex)) continue;
-
-    BasisPtr basis = dofOrdering.getBasis(trialID,sideIndex);
-    int basisRank = dofOrdering.getBasisRank(trialID);
-    int cubDegree = 2*basis->getDegree();
-
-    bool boundaryIntegral;
-    if (_bf != Teuchos::null)
-      boundaryIntegral = _bf->isFluxOrTrace(trialID);
-    else
-      boundaryIntegral = _mesh()->bilinearForm()->isFluxOrTrace(trialID);
-    if ( !boundaryIntegral )
-    {
-      TEUCHOS_TEST_FOR_EXCEPTION(true, std::invalid_argument, "integrateFlux() called for field variable.");
-    }
-
-    CellTopoPtr side = (cellTopo->getSubcell(spaceDim-1,sideIndex)); // create relevant subcell (side) topology
-    int sideDim = side->getDimension();
-    Teuchos::RCP< Intrepid::Cubature<double> > sideCub = cubFactory.create(side, cubDegree);
-    int numCubPoints = sideCub->getNumPoints();
-    Intrepid::FieldContainer<double> cubPointsSide(numCubPoints, sideDim); // cubature points from the pov of the side (i.e. a 1D set)
-    Intrepid::FieldContainer<double> cubWeightsSide(numCubPoints);
-    Intrepid::FieldContainer<double> cubPointsSideRefCell(numCubPoints, spaceDim); // cubPointsSide from the pov of the ref cell
-    Intrepid::FieldContainer<double> jacobianSideRefCell(numCells, numCubPoints, spaceDim, spaceDim);
-
-    sideCub->getCubature(cubPointsSide, cubWeightsSide);
-
-    // compute geometric cell information
-    //cout << "computing geometric cell info for boundary integral." << endl;
-    CamelliaCellTools::mapToReferenceSubcell(cubPointsSideRefCell, cubPointsSide, sideDim, (int)sideIndex, cellTopo);
-    CamelliaCellTools::setJacobian(jacobianSideRefCell, cubPointsSideRefCell, physicalCellNodes, cellTopo);
-
-    // map side cubature points in reference parent cell domain to physical space
-    Intrepid::FieldContainer<double> physCubPoints(numCells, numCubPoints, spaceDim);
-    CamelliaCellTools::mapToPhysicalFrame(physCubPoints, cubPointsSideRefCell, physicalCellNodes, cellTopo);
-
-    if (cellTopo->getTensorialDegree() > 0)
-    {
-      TEUCHOS_TEST_FOR_EXCEPTION(true,std::invalid_argument,"integrateFlux() doesn't support tensorial degree > 0.");
-    }
-
-    Intrepid::FieldContainer<double> weightedMeasure(numCells, numCubPoints);
-    Intrepid::FunctionSpaceTools::computeEdgeMeasure<double>(weightedMeasure, jacobianSideRefCell,
-        cubWeightsSide, sideIndex, cellTopo->getShardsTopology());
-
-    Intrepid::FieldContainer<Scalar> computedValues(numCells,numCubPoints);
-
-    solutionValues(computedValues, elemTypePtr, trialID, physCubPoints, cubPointsSide, sideIndex);
-
-    // weight computedValues for integration:
-    for (int cellIndex=0; cellIndex<numCells; cellIndex++)
-    {
-      for (int ptIndex=0; ptIndex<numCubPoints; ptIndex++)
-      {
-        computedValues(cellIndex,ptIndex) *= weightedMeasure(cellIndex,ptIndex);
-      }
-    }
-
-    // compute the integral
-    int numPoints = computedValues.dimension(1);
-    for (int cellIndex=0; cellIndex<numCells; cellIndex++)
-    {
-      for (int ptIndex=0; ptIndex<numPoints; ptIndex++)
-      {
-        values(cellIndex) += computedValues(cellIndex,ptIndex);
-      }
-    }
-  }
-}
-
-template <typename Scalar>
-void TSolution<Scalar>::solutionValues(Intrepid::FieldContainer<Scalar> &values,
-                                       ElementTypePtr elemTypePtr,
-                                       int trialID,
-                                       const Intrepid::FieldContainer<double> &physicalPoints,
-                                       const Intrepid::FieldContainer<double> &sideRefCellPoints,
-                                       int sideIndex)
-{
-  // currently, we only support computing solution values on all the cells of a given type at once.
-  // values(numCellsForType,numPoints[,spaceDim (for vector-valued)])
-  // physicalPoints(numCellsForType,numPoints,spaceDim)
-  Intrepid::FieldContainer<Scalar> solnCoeffs = solutionForElementTypeGlobal(elemTypePtr); // (numcells, numLocalTrialDofs)
-  Intrepid::FieldContainer<double> physicalCellNodes = _mesh->physicalCellNodesGlobal(elemTypePtr);
-
-  int numCells = physicalCellNodes.dimension(0);
-  int numPoints = physicalPoints.dimension(1);
-  CellTopoPtr cellTopo = elemTypePtr->cellTopoPtr;
-  int spaceDim = cellTopo->getDimension();
-
-  //  cout << "physicalCellNodes: " << endl << physicalCellNodes;
-  //  cout << "physicalPoints: " << endl << physicalPoints;
-  //  cout << "refElemPoints: " << endl << refElemPoints;
-
-  // Containers for Jacobian
-  Intrepid::FieldContainer<double> cellJacobian(numCells, numPoints, spaceDim, spaceDim);
-  Intrepid::FieldContainer<double> cellJacobInv(numCells, numPoints, spaceDim, spaceDim);
-  Intrepid::FieldContainer<double> cellJacobDet(numCells, numPoints);
-
-  Teuchos::RCP<DofOrdering> trialOrder = elemTypePtr->trialOrderPtr;
-
-  BasisPtr basis = trialOrder->getBasis(trialID,sideIndex);
-
-  int basisRank = trialOrder->getBasisRank(trialID);
-  int basisCardinality = basis->getCardinality();
-
-  TEUCHOS_TEST_FOR_EXCEPTION( ( basisRank==0 ) && values.rank() != 2,
-                              std::invalid_argument,
-                              "for scalar values, values container should be dimensioned(numCells,numPoints).");
-  TEUCHOS_TEST_FOR_EXCEPTION( ( basisRank==1 ) && values.rank() != 3,
-                              std::invalid_argument,
-                              "for scalar values, values container should be dimensioned(numCells,numPoints,spaceDim).");
-  TEUCHOS_TEST_FOR_EXCEPTION( values.dimension(0) != numCells,
-                              std::invalid_argument,
-                              "values.dimension(0) != numCells.");
-  TEUCHOS_TEST_FOR_EXCEPTION( values.dimension(1) != numPoints,
-                              std::invalid_argument,
-                              "values.dimension(1) != numPoints.");
-  TEUCHOS_TEST_FOR_EXCEPTION( basisRank==1 && values.dimension(2) != spaceDim,
-                              std::invalid_argument,
-                              "vector values.dimension(1) != spaceDim.");
-  TEUCHOS_TEST_FOR_EXCEPTION( physicalPoints.rank() != 3,
-                              std::invalid_argument,
-                              "physicalPoints.rank() != 3.");
-  TEUCHOS_TEST_FOR_EXCEPTION( physicalPoints.dimension(2) != spaceDim,
-                              std::invalid_argument,
-                              "physicalPoints.dimension(2) != spaceDim.");
-
-  int oneCell = 1;
-  Intrepid::FieldContainer<double> thisCellJacobian(oneCell,numPoints, spaceDim, spaceDim);
-  Intrepid::FieldContainer<double> thisCellJacobInv(oneCell,numPoints, spaceDim, spaceDim);
-  Intrepid::FieldContainer<double> thisCellJacobDet(oneCell,numPoints);
-  Intrepid::FieldContainer<double> thisRefElemPoints(numPoints,spaceDim);
-
-  CellTopoPtr side = cellTopo->getSubcell(spaceDim-1,sideIndex); // create relevant subcell (side) topology
-  int sideDim = spaceDim-1;
-  Intrepid::FieldContainer<double> cubPointsSideRefCell(numPoints, spaceDim); // cubPointsSide from the pov of the ref cell
-
-  // compute geometric cell information
-  //cout << "computing geometric cell info for boundary integral." << endl;
-  CamelliaCellTools::mapToReferenceSubcell(cubPointsSideRefCell, sideRefCellPoints, sideDim, (int)sideIndex, cellTopo);
-  CamelliaCellTools::setJacobian(cellJacobian, cubPointsSideRefCell, physicalCellNodes, cellTopo);
-  Intrepid::CellTools<double>::setJacobianDet(cellJacobDet, cellJacobian );
-  Intrepid::CellTools<double>::setJacobianInv(cellJacobInv, cellJacobian );
-
-  values.initialize(0.0);
-
-  for (int cellIndex=0; cellIndex<numCells; cellIndex++)
-  {
-    thisCellJacobian.setValues(&cellJacobian(cellIndex,0,0,0),numPoints*spaceDim*spaceDim);
-    thisCellJacobInv.setValues(&cellJacobInv(cellIndex,0,0,0),numPoints*spaceDim*spaceDim);
-    thisCellJacobDet.setValues(&cellJacobDet(cellIndex,0),numPoints);
-    Teuchos::RCP< Intrepid::FieldContainer<double> > transformedValues;
-    transformedValues = BasisEvaluation::getTransformedValues(basis,  OP_VALUE, sideRefCellPoints, oneCell,
-                        thisCellJacobian, thisCellJacobInv, thisCellJacobDet);
-
-    //    cout << "cellIndex " << cellIndex << " thisRefElemPoints: " << thisRefElemPoints;
-    //    cout << "cellIndex " << cellIndex << " transformedValues: " << *transformedValues;
-
-    // now, apply coefficient weights:
-    for (int ptIndex=0; ptIndex < numPoints; ptIndex++)
-    {
-      for (int dofOrdinal=0; dofOrdinal < basisCardinality; dofOrdinal++)
-      {
-        int localDofIndex = trialOrder->getDofIndex(trialID, dofOrdinal, sideIndex);
-        //        cout << "localDofIndex " << localDofIndex << " solnCoeffs(cellIndex,localDofIndex): " << solnCoeffs(cellIndex,localDofIndex) << endl;
-        if (basisRank == 0)
-        {
-          values(cellIndex,ptIndex) += (*transformedValues)(0,dofOrdinal,ptIndex) * solnCoeffs(cellIndex,localDofIndex);
-        }
-        else
-        {
-          for (int i=0; i<spaceDim; i++)
-          {
-            values(cellIndex,ptIndex,i) += (*transformedValues)(0,dofOrdinal,ptIndex,i) * solnCoeffs(cellIndex,localDofIndex);
-          }
-        }
-      }
-      /*if (basisRank == 0) {
-       cout << "solutionValue for point (" << physicalPoints(cellIndex,ptIndex,0) << ",";
-       cout << physicalPoints(cellIndex,ptIndex,1) << "): " << values(cellIndex,ptIndex) << endl;
-       } else {
-       cout << "solutionValue for point (" << physicalPoints(cellIndex,ptIndex,0) << ",";
-       cout << physicalPoints(cellIndex,ptIndex,1) << "): " << "(" << values(cellIndex,ptIndex,0);
-       cout << "," << values(cellIndex,ptIndex,1) << ")" << endl;
-       }*/
-    }
-  }
-}
-
-template <typename Scalar>
 double TSolution<Scalar>::energyErrorTotal()
 {
   narrate("energyErrorTotal()");
@@ -2583,7 +2355,7 @@ void TSolution<Scalar>::solutionValues(Intrepid::FieldContainer<Scalar> &values,
 
     Intrepid::FieldContainer<Scalar>* solnCoeffs = &_solutionForCellIDGlobal[cellID];
 
-    DofOrderingPtr trialOrder = _mesh->getElement(cellID)->elementType()->trialOrderPtr;
+    DofOrderingPtr trialOrder = _mesh->getElementType(cellID)->trialOrderPtr;
 
     BasisPtr basis;
     if (fluxOrTrace)
@@ -3150,7 +2922,7 @@ void TSolution<Scalar>::basisCoeffsForTrialOrder(Intrepid::FieldContainer<Scalar
 template <typename Scalar>
 void TSolution<Scalar>::solnCoeffsForCellID(Intrepid::FieldContainer<Scalar> &solnCoeffs, GlobalIndexType cellID, int trialID, int sideIndex)
 {
-  Teuchos::RCP< DofOrdering > trialOrder = _mesh->getElement(cellID)->elementType()->trialOrderPtr;
+  Teuchos::RCP< DofOrdering > trialOrder = _mesh->getElementType(cellID)->trialOrderPtr;
 
   if (_solutionForCellIDGlobal.find(cellID) == _solutionForCellIDGlobal.end() )
   {
@@ -3256,7 +3028,7 @@ void TSolution<Scalar>::setSolnCoeffsForCellID(Intrepid::FieldContainer<Scalar> 
 template <typename Scalar>
 void TSolution<Scalar>::setSolnCoeffsForCellID(Intrepid::FieldContainer<Scalar> &solnCoeffsToSet, GlobalIndexType cellID, int trialID, int sideIndex)
 {
-  ElementTypePtr elemTypePtr = _mesh->getElement(cellID)->elementType();
+  ElementTypePtr elemTypePtr = _mesh->getElementType(cellID);
 
   Teuchos::RCP< DofOrdering > trialOrder = elemTypePtr->trialOrderPtr;
   BasisPtr basis = trialOrder->getBasis(trialID,sideIndex);
@@ -3494,101 +3266,7 @@ void TSolution<Scalar>::writeFieldsToFile(int trialID, const string &filePath)
 template <typename Scalar>
 void TSolution<Scalar>::writeFluxesToFile(int trialID, const string &filePath)
 {
-
-  ofstream fout(filePath.c_str());
-  fout << setprecision(15);
-  vector< ElementTypePtr > elementTypes = _mesh->elementTypes();
-  vector< ElementTypePtr >::iterator elemTypeIt;
-  int spaceDim = 2; // TODO: generalize to 3D...
-
-  for (elemTypeIt = elementTypes.begin(); elemTypeIt != elementTypes.end(); elemTypeIt++)   //thru quads/triangles/etc
-  {
-
-    ElementTypePtr elemTypePtr = *(elemTypeIt);
-    CellTopoPtr cellTopo = elemTypePtr->cellTopoPtr;
-    int numSides = cellTopo->getSideCount();
-
-    Intrepid::FieldContainer<double> vertexPoints, physPoints;
-    _mesh->verticesForElementType(vertexPoints,elemTypePtr); //stores vertex points for this element
-    Intrepid::FieldContainer<double> physicalCellNodes = _mesh()->physicalCellNodesGlobal(elemTypePtr);
-
-    int numCells = vertexPoints.dimension(0);
-    // takes centroid of all cells
-    int numVertices = vertexPoints.dimension(1);
-    Intrepid::FieldContainer<double> cellIDs(numCells);
-    for (int cellIndex=0; cellIndex<numCells; cellIndex++)
-    {
-      Intrepid::FieldContainer<double> cellCentroid(spaceDim);
-      cellCentroid.initialize(0.0);
-      for (int vertIndex=0; vertIndex<numVertices; vertIndex++)
-      {
-        for (int dimIndex=0; dimIndex<spaceDim; dimIndex++)
-        {
-          cellCentroid(dimIndex) += vertexPoints(cellIndex,vertIndex,dimIndex);
-        }
-      }
-      for (int dimIndex=0; dimIndex<spaceDim; dimIndex++)
-      {
-        cellCentroid(dimIndex) /= numVertices;
-      }
-      cellCentroid.resize(1,spaceDim); // only one cell
-      int cellID = _mesh->elementsForPoints(cellCentroid)[0]->cellID();
-      cellIDs(cellIndex) = cellID;
-    }
-
-    for (int sideIndex=0; sideIndex < numSides; sideIndex++)
-    {
-
-      CubatureFactory  cubFactory;
-      int cubDegree = 15;//arbitrary number of points per cell, make dep on basis degree?
-      CellTopoPtr side = cellTopo->getSubcell(spaceDim-1,sideIndex);
-      int sideDim = side->getDimension();
-      Teuchos::RCP<Intrepid::Cubature<double> > sideCub = cubFactory.create(side, cubDegree);
-      int numCubPoints = sideCub->getNumPoints();
-      Intrepid::FieldContainer<double> cubPointsSideRefCell(numCubPoints, spaceDim); // just need the reference cell cubature points - map to physical space in n-D space
-      Intrepid::FieldContainer<double> cubPointsSide(numCubPoints, sideDim);
-      Intrepid::FieldContainer<double> cubWeightsSide(numCubPoints);// dummy for now
-
-      sideCub->getCubature(cubPointsSide, cubWeightsSide);
-
-      // compute geometric cell information
-      CamelliaCellTools::mapToReferenceSubcell(cubPointsSideRefCell, cubPointsSide, sideDim, sideIndex, cellTopo);
-
-      // map side cubature points in reference parent cell domain to physical space
-      Intrepid::FieldContainer<double> physCubPoints(numCells, numCubPoints, spaceDim);
-      CamelliaCellTools::mapToPhysicalFrame(physCubPoints, cubPointsSideRefCell, physicalCellNodes, cellTopo);
-
-      // we now have cubPointsSideRefCell
-      Intrepid::FieldContainer<double> computedValues(numCells,numCubPoints); // first arg = 1 cell only
-      solutionValues(computedValues, elemTypePtr, trialID, physCubPoints, cubPointsSide, sideIndex);
-
-      // NOW loop over all cells to write solution to file
-      for (int cellIndex=0; cellIndex < numCells; cellIndex++)
-      {
-        Intrepid::FieldContainer<double> cellParities = _mesh->cellSideParitiesForCell( cellIDs(cellIndex) );
-        for (int pointIndex = 0; pointIndex < numCubPoints; pointIndex++)
-        {
-          for (int dimInd=0; dimInd<spaceDim; dimInd++)
-          {
-            fout << physCubPoints(cellIndex,pointIndex,dimInd) << " ";
-          }
-          /* // if we can figure out how to undo the parity negation on fluxes, do so here
-           if (_mesh->bilinearForm()->functionSpaceForTrial(trialID)==Camellia::FUNCTION_SPACE_HVOL){
-           computedValues(cellIndex,pointIndex) *= cellParities(sideIndex);
-           }
-           */
-          fout << computedValues(cellIndex,pointIndex) << endl;
-        }
-        // insert NaN for matlab to plot discontinuities - WILL NOT WORK IN 3D
-        for (int dimInd=0; dimInd<spaceDim; dimInd++)
-        {
-          fout << "NaN" << " ";
-        }
-        fout << "NaN" << endl;
-      }
-    }
-  }
-  fout.close();
+  TEUCHOS_TEST_FOR_EXCEPTION(true,std::invalid_argument,"This method is no longer supported.  Use HDF5Exporter instead.");
 }
 
 template <typename Scalar>
@@ -3756,8 +3434,8 @@ Epetra_Map TSolution<Scalar>::getPartitionMap(PartitionIndexType rank, set<Globa
     int zeroMeanConstraintsSize, Epetra_Comm* Comm )
 {
   int numGlobalLagrange = _lagrangeConstraints->numGlobalConstraints();
-  vector< ElementPtr > elements = _mesh->elementsInPartition(rank);
-  IndexType numMyElements = elements.size();
+  const set<GlobalIndexType>* cellIDsInPartition = &_mesh->globalDofAssignment()->cellsInPartition(rank);
+  IndexType numMyElements = cellIDsInPartition->size();
   int numElementLagrange = _lagrangeConstraints->numElementConstraints() * numMyElements;
   int globalNumElementLagrange = _lagrangeConstraints->numElementConstraints() * _mesh->numActiveElements();
 
@@ -4334,7 +4012,7 @@ void TSolution<Scalar>::readFromFile(const string &filePath)
       cout << "No cellID " << cellID << endl;
       TEUCHOS_TEST_FOR_EXCEPTION(true, std::invalid_argument, "Could not find cellID in solution file in mesh.");
     }
-    ElementTypePtr elemType = _mesh->getElement(cellID)->elementType();
+    ElementTypePtr elemType = _mesh->getElementType(cellID);
     int numDofsExpected = elemType->trialOrderPtr->totalDofs();
 
     if ( linestream.good() )

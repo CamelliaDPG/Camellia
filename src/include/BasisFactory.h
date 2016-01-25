@@ -70,7 +70,9 @@ private:
   map< pair< pair< Camellia::Basis<>*, int>, Camellia::EFunctionSpace>, BasisPtr >
   _conformingSpaceTimeBases; // keys are (shards Topo basis, temporal degree, temporal function space)
 
-
+  map<unsigned, BasisPtr> _nodalBasisForShardsTopology;
+  map<CellTopologyKey, BasisPtr> _nodalBasisForTopology;
+  
   // the following maps let us remember what arguments were used to create a basis:
   // (this is useful to, say, create a basis again, but now with polyOrder+1)
   map< Camellia::Basis<>*, int > _polyOrders; // allows lookup of poly order used to create basis

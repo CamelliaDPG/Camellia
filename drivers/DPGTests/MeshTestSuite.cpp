@@ -594,18 +594,22 @@ bool MeshTestSuite::testFluxIntegration()
 
     solution.solve();
 
-    FieldContainer<double> integral(myMesh->numElements());
-
     VarPtr phi_hat = PoissonBilinearForm::poissonBilinearForm()->varFactory()->traceVar(PoissonBilinearForm::S_PHI_HAT);
-
-    solution.integrateFlux(integral,phi_hat->ID());
-
-    double diff = abs(expectedValues[i] - integral(0));
+    
+    SolutionPtr solnPtr = Teuchos::rcp(&solution,false);
+    FunctionPtr phiFxn = Function::solution(phi_hat, solnPtr);
+    
+    int cellID = 0;
+    BasisCachePtr basisCache = BasisCache::basisCacheForCell(myMesh, cellID);
+    FieldContainer<double> cellIntegrals(1);
+    phiFxn->integrate(cellIntegrals, basisCache);
+    
+    double diff = abs(expectedValues[i] - cellIntegrals(0));
 
     if (diff > tol)
     {
       success = false;
-      cout << "Failure: Integral of phi_hat solution of Poisson was " << integral(0) << "; expected " << expectedValues[i] << endl;
+      cout << "Failure: Integral of phi_hat solution of Poisson was " << cellIntegrals(0) << "; expected " << expectedValues[i] << endl;
     }
   }
   return success;

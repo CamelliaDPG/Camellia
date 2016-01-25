@@ -296,8 +296,8 @@ public:
   void hRefine(const set<GlobalIndexType> &cellIDs, Teuchos::RCP<RefinementPattern> refPattern);
 
   using RefinementObserver::hRefine; // avoid compiler warnings about the hRefine() methods below.
-  void hRefine(const vector<GlobalIndexType> &cellIDs);
-  void hRefine(const set<GlobalIndexType> &cellIDs);
+  void hRefine(const vector<GlobalIndexType> &cellIDs, bool repartitionAndRebuild = true);
+  void hRefine(const set<GlobalIndexType> &cellIDs, bool repartitionAndRebuild = true);
 
   void hRefine(const set<GlobalIndexType> &cellIDs, Teuchos::RCP<RefinementPattern> refPattern, bool repartitionAndRebuild);
   void hRefine(const vector<GlobalIndexType> &cellIDs, Teuchos::RCP<RefinementPattern> refPattern);

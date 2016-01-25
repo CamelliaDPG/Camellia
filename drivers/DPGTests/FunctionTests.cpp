@@ -126,7 +126,7 @@ void FunctionTests::setup()
     }
   }
 
-  _elemType = _spectralConfusionMesh->getElement(0)->elementType();
+  _elemType = _spectralConfusionMesh->getElementType(0);
   vector<GlobalIndexType> cellIDs;
   GlobalIndexType cellID = 0;
   cellIDs.push_back(cellID);
@@ -267,7 +267,7 @@ bool FunctionTests::testBasisSumFunction()
   int cellID = 0;
   double tol = 1e-16; // overly restrictive, just for now.
 
-  DofOrderingPtr trialSpace = spectralConfusionMesh->getElement(cellID)->elementType()->trialOrderPtr;
+  DofOrderingPtr trialSpace = spectralConfusionMesh->getElementType(cellID)->trialOrderPtr;
   set<int> trialIDs = trialSpace->getVarIDs();
 
   BasisCachePtr volumeCache = BasisCache::basisCacheForCell(spectralConfusionMesh, cellID);

@@ -265,9 +265,9 @@ void BilinearFormUtility<Scalar>::computeStiffnessMatrix(FieldContainer<Scalar> 
 template <typename Scalar>
 void BilinearFormUtility<Scalar>::computeStiffnessMatrixForCell(FieldContainer<Scalar> &stiffness, Teuchos::RCP<Mesh> mesh, int cellID)
 {
-  DofOrderingPtr trialOrder = mesh->getElement(cellID)->elementType()->trialOrderPtr;
-  DofOrderingPtr testOrder  = mesh->getElement(cellID)->elementType()->testOrderPtr;
-  CellTopoPtr     cellTopo  = mesh->getElement(cellID)->elementType()->cellTopoPtr;
+  DofOrderingPtr trialOrder = mesh->getElementType(cellID)->trialOrderPtr;
+  DofOrderingPtr testOrder  = mesh->getElementType(cellID)->testOrderPtr;
+  CellTopoPtr     cellTopo  = mesh->getElementType(cellID)->cellTopoPtr;
   FieldContainer<double> physicalCellNodes = mesh->physicalCellNodesForCell(cellID);
   FieldContainer<double> cellSideParities  = mesh->cellSideParitiesForCell(cellID);
   int numCells = 1;
