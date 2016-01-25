@@ -81,6 +81,11 @@ public:
   GlobalIndexType getNumElements(int refinementNumber);
   GlobalIndexType getNumDofs(int refinementNumber);
   
+  // ! computes approximate gradients in the scalar field variable indicated.  It is not clear that this is the
+  // ! best place for this, but it's placed here for now because this can be useful in context of refinements.
+  static void computeApproximateGradients(SolutionPtr soln, VarPtr u, const std::vector<GlobalIndexType> &cells,
+                                          std::vector<double> &gradient_l2_norm, double weightWithPowerOfH);
+  
   virtual ~TRefinementStrategy() {}
 };
 
