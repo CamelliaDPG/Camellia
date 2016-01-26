@@ -542,8 +542,8 @@ int main(int argc, char *argv[])
     if (!steady)
     {
       double t0 = 0;
-      double t1 = 10;
-      int temporalDivisions = 10;
+      double t1 = 4;
+      int temporalDivisions = 4;
       meshTopo = MeshFactory::spaceTimeMeshTopology(meshTopo, t0, t1, temporalDivisions);
     }
   }
@@ -688,6 +688,7 @@ int main(int argc, char *argv[])
     BCPtr bc = form.solutionIncrement()->bc();
 
     FunctionPtr zero = Function::zero();
+    FunctionPtr one = Function::constant(1);
     SpatialFilterPtr leftX  = SpatialFilter::matchingX(-3);
     SpatialFilterPtr rightX = SpatialFilter::matchingX(9);
     SpatialFilterPtr leftY  = SpatialFilter::matchingY(-4.5);
@@ -699,12 +700,30 @@ int main(int argc, char *argv[])
     double meshHeight = 9;
     FunctionPtr decay = Teuchos::rcp(new Exp_at(-10));
     FunctionPtr perturbation = Teuchos::rcp(new Sin_ay(2*pi/meshHeight));
-    FunctionPtr perturbed = Function::constant(1) + 0.01*decay*perturbation;
+    // FunctionPtr perturbed = Function::constant(1) + 0.01*decay*perturbation;
+    // FunctionPtr r = PolarizedFunction::r();
+    // FunctionPtr cos_theta = PolarizedFunction::cos_theta;
+    // FunctionPtr sin_theta = PolarizedFunction::sin_theta;
+    // FunctionPtr ur = (one-0.5*0.5/(r*r))*cos_theta;
+    // FunctionPtr utheta = -(one+0.5*0.5/(r*r))*sin_theta;
+    FunctionPtr x1 = Function::xn(1);
+    FunctionPtr y1 = Function::yn(1);
+    FunctionPtr x2 = Function::xn(2);
+    FunctionPtr y2 = Function::yn(2);
+    double R2 = 0.25;
     if (steady)
-      u1_exact = Function::constant(1);
+    {
+      // u1_exact = Function::constant(1);
+      u1_exact = (R2*(y2-x2)+(x2+y2)*(x2+y2))/((x2+y2)*(x2+y2));
+      u2_exact = -(2*R2*x1*y1)/((x2+y2)*(x2+y2));
+    }
     else
-      u1_exact = Function::min(Function::tn(1),Function::constant(1))*perturbed;
-    u2_exact = zero;
+    {
+      // u1_exact = Function::min(Function::tn(1),Function::constant(1))*perturbed;
+      u1_exact = (R2*(y2-x2)+(x2+y2)*(x2+y2))/((x2+y2)*(x2+y2)) + 0.1*decay*perturbation;
+      u2_exact = -(2*R2*x1*y1)/((x2+y2)*(x2+y2));
+    }
+    // u2_exact = zero;
 
     u_exact = Function::vectorize(u1_exact,u2_exact);
     form.addInflowCondition(leftX,  u_exact);
@@ -733,6 +752,11 @@ int main(int argc, char *argv[])
     if (!steady)
       form.addInitialCondition(0, u_exact);
   }
+
+  map<int, FunctionPtr> initialGuess;
+  initialGuess[form.u(1)->ID()] = u1_exact;
+  initialGuess[form.u(2)->ID()] = u2_exact;
+  form.solution()->projectOntoMesh(initialGuess);
 
   double l2NormOfIncrement = 1.0;
   int stepNumber = 0;
