@@ -412,8 +412,9 @@ int main(int argc, char *argv[])
   cmdp.setOption("useCondensedSolve", "useStandardSolve", &useCondensedSolve);
   bool useConformingTraces = false;
   cmdp.setOption("conformingTraces", "nonconformingTraces", &useConformingTraces, "use conforming traces");
-  int polyOrder = 2, delta_k = 2;
+  int polyOrder = 2, delta_k = 3;
   cmdp.setOption("polyOrder",&polyOrder,"polynomial order for field variable u");
+  cmdp.setOption("delta_k",&delta_k,"polynomial enrichment for test functions");
   int polyOrderCoarse = 1;
   double cgTol = 1e-6;
   cmdp.setOption("cgTol", &cgTol, "iterative solver tolerance");
