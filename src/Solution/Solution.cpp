@@ -113,6 +113,7 @@
 #endif
 
 using namespace Camellia;
+using namespace Intrepid;
 
 template <typename Scalar>
 double TSolution<Scalar>::conditionNumberEstimate( Epetra_LinearProblem & problem )
@@ -532,6 +533,519 @@ template <typename Scalar>
 bool TSolution<Scalar>::cellHasCoefficientsAssigned(GlobalIndexType cellID)
 {
   return _solutionForCellIDGlobal.find(cellID) != _solutionForCellIDGlobal.end();
+}
+
+template <typename Scalar>
+void TSolution<Scalar>::applyDGJumpTerms()
+{
+  // accumulate any inter-element DG terms
+  // we integrate over the interior faces.
+  
+  /*
+   We do the integration elementwise; on each face of each element, we decide whether the
+   element "owns" the face, so that the term is only integrated once, and only on the side
+   with finer quadrature, in the case of a locally refined mesh.
+   */
+  
+#ifdef HAVE_MPI
+  Epetra_MpiComm Comm(MPI_COMM_WORLD);
+  //cout << "rank: " << rank << " of " << numProcs << endl;
+#else
+  Epetra_SerialComm Comm;
+#endif
+  
+  int numProcs=Teuchos::GlobalMPISession::getNProc();;
+  
+  int indexBase = 0;
+  
+  Epetra_Map timeMap(numProcs,indexBase,Comm);
+  
+  Epetra_Time timer(Comm);
+  
+  Epetra_FECrsMatrix* stiffnessMatrix = dynamic_cast<Epetra_FECrsMatrix*>(_globalStiffMatrix.get());
+  
+  MeshTopologyViewPtr meshTopo = _mesh->getTopology();
+  set<GlobalIndexType> activeCellIDs = _mesh->getActiveCellIDs();
+  set<GlobalIndexType> myCellIDs = _mesh->cellIDsInPartition();
+  int sideDim = meshTopo->getDimension() - 1;
+  
+  FieldContainer<double> emptyRefPointsVolume(0,meshTopo->getDimension()); // (P,D)
+  FieldContainer<double> emptyRefPointsSide(0,sideDim); // (P,D)
+  FieldContainer<double> emptyCubWeights(1,0); // (C,P)
+  
+  map<pair<CellTopologyKey,int>, FieldContainer<double>> cubPointsForSideTopo;
+  map<pair<CellTopologyKey,int>, FieldContainer<double>> cubWeightsForSideTopo;
+  
+  CubatureFactory cubFactory;
+  
+  map<CellTopologyKey,BasisCachePtr> basisCacheForVolumeTopo; // used for "my" cells
+  map<CellTopologyKey,BasisCachePtr> basisCacheForNeighborVolumeTopo; // used for neighbor cells
+  map<pair<int,CellTopologyKey>,BasisCachePtr> basisCacheForSideOnVolumeTopo;
+  map<pair<int,CellTopologyKey>,BasisCachePtr> basisCacheForSideOnNeighborVolumeTopo; // these can have permuted cubature points (i.e. we need to set them every time, so we can't share with basisCacheForSideOnVolumeTopo, which tries to avoid this)
+  
+  map<CellTopologyKey,BasisCachePtr> basisCacheForReferenceCellTopo;
+
+  const vector< TBilinearTerm<Scalar> >* bilinearTerms = &_mesh->bilinearForm()->getJumpTerms();
+  
+  for (GlobalIndexType cellID : myCellIDs)
+  {
+    CellPtr cell = meshTopo->getCell(cellID);
+    CellTopoPtr cellTopo = cell->topology();
+    ElementTypePtr elemType = _mesh->getElementType(cellID);
+    
+    FieldContainer<double> physicalCellNodes = _mesh->physicalCellNodesForCell(cellID);
+    BasisCachePtr cellBasisCacheVolume;
+    if (basisCacheForVolumeTopo.find(cellTopo->getKey()) == basisCacheForVolumeTopo.end())
+    {
+      basisCacheForVolumeTopo[cellTopo->getKey()] = Teuchos::rcp( new BasisCache(physicalCellNodes, cellTopo,
+                                                                                 emptyRefPointsVolume, emptyCubWeights) );
+    }
+    
+    cellBasisCacheVolume = basisCacheForVolumeTopo[cellTopo->getKey()];
+    cellBasisCacheVolume->setPhysicalCellNodes(physicalCellNodes, {cellID}, false);
+    
+    cellBasisCacheVolume->setCellIDs({cellID});
+    cellBasisCacheVolume->setMesh(_mesh);
+    
+    // now, determine the max cubature degree for the "me vs. me" terms
+    int myMaxCubatureDegree = 0;
+    
+    DofOrderingPtr trialOrder = elemType->trialOrderPtr;
+    DofOrderingPtr testOrder = elemType->testOrderPtr;
+    
+    int sideCount = cell->getSideCount();
+
+    for (TBilinearTerm<Scalar> bilinearTerm : *bilinearTerms)
+    {
+      TLinearTermPtr<Scalar> trialTerm = bilinearTerm.first;
+      TLinearTermPtr<Scalar> testTerm = bilinearTerm.second;
+      
+      // in what follows, we do assume that the test and trial terms are both scalar-valued
+      // TODO: relax this assumption
+      TEUCHOS_TEST_FOR_EXCEPTION(trialTerm->rank() > 0, std::invalid_argument, "Only scalar-valued DG jump terms are supported right now");
+      TEUCHOS_TEST_FOR_EXCEPTION(testTerm->rank() > 0, std::invalid_argument, "Only scalar-valued DG jump terms are supported right now");
+      
+      const std::set<int> * trialVarIDs = &trialTerm->varIDs();
+      const std::set<int> * testVarIDs = &testTerm->varIDs();
+      
+      for (int trialVarID : *trialVarIDs)
+      {
+        int trialDegree = trialOrder->getBasis(trialVarID)->getDegree();
+        
+        vector<GlobalIndexType> myGlobalDofs_trial_native = _mesh->globalDofAssignment()->globalDofIndicesForFieldVariable(cellID, trialVarID);
+        
+        for (int testVarID : *testVarIDs)
+        {
+          int testDegree = testOrder->getBasis(testVarID)->getDegree();
+          int myMaxCubatureDegree = max(myMaxCubatureDegree,testDegree+trialDegree);
+        }
+      }
+    }
+    
+    for (TBilinearTerm<Scalar> bilinearTerm : *bilinearTerms)
+    {
+      TLinearTermPtr<Scalar> trialTerm = bilinearTerm.first;
+      TLinearTermPtr<Scalar> testTerm = bilinearTerm.second;
+      
+      const std::set<int> * trialVarIDs = &trialTerm->varIDs();
+      const std::set<int> * testVarIDs = &testTerm->varIDs();
+      
+      for (int trialVarID : *trialVarIDs)
+      {
+        BasisPtr trialBasis = trialOrder->getBasis(trialVarID);
+        
+        vector<GlobalIndexType> myGlobalDofs_trial_native = _mesh->globalDofAssignment()->globalDofIndicesForFieldVariable(cellID, trialVarID);
+        
+        for (int testVarID : *testVarIDs)
+        {
+          BasisPtr testBasis = testOrder->getBasis(testVarID);
+          
+          vector<GlobalIndexType> myGlobalDofs_test_native = _mesh->globalDofAssignment()->globalDofIndicesForFieldVariable(cellID, testVarID);
+          
+          for (int sideOrdinal = 0; sideOrdinal < sideCount; sideOrdinal++)
+          {
+            // we'll filter this down to match only the side dofs, so we need to do this inside the sideOrdinal loop:
+            vector<GlobalIndexTypeToCast> myGlobalDofs_trial(myGlobalDofs_trial_native.begin(),myGlobalDofs_trial_native.end());
+            vector<GlobalIndexTypeToCast> myGlobalDofs_test(myGlobalDofs_test_native.begin(),myGlobalDofs_test_native.end());
+            
+            pair<GlobalIndexType,unsigned> neighborInfo = cell->getNeighborInfo(sideOrdinal, meshTopo);
+            GlobalIndexType neighborCellID = neighborInfo.first;
+            unsigned mySideOrdinalInNeighbor = neighborInfo.second;
+            if (activeCellIDs.find(neighborCellID) == activeCellIDs.end())
+            {
+              // no active neigbor on this side: either this is not an interior face (neighborCellID == -1),
+              // or the neighbor is refined and therefore inactive.  If the latter, then the neighbor's
+              // descendants will collectively "own" this side.
+              continue;
+            }
+            
+            // Finally, we need to check whether the neighbor is a "peer" in terms of h-refinements.
+            // If so, we use the cellID to break the tie of ownership; lower cellID owns the face.
+            CellPtr neighbor = meshTopo->getCell(neighborInfo.first);
+            pair<GlobalIndexType,unsigned> neighborNeighborInfo = neighbor->getNeighborInfo(mySideOrdinalInNeighbor, meshTopo);
+            bool neighborIsPeer = neighborNeighborInfo.first == cell->cellIndex();
+            if (neighborIsPeer && (cellID > neighborCellID))
+            {
+              // neighbor wins the tie-breaker
+              continue;
+            }
+            
+            // if we get here, we own the face and should compute its contribution.
+            // determine global dof indices:
+            vector<GlobalIndexType> neighborGlobalDofs_trial_native = _mesh->globalDofAssignment()->globalDofIndicesForFieldVariable(neighborCellID, trialVarID);
+            vector<GlobalIndexTypeToCast> neighborGlobalDofs_trial(neighborGlobalDofs_trial_native.begin(),neighborGlobalDofs_trial_native.end());
+            
+            vector<GlobalIndexType> neighborGlobalDofs_test_native = _mesh->globalDofAssignment()->globalDofIndicesForFieldVariable(neighborCellID, testVarID);
+            vector<GlobalIndexTypeToCast> neighborGlobalDofs_test(neighborGlobalDofs_test_native.begin(),neighborGlobalDofs_test_native.end());
+            
+            // figure out what the cubature degree should be
+            DofOrderingPtr neighborTrialOrder = _mesh->getElementType(neighborCellID)->trialOrderPtr;
+            DofOrderingPtr neighborTestOrder = _mesh->getElementType(neighborCellID)->testOrderPtr;
+            BasisPtr trialBasisNeighbor = neighborTrialOrder->getBasis(trialVarID);
+            BasisPtr testBasisNeighbor = neighborTestOrder->getBasis(testVarID);
+            int neighborCubatureDegree = trialBasisNeighbor->getDegree() + testBasisNeighbor->getDegree();
+            
+            int cubaturePolyOrder = max(myMaxCubatureDegree, neighborCubatureDegree);
+            
+            // set up side basis cache
+            CellTopoPtr mySideTopo = cellTopo->getSide(sideOrdinal); // for non-peers, this is the descendant cell topo
+            
+            pair<int,CellTopologyKey> sideCacheKey{sideOrdinal,cellTopo->getKey()};
+            if (basisCacheForSideOnVolumeTopo.find(sideCacheKey) == basisCacheForSideOnVolumeTopo.end())
+            {
+              basisCacheForSideOnVolumeTopo[sideCacheKey] = Teuchos::rcp( new BasisCache(sideOrdinal, cellBasisCacheVolume,
+                                                                                         emptyRefPointsSide, emptyCubWeights, -1));
+            }
+            BasisCachePtr cellBasisCacheSide = basisCacheForSideOnVolumeTopo[sideCacheKey];
+            
+            pair<CellTopologyKey,int> cubKey{mySideTopo->getKey(),cubaturePolyOrder};
+            if (cubWeightsForSideTopo.find(cubKey) == cubWeightsForSideTopo.end())
+            {
+              int cubDegree = cubKey.second;
+              if (sideDim > 0)
+              {
+                Teuchos::RCP<Cubature<double> > sideCub;
+                if (cubDegree >= 0)
+                  sideCub = cubFactory.create(mySideTopo, cubDegree);
+                
+                int numCubPointsSide;
+                
+                if (sideCub != Teuchos::null)
+                  numCubPointsSide = sideCub->getNumPoints();
+                else
+                  numCubPointsSide = 0;
+                
+                FieldContainer<double> cubPoints(numCubPointsSide, sideDim); // cubature points from the pov of the side (i.e. a (d-1)-dimensional set)
+                FieldContainer<double> cubWeights(numCubPointsSide);
+                if (numCubPointsSide > 0)
+                  sideCub->getCubature(cubPoints, cubWeights);
+                cubPointsForSideTopo[cubKey] = cubPoints;
+                cubWeightsForSideTopo[cubKey] = cubWeights;
+              }
+              else
+              {
+                int numCubPointsSide = 1;
+                FieldContainer<double> cubPoints(numCubPointsSide, 1); // cubature points from the pov of the side (i.e. a (d-1)-dimensional set)
+                FieldContainer<double> cubWeights(numCubPointsSide);
+                
+                cubPoints.initialize(0.0);
+                cubWeights.initialize(1.0);
+                cubPointsForSideTopo[cubKey] = cubPoints;
+                cubWeightsForSideTopo[cubKey] = cubWeights;
+              }
+            }
+            if (cellBasisCacheSide->cubatureDegree() != cubaturePolyOrder)
+            {
+              cellBasisCacheSide->setRefCellPoints(cubPointsForSideTopo[cubKey], cubWeightsForSideTopo[cubKey], cubaturePolyOrder, false);
+            }
+            cellBasisCacheSide->setPhysicalCellNodes(cellBasisCacheVolume->getPhysicalCellNodes(), {cellID}, false);
+            
+            int numCells = 1;
+            int numTrialFields = trialBasis->getCardinality();
+            int numPoints = cellBasisCacheSide->getRefCellPoints().dimension(0);
+            Intrepid::FieldContainer<double> trial_values(numCells, numTrialFields, numPoints);
+            trialTerm->values(trial_values, trialVarID, trialBasis, cellBasisCacheSide);
+            
+            // we integrate against the jump term beta * [v n]
+            // this is simply the sum of beta * (v n) from cell and neighbor's point of view
+            
+            int numTestFields = testBasis->getCardinality();
+            Intrepid::FieldContainer<double> test_values(numCells, numTestFields, numPoints);
+            testTerm->values(test_values, testVarID, testBasis, cellBasisCacheSide);
+            
+            // filter to include only those members of uBasis that have support on the side
+            // (it might be nice to have LinearTerm::values() support this directly, via a basisDofOrdinal container argument...)
+            auto filterSideBasisValues = [] (BasisPtr basis, int sideOrdinal,
+                                             FieldContainer<double> &values) -> void
+            {
+              set<int> mySideBasisDofOrdinals = basis->dofOrdinalsForSide(sideOrdinal);
+              int numFilteredFields = mySideBasisDofOrdinals.size();
+              int numCells = values.dimension(0);
+              int numPoints = values.dimension(2);
+              FieldContainer<double> filteredValues(numCells,numFilteredFields,numPoints);
+              for (int cellOrdinal=0; cellOrdinal<numCells; cellOrdinal++)
+              {
+                int filteredDofOrdinal = 0;
+                for (int basisDofOrdinal : mySideBasisDofOrdinals)
+                {
+                  for (int pointOrdinal=0; pointOrdinal<numPoints; pointOrdinal++)
+                  {
+                    filteredValues(cellOrdinal,filteredDofOrdinal,pointOrdinal) = values(cellOrdinal,basisDofOrdinal,pointOrdinal);
+                  }
+                  filteredDofOrdinal++;
+                }
+              }
+              values = filteredValues;
+            };
+            
+            auto filterGlobalDofOrdinals = [] (BasisPtr basis, int sideOrdinal,
+                                               vector<GlobalIndexTypeToCast> &globalDofOrdinals) -> void
+            {
+              set<int> mySideBasisDofOrdinals = basis->dofOrdinalsForSide(sideOrdinal);
+              vector<GlobalIndexTypeToCast> filteredGlobalDofOrdinals;
+              for (int basisDofOrdinal : mySideBasisDofOrdinals)
+              {
+                filteredGlobalDofOrdinals.push_back(globalDofOrdinals[basisDofOrdinal]);
+              }
+              globalDofOrdinals = filteredGlobalDofOrdinals;
+            };
+            
+            filterSideBasisValues(trialBasis,sideOrdinal,trial_values);
+            filterSideBasisValues(testBasis,sideOrdinal,test_values);
+            filterGlobalDofOrdinals(trialBasis,sideOrdinal,myGlobalDofs_trial);
+            filterGlobalDofOrdinals(testBasis,sideOrdinal,myGlobalDofs_test);
+            numTrialFields = myGlobalDofs_trial.size();
+            numTestFields = myGlobalDofs_test.size();
+            
+            // Now the geometrically challenging bit: we need to line up the physical points in
+            // the cellBasisCacheSide with those in a BasisCache for the neighbor cell
+            
+            CellTopoPtr neighborTopo = neighbor->topology();
+            CellTopoPtr sideTopo = neighborTopo->getSide(mySideOrdinalInNeighbor); // for non-peers, this is my ancestor's cell topo
+            int nodeCount = sideTopo->getNodeCount();
+            
+            unsigned permutationFromMeToNeighbor;
+            Intrepid::FieldContainer<double> myRefPoints = cellBasisCacheSide->getRefCellPoints();
+            
+            if (!neighborIsPeer) // then we have some refinements relative to neighbor
+            {
+              /*******   Map my ref points to my ancestor ******/
+              pair<GlobalIndexType,unsigned> ancestorInfo = neighbor->getNeighborInfo(mySideOrdinalInNeighbor, meshTopo);
+              GlobalIndexType ancestorCellIndex = ancestorInfo.first;
+              unsigned ancestorSideOrdinal = ancestorInfo.second;
+              
+              RefinementBranch refinementBranch = cell->refinementBranchForSide(sideOrdinal, meshTopo);
+              RefinementBranch sideRefinementBranch = RefinementPattern::sideRefinementBranch(refinementBranch, ancestorSideOrdinal);
+              FieldContainer<double> cellNodes = RefinementPattern::descendantNodesRelativeToAncestorReferenceCell(sideRefinementBranch);
+              
+              cellNodes.resize(1,cellNodes.dimension(0),cellNodes.dimension(1));
+              BasisCachePtr ancestralBasisCache = Teuchos::rcp(new BasisCache(cellNodes,sideTopo,cubaturePolyOrder,false)); // false: don't create side cache too
+              
+              ancestralBasisCache->setRefCellPoints(myRefPoints, emptyCubWeights, cubaturePolyOrder, true);
+              
+              // now, the "physical" points in ancestral cache are the ones we want
+              myRefPoints = ancestralBasisCache->getPhysicalCubaturePoints();
+              myRefPoints.resize(myRefPoints.dimension(1),myRefPoints.dimension(2)); // strip cell dimension
+              
+              /*******  Determine ancestor's permutation of the side relative to neighbor ******/
+              CellPtr ancestor = meshTopo->getCell(ancestorCellIndex);
+              vector<IndexType> ancestorSideNodes, neighborSideNodes; // this will list the indices as seen by MeshTopology
+              
+              CellTopoPtr sideTopo = ancestor->topology()->getSide(ancestorSideOrdinal);
+              nodeCount = sideTopo->getNodeCount();
+              
+              for (int node=0; node<nodeCount; node++)
+              {
+                int nodeInCell = cellTopo->getNodeMap(sideDim, sideOrdinal, node);
+                ancestorSideNodes.push_back(ancestor->vertices()[nodeInCell]);
+                int nodeInNeighborCell = neighborTopo->getNodeMap(sideDim, mySideOrdinalInNeighbor, node);
+                neighborSideNodes.push_back(neighbor->vertices()[nodeInNeighborCell]);
+              }
+              // now, we want to know what permutation of the side topology takes us from my order to neighbor's
+              // TODO: make sure I'm not going the wrong direction here; it's easy to get confused.
+              permutationFromMeToNeighbor = CamelliaCellTools::permutationMatchingOrder(sideTopo, ancestorSideNodes, neighborSideNodes);
+            }
+            else
+            {
+              nodeCount = cellTopo->getSide(sideOrdinal)->getNodeCount();
+              
+              vector<IndexType> mySideNodes, neighborSideNodes; // this will list the indices as seen by MeshTopology
+              for (int node=0; node<nodeCount; node++)
+              {
+                int nodeInCell = cellTopo->getNodeMap(sideDim, sideOrdinal, node);
+                mySideNodes.push_back(cell->vertices()[nodeInCell]);
+                int nodeInNeighborCell = neighborTopo->getNodeMap(sideDim, mySideOrdinalInNeighbor, node);
+                neighborSideNodes.push_back(neighbor->vertices()[nodeInNeighborCell]);
+              }
+              // now, we want to know what permutation of the side topology takes us from my order to neighbor's
+              // TODO: make sure I'm not going the wrong direction here; it's easy to get confused.
+              permutationFromMeToNeighbor = CamelliaCellTools::permutationMatchingOrder(sideTopo, mySideNodes, neighborSideNodes);
+            }
+            
+            Intrepid::FieldContainer<double> permutedRefNodes(nodeCount,sideDim);
+            CamelliaCellTools::refCellNodesForTopology(permutedRefNodes, sideTopo, permutationFromMeToNeighbor);
+            permutedRefNodes.resize(1,nodeCount,sideDim); // add cell dimension to make this a "physical" node container
+            if (basisCacheForReferenceCellTopo.find(sideTopo->getKey()) == basisCacheForReferenceCellTopo.end())
+            {
+              basisCacheForReferenceCellTopo[sideTopo->getKey()] = BasisCache::basisCacheForReferenceCell(sideTopo, -1);
+            }
+            BasisCachePtr referenceBasisCache = basisCacheForReferenceCellTopo[sideTopo->getKey()];
+            referenceBasisCache->setRefCellPoints(myRefPoints,emptyCubWeights,cubaturePolyOrder,false);
+            std::vector<GlobalIndexType> cellIDs = {0}; // unused
+            referenceBasisCache->setPhysicalCellNodes(permutedRefNodes, cellIDs, false);
+            // now, the "physical" points are the ones we should use as ref points for the neighbor
+            Intrepid::FieldContainer<double> neighborRefCellPoints = referenceBasisCache->getPhysicalCubaturePoints();
+            neighborRefCellPoints.resize(numPoints,sideDim); // strip cell dimension to convert to a "reference" point container
+            
+            FieldContainer<double> neighborCellNodes = _mesh->physicalCellNodesForCell(neighborCellID);
+            if (basisCacheForNeighborVolumeTopo.find(neighborTopo->getKey()) == basisCacheForNeighborVolumeTopo.end())
+            {
+              basisCacheForNeighborVolumeTopo[neighborTopo->getKey()] = Teuchos::rcp( new BasisCache(neighborCellNodes, neighborTopo,
+                                                                                                     emptyRefPointsVolume, emptyCubWeights) );
+            }
+            BasisCachePtr neighborVolumeCache = basisCacheForNeighborVolumeTopo[neighborTopo->getKey()];
+            neighborVolumeCache->setPhysicalCellNodes(neighborCellNodes, {neighborCellID}, false);
+            
+            pair<int,CellTopologyKey> neighborSideCacheKey{mySideOrdinalInNeighbor,neighborTopo->getKey()};
+            if (basisCacheForSideOnNeighborVolumeTopo.find(neighborSideCacheKey) == basisCacheForSideOnNeighborVolumeTopo.end())
+            {
+              basisCacheForSideOnNeighborVolumeTopo[neighborSideCacheKey]
+              = Teuchos::rcp( new BasisCache(mySideOrdinalInNeighbor, neighborVolumeCache, emptyRefPointsSide, emptyCubWeights, -1));
+            }
+            BasisCachePtr neighborSideCache = basisCacheForSideOnNeighborVolumeTopo[neighborSideCacheKey];
+            neighborSideCache->setRefCellPoints(neighborRefCellPoints, emptyCubWeights, cubaturePolyOrder, false);
+            neighborSideCache->setPhysicalCellNodes(neighborCellNodes, {neighborCellID}, false);
+            {
+              // Sanity check that the physical points agree:
+              double tol = 1e-15;
+              Intrepid::FieldContainer<double> myPhysicalPoints = cellBasisCacheSide->getPhysicalCubaturePoints();
+              Intrepid::FieldContainer<double> neighborPhysicalPoints = neighborSideCache->getPhysicalCubaturePoints();
+              
+              bool pointsMatch = (myPhysicalPoints.size() == neighborPhysicalPoints.size()); // true unless we find a point that doesn't match
+              if (pointsMatch)
+              {
+                for (int i=0; i<myPhysicalPoints.size(); i++)
+                {
+                  double diff = abs(myPhysicalPoints[i]-neighborPhysicalPoints[i]);
+                  if (diff > tol)
+                  {
+                    pointsMatch = false;
+                    break;
+                  }
+                }
+              }
+              
+              if (!pointsMatch)
+              {
+                cout << "ERROR: pointsMatch is false.\n";
+                cout << "myPhysicalPoints:\n" << myPhysicalPoints;
+                cout << "neighborPhysicalPoints:\n" << neighborPhysicalPoints;
+              }
+            }
+            
+            int numNeighborTrialFields = trialBasisNeighbor->getCardinality();
+            int numNeighborTestFields = testBasisNeighbor->getCardinality();
+            
+            Intrepid::FieldContainer<double> neighbor_trial_values(numCells, numNeighborTrialFields, numPoints);
+            trialTerm->values(neighbor_trial_values, trialVarID, trialBasisNeighbor, neighborSideCache);
+            
+            Intrepid::FieldContainer<double> neighbor_test_values(numCells, numNeighborTestFields, numPoints);
+            testTerm->values(neighbor_test_values, testVarID, testBasisNeighbor, neighborSideCache);
+            
+            int neighborSideOrdinal = neighborSideCache->getSideIndex();
+            filterSideBasisValues(trialBasisNeighbor,neighborSideOrdinal,neighbor_trial_values);
+            filterSideBasisValues(testBasisNeighbor,neighborSideOrdinal,neighbor_test_values);
+            filterGlobalDofOrdinals(trialBasisNeighbor,neighborSideOrdinal,neighborGlobalDofs_trial);
+            filterGlobalDofOrdinals(testBasisNeighbor,neighborSideOrdinal,neighborGlobalDofs_test);
+            numNeighborTrialFields = neighborGlobalDofs_trial.size();
+            numNeighborTestFields = neighborGlobalDofs_test.size();
+            
+            // weight u_values containers using cubature weights defined in cellBasisCacheSide:
+            Intrepid::FunctionSpaceTools::multiplyMeasure<double>(trial_values, cellBasisCacheSide->getWeightedMeasures(), trial_values);
+            Intrepid::FunctionSpaceTools::multiplyMeasure<double>(neighbor_trial_values, cellBasisCacheSide->getWeightedMeasures(), neighbor_trial_values);
+            
+            // now, we compute four integrals (test, trial) and insert into global stiffness
+            // define a lambda function for insertion
+            auto insertValues = [stiffnessMatrix] (vector<int> &rowDofOrdinals, vector<int> &colDofOrdinals,
+                                                   Intrepid::FieldContainer<double> &values) -> void
+            {
+              // values container is (cell, test, trial)
+              int rowCount = rowDofOrdinals.size();
+              int colCount = colDofOrdinals.size();
+              
+              //        stiffnessMatrix->InsertGlobalValues(rowCount,&rowDofOrdinals[0],colCount,&colDofOrdinals[0],&values(0,0,0),
+              //                                            Epetra_FECrsMatrix::ROW_MAJOR); // COL_MAJOR is the right thing, actually, but for some reason does not work...
+              
+              // because I don't trust Epetra in terms of the format, let's insert values one at a time
+              for (int i=0; i<rowCount; i++)
+              {
+                for (int j=0; j<colCount; j++)
+                {
+                  // rows in FieldContainer correspond to trial variables, cols to test
+                  // in stiffness matrix, it's the opposite.
+                  if (values(0,i,j) != 0) // skip 0's, which I believe Epetra should ignore anyway
+                  {
+                    //              cout << "Inserting (" << rowDofOrdinals[i] << "," << colDofOrdinals[j] << ") = ";
+                    //              cout << values(0,i,j) << endl;
+                    stiffnessMatrix->InsertGlobalValues(1,&rowDofOrdinals[i],1,&colDofOrdinals[j],&values(0,i,j));
+                  }
+                }
+              }
+            };
+            
+            auto hasNonzeros = [] (Intrepid::FieldContainer<double> &values, double tol) -> bool
+            {
+              for (int i=0; i<values.size(); i++)
+              {
+                if (abs(values[i]) > tol) return true;
+              }
+              return false;
+            };
+            
+            if (hasNonzeros(test_values,0) && hasNonzeros(trial_values,0))
+            {
+              Intrepid::FieldContainer<double> integralValues_me_me(numCells,numTestFields,numTrialFields);
+              Intrepid::FunctionSpaceTools::integrate<double>(integralValues_me_me,test_values,trial_values,Intrepid::COMP_BLAS);
+              insertValues(myGlobalDofs_trial,myGlobalDofs_test,integralValues_me_me);
+            }
+            
+            if (hasNonzeros(neighbor_test_values,0) && hasNonzeros(trial_values,0))
+            {
+              Intrepid::FieldContainer<double> integralValues_neighbor_me(numCells,numNeighborTestFields,numTrialFields);
+              Intrepid::FunctionSpaceTools::integrate<double>(integralValues_neighbor_me,neighbor_test_values,trial_values,Intrepid::COMP_BLAS);
+              insertValues(neighborGlobalDofs_test,myGlobalDofs_trial,integralValues_neighbor_me);
+            }
+            
+            if (hasNonzeros(test_values,0) && hasNonzeros(neighbor_trial_values,0))
+            {
+              Intrepid::FieldContainer<double> integralValues_me_neighbor(numCells,numTestFields,numNeighborTrialFields);
+              Intrepid::FunctionSpaceTools::integrate<double>(integralValues_me_neighbor,test_values,neighbor_trial_values,Intrepid::COMP_BLAS);
+              insertValues(myGlobalDofs_test,neighborGlobalDofs_trial,integralValues_me_neighbor);
+            }
+            
+            if (hasNonzeros(neighbor_test_values,0) && hasNonzeros(neighbor_trial_values,0))
+            {
+              Intrepid::FieldContainer<double> integralValues_neighbor_neighbor(numCells,numNeighborTestFields,numNeighborTrialFields);
+              Intrepid::FunctionSpaceTools::integrate<double>(integralValues_neighbor_neighbor,neighbor_test_values,neighbor_trial_values,Intrepid::COMP_BLAS);
+              insertValues(neighborGlobalDofs_test,neighborGlobalDofs_trial,integralValues_neighbor_neighbor);
+            }
+          }
+        }
+      }
+    }
+  }
+  
+  Epetra_Vector timeApplyJumpVector(timeMap);
+ 
+  double timeApplyDGJumpTerms = timer.ElapsedTime();
+  //  cout << "Done computing local matrices" << endl;
+  Epetra_Vector timeApplyJumpTermsVector(timeMap);
+  timeApplyJumpTermsVector[0] = timeApplyDGJumpTerms;
+  
+  int err = timeApplyJumpTermsVector.Norm1( &_totalTimeApplyJumpTerms );
+  err = timeApplyJumpTermsVector.MeanValue( &_meanTimeApplyJumpTerms );
+  err = timeApplyJumpTermsVector.MinValue( &_minTimeApplyJumpTerms );
+  err = timeApplyJumpTermsVector.MaxValue( &_maxTimeApplyJumpTerms );
 }
 
 template <typename Scalar>
@@ -1109,6 +1623,7 @@ int TSolution<Scalar>::solve(TSolverPtr<Scalar> solver)
   initializeLHSVector();
   initializeStiffnessAndLoad();
   setProblem(solver);
+  applyDGJumpTerms();
   populateStiffnessAndLoad();
   int solveSuccess = solveWithPrepopulatedStiffnessAndLoad(solver);
 //  cout << "about to call importSolution on rank " << rank << endl;
@@ -3270,6 +3785,12 @@ void TSolution<Scalar>::writeFluxesToFile(int trialID, const string &filePath)
 }
 
 template <typename Scalar>
+double TSolution<Scalar>::totalTimeApplyJumpTerms()
+{
+  return _totalTimeApplyJumpTerms;
+}
+
+template <typename Scalar>
 double TSolution<Scalar>::totalTimeLocalStiffness()
 {
   return _totalTimeLocalStiffness;
@@ -3297,6 +3818,12 @@ template <typename Scalar>
 double TSolution<Scalar>::totalTimeDistributeSolution()
 {
   return _totalTimeDistributeSolution;
+}
+
+template <typename Scalar>
+double TSolution<Scalar>::meanTimeApplyJumpTerms()
+{
+  return _meanTimeApplyJumpTerms;
 }
 
 template <typename Scalar>
@@ -3330,6 +3857,12 @@ double TSolution<Scalar>::meanTimeDistributeSolution()
 }
 
 template <typename Scalar>
+double TSolution<Scalar>::maxTimeApplyJumpTerms()
+{
+  return _maxTimeApplyJumpTerms;
+}
+
+template <typename Scalar>
 double TSolution<Scalar>::maxTimeLocalStiffness()
 {
   return _maxTimeLocalStiffness;
@@ -3357,6 +3890,12 @@ template <typename Scalar>
 double TSolution<Scalar>::maxTimeDistributeSolution()
 {
   return _maxTimeDistributeSolution;
+}
+
+template <typename Scalar>
+double TSolution<Scalar>::minTimeApplyJumpTerms()
+{
+  return _minTimeApplyJumpTerms;
 }
 
 template <typename Scalar>

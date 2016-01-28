@@ -354,6 +354,8 @@ void TensorBasis<Scalar,ArrayScalar>::getValues(ArrayScalar &values, const Array
   bool gradInBoth = (spatialOperatorType==Intrepid::OPERATOR_GRAD) && (temporalOperatorType==Intrepid::OPERATOR_GRAD);
   this->CHECK_VALUES_ARGUMENTS(values,refPoints,spatialOperatorType);
 
+  static const bool CHECK_ENUMERATIONS = false;
+  
   int numPoints = refPoints.dimension(0);
 
   Teuchos::Array<int> spaceTimePointsDimensions;
@@ -414,14 +416,25 @@ void TensorBasis<Scalar,ArrayScalar>::getValues(ArrayScalar &values, const Array
 
   Teuchos::Array<int> spaceTimeValueCoordinate(valuesDim.size(), 0);
   Teuchos::Array<int> spatialValueCoordinate(valuesDim.size(), 0);
-
+  
+  if (gradInBoth && (_spatialBasis->rangeDimension() == 0))
+    valuesPerPointSpace = 0;
+  
   // combine values:
   for (int spaceFieldOrdinal=0; spaceFieldOrdinal<_spatialBasis->getCardinality(); spaceFieldOrdinal++)
   {
     spatialValueCoordinate[0] = spaceFieldOrdinal;
     for (int timeFieldOrdinal=0; timeFieldOrdinal<_temporalBasis->getCardinality(); timeFieldOrdinal++)
     {
+      int spatialValueEnumeration = spaceFieldOrdinal * numPoints * valuesPerPointSpace;
+      
       int spaceTimeFieldOrdinal = TENSOR_FIELD_ORDINAL(spaceFieldOrdinal, timeFieldOrdinal);
+      int spaceTimeValueEnumeration;
+      if (gradInBoth)
+        spaceTimeValueEnumeration = spaceTimeFieldOrdinal * numPoints * (valuesPerPointSpace + 1);
+      else
+        spaceTimeValueEnumeration = spaceTimeFieldOrdinal * numPoints * valuesPerPointSpace;
+      
       spaceTimeValueCoordinate[0] = spaceTimeFieldOrdinal;
       for (int pointOrdinal=0; pointOrdinal<numPoints; pointOrdinal++)
       {
@@ -432,15 +445,26 @@ void TensorBasis<Scalar,ArrayScalar>::getValues(ArrayScalar &values, const Array
           temporalValue = temporalValues(timeFieldOrdinal,pointOrdinal);
         else
           temporalValue = temporalValues(timeFieldOrdinal,pointOrdinal, 0);
-        int spatialValueEnumeration = spatialValues.getEnumeration(spatialValueCoordinate);
+        
+        if (CHECK_ENUMERATIONS)
+        {
+          if (! (gradInBoth && (spaceDim == 0)) )
+          {
+            int spatialValueEnumerationOld = spatialValues.getEnumeration(spatialValueCoordinate);
+            if (spatialValueEnumerationOld != spatialValueEnumeration)
+            {
+              TEUCHOS_TEST_FOR_EXCEPTION(true, std::invalid_argument, "not equal");
+            }
+          }
+        }
 
         if (! gradInBoth)
         {
-          int spaceTimeValueEnumeration = values.getEnumeration(spaceTimeValueCoordinate);
+//          int spaceTimeValueEnumeration = values.getEnumeration(spaceTimeValueCoordinate);
           for (int offset=0; offset<valuesPerPointSpace; offset++)
           {
-            double spatialValue = spatialValues[spatialValueEnumeration+offset];
-            values[spaceTimeValueEnumeration+offset] = spatialValue * temporalValue;
+            double spatialValue = spatialValues[spatialValueEnumeration++];
+            values[spaceTimeValueEnumeration++] = spatialValue * temporalValue;
           }
         }
         else
@@ -450,24 +474,40 @@ void TensorBasis<Scalar,ArrayScalar>::getValues(ArrayScalar &values, const Array
 
           // product rule: first components are spatial gradient times temporal value; next components are spatial value times temporal gradient
           // first, handle spatial gradients
-          spaceTimeValueCoordinate[2] = 0;
-          int spaceTimeValueEnumeration = values.getEnumeration(spaceTimeValueCoordinate);
+          if (CHECK_ENUMERATIONS)
+          {
+            spaceTimeValueCoordinate[2] = 0;
+            int spaceTimeValueEnumerationOld = values.getEnumeration(spaceTimeValueCoordinate);
+            if (spaceTimeValueEnumerationOld != spaceTimeValueEnumeration)
+            {
+              TEUCHOS_TEST_FOR_EXCEPTION(true, std::invalid_argument, "not equal");
+            }
+          }
+          
           for (int offset=0; offset<valuesPerPointSpace; offset++)
           {
-            double spatialGradValue = spatialValues[spatialValueEnumeration+offset];
+            double spatialGradValue = spatialValues[spatialValueEnumeration++];
             double spaceTimeValue = spatialGradValue * temporalValue_opValue;
 
-            values[spaceTimeValueEnumeration+offset] = spaceTimeValue;
+            values[spaceTimeValueEnumeration++] = spaceTimeValue;
           }
 
           // next, temporal gradients
-          spaceTimeValueCoordinate[2] = _spatialBasis->rangeDimension();
-          spaceTimeValueEnumeration = values.getEnumeration(spaceTimeValueCoordinate);
+          if (CHECK_ENUMERATIONS)
+          {
+            spaceTimeValueCoordinate[2] = _spatialBasis->rangeDimension();
+            int spaceTimeValueEnumerationOld = values.getEnumeration(spaceTimeValueCoordinate);
 
+            if (spaceTimeValueEnumerationOld != spaceTimeValueEnumeration)
+            {
+              TEUCHOS_TEST_FOR_EXCEPTION(true, std::invalid_argument, "not equal");
+            }
+          }
+          
           double temporalGradValue = temporalValues(timeFieldOrdinal,pointOrdinal,0);
           double spaceTimeValue = spatialValue_opValue * temporalGradValue;
 
-          values[spaceTimeValueEnumeration] = spaceTimeValue;
+          values[spaceTimeValueEnumeration++] = spaceTimeValue;
         }
       }
     }

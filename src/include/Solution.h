@@ -113,6 +113,7 @@ private:
   double _meanTimeLocalStiffness, _meanTimeGlobalAssembly, _meanTimeBCImposition, _meanTimeSolve, _meanTimeDistributeSolution;
   double _maxTimeLocalStiffness, _maxTimeGlobalAssembly, _maxTimeBCImposition, _maxTimeSolve, _maxTimeDistributeSolution;
   double _minTimeLocalStiffness, _minTimeGlobalAssembly, _minTimeBCImposition, _minTimeSolve, _minTimeDistributeSolution;
+  double _totalTimeApplyJumpTerms, _meanTimeApplyJumpTerms, _maxTimeApplyJumpTerms, _minTimeApplyJumpTerms;
 
   bool _reportConditionNumber, _reportTimingResults;
   bool _saveMeshOnSolveError = true; // if there is a solve error, save the mesh to disk for potential analysis
@@ -176,6 +177,7 @@ public:
   void initializeLHSVector();
   void initializeLoad(); // to be used if setStiffnessMatrix() will be called...
   void initializeStiffnessAndLoad();
+  void applyDGJumpTerms();
   void populateStiffnessAndLoad();
   void imposeBCs();
   void imposeZMCsUsingLagrange(); // if not using Lagrange for ZMCs, puts 1's in the diagonal for these rows
@@ -321,24 +323,28 @@ public:
   void writeTracesToVTK(const std::string& filePath);
 
   // statistics accessors:
+  double totalTimeApplyJumpTerms();
   double totalTimeLocalStiffness();
   double totalTimeGlobalAssembly();
   double totalTimeBCImposition();
   double totalTimeSolve();
   double totalTimeDistributeSolution();
 
+  double meanTimeApplyJumpTerms();
   double meanTimeLocalStiffness();
   double meanTimeGlobalAssembly();
   double meanTimeBCImposition();
   double meanTimeSolve();
   double meanTimeDistributeSolution();
 
+  double maxTimeApplyJumpTerms();
   double maxTimeLocalStiffness();
   double maxTimeGlobalAssembly();
   double maxTimeBCImposition();
   double maxTimeSolve();
   double maxTimeDistributeSolution();
 
+  double minTimeApplyJumpTerms();
   double minTimeLocalStiffness();
   double minTimeGlobalAssembly();
   double minTimeBCImposition();
