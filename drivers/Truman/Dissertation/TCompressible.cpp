@@ -607,13 +607,14 @@ int main(int argc, char *argv[])
     else
       u_exact = Function::vectorize(u1_exact,u2_exact);
 
-    if (!steady)
-    {
-      SpatialFilterPtr t0  = SpatialFilter::matchingT(0);
-      form.addMassFluxCondition(    t0, rho_exact, u_exact, T_exact);
-      form.addMomentumFluxCondition(t0, rho_exact, u_exact, T_exact);
-      form.addEnergyFluxCondition(  t0, rho_exact, u_exact, T_exact);
-    }
+    // if (!steady)
+    // {
+    //   SpatialFilterPtr t0  = SpatialFilter::matchingT(0);
+    //   form.addMassFluxCondition(    t0, rho_exact, u_exact, T_exact);
+    //   form.addMomentumFluxCondition(t0, rho_exact, u_exact, T_exact);
+    //   form.addEnergyFluxCondition(  t0, rho_exact, u_exact, T_exact);
+    // }
+    SpatialFilterPtr t0  = SpatialFilter::matchingT(0);
     switch (spaceDim)
     {
       case 1:
@@ -623,6 +624,12 @@ int main(int argc, char *argv[])
         form.addVelocityTraceCondition(   rightX, zero);
         form.addMassFluxCondition(        rightX, zero);
         form.addEnergyFluxCondition(      rightX, zero);
+        if (!steady)
+        {
+          form.addMassFluxCondition(     t0, -one);
+          form.addXMomentumFluxCondition(t0, -u1_exact);
+          form.addEnergyFluxCondition(   t0, -(Cv+0.5)*one);
+        }
         break;
       case 2:
         form.addMassFluxCondition(        leftX, -u1_exact);
@@ -652,6 +659,13 @@ int main(int argc, char *argv[])
         // form.addXMomentumFluxCondition(   leftY, u2_exact*u1_exact);
         // form.addYMomentumFluxCondition(   leftY, u2_exact*u2_exact+R*one);
         // form.addEnergyFluxCondition(      leftY, u2_exact*(Cv+0.5+R));
+        if (!steady)
+        {
+          form.addMassFluxCondition(     t0, -one);
+          form.addXMomentumFluxCondition(t0, -u1_exact);
+          form.addYMomentumFluxCondition(t0, -u2_exact);
+          form.addEnergyFluxCondition(   t0, -(Cv+0.5)*one);
+        }
         break;
       case 3:
         break;
