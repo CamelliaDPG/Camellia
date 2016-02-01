@@ -7,6 +7,7 @@
 #include "SimpleFunction.h"
 #include "ExpFunction.h"
 #include "TrigFunctions.h"
+#include "PolarizedFunction.h"
 #include "PenaltyConstraints.h"
 #include "SuperLUDistSolver.h"
 
@@ -149,6 +150,8 @@ int main(int argc, char *argv[])
   cmdp.setOption("useDirectSolver", "useIterativeSolver", &useDirectSolver, "use direct solver");
   bool useCondensedSolve = false;
   cmdp.setOption("useCondensedSolve", "useStandardSolve", &useCondensedSolve);
+  bool useSPDSolver = false;
+  cmdp.setOption("useSPDSolver", "useQRSolver", &useSPDSolver);
   bool useConformingTraces = false;
   cmdp.setOption("conformingTraces", "nonconformingTraces", &useConformingTraces, "use conforming traces");
   int polyOrder = 1, delta_k = 3;
@@ -227,11 +230,11 @@ int main(int argc, char *argv[])
     double T_inf = 1;
     double M_inf = 3;
     Cv = (U_inf*U_inf)/(M_inf*M_inf*gamma*(gamma-1)*T_inf);
-    int meshWidth = 2;
+    int meshWidth = 4;
     vector<double> dims(spaceDim,2.0);
     dims[1] = 1;
     vector<int> numElements(spaceDim,meshWidth);
-    numElements[1] = 1;
+    numElements[1] = 2;
     vector<double> x0(spaceDim, -1);
     x0[1] = 0;
 
@@ -240,6 +243,30 @@ int main(int argc, char *argv[])
     {
       double t0 = 0;
       double t1 = 1;
+      int temporalDivisions = 4;
+      meshTopo = MeshFactory::spaceTimeMeshTopology(meshTopo, t0, t1, temporalDivisions);
+    }
+  }
+  if (problemName == "Noh")
+  {
+    gamma = 5./3;
+    double p_inf = 1;
+    double rho_inf = 1;
+    double u_inf = 1;
+    double a_inf = sqrt(gamma*p_inf*rho_inf);
+    double M_inf = u_inf/a_inf;
+    double T_inf = p_inf/(rho_inf*Cv*(gamma-1));
+    Cv = (u_inf*u_inf)/(M_inf*M_inf*gamma*(gamma-1)*T_inf);
+    int meshWidth = 2;
+    vector<double> dims(spaceDim,1.0);
+    vector<int> numElements(spaceDim,meshWidth);
+    vector<double> x0(spaceDim,-1);
+
+    meshTopo = MeshFactory::rectilinearMeshTopology(dims,numElements,x0);
+    if (!steady)
+    {
+      double t0 = 0;
+      double t1 = 0.5;
       int temporalDivisions = 1;
       meshTopo = MeshFactory::spaceTimeMeshTopology(meshTopo, t0, t1, temporalDivisions);
     }
@@ -264,6 +291,9 @@ int main(int argc, char *argv[])
   nsParameters.set("u2Init", 0.);
   nsParameters.set("TInit", 1.);
   CompressibleNavierStokesFormulation form(meshTopo, nsParameters);
+
+  if (useSPDSolver)
+    form.bf()->setUseSPDSolveForOptimalTestFunctions(true);
 
   // form.refine();
 
@@ -532,6 +562,100 @@ int main(int argc, char *argv[])
 
     form.addVelocityTraceCondition(plate, zeros);
     form.addTemperatureTraceCondition(plate, 2.8*one);
+  }
+  if (problemName == "Noh")
+  {
+    SpatialFilterPtr leftX  = SpatialFilter::matchingX(-1);
+    SpatialFilterPtr rightX = SpatialFilter::matchingX(0);
+    SpatialFilterPtr leftY  = SpatialFilter::matchingY(-1);
+    SpatialFilterPtr rightY = SpatialFilter::matchingY(0);
+
+    FunctionPtr zero = Function::zero();
+    FunctionPtr zeros = Function::vectorize(zero, zero);
+    FunctionPtr one = Function::constant(1);
+    FunctionPtr onezero = Function::vectorize(one, zero);
+    FunctionPtr ones = Function::vectorize(one, one);
+    FunctionPtr cos_y = Teuchos::rcp(new Cos_ay(1));
+    FunctionPtr sin_y = Teuchos::rcp(new Sin_ay(1));
+    // FunctionPtr cos_theta = Function::polarize(Teuchos::rcp( new Cos_y ) );
+    // FunctionPtr sin_theta = Function::polarize(Teuchos::rcp( new Sin_y ) );
+    FunctionPtr cos_theta = Teuchos::rcp( new PolarizedFunction<double>( cos_y ) );
+    FunctionPtr sin_theta = Teuchos::rcp( new PolarizedFunction<double>( sin_y ) );
+
+    // FunctionPtr cos_theta = PolarizedFunction<double>::cos_theta;
+    // FunctionPtr sin_theta = PolarizedFunction<double>::sin_theta;
+
+    FunctionPtr rho_exact, u1_exact, u2_exact, T_exact;
+    if (spaceDim == 1)
+    {
+      rho_exact = one;
+      u1_exact = one;
+      T_exact = one;
+    }
+    else
+    {
+      rho_exact = one;
+      u1_exact = -cos_theta;
+      u2_exact = -sin_theta;
+      // u1_exact = one;
+      // u2_exact = zero;
+      T_exact = one;
+    }
+    FunctionPtr u_exact;
+    if (spaceDim == 1)
+      u_exact = u1_exact;
+    else
+      u_exact = Function::vectorize(u1_exact,u2_exact);
+
+    if (!steady)
+    {
+      SpatialFilterPtr t0  = SpatialFilter::matchingT(0);
+      form.addMassFluxCondition(    t0, rho_exact, u_exact, T_exact);
+      form.addMomentumFluxCondition(t0, rho_exact, u_exact, T_exact);
+      form.addEnergyFluxCondition(  t0, rho_exact, u_exact, T_exact);
+    }
+    switch (spaceDim)
+    {
+      case 1:
+        form.addMassFluxCondition(        leftX, -one);
+        form.addXMomentumFluxCondition(   leftX, -(1+R)*one);
+        form.addEnergyFluxCondition(      leftX, -(Cv+.5+R)*one);
+        form.addVelocityTraceCondition(   rightX, zero);
+        form.addMassFluxCondition(        rightX, zero);
+        form.addEnergyFluxCondition(      rightX, zero);
+        break;
+      case 2:
+        form.addMassFluxCondition(        leftX, -u1_exact);
+        form.addXMomentumFluxCondition(   leftX, -u1_exact*u1_exact-R*one);
+        form.addYMomentumFluxCondition(   leftX, -u1_exact*u2_exact);
+        form.addEnergyFluxCondition(      leftX, -u1_exact*(Cv+0.5+R));
+
+        form.addMassFluxCondition(        leftY, -u2_exact);
+        form.addXMomentumFluxCondition(   leftY, -u2_exact*u1_exact);
+        form.addYMomentumFluxCondition(   leftY, -u2_exact*u2_exact-R*one);
+        form.addEnergyFluxCondition(      leftY, -u2_exact*(Cv+0.5+R));
+
+        form.addXVelocityTraceCondition(  rightX, zero);
+        form.addMassFluxCondition(        rightX, zero);
+        form.addYMomentumFluxCondition(   rightX, zero);
+        form.addEnergyFluxCondition(      rightX, zero);
+
+        form.addYVelocityTraceCondition(  rightY, zero);
+        form.addMassFluxCondition(        rightY, zero);
+        form.addXMomentumFluxCondition(   rightY, zero);
+        form.addEnergyFluxCondition(      rightY, zero);
+        // form.addMassFluxCondition(        leftX, u1_exact);
+        // form.addXMomentumFluxCondition(   leftX, u1_exact*u1_exact+R*one);
+        // form.addYMomentumFluxCondition(   leftX, u1_exact*u2_exact);
+        // form.addEnergyFluxCondition(      leftX, u1_exact*(Cv+0.5+R));
+        // form.addMassFluxCondition(        leftY, u2_exact);
+        // form.addXMomentumFluxCondition(   leftY, u2_exact*u1_exact);
+        // form.addYMomentumFluxCondition(   leftY, u2_exact*u2_exact+R*one);
+        // form.addEnergyFluxCondition(      leftY, u2_exact*(Cv+0.5+R));
+        break;
+      case 3:
+        break;
+    }
   }
 
   ostringstream exportName;

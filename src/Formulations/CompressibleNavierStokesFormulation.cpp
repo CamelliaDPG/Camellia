@@ -17,6 +17,8 @@
 #include "PoissonFormulation.h"
 #include "PreviousSolutionFunction.h"
 #include "SimpleFunction.h"
+#include "TrigFunctions.h"
+#include "PolarizedFunction.h"
 #include "SuperLUDistSolver.h"
 
 using namespace Camellia;
@@ -350,9 +352,17 @@ CompressibleNavierStokesFormulation::CompressibleNavierStokesFormulation(MeshTop
   // Project ones as initial guess
   FunctionPtr rho_init, u1_init, u2_init, u3_init, T_init, tc_init, tm1_init, tm2_init, tm3_init, te_init;
   rho_init = Function::constant(rhoInit);
-  u1_init = Function::constant(u1Init);
+
+  FunctionPtr cos_y = Teuchos::rcp(new Cos_ay(1));
+  FunctionPtr sin_y = Teuchos::rcp(new Sin_ay(1));
+  FunctionPtr cos_theta = Teuchos::rcp( new PolarizedFunction<double>( cos_y ) );
+  FunctionPtr sin_theta = Teuchos::rcp( new PolarizedFunction<double>( sin_y ) );
+
+  // u1_init = Function::constant(u1Init);
+  u1_init = -cos_theta;
   if (_spaceDim > 1)
-    u2_init = Function::constant(u2Init);
+    // u2_init = Function::constant(u2Init);
+    u2_init = -sin_theta;
   if (_spaceDim > 2)
     u3_init = Function::constant(u3Init);
   T_init = Function::constant(TInit);
