@@ -250,7 +250,7 @@ int main(int argc, char *argv[])
   if (problemName == "Noh")
   {
     gamma = 5./3;
-    double p_inf = 1;
+    double p_inf = 1e-6;
     double rho_inf = 1;
     double u_inf = 1;
     double a_inf = sqrt(gamma*p_inf*rho_inf);
