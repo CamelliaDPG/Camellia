@@ -250,13 +250,14 @@ int main(int argc, char *argv[])
   if (problemName == "Noh")
   {
     gamma = 5./3;
-    double p_inf = 1e-6;
+    // double p_inf = 1e-6;
     double rho_inf = 1;
     double u_inf = 1;
-    double a_inf = sqrt(gamma*p_inf*rho_inf);
-    double M_inf = u_inf/a_inf;
-    double T_inf = p_inf/(rho_inf*Cv*(gamma-1));
-    Cv = (u_inf*u_inf)/(M_inf*M_inf*gamma*(gamma-1)*T_inf);
+    // double a_inf = sqrt(gamma*p_inf*rho_inf);
+    // double M_inf = u_inf/a_inf;
+    // double T_inf = p_inf/(rho_inf*Cv*(gamma-1));
+    // Cv = (u_inf*u_inf)/(M_inf*M_inf*gamma*(gamma-1)*T_inf);
+    Cv = 1;
     int meshWidth = 2;
     vector<double> dims(spaceDim,1.0);
     vector<int> numElements(spaceDim,meshWidth);
@@ -289,7 +290,7 @@ int main(int argc, char *argv[])
   nsParameters.set("rhoInit", 1.);
   nsParameters.set("u1Init", 1.);
   nsParameters.set("u2Init", 0.);
-  nsParameters.set("TInit", 1.);
+  nsParameters.set("TInit", 0.);
   CompressibleNavierStokesFormulation form(meshTopo, nsParameters);
 
   if (useSPDSolver)
@@ -590,7 +591,7 @@ int main(int argc, char *argv[])
     {
       rho_exact = one;
       u1_exact = one;
-      T_exact = one;
+      T_exact = zero;
     }
     else
     {
@@ -599,7 +600,7 @@ int main(int argc, char *argv[])
       u2_exact = -sin_theta;
       // u1_exact = one;
       // u2_exact = zero;
-      T_exact = one;
+      T_exact = zero;
     }
     FunctionPtr u_exact;
     if (spaceDim == 1)
@@ -619,8 +620,8 @@ int main(int argc, char *argv[])
     {
       case 1:
         form.addMassFluxCondition(        leftX, -one);
-        form.addXMomentumFluxCondition(   leftX, -(1+R)*one);
-        form.addEnergyFluxCondition(      leftX, -(Cv+.5+R)*one);
+        form.addXMomentumFluxCondition(   leftX, -one);
+        form.addEnergyFluxCondition(      leftX, -(Cv+.5)*one);
         form.addVelocityTraceCondition(   rightX, zero);
         form.addMassFluxCondition(        rightX, zero);
         form.addEnergyFluxCondition(      rightX, zero);
@@ -633,14 +634,14 @@ int main(int argc, char *argv[])
         break;
       case 2:
         form.addMassFluxCondition(        leftX, -u1_exact);
-        form.addXMomentumFluxCondition(   leftX, -u1_exact*u1_exact-R*one);
+        form.addXMomentumFluxCondition(   leftX, -u1_exact*u1_exact);
         form.addYMomentumFluxCondition(   leftX, -u1_exact*u2_exact);
-        form.addEnergyFluxCondition(      leftX, -u1_exact*(Cv+0.5+R));
+        form.addEnergyFluxCondition(      leftX, -u1_exact*(Cv+0.5));
 
         form.addMassFluxCondition(        leftY, -u2_exact);
         form.addXMomentumFluxCondition(   leftY, -u2_exact*u1_exact);
-        form.addYMomentumFluxCondition(   leftY, -u2_exact*u2_exact-R*one);
-        form.addEnergyFluxCondition(      leftY, -u2_exact*(Cv+0.5+R));
+        form.addYMomentumFluxCondition(   leftY, -u2_exact*u2_exact);
+        form.addEnergyFluxCondition(      leftY, -u2_exact*(Cv+0.5));
 
         form.addXVelocityTraceCondition(  rightX, zero);
         form.addMassFluxCondition(        rightX, zero);
