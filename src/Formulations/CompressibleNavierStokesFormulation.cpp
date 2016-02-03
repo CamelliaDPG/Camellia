@@ -17,6 +17,8 @@
 #include "PoissonFormulation.h"
 #include "PreviousSolutionFunction.h"
 #include "SimpleFunction.h"
+#include "TrigFunctions.h"
+#include "PolarizedFunction.h"
 #include "SuperLUDistSolver.h"
 
 using namespace Camellia;
@@ -157,6 +159,11 @@ CompressibleNavierStokesFormulation::CompressibleNavierStokesFormulation(MeshTop
   _t0 = parameters.get<double>("t0",0);
   _neglectFluxesOnRHS = neglectFluxesOnRHS;
   _delta_k = delta_k;
+
+  _muParamFunc = ParameterFunction::parameterFunction(_mu);
+  _muSqrtParamFunc = ParameterFunction::parameterFunction(sqrt(_mu));
+  _muFunc = _muParamFunc;
+  _muSqrtFunc = _muSqrtParamFunc;
 
   double thetaValue;
   switch (timeStepType) {
@@ -350,9 +357,17 @@ CompressibleNavierStokesFormulation::CompressibleNavierStokesFormulation(MeshTop
   // Project ones as initial guess
   FunctionPtr rho_init, u1_init, u2_init, u3_init, T_init, tc_init, tm1_init, tm2_init, tm3_init, te_init;
   rho_init = Function::constant(rhoInit);
-  u1_init = Function::constant(u1Init);
+
+  FunctionPtr cos_y = Teuchos::rcp(new Cos_ay(1));
+  FunctionPtr sin_y = Teuchos::rcp(new Sin_ay(1));
+  FunctionPtr cos_theta = Teuchos::rcp( new PolarizedFunction<double>( cos_y ) );
+  FunctionPtr sin_theta = Teuchos::rcp( new PolarizedFunction<double>( sin_y ) );
+
+  // u1_init = Function::constant(u1Init);
+  u1_init = -cos_theta;
   if (_spaceDim > 1)
-    u2_init = Function::constant(u2Init);
+    // u2_init = Function::constant(u2Init);
+    u2_init = -sin_theta;
   if (_spaceDim > 2)
     u3_init = Function::constant(u3Init);
   T_init = Function::constant(TInit);
@@ -535,61 +550,61 @@ CompressibleNavierStokesFormulation::CompressibleNavierStokesFormulation(MeshTop
   switch (_spaceDim)
   {
     case 1:
-      _bf->addTerm(u1, S1->dx()); // D1 = _mu * grad u1
-      _bf->addTerm(1./_mu * D11, S1); // (D1, S1)
+      _bf->addTerm(u1, S1->dx()); // D1 = mu() * grad u1
+      _bf->addTerm(1./_muFunc * D11, S1); // (D1, S1)
       _bf->addTerm(-u1_hat, S1*n_x->x());
 
-      _rhs->addTerm(-u1_prev * S1->dx()); // D1 = _mu * grad u1
-      _rhs->addTerm(-1./_mu * D11_prev * S1); // (D1, S1)
+      _rhs->addTerm(-u1_prev * S1->dx()); // D1 = mu() * grad u1
+      _rhs->addTerm(-1./_muFunc * D11_prev * S1); // (D1, S1)
       break;
     case 2:
-      _bf->addTerm(u1, S1->div()); // D1 = _mu * grad u1
-      _bf->addTerm(u2, S2->div()); // D2 = _mu * grad u2
-      // _bf->addTerm(u1, S1->x()->dx() + S1->y()->dy()); // D1 = _mu * grad u1
-      // _bf->addTerm(u2, S2->x()->dx() + S2->y()->dy()); // D2 = _mu * grad u2
-      _bf->addTerm(1./_mu * D11, S1->x()); // (D1, S1)
-      _bf->addTerm(1./_mu * D12, S1->y());
-      _bf->addTerm(1./_mu * D21, S2->x()); // (D2, S2)
-      _bf->addTerm(1./_mu * D22, S2->y());
+      _bf->addTerm(u1, S1->div()); // D1 = mu() * grad u1
+      _bf->addTerm(u2, S2->div()); // D2 = mu() * grad u2
+      // _bf->addTerm(u1, S1->x()->dx() + S1->y()->dy()); // D1 = mu() * grad u1
+      // _bf->addTerm(u2, S2->x()->dx() + S2->y()->dy()); // D2 = mu() * grad u2
+      _bf->addTerm(1./_muFunc * D11, S1->x()); // (D1, S1)
+      _bf->addTerm(1./_muFunc * D12, S1->y());
+      _bf->addTerm(1./_muFunc * D21, S2->x()); // (D2, S2)
+      _bf->addTerm(1./_muFunc * D22, S2->y());
       _bf->addTerm(-u1_hat, S1*n_x);
       _bf->addTerm(-u2_hat, S2*n_x);
 
-      _rhs->addTerm(-u1_prev * S1->div()); // D1 = _mu * grad u1
-      _rhs->addTerm(-u2_prev * S2->div()); // D2 = _mu * grad u2
-      _rhs->addTerm(-1./_mu * D11_prev * S1->x()); // (D1, S1)
-      _rhs->addTerm(-1./_mu * D12_prev * S1->y());
-      _rhs->addTerm(-1./_mu * D21_prev * S2->x()); // (D2, S2)
-      _rhs->addTerm(-1./_mu * D22_prev * S2->y());
+      _rhs->addTerm(-u1_prev * S1->div()); // D1 = mu() * grad u1
+      _rhs->addTerm(-u2_prev * S2->div()); // D2 = mu() * grad u2
+      _rhs->addTerm(-1./_muFunc * D11_prev * S1->x()); // (D1, S1)
+      _rhs->addTerm(-1./_muFunc * D12_prev * S1->y());
+      _rhs->addTerm(-1./_muFunc * D21_prev * S2->x()); // (D2, S2)
+      _rhs->addTerm(-1./_muFunc * D22_prev * S2->y());
       break;
     case 3:
-      _bf->addTerm(u1, S1->div()); // D1 = _mu * grad u1
-      _bf->addTerm(u2, S2->div()); // D2 = _mu * grad u2
-      _bf->addTerm(u3, S3->div()); // D3 = _mu * grad u3
-      _bf->addTerm(1./_mu * D11, S1->x()); // (D1, S1)
-      _bf->addTerm(1./_mu * D12, S1->y());
-      _bf->addTerm(1./_mu * D13, S1->z());
-      _bf->addTerm(1./_mu * D21, S2->x()); // (D2, S2)
-      _bf->addTerm(1./_mu * D22, S2->y());
-      _bf->addTerm(1./_mu * D23, S2->z());
-      _bf->addTerm(1./_mu * D31, S3->x()); // (D3, S3)
-      _bf->addTerm(1./_mu * D32, S3->y());
-      _bf->addTerm(1./_mu * D33, S3->z());
+      _bf->addTerm(u1, S1->div()); // D1 = mu() * grad u1
+      _bf->addTerm(u2, S2->div()); // D2 = mu() * grad u2
+      _bf->addTerm(u3, S3->div()); // D3 = mu() * grad u3
+      _bf->addTerm(1./_muFunc * D11, S1->x()); // (D1, S1)
+      _bf->addTerm(1./_muFunc * D12, S1->y());
+      _bf->addTerm(1./_muFunc * D13, S1->z());
+      _bf->addTerm(1./_muFunc * D21, S2->x()); // (D2, S2)
+      _bf->addTerm(1./_muFunc * D22, S2->y());
+      _bf->addTerm(1./_muFunc * D23, S2->z());
+      _bf->addTerm(1./_muFunc * D31, S3->x()); // (D3, S3)
+      _bf->addTerm(1./_muFunc * D32, S3->y());
+      _bf->addTerm(1./_muFunc * D33, S3->z());
       _bf->addTerm(-u1_hat, S1*n_x);
       _bf->addTerm(-u2_hat, S2*n_x);
       _bf->addTerm(-u3_hat, S3*n_x);
 
-      _rhs->addTerm(-u1_prev * S1->div()); // D1 = _mu * grad u1
-      _rhs->addTerm(-u2_prev * S2->div()); // D2 = _mu * grad u2
-      _rhs->addTerm(-u3_prev * S3->div()); // D3 = _mu * grad u3
-      _rhs->addTerm(-1./_mu * D11_prev * S1->x()); // (D1, S1)
-      _rhs->addTerm(-1./_mu * D12_prev * S1->y());
-      _rhs->addTerm(-1./_mu * D13_prev * S1->z());
-      _rhs->addTerm(-1./_mu * D21_prev * S2->x()); // (D2, S2)
-      _rhs->addTerm(-1./_mu * D22_prev * S2->y());
-      _rhs->addTerm(-1./_mu * D23_prev * S2->z());
-      _rhs->addTerm(-1./_mu * D31_prev * S3->x()); // (D3, S3)
-      _rhs->addTerm(-1./_mu * D32_prev * S3->y());
-      _rhs->addTerm(-1./_mu * D33_prev * S3->z());
+      _rhs->addTerm(-u1_prev * S1->div()); // D1 = mu() * grad u1
+      _rhs->addTerm(-u2_prev * S2->div()); // D2 = mu() * grad u2
+      _rhs->addTerm(-u3_prev * S3->div()); // D3 = mu() * grad u3
+      _rhs->addTerm(-1./_muFunc * D11_prev * S1->x()); // (D1, S1)
+      _rhs->addTerm(-1./_muFunc * D12_prev * S1->y());
+      _rhs->addTerm(-1./_muFunc * D13_prev * S1->z());
+      _rhs->addTerm(-1./_muFunc * D21_prev * S2->x()); // (D2, S2)
+      _rhs->addTerm(-1./_muFunc * D22_prev * S2->y());
+      _rhs->addTerm(-1./_muFunc * D23_prev * S2->z());
+      _rhs->addTerm(-1./_muFunc * D31_prev * S3->x()); // (D3, S3)
+      _rhs->addTerm(-1./_muFunc * D32_prev * S3->y());
+      _rhs->addTerm(-1./_muFunc * D33_prev * S3->z());
       break;
     default:
       break;
@@ -600,33 +615,33 @@ CompressibleNavierStokesFormulation::CompressibleNavierStokesFormulation(MeshTop
   {
     case 1:
       _bf->addTerm(-T, tau->dx()); // tau = Cp*mu/Pr * grad T
-      _bf->addTerm(Pr()/(Cp()*mu()) * q1, tau); // (D1, S1)
+      _bf->addTerm(Pr()/(Cp()*_muFunc) * q1, tau); // (D1, S1)
       _bf->addTerm(T_hat, tau*n_x->x());
 
       _rhs->addTerm( T_prev * tau->dx()); // tau = Cp*_mu/Pr * grad T
-      _rhs->addTerm(-Pr()/(Cp()*mu()) * q1_prev * tau); // (D1, S1)
+      _rhs->addTerm(-Pr()/(Cp()*_muFunc) * q1_prev * tau); // (D1, S1)
       break;
     case 2:
       _bf->addTerm(-T, tau->div()); // tau = Cp*mu/Pr * grad T
-      _bf->addTerm(Pr()/(Cp()*mu()) * q1, tau->x()); // (D1, S1)
-      _bf->addTerm(Pr()/(Cp()*mu()) * q2, tau->y()); // (D1, S1)
+      _bf->addTerm(Pr()/(Cp()*_muFunc) * q1, tau->x()); // (D1, S1)
+      _bf->addTerm(Pr()/(Cp()*_muFunc) * q2, tau->y()); // (D1, S1)
       _bf->addTerm(T_hat, tau*n_x);
 
       _rhs->addTerm( T_prev * tau->div()); // tau = Cp*_mu/Pr * grad T
-      _rhs->addTerm(-Pr()/(Cp()*mu()) * q1_prev * tau->x()); // (D1, S1)
-      _rhs->addTerm(-Pr()/(Cp()*mu()) * q2_prev * tau->y());
+      _rhs->addTerm(-Pr()/(Cp()*_muFunc) * q1_prev * tau->x()); // (D1, S1)
+      _rhs->addTerm(-Pr()/(Cp()*_muFunc) * q2_prev * tau->y());
       break;
     case 3:
       _bf->addTerm(-T, tau->div()); // tau = Cp*mu/Pr * grad T
-      _bf->addTerm(Pr()/(Cp()*mu()) * q1, tau->x()); // (D1, S1)
-      _bf->addTerm(Pr()/(Cp()*mu()) * q2, tau->y());
-      _bf->addTerm(Pr()/(Cp()*mu()) * q3, tau->z());
+      _bf->addTerm(Pr()/(Cp()*_muFunc) * q1, tau->x()); // (D1, S1)
+      _bf->addTerm(Pr()/(Cp()*_muFunc) * q2, tau->y());
+      _bf->addTerm(Pr()/(Cp()*_muFunc) * q3, tau->z());
       _bf->addTerm(T_hat, tau*n_x);
 
       _rhs->addTerm( T_prev * tau->div()); // tau = Cp*_mu/Pr * grad T
-      _rhs->addTerm(-Pr()/(Cp()*mu()) * q1_prev * tau->x()); // (D1, S1)
-      _rhs->addTerm(-Pr()/(Cp()*mu()) * q2_prev * tau->y());
-      _rhs->addTerm(-Pr()/(Cp()*mu()) * q3_prev * tau->z());
+      _rhs->addTerm(-Pr()/(Cp()*_muFunc) * q1_prev * tau->x()); // (D1, S1)
+      _rhs->addTerm(-Pr()/(Cp()*_muFunc) * q2_prev * tau->y());
+      _rhs->addTerm(-Pr()/(Cp()*_muFunc) * q3_prev * tau->z());
       break;
     default:
       break;
@@ -1170,8 +1185,8 @@ CompressibleNavierStokesFormulation::CompressibleNavierStokesFormulation(MeshTop
       adj_Fe->addTerm( R()*rho_prev*vm1->dx() + Cv()*rho_prev*u1_prev*ve->dx() + R()*rho_prev*u1_prev*ve->dx() );
       adj_KD11->addTerm( vm1->dx() + vm1->dx() - 2./3*vm1->dx() + u1_prev*ve->dx() + u1_prev*ve->dx() - 2./3*u1_prev*ve->dx() );
       adj_Kq1->addTerm( -ve->dx() );
-      adj_MD11->addTerm( 1./mu()*S1 );
-      adj_Mq1->addTerm( Pr()/(Cp()*mu())*tau );
+      adj_MD11->addTerm( 1./_muFunc*S1 );
+      adj_Mq1->addTerm( Pr()/(Cp()*_muFunc)*tau );
       adj_Gm1->addTerm( one*S1->dx() );
       adj_Ge->addTerm( -tau->dx() );
 
@@ -1201,11 +1216,11 @@ CompressibleNavierStokesFormulation::CompressibleNavierStokesFormulation(MeshTop
 
       _ips["Robust"] = Teuchos::rcp(new IP);
       // _ips["Robust"]->addTerm(Function::min(one/Function::h(),Function::constant(1./sqrt(_mu)))*tau);
-      _ips["Robust"]->addTerm( Function::min(one/Function::h(),Function::constant(1./sqrt(mu())))*mu()*adj_MD11);
-      _ips["Robust"]->addTerm( Function::min(one/Function::h(),Function::constant(1./sqrt(mu())))*Cp()*mu()/Pr()*adj_Mq1);
+      _ips["Robust"]->addTerm( Function::min(one/Function::h(),1./_muSqrtFunc)*_muFunc*adj_MD11);
+      _ips["Robust"]->addTerm( Function::min(one/Function::h(),1./_muSqrtFunc)*Cp()*_muFunc/Pr()*adj_Mq1);
       // _ips["Robust"]->addTerm(sqrt(_mu)*v->grad());
-      _ips["Robust"]->addTerm( sqrt(mu())*one*adj_KD11 );
-      _ips["Robust"]->addTerm( sqrt(Cp()*mu()/Pr())*one*adj_Kq1 );
+      _ips["Robust"]->addTerm( _muSqrtFunc*adj_KD11 );
+      _ips["Robust"]->addTerm( sqrt(Cp()/Pr())*_muSqrtFunc*adj_Kq1 );
       if (_spaceTime)
       {
         // _ips["Robust"]->addTerm(_beta*v->grad() + v->dt());
@@ -1234,11 +1249,11 @@ CompressibleNavierStokesFormulation::CompressibleNavierStokesFormulation(MeshTop
 
       _ips["CoupledRobust"] = Teuchos::rcp(new IP);
       // _ips["CoupledRobust"]->addTerm(Function::min(one/Function::h(),Function::constant(1./sqrt(_mu)))*tau);
-      _ips["CoupledRobust"]->addTerm( Function::min(one/Function::h(),Function::constant(1./sqrt(mu())))*mu()*adj_MD11);
-      _ips["CoupledRobust"]->addTerm( Function::min(one/Function::h(),Function::constant(1./sqrt(mu())))*Cp()*mu()/Pr()*adj_Mq1);
+      _ips["CoupledRobust"]->addTerm( Function::min(one/Function::h(),1./_muSqrtFunc)*_muFunc*adj_MD11);
+      _ips["CoupledRobust"]->addTerm( Function::min(one/Function::h(),1./_muSqrtFunc)*Cp()*_muFunc/Pr()*adj_Mq1);
       // _ips["CoupledRobust"]->addTerm(sqrt(_mu)*v->grad());
-      _ips["CoupledRobust"]->addTerm( sqrt(mu())*one*adj_KD11 );
-      _ips["CoupledRobust"]->addTerm( sqrt(Cp()*mu()/Pr())*one*adj_Kq1 );
+      _ips["CoupledRobust"]->addTerm( _muSqrtFunc*adj_KD11 );
+      _ips["CoupledRobust"]->addTerm( sqrt(Cp()/Pr())*_muSqrtFunc*adj_Kq1 );
       if (_spaceTime)
       {
         // _ips["CoupledRobust"]->addTerm(tau->div() - v->dt() - beta*v->grad());
@@ -1271,8 +1286,8 @@ CompressibleNavierStokesFormulation::CompressibleNavierStokesFormulation(MeshTop
 
       _ips["NSDecoupled"] = Teuchos::rcp(new IP);
       // _ips["NSDecoupled"]->addTerm(one/Function::h()*tau);
-      _ips["NSDecoupled"]->addTerm( mu()/Function::h()*adj_MD11 );
-      _ips["NSDecoupled"]->addTerm( Cp()*mu()/Pr()/Function::h()*adj_Mq1 );
+      _ips["NSDecoupled"]->addTerm( _muFunc/Function::h()*adj_MD11 );
+      _ips["NSDecoupled"]->addTerm( Cp()*_muFunc/Pr()/Function::h()*adj_Mq1 );
       // _ips["NSDecoupled"]->addTerm(tau->div());
       _ips["NSDecoupled"]->addTerm( adj_KD11 );
       _ips["NSDecoupled"]->addTerm( adj_Kq1 );
@@ -1341,12 +1356,12 @@ CompressibleNavierStokesFormulation::CompressibleNavierStokesFormulation(MeshTop
           + u2_prev*ve->dy() + u2_prev*ve->dy() - 2./3*u1_prev*ve->dx() - 2./3*u2_prev*ve->dy() );
       adj_Kq1->addTerm( -ve->dx() );
       adj_Kq2->addTerm( -ve->dy() );
-      adj_MD11->addTerm( 1./mu()*S1->x() );
-      adj_MD12->addTerm( 1./mu()*S1->y() );
-      adj_MD21->addTerm( 1./mu()*S2->x() );
-      adj_MD22->addTerm( 1./mu()*S2->y() );
-      adj_Mq1->addTerm( Pr()/(Cp()*mu())*tau->x() );
-      adj_Mq2->addTerm( Pr()/(Cp()*mu())*tau->y() );
+      adj_MD11->addTerm( 1./_muFunc*S1->x() );
+      adj_MD12->addTerm( 1./_muFunc*S1->y() );
+      adj_MD21->addTerm( 1./_muFunc*S2->x() );
+      adj_MD22->addTerm( 1./_muFunc*S2->y() );
+      adj_Mq1->addTerm( Pr()/(Cp()*_muFunc)*tau->x() );
+      adj_Mq2->addTerm( Pr()/(Cp()*_muFunc)*tau->y() );
       adj_Gm1->addTerm( one*S1->div() );
       adj_Gm2->addTerm( one*S2->div() );
       adj_Ge->addTerm( -tau->div() );
@@ -1382,19 +1397,19 @@ CompressibleNavierStokesFormulation::CompressibleNavierStokesFormulation(MeshTop
 
       _ips["Robust"] = Teuchos::rcp(new IP);
       // _ips["Robust"]->addTerm(Function::min(one/Function::h(),Function::constant(1./sqrt(_mu)))*tau);
-      _ips["Robust"]->addTerm( Function::min(one/Function::h(),Function::constant(1./sqrt(mu())))*mu()*adj_MD11);
-      _ips["Robust"]->addTerm( Function::min(one/Function::h(),Function::constant(1./sqrt(mu())))*mu()*adj_MD12);
-      _ips["Robust"]->addTerm( Function::min(one/Function::h(),Function::constant(1./sqrt(mu())))*mu()*adj_MD21);
-      _ips["Robust"]->addTerm( Function::min(one/Function::h(),Function::constant(1./sqrt(mu())))*mu()*adj_MD22);
-      _ips["Robust"]->addTerm( Function::min(one/Function::h(),Function::constant(1./sqrt(mu())))*Cp()*mu()/Pr()*adj_Mq1);
-      _ips["Robust"]->addTerm( Function::min(one/Function::h(),Function::constant(1./sqrt(mu())))*Cp()*mu()/Pr()*adj_Mq2);
+      _ips["Robust"]->addTerm( Function::min(one/Function::h(),1./_muSqrtFunc)*_muFunc*adj_MD11);
+      _ips["Robust"]->addTerm( Function::min(one/Function::h(),1./_muSqrtFunc)*_muFunc*adj_MD12);
+      _ips["Robust"]->addTerm( Function::min(one/Function::h(),1./_muSqrtFunc)*_muFunc*adj_MD21);
+      _ips["Robust"]->addTerm( Function::min(one/Function::h(),1./_muSqrtFunc)*_muFunc*adj_MD22);
+      _ips["Robust"]->addTerm( Function::min(one/Function::h(),1./_muSqrtFunc)*Cp()*_muFunc/Pr()*adj_Mq1);
+      _ips["Robust"]->addTerm( Function::min(one/Function::h(),1./_muSqrtFunc)*Cp()*_muFunc/Pr()*adj_Mq2);
       // _ips["Robust"]->addTerm(sqrt(_mu)*v->grad());
-      _ips["Robust"]->addTerm( sqrt(mu())*one*adj_KD11 );
-      _ips["Robust"]->addTerm( sqrt(mu())*one*adj_KD12 );
-      _ips["Robust"]->addTerm( sqrt(mu())*one*adj_KD21 );
-      _ips["Robust"]->addTerm( sqrt(mu())*one*adj_KD22 );
-      _ips["Robust"]->addTerm( sqrt(Cp()*mu()/Pr())*one*adj_Kq1 );
-      _ips["Robust"]->addTerm( sqrt(Cp()*mu()/Pr())*one*adj_Kq2 );
+      _ips["Robust"]->addTerm( _muSqrtFunc*adj_KD11 );
+      _ips["Robust"]->addTerm( _muSqrtFunc*adj_KD12 );
+      _ips["Robust"]->addTerm( _muSqrtFunc*adj_KD21 );
+      _ips["Robust"]->addTerm( _muSqrtFunc*adj_KD22 );
+      _ips["Robust"]->addTerm( sqrt(Cp()/Pr())*_muSqrtFunc*adj_Kq1 );
+      _ips["Robust"]->addTerm( sqrt(Cp()/Pr())*_muSqrtFunc*adj_Kq2 );
       if (_spaceTime)
       {
         // _ips["Robust"]->addTerm(_beta*v->grad() + v->dt());
@@ -1436,19 +1451,19 @@ CompressibleNavierStokesFormulation::CompressibleNavierStokesFormulation(MeshTop
 
       _ips["CoupledRobust"] = Teuchos::rcp(new IP);
       // _ips["CoupledRobust"]->addTerm(Function::min(one/Function::h(),Function::constant(1./sqrt(_mu)))*tau);
-      _ips["CoupledRobust"]->addTerm( Function::min(one/Function::h(),Function::constant(1./sqrt(mu())))*mu()*adj_MD11);
-      _ips["CoupledRobust"]->addTerm( Function::min(one/Function::h(),Function::constant(1./sqrt(mu())))*mu()*adj_MD12);
-      _ips["CoupledRobust"]->addTerm( Function::min(one/Function::h(),Function::constant(1./sqrt(mu())))*mu()*adj_MD21);
-      _ips["CoupledRobust"]->addTerm( Function::min(one/Function::h(),Function::constant(1./sqrt(mu())))*mu()*adj_MD22);
-      _ips["CoupledRobust"]->addTerm( Function::min(one/Function::h(),Function::constant(1./sqrt(mu())))*Cp()*mu()/Pr()*adj_Mq1);
-      _ips["CoupledRobust"]->addTerm( Function::min(one/Function::h(),Function::constant(1./sqrt(mu())))*Cp()*mu()/Pr()*adj_Mq2);
+      _ips["CoupledRobust"]->addTerm( Function::min(one/Function::h(),1./_muSqrtFunc)*_muFunc*adj_MD11);
+      _ips["CoupledRobust"]->addTerm( Function::min(one/Function::h(),1./_muSqrtFunc)*_muFunc*adj_MD12);
+      _ips["CoupledRobust"]->addTerm( Function::min(one/Function::h(),1./_muSqrtFunc)*_muFunc*adj_MD21);
+      _ips["CoupledRobust"]->addTerm( Function::min(one/Function::h(),1./_muSqrtFunc)*_muFunc*adj_MD22);
+      _ips["CoupledRobust"]->addTerm( Function::min(one/Function::h(),1./_muSqrtFunc)*Cp()*_muFunc/Pr()*adj_Mq1);
+      _ips["CoupledRobust"]->addTerm( Function::min(one/Function::h(),1./_muSqrtFunc)*Cp()*_muFunc/Pr()*adj_Mq2);
       // _ips["CoupledRobust"]->addTerm(sqrt(_mu)*v->grad());
-      _ips["CoupledRobust"]->addTerm( sqrt(mu())*one*adj_KD11 );
-      _ips["CoupledRobust"]->addTerm( sqrt(mu())*one*adj_KD12 );
-      _ips["CoupledRobust"]->addTerm( sqrt(mu())*one*adj_KD21 );
-      _ips["CoupledRobust"]->addTerm( sqrt(mu())*one*adj_KD22 );
-      _ips["CoupledRobust"]->addTerm( sqrt(Cp()*mu()/Pr())*one*adj_Kq1 );
-      _ips["CoupledRobust"]->addTerm( sqrt(Cp()*mu()/Pr())*one*adj_Kq2 );
+      _ips["CoupledRobust"]->addTerm( _muFunc*adj_KD11 );
+      _ips["CoupledRobust"]->addTerm( _muFunc*adj_KD12 );
+      _ips["CoupledRobust"]->addTerm( _muFunc*adj_KD21 );
+      _ips["CoupledRobust"]->addTerm( _muFunc*adj_KD22 );
+      _ips["CoupledRobust"]->addTerm( sqrt(Cp()/Pr())*_muSqrtFunc*adj_Kq1 );
+      _ips["CoupledRobust"]->addTerm( sqrt(Cp()/Pr())*_muSqrtFunc*adj_Kq2 );
       if (_spaceTime)
       {
         // _ips["CoupledRobust"]->addTerm(tau->div() - v->dt() - beta*v->grad());
@@ -1516,12 +1531,12 @@ CompressibleNavierStokesFormulation::CompressibleNavierStokesFormulation(MeshTop
       _ips["CoupledRobust"]->addTerm( ve );
 
       _ips["NSDecoupled"] = Teuchos::rcp(new IP);
-      _ips["NSDecoupled"]->addTerm( mu()/Function::h()*adj_MD11 );
-      _ips["NSDecoupled"]->addTerm( mu()/Function::h()*adj_MD12 );
-      _ips["NSDecoupled"]->addTerm( mu()/Function::h()*adj_MD21 );
-      _ips["NSDecoupled"]->addTerm( mu()/Function::h()*adj_MD22 );
-      _ips["NSDecoupled"]->addTerm( Cp()*mu()/Pr()/Function::h()*adj_Mq1 );
-      _ips["NSDecoupled"]->addTerm( Cp()*mu()/Pr()/Function::h()*adj_Mq2 );
+      _ips["NSDecoupled"]->addTerm( _muFunc/Function::h()*adj_MD11 );
+      _ips["NSDecoupled"]->addTerm( _muFunc/Function::h()*adj_MD12 );
+      _ips["NSDecoupled"]->addTerm( _muFunc/Function::h()*adj_MD21 );
+      _ips["NSDecoupled"]->addTerm( _muFunc/Function::h()*adj_MD22 );
+      _ips["NSDecoupled"]->addTerm( Cp()*_muFunc/Pr()/Function::h()*adj_Mq1 );
+      _ips["NSDecoupled"]->addTerm( Cp()*_muFunc/Pr()/Function::h()*adj_Mq2 );
       _ips["NSDecoupled"]->addTerm( adj_KD11 );
       _ips["NSDecoupled"]->addTerm( adj_KD12 );
       _ips["NSDecoupled"]->addTerm( adj_KD21 );
@@ -2566,6 +2581,13 @@ int CompressibleNavierStokesFormulation::nonlinearIterationCount()
 double CompressibleNavierStokesFormulation::mu()
 {
   return _mu;
+}
+
+void CompressibleNavierStokesFormulation::setmu(double value)
+{
+  _mu = value;
+  _muParamFunc->setValue(_mu);
+  _muSqrtParamFunc->setValue(sqrt(_mu));
 }
 
 double CompressibleNavierStokesFormulation::gamma()

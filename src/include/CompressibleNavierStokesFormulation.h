@@ -35,6 +35,10 @@ class CompressibleNavierStokesFormulation
   int _spaceDim;
   bool _useConformingTraces;
   double _mu;
+  FunctionPtr _muFunc;
+  FunctionPtr _muSqrtFunc;
+  Teuchos::RCP<ParameterFunction> _muParamFunc;
+  Teuchos::RCP<ParameterFunction> _muSqrtParamFunc;
   double _gamma;
   double _Pr;
   double _Cv;
@@ -194,6 +198,9 @@ public:
 
   // ! Returns viscosity mu.
   double mu();
+
+  // ! Set viscosity
+  void setmu(double value);
 
   // ! Returns gamma
   double gamma();

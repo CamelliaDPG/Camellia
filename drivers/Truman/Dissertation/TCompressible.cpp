@@ -7,6 +7,7 @@
 #include "SimpleFunction.h"
 #include "ExpFunction.h"
 #include "TrigFunctions.h"
+#include "PolarizedFunction.h"
 #include "PenaltyConstraints.h"
 #include "SuperLUDistSolver.h"
 
@@ -143,16 +144,23 @@ int main(int argc, char *argv[])
   cmdp.setOption("spaceDim", &spaceDim, "spatial dimension");
   double Re = 1e2;
   cmdp.setOption("Re", &Re, "Re");
+  double coarseRe = 1e2;
+  cmdp.setOption("coarseRe", &coarseRe, "coarse Re");
+  bool rampRe = false;
+  cmdp.setOption("rampRe", "constantRe", &rampRe, "ramp Re to final value");
   string norm = "Graph";
   cmdp.setOption("norm", &norm, "norm");
   bool useDirectSolver = false; // false has an issue during GMGOperator::setFineStiffnessMatrix's call to GMGOperator::computeCoarseStiffnessMatrix().  I'm not yet clear on the nature of this isssue.
   cmdp.setOption("useDirectSolver", "useIterativeSolver", &useDirectSolver, "use direct solver");
   bool useCondensedSolve = false;
   cmdp.setOption("useCondensedSolve", "useStandardSolve", &useCondensedSolve);
+  bool useSPDSolver = false;
+  cmdp.setOption("useSPDSolver", "useQRSolver", &useSPDSolver);
   bool useConformingTraces = false;
   cmdp.setOption("conformingTraces", "nonconformingTraces", &useConformingTraces, "use conforming traces");
-  int polyOrder = 2, delta_k = 2;
+  int polyOrder = 1, delta_k = 3;
   cmdp.setOption("polyOrder",&polyOrder,"polynomial order for field variable u");
+  cmdp.setOption("delta_k",&delta_k,"polynomial enrichment for test functions");
   int polyOrderCoarse = 1;
   double cgTol = 1e-10;
   cmdp.setOption("cgTol", &cgTol, "iterative solver tolerance");
@@ -188,6 +196,7 @@ int main(int argc, char *argv[])
   MeshGeometryPtr meshGeometry = Teuchos::null;
   double gamma = 1.4;
   double Cv = 1;
+  double rho_inf, u_inf, T_inf;
   if (problemName == "Trivial")
   {
     int meshWidth = 2;
@@ -223,14 +232,14 @@ int main(int argc, char *argv[])
   if (problemName == "Carter")
   {
     double U_inf = 1;
-    double T_inf = 1;
+    T_inf = 1;
     double M_inf = 3;
     Cv = (U_inf*U_inf)/(M_inf*M_inf*gamma*(gamma-1)*T_inf);
-    int meshWidth = 2;
+    int meshWidth = 4;
     vector<double> dims(spaceDim,2.0);
     dims[1] = 1;
     vector<int> numElements(spaceDim,meshWidth);
-    numElements[1] = 1;
+    numElements[1] = 2;
     vector<double> x0(spaceDim, -1);
     x0[1] = 0;
 
@@ -239,19 +248,48 @@ int main(int argc, char *argv[])
     {
       double t0 = 0;
       double t1 = 1;
-      int temporalDivisions = 1;
+      int temporalDivisions = 4;
+      meshTopo = MeshFactory::spaceTimeMeshTopology(meshTopo, t0, t1, temporalDivisions);
+    }
+  }
+  if (problemName == "Noh")
+  {
+    gamma = 5./3;
+    // double p_inf = 1e-3;
+    rho_inf = 1;
+    u_inf = 1;
+    // double a_inf = sqrt(gamma*p_inf*rho_inf);
+    // double M_inf = u_inf/a_inf;
+    // T_inf = p_inf/(rho_inf*Cv*(gamma-1));
+    T_inf = 0;
+    // Cv = (u_inf*u_inf)/(M_inf*M_inf*gamma*(gamma-1)*T_inf);
+    Cv = 1;
+    int meshWidth = 2;
+    vector<double> dims(spaceDim,1.0);
+    vector<int> numElements(spaceDim,meshWidth);
+    vector<double> x0(spaceDim,-1);
+
+    meshTopo = MeshFactory::rectilinearMeshTopology(dims,numElements,x0);
+    if (!steady)
+    {
+      double t0 = 0;
+      double t1 = 1;
+      int temporalDivisions = 2;
       meshTopo = MeshFactory::spaceTimeMeshTopology(meshTopo, t0, t1, temporalDivisions);
     }
   }
   double R = Cv*(gamma-1);
+  double formRe = Re;
+  if (rampRe)
+    formRe = coarseRe;
 
   Teuchos::ParameterList nsParameters;
   if (steady)
-    nsParameters = CompressibleNavierStokesFormulation::steadyFormulation(spaceDim, Re, useConformingTraces, meshTopo, polyOrder, delta_k).getConstructorParameters();
+    nsParameters = CompressibleNavierStokesFormulation::steadyFormulation(spaceDim, formRe, useConformingTraces, meshTopo, polyOrder, delta_k).getConstructorParameters();
   else
-    nsParameters = CompressibleNavierStokesFormulation::spaceTimeFormulation(spaceDim, Re, useConformingTraces, meshTopo, polyOrder, polyOrder, delta_k).getConstructorParameters();
+    nsParameters = CompressibleNavierStokesFormulation::spaceTimeFormulation(spaceDim, formRe, useConformingTraces, meshTopo, polyOrder, polyOrder, delta_k).getConstructorParameters();
   if (timeStepping)
-    nsParameters = CompressibleNavierStokesFormulation::timeSteppingFormulation(spaceDim, Re, useConformingTraces, meshTopo, polyOrder, polyOrder, delta_k).getConstructorParameters();
+    nsParameters = CompressibleNavierStokesFormulation::timeSteppingFormulation(spaceDim, formRe, useConformingTraces, meshTopo, polyOrder, polyOrder, delta_k).getConstructorParameters();
 
   // nsParameters.set("neglectFluxesOnRHS", false);
   nsParameters.set("norm", norm);
@@ -261,8 +299,11 @@ int main(int argc, char *argv[])
   nsParameters.set("rhoInit", 1.);
   nsParameters.set("u1Init", 1.);
   nsParameters.set("u2Init", 0.);
-  nsParameters.set("TInit", 1.);
+  nsParameters.set("TInit", 0.);
   CompressibleNavierStokesFormulation form(meshTopo, nsParameters);
+
+  if (useSPDSolver)
+    form.bf()->setUseSPDSolveForOptimalTestFunctions(true);
 
   // form.refine();
 
@@ -532,6 +573,114 @@ int main(int argc, char *argv[])
     form.addVelocityTraceCondition(plate, zeros);
     form.addTemperatureTraceCondition(plate, 2.8*one);
   }
+  if (problemName == "Noh")
+  {
+    SpatialFilterPtr leftX  = SpatialFilter::matchingX(-1);
+    SpatialFilterPtr rightX = SpatialFilter::matchingX(0);
+    SpatialFilterPtr leftY  = SpatialFilter::matchingY(-1);
+    SpatialFilterPtr rightY = SpatialFilter::matchingY(0);
+
+    FunctionPtr zero = Function::zero();
+    FunctionPtr zeros = Function::vectorize(zero, zero);
+    FunctionPtr one = Function::constant(1);
+    FunctionPtr onezero = Function::vectorize(one, zero);
+    FunctionPtr ones = Function::vectorize(one, one);
+    FunctionPtr cos_y = Teuchos::rcp(new Cos_ay(1));
+    FunctionPtr sin_y = Teuchos::rcp(new Sin_ay(1));
+    // FunctionPtr cos_theta = Function::polarize(Teuchos::rcp( new Cos_y ) );
+    // FunctionPtr sin_theta = Function::polarize(Teuchos::rcp( new Sin_y ) );
+    FunctionPtr cos_theta = Teuchos::rcp( new PolarizedFunction<double>( cos_y ) );
+    FunctionPtr sin_theta = Teuchos::rcp( new PolarizedFunction<double>( sin_y ) );
+
+    // FunctionPtr cos_theta = PolarizedFunction<double>::cos_theta;
+    // FunctionPtr sin_theta = PolarizedFunction<double>::sin_theta;
+
+    FunctionPtr rho_exact, u1_exact, u2_exact, T_exact;
+    if (spaceDim == 1)
+    {
+      rho_exact = one;
+      u1_exact = one;
+      // T_exact = T_inf*one;
+      T_exact = zero;
+    }
+    else
+    {
+      rho_exact = one;
+      u1_exact = -cos_theta;
+      u2_exact = -sin_theta;
+      // T_exact = T_inf*one;
+      T_exact = zero;
+    }
+    FunctionPtr u_exact;
+    if (spaceDim == 1)
+      u_exact = u1_exact;
+    else
+      u_exact = Function::vectorize(u1_exact,u2_exact);
+
+    // if (!steady)
+    // {
+    //   SpatialFilterPtr t0  = SpatialFilter::matchingT(0);
+    //   form.addMassFluxCondition(    t0, rho_exact, u_exact, T_exact);
+    //   form.addMomentumFluxCondition(t0, rho_exact, u_exact, T_exact);
+    //   form.addEnergyFluxCondition(  t0, rho_exact, u_exact, T_exact);
+    // }
+    SpatialFilterPtr t0  = SpatialFilter::matchingT(0);
+    switch (spaceDim)
+    {
+      case 1:
+        form.addMassFluxCondition(        leftX, -one);
+        form.addXMomentumFluxCondition(   leftX, -(u1_exact+rho_exact*R*T_exact));
+        form.addEnergyFluxCondition(      leftX, -(Cv*T_exact+.5+R*T_exact)*one);
+        form.addVelocityTraceCondition(   rightX, zero);
+        form.addMassFluxCondition(        rightX, zero);
+        form.addEnergyFluxCondition(      rightX, zero);
+        if (!steady)
+        {
+          form.addMassFluxCondition(     t0, -one);
+          form.addXMomentumFluxCondition(t0, -u1_exact);
+          form.addEnergyFluxCondition(   t0, -(Cv*T_exact+0.5)*one);
+        }
+        break;
+      case 2:
+        form.addMassFluxCondition(        leftX, -u1_exact);
+        form.addXMomentumFluxCondition(   leftX, -(u1_exact*u1_exact+R*T_exact));
+        form.addYMomentumFluxCondition(   leftX, -(u1_exact*u2_exact));
+        form.addEnergyFluxCondition(      leftX, -(u1_exact*(Cv*T_exact+0.5+R*T_exact)));
+
+        form.addMassFluxCondition(        leftY, -u2_exact);
+        form.addXMomentumFluxCondition(   leftY, -(u2_exact*u1_exact));
+        form.addYMomentumFluxCondition(   leftY, -(u2_exact*u2_exact+R*T_exact));
+        form.addEnergyFluxCondition(      leftY, -(u2_exact*(Cv*T_exact+0.5+R*T_exact)));
+
+        form.addXVelocityTraceCondition(  rightX, zero);
+        form.addMassFluxCondition(        rightX, zero);
+        form.addYMomentumFluxCondition(   rightX, zero);
+        form.addEnergyFluxCondition(      rightX, zero);
+
+        form.addYVelocityTraceCondition(  rightY, zero);
+        form.addMassFluxCondition(        rightY, zero);
+        form.addXMomentumFluxCondition(   rightY, zero);
+        form.addEnergyFluxCondition(      rightY, zero);
+        // form.addMassFluxCondition(        leftX, u1_exact);
+        // form.addXMomentumFluxCondition(   leftX, u1_exact*u1_exact+R*one);
+        // form.addYMomentumFluxCondition(   leftX, u1_exact*u2_exact);
+        // form.addEnergyFluxCondition(      leftX, u1_exact*(Cv+0.5+R));
+        // form.addMassFluxCondition(        leftY, u2_exact);
+        // form.addXMomentumFluxCondition(   leftY, u2_exact*u1_exact);
+        // form.addYMomentumFluxCondition(   leftY, u2_exact*u2_exact+R*one);
+        // form.addEnergyFluxCondition(      leftY, u2_exact*(Cv+0.5+R));
+        if (!steady)
+        {
+          form.addMassFluxCondition(     t0, -one);
+          form.addXMomentumFluxCondition(t0, -u1_exact);
+          form.addYMomentumFluxCondition(t0, -u2_exact);
+          form.addEnergyFluxCondition(   t0, -(Cv*T_exact+0.5)*one);
+        }
+        break;
+      case 3:
+        break;
+    }
+  }
 
   ostringstream exportName;
   if (steady)
@@ -658,6 +807,13 @@ int main(int argc, char *argv[])
     form.refine();
 
     if (rank==0) cout << " ****** Refinement " << refNumber << " ****** " << endl;
+
+    if (rampRe)
+    {
+      double mu = max(1./Re, min(1./coarseRe,1./pow(2,2+refNumber)));
+      form.setmu(mu);
+      if (rank==0) cout << " Mesh Re = " << 1./mu << endl;
+    }
 
     meshesCoarseToFine = GMGSolver::meshesForMultigrid(mesh, polyOrderCoarse, delta_k);
     // truncate meshesCoarseToFine to get a "fair" iteration count measure
