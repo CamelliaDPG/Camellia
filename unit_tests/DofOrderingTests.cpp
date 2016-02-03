@@ -9,8 +9,12 @@
 #include "DofOrdering.h"
 #include "CellTopology.h"
 #include "doubleBasisConstruction.h"
+#include "ElementType.h"
+#include "MeshFactory.h"
+#include "PoissonFormulation.h"
 
 using namespace Camellia;
+using namespace Intrepid;
 
 #include "Teuchos_UnitTestHarness.hpp"
 namespace
@@ -70,6 +74,42 @@ TEUCHOS_UNIT_TEST( DofOrdering, SidesForVarID )
 
   TEST_COMPARE_ARRAYS( sidesExpected, trialOrdering->getSidesForVarID(trialID) );
 }
+  
+  TEUCHOS_UNIT_TEST( DofOrdering, VariablesWithNonZeroEntries)
+  {
+    int spaceDim = 2;
+    bool conformingTraces = true;
+    PoissonFormulation form(spaceDim,conformingTraces);
+    
+    MeshPtr mesh = MeshFactory::rectilinearMesh(form.bf(), {1.0,1.0}, {1,1}, 1);
+    
+    GlobalIndexType cellID = 0;
+    DofOrderingPtr trialOrdering = mesh->getElementType(cellID)->trialOrderPtr;
+    
+    VarPtr phi_hat = form.phi_hat();
+    
+    FieldContainer<double> localCoefficients(trialOrdering->totalDofs());
+    for (int sideOrdinal : trialOrdering->getSidesForVarID(phi_hat->ID()))
+    {
+      int numBasisDofs = trialOrdering->getBasisCardinality(phi_hat->ID(), sideOrdinal);
+      for (int basisDofOrdinal = 0; basisDofOrdinal < numBasisDofs; basisDofOrdinal++)
+      {
+        int localDofIndex = trialOrdering->getDofIndex(phi_hat->ID(), basisDofOrdinal, sideOrdinal);
+        localCoefficients(localDofIndex) = 1.0;
+      }
+    }
+    
+    double tol = 1e-15;
+    vector<pair<int,vector<int>>> entries = trialOrdering->variablesWithNonZeroEntries(localCoefficients, tol);
+    
+    TEUCHOS_ASSERT_EQUALITY(entries.size(), 1); // just phi_hat
+    
+    pair<int,vector<int>> entry = entries[0];
+    
+    TEUCHOS_ASSERT_EQUALITY(entry.first, phi_hat->ID());
+    
+    TEUCHOS_ASSERT_EQUALITY(entry.second.size(), trialOrdering->getSidesForVarID(phi_hat->ID()).size());
+  }
 //  TEUCHOS_UNIT_TEST( Int, Assignment )
 //  {
 //    int i1 = 4;
