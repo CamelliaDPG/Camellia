@@ -2213,3 +2213,19 @@ void RefinementPattern::mapRefCellPointsToAncestor(GeneralizedRefinementBranch &
     }
   }
 }
+
+pair<unsigned, unsigned> RefinementPattern::mapSubcellFromDescendantToAncestor(RefinementBranch &refBranch,
+                                                                               unsigned subcdim, unsigned childSubcord)
+{
+  unsigned ancestorSubcord = childSubcord, ancestorSubcdim = subcdim;
+  
+  for (int i=refBranch.size()-1; i >= 0; i--)
+  {
+    RefinementPattern* refPattern = refBranch[i].first;
+    unsigned childOrdinal = refBranch[i].second;
+    pair<unsigned, unsigned> parentSubcord = refPattern->mapSubcellFromChildToParent(childOrdinal, ancestorSubcdim, ancestorSubcord);
+    ancestorSubcdim = parentSubcord.first;
+    ancestorSubcord = parentSubcord.second;
+  }
+  return make_pair(ancestorSubcdim, ancestorSubcord);
+}

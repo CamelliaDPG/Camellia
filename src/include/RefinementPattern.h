@@ -175,6 +175,9 @@ namespace Camellia {
 
   static void mapRefCellPointsToAncestor(RefinementBranch &refinementBranch, const Intrepid::FieldContainer<double> &leafRefCellPoints,
                                          Intrepid::FieldContainer<double> &rootRefCellPoints);
+    
+  static pair<unsigned, unsigned> mapSubcellFromDescendantToAncestor(RefinementBranch &refBranch,
+                                                                     unsigned subcdim, unsigned childSubcord);
 };
 
 typedef Teuchos::RCP<RefinementPattern> RefinementPatternPtr;
