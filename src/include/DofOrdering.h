@@ -110,6 +110,8 @@ public:
   int maxBasisDegree();
   int maxBasisDegreeForVolume();
 
+  void print(std::ostream& os);
+  
   int totalDofs() const
   {
     return _nextIndex;

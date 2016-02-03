@@ -40,7 +40,7 @@ DofOrdering::DofOrdering(CellTopoPtr cellTopo)   // constructor
 {
   _nextIndex = 0;
   _indexNeedsToBeRebuilt = false;
-  _cellTopologyForSide[-1] = cellTopo; // side -1 means volume, in this context.
+  _cellTopologyForSide[VOLUME_INTERIOR_SIDE_ORDINAL] = cellTopo;
 }
 
 void DofOrdering::addEntry(int varID, BasisPtr basis, int basisRank, int sideIndex)
@@ -338,6 +338,11 @@ int DofOrdering::maxBasisDegreeForVolume()   // max degree among the varIDs with
     }
   }
   return maxBasisDegree;
+}
+
+void DofOrdering::print(std::ostream& os)
+{
+  os << *this;
 }
 
 void DofOrdering::rebuildIndex()
