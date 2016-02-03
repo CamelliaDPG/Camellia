@@ -16,6 +16,13 @@
 
 #include <Intrepid_FieldContainer.hpp>
 
+// Epetra includes
+#ifdef HAVE_MPI
+#include "Epetra_MpiComm.h"
+#else
+#include "Epetra_SerialComm.h"
+#endif
+
 namespace Camellia
 {
 // Basic typedefs
@@ -34,6 +41,9 @@ typedef unsigned long EntityHandle; // identical to MOAB's EntityHandle type.  W
 // Trilinos typedefs
 typedef Teuchos::RCP< Intrepid::FieldContainer<double> > FCPtr;
 typedef Teuchos::RCP< const Intrepid::FieldContainer<double> > constFCPtr;
+  
+  typedef Teuchos::RCP<Epetra_Comm> Epetra_CommPtr;
+  typedef Teuchos::RCP<Teuchos::Comm<int>> Teuchos_CommPtr;
 
 // Camellia forward declarations and typedefs
 class BasisCache;
@@ -169,6 +179,8 @@ using TMatrixPtr = Teuchos::RCP< Tpetra::CrsMatrix<Scalar,IndexType,GlobalIndexT
 template <typename Scalar>
 using TVectorPtr = Teuchos::RCP< Tpetra::MultiVector<Scalar,IndexType,GlobalIndexType> >;
 // typedef TVectorPtr<double> VectorPtr;
+  
+  
 }
 
 
