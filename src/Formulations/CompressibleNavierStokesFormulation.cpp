@@ -150,6 +150,8 @@ CompressibleNavierStokesFormulation::CompressibleNavierStokesFormulation(MeshTop
   double u3Init = parameters.get<double>("u3Init", 0.);
   double TInit = parameters.get<double>("TInit", 1.);
 
+  string problemName = parameters.get<string>("problemName", "Trivial");
+
   _spaceDim = spaceDim;
   _useConformingTraces = useConformingTraces;
   _spatialPolyOrder = spatialPolyOrder;
@@ -363,14 +365,22 @@ CompressibleNavierStokesFormulation::CompressibleNavierStokesFormulation(MeshTop
   FunctionPtr cos_theta = Teuchos::rcp( new PolarizedFunction<double>( cos_y ) );
   FunctionPtr sin_theta = Teuchos::rcp( new PolarizedFunction<double>( sin_y ) );
 
-  // u1_init = Function::constant(u1Init);
-  u1_init = -cos_theta;
+  u1_init = Function::constant(u1Init);
   if (_spaceDim > 1)
-    // u2_init = Function::constant(u2Init);
-    u2_init = -sin_theta;
+    u2_init = Function::constant(u2Init);
   if (_spaceDim > 2)
     u3_init = Function::constant(u3Init);
+  if (spaceDim > 1 && problemName == "Noh")
+  {
+    u1_init = -cos_theta;
+    u2_init = -sin_theta;
+  }
   T_init = Function::constant(TInit);
+  if (spaceDim > 1 && problemName == "TriplePoint")
+  {
+    rho_init = one - (1-0.125)*Function::heaviside(1)*Function::heavisideY(1.5);
+    T_init = one - (1-0.1)*Function::heaviside(1);
+  }
   FunctionPtr n_xx, n_xy, n_xz, n_t;
   n_xx = n_x->x() * Function::sideParity();
   if (_spaceDim > 1)
