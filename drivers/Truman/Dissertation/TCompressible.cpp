@@ -255,17 +255,12 @@ int main(int argc, char *argv[])
   if (problemName == "Noh")
   {
     gamma = 5./3;
-    // double p_inf = 1e-3;
     rho_inf = 1;
     u_inf = 1;
-    // double a_inf = sqrt(gamma*p_inf*rho_inf);
-    // double M_inf = u_inf/a_inf;
-    // T_inf = p_inf/(rho_inf*Cv*(gamma-1));
     T_inf = 0;
-    // Cv = (u_inf*u_inf)/(M_inf*M_inf*gamma*(gamma-1)*T_inf);
     Cv = 1;
     int meshWidth = 2;
-    vector<double> dims(spaceDim,1.0);
+    vector<double> dims(spaceDim,1);
     vector<int> numElements(spaceDim,meshWidth);
     vector<double> x0(spaceDim,-1);
 
@@ -275,6 +270,48 @@ int main(int argc, char *argv[])
       double t0 = 0;
       double t1 = 1;
       int temporalDivisions = 2;
+      meshTopo = MeshFactory::spaceTimeMeshTopology(meshTopo, t0, t1, temporalDivisions);
+    }
+  }
+  if (problemName == "Sedov")
+  {
+    rho_inf = 1;
+    u_inf = 0;
+    T_inf = 0;
+    Cv = 1;
+    int meshWidth = 4;
+    vector<double> dims(spaceDim,1.0);
+    vector<int> numElements(spaceDim,meshWidth);
+    vector<double> x0(spaceDim,0);
+
+    meshTopo = MeshFactory::rectilinearMeshTopology(dims,numElements,x0);
+    if (!steady)
+    {
+      double t0 = 0;
+      double t1 = .25;
+      int temporalDivisions = 1;
+      meshTopo = MeshFactory::spaceTimeMeshTopology(meshTopo, t0, t1, temporalDivisions);
+    }
+  }
+  if (problemName == "TriplePoint")
+  {
+    rho_inf = 1;
+    u_inf = 0;
+    T_inf = 1;
+    Cv = 1;
+    int meshWidth = 7;
+    vector<double> dims(spaceDim,7.0);
+    dims[1] = 3;
+    vector<int> numElements(spaceDim,meshWidth);
+    numElements[1] = 3;
+    vector<double> x0(spaceDim,0);
+
+    meshTopo = MeshFactory::rectilinearMeshTopology(dims,numElements,x0);
+    if (!steady)
+    {
+      double t0 = 0;
+      double t1 = 1;
+      int temporalDivisions = 1;
       meshTopo = MeshFactory::spaceTimeMeshTopology(meshTopo, t0, t1, temporalDivisions);
     }
   }
@@ -292,6 +329,7 @@ int main(int argc, char *argv[])
     nsParameters = CompressibleNavierStokesFormulation::timeSteppingFormulation(spaceDim, formRe, useConformingTraces, meshTopo, polyOrder, polyOrder, delta_k).getConstructorParameters();
 
   // nsParameters.set("neglectFluxesOnRHS", false);
+  nsParameters.set("problemName", problemName);
   nsParameters.set("norm", norm);
   nsParameters.set("dt", dt);
   nsParameters.set("Cv", Cv);
@@ -299,7 +337,22 @@ int main(int argc, char *argv[])
   nsParameters.set("rhoInit", 1.);
   nsParameters.set("u1Init", 1.);
   nsParameters.set("u2Init", 0.);
-  nsParameters.set("TInit", 0.);
+  nsParameters.set("TInit", 1.);
+  if (problemName == "Noh")
+  {
+    nsParameters.set("u1Init", 1.);
+    nsParameters.set("TInit", 1.);
+  }
+  if (problemName == "Sedov")
+  {
+    nsParameters.set("u1Init", 0.);
+    nsParameters.set("u2Init", 0.);
+  }
+  if (problemName == "TriplePoint")
+  {
+    nsParameters.set("u1Init", 0.);
+    nsParameters.set("u2Init", 0.);
+  }
   CompressibleNavierStokesFormulation form(meshTopo, nsParameters);
 
   if (useSPDSolver)
@@ -324,6 +377,8 @@ int main(int argc, char *argv[])
   // VarPtr tn1_hat = form.tn_hat(1), tn2_hat = form.tn_hat(2);
 
   FunctionPtr rho_exact, u1_exact, u2_exact, u3_exact, T_exact;
+  Teuchos::RCP<ParameterFunction> refParamFunc = ParameterFunction::parameterFunction(64);
+  FunctionPtr refFunc = refParamFunc;
   if (problemName == "Trivial")
   {
     SpatialFilterPtr leftX  = SpatialFilter::matchingX(-1);
@@ -579,6 +634,7 @@ int main(int argc, char *argv[])
     SpatialFilterPtr rightX = SpatialFilter::matchingX(0);
     SpatialFilterPtr leftY  = SpatialFilter::matchingY(-1);
     SpatialFilterPtr rightY = SpatialFilter::matchingY(0);
+    SpatialFilterPtr t0  = SpatialFilter::matchingT(0);
 
     FunctionPtr zero = Function::zero();
     FunctionPtr zeros = Function::vectorize(zero, zero);
@@ -587,13 +643,8 @@ int main(int argc, char *argv[])
     FunctionPtr ones = Function::vectorize(one, one);
     FunctionPtr cos_y = Teuchos::rcp(new Cos_ay(1));
     FunctionPtr sin_y = Teuchos::rcp(new Sin_ay(1));
-    // FunctionPtr cos_theta = Function::polarize(Teuchos::rcp( new Cos_y ) );
-    // FunctionPtr sin_theta = Function::polarize(Teuchos::rcp( new Sin_y ) );
     FunctionPtr cos_theta = Teuchos::rcp( new PolarizedFunction<double>( cos_y ) );
     FunctionPtr sin_theta = Teuchos::rcp( new PolarizedFunction<double>( sin_y ) );
-
-    // FunctionPtr cos_theta = PolarizedFunction<double>::cos_theta;
-    // FunctionPtr sin_theta = PolarizedFunction<double>::sin_theta;
 
     FunctionPtr rho_exact, u1_exact, u2_exact, T_exact;
     if (spaceDim == 1)
@@ -617,14 +668,6 @@ int main(int argc, char *argv[])
     else
       u_exact = Function::vectorize(u1_exact,u2_exact);
 
-    // if (!steady)
-    // {
-    //   SpatialFilterPtr t0  = SpatialFilter::matchingT(0);
-    //   form.addMassFluxCondition(    t0, rho_exact, u_exact, T_exact);
-    //   form.addMomentumFluxCondition(t0, rho_exact, u_exact, T_exact);
-    //   form.addEnergyFluxCondition(  t0, rho_exact, u_exact, T_exact);
-    // }
-    SpatialFilterPtr t0  = SpatialFilter::matchingT(0);
     switch (spaceDim)
     {
       case 1:
@@ -661,20 +704,186 @@ int main(int argc, char *argv[])
         form.addMassFluxCondition(        rightY, zero);
         form.addXMomentumFluxCondition(   rightY, zero);
         form.addEnergyFluxCondition(      rightY, zero);
-        // form.addMassFluxCondition(        leftX, u1_exact);
-        // form.addXMomentumFluxCondition(   leftX, u1_exact*u1_exact+R*one);
-        // form.addYMomentumFluxCondition(   leftX, u1_exact*u2_exact);
-        // form.addEnergyFluxCondition(      leftX, u1_exact*(Cv+0.5+R));
-        // form.addMassFluxCondition(        leftY, u2_exact);
-        // form.addXMomentumFluxCondition(   leftY, u2_exact*u1_exact);
-        // form.addYMomentumFluxCondition(   leftY, u2_exact*u2_exact+R*one);
-        // form.addEnergyFluxCondition(      leftY, u2_exact*(Cv+0.5+R));
         if (!steady)
         {
           form.addMassFluxCondition(     t0, -one);
           form.addXMomentumFluxCondition(t0, -u1_exact);
           form.addYMomentumFluxCondition(t0, -u2_exact);
           form.addEnergyFluxCondition(   t0, -(Cv*T_exact+0.5)*one);
+        }
+        break;
+      case 3:
+        break;
+    }
+  }
+  if (problemName == "Sedov")
+  {
+    SpatialFilterPtr leftX  = SpatialFilter::matchingX(0);
+    SpatialFilterPtr rightX = SpatialFilter::matchingX(1);
+    SpatialFilterPtr leftY  = SpatialFilter::matchingY(0);
+    SpatialFilterPtr rightY = SpatialFilter::matchingY(1);
+    SpatialFilterPtr t0  = SpatialFilter::matchingT(0);
+
+    FunctionPtr zero = Function::zero();
+    FunctionPtr zeros = Function::vectorize(zero, zero);
+    FunctionPtr one = Function::constant(1);
+    FunctionPtr onezero = Function::vectorize(one, zero);
+    FunctionPtr ones = Function::vectorize(one, one);
+
+    FunctionPtr rho_exact, u1_exact, u2_exact, T_exact;
+    if (spaceDim == 1)
+    {
+      rho_exact = one;
+      u1_exact = zero;
+      FunctionPtr x = Function::xn(1);
+      T_exact = Function::max(2*refFunc*(1-refFunc*x), zero);
+      // T_exact = 1./width*(one-Function::heaviside(width));
+    }
+    else
+    {
+      rho_exact = one;
+      u1_exact = zero;
+      u2_exact = zero;
+      FunctionPtr x = Function::xn(1);
+      FunctionPtr y = Function::yn(1);
+      T_exact = Function::max(2*refFunc*(1-refFunc*x), zero)*Function::max(2*refFunc*(1-refFunc*y), zero);
+      // double width = 1./16;
+      // T_exact = 1./(width*width)*(one-Function::heaviside(width))*(one-Function::heavisideY(width));
+    }
+    FunctionPtr u_exact;
+    if (spaceDim == 1)
+      u_exact = u1_exact;
+    else
+      u_exact = Function::vectorize(u1_exact,u2_exact);
+
+    switch (spaceDim)
+    {
+      case 1:
+        form.addMassFluxCondition(       rightX, zero);
+        form.addXMomentumFluxCondition(  rightX, zero);
+        form.addEnergyFluxCondition(     rightX, zero);
+        form.addVelocityTraceCondition(   leftX, zero);
+        form.addMassFluxCondition(        leftX, zero);
+        form.addEnergyFluxCondition(      leftX, zero);
+        if (!steady)
+        {
+          form.addMassFluxCondition(     t0, -rho_exact);
+          form.addXMomentumFluxCondition(t0, -u1_exact);
+          form.addEnergyFluxCondition(   t0, -Cv*T_exact);
+        }
+        break;
+      case 2:
+        form.addMassFluxCondition(       rightX, zero);
+        form.addXMomentumFluxCondition(  rightX, zero);
+        form.addYMomentumFluxCondition(  rightX, zero);
+        form.addEnergyFluxCondition(     rightX, zero);
+
+        form.addMassFluxCondition(       rightY, zero);
+        form.addXMomentumFluxCondition(  rightY, zero);
+        form.addYMomentumFluxCondition(  rightY, zero);
+        form.addEnergyFluxCondition(     rightY, zero);
+
+        form.addXVelocityTraceCondition(  leftX, zero);
+        form.addMassFluxCondition(        leftX, zero);
+        form.addYMomentumFluxCondition(   leftX, zero);
+        form.addEnergyFluxCondition(      leftX, zero);
+
+        form.addYVelocityTraceCondition(  leftY, zero);
+        form.addMassFluxCondition(        leftY, zero);
+        form.addXMomentumFluxCondition(   leftY, zero);
+        form.addEnergyFluxCondition(      leftY, zero);
+        if (!steady)
+        {
+          form.addMassFluxCondition(     t0, -rho_exact);
+          form.addXMomentumFluxCondition(t0, -u1_exact);
+          form.addYMomentumFluxCondition(t0, -u2_exact);
+          form.addEnergyFluxCondition(   t0, -Cv*T_exact);
+        }
+        break;
+      case 3:
+        break;
+    }
+  }
+  if (problemName == "TriplePoint")
+  {
+    SpatialFilterPtr leftX  = SpatialFilter::matchingX(0);
+    SpatialFilterPtr rightX = SpatialFilter::matchingX(7);
+    SpatialFilterPtr leftY  = SpatialFilter::matchingY(0);
+    SpatialFilterPtr rightY = SpatialFilter::matchingY(3);
+    SpatialFilterPtr t0  = SpatialFilter::matchingT(0);
+
+    FunctionPtr zero = Function::zero();
+    FunctionPtr zeros = Function::vectorize(zero, zero);
+    FunctionPtr one = Function::constant(1);
+    FunctionPtr onezero = Function::vectorize(one, zero);
+    FunctionPtr ones = Function::vectorize(one, one);
+
+    FunctionPtr rho_exact, u1_exact, u2_exact, T_exact;
+    rho_exact = one - (1-0.125)*Function::heaviside(1)*Function::heavisideY(1.5);
+    u1_exact = zero;
+    u2_exact = zero;
+    T_exact = one - (1-0.1)*Function::heaviside(1);
+    FunctionPtr u_exact;
+    if (spaceDim == 1)
+      u_exact = u1_exact;
+    else
+      u_exact = Function::vectorize(u1_exact,u2_exact);
+
+    switch (spaceDim)
+    {
+      case 1:
+        // form.addMassFluxCondition(       rightX, zero);
+        // form.addXMomentumFluxCondition(  rightX, zero);
+        // form.addEnergyFluxCondition(     rightX, zero);
+        form.addVelocityTraceCondition(   leftX, zero);
+        form.addMassFluxCondition(        leftX, zero);
+        form.addEnergyFluxCondition(      leftX, zero);
+        form.addVelocityTraceCondition(  rightX, zero);
+        form.addMassFluxCondition(       rightX, zero);
+        form.addEnergyFluxCondition(     rightX, zero);
+        if (!steady)
+        {
+          form.addMassFluxCondition(     t0, -rho_exact);
+          form.addXMomentumFluxCondition(t0, -u1_exact);
+          form.addEnergyFluxCondition(   t0, -Cv*T_exact);
+        }
+        break;
+      case 2:
+        // form.addMassFluxCondition(       rightX, zero);
+        // form.addXMomentumFluxCondition(  rightX, zero);
+        // form.addYMomentumFluxCondition(  rightX, zero);
+        // form.addEnergyFluxCondition(     rightX, zero);
+
+        // form.addMassFluxCondition(       rightY, zero);
+        // form.addXMomentumFluxCondition(  rightY, zero);
+        // form.addYMomentumFluxCondition(  rightY, zero);
+        // form.addEnergyFluxCondition(     rightY, zero);
+
+        form.addXVelocityTraceCondition(  leftX, zero);
+        form.addMassFluxCondition(        leftX, zero);
+        form.addYMomentumFluxCondition(   leftX, zero);
+        form.addEnergyFluxCondition(      leftX, zero);
+
+        form.addYVelocityTraceCondition(  leftY, zero);
+        form.addMassFluxCondition(        leftY, zero);
+        form.addXMomentumFluxCondition(   leftY, zero);
+        form.addEnergyFluxCondition(      leftY, zero);
+
+        form.addXVelocityTraceCondition( rightX, zero);
+        form.addMassFluxCondition(       rightX, zero);
+        form.addYMomentumFluxCondition(  rightX, zero);
+        form.addEnergyFluxCondition(     rightX, zero);
+
+        form.addYVelocityTraceCondition( rightY, zero);
+        form.addMassFluxCondition(       rightY, zero);
+        form.addXMomentumFluxCondition(  rightY, zero);
+        form.addEnergyFluxCondition(     rightY, zero);
+        if (!steady)
+        {
+          form.addMassFluxCondition(     t0, -rho_exact);
+          form.addXMomentumFluxCondition(t0, -u1_exact);
+          form.addYMomentumFluxCondition(t0, -u2_exact);
+          form.addEnergyFluxCondition(   t0, -Cv*T_exact);
         }
         break;
       case 3:
@@ -810,9 +1019,12 @@ int main(int argc, char *argv[])
 
     if (rampRe)
     {
-      double mu = max(1./Re, min(1./coarseRe,1./pow(2,2+refNumber)));
+      double mu = max(1./Re, min(1./coarseRe,1./pow(2,refNumber)));
       form.setmu(mu);
+      double refVal = min(64.,max(pow(2.,2+refNumber),64.));
+      refParamFunc->setValue(refVal);
       if (rank==0) cout << " Mesh Re = " << 1./mu << endl;
+      if (rank==0) cout << " ref value = " << refVal << endl;
     }
 
     meshesCoarseToFine = GMGSolver::meshesForMultigrid(mesh, polyOrderCoarse, delta_k);
