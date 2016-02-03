@@ -85,6 +85,22 @@ void MPIWrapper::allGatherCompact(FieldContainer<double> &gatheredValues,
   MPIWrapper::allGatherCompact<double>(gatheredValues,myValues,offsets);
 }
 
+Epetra_CommPtr& MPIWrapper::CommSerial()
+{
+  static Epetra_CommPtr Comm = Teuchos::rcp( new Epetra_SerialComm() );
+  return Comm;
+}
+
+Epetra_CommPtr& MPIWrapper::CommWorld()
+{
+#ifdef HAVE_MPI
+  static Epetra_CommPtr Comm = Teuchos::rcp( new Epetra_MpiComm(MPI_COMM_WORLD) );
+#else
+  static Epetra_CommPtr Comm = Teuchos::rcp( new Epetra_SerialComm() );
+#endif
+  return Comm;
+}
+
 int MPIWrapper::rank()
 {
   return Teuchos::GlobalMPISession::getRank();
@@ -118,46 +134,9 @@ void MPIWrapper::entryWiseSum(FieldContainer<ScalarType> &values)
 #endif
 }
 
-template<typename ScalarType>
-void MPIWrapper::entryWiseSum(const Epetra_Comm &Comm, FieldContainer<ScalarType> &values)
-{
-  FieldContainer<ScalarType> valuesCopy = values; // it appears this copy is necessary
-  bool DEBUGGING = false;
-  if (DEBUGGING)
-  {
-    int myRank = Teuchos::GlobalMPISession::getRank();
-    std::cout << "entryWiseSum: original values on rank " << myRank << ": ";
-    for (int i=0; i<values.size(); i++)
-    {
-      std::cout << values[i] << " ";
-    }
-    std::cout << std::endl;
-  }
-  Comm.SumAll(&valuesCopy[0], &values[0], values.size());
-  
-  if (DEBUGGING)
-  {
-    int myRank = Teuchos::GlobalMPISession::getRank();
-    if (myRank == 0)
-    {
-      std::cout << "entryWiseSum: final values on rank " << myRank << ": ";
-      for (int i=0; i<values.size(); i++)
-      {
-        std::cout << values[i] << " ";
-      }
-      std::cout << std::endl;
-    }
-  }
-}
-
 void MPIWrapper::entryWiseSum(FieldContainer<double> &values)   // sums values entry-wise across all processors
 {
   entryWiseSum<double>(values);
-}
-
-void MPIWrapper::entryWiseSum(const Epetra_Comm &Comm, FieldContainer<double> &values)   // sums values entry-wise across all processors
-{
-  entryWiseSum<double>(Comm, values);
 }
 
 // sum the contents of valuesToSum across all processors, and returns the result:
@@ -272,4 +251,20 @@ GlobalIndexType MPIWrapper::sum(GlobalIndexType mySum)
 #else
 #endif
   return mySumLongLong;
+}
+
+Teuchos_CommPtr& MPIWrapper::TeuchosCommSerial()
+{
+  static Teuchos_CommPtr Comm = Teuchos::rcp( new Teuchos::SerialComm<int>() );
+  return Comm;
+}
+
+Teuchos_CommPtr& MPIWrapper::TeuchosCommWorld()
+{
+#ifdef HAVE_MPI
+  static Teuchos_CommPtr Comm = Teuchos::rcp( new Teuchos::MpiComm<int> (MPI_COMM_WORLD) );
+#else
+  static Teuchos_CommPtr Comm = Teuchos::rcp( new Teuchos::SerialComm<int>() );
+#endif
+  return Comm;
 }

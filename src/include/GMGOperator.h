@@ -11,6 +11,7 @@
 #include "Epetra_Operator.h"
 
 #include "BasisReconciliation.h"
+#include "HDF5Exporter.h"
 #include "IP.h"
 #include "LocalDofMapper.h"
 #include "Mesh.h"
@@ -121,6 +122,12 @@ private:
   int prolongationRowCount() const;
   int prolongationColCount() const;
   
+  Teuchos::RCP<HDF5Exporter> _functionExporter;
+  FunctionPtr _functionToExport;
+  std::string _functionToExportName;
+  int _exportTimeStep;
+  
+  void exportFunction();
 public: // promoted these two to public for testing purposes:
   LocalDofMapperPtr getLocalCoefficientMap(GlobalIndexType fineCellID) const;
   GlobalIndexType getCoarseCellID(GlobalIndexType fineCellID) const;
@@ -369,6 +376,9 @@ public:
   
   //! Returns the fine dof interpreter
   Teuchos::RCP<DofInterpreter> getFineDofInterpreter();
+  
+  //! Set an exporter for typically an error function, to allow visualization of various smoother/coarse solve steps.
+  void setFunctionExporter(Teuchos::RCP<HDF5Exporter> exporter, FunctionPtr function, std::string functionName="error");
   
   //! Informs the GMGOperator whether it is the finest one.  (If not, can freely discard local stiffness matrices stored in CondensedDofInterpreter, e.g.).  Default value is true.
   void setIsFinest(bool value);

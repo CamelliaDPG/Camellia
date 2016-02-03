@@ -10,6 +10,7 @@
 #define Zoltan_MeshPartitionPolicy_h
 
 #include "MeshPartitionPolicy.h"
+#include "TypeDefs.h"
 #include <zoltan_cpp.h>
 #include <string>
 
@@ -66,8 +67,8 @@ private:
                                char *buf,
                                int *ierr);
 public:
-  ZoltanMeshPartitionPolicy();
-  ZoltanMeshPartitionPolicy(string partitionerName);
+  ZoltanMeshPartitionPolicy(Epetra_CommPtr Comm);
+  ZoltanMeshPartitionPolicy(Epetra_CommPtr Comm, string partitionerName);
   virtual void partitionMesh(Mesh *mesh, PartitionIndexType numPartitions);
 };
 }
