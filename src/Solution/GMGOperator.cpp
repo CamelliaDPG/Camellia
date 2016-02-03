@@ -10,6 +10,7 @@
 
 #include "AdditiveSchwarz.h"
 #include "BasisFactory.h"
+#include "DofOrdering.h"
 #include "GlobalDofAssignment.h"
 #include "BasisSumFunction.h"
 #include "CamelliaCellTools.h"
@@ -497,6 +498,9 @@ Teuchos::RCP<Epetra_FECrsMatrix> GMGOperator::constructProlongationOperator(Teuc
            effort than the below: here, we take the local coefficients and work out which variable matches.
            */
           fineDofInterpreter->interpretGlobalCoefficients(fineCellID, fineCellCoefficients, *XLocal);
+          
+//          cout << "fineCellCoefficients:\n" << fineCellCoefficients;
+          
           vector<pair<int,vector<int>>> fineNonZeroVarIDs = fineTrialOrdering->variablesWithNonZeroEntries(fineCellCoefficients);
           TEUCHOS_TEST_FOR_EXCEPTION(fineNonZeroVarIDs.size() != 1, std::invalid_argument, "There should be exactly one variable corresponding to a given global dof ordinal in fine mesh");
           
@@ -517,6 +521,8 @@ Teuchos::RCP<Epetra_FECrsMatrix> GMGOperator::constructProlongationOperator(Teuc
           
           coarseCellCoefficients = fineMapper->mapLocalData(fineCellCoefficients, true, fineNonZeroVarIDs);
           
+//          cout << "coarseCellCoefficients:\n" << coarseCellCoefficients;
+          
           vector<pair<int,vector<int>>> coarseNonZeroVarIDs = coarseTrialOrdering->variablesWithNonZeroEntries(coarseCellCoefficients);
           
           map<GlobalIndexType,double> fittedGlobalCoefficients;
@@ -533,6 +539,9 @@ Teuchos::RCP<Epetra_FECrsMatrix> GMGOperator::constructProlongationOperator(Teuc
               }
               coarseDofInterpreter->interpretLocalBasisCoefficients(coarseCellID, varID, sideOrdinal, basisCoefficients,
                                                                     globalCoefficients, globalDofIndices);
+              
+//              cout << "basisCoefficients for varID " << varID << " on side " << sideOrdinal << ":\n" << basisCoefficients;
+//              cout << "globalCoefficients:\n" << globalCoefficients;
               for (int i=0; i<globalCoefficients.size(); i++)
               {
                 fittedGlobalCoefficients[globalDofIndices[i]] = globalCoefficients[i];
@@ -633,6 +642,15 @@ Teuchos::RCP<Epetra_CrsMatrix> GMGOperator::constructProlongationOperator()
   return _P;
 }
 
+void GMGOperator::exportFunction()
+{
+  if (_functionExporter != Teuchos::null)
+  {
+    _functionExporter->exportFunction(_functionToExport, _functionToExportName, _exportTimeStep);
+    _exportTimeStep++;
+  }
+}
+
 //! Dimension that will be used for neighbor relationships for Schwarz blocks, if CAMELLIA_ADDITIVE_SCHWARZ is the smoother choice.
 int GMGOperator::getDimensionForSchwarzNeighborRelationship()
 {
@@ -697,10 +715,102 @@ Epetra_CrsMatrix* GMGOperator::getFineStiffnessMatrix()
 
 LocalDofMapperPtr GMGOperator::getLocalCoefficientMap(GlobalIndexType fineCellID) const
 {
+  GDAMinimumRule* gdaMinRuleFineMesh = dynamic_cast<GDAMinimumRule *>(_fineMesh->globalDofAssignment().get());
+
+  // define lambda for filtering out fine dofs that don't belong:
+  auto filterOutDuplicateFineDofs = [gdaMinRuleFineMesh, this] (BasisPtr fineBasis, CellPtr fineCell,
+                                                                int sideOrdinal,
+                                                                bool coarseInteriorDofsOnly,
+                                                                RefinementBranch &refBranch,
+                                                                SubBasisReconciliationWeights &weights) -> void
+  {
+    // Now: Zero out weights on fine dofs that are
+    // - *not* interior to the coarse domain, or
+    // - on interior subcells that are not owned by the child cell.
+    GlobalIndexType fineCellID = fineCell->cellIndex();
+    int minSubcellDimension = BasisReconciliation::minimumSubcellDimension(fineBasis);
+    CellTopoPtr fineTopo = fineBasis->domainTopology();
+    vector<vector<OwnershipInfo>> subcellOwnershipInfo = gdaMinRuleFineMesh->getCellConstraints(fineCellID).owningCellIDForSubcell;
+    
+    int sideDim = fineCell->topology()->getDimension() - 1;
+    
+    set<int> fineDofsToDiscard;
+    for (int d=minSubcellDimension; d<=sideDim; d++)
+    {
+      for (int subcord=0; subcord<fineTopo->getSubcellCount(d); subcord++)
+      {
+        unsigned childCellSubcord = CamelliaCellTools::subcellOrdinalMap(fineCell->topology(), sideDim, sideOrdinal, d, subcord);
+        bool shouldDiscard = false;
+        if (subcellOwnershipInfo[d][childCellSubcord].cellID != fineCellID)
+        {
+          shouldDiscard = true;
+        }
+        else
+        {
+          if (d < sideDim)
+          {
+            // if we get here, this cell owns, but we need to check whether there is an earlier side on this cell that
+            // also sees this subcell
+            for (int earlierSideOrdinal = 0; earlierSideOrdinal < sideOrdinal; earlierSideOrdinal++)
+            {
+              CellTopoPtr earlierSide = fineCell->topology()->getSide(earlierSideOrdinal);
+              int earlierSubcellCount = earlierSide->getSubcellCount(d);
+              for (int earlierSubcord=0; earlierSubcord<earlierSubcellCount; earlierSubcord++)
+              {
+                unsigned earlierSubcordInChildCell = CamelliaCellTools::subcellOrdinalMap(fineCell->topology(),
+                                                                                          sideDim, earlierSideOrdinal,
+                                                                                          d, earlierSubcord);
+                if (earlierSubcordInChildCell == childCellSubcord)
+                {
+                  shouldDiscard = true;
+                  break;
+                }
+              }
+            }
+          }
+          if (!shouldDiscard) // if shouldDiscard is already true, then we don't need to check whether subcell is interior
+          {
+            if (coarseInteriorDofsOnly)
+            {
+              pair<unsigned, unsigned> coarseSubcell = RefinementPattern::mapSubcellFromDescendantToAncestor(refBranch, d,
+                                                                                                             childCellSubcord);
+              unsigned coarseSubcellDim = coarseSubcell.first;
+              if (coarseSubcellDim <= sideDim)
+              {
+                // *NOT* interior to the coarse cell
+                shouldDiscard = true;
+              }
+            }
+          }
+        }
+        if (shouldDiscard)
+        {
+          set<int> dofOrdinals = fineBasis->dofOrdinalsForSubcell(d, subcord);
+          fineDofsToDiscard.insert(dofOrdinals.begin(),dofOrdinals.end());
+        }
+      }
+    }
+    int row = 0; // in weights container
+    for (int fineDofOrdinal : weights.fineOrdinals)
+    {
+      if (fineDofsToDiscard.find(fineDofOrdinal) != fineDofsToDiscard.end())
+      {
+        // zero out
+        for (int col=0; col<weights.weights.dimension(1); col++)
+        {
+          weights.weights(row,col) = 0;
+        }
+      }
+      row++;
+    }
+    weights = BasisReconciliation::filterOutZeroRowsAndColumns(weights);
+  };
+  
   const set<IndexType>* coarseCellIDs = &_coarseMesh->getTopology()->getActiveCellIndices();
   CellPtr fineCell = _fineMesh->getTopology()->getCell(fineCellID);
   CellPtr ancestor = fineCell;
   RefinementBranch refBranch;
+
   while (coarseCellIDs->find(ancestor->cellIndex()) == coarseCellIDs->end())
   {
     CellPtr parent = ancestor->getParent();
@@ -735,6 +845,9 @@ LocalDofMapperPtr GMGOperator::getLocalCoefficientMap(GlobalIndexType fineCellID
   DofOrderingPtr coarseTrialOrdering = _coarseMesh->getElementType(coarseCellID)->trialOrderPtr;
   DofOrderingPtr fineTrialOrdering = _fineMesh->getElementType(fineCellID)->trialOrderPtr;
 
+//  cout << "coarse trial ordering: \n";
+//  coarseTrialOrdering->print(cout);
+  
   pair< pair<int,int>, RefinementBranch > key = make_pair(make_pair(fineOrder, coarseOrder), refBranch);
 
   CondensedDofInterpreter<double>* condensedDofInterpreterCoarse = NULL;
@@ -775,12 +888,56 @@ LocalDofMapperPtr GMGOperator::getLocalCoefficientMap(GlobalIndexType fineCellID
     Teuchos::RCP<Epetra_SerialDenseMatrix> coarseFluxToFieldMapMatrix;
     vector<int> fluxOrdinalToLocalDofIndex;
     set<int> condensibleVarIDs;
+    MeshPtr coarseSingleCellMesh;
     if (!cellProlongationCanMatchPatterns)
     {
       // then we're doing static condensation in context of h-refinement: we'll need to compute coarseFluxToFieldMap
       coarseFluxToFieldMapMatrix = condensedDofInterpreterCoarse->fluxToFieldMapForIterativeSolves(coarseCellID);
       fluxOrdinalToLocalDofIndex = condensedDofInterpreterCoarse->fluxIndexLookupLocalCell(coarseCellID);
       condensibleVarIDs = condensedDofInterpreterCoarse->condensibleVariableIDs();
+      Epetra_CommPtr SerialComm = Teuchos::rcp( new Epetra_SerialComm() );
+      coarseSingleCellMesh = Teuchos::rcp( new Mesh(_coarseMesh, coarseCellID, SerialComm) );
+      
+      // TODO: setup some sort of lookup table for single cell mesh (indexed on ElementType); everything important about this happens on the reference cell...
+
+      // the fact that the local view does not enforce conformity means that for conforming traces
+      // the coarseFluxToFieldMapMatrix does not do the right thing if we only map, say, one of two
+      // dofs identified with a vertex.  Since this is the way we approach things below, here we manipulate
+      // the matrix, essentially enforcing conformity:
+      // (NOTE: the same thing could be accomplished at the abstract, reference-element level.  It would be more
+      //  efficient to construct a matrix like this once for the element type, and then multiply matrices to enforce
+      //  conformity...)
+      FieldContainer<double> localData(coarseTrialOrdering->totalDofs());
+      FieldContainer<double> localCoefficients(coarseTrialOrdering->totalDofs());
+      FieldContainer<double> globalCoefficients;
+      FieldContainer<GlobalIndexType> globalDofIndices;
+      GlobalIndexType zeroCellID = 0;
+      int indexBase = 0;
+      int numDofsSingleElementMesh = coarseSingleCellMesh->numGlobalDofs();
+      Epetra_Map serialGlobalDofMap(numDofsSingleElementMesh,indexBase,*SerialComm);
+      Epetra_MultiVector globalCoefficientsVector(serialGlobalDofMap,1,true);
+      for (int fieldOrdinal=0; fieldOrdinal<coarseFluxToFieldMapMatrix->M(); fieldOrdinal++)
+      {
+        for (int fluxOrdinal=0; fluxOrdinal<coarseFluxToFieldMapMatrix->N(); fluxOrdinal++)
+        {
+          localData(fluxOrdinalToLocalDofIndex[fluxOrdinal]) = (*coarseFluxToFieldMapMatrix)(fieldOrdinal,fluxOrdinal);
+        }
+        
+        coarseSingleCellMesh->globalDofAssignment()->interpretLocalData(zeroCellID, localData, globalCoefficients, globalDofIndices);
+        
+        for (int i=0; i<globalCoefficients.size(); i++)
+        {
+          int globalDofIndex = globalDofIndices[i];
+          globalCoefficientsVector[0][globalDofIndex] = globalCoefficients[i];
+        }
+        
+        coarseSingleCellMesh->globalDofAssignment()->interpretGlobalCoefficients(zeroCellID, localCoefficients, globalCoefficientsVector);
+        for (int fluxOrdinal=0; fluxOrdinal<coarseFluxToFieldMapMatrix->N(); fluxOrdinal++)
+        {
+          (*coarseFluxToFieldMapMatrix)(fieldOrdinal,fluxOrdinal) = localCoefficients(fluxOrdinalToLocalDofIndex[fluxOrdinal]);
+        }
+      }
+      
 //      cout << "coarseFluxToFieldMapMatrix:\n" << *coarseFluxToFieldMapMatrix;
     }
     
@@ -888,7 +1045,12 @@ LocalDofMapperPtr GMGOperator::getLocalCoefficientMap(GlobalIndexType fineCellID
                                                                                             sideDim, fineBasis, fineSubcellOrdinalInFineDomain, refBranch, sideOrdinal,
                                                                                             ancestor->topology(),
                                                                                             spaceDim, coarseBasis, coarseSubcellOrdinal, coarseDomainOrdinal, coarseSubcellPermutation);
-
+                // Now: Zero out weights on fine dofs that are
+                // - *not* interior to the coarse domain, or
+                // - on interior subcells that are not owned by the child cell.
+                filterOutDuplicateFineDofs(fineBasis, fineCell, sideOrdinal, true, refBranch, weights);
+                // **** end new weight-adjusting code ****
+                
                 set<unsigned> fineDofOrdinals(weights.fineOrdinals.begin(),weights.fineOrdinals.end());
                 
                 vector<GlobalIndexType> coarseDofIndices;
@@ -913,20 +1075,23 @@ LocalDofMapperPtr GMGOperator::getLocalCoefficientMap(GlobalIndexType fineCellID
                 unsigned volumeSubcellOrdinal = 0, volumeDomainOrdinal = 0;
                 unsigned volumeSubcellPermutation = 0;
                 unsigned fineSubcellOrdinalInFineDomain = 0; // the side is the whole fine domain...
-                SubBasisReconciliationWeights fieldInteriorWeights = _br.constrainedWeightsForTermTraced(termTraced, varTracedID,
-                                                                                                         sideDim, fineBasis, fineSubcellOrdinalInFineDomain, refBranch, sideOrdinal, volumeTopo,
-                                                                                                         spaceDim, volumeBasis, volumeSubcellOrdinal, volumeDomainOrdinal, volumeSubcellPermutation);
-
-                fieldInteriorWeights = BasisReconciliation::filterOutZeroRowsAndColumns(fieldInteriorWeights);
+                SubBasisReconciliationWeights weights = _br.constrainedWeightsForTermTraced(termTraced, varTracedID,
+                                                                                            sideDim, fineBasis,
+                                                                                            fineSubcellOrdinalInFineDomain, refBranch,
+                                                                                            sideOrdinal, volumeTopo,
+                                                                                            spaceDim, volumeBasis, volumeSubcellOrdinal,
+                                                                                            volumeDomainOrdinal, volumeSubcellPermutation);
+                
+                weights = BasisReconciliation::filterOutZeroRowsAndColumns(weights);
                 
                 // TODO: treat the case (as with pressure in Stokes VGP) where termTraced includes some field variables that are not condensible.
                 
-//                print("fieldInteriorWeights, fineOrdinals", fieldInteriorWeights.fineOrdinals);
-//                print("fieldInteriorWeights, coarseOrdinals", fieldInteriorWeights.coarseOrdinals);
-//                cout << "fieldInteriorWeights, weights:\n" << fieldInteriorWeights.weights;
+//                print("weights, fineOrdinals", weights.fineOrdinals);
+//                print("weights, coarseOrdinals", weights.coarseOrdinals);
+//                cout << "weights, weights:\n" << weights.weights;
                 
                 // extract a Epetra_SerialDenseMatrix corresponding to just the varTracedID dofs
-                set<int> volumeBasisOrdinals = fieldInteriorWeights.coarseOrdinals;
+                set<int> volumeBasisOrdinals = weights.coarseOrdinals;
                 Epetra_SerialDenseMatrix coarseFluxToFieldTraced(volumeBasisOrdinals.size(),coarseFluxToFieldMapMatrix->ColDim()); // columns here correspond to our coarse dof indices -- what we map to
                 
                 vector<int> fieldTracedIndices = condensedDofInterpreterCoarse->fieldRowIndices(coarseCellID, varTracedID);
@@ -941,23 +1106,24 @@ LocalDofMapperPtr GMGOperator::getLocalCoefficientMap(GlobalIndexType fineCellID
                   }
                   reducedRowIndex++;
                 }
-                int n = fieldInteriorWeights.weights.dimension(0);
-                int m = fieldInteriorWeights.weights.dimension(1);
+                int n = weights.weights.dimension(0);
+                int m = weights.weights.dimension(1);
                 if ((n==0) || (m==0))
                 {
                   continue;
                 }
-                double *firstEntry = (double *) &fieldInteriorWeights.weights[0];
+                double *firstEntry = (double *) &weights.weights[0];
                 Epetra_SerialDenseMatrix fineBasisToCoarseFieldMatrix(::Copy,firstEntry,m,m,n);
                 fineBasisToCoarseFieldMatrix.SetUseTranspose(true); // use transpose, because SDM is column-major, while FC is row-major
                 
-                Epetra_SerialDenseMatrix fineBasisToCoarseFluxMatrix(fieldInteriorWeights.fineOrdinals.size(),coarseFluxToFieldTraced.ColDim());
+                Epetra_SerialDenseMatrix fineBasisToCoarseFluxMatrix(weights.fineOrdinals.size(),coarseFluxToFieldTraced.ColDim());
                 fineBasisToCoarseFieldMatrix.Apply(coarseFluxToFieldTraced, fineBasisToCoarseFluxMatrix);
-
+                
                 vector<GlobalIndexType> coarseDofIndicesVector;
                 
                 // Look for zero columns in fineBasisToCoarseFluxMatrix
                 vector<unsigned> nonZeroColumnIndices;
+                map<GlobalIndexType,unsigned> columnOrdinalForCoarseDofIndex; // allows sorting by coarse dof index
                 double tol = 1e-15;
                 for (int j=0; j<fineBasisToCoarseFluxMatrix.ColDim(); j++)
                 {
@@ -968,27 +1134,44 @@ LocalDofMapperPtr GMGOperator::getLocalCoefficientMap(GlobalIndexType fineCellID
                     {
                       nonZero = true;
                       nonZeroColumnIndices.push_back(j);
+                      columnOrdinalForCoarseDofIndex[fluxOrdinalToLocalDofIndex[j]] = coarseDofIndicesVector.size();
                       coarseDofIndicesVector.push_back(fluxOrdinalToLocalDofIndex[j]);
                       break;
                     }
                   }
                 }
                 
-                FieldContainer<double> fineBasisToCoarseFluxMatrixFC(fineBasisToCoarseFluxMatrix.RowDim(),nonZeroColumnIndices.size());
-                for (int i=0; i<fineBasisToCoarseFluxMatrixFC.dimension(0); i++)
-                {
-                  for (int j=0; j<fineBasisToCoarseFluxMatrixFC.dimension(1); j++)
-                  {
-                    fineBasisToCoarseFluxMatrixFC(i,j) = fineBasisToCoarseFluxMatrix(i,nonZeroColumnIndices[j]);
-                  }
+                vector<unsigned> permutedNonZeroColumnIndices;
+                for (auto entry : columnOrdinalForCoarseDofIndex) {
+                  permutedNonZeroColumnIndices.push_back(nonZeroColumnIndices[entry.second]);
                 }
                 
-//                print("non-zero columns", nonZeroColumnIndices);
-//                print("coarseDofIndices", coarseDofIndicesVector);
-//                cout << "weights:\n" << fineBasisToCoarseFluxMatrixFC;
+                weights.weights.resize(fineBasisToCoarseFluxMatrix.RowDim(),nonZeroColumnIndices.size());
+                for (int i=0; i<weights.weights.dimension(0); i++)
+                {
+                  for (int j=0; j<weights.weights.dimension(1); j++)
+                  {
+                    weights.weights(i,j) = fineBasisToCoarseFluxMatrix(i,permutedNonZeroColumnIndices[j]);
+                  }
+                }
+                weights.coarseOrdinals.clear();
+                weights.coarseOrdinals.insert(coarseDofIndicesVector.begin(),coarseDofIndicesVector.end());
                 
-                set<unsigned> fineOrdinalsUnsigned(fieldInteriorWeights.fineOrdinals.begin(),fieldInteriorWeights.fineOrdinals.end());
-                basisMap.push_back(SubBasisDofMapper::subBasisDofMapper(fineOrdinalsUnsigned, coarseDofIndicesVector, fineBasisToCoarseFluxMatrixFC));
+//                print("coarseDofIndices", weights.coarseOrdinals);
+//                cout << "weights:\n" << weights.weights;
+                
+                // Now: Zero out weights on fine dofs that are
+                // - *not* interior to the coarse domain, or
+                // - on interior subcells that are not owned by the child cell.
+                filterOutDuplicateFineDofs(fineBasis, fineCell, sideOrdinal, true, refBranch, weights);
+                
+                coarseDofIndicesVector.clear();
+                coarseDofIndicesVector.insert(coarseDofIndicesVector.begin(),
+                                              weights.coarseOrdinals.begin(), weights.coarseOrdinals.end());
+                // **** end new weight-adjusting code ****
+                
+                set<unsigned> fineOrdinalsUnsigned(weights.fineOrdinals.begin(),weights.fineOrdinals.end());
+                basisMap.push_back(SubBasisDofMapper::subBasisDofMapper(fineOrdinalsUnsigned, coarseDofIndicesVector, weights.weights));
                 fittableGlobalDofOrdinalsOnSides[sideOrdinal].insert(coarseDofIndicesVector.begin(),coarseDofIndicesVector.end());
               }
             }
@@ -1016,6 +1199,8 @@ LocalDofMapperPtr GMGOperator::getLocalCoefficientMap(GlobalIndexType fineCellID
             }
             SubBasisReconciliationWeights weights = _br.constrainedWeights(fineBasis, sideRefBranches[sideOrdinal], coarseBasis, vertexNodePermutation);
 
+//            filterOutDuplicateFineDofs(fineBasis, fineCell, sideOrdinal, false, refBranch, weights);
+            
             set<unsigned> fineDofOrdinals(weights.fineOrdinals.begin(),weights.fineOrdinals.end());
             vector<GlobalIndexType> coarseDofIndices;
             for (set<int>::iterator coarseOrdinalIt=weights.coarseOrdinals.begin(); coarseOrdinalIt != weights.coarseOrdinals.end(); coarseOrdinalIt++)
@@ -1715,6 +1900,14 @@ void GMGOperator::setFillRatio(double fillRatio)
 {
   _fillRatio = fillRatio;
 //  cout << "fill ratio set to " << fillRatio << endl;
+}
+
+void GMGOperator::setFunctionExporter(Teuchos::RCP<HDF5Exporter> exporter, FunctionPtr function, string functionName)
+{
+  _functionExporter = exporter;
+  _functionToExport = function;
+  _functionToExportName = functionName;
+  _exportTimeStep = 0;
 }
 
 void GMGOperator::setIsFinest(bool value)

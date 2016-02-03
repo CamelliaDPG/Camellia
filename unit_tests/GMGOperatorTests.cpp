@@ -340,15 +340,18 @@ namespace
 
   }
 
-  void testProlongationOperatorQuad(bool simple, bool useStaticCondensation, Teuchos::FancyOStream &out, bool &success)
+  void testProlongationOperatorQuad(bool simple, bool useStaticCondensation, bool useConformingTraces,
+                                    bool testHMultigrid, int levels, bool uniform,
+                                    Teuchos::FancyOStream &out, bool &success)
   {
     int spaceDim = 2;
-    bool useConformingTraces = false;
     PoissonFormulation form(spaceDim, useConformingTraces);
     BFPtr bf = form.bf();
     VarPtr phi = form.phi(), psi = form.psi(), phi_hat = form.phi_hat(), psi_n_hat = form.psi_n_hat();
     
     int H1Order, delta_k = 1;
+    
+    map<int,int> trialOrderEnhancements;
     
     FunctionPtr phi_exact, psi_exact;
     if (simple)
@@ -365,10 +368,15 @@ namespace
       psi_exact = phi_exact->grad();
     }
     
-    int coarseElementCount = 1;
-    vector<double> dimensions(2,1.0);
-    vector<int> elementCounts(2,coarseElementCount);
-    MeshPtr mesh = MeshFactory::rectilinearMesh(bf, dimensions, elementCounts, H1Order, delta_k);
+//    if (useConformingTraces)
+//    {
+//      trialOrderEnhancements[phi->ID()] = 1;
+//    }
+    
+    int coarseElementCount = testHMultigrid ? 1 : 2;
+    vector<double> dimensions(spaceDim,1.0);
+    vector<int> elementCounts(spaceDim,coarseElementCount);
+    MeshPtr mesh = MeshFactory::rectilinearMesh(bf, dimensions, elementCounts, H1Order, delta_k, {0,0}, trialOrderEnhancements);
     
     SolutionPtr coarseSoln = Solution::solution(mesh);
     BCPtr bc = BC::bc();
@@ -403,7 +411,38 @@ namespace
     TEST_COMPARE(energyError, <, tol);
     
     MeshPtr fineMesh = mesh->deepCopy();
-    fineMesh->hRefine(fineMesh->getActiveCellIDs());
+    GlobalIndexType lastRefinedCellID = -1;
+    for (int i=0; i<levels; i++)
+    {
+      set<GlobalIndexType> cellsToRefine;
+      if (uniform)
+      {
+        cellsToRefine = fineMesh->getActiveCellIDs();
+      }
+      else
+      {
+        // refine the one we last refined (in p case), or its child (h case)
+        if (lastRefinedCellID == -1)
+        {
+          // then refine the first active guy:
+          lastRefinedCellID = *fineMesh->getActiveCellIDs().begin();
+        }
+        else if (testHMultigrid)
+        {
+          CellPtr lastRefinedCell = fineMesh->getTopology()->getCell(lastRefinedCellID);
+          lastRefinedCellID = lastRefinedCell->getChildIndices(fineMesh->getTopology())[0];
+        }
+        cellsToRefine.insert(lastRefinedCellID);
+      }
+      
+      if (testHMultigrid)
+      {
+        fineMesh->hRefine(cellsToRefine);
+        fineMesh->enforceOneIrregularity();
+      }
+      else
+        fineMesh->pRefine(cellsToRefine);
+    }
     
     SolutionPtr exactSoln = Solution::solution(fineMesh);
     exactSoln->setIP(ip);
@@ -480,8 +519,168 @@ namespace
       //    DofOrderingPtr trialOrder = fineMesh->getElementType(cellID)->trialOrderPtr;
       //    printLabeledDofCoefficients(form.bf()->varFactory(), trialOrder, coefficients);
     }
-
   }
+
+  void testQuadFineCoarseSwap(bool simple, bool useStaticCondensation, Teuchos::FancyOStream &out, bool &success)
+  {
+    int spaceDim = 2;
+    PoissonFormulation formConforming(spaceDim, true);
+    PoissonFormulation formNonconforming(spaceDim, false);
+    BFPtr bfConforming = formConforming.bf();
+    BFPtr bfNonconforming = formNonconforming.bf();
+    VarPtr phi = formConforming.phi(), psi = formConforming.psi(), phi_hat = formConforming.phi_hat(), psi_n_hat = formConforming.psi_n_hat();
+    
+    int H1Order, delta_k = 1;
+    
+    FunctionPtr phi_exact, psi_exact;
+    if (simple)
+    {
+      H1Order = 1;
+      phi_exact = Function::constant(3.14159);
+      FunctionPtr zero = Function::zero();
+      psi_exact = Function::vectorize(zero, zero);
+    }
+    else
+    {
+      H1Order = 3;
+      phi_exact = Function::xn(2) + Function::yn(1);
+      psi_exact = phi_exact->grad();
+    }
+    
+    int coarseElementCount = 1;
+    vector<double> dimensions(2,1.0);
+    vector<int> elementCounts(2,coarseElementCount);
+    MeshPtr meshConforming = MeshFactory::rectilinearMesh(bfConforming, dimensions, elementCounts, H1Order, delta_k);
+    map<int,int> trialEnhancements;
+    trialEnhancements[phi_hat->ID()] = 1;
+    MeshPtr meshNonconforming = Teuchos::rcp( new Mesh(meshConforming->getTopology(), bfNonconforming, H1Order, delta_k, trialEnhancements) );
+    
+    SolutionPtr coarseSoln = Solution::solution(meshNonconforming);
+    BCPtr bc = BC::bc();
+    coarseSoln->setBC(bc);
+    coarseSoln->setUseCondensedSolve(useStaticCondensation);
+    
+    VarPtr q = formConforming.q();
+    RHSPtr rhs = RHS::rhs();
+    FunctionPtr f = phi_exact->dx()->dx() + phi_exact->dy()->dy();
+    rhs->addTerm(f * q);
+    coarseSoln->setRHS(rhs);
+    IPPtr ip = bfConforming->graphNorm();
+    coarseSoln->setIP(ip);
+    coarseSoln->setUseCondensedSolve(useStaticCondensation);
+    
+    map<int, FunctionPtr> exactSolnMap;
+    exactSolnMap[phi->ID()] = phi_exact;
+    exactSolnMap[psi->ID()] = psi_exact;
+    
+    FunctionPtr phi_hat_exact   =   phi_hat->termTraced()->evaluate(exactSolnMap);
+    FunctionPtr psi_n_hat_exact = psi_n_hat->termTraced()->evaluate(exactSolnMap);
+    
+    exactSolnMap[phi_hat->ID()]   = phi_hat_exact;
+    exactSolnMap[psi_n_hat->ID()] = psi_n_hat_exact;
+    
+    coarseSoln->projectOntoMesh(exactSolnMap);
+    
+    double energyError = coarseSoln->energyErrorTotal();
+    
+    // sanity check: our exact solution should give us 0 energy error
+    double tol = 1e-12;
+    TEST_COMPARE(energyError, <, tol);
+    
+    MeshPtr fineMesh = meshConforming;
+    MeshPtr coarseMesh = meshNonconforming;
+    
+    SolutionPtr fineSoln = Solution::solution(fineMesh);
+    fineSoln->setBC(bc);
+    fineSoln->setIP(ip);
+    fineSoln->setRHS(rhs);
+    fineSoln->setUseCondensedSolve(useStaticCondensation);
+    
+    SolverPtr coarseSolver = Solver::getSolver(Solver::KLU, true);
+    GMGOperator gmgOperator(bc,meshNonconforming,ip,fineMesh,fineSoln->getDofInterpreter(),
+                            fineSoln->getPartitionMap(),coarseSolver, useStaticCondensation);
+    gmgOperator.setFineCoarseRolesSwapped(true);
+    
+    Teuchos::RCP<Epetra_CrsMatrix> P = gmgOperator.constructProlongationOperator();
+    Teuchos::RCP<Epetra_FEVector> coarseSolutionVector = coarseSoln->getLHSVector();
+    
+    cout << "Outputting P to file.\n";
+    EpetraExt::RowMatrixToMatrixMarketFile("/tmp/P.dat",*P, NULL, NULL, false); // false: don't write header
+    
+    fineSoln->projectOntoMesh(exactSolnMap);
+    coarseSoln->initializeLHSVector();
+    coarseSoln->getLHSVector()->PutScalar(0); // set a 0 global solution
+    coarseSoln->importSolution();             // imports the 0 solution onto each cell
+    coarseSoln->clearComputedResiduals();
+    
+    P->Multiply(true, *fineSoln->getLHSVector(), *coarseSolutionVector); // true: transpose
+    
+    coarseSoln->importSolution();
+    
+    set<GlobalIndexType> cellIDs = coarseSoln->mesh()->getActiveCellIDs();
+    
+    energyError = coarseSoln->energyErrorTotal();
+    TEST_COMPARE(energyError, <, tol);
+    
+    bool warnAboutOffRank = false;
+//    VarFactoryPtr vf = bf->varFactory();
+    //    for (set<GlobalIndexType>::iterator cellIDIt = cellIDs.begin(); cellIDIt != cellIDs.end(); cellIDIt++) {
+    //      cout << "\n\n******************** Dofs for cell " << *cellIDIt << " (fineSoln before subtracting exact) ********************\n";
+    //      FieldContainer<double> coefficients = fineSoln->allCoefficientsForCellID(*cellIDIt, warnAboutOffRank);
+    //      DofOrderingPtr trialOrder = fineMesh->getElementType(*cellIDIt)->trialOrderPtr;
+    //      printLabeledDofCoefficients(vf, trialOrder, coefficients);
+    //    }
+    
+    set<GlobalIndexType> myCellIDs = fineSoln->mesh()->cellIDsInPartition();
+    
+    for (GlobalIndexType cellID : myCellIDs) {
+      FieldContainer<double> coefficients = coarseSoln->allCoefficientsForCellID(cellID, warnAboutOffRank);
+      out << "\n\n******************** Dofs for cell " << cellID << " (coarseSoln) ********************\n\n";
+      DofOrderingPtr trialOrder = coarseMesh->getElementType(cellID)->trialOrderPtr;
+      printLabeledDofCoefficients(out, formConforming.bf()->varFactory(), trialOrder, coefficients);
+    }
+    
+    SolutionPtr exactSoln = Solution::solution(coarseMesh);
+    exactSoln->setIP(ip);
+    exactSoln->setRHS(rhs);
+    
+    // again, a sanity check, now on the exact fine solution:
+    exactSoln->projectOntoMesh(exactSolnMap);
+    energyError = exactSoln->energyErrorTotal();
+    TEST_COMPARE(energyError, <, tol);
+    
+    for (GlobalIndexType cellID : myCellIDs) {
+      FieldContainer<double> coefficients = exactSoln->allCoefficientsForCellID(cellID, warnAboutOffRank);
+      out << "\n\n******************** Dofs for cell " << cellID << " (exactSoln) ********************\n\n";
+      DofOrderingPtr trialOrder = coarseMesh->getElementType(cellID)->trialOrderPtr;
+      printLabeledDofCoefficients(out, formConforming.bf()->varFactory(), trialOrder, coefficients);
+    }
+    
+    coarseSoln->addSolution(exactSoln, -1.0); // should recover zero solution this way
+    
+    // import global solution data onto each rank:
+    coarseSoln->importSolutionForOffRankCells(cellIDs);
+    
+    for (GlobalIndexType cellID : cellIDs) {
+      FieldContainer<double> coefficients = coarseSoln->allCoefficientsForCellID(cellID, warnAboutOffRank);
+      FieldContainer<double> expectedCoefficients(coefficients.size()); // zero coefficients
+      
+      TEST_COMPARE_FLOATING_ARRAYS_CAMELLIA_ABSTOLTOO(coefficients, expectedCoefficients, tol, tol);
+      //    cout << "\n\n******************** Dofs for cell " << cellID << " (fineSoln after subtracting exact) ********************\n\n";
+      //    DofOrderingPtr trialOrder = fineMesh->getElementType(cellID)->trialOrderPtr;
+      //    printLabeledDofCoefficients(form.bf()->varFactory(), trialOrder, coefficients);
+    }
+  }
+
+  
+  // Commenting out the FineCoarseSwap test because we likely won't need this feature
+  // TODO: remove the feature from GMGOperator.
+  /*TEUCHOS_UNIT_TEST( GMGOperator, ProlongationOperatorQuad_FineCoarseSwap )
+  {
+    bool simple = true;
+    bool useStaticCondensation = false;
+    testQuadFineCoarseSwap(simple, useStaticCondensation, out, success);
+  }*/
   
   TEUCHOS_UNIT_TEST( GMGOperator, ProlongationOperatorLineStandardSolve )
   {
@@ -491,35 +690,402 @@ namespace
   
   TEUCHOS_UNIT_TEST( GMGOperator, ProlongationOperatorLineCondensedSolve )
   {
+    MPIWrapper::CommWorld()->Barrier();
+    
     bool useStaticCondensation = true;
     testProlongationOperatorLine(useStaticCondensation, out, success);
   }
 
-  TEUCHOS_UNIT_TEST( GMGOperator, ProlongationOperatorQuad_SimpleCondensedSolve )
+  //**** p-Multigrid prolongation tests on the quad *****//
+  TEUCHOS_UNIT_TEST( GMGOperator, ProlongationOperatorQuad_SimpleCondensedSolveNonconforming_p )
   {
     bool simple = true;
     bool useStaticCondensation = true;
-    testProlongationOperatorQuad(simple, useStaticCondensation, out, success);
+    bool useConformingTraces = false;
+    bool testHMultigrid = false;
+    int levels = 1;
+    bool uniform = true;
+    testProlongationOperatorQuad(simple, useStaticCondensation, useConformingTraces, testHMultigrid,
+                                 levels, uniform, out, success);
   }
   
-  TEUCHOS_UNIT_TEST( GMGOperator, ProlongationOperatorQuad_SimpleStandardSolve )
+  TEUCHOS_UNIT_TEST( GMGOperator, ProlongationOperatorQuad_SimpleCondensedSolveConforming_p )
+  {
+    bool simple = true;
+    bool useStaticCondensation = true;
+    bool useConformingTraces = true;
+    bool testHMultigrid = false;
+    int levels = 1;
+    bool uniform = true;
+    testProlongationOperatorQuad(simple, useStaticCondensation, useConformingTraces, testHMultigrid,
+                                 levels, uniform, out, success);
+  }
+  
+  TEUCHOS_UNIT_TEST( GMGOperator, ProlongationOperatorQuad_SimpleStandardSolveNonconforming_p )
   {
     bool simple = true;
     bool useStaticCondensation = false;
-    testProlongationOperatorQuad(simple, useStaticCondensation, out, success);
+    bool useConformingTraces = false;
+    bool testHMultigrid = false;
+    int levels = 1;
+    bool uniform = true;
+    testProlongationOperatorQuad(simple, useStaticCondensation, useConformingTraces, testHMultigrid,
+                                 levels, uniform, out, success);
   }
+  
+  TEUCHOS_UNIT_TEST( GMGOperator, ProlongationOperatorQuad_SimpleStandardSolveConforming_p )
+  {
+    bool simple = true;
+    bool useStaticCondensation = false;
+    bool useConformingTraces = true;
+    bool testHMultigrid = false;
+    int levels = 1;
+    bool uniform = true;
+    testProlongationOperatorQuad(simple, useStaticCondensation, useConformingTraces, testHMultigrid,
+                                 levels, uniform, out, success);
+  }
+  
+  TEUCHOS_UNIT_TEST( GMGOperator, ProlongationOperatorQuad_SlowCondensedSolveNonconforming_p )
+  {
+    bool simple = false;
+    bool useStaticCondensation = true;
+    bool useConformingTraces = false;
+    bool testHMultigrid = false;
+    int levels = 1;
+    bool uniform = true;
+    testProlongationOperatorQuad(simple, useStaticCondensation, useConformingTraces, testHMultigrid,
+                                 levels, uniform, out, success);
+  }
+  
+  TEUCHOS_UNIT_TEST( GMGOperator, ProlongationOperatorQuad_SlowCondensedSolveConforming_p )
+  {
+    bool simple = false;
+    bool useStaticCondensation = true;
+    bool useConformingTraces = true;
+    bool testHMultigrid = false;
+    int levels = 1;
+    bool uniform = true;
+    testProlongationOperatorQuad(simple, useStaticCondensation, useConformingTraces, testHMultigrid,
+                                 levels, uniform, out, success);
+  }
+  
+  TEUCHOS_UNIT_TEST( GMGOperator, ProlongationOperatorQuad_SlowStandardSolveNonconforming_p )
+  {
+    bool simple = false;
+    bool useStaticCondensation = false;
+    bool useConformingTraces = false;
+    bool testHMultigrid = false;
+    int levels = 1;
+    bool uniform = true;
+    testProlongationOperatorQuad(simple, useStaticCondensation, useConformingTraces, testHMultigrid,
+                                 levels, uniform, out, success);
+  }
+  
+  TEUCHOS_UNIT_TEST( GMGOperator, ProlongationOperatorQuad_SlowStandardSolveConforming_p )
+  {
+    bool simple = false;
+    bool useStaticCondensation = false;
+    bool useConformingTraces = true;
+    bool testHMultigrid = false;
+    int levels = 1;
+    bool uniform = true;
+    testProlongationOperatorQuad(simple, useStaticCondensation, useConformingTraces, testHMultigrid,
+                                 levels, uniform, out, success);
+  }
+  
+  //**** h-Multigrid tests below *****//
+  
+  TEUCHOS_UNIT_TEST( GMGOperator, ProlongationOperatorQuad_SimpleCondensedSolveNonconforming )
+  {
+    bool simple = true;
+    bool useStaticCondensation = true;
+    bool useConformingTraces = false;
+    bool testHMultigrid = true;
+    int levels = 1;
+    bool uniform = true;
+    testProlongationOperatorQuad(simple, useStaticCondensation, useConformingTraces, testHMultigrid,
+                                 levels, uniform, out, success);
+  }
+  
+  TEUCHOS_UNIT_TEST( GMGOperator, ProlongationOperatorQuad_SimpleCondensedSolveConforming )
+  {
+    bool simple = true;
+    bool useStaticCondensation = true;
+    bool useConformingTraces = true;
+    bool testHMultigrid = true;
+    int levels = 1;
+    bool uniform = true;
+    testProlongationOperatorQuad(simple, useStaticCondensation, useConformingTraces, testHMultigrid,
+                                 levels, uniform, out, success);
+  }
+  
+  TEUCHOS_UNIT_TEST( GMGOperator, ProlongationOperatorQuad_SimpleStandardSolveNonconforming )
+  {
+    bool simple = true;
+    bool useStaticCondensation = false;
+    bool useConformingTraces = false;
+    bool testHMultigrid = true;
+    int levels = 1;
+    bool uniform = true;
+    testProlongationOperatorQuad(simple, useStaticCondensation, useConformingTraces, testHMultigrid,
+                                 levels, uniform, out, success);
+  }
+  
+  TEUCHOS_UNIT_TEST( GMGOperator, ProlongationOperatorQuad_SimpleStandardSolveConforming )
+  {
+    bool simple = true;
+    bool useStaticCondensation = false;
+    bool useConformingTraces = true;
+    bool testHMultigrid = true;
+    int levels = 1;
+    bool uniform = true;
+    testProlongationOperatorQuad(simple, useStaticCondensation, useConformingTraces, testHMultigrid,
+                                 levels, uniform, out, success);
+  }
+  
+  TEUCHOS_UNIT_TEST( GMGOperator, ProlongationOperatorQuad_SlowCondensedSolveNonconforming )
+  {
+    bool simple = false;
+    bool useStaticCondensation = true;
+    bool useConformingTraces = false;
+    bool testHMultigrid = true;
+    int levels = 1;
+    bool uniform = true;
+    testProlongationOperatorQuad(simple, useStaticCondensation, useConformingTraces, testHMultigrid,
+                                 levels, uniform, out, success);
+  }
+  
+  TEUCHOS_UNIT_TEST( GMGOperator, ProlongationOperatorQuad_SlowCondensedSolveConforming )
+  {
+    bool simple = false;
+    bool useStaticCondensation = true;
+    bool useConformingTraces = true;
+    bool testHMultigrid = true;
+    int levels = 1;
+    bool uniform = true;
+    testProlongationOperatorQuad(simple, useStaticCondensation, useConformingTraces, testHMultigrid,
+                                 levels, uniform, out, success);
+  }
+  
+  TEUCHOS_UNIT_TEST( GMGOperator, ProlongationOperatorQuad_SlowStandardSolveNonconforming )
+  {
+    bool simple = false;
+    bool useStaticCondensation = false;
+    bool useConformingTraces = false;
+    bool testHMultigrid = true;
+    int levels = 1;
+    bool uniform = true;
+    testProlongationOperatorQuad(simple, useStaticCondensation, useConformingTraces, testHMultigrid,
+                                 levels, uniform, out, success);
+  }
+  
+  TEUCHOS_UNIT_TEST( GMGOperator, ProlongationOperatorQuad_SlowStandardSolveConforming )
+  {
+    bool simple = false;
+    bool useStaticCondensation = false;
+    bool useConformingTraces = true;
+    bool testHMultigrid = true;
+    int levels = 1;
+    bool uniform = true;
+    testProlongationOperatorQuad(simple, useStaticCondensation, useConformingTraces, testHMultigrid,
+                                 levels, uniform, out, success);
+  }
+  
+  /***
+   
+   Commenting out the two-level tests because, although these fail, this is not a use case currently
+   supported by the code, and it's not right now a priority to add it.
 
-  TEUCHOS_UNIT_TEST( GMGOperator, ProlongationOperatorQuad_SlowCondensedSolve )
+  TEUCHOS_UNIT_TEST( GMGOperator, ProlongationOperatorQuad_SimpleCondensedSolveTwoLevelNonconforming )
+  {
+    bool simple = true;
+    bool useStaticCondensation = true;
+    bool useConformingTraces = false;
+    bool testHMultigrid = true;
+    int levels = 2;
+    bool uniform = true;
+    testProlongationOperatorQuad(simple, useStaticCondensation, useConformingTraces, testHMultigrid,
+                                 levels, uniform, out, success);
+  }
+  
+  TEUCHOS_UNIT_TEST( GMGOperator, ProlongationOperatorQuad_SimpleCondensedSolveTwoLevelHangingNodesNonconforming )
+  {
+    bool simple = true;
+    bool useStaticCondensation = true;
+    bool useConformingTraces = false;
+    bool testHMultigrid = true;
+    int levels = 2;
+    bool uniform = false;
+    testProlongationOperatorQuad(simple, useStaticCondensation, useConformingTraces, testHMultigrid,
+                                 levels, uniform, out, success);
+  }
+  
+  TEUCHOS_UNIT_TEST( GMGOperator, ProlongationOperatorQuad_SimpleCondensedSolveTwoLevelConforming )
+  {
+    bool simple = true;
+    bool useStaticCondensation = true;
+    bool useConformingTraces = true;
+    bool testHMultigrid = true;
+    int levels = 2;
+    bool uniform = true;
+    testProlongationOperatorQuad(simple, useStaticCondensation, useConformingTraces, testHMultigrid,
+                                 levels, uniform, out, success);
+  }
+  
+  TEUCHOS_UNIT_TEST( GMGOperator, ProlongationOperatorQuad_SimpleCondensedSolveTwoLevelHangingNodesConforming )
+  {
+    bool simple = true;
+    bool useStaticCondensation = true;
+    bool useConformingTraces = true;
+    bool testHMultigrid = true;
+    int levels = 2;
+    bool uniform = false;
+    testProlongationOperatorQuad(simple, useStaticCondensation, useConformingTraces, testHMultigrid,
+                                 levels, uniform, out, success);
+  }
+  
+  TEUCHOS_UNIT_TEST( GMGOperator, ProlongationOperatorQuad_SimpleStandardSolveTwoLevelNonconforming )
+  {
+    bool simple = true;
+    bool useStaticCondensation = false;
+    bool useConformingTraces = false;
+    bool testHMultigrid = true;
+    int levels = 2;
+    bool uniform = true;
+    testProlongationOperatorQuad(simple, useStaticCondensation, useConformingTraces, testHMultigrid,
+                                 levels, uniform, out, success);
+  }
+  
+  TEUCHOS_UNIT_TEST( GMGOperator, ProlongationOperatorQuad_SimpleStandardSolveTwoLevelHangingNodesNonconforming )
+  {
+    bool simple = true;
+    bool useStaticCondensation = false;
+    bool useConformingTraces = false;
+    bool testHMultigrid = true;
+    int levels = 2;
+    bool uniform = false;
+    testProlongationOperatorQuad(simple, useStaticCondensation, useConformingTraces, testHMultigrid,
+                                 levels, uniform, out, success);
+  }
+  
+  TEUCHOS_UNIT_TEST( GMGOperator, ProlongationOperatorQuad_SimpleStandardSolveTwoLevelConforming )
+  {
+    bool simple = true;
+    bool useStaticCondensation = false;
+    bool useConformingTraces = true;
+    bool testHMultigrid = true;
+    int levels = 2;
+    bool uniform = true;
+    testProlongationOperatorQuad(simple, useStaticCondensation, useConformingTraces, testHMultigrid,
+                                 levels, uniform, out, success);
+  }
+  
+  TEUCHOS_UNIT_TEST( GMGOperator, ProlongationOperatorQuad_SimpleStandardSolveTwoLevelHangingNodesConforming )
+  {
+    bool simple = true;
+    bool useStaticCondensation = false;
+    bool useConformingTraces = true;
+    bool testHMultigrid = true;
+    int levels = 2;
+    bool uniform = false;
+    testProlongationOperatorQuad(simple, useStaticCondensation, useConformingTraces, testHMultigrid,
+                                 levels, uniform, out, success);
+  }
+  
+  TEUCHOS_UNIT_TEST( GMGOperator, ProlongationOperatorQuad_SlowCondensedSolveTwoLevelNonconforming )
   {
     bool simple = false;
     bool useStaticCondensation = true;
-    testProlongationOperatorQuad(simple, useStaticCondensation, out, success);
+    bool useConformingTraces = false;
+    bool testHMultigrid = true;
+    int levels = 2;
+    bool uniform = true;
+    testProlongationOperatorQuad(simple, useStaticCondensation, useConformingTraces, testHMultigrid,
+                                 levels, uniform, out, success);
   }
   
-  TEUCHOS_UNIT_TEST( GMGOperator, ProlongationOperatorQuad_SlowStandardSolve )
+  TEUCHOS_UNIT_TEST( GMGOperator, ProlongationOperatorQuad_SlowCondensedSolveTwoLevelHangingNodesNonconforming )
+  {
+    bool simple = false;
+    bool useStaticCondensation = true;
+    bool useConformingTraces = false;
+    bool testHMultigrid = true;
+    int levels = 2;
+    bool uniform = false;
+    testProlongationOperatorQuad(simple, useStaticCondensation, useConformingTraces, testHMultigrid,
+                                 levels, uniform, out, success);
+  }
+  
+  TEUCHOS_UNIT_TEST( GMGOperator, ProlongationOperatorQuad_SlowCondensedSolveTwoLevelConforming )
+  {
+    bool simple = false;
+    bool useStaticCondensation = true;
+    bool useConformingTraces = true;
+    bool testHMultigrid = true;
+    int levels = 2;
+    bool uniform = true;
+    testProlongationOperatorQuad(simple, useStaticCondensation, useConformingTraces, testHMultigrid,
+                                 levels, uniform, out, success);
+  }
+  
+  TEUCHOS_UNIT_TEST( GMGOperator, ProlongationOperatorQuad_SlowCondensedSolveTwoLevelHangingNodesConforming )
+  {
+    bool simple = false;
+    bool useStaticCondensation = true;
+    bool useConformingTraces = true;
+    bool testHMultigrid = true;
+    int levels = 2;
+    bool uniform = false;
+    testProlongationOperatorQuad(simple, useStaticCondensation, useConformingTraces, testHMultigrid,
+                                 levels, uniform, out, success);
+  }
+  
+  TEUCHOS_UNIT_TEST( GMGOperator, ProlongationOperatorQuad_SlowStandardSolveTwoLevelNonconforming )
   {
     bool simple = false;
     bool useStaticCondensation = false;
-    testProlongationOperatorQuad(simple, useStaticCondensation, out, success);
+    bool useConformingTraces = false;
+    bool testHMultigrid = true;
+    int levels = 2;
+    bool uniform = true;
+    testProlongationOperatorQuad(simple, useStaticCondensation, useConformingTraces, testHMultigrid,
+                                 levels, uniform, out, success);
   }
+  
+  TEUCHOS_UNIT_TEST( GMGOperator, ProlongationOperatorQuad_SlowStandardSolveTwoLevelHangingNodesNonconforming )
+  {
+    bool simple = false;
+    bool useStaticCondensation = false;
+    bool useConformingTraces = false;
+    bool testHMultigrid = true;
+    int levels = 2;
+    bool uniform = false;
+    testProlongationOperatorQuad(simple, useStaticCondensation, useConformingTraces, testHMultigrid,
+                                 levels, uniform, out, success);
+  }
+  
+  TEUCHOS_UNIT_TEST( GMGOperator, ProlongationOperatorQuad_SlowStandardSolveTwoLevelConforming )
+  {
+    bool simple = false;
+    bool useStaticCondensation = false;
+    bool useConformingTraces = true;
+    bool testHMultigrid = true;
+    int levels = 2;
+    bool uniform = true;
+    testProlongationOperatorQuad(simple, useStaticCondensation, useConformingTraces, testHMultigrid,
+                                 levels, uniform, out, success);
+  }
+  
+  TEUCHOS_UNIT_TEST( GMGOperator, ProlongationOperatorQuad_SlowStandardSolveTwoLevelHangingNodesConforming )
+  {
+    bool simple = false;
+    bool useStaticCondensation = false;
+    bool useConformingTraces = true;
+    bool testHMultigrid = true;
+    int levels = 2;
+    bool uniform = false;
+    testProlongationOperatorQuad(simple, useStaticCondensation, useConformingTraces, testHMultigrid,
+                                 levels, uniform, out, success);
+  }
+   */
 } // namespace
