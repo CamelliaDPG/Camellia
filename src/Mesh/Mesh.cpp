@@ -76,16 +76,13 @@ map<int,int> Mesh::_emptyIntIntMap;
 
 Mesh::Mesh(MeshTopologyViewPtr meshTopology, VarFactoryPtr varFactory, vector<int> H1Order, int pToAddTest,
            map<int,int> trialOrderEnhancements, map<int,int> testOrderEnhancements,
-           MeshPartitionPolicyPtr partitionPolicy) : DofInterpreter(Teuchos::rcp(this,false))
+           MeshPartitionPolicyPtr partitionPolicy, Epetra_CommPtr Comm) : DofInterpreter(Teuchos::rcp(this,false))
 {
-
   _meshTopology = meshTopology;
 
   DofOrderingFactoryPtr dofOrderingFactoryPtr = Teuchos::rcp( new DofOrderingFactory(varFactory, trialOrderEnhancements,testOrderEnhancements) );
   _enforceMBFluxContinuity = false;
-  //  MeshPartitionPolicyPtr partitionPolicy = Teuchos::rcp( new MeshPartitionPolicy() );
-  if ( partitionPolicy.get() == NULL )
-    partitionPolicy = Teuchos::rcp( new ZoltanMeshPartitionPolicy() );
+  initializePartitionPolicyIfNull(partitionPolicy, Comm);
 
   MeshPtr thisPtr = Teuchos::rcp(this, false);
   _gda = Teuchos::rcp( new GDAMinimumRule(thisPtr, varFactory, dofOrderingFactoryPtr,
@@ -105,16 +102,14 @@ Mesh::Mesh(MeshTopologyViewPtr meshTopology, VarFactoryPtr varFactory, vector<in
 
 Mesh::Mesh(MeshTopologyViewPtr meshTopology, VarFactoryPtr varFactory, int H1Order, int pToAddTest,
            map<int,int> trialOrderEnhancements, map<int,int> testOrderEnhancements,
-           MeshPartitionPolicyPtr partitionPolicy) : DofInterpreter(Teuchos::rcp(this,false))
+           MeshPartitionPolicyPtr partitionPolicy, Epetra_CommPtr Comm) : DofInterpreter(Teuchos::rcp(this,false))
 {
 
   _meshTopology = meshTopology;
 
   DofOrderingFactoryPtr dofOrderingFactoryPtr = Teuchos::rcp( new DofOrderingFactory(varFactory, trialOrderEnhancements,testOrderEnhancements) );
   _enforceMBFluxContinuity = false;
-//  MeshPartitionPolicyPtr partitionPolicy = Teuchos::rcp( new MeshPartitionPolicy() );
-  if ( partitionPolicy.get() == NULL )
-    partitionPolicy = Teuchos::rcp( new ZoltanMeshPartitionPolicy() );
+  initializePartitionPolicyIfNull(partitionPolicy, Comm);
 
   MeshPtr thisPtr = Teuchos::rcp(this, false);
   _gda = Teuchos::rcp( new GDAMinimumRule(thisPtr, varFactory, dofOrderingFactoryPtr,
@@ -135,7 +130,7 @@ Mesh::Mesh(MeshTopologyViewPtr meshTopology, VarFactoryPtr varFactory, int H1Ord
 // Deprecated constructor
 Mesh::Mesh(MeshTopologyViewPtr meshTopology, TBFPtr<double> bilinearForm, vector<int> H1Order, int pToAddTest,
            map<int,int> trialOrderEnhancements, map<int,int> testOrderEnhancements,
-           MeshPartitionPolicyPtr partitionPolicy) : DofInterpreter(Teuchos::rcp(this,false))
+           MeshPartitionPolicyPtr partitionPolicy, Epetra_CommPtr Comm) : DofInterpreter(Teuchos::rcp(this,false))
 {
 
   _meshTopology = meshTopology;
@@ -143,8 +138,7 @@ Mesh::Mesh(MeshTopologyViewPtr meshTopology, TBFPtr<double> bilinearForm, vector
   DofOrderingFactoryPtr dofOrderingFactoryPtr = Teuchos::rcp( new DofOrderingFactory(bilinearForm, trialOrderEnhancements,testOrderEnhancements) );
   _enforceMBFluxContinuity = false;
   //  MeshPartitionPolicyPtr partitionPolicy = Teuchos::rcp( new MeshPartitionPolicy() );
-  if ( partitionPolicy.get() == NULL )
-    partitionPolicy = Teuchos::rcp( new ZoltanMeshPartitionPolicy() );
+  initializePartitionPolicyIfNull(partitionPolicy, Comm);
 
   MeshPtr thisPtr = Teuchos::rcp(this, false);
   _gda = Teuchos::rcp( new GDAMinimumRule(thisPtr, bilinearForm->varFactory(), dofOrderingFactoryPtr,
@@ -166,7 +160,7 @@ Mesh::Mesh(MeshTopologyViewPtr meshTopology, TBFPtr<double> bilinearForm, vector
 // Deprecated constructor
 Mesh::Mesh(MeshTopologyViewPtr meshTopology, TBFPtr<double> bilinearForm, int H1Order, int pToAddTest,
            map<int,int> trialOrderEnhancements, map<int,int> testOrderEnhancements,
-           MeshPartitionPolicyPtr partitionPolicy) : DofInterpreter(Teuchos::rcp(this,false))
+           MeshPartitionPolicyPtr partitionPolicy, Epetra_CommPtr Comm) : DofInterpreter(Teuchos::rcp(this,false))
 {
 
   _meshTopology = meshTopology;
@@ -174,8 +168,7 @@ Mesh::Mesh(MeshTopologyViewPtr meshTopology, TBFPtr<double> bilinearForm, int H1
   DofOrderingFactoryPtr dofOrderingFactoryPtr = Teuchos::rcp( new DofOrderingFactory(bilinearForm, trialOrderEnhancements,testOrderEnhancements) );
   _enforceMBFluxContinuity = false;
 //  MeshPartitionPolicyPtr partitionPolicy = Teuchos::rcp( new MeshPartitionPolicy() );
-  if ( partitionPolicy.get() == NULL )
-    partitionPolicy = Teuchos::rcp( new ZoltanMeshPartitionPolicy() );
+  initializePartitionPolicyIfNull(partitionPolicy, Comm);
 
   MeshPtr thisPtr = Teuchos::rcp(this, false);
   _gda = Teuchos::rcp( new GDAMinimumRule(thisPtr, bilinearForm->varFactory(), dofOrderingFactoryPtr,
@@ -196,7 +189,8 @@ Mesh::Mesh(MeshTopologyViewPtr meshTopology, TBFPtr<double> bilinearForm, int H1
 
 Mesh::Mesh(const vector<vector<double> > &vertices, vector< vector<unsigned> > &elementVertices,
            TBFPtr<double> bilinearForm, int H1Order, int pToAddTest, bool useConformingTraces,
-           map<int,int> trialOrderEnhancements, map<int,int> testOrderEnhancements, vector<PeriodicBCPtr> periodicBCs) : DofInterpreter(Teuchos::rcp(this,false))
+           map<int,int> trialOrderEnhancements, map<int,int> testOrderEnhancements, vector<PeriodicBCPtr> periodicBCs,
+           Epetra_CommPtr Comm) : DofInterpreter(Teuchos::rcp(this,false))
 {
 
 //  cout << "in legacy mesh constructor, periodicBCs size is " << periodicBCs.size() << endl;
@@ -206,7 +200,8 @@ Mesh::Mesh(const vector<vector<double> > &vertices, vector< vector<unsigned> > &
 
   DofOrderingFactoryPtr dofOrderingFactoryPtr = Teuchos::rcp( new DofOrderingFactory(bilinearForm, trialOrderEnhancements,testOrderEnhancements) );
   _enforceMBFluxContinuity = false;
-  MeshPartitionPolicyPtr partitionPolicy = Teuchos::rcp( new ZoltanMeshPartitionPolicy() );
+  MeshPartitionPolicyPtr partitionPolicy;
+  initializePartitionPolicyIfNull(partitionPolicy, Comm);
 
   MeshPtr thisPtr = Teuchos::rcp(this, false);
   _gda = Teuchos::rcp( new GDAMaximumRule2D(thisPtr, bilinearForm->varFactory(), dofOrderingFactoryPtr,
@@ -255,7 +250,8 @@ Mesh::Mesh(const vector<vector<double> > &vertices, vector< vector<unsigned> > &
 
 // private constructor for use by deepCopy()
 Mesh::Mesh(MeshTopologyViewPtr meshTopology, Teuchos::RCP<GlobalDofAssignment> gda, VarFactoryPtr varFactory,
-           int pToAddToTest, bool useConformingTraces, bool usePatchBasis, bool enforceMBFluxContinuity) : DofInterpreter(Teuchos::rcp(this,false))
+           int pToAddToTest, bool useConformingTraces, bool usePatchBasis, bool enforceMBFluxContinuity)
+: DofInterpreter(Teuchos::rcp(this,false))
 {
   _meshTopology = meshTopology;
   _gda = gda;
@@ -266,7 +262,6 @@ Mesh::Mesh(MeshTopologyViewPtr meshTopology, Teuchos::RCP<GlobalDofAssignment> g
   _enforceMBFluxContinuity = enforceMBFluxContinuity;
 
   _boundary.setMesh(Teuchos::rcp(this,false));
-
 }
 
 // deprecated private constructor for use by deepCopy()
@@ -283,7 +278,52 @@ Mesh::Mesh(MeshTopologyViewPtr meshTopology, Teuchos::RCP<GlobalDofAssignment> g
   _enforceMBFluxContinuity = enforceMBFluxContinuity;
 
   _boundary.setMesh(Teuchos::rcp(this,false));
+}
 
+// ! Constructor for a single-element mesh extracted from an existing mesh
+Mesh::Mesh(MeshPtr mesh, GlobalIndexType cellID, Epetra_CommPtr Comm) : DofInterpreter(Teuchos::rcp(this,false))
+{
+  int meshDim = mesh->getTopology()->getDimension();
+  Teuchos::RCP<MeshTopology> meshTopo = Teuchos::rcp( new MeshTopology(meshDim));
+  _meshTopology = meshTopo;
+  
+  CellPtr cell = mesh->getTopology()->getCell(cellID);
+  int vertexCount = cell->vertices().size();
+  vector<vector<double> > cellVertices(vertexCount);
+
+  const vector<unsigned>* vertexIndices = &cell->vertices();
+  int i=0;
+  for (unsigned vertexIndex : *vertexIndices)
+  {
+    cellVertices[i] = mesh->getTopology()->getVertex(vertexIndex);
+    i++;
+  }
+  
+  IndexType cellIDZero = 0;
+  meshTopo->addCell(cellIDZero, cell->topology(), cellVertices);
+
+  _varFactory = mesh->varFactory();
+  
+  DofOrderingFactoryPtr dofOrderingFactoryPtr = mesh->globalDofAssignment()->getDofOrderingFactory();
+  MeshPartitionPolicyPtr partitionPolicy;
+  initializePartitionPolicyIfNull(partitionPolicy, Comm);
+  
+  MeshPtr thisPtr = Teuchos::rcp(this, false);
+  vector<int> H1Order = mesh->globalDofAssignment()->getInitialH1Order();
+  int delta_k = mesh->globalDofAssignment()->getTestOrderEnrichment();
+  _gda = Teuchos::rcp( new GDAMinimumRule(thisPtr, _varFactory, dofOrderingFactoryPtr,
+                                          partitionPolicy, H1Order, delta_k));
+  _gda->setElementType(cellIDZero,mesh->getElementType(cellID));
+  _gda->repartitionAndMigrate();
+  
+  _boundary.setMesh(Teuchos::rcp(this,false));
+  
+  _meshTopology->setGlobalDofAssignment(_gda.get());
+  
+  // Teuchos::RCP< RefinementHistory > refHist = Teuchos::rcp( &_refinementHistory, false );
+  // cout << "Has ownership " << refHist.has_ownership() << endl;
+  // this->registerObserver(refHist);
+  this->registerObserver(Teuchos::rcp( &_refinementHistory, false ));
 }
 
 GlobalIndexType Mesh::numInitialElements()
@@ -344,7 +384,7 @@ GlobalIndexType Mesh::cellID(Teuchos::RCP< ElementType > elemTypePtr, IndexType 
 
 vector< GlobalIndexType > Mesh::cellIDsOfType(ElementTypePtr elemType)
 {
-  int rank = Teuchos::GlobalMPISession::getRank();
+  int rank = Comm()->MyPID();
   return cellIDsOfType(rank,elemType);
 }
 
@@ -404,6 +444,11 @@ vector<GlobalIndexType> Mesh::cellIDsForPoints(const FieldContainer<double> &phy
   return cellIDs;
 }
 
+Epetra_CommPtr& Mesh::Comm()
+{
+  return _gda->getPartitionPolicy()->Comm();
+}
+
 MeshPtr Mesh::deepCopy()
 {
   MeshTopologyViewPtr meshTopoCopy = _meshTopology->deepCopy();
@@ -439,9 +484,10 @@ vector<ElementPtr> Mesh::elementsForPoints(const FieldContainer<double> &physica
 
 void Mesh::enforceOneIrregularity(bool repartitionAndMigrate)
 {
-  int rank = Teuchos::GlobalMPISession::getRank();
+  int rank = Comm()->MyPID();
   bool meshIsNotRegular = true; // assume it's not regular and check elements
   bool meshChanged = false;
+  
   while (meshIsNotRegular)
   {
     int spaceDim = _meshTopology->getDimension();
@@ -451,40 +497,73 @@ void Mesh::enforceOneIrregularity(bool repartitionAndMigrate)
     set< GlobalIndexType > activeCellIDs = _meshTopology->getActiveCellIndices();
     set< GlobalIndexType >::iterator cellIDIt;
 
-    for (GlobalIndexType cellID : activeCellIDs)
+    bool useSideIrregularityEnforcement = false; // this is the old way
+    if (useSideIrregularityEnforcement)
     {
-      CellPtr cell = _meshTopology->getCell(cellID);
-      int sideCount = cell->getSideCount();
-      for (int sideOrdinal=0; sideOrdinal < sideCount; sideOrdinal++)
+      for (GlobalIndexType cellID : activeCellIDs)
       {
-        pair<GlobalIndexType, unsigned> neighborInfo = cell->getNeighborInfo(sideOrdinal, _meshTopology);
-
-        if (neighborInfo.first != -1)
+        CellPtr cell = _meshTopology->getCell(cellID);
+        int sideCount = cell->getSideCount();
+        for (int sideOrdinal=0; sideOrdinal < sideCount; sideOrdinal++)
         {
-          if (spaceDim > 1)
+          pair<GlobalIndexType, unsigned> neighborInfo = cell->getNeighborInfo(sideOrdinal, _meshTopology);
+
+          if (neighborInfo.first != -1)
           {
-            CellPtr neighbor = _meshTopology->getCell(neighborInfo.first);
-            RefinementBranch myRefinementBranch = cell->refinementBranchForSide(sideOrdinal, _meshTopology);
-            if (myRefinementBranch.size() > 1)
+            if (spaceDim > 1)
             {
-              // then *neighbor* is irregular
-              irregularCellIDs[neighbor->topology()->getKey()].insert(neighborInfo.first);
-//              cout << neighborInfo.first << " is irregular.\n";
-              { // DEBUGGING:
-                if (activeCellIDs.find(neighborInfo.first) == activeCellIDs.end())
-                {
-                  _meshTopology->printAllEntitiesInBaseMeshTopology();
-                  // repeat for entering in the debugger before the exception is thrown
-                  cell->getNeighborInfo(sideOrdinal, _meshTopology);
+              CellPtr neighbor = _meshTopology->getCell(neighborInfo.first);
+              RefinementBranch myRefinementBranch = cell->refinementBranchForSide(sideOrdinal, _meshTopology);
+              if (myRefinementBranch.size() > 1)
+              {
+                // then *neighbor* is irregular
+                irregularCellIDs[neighbor->topology()->getKey()].insert(neighborInfo.first);
+  //              cout << neighborInfo.first << " is irregular.\n";
+                { // DEBUGGING:
+                  if (activeCellIDs.find(neighborInfo.first) == activeCellIDs.end())
+                  {
+                    _meshTopology->printAllEntitiesInBaseMeshTopology();
+                    // repeat for entering in the debugger before the exception is thrown
+                    cell->getNeighborInfo(sideOrdinal, _meshTopology);
+                  }
                 }
+                TEUCHOS_TEST_FOR_EXCEPTION(activeCellIDs.find(neighborInfo.first) == activeCellIDs.end(),
+                                           std::invalid_argument, "Internal error: 'irregular' cell is not active!");
               }
-              TEUCHOS_TEST_FOR_EXCEPTION(activeCellIDs.find(neighborInfo.first) == activeCellIDs.end(),
-                                         std::invalid_argument, "Internal error: 'irregular' cell is not active!");
             }
           }
         }
       }
     }
+    else // new way: edge 1-irregularity enforcement
+    {
+      for (GlobalIndexType cellID : activeCellIDs)
+      {
+        CellPtr cell = _meshTopology->getCell(cellID);
+        int edgeCount = cell->topology()->getEdgeCount();
+        static int edgeDim = 1;
+        for (int edgeOrdinal=0; edgeOrdinal < edgeCount; edgeOrdinal++)
+        {
+          int refBranchSize = cell->refinementBranchForSubcell(edgeDim, edgeOrdinal, _meshTopology).size();
+          
+          if (refBranchSize > 1)
+          {
+            // then there is at least one active 2-irregular cell constraining this edge
+            IndexType edgeEntityIndex = cell->entityIndex(edgeDim, edgeOrdinal);
+            pair<IndexType, unsigned> constrainingEntity = _meshTopology->getConstrainingEntity(edgeDim, edgeEntityIndex);
+            IndexType constrainingEntityIndex = constrainingEntity.first;
+            unsigned constrainingEntityDim = constrainingEntity.second;
+            std::vector< std::pair<IndexType,unsigned> > activeCellsForConstrainingEntity = _meshTopology->getActiveCellIndices(constrainingEntityDim, constrainingEntityIndex);
+            for (auto activeCellEntry : activeCellsForConstrainingEntity)
+            {
+              CellTopologyKey cellTopoKey = _meshTopology->getCell(activeCellEntry.first)->topology()->getKey();
+              irregularCellIDs[cellTopoKey].insert(activeCellEntry.first);
+            }
+          }
+        }
+      }
+    }
+    
     if (irregularCellIDs.size() > 0)
     {
       for (map< Camellia::CellTopologyKey, set<GlobalIndexType> >::iterator mapIt = irregularCellIDs.begin();
@@ -514,7 +593,7 @@ FieldContainer<double> Mesh::cellSideParities( ElementTypePtr elemTypePtr )
   // return dynamic_cast<GDAMaximumRule2D*>(_gda.get())->cellSideParities(elemTypePtr);
 
   // new implementation below:
-  int rank = Teuchos::GlobalMPISession::getRank();
+  int rank = Comm()->MyPID();
   vector<GlobalIndexType> cellIDs = _gda->cellIDsOfElementType(rank, elemTypePtr);
 
   int numCells = cellIDs.size();
@@ -953,6 +1032,22 @@ void Mesh::hUnrefine(const set<GlobalIndexType> &cellIDs, bool repartitionAndReb
   }
 }
 
+void Mesh::initializePartitionPolicyIfNull(MeshPartitionPolicyPtr &partitionPolicy, Epetra_CommPtr Comm)
+{
+  if ( partitionPolicy.get() == NULL )
+  {
+    if (Comm == Teuchos::null)
+    {
+#ifdef HAVE_MPI
+      Comm = Teuchos::rcp( new Epetra_MpiComm(MPI_COMM_WORLD) );
+#else
+      Comm = Teuchos::rcp( new Epetra_SerialComm() );
+#endif
+    }
+    partitionPolicy = Teuchos::rcp( new ZoltanMeshPartitionPolicy(Comm) );
+  }
+}
+
 void Mesh::interpretGlobalCoefficients(GlobalIndexType cellID, FieldContainer<double> &localCoefficients, const Epetra_MultiVector &globalCoefficients)
 {
   _gda->interpretGlobalCoefficients(cellID, localCoefficients, globalCoefficients);
@@ -997,13 +1092,13 @@ GlobalIndexType Mesh::numFluxDofs()
   GlobalIndexType fluxDofsForPartition = _gda->partitionOwnedGlobalFluxIndices().size();
   GlobalIndexType traceDofsForPartition = _gda->partitionOwnedGlobalTraceIndices().size();
 
-  return MPIWrapper::sum(fluxDofsForPartition + traceDofsForPartition);
+  return MPIWrapper::sum(*Comm(), (GlobalIndexTypeToCast)(fluxDofsForPartition + traceDofsForPartition));
 }
 
 GlobalIndexType Mesh::numFieldDofs()
 {
   GlobalIndexType fieldDofsForPartition = _gda->partitionOwnedGlobalFieldIndices().size();
-  return MPIWrapper::sum(fieldDofsForPartition);
+  return MPIWrapper::sum(*Comm(),(GlobalIndexTypeToCast)fieldDofsForPartition);
 }
 
 GlobalIndexType Mesh::numGlobalDofs()
@@ -1040,7 +1135,7 @@ GlobalIndexType Mesh::partitionLocalIndexForGlobalDofIndex( GlobalIndexType glob
 
 FieldContainer<double> Mesh::physicalCellNodes( Teuchos::RCP< ElementType > elemTypePtr)
 {
-  int rank = Teuchos::GlobalMPISession::getRank();
+  int rank = Comm()->MyPID();
   vector<GlobalIndexType> cellIDs = _gda->cellIDsOfElementType(rank, elemTypePtr);
 
   return physicalCellNodes(elemTypePtr, cellIDs);
@@ -1569,7 +1664,7 @@ vector<double> Mesh::getCellOrientation(GlobalIndexType cellID)
 #ifdef HAVE_EPETRAEXT_HDF5
 void Mesh::saveToHDF5(string filename)
 {
-  int commRank = Teuchos::GlobalMPISession::getRank();
+  int commRank = Comm()->MyPID();
 
   if (commRank == 0)
   {
@@ -1683,6 +1778,10 @@ void Mesh::saveToHDF5(string filename)
 // end HAVE_EPETRAEXT_HDF5 include guard
 #endif
 
+Teuchos_CommPtr& Mesh::TeuchosComm()
+{
+  return _gda->getPartitionPolicy()->TeuchosComm();
+}
 
 MeshPtr Mesh::readMsh(string filePath, TBFPtr<double> bilinearForm, int H1Order, int pToAdd)
 {

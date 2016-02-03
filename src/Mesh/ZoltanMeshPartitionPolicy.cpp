@@ -20,8 +20,6 @@
 
 #include "Solution.h"
 
-#include <Teuchos_GlobalMPISession.hpp>
-
 #ifdef HAVE_MPI
 #include "Epetra_MpiComm.h"
 #else
@@ -31,7 +29,7 @@
 using namespace Intrepid;
 using namespace Camellia;
 
-ZoltanMeshPartitionPolicy::ZoltanMeshPartitionPolicy()
+ZoltanMeshPartitionPolicy::ZoltanMeshPartitionPolicy(Epetra_CommPtr Comm) : MeshPartitionPolicy(Comm)
 {
   string partitionerName = "HSFC"; // was "BLOCK"
   string debug_level = "0"; // was "10"
@@ -39,7 +37,7 @@ ZoltanMeshPartitionPolicy::ZoltanMeshPartitionPolicy()
   _ZoltanPartitioner = partitionerName;
   _debug_level = debug_level;
 }
-ZoltanMeshPartitionPolicy::ZoltanMeshPartitionPolicy(string partitionerName)
+ZoltanMeshPartitionPolicy::ZoltanMeshPartitionPolicy(Epetra_CommPtr Comm, string partitionerName) : MeshPartitionPolicy(Comm)
 {
   string debug_level = "0";
   _ZoltanPartitioner = partitionerName;
@@ -48,7 +46,7 @@ ZoltanMeshPartitionPolicy::ZoltanMeshPartitionPolicy(string partitionerName)
 
 void ZoltanMeshPartitionPolicy::partitionMesh(Mesh *mesh, PartitionIndexType numPartitions)
 {
-  int myNode = Teuchos::GlobalMPISession::getRank();
+  int myNode = Comm()->MyPID();
 //  cout << "Entered ZoltanMeshPartitionPolicy::partitionMesh() on rank " << myNode << endl;
 //  cout << "ZoltanMeshPartitionPolicy::partitionMesh, registered solution count: " << mesh->globalDofAssignment()->getRegisteredSolutions().size() << endl;
   int numNodes = numPartitions;
@@ -66,192 +64,190 @@ void ZoltanMeshPartitionPolicy::partitionMesh(Mesh *mesh, PartitionIndexType num
     cout << "WARNING: in ZoltanMeshPartitionPolicy, spaceDim > 3, but HSFC only supports spaceDim <= 3.  For the moment, as a stopgap, all cells will be placed on rank 0.  This should be changed!\n";
     numNodes = 1;
   }
-
+  
   if (numNodes>1)
   {
 #ifdef HAVE_MPI
-    Zoltan *zz = new Zoltan(MPI::COMM_WORLD);
-    if (zz == NULL)
+    Epetra_MpiComm* mpiComm = dynamic_cast<Epetra_MpiComm*>(this->Comm().get());
+    
+    if (mpiComm != NULL)
     {
-      cout << "ZoltanMeshPartititionPolicy: construction of new Zoltan object failed.\n";
-      MPI::Finalize();
-      exit(0);
-    }
-    bool useLocalIDs = false;
-
-    if (_debug_level == "0")
-    {
-      // then suppress all debug output (in particular, the "ZOLTAN Load balancing method" messages) as follows:
-      ostringstream numProcStream;
-      numProcStream << numNodes;
-      // Zoltan issues warnings if you set DEBUG_PROCESSOR < 0 or > NumProc.
-      // But if we set it to be exactly NumProc, I think we'll avoid all messages.
-      zz->Set_Param( "DEBUG_PROCESSOR", numProcStream.str() );
-    }
-
-    /* Calling Zoltan Load-balancing routine */
-    //cout << "Setting zoltan params" << endl;
-    zz->Set_Param( "LB_METHOD", _ZoltanPartitioner.c_str());    /* Zoltan method */
-    zz->Set_Param( "NUM_GID_ENTRIES", "1");  /* global ID is 1 integer */
-    if (useLocalIDs)
-    {
-      zz->Set_Param( "NUM_LID_ENTRIES", "1");  /* local ID is 1 integer */
-    }
-    else
-    {
-      zz->Set_Param( "NUM_LID_ENTRIES", "0");  /* local ID is null */
-    }
-    zz->Set_Param( "OBJ_WEIGHT_DIM", "0");
-    zz->Set_Param( "DEBUG_LEVEL", _debug_level);
-    //  zz->Set_Param( "REFTREE_INITPATH", "CONNECTED"); // no SFC on coarse meshTopology
-    zz->Set_Param( "RANDOM_MOVE_FRACTION", "1.0");    /* Zoltan "random" partition param */
-
-    zz->Set_Param( "IMBALANCE_TOL", "1.1"); // the default is 1.1; measured as the max. load divided by the average load -- worth noting that this is sometimes clearly unattainable (if you have e.g. 5 elements and 4 MPI ranks, you will have an average load of 1.25, and a maximum load of at least 2), and even in such cases zoltan issues a warning.  If we wanted to eliminate such warnings, it would be easy enough to compute the best case as determined by the pigeonhole principle (assuming equal weights, as we have now), and take the more tolerant of the best case versus e.g. 1.1.  But if you think of the warning as simply saying hey your work is imbalanced, that's true, even if that's totally unavoidable.
-
-    Mesh* myData = mesh;
-
-    // Testing query functions
-    zz->Set_Num_Obj_Fn(&get_number_of_objects, myData);
-    zz->Set_Obj_List_Fn(&get_object_list, myData);
-
-    // HSFC query functions
-    zz->Set_Num_Geom_Fn(&get_num_geom, myData);
-    zz->Set_Geom_Multi_Fn(&get_geom_list, myData);
-
-    // object sizing/packing functions:
-    zz->Set_Obj_Size_Fn( &get_elem_data_size, myData);
-    zz->Set_Pack_Obj_Fn( &pack_elem_data, myData);
-    zz->Set_Unpack_Obj_Fn( &unpack_elem_data, myData);
-
-    int changes;
-    int numGidEntries;
-    int numLidEntries;
-    int numImport;
-    ZOLTAN_ID_PTR importGlobalIds;
-    ZOLTAN_ID_PTR importLocalIds;
-    int *importProcs;
-    int *importToPart;
-    int numExport;
-    ZOLTAN_ID_PTR exportGlobalIds;
-    ZOLTAN_ID_PTR exportLocalIds;
-    int *exportProcs;
-    int *exportToPart;
-
-    int rc = zz->LB_Partition(changes, numGidEntries, numLidEntries,
-                              numImport, importGlobalIds, importLocalIds, importProcs, importToPart,
-                              numExport, exportGlobalIds, exportLocalIds, exportProcs, exportToPart);
-
-    if (rc == ZOLTAN_WARN)
-    {
-      if (numActiveElements / numPartitions > 0)   // if the warning is just because not every process received an element, don't even note that the warning was issued
+      Zoltan *zz = new Zoltan(mpiComm->Comm());
+      if (zz == NULL)
       {
-        if (myNode == 0)
-        {
-//          printf("Partitioning with Zoltan on process %d returned a warning.  # active elements = %d\n",myNode,numActiveElements);
-          printf("Partitioning with Zoltan returned a warning.  # active elements = %d\n",numActiveElements);
-        }
+        cout << "ZoltanMeshPartititionPolicy: construction of new Zoltan object failed.\n";
+        MPI::Finalize();
+        exit(0);
+      }
+      bool useLocalIDs = false;
+
+      if (_debug_level == "0")
+      {
+        // then suppress all debug output (in particular, the "ZOLTAN Load balancing method" messages) as follows:
+        ostringstream numProcStream;
+        numProcStream << numNodes;
+        // Zoltan issues warnings if you set DEBUG_PROCESSOR < 0 or > NumProc.
+        // But if we set it to be exactly NumProc, I think we'll avoid all messages.
+        zz->Set_Param( "DEBUG_PROCESSOR", numProcStream.str() );
+      }
+
+      /* Calling Zoltan Load-balancing routine */
+      //cout << "Setting zoltan params" << endl;
+      zz->Set_Param( "LB_METHOD", _ZoltanPartitioner.c_str());    /* Zoltan method */
+      zz->Set_Param( "NUM_GID_ENTRIES", "1");  /* global ID is 1 integer */
+      if (useLocalIDs)
+      {
+        zz->Set_Param( "NUM_LID_ENTRIES", "1");  /* local ID is 1 integer */
       }
       else
-        rc = ZOLTAN_OK;
-    }
-
-    if (rc == ZOLTAN_FATAL)
-    {
-      printf("Partitioning failed on process %d with a fatal error.  Exiting...\n",myNode);
-      exit(1);
-    }
-    else
-    {
-
-      /* ----------- modify output array partitionedActiveCells ------- */
-
-      set<GlobalIndexType> rankLocalCells = getRankLocalCellIDs(mesh);
-      // remove export IDs FOR THIS NODE
-      for (int i=0; i<numExport; i++)
       {
-        rankLocalCells.erase(exportGlobalIds[i]);
+        zz->Set_Param( "NUM_LID_ENTRIES", "0");  /* local ID is null */
       }
-      // add import IDs FOR THIS NODE
-      for (int i=0; i<numImport; i++)
+      zz->Set_Param( "OBJ_WEIGHT_DIM", "0");
+      zz->Set_Param( "DEBUG_LEVEL", _debug_level);
+      //  zz->Set_Param( "REFTREE_INITPATH", "CONNECTED"); // no SFC on coarse meshTopology
+      zz->Set_Param( "RANDOM_MOVE_FRACTION", "1.0");    /* Zoltan "random" partition param */
+
+      zz->Set_Param( "IMBALANCE_TOL", "1.1"); // the default is 1.1; measured as the max. load divided by the average load -- worth noting that this is sometimes clearly unattainable (if you have e.g. 5 elements and 4 MPI ranks, you will have an average load of 1.25, and a maximum load of at least 2), and even in such cases zoltan issues a warning.  If we wanted to eliminate such warnings, it would be easy enough to compute the best case as determined by the pigeonhole principle (assuming equal weights, as we have now), and take the more tolerant of the best case versus e.g. 1.1.  But if you think of the warning as simply saying hey your work is imbalanced, that's true, even if that's totally unavoidable.
+
+      Mesh* myData = mesh;
+
+      // Testing query functions
+      zz->Set_Num_Obj_Fn(&get_number_of_objects, myData);
+      zz->Set_Obj_List_Fn(&get_object_list, myData);
+
+      // HSFC query functions
+      zz->Set_Num_Geom_Fn(&get_num_geom, myData);
+      zz->Set_Geom_Multi_Fn(&get_geom_list, myData);
+
+      // object sizing/packing functions:
+      zz->Set_Obj_Size_Fn( &get_elem_data_size, myData);
+      zz->Set_Pack_Obj_Fn( &pack_elem_data, myData);
+      zz->Set_Unpack_Obj_Fn( &unpack_elem_data, myData);
+
+      int changes;
+      int numGidEntries;
+      int numLidEntries;
+      int numImport;
+      ZOLTAN_ID_PTR importGlobalIds;
+      ZOLTAN_ID_PTR importLocalIds;
+      int *importProcs;
+      int *importToPart;
+      int numExport;
+      ZOLTAN_ID_PTR exportGlobalIds;
+      ZOLTAN_ID_PTR exportLocalIds;
+      int *exportProcs;
+      int *exportToPart;
+
+      int rc = zz->LB_Partition(changes, numGidEntries, numLidEntries,
+                                numImport, importGlobalIds, importLocalIds, importProcs, importToPart,
+                                numExport, exportGlobalIds, exportLocalIds, exportProcs, exportToPart);
+
+      if (rc == ZOLTAN_WARN)
       {
-        rankLocalCells.insert(importGlobalIds[i]);
-      }
-      // compute total number of IDs for this proc
-      bool reportAssignment = false;
-//      bool reportAssignment = (rc==ZOLTAN_WARN);
-      if (reportAssignment)
-      {
-        ostringstream rankListLabel;
-        rankListLabel << "For rank " << myNode << ", Zoltan assigned IDs: ";
-        Camellia::print(rankListLabel.str(), rankLocalCells);
-      }
-
-#ifdef HAVE_MPI
-      Epetra_MpiComm Comm(MPI_COMM_WORLD);
-      //cout << "rank: " << rank << " of " << numProcs << endl;
-#else
-      Epetra_SerialComm Comm;
-#endif
-
-      int myPartitionSize = rankLocalCells.size();
-      int maxPartitionSize;
-      Comm.MaxAll(&myPartitionSize, &maxPartitionSize, 1);
-
-      FieldContainer<GlobalIndexType> partitionedActiveCells(numNodes,maxPartitionSize);
-
-      partitionedActiveCells.initialize(-1); // cellID == -1 signals end of partition
-
-      // need to pass around information about partitions here thru MPI - each processor must know all other processors' partitions
-      FieldContainer<int> myPartition(maxPartitionSize);
-      myPartition.initialize(-1);
-
-      int index = 0;
-      for (set<GlobalIndexType>::iterator myCellIt = rankLocalCells.begin(); myCellIt != rankLocalCells.end(); myCellIt++)
-      {
-        myPartition[index] = *myCellIt;
-        index++;
-      }
-      FieldContainer<int> allPartitions(numNodes,maxPartitionSize);
-      MPIWrapper::allGatherHomogeneous(allPartitions, myPartition);
-
-      // convert the ints to GlobalIndexType -- if sizeof(GlobalIndexType) ever is bigger than sizeof(int), then we'll want to do something else above to pack the cell IDs into ints, etc.
-      for (int node=0; node<numNodes; node++)
-      {
-        for (int i=0; i<maxPartitionSize; i++)
+        if (numActiveElements / numPartitions > 0)   // if the warning is just because not every process received an element, don't even note that the warning was issued
         {
-          partitionedActiveCells(node,i) = allPartitions(node,i);
+          if (myNode == 0)
+          {
+  //          printf("Partitioning with Zoltan on process %d returned a warning.  # active elements = %d\n",myNode,numActiveElements);
+            printf("Partitioning with Zoltan returned a warning.  # active elements = %d\n",numActiveElements);
+          }
         }
+        else
+          rc = ZOLTAN_OK;
       }
-
-      // now that we have the new partition, communicate it:
-      mesh->globalDofAssignment()->setPartitions(partitionedActiveCells);
-
-//      cout << "about to call zz->Migrate on rank " << myNode << endl;
-      int rc = zz->Migrate(numImport, importGlobalIds, importLocalIds, importProcs, importToPart,
-                           numExport, exportGlobalIds, exportLocalIds, exportProcs, exportToPart);
 
       if (rc == ZOLTAN_FATAL)
       {
-        printf("Zoltan: migration failed on process %d with a fatal error.  Exiting...\n",myNode);
+        printf("Partitioning failed on process %d with a fatal error.  Exiting...\n",myNode);
         exit(1);
       }
-//      cout << "zz->Migrate returned on rank " << myNode << " with result code " << rc << endl;
+      else
+      {
 
-      /*
-       for (int node=0;node<numNodes;node++){
-       cout << "ids for node " << node << " are: ";
-       for (int i = 0;i<maxPartitionSize;i++){
-       if (partitionedActiveCells(node,i) !=-1){
-       cout << partitionedActiveCells(node,i)<< ", ";
-       }
-       }
-       cout << endl;
-       }
-       */
+        /* ----------- modify output array partitionedActiveCells ------- */
 
-    }//end else
+        set<GlobalIndexType> rankLocalCells = getRankLocalCellIDs(mesh);
+        // remove export IDs FOR THIS NODE
+        for (int i=0; i<numExport; i++)
+        {
+          rankLocalCells.erase(exportGlobalIds[i]);
+        }
+        // add import IDs FOR THIS NODE
+        for (int i=0; i<numImport; i++)
+        {
+          rankLocalCells.insert(importGlobalIds[i]);
+        }
+        // compute total number of IDs for this proc
+        bool reportAssignment = false;
+  //      bool reportAssignment = (rc==ZOLTAN_WARN);
+        if (reportAssignment)
+        {
+          ostringstream rankListLabel;
+          rankListLabel << "For rank " << myNode << ", Zoltan assigned IDs: ";
+          Camellia::print(rankListLabel.str(), rankLocalCells);
+        }
 
-    delete zz;
+        int myPartitionSize = rankLocalCells.size();
+        int maxPartitionSize;
+        Comm()->MaxAll(&myPartitionSize, &maxPartitionSize, 1);
+
+        FieldContainer<GlobalIndexType> partitionedActiveCells(numNodes,maxPartitionSize);
+
+        partitionedActiveCells.initialize(-1); // cellID == -1 signals end of partition
+
+        // need to pass around information about partitions here thru MPI - each processor must know all other processors' partitions
+        FieldContainer<int> myPartition(maxPartitionSize);
+        myPartition.initialize(-1);
+
+        int index = 0;
+        for (set<GlobalIndexType>::iterator myCellIt = rankLocalCells.begin(); myCellIt != rankLocalCells.end(); myCellIt++)
+        {
+          myPartition[index] = *myCellIt;
+          index++;
+        }
+        FieldContainer<int> allPartitions(numNodes,maxPartitionSize);
+        MPIWrapper::allGatherHomogeneous(allPartitions, myPartition);
+
+        // convert the ints to GlobalIndexType -- if sizeof(GlobalIndexType) ever is bigger than sizeof(int), then we'll want to do something else above to pack the cell IDs into ints, etc.
+        for (int node=0; node<numNodes; node++)
+        {
+          for (int i=0; i<maxPartitionSize; i++)
+          {
+            partitionedActiveCells(node,i) = allPartitions(node,i);
+          }
+        }
+
+        // now that we have the new partition, communicate it:
+        mesh->globalDofAssignment()->setPartitions(partitionedActiveCells);
+
+  //      cout << "about to call zz->Migrate on rank " << myNode << endl;
+        int rc = zz->Migrate(numImport, importGlobalIds, importLocalIds, importProcs, importToPart,
+                             numExport, exportGlobalIds, exportLocalIds, exportProcs, exportToPart);
+
+        if (rc == ZOLTAN_FATAL)
+        {
+          printf("Zoltan: migration failed on process %d with a fatal error.  Exiting...\n",myNode);
+          exit(1);
+        }
+  //      cout << "zz->Migrate returned on rank " << myNode << " with result code " << rc << endl;
+
+        /*
+         for (int node=0;node<numNodes;node++){
+         cout << "ids for node " << node << " are: ";
+         for (int i = 0;i<maxPartitionSize;i++){
+         if (partitionedActiveCells(node,i) !=-1){
+         cout << partitionedActiveCells(node,i)<< ", ";
+         }
+         }
+         cout << endl;
+         }
+         */
+
+      }//end else
+
+      delete zz;
+    }
 #endif
   }
   else     // if just one node, partition = active cellID array

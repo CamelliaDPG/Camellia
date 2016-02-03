@@ -107,6 +107,8 @@ class Mesh : public RefinementObserver, public DofInterpreter
   Mesh(MeshTopologyViewPtr meshTopology, Teuchos::RCP<GlobalDofAssignment> gda, TBFPtr<double> bf,
        int pToAddToTest, bool useConformingTraces, bool usePatchBasis, bool enforceMBFluxContinuity);
 
+  void initializePartitionPolicyIfNull(MeshPartitionPolicyPtr &partitionPolicy, Epetra_CommPtr Comm);
+  
   //set< pair<int,int> > _edges;
   //  map< pair<GlobalIndexType,GlobalIndexType>, vector< pair<GlobalIndexType, GlobalIndexType> > > _edgeToCellIDs; //keys are (vertexIndex1, vertexIndex2)
   //values are (cellID, sideIndex)
@@ -136,7 +138,6 @@ class Mesh : public RefinementObserver, public DofInterpreter
 
   vector< Teuchos::RCP<RefinementObserver> > _registeredObservers; // meshes that should be modified upon refinement (must differ from this only in bilinearForm; must have identical geometry & cellIDs)
 
-
   map<IndexType, GlobalIndexType> getGlobalVertexIDs(const Intrepid::FieldContainer<double> &vertexCoordinates);
 
   ElementPtr addElement(const vector<IndexType> & vertexIndices, ElementTypePtr elemType);
@@ -160,33 +161,39 @@ public:
   // Preferred Constructor for min rule, n-D, single H1Order
   Mesh(MeshTopologyViewPtr meshTopology, VarFactoryPtr varFactory, int H1Order, int pToAddTest,
        map<int,int> trialOrderEnhancements=_emptyIntIntMap, map<int,int> testOrderEnhancements=_emptyIntIntMap,
-       MeshPartitionPolicyPtr meshPartitionPolicy = Teuchos::null);
+       MeshPartitionPolicyPtr meshPartitionPolicy = Teuchos::null, Epetra_CommPtr Comm = Teuchos::null);
 
   // Preferred Constructor for min rule, n-D, vector H1Order for tensor topologies (tensorial degree 0 and 1 supported)
   Mesh(MeshTopologyViewPtr meshTopology, VarFactoryPtr varFactory, vector<int> H1Order, int pToAddTest,
        map<int,int> trialOrderEnhancements=_emptyIntIntMap, map<int,int> testOrderEnhancements=_emptyIntIntMap,
-       MeshPartitionPolicyPtr meshPartitionPolicy = Teuchos::null);
+       MeshPartitionPolicyPtr meshPartitionPolicy = Teuchos::null, Epetra_CommPtr Comm = Teuchos::null);
 
   // legacy (max rule 2D) constructor:
   Mesh(const vector<vector<double> > &vertices, vector< vector<IndexType> > &elementVertices,
        TBFPtr<double> bilinearForm, int H1Order, int pToAddTest, bool useConformingTraces = true,
        map<int,int> trialOrderEnhancements=_emptyIntIntMap, map<int,int> testOrderEnhancements=_emptyIntIntMap,
-       vector< PeriodicBCPtr > periodicBCs = vector< PeriodicBCPtr >());
+       vector< PeriodicBCPtr > periodicBCs = vector< PeriodicBCPtr >(), Epetra_CommPtr Comm = Teuchos::null);
 
   // Deprecated Constructor for min rule, n-D, single H1Order
   Mesh(MeshTopologyViewPtr meshTopology, TBFPtr<double> bilinearForm, int H1Order, int pToAddTest,
        map<int,int> trialOrderEnhancements=_emptyIntIntMap, map<int,int> testOrderEnhancements=_emptyIntIntMap,
-       MeshPartitionPolicyPtr meshPartitionPolicy = Teuchos::null);
+       MeshPartitionPolicyPtr meshPartitionPolicy = Teuchos::null, Epetra_CommPtr Comm = Teuchos::null);
 
   // Deprecated Constructor for min rule, n-D, vector H1Order for tensor topologies (tensorial degree 0 and 1 supported)
   Mesh(MeshTopologyViewPtr meshTopology, TBFPtr<double> bilinearForm, vector<int> H1Order, int pToAddTest,
        map<int,int> trialOrderEnhancements=_emptyIntIntMap, map<int,int> testOrderEnhancements=_emptyIntIntMap,
-       MeshPartitionPolicyPtr meshPartitionPolicy = Teuchos::null);
+       MeshPartitionPolicyPtr meshPartitionPolicy = Teuchos::null, Epetra_CommPtr Comm = Teuchos::null);
 
+  // ! Constructor for a single-element mesh extracted from an existing mesh
+  Mesh(MeshPtr mesh, GlobalIndexType cellID, Epetra_CommPtr Comm);
+  
 #ifdef HAVE_EPETRAEXT_HDF5
   void saveToHDF5(string filename);
 #endif
 
+  Epetra_CommPtr& Comm();
+  Teuchos_CommPtr& TeuchosComm();
+  
   // ! deepCopy makes a deep copy of both MeshTopology and GDA, but not bilinear form
   MeshPtr deepCopy();
 

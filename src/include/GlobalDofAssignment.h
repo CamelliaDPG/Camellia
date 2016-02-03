@@ -99,10 +99,11 @@ public:
 
   virtual ElementTypePtr elementType(GlobalIndexType cellID) = 0;
   virtual vector< ElementTypePtr > elementTypes(PartitionIndexType partitionNumber);
+  virtual void setElementType(GlobalIndexType cellID, ElementTypePtr elem);
 
   DofOrderingFactoryPtr getDofOrderingFactory();
   ElementTypeFactory & getElementTypeFactory();
-
+  
   virtual int getCubatureDegree(GlobalIndexType cellID);
 
   virtual std::vector<int> getH1Order(GlobalIndexType cellID);
@@ -157,6 +158,8 @@ public:
 
   virtual PartitionIndexType partitionForGlobalDofIndex( GlobalIndexType globalDofIndex ) = 0;
 
+  MeshPartitionPolicyPtr getPartitionPolicy();
+  
   void repartitionAndMigrate();
 
   void registerSolution(TSolutionPtr<double> solution);

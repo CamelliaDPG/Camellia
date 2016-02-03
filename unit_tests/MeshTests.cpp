@@ -80,13 +80,58 @@ MeshPtr makeTestMesh( int spaceDim, bool spaceTime )
     int H1Order = 3, pToAdd = 1;
     mesh = Teuchos::rcp( new Mesh (spaceTimeMeshTopology, bf, H1Order, pToAdd) );
   }
+  else if (!spaceTime)
+  {
+    int H1Order = 2;
+    vector<int> elemCounts(spaceDim,2);
+    vector<double> dims(spaceDim,1.0);
+    
+    int spaceDim = 2;
+    bool conformingTraces = true;
+    PoissonFormulation form(spaceDim,conformingTraces);
+    
+    mesh = MeshFactory::rectilinearMesh(form.bf(), dims, elemCounts, H1Order);
+  }
   else
   {
-    // TODO: handle other mesh options
+    // TODO: handle other space-time mesh options for non-1D spatial meshes
   }
   return mesh;
 }
 
+  TEUCHOS_UNIT_TEST( Mesh, ConstructSingleCellMeshSerialComm )
+  {
+    // the purpose of this test is just to ensure that construction for a serial communicator works
+    // without any MPI communication (there used to be some hard-coded MPI_COMM_WORLDs in
+    // the mesh partitioning and dof assignments).
+    MPIWrapper::CommWorld()->Barrier(); // for setting a breakpoint for debugging
+    
+    int globalRank = MPIWrapper::CommWorld()->MyPID();
+
+    int spaceDim = 2;
+    int H1Order = 2;
+    vector<int> elemCounts(spaceDim,2);
+    vector<double> dims(spaceDim,1.0);
+    
+    bool conformingTraces = false; // non-conformity allows us to easily determine how many global dofs to expect on the single-element mesh
+    PoissonFormulation form(spaceDim,conformingTraces);
+    
+    MeshPtr originalMesh = MeshFactory::rectilinearMesh(form.bf(), dims, elemCounts, H1Order);
+    
+    if (globalRank==0)
+    {
+      GlobalIndexType coarseCellID = *originalMesh->getActiveCellIDs().begin();
+      DofOrderingPtr trialOrdering = originalMesh->getElementType(coarseCellID)->trialOrderPtr;
+      int localDofs = trialOrdering->totalDofs();
+      
+      MeshPtr singleCellMesh = Teuchos::rcp( new Mesh(originalMesh, coarseCellID, MPIWrapper::CommSerial()) );
+      
+      int globalDofs = singleCellMesh->numGlobalDofs();
+      
+      TEUCHOS_TEST_EQUALITY(localDofs, globalDofs, out, success);
+    }
+  }
+  
 TEUCHOS_UNIT_TEST( Mesh, ParitySpaceTime1D )
 {
   int spaceDim = 1;
