@@ -172,8 +172,14 @@ int main(int argc, char *argv[])
   cmdp.setOption("nlMaxIters", &nlMaxIters, "maximum number of iterations for Newton solve");
   int numRefs = 10;
   cmdp.setOption("numRefs",&numRefs,"number of refinements");
+  int startRef = 0;
+  cmdp.setOption("startRef",&startRef,"starting ref count");
   bool exportHDF5 = false;
   cmdp.setOption("exportHDF5", "skipHDF5", &exportHDF5, "export solution to HDF5");
+  bool saveSolution = false;
+  cmdp.setOption("saveSolution", "skipSave", &saveSolution, "save solution and mesh");
+  bool loadSolution = false;
+  cmdp.setOption("loadSolution", "skipSave", &loadSolution, "load solution and mesh");
   bool computeL2 = false;
   cmdp.setOption("computeL2Error", "skipL2Error", &computeL2, "compute L2 Error");
   string tag="";
@@ -186,6 +192,15 @@ int main(int argc, char *argv[])
 #endif
     return -1;
   }
+
+  ostringstream exportName;
+  if (steady)
+    exportName << "Steady";
+  else
+    exportName << "Transient";
+  exportName << problemName << spaceDim << "D" << "_Re" << Re << "_" << norm << "_k" << polyOrder;// << "_" << solverChoice;// << "_" << multigridStrategyString;
+  if (tag != "")
+    exportName << "_" << tag;
 
   Teuchos::RCP<Time> totalTimer = Teuchos::TimeMonitor::getNewCounter("Total Time");
   Teuchos::RCP<Time> solverTime = Teuchos::TimeMonitor::getNewCounter("Solve Time");
@@ -310,15 +325,19 @@ int main(int argc, char *argv[])
     if (!steady)
     {
       double t0 = 0;
-      double t1 = 1;
-      int temporalDivisions = 1;
+      double t1 = 5;
+      int temporalDivisions = 5;
       meshTopo = MeshFactory::spaceTimeMeshTopology(meshTopo, t0, t1, temporalDivisions);
     }
   }
   double R = Cv*(gamma-1);
   double formRe = Re;
   if (rampRe)
-    formRe = coarseRe;
+  {
+    // formRe = coarseRe;
+    double mu = max(1./Re, min(1./coarseRe,1./pow(2,startRef)));
+    formRe = 1./mu;
+  }
 
   Teuchos::ParameterList nsParameters;
   if (steady)
@@ -328,6 +347,8 @@ int main(int argc, char *argv[])
   if (timeStepping)
     nsParameters = CompressibleNavierStokesFormulation::timeSteppingFormulation(spaceDim, formRe, useConformingTraces, meshTopo, polyOrder, polyOrder, delta_k).getConstructorParameters();
 
+  if (loadSolution)
+    nsParameters.set("savedSolutionAndMeshPrefix",outputDir+"/"+exportName.str());
   // nsParameters.set("neglectFluxesOnRHS", false);
   nsParameters.set("problemName", problemName);
   nsParameters.set("norm", norm);
@@ -829,76 +850,43 @@ int main(int argc, char *argv[])
     else
       u_exact = Function::vectorize(u1_exact,u2_exact);
 
-    switch (spaceDim)
+    // form.addMassFluxCondition(       rightX, zero);
+    // form.addXMomentumFluxCondition(  rightX, zero);
+    // form.addYMomentumFluxCondition(  rightX, zero);
+    // form.addEnergyFluxCondition(     rightX, zero);
+
+    // form.addMassFluxCondition(       rightY, zero);
+    // form.addXMomentumFluxCondition(  rightY, zero);
+    // form.addYMomentumFluxCondition(  rightY, zero);
+    // form.addEnergyFluxCondition(     rightY, zero);
+
+    form.addXVelocityTraceCondition(  leftX, zero);
+    form.addMassFluxCondition(        leftX, zero);
+    form.addYMomentumFluxCondition(   leftX, zero);
+    form.addEnergyFluxCondition(      leftX, zero);
+
+    form.addYVelocityTraceCondition(  leftY, zero);
+    form.addMassFluxCondition(        leftY, zero);
+    form.addXMomentumFluxCondition(   leftY, zero);
+    form.addEnergyFluxCondition(      leftY, zero);
+
+    form.addXVelocityTraceCondition( rightX, zero);
+    form.addMassFluxCondition(       rightX, zero);
+    form.addYMomentumFluxCondition(  rightX, zero);
+    form.addEnergyFluxCondition(     rightX, zero);
+
+    form.addYVelocityTraceCondition( rightY, zero);
+    form.addMassFluxCondition(       rightY, zero);
+    form.addXMomentumFluxCondition(  rightY, zero);
+    form.addEnergyFluxCondition(     rightY, zero);
+    if (!steady)
     {
-      case 1:
-        // form.addMassFluxCondition(       rightX, zero);
-        // form.addXMomentumFluxCondition(  rightX, zero);
-        // form.addEnergyFluxCondition(     rightX, zero);
-        form.addVelocityTraceCondition(   leftX, zero);
-        form.addMassFluxCondition(        leftX, zero);
-        form.addEnergyFluxCondition(      leftX, zero);
-        form.addVelocityTraceCondition(  rightX, zero);
-        form.addMassFluxCondition(       rightX, zero);
-        form.addEnergyFluxCondition(     rightX, zero);
-        if (!steady)
-        {
-          form.addMassFluxCondition(     t0, -rho_exact);
-          form.addXMomentumFluxCondition(t0, -u1_exact);
-          form.addEnergyFluxCondition(   t0, -Cv*T_exact);
-        }
-        break;
-      case 2:
-        // form.addMassFluxCondition(       rightX, zero);
-        // form.addXMomentumFluxCondition(  rightX, zero);
-        // form.addYMomentumFluxCondition(  rightX, zero);
-        // form.addEnergyFluxCondition(     rightX, zero);
-
-        // form.addMassFluxCondition(       rightY, zero);
-        // form.addXMomentumFluxCondition(  rightY, zero);
-        // form.addYMomentumFluxCondition(  rightY, zero);
-        // form.addEnergyFluxCondition(     rightY, zero);
-
-        form.addXVelocityTraceCondition(  leftX, zero);
-        form.addMassFluxCondition(        leftX, zero);
-        form.addYMomentumFluxCondition(   leftX, zero);
-        form.addEnergyFluxCondition(      leftX, zero);
-
-        form.addYVelocityTraceCondition(  leftY, zero);
-        form.addMassFluxCondition(        leftY, zero);
-        form.addXMomentumFluxCondition(   leftY, zero);
-        form.addEnergyFluxCondition(      leftY, zero);
-
-        form.addXVelocityTraceCondition( rightX, zero);
-        form.addMassFluxCondition(       rightX, zero);
-        form.addYMomentumFluxCondition(  rightX, zero);
-        form.addEnergyFluxCondition(     rightX, zero);
-
-        form.addYVelocityTraceCondition( rightY, zero);
-        form.addMassFluxCondition(       rightY, zero);
-        form.addXMomentumFluxCondition(  rightY, zero);
-        form.addEnergyFluxCondition(     rightY, zero);
-        if (!steady)
-        {
-          form.addMassFluxCondition(     t0, -rho_exact);
-          form.addXMomentumFluxCondition(t0, -u1_exact);
-          form.addYMomentumFluxCondition(t0, -u2_exact);
-          form.addEnergyFluxCondition(   t0, -Cv*T_exact);
-        }
-        break;
-      case 3:
-        break;
+      form.addMassFluxCondition(     t0, -rho_exact);
+      form.addXMomentumFluxCondition(t0, -u1_exact);
+      form.addYMomentumFluxCondition(t0, -u2_exact);
+      form.addEnergyFluxCondition(   t0, -Cv*T_exact);
     }
   }
-
-  ostringstream exportName;
-  if (steady)
-    exportName << "Steady";
-  else
-    exportName << "Transient";
-  exportName << problemName << spaceDim << "D" << "_Re" << Re << "_" << norm << "_k" << polyOrder;// << "_" << solverChoice;// << "_" << multigridStrategyString;
-  if (tag != "")
-    exportName << "_" << tag;
 
   string dataFileLocation;
   dataFileLocation = outputDir+"/"+exportName.str()+".txt";
@@ -923,52 +911,55 @@ int main(int argc, char *argv[])
   int maxTimeSteps = 100;
   double timeRes = 1;
   double timeTol = 1e-6;
-  while (timeStep < maxTimeSteps && timeRes > timeTol)
+  if (startRef == 0)
   {
-    while ((l2NormOfIncrement > nlTol) && (stepNumber < nlMaxIters))
+    while (timeStep < maxTimeSteps && timeRes > timeTol)
     {
-      if (useDirectSolver)
-        setDirectSolver(form);
-      else
-        setGMGSolver(form, meshesCoarseToFine, cgMaxIters, cgTol, useCondensedSolve);
-
-      double alpha = form.solveAndAccumulate();
-      l2NormOfIncrement = form.L2NormSolutionIncrement();
-      stepNumber++;
-
-      if (rank==0) cout << stepNumber << ". alpha = " << alpha << " L^2 norm of increment: " << l2NormOfIncrement;
-
-      if (!useDirectSolver)
+      while ((l2NormOfIncrement > nlTol) && (stepNumber < nlMaxIters))
       {
-        Teuchos::RCP<GMGSolver> gmgSolver = Teuchos::rcp(dynamic_cast<GMGSolver*>(form.getSolver().get()), false);
-        int iterationCount = gmgSolver->iterationCount();
-        totalIterationCount += iterationCount;
-        if (rank==0) cout << " (" << iterationCount << " GMG iterations)\n";
+        if (useDirectSolver)
+          setDirectSolver(form);
+        else
+          setGMGSolver(form, meshesCoarseToFine, cgMaxIters, cgTol, useCondensedSolve);
+
+        double alpha = form.solveAndAccumulate();
+        l2NormOfIncrement = form.L2NormSolutionIncrement();
+        stepNumber++;
+
+        if (rank==0) cout << stepNumber << ". alpha = " << alpha << " L^2 norm of increment: " << l2NormOfIncrement;
+
+        if (!useDirectSolver)
+        {
+          Teuchos::RCP<GMGSolver> gmgSolver = Teuchos::rcp(dynamic_cast<GMGSolver*>(form.getSolver().get()), false);
+          int iterationCount = gmgSolver->iterationCount();
+          totalIterationCount += iterationCount;
+          if (rank==0) cout << " (" << iterationCount << " GMG iterations)\n";
+        }
+        else
+        {
+          if (rank==0) cout << endl;
+        }
+
+        if (alpha < 1e-2)
+          break;
+      }
+      if (timeStepping)
+      {
+        timeRes = form.timeResidual();
+        form.solutionPreviousTimeStep()->setSolution(form.solution());
+        // if (exportHDF5)
+        // {
+        //   exporter->exportSolution(form.solution(), timeStep);
+        //   // energyErrorExporter->exportFunction(energyErrorFunction, "energy error", refNumber);
+        // }
+        if (rank==0) cout << timeStep << ". time residual = " << timeRes << endl;
+        timeStep++;
+        l2NormOfIncrement = 1;
+        stepNumber = 0;
       }
       else
-      {
-        if (rank==0) cout << endl;
-      }
-
-      if (alpha < 1e-2)
-        break;
+        timeRes = 0;
     }
-    if (timeStepping)
-    {
-      timeRes = form.timeResidual();
-      form.solutionPreviousTimeStep()->setSolution(form.solution());
-      // if (exportHDF5)
-      // {
-      //   exporter->exportSolution(form.solution(), timeStep);
-      //   // energyErrorExporter->exportFunction(energyErrorFunction, "energy error", refNumber);
-      // }
-      if (rank==0) cout << timeStep << ". time residual = " << timeRes << endl;
-      timeStep++;
-      l2NormOfIncrement = 1;
-      stepNumber = 0;
-    }
-    else
-      timeRes = 0;
   }
   // form.clearSolutionIncrement(); // need to clear before evaluating energy error
   double solveTime = solverTime->stop();
@@ -981,13 +972,15 @@ int main(int argc, char *argv[])
     exporter->exportSolution(form.solution(), 0);
     // energyErrorExporter->exportFunction(energyErrorFunction, "energy error", 0);
   }
+  if (saveSolution)
+    form.save(outputDir+"/"+exportName.str());
 
   double energyError = form.solutionIncrement()->energyErrorTotal();
   double l2Error = 0;
   // if (computeL2)
   //   l2Error = computeL2Error(form, u_exact, mesh, Re);
   int globalDofs = mesh->globalDofCount();
-  if (rank==0) cout << "Refinement: " << 0
+  if (rank==0) cout << "Refinement: " << startRef
                     << " \tElements: " << mesh->numActiveElements()
                     << " \tDOFs: " << mesh->numGlobalDofs()
                     << " \tEnergy Error: " << energyError
@@ -1009,7 +1002,7 @@ int main(int argc, char *argv[])
   bool truncateMultigridMeshes = true; // for getting a "fair" sense of how iteration counts vary with h.
 
   double tol = 1e-5;
-  int refNumber = 0;
+  int refNumber = startRef;
   while (refNumber < numRefs)
   {
     refNumber++;
@@ -1024,7 +1017,7 @@ int main(int argc, char *argv[])
       double refVal = min(64.,max(pow(2.,2+refNumber),64.));
       refParamFunc->setValue(refVal);
       if (rank==0) cout << " Mesh Re = " << 1./mu << endl;
-      if (rank==0) cout << " ref value = " << refVal << endl;
+      // if (rank==0) cout << " ref value = " << refVal << endl;
     }
 
     meshesCoarseToFine = GMGSolver::meshesForMultigrid(mesh, polyOrderCoarse, delta_k);
@@ -1124,6 +1117,8 @@ int main(int argc, char *argv[])
       exporter->exportSolution(form.solution(), refNumber);
       // energyErrorExporter->exportFunction(energyErrorFunction, "energy error", refNumber);
     }
+    if (saveSolution)
+      form.save(outputDir+"/"+exportName.str());
   }
 
   if (rank==0) dataFile.close();
