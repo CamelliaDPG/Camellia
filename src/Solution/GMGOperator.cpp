@@ -651,6 +651,93 @@ void GMGOperator::exportFunction()
   }
 }
 
+Teuchos::RCP<Epetra_SerialDenseMatrix> GMGOperator::fluxDuplicationMapForCoarseCell(GlobalIndexType coarseCellID) const
+{
+  // a null return value indicates that the operator is the identity (this happens for non-conforming ElementTypes)
+ 
+  // otherwise, returns a matrix that can right-multiply the fluxToFieldMap
+  
+  DofOrdering* trialOrderRawPtr = _coarseMesh->getElementType(coarseCellID)->trialOrderPtr.get();
+  if (_fluxDuplicationMap.find(trialOrderRawPtr) == _fluxDuplicationMap.end())
+  {
+    bool hasConformingTraces = false;
+    for (int varID : trialOrderRawPtr->getVarIDs())
+    {
+      if (trialOrderRawPtr->getSidesForVarID(varID).size() > 1)
+      {
+        // trace or flux; use basis on first side as example
+        EFunctionSpace fs = trialOrderRawPtr->getBasis(varID, trialOrderRawPtr->getSidesForVarID(varID)[0])->functionSpace();
+        if (! functionSpaceIsDiscontinuous(fs))
+        {
+          hasConformingTraces = true;
+          break;
+        }
+      }
+    }
+    if (!hasConformingTraces)
+    {
+      _fluxDuplicationMap[trialOrderRawPtr] = Teuchos::null;
+      return _fluxDuplicationMap[trialOrderRawPtr];
+    }
+    
+    CondensedDofInterpreter<double>* condensedDofInterpreterCoarse = NULL;
+    
+    if (_useStaticCondensation)
+    {
+      condensedDofInterpreterCoarse = dynamic_cast<CondensedDofInterpreter<double>*>(_coarseSolution->getDofInterpreter().get());
+    }
+    TEUCHOS_TEST_FOR_EXCEPTION(condensedDofInterpreterCoarse == NULL, std::invalid_argument, "fluxDuplicationMapForCoarseCell() requires a coarse condensed dof interpreter...");
+    
+    vector<int> fluxIndices = condensedDofInterpreterCoarse->fluxIndexLookupLocalCell(coarseCellID);
+    
+    Epetra_CommPtr SerialComm = MPIWrapper::CommSerial();
+    MeshPtr coarseSingleCellMesh = Teuchos::rcp( new Mesh(_coarseMesh, coarseCellID, SerialComm) );
+    
+    // the fact that the local view does not enforce conformity means that for conforming traces
+    // the coarseFluxToFieldMapMatrix does not do the right thing if we only map, say, one of two
+    // dofs identified with a vertex.  Since this is the way we approach things below, here we manipulate
+    // the matrix, essentially enforcing conformity:
+    // (NOTE: the same thing could be accomplished at the abstract, reference-element level.  It would be more
+    //  efficient to construct a matrix like this once for the element type, and then multiply matrices to enforce
+    //  conformity...)
+    FieldContainer<double> localData(trialOrderRawPtr->totalDofs());
+    FieldContainer<double> localCoefficients(trialOrderRawPtr->totalDofs());
+    FieldContainer<double> globalCoefficients;
+    FieldContainer<GlobalIndexType> globalDofIndices;
+    GlobalIndexType zeroCellID = 0;
+    int indexBase = 0;
+    int numDofsSingleElementMesh = coarseSingleCellMesh->numGlobalDofs();
+    Epetra_Map serialGlobalDofMap(numDofsSingleElementMesh,indexBase,*SerialComm);
+    Epetra_MultiVector globalCoefficientsVector(serialGlobalDofMap,1,true);
+    
+    Teuchos::RCP<Epetra_SerialDenseMatrix> fluxMap = Teuchos::rcp( new Epetra_SerialDenseMatrix(fluxIndices.size(),fluxIndices.size()) );
+    
+    int fluxMapColumn = 0;
+    for (int fluxIndex : fluxIndices)
+    {
+      localData.initialize(0.0);
+      localData(fluxIndex) = 1.0;
+      
+      coarseSingleCellMesh->globalDofAssignment()->interpretLocalData(zeroCellID, localData, globalCoefficients, globalDofIndices);
+      
+      for (int i=0; i<globalCoefficients.size(); i++)
+      {
+        int globalDofIndex = globalDofIndices[i];
+        globalCoefficientsVector[0][globalDofIndex] = globalCoefficients[i];
+      }
+      
+      coarseSingleCellMesh->globalDofAssignment()->interpretGlobalCoefficients(zeroCellID, localCoefficients, globalCoefficientsVector);
+      for (int fluxMapRow=0; fluxMapRow<fluxIndices.size(); fluxMapRow++)
+      {
+        (*fluxMap)(fluxMapRow,fluxMapColumn) = localCoefficients(fluxIndices[fluxMapRow]);
+      }
+      fluxMapColumn++;
+    }
+    _fluxDuplicationMap[trialOrderRawPtr] = fluxMap;
+  }
+  return _fluxDuplicationMap[trialOrderRawPtr];
+}
+
 //! Dimension that will be used for neighbor relationships for Schwarz blocks, if CAMELLIA_ADDITIVE_SCHWARZ is the smoother choice.
 int GMGOperator::getDimensionForSchwarzNeighborRelationship()
 {
@@ -895,46 +982,64 @@ LocalDofMapperPtr GMGOperator::getLocalCoefficientMap(GlobalIndexType fineCellID
       coarseFluxToFieldMapMatrix = condensedDofInterpreterCoarse->fluxToFieldMapForIterativeSolves(coarseCellID);
       fluxOrdinalToLocalDofIndex = condensedDofInterpreterCoarse->fluxIndexLookupLocalCell(coarseCellID);
       condensibleVarIDs = condensedDofInterpreterCoarse->condensibleVariableIDs();
-      Epetra_CommPtr SerialComm = Teuchos::rcp( new Epetra_SerialComm() );
-      coarseSingleCellMesh = Teuchos::rcp( new Mesh(_coarseMesh, coarseCellID, SerialComm) );
-      
-      // TODO: setup some sort of lookup table for single cell mesh (indexed on ElementType); everything important about this happens on the reference cell...
 
-      // the fact that the local view does not enforce conformity means that for conforming traces
-      // the coarseFluxToFieldMapMatrix does not do the right thing if we only map, say, one of two
-      // dofs identified with a vertex.  Since this is the way we approach things below, here we manipulate
-      // the matrix, essentially enforcing conformity:
-      // (NOTE: the same thing could be accomplished at the abstract, reference-element level.  It would be more
-      //  efficient to construct a matrix like this once for the element type, and then multiply matrices to enforce
-      //  conformity...)
-      FieldContainer<double> localData(coarseTrialOrdering->totalDofs());
-      FieldContainer<double> localCoefficients(coarseTrialOrdering->totalDofs());
-      FieldContainer<double> globalCoefficients;
-      FieldContainer<GlobalIndexType> globalDofIndices;
-      GlobalIndexType zeroCellID = 0;
-      int indexBase = 0;
-      int numDofsSingleElementMesh = coarseSingleCellMesh->numGlobalDofs();
-      Epetra_Map serialGlobalDofMap(numDofsSingleElementMesh,indexBase,*SerialComm);
-      Epetra_MultiVector globalCoefficientsVector(serialGlobalDofMap,1,true);
-      for (int fieldOrdinal=0; fieldOrdinal<coarseFluxToFieldMapMatrix->M(); fieldOrdinal++)
+      bool useOldImplementation = false;
+      if (!useOldImplementation)
       {
-        for (int fluxOrdinal=0; fluxOrdinal<coarseFluxToFieldMapMatrix->N(); fluxOrdinal++)
+        Teuchos::RCP<Epetra_SerialDenseMatrix> fluxDuplicationMap = fluxDuplicationMapForCoarseCell(coarseCellID);
+        if (fluxDuplicationMap != Teuchos::null)
         {
-          localData(fluxOrdinalToLocalDofIndex[fluxOrdinal]) = (*coarseFluxToFieldMapMatrix)(fieldOrdinal,fluxOrdinal);
+          Teuchos::RCP<Epetra_SerialDenseMatrix> modifiedMatrix = Teuchos::rcp( new Epetra_SerialDenseMatrix(coarseFluxToFieldMapMatrix->M(),
+                                                                                                             coarseFluxToFieldMapMatrix->N()));
+          coarseFluxToFieldMapMatrix->Apply(*fluxDuplicationMap, *modifiedMatrix);
+          coarseFluxToFieldMapMatrix = modifiedMatrix;
         }
+      }
+      else
+      {
+        // the below implementation is the original, which works, but potentially does a lot of redundant computation
+        // the above is a draft that aims to rectify that.
+        Epetra_CommPtr SerialComm = Teuchos::rcp( new Epetra_SerialComm() );
+        coarseSingleCellMesh = Teuchos::rcp( new Mesh(_coarseMesh, coarseCellID, SerialComm) );
         
-        coarseSingleCellMesh->globalDofAssignment()->interpretLocalData(zeroCellID, localData, globalCoefficients, globalDofIndices);
+        // TODO: setup some sort of lookup table for single cell mesh (indexed on ElementType); everything important about this happens on the reference cell...
         
-        for (int i=0; i<globalCoefficients.size(); i++)
+        // the fact that the local view does not enforce conformity means that for conforming traces
+        // the coarseFluxToFieldMapMatrix does not do the right thing if we only map, say, one of two
+        // dofs identified with a vertex.  Since this is the way we approach things below, here we manipulate
+        // the matrix, essentially enforcing conformity:
+        // (NOTE: the same thing could be accomplished at the abstract, reference-element level.  It would be more
+        //  efficient to construct a matrix like this once for the element type, and then multiply matrices to enforce
+        //  conformity...)
+        FieldContainer<double> localData(coarseTrialOrdering->totalDofs());
+        FieldContainer<double> localCoefficients(coarseTrialOrdering->totalDofs());
+        FieldContainer<double> globalCoefficients;
+        FieldContainer<GlobalIndexType> globalDofIndices;
+        GlobalIndexType zeroCellID = 0;
+        int indexBase = 0;
+        int numDofsSingleElementMesh = coarseSingleCellMesh->numGlobalDofs();
+        Epetra_Map serialGlobalDofMap(numDofsSingleElementMesh,indexBase,*SerialComm);
+        Epetra_MultiVector globalCoefficientsVector(serialGlobalDofMap,1,true);
+        for (int fieldOrdinal=0; fieldOrdinal<coarseFluxToFieldMapMatrix->M(); fieldOrdinal++)
         {
-          int globalDofIndex = globalDofIndices[i];
-          globalCoefficientsVector[0][globalDofIndex] = globalCoefficients[i];
-        }
-        
-        coarseSingleCellMesh->globalDofAssignment()->interpretGlobalCoefficients(zeroCellID, localCoefficients, globalCoefficientsVector);
-        for (int fluxOrdinal=0; fluxOrdinal<coarseFluxToFieldMapMatrix->N(); fluxOrdinal++)
-        {
-          (*coarseFluxToFieldMapMatrix)(fieldOrdinal,fluxOrdinal) = localCoefficients(fluxOrdinalToLocalDofIndex[fluxOrdinal]);
+          for (int fluxOrdinal=0; fluxOrdinal<coarseFluxToFieldMapMatrix->N(); fluxOrdinal++)
+          {
+            localData(fluxOrdinalToLocalDofIndex[fluxOrdinal]) = (*coarseFluxToFieldMapMatrix)(fieldOrdinal,fluxOrdinal);
+          }
+          
+          coarseSingleCellMesh->globalDofAssignment()->interpretLocalData(zeroCellID, localData, globalCoefficients, globalDofIndices);
+          
+          for (int i=0; i<globalCoefficients.size(); i++)
+          {
+            int globalDofIndex = globalDofIndices[i];
+            globalCoefficientsVector[0][globalDofIndex] = globalCoefficients[i];
+          }
+          
+          coarseSingleCellMesh->globalDofAssignment()->interpretGlobalCoefficients(zeroCellID, localCoefficients, globalCoefficientsVector);
+          for (int fluxOrdinal=0; fluxOrdinal<coarseFluxToFieldMapMatrix->N(); fluxOrdinal++)
+          {
+            (*coarseFluxToFieldMapMatrix)(fieldOrdinal,fluxOrdinal) = localCoefficients(fluxOrdinalToLocalDofIndex[fluxOrdinal]);
+          }
         }
       }
       

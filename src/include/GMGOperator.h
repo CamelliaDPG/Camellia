@@ -90,6 +90,12 @@ private:
 
   Teuchos::RCP<Solver> _coarseSolver;
   Teuchos::RCP<GMGOperator> _coarseOperator;
+  
+  // map from trial ordering to a matrix that will "duplicate" the fluxes as dictated by conformity,
+  // required for h-refinements in context of static condensation.
+  // see comment in getLocalCoefficientMap() implementation
+  mutable map<DofOrdering*, Teuchos::RCP<Epetra_SerialDenseMatrix>> _fluxDuplicationMap;
+  Teuchos::RCP<Epetra_SerialDenseMatrix> fluxDuplicationMapForCoarseCell(GlobalIndexType coarseCellID) const;
 
   mutable BasisReconciliation _br;
   mutable map< pair< pair<int,int>, RefinementBranch >, LocalDofMapperPtr > _localCoefficientMap; // pair(fineH1Order,coarseH1Order)

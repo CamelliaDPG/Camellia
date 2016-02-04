@@ -823,40 +823,39 @@ SubBasisReconciliationWeights BasisReconciliation::filterOutZeroRowsAndColumns(S
   const double maxZeroTol = 1e-14;
   // first, look for zero rows:
   set<int> rowsToInclude;
-  vector<int> fineOrdinalsVector(weights.fineOrdinals.begin(),weights.fineOrdinals.end());
-  set<int> filteredFineOrdinals;
 
-  for (int i=0; i<weights.weights.dimension(0); i++)
+  int numRows = weights.weights.dimension(0);
+  int numCols = weights.weights.dimension(1);
+  
+  double *value = &weights.weights[0];
+  for (int i=0; i<numRows; i++)
   {
     bool nonZeroFound = false;
-    for (int j=0; j<weights.weights.dimension(1); j++)
+    for (int j=0; j<numCols; j++)
     {
-      double value = weights.weights(i,j);
-      if (abs(value) < maxZeroTol)
+      if (abs(*value) < maxZeroTol)
       {
-        value = 0;
+        *value = 0;
       }
-      else if (abs(value-1.0) < maxZeroTol)
+      else if (abs(*value-1.0) < maxZeroTol)
       {
-        value = 1;
+        *value = 1;
         nonZeroFound = true;
       }
       else
       {
         nonZeroFound = true;
       }
-      weights.weights(i,j) = value;
+      ++value;
     }
     if (nonZeroFound)
     {
       rowsToInclude.insert(i);
-      filteredFineOrdinals.insert(fineOrdinalsVector[i]);
     }
   }
   // now, look for zero cols:
   set<int> colsToInclude;
-  vector<int> coarseOrdinalsVector(weights.coarseOrdinals.begin(),weights.coarseOrdinals.end());
-  set<int> filteredCoarseOrdinals;
+  
   for (int j=0; j<weights.weights.dimension(1); j++)
   {
     bool nonZeroFound = false;
@@ -865,12 +864,12 @@ SubBasisReconciliationWeights BasisReconciliation::filterOutZeroRowsAndColumns(S
       if (weights.weights(i,j) != 0)   // by virtue of the rounding above, any zeros will be exact
       {
         nonZeroFound = true;
+        break;
       }
     }
     if (nonZeroFound)
     {
       colsToInclude.insert(j);
-      filteredCoarseOrdinals.insert(coarseOrdinalsVector[j]);
     }
   }
 
@@ -879,35 +878,60 @@ SubBasisReconciliationWeights BasisReconciliation::filterOutZeroRowsAndColumns(S
 
 SubBasisReconciliationWeights BasisReconciliation::filterToInclude(set<int> &rowOrdinals, set<int> &colOrdinals, SubBasisReconciliationWeights &weights)
 {
-  vector<int> coarseOrdinalsVector(weights.coarseOrdinals.begin(),weights.coarseOrdinals.end());
-  vector<int> fineOrdinalsVector(weights.fineOrdinals.begin(), weights.fineOrdinals.end());
-
   SubBasisReconciliationWeights filteredWeights;
 
-  for (set<int>::iterator rowIt=rowOrdinals.begin(); rowIt != rowOrdinals.end(); rowIt++)
+//  int rowOrdinalOrdinal = 0; // ordinal in the weights.coarseOrdinals container
+//  for (int fineOrdinal : weights.fineOrdinals)
+//  {
+//    if (rowOrdinals.find(rowOrdinalOrdinal) != rowOrdinals.end())
+//    {
+//      filteredWeights.fineOrdinals.insert(fineOrdinal);
+//    }
+//    
+//    rowOrdinalOrdinal++;
+//  }
+//  
+//  int colOrdinalOrdinal = 0; // ordinal in the weights.coarseOrdinals container
+//  for (int coarseOrdinal : weights.coarseOrdinals)
+//  {
+//    if (colOrdinals.find(colOrdinalOrdinal) != colOrdinals.end())
+//    {
+//      filteredWeights.coarseOrdinals.insert(coarseOrdinal);
+//    }
+//    colOrdinalOrdinal++;
+//  }
+
+  filteredWeights.weights.resize(rowOrdinals.size(), colOrdinals.size());
+
+  auto rowOrdinalIt = weights.fineOrdinals.begin();
+  
+  int prev_i = 0;
+  for (int i : rowOrdinals)
   {
-    filteredWeights.fineOrdinals.insert(fineOrdinalsVector[*rowIt]);
+    for (int n=0; n<i - prev_i; n++ )
+      ++rowOrdinalIt;
+    filteredWeights.fineOrdinals.insert(*rowOrdinalIt);
+    prev_i = i;
   }
 
-  for (set<int>::iterator colIt=colOrdinals.begin(); colIt != colOrdinals.end(); colIt++)
+  auto colOrdinalIt = weights.coarseOrdinals.begin();
+
+  int prev_j = 0;
+  for (int j : colOrdinals)
   {
-    filteredWeights.coarseOrdinals.insert(coarseOrdinalsVector[*colIt]);
+    for (int n=0; n<j - prev_j; n++ )
+      ++colOrdinalIt;
+    filteredWeights.coarseOrdinals.insert(*colOrdinalIt);
+    prev_j = j;
   }
-
-  filteredWeights.weights = FieldContainer<double>(filteredWeights.fineOrdinals.size(), filteredWeights.coarseOrdinals.size());
-
-  int filtered_i = 0;
-  for (set<int>::iterator rowOrdinalIt = rowOrdinals.begin(); rowOrdinalIt != rowOrdinals.end(); rowOrdinalIt++)
+  
+  int filtered_enumeration = 0;
+  for (int i : rowOrdinals)
   {
-    int i = *rowOrdinalIt;
-    int filtered_j = 0;
-    for (set<int>::iterator colOrdinalIt = colOrdinals.begin(); colOrdinalIt != colOrdinals.end(); colOrdinalIt++)
+    for (int j : colOrdinals)
     {
-      int j = *colOrdinalIt;
-      filteredWeights.weights(filtered_i,filtered_j) = weights.weights(i,j);
-      filtered_j++;
+      filteredWeights.weights[filtered_enumeration++] = weights.weights(i,j);
     }
-    filtered_i++;
   }
 
   return filteredWeights;

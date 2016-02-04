@@ -93,8 +93,8 @@ void CondensedDofInterpreter<Scalar>::clearStiffnessAndLoad()
 {
   _localLoadVectors.clear();
   _localStiffnessMatrices.clear();
+  _fluxToFieldMapForIterativeSolves.clear();
 }
-
 
 template <typename Scalar>
 void CondensedDofInterpreter<Scalar>::computeAndStoreLocalStiffnessAndLoad(GlobalIndexType cellID)
@@ -300,49 +300,55 @@ set<int> CondensedDofInterpreter<Scalar>::condensibleVariableIDs()
 template <typename Scalar>
 vector<int> CondensedDofInterpreter<Scalar>::fieldRowIndices(GlobalIndexType cellID, int condensibleVarID)
 {
-  // this is not a particularly efficient way of doing this, but it's not likely to add up to much total expense
+  // this is not a particularly efficient way of doing this, but it's not likely to add up to much total expense, especially
+  // now that we cache the result.
   DofOrderingPtr trialOrder = _mesh->getElementType(cellID)->trialOrderPtr;
-
-  // the way we order field dof indices is according to their index order in the local uncondensed stiffness matrix
   
-  set<int> fieldIndices; // all field indices for the cell
-  set<int> trialIDs = trialOrder->getVarIDs();
-  for (int trialID : trialIDs)
+  pair<DofOrdering*,int> key = {trialOrder.get(),condensibleVarID};
+  if (_fieldRowIndices.find(key) == _fieldRowIndices.end())
   {
-    const vector<int>* sides = &trialOrder->getSidesForVarID(trialID);
-    for (vector<int>::const_iterator sideIt = sides->begin(); sideIt != sides->end(); sideIt++)
+    // the way we order field dof indices is according to their index order in the local uncondensed stiffness matrix
+    
+    set<int> fieldIndices; // all field indices for the cell
+    set<int> trialIDs = trialOrder->getVarIDs();
+    for (int trialID : trialIDs)
     {
-      int sideOrdinal = *sideIt;
-      vector<int> varIndices = trialOrder->getDofIndices(trialID, sideOrdinal);
-      if (varDofsAreCondensible(trialID, sideOrdinal, trialOrder))
+      const vector<int>* sides = &trialOrder->getSidesForVarID(trialID);
+      for (vector<int>::const_iterator sideIt = sides->begin(); sideIt != sides->end(); sideIt++)
       {
-        fieldIndices.insert(varIndices.begin(), varIndices.end());
-      }
-    }
-  }
-
-  vector<int> rowIndices;
-  const vector<int>* sides = &trialOrder->getSidesForVarID(condensibleVarID);
-  TEUCHOS_TEST_FOR_EXCEPTION(sides->size() != 1, std::invalid_argument, "got request for condensible var ID with multiple sides");
-  for (int sideOrdinal : *sides)
-  {
-    vector<int> varIndices = trialOrder->getDofIndices(condensibleVarID, sideOrdinal);
-    for (int dofIndexForBasisOrdinal : varIndices)
-    {
-      int row = 0;
-      for (int fieldDofIndex : fieldIndices)
-      {
-        if (fieldDofIndex == dofIndexForBasisOrdinal)
+        int sideOrdinal = *sideIt;
+        vector<int> varIndices = trialOrder->getDofIndices(trialID, sideOrdinal);
+        if (varDofsAreCondensible(trialID, sideOrdinal, trialOrder))
         {
-          rowIndices.push_back(row);
-          break;
+          fieldIndices.insert(varIndices.begin(), varIndices.end());
         }
-        row++;
       }
     }
-    TEUCHOS_TEST_FOR_EXCEPTION(rowIndices.size() != varIndices.size(), std::invalid_argument, "Internal error: number of rowIndices does not match the number of varIndices");
+
+    vector<int> rowIndices;
+    const vector<int>* sides = &trialOrder->getSidesForVarID(condensibleVarID);
+    TEUCHOS_TEST_FOR_EXCEPTION(sides->size() != 1, std::invalid_argument, "got request for condensible var ID with multiple sides");
+    for (int sideOrdinal : *sides)
+    {
+      vector<int> varIndices = trialOrder->getDofIndices(condensibleVarID, sideOrdinal);
+      for (int dofIndexForBasisOrdinal : varIndices)
+      {
+        int row = 0;
+        for (int fieldDofIndex : fieldIndices)
+        {
+          if (fieldDofIndex == dofIndexForBasisOrdinal)
+          {
+            rowIndices.push_back(row);
+            break;
+          }
+          row++;
+        }
+      }
+      TEUCHOS_TEST_FOR_EXCEPTION(rowIndices.size() != varIndices.size(), std::invalid_argument, "Internal error: number of rowIndices does not match the number of varIndices");
+    }
+    _fieldRowIndices[key] = rowIndices;
   }
-  return rowIndices;
+  return _fieldRowIndices[key];
 }
 
 
@@ -377,44 +383,51 @@ Teuchos::RCP<Epetra_SerialDenseMatrix> CondensedDofInterpreter<Scalar>::fluxToFi
 {
   // if K_11 is the field-field part of the local stiffness matrix, and K_12 is the field-flux part,
   // return -K_11^(-1) * K_12
-  set<int> fieldIndices, fluxIndices; // which are fields and which are fluxes in the local cell coefficients
   
-  Epetra_SerialDenseVector b_field;
-  
-  FieldContainer<Scalar> K,rhs;
-  FieldContainer<GlobalIndexType> interpretedDofIndices;
-  
-  Teuchos::RCP<Epetra_SerialDenseSolver> fieldSolver;
-  Epetra_SerialDenseMatrix FieldField, FieldFlux;
-  
-  getLocalData(cellID, fieldSolver, FieldField, FieldFlux, b_field, interpretedDofIndices, fieldIndices, fluxIndices);
-  
-  Teuchos::RCP<Epetra_SerialDenseMatrix> fluxToFieldMap = Teuchos::rcp( new Epetra_SerialDenseMatrix(fieldIndices.size(),fluxIndices.size()) );
+  if (_fluxToFieldMapForIterativeSolves.find(cellID) == _fluxToFieldMapForIterativeSolves.end())
+  {
+    
+    set<int> fieldIndices, fluxIndices; // which are fields and which are fluxes in the local cell coefficients
+    
+    Epetra_SerialDenseVector b_field;
+    
+    FieldContainer<Scalar> K,rhs;
+    FieldContainer<GlobalIndexType> interpretedDofIndices;
+    
+    Teuchos::RCP<Epetra_SerialDenseSolver> fieldSolver;
+    Epetra_SerialDenseMatrix FieldField, FieldFlux;
+    
+    getLocalData(cellID, fieldSolver, FieldField, FieldFlux, b_field, interpretedDofIndices, fieldIndices, fluxIndices);
+    
+    Teuchos::RCP<Epetra_SerialDenseMatrix> fluxToFieldMap = Teuchos::rcp( new Epetra_SerialDenseMatrix(fieldIndices.size(),fluxIndices.size()) );
 
-  fieldSolver->SetVectors(*fluxToFieldMap, FieldFlux);
-  
-  bool didEquilibriate = false;
-  if (fieldSolver->ShouldEquilibrate())
-  {
-    fieldSolver->EquilibrateMatrix();
-    fieldSolver->EquilibrateRHS();
-    didEquilibriate = true;
+    fieldSolver->SetVectors(*fluxToFieldMap, FieldFlux);
+    
+    bool didEquilibriate = false;
+    if (fieldSolver->ShouldEquilibrate())
+    {
+      fieldSolver->EquilibrateMatrix();
+      fieldSolver->EquilibrateRHS();
+      didEquilibriate = true;
+    }
+    
+    int err = fieldSolver->Solve();
+    if (err != 0)
+    {
+      cout << "WARNING: in CondensedDofInterpreter, fieldSolver returned error code " << err << endl;
+    }
+    if (didEquilibriate)
+    {
+      fieldSolver->UnequilibrateLHS();
+    }
+    
+    // negate
+    fluxToFieldMap->Scale(-1.0);
+    
+    _fluxToFieldMapForIterativeSolves[cellID] = fluxToFieldMap;
   }
   
-  int err = fieldSolver->Solve();
-  if (err != 0)
-  {
-    cout << "WARNING: in CondensedDofInterpreter, fieldSolver returned error code " << err << endl;
-  }
-  if (didEquilibriate)
-  {
-    fieldSolver->UnequilibrateLHS();
-  }
-  
-  // negate
-  fluxToFieldMap->Scale(-1.0);
-  
-  return fluxToFieldMap;
+  return _fluxToFieldMapForIterativeSolves[cellID];
 }
 
 template <typename Scalar>
