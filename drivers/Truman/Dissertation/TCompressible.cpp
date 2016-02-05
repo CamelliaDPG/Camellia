@@ -156,6 +156,8 @@ int main(int argc, char *argv[])
   cmdp.setOption("useCondensedSolve", "useStandardSolve", &useCondensedSolve);
   bool useSPDSolver = false;
   cmdp.setOption("useSPDSolver", "useQRSolver", &useSPDSolver);
+  bool useCG = true;
+  cmdp.setOption("useCG", "useGMRES", &useCG);
   bool useConformingTraces = false;
   cmdp.setOption("conformingTraces", "nonconformingTraces", &useConformingTraces, "use conforming traces");
   int polyOrder = 1, delta_k = 3;
@@ -931,6 +933,7 @@ int main(int argc, char *argv[])
         if (!useDirectSolver)
         {
           Teuchos::RCP<GMGSolver> gmgSolver = Teuchos::rcp(dynamic_cast<GMGSolver*>(form.getSolver().get()), false);
+          gmgSolver->setUseConjugateGradient(useCG);
           int iterationCount = gmgSolver->iterationCount();
           totalIterationCount += iterationCount;
           if (rank==0) cout << " (" << iterationCount << " GMG iterations)\n";
@@ -969,7 +972,7 @@ int main(int argc, char *argv[])
 
   if (exportHDF5)
   {
-    exporter->exportSolution(form.solution(), 0);
+    exporter->exportSolution(form.solution(), startRef);
     // energyErrorExporter->exportFunction(energyErrorFunction, "energy error", 0);
   }
   if (saveSolution)
@@ -1053,6 +1056,7 @@ int main(int argc, char *argv[])
         if (!useDirectSolver)
         {
           Teuchos::RCP<GMGSolver> gmgSolver = Teuchos::rcp(dynamic_cast<GMGSolver*>(form.getSolver().get()), false);
+          gmgSolver->setUseConjugateGradient(useCG);
           int iterationCount = gmgSolver->iterationCount();
           totalIterationCount += iterationCount;
           if (rank==0) cout << " (" << iterationCount << " GMG iterations)\n";

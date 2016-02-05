@@ -15,6 +15,15 @@
 
 using namespace Camellia;
 
+vector<double> makeVertex(double v0, double v1, double v2)
+{
+  vector<double> v;
+  v.push_back(v0);
+  v.push_back(v1);
+  v.push_back(v2);
+  return v;
+}
+
 // this Function will work for both 2D and 3D cavity flow top BC (matching y = 1)
 class RampBoundaryFunction_U1 : public SimpleFunction<double>
 {
@@ -381,7 +390,7 @@ double computeL2Error(NavierStokesVGPFormulation &form, FunctionPtr u_exact, Mes
 
 int main(int argc, char *argv[])
 {
-  Teuchos::GlobalMPISession mpiSession(&argc, &argv); // initialize MPI
+  Teuchos::GlobalMPISession mpiSession(&argc, &argv, 0); // initialize MPI
   int rank = Teuchos::GlobalMPISession::getRank();
 
 #ifdef HAVE_MPI
@@ -505,6 +514,66 @@ int main(int argc, char *argv[])
       meshTopo = MeshFactory::spaceTimeMeshTopology(meshTopo, t0, t1, temporalDivisions);
     }
   }
+  else if (problemName == "BoundaryLayer")
+  {
+    // int tensorialDegree = 1;
+    // CellTopoPtr quad_x_time = CellTopology::cellTopology(shards::getCellTopologyData<shards::Quadrilateral<4> >(), tensorialDegree);
+    // vector<double> v00 = makeVertex(0,0,0);
+    // vector<double> v10 = makeVertex(1,0,0);
+    // vector<double> v20 = makeVertex(1,1,0);
+    // vector<double> v30 = makeVertex(0,1,0);
+    // vector<double> v01 = makeVertex(0,0,1);
+    // vector<double> v11 = makeVertex(1,0,1);
+    // vector<double> v21 = makeVertex(1,1,1);
+    // vector<double> v31 = makeVertex(0,1,1);
+    // vector< vector<double> > spaceTimeVertices;
+    // spaceTimeVertices.push_back(v00);
+    // spaceTimeVertices.push_back(v10);
+    // spaceTimeVertices.push_back(v20);
+    // spaceTimeVertices.push_back(v30);
+    // spaceTimeVertices.push_back(v01);
+    // spaceTimeVertices.push_back(v11);
+    // spaceTimeVertices.push_back(v21);
+    // spaceTimeVertices.push_back(v31);
+    // vector<unsigned> spaceTimeQuadVertexList;
+    // spaceTimeQuadVertexList.push_back(0);
+    // spaceTimeQuadVertexList.push_back(1);
+    // spaceTimeQuadVertexList.push_back(2);
+    // spaceTimeQuadVertexList.push_back(3);
+    // spaceTimeQuadVertexList.push_back(4);
+    // spaceTimeQuadVertexList.push_back(5);
+    // spaceTimeQuadVertexList.push_back(6);
+    // spaceTimeQuadVertexList.push_back(7);
+    // vector< vector<unsigned> > spaceTimeElementVertices;
+    // spaceTimeElementVertices.push_back(spaceTimeQuadVertexList);
+    // vector< CellTopoPtr > spaceTimeCellTopos;
+    // spaceTimeCellTopos.push_back(quad_x_time);
+    // MeshGeometryPtr spaceTimeMeshGeometry = Teuchos::rcp( new MeshGeometry(spaceTimeVertices, spaceTimeElementVertices, spaceTimeCellTopos) );
+    // MeshTopologyPtr spaceTimeMeshTopology = Teuchos::rcp( new MeshTopology(spaceTimeMeshGeometry) );
+
+    // vector<double> x0;
+    // vector<double> dims;
+    // vector<int> numElements;
+    // x0.push_back(-.5);
+    // x0.push_back(-.5);
+    // dims.push_back(1.5);
+    // dims.push_back(2.0);
+    // numElements.push_back(3);
+    // numElements.push_back(4);
+    // pressureConstraintPoint = {0,0};
+    // meshTopo = MeshFactory::rectilinearMeshTopology(dims,numElements,x0);
+    vector<PeriodicBCPtr> periodicBCs;
+    // periodicBCs.push_back(PeriodicBC::xIdentification(0, 1));
+    // MeshTopologyPtr meshTopo = MeshFactory::quadMeshTopology(1.0, 1.0, 1, 1, false, 0.0, 0.0, periodicBCs);
+    MeshTopologyPtr meshTopo = MeshFactory::quadMeshTopology(1.0, 1.0, 1, 1, false, 0.0, 0.0);
+    if (!steady)
+    {
+      double t0 = 0;
+      double t1 = 1;
+      int temporalDivisions = 2;
+      meshTopo = MeshFactory::spaceTimeMeshTopology(meshTopo, t0, t1, temporalDivisions);
+    }
+  }
   else if (problemName == "TaylorGreen")
   {
     double pi = atan(1)*4;
@@ -566,6 +635,8 @@ int main(int argc, char *argv[])
   if (problemName == "LidDriven")
     form.addPointPressureCondition(pressureConstraintPoint);
   if (problemName == "Kovasznay")
+    form.addPointPressureCondition(pressureConstraintPoint);
+  if (problemName == "BoundaryLayer")
     form.addPointPressureCondition(pressureConstraintPoint);
   if (problemName == "TaylorGreen")
     form.addPointPressureCondition(pressureConstraintPoint);
@@ -654,6 +725,28 @@ int main(int argc, char *argv[])
     if (!steady)
       form.addInitialCondition(0, u_exact);
       // form.addFluxCondition(t0, -u_exact);
+  }
+  else if (problemName == "BoundaryLayer")
+  {
+    BCPtr bc = form.solutionIncrement()->bc();
+
+    SpatialFilterPtr leftX  = SpatialFilter::matchingX(0);
+    SpatialFilterPtr rightX = SpatialFilter::matchingX(1);
+    SpatialFilterPtr leftY  = SpatialFilter::matchingY(0);
+    SpatialFilterPtr rightY = SpatialFilter::matchingY(1);
+    SpatialFilterPtr t0  = SpatialFilter::matchingT(0);
+
+    FunctionPtr one = Function::constant(1);
+    FunctionPtr zero = Function::constant(0);
+    FunctionPtr onezero = Function::vectorize(one,zero);
+    FunctionPtr zeros = Function::vectorize(zero,zero);
+    // form.addInflowCondition(leftX,  u_exact);
+    // form.addInflowCondition(rightX, u_exact);
+    form.addInflowCondition(leftY,  onezero);
+    form.addInflowCondition(rightY, zeros);
+
+    if (!steady)
+      form.addInitialCondition(0, zeros);
   }
   else if (problemName == "TaylorGreen")
   {
