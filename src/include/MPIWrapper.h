@@ -31,7 +31,8 @@ class MPIWrapper
 {
 private:
   template<typename Scalar>
-  static void allGatherCompact(Intrepid::FieldContainer<Scalar> &gatheredValues,
+  static void allGatherCompact(const Epetra_Comm &Comm,
+                               Intrepid::FieldContainer<Scalar> &gatheredValues,
                                Intrepid::FieldContainer<Scalar> &myValues,
                                Intrepid::FieldContainer<int> &offsets);
 public:
@@ -42,18 +43,22 @@ public:
   // (d1,d2,d3) will be summed and stored in outValues(d1,d2,d3).
   //  static void entryWiseSum(FieldContainer<double> &outValues, const FieldContainer<double> &inValues);
 
-  static void allGather(Intrepid::FieldContainer<int> &allValues, int myValue);
-  static void allGatherHomogeneous(Intrepid::FieldContainer<int> &values, Intrepid::FieldContainer<int> &myValues); // assumes myValues is same size on every proc.
+  static void allGather(const Epetra_Comm &Comm, Intrepid::FieldContainer<int> &allValues, int myValue);
+  static void allGatherHomogeneous(const Epetra_Comm &Comm,
+                                   Intrepid::FieldContainer<int> &values,
+                                   Intrepid::FieldContainer<int> &myValues); // assumes myValues is same size on every proc.
 
   // \brief Resizes gatheredValues to be the size of the sum of the myValues containers, and fills it with the values from those containers.
   //        Not necessarily super-efficient in terms of communication, but avoids allocating a big array like allGatherHomogeneous would.
-  static void allGatherCompact(Intrepid::FieldContainer<int> &gatheredValues,
+  static void allGatherCompact(const Epetra_Comm &Comm,
+                               Intrepid::FieldContainer<int> &gatheredValues,
                                Intrepid::FieldContainer<int> &myValues,
                                Intrepid::FieldContainer<int> &offsets);
 
   // \brief Resizes gatheredValues to be the size of the sum of the myValues containers, and fills it with the values from those containers.
   //        Not necessarily super-efficient in terms of communication, but avoids allocating a big array like allGatherHomogeneous would.
-  static void allGatherCompact(Intrepid::FieldContainer<double> &gatheredValues,
+  static void allGatherCompact(const Epetra_Comm &Comm,
+                               Intrepid::FieldContainer<double> &gatheredValues,
                                Intrepid::FieldContainer<double> &myValues,
                                Intrepid::FieldContainer<int> &offsets);
   

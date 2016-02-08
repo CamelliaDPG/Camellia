@@ -207,7 +207,7 @@ void ZoltanMeshPartitionPolicy::partitionMesh(Mesh *mesh, PartitionIndexType num
           index++;
         }
         FieldContainer<int> allPartitions(numNodes,maxPartitionSize);
-        MPIWrapper::allGatherHomogeneous(allPartitions, myPartition);
+        MPIWrapper::allGatherHomogeneous(*this->Comm(), allPartitions, myPartition);
 
         // convert the ints to GlobalIndexType -- if sizeof(GlobalIndexType) ever is bigger than sizeof(int), then we'll want to do something else above to pack the cell IDs into ints, etc.
         for (int node=0; node<numNodes; node++)

@@ -545,7 +545,6 @@ void TSolution<Scalar>::applyDGJumpTerms()
    */
   
   Epetra_CommPtr Comm = _mesh->Comm();
-  int rank = Comm->MyPID();
   int numProcs = Comm->NumProc();
   
   int indexBase = 0;
@@ -1424,7 +1423,7 @@ void TSolution<Scalar>::populateStiffnessAndLoad()
       else
         zmcIndex = 0;
 
-      zmcIndex = MPIWrapper::sum(zmcIndex);
+      zmcIndex = MPIWrapper::sum(*_mesh->Comm(), zmcIndex);
 
       Intrepid::FieldContainer<Scalar> basisIntegrals;
       Intrepid::FieldContainer<GlobalIndexTypeToCast> globalIndices;
@@ -1878,13 +1877,8 @@ void TSolution<Scalar>::importSolutionForOffRankCells(std::set<GlobalIndexType> 
 template <typename Scalar>
 void TSolution<Scalar>::importGlobalSolution()
 {
-#ifdef HAVE_MPI
-  Epetra_MpiComm Comm(MPI_COMM_WORLD);
-  //cout << "rank: " << rank << " of " << numProcs << endl;
-#else
-  Epetra_SerialComm Comm;
-#endif
-  Epetra_Time timer(Comm);
+  Epetra_CommPtr Comm = _mesh->Comm();
+  Epetra_Time timer(*Comm);
 
   GlobalIndexType globalDofCount = _mesh->globalDofAssignment()->globalDofCount();
 
@@ -1896,7 +1890,7 @@ void TSolution<Scalar>::importGlobalSolution()
     myDof++;
   }
 
-  Epetra_Map     myCellsMap(-1, globalDofCount, myDofs, 0, Comm);
+  Epetra_Map     myCellsMap(-1, globalDofCount, myDofs, 0, *Comm);
 
   // Import global solution onto each processor
   Epetra_Map partMap = getPartitionMap();
@@ -1917,7 +1911,7 @@ void TSolution<Scalar>::importGlobalSolution()
 
   int numProcs = Teuchos::GlobalMPISession::getNProc();
   int indexBase = 0;
-  Epetra_Map timeMap(numProcs,indexBase,Comm);
+  Epetra_Map timeMap(numProcs,indexBase,*Comm);
   Epetra_Vector timeDistributeSolutionVector(timeMap);
   timeDistributeSolutionVector[0] = timeDistributeSolution;
 
@@ -2060,7 +2054,7 @@ void TSolution<Scalar>::imposeZMCsUsingLagrange()
     else
       zmcIndex = 0;
 
-    zmcIndex = MPIWrapper::sum(zmcIndex);
+    zmcIndex = MPIWrapper::sum(*_mesh->Comm(),zmcIndex);
 
     if (_zmcsAsLagrangeMultipliers)
     {
@@ -2071,12 +2065,12 @@ void TSolution<Scalar>::imposeZMCsUsingLagrange()
 
       Intrepid::FieldContainer<int> offsets;
       Intrepid::FieldContainer<Scalar> allBasisIntegrals;
-      MPIWrapper::allGatherCompact(allBasisIntegrals,basisIntegrals,offsets);
+      MPIWrapper::allGatherCompact(*_mesh->Comm(),allBasisIntegrals,basisIntegrals,offsets);
 
 //      if (rank==0) cout << "allBasisIntegrals:\n" << allBasisIntegrals;
 
       Intrepid::FieldContainer<GlobalIndexTypeToCast> allGlobalIndices;
-      MPIWrapper::allGatherCompact(allGlobalIndices,globalIndices,offsets);
+      MPIWrapper::allGatherCompact(*_mesh->Comm(),allGlobalIndices,globalIndices,offsets);
 
 //      if (rank==0) cout << "allGlobalIndices:\n" << allGlobalIndices;
 
@@ -2329,18 +2323,12 @@ double TSolution<Scalar>::meshMeasure()
 template <typename Scalar>
 double TSolution<Scalar>::InfNormOfSolutionGlobal(int trialID)
 {
-  int numProcs = Teuchos::GlobalMPISession::getNProc();
-  int rank     = Teuchos::GlobalMPISession::getRank();
-
-#ifdef HAVE_MPI
-  Epetra_MpiComm Comm(MPI_COMM_WORLD);
-  //cout << "rank: " << rank << " of " << numProcs << endl;
-#else
-  Epetra_SerialComm Comm;
-#endif
+  Epetra_CommPtr Comm = _mesh->Comm();
+  int rank = Comm->MyPID();
+  int numProcs = Comm->NumProc();
 
   int indexBase = 0;
-  Epetra_Map procMap(numProcs,indexBase,Comm);
+  Epetra_Map procMap(numProcs,indexBase,*Comm);
   double localInfNorm = InfNormOfSolution(trialID);
   Epetra_Vector infNormVector(procMap);
   infNormVector[0] = localInfNorm;
@@ -2356,17 +2344,9 @@ double TSolution<Scalar>::InfNormOfSolutionGlobal(int trialID)
 template <typename Scalar>
 double TSolution<Scalar>::InfNormOfSolution(int trialID)
 {
-
-  int numProcs=1;
-  int rank=0;
-
-#ifdef HAVE_MPI
-  rank     = Teuchos::GlobalMPISession::getRank();
-  numProcs = Teuchos::GlobalMPISession::getNProc();
-  Epetra_MpiComm Comm(MPI_COMM_WORLD);
-#else
-  Epetra_SerialComm Comm;
-#endif
+  Epetra_CommPtr Comm = _mesh->Comm();
+  int rank = Comm->MyPID();
+  int numProcs = Comm->NumProc();
 
   double value = 0.0;
   vector<ElementTypePtr> elemTypes = _mesh->elementTypes(rank);
@@ -3910,20 +3890,15 @@ double TSolution<Scalar>::minTimeDistributeSolution()
 template <typename Scalar>
 Epetra_Map TSolution<Scalar>::getPartitionMap()
 {
-  int rank = Teuchos::GlobalMPISession::getRank();
-
-#ifdef HAVE_MPI
-  Epetra_MpiComm Comm(MPI_COMM_WORLD);
-#else
-  Epetra_SerialComm Comm;
-#endif
+  Epetra_CommPtr Comm = _mesh->Comm();
+  int rank = Comm->MyPID();
 
   vector<int> zeroMeanConstraints = getZeroMeanConstraints();
   GlobalIndexType numGlobalDofs = _dofInterpreter->globalDofCount();
   set<GlobalIndexType> myGlobalIndicesSet = _dofInterpreter->globalDofIndicesForPartition(rank);
   int numZMCDofs = _zmcsAsRankOneUpdate ? 0 : zeroMeanConstraints.size();
 
-  Epetra_Map partMap = getPartitionMap(rank, myGlobalIndicesSet,numGlobalDofs,numZMCDofs,&Comm);
+  Epetra_Map partMap = getPartitionMap(rank, myGlobalIndicesSet,numGlobalDofs,numZMCDofs,Comm.get());
   return partMap;
 }
 
@@ -4034,16 +4009,15 @@ Epetra_Map TSolution<Scalar>::getPartitionMap(PartitionIndexType rank, set<Globa
 template <typename Scalar>
 MapPtr TSolution<Scalar>::getPartitionMap2()
 {
-  int rank = Teuchos::GlobalMPISession::getRank();
-
-  Teuchos::RCP<const Teuchos::Comm<int> > comm = Tpetra::DefaultPlatform::getDefaultPlatform().getComm();
-
+  Teuchos_CommPtr Comm = _mesh->TeuchosComm();
+  int rank = Comm->getRank();
+  
   vector<int> zeroMeanConstraints = getZeroMeanConstraints();
   GlobalIndexType numGlobalDofs = _dofInterpreter->globalDofCount();
   set<GlobalIndexType> myGlobalIndicesSet = _dofInterpreter->globalDofIndicesForPartition(rank);
   int numZMCDofs = _zmcsAsRankOneUpdate ? 0 : zeroMeanConstraints.size();
 
-  MapPtr partMap = getPartitionMap2(rank, myGlobalIndicesSet,numGlobalDofs,numZMCDofs,comm);
+  MapPtr partMap = getPartitionMap2(rank, myGlobalIndicesSet,numGlobalDofs,numZMCDofs,Comm);
   return partMap;
 }
 
@@ -4065,7 +4039,7 @@ MapPtr TSolution<Scalar>::getPartitionMap2()
 
 template <typename Scalar>
 MapPtr TSolution<Scalar>::getPartitionMap2(PartitionIndexType rank, set<GlobalIndexType> & myGlobalIndicesSet, GlobalIndexType numGlobalDofs,
-    int zeroMeanConstraintsSize, Teuchos::RCP<const Teuchos::Comm<int> > Comm )
+    int zeroMeanConstraintsSize, Teuchos_CommPtr Comm )
 {
   int numGlobalLagrange = _lagrangeConstraints->numGlobalConstraints();
   vector< ElementPtr > elements = _mesh->elementsInPartition(rank);
@@ -4623,15 +4597,10 @@ void TSolution<Scalar>::saveToHDF5(string filename)
   // storage cost and the headache of figuring out whether it's safe to use the
   // vector representation, for the computational savings of not having to reconstruct
   // the global vector from the local representation.
-  int commRank = Teuchos::GlobalMPISession::getRank();
-  int nProcs = Teuchos::GlobalMPISession::getNProc();
 
-#ifdef HAVE_MPI
-  Epetra_MpiComm Comm(MPI_COMM_WORLD);
-#else
-  Epetra_SerialComm Comm;
-#endif
-  EpetraExt::HDF5 hdf5(Comm);
+  Epetra_CommPtr Comm = _mesh->Comm();
+  
+  EpetraExt::HDF5 hdf5(*Comm);
   hdf5.Create(filename);
   if (_lhsVector == Teuchos::null)
   {
@@ -4646,15 +4615,10 @@ template <typename Scalar>
 void TSolution<Scalar>::loadFromHDF5(string filename)
 {
   initializeLHSVector();
-  int commRank = Teuchos::GlobalMPISession::getRank();
-  int nProcs = Teuchos::GlobalMPISession::getNProc();
+  
+  Epetra_CommPtr Comm = _mesh->Comm();
 
-#ifdef HAVE_MPI
-  Epetra_MpiComm Comm(MPI_COMM_WORLD);
-#else
-  Epetra_SerialComm Comm;
-#endif
-  EpetraExt::HDF5 hdf5(Comm);
+  EpetraExt::HDF5 hdf5(*Comm);
   hdf5.Open(filename);
   Epetra_MultiVector *lhsVec;
   Epetra_Map partMap = getPartitionMap();
