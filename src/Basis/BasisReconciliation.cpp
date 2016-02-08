@@ -721,14 +721,8 @@ const SubBasisReconciliationWeights & BasisReconciliation::constrainedWeights(un
   {
     _subcellReconcilationWeights[cacheKey] = computeConstrainedWeights(subcellDimension, finerBasis, finerBasisSubcellOrdinal, refinements,
                                                                        coarserBasis, coarserBasisSubcellOrdinal, vertexNodePermutation);
-    
     // 10-14-15 added filtering:
     _subcellReconcilationWeights[cacheKey] = filterOutZeroRowsAndColumns(_subcellReconcilationWeights[cacheKey]);
-    // unnecessary copy added for debugging purposes:
-//    SubBasisReconciliationWeights weights = computeConstrainedWeights(subcellDimension, finerBasis, finerBasisSubcellOrdinal, refinements,
-//                                                                      coarserBasis, coarserBasisSubcellOrdinal, vertexNodePermutation);
-//    cout << "weights.weights:\n" << weights.weights;
-//    _subcellReconcilationWeights[cacheKey] = weights;
   }
 
   return _subcellReconcilationWeights[cacheKey];
