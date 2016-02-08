@@ -48,6 +48,7 @@
 
 #include "Mesh.h"
 #include "MathInnerProduct.h"
+#include "MPIWrapper.h"
 #include "Solution.h"
 #include "Element.h"
 #include "ElementType.h"
@@ -2746,7 +2747,7 @@ bool MeshTestSuite::testJesseAnisotropicRefinement()
 
   int pToAdd = 1;
   MeshPtr mesh = MeshUtilities::buildUnitQuadMesh(2, convectionBF, order, order+pToAdd);
-  mesh->setPartitionPolicy(Teuchos::rcp(new ZoltanMeshPartitionPolicy("HSFC")));
+  mesh->setPartitionPolicy(Teuchos::rcp(new ZoltanMeshPartitionPolicy(MPIWrapper::CommWorld(), "HSFC")));
 
   Teuchos::RCP<Solution> solution;
   solution = Teuchos::rcp( new Solution(mesh, bc, rhs, ip) );
@@ -2823,7 +2824,7 @@ bool MeshTestSuite::testPRefinementAdjacentCells()
 
   int pToAdd = 1;
   MeshPtr mesh = MeshUtilities::buildUnitQuadMesh(2, convectionBF, order, order+pToAdd);
-  mesh->setPartitionPolicy(Teuchos::rcp(new ZoltanMeshPartitionPolicy("HSFC")));
+  mesh->setPartitionPolicy(Teuchos::rcp(new ZoltanMeshPartitionPolicy(MPIWrapper::CommWorld(), "HSFC")));
 
   Teuchos::RCP<Solution> solution;
   solution = Teuchos::rcp( new Solution(mesh, bc, rhs, ip) );
