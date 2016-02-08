@@ -103,11 +103,6 @@ class GDAMinimumRule : public GlobalDofAssignment
 
   static string annotatedEntityToString(AnnotatedEntity &entity);
 
-  // LOOKS like filterSubBasisConstraintData() is unused.  If not, should be deleted.
-  void filterSubBasisConstraintData(set<unsigned> &basisDofOrdinals,vector<GlobalIndexType> &globalDofOrdinals,
-                                    Intrepid::FieldContainer<double> &constraintMatrixSideInterior, Intrepid::FieldContainer<bool> &processedDofs,
-                                    DofOrderingPtr trialOrdering, VarPtr var, int sideOrdinal = VOLUME_INTERIOR_SIDE_ORDINAL);
-
   typedef vector< SubBasisDofMapperPtr > BasisMap;
   BasisMap getBasisMap(GlobalIndexType cellID, SubCellDofIndexInfo& dofOwnershipInfo, VarPtr var);
   BasisMap getBasisMapVolumeRestrictedToSide(GlobalIndexType cellID, SubCellDofIndexInfo& dofOwnershipInfo, VarPtr var, int sideOrdinal);
