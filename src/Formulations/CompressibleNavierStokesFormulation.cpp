@@ -151,6 +151,7 @@ CompressibleNavierStokesFormulation::CompressibleNavierStokesFormulation(MeshTop
   double TInit = parameters.get<double>("TInit", 1.);
 
   string problemName = parameters.get<string>("problemName", "Trivial");
+  string savedSolutionAndMeshPrefix = parameters.get<string>("savedSolutionAndMeshPrefix", "");
 
   _spaceDim = spaceDim;
   _useConformingTraces = useConformingTraces;
@@ -349,146 +350,149 @@ CompressibleNavierStokesFormulation::CompressibleNavierStokesFormulation(MeshTop
     H1Order = {spatialPolyOrder+1};
   }
 
-  MeshPtr mesh = Teuchos::rcp( new Mesh(meshTopo, _bf, H1Order, delta_k, _trialVariablePolyOrderAdjustments) ) ;
   BCPtr bc = BC::bc();
 
-  _backgroundFlow = Solution::solution(_bf, mesh, bc);
-  _solnIncrement = Solution::solution(_bf, mesh, bc);
-  _solnPrevTime = Solution::solution(_bf, mesh, bc);
-
-  // Project ones as initial guess
-  FunctionPtr rho_init, u1_init, u2_init, u3_init, T_init, tc_init, tm1_init, tm2_init, tm3_init, te_init;
-  rho_init = Function::constant(rhoInit);
-
-  FunctionPtr cos_y = Teuchos::rcp(new Cos_ay(1));
-  FunctionPtr sin_y = Teuchos::rcp(new Sin_ay(1));
-  FunctionPtr cos_theta = Teuchos::rcp( new PolarizedFunction<double>( cos_y ) );
-  FunctionPtr sin_theta = Teuchos::rcp( new PolarizedFunction<double>( sin_y ) );
-
-  u1_init = Function::constant(u1Init);
-  if (_spaceDim > 1)
-    u2_init = Function::constant(u2Init);
-  if (_spaceDim > 2)
-    u3_init = Function::constant(u3Init);
-  if (spaceDim > 1 && problemName == "Noh")
+  MeshPtr mesh;
+  if (savedSolutionAndMeshPrefix == "")
   {
-    u1_init = -cos_theta;
-    u2_init = -sin_theta;
-  }
-  T_init = Function::constant(TInit);
-  if (spaceDim > 1 && problemName == "TriplePoint")
-  {
-    rho_init = one - (1-0.125)*Function::heaviside(1)*Function::heavisideY(1.5);
-    T_init = one - (1-0.1)*Function::heaviside(1);
-  }
-  FunctionPtr n_xx, n_xy, n_xz, n_t;
-  n_xx = n_x->x() * Function::sideParity();
-  if (_spaceDim > 1)
-    n_xy = n_x->y() * Function::sideParity();
-  if (_spaceDim > 2)
-    n_xz = n_x->z() * Function::sideParity();
-  if (_spaceTime)
-    n_t = n_xt->t() * Function::sideParity();
-  switch (_spaceDim)
-  {
-    case 1:
-      tc_init = rho_init*u1_init*n_xx;
-      tm1_init = (rho_init*u1_init*u1_init + R()*rho_init*T_init)*n_xx;
-      te_init = (Cv()*rho_init*u1_init*T_init + 0.5*rho_init*u1_init*u1_init*u1_init + R()*rho_init*u1_init*T_init)*n_xx;
-      if (_spaceTime)
-      {
-        tc_init = tc_init + rho_init*n_t;
-        tm1_init = tm1_init + rho_init*u1_init*n_t;
-        te_init = te_init + (Cv()*rho_init*T_init+0.5*u1_init*u1_init)*n_t;
-      }
-      break;
-    case 2:
-      tc_init = rho_init*u1_init*n_xx + rho_init*u2_init*n_xy;
-      tm1_init = (rho_init*u1_init*u1_init + R()*rho_init*T_init)*n_xx
-        + (rho_init*u1_init*u2_init)*n_xy;
-      tm2_init = (rho_init*u1_init*u2_init)*n_xx
-        + (rho_init*u2_init*u2_init + R()*rho_init*T_init)*n_xy;
-      te_init = ( Cv()*rho_init*u1_init*T_init
-          + 0.5*rho_init*(u1_init*u1_init+u2_init*u2_init)*u1_init
-          + R()*rho_init*u1_init*T_init )*n_xx
-        + ( Cv()*rho_init*u2_init*T_init
-            + 0.5*rho_init*(u1_init*u1_init+u2_init*u2_init)*u2_init
-            + R()*rho_init*u2_init*T_init )*n_xy;
-      if (_spaceTime)
-      {
-        tc_init = tc_init + rho_init*n_t;
-        tm1_init = tm1_init + rho_init*u1_init*n_t;
-        tm2_init = tm2_init + rho_init*u2_init*n_t;
-        te_init = te_init + (Cv()*rho_init*T_init+0.5*rho_init*(u1_init*u1_init+u2_init*u2_init))*n_t;
-      }
-      break;
-    case 3:
-      tc_init = rho_init*u1_init*n_xx + rho_init*u2_init*n_xy + rho_init*u3_init*n_xz;
-      tm1_init = (rho_init*u1_init*u1_init + R()*rho_init*T_init)*n_xx
-        + (rho_init*u1_init*u2_init)*n_xy
-        + (rho_init*u1_init*u3_init)*n_xz;
-      tm2_init = (rho_init*u2_init*u2_init + R()*rho_init*T_init)*n_xy
-        + (rho_init*u1_init*u2_init)*n_xx
-        + (rho_init*u3_init*u2_init)*n_xz;
-      tm3_init = (rho_init*u3_init*u3_init + R()*rho_init*T_init)*n_xz
-        + (rho_init*u1_init*u3_init)*n_xx
-        + (rho_init*u2_init*u3_init)*n_xy;
-      te_init = ( Cv()*rho_init*u1_init*T_init
-          + 0.5*rho_init*(u1_init*u1_init+u2_init*u2_init+u3_init*u3_init)*u1_init
-          + R()*rho_init*u1_init*T_init )*n_xx
-        + ( Cv()*rho_init*u2_init*T_init
-            + 0.5*rho_init*(u1_init*u1_init+u2_init*u2_init+u3_init*u3_init)*u2_init
-            + R()*rho_init*u2_init*T_init )*n_xy
-        + ( Cv()*rho_init*u3_init*T_init
-            + 0.5*rho_init*(u1_init*u1_init+u2_init*u2_init+u3_init*u3_init)*u3_init
-            + R()*rho_init*u3_init*T_init )*n_xz;
-      if (_spaceTime)
-      {
-        tc_init = tc_init + rho_init*n_t;
-        tm1_init = tm1_init + rho_init*u1_init*n_t;
-        tm2_init = tm2_init + rho_init*u2_init*n_t;
-        tm3_init = tm3_init + rho_init*u3_init*n_t;
-        te_init = te_init + (Cv()*rho_init*T_init
-          + 0.5*(u1_init*u1_init+u2_init*u2_init+u3_init*u3_init))*n_t;
-      }
-      break;
-  }
+    mesh = Teuchos::rcp( new Mesh(meshTopo, _bf, H1Order, delta_k, _trialVariablePolyOrderAdjustments) ) ;
+    _backgroundFlow = Solution::solution(_bf, mesh, bc);
+    _solnIncrement = Solution::solution(_bf, mesh, bc);
+    _solnPrevTime = Solution::solution(_bf, mesh, bc);
 
-  map<int, FunctionPtr> initialGuess;
-  initialGuess[this->rho()->ID()] = rho_init;
-  initialGuess[this->T()->ID()] = T_init;
-  initialGuess[this->T_hat()->ID()] = T_init;
-  initialGuess[this->tc()->ID()] = tc_init;
-  initialGuess[this->te()->ID()] = te_init;
-  initialGuess[this->u(1)->ID()] = u1_init;
-  initialGuess[this->u_hat(1)->ID()] = u1_init;
-  initialGuess[this->tm(1)->ID()] = tm1_init;
-  if (_spaceDim > 1)
-  {
-    initialGuess[this->u(2)->ID()] = u2_init;
-    initialGuess[this->u_hat(2)->ID()] = u2_init;
-    initialGuess[this->tm(2)->ID()] = tm2_init;
-  }
-  if (_spaceDim > 2)
-  {
-    initialGuess[this->u(3)->ID()] = u3_init;
-    initialGuess[this->u_hat(3)->ID()] = u3_init;
-    initialGuess[this->tm(3)->ID()] = tm3_init;
-  }
+    // Project ones as initial guess
+    FunctionPtr rho_init, u1_init, u2_init, u3_init, T_init, tc_init, tm1_init, tm2_init, tm3_init, te_init;
+    rho_init = Function::constant(rhoInit);
 
-  _backgroundFlow->projectOntoMesh(initialGuess);
-  _solnPrevTime->projectOntoMesh(initialGuess);
+    FunctionPtr cos_y = Teuchos::rcp(new Cos_ay(1));
+    FunctionPtr sin_y = Teuchos::rcp(new Sin_ay(1));
+    FunctionPtr cos_theta = Teuchos::rcp( new PolarizedFunction<double>( cos_y ) );
+    FunctionPtr sin_theta = Teuchos::rcp( new PolarizedFunction<double>( sin_y ) );
 
-  // // Project ones as initial guess
-  // map<int, FunctionPtr> initialGuess;
-  // initialGuess[this->rho()->ID()] = 2*one;
-  // initialGuess[this->u(1)->ID()] = 2*one;
-  // if (_spaceDim > 1)
-  //   initialGuess[this->u(2)->ID()] = 2*one;
-  // if (_spaceDim > 2)
-  //   initialGuess[this->u(3)->ID()] = 2*one;
-  // initialGuess[this->T()->ID()] = 2*one;
-  // _backgroundFlow->projectOntoMesh(initialGuess);
+    u1_init = Function::constant(u1Init);
+    if (_spaceDim > 1)
+      u2_init = Function::constant(u2Init);
+    if (_spaceDim > 2)
+      u3_init = Function::constant(u3Init);
+    if (spaceDim > 1 && problemName == "Noh")
+    {
+      u1_init = -cos_theta;
+      u2_init = -sin_theta;
+    }
+    T_init = Function::constant(TInit);
+    if (spaceDim > 1 && problemName == "TriplePoint")
+    {
+      rho_init = one - (1-0.125)*Function::heaviside(1)*Function::heavisideY(1.5);
+      T_init = one - (1-0.1)*Function::heaviside(1);
+    }
+    FunctionPtr n_xx, n_xy, n_xz, n_t;
+    n_xx = n_x->x() * Function::sideParity();
+    if (_spaceDim > 1)
+      n_xy = n_x->y() * Function::sideParity();
+    if (_spaceDim > 2)
+      n_xz = n_x->z() * Function::sideParity();
+    if (_spaceTime)
+      n_t = n_xt->t() * Function::sideParity();
+    switch (_spaceDim)
+    {
+      case 1:
+        tc_init = rho_init*u1_init*n_xx;
+        tm1_init = (rho_init*u1_init*u1_init + R()*rho_init*T_init)*n_xx;
+        te_init = (Cv()*rho_init*u1_init*T_init + 0.5*rho_init*u1_init*u1_init*u1_init + R()*rho_init*u1_init*T_init)*n_xx;
+        if (_spaceTime)
+        {
+          tc_init = tc_init + rho_init*n_t;
+          tm1_init = tm1_init + rho_init*u1_init*n_t;
+          te_init = te_init + (Cv()*rho_init*T_init+0.5*u1_init*u1_init)*n_t;
+        }
+        break;
+      case 2:
+        tc_init = rho_init*u1_init*n_xx + rho_init*u2_init*n_xy;
+        tm1_init = (rho_init*u1_init*u1_init + R()*rho_init*T_init)*n_xx
+          + (rho_init*u1_init*u2_init)*n_xy;
+        tm2_init = (rho_init*u1_init*u2_init)*n_xx
+          + (rho_init*u2_init*u2_init + R()*rho_init*T_init)*n_xy;
+        te_init = ( Cv()*rho_init*u1_init*T_init
+            + 0.5*rho_init*(u1_init*u1_init+u2_init*u2_init)*u1_init
+            + R()*rho_init*u1_init*T_init )*n_xx
+          + ( Cv()*rho_init*u2_init*T_init
+              + 0.5*rho_init*(u1_init*u1_init+u2_init*u2_init)*u2_init
+              + R()*rho_init*u2_init*T_init )*n_xy;
+        if (_spaceTime)
+        {
+          tc_init = tc_init + rho_init*n_t;
+          tm1_init = tm1_init + rho_init*u1_init*n_t;
+          tm2_init = tm2_init + rho_init*u2_init*n_t;
+          te_init = te_init + (Cv()*rho_init*T_init+0.5*rho_init*(u1_init*u1_init+u2_init*u2_init))*n_t;
+        }
+        break;
+      case 3:
+        tc_init = rho_init*u1_init*n_xx + rho_init*u2_init*n_xy + rho_init*u3_init*n_xz;
+        tm1_init = (rho_init*u1_init*u1_init + R()*rho_init*T_init)*n_xx
+          + (rho_init*u1_init*u2_init)*n_xy
+          + (rho_init*u1_init*u3_init)*n_xz;
+        tm2_init = (rho_init*u2_init*u2_init + R()*rho_init*T_init)*n_xy
+          + (rho_init*u1_init*u2_init)*n_xx
+          + (rho_init*u3_init*u2_init)*n_xz;
+        tm3_init = (rho_init*u3_init*u3_init + R()*rho_init*T_init)*n_xz
+          + (rho_init*u1_init*u3_init)*n_xx
+          + (rho_init*u2_init*u3_init)*n_xy;
+        te_init = ( Cv()*rho_init*u1_init*T_init
+            + 0.5*rho_init*(u1_init*u1_init+u2_init*u2_init+u3_init*u3_init)*u1_init
+            + R()*rho_init*u1_init*T_init )*n_xx
+          + ( Cv()*rho_init*u2_init*T_init
+              + 0.5*rho_init*(u1_init*u1_init+u2_init*u2_init+u3_init*u3_init)*u2_init
+              + R()*rho_init*u2_init*T_init )*n_xy
+          + ( Cv()*rho_init*u3_init*T_init
+              + 0.5*rho_init*(u1_init*u1_init+u2_init*u2_init+u3_init*u3_init)*u3_init
+              + R()*rho_init*u3_init*T_init )*n_xz;
+        if (_spaceTime)
+        {
+          tc_init = tc_init + rho_init*n_t;
+          tm1_init = tm1_init + rho_init*u1_init*n_t;
+          tm2_init = tm2_init + rho_init*u2_init*n_t;
+          tm3_init = tm3_init + rho_init*u3_init*n_t;
+          te_init = te_init + (Cv()*rho_init*T_init
+              + 0.5*(u1_init*u1_init+u2_init*u2_init+u3_init*u3_init))*n_t;
+        }
+        break;
+    }
+
+    map<int, FunctionPtr> initialGuess;
+    initialGuess[this->rho()->ID()] = rho_init;
+    initialGuess[this->T()->ID()] = T_init;
+    initialGuess[this->T_hat()->ID()] = T_init;
+    initialGuess[this->tc()->ID()] = tc_init;
+    initialGuess[this->te()->ID()] = te_init;
+    initialGuess[this->u(1)->ID()] = u1_init;
+    initialGuess[this->u_hat(1)->ID()] = u1_init;
+    initialGuess[this->tm(1)->ID()] = tm1_init;
+    if (_spaceDim > 1)
+    {
+      initialGuess[this->u(2)->ID()] = u2_init;
+      initialGuess[this->u_hat(2)->ID()] = u2_init;
+      initialGuess[this->tm(2)->ID()] = tm2_init;
+    }
+    if (_spaceDim > 2)
+    {
+      initialGuess[this->u(3)->ID()] = u3_init;
+      initialGuess[this->u_hat(3)->ID()] = u3_init;
+      initialGuess[this->tm(3)->ID()] = tm3_init;
+    }
+
+    _backgroundFlow->projectOntoMesh(initialGuess);
+    _solnPrevTime->projectOntoMesh(initialGuess);
+  }
+  else
+  {
+    mesh = MeshFactory::loadFromHDF5(_bf, savedSolutionAndMeshPrefix+".mesh");
+    _backgroundFlow = Solution::solution(_bf, mesh, bc);
+    _solnIncrement = Solution::solution(_bf, mesh, bc);
+    _solnPrevTime = Solution::solution(_bf, mesh, bc);
+    _backgroundFlow->loadFromHDF5(savedSolutionAndMeshPrefix+".soln");
+    _solnIncrement->loadFromHDF5(savedSolutionAndMeshPrefix+"_increment.soln");
+    _solnPrevTime->loadFromHDF5(savedSolutionAndMeshPrefix+"_prevtime.soln");
+  }
 
   // Previous solution values
   FunctionPtr rho_prev;
@@ -3209,6 +3213,8 @@ void CompressibleNavierStokesFormulation::save(std::string prefixString)
 {
   _backgroundFlow->mesh()->saveToHDF5(prefixString+".mesh");
   _backgroundFlow->saveToHDF5(prefixString+".soln");
+  _solnIncrement->saveToHDF5(prefixString+"_increment.soln");
+  _solnPrevTime->saveToHDF5(prefixString+"_prevtime.soln");
 }
 
 // ! set current time step used for transient solve
