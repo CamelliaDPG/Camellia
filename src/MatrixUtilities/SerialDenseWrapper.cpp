@@ -648,6 +648,27 @@ namespace Camellia {
       TEUCHOS_TEST_FOR_EXCEPTION(true, std::invalid_argument, "x and b's first dimension must match the dimension of A!");
     }
     
+    { // DEBUGGING:
+      bool printMatrixInfo = false;
+      if (printMatrixInfo)
+      {
+        int N = A.dimension(0);
+        int nnz = 0;
+        double tol = 1e-15;
+        for (int i=0; i<N; i++)
+        {
+          for (int j=0; j<N; j++)
+          {
+            if (abs(A(i,j)) > tol)
+            {
+              nnz++;
+            }
+          }
+        }
+        std::cout << "A has dimensions " << N << " x " << N << " and has " << nnz << " non-zero entries.\n";
+      }
+    }
+    
     int N = A.dimension(0);
     int nRHS = b.dimension(1); // M
     
