@@ -376,7 +376,8 @@ namespace
     int coarseElementCount = testHMultigrid ? 1 : 2;
     vector<double> dimensions(spaceDim,1.0);
     vector<int> elementCounts(spaceDim,coarseElementCount);
-    MeshPtr mesh = MeshFactory::rectilinearMesh(bf, dimensions, elementCounts, H1Order, delta_k, {0,0}, trialOrderEnhancements);
+    vector<double> x0(spaceDim,0.0);
+    MeshPtr mesh = MeshFactory::rectilinearMesh(bf, dimensions, elementCounts, H1Order, delta_k, x0, trialOrderEnhancements);
     
     SolutionPtr coarseSoln = Solution::solution(mesh);
     BCPtr bc = BC::bc();
@@ -890,12 +891,9 @@ namespace
     testProlongationOperatorQuad(simple, useStaticCondensation, useConformingTraces, testHMultigrid,
                                  levels, uniform, out, success);
   }
-  
-  /***
-   
-   Commenting out the two-level tests because, although these fail, this is not a use case currently
-   supported by the code, and it's not right now a priority to add it.
 
+  /*** Two-level tests ***/
+  
   TEUCHOS_UNIT_TEST( GMGOperator, ProlongationOperatorQuad_SimpleCondensedSolveTwoLevelNonconforming )
   {
     bool simple = true;
@@ -1087,5 +1085,4 @@ namespace
     testProlongationOperatorQuad(simple, useStaticCondensation, useConformingTraces, testHMultigrid,
                                  levels, uniform, out, success);
   }
-   */
 } // namespace
