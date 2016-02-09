@@ -141,7 +141,7 @@ namespace
     }
   }
   
-  void testCoarseBasisEqualsWeightedFineBasis(MeshPtr mesh, bool useConstraintTree, Teuchos::FancyOStream &out, bool &success)
+  void testCoarseBasisEqualsWeightedFineBasis(MeshPtr mesh, Teuchos::FancyOStream &out, bool &success)
   {
     /*
      For each active cell:
@@ -225,11 +225,11 @@ namespace
       {
         BasisCachePtr sideBasisCache = cellBasisCache->getSideBasisCache(sideOrdinal);
         BasisPtr fineBasis = mesh->getElementType(cellID)->trialOrderPtr->getBasis(traceVar->ID(),sideOrdinal);
-        auto fineBasisMap = useConstraintTree ? gda->getBasisMapExperimentalConstraintTree(cellID, dofOwnershipInfo, traceVar, sideOrdinal) :
-                                                gda->getBasisMapOld(cellID, dofOwnershipInfo, traceVar, sideOrdinal);
+        auto fineBasisMap = gda->getBasisMapOld(cellID, dofOwnershipInfo, traceVar, sideOrdinal);
         int cubDegree = fineBasis->getDegree();
         CellTopoPtr sideTopo = cellTopo->getSide(sideOrdinal);
-        for (int subcdim=0; subcdim<=sideDim; subcdim++)
+        int minSubcellDimension = BasisReconciliation::minimumSubcellDimension(fineBasis);
+        for (int subcdim=minSubcellDimension; subcdim<=sideDim; subcdim++)
         {
           int subcellCount = sideTopo->getSubcellCount(subcdim);
           for (int subcord=0; subcord<subcellCount; subcord++)
@@ -337,9 +337,7 @@ namespace
             
             CellConstraints coarseCellConstraints = gda->getCellConstraints(constrainingEntityInfo.cellID);
             auto coarseGlobalDofInfo = gda->getGlobalDofIndices(constrainingEntityInfo.cellID, cellConstraints);
-            auto coarseBasisMap = useConstraintTree ?
-            gda->getBasisMapExperimentalConstraintTree(constrainingEntityInfo.cellID, coarseGlobalDofInfo, traceVar, constrainingSideOrdinal) :
-            gda->getBasisMapOld(constrainingEntityInfo.cellID, coarseGlobalDofInfo, traceVar, constrainingSideOrdinal);
+            auto coarseBasisMap = gda->getBasisMapOld(constrainingEntityInfo.cellID, coarseGlobalDofInfo, traceVar, constrainingSideOrdinal);
             
             for (int pointOrdinal=0; pointOrdinal<numPoints; pointOrdinal++)
             {
@@ -636,10 +634,8 @@ namespace
     return poissonUniformMesh(elementCounts, H1Order, useConformingTraces);
   }
   
-  MeshPtr poissonIrregularMesh(int spaceDim, int irregularity, int H1Order)
+  MeshPtr poissonIrregularMesh(int spaceDim, int irregularity, int H1Order, bool useConformingTraces)
   {
-    bool useConformingTraces = true;
-    
     int elementWidth = 2;
     MeshPtr mesh = poissonUniformMesh(spaceDim, elementWidth, H1Order, useConformingTraces);
     
@@ -677,16 +673,14 @@ namespace
     return poissonUniformMesh(3, 2, 2, true);
   }
   
-  
   TEUCHOS_UNIT_TEST( GDAMinimumRule, BasisMapsAgreePoisson1D)
   {
     int spaceDim = 1;
     int elementWidth = 2;
     int H1Order = 2;
     bool useConformingTraces = true;
-    bool useConstraintTree = true;
     MeshPtr mesh = poissonUniformMesh(spaceDim, elementWidth, H1Order, useConformingTraces);
-    testCoarseBasisEqualsWeightedFineBasis(mesh, useConstraintTree, out, success);
+    testCoarseBasisEqualsWeightedFineBasis(mesh, out, success);
   }
   
   TEUCHOS_UNIT_TEST( GDAMinimumRule, BasisMapsAgreePoisson2DUniform)
@@ -695,9 +689,8 @@ namespace
     int elementWidth = 2;
     int H1Order = 2;
     bool useConformingTraces = true;
-    bool useConstraintTree = true;
     MeshPtr mesh = poissonUniformMesh(spaceDim, elementWidth, H1Order, useConformingTraces);
-    testCoarseBasisEqualsWeightedFineBasis(mesh, useConstraintTree, out, success);
+    testCoarseBasisEqualsWeightedFineBasis(mesh, out, success);
   }
   
   TEUCHOS_UNIT_TEST( GDAMinimumRule, BasisMapsAgreePoisson2DHangingNode1Irregular_Slow)
@@ -705,31 +698,20 @@ namespace
     int spaceDim = 2;
     int H1Order = 2;
     int irregularity = 1;
-    bool useConstraintTree = false;
-    MeshPtr mesh = poissonIrregularMesh(spaceDim, irregularity, H1Order);
-    testCoarseBasisEqualsWeightedFineBasis(mesh, useConstraintTree, out, success);
+    bool useConformingTraces = true;
+    MeshPtr mesh = poissonIrregularMesh(spaceDim, irregularity, H1Order, useConformingTraces);
+    testCoarseBasisEqualsWeightedFineBasis(mesh, out, success);
   }
-
-  // Commenting this out just to avoid pushing a new failing test -- will uncomment as I continue working on the
-  // constraint tree stuff.
-//  TEUCHOS_UNIT_TEST( GDAMinimumRule, BasisMapsAgreePoisson2DHangingNode1IrregularExperimentalConstraintTree_Slow)
-//  {
-//    int spaceDim = 2;
-//    int H1Order = 2;
-//    int irregularity = 1;
-//    bool useConstraintTree = true;
-//    MeshPtr mesh = poissonIrregularMesh(spaceDim, irregularity, H1Order);
-//    testCoarseBasisEqualsWeightedFineBasis(mesh, useConstraintTree, out, success);
-//  }
   
   TEUCHOS_UNIT_TEST( GDAMinimumRule, BasisMapsAgreePoisson2DHangingNode2Irregular_Slow)
   {
     int spaceDim = 2;
     int H1Order = 2;
     int irregularity = 2;
-    bool useConstraintTree = false;
-    MeshPtr mesh = poissonIrregularMesh(spaceDim, irregularity, H1Order);
-    testCoarseBasisEqualsWeightedFineBasis(mesh, useConstraintTree, out, success);
+    // in 2D, can support arbitrary-irregularity conforming meshes
+    bool useConformingTraces = true;
+    MeshPtr mesh = poissonIrregularMesh(spaceDim, irregularity, H1Order, useConformingTraces);
+    testCoarseBasisEqualsWeightedFineBasis(mesh, out, success);
   }
   
   TEUCHOS_UNIT_TEST( GDAMinimumRule, BasisMapsAgreePoisson3DUniform_Slow)
@@ -738,9 +720,8 @@ namespace
     int elementWidth = 2;
     int H1Order = 2;
     bool useConformingTraces = true;
-    bool useConstraintTree = false;
     MeshPtr mesh = poissonUniformMesh(spaceDim, elementWidth, H1Order, useConformingTraces);
-    testCoarseBasisEqualsWeightedFineBasis(mesh, useConstraintTree, out, success);
+    testCoarseBasisEqualsWeightedFineBasis(mesh, out, success);
   }
   
   TEUCHOS_UNIT_TEST( GDAMinimumRule, BasisMapsAgreePoisson3DHangingNode1Irregular_Slow)
@@ -748,9 +729,11 @@ namespace
     int irregularity = 1;
     int spaceDim = 3;
     int H1Order = 2;
-    bool useConstraintTree = false;
-    MeshPtr mesh = poissonIrregularMesh(spaceDim, irregularity, H1Order);
-    testCoarseBasisEqualsWeightedFineBasis(mesh, useConstraintTree, out, success);
+    // for 1-irregular meshes, can use conforming traces, and this is the harder test to pass.
+    // for 2+-irregular meshes, conforming traces are not supported, so should use non-conforming.
+    bool useConformingTraces = true;
+    MeshPtr mesh = poissonIrregularMesh(spaceDim, irregularity, H1Order, useConformingTraces);
+    testCoarseBasisEqualsWeightedFineBasis(mesh, out, success);
   }
   
   // This test fails.  Think of it as a warning (avoid 2-irregular meshes in 3D, at least...)
@@ -759,69 +742,18 @@ namespace
     int irregularity = 2;
     int spaceDim = 3;
     int H1Order = 1;
-    MeshPtr mesh = poissonIrregularMesh(spaceDim, irregularity, H1Order);
+    // for 1-irregular meshes, can use conforming traces, and this is the harder test to pass.
+    // for 2+-irregular meshes, conforming traces are not supported, so should use non-conforming.
+    bool useConformingTraces = false;
+    MeshPtr mesh = poissonIrregularMesh(spaceDim, irregularity, H1Order, useConformingTraces);
     { // DEBUGGING:
 //      mesh->getTopology()->printAllEntities();
 //      GDAMinimumRule* minRule = dynamic_cast<GDAMinimumRule*>(mesh->globalDofAssignment().get());
 //      minRule->printGlobalDofInfo();
     }
-    // 6-3-15: we fail this test for both values of useConstraintTree, but when it's true we fail
-    //         in our mapping of the physical points, which seems to indicate some other problem,
-    //         either with the test or with the point-mapping code in BasisReconciliation.
-    bool useConstraintTree = false;
 
-    testCoarseBasisEqualsWeightedFineBasis(mesh, useConstraintTree, out, success);
+    testCoarseBasisEqualsWeightedFineBasis(mesh, out, success);
   }
-  
-  //  TEUCHOS_UNIT_TEST( GDAMinimumRule, SideSubcellConstraintEnforcedBySuperPoisson3DHangingNode2Irregular)
-  //  {
-  //    /*
-  //     This test is meant to check that the CellConstraints.sideSubcellConstraintEnforcedBySuper is
-  //     filled in appropriately.  Kind of hard-coded right now, and just checks one case that's of interest.
-  //     */
-  //    int irregularity = 2;
-  //    int spaceDim = 3;
-  //    int sideDim = spaceDim - 1;
-  //    int H1Order = 1;
-  //    MeshPtr mesh = poissonIrregularMesh(spaceDim, irregularity, H1Order);
-  //    GDAMinimumRule* minRule = dynamic_cast<GDAMinimumRule*>(mesh->globalDofAssignment().get());
-  //    GlobalIndexType twoIrregularCellID = 16;
-  //    unsigned twoIrregularSideOrdinal = 2;
-  //    CellConstraints twoIrregularCellConstraints = minRule->getCellConstraints(twoIrregularCellID);
-  //
-  //    vector<vector<bool>> expectedSideSubcellConstraintsEnforcedBySuper(vector<vector<bool>>(sideDim+1));
-  //    expectedSideSubcellConstraintsEnforcedBySuper[sideDim] = {false}; // side itself not constrained by any super
-  //    int edgeDim = 1, vertexDim = 0;
-  //    // edges 2 has constraints enforced by super:
-  //    expectedSideSubcellConstraintsEnforcedBySuper[edgeDim] = {false,false,true,false};
-  //    // all vertices have constraints enforced by super:
-  //    expectedSideSubcellConstraintsEnforcedBySuper[vertexDim] = {true,true,true,true};
-  //
-  //    vector<vector<bool>> actualSideSubcellConstraintsEnforcedBySuper = twoIrregularCellConstraints.sideSubcellConstraintEnforcedBySuper[twoIrregularSideOrdinal];
-  //    for (int d=0; d<=sideDim; d++)
-  //    {
-  //      out << "Comparing expected to actual sideSubcellConstraintsEnforcedBySuper for d=" << d << "\n";
-  //      TEST_COMPARE_ARRAYS(expectedSideSubcellConstraintsEnforcedBySuper[d], actualSideSubcellConstraintsEnforcedBySuper[d]);
-  //    }
-  //
-  //    // second test: neighboring cell, 18, side 5 (top face)
-  //    twoIrregularCellID = 18;
-  //    twoIrregularSideOrdinal = 5;
-  //    twoIrregularCellConstraints = minRule->getCellConstraints(twoIrregularCellID);
-  //
-  //    expectedSideSubcellConstraintsEnforcedBySuper[sideDim] = {false}; // side itself not constrained by any super
-  //    // no edge has constraints enforced by super:
-  //    expectedSideSubcellConstraintsEnforcedBySuper[edgeDim] = {false,false,false,false};
-  //    // vertices 0,2,3 have constraints enforced by super:
-  //    expectedSideSubcellConstraintsEnforcedBySuper[vertexDim] = {true,false,true,true};
-  //
-  //    actualSideSubcellConstraintsEnforcedBySuper = twoIrregularCellConstraints.sideSubcellConstraintEnforcedBySuper[twoIrregularSideOrdinal];
-  //    for (int d=0; d<=sideDim; d++)
-  //    {
-  //      out << "Comparing expected to actual sideSubcellConstraintsEnforcedBySuper for d=" << d << "\n";
-  //      TEST_COMPARE_ARRAYS(expectedSideSubcellConstraintsEnforcedBySuper[d], actualSideSubcellConstraintsEnforcedBySuper[d]);
-  //    }
-  //  }
   
   TEUCHOS_UNIT_TEST( GDAMinimumRule, CheckConstraintsPoisson3DUniform )
   {
@@ -834,7 +766,10 @@ namespace
     int irregularity = 1;
     int spaceDim = 3;
     int H1Order = 2;
-    MeshPtr mesh = poissonIrregularMesh(spaceDim, irregularity, H1Order);
+    // for 1-irregular meshes, can use conforming traces, and this is the harder test to pass.
+    // for 2+-irregular meshes, conforming traces are not supported, so should use non-conforming.
+    bool useConformingTraces = true;
+    MeshPtr mesh = poissonIrregularMesh(spaceDim, irregularity, H1Order, useConformingTraces);
     testSubcellConstraintIsAncestor(mesh, out, success);
   }
   
@@ -843,7 +778,10 @@ namespace
     int irregularity = 2;
     int spaceDim = 3;
     int H1Order = 1;
-    MeshPtr mesh = poissonIrregularMesh(spaceDim, irregularity, H1Order);
+    // for 1-irregular meshes, can use conforming traces, and this is the harder test to pass.
+    // for 2+-irregular meshes, conforming traces are not supported, so should use non-conforming.
+    bool useConformingTraces = false;
+    MeshPtr mesh = poissonIrregularMesh(spaceDim, irregularity, H1Order, useConformingTraces);
     testSubcellConstraintIsAncestor(mesh, out, success);
   }
   
@@ -852,7 +790,8 @@ namespace
     int spaceDim = 2;
     int irregularity = 2;
     int H1Order = 2;
-    MeshPtr mesh = poissonIrregularMesh(spaceDim, irregularity, H1Order);
+    bool useConformingTraces = true;
+    MeshPtr mesh = poissonIrregularMesh(spaceDim, irregularity, H1Order, useConformingTraces);
     
     GlobalIndexType activeElementCount_initial = mesh->numActiveElements();
     
@@ -906,7 +845,7 @@ namespace
     int spaceDim = 3;
     bool useConformingTraces = true;
     PoissonFormulation poissonForm(spaceDim, useConformingTraces);
-    // TODO: try this with 2-irregular.  Once upon a time, there was an exception thrown for that case.
+
     for (int irregularity = 1; irregularity<=1; irregularity++)
     {
       SolutionPtr soln = poissonExactSolution3DHangingNodes(irregularity,phi_exact,H1Order);

@@ -983,67 +983,14 @@ LocalDofMapperPtr GMGOperator::getLocalCoefficientMap(GlobalIndexType fineCellID
       fluxOrdinalToLocalDofIndex = condensedDofInterpreterCoarse->fluxIndexLookupLocalCell(coarseCellID);
       condensibleVarIDs = condensedDofInterpreterCoarse->condensibleVariableIDs();
 
-      bool useOldImplementation = false;
-      if (!useOldImplementation)
+      Teuchos::RCP<Epetra_SerialDenseMatrix> fluxDuplicationMap = fluxDuplicationMapForCoarseCell(coarseCellID);
+      if (fluxDuplicationMap != Teuchos::null)
       {
-        Teuchos::RCP<Epetra_SerialDenseMatrix> fluxDuplicationMap = fluxDuplicationMapForCoarseCell(coarseCellID);
-        if (fluxDuplicationMap != Teuchos::null)
-        {
-          Teuchos::RCP<Epetra_SerialDenseMatrix> modifiedMatrix = Teuchos::rcp( new Epetra_SerialDenseMatrix(coarseFluxToFieldMapMatrix->M(),
-                                                                                                             coarseFluxToFieldMapMatrix->N()));
-          coarseFluxToFieldMapMatrix->Apply(*fluxDuplicationMap, *modifiedMatrix);
-          coarseFluxToFieldMapMatrix = modifiedMatrix;
-        }
+        Teuchos::RCP<Epetra_SerialDenseMatrix> modifiedMatrix = Teuchos::rcp( new Epetra_SerialDenseMatrix(coarseFluxToFieldMapMatrix->M(),
+                                                                                                           coarseFluxToFieldMapMatrix->N()));
+        coarseFluxToFieldMapMatrix->Apply(*fluxDuplicationMap, *modifiedMatrix);
+        coarseFluxToFieldMapMatrix = modifiedMatrix;
       }
-      else
-      {
-        // the below implementation is the original, which works, but potentially does a lot of redundant computation
-        // the above is a draft that aims to rectify that.
-        Epetra_CommPtr SerialComm = Teuchos::rcp( new Epetra_SerialComm() );
-        coarseSingleCellMesh = Teuchos::rcp( new Mesh(_coarseMesh, coarseCellID, SerialComm) );
-        
-        // TODO: setup some sort of lookup table for single cell mesh (indexed on ElementType); everything important about this happens on the reference cell...
-        
-        // the fact that the local view does not enforce conformity means that for conforming traces
-        // the coarseFluxToFieldMapMatrix does not do the right thing if we only map, say, one of two
-        // dofs identified with a vertex.  Since this is the way we approach things below, here we manipulate
-        // the matrix, essentially enforcing conformity:
-        // (NOTE: the same thing could be accomplished at the abstract, reference-element level.  It would be more
-        //  efficient to construct a matrix like this once for the element type, and then multiply matrices to enforce
-        //  conformity...)
-        FieldContainer<double> localData(coarseTrialOrdering->totalDofs());
-        FieldContainer<double> localCoefficients(coarseTrialOrdering->totalDofs());
-        FieldContainer<double> globalCoefficients;
-        FieldContainer<GlobalIndexType> globalDofIndices;
-        GlobalIndexType zeroCellID = 0;
-        int indexBase = 0;
-        int numDofsSingleElementMesh = coarseSingleCellMesh->numGlobalDofs();
-        Epetra_Map serialGlobalDofMap(numDofsSingleElementMesh,indexBase,*SerialComm);
-        Epetra_MultiVector globalCoefficientsVector(serialGlobalDofMap,1,true);
-        for (int fieldOrdinal=0; fieldOrdinal<coarseFluxToFieldMapMatrix->M(); fieldOrdinal++)
-        {
-          for (int fluxOrdinal=0; fluxOrdinal<coarseFluxToFieldMapMatrix->N(); fluxOrdinal++)
-          {
-            localData(fluxOrdinalToLocalDofIndex[fluxOrdinal]) = (*coarseFluxToFieldMapMatrix)(fieldOrdinal,fluxOrdinal);
-          }
-          
-          coarseSingleCellMesh->globalDofAssignment()->interpretLocalData(zeroCellID, localData, globalCoefficients, globalDofIndices);
-          
-          for (int i=0; i<globalCoefficients.size(); i++)
-          {
-            int globalDofIndex = globalDofIndices[i];
-            globalCoefficientsVector[0][globalDofIndex] = globalCoefficients[i];
-          }
-          
-          coarseSingleCellMesh->globalDofAssignment()->interpretGlobalCoefficients(zeroCellID, localCoefficients, globalCoefficientsVector);
-          for (int fluxOrdinal=0; fluxOrdinal<coarseFluxToFieldMapMatrix->N(); fluxOrdinal++)
-          {
-            (*coarseFluxToFieldMapMatrix)(fieldOrdinal,fluxOrdinal) = localCoefficients(fluxOrdinalToLocalDofIndex[fluxOrdinal]);
-          }
-        }
-      }
-      
-//      cout << "coarseFluxToFieldMapMatrix:\n" << *coarseFluxToFieldMapMatrix;
     }
     
     VarFactoryPtr vf = _fineMesh->bilinearForm()->varFactory();
@@ -1154,6 +1101,11 @@ LocalDofMapperPtr GMGOperator::getLocalCoefficientMap(GlobalIndexType fineCellID
                 // - *not* interior to the coarse domain, or
                 // - on interior subcells that are not owned by the child cell.
                 filterOutDuplicateFineDofs(fineBasis, fineCell, sideOrdinal, true, refBranch, weights);
+                // NOTE: applying the above filter is a bit fragile: since we are doing pattern-matching, it relies
+                //       on ownership of the fine dofs on the interior of a refined element being assigned in the same
+                //       way on every refined element.  This is in fact the case in GDAMinimumRule, and it seems a natural
+                //       thing, but if it were to change, that would be a problem.
+                
                 // **** end new weight-adjusting code ****
                 
                 set<unsigned> fineDofOrdinals(weights.fineOrdinals.begin(),weights.fineOrdinals.end());
@@ -1303,15 +1255,13 @@ LocalDofMapperPtr GMGOperator::getLocalCoefficientMap(GlobalIndexType fineCellID
               TEUCHOS_TEST_FOR_EXCEPTION(fineBasis->functionSpace() != coarseBasis->functionSpace(), std::invalid_argument, "Even after getting continuous basis for coarseBasis, fine and coarse function spaces disagree");
             }
             SubBasisReconciliationWeights weights = _br.constrainedWeights(fineBasis, sideRefBranches[sideOrdinal], coarseBasis, vertexNodePermutation);
-
-//            filterOutDuplicateFineDofs(fineBasis, fineCell, sideOrdinal, false, refBranch, weights);
             
             set<unsigned> fineDofOrdinals(weights.fineOrdinals.begin(),weights.fineOrdinals.end());
-            vector<GlobalIndexType> coarseDofIndices;
-            for (set<int>::iterator coarseOrdinalIt=weights.coarseOrdinals.begin(); coarseOrdinalIt != weights.coarseOrdinals.end(); coarseOrdinalIt++)
+            vector<GlobalIndexType> coarseDofIndices(weights.coarseOrdinals.size());
+            int i = 0;
+            for (int coarseOrdinal : weights.coarseOrdinals)
             {
-              unsigned coarseDofIndex = coarseTrialOrdering->getDofIndex(trialID, *coarseOrdinalIt, coarseSideOrdinal);
-              coarseDofIndices.push_back(coarseDofIndex);
+              coarseDofIndices[i++] = coarseTrialOrdering->getDofIndex(trialID, coarseOrdinal, coarseSideOrdinal);
             }
 
             basisMap.push_back(SubBasisDofMapper::subBasisDofMapper(fineDofOrdinals, coarseDofIndices, weights.weights));

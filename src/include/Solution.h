@@ -162,7 +162,7 @@ public:
   // Not implemented for now
   // MapPtr getPartitionMapSolutionDofsOnly2(); // omits lagrange constraints, zmcs, etc.
   MapPtr getPartitionMap2(PartitionIndexType rank, std::set<GlobalIndexType> &myGlobalIndicesSet,
-                          GlobalIndexType numGlobalDofs, int zeroMeanConstraintsSize, Teuchos::RCP<const Teuchos::Comm<int> > Comm );
+                          GlobalIndexType numGlobalDofs, int zeroMeanConstraintsSize, Teuchos_CommPtr Comm );
 
   Epetra_MultiVector* getGlobalCoefficients();
   TVectorPtr<Scalar> getGlobalCoefficients2();

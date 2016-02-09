@@ -19,12 +19,47 @@
 
 #include "BasisReconciliation.h"
 
-#include "GDAMinimumRuleConstraints.h"
-#include "GDAMinimumRuleConstraintTree.h"
-
 namespace Camellia
 {
-struct OwnershipInfo
+
+  struct AnnotatedEntity
+  {
+    GlobalIndexType cellID;
+    unsigned sideOrdinal;    // -1 for volume-based constraint determination (i.e. for cases when the basis domain is the whole cell)
+    unsigned subcellOrdinal; // subcell ordinal in the domain (cell for volume-based, side for side-based)
+    unsigned dimension; // subcells can be constrained by subcells of higher dimension (i.e. this is not redundant!)
+    
+    bool operator < (const AnnotatedEntity & other) const
+    {
+      if (cellID < other.cellID) return true;
+      if (cellID > other.cellID) return false;
+      
+      if (sideOrdinal < other.sideOrdinal) return true;
+      if (sideOrdinal > other.sideOrdinal) return false;
+      
+      if (subcellOrdinal < other.subcellOrdinal) return true;
+      if (subcellOrdinal > other.subcellOrdinal) return false;
+      
+      if (dimension < other.dimension) return true;
+      if (dimension > other.dimension) return false;
+      
+      return false; // this is the case of equality.
+    }
+    
+    bool operator == (const AnnotatedEntity & other) const
+    {
+      return !(*this < other) && !(other < *this);
+    }
+    
+    bool operator != (const AnnotatedEntity & other) const
+    {
+      return !(*this == other);
+    }
+  };
+  
+  std::ostream& operator << (std::ostream& os, AnnotatedEntity& annotatedEntity);
+  
+  struct OwnershipInfo
 {
   GlobalIndexType cellID;
   GlobalIndexType owningSubcellEntityIndex;
@@ -58,7 +93,6 @@ class GDAMinimumRule : public GlobalDofAssignment
   typedef vector< SubCellOrdinalToMap > SubCellDofIndexInfo; // index to vector: subcell dimension
 
   map< GlobalIndexType, CellConstraints > _constraintsCache;
-  map< pair<GlobalIndexType,unsigned>, Teuchos::RCP<GDAMinimumRuleConstraintTree> > _constraintTreeCache;
   map< GlobalIndexType, LocalDofMapperPtr > _dofMapperCache;
   map< GlobalIndexType, map<int, map<int, LocalDofMapperPtr> > > _dofMapperForVariableOnSideCache; // cellID --> side --> variable --> LocalDofMapper
   map< GlobalIndexType, SubCellDofIndexInfo> _ownedGlobalDofIndicesCache; // (cellID --> SubCellDofIndexInfo)
@@ -69,16 +103,9 @@ class GDAMinimumRule : public GlobalDofAssignment
 
   static string annotatedEntityToString(AnnotatedEntity &entity);
 
-  // LOOKS like filterSubBasisConstraintData() is unused.  If not, should be deleted.
-  void filterSubBasisConstraintData(set<unsigned> &basisDofOrdinals,vector<GlobalIndexType> &globalDofOrdinals,
-                                    Intrepid::FieldContainer<double> &constraintMatrixSideInterior, Intrepid::FieldContainer<bool> &processedDofs,
-                                    DofOrderingPtr trialOrdering, VarPtr var, int sideOrdinal = VOLUME_INTERIOR_SIDE_ORDINAL);
-
   typedef vector< SubBasisDofMapperPtr > BasisMap;
   BasisMap getBasisMap(GlobalIndexType cellID, SubCellDofIndexInfo& dofOwnershipInfo, VarPtr var);
   BasisMap getBasisMapVolumeRestrictedToSide(GlobalIndexType cellID, SubCellDofIndexInfo& dofOwnershipInfo, VarPtr var, int sideOrdinal);
-
-  BasisMap getBasisMapExperimental(GlobalIndexType cellID, SubCellDofIndexInfo& dofOwnershipInfo, VarPtr var, int sideOrdinal);
 
   void getGlobalDofIndices(GlobalIndexType cellID, int varID, int sideOrdinal,
                            Intrepid::FieldContainer<GlobalIndexType> &globalDofIndices);
@@ -95,10 +122,6 @@ class GDAMinimumRule : public GlobalDofAssignment
 public:
   // these are public just for easier testing:
   BasisMap getBasisMapOld(GlobalIndexType cellID, SubCellDofIndexInfo& dofOwnershipInfo, VarPtr var, int sideOrdinal);
-
-  // new (6/2/15), experimental getBasisMap using GDAMinimumRuleConstraintTree:
-  BasisMap getBasisMapExperimentalConstraintTree(GlobalIndexType cellID, SubCellDofIndexInfo& dofOwnershipInfo, VarPtr var, int sideOrdinal);
-  Teuchos::RCP<GDAMinimumRuleConstraintTree> getConstraintTree(GlobalIndexType cellID, unsigned sideOrdinal);
   
   CellConstraints getCellConstraints(GlobalIndexType cellID);
   LocalDofMapperPtr getDofMapper(GlobalIndexType cellID, CellConstraints &constraints, int varIDToMap = -1, int sideOrdinalToMap = -1);

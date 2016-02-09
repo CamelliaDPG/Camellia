@@ -56,7 +56,7 @@ TEUCHOS_UNIT_TEST_TEMPLATE_1_DECL( MPIWrapper, AllGatherCompact, Scalar )
 
   FieldContainer<Scalar> allValues;
   FieldContainer<int> offsets;
-  MPIWrapper::allGatherCompact(allValues,myValues,offsets);
+  MPIWrapper::allGatherCompact(*MPIWrapper::CommWorld(),allValues,myValues,offsets);
 
   TEST_COMPARE_ARRAYS(expectedOffsets, offsets);
 

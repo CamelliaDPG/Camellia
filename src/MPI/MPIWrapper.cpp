@@ -14,14 +14,14 @@
 using namespace Intrepid;
 using namespace Camellia;
 
-void MPIWrapper::allGather(FieldContainer<int> &allValues, int myValue)
+void MPIWrapper::allGather(const Epetra_Comm &Comm, FieldContainer<int> &allValues, int myValue)
 {
   FieldContainer<int> myValueFC(1);
   myValueFC[0] = myValue;
-  MPIWrapper::allGatherHomogeneous(allValues, myValueFC);
+  MPIWrapper::allGatherHomogeneous(Comm, allValues, myValueFC);
 }
 
-void MPIWrapper::allGatherHomogeneous(FieldContainer<int> &allValues, FieldContainer<int> &myValues)
+void MPIWrapper::allGatherHomogeneous(const Epetra_Comm &Comm, FieldContainer<int> &allValues, FieldContainer<int> &myValues)
 {
   int numProcs = Teuchos::GlobalMPISession::getNProc();
   if (numProcs != allValues.dimension(0))
@@ -33,7 +33,6 @@ void MPIWrapper::allGatherHomogeneous(FieldContainer<int> &allValues, FieldConta
     TEUCHOS_TEST_FOR_EXCEPTION(true, std::invalid_argument, "myValues size invalid");
   }
 #ifdef HAVE_MPI
-  Epetra_MpiComm Comm(MPI_COMM_WORLD);
   Comm.GatherAll(&myValues[0], &allValues[0], allValues.size()/numProcs);
 #else
 #endif
@@ -42,14 +41,9 @@ void MPIWrapper::allGatherHomogeneous(FieldContainer<int> &allValues, FieldConta
 // \brief Resizes gatheredValues to be the size of the sum of the myValues containers, and fills it with the values from those containers.
 //        Not necessarily super-efficient in terms of communication, but avoids allocating a big array like allGatherHomogeneous would.
 template<typename Scalar>
-void MPIWrapper::allGatherCompact(FieldContainer<Scalar> &gatheredValues, FieldContainer<Scalar> &myValues, FieldContainer<int> &offsets)
+void MPIWrapper::allGatherCompact(const Epetra_Comm &Comm, FieldContainer<Scalar> &gatheredValues,
+                                  FieldContainer<Scalar> &myValues, FieldContainer<int> &offsets)
 {
-#ifdef HAVE_MPI
-  Epetra_MpiComm Comm(MPI_COMM_WORLD);
-#else
-  Epetra_SerialComm Comm;
-#endif
-
   int mySize = myValues.size();
   int totalSize;
   Comm.SumAll(&mySize, &totalSize, 1);
@@ -64,25 +58,27 @@ void MPIWrapper::allGatherCompact(FieldContainer<Scalar> &gatheredValues, FieldC
   {
     gatheredValues[myOffset+i] = myValues[i];
   }
-  MPIWrapper::entryWiseSum(gatheredValues);
+  MPIWrapper::entryWiseSum(Comm, gatheredValues);
 
-  offsets.resize(Teuchos::GlobalMPISession::getNProc());
-  offsets[Teuchos::GlobalMPISession::getRank()] = myOffset;
-  MPIWrapper::entryWiseSum(offsets);
+  offsets.resize(Comm.NumProc());
+  offsets[Comm.MyPID()] = myOffset;
+  MPIWrapper::entryWiseSum(Comm, offsets);
 }
 
-void MPIWrapper::allGatherCompact(FieldContainer<int> &gatheredValues,
+void MPIWrapper::allGatherCompact(const Epetra_Comm &Comm,
+                                  FieldContainer<int> &gatheredValues,
                                   FieldContainer<int> &myValues,
                                   FieldContainer<int> &offsets)
 {
-  MPIWrapper::allGatherCompact<int>(gatheredValues,myValues,offsets);
+  MPIWrapper::allGatherCompact<int>(Comm,gatheredValues,myValues,offsets);
 }
 
-void MPIWrapper::allGatherCompact(FieldContainer<double> &gatheredValues,
+void MPIWrapper::allGatherCompact(const Epetra_Comm &Comm,
+                                  FieldContainer<double> &gatheredValues,
                                   FieldContainer<double> &myValues,
                                   FieldContainer<int> &offsets)
 {
-  MPIWrapper::allGatherCompact<double>(gatheredValues,myValues,offsets);
+  MPIWrapper::allGatherCompact<double>(Comm,gatheredValues,myValues,offsets);
 }
 
 Epetra_CommPtr& MPIWrapper::CommSerial()
