@@ -66,7 +66,7 @@ void setGMGSolver(CompressibleNavierStokesFormulation &form, vector<MeshPtr> &me
   Teuchos::RCP<Solver> coarseSolver = Solver::getDirectSolver(true);
   Teuchos::RCP<GMGSolver> gmgSolver = Teuchos::rcp( new GMGSolver(form.solutionIncrement(), meshesCoarseToFine, cgMaxIters, cgTol,
                                                                   GMGOperator::V_CYCLE, coarseSolver, useCondensedSolve) );
-  gmgSolver->setAztecOutput(0);
+  gmgSolver->setAztecOutput(10);
 #if defined(HAVE_AMESOS_SUPERLUDIST) || defined(HAVE_AMESOS2_SUPERLUDIST)
   SuperLUDistSolver* superLUSolver = dynamic_cast<SuperLUDistSolver*>(coarseSolver.get());
   if (superLUSolver)
@@ -166,7 +166,7 @@ int main(int argc, char *argv[])
   int polyOrderCoarse = 1;
   double cgTol = 1e-10;
   cmdp.setOption("cgTol", &cgTol, "iterative solver tolerance");
-  int cgMaxIters = 2000;
+  int cgMaxIters = 200;
   cmdp.setOption("cgMaxIters", &cgMaxIters, "maximum number of iterations for linear solver");
   double nlTol = 1e-6;
   cmdp.setOption("nlTol", &nlTol, "Newton iteration tolerance");
@@ -925,6 +925,12 @@ int main(int argc, char *argv[])
           setGMGSolver(form, meshesCoarseToFine, cgMaxIters, cgTol, useCondensedSolve);
 
         double alpha = form.solveAndAccumulate();
+        int solveCode = form.getSolveCode();
+        if (solveCode != 0)
+        {
+          if (rank==0) cout << "Solve not completed correctly, repeating Newton iteration" << endl;
+          stepNumber--;
+        }
         l2NormOfIncrement = form.L2NormSolutionIncrement();
         stepNumber++;
 
@@ -934,6 +940,7 @@ int main(int argc, char *argv[])
         {
           Teuchos::RCP<GMGSolver> gmgSolver = Teuchos::rcp(dynamic_cast<GMGSolver*>(form.getSolver().get()), false);
           gmgSolver->setUseConjugateGradient(useCG);
+          gmgSolver->setComputeConditionNumberEstimate(false);
           int iterationCount = gmgSolver->iterationCount();
           totalIterationCount += iterationCount;
           if (rank==0) cout << " (" << iterationCount << " GMG iterations)\n";
@@ -1057,6 +1064,7 @@ int main(int argc, char *argv[])
         {
           Teuchos::RCP<GMGSolver> gmgSolver = Teuchos::rcp(dynamic_cast<GMGSolver*>(form.getSolver().get()), false);
           gmgSolver->setUseConjugateGradient(useCG);
+          gmgSolver->setComputeConditionNumberEstimate(false);
           int iterationCount = gmgSolver->iterationCount();
           totalIterationCount += iterationCount;
           if (rank==0) cout << " (" << iterationCount << " GMG iterations)\n";

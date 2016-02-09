@@ -15,6 +15,14 @@
 
 using namespace Camellia;
 
+vector<double> makeVertex(double v0, double v1)
+{
+  vector<double> v;
+  v.push_back(v0);
+  v.push_back(v1);
+  return v;
+}
+
 vector<double> makeVertex(double v0, double v1, double v2)
 {
   vector<double> v;
@@ -116,6 +124,75 @@ public:
     {
       return t / _timeScale;
     }
+  }
+};
+
+class BoundaryLayerExact : public SimpleFunction<double>
+{
+  double _Re;
+public:
+  BoundaryLayerExact(double Re)
+  {
+    _Re = Re;
+  }
+  double value(double x, double y, double t)
+  {
+    return 1-erf(0.5*sqrt(_Re)*y/sqrt(t));
+  }
+};
+
+// class RightSolution : public Function {
+//   private:
+//     FunctionPtr _function;
+//     double _shift;
+//   public:
+//     RightSolution(FunctionPtr function, double shift) : Function(0), _function(function), _shift(shift) {}
+//     void values(FieldContainer<double> &values, BasisCachePtr basisCache) {
+//       int numCells = values.dimension(0);
+//       int numPoints = values.dimension(1);
+//
+//       Intrepid::FieldContainer<double> rightPoint(1,1,3);
+//       Intrepid::FieldContainer<double> rightRefPoint(1,3);
+//
+//       const FieldContainer<double> *points = &(basisCache->getPhysicalCubaturePoints());
+//       for (int cellIndex=0; cellIndex<numCells; cellIndex++) {
+//         for (int ptIndex=0; ptIndex<numPoints; ptIndex++) {
+//           double x = (*points)(cellIndex,ptIndex,0);
+//           double y = (*points)(cellIndex,ptIndex,1);
+//           double t = (*points)(cellIndex,ptIndex,2);
+//           rightPoint(0,0,0) = 1;
+//           rightPoint(0,0,1) = y;
+//           rightPoint(0,0,2) = t;
+//         }
+//       }
+//       _function->values(values, shiftedBasisCache);
+//
+//       const FieldContainer<double> *points = &(basisCache->getPhysicalCubaturePoints());
+//       for (int cellIndex=0; cellIndex<numCells; cellIndex++) {
+//         for (int ptIndex=0; ptIndex<numPoints; ptIndex++) {
+//           double x = (*points)(cellIndex,ptIndex,0);
+//           double y = (*points)(cellIndex,ptIndex,1);
+//           double t = (*points)(cellIndex,ptIndex,2);
+//
+//           values(cellIndex, ptIndex) = pow(values(cellIndex, ptIndex), _power);
+//         }
+//       }
+//     }
+// };
+
+class ShiftedFunction : public SimpleFunction<double>
+{
+  Teuchos::RCP<SimpleFunction<double>> _fcn;
+  double _shift;
+public:
+  ShiftedFunction(Teuchos::RCP<SimpleFunction<double>> fcn, double shift)
+  {
+    _fcn = fcn;
+    _shift = shift;
+  }
+  double value(double x)
+  {
+    return _fcn->value(x-_shift);
   }
 };
 
@@ -516,6 +593,32 @@ int main(int argc, char *argv[])
   }
   else if (problemName == "BoundaryLayer")
   {
+    // vector<PeriodicBCPtr> periodicBCs;
+    // periodicBCs.push_back(PeriodicBC::xIdentification(0, 1));
+
+    // CellTopoPtr quad_4 = CellTopology::quad();
+    // vector<double> v0 = makeVertex(0,0);
+    // vector<double> v1 = makeVertex(1,0);
+    // vector<double> v2 = makeVertex(1,1);
+    // vector<double> v3 = makeVertex(0,1);
+    // vector< vector<double> > vertices;
+    // vertices.push_back(v0);
+    // vertices.push_back(v1);
+    // vertices.push_back(v2);
+    // vertices.push_back(v3);
+    // vector<unsigned> quadVertexList;
+    // quadVertexList.push_back(0);
+    // quadVertexList.push_back(1);
+    // quadVertexList.push_back(2);
+    // quadVertexList.push_back(3);
+    // vector< vector<unsigned> > elementVertices;
+    // elementVertices.push_back(quadVertexList);
+    // vector< CellTopoPtr > cellTopos;
+    // cellTopos.push_back(quad_4);
+    // MeshGeometryPtr meshGeometry = Teuchos::rcp( new MeshGeometry(vertices, elementVertices, cellTopos) );
+    // // meshTopo = Teuchos::rcp( new MeshTopology(meshGeometry) );
+    // meshTopo = Teuchos::rcp( new MeshTopology(meshGeometry, periodicBCs) );
+
     // int tensorialDegree = 1;
     // CellTopoPtr quad_x_time = CellTopology::cellTopology(shards::getCellTopologyData<shards::Quadrilateral<4> >(), tensorialDegree);
     // vector<double> v00 = makeVertex(0,0,0);
@@ -549,28 +652,30 @@ int main(int argc, char *argv[])
     // vector< CellTopoPtr > spaceTimeCellTopos;
     // spaceTimeCellTopos.push_back(quad_x_time);
     // MeshGeometryPtr spaceTimeMeshGeometry = Teuchos::rcp( new MeshGeometry(spaceTimeVertices, spaceTimeElementVertices, spaceTimeCellTopos) );
-    // MeshTopologyPtr spaceTimeMeshTopology = Teuchos::rcp( new MeshTopology(spaceTimeMeshGeometry) );
+    // meshTopo = Teuchos::rcp( new MeshTopology(spaceTimeMeshGeometry) );
+    // meshTopo = Teuchos::rcp( new MeshTopology(spaceTimeMeshGeometry, periodicBCs) );
 
-    // vector<double> x0;
-    // vector<double> dims;
-    // vector<int> numElements;
-    // x0.push_back(-.5);
-    // x0.push_back(-.5);
-    // dims.push_back(1.5);
-    // dims.push_back(2.0);
-    // numElements.push_back(3);
-    // numElements.push_back(4);
-    // pressureConstraintPoint = {0,0};
-    // meshTopo = MeshFactory::rectilinearMeshTopology(dims,numElements,x0);
-    vector<PeriodicBCPtr> periodicBCs;
+    // vector<PeriodicBCPtr> periodicBCs;
     // periodicBCs.push_back(PeriodicBC::xIdentification(0, 1));
     // MeshTopologyPtr meshTopo = MeshFactory::quadMeshTopology(1.0, 1.0, 1, 1, false, 0.0, 0.0, periodicBCs);
-    MeshTopologyPtr meshTopo = MeshFactory::quadMeshTopology(1.0, 1.0, 1, 1, false, 0.0, 0.0);
+    // MeshTopologyPtr meshTopo = MeshFactory::quadMeshTopology(1.0, 1.0, 1, 1, false, 0.0, 0.0);
+
+    vector<double> x0;
+    vector<double> dims;
+    vector<int> numElements;
+    x0.push_back(0);
+    x0.push_back(0);
+    dims.push_back(1.0);
+    dims.push_back(1.0);
+    numElements.push_back(1);
+    numElements.push_back(1);
+    pressureConstraintPoint = {0,0};
+    meshTopo = MeshFactory::rectilinearMeshTopology(dims,numElements,x0);
     if (!steady)
     {
       double t0 = 0;
       double t1 = 1;
-      int temporalDivisions = 2;
+      int temporalDivisions = 1;
       meshTopo = MeshFactory::spaceTimeMeshTopology(meshTopo, t0, t1, temporalDivisions);
     }
   }
@@ -729,6 +834,8 @@ int main(int argc, char *argv[])
   else if (problemName == "BoundaryLayer")
   {
     BCPtr bc = form.solutionIncrement()->bc();
+    // SolutionPtr backgroundFlow = form.solution();
+    // FunctionPtr tm1_left = Function::solution(form.tn_hat(1), backgroundFlow);
 
     SpatialFilterPtr leftX  = SpatialFilter::matchingX(0);
     SpatialFilterPtr rightX = SpatialFilter::matchingX(1);
@@ -740,10 +847,12 @@ int main(int argc, char *argv[])
     FunctionPtr zero = Function::constant(0);
     FunctionPtr onezero = Function::vectorize(one,zero);
     FunctionPtr zeros = Function::vectorize(zero,zero);
-    // form.addInflowCondition(leftX,  u_exact);
-    // form.addInflowCondition(rightX, u_exact);
-    form.addInflowCondition(leftY,  onezero);
-    form.addInflowCondition(rightY, zeros);
+    FunctionPtr u1_exact = Teuchos::rcp(new BoundaryLayerExact(Re));
+    FunctionPtr u_exact = Function::vectorize(u1_exact,zero);
+    form.addInflowCondition(leftX,  u_exact);
+    form.addInflowCondition(rightX, u_exact);
+    form.addInflowCondition(leftY,  u_exact);
+    form.addInflowCondition(rightY, u_exact);
 
     if (!steady)
       form.addInitialCondition(0, zeros);

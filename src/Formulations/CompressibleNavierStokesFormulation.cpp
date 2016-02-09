@@ -456,6 +456,8 @@ CompressibleNavierStokesFormulation::CompressibleNavierStokesFormulation(MeshTop
               + 0.5*(u1_init*u1_init+u2_init*u2_init+u3_init*u3_init))*n_t;
         }
         break;
+      default:
+        TEUCHOS_TEST_FOR_EXCEPTION(true, std::invalid_argument, "_spaceDim must be 1,2, or 3!");
     }
 
     map<int, FunctionPtr> initialGuess;
@@ -555,9 +557,8 @@ CompressibleNavierStokesFormulation::CompressibleNavierStokesFormulation(MeshTop
       u3_prev_time = Function::solution(this->u(3), _solnPrevTime);
       T_prev_time  = Function::solution(this->T(), _solnPrevTime);
       break;
-
     default:
-      break;
+      TEUCHOS_TEST_FOR_EXCEPTION(true, std::invalid_argument, "_spaceDim must be 1,2, or 3!");
   }
 
   // S terms:
@@ -621,7 +622,7 @@ CompressibleNavierStokesFormulation::CompressibleNavierStokesFormulation(MeshTop
       _rhs->addTerm(-1./_muFunc * D33_prev * S3->z());
       break;
     default:
-      break;
+      TEUCHOS_TEST_FOR_EXCEPTION(true, std::invalid_argument, "_spaceDim must be 1,2, or 3!");
   }
 
   // tau terms:
@@ -658,7 +659,7 @@ CompressibleNavierStokesFormulation::CompressibleNavierStokesFormulation(MeshTop
       _rhs->addTerm(-Pr()/(Cp()*_muFunc) * q3_prev * tau->z());
       break;
     default:
-      break;
+      TEUCHOS_TEST_FOR_EXCEPTION(true, std::invalid_argument, "_spaceDim must be 1,2, or 3!");
   }
 
   // if (_spaceTime)
@@ -722,7 +723,7 @@ CompressibleNavierStokesFormulation::CompressibleNavierStokesFormulation(MeshTop
       _rhs->addTerm( rho_prev*u3_prev * vc->dz());
       break;
     default:
-      break;
+      TEUCHOS_TEST_FOR_EXCEPTION(true, std::invalid_argument, "_spaceDim must be 1,2, or 3!");
   }
 
   // vm
@@ -896,7 +897,7 @@ CompressibleNavierStokesFormulation::CompressibleNavierStokesFormulation(MeshTop
       _rhs->addTerm(-(D32_prev+D23_prev) * vm3->dy());
       _rhs->addTerm(-(D33_prev+D33_prev-2./3*D11_prev-2./3*D22_prev-2./3*D33_prev) * vm3->dz());
     default:
-      break;
+      TEUCHOS_TEST_FOR_EXCEPTION(true, std::invalid_argument, "_spaceDim must be 1,2, or 3!");
   }
   // // vm1:
   // if (_spaceTime)
@@ -1124,7 +1125,7 @@ CompressibleNavierStokesFormulation::CompressibleNavierStokesFormulation(MeshTop
       _rhs->addTerm(-(D33_prev+D33_prev-2./3*(D11_prev+D22_prev+D33_prev))*u3_prev * ve->dz());
       break;
     default:
-      break;
+      TEUCHOS_TEST_FOR_EXCEPTION(true, std::invalid_argument, "_spaceDim must be 1,2, or 3!");
   }
 
   vector<VarPtr> missingTestVars = _bf->missingTestVars();
@@ -1601,6 +1602,8 @@ CompressibleNavierStokesFormulation::CompressibleNavierStokesFormulation(MeshTop
       break;
     case 3:
       break;
+    default:
+      TEUCHOS_TEST_FOR_EXCEPTION(true, std::invalid_argument, "_spaceDim must be 1,2, or 3!");
   }
 
   IPPtr ip = _ips.at(normName);
@@ -1901,9 +1904,8 @@ void CompressibleNavierStokesFormulation::addMassFluxCondition(SpatialFilterPtr 
     case 3:
       tc_exact = rho_exact*u_exact->x()*n_x + rho_exact*u_exact->y()*n_y + rho_exact*u_exact->z()*n_z;
       break;
-
     default:
-      break;
+      TEUCHOS_TEST_FOR_EXCEPTION(true, std::invalid_argument, "_spaceDim must be 1,2, or 3!");
   }
   if (_spaceTime) tc_exact = tc_exact + rho_exact*n_t;
   // FunctionPtr tc_exact = rho_exact*beta_x*n_x;
@@ -2003,7 +2005,7 @@ void CompressibleNavierStokesFormulation::addXMomentumFluxCondition(SpatialFilte
       break;
 
     default:
-      break;
+      TEUCHOS_TEST_FOR_EXCEPTION(true, std::invalid_argument, "_spaceDim must be 1,2, or 3!");
   }
 
   if (_neglectFluxesOnRHS)
@@ -2098,7 +2100,7 @@ void CompressibleNavierStokesFormulation::addYMomentumFluxCondition(SpatialFilte
       break;
 
     default:
-      break;
+      TEUCHOS_TEST_FOR_EXCEPTION(true, std::invalid_argument, "_spaceDim must be 1,2, or 3!");
   }
 
   if (_neglectFluxesOnRHS)
@@ -2174,7 +2176,7 @@ void CompressibleNavierStokesFormulation::addZMomentumFluxCondition(SpatialFilte
       break;
 
     default:
-      break;
+      TEUCHOS_TEST_FOR_EXCEPTION(true, std::invalid_argument, "_spaceDim must be 1,2, or 3!");
   }
 
   if (_neglectFluxesOnRHS)
@@ -2431,7 +2433,7 @@ void CompressibleNavierStokesFormulation::addEnergyFluxCondition(SpatialFilterPt
       break;
 
     default:
-      break;
+      TEUCHOS_TEST_FOR_EXCEPTION(true, std::invalid_argument, "_spaceDim must be 1,2, or 3!");
   }
 
   if (_neglectFluxesOnRHS)
@@ -2662,6 +2664,11 @@ void CompressibleNavierStokesFormulation::pRefine()
 SolverPtr CompressibleNavierStokesFormulation::getSolver()
 {
   return _solver;
+}
+
+int CompressibleNavierStokesFormulation::getSolveCode()
+{
+  return _solveCode;
 }
 
 void CompressibleNavierStokesFormulation::setSolver(SolverPtr solver)
@@ -3236,7 +3243,7 @@ SolutionPtr CompressibleNavierStokesFormulation::solutionIncrement()
 
 double CompressibleNavierStokesFormulation::solveAndAccumulate()
 {
-  _solnIncrement->solve(_solver);
+  _solveCode = _solnIncrement->solve(_solver);
 
   bool allowEmptyCells = false;
   set<int> nlVars;
@@ -3407,6 +3414,8 @@ double CompressibleNavierStokesFormulation::timeResidual()
         + (tre*tre)->integrate(_solnPrevTime->mesh(),5));
       return timeRes;
       break;
+    default:
+      TEUCHOS_TEST_FOR_EXCEPTION(true, std::invalid_argument, "_spaceDim must be 1,2, or 3!");
   }
 
 }
