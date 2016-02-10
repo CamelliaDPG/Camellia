@@ -1,4 +1,5 @@
 #include "CamelliaDebugUtility.h"
+#include "CondensedDofInterpreter.h"
 #include "ConvectionDiffusionFormulation.h"
 #include "ExpFunction.h"
 #include "GMGOperator.h"
@@ -274,10 +275,13 @@ void initializeSolutionAndCoarseMesh(SolutionPtr &solution, vector<MeshPtr> &mes
 //      {
 //        print("h-refining cells", activeCellIDs);
 //      }
+      IndexType nextCellID = meshTopo->cellCount();
       for (IndexType activeCellID : activeCellIDs)
       {
         CellTopoPtr cellTopo = meshTopo->getCell(activeCellID)->topology();
-        meshTopo->refineCell(activeCellID, RefinementPattern::regularRefinementPattern(cellTopo));
+        RefinementPatternPtr refPattern = RefinementPattern::regularRefinementPattern(cellTopo);
+        meshTopo->refineCell(activeCellID, refPattern, nextCellID);
+        nextCellID += refPattern->numChildren();
       }
       meshWidthCells *= 2;
     }
@@ -434,6 +438,8 @@ int main(int argc, char *argv[])
   bool conformingTraces = false;
   bool enhanceFieldsForH1TracesWhenConforming = true;
 
+  int numGrids = -1;
+  
   int numCells = -1;
   int numCellsRootMesh = -1;
   int spaceDim = 1;
@@ -442,6 +448,8 @@ int main(int argc, char *argv[])
   double cgTol = 1e-10;
   int cgMaxIterations = 2000;
 
+  bool clearFinestCondensedDofInterpreterAfterProlongation = false;
+  
   bool reportTimings = false;
   bool useZeroMeanConstraints = false;
   bool useConjugateGradient = true;
@@ -456,7 +464,7 @@ int main(int argc, char *argv[])
   bool setUpMeshesAndQuit = false;
   bool setUpMeshTopologyAndQuit = false;
   
-  string multigridStrategyString = "W-cycle";
+  string multigridStrategyString = "V-cycle";
   
   bool pauseOnRankZero = false;
 
@@ -481,7 +489,12 @@ int main(int argc, char *argv[])
   
   cmdp.setOption("azOutput", &azOutput);
   cmdp.setOption("logFineOperator", "dontLogFineOperator", &logFineOperator);
+  
+  cmdp.setOption("clearFinestCondensedDofInterpreterAfterProlongation", "retainFinestCondensedDofInterpreterAfterProlongation",
+                 &clearFinestCondensedDofInterpreterAfterProlongation);
+  
   cmdp.setOption("multigridStrategy", &multigridStrategyString, "Multigrid strategy: V-cycle, W-cycle, Full-V, Full-W, or Two-level");
+  cmdp.setOption("numGrids", &numGrids, "Number of grid levels to use (-1 means all).");
   
   cmdp.setOption("useCondensedSolve", "useStandardSolve", &useCondensedSolve);
   cmdp.setOption("useConformingTraces", "useNonConformingTraces", &conformingTraces);
@@ -623,6 +636,18 @@ int main(int argc, char *argv[])
     exit(0);
   }
   
+  if (numGrids != -1)
+  {
+    vector<MeshPtr> newMeshesCoarseToFine;
+    for (int gridNumber=0; gridNumber < numGrids; gridNumber++)
+    {
+      MeshPtr lastMesh = meshesCoarseToFine[meshesCoarseToFine.size()-1];
+      meshesCoarseToFine.pop_back();
+      newMeshesCoarseToFine.insert(newMeshesCoarseToFine.begin(), lastMesh);
+    }
+    meshesCoarseToFine = newMeshesCoarseToFine;
+  }
+  
   double meshInitializationTime = timer.ElapsedTime();
 
   int numDofs = solution->mesh()->numGlobalDofs();
@@ -707,6 +732,8 @@ int main(int argc, char *argv[])
     gmgSolver->setAztecOutput(azOutput);
     gmgSolver->gmgOperator()->setNarrateOnRankZero(logFineOperator,"finest GMGOperator");
     
+    gmgSolver->gmgOperator()->setClearFinestCondensedDofInterpreterAfterProlongation(clearFinestCondensedDofInterpreterAfterProlongation);
+    
     gmgSolverInitializationTime = timer.ElapsedTime();
     if (rank==0)
     {
@@ -729,13 +756,28 @@ int main(int argc, char *argv[])
       exit(0);
     }
     
-
-    
     timer.ResetStartTime();
     
     solution->solve(gmgSolver);
     solveTime = timer.ElapsedTime();
 
+    if (useCondensedSolve)
+    {
+      long long memoryCost = 0;
+      
+      Teuchos::RCP<GMGOperator> gmgOperator = gmgSolver->gmgOperator();
+      while (gmgOperator != Teuchos::null)
+      {
+        CondensedDofInterpreter<double>* dofInterpreter = dynamic_cast<CondensedDofInterpreter<double>*>(gmgOperator->getFineDofInterpreter().get());
+        memoryCost += dofInterpreter->approximateStiffnessAndLoadMemoryCost();
+        
+        gmgOperator = gmgOperator->getCoarseOperator();
+      }
+      
+      double memoryCostInMB = memoryCost / (1024.0 * 1024.0);
+      if (rank==0) cout << "On rank 0, CondensedDofInterpreter used " << memoryCostInMB << " MB for stiffness and load storage.\n";
+    }
+    
     if (rank==0) cout << "Finest GMGOperator, timing report:\n";
     gmgSolver->gmgOperator()->reportTimingsSumOfOperators(StatisticChoice::MAX);
     
@@ -765,6 +807,8 @@ int main(int argc, char *argv[])
 #endif
     solution->solve(superLUSolver);
     solveTime = timer.ElapsedTime();
+    
+    solution->reportTimings();
   }
 
   double maxTimeLocalStiffness = solution->maxTimeLocalStiffness();
