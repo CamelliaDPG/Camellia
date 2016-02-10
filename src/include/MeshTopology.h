@@ -85,6 +85,8 @@ class MeshTopology : public MeshTopologyView
 
   void determineGeneralizedParentsForRefinement(CellPtr cell, RefinementPatternPtr refPattern);
 
+  IndexType equivalentSidePeriodicBCs(IndexType sideEntityIndex);
+  
   IndexType getVertexIndexAdding(const vector<double> &vertex, double tol);
   vector<IndexType> getVertexIndices(const Intrepid::FieldContainer<double> &vertices);
   vector<IndexType> getVertexIndices(const vector< vector<double> > &vertices);

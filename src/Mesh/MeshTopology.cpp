@@ -414,6 +414,10 @@ unsigned MeshTopology::addCell(IndexType cellIndex, CellTopoPtr cellTopo, const 
           for (set< pair<int, int> >::iterator bcIt = _periodicBCIndicesMatchingNode[entityIndex].begin(); bcIt != _periodicBCIndicesMatchingNode[entityIndex].end(); bcIt++)
           {
             IndexType equivalentNode = _equivalentNodeViaPeriodicBC[make_pair(entityIndex, *bcIt)];
+            if (_activeCellsForEntities[d].size() <= equivalentNode)   // expand container
+            {
+              _activeCellsForEntities[d].resize(equivalentNode + 1, vector< pair<IndexType, unsigned> >());
+            }
             _activeCellsForEntities[d][equivalentNode].push_back(make_pair(cellIndex, j));
             // now that we've added, sort:
             std::sort(_activeCellsForEntities[d][equivalentNode].begin(), _activeCellsForEntities[d][equivalentNode].end());
@@ -445,8 +449,8 @@ unsigned MeshTopology::addCell(IndexType cellIndex, CellTopoPtr cellTopo, const 
     unsigned cellCountForSide = getCellCountForSide(sideEntityIndex);
     if (cellCountForSide == 2)   // compatible neighbors
     {
-      pair<unsigned,unsigned> firstNeighbor  = _cellsForSideEntities[sideEntityIndex].first;
-      pair<unsigned,unsigned> secondNeighbor = _cellsForSideEntities[sideEntityIndex].second;
+      pair<unsigned,unsigned> firstNeighbor  = getFirstCellForSide(sideEntityIndex);
+      pair<unsigned,unsigned> secondNeighbor = getSecondCellForSide(sideEntityIndex);
       CellPtr firstCell = _cells[firstNeighbor.first];
       CellPtr secondCell = _cells[secondNeighbor.first];
       firstCell->setNeighbor(firstNeighbor.second, secondNeighbor.first, secondNeighbor.second);
@@ -485,7 +489,58 @@ unsigned MeshTopology::addCell(IndexType cellIndex, CellTopoPtr cellTopo, const 
     }
     else if (cellCountForSide == 1)     // just this side
     {
-      if (parentCellIndex == -1)   // for now anyway, we are on the boundary...
+      IndexType equivalentSideIndex = equivalentSidePeriodicBCs(sideEntityIndex);
+      if ((equivalentSideIndex != -1) && (getFirstCellForSide(equivalentSideIndex).first != -1))
+      {
+        // this code copied from above.  May want to refactor.
+        pair<unsigned,unsigned> firstNeighbor  = _cellsForSideEntities[sideEntityIndex].first;
+        pair<unsigned,unsigned> secondNeighbor = _cellsForSideEntities[equivalentSideIndex].first;
+        CellPtr firstCell = _cells[firstNeighbor.first];
+        CellPtr secondCell = _cells[secondNeighbor.first];
+        firstCell->setNeighbor(firstNeighbor.second, secondNeighbor.first, secondNeighbor.second);
+        secondCell->setNeighbor(secondNeighbor.second, firstNeighbor.first, firstNeighbor.second);
+        if (_boundarySides.find(sideEntityIndex) != _boundarySides.end())
+        {
+          if (_childEntities[sideDim].find(sideEntityIndex) != _childEntities[sideDim].end())
+          {
+            cout << "Unhandled case: boundary side acquired neighbor after being refined.\n";
+            TEUCHOS_TEST_FOR_EXCEPTION(true, std::invalid_argument, "Unhandled case: boundary side acquired neighbor after being refined");
+          }
+          _boundarySides.erase(sideEntityIndex);
+        }
+        if (_boundarySides.find(equivalentSideIndex) != _boundarySides.end())
+        {
+          if (_childEntities[sideDim].find(equivalentSideIndex) != _childEntities[sideDim].end())
+          {
+            cout << "Unhandled case: boundary side acquired neighbor after being refined.\n";
+            TEUCHOS_TEST_FOR_EXCEPTION(true, std::invalid_argument, "Unhandled case: boundary side acquired neighbor after being refined");
+          }
+          _boundarySides.erase(equivalentSideIndex);
+        }
+        // if the pre-existing neighbor is refined, set its descendants to have the appropriate neighbor.
+        MeshTopologyPtr thisPtr = Teuchos::rcp(this,false);
+        if (firstCell->isParent(thisPtr))
+        {
+          vector< pair< GlobalIndexType, unsigned> > firstCellDescendants = firstCell->getDescendantsForSide(firstNeighbor.second, thisPtr);
+          for (vector< pair< GlobalIndexType, unsigned> >::iterator descIt = firstCellDescendants.begin(); descIt != firstCellDescendants.end(); descIt++)
+          {
+            unsigned childCellIndex = descIt->first;
+            unsigned childSideIndex = descIt->second;
+            getCell(childCellIndex)->setNeighbor(childSideIndex, secondNeighbor.first, secondNeighbor.second);
+          }
+        }
+        if (secondCell->isParent(thisPtr))
+        {
+          vector< pair< GlobalIndexType, unsigned> > secondCellDescendants = secondCell->getDescendantsForSide(secondNeighbor.first, thisPtr);
+          for (vector< pair< GlobalIndexType, unsigned> >::iterator descIt = secondCellDescendants.begin(); descIt != secondCellDescendants.end(); descIt++)
+          {
+            GlobalIndexType childCellIndex = descIt->first;
+            unsigned childSideOrdinal = descIt->second;
+            getCell(childCellIndex)->setNeighbor(childSideOrdinal, firstNeighbor.first, firstNeighbor.second);
+          }
+        }
+      }
+      else if (parentCellIndex == -1)   // for now anyway, we are on the boundary...
       {
         _boundarySides.insert(sideEntityIndex);
       }
@@ -549,7 +604,11 @@ void MeshTopology::addCellForSide(unsigned int cellIndex, unsigned int sideOrdin
   if (_cellsForSideEntities.find(sideEntityIndex) == _cellsForSideEntities.end())
   {
     pair< unsigned, unsigned > cell1 = make_pair(cellIndex, sideOrdinal);
-    pair< unsigned, unsigned > cell2 = make_pair(-1, -1);
+    pair< unsigned, unsigned > cell2 = {-1,-1};
+    
+    // check for equivalent side that matches periodic BCs
+    
+    
     _cellsForSideEntities[sideEntityIndex] = make_pair(cell1, cell2);
   }
   else
@@ -1063,6 +1122,61 @@ EntitySetPtr MeshTopology::createEntitySet()
   return entitySet;
 }
 
+IndexType MeshTopology::equivalentSidePeriodicBCs(IndexType sideEntityIndex)
+{
+  if (_periodicBCs.size() == 0) return -1;
+  
+  const vector<IndexType>* sideNodes = &_entities[_spaceDim-1][sideEntityIndex];
+  
+  bool allNodesMatch = true;
+  for (IndexType node : *sideNodes)
+  {
+    if (_periodicBCIndicesMatchingNode.find(node) == _periodicBCIndicesMatchingNode.end())
+    {
+      allNodesMatch = false;
+      break;
+    }
+  }
+  if (!allNodesMatch) return -1;
+  // we are looking for some side that matches all the specified nodes via periodic BCs
+  
+  set<IndexType> sidesMatchingAllNodes;
+  int vertexDim = 0;
+  bool firstNode = true;
+  for (IndexType node : *sideNodes)
+  {
+    set<IndexType> sidesMatchingNode;
+    for (pair<int, int> bcEntry : _periodicBCIndicesMatchingNode[node])
+    {
+      IndexType equivalentNode = _equivalentNodeViaPeriodicBC[{node,bcEntry}];
+      vector<IndexType> sideIndices = this->getSidesContainingEntity(vertexDim, equivalentNode);
+      sidesMatchingNode.insert(sideIndices.begin(), sideIndices.end());
+    }
+    
+    if (firstNode)
+    {
+      sidesMatchingAllNodes = sidesMatchingNode;
+    }
+    else
+    {
+      // intersect
+      set<IndexType> newMatchSet;
+      for (IndexType side : sidesMatchingAllNodes)
+      {
+        if (sidesMatchingNode.find(side) != sidesMatchingNode.end())
+        {
+          newMatchSet.insert(side);
+        }
+      }
+      sidesMatchingAllNodes = newMatchSet;
+    }
+  }
+  if (sidesMatchingAllNodes.size() == 0) return -1;
+  if (sidesMatchingAllNodes.size() == 1) return *sidesMatchingAllNodes.begin();
+  
+  TEUCHOS_TEST_FOR_EXCEPTION(true, std::invalid_argument, "More than 2 sides match via periodic BCs");
+}
+
 CellPtr MeshTopology::findCellWithVertices(const vector< vector<double> > &cellVertices)
 {
   CellPtr cell;
@@ -1220,11 +1334,13 @@ EntitySetPtr MeshTopology::getEntitySetInitialTime() const
 
 pair<IndexType, unsigned> MeshTopology::getFirstCellForSide(IndexType sideEntityIndex)
 {
+  if (_cellsForSideEntities.find(sideEntityIndex) == _cellsForSideEntities.end()) return {-1,-1};
   return _cellsForSideEntities[sideEntityIndex].first;
 }
 
 pair<IndexType, unsigned> MeshTopology::getSecondCellForSide(IndexType sideEntityIndex)
 {
+  if (_cellsForSideEntities.find(sideEntityIndex) == _cellsForSideEntities.end()) return {-1,-1};
   return _cellsForSideEntities[sideEntityIndex].second;
 }
 
@@ -1887,28 +2003,29 @@ unsigned MeshTopology::getVertexIndexAdding(const vector<double> &vertex, double
     _entityCellTopologyKeys[vertexDim].push_back(nodeTopo->getKey());
   }
 
-  set< pair<int,int> > matchingPeriodicBCs;
-
   for (int i=0; i<_periodicBCs.size(); i++)
   {
     vector<int> matchingSides = _periodicBCs[i]->getMatchingSides(vertex);
     for (int j=0; j<matchingSides.size(); j++)
     {
       int matchingSide = matchingSides[j];
-      pair<int,int> matchingBC = make_pair(i, matchingSide);
-      matchingPeriodicBCs.insert(matchingBC);
+      pair<int,int> matchingBC{i, matchingSide};
+      pair<int,int> matchingBCForEquivalentVertex = {i, 1 - matchingBC.second}; // the matching side 0 or 1, depending on whether it's "to" or "from"
       vector<double> matchingPoint = _periodicBCs[i]->getMatchingPoint(vertex, matchingSide);
-      unsigned equivalentVertexIndex = getVertexIndexAdding(matchingPoint, tol);
-      _equivalentNodeViaPeriodicBC[make_pair(vertexIndex, matchingBC)] = equivalentVertexIndex;
+      unsigned equivalentVertexIndex;
+      if ( getVertexIndex(matchingPoint, equivalentVertexIndex, tol) )
+      {
+        _equivalentNodeViaPeriodicBC[make_pair(vertexIndex, matchingBC)] = equivalentVertexIndex;
+        _equivalentNodeViaPeriodicBC[make_pair(equivalentVertexIndex, matchingBCForEquivalentVertex)] = vertexIndex;
+        _periodicBCIndicesMatchingNode[vertexIndex].insert(matchingBC);
+        _periodicBCIndicesMatchingNode[equivalentVertexIndex].insert({matchingBCForEquivalentVertex});
+      }
 
       //      cout << "vertex " << vertexIndex << " is equivalent to " << equivalentVertexIndex << endl;
       //      printVertex(vertexIndex);
       //      printVertex(equivalentVertexIndex);
     }
   }
-
-  if (matchingPeriodicBCs.size() > 0)
-    _periodicBCIndicesMatchingNode[vertexIndex] = matchingPeriodicBCs;
 
   return vertexIndex;
 }

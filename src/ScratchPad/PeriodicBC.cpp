@@ -25,6 +25,18 @@ public:
     _xFrom = xFrom;
     _xTo = xTo;
   }
+  vector<double> value(double x)
+  {
+    vector<double> value(1);
+    double tol=1e-14;
+    if (abs(x-_xFrom)>tol)
+    {
+      cout << "x must match xFrom!\n";
+      TEUCHOS_TEST_FOR_EXCEPTION(true, std::invalid_argument, "x must match xFrom!")
+    }
+    value[0] = _xTo;
+    return value;
+  }
   vector<double> value(double x, double y)
   {
     vector<double> value(2);
