@@ -816,10 +816,13 @@ SubBasisReconciliationWeights BasisReconciliation::filterOutZeroRowsAndColumns(S
   // we also will filter out zero rows and columns (and while we're at it, round to zero/one for any values that are very close to those):
   const double maxZeroTol = 1e-14;
   // first, look for zero rows:
-  set<int> rowsToInclude;
+  set<int> rowsToInclude, colsToInclude;
 
   int numRows = weights.weights.dimension(0);
   int numCols = weights.weights.dimension(1);
+  
+  if (weights.weights.size() == 0) // resize to exclude all weights
+    return filterToInclude(rowsToInclude, colsToInclude, weights);
   
   double *value = &weights.weights[0];
   for (int i=0; i<numRows; i++)
@@ -847,9 +850,8 @@ SubBasisReconciliationWeights BasisReconciliation::filterOutZeroRowsAndColumns(S
       rowsToInclude.insert(i);
     }
   }
-  // now, look for zero cols:
-  set<int> colsToInclude;
   
+  // now, look for zero cols:
   for (int j=0; j<weights.weights.dimension(1); j++)
   {
     bool nonZeroFound = false;
