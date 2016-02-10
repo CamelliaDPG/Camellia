@@ -40,7 +40,7 @@ namespace
    1. Cell and subcell constraints are correctly identified.
    2. Take a coarse (constraining) basis and compute some values on subcell.  Compute
    fine (constrained) basis values along the same physical region, now weighting
-   according to getBasisMapOld() (the one we currently use).  Are the values the same?
+   according to getBasisMap().  Are the values the same?
    3. Actually try solving something.
    
    Of these, #1 would be good for a few hand-computed instances -- I'm unclear on how
@@ -225,7 +225,7 @@ namespace
       {
         BasisCachePtr sideBasisCache = cellBasisCache->getSideBasisCache(sideOrdinal);
         BasisPtr fineBasis = mesh->getElementType(cellID)->trialOrderPtr->getBasis(traceVar->ID(),sideOrdinal);
-        auto fineBasisMap = gda->getBasisMapOld(cellID, dofOwnershipInfo, traceVar, sideOrdinal);
+        auto fineBasisMap = gda->getBasisMap(cellID, dofOwnershipInfo, traceVar, sideOrdinal);
         int cubDegree = fineBasis->getDegree();
         CellTopoPtr sideTopo = cellTopo->getSide(sideOrdinal);
         int minSubcellDimension = BasisReconciliation::minimumSubcellDimension(fineBasis);
@@ -337,7 +337,7 @@ namespace
             
             CellConstraints coarseCellConstraints = gda->getCellConstraints(constrainingEntityInfo.cellID);
             auto coarseGlobalDofInfo = gda->getGlobalDofIndices(constrainingEntityInfo.cellID, cellConstraints);
-            auto coarseBasisMap = gda->getBasisMapOld(constrainingEntityInfo.cellID, coarseGlobalDofInfo, traceVar, constrainingSideOrdinal);
+            auto coarseBasisMap = gda->getBasisMap(constrainingEntityInfo.cellID, coarseGlobalDofInfo, traceVar, constrainingSideOrdinal);
             
             for (int pointOrdinal=0; pointOrdinal<numPoints; pointOrdinal++)
             {
@@ -830,7 +830,119 @@ namespace
       success = false;
     }
   }
-  
+
+  TEUCHOS_UNIT_TEST( GDAMinimumRule, SolvePoisson2DContinuousGalerkinHangingNode_Slow )
+  {
+    // exact solution: for now, we just use a linear phi
+    FunctionPtr x = Function::xn(1);
+    FunctionPtr y = Function::yn(1);
+
+    FunctionPtr phi_exact = -x + y;
+    
+    int H1Order = 2;
+    int spaceDim = 2;
+    bool useConformingTraces = true;
+    PoissonFormulation poissonForm(spaceDim, useConformingTraces, PoissonFormulation::CONTINUOUS_GALERKIN);
+    
+    vector<double> dimensions(spaceDim,1.0);
+    vector<int> elementCounts = {1,2}; // 1 x 2: smallest mesh on which we can create a hanging node
+    int delta_k = 0; // bubnov-galerkin
+    MeshPtr mesh = MeshFactory::rectilinearMesh(poissonForm.bf(), dimensions, elementCounts, H1Order, delta_k);
+    
+    // rhs = f * v, where f = \Delta phi
+    RHSPtr rhs = RHS::rhs();
+    FunctionPtr f = phi_exact->dx()->dx() + phi_exact->dy()->dy() + phi_exact->dz()->dz();
+    rhs->addTerm(f * poissonForm.q());
+    
+    set<GlobalIndexType> cellsToRefine = {0};
+    mesh->hRefine(cellsToRefine);
+
+    // TODO: work out whether checkLocalGlobalConsistency() is valid on CG meshes
+//    if (! MeshTestUtility::checkLocalGlobalConsistency(mesh) )
+//    {
+//      cout << "FAILURE: 1-irregular Poisson 2D mesh fails local-to-global consistency check.\n";
+//      success = false;
+//    }
+    
+//    GDAMinimumRule * minRule = dynamic_cast<GDAMinimumRule *>(mesh->globalDofAssignment().get());
+//    minRule->printGlobalDofInfo();
+//    
+//    GlobalIndexType cellWithHangingNode = 4;
+//    CellConstraints cellConstraints = minRule->getCellConstraints(cellWithHangingNode);
+//    minRule->getDofMapper(cellWithHangingNode, cellConstraints)->printMappingReport();
+    
+    VarPtr phi = poissonForm.phi();
+    BCPtr bc = BC::bc();
+    SpatialFilterPtr boundary = SpatialFilter::allSpace();
+    bc->addDirichlet(phi, boundary, phi_exact);
+    
+    SolutionPtr soln = Solution::solution(poissonForm.bf(), mesh, bc, rhs);
+    
+    map<int, FunctionPtr> phi_exact_map;
+    phi_exact_map[phi->ID()] = phi_exact;
+    soln->projectOntoMesh(phi_exact_map);
+    
+    FunctionPtr phi_soln = Function::solution(phi, soln);
+    FunctionPtr phi_err = phi_soln - phi_exact;
+    
+    double tol = 1e-12;
+    double phi_err_l2 = phi_err->l2norm(mesh);
+    
+    if (phi_err_l2 > tol)
+    {
+      success = false;
+      cout << "GDAMinimumRuleTests failure: for 1-irregular 2D mesh and exactly recoverable solution, phi error after projection is " << phi_err_l2 << endl;
+      
+      string outputSuperDir = ".";
+      string outputDir = "poisson2DHangingNodeProjection";
+      HDF5Exporter exporter(mesh, outputDir, outputSuperDir);
+      cout << "Writing phi err to " << outputSuperDir << "/" << outputDir << endl;
+      
+      exporter.exportFunction(phi_err, "phi_err");
+    }
+    
+    soln->clear();
+    soln->solve();
+    
+    Epetra_MultiVector *lhsVector = soln->getGlobalCoefficients();
+    Epetra_SerialComm Comm;
+    Epetra_Map partMap = soln->getPartitionMap();
+    
+    // Import solution onto current processor
+    GlobalIndexTypeToCast numNodesGlobal = mesh->numGlobalDofs();
+    GlobalIndexTypeToCast numMyNodes = numNodesGlobal;
+    Epetra_Map     solnMap(numNodesGlobal, numMyNodes, 0, Comm);
+    Epetra_Import  solnImporter(solnMap, partMap);
+    Epetra_Vector  solnCoeff(solnMap);
+    solnCoeff.Import(*lhsVector, solnImporter, Insert);
+    
+    // TODO: work out whether MeshTestUtility::neighborBasesAgreeOnSides() is valid on CG meshes
+//    if ( ! MeshTestUtility::neighborBasesAgreeOnSides(mesh, solnCoeff))
+//    {
+//      cout << "GDAMinimumRuleTests failure: for 1-irregular 2D Poisson mesh with hanging nodes (after solving), neighboring bases do not agree on sides." << endl;
+//      success = false;
+//    }
+    
+    //    cout << "...solution continuities checked.\n";
+    
+    phi_err_l2 = phi_err->l2norm(mesh);
+    if (phi_err_l2 > tol)
+    {
+      success = false;
+      cout << "GDAMinimumRuleTests failure: for 1-irregular 2D mesh and exactly recoverable solution, phi error is " << phi_err_l2 << endl;
+      
+      string outputSuperDir = ".";
+      string outputDir = "poisson2DHangingNode";
+      HDF5Exporter exporter(mesh, outputDir, outputSuperDir);
+      cout << "Writing phi err to " << outputSuperDir << "/" << outputDir << endl;
+      
+      exporter.exportFunction(phi_err, "phi_err");
+    }
+
+    HDF5Exporter exporter(mesh, "poisson2DHangingNodeSolution", "/tmp");
+    exporter.exportSolution(soln);
+  }
+
   TEUCHOS_UNIT_TEST( GDAMinimumRule, SolvePoisson3DHangingNode_Slow )
   {
     // exact solution: for now, we just use a linear phi
