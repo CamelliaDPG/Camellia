@@ -70,6 +70,8 @@ class CompressibleNavierStokesFormulation
 
   SolverPtr _solver;
 
+  int _solveCode;
+
   map<string, IPPtr> _ips;
 
   FunctionPtr _L2IncrementFunction, _L2SolutionFunction;
@@ -241,6 +243,9 @@ public:
 
   // ! get the Solver used for the linear updates
   SolverPtr getSolver();
+
+  // ! get the status of the last solve
+  int getSolveCode();
 
   // ! set the Solver for the linear updates
   void setSolver(SolverPtr solver);
