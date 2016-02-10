@@ -486,6 +486,30 @@ TEUCHOS_UNIT_TEST(MeshTopology, GetRootMeshTopology)
   }
 }
   
+  TEUCHOS_UNIT_TEST( MeshTopology, PeriodicBCs_1D )
+  {
+    vector<double> A = {-1.0}, B = {0.0}, C = {1.0};
+    vector<vector<double>> vertices = {A, B, C};
+    vector<vector<IndexType>> elementVertices;
+    // cell 0:
+    elementVertices.push_back({0,1});
+    // cell 1:
+    elementVertices.push_back({1,2});
+    vector<CellTopoPtr> cellTopos(2,CellTopology::line());
+    MeshGeometryPtr geometry = Teuchos::rcp(new MeshGeometry(vertices,elementVertices,cellTopos));
+    PeriodicBCPtr leftEqualsRight = PeriodicBC::xIdentification(A[0], C[0]);
+    
+    MeshTopologyPtr meshTopo = Teuchos::rcp( new MeshTopology(geometry, {leftEqualsRight}) );
+    
+    IndexType leftCellIndex = 0, rightCellIndex = 1;
+    
+    CellPtr leftCell = meshTopo->getCell(leftCellIndex);
+    CellPtr rightCell = meshTopo->getCell(rightCellIndex);
+    
+    TEST_EQUALITY(leftCell->getNeighbor(0, meshTopo)->cellIndex(), rightCellIndex);
+    TEST_EQUALITY(rightCell->getNeighbor(1, meshTopo)->cellIndex(), leftCellIndex);
+  }
+  
   TEUCHOS_UNIT_TEST( MeshTopology, UpdateNeighborsAfterAnisotropicRefinements)
   {
     // set up MeshGeometry sorta like what we have in Hemker meshes:
