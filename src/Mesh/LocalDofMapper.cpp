@@ -800,6 +800,8 @@ FieldContainer<double> LocalDofMapper::fitLocalCoefficients(const FieldContainer
       cout << " for variable " << _varIDToMap << ", solveSystemUsingQR returned err = " << err << endl;
       Camellia::print("fittableGlobalOrdinals",fittableOrdinals);
       cout << "localCoefficients:\n" << localCoefficients;
+      
+      printMappingReport();
     }
   }
   
