@@ -18,6 +18,14 @@ namespace Camellia
 {
 class PoissonFormulation
 {
+public:
+  enum PoissonFormulationChoice
+  {
+    CONTINUOUS_GALERKIN,
+    PRIMAL,
+    ULTRAWEAK
+  };
+private:
   BFPtr _poissonBF;
   int _spaceDim;
 
@@ -30,7 +38,7 @@ class PoissonFormulation
   static const string S_Q;
   static const string S_TAU;
 public:
-  PoissonFormulation(int spaceDim, bool useConformingTraces);
+  PoissonFormulation(int spaceDim, bool useConformingTraces, PoissonFormulationChoice formulationChoice=ULTRAWEAK);
 
   BFPtr bf();
 
