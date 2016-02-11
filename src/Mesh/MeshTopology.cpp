@@ -443,6 +443,8 @@ unsigned MeshTopology::addCell(IndexType cellIndex, CellTopoPtr cellTopo, const 
     unsigned sideEntityIndex = cell->entityIndex(sideDim, sideOrdinal);
     addCellForSide(cellIndex,sideOrdinal,sideEntityIndex);
   }
+  bool allowSameCellIndices = (_periodicBCs.size() > 0); // for periodic BCs, we allow a cell to be its own neighbor
+  
   for (int sideOrdinal=0; sideOrdinal<sideCount; sideOrdinal++)
   {
     unsigned sideEntityIndex = cell->entityIndex(sideDim, sideOrdinal);
@@ -453,8 +455,8 @@ unsigned MeshTopology::addCell(IndexType cellIndex, CellTopoPtr cellTopo, const 
       pair<unsigned,unsigned> secondNeighbor = getSecondCellForSide(sideEntityIndex);
       CellPtr firstCell = _cells[firstNeighbor.first];
       CellPtr secondCell = _cells[secondNeighbor.first];
-      firstCell->setNeighbor(firstNeighbor.second, secondNeighbor.first, secondNeighbor.second);
-      secondCell->setNeighbor(secondNeighbor.second, firstNeighbor.first, firstNeighbor.second);
+      firstCell->setNeighbor(firstNeighbor.second, secondNeighbor.first, secondNeighbor.second, allowSameCellIndices);
+      secondCell->setNeighbor(secondNeighbor.second, firstNeighbor.first, firstNeighbor.second, allowSameCellIndices);
       if (_boundarySides.find(sideEntityIndex) != _boundarySides.end())
       {
         if (_childEntities[sideDim].find(sideEntityIndex) != _childEntities[sideDim].end())
@@ -489,58 +491,7 @@ unsigned MeshTopology::addCell(IndexType cellIndex, CellTopoPtr cellTopo, const 
     }
     else if (cellCountForSide == 1)     // just this side
     {
-      IndexType equivalentSideIndex = equivalentSidePeriodicBCs(sideEntityIndex);
-      if ((equivalentSideIndex != -1) && (getFirstCellForSide(equivalentSideIndex).first != -1))
-      {
-        // this code copied from above.  May want to refactor.
-        pair<unsigned,unsigned> firstNeighbor  = _cellsForSideEntities[sideEntityIndex].first;
-        pair<unsigned,unsigned> secondNeighbor = _cellsForSideEntities[equivalentSideIndex].first;
-        CellPtr firstCell = _cells[firstNeighbor.first];
-        CellPtr secondCell = _cells[secondNeighbor.first];
-        firstCell->setNeighbor(firstNeighbor.second, secondNeighbor.first, secondNeighbor.second);
-        secondCell->setNeighbor(secondNeighbor.second, firstNeighbor.first, firstNeighbor.second);
-        if (_boundarySides.find(sideEntityIndex) != _boundarySides.end())
-        {
-          if (_childEntities[sideDim].find(sideEntityIndex) != _childEntities[sideDim].end())
-          {
-            cout << "Unhandled case: boundary side acquired neighbor after being refined.\n";
-            TEUCHOS_TEST_FOR_EXCEPTION(true, std::invalid_argument, "Unhandled case: boundary side acquired neighbor after being refined");
-          }
-          _boundarySides.erase(sideEntityIndex);
-        }
-        if (_boundarySides.find(equivalentSideIndex) != _boundarySides.end())
-        {
-          if (_childEntities[sideDim].find(equivalentSideIndex) != _childEntities[sideDim].end())
-          {
-            cout << "Unhandled case: boundary side acquired neighbor after being refined.\n";
-            TEUCHOS_TEST_FOR_EXCEPTION(true, std::invalid_argument, "Unhandled case: boundary side acquired neighbor after being refined");
-          }
-          _boundarySides.erase(equivalentSideIndex);
-        }
-        // if the pre-existing neighbor is refined, set its descendants to have the appropriate neighbor.
-        MeshTopologyPtr thisPtr = Teuchos::rcp(this,false);
-        if (firstCell->isParent(thisPtr))
-        {
-          vector< pair< GlobalIndexType, unsigned> > firstCellDescendants = firstCell->getDescendantsForSide(firstNeighbor.second, thisPtr);
-          for (vector< pair< GlobalIndexType, unsigned> >::iterator descIt = firstCellDescendants.begin(); descIt != firstCellDescendants.end(); descIt++)
-          {
-            unsigned childCellIndex = descIt->first;
-            unsigned childSideIndex = descIt->second;
-            getCell(childCellIndex)->setNeighbor(childSideIndex, secondNeighbor.first, secondNeighbor.second);
-          }
-        }
-        if (secondCell->isParent(thisPtr))
-        {
-          vector< pair< GlobalIndexType, unsigned> > secondCellDescendants = secondCell->getDescendantsForSide(secondNeighbor.first, thisPtr);
-          for (vector< pair< GlobalIndexType, unsigned> >::iterator descIt = secondCellDescendants.begin(); descIt != secondCellDescendants.end(); descIt++)
-          {
-            GlobalIndexType childCellIndex = descIt->first;
-            unsigned childSideOrdinal = descIt->second;
-            getCell(childCellIndex)->setNeighbor(childSideOrdinal, firstNeighbor.first, firstNeighbor.second);
-          }
-        }
-      }
-      else if (parentCellIndex == -1)   // for now anyway, we are on the boundary...
+      if (parentCellIndex == -1)   // for now anyway, we are on the boundary...
       {
         _boundarySides.insert(sideEntityIndex);
       }
@@ -874,10 +825,9 @@ void MeshTopology::applyTag(std::string tagName, int tagID, EntitySetPtr entityS
 
 vector<IndexType> MeshTopology::getCanonicalEntityNodesViaPeriodicBCs(unsigned d, const vector<IndexType> &myEntityNodes)
 {
-//  set<IndexType> myNodeSet(myEntityNodes.begin(),myEntityNodes.end());
   vector<IndexType> sortedNodes(myEntityNodes.begin(),myEntityNodes.end());
   std::sort(sortedNodes.begin(), sortedNodes.end());
-
+  
   if (_knownEntities[d].find(sortedNodes) != _knownEntities[d].end())
   {
     return myEntityNodes;
@@ -1120,61 +1070,6 @@ EntitySetPtr MeshTopology::createEntitySet()
   _entitySets[handle] = entitySet;
   
   return entitySet;
-}
-
-IndexType MeshTopology::equivalentSidePeriodicBCs(IndexType sideEntityIndex)
-{
-  if (_periodicBCs.size() == 0) return -1;
-  
-  const vector<IndexType>* sideNodes = &_entities[_spaceDim-1][sideEntityIndex];
-  
-  bool allNodesMatch = true;
-  for (IndexType node : *sideNodes)
-  {
-    if (_periodicBCIndicesMatchingNode.find(node) == _periodicBCIndicesMatchingNode.end())
-    {
-      allNodesMatch = false;
-      break;
-    }
-  }
-  if (!allNodesMatch) return -1;
-  // we are looking for some side that matches all the specified nodes via periodic BCs
-  
-  set<IndexType> sidesMatchingAllNodes;
-  int vertexDim = 0;
-  bool firstNode = true;
-  for (IndexType node : *sideNodes)
-  {
-    set<IndexType> sidesMatchingNode;
-    for (pair<int, int> bcEntry : _periodicBCIndicesMatchingNode[node])
-    {
-      IndexType equivalentNode = _equivalentNodeViaPeriodicBC[{node,bcEntry}];
-      vector<IndexType> sideIndices = this->getSidesContainingEntity(vertexDim, equivalentNode);
-      sidesMatchingNode.insert(sideIndices.begin(), sideIndices.end());
-    }
-    
-    if (firstNode)
-    {
-      sidesMatchingAllNodes = sidesMatchingNode;
-    }
-    else
-    {
-      // intersect
-      set<IndexType> newMatchSet;
-      for (IndexType side : sidesMatchingAllNodes)
-      {
-        if (sidesMatchingNode.find(side) != sidesMatchingNode.end())
-        {
-          newMatchSet.insert(side);
-        }
-      }
-      sidesMatchingAllNodes = newMatchSet;
-    }
-  }
-  if (sidesMatchingAllNodes.size() == 0) return -1;
-  if (sidesMatchingAllNodes.size() == 1) return *sidesMatchingAllNodes.begin();
-  
-  TEUCHOS_TEST_FOR_EXCEPTION(true, std::invalid_argument, "More than 2 sides match via periodic BCs");
 }
 
 CellPtr MeshTopology::findCellWithVertices(const vector< vector<double> > &cellVertices)
@@ -1679,7 +1574,21 @@ unsigned MeshTopology::getEntityIndex(unsigned d, const set<unsigned> &nodeSet)
   {
     if (nodeSet.size()==1)
     {
-      return *nodeSet.begin();
+      if (_periodicBCs.size() == 0)
+      {
+        return *nodeSet.begin();
+      }
+      else
+      {
+        // NEW 2-11-16: for periodic BCs, return a "canonical" vertex here
+        //              Notion is that the result of getEntityIndex is used by GDAMinimumRule, etc.; we need to know
+        //              which cells contain this particular vertex.  This is analogous to what we do below with edges, etc.;
+        //              the only distinction is that there *are* two vertices stored, so that the physical location of the
+        //              cell can still be meaningfully determined.
+        vector<IndexType> nodeVector(nodeSet.begin(),nodeSet.end());
+        vector<IndexType> equivalentNodeVector = getCanonicalEntityNodesViaPeriodicBCs(d, nodeVector);
+        return equivalentNodeVector[0];
+      }
     }
     else
     {
@@ -1691,7 +1600,7 @@ unsigned MeshTopology::getEntityIndex(unsigned d, const set<unsigned> &nodeSet)
   {
     return _knownEntities[d][sortedNodes];
   }
-  else
+  else if (_periodicBCs.size() > 0)
   {
     // look for alternative, equivalent nodeSets, arrived at via periodic BCs
     vector<IndexType> nodeVector(nodeSet.begin(),nodeSet.end());
@@ -1985,24 +1894,23 @@ unsigned MeshTopology::getVertexIndexAdding(const vector<double> &vertex, double
     TEUCHOS_TEST_FOR_EXCEPTION(true, std::invalid_argument, "Mesh error: attempting to add existing vertex");
   }
   _vertexMap[vertex] = vertexIndex;
-
+  
+  // update the various entity containers
+  int vertexDim = 0;
+  vector<IndexType> nodeVector(1,vertexIndex);
+  _entities[vertexDim].push_back(nodeVector);
+  vector<IndexType> entityVertices;
+  entityVertices.push_back(vertexIndex);
+  //_canonicalEntityOrdering[vertexDim][vertexIndex] = entityVertices;
+  CellTopoPtr nodeTopo = CellTopology::point();
+  if (_knownTopologies.find(nodeTopo->getKey()) == _knownTopologies.end())
   {
-    // update the various entity containers
-    int vertexDim = 0;
-    vector<IndexType> nodeVector(1,vertexIndex);
-    _entities[vertexDim].push_back(nodeVector);
-    _knownEntities[vertexDim][nodeVector] = vertexIndex;
-    vector<IndexType> entityVertices;
-    entityVertices.push_back(vertexIndex);
-    //_canonicalEntityOrdering[vertexDim][vertexIndex] = entityVertices;
-    CellTopoPtr nodeTopo = CellTopology::point();
-    if (_knownTopologies.find(nodeTopo->getKey()) == _knownTopologies.end())
-    {
-      _knownTopologies[nodeTopo->getKey()] = nodeTopo;
-    }
-    _entityCellTopologyKeys[vertexDim].push_back(nodeTopo->getKey());
+    _knownTopologies[nodeTopo->getKey()] = nodeTopo;
   }
+  _entityCellTopologyKeys[vertexDim].push_back(nodeTopo->getKey());
 
+  // new 2-11-16: when using periodic BCs, only add vertex to _knownEntities if it is the original matching point
+  bool matchFound = false;
   for (int i=0; i<_periodicBCs.size(); i++)
   {
     vector<int> matchingSides = _periodicBCs[i]->getMatchingSides(vertex);
@@ -2019,12 +1927,13 @@ unsigned MeshTopology::getVertexIndexAdding(const vector<double> &vertex, double
         _equivalentNodeViaPeriodicBC[make_pair(equivalentVertexIndex, matchingBCForEquivalentVertex)] = vertexIndex;
         _periodicBCIndicesMatchingNode[vertexIndex].insert(matchingBC);
         _periodicBCIndicesMatchingNode[equivalentVertexIndex].insert({matchingBCForEquivalentVertex});
+        matchFound = true;
       }
-
-      //      cout << "vertex " << vertexIndex << " is equivalent to " << equivalentVertexIndex << endl;
-      //      printVertex(vertexIndex);
-      //      printVertex(equivalentVertexIndex);
     }
+  }
+  if (!matchFound)
+  {
+    _knownEntities[vertexDim][nodeVector] = vertexIndex;
   }
 
   return vertexIndex;
