@@ -66,7 +66,7 @@ void setGMGSolver(CompressibleNavierStokesFormulation &form, vector<MeshPtr> &me
   Teuchos::RCP<Solver> coarseSolver = Solver::getDirectSolver(true);
   Teuchos::RCP<GMGSolver> gmgSolver = Teuchos::rcp( new GMGSolver(form.solutionIncrement(), meshesCoarseToFine, cgMaxIters, cgTol,
                                                                   GMGOperator::V_CYCLE, coarseSolver, useCondensedSolve) );
-  gmgSolver->setAztecOutput(10);
+  gmgSolver->setAztecOutput(0);
 #if defined(HAVE_AMESOS_SUPERLUDIST) || defined(HAVE_AMESOS2_SUPERLUDIST)
   SuperLUDistSolver* superLUSolver = dynamic_cast<SuperLUDistSolver*>(coarseSolver.get());
   if (superLUSolver)

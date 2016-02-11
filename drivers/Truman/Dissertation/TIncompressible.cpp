@@ -593,84 +593,28 @@ int main(int argc, char *argv[])
   }
   else if (problemName == "BoundaryLayer")
   {
-    // vector<PeriodicBCPtr> periodicBCs;
-    // periodicBCs.push_back(PeriodicBC::xIdentification(0, 1));
+    vector<PeriodicBCPtr> periodicBCs;
+    periodicBCs.push_back(PeriodicBC::xIdentification(0, 1));
 
-    // CellTopoPtr quad_4 = CellTopology::quad();
-    // vector<double> v0 = makeVertex(0,0);
-    // vector<double> v1 = makeVertex(1,0);
-    // vector<double> v2 = makeVertex(1,1);
-    // vector<double> v3 = makeVertex(0,1);
-    // vector< vector<double> > vertices;
-    // vertices.push_back(v0);
-    // vertices.push_back(v1);
-    // vertices.push_back(v2);
-    // vertices.push_back(v3);
-    // vector<unsigned> quadVertexList;
-    // quadVertexList.push_back(0);
-    // quadVertexList.push_back(1);
-    // quadVertexList.push_back(2);
-    // quadVertexList.push_back(3);
-    // vector< vector<unsigned> > elementVertices;
-    // elementVertices.push_back(quadVertexList);
-    // vector< CellTopoPtr > cellTopos;
-    // cellTopos.push_back(quad_4);
-    // MeshGeometryPtr meshGeometry = Teuchos::rcp( new MeshGeometry(vertices, elementVertices, cellTopos) );
-    // // meshTopo = Teuchos::rcp( new MeshTopology(meshGeometry) );
-    // meshTopo = Teuchos::rcp( new MeshTopology(meshGeometry, periodicBCs) );
+    vector<double> A = {0,0}, B = {1,0}, C = {0,1}, D = {1,1};
+    vector<vector<double>> vertices = {A, B, C, D};
+    vector<vector<IndexType>> elementVertices = {{0,1,3,2}};
+    vector<CellTopoPtr> cellTopos(1,CellTopology::quad());
+    MeshGeometryPtr geometry = Teuchos::rcp(new MeshGeometry(vertices,elementVertices,cellTopos));
+    // meshTopo = Teuchos::rcp(new MeshTopology(geometry));
+    meshTopo = Teuchos::rcp( new MeshTopology(geometry, periodicBCs) );
 
-    // int tensorialDegree = 1;
-    // CellTopoPtr quad_x_time = CellTopology::cellTopology(shards::getCellTopologyData<shards::Quadrilateral<4> >(), tensorialDegree);
-    // vector<double> v00 = makeVertex(0,0,0);
-    // vector<double> v10 = makeVertex(1,0,0);
-    // vector<double> v20 = makeVertex(1,1,0);
-    // vector<double> v30 = makeVertex(0,1,0);
-    // vector<double> v01 = makeVertex(0,0,1);
-    // vector<double> v11 = makeVertex(1,0,1);
-    // vector<double> v21 = makeVertex(1,1,1);
-    // vector<double> v31 = makeVertex(0,1,1);
-    // vector< vector<double> > spaceTimeVertices;
-    // spaceTimeVertices.push_back(v00);
-    // spaceTimeVertices.push_back(v10);
-    // spaceTimeVertices.push_back(v20);
-    // spaceTimeVertices.push_back(v30);
-    // spaceTimeVertices.push_back(v01);
-    // spaceTimeVertices.push_back(v11);
-    // spaceTimeVertices.push_back(v21);
-    // spaceTimeVertices.push_back(v31);
-    // vector<unsigned> spaceTimeQuadVertexList;
-    // spaceTimeQuadVertexList.push_back(0);
-    // spaceTimeQuadVertexList.push_back(1);
-    // spaceTimeQuadVertexList.push_back(2);
-    // spaceTimeQuadVertexList.push_back(3);
-    // spaceTimeQuadVertexList.push_back(4);
-    // spaceTimeQuadVertexList.push_back(5);
-    // spaceTimeQuadVertexList.push_back(6);
-    // spaceTimeQuadVertexList.push_back(7);
-    // vector< vector<unsigned> > spaceTimeElementVertices;
-    // spaceTimeElementVertices.push_back(spaceTimeQuadVertexList);
-    // vector< CellTopoPtr > spaceTimeCellTopos;
-    // spaceTimeCellTopos.push_back(quad_x_time);
-    // MeshGeometryPtr spaceTimeMeshGeometry = Teuchos::rcp( new MeshGeometry(spaceTimeVertices, spaceTimeElementVertices, spaceTimeCellTopos) );
-    // meshTopo = Teuchos::rcp( new MeshTopology(spaceTimeMeshGeometry) );
-    // meshTopo = Teuchos::rcp( new MeshTopology(spaceTimeMeshGeometry, periodicBCs) );
-
-    // vector<PeriodicBCPtr> periodicBCs;
-    // periodicBCs.push_back(PeriodicBC::xIdentification(0, 1));
-    // MeshTopologyPtr meshTopo = MeshFactory::quadMeshTopology(1.0, 1.0, 1, 1, false, 0.0, 0.0, periodicBCs);
-    // MeshTopologyPtr meshTopo = MeshFactory::quadMeshTopology(1.0, 1.0, 1, 1, false, 0.0, 0.0);
-
-    vector<double> x0;
-    vector<double> dims;
-    vector<int> numElements;
-    x0.push_back(0);
-    x0.push_back(0);
-    dims.push_back(1.0);
-    dims.push_back(1.0);
-    numElements.push_back(1);
-    numElements.push_back(1);
+    // vector<double> x0;
+    // vector<double> dims;
+    // vector<int> numElements;
+    // x0.push_back(0);
+    // x0.push_back(0);
+    // dims.push_back(1.0);
+    // dims.push_back(1.0);
+    // numElements.push_back(1);
+    // numElements.push_back(1);
+    // meshTopo = MeshFactory::rectilinearMeshTopology(dims,numElements,x0);
     pressureConstraintPoint = {0,0};
-    meshTopo = MeshFactory::rectilinearMeshTopology(dims,numElements,x0);
     if (!steady)
     {
       double t0 = 0;
@@ -849,8 +793,8 @@ int main(int argc, char *argv[])
     FunctionPtr zeros = Function::vectorize(zero,zero);
     FunctionPtr u1_exact = Teuchos::rcp(new BoundaryLayerExact(Re));
     FunctionPtr u_exact = Function::vectorize(u1_exact,zero);
-    form.addInflowCondition(leftX,  u_exact);
-    form.addInflowCondition(rightX, u_exact);
+    // form.addInflowCondition(leftX,  u_exact);
+    // form.addInflowCondition(rightX, u_exact);
     form.addInflowCondition(leftY,  u_exact);
     form.addInflowCondition(rightY, u_exact);
 
