@@ -596,11 +596,10 @@ int main(int argc, char *argv[])
     vector<PeriodicBCPtr> periodicBCs;
     periodicBCs.push_back(PeriodicBC::xIdentification(0, 1));
 
-    vector<double> A = {0,0}, B = {.5,0}, C = {1,0}, D = {0,1}, E = {0.5,1}, F = {1,1};
-    vector<vector<double>> vertices = {A, B, C, D, E, F};
-    vector<vector<IndexType>> elementVertices = {{0,1,4,3}};
-    elementVertices.push_back({1,2,5,4});
-    vector<CellTopoPtr> cellTopos(2,CellTopology::quad());
+    vector<double> A = {0,0}, B = {1,0}, C = {0,1}, D = {1,1};
+    vector<vector<double>> vertices = {A, B, C, D};
+    vector<vector<IndexType>> elementVertices = {{0,1,3,2}};
+    vector<CellTopoPtr> cellTopos(1,CellTopology::quad());
     MeshGeometryPtr geometry = Teuchos::rcp(new MeshGeometry(vertices,elementVertices,cellTopos));
     // meshTopo = Teuchos::rcp(new MeshTopology(geometry));
     meshTopo = Teuchos::rcp( new MeshTopology(geometry, periodicBCs) );
