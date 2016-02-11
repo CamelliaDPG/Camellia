@@ -1,16 +1,15 @@
-#include "RefinementStrategy.h"
-#include "PreviousSolutionFunction.h"
-#include "MeshFactory.h"
-#include "SolutionExporter.h"
-#include <Teuchos_GlobalMPISession.hpp>
 #include "GnuPlotUtil.h"
+#include "MeshFactory.h"
+#include "PreviousSolutionFunction.h"
+#include "RefinementStrategy.h"
+#include "SimpleFunction.h"
+#include "Solver.h"
+#include "TypeDefs.h"
 
 #include "Teuchos_CommandLineProcessor.hpp"
 #include "Teuchos_ParameterList.hpp"
 
-#include "Solver.h"
-
-#include "CamelliaConfig.h"
+#include <Teuchos_GlobalMPISession.hpp>
 
 #ifdef ENABLE_INTEL_FLOATING_POINT_EXCEPTIONS
 #include <xmmintrin.h>
@@ -27,7 +26,9 @@
 #include "HDF5Exporter.h"
 #endif
 
-class Cone_U0 : public SimpleFunction
+using namespace Camellia;
+
+class Cone_U0 : public SimpleFunction<double>
 {
   double _r; // cone radius
   double _h; // height
@@ -53,7 +54,7 @@ public:
       if (y > 0.5) y = y - 1;
     }
     double d = sqrt( (x-_x0) * (x-_x0) + (y-_y0) * (y-_y0) );
-    double u = max(0.0, _h * (1 - d/_r));
+    double u = std::max(0.0, _h * (1 - d/_r));
 
     return u;
   }
@@ -115,16 +116,16 @@ int main(int argc, char *argv[])
 
   Teuchos::CommandLineProcessor cmdp(false,true); // false: don't throw exceptions; true: do return errors for unrecognized options
 
-  bool useCondensedSolve = false; // condensed solve not yet compatible with minimum rule meshes
+  bool useCondensedSolve = true;
 
-  int numGridPoints = 32; // in x,y -- idea is to keep the overall order of approximation constant
+  int numGridPoints = 64; // in x,y -- idea is to keep the overall order of approximation constant
   int k = 4; // poly order for u
   double theta = 0.5;
   int numTimeSteps = 2000;
   int numCells = -1; // in x, y (-1 so we can set a default if unset from the command line.)
   int numFrames = 50;
   int delta_k = 2;   // test space enrichment: should be 2 for 2D
-  bool useMumpsIfAvailable  = true;
+
   bool convertSolutionsToVTK = false; // when true assumes we've already run with precisely the same options, except without VTK support (so we have a bunch of .soln files)
   bool usePeriodicBCs = false;
   bool useConstantConvection = false;
@@ -141,7 +142,6 @@ int main(int argc, char *argv[])
   cmdp.setOption("useConstantConvection", "useVariableConvection", &useConstantConvection);
 
   cmdp.setOption("useCondensedSolve", "useUncondensedSolve", &useCondensedSolve, "use static condensation to reduce the size of the global solve");
-  cmdp.setOption("useMumps", "useKLU", &useMumpsIfAvailable, "use MUMPS (if available)");
   cmdp.setOption("convertPreComputedSolutionsToVTK", "computeSolutions", &convertSolutionsToVTK);
 
   if (cmdp.parse(argc,argv) != Teuchos::CommandLineProcessor::PARSE_SUCCESSFUL)
@@ -177,15 +177,15 @@ int main(int argc, char *argv[])
 
   double dt = 2 * PI / numTimeSteps;
 
-  VarFactory varFactory;
+  VarFactoryPtr varFactory = VarFactory::varFactory();
   // traces:
-  VarPtr qHat = varFactory.fluxVar("\\widehat{q}");
+  VarPtr qHat = varFactory->fluxVar("\\widehat{q}");
 
   // fields:
-  VarPtr u = varFactory.fieldVar("u", L2);
+  VarPtr u = varFactory->fieldVar("u", L2);
 
   // test functions:
-  VarPtr v = varFactory.testVar("v", HGRAD);
+  VarPtr v = varFactory->testVar("v", HGRAD);
 
   FunctionPtr x = Function::xn(1);
   FunctionPtr y = Function::yn(1);
@@ -257,7 +257,7 @@ int main(int argc, char *argv[])
   SolutionPtr soln0 = Solution::solution(mesh, bc, initialRHS, ip);
   soln0->setCubatureEnrichmentDegree(5);
   FunctionPtr u_soln0 = Function::solution(u, soln0);
-  FunctionPtr qHat_soln0 = Function::solution(qHat, soln0);
+  FunctionPtr qHat_soln0 = Function::solution(qHat, soln0, false);
 
   RHSPtr rhs1 = RHS::rhs();
   rhs1->addTerm(u_soln0 / dt * v);
@@ -266,17 +266,13 @@ int main(int argc, char *argv[])
   SolutionPtr soln1 = Solution::solution(mesh, bc, rhs1, ip);
   soln1->setCubatureEnrichmentDegree(5);
   FunctionPtr u_soln1 = Function::solution(u, soln1);
-  FunctionPtr qHat_soln1 = Function::solution(qHat, soln1);
+  FunctionPtr qHat_soln1 = Function::solution(qHat, soln1, false);
 
   RHSPtr rhs2 = RHS::rhs(); // after the first solve on soln0, we'll swap out initialRHS for rhs2
   rhs2->addTerm(u_soln1 / dt * v);
   rhs2->addTerm((1-theta) * u_soln1 * c * v->grad());
 
-  Teuchos::RCP<Solver> solver = Teuchos::rcp( new KluSolver );
-
-#ifdef HAVE_AMESOS_MUMPS
-  if (useMumpsIfAvailable) solver = Teuchos::rcp( new MumpsSolver );
-#endif
+  Teuchos::RCP<Solver> solver = Solver::getDirectSolver();
 
 //  double energyErrorSum = 0;
 
@@ -331,7 +327,7 @@ int main(int argc, char *argv[])
     if (rank==0) soln0Exporter.exportFields(filename.str());
 #endif
 #ifdef USE_HDF5
-    exporter.exportSolution(soln0, varFactory,0);
+    exporter.exportSolution(soln0,0);
 #endif
     if (saveSolutionFiles)
     {
@@ -363,7 +359,7 @@ int main(int argc, char *argv[])
     if (rank==0) soln0Exporter.exportFields(filename.str());
 #endif
 #ifdef USE_HDF5
-    exporter.exportSolution(soln0, varFactory);
+    exporter.exportSolution(soln0);
 #endif
     if (saveSolutionFiles)
     {
@@ -417,11 +413,11 @@ int main(int argc, char *argv[])
       double t = n * dt;
       if (odd)
       {
-        exporter.exportSolution(soln1, varFactory, t);
+        exporter.exportSolution(soln1, t);
       }
       else
       {
-        exporter.exportSolution(soln0, varFactory, t);
+        exporter.exportSolution(soln0, t);
       }
 #endif
       if (saveSolutionFiles)

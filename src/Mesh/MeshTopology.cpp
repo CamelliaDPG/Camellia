@@ -834,6 +834,19 @@ vector<IndexType> MeshTopology::getCanonicalEntityNodesViaPeriodicBCs(unsigned d
   }
   else
   {
+    if (d==0)
+    {
+      IndexType vertexIndex = myEntityNodes[0];
+      if (_canonicalVertexPeriodic.find(vertexIndex) != _canonicalVertexPeriodic.end())
+      {
+        return {_canonicalVertexPeriodic[vertexIndex]};
+      }
+      else
+      {
+        TEUCHOS_TEST_FOR_EXCEPTION(true, std::invalid_argument, "MeshTopology error: vertex not found.");
+      }
+    }
+    
     // compute the intersection of the periodic BCs that match each node in nodeSet
     set< pair<int, int> > matchingPeriodicBCsIntersection;
     bool firstNode = true;
@@ -1585,6 +1598,7 @@ unsigned MeshTopology::getEntityIndex(unsigned d, const set<unsigned> &nodeSet)
         //              which cells contain this particular vertex.  This is analogous to what we do below with edges, etc.;
         //              the only distinction is that there *are* two vertices stored, so that the physical location of the
         //              cell can still be meaningfully determined.
+        
         vector<IndexType> nodeVector(nodeSet.begin(),nodeSet.end());
         vector<IndexType> equivalentNodeVector = getCanonicalEntityNodesViaPeriodicBCs(d, nodeVector);
         return equivalentNodeVector[0];
@@ -1908,7 +1922,7 @@ unsigned MeshTopology::getVertexIndexAdding(const vector<double> &vertex, double
     _knownTopologies[nodeTopo->getKey()] = nodeTopo;
   }
   _entityCellTopologyKeys[vertexDim].push_back(nodeTopo->getKey());
-
+  
   // new 2-11-16: when using periodic BCs, only add vertex to _knownEntities if it is the original matching point
   bool matchFound = false;
   for (int i=0; i<_periodicBCs.size(); i++)
@@ -1923,10 +1937,20 @@ unsigned MeshTopology::getVertexIndexAdding(const vector<double> &vertex, double
       unsigned equivalentVertexIndex;
       if ( getVertexIndex(matchingPoint, equivalentVertexIndex, tol) )
       {
+        if (_canonicalVertexPeriodic.find(equivalentVertexIndex) == _canonicalVertexPeriodic.end())
+        {
+          _canonicalVertexPeriodic[vertexIndex] = equivalentVertexIndex;
+        }
+        else
+        {
+          _canonicalVertexPeriodic[vertexIndex] = _canonicalVertexPeriodic[equivalentVertexIndex];
+        }
+        // we do still need to keep track of _equivalentNodeViaPeriodicBC, _periodicBCIndicesMatchingNode,
+        // since this is how we can decide that two sides are the same...
         _equivalentNodeViaPeriodicBC[make_pair(vertexIndex, matchingBC)] = equivalentVertexIndex;
         _equivalentNodeViaPeriodicBC[make_pair(equivalentVertexIndex, matchingBCForEquivalentVertex)] = vertexIndex;
         _periodicBCIndicesMatchingNode[vertexIndex].insert(matchingBC);
-        _periodicBCIndicesMatchingNode[equivalentVertexIndex].insert({matchingBCForEquivalentVertex});
+        _periodicBCIndicesMatchingNode[equivalentVertexIndex].insert(matchingBCForEquivalentVertex);
         matchFound = true;
       }
     }

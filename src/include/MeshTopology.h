@@ -42,6 +42,7 @@ class MeshTopology : public MeshTopologyView
   vector< PeriodicBCPtr > _periodicBCs;
   map<IndexType, set< pair<int, int> > > _periodicBCIndicesMatchingNode; // pair: first = index in _periodicBCs; second: 0 or 1, indicating first or second part of the identification matches.  IndexType is the vertex index.
   map< pair<IndexType, pair<int,int> >, IndexType > _equivalentNodeViaPeriodicBC;
+  map<IndexType, IndexType> _canonicalVertexPeriodic; // key is a vertex *not* in _knownEntities; the value is the matching vertex in _knownEntities
 
   // the following entity vectors are indexed on dimension of the entities
   vector< vector< vector<IndexType> > > _entities; // vertices, edges, faces, solids, etc., up to dimension (_spaceDim - 1).  Innermost container is sorted by value of IndexType (nodes). The outer two indices are entityDim, entityIndex.
