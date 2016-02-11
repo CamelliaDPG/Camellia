@@ -755,9 +755,9 @@ vector<CellPtr> Cell::getNeighbors(MeshTopologyViewPtr meshTopoViewForCellValidi
   return neighbors;
 }
 
-void Cell::setNeighbor(unsigned sideOrdinal, GlobalIndexType neighborCellIndex, unsigned neighborSideOrdinal)
+void Cell::setNeighbor(unsigned sideOrdinal, GlobalIndexType neighborCellIndex, unsigned neighborSideOrdinal, bool allowSameCellIndex)
 {
-  if (neighborCellIndex == _cellIndex)
+  if ((neighborCellIndex == _cellIndex) && !allowSameCellIndex)
   {
     cout << "ERROR: neighborCellIndex == _cellIndex.\n";
     TEUCHOS_TEST_FOR_EXCEPTION(true, std::invalid_argument, "ERROR: neighborCellIndex == _cellIndex.\n");
