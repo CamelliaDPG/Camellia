@@ -606,6 +606,11 @@ BasisMap GDAMinimumRule::getBasisMap(GlobalIndexType cellID, SubCellDofIndexInfo
   // assumption is that the basis is defined on the whole cell
   BasisPtr basis = trialOrdering->getBasis(var->ID());
 
+  const static int DEBUG_VAR_ID = 0;
+  const static GlobalIndexType DEBUG_CELL_ID = 3;
+  const static GlobalIndexType DEBUG_GLOBAL_DOF = 0;
+  const static int DEBUG_LOCAL_DOF = 5;
+  
   // to begin, let's map the volume-interior dofs:
   vector<GlobalIndexType> globalDofOrdinals = dofIndexInfo[spaceDim][0][var->ID()];
   set<int> basisDofOrdinals = BasisReconciliation::interiorDofOrdinalsForBasis(basis); // basis->dofOrdinalsForInterior(); // TODO: change interiorDofOrdinalsForBasis to return set<unsigned>...
@@ -750,6 +755,29 @@ BasisMap GDAMinimumRule::getBasisMap(GlobalIndexType cellID, SubCellDofIndexInfo
         subBasisMap.globalDofOrdinals = globalDofOrdinals;
         subBasisMap.basisDofOrdinals = weightsForSubcell.fineOrdinals;
         
+//        { // DEBUGGING
+//          if (cellID == DEBUG_CELL_ID)
+//          {
+//            if (var->ID() == DEBUG_VAR_ID)
+//            {
+//              if (std::find(subBasisMap.globalDofOrdinals.begin(), subBasisMap.globalDofOrdinals.end(), DEBUG_GLOBAL_DOF) != subBasisMap.globalDofOrdinals.end())
+//              {
+//                if (subBasisMap.basisDofOrdinals.find(DEBUG_LOCAL_DOF) != subBasisMap.basisDofOrdinals.end())
+//                {
+//                  cout << CamelliaCellTools::entityTypeString(d) << " " << subcord << " on cell " << cellID << " constrained by ";
+//                  cout << CamelliaCellTools::entityTypeString(subcellConstraint.dimension) << " " << subcellOrdinalInConstrainingCell << " on cell ";
+//                  cout << subcellConstraint.cellID << ".\n";
+//                  
+//                  Camellia::print("weights coarse ordinals", weightsForSubcell.coarseOrdinals);
+//                  Camellia::print("subBasisMap.basisDofOrdinals", subBasisMap.basisDofOrdinals);
+//                  Camellia::print("subBasisMap.globalDofOrdinals", subBasisMap.globalDofOrdinals);
+//                  cout << "subBasisMap.weights:\n" << weightsForSubcell.weights;
+//                }
+//              }
+//            }
+//          }
+//        }
+        
         subBasisMaps.push_back(subBasisMap);
       }
       
@@ -797,7 +825,7 @@ BasisMap GDAMinimumRule::getBasisMap(GlobalIndexType cellID, SubCellDofIndexInfo
             vector<GlobalIndexType> globalDofOrdinalsForSubcell = owningCellDofIndexInfo[ownershipInfo.dimension][owningSubcellOrdinal][var->ID()];
             
             // extract the global dof ordinals corresponding to subcellInteriorWeights.coarseOrdinals
-            set<int> constrainingBasisOrdinalsForSubcell = constrainingBasis->dofOrdinalsForSubcell(subsubcdim, subsubcellOrdinalInConstrainingCell, 0);
+            set<int> constrainingBasisOrdinalsForSubcell = constrainingBasis->dofOrdinalsForSubcell(subsubcdim, subsubcellOrdinalInConstrainingCell);
             vector<int> basisOrdinalsVector(constrainingBasisOrdinalsForSubcell.begin(),constrainingBasisOrdinalsForSubcell.end());
             vector<GlobalIndexType> globalDofOrdinals;
             for (int i=0; i<basisOrdinalsVector.size(); i++)
@@ -819,6 +847,32 @@ BasisMap GDAMinimumRule::getBasisMap(GlobalIndexType cellID, SubCellDofIndexInfo
             subBasisMap.weights = weightsForSubSubcell.weights;
             subBasisMap.globalDofOrdinals = globalDofOrdinals;
             subBasisMap.basisDofOrdinals = weightsForSubSubcell.fineOrdinals;
+            
+//            { // DEBUGGING
+//              if (cellID == DEBUG_CELL_ID)
+//              {
+//                if (var->ID() == DEBUG_VAR_ID)
+//                {
+//                  if (std::find(subBasisMap.globalDofOrdinals.begin(), subBasisMap.globalDofOrdinals.end(), DEBUG_GLOBAL_DOF) != subBasisMap.globalDofOrdinals.end())
+//                  {
+//                    if (subBasisMap.basisDofOrdinals.find(DEBUG_LOCAL_DOF) != subBasisMap.basisDofOrdinals.end())
+//                    {
+//                      cout << CamelliaCellTools::entityTypeString(d) << " " << subcord << " on cell " << cellID << " constrained by ";
+//                      cout << CamelliaCellTools::entityTypeString(subcellConstraint.dimension) << " " << subcellOrdinalInConstrainingCell << " on cell ";
+//                      cout << subcellConstraint.cellID << "; " << CamelliaCellTools::entityTypeString(subsubcdim) << " " << subsubcellOrdinalInConstrainingCell;
+//                      cout << " on cell " << subcellConstraint.cellID << " constrained by ";
+//                      cout << CamelliaCellTools::entityTypeString(subsubcellConstraints.dimension) << " " << subcellOrdinalInConstrainingCell << " on cell ";
+//                      cout << subsubcellConstraints.cellID << ".\n";
+//                      
+//                      Camellia::print("weights coarse ordinals", weightsForSubSubcell.coarseOrdinals);
+//                      Camellia::print("subBasisMap.basisDofOrdinals", subBasisMap.basisDofOrdinals);
+//                      Camellia::print("subBasisMap.globalDofOrdinals", subBasisMap.globalDofOrdinals);
+//                      cout << "subBasisMap.weights:\n" << weightsForSubSubcell.weights;
+//                    }
+//                  }
+//                }
+//              }
+//            }
             
             subBasisMaps.push_back(subBasisMap);
             
@@ -877,6 +931,20 @@ BasisMap GDAMinimumRule::getBasisMap(GlobalIndexType cellID, SubCellDofIndexInfo
           }
           fineOrdinalCoefficientsThusFar[fineOrdinal] = coefficient;
           globalOrdinalsForFineOrdinal[fineOrdinal].insert(globalDofOrdinal);
+//          {
+//            // DEBUGGING
+//            if (cellID == DEBUG_CELL_ID)
+//            {
+//              if (var->ID() == DEBUG_VAR_ID)
+//              {
+//                if ((fineOrdinal == DEBUG_LOCAL_DOF) && (globalDofOrdinal == DEBUG_GLOBAL_DOF))
+//                {
+//                  cout << "subBasisMap.weights:\n" << subBasisMap.weights;
+//                  cout << "Added weight " << coefficient << " for global dof " << globalDofOrdinal << " representation by local basis ordinal " << fineOrdinal << endl;
+//                }
+//              }
+//            }
+//          }
         }
       }
       weightsForGlobalOrdinal[globalDofOrdinal] = fineOrdinalCoefficientsThusFar;
