@@ -941,11 +941,8 @@ set<int> BasisReconciliation::interiorDofOrdinalsForBasis(BasisPtr basis)
   set<int> interiorDofOrdinals = isL2 ? basis->dofOrdinalsForSubcells(spaceDim, true) : basis->dofOrdinalsForInterior();
   if (interiorDofOrdinals.size() == 0)
   {
-    cout << "Empty interiorDofOrdinals ";
     if (isL2)
-      cout << "(L^2 basis).\n";
-    else
-      cout << "(non-L^2 basis).\n";
+      cout << "Empty interiorDofOrdinals for L^2 basis.\n";
   }
   return interiorDofOrdinals;
 }

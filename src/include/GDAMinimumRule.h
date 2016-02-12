@@ -105,7 +105,8 @@ class GDAMinimumRule : public GlobalDofAssignment
 
   typedef vector< SubBasisDofMapperPtr > BasisMap;
   BasisMap getBasisMap(GlobalIndexType cellID, SubCellDofIndexInfo& dofOwnershipInfo, VarPtr var);
-  BasisMap getBasisMapVolumeRestrictedToSide(GlobalIndexType cellID, SubCellDofIndexInfo& dofOwnershipInfo, VarPtr var, int sideOrdinal);
+  BasisMap getBasisMapDiscontinuousVolumeRestrictedToSide(GlobalIndexType cellID, SubCellDofIndexInfo& dofOwnershipInfo, VarPtr var, int sideOrdinal);
+  static BasisMap getRestrictedBasisMap(BasisMap &basisMap, const set<int> &basisDofOrdinalRestriction); // restricts to part of the basis
 
   void getGlobalDofIndices(GlobalIndexType cellID, int varID, int sideOrdinal,
                            Intrepid::FieldContainer<GlobalIndexType> &globalDofIndices);

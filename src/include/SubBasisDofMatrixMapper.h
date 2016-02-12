@@ -20,17 +20,14 @@ namespace Camellia
 {
 class SubBasisDofMatrixMapper : public SubBasisDofMapper   // subclass that multiplies by a matrix (as opposed to applying a permutation)
 {
-  std::set<unsigned> _basisDofOrdinalFilter;
+  std::set<int> _basisDofOrdinalFilter;
   std::vector<GlobalIndexType> _mappedGlobalDofOrdinals;
   Intrepid::FieldContainer<double> _constraintMatrix;
-  
-  void mapSubBasisDataIntoGlobalContainer(const Intrepid::FieldContainer<double> &subBasisData, const std::map<GlobalIndexType, unsigned> &globalIndexToOrdinal,
-                                          bool fittableDofsOnly, const std::set<GlobalIndexType> &fittableDofIndices, Intrepid::FieldContainer<double> &globalData);
 public:
-  SubBasisDofMatrixMapper(const std::set<unsigned> &basisDofOrdinalFilter,
+  SubBasisDofMatrixMapper(const std::set<int> &basisDofOrdinalFilter,
                           const std::vector<GlobalIndexType> &mappedGlobalDofOrdinals,
                           const Intrepid::FieldContainer<double> &constraintMatrix);
-  const set<unsigned> &basisDofOrdinalFilter();
+  const set<int> &basisDofOrdinalFilter();
   
   //! returns true if the sub basis map is a simple permutation, negated  -- SubBasisDofMatrixMapper always returns false
   bool isNegatedPermutation();
@@ -46,10 +43,15 @@ public:
   void mapDataIntoGlobalContainer(const Intrepid::FieldContainer<double> &wholeBasisData, const std::map<GlobalIndexType, unsigned> &globalIndexToOrdinal,
                                   bool fittableDofsOnly, const std::set<GlobalIndexType> &fittableDofIndices, Intrepid::FieldContainer<double> &globalData);
 
+  void mapSubBasisDataIntoGlobalContainer(const Intrepid::FieldContainer<double> &subBasisData, const std::map<GlobalIndexType, unsigned> &globalIndexToOrdinal,
+                                          bool fittableDofsOnly, const std::set<GlobalIndexType> &fittableDofIndices, Intrepid::FieldContainer<double> &globalData);
+  
   const std::vector<GlobalIndexType> &mappedGlobalDofOrdinals();
-  std::set<GlobalIndexType> mappedGlobalDofOrdinalsForBasisOrdinals(std::set<unsigned> &basisDofOrdinals);
+  std::set<GlobalIndexType> mappedGlobalDofOrdinalsForBasisOrdinals(std::set<int> &basisDofOrdinals);
 
   SubBasisDofMapperPtr negatedDofMapper();
+  SubBasisDofMapperPtr restrictDofOrdinalFilter(const set<int> &newDofOrdinalFilter); // this dof mapper, restricted to the specified basisDofOrdinals
+  SubBasisDofMapperPtr restrictGlobalDofOrdinals(const set<GlobalIndexType> &newGlobalDofOrdinals); // this dof mapper, restricted to the specified global dof ordinals
 
   const Intrepid::FieldContainer<double> &constraintMatrix();
   Intrepid::FieldContainer<double> getConstraintMatrix();
