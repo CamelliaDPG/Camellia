@@ -97,7 +97,7 @@ namespace
     
     FunctionPtr phi_exact = -x + y;
     
-    int H1Order = 1;
+    int H1Order = 2;
     bool useConformingTraces = true; // doesn't matter for continuous Galerkin
     PoissonFormulation poissonForm(spaceDim, useConformingTraces, PoissonFormulation::CONTINUOUS_GALERKIN);
     
