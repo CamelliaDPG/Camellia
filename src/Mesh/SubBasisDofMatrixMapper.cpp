@@ -386,7 +386,8 @@ SubBasisDofMapperPtr SubBasisDofMatrixMapper::restrictDofOrdinalFilter(const set
     }
     restricted_i++;
   }
-  return Teuchos::rcp(new SubBasisDofMatrixMapper(restrictedDofOrdinalFilter, restrictedMappedGlobalDofOrdinals, restrictedConstraintMatrix));
+  return SubBasisDofMapper::subBasisDofMapper(restrictedDofOrdinalFilter, restrictedMappedGlobalDofOrdinals, restrictedConstraintMatrix);
+//  return Teuchos::rcp(new SubBasisDofMatrixMapper(restrictedDofOrdinalFilter, restrictedMappedGlobalDofOrdinals, restrictedConstraintMatrix));
 }
 
 SubBasisDofMapperPtr SubBasisDofMatrixMapper::restrictGlobalDofOrdinals(const set<GlobalIndexType> &newGlobalDofOrdinals) // this dof mapper, restricted to the specified global dof ordinals
