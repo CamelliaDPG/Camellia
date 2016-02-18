@@ -16,7 +16,7 @@ using namespace std;
 using namespace Intrepid;
 using namespace Camellia;
 
-SubBasisDofMatrixMapper::SubBasisDofMatrixMapper(const set<unsigned> &basisDofOrdinalFilter, const vector<GlobalIndexType> &mappedGlobalDofOrdinals, const FieldContainer<double> &constraintMatrix)
+SubBasisDofMatrixMapper::SubBasisDofMatrixMapper(const set<int> &basisDofOrdinalFilter, const vector<GlobalIndexType> &mappedGlobalDofOrdinals, const FieldContainer<double> &constraintMatrix)
 {
   _basisDofOrdinalFilter = basisDofOrdinalFilter;
   _mappedGlobalDofOrdinals = mappedGlobalDofOrdinals;
@@ -125,7 +125,7 @@ SubBasisDofMatrixMapper::SubBasisDofMatrixMapper(const set<unsigned> &basisDofOr
 //  }
 }
 
-const set<unsigned> & SubBasisDofMatrixMapper::basisDofOrdinalFilter()
+const set<int> & SubBasisDofMatrixMapper::basisDofOrdinalFilter()
 {
   return _basisDofOrdinalFilter;
 }
@@ -218,8 +218,8 @@ void SubBasisDofMatrixMapper::mapDataIntoGlobalContainer(const Intrepid::FieldCo
                                                          const map<GlobalIndexType, unsigned> &globalIndexToOrdinal,
                                                          bool fittableDofsOnly, const set<GlobalIndexType> &fittableDofIndices, Intrepid::FieldContainer<double> &globalData)
 {
-  const set<unsigned>* basisOrdinalFilter = &this->basisDofOrdinalFilter();
-  vector<unsigned> dofIndices(basisOrdinalFilter->begin(),basisOrdinalFilter->end());
+  const set<int>* basisOrdinalFilter = &this->basisDofOrdinalFilter();
+  vector<int> dofIndices(basisOrdinalFilter->begin(),basisOrdinalFilter->end());
   FieldContainer<double> subBasisData(basisOrdinalFilter->size());
   int dofCount = basisOrdinalFilter->size();
   if (allLocalData.rank()==1)
@@ -246,8 +246,8 @@ void SubBasisDofMatrixMapper::mapDataIntoGlobalContainer(const FieldContainer<do
 {
   // like calling mapData, above, with transposeConstraint = true
 
-  const set<unsigned>* basisOrdinalFilter = &this->basisDofOrdinalFilter();
-  vector<unsigned> dofIndices(basisOrdinalFilter->begin(),basisOrdinalFilter->end());
+  const set<int>* basisOrdinalFilter = &this->basisDofOrdinalFilter();
+  vector<int> dofIndices(basisOrdinalFilter->begin(),basisOrdinalFilter->end());
   FieldContainer<double> subBasisData(basisOrdinalFilter->size());
   int dofCount = basisOrdinalFilter->size();
   if (wholeBasisData.rank()==1)
@@ -313,11 +313,11 @@ const vector<GlobalIndexType> & SubBasisDofMatrixMapper::mappedGlobalDofOrdinals
   return _mappedGlobalDofOrdinals;
 }
 
-set<GlobalIndexType> SubBasisDofMatrixMapper::mappedGlobalDofOrdinalsForBasisOrdinals(set<unsigned> &basisDofOrdinals)
+set<GlobalIndexType> SubBasisDofMatrixMapper::mappedGlobalDofOrdinalsForBasisOrdinals(set<int> &basisDofOrdinals)
 {
   int i=0;
   set<GlobalIndexType> globalIndices;
-  for (unsigned myBasisDofOrdinal : _basisDofOrdinalFilter)
+  for (int myBasisDofOrdinal : _basisDofOrdinalFilter)
   {
     if (basisDofOrdinals.find(myBasisDofOrdinal) != basisDofOrdinals.end())
     {
@@ -341,4 +341,58 @@ SubBasisDofMapperPtr SubBasisDofMatrixMapper::negatedDofMapper()
   FieldContainer<double> negatedConstraintMatrix = _constraintMatrix;
   SerialDenseWrapper::multiplyFCByWeight(negatedConstraintMatrix, -1);
   return Teuchos::rcp( new SubBasisDofMatrixMapper(_basisDofOrdinalFilter, _mappedGlobalDofOrdinals, negatedConstraintMatrix) );
+}
+
+SubBasisDofMapperPtr SubBasisDofMatrixMapper::restrictDofOrdinalFilter(const set<int> &newDofOrdinalFilter)
+{
+  set<int> restrictedDofOrdinalFilter;
+  vector<int> rowsToKeep;
+  set<int> colsToKeep;
+  int i = 0;
+  for (int basisDofOrdinal : _basisDofOrdinalFilter)
+  {
+    if (newDofOrdinalFilter.find(basisDofOrdinal) != newDofOrdinalFilter.end())
+    {
+      rowsToKeep.push_back(i);
+      restrictedDofOrdinalFilter.insert(basisDofOrdinal);
+      double tol = 1e-15;
+      for (int j=0; j<_constraintMatrix.dimension(1); j++)
+      {
+        if (abs(_constraintMatrix(i,j)) > tol)
+        {
+          colsToKeep.insert(j);
+        }
+      }
+    }
+    i++;
+  }
+  FieldContainer<double> restrictedConstraintMatrix(rowsToKeep.size(),colsToKeep.size());
+  vector<GlobalIndexType> restrictedMappedGlobalDofOrdinals(colsToKeep.size());
+  
+  int restricted_j = 0;
+  for (int j : colsToKeep)
+  {
+    restrictedMappedGlobalDofOrdinals[restricted_j++] = _mappedGlobalDofOrdinals[j];
+  }
+  
+  int restricted_i = 0;
+  for (int i : rowsToKeep)
+  {
+    int restricted_j = 0;
+    for (int j : colsToKeep)
+    {
+      restrictedConstraintMatrix(restricted_i, restricted_j) = _constraintMatrix(i,j);
+      restricted_j++;
+    }
+    restricted_i++;
+  }
+  return Teuchos::rcp( new SubBasisDofMatrixMapper(restrictedDofOrdinalFilter, restrictedMappedGlobalDofOrdinals, restrictedConstraintMatrix) );
+}
+
+SubBasisDofMapperPtr SubBasisDofMatrixMapper::restrictGlobalDofOrdinals(const set<GlobalIndexType> &newGlobalDofOrdinals) // this dof mapper, restricted to the specified global dof ordinals
+{
+  // leave unimplemented for now -- first let's debug the other restriction method
+  
+  cout << "SubBasisDofMatrixMapper::restrictGlobalDofOrdinals() has not yet been implemented.  Return null.\n";
+  return Teuchos::null;
 }

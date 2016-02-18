@@ -271,8 +271,12 @@ SubBasisReconciliationWeights BasisReconciliation::computeConstrainedWeights(uns
   //  set<unsigned> fineOrdinalsUnsigned = internalDofOrdinalsForFinerBasis(finerBasis, refinements, subcellDimension, finerBasisSubcellOrdinal);
   //  weights.fineOrdinals.insert(fineOrdinalsUnsigned.begin(),fineOrdinalsUnsigned.end());
 
-  weights.fineOrdinals = finerBasis->dofOrdinalsForSubcell(subcellDimension, finerBasisSubcellOrdinal, 0);
-  weights.coarseOrdinals = coarserBasis->dofOrdinalsForSubcell(subcellDimension,coarserBasisSubcellOrdinal,0);
+  // TODO: consider changing weights structure to use (sorted) vector instead of set
+  
+  vector<int> fineOrdinals = finerBasis->dofOrdinalsForSubcell(subcellDimension, finerBasisSubcellOrdinal, 0);
+  vector<int> coarseOrdinals = coarserBasis->dofOrdinalsForSubcell(subcellDimension,coarserBasisSubcellOrdinal,0);
+  weights.fineOrdinals = set<int>(fineOrdinals.begin(),fineOrdinals.end());
+  weights.coarseOrdinals = set<int>(coarseOrdinals.begin(), coarseOrdinals.end());
 
   if (weights.fineOrdinals.size() == 0)
   {
@@ -477,9 +481,11 @@ SubBasisReconciliationWeights BasisReconciliation::computeConstrainedWeights(uns
     TEUCHOS_TEST_FOR_EXCEPTION(true, std::invalid_argument, "dimensions of finerBasis and coarserBasis domains do not match!");
   }
 
-  weights.fineOrdinals = finerBasis->dofOrdinalsForSubcell(fineSubcellDimension, fineSubcellOrdinalInFineDomain, 0);
-  weights.coarseOrdinals = coarserBasis->dofOrdinalsForSubcell(coarseSubcellDimension, coarseSubcellOrdinalInCoarseDomain, 0);
-
+  vector<int> fineOrdinals = finerBasis->dofOrdinalsForSubcell(fineSubcellDimension, fineSubcellOrdinalInFineDomain, 0);
+  vector<int> coarseOrdinals = coarserBasis->dofOrdinalsForSubcell(coarseSubcellDimension, coarseSubcellOrdinalInCoarseDomain, 0);
+  weights.fineOrdinals = set<int>(fineOrdinals.begin(),fineOrdinals.end());
+  weights.coarseOrdinals = set<int>(coarseOrdinals.begin(), coarseOrdinals.end());
+  
   if (weights.fineOrdinals.size() == 0)
   {
     if (weights.coarseOrdinals.size() != 0)
@@ -561,10 +567,12 @@ SubBasisReconciliationWeights BasisReconciliation::computeConstrainedWeightsForT
     unsigned coarseSubcellPermutation)
 {
   SubBasisReconciliationWeights weights;
-
-  weights.fineOrdinals = finerBasis->dofOrdinalsForSubcell(fineSubcellDimension, fineSubcellOrdinalInFineDomain, 0);
-  weights.coarseOrdinals = coarserBasis->dofOrdinalsForSubcell(coarseSubcellDimension, coarseSubcellOrdinalInCoarseDomain, 0);
-
+  
+  vector<int> fineOrdinals = finerBasis->dofOrdinalsForSubcell(fineSubcellDimension, fineSubcellOrdinalInFineDomain, 0);
+  vector<int> coarseOrdinals = coarserBasis->dofOrdinalsForSubcell(coarseSubcellDimension, coarseSubcellOrdinalInCoarseDomain, 0);
+  weights.fineOrdinals = set<int>(fineOrdinals.begin(),fineOrdinals.end());
+  weights.coarseOrdinals = set<int>(coarseOrdinals.begin(), coarseOrdinals.end());
+  
   if (weights.fineOrdinals.size() == 0)
   {
     if (weights.coarseOrdinals.size() != 0)
@@ -941,11 +949,8 @@ set<int> BasisReconciliation::interiorDofOrdinalsForBasis(BasisPtr basis)
   set<int> interiorDofOrdinals = isL2 ? basis->dofOrdinalsForSubcells(spaceDim, true) : basis->dofOrdinalsForInterior();
   if (interiorDofOrdinals.size() == 0)
   {
-    cout << "Empty interiorDofOrdinals ";
     if (isL2)
-      cout << "(L^2 basis).\n";
-    else
-      cout << "(non-L^2 basis).\n";
+      cout << "Empty interiorDofOrdinals for L^2 basis.\n";
   }
   return interiorDofOrdinals;
 }
@@ -982,11 +987,11 @@ set<unsigned> BasisReconciliation::internalDofOrdinalsForFinerBasis(BasisPtr fin
     for (set<unsigned>::iterator scOrdinalIt = internalOrdinals.begin(); scOrdinalIt != internalOrdinals.end(); scOrdinalIt++)
     {
       unsigned scOrdinal = *scOrdinalIt;
-      set<int> scInternalDofs = finerBasis->dofOrdinalsForSubcell(scDim, scOrdinal, scDim);
+      vector<int> scInternalDofs = finerBasis->dofOrdinalsForSubcell(scDim, scOrdinal, scDim);
       internalDofOrdinals.insert(scInternalDofs.begin(),scInternalDofs.end());
     }
   }
-  set<int> cellInternalDofs = finerBasis->dofOrdinalsForSubcell(spaceDim, 0, spaceDim);
+  vector<int> cellInternalDofs = finerBasis->dofOrdinalsForSubcell(spaceDim, 0, spaceDim);
   internalDofOrdinals.insert(cellInternalDofs.begin(),cellInternalDofs.end());
 
   return internalDofOrdinals;
@@ -1046,7 +1051,7 @@ set<unsigned> BasisReconciliation::internalDofOrdinalsForFinerBasis(BasisPtr fin
 
   set<unsigned> internalDofOrdinals;
   // first, add all dofs internal to the fine subcell:
-  set<int> fineSubcellInternalDofs = finerBasis->dofOrdinalsForSubcell(subcdim, subcord);
+  vector<int> fineSubcellInternalDofs = finerBasis->dofOrdinalsForSubcell(subcdim, subcord);
   internalDofOrdinals.insert(fineSubcellInternalDofs.begin(),fineSubcellInternalDofs.end());
   for (int d=0; d<subcdim; d++)
   {
@@ -1054,7 +1059,7 @@ set<unsigned> BasisReconciliation::internalDofOrdinalsForFinerBasis(BasisPtr fin
     for (set<unsigned>::iterator ordIt=subcellOrdinals.begin(); ordIt != subcellOrdinals.end(); ordIt++)
     {
       unsigned subcellOrdinal = *ordIt;
-      set<int> subcellDofs = finerBasis->dofOrdinalsForSubcell(d, subcellOrdinal);
+      vector<int> subcellDofs = finerBasis->dofOrdinalsForSubcell(d, subcellOrdinal);
       internalDofOrdinals.insert(subcellDofs.begin(),subcellDofs.end());
     }
   }
@@ -1503,14 +1508,14 @@ SubBasisReconciliationWeights BasisReconciliation::sumWeights(SubBasisReconcilia
 SubBasisReconciliationWeights BasisReconciliation::weightsForCoarseSubcell(SubBasisReconciliationWeights &weights, BasisPtr constrainingBasis, unsigned subcdim, unsigned subcord, bool includeSubsubcells)
 {
   int minSubcellDimension = includeSubsubcells ? 0 : subcdim;
-  set<int> coarseDofsForSubcell = constrainingBasis->dofOrdinalsForSubcell(subcdim, subcord, minSubcellDimension);
+  vector<int> coarseDofsForSubcell = constrainingBasis->dofOrdinalsForSubcell(subcdim, subcord, minSubcellDimension);
   set<int> coarseDofsToInclude; // will be the intersection of coarseDofsForSubcell and weights.coarseOrdinals
   vector<unsigned> columnOrdinalsToInclude;
   int columnOrdinal = 0;
   for (set<int>::iterator coarseOrdinalIt = weights.coarseOrdinals.begin(); coarseOrdinalIt != weights.coarseOrdinals.end(); coarseOrdinalIt++)
   {
     int coarseOrdinal = *coarseOrdinalIt;
-    if (coarseDofsForSubcell.find(coarseOrdinal) != coarseDofsForSubcell.end())
+    if (std::find(coarseDofsForSubcell.begin(), coarseDofsForSubcell.end(), coarseOrdinal) != coarseDofsForSubcell.end())
     {
       columnOrdinalsToInclude.push_back(columnOrdinal);
       coarseDofsToInclude.insert(coarseOrdinal);

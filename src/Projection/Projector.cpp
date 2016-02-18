@@ -296,7 +296,7 @@ void Projector<Scalar>::projectFunctionOntoBasisInterpolating(FieldContainer<Sca
     int subcellCount = domainTopo->getSubcellCount(d);
     for (int subcord=0; subcord<subcellCount; subcord++)
     {
-      set<int> subcellDofOrdinals;
+      vector<int> subcellDofOrdinals;
       if (basisDomainDim == domainDim)
       {
         if (d > startingDimensionForProjection)

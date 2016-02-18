@@ -872,8 +872,8 @@ LocalDofMapperPtr GMGOperator::getLocalCoefficientMap(GlobalIndexType fineCellID
         }
         if (shouldDiscard)
         {
-          set<int> dofOrdinals = fineBasis->dofOrdinalsForSubcell(d, subcord);
-          fineDofsToDiscard.insert(dofOrdinals.begin(),dofOrdinals.end());
+          const vector<int>* dofOrdinals = &fineBasis->dofOrdinalsForSubcell(d, subcord);
+          fineDofsToDiscard.insert(dofOrdinals->begin(),dofOrdinals->end());
         }
       }
     }
@@ -1037,8 +1037,6 @@ LocalDofMapperPtr GMGOperator::getLocalCoefficientMap(GlobalIndexType fineCellID
         }
         SubBasisReconciliationWeights weights = _br.constrainedWeights(fineBasis, refBranch, coarseBasis, vertexNodePermutation);
         
-        set<unsigned> fineDofOrdinals(weights.fineOrdinals.begin(),weights.fineOrdinals.end());
-
         vector<GlobalIndexType> coarseDofIndices;
         for (set<int>::iterator coarseOrdinalIt=weights.coarseOrdinals.begin(); coarseOrdinalIt != weights.coarseOrdinals.end(); coarseOrdinalIt++)
         {
@@ -1046,7 +1044,7 @@ LocalDofMapperPtr GMGOperator::getLocalCoefficientMap(GlobalIndexType fineCellID
           coarseDofIndices.push_back(coarseDofIndex);
         }
         fittableGlobalDofOrdinalsInVolume.insert(coarseDofIndices.begin(),coarseDofIndices.end());
-        BasisMap basisMap(1,SubBasisDofMapper::subBasisDofMapper(fineDofOrdinals, coarseDofIndices, weights.weights));
+        BasisMap basisMap(1,SubBasisDofMapper::subBasisDofMapper(weights.fineOrdinals, coarseDofIndices, weights.weights));
         volumeMaps[trialID] = basisMap;
 //        cout << "weights for trial ID " << trialID << ":\n" << weights.weights;
       }
@@ -1108,8 +1106,6 @@ LocalDofMapperPtr GMGOperator::getLocalCoefficientMap(GlobalIndexType fineCellID
                 
                 // **** end new weight-adjusting code ****
                 
-                set<unsigned> fineDofOrdinals(weights.fineOrdinals.begin(),weights.fineOrdinals.end());
-                
                 vector<GlobalIndexType> coarseDofIndices;
                 for (set<int>::iterator coarseOrdinalIt=weights.coarseOrdinals.begin(); coarseOrdinalIt != weights.coarseOrdinals.end(); coarseOrdinalIt++)
                 {
@@ -1119,7 +1115,7 @@ LocalDofMapperPtr GMGOperator::getLocalCoefficientMap(GlobalIndexType fineCellID
   //                cout << "termTraced weights:\n" << weights.weights;
                 }
 
-                basisMap.push_back(SubBasisDofMapper::subBasisDofMapper(fineDofOrdinals, coarseDofIndices, weights.weights));
+                basisMap.push_back(SubBasisDofMapper::subBasisDofMapper(weights.fineOrdinals, coarseDofIndices, weights.weights));
               }
               else
               {
@@ -1227,8 +1223,7 @@ LocalDofMapperPtr GMGOperator::getLocalCoefficientMap(GlobalIndexType fineCellID
                                               weights.coarseOrdinals.begin(), weights.coarseOrdinals.end());
                 // **** end new weight-adjusting code ****
                 
-                set<unsigned> fineOrdinalsUnsigned(weights.fineOrdinals.begin(),weights.fineOrdinals.end());
-                basisMap.push_back(SubBasisDofMapper::subBasisDofMapper(fineOrdinalsUnsigned, coarseDofIndicesVector, weights.weights));
+                basisMap.push_back(SubBasisDofMapper::subBasisDofMapper(weights.fineOrdinals, coarseDofIndicesVector, weights.weights));
                 fittableGlobalDofOrdinalsOnSides[sideOrdinal].insert(coarseDofIndicesVector.begin(),coarseDofIndicesVector.end());
               }
             }
@@ -1256,7 +1251,6 @@ LocalDofMapperPtr GMGOperator::getLocalCoefficientMap(GlobalIndexType fineCellID
             }
             SubBasisReconciliationWeights weights = _br.constrainedWeights(fineBasis, sideRefBranches[sideOrdinal], coarseBasis, vertexNodePermutation);
             
-            set<unsigned> fineDofOrdinals(weights.fineOrdinals.begin(),weights.fineOrdinals.end());
             vector<GlobalIndexType> coarseDofIndices(weights.coarseOrdinals.size());
             int i = 0;
             for (int coarseOrdinal : weights.coarseOrdinals)
@@ -1264,7 +1258,7 @@ LocalDofMapperPtr GMGOperator::getLocalCoefficientMap(GlobalIndexType fineCellID
               coarseDofIndices[i++] = coarseTrialOrdering->getDofIndex(trialID, coarseOrdinal, coarseSideOrdinal);
             }
 
-            basisMap.push_back(SubBasisDofMapper::subBasisDofMapper(fineDofOrdinals, coarseDofIndices, weights.weights));
+            basisMap.push_back(SubBasisDofMapper::subBasisDofMapper(weights.fineOrdinals, coarseDofIndices, weights.weights));
           }
 
           sideMaps[sideOrdinal][trialID] = basisMap;
