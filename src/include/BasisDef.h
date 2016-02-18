@@ -107,7 +107,7 @@ int Basis<Scalar, ArrayScalar>::getDofOrdinal(const int subcDim,
 //    std::cout << "int Basis<Scalar, ArrayScalar>::getDofOrdinal" << std::endl;
   if (!_basisTagsAreSet)
   {
-    initializeTags();
+    initializeTagsAndTrim();
     _basisTagsAreSet = true;
   }
   // Use .at() for bounds checking
@@ -122,7 +122,7 @@ const std::vector<std::vector<std::vector<int> > > & Basis<Scalar, ArrayScalar>:
 {
   if (!_basisTagsAreSet)
   {
-    initializeTags();
+    initializeTagsAndTrim();
     _basisTagsAreSet = true;
   }
   return _tagToOrdinal;
@@ -134,7 +134,7 @@ const std::vector<int>&  Basis<Scalar, ArrayScalar>::getDofTag(int dofOrd) const
 {
   if (!_basisTagsAreSet)
   {
-    initializeTags();
+    initializeTagsAndTrim();
     _basisTagsAreSet = true;
   }
   // Use .at() for bounds checking
@@ -146,7 +146,7 @@ const std::vector<std::vector<int> > & Basis<Scalar, ArrayScalar>::getAllDofTags
 {
   if (!_basisTagsAreSet)
   {
-    initializeTags();
+    initializeTagsAndTrim();
     _basisTagsAreSet = true;
   }
   return _ordinalToTag;
@@ -156,55 +156,137 @@ const std::vector<std::vector<int> > & Basis<Scalar, ArrayScalar>::getAllDofTags
   std::set<int> Basis<Scalar,ArrayScalar>::dofOrdinalsForSide(int sideOrdinal) const
   {
     int sideDim = this->_domainTopology->getDimension() - 1;
-    return this->dofOrdinalsForSubcell(sideDim, sideOrdinal, 0);
+    std::vector<int> dofOrdinals = this->dofOrdinalsForSubcell(sideDim, sideOrdinal, 0);
+    std::set<int> dofOrdinalsSet(dofOrdinals.begin(),dofOrdinals.end());
+    return dofOrdinalsSet;
   }
   
 template<class Scalar, class ArrayScalar>
-std::set<int> Basis<Scalar,ArrayScalar>::dofOrdinalsForSubcell(int subcellDim, int subcellIndex) const
+const std::vector<int> &Basis<Scalar,ArrayScalar>::dofOrdinalsForSubcell(int subcellDim, int subcellIndex) const
 {
+//  static std::vector<int> emptyVector;
   if (!_basisTagsAreSet)
   {
-    initializeTags();
+    initializeTagsAndTrim();
     _basisTagsAreSet = true;
   }
-  std::set<int> dofOrdinals;
-  int firstDofOrdinal = -1;
-  if (_tagToOrdinal.size() > subcellDim)
-  {
-    if (_tagToOrdinal[subcellDim].size() > subcellIndex)
+//  std::vector<int> dofOrdinals;
+//  int firstDofOrdinal = -1;
+//  if (_tagToOrdinal.size() > subcellDim)
+//  {
+//    if (_tagToOrdinal[subcellDim].size() > subcellIndex)
+//    {
+//      if (_tagToOrdinal[subcellDim][subcellIndex].size() > 0)
+//      {
+//        firstDofOrdinal = _tagToOrdinal[subcellDim][subcellIndex][0];
+//      }
+//    }
+//  }
+//  if (firstDofOrdinal == -1)   // no matching dof ordinals
+//  {
+//    return emptyVector;
+//  }
+//  int numDofs = _ordinalToTag.at(firstDofOrdinal)[3];
+////  int numDofs = _tagToOrdinal[subcellDim][subcellIndex].size();
+//
+//  for (int dofIndex=0; dofIndex<numDofs; dofIndex++)
+//  {
+//    int dofOrdinal = _tagToOrdinal.at(subcellDim).at(subcellIndex).at(dofIndex); // -1 indicates invalid entry...
+//    TEUCHOS_TEST_FOR_EXCEPTION(dofOrdinal < 0, std::invalid_argument, "invalid entry encountered in _tagToOrdinal");
+//  }
+  
+  { // DEBUGGING -- sanity checks:
+    for (int dofOrdinal : _tagToOrdinalTrimmed[subcellDim][subcellIndex])
     {
-      if (_tagToOrdinal[subcellDim][subcellIndex].size() > 0)
+      TEUCHOS_TEST_FOR_EXCEPTION(dofOrdinal < 0, std::invalid_argument, "dofOrdinal can't be < 0");
+    }
+    int firstDofOrdinal = -1;
+    if (_tagToOrdinal.size() > subcellDim)
+    {
+      if (_tagToOrdinal[subcellDim].size() > subcellIndex)
       {
-        firstDofOrdinal = _tagToOrdinal[subcellDim][subcellIndex][0];
+        if (_tagToOrdinal[subcellDim][subcellIndex].size() > 0)
+        {
+          firstDofOrdinal = _tagToOrdinal[subcellDim][subcellIndex][0];
+        }
       }
     }
-  }
-  if (firstDofOrdinal == -1)   // no matching dof ordinals
-  {
-    return dofOrdinals;
-  }
-  int numDofs = _tagToOrdinal[subcellDim][subcellIndex].size();
-
-  for (int dofIndex=0; dofIndex<numDofs; dofIndex++)
-  {
-    int dofOrdinal = _tagToOrdinal.at(subcellDim).at(subcellIndex).at(dofIndex); // -1 indicates invalid entry...
-    if (dofOrdinal >= 0)
+    int numDofs;
+    
+    if (firstDofOrdinal == -1)   // no matching dof ordinals
     {
-      dofOrdinals.insert(dofOrdinal);
+      numDofs = 0;
     }
+    else
+    {
+      numDofs = _ordinalToTag.at(firstDofOrdinal)[3];
+      if (numDofs == 0)
+      {
+        // inconsistent, but we can survive that
+        // (bug in HDIV_HEX_In, at least when n=1; hopefully not otherwise)
+        numDofs = 1;
+      }
+    }
+    
+    TEUCHOS_TEST_FOR_EXCEPTION(numDofs != _tagToOrdinalTrimmed[subcellDim][subcellIndex].size(), std::invalid_argument, "wrong number of dofs in trimmed container");
   }
-  return dofOrdinals;
+  
+  return _tagToOrdinalTrimmed[subcellDim][subcellIndex];
 }
+  
+//  template<class Scalar, class ArrayScalar>
+//  void Basis<Scalar,ArrayScalar>::dofOrdinalsForSubcell(int subcellDim, int subcellIndex, std::vector<int> &dofOrdinals) const
+//{
+//  if (!_basisTagsAreSet)
+//  {
+//    initializeTagsAndTrim();
+//    _basisTagsAreSet = true;
+//  }
+//
+//  int firstDofOrdinal = -1;
+//  if (_tagToOrdinal.size() > subcellDim)
+//  {
+//    if (_tagToOrdinal[subcellDim].size() > subcellIndex)
+//    {
+//      if (_tagToOrdinal[subcellDim][subcellIndex].size() > 0)
+//      {
+//        firstDofOrdinal = _tagToOrdinal[subcellDim][subcellIndex][0];
+//      }
+//    }
+//  }
+//  if (firstDofOrdinal == -1)   // no matching dof ordinals
+//  {
+//    dofOrdinals.resize(0);
+//    return;
+//  }
+//  int numDofs = _ordinalToTag.at(firstDofOrdinal)[3];
+////  int numDofs = _tagToOrdinal[subcellDim][subcellIndex].size();
+//  dofOrdinals.resize(numDofs);
+//  
+//  for (int dofIndex=0; dofIndex<numDofs; dofIndex++)
+//  {
+//    int dofOrdinal = _tagToOrdinal.at(subcellDim).at(subcellIndex).at(dofIndex); // -1 indicates invalid entry...
+//    if (dofOrdinal >= 0)
+//    {
+//      dofOrdinals[dofIndex] = dofOrdinal;
+//    }
+//    else
+//    {
+//      TEUCHOS_TEST_FOR_EXCEPTION(true, std::invalid_argument, "invalid entry encountered in _tagToOrdinal");
+//    }
+//  }
+//  std::sort(dofOrdinals.begin(), dofOrdinals.end());
+//}
 
 template<class Scalar, class ArrayScalar>
-std::set<int> Basis<Scalar,ArrayScalar>::dofOrdinalsForSubcell(int subcellDim, int subcellIndex, int minimumSubSubcellDimension) const
+std::vector<int> Basis<Scalar,ArrayScalar>::dofOrdinalsForSubcell(int subcellDim, int subcellIndex, int minimumSubSubcellDimension) const
 {
   if (minimumSubSubcellDimension > subcellDim)
   {
-    return std::set<int>();
+    return std::vector<int>();
   }
   // to start, get the ones defined on the subcell itself:
-  std::set<int> dofOrdinals = this->dofOrdinalsForSubcell(subcellDim, subcellIndex);
+  std::vector<int> dofOrdinals = this->dofOrdinalsForSubcell(subcellDim, subcellIndex);
 
   CellTopoPtr cellTopo = this->domainTopology();
   CellTopoPtr sideTopo = cellTopo->getSubcell(subcellDim, subcellIndex);
@@ -272,17 +354,18 @@ std::set<int> Basis<Scalar,ArrayScalar>::dofOrdinalsForSubcell(int subcellDim, i
         }
         TEUCHOS_TEST_FOR_EXCEPTION(matchingSubcellIndex >= numSubcells, std::invalid_argument, "matching subcell not found");
       }
-      std::set<int> dofOrdinals_ssc = this->dofOrdinalsForSubcell(d_ssc,matchingSubcellIndex);
-      dofOrdinals.insert(dofOrdinals_ssc.begin(), dofOrdinals_ssc.end());
+      const std::vector<int> dofOrdinals_ssc = this->dofOrdinalsForSubcell(d_ssc,matchingSubcellIndex);
+      dofOrdinals.insert(dofOrdinals.end(), dofOrdinals_ssc.begin(), dofOrdinals_ssc.end());
     }
   }
+  std::sort(dofOrdinals.begin(), dofOrdinals.end());
   return dofOrdinals;
 }
 
 template<class Scalar, class ArrayScalar>
-std::set<int> Basis<Scalar,ArrayScalar>::dofOrdinalsForEdge(int edgeIndex) const
+const std::vector<int>& Basis<Scalar,ArrayScalar>::dofOrdinalsForEdge(int edgeIndex) const
 {
-  int edgeDim = 1;
+  static const int edgeDim = 1;
   return dofOrdinalsForSubcell(edgeDim, edgeIndex);
 }
 
@@ -293,7 +376,7 @@ std::set<int> Basis<Scalar,ArrayScalar>::dofOrdinalsForSubcells(int subcellDim, 
   std::set<int> dofOrdinals;
   if (!_basisTagsAreSet)
   {
-    initializeTags();
+    initializeTagsAndTrim();
     _basisTagsAreSet = true;
   }
   if ((subcellDim > 0) && includeLesserDimensions)
@@ -305,10 +388,10 @@ std::set<int> Basis<Scalar,ArrayScalar>::dofOrdinalsForSubcells(int subcellDim, 
     return dofOrdinals;
   }
 
-  int numSubcells = this->_tagToOrdinal[subcellDim].size();
+  int numSubcells = this->domainTopology()->getSubcellCount(subcellDim);
   for (int subcellIndex=0; subcellIndex<numSubcells; subcellIndex++)
   {
-    std::set<int> dofOrdinalsForSubcell = this->dofOrdinalsForSubcell(subcellDim,subcellIndex);
+    std::vector<int> dofOrdinalsForSubcell = this->dofOrdinalsForSubcell(subcellDim,subcellIndex);
     dofOrdinals.insert(dofOrdinalsForSubcell.begin(), dofOrdinalsForSubcell.end());
   }
   return dofOrdinals;
@@ -336,16 +419,16 @@ std::set<int> Basis<Scalar,ArrayScalar>::dofOrdinalsForInterior() const
 }
 
 template<class Scalar, class ArrayScalar>
-std::set<int> Basis<Scalar,ArrayScalar>::dofOrdinalsForVertex(int vertexIndex) const
+const std::vector<int> &Basis<Scalar,ArrayScalar>::dofOrdinalsForVertex(int vertexIndex) const
 {
-  int vertexDim = 0;
+  const static int vertexDim = 0;
   return this->dofOrdinalsForSubcell(vertexDim, vertexIndex);
 }
 
 template<class Scalar, class ArrayScalar>
 std::set<int> Basis<Scalar,ArrayScalar>::dofOrdinalsForVertices() const
 {
-  int vertexDim = 0;
+  const static int vertexDim = 0;
   return this->dofOrdinalsForSubcells(vertexDim, false);
 }
 
@@ -398,6 +481,42 @@ Camellia::EFunctionSpace Basis<Scalar,ArrayScalar>::functionSpace(int tensorialR
     }
   }
 
+  template<class Scalar, class ArrayScalar>
+  void Basis<Scalar,ArrayScalar>::initializeTagsAndTrim() const
+  {
+    initializeTags();
+    
+    // trim so that _tagToOrdinal vectors have the right size (no -1 filling)
+    CellTopoPtr domainTopo = this->domainTopology();
+    int domainDim = domainTopo->getDimension();
+    this->_tagToOrdinalTrimmed.resize(domainDim + 1);
+    
+    for (int d=0; d<=domainDim; d++)
+    {
+      int subcellCount = domainTopo->getSubcellCount(d);
+      this->_tagToOrdinalTrimmed[d].resize(subcellCount);
+      for (int subcOrd=0; subcOrd < subcellCount; subcOrd++)
+      {
+        vector<int> dofOrdinals;
+        // some subclasses don't fill the container for subcells when subcells of a given dimension don't have any dofOrdinals defined...  We'll set it to be an empty vector<int> in that case...
+        if ((d < this->_tagToOrdinal.size()) && (subcOrd < this->_tagToOrdinal[d].size()))
+        {
+          int numDofs = this->_tagToOrdinal[d][subcOrd].size();
+          for (int dofIndex = 0; dofIndex < numDofs; dofIndex++)
+          {
+            int dofOrdinal = this->_tagToOrdinal[d][subcOrd][dofIndex];
+            if (dofOrdinal >= 0)
+            {
+              dofOrdinals.push_back(dofOrdinal);
+            }
+          }
+          std::sort(dofOrdinals.begin(),dofOrdinals.end());
+        }
+        this->_tagToOrdinalTrimmed[d][subcOrd] = dofOrdinals;
+      }
+    }
+  }
+  
 template<class Scalar, class ArrayScalar>
 bool Basis<Scalar,ArrayScalar>::isConforming() const
 {
@@ -481,19 +600,24 @@ void IntrepidBasisWrapper<Scalar,ArrayScalar>::initializeTags() const
     int domainDimension = this->domainTopology()->getDimension();
     this->_ordinalToTag = std::vector< std::vector<int> >(this->_basisCardinality);
     this->_tagToOrdinal = std::vector<std::vector<std::vector<int> > >(domainDimension + 1);
+    for (int d=0; d<=domainDimension; d++)
+    {
+      int subcellCount = this->domainTopology()->getSubcellCount(d);
+      this->_tagToOrdinal[d].resize(subcellCount);
+    }
     this->_tagToOrdinal[domainDimension] = std::vector<std::vector<int> >(1);
     this->_tagToOrdinal[domainDimension][0] = std::vector<int>(this->_basisCardinality);
 
-    for (int d=0; d<this->_tagToOrdinal.size(); d++)
-    {
-      for (int subcOrd=0; subcOrd < this->_tagToOrdinal[d].size(); subcOrd++)
-      {
-        for (int subcDofOrd=0; subcDofOrd< this->_tagToOrdinal[d][subcOrd].size(); subcDofOrd++)
-        {
-          this->_tagToOrdinal[d][subcOrd][subcDofOrd] = -1;
-        }
-      }
-    }
+//    for (int d=0; d<this->_tagToOrdinal.size(); d++)
+//    {
+//      for (int subcOrd=0; subcOrd < this->_tagToOrdinal[d].size(); subcOrd++)
+//      {
+//        for (int subcDofOrd=0; subcDofOrd< this->_tagToOrdinal[d][subcOrd].size(); subcDofOrd++)
+//        {
+//          this->_tagToOrdinal[d][subcOrd][subcDofOrd] = -1;
+//        }
+//      }
+//    }
 
     for (int dofOrdinal = 0; dofOrdinal < this->_basisCardinality; dofOrdinal++)
     {
@@ -518,8 +642,7 @@ Teuchos::RCP< Intrepid::Basis<Scalar,ArrayScalar> > IntrepidBasisWrapper<Scalar,
   {
     if (this->_continuousBasis == Teuchos::null)
     {
-      int sideDim = this->_domainTopology->getDimension() - 1;
-      return this->dofOrdinalsForSubcell(sideDim, sideOrdinal, 0);
+      return this->Basis<Scalar,ArrayScalar>::dofOrdinalsForSide(sideOrdinal);
     }
     else
     {

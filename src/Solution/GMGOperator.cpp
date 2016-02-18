@@ -872,8 +872,8 @@ LocalDofMapperPtr GMGOperator::getLocalCoefficientMap(GlobalIndexType fineCellID
         }
         if (shouldDiscard)
         {
-          set<int> dofOrdinals = fineBasis->dofOrdinalsForSubcell(d, subcord);
-          fineDofsToDiscard.insert(dofOrdinals.begin(),dofOrdinals.end());
+          const vector<int>* dofOrdinals = &fineBasis->dofOrdinalsForSubcell(d, subcord);
+          fineDofsToDiscard.insert(dofOrdinals->begin(),dofOrdinals->end());
         }
       }
     }

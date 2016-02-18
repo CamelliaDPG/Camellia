@@ -580,8 +580,8 @@ set<GlobalIndexType> LocalDofMapper::globalIndicesForSubcell(int varID, unsigned
     
     BasisPtr volumeBasis = BasisFactory::basisFactory()->getContinuousBasis(_dofOrdering->getBasis(varID));
     
-    set<int> dofOrdinalsInt = volumeBasis->dofOrdinalsForSubcell(d, subcord, 0);
-    set<int> dofOrdinals(dofOrdinalsInt.begin(), dofOrdinalsInt.end());
+    vector<int> dofOrdinalsVector = volumeBasis->dofOrdinalsForSubcell(d, subcord, 0);
+    set<int> dofOrdinals(dofOrdinalsVector.begin(), dofOrdinalsVector.end());
     
     for (auto subBasisMap : volumeMap)
     {
@@ -607,8 +607,8 @@ set<GlobalIndexType> LocalDofMapper::globalIndicesForSubcell(int varID, unsigned
       
       BasisPtr sideBasis = BasisFactory::basisFactory()->getContinuousBasis(_dofOrdering->getBasis(varID,sideOrdinal));
       
-      set<int> dofOrdinalsInt = sideBasis->dofOrdinalsForSubcell(d, sideSubcellOrdinal, 0);
-      set<int> dofOrdinals(dofOrdinalsInt.begin(), dofOrdinalsInt.end());
+      vector<int> dofOrdinalsVector = sideBasis->dofOrdinalsForSubcell(d, sideSubcellOrdinal, 0);
+      set<int> dofOrdinals(dofOrdinalsVector.begin(), dofOrdinalsVector.end());
       
       for (auto subBasisMap : sideMap)
       {

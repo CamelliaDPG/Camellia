@@ -880,7 +880,7 @@ set<GlobalIndexType> GDAMaximumRule2D::globalDofIndicesForVarOnSubcell(int varID
       if (domainSubcellOrdinal == -1) continue; // skip this side: subcell doesn't belong to it.
     }
     
-    set<int> basisDofOrdinals = basis->dofOrdinalsForSubcell(dim, domainSubcellOrdinal, 0);
+    vector<int> basisDofOrdinals = basis->dofOrdinalsForSubcell(dim, domainSubcellOrdinal, 0);
     for (int basisDofOrdinal : basisDofOrdinals)
     {
       int localDofOrdinal = elementType(cellID)->trialOrderPtr->getDofIndex(varID, basisDofOrdinal, sideOrdinal);

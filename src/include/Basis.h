@@ -65,6 +65,11 @@ protected:
    \li     tagToOrdinal_[subcDim][subcOrd][subcDofOrd] = Degree-of-freedom ordinal
    */
   mutable std::vector<std::vector<std::vector<int> > > _tagToOrdinal;
+  
+  //! Here, the innermost vectors are trimmed to match the number of dofs associated with the subcell
+  mutable std::vector<std::vector<std::vector<int> > > _tagToOrdinalTrimmed;
+
+  void initializeTagsAndTrim() const;
 public:
   virtual int getCardinality() const;
   virtual int getDegree() const;
@@ -85,10 +90,12 @@ public:
   // ! continuity would not usually be enforced along the side for these.
   virtual std::set<int> dofOrdinalsForSide(int sideOrdinal) const;
   
-  virtual std::set<int> dofOrdinalsForSubcell(int subcellDim, int subcellIndex, int minimumSubSubcellDimension) const; // e.g. can get vertex, edge, and face dofs for a side by specifying subcellDim=2, minimumSubSubcellDimension = 0
-  virtual std::set<int> dofOrdinalsForSubcell(int subcellDim, int subcellIndex) const;
-  virtual std::set<int> dofOrdinalsForVertex(int vertexIndex) const;
-  virtual std::set<int> dofOrdinalsForEdge(int edgeIndex) const;
+  virtual std::vector<int> dofOrdinalsForSubcell(int subcellDim, int subcellIndex, int minimumSubSubcellDimension) const; // e.g. can get vertex, edge, and face dofs for a side by specifying subcellDim=2, minimumSubSubcellDimension = 0
+  virtual const std::vector<int> &dofOrdinalsForSubcell(int subcellDim, int subcellIndex) const;
+  virtual const std::vector<int> &dofOrdinalsForVertex(int vertexIndex) const;
+  virtual const std::vector<int> &dofOrdinalsForEdge(int edgeIndex) const;
+  
+//  virtual void dofOrdinalsForSubcell(int subcellDim, int subcellIndex, std::vector<int> &dofOrdinals) const;
 
   virtual int getDofOrdinal(const int subcDim, const int subcOrd, const int subcDofOrd) const;
   virtual const std::vector<std::vector<std::vector<int> > > &getDofOrdinalData( ) const;

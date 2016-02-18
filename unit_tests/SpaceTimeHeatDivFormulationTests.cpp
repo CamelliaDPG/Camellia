@@ -165,8 +165,8 @@ namespace
           int subcCount = uhatBasis->domainTopology()->getSubcellCount(subcdim);
           for (int subcord=0; subcord<subcCount; subcord++)
           {
-            set<int> dofOrdinalsForSubcell = uhatBasis->dofOrdinalsForSubcell(subcdim, subcord);
-            if (dofOrdinalsForSubcell.find(basisOrdinal) != dofOrdinalsForSubcell.end())
+            const vector<int>* dofOrdinalsForSubcell = &uhatBasis->dofOrdinalsForSubcell(subcdim, subcord);
+            if (std::find(dofOrdinalsForSubcell->begin(), dofOrdinalsForSubcell->end(), basisOrdinal) != dofOrdinalsForSubcell->end())
             {
               cout << "basisOrdinal " << basisOrdinal << " belongs to subcell " << subcord << " of dimension " << subcdim << endl;
             }
