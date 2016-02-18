@@ -127,11 +127,11 @@ public:
   }
 };
 
-class BoundaryLayerExact : public SimpleFunction<double>
+class StokesFirstExact : public SimpleFunction<double>
 {
   double _Re;
 public:
-  BoundaryLayerExact(double Re)
+  StokesFirstExact(double Re)
   {
     _Re = Re;
   }
@@ -591,10 +591,10 @@ int main(int argc, char *argv[])
       meshTopo = MeshFactory::spaceTimeMeshTopology(meshTopo, t0, t1, temporalDivisions);
     }
   }
-  else if (problemName == "BoundaryLayer")
+  else if (problemName == "StokesFirst")
   {
     vector<PeriodicBCPtr> periodicBCs;
-    periodicBCs.push_back(PeriodicBC::xIdentification(0, 1));
+    // periodicBCs.push_back(PeriodicBC::xIdentification(0, 1));
 
     vector<double> A = {0,0}, B = {1,0}, C = {0,1}, D = {1,1};
     vector<vector<double>> vertices = {A, B, C, D};
@@ -685,7 +685,7 @@ int main(int argc, char *argv[])
     form.addPointPressureCondition(pressureConstraintPoint);
   if (problemName == "Kovasznay")
     form.addPointPressureCondition(pressureConstraintPoint);
-  if (problemName == "BoundaryLayer")
+  if (problemName == "StokesFirst")
     form.addPointPressureCondition(pressureConstraintPoint);
   if (problemName == "TaylorGreen")
     form.addPointPressureCondition(pressureConstraintPoint);
@@ -775,7 +775,7 @@ int main(int argc, char *argv[])
       form.addInitialCondition(0, u_exact);
       // form.addFluxCondition(t0, -u_exact);
   }
-  else if (problemName == "BoundaryLayer")
+  else if (problemName == "StokesFirst")
   {
     BCPtr bc = form.solutionIncrement()->bc();
     // SolutionPtr backgroundFlow = form.solution();
@@ -791,10 +791,10 @@ int main(int argc, char *argv[])
     FunctionPtr zero = Function::constant(0);
     FunctionPtr onezero = Function::vectorize(one,zero);
     FunctionPtr zeros = Function::vectorize(zero,zero);
-    FunctionPtr u1_exact = Teuchos::rcp(new BoundaryLayerExact(Re));
+    FunctionPtr u1_exact = Teuchos::rcp(new StokesFirstExact(Re));
     FunctionPtr u_exact = Function::vectorize(u1_exact,zero);
-    // form.addInflowCondition(leftX,  u_exact);
-    // form.addInflowCondition(rightX, u_exact);
+    form.addInflowCondition(leftX,  u_exact);
+    form.addInflowCondition(rightX, u_exact);
     form.addInflowCondition(leftY,  u_exact);
     form.addInflowCondition(rightY, u_exact);
 

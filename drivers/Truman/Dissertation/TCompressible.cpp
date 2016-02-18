@@ -269,6 +269,26 @@ int main(int argc, char *argv[])
       meshTopo = MeshFactory::spaceTimeMeshTopology(meshTopo, t0, t1, temporalDivisions);
     }
   }
+  if (problemName == "Sod")
+  {
+    int meshWidth = 4;
+    vector<double> dims(spaceDim,1.0);
+    if (spaceDim == 2)
+      dims[1] = 0.25;
+    vector<int> numElements(spaceDim,meshWidth);
+    if (spaceDim == 2)
+      numElements[1] = 1;
+    vector<double> x0(spaceDim,0);
+
+    meshTopo = MeshFactory::rectilinearMeshTopology(dims,numElements,x0);
+    if (!steady)
+    {
+      double t0 = 0;
+      double t1 = 0.2;
+      int temporalDivisions = 1;
+      meshTopo = MeshFactory::spaceTimeMeshTopology(meshTopo, t0, t1, temporalDivisions);
+    }
+  }
   if (problemName == "Noh")
   {
     gamma = 5./3;
@@ -361,6 +381,10 @@ int main(int argc, char *argv[])
   nsParameters.set("u1Init", 1.);
   nsParameters.set("u2Init", 0.);
   nsParameters.set("TInit", 1.);
+  if (problemName == "Sod")
+  {
+    nsParameters.set("u1Init", 0.);
+  }
   if (problemName == "Noh")
   {
     nsParameters.set("u1Init", 1.);
@@ -650,6 +674,73 @@ int main(int argc, char *argv[])
 
     form.addVelocityTraceCondition(plate, zeros);
     form.addTemperatureTraceCondition(plate, 2.8*one);
+  }
+  if (problemName == "Sod")
+  {
+    SpatialFilterPtr leftX  = SpatialFilter::matchingX(0);
+    SpatialFilterPtr rightX = SpatialFilter::matchingX(1);
+    SpatialFilterPtr leftY  = SpatialFilter::matchingY(0);
+    SpatialFilterPtr rightY = SpatialFilter::matchingY(0.25);
+
+    FunctionPtr zero = Function::zero();
+    FunctionPtr one = Function::constant(1);
+
+    FunctionPtr rho_exact, u1_exact, u2_exact, T_exact, p_exact;
+    rho_exact = one - 0.875*Function::heaviside(0.5);
+    u1_exact = zero;
+    u2_exact = zero;
+    p_exact = one - 0.9*Function::heaviside(0.5);
+    T_exact = 1./.4*p_exact/rho_exact;
+    FunctionPtr u_exact;
+    if (spaceDim == 1)
+      u_exact = u1_exact;
+    else
+      u_exact = Function::vectorize(u1_exact,u2_exact);
+
+    if (!steady)
+    {
+      SpatialFilterPtr t0  = SpatialFilter::matchingT(0);
+      form.addMassFluxCondition(    t0, rho_exact, u_exact, T_exact);
+      form.addMomentumFluxCondition(t0, rho_exact, u_exact, T_exact);
+      form.addEnergyFluxCondition(  t0, rho_exact, u_exact, T_exact);
+    }
+    switch (spaceDim)
+    {
+      case 1:
+        form.addMassFluxCondition(        leftX, rho_exact*u1_exact);
+        form.addVelocityTraceCondition(   leftX, u_exact);
+        form.addTemperatureTraceCondition(leftX, T_exact);
+        form.addMassFluxCondition(        rightX, rho_exact*u1_exact);
+        form.addVelocityTraceCondition(   rightX, u_exact);
+        form.addTemperatureTraceCondition(rightX, T_exact);
+        break;
+      case 2:
+        form.addMassFluxCondition(        leftX, rho_exact*u1_exact);
+        form.addVelocityTraceCondition(   leftX, u_exact);
+        form.addTemperatureTraceCondition(leftX, T_exact);
+        form.addMassFluxCondition(        rightX, rho_exact*u1_exact);
+        form.addVelocityTraceCondition(   rightX, u_exact);
+        form.addTemperatureTraceCondition(rightX, T_exact);
+        form.addMassFluxCondition(        leftY, rho_exact*u2_exact);
+        form.addVelocityTraceCondition(   leftY, u_exact);
+        form.addTemperatureTraceCondition(leftY, T_exact);
+        form.addMassFluxCondition(        rightY, rho_exact*u2_exact);
+        form.addVelocityTraceCondition(   rightY, u_exact);
+        form.addTemperatureTraceCondition(rightY, T_exact);
+        // form.addMassFluxCondition(        leftX, rho_exact, u_exact, T_exact);
+        // form.addMassFluxCondition(        leftY, rho_exact, u_exact, T_exact);
+        // form.addMomentumFluxCondition(    leftX, rho_exact, u_exact, T_exact);
+        // form.addMomentumFluxCondition(    leftY, rho_exact, u_exact, T_exact);
+        // form.addMomentumFluxCondition(    rightX, rho_exact, u_exact, T_exact);
+        // form.addMomentumFluxCondition(    rightY, rho_exact, u_exact, T_exact);
+        // form.addEnergyFluxCondition(      leftX, rho_exact, u_exact, T_exact);
+        // form.addEnergyFluxCondition(      leftY, rho_exact, u_exact, T_exact);
+        // form.addEnergyFluxCondition(      rightX, rho_exact, u_exact, T_exact);
+        // form.addEnergyFluxCondition(      rightY, rho_exact, u_exact, T_exact);
+        break;
+      case 3:
+        break;
+    }
   }
   if (problemName == "Noh")
   {
