@@ -166,7 +166,7 @@ int main(int argc, char *argv[])
   int polyOrderCoarse = 1;
   double cgTol = 1e-10;
   cmdp.setOption("cgTol", &cgTol, "iterative solver tolerance");
-  int cgMaxIters = 200;
+  int cgMaxIters = 2000;
   cmdp.setOption("cgMaxIters", &cgMaxIters, "maximum number of iterations for linear solver");
   double nlTol = 1e-6;
   cmdp.setOption("nlTol", &nlTol, "Newton iteration tolerance");
@@ -936,7 +936,9 @@ int main(int argc, char *argv[])
     rho_exact = one - (1-0.125)*Function::heaviside(1)*Function::heavisideY(1.5);
     u1_exact = zero;
     u2_exact = zero;
-    T_exact = one - (1-0.1)*Function::heaviside(1);
+    p_exact = one - (1-0.1)*Function::heaviside(1);
+    T_exact = 1./.4*p_exact/rho_exact;
+    // T_exact = one - (1-0.1)*Function::heaviside(1);
     FunctionPtr u_exact;
     if (spaceDim == 1)
       u_exact = u1_exact;
