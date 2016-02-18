@@ -63,7 +63,7 @@ void Projector<Scalar>::projectFunctionOntoBasis(FieldContainer<Scalar> &basisCo
   FieldContainer<Scalar> ipVector(numCells,cardinality);
 
   // fake a DofOrdering
-  DofOrderingPtr dofOrdering = Teuchos::rcp( new DofOrdering(cellTopo) );
+  DofOrderingPtr dofOrdering = Teuchos::rcp( new DofOrdering(basisCache->cellTopology()) );
   if (basisCache->isSideCache() && ((v->varType()==FLUX) || (v->varType()==TRACE)))
   {
     dofOrdering->addEntry(v->ID(), basis, v->rank(), basisCache->getSideIndex());
