@@ -932,7 +932,7 @@ int main(int argc, char *argv[])
     FunctionPtr onezero = Function::vectorize(one, zero);
     FunctionPtr ones = Function::vectorize(one, one);
 
-    FunctionPtr rho_exact, u1_exact, u2_exact, T_exact;
+    FunctionPtr rho_exact, u1_exact, u2_exact, T_exact, p_exact;
     rho_exact = one - (1-0.125)*Function::heaviside(1)*Function::heavisideY(1.5);
     u1_exact = zero;
     u2_exact = zero;
