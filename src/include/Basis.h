@@ -22,6 +22,10 @@ template<class Scalar=double, class ArrayScalar=Intrepid::FieldContainer<Scalar>
 
 template<class Scalar, class ArrayScalar> class Basis
 {
+  /** \brief  "true" if <var>_tagToOrdinal</var> and <var>_ordinalToTag</var> have been initialized and initializeTagsAndTrim() has been called.
+   */
+  mutable bool _basisTagsAreSet;
+  void initializeTagsAndTrim() const;
 protected:
   Basis();
 
@@ -34,9 +38,6 @@ protected:
   Camellia::EFunctionSpace _functionSpace;
 
   virtual void initializeTags() const = 0;
-  /** \brief  "true" if <var>_tagToOrdinal</var> and <var>_ordinalToTag</var> have been initialized
-   */
-  mutable bool _basisTagsAreSet;
 
   /** \brief  DoF ordinal to tag lookup table.
 
@@ -55,21 +56,11 @@ protected:
 
   /** \brief  DoF tag to ordinal lookup table.
 
-   Rank-3 array with dimensions (maxScDim + 1, maxScOrd + 1, maxDfOrd + 1), i.e., the
-   columnwise maximums of the 1st three columns in the DoF tag table for the basis plus 1.
-   For every triple (subscDim, subcOrd, subcDofOrd) that is valid DoF tag data this array
-   stores the corresponding DoF ordinal. If the triple does not correspond to tag data,
-   the array stores -1. This array is left empty at instantiation and filled by
-   initializeTags() only when tag data is requested.
+   Rank-3 container with arguments (scdim, scord, subcDofOrd).  Subclasses (in particular IntrepidBasisWrapper) often fill some empty slots with -1s, but these are eliminated during initializeTagsAndTrim().
 
    \li     tagToOrdinal_[subcDim][subcOrd][subcDofOrd] = Degree-of-freedom ordinal
    */
   mutable std::vector<std::vector<std::vector<int> > > _tagToOrdinal;
-  
-  //! Here, the innermost vectors are trimmed to match the number of dofs associated with the subcell
-  mutable std::vector<std::vector<std::vector<int> > > _tagToOrdinalTrimmed;
-
-  void initializeTagsAndTrim() const;
 public:
   virtual int getCardinality() const;
   virtual int getDegree() const;

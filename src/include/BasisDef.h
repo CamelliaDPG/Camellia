@@ -196,7 +196,7 @@ const std::vector<int> &Basis<Scalar,ArrayScalar>::dofOrdinalsForSubcell(int sub
 //  }
   
   { // DEBUGGING -- sanity checks:
-    for (int dofOrdinal : _tagToOrdinalTrimmed[subcellDim][subcellIndex])
+    for (int dofOrdinal : _tagToOrdinal[subcellDim][subcellIndex])
     {
       TEUCHOS_TEST_FOR_EXCEPTION(dofOrdinal < 0, std::invalid_argument, "dofOrdinal can't be < 0");
     }
@@ -228,10 +228,10 @@ const std::vector<int> &Basis<Scalar,ArrayScalar>::dofOrdinalsForSubcell(int sub
       }
     }
     
-    TEUCHOS_TEST_FOR_EXCEPTION(numDofs != _tagToOrdinalTrimmed[subcellDim][subcellIndex].size(), std::invalid_argument, "wrong number of dofs in trimmed container");
+    TEUCHOS_TEST_FOR_EXCEPTION(numDofs != _tagToOrdinal[subcellDim][subcellIndex].size(), std::invalid_argument, "wrong number of dofs in trimmed container");
   }
   
-  return _tagToOrdinalTrimmed[subcellDim][subcellIndex];
+  return _tagToOrdinal[subcellDim][subcellIndex];
 }
   
 //  template<class Scalar, class ArrayScalar>
@@ -489,12 +489,14 @@ Camellia::EFunctionSpace Basis<Scalar,ArrayScalar>::functionSpace(int tensorialR
     // trim so that _tagToOrdinal vectors have the right size (no -1 filling)
     CellTopoPtr domainTopo = this->domainTopology();
     int domainDim = domainTopo->getDimension();
-    this->_tagToOrdinalTrimmed.resize(domainDim + 1);
+    
+    auto tagToOrdinalTrimmed = std::vector<std::vector<std::vector<int> > >(domainDim + 1);
+    tagToOrdinalTrimmed.resize(domainDim + 1);
     
     for (int d=0; d<=domainDim; d++)
     {
       int subcellCount = domainTopo->getSubcellCount(d);
-      this->_tagToOrdinalTrimmed[d].resize(subcellCount);
+      tagToOrdinalTrimmed[d].resize(subcellCount);
       for (int subcOrd=0; subcOrd < subcellCount; subcOrd++)
       {
         vector<int> dofOrdinals;
@@ -512,9 +514,10 @@ Camellia::EFunctionSpace Basis<Scalar,ArrayScalar>::functionSpace(int tensorialR
           }
           std::sort(dofOrdinals.begin(),dofOrdinals.end());
         }
-        this->_tagToOrdinalTrimmed[d][subcOrd] = dofOrdinals;
+        tagToOrdinalTrimmed[d][subcOrd] = dofOrdinals;
       }
     }
+    _tagToOrdinal = tagToOrdinalTrimmed;
   }
   
 template<class Scalar, class ArrayScalar>
