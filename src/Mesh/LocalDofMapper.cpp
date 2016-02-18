@@ -481,11 +481,12 @@ LocalDofMapper::LocalDofMapper(DofOrderingPtr dofOrdering, map< int, BasisMap > 
   }
 }
 
-map<int, GlobalIndexType> LocalDofMapper::getPermutationMap()
+const map<int, GlobalIndexType> & LocalDofMapper::getPermutationMap()
 {
   TEUCHOS_TEST_FOR_EXCEPTION(! isPermutation(), std::invalid_argument, "getPermutionMap() requires that LocalDofMapper::isPermutation() return true");
   
-  map<int, GlobalIndexType> permutationMap;
+  // if we've already filled _permutationMap, can just return it.
+  if (_permutationMap.size() > 0) return _permutationMap;
   
   for (auto volumeMapEntry : _volumeMaps)
   {
@@ -506,7 +507,7 @@ map<int, GlobalIndexType> LocalDofMapper::getPermutationMap()
         {
           int basisDofOrdinal = *basisOrdinalIt;
           int localDofIndex = (*dofIndices)[basisDofOrdinal];
-          permutationMap[localDofIndex] = globalDofOrdinal;
+          _permutationMap[localDofIndex] = globalDofOrdinal;
           basisOrdinalIt++;
         }
       }
@@ -533,14 +534,14 @@ map<int, GlobalIndexType> LocalDofMapper::getPermutationMap()
           {
             int basisDofOrdinal = *basisOrdinalIt;
             int localDofIndex = (*dofIndices)[basisDofOrdinal];
-            permutationMap[localDofIndex] = globalDofOrdinal;
+            _permutationMap[localDofIndex] = globalDofOrdinal;
             basisOrdinalIt++;
           }
         }
       }
     }
   }
-  return permutationMap;
+  return _permutationMap;
 }
 
 const vector<GlobalIndexType> &LocalDofMapper::globalIndices()
@@ -1256,13 +1257,14 @@ FieldContainer<double> LocalDofMapper::mapGlobalCoefficients(const FieldContaine
   return localCoefficients;
 }
 
-Intrepid::FieldContainer<double> LocalDofMapper::mapGlobalCoefficients(const std::map<GlobalIndexType,double> &globalCoefficients)
+void LocalDofMapper::mapGlobalCoefficients(const std::map<GlobalIndexType,double> &globalCoefficients, FieldContainer<double> &localCoefficients)
 {
   int mappedDofCount = _dofOrdering->totalDofs();
-  FieldContainer<double> localCoefficients(mappedDofCount);
+  localCoefficients.resize(mappedDofCount);
+  localCoefficients.initialize(0.0);
   
   if (globalCoefficients.size()==0) // 0 result
-    return localCoefficients;
+    return;
   
   set<int> varIDsMapped;
   for (auto entry : globalCoefficients)
@@ -1299,7 +1301,6 @@ Intrepid::FieldContainer<double> LocalDofMapper::mapGlobalCoefficients(const std
       addReverseSubBasisMapVectorContribution(varID, sideOrdinal, *basisMap, globalCoefficients, localCoefficients);
     }
   }
-  return localCoefficients;
 }
 
 void LocalDofMapper::printMappingReport()

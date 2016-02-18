@@ -316,7 +316,7 @@ void GDAMinimumRule::interpretGlobalCoefficients(GlobalIndexType cellID, Intrepi
 {
   CellConstraints constraints = getCellConstraints(cellID);
   LocalDofMapperPtr dofMapper = getDofMapper(cellID, constraints);
-  vector<GlobalIndexType> globalIndexVector = dofMapper->globalIndices();
+  const vector<GlobalIndexType>* globalIndexVector = &dofMapper->globalIndices();
 
   // DEBUGGING
 //  if (cellID==0) {
@@ -330,11 +330,11 @@ void GDAMinimumRule::interpretGlobalCoefficients(GlobalIndexType cellID, Intrepi
     
     if (useFieldContainer)
     {
-      Intrepid::FieldContainer<double> globalCoefficientsFC(globalIndexVector.size());
+      Intrepid::FieldContainer<double> globalCoefficientsFC(globalIndexVector->size());
       Epetra_BlockMap partMap = globalCoefficients.Map();
-      for (int i=0; i<globalIndexVector.size(); i++)
+      for (int i=0; i<globalIndexVector->size(); i++)
       {
-        GlobalIndexTypeToCast globalIndex = globalIndexVector[i];
+        GlobalIndexTypeToCast globalIndex = (*globalIndexVector)[i];
         int localIndex = partMap.LID(globalIndex);
         if (localIndex != -1)
         {
@@ -352,29 +352,31 @@ void GDAMinimumRule::interpretGlobalCoefficients(GlobalIndexType cellID, Intrepi
     {
       Epetra_BlockMap partMap = globalCoefficients.Map();
       map<GlobalIndexType,double> globalCoefficientsToMap;
-      for (int i=0; i<globalIndexVector.size(); i++)
+      for (int i=0; i<globalIndexVector->size(); i++)
       {
-        GlobalIndexTypeToCast globalIndex = globalIndexVector[i];
+        GlobalIndexTypeToCast globalIndex = (*globalIndexVector)[i];
         int localIndex = partMap.LID(globalIndex);
         if (localIndex != -1)
         {
           if (globalCoefficients[0][localIndex] != 0.0)
+          {
             globalCoefficientsToMap[globalIndex] = globalCoefficients[0][localIndex];
+          }
         }
       }
 //      if (globalCoefficientsToMap.size() == 0) cout << "***********************  Empty globalCoefficientsToMap **************************\n";
-      localCoefficients = dofMapper->mapGlobalCoefficients(globalCoefficientsToMap);
+      dofMapper->mapGlobalCoefficients(globalCoefficientsToMap, localCoefficients);
     }
   }
   else
   {
-    Intrepid::FieldContainer<double> globalCoefficientsFC(globalCoefficients.NumVectors(), globalIndexVector.size());
+    Intrepid::FieldContainer<double> globalCoefficientsFC(globalCoefficients.NumVectors(), globalIndexVector->size());
     Epetra_BlockMap partMap = globalCoefficients.Map();
     for (int vectorOrdinal=0; vectorOrdinal < globalCoefficients.NumVectors(); vectorOrdinal++)
     {
-      for (int i=0; i<globalIndexVector.size(); i++)
+      for (int i=0; i<globalIndexVector->size(); i++)
       {
-        GlobalIndexTypeToCast globalIndex = globalIndexVector[i];
+        GlobalIndexTypeToCast globalIndex = (*globalIndexVector)[i];
         int localIndex = partMap.LID(globalIndex);
         if (localIndex != -1)
         {
@@ -530,8 +532,7 @@ void GDAMinimumRule::interpretLocalBasisCoefficients(GlobalIndexType cellID, int
 
   if (dofMapper->isPermutation())
   {
-    map<int, GlobalIndexType> permutationMap = dofMapper->getPermutationMap();
-    int entryOrdinal = 0;
+    const map<int, GlobalIndexType>* permutationMap = &dofMapper->getPermutationMap();
     DofOrderingPtr dofOrdering = elementType(cellID)->trialOrderPtr;
     if (dofOrdering->hasBasisEntry(varID, sideOrdinal))
     {
@@ -541,11 +542,14 @@ void GDAMinimumRule::interpretLocalBasisCoefficients(GlobalIndexType cellID, int
       int numEntries = basisCoefficients.size();
       globalCoefficients.resize(numEntries);
       globalDofIndices.resize(numEntries);
+      const double* basisCoefficient = &basisCoefficients[0];
+      double* globalCoefficient = &globalCoefficients[0];
+      GlobalIndexType* globalDofIndex = &globalDofIndices[0];
       for (int localDofIndex : *localDofIndices)
       {
-        globalCoefficients[entryOrdinal] = basisCoefficients[entryOrdinal];
-        globalDofIndices[entryOrdinal] = permutationMap[localDofIndex];
-        entryOrdinal++;
+        *globalCoefficient++ = *basisCoefficient++;
+        auto permutationEntry = permutationMap->find(localDofIndex);
+        *globalDofIndex++ = permutationEntry->second;
       }
     }
     else
@@ -559,12 +563,15 @@ void GDAMinimumRule::interpretLocalBasisCoefficients(GlobalIndexType cellID, int
       int numEntries = basisCoefficients.size();
       globalCoefficients.resize(numEntries);
       globalDofIndices.resize(numEntries);
+      const double* basisCoefficient = &basisCoefficients[0];
+      double* globalCoefficient = &globalCoefficients[0];
+      GlobalIndexType* globalDofIndex = &globalDofIndices[0];
       for (int basisDofOrdinal : basisDofOrdinals)
       {
         int localDofIndex = (*localDofIndices)[basisDofOrdinal];
-        globalCoefficients[entryOrdinal] = basisCoefficients[entryOrdinal];
-        globalDofIndices[entryOrdinal] = permutationMap[localDofIndex];
-        entryOrdinal++;
+        *globalCoefficient++ = *basisCoefficient++;
+        auto permutationEntry = permutationMap->find(localDofIndex);
+        *globalDofIndex++ = permutationEntry->second;
       }
     }
   }
