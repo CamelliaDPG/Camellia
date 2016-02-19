@@ -1200,14 +1200,14 @@ CompressibleNavierStokesFormulation::CompressibleNavierStokesFormulation(MeshTop
       adj_Fe->addTerm( R()*rho_prev*vm1->dx() + Cv()*rho_prev*u1_prev*ve->dx() + R()*rho_prev*u1_prev*ve->dx() );
       adj_KD11->addTerm( vm1->dx() + vm1->dx() - 2./3*vm1->dx() + u1_prev*ve->dx() + u1_prev*ve->dx() - 2./3*u1_prev*ve->dx() );
       adj_Kq1->addTerm( -ve->dx() );
-      adj_MD11->addTerm( 1./_muFunc*S1 );
-      adj_Mq1->addTerm( Pr()/(Cp()*_muFunc)*tau );
+      adj_MD11->addTerm( one*S1 );
+      adj_Mq1->addTerm( Pr()/Cp()*tau );
       adj_Gm1->addTerm( one*S1->dx() );
       adj_Ge->addTerm( -tau->dx() );
 
       _ips["ManualGraph"] = Teuchos::rcp(new IP);
-      _ips["ManualGraph"]->addTerm( adj_MD11 + adj_KD11 );
-      _ips["ManualGraph"]->addTerm( adj_Mq1 + adj_Kq1 );
+      _ips["ManualGraph"]->addTerm( 1./_muFunc*adj_MD11 + adj_KD11 );
+      _ips["ManualGraph"]->addTerm( 1./_muFunc*adj_Mq1 + adj_Kq1 );
       if (_spaceTime)
       {
         _ips["ManualGraph"]->addTerm( adj_Gc - adj_Fc - adj_Cc );
@@ -1231,8 +1231,8 @@ CompressibleNavierStokesFormulation::CompressibleNavierStokesFormulation(MeshTop
 
       _ips["Robust"] = Teuchos::rcp(new IP);
       // _ips["Robust"]->addTerm(Function::min(one/Function::h(),Function::constant(1./sqrt(_mu)))*tau);
-      _ips["Robust"]->addTerm( Function::min(one/Function::h(),1./_muSqrtFunc)*_muFunc*adj_MD11);
-      _ips["Robust"]->addTerm( Function::min(one/Function::h(),1./_muSqrtFunc)*Cp()*_muFunc/Pr()*adj_Mq1);
+      _ips["Robust"]->addTerm( Function::min(one/Function::h(),1./_muSqrtFunc)*adj_MD11);
+      _ips["Robust"]->addTerm( Function::min(one/Function::h(),1./_muSqrtFunc)*adj_Mq1);
       // _ips["Robust"]->addTerm(sqrt(_mu)*v->grad());
       _ips["Robust"]->addTerm( _muSqrtFunc*adj_KD11 );
       _ips["Robust"]->addTerm( sqrt(Cp()/Pr())*_muSqrtFunc*adj_Kq1 );
@@ -1264,8 +1264,8 @@ CompressibleNavierStokesFormulation::CompressibleNavierStokesFormulation(MeshTop
 
       _ips["CoupledRobust"] = Teuchos::rcp(new IP);
       // _ips["CoupledRobust"]->addTerm(Function::min(one/Function::h(),Function::constant(1./sqrt(_mu)))*tau);
-      _ips["CoupledRobust"]->addTerm( Function::min(one/Function::h(),1./_muSqrtFunc)*_muFunc*adj_MD11);
-      _ips["CoupledRobust"]->addTerm( Function::min(one/Function::h(),1./_muSqrtFunc)*Cp()*_muFunc/Pr()*adj_Mq1);
+      _ips["CoupledRobust"]->addTerm( Function::min(one/Function::h(),1./_muSqrtFunc)*adj_MD11);
+      _ips["CoupledRobust"]->addTerm( Function::min(one/Function::h(),1./_muSqrtFunc)*adj_Mq1);
       // _ips["CoupledRobust"]->addTerm(sqrt(_mu)*v->grad());
       _ips["CoupledRobust"]->addTerm( _muSqrtFunc*adj_KD11 );
       _ips["CoupledRobust"]->addTerm( sqrt(Cp()/Pr())*_muSqrtFunc*adj_Kq1 );
@@ -1301,8 +1301,8 @@ CompressibleNavierStokesFormulation::CompressibleNavierStokesFormulation(MeshTop
 
       _ips["NSDecoupled"] = Teuchos::rcp(new IP);
       // _ips["NSDecoupled"]->addTerm(one/Function::h()*tau);
-      _ips["NSDecoupled"]->addTerm( _muFunc/Function::h()*adj_MD11 );
-      _ips["NSDecoupled"]->addTerm( Cp()*_muFunc/Pr()/Function::h()*adj_Mq1 );
+      _ips["NSDecoupled"]->addTerm( 1./Function::h()*adj_MD11 );
+      _ips["NSDecoupled"]->addTerm( 1./Function::h()*adj_Mq1 );
       // _ips["NSDecoupled"]->addTerm(tau->div());
       _ips["NSDecoupled"]->addTerm( adj_KD11 );
       _ips["NSDecoupled"]->addTerm( adj_Kq1 );
@@ -1371,23 +1371,23 @@ CompressibleNavierStokesFormulation::CompressibleNavierStokesFormulation(MeshTop
           + u2_prev*ve->dy() + u2_prev*ve->dy() - 2./3*u1_prev*ve->dx() - 2./3*u2_prev*ve->dy() );
       adj_Kq1->addTerm( -ve->dx() );
       adj_Kq2->addTerm( -ve->dy() );
-      adj_MD11->addTerm( 1./_muFunc*S1->x() );
-      adj_MD12->addTerm( 1./_muFunc*S1->y() );
-      adj_MD21->addTerm( 1./_muFunc*S2->x() );
-      adj_MD22->addTerm( 1./_muFunc*S2->y() );
-      adj_Mq1->addTerm( Pr()/(Cp()*_muFunc)*tau->x() );
-      adj_Mq2->addTerm( Pr()/(Cp()*_muFunc)*tau->y() );
+      adj_MD11->addTerm( one*S1->x() );
+      adj_MD12->addTerm( one*S1->y() );
+      adj_MD21->addTerm( one*S2->x() );
+      adj_MD22->addTerm( one*S2->y() );
+      adj_Mq1->addTerm( Pr()/Cp()*tau->x() );
+      adj_Mq2->addTerm( Pr()/Cp()*tau->y() );
       adj_Gm1->addTerm( one*S1->div() );
       adj_Gm2->addTerm( one*S2->div() );
       adj_Ge->addTerm( -tau->div() );
 
       _ips["ManualGraph"] = Teuchos::rcp(new IP);
-      _ips["ManualGraph"]->addTerm( adj_MD11 + adj_KD11 );
-      _ips["ManualGraph"]->addTerm( adj_MD12 + adj_KD12 );
-      _ips["ManualGraph"]->addTerm( adj_MD21 + adj_KD21 );
-      _ips["ManualGraph"]->addTerm( adj_MD22 + adj_KD22 );
-      _ips["ManualGraph"]->addTerm( adj_Mq1 + adj_Kq1 );
-      _ips["ManualGraph"]->addTerm( adj_Mq2 + adj_Kq2 );
+      _ips["ManualGraph"]->addTerm( 1./_muFunc*adj_MD11 + adj_KD11 );
+      _ips["ManualGraph"]->addTerm( 1./_muFunc*adj_MD12 + adj_KD12 );
+      _ips["ManualGraph"]->addTerm( 1./_muFunc*adj_MD21 + adj_KD21 );
+      _ips["ManualGraph"]->addTerm( 1./_muFunc*adj_MD22 + adj_KD22 );
+      _ips["ManualGraph"]->addTerm( 1./_muFunc*adj_Mq1 + adj_Kq1 );
+      _ips["ManualGraph"]->addTerm( 1./_muFunc*adj_Mq2 + adj_Kq2 );
       if (_spaceTime)
       {
         _ips["ManualGraph"]->addTerm( adj_Gc - adj_Fc - adj_Cc );
@@ -1412,12 +1412,12 @@ CompressibleNavierStokesFormulation::CompressibleNavierStokesFormulation(MeshTop
 
       _ips["Robust"] = Teuchos::rcp(new IP);
       // _ips["Robust"]->addTerm(Function::min(one/Function::h(),Function::constant(1./sqrt(_mu)))*tau);
-      _ips["Robust"]->addTerm( Function::min(one/Function::h(),1./_muSqrtFunc)*_muFunc*adj_MD11);
-      _ips["Robust"]->addTerm( Function::min(one/Function::h(),1./_muSqrtFunc)*_muFunc*adj_MD12);
-      _ips["Robust"]->addTerm( Function::min(one/Function::h(),1./_muSqrtFunc)*_muFunc*adj_MD21);
-      _ips["Robust"]->addTerm( Function::min(one/Function::h(),1./_muSqrtFunc)*_muFunc*adj_MD22);
-      _ips["Robust"]->addTerm( Function::min(one/Function::h(),1./_muSqrtFunc)*Cp()*_muFunc/Pr()*adj_Mq1);
-      _ips["Robust"]->addTerm( Function::min(one/Function::h(),1./_muSqrtFunc)*Cp()*_muFunc/Pr()*adj_Mq2);
+      _ips["Robust"]->addTerm( Function::min(one/Function::h(),1./_muSqrtFunc)*adj_MD11);
+      _ips["Robust"]->addTerm( Function::min(one/Function::h(),1./_muSqrtFunc)*adj_MD12);
+      _ips["Robust"]->addTerm( Function::min(one/Function::h(),1./_muSqrtFunc)*adj_MD21);
+      _ips["Robust"]->addTerm( Function::min(one/Function::h(),1./_muSqrtFunc)*adj_MD22);
+      _ips["Robust"]->addTerm( Function::min(one/Function::h(),1./_muSqrtFunc)*adj_Mq1);
+      _ips["Robust"]->addTerm( Function::min(one/Function::h(),1./_muSqrtFunc)*adj_Mq2);
       // _ips["Robust"]->addTerm(sqrt(_mu)*v->grad());
       _ips["Robust"]->addTerm( _muSqrtFunc*adj_KD11 );
       _ips["Robust"]->addTerm( _muSqrtFunc*adj_KD12 );
@@ -1466,17 +1466,17 @@ CompressibleNavierStokesFormulation::CompressibleNavierStokesFormulation(MeshTop
 
       _ips["CoupledRobust"] = Teuchos::rcp(new IP);
       // _ips["CoupledRobust"]->addTerm(Function::min(one/Function::h(),Function::constant(1./sqrt(_mu)))*tau);
-      _ips["CoupledRobust"]->addTerm( Function::min(one/Function::h(),1./_muSqrtFunc)*_muFunc*adj_MD11);
-      _ips["CoupledRobust"]->addTerm( Function::min(one/Function::h(),1./_muSqrtFunc)*_muFunc*adj_MD12);
-      _ips["CoupledRobust"]->addTerm( Function::min(one/Function::h(),1./_muSqrtFunc)*_muFunc*adj_MD21);
-      _ips["CoupledRobust"]->addTerm( Function::min(one/Function::h(),1./_muSqrtFunc)*_muFunc*adj_MD22);
-      _ips["CoupledRobust"]->addTerm( Function::min(one/Function::h(),1./_muSqrtFunc)*Cp()*_muFunc/Pr()*adj_Mq1);
-      _ips["CoupledRobust"]->addTerm( Function::min(one/Function::h(),1./_muSqrtFunc)*Cp()*_muFunc/Pr()*adj_Mq2);
+      _ips["CoupledRobust"]->addTerm( Function::min(one/Function::h(),1./_muSqrtFunc)*adj_MD11);
+      _ips["CoupledRobust"]->addTerm( Function::min(one/Function::h(),1./_muSqrtFunc)*adj_MD12);
+      _ips["CoupledRobust"]->addTerm( Function::min(one/Function::h(),1./_muSqrtFunc)*adj_MD21);
+      _ips["CoupledRobust"]->addTerm( Function::min(one/Function::h(),1./_muSqrtFunc)*adj_MD22);
+      _ips["CoupledRobust"]->addTerm( Function::min(one/Function::h(),1./_muSqrtFunc)*adj_Mq1);
+      _ips["CoupledRobust"]->addTerm( Function::min(one/Function::h(),1./_muSqrtFunc)*adj_Mq2);
       // _ips["CoupledRobust"]->addTerm(sqrt(_mu)*v->grad());
-      _ips["CoupledRobust"]->addTerm( _muFunc*adj_KD11 );
-      _ips["CoupledRobust"]->addTerm( _muFunc*adj_KD12 );
-      _ips["CoupledRobust"]->addTerm( _muFunc*adj_KD21 );
-      _ips["CoupledRobust"]->addTerm( _muFunc*adj_KD22 );
+      _ips["CoupledRobust"]->addTerm( _muSqrtFunc*adj_KD11 );
+      _ips["CoupledRobust"]->addTerm( _muSqrtFunc*adj_KD12 );
+      _ips["CoupledRobust"]->addTerm( _muSqrtFunc*adj_KD21 );
+      _ips["CoupledRobust"]->addTerm( _muSqrtFunc*adj_KD22 );
       _ips["CoupledRobust"]->addTerm( sqrt(Cp()/Pr())*_muSqrtFunc*adj_Kq1 );
       _ips["CoupledRobust"]->addTerm( sqrt(Cp()/Pr())*_muSqrtFunc*adj_Kq2 );
       if (_spaceTime)
@@ -1546,12 +1546,12 @@ CompressibleNavierStokesFormulation::CompressibleNavierStokesFormulation(MeshTop
       _ips["CoupledRobust"]->addTerm( ve );
 
       _ips["NSDecoupled"] = Teuchos::rcp(new IP);
-      _ips["NSDecoupled"]->addTerm( _muFunc/Function::h()*adj_MD11 );
-      _ips["NSDecoupled"]->addTerm( _muFunc/Function::h()*adj_MD12 );
-      _ips["NSDecoupled"]->addTerm( _muFunc/Function::h()*adj_MD21 );
-      _ips["NSDecoupled"]->addTerm( _muFunc/Function::h()*adj_MD22 );
-      _ips["NSDecoupled"]->addTerm( Cp()*_muFunc/Pr()/Function::h()*adj_Mq1 );
-      _ips["NSDecoupled"]->addTerm( Cp()*_muFunc/Pr()/Function::h()*adj_Mq2 );
+      _ips["NSDecoupled"]->addTerm( 1./Function::h()*adj_MD11 );
+      _ips["NSDecoupled"]->addTerm( 1./Function::h()*adj_MD12 );
+      _ips["NSDecoupled"]->addTerm( 1./Function::h()*adj_MD21 );
+      _ips["NSDecoupled"]->addTerm( 1./Function::h()*adj_MD22 );
+      _ips["NSDecoupled"]->addTerm( 1./Function::h()*adj_Mq1 );
+      _ips["NSDecoupled"]->addTerm( 1./Function::h()*adj_Mq2 );
       _ips["NSDecoupled"]->addTerm( adj_KD11 );
       _ips["NSDecoupled"]->addTerm( adj_KD12 );
       _ips["NSDecoupled"]->addTerm( adj_KD21 );

@@ -152,13 +152,13 @@ int main(int argc, char *argv[])
   cmdp.setOption("norm", &norm, "norm");
   bool useDirectSolver = false; // false has an issue during GMGOperator::setFineStiffnessMatrix's call to GMGOperator::computeCoarseStiffnessMatrix().  I'm not yet clear on the nature of this isssue.
   cmdp.setOption("useDirectSolver", "useIterativeSolver", &useDirectSolver, "use direct solver");
-  bool useCondensedSolve = false;
+  bool useCondensedSolve = true;
   cmdp.setOption("useCondensedSolve", "useStandardSolve", &useCondensedSolve);
   bool useSPDSolver = false;
   cmdp.setOption("useSPDSolver", "useQRSolver", &useSPDSolver);
   bool useCG = true;
   cmdp.setOption("useCG", "useGMRES", &useCG);
-  bool useConformingTraces = false;
+  bool useConformingTraces = true;
   cmdp.setOption("conformingTraces", "nonconformingTraces", &useConformingTraces, "use conforming traces");
   int polyOrder = 1, delta_k = 3;
   cmdp.setOption("polyOrder",&polyOrder,"polynomial order for field variable u");
@@ -1115,7 +1115,7 @@ int main(int argc, char *argv[])
 
     if (rampRe)
     {
-      double mu = max(1./Re, min(1./coarseRe,1./pow(2,refNumber)));
+      double mu = max(1./Re, min(1./coarseRe,1./pow(2,refNumber+4)));
       form.setmu(mu);
       double refVal = min(64.,max(pow(2.,2+refNumber),64.));
       refParamFunc->setValue(refVal);
