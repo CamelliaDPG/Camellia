@@ -114,9 +114,9 @@ public:
     for (set<int>::iterator testIDIt = testIDs.begin(); testIDIt != testIDs.end(); testIDIt++) {
       int testID = *testIDIt;
       BasisPtr basis = testOrderTrace->getBasis(testID);
-      set<int> interiorDofs = basis->dofOrdinalsForInterior();
+      vector<int> interiorDofs = basis->dofOrdinalsForInterior();
       for (int basisOrdinal=0; basisOrdinal<basis->getCardinality(); basisOrdinal++) {
-        if (interiorDofs.find(basisOrdinal) == interiorDofs.end()) {
+        if (std::find(interiorDofs.begin(),interiorDofs.end(),basisOrdinal) == interiorDofs.end()) {
           int dofIndex = testOrderTrace->getDofIndex(testID, basisOrdinal);
           remappedTraceIndices[dofIndex] = testTraceIndex;
           testTraceIndex++;

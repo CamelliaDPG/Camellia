@@ -72,7 +72,6 @@ public:
   // dof ordinal subsets:
   virtual std::set<int> dofOrdinalsForEdges(bool includeVertices = true) const;
   virtual std::set<int> dofOrdinalsForFaces(bool includeVerticesAndEdges = true) const;
-  virtual std::set<int> dofOrdinalsForInterior() const;
   virtual std::set<int> dofOrdinalsForVertices() const;
   virtual std::set<int> dofOrdinalsForSubcells(int subcellDim, bool includeLesserDimensions) const;
 
@@ -80,6 +79,8 @@ public:
   // ! i.e., if you have HGRAD_DISC or HVOL, you'll get the dofs that have support on the side, even though
   // ! continuity would not usually be enforced along the side for these.
   virtual std::set<int> dofOrdinalsForSide(int sideOrdinal) const;
+  
+  virtual const std::vector<int> &dofOrdinalsForInterior() const;
   
   virtual std::vector<int> dofOrdinalsForSubcell(int subcellDim, int subcellIndex, int minimumSubSubcellDimension) const; // e.g. can get vertex, edge, and face dofs for a side by specifying subcellDim=2, minimumSubSubcellDimension = 0
   virtual const std::vector<int> &dofOrdinalsForSubcell(int subcellDim, int subcellIndex) const;

@@ -412,10 +412,10 @@ std::set<int> Basis<Scalar,ArrayScalar>::dofOrdinalsForFaces(bool includeVertice
 }
 
 template<class Scalar, class ArrayScalar>
-std::set<int> Basis<Scalar,ArrayScalar>::dofOrdinalsForInterior() const
+const std::vector<int> &Basis<Scalar,ArrayScalar>::dofOrdinalsForInterior() const
 {
   int interiorDim = this->domainTopology()->getDimension();
-  return dofOrdinalsForSubcells(interiorDim, false);
+  return dofOrdinalsForSubcell(interiorDim, false);
 }
 
 template<class Scalar, class ArrayScalar>
