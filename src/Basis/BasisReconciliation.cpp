@@ -941,19 +941,19 @@ SubBasisReconciliationWeights BasisReconciliation::filterToInclude(set<int> &row
   return filteredWeights;
 }
 
-set<int> BasisReconciliation::interiorDofOrdinalsForBasis(BasisPtr basis)
-{
-  // if L2, we include all dofs, not just the interior ones
-  bool isL2 = (basis->functionSpace() == Camellia::FUNCTION_SPACE_HVOL) || (basis->functionSpace() == Camellia::FUNCTION_SPACE_VECTOR_HVOL);
-  int spaceDim = basis->domainTopology()->getDimension();
-  set<int> interiorDofOrdinals = isL2 ? basis->dofOrdinalsForSubcells(spaceDim, true) : basis->dofOrdinalsForInterior();
-  if (interiorDofOrdinals.size() == 0)
-  {
-    if (isL2)
-      cout << "Empty interiorDofOrdinals for L^2 basis.\n";
-  }
-  return interiorDofOrdinals;
-}
+//set<int> BasisReconciliation::interiorDofOrdinalsForBasis(BasisPtr basis)
+//{
+//  // if L2, we include all dofs, not just the interior ones
+//  bool isL2 = (basis->functionSpace() == Camellia::FUNCTION_SPACE_HVOL) || (basis->functionSpace() == Camellia::FUNCTION_SPACE_VECTOR_HVOL);
+//  int spaceDim = basis->domainTopology()->getDimension();
+//  set<int> interiorDofOrdinals = isL2 ? basis->dofOrdinalsForSubcells(spaceDim, true) : basis->dofOrdinalsForInterior();
+//  if (interiorDofOrdinals.size() == 0)
+//  {
+//    if (isL2)
+//      cout << "Empty interiorDofOrdinals for L^2 basis.\n";
+//  }
+//  return interiorDofOrdinals;
+//}
 
 set<unsigned> BasisReconciliation::internalDofOrdinalsForFinerBasis(BasisPtr finerBasis, RefinementBranch refinements)
 {
@@ -963,8 +963,8 @@ set<unsigned> BasisReconciliation::internalDofOrdinalsForFinerBasis(BasisPtr fin
 
   if (refinements.size() == 0)
   {
-    set<int> internalDofOrdinalsInt = BasisReconciliation::interiorDofOrdinalsForBasis(finerBasis);
-    internalDofOrdinals.insert(internalDofOrdinalsInt.begin(),internalDofOrdinalsInt.end());
+    const vector<int>* internalDofOrdinalsVector = &finerBasis->dofOrdinalsForInterior();
+    internalDofOrdinals.insert(internalDofOrdinalsVector->begin(),internalDofOrdinalsVector->end());
     return internalDofOrdinals;
   }
 

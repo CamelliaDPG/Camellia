@@ -60,7 +60,7 @@ TEUCHOS_UNIT_TEST( DofOrdering, SidesForVarID )
   vector<int> sidesExpected;
   sidesExpected.push_back(-1);
   sidesExpected.push_back(2);
-  sidesExpected.push_back(4);
+  sidesExpected.push_back(3);
 
   CellTopoPtr cellTopo = CellTopology::quad();
 
