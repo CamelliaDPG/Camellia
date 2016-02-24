@@ -117,8 +117,11 @@ class CompressibleNavierStokesFormulation
 public:
   CompressibleNavierStokesFormulation(MeshTopologyPtr meshTopo, Teuchos::ParameterList &parameters);
 
-  // ! the Oldroyd-B VGP formulation bilinear form
+  // ! the compressible Navier-Stokes formulation bilinear form
   BFPtr bf();
+
+  // ! the compressible Navier-Stokes formulation rhs
+  RHSPtr rhs();
 
   void addXVelocityTraceCondition(SpatialFilterPtr region, FunctionPtr u1_exact);
   void addYVelocityTraceCondition(SpatialFilterPtr region, FunctionPtr u2_exact);

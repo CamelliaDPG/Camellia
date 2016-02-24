@@ -17,6 +17,29 @@
 using namespace Camellia;
 using namespace std;
 
+class Exp_ay2 : public SimpleFunction<double>
+{
+  double _a;
+public:
+  Exp_ay2(double a) : _a(a) {}
+  double value(double x, double y)
+  {
+    return exp(_a*y*y);
+  }
+};
+
+class Log_ay2b : public SimpleFunction<double>
+{
+  double _a;
+  double _b;
+public:
+  Log_ay2b(double a, double b) : _a(a), _b(b) {}
+  double value(double x, double y)
+  {
+    return log(_a*y*y+_b);
+  }
+};
+
 // class TimeRamp : public SimpleFunction<double>
 // {
 //   FunctionPtr _time;
@@ -214,6 +237,7 @@ int main(int argc, char *argv[])
   double gamma = 1.4;
   double Cv = 1;
   double rho_inf, u_inf, T_inf;
+  int rampIncrement = 4;
   if (problemName == "Trivial")
   {
     int meshWidth = 2;
@@ -291,6 +315,7 @@ int main(int argc, char *argv[])
   }
   if (problemName == "Noh")
   {
+    rampIncrement = 0;
     gamma = 5./3;
     rho_inf = 1;
     u_inf = 1;
@@ -309,6 +334,50 @@ int main(int argc, char *argv[])
       int temporalDivisions = 2;
       meshTopo = MeshFactory::spaceTimeMeshTopology(meshTopo, t0, t1, temporalDivisions);
     }
+  }
+  if (problemName == "Piston")
+  {
+    gamma = 5./3;
+    rho_inf = 1;
+    u_inf = 0;
+    T_inf = 0;
+    Cv = 1;
+
+    int tensorialDegree = 1;
+    CellTopoPtr line_x_time = CellTopology::cellTopology(shards::getCellTopologyData<shards::Line<2> >(), tensorialDegree);
+    vector<double> v00 = {0,0};
+    vector<double> v10 = {1,0};
+    vector<double> v01 = {.5,.5};
+    vector<double> v11 = {1,.5};
+    vector< vector<double> > spaceTimeVertices;
+    spaceTimeVertices.push_back(v00);
+    spaceTimeVertices.push_back(v10);
+    spaceTimeVertices.push_back(v01);
+    spaceTimeVertices.push_back(v11);
+    vector<unsigned> spaceTimeLine1VertexList;
+    spaceTimeLine1VertexList.push_back(0);
+    spaceTimeLine1VertexList.push_back(1);
+    spaceTimeLine1VertexList.push_back(2);
+    spaceTimeLine1VertexList.push_back(3);
+    vector< vector<unsigned> > spaceTimeElementVertices;
+    spaceTimeElementVertices.push_back(spaceTimeLine1VertexList);
+    vector< CellTopoPtr > spaceTimeCellTopos;
+    spaceTimeCellTopos.push_back(line_x_time);
+    MeshGeometryPtr spaceTimeMeshGeometry = Teuchos::rcp( new MeshGeometry(spaceTimeVertices, spaceTimeElementVertices, spaceTimeCellTopos) );
+    meshTopo = Teuchos::rcp( new MeshTopology(spaceTimeMeshGeometry) );
+
+    // int meshWidth = 2;
+    // vector<double> dims(spaceDim,1);
+    // vector<int> numElements(spaceDim,meshWidth);
+    // vector<double> x0(spaceDim,-1);
+    // meshTopo = MeshFactory::rectilinearMeshTopology(dims,numElements,x0);
+    // if (!steady)
+    // {
+    //   double t0 = 0;
+    //   double t1 = 1;
+    //   int temporalDivisions = 2;
+    //   meshTopo = MeshFactory::spaceTimeMeshTopology(meshTopo, t0, t1, temporalDivisions);
+    // }
   }
   if (problemName == "Sedov")
   {
@@ -352,12 +421,34 @@ int main(int argc, char *argv[])
       meshTopo = MeshFactory::spaceTimeMeshTopology(meshTopo, t0, t1, temporalDivisions);
     }
   }
+  if (problemName == "RayleighTaylor")
+  {
+    rho_inf = 1;
+    u_inf = 0;
+    T_inf = 1;
+    Cv = 1;
+    vector<double> dims(spaceDim,.5);
+    dims[1] = 2;
+    vector<int> numElements(spaceDim,1);
+    numElements[1] = 4;
+    vector<double> x0(spaceDim,0);
+    x0[1] = -1;
+
+    meshTopo = MeshFactory::rectilinearMeshTopology(dims,numElements,x0);
+    if (!steady)
+    {
+      double t0 = 0;
+      double t1 = 3;
+      int temporalDivisions = 3;
+      meshTopo = MeshFactory::spaceTimeMeshTopology(meshTopo, t0, t1, temporalDivisions);
+    }
+  }
   double R = Cv*(gamma-1);
   double formRe = Re;
   if (rampRe)
   {
     // formRe = coarseRe;
-    double mu = max(1./Re, min(1./coarseRe,1./pow(2,startRef)));
+    double mu = max(1./Re, min(1./coarseRe,1./pow(2,startRef+rampIncrement)));
     formRe = 1./mu;
   }
 
@@ -390,12 +481,22 @@ int main(int argc, char *argv[])
     nsParameters.set("u1Init", 1.);
     nsParameters.set("TInit", 1.);
   }
+  if (problemName == "Piston")
+  {
+    nsParameters.set("u1Init", 0.);
+    nsParameters.set("TInit", 0.);
+  }
   if (problemName == "Sedov")
   {
     nsParameters.set("u1Init", 0.);
     nsParameters.set("u2Init", 0.);
   }
   if (problemName == "TriplePoint")
+  {
+    nsParameters.set("u1Init", 0.);
+    nsParameters.set("u2Init", 0.);
+  }
+  if (problemName == "RayleighTaylor")
   {
     nsParameters.set("u1Init", 0.);
     nsParameters.set("u2Init", 0.);
@@ -830,6 +931,93 @@ int main(int argc, char *argv[])
         break;
     }
   }
+  if (problemName == "Piston")
+  {
+    Teuchos::RCP<PenaltyConstraints> pc = Teuchos::rcp( new PenaltyConstraints );
+    // SpatialFilterPtr leftX  = SpatialFilter::matchingX(-1);
+    SpatialFilterPtr rightX = SpatialFilter::matchingX(1);
+    // SpatialFilterPtr leftY  = SpatialFilter::matchingY(-1);
+    // SpatialFilterPtr rightY = SpatialFilter::matchingY(0);
+    SpatialFilterPtr t0  = SpatialFilter::matchingT(0);
+    SpatialFilterPtr t1  = SpatialFilter::matchingT(.5);
+    SpatialFilterPtr leftX  = SpatialFilter::negatedFilter(rightX & t0 & t1);
+
+    FunctionPtr zero = Function::zero();
+    FunctionPtr one = Function::constant(1);
+    VarPtr te = form.te();
+    VarPtr tm1 = form.tm(1);
+
+    // FunctionPtr rho_exact, u1_exact, u2_exact, T_exact;
+    // if (spaceDim == 1)
+    // {
+    //   rho_exact = one;
+    //   u1_exact = one;
+    //   // T_exact = T_inf*one;
+    //   T_exact = zero;
+    // }
+    // else
+    // {
+    //   rho_exact = one;
+    //   u1_exact = -cos_theta;
+    //   u2_exact = -sin_theta;
+    //   // T_exact = T_inf*one;
+    //   T_exact = zero;
+    // }
+    // FunctionPtr u_exact;
+    // if (spaceDim == 1)
+    //   u_exact = u1_exact;
+    // else
+    //   u_exact = Function::vectorize(u1_exact,u2_exact);
+
+    switch (spaceDim)
+    {
+      case 1:
+        form.addVelocityTraceCondition(   leftX, zero);
+        form.addMassFluxCondition(        leftX, zero);
+        pc->addConstraint(one*tm1 - one*te == zero, leftX);
+        form.addVelocityTraceCondition(   rightX, zero);
+        form.addMassFluxCondition(        rightX, zero);
+        form.addEnergyFluxCondition(      rightX, zero);
+        if (!steady)
+        {
+          form.addMassFluxCondition(     t0, -one);
+          form.addXMomentumFluxCondition(t0, zero);
+          form.addEnergyFluxCondition(   t0, zero);
+        }
+        break;
+      // case 2:
+      //   form.addMassFluxCondition(        leftX, -u1_exact);
+      //   form.addXMomentumFluxCondition(   leftX, -(u1_exact*u1_exact+R*T_exact));
+      //   form.addYMomentumFluxCondition(   leftX, -(u1_exact*u2_exact));
+      //   form.addEnergyFluxCondition(      leftX, -(u1_exact*(Cv*T_exact+0.5+R*T_exact)));
+
+      //   form.addMassFluxCondition(        leftY, -u2_exact);
+      //   form.addXMomentumFluxCondition(   leftY, -(u2_exact*u1_exact));
+      //   form.addYMomentumFluxCondition(   leftY, -(u2_exact*u2_exact+R*T_exact));
+      //   form.addEnergyFluxCondition(      leftY, -(u2_exact*(Cv*T_exact+0.5+R*T_exact)));
+
+      //   form.addXVelocityTraceCondition(  rightX, zero);
+      //   form.addMassFluxCondition(        rightX, zero);
+      //   form.addYMomentumFluxCondition(   rightX, zero);
+      //   form.addEnergyFluxCondition(      rightX, zero);
+
+      //   form.addYVelocityTraceCondition(  rightY, zero);
+      //   form.addMassFluxCondition(        rightY, zero);
+      //   form.addXMomentumFluxCondition(   rightY, zero);
+      //   form.addEnergyFluxCondition(      rightY, zero);
+      //   if (!steady)
+      //   {
+      //     form.addMassFluxCondition(     t0, -one);
+      //     form.addXMomentumFluxCondition(t0, -u1_exact);
+      //     form.addYMomentumFluxCondition(t0, -u2_exact);
+      //     form.addEnergyFluxCondition(   t0, -(Cv*T_exact+0.5)*one);
+      //   }
+      //   break;
+      case 3:
+        break;
+    }
+    form.solutionIncrement()->setFilter(pc);
+  }
   if (problemName == "Sedov")
   {
     SpatialFilterPtr leftX  = SpatialFilter::matchingX(0);
@@ -954,6 +1142,76 @@ int main(int argc, char *argv[])
     // form.addXMomentumFluxCondition(  rightY, zero);
     // form.addYMomentumFluxCondition(  rightY, zero);
     // form.addEnergyFluxCondition(     rightY, zero);
+
+    form.addXVelocityTraceCondition(  leftX, zero);
+    form.addMassFluxCondition(        leftX, zero);
+    form.addYMomentumFluxCondition(   leftX, zero);
+    form.addEnergyFluxCondition(      leftX, zero);
+
+    form.addYVelocityTraceCondition(  leftY, zero);
+    form.addMassFluxCondition(        leftY, zero);
+    form.addXMomentumFluxCondition(   leftY, zero);
+    form.addEnergyFluxCondition(      leftY, zero);
+
+    form.addXVelocityTraceCondition( rightX, zero);
+    form.addMassFluxCondition(       rightX, zero);
+    form.addYMomentumFluxCondition(  rightX, zero);
+    form.addEnergyFluxCondition(     rightX, zero);
+
+    form.addYVelocityTraceCondition( rightY, zero);
+    form.addMassFluxCondition(       rightY, zero);
+    form.addXMomentumFluxCondition(  rightY, zero);
+    form.addEnergyFluxCondition(     rightY, zero);
+    if (!steady)
+    {
+      form.addMassFluxCondition(     t0, -rho_exact);
+      form.addXMomentumFluxCondition(t0, -u1_exact);
+      form.addYMomentumFluxCondition(t0, -u2_exact);
+      form.addEnergyFluxCondition(   t0, -Cv*T_exact);
+    }
+  }
+  if (problemName == "RayleighTaylor")
+  {
+    RHSPtr rhs = form.rhs();
+    VarPtr vm2 = form.vm(2);
+    FunctionPtr rho_prev = Function::solution(form.rho(), form.solution());
+    double g = -1;
+    rhs->addTerm(g*rho_prev * vm2);
+
+    SpatialFilterPtr leftX  = SpatialFilter::matchingX(0);
+    SpatialFilterPtr rightX = SpatialFilter::matchingX(.5);
+    SpatialFilterPtr leftY  = SpatialFilter::matchingY(-2);
+    SpatialFilterPtr rightY = SpatialFilter::matchingY(2);
+    SpatialFilterPtr t0  = SpatialFilter::matchingT(0);
+
+    FunctionPtr zero = Function::zero();
+    FunctionPtr one = Function::constant(1);
+
+    FunctionPtr rho_exact, u1_exact, u2_exact, T_exact, p_exact;
+    double beta = 20;
+    double pi = atan(1)*4;
+    double rho1 = 1;
+    double rho2 = 2;
+    FunctionPtr atan_betay = Teuchos::rcp(new ArcTan_ay(beta));
+    double u0 = 0.02;
+    FunctionPtr exp_m2piy2 = Teuchos::rcp(new Exp_ay2(-2*pi));
+    FunctionPtr cos_2pix = Teuchos::rcp(new Cos_ax(2*pi));
+    FunctionPtr sin_2pix = Teuchos::rcp(new Sin_ax(2*pi));
+    FunctionPtr y = Function::yn(1);
+    double C = 4 + (1.5*2+2./pi*atan(beta*2)-1./(2*pi*beta)*log(beta*beta*4+1));
+    // cout << "C = " << C << endl;
+    FunctionPtr log_b2y21 = Teuchos::rcp(new Log_ay2b(beta*beta,1));
+    p_exact = g*((rho1+rho2)/2.*y + (rho2-rho1)/pi*(atan_betay*y-1./(2*beta)*log_b2y21))+C*one;
+
+    rho_exact = (rho1+rho2)/2.*one + (rho2-rho1)/pi*atan_betay;
+    u1_exact = u0*exp_m2piy2*2*y*sin_2pix;
+    u2_exact = u0*exp_m2piy2*2*y*cos_2pix;
+    T_exact = 1./.4*p_exact/rho_exact;
+    FunctionPtr u_exact;
+    if (spaceDim == 1)
+      u_exact = u1_exact;
+    else
+      u_exact = Function::vectorize(u1_exact,u2_exact);
 
     form.addXVelocityTraceCondition(  leftX, zero);
     form.addMassFluxCondition(        leftX, zero);
@@ -1115,7 +1373,7 @@ int main(int argc, char *argv[])
 
     if (rampRe)
     {
-      double mu = max(1./Re, min(1./coarseRe,1./pow(2,refNumber+4)));
+      double mu = max(1./Re, min(1./coarseRe,1./pow(2,refNumber+rampIncrement)));
       form.setmu(mu);
       double refVal = min(64.,max(pow(2.,2+refNumber),64.));
       refParamFunc->setValue(refVal);

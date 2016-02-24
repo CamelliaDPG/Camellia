@@ -23,6 +23,70 @@
 
 using namespace Camellia;
 
+class Exp_ay2 : public SimpleFunction<double>
+{
+  double _a;
+public:
+  Exp_ay2(double a) : _a(a) {}
+  double value(double x, double y)
+  {
+    return exp(_a*y*y);
+  }
+};
+
+class Log_ay2b : public SimpleFunction<double>
+{
+  double _a;
+  double _b;
+public:
+  Log_ay2b(double a, double b) : _a(a), _b(b) {}
+  double value(double x, double y)
+  {
+    return log(_a*y*y+_b);
+  }
+};
+
+class SqrtFunction : public Function {
+  private:
+    FunctionPtr _function;
+  public:
+    SqrtFunction(FunctionPtr function) : Function(0), _function(function) {}
+    void values(Intrepid::FieldContainer<double> &values, BasisCachePtr basisCache) {
+      int numCells = values.dimension(0);
+      int numPoints = values.dimension(1);
+
+      _function->values(values, basisCache);
+
+      const Intrepid::FieldContainer<double> *points = &(basisCache->getPhysicalCubaturePoints());
+      for (int cellIndex=0; cellIndex<numCells; cellIndex++) {
+        for (int ptIndex=0; ptIndex<numPoints; ptIndex++) {
+          values(cellIndex, ptIndex) = sqrt(values(cellIndex, ptIndex));
+        }
+      }
+    }
+};
+
+class BoundedSqrtFunction : public Function {
+  private:
+    FunctionPtr _function;
+    double _bound;
+  public:
+    BoundedSqrtFunction(FunctionPtr function, double bound) : Function(0), _function(function), _bound(bound) {}
+    void values(Intrepid::FieldContainer<double> &values, BasisCachePtr basisCache) {
+      int numCells = values.dimension(0);
+      int numPoints = values.dimension(1);
+
+      _function->values(values, basisCache);
+
+      const Intrepid::FieldContainer<double> *points = &(basisCache->getPhysicalCubaturePoints());
+      for (int cellIndex=0; cellIndex<numCells; cellIndex++) {
+        for (int ptIndex=0; ptIndex<numPoints; ptIndex++) {
+          values(cellIndex, ptIndex) = sqrt(std::max(values(cellIndex, ptIndex),_bound));
+        }
+      }
+    }
+};
+
 const string CompressibleNavierStokesFormulation::S_rho = "rho";
 const string CompressibleNavierStokesFormulation::S_u1  = "u1";
 const string CompressibleNavierStokesFormulation::S_u2  = "u2";
@@ -384,6 +448,28 @@ CompressibleNavierStokesFormulation::CompressibleNavierStokesFormulation(MeshTop
     {
       rho_init = one - (1-0.125)*Function::heaviside(1)*Function::heavisideY(1.5);
       T_init = one - (1-0.1)*Function::heaviside(1);
+    }
+    if (spaceDim > 1 && problemName == "RayleighTaylor")
+    {
+      double g = -1;
+      double beta = 20;
+      double pi = atan(1)*4;
+      double rho1 = 1;
+      double rho2 = 2;
+      FunctionPtr atan_betay = Teuchos::rcp(new ArcTan_ay(beta));
+      double u0 = 0.02;
+      FunctionPtr exp_m2piy2 = Teuchos::rcp(new Exp_ay2(-2*pi));
+      FunctionPtr cos_2pix = Teuchos::rcp(new Cos_ax(2*pi));
+      FunctionPtr sin_2pix = Teuchos::rcp(new Sin_ax(2*pi));
+      FunctionPtr y = Function::yn(1);
+      double C = 4 + (1.5+1./pi*atan(beta)-1./(2*pi*beta)*log(beta*beta+1));
+      FunctionPtr log_b2y21 = Teuchos::rcp(new Log_ay2b(beta*beta,1));
+      FunctionPtr p_init = g*((rho1+rho2)/2.*y + (rho2-rho1)/pi*(atan_betay*y-1./(2*beta)*log_b2y21))+C*one;
+
+      rho_init = (rho1+rho2)/2.*one + (rho2-rho1)/pi*atan_betay;
+      u1_init = u0*exp_m2piy2*2*y*sin_2pix;
+      u2_init = u0*exp_m2piy2*2*y*cos_2pix;
+      T_init = 1./.4*p_init/rho_init;
     }
     FunctionPtr n_xx, n_xy, n_xz, n_t;
     n_xx = n_x->x() * Function::sideParity();
@@ -1185,6 +1271,8 @@ CompressibleNavierStokesFormulation::CompressibleNavierStokesFormulation(MeshTop
   _ips["Graph"] = _bf->graphNorm();
   // cout << "Graph" << endl;
   // _ips["Graph"]->printInteractions();
+  FunctionPtr rho_sqrt = Teuchos::rcp(new BoundedSqrtFunction(rho_prev,1e-4));
+  FunctionPtr T_sqrt = Teuchos::rcp(new BoundedSqrtFunction(T_prev,1e-4));
 
   switch (_spaceDim)
   {
@@ -1226,6 +1314,27 @@ CompressibleNavierStokesFormulation::CompressibleNavierStokesFormulation(MeshTop
       _ips["ManualGraph"]->addTerm( S1 );
       _ips["ManualGraph"]->addTerm( tau );
 
+      _ips["EntropyGraph"] = Teuchos::rcp(new IP);
+      _ips["EntropyGraph"]->addTerm( 1./_muFunc*adj_MD11 + adj_KD11 );
+      _ips["EntropyGraph"]->addTerm( 1./_muFunc*adj_Mq1 + adj_Kq1 );
+      if (_spaceTime)
+      {
+        _ips["EntropyGraph"]->addTerm( rho_sqrt/sqrt(_gamma-1)*(adj_Gc - adj_Fc - adj_Cc) );
+        _ips["EntropyGraph"]->addTerm(   Cv()*T_sqrt/rho_sqrt*(adj_Gm1 - adj_Fm1 - adj_Cm1) );
+        _ips["EntropyGraph"]->addTerm(        T_prev/rho_sqrt*(adj_Ge - adj_Fe - adj_Ce) );
+      }
+      else
+      {
+        _ips["EntropyGraph"]->addTerm( rho_sqrt/sqrt(_gamma-1)*(adj_Gc - adj_Fc) );
+        _ips["EntropyGraph"]->addTerm(   Cv()*T_sqrt/rho_sqrt*(adj_Gm1 - adj_Fm1) );
+        _ips["EntropyGraph"]->addTerm(        T_prev/rho_sqrt*(adj_Ge - adj_Fe) );
+      }
+      _ips["EntropyGraph"]->addTerm( vc );
+      _ips["EntropyGraph"]->addTerm( vm1 );
+      _ips["EntropyGraph"]->addTerm( ve );
+      _ips["EntropyGraph"]->addTerm( S1 );
+      _ips["EntropyGraph"]->addTerm( tau );
+
       // cout << endl << "ManualGraph" << endl;
       // _ips["ManualGraph"]->printInteractions();
 
@@ -1261,6 +1370,39 @@ CompressibleNavierStokesFormulation::CompressibleNavierStokesFormulation(MeshTop
       _ips["Robust"]->addTerm( vc );
       _ips["Robust"]->addTerm( vm1 );
       _ips["Robust"]->addTerm( ve );
+
+      _ips["EntropyRobust"] = Teuchos::rcp(new IP);
+      // _ips["EntropyRobust"]->addTerm(Function::min(one/Function::h(),Function::constant(1./sqrt(_mu)))*tau);
+      _ips["EntropyRobust"]->addTerm( Function::min(one/Function::h(),1./_muSqrtFunc)*adj_MD11);
+      _ips["EntropyRobust"]->addTerm( Function::min(one/Function::h(),1./_muSqrtFunc)*adj_Mq1);
+      // _ips["EntropyRobust"]->addTerm(sqrt(_mu)*v->grad());
+      _ips["EntropyRobust"]->addTerm( _muSqrtFunc*adj_KD11 );
+      _ips["EntropyRobust"]->addTerm( sqrt(Cp()/Pr())*_muSqrtFunc*adj_Kq1 );
+      if (_spaceTime)
+      {
+        // _ips["EntropyRobust"]->addTerm(_beta*v->grad() + v->dt());
+        _ips["EntropyRobust"]->addTerm( rho_sqrt/sqrt(_gamma-1)*(adj_Fc + adj_Cc) );
+        _ips["EntropyRobust"]->addTerm(   Cv()*T_sqrt/rho_sqrt*(adj_Fm1 + adj_Cm1) );
+        _ips["EntropyRobust"]->addTerm(        T_prev/rho_sqrt*(adj_Fe + adj_Ce) );
+      }
+      else
+      {
+        // _ips["EntropyRobust"]->addTerm(_beta*v->grad());
+        _ips["EntropyRobust"]->addTerm( rho_sqrt/sqrt(_gamma-1)*(adj_Fc) );
+        _ips["EntropyRobust"]->addTerm(   Cv()*T_sqrt/rho_sqrt*(adj_Fm1) );
+        _ips["EntropyRobust"]->addTerm(        T_prev/rho_sqrt*(adj_Fe) );
+      }
+      // _ips["EntropyRobust"]->addTerm(tau->div());
+      _ips["EntropyRobust"]->addTerm( rho_sqrt/sqrt(_gamma-1)*adj_Gc );
+      _ips["EntropyRobust"]->addTerm(   Cv()*T_sqrt/rho_sqrt*adj_Gm1 );
+      _ips["EntropyRobust"]->addTerm(        T_prev/rho_sqrt*adj_Ge );
+      // _ips["EntropyRobust"]->addTerm(Function::min(sqrt(_mu)*one/Function::h(),one)*v);
+      // _ips["EntropyRobust"]->addTerm( Function::min(sqrt(mu())*one/Function::h(),one)*vc );
+      // _ips["EntropyRobust"]->addTerm( Function::min(sqrt(mu())*one/Function::h(),one)*vm1 );
+      // _ips["EntropyRobust"]->addTerm( Function::min(sqrt(mu())*one/Function::h(),one)*ve );
+      _ips["EntropyRobust"]->addTerm( vc );
+      _ips["EntropyRobust"]->addTerm( vm1 );
+      _ips["EntropyRobust"]->addTerm( ve );
 
       _ips["CoupledRobust"] = Teuchos::rcp(new IP);
       // _ips["CoupledRobust"]->addTerm(Function::min(one/Function::h(),Function::constant(1./sqrt(_mu)))*tau);
@@ -1298,6 +1440,43 @@ CompressibleNavierStokesFormulation::CompressibleNavierStokesFormulation(MeshTop
       _ips["CoupledRobust"]->addTerm( vc );
       _ips["CoupledRobust"]->addTerm( vm1 );
       _ips["CoupledRobust"]->addTerm( ve );
+
+      _ips["EntropyCoupledRobust"] = Teuchos::rcp(new IP);
+      // _ips["EntropyCoupledRobust"]->addTerm(Function::min(one/Function::h(),Function::constant(1./sqrt(_mu)))*tau);
+      _ips["EntropyCoupledRobust"]->addTerm( Function::min(one/Function::h(),1./_muSqrtFunc)*adj_MD11);
+      _ips["EntropyCoupledRobust"]->addTerm( Function::min(one/Function::h(),1./_muSqrtFunc)*adj_Mq1);
+      // _ips["EntropyCoupledRobust"]->addTerm(sqrt(_mu)*v->grad());
+      _ips["EntropyCoupledRobust"]->addTerm( _muSqrtFunc*adj_KD11 );
+      _ips["EntropyCoupledRobust"]->addTerm( sqrt(Cp()/Pr())*_muSqrtFunc*adj_Kq1 );
+      if (_spaceTime)
+      {
+        // _ips["EntropyCoupledRobust"]->addTerm(tau->div() - v->dt() - beta*v->grad());
+        _ips["EntropyGraph"]->addTerm( rho_sqrt/sqrt(_gamma-1)*(adj_Gc - adj_Fc - adj_Cc) );
+        _ips["EntropyGraph"]->addTerm(   Cv()*T_sqrt/rho_sqrt*(adj_Gm1 - adj_Fm1 - adj_Cm1) );
+        _ips["EntropyGraph"]->addTerm(        T_prev/rho_sqrt*(adj_Ge - adj_Fe - adj_Ce) );
+        // _ips["EntropyCoupledRobust"]->addTerm(_beta*v->grad() + v->dt());
+        _ips["EntropyGraph"]->addTerm( rho_sqrt/sqrt(_gamma-1)*(adj_Fc + adj_Cc) );
+        _ips["EntropyGraph"]->addTerm(   Cv()*T_sqrt/rho_sqrt*(adj_Fm1 + adj_Cm1) );
+        _ips["EntropyGraph"]->addTerm(        T_prev/rho_sqrt*(adj_Fe + adj_Ce) );
+      }
+      else
+      {
+        // _ips["EntropyCoupledRobust"]->addTerm(tau->div() - beta*v->grad());
+        _ips["EntropyGraph"]->addTerm( rho_sqrt/sqrt(_gamma-1)*(adj_Gc - adj_Fc) );
+        _ips["EntropyGraph"]->addTerm(   Cv()*T_sqrt/rho_sqrt*(adj_Gm1 - adj_Fm1) );
+        _ips["EntropyGraph"]->addTerm(        T_prev/rho_sqrt*(adj_Ge - adj_Fe) );
+        // _ips["EntropyCoupledRobust"]->addTerm(_beta*v->grad());
+        _ips["EntropyGraph"]->addTerm( rho_sqrt/sqrt(_gamma-1)*adj_Fc );
+        _ips["EntropyGraph"]->addTerm(   Cv()*T_sqrt/rho_sqrt*adj_Fm1 );
+        _ips["EntropyGraph"]->addTerm(        T_prev/rho_sqrt*adj_Fe );
+      }
+      // _ips["EntropyCoupledRobust"]->addTerm(Function::min(sqrt(_mu)*one/Function::h(),one)*v);
+      // _ips["EntropyCoupledRobust"]->addTerm( Function::min(sqrt(mu())*one/Function::h(),one)*vc );
+      // _ips["EntropyCoupledRobust"]->addTerm( Function::min(sqrt(mu())*one/Function::h(),one)*vm1 );
+      // _ips["EntropyCoupledRobust"]->addTerm( Function::min(sqrt(mu())*one/Function::h(),one)*ve );
+      _ips["EntropyCoupledRobust"]->addTerm( vc );
+      _ips["EntropyCoupledRobust"]->addTerm( vm1 );
+      _ips["EntropyCoupledRobust"]->addTerm( ve );
 
       _ips["NSDecoupled"] = Teuchos::rcp(new IP);
       // _ips["NSDecoupled"]->addTerm(one/Function::h()*tau);
@@ -2453,6 +2632,11 @@ void CompressibleNavierStokesFormulation::addEnergyFluxCondition(SpatialFilterPt
 BFPtr CompressibleNavierStokesFormulation::bf()
 {
   return _bf;
+}
+
+RHSPtr CompressibleNavierStokesFormulation::rhs()
+{
+  return _rhs;
 }
 
 void CompressibleNavierStokesFormulation::CHECK_VALID_COMPONENT(int i) // throws exception on bad component value (should be between 1 and _spaceDim, inclusive)
