@@ -135,7 +135,8 @@ unsigned vertexPermutation(shards::CellTopology &fineTopo, unsigned fineSideInde
   return -1; // just for compilers that would otherwise warn that we're missing a return value...
 }
 
-SubBasisReconciliationWeights BasisReconciliation::composedSubBasisReconciliationWeights(SubBasisReconciliationWeights aWeights, SubBasisReconciliationWeights bWeights)
+SubBasisReconciliationWeights BasisReconciliation::composedSubBasisReconciliationWeights(const SubBasisReconciliationWeights &aWeights,
+                                                                                         const SubBasisReconciliationWeights &bWeights)
 {
   // first render aWeights and bWeights compatible by intersecting aWeights.coarseOrdinals with bWeights.fineOrdinals
   set<int> aColOrdinalsToInclude, bRowOrdinalsToInclude;
@@ -159,13 +160,28 @@ SubBasisReconciliationWeights BasisReconciliation::composedSubBasisReconciliatio
   }
 
   set<int> aAllRows, bAllCols;
-  for (int i=0; i<aWeights.fineOrdinals.size(); i++)
+  if (! aWeights.isIdentity)
   {
-    aAllRows.insert(i);
+    for (int i=0; i<aWeights.fineOrdinals.size(); i++)
+    {
+      aAllRows.insert(i);
+    }
   }
-  for (int j=0; j<bWeights.coarseOrdinals.size(); j++)
+  else
   {
-    bAllCols.insert(j);
+    // take the part of the identity corresponding to aColOrdinalsToInclude
+    aAllRows = aColOrdinalsToInclude;
+  }
+  if (! bWeights.isIdentity)
+  {
+    for (int j=0; j<bWeights.coarseOrdinals.size(); j++)
+    {
+      bAllCols.insert(j);
+    }
+  }
+  else
+  {
+    bAllCols = bRowOrdinalsToInclude;
   }
 
 //  if (aWeights.coarseOrdinals.size() != bWeights.fineOrdinals.size()) {
@@ -181,9 +197,9 @@ SubBasisReconciliationWeights BasisReconciliation::composedSubBasisReconciliatio
 //  Camellia::print("b: fine ordinals", bWeights.fineOrdinals);
 //  Camellia::print("b: coarse ordinals", bWeights.coarseOrdinals);
 //  cout << "b: weights:\n" << bWeights.weights;
-
-  aWeights = filterToInclude(aAllRows, aColOrdinalsToInclude, aWeights);
-  bWeights = filterToInclude(bRowOrdinalsToInclude, bAllCols, bWeights);
+  
+  SubBasisReconciliationWeights aWeightsFiltered = filterToInclude(aAllRows, aColOrdinalsToInclude, aWeights);
+  SubBasisReconciliationWeights bWeightsFiltered = filterToInclude(bRowOrdinalsToInclude, bAllCols, bWeights);
 
 //  cout << "aWeights, bWeights after filtering to intersect:\n";
 //
@@ -195,30 +211,43 @@ SubBasisReconciliationWeights BasisReconciliation::composedSubBasisReconciliatio
 //  Camellia::print("b: coarse ordinals", bWeights.coarseOrdinals);
 //  cout << "b: weights:\n" << bWeights.weights;
 
-  if (aWeights.coarseOrdinals.size() != bWeights.fineOrdinals.size())
+  if (aWeightsFiltered.coarseOrdinals.size() != bWeightsFiltered.fineOrdinals.size())
   {
     cout << "aWeights and bWeights are incompatible...\n";
 
-    Camellia::print("a: fine ordinals", aWeights.fineOrdinals);
-    Camellia::print("a: coarse ordinals", aWeights.coarseOrdinals);
-    cout << "a: weights:\n" << aWeights.weights;
+    Camellia::print("a: fine ordinals", aWeightsFiltered.fineOrdinals);
+    Camellia::print("a: coarse ordinals", aWeightsFiltered.coarseOrdinals);
+    cout << "a: weights:\n" << aWeightsFiltered.weights;
 
-    Camellia::print("b: fine ordinals", bWeights.fineOrdinals);
-    Camellia::print("b: coarse ordinals", bWeights.coarseOrdinals);
-    cout << "b: weights:\n" << bWeights.weights;
+    Camellia::print("b: fine ordinals", bWeightsFiltered.fineOrdinals);
+    Camellia::print("b: coarse ordinals", bWeightsFiltered.coarseOrdinals);
+    cout << "b: weights:\n" << bWeightsFiltered.weights;
 
     TEUCHOS_TEST_FOR_EXCEPTION(true, std::invalid_argument, "aWeights and bWeights are incompatible...");
   }
+  
   SubBasisReconciliationWeights cWeights;
-  cWeights.weights = FieldContainer<double>(aWeights.fineOrdinals.size(), bWeights.coarseOrdinals.size());
-  if ((cWeights.weights.size() != 0) && (aWeights.weights.size() != 0) && (bWeights.weights.size() != 0))
+  cWeights.fineOrdinals = aWeightsFiltered.fineOrdinals;
+  cWeights.coarseOrdinals = bWeightsFiltered.coarseOrdinals;
+  cWeights.isIdentity = aWeightsFiltered.isIdentity && bWeightsFiltered.isIdentity;
+  if (aWeights.isIdentity)
   {
-    FieldContainer<double> aMatrix = aWeights.weights;
-    FieldContainer<double> bMatrix = bWeights.weights;
-    SerialDenseWrapper::multiply(cWeights.weights, aWeights.weights, bWeights.weights);
+    cWeights.weights = bWeightsFiltered.weights;
   }
-  cWeights.fineOrdinals = aWeights.fineOrdinals;
-  cWeights.coarseOrdinals = bWeights.coarseOrdinals;
+  else if (bWeights.isIdentity)
+  {
+    cWeights.weights = aWeightsFiltered.weights;
+  }
+  else
+  {
+    cWeights.weights = FieldContainer<double>(aWeightsFiltered.fineOrdinals.size(), bWeightsFiltered.coarseOrdinals.size());
+    if ((cWeights.weights.size() != 0) && (aWeightsFiltered.weights.size() != 0) && (bWeightsFiltered.weights.size() != 0))
+    {
+      FieldContainer<double> aMatrix = aWeightsFiltered.weights;
+      FieldContainer<double> bMatrix = bWeightsFiltered.weights;
+      SerialDenseWrapper::multiply(cWeights.weights, aWeightsFiltered.weights, bWeightsFiltered.weights);
+    }
+  }
   return filterOutZeroRowsAndColumns(cWeights);
 }
 
@@ -232,6 +261,24 @@ SubBasisReconciliationWeights BasisReconciliation::computeConstrainedWeights(uns
 {
   SubBasisReconciliationWeights weights;
 
+  if ((finerBasis.get() == coarserBasis.get()) && (vertexNodePermutation == 0)
+      && (finerBasisSubcellOrdinal == coarserBasisSubcellOrdinal)
+      )
+  {
+    if (refinements.size() == 1)
+    {
+      if (refinements[0].first->numChildren() == 1)
+      {
+        // trivial refinement; if we get here the two really do match
+        weights.isIdentity = true;
+        vector<int> fineOrdinals = finerBasis->dofOrdinalsForSubcell(subcellDimension, finerBasisSubcellOrdinal, 0);
+        weights.fineOrdinals = set<int>(fineOrdinals.begin(),fineOrdinals.end());
+        weights.coarseOrdinals = weights.fineOrdinals;
+        return weights;
+      }
+    }
+  }
+  
   // use the functionSpace to determine what continuities should be enforced:
   Camellia::EFunctionSpace fs = finerBasis->functionSpace();
   TEUCHOS_TEST_FOR_EXCEPTION(fs != coarserBasis->functionSpace(), std::invalid_argument, "Bases must agree on functionSpace().");
@@ -471,6 +518,25 @@ SubBasisReconciliationWeights BasisReconciliation::computeConstrainedWeights(uns
 {
   SubBasisReconciliationWeights weights;
 
+  if (((finerBasis.get() == coarserBasis.get()) && (fineSubcellDimension == coarseSubcellDimension)) && (coarseSubcellPermutation == 0)
+      && (fineSubcellOrdinalInFineDomain == coarseSubcellOrdinalInCoarseDomain) &&
+      (coarseDomainOrdinalInCoarseCellTopo == fineDomainOrdinalInRefinementLeaf)
+      )
+  {
+    if (fineCellRefinementBranch.size() == 1)
+    {
+      if (fineCellRefinementBranch[0].first->numChildren() == 1)
+      {
+        // trivial refinement; if we get here the two really do match
+        weights.isIdentity = true;
+        vector<int> fineOrdinals = finerBasis->dofOrdinalsForSubcell(fineSubcellDimension, fineSubcellOrdinalInFineDomain, 0);
+        weights.fineOrdinals = set<int>(fineOrdinals.begin(),fineOrdinals.end());
+        weights.coarseOrdinals = weights.fineOrdinals;
+        return weights;
+      }
+    }
+  }
+  
 //  Camellia::EFunctionSpace fs = finerBasis->functionSpace();
 //  TEUCHOS_TEST_FOR_EXCEPTION(fs != coarserBasis->functionSpace(), std::invalid_argument, "Bases must agree on functionSpace().");
 
@@ -790,6 +856,54 @@ const SubBasisReconciliationWeights &BasisReconciliation::constrainedWeightsForT
   return _termsTraced[cacheKey];
 }
 
+bool BasisReconciliation::equalWeights(const SubBasisReconciliationWeights &aWeights, const SubBasisReconciliationWeights &bWeights, double tol)
+{
+  if (aWeights.fineOrdinals.size() != bWeights.fineOrdinals.size()) return false;
+  if (aWeights.coarseOrdinals.size() != bWeights.coarseOrdinals.size()) return false;
+  auto aFineOrdinalIt = aWeights.fineOrdinals.begin();
+  for (int bFineOrdinal : bWeights.fineOrdinals)
+  {
+    if (bFineOrdinal != *aFineOrdinalIt) return false;
+    aFineOrdinalIt++;
+  }
+  auto aCoarseOrdinalIt = aWeights.coarseOrdinals.begin();
+  for (int bCoarseOrdinal : bWeights.coarseOrdinals)
+  {
+    if (bCoarseOrdinal != *aCoarseOrdinalIt) return false;
+    aCoarseOrdinalIt++;
+  }
+  if (aWeights.isIdentity && bWeights.isIdentity)
+  {
+    return true;
+  }
+  else if (aWeights.isIdentity || bWeights.isIdentity)
+  {
+    const SubBasisReconciliationWeights* nonIdentity;
+    nonIdentity = aWeights.isIdentity ? &bWeights : &aWeights;
+    for (int i=0; i<nonIdentity->weights.dimension(0); i++)
+    {
+      for (int j=0; j<nonIdentity->weights.dimension(1); j++)
+      {
+        double identityValue = (i==j) ? 1.0 : 0.0;
+        double diff = abs(nonIdentity->weights(i,j) - identityValue);
+        if (diff > tol) return false;
+      }
+    }
+  }
+  else
+  {
+    for (int i=0; i<aWeights.weights.dimension(0); i++)
+    {
+      for (int j=0; j<aWeights.weights.dimension(1); j++)
+      {
+        double diff = abs(aWeights.weights(i,j) - bWeights.weights(i,j));
+        if (diff > tol) return false;
+      }
+    }
+  }
+  return true;
+}
+
 FieldContainer<double> BasisReconciliation::filterBasisValues(const FieldContainer<double> &basisValues, set<int> &filter)
 {
   Teuchos::Array<int> dim;
@@ -822,6 +936,11 @@ FieldContainer<double> BasisReconciliation::filterBasisValues(const FieldContain
 SubBasisReconciliationWeights BasisReconciliation::filterOutZeroRowsAndColumns(SubBasisReconciliationWeights &weights)
 {
   // we also will filter out zero rows and columns (and while we're at it, round to zero/one for any values that are very close to those):
+  if (weights.isIdentity)
+  {
+    return weights;
+  }
+  
   const double maxZeroTol = 1e-14;
   // first, look for zero rows:
   set<int> rowsToInclude, colsToInclude;
@@ -880,10 +999,35 @@ SubBasisReconciliationWeights BasisReconciliation::filterOutZeroRowsAndColumns(S
   return filterToInclude(rowsToInclude, colsToInclude, weights);
 }
 
-SubBasisReconciliationWeights BasisReconciliation::filterToInclude(set<int> &rowOrdinals, set<int> &colOrdinals, SubBasisReconciliationWeights &weights)
+SubBasisReconciliationWeights BasisReconciliation::filterToInclude(set<int> &rowOrdinals, set<int> &colOrdinals, const SubBasisReconciliationWeights &weights)
 {
   SubBasisReconciliationWeights filteredWeights;
+  auto fineOrdinalIt = weights.fineOrdinals.begin();
 
+  if (weights.isIdentity)
+  {
+    TEUCHOS_TEST_FOR_EXCEPTION(rowOrdinals.size() != colOrdinals.size(), std::invalid_argument, "rowOrdinals != colOrdinals when weights.isIdentity = true");
+    auto rowIt = rowOrdinals.begin();
+    auto colIt = colOrdinals.begin();
+    while (rowIt != rowOrdinals.end()) {
+      TEUCHOS_TEST_FOR_EXCEPTION(*rowIt != *colIt, std::invalid_argument, "rowOrdinals != colOrdinals when weights.isIdentity = true");
+      rowIt++;
+      colIt++;
+    }
+    
+    filteredWeights.isIdentity = true;
+    int prev_i = 0;
+    for (int i : rowOrdinals)
+    {
+      for (int n=0; n<i - prev_i; n++ )
+        ++fineOrdinalIt;
+      filteredWeights.fineOrdinals.insert(*fineOrdinalIt);
+      prev_i = i;
+    }
+    filteredWeights.coarseOrdinals = filteredWeights.fineOrdinals;
+    return filteredWeights;
+  }
+  
 //  int rowOrdinalOrdinal = 0; // ordinal in the weights.coarseOrdinals container
 //  for (int fineOrdinal : weights.fineOrdinals)
 //  {
@@ -906,26 +1050,24 @@ SubBasisReconciliationWeights BasisReconciliation::filterToInclude(set<int> &row
 //  }
 
   filteredWeights.weights.resize(rowOrdinals.size(), colOrdinals.size());
-
-  auto rowOrdinalIt = weights.fineOrdinals.begin();
   
   int prev_i = 0;
   for (int i : rowOrdinals)
   {
     for (int n=0; n<i - prev_i; n++ )
-      ++rowOrdinalIt;
-    filteredWeights.fineOrdinals.insert(*rowOrdinalIt);
+      ++fineOrdinalIt;
+    filteredWeights.fineOrdinals.insert(*fineOrdinalIt);
     prev_i = i;
   }
 
-  auto colOrdinalIt = weights.coarseOrdinals.begin();
+  auto coarseOrdinalIt = weights.coarseOrdinals.begin();
 
   int prev_j = 0;
   for (int j : colOrdinals)
   {
     for (int n=0; n<j - prev_j; n++ )
-      ++colOrdinalIt;
-    filteredWeights.coarseOrdinals.insert(*colOrdinalIt);
+      ++coarseOrdinalIt;
+    filteredWeights.coarseOrdinals.insert(*coarseOrdinalIt);
     prev_j = j;
   }
   
@@ -1419,7 +1561,7 @@ void BasisReconciliation::setupFineAndCoarseBasisCachesForReconciliation(BasisCa
   coarseDomainCache->setPhysicalCellNodes(coarseTopoRefNodes, vector<GlobalIndexType>(), false);
 }
 
-SubBasisReconciliationWeights BasisReconciliation::sumWeights(SubBasisReconciliationWeights aWeights, SubBasisReconciliationWeights bWeights)
+SubBasisReconciliationWeights BasisReconciliation::sumWeights(const SubBasisReconciliationWeights &aWeights, const SubBasisReconciliationWeights &bWeights)
 {
   SubBasisReconciliationWeights weights;
   // union the ordinals in the two weights:
@@ -1505,7 +1647,8 @@ SubBasisReconciliationWeights BasisReconciliation::sumWeights(SubBasisReconcilia
   return weights;
 }
 
-SubBasisReconciliationWeights BasisReconciliation::weightsForCoarseSubcell(SubBasisReconciliationWeights &weights, BasisPtr constrainingBasis, unsigned subcdim, unsigned subcord, bool includeSubsubcells)
+SubBasisReconciliationWeights BasisReconciliation::weightsForCoarseSubcell(const SubBasisReconciliationWeights &weights, BasisPtr constrainingBasis,
+                                                                           unsigned subcdim, unsigned subcord, bool includeSubsubcells)
 {
   int minSubcellDimension = includeSubsubcells ? 0 : subcdim;
   vector<int> coarseDofsForSubcell = constrainingBasis->dofOrdinalsForSubcell(subcdim, subcord, minSubcellDimension);
@@ -1523,6 +1666,12 @@ SubBasisReconciliationWeights BasisReconciliation::weightsForCoarseSubcell(SubBa
     columnOrdinal++;
   }
 
+  if (weights.isIdentity)
+  {
+    set<int> rowColToIncludeSet(columnOrdinalsToInclude.begin(),columnOrdinalsToInclude.end());
+    return filterToInclude(rowColToIncludeSet, rowColToIncludeSet, weights);
+  }
+  
   SubBasisReconciliationWeights filteredWeights;
 
   filteredWeights.coarseOrdinals = coarseDofsToInclude;

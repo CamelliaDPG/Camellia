@@ -92,6 +92,8 @@ class GDAMinimumRule : public GlobalDofAssignment
   typedef map<unsigned, VarIDToDofIndices> SubCellOrdinalToMap; // key: subcell ordinal
   typedef vector< SubCellOrdinalToMap > SubCellDofIndexInfo; // index to vector: subcell dimension
 
+  bool _allowCascadingConstraints = false;
+  
   map< GlobalIndexType, CellConstraints > _constraintsCache;
   map< GlobalIndexType, LocalDofMapperPtr > _dofMapperCache;
   map< GlobalIndexType, map<int, map<int, LocalDofMapperPtr> > > _dofMapperForVariableOnSideCache; // cellID --> side --> variable --> LocalDofMapper
@@ -104,14 +106,13 @@ class GDAMinimumRule : public GlobalDofAssignment
   static string annotatedEntityToString(AnnotatedEntity &entity);
 
   typedef vector< SubBasisDofMapperPtr > BasisMap;
-  BasisMap getBasisMap(GlobalIndexType cellID, SubCellDofIndexInfo& dofOwnershipInfo, VarPtr var);
   BasisMap getBasisMapDiscontinuousVolumeRestrictedToSide(GlobalIndexType cellID, SubCellDofIndexInfo& dofOwnershipInfo, VarPtr var, int sideOrdinal);
   static BasisMap getRestrictedBasisMap(BasisMap &basisMap, const set<int> &basisDofOrdinalRestriction); // restricts to part of the basis
 
   void getGlobalDofIndices(GlobalIndexType cellID, int varID, int sideOrdinal,
                            Intrepid::FieldContainer<GlobalIndexType> &globalDofIndices);
   
-  SubCellDofIndexInfo getOwnedGlobalDofIndices(GlobalIndexType cellID, CellConstraints &cellConstraints);
+  SubCellDofIndexInfo & getOwnedGlobalDofIndices(GlobalIndexType cellID, CellConstraints &cellConstraints);
 
   set<GlobalIndexType> getFittableGlobalDofIndices(GlobalIndexType cellID, CellConstraints &constraints, int sideOrdinal,
                                                    int varID = -1); // returns the global dof indices for basis functions which have support on the given side (i.e. their support intersected with the side has positive measure).  This is determined by taking the union of the global dof indices defined on all the constraining sides for the given side (the constraining sides are by definition unconstrained).  If varID of -1 is specified, returns dof indices corresponding to all variables; otherwise, returns dof indices only for the specified variable.
@@ -122,6 +123,7 @@ class GDAMinimumRule : public GlobalDofAssignment
 
 public:
   // these are public just for easier testing:
+  BasisMap getBasisMap(GlobalIndexType cellID, SubCellDofIndexInfo& dofOwnershipInfo, VarPtr var);
   BasisMap getBasisMap(GlobalIndexType cellID, SubCellDofIndexInfo& dofOwnershipInfo, VarPtr var, int sideOrdinal);
   
   CellConstraints getCellConstraints(GlobalIndexType cellID);
@@ -139,6 +141,12 @@ public:
   GDAMinimumRule(MeshPtr mesh, VarFactoryPtr varFactory, DofOrderingFactoryPtr dofOrderingFactory, MeshPartitionPolicyPtr partitionPolicy,
                  vector<int> initialH1OrderTrial, unsigned testOrderEnhancement);
 
+  // ! True if cascading constraints are allowed.
+  bool allowCascadingConstraints() const;
+  
+  // ! Default is false.  Cascading constraints work in 2D generally, and for *some* 3D meshes.  They are also somewhat more expensive.  For H^1-conforming meshes, when allowCascadingConstraints is false, meshes of at most 1-irregularity are supported.  See Mesh::enforceOneIrregularity().  For meshes in which only face (side) continuity enforced, arbitrary irregularity is supported.
+  void setAllowCascadingConstraints(bool value);
+  
   GlobalDofAssignmentPtr deepCopy();
 
   void didHRefine(const set<GlobalIndexType> &parentCellIDs);

@@ -786,9 +786,11 @@ void testHGRADTrace(MeshTopologyPtr meshTopo, int polyOrder, Teuchos::FancyOStre
               {
                 for (int j=0; j<weights.coarseOrdinals.size(); j++)
                 {
+                  if ((weights.isIdentity) && (i != j)) continue;
+                  double weight = weights.isIdentity ? 1.0 : weights.weights(i,j);
                   for (int ptOrdinal=0; ptOrdinal<numPoints; ptOrdinal++)
                   {
-                    weightedValues1(j,ptOrdinal) += weights.weights(i,j) * values1Filtered(i,ptOrdinal);
+                    weightedValues1(j,ptOrdinal) += weight * values1Filtered(i,ptOrdinal);
                     //                  out << "weightedValues1(" << j << "," << ptOrdinal << ") += " << weights.weights(i,j) * values1Filtered(i,ptOrdinal) << endl;
                   }
                 }
@@ -1491,6 +1493,86 @@ TEUCHOS_UNIT_TEST( BasisReconciliation, HGRADVolume_Hexahedron )
   MeshTopologyPtr meshTopo = MeshFactory::rectilinearMeshTopology({1,1,1}, {1,2,1});
   int polyOrder = 2;
   testHGRADVolumeNoHangingNodes(meshTopo, polyOrder, out, success);
+}
+  
+TEUCHOS_UNIT_TEST( BasisReconciliation, IdentityWeightCompositions )
+{
+  // check that when an identity map is composed with another weight container, we get the same thing as when
+  // a manually specified FieldContainer-based identity map is used
+  
+  SubBasisReconciliationWeights simpleIdentity;
+  SubBasisReconciliationWeights manualIdentity;
+  set<int> identityOrdinals = {2,4,8};
+  simpleIdentity.fineOrdinals = identityOrdinals;
+  simpleIdentity.coarseOrdinals = identityOrdinals;
+  simpleIdentity.isIdentity = true;
+  manualIdentity.fineOrdinals = identityOrdinals;
+  manualIdentity.coarseOrdinals = identityOrdinals;
+  manualIdentity.weights = FieldContainer<double>(identityOrdinals.size(),identityOrdinals.size());
+  for (int i=0; i<identityOrdinals.size(); i++)
+  {
+    manualIdentity.weights(i,i) = 1.0;
+  }
+  
+  SubBasisReconciliationWeights weights;
+  weights.coarseOrdinals = {1,2,3,4};
+  weights.fineOrdinals = {4,8,16};
+  weights.weights = FieldContainer<double>(weights.fineOrdinals.size(),weights.coarseOrdinals.size());
+  for (int i=0; i<weights.fineOrdinals.size(); i++)
+  {
+    for (int j=0; j<weights.coarseOrdinals.size(); j++)
+    {
+      weights.weights(i,j) = (i+1) * (j+1); // arbitrary data
+    }
+  }
+  
+  auto weightsEqual = [] (SubBasisReconciliationWeights aWeights, SubBasisReconciliationWeights bWeights) -> bool
+  {
+    if (aWeights.fineOrdinals.size() != bWeights.fineOrdinals.size()) return false;
+    if (aWeights.coarseOrdinals.size() != bWeights.coarseOrdinals.size()) return false;
+    auto aFineOrdinalIt = aWeights.fineOrdinals.begin();
+    for (int bFineOrdinal : bWeights.fineOrdinals)
+    {
+      if (bFineOrdinal != *aFineOrdinalIt) return false;
+      aFineOrdinalIt++;
+    }
+    auto aCoarseOrdinalIt = aWeights.coarseOrdinals.begin();
+    for (int bCoarseOrdinal : bWeights.coarseOrdinals)
+    {
+      if (bCoarseOrdinal != *aCoarseOrdinalIt) return false;
+      aCoarseOrdinalIt++;
+    }
+    double tol = 1e-15;
+    for (int i=0; i<aWeights.weights.dimension(0); i++)
+    {
+      for (int j=0; j<aWeights.weights.dimension(1); j++)
+      {
+        double diff = abs(aWeights.weights(i,j) - bWeights.weights(i,j));
+        if (diff > tol) return false;
+      }
+    }
+    return true;
+  };
+
+  
+  SubBasisReconciliationWeights composedWeightsIdentity, composedWeightsManual;
+  composedWeightsIdentity = BasisReconciliation::composedSubBasisReconciliationWeights(simpleIdentity, weights);
+  composedWeightsManual = BasisReconciliation::composedSubBasisReconciliationWeights(manualIdentity, weights);
+  
+  if (! weightsEqual(composedWeightsManual, composedWeightsIdentity))
+  {
+    success = false;
+    out << "identity * weights failed.\n";
+  }
+  
+  composedWeightsIdentity = BasisReconciliation::composedSubBasisReconciliationWeights(weights, simpleIdentity);
+  composedWeightsManual = BasisReconciliation::composedSubBasisReconciliationWeights(weights, manualIdentity);
+
+  if (! weightsEqual(composedWeightsManual, composedWeightsIdentity))
+  {
+    success = false;
+    out << "weights * identity failed.\n";
+  }
 }
 
 TEUCHOS_UNIT_TEST( BasisReconciliation, InternalSubcellOrdinals )

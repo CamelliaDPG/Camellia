@@ -27,6 +27,7 @@ struct SubBasisMapInfo
   set<int> basisDofOrdinals;
   vector<GlobalIndexType> globalDofOrdinals;
   Intrepid::FieldContainer<double> weights;
+  bool isIdentity = false;
 };
 
 class SubBasisDofMapper
