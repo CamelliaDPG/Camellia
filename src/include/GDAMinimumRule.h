@@ -135,8 +135,12 @@ class GDAMinimumRule : public GlobalDofAssignment
   typedef pair< IndexType, unsigned > CellPair;
   CellPair cellContainingEntityWithLeastH1Order(int d, IndexType entityIndex);
   
+  AnnotatedEntity* getConstrainingEntityInfo(GlobalIndexType cellID, CellConstraints &cellConstraints, VarPtr var, int d, int scord);
+  
   void getGlobalDofIndices(GlobalIndexType cellID, int varID, int sideOrdinal,
                            Intrepid::FieldContainer<GlobalIndexType> &globalDofIndices);
+  
+  vector<GlobalIndexType> getGlobalDofOrdinalsForSubcell(GlobalIndexType cellID, VarPtr var, int d, int scord);
   
   SubCellDofIndexInfo & getOwnedGlobalDofIndices(GlobalIndexType cellID, CellConstraints &cellConstraints);
 
