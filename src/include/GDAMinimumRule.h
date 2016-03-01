@@ -71,6 +71,27 @@ struct CellConstraints
   vector< vector< AnnotatedEntity > > subcellConstraints; // outer: subcell dim, inner: subcell ordinal in cell
   vector< vector< OwnershipInfo > > owningCellIDForSubcell; // outer vector indexed by subcell dimension; inner vector indexed by subcell ordinal in cell.  Pairs are (CellID, subcellIndex in MeshTopology)
 //  vector< vector< vector<bool> > > sideSubcellConstraintEnforcedBySuper; // outermost vector indexed by side ordinal, then subcell dimension, then subcell ordinal.  When true, subcell does not need to be independently considered.
+  
+  /*
+   spatialSliceConstraints: 
+   When space-only trace/flux variables are defined in space-time meshes,
+   then we need to treat these somewhat specially, because sometimes the geometrically
+   constraining side must be a temporal interface.  When that happens, we need to know what
+   same-dimensional "constraints" there are on the spatial slice.  Because here we will
+   necessarily have a hanging node on the temporal interface (otherwise a spatial side
+   would be available), then for a 1-irregular mesh we can guarantee that the entities constrained
+   by that temporal side are not geometrically constrained in space.  So really what we are doing
+   here is deciding ownership and orientation, as well as resolving any difference in polynomial
+   degree.
+   
+   To keep the storage cost to a minimum, we only initialize this container when there is a temporal
+   side constraint.  Even then, we only fill it in for those entities that we cannot resolve by the
+   usual mechanism: those that are constrained by the temporal interface.  The idea is that the
+   usual mechanism should be tried first, and if that fails, then this special space-time mechanism
+   can be consulted.
+   */
+  
+  Teuchos::RCP<CellConstraints> spatialSliceConstraints;
 };
 
 class GDAMinimumRule : public GlobalDofAssignment
@@ -82,6 +103,8 @@ class GDAMinimumRule : public GlobalDofAssignment
   GlobalIndexType _partitionDofCount; // how many dofs belong to the local partition
   Intrepid::FieldContainer<IndexType> _partitionDofCounts; // how many dofs belong to each MPI rank.
   GlobalIndexType _globalDofCount;
+  
+  bool _hasSpaceOnlyTrialVariable;
 
   set<IndexType> _partitionFluxIndexOffsets;
   set<IndexType> _partitionTraceIndexOffsets; // field indices are the complement of the other two
@@ -104,11 +127,14 @@ class GDAMinimumRule : public GlobalDofAssignment
   vector<unsigned> allBasisDofOrdinalsVector(int basisCardinality);
 
   static string annotatedEntityToString(AnnotatedEntity &entity);
-
+  
   typedef vector< SubBasisDofMapperPtr > BasisMap;
   BasisMap getBasisMapDiscontinuousVolumeRestrictedToSide(GlobalIndexType cellID, SubCellDofIndexInfo& dofOwnershipInfo, VarPtr var, int sideOrdinal);
   static BasisMap getRestrictedBasisMap(BasisMap &basisMap, const set<int> &basisDofOrdinalRestriction); // restricts to part of the basis
 
+  typedef pair< IndexType, unsigned > CellPair;
+  CellPair cellContainingEntityWithLeastH1Order(int d, IndexType entityIndex);
+  
   void getGlobalDofIndices(GlobalIndexType cellID, int varID, int sideOrdinal,
                            Intrepid::FieldContainer<GlobalIndexType> &globalDofIndices);
   

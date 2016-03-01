@@ -344,6 +344,11 @@ namespace
       bc->addDirichlet(tc, SpatialFilter::allSpace() | allTime, -sigma*n_x + u*n_xt->t());
     }
 
+//    GDAMinimumRule* minRule =  dynamic_cast<GDAMinimumRule*>(form.solution()->mesh()->globalDofAssignment().get());
+//    minRule->printGlobalDofInfo();
+//    GlobalIndexType numGlobalDofs = form.solution()->mesh()->numGlobalDofs();
+//    cout << "numGlobalDofs = " << numGlobalDofs;
+    
     form.solution()->solve();
 
 //    if (spaceDim != 3)

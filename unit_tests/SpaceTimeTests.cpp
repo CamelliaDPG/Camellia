@@ -9,6 +9,7 @@
 #include "Teuchos_UnitTestHarness.hpp"
 
 #include "Function.h"
+#include "GDAMinimumRule.h"
 #include "MeshFactory.h"
 #include "SpaceTimeHeatFormulation.h"
 #include "TypeDefs.h"
@@ -122,6 +123,71 @@ void testIntegrateSpaceVaryingFunctionSides(int spaceDim, Teuchos::FancyOStream 
                             + expectedIntegralSides_varying_x * numSides_varying_x;
   TEST_FLOATING_EQUALITY(actualIntegral, expectedIntegral, 1e-15);
 }
+  
+  TEUCHOS_UNIT_TEST( SpaceTime, ConformingSpaceOnlyTracesAreContinuousInSpace )
+  {
+    // the main concern is with hanging nodes "constrained" by a temporal side.
+    /* If we take a space-time mesh that looks like this:
+           _________________
+           |               |
+           |               |
+           |_______________|
+           |       |       |
+           |       |       |
+           |_______|_______|
+    
+     and we define a space-only trace variable that is H^1 in space, with H^1 order
+     of 1 (field order 0), then we expect there to be 11 degrees of freedom, one for
+     each vertex.
+     */
+    
+    int spaceDim = 1;
+    int H1Order = 1;
+    
+    vector<double> dimensions(spaceDim,2.0); // 2.0^d hypercube domain
+    vector<int> elementCounts(spaceDim,1);   // 1^d mesh
+    vector<double> x0(spaceDim,-1.0);
+    MeshTopologyPtr spatialMeshTopo = MeshFactory::rectilinearMeshTopology(dimensions, elementCounts, x0);
+    
+    double t0 = 0.0, t1 = 1.0;
+    int numTimeSlabs = 2;
+    MeshTopologyPtr spaceTimeMeshTopo = MeshFactory::spaceTimeMeshTopology(spatialMeshTopo, t0, t1, numTimeSlabs);
+
+    VarFactoryPtr vf = VarFactory::varFactory();
+    vf->traceVarSpaceOnly("u_hat", HGRAD);
+    BFPtr bf = BF::bf(vf);
+    
+    int delta_k = 1;
+    vector<int> H1OrderVector(2);
+    H1OrderVector[0] = H1Order;
+    H1OrderVector[1] = H1Order;
+    MeshPtr mesh = Teuchos::rcp( new Mesh(spaceTimeMeshTopo, bf, H1OrderVector, delta_k) ) ;
+    
+//    GDAMinimumRule* gdaMinRule = dynamic_cast<GDAMinimumRule*>(mesh->globalDofAssignment().get());
+    
+    // DEBUGGING:
+//    cout << "Global dof info before refinement:\n";
+//    gdaMinRule->printGlobalDofInfo();
+//    cout << "Cell 1 constraint info before refinement:\n";
+//    gdaMinRule->printConstraintInfo(1); // cell 1
+    
+    int numGlobalDofsInitialMeshExpected = 6;
+    int numGlobalDofsInitialMesh = mesh->numGlobalDofs();
+    
+    
+    // sanity check: do we have the right number before we refine?
+    TEST_EQUALITY(numGlobalDofsInitialMesh, numGlobalDofsInitialMeshExpected);
+    
+    mesh->hRefine(set<GlobalIndexType>{0}); // regular refinement
+    
+//    cout << "Global dof info after refinement:\n";
+//    gdaMinRule->printGlobalDofInfo();
+    
+    int numGlobalDofsExpected = 11;
+    int numGlobalDofs = mesh->numGlobalDofs();
+    
+    TEST_EQUALITY(numGlobalDofs, numGlobalDofsExpected);
+  }
   
   TEUCHOS_UNIT_TEST( SpaceTime, ConformingSpaceTimeTracesAreContinuousInTime )
   {
