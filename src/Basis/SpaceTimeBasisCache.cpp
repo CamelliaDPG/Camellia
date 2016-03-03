@@ -620,13 +620,14 @@ void SpaceTimeBasisCache::setPhysicalCellNodes(const Intrepid::FieldContainer<do
       {
         // check that the other nodes match
         componentNodes[0] = spaceNodeOrdinal;
-        double tol = 1e-15;
+        double tol = 1e-13;
         spaceTimeNodeOrdinal = spaceTimeTopo->getNodeFromTensorialComponentNodes(componentNodes);
         double diff = abs(physicalCellNodesTime(cellOrdinal,timeNodeOrdinal,0) - physicalCellNodes(cellOrdinal,spaceTimeNodeOrdinal,spaceDim));
         if (diff > tol)
         {
           cout << physicalCellNodes;
           cout << "physical cell nodes are not in a tensor product structure; this is not supported.\n";
+          cout << "Difference of " << diff << " detected for spatial node " << spaceNodeOrdinal << endl;
           TEUCHOS_TEST_FOR_EXCEPTION(true, std::invalid_argument, "non-tensor product space time mesh");
         }
       }
