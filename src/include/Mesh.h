@@ -246,8 +246,8 @@ public:
   int cellPolyOrder(GlobalIndexType cellID);
   vector<int> cellTensorPolyOrder(GlobalIndexType cellID);
 
+  //! This should probably be renamed "enforceRegularityRules" and then made more general to enforce whatever rules are appropriate for the mesh.
   void enforceOneIrregularity(bool repartitionAndMigrate = true);
-  //  void enforceOneIrregularity(vector< TSolutionPtr<double> > solutions);
 
   vector<double> getCellCentroid(GlobalIndexType cellID);
 

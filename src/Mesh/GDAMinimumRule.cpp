@@ -1707,7 +1707,7 @@ BasisMap GDAMinimumRule::getBasisMap(GlobalIndexType cellID, SubCellDofIndexInfo
                 subsubcellPermutation = CamelliaCellTools::permutationComposition(subsubcellTopo, subcellPermutationInverse, sscNewConstrainingPermutation);
               }
             }
-            TEUCHOS_TEST_FOR_EXCEPTION(furtherConstrained && subcellIsGeometricallyConstrained, std::invalid_argument, "Mesh is not 1-irregular");
+            TEUCHOS_TEST_FOR_EXCEPTION(furtherConstrained && subcellIsGeometricallyConstrained, std::invalid_argument, "Mesh has a cascading constraint (may not be 1-irregular)");
             if (furtherConstrained) continue;
             
             SubBasisReconciliationWeights weightsForSubSubcell;
@@ -3185,49 +3185,6 @@ set<GlobalIndexType> GDAMinimumRule::getGlobalDofIndicesForIntegralContribution(
   }
 
   return indices;
-}
-
-set<GlobalIndexType> GDAMinimumRule::getGlobalDofIndices(GlobalIndexType cellID, int varID, int sideOrdinal)
-{
-  CellConstraints constraints = getCellConstraints(cellID);
-  
-  CellPtr cell = _meshTopology->getCell(cellID);
-  CellTopoPtr topo = _elementTypeForCell[cellID]->cellTopoPtr;
-  int spaceDim = topo->getDimension();
-  
-  DofOrderingPtr trialOrdering = _elementTypeForCell[cellID]->trialOrderPtr;
-  map<int, VarPtr> trialVars = _varFactory->trialVars();
-  
-  VarPtr var = trialVars[varID];
-  
-  set<GlobalIndexType> fittableIndexSet;
-  if ((var->varType() == FLUX) || (var->varType() == TRACE))
-  {
-    return getFittableGlobalDofIndices(cellID, constraints, sideOrdinal, varID);
-  }
-  else if (sideOrdinal == -1)
-  {
-    SubCellDofIndexInfo* dofIndexInfo = &getGlobalDofIndices(cellID, constraints);
-    fittableIndexSet.insert((*dofIndexInfo)[spaceDim][0][varID].begin(),(*dofIndexInfo)[spaceDim][0][varID].end());
-    BasisPtr basis = trialOrdering->getBasis(varID);
-    if (! functionSpaceIsDiscontinuous(basis->functionSpace()))
-    {
-      // then we also need to add fittable ordinals from the sides
-      int sideCount = basis->domainTopology()->getSideCount();
-      for (int domainSideOrdinal=0; domainSideOrdinal<sideCount; domainSideOrdinal++)
-      {
-        set<GlobalIndexType> fittableIndicesOnSide = getFittableGlobalDofIndices(cellID, constraints, domainSideOrdinal, varID);
-        fittableIndexSet.insert(fittableIndicesOnSide.begin(),fittableIndicesOnSide.end());
-      }
-    }
-  }
-  else
-  {
-    // sideOrdinal != -1, and var is not a flux or trace
-    return getFittableGlobalDofIndices(cellID, constraints, sideOrdinal, varID);
-  }
-  
-  return fittableIndexSet;
 }
 
 vector<GlobalIndexType> GDAMinimumRule::globalDofIndicesForFieldVariable(GlobalIndexType cellID, int varID)

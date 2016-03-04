@@ -583,6 +583,13 @@ bool Cell::isBoundary(unsigned int sideOrdinal)
   return _neighbors[sideOrdinal].first == -1;
 }
 
+bool Cell::isInteriorChild()
+{
+  if (_parent == Teuchos::null) return false;
+  unsigned myOrdinalInParent = _parent->findChildOrdinal(_cellIndex);
+  return _parent->refinementPattern()->childIsInterior(myOrdinalInParent);
+}
+
 MeshTopology* Cell::meshTopology()
 {
   return _meshTopo;

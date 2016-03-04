@@ -508,7 +508,7 @@ void Mesh::enforceOneIrregularity(bool repartitionAndMigrate)
         {
           pair<GlobalIndexType, unsigned> neighborInfo = cell->getNeighborInfo(sideOrdinal, _meshTopology);
 
-          if (neighborInfo.first != -1)
+          if (neighborInfo.first != -1) // I have a neighbor
           {
             if (spaceDim > 1)
             {
@@ -558,6 +558,30 @@ void Mesh::enforceOneIrregularity(bool repartitionAndMigrate)
             {
               CellTopologyKey cellTopoKey = _meshTopology->getCell(activeCellEntry.first)->topology()->getKey();
               irregularCellIDs[cellTopoKey].insert(activeCellEntry.first);
+            }
+          }
+        }
+        
+        // One other thing to check has to do with interior children (e.g. the middle triangle in a regular triangle refinement)
+        // If the parent of an active cell is an interior child, then all of its parent's neighbors should be refined if
+        // they aren't already.
+        // TODO: compare this with strategies in the literature.  (Particularly Leszek's.)
+        /* 
+         NOTE: this logic is not perfectly general.  In particular, it assumes that if the grandparent's neighbors *are*
+               refined, they are refined in a way that makes them compatible.  In the case e.g. of anisotropic refinements,
+               this need not be the case.  If a null refinement has made its way into the mesh, the same thing applies.
+         */
+        CellPtr parent = cell->getParent();
+        if ((parent != Teuchos::null) && parent->isInteriorChild())
+        {
+          CellPtr grandparent = parent->getParent();
+          int grandparentSideCount = grandparent->topology()->getSideCount();
+          for (int grandparentSideOrdinal=0; grandparentSideOrdinal < grandparentSideCount; grandparentSideOrdinal++)
+          {
+            CellPtr grandparentNeighbor = grandparent->getNeighbor(grandparentSideOrdinal, _meshTopology);
+            if ((grandparentNeighbor != Teuchos::null) && (!grandparentNeighbor->isParent(_meshTopology)))
+            {
+              irregularCellIDs[grandparentNeighbor->topology()->getKey()].insert(grandparentNeighbor->cellIndex());
             }
           }
         }

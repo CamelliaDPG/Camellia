@@ -1009,6 +1009,54 @@ namespace
     testCoarseBasisEqualsWeightedFineBasis(mesh, out, success);
   }
   
+  TEUCHOS_UNIT_TEST( GDAMinimumRule, BasisMapsAgreePoisson2DTrianglesHangingNode1Irregular_Slow)
+  {
+    int spaceDim = 2;
+    int H1Order = 2;
+    bool useConformingTraces = true;
+    
+    int delta_k = spaceDim;
+
+    vector<vector<double>> vertices = {{0,0},{1,0},{0.5,1}};
+    vector<vector<IndexType>> elementVertices = {{0,1,2}};
+    CellTopoPtr triangle = CellTopology::triangle();
+    
+    MeshGeometryPtr geometry = Teuchos::rcp( new MeshGeometry(vertices, elementVertices, {triangle}) );
+    MeshTopologyPtr meshTopo = Teuchos::rcp( new MeshTopology(geometry));
+    
+    // create a problematic mesh of a particular sort: refine once, then refine the interior element.  Then refine the interior element of the refined element.
+    IndexType cellIDToRefine = 0, nextCellIndex = 1;
+    int interiorChildOrdinal = 1; // interior child has index 1 in children
+    RefinementPatternPtr refPattern = RefinementPattern::regularRefinementPattern(triangle);
+    meshTopo->refineCell(cellIDToRefine, refPattern, nextCellIndex);
+    nextCellIndex += refPattern->numChildren();
+    
+    vector<CellPtr> children = meshTopo->getCell(cellIDToRefine)->children();
+    cellIDToRefine = children[interiorChildOrdinal]->cellIndex();
+    meshTopo->refineCell(cellIDToRefine, refPattern, nextCellIndex);
+    nextCellIndex += refPattern->numChildren();
+    
+    children = meshTopo->getCell(cellIDToRefine)->children();
+    cellIDToRefine = children[interiorChildOrdinal]->cellIndex();
+    meshTopo->refineCell(cellIDToRefine, refPattern, nextCellIndex);
+    nextCellIndex += refPattern->numChildren();
+    
+    PoissonFormulation poissonForm(spaceDim, useConformingTraces);
+    MeshPtr mesh = Teuchos::rcp( new Mesh(meshTopo, poissonForm.bf(), H1Order, delta_k) );
+    
+    int numElements = mesh->numElements();
+//    cout << "numElements: " << numElements << endl;
+    // The above mesh will cause some cascading constraints, which the new getBasisMap() can't
+    // handle.  We have added logic to deal with this case to Mesh::enforceOneIrregularity().
+    mesh->enforceOneIrregularity();
+    
+    
+    numElements = mesh->numElements();
+//    cout << "numElements: " << numElements << endl;
+    
+    testCoarseBasisEqualsWeightedFineBasis(mesh, out, success);
+  }
+  
   TEUCHOS_UNIT_TEST( GDAMinimumRule, BasisMapsAgreePoissonContinuousGalerkin2DHangingNode_Slow)
   {
     int spaceDim = 2;

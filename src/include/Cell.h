@@ -84,6 +84,7 @@ public:
   void setParent(Teuchos::RCP<Cell> parent);
 
   bool isBoundary(unsigned sideOrdinal);
+  bool isInteriorChild();
   bool isParent(MeshTopologyViewPtr meshTopoViewForCellValidity);
 
   unsigned childOrdinal(IndexType childIndex);
