@@ -167,6 +167,7 @@ RefinementPattern::RefinementPattern(CellTopoPtr cellTopoPtr, FieldContainer<dou
   }
 
   CellPtr parentCell = _refinementTopology->getCell(0);
+  set<unsigned> childrenThatShareSideWithParent;
 
   // populate _childrenForSides and _parentSideForChildSide
   for (int sideIndex = 0; sideIndex < sideCount; sideIndex++)   // sideIndex: side ordinal in parent
@@ -198,8 +199,19 @@ RefinementPattern::RefinementPattern(CellTopoPtr cellTopoPtr, FieldContainer<dou
           pair<int,int> entry = make_pair(childIndexInParent, childSideIndex);
           _childrenForSides[sideIndex].push_back(entry);
           _parentSideForChildSide[entry] = sideIndex;
+          childrenThatShareSideWithParent.insert(childIndexInParent);
         }
       }
+    }
+  }
+  
+  // look for any children that do not share sides with parent
+  vector<unsigned> childCellIndices = parentCell->getChildIndices(_refinementTopology);
+  for (int childOrdinal = 0; childOrdinal<childCellIndices.size(); childOrdinal++)
+  {
+    if (childrenThatShareSideWithParent.find(childOrdinal) == childrenThatShareSideWithParent.end())
+    {
+      _interiorChildOrdinals.push_back(childOrdinal);
     }
   }
 
@@ -705,6 +717,11 @@ FieldContainer<double> RefinementPattern::verticesForRefinement(FieldContainer<d
 const FieldContainer<double> & RefinementPattern::verticesOnReferenceCell()
 {
   return _vertices;
+}
+
+bool RefinementPattern::childIsInterior(unsigned int childOrdinal) const
+{
+  return std::find(_interiorChildOrdinals.begin(), _interiorChildOrdinals.end(), childOrdinal) != _interiorChildOrdinals.end();
 }
 
 unsigned RefinementPattern::childOrdinalForPoint(const std::vector<double> &pointParentCoords)

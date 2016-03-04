@@ -78,6 +78,33 @@ namespace
     }
   }
 
+  TEUCHOS_UNIT_TEST( RefinementPattern, ChildIsInteriorTriangle )
+  {
+    RefinementPatternPtr triangleRef = RefinementPattern::regularRefinementPatternTriangle();
+    TEST_EQUALITY(triangleRef->childIsInterior(0), false);
+    TEST_EQUALITY(triangleRef->childIsInterior(1), true);
+    TEST_EQUALITY(triangleRef->childIsInterior(2), false);
+    TEST_EQUALITY(triangleRef->childIsInterior(3), false);
+  }
+  
+  TEUCHOS_UNIT_TEST( RefinementPattern, ChildIsInteriorQuad )
+  {
+    RefinementPatternPtr quadRef = RefinementPattern::regularRefinementPatternQuad();
+    for (int childOrdinal = 0; childOrdinal < quadRef->numChildren(); childOrdinal++)
+    {
+      TEST_EQUALITY(quadRef->childIsInterior(0), false);
+    }
+  }
+  
+  TEUCHOS_UNIT_TEST( RefinementPattern, ChildIsInteriorHexahedron )
+  {
+    RefinementPatternPtr hexRef = RefinementPattern::regularRefinementPatternHexahedron();
+    for (int childOrdinal = 0; childOrdinal < hexRef->numChildren(); childOrdinal++)
+    {
+      TEST_EQUALITY(hexRef->childIsInterior(0), false);
+    }
+  }
+
   TEUCHOS_UNIT_TEST( RefinementPattern, GeneralizedRefinementBranchForLeafSubcell_HangingVertexOnOutsideEdge )
   {
     RefinementPatternPtr quadRefinement = RefinementPattern::regularRefinementPatternQuad();
