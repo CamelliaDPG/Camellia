@@ -42,6 +42,7 @@ private:
   LagrangeConstraints* _lagrangeConstraints;
   set<int> _uncondensibleVarIDs;
   
+  GlobalIndexType _meshLastKnownGlobalDofCount;
   std::set<GlobalIndexType> _offRankCellsToInclude;
   
   map<pair<DofOrdering*,int>, vector<int>> _fieldRowIndices; // key is (trialOrdering, varID)

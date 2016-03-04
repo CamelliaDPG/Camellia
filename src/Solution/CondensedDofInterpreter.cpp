@@ -15,17 +15,15 @@
 #include "Epetra_DataAccess.h"
 
 #include <Teuchos_GlobalMPISession.hpp>
-#include "MPIWrapper.h"
 
 #include "Epetra_SerialComm.h"
 
-#include "GlobalDofAssignment.h"
-
-#include "SerialDenseWrapper.h"
-
 #include "CamelliaDebugUtility.h"
-
+#include "GDAMinimumRule.h"
+#include "GlobalDofAssignment.h"
+#include "MPIWrapper.h"
 #include "RHS.h"
+#include "SerialDenseWrapper.h"
 
 using namespace Intrepid;
 using namespace Camellia;
@@ -44,6 +42,8 @@ CondensedDofInterpreter<Scalar>::CondensedDofInterpreter(MeshPtr mesh, TIPPtr<Sc
   _uncondensibleVarIDs.insert(fieldIDsToExclude.begin(),fieldIDsToExclude.end());
   _offRankCellsToInclude = offRankCellsToInclude;
   _skipLocalFields = false;
+  
+  _meshLastKnownGlobalDofCount = _mesh->globalDofCount();
 
   int numGlobalConstraints = lagrangeConstraints->numGlobalConstraints();
   for (int i=0; i<numGlobalConstraints; i++)
@@ -65,6 +65,8 @@ CondensedDofInterpreter<Scalar>::CondensedDofInterpreter(MeshPtr mesh, TIPPtr<Sc
 template <typename Scalar>
 void CondensedDofInterpreter<Scalar>::reinitialize()
 {
+  _meshLastKnownGlobalDofCount = _mesh->globalDofCount(); // stored for a basic staleness check (used right now in numGlobalDofs()).
+  
   _localLoadVectors.clear();
   _localStiffnessMatrices.clear();
   _localInterpretedDofIndices.clear();
@@ -568,7 +570,6 @@ void CondensedDofInterpreter<Scalar>::initializeGlobalDofIndices()
 {
   _interpretedFluxDofIndices.clear();
   _interpretedToGlobalDofIndexMap.clear();
-//  _interpretedDofIndicesForBasis.clear();
 
   PartitionIndexType rank = Teuchos::GlobalMPISession::getRank();
   set<GlobalIndexType> cellsForFluxStorage = _mesh->globalDofAssignment()->cellsInPartition(rank);
@@ -655,6 +656,12 @@ void CondensedDofInterpreter<Scalar>::initializeGlobalDofIndices()
 template <typename Scalar>
 GlobalIndexType CondensedDofInterpreter<Scalar>::globalDofCount()
 {
+  GlobalIndexType meshGlobalDofCount = _mesh->globalDofCount();
+  if (meshGlobalDofCount != _meshLastKnownGlobalDofCount)
+  {
+    reinitialize();
+  }
+  
   return MPIWrapper::sum(_myGlobalDofIndexCount);
 }
 
@@ -716,6 +723,18 @@ void CondensedDofInterpreter<Scalar>::interpretLocalBasisCoefficients(GlobalInde
     }
     else
     {
+      cout << "globalDofIndex not found for specified interpretedDofIndex " << interpretedDofIndex << " (may not be a flux?)\n";
+      cout << "cellID " << cellID << ", varID " << varID << ", side " << sideOrdinal << endl;
+      
+      GDAMinimumRule* minRule = dynamic_cast<GDAMinimumRule*>(_mesh->globalDofAssignment().get());
+      if (minRule != NULL)
+      {
+        cout << "GDAMinimumRule globalDofs for rank " << rank << ":\n";
+        minRule->printGlobalDofInfo();
+      }
+      
+      _mesh->getTopology()->printAllEntitiesInBaseMeshTopology();
+      
       TEUCHOS_TEST_FOR_EXCEPTION(true, std::invalid_argument, "globalDofIndex not found for specified interpretedDofIndex (may not be a flux?)");
     }
   }
