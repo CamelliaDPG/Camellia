@@ -872,10 +872,12 @@ CompressibleNavierStokesFormulation::CompressibleNavierStokesFormulation(MeshTop
       _bf->addTerm(-R()*rho_prev*T, vm1->dx());
       _bf->addTerm(-R()*T_prev*rho, vm2->dy());
       _bf->addTerm(-R()*rho_prev*T, vm2->dy());
-      _bf->addTerm( D11+D11-2./3*D11-2./3*D22, vm1->dx());
+      // _bf->addTerm( D11+D11-2./3*D11-2./3*D22, vm1->dx());
+      _bf->addTerm( D11+D11-2./2*D11-2./2*D22, vm1->dx());
       _bf->addTerm( D12+D21, vm1->dy());
       _bf->addTerm( D21+D12, vm2->dx());
-      _bf->addTerm( D22+D22-2./3*D11-2./3*D22, vm2->dy());
+      // _bf->addTerm( D22+D22-2./3*D11-2./3*D22, vm2->dy());
+      _bf->addTerm( D22+D22-2./2*D11-2./2*D22, vm2->dy());
       _bf->addTerm(tm1, vm1);
       _bf->addTerm(tm2, vm2);
 
@@ -897,10 +899,12 @@ CompressibleNavierStokesFormulation::CompressibleNavierStokesFormulation(MeshTop
       _rhs->addTerm( rho_prev*u2_prev*u2_prev * vm2->dy());
       _rhs->addTerm( R()*rho_prev*T_prev * vm1->dx());
       _rhs->addTerm( R()*rho_prev*T_prev * vm2->dy());
-      _rhs->addTerm(-(D11_prev+D11_prev-2./3*D11_prev-2./3*D22_prev) * vm1->dx());
+      // _rhs->addTerm(-(D11_prev+D11_prev-2./3*D11_prev-2./3*D22_prev) * vm1->dx());
+      _rhs->addTerm(-(D11_prev+D11_prev-2./2*D11_prev-2./2*D22_prev) * vm1->dx());
       _rhs->addTerm(-(D12_prev+D21_prev) * vm1->dy());
       _rhs->addTerm(-(D21_prev+D12_prev) * vm2->dx());
-      _rhs->addTerm(-(D22_prev+D22_prev-2./3*D11_prev-2./3*D22_prev) * vm2->dy());
+      // _rhs->addTerm(-(D22_prev+D22_prev-2./3*D11_prev-2./3*D22_prev) * vm2->dy());
+      _rhs->addTerm(-(D22_prev+D22_prev-2./2*D11_prev-2./2*D22_prev) * vm2->dy());
       break;
     case 3:
       if (_spaceTime)
