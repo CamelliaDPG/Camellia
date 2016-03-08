@@ -9,6 +9,7 @@
 #include "TrigFunctions.h"
 #include "PenaltyConstraints.h"
 #include "SuperLUDistSolver.h"
+#include "GDAMinimumRule.h"
 
 #include "Teuchos_GlobalMPISession.hpp"
 #include "Teuchos_TimeMonitor.hpp"
@@ -640,8 +641,8 @@ int main(int argc, char *argv[])
     if (!steady)
     {
       double t0 = 0;
-      double t1 = 1;
-      int temporalDivisions = 2;
+      double t1 = pi;
+      int temporalDivisions = 1;
       meshTopo = MeshFactory::spaceTimeMeshTopology(meshTopo, t0, t1, temporalDivisions);
     }
   }
@@ -695,6 +696,9 @@ int main(int argc, char *argv[])
   //   preprocessHemkerMesh(mesh, steady, 1);
   if (meshGeometry != Teuchos::null)
     mesh->setEdgeToCurveMap(meshGeometry->edgeToCurveMap());
+
+  GDAMinimumRule* minRule = dynamic_cast<GDAMinimumRule*>(mesh->globalDofAssignment().get());
+  minRule->setAllowCascadingConstraints(true); // required for 2-irregular meshes
 
   vector<MeshPtr> meshesCoarseToFine = GMGSolver::meshesForMultigrid(mesh, polyOrderCoarse, delta_k);
   int numberOfMeshesForMultigrid = meshesCoarseToFine.size();
