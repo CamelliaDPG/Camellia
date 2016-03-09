@@ -6,6 +6,7 @@
 #include "RefinementStrategy.h"
 #include "SolutionExporter.h"
 #include "PreviousSolutionFunction.h"
+#include "PenaltyConstraints.h"
 
 #ifdef HAVE_MPI
 #include <Teuchos_GlobalMPISession.hpp>
@@ -324,6 +325,31 @@ class RampedInitialCondition : public Function {
       }
 };
 
+class ArtificialViscosity : public Function {
+   private:
+      double _muCoarse;
+      double _muFine;
+      int _refNumber;
+   public:
+      ArtificialViscosity(double muCoarse, double muFine, int refNumber) : Function(0), _muCoarse(muCoarse), _muFine(muFine), _refNumber(refNumber) {}
+      void setRefNumber(int refNumber) {
+        _refNumber = refNumber;
+        cout << 1./max(_muFine, min(_muCoarse,1./pow(2,_refNumber+1))) << endl;
+      }
+      void values(FieldContainer<double> &values, BasisCachePtr basisCache) {
+         int numCells = values.dimension(0);
+         int numPoints = values.dimension(1);
+
+         const FieldContainer<double> *points = &(basisCache->getPhysicalCubaturePoints());
+         for (int cellIndex=0; cellIndex<numCells; cellIndex++) {
+            for (int ptIndex=0; ptIndex<numPoints; ptIndex++)
+            {
+              values(cellIndex, ptIndex) = max(_muFine, min(_muCoarse,1./pow(2,_refNumber+1)));
+            }
+         }
+      }
+};
+
 enum NormType
 {
   Graph,
@@ -364,7 +390,8 @@ int main(int argc, char *argv[]) {
   int numRefs = args.Input("--numRefs", "number of refinement steps", 0);
   int numPreRefs = args.Input<int>("--numPreRefs","pre-refinements on singularity",0);
   double physicalViscosity = args.Input("--mu", "viscosity", 1e-2);
-  double mu = physicalViscosity;
+  double coarseViscosity = args.Input("--muCoarse", "coarse viscosity", 16);
+  // double mu = physicalViscosity;
   // double mu_sqrt = sqrt(mu);
   int numSlabs = args.Input("--numSlabs", "number of time slabs", 1);
   bool useLineSearch = args.Input("--lineSearch", "use line search", true);
@@ -374,7 +401,7 @@ int main(int argc, char *argv[]) {
   int numX = args.Input("--numX", "number of cells in the x direction", 4);
   int numT = args.Input("--numT", "number of cells in the t direction", 1);
   int maxNewtonIterations = args.Input("--maxIterations", "maximum number of Newton iterations", 10);
-  double nlTol = args.Input("--nlTol", "nonlinear tolerance", 1e-6);
+  double nlTol = args.Input("--nlTol", "nonlinear tolerance", 1e-5);
 
   args.Process();
 
@@ -397,6 +424,10 @@ int main(int argc, char *argv[]) {
   // stringToNorm["hAlt3NSDecoupled"] = hAlt3NSDecoupled;
   // stringToNorm["MinNSDecoupled"] = MinNSDecoupled;
   NormType norm = stringToNorm[normString];
+
+
+  // Artificial Viscosity
+  Teuchos::RCP<ArtificialViscosity> artificialViscosity = Teuchos::rcp( new ArtificialViscosity(coarseViscosity, physicalViscosity, 0) );
 
    ////////////////////   PROBLEM DEFINITIONS   ///////////////////////
   int H1Order = polyOrder+1;
@@ -534,16 +565,17 @@ int main(int argc, char *argv[]) {
     case 7:
     problemName = "Piston";
     gamma = 5./3;
-    a0 = sqrt(gamma*p0/rho0);
-    M_inf = u0/a0;
-    Cv = 1./(gamma*(gamma-1)*M_inf*M_inf);
+    // a0 = sqrt(gamma*p0/rho0);
+    // M_inf = u0/a0;
+    // Cv = 1./(gamma*(gamma-1)*M_inf*M_inf);
+    Cv = 1;
     Cp = gamma*Cv;
     R = Cp-Cv;
     xmin = 0;
     xmax = 1;
     // xint = -.5+1./64;
     xint = 0;
-    tmax = .5;
+    tmax = .85;
 
     rhoL = 1;
     rhoR = 1;
@@ -830,10 +862,7 @@ int main(int argc, char *argv[]) {
     // FunctionPtr invA0p_c = 1./A0p_c;
     // FunctionPtr invA0p_m = 1./A0p_m;
     // FunctionPtr invA0p_e = 1./A0p_e;
-
-    // Artificial Viscosity
-    // FunctionPtr artificialViscosity = Teuchos::rcp( new ArtificialViscosity(Function::h(), rho_prev, dudx_prev, T_sqrt, D_prev, dDdx_prev, gamma, R) );
-    // FunctionPtr mu = artificialViscosity;
+    FunctionPtr mu = artificialViscosity;
     // FunctionPtr mu_sqrt = Teuchos::rcp( new SqrtFunction(mu) );
     switch (formulation)
     {
@@ -1432,6 +1461,7 @@ int main(int argc, char *argv[]) {
   // FunctionPtr Fm_prev;
   // FunctionPtr Fe_prev;
   FunctionPtr rhoInit, momInit, EInit;
+  Teuchos::RCP<PenaltyConstraints> pc = Teuchos::rcp( new PenaltyConstraints );
   for (int slab=0; slab < numSlabs; slab++)
   {
     Teuchos::RCP<BCEasy> bc = Teuchos::rcp( new BCEasy );
@@ -1455,40 +1485,24 @@ int main(int argc, char *argv[]) {
     FunctionPtr rho_prev = Uc_prev;
     FunctionPtr u_prev = Um_prev;
     FunctionPtr T_prev = Ue_prev;
-    if (problem != 7)
+    if (problem == 7)
+    {
+      bc->addDirichlet(uhat, piston, one);
+      bc->addDirichlet(tc,   piston, zero);
+      pc->addConstraint(one*tm - one*te == zero, piston);
+      bc->addDirichlet(uhat, right, zero);
+      bc->addDirichlet(tc,   right, zero);
+      bc->addDirichlet(te,   right, zero);
+    }
+    else
     {
       bc->addDirichlet(tc, left, -rhoL*uL*one);
       bc->addDirichlet(tc, right, rhoR*uR*one);
-    }
-    else
-    {
-      bc->addDirichlet(tc, piston, zero);
-      bc->addDirichlet(tc, right, zero);
-      // bc->addDirichlet(tc, right, zero);
-    }
-    if (problem != 7)
-    {
       bc->addDirichlet(tm, left, -(rhoL*uL*uL+R*rhoL*TL)*one);
       bc->addDirichlet(tm, right, (rhoR*uR*uR+R*rhoR*TR)*one);
-    }
-    else
-    {
-      bc->addDirichlet(tm, piston, -sqrt(.5)*(R*rho_prev*T_prev-D_prev));
-      bc->addDirichlet(tm, right, R*rho_prev*T_prev-D_prev);
-    }
-    if (problem != 7)
-    {
       bc->addDirichlet(te, left, -(rhoL*Cv*TL+0.5*rhoL*uL*uL+R*rhoL*TL)*uL*one);
       bc->addDirichlet(te, right, (rhoR*Cv*TR+0.5*rhoR*uR*uR+R*rhoR*TR)*uR*one);
     }
-    else
-    {
-      bc->addDirichlet(te, piston, -sqrt(.5)*(R*rho_prev*u_prev*T_prev + q_prev - u_prev*D_prev));
-      bc->addDirichlet(te, right, q_prev);
-      // bc->addDirichlet(te, right, zero);
-    }
-    // cout << "R = " << R << " Cv = " << Cv << " Cp = " << Cp << " gamma = " << gamma << endl;
-    // cout << "left " << rhoL*uL << " " << (rhoL*uL*uL+R*rhoL*TL) << " " << (rhoL*Cv*TL+0.5*rhoL*uL*uL+R*Cv*TL)*uL << endl;
     if (slab == 0)
     {
       bc->addDirichlet(tc, init, -rhoInit);
@@ -1508,6 +1522,8 @@ int main(int argc, char *argv[]) {
   {
     Teuchos::RCP<Solution> solution = Teuchos::rcp( new Solution(meshes[slab], bcs[slab], rhss[slab], ips[slab]) );
     solution->setCubatureEnrichmentDegree(cubatureEnrichment);
+    if (problem == 7)
+      solution->setFilter(pc);
     solutions.push_back(solution);
     if (slab > 0)
     {
@@ -1678,6 +1694,7 @@ int main(int argc, char *argv[]) {
       {
         refinementStrategy.refine(commRank==0);
         double newRamp = (xmax-xmin)/(numX*pow(2., refIndex+1));
+        artificialViscosity->setRefNumber(refIndex);
         // if (commRank == 0)
         //   cout << "New ramp width = " << newRamp << endl;
         // dynamic_cast< RampedInitialCondition* >(initialGuess[rho->ID()].get())->setH(newRamp);
