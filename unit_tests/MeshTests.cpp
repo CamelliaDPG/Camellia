@@ -131,6 +131,140 @@ MeshPtr makeTestMesh( int spaceDim, bool spaceTime )
       TEUCHOS_TEST_EQUALITY(localDofs, globalDofs, out, success);
     }
   }
+
+  TEUCHOS_UNIT_TEST( Mesh, EnforceRegularityHexahedralMesh )
+  {
+    int spaceDim = 3;
+    int H1Order = 1;
+    vector<int> elemCounts = {2,2,1}; // just big enough that we can have some refinements that an element only sees along an edge
+    vector<double> dims(spaceDim,1.0);
+    
+    bool conformingTraces = true;
+    PoissonFormulation form(spaceDim,conformingTraces);
+    MeshPtr mesh = MeshFactory::rectilinearMesh(form.bf(), dims, elemCounts, H1Order);
+    MeshTopology* meshTopo = dynamic_cast<MeshTopology*>(mesh->getTopology().get());
+    
+    int numActiveElementsExpected = elemCounts[0] * elemCounts[1] * elemCounts[2];
+    int numActiveElementsActual = meshTopo->getActiveCellIndices().size();
+    TEST_EQUALITY(numActiveElementsActual, numActiveElementsExpected);
+    
+    // there should be one edge that is shared by all four cells; let's find it
+    IndexType centralEdgeEntityIndex = -1;
+    int edgeDim = 1;
+    CellPtr cell0 = meshTopo->getCell(0);
+    CellTopoPtr cellTopo = cell0->topology();
+    int edgeCount = cellTopo->getSubcellCount(edgeDim);
+    for (int edgeOrdinal=0; edgeOrdinal<edgeCount; edgeOrdinal++)
+    {
+      IndexType edgeEntityIndex = cell0->entityIndex(edgeDim, edgeOrdinal);
+      int numCellsForEdge = meshTopo->getCellsContainingEntity(edgeDim, edgeEntityIndex).size();
+      if (numCellsForEdge == 4)
+      {
+        centralEdgeEntityIndex = edgeEntityIndex;
+        break;
+      }
+    }
+    // test that we found it:
+    TEST_INEQUALITY(centralEdgeEntityIndex, -1);
+    
+    // now, refine cell 0
+    mesh->hRefine(vector<GlobalIndexType>{0});
+    
+    // that should add 7 new active elements
+    numActiveElementsExpected += 7;
+    numActiveElementsActual = meshTopo->getActiveCellIndices().size();
+    TEST_EQUALITY(numActiveElementsActual, numActiveElementsExpected);
+    
+    // now, our central edge should have a couple children
+    vector<IndexType> centralEdgeChildEntities = meshTopo->getChildEntities(edgeDim, centralEdgeEntityIndex);
+    TEST_EQUALITY(centralEdgeChildEntities.size(), 2);
+    
+    // determine the cellID of the cell that contains the first child edge
+    set< pair<IndexType, unsigned> > cellsForChildEdge = meshTopo->getCellsContainingEntity(edgeDim, centralEdgeChildEntities[0]);
+    // test that there is just one such cell
+    TEST_EQUALITY(cellsForChildEdge.size(), 1);
+    IndexType cellIDForCentralChildEdge = (*cellsForChildEdge.begin()).first;
+    mesh->hRefine(vector<GlobalIndexType>{cellIDForCentralChildEdge});
+    
+    // should have another 7 new active elements:
+    numActiveElementsExpected += 7;
+    numActiveElementsActual = meshTopo->getActiveCellIndices().size();
+    TEST_EQUALITY(numActiveElementsActual, numActiveElementsExpected);
+    
+    // right now, we've only refined one original cell and one of its children; therefore, the original central edge
+    // should have three active cells
+    int numActiveCellsForCentralEdgeExpected = 3;
+    int numActiveCellsForCentralEdge = meshTopo->getActiveCellIndices(edgeDim, centralEdgeEntityIndex).size();
+    TEST_EQUALITY(numActiveCellsForCentralEdge, numActiveCellsForCentralEdgeExpected);
+    
+    // now, enforce 1 irregularity.  This should cause all 3 remaining original cells to be refined.
+    mesh->enforceOneIrregularity();
+    numActiveCellsForCentralEdgeExpected = 0;
+    numActiveCellsForCentralEdge = meshTopo->getActiveCellIndices(edgeDim, centralEdgeEntityIndex).size();
+    TEST_EQUALITY(numActiveCellsForCentralEdge, numActiveCellsForCentralEdgeExpected);
+  }
+  
+  TEUCHOS_UNIT_TEST( Mesh, EnforceRegularityHexadralMeshComplex )
+  {
+    /*
+     This is basically a recreation of an issue Truman Ellis ran into, demonstrating a bug in MeshTopology's
+     determination of like-dimensional constraints.  There is probably a simpler way to check the same behavior,
+     but this is not, it turns out, too expensive, so I'm leaving it as is.
+     */
+    vector<int> elementCounts = {1,1,2};
+    int spaceDim = elementCounts.size();
+    int testSpaceEnrichment = spaceDim;
+    int H1Order = 1;
+    
+    vector<double> dimensions(spaceDim,1.0);
+    
+    bool useConformingTraces = true;
+    PoissonFormulation poissonForm(spaceDim, useConformingTraces);
+    MeshPtr mesh = MeshFactory::rectilinearMesh(poissonForm.bf(), dimensions, elementCounts, H1Order, testSpaceEnrichment);
+    
+    mesh->hRefine(vector<GlobalIndexType>{0,1}, false);
+    mesh->hRefine(vector<GlobalIndexType>{8,12,14,15,16,17}, false);
+    mesh->hRefine(vector<GlobalIndexType>{51}, false);
+    
+    mesh->enforceOneIrregularity(true);
+    int irregularity = mesh->irregularity();
+    TEST_EQUALITY(irregularity, 1);
+    
+    VarPtr traceVar = poissonForm.phi_hat(); // important that it be H^1-conforming
+    
+    MeshTopology* meshTopo = dynamic_cast<MeshTopology*>(mesh->getTopology().get());
+    int edgeDim = 1;
+    
+    auto myCellIndices = &mesh->cellIDsInPartition();
+    for (auto cellID : *myCellIndices)
+    {
+      CellPtr cell = meshTopo->getCell(cellID);
+      int edgeCount = cell->topology()->getEdgeCount();
+      for (int edgeOrdinal=0; edgeOrdinal<edgeCount; edgeOrdinal++)
+      {
+        IndexType edgeIndex = cell->entityIndex(edgeDim, edgeOrdinal);
+        if (meshTopo->entityHasParent(edgeDim, edgeIndex))
+        {
+          IndexType parentEdgeIndex = meshTopo->getEntityParent(edgeDim, edgeIndex);
+          if (meshTopo->entityHasParent(edgeDim, parentEdgeIndex))
+          {
+            IndexType grandparentEdgeIndex = meshTopo->getEntityParent(edgeDim, parentEdgeIndex);
+            set<pair<IndexType,unsigned>> cellEntries = meshTopo->getCellsContainingEntity(edgeDim, grandparentEdgeIndex);
+            auto activeCells = &meshTopo->getActiveCellIndices();
+            for (auto cellEntry : cellEntries)
+            {
+              IndexType cellID = cellEntry.first;
+              if (activeCells->find(cellID) != activeCells->end())
+              {
+                success = false;
+                out << "Active cell " << cellID << " contains 'grandparent' edge, a violation of 1-irregularity.\n";
+              }
+            }
+          }
+        }
+      }
+    }
+  }
   
   TEUCHOS_UNIT_TEST( Mesh, EnforceRegularityInteriorTriangles )
   {
