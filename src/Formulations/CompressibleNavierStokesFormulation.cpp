@@ -1319,25 +1319,25 @@ CompressibleNavierStokesFormulation::CompressibleNavierStokesFormulation(MeshTop
       _ips["ManualGraph"]->addTerm( tau );
 
       _ips["EntropyGraph"] = Teuchos::rcp(new IP);
-      _ips["EntropyGraph"]->addTerm( 1./_muFunc*adj_MD11 + adj_KD11 );
-      _ips["EntropyGraph"]->addTerm( 1./_muFunc*adj_Mq1 + adj_Kq1 );
+      _ips["EntropyGraph"]->addTerm( Cv()*T_sqrt/rho_sqrt*(1./_muFunc*adj_MD11 + adj_KD11) );
+      _ips["EntropyGraph"]->addTerm(      T_sqrt*T_sqrt/rho_sqrt*(1./_muFunc*adj_Mq1 + adj_Kq1) );
       if (_spaceTime)
       {
         _ips["EntropyGraph"]->addTerm( rho_sqrt/sqrt(_gamma-1)*(adj_Gc - adj_Fc - adj_Cc) );
-        _ips["EntropyGraph"]->addTerm(   Cv()*T_sqrt/rho_sqrt*(adj_Gm1 - adj_Fm1 - adj_Cm1) );
-        _ips["EntropyGraph"]->addTerm(        T_prev/rho_sqrt*(adj_Ge - adj_Fe - adj_Ce) );
+        _ips["EntropyGraph"]->addTerm(    Cv()*T_sqrt/rho_sqrt*(adj_Gm1 - adj_Fm1 - adj_Cm1) );
+        _ips["EntropyGraph"]->addTerm(         T_sqrt*T_sqrt/rho_sqrt*(adj_Ge - adj_Fe - adj_Ce) );
       }
       else
       {
         _ips["EntropyGraph"]->addTerm( rho_sqrt/sqrt(_gamma-1)*(adj_Gc - adj_Fc) );
-        _ips["EntropyGraph"]->addTerm(   Cv()*T_sqrt/rho_sqrt*(adj_Gm1 - adj_Fm1) );
-        _ips["EntropyGraph"]->addTerm(        T_prev/rho_sqrt*(adj_Ge - adj_Fe) );
+        _ips["EntropyGraph"]->addTerm(    Cv()*T_sqrt/rho_sqrt*(adj_Gm1 - adj_Fm1) );
+        _ips["EntropyGraph"]->addTerm(         T_sqrt*T_sqrt/rho_sqrt*(adj_Ge - adj_Fe) );
       }
-      _ips["EntropyGraph"]->addTerm( vc );
-      _ips["EntropyGraph"]->addTerm( vm1 );
-      _ips["EntropyGraph"]->addTerm( ve );
-      _ips["EntropyGraph"]->addTerm( S1 );
-      _ips["EntropyGraph"]->addTerm( tau );
+      _ips["EntropyGraph"]->addTerm( rho_sqrt/sqrt(_gamma-1)*vc );
+      _ips["EntropyGraph"]->addTerm(    Cv()*T_sqrt/rho_sqrt*vm1 );
+      _ips["EntropyGraph"]->addTerm(         T_sqrt*T_sqrt/rho_sqrt*ve );
+      _ips["EntropyGraph"]->addTerm( Cv()*T_sqrt/rho_sqrt*S1 );
+      _ips["EntropyGraph"]->addTerm(      T_sqrt*T_sqrt/rho_sqrt*tau );
 
       // cout << endl << "ManualGraph" << endl;
       // _ips["ManualGraph"]->printInteractions();
@@ -1377,36 +1377,36 @@ CompressibleNavierStokesFormulation::CompressibleNavierStokesFormulation(MeshTop
 
       _ips["EntropyRobust"] = Teuchos::rcp(new IP);
       // _ips["EntropyRobust"]->addTerm(Function::min(one/Function::h(),Function::constant(1./sqrt(_mu)))*tau);
-      _ips["EntropyRobust"]->addTerm( Function::min(one/Function::h(),1./_muSqrtFunc)*adj_MD11);
-      _ips["EntropyRobust"]->addTerm( Function::min(one/Function::h(),1./_muSqrtFunc)*adj_Mq1);
+      _ips["EntropyRobust"]->addTerm( Cv()*T_sqrt/rho_sqrt*Function::min(one/Function::h(),1./_muSqrtFunc)*adj_MD11);
+      _ips["EntropyRobust"]->addTerm(      T_sqrt*T_sqrt/rho_sqrt*Function::min(one/Function::h(),1./_muSqrtFunc)*adj_Mq1);
       // _ips["EntropyRobust"]->addTerm(sqrt(_mu)*v->grad());
-      _ips["EntropyRobust"]->addTerm( _muSqrtFunc*adj_KD11 );
-      _ips["EntropyRobust"]->addTerm( sqrt(Cp()/Pr())*_muSqrtFunc*adj_Kq1 );
+      _ips["EntropyRobust"]->addTerm( Cv()*T_sqrt/rho_sqrt*_muSqrtFunc*adj_KD11 );
+      _ips["EntropyRobust"]->addTerm(      T_sqrt*T_sqrt/rho_sqrt*sqrt(Cp()/Pr())*_muSqrtFunc*adj_Kq1 );
       if (_spaceTime)
       {
         // _ips["EntropyRobust"]->addTerm(_beta*v->grad() + v->dt());
         _ips["EntropyRobust"]->addTerm( rho_sqrt/sqrt(_gamma-1)*(adj_Fc + adj_Cc) );
-        _ips["EntropyRobust"]->addTerm(   Cv()*T_sqrt/rho_sqrt*(adj_Fm1 + adj_Cm1) );
-        _ips["EntropyRobust"]->addTerm(        T_prev/rho_sqrt*(adj_Fe + adj_Ce) );
+        _ips["EntropyRobust"]->addTerm(    Cv()*T_sqrt/rho_sqrt*(adj_Fm1 + adj_Cm1) );
+        _ips["EntropyRobust"]->addTerm(         T_sqrt*T_sqrt/rho_sqrt*(adj_Fe + adj_Ce) );
       }
       else
       {
         // _ips["EntropyRobust"]->addTerm(_beta*v->grad());
         _ips["EntropyRobust"]->addTerm( rho_sqrt/sqrt(_gamma-1)*(adj_Fc) );
-        _ips["EntropyRobust"]->addTerm(   Cv()*T_sqrt/rho_sqrt*(adj_Fm1) );
-        _ips["EntropyRobust"]->addTerm(        T_prev/rho_sqrt*(adj_Fe) );
+        _ips["EntropyRobust"]->addTerm(    Cv()*T_sqrt/rho_sqrt*(adj_Fm1) );
+        _ips["EntropyRobust"]->addTerm(         T_sqrt*T_sqrt/rho_sqrt*(adj_Fe) );
       }
       // _ips["EntropyRobust"]->addTerm(tau->div());
       _ips["EntropyRobust"]->addTerm( rho_sqrt/sqrt(_gamma-1)*adj_Gc );
-      _ips["EntropyRobust"]->addTerm(   Cv()*T_sqrt/rho_sqrt*adj_Gm1 );
-      _ips["EntropyRobust"]->addTerm(        T_prev/rho_sqrt*adj_Ge );
-      // _ips["EntropyRobust"]->addTerm(Function::min(sqrt(_mu)*one/Function::h(),one)*v);
-      // _ips["EntropyRobust"]->addTerm( Function::min(sqrt(mu())*one/Function::h(),one)*vc );
-      // _ips["EntropyRobust"]->addTerm( Function::min(sqrt(mu())*one/Function::h(),one)*vm1 );
+      _ips["EntropyRobust"]->addTerm(    Cv()*T_sqrt/rho_sqrt*adj_Gm1 );
+      _ips["EntropyRobust"]->addTerm(         T_sqrt*T_sqrt/rho_sqrt*adj_Ge );
+      // _ips["EntropyRobust"]->addTerm( rho_sqrt/sqrt(_gamma-1)*Function::min(sqrt(_mu)*one/Function::h(),one)*v);
+      // _ips["EntropyRobust"]->addTerm(    Cv()*T_sqrt/rho_sqrt*Function::min(sqrt(mu())*one/Function::h(),one)*vc );
+      // _ips["EntropyRobust"]->addTerm(         T_sqrt*T_sqrt/rho_sqrt*Function::min(sqrt(mu())*one/Function::h(),one)*vm1 );
       // _ips["EntropyRobust"]->addTerm( Function::min(sqrt(mu())*one/Function::h(),one)*ve );
-      _ips["EntropyRobust"]->addTerm( vc );
-      _ips["EntropyRobust"]->addTerm( vm1 );
-      _ips["EntropyRobust"]->addTerm( ve );
+      _ips["EntropyRobust"]->addTerm( rho_sqrt/sqrt(_gamma-1)*vc );
+      _ips["EntropyRobust"]->addTerm(    Cv()*T_sqrt/rho_sqrt*vm1 );
+      _ips["EntropyRobust"]->addTerm(         T_sqrt*T_sqrt/rho_sqrt*ve );
 
       _ips["CoupledRobust"] = Teuchos::rcp(new IP);
       // _ips["CoupledRobust"]->addTerm(Function::min(one/Function::h(),Function::constant(1./sqrt(_mu)))*tau);
@@ -1447,40 +1447,40 @@ CompressibleNavierStokesFormulation::CompressibleNavierStokesFormulation(MeshTop
 
       _ips["EntropyCoupledRobust"] = Teuchos::rcp(new IP);
       // _ips["EntropyCoupledRobust"]->addTerm(Function::min(one/Function::h(),Function::constant(1./sqrt(_mu)))*tau);
-      _ips["EntropyCoupledRobust"]->addTerm( Function::min(one/Function::h(),1./_muSqrtFunc)*adj_MD11);
-      _ips["EntropyCoupledRobust"]->addTerm( Function::min(one/Function::h(),1./_muSqrtFunc)*adj_Mq1);
+      _ips["EntropyCoupledRobust"]->addTerm( Cv()*T_sqrt/rho_sqrt*Function::min(one/Function::h(),1./_muSqrtFunc)*adj_MD11);
+      _ips["EntropyCoupledRobust"]->addTerm(      T_sqrt*T_sqrt/rho_sqrt*Function::min(one/Function::h(),1./_muSqrtFunc)*adj_Mq1);
       // _ips["EntropyCoupledRobust"]->addTerm(sqrt(_mu)*v->grad());
-      _ips["EntropyCoupledRobust"]->addTerm( _muSqrtFunc*adj_KD11 );
-      _ips["EntropyCoupledRobust"]->addTerm( sqrt(Cp()/Pr())*_muSqrtFunc*adj_Kq1 );
+      _ips["EntropyCoupledRobust"]->addTerm( Cv()*T_sqrt/rho_sqrt*_muSqrtFunc*adj_KD11 );
+      _ips["EntropyCoupledRobust"]->addTerm(      T_sqrt*T_sqrt/rho_sqrt*sqrt(Cp()/Pr())*_muSqrtFunc*adj_Kq1 );
       if (_spaceTime)
       {
         // _ips["EntropyCoupledRobust"]->addTerm(tau->div() - v->dt() - beta*v->grad());
-        _ips["EntropyGraph"]->addTerm( rho_sqrt/sqrt(_gamma-1)*(adj_Gc - adj_Fc - adj_Cc) );
-        _ips["EntropyGraph"]->addTerm(   Cv()*T_sqrt/rho_sqrt*(adj_Gm1 - adj_Fm1 - adj_Cm1) );
-        _ips["EntropyGraph"]->addTerm(        T_prev/rho_sqrt*(adj_Ge - adj_Fe - adj_Ce) );
+        _ips["EntropyCoupledRobust"]->addTerm( rho_sqrt/sqrt(_gamma-1)*(adj_Gc - adj_Fc - adj_Cc) );
+        _ips["EntropyCoupledRobust"]->addTerm(    Cv()*T_sqrt/rho_sqrt*(adj_Gm1 - adj_Fm1 - adj_Cm1) );
+        _ips["EntropyCoupledRobust"]->addTerm(         T_sqrt*T_sqrt/rho_sqrt*(adj_Ge - adj_Fe - adj_Ce) );
         // _ips["EntropyCoupledRobust"]->addTerm(_beta*v->grad() + v->dt());
-        _ips["EntropyGraph"]->addTerm( rho_sqrt/sqrt(_gamma-1)*(adj_Fc + adj_Cc) );
-        _ips["EntropyGraph"]->addTerm(   Cv()*T_sqrt/rho_sqrt*(adj_Fm1 + adj_Cm1) );
-        _ips["EntropyGraph"]->addTerm(        T_prev/rho_sqrt*(adj_Fe + adj_Ce) );
+        _ips["EntropyCoupledRobust"]->addTerm( rho_sqrt/sqrt(_gamma-1)*(adj_Fc + adj_Cc) );
+        _ips["EntropyCoupledRobust"]->addTerm(    Cv()*T_sqrt/rho_sqrt*(adj_Fm1 + adj_Cm1) );
+        _ips["EntropyCoupledRobust"]->addTerm(         T_sqrt*T_sqrt/rho_sqrt*(adj_Fe + adj_Ce) );
       }
       else
       {
         // _ips["EntropyCoupledRobust"]->addTerm(tau->div() - beta*v->grad());
-        _ips["EntropyGraph"]->addTerm( rho_sqrt/sqrt(_gamma-1)*(adj_Gc - adj_Fc) );
-        _ips["EntropyGraph"]->addTerm(   Cv()*T_sqrt/rho_sqrt*(adj_Gm1 - adj_Fm1) );
-        _ips["EntropyGraph"]->addTerm(        T_prev/rho_sqrt*(adj_Ge - adj_Fe) );
+        _ips["EntropyCoupledRobust"]->addTerm( rho_sqrt/sqrt(_gamma-1)*(adj_Gc - adj_Fc) );
+        _ips["EntropyCoupledRobust"]->addTerm(    Cv()*T_sqrt/rho_sqrt*(adj_Gm1 - adj_Fm1) );
+        _ips["EntropyCoupledRobust"]->addTerm(         T_sqrt*T_sqrt/rho_sqrt*(adj_Ge - adj_Fe) );
         // _ips["EntropyCoupledRobust"]->addTerm(_beta*v->grad());
-        _ips["EntropyGraph"]->addTerm( rho_sqrt/sqrt(_gamma-1)*adj_Fc );
-        _ips["EntropyGraph"]->addTerm(   Cv()*T_sqrt/rho_sqrt*adj_Fm1 );
-        _ips["EntropyGraph"]->addTerm(        T_prev/rho_sqrt*adj_Fe );
+        _ips["EntropyCoupledRobust"]->addTerm( rho_sqrt/sqrt(_gamma-1)*adj_Fc );
+        _ips["EntropyCoupledRobust"]->addTerm(    Cv()*T_sqrt/rho_sqrt*adj_Fm1 );
+        _ips["EntropyCoupledRobust"]->addTerm(         T_sqrt*T_sqrt/rho_sqrt*adj_Fe );
       }
       // _ips["EntropyCoupledRobust"]->addTerm(Function::min(sqrt(_mu)*one/Function::h(),one)*v);
-      // _ips["EntropyCoupledRobust"]->addTerm( Function::min(sqrt(mu())*one/Function::h(),one)*vc );
-      // _ips["EntropyCoupledRobust"]->addTerm( Function::min(sqrt(mu())*one/Function::h(),one)*vm1 );
-      // _ips["EntropyCoupledRobust"]->addTerm( Function::min(sqrt(mu())*one/Function::h(),one)*ve );
-      _ips["EntropyCoupledRobust"]->addTerm( vc );
-      _ips["EntropyCoupledRobust"]->addTerm( vm1 );
-      _ips["EntropyCoupledRobust"]->addTerm( ve );
+      // _ips["EntropyCoupledRobust"]->addTerm( rho_sqrt/sqrt(_gamma-1)*Function::min(sqrt(mu())*one/Function::h(),one)*vc );
+      // _ips["EntropyCoupledRobust"]->addTerm(    Cv()*T_sqrt/rho_sqrt*Function::min(sqrt(mu())*one/Function::h(),one)*vm1 );
+      // _ips["EntropyCoupledRobust"]->addTerm(         T_sqrt*T_sqrt/rho_sqrt*Function::min(sqrt(mu())*one/Function::h(),one)*ve );
+      _ips["EntropyCoupledRobust"]->addTerm( rho_sqrt/sqrt(_gamma-1)*vc );
+      _ips["EntropyCoupledRobust"]->addTerm(    Cv()*T_sqrt/rho_sqrt*vm1 );
+      _ips["EntropyCoupledRobust"]->addTerm(         T_sqrt*T_sqrt/rho_sqrt*ve );
 
       _ips["NSDecoupled"] = Teuchos::rcp(new IP);
       // _ips["NSDecoupled"]->addTerm(one/Function::h()*tau);
