@@ -26,7 +26,7 @@ public:
   virtual bool matchesPoint(double x, double y);
   virtual bool matchesPoint(double x, double y, double z);
   virtual bool matchesPoint(double x, double y, double z, double t);
-  virtual bool matchesPoint(vector<double>&point);
+  virtual bool matchesPoint(const vector<double>&point);
   virtual bool matchesPoints(Intrepid::FieldContainer<bool> &pointsMatch, BasisCachePtr basisCache);
   
   virtual bool matchesSpatialSides(); // default: true

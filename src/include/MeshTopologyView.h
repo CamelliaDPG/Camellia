@@ -59,7 +59,10 @@ namespace Camellia {
     virtual Teuchos::RCP<MeshTopology> deepCopy();
 
     virtual bool entityIsAncestor(unsigned d, IndexType ancestor, IndexType descendent);
+    virtual bool entityIsGeneralizedAncestor(unsigned ancestorDimension, IndexType ancestor,
+                                             unsigned descendentDimension, IndexType descendent);
     
+    virtual IndexType getActiveCellCount(unsigned d, IndexType entityIndex);
     virtual const std::set<IndexType> &getActiveCellIndices();
     virtual std::vector< std::pair<IndexType,unsigned> > getActiveCellIndices(unsigned d, IndexType entityIndex); // first entry in pair is the cellIndex, the second is the index of the entity in that cell (the subcord).
     
@@ -72,7 +75,7 @@ namespace Camellia {
     virtual IndexType getConstrainingEntityIndexOfLikeDimension(unsigned d, IndexType entityIndex);
     virtual std::vector< std::pair<IndexType,unsigned> > getConstrainingSideAncestry(unsigned int sideEntityIndex);
     
-    virtual unsigned getDimension();
+    virtual unsigned getDimension() const;
     
     virtual std::vector<IndexType> getEntityVertexIndices(unsigned d, IndexType entityIndex);
     
@@ -103,6 +106,9 @@ namespace Camellia {
     virtual MeshTopologyViewPtr getView(const std::set<IndexType> &activeCellIndices);
     
     void printAllEntitiesInBaseMeshTopology();
+    
+    void printActiveCellAncestors();
+    void printCellAncestors(IndexType cellIndex);
   };
 
 }

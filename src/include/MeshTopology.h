@@ -18,6 +18,7 @@
 #include "MeshTopologyView.h"
 #include "PeriodicBC.h"
 #include "RefinementPattern.h"
+#include "SpatialFilter.h"
 #include "TypeDefs.h"
 
 using namespace std;
@@ -177,9 +178,9 @@ public:
   vector<IndexType> getCellsForSide(IndexType sideEntityIndex);
   vector< IndexType > getSidesContainingEntity(unsigned d, IndexType entityIndex);
 
-  RefinementBranch getSideConstraintRefinementBranch(IndexType sideEntityIndex); // Returns a RefinementBranch that goes from the constraining side to the side indicated.
+//  RefinementBranch getSideConstraintRefinementBranch(IndexType sideEntityIndex); // Returns a RefinementBranch that goes from the constraining side to the side indicated.
 
-  unsigned getDimension();
+  unsigned getDimension() const;
   unsigned getSubEntityCount(unsigned int d, IndexType entityIndex, unsigned subEntityDim);
   IndexType getSubEntityIndex(unsigned d, IndexType entityIndex, unsigned subEntityDim, unsigned subEntityOrdinal);
   unsigned getSubEntityPermutation(unsigned d, IndexType entityIndex, unsigned subEntityDim, unsigned subEntityOrdinal);
@@ -215,6 +216,9 @@ public:
   // ! Specifies an EntitySet corresponding to the initial time, for a space-time MeshTopology.  Called by MeshFactory.
   void setEntitySetInitialTime(EntitySetPtr entitySet);
 
+  // ! Returns boundary sides whose vertices all match the specified SpatialFilter
+  vector<IndexType> getBoundarySidesThatMatch(SpatialFilterPtr spatialFilter) const;
+  
   // ! maxConstraint made public for the sake of MeshTopologyView; not intended for general use
   IndexType maxConstraint(unsigned d, IndexType entityIndex1, IndexType entityIndex2);
   

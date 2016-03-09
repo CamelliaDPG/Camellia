@@ -8,6 +8,7 @@
 
 #include "MeshTopologyView.h"
 
+#include "CamelliaDebugUtility.h"
 #include "MeshTopology.h"
 
 using namespace Camellia;
@@ -112,9 +113,31 @@ bool MeshTopologyView::entityIsAncestor(unsigned d, IndexType ancestor, IndexTyp
   return _meshTopo->entityIsAncestor(d, ancestor, descendent);
 }
 
+bool MeshTopologyView::entityIsGeneralizedAncestor(unsigned int ancestorDimension, IndexType ancestor, unsigned int descendentDimension, IndexType descendent)
+{
+  return _meshTopo->entityIsGeneralizedAncestor(ancestorDimension, ancestor, descendentDimension, descendent);
+}
+
 const set<IndexType> &MeshTopologyView::getActiveCellIndices()
 {
   return _activeCells;
+}
+
+IndexType MeshTopologyView::getActiveCellCount(unsigned d, IndexType entityIndex)
+{
+  // first entry in pair is the cellIndex, the second is the ordinal of the entity in that cell (the subcord).
+  set<IndexType> activeCellIndices;
+  
+  vector<IndexType> sideIndices = this->getSidesContainingEntity(d, entityIndex);
+  for (IndexType sideEntityIndex : sideIndices)
+  {
+    vector<IndexType> cells = this->getActiveCellsForSide(sideEntityIndex);
+    for (IndexType cellIndex : cells)
+    {
+      activeCellIndices.insert(cellIndex);
+    }
+  }
+  return activeCellIndices.size();
 }
 
 vector< pair<IndexType,unsigned> > MeshTopologyView::getActiveCellIndices(unsigned d, IndexType entityIndex)
@@ -294,36 +317,58 @@ pair<IndexType, unsigned> MeshTopologyView::getConstrainingEntity(unsigned d, In
 // copied from MeshTopology; once that's a subclass of MeshTopologyView, could possibly eliminate it in MeshTopology
 IndexType MeshTopologyView::getConstrainingEntityIndexOfLikeDimension(unsigned d, IndexType entityIndex)
 {
-  IndexType constrainingEntityIndex = entityIndex;
+  unsigned constrainingEntityIndex = entityIndex;
   
   if (d==0)   // one vertex can't constrain another...
   {
     return entityIndex;
   }
   
-  vector<IndexType> sidesForEntity = getSidesContainingEntity(d, entityIndex);
-  for (IndexType sideEntityIndex : sidesForEntity)
+  // 3-9-16: I've found an example in which the below fails in a 2-irregular mesh
+  // I think the following, simpler thing will work just fine.  (It does pass tests!)
+  IndexType ancestorEntityIndex = entityIndex;
+  while (_meshTopo->entityHasParent(d, ancestorEntityIndex))
   {
-    vector< pair<IndexType,unsigned> > sideAncestry = getConstrainingSideAncestry(sideEntityIndex);
-    IndexType constrainingEntityIndexForSide = entityIndex;
-    if (sideAncestry.size() > 0)
+    ancestorEntityIndex = _meshTopo->getEntityParent(d, ancestorEntityIndex);
+    if (getActiveCellCount(d, ancestorEntityIndex) > 0)
     {
-      // need to find the subcellEntity for the constraining side that overlaps with the one on our present side
-      for (pair<IndexType,unsigned> entry : sideAncestry)
-      {
-        // need to map constrained entity index from the current side to its parent in sideAncestry
-        IndexType parentSideEntityIndex = entry.first;
-        if (! _meshTopo->entityHasParent(d, constrainingEntityIndexForSide))
-        {
-          // no parent for this entity (may be that it was a refinement-interior edge, e.g.)
-          break;
-        }
-        constrainingEntityIndexForSide = _meshTopo->getEntityParentForSide(d,constrainingEntityIndexForSide,parentSideEntityIndex);
-        sideEntityIndex = parentSideEntityIndex;
-      }
+      constrainingEntityIndex = ancestorEntityIndex;
     }
-    constrainingEntityIndex = _meshTopo->maxConstraint(d, constrainingEntityIndex, constrainingEntityIndexForSide);
   }
+  
+  //  vector<unsigned> sidesForEntity;
+  //  unsigned sideDim = _spaceDim - 1;
+  //  if (d==sideDim)
+  //  {
+  //    sidesForEntity.push_back(entityIndex);
+  //  }
+  //  else
+  //  {
+  //    sidesForEntity = _sidesForEntities[d][entityIndex];
+  //  }
+  //  for (vector<unsigned>::iterator sideEntityIt = sidesForEntity.begin(); sideEntityIt != sidesForEntity.end(); sideEntityIt++)
+  //  {
+  //    unsigned sideEntityIndex = *sideEntityIt;
+  //    vector< pair<unsigned,unsigned> > sideAncestry = getConstrainingSideAncestry(sideEntityIndex);
+  //    unsigned constrainingEntityIndexForSide = entityIndex;
+  //    if (sideAncestry.size() > 0)
+  //    {
+  //      // need to find the subcellEntity for the constraining side that overlaps with the one on our present side
+  //      for (vector< pair<unsigned,unsigned> >::iterator entryIt=sideAncestry.begin(); entryIt != sideAncestry.end(); entryIt++)
+  //      {
+  //        // need to map constrained entity index from the current side to its parent in sideAncestry
+  //        unsigned parentSideEntityIndex = entryIt->first;
+  //        if (_parentEntities[d].find(constrainingEntityIndexForSide) == _parentEntities[d].end())
+  //        {
+  //          // no parent for this entity (may be that it was a refinement-interior edge, e.g.)
+  //          break;
+  //        }
+  //        constrainingEntityIndexForSide = getEntityParentForSide(d,constrainingEntityIndexForSide,parentSideEntityIndex);
+  //        sideEntityIndex = parentSideEntityIndex;
+  //      }
+  //    }
+  //    constrainingEntityIndex = maxConstraint(d, constrainingEntityIndex, constrainingEntityIndexForSide);
+  //  }
   return constrainingEntityIndex;
 }
 
@@ -385,7 +430,7 @@ vector< pair<IndexType,unsigned> > MeshTopologyView::getConstrainingSideAncestry
   }
 }
 
-unsigned MeshTopologyView::getDimension()
+unsigned MeshTopologyView::getDimension() const
 {
   return _meshTopo->getDimension();
 }
@@ -453,6 +498,14 @@ Intrepid::FieldContainer<double> MeshTopologyView::physicalCellNodesForCell(unsi
   return _meshTopo->physicalCellNodesForCell(cellIndex,includeCellDimension);
 }
 
+void MeshTopologyView::printActiveCellAncestors()
+{
+  for (IndexType cellID : getActiveCellIndices())
+  {
+    printCellAncestors(cellID);
+  }
+}
+
 void MeshTopologyView::printAllEntitiesInBaseMeshTopology()
 {
   if (_meshTopo != Teuchos::null)
@@ -465,6 +518,19 @@ void MeshTopologyView::printAllEntitiesInBaseMeshTopology()
     MeshTopology* meshTopo = dynamic_cast<MeshTopology*>(this);
     meshTopo->printAllEntities();
   }
+}
+
+void MeshTopologyView::printCellAncestors(IndexType cellID)
+{
+  vector<IndexType> cellAncestors;
+  CellPtr cell = getCell(cellID);
+  while (cell->getParent() != Teuchos::null) {
+    cell = cell->getParent();
+    cellAncestors.push_back(cell->cellIndex());
+  }
+  ostringstream cellLabel;
+  cellLabel << cellID;
+  print(cellLabel.str(),cellAncestors);
 }
 
 Teuchos::RCP<MeshTransformationFunction> MeshTopologyView::transformationFunction()

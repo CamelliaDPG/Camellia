@@ -345,7 +345,7 @@ bool SpatialFilter::matchesPoint(double x, double y, double z, double t)
   TEUCHOS_TEST_FOR_EXCEPTION(true, std::invalid_argument, "matchesPoint(x,y,z,t) unimplemented.");
 }
 
-bool SpatialFilter::matchesPoint(vector<double>&point)
+bool SpatialFilter::matchesPoint(const vector<double> &point)
 {
   if (point.size() == 4)
   {
