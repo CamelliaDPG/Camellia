@@ -273,10 +273,6 @@ public:
   vector< ElementPtr > activeElements();  // deprecated -- use getActiveElement instead
   ElementPtr ancestralNeighborForSide(ElementPtr elem, int sideOrdinal, int &elemSideOrdinalInNeighbor);
 
-  //  GlobalIndexType numEdgeToCellIDEntries(){
-  //    return _edgeToCellIDs.size();
-  //  }
-
   vector< ElementPtr > elementsOfType(PartitionIndexType partitionNumber, ElementTypePtr elemTypePtr);
   vector< ElementPtr > elementsOfTypeGlobal(ElementTypePtr elemTypePtr); // may want to deprecate in favor of cellIDsOfTypeGlobal()
 
@@ -291,11 +287,6 @@ public:
   DofOrderingFactory & getDofOrderingFactory();
 
   ElementTypeFactory & getElementTypeFactory();
-  //  void getMultiBasisOrdering(DofOrderingPtr &originalNonParentOrdering,
-  //                             ElementPtr parent, int sideIndex, int parentSideIndexInNeighbor,
-  //                             ElementPtr nonParent);
-  //
-  //  void getPatchBasisOrdering(DofOrderingPtr &originalChildOrdering, ElementPtr child, int sideIndex);
 
   TFunctionPtr<double> getTransformationFunction(); // will be NULL for meshes without edge curves defined
 
@@ -320,26 +311,15 @@ public:
   bool meshUsesMaximumRule();
   bool meshUsesMinimumRule();
 
-  // for the case where we want to reproject the previous mesh solution onto the new one:
-  //  void hRefine(vector<GlobalIndexType> cellIDs, Teuchos::RCP<RefinementPattern> refPattern, vector< TSolutionPtr<double> > solutions);
-
-  //  void matchNeighbor(const ElementPtr &elem, int sideIndex);
-
-  //  void maxMinPolyOrder(int &maxPolyOrder, int &minPolyOrder, ElementPtr elem, int sideIndex);
-
-  //  map< int, BasisPtr > multiBasisUpgradeMap(ElementPtr parent, int sideIndex, int bigNeighborPolyOrder = -1);
-
-  //  static int neighborChildPermutation(int childIndex, int numChildrenInSide);
-  //  static int neighborDofPermutation(int dofIndex, int numDofsForSide);
-
   GlobalIndexType numActiveElements();
-
-  // ! Returns the number of degrees of freedom on the mesh skeleton.  Involves MPI collective communication.  Must be called on every rank.
-  GlobalIndexType numFluxDofs();
   
   // ! Returns the number of degrees of freedom belonging to field (volume) variables.  Involves MPI collective communication.  Must be called on every rank.
   GlobalIndexType numFieldDofs();
+  
+  // ! Returns the number of degrees of freedom on the mesh skeleton.  Involves MPI collective communication.  Must be called on every rank.
+  GlobalIndexType numFluxDofs();
 
+  // ! Returns the total number of degrees of freedom on the mesh.  Involves MPI collective communication.  Must be called on every rank.
   GlobalIndexType numGlobalDofs();
 
   GlobalIndexType numElements();
@@ -367,6 +347,9 @@ public:
   void rebuildLookups();
 
   void registerObserver(Teuchos::RCP<RefinementObserver> observer);
+  
+  //! returns the irregularity of the mesh, defined as the maximum depth of refinement hierarchy for an edge belonging to an active cell.  MPI collective method.
+  int irregularity();
 
   template <typename Scalar>
   void registerSolution(TSolutionPtr<Scalar> solution);

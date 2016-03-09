@@ -1089,6 +1089,26 @@ void Mesh::interpretLocalData(GlobalIndexType cellID, const FieldContainer<doubl
   _gda->interpretLocalData(cellID, localDofs, globalDofs, globalDofIndices);
 }
 
+int Mesh::irregularity()
+{
+  const set<GlobalIndexType>* myCells = &this->cellIDsInPartition();
+  int myIrregularity = 0; // for this partition
+  for (GlobalIndexType cellID : *myCells)
+  {
+    CellPtr cell = _meshTopology->getCell(cellID);
+    int edgeCount = cell->topology()->getEdgeCount();
+    int edgeDim = 1;
+    for (int edgeOrdinal=0; edgeOrdinal<edgeCount; edgeOrdinal++)
+    {
+      int edgeIrregularity = cell->refinementBranchForSubcell(edgeDim, edgeOrdinal, _meshTopology).size();
+      myIrregularity = max(edgeIrregularity, myIrregularity);
+    }
+  }
+  int globalIrregularity = 0;
+  Comm()->MaxAll(&myIrregularity, &globalIrregularity, 1);
+  return globalIrregularity;
+}
+
 GlobalIndexType Mesh::numActiveElements()
 {
   return _meshTopology->getActiveCellIndices().size();
