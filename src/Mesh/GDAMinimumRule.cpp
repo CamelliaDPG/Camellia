@@ -11,6 +11,7 @@
 #include "BasisFactory.h"
 #include "CamelliaCellTools.h"
 #include "CamelliaDebugUtility.h"
+#include "MeshTestUtility.h"
 #include "MPIWrapper.h"
 #include "SerialDenseWrapper.h"
 #include "Solution.h"
@@ -119,6 +120,11 @@ CellPair GDAMinimumRule::cellContainingEntityWithLeastH1Order(int d, IndexType e
 //  }
 
   return constrainingCellPair;
+}
+
+void GDAMinimumRule::setCheckConstraintConsistency(bool value)
+{
+  _checkConstraintConsistency = value;
 }
 
 GlobalDofAssignmentPtr GDAMinimumRule::deepCopy()
@@ -332,56 +338,6 @@ set<GlobalIndexType> GDAMinimumRule::ownedGlobalDofIndicesForCell(GlobalIndexTyp
   }
 
   return globalDofIndices;
-}
-
-set<GlobalIndexType> GDAMinimumRule::partitionOwnedGlobalFieldIndices()
-{
-  // compute complement of fluxes and traces
-  set<GlobalIndexType> fieldDofIndices;
-  // by construction, our globalDofIndices are contiguously numbered, starting with _partitionDofOffset
-  for (GlobalIndexType i=0; i<_partitionDofCount; i++)
-  {
-    if ((_partitionTraceIndexOffsets.find(i) == _partitionTraceIndexOffsets.end()) &&
-        (_partitionFluxIndexOffsets.find(i) == _partitionFluxIndexOffsets.end()) )
-    {
-      fieldDofIndices.insert(_partitionDofOffset + i);
-    }
-  }
-  return fieldDofIndices;
-}
-
-set<GlobalIndexType> GDAMinimumRule::partitionOwnedIndicesForVariables(set<int> varIDs)
-{
-  set<GlobalIndexType> varIndices;
-  for (set<int>::iterator varIt = varIDs.begin(); varIt != varIDs.end(); varIt++)
-  {
-    for (set<IndexType>::iterator varOffsetIt=_partitionIndexOffsetsForVarID[*varIt].begin();
-         varOffsetIt != _partitionIndexOffsetsForVarID[*varIt].end(); varOffsetIt++)
-    {
-      varIndices.insert(*varOffsetIt + _partitionDofOffset);
-    }
-  }
-  return varIndices;
-}
-
-set<GlobalIndexType> GDAMinimumRule::partitionOwnedGlobalFluxIndices()
-{
-  set<GlobalIndexType> fluxIndices;
-  for (set<IndexType>::iterator fluxOffsetIt=_partitionFluxIndexOffsets.begin(); fluxOffsetIt != _partitionFluxIndexOffsets.end(); fluxOffsetIt++)
-  {
-    fluxIndices.insert(*fluxOffsetIt + _partitionDofOffset);
-  }
-  return fluxIndices;
-}
-
-set<GlobalIndexType> GDAMinimumRule::partitionOwnedGlobalTraceIndices()
-{
-  set<GlobalIndexType> traceIndices;
-  for (set<IndexType>::iterator traceOffsetIt=_partitionTraceIndexOffsets.begin(); traceOffsetIt != _partitionTraceIndexOffsets.end(); traceOffsetIt++)
-  {
-    traceIndices.insert(*traceOffsetIt + _partitionDofOffset);
-  }
-  return traceIndices;
 }
 
 vector<int> GDAMinimumRule::H1Order(GlobalIndexType cellID, unsigned sideOrdinal)
@@ -1350,6 +1306,20 @@ BasisMap GDAMinimumRule::getBasisMap(GlobalIndexType cellID, SubCellDofIndexInfo
         if (processedSubcells[d][subcord]) continue;
         unsigned subcordInCell = CamelliaCellTools::subcellOrdinalMap(topo, sideDim, sideOrdinal, d, subcord);
         AnnotatedEntity* subcellConstraint = getConstrainingEntityInfo(cellID, cellConstraints, var, d, subcordInCell);
+        
+        if (_checkConstraintConsistency)
+        {
+          IndexType subcellEntityIndex = cell->entityIndex(d, subcordInCell);
+          bool cellIsActive = !cell->isParent(_meshTopology);
+          // if cell is active, then also check that the constrainning entity belongs to an active cell
+          // (this can be violated for anisotropic refinements, but that's not presently supported in 3D,
+          //  and not what we're debugging right now.)
+          if (!MeshTestUtility::constraintIsConsistent(_meshTopology, *subcellConstraint, d, subcellEntityIndex, cellIsActive))
+          {
+            TEUCHOS_TEST_FOR_EXCEPTION(true, std::invalid_argument, "Constraint is not consistent");
+          }
+        }
+        
         CellPtr constrainingCell = _meshTopology->getCell(subcellConstraint->cellID);
         bool followGeometricConstraints = true;
         if (subcellConstraint != &cellConstraints.subcellConstraints[d][subcordInCell])
@@ -1675,6 +1645,19 @@ BasisMap GDAMinimumRule::getBasisMap(GlobalIndexType cellID, SubCellDofIndexInfo
             AnnotatedEntity* subsubcellConstraints = getConstrainingEntityInfo(subcellConstraint->cellID, constrainingCellConstraints,
                                                                                var, subsubcdim, sscOrdInOriginalConstrainingCell);
             
+            if (_checkConstraintConsistency)
+            {
+              IndexType subsubcellEntityIndex = constrainingCell->entityIndex(subsubcdim, sscOrdInOriginalConstrainingCell);
+              bool cellIsActive = !cell->isParent(_meshTopology);
+              // if cell is active, then also check that the constrainning entity belongs to an active cell
+              // (this can be violated for anisotropic refinements, but that's not presently supported in 3D,
+              //  and not what we're debugging right now.)
+              if (!MeshTestUtility::constraintIsConsistent(_meshTopology, *subsubcellConstraints, subsubcdim, subsubcellEntityIndex, cellIsActive))
+              {
+                TEUCHOS_TEST_FOR_EXCEPTION(true, std::invalid_argument, "Constraint is not consistent");
+              }
+            }
+            
             int sscOrdInNewConstrainingSide = subsubcellConstraints->subcellOrdinal;
             int sscOrdInNewConstrainingCell = -1;
             
@@ -1686,7 +1669,7 @@ BasisMap GDAMinimumRule::getBasisMap(GlobalIndexType cellID, SubCellDofIndexInfo
             {
               CellPtr subsubcellConstrainingCell = _meshTopology->getCell(subsubcellConstraints->cellID);
               sscOrdInNewConstrainingCell = CamelliaCellTools::subcellOrdinalMap(subsubcellConstrainingCell->topology(), sideDim,
-                                                                                 subsubcellConstraints->sideOrdinal, subsubcdim,
+                                                                                 subsubcellConstraints->sideOrdinal, subsubcellConstraints->dimension,
                                                                                  subsubcellConstraints->subcellOrdinal);
               IndexType constrainingEntityIndex = subsubcellConstrainingCell->entityIndex(subsubcdim, sscOrdInNewConstrainingCell);
               
@@ -1707,7 +1690,42 @@ BasisMap GDAMinimumRule::getBasisMap(GlobalIndexType cellID, SubCellDofIndexInfo
                 subsubcellPermutation = CamelliaCellTools::permutationComposition(subsubcellTopo, subcellPermutationInverse, sscNewConstrainingPermutation);
               }
             }
-            TEUCHOS_TEST_FOR_EXCEPTION(furtherConstrained && subcellIsGeometricallyConstrained, std::invalid_argument, "Mesh has a cascading constraint (may not be 1-irregular)");
+            if (furtherConstrained && subcellIsGeometricallyConstrained)
+            {
+              CellPtr subsubcellConstrainingCell = _meshTopology->getCell(subsubcellConstraints->cellID);
+              sscOrdInNewConstrainingCell = CamelliaCellTools::subcellOrdinalMap(subsubcellConstrainingCell->topology(), sideDim,
+                                                                                 subsubcellConstraints->sideOrdinal, subsubcellConstraints->dimension,
+                                                                                 subsubcellConstraints->subcellOrdinal);
+              
+              cout << "Mesh has a cascading constraint; on cell " << cellID;
+              cout << ", " << CamelliaCellTools::entityTypeString(d) << " " << subcordInCell;
+              cout << " is constrained by cell " << subcellConstraint->cellID;
+              cout << ", " << CamelliaCellTools::entityTypeString(subcellConstraint->dimension) << " " << subcellOrdinalInConstrainingCell << endl;
+              cout << "This has a subcell, " << CamelliaCellTools::entityTypeString(subsubcdim) << " " << sscOrdInOriginalConstrainingCell;
+              cout << ", which is constrained by cell " << subsubcellConstraints->cellID;
+              cout << ", " << CamelliaCellTools::entityTypeString(subsubcellConstraints->dimension) << " " << sscOrdInNewConstrainingCell;
+              cout << endl;
+              
+              cout << "cell ancestors:\n";
+              _meshTopology->printCellAncestors(cellID);
+              _meshTopology->printCellAncestors(subcellConstraint->cellID);
+              _meshTopology->printCellAncestors(subsubcellConstraints->cellID);
+              
+              cout << "All active cell ancestors:\n";
+              _meshTopology->printActiveCellAncestors();
+              
+              _meshTopology->printAllEntitiesInBaseMeshTopology();
+              
+              bool meshIsConsistent = MeshTestUtility::checkConstraintConsistency(_mesh);
+              
+              if (meshIsConsistent)
+                cout << "passes consistency check on rank " << _mesh->Comm()->MyPID() << endl;
+              else
+                cout << "FAILS consistency check on rank " << _mesh->Comm()->MyPID() << endl;
+              
+              
+              TEUCHOS_TEST_FOR_EXCEPTION(furtherConstrained && subcellIsGeometricallyConstrained, std::invalid_argument, "Mesh has a cascading constraint (may not be 1-irregular)");
+            }
             if (furtherConstrained) continue;
             
             SubBasisReconciliationWeights weightsForSubSubcell;
@@ -2809,9 +2827,23 @@ CellConstraints GDAMinimumRule::getCellConstraints(GlobalIndexType cellID)
 AnnotatedEntity* GDAMinimumRule::getConstrainingEntityInfo(GlobalIndexType cellID, CellConstraints &cellConstraints,
                                                            VarPtr var, int d, int scord)
 {
+  AnnotatedEntity* constrainingInfo;
+  OwnershipInfo* ownershipInfo;
+  bool spaceOnlyConstraint;
+  getConstrainingEntityInfo(cellID, cellConstraints, var, d, scord, constrainingInfo, ownershipInfo, spaceOnlyConstraint);
+  return constrainingInfo;
+}
+
+void GDAMinimumRule::getConstrainingEntityInfo(GlobalIndexType cellID, CellConstraints &cellConstraints,
+                                               VarPtr var, int d, int scord,
+                                               AnnotatedEntity* &constrainingInfo, OwnershipInfo* &ownershipInfo,
+                                               bool &spaceOnlyConstraint)
+{
   if (var->isDefinedOnTemporalInterface())
   {
-    return &cellConstraints.subcellConstraints[d][scord];
+    constrainingInfo = &cellConstraints.subcellConstraints[d][scord];
+    ownershipInfo = &cellConstraints.owningCellIDForSubcell[d][scord];
+    spaceOnlyConstraint = false;
   }
   else
   {
@@ -2819,11 +2851,24 @@ AnnotatedEntity* GDAMinimumRule::getConstrainingEntityInfo(GlobalIndexType cellI
     CellPtr cell = _meshTopology->getCell(cellID);
     if (cell->topology()->sideIsSpatial(constrainingSideOrdinal))
     {
-      return &cellConstraints.subcellConstraints[d][scord];
+      constrainingInfo = &cellConstraints.subcellConstraints[d][scord];
+      ownershipInfo = &cellConstraints.owningCellIDForSubcell[d][scord];
+      spaceOnlyConstraint = false;
     }
     else
     {
-      return &cellConstraints.spatialSliceConstraints->subcellConstraints[d][scord];
+      if (cellConstraints.spatialSliceConstraints != Teuchos::null)
+      {
+        constrainingInfo = &cellConstraints.spatialSliceConstraints->subcellConstraints[d][scord];
+        ownershipInfo = &cellConstraints.spatialSliceConstraints->owningCellIDForSubcell[d][scord];
+        spaceOnlyConstraint = true;
+      }
+      else
+      {
+        constrainingInfo = NULL;
+        ownershipInfo = NULL;
+        spaceOnlyConstraint = true;
+      }
     }
   }
 }
@@ -2958,8 +3003,6 @@ set<GlobalIndexType> GDAMinimumRule::getFittableGlobalDofIndices(GlobalIndexType
 
 SubCellDofIndexInfo & GDAMinimumRule::getOwnedGlobalDofIndices(GlobalIndexType cellID, CellConstraints &constraints)
 {
-  // there's a lot of redundancy between this method and the dof-counting bit of rebuild lookups.  May be worth factoring that out.
-
   if (_ownedGlobalDofIndicesCache.find(cellID) != _ownedGlobalDofIndicesCache.end())
   {
     return _ownedGlobalDofIndicesCache[cellID];
@@ -2979,31 +3022,38 @@ SubCellDofIndexInfo & GDAMinimumRule::getOwnedGlobalDofIndices(GlobalIndexType c
 
   GlobalIndexType globalDofIndex = _globalCellDofOffsets[cellID]; // this cell's first globalDofIndex
 
-  for (auto varEntry : *trialVars)
+  map< pair<unsigned,IndexType>, pair<unsigned, unsigned> > entitiesClaimed; // maps from the constraining entity claimed to the (d, scord) entry that claimed it.
+  map< pair<unsigned,IndexType>, pair<unsigned, unsigned> > entitiesClaimedSpaceOnlyVariables; // for variables with var->isDefinedOnTemporalInterface()==false
+  for (int d=0; d<=spaceDim; d++)
   {
-    map< pair<unsigned,IndexType>, pair<unsigned, unsigned> > entitiesClaimedForVariable; // maps from the constraining entity claimed to the (d, scord) entry that claimed it.
-    VarPtr var = varEntry.second;
-    unsigned scordForBasis;
-    bool varHasSupportOnVolume = (var->varType() == FIELD) || (var->varType() == TEST);
-//    cout << " var " << var->name() << ":\n";
-    bool varIsDefinedOnTemporalInterfaces = var->isDefinedOnTemporalInterface();
-
-    for (int d=0; d<=spaceDim; d++)
+    int scCount = topo->getSubcellCount(d);
+    for (int scord=0; scord<scCount; scord++)
     {
-      int scCount = topo->getSubcellCount(d);
-      for (int scord=0; scord<scCount; scord++)
+      pair<unsigned, IndexType> owningSubcellEntity = {-1,-1};
+      pair<unsigned, IndexType> owningSubcellEntitySpaceOnly = {-1,-1};
+
+      for (auto varEntry : *trialVars)
       {
-        AnnotatedEntity* constrainingEntityInfo = &constraints.subcellConstraints[d][scord];
+        VarPtr var = varEntry.second;
+        unsigned scordForBasis;
+        bool varHasSupportOnVolume = (var->varType() == FIELD) || (var->varType() == TEST);
+        
+        AnnotatedEntity* constrainingEntityInfo;
         OwnershipInfo* ownershipInfo;
-        if (!varIsDefinedOnTemporalInterfaces && !topo->sideIsSpatial(constrainingEntityInfo->sideOrdinal))
+        bool spaceOnlyConstraint;
+        
+        getConstrainingEntityInfo(cellID, constraints, var, d, scord, constrainingEntityInfo, ownershipInfo, spaceOnlyConstraint);
+//        if (constrainingEntityInfo == NULL) continue;
+        
+        map< pair<unsigned,IndexType>, pair<unsigned, unsigned> >* entitiesClaimedForVariable;
+        if (spaceOnlyConstraint)
         {
           if (d >= sideDim) continue; // the subcell is itself a temporal side (or a volume); no basis defined on this...
-          constrainingEntityInfo = &constraints.spatialSliceConstraints->subcellConstraints[d][scord];
-          ownershipInfo = &constraints.spatialSliceConstraints->owningCellIDForSubcell[d][scord];
+          entitiesClaimedForVariable = &entitiesClaimedSpaceOnlyVariables;
         }
         else
         {
-          ownershipInfo = &constraints.owningCellIDForSubcell[d][scord];
+          entitiesClaimedForVariable = &entitiesClaimed;
         }
         
         if (ownershipInfo->cellID == cellID)   // owned by this cell: count all the constraining dofs as entries for this cell
@@ -3037,42 +3087,57 @@ SubCellDofIndexInfo & GDAMinimumRule::getOwnedGlobalDofIndices(GlobalIndexType c
           int minimumConstraintDimension = BasisReconciliation::minimumSubcellDimension(basis);
           if (minimumConstraintDimension > d) continue; // then we don't enforce (or own) anything for this subcell/basis combination
 
-          pair<unsigned, IndexType> owningSubcellEntity = make_pair(ownershipInfo->dimension, ownershipInfo->owningSubcellEntityIndex);
-          if (entitiesClaimedForVariable.find(owningSubcellEntity) != entitiesClaimedForVariable.end())
+          pair<unsigned, IndexType> owningSubcellEntityForVariable = make_pair(ownershipInfo->dimension, ownershipInfo->owningSubcellEntityIndex);
+          if (entitiesClaimedForVariable == &entitiesClaimed)
           {
-            // already processed this guy on this cell: just copy
-            pair<unsigned,unsigned> previousConstrainedSubcell = entitiesClaimedForVariable[owningSubcellEntity];
-            scInfo[d][scord][var->ID()] = scInfo[previousConstrainedSubcell.first][previousConstrainedSubcell.second][var->ID()];
-            continue;
+            // sanity check: if this has previously been set, then make sure it's the same
+            if (owningSubcellEntity != pair<unsigned,IndexType>{-1,-1})
+            {
+              TEUCHOS_TEST_FOR_EXCEPTION(owningSubcellEntity != owningSubcellEntityForVariable, std::invalid_argument, "owningSubcellEntry changed");
+            }
+            owningSubcellEntity = owningSubcellEntityForVariable;
           }
           else
           {
-            entitiesClaimedForVariable[owningSubcellEntity] = make_pair(d, scord);
+            // sanity check: if this has previously been set, then make sure it's the same
+            if (owningSubcellEntitySpaceOnly != pair<unsigned,IndexType>{-1,-1})
+            {
+              TEUCHOS_TEST_FOR_EXCEPTION(owningSubcellEntitySpaceOnly != owningSubcellEntityForVariable, std::invalid_argument, "owningSubcellEntitySpaceOnly changed");
+            }
+            owningSubcellEntitySpaceOnly = owningSubcellEntityForVariable;
+          }
+          
+          if (entitiesClaimedForVariable->find(owningSubcellEntity) != entitiesClaimedForVariable->end())
+          {
+            // already processed this guy on this cell: just copy
+            pair<unsigned,unsigned> previousConstrainedSubcell = (*entitiesClaimedForVariable)[owningSubcellEntity];
+            scInfo[d][scord][var->ID()] = scInfo[previousConstrainedSubcell.first][previousConstrainedSubcell.second][var->ID()];
+            continue;
           }
 
           int dofOrdinalCount = basis->dofOrdinalsForSubcell(constrainingDimension, scordForBasis).size();
           vector<GlobalIndexType> globalDofIndices;
 
-//          cout << "   dim " << d << ", scord " << scord << ":";
-
           for (int i=0; i<dofOrdinalCount; i++)
           {
-//            cout << " " << globalDofIndex;
             globalDofIndices.push_back(globalDofIndex++);
           }
-//          cout << endl;
+          
           if (scInfo.size() < d+1)
           {
             TEUCHOS_TEST_FOR_EXCEPTION(true, std::invalid_argument, "Internal error: scInfo vector not big enough");
           }
-//          if (scInfo[d].find(scord) == scInfo[d].end()) {
-//            TEUCHOS_TEST_FOR_EXCEPTION(true, std::invalid_argument, "Internal error: scord not found");
-//          }
-//          if (scInfo[d][scord].find(var->ID())==scInfo[d][scord].end()) {
-//            TEUCHOS_TEST_FOR_EXCEPTION(true, std::invalid_argument, "Internal error: var ID not found");
-//          }
           scInfo[d][scord][var->ID()] = globalDofIndices;
         }
+      }
+      
+      if (owningSubcellEntity != pair<unsigned,IndexType>{-1,-1})
+      {
+        entitiesClaimed[owningSubcellEntity] = make_pair(d, scord);
+      }
+      if (owningSubcellEntitySpaceOnly != pair<unsigned,IndexType>{-1,-1})
+      {
+        entitiesClaimedSpaceOnlyVariables[owningSubcellEntitySpaceOnly] = make_pair(d, scord);
       }
     }
   }
@@ -3437,6 +3502,21 @@ BasisMap GDAMinimumRule::getRestrictedBasisMap(BasisMap &basisMap, const set<int
   return newBasisMap;
 }
 
+GlobalIndexType GDAMinimumRule::numPartitionOwnedGlobalFieldIndices()
+{
+  return _partitionFieldDofCount;
+}
+
+GlobalIndexType GDAMinimumRule::numPartitionOwnedGlobalFluxIndices()
+{
+  return _partitionFluxDofCount;
+}
+
+GlobalIndexType GDAMinimumRule::numPartitionOwnedGlobalTraceIndices()
+{
+  return _partitionTraceDofCount;
+}
+
 PartitionIndexType GDAMinimumRule::partitionForGlobalDofIndex( GlobalIndexType globalDofIndex )
 {
   PartitionIndexType numRanks = _partitionDofCounts.size();
@@ -3504,9 +3584,9 @@ void GDAMinimumRule::rebuildLookups()
   _globalDofIndicesForCellCache.clear();
   _fittableGlobalIndicesCache.clear();
 
-  _partitionFluxIndexOffsets.clear();
-  _partitionTraceIndexOffsets.clear();
-  _partitionIndexOffsetsForVarID.clear();
+  _partitionFieldDofCount = 0;
+  _partitionFluxDofCount = 0;
+  _partitionTraceDofCount = 0;
 
   int rank = _partitionPolicy->Comm()->MyPID();
 //  cout << "GDAMinimumRule: Rebuilding lookups on rank " << rank << endl;
@@ -3516,13 +3596,22 @@ void GDAMinimumRule::rebuildLookups()
 
   _cellDofOffsets.clear(); // within the partition, offsets for the owned dofs in cell
 
+  // TODO: add some sort of check here, and warning if mesh must be 1-irregular but isn't.
+  // (Need to examine variables to see if there are any that require reconciliation for d < sideDim; otherwise we can do without 1-irregularity.)
+//  if (!_allowCascadingConstraints)
+//  {
+//    int irregularity = _mesh->irregularity();
+//    if (irregularity > 1)
+//    {
+//      cout << "WARNING: mesh is " << irregularity << "-irregular.\n";
+//    }
+//    else
+//    {
+//      cout << "Mesh is " << irregularity << "-irregular.\n";
+//    }
+//  }
+  
   int spaceDim = _meshTopology->getDimension();
-  int sideDim = spaceDim - 1;
-
-  // pieces of this remain fairly ugly--the brute force searches are limited to entities on a cell (i.e. < O(12) items to search in a hexahedron),
-  // and I've done a reasonable job only doing them when we need the result, but they still are brute force searches.  By tweaking
-  // the design of MeshTopology and Cell to take better advantage of regularities (or just to store better lookups), we should be able to do better.
-  // But in the interest of avoiding wasting development time on premature optimization, I'm leaving it as is for now...
 
   _partitionDofCount = 0; // how many dofs we own locally
   for (GlobalIndexType cellID : *myCellIDs)
@@ -3532,145 +3621,36 @@ void GDAMinimumRule::rebuildLookups()
     CellTopoPtr topo = cell->topology();
     CellConstraints constraints = getCellConstraints(cellID);
 
-    set< pair<unsigned,IndexType> > entitiesClaimedForCell;
-
-    for (int d=0; d<=spaceDim; d++)
+    // getOwnedGlobalDofIndices will use the cell's global dof offset, which we still have to compute
+    // We use zero for now, and adjust below
+    _globalCellDofOffsets[cellID] = 0;
+    SubCellDofIndexInfo* ownedGlobalDofIndices = &getOwnedGlobalDofIndices(cellID, constraints);
+    
+    for (map<int, VarPtr>::iterator varIt = trialVars.begin(); varIt != trialVars.end(); varIt++)
     {
-      int scCount = topo->getSubcellCount(d);
-      for (int scord=0; scord<scCount; scord++)
+      VarPtr var = varIt->second;
+      set<GlobalIndexType> dofsForVariable; // set to avoid double-counting (do we need this??)
+      for (int d=0; d<=spaceDim; d++)
       {
-        AnnotatedEntity* usualConstrainingEntityInfo = &constraints.subcellConstraints[d][scord];
-        AnnotatedEntity* spaceOnlyTraceConstrainingEntityInfo = NULL;
-        OwnershipInfo* usualOwnershipInfo = &constraints.owningCellIDForSubcell[d][scord];
-        OwnershipInfo* spaceOnlyTraceOwnershipInfo = NULL;
-        if (_hasSpaceOnlyTrialVariable && !topo->sideIsSpatial(usualConstrainingEntityInfo->sideOrdinal))
+        int scCount = topo->getSubcellCount(d);
+        for (int scord=0; scord<scCount; scord++)
         {
-          if (d < sideDim) // otherwise, the subcell is itself a temporal side (or a volume)
-          {
-            spaceOnlyTraceConstrainingEntityInfo = &constraints.spatialSliceConstraints->subcellConstraints[d][scord];
-            spaceOnlyTraceOwnershipInfo = &constraints.spatialSliceConstraints->owningCellIDForSubcell[d][scord];
-          }
-        }
-
-        bool usualConstrainingEntityAlreadyProcessed = false;
-        bool spaceOnlyTraceConstrainingEntityAlreadyProcessed = false;
-        bool usualIsOwner = false;
-        bool spaceOnlyTraceIsOwner = false;
-        
-        if (usualOwnershipInfo->cellID == cellID)   // owned by this cell: count all the constraining dofs as entries for this cell
-        {
-          usualIsOwner = true;
-          pair<unsigned, IndexType> owningSubcellEntity = make_pair(usualOwnershipInfo->dimension,
-                                                                    usualOwnershipInfo->owningSubcellEntityIndex);
-          if (entitiesClaimedForCell.find(owningSubcellEntity) != entitiesClaimedForCell.end())
-          {
-            usualConstrainingEntityAlreadyProcessed = true; // already processed this guy on this cell
-          }
-          else
-          {
-            entitiesClaimedForCell.insert(owningSubcellEntity);
-          }
-        }
-        
-        if (spaceOnlyTraceOwnershipInfo != NULL)
-        {
-          if (spaceOnlyTraceOwnershipInfo->cellID == cellID)   // owned by this cell: count all the constraining dofs as entries for this cell
-          {
-            spaceOnlyTraceIsOwner = true;
-            pair<unsigned, IndexType> owningSubcellEntity = make_pair(spaceOnlyTraceOwnershipInfo->dimension,
-                                                                      spaceOnlyTraceOwnershipInfo->owningSubcellEntityIndex);
-            if (entitiesClaimedForCell.find(owningSubcellEntity) != entitiesClaimedForCell.end())
-            {
-              spaceOnlyTraceConstrainingEntityAlreadyProcessed = true; // already processed this guy on this cell
-            }
-            else
-            {
-              entitiesClaimedForCell.insert(owningSubcellEntity);
-            }
-          }
-        }
-        
-        bool someVarsLeftToProcess = (spaceOnlyTraceIsOwner && ! spaceOnlyTraceConstrainingEntityAlreadyProcessed) || (usualIsOwner && !usualConstrainingEntityAlreadyProcessed);
-        
-        if (!someVarsLeftToProcess) continue;
-        
-        for (map<int, VarPtr>::iterator varIt = trialVars.begin(); varIt != trialVars.end(); varIt++)
-        {
-          VarPtr var = varIt->second;
-          bool varHasSupportOnVolume = (var->varType() == FIELD) || (var->varType() == TEST);
-          
-          AnnotatedEntity* constrainingEntityInfo = usualConstrainingEntityInfo;
-          bool usual = true;
-          if ((! var->isDefinedOnTemporalInterface()) && (spaceOnlyTraceConstrainingEntityInfo != NULL))
-          {
-            // if spaceOnlyTraceConstrainingEntityInfo *is* null, then we aren't on a temporal interface anyway...
-            // in that case, we can process this space-only traces as usual.
-            // On the other hand, if it is not null, then we are on a temporal interface, and special treatment is required.
-            usual = false;
-            constrainingEntityInfo = spaceOnlyTraceConstrainingEntityInfo;
-          }
-          if (usual && usualConstrainingEntityAlreadyProcessed) continue;
-          if (!usual && spaceOnlyTraceConstrainingEntityAlreadyProcessed) continue;
-          
-          GlobalIndexType constrainingCellID = constrainingEntityInfo->cellID;
-          unsigned constrainingSubcellDimension = constrainingEntityInfo->dimension;
-          DofOrderingPtr trialOrdering = _elementTypeForCell[constrainingCellID]->trialOrderPtr;
-          unsigned scordForBasis;
-          BasisPtr basis; // the constraining basis for the subcell
-          if (varHasSupportOnVolume)
-          {
-            // volume basis => the basis sees the cell as a whole: in constraining cell, map from side scord to the volume
-            if (constrainingSubcellDimension==spaceDim)
-            {
-              // then there is only one subcell ordinal (and there will be -1's in sideOrdinal and subcellOrdinalInSide....
-              scordForBasis = 0;
-            }
-            else
-            {
-              scordForBasis = CamelliaCellTools::subcellOrdinalMap(_meshTopology->getCell(constrainingCellID)->topology(), sideDim,
-                                                                   constrainingEntityInfo->sideOrdinal,
-                                                                   constrainingSubcellDimension, constrainingEntityInfo->subcellOrdinal);
-            }
-            basis = trialOrdering->getBasis(var->ID());
-            // field
-            int ordinalCount = basis->dofOrdinalsForSubcell(constrainingSubcellDimension, scordForBasis).size();
-            for (int ordinal=0; ordinal<ordinalCount; ordinal++)
-            {
-              _partitionIndexOffsetsForVarID[var->ID()].insert(ordinal+_partitionDofCount);
-            }
-          }
-          else
-          {
-            if (constrainingSubcellDimension==spaceDim) continue; // side bases don't have any support on the interior of the cell...
-            if (!trialOrdering->hasBasisEntry(var->ID(), constrainingEntityInfo->sideOrdinal))
-            {
-              continue;
-            }
-            
-            scordForBasis = constrainingEntityInfo->subcellOrdinal; // the basis sees the side, so that's the view to use for subcell ordinal
-            basis = trialOrdering->getBasis(var->ID(), constrainingEntityInfo->sideOrdinal);
-            
-            int ordinalCount = basis->dofOrdinalsForSubcell(constrainingSubcellDimension, scordForBasis).size();
-            if (var->varType()==FLUX)
-            {
-              for (int ordinal=0; ordinal<ordinalCount; ordinal++)
-              {
-                _partitionFluxIndexOffsets.insert(ordinal+_partitionDofCount);
-                _partitionIndexOffsetsForVarID[var->ID()].insert(ordinal+_partitionDofCount);
-              }
-            }
-            else if (var->varType() == TRACE)
-            {
-              for (int ordinal=0; ordinal<ordinalCount; ordinal++)
-              {
-                _partitionTraceIndexOffsets.insert(ordinal+_partitionDofCount);
-                _partitionIndexOffsetsForVarID[var->ID()].insert(ordinal+_partitionDofCount);
-              }
-            }
-          }
-          _partitionDofCount += basis->dofOrdinalsForSubcell(constrainingSubcellDimension, scordForBasis).size();
+          vector<GlobalIndexType>* varDofs = &(*ownedGlobalDofIndices)[d][scord][var->ID()];
+          dofsForVariable.insert(varDofs->begin(),varDofs->end());
         }
       }
+      switch (var->varType()) {
+        case FLUX:
+          _partitionFluxDofCount += dofsForVariable.size();
+          break;
+        case TRACE:
+          _partitionTraceDofCount += dofsForVariable.size();
+          break;
+        default:
+          _partitionFieldDofCount += dofsForVariable.size();
+          break;
+      }
+      _partitionDofCount += dofsForVariable.size();
     }
   }
   int numRanks = _partitionPolicy->Comm()->NumProc();
@@ -3723,6 +3703,34 @@ void GDAMinimumRule::rebuildLookups()
     }
   }
 
+  // Now that we have the global dof offsets for our cells, we adjust the ownedGlobalDofIndices container accordingly
+  for (GlobalIndexType cellID : *myCellIDs)
+  {
+    CellConstraints constraints = getCellConstraints(cellID);
+    SubCellDofIndexInfo* ownedGlobalDofIndices = &getOwnedGlobalDofIndices(cellID, constraints);
+
+    CellTopoPtr topo = _meshTopology->getCell(cellID)->topology();
+
+    GlobalIndexType globalCellDofOffset = _globalCellDofOffsets[cellID];
+    
+    for (map<int, VarPtr>::iterator varIt = trialVars.begin(); varIt != trialVars.end(); varIt++)
+    {
+      VarPtr var = varIt->second;
+      for (int d=0; d<=spaceDim; d++)
+      {
+        int scCount = topo->getSubcellCount(d);
+        for (int scord=0; scord<scCount; scord++)
+        {
+          vector<GlobalIndexType>* varDofs = &(*ownedGlobalDofIndices)[d][scord][var->ID()];
+          for (vector<GlobalIndexType>::iterator varDofIt = varDofs->begin(); varDofIt != varDofs->end(); varDofIt++)
+          {
+            *varDofIt += globalCellDofOffset;
+          }
+        }
+      }
+    }
+  }
+  
   _cellIDsForElementType = vector< map< ElementType*, vector<GlobalIndexType> > >(numRanks);
   for (int i=0; i<numRanks; i++)
   {

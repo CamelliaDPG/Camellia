@@ -26,6 +26,7 @@
 #include "PoissonFormulation.h"
 #include "RHS.h"
 #include "Solution.h"
+#include "SpaceTimeHeatDivFormulation.h"
 #include "TypeDefs.h"
 #include "VarFactory.h"
 
@@ -111,6 +112,87 @@ namespace
     return mesh;
   }
   
+  void testContiguousGlobalDofNumbering(GDAMinimumRule* gdaMinRule, Teuchos::FancyOStream &out, bool &success)
+  {
+    // check that all dofs are assigned, basically
+    set<GlobalIndexType> myGlobalDofIndices = gdaMinRule->globalDofIndicesForPartition(-1); // -1 means this rank
+    // while some of the local cells will see dofs that don't belong to the partition, they should see every dof
+    // that *does* belong to the partition -- by iterating through local cells and asking for their global dofs,
+    // we should find all members of myGlobalDofIndices
+    set<GlobalIndexType> foundGlobalIndices;
+    const set<GlobalIndexType>* myCellIDs = &gdaMinRule->cellsInPartition(-1);
+    for (GlobalIndexType cellID : *myCellIDs)
+    {
+      set<GlobalIndexType> globalIndicesForCell = gdaMinRule->globalDofIndicesForCell(cellID);
+      foundGlobalIndices.insert(globalIndicesForCell.begin(),globalIndicesForCell.end());
+    }
+    // rule is, foundGlobalIndices should be a superset of myGlobalDofIndices
+    set<GlobalIndexType> missingDofIndices;
+    for (GlobalIndexType myDofIndex : myGlobalDofIndices)
+    {
+      if (foundGlobalIndices.find(myDofIndex) == foundGlobalIndices.end())
+      {
+        missingDofIndices.insert(myDofIndex);
+      }
+    }
+    if (missingDofIndices.size() != 0)
+    {
+      success = false;
+      out << "Missing global dof ordinals: ";
+      for (GlobalIndexType missingDofIndex : missingDofIndices)
+      {
+        out << missingDofIndex << " ";
+      }
+      out << endl;
+    }
+  }
+  
+  void testContiguousGlobalDofNumberingComplexSpaceTimeMesh(bool useConformingTraces, Teuchos::FancyOStream &out, bool &success)
+  {
+    int spaceDim = 2;
+    double pi = atan(1)*4;
+    
+    double t0 = 0;
+    double t1 = pi;
+    int temporalDivisions = 1;
+    
+    vector<double> x0 = {0.0, 0.0};;
+    vector<double> dims = {2*pi, 2*pi};
+    vector<int> numElements = {2,2};
+    
+    MeshTopologyPtr spatial2DMeshTopo = MeshFactory::rectilinearMeshTopology(dims,numElements,x0);
+    MeshTopologyPtr meshTopo = MeshFactory::spaceTimeMeshTopology(spatial2DMeshTopo, t0, t1, temporalDivisions);
+    
+    // some refinements in an effort to replicate an issue...
+    // 1. Uniform refinement
+    IndexType nextElement = meshTopo->cellCount();
+    set<IndexType> cellsToRefine = meshTopo->getActiveCellIndices();
+    CellTopoPtr cellTopo = meshTopo->getCell(0)->topology();
+    RefinementPatternPtr refPattern = RefinementPattern::regularRefinementPattern(cellTopo);
+    for (IndexType cellIndex : cellsToRefine)
+    {
+      meshTopo->refineCell(cellIndex, refPattern, nextElement);
+      nextElement += refPattern->numChildren();
+    }
+    // 2. Selective refinement
+    cellsToRefine = {4,15,21,30};
+    for (IndexType cellIndex : cellsToRefine)
+    {
+      meshTopo->refineCell(cellIndex, refPattern, nextElement);
+      nextElement += refPattern->numChildren();
+    }
+    
+    int fieldPolyOrder = 1;
+    double epsilon = 1.0;
+    SpaceTimeHeatDivFormulation form(spaceDim, epsilon);
+    form.initializeSolution(meshTopo, fieldPolyOrder);
+    
+    MeshPtr formMesh = form.solution()->mesh();
+    
+    GDAMinimumRule* gdaMinRule = dynamic_cast<GDAMinimumRule*>(formMesh->globalDofAssignment().get());
+    testContiguousGlobalDofNumbering(gdaMinRule, out, success);
+  }
+  
   void testSolvePoissonHangingNode(int spaceDim, PoissonFormulation::PoissonFormulationChoice formChoice,
                                    Teuchos::FancyOStream &out, bool &success)
   {
@@ -157,7 +239,6 @@ namespace
     FunctionPtr f = phi_exact->dx()->dx() + phi_exact->dy()->dy() + phi_exact->dz()->dz();
     rhs->addTerm(f * poissonForm.q());
     
-    // TODO: work out whether checkLocalGlobalConsistency() is valid on CG meshes
     if (! MeshTestUtility::checkLocalGlobalConsistency(mesh) )
     {
       cout << "FAILURE: 1-irregular Poisson 2D mesh fails local-to-global consistency check.\n";
@@ -1112,7 +1193,6 @@ namespace
     testCoarseBasisEqualsWeightedFineBasis(mesh, out, success);
   }
   
-  // This test fails.  Think of it as a warning (avoid 2-irregular meshes in 3D, at least...)
   TEUCHOS_UNIT_TEST( GDAMinimumRule, BasisMapsAgreePoisson3DHangingNode2Irregular_Slow)
   {
     int irregularity = 2;
@@ -1122,11 +1202,6 @@ namespace
     // for 2+-irregular meshes, conforming traces are not supported, so should use non-conforming.
     bool useConformingTraces = false;
     MeshPtr mesh = poissonIrregularMesh(spaceDim, irregularity, H1Order, useConformingTraces);
-    { // DEBUGGING:
-//      mesh->getTopology()->printAllEntities();
-//      GDAMinimumRule* minRule = dynamic_cast<GDAMinimumRule*>(mesh->globalDofAssignment().get());
-//      minRule->printGlobalDofInfo();
-    }
 
     testCoarseBasisEqualsWeightedFineBasis(mesh, out, success);
   }
@@ -1159,6 +1234,12 @@ namespace
     bool useConformingTraces = false;
     MeshPtr mesh = poissonIrregularMesh(spaceDim, irregularity, H1Order, useConformingTraces);
     testSubcellConstraintIsAncestor(mesh, out, success);
+  }
+  
+  TEUCHOS_UNIT_TEST( GDAMinimumRule, ContiguousGlobalDofNumberingComplexSpaceTimeMesh )
+  {
+    bool useConformingTraces = true;
+    testContiguousGlobalDofNumberingComplexSpaceTimeMesh(useConformingTraces, out, success);
   }
   
   TEUCHOS_UNIT_TEST( GDAMinimumRule, OneIrregularityEnforcement_2D)

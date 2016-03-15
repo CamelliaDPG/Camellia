@@ -9,6 +9,7 @@
 #ifndef Camellia_debug_MeshTestUtility_h
 #define Camellia_debug_MeshTestUtility_h
 
+#include "GDAMinimumRule.h"
 #include "Mesh.h"
 
 namespace Camellia
@@ -26,6 +27,13 @@ public:
   static bool checkMeshDofConnectivities(Teuchos::RCP<Mesh> mesh2DMaximumRule);
   static bool checkMeshConsistency(Teuchos::RCP<Mesh> mesh2DMaximumRule);
 
+  // ! Method for checking consistency of all constraints in minimum-rule mesh.  Checks on present rank only (non-communicating method)
+  static bool checkConstraintConsistency(MeshPtr meshMinimumRule);
+  
+  // ! Returns true if the indicated constrainingEntity is a (generalized) ancestor of the constrained entity in meshTopo.
+  static bool constraintIsConsistent(MeshTopologyViewPtr meshTopo, AnnotatedEntity &constrainingEntity,
+                                     int d, IndexType constrainedEntityIndex, bool requireConstrainingEntityBelongToActiveCell);
+  
   static bool fcsAgree(const Intrepid::FieldContainer<double> &fc1, const Intrepid::FieldContainer<double> &fc2, double tol, double &maxDiff); // redundant with / copied from TestSuite::fcsAgree()
   static bool neighborBasesAgreeOnSides(Teuchos::RCP<Mesh> mesh);
 

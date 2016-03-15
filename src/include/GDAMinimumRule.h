@@ -96,6 +96,8 @@ struct CellConstraints
 
 class GDAMinimumRule : public GlobalDofAssignment
 {
+  bool _checkConstraintConsistency = false;
+  
   BasisReconciliation _br;
   map<GlobalIndexType, IndexType> _cellDofOffsets; // (cellID -> first partition-local dof index for that cell)  within the partition, offsets for the owned dofs in cell
   map<GlobalIndexType, GlobalIndexType> _globalCellDofOffsets; // (cellID -> first global dof index for that cell)
@@ -105,11 +107,10 @@ class GDAMinimumRule : public GlobalDofAssignment
   GlobalIndexType _globalDofCount;
   
   bool _hasSpaceOnlyTrialVariable;
-
-  set<IndexType> _partitionFluxIndexOffsets;
-  set<IndexType> _partitionTraceIndexOffsets; // field indices are the complement of the other two
-
-  map<int,set<IndexType> > _partitionIndexOffsetsForVarID; // TODO: factor out _partitionFluxIndexOffsets and _partitionTraceIndexOffsets using this container.
+  
+  GlobalIndexType _partitionFieldDofCount;
+  GlobalIndexType _partitionFluxDofCount;
+  GlobalIndexType _partitionTraceDofCount;
 
   typedef map<int, vector<GlobalIndexType> > VarIDToDofIndices; // key: varID
   typedef map<unsigned, VarIDToDofIndices> SubCellOrdinalToMap; // key: subcell ordinal
@@ -136,6 +137,8 @@ class GDAMinimumRule : public GlobalDofAssignment
   CellPair cellContainingEntityWithLeastH1Order(int d, IndexType entityIndex);
   
   AnnotatedEntity* getConstrainingEntityInfo(GlobalIndexType cellID, CellConstraints &cellConstraints, VarPtr var, int d, int scord);
+  void getConstrainingEntityInfo(GlobalIndexType cellID, CellConstraints &cellConstraints, VarPtr var, int d, int scord,
+                                 AnnotatedEntity* &constrainingInfo, OwnershipInfo* &ownershipInfo, bool &spaceOnlyConstraint);
   
   void getGlobalDofIndices(GlobalIndexType cellID, int varID, int sideOrdinal,
                            Intrepid::FieldContainer<GlobalIndexType> &globalDofIndices);
@@ -177,6 +180,9 @@ public:
   // ! Default is false.  Cascading constraints work in 2D generally, and for *some* 3D meshes.  They are also somewhat more expensive.  For H^1-conforming meshes, when allowCascadingConstraints is false, meshes of at most 1-irregularity are supported.  See Mesh::enforceOneIrregularity().  For meshes in which only face (side) continuity enforced, arbitrary irregularity is supported.
   void setAllowCascadingConstraints(bool value);
   
+  // ! Default is false.  Checking constraint consistency is useful for debugging purposes, though.
+  void setCheckConstraintConsistency(bool value);
+  
   GlobalDofAssignmentPtr deepCopy();
 
   void didHRefine(const set<GlobalIndexType> &parentCellIDs);
@@ -203,10 +209,9 @@ public:
 
   set<GlobalIndexType> ownedGlobalDofIndicesForCell(GlobalIndexType cellID);
 
-  set<GlobalIndexType> partitionOwnedGlobalFieldIndices();
-  set<GlobalIndexType> partitionOwnedGlobalFluxIndices();
-  set<GlobalIndexType> partitionOwnedGlobalTraceIndices();
-  set<GlobalIndexType> partitionOwnedIndicesForVariables(set<int> varIDs);
+  GlobalIndexType numPartitionOwnedGlobalFieldIndices();
+  GlobalIndexType numPartitionOwnedGlobalFluxIndices();
+  GlobalIndexType numPartitionOwnedGlobalTraceIndices();
 
   void interpretLocalData(GlobalIndexType cellID, const Intrepid::FieldContainer<double> &localData,
                           Intrepid::FieldContainer<double> &globalData,

@@ -1133,15 +1133,17 @@ GlobalIndexType Mesh::numElementsOfType( Teuchos::RCP< ElementType > elemTypePtr
 
 GlobalIndexType Mesh::numFluxDofs()
 {
-  GlobalIndexType fluxDofsForPartition = _gda->partitionOwnedGlobalFluxIndices().size();
-  GlobalIndexType traceDofsForPartition = _gda->partitionOwnedGlobalTraceIndices().size();
+  GlobalIndexType fluxDofsForPartition = _gda->numPartitionOwnedGlobalFluxIndices();
+  GlobalIndexType traceDofsForPartition = _gda->numPartitionOwnedGlobalTraceIndices();
+//  GlobalIndexType fluxDofsForPartition = _gda->partitionOwnedGlobalFluxIndices().size();
+//  GlobalIndexType traceDofsForPartition = _gda->partitionOwnedGlobalTraceIndices().size();
 
   return MPIWrapper::sum(*Comm(), (GlobalIndexTypeToCast)(fluxDofsForPartition + traceDofsForPartition));
 }
 
 GlobalIndexType Mesh::numFieldDofs()
 {
-  GlobalIndexType fieldDofsForPartition = _gda->partitionOwnedGlobalFieldIndices().size();
+  GlobalIndexType fieldDofsForPartition = _gda->numPartitionOwnedGlobalFieldIndices();
   return MPIWrapper::sum(*Comm(),(GlobalIndexTypeToCast)fieldDofsForPartition);
 }
 

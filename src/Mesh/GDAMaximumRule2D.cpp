@@ -896,6 +896,32 @@ set<GlobalIndexType> GDAMaximumRule2D::globalDofIndicesForPartition(PartitionInd
   return _partitionedGlobalDofIndices[partitionNumber];
 }
 
+GlobalIndexType GDAMaximumRule2D::numPartitionOwnedGlobalFieldIndices()
+{
+  // there are MUCH more efficient ways to do this.  Since GDAMaximumRule2D is legacy code by now,
+  // we do not expect this implementation to see much use...
+  set<GlobalIndexType> indices = partitionOwnedGlobalFieldIndices();
+  return indices.size();
+}
+
+GlobalIndexType GDAMaximumRule2D::numPartitionOwnedGlobalFluxIndices()
+{
+  // there are MUCH more efficient ways to do this.  Since GDAMaximumRule2D is legacy code by now,
+  // we do not expect this implementation to see much use...
+  set<GlobalIndexType> indices = partitionOwnedGlobalFluxIndices();
+  return indices.size();
+  
+}
+
+GlobalIndexType GDAMaximumRule2D::numPartitionOwnedGlobalTraceIndices()
+{
+  // there are MUCH more efficient ways to do this.  Since GDAMaximumRule2D is legacy code by now,
+  // we do not expect this implementation to see much use...
+  set<GlobalIndexType> indices = partitionOwnedGlobalTraceIndices();
+  return indices.size();
+
+}
+
 set<GlobalIndexType> GDAMaximumRule2D::partitionOwnedGlobalFieldIndices()
 {
   int rank = _partitionPolicy->Comm()->MyPID();
@@ -1003,7 +1029,6 @@ set<GlobalIndexType> GDAMaximumRule2D::partitionOwnedGlobalTraceIndices()
   {
     GlobalIndexType cellID = *cellIt;
     ElementTypePtr elemTypePtr = elementType(cellID);
-    int sideCount = elemTypePtr->cellTopoPtr->getSideCount();
     vector< VarPtr >::iterator traceIt;
     for (traceIt = traceVars.begin(); traceIt != traceVars.end(); traceIt++)
     {
@@ -1019,7 +1044,6 @@ set<GlobalIndexType> GDAMaximumRule2D::partitionOwnedGlobalTraceIndices()
 
           if (partitionForGlobalDofIndex(globalIndex) == rank)
             traceIndices.insert(globalIndex);
-
         }
       }
     }

@@ -120,10 +120,10 @@ public:
   virtual GlobalIndexType globalCellIndex(GlobalIndexType cellID);
   virtual GlobalIndexType globalDofCount() = 0;
   virtual set<GlobalIndexType> globalDofIndicesForPartition(PartitionIndexType partitionNumber) = 0;
-  virtual set<GlobalIndexType> partitionOwnedIndicesForVariables(set<int> varIDs) = 0;
-  virtual set<GlobalIndexType> partitionOwnedGlobalFieldIndices() = 0;
-  virtual set<GlobalIndexType> partitionOwnedGlobalFluxIndices() = 0;
-  virtual set<GlobalIndexType> partitionOwnedGlobalTraceIndices() = 0;
+  
+  virtual GlobalIndexType numPartitionOwnedGlobalFieldIndices() = 0;
+  virtual GlobalIndexType numPartitionOwnedGlobalFluxIndices() = 0;
+  virtual GlobalIndexType numPartitionOwnedGlobalTraceIndices() = 0;
 
   virtual void interpretLocalData(GlobalIndexType cellID, const Intrepid::FieldContainer<double> &localData,
                                   Intrepid::FieldContainer<double> &globalData,
