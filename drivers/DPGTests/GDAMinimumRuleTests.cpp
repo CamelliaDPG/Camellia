@@ -10,6 +10,7 @@
 
 #include "BF.h"
 #include "CamelliaDebugUtility.h"
+#include "GDAMinimumRule.h"
 #include "GlobalDofAssignment.h"
 #include "GnuPlotUtil.h"
 #include "MeshFactory.h"
@@ -1067,6 +1068,9 @@ SolutionPtr GDAMinimumRuleTests::poissonExactSolution3DHangingNodes(int irregula
   // now, repeat the above, but with a 2-irregular mesh.
   vector<CellPtr> children = mesh->getTopology()->getCell(1)->children();
 
+  GDAMinimumRule* minRule = dynamic_cast<GDAMinimumRule*>(mesh->globalDofAssignment().get());
+  minRule->setAllowCascadingConstraints(true); // required for 2-irregular meshes
+  
   // childrenForSides outer vector: indexed by parent's sides; inner vector: (child index in children, index of child's side shared with parent)
   vector< vector< pair< unsigned, unsigned > > > childrenForSides = mesh->getTopology()->getCell(1)->refinementPattern()->childrenForSides();
   for (int sideOrdinal=0; sideOrdinal<childrenForSides.size(); sideOrdinal++)
@@ -1185,6 +1189,10 @@ bool GDAMinimumRuleTests::testHangingNodePoisson(bool useQuads)
     // then let's do one more test, with a 2-irregular mesh
     cellIDs.clear();
     cellIDs.insert(5); // TODO: eliminate this hard-coded cell ID in favor of one that we look up in terms of physical points...
+    
+    GDAMinimumRule* minRule = dynamic_cast<GDAMinimumRule*>(mesh->globalDofAssignment().get());
+    minRule->setAllowCascadingConstraints(true); // required for 2-irregular meshes
+    
     mesh->hRefine(cellIDs, RefinementPattern::regularRefinementPatternQuad());
     soln->solve();
 
@@ -1228,6 +1236,8 @@ bool GDAMinimumRuleTests::testHangingNodePoisson(bool useQuads)
     soln = poissonExactSolution(true, horizontalCellsInitialMesh, verticalCellsInitialMesh, H1Order, phi_exact, divideIntoTriangles);
 
     mesh = soln->mesh();
+    minRule = dynamic_cast<GDAMinimumRule*>(mesh->globalDofAssignment().get());
+    minRule->setAllowCascadingConstraints(true); // required for 2-irregular meshes
 
     // refine left cell:
     set<unsigned> cellsToRefine;
@@ -1378,6 +1388,8 @@ bool GDAMinimumRuleTests::testHangingNodeStokes(bool useQuads)
                                u1_exact, u2_exact, p_exact, divideIntoTriangles);
 
     mesh = soln->mesh();
+    GDAMinimumRule* minRule = dynamic_cast<GDAMinimumRule*>(mesh->globalDofAssignment().get());
+    minRule->setAllowCascadingConstraints(true); // required for 2-irregular meshes
 
     // refine left cell:
     set<unsigned> cellsToRefine;
