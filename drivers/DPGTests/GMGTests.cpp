@@ -546,7 +546,6 @@ bool GMGTests::testGMGOperatorP()
 
     set<GlobalIndexType> cellIDs = coarseMesh->cellIDsInPartition();
 
-    set<GlobalIndexType> coarseFieldIndices = coarseGDA->partitionOwnedGlobalFieldIndices();
     for (set<GlobalIndexType>::iterator cellIDIt=cellIDs.begin(); cellIDIt != cellIDs.end(); cellIDIt++)
     {
       GlobalIndexType cellID = *cellIDIt;
