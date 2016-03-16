@@ -3127,7 +3127,10 @@ SubCellDofIndexInfo & GDAMinimumRule::getOwnedGlobalDofIndices(GlobalIndexType c
           {
             TEUCHOS_TEST_FOR_EXCEPTION(true, std::invalid_argument, "Internal error: scInfo vector not big enough");
           }
-          scInfo[d][scord][var->ID()] = globalDofIndices;
+          if (dofOrdinalCount > 0)
+          {
+            scInfo[d][scord][var->ID()] = globalDofIndices;
+          }
         }
       }
       
@@ -3635,8 +3638,14 @@ void GDAMinimumRule::rebuildLookups()
         int scCount = topo->getSubcellCount(d);
         for (int scord=0; scord<scCount; scord++)
         {
-          vector<GlobalIndexType>* varDofs = &(*ownedGlobalDofIndices)[d][scord][var->ID()];
-          dofsForVariable.insert(varDofs->begin(),varDofs->end());
+          if ((*ownedGlobalDofIndices)[d].find(scord) != (*ownedGlobalDofIndices)[d].end())
+          {
+            if ((*ownedGlobalDofIndices)[d][scord].find(var->ID()) != (*ownedGlobalDofIndices)[d][scord].end())
+            {
+              vector<GlobalIndexType>* varDofs = &(*ownedGlobalDofIndices)[d][scord][var->ID()];
+              dofsForVariable.insert(varDofs->begin(),varDofs->end());
+            }
+          }
         }
       }
       switch (var->varType()) {
@@ -3721,10 +3730,16 @@ void GDAMinimumRule::rebuildLookups()
         int scCount = topo->getSubcellCount(d);
         for (int scord=0; scord<scCount; scord++)
         {
-          vector<GlobalIndexType>* varDofs = &(*ownedGlobalDofIndices)[d][scord][var->ID()];
-          for (vector<GlobalIndexType>::iterator varDofIt = varDofs->begin(); varDofIt != varDofs->end(); varDofIt++)
+          if ((*ownedGlobalDofIndices)[d].find(scord) != (*ownedGlobalDofIndices)[d].end())
           {
-            *varDofIt += globalCellDofOffset;
+            if ((*ownedGlobalDofIndices)[d][scord].find(var->ID()) != (*ownedGlobalDofIndices)[d][scord].end())
+            {
+              vector<GlobalIndexType>* varDofs = &(*ownedGlobalDofIndices)[d][scord][var->ID()];
+              for (vector<GlobalIndexType>::iterator varDofIt = varDofs->begin(); varDofIt != varDofs->end(); varDofIt++)
+              {
+                *varDofIt += globalCellDofOffset;
+              }
+            }
           }
         }
       }
