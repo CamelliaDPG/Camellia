@@ -214,6 +214,9 @@ void GMGOperator::computeCoarseStiffnessMatrix(Epetra_CrsMatrix *fineStiffnessMa
     //  Epetra_Map domain_P = _fineCoarseRolesSwapped ? _P->RangeMap() : _P->DomainMap();
     //    Epetra_Map domain_P = _coarseSolution->getPartitionMap();
     Epetra_Map domain_P = _P->DomainMap();
+//    Epetra_Map range_P = _P->RangeMap();
+//    printMapSummary(domain_P, "_P->DomainMap()");
+//    printMapSummary(range_P, "_P->RangeMap()");
     Teuchos::RCP<Epetra_CrsMatrix> PT_A_P = Teuchos::rcp( new Epetra_CrsMatrix(::Copy, domain_P, maxRowSize) );
     
     // compute P^T * A * P
@@ -366,6 +369,74 @@ void GMGOperator::computeResidual(const Epetra_MultiVector& Y, Epetra_MultiVecto
   }
 }
 
+// ! Computed as 1/(1+N), where N = max #neighbors of any cell's overlap region.
+double GMGOperator::computeSchwarzSmootherWeight()
+{
+  // (For IfPack, this weight may not be exactly correct, but it's probably kinda close.  Likely we will deprecate support for
+  // IFPACK_ADDITIVE_SCHWARZ soon.)
+  
+  // Suppose that E is a matrix with rows and columns corresponding to the elements, with 0s for disconnected elements, and 1s for
+  // connected elements (an element is connected to itself and its face neighbors).
+  // Conjecture: rho(E) is bounded above by the maximum side count of an element plus 1.
+  // Based on results in Smith et al., I *think* that we can bound the maximum eigenvalue of S*A by 1 + rho(E)
+  set<GlobalIndexType> myCellIndices = _fineMesh->globalDofAssignment()->cellsInPartition(-1);
+  Epetra_CommPtr Comm = _fineMesh->Comm();
+  
+  int localMaxNeighbors = 0;
+  MeshTopologyViewPtr fineMeshTopo = _fineMesh->getTopology();
+  for (GlobalIndexType cellIndex : myCellIndices)
+  {
+    set<GlobalIndexType> subdomainCellsAndNeighbors = OverlappingRowMatrix::overlappingCells(cellIndex, _fineMesh, _smootherOverlap,
+                                                                                             _hierarchicalNeighborsForSchwarz,
+                                                                                             _dimensionForSchwarzNeighborRelationship);
+    
+    set<GlobalIndexType> subdomainNeighbors;
+    for (GlobalIndexType subdomainCellIndex : subdomainCellsAndNeighbors)
+    {
+      CellPtr subdomainCell = _fineMesh->getTopology()->getCell(subdomainCellIndex);
+      int sideCount = subdomainCell->getSideCount();
+      for (int sideOrdinal=0; sideOrdinal<sideCount; sideOrdinal++)
+      {
+        pair<GlobalIndexType,unsigned> neighborInfo = subdomainCell->getNeighborInfo(sideOrdinal, fineMeshTopo);
+        GlobalIndexType neighborCellID = neighborInfo.first;
+        if (neighborCellID == -1) continue;
+        unsigned neighborSideOrdinal = neighborInfo.second;
+        CellPtr neighbor = fineMeshTopo->getCell(neighborCellID);
+        if (!neighbor->isParent(fineMeshTopo))
+        {
+          subdomainNeighbors.insert(neighborCellID);
+        }
+        else
+        {
+          bool leafCellsOnly = true;
+          vector<pair<GlobalIndexType,unsigned>> neighborDescendentsInfo = neighbor->getDescendantsForSide(neighborSideOrdinal, fineMeshTopo, leafCellsOnly);
+          for (auto neighborDescendentInfo : neighborDescendentsInfo)
+          {
+            subdomainNeighbors.insert(neighborDescendentInfo.first);
+          }
+        }
+      }
+    }
+    
+    subdomainCellsAndNeighbors.insert(subdomainNeighbors.begin(),subdomainNeighbors.end());
+//    {
+//      // DEBUGGING
+//      if (localMaxNeighbors < subdomainCellsAndNeighbors.size())
+//      {
+//        cout << "cell " << cellIndex << " has " << subdomainCellsAndNeighbors.size() << " neighbors.\n";
+//        print("neighbors", subdomainCellsAndNeighbors);
+//      }
+//    }
+    localMaxNeighbors = max(localMaxNeighbors,(int)subdomainCellsAndNeighbors.size());
+  }
+  int globalMaxNeighbors;
+  Comm->MaxAll(&localMaxNeighbors, &globalMaxNeighbors, 1);
+  
+  double weight = 1.0 / (globalMaxNeighbors + 1); // aiming for a weight that guarantees max eig of weight * S * A is 1.0
+  
+  return weight;
+}
+
 void GMGOperator::constructLocalCoefficientMaps()
 {
   narrate("constructLocalCoefficientMaps()");
@@ -450,9 +521,14 @@ Teuchos::RCP<Epetra_FECrsMatrix> GMGOperator::constructProlongationOperator(Teuc
         }
       }
     }
-    
+
+    // TODO: consider changing this to use an Epetra_Map with a single entry (given the usage below, this should be possible).
     Epetra_Map    localXMap(myGlobalIndices.size(), myGlobalIndices.size(), &myGlobalIndices[0], 0, SerialComm);
     Teuchos::RCP<Epetra_Vector> XLocal = Teuchos::rcp( new Epetra_Vector(localXMap) );
+    
+//    Epetra_Map    mapOneElement(1,1,&myGlobalIndices[0], 0, SerialComm);
+//    Teuchos::RCP<Epetra_Vector> oneElementVector = Teuchos::rcp( new Epetra_Vector(mapOneElement) );
+//    (*oneElementVector)[0] = 1.0;
     
     // to (possibly) reduce the cost of allocating these containers, declare them outside and resize inside as needed
     FieldContainer<GlobalIndexTypeToCast> coarseGlobalIndices;
@@ -467,8 +543,9 @@ Teuchos::RCP<Epetra_FECrsMatrix> GMGOperator::constructProlongationOperator(Teuc
     for (int localID=0; localID < fineMap.NumMyElements(); localID++)
     {
       GlobalIndexTypeToCast globalRow = fineMap.GID(localID);
-      
       map<GlobalIndexTypeToCast, double> coarseXVectorLocal; // rank-local representation, so we just use an STL map.  Has the advantage of growing as we need it to.
+//      mapOneElement = Epetra_Map(1,1,&myGlobalIndices[localID],0,SerialComm);
+//      oneElementVector->ReplaceMap(mapOneElement);
       (*XLocal)[localID] = 1.0;
       
       if (globalRow >= firstFineConstraintRowIndex)
@@ -496,16 +573,29 @@ Teuchos::RCP<Epetra_FECrsMatrix> GMGOperator::constructProlongationOperator(Teuc
            The following is a bit backwards; it should be that DofInterpreter itself could tell us which variables
            and sides belong to the provided global degree of freedom.  But adding this is a change that would take more
            effort than the below: here, we take the local coefficients and work out which variable matches.
+           
+           (For GDAMinimumRule, it wouldn't be *that* much effort to go from global dof index to variable; we have
+           lookup tables and at worst we could do a brute force search through the lookup table for the fine cell.
+           But in fact the brute force search wouldn't likely be much/any cheaper than variablesWithNonZeroEntries() below.)
            */
           fineDofInterpreter->interpretGlobalCoefficients(fineCellID, fineCellCoefficients, *XLocal);
+//          fineDofInterpreter->interpretGlobalCoefficients(fineCellID, fineCellCoefficients, *oneElementVector);
           
 //          cout << "fineCellCoefficients:\n" << fineCellCoefficients;
           
           vector<pair<int,vector<int>>> fineNonZeroVarIDs = fineTrialOrdering->variablesWithNonZeroEntries(fineCellCoefficients);
-          TEUCHOS_TEST_FOR_EXCEPTION(fineNonZeroVarIDs.size() != 1, std::invalid_argument, "There should be exactly one variable corresponding to a given global dof ordinal in fine mesh");
+          if (fineNonZeroVarIDs.size() != 1)
+          {
+            GDAMinimumRule* minRule = dynamic_cast<GDAMinimumRule*>(_fineMesh->globalDofAssignment().get());
+            minRule->printGlobalDofInfo();
+            fineTrialOrdering->print(cout);
+            cout << fineCellCoefficients;
+            TEUCHOS_TEST_FOR_EXCEPTION(fineNonZeroVarIDs.size() != 1, std::invalid_argument, "There should be exactly one variable corresponding to a given global dof ordinal in fine mesh");
+          }
           
           LocalDofMapperPtr fineMapper = getLocalCoefficientMap(fineCellID);
           GlobalIndexType coarseCellID = getCoarseCellID(fineCellID);
+          
           if (_fineCoarseRolesSwapped && (coarseCellID != fineCellID))
           {
             // then getLocalCoefficientMap() will have gotten the wrong thing.
@@ -537,6 +627,7 @@ Teuchos::RCP<Epetra_FECrsMatrix> GMGOperator::constructProlongationOperator(Teuc
               {
                 basisCoefficients[basisOrdinal] = coarseCellCoefficients[(*localDofIndices)[basisOrdinal]];
               }
+              
               coarseDofInterpreter->interpretLocalBasisCoefficients(coarseCellID, varID, sideOrdinal, basisCoefficients,
                                                                     globalCoefficients, globalDofIndices);
               
@@ -575,10 +666,11 @@ Teuchos::RCP<Epetra_FECrsMatrix> GMGOperator::constructProlongationOperator(Teuc
       coarseGlobalIndices.resize(coarseXVectorLocal.size());
       coarseGlobalValues.resize(coarseXVectorLocal.size());
       int nnz = 0; // nonzero entries
+      double tol = 1e-13; // count anything less as a zero entry
       //      cout << "P global row " << globalRow << ": ";
       for (map<GlobalIndexTypeToCast, double>::iterator coarseXIt=coarseXVectorLocal.begin(); coarseXIt != coarseXVectorLocal.end(); coarseXIt++)
       {
-        if (coarseXIt->second != 0.0)
+        if (abs(coarseXIt->second) > tol)
         {
           coarseGlobalIndices[nnz] = coarseXIt->first;
           coarseGlobalValues[nnz] = coarseXIt->second;
@@ -596,9 +688,69 @@ Teuchos::RCP<Epetra_FECrsMatrix> GMGOperator::constructProlongationOperator(Teuc
     }
   }
   
+//  cout << "Fine mesh has " << _fineMesh->numGlobalDofs() << " global dofs.\n";
+  
   //  cout << "before FillComplete(), P has " << P->NumGlobalRows64() << " rows and " << P->NumGlobalCols64() << " columns.\n";
   
   P->GlobalAssemble(coarseMap, fineMap);
+  
+  const static bool DEBUGGING = false;
+  if (DEBUGGING)
+  { // DEBUGGING
+    // check whether all domain map (coarseMap) GIDs are present as column indices
+    // (they should be, but it appears there are cases when they aren't)
+    int numDomainElements = coarseMap.NumMyElements();
+    
+    int numMyRows = P->NumMyRows();
+    
+    vector<bool> localGID(numDomainElements,false); // track which LIDs we have found
+    int numLocalColGIDs = 0;
+    
+    vector<int> colIndices;
+    vector<double> values;
+    for (int i=0; i<numMyRows; i++)
+    {
+      int numRowEntries = P->NumMyEntries(i);
+      colIndices.resize(numRowEntries);
+      values.resize(numRowEntries);
+      P->ExtractMyRowCopy(i, numRowEntries, numRowEntries, &values[0], &colIndices[0]);
+      for (int j=0; j<numRowEntries; j++)
+      {
+        int GID = colIndices[j];
+        if (i==8622)
+        {
+          cout << "Row 8622 has column entry for GID " << GID << endl;
+        }
+        
+        int LID = coarseMap.LID(GID);
+        if (LID != -1)
+        {
+          bool previouslyFound = localGID[LID];
+          if (!previouslyFound)
+          {
+            localGID[LID] = true;
+            numLocalColGIDs++;
+          }
+        }
+      }
+    }
+    cout << "Found " << numLocalColGIDs << " of " << numDomainElements << " in coarseMap.\n";
+    
+    if (numLocalColGIDs != numDomainElements)
+    {
+      cout << "Missing coarse GIDs: ";
+      for (int colLID=0; colLID<numDomainElements; colLID++)
+      {
+        if (localGID[colLID]) continue;
+        int GID = coarseMap.GID(colLID);
+        cout << GID << " ";
+      }
+      cout << endl;
+      
+      GDAMinimumRule* gdaMinRuleCoarseMesh = dynamic_cast<GDAMinimumRule *>(_coarseMesh->globalDofAssignment().get());
+      gdaMinRuleCoarseMesh->printGlobalDofInfo();
+    }
+  }
   
   if (condensedDofInterpreterFine != NULL)
   {
@@ -1402,7 +1554,9 @@ Teuchos::RCP<Epetra_MultiVector> GMGOperator::getSmootherWeightVector()
 
 int GMGOperator::Apply(const Epetra_MultiVector& X, Epetra_MultiVector& Y) const
 {
-  TEUCHOS_TEST_FOR_EXCEPTION(true, std::invalid_argument, "Unsupported method.");
+  // Belos thinks preconditioners *are* inverses, where Aztec thinks they're forward operators.  We do the same thing regardless of which you call...
+  return ApplyInverse(X,Y);
+  //  TEUCHOS_TEST_FOR_EXCEPTION(true, std::invalid_argument, "Unsupported method.");}
 }
 
 int GMGOperator::ApplyInverse(const Epetra_MultiVector& X_in, Epetra_MultiVector& Y) const
@@ -2213,7 +2367,7 @@ void GMGOperator::setUpSmoother(Epetra_CrsMatrix *fineStiffnessMatrix)
     cout << "WARNING: In GMGOperator (level " << myLevel << "), smoother->Compute() returned with err = " << err << endl;
   }
 
-  if (choice == CAMELLIA_ADDITIVE_SCHWARZ)
+  if ((choice == CAMELLIA_ADDITIVE_SCHWARZ) && _useSchwarzDiagonalWeight)
   {
     // setup weight vector:
     const Epetra_Map* rangeMap = NULL;
@@ -2268,68 +2422,26 @@ void GMGOperator::setUpSmoother(Epetra_CrsMatrix *fineStiffnessMatrix)
 //    printMapSummary(*rangeMap, "Schwarz matrix range map");
 //    cout << *_smootherWeight_sqrt;
   }
-
-//  static bool haveWarnedAboutOldSchwarzWeight = false;
-//  if (!_hierarchicalNeighborsForSchwarz && ((_useSchwarzScalingWeight) && ((_smootherType == CAMELLIA_ADDITIVE_SCHWARZ) || (_smootherType == IFPACK_ADDITIVE_SCHWARZ))))
-//  {
-//    int rank = Teuchos::GlobalMPISession::getRank();
-//    if ((rank==0) && !haveWarnedAboutOldSchwarzWeight)
-//    {
-//      cout << "Note: as an experiment, trying Fischer & Lottes's Schwarz scaling when _hierarchicalNeighborsForSchwarz is false.\n";
-//      haveWarnedAboutOldSchwarzWeight = true;
-//    }
-//
-//  }
   
-//  if ((_useSchwarzScalingWeight && _hierarchicalNeighborsForSchwarz) && ((_smootherType == CAMELLIA_ADDITIVE_SCHWARZ) || (_smootherType == IFPACK_ADDITIVE_SCHWARZ)))
   if (_useSchwarzScalingWeight && ((_smootherType == CAMELLIA_ADDITIVE_SCHWARZ) || (_smootherType == IFPACK_ADDITIVE_SCHWARZ)))
   {
     // (For IfPack, this weight may not be exactly correct, but it's probably kinda close.  Likely we will deprecate support for
     // IFPACK_ADDITIVE_SCHWARZ soon.)
     
-    // Suppose that E is a matrix with rows and columns corresponding to the elements, with 0s for disconnected elements, and 1s for
-    // connected elements (an element is connected to itself and its face neighbors).
-    // Conjecture: rho(E) is bounded above by the maximum side count of an element plus 1.
-    // Based on results in Smith et al., I *think* that we can bound the maximum eigenvalue of S*A by 1 + rho(E)
-    set<GlobalIndexType> myCellIndices = _fineMesh->globalDofAssignment()->cellsInPartition(-1);
-    Epetra_MpiComm Comm(MPI_COMM_WORLD);
+//    double oldWeight = _smootherWeight;
     
-    double oldSmootherWeight = _smootherWeight;
+    _smootherWeight = computeSchwarzSmootherWeight();
     
-    int localMaxNeighbors = 0;
-    for (GlobalIndexType cellIndex : myCellIndices)
-    {
-      set<GlobalIndexType> subdomainCellsAndNeighbors = OverlappingRowMatrix::overlappingCells(cellIndex, _fineMesh, _smootherOverlap,
-                                                                                              _hierarchicalNeighborsForSchwarz,
-                                                                                               _dimensionForSchwarzNeighborRelationship);
-      
-      set<GlobalIndexType> subdomainNeighbors;
-      for (GlobalIndexType subdomainCellIndex : subdomainCellsAndNeighbors)
-      {
-        CellPtr subdomainCell = _fineMesh->getTopology()->getCell(subdomainCellIndex);
-        vector<CellPtr> neighborCells = subdomainCell->getNeighbors(_fineMesh->getTopology());
-        for (CellPtr neighbor : neighborCells)
-        {
-          subdomainNeighbors.insert(neighbor->cellIndex());
-        }
-      }
-      
-      subdomainCellsAndNeighbors.insert(subdomainNeighbors.begin(),subdomainNeighbors.end());
-      localMaxNeighbors = max(localMaxNeighbors,(int)subdomainNeighbors.size());
-    }
-    int globalMaxNeighbors;
-    Comm.MaxAll(&localMaxNeighbors, &globalMaxNeighbors, 1);
-    
-    _smootherWeight = 1.0 / (globalMaxNeighbors + 1); // aiming for a weight that guarantees max eig of weight * S * A is 1.0
-    
-    int rank = Teuchos::GlobalMPISession::getRank();
-    static bool haveWarned = false;
-    if (!haveWarned && (rank==0))
-    {
-      cout << "NOTE: using new approach to Schwarz scaling weight, based on Nate's conjecture regarding the spectral radius of the subdomain connectivity matrix and some results in Smith et al.";
-      cout << " First _smootherWeight value: " << _smootherWeight << " (old weight was " << oldSmootherWeight << ").\n";
-      haveWarned = true;
-    }
+//    int rank = Teuchos::GlobalMPISession::getRank();
+//    static bool haveWarned = false;
+//    if (!haveWarned && (rank==0))
+//    {
+//      cout << "NOTE: using new approach to Schwarz scaling weight, based on Nate's conjecture regarding the spectral radius of the subdomain connectivity matrix and some results in Smith et al.";
+//      cout << " First _smootherWeight value: " << _smootherWeight << " (previous weight was " << oldWeight << ").\n";
+//      haveWarned = true;
+//    }
+    // DEBUGGING
+//    cout << "_smootherWeight value: " << _smootherWeight << " (previous weight was " << oldWeight << ").\n";
   }
   
   _smoother = smoother;

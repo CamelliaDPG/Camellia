@@ -324,6 +324,8 @@ public:
   void setSmootherType(SmootherChoice smootherType);
   void setSmootherOverlap(int overlap);
 
+  // ! Computed as 1/(1+N), where N = max #neighbors of any cell's overlap region.
+  double computeSchwarzSmootherWeight();
   // ! smoother weight is applied to each application of the smoother. Default = 1.0
   double getSmootherWeight();
   // ! smoother weight is applied to each application of the smoother. Default = 1.0
