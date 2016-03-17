@@ -1105,6 +1105,8 @@ namespace
     MeshGeometryPtr geometry = Teuchos::rcp( new MeshGeometry(vertices, elementVertices, {triangle}) );
     MeshTopologyPtr meshTopo = Teuchos::rcp( new MeshTopology(geometry));
     
+    out << "**** First mesh ****\n";
+    
     // create a problematic mesh of a particular sort: refine once, then refine the interior element.  Then refine the interior element of the refined element.
     IndexType cellIDToRefine = 0, nextCellIndex = 1;
     int interiorChildOrdinal = 1; // interior child has index 1 in children
@@ -1125,15 +1127,26 @@ namespace
     PoissonFormulation poissonForm(spaceDim, useConformingTraces);
     MeshPtr mesh = Teuchos::rcp( new Mesh(meshTopo, poissonForm.bf(), H1Order, delta_k) );
     
-    int numElements = mesh->numElements();
-//    cout << "numElements: " << numElements << endl;
     // The above mesh will cause some cascading constraints, which the new getBasisMap() can't
     // handle.  We have added logic to deal with this case to Mesh::enforceOneIrregularity().
     mesh->enforceOneIrregularity();
+
+    testCoarseBasisEqualsWeightedFineBasis(mesh, out, success);
     
+    // now, try another, simpler (in some ways, anyway) mesh:
+    // (this is one for which GMGOperator has had problems with an H^1-conforming quadratic trace basis)
+    out << "**** Second mesh ****\n";
+    bool useTriangles = true;
+    PoissonFormulation form(spaceDim, useConformingTraces);
     
-    numElements = mesh->numElements();
-//    cout << "numElements: " << numElements << endl;
+    vector<double> dimensions = {1.0,1.0};
+    vector<int> elementCounts = {1,2};
+    
+    mesh = MeshFactory::quadMeshMinRule(form.bf(), H1Order, delta_k, dimensions[0], dimensions[1],
+                                        elementCounts[0], elementCounts[1], useTriangles);
+    
+    set<GlobalIndexType> cellsToRefine = {2};
+    mesh->hRefine(cellsToRefine);
     
     testCoarseBasisEqualsWeightedFineBasis(mesh, out, success);
   }
@@ -1240,6 +1253,116 @@ namespace
   {
     bool useConformingTraces = true;
     testContiguousGlobalDofNumberingComplexSpaceTimeMesh(useConformingTraces, out, success);
+  }
+  
+  TEUCHOS_UNIT_TEST( GDAMinimumRule, InterpretLocalBasisCoefficientsHangingNode_Triangles )
+  {
+    /*
+     This test replicates an issue that caused problems for GMGOperator.
+     
+     ____________
+     |         /|
+     |        / |
+     |       /  |
+     |      /   |
+     |     /____|
+     |    /|    |
+     |   / |   /|
+     |  /  |  / |
+     | /   | /  |
+     |/____|/___| <-- This vertex dof is one we've had trouble with
+     |         /|
+     |        / |
+     |       /  |
+     |      /   |
+     |     /    |
+     |    /     |
+     |   /      |
+     |  /       |
+     | /        |
+     |/_________|
+     
+     */
+    int spaceDim = 2;
+    bool useConformingTraces = true;
+    bool useTriangles = true;
+    PoissonFormulation form(spaceDim, useConformingTraces);
+    
+    vector<double> dimensions = {1.0,1.0};
+    vector<int> elementCounts = {1,2};
+    
+    int H1Order = 2, delta_k = 1;
+    MeshPtr mesh = MeshFactory::quadMeshMinRule(form.bf(), H1Order, delta_k, dimensions[0], dimensions[1],
+                                                elementCounts[0], elementCounts[1], useTriangles);
+    
+    GDAMinimumRule* minRule = dynamic_cast<GDAMinimumRule*>(mesh->globalDofAssignment().get());
+    
+    set<GlobalIndexType> cellsToRefine = {2};
+    mesh->hRefine(cellsToRefine);
+    
+    // would be better to get the cellID and vertex from the geometry rather than hardcoding, in case
+    // the numbering of these things changes.
+    GlobalIndexType cellID = 6; // cell 6 is the bottom-right guy in the refined cell
+    unsigned cellVertex = 1;    // the problematic vertex pointed out above
+    VarPtr phi_hat = form.phi_hat(); // H^1-conforming variable
+    unsigned vertexDim = 0;
+    unsigned cellSideOrdinal = 0; // side 0 is the one with the hanging node
+    
+    set<GlobalIndexType> myCells = mesh->cellIDsInPartition();
+    // Since globalDofIndicesForVarOnSubcell() is only guaranteed to work for a local cell, we only run this test on the owning
+    // MPI rank.
+    if (myCells.find(cellID) != myCells.end())
+    {
+      // we start by representing the global dof for the problematic vertex in terms of the local basis on the refined cell.
+      set<GlobalIndexType> globalIndices = minRule->globalDofIndicesForVarOnSubcell(phi_hat->ID(), cellID, vertexDim, cellVertex);
+      // there should be exactly one globalIndex for the vertex
+      TEST_EQUALITY(globalIndices.size(), 1);
+      int vertexGlobalDofIndex = *globalIndices.begin();
+     
+      Epetra_SerialComm SerialComm; // rank-local map
+      Epetra_Map    localXMap(1, 1, &vertexGlobalDofIndex, 0, SerialComm);
+      Teuchos::RCP<Epetra_Vector> XLocal = Teuchos::rcp( new Epetra_Vector(localXMap) );
+      (*XLocal)[0] = 1.0;
+      
+      FieldContainer<double> localCoefficients;
+      minRule->interpretGlobalCoefficients(cellID, localCoefficients, *XLocal);
+      
+      DofOrderingPtr trialOrder = mesh->getElementType(cellID)->trialOrderPtr;
+      BasisPtr basis = trialOrder->getBasis(phi_hat->ID(), cellSideOrdinal);
+      FieldContainer<double> localBasisCoefficients(basis->getCardinality());
+      
+      for (int basisOrdinal=0; basisOrdinal<basis->getCardinality(); basisOrdinal++)
+      {
+        int localDofIndex = trialOrder->getDofIndex(phi_hat->ID(), basisOrdinal, cellSideOrdinal);
+        localBasisCoefficients[basisOrdinal] = localCoefficients[localDofIndex];
+      }
+      
+      FieldContainer<double> globalCoefficients;
+      FieldContainer<GlobalIndexType> globalDofIndices;
+      minRule->interpretLocalBasisCoefficients(cellID, phi_hat->ID(), cellSideOrdinal,
+                                               localBasisCoefficients, globalCoefficients, globalDofIndices);
+      
+      // expect 1.0 weight for vertexGlobalDofIndex, 0 for any others
+      bool foundVertexDofIndex = false;
+      double tol = 1e-13;
+      for (int i=0; i<globalDofIndices.size(); i++)
+      {
+        if (globalDofIndices[i] == vertexGlobalDofIndex)
+        {
+          foundVertexDofIndex = true;
+          TEST_FLOATING_EQUALITY(globalCoefficients[i], (*XLocal)[0], tol);
+        }
+        else
+        {
+          TEST_COMPARE(abs(globalCoefficients[i]), <, tol);
+        }
+      }
+      if (!foundVertexDofIndex)
+      {
+        success = false;
+        out << "vertexGlobalDofIndex " << vertexGlobalDofIndex << " not mapped by interpretLocalBasisCoefficients(): FAILED\n";
+      }
+    }
   }
   
   TEUCHOS_UNIT_TEST( GDAMinimumRule, OneIrregularityEnforcement_2D)
