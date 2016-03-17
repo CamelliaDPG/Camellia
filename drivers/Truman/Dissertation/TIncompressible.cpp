@@ -645,6 +645,27 @@ int main(int argc, char *argv[])
       int temporalDivisions = 1;
       meshTopo = MeshFactory::spaceTimeMeshTopology(meshTopo, t0, t1, temporalDivisions);
     }
+    {
+      // DEBUGGING
+      // manual refinements in an effort to replicate an issue on the first solve.
+      // 1. Uniform refinement
+      IndexType nextElement = meshTopo->cellCount();
+      set<IndexType> cellsToRefine = meshTopo->getActiveCellIndices();
+      CellTopoPtr cellTopo = meshTopo->getCell(0)->topology();
+      RefinementPatternPtr refPattern = RefinementPattern::regularRefinementPattern(cellTopo);
+      for (IndexType cellIndex : cellsToRefine)
+      {
+        meshTopo->refineCell(cellIndex, refPattern, nextElement);
+        nextElement += refPattern->numChildren();
+      }
+      // 2. Selective refinement
+      cellsToRefine = {4,15,21,30};
+      for (IndexType cellIndex : cellsToRefine)
+      {
+        meshTopo->refineCell(cellIndex, refPattern, nextElement);
+        nextElement += refPattern->numChildren();
+      }
+    }
   }
   else if (problemName == "Cylinder")
   {
