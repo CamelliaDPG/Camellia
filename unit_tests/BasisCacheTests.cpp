@@ -9,11 +9,14 @@
 #include "Teuchos_UnitTestHarness.hpp"
 
 #include "BasisCache.h"
-
-#include "SerialDenseWrapper.h"
-
+#include "BasisFactory.h"
+#include "BasisSumFunction.h"
 #include "CamelliaCellTools.h"
 #include "CellTopology.h"
+#include "MeshFactory.h"
+#include "PoissonFormulation.h"
+#include "SerialDenseWrapper.h"
+#include "Solution.h"
 
 #include "Intrepid_CellTools.hpp"
 #include "Intrepid_FunctionSpaceTools.hpp"
@@ -495,4 +498,224 @@ TEUCHOS_UNIT_TEST( BasisCache, SetRefCellPointsSpaceTimeSide )
     TEST_ASSERT(maxDiff < tol);
   }
 }
+  
+  
+  TEUCHOS_UNIT_TEST( BasisCache, TransformedGradientValues )
+  {
+    vector<double> scales = {2,4,8};
+    CellTopoPtr cellTopo = CellTopology::hexahedron();
+    int spaceDim = cellTopo->getDimension();
+    int nodeCount = cellTopo->getNodeCount();
+    Intrepid::FieldContainer<double> cellNodes(nodeCount,spaceDim);
+    CamelliaCellTools::refCellNodesForTopology(cellNodes, cellTopo);
+    for (int node = 0; node < nodeCount; node++)
+    {
+      for (int d = 0; d < spaceDim; d++)
+      {
+        cellNodes(node,d) *= scales[d];
+      }
+    }
+    cellNodes.resize(1, nodeCount, spaceDim);
+    
+    int H1Order = 3;
+    BasisCachePtr basisCache = BasisCache::basisCacheForCellTopology(cellTopo, H1Order, cellNodes);
+    Camellia::EOperator op = OP_GRAD;
+    Intrepid::EOperator opIntrepid = OPERATOR_GRAD;
+    BasisPtr basis = BasisFactory::basisFactory()->getBasis(H1Order, cellTopo, Camellia::FUNCTION_SPACE_HGRAD);
+    int basisCardinality = basis->getCardinality();
+    
+    // get gradients in reference space
+    int numPoints = basisCache->getRefCellPoints().dimension(0);
+    FieldContainer<double> values(basisCardinality, numPoints, spaceDim);
+    basis->getValues(values, basisCache->getRefCellPoints(), opIntrepid);
+    
+    // if x dimension has doubled, then we expect d/dx to be scaled by 1/2
+    // scale values accordingly
+    for (int basisOrdinal=0; basisOrdinal < basisCardinality; basisOrdinal++)
+    {
+      for (int pointOrdinal=0; pointOrdinal < numPoints; pointOrdinal++)
+      {
+        for (int d=0; d<spaceDim; d++)
+        {
+          values(basisOrdinal,pointOrdinal,d) *= 1.0 / scales[d];
+        }
+      }
+    }
+    
+    FieldContainer<double> valuesActual = *basisCache->getTransformedValues(basis, op);
+    TEST_COMPARE_FLOATING_ARRAYS(values, valuesActual, 1e-14);
+  }
+  
+  void testProjectedFunctionLaplacian(int spaceDim, Teuchos::FancyOStream &out, bool &success)
+  {
+    /*
+     Take arbitrary scalar function f with known Laplacian.
+     
+     Project onto a mesh (using BasisSumFunction).
+     
+     Compute Laplacian of the basis representation of f.
+     
+     Compare with the known Laplacian of f.
+     
+     */
+    
+    // start by setting up a mesh
+    vector<double> scales = {2,4,8};
+    vector<double> dimensions;
+    int meshWidth = 1; // just a single element should be a fine test
+    vector<int> elementCounts(spaceDim,meshWidth);
+    for (int d=0; d<spaceDim; d++)
+    {
+      dimensions.push_back(scales[d]);
+    }
+    
+    bool conformingTraces = true;
+    PoissonFormulation form(spaceDim, conformingTraces, PoissonFormulation::CONTINUOUS_GALERKIN);
+    
+    int H1Order = 4;
+    MeshPtr mesh = MeshFactory::rectilinearMesh(form.bf(), dimensions, elementCounts, H1Order);
+    
+    FunctionPtr x3 = Function::xn(3); // x^3
+    FunctionPtr y2 = Function::yn(2); // y^2
+    FunctionPtr z4 = Function::zn(4); // z^4
+    FunctionPtr f, expected_laplacian;
+    if (spaceDim == 1)
+    {
+      f = x3;
+      expected_laplacian = 6 * Function::xn(1);
+    }
+    else if (spaceDim == 2)
+    {
+      f = x3 + y2;
+      expected_laplacian = 6 * Function::xn(1) + 2;
+    }
+    else if (spaceDim == 3)
+    {
+      f = x3 + y2 + z4 / (12 * scales[2] * scales[2]);
+      expected_laplacian = 6 * Function::xn(1) + 2 + Function::zn(2) / (scales[2] * scales[2]);
+    }
+    // sanity check that the Function's laplacian matches the expected
+    FunctionPtr f_laplacian = f->dx()->dx() + f->dy()->dy() + f->dz()->dz();
+    double tol = 1e-11; // 3D test requires looser tolerance
+    double err = (f_laplacian - expected_laplacian)->l2norm(mesh);
+    TEST_COMPARE(err, <, tol);
+    
+    SolutionPtr soln = Solution::solution(mesh);
+    map<int, FunctionPtr> functionMap;
+    functionMap[form.phi()->ID()] = f;
+    soln->projectOntoMesh(functionMap);
+    // confirm that the projection worked:
+    FunctionPtr f_soln = Function::solution(form.phi(), soln);
+    err = (f - f_soln)->l2norm(mesh);
+    TEST_COMPARE(err, <, tol);
+    
+    // set up BasisSumFunction
+    GlobalIndexType cellID = 0;
+    DofOrderingPtr trialOrder = mesh->getElementType(cellID)->trialOrderPtr;
+    BasisPtr basis = trialOrder->getBasis(form.phi()->ID());
+    FieldContainer<double> cellCoefficients = soln->allCoefficientsForCellID(cellID);
+    FieldContainer<double> basisCoefficients(basis->getCardinality());
+    const vector<int>* dofIndices = &trialOrder->getDofIndices(form.phi()->ID());
+    for (int basisOrdinal=0; basisOrdinal<basis->getCardinality(); basisOrdinal++)
+    {
+      basisCoefficients[basisOrdinal] = cellCoefficients[(*dofIndices)[basisOrdinal]];
+    }
+    FunctionPtr f_basisSum = BasisSumFunction::basisSumFunction(basis, basisCoefficients, OP_VALUE);
+    // confirm that this also worked:
+    err = (f - f_basisSum)->l2norm(mesh);
+    TEST_COMPARE(err, <, tol);
+    FunctionPtr f_basisSum_laplacian = BasisSumFunction::basisSumFunction(basis, basisCoefficients, OP_LAPLACIAN);
+    // the real test:
+    err = (f_laplacian - f_basisSum_laplacian)->l2norm(mesh);
+    TEST_COMPARE(err, <, tol);
+  }
+  
+  TEUCHOS_UNIT_TEST( BasisCache, ProjectedFunctionLaplacianValues_1D )
+  {
+    int spaceDim = 1;
+    testProjectedFunctionLaplacian(spaceDim, out, success);
+  }
+  
+  TEUCHOS_UNIT_TEST( BasisCache, ProjectedFunctionLaplacianValues_2D )
+  {
+    int spaceDim = 2;
+    testProjectedFunctionLaplacian(spaceDim, out, success);
+  }
+  
+  TEUCHOS_UNIT_TEST( BasisCache, ProjectedFunctionLaplacianValues_3D )
+  {
+    int spaceDim = 3;
+    testProjectedFunctionLaplacian(spaceDim, out, success);
+  }
+
+  // we don't yet support Laplacians on curvilinear meshes
+//  TEUCHOS_UNIT_TEST( BasisCache, ProjectedFunctionLaplacianValues_2D_Curvilinear )
+//  {
+//    /*
+//     Take arbitrary scalar function f with known Laplacian.
+//     
+//     Project onto a mesh (using BasisSumFunction).
+//     
+//     Compute Laplacian of the basis representation of f.
+//     
+//     Compare with the known Laplacian of f.
+//     
+//     */
+//    
+//    out << "This test not yet implemented.\n";
+//    success = false;
+//  }
+  
+  TEUCHOS_UNIT_TEST( BasisCache, TransformedLaplacianValues_3D )
+  {
+    vector<double> scales = {2,4,8};
+    CellTopoPtr cellTopo = CellTopology::hexahedron();
+    int spaceDim = cellTopo->getDimension();
+    int nodeCount = cellTopo->getNodeCount();
+    Intrepid::FieldContainer<double> cellNodes(nodeCount,spaceDim);
+    CamelliaCellTools::refCellNodesForTopology(cellNodes, cellTopo);
+    for (int node = 0; node < nodeCount; node++)
+    {
+      for (int d = 0; d < spaceDim; d++)
+      {
+        cellNodes(node,d) *= scales[d];
+      }
+    }
+    cellNodes.resize(1, nodeCount, spaceDim);
+    
+    int H1Order = 3;
+    BasisCachePtr basisCache = BasisCache::basisCacheForCellTopology(cellTopo, H1Order, cellNodes);
+    Camellia::EOperator op = OP_LAPLACIAN;
+    Intrepid::EOperator opIntrepid = OPERATOR_D2;
+    BasisPtr basis = BasisFactory::basisFactory()->getBasis(H1Order, cellTopo, Camellia::FUNCTION_SPACE_HGRAD);
+    int basisCardinality = basis->getCardinality();
+    
+    // get gradients in reference space
+    int numPoints = basisCache->getRefCellPoints().dimension(0);
+    int refSpaceValuesPerPoint = Intrepid::getDkCardinality(opIntrepid, spaceDim);
+    FieldContainer<double> valuesRefSpace(basisCardinality, numPoints, refSpaceValuesPerPoint);
+    basis->getValues(valuesRefSpace, basisCache->getRefCellPoints(), opIntrepid);
+    
+    vector<int> d2_enumeration(3);
+    d2_enumeration[0] = Intrepid::getDkEnumeration(2,0,0);
+    d2_enumeration[1] = Intrepid::getDkEnumeration(0,2,0);
+    d2_enumeration[2] = Intrepid::getDkEnumeration(0,0,2);
+    
+    FieldContainer<double> values(basisCardinality, numPoints);
+    // if x dimension has doubled, then we expect d/dx to be scaled by 1/2, and d^2/dx^2 to be scaled by 1/4
+    // scale values accordingly
+    for (int basisOrdinal=0; basisOrdinal < basisCardinality; basisOrdinal++)
+    {
+      for (int pointOrdinal=0; pointOrdinal < numPoints; pointOrdinal++)
+      {
+        for (int d=0; d<spaceDim; d++)
+        {
+          values(basisOrdinal,pointOrdinal) += valuesRefSpace(basisOrdinal,pointOrdinal,d2_enumeration[d]) / (scales[d] * scales[d]);
+        }
+      }
+    }
+    
+    FieldContainer<double> valuesActual = *basisCache->getTransformedValues(basis, op);
+    TEST_COMPARE_FLOATING_ARRAYS(values, valuesActual, 1e-13);
+  }
 } // namespace

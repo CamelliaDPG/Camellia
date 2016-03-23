@@ -176,7 +176,7 @@ public:
 
     // check if we're taking a temporal derivative
     int component;
-    Intrepid::EOperator relatedOp = BasisEvaluation::relatedOperator(_op, _basis->functionSpace(), component);
+    Intrepid::EOperator relatedOp = BasisEvaluation::relatedOperator(_op, _basis->functionSpace(), spaceDim, component);
     if ((relatedOp == Intrepid::OPERATOR_GRAD) && (component==spaceDim)) {
       // then we are taking the temporal part of the Jacobian of the reference to curvilinear-reference space
       // based on our assumptions that curvilinearity is just in the spatial direction (and is orthogonally extruded in the
@@ -300,17 +300,32 @@ public:
 
   TFunctionPtr<double> dx()
   {
-    return Teuchos::rcp( new CellTransformationFunction(_basis,_basisCoefficients,OP_DX) );
+    if (_op == OP_VALUE)
+      return Teuchos::rcp( new CellTransformationFunction(_basis,_basisCoefficients,OP_DX) );
+    else if (_op == OP_DX)
+      return Teuchos::rcp( new CellTransformationFunction(_basis,_basisCoefficients,OP_DXDX) );
+    else
+      TEUCHOS_TEST_FOR_EXCEPTION(true, std::invalid_argument, "Unsupported operator");
   }
 
   TFunctionPtr<double> dy()
   {
-    return Teuchos::rcp( new CellTransformationFunction(_basis,_basisCoefficients,OP_DY) );
+    if (_op == OP_VALUE)
+      return Teuchos::rcp( new CellTransformationFunction(_basis,_basisCoefficients,OP_DY) );
+    else if (_op == OP_DX)
+      return Teuchos::rcp( new CellTransformationFunction(_basis,_basisCoefficients,OP_DYDY) );
+    else
+      TEUCHOS_TEST_FOR_EXCEPTION(true, std::invalid_argument, "Unsupported operator");
   }
 
   TFunctionPtr<double> dz()
   {
-    return Teuchos::rcp( new CellTransformationFunction(_basis,_basisCoefficients,OP_DZ) );
+    if (_op == OP_VALUE)
+      return Teuchos::rcp( new CellTransformationFunction(_basis,_basisCoefficients,OP_DZ) );
+    else if (_op == OP_DX)
+      return Teuchos::rcp( new CellTransformationFunction(_basis,_basisCoefficients,OP_DZDZ) );
+    else
+      TEUCHOS_TEST_FOR_EXCEPTION(true, std::invalid_argument, "Unsupported operator");
   }
 
   static Teuchos::RCP<CellTransformationFunction> cellTransformation(MeshPtr mesh, GlobalIndexType cellID, const vector< ParametricCurvePtr > edgeFunctions)
@@ -326,7 +341,6 @@ MeshTransformationFunction::MeshTransformationFunction(MeshPtr mesh, map< Global
   _cellTransforms = cellTransforms;
   _op = op;
   _maxPolynomialDegree = 1; // 1 is the degree of the identity transform (x,y) -> (x,y)
-
 }
 
 MeshTransformationFunction::MeshTransformationFunction(MeshPtr mesh, set<GlobalIndexType> cellIDsToTransform) : TFunction<double>(1)   // vector-valued Function

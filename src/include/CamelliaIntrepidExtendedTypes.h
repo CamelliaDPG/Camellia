@@ -37,7 +37,11 @@ enum EOperator   // first 13 simply copied from Intrepid::EOperator
   OP_TIMES_NORMAL_Y,  // 26
   OP_TIMES_NORMAL_Z,  // 27
   OP_TIMES_NORMAL_T,  // 28
-  OP_VECTORIZE_VALUE  // 29
+  OP_VECTORIZE_VALUE, // 29
+  OP_LAPLACIAN,       // 30
+  OP_DXDX,            // 31
+  OP_DYDY,            // 32
+  OP_DZDZ             // 33
 };
 
 enum EFunctionSpace   // the first four copied from Intrepid::EFunctionSpace
