@@ -1255,6 +1255,38 @@ namespace
     testContiguousGlobalDofNumberingComplexSpaceTimeMesh(useConformingTraces, out, success);
   }
   
+  TEUCHOS_UNIT_TEST( GDAMinimumRule, DofCount_ContinuousTriangles )
+  {
+    // a couple tests to ensure that the dof counts are correct in linear, triangular Bubnov-Galerkin meshes
+    int spaceDim = 2;
+    bool useConformingTraces = true;
+    bool useTriangles = true;
+    PoissonFormulation form(spaceDim, useConformingTraces, PoissonFormulation::CONTINUOUS_GALERKIN);
+    
+    vector<double> dimensions = {1.0,1.0};
+    vector<int> elementCounts = {1,1};
+    
+    int H1Order = 1, delta_k = 0;
+    MeshPtr mesh = MeshFactory::quadMeshMinRule(form.bf(), H1Order, delta_k, dimensions[0], dimensions[1],
+                                                elementCounts[0], elementCounts[1], useTriangles);
+    
+    MeshTopology* meshTopo = dynamic_cast<MeshTopology*>(mesh->getTopology().get());
+    int vertexDim = 0;
+    int numVertices = meshTopo->getEntityCount(vertexDim);
+    
+    int globalDofCount = mesh->numGlobalDofs();
+    TEST_EQUALITY(numVertices, globalDofCount);
+    
+    elementCounts = {16,16};
+    mesh = MeshFactory::quadMeshMinRule(form.bf(), H1Order, delta_k, dimensions[0], dimensions[1],
+                                        elementCounts[0], elementCounts[1], useTriangles);
+    meshTopo = dynamic_cast<MeshTopology*>(mesh->getTopology().get());
+    numVertices = meshTopo->getEntityCount(vertexDim);
+    
+    globalDofCount = mesh->numGlobalDofs();
+    TEST_EQUALITY(numVertices, globalDofCount);
+  }
+  
   TEUCHOS_UNIT_TEST( GDAMinimumRule, InterpretLocalBasisCoefficientsHangingNode_Triangles )
   {
     /*
@@ -1411,6 +1443,71 @@ namespace
     }
   }
 
+  void testProjectionOntoTriangularContinuousGalerkinMesh(int meshWidth, int polyOrder, Teuchos::FancyOStream &out, bool &success)
+  {
+    bool useTriangles = true;
+    int spaceDim = 2;
+    bool useConformingTraces = true;
+    PoissonFormulation form(spaceDim, useConformingTraces, PoissonFormulation::CONTINUOUS_GALERKIN);
+    
+    vector<double> dimensions = {1.0,1.0};
+    vector<int> elementCounts = {meshWidth,meshWidth};
+    
+    int H1Order = polyOrder, delta_k = 0;
+    MeshPtr mesh = MeshFactory::quadMeshMinRule(form.bf(), H1Order, delta_k, dimensions[0], dimensions[1],
+                                                elementCounts[0], elementCounts[1], useTriangles);
+    
+    SolutionPtr soln = Solution::solution(mesh);
+    FunctionPtr phiExact = 2 * Function::xn(1) + Function::yn(1);
+    map<int, FunctionPtr> projectionMap;
+    projectionMap[form.phi()->ID()] = phiExact;
+    soln->projectOntoMesh(projectionMap);
+    soln->initializeLHSVector();
+    soln->importSolution();
+    
+    FunctionPtr projectedFunction = Function::solution(form.phi(), soln);
+    double err = (projectedFunction - phiExact)->l2norm(mesh);
+    TEST_COMPARE(err, <, 1e-13);
+    
+    if (!success)
+    {
+      // DEBUGGING
+      mesh->getTopology()->printAllEntitiesInBaseMeshTopology();
+
+      GDAMinimumRule* minRule = dynamic_cast<GDAMinimumRule*>(mesh->globalDofAssignment().get());
+      minRule->printGlobalDofInfo();
+      
+      minRule->printConstraintInfo(0);
+      CellConstraints cellConstraints = minRule->getCellConstraints(0);
+      minRule->getDofMapper(0, cellConstraints)->printMappingReport();
+      
+      minRule->printConstraintInfo(1);
+      cellConstraints = minRule->getCellConstraints(1);
+      minRule->getDofMapper(1, cellConstraints)->printMappingReport();
+
+      string outputSuperDir = "/tmp";
+      string outputDir = "PoissonSoln";
+      HDF5Exporter exporter(mesh, outputDir, outputSuperDir);
+      cout << "Writing phi to " << outputSuperDir << "/" << outputDir << endl;
+
+      exporter.exportSolution(soln);
+    }
+  }
+  
+  TEUCHOS_UNIT_TEST( GDAMinimumRule, ProjectOntoTriangularUniformMesh_Linear )
+  {
+    int polyOrder = 1;
+    int meshWidth = 2;
+    testProjectionOntoTriangularContinuousGalerkinMesh(meshWidth, polyOrder, out, success);
+  }
+  
+  TEUCHOS_UNIT_TEST( GDAMinimumRule, ProjectOntoTriangularUniformMesh_Quadratic )
+  {
+    int polyOrder = 2;
+    int meshWidth = 1;
+    testProjectionOntoTriangularContinuousGalerkinMesh(meshWidth, polyOrder, out, success);
+  }
+  
   TEUCHOS_UNIT_TEST( GDAMinimumRule, SolvePoisson2DContinuousGalerkinHangingNode_Slow )
   {
     int spaceDim = 2;
