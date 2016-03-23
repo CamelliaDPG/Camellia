@@ -628,6 +628,11 @@ TEUCHOS_UNIT_TEST( BasisCache, SetRefCellPointsSpaceTimeSide )
     // the real test:
     err = (f_laplacian - f_basisSum_laplacian)->l2norm(mesh);
     TEST_COMPARE(err, <, tol);
+    
+    // we should also be able to do the same test more simply using Var::laplacian(), without requiring BasisSumFunction explicitly:
+    FunctionPtr f_soln_laplacian = Function::solution(form.phi()->laplacian(), soln);
+    err = (f_laplacian - f_soln_laplacian)->l2norm(mesh);
+    TEST_COMPARE(err, <, tol);
   }
   
   TEUCHOS_UNIT_TEST( BasisCache, ProjectedFunctionLaplacianValues_1D )
