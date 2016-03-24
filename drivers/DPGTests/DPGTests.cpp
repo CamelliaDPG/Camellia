@@ -196,8 +196,7 @@ void DPGTests::runTests()
 
   // setup our TestSuite tests:
   vector< Teuchos::RCP< TestSuite > > testSuites;
-
-
+  
   if (skipSlowTests)
   {
     if (rank==0)
@@ -456,7 +455,7 @@ bool DPGTests::testComputeStiffnessConformingVertices()
 bool DPGTests::testDofOrdering()
 {
   bool success = true;
-  DofOrdering traceOrdering(CellTopology::line());
+  DofOrdering traceOrdering(CellTopology::quad());
 
   string myName = "testDofOrdering";
 

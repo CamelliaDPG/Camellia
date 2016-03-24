@@ -38,7 +38,7 @@ public:
 
   bool boundaryValueOnly();
 
-  static TFunctionPtr<double> basisSumFunction(BasisPtr basis, const Intrepid::FieldContainer<double> &basisCoefficients);
+  static TFunctionPtr<double> basisSumFunction(BasisPtr basis, const Intrepid::FieldContainer<double> &basisCoefficients, Camellia::EOperator op = OP_VALUE);
 };
 }
 
