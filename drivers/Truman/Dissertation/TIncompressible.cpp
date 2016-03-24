@@ -555,6 +555,22 @@ int main(int argc, char *argv[])
       meshTopo = MeshFactory::spaceTimeMeshTopology(meshTopo, t0, t1, temporalDivisions);
     }
   }
+  else if (problemName == "FlatPlate")
+  {
+    int meshWidth = 2;
+    vector<double> dims(spaceDim,1.0);
+    vector<int> numElements(spaceDim,meshWidth);
+    vector<double> x0(spaceDim,0.0);
+    pressureConstraintPoint = {0.5,0.5};
+    meshTopo = MeshFactory::rectilinearMeshTopology(dims,numElements,x0);
+    if (!steady)
+    {
+      double t0 = 0;
+      double t1 = 1;
+      int temporalDivisions = 2;
+      meshTopo = MeshFactory::spaceTimeMeshTopology(meshTopo, t0, t1, temporalDivisions);
+    }
+  }
   else if (problemName == "LidDriven")
   {
     int meshWidth = 2;
@@ -691,17 +707,20 @@ int main(int argc, char *argv[])
 
   Teuchos::ParameterList nsParameters;
   if (steady)
-    nsParameters = NavierStokesVGPFormulation::steadyConservationFormulation(spaceDim, Re, useConformingTraces, meshTopo, polyOrder, delta_k).getConstructorParameters();
+    nsParameters = NavierStokesVGPFormulation::steadyFormulation(spaceDim, Re, useConformingTraces, meshTopo, polyOrder, delta_k).getConstructorParameters();
+    // nsParameters = NavierStokesVGPFormulation::steadyConservationFormulation(spaceDim, Re, useConformingTraces, meshTopo, polyOrder, delta_k).getConstructorParameters();
   else
-    nsParameters = NavierStokesVGPFormulation::spaceTimeConservationFormulation(spaceDim, Re, useConformingTraces, meshTopo, polyOrder, polyOrder, delta_k).getConstructorParameters();
+    nsParameters = NavierStokesVGPFormulation::spaceTimeFormulation(spaceDim, Re, useConformingTraces, meshTopo, polyOrder, polyOrder, delta_k).getConstructorParameters();
+    // nsParameters = NavierStokesVGPFormulation::spaceTimeConservationFormulation(spaceDim, Re, useConformingTraces, meshTopo, polyOrder, polyOrder, delta_k).getConstructorParameters();
 
   nsParameters.set("neglectFluxesOnRHS", false);
   NavierStokesVGPFormulation form(meshTopo, nsParameters);
 
   form.setIP( norm );
 
-  form.solutionIncrement()->setUseCondensedSolve(useCondensedSolve);
   if (problemName == "Trivial")
+    form.addPointPressureCondition(pressureConstraintPoint);
+  if (problemName == "FlatPlate")
     form.addPointPressureCondition(pressureConstraintPoint);
   if (problemName == "LidDriven")
     form.addPointPressureCondition(pressureConstraintPoint);
@@ -712,11 +731,13 @@ int main(int argc, char *argv[])
   if (problemName == "TaylorGreen")
     form.addPointPressureCondition(pressureConstraintPoint);
 
+  form.solutionIncrement()->setUseCondensedSolve(useCondensedSolve);
+
   MeshPtr mesh = form.solutionIncrement()->mesh();
   // if (problemName == "Cylinder")
   //   preprocessHemkerMesh(mesh, steady, 1);
-  if (meshGeometry != Teuchos::null)
-    mesh->setEdgeToCurveMap(meshGeometry->edgeToCurveMap());
+  // if (meshGeometry != Teuchos::null)
+  //   mesh->setEdgeToCurveMap(meshGeometry->edgeToCurveMap());
 
   GDAMinimumRule* minRule = dynamic_cast<GDAMinimumRule*>(mesh->globalDofAssignment().get());
   minRule->setAllowCascadingConstraints(true); // required for 2-irregular meshes
@@ -751,6 +772,58 @@ int main(int argc, char *argv[])
     if (!steady)
       form.addInitialCondition(0, u_exact);
       // form.addFluxCondition(t0, -u_exact);
+  }
+  else if (problemName == "FlatPlate")
+  {
+    SpatialFilterPtr leftX  = SpatialFilter::matchingX(0);
+    SpatialFilterPtr rightX = SpatialFilter::matchingX(1);
+    SpatialFilterPtr bottom = SpatialFilter::matchingY(0);
+    SpatialFilterPtr top    = SpatialFilter::matchingY(1);
+    SpatialFilterPtr xGreater0 = SpatialFilter::greaterThanX(.5);
+    SpatialFilterPtr xLess0 = SpatialFilter::lessThanX(.5);
+    SpatialFilterPtr bottomFree = SpatialFilter::intersectionFilter(bottom, xLess0);
+    SpatialFilterPtr plate = SpatialFilter::intersectionFilter(bottom, xGreater0);
+    SpatialFilterPtr t0  = SpatialFilter::matchingT(0);
+
+    FunctionPtr zero = Function::zero();
+    FunctionPtr one = Function::constant(1);
+
+    u1_exact = one;
+    u2_exact = zero;
+    u_exact = Function::vectorize(u1_exact,u2_exact);
+
+    form.addXVelocityCondition(leftX,  u1_exact);
+    form.addYVelocityCondition(leftX,  u2_exact);
+    // form.addXFluxCondition(    leftX,  -one);
+    // form.addYFluxCondition(    leftX,  zero);
+    form.addYVelocityCondition(top,  zero);
+    form.addXFluxCondition(    top,  zero);
+    form.addYVelocityCondition(bottomFree,  zero);
+    form.addXFluxCondition(    bottomFree,  zero);
+    // form.addYVelocityCondition(plate,  zero);
+    // form.addXFluxCondition(    plate,  zero);
+    form.addWallCondition(plate);
+
+    // define traction components in terms of field variables
+    FunctionPtr n = Function::normal();
+    VarPtr sigma11 = form.sigma(1,1);
+    VarPtr sigma12 = form.sigma(1,2);
+    VarPtr sigma21 = form.sigma(2,1);
+    VarPtr sigma22 = form.sigma(2,2);
+    VarPtr p = form.p();
+    LinearTermPtr t1 = n->x() * (2 * sigma11 - p) + n->y() * (sigma12 + sigma21);
+    LinearTermPtr t2 = n->x() * (sigma12 + sigma21) + n->y() * (2 * sigma22 - p);
+
+    Teuchos::RCP<PenaltyConstraints> pc = Teuchos::rcp(new PenaltyConstraints);
+    pc->addConstraint(t1==zero, rightX);
+    pc->addConstraint(t2==zero, rightX);
+    // pc->addConstraint(t1==zero, top);
+    // pc->addConstraint(t2==zero, top);
+
+    form.solutionIncrement()->setFilter(pc);
+
+    if (!steady)
+      form.addInitialCondition(0, u_exact);
   }
   else if (problemName == "LidDriven")
   {
@@ -1018,7 +1091,7 @@ int main(int argc, char *argv[])
            << " " << totalIterationCount
            << " " << endl;
 
-  bool truncateMultigridMeshes = true; // for getting a "fair" sense of how iteration counts vary with h.
+  bool truncateMultigridMeshes = false; // for getting a "fair" sense of how iteration counts vary with h.
 
   double tol = 1e-5;
   int refNumber = 0;

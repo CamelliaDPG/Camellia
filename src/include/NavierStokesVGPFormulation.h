@@ -76,6 +76,24 @@ public:
 
   NavierStokesVGPFormulation(MeshTopologyPtr meshTopology, Teuchos::ParameterList &parameters);
 
+  // ! sets an x-velocity boundary condition
+  void addXVelocityCondition(SpatialFilterPtr region, TFunctionPtr<double> value);
+
+  // ! sets an y-velocity boundary condition
+  void addYVelocityCondition(SpatialFilterPtr region, TFunctionPtr<double> value);
+
+  // ! sets an z-velocity boundary condition
+  void addZVelocityCondition(SpatialFilterPtr region, TFunctionPtr<double> value);
+
+  // ! sets an x-flux boundary condition
+  void addXFluxCondition(SpatialFilterPtr region, TFunctionPtr<double> value);
+
+  // ! sets an y-flux boundary condition
+  void addYFluxCondition(SpatialFilterPtr region, TFunctionPtr<double> value);
+
+  // ! sets an z-flux boundary condition
+  void addZFluxCondition(SpatialFilterPtr region, TFunctionPtr<double> value);
+
   // ! sets a wall boundary condition
   void addWallCondition(SpatialFilterPtr wall);
 
