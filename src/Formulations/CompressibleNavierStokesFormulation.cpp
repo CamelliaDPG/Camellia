@@ -18,6 +18,7 @@
 #include "PreviousSolutionFunction.h"
 #include "SimpleFunction.h"
 #include "TrigFunctions.h"
+#include "ExpFunction.h"
 #include "PolarizedFunction.h"
 #include "SuperLUDistSolver.h"
 
@@ -425,7 +426,8 @@ CompressibleNavierStokesFormulation::CompressibleNavierStokesFormulation(MeshTop
     _solnPrevTime = Solution::solution(_bf, mesh, bc);
 
     // Project ones as initial guess
-    FunctionPtr rho_init, u1_init, u2_init, u3_init, T_init, tc_init, tm1_init, tm2_init, tm3_init, te_init;
+    FunctionPtr rho_init, u1_init, u2_init, u3_init, T_init, tc_init, tm1_init, tm2_init, tm3_init, te_init,
+                D11_init, D12_init, D21_init, D22_init, q1_init, q2_init;
     rho_init = Function::constant(rhoInit);
 
     FunctionPtr cos_y = Teuchos::rcp(new Cos_ay(1));
@@ -438,6 +440,32 @@ CompressibleNavierStokesFormulation::CompressibleNavierStokesFormulation(MeshTop
       u2_init = Function::constant(u2Init);
     if (_spaceDim > 2)
       u3_init = Function::constant(u3Init);
+    D11_init = Function::zero();
+    D12_init = Function::zero();
+    D21_init = Function::zero();
+    D22_init = Function::zero();
+    q1_init = Function::zero();
+    q2_init = Function::zero();
+    if (spaceDim > 1 && problemName == "CompressibleTaylorGreen")
+    {
+      FunctionPtr temporalDecay = Teuchos::rcp(new Exp_at(-2.*_mu));
+      FunctionPtr sinX = Teuchos::rcp(new Sin_x());
+      FunctionPtr cosX = Teuchos::rcp(new Cos_x());
+      FunctionPtr sinY = Teuchos::rcp(new Sin_y());
+      FunctionPtr cosY = Teuchos::rcp(new Cos_y());
+      FunctionPtr cos2X = Teuchos::rcp(new Cos_ax(2));
+      FunctionPtr cos2Y = Teuchos::rcp(new Cos_ay(2));
+      rho_init = Function::constant(1);
+      T_init = 0.25*(cos2X+cos2Y)*temporalDecay*temporalDecay*(1./.4/rho_init);
+      u1_init = sinX*cosY*temporalDecay;
+      u2_init = -cosX*sinY*temporalDecay;
+      D11_init = _mu*u1_init->dx();
+      D12_init = _mu*u1_init->dy();
+      D21_init = _mu*u2_init->dx();
+      D22_init = _mu*u2_init->dy();
+      q1_init = -_mu*Cp()/Pr()*T_init->dx();
+      q2_init = -_mu*Cp()/Pr()*T_init->dy();
+    }
     if (spaceDim > 1 && problemName == "Noh")
     {
       u1_init = -cos_theta;
@@ -555,11 +583,17 @@ CompressibleNavierStokesFormulation::CompressibleNavierStokesFormulation(MeshTop
     initialGuess[this->u(1)->ID()] = u1_init;
     initialGuess[this->u_hat(1)->ID()] = u1_init;
     initialGuess[this->tm(1)->ID()] = tm1_init;
+    initialGuess[this->D(1,1)->ID()] = D11_init;
+    initialGuess[this->q(1)->ID()] = q1_init;
     if (_spaceDim > 1)
     {
       initialGuess[this->u(2)->ID()] = u2_init;
       initialGuess[this->u_hat(2)->ID()] = u2_init;
       initialGuess[this->tm(2)->ID()] = tm2_init;
+      initialGuess[this->D(1,2)->ID()] = D12_init;
+      initialGuess[this->D(2,1)->ID()] = D21_init;
+      initialGuess[this->D(2,2)->ID()] = D22_init;
+      initialGuess[this->q(2)->ID()] = q2_init;
     }
     if (_spaceDim > 2)
     {

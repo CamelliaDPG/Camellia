@@ -100,43 +100,44 @@ void setGMGSolver(CompressibleNavierStokesFormulation &form, vector<MeshPtr> &me
   form.setSolver(gmgSolver);
 }
 
-// double computeL2Error(CompressibleNavierStokesFormulation &form, FunctionPtr u_exact, MeshPtr mesh, double Re)
-// {
-//   FunctionPtr sigma1_exact = 1./Re*u_exact->x()->grad();
-//   FunctionPtr sigma2_exact = 1./Re*u_exact->y()->grad();
-//
-//   // double l2Error = 0;
-//   double u1_l2 = 0, u2_l2, sigma11_l2 = 0, sigma12_l2 = 0, sigma21_l2 = 0, sigma22_l2 = 0;
-//   FunctionPtr u1_soln, u2_soln, sigma11_soln, sigma12_soln, sigma21_soln, sigma22_soln,
-//               u1_diff, u2_diff, sigma11_diff, sigma12_diff, sigma21_diff, sigma22_diff,
-//               u1_sqr, u2_sqr, sigma11_sqr, sigma12_sqr, sigma21_sqr, sigma22_sqr;
-//   u1_soln = Function::solution(form.u(1), form.solution());
-//   u2_soln = Function::solution(form.u(2), form.solution());
-//   sigma11_soln = Function::solution(form.sigma(1,1), form.solution());
-//   sigma12_soln = Function::solution(form.sigma(1,2), form.solution());
-//   sigma21_soln = Function::solution(form.sigma(2,1), form.solution());
-//   sigma22_soln = Function::solution(form.sigma(2,2), form.solution());
-//   u1_diff = u1_soln - u_exact->x();
-//   u2_diff = u2_soln - u_exact->y();
-//   sigma11_diff = sigma11_soln - sigma1_exact->x();
-//   sigma12_diff = sigma12_soln - sigma1_exact->y();
-//   sigma21_diff = sigma21_soln - sigma2_exact->x();
-//   sigma22_diff = sigma22_soln - sigma2_exact->y();
-//   u1_sqr = u1_diff*u1_diff;
-//   u2_sqr = u2_diff*u2_diff;
-//   sigma11_sqr = sigma11_diff*sigma11_diff;
-//   sigma12_sqr = sigma12_diff*sigma12_diff;
-//   sigma21_sqr = sigma21_diff*sigma21_diff;
-//   sigma22_sqr = sigma22_diff*sigma22_diff;
-//   u1_l2 = u1_sqr->integrate(mesh, 10);
-//   u2_l2 = u2_sqr->integrate(mesh, 10);
-//   sigma11_l2 = sigma11_sqr->integrate(mesh, 10);
-//   sigma12_l2 = sigma12_sqr->integrate(mesh, 10);
-//   sigma21_l2 = sigma21_sqr->integrate(mesh, 10);
-//   sigma22_l2 = sigma22_sqr->integrate(mesh, 10);
-//   return sqrt(u1_l2+sigma11_l2+sigma12_l2+sigma21_l2+sigma22_l2);
-//   // l2Error = sqrt(u_l2);
-// }
+double computeL2Error(CompressibleNavierStokesFormulation &form, FunctionPtr rho_exact, FunctionPtr u1_exact, FunctionPtr u2_exact, FunctionPtr T_exact, MeshPtr mesh)
+{
+  // FunctionPtr D1_exact = form.mu()*u_exact->x()->grad();
+  // FunctionPtr D2_exact = form.mu()*u_exact->y()->grad();
+
+  int spaceDim = form.spaceDim();
+
+  // double l2Error = 0;
+  double rho_l2 = 0, u1_l2 = 0, u2_l2 = 0, T_l2 = 0;
+  FunctionPtr rho_soln, u1_soln, u2_soln, T_soln,
+              rho_diff, u1_diff, u2_diff, T_diff,
+              rho_sqr, u1_sqr, u2_sqr, T_sqr;
+  rho_soln = Function::solution(form.rho(), form.solution());
+  u1_soln = Function::solution(form.u(1), form.solution());
+  if (spaceDim == 2)
+    u2_soln = Function::solution(form.u(2), form.solution());
+  T_soln = Function::solution(form.T(), form.solution());
+  rho_diff = rho_soln - rho_exact;
+  rho_sqr = rho_diff*rho_diff;
+  rho_l2 = rho_sqr->integrate(mesh, 10);
+  if (spaceDim == 1)
+  {
+    u1_diff = u1_soln - u1_exact;
+    u1_sqr = u1_diff*u1_diff;
+    u1_l2 = u1_sqr->integrate(mesh, 10);
+  }
+  else if (spaceDim == 2)
+  {
+    u2_diff = u2_soln - u2_exact;
+    u2_sqr = u2_diff*u2_diff;
+    u2_l2 = u2_sqr->integrate(mesh, 10);
+  }
+  // T_diff = T_soln - T_exact;
+  // T_sqr = T_diff*T_diff;
+  // T_l2 = T_sqr->integrate(mesh, 10);
+  // return sqrt(rho_l2+u1_l2+u2_l2+T_l2);
+  return sqrt(rho_l2+u1_l2+u2_l2);
+}
 
 int main(int argc, char *argv[])
 {
@@ -238,6 +239,7 @@ int main(int argc, char *argv[])
   double Cv = 1;
   double rho_inf, u_inf, T_inf;
   int rampIncrement = 4;
+  double pi = atan(1)*4;
   if (problemName == "Trivial")
   {
     int meshWidth = 2;
@@ -250,6 +252,23 @@ int main(int argc, char *argv[])
     {
       double t0 = 0;
       double t1 = 1;
+      int temporalDivisions = 2;
+      meshTopo = MeshFactory::spaceTimeMeshTopology(meshTopo, t0, t1, temporalDivisions);
+    }
+  }
+  if (problemName == "CompressibleTaylorGreen")
+  {
+    T_inf = 1e6;
+    int meshWidth = 2;
+    vector<double> dims(spaceDim,2*pi);
+    vector<int> numElements(spaceDim,meshWidth);
+    vector<double> x0(spaceDim,0);
+
+    meshTopo = MeshFactory::rectilinearMeshTopology(dims,numElements,x0);
+    if (!steady)
+    {
+      double t0 = 0;
+      double t1 = pi;
       int temporalDivisions = 2;
       meshTopo = MeshFactory::spaceTimeMeshTopology(meshTopo, t0, t1, temporalDivisions);
     }
@@ -524,7 +543,7 @@ int main(int argc, char *argv[])
   // VarPtr u1_hat = form.u_hat(1), u2_hat = form.u_hat(2);
   // VarPtr tn1_hat = form.tn_hat(1), tn2_hat = form.tn_hat(2);
 
-  FunctionPtr rho_exact, u1_exact, u2_exact, u3_exact, T_exact;
+  FunctionPtr rho_exact, u1_exact, u2_exact, u3_exact, T_exact, p_exact, u_exact;
   Teuchos::RCP<ParameterFunction> refParamFunc = ParameterFunction::parameterFunction(64);
   FunctionPtr refFunc = refParamFunc;
   if (problemName == "Trivial")
@@ -540,7 +559,6 @@ int main(int argc, char *argv[])
     FunctionPtr onezero = Function::vectorize(one, zero);
     FunctionPtr ones = Function::vectorize(one, one);
 
-    FunctionPtr rho_exact, u1_exact, u2_exact, T_exact;
     // if (spaceDim == 1)
     // {
       rho_exact = Function::constant(1);
@@ -556,7 +574,6 @@ int main(int argc, char *argv[])
     //   u2_exact = Function::constant(1)-exp1lambdax;
     //   T_exact = Function::constant(1)-exp1lambdax;
     // }
-    FunctionPtr u_exact;
     if (spaceDim == 1)
       u_exact = u1_exact;
     else
@@ -610,6 +627,81 @@ int main(int argc, char *argv[])
       // form.addTemperatureTraceCondition(t1, one);
     }
   }
+  if (problemName == "CompressibleTaylorGreen")
+  {
+    FunctionPtr zero = Function::zero();
+    FunctionPtr one = Function::constant(1);
+    FunctionPtr temporalDecay = Teuchos::rcp(new Exp_at(-2./Re));
+    FunctionPtr sinX = Teuchos::rcp(new Sin_x());
+    FunctionPtr cosX = Teuchos::rcp(new Cos_x());
+    FunctionPtr sinY = Teuchos::rcp(new Sin_y());
+    FunctionPtr cosY = Teuchos::rcp(new Cos_y());
+    FunctionPtr cos2X = Teuchos::rcp(new Cos_ax(2));
+    FunctionPtr cos2Y = Teuchos::rcp(new Cos_ay(2));
+
+    rho_exact = one;
+    T_exact = 1./.4*0.25*(cos2X+cos2Y)*temporalDecay*temporalDecay;
+    u1_exact = sinX*cosY*temporalDecay;
+    u2_exact = -cosX*sinY*temporalDecay;
+
+    FunctionPtr dTdt_exact = 1./.4*.25*(cos2X+cos2Y)*4./Re*temporalDecay*temporalDecay;
+    FunctionPtr duudt_exact = -4./Re*(cosY*cosY*sinX*sinX+cosX*cosX*sinY*sinY)*temporalDecay*temporalDecay;
+    FunctionPtr D11_exact = 1./Re*u1_exact->dx();
+    FunctionPtr D12_exact = 1./Re*u1_exact->dy();
+    FunctionPtr D21_exact = 1./Re*u2_exact->dx();
+    FunctionPtr D22_exact = 1./Re*u2_exact->dy();
+    FunctionPtr q1_exact = -form.Cp()/(Re*form.Pr())*T_exact->dx();
+    FunctionPtr q2_exact = -form.Cp()/(Re*form.Pr())*T_exact->dy();
+
+    FunctionPtr u_exact = Function::vectorize(u1_exact,u2_exact);
+
+    RHSPtr rhs = form.rhs();
+    VarPtr ve = form.ve();
+    rhs->addTerm(-Cv*dTdt_exact * ve);
+    rhs->addTerm(-0.5*duudt_exact * ve);
+    rhs->addTerm(-(Cv*u1_exact*T_exact)->dx() * ve);
+    rhs->addTerm(-(0.5*(u1_exact*u1_exact+u2_exact*u2_exact)*u1_exact)->dx() * ve);
+    rhs->addTerm(-(R*u1_exact*T_exact)->dx() * ve);
+    rhs->addTerm(-(Cv*u2_exact*T_exact)->dy() * ve);
+    rhs->addTerm(-(0.5*(u1_exact*u1_exact+u2_exact*u2_exact)*u2_exact)->dy() * ve);
+    rhs->addTerm(-(R*u2_exact*T_exact)->dy() * ve);
+    rhs->addTerm(-(q1_exact)->dx() * ve);
+    rhs->addTerm(-(q2_exact)->dy() * ve);
+    rhs->addTerm(-(-(D11_exact+D11_exact-2./3*(D11_exact+D22_exact))*u1_exact)->dx() * ve);
+    rhs->addTerm(-(-(D12_exact+D21_exact)*u2_exact)->dx() * ve);
+    rhs->addTerm(-(-(D21_exact+D12_exact)*u1_exact)->dy() * ve);
+    rhs->addTerm(-(-(D22_exact+D22_exact-2./3*(D11_exact+D22_exact))*u2_exact)->dy() * ve);
+
+    SpatialFilterPtr leftX  = SpatialFilter::matchingX(0);
+    SpatialFilterPtr rightX = SpatialFilter::matchingX(2*pi);
+    SpatialFilterPtr leftY  = SpatialFilter::matchingY(0);
+    SpatialFilterPtr rightY = SpatialFilter::matchingY(2*pi);
+
+    form.addTemperatureTraceCondition(leftX,  T_exact);
+    form.addTemperatureTraceCondition(leftY,  T_exact);
+    form.addTemperatureTraceCondition(rightX, T_exact);
+    form.addTemperatureTraceCondition(rightY, T_exact);
+    form.addVelocityTraceCondition(leftX,  u_exact);
+    form.addVelocityTraceCondition(leftY,  u_exact);
+    form.addVelocityTraceCondition(rightX, u_exact);
+    form.addVelocityTraceCondition(rightY, u_exact);
+    form.addMassFluxCondition(leftX,  zero);
+    form.addMassFluxCondition(leftY,  zero);
+    form.addMassFluxCondition(rightX, zero);
+    form.addMassFluxCondition(rightY, zero);
+    // form.addEnergyFluxCondition(leftX,  zero);
+    // form.addEnergyFluxCondition(leftY,  zero);
+    // form.addEnergyFluxCondition(rightX, zero);
+    // form.addEnergyFluxCondition(rightY, zero);
+
+    if (!steady)
+    {
+      SpatialFilterPtr t0  = SpatialFilter::matchingT(0);
+      form.addMassFluxCondition(    t0,    rho_exact, u_exact, T_exact);
+      form.addMomentumFluxCondition(t0,    rho_exact, u_exact, T_exact);
+      form.addEnergyFluxCondition(  t0,    rho_exact, u_exact, T_exact);
+    }
+  }
   if (problemName == "SimpleShock")
   {
     SpatialFilterPtr leftX  = SpatialFilter::matchingX(-0.5);
@@ -623,7 +715,6 @@ int main(int argc, char *argv[])
     FunctionPtr onezero = Function::vectorize(one, zero);
     FunctionPtr ones = Function::vectorize(one, one);
 
-    FunctionPtr rho_exact, u1_exact, u2_exact, T_exact;
     if (spaceDim == 1)
     {
       rho_exact = 2*one - Function::heaviside(0);
@@ -640,7 +731,6 @@ int main(int argc, char *argv[])
       u2_exact = Function::constant(0);
       T_exact = Function::constant(1);
     }
-    FunctionPtr u_exact;
     if (spaceDim == 1)
       u_exact = u1_exact;
     else
@@ -708,13 +798,12 @@ int main(int argc, char *argv[])
     FunctionPtr onezero = Function::vectorize(one, zero);
     FunctionPtr ones = Function::vectorize(one, one);
 
-    FunctionPtr rho_exact, u1_exact, u2_exact, T_exact;
     TEUCHOS_TEST_FOR_EXCEPTION(spaceDim != 2, std::invalid_argument, "spaceDim must be 2");
     rho_exact = one;
     u1_exact = one;
     u2_exact = zero;
     T_exact = one;
-    FunctionPtr u_exact = Function::vectorize(u1_exact,u2_exact);
+    u_exact = Function::vectorize(u1_exact,u2_exact);
 
     if (!steady)
     {
@@ -786,13 +875,11 @@ int main(int argc, char *argv[])
     FunctionPtr zero = Function::zero();
     FunctionPtr one = Function::constant(1);
 
-    FunctionPtr rho_exact, u1_exact, u2_exact, T_exact, p_exact;
     rho_exact = one - 0.875*Function::heaviside(0.5);
     u1_exact = zero;
     u2_exact = zero;
     p_exact = one - 0.9*Function::heaviside(0.5);
     T_exact = 1./.4*p_exact/rho_exact;
-    FunctionPtr u_exact;
     if (spaceDim == 1)
       u_exact = u1_exact;
     else
@@ -861,7 +948,6 @@ int main(int argc, char *argv[])
     FunctionPtr cos_theta = Teuchos::rcp( new PolarizedFunction<double>( cos_y ) );
     FunctionPtr sin_theta = Teuchos::rcp( new PolarizedFunction<double>( sin_y ) );
 
-    FunctionPtr rho_exact, u1_exact, u2_exact, T_exact;
     if (spaceDim == 1)
     {
       rho_exact = one;
@@ -877,7 +963,6 @@ int main(int argc, char *argv[])
       // T_exact = T_inf*one;
       T_exact = zero;
     }
-    FunctionPtr u_exact;
     if (spaceDim == 1)
       u_exact = u1_exact;
     else
@@ -947,7 +1032,6 @@ int main(int argc, char *argv[])
     VarPtr te = form.te();
     VarPtr tm1 = form.tm(1);
 
-    // FunctionPtr rho_exact, u1_exact, u2_exact, T_exact;
     // if (spaceDim == 1)
     // {
     //   rho_exact = one;
@@ -1032,7 +1116,6 @@ int main(int argc, char *argv[])
     FunctionPtr onezero = Function::vectorize(one, zero);
     FunctionPtr ones = Function::vectorize(one, one);
 
-    FunctionPtr rho_exact, u1_exact, u2_exact, T_exact;
     if (spaceDim == 1)
     {
       rho_exact = one;
@@ -1052,7 +1135,6 @@ int main(int argc, char *argv[])
       // double width = 1./16;
       // T_exact = 1./(width*width)*(one-Function::heaviside(width))*(one-Function::heavisideY(width));
     }
-    FunctionPtr u_exact;
     if (spaceDim == 1)
       u_exact = u1_exact;
     else
@@ -1120,14 +1202,12 @@ int main(int argc, char *argv[])
     FunctionPtr onezero = Function::vectorize(one, zero);
     FunctionPtr ones = Function::vectorize(one, one);
 
-    FunctionPtr rho_exact, u1_exact, u2_exact, T_exact, p_exact;
     rho_exact = one - (1-0.125)*Function::heaviside(1)*Function::heavisideY(1.5);
     u1_exact = zero;
     u2_exact = zero;
     p_exact = one - (1-0.1)*Function::heaviside(1);
     T_exact = 1./.4*p_exact/rho_exact;
     // T_exact = one - (1-0.1)*Function::heaviside(1);
-    FunctionPtr u_exact;
     if (spaceDim == 1)
       u_exact = u1_exact;
     else
@@ -1187,9 +1267,7 @@ int main(int argc, char *argv[])
     FunctionPtr zero = Function::zero();
     FunctionPtr one = Function::constant(1);
 
-    FunctionPtr rho_exact, u1_exact, u2_exact, T_exact, p_exact;
     double beta = 20;
-    double pi = atan(1)*4;
     double rho1 = 1;
     double rho2 = 2;
     FunctionPtr atan_betay = Teuchos::rcp(new ArcTan_ay(beta));
@@ -1338,8 +1416,8 @@ int main(int argc, char *argv[])
 
   double energyError = form.solutionIncrement()->energyErrorTotal();
   double l2Error = 0;
-  // if (computeL2)
-  //   l2Error = computeL2Error(form, u_exact, mesh, Re);
+  if (computeL2)
+    l2Error = computeL2Error(form, rho_exact, u1_exact, u2_exact, T_exact, mesh);
   int globalDofs = mesh->globalDofCount();
   if (rank==0) cout << "Refinement: " << startRef
                     << " \tElements: " << mesh->numActiveElements()
@@ -1360,7 +1438,7 @@ int main(int argc, char *argv[])
            << " " << totalIterationCount
            << " " << endl;
 
-  bool truncateMultigridMeshes = true; // for getting a "fair" sense of how iteration counts vary with h.
+  bool truncateMultigridMeshes = false; // for getting a "fair" sense of how iteration counts vary with h.
 
   double tol = 1e-5;
   int refNumber = startRef;
@@ -1451,8 +1529,8 @@ int main(int argc, char *argv[])
 
     // form.clearSolutionIncrement(); // need to clear before evaluating energy error
     energyError = form.solutionIncrement()->energyErrorTotal();
-    // if (computeL2)
-    //   l2Error = computeL2Error(form, u_exact, mesh, Re);
+    if (computeL2)
+      l2Error = computeL2Error(form, rho_exact, u1_exact, u2_exact, T_exact, mesh);
 
     solveTime = solverTime->stop();
 
