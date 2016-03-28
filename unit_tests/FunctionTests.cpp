@@ -208,6 +208,100 @@ void testSpaceTimeNormal(CellTopoPtr spaceTopo, Teuchos::FancyOStream &out, bool
   }
 }
 
+  void testHFunction(CellTopoPtr cellTopo, Teuchos::FancyOStream &out, bool &success)
+  {
+    /*
+     For a simple, generic test of hFunction, we take the h value measured for the reference
+     cell, and then scale each vertex in the reference cell by a factor.  We then expect the
+     h value for the new cell to scale by that same factor.
+     */
+    
+    int nodeCount = cellTopo->getNodeCount();
+    int dim = cellTopo->getDimension();
+    FieldContainer<double> refCellNodes(nodeCount, dim);
+    FieldContainer<double> scaledRefCellNodes = refCellNodes;
+    CamelliaCellTools::refCellNodesForTopology(refCellNodes, cellTopo);
+    
+    double scalingFactor = 2.0;
+    for (int i=0; i<refCellNodes.size(); i++)
+    {
+      scaledRefCellNodes[i] = scalingFactor * refCellNodes[i];
+    }
+    // add "cell" dimension
+    int cellCount = 1;
+    refCellNodes.resize(cellCount, nodeCount, dim);
+    scaledRefCellNodes.resize(cellCount, nodeCount, dim);
+    int cubDegree = 1;
+    
+    BasisCachePtr refBasisCache = BasisCache::basisCacheForCellTopology(cellTopo, cubDegree, refCellNodes);
+    BasisCachePtr scaledBasisCache = BasisCache::basisCacheForCellTopology(cellTopo, cubDegree, scaledRefCellNodes);
+    
+    FunctionPtr h = Function::h();
+    int numPoints = refBasisCache->getPhysicalCubaturePoints().dimension(1); // C, P, D
+    FieldContainer<double> refValues(cellCount,numPoints);
+    FieldContainer<double> scaledRefValues(cellCount,numPoints);
+    
+    h->values(refValues, refBasisCache);
+    h->values(scaledRefValues, scaledBasisCache);
+    
+    double tol = 1e-15;
+    double maxDiff = 0;
+    for (int i=0; i<refValues.size(); i++)
+    {
+      double expected = refValues[i] * scalingFactor;
+      double actual = scaledRefValues[i];
+      double diff = abs(expected-actual);
+      if (diff > tol)
+      {
+        success = false;
+      }
+      maxDiff = max(maxDiff,diff);
+    }
+    if (!success)
+    {
+      out << "Expected and actual values differ; refValues were:\n" << refValues;
+      out << "Expected these to be scaled by " << scalingFactor << " in scaledRefValues:\n" << scaledRefValues;
+      out << "Maximum difference is " << maxDiff << endl;
+    }
+  }
+  
+  TEUCHOS_UNIT_TEST( Function, hFunction_Line )
+  {
+    CellTopoPtr cellTopo = CellTopology::line();
+    testHFunction(cellTopo, out, success);
+  }
+  
+  TEUCHOS_UNIT_TEST( Function, hFunction_Quad )
+  {
+    CellTopoPtr cellTopo = CellTopology::quad();
+    testHFunction(cellTopo, out, success);
+  }
+  
+  TEUCHOS_UNIT_TEST( Function, hFunction_Triangle )
+  {
+    CellTopoPtr cellTopo = CellTopology::triangle();
+    testHFunction(cellTopo, out, success);
+  }
+  
+  TEUCHOS_UNIT_TEST( Function, hFunction_Tetrahedron )
+  {
+    CellTopoPtr cellTopo = CellTopology::tetrahedron();
+    testHFunction(cellTopo, out, success);
+  }
+  
+  TEUCHOS_UNIT_TEST( Function, hFunction_Hexahedron )
+  {
+    CellTopoPtr cellTopo = CellTopology::hexahedron();
+    testHFunction(cellTopo, out, success);
+  }
+  
+  TEUCHOS_UNIT_TEST( Function, hFunction_Hexahedron_x_Line )
+  {
+    CellTopoPtr hex = CellTopology::hexahedron();
+    CellTopoPtr cellTopo = CellTopology::lineTensorTopology(hex);
+    testHFunction(cellTopo, out, success);
+  }
+  
 TEUCHOS_UNIT_TEST( Function, MinAndMaxFunctions )
 {
   FunctionPtr one = Function::constant(1);

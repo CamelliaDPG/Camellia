@@ -11,10 +11,6 @@ string hFunction::displayString()
   return "h";
 }
 
-double hFunction::value(double x, double y, double h)
-{
-  return h;
-}
 void hFunction::values(Intrepid::FieldContainer<double> &values, BasisCachePtr basisCache)
 {
   this->CHECK_VALUES_RANK(values);
@@ -22,15 +18,14 @@ void hFunction::values(Intrepid::FieldContainer<double> &values, BasisCachePtr b
   int numPoints = values.dimension(1);
 
   Intrepid::FieldContainer<double> cellMeasures = basisCache->getCellMeasures();
-  const Intrepid::FieldContainer<double> *points = &(basisCache->getPhysicalCubaturePoints());
+  int dimension = basisCache->cellTopology()->getDimension();
+  
   for (int cellIndex=0; cellIndex<numCells; cellIndex++)
   {
-    double h = sqrt(cellMeasures(cellIndex));
+    double h = pow(cellMeasures(cellIndex), 1.0 / dimension);
     for (int ptIndex=0; ptIndex<numPoints; ptIndex++)
     {
-      double x = (*points)(cellIndex,ptIndex,0);
-      double y = (*points)(cellIndex,ptIndex,1);
-      values(cellIndex,ptIndex) = value(x,y,h);
+      values(cellIndex,ptIndex) = h;
     }
   }
 }
