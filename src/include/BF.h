@@ -36,7 +36,8 @@ protected:
   bool _useIterativeRefinementsWithSPDSolve = false;
   bool _useQRSolveForOptimalTestFunctions = true;
   bool _warnAboutZeroRowsAndColumns = true;
-
+  bool _useSubgridMeshForOptimalTestSolve = false;
+  
   bool checkSymmetry(Intrepid::FieldContainer<Scalar> &innerProductMatrix);
 public:
   TBF( bool isLegacySubclass ); // legacy version; new code should use a VarFactory version of the constructor
@@ -144,6 +145,7 @@ public:
   void setUseSPDSolveForOptimalTestFunctions(bool value);
   void setUseIterativeRefinementsWithSPDSolve(bool value);
   void setUseExtendedPrecisionSolveForOptimalTestFunctions(bool value);
+  void setUseSubgridMeshForOptimalTestFunctions(bool value);
   void setWarnAboutZeroRowsAndColumns(bool value);
 
   const vector< int > & trialIDs();

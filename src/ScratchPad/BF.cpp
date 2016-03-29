@@ -944,97 +944,101 @@ namespace Camellia
     double testMatrixAssemblyTime = 0, localStiffnessDeterminationTime = 0;
     double rhsDeterminationTime = 0;
     
-#ifdef HAVE_MPI
-    Epetra_MpiComm Comm(MPI_COMM_WORLD);
-    //cout << "rank: " << rank << " of " << numProcs << endl;
-#else
-    Epetra_SerialComm Comm;
-#endif
-    
-    Epetra_Time timer(Comm);
-    
-    // localStiffness should have dim. (numCells, numTrialFields, numTrialFields)
-    MeshPtr mesh = basisCache->mesh();
-    if (mesh.get() == NULL)
-    {
-      cout << "localStiffnessMatrix requires BasisCache to have mesh set.\n";
-      TEUCHOS_TEST_FOR_EXCEPTION(true, std::invalid_argument, "localStiffnessMatrix requires BasisCache to have mesh set.");
-    }
-    const vector<GlobalIndexType>* cellIDs = &basisCache->cellIDs();
-    int numCells = cellIDs->size();
-    if (numCells != localStiffness.dimension(0))
-    {
-      cout << "localStiffnessMatrix requires basisCache->cellIDs() to have the same # of cells as the first dimension of localStiffness\n";
-      TEUCHOS_TEST_FOR_EXCEPTION(true, std::invalid_argument, "localStiffnessMatrix requires basisCache->cellIDs() to have the same # of cells as the first dimension of localStiffness");
-    }
-    
-    ElementTypePtr elemType = mesh->getElementType((*cellIDs)[0]); // we assume all cells provided are of the same type
-    DofOrderingPtr trialOrder = elemType->trialOrderPtr;
-    DofOrderingPtr testOrder = elemType->testOrderPtr;
-    int numTestDofs = testOrder->totalDofs();
-    int numTrialDofs = trialOrder->totalDofs();
-    if ((numTrialDofs != localStiffness.dimension(1)) || (numTrialDofs != localStiffness.dimension(2)))
-    {
-      cout << "localStiffness should have dimensions (C,numTrialFields,numTrialFields).\n";
-      TEUCHOS_TEST_FOR_EXCEPTION(true, std::invalid_argument, "localStiffness should have dimensions (C,numTrialFields,numTrialFields).");
-    }
-    
+    Epetra_Time timer(*MPIWrapper::CommWorld());
     bool printTimings = false;
-    
-    if (printTimings)
-    {
-      cout << "numCells: " << numCells << endl;
-      cout << "numTestDofs: " << numTestDofs << endl;
-      cout << "numTrialDofs: " << numTrialDofs << endl;
-    }
-    
-    timer.ResetStartTime();
-    FieldContainer<double> cellSideParities = basisCache->getCellSideParities();
 
-    if (ip == Teuchos::null)
+    if (! _useSubgridMeshForOptimalTestSolve)
     {
-      // can we interpret as a Bubnov-Galerkin setting?
-      TEUCHOS_TEST_FOR_EXCEPTION(numTestDofs != numTrialDofs, std::invalid_argument, "BF: ip is null, but the number of test dofs is different from the number of trial dofs (can't do Bubnov-Galerkin).");
-      this->stiffnessMatrix(localStiffness, elemType, cellSideParities, basisCache);
-      
-      // the above stores in (trial, test) order; we want (test, trial) -- so we transpose cell-wise:
-      Teuchos::Array<int> dim;
-      dim.push_back(numTrialDofs);
-      dim.push_back(numTrialDofs);
-      
-      for (int cellOrdinal=0; cellOrdinal<numCells; cellOrdinal++)
+      // localStiffness should have dim. (numCells, numTrialFields, numTrialFields)
+      MeshPtr mesh = basisCache->mesh();
+      if (mesh.get() == NULL)
       {
-        FieldContainer<double> cellLocalStiffness(dim, &localStiffness(cellOrdinal,0,0));
-        SerialDenseWrapper::transposeSquareMatrix(cellLocalStiffness); // transposes data in place
+        cout << "localStiffnessMatrix requires BasisCache to have mesh set.\n";
+        TEUCHOS_TEST_FOR_EXCEPTION(true, std::invalid_argument, "localStiffnessMatrix requires BasisCache to have mesh set.");
+      }
+      const vector<GlobalIndexType>* cellIDs = &basisCache->cellIDs();
+      int numCells = cellIDs->size();
+      if (numCells != localStiffness.dimension(0))
+      {
+        cout << "localStiffnessMatrix requires basisCache->cellIDs() to have the same # of cells as the first dimension of localStiffness\n";
+        TEUCHOS_TEST_FOR_EXCEPTION(true, std::invalid_argument, "localStiffnessMatrix requires basisCache->cellIDs() to have the same # of cells as the first dimension of localStiffness");
       }
       
-      localStiffnessDeterminationTime += timer.ElapsedTime();
-
+      ElementTypePtr elemType = mesh->getElementType((*cellIDs)[0]); // we assume all cells provided are of the same type
+      DofOrderingPtr trialOrder = elemType->trialOrderPtr;
+      DofOrderingPtr testOrder = elemType->testOrderPtr;
+      int numTestDofs = testOrder->totalDofs();
+      int numTrialDofs = trialOrder->totalDofs();
+      if ((numTrialDofs != localStiffness.dimension(1)) || (numTrialDofs != localStiffness.dimension(2)))
+      {
+        cout << "localStiffness should have dimensions (C,numTrialFields,numTrialFields).\n";
+        TEUCHOS_TEST_FOR_EXCEPTION(true, std::invalid_argument, "localStiffness should have dimensions (C,numTrialFields,numTrialFields).");
+      }
+      
+      if (printTimings)
+      {
+        cout << "numCells: " << numCells << endl;
+        cout << "numTestDofs: " << numTestDofs << endl;
+        cout << "numTrialDofs: " << numTrialDofs << endl;
+      }
+      
       timer.ResetStartTime();
-      rhs->integrateAgainstStandardBasis(rhsVector, testOrder, basisCache);
-      rhsDeterminationTime += timer.ElapsedTime();
+      FieldContainer<double> cellSideParities = basisCache->getCellSideParities();
+
+      if (ip == Teuchos::null)
+      {
+        // can we interpret as a Bubnov-Galerkin setting?
+        TEUCHOS_TEST_FOR_EXCEPTION(numTestDofs != numTrialDofs, std::invalid_argument, "BF: ip is null, but the number of test dofs is different from the number of trial dofs (can't do Bubnov-Galerkin).");
+        this->stiffnessMatrix(localStiffness, elemType, cellSideParities, basisCache);
+        
+        // the above stores in (trial, test) order; we want (test, trial) -- so we transpose cell-wise:
+        Teuchos::Array<int> dim;
+        dim.push_back(numTrialDofs);
+        dim.push_back(numTrialDofs);
+        
+        for (int cellOrdinal=0; cellOrdinal<numCells; cellOrdinal++)
+        {
+          FieldContainer<double> cellLocalStiffness(dim, &localStiffness(cellOrdinal,0,0));
+          SerialDenseWrapper::transposeSquareMatrix(cellLocalStiffness); // transposes data in place
+        }
+        
+        localStiffnessDeterminationTime += timer.ElapsedTime();
+
+        timer.ResetStartTime();
+        rhs->integrateAgainstStandardBasis(rhsVector, testOrder, basisCache);
+        rhsDeterminationTime += timer.ElapsedTime();
+      }
+      else
+      {
+        //      cout << "ipMatrix:\n" << ipMatrix;
+        
+        timer.ResetStartTime();
+        FieldContainer<Scalar> optTestCoeffs(numCells,numTrialDofs,numTestDofs);
+        
+        int optSuccess = this->optimalTestWeightsAndStiffness(optTestCoeffs, localStiffness, elemType,
+                                                              cellSideParities, basisCache, ip, ipBasisCache);
+
+        localStiffnessDeterminationTime += timer.ElapsedTime();
+        //      cout << "optTestCoeffs:\n" << optTestCoeffs;
+        
+        if ( optSuccess != 0 )
+        {
+          cout << "**** WARNING: in BilinearForm::localStiffnessMatrixAndRHS(), optimal test function computation failed with error code " << optSuccess << ". ****\n";
+        }
+        
+        timer.ResetStartTime();
+        rhs->integrateAgainstOptimalTests(rhsVector, optTestCoeffs, testOrder, basisCache);
+        rhsDeterminationTime += timer.ElapsedTime();
+      }
     }
     else
     {
-      //      cout << "ipMatrix:\n" << ipMatrix;
-      
-      timer.ResetStartTime();
-      FieldContainer<Scalar> optTestCoeffs(numCells,numTrialDofs,numTestDofs);
-      
-      int optSuccess = this->optimalTestWeightsAndStiffness(optTestCoeffs, localStiffness, elemType,
-                                                            cellSideParities, basisCache, ip, ipBasisCache);
-
-      localStiffnessDeterminationTime += timer.ElapsedTime();
-      //      cout << "optTestCoeffs:\n" << optTestCoeffs;
-      
-      if ( optSuccess != 0 )
-      {
-        cout << "**** WARNING: in BilinearForm::localStiffnessMatrixAndRHS(), optimal test function computation failed with error code " << optSuccess << ". ****\n";
-      }
-      
-      timer.ResetStartTime();
-      rhs->integrateAgainstOptimalTests(rhsVector, optTestCoeffs, testOrder, basisCache);
-      rhsDeterminationTime += timer.ElapsedTime();
+      // 1. set up a (serial) Mesh for IP.  Ultimately, can/should cache these (one per ElementType), and simply relabel the vertices
+      // 2. set up a SerialComm-based dof Epetra_Map (Tpetra_Map?), and create FECrsMatrix and RHSVector
+      // 3. Fill both LHS and RHS using appropriate LinearTerms.
+      // 4. Solve.  (Direct solver to start, but ultimately, I want to try GMG.  Can reuse the prolongation operator, too.)
+      // 5. Compute the local stiffness matrix and RHS.
+      TEUCHOS_TEST_FOR_EXCEPTION(true, std::invalid_argument, "Subgrid mesh optimal test solve implementation not yet complete!");
     }
     
     if (printTimings)
@@ -1093,14 +1097,7 @@ namespace Camellia
     int numTestDofs = testOrdering->totalDofs();
     int numTrialDofs = trialOrdering->totalDofs();
     
-#ifdef HAVE_MPI
-    Epetra_MpiComm Comm(MPI_COMM_WORLD);
-    //cout << "rank: " << rank << " of " << numProcs << endl;
-#else
-    Epetra_SerialComm Comm;
-#endif
-    
-    Epetra_Time timer(Comm);
+    Epetra_Time timer(*MPIWrapper::CommWorld());
     
     double timeG, timeB, timeT; // time to compute Gram matrix, the right-hand side B, and time to solve GT = B
     
@@ -1212,6 +1209,12 @@ namespace Camellia
   void TBF<Scalar>::setUseIterativeRefinementsWithSPDSolve(bool value)
   {
     _useIterativeRefinementsWithSPDSolve = value;
+  }
+  
+  template <typename Scalar>
+  void TBF<Scalar>::setUseSubgridMeshForOptimalTestFunctions(bool value)
+  {
+    _useSubgridMeshForOptimalTestSolve = value;
   }
   
   template <typename Scalar>
