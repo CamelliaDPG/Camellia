@@ -403,8 +403,8 @@ NavierStokesVGPFormulation::NavierStokesVGPFormulation(MeshTopologyPtr meshTopo,
   // setIP( _navierStokesBF->graphNorm() );
   setIP( _ips[normName] );
 
-  int vectorRank = 1;
-  FunctionPtr forcingFunction = parameters.get<FunctionPtr>("forcingFunction",Function::zero(vectorRank));
+  FunctionPtr zeroForcing = Function::vectorize(vector<FunctionPtr>(_spaceDim,Function::zero()));
+  FunctionPtr forcingFunction = parameters.get<FunctionPtr>("forcingFunction",zeroForcing);
   this->setForcingFunction(forcingFunction); // default to zero
 
   _bc = BC::bc();
@@ -447,7 +447,7 @@ NavierStokesVGPFormulation::NavierStokesVGPFormulation(MeshTopologyPtr meshTopo,
 
   _nonlinearIterationCount = 0;
 
-  if (_spaceDim==2)
+  if ((_spaceDim==2) && !_spaceTime)
   {
     // finally, set up a stream function solve for 2D
     _streamFormulation = Teuchos::rcp( new PoissonFormulation(_spaceDim,_useConformingTraces) );
