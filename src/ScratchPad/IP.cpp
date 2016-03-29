@@ -135,7 +135,6 @@ void TIP<Scalar>::computeInnerProductMatrix(FieldContainer<Scalar> &innerProduct
     FieldContainer<double> physicalCubaturePoints = basisCache->getPhysicalCubaturePoints();
 
     unsigned numCells = physicalCubaturePoints.dimension(0);
-    unsigned spaceDim = physicalCubaturePoints.dimension(2);
 
     vector<int> testIDs = _bilinearForm->testIDs();
     vector<int>::iterator testIterator1;
@@ -224,14 +223,7 @@ void TIP<Scalar>::computeInnerProductMatrix(FieldContainer<Scalar> &innerProduct
     const FieldContainer<double>* physicalCubaturePoints = &basisCache->getPhysicalCubaturePoints();
 
     unsigned numCells = physicalCubaturePoints->dimension(0);
-    unsigned numPoints = physicalCubaturePoints->dimension(1);
-    //  unsigned spaceDim = physicalCubaturePoints.dimension(2);
     unsigned numDofs = dofOrdering->totalDofs();
-
-    Teuchos::Array<int> ltValueDim;
-    ltValueDim.push_back(numCells);
-    ltValueDim.push_back(0); // # fields -- empty until we have a particular basis
-    ltValueDim.push_back(numPoints);
 
     innerProduct.initialize(0.0);
 
@@ -338,16 +330,6 @@ void TIP<Scalar>::computeInnerProductVector(FieldContainer<Scalar> &ipVector,
   {
     TEUCHOS_TEST_FOR_EXCEPTION(true, std::invalid_argument, "fxn cannot be null!");
   }
-
-  unsigned numCells = physicalCubaturePoints.dimension(0);
-  unsigned numPoints = physicalCubaturePoints.dimension(1);
-//  unsigned spaceDim = physicalCubaturePoints.dimension(2);
-//  unsigned numDofs = dofOrdering->totalDofs();
-
-  Teuchos::Array<int> ltValueDim;
-  ltValueDim.push_back(numCells);
-  ltValueDim.push_back(0); // # fields -- empty until we have a particular basis
-  ltValueDim.push_back(numPoints);
 
   ipVector.initialize(0.0);
 
