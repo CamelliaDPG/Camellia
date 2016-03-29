@@ -33,6 +33,12 @@ namespace Camellia
     static void filterMatrix(Intrepid::FieldContainer<double> &filteredMatrix, const Intrepid::FieldContainer<double> &matrix,
                              const std::set<int> &rowOrdinals, const std::set<int> &colOrdinals);
     
+    // ! provides an implementation of getEnumeration that uses std::vector<int> instead.  In the context of debugging, Teuchos::Array<int>, which is what FieldContainer uses, can be prohibitively slow.
+    static int getEnumeration(const std::vector<int> &index, const Intrepid::FieldContainer<double> &fc);
+
+    // ! returns a lambda function that depends dynamically on the values in index, and at generation time on the dimensions of fc.  Intended to provide a faster version than either FieldContainer or the above getEnumeration() (which should perhaps be deleted).
+    static std::function<int()> getEnumerator(const std::vector<int> &index, const Intrepid::FieldContainer<double> &fc);
+    
     static bool matrixIsSymmetric(Intrepid::FieldContainer<double> &A, double relTol = 1e-12, double absTol = 1e-14);
     
     static bool matrixIsSymmetric(Intrepid::FieldContainer<double> &A, std::vector<std::pair<int,int>> &asymmetricEntries,

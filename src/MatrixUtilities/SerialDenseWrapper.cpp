@@ -252,6 +252,95 @@ namespace Camellia {
     }
   }
   
+  int SerialDenseWrapper::getEnumeration(const std::vector<int> &index, const Intrepid::FieldContainer<double> &fc)
+  {
+    switch (fc.rank())
+    {
+      case 0:
+        return 0;
+      case 1:
+        return index[0];
+      case 2:
+        return index[0] * fc.dimension(1) + index[1];
+      case 3:
+        return (index[0] * fc.dimension(1) + index[1]) * fc.dimension(2) + index[2];
+      case 4:
+        return ((index[0] * fc.dimension(1) + index[1]) * fc.dimension(2) + index[2]) * fc.dimension(3) + index[3];
+      case 5:
+        return (((index[0] * fc.dimension(1) + index[1]) * fc.dimension(2) + index[2]) * fc.dimension(3) + index[3]) * fc.dimension(4) + index[4];
+      default:
+        TEUCHOS_TEST_FOR_EXCEPTION(true, std::invalid_argument, "Unhandled FieldContainer rank.");
+    }
+  }
+  
+  std::function<int()> SerialDenseWrapper::getEnumerator(const std::vector<int> &index, const Intrepid::FieldContainer<double> &fc)
+  {
+    std::function<int()> enumerator;
+    int dim1, dim2, dim3, dim4;
+    const int *coord0, *coord1, *coord2, *coord3, *coord4;
+    switch(fc.rank())
+    {
+      case 0:
+        enumerator = []() {
+          return 0;
+        };
+        break;
+      case 1:
+        coord0 = &index[0];
+        enumerator = [coord0]() {
+          return *coord0;
+        };
+        break;
+      case 2:
+        dim1 = fc.dimension(1);
+        coord0 = &index[0];
+        coord1 = &index[1];
+        enumerator = [dim1, coord0, coord1]() {
+          return *coord0 * dim1 + *coord1;
+        };
+        break;
+      case 3:
+        dim1 = fc.dimension(1);
+        dim2 = fc.dimension(2);
+        coord0 = &index[0];
+        coord1 = &index[1];
+        coord2 = &index[2];
+        enumerator = [dim1, dim2, coord0, coord1, coord2]() {
+          return (*coord0 * dim1 + *coord1) * dim2 + *coord2;
+        };
+        break;
+      case 4:
+        dim1 = fc.dimension(1);
+        dim2 = fc.dimension(2);
+        dim3 = fc.dimension(3);
+        coord0 = &index[0];
+        coord1 = &index[1];
+        coord2 = &index[2];
+        coord3 = &index[3];
+        enumerator = [dim1, dim2, dim3, coord0, coord1, coord2, coord3]() {
+          return ((*coord0 * dim1 + *coord1) * dim2 + *coord2) * dim3 + *coord3;
+        };
+        break;
+      case 5:
+        dim1 = fc.dimension(1);
+        dim2 = fc.dimension(2);
+        dim3 = fc.dimension(3);
+        dim4 = fc.dimension(4);
+        coord0 = &index[0];
+        coord1 = &index[1];
+        coord2 = &index[2];
+        coord3 = &index[3];
+        coord4 = &index[4];
+        enumerator = [dim1, dim2, dim3, dim4, coord0, coord1, coord2, coord3, coord4]() {
+          return (((*coord0 * dim1 + *coord1) * dim2 + *coord2) * dim3 + *coord3) * dim4 + *coord4;
+        };
+        break;
+      default:
+        TEUCHOS_TEST_FOR_EXCEPTION(true,std::invalid_argument, "Unhandled outputValues rank");
+    }
+    return enumerator;
+  }
+  
   bool SerialDenseWrapper::matrixIsSymmetric(Intrepid::FieldContainer<double> &A, double relTol, double absTol)
   {
     TEUCHOS_TEST_FOR_EXCEPTION(A.rank() != 2, std::invalid_argument, "A must have rank 2");
