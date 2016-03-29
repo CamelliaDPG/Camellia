@@ -278,89 +278,6 @@ void TSolution<Scalar>::addSolution(Teuchos::RCP< TSolution<Scalar> > otherSoln,
   clearComputedResiduals();
 
   return;
-  // old implementation -- distinguishing between condensed case and other -- below
-  /*
-  { // treat the condensedDofInterpreter case:
-    CondensedDofInterpreter* condensedDofInterpreter = dynamic_cast<CondensedDofInterpreter*>( _dofInterpreter.get() );
-    CondensedDofInterpreter* otherCondensedDofInterpreter = dynamic_cast<CondensedDofInterpreter*>( otherSoln->getDofInterpreter().get() );
-
-    bool isCondensed = (condensedDofInterpreter != NULL);
-    bool otherIsCondensed = (otherCondensedDofInterpreter != NULL);
-
-    if (isCondensed || otherIsCondensed) {
-      // In many situations, we can't legitimately add two condensed solution _lhsVectors together and back out the other (field) dofs.
-      // E.g., consider a nonlinear problem in which the bilinear form (and therefore stiffness matrix) depends on background data.
-      // Even a linear problem with two solutions with different RHS data would require us to accumulate the local load vectors.
-      // For this reason, we don't attempt to add two condensed solutions together.  Instead, we add their respective cell-local
-      // (expanded, basically) coefficients together, and then glean the condensed representation from that using the private
-      // setGlobalSolutionFromCellLocalCoefficients() method.
-
-      set<GlobalIndexType> myCellIDs = _mesh->cellIDsInPartition();
-
-      for (set<GlobalIndexType>::iterator cellIDIt = myCellIDs.begin(); cellIDIt != myCellIDs.end(); cellIDIt++) {
-        GlobalIndexType cellID = *cellIDIt;
-
-        Intrepid::FieldContainer<double> myCoefficients;
-        if (_solutionForCellIDGlobal.find(cellID) != _solutionForCellIDGlobal.end()) {
-          myCoefficients = _solutionForCellIDGlobal[cellID];
-        } else {
-          myCoefficients.resize(_mesh->getElementType(cellID)->trialOrderPtr->totalDofs());
-        }
-
-        Intrepid::FieldContainer<double> otherCoefficients = otherSoln->allCoefficientsForCellID(cellID);
-
-        SerialDenseWrapper::addFCs(myCoefficients, otherCoefficients, weight);
-
-        if (replaceBoundaryTerms) {
-          // then copy the flux/field terms from otherCoefficients, weighting with weight
-          //   (though it seems to me now that this option probably only really makes sense when weight = 1.0, this implementation is consistent
-          //    with the previous non-condensed version of addSolution)
-          DofOrderingPtr trialOrder = _mesh->getElementType(cellID)->trialOrderPtr;
-          set<int> traceDofIndices = trialOrder->getTraceDofIndices();
-          for (set<int>::iterator traceDofIndexIt = traceDofIndices.begin(); traceDofIndexIt != traceDofIndices.end(); traceDofIndexIt++) {
-            int traceDofIndex = *traceDofIndexIt;
-            myCoefficients[traceDofIndex] = weight * otherCoefficients[traceDofIndex];
-          }
-        }
-        _solutionForCellIDGlobal[cellID] = myCoefficients;
-      }
-
-      setGlobalSolutionFromCellLocalCoefficients();
-
-      clearComputedResiduals();
-
-      return;
-    }
-  }
-
-  // first, add the global solution vectors together.
-  if (otherSoln->getLHSVector().get() != NULL) {
-    if (_lhsVector.get() != NULL) {
-      _lhsVector->Update(weight, *otherSoln->getLHSVector(), 1.0);
-    } else {
-      _lhsVector = Teuchos::rcp( new Epetra_FEVector( *otherSoln->getLHSVector() ) );
-      _lhsVector->Scale(weight);
-    }
-
-    if (replaceBoundaryTerms) {
-      Epetra_Map partMap = getPartitionMap();
-      set<GlobalIndexType> boundaryIndices;
-      set<GlobalIndexType> fluxIndices = _mesh->globalDofAssignment()->partitionOwnedGlobalFluxIndices();
-      set<GlobalIndexType> traceIndices = _mesh->globalDofAssignment()->partitionOwnedGlobalTraceIndices();
-      boundaryIndices.insert(fluxIndices.begin(), fluxIndices.end());
-      boundaryIndices.insert(traceIndices.begin(), traceIndices.end());
-      for (set<GlobalIndexType>::iterator traceIndexIt=boundaryIndices.begin(); traceIndexIt != boundaryIndices.end(); traceIndexIt++) {
-        GlobalIndexTypeToCast traceIndex = (GlobalIndexTypeToCast) *traceIndexIt;
-        int localIndex = partMap.LID(traceIndex);
-        double value = weight * (*otherSoln->getLHSVector())[0][localIndex];
-        _lhsVector->ReplaceGlobalValue(traceIndex, 0, value);
-      }
-    }
-    // now, interpret the global data
-    importSolution();
-
-    clearComputedResiduals();
-  }*/
 }
 
 template <typename Scalar>
@@ -2934,7 +2851,6 @@ void TSolution<Scalar>::solutionValues(Intrepid::FieldContainer<Scalar> &values,
     values.initialize(0.0);
     for (int cellIndex=0; cellIndex<numTotalCells; cellIndex++)
     {
-
       Intrepid::FieldContainer<double> cellPoint(1,spaceDim); // a single point to find elem we're in
       for (int i=0; i<spaceDim; i++)
       {
@@ -2969,21 +2885,21 @@ void TSolution<Scalar>::solutionValues(Intrepid::FieldContainer<Scalar> &values,
 
       BasisCachePtr basisCache = BasisCache::basisCacheForCell(_mesh, cellID);
       basisCache->setRefCellPoints(refElemPoints);
-      Teuchos::Array<int> dim;
+      std::vector<int> dim;
       values.dimensions(dim);
       dim[0] = 1; // one cell
-      Teuchos::Array<int> cellOffset = dim;
+      std::vector<int> cellOffset = dim;
       cellOffset[0] = cellIndex;
       for (int containerRank=1; containerRank<cellOffset.size(); containerRank++)
       {
         cellOffset[containerRank] = 0;
       }
-      Intrepid::FieldContainer<double> cellValues(dim,&values[values.getEnumeration(cellOffset)]);
+      Intrepid::FieldContainer<double> cellValues(dim,&values[SerialDenseWrapper::getEnumeration(cellOffset,values)]);
       this->solutionValues(cellValues, trialID, basisCache);
     }
     //  when the cell containing the point is off-rank, we have 0s.
     // We sum entrywise to get the missing values.
-    MPIWrapper::entryWiseSum(values);
+    MPIWrapper::entryWiseSum(*_mesh->Comm(),values);
   }
   else     // (P,D) physicalPoints
   {
