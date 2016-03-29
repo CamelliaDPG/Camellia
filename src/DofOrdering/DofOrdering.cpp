@@ -31,6 +31,7 @@
 #include "DofOrdering.h"
 #include "MultiBasis.h"
 #include "BasisFactory.h"
+#include "BasisReconciliation.h"
 
 using namespace std;
 using namespace Intrepid;
@@ -326,7 +327,6 @@ int DofOrdering::maxBasisDegree()
 
 int DofOrdering::maxBasisDegreeForVolume()   // max degree among the varIDs with numSides == 1
 {
-
   int maxBasisDegree = 0;
 
   for (set<int>::iterator varIt = varIDs.begin(); varIt != varIDs.end(); varIt++)
@@ -343,6 +343,23 @@ int DofOrdering::maxBasisDegreeForVolume()   // max degree among the varIDs with
     }
   }
   return maxBasisDegree;
+}
+
+int DofOrdering::minimumSubcellDimensionForContinuity() const // across all bases
+{
+  CellTopoPtr volumeTopo = _cellTopologyForSide.find(VOLUME_INTERIOR_SIDE_ORDINAL)->second;
+  int minSubcellDimension = volumeTopo->getDimension();
+  
+  for (auto entry : bases)
+  {
+    BasisPtr basis = entry.second;
+    int basisMin = BasisReconciliation::minimumSubcellDimension(basis);
+    if (minSubcellDimension > basisMin)
+    {
+      minSubcellDimension = basisMin;
+    }
+  }
+  return minSubcellDimension;
 }
 
 void DofOrdering::print(std::ostream& os)

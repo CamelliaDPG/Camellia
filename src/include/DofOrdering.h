@@ -111,6 +111,7 @@ public:
 
   CellTopoPtr cellTopology(int sideIndex = -1) const;
 
+  int minimumSubcellDimensionForContinuity() const; // across all bases
   int maxBasisDegree();
   int maxBasisDegreeForVolume();
 
