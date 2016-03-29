@@ -127,11 +127,16 @@ void testIntegrateSpaceVaryingFunctionSides(int spaceDim, Teuchos::FancyOStream 
   TEUCHOS_UNIT_TEST( SpaceTime, ConformingSpaceOnlyTracesAreContinuousInSpace )
   {
     // the main concern is with hanging nodes "constrained" by a temporal side.
-    /* If we take a space-time mesh that looks like this:
+    /* If we take a space-time mesh that looks like this (y axis is time):
            _________________
            |               |
            |               |
-           |_______________|
+           |               |
+           |               |
+           |_______________| <----- horizontal side here is temporal, and would constrain a full trace variable
+           |       |       |        but not a space-only trace variable (which is undefined on the horizontal side)
+           |       |       |
+           |_______|_______|
            |       |       |
            |       |       |
            |_______|_______|
