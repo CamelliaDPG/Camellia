@@ -577,12 +577,12 @@ void CondensedDofInterpreter<Scalar>::initializeGlobalDofIndices()
   map<GlobalIndexType, IndexType> partitionLocalFluxMap = interpretedFluxMapForPartition(rank, cellsForFluxStorage);
 
   int numRanks = Teuchos::GlobalMPISession::getNProc();
-  FieldContainer<GlobalIndexType> fluxDofCountForRank(numRanks);
+  FieldContainer<GlobalIndexTypeToCast> fluxDofCountForRank(numRanks);
 
   _myGlobalDofIndexCount = partitionLocalFluxMap.size();
-  fluxDofCountForRank(rank) = _myGlobalDofIndexCount;
+  fluxDofCountForRank(rank) = (GlobalIndexTypeToCast) _myGlobalDofIndexCount;
 
-  MPIWrapper::entryWiseSum(fluxDofCountForRank);
+  MPIWrapper::entryWiseSum(*_mesh->Comm(), fluxDofCountForRank);
 
   _myGlobalDofIndexOffset = 0;
   for (int i=0; i<rank; i++)
@@ -662,7 +662,7 @@ GlobalIndexType CondensedDofInterpreter<Scalar>::globalDofCount()
     reinitialize();
   }
   
-  return MPIWrapper::sum(_myGlobalDofIndexCount);
+  return MPIWrapper::sum(*_mesh->Comm(), (GlobalIndexTypeToCast)_myGlobalDofIndexCount);
 }
 
 template <typename Scalar>
@@ -975,39 +975,43 @@ void CondensedDofInterpreter<Scalar>::interpretGlobalCoefficients(GlobalIndexTyp
     interpretedDofIndices = _localInterpretedDofIndices[cellID];
   }
     
-  
-//  cout << "Got local data.\n";
+  vector<GlobalIndexTypeToCast> interpretedDofIndicesPresent(interpretedDofIndices.size());
+  int numPresent = 0;
+  for (int i=0; i<interpretedDofIndices.size(); i++)
+  {
+    GlobalIndexTypeToCast interpretedDofIndex = interpretedDofIndices[i];
+    if (_interpretedToGlobalDofIndexMap.find(interpretedDofIndex) != _interpretedToGlobalDofIndexMap.end())
+    {
+      GlobalIndexTypeToCast globalDofIndex = _interpretedToGlobalDofIndexMap[interpretedDofIndex];
+      int lID_global = globalCoefficients.Map().LID(globalDofIndex);
+      if (lID_global != -1)
+      {
+        interpretedDofIndicesPresent[numPresent++] = interpretedDofIndex;
+      }
+    }
+  }
+  // construct map for interpretedCoefficients that are represented:
+  Epetra_SerialComm SerialComm; // rank-local map
+  Epetra_Map    interpretedFluxIndicesMap((GlobalIndexTypeToCast)-1, numPresent, &interpretedDofIndicesPresent[0], 0, SerialComm);
+  Epetra_MultiVector interpretedCoefficients(interpretedFluxIndicesMap, 1);
   
   int fieldCount = fieldIndices.size();
   int fluxCount = fluxIndices.size();
 
   Epetra_SerialDenseVector field_dofs(fieldCount);
   
-  FieldContainer<GlobalIndexTypeToCast> interpretedDofIndicesCast(interpretedDofIndices.size());
-  for (int i=0; i<interpretedDofIndices.size(); i++)
+  for (int i=0; i<numPresent; i++)
   {
-    interpretedDofIndicesCast[i] = (GlobalIndexTypeToCast) interpretedDofIndices[i];
-  }
-  
-  // construct map for interpretedCoefficients:
-  Epetra_SerialComm SerialComm; // rank-local map
-  Epetra_Map    interpretedFluxIndicesMap((GlobalIndexTypeToCast)-1, (GlobalIndexTypeToCast)interpretedDofIndices.size(), &interpretedDofIndicesCast[0], 0, SerialComm);
-  Epetra_MultiVector interpretedCoefficients(interpretedFluxIndicesMap, 1);
-  
-  for (int i=0; i<interpretedDofIndices.size(); i++)
-  {
-    GlobalIndexTypeToCast interpretedDofIndex = interpretedDofIndicesCast[i];
+    GlobalIndexTypeToCast interpretedDofIndex = interpretedDofIndicesPresent[i];
     int lID_interpreted = interpretedFluxIndicesMap.LID(interpretedDofIndex);
     if (_interpretedToGlobalDofIndexMap.find(interpretedDofIndex) != _interpretedToGlobalDofIndexMap.end())
     {
       GlobalIndexTypeToCast globalDofIndex = _interpretedToGlobalDofIndexMap[interpretedDofIndex];
       int lID_global = globalCoefficients.Map().LID(globalDofIndex);
-      interpretedCoefficients[0][lID_interpreted] = globalCoefficients[0][lID_global];
-      //      cout << "globalCoefficient for globalDofIndex " << globalDofIndex << ": " << globalCoefficients[0][lID_global] << endl;
-    }
-    else
-    {
-      interpretedCoefficients[0][lID_interpreted] = 0; // zeros for fields, for now
+      if (lID_global != -1)
+      {
+        interpretedCoefficients[0][lID_interpreted] = globalCoefficients[0][lID_global];
+      }
     }
   }
   
