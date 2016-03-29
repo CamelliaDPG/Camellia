@@ -87,7 +87,7 @@ public:
 
   virtual GlobalIndexType cellID(ElementTypePtr elemTypePtr, IndexType cellIndex, PartitionIndexType partitionNumber);
   virtual vector<GlobalIndexType> cellIDsOfElementType(unsigned partitionNumber, ElementTypePtr elemTypePtr);
-  const set< GlobalIndexType > &cellsInPartition(PartitionIndexType partitionNumber);
+  const set< GlobalIndexType > &cellsInPartition(PartitionIndexType partitionNumber) const;
   Intrepid::FieldContainer<double> cellSideParitiesForCell( GlobalIndexType cellID );
 
   // after calling any of these, must call rebuildLookups
@@ -150,6 +150,10 @@ public:
   
   virtual IndexType localDofCount() = 0; // local to the MPI node
 
+  // ! Returns the smallest dimension along which continuity will be enforced.  GlobalDofAssignment's implementation
+  // ! assumes that the function spaces for the bases defined on cells determine this (e.g. H^1-conforming basis --> 0).
+  virtual int minimumSubcellDimensionForContinuityEnforcement() const;
+  
   // ! method for setting mesh and meshTopology after a deep copy of GDA.  Doesn't rebuild anything!!
   void setMeshAndMeshTopology(MeshPtr mesh);
 

@@ -259,7 +259,7 @@ vector<GlobalIndexType> GlobalDofAssignment::cellIDsOfElementType(PartitionIndex
   return cellIDsIt->second;
 }
 
-const set< GlobalIndexType > & GlobalDofAssignment::cellsInPartition(PartitionIndexType partitionNumber)
+const set< GlobalIndexType > & GlobalDofAssignment::cellsInPartition(PartitionIndexType partitionNumber) const
 {
   int rank = _partitionPolicy->Comm()->MyPID();
   if (partitionNumber == -1)
@@ -580,6 +580,30 @@ void GlobalDofAssignment::interpretLocalCoefficients(GlobalIndexType cellID, con
   }
 }
 template void GlobalDofAssignment::interpretLocalCoefficients(GlobalIndexType cellID, const FieldContainer<double> &localCoefficients, TVectorPtr<double> globalCoefficients);
+
+// ! Returns the smallest dimension along which continuity will be enforced.  GlobalDofAssignment's implementation
+// ! assumes that the function spaces for the bases defined on cells determine this (e.g. H^1-conforming basis --> 0).
+int GlobalDofAssignment::minimumSubcellDimensionForContinuityEnforcement() const
+{
+  const set<GlobalIndexType>* myCells = &cellsInPartition(-1);
+  int myMinimumSubcellDimension = _meshTopology->getDimension();
+  set<ElementType*> processedTypes;
+  for (GlobalIndexType cellID : *myCells)
+  {
+    auto entry = _elementTypeForCell.find(cellID);
+    ElementType* elemType = entry->second.get();
+    if (processedTypes.find(elemType) == processedTypes.end())
+    {
+      int elemMin = elemType->trialOrderPtr->minimumSubcellDimensionForContinuity();
+      myMinimumSubcellDimension = min(myMinimumSubcellDimension,elemMin);
+      if (myMinimumSubcellDimension == 0) break; // can't go lower than 0
+      processedTypes.insert(elemType);
+    }
+  }
+  int globalMinimumSubcellDimension;
+  _mesh->Comm()->MinAll(&myMinimumSubcellDimension, &globalMinimumSubcellDimension, 1);
+  return globalMinimumSubcellDimension;
+}
 
 void GlobalDofAssignment::projectParentCoefficientsOntoUnsetChildren()
 {
