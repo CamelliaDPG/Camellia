@@ -20,6 +20,11 @@ namespace Camellia
 class MeshTools
 {
 public:
+  // ! For two MeshTopologies whose cells have same geometry (vertices), generates a map from the cell indices of
+  // ! one to the cell indices of the other.  (Not meant for large-scale/production use.)  Keys are the cell indices
+  // ! in meshTopoFrom; values are cell indices in meshTopoTo.
+  static map<IndexType,IndexType> mapActiveCellIndices(MeshTopologyViewPtr meshTopoFrom, MeshTopologyViewPtr meshTopoTo);
+  
   static MeshPtr timeSliceMesh(MeshPtr spaceTimeMesh, double t,
                                map<GlobalIndexType, GlobalIndexType> &sliceCellIDToSpaceTimeCellID, int H1OrderForSlice);
 

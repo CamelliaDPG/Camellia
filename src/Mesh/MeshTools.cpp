@@ -20,6 +20,7 @@
 // #endif
 
 #include "MeshPartitionPolicy.h"
+#include "SerialDenseWrapper.h"
 
 using namespace Intrepid;
 using namespace Camellia;
@@ -86,6 +87,27 @@ CellTopoPtr getBottomTopology(MeshTopology* meshTopo, IndexType cellID)
   Camellia::CellTopologyKey bottomCellTopoKey = meshTopo->getEntityTopology(spaceDim, bottomEntityIndex)->getKey();
   CellTopoPtr cellTopo = CamelliaCellTools::cellTopoForKey(bottomCellTopoKey);
   return cellTopo;
+}
+
+map<IndexType,IndexType> MeshTools::mapActiveCellIndices(MeshTopologyViewPtr meshTopoFrom, MeshTopologyViewPtr meshTopoTo)
+{
+  const set<IndexType>* activeCellIndices = &meshTopoFrom->getActiveCellIndices();
+  vector<vector<double>> centroid(activeCellIndices->size());
+  FieldContainer<double> centroidFC(activeCellIndices->size(),1,meshTopoFrom->getDimension());
+  int cellOrdinal = 0;
+  for (IndexType cellIndex : *activeCellIndices)
+  {
+    centroid[cellOrdinal++] = meshTopoFrom->getCellCentroid(cellIndex);
+  }
+  CamelliaCellTools::pointsFCFromVector(centroidFC, centroid);
+  vector<IndexType> toIndices = meshTopoTo->cellIDsForPoints(centroidFC);
+  cellOrdinal = 0;
+  map<IndexType,IndexType> resultMap;
+  for (IndexType cellIndex : *activeCellIndices)
+  {
+    resultMap[cellIndex] = toIndices[cellOrdinal++];
+  }
+  return resultMap;
 }
 
 MeshPtr MeshTools::timeSliceMesh(MeshPtr spaceTimeMesh, double t,
@@ -178,12 +200,12 @@ public:
     Teuchos::Array<int> dim;
     values.dimensions(dim);
     dim[0] = 1; // one cell
-    Teuchos::Array<int> offset(dim.size());
+    std::vector<int> offset(dim.size());
 
     for (int cellOrdinal = 0; cellOrdinal < sliceCellIDs.size(); cellOrdinal++)
     {
       offset[0] = cellOrdinal;
-      int enumeration = values.getEnumeration(offset);
+      int enumeration = SerialDenseWrapper::getEnumeration(offset,values);
       FieldContainer<double>valuesForCell(dim,&values[enumeration]);
       GlobalIndexType sliceCellID = sliceCellIDs[cellOrdinal];
       int numPoints = sliceBasisCache->getPhysicalCubaturePoints().dimension(1);
