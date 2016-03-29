@@ -611,20 +611,27 @@ TEUCHOS_UNIT_TEST( BasisCache, SetRefCellPointsSpaceTimeSide )
     
     // set up BasisSumFunction
     GlobalIndexType cellID = 0;
-    DofOrderingPtr trialOrder = mesh->getElementType(cellID)->trialOrderPtr;
-    BasisPtr basis = trialOrder->getBasis(form.phi()->ID());
-    FieldContainer<double> cellCoefficients = soln->allCoefficientsForCellID(cellID);
-    FieldContainer<double> basisCoefficients(basis->getCardinality());
-    const vector<int>* dofIndices = &trialOrder->getDofIndices(form.phi()->ID());
-    for (int basisOrdinal=0; basisOrdinal<basis->getCardinality(); basisOrdinal++)
+    const set<GlobalIndexType>* myCells = &mesh->cellIDsInPartition();
+    // set up function to be zero everywhere except for on the MPI rank that owns cellID
+    FunctionPtr f_basisSum = Function::zero();
+    FunctionPtr f_basisSum_laplacian = Function::zero();
+    if (myCells->find(cellID) != myCells->end())
     {
-      basisCoefficients[basisOrdinal] = cellCoefficients[(*dofIndices)[basisOrdinal]];
+      DofOrderingPtr trialOrder = mesh->getElementType(cellID)->trialOrderPtr;
+      BasisPtr basis = trialOrder->getBasis(form.phi()->ID());
+      FieldContainer<double> cellCoefficients = soln->allCoefficientsForCellID(cellID);
+      FieldContainer<double> basisCoefficients(basis->getCardinality());
+      const vector<int>* dofIndices = &trialOrder->getDofIndices(form.phi()->ID());
+      for (int basisOrdinal=0; basisOrdinal<basis->getCardinality(); basisOrdinal++)
+      {
+        basisCoefficients[basisOrdinal] = cellCoefficients[(*dofIndices)[basisOrdinal]];
+      }
+      f_basisSum = BasisSumFunction::basisSumFunction(basis, basisCoefficients, OP_VALUE);
+      f_basisSum_laplacian = BasisSumFunction::basisSumFunction(basis, basisCoefficients, OP_LAPLACIAN);
     }
-    FunctionPtr f_basisSum = BasisSumFunction::basisSumFunction(basis, basisCoefficients, OP_VALUE);
     // confirm that this also worked:
     err = (f - f_basisSum)->l2norm(mesh);
     TEST_COMPARE(err, <, tol);
-    FunctionPtr f_basisSum_laplacian = BasisSumFunction::basisSumFunction(basis, basisCoefficients, OP_LAPLACIAN);
     // the real test:
     err = (f_laplacian - f_basisSum_laplacian)->l2norm(mesh);
     TEST_COMPARE(err, <, tol);
