@@ -10,12 +10,14 @@
 
 #include "Function.h"
 #include "MeshFactory.h"
+#include "PoissonFormulation.h"
 #include "SerialDenseWrapper.h"
 #include "SpaceTimeHeatFormulation.h"
 #include "TensorBasis.h"
 #include "TypeDefs.h"
 
 using namespace Camellia;
+using namespace Intrepid;
 
 namespace
 {
@@ -546,6 +548,141 @@ TEUCHOS_UNIT_TEST( LinearTerm, FauxSpaceTimeIntegrationByPartsInTime_2D )
   testFauxSpaceTimeIntegrationByPartsInTime(2,out,success);
 }
 
+  TEUCHOS_UNIT_TEST( LinearTerm, SolutionEvaluation_ScalarTimesScalar )
+  {
+    int spaceDim = 2;
+    bool useConformingTraces = true; // shouldn't matter here
+    PoissonFormulation form(spaceDim, useConformingTraces, PoissonFormulation::CONTINUOUS_GALERKIN);
+    
+    // one-element unit quad domain, 2nd order
+    MeshPtr mesh = MeshFactory::rectilinearMesh(form.bf(), {1.0,1.0}, {1,1}, 2);
+    FunctionPtr x = Function::xn(1), y = Function::yn(1);
+    FunctionPtr phi_exact = x + 2 * y;
+    FunctionPtr weight = Function::constant(4.0);
+    FunctionPtr expectedFunction = weight * phi_exact;
+    
+    VarPtr phi = form.phi();
+    LinearTermPtr lt = weight * phi;
+    
+    SolutionPtr solution = Solution::solution(form.bf(), mesh);
+    solution->projectOntoMesh({{phi->ID(), phi_exact}});
+    
+    GlobalIndexType cellID = 0;
+    BasisCachePtr basisCache = BasisCache::basisCacheForCell(mesh, cellID);
+    int numPoints = basisCache->getRefCellPoints().dimension(0);
+    int numCells = 1;
+    FieldContainer<double> actualValues(numCells, numPoints);
+    lt->evaluate(actualValues, solution, basisCache);
+    
+    FieldContainer<double> expectedValues(numCells, numPoints);
+    expectedFunction->values(expectedValues, basisCache);
+    
+    double tol = 1e-14;
+    TEST_COMPARE_FLOATING_ARRAYS(actualValues, expectedValues, tol);
+  }
+
+  
+  TEUCHOS_UNIT_TEST( LinearTerm, SolutionEvaluation_ScalarTimesVector )
+  {
+    int spaceDim = 2;
+    bool useConformingTraces = true; // shouldn't matter here
+    PoissonFormulation form(spaceDim, useConformingTraces, PoissonFormulation::CONTINUOUS_GALERKIN);
+    
+    // one-element unit quad domain, 2nd order
+    MeshPtr mesh = MeshFactory::rectilinearMesh(form.bf(), {1.0,1.0}, {1,1}, 2);
+    FunctionPtr x = Function::xn(1), y = Function::yn(1);
+    FunctionPtr phi_exact = x + 2 * y;
+    FunctionPtr weight = Function::constant(4.0);
+    FunctionPtr expectedFunction = weight * phi_exact->grad();
+    
+    VarPtr phi = form.phi();
+    LinearTermPtr lt = weight * phi->grad();
+    
+    SolutionPtr solution = Solution::solution(form.bf(), mesh);
+    solution->projectOntoMesh({{phi->ID(), phi_exact}});
+    
+    GlobalIndexType cellID = 0;
+    BasisCachePtr basisCache = BasisCache::basisCacheForCell(mesh, cellID);
+    int numPoints = basisCache->getRefCellPoints().dimension(0);
+    int numCells = 1;
+    FieldContainer<double> actualValues(numCells, numPoints, spaceDim);
+    lt->evaluate(actualValues, solution, basisCache);
+    
+    FieldContainer<double> expectedValues(numCells, numPoints, spaceDim);
+    expectedFunction->values(expectedValues, basisCache);
+    
+    double tol = 1e-13;
+    TEST_COMPARE_FLOATING_ARRAYS(actualValues, expectedValues, tol);
+  }
+  
+  
+  TEUCHOS_UNIT_TEST( LinearTerm, SolutionEvaluation_VectorTimesScalar )
+  {
+    int spaceDim = 2;
+    bool useConformingTraces = true; // shouldn't matter here
+    PoissonFormulation form(spaceDim, useConformingTraces, PoissonFormulation::CONTINUOUS_GALERKIN);
+    
+    // one-element unit quad domain, 2nd order
+    MeshPtr mesh = MeshFactory::rectilinearMesh(form.bf(), {1.0,1.0}, {1,1}, 2);
+    FunctionPtr x = Function::xn(1), y = Function::yn(1);
+    FunctionPtr phi_exact = x + 2 * y;
+    FunctionPtr weight = Function::constant({4.0,-3.0});
+    FunctionPtr expectedFunction = weight * phi_exact;
+    
+    VarPtr phi = form.phi();
+    LinearTermPtr lt = weight * phi;
+    
+    SolutionPtr solution = Solution::solution(form.bf(), mesh);
+    solution->projectOntoMesh({{phi->ID(), phi_exact}});
+    
+    GlobalIndexType cellID = 0;
+    BasisCachePtr basisCache = BasisCache::basisCacheForCell(mesh, cellID);
+    int numPoints = basisCache->getRefCellPoints().dimension(0);
+    int numCells = 1;
+    FieldContainer<double> actualValues(numCells, numPoints, spaceDim);
+    lt->evaluate(actualValues, solution, basisCache);
+    
+    FieldContainer<double> expectedValues(numCells, numPoints, spaceDim);
+    expectedFunction->values(expectedValues, basisCache);
+    
+    double tol = 1e-13;
+    TEST_COMPARE_FLOATING_ARRAYS(actualValues, expectedValues, tol);
+  }
+  
+  TEUCHOS_UNIT_TEST( LinearTerm, SolutionEvaluation_VectorTimesVector )
+  {
+    int spaceDim = 2;
+    bool useConformingTraces = true; // shouldn't matter here
+    PoissonFormulation form(spaceDim, useConformingTraces, PoissonFormulation::CONTINUOUS_GALERKIN);
+    
+    // one-element unit quad domain, 2nd order
+    MeshPtr mesh = MeshFactory::rectilinearMesh(form.bf(), {1.0,1.0}, {1,1}, 2);
+    FunctionPtr x = Function::xn(1), y = Function::yn(1);
+    FunctionPtr phi_exact = x + 2 * y;
+    FunctionPtr weight = Function::constant({4.0,-3.0});
+    FunctionPtr expectedFunction = weight * phi_exact->grad();
+    
+    VarPtr phi = form.phi();
+    LinearTermPtr lt = weight * phi->grad();
+    
+    SolutionPtr solution = Solution::solution(form.bf(), mesh);
+    solution->projectOntoMesh({{phi->ID(), phi_exact}});
+    
+    GlobalIndexType cellID = 0;
+    BasisCachePtr basisCache = BasisCache::basisCacheForCell(mesh, cellID);
+    int numPoints = basisCache->getRefCellPoints().dimension(0);
+    int numCells = 1;
+    FieldContainer<double> actualValues(numCells, numPoints);
+    lt->evaluate(actualValues, solution, basisCache);
+    
+    FieldContainer<double> expectedValues(numCells, numPoints);
+    expectedFunction->values(expectedValues, basisCache);
+    
+    double tol = 1e-13;
+    TEST_COMPARE_FLOATING_ARRAYS(actualValues, expectedValues, tol);
+  }
+
+  
 TEUCHOS_UNIT_TEST( LinearTerm, SpaceTimeIntegrationByPartsInTime_1D )
 {
   testSpaceTimeIntegrationByPartsInTime(1,out,success);

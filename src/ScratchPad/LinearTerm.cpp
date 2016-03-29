@@ -14,6 +14,7 @@
 #include "Mesh.h"
 #include "MPIWrapper.h"
 #include "RieszRep.h"
+#include "SerialDenseWrapper.h"
 #include "Solution.h"
 #include "TensorBasis.h"
 
@@ -858,17 +859,27 @@ void TLinearTerm<Scalar>::evaluate(Intrepid::FieldContainer<Scalar> &values, TSo
     solution->solutionValues(solnValues,var->ID(),basisCache,
                              applyCubatureWeights,var->op());
 
-    Teuchos::Array<int> fDim(fValues.rank());
-    Teuchos::Array<int> solnDim(solnValues.rank());
+    std::vector<int> fDim(fValues.rank());
+    std::vector<int> solnDim(solnValues.rank());
 
-    int entriesPerPoint = 1;
     bool scalarF = f->rank() == 0;
-    int resultRank = scalarF ? var->rank() : f->rank();
-    for (int d=0; d<resultRank; d++)
+    int resultRank = -1;
+    if (scalarF)
+      resultRank = var->rank();
+    else if (var->rank() == 0)
+      resultRank = f->rank();
+    else if (var->rank() == f->rank())
+      resultRank = 0;
+    else
+      TEUCHOS_TEST_FOR_EXCEPTION(true, std::invalid_argument, "Unhandled var/f rank combination");
+    
+    int maxRank = max(var->rank(),f->rank());
+    int entriesPerPoint = 1;
+    for (int d=0; d<maxRank; d++)
     {
       entriesPerPoint *= spaceDim;
     }
-    Teuchos::Array<int> vDim( values.rank() );
+    std::vector<int> vDim( values.rank() );
     for (int cellIndex=0; cellIndex<numCells; cellIndex++)
     {
       fDim[0] = cellIndex;
@@ -879,31 +890,37 @@ void TLinearTerm<Scalar>::evaluate(Intrepid::FieldContainer<Scalar> &values, TSo
         fDim[1] = ptIndex;
         solnDim[1] = ptIndex;
         vDim[1] = ptIndex;
-        const Scalar *fValue = &fValues[fValues.getEnumeration(fDim)];
-        const Scalar *solnValue = &solnValues[solnValues.getEnumeration(solnDim)];
-
-        Scalar *value = &values[values.getEnumeration(vDim)];
+        
+        int fEnum = SerialDenseWrapper::getEnumeration(fDim,fValues);
+        int solnEnum = SerialDenseWrapper::getEnumeration(solnDim,solnValues);
+        int valueEnum = SerialDenseWrapper::getEnumeration(vDim, values);
 
         for (int entryIndex=0; entryIndex<entriesPerPoint; entryIndex++)
         {
-          *value += *fValue * *solnValue;
-          value++;
+          values[valueEnum] += fValues[fEnum] * solnValues[solnEnum];
+//          *value += *fValue * *solnValue;
+//          value++;
           if (resultRank == 0)
           {
             // resultRank == 0 --> "dot" product; march along both f and soln
-            fValue++;
-            solnValue++;
+//            fValue++;
+//            solnValue++;
+            fEnum++;
+            solnEnum++;
           }
           else
           {
+            valueEnum++;
             // resultRank != 0 --> scalar guy stays fixed while we march over the higher-rank values
             if (scalarF)
             {
-              solnValue++;
+//              solnValue++;
+              solnEnum++;
             }
             else
             {
-              fValue++;
+//              fValue++;
+              fEnum++;
             }
           }
         }
@@ -1155,9 +1172,14 @@ void TLinearTerm<Scalar>::values(Intrepid::FieldContainer<Scalar> &values, int v
         // E.g. ConstantTFunction<double>::scalarMultiplyBasisValues() knows not to do anything at all if its value is 1.0...
         Intrepid::FieldContainer<double> weightedBasisValues = *basisValues; // weighted by the scalar function
         ls.first->scalarMultiplyBasisValues(weightedBasisValues,basisCache);
-        for (int i=0; i<values.size(); i++)
+        // bounds check so we can safely do pointer arithmetic below:
+        int size = values.size();
+        TEUCHOS_TEST_FOR_EXCEPTION(weightedBasisValues.size() != size, std::invalid_argument, "Error: values containers are different sizes");
+        double *valuePtr = &values[0];
+        double *weightedBasisValuePtr = &weightedBasisValues[0];
+        for (int i=0; i<size; i++)
         {
-          values[i] += weightedBasisValues[i];
+          *valuePtr++ += *weightedBasisValuePtr++;
         }
         continue;
       }
@@ -1200,8 +1222,8 @@ void TLinearTerm<Scalar>::values(Intrepid::FieldContainer<Scalar> &values, int v
 //          }
 //        }
 
-      Teuchos::Array<int> fDim(fValues.rank());
-      Teuchos::Array<int> bDim(basisValues->rank());
+      std::vector<int> fDim(fValues.rank());
+      std::vector<int> bDim(basisValues->rank());
 
       bool usePointerArithmetic = false; // slightly faster, but skips some bounds checks
       if (usePointerArithmetic)   // do some bounds checks here
@@ -1231,9 +1253,9 @@ void TLinearTerm<Scalar>::values(Intrepid::FieldContainer<Scalar> &values, int v
             {
               if (usePointerArithmetic)
               {
-                const Scalar *fValue = &fValues[fValues.getEnumeration(fDim)];
+                const Scalar *fValue = &fValues[SerialDenseWrapper::getEnumeration(fDim, fValues)];
                 bDim[1] = fieldIndex;
-                const double *bValue = &((*basisValues)[basisValues->getEnumeration(bDim)]);
+                const double *bValue = &((*basisValues)[SerialDenseWrapper::getEnumeration(bDim, *basisValues)]);
                 for (int entryIndex=0; entryIndex<entriesPerPoint; entryIndex++)
                 {
                   values(cellIndex,fieldIndex,ptIndex) += *fValue * *bValue;
@@ -1244,9 +1266,9 @@ void TLinearTerm<Scalar>::values(Intrepid::FieldContainer<Scalar> &values, int v
               }
               else
               {
-                int fValueEnum = fValues.getEnumeration(fDim);
+                int fValueEnum = SerialDenseWrapper::getEnumeration(fDim,fValues);
                 bDim[1] = fieldIndex;
-                int bValueEnum = basisValues->getEnumeration(bDim);
+                int bValueEnum = SerialDenseWrapper::getEnumeration(bDim,*basisValues);
 //                  cout << ls.first->displayString() << " " << ls.second->displayString();
 //                  cout << ", basis cardinality: " << numFields << "; entriesPerPoint: " << entriesPerPoint << endl;
                 for (int entryIndex=0; entryIndex<entriesPerPoint; entryIndex++)
@@ -1279,7 +1301,7 @@ void TLinearTerm<Scalar>::values(Intrepid::FieldContainer<Scalar> &values, int v
         {
           entriesPerPoint *= spaceDim;
         }
-        Teuchos::Array<int> vDim( values.rank() );
+        std::vector<int> vDim( values.rank() );
         for (int cellIndex=0; cellIndex<numCells; cellIndex++)
         {
           fDim[0] = cellIndex;
@@ -1294,12 +1316,12 @@ void TLinearTerm<Scalar>::values(Intrepid::FieldContainer<Scalar> &values, int v
             {
               if (usePointerArithmetic)
               {
-                const Scalar *fValue = &fValues[fValues.getEnumeration(fDim)];
+                const Scalar *fValue = &fValues[SerialDenseWrapper::getEnumeration(fDim,fValues)];
                 bDim[1] = fieldIndex;
                 vDim[1] = fieldIndex;
-                const double *bValue = &(*basisValues)[basisValues->getEnumeration(bDim)];
+                const double *bValue = &(*basisValues)[SerialDenseWrapper::getEnumeration(bDim, *basisValues)];
 
-                Scalar *value = &values[values.getEnumeration(vDim)];
+                Scalar *value = &values[SerialDenseWrapper::getEnumeration(vDim, values)];
 
                 for (int entryIndex=0; entryIndex<entriesPerPoint; entryIndex++)
                 {
@@ -1317,13 +1339,13 @@ void TLinearTerm<Scalar>::values(Intrepid::FieldContainer<Scalar> &values, int v
               }
               else
               {
-                int fValueEnum = fValues.getEnumeration(fDim);
+                int fValueEnum = SerialDenseWrapper::getEnumeration(fDim,fValues);
                 bDim[1] = fieldIndex;
                 vDim[1] = fieldIndex;
-                int bValueEnum = basisValues->getEnumeration(bDim);
-                int valueEnum = values.getEnumeration(vDim);
+                int bValueEnum = SerialDenseWrapper::getEnumeration(bDim,*basisValues);
+                int valueEnum = SerialDenseWrapper::getEnumeration(vDim,values);
 
-                //                double *value = &values[values.getEnumeration(vDim)];
+                //                double *value = &values[SerialDenseWrapper::getEnumeration(vDim, values)];
 
                 for (int entryIndex=0; entryIndex<entriesPerPoint; entryIndex++)
                 {
@@ -1456,8 +1478,8 @@ void TLinearTerm<Scalar>::values(Intrepid::FieldContainer<Scalar> &values, int v
 
       ls.first->values(fValues,basisCache);
 
-      Teuchos::Array<int> fDim(fValues.rank()); // f is the functional weight -- fxn is the function substituted for the variable
-      Teuchos::Array<int> fxnDim(fxnValues.rank());
+      std::vector<int> fDim(fValues.rank()); // f is the functional weight -- fxn is the function substituted for the variable
+      std::vector<int> fxnDim(fxnValues.rank());
 
       // compute f * basisValues
       if ( ls.first->rank() == ls.second->rank() )   // scalar result
@@ -1476,8 +1498,8 @@ void TLinearTerm<Scalar>::values(Intrepid::FieldContainer<Scalar> &values, int v
           {
             fDim[1] = ptIndex;
             fxnDim[1] = ptIndex;
-            const Scalar *fValue = &fValues[fValues.getEnumeration(fDim)];
-            const Scalar *fxnValue = &(fxnValues[fxnValues.getEnumeration(fxnDim)]);
+            const Scalar *fValue = &fValues[SerialDenseWrapper::getEnumeration(fDim,fValues)];
+            const Scalar *fxnValue = &(fxnValues[SerialDenseWrapper::getEnumeration(fxnDim,fxnValues)]);
             for (int entryIndex=0; entryIndex<entriesPerPoint; entryIndex++)
             {
               values(cellIndex,ptIndex) += *fValue * *fxnValue;
@@ -1504,7 +1526,7 @@ void TLinearTerm<Scalar>::values(Intrepid::FieldContainer<Scalar> &values, int v
         {
           entriesPerPoint *= spaceDim;
         }
-        Teuchos::Array<int> vDim( values.rank() );
+        std::vector<int> vDim( values.rank() );
         for (int cellIndex=0; cellIndex<numCells; cellIndex++)
         {
           fDim[0] = cellIndex;
@@ -1515,10 +1537,10 @@ void TLinearTerm<Scalar>::values(Intrepid::FieldContainer<Scalar> &values, int v
             fDim[1] = ptIndex;
             fxnDim[1] = ptIndex;
             vDim[1] = ptIndex;
-            const Scalar *fValue = &fValues[fValues.getEnumeration(fDim)];
-            const Scalar *fxnValue = &(fxnValues)[fxnValues.getEnumeration(fxnDim)];
+            const Scalar *fValue = &fValues[SerialDenseWrapper::getEnumeration(fDim,fValues)];
+            const Scalar *fxnValue = &(fxnValues)[SerialDenseWrapper::getEnumeration(fxnDim,fxnValues)];
 
-            Scalar *value = &values[values.getEnumeration(vDim)];
+            Scalar *value = &values[SerialDenseWrapper::getEnumeration(vDim,values)];
 
             for (int entryIndex=0; entryIndex<entriesPerPoint; entryIndex++)
             {
