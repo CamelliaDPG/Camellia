@@ -15,6 +15,8 @@
 using namespace Intrepid;
 using namespace Camellia;
 
+bool SpaceTimeBasisCache::_defaultStoreTransformedValues = false;
+
 // volume constructor
 SpaceTimeBasisCache::SpaceTimeBasisCache(MeshPtr spaceTimeMesh, ElementTypePtr spaceTimeElementType,
     const FieldContainer<double> &physicalNodesSpatial,
@@ -24,6 +26,7 @@ SpaceTimeBasisCache::SpaceTimeBasisCache(MeshPtr spaceTimeMesh, ElementTypePtr s
     bool testVsTest, int cubatureDegreeEnrichment)
   : BasisCache(spaceTimeElementType, spaceTimeMesh, testVsTest, cubatureDegreeEnrichment, true, false)
 {
+  _storeTransformedValues = _defaultStoreTransformedValues;
   int cellCount = cellIDs.size();
   int sideCount = cellTopology()->getSideCount();
 
@@ -77,6 +80,8 @@ SpaceTimeBasisCache::SpaceTimeBasisCache(const FieldContainer<double> &physicalN
     CellTopoPtr cellTopo, int cubDegreeSpaceTime)
   : BasisCache(physicalCellNodes,cellTopo,cubDegreeSpaceTime,false,true)   // false: don't create side caches during construction; true: tensor product topology (which we should have here) --> space-time
 {
+  _storeTransformedValues = _defaultStoreTransformedValues;
+  
   bool createSideCache = true;
 
   int sideCount = cellTopology()->getSideCount();
@@ -134,6 +139,8 @@ SpaceTimeBasisCache::SpaceTimeBasisCache(int sideOrdinal, Teuchos::RCP<SpaceTime
     int trialDegree, int testDegree)
   : BasisCache(sideOrdinal, volumeCache, trialDegree, testDegree, (BasisPtr) Teuchos::null)
 {
+  _storeTransformedValues = _defaultStoreTransformedValues;
+  
   BasisCachePtr spatialCacheVolume = volumeCache->getSpatialBasisCache();
   BasisCachePtr temporalCacheVolume = volumeCache->getTemporalBasisCache();
 
@@ -505,6 +512,16 @@ constFCPtr SpaceTimeBasisCache::getValues(BasisPtr basis, Camellia::EOperator op
 
 constFCPtr SpaceTimeBasisCache::getTransformedValues(BasisPtr basis, Camellia::EOperator op, bool useCubPointsSideRefCell)
 {
+  pair<Camellia::Basis<>*, Camellia::EOperator> key = make_pair(basis.get(), op);
+
+  if (_storeTransformedValues)
+  {
+    if (_knownValuesTransformed.find(key) != _knownValuesTransformed.end())
+    {
+      return _knownValuesTransformed[key];
+    }
+  }
+  
   if ( isSideCache() && !cellTopology()->sideIsSpatial(getSideIndex()) )
   {
     // in this case, two possibilities:
@@ -556,8 +573,15 @@ constFCPtr SpaceTimeBasisCache::getTransformedValues(BasisPtr basis, Camellia::E
 
   // _temporalCache is always a volume cache
   temporalValues = _temporalCache->getTransformedValues(temporalBasis, timeOp, false);
-  return getTensorBasisValues(tensorBasis, FIELD_INDEX, POINT_INDEX, spatialValues, temporalValues,
-                              spaceOpForSizing, timeOpForSizing);
+  
+  constFCPtr values = getTensorBasisValues(tensorBasis, FIELD_INDEX, POINT_INDEX, spatialValues, temporalValues,
+                                           spaceOpForSizing, timeOpForSizing);
+  if (_storeTransformedValues)
+  {
+    _knownValuesTransformed[key] = values;
+  }
+  
+  return values;
 }
 
 constFCPtr SpaceTimeBasisCache::getTransformedWeightedValues(BasisPtr basis, Camellia::EOperator op, bool useCubPointsSideRefCell)
@@ -568,6 +592,11 @@ constFCPtr SpaceTimeBasisCache::getTransformedWeightedValues(BasisPtr basis, Cam
   Teuchos::RCP< FieldContainer<double> > weightedValues = Teuchos::rcp( new FieldContainer<double>(dimensions) );
   FunctionSpaceTools::multiplyMeasure<double>(*weightedValues, this->getWeightedMeasures(), *unWeightedValues);
   return weightedValues;
+}
+
+void SpaceTimeBasisCache::setDefaultStoreTransformedValues(bool storeValues)
+{
+  _defaultStoreTransformedValues = storeValues;
 }
 
 void SpaceTimeBasisCache::setPhysicalCellNodes(const Intrepid::FieldContainer<double> &physicalCellNodes,

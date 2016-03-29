@@ -16,10 +16,13 @@ namespace Camellia
 {
 class SpaceTimeBasisCache : public BasisCache
 {
+  static bool _defaultStoreTransformedValues; // default for new SpaceTimeBasisCaches (see static setter, below)
+  
   typedef Teuchos::RCP< Intrepid::FieldContainer<double> > FCPtr;
   typedef Teuchos::RCP< const Intrepid::FieldContainer<double> > constFCPtr;
 
   BasisCachePtr _spatialCache, _temporalCache;
+  bool _storeTransformedValues;
 
   // side constructor:
   SpaceTimeBasisCache(int sideIndex, Teuchos::RCP<SpaceTimeBasisCache> volumeCache, int trialDegree, int testDegree);
@@ -83,6 +86,7 @@ public:
 
   static void getTensorialComponentPoints(CellTopoPtr spaceTimeTopo, const Intrepid::FieldContainer<double> &tensorPoints,
                                           Intrepid::FieldContainer<double> &spatialPoints, Intrepid::FieldContainer<double> &temporalPoints);
+  static void setDefaultStoreTransformedValues(bool storeValues);
 };
 }
 
