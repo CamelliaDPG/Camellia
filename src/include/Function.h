@@ -168,6 +168,9 @@ public:
   // ! implements Heaviside step function, shifted right by xValue
   static TFunctionPtr<double> heaviside(double xValue);
   static TFunctionPtr<double> heavisideY(double yValue);
+  
+  // ! Square root of the specified function.
+  static TFunctionPtr<Scalar> sqrtFunction(TFunctionPtr<Scalar> f);
 
   static TFunctionPtr<double> meshBoundaryCharacteristic(); // 1 on mesh boundary, 0 elsewhere
   static TFunctionPtr<double> meshSkeletonCharacteristic(); // 1 on mesh skeleton, 0 elsewhere
