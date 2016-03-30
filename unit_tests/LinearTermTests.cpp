@@ -568,20 +568,24 @@ TEUCHOS_UNIT_TEST( LinearTerm, FauxSpaceTimeIntegrationByPartsInTime_2D )
     solution->projectOntoMesh({{phi->ID(), phi_exact}});
     
     GlobalIndexType cellID = 0;
-    BasisCachePtr basisCache = BasisCache::basisCacheForCell(mesh, cellID);
-    int numPoints = basisCache->getRefCellPoints().dimension(0);
-    int numCells = 1;
-    FieldContainer<double> actualValues(numCells, numPoints);
-    lt->evaluate(actualValues, solution, basisCache);
-    
-    FieldContainer<double> expectedValues(numCells, numPoints);
-    expectedFunction->values(expectedValues, basisCache);
-    
-    double tol = 1e-14;
-    TEST_COMPARE_FLOATING_ARRAYS(actualValues, expectedValues, tol);
+    // do comparison on the MPI rank that owns cellID
+    const set<GlobalIndexType>* myCells = &mesh->cellIDsInPartition();
+    if (myCells->find(cellID) != myCells->end())
+    {
+      BasisCachePtr basisCache = BasisCache::basisCacheForCell(mesh, cellID);
+      int numPoints = basisCache->getRefCellPoints().dimension(0);
+      int numCells = 1;
+      FieldContainer<double> actualValues(numCells, numPoints);
+      lt->evaluate(actualValues, solution, basisCache);
+      
+      FieldContainer<double> expectedValues(numCells, numPoints);
+      expectedFunction->values(expectedValues, basisCache);
+      
+      double tol = 1e-14;
+      TEST_COMPARE_FLOATING_ARRAYS(actualValues, expectedValues, tol);
+    }
   }
 
-  
   TEUCHOS_UNIT_TEST( LinearTerm, SolutionEvaluation_ScalarTimesVector )
   {
     int spaceDim = 2;
@@ -602,17 +606,22 @@ TEUCHOS_UNIT_TEST( LinearTerm, FauxSpaceTimeIntegrationByPartsInTime_2D )
     solution->projectOntoMesh({{phi->ID(), phi_exact}});
     
     GlobalIndexType cellID = 0;
-    BasisCachePtr basisCache = BasisCache::basisCacheForCell(mesh, cellID);
-    int numPoints = basisCache->getRefCellPoints().dimension(0);
-    int numCells = 1;
-    FieldContainer<double> actualValues(numCells, numPoints, spaceDim);
-    lt->evaluate(actualValues, solution, basisCache);
-    
-    FieldContainer<double> expectedValues(numCells, numPoints, spaceDim);
-    expectedFunction->values(expectedValues, basisCache);
-    
-    double tol = 1e-13;
-    TEST_COMPARE_FLOATING_ARRAYS(actualValues, expectedValues, tol);
+    // do comparison on the MPI rank that owns cellID
+    const set<GlobalIndexType>* myCells = &mesh->cellIDsInPartition();
+    if (myCells->find(cellID) != myCells->end())
+    {
+      BasisCachePtr basisCache = BasisCache::basisCacheForCell(mesh, cellID);
+      int numPoints = basisCache->getRefCellPoints().dimension(0);
+      int numCells = 1;
+      FieldContainer<double> actualValues(numCells, numPoints, spaceDim);
+      lt->evaluate(actualValues, solution, basisCache);
+      
+      FieldContainer<double> expectedValues(numCells, numPoints, spaceDim);
+      expectedFunction->values(expectedValues, basisCache);
+      
+      double tol = 1e-13;
+      TEST_COMPARE_FLOATING_ARRAYS(actualValues, expectedValues, tol);
+    }
   }
   
   
@@ -636,17 +645,22 @@ TEUCHOS_UNIT_TEST( LinearTerm, FauxSpaceTimeIntegrationByPartsInTime_2D )
     solution->projectOntoMesh({{phi->ID(), phi_exact}});
     
     GlobalIndexType cellID = 0;
-    BasisCachePtr basisCache = BasisCache::basisCacheForCell(mesh, cellID);
-    int numPoints = basisCache->getRefCellPoints().dimension(0);
-    int numCells = 1;
-    FieldContainer<double> actualValues(numCells, numPoints, spaceDim);
-    lt->evaluate(actualValues, solution, basisCache);
-    
-    FieldContainer<double> expectedValues(numCells, numPoints, spaceDim);
-    expectedFunction->values(expectedValues, basisCache);
-    
-    double tol = 1e-13;
-    TEST_COMPARE_FLOATING_ARRAYS(actualValues, expectedValues, tol);
+    // do comparison on the MPI rank that owns cellID
+    const set<GlobalIndexType>* myCells = &mesh->cellIDsInPartition();
+    if (myCells->find(cellID) != myCells->end())
+    {
+      BasisCachePtr basisCache = BasisCache::basisCacheForCell(mesh, cellID);
+      int numPoints = basisCache->getRefCellPoints().dimension(0);
+      int numCells = 1;
+      FieldContainer<double> actualValues(numCells, numPoints, spaceDim);
+      lt->evaluate(actualValues, solution, basisCache);
+      
+      FieldContainer<double> expectedValues(numCells, numPoints, spaceDim);
+      expectedFunction->values(expectedValues, basisCache);
+      
+      double tol = 1e-13;
+      TEST_COMPARE_FLOATING_ARRAYS(actualValues, expectedValues, tol);
+    }
   }
   
   TEUCHOS_UNIT_TEST( LinearTerm, SolutionEvaluation_VectorTimesVector )
@@ -669,17 +683,22 @@ TEUCHOS_UNIT_TEST( LinearTerm, FauxSpaceTimeIntegrationByPartsInTime_2D )
     solution->projectOntoMesh({{phi->ID(), phi_exact}});
     
     GlobalIndexType cellID = 0;
-    BasisCachePtr basisCache = BasisCache::basisCacheForCell(mesh, cellID);
-    int numPoints = basisCache->getRefCellPoints().dimension(0);
-    int numCells = 1;
-    FieldContainer<double> actualValues(numCells, numPoints);
-    lt->evaluate(actualValues, solution, basisCache);
-    
-    FieldContainer<double> expectedValues(numCells, numPoints);
-    expectedFunction->values(expectedValues, basisCache);
-    
-    double tol = 1e-13;
-    TEST_COMPARE_FLOATING_ARRAYS(actualValues, expectedValues, tol);
+    // do comparison on the MPI rank that owns cellID
+    const set<GlobalIndexType>* myCells = &mesh->cellIDsInPartition();
+    if (myCells->find(cellID) != myCells->end())
+    {
+      BasisCachePtr basisCache = BasisCache::basisCacheForCell(mesh, cellID);
+      int numPoints = basisCache->getRefCellPoints().dimension(0);
+      int numCells = 1;
+      FieldContainer<double> actualValues(numCells, numPoints);
+      lt->evaluate(actualValues, solution, basisCache);
+      
+      FieldContainer<double> expectedValues(numCells, numPoints);
+      expectedFunction->values(expectedValues, basisCache);
+      
+      double tol = 1e-13;
+      TEST_COMPARE_FLOATING_ARRAYS(actualValues, expectedValues, tol);
+    }
   }
 
   
