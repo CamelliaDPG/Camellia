@@ -99,15 +99,25 @@ namespace
     TEST_COMPARE(l2_diff, <, 1e-14);
   }
   
-  void testSpaceTimeHeatConsistency(int spaceDim, bool useConformingTraces, Teuchos::FancyOStream &out, bool &success)
+  void testSpaceTimeHeatConsistency(int spaceDim, bool useConformingTraces, bool useHangingNodes, Teuchos::FancyOStream &out, bool &success)
   {
     vector<double> dimensions(spaceDim,2.0); // 2.0^d hypercube domain
     vector<int> elementCounts(spaceDim,1);   // 1^d mesh
     vector<double> x0(spaceDim,-1.0);
     MeshTopologyPtr spatialMeshTopo = MeshFactory::rectilinearMeshTopology(dimensions, elementCounts, x0);
     
+    int numElementsTime = useHangingNodes ? 2 : 1;
+    
     double t0 = 0.0, t1 = 1.0;
-    MeshTopologyPtr spaceTimeMeshTopo = MeshFactory::spaceTimeMeshTopology(spatialMeshTopo, t0, t1);
+    MeshTopologyPtr spaceTimeMeshTopo = MeshFactory::spaceTimeMeshTopology(spatialMeshTopo, t0, t1, numElementsTime);
+    
+    if (useHangingNodes)
+    {
+      int numElements = spaceTimeMeshTopo->cellCount();
+      GlobalIndexType cellToRefine = 0;
+      RefinementPatternPtr refPattern = RefinementPattern::regularRefinementPattern(spaceTimeMeshTopo->getCell(cellToRefine)->topology());
+      spaceTimeMeshTopo->refineCell(0, refPattern, numElements);
+    }
     
     double epsilon = 0.1;
     int fieldPolyOrder = 2, delta_k = 1;
@@ -164,8 +174,8 @@ namespace
           int subcCount = uHatBasis->domainTopology()->getSubcellCount(subcdim);
           for (int subcord=0; subcord<subcCount; subcord++)
           {
-            set<int> dofOrdinalsForSubcell = uHatBasis->dofOrdinalsForSubcell(subcdim, subcord);
-            if (dofOrdinalsForSubcell.find(basisOrdinal) != dofOrdinalsForSubcell.end())
+            const vector<int>* dofOrdinalsForSubcell = &uHatBasis->dofOrdinalsForSubcell(subcdim, subcord);
+            if (std::find(dofOrdinalsForSubcell->begin(), dofOrdinalsForSubcell->end(), basisOrdinal) != dofOrdinalsForSubcell->end())
             {
               cout << "basisOrdinal " << basisOrdinal << " belongs to subcell " << subcord << " of dimension " << subcdim << endl;
             }
@@ -195,15 +205,25 @@ namespace
     TEST_COMPARE(energyError, <, tol);
   }
   
-  void testSpaceTimeHeatConsistencyConstantSolution(int spaceDim, Teuchos::FancyOStream &out, bool &success)
+  void testSpaceTimeHeatConsistencyConstantSolution(int spaceDim, bool useHangingNodes, Teuchos::FancyOStream &out, bool &success)
   {
     vector<double> dimensions(spaceDim,2.0); // 2.0^d hypercube domain
     vector<int> elementCounts(spaceDim,1);   // one-element mesh
     vector<double> x0(spaceDim,-1.0);
     MeshTopologyPtr spatialMeshTopo = MeshFactory::rectilinearMeshTopology(dimensions, elementCounts, x0);
     
+    int numElementsTime = useHangingNodes ? 2 : 1;
+    
     double t0 = 0.0, t1 = 1.0;
-    MeshTopologyPtr spaceTimeMeshTopo = MeshFactory::spaceTimeMeshTopology(spatialMeshTopo, t0, t1);
+    MeshTopologyPtr spaceTimeMeshTopo = MeshFactory::spaceTimeMeshTopology(spatialMeshTopo, t0, t1, numElementsTime);
+    
+    if (useHangingNodes)
+    {
+      int numElements = spaceTimeMeshTopo->cellCount();
+      GlobalIndexType cellToRefine = 0;
+      RefinementPatternPtr refPattern = RefinementPattern::regularRefinementPattern(spaceTimeMeshTopo->getCell(cellToRefine)->topology());
+      spaceTimeMeshTopo->refineCell(0, refPattern, numElements);
+    }
     
     double epsilon = .1;
     int fieldPolyOrder = 1, delta_k = 1;
@@ -354,61 +374,81 @@ namespace
   TEUCHOS_UNIT_TEST( SpaceTimeHeatFormulation, ConsistencyConstantSolution_1D )
   {
     // consistency test for space-time formulation with 1D space
-    testSpaceTimeHeatConsistencyConstantSolution(1, out, success);
+    bool useHangingNodes = false;
+    int spaceDim = 1;
+    testSpaceTimeHeatConsistencyConstantSolution(spaceDim, useHangingNodes, out, success);
   }
   
   TEUCHOS_UNIT_TEST( SpaceTimeHeatFormulation, ConsistencyConstantSolution_2D )
   {
     // consistency test for space-time formulation with 2D space
-    testSpaceTimeHeatConsistencyConstantSolution(2, out, success);
+    bool useHangingNodes = false;
+    int spaceDim = 2;
+    testSpaceTimeHeatConsistencyConstantSolution(spaceDim, useHangingNodes, out, success);
   }
   
-  //  TEUCHOS_UNIT_TEST( SpaceTimeHeatFormulation, ConsistencyConstantSolution_3D )
-  //  {
-  //    // consistency test for space-time formulation with 3D space
-  //    testSpaceTimeHeatConsistencyConstantSolution(3, out, success);
-  //  }
+//  TEUCHOS_UNIT_TEST( SpaceTimeHeatFormulation, ConsistencyConstantSolution_3D )
+//  {
+//    // consistency test for space-time formulation with 3D space
+//    bool useHangingNodes = false;
+//    int spaceDim = 3;
+//    testSpaceTimeHeatConsistencyConstantSolution(spaceDim, useHangingNodes, out, success);
+//  }
   
   TEUCHOS_UNIT_TEST( SpaceTimeHeatFormulation, Consistency_Conforming_1D )
   {
     // consistency test for space-time formulation with 1D space
     bool useConformingTraces = true; // conforming and non conforming are the same for 1D
-    testSpaceTimeHeatConsistency(1, useConformingTraces, out, success);
+    bool useHangingNodes = false;
+    testSpaceTimeHeatConsistency(1, useConformingTraces, useHangingNodes, out, success);
   }
   
   TEUCHOS_UNIT_TEST( SpaceTimeHeatFormulation, Consistency_Nonconforming_1D )
   {
     // consistency test for space-time formulation with 1D space
     bool useConformingTraces = false; // conforming and non conforming are the same for 1D
-    testSpaceTimeHeatConsistency(1, useConformingTraces, out, success);
+    bool useHangingNodes = false;
+    testSpaceTimeHeatConsistency(1, useConformingTraces, useHangingNodes, out, success);
   }
   
   TEUCHOS_UNIT_TEST( SpaceTimeHeatFormulation, Consistency_Conforming_2D )
   {
     // consistency test for space-time formulation with 2D space
     bool useConformingTraces = true;
-    testSpaceTimeHeatConsistency(2, useConformingTraces, out, success);
+    bool useHangingNodes = false;
+    testSpaceTimeHeatConsistency(2, useConformingTraces, useHangingNodes, out, success);
+  }
+  
+  TEUCHOS_UNIT_TEST( SpaceTimeHeatFormulation, Consistency_Conforming_Irregular_2D )
+  {
+    // consistency test for space-time formulation with 2D space and hanging node
+    bool useConformingTraces = true;
+    bool useHangingNodes = true;
+    testSpaceTimeHeatConsistency(2, useConformingTraces, useHangingNodes, out, success);
   }
   
   TEUCHOS_UNIT_TEST( SpaceTimeHeatFormulation, Consistency_Conforming_3D_Slow )
   {
     // consistency test for space-time formulation with 3D space
     bool useConformingTraces = true;
-    testSpaceTimeHeatConsistency(3, useConformingTraces, out, success);
+    bool useHangingNodes = false;
+    testSpaceTimeHeatConsistency(3, useConformingTraces, useHangingNodes, out, success);
   }
   
   TEUCHOS_UNIT_TEST( SpaceTimeHeatFormulation, Consistency_Nonconforming_2D )
   {
     // consistency test for space-time formulation with 2D space
     bool useConformingTraces = false;
-    testSpaceTimeHeatConsistency(2, useConformingTraces, out, success);
+    bool useHangingNodes = false;
+    testSpaceTimeHeatConsistency(2, useConformingTraces, useHangingNodes, out, success);
   }
   
   TEUCHOS_UNIT_TEST( SpaceTimeHeatFormulation, Consistency_Nonconforming_3D_Slow )
   {
     // consistency test for space-time formulation with 3D space
     bool useConformingTraces = false;
-    testSpaceTimeHeatConsistency(3, useConformingTraces, out, success);
+    bool useHangingNodes = false;
+    testSpaceTimeHeatConsistency(3, useConformingTraces, useHangingNodes, out, success);
   }
   
   TEUCHOS_UNIT_TEST( SpaceTimeHeatFormulation, ForcingFunctionForConstantU_1D )

@@ -49,6 +49,7 @@ int main(int argc, char *argv[])
   int spaceDim = 2;
   double epsilon = 1;
   int numRefs = 1;
+  int preRefs = 0;
   int p = 2, delta_p = 2;
   int numXElems = 2;
   int numTElems = 1;
@@ -71,6 +72,7 @@ int main(int argc, char *argv[])
   cmdp.setOption("polyOrder",&p,"polynomial order for field variable u");
   cmdp.setOption("delta_p", &delta_p, "test space polynomial order enrichment");
   cmdp.setOption("numRefs",&numRefs,"number of refinements");
+  cmdp.setOption("preRefs",&preRefs,"number of prerefinements");
   cmdp.setOption("numXElems",&numXElems,"number of elements in x direction");
   cmdp.setOption("epsilon", &epsilon, "epsilon");
   cmdp.setOption("norm", &norm, "norm");
@@ -131,9 +133,7 @@ int main(int argc, char *argv[])
   // FunctionPtr u_exact = u_steady + 4*explt*(explambda1x-explambda2x)*Function::yn(1);
 
   FunctionPtr u_exact = u_steady + explt*(explambda1x-explambda2x);
-  // FunctionPtr u_exact = u_steady + 4*explt*(explambda1x-explambda2x);
-  // FunctionPtr u_exact = 4*explt*(explambda1x-explambda2x);
-  // FunctionPtr u_exact = Function::xn(2);
+  // FunctionPtr u_exact = u_steady;
   FunctionPtr sigma_exact = epsilon*u_exact->grad();
 
   FunctionPtr beta;
@@ -175,13 +175,13 @@ int main(int argc, char *argv[])
   {
     dimensions.push_back(width);
     if (d == 0)
-      elementCounts.push_back(numXElems);
+      elementCounts.push_back(pow(2,preRefs));
     else
       elementCounts.push_back(1);
   }
   MeshTopologyPtr spatialMeshTopo = MeshFactory::rectilinearMeshTopology(dimensions, elementCounts, x0);
-  double t0 = 0.0, t1 = 1.0;
-  MeshTopologyPtr spaceTimeMeshTopo = MeshFactory::spaceTimeMeshTopology(spatialMeshTopo, t0, t1, numXElems);
+  double t0 = 0.0, t1 = 1.0/pow(2,preRefs);
+  MeshTopologyPtr spaceTimeMeshTopo = MeshFactory::spaceTimeMeshTopology(spatialMeshTopo, t0, t1, 1);
 
   FunctionPtr zero = Function::zero();
   FunctionPtr one = Function::constant(1);
@@ -290,7 +290,7 @@ int main(int argc, char *argv[])
     dataFileLocation = outputDir+"/"+solnName.str()+".txt";
   ofstream dataFile(dataFileLocation);
   dataFile << "ref\t " << "elements\t " << "dofs\t " << "energy\t " << "ul2\t " << "sigmal2\t " << "solvetime\t" << "elapsed\t" << "iterations\t " << endl;
-  for (int refIndex=0; refIndex <= numRefs; refIndex++)
+  for (int refIndex=0; refIndex <= numRefs-preRefs; refIndex++)
   {
     solverTime->start(true);
     Teuchos::RCP<GMGSolver> gmgSolver;

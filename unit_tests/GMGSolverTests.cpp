@@ -634,7 +634,7 @@ namespace
     RHSPtr rhs = RHS::rhs();
     if (spaceDim==1)
       rhs->addTerm(phi_exact->dx()->dx() * form.q());
-    else if (spaceDim==3)
+    else if (spaceDim==2)
       rhs->addTerm((phi_exact->dx()->dx() + phi_exact->dy()->dy()) * form.q());
     else if (spaceDim==3)
       rhs->addTerm((phi_exact->dx()->dx() + phi_exact->dy()->dy() + phi_exact->dz()->dz())  * form.q());
@@ -665,10 +665,70 @@ namespace
     RHSPtr rhs = RHS::rhs();
     if (spaceDim==1)
       rhs->addTerm(phi_exact->dx()->dx() * form.q());
-    else if (spaceDim==3)
+    else if (spaceDim==2)
       rhs->addTerm((phi_exact->dx()->dx() + phi_exact->dy()->dy()) * form.q());
     else if (spaceDim==3)
       rhs->addTerm((phi_exact->dx()->dx() + phi_exact->dy()->dy() + phi_exact->dz()->dz())  * form.q());
+    BCPtr bc = BC::bc();
+    bc->addDirichlet(form.phi_hat(), SpatialFilter::allSpace(), phi_exact);
+    fineSolution = Solution::solution(fineMesh, bc, rhs, bf->graphNorm());
+    int maxIters = 1000;
+    double tol = 1e-6;
+    gmgSolver = Teuchos::rcp( new GMGSolver(fineSolution,{coarseMesh, fineMesh},maxIters,tol) );
+    turnOffSuperLUDistOutput(gmgSolver);
+  }
+  
+  void setupPoissonGMGSolver_TwoGridTriangles_h(Teuchos::RCP<GMGSolver> &gmgSolver, SolutionPtr &fineSolution, FunctionPtr phi_exact)
+  {
+    bool useConformingTraces = true;
+    int spaceDim = 2;
+    PoissonFormulation form(spaceDim, useConformingTraces);
+    int coarseElementCount = 1;
+    int H1Order_fine = 2, delta_k = 1;
+    int H1Order_coarse = 2;
+    vector<double> dimensions(spaceDim,1.0);
+    vector<int> elementCounts(spaceDim,coarseElementCount);
+    BFPtr bf = form.bf();
+    
+    bool divideIntoTriangles = true;
+    MeshPtr coarseMesh = MeshFactory::quadMeshMinRule(bf, H1Order_coarse, delta_k, dimensions[0], dimensions[1], elementCounts[0], elementCounts[1],
+                                                      divideIntoTriangles);
+    MeshPtr fineMesh = MeshFactory::quadMeshMinRule(bf, H1Order_fine, delta_k, dimensions[0], dimensions[1], elementCounts[0], elementCounts[1],
+                                                    divideIntoTriangles);
+    fineMesh->hRefine(set<GlobalIndexType>({0}));
+    
+    RHSPtr rhs = RHS::rhs();
+    rhs->addTerm((phi_exact->dx()->dx() + phi_exact->dy()->dy()) * form.q());
+    BCPtr bc = BC::bc();
+    bc->addDirichlet(form.phi_hat(), SpatialFilter::allSpace(), phi_exact);
+    fineSolution = Solution::solution(fineMesh, bc, rhs, bf->graphNorm());
+    int maxIters = 1000;
+    double tol = 1e-6;
+    gmgSolver = Teuchos::rcp( new GMGSolver(fineSolution,{coarseMesh, fineMesh},maxIters,tol) );
+    turnOffSuperLUDistOutput(gmgSolver);
+  }
+  
+  void setupPoissonGMGSolver_TwoGridTriangles_p(Teuchos::RCP<GMGSolver> &gmgSolver, SolutionPtr &fineSolution,
+                                                FunctionPtr phi_exact)
+  {
+    bool useConformingTraces = true;
+    int spaceDim = 2;
+    PoissonFormulation form(spaceDim, useConformingTraces);
+    int coarseElementCount = 1;
+    int H1Order_fine = 3, delta_k = 1;
+    int H1Order_coarse = 2;
+    vector<double> dimensions(spaceDim,1.0);
+    vector<int> elementCounts(spaceDim,coarseElementCount);
+    BFPtr bf = form.bf();
+    
+    bool divideIntoTriangles = true;
+    MeshPtr coarseMesh = MeshFactory::quadMeshMinRule(bf, H1Order_coarse, delta_k, dimensions[0], dimensions[1], elementCounts[0], elementCounts[1],
+                                                      divideIntoTriangles);
+    MeshPtr fineMesh = MeshFactory::quadMeshMinRule(bf, H1Order_fine, delta_k, dimensions[0], dimensions[1], elementCounts[0], elementCounts[1],
+                                                    divideIntoTriangles);
+    
+    RHSPtr rhs = RHS::rhs();
+      rhs->addTerm((phi_exact->dx()->dx() + phi_exact->dy()->dy()) * form.q());
     BCPtr bc = BC::bc();
     bc->addDirichlet(form.phi_hat(), SpatialFilter::allSpace(), phi_exact);
     fineSolution = Solution::solution(fineMesh, bc, rhs, bf->graphNorm());
@@ -699,7 +759,7 @@ namespace
     RHSPtr rhs = RHS::rhs();
     if (spaceDim==1)
       rhs->addTerm(phi_exact->dx()->dx() * form.q());
-    else if (spaceDim==3)
+    else if (spaceDim==2)
       rhs->addTerm((phi_exact->dx()->dx() + phi_exact->dy()->dy()) * form.q());
     else if (spaceDim==3)
       rhs->addTerm((phi_exact->dx()->dx() + phi_exact->dy()->dy() + phi_exact->dz()->dz())  * form.q());
@@ -715,6 +775,8 @@ namespace
   enum GridType {
     TwoGrid_h,
     TwoGrid_p,
+    TwoGridTriangles_h,
+    TwoGridTriangles_p,
     ThreeGrid,
     ThreeGrid_Width_2
   };
@@ -749,6 +811,12 @@ void testOperatorIsSPD(int spaceDim, GridType gridType, GMGOperator::SmootherApp
         break;
       case TwoGrid_p:
         setupPoissonGMGSolver_TwoGrid_p(solver, fineSolution, spaceDim, phiExact);
+        break;
+      case TwoGridTriangles_h:
+        setupPoissonGMGSolver_TwoGridTriangles_h(solver, fineSolution, phiExact);
+        break;
+      case TwoGridTriangles_p:
+        setupPoissonGMGSolver_TwoGridTriangles_p(solver, fineSolution, phiExact);
         break;
       case ThreeGrid:
         setupPoissonGMGSolver_ThreeGrid(solver, fineSolution, spaceDim, phiExact, 1);
@@ -846,7 +914,7 @@ void testOperatorIsSPD(int spaceDim, GridType gridType, GMGOperator::SmootherApp
     GridType gridType = TwoGrid_p;
     testOperatorIsSPD(spaceDim, gridType, smootherApplicationType, out, success);
   }
-
+  
   TEUCHOS_UNIT_TEST( GMGSolver, PoissonTwoGridOperatorIsSPD_2D_p_multiplicative )
   {
     int spaceDim = 2;
@@ -854,12 +922,29 @@ void testOperatorIsSPD(int spaceDim, GridType gridType, GMGOperator::SmootherApp
     GridType gridType = TwoGrid_p;
     testOperatorIsSPD(spaceDim, gridType, smootherApplicationType, out, success);
   }
-
+  
   TEUCHOS_UNIT_TEST( GMGSolver, PoissonTwoGridOperatorIsSPD_2D_h_multiplicative )
   {
     int spaceDim = 2;
     GMGOperator::SmootherApplicationType smootherApplicationType = GMGOperator::MULTIPLICATIVE;
     GridType gridType = TwoGrid_h;
+    testOperatorIsSPD(spaceDim, gridType, smootherApplicationType, out, success);
+  }
+  
+  
+  TEUCHOS_UNIT_TEST( GMGSolver, PoissonTwoGridOperatorIsSPD_Triangles_p_multiplicative )
+  {
+    int spaceDim = 2;
+    GMGOperator::SmootherApplicationType smootherApplicationType = GMGOperator::MULTIPLICATIVE;
+    GridType gridType = TwoGridTriangles_p;
+    testOperatorIsSPD(spaceDim, gridType, smootherApplicationType, out, success);
+  }
+  
+  TEUCHOS_UNIT_TEST( GMGSolver, PoissonTwoGridOperatorIsSPD_Triangles_h_multiplicative )
+  {
+    int spaceDim = 2;
+    GMGOperator::SmootherApplicationType smootherApplicationType = GMGOperator::MULTIPLICATIVE;
+    GridType gridType = TwoGridTriangles_h;
     testOperatorIsSPD(spaceDim, gridType, smootherApplicationType, out, success);
   }
 

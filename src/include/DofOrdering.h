@@ -52,6 +52,9 @@ class DofOrdering
 {
   int _indexNeedsToBeRebuilt;
   int _nextIndex;
+  
+  int _volumeIndex; // where the volume indices are stored in _indices
+  
   //  vector<int> varIDs;
   std::set<int> varIDs;
   //  std::vector<int> varIDsVector;
@@ -59,7 +62,8 @@ class DofOrdering
   // values: <sideIndex, dofOrdinal>
   std::map< int, std::vector<int> > _sidesForVarID; // to replace numSidesForVarID
   std::map<int,int> numSidesForVarID;
-  std::map< std::pair<int,int>, std::vector<int> > indices; // keys for indices are <varID, sideIndex >, where sideIndex = 0 for field (volume) variables
+//  std::map< std::pair<int,int>, std::vector<int> > indices; // keys for indices are <varID, sideIndex >, where sideIndex = VOLUME_INTERIOR_SIDE_ORDINAL for field (volume) variables
+  std::vector<map<int,vector<int>>> _indices; // outer index is sideOrdinal (or _volumeIndex); next is varID.
   // values for indices: list of the indices used in the DofOrdering by this <varID, sideIndex> pair's basis, ordered according to that basis's ordering
   std::map< std::pair<int,int>, BasisPtr > bases; // keys are <varID, sideIndex>
   std::map< int, int > basisRanks; // keys are varIDs; values are 0,1,2,... (scalar, vector, tensor)
@@ -107,9 +111,12 @@ public:
 
   CellTopoPtr cellTopology(int sideIndex = -1) const;
 
+  int minimumSubcellDimensionForContinuity() const; // across all bases
   int maxBasisDegree();
   int maxBasisDegreeForVolume();
 
+  void print(std::ostream& os);
+  
   int totalDofs() const
   {
     return _nextIndex;

@@ -87,7 +87,7 @@ public:
 
   virtual GlobalIndexType cellID(ElementTypePtr elemTypePtr, IndexType cellIndex, PartitionIndexType partitionNumber);
   virtual vector<GlobalIndexType> cellIDsOfElementType(unsigned partitionNumber, ElementTypePtr elemTypePtr);
-  const set< GlobalIndexType > &cellsInPartition(PartitionIndexType partitionNumber);
+  const set< GlobalIndexType > &cellsInPartition(PartitionIndexType partitionNumber) const;
   Intrepid::FieldContainer<double> cellSideParitiesForCell( GlobalIndexType cellID );
 
   // after calling any of these, must call rebuildLookups
@@ -99,10 +99,11 @@ public:
 
   virtual ElementTypePtr elementType(GlobalIndexType cellID) = 0;
   virtual vector< ElementTypePtr > elementTypes(PartitionIndexType partitionNumber);
+  virtual void setElementType(GlobalIndexType cellID, ElementTypePtr elem);
 
   DofOrderingFactoryPtr getDofOrderingFactory();
   ElementTypeFactory & getElementTypeFactory();
-
+  
   virtual int getCubatureDegree(GlobalIndexType cellID);
 
   virtual std::vector<int> getH1Order(GlobalIndexType cellID);
@@ -119,10 +120,10 @@ public:
   virtual GlobalIndexType globalCellIndex(GlobalIndexType cellID);
   virtual GlobalIndexType globalDofCount() = 0;
   virtual set<GlobalIndexType> globalDofIndicesForPartition(PartitionIndexType partitionNumber) = 0;
-  virtual set<GlobalIndexType> partitionOwnedIndicesForVariables(set<int> varIDs) = 0;
-  virtual set<GlobalIndexType> partitionOwnedGlobalFieldIndices() = 0;
-  virtual set<GlobalIndexType> partitionOwnedGlobalFluxIndices() = 0;
-  virtual set<GlobalIndexType> partitionOwnedGlobalTraceIndices() = 0;
+  
+  virtual GlobalIndexType numPartitionOwnedGlobalFieldIndices() = 0;
+  virtual GlobalIndexType numPartitionOwnedGlobalFluxIndices() = 0;
+  virtual GlobalIndexType numPartitionOwnedGlobalTraceIndices() = 0;
 
   virtual void interpretLocalData(GlobalIndexType cellID, const Intrepid::FieldContainer<double> &localData,
                                   Intrepid::FieldContainer<double> &globalData,
@@ -149,6 +150,10 @@ public:
   
   virtual IndexType localDofCount() = 0; // local to the MPI node
 
+  // ! Returns the smallest dimension along which continuity will be enforced.  GlobalDofAssignment's implementation
+  // ! assumes that the function spaces for the bases defined on cells determine this (e.g. H^1-conforming basis --> 0).
+  virtual int minimumSubcellDimensionForContinuityEnforcement() const;
+  
   // ! method for setting mesh and meshTopology after a deep copy of GDA.  Doesn't rebuild anything!!
   void setMeshAndMeshTopology(MeshPtr mesh);
 
@@ -157,6 +162,8 @@ public:
 
   virtual PartitionIndexType partitionForGlobalDofIndex( GlobalIndexType globalDofIndex ) = 0;
 
+  MeshPartitionPolicyPtr getPartitionPolicy();
+  
   void repartitionAndMigrate();
 
   void registerSolution(TSolutionPtr<double> solution);

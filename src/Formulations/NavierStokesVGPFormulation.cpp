@@ -403,8 +403,8 @@ NavierStokesVGPFormulation::NavierStokesVGPFormulation(MeshTopologyPtr meshTopo,
   // setIP( _navierStokesBF->graphNorm() );
   setIP( _ips[normName] );
 
-  int vectorRank = 1;
-  FunctionPtr forcingFunction = parameters.get<FunctionPtr>("forcingFunction",Function::zero(vectorRank));
+  FunctionPtr zeroForcing = Function::vectorize(vector<FunctionPtr>(_spaceDim,Function::zero()));
+  FunctionPtr forcingFunction = parameters.get<FunctionPtr>("forcingFunction",zeroForcing);
   this->setForcingFunction(forcingFunction); // default to zero
 
   _bc = BC::bc();
@@ -447,7 +447,7 @@ NavierStokesVGPFormulation::NavierStokesVGPFormulation(MeshTopologyPtr meshTopo,
 
   _nonlinearIterationCount = 0;
 
-  if (_spaceDim==2)
+  if ((_spaceDim==2) && !_spaceTime)
   {
     // finally, set up a stream function solve for 2D
     _streamFormulation = Teuchos::rcp( new PoissonFormulation(_spaceDim,_useConformingTraces) );
@@ -502,6 +502,108 @@ NavierStokesVGPFormulation::NavierStokesVGPFormulation(MeshTopologyPtr meshTopo,
     {
       _streamSolution->loadFromHDF5(filePrefix + "_stream.soln");
     }
+  }
+}
+
+void NavierStokesVGPFormulation::addXVelocityCondition(SpatialFilterPtr region, TFunctionPtr<double> value)
+{
+  VarPtr u1_hat = this->u_hat(1);
+
+  if (_neglectFluxesOnRHS)
+  {
+    // this also governs how we accumulate in the fluxes and traces, and hence whether we should use zero BCs or the true BCs for solution increment
+    _solnIncrement->bc()->addDirichlet(u1_hat, region, value);
+  }
+  else
+  {
+    TSolutionPtr<double> backgroundFlowWeakReference = Teuchos::rcp(_backgroundFlow.get(), false );
+    TFunctionPtr<double> u1_hat_prev = TFunction<double>::solution(u1_hat,backgroundFlowWeakReference);
+    _solnIncrement->bc()->addDirichlet(u1_hat, region, value - u1_hat_prev);
+  }
+}
+
+void NavierStokesVGPFormulation::addYVelocityCondition(SpatialFilterPtr region, TFunctionPtr<double> value)
+{
+  VarPtr u2_hat = this->u_hat(2);
+
+  if (_neglectFluxesOnRHS)
+  {
+    // this also governs how we accumulate in the fluxes and traces, and hence whether we should use zero BCs or the true BCs for solution increment
+    _solnIncrement->bc()->addDirichlet(u2_hat, region, value);
+  }
+  else
+  {
+    TSolutionPtr<double> backgroundFlowWeakReference = Teuchos::rcp(_backgroundFlow.get(), false );
+    TFunctionPtr<double> u2_hat_prev = TFunction<double>::solution(u2_hat,backgroundFlowWeakReference);
+    _solnIncrement->bc()->addDirichlet(u2_hat, region, value - u2_hat_prev);
+  }
+}
+
+void NavierStokesVGPFormulation::addZVelocityCondition(SpatialFilterPtr region, TFunctionPtr<double> value)
+{
+  VarPtr u3_hat = this->u_hat(3);
+
+  if (_neglectFluxesOnRHS)
+  {
+    // this also governs how we accumulate in the fluxes and traces, and hence whether we should use zero BCs or the true BCs for solution increment
+    _solnIncrement->bc()->addDirichlet(u3_hat, region, value);
+  }
+  else
+  {
+    TSolutionPtr<double> backgroundFlowWeakReference = Teuchos::rcp(_backgroundFlow.get(), false );
+    TFunctionPtr<double> u3_hat_prev = TFunction<double>::solution(u3_hat,backgroundFlowWeakReference);
+    _solnIncrement->bc()->addDirichlet(u3_hat, region, value - u3_hat_prev);
+  }
+}
+
+void NavierStokesVGPFormulation::addXFluxCondition(SpatialFilterPtr region, TFunctionPtr<double> value)
+{
+  VarPtr t1_hat = this->tn_hat(1);
+
+  if (_neglectFluxesOnRHS)
+  {
+    // this also governs how we accumulate in the fluxes and traces, and hence whether we should use zero BCs or the true BCs for solution increment
+    _solnIncrement->bc()->addDirichlet(t1_hat, region, value);
+  }
+  else
+  {
+    TSolutionPtr<double> backgroundFlowWeakReference = Teuchos::rcp(_backgroundFlow.get(), false );
+    TFunctionPtr<double> t1_hat_prev = TFunction<double>::solution(t1_hat,backgroundFlowWeakReference, true);
+    _solnIncrement->bc()->addDirichlet(t1_hat, region, value - t1_hat_prev);
+  }
+}
+
+void NavierStokesVGPFormulation::addYFluxCondition(SpatialFilterPtr region, TFunctionPtr<double> value)
+{
+  VarPtr t2_hat = this->tn_hat(2);
+
+  if (_neglectFluxesOnRHS)
+  {
+    // this also governs how we accumulate in the fluxes and traces, and hence whether we should use zero BCs or the true BCs for solution increment
+    _solnIncrement->bc()->addDirichlet(t2_hat, region, value);
+  }
+  else
+  {
+    TSolutionPtr<double> backgroundFlowWeakReference = Teuchos::rcp(_backgroundFlow.get(), false );
+    TFunctionPtr<double> t2_hat_prev = TFunction<double>::solution(t2_hat,backgroundFlowWeakReference, true);
+    _solnIncrement->bc()->addDirichlet(t2_hat, region, value - t2_hat_prev);
+  }
+}
+
+void NavierStokesVGPFormulation::addZFluxCondition(SpatialFilterPtr region, TFunctionPtr<double> value)
+{
+  VarPtr t3_hat = this->tn_hat(3);
+
+  if (_neglectFluxesOnRHS)
+  {
+    // this also governs how we accumulate in the fluxes and traces, and hence whether we should use zero BCs or the true BCs for solution increment
+    _solnIncrement->bc()->addDirichlet(t3_hat, region, value);
+  }
+  else
+  {
+    TSolutionPtr<double> backgroundFlowWeakReference = Teuchos::rcp(_backgroundFlow.get(), false );
+    TFunctionPtr<double> t3_hat_prev = TFunction<double>::solution(t3_hat,backgroundFlowWeakReference, true);
+    _solnIncrement->bc()->addDirichlet(t3_hat, region, value - t3_hat_prev);
   }
 }
 

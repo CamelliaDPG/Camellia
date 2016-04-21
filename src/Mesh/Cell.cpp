@@ -583,6 +583,13 @@ bool Cell::isBoundary(unsigned int sideOrdinal)
   return _neighbors[sideOrdinal].first == -1;
 }
 
+bool Cell::isInteriorChild()
+{
+  if (_parent == Teuchos::null) return false;
+  unsigned myOrdinalInParent = _parent->findChildOrdinal(_cellIndex);
+  return _parent->refinementPattern()->childIsInterior(myOrdinalInParent);
+}
+
 MeshTopology* Cell::meshTopology()
 {
   return _meshTopo;
@@ -755,9 +762,9 @@ vector<CellPtr> Cell::getNeighbors(MeshTopologyViewPtr meshTopoViewForCellValidi
   return neighbors;
 }
 
-void Cell::setNeighbor(unsigned sideOrdinal, GlobalIndexType neighborCellIndex, unsigned neighborSideOrdinal)
+void Cell::setNeighbor(unsigned sideOrdinal, GlobalIndexType neighborCellIndex, unsigned neighborSideOrdinal, bool allowSameCellIndex)
 {
-  if (neighborCellIndex == _cellIndex)
+  if ((neighborCellIndex == _cellIndex) && !allowSameCellIndex)
   {
     cout << "ERROR: neighborCellIndex == _cellIndex.\n";
     TEUCHOS_TEST_FOR_EXCEPTION(true, std::invalid_argument, "ERROR: neighborCellIndex == _cellIndex.\n");

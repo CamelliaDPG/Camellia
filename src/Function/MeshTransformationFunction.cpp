@@ -34,7 +34,8 @@ using namespace Camellia;
 
 VectorBasisPtr basisForTransformation(ElementTypePtr cellType)
 {
-  int polyOrder = std::max(cellType->trialOrderPtr->maxBasisDegree(), cellType->testOrderPtr->maxBasisDegree());
+  // int polyOrder = std::max(cellType->trialOrderPtr->maxBasisDegree(), cellType->testOrderPtr->maxBasisDegree());
+  int polyOrder = cellType->trialOrderPtr->maxBasisDegree();
 
   CellTopoPtr cellTopo = cellType->cellTopoPtr;
   if (cellTopo->getTensorialDegree() > 0)
@@ -44,7 +45,7 @@ VectorBasisPtr basisForTransformation(ElementTypePtr cellType)
     // we also assume that the curvilinearity is purely spatial (and in fact, just 2D for now).
     cellTopo = CellTopology::cellTopology(cellTopo->getShardsTopology(), cellTopo->getTensorialDegree() - 1);
   }
-  
+
   BasisPtr basis = BasisFactory::basisFactory()->getBasis(polyOrder, cellTopo, Camellia::FUNCTION_SPACE_VECTOR_HGRAD);
   VectorBasisPtr vectorBasis = Teuchos::rcp( (VectorizedBasis<> *)basis.get(),false); // dynamic cast would be better
   return vectorBasis;
@@ -165,18 +166,18 @@ public:
       spaceTimeBasisCache = basisCache;
       basisCache = spaceTimeCache->getSpatialBasisCache();
     }
-    
+
     int numDofs = _basis->getCardinality();
     int spaceDim = basisCache->getSpaceDim();
 
     bool basisIsVolumeBasis = (spaceDim == _basis->domainTopology()->getDimension());
     bool useCubPointsSideRefCell = basisIsVolumeBasis && basisCache->isSideCache();
-    
+
     int numPoints = values.dimension(1);
 
     // check if we're taking a temporal derivative
     int component;
-    Intrepid::EOperator relatedOp = BasisEvaluation::relatedOperator(_op, _basis->functionSpace(), component);
+    Intrepid::EOperator relatedOp = BasisEvaluation::relatedOperator(_op, _basis->functionSpace(), spaceDim, component);
     if ((relatedOp == Intrepid::OPERATOR_GRAD) && (component==spaceDim)) {
       // then we are taking the temporal part of the Jacobian of the reference to curvilinear-reference space
       // based on our assumptions that curvilinearity is just in the spatial direction (and is orthogonally extruded in the
@@ -200,7 +201,7 @@ public:
     int rank = transformedValues->rank() - 3;
     TEUCHOS_TEST_FOR_EXCEPTION(rank != values.rank()-2, std::invalid_argument, "values rank is incorrect.");
 
-    
+
     int spaceTimeSideOrdinal = (spaceTimeBasisCache != Teuchos::null) ? spaceTimeBasisCache->getSideIndex() : -1;
     // I'm pretty sure much of this treatment of the time dimension could be simplified by taking advantage of SpaceTimeBasisCache::getTemporalBasisCache()...
     double t0 = -1, t1 = -1;
@@ -214,7 +215,7 @@ public:
       t0 = spaceTimeBasisCache->getPhysicalCellNodes()(_cellIndex,spaceTimeNodeTime0,spaceDim);
       t1 = spaceTimeBasisCache->getPhysicalCellNodes()(_cellIndex,spaceTimeNodeTime1,spaceDim);
     }
-    
+
     // initialize the values we're responsible for setting
     if (_op == OP_VALUE)
     {
@@ -270,7 +271,7 @@ public:
     int numSpatialPoints = transformedValues->dimension(2);
     int numTemporalPoints = numPoints / numSpatialPoints;
     TEUCHOS_TEST_FOR_EXCEPTION(numTemporalPoints * numSpatialPoints != numPoints, std::invalid_argument, "numPoints is not evenly divisible by numSpatialPoints");
-    
+
     for (int i=0; i<numDofs; i++)
     {
       double weight = _basisCoefficients(i);
@@ -300,17 +301,32 @@ public:
 
   TFunctionPtr<double> dx()
   {
-    return Teuchos::rcp( new CellTransformationFunction(_basis,_basisCoefficients,OP_DX) );
+    if (_op == OP_VALUE)
+      return Teuchos::rcp( new CellTransformationFunction(_basis,_basisCoefficients,OP_DX) );
+    else if (_op == OP_DX)
+      return Teuchos::rcp( new CellTransformationFunction(_basis,_basisCoefficients,OP_DXDX) );
+    else
+      TEUCHOS_TEST_FOR_EXCEPTION(true, std::invalid_argument, "Unsupported operator");
   }
 
   TFunctionPtr<double> dy()
   {
-    return Teuchos::rcp( new CellTransformationFunction(_basis,_basisCoefficients,OP_DY) );
+    if (_op == OP_VALUE)
+      return Teuchos::rcp( new CellTransformationFunction(_basis,_basisCoefficients,OP_DY) );
+    else if (_op == OP_DX)
+      return Teuchos::rcp( new CellTransformationFunction(_basis,_basisCoefficients,OP_DYDY) );
+    else
+      TEUCHOS_TEST_FOR_EXCEPTION(true, std::invalid_argument, "Unsupported operator");
   }
 
   TFunctionPtr<double> dz()
   {
-    return Teuchos::rcp( new CellTransformationFunction(_basis,_basisCoefficients,OP_DZ) );
+    if (_op == OP_VALUE)
+      return Teuchos::rcp( new CellTransformationFunction(_basis,_basisCoefficients,OP_DZ) );
+    else if (_op == OP_DX)
+      return Teuchos::rcp( new CellTransformationFunction(_basis,_basisCoefficients,OP_DZDZ) );
+    else
+      TEUCHOS_TEST_FOR_EXCEPTION(true, std::invalid_argument, "Unsupported operator");
   }
 
   static Teuchos::RCP<CellTransformationFunction> cellTransformation(MeshPtr mesh, GlobalIndexType cellID, const vector< ParametricCurvePtr > edgeFunctions)
@@ -326,7 +342,6 @@ MeshTransformationFunction::MeshTransformationFunction(MeshPtr mesh, map< Global
   _cellTransforms = cellTransforms;
   _op = op;
   _maxPolynomialDegree = 1; // 1 is the degree of the identity transform (x,y) -> (x,y)
-
 }
 
 MeshTransformationFunction::MeshTransformationFunction(MeshPtr mesh, set<GlobalIndexType> cellIDsToTransform) : TFunction<double>(1)   // vector-valued Function
@@ -435,7 +450,7 @@ bool MeshTransformationFunction::mapRefCellPointsUsingExactGeometry(FieldContain
     // TODO: work out what to do for triangles (or perhaps even a general polygon)
     TEUCHOS_TEST_FOR_EXCEPTION(true, std::invalid_argument, "Unhandled cell type");
   }
-  
+
 //  cout << "cellPoints after to mapRefCellPointsUsingExactGeometry():\n" << cellPoints;
 
   return true;
@@ -550,7 +565,7 @@ void MeshTransformationFunction::didHRefine(const set<GlobalIndexType> &cellIDs)
   set<GlobalIndexType> childrenWithCurvedEdges;
 
   MeshTopology* topology = dynamic_cast<MeshTopology*>(_mesh->getTopology().get());
-  
+
   TEUCHOS_TEST_FOR_EXCEPTION(!topology, std::invalid_argument, "Mesh::hRefine() called when _meshTopology is not an instance of MeshTopology--likely Mesh initialized with a pure MeshTopologyView, which cannot be h-refined.");
 
   for (set<GlobalIndexType>::iterator cellIDIt = cellIDs.begin(); cellIDIt != cellIDs.end(); cellIDIt++)

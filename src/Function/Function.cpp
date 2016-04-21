@@ -23,11 +23,13 @@
 #include "PolarizedFunction.h"
 #include "ProductFunction.h"
 #include "QuotientFunction.h"
+#include "SerialDenseWrapper.h"
 #include "SimpleFunction.h"
 #include "SimpleSolutionFunction.h"
 #include "SimpleVectorFunction.h"
 #include "SideParityFunction.h"
 #include "Solution.h"
+#include "SqrtFunction.h"
 #include "SumFunction.h"
 #include "TrigFunctions.h"
 #include "UnitNormalFunction.h"
@@ -1263,14 +1265,14 @@ void TFunction<Scalar>::valuesDottedWithTensor(Intrepid::FieldContainer<Scalar> 
 
   values.initialize(0.0);
 
-  Teuchos::Array<int> tensorValueIndex(_rank+2); // +2 for numCells, numPoints indices
+  std::vector<int> tensorValueIndex(_rank+2); // +2 for numCells, numPoints indices
   tensorValueIndex[0] = numCells;
   tensorValueIndex[1] = numPoints;
   for (int d=0; d<_rank; d++)
   {
     tensorValueIndex[d+2] = spaceDim;
   }
-
+  
   Intrepid::FieldContainer<Scalar> myTensorValues(tensorValueIndex);
   this->values(myTensorValues,basisCache);
   Intrepid::FieldContainer<Scalar> otherTensorValues(tensorValueIndex);
@@ -1284,7 +1286,10 @@ void TFunction<Scalar>::valuesDottedWithTensor(Intrepid::FieldContainer<Scalar> 
   {
     tensorValueIndex[d+2] = 0;
   }
-
+  
+  auto getMyTensorValuesEnumeration = SerialDenseWrapper::getEnumerator(tensorValueIndex, myTensorValues);
+  auto getOtherTensorValuesEnumeration = SerialDenseWrapper::getEnumerator(tensorValueIndex, otherTensorValues);
+  
   int entriesPerPoint = 1;
   for (int d=0; d<_rank; d++)
   {
@@ -1296,8 +1301,8 @@ void TFunction<Scalar>::valuesDottedWithTensor(Intrepid::FieldContainer<Scalar> 
     for (int ptIndex=0; ptIndex<numPoints; ptIndex++)
     {
       tensorValueIndex[1] = ptIndex;
-      Scalar *myValue = &myTensorValues[ myTensorValues.getEnumeration(tensorValueIndex) ];
-      Scalar *otherValue = &otherTensorValues[ otherTensorValues.getEnumeration(tensorValueIndex) ];
+      Scalar *myValue = &myTensorValues[ getMyTensorValuesEnumeration() ];
+      Scalar *otherValue = &otherTensorValues[ getOtherTensorValuesEnumeration() ];
       Scalar *value = &values(cellIndex,ptIndex);
 
       for (int entryIndex=0; entryIndex<entriesPerPoint; entryIndex++)
@@ -1323,8 +1328,10 @@ void TFunction<Scalar>::scalarModifyFunctionValues(Intrepid::FieldContainer<Scal
   Intrepid::FieldContainer<Scalar> scalarValues(numCells,numPoints);
   this->values(scalarValues,basisCache);
 
-  Teuchos::Array<int> valueIndex(values.rank());
-
+  std::vector<int> valueIndex(values.rank());
+  
+  auto getValuesEnumeration = SerialDenseWrapper::getEnumerator(valueIndex, values);
+  
   int entriesPerPoint = 1;
   for (int d=0; d < values.rank()-2; d++)    // -2 for numCells, numPoints indices
   {
@@ -1336,7 +1343,7 @@ void TFunction<Scalar>::scalarModifyFunctionValues(Intrepid::FieldContainer<Scal
     for (int ptIndex=0; ptIndex<numPoints; ptIndex++)
     {
       valueIndex[1] = ptIndex;
-      Scalar *value = &values[ values.getEnumeration(valueIndex) ];
+      Scalar *value = &values[ getValuesEnumeration() ];
       Scalar scalarValue = scalarValues(cellIndex,ptIndex);
       for (int entryIndex=0; entryIndex<entriesPerPoint; entryIndex++)
       {
@@ -1371,8 +1378,10 @@ void TFunction<Scalar>::scalarModifyBasisValues(Intrepid::FieldContainer<double>
 
   //  cout << "scalarModifyBasisValues: scalarValues:\n" << scalarValues;
 
-  Teuchos::Array<int> valueIndex(values.rank());
+  std::vector<int> valueIndex(values.rank());
 
+  auto getValuesEnumeration = SerialDenseWrapper::getEnumerator(valueIndex, values);
+  
   int entriesPerPoint = 1;
   for (int d=0; d<values.rank()-3; d++)    // -3 for numCells, numFields, numPoints indices
   {
@@ -1388,7 +1397,7 @@ void TFunction<Scalar>::scalarModifyBasisValues(Intrepid::FieldContainer<double>
       {
         valueIndex[2] = ptIndex;
         double scalarValue = scalarValues(cellIndex,ptIndex);
-        double *value = &values[ values.getEnumeration(valueIndex) ];
+        double *value = &values[ getValuesEnumeration() ];
         for (int entryIndex=0; entryIndex<entriesPerPoint; entryIndex++)
         {
           if (modType == MULTIPLY)
@@ -1645,6 +1654,19 @@ TFunctionPtr<Scalar> TFunction<Scalar>::solution(VarPtr var, TSolutionPtr<Scalar
   return Teuchos::rcp( new SimpleSolutionFunction<Scalar>(var, soln, weightFluxesBySideParity) );
 }
 
+  template <typename Scalar>
+  TFunctionPtr<Scalar> TFunction<Scalar>::sqrtFunction(TFunctionPtr<Scalar> f)
+  {
+    ConstantScalarFunction<Scalar>* f_constant = dynamic_cast<ConstantScalarFunction<Scalar>*> (f.get());
+    if (f_constant != NULL)
+    {
+      Scalar value = f_constant->value();
+      return TFunction<Scalar>::constant(sqrt(value));
+    }
+    
+    return Teuchos::rcp( new SqrtFunction<Scalar>(f) );
+  }
+  
 template <typename Scalar>
 TFunctionPtr<Scalar> TFunction<Scalar>::vectorize(TFunctionPtr<Scalar> f1, TFunctionPtr<Scalar> f2)
 {

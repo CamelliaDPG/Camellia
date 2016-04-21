@@ -23,6 +23,10 @@ class GMGSolver : public Solver, public Narrator
   int _maxIters;
   bool _printToConsole;
   double _tol;
+  
+  bool _exportFullOperators = false; // for debugging/analysis.  Will be slow
+  string _pathForExport = "./";
+  bool _returnErrorIfMaxItersReached = false; // default to false.
 
   Epetra_Map _finePartitionMap;
 
@@ -80,11 +84,18 @@ public:
 
   void setAztecConvergenceOption(int value);
   void setAztecOutput(int value);
+  
+  // ! If true, will export "A.dat" (system matrix) and "M.dat" (preconditioner) during the solve.  Intended for debugging and analysis, not for production.
+  void setExportFullOperatorsOnSolve(bool exportOnSolve, string path = "./");
 
   void setUseConjugateGradient(bool value); // otherwise will use GMRES
 
   void setPrintIterationCount(bool value);
+  
+  void setReturnErrorIfMaxItersReached(bool value);
 
+  void setSmootherType(GMGOperator::SmootherChoice smootherType);
+  
   vector<int> getIterationCountLog();
   
   static std::vector<MeshPtr> meshesForMultigrid(MeshPtr fineMesh, int kCoarse, int delta_k);

@@ -584,14 +584,14 @@ void Boundary::bcsToImpose( map<  GlobalIndexType, Scalar > &globalDofIndicesAnd
       {
         basisForImposition = spatialBasis;
       }
-      set<int> spatialDofOrdinalsForVertex = constantSpatialBasis ? set<int>{0} : spatialBasis->dofOrdinalsForVertex(vertexOrdinalInSide);
+      vector<int> spatialDofOrdinalsForVertex = constantSpatialBasis ? vector<int>{0} : spatialBasis->dofOrdinalsForVertex(vertexOrdinalInSide);
       if (spatialDofOrdinalsForVertex.size() != 1)
       {
         cout << "ERROR: spatialDofOrdinalsForVertex.size() != 1 during singleton BC imposition.\n";
         TEUCHOS_TEST_FOR_EXCEPTION(true, std::invalid_argument, "spatialDofOrdinalsForVertex.size() != 1 during singleton BC imposition");
       }
 
-      int spatialDofOrdinalForVertex = *spatialDofOrdinalsForVertex.begin();
+      int spatialDofOrdinalForVertex = spatialDofOrdinalsForVertex[0];
       vector<int> basisDofOrdinals;
       if (!spaceTime)
       {

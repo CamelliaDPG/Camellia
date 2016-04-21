@@ -14,7 +14,7 @@ using namespace std;
 using namespace Intrepid;
 using namespace Camellia;
 
-SubBasisDofPermutationMapper::SubBasisDofPermutationMapper(const set<unsigned> &basisDofOrdinalFilter, const vector<GlobalIndexType> &globalDofOrdinals,
+SubBasisDofPermutationMapper::SubBasisDofPermutationMapper(const set<int> &basisDofOrdinalFilter, const vector<GlobalIndexType> &globalDofOrdinals,
     bool negate)
 {
   _basisDofOrdinalFilter = basisDofOrdinalFilter;
@@ -33,7 +33,7 @@ SubBasisDofPermutationMapper::SubBasisDofPermutationMapper(const set<unsigned> &
   _negate = negate;
 }
 
-const set<unsigned> & SubBasisDofPermutationMapper::basisDofOrdinalFilter()
+const set<int> & SubBasisDofPermutationMapper::basisDofOrdinalFilter()
 {
   return _basisDofOrdinalFilter;
 }
@@ -98,8 +98,8 @@ void SubBasisDofPermutationMapper::mapDataIntoGlobalContainer(const FieldContain
 {
   // like calling mapData, above, with transposeConstraintMatrix = true
 
-  const set<unsigned>* basisOrdinalFilter = &this->basisDofOrdinalFilter();
-  vector<unsigned> dofIndices(basisOrdinalFilter->begin(),basisOrdinalFilter->end());
+  const set<int>* basisOrdinalFilter = &this->basisDofOrdinalFilter();
+  vector<int> dofIndices(basisOrdinalFilter->begin(),basisOrdinalFilter->end());
 
   for (int sbGlobalOrdinal_i=0; sbGlobalOrdinal_i<_globalDofOrdinals.size(); sbGlobalOrdinal_i++)
   {
@@ -117,8 +117,8 @@ void SubBasisDofPermutationMapper::mapDataIntoGlobalContainer(const Intrepid::Fi
 {
   // like calling mapData, above, with transposeConstraintMatrix = true
   
-  const set<unsigned>* basisOrdinalFilter = &this->basisDofOrdinalFilter();
-  vector<unsigned> dofIndices(basisOrdinalFilter->begin(),basisOrdinalFilter->end());
+  const set<int>* basisOrdinalFilter = &this->basisDofOrdinalFilter();
+  vector<int> dofIndices(basisOrdinalFilter->begin(),basisOrdinalFilter->end());
   
   for (int sbGlobalOrdinal_i=0; sbGlobalOrdinal_i<_globalDofOrdinals.size(); sbGlobalOrdinal_i++)
   {
@@ -158,11 +158,11 @@ const vector<GlobalIndexType> & SubBasisDofPermutationMapper::mappedGlobalDofOrd
   return _globalDofOrdinals;
 }
 
-set<GlobalIndexType> SubBasisDofPermutationMapper::mappedGlobalDofOrdinalsForBasisOrdinals(set<unsigned> &basisDofOrdinals)
+set<GlobalIndexType> SubBasisDofPermutationMapper::mappedGlobalDofOrdinalsForBasisOrdinals(set<int> &basisDofOrdinals)
 {
   int i=0;
   set<GlobalIndexType> globalIndices;
-  for (unsigned myBasisDofOrdinal : _basisDofOrdinalFilter)
+  for (int myBasisDofOrdinal : _basisDofOrdinalFilter)
   {
     if (basisDofOrdinals.find(myBasisDofOrdinal) != basisDofOrdinals.end())
     {
@@ -176,4 +176,40 @@ set<GlobalIndexType> SubBasisDofPermutationMapper::mappedGlobalDofOrdinalsForBas
 SubBasisDofMapperPtr SubBasisDofPermutationMapper::negatedDofMapper()
 {
   return Teuchos::rcp( new SubBasisDofPermutationMapper(_basisDofOrdinalFilter, _globalDofOrdinals, !_negate) );
+}
+
+SubBasisDofMapperPtr SubBasisDofPermutationMapper::restrictDofOrdinalFilter(const set<int> &newDofOrdinalFilter)
+{
+  set<int> newBasisDofOrdinalFilter; // intersection of newDofOrdinalFilter and _basisDofOrdinalFilter
+  vector<GlobalIndexType> newMappedGlobalDofOrdinals;
+  
+  int globalDofOrdinal_i = 0;
+  for (int basisDofOrdinal : _basisDofOrdinalFilter)
+  {
+    if (newDofOrdinalFilter.find(basisDofOrdinal) != newDofOrdinalFilter.end())
+    {
+      newBasisDofOrdinalFilter.insert(basisDofOrdinal);
+      newMappedGlobalDofOrdinals.push_back(_globalDofOrdinals[globalDofOrdinal_i]);
+    }
+    globalDofOrdinal_i++;
+  }
+  return Teuchos::rcp( new SubBasisDofPermutationMapper(newBasisDofOrdinalFilter, newMappedGlobalDofOrdinals, _negate));
+}
+
+SubBasisDofMapperPtr SubBasisDofPermutationMapper::restrictGlobalDofOrdinals(const set<GlobalIndexType> &newGlobalDofOrdinals)
+{
+  set<int> newBasisDofOrdinalFilter;
+  vector<GlobalIndexType> newMappedGlobalDofOrdinals; // intersection of newGlobalDofOrdinals and _globalDofOrdinals
+  
+  int globalDofOrdinal_i = 0;
+  for (int basisDofOrdinal : _basisDofOrdinalFilter)
+  {
+    if (newGlobalDofOrdinals.find(_globalDofOrdinals[globalDofOrdinal_i]) != newGlobalDofOrdinals.end())
+    {
+      newBasisDofOrdinalFilter.insert(basisDofOrdinal);
+      newMappedGlobalDofOrdinals.push_back(_globalDofOrdinals[globalDofOrdinal_i]);
+    }
+    globalDofOrdinal_i++;
+  }
+  return Teuchos::rcp( new SubBasisDofPermutationMapper(newBasisDofOrdinalFilter, newMappedGlobalDofOrdinals, _negate));
 }

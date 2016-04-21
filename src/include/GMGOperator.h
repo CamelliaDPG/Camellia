@@ -11,6 +11,7 @@
 #include "Epetra_Operator.h"
 
 #include "BasisReconciliation.h"
+#include "HDF5Exporter.h"
 #include "IP.h"
 #include "LocalDofMapper.h"
 #include "Mesh.h"
@@ -89,6 +90,12 @@ private:
 
   Teuchos::RCP<Solver> _coarseSolver;
   Teuchos::RCP<GMGOperator> _coarseOperator;
+  
+  // map from trial ordering to a matrix that will "duplicate" the fluxes as dictated by conformity,
+  // required for h-refinements in context of static condensation.
+  // see comment in getLocalCoefficientMap() implementation
+  mutable map<DofOrdering*, Teuchos::RCP<Epetra_SerialDenseMatrix>> _fluxDuplicationMap;
+  Teuchos::RCP<Epetra_SerialDenseMatrix> fluxDuplicationMapForCoarseCell(GlobalIndexType coarseCellID) const;
 
   mutable BasisReconciliation _br;
   mutable map< pair< pair<int,int>, RefinementBranch >, LocalDofMapperPtr > _localCoefficientMap; // pair(fineH1Order,coarseH1Order)
@@ -121,6 +128,12 @@ private:
   int prolongationRowCount() const;
   int prolongationColCount() const;
   
+  Teuchos::RCP<HDF5Exporter> _functionExporter;
+  FunctionPtr _functionToExport;
+  std::string _functionToExportName;
+  int _exportTimeStep;
+  
+  void exportFunction();
 public: // promoted these two to public for testing purposes:
   LocalDofMapperPtr getLocalCoefficientMap(GlobalIndexType fineCellID) const;
   GlobalIndexType getCoarseCellID(GlobalIndexType fineCellID) const;
@@ -311,6 +324,8 @@ public:
   void setSmootherType(SmootherChoice smootherType);
   void setSmootherOverlap(int overlap);
 
+  // ! Computed as 1/(1+N), where N = max #neighbors of any cell's overlap region.
+  double computeSchwarzSmootherWeight();
   // ! smoother weight is applied to each application of the smoother. Default = 1.0
   double getSmootherWeight();
   // ! smoother weight is applied to each application of the smoother. Default = 1.0
@@ -369,6 +384,9 @@ public:
   
   //! Returns the fine dof interpreter
   Teuchos::RCP<DofInterpreter> getFineDofInterpreter();
+  
+  //! Set an exporter for typically an error function, to allow visualization of various smoother/coarse solve steps.
+  void setFunctionExporter(Teuchos::RCP<HDF5Exporter> exporter, FunctionPtr function, std::string functionName="error");
   
   //! Informs the GMGOperator whether it is the finest one.  (If not, can freely discard local stiffness matrices stored in CondensedDofInterpreter, e.g.).  Default value is true.
   void setIsFinest(bool value);

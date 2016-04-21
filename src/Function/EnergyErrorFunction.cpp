@@ -10,6 +10,7 @@
 
 #include "BasisCache.h"
 #include "Function.h"
+#include "RieszRep.h"
 #include "Solution.h"
 #include "TypeDefs.h"
 
@@ -21,12 +22,29 @@ EnergyErrorFunction::EnergyErrorFunction(SolutionPtr soln)
   _soln = soln;
 }
 
+EnergyErrorFunction::EnergyErrorFunction(RieszRepPtr rieszRep)
+{
+  _rieszRep = rieszRep;
+}
+
 void EnergyErrorFunction::values(Intrepid::FieldContainer<double> &values,
                                  BasisCachePtr basisCache)
 {
   // values should have shape: (C,P)
   int numPoints = values.dimension(1);
-  const map<GlobalIndexType,double>* cellError = &_soln->rankLocalEnergyError();
+  
+  const map<GlobalIndexType,double>* cellError;
+  bool takeSqrt;
+  if (_soln != Teuchos::null)
+  {
+    cellError = &_soln->rankLocalEnergyError();
+    takeSqrt = false;
+  }
+  else
+  {
+    takeSqrt = true;
+    cellError = &_rieszRep->getNormsSquared();
+  }
   
   int cellOrdinal = 0;
   for (GlobalIndexType cellID : basisCache->cellIDs())
@@ -35,6 +53,10 @@ void EnergyErrorFunction::values(Intrepid::FieldContainer<double> &values,
       TEUCHOS_TEST_FOR_EXCEPTION(true, std::invalid_argument, "cellID not found");
     
     double error = cellError->find(cellID)->second;
+    if (takeSqrt)
+    {
+      error = sqrt(error);
+    }
     for (int ptOrdinal=0; ptOrdinal<numPoints; ptOrdinal++)
     {
       values(cellOrdinal,ptOrdinal) = error;

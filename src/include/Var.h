@@ -59,6 +59,7 @@ public:
   VarPtr y() const;
   VarPtr z() const;
   VarPtr t() const;
+  VarPtr laplacian() const;
   
   // ! i is 1-based ordinal; 1 for x, 2 for y, 3 for z
   VarPtr spatialComponent(int i) const;

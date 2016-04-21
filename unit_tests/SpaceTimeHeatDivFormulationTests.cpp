@@ -165,8 +165,8 @@ namespace
           int subcCount = uhatBasis->domainTopology()->getSubcellCount(subcdim);
           for (int subcord=0; subcord<subcCount; subcord++)
           {
-            set<int> dofOrdinalsForSubcell = uhatBasis->dofOrdinalsForSubcell(subcdim, subcord);
-            if (dofOrdinalsForSubcell.find(basisOrdinal) != dofOrdinalsForSubcell.end())
+            const vector<int>* dofOrdinalsForSubcell = &uhatBasis->dofOrdinalsForSubcell(subcdim, subcord);
+            if (std::find(dofOrdinalsForSubcell->begin(), dofOrdinalsForSubcell->end(), basisOrdinal) != dofOrdinalsForSubcell->end())
             {
               cout << "basisOrdinal " << basisOrdinal << " belongs to subcell " << subcord << " of dimension " << subcdim << endl;
             }
@@ -344,6 +344,11 @@ namespace
       bc->addDirichlet(tc, SpatialFilter::allSpace() | allTime, -sigma*n_x + u*n_xt->t());
     }
 
+//    GDAMinimumRule* minRule =  dynamic_cast<GDAMinimumRule*>(form.solution()->mesh()->globalDofAssignment().get());
+//    minRule->printGlobalDofInfo();
+//    GlobalIndexType numGlobalDofs = form.solution()->mesh()->numGlobalDofs();
+//    cout << "numGlobalDofs = " << numGlobalDofs;
+    
     form.solution()->solve();
 
 //    if (spaceDim != 3)

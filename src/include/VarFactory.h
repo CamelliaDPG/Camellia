@@ -41,6 +41,10 @@ public:
 
   VarFactory();
   VarFactoryPtr getBubnovFactory(BubnovChoice choice);
+  
+  // ! returns true if some trace or flux variable returns false when isDefinedOnTemporalInterface() is called.
+  bool hasSpaceOnlyTrialVariable() const;
+  
   // accessors:
   VarPtr test(int testID);
   VarPtr trial(int trialID);

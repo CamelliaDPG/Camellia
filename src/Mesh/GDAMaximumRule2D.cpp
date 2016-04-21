@@ -226,7 +226,7 @@ void GDAMaximumRule2D::buildTypeLookups()
 
 //  cout << "_numPartitions = " << _numPartitions << endl;
 
-//  int rank = Teuchos::GlobalMPISession::getRank();
+//  int rank = _partitionPolicy->Comm()->MyPID();
 
   for (PartitionIndexType partitionNumber=0; partitionNumber < _numPartitions; partitionNumber++)
   {
@@ -375,7 +375,7 @@ int GDAMaximumRule2D::cellPolyOrder(GlobalIndexType cellID)
 FieldContainer<double> & GDAMaximumRule2D::cellSideParities( ElementTypePtr elemTypePtr )
 {
 #ifdef HAVE_MPI
-  int partitionNumber     = Teuchos::GlobalMPISession::getRank();
+  int partitionNumber     = _partitionPolicy->Comm()->MyPID();
 #else
   int partitionNumber     = 0;
 #endif
@@ -808,7 +808,7 @@ void GDAMaximumRule2D::getMultiBasisOrdering(DofOrderingPtr &originalNonParentOr
 
 GlobalIndexType GDAMaximumRule2D::globalCellIndex(GlobalIndexType cellID)
 {
-//  int rank = Teuchos::GlobalMPISession::getRank();
+//  int rank = _partitionPolicy->Comm()->MyPID();
 //  cout << "on rank " << rank << ", cellID " << cellID << " has globalCellIndex " << _globalCellIndices[cellID] << endl;
   return _globalCellIndices[cellID];
 }
@@ -880,7 +880,7 @@ set<GlobalIndexType> GDAMaximumRule2D::globalDofIndicesForVarOnSubcell(int varID
       if (domainSubcellOrdinal == -1) continue; // skip this side: subcell doesn't belong to it.
     }
     
-    set<int> basisDofOrdinals = basis->dofOrdinalsForSubcell(dim, domainSubcellOrdinal, 0);
+    vector<int> basisDofOrdinals = basis->dofOrdinalsForSubcell(dim, domainSubcellOrdinal, 0);
     for (int basisDofOrdinal : basisDofOrdinals)
     {
       int localDofOrdinal = elementType(cellID)->trialOrderPtr->getDofIndex(varID, basisDofOrdinal, sideOrdinal);
@@ -896,9 +896,35 @@ set<GlobalIndexType> GDAMaximumRule2D::globalDofIndicesForPartition(PartitionInd
   return _partitionedGlobalDofIndices[partitionNumber];
 }
 
+GlobalIndexType GDAMaximumRule2D::numPartitionOwnedGlobalFieldIndices()
+{
+  // there are MUCH more efficient ways to do this.  Since GDAMaximumRule2D is legacy code by now,
+  // we do not expect this implementation to see much use...
+  set<GlobalIndexType> indices = partitionOwnedGlobalFieldIndices();
+  return indices.size();
+}
+
+GlobalIndexType GDAMaximumRule2D::numPartitionOwnedGlobalFluxIndices()
+{
+  // there are MUCH more efficient ways to do this.  Since GDAMaximumRule2D is legacy code by now,
+  // we do not expect this implementation to see much use...
+  set<GlobalIndexType> indices = partitionOwnedGlobalFluxIndices();
+  return indices.size();
+  
+}
+
+GlobalIndexType GDAMaximumRule2D::numPartitionOwnedGlobalTraceIndices()
+{
+  // there are MUCH more efficient ways to do this.  Since GDAMaximumRule2D is legacy code by now,
+  // we do not expect this implementation to see much use...
+  set<GlobalIndexType> indices = partitionOwnedGlobalTraceIndices();
+  return indices.size();
+
+}
+
 set<GlobalIndexType> GDAMaximumRule2D::partitionOwnedGlobalFieldIndices()
 {
-  int rank = Teuchos::GlobalMPISession::getRank();
+  int rank = _partitionPolicy->Comm()->MyPID();
 
   set<GlobalIndexType> fieldIndices;
   set<GlobalIndexType> cellIDs = cellsInPartition(-1);
@@ -927,7 +953,7 @@ set<GlobalIndexType> GDAMaximumRule2D::partitionOwnedGlobalFieldIndices()
 
 set<GlobalIndexType> GDAMaximumRule2D::partitionOwnedIndicesForVariables(set<int> varIDs)
 {
-  int rank = Teuchos::GlobalMPISession::getRank();
+  int rank = _partitionPolicy->Comm()->MyPID();
 
   set<GlobalIndexType> varIndices;
   set<GlobalIndexType> cellIDs = cellsInPartition(-1);
@@ -960,7 +986,7 @@ set<GlobalIndexType> GDAMaximumRule2D::partitionOwnedIndicesForVariables(set<int
 
 set<GlobalIndexType> GDAMaximumRule2D::partitionOwnedGlobalFluxIndices()
 {
-  int rank = Teuchos::GlobalMPISession::getRank();
+  int rank = _partitionPolicy->Comm()->MyPID();
 
   set<GlobalIndexType> fluxIndices;
   vector< VarPtr > fluxVars = _varFactory->fluxVars();
@@ -994,7 +1020,7 @@ set<GlobalIndexType> GDAMaximumRule2D::partitionOwnedGlobalFluxIndices()
 
 set<GlobalIndexType> GDAMaximumRule2D::partitionOwnedGlobalTraceIndices()
 {
-  int rank = Teuchos::GlobalMPISession::getRank();
+  int rank = _partitionPolicy->Comm()->MyPID();
 
   set<GlobalIndexType> traceIndices;
   vector< VarPtr > traceVars = _varFactory->traceVars();
@@ -1003,7 +1029,6 @@ set<GlobalIndexType> GDAMaximumRule2D::partitionOwnedGlobalTraceIndices()
   {
     GlobalIndexType cellID = *cellIt;
     ElementTypePtr elemTypePtr = elementType(cellID);
-    int sideCount = elemTypePtr->cellTopoPtr->getSideCount();
     vector< VarPtr >::iterator traceIt;
     for (traceIt = traceVars.begin(); traceIt != traceVars.end(); traceIt++)
     {
@@ -1019,7 +1044,6 @@ set<GlobalIndexType> GDAMaximumRule2D::partitionOwnedGlobalTraceIndices()
 
           if (partitionForGlobalDofIndex(globalIndex) == rank)
             traceIndices.insert(globalIndex);
-
         }
       }
     }
@@ -1425,7 +1449,7 @@ PartitionIndexType GDAMaximumRule2D::partitionForGlobalDofIndex( GlobalIndexType
 
 IndexType GDAMaximumRule2D::partitionLocalCellIndex(GlobalIndexType cellID, int partitionNumber) // partitionNumber == -1 means use MPI rank as partitionNumber
 {
-  if (partitionNumber != Teuchos::GlobalMPISession::getRank())
+  if (partitionNumber != _partitionPolicy->Comm()->MyPID())
   {
     if (partitionNumber != -1)
       TEUCHOS_TEST_FOR_EXCEPTION(true, std::invalid_argument, "GDAMaximumRule2D does not support off-rank partitionNumbers in partitionLocalCellIndex.");
@@ -1441,7 +1465,7 @@ GlobalIndexType GDAMaximumRule2D::partitionLocalIndexForGlobalDofIndex( GlobalIn
 FieldContainer<double> & GDAMaximumRule2D::physicalCellNodes( ElementTypePtr elemTypePtr)
 {
 #ifdef HAVE_MPI
-  int partitionNumber     = Teuchos::GlobalMPISession::getRank();
+  int partitionNumber     = _partitionPolicy->Comm()->MyPID();
 #else
   int partitionNumber     = 0;
 #endif

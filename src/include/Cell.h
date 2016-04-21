@@ -84,6 +84,7 @@ public:
   void setParent(Teuchos::RCP<Cell> parent);
 
   bool isBoundary(unsigned sideOrdinal);
+  bool isInteriorChild();
   bool isParent(MeshTopologyViewPtr meshTopoViewForCellValidity);
 
   unsigned childOrdinal(IndexType childIndex);
@@ -118,7 +119,7 @@ public:
 
   Teuchos::RCP<Cell> getNeighbor(unsigned sideOrdinal, MeshTopologyViewPtr meshTopoViewForCellValidity);
   pair<GlobalIndexType, unsigned> getNeighborInfo(unsigned sideOrdinal, MeshTopologyViewPtr meshTopoViewForCellValidity); // (neighborCellIndex, neighborSideOrdinal)
-  void setNeighbor(unsigned sideOrdinal, GlobalIndexType neighborCellIndex, unsigned neighborSideOrdinal);
+  void setNeighbor(unsigned sideOrdinal, GlobalIndexType neighborCellIndex, unsigned neighborSideOrdinal, bool allowSameCellIndex = false);
   std::vector< Teuchos::RCP<Cell> > getNeighbors(MeshTopologyViewPtr meshTopoViewForCellValidity);
   
   std::set<GlobalIndexType> getActiveNeighborIndices(MeshTopologyViewPtr meshTopoViewForCellValidity);

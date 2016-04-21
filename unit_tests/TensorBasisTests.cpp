@@ -282,7 +282,7 @@ void testBasisOrdinalsForSubcell(CellTopoPtr spaceTopo, bool useHGRADInTime, int
         FieldContainer<double> subcellPointsInParent(numPoints,spaceTimeTopo->getDimension());
         CamelliaCellTools::mapToReferenceSubcell(subcellPointsInParent, subcellCubPoints, subcellDim, subcellOrdinal, spaceTimeTopo);
 
-        set<int> dofOrdinals = tensorBasis->dofOrdinalsForSubcell(subcellDim, subcellOrdinal);
+        vector<int> dofOrdinals = tensorBasis->dofOrdinalsForSubcell(subcellDim, subcellOrdinal);
         FieldContainer<double> values(tensorBasis->getCardinality(), numPoints);
         tensorBasis->getValues(values, subcellPointsInParent, OPERATOR_VALUE);
 

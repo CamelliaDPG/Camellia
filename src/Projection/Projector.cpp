@@ -63,7 +63,7 @@ void Projector<Scalar>::projectFunctionOntoBasis(FieldContainer<Scalar> &basisCo
   FieldContainer<Scalar> ipVector(numCells,cardinality);
 
   // fake a DofOrdering
-  DofOrderingPtr dofOrdering = Teuchos::rcp( new DofOrdering(cellTopo) );
+  DofOrderingPtr dofOrdering = Teuchos::rcp( new DofOrdering(basisCache->cellTopology()) );
   if (basisCache->isSideCache() && ((v->varType()==FLUX) || (v->varType()==TRACE)))
   {
     dofOrdering->addEntry(v->ID(), basis, v->rank(), basisCache->getSideIndex());
@@ -296,7 +296,7 @@ void Projector<Scalar>::projectFunctionOntoBasisInterpolating(FieldContainer<Sca
     int subcellCount = domainTopo->getSubcellCount(d);
     for (int subcord=0; subcord<subcellCount; subcord++)
     {
-      set<int> subcellDofOrdinals;
+      vector<int> subcellDofOrdinals;
       if (basisDomainDim == domainDim)
       {
         if (d > startingDimensionForProjection)

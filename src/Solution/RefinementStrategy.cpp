@@ -193,6 +193,41 @@ void TRefinementStrategy<Scalar>::computeApproximateGradients(SolutionPtr soln, 
 }
 
 template <typename Scalar>
+double TRefinementStrategy<Scalar>::computeTotalEnergyError()
+{
+  double totalEnergyErrorSquared = 0.0;
+  map<GlobalIndexType, double> energyErrorThisRank; // for each cell owned by this rank
+  if (_rieszRep.get() != NULL)
+  {
+    _rieszRep->computeRieszRep();
+    energyErrorThisRank = _rieszRep->getNormsSquared();
+    // take square roots:
+    for (map<GlobalIndexType, double>::iterator energyEntryIt = energyErrorThisRank.begin();
+         energyEntryIt != energyErrorThisRank.end(); energyEntryIt++)
+    {
+      totalEnergyErrorSquared += energyEntryIt->second;
+      energyEntryIt->second = sqrt( energyEntryIt->second );
+    }
+  }
+  else
+  {
+    energyErrorThisRank = _solution->rankLocalEnergyError();
+    for (auto energyEntry : energyErrorThisRank)
+    {
+      totalEnergyErrorSquared += energyEntry.second * energyEntry.second;
+    }
+  }
+  totalEnergyErrorSquared = MPIWrapper::sum(*mesh()->Comm(), totalEnergyErrorSquared);
+  return sqrt(totalEnergyErrorSquared);
+}
+
+template <typename Scalar>
+TRieszRepPtr<Scalar> TRefinementStrategy<Scalar>::getRieszRep()
+{
+  return _rieszRep;
+}
+
+template <typename Scalar>
 void TRefinementStrategy<Scalar>::setMinH(double value)
 {
   _min_h = value;
@@ -352,7 +387,10 @@ void TRefinementStrategy<Scalar>::refine(bool printToConsole)
 
   bool repartitionAndRebuild = false;
   if (_enforceOneIrregularity)
+  {
     mesh->enforceOneIrregularity(repartitionAndRebuild);
+//    cout << "Enforced one irregularity.\n";
+  }
 
   // now, repartition and rebuild:
   mesh->repartitionAndRebuild();

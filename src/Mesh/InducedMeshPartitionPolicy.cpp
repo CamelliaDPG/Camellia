@@ -24,6 +24,7 @@ Teuchos::RCP<InducedMeshPartitionPolicy> InducedMeshPartitionPolicy::inducedMesh
 }
 
 InducedMeshPartitionPolicy::InducedMeshPartitionPolicy(MeshPtr thisMesh, MeshPtr otherMesh)
+: MeshPartitionPolicy(otherMesh->Comm())
 {
   _thisMesh = Teuchos::rcp(thisMesh.get(), false); // weak RCP to avoid circular references
   _otherMesh = otherMesh;
@@ -52,6 +53,7 @@ InducedMeshPartitionPolicy::InducedMeshPartitionPolicy(MeshPtr thisMesh, MeshPtr
 }
 
 InducedMeshPartitionPolicy::InducedMeshPartitionPolicy(MeshPtr thisMesh, MeshPtr otherMesh, const map<GlobalIndexType, GlobalIndexType> & cellIDMap)
+: MeshPartitionPolicy(otherMesh->Comm())
 {
   _thisMesh = thisMesh;
   _otherMesh = otherMesh;

@@ -44,6 +44,7 @@ namespace Camellia {
     Intrepid::FieldContainer<double> _vertices;
 
     vector< CellTopoPtr > _childTopos;
+    vector<unsigned> _interiorChildOrdinals; // e.g. 1 for regular triangle refinement pattern
 
     vector< vector< Teuchos::RCP<RefinementPattern> > > _patternForSubcell;
     vector< RefinementPatternRecipe > _relatedRecipes;
@@ -106,7 +107,8 @@ namespace Camellia {
   static RefinementPatternPtr yAnisotropicRefinementPatternQuadTimeExtruded();
 
 
-    
+    // ! returns true if the child does not share any side with parent (as in triangular refinements)
+    bool childIsInterior(unsigned childOrdinal) const;
   unsigned childOrdinalForPoint(const std::vector<double> &pointParentCoords); // returns -1 if no hit
 
   static void initializeAnisotropicRelationships();
@@ -175,6 +177,9 @@ namespace Camellia {
 
   static void mapRefCellPointsToAncestor(RefinementBranch &refinementBranch, const Intrepid::FieldContainer<double> &leafRefCellPoints,
                                          Intrepid::FieldContainer<double> &rootRefCellPoints);
+    
+  static pair<unsigned, unsigned> mapSubcellFromDescendantToAncestor(RefinementBranch &refBranch,
+                                                                     unsigned subcdim, unsigned childSubcord);
 };
 
 typedef Teuchos::RCP<RefinementPattern> RefinementPatternPtr;

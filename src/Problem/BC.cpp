@@ -122,10 +122,10 @@ template class BCLogicalOrFunction<double>;
 template <typename Scalar>
 void TBC<Scalar>::addDirichlet( VarPtr traceOrFlux, SpatialFilterPtr spatialPoints, TFunctionPtr<Scalar> valueFunction )
 {
-  if ((traceOrFlux->varType() != TRACE) && (traceOrFlux->varType() != FLUX))
-  {
-    cout << "WARNING: adding Dirichlet BC for variable that is neither a trace nor a flux.\n";
-  }
+//  if ((traceOrFlux->varType() != TRACE) && (traceOrFlux->varType() != FLUX))
+//  {
+//    cout << "WARNING: adding Dirichlet BC for variable that is neither a trace nor a flux.\n";
+//  }
 
   if (_dirichletBCs.find( traceOrFlux->ID() ) != _dirichletBCs.end() )
   {

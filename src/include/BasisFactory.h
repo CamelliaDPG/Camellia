@@ -101,7 +101,7 @@ public:
   // This version of getBasis handles 0 or 1 temporal dimensions; calls the other version:
   BasisPtr getBasis(int H1Order, CellTopoPtr cellTopo, FSE functionSpaceForSpatialTopology, int temporalH1Order = -1,
                     FSE functionSpaceForTemporalTopology = Camellia::FUNCTION_SPACE_HVOL);
-  BasisPtr getBasis( int polyOrder, unsigned cellTopoKey, FSE fs);
+  BasisPtr getBasis( int H1Order, unsigned cellTopoKey, FSE fs);
 
   // This version of getConformingBasis is meant eventually to support tensorial polynomial orders; right now, it does so for space-time
   BasisPtr getConformingBasis(std::vector<int> &H1Order, CellTopoPtr cellTopo, FSE functionSpaceForSpatialTopology,

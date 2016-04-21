@@ -19,8 +19,10 @@ namespace Camellia
   class EnergyErrorFunction : public TFunction<double>
   {
     SolutionPtr _soln;
+    RieszRepPtr _rieszRep;
   public:
     EnergyErrorFunction(SolutionPtr soln);
+    EnergyErrorFunction(RieszRepPtr rieszRep);
     
     virtual void values(Intrepid::FieldContainer<double> &values, BasisCachePtr basisCache);
     

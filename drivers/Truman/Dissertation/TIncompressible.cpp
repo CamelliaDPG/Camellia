@@ -9,11 +9,29 @@
 #include "TrigFunctions.h"
 #include "PenaltyConstraints.h"
 #include "SuperLUDistSolver.h"
+#include "GDAMinimumRule.h"
 
 #include "Teuchos_GlobalMPISession.hpp"
 #include "Teuchos_TimeMonitor.hpp"
 
 using namespace Camellia;
+
+vector<double> makeVertex(double v0, double v1)
+{
+  vector<double> v;
+  v.push_back(v0);
+  v.push_back(v1);
+  return v;
+}
+
+vector<double> makeVertex(double v0, double v1, double v2)
+{
+  vector<double> v;
+  v.push_back(v0);
+  v.push_back(v1);
+  v.push_back(v2);
+  return v;
+}
 
 // this Function will work for both 2D and 3D cavity flow top BC (matching y = 1)
 class RampBoundaryFunction_U1 : public SimpleFunction<double>
@@ -107,6 +125,75 @@ public:
     {
       return t / _timeScale;
     }
+  }
+};
+
+class StokesFirstExact : public SimpleFunction<double>
+{
+  double _Re;
+public:
+  StokesFirstExact(double Re)
+  {
+    _Re = Re;
+  }
+  double value(double x, double y, double t)
+  {
+    return 1-erf(0.5*sqrt(_Re)*y/sqrt(t));
+  }
+};
+
+// class RightSolution : public Function {
+//   private:
+//     FunctionPtr _function;
+//     double _shift;
+//   public:
+//     RightSolution(FunctionPtr function, double shift) : Function(0), _function(function), _shift(shift) {}
+//     void values(FieldContainer<double> &values, BasisCachePtr basisCache) {
+//       int numCells = values.dimension(0);
+//       int numPoints = values.dimension(1);
+//
+//       Intrepid::FieldContainer<double> rightPoint(1,1,3);
+//       Intrepid::FieldContainer<double> rightRefPoint(1,3);
+//
+//       const FieldContainer<double> *points = &(basisCache->getPhysicalCubaturePoints());
+//       for (int cellIndex=0; cellIndex<numCells; cellIndex++) {
+//         for (int ptIndex=0; ptIndex<numPoints; ptIndex++) {
+//           double x = (*points)(cellIndex,ptIndex,0);
+//           double y = (*points)(cellIndex,ptIndex,1);
+//           double t = (*points)(cellIndex,ptIndex,2);
+//           rightPoint(0,0,0) = 1;
+//           rightPoint(0,0,1) = y;
+//           rightPoint(0,0,2) = t;
+//         }
+//       }
+//       _function->values(values, shiftedBasisCache);
+//
+//       const FieldContainer<double> *points = &(basisCache->getPhysicalCubaturePoints());
+//       for (int cellIndex=0; cellIndex<numCells; cellIndex++) {
+//         for (int ptIndex=0; ptIndex<numPoints; ptIndex++) {
+//           double x = (*points)(cellIndex,ptIndex,0);
+//           double y = (*points)(cellIndex,ptIndex,1);
+//           double t = (*points)(cellIndex,ptIndex,2);
+//
+//           values(cellIndex, ptIndex) = pow(values(cellIndex, ptIndex), _power);
+//         }
+//       }
+//     }
+// };
+
+class ShiftedFunction : public SimpleFunction<double>
+{
+  Teuchos::RCP<SimpleFunction<double>> _fcn;
+  double _shift;
+public:
+  ShiftedFunction(Teuchos::RCP<SimpleFunction<double>> fcn, double shift)
+  {
+    _fcn = fcn;
+    _shift = shift;
+  }
+  double value(double x)
+  {
+    return _fcn->value(x-_shift);
   }
 };
 
@@ -381,7 +468,7 @@ double computeL2Error(NavierStokesVGPFormulation &form, FunctionPtr u_exact, Mes
 
 int main(int argc, char *argv[])
 {
-  Teuchos::GlobalMPISession mpiSession(&argc, &argv); // initialize MPI
+  Teuchos::GlobalMPISession mpiSession(&argc, &argv, 0); // initialize MPI
   int rank = Teuchos::GlobalMPISession::getRank();
 
 #ifdef HAVE_MPI
@@ -412,8 +499,9 @@ int main(int argc, char *argv[])
   cmdp.setOption("useCondensedSolve", "useStandardSolve", &useCondensedSolve);
   bool useConformingTraces = false;
   cmdp.setOption("conformingTraces", "nonconformingTraces", &useConformingTraces, "use conforming traces");
-  int polyOrder = 2, delta_k = 2;
+  int polyOrder = 2, delta_k = 3;
   cmdp.setOption("polyOrder",&polyOrder,"polynomial order for field variable u");
+  cmdp.setOption("delta_k",&delta_k,"polynomial enrichment for test functions");
   int polyOrderCoarse = 1;
   double cgTol = 1e-6;
   cmdp.setOption("cgTol", &cgTol, "iterative solver tolerance");
@@ -467,6 +555,22 @@ int main(int argc, char *argv[])
       meshTopo = MeshFactory::spaceTimeMeshTopology(meshTopo, t0, t1, temporalDivisions);
     }
   }
+  else if (problemName == "FlatPlate")
+  {
+    int meshWidth = 2;
+    vector<double> dims(spaceDim,1.0);
+    vector<int> numElements(spaceDim,meshWidth);
+    vector<double> x0(spaceDim,0.0);
+    pressureConstraintPoint = {0.5,0.5};
+    meshTopo = MeshFactory::rectilinearMeshTopology(dims,numElements,x0);
+    if (!steady)
+    {
+      double t0 = 0;
+      double t1 = 1;
+      int temporalDivisions = 2;
+      meshTopo = MeshFactory::spaceTimeMeshTopology(meshTopo, t0, t1, temporalDivisions);
+    }
+  }
   else if (problemName == "LidDriven")
   {
     int meshWidth = 2;
@@ -504,6 +608,38 @@ int main(int argc, char *argv[])
       meshTopo = MeshFactory::spaceTimeMeshTopology(meshTopo, t0, t1, temporalDivisions);
     }
   }
+  else if (problemName == "StokesFirst")
+  {
+    vector<PeriodicBCPtr> periodicBCs;
+    // periodicBCs.push_back(PeriodicBC::xIdentification(0, 1));
+
+    vector<double> A = {0,0}, B = {1,0}, C = {0,1}, D = {1,1};
+    vector<vector<double>> vertices = {A, B, C, D};
+    vector<vector<IndexType>> elementVertices = {{0,1,3,2}};
+    vector<CellTopoPtr> cellTopos(1,CellTopology::quad());
+    MeshGeometryPtr geometry = Teuchos::rcp(new MeshGeometry(vertices,elementVertices,cellTopos));
+    // meshTopo = Teuchos::rcp(new MeshTopology(geometry));
+    meshTopo = Teuchos::rcp( new MeshTopology(geometry, periodicBCs) );
+
+    // vector<double> x0;
+    // vector<double> dims;
+    // vector<int> numElements;
+    // x0.push_back(0);
+    // x0.push_back(0);
+    // dims.push_back(1.0);
+    // dims.push_back(1.0);
+    // numElements.push_back(1);
+    // numElements.push_back(1);
+    // meshTopo = MeshFactory::rectilinearMeshTopology(dims,numElements,x0);
+    pressureConstraintPoint = {0,0};
+    if (!steady)
+    {
+      double t0 = 0;
+      double t1 = 1;
+      int temporalDivisions = 1;
+      meshTopo = MeshFactory::spaceTimeMeshTopology(meshTopo, t0, t1, temporalDivisions);
+    }
+  }
   else if (problemName == "TaylorGreen")
   {
     double pi = atan(1)*4;
@@ -521,9 +657,30 @@ int main(int argc, char *argv[])
     if (!steady)
     {
       double t0 = 0;
-      double t1 = 1;
-      int temporalDivisions = 2;
+      double t1 = pi;
+      int temporalDivisions = 1;
       meshTopo = MeshFactory::spaceTimeMeshTopology(meshTopo, t0, t1, temporalDivisions);
+    }
+    {
+      // DEBUGGING
+      // manual refinements in an effort to replicate an issue on the first solve.
+      // 1. Uniform refinement
+      IndexType nextElement = meshTopo->cellCount();
+      set<IndexType> cellsToRefine = meshTopo->getActiveCellIndices();
+      CellTopoPtr cellTopo = meshTopo->getCell(0)->topology();
+      RefinementPatternPtr refPattern = RefinementPattern::regularRefinementPattern(cellTopo);
+      for (IndexType cellIndex : cellsToRefine)
+      {
+        meshTopo->refineCell(cellIndex, refPattern, nextElement);
+        nextElement += refPattern->numChildren();
+      }
+      // 2. Selective refinement
+      cellsToRefine = {4,15,21,30};
+      for (IndexType cellIndex : cellsToRefine)
+      {
+        meshTopo->refineCell(cellIndex, refPattern, nextElement);
+        nextElement += refPattern->numChildren();
+      }
     }
   }
   else if (problemName == "Cylinder")
@@ -550,30 +707,40 @@ int main(int argc, char *argv[])
 
   Teuchos::ParameterList nsParameters;
   if (steady)
-    nsParameters = NavierStokesVGPFormulation::steadyConservationFormulation(spaceDim, Re, useConformingTraces, meshTopo, polyOrder, delta_k).getConstructorParameters();
+    nsParameters = NavierStokesVGPFormulation::steadyFormulation(spaceDim, Re, useConformingTraces, meshTopo, polyOrder, delta_k).getConstructorParameters();
+    // nsParameters = NavierStokesVGPFormulation::steadyConservationFormulation(spaceDim, Re, useConformingTraces, meshTopo, polyOrder, delta_k).getConstructorParameters();
   else
-    nsParameters = NavierStokesVGPFormulation::spaceTimeConservationFormulation(spaceDim, Re, useConformingTraces, meshTopo, polyOrder, polyOrder, delta_k).getConstructorParameters();
+    nsParameters = NavierStokesVGPFormulation::spaceTimeFormulation(spaceDim, Re, useConformingTraces, meshTopo, polyOrder, polyOrder, delta_k).getConstructorParameters();
+    // nsParameters = NavierStokesVGPFormulation::spaceTimeConservationFormulation(spaceDim, Re, useConformingTraces, meshTopo, polyOrder, polyOrder, delta_k).getConstructorParameters();
 
   nsParameters.set("neglectFluxesOnRHS", false);
   NavierStokesVGPFormulation form(meshTopo, nsParameters);
 
   form.setIP( norm );
 
-  form.solutionIncrement()->setUseCondensedSolve(useCondensedSolve);
   if (problemName == "Trivial")
+    form.addPointPressureCondition(pressureConstraintPoint);
+  if (problemName == "FlatPlate")
     form.addPointPressureCondition(pressureConstraintPoint);
   if (problemName == "LidDriven")
     form.addPointPressureCondition(pressureConstraintPoint);
   if (problemName == "Kovasznay")
     form.addPointPressureCondition(pressureConstraintPoint);
+  if (problemName == "StokesFirst")
+    form.addPointPressureCondition(pressureConstraintPoint);
   if (problemName == "TaylorGreen")
     form.addPointPressureCondition(pressureConstraintPoint);
+
+  form.solutionIncrement()->setUseCondensedSolve(useCondensedSolve);
 
   MeshPtr mesh = form.solutionIncrement()->mesh();
   // if (problemName == "Cylinder")
   //   preprocessHemkerMesh(mesh, steady, 1);
-  if (meshGeometry != Teuchos::null)
-    mesh->setEdgeToCurveMap(meshGeometry->edgeToCurveMap());
+  // if (meshGeometry != Teuchos::null)
+  //   mesh->setEdgeToCurveMap(meshGeometry->edgeToCurveMap());
+
+  GDAMinimumRule* minRule = dynamic_cast<GDAMinimumRule*>(mesh->globalDofAssignment().get());
+  minRule->setAllowCascadingConstraints(true); // required for 2-irregular meshes
 
   vector<MeshPtr> meshesCoarseToFine = GMGSolver::meshesForMultigrid(mesh, polyOrderCoarse, delta_k);
   int numberOfMeshesForMultigrid = meshesCoarseToFine.size();
@@ -605,6 +772,58 @@ int main(int argc, char *argv[])
     if (!steady)
       form.addInitialCondition(0, u_exact);
       // form.addFluxCondition(t0, -u_exact);
+  }
+  else if (problemName == "FlatPlate")
+  {
+    SpatialFilterPtr leftX  = SpatialFilter::matchingX(0);
+    SpatialFilterPtr rightX = SpatialFilter::matchingX(1);
+    SpatialFilterPtr bottom = SpatialFilter::matchingY(0);
+    SpatialFilterPtr top    = SpatialFilter::matchingY(1);
+    SpatialFilterPtr xGreater0 = SpatialFilter::greaterThanX(.5);
+    SpatialFilterPtr xLess0 = SpatialFilter::lessThanX(.5);
+    SpatialFilterPtr bottomFree = SpatialFilter::intersectionFilter(bottom, xLess0);
+    SpatialFilterPtr plate = SpatialFilter::intersectionFilter(bottom, xGreater0);
+    SpatialFilterPtr t0  = SpatialFilter::matchingT(0);
+
+    FunctionPtr zero = Function::zero();
+    FunctionPtr one = Function::constant(1);
+
+    u1_exact = one;
+    u2_exact = zero;
+    u_exact = Function::vectorize(u1_exact,u2_exact);
+
+    form.addXVelocityCondition(leftX,  u1_exact);
+    form.addYVelocityCondition(leftX,  u2_exact);
+    // form.addXFluxCondition(    leftX,  -one);
+    // form.addYFluxCondition(    leftX,  zero);
+    form.addYVelocityCondition(top,  zero);
+    form.addXFluxCondition(    top,  zero);
+    form.addYVelocityCondition(bottomFree,  zero);
+    form.addXFluxCondition(    bottomFree,  zero);
+    // form.addYVelocityCondition(plate,  zero);
+    // form.addXFluxCondition(    plate,  zero);
+    form.addWallCondition(plate);
+
+    // define traction components in terms of field variables
+    FunctionPtr n = Function::normal();
+    VarPtr sigma11 = form.sigma(1,1);
+    VarPtr sigma12 = form.sigma(1,2);
+    VarPtr sigma21 = form.sigma(2,1);
+    VarPtr sigma22 = form.sigma(2,2);
+    VarPtr p = form.p();
+    LinearTermPtr t1 = n->x() * (2 * sigma11 - p) + n->y() * (sigma12 + sigma21);
+    LinearTermPtr t2 = n->x() * (sigma12 + sigma21) + n->y() * (2 * sigma22 - p);
+
+    Teuchos::RCP<PenaltyConstraints> pc = Teuchos::rcp(new PenaltyConstraints);
+    pc->addConstraint(t1==zero, rightX);
+    pc->addConstraint(t2==zero, rightX);
+    // pc->addConstraint(t1==zero, top);
+    // pc->addConstraint(t2==zero, top);
+
+    form.solutionIncrement()->setFilter(pc);
+
+    if (!steady)
+      form.addInitialCondition(0, u_exact);
   }
   else if (problemName == "LidDriven")
   {
@@ -653,6 +872,32 @@ int main(int argc, char *argv[])
     if (!steady)
       form.addInitialCondition(0, u_exact);
       // form.addFluxCondition(t0, -u_exact);
+  }
+  else if (problemName == "StokesFirst")
+  {
+    BCPtr bc = form.solutionIncrement()->bc();
+    // SolutionPtr backgroundFlow = form.solution();
+    // FunctionPtr tm1_left = Function::solution(form.tn_hat(1), backgroundFlow);
+
+    SpatialFilterPtr leftX  = SpatialFilter::matchingX(0);
+    SpatialFilterPtr rightX = SpatialFilter::matchingX(1);
+    SpatialFilterPtr leftY  = SpatialFilter::matchingY(0);
+    SpatialFilterPtr rightY = SpatialFilter::matchingY(1);
+    SpatialFilterPtr t0  = SpatialFilter::matchingT(0);
+
+    FunctionPtr one = Function::constant(1);
+    FunctionPtr zero = Function::constant(0);
+    FunctionPtr onezero = Function::vectorize(one,zero);
+    FunctionPtr zeros = Function::vectorize(zero,zero);
+    FunctionPtr u1_exact = Teuchos::rcp(new StokesFirstExact(Re));
+    FunctionPtr u_exact = Function::vectorize(u1_exact,zero);
+    form.addInflowCondition(leftX,  u_exact);
+    form.addInflowCondition(rightX, u_exact);
+    form.addInflowCondition(leftY,  u_exact);
+    form.addInflowCondition(rightY, u_exact);
+
+    if (!steady)
+      form.addInitialCondition(0, zeros);
   }
   else if (problemName == "TaylorGreen")
   {
@@ -846,7 +1091,7 @@ int main(int argc, char *argv[])
            << " " << totalIterationCount
            << " " << endl;
 
-  bool truncateMultigridMeshes = true; // for getting a "fair" sense of how iteration counts vary with h.
+  bool truncateMultigridMeshes = false; // for getting a "fair" sense of how iteration counts vary with h.
 
   double tol = 1e-5;
   int refNumber = 0;

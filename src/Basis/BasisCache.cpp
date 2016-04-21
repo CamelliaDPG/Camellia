@@ -81,6 +81,18 @@ int boundDegreeToMaxCubatureForCellTopo(int degree, unsigned cellTopoKey)
   }
 }
 
+bool BasisCache::canComputeTransformedValues(Camellia::EOperator op)
+{
+  // a bit ugly, in that this depends on
+  if ((OP_VALUE <= op) && (op <= OP_D1)) // zero order and first order intrepid operators all supported
+    return true;
+  if ((OP_D2 <= op) && (op <= OP_D10)) // can't transform general second order and above
+    return false;
+  if ((OP_X <= op) && (op <= OP_DZDZ)) // zero and first order Camellia operators, and second-order with i==j
+    return true;
+  return false;
+}
+
 // ! Requires that _cellTopo be initialized
 void BasisCache::initCubatureDegree(int maxTrialDegree, int maxTestDegree)
 {
@@ -747,6 +759,39 @@ void BasisCache::findMaximumDegreeBasisForSides(DofOrdering &trialOrdering)
   }
 }
 
+bool BasisCache::neglectHessian() const
+{
+  if (_transformationFxn == Teuchos::null)
+  {
+    /* Then the transformation is determined by the physical vertices of the element,
+       which means the second derivatives of the transformation will be zero.
+     
+     This does *NOT* mean that the mixed derivative terms in the Hessian (e.g. d^2/(dx dy))
+     are zero, and for computing arbitrary second-order derivatives we would need to take these
+     into account even for the straight-edge case.  But for computing the "diagonal" terms in
+     OPERATOR_D2 (like d^2/dx^2) that contribute the Laplacian, all we need is those same diagonal
+     terms in the Hessian.  For the straight-edge case these are zero.
+     
+     Right now we don't support transformations 
+     
+     */
+    return true;
+  }
+  else
+  {
+    // for 2nd-order operators other than the Laplacian, we'll also need dx()->dy(), etc.  But
+    // for now we're focused on allowing Laplacians to be computed.
+    if (_spaceDim == 1)
+      return _transformationFxn->dx()->dx()->isZero();
+    else if (_spaceDim == 2)
+      return _transformationFxn->dx()->dx()->isZero() && _transformationFxn->dy()->dy()->isZero();
+    else if (_spaceDim == 3)
+      return _transformationFxn->dx()->dx()->isZero() && _transformationFxn->dy()->dy()->isZero() && _transformationFxn->dz()->dz()->isZero();
+    else
+      TEUCHOS_TEST_FOR_EXCEPTION(true, std::invalid_argument, "Unsupported space dimension");
+  }
+}
+
 MeshPtr BasisCache::mesh()
 {
   if ( ! _isSideCache )
@@ -876,7 +921,7 @@ constFCPtr BasisCache::getValues(BasisPtr basis, Camellia::EOperator op,
   int componentOfInterest = -1;
   // otherwise, lookup to see whether a related value is already known
   Camellia::EFunctionSpace fs = basis->functionSpace();
-  Intrepid::EOperator relatedOp = BasisEvaluation::relatedOperator(op, fs, componentOfInterest);
+  Intrepid::EOperator relatedOp = BasisEvaluation::relatedOperator(op, fs, _spaceDim, componentOfInterest);
 
   pair<Camellia::Basis<>*, Camellia::EOperator> relatedKey = key;
   if ((Camellia::EOperator)relatedOp != op)
@@ -915,6 +960,8 @@ constFCPtr BasisCache::getValues(BasisPtr basis, Camellia::EOperator op,
 constFCPtr BasisCache::getTransformedValues(BasisPtr basis, Camellia::EOperator op,
     bool useCubPointsSideRefCell)
 {
+  TEUCHOS_TEST_FOR_EXCEPTION(!canComputeTransformedValues(op), std::invalid_argument, "computing transformed values of this operator is not supported");
+  
   pair<Camellia::Basis<>*, Camellia::EOperator> key = make_pair(basis.get(), op);
   if (_knownValuesTransformed.find(key) != _knownValuesTransformed.end())
   {
@@ -923,7 +970,7 @@ constFCPtr BasisCache::getTransformedValues(BasisPtr basis, Camellia::EOperator 
 
   int componentOfInterest;
   Camellia::EFunctionSpace fs = basis->functionSpace();
-  Intrepid::EOperator relatedOp = BasisEvaluation::relatedOperator(op, fs, componentOfInterest);
+  Intrepid::EOperator relatedOp = BasisEvaluation::relatedOperator(op, fs, _spaceDim, componentOfInterest);
 
   pair<Camellia::Basis<>*, Camellia::EOperator> relatedKey = make_pair(basis.get(),(Camellia::EOperator) relatedOp);
   if (_knownValuesTransformed.find(relatedKey) == _knownValuesTransformed.end())
@@ -969,7 +1016,7 @@ constFCPtr BasisCache::getTransformedValues(BasisPtr basis, Camellia::EOperator 
          && (op != Camellia::OP_TIMES_NORMAL_Z) && (op != Camellia::OP_TIMES_NORMAL_T)
      )
   {
-    result = BasisEvaluation::BasisEvaluation::getComponentOfInterest(relatedValuesTransformed,op,fs,componentOfInterest);
+    result = BasisEvaluation::getComponentOfInterest(relatedValuesTransformed,op,fs,componentOfInterest);
     if ( result.get() == 0 )
     {
       result = relatedValuesTransformed;

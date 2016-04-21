@@ -46,97 +46,14 @@ void OverlappingRowMatrix::BuildMap(int OverlapLevel_in, MeshPtr mesh, Teuchos::
                                     bool hierarchical)
 {
   // Camellia revision/addition: determine the cell neighbors according to the overlap level
-  std::set<GlobalIndexType> allCells = mesh->cellIDsInPartition();
-  std::set<GlobalIndexType> lastNeighbors = allCells;
-  for (int overlap = 0 ; overlap < OverlapLevel_in ; ++overlap)
-  {
-    std::set<GlobalIndexType> cellNeighbors;
-    for (std::set<GlobalIndexType>::iterator cellIDIt = lastNeighbors.begin(); cellIDIt != lastNeighbors.end(); cellIDIt++)
-    {
-      CellPtr cell = mesh->getTopology()->getCell(*cellIDIt);
-      int numSides = cell->getSideCount();
-      for (int sideOrdinal=0; sideOrdinal<numSides; sideOrdinal++)
-      {
-        pair<GlobalIndexType, unsigned> neighborInfo = cell->getNeighborInfo(sideOrdinal,mesh->getTopology());
-        if (neighborInfo.first != -1)   // -1 indicates boundary/no neighbor
-        {
-          cellNeighbors.insert(neighborInfo.first);
-        }
-      }
-    }
-    allCells.insert(cellNeighbors.begin(), cellNeighbors.end());
-    lastNeighbors = cellNeighbors;
-  }
-  if (hierarchical)
-  {
-    // get ancestors up to overlap level above our cells:
-    std::set<GlobalIndexType> ancestors = allCells;
-    for (int overlap = 0 ; overlap < OverlapLevel_in ; ++overlap)
-    {
-      std::set<GlobalIndexType> previousAncestors = ancestors;
-      ancestors.clear();
-      for (std::set<GlobalIndexType>::iterator cellIDIt = previousAncestors.begin(); cellIDIt != previousAncestors.end();
-           cellIDIt++)
-      {
-        GlobalIndexType cellID = *cellIDIt;
-        CellPtr cell = mesh->getTopology()->getCell(cellID);
-        if (cell->getParent() == Teuchos::null)
-        {
-          ancestors.insert(cellID);
-        }
-        else
-        {
-          ancestors.insert(cell->getParent()->cellIndex());
-        }
-      }
-      previousAncestors = ancestors;
-    }
-    // now, get all the descendants in ancestors:
-    set<GlobalIndexType> descendantCells;
-    for (std::set<GlobalIndexType>::iterator cellIDIt = ancestors.begin(); cellIDIt != ancestors.end();
-         cellIDIt++)
-    {
-      GlobalIndexType cellID = *cellIDIt;
-      CellPtr cell = mesh->getTopology()->getCell(cellID);
-      std::set<GlobalIndexType> descendants = cell->getDescendants(mesh->getTopology());
-      descendantCells.insert(descendants.begin(),descendants.end());
-    }
-    // finally, INTERSECT with the allCells given by standard neighbor thing
-    set<GlobalIndexType> neighborCells = allCells;
-    allCells.clear();
-    for (GlobalIndexType descendantCell : descendantCells)
-    {
-      if (neighborCells.find(descendantCell) != neighborCells.end())
-      {
-        allCells.insert(descendantCell);
-      }
-    }
-  }
+  int sideDim = mesh->getTopology()->getDimension() - 1;
+  set<GlobalIndexType> allCells = overlappingCells(mesh->cellIDsInPartition(), mesh, OverlapLevel_in, hierarchical, sideDim);
+
   std::vector<GlobalIndexType> allCellsVector(allCells.begin(),allCells.end());
 //  print("allCells on OverlappingRowMatrix",allCells);
   // Next, determine all global degrees of freedom belonging to those cells
   std::set<GlobalIndexType> globalDofIndices = dofInterpreter->importGlobalIndicesForCells(allCellsVector);
-//  print("globalDofIndices imported on OverlappingRowMatrix",globalDofIndices);
-//  for (std::set<GlobalIndexType>::iterator cellIDIt = allCells.begin(); cellIDIt != allCells.end(); cellIDIt++) {
-//    std::set<GlobalIndexType> globalDofIndicesForCell = dofInterpreter->globalDofIndicesForCell(*cellIDIt);
-//    globalDofIndices.insert(globalDofIndicesForCell.begin(),globalDofIndicesForCell.end());
-//  }
-
-  //  std::set<int_type> externalDofIndices;
-  //
-  //  // importing rows corresponding to elements that are in the globalDofIndices set,
-  //  // but not in RowMap (seen by our cells and their neighbors, but not owned by us)
-  //  {
-  //    for (std::set<GlobalIndexType>::iterator dofIt = globalDofIndices.begin(); dofIt != globalDofIndices.end(); dofIt++) {
-  //      int_type GID = (int_type) *dofIt;
-  //      if (A().RowMatrixRowMap().LID(GID) == -1) {
-  //        externalDofIndices.insert(GID);
-  //      }
-  //    }
-  //  }
-
-//  BuildMap<int_type>(OverlapLevel_in, globalDofIndices);
-  // try new version:
+//  print("globalDofIndices (RowMap)", globalDofIndices);
   BuildMap<int_type>(globalDofIndices);
 }
 
@@ -322,6 +239,20 @@ void OverlappingRowMatrix::BuildMap(int OverlapLevel_in)
   BuildMap<int_type>(OverlapLevel_in, rowIndices_, filter);
 }
 
+std::set<GlobalIndexType> OverlappingRowMatrix::overlappingCells(const std::set<GlobalIndexType> &cellIDs, MeshPtr mesh,
+                                                                 int overlapLevel, bool hierarchical,
+                                                                 int dimensionForNeighborRelation)
+{
+  set<GlobalIndexType> cellsInOverlap = cellIDs;
+  for (GlobalIndexType cellID : cellIDs)
+  {
+    std::set<GlobalIndexType> cellHalo = OverlappingRowMatrix::overlappingCells(cellID, mesh, overlapLevel,
+                                                                                hierarchical, dimensionForNeighborRelation);
+    cellsInOverlap.insert(cellHalo.begin(), cellHalo.end());
+  }
+  return cellsInOverlap;
+}
+
 std::set<GlobalIndexType> OverlappingRowMatrix::overlappingCells(GlobalIndexType cellID, MeshPtr mesh,
                                                                  int overlapLevel, bool hierarchical,
                                                                  int dimensionForNeighborRelation)
@@ -337,7 +268,7 @@ std::set<GlobalIndexType> OverlappingRowMatrix::overlappingCells(GlobalIndexType
     {
       CellPtr cell = mesh->getTopology()->getCell(*cellIDIt);
       
-      bool useOldSideBasedNeighborRelation = false;
+      bool useOldSideBasedNeighborRelation = true;
       
       if (useOldSideBasedNeighborRelation)
       {
@@ -347,19 +278,46 @@ std::set<GlobalIndexType> OverlappingRowMatrix::overlappingCells(GlobalIndexType
           pair<GlobalIndexType, unsigned> neighborInfo = cell->getNeighborInfo(sideOrdinal,mesh->getTopology());
           if (neighborInfo.first != -1)   // -1 indicates boundary/no neighbor
           {
-            cellNeighbors.insert(neighborInfo.first);
+            GlobalIndexType neighborCellID = neighborInfo.first;
+            unsigned neighborSideOrdinal = neighborInfo.second;
+            if (mesh->cellIsActive(neighborCellID))
+            {
+              cellNeighbors.insert(neighborCellID);
+            }
+            else
+            {
+              CellPtr neighborCell = mesh->getTopology()->getCell(neighborCellID);
+              vector< pair< GlobalIndexType, unsigned> > activeDescendants = neighborCell->getDescendantsForSide(neighborSideOrdinal,
+                                                                                                                 mesh->getTopology());
+              for (auto descendantCellPair : activeDescendants)
+              {
+                cellNeighbors.insert(descendantCellPair.first);
+              }
+            }
           }
         }
       }
       else
       {
         // if dimensionForNeighborRelation < 0, then use sideDim.
-        if (dimensionForNeighborRelation < 0) dimensionForNeighborRelation = cell->topology()->getDimension() - 1;
+        int sideDim = cell->topology()->getDimension() - 1;
+        if (dimensionForNeighborRelation < 0) dimensionForNeighborRelation = sideDim;
         int numSubcells = cell->topology()->getSubcellCount(dimensionForNeighborRelation);
         for (int subcellOrdinal=0; subcellOrdinal<numSubcells; subcellOrdinal++)
         {
           IndexType subcellEntityIndex = cell->entityIndex(dimensionForNeighborRelation, subcellOrdinal);
           set< pair<IndexType, unsigned> > cellPairs = mesh->getTopology()->getCellsContainingEntity(dimensionForNeighborRelation, subcellEntityIndex);
+          
+          CellPtr ancestor = cell->ancestralCellForSubcell(dimensionForNeighborRelation, subcellOrdinal, mesh->getTopology());
+          if (ancestor->cellIndex() != cell->cellIndex())
+          {
+            pair<unsigned, unsigned> ancestralInfo = cell->ancestralSubcellOrdinalAndDimension(dimensionForNeighborRelation,
+                                                                                               subcellOrdinal, mesh->getTopology());
+            IndexType ancestralEntityIndex = ancestor->entityIndex(ancestralInfo.second, ancestralInfo.first);
+            set< pair<IndexType, unsigned> > ancestralCellPairs = mesh->getTopology()->getCellsContainingEntity(ancestralInfo.second, ancestralEntityIndex);
+            cellPairs.insert(ancestralCellPairs.begin(),ancestralCellPairs.end());
+          }
+          
           while (cellPairs.size() > 0)
           {
             set< pair<IndexType, unsigned> > newPairs;
@@ -372,18 +330,33 @@ std::set<GlobalIndexType> OverlappingRowMatrix::overlappingCells(GlobalIndexType
               }
               else
               {
-                static bool haveWarned = false;
-                if (!haveWarned)
+                if (dimensionForNeighborRelation == sideDim)
                 {
-                  haveWarned = true;
-                  cout << "WARNING: In OverlappingRowMatrix::overlappingCells(), encountered hanging node.  We still need to finish writing the code to find neighbors appropriately!\n";
+                  // find the descendants of neighbor along the side
+                  unsigned neighborSideOrdinal = cellPair.second;
+                  CellPtr neighborCell = mesh->getTopology()->getCell(neighborCellID);
+                  vector< pair< GlobalIndexType, unsigned> > activeDescendants = neighborCell->getDescendantsForSide(neighborSideOrdinal, mesh->getTopology());
+                  for (auto descendantCellPair : activeDescendants)
+                  {
+                    cellNeighbors.insert(descendantCellPair.first);
+                  }
                 }
-                // TODO: finish this
-                //       we need to proceed in two directions: find any descendants of subcellEntityIndex that have active cells that we haven't already seen, and any ancestors of subcellEntityIndex that have active cells that we haven't already seen.
-                // we insert all such neighbors into cellPairs.
-                // (to check what we've seen, should look both at cellNeighbors container and at cells container)
-                // NOTE: It may be worth implementing Cell::getActiveNeighborsForSubcell(subcdim, subcord);
-                //       -- This would allow us to replace everything to do with cellPairs above (though the new method would likely call getCellsContainingEntity)
+                else
+                {
+                  static bool haveWarned = false;
+                  if (!haveWarned)
+                  {
+                    haveWarned = true;
+                    cout << "WARNING: In OverlappingRowMatrix::overlappingCells(), encountered hanging node when the dimension for the neighbor relation was not sideDim.  We still need to finish writing the code to find neighbors appropriately in this case!\n";
+                  }
+                  
+                  // TODO: finish this
+                  //       we need to proceed in two directions: find any descendants of subcellEntityIndex that have active cells that we haven't already seen, and any ancestors of subcellEntityIndex that have active cells that we haven't already seen.
+                  // we insert all such neighbors into cellPairs.
+                  // (to check what we've seen, should look both at cellNeighbors container and at cells container)
+                  // NOTE: It may be worth implementing Cell::getActiveNeighborsForSubcell(subcdim, subcord);
+                  //       -- This would allow us to replace everything to do with cellPairs above (though the new method would likely call getCellsContainingEntity)
+                }
               }
             }
             cellPairs = newPairs;

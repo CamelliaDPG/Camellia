@@ -24,9 +24,10 @@ typedef Teuchos::RCP<SubBasisDofMapper> SubBasisDofMapperPtr;
 
 struct SubBasisMapInfo
 {
-  set<unsigned> basisDofOrdinals;
+  set<int> basisDofOrdinals;
   vector<GlobalIndexType> globalDofOrdinals;
   Intrepid::FieldContainer<double> weights;
+  bool isIdentity = false;
 };
 
 class SubBasisDofMapper
@@ -41,6 +42,9 @@ public:
                                           const map<GlobalIndexType, unsigned> &globalIndexToOrdinal,
                                           bool fittableDofsOnly, const set<GlobalIndexType> &fittableDofIndices, Intrepid::FieldContainer<double> &globalData) = 0;
 
+  virtual void mapSubBasisDataIntoGlobalContainer(const Intrepid::FieldContainer<double> &subBasisData, const std::map<GlobalIndexType, unsigned> &globalIndexToOrdinal,
+                                                  bool fittableDofsOnly, const std::set<GlobalIndexType> &fittableDofIndices, Intrepid::FieldContainer<double> &globalData);
+  
   //  virtual Intrepid::FieldContainer<double> getConstraintMatrix();
 
   virtual Intrepid::FieldContainer<double> mapCoarseCoefficients(Intrepid::FieldContainer<double> &coarseCoefficients)
@@ -53,7 +57,7 @@ public:
     return mapData(true, fineData); // 5-18-15: changed "false" to "true"
   }
 
-  virtual const set<unsigned> &basisDofOrdinalFilter() = 0;
+  virtual const set<int> &basisDofOrdinalFilter() = 0;
   virtual const vector<GlobalIndexType> &mappedGlobalDofOrdinals() = 0;
 
   //! returns true if the sub basis map is a simple permutation, negated
@@ -62,14 +66,17 @@ public:
   //! returns true if the sub basis map is a simple permutation
   virtual bool isPermutation() = 0;
   
-  virtual set<GlobalIndexType> mappedGlobalDofOrdinalsForBasisOrdinals(set<unsigned> &basisDofOrdinals) = 0;
+  virtual set<GlobalIndexType> mappedGlobalDofOrdinalsForBasisOrdinals(set<int> &basisDofOrdinals) = 0;
 
   virtual SubBasisDofMapperPtr negatedDofMapper() = 0; // this dof mapper, but with negated coefficients (useful for fluxes)
-
+  
+  virtual SubBasisDofMapperPtr restrictDofOrdinalFilter(const set<int> &newDofOrdinalFilter) = 0; // this dof mapper, restricted to the specified basisDofOrdinals
+  virtual SubBasisDofMapperPtr restrictGlobalDofOrdinals(const set<GlobalIndexType> &newGlobalDofOrdinals) = 0; // this dof mapper, restricted to the specified global dof ordinals
+  
   virtual ~SubBasisDofMapper();
 
-  static SubBasisDofMapperPtr subBasisDofMapper(const set<unsigned> &dofOrdinalFilter, const vector<GlobalIndexType> &globalDofOrdinals);
-  static SubBasisDofMapperPtr subBasisDofMapper(const set<unsigned> &dofOrdinalFilter, const vector<GlobalIndexType> &globalDofOrdinals, const Intrepid::FieldContainer<double> &constraintMatrix);
+  static SubBasisDofMapperPtr subBasisDofMapper(const set<int> &dofOrdinalFilter, const vector<GlobalIndexType> &globalDofOrdinals);
+  static SubBasisDofMapperPtr subBasisDofMapper(const set<int> &dofOrdinalFilter, const vector<GlobalIndexType> &globalDofOrdinals, const Intrepid::FieldContainer<double> &constraintMatrix);
   //  static SubBasisDofMapperPtr subBasisDofMapper(); // determines if the constraint is a permutation--if it is, then
 };
 }

@@ -192,3 +192,55 @@ string Sin_ay::displayString()
   ss << "\\sin( " << _a << " y )";
   return ss.str();
 }
+
+ArcTan_ax::ArcTan_ax(double a, double b)
+{
+  _a = a;
+  _b = b;
+}
+double ArcTan_ax::value(double x)
+{
+  return atan( _a * x + _b);
+}
+TFunctionPtr<double> ArcTan_ax::dx()
+{
+  TFunctionPtr<double> one = TFunction<double>::constant(1);
+  TFunctionPtr<double> x2  = TFunction<double>::xn(2);
+  return _a * one/(x2 + one);
+}
+TFunctionPtr<double> ArcTan_ax::dy()
+{
+  return TFunction<double>::zero();
+}
+string ArcTan_ax::displayString()
+{
+  ostringstream ss;
+  ss << "\\atan( " << _a << " x )";
+  return ss.str();
+}
+
+ArcTan_ay::ArcTan_ay(double a, double b)
+{
+  _a = a;
+  _b = b;
+}
+double ArcTan_ay::value(double x, double y)
+{
+  return atan( _a * y + _b);
+}
+TFunctionPtr<double> ArcTan_ay::dx()
+{
+  return TFunction<double>::zero();
+}
+TFunctionPtr<double> ArcTan_ay::dy()
+{
+  TFunctionPtr<double> one = TFunction<double>::constant(1);
+  TFunctionPtr<double> y2  = TFunction<double>::yn(2);
+  return _a * one/(y2 + one);
+}
+string ArcTan_ay::displayString()
+{
+  ostringstream ss;
+  ss << "\\atan( " << _a << " y )";
+  return ss.str();
+}

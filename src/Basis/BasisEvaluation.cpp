@@ -49,23 +49,56 @@
 using namespace Intrepid;
 using namespace Camellia;
 
+void getD2_ij_FromMultiplicities(int &i, int &j, const Teuchos::Array<int> &multiplicities)
+{
+  bool i_assigned = false;
+  for (int k=0; k<multiplicities.size(); k++)
+  {
+    if (multiplicities[k] == 2)
+    {
+      i = k;
+      j = k;
+      return;
+    }
+    else if (multiplicities[k] == 1)
+    {
+      if (! i_assigned)
+      {
+        i = k;
+        i_assigned = true;
+      }
+      else
+      {
+        j = k;
+        return;
+      }
+    }
+  }
+  TEUCHOS_TEST_FOR_EXCEPTION(true, std::invalid_argument, "i,j not identified from multiplicities...")
+}
+
 FCPtr BasisEvaluation::getValues(BasisPtr basis, Camellia::EOperator op,
                                  const FieldContainer<double> &refPoints)
 {
   int numPoints = refPoints.dimension(0);
   int spaceDim = refPoints.dimension(1);  // points dimensions are (numPoints, spaceDim)
   int basisCardinality = basis->getCardinality();
-  int spaceDimOut = spaceDim; // for now, we assume basis values are in the same spaceDim as points (e.g. vector 1D has just 1 component)
-  // test to make sure that the basis is known by BasisFactory--otherwise, throw exception
   int componentOfInterest = -1;
-  // otherwise, lookup to see whether a related value is already known
   Camellia::EFunctionSpace fs = basis->functionSpace();
-  Intrepid::EOperator relatedOp = relatedOperator(op, fs, componentOfInterest);
+  Intrepid::EOperator relatedOp = relatedOperator(op, fs, spaceDim, componentOfInterest);
 
+  int opCardinality = spaceDim; // for now, we assume basis values are in the same spaceDim as points (e.g. vector 1D has just 1 component)
+  
+  bool relatedOpIsDkOperator = (relatedOp >= OPERATOR_D1) && (relatedOp <= OPERATOR_D10);
+  if (relatedOpIsDkOperator)
+  {
+    opCardinality = Intrepid::getDkCardinality(relatedOp, spaceDim);
+  }
+  
   if ((Camellia::EOperator)relatedOp != op)
   {
     // we can assume relatedResults has dimensions (numPoints,basisCardinality,spaceDimOut)
-    FCPtr relatedResults = Teuchos::rcp(new FieldContainer<double>(basisCardinality,numPoints,spaceDimOut));
+    FCPtr relatedResults = Teuchos::rcp(new FieldContainer<double>(basisCardinality,numPoints,opCardinality));
     basis->getValues(*(relatedResults.get()), refPoints, relatedOp);
     FCPtr result = getComponentOfInterest(relatedResults,op,fs,componentOfInterest);
     if ( result.get() == 0 )
@@ -88,9 +121,17 @@ FCPtr BasisEvaluation::getValues(BasisPtr basis, Camellia::EOperator op,
   dimensions.push_back(basisCardinality);
   dimensions.push_back(numPoints);
   int basisRank = basis->rangeRank();
-  if ( ( ( basisRank == 1) && (op ==  Camellia::OP_VALUE) ) )
+  if (((basisRank == 0) && (op ==  Camellia::OP_VALUE)))
   {
-    dimensions.push_back(spaceDimOut);
+    // scalar; leave as is
+  }
+  else if ((basisRank == 0) && relatedOpIsDkOperator)
+  {
+    dimensions.push_back(opCardinality);
+  }
+  else if ( ( ( basisRank == 1) && (op ==  Camellia::OP_VALUE) ) )
+  {
+    dimensions.push_back(opCardinality);
   }
   else if (
     ( ( basisRank == 0) && (op == Camellia::OP_GRAD) )
@@ -103,7 +144,7 @@ FCPtr BasisEvaluation::getValues(BasisPtr basis, Camellia::EOperator op,
   {
     // grad of vector: a tensor
     dimensions.push_back(spaceDim);
-    dimensions.push_back(spaceDimOut);
+    dimensions.push_back(opCardinality);
   }
   FCPtr result = Teuchos::rcp(new FieldContainer<double>(dimensions));
   basis->getValues(*(result.get()), refPoints, (Intrepid::EOperator)op);
@@ -118,12 +159,14 @@ FCPtr BasisEvaluation::getTransformedValues(BasisPtr basis, Camellia::EOperator 
     const FieldContainer<double> &cellJacobianDet)
 {
   Camellia::EFunctionSpace fs = basis->functionSpace();
+  int spaceDim = referencePoints.dimension(1);
   int componentOfInterest;
   Intrepid::EOperator relatedOp;
-  relatedOp = relatedOperator(op, fs, componentOfInterest);
+  relatedOp = relatedOperator(op, fs, spaceDim, componentOfInterest);
 
   FCPtr referenceValues = getValues(basis,(Camellia::EOperator) relatedOp, referencePoints);
-  return getTransformedValuesWithBasisValues(basis,op,referenceValues,numCells,cellJacobian,cellJacobianInv,cellJacobianDet);
+  return getTransformedValuesWithBasisValues(basis,op,spaceDim,referenceValues,
+                                             numCells,cellJacobian,cellJacobianInv,cellJacobianDet);
 }
 
 FCPtr BasisEvaluation::getTransformedValues(BasisPtr basis, Camellia::EOperator op,
@@ -132,9 +175,10 @@ FCPtr BasisEvaluation::getTransformedValues(BasisPtr basis, Camellia::EOperator 
                                             BasisCache* basisCache)
 {
   Camellia::EFunctionSpace fs = basis->functionSpace();
+  int spaceDim = referencePoints.dimension(1);
   int componentOfInterest;
   Intrepid::EOperator relatedOp;
-  relatedOp = relatedOperator(op, fs, componentOfInterest);
+  relatedOp = relatedOperator(op, fs, spaceDim, componentOfInterest);
   
   FCPtr referenceValues = getValues(basis,(Camellia::EOperator) relatedOp, referencePoints);
   return getTransformedValuesWithBasisValues(basis,op,referenceValues,numCells,basisCache);
@@ -162,16 +206,16 @@ FCPtr BasisEvaluation::getTransformedVectorValuesWithComponentBasisValues(Vector
   return transformedValues;
 }
 
-FCPtr BasisEvaluation::getTransformedValuesWithBasisValues(BasisPtr basis, Camellia::EOperator op,
-    constFCPtr referenceValues, int numCells,
-    const FieldContainer<double> &cellJacobian,
-    const FieldContainer<double> &cellJacobianInv,
-    const FieldContainer<double> &cellJacobianDet)
+FCPtr BasisEvaluation::getTransformedValuesWithBasisValues(BasisPtr basis, Camellia::EOperator op, int spaceDim,
+                                                           constFCPtr referenceValues, int numCells,
+                                                           const FieldContainer<double> &cellJacobian,
+                                                           const FieldContainer<double> &cellJacobianInv,
+                                                           const FieldContainer<double> &cellJacobianDet)
 {
   typedef FunctionSpaceTools fst;
 //  int numCells = cellJacobian.dimension(0);
-
-  int spaceDim = basis->domainTopology()->getDimension(); // changed 2/18/15
+  
+//  int spaceDim = basis->domainTopology()->getDimension(); // changed 2/18/15
 //  // 6-16-14 NVR: getting the spaceDim from cellJacobian's dimensioning is the way we've historically done it.
 //  // I think it might be better to do this using basis->domainTopology() generally, but for now we only make the
 //  // switch in case the domain topology is a Node.
@@ -183,7 +227,7 @@ FCPtr BasisEvaluation::getTransformedValuesWithBasisValues(BasisPtr basis, Camel
 
   int componentOfInterest;
   Camellia::EFunctionSpace fs = basis->functionSpace();
-  Intrepid::EOperator relatedOp = relatedOperator(op,fs, componentOfInterest);
+  Intrepid::EOperator relatedOp = relatedOperator(op,fs,spaceDim, componentOfInterest);
   Teuchos::Array<int> dimensions;
   referenceValues->dimensions(dimensions);
   dimensions.insert(dimensions.begin(), numCells);
@@ -378,11 +422,11 @@ FCPtr BasisEvaluation::getTransformedValuesWithBasisValues(BasisPtr basis, Camel
   typedef FunctionSpaceTools fst;
   //  int numCells = cellJacobian.dimension(0);
   
-  int spaceDim = basis->domainTopology()->getDimension(); // changed 2/18/15
+  int spaceDim = basisCache->getSpaceDim(); // changed 3-21-16
   
   int componentOfInterest;
   Camellia::EFunctionSpace fs = basis->functionSpace();
-  Intrepid::EOperator relatedOp = relatedOperator(op,fs, componentOfInterest);
+  Intrepid::EOperator relatedOp = relatedOperator(op,fs,spaceDim, componentOfInterest);
   Teuchos::Array<int> dimensions;
   referenceValues->dimensions(dimensions);
   dimensions.insert(dimensions.begin(), numCells);
@@ -434,6 +478,7 @@ FCPtr BasisEvaluation::getTransformedValuesWithBasisValues(BasisPtr basis, Camel
     }
       break;
     case(Intrepid::OPERATOR_GRAD):
+    case(Intrepid::OPERATOR_D1):
       switch(fs)
     {
       case Camellia::FUNCTION_SPACE_HVOL:
@@ -557,6 +602,69 @@ FCPtr BasisEvaluation::getTransformedValuesWithBasisValues(BasisPtr basis, Camel
         break;
     }
       break;
+    case(Intrepid::OPERATOR_D2):
+      switch(fs)
+    {
+      case Camellia::FUNCTION_SPACE_HVOL:
+      case Camellia::FUNCTION_SPACE_HGRAD:
+      case Camellia::FUNCTION_SPACE_HGRAD_DISC:
+      {
+        // first term in the sum is:
+        //      J^{-1} * OPD2 * J^{-T}
+        // where J^{-1} is the inverse Jacabian, and OPD2 is the matrix of reference-space values formed from OP_D2
+        
+        const FieldContainer<double> *J_inv = &basisCache->getJacobianInv();
+        transformedValues->initialize(0.0);
+        int basisCardinality = basis->getCardinality();
+        
+        Teuchos::Array<int> multiplicities(spaceDim);
+        Teuchos::Array<int> multiplicitiesTransformed(spaceDim);
+        int dkCardinality = Intrepid::getDkCardinality(Intrepid::OPERATOR_D2, spaceDim);
+        int numPoints = referenceValues->dimension(1);
+        
+        for (int cellOrdinal=0; cellOrdinal<numCells; cellOrdinal++)
+        {
+          for (int fieldOrdinal=0; fieldOrdinal<basisCardinality; fieldOrdinal++)
+          {
+            for (int pointOrdinal=0; pointOrdinal<numPoints; pointOrdinal++)
+            {
+              for (int dkOrdinal=0; dkOrdinal<dkCardinality; dkOrdinal++) // ref values dkOrdinal
+              {
+                double refValue = (*referenceValues)(fieldOrdinal,pointOrdinal,dkOrdinal);
+                Intrepid::getDkMultiplicities(multiplicities, dkOrdinal, Intrepid::OPERATOR_D2, spaceDim);
+                int k,l; // ref space coordinate directions for refValue (columns in J_inv)
+                getD2_ij_FromMultiplicities(k,l,multiplicities);
+                
+                for (int dkOrdinalTransformed=0; dkOrdinalTransformed<dkCardinality; dkOrdinalTransformed++) // physical values dkOrdinal
+                {
+                  Intrepid::getDkMultiplicities(multiplicitiesTransformed, dkOrdinalTransformed, Intrepid::OPERATOR_D2, spaceDim);
+                  int i,j; // physical space coordinate directions for refValue (rows in J_inv)
+                  getD2_ij_FromMultiplicities(i,j,multiplicitiesTransformed);
+                  double J_inv_ik = (*J_inv)(cellOrdinal,pointOrdinal,i,k);
+                  double J_inv_jl = (*J_inv)(cellOrdinal,pointOrdinal,j,l);
+                  (*transformedValues)(cellOrdinal,fieldOrdinal,pointOrdinal,dkOrdinalTransformed) += refValue * J_inv_ik * J_inv_jl;
+                }
+              }
+            }
+          }
+        }
+        
+        // do we need the second term in the sum?  (So far, we don't support this)
+        if (!basisCache->neglectHessian())
+        {
+          // then we need to do include the gradient of the basis times the (inverse) of the Hessian
+          // this seems complicated, and we don't need it for computing the Laplacian in physical space
+          // (at least not unless we have curvilinear geometry) so we don't support it for now...
+          TEUCHOS_TEST_FOR_EXCEPTION(!basisCache->neglectHessian(), std::invalid_argument, "Support for the Hessian of the reference-to-physical mapping not yet implemented.");
+        }
+      }
+        break;
+      default:
+        TEUCHOS_TEST_FOR_EXCEPTION(true,std::invalid_argument, "unhandled transformation");
+        break;
+    }
+      break;
+
     default:
       TEUCHOS_TEST_FOR_EXCEPTION(true,std::invalid_argument, "unhandled transformation");
       break;
@@ -570,7 +678,8 @@ FCPtr BasisEvaluation::getTransformedValuesWithBasisValues(BasisPtr basis, Camel
   return result;
 }
 
-Intrepid::EOperator BasisEvaluation::relatedOperator(Camellia::EOperator op, Camellia::EFunctionSpace fs, int &componentOfInterest)
+Intrepid::EOperator BasisEvaluation::relatedOperator(Camellia::EOperator op, Camellia::EFunctionSpace fs,
+                                                     int spaceDim, int &componentOfInterest)
 {
   Intrepid::EOperator relatedOp = (Intrepid::EOperator) op;
   componentOfInterest = -1;
@@ -597,6 +706,60 @@ Intrepid::EOperator BasisEvaluation::relatedOperator(Camellia::EOperator op, Cam
               || (op==OP_VECTORIZE_VALUE))
   {
     relatedOp = Intrepid::OPERATOR_VALUE;
+  }
+  else if (op==OP_LAPLACIAN)
+  {
+    relatedOp = Intrepid::OPERATOR_D2;
+    componentOfInterest = -1; // this is a special case; we shouldn't compute Laplacians in reference space.  Instead keep the whole operator D2 result; in general, we will also want the gradient in reference space to compute the transformed guy (if the second derivatives of the reference-to-physical transformation are nonzero).
+  }
+  else if ((op==OP_DXDX) || (op==OP_DYDY) || (op==OP_DZDZ))
+  {
+    relatedOp = Intrepid::OPERATOR_D2;
+    if (spaceDim == 1)
+    {
+      if (op==OP_DXDX)
+      {
+        componentOfInterest = Intrepid::getDkEnumeration(2);
+      }
+      else
+      {
+        TEUCHOS_TEST_FOR_EXCEPTION(true, std::invalid_argument, "op incompatible with spaceDim");
+      }
+    }
+    else if (spaceDim == 2)
+    {
+      if (op==OP_DXDX)
+      {
+        componentOfInterest = Intrepid::getDkEnumeration(2,0);
+      }
+      else if (op==OP_DYDY)
+      {
+        componentOfInterest = Intrepid::getDkEnumeration(0,2);
+      }
+      else
+      {
+        TEUCHOS_TEST_FOR_EXCEPTION(true, std::invalid_argument, "op incompatible with spaceDim");
+      }
+    }
+    else if (spaceDim == 3)
+    {
+      if (op==OP_DXDX)
+      {
+        componentOfInterest = Intrepid::getDkEnumeration(2,0,0);
+      }
+      else if (op==OP_DYDY)
+      {
+        componentOfInterest = Intrepid::getDkEnumeration(0,2,0);
+      }
+      else if (op==OP_DZDZ)
+      {
+        componentOfInterest = Intrepid::getDkEnumeration(0,0,2);
+      }
+      else
+      {
+        TEUCHOS_TEST_FOR_EXCEPTION(true, std::invalid_argument, "op incompatible with spaceDim");
+      }
+    }
   }
   return relatedOp;
 }
@@ -633,7 +796,7 @@ FCPtr BasisEvaluation::getComponentOfInterest(constFCPtr values, Camellia::EOper
     }
     return result;
   }
-  else if (componentOfInterest < 0)     // then just return values
+  else if ((componentOfInterest < 0) && (op != Camellia::OP_LAPLACIAN))     // then just return values
   {
     // the copy is a bit unfortunate, but can't be avoided unless we change a bunch of constFCPtrs to FCPtrs (or vice versa)
     // in the API...
@@ -642,10 +805,62 @@ FCPtr BasisEvaluation::getComponentOfInterest(constFCPtr values, Camellia::EOper
   }
   Teuchos::Array<int> dimensions;
   values->dimensions(dimensions);
-  int spaceDim = dimensions[dimensions.size()-1];
+  int opCardinality = dimensions[dimensions.size()-1];
   dimensions.pop_back(); // get rid of last, spatial dimension
   result = Teuchos::rcp(new FieldContainer<double>(dimensions));
-  TEUCHOS_TEST_FOR_EXCEPTION(componentOfInterest >= spaceDim, std::invalid_argument, "componentOfInterest is out of bounds!");
+  
+  if (op == Camellia::OP_LAPLACIAN)
+  {
+    // back out spaceDim from opCardinality
+    int spaceDim = -1;
+    if (opCardinality == 1) spaceDim = 1;
+    if (opCardinality == 3) spaceDim = 2;
+    if (opCardinality == 6) spaceDim = 3;
+//    if (opCardinality == 10) spaceDim = 4;
+    TEUCHOS_TEST_FOR_EXCEPTION(spaceDim == -1, std::invalid_argument, "unhandled opCardinality and/or spaceDim");
+    vector<int> dkEnumeration(spaceDim);
+    if (spaceDim == 1)
+    {
+      dkEnumeration[0] = Intrepid::getDkEnumeration(2);
+    }
+    else if (spaceDim == 2)
+    {
+      dkEnumeration[0] = Intrepid::getDkEnumeration(2,0);
+      dkEnumeration[1] = Intrepid::getDkEnumeration(0,2);
+    }
+    else if (spaceDim == 3)
+    {
+      dkEnumeration[0] = Intrepid::getDkEnumeration(2,0,0);
+      dkEnumeration[1] = Intrepid::getDkEnumeration(0,2,0);
+      dkEnumeration[2] = Intrepid::getDkEnumeration(0,0,2);
+    }
+    for (int comp : dkEnumeration)
+    {
+      int size = result->size();
+      int enumeratedLocation;
+      if (values->rank() == 3) // (F,P,D)
+      {
+        enumeratedLocation = values->getEnumeration(0,0,comp);
+      }
+      else if (values->rank() == 4) // (C,F,P,D)
+      {
+        enumeratedLocation = values->getEnumeration(0,0,0,comp);
+      }
+      else
+      {
+        // TODO: consider computing the enumerated location in a rank-independent way.
+        TEUCHOS_TEST_FOR_EXCEPTION(true,std::invalid_argument,"Unsupported values container rank.");
+      }
+      for (int i=0; i<size; i++)
+      {
+        (*result)[i] += (*values)[enumeratedLocation];
+        enumeratedLocation += opCardinality;
+      }
+    }
+    return result;
+  }
+  
+  TEUCHOS_TEST_FOR_EXCEPTION(componentOfInterest >= opCardinality, std::invalid_argument, "componentOfInterest is out of bounds!");
 //  int numPoints = dimensions[0];
 //  int basisCardinality = dimensions[1];
   int size = result->size();
@@ -670,7 +885,7 @@ FCPtr BasisEvaluation::getComponentOfInterest(constFCPtr values, Camellia::EOper
   for (int i=0; i<size; i++)
   {
     (*result)[i] = (*values)[enumeratedLocation];
-    enumeratedLocation += spaceDim;
+    enumeratedLocation += opCardinality;
   }
   return result;
 }

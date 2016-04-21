@@ -348,6 +348,13 @@ VarPtr Var::curl(int spaceDim) const
   }
 }
 
+VarPtr Var::laplacian() const
+{
+  TEUCHOS_TEST_FOR_EXCEPTION( _op !=  Camellia::OP_VALUE, std::invalid_argument, "operators can only be applied to raw vars, not vars that have been operated on.");
+  TEUCHOS_TEST_FOR_EXCEPTION( _rank != 0, std::invalid_argument, "laplacian() only supported for vars of rank 0.");
+  return Teuchos::rcp( new Var(_id, _rank, _name, Camellia::OP_LAPLACIAN, UNKNOWN_FS, _varType ) );
+}
+
 // ! i is 1-based ordinal; 1 for dx, 2 for dy, 3 for dz
 VarPtr Var::di(int i) const
 {

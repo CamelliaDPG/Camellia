@@ -15,17 +15,15 @@
 #include "Epetra_DataAccess.h"
 
 #include <Teuchos_GlobalMPISession.hpp>
-#include "MPIWrapper.h"
 
 #include "Epetra_SerialComm.h"
 
-#include "GlobalDofAssignment.h"
-
-#include "SerialDenseWrapper.h"
-
 #include "CamelliaDebugUtility.h"
-
+#include "GDAMinimumRule.h"
+#include "GlobalDofAssignment.h"
+#include "MPIWrapper.h"
 #include "RHS.h"
+#include "SerialDenseWrapper.h"
 
 using namespace Intrepid;
 using namespace Camellia;
@@ -44,6 +42,8 @@ CondensedDofInterpreter<Scalar>::CondensedDofInterpreter(MeshPtr mesh, TIPPtr<Sc
   _uncondensibleVarIDs.insert(fieldIDsToExclude.begin(),fieldIDsToExclude.end());
   _offRankCellsToInclude = offRankCellsToInclude;
   _skipLocalFields = false;
+  
+  _meshLastKnownGlobalDofCount = _mesh->globalDofCount();
 
   int numGlobalConstraints = lagrangeConstraints->numGlobalConstraints();
   for (int i=0; i<numGlobalConstraints; i++)
@@ -65,6 +65,8 @@ CondensedDofInterpreter<Scalar>::CondensedDofInterpreter(MeshPtr mesh, TIPPtr<Sc
 template <typename Scalar>
 void CondensedDofInterpreter<Scalar>::reinitialize()
 {
+  _meshLastKnownGlobalDofCount = _mesh->globalDofCount(); // stored for a basic staleness check (used right now in numGlobalDofs()).
+  
   _localLoadVectors.clear();
   _localStiffnessMatrices.clear();
   _localInterpretedDofIndices.clear();
@@ -93,8 +95,8 @@ void CondensedDofInterpreter<Scalar>::clearStiffnessAndLoad()
 {
   _localLoadVectors.clear();
   _localStiffnessMatrices.clear();
+  _fluxToFieldMapForIterativeSolves.clear();
 }
-
 
 template <typename Scalar>
 void CondensedDofInterpreter<Scalar>::computeAndStoreLocalStiffnessAndLoad(GlobalIndexType cellID)
@@ -300,49 +302,55 @@ set<int> CondensedDofInterpreter<Scalar>::condensibleVariableIDs()
 template <typename Scalar>
 vector<int> CondensedDofInterpreter<Scalar>::fieldRowIndices(GlobalIndexType cellID, int condensibleVarID)
 {
-  // this is not a particularly efficient way of doing this, but it's not likely to add up to much total expense
+  // this is not a particularly efficient way of doing this, but it's not likely to add up to much total expense, especially
+  // now that we cache the result.
   DofOrderingPtr trialOrder = _mesh->getElementType(cellID)->trialOrderPtr;
-
-  // the way we order field dof indices is according to their index order in the local uncondensed stiffness matrix
   
-  set<int> fieldIndices; // all field indices for the cell
-  set<int> trialIDs = trialOrder->getVarIDs();
-  for (int trialID : trialIDs)
+  pair<DofOrdering*,int> key = {trialOrder.get(),condensibleVarID};
+  if (_fieldRowIndices.find(key) == _fieldRowIndices.end())
   {
-    const vector<int>* sides = &trialOrder->getSidesForVarID(trialID);
-    for (vector<int>::const_iterator sideIt = sides->begin(); sideIt != sides->end(); sideIt++)
+    // the way we order field dof indices is according to their index order in the local uncondensed stiffness matrix
+    
+    set<int> fieldIndices; // all field indices for the cell
+    set<int> trialIDs = trialOrder->getVarIDs();
+    for (int trialID : trialIDs)
     {
-      int sideOrdinal = *sideIt;
-      vector<int> varIndices = trialOrder->getDofIndices(trialID, sideOrdinal);
-      if (varDofsAreCondensible(trialID, sideOrdinal, trialOrder))
+      const vector<int>* sides = &trialOrder->getSidesForVarID(trialID);
+      for (vector<int>::const_iterator sideIt = sides->begin(); sideIt != sides->end(); sideIt++)
       {
-        fieldIndices.insert(varIndices.begin(), varIndices.end());
-      }
-    }
-  }
-
-  vector<int> rowIndices;
-  const vector<int>* sides = &trialOrder->getSidesForVarID(condensibleVarID);
-  TEUCHOS_TEST_FOR_EXCEPTION(sides->size() != 1, std::invalid_argument, "got request for condensible var ID with multiple sides");
-  for (int sideOrdinal : *sides)
-  {
-    vector<int> varIndices = trialOrder->getDofIndices(condensibleVarID, sideOrdinal);
-    for (int dofIndexForBasisOrdinal : varIndices)
-    {
-      int row = 0;
-      for (int fieldDofIndex : fieldIndices)
-      {
-        if (fieldDofIndex == dofIndexForBasisOrdinal)
+        int sideOrdinal = *sideIt;
+        vector<int> varIndices = trialOrder->getDofIndices(trialID, sideOrdinal);
+        if (varDofsAreCondensible(trialID, sideOrdinal, trialOrder))
         {
-          rowIndices.push_back(row);
-          break;
+          fieldIndices.insert(varIndices.begin(), varIndices.end());
         }
-        row++;
       }
     }
-    TEUCHOS_TEST_FOR_EXCEPTION(rowIndices.size() != varIndices.size(), std::invalid_argument, "Internal error: number of rowIndices does not match the number of varIndices");
+
+    vector<int> rowIndices;
+    const vector<int>* sides = &trialOrder->getSidesForVarID(condensibleVarID);
+    TEUCHOS_TEST_FOR_EXCEPTION(sides->size() != 1, std::invalid_argument, "got request for condensible var ID with multiple sides");
+    for (int sideOrdinal : *sides)
+    {
+      vector<int> varIndices = trialOrder->getDofIndices(condensibleVarID, sideOrdinal);
+      for (int dofIndexForBasisOrdinal : varIndices)
+      {
+        int row = 0;
+        for (int fieldDofIndex : fieldIndices)
+        {
+          if (fieldDofIndex == dofIndexForBasisOrdinal)
+          {
+            rowIndices.push_back(row);
+            break;
+          }
+          row++;
+        }
+      }
+      TEUCHOS_TEST_FOR_EXCEPTION(rowIndices.size() != varIndices.size(), std::invalid_argument, "Internal error: number of rowIndices does not match the number of varIndices");
+    }
+    _fieldRowIndices[key] = rowIndices;
   }
-  return rowIndices;
+  return _fieldRowIndices[key];
 }
 
 
@@ -377,44 +385,51 @@ Teuchos::RCP<Epetra_SerialDenseMatrix> CondensedDofInterpreter<Scalar>::fluxToFi
 {
   // if K_11 is the field-field part of the local stiffness matrix, and K_12 is the field-flux part,
   // return -K_11^(-1) * K_12
-  set<int> fieldIndices, fluxIndices; // which are fields and which are fluxes in the local cell coefficients
   
-  Epetra_SerialDenseVector b_field;
-  
-  FieldContainer<Scalar> K,rhs;
-  FieldContainer<GlobalIndexType> interpretedDofIndices;
-  
-  Teuchos::RCP<Epetra_SerialDenseSolver> fieldSolver;
-  Epetra_SerialDenseMatrix FieldField, FieldFlux;
-  
-  getLocalData(cellID, fieldSolver, FieldField, FieldFlux, b_field, interpretedDofIndices, fieldIndices, fluxIndices);
-  
-  Teuchos::RCP<Epetra_SerialDenseMatrix> fluxToFieldMap = Teuchos::rcp( new Epetra_SerialDenseMatrix(fieldIndices.size(),fluxIndices.size()) );
+  if (_fluxToFieldMapForIterativeSolves.find(cellID) == _fluxToFieldMapForIterativeSolves.end())
+  {
+    
+    set<int> fieldIndices, fluxIndices; // which are fields and which are fluxes in the local cell coefficients
+    
+    Epetra_SerialDenseVector b_field;
+    
+    FieldContainer<Scalar> K,rhs;
+    FieldContainer<GlobalIndexType> interpretedDofIndices;
+    
+    Teuchos::RCP<Epetra_SerialDenseSolver> fieldSolver;
+    Epetra_SerialDenseMatrix FieldField, FieldFlux;
+    
+    getLocalData(cellID, fieldSolver, FieldField, FieldFlux, b_field, interpretedDofIndices, fieldIndices, fluxIndices);
+    
+    Teuchos::RCP<Epetra_SerialDenseMatrix> fluxToFieldMap = Teuchos::rcp( new Epetra_SerialDenseMatrix(fieldIndices.size(),fluxIndices.size()) );
 
-  fieldSolver->SetVectors(*fluxToFieldMap, FieldFlux);
-  
-  bool didEquilibriate = false;
-  if (fieldSolver->ShouldEquilibrate())
-  {
-    fieldSolver->EquilibrateMatrix();
-    fieldSolver->EquilibrateRHS();
-    didEquilibriate = true;
+    fieldSolver->SetVectors(*fluxToFieldMap, FieldFlux);
+    
+    bool didEquilibriate = false;
+    if (fieldSolver->ShouldEquilibrate())
+    {
+      fieldSolver->EquilibrateMatrix();
+      fieldSolver->EquilibrateRHS();
+      didEquilibriate = true;
+    }
+    
+    int err = fieldSolver->Solve();
+    if (err != 0)
+    {
+      cout << "WARNING: in CondensedDofInterpreter, fieldSolver returned error code " << err << endl;
+    }
+    if (didEquilibriate)
+    {
+      fieldSolver->UnequilibrateLHS();
+    }
+    
+    // negate
+    fluxToFieldMap->Scale(-1.0);
+    
+    _fluxToFieldMapForIterativeSolves[cellID] = fluxToFieldMap;
   }
   
-  int err = fieldSolver->Solve();
-  if (err != 0)
-  {
-    cout << "WARNING: in CondensedDofInterpreter, fieldSolver returned error code " << err << endl;
-  }
-  if (didEquilibriate)
-  {
-    fieldSolver->UnequilibrateLHS();
-  }
-  
-  // negate
-  fluxToFieldMap->Scale(-1.0);
-  
-  return fluxToFieldMap;
+  return _fluxToFieldMapForIterativeSolves[cellID];
 }
 
 template <typename Scalar>
@@ -555,7 +570,6 @@ void CondensedDofInterpreter<Scalar>::initializeGlobalDofIndices()
 {
   _interpretedFluxDofIndices.clear();
   _interpretedToGlobalDofIndexMap.clear();
-//  _interpretedDofIndicesForBasis.clear();
 
   PartitionIndexType rank = Teuchos::GlobalMPISession::getRank();
   set<GlobalIndexType> cellsForFluxStorage = _mesh->globalDofAssignment()->cellsInPartition(rank);
@@ -563,12 +577,12 @@ void CondensedDofInterpreter<Scalar>::initializeGlobalDofIndices()
   map<GlobalIndexType, IndexType> partitionLocalFluxMap = interpretedFluxMapForPartition(rank, cellsForFluxStorage);
 
   int numRanks = Teuchos::GlobalMPISession::getNProc();
-  FieldContainer<GlobalIndexType> fluxDofCountForRank(numRanks);
+  FieldContainer<GlobalIndexTypeToCast> fluxDofCountForRank(numRanks);
 
   _myGlobalDofIndexCount = partitionLocalFluxMap.size();
-  fluxDofCountForRank(rank) = _myGlobalDofIndexCount;
+  fluxDofCountForRank(rank) = (GlobalIndexTypeToCast) _myGlobalDofIndexCount;
 
-  MPIWrapper::entryWiseSum(fluxDofCountForRank);
+  MPIWrapper::entryWiseSum(*_mesh->Comm(), fluxDofCountForRank);
 
   _myGlobalDofIndexOffset = 0;
   for (int i=0; i<rank; i++)
@@ -642,7 +656,13 @@ void CondensedDofInterpreter<Scalar>::initializeGlobalDofIndices()
 template <typename Scalar>
 GlobalIndexType CondensedDofInterpreter<Scalar>::globalDofCount()
 {
-  return MPIWrapper::sum(_myGlobalDofIndexCount);
+  GlobalIndexType meshGlobalDofCount = _mesh->globalDofCount();
+  if (meshGlobalDofCount != _meshLastKnownGlobalDofCount)
+  {
+    reinitialize();
+  }
+  
+  return MPIWrapper::sum(*_mesh->Comm(), (GlobalIndexTypeToCast)_myGlobalDofIndexCount);
 }
 
 template <typename Scalar>
@@ -703,6 +723,18 @@ void CondensedDofInterpreter<Scalar>::interpretLocalBasisCoefficients(GlobalInde
     }
     else
     {
+      cout << "globalDofIndex not found for specified interpretedDofIndex " << interpretedDofIndex << " (may not be a flux?)\n";
+      cout << "cellID " << cellID << ", varID " << varID << ", side " << sideOrdinal << endl;
+      
+      GDAMinimumRule* minRule = dynamic_cast<GDAMinimumRule*>(_mesh->globalDofAssignment().get());
+      if (minRule != NULL)
+      {
+        cout << "GDAMinimumRule globalDofs for rank " << rank << ":\n";
+        minRule->printGlobalDofInfo();
+      }
+      
+      _mesh->getTopology()->printAllEntitiesInBaseMeshTopology();
+      
       TEUCHOS_TEST_FOR_EXCEPTION(true, std::invalid_argument, "globalDofIndex not found for specified interpretedDofIndex (may not be a flux?)");
     }
   }
@@ -943,39 +975,43 @@ void CondensedDofInterpreter<Scalar>::interpretGlobalCoefficients(GlobalIndexTyp
     interpretedDofIndices = _localInterpretedDofIndices[cellID];
   }
     
-  
-//  cout << "Got local data.\n";
+  vector<GlobalIndexTypeToCast> interpretedDofIndicesPresent(interpretedDofIndices.size());
+  int numPresent = 0;
+  for (int i=0; i<interpretedDofIndices.size(); i++)
+  {
+    GlobalIndexTypeToCast interpretedDofIndex = interpretedDofIndices[i];
+    if (_interpretedToGlobalDofIndexMap.find(interpretedDofIndex) != _interpretedToGlobalDofIndexMap.end())
+    {
+      GlobalIndexTypeToCast globalDofIndex = _interpretedToGlobalDofIndexMap[interpretedDofIndex];
+      int lID_global = globalCoefficients.Map().LID(globalDofIndex);
+      if (lID_global != -1)
+      {
+        interpretedDofIndicesPresent[numPresent++] = interpretedDofIndex;
+      }
+    }
+  }
+  // construct map for interpretedCoefficients that are represented:
+  Epetra_SerialComm SerialComm; // rank-local map
+  Epetra_Map    interpretedFluxIndicesMap((GlobalIndexTypeToCast)-1, numPresent, &interpretedDofIndicesPresent[0], 0, SerialComm);
+  Epetra_MultiVector interpretedCoefficients(interpretedFluxIndicesMap, 1);
   
   int fieldCount = fieldIndices.size();
   int fluxCount = fluxIndices.size();
 
   Epetra_SerialDenseVector field_dofs(fieldCount);
   
-  FieldContainer<GlobalIndexTypeToCast> interpretedDofIndicesCast(interpretedDofIndices.size());
-  for (int i=0; i<interpretedDofIndices.size(); i++)
+  for (int i=0; i<numPresent; i++)
   {
-    interpretedDofIndicesCast[i] = (GlobalIndexTypeToCast) interpretedDofIndices[i];
-  }
-  
-  // construct map for interpretedCoefficients:
-  Epetra_SerialComm SerialComm; // rank-local map
-  Epetra_Map    interpretedFluxIndicesMap((GlobalIndexTypeToCast)-1, (GlobalIndexTypeToCast)interpretedDofIndices.size(), &interpretedDofIndicesCast[0], 0, SerialComm);
-  Epetra_MultiVector interpretedCoefficients(interpretedFluxIndicesMap, 1);
-  
-  for (int i=0; i<interpretedDofIndices.size(); i++)
-  {
-    GlobalIndexTypeToCast interpretedDofIndex = interpretedDofIndicesCast[i];
+    GlobalIndexTypeToCast interpretedDofIndex = interpretedDofIndicesPresent[i];
     int lID_interpreted = interpretedFluxIndicesMap.LID(interpretedDofIndex);
     if (_interpretedToGlobalDofIndexMap.find(interpretedDofIndex) != _interpretedToGlobalDofIndexMap.end())
     {
       GlobalIndexTypeToCast globalDofIndex = _interpretedToGlobalDofIndexMap[interpretedDofIndex];
       int lID_global = globalCoefficients.Map().LID(globalDofIndex);
-      interpretedCoefficients[0][lID_interpreted] = globalCoefficients[0][lID_global];
-      //      cout << "globalCoefficient for globalDofIndex " << globalDofIndex << ": " << globalCoefficients[0][lID_global] << endl;
-    }
-    else
-    {
-      interpretedCoefficients[0][lID_interpreted] = 0; // zeros for fields, for now
+      if (lID_global != -1)
+      {
+        interpretedCoefficients[0][lID_interpreted] = globalCoefficients[0][lID_global];
+      }
     }
   }
   

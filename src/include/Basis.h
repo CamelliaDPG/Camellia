@@ -22,6 +22,10 @@ template<class Scalar=double, class ArrayScalar=Intrepid::FieldContainer<Scalar>
 
 template<class Scalar, class ArrayScalar> class Basis
 {
+  /** \brief  "true" if <var>_tagToOrdinal</var> and <var>_ordinalToTag</var> have been initialized and initializeTagsAndTrim() has been called.
+   */
+  mutable bool _basisTagsAreSet;
+  void initializeTagsAndTrim() const;
 protected:
   Basis();
 
@@ -34,9 +38,6 @@ protected:
   Camellia::EFunctionSpace _functionSpace;
 
   virtual void initializeTags() const = 0;
-  /** \brief  "true" if <var>_tagToOrdinal</var> and <var>_ordinalToTag</var> have been initialized
-   */
-  mutable bool _basisTagsAreSet;
 
   /** \brief  DoF ordinal to tag lookup table.
 
@@ -55,12 +56,7 @@ protected:
 
   /** \brief  DoF tag to ordinal lookup table.
 
-   Rank-3 array with dimensions (maxScDim + 1, maxScOrd + 1, maxDfOrd + 1), i.e., the
-   columnwise maximums of the 1st three columns in the DoF tag table for the basis plus 1.
-   For every triple (subscDim, subcOrd, subcDofOrd) that is valid DoF tag data this array
-   stores the corresponding DoF ordinal. If the triple does not correspond to tag data,
-   the array stores -1. This array is left empty at instantiation and filled by
-   initializeTags() only when tag data is requested.
+   Rank-3 container with arguments (scdim, scord, subcDofOrd).  Subclasses (in particular IntrepidBasisWrapper) often fill some empty slots with -1s, but these are eliminated during initializeTagsAndTrim().
 
    \li     tagToOrdinal_[subcDim][subcOrd][subcDofOrd] = Degree-of-freedom ordinal
    */
@@ -76,7 +72,6 @@ public:
   // dof ordinal subsets:
   virtual std::set<int> dofOrdinalsForEdges(bool includeVertices = true) const;
   virtual std::set<int> dofOrdinalsForFaces(bool includeVerticesAndEdges = true) const;
-  virtual std::set<int> dofOrdinalsForInterior() const;
   virtual std::set<int> dofOrdinalsForVertices() const;
   virtual std::set<int> dofOrdinalsForSubcells(int subcellDim, bool includeLesserDimensions) const;
 
@@ -85,10 +80,14 @@ public:
   // ! continuity would not usually be enforced along the side for these.
   virtual std::set<int> dofOrdinalsForSide(int sideOrdinal) const;
   
-  virtual std::set<int> dofOrdinalsForSubcell(int subcellDim, int subcellIndex, int minimumSubSubcellDimension) const; // e.g. can get vertex, edge, and face dofs for a side by specifying subcellDim=2, minimumSubSubcellDimension = 0
-  virtual std::set<int> dofOrdinalsForSubcell(int subcellDim, int subcellIndex) const;
-  virtual std::set<int> dofOrdinalsForVertex(int vertexIndex) const;
-  virtual std::set<int> dofOrdinalsForEdge(int edgeIndex) const;
+  virtual const std::vector<int> &dofOrdinalsForInterior() const;
+  
+  virtual std::vector<int> dofOrdinalsForSubcell(int subcellDim, int subcellIndex, int minimumSubSubcellDimension) const; // e.g. can get vertex, edge, and face dofs for a side by specifying subcellDim=2, minimumSubSubcellDimension = 0
+  virtual const std::vector<int> &dofOrdinalsForSubcell(int subcellDim, int subcellIndex) const;
+  virtual const std::vector<int> &dofOrdinalsForVertex(int vertexIndex) const;
+  virtual const std::vector<int> &dofOrdinalsForEdge(int edgeIndex) const;
+  
+//  virtual void dofOrdinalsForSubcell(int subcellDim, int subcellIndex, std::vector<int> &dofOrdinals) const;
 
   virtual int getDofOrdinal(const int subcDim, const int subcOrd, const int subcDofOrd) const;
   virtual const std::vector<std::vector<std::vector<int> > > &getDofOrdinalData( ) const;

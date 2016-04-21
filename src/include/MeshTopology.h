@@ -18,6 +18,7 @@
 #include "MeshTopologyView.h"
 #include "PeriodicBC.h"
 #include "RefinementPattern.h"
+#include "SpatialFilter.h"
 #include "TypeDefs.h"
 
 using namespace std;
@@ -42,6 +43,7 @@ class MeshTopology : public MeshTopologyView
   vector< PeriodicBCPtr > _periodicBCs;
   map<IndexType, set< pair<int, int> > > _periodicBCIndicesMatchingNode; // pair: first = index in _periodicBCs; second: 0 or 1, indicating first or second part of the identification matches.  IndexType is the vertex index.
   map< pair<IndexType, pair<int,int> >, IndexType > _equivalentNodeViaPeriodicBC;
+  map<IndexType, IndexType> _canonicalVertexPeriodic; // key is a vertex *not* in _knownEntities; the value is the matching vertex in _knownEntities
 
   // the following entity vectors are indexed on dimension of the entities
   vector< vector< vector<IndexType> > > _entities; // vertices, edges, faces, solids, etc., up to dimension (_spaceDim - 1).  Innermost container is sorted by value of IndexType (nodes). The outer two indices are entityDim, entityIndex.
@@ -84,7 +86,7 @@ class MeshTopology : public MeshTopologyView
                    const vector< vector<IndexType> > &childVertices);
 
   void determineGeneralizedParentsForRefinement(CellPtr cell, RefinementPatternPtr refPattern);
-
+  
   IndexType getVertexIndexAdding(const vector<double> &vertex, double tol);
   vector<IndexType> getVertexIndices(const Intrepid::FieldContainer<double> &vertices);
   vector<IndexType> getVertexIndices(const vector< vector<double> > &vertices);
@@ -176,9 +178,9 @@ public:
   vector<IndexType> getCellsForSide(IndexType sideEntityIndex);
   vector< IndexType > getSidesContainingEntity(unsigned d, IndexType entityIndex);
 
-  RefinementBranch getSideConstraintRefinementBranch(IndexType sideEntityIndex); // Returns a RefinementBranch that goes from the constraining side to the side indicated.
+//  RefinementBranch getSideConstraintRefinementBranch(IndexType sideEntityIndex); // Returns a RefinementBranch that goes from the constraining side to the side indicated.
 
-  unsigned getDimension();
+  unsigned getDimension() const;
   unsigned getSubEntityCount(unsigned int d, IndexType entityIndex, unsigned subEntityDim);
   IndexType getSubEntityIndex(unsigned d, IndexType entityIndex, unsigned subEntityDim, unsigned subEntityOrdinal);
   unsigned getSubEntityPermutation(unsigned d, IndexType entityIndex, unsigned subEntityDim, unsigned subEntityOrdinal);
@@ -214,6 +216,9 @@ public:
   // ! Specifies an EntitySet corresponding to the initial time, for a space-time MeshTopology.  Called by MeshFactory.
   void setEntitySetInitialTime(EntitySetPtr entitySet);
 
+  // ! Returns boundary sides whose vertices all match the specified SpatialFilter
+  vector<IndexType> getBoundarySidesThatMatch(SpatialFilterPtr spatialFilter) const;
+  
   // ! maxConstraint made public for the sake of MeshTopologyView; not intended for general use
   IndexType maxConstraint(unsigned d, IndexType entityIndex1, IndexType entityIndex2);
   

@@ -19,12 +19,47 @@
 
 #include "BasisReconciliation.h"
 
-#include "GDAMinimumRuleConstraints.h"
-#include "GDAMinimumRuleConstraintTree.h"
-
 namespace Camellia
 {
-struct OwnershipInfo
+
+  struct AnnotatedEntity
+  {
+    GlobalIndexType cellID;
+    unsigned sideOrdinal;    // -1 for volume-based constraint determination (i.e. for cases when the basis domain is the whole cell)
+    unsigned subcellOrdinal; // subcell ordinal in the domain (cell for volume-based, side for side-based)
+    unsigned dimension; // subcells can be constrained by subcells of higher dimension (i.e. this is not redundant!)
+    
+    bool operator < (const AnnotatedEntity & other) const
+    {
+      if (cellID < other.cellID) return true;
+      if (cellID > other.cellID) return false;
+      
+      if (sideOrdinal < other.sideOrdinal) return true;
+      if (sideOrdinal > other.sideOrdinal) return false;
+      
+      if (subcellOrdinal < other.subcellOrdinal) return true;
+      if (subcellOrdinal > other.subcellOrdinal) return false;
+      
+      if (dimension < other.dimension) return true;
+      if (dimension > other.dimension) return false;
+      
+      return false; // this is the case of equality.
+    }
+    
+    bool operator == (const AnnotatedEntity & other) const
+    {
+      return !(*this < other) && !(other < *this);
+    }
+    
+    bool operator != (const AnnotatedEntity & other) const
+    {
+      return !(*this == other);
+    }
+  };
+  
+  std::ostream& operator << (std::ostream& os, AnnotatedEntity& annotatedEntity);
+  
+  struct OwnershipInfo
 {
   GlobalIndexType cellID;
   GlobalIndexType owningSubcellEntityIndex;
@@ -36,10 +71,33 @@ struct CellConstraints
   vector< vector< AnnotatedEntity > > subcellConstraints; // outer: subcell dim, inner: subcell ordinal in cell
   vector< vector< OwnershipInfo > > owningCellIDForSubcell; // outer vector indexed by subcell dimension; inner vector indexed by subcell ordinal in cell.  Pairs are (CellID, subcellIndex in MeshTopology)
 //  vector< vector< vector<bool> > > sideSubcellConstraintEnforcedBySuper; // outermost vector indexed by side ordinal, then subcell dimension, then subcell ordinal.  When true, subcell does not need to be independently considered.
+  
+  /*
+   spatialSliceConstraints: 
+   When space-only trace/flux variables are defined in space-time meshes,
+   then we need to treat these somewhat specially, because sometimes the geometrically
+   constraining side must be a temporal interface.  When that happens, we need to know what
+   same-dimensional "constraints" there are on the spatial slice.  Because here we will
+   necessarily have a hanging node on the temporal interface (otherwise a spatial side
+   would be available), then for a 1-irregular mesh we can guarantee that the entities constrained
+   by that temporal side are not geometrically constrained in space.  So really what we are doing
+   here is deciding ownership and orientation, as well as resolving any difference in polynomial
+   degree.
+   
+   To keep the storage cost to a minimum, we only initialize this container when there is a temporal
+   side constraint.  Even then, we only fill it in for those entities that we cannot resolve by the
+   usual mechanism: those that are constrained by the temporal interface.  The idea is that the
+   usual mechanism should be tried first, and if that fails, then this special space-time mechanism
+   can be consulted.
+   */
+  
+  Teuchos::RCP<CellConstraints> spatialSliceConstraints;
 };
 
 class GDAMinimumRule : public GlobalDofAssignment
 {
+  bool _checkConstraintConsistency = false;
+  
   BasisReconciliation _br;
   map<GlobalIndexType, IndexType> _cellDofOffsets; // (cellID -> first partition-local dof index for that cell)  within the partition, offsets for the owned dofs in cell
   map<GlobalIndexType, GlobalIndexType> _globalCellDofOffsets; // (cellID -> first global dof index for that cell)
@@ -47,18 +105,20 @@ class GDAMinimumRule : public GlobalDofAssignment
   GlobalIndexType _partitionDofCount; // how many dofs belong to the local partition
   Intrepid::FieldContainer<IndexType> _partitionDofCounts; // how many dofs belong to each MPI rank.
   GlobalIndexType _globalDofCount;
-
-  set<IndexType> _partitionFluxIndexOffsets;
-  set<IndexType> _partitionTraceIndexOffsets; // field indices are the complement of the other two
-
-  map<int,set<IndexType> > _partitionIndexOffsetsForVarID; // TODO: factor out _partitionFluxIndexOffsets and _partitionTraceIndexOffsets using this container.
+  
+  bool _hasSpaceOnlyTrialVariable;
+  
+  GlobalIndexType _partitionFieldDofCount;
+  GlobalIndexType _partitionFluxDofCount;
+  GlobalIndexType _partitionTraceDofCount;
 
   typedef map<int, vector<GlobalIndexType> > VarIDToDofIndices; // key: varID
   typedef map<unsigned, VarIDToDofIndices> SubCellOrdinalToMap; // key: subcell ordinal
   typedef vector< SubCellOrdinalToMap > SubCellDofIndexInfo; // index to vector: subcell dimension
 
+  bool _allowCascadingConstraints = false;
+  
   map< GlobalIndexType, CellConstraints > _constraintsCache;
-  map< pair<GlobalIndexType,unsigned>, Teuchos::RCP<GDAMinimumRuleConstraintTree> > _constraintTreeCache;
   map< GlobalIndexType, LocalDofMapperPtr > _dofMapperCache;
   map< GlobalIndexType, map<int, map<int, LocalDofMapperPtr> > > _dofMapperForVariableOnSideCache; // cellID --> side --> variable --> LocalDofMapper
   map< GlobalIndexType, SubCellDofIndexInfo> _ownedGlobalDofIndicesCache; // (cellID --> SubCellDofIndexInfo)
@@ -68,22 +128,24 @@ class GDAMinimumRule : public GlobalDofAssignment
   vector<unsigned> allBasisDofOrdinalsVector(int basisCardinality);
 
   static string annotatedEntityToString(AnnotatedEntity &entity);
-
-  // LOOKS like filterSubBasisConstraintData() is unused.  If not, should be deleted.
-  void filterSubBasisConstraintData(set<unsigned> &basisDofOrdinals,vector<GlobalIndexType> &globalDofOrdinals,
-                                    Intrepid::FieldContainer<double> &constraintMatrixSideInterior, Intrepid::FieldContainer<bool> &processedDofs,
-                                    DofOrderingPtr trialOrdering, VarPtr var, int sideOrdinal = VOLUME_INTERIOR_SIDE_ORDINAL);
-
+  
   typedef vector< SubBasisDofMapperPtr > BasisMap;
-  BasisMap getBasisMap(GlobalIndexType cellID, SubCellDofIndexInfo& dofOwnershipInfo, VarPtr var);
-  BasisMap getBasisMapVolumeRestrictedToSide(GlobalIndexType cellID, SubCellDofIndexInfo& dofOwnershipInfo, VarPtr var, int sideOrdinal);
+  BasisMap getBasisMapDiscontinuousVolumeRestrictedToSide(GlobalIndexType cellID, SubCellDofIndexInfo& dofOwnershipInfo, VarPtr var, int sideOrdinal);
+  static BasisMap getRestrictedBasisMap(BasisMap &basisMap, const set<int> &basisDofOrdinalRestriction); // restricts to part of the basis
 
-  BasisMap getBasisMapExperimental(GlobalIndexType cellID, SubCellDofIndexInfo& dofOwnershipInfo, VarPtr var, int sideOrdinal);
-
+  typedef pair< IndexType, unsigned > CellPair;
+  CellPair cellContainingEntityWithLeastH1Order(int d, IndexType entityIndex);
+  
+  AnnotatedEntity* getConstrainingEntityInfo(GlobalIndexType cellID, CellConstraints &cellConstraints, VarPtr var, int d, int scord);
+  void getConstrainingEntityInfo(GlobalIndexType cellID, CellConstraints &cellConstraints, VarPtr var, int d, int scord,
+                                 AnnotatedEntity* &constrainingInfo, OwnershipInfo* &ownershipInfo, bool &spaceOnlyConstraint);
+  
   void getGlobalDofIndices(GlobalIndexType cellID, int varID, int sideOrdinal,
                            Intrepid::FieldContainer<GlobalIndexType> &globalDofIndices);
   
-  SubCellDofIndexInfo getOwnedGlobalDofIndices(GlobalIndexType cellID, CellConstraints &cellConstraints);
+  vector<GlobalIndexType> getGlobalDofOrdinalsForSubcell(GlobalIndexType cellID, VarPtr var, int d, int scord);
+  
+  SubCellDofIndexInfo & getOwnedGlobalDofIndices(GlobalIndexType cellID, CellConstraints &cellConstraints);
 
   set<GlobalIndexType> getFittableGlobalDofIndices(GlobalIndexType cellID, CellConstraints &constraints, int sideOrdinal,
                                                    int varID = -1); // returns the global dof indices for basis functions which have support on the given side (i.e. their support intersected with the side has positive measure).  This is determined by taking the union of the global dof indices defined on all the constraining sides for the given side (the constraining sides are by definition unconstrained).  If varID of -1 is specified, returns dof indices corresponding to all variables; otherwise, returns dof indices only for the specified variable.
@@ -94,11 +156,8 @@ class GDAMinimumRule : public GlobalDofAssignment
 
 public:
   // these are public just for easier testing:
-  BasisMap getBasisMapOld(GlobalIndexType cellID, SubCellDofIndexInfo& dofOwnershipInfo, VarPtr var, int sideOrdinal);
-
-  // new (6/2/15), experimental getBasisMap using GDAMinimumRuleConstraintTree:
-  BasisMap getBasisMapExperimentalConstraintTree(GlobalIndexType cellID, SubCellDofIndexInfo& dofOwnershipInfo, VarPtr var, int sideOrdinal);
-  Teuchos::RCP<GDAMinimumRuleConstraintTree> getConstraintTree(GlobalIndexType cellID, unsigned sideOrdinal);
+  BasisMap getBasisMap(GlobalIndexType cellID, SubCellDofIndexInfo& dofOwnershipInfo, VarPtr var);
+  BasisMap getBasisMap(GlobalIndexType cellID, SubCellDofIndexInfo& dofOwnershipInfo, VarPtr var, int sideOrdinal);
   
   CellConstraints getCellConstraints(GlobalIndexType cellID);
   LocalDofMapperPtr getDofMapper(GlobalIndexType cellID, CellConstraints &constraints, int varIDToMap = -1, int sideOrdinalToMap = -1);
@@ -115,6 +174,15 @@ public:
   GDAMinimumRule(MeshPtr mesh, VarFactoryPtr varFactory, DofOrderingFactoryPtr dofOrderingFactory, MeshPartitionPolicyPtr partitionPolicy,
                  vector<int> initialH1OrderTrial, unsigned testOrderEnhancement);
 
+  // ! True if cascading constraints are allowed.
+  bool allowCascadingConstraints() const;
+  
+  // ! Default is false.  Cascading constraints work in 2D generally, and for *some* 3D meshes.  They are also somewhat more expensive.  For H^1-conforming meshes, when allowCascadingConstraints is false, meshes of at most 1-irregularity are supported.  See Mesh::enforceOneIrregularity().  For meshes in which only face (side) continuity enforced, arbitrary irregularity is supported.
+  void setAllowCascadingConstraints(bool value);
+  
+  // ! Default is false.  Checking constraint consistency is useful for debugging purposes, though.
+  void setCheckConstraintConsistency(bool value);
+  
   GlobalDofAssignmentPtr deepCopy();
 
   void didHRefine(const set<GlobalIndexType> &parentCellIDs);
@@ -123,11 +191,7 @@ public:
 
   void didChangePartitionPolicy();
   
-
   ElementTypePtr elementType(GlobalIndexType cellID);
-
-  std::set<GlobalIndexType> getGlobalDofIndices(GlobalIndexType cellID, int varID, int sideOrdinal);
-  
   GlobalIndexType globalDofCount();
   
   //!! Returns the global dof indices for the indicated cell.  Only guaranteed to provide correct values for cells that belong to the local partition.
@@ -145,10 +209,9 @@ public:
 
   set<GlobalIndexType> ownedGlobalDofIndicesForCell(GlobalIndexType cellID);
 
-  set<GlobalIndexType> partitionOwnedGlobalFieldIndices();
-  set<GlobalIndexType> partitionOwnedGlobalFluxIndices();
-  set<GlobalIndexType> partitionOwnedGlobalTraceIndices();
-  set<GlobalIndexType> partitionOwnedIndicesForVariables(set<int> varIDs);
+  GlobalIndexType numPartitionOwnedGlobalFieldIndices();
+  GlobalIndexType numPartitionOwnedGlobalFluxIndices();
+  GlobalIndexType numPartitionOwnedGlobalTraceIndices();
 
   void interpretLocalData(GlobalIndexType cellID, const Intrepid::FieldContainer<double> &localData,
                           Intrepid::FieldContainer<double> &globalData,

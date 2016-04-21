@@ -9,20 +9,103 @@
 #include <iostream>
 
 #include "MeshTestUtility.h"
-#include "MultiBasis.h"
 
+#include "BasisCache.h"
 #include "CamelliaCellTools.h"
-
+#include "CubatureFactory.h"
 #include "GDAMaximumRule2D.h"
+#include "GDAMinimumRule.h"
+#include "MultiBasis.h"
 
 #include "Epetra_SerialComm.h"
 
-#include "BasisCache.h"
-
-#include "CubatureFactory.h"
-
 using namespace Intrepid;
 using namespace Camellia;
+using namespace std;
+
+bool MeshTestUtility::constraintIsConsistent(MeshTopologyViewPtr meshTopo, AnnotatedEntity &constrainingEntity,
+                                             int d, IndexType constrainedEntityIndex, bool requireConstrainingEntityBelongToActiveCell)
+{
+  int sideDim = meshTopo->getDimension() - 1;
+  CellPtr constrainingCell = meshTopo->getCell(constrainingEntity.cellID);
+  int constrainingSubcordInCell = CamelliaCellTools::subcellOrdinalMap(constrainingCell->topology(),
+                                                                       sideDim, constrainingEntity.sideOrdinal,
+                                                                       constrainingEntity.dimension, constrainingEntity.subcellOrdinal);
+  
+  IndexType constrainingEntityIndex = constrainingCell->entityIndex(constrainingEntity.dimension, constrainingSubcordInCell);
+  bool isAncestor = meshTopo->entityIsGeneralizedAncestor(constrainingEntity.dimension, constrainingEntityIndex, d, constrainedEntityIndex);
+  
+  if (!isAncestor) return false;
+  
+  if (requireConstrainingEntityBelongToActiveCell)
+  {
+    set<pair<IndexType,unsigned>> cellEntries = meshTopo->getCellsContainingEntity(constrainingEntity.dimension, constrainingEntityIndex);
+    auto activeCells = &meshTopo->getActiveCellIndices();
+    for (auto cellEntry : cellEntries)
+    {
+      IndexType cellID = cellEntry.first;
+      if (activeCells->find(cellID) != activeCells->end()) return true; // found an active cell, and isAncestor is true
+    }
+    return false;
+  }
+  
+  return isAncestor;
+}
+
+bool MeshTestUtility::checkConstraintConsistency(MeshPtr meshMinimumRule)
+{
+  MeshTopologyViewPtr meshTopo = meshMinimumRule->getTopology();
+  GDAMinimumRule* minRule = dynamic_cast<GDAMinimumRule*>(meshMinimumRule->globalDofAssignment().get());
+  
+  bool consistent = true;
+  
+  for (IndexType cellID : meshMinimumRule->cellIDsInPartition())
+  {
+    CellConstraints constraints = minRule->getCellConstraints(cellID);
+    CellPtr cell = meshTopo->getCell(cellID);
+    CellTopoPtr cellTopo = cell->topology();
+    
+    for (int d=0; d<cellTopo->getDimension(); d++)
+    {
+      int scCount = cellTopo->getSubcellCount(d);
+      for (int scord=0; scord<scCount; scord++)
+      {
+        IndexType entityIndex = cell->entityIndex(d, scord);
+        
+        AnnotatedEntity constrainingEntity = constraints.subcellConstraints[d][scord];
+        bool isConsistent = constraintIsConsistent(meshTopo, constrainingEntity, d, entityIndex, true);
+        
+        if (!isConsistent)
+        {
+          cout << "Failed consistency test for standard constraints on cell " << cellID << ", " << CamelliaCellTools::entityTypeString(d) << " " << scord << endl;
+          
+          consistent = false;
+          break;
+        }
+        
+        // now, check space-only constraints (for space-time meshes), if these are defined for this subcell
+        if (constraints.spatialSliceConstraints != Teuchos::null)
+        {
+          AnnotatedEntity constrainingEntityForSpatialSlice = constraints.spatialSliceConstraints->subcellConstraints[d][scord];
+          if (constrainingEntityForSpatialSlice.cellID != -1) {
+            isConsistent = constraintIsConsistent(meshTopo, constrainingEntityForSpatialSlice, d, entityIndex, true);
+            
+          }
+          if (!isConsistent)
+          {
+            cout << "Failed consistency test for spatial slice on cell " << cellID << ", " << CamelliaCellTools::entityTypeString(d) << " " << scord << endl;
+            
+            consistent = false;
+            break;
+          }
+        }
+      }
+      if (!consistent) break;
+    }
+    if (!consistent) break;
+  }
+  return consistent;
+}
 
 bool MeshTestUtility::checkLocalGlobalConsistency(MeshPtr mesh, double tol)
 {

@@ -31,23 +31,28 @@
 #include "DofOrdering.h"
 #include "MultiBasis.h"
 #include "BasisFactory.h"
+#include "BasisReconciliation.h"
 
 using namespace std;
 using namespace Intrepid;
 using namespace Camellia;
 
+#define INDICES_INDEX(sideOrdinal) (sideOrdinal == VOLUME_INTERIOR_SIDE_ORDINAL) ? _volumeIndex : sideOrdinal
+
 DofOrdering::DofOrdering(CellTopoPtr cellTopo)   // constructor
 {
   _nextIndex = 0;
   _indexNeedsToBeRebuilt = false;
-  _cellTopologyForSide[-1] = cellTopo; // side -1 means volume, in this context.
+  _cellTopologyForSide[VOLUME_INTERIOR_SIDE_ORDINAL] = cellTopo;
+  _indices.resize(cellTopo->getSideCount() + 1); // +1 for volume
+  _volumeIndex = cellTopo->getSideCount();
 }
 
-void DofOrdering::addEntry(int varID, BasisPtr basis, int basisRank, int sideIndex)
+void DofOrdering::addEntry(int varID, BasisPtr basis, int basisRank, int sideOrdinal)
 {
   // test to see if we already have one matching this.  (If so, that's an error.)
-  pair<int,int> key = make_pair(varID, sideIndex);
-  if ( indices.find(key) != indices.end() )
+  int sideIndex = INDICES_INDEX(sideOrdinal);
+  if ( _indices[sideIndex].find(varID) != _indices[sideIndex].end() )
   {
     TEUCHOS_TEST_FOR_EXCEPTION( true,
                                 std::invalid_argument,
@@ -55,10 +60,10 @@ void DofOrdering::addEntry(int varID, BasisPtr basis, int basisRank, int sideInd
   }
   else
   {
-    indices[key] = vector<int>(basis->getCardinality());
+    _indices[sideIndex][varID] = vector<int>(basis->getCardinality());
   }
 
-  vector<int>* dofIndices = &(indices[key]);
+  vector<int>* dofIndices = &(_indices[sideIndex][varID]);
 
   for (vector<int>::iterator dofEntryIt = dofIndices->begin(); dofEntryIt != dofIndices->end(); dofEntryIt++)
   {
@@ -68,11 +73,11 @@ void DofOrdering::addEntry(int varID, BasisPtr basis, int basisRank, int sideInd
 
   varIDs.insert(varID);
 
-  _sidesForVarID[varID].push_back(sideIndex);
+  _sidesForVarID[varID].push_back(sideOrdinal);
 
   numSidesForVarID[varID]++;
   //cout << "numSidesForVarID[" << varID << "]" << numSidesForVarID[varID] << endl;
-  pair<int, int> basisKey = make_pair(varID,sideIndex);
+  pair<int, int> basisKey = make_pair(varID,sideOrdinal);
 //  _nextIndex += basis->getCardinality();
   bases[basisKey] = basis;
   basisRanks[varID] = basisRank;
@@ -162,11 +167,13 @@ BasisPtr DofOrdering::getBasis(int varID, int sideIndex) const
   return (*entry).second;
 }
 
-int DofOrdering::getDofIndex(int varID, int basisDofOrdinal, int sideIndex, int subSideIndex)
+int DofOrdering::getDofIndex(int varID, int basisDofOrdinal, int sideOrdinal, int subSideIndex)
 {
   TEUCHOS_TEST_FOR_EXCEPTION( ( _indexNeedsToBeRebuilt ),
                               std::invalid_argument,
                               "getDofIndex called when _indexNeedsToBeRebuilt = true.  Call rebuildIndex() first.");
+  int sideIndex = INDICES_INDEX(sideOrdinal);
+  
   if (subSideIndex >= 0)
   {
     // then we've got a MultiBasis, and the basisDofOrdinal we have is *relative* to the subbasis
@@ -181,9 +188,8 @@ int DofOrdering::getDofIndex(int varID, int basisDofOrdinal, int sideIndex, int 
     //cout << basisDofOrdinal << endl;
   }
 
-  pair<int,int> key = make_pair(varID, sideIndex);
-  map< pair<int,int>, vector<int> >::iterator entryIt = indices.find(key);
-  if ( entryIt != indices.end() )
+  auto entryIt = _indices[sideIndex].find(varID);
+  if ( entryIt != _indices[sideIndex].end() )
   {
     int dofIndex = ((*entryIt).second)[basisDofOrdinal];
     if ((dofIndex < 0) || (dofIndex >= _nextIndex))
@@ -201,15 +207,15 @@ int DofOrdering::getDofIndex(int varID, int basisDofOrdinal, int sideIndex, int 
   }
 }
 
-const vector<int> & DofOrdering::getDofIndices(int varID, int sideIndex) const
+const vector<int> & DofOrdering::getDofIndices(int varID, int sideOrdinal) const
 {
   TEUCHOS_TEST_FOR_EXCEPTION( ( _indexNeedsToBeRebuilt ),
                               std::invalid_argument,
                               "getDofIndices called when _indexNeedsToBeRebuilt = true.  Call rebuildIndex() first.");
 
-  pair<int,int> key = make_pair(varID, sideIndex);
-  const map< pair<int,int>, vector<int> >::const_iterator entryIt = indices.find(key);
-  if ( entryIt == indices.end() )
+  int sideIndex = INDICES_INDEX(sideOrdinal);
+  auto entryIt = _indices[sideIndex].find(varID);
+  if ( entryIt == _indices[sideIndex].end() )
   {
     cout << "No entry found for DofIndex " << varID << " on side " << sideIndex << endl;
     cout << "DofOrdering has entries:\n";
@@ -321,7 +327,6 @@ int DofOrdering::maxBasisDegree()
 
 int DofOrdering::maxBasisDegreeForVolume()   // max degree among the varIDs with numSides == 1
 {
-
   int maxBasisDegree = 0;
 
   for (set<int>::iterator varIt = varIDs.begin(); varIt != varIDs.end(); varIt++)
@@ -338,6 +343,28 @@ int DofOrdering::maxBasisDegreeForVolume()   // max degree among the varIDs with
     }
   }
   return maxBasisDegree;
+}
+
+int DofOrdering::minimumSubcellDimensionForContinuity() const // across all bases
+{
+  CellTopoPtr volumeTopo = _cellTopologyForSide.find(VOLUME_INTERIOR_SIDE_ORDINAL)->second;
+  int minSubcellDimension = volumeTopo->getDimension();
+  
+  for (auto entry : bases)
+  {
+    BasisPtr basis = entry.second;
+    int basisMin = BasisReconciliation::minimumSubcellDimension(basis);
+    if (minSubcellDimension > basisMin)
+    {
+      minSubcellDimension = basisMin;
+    }
+  }
+  return minSubcellDimension;
+}
+
+void DofOrdering::print(std::ostream& os)
+{
+  os << *this;
 }
 
 void DofOrdering::rebuildIndex()
@@ -360,18 +387,19 @@ void DofOrdering::rebuildIndex()
         CellTopoPtr cellTopoPtr = basis->domainTopology();
         _cellTopologyForSide[cellTopoSideIndex] = cellTopoPtr;
       }
+      int sideIndex = INDICES_INDEX(sideOrdinal);
       for (int dofOrdinal=0; dofOrdinal < basis->getCardinality(); dofOrdinal++)
       {
         pair<int, pair<int,int> > key = make_pair(varID, make_pair(sideOrdinal,dofOrdinal));
-        pair<int, int> indexKey = make_pair(key.first,key.second.first); // key into indices container
+        
+        pair<int, int> indexKey = make_pair(varID,sideIndex); // key into indices container
         if ( dofIdentifications.find(key) != dofIdentifications.end() )
         {
-          int earlierSideIndex  = dofIdentifications[key].first;
+          int earlierSideIndex  = INDICES_INDEX(dofIdentifications[key].first);
           int earlierDofOrdinal = dofIdentifications[key].second;
-          pair<int,int> earlierIndexKey = make_pair(varID,earlierSideIndex);
-          if (indices[indexKey][dofOrdinal] != indices[earlierIndexKey][earlierDofOrdinal])
+          if (_indices[sideIndex][varID][dofOrdinal] != _indices[earlierSideIndex][varID][earlierDofOrdinal])
           {
-            indices[indexKey][dofOrdinal] = indices[earlierIndexKey][earlierDofOrdinal];
+            _indices[sideIndex][varID][dofOrdinal] = _indices[earlierSideIndex][varID][earlierDofOrdinal];
 //            cout << "processed identification for varID " << varID << ": (" << sideIndex << "," << dofOrdinal << ")";
 //            cout << " --> " << "(" << earlierSideIndex << "," << earlierDofOrdinal << ")" << endl;
             numIdentificationsProcessed++;
@@ -382,7 +410,7 @@ void DofOrdering::rebuildIndex()
           // modify the index according to the number of dofs we've consolidated
 //          cout << "Reducing indices for key (varID=" << indexKey.first << ", sideIndex " << indexKey.second << ") for dofOrdinal " << dofOrdinal << " from ";
 //          cout << indices[indexKey][dofOrdinal] << " to ";
-          indices[indexKey][dofOrdinal] -= numIdentificationsProcessed;
+          _indices[sideIndex][varID][dofOrdinal] -= numIdentificationsProcessed;
 //          cout << indices[indexKey][dofOrdinal] << "\n";
         }
       }
@@ -396,9 +424,6 @@ void DofOrdering::rebuildIndex()
 vector<pair<int,vector<int>>> DofOrdering::variablesWithNonZeroEntries(const Intrepid::FieldContainer<double> &localCoefficients, double tol) const
 {
   TEUCHOS_TEST_FOR_EXCEPTION(localCoefficients.size() != this->totalDofs(), std::invalid_argument, "localCoefficients must have size == totalDofs()");
-  bool varFound = false;
-  int varID; // there should be only one
-  set<int> localDofIndicesCounted;
   const set<int>* trialIDs = &this->getVarIDs();
 
   vector<pair<int,vector<int>>> results;

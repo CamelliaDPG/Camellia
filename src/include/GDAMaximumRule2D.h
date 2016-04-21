@@ -115,6 +115,10 @@ public:
   IndexType partitionLocalCellIndex(GlobalIndexType cellID, int partitionNumber = -1); // partitionNumber == -1 means use MPI rank as partitionNumber
   GlobalIndexType globalCellIndex(GlobalIndexType cellID);
 
+  GlobalIndexType numPartitionOwnedGlobalFieldIndices();
+  GlobalIndexType numPartitionOwnedGlobalFluxIndices();
+  GlobalIndexType numPartitionOwnedGlobalTraceIndices();
+  
   PartitionIndexType partitionForGlobalDofIndex( GlobalIndexType globalDofIndex );
   GlobalIndexType partitionLocalIndexForGlobalDofIndex( GlobalIndexType globalDofIndex );
 
@@ -122,7 +126,7 @@ public:
   set<GlobalIndexType> partitionOwnedGlobalFluxIndices();
   set<GlobalIndexType> partitionOwnedGlobalTraceIndices();
   set<GlobalIndexType> partitionOwnedIndicesForVariables(set<int> varIDs);
-
+  
   Intrepid::FieldContainer<double> & physicalCellNodes( ElementTypePtr elemTypePtr );
   Intrepid::FieldContainer<double> & physicalCellNodesGlobal( ElementTypePtr elemTypePtr );
 

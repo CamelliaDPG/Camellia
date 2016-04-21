@@ -85,6 +85,17 @@ int VarFactory::getTrialID(int IDarg)
   return IDarg;
 }
 
+// ! returns true if some trace or flux variable returns false when isDefinedOnTemporalInterface() is called.
+bool VarFactory::hasSpaceOnlyTrialVariable() const
+{
+  for (auto trialEntry : _trialVars)
+  {
+    VarPtr trialVar = trialEntry.second;
+    if (!trialVar->isDefinedOnTemporalInterface()) return true;
+  }
+  return false;
+}
+
 // accessors:
 VarPtr VarFactory::test(int testID)
 {

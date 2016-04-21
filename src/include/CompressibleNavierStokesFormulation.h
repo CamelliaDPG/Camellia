@@ -35,6 +35,10 @@ class CompressibleNavierStokesFormulation
   int _spaceDim;
   bool _useConformingTraces;
   double _mu;
+  FunctionPtr _muFunc;
+  FunctionPtr _muSqrtFunc;
+  Teuchos::RCP<ParameterFunction> _muParamFunc;
+  Teuchos::RCP<ParameterFunction> _muSqrtParamFunc;
   double _gamma;
   double _Pr;
   double _Cv;
@@ -65,6 +69,8 @@ class CompressibleNavierStokesFormulation
   // RHSPtr _rhsForSolve, _rhsForResidual;
 
   SolverPtr _solver;
+
+  int _solveCode;
 
   map<string, IPPtr> _ips;
 
@@ -111,8 +117,11 @@ class CompressibleNavierStokesFormulation
 public:
   CompressibleNavierStokesFormulation(MeshTopologyPtr meshTopo, Teuchos::ParameterList &parameters);
 
-  // ! the Oldroyd-B VGP formulation bilinear form
+  // ! the compressible Navier-Stokes formulation bilinear form
   BFPtr bf();
+
+  // ! the compressible Navier-Stokes formulation rhs
+  RHSPtr rhs();
 
   void addXVelocityTraceCondition(SpatialFilterPtr region, FunctionPtr u1_exact);
   void addYVelocityTraceCondition(SpatialFilterPtr region, FunctionPtr u2_exact);
@@ -195,6 +204,9 @@ public:
   // ! Returns viscosity mu.
   double mu();
 
+  // ! Set viscosity
+  void setmu(double value);
+
   // ! Returns gamma
   double gamma();
 
@@ -234,6 +246,9 @@ public:
 
   // ! get the Solver used for the linear updates
   SolverPtr getSolver();
+
+  // ! get the status of the last solve
+  int getSolveCode();
 
   // ! set the Solver for the linear updates
   void setSolver(SolverPtr solver);

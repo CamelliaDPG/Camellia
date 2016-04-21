@@ -207,7 +207,7 @@ bool BasisSumFunction::boundaryValueOnly()
   return _boundaryValueOnly;
 }
 
-TFunctionPtr<double> BasisSumFunction::basisSumFunction(BasisPtr basis, const FieldContainer<double> &basisCoefficients)
+TFunctionPtr<double> BasisSumFunction::basisSumFunction(BasisPtr basis, const FieldContainer<double> &basisCoefficients, Camellia::EOperator op)
 {
-  return Teuchos::rcp( new BasisSumFunction(basis,basisCoefficients) );
+  return Teuchos::rcp( new BasisSumFunction(basis,basisCoefficients,Teuchos::null,op) );
 }

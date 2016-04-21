@@ -22,6 +22,7 @@ VectorizedBasis<Scalar,ArrayScalar>::VectorizedBasis(BasisPtr basis, int numComp
   }
   else this->_functionSpace = basis->functionSpace();
   this->_rangeDimension = numComponents; // may differ from _componentBasis->rangeDimension();
+  this->_domainTopology = _componentBasis->domainTopology();
 }
 
 template<class Scalar, class ArrayScalar>

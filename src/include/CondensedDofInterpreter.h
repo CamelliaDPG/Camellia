@@ -42,11 +42,15 @@ private:
   LagrangeConstraints* _lagrangeConstraints;
   set<int> _uncondensibleVarIDs;
   
+  GlobalIndexType _meshLastKnownGlobalDofCount;
   std::set<GlobalIndexType> _offRankCellsToInclude;
+  
+  map<pair<DofOrdering*,int>, vector<int>> _fieldRowIndices; // key is (trialOrdering, varID)
   
   map<GlobalIndexType, Intrepid::FieldContainer<Scalar> > _localStiffnessMatrices; // will be used by interpretGlobalData if _storeLocalStiffnessMatrices is true
   map<GlobalIndexType, Intrepid::FieldContainer<GlobalIndexType> > _localInterpretedDofIndices;       // will be used by interpretGlobalData if _storeLocalStiffnessMatrices is true
-
+  map<GlobalIndexType, Teuchos::RCP<Epetra_SerialDenseMatrix> > _fluxToFieldMapForIterativeSolves;
+  
   GlobalIndexType _myGlobalDofIndexOffset;
   IndexType _myGlobalDofIndexCount;
 
@@ -66,7 +70,8 @@ private:
   map<GlobalIndexType, GlobalIndexType> interpretedFluxMapForPartition(PartitionIndexType partition,
                                                                        const set<GlobalIndexType> &cellsForFluxInterpretation);
 
-  void getLocalData(GlobalIndexType cellID, Intrepid::FieldContainer<Scalar> &stiffness, Intrepid::FieldContainer<Scalar> &load, Intrepid::FieldContainer<GlobalIndexType> &interpretedDofIndices);
+  void getLocalData(GlobalIndexType cellID, Intrepid::FieldContainer<Scalar> &stiffness, Intrepid::FieldContainer<Scalar> &load,
+                    Intrepid::FieldContainer<GlobalIndexType> &interpretedDofIndices);
   
   // new version:
   void getLocalData(GlobalIndexType cellID, Teuchos::RCP<Epetra_SerialDenseSolver> &fieldSolver,

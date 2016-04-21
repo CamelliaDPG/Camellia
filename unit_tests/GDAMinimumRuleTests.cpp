@@ -26,6 +26,7 @@
 #include "PoissonFormulation.h"
 #include "RHS.h"
 #include "Solution.h"
+#include "SpaceTimeHeatDivFormulation.h"
 #include "TypeDefs.h"
 #include "VarFactory.h"
 
@@ -40,7 +41,7 @@ namespace
    1. Cell and subcell constraints are correctly identified.
    2. Take a coarse (constraining) basis and compute some values on subcell.  Compute
    fine (constrained) basis values along the same physical region, now weighting
-   according to getBasisMapOld() (the one we currently use).  Are the values the same?
+   according to getBasisMap().  Are the values the same?
    3. Actually try solving something.
    
    Of these, #1 would be good for a few hand-computed instances -- I'm unclear on how
@@ -64,7 +65,7 @@ namespace
   
   // copied from BasisReconciliation.cpp -- likely, this method should be in a utility class somewhere
   void filterFCValues(FieldContainer<double> &filteredFC, const FieldContainer<double> &fc,
-                      set<unsigned> &ordinals, int basisCardinality)
+                      set<int> &ordinals, int basisCardinality)
   {
     // we use pointer arithmetic here, which doesn't allow Intrepid's safety checks, for two reasons:
     // 1. It's easier to manage in a way that's independent of the rank of the basis
@@ -87,6 +88,264 @@ namespace
       
       filteredFCIndex++;
     }
+  }
+  
+  MeshPtr minimalPoissonHangingNodeMesh(int H1Order, int delta_k, int spaceDim, PoissonFormulation::PoissonFormulationChoice formChoice)
+  {
+    // exact solution: for now, we just use a linear phi
+    FunctionPtr x = Function::xn(1);
+    FunctionPtr y = Function::yn(1);
+    
+    FunctionPtr phi_exact = -x + y;
+    
+    bool useConformingTraces = true; // doesn't matter for continuous Galerkin
+    PoissonFormulation poissonForm(spaceDim, useConformingTraces, formChoice);
+    
+    vector<double> dimensions(spaceDim,1.0);
+    vector<int> elementCounts(spaceDim,1);
+    elementCounts[0] = 2; // so that we can have a hanging node, make the mesh be two wide in the x direction
+    MeshPtr mesh = MeshFactory::rectilinearMesh(poissonForm.bf(), dimensions, elementCounts, H1Order, delta_k);
+    
+    set<GlobalIndexType> cellsToRefine = {0};
+    mesh->hRefine(cellsToRefine);
+    
+    return mesh;
+  }
+  
+  void testContiguousGlobalDofNumbering(GDAMinimumRule* gdaMinRule, Teuchos::FancyOStream &out, bool &success)
+  {
+    // check that all dofs are assigned, basically
+    set<GlobalIndexType> myGlobalDofIndices = gdaMinRule->globalDofIndicesForPartition(-1); // -1 means this rank
+    // while some of the local cells will see dofs that don't belong to the partition, they should see every dof
+    // that *does* belong to the partition -- by iterating through local cells and asking for their global dofs,
+    // we should find all members of myGlobalDofIndices
+    set<GlobalIndexType> foundGlobalIndices;
+    const set<GlobalIndexType>* myCellIDs = &gdaMinRule->cellsInPartition(-1);
+    for (GlobalIndexType cellID : *myCellIDs)
+    {
+      set<GlobalIndexType> globalIndicesForCell = gdaMinRule->globalDofIndicesForCell(cellID);
+      foundGlobalIndices.insert(globalIndicesForCell.begin(),globalIndicesForCell.end());
+    }
+    // rule is, foundGlobalIndices should be a superset of myGlobalDofIndices
+    set<GlobalIndexType> missingDofIndices;
+    for (GlobalIndexType myDofIndex : myGlobalDofIndices)
+    {
+      if (foundGlobalIndices.find(myDofIndex) == foundGlobalIndices.end())
+      {
+        missingDofIndices.insert(myDofIndex);
+      }
+    }
+    if (missingDofIndices.size() != 0)
+    {
+      success = false;
+      out << "Missing global dof ordinals: ";
+      for (GlobalIndexType missingDofIndex : missingDofIndices)
+      {
+        out << missingDofIndex << " ";
+      }
+      out << endl;
+    }
+  }
+  
+  void testContiguousGlobalDofNumberingComplexSpaceTimeMesh(bool useConformingTraces, Teuchos::FancyOStream &out, bool &success)
+  {
+    int spaceDim = 2;
+    double pi = atan(1)*4;
+    
+    double t0 = 0;
+    double t1 = pi;
+    int temporalDivisions = 1;
+    
+    vector<double> x0 = {0.0, 0.0};;
+    vector<double> dims = {2*pi, 2*pi};
+    vector<int> numElements = {2,2};
+    
+    MeshTopologyPtr spatial2DMeshTopo = MeshFactory::rectilinearMeshTopology(dims,numElements,x0);
+    MeshTopologyPtr meshTopo = MeshFactory::spaceTimeMeshTopology(spatial2DMeshTopo, t0, t1, temporalDivisions);
+    
+    // some refinements in an effort to replicate an issue...
+    // 1. Uniform refinement
+    IndexType nextElement = meshTopo->cellCount();
+    set<IndexType> cellsToRefine = meshTopo->getActiveCellIndices();
+    CellTopoPtr cellTopo = meshTopo->getCell(0)->topology();
+    RefinementPatternPtr refPattern = RefinementPattern::regularRefinementPattern(cellTopo);
+    for (IndexType cellIndex : cellsToRefine)
+    {
+      meshTopo->refineCell(cellIndex, refPattern, nextElement);
+      nextElement += refPattern->numChildren();
+    }
+    // 2. Selective refinement
+    cellsToRefine = {4,15,21,30};
+    for (IndexType cellIndex : cellsToRefine)
+    {
+      meshTopo->refineCell(cellIndex, refPattern, nextElement);
+      nextElement += refPattern->numChildren();
+    }
+    
+    int fieldPolyOrder = 1;
+    double epsilon = 1.0;
+    SpaceTimeHeatDivFormulation form(spaceDim, epsilon);
+    form.initializeSolution(meshTopo, fieldPolyOrder);
+    
+    MeshPtr formMesh = form.solution()->mesh();
+    
+    GDAMinimumRule* gdaMinRule = dynamic_cast<GDAMinimumRule*>(formMesh->globalDofAssignment().get());
+    testContiguousGlobalDofNumbering(gdaMinRule, out, success);
+  }
+  
+  void testSolvePoissonHangingNode(int spaceDim, PoissonFormulation::PoissonFormulationChoice formChoice,
+                                   Teuchos::FancyOStream &out, bool &success)
+  {
+    // exact solution: for now, we just use a linear phi
+    FunctionPtr x = Function::xn(1);
+    FunctionPtr y = Function::yn(1);
+    
+    FunctionPtr phi_exact = -x + y;
+    
+    int H1Order = 2;
+    bool useConformingTraces = true; // doesn't matter for continuous Galerkin
+    int delta_k = -1;
+    PoissonFormulation poissonForm(spaceDim, useConformingTraces, formChoice);
+    
+    IPPtr ip; // null for Bubnov-Galerkin
+    switch (formChoice) {
+      case Camellia::PoissonFormulation::PRIMAL:
+      {
+        VarPtr q = poissonForm.q();
+        ip = IP::ip();
+        ip->addTerm(q->grad());
+        ip->addTerm(q);
+        delta_k = spaceDim;
+      }
+        break;
+      case Camellia::PoissonFormulation::ULTRAWEAK:
+        ip = poissonForm.bf()->graphNorm();
+        delta_k = spaceDim;
+        break;
+      case Camellia::PoissonFormulation::CONTINUOUS_GALERKIN:
+        delta_k = 0; // Bubnov-Galerkin
+        break;
+      default:
+        out << "Unsupported formulation choice!\n";
+        success = false;
+        return;
+        break;
+    }
+    
+    MeshPtr mesh = minimalPoissonHangingNodeMesh(H1Order, delta_k, spaceDim, formChoice);
+    
+    // rhs = f * v, where f = \Delta phi
+    RHSPtr rhs = RHS::rhs();
+    FunctionPtr f = phi_exact->dx()->dx() + phi_exact->dy()->dy() + phi_exact->dz()->dz();
+    rhs->addTerm(f * poissonForm.q());
+    
+    if (! MeshTestUtility::checkLocalGlobalConsistency(mesh) )
+    {
+      cout << "FAILURE: 1-irregular Poisson 2D mesh fails local-to-global consistency check.\n";
+      success = false;
+    }
+
+//    {
+//      //DEBUGGING
+//      GDAMinimumRule * minRule = dynamic_cast<GDAMinimumRule *>(mesh->globalDofAssignment().get());
+//      minRule->printGlobalDofInfo();
+//      GlobalIndexType cellWithHangingNode = 4;
+//      CellConstraints cellConstraints = minRule->getCellConstraints(cellWithHangingNode);
+//      minRule->getDofMapper(cellWithHangingNode, cellConstraints)->printMappingReport();
+//    }
+    
+    VarPtr phi = poissonForm.phi();
+    BCPtr bc = BC::bc();
+    SpatialFilterPtr boundary = SpatialFilter::allSpace();
+    bc->addDirichlet(phi, boundary, phi_exact);
+    
+    SolutionPtr soln = Solution::solution(poissonForm.bf(), mesh, bc, rhs, ip);
+    
+    map<int, FunctionPtr> phi_exact_map;
+    phi_exact_map[phi->ID()] = phi_exact;
+    soln->projectOntoMesh(phi_exact_map);
+    
+    FunctionPtr phi_soln = Function::solution(phi, soln);
+    FunctionPtr phi_err = phi_soln - phi_exact;
+    
+    double tol = 1e-12;
+    double phi_err_l2 = phi_err->l2norm(mesh);
+    
+    if (phi_err_l2 > tol)
+    {
+      success = false;
+      cout << "GDAMinimumRuleTests failure: for 1-irregular ";
+      cout << spaceDim << "D mesh and exactly recoverable solution, phi error after projection is " << phi_err_l2 << endl;
+      
+      string outputSuperDir = ".";
+      string outputDir = "poisson2DHangingNodeProjection";
+      HDF5Exporter exporter(mesh, outputDir, outputSuperDir);
+      cout << "Writing phi err to " << outputSuperDir << "/" << outputDir << endl;
+      
+      exporter.exportFunction(phi_err, "phi_err");
+    }
+    
+    soln->clear();
+    soln->solve();
+    
+    Epetra_MultiVector *lhsVector = soln->getGlobalCoefficients();
+    Epetra_SerialComm Comm;
+    Epetra_Map partMap = soln->getPartitionMap();
+    
+    // Import solution onto current processor
+    GlobalIndexTypeToCast numNodesGlobal = mesh->numGlobalDofs();
+    GlobalIndexTypeToCast numMyNodes = numNodesGlobal;
+    Epetra_Map     solnMap(numNodesGlobal, numMyNodes, 0, Comm);
+    Epetra_Import  solnImporter(solnMap, partMap);
+    Epetra_Vector  solnCoeff(solnMap);
+    solnCoeff.Import(*lhsVector, solnImporter, Insert);
+    
+// TODO: work out whether MeshTestUtility::neighborBasesAgreeOnSides() is valid on CG meshes
+    if ( ! MeshTestUtility::neighborBasesAgreeOnSides(mesh, solnCoeff))
+    {
+      cout << "GDAMinimumRuleTests failure: for 1-irregular 2D Poisson mesh with hanging nodes (after solving), neighboring bases do not agree on sides." << endl;
+      success = false;
+    }
+
+//    cout << "...solution continuities checked.\n";
+    
+    phi_err_l2 = phi_err->l2norm(mesh);
+    if (phi_err_l2 > tol)
+    {
+      success = false;
+      cout << "GDAMinimumRuleTests failure: for 1-irregular ";
+      cout << spaceDim << "D mesh and exactly recoverable solution, phi error is " << phi_err_l2 << endl;
+      
+      string outputSuperDir = ".";
+      string outputDir = "poisson2DHangingNodeError";
+      HDF5Exporter exporter(mesh, outputDir, outputSuperDir);
+      cout << "Writing phi err to " << outputSuperDir << "/" << outputDir << endl;
+      
+      exporter.exportFunction(phi_err, "phi_err");
+      
+      outputDir = "poisson2DHangingNodeSolution";
+      cout << "Writing solution to " << outputSuperDir << "/" << outputDir << endl;
+      HDF5Exporter solutionExporter(mesh, outputDir, outputSuperDir);
+      solutionExporter.exportSolution(soln);
+    }
+    
+//    HDF5Exporter exporter(mesh, "poisson2DHangingNodeSolution", "/tmp");
+//    exporter.exportSolution(soln);
+  }
+  
+  void testSolvePoissonContinuousGalerkinHangingNode(int spaceDim, Teuchos::FancyOStream &out, bool &success)
+  {
+    testSolvePoissonHangingNode(spaceDim, PoissonFormulation::CONTINUOUS_GALERKIN, out, success);
+  }
+ 
+  void testSolvePoissonPrimalHangingNode(int spaceDim, Teuchos::FancyOStream &out, bool &success)
+  {
+    testSolvePoissonHangingNode(spaceDim, PoissonFormulation::PRIMAL, out, success);
+  }
+  
+  void testSolvePoissonUltraweakHangingNode(int spaceDim, Teuchos::FancyOStream &out, bool &success)
+  {
+    testSolvePoissonHangingNode(spaceDim, PoissonFormulation::ULTRAWEAK, out, success);
   }
   
   void testSubcellConstraintIsAncestor(MeshPtr mesh, Teuchos::FancyOStream &out, bool &success)
@@ -141,7 +400,7 @@ namespace
     }
   }
   
-  void testCoarseBasisEqualsWeightedFineBasis(MeshPtr mesh, bool useConstraintTree, Teuchos::FancyOStream &out, bool &success)
+  void testCoarseBasisEqualsWeightedFineBasis(MeshPtr mesh, Teuchos::FancyOStream &out, bool &success)
   {
     /*
      For each active cell:
@@ -180,17 +439,19 @@ namespace
      */
     VarFactoryPtr vf = mesh->bilinearForm()->varFactory();
     
-    // for now, we just check a single trace var:
-    VarPtr traceVar;
+    // for now, we just check a single var, preferring traces:
+    VarPtr var;
     if (vf->traceVars().size() > 0)
     {
-      traceVar = vf->traceVars()[0];
+      var = vf->traceVars()[0];
+    }
+    else if (vf->fluxVars().size() > 0)
+    {
+      var = vf->fluxVars()[0];
     }
     else
     {
-      TEUCHOS_TEST_FOR_EXCEPTION(vf->fluxVars().size() == 0, std::invalid_argument,
-                                 "Both fluxVars and traceVars are empty; this is not supported by this test.");
-      traceVar = vf->fluxVars()[0];
+      var = vf->fieldVars()[0];
     }
     // TODO: test flux var when both traces and fluxes are present (as with Poisson for spaceDim > 1)
     
@@ -202,14 +463,22 @@ namespace
       return;
     }
     
-    //    gda->printGlobalDofInfo();
-    
     auto activeCellIDs = mesh->getActiveCellIDs();
     MeshTopology* meshTopo = dynamic_cast<MeshTopology*>(mesh->getTopology().get());
+
+//    { // DEBUGGING
+//      gda->printGlobalDofInfo();
+//      meshTopo->printAllEntities();
+//      
+//      GlobalIndexType cellID = 5;
+//      CellConstraints constraints = gda->getCellConstraints(cellID);
+//      cout << "Mapping report for cell " << cellID << endl;
+//      gda->getDofMapper(cellID, constraints)->printMappingReport();
+//    }
+//    unsigned edgeDim = 1;
+//    meshTopo->printConstraintReport(edgeDim);
     
-    //    meshTopo->printAllEntities();
-    //    unsigned edgeDim = 1;
-    //    meshTopo->printConstraintReport(edgeDim);
+    typedef vector< SubBasisDofMapperPtr > BasisMap;
     
     int sideDim = meshTopo->getDimension() - 1;
     Camellia::CubatureFactory cubFactory;
@@ -220,22 +489,49 @@ namespace
       CellConstraints cellConstraints = gda->getCellConstraints(cellID);
       auto dofOwnershipInfo = gda->getGlobalDofIndices(cellID, cellConstraints);
       CellTopoPtr cellTopo = cell->topology();
-      int sideCount = cellTopo->getSideCount();
-      for (int sideOrdinal=0; sideOrdinal<sideCount; sideOrdinal++)
+      
+      DofOrderingPtr trialOrder = mesh->getElementType(cellID)->trialOrderPtr;
+      
+      BasisMap fineBasisMap;
+      BasisPtr fineBasis;
+      CellTopoPtr domainTopo;
+      int domainDim, domainOrdinalInCell;
+      
+      bool isVolumeVar = (var->varType() == FIELD);
+      
+      if (isVolumeVar)
       {
-        BasisCachePtr sideBasisCache = cellBasisCache->getSideBasisCache(sideOrdinal);
-        BasisPtr fineBasis = mesh->getElementType(cellID)->trialOrderPtr->getBasis(traceVar->ID(),sideOrdinal);
-        auto fineBasisMap = useConstraintTree ? gda->getBasisMapExperimentalConstraintTree(cellID, dofOwnershipInfo, traceVar, sideOrdinal) :
-                                                gda->getBasisMapOld(cellID, dofOwnershipInfo, traceVar, sideOrdinal);
-        int cubDegree = fineBasis->getDegree();
-        CellTopoPtr sideTopo = cellTopo->getSide(sideOrdinal);
-        for (int subcdim=0; subcdim<=sideDim; subcdim++)
+        fineBasisMap = gda->getBasisMap(cellID, dofOwnershipInfo, var);
+        fineBasis = trialOrder->getBasis(var->ID());
+      }
+      
+      for (int sideOrdinal : trialOrder->getSidesForVarID(var->ID()))
+      {
+        BasisCachePtr domainBasisCache;
+        if (isVolumeVar)
         {
-          int subcellCount = sideTopo->getSubcellCount(subcdim);
+          domainBasisCache = cellBasisCache;
+          domainOrdinalInCell = 0;
+        }
+        else
+        {
+          domainBasisCache = cellBasisCache->getSideBasisCache(sideOrdinal);
+          fineBasis = trialOrder->getBasis(var->ID(),sideOrdinal);
+          fineBasisMap = gda->getBasisMap(cellID, dofOwnershipInfo, var, sideOrdinal);
+          domainOrdinalInCell = sideOrdinal;
+        }
+        
+        int cubDegree = fineBasis->getDegree();
+        domainTopo = fineBasis->domainTopology();
+        int domainDim = domainTopo->getDimension();
+        int minSubcellDimension = BasisReconciliation::minimumSubcellDimension(fineBasis);
+        for (int subcdim=minSubcellDimension; subcdim<=sideDim; subcdim++)
+        {
+          int subcellCount = domainTopo->getSubcellCount(subcdim);
           for (int subcord=0; subcord<subcellCount; subcord++)
           {
-            CellTopoPtr subcell = sideTopo->getSubcell(subcdim, subcord);
-            unsigned subcordInCell = CamelliaCellTools::subcellOrdinalMap(cellTopo, sideDim, sideOrdinal, subcdim, subcord);
+            CellTopoPtr subcell = domainTopo->getSubcell(subcdim, subcord);
+            unsigned subcordInCell = CamelliaCellTools::subcellOrdinalMap(cellTopo, domainDim, domainOrdinalInCell, subcdim, subcord);
             FieldContainer<double> subcellPoints;
             if (subcdim==0)
             {
@@ -243,7 +539,7 @@ namespace
             }
             else
             {
-              CellTopoPtr subcellTopo = sideTopo->getSubcell(subcdim, subcord);
+              CellTopoPtr subcellTopo = domainTopo->getSubcell(subcdim, subcord);
               auto cubature = cubFactory.create(subcellTopo, cubDegree);
               subcellPoints.resize(cubature->getNumPoints(),cubature->getDimension());
               FieldContainer<double> weights(cubature->getNumPoints()); // we ignore these
@@ -252,15 +548,14 @@ namespace
             int numPoints = subcellPoints.dimension(0);
             
             // map the subcellPoints to the fine domain
-            FieldContainer<double> fineDomainPoints(numPoints,sideDim);
-            CamelliaCellTools::mapToReferenceSubcell(fineDomainPoints, subcellPoints, subcdim, subcord, sideTopo);
+            FieldContainer<double> fineDomainPoints(numPoints,domainDim);
+            CamelliaCellTools::mapToReferenceSubcell(fineDomainPoints, subcellPoints, subcdim, subcord, domainTopo);
             
-            sideBasisCache->setRefCellPoints(fineDomainPoints);
-            FieldContainer<double> fineValuesAllPoints = *sideBasisCache->getTransformedValues(fineBasis, OP_VALUE);
+            domainBasisCache->setRefCellPoints(fineDomainPoints);
+            FieldContainer<double> fineValuesAllPoints = *domainBasisCache->getTransformedValues(fineBasis, OP_VALUE);
             // strip cell dimension:
             fineValuesAllPoints.resize(fineBasis->getCardinality(), numPoints);
 
-            
             RefinementBranch cellRefinementBranch = cell->refinementBranchForSubcell(subcdim, subcordInCell, mesh->getTopology());
             if (cellRefinementBranch.size() == 0)
             {
@@ -270,20 +565,43 @@ namespace
             
             AnnotatedEntity constrainingEntityInfo = cellConstraints.subcellConstraints[subcdim][subcordInCell];
             unsigned constrainingSideOrdinal = constrainingEntityInfo.sideOrdinal;
-            ElementTypePtr constrainingElementType = mesh->getElementType(constrainingEntityInfo.cellID);
-            BasisPtr constrainingBasis = constrainingElementType->trialOrderPtr->getBasis(traceVar->ID(), constrainingSideOrdinal);
+            DofOrderingPtr constrainingTrialOrder = mesh->getElementType(constrainingEntityInfo.cellID)->trialOrderPtr;
             
-            BasisCachePtr constrainingCellBasisCache = BasisCache::basisCacheForCell(mesh, constrainingEntityInfo.cellID);
-            BasisCachePtr constrainingSideBasisCache = constrainingCellBasisCache->getSideBasisCache(constrainingSideOrdinal);
-
-            unsigned canonicalToAncestralSubcellPermutation = cell->ancestralPermutationForSubcell(subcdim, subcordInCell, mesh->getTopology());
-
             CellPtr constrainingCell = meshTopo->getCell(constrainingEntityInfo.cellID);
             CellTopoPtr constrainingCellTopo = constrainingCell->topology();
             
-            unsigned constrainingSubcellInConstrainingCell = CamelliaCellTools::subcellOrdinalMap(constrainingCellTopo, sideDim, constrainingSideOrdinal,
-                                                                                                  constrainingEntityInfo.dimension, constrainingEntityInfo.subcellOrdinal);
-            CellTopoPtr constrainingSubcellTopo = constrainingCellTopo->getSubcell(constrainingEntityInfo.dimension,constrainingSubcellInConstrainingCell);
+            BasisCachePtr constrainingCellBasisCache = BasisCache::basisCacheForCell(mesh, constrainingEntityInfo.cellID);
+            BasisCachePtr constrainingDomainBasisCache;
+            BasisPtr constrainingBasis;
+            int constrainingDomainOrdinal;
+            int constrainingSubcellOrdinalInDomain;
+            if (isVolumeVar)
+            {
+              constrainingBasis = constrainingTrialOrder->getBasis(var->ID());
+              constrainingDomainBasisCache = constrainingCellBasisCache;
+              constrainingDomainOrdinal = 0;
+              constrainingSubcellOrdinalInDomain = CamelliaCellTools::subcellOrdinalMap(constrainingCellTopo, sideDim,
+                                                                                        constrainingEntityInfo.sideOrdinal,
+                                                                                        constrainingEntityInfo.dimension,
+                                                                                        constrainingEntityInfo.subcellOrdinal);
+            }
+            else
+            {
+              constrainingBasis = constrainingTrialOrder->getBasis(var->ID(), constrainingSideOrdinal);
+              constrainingDomainBasisCache = constrainingCellBasisCache->getSideBasisCache(constrainingSideOrdinal);
+              constrainingDomainOrdinal = constrainingSideOrdinal;
+              constrainingSubcellOrdinalInDomain = constrainingEntityInfo.subcellOrdinal;
+            }
+            
+            unsigned canonicalToAncestralSubcellPermutation = cell->ancestralPermutationForSubcell(subcdim, subcordInCell,
+                                                                                                   mesh->getTopology());
+            
+            unsigned constrainingSubcellInConstrainingCell = CamelliaCellTools::subcellOrdinalMap(constrainingCellTopo, domainDim,
+                                                                                                  constrainingDomainOrdinal,
+                                                                                                  constrainingEntityInfo.dimension,
+                                                                                                  constrainingSubcellOrdinalInDomain);
+            CellTopoPtr constrainingSubcellTopo = constrainingCellTopo->getSubcell(constrainingEntityInfo.dimension,
+                                                                                   constrainingSubcellInConstrainingCell);
             
             // sanity check: confirm that ancestral subcell and constraining subcell refer to the same entity
             pair<unsigned, unsigned> subcellOrdinalAndDimension = cell->ancestralSubcellOrdinalAndDimension(subcdim, subcordInCell, mesh->getTopology());
@@ -305,20 +623,20 @@ namespace
                                                                     subcellPoints,
                                                                     subcdim,
                                                                     subcord,
-                                                                    sideDim,
-                                                                    sideOrdinal,
+                                                                    domainDim,
+                                                                    domainOrdinalInCell,
                                                                     cellRefinementBranch,
                                                                     constrainingCellTopo,
                                                                     constrainingEntityInfo.dimension,
-                                                                    constrainingEntityInfo.subcellOrdinal,
-                                                                    sideDim,
-                                                                    constrainingEntityInfo.sideOrdinal,
+                                                                    constrainingSubcellOrdinalInDomain,
+                                                                    domainDim,
+                                                                    constrainingDomainOrdinal,
                                                                     ancestralToConstrainingSubcellPermutation);
-            constrainingSideBasisCache->setRefCellPoints(constrainingDomainPoints);
+            constrainingDomainBasisCache->setRefCellPoints(constrainingDomainPoints);
             
             // As a sanity check, compare the physical points for coarse and fine:
-            FieldContainer<double> finePhysicalPoints = sideBasisCache->getPhysicalCubaturePoints();
-            FieldContainer<double> coarsePhysicalPoints = constrainingSideBasisCache->getPhysicalCubaturePoints();
+            FieldContainer<double> finePhysicalPoints = domainBasisCache->getPhysicalCubaturePoints();
+            FieldContainer<double> coarsePhysicalPoints = constrainingDomainBasisCache->getPhysicalCubaturePoints();
             bool oldSuccess = success;
             success = true;
             TEST_COMPARE_FLOATING_ARRAYS_CAMELLIA(finePhysicalPoints, coarsePhysicalPoints, 1e-15);
@@ -331,15 +649,21 @@ namespace
             }
             success = success && oldSuccess;
             
-            FieldContainer<double> constrainingBasisValuesAllPoints = *constrainingSideBasisCache->getTransformedValues(constrainingBasis, OP_VALUE);
+            FieldContainer<double> constrainingBasisValuesAllPoints = *constrainingDomainBasisCache->getTransformedValues(constrainingBasis, OP_VALUE);
             // strip cell dimension:
             constrainingBasisValuesAllPoints.resize(constrainingBasis->getCardinality(), numPoints);
             
             CellConstraints coarseCellConstraints = gda->getCellConstraints(constrainingEntityInfo.cellID);
             auto coarseGlobalDofInfo = gda->getGlobalDofIndices(constrainingEntityInfo.cellID, cellConstraints);
-            auto coarseBasisMap = useConstraintTree ?
-            gda->getBasisMapExperimentalConstraintTree(constrainingEntityInfo.cellID, coarseGlobalDofInfo, traceVar, constrainingSideOrdinal) :
-            gda->getBasisMapOld(constrainingEntityInfo.cellID, coarseGlobalDofInfo, traceVar, constrainingSideOrdinal);
+            BasisMap coarseBasisMap;
+            if (isVolumeVar)
+            {
+              coarseBasisMap = gda->getBasisMap(constrainingEntityInfo.cellID, coarseGlobalDofInfo, var);
+            }
+            else
+            {
+              coarseBasisMap = gda->getBasisMap(constrainingEntityInfo.cellID, coarseGlobalDofInfo, var, constrainingSideOrdinal);
+            }
             
             for (int pointOrdinal=0; pointOrdinal<numPoints; pointOrdinal++)
             {
@@ -352,7 +676,7 @@ namespace
               for (auto subBasisMap : fineBasisMap)
               {
                 // filter fine values according to what subBasisMap knows about.
-                set<unsigned> basisOrdinalFilter = subBasisMap->basisDofOrdinalFilter();
+                set<int> basisOrdinalFilter = subBasisMap->basisDofOrdinalFilter();
                 FieldContainer<double> fineFilteredValues(basisOrdinalFilter.size());
                 filterFCValues(fineFilteredValues, fineValues, basisOrdinalFilter, fineBasis->getCardinality());
                 FieldContainer<double> mappedValues = subBasisMap->mapFineData(fineFilteredValues);
@@ -371,7 +695,7 @@ namespace
               for (auto subBasisMap : coarseBasisMap)
               {
                 // filter constrainingBasisValues here according to what subBasisMap knows about.
-                set<unsigned> basisOrdinalFilter = subBasisMap->basisDofOrdinalFilter();
+                set<int> basisOrdinalFilter = subBasisMap->basisDofOrdinalFilter();
                 FieldContainer<double> filteredConstrainingValues(basisOrdinalFilter.size());
                 filterFCValues(filteredConstrainingValues, constrainingBasisValues, basisOrdinalFilter,
                                constrainingBasis->getCardinality());
@@ -409,7 +733,10 @@ namespace
               if (nonzeroCoarseGlobalValues.size() != nonzeroFineGlobalValues.size())
               {
                 success = false;
-                cout << "Failure on fine cell " << cellID << ", side " << sideOrdinal << endl;
+                cout << "Failure on fine cell " << cellID << ", side " << sideOrdinal;
+                cout << ", subcell ordinal " << subcord << " of dimension " << subcdim << endl;
+                cout << "(comparing with coarse cell " << constrainingCell->cellIndex();
+                cout << ", side " << constrainingSideOrdinal << ")\n";
                 out << "nonzeroCoarseGlobalValues.size() = " << nonzeroCoarseGlobalValues.size();
                 out << " != " << nonzeroFineGlobalValues.size() << " = nonzeroFineGlobalValues().size()\n";
                 print("nonzeroCoarseGlobalValues", nonzeroCoarseGlobalValues);
@@ -439,7 +766,7 @@ namespace
                 for (auto subBasisMap : fineBasisMap)
                 {
                   // filter fine values according to what subBasisMap knows about.
-                  set<unsigned> basisOrdinalFilter = subBasisMap->basisDofOrdinalFilter();
+                  set<int> basisOrdinalFilter = subBasisMap->basisDofOrdinalFilter();
                   FieldContainer<double> fineFilteredValues(basisOrdinalFilter.size());
                   filterFCValues(fineFilteredValues, fineValues, basisOrdinalFilter, fineBasis->getCardinality());
                   FieldContainer<double> mappedValues = subBasisMap->mapFineData(fineFilteredValues);
@@ -453,6 +780,9 @@ namespace
               }
               else
               {
+                bool savedSuccess = success;
+                success = true;
+
                 for (auto coarseGlobalValue : nonzeroCoarseGlobalValues)
                 {
                   GlobalIndexType valueIndex = coarseGlobalValue.first;
@@ -468,6 +798,53 @@ namespace
                     TEST_FLOATING_EQUALITY(valueCoarse, valueFine, tol);
                   }
                 }
+                
+                if (!success)
+                {
+                  cout << "Failure on fine cell " << cellID << ", side " << sideOrdinal;
+                  cout << ", subcell ordinal " << subcord << " of dimension " << subcdim << endl;
+                  cout << "(comparing with coarse cell " << constrainingCell->cellIndex();
+                  cout << ", side " << constrainingSideOrdinal << ")\n";
+                  print("nonzeroCoarseGlobalValues", nonzeroCoarseGlobalValues);
+                  print("nonzeroFineGlobalValues", nonzeroFineGlobalValues);
+                  cout << "physical point: (";
+                  for (int d=0; d < meshTopo->getDimension(); d++)
+                  {
+                    cout << coarsePhysicalPoints(0,pointOrdinal,d);
+                    if (d<sideDim) cout << ", ";
+                  }
+                  cout << ")\n";
+                  cout << "fine reference point: (";
+                  for (int d=0; d < sideDim; d++)
+                  {
+                    cout << fineDomainPoints(pointOrdinal,d);
+                    if (d<sideDim-1) cout << ", ";
+                  }
+                  cout << ")\n";
+                  cout << "coarse reference point: (";
+                  for (int d=0; d < sideDim; d++)
+                  {
+                    cout << constrainingDomainPoints(pointOrdinal,d);
+                    if (d<sideDim-1) cout << ", ";
+                  }
+                  cout << ")\n";
+                  
+                  for (auto subBasisMap : fineBasisMap)
+                  {
+                    // filter fine values according to what subBasisMap knows about.
+                    set<int> basisOrdinalFilter = subBasisMap->basisDofOrdinalFilter();
+                    FieldContainer<double> fineFilteredValues(basisOrdinalFilter.size());
+                    filterFCValues(fineFilteredValues, fineValues, basisOrdinalFilter, fineBasis->getCardinality());
+                    FieldContainer<double> mappedValues = subBasisMap->mapFineData(fineFilteredValues);
+                    vector<GlobalIndexType> globalIndices = subBasisMap->mappedGlobalDofOrdinals();
+                    print("basisOrdinalFilter",basisOrdinalFilter);
+                    print("globalIndices", globalIndices);
+                    cout << "fineFilteredValues:\n" << fineFilteredValues;
+                    cout << "mappedValues:\n" << mappedValues;
+                  }
+                }
+                
+                success = savedSuccess && success;
               }
             }
           }
@@ -636,10 +1013,8 @@ namespace
     return poissonUniformMesh(elementCounts, H1Order, useConformingTraces);
   }
   
-  MeshPtr poissonIrregularMesh(int spaceDim, int irregularity, int H1Order)
+  MeshPtr poissonIrregularMesh(int spaceDim, int irregularity, int H1Order, bool useConformingTraces)
   {
-    bool useConformingTraces = true;
-    
     int elementWidth = 2;
     MeshPtr mesh = poissonUniformMesh(spaceDim, elementWidth, H1Order, useConformingTraces);
     
@@ -669,6 +1044,14 @@ namespace
       cellsToRefine = {childWithNeighborCellID};
       cellToRefine = mesh->getTopology()->getCell(cellsToRefine[0]);
     }
+    
+    if ((spaceDim < 3) && (irregularity > 1))
+    {
+      // then we should set GDAMinimumRule to allow cascading constraints
+      GDAMinimumRule* minRule = dynamic_cast<GDAMinimumRule*> (mesh->globalDofAssignment().get());
+      minRule->setAllowCascadingConstraints(true);
+    }
+    
     return mesh;
   }
   
@@ -677,16 +1060,14 @@ namespace
     return poissonUniformMesh(3, 2, 2, true);
   }
   
-  
   TEUCHOS_UNIT_TEST( GDAMinimumRule, BasisMapsAgreePoisson1D)
   {
     int spaceDim = 1;
     int elementWidth = 2;
     int H1Order = 2;
     bool useConformingTraces = true;
-    bool useConstraintTree = true;
     MeshPtr mesh = poissonUniformMesh(spaceDim, elementWidth, H1Order, useConformingTraces);
-    testCoarseBasisEqualsWeightedFineBasis(mesh, useConstraintTree, out, success);
+    testCoarseBasisEqualsWeightedFineBasis(mesh, out, success);
   }
   
   TEUCHOS_UNIT_TEST( GDAMinimumRule, BasisMapsAgreePoisson2DUniform)
@@ -695,9 +1076,8 @@ namespace
     int elementWidth = 2;
     int H1Order = 2;
     bool useConformingTraces = true;
-    bool useConstraintTree = true;
     MeshPtr mesh = poissonUniformMesh(spaceDim, elementWidth, H1Order, useConformingTraces);
-    testCoarseBasisEqualsWeightedFineBasis(mesh, useConstraintTree, out, success);
+    testCoarseBasisEqualsWeightedFineBasis(mesh, out, success);
   }
   
   TEUCHOS_UNIT_TEST( GDAMinimumRule, BasisMapsAgreePoisson2DHangingNode1Irregular_Slow)
@@ -705,42 +1085,104 @@ namespace
     int spaceDim = 2;
     int H1Order = 2;
     int irregularity = 1;
-    bool useConstraintTree = false;
-    MeshPtr mesh = poissonIrregularMesh(spaceDim, irregularity, H1Order);
-    testCoarseBasisEqualsWeightedFineBasis(mesh, useConstraintTree, out, success);
+    bool useConformingTraces = true;
+    MeshPtr mesh = poissonIrregularMesh(spaceDim, irregularity, H1Order, useConformingTraces);
+    testCoarseBasisEqualsWeightedFineBasis(mesh, out, success);
   }
+  
+  TEUCHOS_UNIT_TEST( GDAMinimumRule, BasisMapsAgreePoisson2DTrianglesHangingNode1Irregular_Slow)
+  {
+    int spaceDim = 2;
+    int H1Order = 2;
+    bool useConformingTraces = true;
+    
+    int delta_k = spaceDim;
 
-  // Commenting this out just to avoid pushing a new failing test -- will uncomment as I continue working on the
-  // constraint tree stuff.
-//  TEUCHOS_UNIT_TEST( GDAMinimumRule, BasisMapsAgreePoisson2DHangingNode1IrregularExperimentalConstraintTree_Slow)
-//  {
-//    int spaceDim = 2;
-//    int H1Order = 2;
-//    int irregularity = 1;
-//    bool useConstraintTree = true;
-//    MeshPtr mesh = poissonIrregularMesh(spaceDim, irregularity, H1Order);
-//    testCoarseBasisEqualsWeightedFineBasis(mesh, useConstraintTree, out, success);
-//  }
+    vector<vector<double>> vertices = {{0,0},{1,0},{0.5,1}};
+    vector<vector<IndexType>> elementVertices = {{0,1,2}};
+    CellTopoPtr triangle = CellTopology::triangle();
+    
+    MeshGeometryPtr geometry = Teuchos::rcp( new MeshGeometry(vertices, elementVertices, {triangle}) );
+    MeshTopologyPtr meshTopo = Teuchos::rcp( new MeshTopology(geometry));
+    
+    out << "**** First mesh ****\n";
+    
+    // create a problematic mesh of a particular sort: refine once, then refine the interior element.  Then refine the interior element of the refined element.
+    IndexType cellIDToRefine = 0, nextCellIndex = 1;
+    int interiorChildOrdinal = 1; // interior child has index 1 in children
+    RefinementPatternPtr refPattern = RefinementPattern::regularRefinementPattern(triangle);
+    meshTopo->refineCell(cellIDToRefine, refPattern, nextCellIndex);
+    nextCellIndex += refPattern->numChildren();
+    
+    vector<CellPtr> children = meshTopo->getCell(cellIDToRefine)->children();
+    cellIDToRefine = children[interiorChildOrdinal]->cellIndex();
+    meshTopo->refineCell(cellIDToRefine, refPattern, nextCellIndex);
+    nextCellIndex += refPattern->numChildren();
+    
+    children = meshTopo->getCell(cellIDToRefine)->children();
+    cellIDToRefine = children[interiorChildOrdinal]->cellIndex();
+    meshTopo->refineCell(cellIDToRefine, refPattern, nextCellIndex);
+    nextCellIndex += refPattern->numChildren();
+    
+    PoissonFormulation poissonForm(spaceDim, useConformingTraces);
+    MeshPtr mesh = Teuchos::rcp( new Mesh(meshTopo, poissonForm.bf(), H1Order, delta_k) );
+    
+    // The above mesh will cause some cascading constraints, which the new getBasisMap() can't
+    // handle.  We have added logic to deal with this case to Mesh::enforceOneIrregularity().
+    mesh->enforceOneIrregularity();
+
+    testCoarseBasisEqualsWeightedFineBasis(mesh, out, success);
+    
+    // now, try another, simpler (in some ways, anyway) mesh:
+    // (this is one for which GMGOperator has had problems with an H^1-conforming quadratic trace basis)
+    out << "**** Second mesh ****\n";
+    bool useTriangles = true;
+    PoissonFormulation form(spaceDim, useConformingTraces);
+    
+    vector<double> dimensions = {1.0,1.0};
+    vector<int> elementCounts = {1,2};
+    
+    mesh = MeshFactory::quadMeshMinRule(form.bf(), H1Order, delta_k, dimensions[0], dimensions[1],
+                                        elementCounts[0], elementCounts[1], useTriangles);
+    
+    set<GlobalIndexType> cellsToRefine = {2};
+    mesh->hRefine(cellsToRefine);
+    
+    testCoarseBasisEqualsWeightedFineBasis(mesh, out, success);
+  }
+  
+  TEUCHOS_UNIT_TEST( GDAMinimumRule, BasisMapsAgreePoissonContinuousGalerkin2DHangingNode_Slow)
+  {
+    int spaceDim = 2;
+    int H1Order = 2;
+    int delta_k = 0;
+    MeshPtr mesh = minimalPoissonHangingNodeMesh(H1Order, delta_k, spaceDim, PoissonFormulation::CONTINUOUS_GALERKIN);
+    testCoarseBasisEqualsWeightedFineBasis(mesh, out, success);
+  }
   
   TEUCHOS_UNIT_TEST( GDAMinimumRule, BasisMapsAgreePoisson2DHangingNode2Irregular_Slow)
   {
     int spaceDim = 2;
     int H1Order = 2;
     int irregularity = 2;
-    bool useConstraintTree = false;
-    MeshPtr mesh = poissonIrregularMesh(spaceDim, irregularity, H1Order);
-    testCoarseBasisEqualsWeightedFineBasis(mesh, useConstraintTree, out, success);
+    // in 2D, can support arbitrary-irregularity conforming meshes
+    bool useConformingTraces = true;
+    MeshPtr mesh = poissonIrregularMesh(spaceDim, irregularity, H1Order, useConformingTraces);
+    testCoarseBasisEqualsWeightedFineBasis(mesh, out, success);
+    
+    // now, setup a simpler, but different, mesh, and test that:
+    mesh = minimalPoissonHangingNodeMesh(H1Order, 2, spaceDim, PoissonFormulation::ULTRAWEAK);
+    testCoarseBasisEqualsWeightedFineBasis(mesh, out, success);
   }
   
   TEUCHOS_UNIT_TEST( GDAMinimumRule, BasisMapsAgreePoisson3DUniform_Slow)
   {
     int spaceDim = 3;
-    int elementWidth = 2;
-    int H1Order = 2;
+    int elementWidth = 1;
+    int H1Order = 3;
     bool useConformingTraces = true;
-    bool useConstraintTree = false;
     MeshPtr mesh = poissonUniformMesh(spaceDim, elementWidth, H1Order, useConformingTraces);
-    testCoarseBasisEqualsWeightedFineBasis(mesh, useConstraintTree, out, success);
+    testCoarseBasisEqualsWeightedFineBasis(mesh, out, success);
   }
   
   TEUCHOS_UNIT_TEST( GDAMinimumRule, BasisMapsAgreePoisson3DHangingNode1Irregular_Slow)
@@ -748,80 +1190,34 @@ namespace
     int irregularity = 1;
     int spaceDim = 3;
     int H1Order = 2;
-    bool useConstraintTree = false;
-    MeshPtr mesh = poissonIrregularMesh(spaceDim, irregularity, H1Order);
-    testCoarseBasisEqualsWeightedFineBasis(mesh, useConstraintTree, out, success);
+    // for 1-irregular meshes, can use conforming traces, and this is the harder test to pass.
+    // for 2+-irregular meshes, conforming traces are not supported, so should use non-conforming.
+    bool useConformingTraces = true;
+    MeshPtr mesh = poissonIrregularMesh(spaceDim, irregularity, H1Order, useConformingTraces);
+    testCoarseBasisEqualsWeightedFineBasis(mesh, out, success);
   }
   
-  // This test fails.  Think of it as a warning (avoid 2-irregular meshes in 3D, at least...)
+  TEUCHOS_UNIT_TEST( GDAMinimumRule, BasisMapsAgreePoissonContinuousGalerkin3DHangingNode_Slow)
+  {
+    int spaceDim = 3;
+    int H1Order = 2;
+    int delta_k = 0;
+    MeshPtr mesh = minimalPoissonHangingNodeMesh(H1Order, delta_k, spaceDim, PoissonFormulation::CONTINUOUS_GALERKIN);
+    testCoarseBasisEqualsWeightedFineBasis(mesh, out, success);
+  }
+  
   TEUCHOS_UNIT_TEST( GDAMinimumRule, BasisMapsAgreePoisson3DHangingNode2Irregular_Slow)
   {
     int irregularity = 2;
     int spaceDim = 3;
     int H1Order = 1;
-    MeshPtr mesh = poissonIrregularMesh(spaceDim, irregularity, H1Order);
-    { // DEBUGGING:
-//      mesh->getTopology()->printAllEntities();
-//      GDAMinimumRule* minRule = dynamic_cast<GDAMinimumRule*>(mesh->globalDofAssignment().get());
-//      minRule->printGlobalDofInfo();
-    }
-    // 6-3-15: we fail this test for both values of useConstraintTree, but when it's true we fail
-    //         in our mapping of the physical points, which seems to indicate some other problem,
-    //         either with the test or with the point-mapping code in BasisReconciliation.
-    bool useConstraintTree = false;
+    // for 1-irregular meshes, can use conforming traces, and this is the harder test to pass.
+    // for 2+-irregular meshes, conforming traces are not supported, so should use non-conforming.
+    bool useConformingTraces = false;
+    MeshPtr mesh = poissonIrregularMesh(spaceDim, irregularity, H1Order, useConformingTraces);
 
-    testCoarseBasisEqualsWeightedFineBasis(mesh, useConstraintTree, out, success);
+    testCoarseBasisEqualsWeightedFineBasis(mesh, out, success);
   }
-  
-  //  TEUCHOS_UNIT_TEST( GDAMinimumRule, SideSubcellConstraintEnforcedBySuperPoisson3DHangingNode2Irregular)
-  //  {
-  //    /*
-  //     This test is meant to check that the CellConstraints.sideSubcellConstraintEnforcedBySuper is
-  //     filled in appropriately.  Kind of hard-coded right now, and just checks one case that's of interest.
-  //     */
-  //    int irregularity = 2;
-  //    int spaceDim = 3;
-  //    int sideDim = spaceDim - 1;
-  //    int H1Order = 1;
-  //    MeshPtr mesh = poissonIrregularMesh(spaceDim, irregularity, H1Order);
-  //    GDAMinimumRule* minRule = dynamic_cast<GDAMinimumRule*>(mesh->globalDofAssignment().get());
-  //    GlobalIndexType twoIrregularCellID = 16;
-  //    unsigned twoIrregularSideOrdinal = 2;
-  //    CellConstraints twoIrregularCellConstraints = minRule->getCellConstraints(twoIrregularCellID);
-  //
-  //    vector<vector<bool>> expectedSideSubcellConstraintsEnforcedBySuper(vector<vector<bool>>(sideDim+1));
-  //    expectedSideSubcellConstraintsEnforcedBySuper[sideDim] = {false}; // side itself not constrained by any super
-  //    int edgeDim = 1, vertexDim = 0;
-  //    // edges 2 has constraints enforced by super:
-  //    expectedSideSubcellConstraintsEnforcedBySuper[edgeDim] = {false,false,true,false};
-  //    // all vertices have constraints enforced by super:
-  //    expectedSideSubcellConstraintsEnforcedBySuper[vertexDim] = {true,true,true,true};
-  //
-  //    vector<vector<bool>> actualSideSubcellConstraintsEnforcedBySuper = twoIrregularCellConstraints.sideSubcellConstraintEnforcedBySuper[twoIrregularSideOrdinal];
-  //    for (int d=0; d<=sideDim; d++)
-  //    {
-  //      out << "Comparing expected to actual sideSubcellConstraintsEnforcedBySuper for d=" << d << "\n";
-  //      TEST_COMPARE_ARRAYS(expectedSideSubcellConstraintsEnforcedBySuper[d], actualSideSubcellConstraintsEnforcedBySuper[d]);
-  //    }
-  //
-  //    // second test: neighboring cell, 18, side 5 (top face)
-  //    twoIrregularCellID = 18;
-  //    twoIrregularSideOrdinal = 5;
-  //    twoIrregularCellConstraints = minRule->getCellConstraints(twoIrregularCellID);
-  //
-  //    expectedSideSubcellConstraintsEnforcedBySuper[sideDim] = {false}; // side itself not constrained by any super
-  //    // no edge has constraints enforced by super:
-  //    expectedSideSubcellConstraintsEnforcedBySuper[edgeDim] = {false,false,false,false};
-  //    // vertices 0,2,3 have constraints enforced by super:
-  //    expectedSideSubcellConstraintsEnforcedBySuper[vertexDim] = {true,false,true,true};
-  //
-  //    actualSideSubcellConstraintsEnforcedBySuper = twoIrregularCellConstraints.sideSubcellConstraintEnforcedBySuper[twoIrregularSideOrdinal];
-  //    for (int d=0; d<=sideDim; d++)
-  //    {
-  //      out << "Comparing expected to actual sideSubcellConstraintsEnforcedBySuper for d=" << d << "\n";
-  //      TEST_COMPARE_ARRAYS(expectedSideSubcellConstraintsEnforcedBySuper[d], actualSideSubcellConstraintsEnforcedBySuper[d]);
-  //    }
-  //  }
   
   TEUCHOS_UNIT_TEST( GDAMinimumRule, CheckConstraintsPoisson3DUniform )
   {
@@ -834,7 +1230,10 @@ namespace
     int irregularity = 1;
     int spaceDim = 3;
     int H1Order = 2;
-    MeshPtr mesh = poissonIrregularMesh(spaceDim, irregularity, H1Order);
+    // for 1-irregular meshes, can use conforming traces, and this is the harder test to pass.
+    // for 2+-irregular meshes, conforming traces are not supported, so should use non-conforming.
+    bool useConformingTraces = true;
+    MeshPtr mesh = poissonIrregularMesh(spaceDim, irregularity, H1Order, useConformingTraces);
     testSubcellConstraintIsAncestor(mesh, out, success);
   }
   
@@ -843,8 +1242,159 @@ namespace
     int irregularity = 2;
     int spaceDim = 3;
     int H1Order = 1;
-    MeshPtr mesh = poissonIrregularMesh(spaceDim, irregularity, H1Order);
+    // for 1-irregular meshes, can use conforming traces, and this is the harder test to pass.
+    // for 2+-irregular meshes, conforming traces are not supported, so should use non-conforming.
+    bool useConformingTraces = false;
+    MeshPtr mesh = poissonIrregularMesh(spaceDim, irregularity, H1Order, useConformingTraces);
     testSubcellConstraintIsAncestor(mesh, out, success);
+  }
+  
+  TEUCHOS_UNIT_TEST( GDAMinimumRule, ContiguousGlobalDofNumberingComplexSpaceTimeMesh )
+  {
+    bool useConformingTraces = true;
+    testContiguousGlobalDofNumberingComplexSpaceTimeMesh(useConformingTraces, out, success);
+  }
+  
+  TEUCHOS_UNIT_TEST( GDAMinimumRule, DofCount_ContinuousTriangles )
+  {
+    // a couple tests to ensure that the dof counts are correct in linear, triangular Bubnov-Galerkin meshes
+    int spaceDim = 2;
+    bool useConformingTraces = true;
+    bool useTriangles = true;
+    PoissonFormulation form(spaceDim, useConformingTraces, PoissonFormulation::CONTINUOUS_GALERKIN);
+    
+    vector<double> dimensions = {1.0,1.0};
+    vector<int> elementCounts = {1,1};
+    
+    int H1Order = 1, delta_k = 0;
+    MeshPtr mesh = MeshFactory::quadMeshMinRule(form.bf(), H1Order, delta_k, dimensions[0], dimensions[1],
+                                                elementCounts[0], elementCounts[1], useTriangles);
+    
+    MeshTopology* meshTopo = dynamic_cast<MeshTopology*>(mesh->getTopology().get());
+    int vertexDim = 0;
+    int numVertices = meshTopo->getEntityCount(vertexDim);
+    
+    int globalDofCount = mesh->numGlobalDofs();
+    TEST_EQUALITY(numVertices, globalDofCount);
+    
+    elementCounts = {16,16};
+    mesh = MeshFactory::quadMeshMinRule(form.bf(), H1Order, delta_k, dimensions[0], dimensions[1],
+                                        elementCounts[0], elementCounts[1], useTriangles);
+    meshTopo = dynamic_cast<MeshTopology*>(mesh->getTopology().get());
+    numVertices = meshTopo->getEntityCount(vertexDim);
+    
+    globalDofCount = mesh->numGlobalDofs();
+    TEST_EQUALITY(numVertices, globalDofCount);
+  }
+  
+  TEUCHOS_UNIT_TEST( GDAMinimumRule, InterpretLocalBasisCoefficientsHangingNode_Triangles )
+  {
+    /*
+     This test replicates an issue that caused problems for GMGOperator.
+     
+     ____________
+     |         /|
+     |        / |
+     |       /  |
+     |      /   |
+     |     /____|
+     |    /|    |
+     |   / |   /|
+     |  /  |  / |
+     | /   | /  |
+     |/____|/___| <-- This vertex dof is one we've had trouble with
+     |         /|
+     |        / |
+     |       /  |
+     |      /   |
+     |     /    |
+     |    /     |
+     |   /      |
+     |  /       |
+     | /        |
+     |/_________|
+     
+     */
+    int spaceDim = 2;
+    bool useConformingTraces = true;
+    bool useTriangles = true;
+    PoissonFormulation form(spaceDim, useConformingTraces);
+    
+    vector<double> dimensions = {1.0,1.0};
+    vector<int> elementCounts = {1,2};
+    
+    int H1Order = 2, delta_k = 1;
+    MeshPtr mesh = MeshFactory::quadMeshMinRule(form.bf(), H1Order, delta_k, dimensions[0], dimensions[1],
+                                                elementCounts[0], elementCounts[1], useTriangles);
+    
+    GDAMinimumRule* minRule = dynamic_cast<GDAMinimumRule*>(mesh->globalDofAssignment().get());
+    
+    set<GlobalIndexType> cellsToRefine = {2};
+    mesh->hRefine(cellsToRefine);
+    
+    // would be better to get the cellID and vertex from the geometry rather than hardcoding, in case
+    // the numbering of these things changes.
+    GlobalIndexType cellID = 6; // cell 6 is the bottom-right guy in the refined cell
+    unsigned cellVertex = 1;    // the problematic vertex pointed out above
+    VarPtr phi_hat = form.phi_hat(); // H^1-conforming variable
+    unsigned vertexDim = 0;
+    unsigned cellSideOrdinal = 0; // side 0 is the one with the hanging node
+    
+    set<GlobalIndexType> myCells = mesh->cellIDsInPartition();
+    // Since globalDofIndicesForVarOnSubcell() is only guaranteed to work for a local cell, we only run this test on the owning
+    // MPI rank.
+    if (myCells.find(cellID) != myCells.end())
+    {
+      // we start by representing the global dof for the problematic vertex in terms of the local basis on the refined cell.
+      set<GlobalIndexType> globalIndices = minRule->globalDofIndicesForVarOnSubcell(phi_hat->ID(), cellID, vertexDim, cellVertex);
+      // there should be exactly one globalIndex for the vertex
+      TEST_EQUALITY(globalIndices.size(), 1);
+      int vertexGlobalDofIndex = *globalIndices.begin();
+     
+      Epetra_SerialComm SerialComm; // rank-local map
+      Epetra_Map    localXMap(1, 1, &vertexGlobalDofIndex, 0, SerialComm);
+      Teuchos::RCP<Epetra_Vector> XLocal = Teuchos::rcp( new Epetra_Vector(localXMap) );
+      (*XLocal)[0] = 1.0;
+      
+      FieldContainer<double> localCoefficients;
+      minRule->interpretGlobalCoefficients(cellID, localCoefficients, *XLocal);
+      
+      DofOrderingPtr trialOrder = mesh->getElementType(cellID)->trialOrderPtr;
+      BasisPtr basis = trialOrder->getBasis(phi_hat->ID(), cellSideOrdinal);
+      FieldContainer<double> localBasisCoefficients(basis->getCardinality());
+      
+      for (int basisOrdinal=0; basisOrdinal<basis->getCardinality(); basisOrdinal++)
+      {
+        int localDofIndex = trialOrder->getDofIndex(phi_hat->ID(), basisOrdinal, cellSideOrdinal);
+        localBasisCoefficients[basisOrdinal] = localCoefficients[localDofIndex];
+      }
+      
+      FieldContainer<double> globalCoefficients;
+      FieldContainer<GlobalIndexType> globalDofIndices;
+      minRule->interpretLocalBasisCoefficients(cellID, phi_hat->ID(), cellSideOrdinal,
+                                               localBasisCoefficients, globalCoefficients, globalDofIndices);
+      
+      // expect 1.0 weight for vertexGlobalDofIndex, 0 for any others
+      bool foundVertexDofIndex = false;
+      double tol = 1e-13;
+      for (int i=0; i<globalDofIndices.size(); i++)
+      {
+        if (globalDofIndices[i] == vertexGlobalDofIndex)
+        {
+          foundVertexDofIndex = true;
+          TEST_FLOATING_EQUALITY(globalCoefficients[i], (*XLocal)[0], tol);
+        }
+        else
+        {
+          TEST_COMPARE(abs(globalCoefficients[i]), <, tol);
+        }
+      }
+      if (!foundVertexDofIndex)
+      {
+        success = false;
+        out << "vertexGlobalDofIndex " << vertexGlobalDofIndex << " not mapped by interpretLocalBasisCoefficients(): FAILED\n";
+      }
+    }
   }
   
   TEUCHOS_UNIT_TEST( GDAMinimumRule, OneIrregularityEnforcement_2D)
@@ -852,7 +1402,8 @@ namespace
     int spaceDim = 2;
     int irregularity = 2;
     int H1Order = 2;
-    MeshPtr mesh = poissonIrregularMesh(spaceDim, irregularity, H1Order);
+    bool useConformingTraces = true;
+    MeshPtr mesh = poissonIrregularMesh(spaceDim, irregularity, H1Order, useConformingTraces);
     
     GlobalIndexType activeElementCount_initial = mesh->numActiveElements();
     
@@ -891,7 +1442,90 @@ namespace
       success = false;
     }
   }
+
+  void testProjectionOntoTriangularContinuousGalerkinMesh(int meshWidth, int polyOrder, Teuchos::FancyOStream &out, bool &success)
+  {
+    bool useTriangles = true;
+    int spaceDim = 2;
+    bool useConformingTraces = true;
+    PoissonFormulation form(spaceDim, useConformingTraces, PoissonFormulation::CONTINUOUS_GALERKIN);
+    
+    vector<double> dimensions = {1.0,1.0};
+    vector<int> elementCounts = {meshWidth,meshWidth};
+    
+    int H1Order = polyOrder, delta_k = 0;
+    MeshPtr mesh = MeshFactory::quadMeshMinRule(form.bf(), H1Order, delta_k, dimensions[0], dimensions[1],
+                                                elementCounts[0], elementCounts[1], useTriangles);
+    
+    SolutionPtr soln = Solution::solution(mesh);
+    FunctionPtr phiExact = 2 * Function::xn(1) + Function::yn(1);
+    map<int, FunctionPtr> projectionMap;
+    projectionMap[form.phi()->ID()] = phiExact;
+    soln->projectOntoMesh(projectionMap);
+    soln->initializeLHSVector();
+    soln->importSolution();
+    
+    FunctionPtr projectedFunction = Function::solution(form.phi(), soln);
+    double err = (projectedFunction - phiExact)->l2norm(mesh);
+    TEST_COMPARE(err, <, 1e-13);
+    
+    if (!success)
+    {
+      // DEBUGGING
+      mesh->getTopology()->printAllEntitiesInBaseMeshTopology();
+
+      GDAMinimumRule* minRule = dynamic_cast<GDAMinimumRule*>(mesh->globalDofAssignment().get());
+      minRule->printGlobalDofInfo();
+      
+      minRule->printConstraintInfo(0);
+      CellConstraints cellConstraints = minRule->getCellConstraints(0);
+      minRule->getDofMapper(0, cellConstraints)->printMappingReport();
+      
+      minRule->printConstraintInfo(1);
+      cellConstraints = minRule->getCellConstraints(1);
+      minRule->getDofMapper(1, cellConstraints)->printMappingReport();
+
+      string outputSuperDir = "/tmp";
+      string outputDir = "PoissonSoln";
+      HDF5Exporter exporter(mesh, outputDir, outputSuperDir);
+      cout << "Writing phi to " << outputSuperDir << "/" << outputDir << endl;
+
+      exporter.exportSolution(soln);
+    }
+  }
   
+  TEUCHOS_UNIT_TEST( GDAMinimumRule, ProjectOntoTriangularUniformMesh_Linear )
+  {
+    int polyOrder = 1;
+    int meshWidth = 2;
+    testProjectionOntoTriangularContinuousGalerkinMesh(meshWidth, polyOrder, out, success);
+  }
+  
+  TEUCHOS_UNIT_TEST( GDAMinimumRule, ProjectOntoTriangularUniformMesh_Quadratic )
+  {
+    int polyOrder = 2;
+    int meshWidth = 1;
+    testProjectionOntoTriangularContinuousGalerkinMesh(meshWidth, polyOrder, out, success);
+  }
+  
+  TEUCHOS_UNIT_TEST( GDAMinimumRule, SolvePoisson2DContinuousGalerkinHangingNode_Slow )
+  {
+    int spaceDim = 2;
+    testSolvePoissonContinuousGalerkinHangingNode(spaceDim, out, success);
+  }
+  
+  TEUCHOS_UNIT_TEST( GDAMinimumRule, SolvePoisson2DUltraweakHangingNode1Irregular_Slow)
+  {
+    int spaceDim = 2;
+    testSolvePoissonUltraweakHangingNode(spaceDim, out, success);
+  }
+  
+  TEUCHOS_UNIT_TEST( GDAMinimumRule, SolvePoisson3DContinuousGalerkinHangingNode_Slow )
+  {
+    int spaceDim = 3;
+    testSolvePoissonContinuousGalerkinHangingNode(spaceDim, out, success);
+  }
+
   TEUCHOS_UNIT_TEST( GDAMinimumRule, SolvePoisson3DHangingNode_Slow )
   {
     // exact solution: for now, we just use a linear phi
@@ -906,7 +1540,7 @@ namespace
     int spaceDim = 3;
     bool useConformingTraces = true;
     PoissonFormulation poissonForm(spaceDim, useConformingTraces);
-    // TODO: try this with 2-irregular.  Once upon a time, there was an exception thrown for that case.
+
     for (int irregularity = 1; irregularity<=1; irregularity++)
     {
       SolutionPtr soln = poissonExactSolution3DHangingNodes(irregularity,phi_exact,H1Order);

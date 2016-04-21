@@ -194,6 +194,10 @@ public:
   
   virtual ~BasisCache() {}
 
+  // ! Returns true if the operator given is supported by getTransformedValues().
+  // ! Right now, we can compute transformations for any first-order operators, and for d^2/{dx_i dx_j} second-order operators when i==j, but not when i!=j.
+  static bool canComputeTransformedValues(Camellia::EOperator op);
+  
   Intrepid::FieldContainer<double> & getWeightedMeasures();
   Intrepid::FieldContainer<double> getCellMeasures();
 
@@ -230,6 +234,9 @@ public:
   const Intrepid::FieldContainer<double> & getJacobianDet();
   const Intrepid::FieldContainer<double> & getJacobianInv();
 
+  // ! Returns true if the second-order derivatives of the reference-to-physical transformation may be ignored.
+  bool neglectHessian() const;
+  
   Intrepid::FieldContainer<double> computeParametricPoints();
 
   virtual const Intrepid::FieldContainer<double> & getPhysicalCubaturePoints();

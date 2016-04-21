@@ -178,7 +178,6 @@ void TensorBasis<Scalar, ArrayScalar>::getTensorPoints(ArrayScalar& tensorPoints
   }
 }
 
-
 template<class Scalar, class ArrayScalar>
 void TensorBasis<Scalar,ArrayScalar>::getTensorValues(ArrayScalar& outputValues, std::vector< ArrayScalar> & componentOutputValuesVector,
     std::vector<Intrepid::EOperator> operatorTypes) const
@@ -351,6 +350,7 @@ template<class Scalar, class ArrayScalar>
 void TensorBasis<Scalar,ArrayScalar>::getValues(ArrayScalar &values, const ArrayScalar &refPoints,
     Intrepid::EOperator spatialOperatorType, Intrepid::EOperator temporalOperatorType) const
 {
+  // TODO: Consider rewriting this method to call getTensorValues().
   bool gradInBoth = (spatialOperatorType==Intrepid::OPERATOR_GRAD) && (temporalOperatorType==Intrepid::OPERATOR_GRAD);
   this->CHECK_VALUES_ARGUMENTS(values,refPoints,spatialOperatorType);
 

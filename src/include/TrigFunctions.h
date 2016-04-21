@@ -95,5 +95,27 @@ public:
   std::string displayString();
 };
 
+class ArcTan_ax : public SimpleFunction<double>
+{
+  double _a, _b;
+public:
+  ArcTan_ax(double a, double b=0);
+  double value(double x);
+  TFunctionPtr<double> dx();
+  TFunctionPtr<double> dy();
+  std::string displayString();
+};
+
+class ArcTan_ay : public SimpleFunction<double>
+{
+  double _a, _b;
+public:
+  ArcTan_ay(double a, double b=0);
+  double value(double x, double y);
+  TFunctionPtr<double> dx();
+  TFunctionPtr<double> dy();
+  std::string displayString();
+};
+
 }
 #endif

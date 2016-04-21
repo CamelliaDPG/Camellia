@@ -24,6 +24,8 @@ struct SubBasisReconciliationWeights
   Intrepid::FieldContainer<double> weights; // indices are (fine, coarse)
   std::set<int> fineOrdinals;
   std::set<int> coarseOrdinals;
+  
+  bool isIdentity = false; // fineOrdinals == coarseOrdinals; weights is the identity matrix (not stored)
 };
 
 class BasisReconciliation
@@ -70,7 +72,7 @@ private:
   
   static Intrepid::FieldContainer<double> filterBasisValues(const Intrepid::FieldContainer<double> &basisValues, std::set<int> &filter);
 
-  static SubBasisReconciliationWeights filterToInclude(std::set<int> &rowOrdinals, std::set<int> &colOrdinals, SubBasisReconciliationWeights &weights);
+  static SubBasisReconciliationWeights filterToInclude(std::set<int> &rowOrdinals, std::set<int> &colOrdinals, const SubBasisReconciliationWeights &weights);
 public:
   BasisReconciliation(bool cacheResults = true)
   {
@@ -133,15 +135,18 @@ public:
       unsigned coarseDomainOrdinalInCoarseCellTopo, // we use the coarserBasis's domain topology to determine the domain's space dimension
       unsigned coarseSubcellPermutation);  // coarseSubcellPermutation: how to permute the nodes of the refinement root to get the subcell seen by the coarse cell.  (This is DIFFERENT from the one in the side-centric computeConstrainedWeights, which deals with the view from the ancestral and coarse *domains*.)
 
-  static SubBasisReconciliationWeights weightsForCoarseSubcell(SubBasisReconciliationWeights &weights, BasisPtr constrainingBasis, unsigned subcdim, unsigned subcord, bool includeSubsubcells);
+  static SubBasisReconciliationWeights weightsForCoarseSubcell(const SubBasisReconciliationWeights &weights, BasisPtr constrainingBasis, unsigned subcdim, unsigned subcord, bool includeSubsubcells);
 
-  static SubBasisReconciliationWeights composedSubBasisReconciliationWeights(SubBasisReconciliationWeights aWeights, SubBasisReconciliationWeights bWeights);
+  static SubBasisReconciliationWeights composedSubBasisReconciliationWeights(const SubBasisReconciliationWeights &aWeights, const SubBasisReconciliationWeights &bWeights);
+
+  // !equalWeights is intended primarily for debugging.  May be inefficient.
+  static bool equalWeights(const SubBasisReconciliationWeights &aWeights, const SubBasisReconciliationWeights &bWeights, double tol = 1e-15);
 
   static SubBasisReconciliationWeights filterOutZeroRowsAndColumns(SubBasisReconciliationWeights &weights);
 
-  static SubBasisReconciliationWeights sumWeights(SubBasisReconciliationWeights aWeights, SubBasisReconciliationWeights bWeights);
+  static SubBasisReconciliationWeights sumWeights(const SubBasisReconciliationWeights &aWeights, const SubBasisReconciliationWeights &bWeights);
 
-  static std::set<int> interiorDofOrdinalsForBasis(BasisPtr basis);
+//  static std::set<int> interiorDofOrdinalsForBasis(BasisPtr basis);
 
   static set<unsigned> internalDofOrdinalsForFinerBasis(BasisPtr finerBasis, RefinementBranch refinements); // which degrees of freedom in the finer basis have empty support on the boundary of the coarser basis's reference element? -- these are the ones for which the constrained weights are determined in computeConstrainedWeights.
   static set<unsigned> internalDofOrdinalsForFinerBasis(BasisPtr finerBasis, RefinementBranch refinements, unsigned subcdim, unsigned subcord);

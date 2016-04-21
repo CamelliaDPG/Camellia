@@ -9,15 +9,14 @@
 #ifndef Camellia_RefinementStrategy_h
 #define Camellia_RefinementStrategy_h
 
-#include "TypeDefs.h"
+
 
 #include "Teuchos_RCP.hpp"
 
-#include "LinearTerm.h"
-
 #include "IP.h"
-
+#include "LinearTerm.h"
 #include "RieszRep.h"
+#include "TypeDefs.h"
 
 using namespace std;
 
@@ -55,6 +54,8 @@ public:
   TRefinementStrategy( TSolutionPtr<Scalar> solution, double relativeEnergyThreshold, double min_h = 0, int max_p = 10, bool preferPRefinements = false);
   TRefinementStrategy( MeshPtr mesh, TLinearTermPtr<Scalar> residual, TIPPtr<Scalar> ip, double relativeEnergyThreshold, double min_h = 0, int max_p = 10, bool preferPRefinements = false);
   
+  double computeTotalEnergyError();
+  
   void setEnforceOneIrregularity(bool value);
   void setAnisotropicThreshhold(double value);
   void setMaxAspectRatio(double value);
@@ -80,6 +81,8 @@ public:
   double getEnergyError(int refinementNumber);
   GlobalIndexType getNumElements(int refinementNumber);
   GlobalIndexType getNumDofs(int refinementNumber);
+  
+  TRieszRepPtr<Scalar> getRieszRep();
   
   // ! computes approximate gradients in the scalar field variable indicated.  It is not clear that this is the
   // ! best place for this, but it's placed here for now because this can be useful in context of refinements.

@@ -51,6 +51,8 @@ class LocalDofMapper   // maps a whole trial ordering
 
   // the following is used by LocalDofMappers that have varIDToMap = -1 when fitLocalCoefficients() is called
   map<pair<int,int>, Teuchos::RCP<LocalDofMapper>> _localDofMapperForVarIDAndSide;
+  
+  std::map<int, GlobalIndexType> _permutationMap; // lazily computed, returned by getPermutationMap for LDMs that are permuation maps.
 public:
   LocalDofMapper(DofOrderingPtr dofOrdering, map< int, BasisMap > volumeMaps,
                  set<GlobalIndexType> fittableGlobalDofOrdinalsInVolume,
@@ -60,7 +62,7 @@ public:
                  int varIDToMap = -1, int sideOrdinalToMap = -1);
 
   // ! Returns an STL map from the local dof indices to the global dof indices.  Throws an exception if isPermutation() returns false.
-  std::map<int, GlobalIndexType> getPermutationMap();
+  const std::map<int, GlobalIndexType> &getPermutationMap();
   
   Intrepid::FieldContainer<double> mapLocalData(const Intrepid::FieldContainer<double> &localData, bool fittableGlobalDofsOnly);
   
@@ -75,9 +77,9 @@ public:
   
   Intrepid::FieldContainer<double> fitLocalCoefficients(const Intrepid::FieldContainer<double> &localCoefficients); // solves normal equations (if the localCoefficients are in the range of the global-to-local operator, then the returned coefficients will be the preimage of localCoefficients under that operator)
   Intrepid::FieldContainer<double> mapGlobalCoefficients(const Intrepid::FieldContainer<double> &globalCoefficients);
-
+  
   // ! this version of mapGlobalCoefficients should be more efficient when the number of global coefficients in the map is small (i.e. there would be lots of zeroes in the FieldContainer version)
-  Intrepid::FieldContainer<double> mapGlobalCoefficients(const std::map<GlobalIndexType,double> &globalCoefficients);
+  void mapGlobalCoefficients(const std::map<GlobalIndexType,double> &globalCoefficients, Intrepid::FieldContainer<double> &localCoefficients);
   
   const vector<GlobalIndexType> &fittableGlobalIndices();
   const vector<GlobalIndexType> &globalIndices();

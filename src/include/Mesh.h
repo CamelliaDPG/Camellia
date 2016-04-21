@@ -107,6 +107,8 @@ class Mesh : public RefinementObserver, public DofInterpreter
   Mesh(MeshTopologyViewPtr meshTopology, Teuchos::RCP<GlobalDofAssignment> gda, TBFPtr<double> bf,
        int pToAddToTest, bool useConformingTraces, bool usePatchBasis, bool enforceMBFluxContinuity);
 
+  void initializePartitionPolicyIfNull(MeshPartitionPolicyPtr &partitionPolicy, Epetra_CommPtr Comm);
+  
   //set< pair<int,int> > _edges;
   //  map< pair<GlobalIndexType,GlobalIndexType>, vector< pair<GlobalIndexType, GlobalIndexType> > > _edgeToCellIDs; //keys are (vertexIndex1, vertexIndex2)
   //values are (cellID, sideIndex)
@@ -136,7 +138,6 @@ class Mesh : public RefinementObserver, public DofInterpreter
 
   vector< Teuchos::RCP<RefinementObserver> > _registeredObservers; // meshes that should be modified upon refinement (must differ from this only in bilinearForm; must have identical geometry & cellIDs)
 
-
   map<IndexType, GlobalIndexType> getGlobalVertexIDs(const Intrepid::FieldContainer<double> &vertexCoordinates);
 
   ElementPtr addElement(const vector<IndexType> & vertexIndices, ElementTypePtr elemType);
@@ -160,33 +161,39 @@ public:
   // Preferred Constructor for min rule, n-D, single H1Order
   Mesh(MeshTopologyViewPtr meshTopology, VarFactoryPtr varFactory, int H1Order, int pToAddTest,
        map<int,int> trialOrderEnhancements=_emptyIntIntMap, map<int,int> testOrderEnhancements=_emptyIntIntMap,
-       MeshPartitionPolicyPtr meshPartitionPolicy = Teuchos::null);
+       MeshPartitionPolicyPtr meshPartitionPolicy = Teuchos::null, Epetra_CommPtr Comm = Teuchos::null);
 
   // Preferred Constructor for min rule, n-D, vector H1Order for tensor topologies (tensorial degree 0 and 1 supported)
   Mesh(MeshTopologyViewPtr meshTopology, VarFactoryPtr varFactory, vector<int> H1Order, int pToAddTest,
        map<int,int> trialOrderEnhancements=_emptyIntIntMap, map<int,int> testOrderEnhancements=_emptyIntIntMap,
-       MeshPartitionPolicyPtr meshPartitionPolicy = Teuchos::null);
+       MeshPartitionPolicyPtr meshPartitionPolicy = Teuchos::null, Epetra_CommPtr Comm = Teuchos::null);
 
   // legacy (max rule 2D) constructor:
   Mesh(const vector<vector<double> > &vertices, vector< vector<IndexType> > &elementVertices,
        TBFPtr<double> bilinearForm, int H1Order, int pToAddTest, bool useConformingTraces = true,
        map<int,int> trialOrderEnhancements=_emptyIntIntMap, map<int,int> testOrderEnhancements=_emptyIntIntMap,
-       vector< PeriodicBCPtr > periodicBCs = vector< PeriodicBCPtr >());
+       vector< PeriodicBCPtr > periodicBCs = vector< PeriodicBCPtr >(), Epetra_CommPtr Comm = Teuchos::null);
 
   // Deprecated Constructor for min rule, n-D, single H1Order
   Mesh(MeshTopologyViewPtr meshTopology, TBFPtr<double> bilinearForm, int H1Order, int pToAddTest,
        map<int,int> trialOrderEnhancements=_emptyIntIntMap, map<int,int> testOrderEnhancements=_emptyIntIntMap,
-       MeshPartitionPolicyPtr meshPartitionPolicy = Teuchos::null);
+       MeshPartitionPolicyPtr meshPartitionPolicy = Teuchos::null, Epetra_CommPtr Comm = Teuchos::null);
 
   // Deprecated Constructor for min rule, n-D, vector H1Order for tensor topologies (tensorial degree 0 and 1 supported)
   Mesh(MeshTopologyViewPtr meshTopology, TBFPtr<double> bilinearForm, vector<int> H1Order, int pToAddTest,
        map<int,int> trialOrderEnhancements=_emptyIntIntMap, map<int,int> testOrderEnhancements=_emptyIntIntMap,
-       MeshPartitionPolicyPtr meshPartitionPolicy = Teuchos::null);
+       MeshPartitionPolicyPtr meshPartitionPolicy = Teuchos::null, Epetra_CommPtr Comm = Teuchos::null);
 
+  // ! Constructor for a single-element mesh extracted from an existing mesh
+  Mesh(MeshPtr mesh, GlobalIndexType cellID, Epetra_CommPtr Comm);
+  
 #ifdef HAVE_EPETRAEXT_HDF5
   void saveToHDF5(string filename);
 #endif
 
+  Epetra_CommPtr& Comm();
+  Teuchos_CommPtr& TeuchosComm();
+  
   // ! deepCopy makes a deep copy of both MeshTopology and GDA, but not bilinear form
   MeshPtr deepCopy();
 
@@ -239,8 +246,8 @@ public:
   int cellPolyOrder(GlobalIndexType cellID);
   vector<int> cellTensorPolyOrder(GlobalIndexType cellID);
 
+  //! This should probably be renamed "enforceRegularityRules" and then made more general to enforce whatever rules are appropriate for the mesh.
   void enforceOneIrregularity(bool repartitionAndMigrate = true);
-  //  void enforceOneIrregularity(vector< TSolutionPtr<double> > solutions);
 
   vector<double> getCellCentroid(GlobalIndexType cellID);
 
@@ -266,10 +273,6 @@ public:
   vector< ElementPtr > activeElements();  // deprecated -- use getActiveElement instead
   ElementPtr ancestralNeighborForSide(ElementPtr elem, int sideOrdinal, int &elemSideOrdinalInNeighbor);
 
-  //  GlobalIndexType numEdgeToCellIDEntries(){
-  //    return _edgeToCellIDs.size();
-  //  }
-
   vector< ElementPtr > elementsOfType(PartitionIndexType partitionNumber, ElementTypePtr elemTypePtr);
   vector< ElementPtr > elementsOfTypeGlobal(ElementTypePtr elemTypePtr); // may want to deprecate in favor of cellIDsOfTypeGlobal()
 
@@ -284,11 +287,6 @@ public:
   DofOrderingFactory & getDofOrderingFactory();
 
   ElementTypeFactory & getElementTypeFactory();
-  //  void getMultiBasisOrdering(DofOrderingPtr &originalNonParentOrdering,
-  //                             ElementPtr parent, int sideIndex, int parentSideIndexInNeighbor,
-  //                             ElementPtr nonParent);
-  //
-  //  void getPatchBasisOrdering(DofOrderingPtr &originalChildOrdering, ElementPtr child, int sideIndex);
 
   TFunctionPtr<double> getTransformationFunction(); // will be NULL for meshes without edge curves defined
 
@@ -313,26 +311,15 @@ public:
   bool meshUsesMaximumRule();
   bool meshUsesMinimumRule();
 
-  // for the case where we want to reproject the previous mesh solution onto the new one:
-  //  void hRefine(vector<GlobalIndexType> cellIDs, Teuchos::RCP<RefinementPattern> refPattern, vector< TSolutionPtr<double> > solutions);
-
-  //  void matchNeighbor(const ElementPtr &elem, int sideIndex);
-
-  //  void maxMinPolyOrder(int &maxPolyOrder, int &minPolyOrder, ElementPtr elem, int sideIndex);
-
-  //  map< int, BasisPtr > multiBasisUpgradeMap(ElementPtr parent, int sideIndex, int bigNeighborPolyOrder = -1);
-
-  //  static int neighborChildPermutation(int childIndex, int numChildrenInSide);
-  //  static int neighborDofPermutation(int dofIndex, int numDofsForSide);
-
   GlobalIndexType numActiveElements();
-
-  // ! Returns the number of degrees of freedom on the mesh skeleton.  Involves MPI collective communication.  Must be called on every rank.
-  GlobalIndexType numFluxDofs();
   
   // ! Returns the number of degrees of freedom belonging to field (volume) variables.  Involves MPI collective communication.  Must be called on every rank.
   GlobalIndexType numFieldDofs();
+  
+  // ! Returns the number of degrees of freedom on the mesh skeleton.  Involves MPI collective communication.  Must be called on every rank.
+  GlobalIndexType numFluxDofs();
 
+  // ! Returns the total number of degrees of freedom on the mesh.  Involves MPI collective communication.  Must be called on every rank.
   GlobalIndexType numGlobalDofs();
 
   GlobalIndexType numElements();
@@ -360,6 +347,9 @@ public:
   void rebuildLookups();
 
   void registerObserver(Teuchos::RCP<RefinementObserver> observer);
+  
+  //! returns the irregularity of the mesh, defined as the maximum depth of refinement hierarchy for an edge belonging to an active cell.  MPI collective method.
+  int irregularity();
 
   template <typename Scalar>
   void registerSolution(TSolutionPtr<Scalar> solution);

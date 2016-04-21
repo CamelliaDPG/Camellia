@@ -10,15 +10,24 @@
 
 #include "MeshPartitionPolicy.h"
 
+#include "GlobalDofAssignment.h"
 #include "InducedMeshPartitionPolicy.h"
 #include "MeshTools.h"
+#include "MPIWrapper.h"
 #include "ZoltanMeshPartitionPolicy.h"
-
-#include "GlobalDofAssignment.h"
 
 using namespace Intrepid;
 using namespace Camellia;
 using namespace std;
+
+MeshPartitionPolicy::MeshPartitionPolicy(Epetra_CommPtr Comm) : _Comm(Comm) {
+  TEUCHOS_TEST_FOR_EXCEPTION(Comm == Teuchos::null, std::invalid_argument, "Comm may not be null!");
+}
+
+Epetra_CommPtr& MeshPartitionPolicy::Comm()
+{
+  return _Comm;
+}
 
 void MeshPartitionPolicy::partitionMesh(Mesh *mesh, PartitionIndexType numPartitions)
 {
@@ -56,30 +65,60 @@ MeshPartitionPolicyPtr MeshPartitionPolicy::inducedPartitionPolicy(MeshPtr thisM
   return InducedMeshPartitionPolicy::inducedMeshPartitionPolicy(thisMesh, otherMesh, cellIDMap);
 }
 
-MeshPartitionPolicyPtr MeshPartitionPolicy::standardPartitionPolicy()
+MeshPartitionPolicyPtr MeshPartitionPolicy::standardPartitionPolicy(Epetra_CommPtr Comm)
 {
-  MeshPartitionPolicyPtr partitionPolicy = Teuchos::rcp( new ZoltanMeshPartitionPolicy() );
+  MeshPartitionPolicyPtr partitionPolicy = Teuchos::rcp( new ZoltanMeshPartitionPolicy(Comm) );
   return partitionPolicy;
 }
 
-class OneRankPartitionPolicy : public MeshPartitionPolicy
+Teuchos_CommPtr& MeshPartitionPolicy::TeuchosComm()
 {
-  int _rankNumber;
-public:
-  OneRankPartitionPolicy(int rankNumber)
+  if (_TeuchosComm == Teuchos::null)
   {
-    _rankNumber = rankNumber;
+#ifdef HAVE_MPI
+    Epetra_MpiComm* mpiComm = dynamic_cast<Epetra_MpiComm*>(_Comm.get());
+    if (mpiComm == NULL)
+    {
+      // serial communicator
+      _TeuchosComm = MPIWrapper::TeuchosCommSerial();
+    }
+    else
+    {
+      if (mpiComm->GetMpiComm() == MPI_COMM_WORLD)
+      {
+        _TeuchosComm = MPIWrapper::TeuchosCommWorld();
+      }
+      else
+      {
+        _TeuchosComm = Teuchos::rcp( new Teuchos::MpiComm<int> (mpiComm->GetMpiComm()) );
+      }
+    }
+#else
+  // if we don't have MPI, then it can only be a serial communicator
+    _TeuchosComm = MPIWrapper::TeuchosSerialComm();
+#endif
   }
-  void partitionMesh(Mesh *mesh, PartitionIndexType numPartitions)
-  {
-    set<GlobalIndexType> activeCellIDs = mesh->getActiveCellIDs();
-    vector< set<GlobalIndexType> > partitions(numPartitions);
-    partitions[_rankNumber] = activeCellIDs;
-    mesh->globalDofAssignment()->setPartitions(partitions);
-  }
-};
-
-MeshPartitionPolicyPtr MeshPartitionPolicy::oneRankPartitionPolicy(int rankNumber)
-{
-  return Teuchos::rcp( new OneRankPartitionPolicy(rankNumber) );
+  return _TeuchosComm;
 }
+
+//class OneRankPartitionPolicy : public MeshPartitionPolicy
+//{
+//  int _rankNumber;
+//public:
+//  OneRankPartitionPolicy(int rankNumber) : MeshPartitionPolicy(Teuchos::rcp(new Epetra_SerialComm()))
+//  {
+//    _rankNumber = rankNumber;
+//  }
+//  void partitionMesh(Mesh *mesh, PartitionIndexType numPartitions)
+//  {
+//    set<GlobalIndexType> activeCellIDs = mesh->getActiveCellIDs();
+//    vector< set<GlobalIndexType> > partitions(numPartitions);
+//    partitions[_rankNumber] = activeCellIDs;
+//    mesh->globalDofAssignment()->setPartitions(partitions);
+//  }
+//};
+//
+//MeshPartitionPolicyPtr MeshPartitionPolicy::oneRankPartitionPolicy(int rankNumber)
+//{
+//  return Teuchos::rcp( new OneRankPartitionPolicy(rankNumber) );
+//}

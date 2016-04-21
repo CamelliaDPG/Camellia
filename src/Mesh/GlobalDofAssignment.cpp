@@ -10,18 +10,15 @@
 
 #include "Teuchos_GlobalMPISession.hpp"
 
-#include "CamelliaDebugUtility.h"
 
 // subclasses:
 #include "GDAMinimumRule.h"
 #include "GDAMaximumRule2D.h"
 
-#include "Solution.h"
-
 #include "CamelliaCellTools.h"
-#include "MPIWrapper.h"
-
+#include "CamelliaDebugUtility.h"
 #include "CondensedDofInterpreter.h"
+#include "Solution.h"
 
 using namespace Intrepid;
 using namespace Camellia;
@@ -61,7 +58,7 @@ GlobalDofAssignment::GlobalDofAssignment(MeshPtr mesh, VarFactoryPtr varFactory,
     assignParities(cellID);
   }
 
-  _numPartitions = Teuchos::GlobalMPISession::getNProc();
+  _numPartitions = _partitionPolicy->Comm()->NumProc();
 
   _partitions = vector<set<GlobalIndexType> >(_numPartitions);
 
@@ -262,9 +259,9 @@ vector<GlobalIndexType> GlobalDofAssignment::cellIDsOfElementType(PartitionIndex
   return cellIDsIt->second;
 }
 
-const set< GlobalIndexType > & GlobalDofAssignment::cellsInPartition(PartitionIndexType partitionNumber)
+const set< GlobalIndexType > & GlobalDofAssignment::cellsInPartition(PartitionIndexType partitionNumber) const
 {
-  int rank     = Teuchos::GlobalMPISession::getRank();
+  int rank = _partitionPolicy->Comm()->MyPID();
   if (partitionNumber == -1)
   {
     partitionNumber = rank;
@@ -274,6 +271,10 @@ const set< GlobalIndexType > & GlobalDofAssignment::cellsInPartition(PartitionIn
 
 FieldContainer<double> GlobalDofAssignment::cellSideParitiesForCell( GlobalIndexType cellID )
 {
+  if (_cellSideParitiesForCellID.find(cellID) == _cellSideParitiesForCellID.end())
+  {
+    assignParities(cellID);
+  }
   TEUCHOS_TEST_FOR_EXCEPTION(_cellSideParitiesForCellID.find(cellID) == _cellSideParitiesForCellID.end(),
                              std::invalid_argument, "_cellSideParities is not set for the provided cell!");
   vector<int> parities = _cellSideParitiesForCellID[cellID];
@@ -298,16 +299,10 @@ void GlobalDofAssignment::constructActiveCellMap()
   }
 
   int indexBase = 0;
-#ifdef HAVE_MPI
-  Epetra_MpiComm Comm(MPI_COMM_WORLD);
-  //cout << "rank: " << rank << " of " << numProcs << endl;
-#else
-  Epetra_SerialComm Comm;
-#endif
   if (myCellIDsFC.size()==0)
-    _activeCellMap = Teuchos::rcp( new Epetra_Map(-1, myCellIDsFC.size(), NULL, indexBase, Comm) );
+    _activeCellMap = Teuchos::rcp( new Epetra_Map(-1, myCellIDsFC.size(), NULL, indexBase, *_partitionPolicy->Comm()) );
   else
-    _activeCellMap = Teuchos::rcp( new Epetra_Map(-1, myCellIDsFC.size(), &myCellIDsFC[0], indexBase, Comm) );
+    _activeCellMap = Teuchos::rcp( new Epetra_Map(-1, myCellIDsFC.size(), &myCellIDsFC[0], indexBase, *_partitionPolicy->Comm()) );
 }
 
 void GlobalDofAssignment::constructActiveCellMap2()
@@ -317,13 +312,12 @@ void GlobalDofAssignment::constructActiveCellMap2()
   Teuchos::ArrayView< const GlobalIndexType > myCellIDsAV(myCellIDsVector);
 
   int indexBase = 0;
-  Teuchos::RCP<const Teuchos::Comm<int> > comm = Tpetra::DefaultPlatform::getDefaultPlatform ().getComm ();
   if (myCellIDsVector.size()==0)
     _activeCellMap2 = Teuchos::rcp( new Tpetra::Map<IndexType,GlobalIndexType>(Teuchos::OrdinalTraits<Tpetra::global_size_t>::invalid(),
-                                    myCellIDsVector.size(), indexBase, comm) );
+                                    myCellIDsVector.size(), indexBase, _partitionPolicy->TeuchosComm()) );
   else
     _activeCellMap2 = Teuchos::rcp( new Tpetra::Map<IndexType,GlobalIndexType>(Teuchos::OrdinalTraits<Tpetra::global_size_t>::invalid(),
-                                    myCellIDsAV, indexBase, comm) );
+                                    myCellIDsAV, indexBase, _partitionPolicy->TeuchosComm()) );
 }
 
 void GlobalDofAssignment::repartitionAndMigrate()
@@ -443,6 +437,11 @@ DofOrderingFactoryPtr GlobalDofAssignment::getDofOrderingFactory()
 ElementTypeFactory & GlobalDofAssignment::getElementTypeFactory()
 {
   return _elementTypeFactory;
+}
+
+MeshPartitionPolicyPtr GlobalDofAssignment::getPartitionPolicy()
+{
+  return _partitionPolicy;
 }
 
 GlobalIndexType GlobalDofAssignment::globalCellIndex(GlobalIndexType cellID)
@@ -582,6 +581,30 @@ void GlobalDofAssignment::interpretLocalCoefficients(GlobalIndexType cellID, con
 }
 template void GlobalDofAssignment::interpretLocalCoefficients(GlobalIndexType cellID, const FieldContainer<double> &localCoefficients, TVectorPtr<double> globalCoefficients);
 
+// ! Returns the smallest dimension along which continuity will be enforced.  GlobalDofAssignment's implementation
+// ! assumes that the function spaces for the bases defined on cells determine this (e.g. H^1-conforming basis --> 0).
+int GlobalDofAssignment::minimumSubcellDimensionForContinuityEnforcement() const
+{
+  const set<GlobalIndexType>* myCells = &cellsInPartition(-1);
+  int myMinimumSubcellDimension = _meshTopology->getDimension();
+  set<ElementType*> processedTypes;
+  for (GlobalIndexType cellID : *myCells)
+  {
+    auto entry = _elementTypeForCell.find(cellID);
+    ElementType* elemType = entry->second.get();
+    if (processedTypes.find(elemType) == processedTypes.end())
+    {
+      int elemMin = elemType->trialOrderPtr->minimumSubcellDimensionForContinuity();
+      myMinimumSubcellDimension = min(myMinimumSubcellDimension,elemMin);
+      if (myMinimumSubcellDimension == 0) break; // can't go lower than 0
+      processedTypes.insert(elemType);
+    }
+  }
+  int globalMinimumSubcellDimension;
+  _mesh->Comm()->MinAll(&myMinimumSubcellDimension, &globalMinimumSubcellDimension, 1);
+  return globalMinimumSubcellDimension;
+}
+
 void GlobalDofAssignment::projectParentCoefficientsOntoUnsetChildren()
 {
   set<GlobalIndexType> rankLocalCellIDs = cellsInPartition(-1);
@@ -619,12 +642,17 @@ void GlobalDofAssignment::projectParentCoefficientsOntoUnsetChildren()
   }
 }
 
+void GlobalDofAssignment::setElementType(GlobalIndexType cellID, ElementTypePtr elemType)
+{
+  _elementTypeForCell[cellID] = elemType;
+}
+
 void GlobalDofAssignment::setPartitions(FieldContainer<GlobalIndexType> &partitionedMesh)
 {
 //  set<unsigned> activeCellIDs = _meshTopology->getActiveCellIndices();
 
-  int partitionNumber     = Teuchos::GlobalMPISession::getRank();
-  int partitionCount      = Teuchos::GlobalMPISession::getNProc();
+  int partitionNumber     = _partitionPolicy->Comm()->MyPID();
+  int partitionCount      = _partitionPolicy->Comm()->NumProc();
 
   TEUCHOS_TEST_FOR_EXCEPTION(partitionedMesh.dimension(0) > partitionCount, std::invalid_argument,
                              "Number of partitions exceeds the maximum MPI rank; this is unsupported");
@@ -673,11 +701,11 @@ void GlobalDofAssignment::setPartitions(FieldContainer<GlobalIndexType> &partiti
 
 void GlobalDofAssignment::setPartitions(std::vector<std::set<GlobalIndexType> > &partitions)
 {
-  int thisPartitionNumber     = Teuchos::GlobalMPISession::getRank();
+  int thisPartitionNumber = _partitionPolicy->Comm()->MyPID();
 
   // not sure numProcs == partitions.size() is a great requirement to impose, but it is an assumption we make in some places,
   // so we require it here.
-  int numProcs = Teuchos::GlobalMPISession::getNProc();
+  int numProcs = _partitionPolicy->Comm()->NumProc();
   TEUCHOS_TEST_FOR_EXCEPTION(numProcs != partitions.size(), std::invalid_argument, "partitions.size() must be equal to numProcs!");
 
   _partitions = partitions;
@@ -724,7 +752,7 @@ IndexType GlobalDofAssignment::partitionLocalCellIndex(GlobalIndexType cellID, i
 {
   if (partitionNumber == -1)
   {
-    partitionNumber     = Teuchos::GlobalMPISession::getRank();
+    partitionNumber     = _partitionPolicy->Comm()->MyPID();
   }
 
   ElementType* elemType = _elementTypeForCell[cellID].get();
