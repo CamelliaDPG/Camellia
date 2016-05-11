@@ -27,6 +27,7 @@
 #include "SpatiallyFilteredFunction.h"
 #include "ExpFunction.h"
 #include "TrigFunctions.h"
+#include "PreviousSolutionFunction.h"
 
 using namespace Camellia;
 
@@ -112,7 +113,9 @@ public:
     _height = height;
   }
   double value(double x, double y) {
-    return (_height/2+y)*(_height/2-y);
+    // return (_height/2+y)*(_height/2-y);
+    // return (1-4*y*y/(_height*_height));
+    return (1-pow(2*y/_height,2));
   }
 };
 
@@ -143,6 +146,7 @@ int main(int argc, char *argv[])
   double lambda = 1;
   double mu0 = 1;
   double mu1 = 1;
+  double alpha = 0;
   // int spaceDim = 2;
   int numRefs = 1;
   int k = 2, delta_k = 2;
@@ -155,8 +159,8 @@ int main(int argc, char *argv[])
   bool useConjugateGradient = true;
   bool logFineOperator = false;
   double solverTolerance = 1e-10;
-  int maxNonlinearIterations = 50;
-  double nonlinearTolerance = 1e-6;
+  int maxNonlinearIterations = 20;
+  double nonlinearTolerance = 1e-5;
   int maxLinearIterations = 10000;
   // bool computeL2Error = false;
   bool exportSolution = false;
@@ -169,6 +173,7 @@ int main(int argc, char *argv[])
   cmdp.setOption("lambda", &lambda, "lambda");
   cmdp.setOption("mu0", &mu0, "mu0");
   cmdp.setOption("mu1", &mu1, "mu1");
+  cmdp.setOption("alpha", &alpha, "alpha");
   // cmdp.setOption("spaceDim", &spaceDim, "spatial dimension");
   cmdp.setOption("polyOrder",&k,"polynomial order for field variable u");
   cmdp.setOption("delta_k", &delta_k, "test space polynomial order enrichment");
@@ -233,6 +238,7 @@ int main(int argc, char *argv[])
     parameters.set("lambda", lambda);
     parameters.set("mu", mu0);
     parameters.set("mu1", mu1);
+    parameters.set("alpha", alpha);
   // }
 
 
@@ -347,8 +353,8 @@ int main(int argc, char *argv[])
     // SpatialFilterPtr otherBoundary = SpatialFilter::negatedFilter(leftRightBoundary);
 
     // inflow on left boundary
-    // FunctionPtr u1_inflowFunction = Teuchos::rcp( new ParabolicInflowFunction_U1(height) );
-    FunctionPtr u1_inflowFunction = one;
+    FunctionPtr u1_inflowFunction = Teuchos::rcp( new ParabolicInflowFunction_U1(height) );
+    // FunctionPtr u1_inflowFunction = one;
     FunctionPtr u2_inflowFunction = zero;
     FunctionPtr u = Function::vectorize(u1_inflowFunction,u2_inflowFunction);
 
@@ -483,18 +489,21 @@ int main(int argc, char *argv[])
     }
     // else
     //   soln->condensedSolve(solvers[solverChoice]);
-    double alpha = 1.0;
+    double alph = 1.0;
+
+    // implement line search
+
     int iterationCount = 0;
     while (l2Update > nonlinearTolerance && iterCount < maxNonlinearIterations)
     {
       if (solverChoice[0] == 'G')
       {
         // solutionIncrement->solve(gmgSolver);
-        form.solveAndAccumulate(alpha);
+        form.solveAndAccumulate(alph);
         iterationCount += gmgSolver->iterationCount();
       }
       else
-        form.solveAndAccumulate(alpha);
+        form.solveAndAccumulate(alph);
         // solutionIncrement->condensedSolve(solvers[solverChoice]);
 
       // Compute L2 norm of update
@@ -522,6 +531,25 @@ int main(int argc, char *argv[])
     // }
     if (commRank == 0)
     {
+      // compute drag coefficient if Hemker problem
+      double dragCoefficient = 0.0;
+      if (problemChoice == "HemkerCylinder")
+      {
+        SpatialFilterPtr cylinderBoundary = Teuchos::rcp( new CylinderBoundary(cylinderRadius));
+
+        TFunctionPtr<double> boundaryRestriction = Function::meshBoundaryCharacteristic();
+
+        TFunctionPtr<double> traction_x = Teuchos::rcp( new PreviousSolutionFunction<double>(solutionBackground, form.sigman_hat(1)));
+        
+        // TFunctionPtr<double> dF_D = Teuchos::rcp( new SpatiallyFilteredFunction<double>( Function::constant(1.0)*boundaryRestriction,cylinderBoundary));
+        TFunctionPtr<double> dF_D = Teuchos::rcp( new SpatiallyFilteredFunction<double>( traction_x*boundaryRestriction,cylinderBoundary));
+        double F_D = dF_D->integrate(solutionBackground->mesh());
+        // double F_D = 1.0;
+
+        // dragCoefficient = F_D;
+        // 2/3 is the average inflow velocity
+        dragCoefficient = F_D;// * (3.0/2.0);
+      }
       cout << "Refinement: " << refIndex
         << " \tElements: " << mesh->numActiveElements()
         << " \tDOFs: " << mesh->numGlobalDofs()
@@ -530,6 +558,7 @@ int main(int argc, char *argv[])
         << " \tSolve Time: " << solveTime
         << " \tTotal Time: " << totalTimer->totalElapsedTime(true)
         << " \tIteration Count: " << iterationCount
+        << " \tDrag Coefficient: " << dragCoefficient
         << endl;
       dataFile << refIndex
         << " " << mesh->numActiveElements()
@@ -539,6 +568,7 @@ int main(int argc, char *argv[])
         << " " << solveTime
         << " " << totalTimer->totalElapsedTime(true)
         << " " << iterationCount
+        << " " << dragCoefficient
         << endl;
     }
 

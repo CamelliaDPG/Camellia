@@ -36,6 +36,7 @@ class OldroydBFormulation2
   bool _useConformingTraces;
   double _mu;
   double _mu1;
+  double _alpha;
   double _lambda;
   int _spatialPolyOrder;
   int _temporalPolyOrder;
@@ -177,6 +178,9 @@ public:
   // ! Returns mu1.
   double mu1();
 
+  // ! Returns alpha.
+  double alpha();
+
   // ! Returns lambda.
   double lambda();
 
@@ -279,6 +283,9 @@ public:
 
   // ! returns the forcing function for this formulation if u and p are the exact solutions.
   TFunctionPtr<double> forcingFunction(TFunctionPtr<double> u, TFunctionPtr<double> p);
+
+  // // ! returns the friction on the mesh skeleton (sigma_n) x n
+  // TFunctionPtr<double> friction(SolutionPtr soln);
 
   // ! Set the forcing function for problem.  Should be a vector-valued function, with number of components equal to the spatial dimension.
   void setForcingFunction(TFunctionPtr<double> f);

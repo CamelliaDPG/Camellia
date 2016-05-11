@@ -2,7 +2,7 @@
 //  OldroydBFormulation2.cpp
 //  Camellia
 //
-//  Created by Nate Roberts on 10/29/14.
+//  Created by Brendan Keith, October 2015
 //
 //
 
@@ -122,6 +122,7 @@ OldroydBFormulation2::OldroydBFormulation2(MeshTopologyPtr meshTopo, Teuchos::Pa
   int spaceDim = parameters.get<int>("spaceDim");
   double mu = parameters.get<double>("mu",1.0);
   double mu1 = parameters.get<double>("mu1",1.0);
+  double alpha = parameters.get<double>("alpha",0);
   double lambda = parameters.get<double>("lambda",1.0);
   bool useConformingTraces = parameters.get<bool>("useConformingTraces",false);
   int spatialPolyOrder = parameters.get<int>("spatialPolyOrder");
@@ -144,6 +145,7 @@ OldroydBFormulation2::OldroydBFormulation2(MeshTopologyPtr meshTopo, Teuchos::Pa
   _temporalPolyOrder =temporalPolyOrder;
   _mu = mu;
   _mu1 = mu1;
+  _alpha = alpha;
   _lambda = lambda;
   _dt = ParameterFunction::parameterFunction(dt);
   _t = ParameterFunction::parameterFunction(0);
@@ -636,6 +638,16 @@ OldroydBFormulation2::OldroydBFormulation2(MeshTopologyPtr meshTopo, Teuchos::Pa
         //
         _oldroydBBF->addTerm( -2 * lambda * Re * L_prev_ik * T_kj, S_ij);
         _oldroydBBF->addTerm( -2 * lambda * Re * T_prev_kj * L_ik, S_ij);
+
+        // Giesekus model
+        if (alpha > 0)
+        {
+          VarPtr T_ik = this->T(comp_i, comp_k);
+          FunctionPtr T_prev_ik = TFunction<double>::solution(T_ik, _backgroundFlow);
+
+          _oldroydBBF->addTerm( - alpha * lambda / mu1 * T_prev_ik * T_kj, S_ij);
+          _oldroydBBF->addTerm( - alpha * lambda / mu1 * T_ik * T_prev_kj, S_ij);
+        }
 
       }
     }
@@ -1251,6 +1263,11 @@ double OldroydBFormulation2::lambda()
   return _lambda;
 }
 
+double OldroydBFormulation2::alpha()
+{
+  return _alpha;
+}
+
 RefinementStrategyPtr OldroydBFormulation2::getRefinementStrategy()
 {
   return _refinementStrategy;
@@ -1427,6 +1444,7 @@ RHSPtr OldroydBFormulation2::rhs(TFunctionPtr<double> f, bool excludeFluxesAndTr
   double Re = 1.0 / mu;
   double mu1 = this->mu1();
   double lambda = this->lambda();
+  double alpha = this->alpha();
   if (!_conservationFormulation)
   {
     for (int comp_i=1; comp_i <= _spaceDim; comp_i++)
@@ -1552,6 +1570,14 @@ RHSPtr OldroydBFormulation2::rhs(TFunctionPtr<double> f, bool excludeFluxesAndTr
 
         rhs->addTerm( 2 * lambda * Re * L_ik_prev * T_kj_prev * S_ij);
 
+        // Giesekus model
+        if (alpha > 0)
+        {
+          VarPtr T_ik = this->T(comp_i, comp_k);
+          FunctionPtr T_ik_prev = TFunction<double>::solution(T_ik, _backgroundFlow);
+
+          rhs->addTerm( alpha * lambda / mu1 * T_ik_prev * T_kj_prev * S_ij);
+        }
       }
     }
   }
@@ -1593,7 +1619,8 @@ VarPtr OldroydBFormulation2::p()
 }
 
 // traces:
-VarPtr OldroydBFormulation2::sigman_hat(int i)
+VarPtr OldroydBFormulation2::
+sigman_hat(int i)
 {
   CHECK_VALID_COMPONENT(i);
   static const vector<string> sigmanStrings = {S_SIGMAN1_HAT,S_SIGMAN2_HAT,S_SIGMAN3_HAT};
@@ -1870,4 +1897,27 @@ TFunctionPtr<double> OldroydBFormulation2::getVorticity()
 // {
 //   VarPtr var = _vf->testVar(name, fs);
 //   return var;
+// }
+
+
+// TO COMPUTE DRAG COEFFICIENT around cylinder
+
+// TFunctionPtr<double> OldroydBFormulation2::friction(SolutionPtr soln)
+// {
+//   if (_spaceDim == 2)
+//   {
+//     // friction is given by (sigma n) x n (that's a cross product)
+//     TFunctionPtr<double> n = Function::normal();
+//     // LinearTermPtr f_lt = n->y() * (sigma11->times_normal_x() + sigma12->times_normal_y())
+//     //                    - n->x() * (sigma21->times_normal_x() + sigma22->times_normal_y());
+//     LinearTermPtr f_lt = n->y() * this->sigman_hat(1) - n->x() * this->sigman_hat(2);
+
+//     TFunctionPtr<double> f = Teuchos::rcp( new PreviousSolutionFunction<double>(soln, f_lt) );
+//     return f;
+//   }
+//   else
+//   {
+//     cout << "ERROR: this function is only supported on 2D solutions.  Returning null.\n";
+//     return Teuchos::null;
+//   }
 // }
