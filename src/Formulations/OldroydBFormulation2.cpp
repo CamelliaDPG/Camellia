@@ -146,7 +146,7 @@ OldroydBFormulation2::OldroydBFormulation2(MeshTopologyPtr meshTopo, Teuchos::Pa
   _mu = mu;
   _mu1 = mu1;
   _alpha = alpha;
-  _lambda = lambda;
+  _lambda = ParameterFunction::parameterFunction(lambda);
   _dt = ParameterFunction::parameterFunction(dt);
   _t = ParameterFunction::parameterFunction(0);
   _includeVelocityTracesInFluxTerm = parameters.get<bool>("includeVelocityTracesInFluxTerm",true);
@@ -590,6 +590,7 @@ OldroydBFormulation2::OldroydBFormulation2(MeshTopologyPtr meshTopo, Teuchos::Pa
 
 
   // UPPER-CONVECTED MAXWELL EQUATION FOR T
+  TFunctionPtr<double> lambdaFxn = _lambda; // cast to allow use of TFunctionPtr<double> operator overloads
 
   for (int comp_i=1; comp_i <= _spaceDim; comp_i++)
   {
@@ -604,7 +605,7 @@ OldroydBFormulation2::OldroydBFormulation2(MeshTopologyPtr meshTopo, Teuchos::Pa
 
       _oldroydBBF->addTerm( T_ij, S_ij);
       //
-      _oldroydBBF->addTerm( lambda * Tu_ijn_hat, S_ij);
+      _oldroydBBF->addTerm( lambdaFxn * Tu_ijn_hat, S_ij);
       //
       _oldroydBBF->addTerm( -2 * Re * mu1 * L_ij, S_ij);
 
@@ -620,24 +621,24 @@ OldroydBFormulation2::OldroydBFormulation2(MeshTopologyPtr meshTopo, Teuchos::Pa
 
         switch (comp_k) {
           case 1:
-            _oldroydBBF->addTerm( -lambda * u_prev_k * T_ij, S_ij->dx());
-            _oldroydBBF->addTerm( -lambda * T_prev_ij * u_k, S_ij->dx());
+            _oldroydBBF->addTerm( -lambdaFxn * u_prev_k * T_ij, S_ij->dx());
+            _oldroydBBF->addTerm( -lambdaFxn * T_prev_ij * u_k, S_ij->dx());
             break;
           case 2:
-            _oldroydBBF->addTerm( -lambda * u_prev_k * T_ij, S_ij->dy());
-            _oldroydBBF->addTerm( -lambda * T_prev_ij * u_k, S_ij->dy());
+            _oldroydBBF->addTerm( -lambdaFxn * u_prev_k * T_ij, S_ij->dy());
+            _oldroydBBF->addTerm( -lambdaFxn * T_prev_ij * u_k, S_ij->dy());
             break;
           case 3:
-            _oldroydBBF->addTerm( -lambda * u_prev_k * T_ij, S_ij->dz());
-            _oldroydBBF->addTerm( -lambda * T_prev_ij * u_k, S_ij->dz());
+            _oldroydBBF->addTerm( -lambdaFxn * u_prev_k * T_ij, S_ij->dz());
+            _oldroydBBF->addTerm( -lambdaFxn * T_prev_ij * u_k, S_ij->dz());
             break;
 
           default:
             break;
         }
         //
-        _oldroydBBF->addTerm( -2 * lambda * Re * L_prev_ik * T_kj, S_ij);
-        _oldroydBBF->addTerm( -2 * lambda * Re * T_prev_kj * L_ik, S_ij);
+        _oldroydBBF->addTerm( -2 * lambdaFxn * Re * L_prev_ik * T_kj, S_ij);
+        _oldroydBBF->addTerm( -2 * lambdaFxn * Re * T_prev_kj * L_ik, S_ij);
 
         // Giesekus model
         if (alpha > 0)
@@ -645,8 +646,8 @@ OldroydBFormulation2::OldroydBFormulation2(MeshTopologyPtr meshTopo, Teuchos::Pa
           VarPtr T_ik = this->T(comp_i, comp_k);
           FunctionPtr T_prev_ik = TFunction<double>::solution(T_ik, _backgroundFlow);
 
-          _oldroydBBF->addTerm( - alpha * lambda / mu1 * T_prev_ik * T_kj, S_ij);
-          _oldroydBBF->addTerm( - alpha * lambda / mu1 * T_ik * T_prev_kj, S_ij);
+          _oldroydBBF->addTerm( - alpha * lambdaFxn / mu1 * T_prev_ik * T_kj, S_ij);
+          _oldroydBBF->addTerm( - alpha * lambdaFxn / mu1 * T_ik * T_prev_kj, S_ij);
         }
 
       }
@@ -679,6 +680,8 @@ OldroydBFormulation2::OldroydBFormulation2(MeshTopologyPtr meshTopo, Teuchos::Pa
   this->setForcingFunction(Teuchos::null); // will default to zero
 
   _bc = BC::bc();
+
+  mesh->registerSolution(_backgroundFlow);
 
   _solnIncrement->setBC(_bc);
 
@@ -1258,7 +1261,7 @@ double OldroydBFormulation2::mu1()
   return _mu1;
 }
 
-double OldroydBFormulation2::lambda()
+Teuchos::RCP<ParameterFunction> OldroydBFormulation2::lambda()
 {
   return _lambda;
 }
@@ -1266,6 +1269,12 @@ double OldroydBFormulation2::lambda()
 double OldroydBFormulation2::alpha()
 {
   return _alpha;
+}
+
+// ! set lambda during continuation
+void OldroydBFormulation2::setLambda(double lambda)
+{
+  _lambda->setValue(lambda);
 }
 
 RefinementStrategyPtr OldroydBFormulation2::getRefinementStrategy()
@@ -1443,7 +1452,8 @@ RHSPtr OldroydBFormulation2::rhs(TFunctionPtr<double> f, bool excludeFluxesAndTr
   // add the u L term:
   double Re = 1.0 / mu;
   double mu1 = this->mu1();
-  double lambda = this->lambda();
+  Teuchos::RCP<ParameterFunction> lambda = this->lambda();
+  TFunctionPtr<double> lambdaFxn = lambda;
   double alpha = this->alpha();
   if (!_conservationFormulation)
   {
@@ -1555,20 +1565,20 @@ RHSPtr OldroydBFormulation2::rhs(TFunctionPtr<double> f, bool excludeFluxesAndTr
 
         switch (comp_k) {
           case 1:
-            rhs->addTerm( lambda * T_ij_prev * u_k_prev * S_ij->dx());
+            rhs->addTerm( lambdaFxn * T_ij_prev * u_k_prev * S_ij->dx());
             break;
           case 2:
-            rhs->addTerm( lambda * T_ij_prev * u_k_prev * S_ij->dy());
+            rhs->addTerm( lambdaFxn * T_ij_prev * u_k_prev * S_ij->dy());
             break;
           case 3:
-            rhs->addTerm( lambda * T_ij_prev * u_k_prev * S_ij->dz());
+            rhs->addTerm( lambdaFxn * T_ij_prev * u_k_prev * S_ij->dz());
             break;
 
           default:
             break;
         }
 
-        rhs->addTerm( 2 * lambda * Re * L_ik_prev * T_kj_prev * S_ij);
+        rhs->addTerm( 2 * lambdaFxn * Re * L_ik_prev * T_kj_prev * S_ij);
 
         // Giesekus model
         if (alpha > 0)
@@ -1576,7 +1586,7 @@ RHSPtr OldroydBFormulation2::rhs(TFunctionPtr<double> f, bool excludeFluxesAndTr
           VarPtr T_ik = this->T(comp_i, comp_k);
           FunctionPtr T_ik_prev = TFunction<double>::solution(T_ik, _backgroundFlow);
 
-          rhs->addTerm( alpha * lambda / mu1 * T_ik_prev * T_kj_prev * S_ij);
+          rhs->addTerm( alpha * lambdaFxn / mu1 * T_ik_prev * T_kj_prev * S_ij);
         }
       }
     }
@@ -1706,6 +1716,7 @@ void OldroydBFormulation2::solveAndAccumulate(double weight)
   _solnIncrement->setRHS(_rhsForSolve);
   _solnIncrement->solve(_solver);
   _solnIncrement->setRHS(savedRHS);
+  // mesh->registerSolution(_backgroundFlow);
 
   bool allowEmptyCells = false;
   _backgroundFlow->addSolution(_solnIncrement, weight, allowEmptyCells, _neglectFluxesOnRHS);
@@ -1715,6 +1726,13 @@ void OldroydBFormulation2::solveAndAccumulate(double weight)
 TSolutionPtr<double> OldroydBFormulation2::solutionPreviousTimeStep()
 {
   return _previousSolution;
+}
+
+double OldroydBFormulation2::computeG(double s)
+{
+  //TODO
+
+  return 1.0-s;
 }
 
 // ! Solves iteratively

@@ -119,6 +119,12 @@ public:
   }
 };
 
+int sgn(double val) {
+  if (val > 0) return  1;
+  if (val < 0) return -1;
+  return 0;
+}
+
 int main(int argc, char *argv[])
 {
 
@@ -417,7 +423,7 @@ int main(int argc, char *argv[])
 #ifdef HAVE_AMESOS_MUMPS
   solvers["MUMPS"] = Solver::getSolver(Solver::MUMPS, true);
 #endif
-  bool useStaticCondensation = false;
+  bool useStaticCondensation = true;
   int azOutput = 20; // print residual every 20 CG iterations
 
   GMGOperator::MultigridStrategy multigridStrategy;
@@ -454,131 +460,204 @@ int main(int argc, char *argv[])
   ofstream dataFile(dataFileLocation);
   dataFile << "ref\t " << "elements\t " << "dofs\t " << "energy\t " << "l2\t " << "solvetime\t" << "elapsed\t" << "iterations\t " << endl;
 
-  for (int refIndex=0; refIndex <= numRefs; refIndex++)
+  double energyTol = 0.2;
+  double energyErrorInitial;
+  double lambdaInitial = lambda;
+  double lambdaMax = 10.0*lambda;
+  double delta_lambda = 0.5*lambda;
+  while (lambda <= lambdaMax)
   {
-    double l2Update = 1e10;
-    int iterCount = 0;
-    solverTime->start(true);
-    Teuchos::RCP<GMGSolver> gmgSolver;
-    if (solverChoice[0] == 'G')
+    for (int refIndex=0; refIndex <= numRefs; refIndex++)
     {
-      bool reuseFactorization = true;
-      SolverPtr coarseSolver = Solver::getDirectSolver(reuseFactorization);
-      int kCoarse = 1;
-      vector<MeshPtr> meshSequence = GMGSolver::meshesForMultigrid(mesh, kCoarse, delta_k);
-      // for (int i=0; i < meshSequence.size(); i++)
-      // {
-      //   if (commRank == 0)
-      //     cout << meshSequence[i]->numGlobalDofs() << endl;
-      // }
-      while (meshSequence[0]->numGlobalDofs() < 2000 && meshSequence.size() > 2)
-        meshSequence.erase(meshSequence.begin());
-      gmgSolver = Teuchos::rcp(new GMGSolver(solutionIncrement, meshSequence, maxLinearIterations, solverTolerance, multigridStrategy, coarseSolver, useCondensedSolve));
-      gmgSolver->setUseConjugateGradient(useConjugateGradient);
-      int azOutput = 20; // print residual every 20 CG iterations
-      gmgSolver->setAztecOutput(azOutput);
-      gmgSolver->gmgOperator()->setNarrateOnRankZero(logFineOperator,"finest GMGOperator");
-
-      if (solverChoice == "GMG-Direct")
-        gmgSolver->gmgOperator()->setSchwarzFactorizationType(GMGOperator::Direct);
-      if (solverChoice == "GMG-ILU")
-        gmgSolver->gmgOperator()->setSchwarzFactorizationType(GMGOperator::ILU);
-      if (solverChoice == "GMG-IC")
-        gmgSolver->gmgOperator()->setSchwarzFactorizationType(GMGOperator::IC);
-      // soln->solve(gmgSolver);
-    }
-    // else
-    //   soln->condensedSolve(solvers[solverChoice]);
-    double alph = 1.0;
-
-    // implement line search
-
-    int iterationCount = 0;
-    while (l2Update > nonlinearTolerance && iterCount < maxNonlinearIterations)
-    {
+      double l2Update = 1e10;
+      int iterCount = 0;
+      solverTime->start(true);
+      Teuchos::RCP<GMGSolver> gmgSolver;
       if (solverChoice[0] == 'G')
       {
-        // solutionIncrement->solve(gmgSolver);
-        form.solveAndAccumulate(alph);
-        iterationCount += gmgSolver->iterationCount();
+        bool reuseFactorization = true;
+        SolverPtr coarseSolver = Solver::getDirectSolver(reuseFactorization);
+        int kCoarse = 1;
+        vector<MeshPtr> meshSequence = GMGSolver::meshesForMultigrid(mesh, kCoarse, delta_k);
+        // for (int i=0; i < meshSequence.size(); i++)
+        // {
+        //   if (commRank == 0)
+        //     cout << meshSequence[i]->numGlobalDofs() << endl;
+        // }
+        while (meshSequence[0]->numGlobalDofs() < 2000 && meshSequence.size() > 2)
+          meshSequence.erase(meshSequence.begin());
+        gmgSolver = Teuchos::rcp(new GMGSolver(solutionIncrement, meshSequence, maxLinearIterations, solverTolerance, multigridStrategy, coarseSolver, useCondensedSolve));
+        gmgSolver->setUseConjugateGradient(useConjugateGradient);
+        int azOutput = 20; // print residual every 20 CG iterations
+        gmgSolver->setAztecOutput(azOutput);
+        gmgSolver->gmgOperator()->setNarrateOnRankZero(logFineOperator,"finest GMGOperator");
+
+        if (solverChoice == "GMG-Direct")
+          gmgSolver->gmgOperator()->setSchwarzFactorizationType(GMGOperator::Direct);
+        if (solverChoice == "GMG-ILU")
+          gmgSolver->gmgOperator()->setSchwarzFactorizationType(GMGOperator::ILU);
+        if (solverChoice == "GMG-IC")
+          gmgSolver->gmgOperator()->setSchwarzFactorizationType(GMGOperator::IC);
+        // soln->solve(gmgSolver);
       }
-      else
-        form.solveAndAccumulate(alph);
-        // solutionIncrement->condensedSolve(solvers[solverChoice]);
+      // else
+      //   soln->condensedSolve(solvers[solverChoice]);
 
-      // Compute L2 norm of update
-      l2Update = form.L2NormSolutionIncrement();
-
-      if (commRank == 0)
-        cout << "Nonlinear Update:\t " << l2Update << endl;
-
-      iterCount++;
-    }
-
-    double solveTime = solverTime->stop();
-
-    double energyError = solutionIncrement->energyErrorTotal();
-    // double l2Error = 0;
-    // if (computeL2Error)
-    // {
-    //   FunctionPtr u_soln;
-    //   u_soln = Function::solution(form.u(), solutionBackground);
-    //   FunctionPtr u_diff = u_soln - u_exact;
-    //   FunctionPtr u_sqr = u_diff*u_diff;
-    //   double u_l2;
-    //   u_l2 = u_sqr->integrate(mesh, 10);
-    //   l2Error = sqrt(u_l2);
-    // }
-    if (commRank == 0)
-    {
-      // compute drag coefficient if Hemker problem
-      double dragCoefficient = 0.0;
-      if (problemChoice == "HemkerCylinder")
+      ////////////////////////////////////////////////////////////////////
+      //    line search to minimize residual in search direction
+      ////////////////////////////////////////////////////////////////////
+      int sMax = 16;
+      int lineSearchMaxIt = 5;
+      double LStol = 0.5; // as taken from Matthies + Strang
+      //
+      double s0 = 0.0;
+      double s1 = 1.0;
+      // G_i = R(u_i) . delta_u
+      //     = R(u_0 + s_i * delta_u) . delta_u
+      double G_init = form.computeG(0);
+      double G0 = G_init;
+      double G1 = form.computeG(1);
+      
+      // find interval about which G changes sign
+      while (sgn(G0)*sgn(G1) > 0 && s1 < sMax)
       {
-        SpatialFilterPtr cylinderBoundary = Teuchos::rcp( new CylinderBoundary(cylinderRadius));
-
-        TFunctionPtr<double> boundaryRestriction = Function::meshBoundaryCharacteristic();
-
-        TFunctionPtr<double> traction_x = Teuchos::rcp( new PreviousSolutionFunction<double>(solutionBackground, form.sigman_hat(1)));
-        
-        // TFunctionPtr<double> dF_D = Teuchos::rcp( new SpatiallyFilteredFunction<double>( Function::constant(1.0)*boundaryRestriction,cylinderBoundary));
-        TFunctionPtr<double> dF_D = Teuchos::rcp( new SpatiallyFilteredFunction<double>( traction_x*boundaryRestriction,cylinderBoundary));
-        double F_D = dF_D->integrate(solutionBackground->mesh());
-        // double F_D = 1.0;
-
-        // dragCoefficient = F_D;
-        // 2/3 is the average inflow velocity
-        dragCoefficient = F_D;// * (3.0/2.0);
+          s0 = s1;
+          s1 = 2*s1;
+          G0 = G1;
+          
+          // compute G1 =  R(u_0+s1*delta_u) . delta
+          G1 = form.computeG(s1);
       }
-      cout << "Refinement: " << refIndex
-        << " \tElements: " << mesh->numActiveElements()
-        << " \tDOFs: " << mesh->numGlobalDofs()
-        << " \tEnergy Error: " << energyError
-        // << " \tL2 Error: " << l2Error
-        << " \tSolve Time: " << solveTime
-        << " \tTotal Time: " << totalTimer->totalElapsedTime(true)
-        << " \tIteration Count: " << iterationCount
-        << " \tDrag Coefficient: " << dragCoefficient
-        << endl;
-      dataFile << refIndex
-        << " " << mesh->numActiveElements()
-        << " " << mesh->numGlobalDofs()
-        << " " << energyError
-        // << " " << l2Error
-        << " " << solveTime
-        << " " << totalTimer->totalElapsedTime(true)
-        << " " << iterationCount
-        << " " << dragCoefficient
-        << endl;
+
+      // find zero of G using this cool Illinois algorithm
+      double s = s1;
+      double G = G1;
+      int i=0;
+      while (i <= lineSearchMaxIt && sgn(G1)*sgn(G0) < 0 && ( abs(G) > LStol*abs(G_init) || abs(s0-s1) > LStol*0.5*(s0+s1)))
+      {
+          ++i;
+          
+          s = s1-G1*(s1-s0)/(G1-G0);
+
+          // compute G1 =  R(u_0+s*delta_u) . delta
+          G1 = form.computeG(s);
+
+          if ((sgn(G)*sgn(G1)) > 0)
+          {
+              G0 = 0.5*G0;
+          }
+          else
+          {
+              s0 = s1;
+              G0 = G1;
+          }
+          s1 = s;
+          G1 = G;
+      }
+
+      ////////////////////////////////////////////////////////////////////
+      //    Solve and accumulate solution
+      ////////////////////////////////////////////////////////////////////
+      // double s = 1.0;
+      int iterationCount = 0;
+      while (l2Update > nonlinearTolerance && iterCount < maxNonlinearIterations)
+      {
+        if (solverChoice[0] == 'G')
+        {
+          // solutionIncrement->solve(gmgSolver);
+          form.solveAndAccumulate(s);
+          iterationCount += gmgSolver->iterationCount();
+        }
+        else
+          form.solveAndAccumulate(s);
+          // solutionIncrement->condensedSolve(solvers[solverChoice]);
+
+        // Compute L2 norm of update
+        l2Update = form.L2NormSolutionIncrement();
+
+        if (commRank == 0)
+          cout << "Nonlinear Update:\t " << l2Update << endl;
+
+        iterCount++;
+      }
+
+      double solveTime = solverTime->stop();
+
+      double energyError = solutionIncrement->energyErrorTotal();
+      // double l2Error = 0;
+      // if (computeL2Error)
+      // {
+      //   FunctionPtr u_soln;
+      //   u_soln = Function::solution(form.u(), solutionBackground);
+      //   FunctionPtr u_diff = u_soln - u_exact;
+      //   FunctionPtr u_sqr = u_diff*u_diff;
+      //   double u_l2;
+      //   u_l2 = u_sqr->integrate(mesh, 10);
+      //   l2Error = sqrt(u_l2);
+      // }
+      if (commRank == 0)
+      {
+        // compute drag coefficient if Hemker problem
+        double dragCoefficient = 0.0;
+        if (problemChoice == "HemkerCylinder")
+        {
+          SpatialFilterPtr cylinderBoundary = Teuchos::rcp( new CylinderBoundary(cylinderRadius));
+
+          TFunctionPtr<double> boundaryRestriction = Function::meshBoundaryCharacteristic();
+
+          TFunctionPtr<double> traction_x = Teuchos::rcp( new PreviousSolutionFunction<double>(solutionBackground, form.sigman_hat(1)));
+          
+          // TFunctionPtr<double> dF_D = Teuchos::rcp( new SpatiallyFilteredFunction<double>( Function::constant(1.0)*boundaryRestriction,cylinderBoundary));
+          TFunctionPtr<double> dF_D = Teuchos::rcp( new SpatiallyFilteredFunction<double>( traction_x*boundaryRestriction,cylinderBoundary));
+          double F_D = dF_D->integrate(solutionBackground->mesh());
+          // double F_D = 1.0;
+
+          // dragCoefficient = F_D;
+          // 2/3 is the average inflow velocity
+          dragCoefficient = F_D;// * (3.0/2.0);
+        }
+        cout << "Refinement: " << refIndex
+          << " \tElements: " << mesh->numActiveElements()
+          << " \tDOFs: " << mesh->numGlobalDofs()
+          << " \tEnergy Error: " << energyError
+          // << " \tL2 Error: " << l2Error
+          << " \tSolve Time: " << solveTime
+          << " \tTotal Time: " << totalTimer->totalElapsedTime(true)
+          << " \tIteration Count: " << iterationCount
+          << " \tDrag Coefficient: " << dragCoefficient
+          << " \tLambda: " << lambda
+          << endl;
+        dataFile << refIndex
+          << " " << mesh->numActiveElements()
+          << " " << mesh->numGlobalDofs()
+          << " " << energyError
+          // << " " << l2Error
+          << " " << solveTime
+          << " " << totalTimer->totalElapsedTime(true)
+          << " " << iterationCount
+          << " " << dragCoefficient
+          << " " << lambda
+          << endl;
+        if (refIndex == 0 && lambda == lambdaInitial)
+        {
+          energyErrorInitial = energyError;
+        }
+      }
+
+      if (exportSolution)
+        exporter->exportSolution(solutionBackground, refIndex);
+        // exporter->exportSolution(solutionIncrement, refIndex);
+
+      if (energyError < energyErrorInitial*energyTol)
+        break;
+
+      if (refIndex != numRefs)
+        form.refine();
+        // refStrategy->refine();
+
     }
-
-    if (exportSolution)
-      exporter->exportSolution(solutionBackground, refIndex);
-      // exporter->exportSolution(solutionIncrement, refIndex);
-
-    if (refIndex != numRefs)
-      form.refine();
-      // refStrategy->refine();
+    lambda += delta_lambda;
+    form.setLambda(lambda);
   }
   dataFile.close();
   double totalTime = totalTimer->stop();

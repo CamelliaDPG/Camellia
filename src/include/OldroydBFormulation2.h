@@ -37,7 +37,6 @@ class OldroydBFormulation2
   double _mu;
   double _mu1;
   double _alpha;
-  double _lambda;
   int _spatialPolyOrder;
   int _temporalPolyOrder;
   int _delta_k;
@@ -53,6 +52,8 @@ class OldroydBFormulation2
   int _nonlinearIterationCount; // starts at 0, increases for each iterate
 
   bool _haveOutflowConditionsImposed; // used to track whether we should impose point/zero mean conditions on pressure
+
+  Teuchos::RCP<ParameterFunction> _lambda; // use a ParameterFunction so that we can set value later and references (in BF, e.g.) automatically pick this up
 
   Teuchos::RCP<ParameterFunction> _dt; // use a ParameterFunction so that we can set value later and references (in BF, e.g.) automatically pick this up
   Teuchos::RCP<ParameterFunction> _t;  // use a ParameterFunction so that user can easily "ramp up" BCs in time...
@@ -182,7 +183,10 @@ public:
   double alpha();
 
   // ! Returns lambda.
-  double lambda();
+  Teuchos::RCP<ParameterFunction> lambda();
+
+  // ! Sets lambda.
+  void setLambda(double lambda);
 
   // ! refine according to energy error in the solution
   void refine();
@@ -228,6 +232,9 @@ public:
 
   // ! Solves iteratively
   void solveIteratively(int maxIters, double cgTol, int azOutputLevel = 0, bool suppressSuperLUOutput = true);
+  
+  // computes Res(u + s*delta_u) . delta_u
+  double computeG(double s);
 
   // ! Returns the spatial dimension.
   int spaceDim();
