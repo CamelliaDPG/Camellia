@@ -176,11 +176,11 @@ public:
   // ! on the OldroydBFormulation2 on which save() was invoked as they were for this OldroydBFormulation2.
   void load(std::string prefixString);
 
-  // ! Returns viscosity mu.
-  double mu();
+  // ! Returns solvent viscosity, muS.
+  double muS();
 
-  // ! Returns mu1.
-  double mu1();
+  // ! Returns polymeric viscosity, muP.
+  double muP();
 
   // ! Returns alpha.
   double alpha();

@@ -120,8 +120,8 @@ OldroydBFormulation2::OldroydBFormulation2(MeshTopologyPtr meshTopo, Teuchos::Pa
 {
   // basic parameters
   int spaceDim = parameters.get<int>("spaceDim");
-  double mu = parameters.get<double>("mu",1.0);
-  double mu1 = parameters.get<double>("mu1",1.0);
+  double muS = parameters.get<double>("muS",1.0); // solvent viscosity
+  double muP = parameters.get<double>("muP",1.0); // polymeric viscosity
   double alpha = parameters.get<double>("alpha",0);
   double lambda = parameters.get<double>("lambda",1.0);
   bool useConformingTraces = parameters.get<bool>("useConformingTraces",false);
@@ -144,8 +144,8 @@ OldroydBFormulation2::OldroydBFormulation2(MeshTopologyPtr meshTopo, Teuchos::Pa
   _useConformingTraces = useConformingTraces;
   _spatialPolyOrder = spatialPolyOrder;
   _temporalPolyOrder =temporalPolyOrder;
-  _mu = mu;
-  _mu1 = mu1;
+  _muS = muS;
+  _muP = muP;
   _alpha = alpha;
   _lambda = ParameterFunction::parameterFunction(lambda);
   _dt = ParameterFunction::parameterFunction(dt);
@@ -385,27 +385,27 @@ OldroydBFormulation2::OldroydBFormulation2(MeshTopologyPtr meshTopo, Teuchos::Pa
 
   _steadyStokesBF = Teuchos::rcp( new BF(_vf) );
   // M1 terms:
-  _steadyStokesBF->addTerm(_mu * u1, M1->div()); // L1 = _mu * grad u1
+  _steadyStokesBF->addTerm(_muS * u1, M1->div()); // L1 = _muS * du1/dx
   _steadyStokesBF->addTerm(L11, M1->x()); // (L1, M1)
   _steadyStokesBF->addTerm(L12, M1->y());
   if (spaceDim == 3) _steadyStokesBF->addTerm(L13, M1->z());
-  _steadyStokesBF->addTerm(-_mu * u1_hat, M1->dot_normal());
+  _steadyStokesBF->addTerm(-_muS * u1_hat, M1->dot_normal());
 
   // M2 terms:
-  _steadyStokesBF->addTerm(_mu * u2, M2->div());
+  _steadyStokesBF->addTerm(_muS * u2, M2->div());
   _steadyStokesBF->addTerm(L21, M2->x());
   _steadyStokesBF->addTerm(L22, M2->y());
   if (spaceDim == 3) _steadyStokesBF->addTerm(L23, M2->z());
-  _steadyStokesBF->addTerm(-_mu * u2_hat, M2->dot_normal());
+  _steadyStokesBF->addTerm(-_muS * u2_hat, M2->dot_normal());
 
   // M3:
   if (spaceDim == 3)
   {
-    _steadyStokesBF->addTerm(_mu * u3, M3->div());
+    _steadyStokesBF->addTerm(_muS * u3, M3->div());
     _steadyStokesBF->addTerm(L31, M3->x());
     _steadyStokesBF->addTerm(L32, M3->y());
     _steadyStokesBF->addTerm(L33, M3->z());
-    _steadyStokesBF->addTerm(-_mu * u3_hat, M3->dot_normal());
+    _steadyStokesBF->addTerm(-_muS * u3_hat, M3->dot_normal());
   }
 
   // v1:
@@ -500,7 +500,7 @@ OldroydBFormulation2::OldroydBFormulation2(MeshTopologyPtr meshTopo, Teuchos::Pa
   // convective terms:
   // vector<FunctionPtr> L_prev, u_prev;
 
-  double Re = 1.0 / this->mu();
+  double Re = 1.0 / _muS;
 
   TFunctionPtr<double> p_prev = TFunction<double>::solution(this->p(), _backgroundFlow);
   if (!_conservationFormulation)
@@ -595,7 +595,7 @@ OldroydBFormulation2::OldroydBFormulation2(MeshTopologyPtr meshTopo, Teuchos::Pa
 
   for (int comp_i=1; comp_i <= _spaceDim; comp_i++)
   {
-    for (int comp_j=1; comp_j <= _spaceDim; comp_j++)
+    for (int comp_j=comp_i; comp_j <= _spaceDim; comp_j++)
     {
       VarPtr T_ij = this->T(comp_i, comp_j);
       VarPtr Tu_ijn_hat = this->Tun_hat(comp_i, comp_j);
@@ -608,7 +608,7 @@ OldroydBFormulation2::OldroydBFormulation2(MeshTopologyPtr meshTopo, Teuchos::Pa
       //
       _oldroydBBF->addTerm( lambdaFxn * Tu_ijn_hat, S_ij);
       //
-      _oldroydBBF->addTerm( -2 * Re * mu1 * L_ij, S_ij);
+      _oldroydBBF->addTerm( -2 * Re * _muP * L_ij, S_ij);
 
       for (int comp_k=1; comp_k <= _spaceDim; comp_k++)
       {
@@ -647,8 +647,8 @@ OldroydBFormulation2::OldroydBFormulation2(MeshTopologyPtr meshTopo, Teuchos::Pa
           VarPtr T_ik = this->T(comp_i, comp_k);
           FunctionPtr T_prev_ik = TFunction<double>::solution(T_ik, _backgroundFlow);
 
-          _oldroydBBF->addTerm( - alpha * lambdaFxn / mu1 * T_prev_ik * T_kj, S_ij);
-          _oldroydBBF->addTerm( - alpha * lambdaFxn / mu1 * T_ik * T_prev_kj, S_ij);
+          _oldroydBBF->addTerm( alpha * lambdaFxn / _muP * T_prev_ik * T_kj, S_ij);
+          _oldroydBBF->addTerm( alpha * lambdaFxn / _muP * T_ik * T_prev_kj, S_ij);
         }
 
       }
@@ -1187,8 +1187,8 @@ void OldroydBFormulation2::initializeSolution(MeshTopologyPtr meshTopo, int fiel
 
     mesh->registerObserver(streamMesh); // refine streamMesh whenever mesh is refined
 
-    LinearTermPtr u1_dy = (1.0 / _mu) * this->L(1,2);
-    LinearTermPtr u2_dx = (1.0 / _mu) * this->L(2,1);
+    LinearTermPtr u1_dy = (1.0 / _muS) * this->L(1,2);
+    LinearTermPtr u2_dx = (1.0 / _muS) * this->L(2,1);
 
     TFunctionPtr<double> vorticity = Teuchos::rcp( new PreviousSolutionFunction<double>(_solution, u2_dx - u1_dy) );
     RHSPtr streamRHS = RHS::rhs();
@@ -1286,14 +1286,14 @@ int OldroydBFormulation2::nonlinearIterationCount()
   return _nonlinearIterationCount;
 }
 
-double OldroydBFormulation2::mu()
+double OldroydBFormulation2::muS()
 {
-  return _mu;
+  return _muS;
 }
 
-double OldroydBFormulation2::mu1()
+double OldroydBFormulation2::muP()
 {
-  return _mu1;
+  return _muP;
 }
 
 Teuchos::RCP<ParameterFunction> OldroydBFormulation2::lambda()
@@ -1393,17 +1393,17 @@ RHSPtr OldroydBFormulation2::rhs(TFunctionPtr<double> f, bool excludeFluxesAndTr
   // rhs->addTerm( -_steadyStokesBF->testFunctional(backgroundFlowWeakReference, excludeFluxesAndTraces) );
 
   // STOKES part
-  double mu = this->mu();
+  double muS = this->muS();
 
   // M1 terms:
-  rhs->addTerm( -mu * u1_prev * M1->div()); // L1 = mu * grad u1
+  rhs->addTerm( -muS * u1_prev * M1->div()); // L1 = muS * du1/dx
   rhs->addTerm( -L11_prev * M1->x()); // (L1, M1)
   rhs->addTerm( -L12_prev * M1->y());
   if (_spaceDim == 3) rhs->addTerm( -L13_prev * M1->z());
   // rhs->addTerm(-mu * u1_hat, M1->dot_normal());
 
   // M2 terms:
-  rhs->addTerm( -mu * u2_prev * M2->div());
+  rhs->addTerm( -muS * u2_prev * M2->div());
   rhs->addTerm( -L21_prev * M2->x());
   rhs->addTerm( -L22_prev * M2->y());
   if (_spaceDim == 3) rhs->addTerm( -L23_prev * M2->z());
@@ -1412,7 +1412,7 @@ RHSPtr OldroydBFormulation2::rhs(TFunctionPtr<double> f, bool excludeFluxesAndTr
   // M3:
   if (_spaceDim == 3)
   {
-    rhs->addTerm( -mu * u3_prev * M3->div());
+    rhs->addTerm( -muS * u3_prev * M3->div());
     rhs->addTerm( -L31_prev * M3->x());
     rhs->addTerm( -L32_prev * M3->y());
     rhs->addTerm( -L33_prev * M3->z());
@@ -1485,8 +1485,8 @@ RHSPtr OldroydBFormulation2::rhs(TFunctionPtr<double> f, bool excludeFluxesAndTr
   // }
 
   // add the u L term:
-  double Re = 1.0 / mu;
-  double mu1 = this->mu1();
+  double Re = 1.0 / muS;
+  double muP = this->muP();
   Teuchos::RCP<ParameterFunction> lambda = this->lambda();
   TFunctionPtr<double> lambdaFxn = lambda;
   double alpha = this->alpha();
@@ -1586,7 +1586,7 @@ RHSPtr OldroydBFormulation2::rhs(TFunctionPtr<double> f, bool excludeFluxesAndTr
       //
       // rhs->addTerm( lambda * Tu_ijn_hat_prev * S_ij);
       //
-      rhs->addTerm( 2 * mu1 * Re * L_ij_prev * S_ij);
+      rhs->addTerm( 2 * muP * Re * L_ij_prev * S_ij);
 
       for (int comp_k=1; comp_k <= _spaceDim; comp_k++)
       {
@@ -1613,7 +1613,7 @@ RHSPtr OldroydBFormulation2::rhs(TFunctionPtr<double> f, bool excludeFluxesAndTr
             break;
         }
 
-        rhs->addTerm( 2 * lambdaFxn * Re * L_ik_prev * T_kj_prev * S_ij);
+        rhs->addTerm( 2.0 * lambdaFxn * Re * L_ik_prev * T_kj_prev * S_ij);
 
         // Giesekus model
         if (alpha > 0)
@@ -1621,7 +1621,7 @@ RHSPtr OldroydBFormulation2::rhs(TFunctionPtr<double> f, bool excludeFluxesAndTr
           VarPtr T_ik = this->T(comp_i, comp_k);
           FunctionPtr T_ik_prev = TFunction<double>::solution(T_ik, _backgroundFlow);
 
-          rhs->addTerm( alpha * lambdaFxn / mu1 * T_ik_prev * T_kj_prev * S_ij);
+          rhs->addTerm( - alpha * lambdaFxn / muP * T_ik_prev * T_kj_prev * S_ij);
         }
       }
     }
@@ -1921,8 +1921,8 @@ TFunctionPtr<double> OldroydBFormulation2::getVelocitySolution()
 
 TFunctionPtr<double> OldroydBFormulation2::getVorticity()
 {
-  LinearTermPtr u1_dy = (1.0 / _mu) * this->L(1,2);
-  LinearTermPtr u2_dx = (1.0 / _mu) * this->L(2,1);
+  LinearTermPtr u1_dy = (1.0 / _muS) * this->L(1,2);
+  LinearTermPtr u2_dx = (1.0 / _muS) * this->L(2,1);
 
   TFunctionPtr<double> vorticity = Teuchos::rcp( new PreviousSolutionFunction<double>(_backgroundFlow, u2_dx - u1_dy) );
   return vorticity;

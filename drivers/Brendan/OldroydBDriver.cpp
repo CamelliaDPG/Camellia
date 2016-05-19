@@ -261,7 +261,7 @@ int main(int argc, char *argv[])
   parameters.set("useSpaceTime", false);
   // if (formulation == "NavierStokes")
   // {
-  //   parameters.set("mu", mu0);
+  //   parameters.set("mu", muS);
   // }
   // else
   // {
@@ -647,8 +647,9 @@ int main(int argc, char *argv[])
 
           TFunctionPtr<double> n = TFunction<double>::normal();
 
-          LinearTermPtr f_lt = - form.p()*n->x() + 2.0*muS*form.L(1,1)*n->x() + form.T(1,1)*n->x()
-                             + muS*form.L(1,2)*n->y() + muS*form.L(2,1)*n->y() + form.T(1,2)*n->y();
+          // L = muS*du/dx
+          LinearTermPtr f_lt = - form.p()*n->x() + 2.0*form.L(1,1)*n->x() + form.T(1,1)*n->x()
+                               + form.L(1,2)*n->y() + form.L(2,1)*n->y() + form.T(1,2)*n->y();
 
           TFunctionPtr<double> traction_x = Teuchos::rcp( new PreviousSolutionFunction<double>(solutionBackground, -f_lt ) );
 
