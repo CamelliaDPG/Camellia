@@ -118,6 +118,9 @@ public:
   // ! sets an inflow velocity boundary condition; u should be a vector-valued function.
   void addInflowCondition(SpatialFilterPtr inflowRegion, TFunctionPtr<double> u);
 
+  // ! sets an inflow values of the viscoelastic stress Tun should be a (symmetric) 2-tensor.
+  void addInflowViscoelasticStress(SpatialFilterPtr inflowRegion, TFunctionPtr<double> T11un, TFunctionPtr<double> T12un, TFunctionPtr<double> T22un);  
+
   // ! Sets an initial condition for space-time.  u0 should have a number of components equal to the spatial dimension.
   // ! If a null pressure is provided (the default), no initial condition will be imposed on the pressure.
   void addInitialCondition(double t0, vector<FunctionPtr> u0, FunctionPtr p0 = Teuchos::null);

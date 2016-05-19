@@ -131,6 +131,7 @@ OldroydBFormulation2::OldroydBFormulation2(MeshTopologyPtr meshTopo, Teuchos::Pa
 
   // nonlinear parameters
   bool conservationFormulation = parameters.get<bool>("useConservationFormulation");
+  // bool neglectFluxesOnRHS = false; // DOES NOT WORK!!!!!
   bool neglectFluxesOnRHS = true;
 
   // time-related parameters:
@@ -762,7 +763,40 @@ void OldroydBFormulation2::addInflowCondition(SpatialFilterPtr inflowRegion, TFu
     _solnIncrement->bc()->addDirichlet(u2_hat, inflowRegion, u->y() - u2_hat_prev);
     if (_spaceDim==3) _solnIncrement->bc()->addDirichlet(u3_hat, inflowRegion, u->z() - u3_hat_prev);
   }
+}
 
+void OldroydBFormulation2::addInflowViscoelasticStress(SpatialFilterPtr inflowRegion, TFunctionPtr<double> T11un, TFunctionPtr<double> T12un, TFunctionPtr<double> T22un)
+{
+  if (_neglectFluxesOnRHS)
+  {
+    // this also governs how we accumulate in the fluxes and traces, and hence whether we should use zero BCs or the true BCs for solution increment
+
+    _solnIncrement->bc()->addDirichlet(this->Tun_hat(1, 1), inflowRegion, T11un);
+    _solnIncrement->bc()->addDirichlet(this->Tun_hat(1, 2), inflowRegion, T12un);
+    _solnIncrement->bc()->addDirichlet(this->Tun_hat(2, 2), inflowRegion, T22un);
+  }
+  else
+  {
+    TSolutionPtr<double> backgroundFlowWeakReference = Teuchos::rcp(_backgroundFlow.get(), false );
+
+    TFunctionPtr<double> T11un_hat_prev = TFunction<double>::solution(this->Tun_hat(1, 1),backgroundFlowWeakReference);
+    TFunctionPtr<double> T12un_hat_prev = TFunction<double>::solution(this->Tun_hat(1, 2),backgroundFlowWeakReference);
+    TFunctionPtr<double> T22un_hat_prev = TFunction<double>::solution(this->Tun_hat(2, 2),backgroundFlowWeakReference);
+
+    _solnIncrement->bc()->addDirichlet(this->Tun_hat(1, 1), inflowRegion, T11un - T11un_hat_prev);
+    _solnIncrement->bc()->addDirichlet(this->Tun_hat(1, 2), inflowRegion, T12un - T12un_hat_prev);
+    _solnIncrement->bc()->addDirichlet(this->Tun_hat(2, 2), inflowRegion, T22un - T22un_hat_prev);
+  }
+
+  // // zero inflow viscoelastic stress
+  // TFunctionPtr<double> zero = TFunction<double>::zero();
+  // for (int i=1; i<=_spaceDim; i++)
+  // {
+  //   for (int j=i; j<=_spaceDim; j++)
+  //   {
+  //     _solnIncrement->bc()->addDirichlet(Tun_hat(i, j), inflowRegion, zero);
+  //   }
+  // }
 }
 
 void OldroydBFormulation2::addOutflowCondition(SpatialFilterPtr outflowRegion, bool usePhysicalTractions)
@@ -817,10 +851,12 @@ void OldroydBFormulation2::addOutflowCondition(SpatialFilterPtr outflowRegion, b
   else
   {
     TFunctionPtr<double> zero = TFunction<double>::zero();
-    for (int d=1; d<=_spaceDim; d++)
-    {
-      _solnIncrement->bc()->addDirichlet(sigman_hat(d), outflowRegion, zero);
-    }
+    // for (int d=1; d<=_spaceDim; d++)
+    // {
+    //   _solnIncrement->bc()->addDirichlet(sigman_hat(d), outflowRegion, zero);
+    // }
+    _solnIncrement->bc()->addDirichlet(this->sigman_hat(1), outflowRegion, zero);
+    _solnIncrement->bc()->addDirichlet(this->u(2), outflowRegion, zero);
   }
 }
 
@@ -941,7 +977,6 @@ void OldroydBFormulation2::CHECK_VALID_COMPONENT(int i) // throws exception on b
     TEUCHOS_TEST_FOR_EXCEPTION(true, std::invalid_argument, "component indices must be at least 1 and less than or equal to _spaceDim");
   }
 }
-
 
 FunctionPtr OldroydBFormulation2::convectiveTerm(int spaceDim, FunctionPtr u_exact)
 {

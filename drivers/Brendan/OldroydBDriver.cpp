@@ -113,9 +113,34 @@ public:
     _height = height;
   }
   double value(double x, double y) {
-    // return (_height/2+y)*(_height/2-y);
-    // return (1-4*y*y/(_height*_height));
-    return (1-pow(2*y/_height,2));
+    return (1-pow(2.0*y/_height,2));
+    // return (16.0*y-pow(y,2))/64.0;
+  }
+};
+
+class ParabolicInflowFunction_Tun : public SimpleFunction<double> {
+  double _i, _j; // index numbers
+  double _height; // ramp width
+  double _muS; // polymeric viscosity
+  double _lambda; // relaxation time
+public:
+  ParabolicInflowFunction_Tun(double height, double muS, double lambda, int i, int j) {
+    _i = i;
+    _j = j;
+    _height = height;
+    _muS = muS;
+    _lambda = lambda;
+  }
+  double value(double x, double y) {
+    if (_i == 1 && _j == 1)
+      return (1-pow(2.0*y/_height,2))*(8.0*_muS*_lambda*pow(y/(_height*_height/4.0),2));
+    else if ((_i == 1 && _j == 2) || (_i == 2 && _j == 1))
+      return (1-pow(2.0*y/_height,2))*(-2.0*_muS*y/(_height*_height/4.0));
+    else if (_i == 2 && _j == 2)
+      return 0.0;
+    else
+      cout << "ERROR: Indices not currently supported\n";
+    return Teuchos::null;
   }
 };
 
@@ -150,8 +175,8 @@ int main(int argc, char *argv[])
   string problemChoice = "LidDriven";
   // double rho = 1;
   double lambda = 1;
-  double mu0 = 1;
-  double mu1 = 1;
+  double muS = 1; // solvent viscsity
+  double muP = 1; // polymeric viscosity
   double alpha = 0;
   // int spaceDim = 2;
   int numRefs = 1;
@@ -177,8 +202,8 @@ int main(int argc, char *argv[])
   cmdp.setOption("problem", &problemChoice, "LidDriven, HemkerCylinder");
   // cmdp.setOption("rho", &rho, "rho");
   cmdp.setOption("lambda", &lambda, "lambda");
-  cmdp.setOption("mu0", &mu0, "mu0");
-  cmdp.setOption("mu1", &mu1, "mu1");
+  cmdp.setOption("muS", &muS, "muS");
+  cmdp.setOption("muP", &muP, "muP");
   cmdp.setOption("alpha", &alpha, "alpha");
   // cmdp.setOption("spaceDim", &spaceDim, "spatial dimension");
   cmdp.setOption("polyOrder",&k,"polynomial order for field variable u");
@@ -242,8 +267,8 @@ int main(int argc, char *argv[])
   // {
     // parameters.set("rho", rho);
     parameters.set("lambda", lambda);
-    parameters.set("mu", mu0);
-    parameters.set("mu1", mu1);
+    parameters.set("muS", muS);
+    parameters.set("muP", muP);
     parameters.set("alpha", alpha);
   // }
 
@@ -359,12 +384,18 @@ int main(int argc, char *argv[])
     // SpatialFilterPtr otherBoundary = SpatialFilter::negatedFilter(leftRightBoundary);
 
     // inflow on left boundary
-    FunctionPtr u1_inflowFunction = Teuchos::rcp( new ParabolicInflowFunction_U1(height) );
-    // FunctionPtr u1_inflowFunction = one;
-    FunctionPtr u2_inflowFunction = zero;
-    FunctionPtr u = Function::vectorize(u1_inflowFunction,u2_inflowFunction);
+    TFunctionPtr<double> u1_inflowFunction = Teuchos::rcp( new ParabolicInflowFunction_U1(height) );
+    // TFunctionPtr<double> u1_inflowFunction = one;
+    TFunctionPtr<double> u2_inflowFunction = zero;
+
+    TFunctionPtr<double> T11un_inflowFunction = Teuchos::rcp( new ParabolicInflowFunction_Tun(height, muS, lambda, 1, 1) );
+    TFunctionPtr<double> T12un_inflowFunction = Teuchos::rcp( new ParabolicInflowFunction_Tun(height, muS, lambda, 1, 2) );
+    TFunctionPtr<double> T22un_inflowFunction = Teuchos::rcp( new ParabolicInflowFunction_Tun(height, muS, lambda, 2, 2) );
+
+    TFunctionPtr<double> u = Function::vectorize(u1_inflowFunction,u2_inflowFunction);
 
     form.addInflowCondition(leftBoundary, u);
+    form.addInflowViscoelasticStress(leftBoundary, T11un_inflowFunction, T12un_inflowFunction, T22un_inflowFunction);
 
     // top+bottom
     // form.addOutflowCondition(topBoundary, false);
@@ -373,9 +404,8 @@ int main(int argc, char *argv[])
     form.addWallCondition(bottomBoundary);
 
 
-
     // outflow on right boundary
-    // form.addOutflowCondition(rightBoundary, true); // true to impose zero traction by penalty
+    // form.addOutflowCondition(rightBoundary, true); // true to impose zero traction by penalty (TODO)
     form.addOutflowCondition(rightBoundary, false); // false for zero flux variable
 
     // no slip on cylinder
@@ -460,7 +490,7 @@ int main(int argc, char *argv[])
   ofstream dataFile(dataFileLocation);
   dataFile << "ref\t " << "elements\t " << "dofs\t " << "energy\t " << "l2\t " << "solvetime\t" << "elapsed\t" << "iterations\t " << endl;
 
-  double energyTol = 0.2;
+  double energyTol = 0.01;
   double energyErrorInitial;
   double lambdaInitial = lambda;
   double lambdaMax = 10.0*lambda;
@@ -469,8 +499,6 @@ int main(int argc, char *argv[])
   {
     for (int refIndex=0; refIndex <= numRefs; refIndex++)
     {
-      double l2Update = 1e10;
-      int iterCount = 0;
       solverTime->start(true);
       Teuchos::RCP<GMGSolver> gmgSolver;
       if (solverChoice[0] == 'G')
@@ -559,8 +587,11 @@ int main(int argc, char *argv[])
       //    Solve and accumulate solution
       ////////////////////////////////////////////////////////////////////
       // double s = 1.0;
+      int iterCount = 0;
       int iterationCount = 0;
-      while (l2Update > nonlinearTolerance && iterCount < maxNonlinearIterations)
+      double l2Update = 1e10;
+      double l2UpdateInitial = l2Update;
+      while (l2Update > nonlinearTolerance*l2UpdateInitial && iterCount < maxNonlinearIterations)
       {
         if (solverChoice[0] == 'G')
         {
@@ -577,6 +608,12 @@ int main(int argc, char *argv[])
 
         if (commRank == 0)
           cout << "Nonlinear Update:\t " << l2Update << endl;
+
+        if (iterCount == 0)
+          l2UpdateInitial = l2Update;
+
+        if (l2Update < 1e-12)
+          break;
 
         iterCount++;
       }
@@ -599,13 +636,26 @@ int main(int argc, char *argv[])
       {
         // compute drag coefficient if Hemker problem
         double dragCoefficient = 0.0;
+        double verticalForce = 0.0;
         if (problemChoice == "HemkerCylinder")
         {
           SpatialFilterPtr cylinderBoundary = Teuchos::rcp( new CylinderBoundary(cylinderRadius));
 
           TFunctionPtr<double> boundaryRestriction = Function::meshBoundaryCharacteristic();
 
-          TFunctionPtr<double> traction_x = Teuchos::rcp( new PreviousSolutionFunction<double>(solutionBackground, form.sigman_hat(1)));
+          // TFunctionPtr<double> traction_x = Teuchos::rcp( new PreviousSolutionFunction<double>(solutionBackground, form.sigman_hat(1)));
+
+          TFunctionPtr<double> n = TFunction<double>::normal();
+
+          LinearTermPtr f_lt = - form.p()*n->x() + 2.0*muS*form.L(1,1)*n->x() + form.T(1,1)*n->x()
+                             + muS*form.L(1,2)*n->y() + muS*form.L(2,1)*n->y() + form.T(1,2)*n->y();
+
+          TFunctionPtr<double> traction_x = Teuchos::rcp( new PreviousSolutionFunction<double>(solutionBackground, -f_lt ) );
+
+
+
+
+
           
           // TFunctionPtr<double> dF_D = Teuchos::rcp( new SpatiallyFilteredFunction<double>( Function::constant(1.0)*boundaryRestriction,cylinderBoundary));
           TFunctionPtr<double> dF_D = Teuchos::rcp( new SpatiallyFilteredFunction<double>( traction_x*boundaryRestriction,cylinderBoundary));
@@ -615,6 +665,13 @@ int main(int argc, char *argv[])
           // dragCoefficient = F_D;
           // 2/3 is the average inflow velocity
           dragCoefficient = F_D;// * (3.0/2.0);
+
+          // compute force in y-direction
+          TFunctionPtr<double> traction_y = Teuchos::rcp( new PreviousSolutionFunction<double>(solutionBackground, form.sigman_hat(2)));
+          dF_D = Teuchos::rcp( new SpatiallyFilteredFunction<double>( traction_y*boundaryRestriction,cylinderBoundary));
+          F_D = dF_D->integrate(solutionBackground->mesh());
+
+          verticalForce = F_D;
         }
         cout << "Refinement: " << refIndex
           << " \tElements: " << mesh->numActiveElements()
@@ -625,6 +682,7 @@ int main(int argc, char *argv[])
           << " \tTotal Time: " << totalTimer->totalElapsedTime(true)
           << " \tIteration Count: " << iterationCount
           << " \tDrag Coefficient: " << dragCoefficient
+          << " \ty-direction Force : " << verticalForce
           << " \tLambda: " << lambda
           << endl;
         dataFile << refIndex
@@ -636,6 +694,7 @@ int main(int argc, char *argv[])
           << " " << totalTimer->totalElapsedTime(true)
           << " " << iterationCount
           << " " << dragCoefficient
+          << " " << verticalForce
           << " " << lambda
           << endl;
         if (refIndex == 0 && lambda == lambdaInitial)
@@ -648,7 +707,7 @@ int main(int argc, char *argv[])
         exporter->exportSolution(solutionBackground, refIndex);
         // exporter->exportSolution(solutionIncrement, refIndex);
 
-      if (energyError < energyErrorInitial*energyTol)
+      if (energyError < energyErrorInitial*energyTol && iterCount < maxNonlinearIterations-1 )
         break;
 
       if (refIndex != numRefs)
