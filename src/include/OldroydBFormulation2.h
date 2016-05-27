@@ -34,8 +34,8 @@ class OldroydBFormulation2
 
   int _spaceDim;
   bool _useConformingTraces;
-  double _mu;
-  double _mu1;
+  double _muS;
+  double _muP;
   double _alpha;
   int _spatialPolyOrder;
   int _temporalPolyOrder;
@@ -224,6 +224,12 @@ public:
   // ! Returns the latest solution increment (at current time)
   TSolutionPtr<double> solutionIncrement();
 
+  // ! Solve without accumulating solution
+  void solveForIncrement();
+
+  // ! Accumalate background flow with present value of solution increment
+  void accumulate(double weight=1.0);
+
   // ! The first time this is called, calls solution()->solve(), and the weight argument is ignored.  After the first call, solves for the next iterate, and adds to background flow with the specified weight.
   void solveAndAccumulate(double weight=1.0);
 
@@ -277,6 +283,9 @@ public:
   VarPtr M(int i);
   VarPtr v(int i);
   VarPtr q();
+
+  // error representation function
+  TRieszRepPtr<double> rieszResidual(FunctionPtr forcingFunction);
 
 
   // ! returns the pressure (which depends on the solution)

@@ -28,6 +28,7 @@
 #include "ExpFunction.h"
 #include "TrigFunctions.h"
 #include "PreviousSolutionFunction.h"
+#include "RieszRep.h"
 
 using namespace Camellia;
 
@@ -175,7 +176,7 @@ int main(int argc, char *argv[])
   string problemChoice = "LidDriven";
   // double rho = 1;
   double lambda = 1;
-  double muS = 1; // solvent viscsity
+  double muS = 1; // solvent viscosity
   double muP = 1; // polymeric viscosity
   double alpha = 0;
   // int spaceDim = 2;
@@ -191,6 +192,7 @@ int main(int argc, char *argv[])
   bool logFineOperator = false;
   double solverTolerance = 1e-10;
   int maxNonlinearIterations = 20;
+  int enrichDegree = 0;
   double nonlinearTolerance = 1e-5;
   int maxLinearIterations = 10000;
   // bool computeL2Error = false;
@@ -220,6 +222,7 @@ int main(int argc, char *argv[])
   cmdp.setOption("logFineOperator", "dontLogFineOperator", &logFineOperator);
   cmdp.setOption("solverTolerance", &solverTolerance, "iterative solver tolerance");
   cmdp.setOption("maxLinearIterations", &maxLinearIterations, "maximum number of iterations for linear solver");
+  cmdp.setOption("enrichCubature", &enrichDegree, "enrichment of quadrature");
   cmdp.setOption("outputDir", &outputDir, "output directory");
   // cmdp.setOption("computeL2Error", "skipL2Error", &computeL2Error, "compute L2 error");
   cmdp.setOption("exportSolution", "skipExport", &exportSolution, "export solution to HDF5");
@@ -344,6 +347,12 @@ int main(int argc, char *argv[])
   SolutionPtr solutionIncrement = form.solutionIncrement();
   SolutionPtr solutionBackground = form.solution();
 
+  if ((commRank==0) && (enrichDegree > 0))
+  {
+    // THIS DOESN'T APPEAR TO WORK
+    cout << "enriching cubature by " << enrichDegree << endl;
+    solutionIncrement->setCubatureEnrichmentDegree(enrichDegree);
+  }
 
   ///////////////////////////  DECLARE BC'S  ///////////////////////////
   BCPtr bc = form.solutionIncrement()->bc();
@@ -490,11 +499,11 @@ int main(int argc, char *argv[])
   ofstream dataFile(dataFileLocation);
   dataFile << "ref\t " << "elements\t " << "dofs\t " << "energy\t " << "l2\t " << "solvetime\t" << "elapsed\t" << "iterations\t " << endl;
 
-  double energyTol = 0.01;
-  double energyErrorInitial;
+  double errorTol = 0.2;
+  double errorRef = 0.0;
   double lambdaInitial = lambda;
-  double lambdaMax = 10.0*lambda;
-  double delta_lambda = 0.5*lambda;
+  double lambdaMax = 30.0;
+  double delta_lambda = 1.0;
   while (lambda <= lambdaMax)
   {
     for (int refIndex=0; refIndex <= numRefs; refIndex++)
@@ -532,58 +541,6 @@ int main(int argc, char *argv[])
       //   soln->condensedSolve(solvers[solverChoice]);
 
       ////////////////////////////////////////////////////////////////////
-      //    line search to minimize residual in search direction
-      ////////////////////////////////////////////////////////////////////
-      int sMax = 16;
-      int lineSearchMaxIt = 5;
-      double LStol = 0.5; // as taken from Matthies + Strang
-      //
-      double s0 = 0.0;
-      double s1 = 1.0;
-      // G_i = R(u_i) . delta_u
-      //     = R(u_0 + s_i * delta_u) . delta_u
-      double G_init = form.computeG(0);
-      double G0 = G_init;
-      double G1 = form.computeG(1);
-      
-      // find interval about which G changes sign
-      while (sgn(G0)*sgn(G1) > 0 && s1 < sMax)
-      {
-          s0 = s1;
-          s1 = 2*s1;
-          G0 = G1;
-          
-          // compute G1 =  R(u_0+s1*delta_u) . delta
-          G1 = form.computeG(s1);
-      }
-
-      // find zero of G using this cool Illinois algorithm
-      double s = s1;
-      double G = G1;
-      int i=0;
-      while (i <= lineSearchMaxIt && sgn(G1)*sgn(G0) < 0 && ( abs(G) > LStol*abs(G_init) || abs(s0-s1) > LStol*0.5*(s0+s1)))
-      {
-          ++i;
-          
-          s = s1-G1*(s1-s0)/(G1-G0);
-
-          // compute G1 =  R(u_0+s*delta_u) . delta
-          G1 = form.computeG(s);
-
-          if ((sgn(G)*sgn(G1)) > 0)
-          {
-              G0 = 0.5*G0;
-          }
-          else
-          {
-              s0 = s1;
-              G0 = G1;
-          }
-          s1 = s;
-          G1 = G;
-      }
-
-      ////////////////////////////////////////////////////////////////////
       //    Solve and accumulate solution
       ////////////////////////////////////////////////////////////////////
       // double s = 1.0;
@@ -596,14 +553,72 @@ int main(int argc, char *argv[])
         if (solverChoice[0] == 'G')
         {
           // solutionIncrement->solve(gmgSolver);
-          form.solveAndAccumulate(s);
+          // form.solveAndAccumulate(s);
+          form.solveForIncrement();
           iterationCount += gmgSolver->iterationCount();
         }
         else
-          form.solveAndAccumulate(s);
+          // form.solveAndAccumulate(s);
+          form.solveForIncrement();
           // solutionIncrement->condensedSolve(solvers[solverChoice]);
 
-        // Compute L2 norm of update
+        ////////////////////////////////////////////////////////////////////
+        //    line search to minimize residual in search direction
+        ////////////////////////////////////////////////////////////////////
+        int sMax = 16;
+        int lineSearchMaxIt = 5;
+        double LStol = 0.5; // as taken from Matthies + Strang
+        //
+        double s0 = 0.0;
+        double s1 = 1.0;
+        // G_i = R(u_i) . delta_u
+        //     = R(u_0 + s_i * delta_u) . delta_u
+        double G_init = form.computeG(0);
+        double G0 = G_init;
+        double G1 = form.computeG(1);
+        
+        // find interval about which G changes sign
+        while (sgn(G0)*sgn(G1) > 0 && s1 < sMax)
+        {
+            s0 = s1;
+            s1 = 2*s1;
+            G0 = G1;
+            
+            // compute G1 =  R(u_0+s1*delta_u) . delta
+            G1 = form.computeG(s1);
+        }
+
+        // find zero of G using this cool Illinois algorithm
+        double s = s1;
+        double G = G1;
+        int i=0;
+        while (i <= lineSearchMaxIt && sgn(G1)*sgn(G0) < 0 && ( abs(G) > LStol*abs(G_init) || abs(s0-s1) > LStol*0.5*(s0+s1)))
+        {
+            ++i;
+            
+            s = s1-G1*(s1-s0)/(G1-G0);
+
+            // compute G1 =  R(u_0+s*delta_u) . delta
+            G1 = form.computeG(s);
+
+            if ((sgn(G)*sgn(G1)) > 0)
+            {
+                G0 = 0.5*G0;
+            }
+            else
+            {
+                s0 = s1;
+                G0 = G1;
+            }
+            s1 = s;
+            G1 = G;
+        }
+        // Accumulate solution
+        form.accumulate(s);
+
+        ////////////////////////////////////////////////////////////////////
+        // Compute L2 norm of update and increment counters
+        ////////////////////////////////////////////////////////////////////
         l2Update = form.L2NormSolutionIncrement();
 
         if (commRank == 0)
@@ -632,48 +647,51 @@ int main(int argc, char *argv[])
       //   u_l2 = u_sqr->integrate(mesh, 10);
       //   l2Error = sqrt(u_l2);
       // }
+      // compute drag coefficient if Hemker problem
+      double dragCoefficient = 0.0;
+      double verticalForce = 0.0;
+      double dragError;
+      if (problemChoice == "HemkerCylinder")
+      {
+        SpatialFilterPtr cylinderBoundary = Teuchos::rcp( new CylinderBoundary(cylinderRadius));
+
+        TFunctionPtr<double> boundaryRestriction = Function::meshBoundaryCharacteristic();
+
+        // TFunctionPtr<double> n = TFunction<double>::normal();
+        // // L = muS*du/dx
+        // LinearTermPtr f_lt = - form.p()*n->x() + 2.0*form.L(1,1)*n->x() + form.T(1,1)*n->x()
+        //                      + form.L(1,2)*n->y() + form.L(2,1)*n->y() + form.T(1,2)*n->y();
+
+        // TFunctionPtr<double> traction_x = Teuchos::rcp( new PreviousSolutionFunction<double>(solutionBackground, -f_lt ) );
+        
+        TFunctionPtr<double> traction_x = Teuchos::rcp( new PreviousSolutionFunction<double>(solutionBackground, form.sigman_hat(1)) );
+        // TFunctionPtr<double> dF_D = Teuchos::rcp( new SpatiallyFilteredFunction<double>( Function::constant(1.0)*boundaryRestriction,cylinderBoundary));
+        TFunctionPtr<double> dF_D = Teuchos::rcp( new SpatiallyFilteredFunction<double>( traction_x*boundaryRestriction, cylinderBoundary) );
+        double F_D = dF_D->integrate(solutionBackground->mesh());
+        // double F_D = 1.0;
+
+        // dragCoefficient = F_D;
+        // 2/3 is the average inflow velocity
+        dragCoefficient = F_D;// * (3.0/2.0);
+
+        // compute force in y-direction
+        TFunctionPtr<double> traction_y = Teuchos::rcp( new PreviousSolutionFunction<double>(solutionBackground, form.sigman_hat(2)) );
+        dF_D = Teuchos::rcp( new SpatiallyFilteredFunction<double>( traction_y*boundaryRestriction, cylinderBoundary) );
+        F_D = dF_D->integrate(solutionBackground->mesh());
+
+        verticalForce = F_D;
+
+        // estimate error in drag coefficient
+        // drag error ~ (e_1,psi_{v})_{1/2} = (1, psi_{v1})_{1/2}
+        TRieszRepPtr<double> rieszResidual = form.rieszResidual(Teuchos::null);
+        rieszResidual->computeRieszRep();
+        TFunctionPtr<double> psi_v1 =  Teuchos::rcp( new RepFunction<double>(form.v(1), rieszResidual) );
+        dF_D = Teuchos::rcp( new SpatiallyFilteredFunction<double>( psi_v1*boundaryRestriction, cylinderBoundary) );
+        dragError = dF_D->integrate(solutionBackground->mesh());
+        dragError = abs(dragError);
+      }
       if (commRank == 0)
       {
-        // compute drag coefficient if Hemker problem
-        double dragCoefficient = 0.0;
-        double verticalForce = 0.0;
-        if (problemChoice == "HemkerCylinder")
-        {
-          SpatialFilterPtr cylinderBoundary = Teuchos::rcp( new CylinderBoundary(cylinderRadius));
-
-          TFunctionPtr<double> boundaryRestriction = Function::meshBoundaryCharacteristic();
-
-          // TFunctionPtr<double> traction_x = Teuchos::rcp( new PreviousSolutionFunction<double>(solutionBackground, form.sigman_hat(1)));
-
-          TFunctionPtr<double> n = TFunction<double>::normal();
-
-          // L = muS*du/dx
-          LinearTermPtr f_lt = - form.p()*n->x() + 2.0*form.L(1,1)*n->x() + form.T(1,1)*n->x()
-                               + form.L(1,2)*n->y() + form.L(2,1)*n->y() + form.T(1,2)*n->y();
-
-          TFunctionPtr<double> traction_x = Teuchos::rcp( new PreviousSolutionFunction<double>(solutionBackground, -f_lt ) );
-
-
-
-
-
-          
-          // TFunctionPtr<double> dF_D = Teuchos::rcp( new SpatiallyFilteredFunction<double>( Function::constant(1.0)*boundaryRestriction,cylinderBoundary));
-          TFunctionPtr<double> dF_D = Teuchos::rcp( new SpatiallyFilteredFunction<double>( traction_x*boundaryRestriction,cylinderBoundary));
-          double F_D = dF_D->integrate(solutionBackground->mesh());
-          // double F_D = 1.0;
-
-          // dragCoefficient = F_D;
-          // 2/3 is the average inflow velocity
-          dragCoefficient = F_D;// * (3.0/2.0);
-
-          // compute force in y-direction
-          TFunctionPtr<double> traction_y = Teuchos::rcp( new PreviousSolutionFunction<double>(solutionBackground, form.sigman_hat(2)));
-          dF_D = Teuchos::rcp( new SpatiallyFilteredFunction<double>( traction_y*boundaryRestriction,cylinderBoundary));
-          F_D = dF_D->integrate(solutionBackground->mesh());
-
-          verticalForce = F_D;
-        }
         cout << "Refinement: " << refIndex
           << " \tElements: " << mesh->numActiveElements()
           << " \tDOFs: " << mesh->numGlobalDofs()
@@ -684,6 +702,7 @@ int main(int argc, char *argv[])
           << " \tIteration Count: " << iterationCount
           << " \tDrag Coefficient: " << dragCoefficient
           << " \ty-direction Force : " << verticalForce
+          << " \tDrag error estimate : " << dragError
           << " \tLambda: " << lambda
           << endl;
         dataFile << refIndex
@@ -696,19 +715,22 @@ int main(int argc, char *argv[])
           << " " << iterationCount
           << " " << dragCoefficient
           << " " << verticalForce
+          << " " << dragError
           << " " << lambda
           << endl;
-        if (refIndex == 0 && lambda == lambdaInitial)
-        {
-          energyErrorInitial = energyError;
-        }
       }
+
+      // if (refIndex == 0 && lambda == lambdaInitial)
+      if (dragError > errorRef)
+        errorRef = dragError;
 
       if (exportSolution)
         exporter->exportSolution(solutionBackground, refIndex);
         // exporter->exportSolution(solutionIncrement, refIndex);
 
-      if (energyError < energyErrorInitial*energyTol && iterCount < maxNonlinearIterations-1 )
+      // if ((energyError < errorRef*errorTol && iterCount < maxNonlinearIterations-1) || energyError < 1e-8 )
+      // if (energyError < errorRef*errorTol || energyError < 1e-8 )
+      if (dragError < errorRef*errorTol || energyError < 1e-8 )
         break;
 
       if (refIndex != numRefs)

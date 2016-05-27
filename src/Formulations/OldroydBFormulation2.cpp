@@ -595,7 +595,7 @@ OldroydBFormulation2::OldroydBFormulation2(MeshTopologyPtr meshTopo, Teuchos::Pa
 
   for (int comp_i=1; comp_i <= _spaceDim; comp_i++)
   {
-    for (int comp_j=comp_i; comp_j <= _spaceDim; comp_j++)
+    for (int comp_j=1; comp_j <= _spaceDim; comp_j++)
     {
       VarPtr T_ij = this->T(comp_i, comp_j);
       VarPtr Tu_ijn_hat = this->Tun_hat(comp_i, comp_j);
@@ -767,36 +767,36 @@ void OldroydBFormulation2::addInflowCondition(SpatialFilterPtr inflowRegion, TFu
 
 void OldroydBFormulation2::addInflowViscoelasticStress(SpatialFilterPtr inflowRegion, TFunctionPtr<double> T11un, TFunctionPtr<double> T12un, TFunctionPtr<double> T22un)
 {
-  if (_neglectFluxesOnRHS)
-  {
-    // this also governs how we accumulate in the fluxes and traces, and hence whether we should use zero BCs or the true BCs for solution increment
-
-    _solnIncrement->bc()->addDirichlet(this->Tun_hat(1, 1), inflowRegion, T11un);
-    _solnIncrement->bc()->addDirichlet(this->Tun_hat(1, 2), inflowRegion, T12un);
-    _solnIncrement->bc()->addDirichlet(this->Tun_hat(2, 2), inflowRegion, T22un);
-  }
-  else
-  {
-    TSolutionPtr<double> backgroundFlowWeakReference = Teuchos::rcp(_backgroundFlow.get(), false );
-
-    TFunctionPtr<double> T11un_hat_prev = TFunction<double>::solution(this->Tun_hat(1, 1),backgroundFlowWeakReference);
-    TFunctionPtr<double> T12un_hat_prev = TFunction<double>::solution(this->Tun_hat(1, 2),backgroundFlowWeakReference);
-    TFunctionPtr<double> T22un_hat_prev = TFunction<double>::solution(this->Tun_hat(2, 2),backgroundFlowWeakReference);
-
-    _solnIncrement->bc()->addDirichlet(this->Tun_hat(1, 1), inflowRegion, T11un - T11un_hat_prev);
-    _solnIncrement->bc()->addDirichlet(this->Tun_hat(1, 2), inflowRegion, T12un - T12un_hat_prev);
-    _solnIncrement->bc()->addDirichlet(this->Tun_hat(2, 2), inflowRegion, T22un - T22un_hat_prev);
-  }
-
-  // // zero inflow viscoelastic stress
-  // TFunctionPtr<double> zero = TFunction<double>::zero();
-  // for (int i=1; i<=_spaceDim; i++)
+  // if (_neglectFluxesOnRHS)
   // {
-  //   for (int j=i; j<=_spaceDim; j++)
-  //   {
-  //     _solnIncrement->bc()->addDirichlet(Tun_hat(i, j), inflowRegion, zero);
-  //   }
+  //   // this also governs how we accumulate in the fluxes and traces, and hence whether we should use zero BCs or the true BCs for solution increment
+
+  //   _solnIncrement->bc()->addDirichlet(this->Tun_hat(1, 1), inflowRegion, T11un);
+  //   _solnIncrement->bc()->addDirichlet(this->Tun_hat(1, 2), inflowRegion, T12un);
+  //   _solnIncrement->bc()->addDirichlet(this->Tun_hat(2, 2), inflowRegion, T22un);
   // }
+  // else
+  // {
+  //   TSolutionPtr<double> backgroundFlowWeakReference = Teuchos::rcp(_backgroundFlow.get(), false );
+
+  //   TFunctionPtr<double> T11un_hat_prev = TFunction<double>::solution(this->Tun_hat(1, 1),backgroundFlowWeakReference);
+  //   TFunctionPtr<double> T12un_hat_prev = TFunction<double>::solution(this->Tun_hat(1, 2),backgroundFlowWeakReference);
+  //   TFunctionPtr<double> T22un_hat_prev = TFunction<double>::solution(this->Tun_hat(2, 2),backgroundFlowWeakReference);
+
+  //   _solnIncrement->bc()->addDirichlet(this->Tun_hat(1, 1), inflowRegion, T11un - T11un_hat_prev);
+  //   _solnIncrement->bc()->addDirichlet(this->Tun_hat(1, 2), inflowRegion, T12un - T12un_hat_prev);
+  //   _solnIncrement->bc()->addDirichlet(this->Tun_hat(2, 2), inflowRegion, T22un - T22un_hat_prev);
+  // }
+
+  // zero inflow viscoelastic stress
+  TFunctionPtr<double> zero = TFunction<double>::zero();
+  for (int i=1; i<=_spaceDim; i++)
+  {
+    for (int j=i; j<=_spaceDim; j++)
+    {
+      _solnIncrement->bc()->addDirichlet(Tun_hat(i, j), inflowRegion, zero);
+    }
+  }
 }
 
 void OldroydBFormulation2::addOutflowCondition(SpatialFilterPtr outflowRegion, bool usePhysicalTractions)
@@ -1664,8 +1664,7 @@ VarPtr OldroydBFormulation2::p()
 }
 
 // traces:
-VarPtr OldroydBFormulation2::
-sigman_hat(int i)
+VarPtr OldroydBFormulation2::sigman_hat(int i)
 {
   CHECK_VALID_COMPONENT(i);
   static const vector<string> sigmanStrings = {S_SIGMAN1_HAT,S_SIGMAN2_HAT,S_SIGMAN3_HAT};
@@ -1715,6 +1714,18 @@ VarPtr OldroydBFormulation2::S(int i, int j)
   return _vf->testVar(SStrings[i-1][j-1], HGRAD);
 }
 
+TRieszRepPtr<double> OldroydBFormulation2::rieszResidual(FunctionPtr forcingFunction)
+{
+  // recompute residual with updated background flow
+  // :: recall that the solution residual is the forcing term for the solution increment problem
+  _rhsForResidual = this->rhs(forcingFunction, false);
+  LinearTermPtr residual = _rhsForResidual->linearTermCopy();
+  // residual->addTerm(-_oldroydBBF->testFunctional(_backgroundFlow));
+  RieszRepPtr rieszResidual = Teuchos::rcp(new RieszRep(_backgroundFlow->mesh(), _solnIncrement->ip(), residual));
+  return rieszResidual;
+}
+
+
 // ! Saves the solution(s) and mesh to an HDF5 format.
 void OldroydBFormulation2::save(std::string prefixString)
 {
@@ -1745,6 +1756,21 @@ TSolutionPtr<double> OldroydBFormulation2::solutionIncrement()
   return _solnIncrement;
 }
 
+void OldroydBFormulation2::solveForIncrement()
+{
+  RHSPtr savedRHS = _solnIncrement->rhs();
+  _solnIncrement->setRHS(_rhsForSolve);
+  _solnIncrement->solve(_solver);
+  _solnIncrement->setRHS(savedRHS);
+}
+
+void OldroydBFormulation2::accumulate(double weight)
+{
+  bool allowEmptyCells = false;
+  _backgroundFlow->addSolution(_solnIncrement, weight, allowEmptyCells, _neglectFluxesOnRHS);
+  _nonlinearIterationCount++;
+}
+
 void OldroydBFormulation2::solveAndAccumulate(double weight)
 {
   RHSPtr savedRHS = _solnIncrement->rhs();
@@ -1757,17 +1783,31 @@ void OldroydBFormulation2::solveAndAccumulate(double weight)
   _backgroundFlow->addSolution(_solnIncrement, weight, allowEmptyCells, _neglectFluxesOnRHS);
   _nonlinearIterationCount++;
 }
+
+// double OldroydBFormulation2::computeG(FunctionPtr forcingFunction, double weight)
+double OldroydBFormulation2::computeG(double weight)
+{
+  bool allowEmptyCells = false;
+  // accumulate background flow
+  _backgroundFlow->addSolution(_solnIncrement, weight, allowEmptyCells, _neglectFluxesOnRHS);
+  // calculate Riesz respresentation of accumulated residual
+  RieszRepPtr rieszResidual = this->rieszResidual(Teuchos::null);
+  // reset background flow
+  _backgroundFlow->addSolution(_solnIncrement, -weight, allowEmptyCells, _neglectFluxesOnRHS);
+
+
+  // G(\Delta u) = b(\Delta u,psi)
+
+  // TODO!
+
+  return 1.0-weight;
+}
+
+
 // ! Returns the solution (at previous time)
 TSolutionPtr<double> OldroydBFormulation2::solutionPreviousTimeStep()
 {
   return _previousSolution;
-}
-
-double OldroydBFormulation2::computeG(double s)
-{
-  //TODO
-
-  return 1.0-s;
 }
 
 // ! Solves iteratively
