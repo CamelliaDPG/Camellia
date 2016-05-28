@@ -20,8 +20,7 @@
 #include "Function.h"
 #include "RefinementStrategy.h"
 #include "GMGSolver.h"
-// #include "OldroydBFormulation.h"
-#include "OldroydBFormulation2.h"
+#include "OldroydBFormulationUW.h"
 // #include "StokesVGPFormulation.h"
 // #include "NavierStokesVGPFormulation.h"
 #include "SpatiallyFilteredFunction.h"
@@ -307,6 +306,11 @@ int main(int argc, char *argv[])
     globalEdgeToCurveMap = map< pair<GlobalIndexType, GlobalIndexType>, ParametricCurvePtr >(localEdgeToCurveMap.begin(),localEdgeToCurveMap.end());
     spatialMeshTopo = Teuchos::rcp( new MeshTopology(HemkerGeometry) );
   }
+  else if (problemChoice == "HalfHemker")
+  {
+    cout << "ERROR: Problem type not currently supported. Returning null.\n";
+    return Teuchos::null;
+  }
   else if (problemChoice == "Test 1")
   {
     cout << "ERROR: Problem type not currently supported. Returning null.\n";
@@ -330,8 +334,7 @@ int main(int argc, char *argv[])
     // OldroydBFormulation form(spatialMeshTopo, parameters);
   // }
   // NavierStokesVGPFormulation form(spatialMeshTopo, parameters);
-  // OldroydBFormulation form(spatialMeshTopo, parameters);
-  OldroydBFormulation2 form(spatialMeshTopo, parameters);
+  OldroydBFormulationUW form(spatialMeshTopo, parameters);
   // StokesVGPFormulation form(spatialMeshTopo, parameters);
 
 
@@ -499,7 +502,7 @@ int main(int argc, char *argv[])
   ofstream dataFile(dataFileLocation);
   dataFile << "ref\t " << "elements\t " << "dofs\t " << "energy\t " << "l2\t " << "solvetime\t" << "elapsed\t" << "iterations\t " << endl;
 
-  double errorTol = 0.2;
+  double errorTol = 0.05;
   double errorRef = 0.0;
   double lambdaInitial = lambda;
   double lambdaMax = 30.0;
@@ -544,6 +547,7 @@ int main(int argc, char *argv[])
       //    Solve and accumulate solution
       ////////////////////////////////////////////////////////////////////
       // double s = 1.0;
+      double s;
       int iterCount = 0;
       int iterationCount = 0;
       double l2Update = 1e10;
@@ -589,7 +593,7 @@ int main(int argc, char *argv[])
         }
 
         // find zero of G using this cool Illinois algorithm
-        double s = s1;
+        s = s1;
         double G = G1;
         int i=0;
         while (i <= lineSearchMaxIt && sgn(G1)*sgn(G0) < 0 && ( abs(G) > LStol*abs(G_init) || abs(s0-s1) > LStol*0.5*(s0+s1)))
@@ -613,6 +617,7 @@ int main(int argc, char *argv[])
             s1 = s;
             G1 = G;
         }
+
         // Accumulate solution
         form.accumulate(s);
 
@@ -622,7 +627,7 @@ int main(int argc, char *argv[])
         l2Update = form.L2NormSolutionIncrement();
 
         if (commRank == 0)
-          cout << "Nonlinear Update:\t " << l2Update << endl;
+          cout << "Nonlinear Update:\t " << l2Update << " \t\tLine search distance:\t " << s << endl;
 
         if (iterCount == 0)
           l2UpdateInitial = l2Update;
@@ -648,64 +653,76 @@ int main(int argc, char *argv[])
       //   l2Error = sqrt(u_l2);
       // }
       // compute drag coefficient if Hemker problem
-      double dragCoefficient = 0.0;
+      // double dragCoefficient = 0.0;
+      double fieldDragCoefficient = 0.0;
+      double fluxDragCoefficient = 0.0;
       double verticalForce = 0.0;
-      double dragError;
+      double dragError = 0.0;
       if (problemChoice == "HemkerCylinder")
       {
         SpatialFilterPtr cylinderBoundary = Teuchos::rcp( new CylinderBoundary(cylinderRadius));
 
         TFunctionPtr<double> boundaryRestriction = Function::meshBoundaryCharacteristic();
 
-        // TFunctionPtr<double> n = TFunction<double>::normal();
-        // // L = muS*du/dx
-        // LinearTermPtr f_lt = - form.p()*n->x() + 2.0*form.L(1,1)*n->x() + form.T(1,1)*n->x()
-        //                      + form.L(1,2)*n->y() + form.L(2,1)*n->y() + form.T(1,2)*n->y();
+        // traction computed from field variables
+        TFunctionPtr<double> n = TFunction<double>::normal();
+        // L = muS*du/dx
+        LinearTermPtr f_lt = - form.p()*n->x() + 2.0*form.L(1,1)*n->x() + form.T(1,1)*n->x()
+                             + form.L(1,2)*n->y() + form.L(2,1)*n->y() + form.T(1,2)*n->y();
+        TFunctionPtr<double> fieldTraction_x = Teuchos::rcp( new PreviousSolutionFunction<double>(solutionBackground, -f_lt ) );
+        fieldTraction_x = Teuchos::rcp( new SpatiallyFilteredFunction<double>( fieldTraction_x*boundaryRestriction, cylinderBoundary) );
+        fieldDragCoefficient = fieldTraction_x->integrate(mesh);
 
-        // TFunctionPtr<double> traction_x = Teuchos::rcp( new PreviousSolutionFunction<double>(solutionBackground, -f_lt ) );
-        
-        TFunctionPtr<double> traction_x = Teuchos::rcp( new PreviousSolutionFunction<double>(solutionBackground, form.sigman_hat(1)) );
+        // traction computed from flux
+        TFunctionPtr<double> fluxTraction_x = Teuchos::rcp( new PreviousSolutionFunction<double>(solutionBackground, form.sigman_hat(1)) );
+        fluxTraction_x = Teuchos::rcp( new SpatiallyFilteredFunction<double>( fluxTraction_x*boundaryRestriction, cylinderBoundary) );
+        fluxDragCoefficient = fluxTraction_x->integrate(mesh);
+
         // TFunctionPtr<double> dF_D = Teuchos::rcp( new SpatiallyFilteredFunction<double>( Function::constant(1.0)*boundaryRestriction,cylinderBoundary));
-        TFunctionPtr<double> dF_D = Teuchos::rcp( new SpatiallyFilteredFunction<double>( traction_x*boundaryRestriction, cylinderBoundary) );
-        double F_D = dF_D->integrate(solutionBackground->mesh());
-        // double F_D = 1.0;
 
         // dragCoefficient = F_D;
         // 2/3 is the average inflow velocity
-        dragCoefficient = F_D;// * (3.0/2.0);
+        // dragCoefficient = F_D;// * (3.0/2.0);
 
-        // compute force in y-direction
+        // compute force in y-direction (from flux)
         TFunctionPtr<double> traction_y = Teuchos::rcp( new PreviousSolutionFunction<double>(solutionBackground, form.sigman_hat(2)) );
-        dF_D = Teuchos::rcp( new SpatiallyFilteredFunction<double>( traction_y*boundaryRestriction, cylinderBoundary) );
-        F_D = dF_D->integrate(solutionBackground->mesh());
-
-        verticalForce = F_D;
+        traction_y = Teuchos::rcp( new SpatiallyFilteredFunction<double>( traction_y*boundaryRestriction, cylinderBoundary) );
+        verticalForce = traction_y->integrate(mesh);
 
         // estimate error in drag coefficient
-        // drag error ~ (e_1,psi_{v})_{1/2} = (1, psi_{v1})_{1/2}
-        TRieszRepPtr<double> rieszResidual = form.rieszResidual(Teuchos::null);
-        rieszResidual->computeRieszRep();
-        TFunctionPtr<double> psi_v1 =  Teuchos::rcp( new RepFunction<double>(form.v(1), rieszResidual) );
-        dF_D = Teuchos::rcp( new SpatiallyFilteredFunction<double>( psi_v1*boundaryRestriction, cylinderBoundary) );
-        dragError = dF_D->integrate(solutionBackground->mesh());
-        dragError = abs(dragError);
+        // // drag error ~ (e_1,psi_{v})_{1/2} = (1, psi_{v1})_{1/2}
+        // TRieszRepPtr<double> rieszResidual = form.rieszResidual(Teuchos::null);
+        // rieszResidual->computeRieszRep();
+        // TFunctionPtr<double> psi_v1 =  Teuchos::rcp( new RepFunction<double>(form.v(1), rieszResidual) );
+        // dF_D = Teuchos::rcp( new SpatiallyFilteredFunction<double>( psi_v1*boundaryRestriction, cylinderBoundary) );
+        // dragError = dF_D->integrate(mesh);
+        // // dragError = (dF_D*dF_D)->integrate(mesh);
+        // dragError = abs(dragError);
+        // // dragError = sqrt(dragError);
+
+        dragError = ((fieldTraction_x-fluxTraction_x)*(fieldTraction_x-fluxTraction_x))->integrate(mesh);
+        dragError = sqrt(2.0*M_PI)*sqrt(dragError);
+
       }
       if (commRank == 0)
       {
-        cout << "Refinement: " << refIndex
+        cout << "Lambda: " << lambda
+          << " \nRefinement: " << refIndex
           << " \tElements: " << mesh->numActiveElements()
           << " \tDOFs: " << mesh->numGlobalDofs()
           << " \tEnergy Error: " << energyError
           // << " \tL2 Error: " << l2Error
-          << " \tSolve Time: " << solveTime
+          << " \nSolve Time: " << solveTime
           << " \tTotal Time: " << totalTimer->totalElapsedTime(true)
           << " \tIteration Count: " << iterationCount
-          << " \tDrag Coefficient: " << dragCoefficient
+          << " \nDrag Coefficient (from field): " << fieldDragCoefficient
+          << " \tDrag Coefficient (from traction): " << fluxDragCoefficient
           << " \ty-direction Force : " << verticalForce
           << " \tDrag error estimate : " << dragError
-          << " \tLambda: " << lambda
+          // << " \nLine search distance: " << s
           << endl;
-        dataFile << refIndex
+        dataFile << lambda
+          << " " << refIndex
           << " " << mesh->numActiveElements()
           << " " << mesh->numGlobalDofs()
           << " " << energyError
@@ -713,10 +730,11 @@ int main(int argc, char *argv[])
           << " " << solveTime
           << " " << totalTimer->totalElapsedTime(true)
           << " " << iterationCount
-          << " " << dragCoefficient
+          << " " << fieldDragCoefficient
+          << " " << fluxDragCoefficient
           << " " << verticalForce
           << " " << dragError
-          << " " << lambda
+          // << " " << s
           << endl;
       }
 

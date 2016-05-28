@@ -1,13 +1,13 @@
 //
-//  OldroydBFormulation2.h
+//  OldroydBFormulationUW.h
 //  Camellia
 //
 //  Created by Nate Roberts on 10/29/14.
 //
 //
 
-#ifndef Camellia_OldroydBFormulation2_h
-#define Camellia_OldroydBFormulation2_h
+#ifndef Camellia_OldroydBFormulationUW_h
+#define Camellia_OldroydBFormulationUW_h
 
 #include <Teuchos_ParameterList.hpp>
 
@@ -27,7 +27,7 @@
 
 namespace Camellia
 {
-class OldroydBFormulation2
+class OldroydBFormulationUW
 {
   BFPtr _oldroydBBF;
   BFPtr _steadyStokesBF;
@@ -105,8 +105,8 @@ class OldroydBFormulation2
 
   void turnOffSuperLUDistOutput(Teuchos::RCP<GMGSolver> gmgSolver);
 public:
-  OldroydBFormulation2(MeshTopologyPtr meshTopo, Teuchos::ParameterList &parameters);
-//  OldroydBFormulation2(int spaceDim, bool useConformingTraces, double mu = 1.0,
+  OldroydBFormulationUW(MeshTopologyPtr meshTopo, Teuchos::ParameterList &parameters);
+//  OldroydBFormulationUW(int spaceDim, bool useConformingTraces, double mu = 1.0,
 //                       bool transient = false, double dt = 1.0);
 
   // ! the Oldroyd-B VGP formulation bilinear form
@@ -172,8 +172,8 @@ public:
   int nonlinearIterationCount();
 
   // ! Loads the mesh and solution from disk, if they were previously saved using save().  In the present
-  // ! implementation, assumes that the constructor arguments provided to OldroydBFormulation2 were the same
-  // ! on the OldroydBFormulation2 on which save() was invoked as they were for this OldroydBFormulation2.
+  // ! implementation, assumes that the constructor arguments provided to OldroydBFormulationUW were the same
+  // ! on the OldroydBFormulationUW on which save() was invoked as they were for this OldroydBFormulationUW.
   void load(std::string prefixString);
 
   // ! Returns solvent viscosity, muS.
@@ -312,7 +312,7 @@ public:
   // ! returns the convective term (u dot grad u) corresponding to the provided velocity function
   static FunctionPtr convectiveTerm(int spaceDim, FunctionPtr u_exact);
 
-  // static OldroydBFormulation2 steadyFormulation(int spaceDim, double mu, bool useConformingTraces);
+  // static OldroydBFormulationUW steadyFormulation(int spaceDim, double mu, bool useConformingTraces);
 
   // // ! when includeVelocityTracesInFluxTerm is true, u1_hat, etc. only defined on spatial interfaces; the temporal velocities are the spatially-normal components of tn_hat.
   // static OldroydBFormulation2 spaceTimeFormulation(int spaceDim, double mu, bool useConformingTraces, bool includeVelocityTracesInFluxTerm = true);
