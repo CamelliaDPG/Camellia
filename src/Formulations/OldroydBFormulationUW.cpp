@@ -1692,7 +1692,6 @@ VarPtr OldroydBFormulationUW::q()
   return _vf->testVar(S_Q, HGRAD);
 }
 
-
 VarPtr OldroydBFormulationUW::M(int i)
 {
   TEUCHOS_TEST_FOR_EXCEPTION((i > _spaceDim) || (i < 1), std::invalid_argument, "i must be at least 1 and less than or equal to _spaceDim");
@@ -1787,59 +1786,76 @@ void OldroydBFormulationUW::solveAndAccumulate(double weight)
 // double OldroydBFormulationUW::computeG(FunctionPtr forcingFunction, double weight)
 double OldroydBFormulationUW::computeG(double weight)
 {
-  bool allowEmptyCells = false;
-  // accumulate background flow
-  _backgroundFlow->addSolution(_solnIncrement, weight, allowEmptyCells, _neglectFluxesOnRHS);
+  // // evaluate linearization at current guess against solution increment
+  // LinearTermPtr soln_functional = _oldroydBBF->testFunctional(_solnIncrement);
 
-  // calculate Riesz respresentation of accumulated nonlinear residual
-  // LinearTermPtr residual = (_solnIncrement->rhs())->linearTermCopy();
-  RieszRepPtr rieszResidual = this->rieszResidual(Teuchos::null);
+  // // TSolutionPtr<double> temporarySolnBackground = 
 
-  // evaluate linearization at current guess against solution increment
-  LinearTermPtr soln_functional = _oldroydBBF->testFunctional(_solnIncrement);
+  // // accumulate background flow
+  // bool allowEmptyCells = false;
+  // _backgroundFlow->addSolution(_solnIncrement, weight, allowEmptyCells, _neglectFluxesOnRHS);
+  // // this->setForcingFunction(Teuchos::null);
+  // // RHSPtr savedRHS = _solnIncrement->rhs();
+  // // _solnIncrement->setRHS(_rhsForResidual);
 
-  // reset background flow
-  _backgroundFlow->addSolution(_solnIncrement, -weight, allowEmptyCells, _neglectFluxesOnRHS);
+  // // calculate Riesz representation of accumulated nonlinear residual
+  // // RHSPtr nonlinearRHS = this->rhs(Teuchos::null, _neglectFluxesOnRHS);
+  // // LinearTermPtr residual = nonlinearRHS->linearTermCopy();
+  // LinearTermPtr residual = _rhsForResidual->linearTermCopy();
+  // // LinearTermPtr residual = (_solnIncrement->rhs())->linearTermCopy();
 
+  // // RieszRepPtr rieszResidual = this->rieszResidual(Teuchos::null);
+  // RieszRepPtr rieszResidual = Teuchos::rcp(new RieszRep(_solnIncrement->mesh(), _solnIncrement->ip(), residual));
 
-  // G(\Delta u) = b(\Delta u,psi)
-  rieszResidual->computeRieszRep();
+  // // G(\Delta u) = b(\Delta u,psi)
+  // rieszResidual->computeRieszRep();
 
-  TFunctionPtr<double> dG = TFunction<double>::zero();
-  map<int,VarPtr> testVars = _vf->testVars();
-  for (auto entry : testVars)
-  {
-    VarPtr var = entry.second;
-    FunctionPtr var_err = Teuchos::rcp(new RepFunction<double>(var,rieszResidual));
-    map<int,FunctionPtr> var_errFxn;
-    var_errFxn[var->ID()] = var_err;
-    dG = dG + soln_functional->evaluate(var_errFxn);
-  }
+  // TFunctionPtr<double> dG = TFunction<double>::zero();
+  // map<int,VarPtr> testVars = _vf->testVars();
+  // for (auto entry : testVars)
+  // {
+  //   VarPtr var = entry.second;
+  //   FunctionPtr var_err = Teuchos::rcp(new RepFunction<double>(var,rieszResidual));
+  //   map<int,FunctionPtr> var_errFxn;
+  //   var_errFxn[var->ID()] = var_err;
+  //   dG = dG + soln_functional->evaluate(var_errFxn);
+  // }
 
-  double G = dG->integrate(_backgroundFlow->mesh());
+  // // FunctionPtr q_err = Teuchos::rcp(new RepFunction<double>(this->q(),rieszResidual));
+  // // map<int,FunctionPtr> q_errFxn;
+  // // q_errFxn[(this->q())->ID()] = q_err;
+  // // TFunctionPtr<double> dG = soln_functional->evaluate(q_errFxn);
+
+  // // FunctionPtr vi_err, Mi_err, Sij_err;
+  // // map<int,FunctionPtr> vi_errFxn, Mi_errFxn, Sij_errFxn;
+  // // for (int i = 1; i <= _spaceDim; ++i)
+  // // {
+  // //   vi_err = Teuchos::rcp(new RepFunction<double>(this->v(i),rieszResidual));
+  // //   vi_errFxn[(this->v(i))->ID()] = vi_err;
+  // //   dG = dG + soln_functional->evaluate(vi_errFxn);
+
+  // //   Mi_err = Teuchos::rcp(new RepFunction<double>(this->M(i),rieszResidual));
+  // //   Mi_errFxn[(this->M(i))->ID()] = Mi_err;
+  // //   dG = dG + soln_functional->evaluate(Mi_errFxn);
+  // //   for (int j = i; j <= _spaceDim; ++j)
+  // //   {
+  // //     Sij_err = Teuchos::rcp(new RepFunction<double>(this->S(i,j),rieszResidual));
+  // //     Sij_errFxn[(this->S(i,j))->ID()] = Sij_err;
+  // //     dG = dG + soln_functional->evaluate(Sij_errFxn);
+  // //   }
+  // // }
+
+  // double G = dG->integrate(_backgroundFlow->mesh());
+
+  // // reset background flow
+  // _backgroundFlow->addSolution(_solnIncrement, -weight, allowEmptyCells, _neglectFluxesOnRHS);
+  // // _solnIncrement->clearComputedResiduals();
+  // // _solnIncrement->setRHS(savedRHS);
+  // // this->setForcingFunction(Teuchos::null);
 
   return 1.0-weight;
   // return G;
 
-  // VarPtr v_i, q, M_i, S_ij;
-  // FunctionPtr q_err = Teuchos::rcp(new RepFunction<double>(this->q(),rieszResidual));
-  // map<int,FunctionPtr> q_errFxn;
-  // q_errFxn[(this->q())->ID()] = q_err;
-
-  // FunctionPtr vi_err, Mi_err, Sij_err;
-  // map<int,FunctionPtr> vi_errFxn, Mi_errFxn, Sij_errFxn;
-  // double G = soln_functional->evaluate(q_errFxn);
-  // for (int i = 1; i <= _spaceDim; ++i)
-  // {
-  //   vi_err = Teuchos::rcp(new RepFunction<double>(this->v(i),rieszResidual));
-  //   vi_errFxn[(this->v(i))->ID()] = vi_err;
-
-  //   Mi_err = Teuchos::rcp(new RepFunction<double>(this->M(i),rieszResidual));
-  //   for (int j = 1; j <= _spaceDim; ++j)
-  //   {
-  //     Sij_err = Teuchos::rcp(new RepFunction<double>(this->S(i,j),rieszResidual));
-  //   }
-  // }
 }
 
 

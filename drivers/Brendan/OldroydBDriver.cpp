@@ -441,19 +441,8 @@ int main(int argc, char *argv[])
   ///////////////////////////////  SOLVE  //////////////////////////////
   //////////////////////////////////////////////////////////////////////
 
-  ostringstream solnName;
-  solnName << "OldroydB" << "_" << norm << "_k" << k << "_" << solverChoice;// << "_" << multigridStrategyString;
-  if (solverChoice[0] == 'G')
-    solnName << "_" << multigridStrategyString;
-  if (tag != "")
-    solnName << "_" << tag;
-
-  // RefinementStrategyPtr refStrategy = form.getRefinementStrategy();
-  Teuchos::RCP<HDF5Exporter> exporter;
-  if (exportSolution)
-    exporter = Teuchos::rcp(new HDF5Exporter(mesh,solnName.str(), outputDir));
-
   Teuchos::RCP<Time> solverTime = Teuchos::TimeMonitor::getNewCounter("Solve Time");
+  // RefinementStrategyPtr refStrategy = form.getRefinementStrategy();
 
   if (commRank == 0)
     Solver::printAvailableSolversReport();
@@ -494,23 +483,45 @@ int main(int argc, char *argv[])
     TEUCHOS_TEST_FOR_EXCEPTION(true, std::invalid_argument, "unrecognized multigrid strategy");
   }
 
+  ostringstream solnName;
+  solnName << "OldroydB" << "_" << norm << "_k" << k << "_" << solverChoice;
+  if (solverChoice[0] == 'G')
+    solnName << "_" << multigridStrategyString;
+  if (tag != "")
+    solnName << "_" << tag;
+
+  double errorTol = 0.01;
+  double errorRef = 0.0;
+  double lambdaInitial = lambda;
+  double lambdaMax = 30.0;
+  double delta_lambda = 1.0;
+
   string dataFileLocation;
   if (exportSolution)
-    dataFileLocation = outputDir+"/"+solnName.str()+"/"+solnName.str()+".txt";
+  {
+    // append initial parameter value to solution name (for storing all data)
+    ostringstream dataSolnName;
+    dataSolnName << solnName.str() << "_lambda" << lambdaInitial;
+    dataFileLocation = outputDir+"/"+dataSolnName.str()+"/"+solnName.str()+".txt";
+  }
   else
     dataFileLocation = outputDir+"/"+solnName.str()+".txt";
   ofstream dataFile(dataFileLocation);
   dataFile << "ref\t " << "elements\t " << "dofs\t " << "energy\t " << "l2\t " << "solvetime\t" << "elapsed\t" << "iterations\t " << endl;
 
-  double errorTol = 0.05;
-  double errorRef = 0.0;
-  double lambdaInitial = lambda;
-  double lambdaMax = 30.0;
-  double delta_lambda = 1.0;
   while (lambda <= lambdaMax)
   {
     for (int refIndex=0; refIndex <= numRefs; refIndex++)
     {
+      Teuchos::RCP<HDF5Exporter> exporter;
+      if (exportSolution)
+      {
+        // append parameter value to solution name
+        ostringstream fullSolnName;
+        fullSolnName << solnName.str() << "_lambda" << lambda;
+        exporter = Teuchos::rcp(new HDF5Exporter(mesh,fullSolnName.str(), outputDir));
+      }
+
       solverTime->start(true);
       Teuchos::RCP<GMGSolver> gmgSolver;
       if (solverChoice[0] == 'G')
@@ -569,7 +580,7 @@ int main(int argc, char *argv[])
         ////////////////////////////////////////////////////////////////////
         //    line search to minimize residual in search direction
         ////////////////////////////////////////////////////////////////////
-        int sMax = 16;
+        int sMax = 2;
         int lineSearchMaxIt = 5;
         double LStol = 0.5; // as taken from Matthies + Strang
         //
@@ -580,6 +591,9 @@ int main(int argc, char *argv[])
         double G_init = form.computeG(0);
         double G0 = G_init;
         double G1 = form.computeG(1);
+
+        // if (commRank == 0)
+        //   cout << "G0 =\t " << G0 << " \t\tG1 =\t " << G1 << endl;
         
         // find interval about which G changes sign
         while (sgn(G0)*sgn(G1) > 0 && s1 < sMax)
@@ -596,7 +610,7 @@ int main(int argc, char *argv[])
         s = s1;
         double G = G1;
         int i=0;
-        while (i <= lineSearchMaxIt && sgn(G1)*sgn(G0) < 0 && ( abs(G) > LStol*abs(G_init) || abs(s0-s1) > LStol*0.5*(s0+s1)))
+        while (i <= lineSearchMaxIt && sgn(G1)*sgn(G0) < 0 && ( abs(G) > LStol*abs(G_init) || abs(s0-s1) > LStol*0.5*(s0+s1) ) )
         {
             ++i;
             
@@ -743,8 +757,11 @@ int main(int argc, char *argv[])
         errorRef = dragError;
 
       if (exportSolution)
+      {
         exporter->exportSolution(solutionBackground, refIndex);
         // exporter->exportSolution(solutionIncrement, refIndex);
+      }
+
 
       // if ((energyError < errorRef*errorTol && iterCount < maxNonlinearIterations-1) || energyError < 1e-8 )
       // if (energyError < errorRef*errorTol || energyError < 1e-8 )
