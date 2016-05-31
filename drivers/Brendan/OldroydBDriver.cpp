@@ -113,7 +113,7 @@ public:
     _height = height;
   }
   double value(double x, double y) {
-    return (1-pow(2.0*y/_height,2));
+    return (1-pow(y/_height,2));
     // return (16.0*y-pow(y,2))/64.0;
   }
 };
@@ -133,9 +133,9 @@ public:
   }
   double value(double x, double y) {
     if (_i == 1 && _j == 1)
-      return (1-pow(2.0*y/_height,2))*(8.0*_muS*_lambda*pow(y/(_height*_height/4.0),2));
+      return (1-pow(y/_height,2))*(8.0*_muS*_lambda*pow(y/(_height*_height),2));
     else if ((_i == 1 && _j == 2) || (_i == 2 && _j == 1))
-      return (1-pow(2.0*y/_height,2))*(-2.0*_muS*y/(_height*_height/4.0));
+      return (1-pow(y/_height,2))*(-2.0*_muS*y/(_height*_height));
     else if (_i == 2 && _j == 2)
       return 0.0;
     else
@@ -200,7 +200,7 @@ int main(int argc, char *argv[])
   string outputDir = ".";
   string tag="";
   cmdp.setOption("formulation", &formulation, "OldroydB, NavierStokes");
-  cmdp.setOption("problem", &problemChoice, "LidDriven, HemkerCylinder");
+  cmdp.setOption("problem", &problemChoice, "LidDriven, HemkerCylinder, HalfHemker, Benchmark");
   // cmdp.setOption("rho", &rho, "rho");
   cmdp.setOption("lambda", &lambda, "lambda");
   cmdp.setOption("muS", &muS, "muS");
@@ -308,8 +308,24 @@ int main(int argc, char *argv[])
   }
   else if (problemChoice == "HalfHemker")
   {
-    cout << "ERROR: Problem type not currently supported. Returning null.\n";
-    return Teuchos::null;
+    // CONFINED CYLINDER exploiting geometric symmetry
+    xLeft = -15.0, xRight = 15.0;
+    height = 2.0;
+    cylinderRadius = 1.0;
+    MeshGeometryPtr halfHemkerGeometry = MeshFactory::halfHemkerGeometry(xLeft, xRight, height, cylinderRadius);
+    map< pair<IndexType, IndexType>, ParametricCurvePtr > localEdgeToCurveMap = halfHemkerGeometry->edgeToCurveMap();
+    globalEdgeToCurveMap = map< pair<GlobalIndexType, GlobalIndexType>, ParametricCurvePtr >(localEdgeToCurveMap.begin(),localEdgeToCurveMap.end());
+    spatialMeshTopo = Teuchos::rcp( new MeshTopology(halfHemkerGeometry) );
+  }
+  else if (problemChoice == "Benchmark")
+  {
+    // CONFINED CYLINDER BENCHMARK PROBLEM
+    xLeft = -15.0, xRight = 15.0;
+    cylinderRadius = 1.0;
+    MeshGeometryPtr benchmarkGeometry = MeshFactory::confinedCylinderGeometry(xLeft, xRight, cylinderRadius);
+    map< pair<IndexType, IndexType>, ParametricCurvePtr > localEdgeToCurveMap = benchmarkGeometry->edgeToCurveMap();
+    globalEdgeToCurveMap = map< pair<GlobalIndexType, GlobalIndexType>, ParametricCurvePtr >(localEdgeToCurveMap.begin(),localEdgeToCurveMap.end());
+    spatialMeshTopo = Teuchos::rcp( new MeshTopology(benchmarkGeometry) );
   }
   else if (problemChoice == "Test 1")
   {
@@ -396,13 +412,13 @@ int main(int argc, char *argv[])
     // SpatialFilterPtr otherBoundary = SpatialFilter::negatedFilter(leftRightBoundary);
 
     // inflow on left boundary
-    TFunctionPtr<double> u1_inflowFunction = Teuchos::rcp( new ParabolicInflowFunction_U1(height) );
+    TFunctionPtr<double> u1_inflowFunction = Teuchos::rcp( new ParabolicInflowFunction_U1(height/2.0) );
     // TFunctionPtr<double> u1_inflowFunction = one;
     TFunctionPtr<double> u2_inflowFunction = zero;
 
-    TFunctionPtr<double> T11un_inflowFunction = Teuchos::rcp( new ParabolicInflowFunction_Tun(height, muS, lambda, 1, 1) );
-    TFunctionPtr<double> T12un_inflowFunction = Teuchos::rcp( new ParabolicInflowFunction_Tun(height, muS, lambda, 1, 2) );
-    TFunctionPtr<double> T22un_inflowFunction = Teuchos::rcp( new ParabolicInflowFunction_Tun(height, muS, lambda, 2, 2) );
+    TFunctionPtr<double> T11un_inflowFunction = Teuchos::rcp( new ParabolicInflowFunction_Tun(height/2.0, muP, lambda, 1, 1) );
+    TFunctionPtr<double> T12un_inflowFunction = Teuchos::rcp( new ParabolicInflowFunction_Tun(height/2.0, muP, lambda, 1, 2) );
+    TFunctionPtr<double> T22un_inflowFunction = Teuchos::rcp( new ParabolicInflowFunction_Tun(height/2.0, muP, lambda, 2, 2) );
 
     TFunctionPtr<double> u = Function::vectorize(u1_inflowFunction,u2_inflowFunction);
 
@@ -425,6 +441,88 @@ int main(int argc, char *argv[])
 
     // cout << "ERROR: Problem type not currently supported. Returning null.\n";
     // return Teuchos::null;
+  }
+    else if (problemChoice == "HalfHemker")
+  {
+    // CONFINED CYLINDER exploiting geometric symmetry
+    SpatialFilterPtr leftBoundary = SpatialFilter::matchingX(xLeft);
+    SpatialFilterPtr rightBoundary = SpatialFilter::matchingX(xRight);
+    SpatialFilterPtr topBoundary = SpatialFilter::matchingY(height);
+    SpatialFilterPtr bottomBoundary = SpatialFilter::matchingY(0.0);
+    SpatialFilterPtr cylinderBoundary = Teuchos::rcp( new CylinderBoundary(cylinderRadius));
+
+    // inflow on left boundary
+    TFunctionPtr<double> u1_inflowFunction = Teuchos::rcp( new ParabolicInflowFunction_U1(height) );
+    // TFunctionPtr<double> u1_inflowFunction = one;
+    TFunctionPtr<double> u2_inflowFunction = zero;
+
+    TFunctionPtr<double> T11un_inflowFunction = Teuchos::rcp( new ParabolicInflowFunction_Tun(height, muP, lambda, 1, 1) );
+    TFunctionPtr<double> T12un_inflowFunction = Teuchos::rcp( new ParabolicInflowFunction_Tun(height, muP, lambda, 1, 2) );
+    TFunctionPtr<double> T22un_inflowFunction = Teuchos::rcp( new ParabolicInflowFunction_Tun(height, muP, lambda, 2, 2) );
+
+    TFunctionPtr<double> u = Function::vectorize(u1_inflowFunction,u2_inflowFunction);
+
+    form.addInflowCondition(leftBoundary, u);
+    form.addInflowViscoelasticStress(leftBoundary, T11un_inflowFunction, T12un_inflowFunction, T22un_inflowFunction);
+
+    // top+bottom
+    // form.addOutflowCondition(topBoundary, false);
+    // form.addOutflowCondition(bottomBoundary, false);
+    form.addWallCondition(topBoundary);
+    form.addSymmetryCondition(bottomBoundary);
+
+    // outflow on right boundary
+    // form.addOutflowCondition(rightBoundary, true); // true to impose zero traction by penalty (TODO)
+    form.addOutflowCondition(rightBoundary, false); // false for zero flux variable
+
+    // no slip on cylinder
+    form.addWallCondition(cylinderBoundary);
+
+    // cout << "ERROR: Problem type not currently supported. Returning null.\n";
+    // return Teuchos::null;  
+  }
+  else if (problemChoice == "Benchmark")
+  {
+    // CONFINED CYLINDER exploiting geometric symmetry
+    double yMax = 2.0*cylinderRadius;
+    SpatialFilterPtr leftBoundary = SpatialFilter::matchingX(xLeft);
+    SpatialFilterPtr rightBoundary = SpatialFilter::matchingX(xRight);
+    SpatialFilterPtr topBoundary = SpatialFilter::matchingY(yMax);
+    SpatialFilterPtr bottomBoundary = SpatialFilter::matchingY(-yMax);
+    SpatialFilterPtr cylinderBoundary = Teuchos::rcp( new CylinderBoundary(cylinderRadius));
+
+
+    // UPDATE THIS FOR WHEN LAMBDA CHANGES
+
+    // inflow on left boundary
+    TFunctionPtr<double> u1_inflowFunction = Teuchos::rcp( new ParabolicInflowFunction_U1(yMax) );
+    // TFunctionPtr<double> u1_inflowFunction = one;
+    TFunctionPtr<double> u2_inflowFunction = zero;
+
+    TFunctionPtr<double> T11un_inflowFunction = Teuchos::rcp( new ParabolicInflowFunction_Tun(yMax, muP, lambda, 1, 1) );
+    TFunctionPtr<double> T12un_inflowFunction = Teuchos::rcp( new ParabolicInflowFunction_Tun(yMax, muP, lambda, 1, 2) );
+    TFunctionPtr<double> T22un_inflowFunction = Teuchos::rcp( new ParabolicInflowFunction_Tun(yMax, muP, lambda, 2, 2) );
+
+    TFunctionPtr<double> u = Function::vectorize(u1_inflowFunction,u2_inflowFunction);
+
+    form.addInflowCondition(leftBoundary, u);
+    form.addInflowViscoelasticStress(leftBoundary, T11un_inflowFunction, T12un_inflowFunction, T22un_inflowFunction);
+
+    // top+bottom
+    // form.addOutflowCondition(topBoundary, false);
+    // form.addOutflowCondition(bottomBoundary, false);
+    form.addWallCondition(topBoundary);
+    form.addWallCondition(bottomBoundary);
+
+    // outflow on right boundary
+    // form.addOutflowCondition(rightBoundary, true); // true to impose zero traction by penalty (TODO)
+    form.addOutflowCondition(rightBoundary, false); // false for zero flux variable
+
+    // no slip on cylinder
+    form.addWallCondition(cylinderBoundary);
+
+    // cout << "ERROR: Problem type not currently supported. Returning null.\n";
+    // return Teuchos::null;  
   }
   else if (problemChoice == "Test 1")
   {
@@ -490,37 +588,50 @@ int main(int argc, char *argv[])
   if (tag != "")
     solnName << "_" << tag;
 
+  string dataFileLocation;
+  if (exportSolution)
+    dataFileLocation = outputDir+"/"+solnName.str()+"/"+solnName.str()+".txt";
+  else
+    dataFileLocation = outputDir+"/"+solnName.str()+".txt";
+
+  ofstream dataFile(dataFileLocation);
+  dataFile << "ref\t " << "elements\t " << "dofs\t " << "energy\t " << "l2\t " << "solvetime\t" << "elapsed\t" << "iterations\t " << endl;
+
+  Teuchos::RCP<HDF5Exporter> exporter;
+  exporter = Teuchos::rcp(new HDF5Exporter(mesh,solnName.str(), outputDir));
+
+
   double errorTol = 0.01;
   double errorRef = 0.0;
   double lambdaInitial = lambda;
-  double lambdaMax = 30.0;
-  double delta_lambda = 1.0;
+  double lambdaMax = 10.0*lambdaInitial;
+  double delta_lambda = 0.1;
 
-  string dataFileLocation;
-  if (exportSolution)
-  {
-    // append initial parameter value to solution name (for storing all data)
-    ostringstream dataSolnName;
-    dataSolnName << solnName.str() << "_lambda" << lambdaInitial;
-    dataFileLocation = outputDir+"/"+dataSolnName.str()+"/"+solnName.str()+".txt";
-  }
-  else
-    dataFileLocation = outputDir+"/"+solnName.str()+".txt";
-  ofstream dataFile(dataFileLocation);
-  dataFile << "ref\t " << "elements\t " << "dofs\t " << "energy\t " << "l2\t " << "solvetime\t" << "elapsed\t" << "iterations\t " << endl;
+  // string dataFileLocation;
+  // if (exportSolution)
+  // {
+  //   // append initial parameter value to solution name (for storing all data)
+  //   ostringstream dataSolnName;
+  //   dataSolnName << solnName.str() << "_lambda" << lambdaInitial;
+  //   dataFileLocation = outputDir+"/"+dataSolnName.str()+"/"+solnName.str()+".txt";
+  // }
+  // else
+  //   dataFileLocation = outputDir+"/"+solnName.str()+".txt";
+  // ofstream dataFile(dataFileLocation);
+  // dataFile << "ref\t " << "elements\t " << "dofs\t " << "energy\t " << "l2\t " << "solvetime\t" << "elapsed\t" << "iterations\t " << endl;
 
   while (lambda <= lambdaMax)
   {
     for (int refIndex=0; refIndex <= numRefs; refIndex++)
     {
-      Teuchos::RCP<HDF5Exporter> exporter;
-      if (exportSolution)
-      {
-        // append parameter value to solution name
-        ostringstream fullSolnName;
-        fullSolnName << solnName.str() << "_lambda" << lambda;
-        exporter = Teuchos::rcp(new HDF5Exporter(mesh,fullSolnName.str(), outputDir));
-      }
+      // Teuchos::RCP<HDF5Exporter> exporter;
+      // if (exportSolution)
+      // {
+      //   // append parameter value to solution name
+      //   ostringstream fullSolnName;
+      //   fullSolnName << solnName.str() << "_lambda" << lambda;
+      //   exporter = Teuchos::rcp(new HDF5Exporter(mesh,fullSolnName.str(), outputDir));
+      // }
 
       solverTime->start(true);
       Teuchos::RCP<GMGSolver> gmgSolver;
@@ -672,7 +783,7 @@ int main(int argc, char *argv[])
       double fluxDragCoefficient = 0.0;
       double verticalForce = 0.0;
       double dragError = 0.0;
-      if (problemChoice == "HemkerCylinder")
+      if (problemChoice == "HemkerCylinder" || problemChoice == "HalfHemker" || problemChoice == "Benchmark")
       {
         SpatialFilterPtr cylinderBoundary = Teuchos::rcp( new CylinderBoundary(cylinderRadius));
 
@@ -717,7 +828,21 @@ int main(int argc, char *argv[])
         dragError = ((fieldTraction_x-fluxTraction_x)*(fieldTraction_x-fluxTraction_x))->integrate(mesh);
         dragError = sqrt(2.0*M_PI)*sqrt(dragError);
 
+        if (problemChoice == "HalfHemker")
+        {
+          fieldDragCoefficient = 2.0*fieldDragCoefficient;
+          fluxDragCoefficient  = 2.0*fluxDragCoefficient;
+          dragError = 2.0*dragError;
+        }
+        else if (problemChoice == "Benchmark")
+        {
+          // 2/3 is the average inflow velocity
+          fieldDragCoefficient = 3.0/2.0*fieldDragCoefficient;
+          fluxDragCoefficient = 3.0/2.0*fluxDragCoefficient;
+          dragError = 3.0/2.0*dragError;
+        }
       }
+
       if (commRank == 0)
       {
         cout << "Lambda: " << lambda

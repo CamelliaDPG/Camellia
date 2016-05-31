@@ -856,7 +856,7 @@ void OldroydBFormulationUW::addOutflowCondition(SpatialFilterPtr outflowRegion, 
     //   _solnIncrement->bc()->addDirichlet(sigman_hat(d), outflowRegion, zero);
     // }
     _solnIncrement->bc()->addDirichlet(this->sigman_hat(1), outflowRegion, zero);
-    _solnIncrement->bc()->addDirichlet(this->u(2), outflowRegion, zero);
+    _solnIncrement->bc()->addDirichlet(this->u_hat(2), outflowRegion, zero);
   }
 }
 
@@ -898,6 +898,14 @@ void OldroydBFormulationUW::addWallCondition(SpatialFilterPtr wall)
 {
   vector<double> zero(_spaceDim, 0.0);
   addInflowCondition(wall, TFunction<double>::constant(zero));
+}
+
+void OldroydBFormulationUW::addSymmetryCondition(SpatialFilterPtr symmetryRegion)
+{
+  TFunctionPtr<double> zero = TFunction<double>::zero();
+  _solnIncrement->bc()->addDirichlet(this->sigman_hat(1), symmetryRegion, zero);
+  _solnIncrement->bc()->addDirichlet(this->Tun_hat(1,2), symmetryRegion, zero);
+  _solnIncrement->bc()->addDirichlet(this->u_hat(2), symmetryRegion, zero);
 }
 
 void OldroydBFormulationUW::addInitialCondition(double t0, vector<FunctionPtr> u0, FunctionPtr p0)

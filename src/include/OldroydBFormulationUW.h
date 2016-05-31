@@ -115,6 +115,9 @@ public:
   // ! sets a wall boundary condition
   void addWallCondition(SpatialFilterPtr wall);
 
+  // ! sets an x-reflective boundary condition
+  void addSymmetryCondition(SpatialFilterPtr wall);
+
   // ! sets an inflow velocity boundary condition; u should be a vector-valued function.
   void addInflowCondition(SpatialFilterPtr inflowRegion, TFunctionPtr<double> u);
 
