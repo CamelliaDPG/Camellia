@@ -107,35 +107,39 @@ public:
 };
 
 class ParabolicInflowFunction_U1 : public SimpleFunction<double> {
-  double _height; // ramp width
+  double _height; // height of channel
 public:
   ParabolicInflowFunction_U1(double height) {
     _height = height;
   }
   double value(double x, double y) {
-    return (1-pow(y/_height,2));
+    return 3.0/2.0*(1.0-pow(y/_height,2)); // chosen so that AVERAGE inflow velocity is 1.0
+    // return (1.0-pow(y/_height,2));
+    // return 3.0/8.0*(4.0-pow(y,2));
     // return (16.0*y-pow(y,2))/64.0;
   }
 };
 
 class ParabolicInflowFunction_Tun : public SimpleFunction<double> {
   double _i, _j; // index numbers
-  double _height; // ramp width
-  double _muS; // polymeric viscosity
+  double _height; // height of channel
+  double _muP; // polymeric viscosity
   double _lambda; // relaxation time
 public:
-  ParabolicInflowFunction_Tun(double height, double muS, double lambda, int i, int j) {
+  ParabolicInflowFunction_Tun(double height, double muP, double lambda, int i, int j) {
     _i = i;
     _j = j;
     _height = height;
-    _muS = muS;
+    _muP = muP;
     _lambda = lambda;
   }
   double value(double x, double y) {
     if (_i == 1 && _j == 1)
-      return (1-pow(y/_height,2))*(8.0*_muS*_lambda*pow(y/(_height*_height),2));
+      // return -(1.0-pow(y/_height,2))*(8.0*_muP*_lambda*pow(y/(_height*_height),2));
+      return 3.0/2.0*(4-pow(y,2))*(8.0*_muP*_lambda*pow(y/(_height*_height),2));
     else if ((_i == 1 && _j == 2) || (_i == 2 && _j == 1))
-      return (1-pow(y/_height,2))*(-2.0*_muS*y/(_height*_height));
+      // return -(1.0-pow(y/_height,2))*(-2.0*_muP*y/(_height*_height));
+      return 3.0/2.0*(4-pow(y,2))*(-2.0*_muP*y/(_height*_height));
     else if (_i == 2 && _j == 2)
       return 0.0;
     else
@@ -183,6 +187,7 @@ int main(int argc, char *argv[])
   int k = 2, delta_k = 2;
   int numXElems = 2;
   int numYElems = 2;
+  bool stokesOnly = false;
   bool useConformingTraces = true;
   string solverChoice = "KLU";
   string multigridStrategyString = "V-cycle";
@@ -196,6 +201,7 @@ int main(int argc, char *argv[])
   int maxLinearIterations = 10000;
   // bool computeL2Error = false;
   bool exportSolution = false;
+  bool useLineSearch = false;
   string norm = "Graph";
   string outputDir = ".";
   string tag="";
@@ -212,9 +218,10 @@ int main(int argc, char *argv[])
   cmdp.setOption("numRefs",&numRefs,"number of refinements");
   cmdp.setOption("numXElems",&numXElems,"number of elements in x direction");
   cmdp.setOption("numYElems",&numYElems,"number of elements in y direction");
+  cmdp.setOption("stokesOnly", "NavierStokesOnly", &stokesOnly, "couple only with Stokes, not Navier-Stokes");
   cmdp.setOption("norm", &norm, "norm");
   cmdp.setOption("conformingTraces", "nonconformingTraces", &useConformingTraces, "use conforming traces");
-  cmdp.setOption("solver", &solverChoice, "KLU, SuperLU, MUMPS, GMG-Direct, GMG-ILU, GMG-IC");
+  cmdp.setOption("solver", &solverChoice, "KLU, SuperLUDist, MUMPS, GMG-Direct, GMG-ILU, GMG-IC");
   cmdp.setOption("multigridStrategy", &multigridStrategyString, "Multigrid strategy: V-cycle, W-cycle, Full, or Two-level");
   cmdp.setOption("useCondensedSolve", "useStandardSolve", &useCondensedSolve);
   cmdp.setOption("CG", "GMRES", &useConjugateGradient);
@@ -225,6 +232,7 @@ int main(int argc, char *argv[])
   cmdp.setOption("outputDir", &outputDir, "output directory");
   // cmdp.setOption("computeL2Error", "skipL2Error", &computeL2Error, "compute L2 error");
   cmdp.setOption("exportSolution", "skipExport", &exportSolution, "export solution to HDF5");
+  cmdp.setOption("useLineSearch", "dontUseLineSearch", &useLineSearch, "compute increment with line search");
   cmdp.setOption("tag", &tag, "output tag");
 
   if (cmdp.parse(argc,argv) != Teuchos::CommandLineProcessor::PARSE_SUCCESSFUL)
@@ -258,6 +266,7 @@ int main(int argc, char *argv[])
   parameters.set("delta_k", delta_k);
   parameters.set("norm", norm);
   parameters.set("useConformingTraces", useConformingTraces);
+  parameters.set("stokesOnly",stokesOnly);
   parameters.set("useConservationFormulation",false);
   parameters.set("useTimeStepping", false);
   parameters.set("useSpaceTime", false);
@@ -366,11 +375,13 @@ int main(int argc, char *argv[])
   SolutionPtr solutionIncrement = form.solutionIncrement();
   SolutionPtr solutionBackground = form.solution();
 
-  if ((commRank==0) && (enrichDegree > 0))
+  if (enrichDegree > 0)
   {
     // THIS DOESN'T APPEAR TO WORK
-    cout << "enriching cubature by " << enrichDegree << endl;
+    if (commRank == 0)
+      cout << "enriching cubature by " << enrichDegree << endl;
     solutionIncrement->setCubatureEnrichmentDegree(enrichDegree);
+    solutionBackground->setCubatureEnrichmentDegree(enrichDegree);
   }
 
   ///////////////////////////  DECLARE BC'S  ///////////////////////////
@@ -552,7 +563,6 @@ int main(int argc, char *argv[])
 #ifdef HAVE_AMESOS_MUMPS
   solvers["MUMPS"] = Solver::getSolver(Solver::MUMPS, true);
 #endif
-  bool useStaticCondensation = true;
   int azOutput = 20; // print residual every 20 CG iterations
 
   GMGOperator::MultigridStrategy multigridStrategy;
@@ -580,6 +590,14 @@ int main(int argc, char *argv[])
   {
     TEUCHOS_TEST_FOR_EXCEPTION(true, std::invalid_argument, "unrecognized multigrid strategy");
   }
+  form.setSolver(solvers[solverChoice]);
+
+  double errorTol = 0.01;
+  double errorRef = 0.0;
+  double lambdaInitial = lambda;
+  double lambdaMax = lambdaInitial;
+  double delta_lambda = 0.1;
+
 
   ostringstream solnName;
   solnName << "OldroydB" << "_" << norm << "_k" << k << "_" << solverChoice;
@@ -587,6 +605,11 @@ int main(int argc, char *argv[])
     solnName << "_" << multigridStrategyString;
   if (tag != "")
     solnName << "_" << tag;
+  if (stokesOnly)
+    solnName << "_Stokes";
+  else
+    solnName << "_NavierStokes";
+  solnName << "_lambda_" << lambdaInitial;
 
   string dataFileLocation;
   if (exportSolution)
@@ -600,12 +623,6 @@ int main(int argc, char *argv[])
   Teuchos::RCP<HDF5Exporter> exporter;
   exporter = Teuchos::rcp(new HDF5Exporter(mesh,solnName.str(), outputDir));
 
-
-  double errorTol = 0.01;
-  double errorRef = 0.0;
-  double lambdaInitial = lambda;
-  double lambdaMax = 10.0*lambdaInitial;
-  double delta_lambda = 0.1;
 
   // string dataFileLocation;
   // if (exportSolution)
@@ -688,59 +705,90 @@ int main(int argc, char *argv[])
           form.solveForIncrement();
           // solutionIncrement->condensedSolve(solvers[solverChoice]);
 
-        ////////////////////////////////////////////////////////////////////
-        //    line search to minimize residual in search direction
-        ////////////////////////////////////////////////////////////////////
-        int sMax = 2;
-        int lineSearchMaxIt = 5;
-        double LStol = 0.5; // as taken from Matthies + Strang
-        //
-        double s0 = 0.0;
-        double s1 = 1.0;
-        // G_i = R(u_i) . delta_u
-        //     = R(u_0 + s_i * delta_u) . delta_u
-        double G_init = form.computeG(0);
-        double G0 = G_init;
-        double G1 = form.computeG(1);
+        // ////////////////////////////////////////////////////////////////////
+        // //    line search to minimize residual in search direction
+        // ////////////////////////////////////////////////////////////////////
+        // int sMax = 2;
+        // int lineSearchMaxIt = 5;
+        // double LStol = 0.5; // as taken from Matthies + Strang
+        // //
+        // double s0 = 0.0;
+        // double s1 = 1.0;
+        // // G_i = R(u_i) . delta_u
+        // //     = R(u_0 + s_i * delta_u) . delta_u
+        // double G_init = form.computeG(0);
+        // double G0 = G_init;
+        // double G1 = form.computeG(1);
 
-        // if (commRank == 0)
-        //   cout << "G0 =\t " << G0 << " \t\tG1 =\t " << G1 << endl;
+        // // if (commRank == 0)
+        // //   cout << "G0 =\t " << G0 << " \t\tG1 =\t " << G1 << endl;
         
-        // find interval about which G changes sign
-        while (sgn(G0)*sgn(G1) > 0 && s1 < sMax)
-        {
-            s0 = s1;
-            s1 = 2*s1;
-            G0 = G1;
+        // // find interval about which G changes sign
+        // while (sgn(G0)*sgn(G1) > 0 && s1 < sMax)
+        // {
+        //     s0 = s1;
+        //     s1 = 2*s1;
+        //     G0 = G1;
             
-            // compute G1 =  R(u_0+s1*delta_u) . delta
-            G1 = form.computeG(s1);
-        }
+        //     // compute G1 =  R(u_0+s1*delta_u) . delta
+        //     G1 = form.computeG(s1);
+        // }
 
-        // find zero of G using this cool Illinois algorithm
-        s = s1;
-        double G = G1;
-        int i=0;
-        while (i <= lineSearchMaxIt && sgn(G1)*sgn(G0) < 0 && ( abs(G) > LStol*abs(G_init) || abs(s0-s1) > LStol*0.5*(s0+s1) ) )
-        {
-            ++i;
+        // // find zero of G using this cool Illinois algorithm
+        // s = s1;
+        // double G = G1;
+        // int i=0;
+        // while (i <= lineSearchMaxIt && sgn(G1)*sgn(G0) < 0 && ( abs(G) > LStol*abs(G_init) || abs(s0-s1) > LStol*0.5*(s0+s1) ) )
+        // {
+        //     ++i;
             
-            s = s1-G1*(s1-s0)/(G1-G0);
+        //     s = s1-G1*(s1-s0)/(G1-G0);
 
-            // compute G1 =  R(u_0+s*delta_u) . delta
-            G1 = form.computeG(s);
+        //     // compute G1 =  R(u_0+s*delta_u) . delta
+        //     G1 = form.computeG(s);
 
-            if ((sgn(G)*sgn(G1)) > 0)
-            {
-                G0 = 0.5*G0;
-            }
-            else
-            {
-                s0 = s1;
-                G0 = G1;
-            }
-            s1 = s;
-            G1 = G;
+        //     if ((sgn(G)*sgn(G1)) > 0)
+        //     {
+        //         G0 = 0.5*G0;
+        //     }
+        //     else
+        //     {
+        //         s0 = s1;
+        //         G0 = G1;
+        //     }
+        //     s1 = s;
+        //     G1 = G;
+        // }
+
+        ////////////////////////////////////////////////////////////////////
+        //    alternative line search to test Sylvester's criteria
+        ////////////////////////////////////////////////////////////////////
+        s=1;
+        if (useLineSearch)
+        {
+          int posEnrich = 5; // amount of enriching of grid points on which to ensure positivity
+          double lineSearchFactor = .75;
+          double eps = .001; // arbitrary
+          TFunctionPtr<double> conf11 = Function::constant(1.0) + (lambda/muP)*Function::solution(form.T(1,1),solutionBackground) + (lambda/muP)*s*Function::solution(form.T(1,1),solutionIncrement);
+          TFunctionPtr<double> conf22 = Function::constant(1.0) + (lambda/muP)*Function::solution(form.T(2,2),solutionBackground) + (lambda/muP)*s*Function::solution(form.T(2,2),solutionIncrement);
+          TFunctionPtr<double> conf12 = (lambda/muP)*Function::solution(form.T(1,2),solutionBackground) + (lambda/muP)*s*Function::solution(form.T(1,2),solutionIncrement);
+          TFunctionPtr<double> detConf = conf11*conf22 - conf12*conf12;
+          bool conf11Positive = (conf11 - Function::constant(eps))->isPositive(mesh,posEnrich);
+          bool detConfPositive = (detConf - Function::constant(eps))->isPositive(mesh,posEnrich);
+          int iter = 0;
+          int maxIter = 3;
+          while (!(conf11Positive && detConfPositive) && iter < maxIter)
+          {
+            s = s*lineSearchFactor;
+            conf11 = Function::constant(1.0) + (lambda/muP)*Function::solution(form.T(1,1),solutionBackground) + (lambda/muP)*s*Function::solution(form.T(1,1),solutionIncrement);
+            conf22 = Function::constant(1.0) + (lambda/muP)*Function::solution(form.T(2,2),solutionBackground) + (lambda/muP)*s*Function::solution(form.T(2,2),solutionIncrement);
+            conf12 = (lambda/muP)*Function::solution(form.T(1,2),solutionBackground) + (lambda/muP)*s*Function::solution(form.T(1,2),solutionIncrement);
+
+            detConf = conf11*conf22 - conf12*conf12;
+            conf11Positive = conf11->isPositive(mesh,posEnrich);
+            detConfPositive = detConf->isPositive(mesh,posEnrich);
+            iter++;
+          }
         }
 
         // Accumulate solution
@@ -834,13 +882,13 @@ int main(int argc, char *argv[])
           fluxDragCoefficient  = 2.0*fluxDragCoefficient;
           dragError = 2.0*dragError;
         }
-        else if (problemChoice == "Benchmark")
-        {
-          // 2/3 is the average inflow velocity
-          fieldDragCoefficient = 3.0/2.0*fieldDragCoefficient;
-          fluxDragCoefficient = 3.0/2.0*fluxDragCoefficient;
-          dragError = 3.0/2.0*dragError;
-        }
+        // else if (problemChoice == "Benchmark")
+        // {
+        //   2/3 is the average inflow velocity
+        //   fieldDragCoefficient = 3.0/2.0*fieldDragCoefficient;
+        //   fluxDragCoefficient = 3.0/2.0*fluxDragCoefficient;
+        //   dragError = 3.0/2.0*dragError;
+        // }
       }
 
       if (commRank == 0)

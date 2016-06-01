@@ -42,6 +42,7 @@ class OldroydBFormulationUW
   int _delta_k;
   string _filePrefix;
   double _time;
+  bool _stokesOnly; // to ignore convective term in Navier-Stokes part
   bool _timeStepping;
   bool _spaceTime;
   bool _includeVelocityTracesInFluxTerm; // distinguishes between two space-time formulation options
@@ -140,6 +141,9 @@ public:
   // ! set a pressure condition at a point
   void addZeroMeanPressureCondition();
 
+  // ! zeros out the solution increment
+  void clearSolutionIncrement();
+
   // ! initialize the Solution object(s) using the provided MeshTopology
   void initializeSolution(MeshTopologyPtr meshTopo, int fieldPolyOrder, int delta_k = 1,
                           TFunctionPtr<double> forcingFunction = Teuchos::null,
@@ -214,6 +218,12 @@ public:
 
   // ! set the RefinementStrategy to use for driving refinements
   void setRefinementStrategy(RefinementStrategyPtr refStrategy);
+
+  // ! get the Solver used for the linear updates
+  SolverPtr getSolver();
+
+  // ! set the Solver for the linear updates
+  void setSolver(SolverPtr solver);
 
   // ! set current time step used for transient solve
   void setTimeStep(double dt);
