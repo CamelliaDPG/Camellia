@@ -43,6 +43,7 @@ class OldroydBFormulationUW
   string _filePrefix;
   double _time;
   bool _stokesOnly; // to ignore convective term in Navier-Stokes part
+  bool _enforceLocalConservation;
   bool _timeStepping;
   bool _spaceTime;
   bool _includeVelocityTracesInFluxTerm; // distinguishes between two space-time formulation options
@@ -133,7 +134,7 @@ public:
   void addZeroInitialCondition(double t0);
 
   // ! sets an outflow velocity boundary condition.  If usePhysicalTractions is true, imposes zero-traction outflow conditions using penalty constraints.  Otherwise, imposes zero values on the "traction" arising from integration by parts on the (pI - L) term.
-  void addOutflowCondition(SpatialFilterPtr outflowRegion, bool usePhysicalTractions);
+  void addOutflowCondition(SpatialFilterPtr outflowRegion, double yMax, double muP, double lambda, bool usePhysicalTractions);
 
   // ! set a pressure condition at a point
   void addPointPressureCondition(vector<double> point = vector<double>());

@@ -18,6 +18,8 @@
 #include "PreviousSolutionFunction.h"
 #include "SimpleFunction.h"
 #include "SuperLUDistSolver.h"
+#include "LagrangeConstraints.h"
+
 
 using namespace Camellia;
 
@@ -124,6 +126,7 @@ OldroydBFormulationUW::OldroydBFormulationUW(MeshTopologyPtr meshTopo, Teuchos::
   double muP = parameters.get<double>("muP",1.0); // polymeric viscosity
   double alpha = parameters.get<double>("alpha",0);
   double lambda = parameters.get<double>("lambda",1.0);
+  bool enforceLocalConservation = parameters.get<bool>("enforceLocalConservation");
   bool useConformingTraces = parameters.get<bool>("useConformingTraces",false);
   int spatialPolyOrder = parameters.get<int>("spatialPolyOrder");
   int temporalPolyOrder = parameters.get<int>("temporalPolyOrder", 1);
@@ -143,6 +146,7 @@ OldroydBFormulationUW::OldroydBFormulationUW(MeshTopologyPtr meshTopo, Teuchos::
 
   _spaceDim = spaceDim;
   _useConformingTraces = useConformingTraces;
+  _enforceLocalConservation = enforceLocalConservation;
   _spatialPolyOrder = spatialPolyOrder;
   _temporalPolyOrder =temporalPolyOrder;
   _muS = muS;
@@ -734,6 +738,33 @@ OldroydBFormulationUW::OldroydBFormulationUW(MeshTopologyPtr meshTopo, Teuchos::
 
   _nonlinearIterationCount = 0;
 
+  // Enforce local conservation
+  if (_enforceLocalConservation)
+  {
+    TFunctionPtr<double> zero = TFunction<double>::zero();
+    if (_spaceDim == 2)
+    {
+      // CONSERVATION OF VOLUME
+      _solnIncrement->lagrangeConstraints()->addConstraint(u1_hat->times_normal_x() + u2_hat->times_normal_y() == zero);
+      // // CONSERVATION OF MOMENTUM (if Stokes)
+      // if (_stokesOnly)
+      // {
+      //   // we are assuming that there is no body forcing in the problem.
+      //   FunctionPtr x    = Function::xn(1);
+      //   FunctionPtr y    = Function::yn(1);
+      //   _solnIncrement->lagrangeConstraints()->addConstraint(sigma1n_hat == zero);
+      //   _solnIncrement->lagrangeConstraints()->addConstraint(sigma2n_hat == zero);
+      //   _solnIncrement->lagrangeConstraints()->addConstraint(x*sigma1n_hat - y*sigma2n_hat == zero); // seems to upset convergence 
+      // }
+      // _solnIncrement->lagrangeConstraints()->addConstraint(_muS*u1_hat->times_normal_x() - L11 == zero);
+    }
+    else if (_spaceDim == 3)
+    {
+      _solnIncrement->lagrangeConstraints()->addConstraint(u1_hat->times_normal_x() + u2_hat->times_normal_y() + u3_hat->times_normal_z() == zero);
+    }
+  }
+
+
   // TO DO: Set up stream function
 
 }
@@ -803,7 +834,7 @@ void OldroydBFormulationUW::addInflowViscoelasticStress(SpatialFilterPtr inflowR
   // }
 }
 
-void OldroydBFormulationUW::addOutflowCondition(SpatialFilterPtr outflowRegion, bool usePhysicalTractions)
+void OldroydBFormulationUW::addOutflowCondition(SpatialFilterPtr outflowRegion, double yMax, double muP, double lambda, bool usePhysicalTractions)
 {
   _haveOutflowConditionsImposed = true;
 
@@ -859,6 +890,9 @@ void OldroydBFormulationUW::addOutflowCondition(SpatialFilterPtr outflowRegion, 
     // {
     //   _solnIncrement->bc()->addDirichlet(sigman_hat(d), outflowRegion, zero);
     // }
+    TFunctionPtr<double> y    = TFunction<double>::yn(1);
+    // TFunctionPtr<double> T11 = Teuchos::rcp( new 18.0*muP*lambda*pow(y/(_height*_height),2));
+    // _solnIncrement->bc()->addDirichlet(this->sigman_hat(1), outflowRegion, -18.0*muP*lambda*y*y/(yMax*yMax*yMax*yMax));
     _solnIncrement->bc()->addDirichlet(this->sigman_hat(1), outflowRegion, zero);
     _solnIncrement->bc()->addDirichlet(this->u_hat(2), outflowRegion, zero);
   }
@@ -1786,7 +1820,8 @@ void OldroydBFormulationUW::solveForIncrement()
 
   RHSPtr savedRHS = _solnIncrement->rhs();
   _solnIncrement->setRHS(_rhsForSolve);
-  _solnIncrement->condensedSolve(_solver);
+  _solnIncrement->solve(_solver);
+  // _solnIncrement->condensedSolve(_solver);
   _solnIncrement->setRHS(savedRHS);
 }
 

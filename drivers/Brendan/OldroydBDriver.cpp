@@ -136,10 +136,10 @@ public:
   double value(double x, double y) {
     if (_i == 1 && _j == 1)
       // return -(1.0-pow(y/_height,2))*(8.0*_muP*_lambda*pow(y/(_height*_height),2));
-      return 3.0/2.0*(4-pow(y,2))*(8.0*_muP*_lambda*pow(y/(_height*_height),2));
+      return -3.0/2.0*(1.0-pow(y/_height,2))*(18.0*_muP*_lambda*pow(y/(_height*_height),2));
     else if ((_i == 1 && _j == 2) || (_i == 2 && _j == 1))
       // return -(1.0-pow(y/_height,2))*(-2.0*_muP*y/(_height*_height));
-      return 3.0/2.0*(4-pow(y,2))*(-2.0*_muP*y/(_height*_height));
+      return -3.0/2.0*(1.0-pow(y/_height,2))*(-3.0*_muP*y/(_height*_height));
     else if (_i == 2 && _j == 2)
       return 0.0;
     else
@@ -188,6 +188,7 @@ int main(int argc, char *argv[])
   int numXElems = 2;
   int numYElems = 2;
   bool stokesOnly = false;
+  bool enforceLocalConservation = false;
   bool useConformingTraces = true;
   string solverChoice = "KLU";
   string multigridStrategyString = "V-cycle";
@@ -195,7 +196,7 @@ int main(int argc, char *argv[])
   bool useConjugateGradient = true;
   bool logFineOperator = false;
   double solverTolerance = 1e-10;
-  int maxNonlinearIterations = 20;
+  int maxNonlinearIterations = 25;
   int enrichDegree = 0;
   double nonlinearTolerance = 1e-5;
   int maxLinearIterations = 10000;
@@ -220,6 +221,7 @@ int main(int argc, char *argv[])
   cmdp.setOption("numYElems",&numYElems,"number of elements in y direction");
   cmdp.setOption("stokesOnly", "NavierStokesOnly", &stokesOnly, "couple only with Stokes, not Navier-Stokes");
   cmdp.setOption("norm", &norm, "norm");
+  cmdp.setOption("enforceLocalConservation", "noLocalConservation", &enforceLocalConservation, "enforce local conservation principles at the element level");
   cmdp.setOption("conformingTraces", "nonconformingTraces", &useConformingTraces, "use conforming traces");
   cmdp.setOption("solver", &solverChoice, "KLU, SuperLUDist, MUMPS, GMG-Direct, GMG-ILU, GMG-IC");
   cmdp.setOption("multigridStrategy", &multigridStrategyString, "Multigrid strategy: V-cycle, W-cycle, Full, or Two-level");
@@ -265,6 +267,7 @@ int main(int argc, char *argv[])
   parameters.set("spatialPolyOrder", k);
   parameters.set("delta_k", delta_k);
   parameters.set("norm", norm);
+  parameters.set("enforceLocalConservation",enforceLocalConservation);
   parameters.set("useConformingTraces", useConformingTraces);
   parameters.set("stokesOnly",stokesOnly);
   parameters.set("useConservationFormulation",false);
@@ -445,7 +448,7 @@ int main(int argc, char *argv[])
 
     // outflow on right boundary
     // form.addOutflowCondition(rightBoundary, true); // true to impose zero traction by penalty (TODO)
-    form.addOutflowCondition(rightBoundary, false); // false for zero flux variable
+    form.addOutflowCondition(rightBoundary, height/2.0, muP, lambda, false); // false for zero flux variable
 
     // no slip on cylinder
     form.addWallCondition(cylinderBoundary);
@@ -484,7 +487,7 @@ int main(int argc, char *argv[])
 
     // outflow on right boundary
     // form.addOutflowCondition(rightBoundary, true); // true to impose zero traction by penalty (TODO)
-    form.addOutflowCondition(rightBoundary, false); // false for zero flux variable
+    form.addOutflowCondition(rightBoundary, height, muP, lambda, false); // false for zero flux variable
 
     // no slip on cylinder
     form.addWallCondition(cylinderBoundary);
@@ -527,13 +530,14 @@ int main(int argc, char *argv[])
 
     // outflow on right boundary
     // form.addOutflowCondition(rightBoundary, true); // true to impose zero traction by penalty (TODO)
-    form.addOutflowCondition(rightBoundary, false); // false for zero flux variable
+    // form.addOutflowCondition(rightBoundary, yMax, muP, lambda, false); // false for zero flux variable
+    form.addInflowCondition(rightBoundary, u);
 
     // no slip on cylinder
     form.addWallCondition(cylinderBoundary);
 
-    // cout << "ERROR: Problem type not currently supported. Returning null.\n";
-    // return Teuchos::null;  
+    //   zero-mean constraint
+    bc->addZeroMeanConstraint(p);
   }
   else if (problemChoice == "Test 1")
   {
@@ -590,9 +594,10 @@ int main(int argc, char *argv[])
   {
     TEUCHOS_TEST_FOR_EXCEPTION(true, std::invalid_argument, "unrecognized multigrid strategy");
   }
-  form.setSolver(solvers[solverChoice]);
+  if (solverChoice != "SuperLUDist")
+    form.setSolver(solvers[solverChoice]);
 
-  double errorTol = 0.01;
+  double errorTol = 0.001;
   double errorRef = 0.0;
   double lambdaInitial = lambda;
   double lambdaMax = lambdaInitial;
