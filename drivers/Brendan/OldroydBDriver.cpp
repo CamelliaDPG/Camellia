@@ -196,10 +196,10 @@ int main(int argc, char *argv[])
   bool useConjugateGradient = true;
   bool logFineOperator = false;
   double solverTolerance = 1e-10;
-  int maxNonlinearIterations = 25;
+  int maxNonlinearIterations = 10;
   int enrichDegree = 0;
   double nonlinearTolerance = 1e-5;
-  int maxLinearIterations = 10000;
+  int maxLinearIterations = 2000;
   // bool computeL2Error = false;
   bool exportSolution = false;
   bool useLineSearch = false;
@@ -567,7 +567,7 @@ int main(int argc, char *argv[])
 #ifdef HAVE_AMESOS_MUMPS
   solvers["MUMPS"] = Solver::getSolver(Solver::MUMPS, true);
 #endif
-  int azOutput = 20; // print residual every 20 CG iterations
+  int azOutput = 50; // print residual every 20 CG iterations
 
   GMGOperator::MultigridStrategy multigridStrategy;
   if (multigridStrategyString == "Two-level")
@@ -594,8 +594,37 @@ int main(int argc, char *argv[])
   {
     TEUCHOS_TEST_FOR_EXCEPTION(true, std::invalid_argument, "unrecognized multigrid strategy");
   }
-  if (solverChoice != "SuperLUDist")
-    form.setSolver(solvers[solverChoice]);
+
+  // Teuchos::RCP<GMGSolver> gmgSolver;
+  // if (solverChoice[0] == 'G')
+  // {
+  //   bool reuseFactorization = true;
+  //   SolverPtr coarseSolver = Solver::getDirectSolver(reuseFactorization);
+  //   int kCoarse = 1;
+  //   vector<MeshPtr> meshSequence = GMGSolver::meshesForMultigrid(mesh, kCoarse, delta_k);
+  //   // for (int i=0; i < meshSequence.size(); i++)
+  //   // {
+  //   //   if (commRank == 0)
+  //   //     cout << meshSequence[i]->numGlobalDofs() << endl;
+  //   // }
+  //   while (meshSequence[0]->numGlobalDofs() < 2000 && meshSequence.size() > 2)
+  //     meshSequence.erase(meshSequence.begin());
+  //   gmgSolver = Teuchos::rcp(new GMGSolver(solutionIncrement, meshSequence, maxLinearIterations, solverTolerance, multigridStrategy, coarseSolver, useCondensedSolve));
+  //   gmgSolver->setUseConjugateGradient(useConjugateGradient);
+  //   int azOutput = 20; // print residual every 20 CG iterations
+  //   gmgSolver->setAztecOutput(azOutput);
+  //   gmgSolver->gmgOperator()->setNarrateOnRankZero(logFineOperator,"finest GMGOperator");
+
+  //   if (solverChoice == "GMG-Direct")
+  //     gmgSolver->gmgOperator()->setSchwarzFactorizationType(GMGOperator::Direct);
+  //   if (solverChoice == "GMG-ILU")
+  //     gmgSolver->gmgOperator()->setSchwarzFactorizationType(GMGOperator::ILU);
+  //   if (solverChoice == "GMG-IC")
+  //     gmgSolver->gmgOperator()->setSchwarzFactorizationType(GMGOperator::IC);
+  //   form.setSolver(gmgSolver);
+  // }
+  // else if (solverChoice != "SuperLUDist")
+  //   form.setSolver(solvers[solverChoice]);
 
   double errorTol = 0.001;
   double errorRef = 0.0;
@@ -655,7 +684,6 @@ int main(int argc, char *argv[])
       //   exporter = Teuchos::rcp(new HDF5Exporter(mesh,fullSolnName.str(), outputDir));
       // }
 
-      solverTime->start(true);
       Teuchos::RCP<GMGSolver> gmgSolver;
       if (solverChoice[0] == 'G')
       {
@@ -682,10 +710,13 @@ int main(int argc, char *argv[])
           gmgSolver->gmgOperator()->setSchwarzFactorizationType(GMGOperator::ILU);
         if (solverChoice == "GMG-IC")
           gmgSolver->gmgOperator()->setSchwarzFactorizationType(GMGOperator::IC);
-        // soln->solve(gmgSolver);
+        form.setSolver(gmgSolver);
       }
-      // else
-      //   soln->condensedSolve(solvers[solverChoice]);
+      else if (solverChoice != "SuperLUDist" && refIndex == 0 && lambda == lambdaInitial)
+        form.setSolver(solvers[solverChoice]);
+
+
+      solverTime->start(true);
 
       ////////////////////////////////////////////////////////////////////
       //    Solve and accumulate solution
@@ -831,7 +862,6 @@ int main(int argc, char *argv[])
       //   l2Error = sqrt(u_l2);
       // }
       // compute drag coefficient if Hemker problem
-      // double dragCoefficient = 0.0;
       double fieldDragCoefficient = 0.0;
       double fluxDragCoefficient = 0.0;
       double verticalForce = 0.0;
