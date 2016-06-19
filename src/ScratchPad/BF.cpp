@@ -7,15 +7,18 @@
 //
 
 #include "BF.h"
-#include "VarFactory.h"
+
 #include "BilinearFormUtility.h"
 #include "Function.h"
 #include "PreviousSolutionFunction.h"
 #include "LinearTerm.h"
+#include "SerialDenseWrapper.h"
+#include "VarFactory.h"
 
 #include "Intrepid_FunctionSpaceTools.hpp"
 
-#include "SerialDenseWrapper.h"
+#include "Teuchos_BLAS.hpp"
+#include "Teuchos_LAPACK.hpp"
 
 #include <iostream>
 #include <sstream>
@@ -68,11 +71,6 @@ namespace Camellia
     _trialIDs = _varFactory->trialIDs();
     _testIDs = _varFactory->testIDs();
     _isLegacySubclass = false;
-    
-//    _useQRSolveForOptimalTestFunctions = true;
-//    _useSPDSolveForOptimalTestFunctions = false;
-//    _useIterativeRefinementsWithSPDSolve = false;
-//    _warnAboutZeroRowsAndColumns = true;
   }
   
   template <typename Scalar>
@@ -515,7 +513,7 @@ namespace Camellia
   {
     if (!_isLegacySubclass)
     {
-      stiffnessMatrix(stiffness, elemType, cellSideParities, basisCache, true); // default to checking
+      stiffnessMatrix(stiffness, elemType, cellSideParities, basisCache, false, true); // default to column-major, checking for zeros
     }
     else
     {
@@ -530,7 +528,7 @@ namespace Camellia
   template <typename Scalar>
   void TBF<Scalar>::stiffnessMatrix(FieldContainer<Scalar> &stiffness, Teuchos::RCP<ElementType> elemType,
                                     FieldContainer<double> &cellSideParities, Teuchos::RCP<BasisCache> basisCache,
-                                    bool checkForZeroCols)
+                                    bool rowMajor, bool checkForZeroCols)
   {
     // stiffness is sized as (C, FTest, FTrial)
     stiffness.initialize(0.0);
@@ -542,13 +540,30 @@ namespace Camellia
       TBilinearTerm<Scalar> bt = *btIt;
       TLinearTermPtr<Scalar> trialTerm = btIt->first;
       TLinearTermPtr<Scalar> testTerm = btIt->second;
-      trialTerm->integrate(stiffness, elemType->trialOrderPtr,
-                           testTerm,  elemType->testOrderPtr, basisCache);
+      if (rowMajor)
+      {
+        testTerm->integrate(stiffness, elemType->testOrderPtr,
+                            trialTerm,  elemType->trialOrderPtr, basisCache);
+      }
+      else
+      {
+        trialTerm->integrate(stiffness, elemType->trialOrderPtr,
+                             testTerm,  elemType->testOrderPtr, basisCache);
+      }
     }
     if (checkForZeroCols)
     {
-      bool checkRows = false; // zero rows just mean a test basis function won't get used, which is fine
-      bool checkCols = true; // zero columns mean that a trial basis function doesn't enter the computation, which is bad
+      bool checkRows, checkCols;
+      if (rowMajor)
+      {
+        checkRows = true;  // zero columns mean that a trial basis function doesn't enter the computation, which is bad
+        checkCols = false; // zero rows just mean a test basis function won't get used, which is fine
+      }
+      else
+      {
+        checkRows = false; // zero rows just mean a test basis function won't get used, which is fine
+        checkCols = true; // zero columns mean that a trial basis function doesn't enter the computation, which is bad
+      }
       if (! BilinearFormUtility<Scalar>::checkForZeroRowsAndColumns("TBF stiffness", stiffness, checkRows, checkCols) )
       {
         cout << "trial ordering:\n" << *(elemType->trialOrderPtr);
@@ -824,6 +839,62 @@ namespace Camellia
   }
   
   template <typename Scalar>
+  int TBF<Scalar>::factoredCholeskySolve(FieldContainer<Scalar> &ipMatrix, FieldContainer<Scalar> &stiffnessEnriched,
+                                         FieldContainer<Scalar> &rhsEnriched, FieldContainer<Scalar> &stiffness,
+                                         FieldContainer<Scalar> &rhs)
+  {
+    int N = ipMatrix.dimension(0);
+    TEUCHOS_TEST_FOR_EXCEPTION(N != ipMatrix.dimension(1), std::invalid_argument, "ipMatrix must be square");
+    int M = stiffnessEnriched.dimension(0);
+    TEUCHOS_TEST_FOR_EXCEPTION(N != stiffnessEnriched.dimension(1), std::invalid_argument, "stiffnessEnriched must be have one dimension equal to test ipMatrix dimension");
+    
+    char UPLO = 'L'; // lower-triangular
+    
+    int result = 0;
+    int INFO;
+    
+    Teuchos::LAPACK<int, double> lapack;
+    Teuchos::BLAS<int, double> blas;
+    
+    lapack.POTRF(UPLO, N, &ipMatrix[0], N, &INFO);
+    
+    if (INFO != 0)
+    {
+      cout << "dpptrf_ result: " << INFO << endl;
+      result = INFO;
+    }
+    
+    double ALPHA = 1.0;
+    blas.TRSM(Teuchos::LEFT_SIDE, Teuchos::LOWER_TRI, Teuchos::NO_TRANS, Teuchos::NON_UNIT_DIAG, N, M, ALPHA, &ipMatrix[0], N,
+              &stiffnessEnriched[0], N);
+
+    double BETA = 0.0;
+    blas.SYRK(Teuchos::LOWER_TRI, Teuchos::TRANS, M, N, ALPHA, &stiffnessEnriched[0], N, BETA, &stiffness[0], M);
+    
+    // copy lower-triangular part of stiffness to the upper-triangular part (in column-major/Fortran order)
+    for (int i=0; i<M; i++)
+    {
+      for (int j=i+1; j<M; j++)
+      {
+        // lower-triangle is stored in (i,j) where j >= i
+        // column-major: store (i,j) in i*M+j
+        // set (j,i) := (i,j)
+        stiffness[j*M+i] = stiffness[i*M+j];
+      }
+    }
+
+    // need also to take cellRectangularStiffness and do back-substitution with L^T, so that what's left in there is the
+    // cellOptimalWeights
+    int oneColumn = 1;
+
+    blas.TRSM(Teuchos::LEFT_SIDE, Teuchos::LOWER_TRI, Teuchos::NO_TRANS, Teuchos::NON_UNIT_DIAG, N, oneColumn, ALPHA, &ipMatrix[0], N,
+              &rhsEnriched[0], N);
+
+    SerialDenseWrapper::multiply(rhs, stiffnessEnriched, rhsEnriched, 'N', 'N');
+    return result;
+  }
+  
+  template <typename Scalar>
   TIPPtr<Scalar> TBF<Scalar>::graphNorm(double weightForL2TestTerms)
   {
     map<int, double> varWeights;
@@ -944,7 +1015,7 @@ namespace Camellia
     double testMatrixAssemblyTime = 0, localStiffnessDeterminationTime = 0;
     double rhsDeterminationTime = 0;
     
-    Epetra_Time timer(*MPIWrapper::CommWorld());
+    Epetra_Time timer(*MPIWrapper::CommSerial());
     bool printTimings = false;
 
     if (! _useSubgridMeshForOptimalTestSolve)
@@ -1003,10 +1074,74 @@ namespace Camellia
         }
         
         localStiffnessDeterminationTime += timer.ElapsedTime();
-
+        // "timeB" is basically the localStiffnessDeterminationTime
+        if (_optimalTestTimingCallback)
+        {
+          _optimalTestTimingCallback(numCells,0,localStiffnessDeterminationTime,0,0,elemType);
+        }
+        
         timer.ResetStartTime();
         rhs->integrateAgainstStandardBasis(rhsVector, testOrder, basisCache);
         rhsDeterminationTime += timer.ElapsedTime();
+      }
+      else if (_optimalTestSolver == FACTORED_CHOLESKY)
+      {
+        int numCells = basisCache->getPhysicalCubaturePoints().dimension(0);
+        int numTestDofs = testOrder->totalDofs();
+        int numTrialDofs = trialOrder->totalDofs();
+        
+        Epetra_Time timer(*MPIWrapper::CommSerial());
+        
+        double timeG, timeB, timeT, timeK; // time to compute Gram matrix, the right-hand side B, time to solve GT = B, and time to compute K = B^T T.
+        
+        FieldContainer<Scalar> stiffnessEnriched(numCells,numTrialDofs,numTestDofs);
+        
+        timer.ResetStartTime();
+        // RHS:
+        this->stiffnessMatrix(stiffnessEnriched, elemType, cellSideParities, basisCache, true, true);
+        timeB = timer.ElapsedTime();
+        
+        Teuchos::Array<int> localIPDim(2);
+        localIPDim[0] = numTestDofs;
+        localIPDim[1] = numTestDofs;
+        Teuchos::Array<int> localStiffnessEnrichedDim(2);
+        localStiffnessEnrichedDim[0] = stiffnessEnriched.dimension(1);
+        localStiffnessEnrichedDim[1] = stiffnessEnriched.dimension(2);
+        Teuchos::Array<int> localStiffnessDim(2);
+        localStiffnessDim[0] = localStiffness.dimension(1);
+        localStiffnessDim[1] = localStiffness.dimension(2);
+        
+        FieldContainer<Scalar> ipMatrix(numCells,numTestDofs,numTestDofs);
+        DofOrderingPtr testOrder = elemType->testOrderPtr;
+        timer.ResetStartTime();
+        ip->computeInnerProductMatrix(ipMatrix, testOrder, ipBasisCache);
+        timeG = timer.ElapsedTime();
+        
+        FieldContainer<Scalar> rhsEnriched(numCells,numTestDofs);
+        rhs->integrateAgainstStandardBasis(rhsEnriched,testOrder,basisCache);
+        
+        Teuchos::Array<int> localRHSEnrichedDim(2);
+        localRHSEnrichedDim[0] = rhsEnriched.dimension(1);
+        localRHSEnrichedDim[1] = 1;
+        
+        Teuchos::Array<int> localRHSDim(2);
+        localRHSDim[0] = numTrialDofs;
+        localRHSDim[1] = 1;
+        
+        timeT = 0;
+        timeK = 0;
+        for (int cellIndex=0; cellIndex < numCells; cellIndex++)
+        {
+          timer.ResetStartTime();
+          int result = 0;
+          FieldContainer<Scalar> cellIPMatrix(localIPDim, &ipMatrix(cellIndex,0,0));
+          FieldContainer<Scalar> cellStiffnessEnriched(localStiffnessEnrichedDim, &stiffnessEnriched(cellIndex,0,0));
+          FieldContainer<Scalar> cellStiffness(localStiffnessDim, &localStiffness(cellIndex,0,0));
+          FieldContainer<Scalar> cellRHSEnriched(localRHSEnrichedDim, &rhsEnriched(cellIndex,0));
+          FieldContainer<Scalar> cellRHS(localRHSDim, &rhsVector(cellIndex,0));
+
+          result = factoredCholeskySolve(cellIPMatrix, cellStiffnessEnriched, cellRHSEnriched, cellStiffness, cellRHS);
+        }
       }
       else
       {
@@ -1029,6 +1164,11 @@ namespace Camellia
         timer.ResetStartTime();
         rhs->integrateAgainstOptimalTests(rhsVector, optTestCoeffs, testOrder, basisCache);
         rhsDeterminationTime += timer.ElapsedTime();
+      }
+      
+      if (_rhsTimingCallback)
+      {
+        _rhsTimingCallback(numCells,rhsDeterminationTime,elemType);
       }
     }
     else
@@ -1097,9 +1237,9 @@ namespace Camellia
     int numTestDofs = testOrdering->totalDofs();
     int numTrialDofs = trialOrdering->totalDofs();
     
-    Epetra_Time timer(*MPIWrapper::CommWorld());
+    Epetra_Time timer(*MPIWrapper::CommSerial());
     
-    double timeG, timeB, timeT; // time to compute Gram matrix, the right-hand side B, and time to solve GT = B
+    double timeG, timeB, timeT, timeK; // time to compute Gram matrix, the right-hand side B, time to solve GT = B, and time to compute K = B^T T.
     
     // check that optimalTestWeights is properly dimensioned....
     TEUCHOS_TEST_FOR_EXCEPTION( ( optimalTestWeights.dimension(0) != numCells ),
@@ -1118,16 +1258,26 @@ namespace Camellia
     FieldContainer<Scalar> rectangularStiffnessMatrix(numCells,numTestDofs,numTrialDofs);
     //  FieldContainer<double> stiffnessMatrixT(numCells,numTrialDofs,numTestDofs);
     
-    timer.ResetStartTime();
-    // RHS:
-    this->stiffnessMatrix(rectangularStiffnessMatrix, elemType, cellSideParities, stiffnessBasisCache);
-    timeB = timer.ElapsedTime();
-    
     int solvedAll = 0;
     
-    Teuchos::Array<int> cellOptimalWeightsTDim(2); // data stored in transposed order relative to what we'll eventually want
-    cellOptimalWeightsTDim[0] = numTestDofs;
-    cellOptimalWeightsTDim[1] = numTrialDofs;
+    timer.ResetStartTime();
+    TEUCHOS_TEST_FOR_EXCEPTION(_optimalTestSolver == FACTORED_CHOLESKY, std::invalid_argument, "optimalTestWeightsAndStiffness() should not be called for FACTORED_CHOLESKY");
+    // RHS:
+    if (_optimalTestSolver != FACTORED_CHOLESKY)
+    {
+      this->stiffnessMatrix(rectangularStiffnessMatrix, elemType, cellSideParities, stiffnessBasisCache);
+    }
+    else
+    {
+      // row-major order
+      rectangularStiffnessMatrix.resize(numCells,numTrialDofs,numTestDofs);
+      this->stiffnessMatrix(rectangularStiffnessMatrix, elemType, cellSideParities, stiffnessBasisCache, true, true);
+    }
+    timeB = timer.ElapsedTime();
+    
+    Teuchos::Array<int> cellOptimalWeightsTDim(2); // data stored in transposed order relative to what we'll eventually want (except in case of FACTORED_CHOLESKY)
+    cellOptimalWeightsTDim[0] = rectangularStiffnessMatrix.dimension(1);
+    cellOptimalWeightsTDim[1] = rectangularStiffnessMatrix.dimension(2);
     
     Teuchos::Array<int> localIPDim(2);
     localIPDim[0] = numTestDofs;
@@ -1145,64 +1295,93 @@ namespace Camellia
     ip->computeInnerProductMatrix(ipMatrix, testOrder, ipBasisCache);
     timeG = timer.ElapsedTime();
     
-    timer.ResetStartTime();
+    timeT = 0;
+    timeK = 0;
     for (int cellIndex=0; cellIndex < numCells; cellIndex++)
     {
+      timer.ResetStartTime();
       int result = 0;
       FieldContainer<Scalar> cellIPMatrix(localIPDim, &ipMatrix(cellIndex,0,0));
       FieldContainer<Scalar> cellRectangularStiffness(localRectangularStiffnessDim, &rectangularStiffnessMatrix(cellIndex,0,0));
       FieldContainer<Scalar> cellStiffness(localStiffnessDim, &stiffnessMatrix(cellIndex,0,0));
       FieldContainer<Scalar> cellOptimalWeightsT(cellOptimalWeightsTDim, &optimalTestWeights(cellIndex,0,0));
-      if (_useQRSolveForOptimalTestFunctions)
+      switch(_optimalTestSolver)
       {
-        bool useIPTranspose = true; // true value may allow less memory to be used during solveSystemUsingQR() (maybe only if we can get overwriting to work, below)
-        bool allowIPOverwrite = true; // assert that we won't be using cellIPMatrix again
-        result = SerialDenseWrapper::solveSystemUsingQR(cellOptimalWeightsT, cellIPMatrix, cellRectangularStiffness, useIPTranspose, allowIPOverwrite);
-        //        result = SerialDenseWrapper::solveSystemUsingQR(optimalWeightsT, cellIPMatrix, cellRectangularStiffness);
-      }
-      else if (_useSPDSolveForOptimalTestFunctions)
-      {
-        bool allowIPOverwrite = false; // assert that we won't be using cellIPMatrix again
-        result = SerialDenseWrapper::solveSPDSystemMultipleRHS(cellOptimalWeightsT, cellIPMatrix, cellRectangularStiffness, allowIPOverwrite);
-        if (result != 0)
+        case CHOLESKY:
         {
-          // may be that we're not SPD numerically
-          cout << "During optimal test weight solution, SPD solve returned error " << result << ".  Solving with LU factorization instead of SPD solve.\n";
-          result = SerialDenseWrapper::solveSystemMultipleRHS(cellOptimalWeightsT, cellIPMatrix, cellRectangularStiffness);
+          bool allowIPOverwrite = false; // assert that we won't be using cellIPMatrix again
+          result = SerialDenseWrapper::solveSPDSystemMultipleRHS(cellOptimalWeightsT, cellIPMatrix, cellRectangularStiffness, allowIPOverwrite);
+          if (result != 0)
+          {
+            // may be that we're not SPD numerically
+            cout << "During optimal test weight solution, SPD solve returned error " << result << ".  Solving with LU factorization instead of SPD solve.\n";
+            result = SerialDenseWrapper::solveSystemMultipleRHS(cellOptimalWeightsT, cellIPMatrix, cellRectangularStiffness);
+          }
         }
+          break;
+        case QR:
+        {
+          bool useIPTranspose = true; // true value may allow less memory to be used during solveSystemUsingQR() (maybe only if we can get overwriting to work, below)
+          bool allowIPOverwrite = true; // assert that we won't be using cellIPMatrix again
+          result = SerialDenseWrapper::solveSystemUsingQR(cellOptimalWeightsT, cellIPMatrix, cellRectangularStiffness, useIPTranspose, allowIPOverwrite);
+        }
+          break;
+        case LU:
+          SerialDenseWrapper::solveSystemMultipleRHS(cellOptimalWeightsT, cellIPMatrix, cellRectangularStiffness);
+          break;
+        default:
+          TEUCHOS_TEST_FOR_EXCEPTION(true, std::invalid_argument, "Unsupported case");
       }
-      else
-      {
-        SerialDenseWrapper::solveSystemMultipleRHS(cellOptimalWeightsT, cellIPMatrix, cellRectangularStiffness);
-      }
+      timeT += timer.ElapsedTime();
       
+      timer.ResetStartTime();
       // multiply to determine stiffness matrix.
       SerialDenseWrapper::multiply(cellStiffness, cellOptimalWeightsT, cellRectangularStiffness, 'T', 'N'); // transpose A; don't transpose B
-      
       // transpose the optimal test weights -- since this is a view into optimalTestWeights, this reorders (part of) that matrix according to contract with caller
       SerialDenseWrapper::transposeMatrix(cellOptimalWeightsT);
+      timeK += timer.ElapsedTime();
       
       if (result != 0)
       {
         solvedAll = result;
       }
     }
-    timeT = timer.ElapsedTime();
    
+    if (_optimalTestTimingCallback)
+    {
+      _optimalTestTimingCallback(numCells,timeG,timeB,timeT,timeK,elemType);
+    }
     bool printTimings = false;
     if (printTimings)
     {
-      cout << "BF timings: computed G in " << timeG << " seconds, B in " << timeB << "; solve for T in " << timeT << endl;
+      cout << "BF timings: on " << numCells << " elements, computed G in " << timeG << " seconds, B in " << timeB << " seconds; solve for T in " << timeT;
+      cout << " seconds; compute K=B^T T in " << timeK << " seconds." << endl;
     }
     return solvedAll;
   }
   
   template <typename Scalar>
-  void TBF<Scalar>::setUseSPDSolveForOptimalTestFunctions(bool value)
+  void TBF<Scalar>::setOptimalTestTimingCallback(std::function<void(int numElements, double timeG, double timeB, double timeT, double timeK, ElementTypePtr elemType)> &optimalTestTimingCallback)
   {
-    _useSPDSolveForOptimalTestFunctions = value;
-    if (_useSPDSolveForOptimalTestFunctions)
-      _useQRSolveForOptimalTestFunctions = false;
+    _optimalTestTimingCallback = optimalTestTimingCallback;
+  }
+  
+  template <typename Scalar>
+  void TBF<Scalar>::setRHSTimingCallback(std::function<void(int numElements, double timeRHS, ElementTypePtr elemType)> &rhsTimingCallback)
+  {
+    _rhsTimingCallback = rhsTimingCallback;
+  }
+  
+  template <typename Scalar>
+  typename TBF<Scalar>::OptimalTestSolver TBF<Scalar>::optimalTestSolver() const
+  {
+    return _optimalTestSolver;
+  }
+  
+  template <typename Scalar>
+  void TBF<Scalar>::setOptimalTestSolver(OptimalTestSolver choice)
+  {
+    _optimalTestSolver = choice;
   }
   
   template <typename Scalar>

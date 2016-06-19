@@ -22,19 +22,32 @@ namespace Camellia
 template <typename Scalar>
 class TBF
 {
+public:
+  enum OptimalTestSolver
+  {
+    CHOLESKY,
+    FACTORED_CHOLESKY,
+    LU,
+    QR
+  };
+private:
   vector< TBilinearTerm<Scalar> > _terms;
   vector< TBilinearTerm<Scalar> > _jumpTerms; // DG-style jump terms
   
   VarFactoryPtr _varFactory;
 
+  std::function<void(int numElements, double timeG, double timeB, double timeT, double timeK, ElementTypePtr elemType)> _optimalTestTimingCallback;
+  std::function<void(int numElements, double timeRHS, ElementTypePtr elemType)> _rhsTimingCallback;
+  
   bool _isLegacySubclass;
   //members that used to be part of BilinearForm:
 protected:
   vector< int > _trialIDs, _testIDs;
   static set<int> _normalOperators;
-  bool _useSPDSolveForOptimalTestFunctions = false;
+  
+  OptimalTestSolver _optimalTestSolver = CHOLESKY; // for now; will do FACTORED_CHOLESKY later;
+  
   bool _useIterativeRefinementsWithSPDSolve = false;
-  bool _useQRSolveForOptimalTestFunctions = true;
   bool _warnAboutZeroRowsAndColumns = true;
   bool _useSubgridMeshForOptimalTestSolve = false;
   
@@ -89,6 +102,10 @@ public:
   
   const std::vector< TBilinearTerm<Scalar> > & getJumpTerms() const;
 
+  static int factoredCholeskySolve(Intrepid::FieldContainer<Scalar> &ipMatrix, Intrepid::FieldContainer<Scalar> &stiffnessEnriched,
+                                   Intrepid::FieldContainer<Scalar> &rhsEnriched, Intrepid::FieldContainer<Scalar> &stiffness,
+                                   Intrepid::FieldContainer<Scalar> &rhs);
+  
   virtual void localStiffnessMatrixAndRHS(Intrepid::FieldContainer<Scalar> &localStiffness, Intrepid::FieldContainer<Scalar> &rhsVector,
                                           TIPPtr<Scalar> ip, BasisCachePtr ipBasisCache,
                                           TRHSPtr<Scalar> rhs,  BasisCachePtr basisCache);
@@ -114,7 +131,7 @@ public:
                        Intrepid::FieldContainer<double> &cellSideParities, Teuchos::RCP<BasisCache> basisCache);
   void stiffnessMatrix(Intrepid::FieldContainer<Scalar> &stiffness, Teuchos::RCP<ElementType> elemType,
                        Intrepid::FieldContainer<double> &cellSideParities, Teuchos::RCP<BasisCache> basisCache,
-                       bool checkForZeroCols);
+                       bool rowMajor, bool checkForZeroCols);
 
   // legacy version of stiffnessMatrix():
   virtual void stiffnessMatrix(Intrepid::FieldContainer<Scalar> &stiffness, DofOrderingPtr trialOrdering,
@@ -140,9 +157,12 @@ public:
                                   vector<Camellia::EOperator> &testOps); // default implementation calls trialTestOperator
 
   virtual VarFactoryPtr varFactory();
+  
+  void setOptimalTestTimingCallback(std::function<void(int numElements, double timeG, double timeB, double timeT, double timeK, ElementTypePtr elemType)> &optimalTestTimingCallback);
+  void setRHSTimingCallback(std::function<void(int numElements, double timeRHS, ElementTypePtr elemType)> &rhsTimingCallback);
 
-  // non-virtual methods (originally from BilinearForm):
-  void setUseSPDSolveForOptimalTestFunctions(bool value);
+  OptimalTestSolver optimalTestSolver() const;
+  void setOptimalTestSolver(OptimalTestSolver choice);
   void setUseIterativeRefinementsWithSPDSolve(bool value);
   void setUseExtendedPrecisionSolveForOptimalTestFunctions(bool value);
   void setUseSubgridMeshForOptimalTestFunctions(bool value);
