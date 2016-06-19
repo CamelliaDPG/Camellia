@@ -1,13 +1,13 @@
 //
-//  OldroydBFormulation2.h
+//  OldroydBFormulationUW.h
 //  Camellia
 //
 //  Created by Nate Roberts on 10/29/14.
 //
 //
 
-#ifndef Camellia_OldroydBFormulation2_h
-#define Camellia_OldroydBFormulation2_h
+#ifndef Camellia_OldroydBFormulationUW_h
+#define Camellia_OldroydBFormulationUW_h
 
 #include <Teuchos_ParameterList.hpp>
 
@@ -27,21 +27,23 @@
 
 namespace Camellia
 {
-class OldroydBFormulation2
+class OldroydBFormulationUW
 {
   BFPtr _oldroydBBF;
   BFPtr _steadyStokesBF;
 
   int _spaceDim;
   bool _useConformingTraces;
-  double _mu;
-  double _mu1;
-  double _lambda;
+  double _muS;
+  double _muP;
+  double _alpha;
   int _spatialPolyOrder;
   int _temporalPolyOrder;
   int _delta_k;
   string _filePrefix;
   double _time;
+  bool _stokesOnly; // to ignore convective term in Navier-Stokes part
+  bool _enforceLocalConservation;
   bool _timeStepping;
   bool _spaceTime;
   bool _includeVelocityTracesInFluxTerm; // distinguishes between two space-time formulation options
@@ -52,6 +54,8 @@ class OldroydBFormulation2
   int _nonlinearIterationCount; // starts at 0, increases for each iterate
 
   bool _haveOutflowConditionsImposed; // used to track whether we should impose point/zero mean conditions on pressure
+
+  Teuchos::RCP<ParameterFunction> _lambda; // use a ParameterFunction so that we can set value later and references (in BF, e.g.) automatically pick this up
 
   Teuchos::RCP<ParameterFunction> _dt; // use a ParameterFunction so that we can set value later and references (in BF, e.g.) automatically pick this up
   Teuchos::RCP<ParameterFunction> _t;  // use a ParameterFunction so that user can easily "ramp up" BCs in time...
@@ -103,8 +107,8 @@ class OldroydBFormulation2
 
   void turnOffSuperLUDistOutput(Teuchos::RCP<GMGSolver> gmgSolver);
 public:
-  OldroydBFormulation2(MeshTopologyPtr meshTopo, Teuchos::ParameterList &parameters);
-//  OldroydBFormulation2(int spaceDim, bool useConformingTraces, double mu = 1.0,
+  OldroydBFormulationUW(MeshTopologyPtr meshTopo, Teuchos::ParameterList &parameters);
+//  OldroydBFormulationUW(int spaceDim, bool useConformingTraces, double mu = 1.0,
 //                       bool transient = false, double dt = 1.0);
 
   // ! the Oldroyd-B VGP formulation bilinear form
@@ -113,8 +117,14 @@ public:
   // ! sets a wall boundary condition
   void addWallCondition(SpatialFilterPtr wall);
 
+  // ! sets an x-reflective boundary condition
+  void addSymmetryCondition(SpatialFilterPtr wall);
+
   // ! sets an inflow velocity boundary condition; u should be a vector-valued function.
   void addInflowCondition(SpatialFilterPtr inflowRegion, TFunctionPtr<double> u);
+
+  // ! sets an inflow values of the viscoelastic stress Tun should be a (symmetric) 2-tensor.
+  void addInflowViscoelasticStress(SpatialFilterPtr inflowRegion, TFunctionPtr<double> T11un, TFunctionPtr<double> T12un, TFunctionPtr<double> T22un);  
 
   // ! Sets an initial condition for space-time.  u0 should have a number of components equal to the spatial dimension.
   // ! If a null pressure is provided (the default), no initial condition will be imposed on the pressure.
@@ -124,13 +134,16 @@ public:
   void addZeroInitialCondition(double t0);
 
   // ! sets an outflow velocity boundary condition.  If usePhysicalTractions is true, imposes zero-traction outflow conditions using penalty constraints.  Otherwise, imposes zero values on the "traction" arising from integration by parts on the (pI - L) term.
-  void addOutflowCondition(SpatialFilterPtr outflowRegion, bool usePhysicalTractions);
+  void addOutflowCondition(SpatialFilterPtr outflowRegion, double yMax, double muP, double lambda, bool usePhysicalTractions);
 
   // ! set a pressure condition at a point
   void addPointPressureCondition(vector<double> point = vector<double>());
 
   // ! set a pressure condition at a point
   void addZeroMeanPressureCondition();
+
+  // ! zeros out the solution increment
+  void clearSolutionIncrement();
 
   // ! initialize the Solution object(s) using the provided MeshTopology
   void initializeSolution(MeshTopologyPtr meshTopo, int fieldPolyOrder, int delta_k = 1,
@@ -167,18 +180,24 @@ public:
   int nonlinearIterationCount();
 
   // ! Loads the mesh and solution from disk, if they were previously saved using save().  In the present
-  // ! implementation, assumes that the constructor arguments provided to OldroydBFormulation2 were the same
-  // ! on the OldroydBFormulation2 on which save() was invoked as they were for this OldroydBFormulation2.
+  // ! implementation, assumes that the constructor arguments provided to OldroydBFormulationUW were the same
+  // ! on the OldroydBFormulationUW on which save() was invoked as they were for this OldroydBFormulationUW.
   void load(std::string prefixString);
 
-  // ! Returns viscosity mu.
-  double mu();
+  // ! Returns solvent viscosity, muS.
+  double muS();
 
-  // ! Returns mu1.
-  double mu1();
+  // ! Returns polymeric viscosity, muP.
+  double muP();
+
+  // ! Returns alpha.
+  double alpha();
 
   // ! Returns lambda.
-  double lambda();
+  Teuchos::RCP<ParameterFunction> lambda();
+
+  // ! Sets lambda.
+  void setLambda(double lambda);
 
   // ! refine according to energy error in the solution
   void refine();
@@ -201,6 +220,12 @@ public:
   // ! set the RefinementStrategy to use for driving refinements
   void setRefinementStrategy(RefinementStrategyPtr refStrategy);
 
+  // ! get the Solver used for the linear updates
+  SolverPtr getSolver();
+
+  // ! set the Solver for the linear updates
+  void setSolver(SolverPtr solver);
+
   // ! set current time step used for transient solve
   void setTimeStep(double dt);
 
@@ -213,6 +238,12 @@ public:
   // ! Returns the latest solution increment (at current time)
   TSolutionPtr<double> solutionIncrement();
 
+  // ! Solve without accumulating solution
+  void solveForIncrement();
+
+  // ! Accumalate background flow with present value of solution increment
+  void accumulate(double weight=1.0);
+
   // ! The first time this is called, calls solution()->solve(), and the weight argument is ignored.  After the first call, solves for the next iterate, and adds to background flow with the specified weight.
   void solveAndAccumulate(double weight=1.0);
 
@@ -224,6 +255,9 @@ public:
 
   // ! Solves iteratively
   void solveIteratively(int maxIters, double cgTol, int azOutputLevel = 0, bool suppressSuperLUOutput = true);
+  
+  // computes Res(u + s*delta_u) . delta_u
+  double computeG(double s);
 
   // ! Returns the spatial dimension.
   int spaceDim();
@@ -264,6 +298,9 @@ public:
   VarPtr v(int i);
   VarPtr q();
 
+  // error representation function
+  TRieszRepPtr<double> rieszResidual(FunctionPtr forcingFunction);
+
 
   // ! returns the pressure (which depends on the solution)
   TFunctionPtr<double> getPressureSolution();
@@ -280,13 +317,16 @@ public:
   // ! returns the forcing function for this formulation if u and p are the exact solutions.
   TFunctionPtr<double> forcingFunction(TFunctionPtr<double> u, TFunctionPtr<double> p);
 
+  // // ! returns the friction on the mesh skeleton (sigma_n) x n
+  // TFunctionPtr<double> friction(SolutionPtr soln);
+
   // ! Set the forcing function for problem.  Should be a vector-valued function, with number of components equal to the spatial dimension.
   void setForcingFunction(TFunctionPtr<double> f);
 
   // ! returns the convective term (u dot grad u) corresponding to the provided velocity function
   static FunctionPtr convectiveTerm(int spaceDim, FunctionPtr u_exact);
 
-  // static OldroydBFormulation2 steadyFormulation(int spaceDim, double mu, bool useConformingTraces);
+  // static OldroydBFormulationUW steadyFormulation(int spaceDim, double mu, bool useConformingTraces);
 
   // // ! when includeVelocityTracesInFluxTerm is true, u1_hat, etc. only defined on spatial interfaces; the temporal velocities are the spatially-normal components of tn_hat.
   // static OldroydBFormulation2 spaceTimeFormulation(int spaceDim, double mu, bool useConformingTraces, bool includeVelocityTracesInFluxTerm = true);

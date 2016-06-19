@@ -388,7 +388,7 @@ int GMGSolver::solve(bool buildCoarseStiffness)
 {
   int rank = Teuchos::GlobalMPISession::getRank();
   
-  bool useBelos = true; // new option, under development (otherwise, use Aztec)
+  bool useBelos = false; // new option, under development (otherwise, use Aztec)
   
   int solveResult;
   
@@ -480,8 +480,9 @@ int GMGSolver::solve(bool buildCoarseStiffness)
     
     if (_computeCondest && _useCG)
     {
-      _condest = cgSolver->getConditionEstimate();
-      if ((rank==0) && (_azOutput > 0))
+      //_condest = cgSolver->getConditionEstimate();
+    _condest = -1;  
+    if ((rank==0) && (_azOutput > 0))
       {
         cout << "Condition number estimate: " << _condest << endl;
       }

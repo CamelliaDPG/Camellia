@@ -1,12 +1,12 @@
 
-//  OldroydBFormulation2.cpp
+//  OldroydBFormulationUW.cpp
 //  Camellia
 //
-//  Created by Nate Roberts on 10/29/14.
+//  Created by Brendan Keith, October 2015
 //
 //
 
-#include "OldroydBFormulation2.h"
+#include "OldroydBFormulationUW.h"
 
 #include "ConstantScalarFunction.h"
 #include "Constraint.h"
@@ -18,59 +18,61 @@
 #include "PreviousSolutionFunction.h"
 #include "SimpleFunction.h"
 #include "SuperLUDistSolver.h"
+#include "LagrangeConstraints.h"
+
 
 using namespace Camellia;
 
-const string OldroydBFormulation2::S_U1 = "u_1";
-const string OldroydBFormulation2::S_U2 = "u_2";
-const string OldroydBFormulation2::S_U3 = "u_3";
-const string OldroydBFormulation2::S_L11 = "L_{11}";
-const string OldroydBFormulation2::S_L12 = "L_{12}";
-const string OldroydBFormulation2::S_L13 = "L_{13}";
-const string OldroydBFormulation2::S_L21 = "L_{21}";
-const string OldroydBFormulation2::S_L22 = "L_{22}";
-const string OldroydBFormulation2::S_L23 = "L_{23}";
-const string OldroydBFormulation2::S_L31 = "L_{31}";
-const string OldroydBFormulation2::S_L32 = "L_{32}";
-const string OldroydBFormulation2::S_L33 = "L_{33}";
-const string OldroydBFormulation2::S_T11 = "T_{11}";
-const string OldroydBFormulation2::S_T12 = "T_{12}";
-const string OldroydBFormulation2::S_T13 = "T_{13}";
-const string OldroydBFormulation2::S_T22 = "T_{22}";
-const string OldroydBFormulation2::S_T23 = "T_{23}";
-const string OldroydBFormulation2::S_T33 = "T_{33}";
-const string OldroydBFormulation2::S_P = "p";
+const string OldroydBFormulationUW::S_U1 = "u_1";
+const string OldroydBFormulationUW::S_U2 = "u_2";
+const string OldroydBFormulationUW::S_U3 = "u_3";
+const string OldroydBFormulationUW::S_L11 = "L_{11}";
+const string OldroydBFormulationUW::S_L12 = "L_{12}";
+const string OldroydBFormulationUW::S_L13 = "L_{13}";
+const string OldroydBFormulationUW::S_L21 = "L_{21}";
+const string OldroydBFormulationUW::S_L22 = "L_{22}";
+const string OldroydBFormulationUW::S_L23 = "L_{23}";
+const string OldroydBFormulationUW::S_L31 = "L_{31}";
+const string OldroydBFormulationUW::S_L32 = "L_{32}";
+const string OldroydBFormulationUW::S_L33 = "L_{33}";
+const string OldroydBFormulationUW::S_T11 = "T_{11}";
+const string OldroydBFormulationUW::S_T12 = "T_{12}";
+const string OldroydBFormulationUW::S_T13 = "T_{13}";
+const string OldroydBFormulationUW::S_T22 = "T_{22}";
+const string OldroydBFormulationUW::S_T23 = "T_{23}";
+const string OldroydBFormulationUW::S_T33 = "T_{33}";
+const string OldroydBFormulationUW::S_P = "p";
 
-const string OldroydBFormulation2::S_U1_HAT = "\\widehat{u}_1";
-const string OldroydBFormulation2::S_U2_HAT = "\\widehat{u}_2";
-const string OldroydBFormulation2::S_U3_HAT = "\\widehat{u}_3";
-const string OldroydBFormulation2::S_SIGMAN1_HAT = "\\widehat{\\sigma}_{1n}";
-const string OldroydBFormulation2::S_SIGMAN2_HAT = "\\widehat{\\sigma}_{2n}";
-const string OldroydBFormulation2::S_SIGMAN3_HAT = "\\widehat{\\sigma}_{3n}";
-const string OldroydBFormulation2::S_TUN11_HAT = "\\hat{(T\\otimes u)_{n_{11}}}";
-const string OldroydBFormulation2::S_TUN12_HAT = "\\hat{(T\\otimes u)_{n_{12}}}";
-const string OldroydBFormulation2::S_TUN13_HAT = "\\hat{(T\\otimes u)_{n_{13}}}";
-const string OldroydBFormulation2::S_TUN22_HAT = "\\hat{(T\\otimes u)_{n_{22}}}";
-const string OldroydBFormulation2::S_TUN23_HAT = "\\hat{(T\\otimes u)_{n_{23}}}";
-const string OldroydBFormulation2::S_TUN33_HAT = "\\hat{(T\\otimes u)_{n_{33}}}";
+const string OldroydBFormulationUW::S_U1_HAT = "\\widehat{u}_1";
+const string OldroydBFormulationUW::S_U2_HAT = "\\widehat{u}_2";
+const string OldroydBFormulationUW::S_U3_HAT = "\\widehat{u}_3";
+const string OldroydBFormulationUW::S_SIGMAN1_HAT = "\\widehat{\\sigma}_{1n}";
+const string OldroydBFormulationUW::S_SIGMAN2_HAT = "\\widehat{\\sigma}_{2n}";
+const string OldroydBFormulationUW::S_SIGMAN3_HAT = "\\widehat{\\sigma}_{3n}";
+const string OldroydBFormulationUW::S_TUN11_HAT = "\\hat{(T\\otimes u)_{n_{11}}}";
+const string OldroydBFormulationUW::S_TUN12_HAT = "\\hat{(T\\otimes u)_{n_{12}}}";
+const string OldroydBFormulationUW::S_TUN13_HAT = "\\hat{(T\\otimes u)_{n_{13}}}";
+const string OldroydBFormulationUW::S_TUN22_HAT = "\\hat{(T\\otimes u)_{n_{22}}}";
+const string OldroydBFormulationUW::S_TUN23_HAT = "\\hat{(T\\otimes u)_{n_{23}}}";
+const string OldroydBFormulationUW::S_TUN33_HAT = "\\hat{(T\\otimes u)_{n_{33}}}";
 
-const string OldroydBFormulation2::S_V1 = "v_1";
-const string OldroydBFormulation2::S_V2 = "v_2";
-const string OldroydBFormulation2::S_V3 = "v_3";
-const string OldroydBFormulation2::S_M1 = "M_{1}";
-const string OldroydBFormulation2::S_M2 = "M_{2}";
-const string OldroydBFormulation2::S_M3 = "M_{3}";
-const string OldroydBFormulation2::S_S11 = "S_{11}";
-const string OldroydBFormulation2::S_S12 = "S_{12}";
-const string OldroydBFormulation2::S_S13 = "S_{13}";
-const string OldroydBFormulation2::S_S22 = "S_{22}";
-const string OldroydBFormulation2::S_S23 = "S_{23}";
-const string OldroydBFormulation2::S_S33 = "S_{33}";
-const string OldroydBFormulation2::S_Q = "q";
+const string OldroydBFormulationUW::S_V1 = "v_1";
+const string OldroydBFormulationUW::S_V2 = "v_2";
+const string OldroydBFormulationUW::S_V3 = "v_3";
+const string OldroydBFormulationUW::S_M1 = "M_{1}";
+const string OldroydBFormulationUW::S_M2 = "M_{2}";
+const string OldroydBFormulationUW::S_M3 = "M_{3}";
+const string OldroydBFormulationUW::S_S11 = "S_{11}";
+const string OldroydBFormulationUW::S_S12 = "S_{12}";
+const string OldroydBFormulationUW::S_S13 = "S_{13}";
+const string OldroydBFormulationUW::S_S22 = "S_{22}";
+const string OldroydBFormulationUW::S_S23 = "S_{23}";
+const string OldroydBFormulationUW::S_S33 = "S_{33}";
+const string OldroydBFormulationUW::S_Q = "q";
 
 static const int INITIAL_CONDITION_TAG = 1;
 
-// OldroydBFormulation2 OldroydBFormulation2::steadyFormulation(int spaceDim, double mu, bool useConformingTraces)
+// OldroydBFormulationUW OldroydBFormulationUW::steadyFormulation(int spaceDim, double mu, bool useConformingTraces)
 // {
 //   Teuchos::ParameterList parameters;
 
@@ -80,10 +82,10 @@ static const int INITIAL_CONDITION_TAG = 1;
 //   parameters.set("useTimeStepping", false);
 //   parameters.set("useSpaceTime", false);
 
-//   return OldroydBFormulation2(parameters);
+//   return OldroydBFormulationUW(parameters);
 // }
 
-// OldroydBFormulation2 OldroydBFormulation2::spaceTimeFormulation(int spaceDim, double mu, bool useConformingTraces,
+// OldroydBFormulationUW OldroydBFormulationUW::spaceTimeFormulation(int spaceDim, double mu, bool useConformingTraces,
 //                                                                 bool includeVelocityTracesInFluxTerm)
 // {
 //   Teuchos::ParameterList parameters;
@@ -97,10 +99,10 @@ static const int INITIAL_CONDITION_TAG = 1;
 //   parameters.set("includeVelocityTracesInFluxTerm",includeVelocityTracesInFluxTerm); // a bit easier to visualize traces when false (when true, tn in space and uhat in time get lumped together, and these can have fairly different scales)
 //   parameters.set("t0",0.0);
 
-//   return OldroydBFormulation2(parameters);
+//   return OldroydBFormulationUW(parameters);
 // }
 
-// OldroydBFormulation2 OldroydBFormulation2::timeSteppingFormulation(int spaceDim, double mu, double dt,
+// OldroydBFormulationUW OldroydBFormulationUW::timeSteppingFormulation(int spaceDim, double mu, double dt,
 //                                                                    bool useConformingTraces, TimeStepType timeStepType)
 // {
 //   Teuchos::ParameterList parameters;
@@ -113,23 +115,27 @@ static const int INITIAL_CONDITION_TAG = 1;
 //   parameters.set("dt", dt);
 //   parameters.set("timeStepType", timeStepType);
 
-//   return OldroydBFormulation2(parameters);
+//   return OldroydBFormulationUW(parameters);
 // }
 
-OldroydBFormulation2::OldroydBFormulation2(MeshTopologyPtr meshTopo, Teuchos::ParameterList &parameters)
+OldroydBFormulationUW::OldroydBFormulationUW(MeshTopologyPtr meshTopo, Teuchos::ParameterList &parameters)
 {
   // basic parameters
   int spaceDim = parameters.get<int>("spaceDim");
-  double mu = parameters.get<double>("mu",1.0);
-  double mu1 = parameters.get<double>("mu1",1.0);
+  double muS = parameters.get<double>("muS",1.0); // solvent viscosity
+  double muP = parameters.get<double>("muP",1.0); // polymeric viscosity
+  double alpha = parameters.get<double>("alpha",0);
   double lambda = parameters.get<double>("lambda",1.0);
+  bool enforceLocalConservation = parameters.get<bool>("enforceLocalConservation");
   bool useConformingTraces = parameters.get<bool>("useConformingTraces",false);
   int spatialPolyOrder = parameters.get<int>("spatialPolyOrder");
   int temporalPolyOrder = parameters.get<int>("temporalPolyOrder", 1);
   int delta_k = parameters.get<int>("delta_k");
 
   // nonlinear parameters
+  bool stokesOnly = parameters.get<bool>("stokesOnly");
   bool conservationFormulation = parameters.get<bool>("useConservationFormulation");
+  // bool neglectFluxesOnRHS = false; // DOES NOT WORK!!!!!
   bool neglectFluxesOnRHS = true;
 
   // time-related parameters:
@@ -140,15 +146,18 @@ OldroydBFormulation2::OldroydBFormulation2(MeshTopologyPtr meshTopo, Teuchos::Pa
 
   _spaceDim = spaceDim;
   _useConformingTraces = useConformingTraces;
+  _enforceLocalConservation = enforceLocalConservation;
   _spatialPolyOrder = spatialPolyOrder;
   _temporalPolyOrder =temporalPolyOrder;
-  _mu = mu;
-  _mu1 = mu1;
-  _lambda = lambda;
+  _muS = muS;
+  _muP = muP;
+  _alpha = alpha;
+  _lambda = ParameterFunction::parameterFunction(lambda);
   _dt = ParameterFunction::parameterFunction(dt);
   _t = ParameterFunction::parameterFunction(0);
   _includeVelocityTracesInFluxTerm = parameters.get<bool>("includeVelocityTracesInFluxTerm",true);
   _t0 = parameters.get<double>("t0",0);
+  _stokesOnly = stokesOnly;
   _conservationFormulation = conservationFormulation;
   _neglectFluxesOnRHS = neglectFluxesOnRHS;
   _delta_k = delta_k;
@@ -382,27 +391,27 @@ OldroydBFormulation2::OldroydBFormulation2(MeshTopologyPtr meshTopo, Teuchos::Pa
 
   _steadyStokesBF = Teuchos::rcp( new BF(_vf) );
   // M1 terms:
-  _steadyStokesBF->addTerm(_mu * u1, M1->div()); // L1 = _mu * grad u1
+  _steadyStokesBF->addTerm(_muS * u1, M1->div()); // L1 = _muS * du1/dx
   _steadyStokesBF->addTerm(L11, M1->x()); // (L1, M1)
   _steadyStokesBF->addTerm(L12, M1->y());
   if (spaceDim == 3) _steadyStokesBF->addTerm(L13, M1->z());
-  _steadyStokesBF->addTerm(-_mu * u1_hat, M1->dot_normal());
+  _steadyStokesBF->addTerm(-_muS * u1_hat, M1->dot_normal());
 
   // M2 terms:
-  _steadyStokesBF->addTerm(_mu * u2, M2->div());
+  _steadyStokesBF->addTerm(_muS * u2, M2->div());
   _steadyStokesBF->addTerm(L21, M2->x());
   _steadyStokesBF->addTerm(L22, M2->y());
   if (spaceDim == 3) _steadyStokesBF->addTerm(L23, M2->z());
-  _steadyStokesBF->addTerm(-_mu * u2_hat, M2->dot_normal());
+  _steadyStokesBF->addTerm(-_muS * u2_hat, M2->dot_normal());
 
   // M3:
   if (spaceDim == 3)
   {
-    _steadyStokesBF->addTerm(_mu * u3, M3->div());
+    _steadyStokesBF->addTerm(_muS * u3, M3->div());
     _steadyStokesBF->addTerm(L31, M3->x());
     _steadyStokesBF->addTerm(L32, M3->y());
     _steadyStokesBF->addTerm(L33, M3->z());
-    _steadyStokesBF->addTerm(-_mu * u3_hat, M3->dot_normal());
+    _steadyStokesBF->addTerm(-_muS * u3_hat, M3->dot_normal());
   }
 
   // v1:
@@ -497,75 +506,77 @@ OldroydBFormulation2::OldroydBFormulation2(MeshTopologyPtr meshTopo, Teuchos::Pa
   // convective terms:
   // vector<FunctionPtr> L_prev, u_prev;
 
-  double Re = 1.0 / this->mu();
-
+  double Re = 1.0 / _muS;
   TFunctionPtr<double> p_prev = TFunction<double>::solution(this->p(), _backgroundFlow);
-  if (!_conservationFormulation)
+
+  if (!_stokesOnly)
   {
-    for (int comp_i=1; comp_i <= _spaceDim; comp_i++)
+    if (!_conservationFormulation)
     {
-      VarPtr u_i = this->u(comp_i);
-      VarPtr v_i = this->v(comp_i);
-
-      for (int comp_j=1; comp_j <= _spaceDim; comp_j++)
+      for (int comp_i=1; comp_i <= _spaceDim; comp_i++)
       {
-        VarPtr u_j = this->u(comp_j);
-        VarPtr L_ij = this->L(comp_i, comp_j);
+        VarPtr u_i = this->u(comp_i);
+        VarPtr v_i = this->v(comp_i);
 
-        FunctionPtr u_prev_j = TFunction<double>::solution(u_j, _backgroundFlow);
-        FunctionPtr L_prev_ij = TFunction<double>::solution(L_ij, _backgroundFlow);
+        for (int comp_j=1; comp_j <= _spaceDim; comp_j++)
+        {
+          VarPtr u_j = this->u(comp_j);
+          VarPtr L_ij = this->L(comp_i, comp_j);
 
-        _oldroydBBF->addTerm( Re * L_prev_ij * u_j, v_i);
-        _oldroydBBF->addTerm( Re * u_prev_j * L_ij, v_i);
+          FunctionPtr u_prev_j = TFunction<double>::solution(u_j, _backgroundFlow);
+          FunctionPtr L_prev_ij = TFunction<double>::solution(L_ij, _backgroundFlow);
+
+          _oldroydBBF->addTerm( Re * L_prev_ij * u_j, v_i);
+          _oldroydBBF->addTerm( Re * u_prev_j * L_ij, v_i);
+        }
+      }
+    }
+    else
+    {
+      if (_spaceDim == 2)
+      {
+        FunctionPtr u_prev_1 = TFunction<double>::solution(u1, _backgroundFlow);
+        FunctionPtr u_prev_2 = TFunction<double>::solution(u2, _backgroundFlow);
+
+        _oldroydBBF->addTerm(-u_prev_1*u1, v1->dx());
+        _oldroydBBF->addTerm(-u_prev_1*u1, v1->dx());
+        _oldroydBBF->addTerm(-u_prev_2*u1, v1->dy());
+        _oldroydBBF->addTerm(-u_prev_1*u2, v1->dy());
+
+        _oldroydBBF->addTerm(-u_prev_2*u1, v2->dx());
+        _oldroydBBF->addTerm(-u_prev_1*u2, v2->dx());
+        _oldroydBBF->addTerm(-u_prev_2*u2, v2->dy());
+        _oldroydBBF->addTerm(-u_prev_2*u2, v2->dy());
+      }
+      else if (_spaceDim == 3)
+      {
+        FunctionPtr u_prev_1 = TFunction<double>::solution(u1, _backgroundFlow);
+        FunctionPtr u_prev_2 = TFunction<double>::solution(u2, _backgroundFlow);
+        FunctionPtr u_prev_3 = TFunction<double>::solution(u3, _backgroundFlow);
+
+        _oldroydBBF->addTerm(u_prev_1*u1, v1->dx());
+        _oldroydBBF->addTerm(u_prev_1*u1, v1->dx());
+        _oldroydBBF->addTerm(u_prev_2*u1, v1->dy());
+        _oldroydBBF->addTerm(u_prev_1*u2, v1->dy());
+        _oldroydBBF->addTerm(u_prev_3*u1, v1->dz());
+        _oldroydBBF->addTerm(u_prev_1*u3, v1->dz());
+
+        _oldroydBBF->addTerm(u_prev_1*u2, v2->dx());
+        _oldroydBBF->addTerm(u_prev_2*u1, v2->dx());
+        _oldroydBBF->addTerm(u_prev_2*u2, v2->dy());
+        _oldroydBBF->addTerm(u_prev_2*u2, v2->dy());
+        _oldroydBBF->addTerm(u_prev_3*u2, v2->dz());
+        _oldroydBBF->addTerm(u_prev_2*u3, v2->dz());
+
+        _oldroydBBF->addTerm(u_prev_1*u3, v3->dx());
+        _oldroydBBF->addTerm(u_prev_3*u1, v3->dx());
+        _oldroydBBF->addTerm(u_prev_2*u3, v3->dy());
+        _oldroydBBF->addTerm(u_prev_3*u2, v3->dy());
+        _oldroydBBF->addTerm(u_prev_3*u3, v3->dz());
+        _oldroydBBF->addTerm(u_prev_3*u3, v3->dz());
       }
     }
   }
-  else
-  {
-    if (_spaceDim == 2)
-    {
-      FunctionPtr u_prev_1 = TFunction<double>::solution(u1, _backgroundFlow);
-      FunctionPtr u_prev_2 = TFunction<double>::solution(u2, _backgroundFlow);
-
-      _oldroydBBF->addTerm(-u_prev_1*u1, v1->dx());
-      _oldroydBBF->addTerm(-u_prev_1*u1, v1->dx());
-      _oldroydBBF->addTerm(-u_prev_2*u1, v1->dy());
-      _oldroydBBF->addTerm(-u_prev_1*u2, v1->dy());
-
-      _oldroydBBF->addTerm(-u_prev_2*u1, v2->dx());
-      _oldroydBBF->addTerm(-u_prev_1*u2, v2->dx());
-      _oldroydBBF->addTerm(-u_prev_2*u2, v2->dy());
-      _oldroydBBF->addTerm(-u_prev_2*u2, v2->dy());
-    }
-    else if (_spaceDim == 3)
-    {
-      FunctionPtr u_prev_1 = TFunction<double>::solution(u1, _backgroundFlow);
-      FunctionPtr u_prev_2 = TFunction<double>::solution(u2, _backgroundFlow);
-      FunctionPtr u_prev_3 = TFunction<double>::solution(u3, _backgroundFlow);
-
-      _oldroydBBF->addTerm(u_prev_1*u1, v1->dx());
-      _oldroydBBF->addTerm(u_prev_1*u1, v1->dx());
-      _oldroydBBF->addTerm(u_prev_2*u1, v1->dy());
-      _oldroydBBF->addTerm(u_prev_1*u2, v1->dy());
-      _oldroydBBF->addTerm(u_prev_3*u1, v1->dz());
-      _oldroydBBF->addTerm(u_prev_1*u3, v1->dz());
-
-      _oldroydBBF->addTerm(u_prev_1*u2, v2->dx());
-      _oldroydBBF->addTerm(u_prev_2*u1, v2->dx());
-      _oldroydBBF->addTerm(u_prev_2*u2, v2->dy());
-      _oldroydBBF->addTerm(u_prev_2*u2, v2->dy());
-      _oldroydBBF->addTerm(u_prev_3*u2, v2->dz());
-      _oldroydBBF->addTerm(u_prev_2*u3, v2->dz());
-
-      _oldroydBBF->addTerm(u_prev_1*u3, v3->dx());
-      _oldroydBBF->addTerm(u_prev_3*u1, v3->dx());
-      _oldroydBBF->addTerm(u_prev_2*u3, v3->dy());
-      _oldroydBBF->addTerm(u_prev_3*u2, v3->dy());
-      _oldroydBBF->addTerm(u_prev_3*u3, v3->dz());
-      _oldroydBBF->addTerm(u_prev_3*u3, v3->dz());
-    }
-  }
-
 
   // new constitutive terms:
   switch (_spaceDim) {
@@ -588,6 +599,7 @@ OldroydBFormulation2::OldroydBFormulation2(MeshTopologyPtr meshTopo, Teuchos::Pa
 
 
   // UPPER-CONVECTED MAXWELL EQUATION FOR T
+  TFunctionPtr<double> lambdaFxn = _lambda; // cast to allow use of TFunctionPtr<double> operator overloads
 
   for (int comp_i=1; comp_i <= _spaceDim; comp_i++)
   {
@@ -602,9 +614,9 @@ OldroydBFormulation2::OldroydBFormulation2(MeshTopologyPtr meshTopo, Teuchos::Pa
 
       _oldroydBBF->addTerm( T_ij, S_ij);
       //
-      _oldroydBBF->addTerm( lambda * Tu_ijn_hat, S_ij);
+      _oldroydBBF->addTerm( lambdaFxn * Tu_ijn_hat, S_ij);
       //
-      _oldroydBBF->addTerm( -2 * Re * mu1 * L_ij, S_ij);
+      _oldroydBBF->addTerm( -2 * Re * _muP * L_ij, S_ij);
 
       for (int comp_k=1; comp_k <= _spaceDim; comp_k++)
       {
@@ -618,24 +630,34 @@ OldroydBFormulation2::OldroydBFormulation2(MeshTopologyPtr meshTopo, Teuchos::Pa
 
         switch (comp_k) {
           case 1:
-            _oldroydBBF->addTerm( -lambda * u_prev_k * T_ij, S_ij->dx());
-            _oldroydBBF->addTerm( -lambda * T_prev_ij * u_k, S_ij->dx());
+            _oldroydBBF->addTerm( -lambdaFxn * u_prev_k * T_ij, S_ij->dx());
+            _oldroydBBF->addTerm( -lambdaFxn * T_prev_ij * u_k, S_ij->dx());
             break;
           case 2:
-            _oldroydBBF->addTerm( -lambda * u_prev_k * T_ij, S_ij->dy());
-            _oldroydBBF->addTerm( -lambda * T_prev_ij * u_k, S_ij->dy());
+            _oldroydBBF->addTerm( -lambdaFxn * u_prev_k * T_ij, S_ij->dy());
+            _oldroydBBF->addTerm( -lambdaFxn * T_prev_ij * u_k, S_ij->dy());
             break;
           case 3:
-            _oldroydBBF->addTerm( -lambda * u_prev_k * T_ij, S_ij->dz());
-            _oldroydBBF->addTerm( -lambda * T_prev_ij * u_k, S_ij->dz());
+            _oldroydBBF->addTerm( -lambdaFxn * u_prev_k * T_ij, S_ij->dz());
+            _oldroydBBF->addTerm( -lambdaFxn * T_prev_ij * u_k, S_ij->dz());
             break;
 
           default:
             break;
         }
         //
-        _oldroydBBF->addTerm( -2 * lambda * Re * L_prev_ik * T_kj, S_ij);
-        _oldroydBBF->addTerm( -2 * lambda * Re * T_prev_kj * L_ik, S_ij);
+        _oldroydBBF->addTerm( -2 * lambdaFxn * Re * L_prev_ik * T_kj, S_ij);
+        _oldroydBBF->addTerm( -2 * lambdaFxn * Re * T_prev_kj * L_ik, S_ij);
+
+        // Giesekus model
+        if (alpha > 0)
+        {
+          VarPtr T_ik = this->T(comp_i, comp_k);
+          FunctionPtr T_prev_ik = TFunction<double>::solution(T_ik, _backgroundFlow);
+
+          _oldroydBBF->addTerm( alpha * lambdaFxn / _muP * T_prev_ik * T_kj, S_ij);
+          _oldroydBBF->addTerm( alpha * lambdaFxn / _muP * T_ik * T_prev_kj, S_ij);
+        }
 
       }
     }
@@ -667,6 +689,8 @@ OldroydBFormulation2::OldroydBFormulation2(MeshTopologyPtr meshTopo, Teuchos::Pa
   this->setForcingFunction(Teuchos::null); // will default to zero
 
   _bc = BC::bc();
+
+  mesh->registerSolution(_backgroundFlow);
 
   _solnIncrement->setBC(_bc);
 
@@ -714,11 +738,38 @@ OldroydBFormulation2::OldroydBFormulation2(MeshTopologyPtr meshTopo, Teuchos::Pa
 
   _nonlinearIterationCount = 0;
 
+  // Enforce local conservation
+  if (_enforceLocalConservation)
+  {
+    TFunctionPtr<double> zero = TFunction<double>::zero();
+    if (_spaceDim == 2)
+    {
+      // CONSERVATION OF VOLUME
+      _solnIncrement->lagrangeConstraints()->addConstraint(u1_hat->times_normal_x() + u2_hat->times_normal_y() == zero);
+      // CONSERVATION OF MOMENTUM (if Stokes)
+      if (_stokesOnly)
+      {
+        // we are assuming that there is no body forcing in the problem.
+        FunctionPtr x    = Function::xn(1);
+        FunctionPtr y    = Function::yn(1);
+        _solnIncrement->lagrangeConstraints()->addConstraint(sigma1n_hat == zero);
+        _solnIncrement->lagrangeConstraints()->addConstraint(sigma2n_hat == zero);
+        _solnIncrement->lagrangeConstraints()->addConstraint(-y*sigma1n_hat + x*sigma2n_hat == zero); // seems to upset convergence 
+      }
+      // _solnIncrement->lagrangeConstraints()->addConstraint(_muS*u1_hat->times_normal_x() - L11 == zero);
+    }
+    else if (_spaceDim == 3)
+    {
+      _solnIncrement->lagrangeConstraints()->addConstraint(u1_hat->times_normal_x() + u2_hat->times_normal_y() + u3_hat->times_normal_z() == zero);
+    }
+  }
+
+
   // TO DO: Set up stream function
 
 }
 
-void OldroydBFormulation2::addInflowCondition(SpatialFilterPtr inflowRegion, TFunctionPtr<double> u)
+void OldroydBFormulationUW::addInflowCondition(SpatialFilterPtr inflowRegion, TFunctionPtr<double> u)
 {
   VarPtr u1_hat = this->u_hat(1), u2_hat = this->u_hat(2);
   VarPtr u3_hat;
@@ -747,10 +798,43 @@ void OldroydBFormulation2::addInflowCondition(SpatialFilterPtr inflowRegion, TFu
     _solnIncrement->bc()->addDirichlet(u2_hat, inflowRegion, u->y() - u2_hat_prev);
     if (_spaceDim==3) _solnIncrement->bc()->addDirichlet(u3_hat, inflowRegion, u->z() - u3_hat_prev);
   }
-
 }
 
-void OldroydBFormulation2::addOutflowCondition(SpatialFilterPtr outflowRegion, bool usePhysicalTractions)
+void OldroydBFormulationUW::addInflowViscoelasticStress(SpatialFilterPtr inflowRegion, TFunctionPtr<double> T11un, TFunctionPtr<double> T12un, TFunctionPtr<double> T22un)
+{
+  if (_neglectFluxesOnRHS)
+  {
+    // this also governs how we accumulate in the fluxes and traces, and hence whether we should use zero BCs or the true BCs for solution increment
+
+    _solnIncrement->bc()->addDirichlet(this->Tun_hat(1, 1), inflowRegion, T11un);
+    _solnIncrement->bc()->addDirichlet(this->Tun_hat(1, 2), inflowRegion, T12un);
+    _solnIncrement->bc()->addDirichlet(this->Tun_hat(2, 2), inflowRegion, T22un);
+  }
+  else
+  {
+    TSolutionPtr<double> backgroundFlowWeakReference = Teuchos::rcp(_backgroundFlow.get(), false );
+
+    TFunctionPtr<double> T11un_hat_prev = TFunction<double>::solution(this->Tun_hat(1, 1),backgroundFlowWeakReference);
+    TFunctionPtr<double> T12un_hat_prev = TFunction<double>::solution(this->Tun_hat(1, 2),backgroundFlowWeakReference);
+    TFunctionPtr<double> T22un_hat_prev = TFunction<double>::solution(this->Tun_hat(2, 2),backgroundFlowWeakReference);
+
+    _solnIncrement->bc()->addDirichlet(this->Tun_hat(1, 1), inflowRegion, T11un - T11un_hat_prev);
+    _solnIncrement->bc()->addDirichlet(this->Tun_hat(1, 2), inflowRegion, T12un - T12un_hat_prev);
+    _solnIncrement->bc()->addDirichlet(this->Tun_hat(2, 2), inflowRegion, T22un - T22un_hat_prev);
+  }
+
+  // // zero inflow viscoelastic stress
+  // TFunctionPtr<double> zero = TFunction<double>::zero();
+  // for (int i=1; i<=_spaceDim; i++)
+  // {
+  //   for (int j=i; j<=_spaceDim; j++)
+  //   {
+  //     _solnIncrement->bc()->addDirichlet(Tun_hat(i, j), inflowRegion, zero);
+  //   }
+  // }
+}
+
+void OldroydBFormulationUW::addOutflowCondition(SpatialFilterPtr outflowRegion, double yMax, double muP, double lambda, bool usePhysicalTractions)
 {
   _haveOutflowConditionsImposed = true;
 
@@ -802,14 +886,19 @@ void OldroydBFormulation2::addOutflowCondition(SpatialFilterPtr outflowRegion, b
   else
   {
     TFunctionPtr<double> zero = TFunction<double>::zero();
-    for (int d=1; d<=_spaceDim; d++)
-    {
-      _solnIncrement->bc()->addDirichlet(sigman_hat(d), outflowRegion, zero);
-    }
+    // for (int d=1; d<=_spaceDim; d++)
+    // {
+    //   _solnIncrement->bc()->addDirichlet(sigman_hat(d), outflowRegion, zero);
+    // }
+    TFunctionPtr<double> y    = TFunction<double>::yn(1);
+    // TFunctionPtr<double> T11 = Teuchos::rcp( new 18.0*muP*lambda*pow(y/(_height*_height),2));
+    // _solnIncrement->bc()->addDirichlet(this->sigman_hat(1), outflowRegion, -18.0*muP*lambda*y*y/(yMax*yMax*yMax*yMax));
+    _solnIncrement->bc()->addDirichlet(this->sigman_hat(1), outflowRegion, zero);
+    _solnIncrement->bc()->addDirichlet(this->u_hat(2), outflowRegion, zero);
   }
 }
 
-void OldroydBFormulation2::addPointPressureCondition(vector<double> vertex)
+void OldroydBFormulationUW::addPointPressureCondition(vector<double> vertex)
 {
   if (_haveOutflowConditionsImposed)
   {
@@ -843,13 +932,21 @@ void OldroydBFormulation2::addPointPressureCondition(vector<double> vertex)
   }
 }
 
-void OldroydBFormulation2::addWallCondition(SpatialFilterPtr wall)
+void OldroydBFormulationUW::addWallCondition(SpatialFilterPtr wall)
 {
   vector<double> zero(_spaceDim, 0.0);
   addInflowCondition(wall, TFunction<double>::constant(zero));
 }
 
-void OldroydBFormulation2::addInitialCondition(double t0, vector<FunctionPtr> u0, FunctionPtr p0)
+void OldroydBFormulationUW::addSymmetryCondition(SpatialFilterPtr symmetryRegion)
+{
+  TFunctionPtr<double> zero = TFunction<double>::zero();
+  _solnIncrement->bc()->addDirichlet(this->sigman_hat(1), symmetryRegion, zero);
+  _solnIncrement->bc()->addDirichlet(this->Tun_hat(1,2), symmetryRegion, zero);
+  _solnIncrement->bc()->addDirichlet(this->u_hat(2), symmetryRegion, zero);
+}
+
+void OldroydBFormulationUW::addInitialCondition(double t0, vector<FunctionPtr> u0, FunctionPtr p0)
 {
   TEUCHOS_TEST_FOR_EXCEPTION(!_spaceTime, std::invalid_argument, "This method only supported for space-time formulations");
   TEUCHOS_TEST_FOR_EXCEPTION(u0.size() != _spaceDim, std::invalid_argument, "u0 should have length equal to the number of spatial dimensions");
@@ -885,13 +982,13 @@ void OldroydBFormulation2::addInitialCondition(double t0, vector<FunctionPtr> u0
   }
 }
 
-void OldroydBFormulation2::addZeroInitialCondition(double t0)
+void OldroydBFormulationUW::addZeroInitialCondition(double t0)
 {
   vector<FunctionPtr> zero(_spaceDim, Function::zero());
   addInitialCondition(t0, zero, Teuchos::null); // null: don't impose an initial condition on the pressure.
 }
 
-void OldroydBFormulation2::addZeroMeanPressureCondition()
+void OldroydBFormulationUW::addZeroMeanPressureCondition()
 {
   if (_spaceTime)
   {
@@ -914,12 +1011,20 @@ void OldroydBFormulation2::addZeroMeanPressureCondition()
   }
 }
 
-BFPtr OldroydBFormulation2::bf()
+BFPtr OldroydBFormulationUW::bf()
 {
   return _oldroydBBF;
 }
 
-void OldroydBFormulation2::CHECK_VALID_COMPONENT(int i) // throws exception on bad component value (should be between 1 and _spaceDim, inclusive)
+void OldroydBFormulationUW::clearSolutionIncrement()
+{
+  _solnIncrement->clear(); // only clears the local cell coefficients, not the global solution vector
+  if (_solnIncrement->getLHSVector().get() != NULL)
+    _solnIncrement->getLHSVector()->PutScalar(0); // this clears global solution vector
+  _solnIncrement->clearComputedResiduals();
+}
+
+void OldroydBFormulationUW::CHECK_VALID_COMPONENT(int i) // throws exception on bad component value (should be between 1 and _spaceDim, inclusive)
 {
   if ((i > _spaceDim) || (i < 1))
   {
@@ -927,8 +1032,7 @@ void OldroydBFormulation2::CHECK_VALID_COMPONENT(int i) // throws exception on b
   }
 }
 
-
-FunctionPtr OldroydBFormulation2::convectiveTerm(int spaceDim, FunctionPtr u_exact)
+FunctionPtr OldroydBFormulationUW::convectiveTerm(int spaceDim, FunctionPtr u_exact)
 {
   TEUCHOS_TEST_FOR_EXCEPTION((spaceDim != 2) && (spaceDim != 3), std::invalid_argument, "spaceDim must be 2 or 3");
 
@@ -998,7 +1102,7 @@ FunctionPtr OldroydBFormulation2::convectiveTerm(int spaceDim, FunctionPtr u_exa
   }
 }
 
-// TFunctionPtr<double> OldroydBFormulation2::forcingFunction(TFunctionPtr<double> u_exact, TFunctionPtr<double> p_exact)
+// TFunctionPtr<double> OldroydBFormulationUW::forcingFunction(TFunctionPtr<double> u_exact, TFunctionPtr<double> p_exact)
 // {
 //   // f1 and f2 are those for Navier-Stokes, but without the u \cdot \grad u term
 //   TFunctionPtr<double> u1_exact = u_exact->x();
@@ -1041,7 +1145,7 @@ FunctionPtr OldroydBFormulation2::convectiveTerm(int spaceDim, FunctionPtr u_exa
 //   return f_stokes + convectiveTerm;
 // }
 
-void OldroydBFormulation2::setForcingFunction(FunctionPtr forcingFunction)
+void OldroydBFormulationUW::setForcingFunction(FunctionPtr forcingFunction)
 {
   // set the RHS:
   if (forcingFunction == Teuchos::null)
@@ -1062,19 +1166,19 @@ void OldroydBFormulation2::setForcingFunction(FunctionPtr forcingFunction)
   _solnIncrement->setRHS(_rhsForSolve);
 }
 
-void OldroydBFormulation2::initializeSolution(MeshTopologyPtr meshTopo, int fieldPolyOrder, int delta_k,
+void OldroydBFormulationUW::initializeSolution(MeshTopologyPtr meshTopo, int fieldPolyOrder, int delta_k,
     TFunctionPtr<double> forcingFunction, int temporalPolyOrder)
 {
   this->initializeSolution(meshTopo, fieldPolyOrder, delta_k, forcingFunction, "", temporalPolyOrder);
 }
 
-void OldroydBFormulation2::initializeSolution(std::string filePrefix, int fieldPolyOrder, int delta_k,
+void OldroydBFormulationUW::initializeSolution(std::string filePrefix, int fieldPolyOrder, int delta_k,
     TFunctionPtr<double> forcingFunction, int temporalPolyOrder)
 {
   this->initializeSolution(Teuchos::null, fieldPolyOrder, delta_k, forcingFunction, filePrefix, temporalPolyOrder);
 }
 
-void OldroydBFormulation2::initializeSolution(MeshTopologyPtr meshTopo, int fieldPolyOrder, int delta_k,
+void OldroydBFormulationUW::initializeSolution(MeshTopologyPtr meshTopo, int fieldPolyOrder, int delta_k,
     TFunctionPtr<double> forcingFunction, string savedSolutionAndMeshPrefix, int temporalPolyOrder)
 {
   _haveOutflowConditionsImposed = false;
@@ -1137,8 +1241,8 @@ void OldroydBFormulation2::initializeSolution(MeshTopologyPtr meshTopo, int fiel
 
     mesh->registerObserver(streamMesh); // refine streamMesh whenever mesh is refined
 
-    LinearTermPtr u1_dy = (1.0 / _mu) * this->L(1,2);
-    LinearTermPtr u2_dx = (1.0 / _mu) * this->L(2,1);
+    LinearTermPtr u1_dy = (1.0 / _muS) * this->L(1,2);
+    LinearTermPtr u2_dx = (1.0 / _muS) * this->L(2,1);
 
     TFunctionPtr<double> vorticity = Teuchos::rcp( new PreviousSolutionFunction<double>(_solution, u2_dx - u1_dy) );
     RHSPtr streamRHS = RHS::rhs();
@@ -1177,28 +1281,28 @@ void OldroydBFormulation2::initializeSolution(MeshTopologyPtr meshTopo, int fiel
   }
 }
 
-bool OldroydBFormulation2::isSpaceTime() const
+bool OldroydBFormulationUW::isSpaceTime() const
 {
   return _spaceTime;
 }
 
-bool OldroydBFormulation2::isSteady() const
+bool OldroydBFormulationUW::isSteady() const
 {
   return !_timeStepping && !_spaceTime;
 }
 
 
-bool OldroydBFormulation2::isTimeStepping() const
+bool OldroydBFormulationUW::isTimeStepping() const
 {
   return _timeStepping;
 }
 
-void OldroydBFormulation2::setIP(IPPtr ip)
+void OldroydBFormulationUW::setIP(IPPtr ip)
 {
   _solnIncrement->setIP(ip);
 }
 
-double OldroydBFormulation2::relativeL2NormOfTimeStep()
+double OldroydBFormulationUW::relativeL2NormOfTimeStep()
 {
   TFunctionPtr<double>  p_current = TFunction<double>::solution( p(), _solution);
   TFunctionPtr<double> u1_current = TFunction<double>::solution(u(1), _solution);
@@ -1219,64 +1323,75 @@ double OldroydBFormulation2::relativeL2NormOfTimeStep()
   return sqrt(valSquared) / L2OfAverage;
 }
 
-double OldroydBFormulation2::L2NormSolution()
+double OldroydBFormulationUW::L2NormSolution()
 {
   double l2_squared = _L2SolutionFunction->integrate(_backgroundFlow->mesh());
   return sqrt(l2_squared);
 }
 
-double OldroydBFormulation2::L2NormSolutionIncrement()
+double OldroydBFormulationUW::L2NormSolutionIncrement()
 {
   double l2_squared = _L2IncrementFunction->integrate(_solnIncrement->mesh());
   return sqrt(l2_squared);
 }
 
-int OldroydBFormulation2::nonlinearIterationCount()
+int OldroydBFormulationUW::nonlinearIterationCount()
 {
   return _nonlinearIterationCount;
 }
 
-double OldroydBFormulation2::mu()
+double OldroydBFormulationUW::muS()
 {
-  return _mu;
+  return _muS;
 }
 
-double OldroydBFormulation2::mu1()
+double OldroydBFormulationUW::muP()
 {
-  return _mu1;
+  return _muP;
 }
 
-double OldroydBFormulation2::lambda()
+Teuchos::RCP<ParameterFunction> OldroydBFormulationUW::lambda()
 {
   return _lambda;
 }
 
-RefinementStrategyPtr OldroydBFormulation2::getRefinementStrategy()
+double OldroydBFormulationUW::alpha()
+{
+  return _alpha;
+}
+
+// ! set lambda during continuation
+void OldroydBFormulationUW::setLambda(double lambda)
+{
+  _lambda->setValue(lambda);
+}
+
+RefinementStrategyPtr OldroydBFormulationUW::getRefinementStrategy()
 {
   return _refinementStrategy;
 }
 
-void OldroydBFormulation2::setRefinementStrategy(RefinementStrategyPtr refStrategy)
+void OldroydBFormulationUW::setRefinementStrategy(RefinementStrategyPtr refStrategy)
 {
   _refinementStrategy = refStrategy;
 }
 
-void OldroydBFormulation2::refine()
+void OldroydBFormulationUW::refine()
 {
   _refinementStrategy->refine();
 }
 
-void OldroydBFormulation2::hRefine()
+void OldroydBFormulationUW::hRefine()
 {
   _hRefinementStrategy->refine();
 }
 
-void OldroydBFormulation2::pRefine()
+void OldroydBFormulationUW::pRefine()
 {
   _pRefinementStrategy->refine();
 }
 
-RHSPtr OldroydBFormulation2::rhs(TFunctionPtr<double> f, bool excludeFluxesAndTraces)
+RHSPtr OldroydBFormulationUW::rhs(TFunctionPtr<double> f, bool excludeFluxesAndTraces)
 {
 
   // TO DO : UPDATE THIS!
@@ -1332,17 +1447,17 @@ RHSPtr OldroydBFormulation2::rhs(TFunctionPtr<double> f, bool excludeFluxesAndTr
   // rhs->addTerm( -_steadyStokesBF->testFunctional(backgroundFlowWeakReference, excludeFluxesAndTraces) );
 
   // STOKES part
-  double mu = this->mu();
+  double muS = this->muS();
 
   // M1 terms:
-  rhs->addTerm( -mu * u1_prev * M1->div()); // L1 = mu * grad u1
+  rhs->addTerm( -muS * u1_prev * M1->div()); // L1 = muS * du1/dx
   rhs->addTerm( -L11_prev * M1->x()); // (L1, M1)
   rhs->addTerm( -L12_prev * M1->y());
   if (_spaceDim == 3) rhs->addTerm( -L13_prev * M1->z());
   // rhs->addTerm(-mu * u1_hat, M1->dot_normal());
 
   // M2 terms:
-  rhs->addTerm( -mu * u2_prev * M2->div());
+  rhs->addTerm( -muS * u2_prev * M2->div());
   rhs->addTerm( -L21_prev * M2->x());
   rhs->addTerm( -L22_prev * M2->y());
   if (_spaceDim == 3) rhs->addTerm( -L23_prev * M2->z());
@@ -1351,7 +1466,7 @@ RHSPtr OldroydBFormulation2::rhs(TFunctionPtr<double> f, bool excludeFluxesAndTr
   // M3:
   if (_spaceDim == 3)
   {
-    rhs->addTerm( -mu * u3_prev * M3->div());
+    rhs->addTerm( -muS * u3_prev * M3->div());
     rhs->addTerm( -L31_prev * M3->x());
     rhs->addTerm( -L32_prev * M3->y());
     rhs->addTerm( -L33_prev * M3->z());
@@ -1424,47 +1539,52 @@ RHSPtr OldroydBFormulation2::rhs(TFunctionPtr<double> f, bool excludeFluxesAndTr
   // }
 
   // add the u L term:
-  double Re = 1.0 / mu;
-  double mu1 = this->mu1();
-  double lambda = this->lambda();
-  if (!_conservationFormulation)
+  double Re = 1.0 / muS;
+  double muP = this->muP();
+  Teuchos::RCP<ParameterFunction> lambda = this->lambda();
+  TFunctionPtr<double> lambdaFxn = lambda;
+  double alpha = this->alpha();
+  if (!_stokesOnly)
   {
-    for (int comp_i=1; comp_i <= _spaceDim; comp_i++)
+    if (!_conservationFormulation)
     {
-      VarPtr vi = this->v(comp_i);
-
-      for (int comp_j=1; comp_j <= _spaceDim; comp_j++)
+      for (int comp_i=1; comp_i <= _spaceDim; comp_i++)
       {
-        VarPtr uj = this->u(comp_j);
-        TFunctionPtr<double> uj_prev = TFunction<double>::solution(uj,backgroundFlowWeakReference);
-        VarPtr L_ij = this->L(comp_i, comp_j);
-        TFunctionPtr<double> L_ij_prev = TFunction<double>::solution(L_ij, backgroundFlowWeakReference);
-        rhs->addTerm((-Re * uj_prev * L_ij_prev) * vi);
+        VarPtr vi = this->v(comp_i);
+
+        for (int comp_j=1; comp_j <= _spaceDim; comp_j++)
+        {
+          VarPtr uj = this->u(comp_j);
+          TFunctionPtr<double> uj_prev = TFunction<double>::solution(uj,backgroundFlowWeakReference);
+          VarPtr L_ij = this->L(comp_i, comp_j);
+          TFunctionPtr<double> L_ij_prev = TFunction<double>::solution(L_ij, backgroundFlowWeakReference);
+          rhs->addTerm((-Re * uj_prev * L_ij_prev) * vi);
+        }
       }
     }
-  }
-  else
-  {
-    if (_spaceDim == 2)
+    else
     {
-      rhs->addTerm( u1_prev * u1_prev * v1->dx() );
-      rhs->addTerm( u1_prev * u2_prev * v1->dy() );
-      rhs->addTerm( u2_prev * u1_prev * v2->dx() );
-      rhs->addTerm( u2_prev * u2_prev * v2->dy() );
-    }
-    else if (_spaceDim == 3)
-    {
-      rhs->addTerm( u1_prev * u1_prev * v1->dx() );
-      rhs->addTerm( u1_prev * u2_prev * v1->dy() );
-      rhs->addTerm( u1_prev * u3_prev * v1->dz() );
+      if (_spaceDim == 2)
+      {
+        rhs->addTerm( u1_prev * u1_prev * v1->dx() );
+        rhs->addTerm( u1_prev * u2_prev * v1->dy() );
+        rhs->addTerm( u2_prev * u1_prev * v2->dx() );
+        rhs->addTerm( u2_prev * u2_prev * v2->dy() );
+      }
+      else if (_spaceDim == 3)
+      {
+        rhs->addTerm( u1_prev * u1_prev * v1->dx() );
+        rhs->addTerm( u1_prev * u2_prev * v1->dy() );
+        rhs->addTerm( u1_prev * u3_prev * v1->dz() );
 
-      rhs->addTerm( u2_prev * u1_prev * v2->dx() );
-      rhs->addTerm( u2_prev * u2_prev * v2->dy() );
-      rhs->addTerm( u2_prev * u3_prev * v2->dz() );
+        rhs->addTerm( u2_prev * u1_prev * v2->dx() );
+        rhs->addTerm( u2_prev * u2_prev * v2->dy() );
+        rhs->addTerm( u2_prev * u3_prev * v2->dz() );
 
-      rhs->addTerm( u3_prev * u1_prev * v3->dx() );
-      rhs->addTerm( u3_prev * u2_prev * v3->dy() );
-      rhs->addTerm( u3_prev * u3_prev * v3->dz() );
+        rhs->addTerm( u3_prev * u1_prev * v3->dx() );
+        rhs->addTerm( u3_prev * u2_prev * v3->dy() );
+        rhs->addTerm( u3_prev * u3_prev * v3->dz() );
+      }
     }
   }
 
@@ -1523,7 +1643,7 @@ RHSPtr OldroydBFormulation2::rhs(TFunctionPtr<double> f, bool excludeFluxesAndTr
       //
       // rhs->addTerm( lambda * Tu_ijn_hat_prev * S_ij);
       //
-      rhs->addTerm( 2 * mu1 * Re * L_ij_prev * S_ij);
+      rhs->addTerm( 2 * muP * Re * L_ij_prev * S_ij);
 
       for (int comp_k=1; comp_k <= _spaceDim; comp_k++)
       {
@@ -1537,21 +1657,29 @@ RHSPtr OldroydBFormulation2::rhs(TFunctionPtr<double> f, bool excludeFluxesAndTr
 
         switch (comp_k) {
           case 1:
-            rhs->addTerm( lambda * T_ij_prev * u_k_prev * S_ij->dx());
+            rhs->addTerm( lambdaFxn * T_ij_prev * u_k_prev * S_ij->dx());
             break;
           case 2:
-            rhs->addTerm( lambda * T_ij_prev * u_k_prev * S_ij->dy());
+            rhs->addTerm( lambdaFxn * T_ij_prev * u_k_prev * S_ij->dy());
             break;
           case 3:
-            rhs->addTerm( lambda * T_ij_prev * u_k_prev * S_ij->dz());
+            rhs->addTerm( lambdaFxn * T_ij_prev * u_k_prev * S_ij->dz());
             break;
 
           default:
             break;
         }
 
-        rhs->addTerm( 2 * lambda * Re * L_ik_prev * T_kj_prev * S_ij);
+        rhs->addTerm( 2.0 * lambdaFxn * Re * L_ik_prev * T_kj_prev * S_ij);
 
+        // Giesekus model
+        if (alpha > 0)
+        {
+          VarPtr T_ik = this->T(comp_i, comp_k);
+          FunctionPtr T_ik_prev = TFunction<double>::solution(T_ik, _backgroundFlow);
+
+          rhs->addTerm( - alpha * lambdaFxn / muP * T_ik_prev * T_kj_prev * S_ij);
+        }
       }
     }
   }
@@ -1561,7 +1689,7 @@ RHSPtr OldroydBFormulation2::rhs(TFunctionPtr<double> f, bool excludeFluxesAndTr
   return rhs;
 }
 
-VarPtr OldroydBFormulation2::L(int i, int j)
+VarPtr OldroydBFormulationUW::L(int i, int j)
 {
   CHECK_VALID_COMPONENT(i);
   CHECK_VALID_COMPONENT(j);
@@ -1570,7 +1698,7 @@ VarPtr OldroydBFormulation2::L(int i, int j)
   return _vf->fieldVar(LStrings[i-1][j-1]);
 }
 
-VarPtr OldroydBFormulation2::u(int i)
+VarPtr OldroydBFormulationUW::u(int i)
 {
   CHECK_VALID_COMPONENT(i);
 
@@ -1578,7 +1706,7 @@ VarPtr OldroydBFormulation2::u(int i)
   return _vf->fieldVar(uStrings[i-1]);
 }
 
-VarPtr OldroydBFormulation2::T(int i, int j)
+VarPtr OldroydBFormulationUW::T(int i, int j)
 {
   CHECK_VALID_COMPONENT(i);
   CHECK_VALID_COMPONENT(j);
@@ -1587,27 +1715,27 @@ VarPtr OldroydBFormulation2::T(int i, int j)
   return _vf->fieldVar(TStrings[i-1][j-1]);
 }
 
-VarPtr OldroydBFormulation2::p()
+VarPtr OldroydBFormulationUW::p()
 {
   return _vf->fieldVar(S_P);
 }
 
 // traces:
-VarPtr OldroydBFormulation2::sigman_hat(int i)
+VarPtr OldroydBFormulationUW::sigman_hat(int i)
 {
   CHECK_VALID_COMPONENT(i);
   static const vector<string> sigmanStrings = {S_SIGMAN1_HAT,S_SIGMAN2_HAT,S_SIGMAN3_HAT};
   return _vf->fluxVar(sigmanStrings[i-1]);
 }
 
-VarPtr OldroydBFormulation2::u_hat(int i)
+VarPtr OldroydBFormulationUW::u_hat(int i)
 {
   CHECK_VALID_COMPONENT(i);
   static const vector<string> uHatStrings = {S_U1_HAT,S_U2_HAT,S_U3_HAT};
   return _vf->traceVar(uHatStrings[i-1]);
 }
 
-VarPtr OldroydBFormulation2::Tun_hat(int i, int j)
+VarPtr OldroydBFormulationUW::Tun_hat(int i, int j)
 {
   CHECK_VALID_COMPONENT(i);
   CHECK_VALID_COMPONENT(j);
@@ -1616,26 +1744,25 @@ VarPtr OldroydBFormulation2::Tun_hat(int i, int j)
 }
 
 // test variables:
-VarPtr OldroydBFormulation2::q()
+VarPtr OldroydBFormulationUW::q()
 {
   return _vf->testVar(S_Q, HGRAD);
 }
 
-
-VarPtr OldroydBFormulation2::M(int i)
+VarPtr OldroydBFormulationUW::M(int i)
 {
   TEUCHOS_TEST_FOR_EXCEPTION((i > _spaceDim) || (i < 1), std::invalid_argument, "i must be at least 1 and less than or equal to _spaceDim");
   const static vector<string> MStrings = {S_M1,S_M2,S_M3};
   return _vf->testVar(MStrings[i-1], HDIV);
 }
 
-VarPtr OldroydBFormulation2::v(int i)
+VarPtr OldroydBFormulationUW::v(int i)
 {
   TEUCHOS_TEST_FOR_EXCEPTION((i > _spaceDim) || (i < 1), std::invalid_argument, "i must be at least 1 and less than or equal to _spaceDim");
   const static vector<string> vStrings = {S_V1,S_V2,S_V3};
   return _vf->testVar(vStrings[i-1], HGRAD);
 }
-VarPtr OldroydBFormulation2::S(int i, int j)
+VarPtr OldroydBFormulationUW::S(int i, int j)
 {
   TEUCHOS_TEST_FOR_EXCEPTION((i > _spaceDim) || (i < 1), std::invalid_argument, "i must be at least 1 and less than or equal to _spaceDim");
   TEUCHOS_TEST_FOR_EXCEPTION((j > _spaceDim) || (j < 1), std::invalid_argument, "j must be at least 1 and less than or equal to _spaceDim");
@@ -1643,8 +1770,20 @@ VarPtr OldroydBFormulation2::S(int i, int j)
   return _vf->testVar(SStrings[i-1][j-1], HGRAD);
 }
 
+TRieszRepPtr<double> OldroydBFormulationUW::rieszResidual(FunctionPtr forcingFunction)
+{
+  // recompute residual with updated background flow
+  // :: recall that the solution residual is the forcing term for the solution increment problem
+  // _rhsForResidual = this->rhs(forcingFunction, false);
+  LinearTermPtr residual = _rhsForResidual->linearTermCopy();
+  residual->addTerm(-_oldroydBBF->testFunctional(_solnIncrement));
+  RieszRepPtr rieszResidual = Teuchos::rcp(new RieszRep(_solnIncrement->mesh(), _solnIncrement->ip(), residual));
+  return rieszResidual;
+}
+
+
 // ! Saves the solution(s) and mesh to an HDF5 format.
-void OldroydBFormulation2::save(std::string prefixString)
+void OldroydBFormulationUW::save(std::string prefixString)
 {
   _backgroundFlow->mesh()->saveToHDF5(prefixString+".mesh");
   _backgroundFlow->saveToHDF5(prefixString+".soln");
@@ -1657,41 +1796,143 @@ void OldroydBFormulation2::save(std::string prefixString)
 }
 
 // ! set current time step used for transient solve
-void OldroydBFormulation2::setTimeStep(double dt)
+void OldroydBFormulationUW::setTimeStep(double dt)
 {
   _dt->setValue(dt);
 }
 
 // ! Returns the solution (at current time)
-TSolutionPtr<double> OldroydBFormulation2::solution()
+TSolutionPtr<double> OldroydBFormulationUW::solution()
 {
   return _backgroundFlow;
 }
 
-TSolutionPtr<double> OldroydBFormulation2::solutionIncrement()
+TSolutionPtr<double> OldroydBFormulationUW::solutionIncrement()
 {
   return _solnIncrement;
 }
 
-void OldroydBFormulation2::solveAndAccumulate(double weight)
+void OldroydBFormulationUW::solveForIncrement()
 {
+  // before we solve, clear out the solnIncrement:
+  this->clearSolutionIncrement();
+  // (this matters for iterative solvers; otherwise we'd start with a bad initial guess after the first Newton step)
+
+  RHSPtr savedRHS = _solnIncrement->rhs();
+  _solnIncrement->setRHS(_rhsForSolve);
+  _solnIncrement->solve(_solver);
+  // _solnIncrement->condensedSolve(_solver);
+  _solnIncrement->setRHS(savedRHS);
+}
+
+void OldroydBFormulationUW::accumulate(double weight)
+{
+  bool allowEmptyCells = false;
+  _backgroundFlow->addSolution(_solnIncrement, weight, allowEmptyCells, _neglectFluxesOnRHS);
+  _nonlinearIterationCount++;
+}
+
+void OldroydBFormulationUW::solveAndAccumulate(double weight)
+{
+  // before we solve, clear out the solnIncrement:
+  this->clearSolutionIncrement();
+  // (this matters for iterative solvers; otherwise we'd start with a bad initial guess after the first Newton step)
+
   RHSPtr savedRHS = _solnIncrement->rhs();
   _solnIncrement->setRHS(_rhsForSolve);
   _solnIncrement->solve(_solver);
   _solnIncrement->setRHS(savedRHS);
+  // mesh->registerSolution(_backgroundFlow);
 
   bool allowEmptyCells = false;
   _backgroundFlow->addSolution(_solnIncrement, weight, allowEmptyCells, _neglectFluxesOnRHS);
   _nonlinearIterationCount++;
 }
+
+// double OldroydBFormulationUW::computeG(FunctionPtr forcingFunction, double weight)
+double OldroydBFormulationUW::computeG(double weight)
+{
+  // // evaluate linearization at current guess against solution increment
+  // LinearTermPtr soln_functional = _oldroydBBF->testFunctional(_solnIncrement);
+
+  // // TSolutionPtr<double> temporarySolnBackground = 
+
+  // // accumulate background flow
+  // bool allowEmptyCells = false;
+  // _backgroundFlow->addSolution(_solnIncrement, weight, allowEmptyCells, _neglectFluxesOnRHS);
+  // // this->setForcingFunction(Teuchos::null);
+  // // RHSPtr savedRHS = _solnIncrement->rhs();
+  // // _solnIncrement->setRHS(_rhsForResidual);
+
+  // // calculate Riesz representation of accumulated nonlinear residual
+  // // RHSPtr nonlinearRHS = this->rhs(Teuchos::null, _neglectFluxesOnRHS);
+  // // LinearTermPtr residual = nonlinearRHS->linearTermCopy();
+  // LinearTermPtr residual = _rhsForResidual->linearTermCopy();
+  // // LinearTermPtr residual = (_solnIncrement->rhs())->linearTermCopy();
+
+  // // RieszRepPtr rieszResidual = this->rieszResidual(Teuchos::null);
+  // RieszRepPtr rieszResidual = Teuchos::rcp(new RieszRep(_solnIncrement->mesh(), _solnIncrement->ip(), residual));
+
+  // // G(\Delta u) = b(\Delta u,psi)
+  // rieszResidual->computeRieszRep();
+
+  // TFunctionPtr<double> dG = TFunction<double>::zero();
+  // map<int,VarPtr> testVars = _vf->testVars();
+  // for (auto entry : testVars)
+  // {
+  //   VarPtr var = entry.second;
+  //   FunctionPtr var_err = Teuchos::rcp(new RepFunction<double>(var,rieszResidual));
+  //   map<int,FunctionPtr> var_errFxn;
+  //   var_errFxn[var->ID()] = var_err;
+  //   dG = dG + soln_functional->evaluate(var_errFxn);
+  // }
+
+  // // FunctionPtr q_err = Teuchos::rcp(new RepFunction<double>(this->q(),rieszResidual));
+  // // map<int,FunctionPtr> q_errFxn;
+  // // q_errFxn[(this->q())->ID()] = q_err;
+  // // TFunctionPtr<double> dG = soln_functional->evaluate(q_errFxn);
+
+  // // FunctionPtr vi_err, Mi_err, Sij_err;
+  // // map<int,FunctionPtr> vi_errFxn, Mi_errFxn, Sij_errFxn;
+  // // for (int i = 1; i <= _spaceDim; ++i)
+  // // {
+  // //   vi_err = Teuchos::rcp(new RepFunction<double>(this->v(i),rieszResidual));
+  // //   vi_errFxn[(this->v(i))->ID()] = vi_err;
+  // //   dG = dG + soln_functional->evaluate(vi_errFxn);
+
+  // //   Mi_err = Teuchos::rcp(new RepFunction<double>(this->M(i),rieszResidual));
+  // //   Mi_errFxn[(this->M(i))->ID()] = Mi_err;
+  // //   dG = dG + soln_functional->evaluate(Mi_errFxn);
+  // //   for (int j = i; j <= _spaceDim; ++j)
+  // //   {
+  // //     Sij_err = Teuchos::rcp(new RepFunction<double>(this->S(i,j),rieszResidual));
+  // //     Sij_errFxn[(this->S(i,j))->ID()] = Sij_err;
+  // //     dG = dG + soln_functional->evaluate(Sij_errFxn);
+  // //   }
+  // // }
+
+  // double G = dG->integrate(_backgroundFlow->mesh());
+
+  // // reset background flow
+  // _backgroundFlow->addSolution(_solnIncrement, -weight, allowEmptyCells, _neglectFluxesOnRHS);
+  // // _solnIncrement->clearComputedResiduals();
+  // // _solnIncrement->setRHS(savedRHS);
+  // // this->setForcingFunction(Teuchos::null);
+
+  return 1.0-weight;
+  // return G;
+
+}
+
+
 // ! Returns the solution (at previous time)
-TSolutionPtr<double> OldroydBFormulation2::solutionPreviousTimeStep()
+TSolutionPtr<double> OldroydBFormulationUW::solutionPreviousTimeStep()
 {
   return _previousSolution;
 }
 
 // ! Solves iteratively
-void OldroydBFormulation2::solveIteratively(int maxIters, double cgTol, int azOutputLevel, bool suppressSuperLUOutput)
+void OldroydBFormulationUW::solveIteratively(int maxIters, double cgTol, int azOutputLevel, bool suppressSuperLUOutput)
 {
   int kCoarse = 0;
 
@@ -1729,17 +1970,17 @@ void OldroydBFormulation2::solveIteratively(int maxIters, double cgTol, int azOu
   _solnIncrement->solve(gmgSolver);
 }
 
-int OldroydBFormulation2::spaceDim()
+int OldroydBFormulationUW::spaceDim()
 {
   return _spaceDim;
 }
 
-PoissonFormulation & OldroydBFormulation2::streamFormulation()
+PoissonFormulation & OldroydBFormulationUW::streamFormulation()
 {
   return *_streamFormulation;
 }
 
-VarPtr OldroydBFormulation2::streamPhi()
+VarPtr OldroydBFormulationUW::streamPhi()
 {
   if (_spaceDim == 2)
   {
@@ -1757,7 +1998,7 @@ VarPtr OldroydBFormulation2::streamPhi()
   }
 }
 
-TSolutionPtr<double> OldroydBFormulation2::streamSolution()
+TSolutionPtr<double> OldroydBFormulationUW::streamSolution()
 {
   if (_spaceDim == 2)
   {
@@ -1775,18 +2016,28 @@ TSolutionPtr<double> OldroydBFormulation2::streamSolution()
   }
 }
 
+SolverPtr OldroydBFormulationUW::getSolver()
+{
+  return _solver;
+}
+
+void OldroydBFormulationUW::setSolver(SolverPtr solver)
+{
+  _solver = solver;
+}
+
 // ! Returns the sum of the time steps taken thus far.
-double OldroydBFormulation2::getTime()
+double OldroydBFormulationUW::getTime()
 {
   return _time;
 }
 
-TFunctionPtr<double> OldroydBFormulation2::getTimeFunction()
+TFunctionPtr<double> OldroydBFormulationUW::getTimeFunction()
 {
   return _t;
 }
 
-void OldroydBFormulation2::turnOffSuperLUDistOutput(Teuchos::RCP<GMGSolver> gmgSolver){
+void OldroydBFormulationUW::turnOffSuperLUDistOutput(Teuchos::RCP<GMGSolver> gmgSolver){
   Teuchos::RCP<GMGOperator> gmgOperator = gmgSolver->gmgOperator();
   while (gmgOperator->getCoarseOperator() != Teuchos::null)
   {
@@ -1803,7 +2054,7 @@ void OldroydBFormulation2::turnOffSuperLUDistOutput(Teuchos::RCP<GMGSolver> gmgS
 }
 
 
-LinearTermPtr OldroydBFormulation2::getTraction(int i)
+LinearTermPtr OldroydBFormulationUW::getTraction(int i)
 {
   CHECK_VALID_COMPONENT(i);
   switch (i)
@@ -1818,18 +2069,18 @@ LinearTermPtr OldroydBFormulation2::getTraction(int i)
   TEUCHOS_TEST_FOR_EXCEPTION(true, std::invalid_argument, "unhandled i value");
 }
 
-TFunctionPtr<double> OldroydBFormulation2::getPressureSolution()
+TFunctionPtr<double> OldroydBFormulationUW::getPressureSolution()
 {
   TFunctionPtr<double> p_soln = Function::solution(p(), _backgroundFlow);
   return p_soln;
 }
 
-const std::map<int,int> & OldroydBFormulation2::getTrialVariablePolyOrderAdjustments()
+const std::map<int,int> & OldroydBFormulationUW::getTrialVariablePolyOrderAdjustments()
 {
   return _trialVariablePolyOrderAdjustments;
 }
 
-TFunctionPtr<double> OldroydBFormulation2::getVelocitySolution()
+TFunctionPtr<double> OldroydBFormulationUW::getVelocitySolution()
 {
   vector<FunctionPtr> u_components;
   for (int d=1; d<=_spaceDim; d++)
@@ -1839,35 +2090,58 @@ TFunctionPtr<double> OldroydBFormulation2::getVelocitySolution()
   return Function::vectorize(u_components);
 }
 
-TFunctionPtr<double> OldroydBFormulation2::getVorticity()
+TFunctionPtr<double> OldroydBFormulationUW::getVorticity()
 {
-  LinearTermPtr u1_dy = (1.0 / _mu) * this->L(1,2);
-  LinearTermPtr u2_dx = (1.0 / _mu) * this->L(2,1);
+  LinearTermPtr u1_dy = (1.0 / _muS) * this->L(1,2);
+  LinearTermPtr u2_dx = (1.0 / _muS) * this->L(2,1);
 
   TFunctionPtr<double> vorticity = Teuchos::rcp( new PreviousSolutionFunction<double>(_backgroundFlow, u2_dx - u1_dy) );
   return vorticity;
 }
 
-// VarPtr OldroydBFormulation2::addFieldVar(std::string name)
+// VarPtr OldroydBFormulationUW::addFieldVar(std::string name)
 // {
 //   VarPtr var = _vf->fieldVar(name);
 //   return var;
 // }
 
-// VarPtr OldroydBFormulation2::addTraceVar(std::string name)
+// VarPtr OldroydBFormulationUW::addTraceVar(std::string name)
 // {
 //   VarPtr var = _vf->traceVar(name);
 //   return var;
 // }
 
-// VarPtr OldroydBFormulation2::addFluxVar(std::string name)
+// VarPtr OldroydBFormulationUW::addFluxVar(std::string name)
 // {
 //   VarPtr var = _vf->fluxVar(name);
 //   return var;
 // }
 
-// VarPtr OldroydBFormulation2::addTestVar(std::string name, Space fs)
+// VarPtr OldroydBFormulationUW::addTestVar(std::string name, Space fs)
 // {
 //   VarPtr var = _vf->testVar(name, fs);
 //   return var;
+// }
+
+
+// TO COMPUTE DRAG COEFFICIENT around cylinder
+
+// TFunctionPtr<double> OldroydBFormulationUW::friction(SolutionPtr soln)
+// {
+//   if (_spaceDim == 2)
+//   {
+//     // friction is given by (sigma n) x n (that's a cross product)
+//     TFunctionPtr<double> n = Function::normal();
+//     // LinearTermPtr f_lt = n->y() * (sigma11->times_normal_x() + sigma12->times_normal_y())
+//     //                    - n->x() * (sigma21->times_normal_x() + sigma22->times_normal_y());
+//     LinearTermPtr f_lt = n->y() * this->sigman_hat(1) - n->x() * this->sigman_hat(2);
+
+//     TFunctionPtr<double> f = Teuchos::rcp( new PreviousSolutionFunction<double>(soln, f_lt) );
+//     return f;
+//   }
+//   else
+//   {
+//     cout << "ERROR: this function is only supported on 2D solutions.  Returning null.\n";
+//     return Teuchos::null;
+//   }
 // }
