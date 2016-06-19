@@ -770,6 +770,12 @@ bool Mesh::meshUsesMinimumRule()
   return (minRule != NULL);
 }
 
+bool Mesh::myCellsInclude(GlobalIndexType cellID) const
+{
+  const set<GlobalIndexType>* myCellIDs = &_gda->cellsInPartition(-1);
+  return (myCellIDs->find(cellID) != myCellIDs->end());
+}
+
 set<GlobalIndexType> Mesh::getGlobalDofIndices(GlobalIndexType cellID, int varID, int sideOrdinal)
 {
   return _gda->getGlobalDofIndices(cellID,varID,sideOrdinal);

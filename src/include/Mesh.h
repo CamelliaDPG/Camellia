@@ -311,6 +311,8 @@ public:
   bool meshUsesMaximumRule();
   bool meshUsesMinimumRule();
 
+  bool myCellsInclude(GlobalIndexType cellID) const;
+
   GlobalIndexType numActiveElements();
   
   // ! Returns the number of degrees of freedom belonging to field (volume) variables.  Involves MPI collective communication.  Must be called on every rank.
