@@ -747,15 +747,15 @@ OldroydBFormulationUW::OldroydBFormulationUW(MeshTopologyPtr meshTopo, Teuchos::
       // CONSERVATION OF VOLUME
       _solnIncrement->lagrangeConstraints()->addConstraint(u1_hat->times_normal_x() + u2_hat->times_normal_y() == zero);
       // CONSERVATION OF MOMENTUM (if Stokes)
-      if (_stokesOnly)
-      {
-        // we are assuming that there is no body forcing in the problem.
-        FunctionPtr x    = Function::xn(1);
-        FunctionPtr y    = Function::yn(1);
-        _solnIncrement->lagrangeConstraints()->addConstraint(sigma1n_hat == zero);
-        _solnIncrement->lagrangeConstraints()->addConstraint(sigma2n_hat == zero);
-        _solnIncrement->lagrangeConstraints()->addConstraint(-y*sigma1n_hat + x*sigma2n_hat == zero); // seems to upset convergence 
-      }
+      // if (_stokesOnly)
+      // {
+      //   // we are assuming that there is no body forcing in the problem.
+      //   FunctionPtr x    = Function::xn(1);
+      //   FunctionPtr y    = Function::yn(1);
+      //   _solnIncrement->lagrangeConstraints()->addConstraint(sigma1n_hat == zero);
+      //   _solnIncrement->lagrangeConstraints()->addConstraint(sigma2n_hat == zero);
+      //   _solnIncrement->lagrangeConstraints()->addConstraint(-y*sigma1n_hat + x*sigma2n_hat == zero); // seems to upset convergence 
+      // }
       // _solnIncrement->lagrangeConstraints()->addConstraint(_muS*u1_hat->times_normal_x() - L11 == zero);
     }
     else if (_spaceDim == 3)
@@ -941,7 +941,7 @@ void OldroydBFormulationUW::addWallCondition(SpatialFilterPtr wall)
 void OldroydBFormulationUW::addSymmetryCondition(SpatialFilterPtr symmetryRegion)
 {
   TFunctionPtr<double> zero = TFunction<double>::zero();
-  _solnIncrement->bc()->addDirichlet(this->sigman_hat(1), symmetryRegion, zero);
+  // _solnIncrement->bc()->addDirichlet(this->sigman_hat(1), symmetryRegion, zero);
   _solnIncrement->bc()->addDirichlet(this->Tun_hat(1,2), symmetryRegion, zero);
   _solnIncrement->bc()->addDirichlet(this->u_hat(2), symmetryRegion, zero);
 }

@@ -195,11 +195,13 @@ int main(int argc, char *argv[])
   bool useCondensedSolve = false;
   bool useConjugateGradient = true;
   bool logFineOperator = false;
-  double solverTolerance = 1e-10;
-  int maxNonlinearIterations = 10;
+  double solverTolerance = 1e-8;
+  int maxNonlinearIterations = 25;
   int enrichDegree = 0;
   double nonlinearTolerance = 1e-5;
-  int maxLinearIterations = 2000;
+  // double minNonlinearTolerance = 10*solverTolerance;
+  double minNonlinearTolerance = 4e-5;
+  int maxLinearIterations = 1000;
   // bool computeL2Error = false;
   bool exportSolution = false;
   bool useLineSearch = false;
@@ -626,6 +628,11 @@ int main(int argc, char *argv[])
   // else if (solverChoice != "SuperLUDist")
   //   form.setSolver(solvers[solverChoice]);
 
+  // choose local normal matrix calculation algorithm
+  BFPtr bf = form.bf();
+  // bf->setOptimalTestSolver(TBF<>::CHOLESKY);
+  bf->setOptimalTestSolver(TBF<>::FACTORED_CHOLESKY);
+
   double errorTol = 0.001;
   double errorRef = 0.0;
   double lambdaInitial = lambda;
@@ -652,7 +659,19 @@ int main(int argc, char *argv[])
     dataFileLocation = outputDir+"/"+solnName.str()+".txt";
 
   ofstream dataFile(dataFileLocation);
-  dataFile << "ref\t " << "elements\t " << "dofs\t " << "energy\t " << "l2\t " << "solvetime\t" << "elapsed\t" << "iterations\t " << endl;
+  dataFile << "lambda\t "
+           << "ref\t "
+           << "elements\t "
+           << "dofs\t "
+           << "energy\t "
+           << "solvetime\t "
+           << "elapsed\t "
+           << "iterations\t "
+           << "drag coefficient (field)\t "
+           << "drag coefficient (traction)\t "
+           << "y-direction force\t "
+           << "drag error estimate\t "
+           << endl;
 
   Teuchos::RCP<HDF5Exporter> exporter;
   exporter = Teuchos::rcp(new HDF5Exporter(mesh,solnName.str(), outputDir));
@@ -696,7 +715,7 @@ int main(int argc, char *argv[])
         //   if (commRank == 0)
         //     cout << meshSequence[i]->numGlobalDofs() << endl;
         // }
-        while (meshSequence[0]->numGlobalDofs() < 2000 && meshSequence.size() > 2)
+        while (meshSequence[0]->numGlobalDofs() < 100000 && meshSequence.size() > 2)
           meshSequence.erase(meshSequence.begin());
         gmgSolver = Teuchos::rcp(new GMGSolver(solutionIncrement, meshSequence, maxLinearIterations, solverTolerance, multigridStrategy, coarseSolver, useCondensedSolve));
         gmgSolver->setUseConjugateGradient(useConjugateGradient);
@@ -727,7 +746,7 @@ int main(int argc, char *argv[])
       int iterationCount = 0;
       double l2Update = 1e10;
       double l2UpdateInitial = l2Update;
-      while (l2Update > nonlinearTolerance*l2UpdateInitial && iterCount < maxNonlinearIterations)
+      while (l2Update > nonlinearTolerance*l2UpdateInitial && iterCount < maxNonlinearIterations && l2Update > minNonlinearTolerance)
       {
         if (solverChoice[0] == 'G')
         {
