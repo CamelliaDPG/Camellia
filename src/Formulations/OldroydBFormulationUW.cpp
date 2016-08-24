@@ -15,6 +15,7 @@
 #include "MeshFactory.h"
 #include "PenaltyConstraints.h"
 #include "PoissonFormulation.h"
+#include "H1ProjectionFormulation.h"
 #include "PreviousSolutionFunction.h"
 #include "SimpleFunction.h"
 #include "SuperLUDistSolver.h"

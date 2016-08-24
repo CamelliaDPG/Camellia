@@ -17,6 +17,7 @@
 #include "GMGSolver.h"
 #include "ParameterFunction.h"
 #include "PoissonFormulation.h"
+#include "H1ProjectionFormulation.h"
 #include "RefinementStrategy.h"
 #include "Solution.h"
 #include "Solver.h"
