@@ -148,7 +148,7 @@ OldroydBFormulationUW::OldroydBFormulationUW(MeshTopologyPtr meshTopo, Teuchos::
   _useConformingTraces = useConformingTraces;
   _enforceLocalConservation = enforceLocalConservation;
   _spatialPolyOrder = spatialPolyOrder;
-  _temporalPolyOrder =temporalPolyOrder;
+  _temporalPolyOrder = temporalPolyOrder;
   _muS = muS;
   _muP = muP;
   _alpha = alpha;

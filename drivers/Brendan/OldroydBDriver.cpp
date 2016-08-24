@@ -82,7 +82,7 @@ public:
   // CylinderBoundary(double radius) : _radius(radius) {}
   bool matchesPoint(double x, double y)
   {
-    double tol = 5e-1; // be generous b/c dealing with parametric curve
+    double tol = 5e-2; // be generous b/c dealing with parametric curve
     return (sqrt(x*x+y*y) < _radius+tol);
   }
 };
@@ -206,6 +206,7 @@ int main(int argc, char *argv[])
   bool exportSolution = false;
   bool useLineSearch = false;
   string norm = "Graph";
+  string errorIndicator = "Energy";
   string outputDir = ".";
   string tag="";
   cmdp.setOption("formulation", &formulation, "OldroydB, NavierStokes");
@@ -223,6 +224,7 @@ int main(int argc, char *argv[])
   cmdp.setOption("numYElems",&numYElems,"number of elements in y direction");
   cmdp.setOption("stokesOnly", "NavierStokesOnly", &stokesOnly, "couple only with Stokes, not Navier-Stokes");
   cmdp.setOption("norm", &norm, "norm");
+  cmdp.setOption("errorIndicator", &errorIndicator, "Energy,CylinderBoundary,DragOriented");
   cmdp.setOption("enforceLocalConservation", "noLocalConservation", &enforceLocalConservation, "enforce local conservation principles at the element level");
   cmdp.setOption("conformingTraces", "nonconformingTraces", &useConformingTraces, "use conforming traces");
   cmdp.setOption("solver", &solverChoice, "KLU, SuperLUDist, MUMPS, GMG-Direct, GMG-ILU, GMG-IC");
@@ -996,7 +998,60 @@ int main(int argc, char *argv[])
         break;
 
       if (refIndex != numRefs)
+
+      ///////////////////  CHOOSE REFINEMENT STRATEGY  ////////////////////
+      // Can also set whether to use h or p adaptivity here
+      if (errorIndicator == "Energy")
+      {
         form.refine();
+      }
+      else if (errorIndicator == "CylinderBoundary")
+      {
+        // cout << "ERROR: Error indicator type not currently supported. Returning null.\n";
+        // return Teuchos::null;
+
+        SpatialFilterPtr cylinderBoundary;
+        if (problemChoice == "Benchmark")
+        {
+          cylinderBoundary = Teuchos::rcp( new CylinderBoundary(cylinderRadius));
+        }
+        else {
+          cout << "ERROR: Error indicator type not currently supported for this mesh. Returning null.\n";
+          return Teuchos::null;
+        }
+
+        vector< Teuchos::RCP< Element > > activeElements = mesh->activeElements();
+        vector<GlobalIndexType> cellsToRefine;
+        // refine cells bordering on the cylinder
+        for (vector< Teuchos::RCP< Element > >::iterator activeElemIt = activeElements.begin(); activeElemIt != activeElements.end(); activeElemIt++)
+        {
+          Teuchos::RCP< Element > current_element = *(activeElemIt);
+          int cellID = current_element->cellID();
+          vector< vector<double> > verticesOfElement = mesh->verticesForCell(cellID);
+          for (int vertexIndex=0; vertexIndex<verticesOfElement.size(); vertexIndex++)
+          {
+            if (cylinderBoundary->matchesPoint(verticesOfElement[vertexIndex][0], verticesOfElement[vertexIndex][1]))
+            {
+              cellsToRefine.push_back(cellID);
+              break;
+            }
+          }
+        }
+
+        RefinementStrategyPtr refStrategy = form.getRefinementStrategy();
+        refStrategy->hRefineCells(mesh, cellsToRefine);
+        bool repartitionAndRebuild = false;
+        mesh->enforceOneIrregularity(repartitionAndRebuild);
+        // now, repartition and rebuild:
+        mesh->repartitionAndRebuild();
+      }
+      else if (errorIndicator == "DragOriented")
+      {
+        cout << "ERROR: Error indicator type not currently supported. Returning null.\n";
+        return Teuchos::null;
+        // form.setRefinementStrategy("DragOriented");
+      }
+        // form.refine();
         // refStrategy->refine();
 
     }
