@@ -21,6 +21,7 @@
 #include "RefinementStrategy.h"
 #include "GMGSolver.h"
 #include "OldroydBFormulationUW.h"
+#include "H1ProjectionFormulation.h"
 // #include "StokesVGPFormulation.h"
 // #include "NavierStokesVGPFormulation.h"
 #include "SpatiallyFilteredFunction.h"
@@ -28,6 +29,8 @@
 #include "TrigFunctions.h"
 #include "PreviousSolutionFunction.h"
 #include "RieszRep.h"
+#include "BasisFactory.h"
+
 
 using namespace Camellia;
 
@@ -297,8 +300,10 @@ int main(int argc, char *argv[])
 
   ///////////////////////////  DECLARE MESH  ///////////////////////////
 
+  MeshGeometryPtr spatialMeshGeom;
   MeshTopologyPtr spatialMeshTopo;
   map< pair<GlobalIndexType, GlobalIndexType>, ParametricCurvePtr > globalEdgeToCurveMap;
+
 
   double xLeft, xRight, height, cylinderRadius;
   if (problemChoice == "LidDriven")
@@ -338,10 +343,10 @@ int main(int argc, char *argv[])
     // CONFINED CYLINDER BENCHMARK PROBLEM
     xLeft = -15.0, xRight = 15.0;
     cylinderRadius = 1.0;
-    MeshGeometryPtr benchmarkGeometry = MeshFactory::confinedCylinderGeometry(xLeft, xRight, cylinderRadius);
-    map< pair<IndexType, IndexType>, ParametricCurvePtr > localEdgeToCurveMap = benchmarkGeometry->edgeToCurveMap();
+    spatialMeshGeom = MeshFactory::confinedCylinderGeometry(xLeft, xRight, cylinderRadius);
+    map< pair<IndexType, IndexType>, ParametricCurvePtr > localEdgeToCurveMap = spatialMeshGeom->edgeToCurveMap();
     globalEdgeToCurveMap = map< pair<GlobalIndexType, GlobalIndexType>, ParametricCurvePtr >(localEdgeToCurveMap.begin(),localEdgeToCurveMap.end());
-    spatialMeshTopo = Teuchos::rcp( new MeshTopology(benchmarkGeometry) );
+    spatialMeshTopo = Teuchos::rcp( new MeshTopology(spatialMeshGeom) );
   }
   else if (problemChoice == "Test 1")
   {
@@ -354,22 +359,11 @@ int main(int argc, char *argv[])
     return Teuchos::null;
   }
 
-
-
-  // form = NULL;
-  // if (formulation == "NavierStokes")
-  // {
-  //   NavierStokesVGPFormulation form(spatialMeshTopo, parameters);
-  // }
-  // else
-  // {
-    // OldroydBFormulation form(spatialMeshTopo, parameters);
-  // }
-  // NavierStokesVGPFormulation form(spatialMeshTopo, parameters);
+  ///////////
+  bool useEnrichedTraces = true; // enriched traces are the right choice, mathematically speaking
+  BasisFactory::basisFactory()->setUseEnrichedTraces(useEnrichedTraces);
   OldroydBFormulationUW form(spatialMeshTopo, parameters);
-  // StokesVGPFormulation form(spatialMeshTopo, parameters);
-
-
+  ///////////
 
   MeshPtr mesh = form.solutionIncrement()->mesh();
   if (globalEdgeToCurveMap.size() > 0)
@@ -552,6 +546,50 @@ int main(int argc, char *argv[])
   {
     cout << "ERROR: Problem type not currently supported. Returning null.\n";
     return Teuchos::null;
+  }
+
+  //////////////////////////////////////////////////////////////////////
+  ////////////////////////  REFINEMENT STRATEGY  ///////////////////////
+  //////////////////////////////////////////////////////////////////////
+
+  bool H1ProjectionConformingTraces = true; // no difference for primal/continuous formulations
+  int spaceDim = 2;
+  H1ProjectionFormulation formPhiPlus(spaceDim, H1ProjectionConformingTraces, H1ProjectionFormulation::CONTINUOUS_GALERKIN);
+  H1ProjectionFormulation formPhiMinus(spaceDim, H1ProjectionConformingTraces, H1ProjectionFormulation::CONTINUOUS_GALERKIN);
+  VarPtr phiPlus, phiMinus;
+  BFPtr phiPlusBF, phiMinusBF;
+  MeshPtr phiPlusMesh, phiMinusMesh;
+  // Teuchos::RCP<Mesh> phiPlusMesh, phiMinusMesh;
+  IPPtr phiIP;
+  BCPtr phiPlusBC, phiMinusBC;
+  RHSPtr phiRHS;
+  SolutionPtr phiPlusSolution, phiMinusSolution;
+  if (errorIndicator == "DragOriented")
+  {
+    phiPlus = formPhiPlus.phi();
+    phiMinus = formPhiMinus.phi();
+    phiPlusBF = formPhiPlus.bf();
+    phiMinusBF = formPhiMinus.bf();
+    MeshTopologyPtr phiPlusMeshTopo = spatialMeshTopo->deepCopy();
+    MeshTopologyPtr phiMinusMeshTopo = spatialMeshTopo->deepCopy();
+    vector<int> H1Order = {k+1};
+    int phiTestEnrichment = 0; // unnecessary since using Bubnov-Galerkin
+    phiPlusMesh = Teuchos::rcp( new Mesh(phiPlusMeshTopo, phiPlusBF, H1Order, phiTestEnrichment) ) ;
+    phiMinusMesh = Teuchos::rcp( new Mesh(phiMinusMeshTopo, phiMinusBF, H1Order, phiTestEnrichment) ) ;
+    // if (globalEdgeToCurveMap.size() > 0)
+    // {
+    //   phiPlusMesh->setEdgeToCurveMap(globalEdgeToCurveMap);
+    //   phiMinusMesh->setEdgeToCurveMap(globalEdgeToCurveMap);
+    // }
+    mesh->registerObserver(phiPlusMesh); // will refine phiPlusMesh in the same way as mesh.
+    mesh->registerObserver(phiMinusMesh);
+
+    phiIP = Teuchos::null;
+    phiPlusBC = BC::bc();
+    phiMinusBC = BC::bc();
+    VarPtr qPlus = formPhiPlus.q();
+    phiRHS = RHS::rhs();
+    phiRHS->addTerm(0.0 * qPlus); // no forcing
   }
 
   //////////////////////////////////////////////////////////////////////
@@ -1047,12 +1085,44 @@ int main(int argc, char *argv[])
       }
       else if (errorIndicator == "DragOriented")
       {
-        cout << "ERROR: Error indicator type not currently supported. Returning null.\n";
-        return Teuchos::null;
+        // cout << "ERROR: Error indicator type not currently supported. Returning null.\n";
+        // return Teuchos::null;
         // form.setRefinementStrategy("DragOriented");
+
+        SpatialFilterPtr cylinderBoundary;
+        if (problemChoice == "Benchmark")
+        {
+          cylinderBoundary = Teuchos::rcp( new CylinderBoundary(cylinderRadius));
+        }
+        else {
+          cout << "ERROR: Error indicator type not currently supported for this mesh. Returning null.\n";
+          return Teuchos::null;
+        }
+
+        phiPlusBC->addDirichlet(phiPlus, cylinderBoundary, one);
+        phiMinusBC->addDirichlet(phiMinus, cylinderBoundary, -one);
+        // phiPlusBC->addDirichlet(phiPlus, SpatialFilter::allSpace(), Function::constant(1));
+        // phiMinusBC->addDirichlet(phiMinus, SpatialFilter::allSpace(), Function::constant(1));
+        phiPlusSolution = Solution::solution(phiPlusBF, phiPlusMesh, phiPlusBC, phiRHS, phiIP);
+        phiMinusSolution = Solution::solution(phiMinusBF, phiMinusMesh, phiMinusBC, phiRHS, phiIP);
+
+        phiPlusSolution->solve();
+        phiMinusSolution->solve();
+
+        // debugging
+        Teuchos::RCP<HDF5Exporter> phiPlusExporter;
+        Teuchos::RCP<HDF5Exporter> phiMinusExporter;
+        phiPlusExporter = Teuchos::rcp(new HDF5Exporter(phiPlusMesh, solnName.str()+"phiPlus", outputDir));
+        phiMinusExporter = Teuchos::rcp(new HDF5Exporter(phiPlusMesh, solnName.str()+"phiMinus", outputDir));
+
+        phiPlusExporter->exportSolution(phiPlusSolution, refIndex);
+        phiMinusExporter->exportSolution(phiMinusSolution, refIndex);
+
+
+        form.refine();
       }
-        // form.refine();
-        // refStrategy->refine();
+      // form.refine();
+      // refStrategy->refine();
 
     }
     lambda += delta_lambda;
