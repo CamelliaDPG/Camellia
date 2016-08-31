@@ -685,7 +685,8 @@ OldroydBFormulationUW::OldroydBFormulationUW(MeshTopologyPtr meshTopo, Teuchos::
   // cout << endl << _oldroydBBF->displayString() << endl;
 
   // set the inner product to the graph norm:
-  setIP( _oldroydBBF->graphNorm() );
+  this->setIP( _oldroydBBF->graphNorm() );
+  // setIP( _oldroydBBF->graphNorm() );
 
   this->setForcingFunction(Teuchos::null); // will default to zero
 

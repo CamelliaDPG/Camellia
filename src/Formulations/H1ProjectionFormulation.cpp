@@ -19,7 +19,7 @@ const string H1ProjectionFormulation::S_PSI_N_HAT = "\\widehat{\\psi}_n";
 const string H1ProjectionFormulation::S_Q = "q";
 const string H1ProjectionFormulation::S_TAU = "\\tau";
 
-H1ProjectionFormulation::H1ProjectionFormulation(int spaceDim, bool useConformingTraces, H1ProjectionFormulationChoice formulationChoice)
+H1ProjectionFormulation::H1ProjectionFormulation(int spaceDim, bool useConformingTraces, H1ProjectionFormulationChoice formulationChoice, double lengthScale)
 {
   _spaceDim = spaceDim;
 
@@ -54,9 +54,9 @@ H1ProjectionFormulation::H1ProjectionFormulation(int spaceDim, bool useConformin
     TFunctionPtr<double> n = TFunction<double>::normal();
 
     if (spaceDim > 1)
-      psi_n_hat = vf->fluxVar(S_PSI_N_HAT, -psi * (n * parity));
+      psi_n_hat = vf->fluxVar(S_PSI_N_HAT, -(lengthScale * lengthScale) * psi * (n * parity));
     else
-      psi_n_hat = vf->fluxVar(S_PSI_N_HAT, -psi * (Function::normal_1D() * parity));
+      psi_n_hat = vf->fluxVar(S_PSI_N_HAT, -(lengthScale * lengthScale) * psi * (Function::normal_1D() * parity));
 
     q = vf->testVar(S_Q, HGRAD);
     tau = vf->testVar(S_TAU, tauSpace);
@@ -70,9 +70,9 @@ H1ProjectionFormulation::H1ProjectionFormulation(int spaceDim, bool useConformin
       _H1ProjectionBF->addTerm(phi, tau->dx());
       _H1ProjectionBF->addTerm(-phi_hat, tau);
 
-      _H1ProjectionBF->addTerm(psi, q->dx());
+      _H1ProjectionBF->addTerm((lengthScale*lengthScale)*psi, q->dx());
       _H1ProjectionBF->addTerm(phi, q);
-      _H1ProjectionBF->addTerm(-psi_n_hat, q);
+      _H1ProjectionBF->addTerm(-(lengthScale*lengthScale)*psi_n_hat, q);
     }
     else
     {
@@ -80,9 +80,9 @@ H1ProjectionFormulation::H1ProjectionFormulation(int spaceDim, bool useConformin
       _H1ProjectionBF->addTerm(phi, tau->div());
       _H1ProjectionBF->addTerm(-phi_hat, tau->dot_normal());
 
-      _H1ProjectionBF->addTerm(psi, q->grad());
+      _H1ProjectionBF->addTerm((lengthScale*lengthScale)*psi, q->grad());
       _H1ProjectionBF->addTerm(phi, q);
-      _H1ProjectionBF->addTerm(-psi_n_hat, q);
+      _H1ProjectionBF->addTerm(-(lengthScale*lengthScale)*psi_n_hat, q);
     }
   }
   else if ((formulationChoice == PRIMAL) || (formulationChoice == CONTINUOUS_GALERKIN))
@@ -112,17 +112,17 @@ H1ProjectionFormulation::H1ProjectionFormulation(int spaceDim, bool useConformin
     q = vf->testVar(S_Q, HGRAD);
     
     _H1ProjectionBF = BF::bf(vf);
-    _H1ProjectionBF->addTerm(phi->grad(), q->grad());
+    _H1ProjectionBF->addTerm((lengthScale*lengthScale)*phi->grad(), q->grad());
     _H1ProjectionBF->addTerm(phi, q);
 
     if (formulationChoice == CONTINUOUS_GALERKIN)
     {
       FunctionPtr boundaryIndicator = Function::meshBoundaryCharacteristic();
-      _H1ProjectionBF->addTerm(-phi->grad() * n, boundaryIndicator * q);
+      _H1ProjectionBF->addTerm(-(lengthScale*lengthScale)*phi->grad() * n, boundaryIndicator * q);
     }
     else // primal
     {
-      _H1ProjectionBF->addTerm(-psi_n_hat, q);
+      _H1ProjectionBF->addTerm(-(lengthScale*lengthScale)*psi_n_hat, q);
     }
   }
   else

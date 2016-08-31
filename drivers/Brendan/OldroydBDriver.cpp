@@ -85,7 +85,7 @@ public:
   // CylinderBoundary(double radius) : _radius(radius) {}
   bool matchesPoint(double x, double y)
   {
-    double tol = 5e-2; // be generous b/c dealing with parametric curve
+    double tol = 5e-1; // be generous b/c dealing with parametric curve
     return (sqrt(x*x+y*y) < _radius+tol);
   }
 };
@@ -201,9 +201,10 @@ int main(int argc, char *argv[])
   double solverTolerance = 1e-8;
   int maxNonlinearIterations = 25;
   int enrichDegree = 0;
-  double nonlinearTolerance = 1e-5;
+  double nonlinearTolerance = 1e-10;
   // double minNonlinearTolerance = 10*solverTolerance;
-  double minNonlinearTolerance = 4e-5;
+  double minNonlinearTolerance = 1e-8;
+  // double minNonlinearTolerance = 4e-5;
   int maxLinearIterations = 1000;
   // bool computeL2Error = false;
   bool exportSolution = false;
@@ -554,42 +555,29 @@ int main(int argc, char *argv[])
 
   bool H1ProjectionConformingTraces = true; // no difference for primal/continuous formulations
   int spaceDim = 2;
-  H1ProjectionFormulation formPhiPlus(spaceDim, H1ProjectionConformingTraces, H1ProjectionFormulation::CONTINUOUS_GALERKIN);
-  H1ProjectionFormulation formPhiMinus(spaceDim, H1ProjectionConformingTraces, H1ProjectionFormulation::CONTINUOUS_GALERKIN);
-  VarPtr phiPlus, phiMinus;
-  BFPtr phiPlusBF, phiMinusBF;
-  MeshPtr phiPlusMesh, phiMinusMesh;
-  // Teuchos::RCP<Mesh> phiPlusMesh, phiMinusMesh;
+  double lengthScale = 1.0;
+  H1ProjectionFormulation formPhi(spaceDim, H1ProjectionConformingTraces, H1ProjectionFormulation::CONTINUOUS_GALERKIN, lengthScale);
+  VarPtr phi;
+  BFPtr phiBF;
+  MeshPtr phiMesh;
   IPPtr phiIP;
-  BCPtr phiPlusBC, phiMinusBC;
   RHSPtr phiRHS;
-  SolutionPtr phiPlusSolution, phiMinusSolution;
   if (errorIndicator == "DragOriented")
   {
-    phiPlus = formPhiPlus.phi();
-    phiMinus = formPhiMinus.phi();
-    phiPlusBF = formPhiPlus.bf();
-    phiMinusBF = formPhiMinus.bf();
-    MeshTopologyPtr phiPlusMeshTopo = spatialMeshTopo->deepCopy();
-    MeshTopologyPtr phiMinusMeshTopo = spatialMeshTopo->deepCopy();
-    vector<int> H1Order = {k+1};
+    phi = formPhi.phi();
+    phiBF = formPhi.bf();
+    MeshTopologyPtr phiMeshTopo = spatialMeshTopo->deepCopy();
+    vector<int> H1Order = {k+1+delta_k};
     int phiTestEnrichment = 0; // unnecessary since using Bubnov-Galerkin
-    phiPlusMesh = Teuchos::rcp( new Mesh(phiPlusMeshTopo, phiPlusBF, H1Order, phiTestEnrichment) ) ;
-    phiMinusMesh = Teuchos::rcp( new Mesh(phiMinusMeshTopo, phiMinusBF, H1Order, phiTestEnrichment) ) ;
+    phiMesh = Teuchos::rcp( new Mesh(phiMeshTopo, phiBF, H1Order, phiTestEnrichment) ) ;
     // if (globalEdgeToCurveMap.size() > 0)
     // {
-    //   phiPlusMesh->setEdgeToCurveMap(globalEdgeToCurveMap);
-    //   phiMinusMesh->setEdgeToCurveMap(globalEdgeToCurveMap);
+    //   phiMesh->setEdgeToCurveMap(globalEdgeToCurveMap);
     // }
-    mesh->registerObserver(phiPlusMesh); // will refine phiPlusMesh in the same way as mesh.
-    mesh->registerObserver(phiMinusMesh);
+    mesh->registerObserver(phiMesh); // will refine phiMesh in the same way as mesh.
 
     phiIP = Teuchos::null;
-    phiPlusBC = BC::bc();
-    phiMinusBC = BC::bc();
-    VarPtr qPlus = formPhiPlus.q();
     phiRHS = RHS::rhs();
-    phiRHS->addTerm(0.0 * qPlus); // no forcing
   }
 
   //////////////////////////////////////////////////////////////////////
@@ -1089,37 +1077,230 @@ int main(int argc, char *argv[])
         // return Teuchos::null;
         // form.setRefinementStrategy("DragOriented");
 
-        SpatialFilterPtr cylinderBoundary;
+        SpatialFilterPtr cylinderBoundary, topBoundary, bottomBoundary, leftBoundary, 
+rightBoundary;
+        double yMax = 2.0 * cylinderRadius;
         if (problemChoice == "Benchmark")
         {
           cylinderBoundary = Teuchos::rcp( new CylinderBoundary(cylinderRadius));
+          topBoundary = SpatialFilter::matchingY(yMax);
+          bottomBoundary = SpatialFilter::matchingY(-yMax);
+          leftBoundary = SpatialFilter::matchingX(xLeft);
+          rightBoundary = SpatialFilter::matchingX(xRight);
         }
         else {
           cout << "ERROR: Error indicator type not currently supported for this mesh. Returning null.\n";
           return Teuchos::null;
         }
+        BCPtr qBC = BC::bc();
+        BCPtr phiBC = BC::bc();
+        BCPtr phiPlusBC = BC::bc();
+        BCPtr phiMinusBC = BC::bc();
 
-        phiPlusBC->addDirichlet(phiPlus, cylinderBoundary, one);
-        phiMinusBC->addDirichlet(phiMinus, cylinderBoundary, -one);
-        // phiPlusBC->addDirichlet(phiPlus, SpatialFilter::allSpace(), Function::constant(1));
-        // phiMinusBC->addDirichlet(phiMinus, SpatialFilter::allSpace(), Function::constant(1));
-        phiPlusSolution = Solution::solution(phiPlusBF, phiPlusMesh, phiPlusBC, phiRHS, phiIP);
-        phiMinusSolution = Solution::solution(phiMinusBF, phiMinusMesh, phiMinusBC, phiRHS, phiIP);
+        // compute error representation function
+
+
+        LinearTermPtr residual = solutionIncrement->rhs()->linearTerm() - bf->testFunctional(solutionIncrement,false);
+        RieszRepPtr rieszResidual = Teuchos::rcp(new RieszRep(mesh, solutionIncrement->ip(), residual));
+        // RieszRepPtr rieszResidual = form.rieszResidual(Teuchos::null); // this MUST to be computed wrong, the refinement patterns are not symmetric ???????
+        rieszResidual->computeRieszRep();
+        FunctionPtr psi_v1 =  Teuchos::rcp( new RepFunction<double>(form.v(1), rieszResidual) );
+
+        // compute scaling factor
+        double scale;
+        // use phiPlus for scale of q
+        qBC->addDirichlet(phi, cylinderBoundary, one);
+        qBC->addDirichlet(phi, topBoundary, zero);
+        qBC->addDirichlet(phi, bottomBoundary, zero);
+        SolutionPtr qSolution = Solution::solution(phiBF, phiMesh, qBC, phiRHS, phiIP);
+        qSolution->solve();
+        FunctionPtr extension = TFunction<double>::solution(phi, qSolution);
+        FunctionPtr dx_extension = extension->dx();
+        FunctionPtr dy_extension = extension->dy();
+        FunctionPtr d_extensionNorm = extension * extension + (lengthScale * lengthScale) * (dx_extension * dx_extension + dy_extension * dy_extension);
+        double extensionNorm = d_extensionNorm->integrate(phiMesh);
+        double qExtensionNorm = sqrt(extensionNorm);
+        // use phiPlus for scale of psi_v1
+        phiBC->addDirichlet(phi, cylinderBoundary, psi_v1);
+        phiBC->addDirichlet(phi, topBoundary, psi_v1);
+        phiBC->addDirichlet(phi, bottomBoundary, psi_v1);
+        SolutionPtr phiSolution = Solution::solution(phiBF, phiMesh, phiBC, phiRHS, phiIP);
+        phiSolution->solve();
+        extension = TFunction<double>::solution(phi, phiSolution);
+        dx_extension = extension->dx();
+        dy_extension = extension->dy();
+        d_extensionNorm = extension * extension + (lengthScale * lengthScale) * (dx_extension * dx_extension + dy_extension * dy_extension);
+        extensionNorm = d_extensionNorm->integrate(phiMesh);
+        double psiExtensionNorm = sqrt(extensionNorm);
+
+        scale = psiExtensionNorm / qExtensionNorm;
+        // cout << "scale = " << scale << endl;
+        // scale = 1.0;
+
+
+
+
+
+
+        // DEBUGGING
+        Teuchos::RCP<HDF5Exporter> phiExporter = Teuchos::rcp(new HDF5Exporter(phiMesh, solnName.str()+"phi", outputDir));
+        phiExporter->exportSolution(phiSolution, refIndex);
+
+        // compute average of psi_v1 along cylinder TWO DIFFERENT WAYS
+        // compute average from solution from solution
+        TFunctionPtr<double> boundaryRestriction = Function::meshBoundaryCharacteristic();
+        TFunctionPtr<double> phi_bndry = Teuchos::rcp( new PreviousSolutionFunction<double>(phiSolution, phi) );
+        phi_bndry = Teuchos::rcp( new SpatiallyFilteredFunction<double>( phi_bndry*boundaryRestriction, cylinderBoundary) );
+        double averagePhi = phi_bndry->integrate(phiMesh);
+
+        // compute average from Dirichlet BC's
+        // TFunctionPtr<double> phiPlusBC_bndry = Teuchos::rcp( new SpatiallyFilteredFunction<double>( one*boundaryRestriction, cylinderBoundary) ); // also evaluates to 2*pi
+        TFunctionPtr<double> phiBC_bndry = Teuchos::rcp( new SpatiallyFilteredFunction<double>( psi_v1*boundaryRestriction, cylinderBoundary) );
+        double averagePhiBC = phiBC_bndry->integrate(phiMesh);
+
+        // cout << "averagePhi = " << averagePhi << endl; // average from solution
+        // cout << "averagePhiBC = " << averagePhiBC << endl; // average from BC's
+        // DEBUGGING
+
+
+
+
+
+
+
+        // drag error ~ (e_1,psi_{v})_{1/2} = (1, psi_{v1})_{1/2}
+        // phiPlusBC->addDirichlet(phiPlus, cylinderBoundary, one); // later integral evaluates to 2*pi in this case, as it should
+        // phiPlusBC->addDirichlet(phiPlus, cylinderBoundary, psi_v1);
+        phiPlusBC->addDirichlet(phi, cylinderBoundary, 1.0/scale*psi_v1+scale*one);
+        phiPlusBC->addDirichlet(phi, topBoundary, 1.0/scale*psi_v1);
+        phiPlusBC->addDirichlet(phi, bottomBoundary, 1.0/scale*psi_v1);
+        // phiPlusBC->addDirichlet(phi, leftBoundary, psi_v1);
+        // phiPlusBC->addDirichlet(phi, rightBoundary, psi_v1);
+
+        phiMinusBC->addDirichlet(phi, cylinderBoundary, 1.0/scale*psi_v1-scale*one);
+        phiMinusBC->addDirichlet(phi, topBoundary, 1.0/scale*psi_v1);
+        phiMinusBC->addDirichlet(phi, bottomBoundary, 1.0/scale*psi_v1);
+        // phiMinusBC->addDirichlet(phi, leftBoundary, psi_v1);
+        // phiMinusBC->addDirichlet(phi, rightBoundary, psi_v1);
+        SolutionPtr phiPlusSolution = Solution::solution(phiBF, phiMesh, phiPlusBC, phiRHS, phiIP);
+        SolutionPtr phiMinusSolution = Solution::solution(phiBF, phiMesh, phiMinusBC, phiRHS, phiIP);
+        // SolutionPtr phiMinusSolution = Solution::solution(phiMinusBF, phiMinusMesh, phiMinusBC, phiRHS, phiIP);
 
         phiPlusSolution->solve();
         phiMinusSolution->solve();
 
+
+
+        FunctionPtr phiP_fxn = TFunction<double>::solution(phi, phiPlusSolution);
+        // FunctionPtr phiPlus_fxn = TFunction<double>::solution(phiPlus, phiPlusSolution);
+        // FunctionPtr phiMinus_fxn = TFunction<double>::solution(phiMinus, phiMinusSolution);
+        FunctionPtr dx_phiP_fxn = phiP_fxn->dx();
+        FunctionPtr dy_phiP_fxn = phiP_fxn->dy();
+        FunctionPtr d_eta = phiP_fxn * phiP_fxn + (lengthScale * lengthScale) * (dx_phiP_fxn * dx_phiP_fxn + dy_phiP_fxn * dy_phiP_fxn);
+
+        FunctionPtr phiM_fxn = TFunction<double>::solution(phi, phiMinusSolution);
+        FunctionPtr dx_phiM_fxn = phiM_fxn->dx();
+        FunctionPtr dy_phiM_fxn = phiM_fxn->dy();
+        d_eta = d_eta - phiM_fxn * phiM_fxn - (lengthScale * lengthScale) * (dx_phiM_fxn * dx_phiM_fxn + dy_phiM_fxn * dy_phiM_fxn);
+
+
+
+
+
+        // vector< Teuchos::RCP< Element > > activeElements = phiMesh->activeElements();
+        map<GlobalIndexType, double> eta;
+        // double maxEta = 0.0;
+        vector<GlobalIndexType> cellsToRefine;
+        // // refine cells bordering on the cylinder
+        // for (vector< Teuchos::RCP< Element > >::iterator activeElemIt = activeElements.begin(); activeElemIt != activeElements.end(); activeElemIt++)
+        // {
+        //   Teuchos::RCP< Element > current_element = *(activeElemIt);
+        //   GlobalIndexType cellID = current_element->cellID();
+
+        //   eta[cellID] = abs(d_eta->integrate(cellID, phiMesh));
+        //   maxEta = max(maxEta,eta[cellID]);
+
+        // }
+
+        // keep track of local maximum value
+        double localMax = 0;
+        // get reference to my cellIDs container (pointer avoids copy)
+        const set<GlobalIndexType>* myCellIDs = &phiMesh->cellIDsInPartition();
+        // C++11 - style for loop looks prettier than things involving iterators:
+        for (GlobalIndexType cellID : *myCellIDs)
+        {
+          eta[cellID] = abs(d_eta->integrate(cellID, phiMesh));
+          localMax = max(localMax, eta[cellID]);
+        }
+        // MPI communication to determine global maximum value
+        double globalMax;
+        phiMesh->Comm()->MaxAll(&localMax, &globalMax, 1);
+
+        cout << "globalMax = " << globalMax << endl;
+
         // debugging
-        Teuchos::RCP<HDF5Exporter> phiPlusExporter;
-        Teuchos::RCP<HDF5Exporter> phiMinusExporter;
-        phiPlusExporter = Teuchos::rcp(new HDF5Exporter(phiPlusMesh, solnName.str()+"phiPlus", outputDir));
-        phiMinusExporter = Teuchos::rcp(new HDF5Exporter(phiPlusMesh, solnName.str()+"phiMinus", outputDir));
+        // if (commRank == 0)
+        // {
 
-        phiPlusExporter->exportSolution(phiPlusSolution, refIndex);
-        phiMinusExporter->exportSolution(phiMinusSolution, refIndex);
+        //   cout << "size of eta " << eta.size() << endl;
+        //   for (int el = 0; el < eta.size(); el++)
+        //   {            
+        //     cout << " eta[" << el << "] " << eta[el] << endl;
+        //   }
+        // }
+        // debugging
+        // if (commRank == 0)
+        // {
+        //   cout << " activeElements size " << activeElements.size() << endl;
+        // }
+        // for (vector< Teuchos::RCP< Element > >::iterator activeElemIt = activeElements.begin(); activeElemIt != activeElements.end(); activeElemIt++)
+        // {
+        //   Teuchos::RCP< Element > current_element = *(activeElemIt);
+        //   GlobalIndexType cellID = current_element->cellID();
+
+        //   if ( eta[cellID] >= maxEta * 0.01 )
+        //   {
+        //     cellsToRefine.push_back(cellID);
+        //   }
+
+        // }
+        for (GlobalIndexType cellID : *myCellIDs)
+        {
+          if ( eta[cellID] >= globalMax * 0.01 )
+          {
+            cellsToRefine.push_back(cellID);
+          }
+        }
 
 
-        form.refine();
+        // debugging
+        if (commRank == 0)
+        {
+
+          cout << " cellsToRefine = " << cellsToRefine.size() << endl;
+          for (int el = 0; el < cellsToRefine.size(); el++)
+          {            
+            cout << " cellsToRefine[" << el << "] " << cellsToRefine[el] << endl;
+          }
+        }
+        // debugging
+
+        // refine phiMesh instead of mesh and register meshes
+        RefinementStrategyPtr refStrategy = form.getRefinementStrategy();
+        refStrategy->hRefineCells(mesh, cellsToRefine);
+        bool repartitionAndRebuild = false;
+        mesh->enforceOneIrregularity(repartitionAndRebuild);
+        // now, repartition and rebuild:
+        mesh->repartitionAndRebuild();
+
+        // RefinementStrategyPtr refStrategy = form.getRefinementStrategy();
+        // refStrategy->hRefineCells(mesh, cellsToRefine);
+        // bool repartitionAndRebuild = false;
+        // mesh->enforceOneIrregularity(repartitionAndRebuild);
+        // // now, repartition and rebuild:
+        // mesh->repartitionAndRebuild();
+
+        // form.refine();
       }
       // form.refine();
       // refStrategy->refine();

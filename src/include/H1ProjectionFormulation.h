@@ -38,7 +38,7 @@ private:
   static const string S_Q;
   static const string S_TAU;
 public:
-  H1ProjectionFormulation(int spaceDim, bool useConformingTraces, H1ProjectionFormulationChoice formulationChoice=ULTRAWEAK);
+  H1ProjectionFormulation(int spaceDim, bool useConformingTraces, H1ProjectionFormulationChoice formulationChoice=ULTRAWEAK, double lengthScale=1.0);
 
   BFPtr bf();
 
