@@ -1862,7 +1862,10 @@ void Mesh::saveToHDF5(string filename)
   }
   int pRefinementsSize = pRefinementsVector.size();
   hdf5.Write("Mesh", "p refinements size", pRefinementsSize);
-  hdf5.Write("Mesh", "p refinements", H5T_NATIVE_INT, pRefinementsVector.size(), &pRefinementsVector[0]);
+  if (pRefinementsSize > 0) {
+    hdf5.Write("Mesh", "p refinements", H5T_NATIVE_INT, pRefinementsVector.size(), &pRefinementsVector[0]);
+  }
+  
   
   if (meshUsesMaximumRule())
     hdf5.Write("Mesh", "GDARule", "max");
