@@ -142,9 +142,9 @@ TEUCHOS_UNIT_TEST( MeshTools, MeshSlice_Polynomial )
   // test functions:
   VarPtr v = varFactory->testVar("v", HGRAD);
 
+  // bf does not really matter here (not solving); bf is used for the varFactory (the discretization)
   BFPtr bf = Teuchos::rcp( new BF(varFactory) );
-
-  bf->addTerm( u, v->grad());
+  bf->addTerm( u, v);
   bf->addTerm(qHat, v);
 
   // for this test, just make a single-element mesh whose geometry hugs the initial data
