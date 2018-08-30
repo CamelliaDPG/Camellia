@@ -28,11 +28,13 @@ int main(int argc, char *argv[])
   
   int spaceDim = 3;
   int polyOrder = 3, delta_k = spaceDim;
+  bool outputStiffnessToo = false;
   
   Teuchos::CommandLineProcessor cmdp(false,true); // false: don't throw exceptions; true: do return errors for unrecognized options
   cmdp.setOption("polyOrder",&polyOrder,"polynomial order for field variable u");
   cmdp.setOption("delta_k", &delta_k, "test space polynomial order enrichment");
   cmdp.setOption("spaceDim", &spaceDim, "space dimensions (2 or 3)");
+  cmdp.setOption("outputStiffness", "onlyGram", &outputStiffnessToo, "if true, output the DPG stiffness matrix as well.");
   
   if (cmdp.parse(argc,argv) != Teuchos::CommandLineProcessor::PARSE_SUCCESSFUL)
   {
@@ -122,6 +124,18 @@ int main(int argc, char *argv[])
   
   SerialDenseWrapper::writeMatrixToMatlabFile(matrixFileName.str(), ipMatrix);
   SerialDenseWrapper::writeMatrixToMatlabFile(coordsFileName.str(), allDofCoords);
+  
+  if (outputStiffnessToo)
+  {
+    auto soln = form.solution();
+    ostringstream stiffnessFileName;
+    stiffnessFileName << "StokesK" << suffix.str() << ".dat";
+    
+    form.addWallCondition(SpatialFilter::allSpace());
+    
+    soln->setWriteMatrixToFile(true, stiffnessFileName.str());
+    soln->solve();
+  }
   
   return 0;
 }
