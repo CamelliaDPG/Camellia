@@ -429,6 +429,16 @@ int runSolver(Teuchos::RCP<Form> form, double dt, int meshWidth, double x_a, dou
     ds = c_p * ln(T2 / T1) - R * ln(p2/p1);
   }
   
+  {
+    // check that initial solution satisfies physicality constraints
+    auto T_previous = TAbstract->evaluateAt(prevSolnMap);
+    int posEnrich = 5;
+    double minValue = T_previous->minimumValue(mesh, posEnrich);
+    cout << "min temperature at time 0: " << minValue << endl;
+  }
+  
+  
+  
   if (spaceTime)
   {
     // DEBUGGING: print out all BF integrations (trying to see why we get zero rows)
@@ -712,7 +722,7 @@ int main(int argc, char *argv[])
 {
   Teuchos::GlobalMPISession mpiSession(&argc, &argv); // initialize MPI
   
-  int meshWidth = 32;
+  int meshWidth = 16;
   int polyOrder = 2;
   int delta_k   = 1;
   bool useCondensedSolve = true;
@@ -737,8 +747,6 @@ int main(int argc, char *argv[])
     {"transientGraph", TRANSIENT_GRAPH_NORM},
     {"experimental", EXPERIMENTAL_CONSERVATIVE_NORM}
   };
-  
-  int type;
   
   std::string normChoiceString = "transientGraph";
   
