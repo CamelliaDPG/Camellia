@@ -162,6 +162,10 @@ public:
   {
     return true;
   }
+  string displayString()
+  {
+    return "|_{\\Gamma}";
+  }
   void values(Intrepid::FieldContainer<double> &values, BasisCachePtr basisCache)
   {
     CHECK_VALUES_RANK(values);
