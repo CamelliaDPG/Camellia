@@ -109,15 +109,19 @@ FCPtr BasisEvaluation::getValues(BasisPtr basis, Camellia::EOperator op,
   else if (
     ( ( basisRank == 0) && (op == Camellia::OP_GRAD) )
     ||
-    ( ( basisRank == 0) && (op == Camellia::OP_CURL) ) )
+    ( ( basisRank == 0) && (op == Camellia::OP_CURL) ) ) // curl of scalar happens in 2D only, and produces a vector
   {
     dimensions.push_back(spaceDim);
   }
-  else if ( (basis->rangeRank() == 1) && (op == Camellia::OP_GRAD) )
+  else if ( (basisRank == 1) && (op == Camellia::OP_GRAD) )
   {
     // grad of vector: a tensor
     dimensions.push_back(spaceDim);
     dimensions.push_back(opCardinality);
+  }
+  else if ( (basisRank == 1) && (op == Camellia::OP_CURL) && (spaceDim == 3) ) // curl of vector in 2D produces a scalar; in 3D produces a vector
+  {
+    dimensions.push_back(spaceDim);
   }
   FCPtr result = Teuchos::rcp(new FieldContainer<double>(dimensions));
   basis->getValues(*(result.get()), refPoints, (Intrepid::EOperator)op);
