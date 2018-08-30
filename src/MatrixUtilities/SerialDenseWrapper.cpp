@@ -123,6 +123,7 @@ namespace Camellia {
   
   Epetra_SerialDenseMatrix SerialDenseWrapper::convertFCToSDM(const Intrepid::FieldContainer<double> &A, Epetra_DataAccess CV)
   {
+    TEUCHOS_TEST_FOR_EXCEPTION(A.rank() != 2, std::invalid_argument, "A must be a rank 2 FieldContainer.");
     //  FC is row major, SDM expects column major data, so the roles of rows and columns get swapped
     // distance between rows in FC is the column length (dimension 1)
     int n = A.dimension(0);
