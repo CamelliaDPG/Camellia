@@ -21,12 +21,15 @@ using namespace std;
 double conditionNumberForGram(CellTopoPtr cellTopo, int polyOrder, Space fs, double scaling, bool useTraceTerms)
 {
   // our initial question is: if we use the natural differential operator on the interior and simply the L^2 inner product on the element boundary, do we recover a norm?
+  // Spoiler: the answer is "No" in general, if the fs is not HGRAD.
   VarFactoryPtr vf = VarFactory::varFactory();
   VarPtr v;
   LinearTermPtr volumeTerm, traceTerm;
   auto trace = Function::meshSkeletonCharacteristic();
   
   v = vf->testVar("v", fs);
+  
+  // default trace term to the volume L^2 term; override below
   
   if (useTraceTerms)
   {
@@ -62,7 +65,7 @@ double conditionNumberForGram(CellTopoPtr cellTopo, int polyOrder, Space fs, dou
   ip->addTerm(traceTerm);
   
   DofOrderingFactory dofOrderingFactory(vf);
-  vector<int> polyOrderVector(1,polyOrder); // isotropic in p
+  vector<int> polyOrderVector = {polyOrder}; // isotropic in p
   auto testOrdering = dofOrderingFactory.testOrdering(polyOrderVector, cellTopo);
   
   bool createSideCacheToo = true;
@@ -84,6 +87,8 @@ double conditionNumberForGram(CellTopoPtr cellTopo, int polyOrder, Space fs, dou
   
   ip->printInteractions();
   
+  ipMatrix.resize(testDofCount,testDofCount);
+  
   double condNumber1NormEst = SerialDenseWrapper::getMatrixConditionNumber(ipMatrix);
   cout << "1-norm condition number estimate: " << condNumber1NormEst << endl;
   
@@ -99,7 +104,7 @@ double conditionNumberForTraceTermGram(CellTopoPtr cellTopo, int polyOrder, Spac
 
 double conditionNumberForVolumeL2Gram(CellTopoPtr cellTopo, int polyOrder, Space fs, double scaling)
 {
-  bool useTraceTerms = true;
+  bool useTraceTerms = false;
   return conditionNumberForGram(cellTopo, polyOrder, fs, scaling, useTraceTerms);
 }
 
@@ -114,12 +119,14 @@ int main(int argc, char *argv[])
   Epetra_MpiComm Comm(MPI_COMM_WORLD);
   Comm.Barrier(); // set breakpoint here to allow debugger attachment to other MPI processes than the one you automatically attached to.
   
+  bool useTraceTerm = true; // 'false' allows us to see what the non-trace version does
+  double scaling = 1.0; // 1.0 corresponds to reference space.
+  int polyOrder = 3;
+  
   Teuchos::CommandLineProcessor cmdp(false,true); // false: don't throw exceptions; true: do return errors for unrecognized options
-//  cmdp.setOption("polyOrder",&polyOrder,"polynomial order for field variable u");
-//  cmdp.setOption("delta_k", &delta_k, "test space polynomial order enrichment");
-//  cmdp.setOption("spaceDim", &spaceDim, "space dimensions (2 or 3)");
-//  cmdp.setOption("outputStiffness", "onlyGram", &outputStiffnessToo, "if true, output the DPG stiffness matrix as well.");
-//  cmdp.setOption("meshWidth", &meshWidth, "mesh width");
+  cmdp.setOption("scaling",&scaling,"scaling to use for coordinate space (h value)");
+  cmdp.setOption("polyOrder", &polyOrder, "polynomial order");
+  cmdp.setOption("useTraceTerm", "useVolumeL2Term", &useTraceTerm, "whether to use the trace term, or the standard volume L^2 term");
   
   if (cmdp.parse(argc,argv) != Teuchos::CommandLineProcessor::PARSE_SUCCESSFUL)
   {
@@ -129,7 +136,7 @@ int main(int argc, char *argv[])
     return -1;
   }
   
-  double h = 1.0;
+  double h = scaling;
 
   vector<CellTopoPtr> cellTopos_1D = {CellTopology::line()};
   vector<CellTopoPtr> cellTopos_2D = {CellTopology::triangle(), CellTopology::quad()};
@@ -153,8 +160,14 @@ int main(int argc, char *argv[])
       cout << "--- " << cellTopo->getName() << " ---\n";
       for (auto space : spaces_d)
       {
-        int polyOrder = 3;
-        conditionNumberForTraceTermGram(cellTopo, polyOrder, space, h);
+        if (useTraceTerm)
+        {
+          conditionNumberForTraceTermGram(cellTopo, polyOrder, space, h);
+        }
+        else
+        {
+          conditionNumberForVolumeL2Gram(cellTopo, polyOrder, space, h);
+        }
       }
     }
   }
