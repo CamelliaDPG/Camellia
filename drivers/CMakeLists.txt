@@ -1,9 +1,10 @@
 project(Drivers)
 
-option(BUILD_DPGTESTS_DRIVER "Build DPGTests driver" OFF)
 option(BUILD_BRENDAN_DRIVERS "Build drivers in Brendan directory" OFF)
-option(BUILD_PRECONDITIONING_DRIVERS "Build drivers in Preconditioning directory" OFF)
 option(BUILD_CONVECTION_DRIVERS "Build drivers in Convection directory" OFF)
+option(BUILD_DPGTESTS_DRIVER "Build DPGTests driver" OFF)
+option(BUILD_EXPERIMENTAL_DRIVERS "Build drivers in experimental directory" OFF)
+option(BUILD_PRECONDITIONING_DRIVERS "Build drivers in Preconditioning directory" OFF)
 
 # Include headers from DPGTests for some drivers
 include_directories(DPGTests)
@@ -37,3 +38,8 @@ if (BUILD_PRECONDITIONING_DRIVERS)
 else()
   MESSAGE("Not setting up makefiles for drivers in drivers/Preconditioning, because BUILD_PRECONDITIONING_DRIVERS is OFF.")  
 endif(BUILD_PRECONDITIONING_DRIVERS)
+
+if (BUILD_EXPERIMENTAL_DRIVERS)
+  MESSAGE("Setting up makefiles for drivers in drivers/experimental, because BUILD_EXPERIMENTAL_DRIVERS is ON.")
+  add_subdirectory(experimental)
+endif(BUILD_EXPERIMENTAL_DRIVERS)
