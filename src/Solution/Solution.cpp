@@ -527,7 +527,15 @@ void TSolution<Scalar>::applyDGJumpTerms()
   
   map<CellTopologyKey,BasisCachePtr> basisCacheForReferenceCellTopo;
 
-  const vector< TBilinearTerm<Scalar> >* bilinearTerms = &_mesh->bilinearForm()->getJumpTerms();
+  const vector< TBilinearTerm<Scalar> >* bilinearTerms;
+  if (_bf == Teuchos::null)
+  {
+    bilinearTerms = &_mesh->bilinearForm()->getJumpTerms();
+  }
+  else
+  {
+    bilinearTerms = &_bf->getJumpTerms();
+  }
   
   for (GlobalIndexType cellID : myCellIDs)
   {
