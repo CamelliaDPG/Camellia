@@ -63,9 +63,8 @@ DofOrderingPtr DofOrderingFactory::testOrdering(vector<int> &polyOrder, CellTopo
 
   vector<int> testIDPolyOrder(polyOrder.size());
 
-  for (testIterator = testIDs.begin(); testIterator != testIDs.end(); testIterator++)
+  for (int testID : testIDs)
   {
-    int testID = *testIterator;
     // Camellia::EFunctionSpace fs = _bilinearForm->functionSpaceForTest(testID);
     Camellia::EFunctionSpace fs = efsForSpace(_varFactory->test(testID)->space());
     BasisPtr basis;
@@ -74,9 +73,37 @@ DofOrderingPtr DofOrderingFactory::testOrdering(vector<int> &polyOrder, CellTopo
       testIDPolyOrder[pComponent] = polyOrder[pComponent] + getTestOrderEnhancement(testID);
     }
     Camellia::EFunctionSpace fsTemporal = FUNCTION_SPACE_HGRAD; // tests should use HGRAD, so we can take time derivatives...
-    basis = BasisFactory::basisFactory()->getBasis( testIDPolyOrder, cellTopo, fs, fsTemporal);
-    int basisRank = basis->rangeRank();
-    testOrder->addEntry(testID,basis,basisRank);
+    
+    VarPtr testVar = _varFactory->test(testID);
+    
+    VarType varType = testVar->varType();
+    if ((varType == FLUX) || (varType == TRACE))
+    {
+      int sideDim = cellTopo->getDimension() - 1;
+      int numSides = cellTopo->getSideCount();
+      for (int sideOrdinal=0; sideOrdinal<numSides; sideOrdinal++)
+      {
+        CellTopoPtr sideTopo = cellTopo->getSubcell(sideDim, sideOrdinal);
+        basis = BasisFactory::basisFactory()->getConformingBasis( testIDPolyOrder, sideTopo, fs, fsTemporal );
+        int basisRank = basis->rangeRank();
+        
+        bool temporalSide = ! cellTopo->sideIsSpatial(sideOrdinal);
+        
+        if ( temporalSide && !testVar->isDefinedOnTemporalInterface() )
+        {
+          // skip adding on this side
+          continue;
+        }
+        
+        testOrder->addEntry(testID,basis,basisRank,sideOrdinal);
+      }
+    }
+    else
+    {
+      basis = BasisFactory::basisFactory()->getBasis( testIDPolyOrder, cellTopo, fs, fsTemporal);
+      int basisRank = basis->rangeRank();
+      testOrder->addEntry(testID,basis,basisRank);
+    }
   }
   
   testOrder = *(_testOrderingsSet.insert(testOrder).first);
@@ -154,7 +181,6 @@ DofOrderingPtr DofOrderingFactory::trialOrdering(vector<int> &polyOrder,
       temporalFS = FUNCTION_SPACE_HVOL;
     }
     
-    // if (_bilinearForm->isFluxOrTrace(trialID)) {
     VarType varType = _varFactory->trial(trialID)->varType();
     if ((varType == FLUX) || (varType == TRACE))
     {

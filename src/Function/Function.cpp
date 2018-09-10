@@ -2014,6 +2014,7 @@ Scalar TFunction<Scalar>::integrate(MeshPtr mesh, int cubatureDegreeEnrichment, 
                                     bool spatialSidesOnly)
 {
   Scalar integral = 0;
+  MeshTopologyViewPtr meshTopoView = mesh->getTopology();
 
   set<GlobalIndexType> cellIDs = mesh->cellIDsInPartition();
   for (GlobalIndexType cellID : cellIDs)
@@ -2028,6 +2029,12 @@ Scalar TFunction<Scalar>::integrate(MeshPtr mesh, int cubatureDegreeEnrichment, 
       {
         if (spatialSidesOnly && !elemType->cellTopoPtr->sideIsSpatial(sideOrdinal)) continue; // skip non-spatial sides if spatialSidesOnly is true
         Scalar sideIntegral = this->integrate(basisCache->getSideBasisCache(sideOrdinal));
+        // this will hit each interior side twice; therefore we divide by two if the side is interior
+        auto neighborCell = meshTopoView->getCell(cellID)->getNeighbor(sideOrdinal, meshTopoView);
+        if (neighborCell != Teuchos::null) // interior side, then
+        {
+          sideIntegral /= 2.0;
+        }
         integral += sideIntegral;
       }
     }
