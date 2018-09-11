@@ -31,7 +31,7 @@ enum NormChoice
   TRACE_NORM
 };
 
-void runSolve(vector<vector<double>> domainDim, int numElements, int polyOrder, ProblemChoice problemChoice, FormulationChoice formulationChoice, NormChoice normChoice)
+void runSolve(vector<vector<double>> domainDim, int numElements, int polyOrder, int pToAdd, ProblemChoice problemChoice, FormulationChoice formulationChoice, NormChoice normChoice)
 {
   int rank = Teuchos::GlobalMPISession::getRank();
   int spaceDim = domainDim.size();
@@ -77,6 +77,8 @@ void runSolve(vector<vector<double>> domainDim, int numElements, int polyOrder, 
   map<int,int> trialOrderEnhancements;
   // enhance order of u_hat:
   trialOrderEnhancements[form.u_hat()->ID()] = 1;
+  // EXPERIMENT: try enhancing order of sigma_n_hat, too
+//  trialOrderEnhancements[form.sigma_n_hat()->ID()] = 1;
   MeshPtr mesh = Teuchos::rcp( new Mesh(meshTopo, bf->varFactory(), polyOrder+1, pToAddTest, trialOrderEnhancements) );
   mesh->setBilinearForm(bf);
   
@@ -120,12 +122,13 @@ void runSolve(vector<vector<double>> domainDim, int numElements, int polyOrder, 
     if (hWeightTraceTerms)
     {
       auto h = Function::h();
-      auto traceWeight = Function::sqrtFunction(h); // volume is h^2; trace of element is 4 h
+      auto traceWeight = Function::sqrtFunction(0.25 * h); // volume is h^2; trace of element is 4 h
+//      auto traceWeight = Function::constant(1e-6);
       trace = trace * traceWeight;
     }
-    ip->addTerm(tau * trace);
+//    ip->addTerm(tau * trace);
     // trying something (this seems to give lower L^2 error)
-    // ip->addTerm(traceWeight * tau->dot_normal());
+    ip->addTerm(trace * tau->dot_normal());
 
     ip->addTerm(v * trace);
   }
@@ -159,6 +162,7 @@ void runSolve(vector<vector<double>> domainDim, int numElements, int polyOrder, 
   
   bool exportL2Projection = false; //
   // export the L^2 projection matrix on this mesh:
+  if (exportL2Projection)
   {
     VarFactoryPtr vf_L2 = bf->varFactory()->getBubnovFactory(VarFactory::BUBNOV_TRIAL);
     BFPtr bf_L2 = BF::bf(vf_L2);
@@ -275,6 +279,7 @@ int main(int argc, char *argv[])
   int numElements = 30;
   vector<vector<double>> domainDim(spaceDim,vector<double>{0.0,1.0}); // first index: spaceDim; second: 0/1 for x0, x1, etc.
   int polyOrder = 3;
+  int pToAdd = spaceDim;
   string normChoiceString = "Trace"; // "Graph" is the alternative
   string formulationChoiceString = "Nonconforming"; // "Conforming" the alternative
   string problemChoiceString = "Manufactured"; // "Unit Forcing" the alternative
@@ -286,6 +291,7 @@ int main(int argc, char *argv[])
   cmdp.setOption("problem", &problemChoiceString);
   cmdp.setOption("meshWidth", &numElements );
   cmdp.setOption("polyOrder", &polyOrder );
+  cmdp.setOption("deltaP", &pToAdd);
   cmdp.setOption("runAll", "runOne", &runAll);
   cmdp.setOption("x0", &domainDim[0][0] );
   cmdp.setOption("x1", &domainDim[0][1] );
@@ -344,7 +350,7 @@ int main(int argc, char *argv[])
 
   if (!runAll)
   {
-    runSolve(domainDim, numElements, polyOrder, problemChoice, formulationChoice, normChoice);
+    runSolve(domainDim, numElements, polyOrder, pToAdd, problemChoice, formulationChoice, normChoice);
   }
   else
   {
@@ -355,7 +361,7 @@ int main(int argc, char *argv[])
       cout << "*************** mesh width " << numElements << " *******************\n";
       for (NormChoice normChoice : normChoices)
       {
-        runSolve(domainDim, numElements, polyOrder, problemChoice, formulationChoice, normChoice);
+        runSolve(domainDim, numElements, polyOrder, pToAdd, problemChoice, formulationChoice, normChoice);
       }
     }
   }
