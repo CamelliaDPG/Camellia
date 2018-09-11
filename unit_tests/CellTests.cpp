@@ -23,6 +23,132 @@ using namespace Intrepid;
 
 namespace
 {
+  TEUCHOS_UNIT_TEST( Cell, BoundarySubcells )
+  {
+    // tests a new feature, necessary for certain meshes when imposing BCs on test functions, that allows determination
+    // of subcells of lower dimension than sides that lie on the mesh boundary.  (For trial BC imposition, you can rely on
+    // global conformity to take care of these entities; our DPG test spaces are taken to be discontinuous/nonconforming.)
+    
+    // set up a 2D mesh with a triangle that has no boundary sides, but has vertices that do lie on the boundary
+    // unit square ABCD, where edge BC has midpoint E, edge CD has midpoint F.
+    vector<double> A = {{0.0, 0.0}};
+    vector<double> B = {{1.0, 0.0}};
+    vector<double> C = {{1.0, 1.0}};
+    vector<double> D = {{0.0, 1.0}};
+    vector<double> E = {{1.0, 0.5}}; // on BC
+    vector<double> F = {{0.5, 1.0}}; // on CD
+    
+    IndexType A_index = 0;
+    IndexType B_index = 1;
+    IndexType C_index = 2;
+    IndexType D_index = 3;
+    IndexType E_index = 4;
+    IndexType F_index = 5;
+    
+    // elements:
+    vector<IndexType> ABE_vertices = {A_index,B_index,E_index};
+    vector<IndexType> ECF_vertices = {E_index,C_index,F_index};
+    vector<IndexType> FDA_vertices = {F_index,D_index,A_index};
+    vector<IndexType> AEF_vertices = {A_index,E_index,F_index};
+    
+    vector< vector<double> > vertices = {A,B,C,D,E,F};
+    vector< vector< IndexType > > elementVertices = {ABE_vertices, ECF_vertices, FDA_vertices, AEF_vertices};
+    
+    auto triTopo = CellTopology::triangle();
+    auto cellTopos = vector<CellTopoPtr>(elementVertices.size(), triTopo);
+    
+    MeshGeometryPtr geometry = Teuchos::rcp( new MeshGeometry(vertices, elementVertices, cellTopos));
+    
+    vector<PeriodicBCPtr> periodicBCs;
+    
+    MeshTopologyPtr meshTopology = Teuchos::rcp( new MeshTopology(geometry, periodicBCs) );
+    
+    // while cell AEF is the most interesting, we might as well test all four cells
+    CellPtr ABE = meshTopology->getCell(0);
+    CellPtr ECF = meshTopology->getCell(1);
+    CellPtr FDA = meshTopology->getCell(2);
+    CellPtr AEF = meshTopology->getCell(3);
+    
+    // all cells have all their vertices on the boundary
+    set<unsigned> expectedVertexOrdinals;
+    set<unsigned> expectedSideOrdinals;
+    
+    // define a lambda for checking boundary entries match expected side, vertex ordinals
+    auto checkBoundarySubcells = [&](vector< pair<unsigned,unsigned> > actualEntries) -> void
+    {
+      int entryCountExpected = expectedVertexOrdinals.size() + expectedSideOrdinals.size();
+      TEST_EQUALITY(actualEntries.size(), entryCountExpected);
+      
+      set< pair<unsigned,unsigned> > entriesSeen;
+      for (auto entry : actualEntries)
+      {
+        unsigned scdim = entry.first;
+        unsigned scord = entry.second;
+        
+        if (scdim == 0)
+        {
+          // vertex
+          if (expectedVertexOrdinals.find(scord) == expectedVertexOrdinals.end())
+          {
+            out << "FAILURE: Unexpected vertex ordinal " << scord << " included in boundary subcells.\n";
+            success = false;
+          }
+        }
+        else if (scdim == 1)
+        {
+          // side
+          if (expectedSideOrdinals.find(scord) == expectedSideOrdinals.end())
+          {
+            out << "FAILURE: Unexpected edge ordinal " << scord << " included in boundary subcells.\n";
+            success = false;
+          }
+        }
+        
+        if (entriesSeen.find(entry) != entriesSeen.end())
+        {
+          out << "FAILURE: Duplicate entry for subcell with dimension " << scdim << ", ordinal " << scord << endl;
+          success = false;
+        }
+        else
+        {
+          entriesSeen.insert(entry);
+        }
+      }
+    };
+    
+    // ABE has boundary sides AB, BE (ordinals 0 and 1)
+    auto ABE_boundary = ABE->boundarySubcells();
+    expectedVertexOrdinals = {0,1,2};
+    expectedSideOrdinals = {0,1};
+    
+    out << "Checking cell ABE\n";
+    checkBoundarySubcells(ABE_boundary);
+    
+    // ECF has boundary sides EC, CF (ordinals 0 and 1)
+    auto ECF_boundary = ECF->boundarySubcells();
+    expectedVertexOrdinals = {0,1,2};
+    expectedSideOrdinals = {0,1};
+    
+    out << "Checking cell ECF\n";
+    checkBoundarySubcells(ECF_boundary);
+    
+    // FDA has boundary sides FD, DA (ordinals 0 and 1)
+    auto FDA_boundary = FDA->boundarySubcells();
+    expectedVertexOrdinals = {0,1,2};
+    expectedSideOrdinals = {0,1};
+    
+    out << "Checking cell FDA\n";
+    checkBoundarySubcells(FDA_boundary);
+    
+    // AEF has no boundary sides
+    auto AEF_boundary = AEF->boundarySubcells();
+    expectedVertexOrdinals = {0,1,2};
+    expectedSideOrdinals = {};
+    
+    out << "Checking cell AEF\n";
+    checkBoundarySubcells(AEF_boundary);
+  }
+  
 TEUCHOS_UNIT_TEST( Cell, FindSubcellOrdinalInSide )
 {
   double width=1.0, height=1.0;

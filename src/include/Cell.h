@@ -55,6 +55,11 @@ class Cell
      - hanging node sides point to the constraining neighbor (which may not be active)
      - cells with broken neighbors point to their peer, the ancestor of the active neighbors
    */
+  
+  // ! subcells that lie on the mesh boundary as a vector of (scdim, scord) pairs
+  // ! this is a somewhat expensive operation the first time; the result is cached for reuse
+  std::vector< std::pair<unsigned, unsigned> > _boundarySubcells;
+  bool _haveComputedBoundarySubcells;
 
   map<string, long long> approximateMemoryCosts(); // for each private variable
 public:
@@ -141,6 +146,10 @@ public:
   std::set<GlobalIndexType> getPeerNeighborIndices(unsigned dimensionForNeighborRelation, ConstMeshTopologyViewPtr meshTopoViewForCellValidity);
   std::vector<IndexType> entitiesOnNeighborInterfaces(unsigned dimensionOfInterest, bool peersOnly,
                                                       ConstMeshTopologyViewPtr meshTopoViewForCellValidity);
+  
+  // ! returns subcells that lie on the mesh boundary as a vector of (scdim, scord) pairs
+  // ! this is a somewhat expensive operation the first time; the result is cached for reuse
+  std::vector< std::pair<unsigned, unsigned> > boundarySubcells();
   
   void printApproximateMemoryReport(); // in bytes
 

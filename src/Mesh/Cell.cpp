@@ -11,6 +11,83 @@
 #include "GnuPlotUtil.h"
 
 using namespace Camellia;
+using namespace std;
+
+vector< pair< unsigned, unsigned > > Cell::boundarySubcells()
+{
+  if (! _haveComputedBoundarySubcells)
+  {
+    // strategy is:
+    // for each subcell sc
+    //   - determine descendants (including sc itself)
+    //   - for each descendant, get all sides in the MeshTopo that contain that descendant
+    //   - check whether any of these sides are on the mesh boundary
+    //   - if all descendants belong to some side on the mesh boundary, then the sc belongs to mesh boundary
+    //   - if it does, add it to _boundarySubcells
+    
+    // TODO: implement the computation here...
+    
+    int spaceDim = _cellTopo->getDimension();
+    int sideDim = spaceDim - 1;
+    
+    set< pair<unsigned, unsigned> > boundarySubcellSet; // use set for uniquing/lookup
+    
+    for (int d=sideDim; d>=0; d--)
+    {
+      int scCount = _cellTopo->getSubcellCount(d);
+      for (int scord=0; scord<scCount; scord++)
+      {
+        if (boundarySubcellSet.find({d,scord}) != boundarySubcellSet.end())
+        {
+          // we've already identified that this subcell is on the boundary; continue
+          continue;
+        }
+        IndexType scEntityIndex = entityIndex(d, scord);
+        
+        vector<IndexType> entitiesToCheck = _meshTopo->getChildEntities(d,scEntityIndex);
+        entitiesToCheck.push_back(scEntityIndex);
+        
+        bool eachEntityHasSideOnBoundary = true;
+        for (auto entityIndex : entitiesToCheck)
+        {
+          vector<IndexType> sideIndices = _meshTopo->getSidesContainingEntity(d, entityIndex);
+          bool foundSideOnBoundary = false;
+          for (IndexType sideIndex : sideIndices)
+          {
+            if (_meshTopo->isBoundarySide(sideIndex))
+            {
+              foundSideOnBoundary = true;
+              break;
+            }
+          }
+          if (!foundSideOnBoundary)
+          {
+            eachEntityHasSideOnBoundary = false;
+          }
+        }
+        if (eachEntityHasSideOnBoundary)
+        {
+          // this subcell and all its subcells lie on the boundary
+          boundarySubcellSet.insert({d,scord});
+          CellTopoPtr subcell = _cellTopo->getSubcell(d, scord);
+          for (unsigned subsubcellDim=0; subsubcellDim < d; subsubcellDim++ )
+          {
+            int subsubcellCount = subcell->getSubcellCount(subsubcellDim);
+            for (unsigned subsubcellOrd=0; subsubcellOrd<subsubcellCount; subsubcellOrd++)
+            {
+              unsigned subsubcellOrdinalInCell = CamelliaCellTools::subcellOrdinalMap(_cellTopo, d, scord, subsubcellDim, subsubcellOrd);
+              boundarySubcellSet.insert({subsubcellDim,subsubcellOrdinalInCell});
+            }
+          }
+        }
+      }
+    }
+    _boundarySubcells = vector< pair<unsigned,unsigned> > (boundarySubcellSet.begin(), boundarySubcellSet.end());
+    
+    _haveComputedBoundarySubcells = true;
+  }
+  return _boundarySubcells;
+}
 
 vector< pair<GlobalIndexType, unsigned> > Cell::childrenForSide(unsigned sideIndex)
 {
@@ -58,7 +135,7 @@ vector<IndexType> Cell::entitiesOnNeighborInterfaces(unsigned dimensionOfInteres
 {
   // strategy:
   /*
-      Find the entities of dimension dimensionForNeighborRelation that belong to our sides and, if
+      Find the entities of dimension dimensionOfInterest that belong to our sides and, if
       peersOnly is false, their descendants.
    */
   int spaceDim = _cellTopo->getDimension();
@@ -288,6 +365,7 @@ Cell::Cell(CellTopoPtr cellTopo, const vector<IndexType> &vertices, const vector
   int sideCount = cellTopo->getSideCount();
   _level = 0;
   _neighbors = vector< pair<GlobalIndexType, IndexType> >(sideCount,{-1,-1});
+  _haveComputedBoundarySubcells = false;
 }
 
 map<string, long long> Cell::approximateMemoryCosts()
@@ -323,7 +401,11 @@ map<string, long long> Cell::approximateMemoryCosts()
   variableCosts["_parent"] = sizeof(_parent);
 
   variableCosts["_neighbors"] = VECTOR_OVERHEAD + _neighbors.size() * sizeof(pair<GlobalIndexType, unsigned>);
+  
+  variableCosts["_boundarySubcells"] = VECTOR_OVERHEAD + _boundarySubcells.size() * sizeof(pair<unsigned,unsigned>);
 
+  variableCosts["_haveComputedBoundarySubcells"] = sizeof(_haveComputedBoundarySubcells);
+  
   return variableCosts;
 }
 
