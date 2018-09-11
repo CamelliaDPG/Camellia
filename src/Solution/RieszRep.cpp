@@ -97,6 +97,17 @@ void TRieszRep<Scalar>::computeRieszRep(int cubatureEnrichment)
     FieldContainer<Scalar> rieszRepDofs = rhsValues; // copy so we can do the dot product below after solving
     ipMatrix.resize(numTestDofs,numTestDofs);
     rhsValues.resize(numTestDofs,1);
+    
+    // impose any BCs from the test space:
+    if (_ip->hasBCsImposed())
+    {
+      auto testDofOrdinalsToZero = _ip->homogeneousBCDofOrdinalsForCell(_mesh,cellID);
+      for (auto testDofOrdinal : testDofOrdinalsToZero)
+      {
+        rieszRepDofs(testDofOrdinal,0) = 0.0;
+      }
+    }
+    
     int success = SerialDenseWrapper::solveSPDSystemLAPACKCholesky(rieszRepDofs, ipMatrix);// solveSystemUsingQR(rieszRepDofs, ipMatrix, rhsValues);
 
     if (success != 0)

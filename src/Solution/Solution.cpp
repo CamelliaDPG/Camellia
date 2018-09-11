@@ -2714,9 +2714,19 @@ void TSolution<Scalar>::computeErrorRepresentation()
     _ip->computeInnerProductMatrix(ipMatrix,testOrdering, ipBasisCache);
     Intrepid::FieldContainer<double> errorRepresentation = _residualForCell[cellID];
     errorRepresentation.resize(numTestDofs, 1);
-
+    
     // strip cell dimension:
     ipMatrix.resize(ipMatrix.dimension(1),ipMatrix.dimension(2));
+    
+    // impose any BCs from the test space:
+    if (_ip->hasBCsImposed())
+    {
+      auto dofOrdinalsToZero = _ip->homogeneousBCDofOrdinalsForCell(_mesh,cellID);
+      for (auto dofOrdinal : dofOrdinalsToZero)
+      {
+        errorRepresentation(dofOrdinal,0) = 0.0;
+      }
+    }
 
     int result = SerialDenseWrapper::solveSPDSystemLAPACKCholesky(errorRepresentation, ipMatrix);
 

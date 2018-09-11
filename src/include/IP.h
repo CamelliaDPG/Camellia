@@ -31,6 +31,8 @@ class TIP
   std::vector< TLinearTermPtr<Scalar> > _boundaryTerms;
   std::vector< TLinearTermPtr<Scalar> > _zeroMeanTerms;
 
+  std::vector< std::pair<VarPtr, SpatialFilterPtr> > _homogeneousBCs;
+  
   bool _isLegacySubclass;
 protected:
   TBFPtr<Scalar> _bilinearForm; // for legacy subclasses (originally subclasses of DPGInnerProduct)
@@ -89,6 +91,18 @@ public:
   
   virtual bool hasBoundaryTerms();
 
+  // ! returns true if BCs have been set using imposeHomogeneousBCs()
+  bool hasBCsImposed();
+  
+  // ! specify that homogeneous BCs should be imposed on var on the portion of the mesh boundary that matches the provided filter.
+  // ! Note that this only changes the inner product (Gram) matrix by zeroing out appropriate rows and columns, putting 1s in the diagonal.
+  // ! Since IP does not compute the RHS of any solves, clients are responsible for calling homogeneousBCDofOrdinalsForCell() and setting
+  // ! corresponding RHS entries to 0.
+  void imposeHomogeneousBCs(VarPtr var, SpatialFilterPtr meshBoundaryFilter);
+  
+  // returns the cell-local dof ordinals on which homogeneous BCs are being imposed (necessary for correct handling of RHS in any solves performed by caller)
+  std::vector<int> homogeneousBCDofOrdinalsForCell(MeshPtr mesh, GlobalIndexType cellID);
+  
   int nonZeroEntryCount(DofOrderingPtr testOrdering);
   
   virtual void operators(int testID1, int testID2,

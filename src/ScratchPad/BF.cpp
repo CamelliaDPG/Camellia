@@ -1270,6 +1270,19 @@ namespace Camellia
           FieldContainer<Scalar> cellStiffnessEnriched(localStiffnessEnrichedDim, &stiffnessEnriched(cellIndex,0,0));
           FieldContainer<Scalar> cellRHSEnriched(localRHSEnrichedDim, &rhsEnriched(cellIndex,0));
           
+          // impose any BCs from the test space:
+          if (ip->hasBCsImposed())
+          {
+            auto testDofOrdinalsToZero = ip->homogeneousBCDofOrdinalsForCell(ipBasisCache->mesh(),ipBasisCache->cellIDs()[cellIndex]);
+            for (auto testDofOrdinal : testDofOrdinalsToZero)
+            {
+              for (int trialOrdinal=0; trialOrdinal<numTrialDofs; trialOrdinal++)
+              {
+                cellStiffnessEnriched(trialOrdinal,testDofOrdinal) = 0.0;
+              }
+            }
+          }
+          
           result = factoredCholeskySolve(cellIPMatrix, cellStiffnessEnriched, cellRHSEnriched, dummyStiffness, dummyRHS);
         }
         timeK = timer.ElapsedTime();
@@ -1438,6 +1451,19 @@ namespace Camellia
           FieldContainer<Scalar> cellRHSEnriched(localRHSEnrichedDim, &rhsEnriched(cellIndex,0));
           FieldContainer<Scalar> cellRHS(localRHSDim, &rhsVector(cellIndex,0));
 
+          // impose any BCs from the test space:
+          if (ip->hasBCsImposed())
+          {
+            auto testDofOrdinalsToZero = ip->homogeneousBCDofOrdinalsForCell(ipBasisCache->mesh(),ipBasisCache->cellIDs()[cellIndex]);
+            for (auto testDofOrdinal : testDofOrdinalsToZero)
+            {
+              for (int trialOrdinal=0; trialOrdinal<numTrialDofs; trialOrdinal++)
+              {
+                cellStiffnessEnriched(trialOrdinal,testDofOrdinal) = 0.0;
+              }
+            }
+          }
+          
           result = factoredCholeskySolve(cellIPMatrix, cellStiffnessEnriched, cellRHSEnriched, cellStiffness, cellRHS);
         }
         timeK = timer.ElapsedTime();
@@ -1633,6 +1659,20 @@ namespace Camellia
       FieldContainer<Scalar> cellRectangularStiffness(localRectangularStiffnessDim, &rectangularStiffnessMatrix(cellIndex,0,0));
       FieldContainer<Scalar> cellStiffness(localStiffnessDim, &stiffnessMatrix(cellIndex,0,0));
       FieldContainer<Scalar> cellOptimalWeightsT(cellOptimalWeightsTDim, &optimalTestWeights(cellIndex,0,0));
+      
+      // impose any BCs from the test space:
+      if (ip->hasBCsImposed())
+      {
+        auto testDofOrdinalsToZero = ip->homogeneousBCDofOrdinalsForCell(ipBasisCache->mesh(),ipBasisCache->cellIDs()[cellIndex]);
+        for (auto testDofOrdinal : testDofOrdinalsToZero)
+        {
+          for (int trialOrdinal=0; trialOrdinal<numTrialDofs; trialOrdinal++)
+          {
+            cellRectangularStiffness(trialOrdinal,testDofOrdinal) = 0.0;
+          }
+        }
+      }
+      
       switch(_optimalTestSolver)
       {
         case CHOLESKY:

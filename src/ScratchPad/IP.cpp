@@ -214,7 +214,6 @@ void TIP<Scalar>::computeInnerProductMatrix(FieldContainer<Scalar> &innerProduct
   }
   else     // _isLegacySubclass is false
   {
-
     // innerProduct FC is sized as (C,F,F)
     const FieldContainer<double>* physicalCubaturePoints = &basisCache->getPhysicalCubaturePoints();
 
@@ -288,6 +287,31 @@ void TIP<Scalar>::computeInnerProductMatrix(FieldContainer<Scalar> &innerProduct
             // cout << "(" << innerProduct(c, i, j) << ", " << valAdd << ") ";
             innerProduct(c, i, j) += valAdd;
           }
+    }
+  }
+  if (_homogeneousBCs.size() > 0)
+  {
+    const FieldContainer<double>* physicalCubaturePoints = &basisCache->getPhysicalCubaturePoints();
+    
+    unsigned numCells = physicalCubaturePoints->dimension(0);
+    
+    for (IndexType cellOrdinal=0; cellOrdinal < numCells; cellOrdinal++)
+    {
+      auto cellID = basisCache->cellIDs()[cellOrdinal];
+      
+      auto dofOrdinals = this->homogeneousBCDofOrdinalsForCell(basisCache->mesh(),cellID);
+      
+      for (auto dofOrdinal : dofOrdinals)
+      {
+        unsigned numDofs = dofOrdering->totalDofs();
+        // zero out (dofOrdinal,i), (i,dofOrdinal)
+        for (int i=0; i<numDofs; i++)
+        {
+          innerProduct(cellOrdinal,dofOrdinal,i) = 0.0;
+          innerProduct(cellOrdinal,i,dofOrdinal) = 0.0;
+        }
+        innerProduct(cellOrdinal,dofOrdinal,dofOrdinal) = 1.0; // 1 in the diagonal
+      }
     }
   }
 }
@@ -373,10 +397,60 @@ std::vector< TLinearTermPtr<Scalar> > TIP<Scalar>::getZeroMeanTerms() const
 }
 
 template <typename Scalar>
+bool TIP<Scalar>::hasBCsImposed()
+{
+  return _homogeneousBCs.size() > 0;
+}
+
+template <typename Scalar>
 bool TIP<Scalar>::hasBoundaryTerms()
 {
   if (_isLegacySubclass) return false;
   else return _boundaryTerms.size() > 0;
+}
+
+template <typename Scalar>
+std::vector<int> TIP<Scalar>::homogeneousBCDofOrdinalsForCell(MeshPtr mesh, GlobalIndexType cellID)
+{
+  vector<int> dofIndices;
+  if (_homogeneousBCs.size() == 0) return dofIndices;
+  
+  auto cell = mesh->getTopology()->getCell(cellID);
+  auto boundarySubcells = cell->boundarySubcells();
+  if (boundarySubcells.size() == 0) return dofIndices;
+  
+  auto dofOrdering = mesh->getElementType(cellID)->testOrderPtr;
+  
+  for (auto bcEntry : _homogeneousBCs)
+  {
+    VarPtr var = bcEntry.first;
+    
+    bool varIsDefinedOnVolume = (dofOrdering->getSidesForVarID(var->ID()).size() == 1);
+    if (!varIsDefinedOnVolume)
+    {
+      TEUCHOS_TEST_FOR_EXCEPTION(true, std::invalid_argument, "Imposition of test-space BCs is not (yet) supported for trace test variables");
+      // would not be hard to implement; just need to map the subcell ordinals from the cell to the sides (using the reverse map provided in CamelliaCellTools)
+    }
+    BasisPtr basis = dofOrdering->getBasis(var->ID());
+    for (auto boundarySubcell : boundarySubcells)
+    {
+      unsigned scdim = boundarySubcell.first;
+      unsigned scord = boundarySubcell.second;
+      auto basisDofOrdinals = basis->dofOrdinalsForSubcell(scdim, scord);
+      for (auto basisDofOrdinal : basisDofOrdinals)
+      {
+        auto cellDofOrdinal = dofOrdering->getDofIndex(var->ID(), basisDofOrdinal);
+        dofIndices.push_back(cellDofOrdinal);
+      }
+    }
+  }
+  return dofIndices;
+}
+
+template <typename Scalar>
+void TIP<Scalar>::imposeHomogeneousBCs(VarPtr var, SpatialFilterPtr meshBoundaryFilter)
+{
+  _homogeneousBCs.push_back({var,meshBoundaryFilter});
 }
 
 // ! returns the number of potential nonzeros for the given trial ordering and test ordering

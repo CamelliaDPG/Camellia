@@ -17,6 +17,10 @@ IPSwitcher::IPSwitcher(IPPtr ip1, IPPtr ip2, double minH)
   _ip1 = ip1;
   _ip2 = ip2;
   _minH = minH;
+  
+  // would not be hard to add support for BC imposition, but IPSwitcher is not commonly used, so we'll delay that for now...
+  TEUCHOS_TEST_FOR_EXCEPTION(ip1->hasBCsImposed(), std::invalid_argument, "IPSwitcher does not (yet) support IPs that have BCs imposed");
+  TEUCHOS_TEST_FOR_EXCEPTION(ip2->hasBCsImposed(), std::invalid_argument, "IPSwitcher does not (yet) support IPs that have BCs imposed");
 }
 
 

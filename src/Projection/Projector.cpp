@@ -149,6 +149,16 @@ void Projector<Scalar>::projectFunctionOntoBasis(FieldContainer<Scalar> &basisCo
     FieldContainer<Scalar> cellRHS(rhsDim, &ipVector(cellIndex,0));
     FieldContainer<Scalar> x(gramMatrix.dimension(1),1); // 1: number of RHSes in our current solve
     
+    // impose any BCs from the test space:
+    if (ip->hasBCsImposed())
+    {
+      auto testDofOrdinalsToZero = ip->homogeneousBCDofOrdinalsForCell(basisCache->mesh(),basisCache->cellIDs()[cellIndex]);
+      for (auto testDofOrdinal : testDofOrdinalsToZero)
+      {
+        cellRHS(testDofOrdinal,0) = 0.0;
+      }
+    }
+    
     // sanity check: scalar basis should be evaluated at at least as many quadrature points as there are basis functions
     //               (otherwise, the projection will not be uniquely defined)
     // For a vector basis, the rule is that each scalar component needs to have that many quadrature points.
