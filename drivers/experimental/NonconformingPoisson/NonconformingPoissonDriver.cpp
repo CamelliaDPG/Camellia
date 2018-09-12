@@ -118,19 +118,15 @@ void runSolve(vector<vector<double>> domainDim, int numElements, int polyOrder, 
     
     auto trace = Function::meshSkeletonCharacteristic(); // skeleton restriction
     
-    bool hWeightTraceTerms = false;
-    if (hWeightTraceTerms)
-    {
-      auto h = Function::h();
-      auto traceWeight = Function::sqrtFunction(0.25 * h); // volume is h^2; trace of element is 4 h
-//      auto traceWeight = Function::constant(1e-6);
-      trace = trace * traceWeight;
-    }
-//    ip->addTerm(tau * trace);
-    // trying something (this seems to give lower L^2 error)
-    ip->addTerm(trace * tau->dot_normal());
-
-    ip->addTerm(v * trace);
+    ip->addTerm(v);
+    ip->addTerm(tau);
+    
+    ip->addTerm(trace * v);
+    
+    // to approximate a projection into H^1_0(\Omega), restrict the tau * n term to the interior of the mesh skeleton
+    // (amounts, more or less, to setting a 0 boundary condition on the mesh boundary)
+    auto traceInterior = trace - Function::meshBoundaryCharacteristic();
+    ip->addTerm(tau->dot_normal() * traceInterior);
   }
   else
   {
