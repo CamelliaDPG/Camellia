@@ -118,15 +118,25 @@ void runSolve(vector<vector<double>> domainDim, int numElements, int polyOrder, 
     
     auto trace = Function::meshSkeletonCharacteristic(); // skeleton restriction
     
+    FunctionPtr traceWeight = Function::constant(1.0);
+    bool useHWeight = false; // experimental
+    if (useHWeight)
+    {
+      // multiplying by sqrt(h) in each side of the inner product amounts to an h-scaling
+      // of the term as a whole.  This means that the trace terms will scale in the same way
+      // as an L^2 (volume) term would.
+      traceWeight = Function::sqrtFunction(Function::h());
+    }
+    
     ip->addTerm(v);
     ip->addTerm(tau);
     
-    ip->addTerm(trace * v);
+    ip->addTerm((traceWeight * trace) * v);
     
     // to approximate a projection into H^1_0(\Omega), restrict the tau * n term to the interior of the mesh skeleton
     // (amounts, more or less, to setting a 0 boundary condition on the mesh boundary)
     auto traceInterior = trace - Function::meshBoundaryCharacteristic();
-    ip->addTerm(tau->dot_normal() * traceInterior);
+    ip->addTerm(tau->dot_normal() * (traceWeight * traceInterior));
   }
   else
   {
@@ -236,6 +246,7 @@ void runSolve(vector<vector<double>> domainDim, int numElements, int polyOrder, 
     map<int,VarPtr> trialVars = bf->varFactory()->trialVars();
     
     double l2NormSquared = 0.0;
+    double bestDifferenceL2Squared = 0.0;
     for (auto entry : trialVars)
     {
       auto var = entry.second;
@@ -255,13 +266,14 @@ void runSolve(vector<vector<double>> domainDim, int numElements, int polyOrder, 
       double diffOfBest = (var_best - var_soln)->l2norm(mesh, cubatureEnrichment);
       cout << "L^2 norm of difference between solution and best approximation: " << diffOfBest << endl;
       
-      l2NormSquared += actualError;
+      bestDifferenceL2Squared += diffOfBest * diffOfBest;
+      l2NormSquared += actualError * actualError;
     }
     
     double energyError = solution->energyErrorTotal();
-    cout << "Energy error: " << energyError << endl;
-    
-    cout << "L^2 error: " << sqrt(l2NormSquared) << endl;
+    cout << "Energy error:     " << energyError << endl;
+    cout << "L^2 error:        " << sqrt(l2NormSquared) << endl;
+    cout << "L^2 diff of best: " << sqrt(bestDifferenceL2Squared) << endl;
   }
 }
 
