@@ -236,7 +236,7 @@ int runSolver(Teuchos::RCP<Form> form, double dt, int meshWidth, double x_a, dou
   auto BParallel        = Function::constant(1.0);
   auto BPerpendicular   = Function::constant(0.1);
   auto direction        = Function::constant(1.0);
-  auto pressure         = Function::zero();
+  auto pressure         = Function::constant(0.1);
   auto vParallel        = Function::zero();
   
   double x1size, x2size, x3size;
@@ -830,7 +830,7 @@ int main(int argc, char *argv[])
     meshTopo = MeshFactory::rectilinearMeshTopology(meshDims, elementCounts, meshOrigin, periodicBCs);
   }
   
-  double gamma = 1.6667;
+  double gamma = 5.0 / 3.0;
   double finalTime = 1.0;
   
   Teuchos::RCP<IdealMHDFormulation> form;
