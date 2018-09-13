@@ -476,6 +476,21 @@ SpatialFilterPtr SpatialFilter::matchingT(double t, bool matchSpatialSides)
   return Teuchos::rcp( new SpatialFilterMatchingT(t, matchSpatialSides) );
 }
 
+SpatialFilterPtr SpatialFilter::lessThanOrEqualToX(double x)
+{
+  return SpatialFilter::lessThanX(x) | SpatialFilter::matchingX(x);
+}
+
+SpatialFilterPtr SpatialFilter::lessThanOrEqualToY(double y)
+{
+  return SpatialFilter::lessThanY(y) | SpatialFilter::matchingY(y);
+}
+
+SpatialFilterPtr SpatialFilter::lessThanOrEqualToZ(double z)
+{
+  return SpatialFilter::lessThanZ(z) | SpatialFilter::matchingZ(z);
+}
+
 SpatialFilterPtr SpatialFilter::lessThanX(double x)
 {
   return Teuchos::rcp( new SpatialFilterLessThanX(x) );
@@ -504,6 +519,21 @@ SpatialFilterPtr SpatialFilter::greaterThanY(double y)
 SpatialFilterPtr SpatialFilter::greaterThanZ(double z)
 {
   return Teuchos::rcp( new SpatialFilterGreaterThanZ(z) );
+}
+
+SpatialFilterPtr SpatialFilter::greaterThanOrEqualToX(double x)
+{
+  return SpatialFilter::greaterThanX(x) | SpatialFilter::matchingX(x);
+}
+
+SpatialFilterPtr SpatialFilter::greaterThanOrEqualToY(double y)
+{
+  return SpatialFilter::greaterThanY(y) | SpatialFilter::matchingY(y);
+}
+
+SpatialFilterPtr SpatialFilter::greaterThanOrEqualToZ(double z)
+{
+  return SpatialFilter::greaterThanZ(z) | SpatialFilter::matchingZ(z);
 }
 
 SpatialFilterLogicalOr::SpatialFilterLogicalOr(SpatialFilterPtr sf1, SpatialFilterPtr sf2)

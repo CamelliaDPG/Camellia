@@ -57,6 +57,14 @@ public:
   static SpatialFilterPtr greaterThanX(double x);
   static SpatialFilterPtr greaterThanY(double y);
   static SpatialFilterPtr greaterThanZ(double z);
+  
+  static SpatialFilterPtr lessThanOrEqualToX(double x);
+  static SpatialFilterPtr lessThanOrEqualToY(double y);
+  static SpatialFilterPtr lessThanOrEqualToZ(double z);
+  
+  static SpatialFilterPtr greaterThanOrEqualToX(double x);
+  static SpatialFilterPtr greaterThanOrEqualToY(double y);
+  static SpatialFilterPtr greaterThanOrEqualToZ(double z);
 
   virtual ~SpatialFilter() {}
 };

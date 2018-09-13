@@ -39,6 +39,9 @@ public:
   TFunctionPtr<Scalar> dz();
   
   std::vector< TFunctionPtr<Scalar> > memberFunctions();
+  
+  static TFunctionPtr<Scalar> spatiallyFilteredFunction(Scalar value, SpatialFilterPtr sf);
+  static TFunctionPtr<Scalar> spatiallyFilteredFunction(TFunctionPtr<Scalar> f, SpatialFilterPtr sf);
 };
 }
 

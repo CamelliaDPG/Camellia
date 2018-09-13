@@ -100,6 +100,18 @@ TFunctionPtr<Scalar> SpatiallyFilteredFunction<Scalar>::dz()
   return Teuchos::rcp( new SpatiallyFilteredFunction<Scalar>(_f->dz(), _sf));
 }
 
+template <typename Scalar>
+TFunctionPtr<Scalar> SpatiallyFilteredFunction<Scalar>::spatiallyFilteredFunction(Scalar value, SpatialFilterPtr sf)
+{
+  return SpatiallyFilteredFunction<Scalar>::spatiallyFilteredFunction(TFunction<Scalar>::constant(value), sf);
+}
+
+template <typename Scalar>
+TFunctionPtr<Scalar> SpatiallyFilteredFunction<Scalar>::spatiallyFilteredFunction(TFunctionPtr<Scalar> f, SpatialFilterPtr sf)
+{
+  return Teuchos::rcp( new SpatiallyFilteredFunction<Scalar>(f,sf));
+}
+
 namespace Camellia
 {
 template class SpatiallyFilteredFunction<double>;
