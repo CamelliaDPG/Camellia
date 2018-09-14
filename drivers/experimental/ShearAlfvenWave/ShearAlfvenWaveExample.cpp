@@ -409,6 +409,8 @@ int runSolver(Teuchos::RCP<Form> form, double dt, double finalTime, int outputFr
   
   // hard-coded h value for now -- assumes the domain is 3.0 x 1.2
   double h = (spaceDim == 2) ? 3.0 * 1.2 / (horizontalElements * verticalElements) : 3.0 / horizontalElements;
+  // account for higher-order by dividing h by p to get the effective grid spacing
+  h /= polyOrder;
   
   // for the moment, time step adjustment only reduces time step size
   auto adjustTimeStep = [&]() -> void
@@ -503,7 +505,7 @@ int runSolver(Teuchos::RCP<Form> form, double dt, double finalTime, int outputFr
     t += dt;
 
     printLocalConservationReport(); // since this depends on the difference between current/previous solution, we need to call before we set prev to current.
-    if ((timeStepNumber % outputFrequency == 0) || (timeStepNumber == numTimeSteps - 1))
+    if (((timeStepNumber + 1) % outputFrequency == 0) || (timeStepNumber == numTimeSteps - 1))
     {
       solutionExporter.exportSolution(form->solution(),functionsToPlot,functionNames,t); // similarly, since the entropy compares current and previous, need this to happen before setSolution()
     }
