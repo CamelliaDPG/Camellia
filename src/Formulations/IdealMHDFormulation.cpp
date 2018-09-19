@@ -68,7 +68,7 @@ const string IdealMHDFormulation::S_tB[3]   = {S_tB1, S_tB2, S_tB3};
 const string IdealMHDFormulation::S_vm[3]   = {S_vm1, S_vm2, S_vm3};
 const string IdealMHDFormulation::S_vB[3]   = {S_vB1, S_vB2, S_vB3};
 
-void IdealMHDFormulation::CHECK_VALID_COMPONENT(int i) // throws exception on bad component value (should be between 1 and _spaceDim, inclusive)
+void IdealMHDFormulation::CHECK_VALID_COMPONENT(int i) const // throws exception on bad component value (should be between 1 and _spaceDim, inclusive)
 {
   const int trueSpaceDim = 3;
   if ((i > trueSpaceDim) || (i < 1))
@@ -769,7 +769,7 @@ void IdealMHDFormulation::addEnergyFluxCondition(SpatialFilterPtr region, Functi
 //  cout << "adding boundary condition te = " << te_exact->displayString() << endl;
 }
 
-VarPtr IdealMHDFormulation::B(int i)
+VarPtr IdealMHDFormulation::B(int i) const
 {
   return _vf->trialVar(S_B[i-1]);
 }
@@ -789,7 +789,7 @@ double IdealMHDFormulation::Cp()
   return _gamma*_Cv;
 }
 
-VarPtr IdealMHDFormulation::E()
+VarPtr IdealMHDFormulation::E() const
 {
   return _vf->trialVar(S_E);
 }
@@ -1093,19 +1093,105 @@ FunctionPtr IdealMHDFormulation::getMomentumFluxComponent(FunctionPtr momentumFl
   return flux;
 }
 
-VarPtr IdealMHDFormulation::m(int i)
+VarPtr IdealMHDFormulation::m(int i) const
 {
   CHECK_VALID_COMPONENT(i);
   
   return _vf->trialVar(S_m[i-1]);
 }
- 
+
+bool IdealMHDFormulation::newtonSolve(double newtonThreshold, int maxSteps, bool print)
+{
+  int stepNumber=0;
+  double L2NormOfIncrement = 1e5;
+  
+  set<int> nonlinearVariables, linearVariables;
+  
+  if (_usePicardIteration)
+  {
+    // then all variables are linear variables, in terms of accumulation
+    auto trialIDs = _vf->trialIDs();
+    linearVariables.insert(trialIDs.begin(),trialIDs.end());
+  }
+  else
+  {
+    if (_usePrimitiveVariables)
+    {
+      nonlinearVariables = {{rho()->ID(), T()->ID()}};
+      linearVariables = {{tc()->ID(), te()->ID()}};
+      
+      const int trueSpaceDim = 3;
+      for (int d1=0; d1<trueSpaceDim; d1++)
+      {
+        nonlinearVariables.insert(u(d1+1)->ID());
+        linearVariables.insert(tm(d1+1)->ID());
+        if ((d1>0) || (_spaceDim > 1))
+        {
+          nonlinearVariables.insert(B(d1+1)->ID());
+          linearVariables.insert(tB(d1+1)->ID());
+        }
+      }
+    }
+    else
+    {
+      nonlinearVariables = {{rho()->ID(), E()->ID()}};
+      linearVariables = {{tc()->ID(), te()->ID()}};
+      
+      const int trueSpaceDim = 3;
+      for (int d1=0; d1<trueSpaceDim; d1++)
+      {
+        nonlinearVariables.insert(m(d1+1)->ID());
+        linearVariables.insert(tm(d1+1)->ID());
+        if ((d1>0) || (_spaceDim > 1))
+        {
+          nonlinearVariables.insert(B(d1+1)->ID());
+          linearVariables.insert(tB(d1+1)->ID());
+        }
+      }
+    }
+  }
+  
+  double alpha = 1.0;
+  
+  while ((L2NormOfIncrement >= newtonThreshold) && (stepNumber < maxSteps))
+  {
+    _solveCode = _solnIncrement->solve(_solver);
+    double l2_squared = _L2IncrementFunction->integrate(_solnIncrement->mesh());
+    L2NormOfIncrement = sqrt(l2_squared);
+    
+    if (!_usePicardIteration)
+    {
+      _backgroundFlow->addReplaceSolution(_solnIncrement, alpha, nonlinearVariables, linearVariables);
+    }
+    else
+    {
+      // this will do a convex sum of background flow and soln increment in linearVariables.  nonlinearVariables is empty.
+      _backgroundFlow->addReplaceSolution(_solnIncrement, alpha, 1.0 - alpha, linearVariables, nonlinearVariables);
+    }
+    if (print)
+    {
+      cout << "Newton step " << stepNumber << ", L^2(increment) = " << L2NormOfIncrement << endl;
+    }
+    stepNumber++;
+  }
+  
+  _l2NormOfIncrement = L2NormOfIncrement;
+  if (_l2NormOfIncrement > newtonThreshold)
+  {
+    return false;
+  }
+  
+  _nonlinearIterationCount += stepNumber;
+  
+  return true; // for now, we pretend that we always succeed....
+}
+
 double IdealMHDFormulation::R()
 {
   return Cp()-Cv();
 }
 
-VarPtr IdealMHDFormulation::rho()
+VarPtr IdealMHDFormulation::rho() const
 {
   return _vf->trialVar(S_rho);
 }
@@ -1311,12 +1397,12 @@ double IdealMHDFormulation::solveAndAccumulate()
       alphaParameter->setName("alpha");
       
       map<int,FunctionPtr> updatedFieldMap;
-      for (auto entry : _solnPreviousTimeMap)
+      for (auto entry : _backgroundFlowMap)
       {
         auto uID = entry.first;
-        auto uPrev = entry.second;
+        auto uBackground = entry.second;
         FunctionPtr uIncr = _solnIncrementMap.find(uID)->second;
-        FunctionPtr uUpdated = uPrev + FunctionPtr(alphaParameter) * uIncr;
+        FunctionPtr uUpdated = uBackground + FunctionPtr(alphaParameter) * uIncr;
         updatedFieldMap[uID] = uUpdated;
       }
 
@@ -1552,6 +1638,69 @@ const std::map<int, FunctionPtr> & IdealMHDFormulation::solutionFieldMap() const
   return _backgroundFlowMap;
 }
 
+bool IdealMHDFormulation::solutionIsAdmissible(double minDistanceFromZero, bool printOnFailure) const
+{
+  auto rho = _backgroundFlowMap.find(this->rho()->ID())->second;
+  auto T   = _abstractTemperature->evaluateAt(_backgroundFlowMap);
+  
+  auto P  = _abstractPressure->evaluateAt(_backgroundFlowMap);
+  
+  auto E  = _abstractEnergy->evaluateAt(_backgroundFlowMap);
+  auto B  = _abstractMagnetism->evaluateAt(_backgroundFlowMap);
+  
+  //  cout << "TUpdated: " << TUpdated->displayString() << endl;
+  //  cout << "rhoUpdated: " << rhoUpdated->displayString() << endl;
+  
+  // we may need to do something else to ensure positive changes in entropy;
+  // if we just add ds to the list of positive functions, we stall on the first Newton step...
+  vector<FunctionPtr> positiveFunctions = {rho, T};
+  vector<string> positiveFunctionNames = {"rho", "T"};
+  int posEnrich = 5;
+  
+  for (int i=0; i<positiveFunctions.size(); i++)
+  {
+    auto f = positiveFunctions[i];
+    auto fName = positiveFunctionNames[i];
+    FunctionPtr f_smaller = f - minDistanceFromZero;
+    //        bool isPositive = f_smaller->isPositive(_solnIncrement->mesh(),posEnrich); // does MPI communication
+    auto mesh = _solnIncrement->mesh();
+    double minValue = f->minimumValue(mesh, posEnrich);
+    bool isPositive = (minValue - minDistanceFromZero) >= 0.0;
+    if (!isPositive)
+    {
+      double minValue = f->minimumValue(mesh, posEnrich);
+      double minPressureValue = P->minimumValue(mesh, posEnrich);
+      double maxPressureValue = P->maximumValue(mesh, posEnrich);
+      double minTValue = T->minimumValue(mesh, posEnrich);
+      double maxTValue = T->maximumValue(mesh, posEnrich);
+      double minRhoValue = rho->minimumValue(mesh, posEnrich);
+      double maxRhoValue = rho->maximumValue(mesh, posEnrich);
+      double minEValue   = E->minimumValue(mesh, posEnrich);
+      double maxEValue   = E->maximumValue(mesh, posEnrich);
+      double minBxValue  = B->spatialComponent(1)->minimumValue(mesh, posEnrich);
+      double maxBxValue  = B->spatialComponent(1)->maximumValue(mesh, posEnrich);
+      double minByValue  = B->spatialComponent(2)->minimumValue(mesh, posEnrich);
+      double maxByValue  = B->spatialComponent(2)->maximumValue(mesh, posEnrich);
+      double minBzValue  = B->spatialComponent(3)->minimumValue(mesh, posEnrich);
+      double maxBzValue  = B->spatialComponent(3)->maximumValue(mesh, posEnrich);
+      if (printOnFailure)
+      {
+        cout << "During positivity check, " << fName << " check failed with minimum value of " << minValue << endl;
+        cout << "Pressure value range: (" << minPressureValue << ", " << maxPressureValue << ")\n";
+        cout << "T value range:        (" << minTValue << ", " << maxTValue << ")\n";
+        cout << "rho value range:      (" << minRhoValue << ", " << maxRhoValue << ")\n";
+        cout << "E  value range:       (" << minEValue   << ", " << maxEValue   << ")\n";
+        cout << "Bx value range:       (" << minBxValue  << ", " << maxBxValue  << ")\n";
+        cout << "By value range:       (" << minByValue  << ", " << maxByValue  << ")\n";
+        cout << "Bz value range:       (" << minBzValue  << ", " << maxBzValue  << ")\n";
+      }
+      
+      return false;
+    }
+  }
+  return true;
+}
+
 SolutionPtr IdealMHDFormulation::solutionIncrement()
 {
   return _solnIncrement;
@@ -1579,58 +1728,56 @@ BFPtr IdealMHDFormulation::steadyBF()
   return _steadyBF;
 }
 
-VarPtr IdealMHDFormulation::u(int i)
+VarPtr IdealMHDFormulation::u(int i) const
 {
   return _vf->trialVar(S_u[i-1]);
 }
 
-VarPtr IdealMHDFormulation::T()
+VarPtr IdealMHDFormulation::T() const
 {
   return _vf->trialVar(S_T);
 }
 
-VarPtr IdealMHDFormulation::tB(int i)
+VarPtr IdealMHDFormulation::tB(int i) const
 {
   CHECK_VALID_COMPONENT(i);
   return _vf->trialVar(S_tB[i-1]);
 }
 
-
-VarPtr IdealMHDFormulation::tc()
+VarPtr IdealMHDFormulation::tc() const
 {
   return _vf->trialVar(S_tc);
 }
 
-
-VarPtr IdealMHDFormulation::te()
+VarPtr IdealMHDFormulation::te() const
 {
   return _vf->trialVar(S_te);
 }
 
-VarPtr IdealMHDFormulation::tm(int i)
+VarPtr IdealMHDFormulation::tm(int i) const
 {
   CHECK_VALID_COMPONENT(i);
   return _vf->trialVar(S_tm[i-1]);
 }
 
-VarPtr IdealMHDFormulation::vB(int i)
+VarPtr IdealMHDFormulation::vB(int i) const
 {
   CHECK_VALID_COMPONENT(i);
   return _vf->testVar(S_vB[i-1]);
 }
 
-VarPtr IdealMHDFormulation::vc()
+VarPtr IdealMHDFormulation::vc() const
 {
   return _vf->testVar(S_vc);
 }
 
-VarPtr IdealMHDFormulation::vm(int i)
+VarPtr IdealMHDFormulation::vm(int i) const
 {
   CHECK_VALID_COMPONENT(i);
   return _vf->testVar(S_vm[i-1]);
 }
 
-VarPtr IdealMHDFormulation::ve()
+VarPtr IdealMHDFormulation::ve() const
 {
   return _vf->testVar(S_ve);
 }

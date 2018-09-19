@@ -104,7 +104,7 @@ namespace Camellia
     static const std::string S_vm[3];
     static const std::string S_vB[3];
     
-    void CHECK_VALID_COMPONENT(int i); // throws exception on bad component value (should be between 1 and _spaceDim, inclusive)
+    void CHECK_VALID_COMPONENT(int i) const; // throws exception on bad component value (should be between 1 and _spaceDim, inclusive)
     
     struct ScalarFluxEquation
     {
@@ -173,6 +173,11 @@ namespace Camellia
     
     // ! returns the L^2 norm of the background flow
     double L2NormSolution();
+    
+    // ! Performs a Newton iteration, without regard to physicality of the solution in the Newton iterates
+    // ! Once the newtonThreshold is reached (that is, the L^2 norm of the increment is below the threshold),
+    // ! the
+    bool newtonSolve(double newtonThreshold, int maxSteps, bool print);
     
     // ! returns the nonlinear iteration count (since last refinement)
     int nonlinearIterationCount();
@@ -245,6 +250,9 @@ namespace Camellia
     // ! The first time this is called, calls solution()->solve(), and the weight argument is ignored.  After the first call, solves for the next iterate, and adds to background flow with the specified weight.
     double solveAndAccumulate();
     
+    // ! Returns true if the solution (at current time) satisfies certain physicality constraints (non-negative temperature, density)
+    bool solutionIsAdmissible(double minDistanceFromZero, bool printOnFailure) const;
+    
     // ! Returns the L2 norm of the time residual
     double timeResidual();
     
@@ -261,28 +269,28 @@ namespace Camellia
     int spaceDim();
     
     // field variables:
-    VarPtr rho();           // density
-    VarPtr m(int i);        // momentum
-    VarPtr E();             // total energy
-    VarPtr B(int i);        // magnetic field
+    VarPtr rho() const;    // density
+    VarPtr m(int i) const; // momentum
+    VarPtr E() const;      // total energy
+    VarPtr B(int i) const; // magnetic field
     
     // primitive fields
-    VarPtr u(int i);        // velocity
-    VarPtr T();             // temperature
+    VarPtr u(int i) const; // velocity
+    VarPtr T() const;      // temperature
     
     // traces:
-    VarPtr tc();
-    VarPtr tm(int i);
-    VarPtr te();
-    VarPtr tB(int i);
-    VarPtr tGauss(); // trace for Gauss's Law (only defined for spaceDim > 1)
+    VarPtr tc() const;
+    VarPtr tm(int i) const;
+    VarPtr te() const;
+    VarPtr tB(int i) const;
+    VarPtr tGauss() const; // trace for Gauss's Law (only defined for spaceDim > 1)
     
     // test variables:
-    VarPtr vc();
-    VarPtr vm(int i); // 1, 2, or 3.  (All are defined regardless of mesh dimension...)
-    VarPtr ve();
-    VarPtr vB(int i); // 1, 2, or 3, corresponding to Bx, By, Bz.  Note that in 1D, we don't solve for Bx, and input of "1" will cause an exception to be thrown.
-    VarPtr vGauss(); // test function for Gauss' Law.  Only defined for meshes of dimension > 1.  (In 1D, Gauss' Law is trivially satisfied.)
+    VarPtr vc() const;
+    VarPtr vm(int i) const; // 1, 2, or 3.  (All are defined regardless of mesh dimension...)
+    VarPtr ve() const;
+    VarPtr vB(int i) const; // 1, 2, or 3, corresponding to Bx, By, Bz.  Note that in 1D, we don't solve for Bx, and input of "1" will cause an exception to be thrown.
+    VarPtr vGauss() const; // test function for Gauss' Law.  Only defined for meshes of dimension > 1.  (In 1D, Gauss' Law is trivially satisfied.)
     
     // ! in 1D, set the value of Bx
     void setBx(FunctionPtr Bx);
