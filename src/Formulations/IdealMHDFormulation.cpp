@@ -1655,14 +1655,12 @@ bool IdealMHDFormulation::solutionIsAdmissible(double minDistanceFromZero, bool 
   // if we just add ds to the list of positive functions, we stall on the first Newton step...
   vector<FunctionPtr> positiveFunctions = {rho, T};
   vector<string> positiveFunctionNames = {"rho", "T"};
-  int posEnrich = 5;
+  int posEnrich = 0;
   
   for (int i=0; i<positiveFunctions.size(); i++)
   {
     auto f = positiveFunctions[i];
     auto fName = positiveFunctionNames[i];
-    FunctionPtr f_smaller = f - minDistanceFromZero;
-    //        bool isPositive = f_smaller->isPositive(_solnIncrement->mesh(),posEnrich); // does MPI communication
     auto mesh = _solnIncrement->mesh();
     double minValue = f->minimumValue(mesh, posEnrich);
     bool isPositive = (minValue - minDistanceFromZero) >= 0.0;
