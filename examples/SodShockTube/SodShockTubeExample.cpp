@@ -272,6 +272,14 @@ void setTempOrEnergy<CompressibleNavierStokesFormulationRefactor>(Teuchos::RCP<C
 
 void writeFunctions(MeshPtr mesh, int meshWidth, int polyOrder, double x_a, std::vector<FunctionPtr> &functions, std::vector<string> &functionNames, string filePrefix)
 {
+  if (meshWidth != mesh->numElements())
+  {
+    TEUCHOS_TEST_FOR_EXCEPTION(true, std::invalid_argument, "writeFunctions() does not yet support refined meshes");
+  }
+  if (1 != mesh->getTopology()->getDimension())
+  {
+    TEUCHOS_TEST_FOR_EXCEPTION(true, std::invalid_argument, "writeFunctions() only supports 1D meshes");
+  }
   int numPoints = max(polyOrder*2 + 1, 2); // polyOrder * 2 will, hopefully, give reasonable approximation of high-order curves
   Intrepid::FieldContainer<double> refCellPoints(numPoints,1);
   double dx = 2.0 / (refCellPoints.size() - 1); // 2.0 is the size of the reference element
@@ -358,7 +366,7 @@ FunctionPtr ln(FunctionPtr arg)
 }
 
 template<class Form>
-int runSolver(Teuchos::RCP<Form> form, bool conservationVariables, double dt, int meshWidth, double x_a, double x_b,
+int runSolver(Teuchos::RCP<Form> form, bool conservationVariables, double dt, double finalTime, int meshWidth, double x_a, double x_b,
               int polyOrder, int cubatureEnrichment, bool useCondensedSolve, double nonlinearTolerance, int continuationSteps,
               double continuationTolerance, TestNormChoice normChoice, bool enforceConservationUsingLagrangeMultipliers)
 {
@@ -437,7 +445,6 @@ int runSolver(Teuchos::RCP<Form> form, bool conservationVariables, double dt, in
     form->solutionPreviousTimeStep()->setIP(steadyIP);
   }
   
-  double finalTime = 0.20; // standard for Sod is to take it to t = 0.20
   int numTimeSteps = finalTime / dt;
   
   if (rank == 0)
@@ -736,7 +743,12 @@ int runSolver(Teuchos::RCP<Form> form, bool conservationVariables, double dt, in
     }
   };
   
-  adjustTimeStep();
+  // for now, we hardcode this option -- we are exploring time steps bigger than the CFL
+  bool enforceTimeStepSatisfiesInitialCFL = false;
+  if (enforceTimeStepSatisfiesInitialCFL)
+  {
+    adjustTimeStep();
+  }
   
   for (timeStepNumber = 0; timeStepNumber < numTimeSteps; timeStepNumber++)
   {
@@ -823,7 +835,18 @@ int runSolver(Teuchos::RCP<Form> form, bool conservationVariables, double dt, in
   functionsToPlot.push_back(rho);
   functionNames.push_back("density");
   
-  writeFunctions(mesh, meshWidth, polyOrder, x_a, functionsToPlot, functionNames, solnName.str());
+  // writeFunctions() only supports unrefined meshes right now.  If we want to emit .dat files for our graded meshes, we'll need to fix that.
+  if (mesh->numElements() == meshWidth)
+  {
+    writeFunctions(mesh, meshWidth, polyOrder, x_a, functionsToPlot, functionNames, solnName.str());
+  }
+  else
+  {
+    if (rank == 0)
+    {
+      std::cout << "Skipping emission of .dat files for TeX plotting, because writeFunctions() does not yet support refined meshes.\n";
+    }
+  }
   
   return 0;
 }
@@ -842,6 +865,8 @@ int main(int argc, char *argv[])
   double continuationTolerance = 1e-2;
   int continuationSteps = 4;
   
+  double finalTime = 0.20; // standard for Sod is to take it to t = 0.20
+  
   double x_a   = -0.5;
   double x_b   = 0.5;
 
@@ -852,6 +877,7 @@ int main(int argc, char *argv[])
   bool useEuler = false;
   bool runWriteFunctionTest = false; // option for debugging some output code...
   bool enforceConservationUsingLagrangeMultipliers = false;
+  int meshGradingIterations = 0; // number of times to refine at the elements at the center of the discretization
   
   std::map<string, TestNormChoice> normChoices = {
     {"steadyGraph", STEADY_GRAPH_NORM},
@@ -874,6 +900,8 @@ int main(int argc, char *argv[])
   cmdp.setOption("conservationVariables", "primitiveVariables", &useConservationFormulation);
   cmdp.setOption("euler", "fullNS", &useEuler);
   cmdp.setOption("enforceConservation", "dontEnforceConservation", &enforceConservationUsingLagrangeMultipliers);
+  cmdp.setOption("finalTime", &finalTime);
+  cmdp.setOption("meshGradingIterations", &meshGradingIterations, "Number of times to refine the elements immediately around center -- adds two elements per iteration");
   
   cmdp.setOption("norm", &normChoiceString);
   
@@ -897,6 +925,33 @@ int main(int argc, char *argv[])
   
   MeshTopologyPtr meshTopo = MeshFactory::intervalMeshTopology(x_a, x_b, meshWidth);
   
+  if (meshGradingIterations > 0)
+  {
+    // a bit of a cheat here, in that we use knowledge of how the elements are numbered...
+    GlobalIndexType centerCellLeft = meshWidth / 2 - 1;
+    GlobalIndexType centerCellRight = meshWidth / 2;
+    
+    RefinementPatternPtr lineRefinement = RefinementPattern::regularRefinementPatternLine();
+    
+    for (int meshGradingIteration = 0; meshGradingIteration < meshGradingIterations; meshGradingIteration++)
+    {
+      GlobalIndexType cellCount = meshTopo->cellCount();
+      meshTopo->refineCell(centerCellLeft, lineRefinement, cellCount);
+      cellCount += lineRefinement->numChildren();
+      
+      // update the left center cell number to be the rightmost of the newly introduced cells
+      // again using knowledge of how the elements are numbered...
+      centerCellLeft = cellCount - 1; //
+      
+      meshTopo->refineCell(centerCellRight, lineRefinement, cellCount);
+      cellCount += lineRefinement->numChildren();
+      
+      // update the right center cell number to be the leftmost of the newly introduced cells
+      // again using knowledge of how the elements are numbered...
+      centerCellRight = cellCount - 2;
+    }
+  }
+  
   bool useConformingTraces = true;
   
   if (runWriteFunctionTest)
@@ -917,14 +972,14 @@ int main(int argc, char *argv[])
       auto form = CompressibleNavierStokesConservationForm::timeSteppingEulerFormulation(spaceDim, useConformingTraces,
                                                                                          meshTopo, polyOrder, delta_k);
       
-      return runSolver(form, useConservationFormulation, dt, meshWidth, x_a, x_b, polyOrder, cubatureEnrichment, useCondensedSolve,
+      return runSolver(form, useConservationFormulation, dt, finalTime, meshWidth, x_a, x_b, polyOrder, cubatureEnrichment, useCondensedSolve,
                        nonlinearTolerance, continuationSteps, continuationTolerance, normChoice, enforceConservationUsingLagrangeMultipliers);
     }
     else
     {
       auto form = CompressibleNavierStokesConservationForm::timeSteppingFormulation(spaceDim, Re, useConformingTraces,
                                                                                     meshTopo, polyOrder, delta_k);
-      return runSolver(form, useConservationFormulation, dt, meshWidth, x_a, x_b, polyOrder, cubatureEnrichment, useCondensedSolve,
+      return runSolver(form, useConservationFormulation, dt, finalTime, meshWidth, x_a, x_b, polyOrder, cubatureEnrichment, useCondensedSolve,
                        nonlinearTolerance, continuationSteps, continuationTolerance, normChoice, enforceConservationUsingLagrangeMultipliers);
     }
   }
@@ -934,14 +989,14 @@ int main(int argc, char *argv[])
     {
       auto form = CompressibleNavierStokesFormulationRefactor::timeSteppingEulerFormulation(spaceDim, useConformingTraces,
                                                                                             meshTopo, polyOrder, delta_k);
-      return runSolver(form, useConservationFormulation, dt, meshWidth, x_a, x_b, polyOrder, cubatureEnrichment, useCondensedSolve,
+      return runSolver(form, useConservationFormulation, dt, finalTime, meshWidth, x_a, x_b, polyOrder, cubatureEnrichment, useCondensedSolve,
                        nonlinearTolerance, continuationSteps, continuationTolerance, normChoice, enforceConservationUsingLagrangeMultipliers);
     }
     else
     {
       auto form = CompressibleNavierStokesFormulationRefactor::timeSteppingFormulation(spaceDim, Re, useConformingTraces,
                                                                                        meshTopo, polyOrder, delta_k);
-      return runSolver(form, useConservationFormulation, dt, meshWidth, x_a, x_b, polyOrder, cubatureEnrichment, useCondensedSolve,
+      return runSolver(form, useConservationFormulation, dt, finalTime, meshWidth, x_a, x_b, polyOrder, cubatureEnrichment, useCondensedSolve,
                        nonlinearTolerance, continuationSteps, continuationTolerance, normChoice, enforceConservationUsingLagrangeMultipliers);
     }
   }

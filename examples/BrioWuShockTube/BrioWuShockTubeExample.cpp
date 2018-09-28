@@ -86,6 +86,15 @@ void addConservationConstraint(Teuchos::RCP<IdealMHDFormulation> form)
 
 void writeFunctions(MeshPtr mesh, int meshWidth, int polyOrder, double x_a, std::vector<FunctionPtr> &functions, std::vector<string> &functionNames, string filePrefix)
 {
+  if (meshWidth != mesh->numElements())
+  {
+    TEUCHOS_TEST_FOR_EXCEPTION(true, std::invalid_argument, "writeFunctions() does not yet support refined meshes");
+  }
+  if (1 != mesh->getTopology()->getDimension())
+  {
+    TEUCHOS_TEST_FOR_EXCEPTION(true, std::invalid_argument, "writeFunctions() only supports 1D meshes");
+  }
+  
   int numPoints = max(polyOrder*2 + 1, 2); // polyOrder * 2 will, hopefully, give reasonable approximation of high-order curves
   Intrepid::FieldContainer<double> refCellPoints(numPoints,1);
   double dx = 2.0 / (refCellPoints.size() - 1); // 2.0 is the size of the reference element
@@ -700,12 +709,17 @@ int runSolver(Teuchos::RCP<Form> form, double dt, int meshWidth, double x_a, dou
     }
   };
   
-  adjustTimeStep();
+  // for now, we hardcode this option -- we are exploring time steps bigger than the CFL
+  bool enforceTimeStepSatisfiesInitialCFL = false;
+  if (enforceTimeStepSatisfiesInitialCFL)
+  {
+    adjustTimeStep();
+  }
   
   form->setMaxLineSearchSteps(0); // don't do line search.
 //  form->setMaxLineSearchSteps(10);
   
-  bool adaptTimeStepToMaintainConservation = true;
+  bool adaptTimeStepToMaintainConservation = false;
   double maxAllowedConservationFailure = 1e-10;
   
   double timeTol = 1e-12;
@@ -829,7 +843,18 @@ int runSolver(Teuchos::RCP<Form> form, double dt, int meshWidth, double x_a, dou
   functionsToPlot.push_back(rho);
   functionNames.push_back("density");
   
-  writeFunctions(mesh, meshWidth, polyOrder, x_a, functionsToPlot, functionNames, solnName.str());
+  // writeFunctions() only supports unrefined meshes right now.  If we want to emit .dat files for our graded meshes, we'll need to fix that.
+  if (mesh->numElements() == meshWidth)
+  {
+    writeFunctions(mesh, meshWidth, polyOrder, x_a, functionsToPlot, functionNames, solnName.str());
+  }
+  else
+  {
+    if (rank == 0)
+    {
+      std::cout << "Skipping emission of .dat files for TeX plotting, because writeFunctions() does not yet support refined meshes.\n";
+    }
+  }
   
   return 0;
 }
@@ -856,6 +881,8 @@ int main(int argc, char *argv[])
   int temporalMeshWidth = -1;  // if useSpaceTime gets set to true and temporalMeshWidth is left unset, we'll use meshWidth = (finalTime / dt / temporalPolyOrder)
   std::string linearization = "Newton";
   bool useConservationVariables = true;
+  int meshGradingIterations = 0; // number of times to refine at the elements at the center of the discretization
+  double finalTime = 0.08; // standard for Brio-Wu is to run to t = 0.08; for Sod is to run to t = 0.20
   
   double x_a   = -0.5;
   double x_b   = 0.5;
@@ -892,6 +919,8 @@ int main(int argc, char *argv[])
   cmdp.setOption("temporalMeshWidth", &temporalMeshWidth);
   cmdp.setOption("norm", &normChoiceString);
   cmdp.setOption("useConservationVariables", "usePrimitiveVariables", &useConservationVariables);
+  cmdp.setOption("finalTime", &finalTime);
+  cmdp.setOption("meshGradingIterations", &meshGradingIterations, "Number of times to refine the elements immediately around center -- adds two elements per iteration");
   
   if (cmdp.parse(argc,argv) != Teuchos::CommandLineProcessor::PARSE_SUCCESSFUL)
   {
@@ -915,8 +944,36 @@ int main(int argc, char *argv[])
   
   MeshTopologyPtr meshTopo = MeshFactory::intervalMeshTopology(x_a, x_b, meshWidth);
   
+  if (meshGradingIterations > 0)
+  {
+    // a bit of a cheat here, in that we use knowledge of how the elements are numbered...
+    GlobalIndexType centerCellLeft = meshWidth / 2 - 1;
+    GlobalIndexType centerCellRight = meshWidth / 2;
+    
+    RefinementPatternPtr lineRefinement = RefinementPattern::regularRefinementPatternLine();
+    
+    for (int meshGradingIteration = 0; meshGradingIteration < meshGradingIterations; meshGradingIteration++)
+    {
+      GlobalIndexType cellCount = meshTopo->cellCount();
+      meshTopo->refineCell(centerCellLeft, lineRefinement, cellCount);
+      cellCount += lineRefinement->numChildren();
+      
+      // update the left center cell number to be the rightmost of the newly introduced cells
+      // again using knowledge of how the elements are numbered...
+      centerCellLeft = cellCount - 1; //
+      
+      meshTopo->refineCell(centerCellRight, lineRefinement, cellCount);
+      cellCount += lineRefinement->numChildren();
+      
+      // update the right center cell number to be the leftmost of the newly introduced cells
+      // again using knowledge of how the elements are numbered...
+      centerCellRight = cellCount - 2;
+    }
+  }
+  
   double gamma = runSodInstead ? 1.4 : 2.0;
-  double finalTime = runSodInstead ? 0.20 : .08;
+  if (runSodInstead && (finalTime == .08)) // i.e., user has asked for Sod and has not set finalTime
+    finalTime = 0.20;
   
   Teuchos::RCP<IdealMHDFormulation> form;
   if (useSpaceTime)

@@ -244,8 +244,11 @@ int runSolver(Teuchos::RCP<Form> form, double dt, double finalTime, int outputFr
   
   // define u so we can plot in solution export
 //  cout << "uAbstract = " << uAbstract->displayString() << endl;
-  FunctionPtr u_prev = uAbstract->evaluateAt(prevSolnMap);
-  FunctionPtr v_prev = vAbstract->evaluateAt(prevSolnMap);
+  FunctionPtr u1_prev = uAbstract->evaluateAt(prevSolnMap);
+  FunctionPtr u2_prev = vAbstract->evaluateAt(prevSolnMap);
+  
+  FunctionPtr u2_soln = vAbstract->evaluateAt(solnMap);
+  FunctionPtr T_soln = TAbstract->evaluateAt(solnMap);
   
   auto velocityAbstract = form->abstractVelocity();
   auto velocity_soln = velocityAbstract->evaluateAt(solnMap);
@@ -277,8 +280,8 @@ int runSolver(Teuchos::RCP<Form> form, double dt, double finalTime, int outputFr
 //    solnIncrement->bf()->setPrintTermWiseIntegrationOutput(true);
   }
   
-  vector<FunctionPtr> functionsToPlot = {p_prev,u_prev,ds};
-  vector<string> functionNames = {"pressure","velocity","entropy change"};
+  vector<FunctionPtr> functionsToPlot = {p_soln, u2_soln, T_soln};
+  vector<string> functionNames = {"pressure","u2","T"};
   
   // history export gets every nonlinear increment as a separate step
   HDF5Exporter solutionHistoryExporter(mesh, "protoBrioWuSolutionHistory", ".");
@@ -439,7 +442,7 @@ int runSolver(Teuchos::RCP<Form> form, double dt, double finalTime, int outputFr
   
   for (timeStepNumber = 0; timeStepNumber < numTimeSteps; timeStepNumber++)
   {
-    int maxTimeStepReductions = 10;
+    int maxTimeStepReductions = 20;
     
     int timeStepReductions = 0;
     
@@ -463,18 +466,31 @@ int runSolver(Teuchos::RCP<Form> form, double dt, double finalTime, int outputFr
       }
       
       bool printOnFailure = (rank == 0);
-      double minDistanceFromZero = 1e-5;
+      double minDistanceFromZero = 0.0;
       bool solutionIsAdmissible = form->solutionIsAdmissible(minDistanceFromZero, printOnFailure);
       if (!solutionIsAdmissible)
       {
-        dt /= 2.0;
-        form->setTimeStep(dt);
-        if (rank == 0)
+        if (timeStepReductions != maxTimeStepReductions-1)
         {
-          cout << "Newton step converged to an inadmissible state.  Restarting time step with dt = " << dt << endl;
+          dt /= 2.0;
+          form->setTimeStep(dt);
+          if (rank == 0)
+          {
+            cout << "Newton step converged to an inadmissible state.  Restarting time step with dt = " << dt << endl;
+          }
+          // reset "background flow" to the previous time step's solution.
+          form->solution()->setSolution(form->solutionPreviousTimeStep());
         }
-        // reset "background flow" to the previous time step's solution.
-        form->solution()->setSolution(form->solutionPreviousTimeStep());
+        else
+        {
+          double inadmissibleTime = finalTime * 2;
+          if (rank == 0)
+          {
+            cout << "Time step failed; outputting inadmissible solution at t = " << inadmissibleTime << endl;
+          }
+          // we're about to finish the while loop with failure -- let's make the exporter output the inadmissible solution, so we can look at it
+          solutionExporter.exportSolution(form->solution(),functionsToPlot,functionNames,inadmissibleTime); // similarly, since the entropy compares current and previous, need this to happen before setSolution()
+        }
         
         timeStepReductions++;
       }
@@ -494,9 +510,10 @@ int runSolver(Teuchos::RCP<Form> form, double dt, double finalTime, int outputFr
       return -1;
     }
     
-    dt = savedDt;
-
     t += dt;
+    
+    dt = savedDt;
+    form->setTimeStep(dt);
 
     printLocalConservationReport(); // since this depends on the difference between current/previous solution, we need to call before we set prev to current.
     if (((timeStepNumber + 1) % outputFrequency == 0) || (timeStepNumber == numTimeSteps - 1))
