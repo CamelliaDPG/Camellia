@@ -12,6 +12,7 @@
 #include "MeshFactory.h"
 #include "IdealMHDFormulation.hpp"
 #include "LagrangeConstraints.h"
+#include "RefinementStrategy.h"
 #include "RHS.h"
 #include "SimpleFunction.h"
 #include "SuperLUDistSolver.h"
@@ -86,7 +87,7 @@ template<class Form>
 int runSolver(Teuchos::RCP<Form> form, double dt, double finalTime, int outputFrequency, int horizontalElements,
               int polyOrder, int cubatureEnrichment, bool useCondensedSolve, double nonlinearTolerance,
               TestNormChoice normChoice, bool enforceConservationUsingLagrangeMultipliers,
-              bool spaceTime, bool useLeftState, double ByMagnitude=1.0)
+              bool spaceTime, bool useLeftState, double ByMagnitude, bool enableAdaptivity)
 {
   MeshPtr mesh = form->solutionIncrement()->mesh();
   
@@ -458,11 +459,41 @@ int runSolver(Teuchos::RCP<Form> form, double dt, double finalTime, int outputFr
       
       if (! newtonSuccess)
       {
-        if (rank == 0)
+        if (enableAdaptivity)
         {
-          cout << "Nonlinear iteration failed to converge.  Exiting...\n";
+          // then we haven't been reducing time step; we can do so here
+          if (timeStepReductions != maxTimeStepReductions-1)
+          {
+            dt /= 2.0;
+            form->setTimeStep(dt);
+            if (rank == 0)
+            {
+              cout << "Newton step failed to converge.  Restarting time step with dt = " << dt << endl;
+            }
+            // reset "background flow" to the previous time step's solution.
+            form->solution()->setSolution(form->solutionPreviousTimeStep());
+            continue; // go to top of while loop, to try the newton solve again.
+          }
+          else
+          {
+            double inadmissibleTime = finalTime * 2;
+            if (rank == 0)
+            {
+              cout << "Newton step failed to converge, and time step reductions have reached maximum.  Outputting unconverged solution at t = " << inadmissibleTime << endl;
+            }
+            // we're about to finish the while loop with failure -- let's make the exporter output the inadmissible solution, so we can look at it
+            solutionExporter.exportSolution(form->solution(),functionsToPlot,functionNames,inadmissibleTime); // similarly, since the entropy compares current and previous, need this to happen before setSolution()
+            return -1;
+          }
         }
-        return -1;
+        else
+        {
+          if (rank == 0)
+          {
+            cout << "Nonlinear iteration failed to converge.  Exiting...\n";
+          }
+          return -1;
+        }
       }
       
       bool printOnFailure = (rank == 0);
@@ -470,7 +501,19 @@ int runSolver(Teuchos::RCP<Form> form, double dt, double finalTime, int outputFr
       bool solutionIsAdmissible = form->solutionIsAdmissible(minDistanceFromZero, printOnFailure);
       if (!solutionIsAdmissible)
       {
-        if (timeStepReductions != maxTimeStepReductions-1)
+        if (enableAdaptivity)
+        {
+          if (rank == 0)
+          {
+            cout << "Newton step converged to an inadmissible state.  Restarting time step after adapting mesh.\n";
+          }
+          
+          RefinementStrategyPtr refStrategy = RefinementStrategy::energyErrorRefinementStrategy(form->solutionIncrement(), 0.2);
+          refStrategy->refine();
+          
+          form->solution()->setSolution(form->solutionPreviousTimeStep());
+        }
+        else if (timeStepReductions != maxTimeStepReductions-1)
         {
           dt /= 2.0;
           form->setTimeStep(dt);
@@ -569,7 +612,7 @@ int main(int argc, char *argv[])
   int polyOrder = 2;
   int delta_k   = 2;
   bool useCondensedSolve = true;
-  int spaceDim = 2;
+  int spaceDim = 1;
   int cubatureEnrichment = 3 * polyOrder; // there are places in the strong, nonlinear equations where 4 variables multiplied together.  Therefore we need to add 3 variables' worth of quadrature to the simple test v. trial quadrature.
   double nonlinearTolerance    = 1e-2;
   bool useSpaceTime = false;
@@ -579,6 +622,7 @@ int main(int argc, char *argv[])
   bool useConservationVariables = true;
   bool useLeftState = true; // use left state from Brio-Wu for initial conditions of thermodynamic variables (if false, will use the right state)
   double ByMagnitude = 1.0;
+  bool enableAdaptivity = false;
   
   double dt    = 0.001; // time step
   double finalTime = 5.0;
@@ -613,6 +657,7 @@ int main(int argc, char *argv[])
   cmdp.setOption("useConservationVariables", "usePrimitiveVariables", &useConservationVariables);
   cmdp.setOption("useLeftState", "useRightState", &useLeftState);
   cmdp.setOption("ByMagnitude", &ByMagnitude);
+  cmdp.setOption("enableAdaptivity", "disableAdaptivity", &enableAdaptivity);
   
   cmdp.setOption("norm", &normChoiceString);
   
@@ -685,5 +730,5 @@ int main(int argc, char *argv[])
   }
 
   return runSolver(form, dt, finalTime, outputFrequency, horizontalElements, polyOrder, cubatureEnrichment, useCondensedSolve,
-                   nonlinearTolerance, normChoice, enforceConservationUsingLagrangeMultipliers, useSpaceTime, useLeftState, ByMagnitude);
+                   nonlinearTolerance, normChoice, enforceConservationUsingLagrangeMultipliers, useSpaceTime, useLeftState, ByMagnitude, enableAdaptivity);
 }
