@@ -154,6 +154,9 @@ namespace Camellia
     // ! For space-time, sets BCs at time 0 (via addMassFluxCondition, etc.)
     void setInitialCondition(FunctionPtr rho, FunctionPtr u, FunctionPtr E, FunctionPtr B);
     
+    // ! returns the locally-owned cells in which the solution is inadmissible
+    std::vector<GlobalIndexType> getLocalInadmissibleCells();
+    
     // ! returns true if this is a space-time formulation; false otherwise.
     bool isSpaceTime() const;
     

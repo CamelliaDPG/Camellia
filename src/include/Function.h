@@ -133,6 +133,9 @@ public:
   // ! returns the minimum value at quadrature points.  Performs MPI communication.
   double minimumValue(MeshPtr mesh, int cubatureDegreeEnrichment = 0);
   
+  // ! returns locally-owned cells which take a negative value at quadrature points.  Does not perform MPI communication.
+  std::vector<GlobalIndexType> localCellsWithNegativeValues(MeshPtr mesh, int cubatureDegreeEnrichment = 0);
+  
   // ! computes the squared L^2 norm of the jumps of this Function along the mesh skeleton (external boundary values are treated as zero, so the jump
   // ! along the boundary is the value of the Function itself)
   // ! if weightBySideMeasure is true, then the edge lengths (2D) or face area will be used to weight the integral of the squared jump.

@@ -25,7 +25,7 @@ void Exp<Scalar>::values(Intrepid::FieldContainer<Scalar> &values, BasisCachePtr
   {
     for (int pointOrdinal=0; pointOrdinal<numPoints; pointOrdinal++)
     {
-      values(cellOrdinal,pointOrdinal) = exp(values(cellOrdinal,pointOrdinal));
+      values(cellOrdinal,pointOrdinal) = std::exp(values(cellOrdinal,pointOrdinal));
     }
   }
 }
@@ -68,6 +68,12 @@ template<class Scalar>
 std::vector< TFunctionPtr<Scalar> > Exp<Scalar>::memberFunctions()
 {
   return {{_power}};
+}
+
+template<class Scalar>
+TFunctionPtr<Scalar> Exp<Scalar>::exp(TFunctionPtr<Scalar> f)
+{
+  return Teuchos::rcp(new Exp<Scalar>(f));
 }
 
 string Exp_x::displayString()

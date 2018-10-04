@@ -35,6 +35,8 @@ namespace Camellia
     std::vector< TFunctionPtr<Scalar> > memberFunctions();
     
     std::string displayString();
+    
+    static TFunctionPtr<Scalar> exp(TFunctionPtr<Scalar> power);
   };
   
   template<class Scalar>

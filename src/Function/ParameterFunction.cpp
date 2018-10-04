@@ -4,6 +4,7 @@
 
 #include <iostream>
 
+#include "ConstantScalarFunction.h"
 #include "ParameterFunction.h"
 
 using namespace Intrepid;
@@ -17,6 +18,17 @@ ParameterFunction::ParameterFunction(double value) : TFunction<double>(0)
 ParameterFunction::ParameterFunction(TFunctionPtr<double> fxn) : TFunction<double>(fxn->rank())
 {
   setValue(fxn);
+}
+
+double ParameterFunction::getConstantValue() const
+{
+  auto scalarFxn = dynamic_cast<ConstantScalarFunction<double>*>(_fxn.get());
+  if (scalarFxn == NULL)
+  {
+    TEUCHOS_TEST_FOR_EXCEPTION(true, std::invalid_argument, "getConstantValue() only supported for _fxn that is a subclass of ConstantScalarFunction<double>");
+  }
+  
+  return scalarFxn->value();
 }
 
 TFunctionPtr<double> ParameterFunction::getValue() const

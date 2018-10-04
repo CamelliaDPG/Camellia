@@ -12,6 +12,7 @@
 #include "MeshFactory.h"
 #include "IdealMHDFormulation.hpp"
 #include "LagrangeConstraints.h"
+#include "RefinementStrategy.h"
 #include "RHS.h"
 #include "SimpleFunction.h"
 #include "SuperLUDistSolver.h"
@@ -25,6 +26,126 @@ using namespace Camellia;
 #ifdef CHECK_FPE
 #include <xmmintrin.h>
 #endif
+
+// class to note when cells are p-coarsened to 0
+// although the RefinementObserver interface does not indicate the change in polynomial order
+// (it only indicates that the order has changed, not by what amount), here we assume that:
+// 1. We coarsen a certain set of cells to p=0
+// 2. We refine that same set of cells to restore polynomial order
+// We assume that every other call to pRefine is a restoration of the global order in the p-coarsened cells
+class PRefinementTracker : RefinementObserver
+{
+private:
+  set<GlobalIndexType> _cellsChanged; // these will be the
+public:
+ void pRefine(const set<GlobalIndexType> &cellIDs, bool repartitionAndRebuild)
+  {
+    if (_cellsChanged.size() == 0)
+    {
+      _cellsChanged = cellIDs;
+    }
+    else
+    {
+      TEUCHOS_TEST_FOR_EXCEPTION(cellIDs.size() != _cellsChanged.size(), std::invalid_argument, "what was expected to be a restoration did not match the prior coarsening");
+      _cellsChanged.clear();
+    }
+  }
+  set<GlobalIndexType> cellsCoarsened()
+  {
+    return _cellsChanged;
+  }
+};
+
+// the following class looks for cells in which the solution is inadmissible
+// the refinement strategy follows a tick-tock pattern:
+// tick: find inadmissible cells; coarsen to p=0 there
+// tock: restore prior poly order in any coarsened cells
+class InadmissibilityIndicator : public ErrorIndicator
+{
+  Teuchos::RCP<IdealMHDFormulation> _form;
+public:
+  InadmissibilityIndicator(Teuchos::RCP<IdealMHDFormulation> form)
+  : ErrorIndicator(form->solution()->mesh()), _form(form)
+  {}
+  
+  // ! populate _localErrorMeasures as follows: admissible cells have 0 error; inadmissible have error 1.0
+  void measureError() override
+  {
+    _localErrorMeasures.clear();
+    auto localInadmissibleCells = _form->getLocalInadmissibleCells();
+    for (auto cellID : localInadmissibleCells)
+    {
+      _localErrorMeasures[cellID] = 1.0;
+    }
+  }
+};
+
+// since RefinementStrategy doesn't give a good way to p-coarsen, or to coarsen, then refine,
+// we just implement our own "strategy" object that does our tick-tock thing
+class CoarsenThenRefineStrategy {
+  std::vector<GlobalIndexType> _cellsCoarsened;
+  Teuchos::RCP<InadmissibilityIndicator> _inadmissibilityIndicator;
+  
+  int _globalPolyOrder; // the L^2 order, which should be reduced to 0 in inadmissible cells
+public:
+  CoarsenThenRefineStrategy(int globalPolyOrder, Teuchos::RCP<InadmissibilityIndicator> inadmissibilityIndicator)
+  {
+    _globalPolyOrder = globalPolyOrder;
+    _inadmissibilityIndicator = inadmissibilityIndicator;
+  }
+  
+  void coarsen()
+  {
+    if (_cellsCoarsened.size() > 0)
+    {
+      TEUCHOS_TEST_FOR_EXCEPTION(true, std::invalid_argument, "Must call refine() before another call to coarsen()");
+    }
+    
+    _inadmissibilityIndicator->measureError();
+    
+    auto mesh = _inadmissibilityIndicator->mesh();
+    
+    std::vector<GlobalIndexType> myCellsToCoarsen;
+    _inadmissibilityIndicator->localCellsAboveErrorThreshold(0.5, myCellsToCoarsen);
+    
+    GlobalIndexTypeToCast numCellsToCoarsen = 0;
+    GlobalIndexTypeToCast myNumCellsToCoarsen = myCellsToCoarsen.size();
+    mesh->Comm()->SumAll(&myNumCellsToCoarsen, &numCellsToCoarsen, 1);
+    
+    vector<GlobalIndexType> cellsToCoarsen;
+    if (numCellsToCoarsen > 0)
+    {
+      GlobalIndexTypeToCast myCellOrdinalOffset = 0;
+      mesh->Comm()->ScanSum(&myNumCellsToCoarsen, &myCellOrdinalOffset, 1);
+      myCellOrdinalOffset -= myNumCellsToCoarsen;
+      
+      vector<GlobalIndexTypeToCast> globalCellsToCoarsenVector(numCellsToCoarsen, 0);
+      for (int i=0; i<myNumCellsToCoarsen; i++)
+      {
+        globalCellsToCoarsenVector[myCellOrdinalOffset + i] = myCellsToCoarsen[i];
+      }
+      vector<GlobalIndexTypeToCast> gatheredCellsToCoarsenVector(numCellsToCoarsen, 0);
+      mesh->Comm()->SumAll(&globalCellsToCoarsenVector[0], &gatheredCellsToCoarsenVector[0], numCellsToCoarsen);
+      
+      cellsToCoarsen = vector<GlobalIndexType>(gatheredCellsToCoarsenVector.begin(),gatheredCellsToCoarsenVector.end());
+    }
+    
+    std::sort(cellsToCoarsen.begin(), cellsToCoarsen.end());
+    
+    mesh->pRefine(cellsToCoarsen, -_globalPolyOrder);
+    
+    _cellsCoarsened = cellsToCoarsen;
+  }
+  
+  void refine()
+  {
+    auto mesh = _inadmissibilityIndicator->mesh();
+    
+    mesh->pRefine(_cellsCoarsened, _globalPolyOrder);
+    
+    _cellsCoarsened.clear();
+  }
+};
 
 void addConservationConstraint(Teuchos::RCP<IdealMHDFormulation> form)
 {
@@ -184,9 +305,13 @@ template<class Form>
 int runSolver(Teuchos::RCP<Form> form, double dt, int meshWidth, double x_a, double x_b,
               int polyOrder, int cubatureEnrichment, bool useCondensedSolve, double nonlinearTolerance,
               TestNormChoice normChoice, bool enforceConservationUsingLagrangeMultipliers,
-              bool runSodInstead, bool spaceTime)
+              bool runSodInstead, bool spaceTime, bool usePCoarseningForAdmissibility)
 {
   MeshPtr mesh = form->solutionIncrement()->mesh();
+  
+  auto admissibilityIndicator = Teuchos::rcp( new InadmissibilityIndicator(form) );
+  
+  CoarsenThenRefineStrategy coarsenThenRefineStrategy(polyOrder, admissibilityIndicator);
   
   if (enforceConservationUsingLagrangeMultipliers)
   {
@@ -725,9 +850,67 @@ int runSolver(Teuchos::RCP<Form> form, double dt, int meshWidth, double x_a, dou
   double timeTol = 1e-12;
   while (t <= finalTime - timeTol)
   {
+    double storedDt = dt;
+    
     double l2NormOfIncrement = 1.0;
     int stepNumber = 0;
     int maxNonlinearSteps = 100;
+    
+    bool printNewtonInfo = (rank == 0);
+    bool newtonSuccess = form->newtonSolve(nonlinearTolerance, maxNonlinearSteps, printNewtonInfo);
+
+    if (! newtonSuccess)
+    {
+      if (rank == 0)
+      {
+        cout << "Nonlinear iteration failed to converge.  Exiting...\n";
+      }
+      return -1;
+    }
+    
+    admissibilityIndicator->measureError();
+    bool inadmissibleSolution = (admissibilityIndicator->maxError() > 0);
+    
+    if (inadmissibleSolution)
+    {
+      // coarsen
+      coarsenThenRefineStrategy.coarsen();
+      
+      // restore the background flow to what it was in the prior time step:
+      form->solution()->setSolution(form->solutionPreviousTimeStep());
+      
+      if (rank == 0)
+      {
+        cout << "Nonlinear iteration converged to inadmissible solution.  Coarsening to p=0 in bad cells, then trying again...\n";
+      }
+      // try the solve again
+      bool newtonSuccess = form->newtonSolve(nonlinearTolerance, maxNonlinearSteps, printNewtonInfo);
+      if (! newtonSuccess)
+      {
+        if (rank == 0)
+        {
+          cout << "Nonlinear iteration failed to converge after coarsening.  Exiting...\n";
+        }
+        return -1;
+      }
+      
+      admissibilityIndicator->measureError();
+      bool inadmissibleSolution = (admissibilityIndicator->maxError() > 0);
+      if (inadmissibleSolution)
+      {
+        if (rank == 0)
+        {
+          cout << "Nonlinear iteration converged to inadmissible solution after coarsening.  Time step reduction could be implemented here, but isn't yet.  Exiting...\n";
+        }
+        return -1;
+      }
+      
+      // restore the coarsened cells
+      coarsenThenRefineStrategy.refine();
+    }
+    
+    // previous newton iteration commented out below
+    /*
     double alpha = 1.0;
     double storedDt = dt;
 //    double smallestDtAllowed = dt; // dt * 1e-8; // for now, avoid adaptive time stepping -- just fail if inadmissible
@@ -777,14 +960,6 @@ int runSolver(Teuchos::RCP<Form> form, double dt, int meshWidth, double x_a, dou
       {
         if (alpha == 1.0)
           std::cout << "In Newton step " << stepNumber << ", L^2 norm of increment = " << l2NormOfIncrement << std::endl;
-//        if (alpha != 1.0)
-//        {
-//          std::cout << " (alpha = " << alpha << ")" << std::endl;
-//        }
-//        else
-//        {
-//          std::cout << std::endl;
-//        }
       }
       stepNumber++;
       if (alpha == -1.0)
@@ -798,8 +973,6 @@ int runSolver(Teuchos::RCP<Form> form, double dt, int meshWidth, double x_a, dou
         soln->setSolution(solnPreviousTime);
         stepNumber = 0;
       }
-//      solutionHistoryExporter.exportSolution(form->solution(), double(stepNumber));  // use stepNumber as the "time" value for export...
-//      solutionIncrementHistoryExporter.exportSolution(form->solutionIncrement(), double(stepNumber));
     }
     if ((l2NormOfIncrement > nonlinearTolerance) || (alpha == -1.0))
     {
@@ -808,7 +981,7 @@ int runSolver(Teuchos::RCP<Form> form, double dt, int meshWidth, double x_a, dou
         cout << "Nonlinear iteration failed.  Exiting...\n";
       }
       return -1;
-    }
+    }*/
     t += dt;
     
     printLocalConservationReport(); // since this depends on the difference between current/previous solution, we need to call before we set prev to current.
@@ -883,6 +1056,7 @@ int main(int argc, char *argv[])
   bool useConservationVariables = true;
   int meshGradingIterations = 0; // number of times to refine at the elements at the center of the discretization
   double finalTime = 0.08; // standard for Brio-Wu is to run to t = 0.08; for Sod is to run to t = 0.20
+  bool usePCoarseningForInadmissible = true;
   
   double x_a   = -0.5;
   double x_b   = 0.5;
@@ -1004,5 +1178,6 @@ int main(int argc, char *argv[])
   }
 
   return runSolver(form, dt, meshWidth, x_a, x_b, polyOrder, cubatureEnrichment, useCondensedSolve,
-                   nonlinearTolerance, normChoice, enforceConservationUsingLagrangeMultipliers, runSodInstead, useSpaceTime);
+                   nonlinearTolerance, normChoice, enforceConservationUsingLagrangeMultipliers, runSodInstead, useSpaceTime,
+                   usePCoarseningForInadmissible);
 }

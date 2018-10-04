@@ -28,6 +28,10 @@ public:
   ParameterFunction(TFunctionPtr<double> value);
 
   TFunctionPtr<double> getValue() const;
+  
+  // ! For scalar constant-valued "value" types only; returns the current value as a double
+  // ! Throws an exception if _fxn.get() cannot be cast to ConstantScalarFunction
+  double getConstantValue() const;
 
   void setValue(TFunctionPtr<double> fxn);
   void setValue(double value);

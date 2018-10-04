@@ -587,6 +587,62 @@ size_t TFunction<Scalar>::getCellDataSize(GlobalIndexType cellID)
 }
 
 template <typename Scalar>
+std::vector<GlobalIndexType> TFunction<Scalar>::localCellsWithNegativeValues(MeshPtr mesh, int cubatureDegreeEnrichment)
+{
+  TEUCHOS_TEST_FOR_EXCEPTION(_rank != 0, std::invalid_argument, "can only compute the minimum value of scalar functions.");
+  
+  bool testVsTest = false;
+  set<GlobalIndexType> cellIDs = mesh->cellIDsInPartition();
+  
+  vector<GlobalIndexType> myCellsWithNegativeValues;
+  for (GlobalIndexType cellID : cellIDs)
+  {
+    double cellMin = numeric_limits<double>::max();
+    
+    BasisCachePtr basisCache = BasisCache::basisCacheForCell(mesh, cellID, testVsTest, cubatureDegreeEnrichment);
+    int numCells = basisCache->getPhysicalCubaturePoints().dimension(0);
+    int numPoints = basisCache->getPhysicalCubaturePoints().dimension(1);
+    Intrepid::FieldContainer<Scalar> fxnValues(numCells,numPoints);
+    this->values(fxnValues,basisCache);
+    
+    for (int cellIndex=0; cellIndex<numCells; cellIndex++)
+    {
+      for (int ptIndex=0; ptIndex<numPoints; ptIndex++)
+      {
+        cellMin = std::min(cellMin,fxnValues(cellIndex,ptIndex));
+      }
+    }
+    
+    if (!basisCache->isSideCache())
+    {
+      int numSides = basisCache->cellTopology()->getSideCount();
+      for (int sideOrdinal=0; sideOrdinal<numSides; sideOrdinal++)
+      {
+        auto sideCache = basisCache->getSideBasisCache(sideOrdinal);
+        int numCells = basisCache->getPhysicalCubaturePoints().dimension(0);
+        int numSidePoints = sideCache->getPhysicalCubaturePoints().dimension(1);
+        Intrepid::FieldContainer<Scalar> fxnValues(numCells,numSidePoints);
+        this->values(fxnValues,sideCache);
+        for (int cellIndex=0; cellIndex<numCells; cellIndex++)
+        {
+          for (int ptIndex=0; ptIndex<numSidePoints; ptIndex++)
+          {
+            cellMin = std::min(cellMin,fxnValues(cellIndex,ptIndex));
+          }
+        }
+      }
+    }
+    
+    if (cellMin < 0.0)
+    {
+      myCellsWithNegativeValues.push_back(cellID);
+    }
+  }
+  
+  return myCellsWithNegativeValues;
+}
+  
+template <typename Scalar>
 void TFunction<Scalar>::packCellData(GlobalIndexType cellID, char* cellData, size_t bufferLength)
 {
   auto members = this->memberFunctions();

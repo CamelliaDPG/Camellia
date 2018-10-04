@@ -1065,6 +1065,31 @@ double IdealMHDFormulation::gamma()
   return _gamma;
 }
 
+std::vector<GlobalIndexType> IdealMHDFormulation::getLocalInadmissibleCells()
+{
+  auto rho = _backgroundFlowMap.find(this->rho()->ID())->second;
+  auto T   = _abstractTemperature->evaluateAt(_backgroundFlowMap);
+  
+  vector<FunctionPtr> positiveFunctions = {rho, T};
+  vector<string> positiveFunctionNames = {"rho", "T"};
+  
+  // use a set to ensure uniqueness
+  std::set<GlobalIndexType> localCellsSet;
+  auto mesh = _backgroundFlow->mesh();
+  
+  for (int i=0; i<positiveFunctions.size(); i++)
+  {
+    auto f = positiveFunctions[i];
+    auto fName = positiveFunctionNames[i];
+    
+    std::vector<GlobalIndexType> negativeCells = f->localCellsWithNegativeValues(mesh);
+    localCellsSet.insert(negativeCells.begin(), negativeCells.end());
+  }
+  
+  std::vector<GlobalIndexType> localInadmissibleCells(localCellsSet.begin(),localCellsSet.end());
+  return localInadmissibleCells;
+}
+
 int IdealMHDFormulation::getSolveCode()
 {
   return _solveCode;
