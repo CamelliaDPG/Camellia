@@ -305,7 +305,7 @@ template<class Form>
 int runSolver(Teuchos::RCP<Form> form, double dt, int meshWidth, double x_a, double x_b,
               int polyOrder, int cubatureEnrichment, bool useCondensedSolve, double nonlinearTolerance,
               TestNormChoice normChoice, bool enforceConservationUsingLagrangeMultipliers,
-              bool runSodInstead, bool spaceTime, bool usePCoarseningForAdmissibility)
+              bool runSodInstead, bool spaceTime, bool usePCoarseningForAdmissibility, int numFrames)
 {
   MeshPtr mesh = form->solutionIncrement()->mesh();
   
@@ -847,6 +847,8 @@ int runSolver(Teuchos::RCP<Form> form, double dt, int meshWidth, double x_a, dou
   bool adaptTimeStepToMaintainConservation = false;
   double maxAllowedConservationFailure = 1e-10;
   
+  int outputFrequency = numTimeSteps / numFrames;
+  
   double timeTol = 1e-12;
   while (t <= finalTime - timeTol)
   {
@@ -995,7 +997,11 @@ int runSolver(Teuchos::RCP<Form> form, double dt, int meshWidth, double x_a, dou
         cout << "Restoring previous time step size of dt = " << dt << endl;
       }
     }
-    solutionExporter.exportSolution(form->solution(),functionsToPlot,functionNames,t); // similarly, since the entropy compares current and previous, need this to happen before setSolution()
+    
+    if ((timeStepNumber + 1) % outputFrequency == 0)
+    {
+      solutionExporter.exportSolution(form->solution(),functionsToPlot,functionNames,t); // similarly, since the entropy compares current and previous, need this to happen before setSolution()
+    }
     printConservationReport();
     
     if (rank == 0) std::cout << "========== t = " << t << ", time step number " << timeStepNumber+1 << " ==========\n";
@@ -1003,7 +1009,7 @@ int runSolver(Teuchos::RCP<Form> form, double dt, int meshWidth, double x_a, dou
     {
       form->solutionPreviousTimeStep()->setSolution(form->solution());
     }
-    else if (t + dt >= finalTime) // next time step should be the last
+    if (t + dt >= finalTime) // next time step should be the last
     {
       dt = finalTime - t;
       form->setTimeStep(dt);
@@ -1066,6 +1072,8 @@ int main(int argc, char *argv[])
   // the CFL condition then would suggest 1/1600 -- about 0.000625 -- as the maximum time step
   double dt    = 0.0005; // time step
   
+  int numFrames = 100; // output 100 times
+  
   bool enforceConservationUsingLagrangeMultipliers = false;
   
   bool runSodInstead = false;
@@ -1095,6 +1103,8 @@ int main(int argc, char *argv[])
   cmdp.setOption("useConservationVariables", "usePrimitiveVariables", &useConservationVariables);
   cmdp.setOption("finalTime", &finalTime);
   cmdp.setOption("meshGradingIterations", &meshGradingIterations, "Number of times to refine the elements immediately around center -- adds two elements per iteration");
+  
+  
   
   if (cmdp.parse(argc,argv) != Teuchos::CommandLineProcessor::PARSE_SUCCESSFUL)
   {
@@ -1179,5 +1189,5 @@ int main(int argc, char *argv[])
 
   return runSolver(form, dt, meshWidth, x_a, x_b, polyOrder, cubatureEnrichment, useCondensedSolve,
                    nonlinearTolerance, normChoice, enforceConservationUsingLagrangeMultipliers, runSodInstead, useSpaceTime,
-                   usePCoarseningForInadmissible);
+                   usePCoarseningForInadmissible, numFrames);
 }
