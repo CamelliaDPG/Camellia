@@ -1314,4 +1314,77 @@ TEUCHOS_UNIT_TEST( Mesh, SaveAndLoadStokesConforming )
   StokesVGPFormulation form = StokesVGPFormulation::steadyFormulation(spaceDim,mu,conformingTraces);
   testSaveAndLoad2D(form.bf(), out, success);
 }
+  
+void testUnrefine(int spaceDim, Teuchos::FancyOStream &out, bool &success)
+{
+  int H1Order = 1; // lowest-order mesh
+  bool conformingTraces = true;
+  PoissonFormulation form(spaceDim,conformingTraces);
+  
+  int numCellsAddedPerRefinement = 1;
+  for (int d=0; d<spaceDim; d++)
+  {
+    numCellsAddedPerRefinement *= 2;
+  }
+  int numActiveCellsAddedPerRefinement = numCellsAddedPerRefinement - 1; // parent gets deactivated
+  
+  int meshWidth = 2;
+  vector<double> domainDim(spaceDim, 1.0);
+  vector<int> meshDim(spaceDim, meshWidth);
+  MeshPtr mesh = MeshFactory::rectilinearMesh(form.bf(), domainDim, meshDim, H1Order);
+  
+  int numCellsExpected = 1;
+  int numActiveCellsExpected = 1;
+  for (int d=0; d<spaceDim; d++)
+  {
+    numCellsExpected       *= meshWidth;
+    numActiveCellsExpected *= meshWidth;
+  }
+  TEST_EQUALITY(numCellsExpected, mesh->getTopology()->cellCount());
+  TEST_EQUALITY(numActiveCellsExpected, mesh->numActiveElements());
+  
+  int totalDofsBeforeRefinement = mesh->numGlobalDofs();
+  
+  vector<GlobalIndexType> cellsToRefine = {1};
+  mesh->hRefine(cellsToRefine);
+  
+  numCellsExpected += numCellsAddedPerRefinement;
+  TEST_EQUALITY(numCellsExpected, mesh->getTopology()->cellCount());
+  
+  numActiveCellsExpected += numActiveCellsAddedPerRefinement;
+  TEST_EQUALITY(numActiveCellsExpected, mesh->numActiveElements());
+  
+  // number of dofs should have changed
+  TEST_INEQUALITY(totalDofsBeforeRefinement, mesh->numGlobalDofs());
+  
+  mesh->hUnrefine({1});
+  
+  numCellsExpected -= numCellsAddedPerRefinement;
+  TEST_EQUALITY(numCellsExpected, mesh->getTopology()->cellCount());
+  
+  numActiveCellsExpected -= numActiveCellsAddedPerRefinement;
+  TEST_EQUALITY(numActiveCellsExpected, mesh->numActiveElements());
+  
+  // number of dofs should be restored to what they were before refinement
+  TEST_EQUALITY(totalDofsBeforeRefinement, mesh->numGlobalDofs());
+}
+  
+TEUCHOS_UNIT_TEST( Mesh, Unrefine_1D )
+{
+  int spaceDim = 1;
+  testUnrefine(spaceDim, out, success);
+}
+  
+TEUCHOS_UNIT_TEST( Mesh, Unrefine_2D )
+{
+  int spaceDim = 2;
+  testUnrefine(spaceDim, out, success);
+}
+  
+TEUCHOS_UNIT_TEST( Mesh, Unrefine_3D )
+{
+  int spaceDim = 3;
+  testUnrefine(spaceDim, out, success);
+}
+
 } // namespace

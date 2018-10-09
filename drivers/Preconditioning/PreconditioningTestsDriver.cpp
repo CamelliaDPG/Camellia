@@ -1000,7 +1000,7 @@ void initializeSolutionAndCoarseMesh(SolutionPtr &solution, MeshPtr &coarseMesh,
     while (meshWidthCells < numCells)
     {
       vector<IndexType> activeCellIDs = meshTopo->getActiveCellIndicesGlobal(); // should match between coarseMesh and mesh
-      IndexType nextCellIndexFine = meshTopo->cellCount();
+      IndexType nextCellIndexFine = meshTopo->nextCellID();
       for (IndexType cellIndex : activeCellIDs)
       {
         CellTopoPtr cellTopo = meshTopo->getCell(cellIndex)->topology();

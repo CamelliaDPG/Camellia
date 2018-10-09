@@ -45,7 +45,7 @@ namespace
         sharedSideOrdinal = sideOrdinal;
       }
     }
-    GlobalIndexType nextCellID = meshTopo->cellCount();
+    GlobalIndexType nextCellID = meshTopo->nextCellID();
     for (int i=0; i<irregularity; i++)
     {
       CellPtr cellToRefine = meshTopo->getCell(activeCellWithBigNeighbor);
@@ -504,7 +504,7 @@ void testConstraints( MeshTopology* mesh, unsigned entityDim, map<unsigned,pair<
   {
     // do some refinements
     GlobalIndexType cellID = 0;
-    GlobalIndexType nextChildIndex = meshTopo->cellCount();
+    GlobalIndexType nextChildIndex = meshTopo->nextCellID();
     int childOrdinal = 1; // in each refinement, take this child as the one to refine next
     RefinementPatternPtr refPattern = RefinementPattern::regularRefinementPattern(meshTopo->getCell(cellID)->topology());
     int numRefinements = 1;
@@ -522,7 +522,7 @@ void testConstraints( MeshTopology* mesh, unsigned entityDim, map<unsigned,pair<
   {
     // do some refinements
     GlobalIndexType cellID = 0;
-    GlobalIndexType nextChildIndex = meshTopo->cellCount();
+    GlobalIndexType nextChildIndex = meshTopo->nextCellID();
     int childOrdinal = 1; // in each refinement, take this child as the one to refine next
     RefinementPatternPtr refPattern = RefinementPattern::regularRefinementPattern(meshTopo->getCell(cellID)->topology());
     int numRefinements = 1;
@@ -728,7 +728,7 @@ TEUCHOS_UNIT_TEST(MeshTopology, GetEntityGeneralizedParent_LineRefinement)
 
   RefinementPatternPtr refPattern = RefinementPattern::regularRefinementPattern(lineTopo);
 
-  meshTopo->refineCell(cell->cellIndex(), refPattern, meshTopo->cellCount());
+  meshTopo->refineCell(cell->cellIndex(), refPattern, meshTopo->nextCellID());
 
   double xMiddle = (xLeft + xRight) / 2.0;
 
@@ -1056,6 +1056,66 @@ TEUCHOS_UNIT_TEST(MeshTopology, GetRootMeshTopology)
     testPruneAddPrune(meshTopo, partitions, out, success);
   }
   
+  TEUCHOS_UNIT_TEST( MeshTopology, Unrefine_1D )
+  {
+    int meshWidth = 4;
+    MeshTopologyPtr meshTopo = MeshFactory::rectilinearMeshTopology({1.0}, {meshWidth});
+    
+    // at this point, cell 0 is neighbors with cell 1
+    CellPtr cell0 = meshTopo->getCell(0);
+    CellPtr cell1 = meshTopo->getCell(1);
+    
+    auto cell0Neighbors = cell0->getActiveNeighborIndices(meshTopo);
+    TEST_ASSERT(cell0Neighbors.find(1) != cell0Neighbors.end());
+    
+    // now, refine cell 1:
+    auto refPattern = RefinementPattern::regularRefinementPatternLine();
+    IndexType firstChildIndex = meshTopo->nextCellID();
+    meshTopo->refineCell(1, refPattern, firstChildIndex);
+    
+    // now, cell 0 should have firstChildIndex among its neighbors, but not cell 1
+    cell0Neighbors = cell0->getActiveNeighborIndices(meshTopo);
+    TEST_ASSERT(cell0Neighbors.find(firstChildIndex) != cell0Neighbors.end());
+    TEST_ASSERT(cell0Neighbors.find(1) == cell0Neighbors.end());
+    
+    // next, unrefine cell 1:
+    meshTopo->unrefineCell(1, refPattern);
+    // now, cell 0 should not have firstChildIndex among its neighbors, but should have cell 1
+    cell0Neighbors = cell0->getActiveNeighborIndices(meshTopo);
+    TEST_ASSERT(cell0Neighbors.find(firstChildIndex) == cell0Neighbors.end());
+    TEST_ASSERT(cell0Neighbors.find(1) != cell0Neighbors.end());
+  }
+  
+  TEUCHOS_UNIT_TEST( MeshTopology, Unrefine_2D )
+  {
+    int meshWidth = 2;
+    MeshTopologyPtr meshTopo = MeshFactory::rectilinearMeshTopology({1.0,1.0}, {meshWidth,meshWidth});
+    
+    // at this point, cell 0 is neighbors with cell 1
+    CellPtr cell0 = meshTopo->getCell(0);
+    CellPtr cell1 = meshTopo->getCell(1);
+    
+    auto cell0Neighbors = cell0->getActiveNeighborIndices(meshTopo);
+    TEST_ASSERT(cell0Neighbors.find(1) != cell0Neighbors.end());
+    
+    // now, refine cell 1:
+    auto refPattern = RefinementPattern::regularRefinementPatternQuad();
+    IndexType firstChildIndex = meshTopo->nextCellID();
+    meshTopo->refineCell(1, refPattern, firstChildIndex);
+    
+    // now, cell 0 should have firstChildIndex among its neighbors, but not cell 1
+    cell0Neighbors = cell0->getActiveNeighborIndices(meshTopo);
+    TEST_ASSERT(cell0Neighbors.find(firstChildIndex) != cell0Neighbors.end());
+    TEST_ASSERT(cell0Neighbors.find(1) == cell0Neighbors.end());
+    
+    // next, unrefine cell 1:
+    meshTopo->unrefineCell(1, refPattern);
+    // now, cell 0 should not have firstChildIndex among its neighbors, but should have cell 1
+    cell0Neighbors = cell0->getActiveNeighborIndices(meshTopo);
+    TEST_ASSERT(cell0Neighbors.find(firstChildIndex) == cell0Neighbors.end());
+    TEST_ASSERT(cell0Neighbors.find(1) != cell0Neighbors.end());
+  }
+  
   TEUCHOS_UNIT_TEST( MeshTopology, UpdateNeighborsAfterAnisotropicRefinements)
   {
     // set up MeshGeometry sorta like what we have in Hemker meshes:
@@ -1098,7 +1158,7 @@ TEUCHOS_UNIT_TEST(MeshTopology, GetRootMeshTopology)
     set<GlobalIndexType> cellsToCutVertically = {1};
     set<GlobalIndexType> cellsToCutHorizontally = {2};
     
-    GlobalIndexType nextCellID = meshTopo->cellCount();
+    GlobalIndexType nextCellID = meshTopo->nextCellID();
     // cut 5 times
     int cutCycles = 5;
     for (int i=0; i<cutCycles; i++)
@@ -1177,7 +1237,7 @@ TEUCHOS_UNIT_TEST(MeshTopology, GetRootMeshTopology)
     // test neighbors before and after refinement
     testNeighbors(meshTopo, out, success);
     
-    GlobalIndexType nextCellID = meshTopo->cellCount();
+    GlobalIndexType nextCellID = meshTopo->nextCellID();
     RefinementPatternPtr refPattern = RefinementPattern::regularRefinementPattern(meshTopo->getCell(irregularCellIndex)->topology());
     meshTopo->refineCell(irregularCellIndex, refPattern, nextCellID);
     nextCellID += refPattern->numChildren();

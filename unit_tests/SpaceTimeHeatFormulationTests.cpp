@@ -117,7 +117,7 @@ namespace
     
     if (useHangingNodes)
     {
-      int numElements = spaceTimeMeshTopo->cellCount();
+      int numElements = spaceTimeMeshTopo->nextCellID();
       GlobalIndexType cellToRefine = 0;
       RefinementPatternPtr refPattern = RefinementPattern::regularRefinementPattern(spaceTimeMeshTopo->getCell(cellToRefine)->topology());
       spaceTimeMeshTopo->refineCell(0, refPattern, numElements);
@@ -223,7 +223,7 @@ namespace
     
     if (useHangingNodes)
     {
-      int numElements = spaceTimeMeshTopo->cellCount();
+      int numElements = spaceTimeMeshTopo->nextCellID();
       GlobalIndexType cellToRefine = 0;
       RefinementPatternPtr refPattern = RefinementPattern::regularRefinementPattern(spaceTimeMeshTopo->getCell(cellToRefine)->topology());
       spaceTimeMeshTopo->refineCell(0, refPattern, numElements);

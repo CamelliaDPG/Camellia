@@ -236,6 +236,7 @@ public:
   void hRefine(const vector<GlobalIndexType> &cellIDs, Teuchos::RCP<RefinementPattern> refPattern);
   void hRefine(const vector<GlobalIndexType> &cellIDs, Teuchos::RCP<RefinementPattern> refPattern, bool repartitionAndRebuild);
 
+  // ! unrefine the specified cells -- at end of unrefinement, these cells should be active, possibly modulo enforcement of 1-irregularity
   void hUnrefine(const set<GlobalIndexType> &cellIDs, bool repartitionAndRebuild = true);
   
   // ! For curvilinear geometry, call this after mesh initialization.

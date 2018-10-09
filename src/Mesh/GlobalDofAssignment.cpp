@@ -535,10 +535,47 @@ void GlobalDofAssignment::didPRefine(const set<GlobalIndexType> &cellIDs, int de
   }
 }
 
-void GlobalDofAssignment::didHUnrefine(const set<GlobalIndexType> &parentCellIDs)   // subclasses should call super
+void GlobalDofAssignment::willHUnrefine(const set<GlobalIndexType> &parentCellIDs)   // subclasses should call super
 {
-  cout << "WARNING: GlobalDofAssignment::didHUnrefine unimplemented.  At minimum, should update partition to drop children, and add parent.\n";
-  // TODO: address this -- of course, Mesh doesn't yet support h-unrefinements, so might want to do that first.
+  cout << "WARNING: GlobalDofAssignment::willHUnrefine has only undergone limited testing.\n";
+  
+  for (GlobalIndexType parentID : parentCellIDs)
+  {
+    PartitionIndexType partitionForParent = partitionForCellID(parentID);
+    if (partitionForParent == -1) // this check allows us to be robust against getting the notification twice.
+    {
+      if (_meshTopology->isValidCellIndex(parentID))
+      {
+        CellPtr parent = _meshTopology->getCell(parentID);
+        vector<GlobalIndexType> childIDs = parent->getChildIndices(_meshTopology);
+        
+        GlobalIndexType firstChildID = childIDs[0];
+        
+        // get first active descendant's ID -- we'll assign the parent to that partition
+        while (_meshTopology->isParent(firstChildID))
+        {
+          CellPtr firstChild = _meshTopology->getCell(firstChildID);
+          firstChildID = firstChild->getChildIndices(_meshTopology)[0];
+        }
+        
+        bool leafNodesOnly = true; // active descendants will be the only ones in the _partitions structures
+        set<GlobalIndexType> activeDescendants = parent->getDescendants(_meshTopology, leafNodesOnly);
+        
+        partitionForParent = partitionForCellID(firstChildID);
+        
+        _partitions[partitionForParent].insert(parentID);
+        _partitionForCellID[parentID] = partitionForParent;
+        
+        for (GlobalIndexType childID : activeDescendants)
+        {
+          auto partition = _partitionForCellID[childID];
+          _partitions[partition].erase(childID);
+          _partitionForCellID.erase(childID);
+        }
+      }
+    }
+  }
+  constructActiveCellMap();
 }
 
 vector< ElementTypePtr > GlobalDofAssignment::elementTypes(PartitionIndexType partitionNumber)
@@ -825,10 +862,8 @@ void GlobalDofAssignment::projectParentCoefficientsOntoUnsetChildren()
 {
   set<GlobalIndexType> rankLocalCellIDs = cellsInPartition(-1);
 
-  for (vector< TSolutionPtr<double> >::iterator solutionIt = _registeredSolutions.begin();
-       solutionIt != _registeredSolutions.end(); solutionIt++)
+  for (TSolutionPtr<double> soln : _registeredSolutions)
   {
-    TSolutionPtr<double> soln = *solutionIt;
     const int numLHSes = soln->numSolutions();
     for (set<GlobalIndexType>::iterator cellIDIt = rankLocalCellIDs.begin(); cellIDIt != rankLocalCellIDs.end(); cellIDIt++)
     {

@@ -516,7 +516,7 @@ namespace
     while (meshWidthCells < numCells)
     {
       vector<IndexType> activeCellIDs = meshTopo->getActiveCellIndicesGlobal();
-      IndexType nextCellID = meshTopo->cellCount();
+      IndexType nextCellID = meshTopo->nextCellID();
       for (IndexType activeCellID : activeCellIDs)
       {
         CellTopoPtr cellTopo = meshTopo->getCell(activeCellID)->topology();
@@ -725,7 +725,7 @@ namespace
     IndexType cellIndex = 0;
     CellPtr cell = fineMeshTopo->getCell(cellIndex);
     RefinementPatternPtr refPattern = RefinementPattern::regularRefinementPattern(cell->topology());
-    IndexType firstChildCellIndex = fineMeshTopo->cellCount();
+    IndexType firstChildCellIndex = fineMeshTopo->nextCellID();
     fineMeshTopo->refineCell(cellIndex, refPattern, firstChildCellIndex);
     
     MeshPtr fineMesh = Teuchos::rcp( new Mesh(fineMeshTopo, bf, H1Order_fine, delta_k) );
@@ -806,7 +806,7 @@ namespace
     {
       CellPtr cell = fineMeshTopo->getCell(cellIndex);
       RefinementPatternPtr refPattern = RefinementPattern::regularRefinementPattern(cell->topology());
-      IndexType firstChildCellIndex = fineMeshTopo->cellCount();
+      IndexType firstChildCellIndex = fineMeshTopo->nextCellID();
       fineMeshTopo->refineCell(cellIndex, refPattern, firstChildCellIndex);
     }
     

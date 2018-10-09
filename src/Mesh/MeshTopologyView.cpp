@@ -503,7 +503,10 @@ set< pair<IndexType, unsigned> > MeshTopologyView::getCellsContainingEntity(unsi
   for (IndexType sideEntityIndex : sidesForEntity)
   {
     vector<IndexType> cellsForSide = getCellsForSide(sideEntityIndex);
-    TEUCHOS_TEST_FOR_EXCEPTION((cellsForSide.size() == 0) || (cellsForSide.size() > 2), std::invalid_argument, "Unexpected cell count for side.");
+    
+    // we now allow cellsForSide to be empty -- this can happen after an unrefinement removes all cells containing a side
+    // but cellsForSide should not have more than two cells
+    TEUCHOS_TEST_FOR_EXCEPTION(cellsForSide.size() > 2, std::invalid_argument, "Unexpected cell count for side.");
     
     for (IndexType cellIndex : cellsForSide)
     {

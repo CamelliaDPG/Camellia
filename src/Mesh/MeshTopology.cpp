@@ -42,6 +42,7 @@ void MeshTopology::init(unsigned spaceDim)
   _entityCellTopologyKeys = vector< map<CellTopologyKey, RangeList<IndexType> > >(numEntityDimensions);
   _nextCellIndex = 0;
   _activeCellCount = 0;
+  _cellCount = 0;
   
   _gda = NULL;
 }
@@ -439,6 +440,7 @@ IndexType MeshTopology::addCell(IndexType cellIndex, CellTopoPtr cellTopo, const
   {
     _nextCellIndex++;
     _activeCellCount++;
+    _cellCount++;
   }
   else
   {
@@ -1068,7 +1070,7 @@ bool MeshTopology::cellContainsPoint(GlobalIndexType cellID, const vector<double
 
 IndexType MeshTopology::cellCount() const
 {
-  return _nextCellIndex;
+  return _cellCount;
 }
 
 vector<IndexType> MeshTopology::cellIDsForPoints(const FieldContainer<double> &physicalPoints) const
@@ -2641,6 +2643,11 @@ IndexType MeshTopology::maxConstraint(unsigned d, IndexType entityIndex1, IndexT
   return -1;
 }
 
+IndexType MeshTopology::nextCellID() const
+{
+  return _nextCellIndex;
+}
+
 vector< ParametricCurvePtr > MeshTopology::parametricEdgesForCell(IndexType cellIndex, bool neglectCurves) const
 {
   vector< ParametricCurvePtr > edges;
@@ -3344,19 +3351,12 @@ void MeshTopology::refineCell(IndexType cellIndex, RefinementPatternPtr refPatte
   {
     _nextCellIndex = firstChildCellIndex + refPattern->numChildren();
     _activeCellCount += refPattern->numChildren() - 1;
+    _cellCount += refPattern->numChildren();
   }
   if (!isValidCellIndex(cellIndex))
   {
     return;
   }
-  
-  
-//  { // DEBUGGING
-//    if (cellIndex == 39)
-//    {
-//      cout << "refining cell " << cellIndex << endl;
-//    }
-//  }
   
   CellPtr cell = _cells[cellIndex];
   FieldContainer<double> cellNodes(cell->vertices().size(), _spaceDim);
@@ -3822,6 +3822,90 @@ void MeshTopology::setEntitySetInitialTime(EntitySetPtr entitySet)
 Teuchos::RCP<MeshTransformationFunction> MeshTopology::transformationFunction() const
 {
   return _transformationFunction;
+}
+
+void MeshTopology::unrefineCell(IndexType cellIndex, RefinementPatternPtr refPattern)
+{
+  // if we get a request to unrefine a cell that we don't know about, we simply return after updating
+  // _activeCellCount and _cellCount.
+  // for now, we don't worry about reclaiming cell IDs; we just count upward
+  // (For reclaiming cell IDs, we might want just to do a global renumbering thing that
+  // eliminates gaps, rather than reclaiming as we go, which would involve a fair amount of bookkeeping.)
+  
+  // Along similar lines, we do not delete the vertices, edges, etc. that belong only to the deleted cells.
+  // Again, the book-keeping would be a bit much, since these are not maps, but contiguous arrays.  The lookups
+  // are such that if this cell is refined again, the existing vertices and edges will be reused.  We can always
+  // implement a method to clean up the extra entities, which would involve a renumbering.
+  
+  _activeCellCount -= (refPattern->numChildren() - 1);
+  _cellCount       -= refPattern->numChildren();
+  
+  if (!isValidCellIndex(cellIndex))
+  {
+    return;
+  }
+  
+  MeshTopologyPtr thisPtr = Teuchos::rcp(this,false);
+  
+  // The cleanest way, I think, is actually to record the cell info, delete the cell altogether, and recreate
+  // through a call to addCell()
+  CellPtr cell = _cells[cellIndex];
+  
+  auto cellVertices = cell->vertices();
+  auto cellTopo = cell->topology();
+  
+  if (! cell->isParent(thisPtr))
+  {
+    // nothing to unrefine; just return
+    return;
+  }
+  
+  bool leafNodesOnly = false; // get all descendants, including the cell itself
+  set<GlobalIndexType> descendants = cell->getDescendants(thisPtr, leafNodesOnly);
+  
+  TEUCHOS_TEST_FOR_EXCEPTION(descendants.size() != refPattern->numChildren() + 1, std::invalid_argument, "children must be unrefined before unrefine is called on parent");
+  
+  int sideDim = this->getDimension() - 1;
+  
+  for (GlobalIndexType cellIDToDelete : descendants)
+  {
+    CellPtr deletedCell = _cells[cellIDToDelete];
+    if (_activeCells.find(cellIDToDelete) != _activeCells.end())
+    {
+      deactivateCell(deletedCell);
+    }
+    
+    // _cellsForSideEntities needs to be updated not to refer to the deleted cell
+    int sideCount = deletedCell->getSideCount();
+    for (int sideOrdinal=0; sideOrdinal<sideCount; sideOrdinal++)
+    {
+      auto sideEntityIndex = deletedCell->entityIndex(sideDim, sideOrdinal);
+      
+      auto sideCells = _cellsForSideEntities[sideEntityIndex];
+      
+      auto cell1 = sideCells.first;
+      auto cell2 = sideCells.second;
+      
+      bool noCellsForSide = false;
+      if (cell1.first == cellIDToDelete)
+      {
+        cell1 = make_pair(-1, -1);
+        noCellsForSide = (cell2.first == -1);
+      }
+      else if (cell2.first == cellIDToDelete)
+      {
+        cell2 = make_pair(-1, -1);
+        noCellsForSide = (cell1.first == -1);
+      }
+      
+      _cellsForSideEntities[sideEntityIndex] = make_pair(cell1, cell2);
+    }
+    
+    _cells.erase(cellIDToDelete);
+  }
+  
+  // add the cell back in -- this will activate it, establish neighbor relationships, etc.
+  this->addCell(cellIndex, cellTopo, cellVertices);
 }
 
 void MeshTopology::verticesForCell(FieldContainer<double>& vertices, GlobalIndexType cellID) const

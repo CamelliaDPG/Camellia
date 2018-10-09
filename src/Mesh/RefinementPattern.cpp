@@ -137,7 +137,7 @@ RefinementPattern::RefinementPattern(CellTopoPtr cellTopoPtr, FieldContainer<dou
   _refinementTopology->addCell(cellTopoPtr, refCellNodesVector);
   if (spaceDim != 0)
   {
-    _refinementTopology->refineCell(0, thisPtr, _refinementTopology->cellCount());
+    _refinementTopology->refineCell(0, thisPtr, _refinementTopology->nextCellID());
   }
 
   CellPtr parentCell = _refinementTopology->getCell(0);
@@ -2172,7 +2172,7 @@ FieldContainer<double> RefinementPattern::descendantNodes(RefinementBranch refin
   MeshTopologyPtr meshTopo = Teuchos::rcp( new MeshTopology(meshGeometry) );
 
   unsigned cellIndex = 0; // cellIndex of the current parent in the RefinementBranch
-  GlobalIndexType newCellID = meshTopo->cellCount();
+  GlobalIndexType newCellID = meshTopo->nextCellID();
   for (int refIndex=0; refIndex<refinementBranch.size(); refIndex++)
   {
     RefinementPatternPtr tempRefPatternPtr = Teuchos::rcp(refinementBranch[refIndex].first, false);

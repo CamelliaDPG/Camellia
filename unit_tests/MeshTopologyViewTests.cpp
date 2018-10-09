@@ -318,7 +318,7 @@ namespace
     TEST_ASSERT(vertexFound);
     
     IndexType cellIndex = 0;
-    GlobalIndexType nextCellID = meshTopo->cellCount();
+    GlobalIndexType nextCellID = meshTopo->nextCellID();
     meshTopo->refineCell(cellIndex, RefinementPattern::regularRefinementPatternLine(), nextCellID);
     
     unsigned vertexDim = 0;

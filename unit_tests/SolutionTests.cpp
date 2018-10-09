@@ -2001,4 +2001,77 @@ namespace
     StokesVGPFormulation form = StokesVGPFormulation::steadyFormulation(spaceDim,mu,conformingTraces);
     testSaveAndLoad2D(form.bf(), out, success);
   }
+  
+  void testUnrefine(int spaceDim, Teuchos::FancyOStream &out, bool &success)
+  {
+    int H1Order = 2; // linear field order
+    bool conformingTraces = true;
+    PoissonFormulation form(spaceDim,conformingTraces);
+    
+    int numCellsAddedPerRefinement = 1;
+    for (int d=0; d<spaceDim; d++)
+    {
+      numCellsAddedPerRefinement *= 2;
+    }
+    int numActiveCellsAddedPerRefinement = numCellsAddedPerRefinement - 1; // parent gets deactivated
+    
+    int meshWidth = 2;
+    vector<double> domainDim(spaceDim, 1.0);
+    vector<int> meshDim(spaceDim, meshWidth);
+    MeshPtr mesh = MeshFactory::rectilinearMesh(form.bf(), domainDim, meshDim, H1Order);
+    
+    SolutionPtr soln = Solution::solution(mesh);
+    mesh->registerSolution(soln);
+    
+    // add a concrete solution, so we can check that projections are done appropriately
+    // we will just use one that can be exactly represented (a patch test)
+    
+    FunctionPtr u_exact = Function::xn(1);
+    std::map<int, FunctionPtr> solnMap;
+    solnMap[form.u()->ID()] = u_exact;
+    
+    int solutionOrdinal = 0; // just one solution
+    soln->projectOntoMesh(solnMap, solutionOrdinal);
+    
+    FunctionPtr u_soln = Function::solution(form.u(), soln);
+    
+    // sanity check: verify that u_soln and u_exact match in the original mesh
+    double tol = 1e-14;
+    double err = (u_soln - u_exact)->l2norm(mesh);
+    TEST_COMPARE(err, <, tol);
+    
+    vector<GlobalIndexType> cellsToRefine = {1};
+    mesh->hRefine(cellsToRefine);
+    
+    // check that after the forward refinement, u_soln still matches u_exact
+    err = (u_soln - u_exact)->l2norm(mesh);
+    TEST_COMPARE(err, <, tol);
+    
+    // for this to be an effective test, we discard parent cell's old coefficients -- these should be recomputed during hUnrefine()
+    soln->discardInactiveCellCoefficients();
+    
+    mesh->hUnrefine({1});
+    
+    // check that after the unrefinement, u_soln still matches u_exact
+    err = (u_soln - u_exact)->l2norm(mesh);
+    TEST_COMPARE(err, <, tol);
+  }
+  
+  TEUCHOS_UNIT_TEST( Solution, Unrefine_1D )
+  {
+    int spaceDim = 1;
+    testUnrefine(spaceDim, out, success);
+  }
+  
+  TEUCHOS_UNIT_TEST( Solution, Unrefine_2D )
+  {
+    int spaceDim = 2;
+    testUnrefine(spaceDim, out, success);
+  }
+  
+  TEUCHOS_UNIT_TEST( Solution, Unrefine_3D )
+  {
+    int spaceDim = 3;
+    testUnrefine(spaceDim, out, success);
+  }
 } // namespace

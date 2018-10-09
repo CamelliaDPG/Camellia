@@ -255,7 +255,7 @@ TEUCHOS_UNIT_TEST( Cell, Neighbors1D )
     vector<int> elementCounts = {1,1};
     MeshTopologyPtr meshTopo = MeshFactory::quadMeshTopology(dimensions[0], dimensions[1],
                                                              elementCounts[0], elementCounts[1], useTriangles);
-    IndexType firstChildCellIndex = meshTopo->cellCount();
+    IndexType firstChildCellIndex = meshTopo->nextCellID();
     IndexType cellToRefine = 0;
     RefinementPatternPtr triangleRefPattern = RefinementPattern::regularRefinementPatternTriangle();
     meshTopo->refineCell(cellToRefine, triangleRefPattern, firstChildCellIndex);

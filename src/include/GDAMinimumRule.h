@@ -188,7 +188,7 @@ public:
   
   void didHRefine(const set<GlobalIndexType> &parentCellIDs);
   void didPRefine(const set<GlobalIndexType> &cellIDs, int deltaP);
-  void didHUnrefine(const set<GlobalIndexType> &parentCellIDs);
+  void willHUnrefine(const set<GlobalIndexType> &parentCellIDs);
 
   void didChangePartitionPolicy();
   

@@ -47,6 +47,7 @@ class MeshTopology : public MeshTopologyView
   
   IndexType _nextCellIndex; // until we actually support cell coarsenings, this will be the same as the global cell count
   IndexType _activeCellCount;
+  IndexType _cellCount;
 
   map< vector<double>, IndexType > _vertexMap; // maps into indices in the vertices list -- here just for vertex identification (i.e. so we don't add the same vertex twice)
   vector< vector<double> > _vertices; // vertex locations
@@ -223,8 +224,17 @@ public:
   Intrepid::FieldContainer<double> physicalCellNodesForCell(IndexType cellIndex, bool includeCellDimension = false) const;
   void refineCell(IndexType cellIndex, RefinementPatternPtr refPattern, IndexType firstChildCellIndex);
   
+  // ! Unrefine so that the specified cellIndex is an active cell (i.e., discard the cell's children)
+  // ! at present, only one-level unrefinements are supported (i.e., cell's children should be active, not themselves parents)
+  // ! refPattern should match the refinement that was done on the cell (this is for counting purposes, to avoid MPI communication
+  // ! when the cell is not locally known)
+  void unrefineCell(IndexType cellIndex, RefinementPatternPtr refPattern);
+  
   // ! Returns the global cell count.
   IndexType cellCount() const;
+  
+  // the next available cellID -- useful for passing to refineCell()
+  IndexType nextCellID() const;
 
   // ! Returns the global active cell count.
   IndexType activeCellCount() const;

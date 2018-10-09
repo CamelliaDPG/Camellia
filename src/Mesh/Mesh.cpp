@@ -919,7 +919,7 @@ void Mesh::hRefine(const set<GlobalIndexType> &cellIDs, Teuchos::RCP<RefinementP
   // gets refined.  For reasons I'm not entirely clear on.
   bool usingMaxRule = this->meshUsesMaximumRule();
   
-  GlobalIndexType nextCellID = writableMeshTopology->cellCount();
+  GlobalIndexType nextCellID = writableMeshTopology->nextCellID();
   for (cellIt = cellIDs.begin(); cellIt != cellIDs.end(); cellIt++)
   {
     GlobalIndexType cellID = *cellIt;
@@ -966,104 +966,45 @@ void Mesh::hRefine(const set<GlobalIndexType> &cellIDs, Teuchos::RCP<RefinementP
 void Mesh::hUnrefine(const set<GlobalIndexType> &cellIDs, bool repartitionAndRebuild)
 {
   if (cellIDs.size() == 0) return;
-
-  // refine any registered meshes
-  for (vector< Teuchos::RCP<RefinementObserver> >::iterator meshIt = _registeredObservers.begin();
-       meshIt != _registeredObservers.end(); meshIt++)
-  {
-    (*meshIt)->hUnrefine(cellIDs, repartitionAndRebuild);
-  }
-
-  MeshTopology* meshTopologyInstance = dynamic_cast<MeshTopology*>(_meshTopology.get());
-
-  TEUCHOS_TEST_FOR_EXCEPTION(!meshTopologyInstance, std::invalid_argument, "Mesh::hUnrefine() called when _meshTopology is not an instance of MeshTopology--likely Mesh initialized with a pure MeshTopologyView, which cannot be h-unrefined.");
   
-  MeshTopologyPtr writableMeshTopology = Teuchos::rcp(meshTopologyInstance, false);
-
-  // TODO: finish implementing this
+  bool usingMaxRule = this->meshUsesMaximumRule();
   
-//  set<GlobalIndexType>::const_iterator cellIt;
-//  set< pair<GlobalIndexType, int> > affectedNeighborSides; // (cellID, sideIndex)
-//  set< GlobalIndexType > deletedCellIDs;
-//
-//  for (cellIt = cellIDs.begin(); cellIt != cellIDs.end(); cellIt++) {
-//    GlobalIndexType cellID = *cellIt;
-//    ElementPtr elem = getElement(cellID);
-//    elem->deleteChildrenFromMesh(affectedNeighborSides, deletedCellIDs);
-//  }
-//
-//  set<int> affectedNeighbors;
-//  // for each nullified neighbor relationship, need to figure out the correct element type...
-//  for ( set< pair<int, int> >::iterator neighborIt = affectedNeighborSides.begin();
-//       neighborIt != affectedNeighborSides.end(); neighborIt++) {
-//    ElementPtr elem = _elements[ neighborIt->first ];
-//    if (elem->isActive()) {
-//      matchNeighbor( elem, neighborIt->second );
-//    }
-//  }
-//
-//  // delete any boundary entries for deleted elements
-//  for (set<int>::iterator cellIt = deletedCellIDs.begin(); cellIt != deletedCellIDs.end(); cellIt++) {
-//    int cellID = *cellIt;
-//    ElementPtr elem = _elements[cellID];
-//    for (int sideIndex=0; sideIndex<elem->numSides(); sideIndex++) {
-//      // boundary allows us to delete even combinations that weren't there to begin with...
-//      _boundary.deleteElement(cellID, sideIndex);
-//    }
-//  }
-
-//  // add in any new boundary elements:
-//  for (cellIt = cellIDs.begin(); cellIt != cellIDs.end(); cellIt++) {
-//    int cellID = *cellIt;
-//    ElementPtr elem = _elements[cellID];
-//    if (elem->isActive()) {
-//      int elemSideIndexInNeighbor;
-//      for (int sideIndex=0; sideIndex<elem->numSides(); sideIndex++) {
-//        if (ancestralNeighborForSide(elem, sideIndex, elemSideIndexInNeighbor)->cellID() == -1) {
-//          // boundary
-//          _boundary.addElement(cellID, sideIndex);
-//        }
-//      }
-//    }
-//  }
-
-//  // added by Jesse to try to fix bug
-//  for (set<int>::iterator cellIt = deletedCellIDs.begin(); cellIt != deletedCellIDs.end(); cellIt++) {
-//    // erase from _elements list
-//    for (int i = 0; i<_elements.size();i++){
-//      if (_elements[i]->cellID()==(*cellIt)){
-//        _elements.erase(_elements.begin()+i);
-//        break;
-//      }
-//    }
-//    // erase any pairs from _edgeToCellIDs having to do with deleted cellIDs
-//    for (map<pair<int,int>, vector<pair<int,int> > >::iterator mapIt = _edgeToCellIDs.begin(); mapIt!=_edgeToCellIDs.end();mapIt++){
-//      vector<pair<int,int> > cellIDSideIndices = mapIt->second;
-//      bool eraseEntry = false;
-//      for (int i = 0;i<cellIDSideIndices.size();i++){
-//        int cellID = cellIDSideIndices[i].first;
-//        if (cellID==(*cellIt)){
-//          eraseEntry = true;
-//        }
-//        if (eraseEntry)
-//          break;
-//      }
-//      if (eraseEntry){
-//        _edgeToCellIDs.erase(mapIt);
-////        cout << "deleting edge to cell entry " << mapIt->first.first << " --> " << mapIt->first.second << endl;
-//      }
-//    }
-//  }
-
+  TEUCHOS_TEST_FOR_EXCEPTION(usingMaxRule, std::invalid_argument, "hUnrefine() not supported for maximum rule");
+  
+  // because unrefinements are destructive (they delete children), need "will" notification instead of "did",
+  // so that recipients still have access to child data
+  _gda->willHUnrefine(cellIDs);
+  
   // TODO: consider making GDA a RefinementObserver, and using that interface to send the notification of unrefinement.
-  _gda->didHUnrefine(cellIDs);
-
-  // notify observers that of the unrefinement that just happened
-  for (Teuchos::RCP<RefinementObserver> refinementObserver : _registeredObservers)
+  
+  MeshTopology* meshTopologyInstance = dynamic_cast<MeshTopology*>(_meshTopology.get());
+  TEUCHOS_TEST_FOR_EXCEPTION(!meshTopologyInstance, std::invalid_argument, "Mesh::hUnrefine() called when _meshTopology is not an instance of MeshTopology--likely Mesh initialized with a pure MeshTopologyView, which cannot be h-unrefined.");
+  MeshTopologyPtr writableMeshTopology = Teuchos::rcp(meshTopologyInstance, false);
+  
+  // notify observers that of the unrefinement that will soon happen
+  for (auto observer  : _registeredObservers)
   {
-    refinementObserver->didHUnrefine(writableMeshTopology,cellIDs, repartitionAndRebuild);
+    observer->willHUnrefine(writableMeshTopology, cellIDs, repartitionAndRebuild);
   }
 
+  // unrefine any registered meshes
+  for (auto observer : _registeredObservers)
+  {
+    observer->hUnrefine(cellIDs, repartitionAndRebuild);
+  }
+
+  // unrefine at the MeshTopology level (deletes children):
+  for (auto parentCellID: cellIDs)
+  {
+    // TODO: worry about the case where the parentCellID is not locally known.
+    //       In this case, the below getCell() will return a null pointer
+    //       We want instead of the below to do something like what is implemented above for
+    //              void Mesh::hRefine(const set<GlobalIndexType> &cellIDs, bool repartitionAndRebuild),
+    //       which does MPI communication to specify the cell topology.  Here, we would want the refPatternID instead
+    auto refPattern = writableMeshTopology->getCell(parentCellID)->refinementPattern();
+    writableMeshTopology->unrefineCell(parentCellID, refPattern);
+  }
+  
   if (repartitionAndRebuild)
   {
     _gda->repartitionAndMigrate();

@@ -2806,7 +2806,7 @@ MeshTopologyPtr MeshFactory::spaceTimeMeshTopology(MeshTopologyPtr spatialMeshTo
 
   bool noCellsToRefine = false;
 
-  GlobalIndexType newCellID = spaceTimeTopology->cellCount();
+  GlobalIndexType newCellID = spaceTimeTopology->nextCellID();
   
   while (!noCellsToRefine)
   {

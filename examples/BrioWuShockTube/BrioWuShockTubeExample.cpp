@@ -1138,20 +1138,20 @@ int main(int argc, char *argv[])
     
     for (int meshGradingIteration = 0; meshGradingIteration < meshGradingIterations; meshGradingIteration++)
     {
-      GlobalIndexType cellCount = meshTopo->cellCount();
-      meshTopo->refineCell(centerCellLeft, lineRefinement, cellCount);
-      cellCount += lineRefinement->numChildren();
+      GlobalIndexType nextCellID = meshTopo->nextCellID();
+      meshTopo->refineCell(centerCellLeft, lineRefinement, nextCellID);
+      nextCellID += lineRefinement->numChildren();
       
       // update the left center cell number to be the rightmost of the newly introduced cells
       // again using knowledge of how the elements are numbered...
       centerCellLeft = cellCount - 1; //
       
-      meshTopo->refineCell(centerCellRight, lineRefinement, cellCount);
-      cellCount += lineRefinement->numChildren();
+      meshTopo->refineCell(centerCellRight, lineRefinement, nextCellID);
+      nextCellID += lineRefinement->numChildren();
       
       // update the right center cell number to be the leftmost of the newly introduced cells
       // again using knowledge of how the elements are numbered...
-      centerCellRight = cellCount - 2;
+      centerCellRight = nextCellID - 2;
     }
   }
   

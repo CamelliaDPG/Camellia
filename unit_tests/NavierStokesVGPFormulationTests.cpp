@@ -483,7 +483,7 @@ namespace
     // some refinements in an effort to replicate an issue, which may be revealed in a difference between
     // the dofs assigned to a MeshTopology and a MeshTopologyView with the same elements
     // 1. Uniform refinement
-    IndexType nextElement = meshTopo->cellCount();
+    IndexType nextElement = meshTopo->nextCellID();
     vector<IndexType> cellsToRefine = meshTopo->getActiveCellIndicesGlobal();
     CellTopoPtr cellTopo = meshTopo->getCell(0)->topology();
     RefinementPatternPtr refPattern = RefinementPattern::regularRefinementPattern(cellTopo);

@@ -292,13 +292,11 @@ void GDAMinimumRule::setCellPRefinements(const map<GlobalIndexType,int>& pRefine
 //  }
 }
 
-void GDAMinimumRule::didHUnrefine(const set<GlobalIndexType> &parentCellIDs)
+void GDAMinimumRule::willHUnrefine(const set<GlobalIndexType> &parentCellIDs)
 {
-  this->GlobalDofAssignment::didHUnrefine(parentCellIDs);
-  // TODO: implement this
-  cout << "WARNING: GDAMinimumRule::didHUnrefine() unimplemented.\n";
+  this->GlobalDofAssignment::willHUnrefine(parentCellIDs);
   // will need to treat cell side parities here--probably suffices to redo those in parentCellIDs plus all their neighbors.
-//  rebuildLookups();
+  // (but this should be handled at the GlobalDofAssignment level)
 }
 
 void GDAMinimumRule::distributeCellGlobalDofs(const map<GlobalIndexType, SubcellDofIndices> &myCellGlobalDofs,

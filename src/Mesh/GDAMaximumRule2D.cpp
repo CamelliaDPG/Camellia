@@ -740,9 +740,9 @@ void GDAMaximumRule2D::didPRefine(const set<GlobalIndexType> &cellIDs, int delta
 //  rebuildLookups();
 }
 
-void GDAMaximumRule2D::didHUnrefine(const set<GlobalIndexType> &parentCellIDs)
+void GDAMaximumRule2D::willHUnrefine(const set<GlobalIndexType> &parentCellIDs)
 {
-  this->GlobalDofAssignment::didHUnrefine(parentCellIDs);
+  this->GlobalDofAssignment::willHUnrefine(parentCellIDs);
   for (set<GlobalIndexType>::iterator parentCellIt = parentCellIDs.begin(); parentCellIt != parentCellIDs.end(); parentCellIt++)
   {
     GlobalIndexType parentCellID = *parentCellIt;

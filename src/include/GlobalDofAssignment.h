@@ -106,7 +106,7 @@ public:
   // after calling any of these, must call rebuildLookups
   virtual void didHRefine(const set<GlobalIndexType> &parentCellIDs); // subclasses should call super
   virtual void didPRefine(const set<GlobalIndexType> &cellIDs, int deltaP); // subclasses should call super
-  virtual void didHUnrefine(const set<GlobalIndexType> &parentCellIDs); // subclasses should call super
+  virtual void willHUnrefine(const set<GlobalIndexType> &parentCellIDs); // subclasses should call super
 
   virtual void didChangePartitionPolicy() = 0; // called by superclass after setPartitionPolicy() is invoked
 
