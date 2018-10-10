@@ -845,7 +845,6 @@ void Mesh::hRefine(const set<GlobalIndexType> &cellIDs, bool repartitionAndRebui
 {
   // let the owner of the cellID tell us what the topology of the cell is, so we can choose the right regular refinement pattern
   vector<pair<GlobalIndexType,CellTopologyKey>> myCellTopologyKeys;
-  vector<int> cellTopoKeysAsInts(cellIDs.size() * 2);
   const set<GlobalIndexType> *myCellIDs = &this->cellIDsInPartition();
   for (GlobalIndexType cellID : cellIDs)
   {
@@ -993,16 +992,41 @@ void Mesh::hUnrefine(const set<GlobalIndexType> &cellIDs, bool repartitionAndReb
     observer->hUnrefine(cellIDs, repartitionAndRebuild);
   }
 
-  // unrefine at the MeshTopology level (deletes children):
-  for (auto parentCellID: cellIDs)
+  // in case some of the cells to unrefine are not known to some MPI ranks, communicate their refinement pattern:
+  // let the owner of the cellID tell us what the topology of the cell is, so we can choose the right regular refinement pattern
+  vector<pair<GlobalIndexType,RefinementPatternKey>> myRefPatternKeys;
+  const set<GlobalIndexType> *myCellIDs = &this->cellIDsInPartition();
+  for (GlobalIndexType cellID : cellIDs)
   {
-    // TODO: worry about the case where the parentCellID is not locally known.
-    //       In this case, the below getCell() will return a null pointer
-    //       We want instead of the below to do something like what is implemented above for
-    //              void Mesh::hRefine(const set<GlobalIndexType> &cellIDs, bool repartitionAndRebuild),
-    //       which does MPI communication to specify the cell topology.  Here, we would want the refPatternID instead
-    auto refPattern = writableMeshTopology->getCell(parentCellID)->refinementPattern();
-    writableMeshTopology->unrefineCell(parentCellID, refPattern);
+    if (myCellIDs->find(cellID) != myCellIDs->end())
+    {
+      RefinementPatternKey refPatternKey = _meshTopology->getCell(cellID)->refinementPattern()->getKey();
+      myRefPatternKeys.push_back({cellID,refPatternKey});
+    }
+  }
+  vector<pair<GlobalIndexType,RefinementPatternKey>> gatheredRefPatternKeys;
+  vector<int> offsets;
+  MPIWrapper::allGatherVariable(*Comm(), gatheredRefPatternKeys, myRefPatternKeys, offsets);
+  
+  map< RefinementPatternKey, set<GlobalIndexType> > cellIDsForRefinementPattern;
+  
+  for (auto entry : gatheredRefPatternKeys)
+  {
+    GlobalIndexType cellID = entry.first;
+    RefinementPatternKey refPatternKey = entry.second;
+    cellIDsForRefinementPattern[refPatternKey].insert(cellID);
+  }
+  
+  // unrefine at the MeshTopology level (deletes children):
+  for (auto & entry : cellIDsForRefinementPattern)
+  {
+    auto refPattern = RefinementPattern::refinementPattern(entry.first);
+    auto & parentCellIDs = entry.second;
+
+    for (auto parentCellID: parentCellIDs)
+    {
+      writableMeshTopology->unrefineCell(parentCellID, refPattern);
+    }
   }
   
   if (repartitionAndRebuild)
