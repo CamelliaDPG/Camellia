@@ -539,6 +539,8 @@ void GlobalDofAssignment::willHUnrefine(const set<GlobalIndexType> &parentCellID
 {
   cout << "WARNING: GlobalDofAssignment::willHUnrefine has only undergone limited testing.\n";
   
+  projectChildCoefficientsOntoParents(parentCellIDs);
+  
   for (GlobalIndexType parentID : parentCellIDs)
   {
     PartitionIndexType partitionForParent = partitionForCellID(parentID);
@@ -575,6 +577,8 @@ void GlobalDofAssignment::willHUnrefine(const set<GlobalIndexType> &parentCellID
       }
     }
   }
+  
+  // TODO: do something to ensure that the active cell map is reconstructed after the unrefinement actually takes place
   constructActiveCellMap();
 }
 
@@ -858,16 +862,69 @@ int GlobalDofAssignment::minimumSubcellDimensionForContinuityEnforcement() const
   return _minContinuityDimension;
 }
 
+void GlobalDofAssignment::projectChildCoefficientsOntoParents(const std::set<GlobalIndexType> &parentCellIDs)
+{
+  // rule is that the parent coefficients end up on the first child's partition
+  // therefore, we need to send all child coefficients that do not belong to the same partition as the first child to that partition
+  int myRank = _partitionPolicy->Comm()->MyPID();
+  
+  // we will use Solution::importSolutionForOffRankCells(cellIDs)
+  // we build up a list of off-rank cells whose data we need
+  set<GlobalIndexType> offRankCellsNeeded;
+  
+  set<GlobalIndexType> localParentCellIDs; // the ones that end up on this rank
+  
+  for (auto parentCellID : parentCellIDs)
+  {
+    if (_meshTopology->isValidCellIndex(parentCellID))
+    {
+      auto parentCell = _meshTopology->getCell(parentCellID);
+      auto childIndices = parentCell->getChildIndices(_meshTopology);
+      auto firstChildID = childIndices[0];
+      auto destinationRank = partitionForCellID(firstChildID);
+      if (destinationRank == myRank) // if first child is locally owned, then we may have some data to request
+      {
+        localParentCellIDs.insert(parentCellID);
+        for (int childOrdinal=1; childOrdinal<childIndices.size(); childOrdinal++)
+        {
+          auto childID = childIndices[childOrdinal];
+          auto childPartition = partitionForCellID(childID);
+          if (childPartition != myRank)
+          {
+            offRankCellsNeeded.insert(childID);
+          }
+        }
+      }
+    }
+  }
+  
+  for (TSolutionPtr<double> soln : _registeredSolutions)
+  {
+    soln->importSolutionForOffRankCells(offRankCellsNeeded);
+  }
+  
+  for (TSolutionPtr<double> soln : _registeredSolutions)
+  {
+    const int numLHSes = soln->numSolutions();
+    for (GlobalIndexType parentCellID : localParentCellIDs)
+    {
+      for (int lhsOrdinal=0; lhsOrdinal<numLHSes; lhsOrdinal++)
+      {
+        soln->projectChildrenOntoParent(parentCellID, lhsOrdinal);
+      }
+    }
+  }
+}
+
 void GlobalDofAssignment::projectParentCoefficientsOntoUnsetChildren()
 {
-  set<GlobalIndexType> rankLocalCellIDs = cellsInPartition(-1);
+  const set<GlobalIndexType> & rankLocalCellIDs = cellsInPartition(-1);
 
   for (TSolutionPtr<double> soln : _registeredSolutions)
   {
     const int numLHSes = soln->numSolutions();
-    for (set<GlobalIndexType>::iterator cellIDIt = rankLocalCellIDs.begin(); cellIDIt != rankLocalCellIDs.end(); cellIDIt++)
+    for (GlobalIndexType cellID : rankLocalCellIDs)
     {
-      GlobalIndexType cellID = *cellIDIt;
       for (int lhsOrdinal=0; lhsOrdinal<numLHSes; lhsOrdinal++)
       {
         if (soln->cellHasCoefficientsAssigned(cellID,lhsOrdinal)) continue;

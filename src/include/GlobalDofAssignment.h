@@ -190,6 +190,10 @@ public:
 
   MeshPartitionPolicyPtr getPartitionPolicy();
   
+  // project the children of the specified cells onto their parents in any registered solutions -- one use case is immediately prior to unrefinement
+  void projectChildCoefficientsOntoParents(const std::set<GlobalIndexType> &parentCellIDs);
+  
+  // project parent values onto any child elements that do not have coefficients specified in any registered solutions -- one use case is immediately after refinement
   void projectParentCoefficientsOntoUnsetChildren();
   
   virtual void rebuildLookups() = 0;

@@ -210,6 +210,13 @@ public:
   const Intrepid::FieldContainer<double> & getJacobian();
   const Intrepid::FieldContainer<double> & getJacobianDet();
   const Intrepid::FieldContainer<double> & getJacobianInv();
+  
+  // ! sets an externally-computed jacobian; sets _jacobianIsValid to true
+  void setJacobian(const Intrepid::FieldContainer<double> &jacobian);
+  // ! sets an externally-computed jacobian determinant; sets _jacobianDetIsValid to true
+  void setJacobianDet(const Intrepid::FieldContainer<double> &jacobianDet);
+  // ! sets an externally-computed jacobian inverse; sets _jacobianInvIsValid to true
+  void setJacobianInv(const Intrepid::FieldContainer<double> &jacobianInv);
 
   // ! Returns true if the second-order derivatives of the reference-to-physical transformation may be ignored.
   bool neglectHessian() const;
@@ -219,6 +226,8 @@ public:
   virtual const Intrepid::FieldContainer<double> & getPhysicalCubaturePoints();
   const Intrepid::FieldContainer<double> & getPhysicalCubaturePointsForSide(int sideOrdinal);
   const Intrepid::FieldContainer<double> & getCellSideParities();
+  
+  virtual void setPhysicalCubaturePoints(const Intrepid::FieldContainer<double> &physicalCubaturePoints);
 
   const Intrepid::FieldContainer<double> & getCubatureWeights();
 

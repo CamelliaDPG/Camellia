@@ -166,7 +166,7 @@ public:
   void setProblem(TSolverPtr<Scalar> solver);
   int solveWithPrepopulatedStiffnessAndLoad(TSolverPtr<Scalar> solver, bool callResolveInstead = false);
   void importSolution(); // imports for all rank-local cellIDs
-  void importSolutionForOffRankCells(std::set<GlobalIndexType> cellIDs);
+  void importSolutionForOffRankCells(const std::set<GlobalIndexType> &cellIDs);
   void importGlobalSolution(); // imports (and interprets!) global solution.  NOT scalable.
 
   int solve();
@@ -241,6 +241,10 @@ public:
   void projectOntoCell(const std::map<int, TFunctionPtr<Scalar> > &functionMap, GlobalIndexType cellID, int sideIndex, int solutionOrdinal);
   void projectFieldVariablesOntoOtherSolution(TSolutionPtr<Scalar> otherSoln);
 
+  // ! project child coefficients onto parent; useful for unrefinement.  Caller is responsible for ensuring
+  // ! that all child coefficient data is rank-local.  (See implementation of GlobalDofAssignment::projectChildCoefficientsOntoParents() for an example of how to do this.)
+  void projectChildrenOntoParent(GlobalIndexType parentCellID, int solutionOrdinal);
+  
   void projectOldCellOntoNewCells(GlobalIndexType cellID, ElementTypePtr oldElemType,
                                   const vector<GlobalIndexType> &childIDs, int solutionOrdinal);
   void projectOldCellOntoNewCells(GlobalIndexType cellID, ElementTypePtr oldElemType,

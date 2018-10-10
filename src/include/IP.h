@@ -76,7 +76,8 @@ public:
   virtual void computeInnerProductVector(Intrepid::FieldContainer<Scalar> &ipVector,
                                          VarPtr var, TFunctionPtr<Scalar> fxn,
                                          Teuchos::RCP<DofOrdering> dofOrdering,
-                                         Teuchos::RCP<BasisCache> basisCache);
+                                         Teuchos::RCP<BasisCache> basisCache,
+                                         bool sumInto = false);
 
   double computeMaxConditionNumber(DofOrderingPtr testSpace, BasisCachePtr basisCache);
 

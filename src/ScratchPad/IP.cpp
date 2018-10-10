@@ -341,7 +341,7 @@ template <typename Scalar>
 void TIP<Scalar>::computeInnerProductVector(FieldContainer<Scalar> &ipVector,
     VarPtr var, TFunctionPtr<Scalar> fxn,
     Teuchos::RCP<DofOrdering> dofOrdering,
-    Teuchos::RCP<BasisCache> basisCache)
+    Teuchos::RCP<BasisCache> basisCache, bool sumInto)
 {
   // ipVector FC is sized as (C,F)
   FieldContainer<double> physicalCubaturePoints = basisCache->getPhysicalCubaturePoints();
@@ -351,7 +351,10 @@ void TIP<Scalar>::computeInnerProductVector(FieldContainer<Scalar> &ipVector,
     TEUCHOS_TEST_FOR_EXCEPTION(true, std::invalid_argument, "fxn cannot be null!");
   }
 
-  ipVector.initialize(0.0);
+  if (!sumInto)
+  {
+    ipVector.initialize(0.0);
+  }
 
   for (typename vector< TLinearTermPtr<Scalar> >:: iterator ltIt = _linearTerms.begin();
        ltIt != _linearTerms.end(); ltIt++)

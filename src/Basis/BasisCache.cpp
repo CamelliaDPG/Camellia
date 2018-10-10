@@ -1405,6 +1405,24 @@ void BasisCache::determineJacobianInverseAndDeterminant()
   _cellJacobianDeterminantIsValid = true;
 }
 
+void BasisCache::setJacobian(const Intrepid::FieldContainer<double> &jacobian)
+{
+  _cellJacobian = jacobian;
+  _cellJacobianIsValid = true;
+}
+
+void BasisCache::setJacobianDet(const Intrepid::FieldContainer<double> &jacobianDet)
+{
+  _cellJacobDet = jacobianDet;
+  _cellJacobianDeterminantIsValid = true;
+}
+
+void BasisCache::setJacobianInv(const Intrepid::FieldContainer<double> &jacobianInv)
+{
+  _cellJacobInv = jacobianInv;
+  _cellJacobianInverseIsValid = true;
+}
+
 void BasisCache::setPhysicalCellNodes(const FieldContainer<double> &physicalCellNodes,
                                       const vector<GlobalIndexType> &cellIDs, bool createSideCacheToo)
 {
@@ -1454,6 +1472,20 @@ void BasisCache::setPhysicalCellNodes(const FieldContainer<double> &physicalCell
     // then we have side caches whose values are going to be stale: we should delete these
     _basisCacheSides.clear();
   }
+}
+
+void BasisCache::setPhysicalCubaturePoints(const Intrepid::FieldContainer<double> &physicalCubaturePoints)
+{
+  _physCubPoints = physicalCubaturePoints;
+  _physCubPointsIsValid = true;
+  
+  // invalidate jacobians
+  _cellJacobianIsValid = false;
+  _cellJacobianDeterminantIsValid = false;
+  _cellJacobianInverseIsValid = false;
+  
+  // set numCells
+  _numCells = physicalCubaturePoints.dimension(0);
 }
 
 int BasisCache::maxTestDegree()
