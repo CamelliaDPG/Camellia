@@ -356,19 +356,15 @@ void TIP<Scalar>::computeInnerProductVector(FieldContainer<Scalar> &ipVector,
     ipVector.initialize(0.0);
   }
 
-  for (typename vector< TLinearTermPtr<Scalar> >:: iterator ltIt = _linearTerms.begin();
-       ltIt != _linearTerms.end(); ltIt++)
+  for (TLinearTermPtr<Scalar> lt : _linearTerms)
   {
-    TLinearTermPtr<Scalar> lt = *ltIt;
     // integrate lt against itself, evaluated at var = fxn
     lt->integrate(ipVector,dofOrdering,lt,var,fxn,basisCache);
   }
 
   // boundary terms:
-  for (typename vector< TLinearTermPtr<Scalar> >:: iterator btIt = _boundaryTerms.begin();
-       btIt != _boundaryTerms.end(); btIt++)
+  for (TLinearTermPtr<Scalar> bt : _boundaryTerms)
   {
-    TLinearTermPtr<Scalar> bt = *btIt;
     bool forceBoundary = true; // force interpretation of this as a term on the element boundary
     bt->integrate(ipVector,dofOrdering,bt,var,fxn,basisCache,forceBoundary);
   }

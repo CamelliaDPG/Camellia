@@ -10,10 +10,72 @@
 #include "BasisCache.h"
 #include "CamelliaCellTools.h"
 #include "Camellia_matrix.hpp"
+#include "Function.h"
 #include "RefinementPattern.h"
 #include "SerialDenseWrapper.h"
 
 using namespace Camellia;
+using namespace std;
+
+namespace Camellia {
+  template<typename Scalar>
+  class UnionBasisCacheSubdomainFunctionWrapper : public Function {
+    std::vector<BasisCachePtr> _subdomainCaches;
+    TFunctionPtr<Scalar> _f;
+  public:
+    UnionBasisCacheSubdomainFunctionWrapper(TFunctionPtr<Scalar> f, const std::vector<BasisCachePtr> &subdomainCaches)
+    : Function(f->rank()), _subdomainCaches(subdomainCaches), _f(f)
+    {
+      
+    }
+    
+    void values(Intrepid::FieldContainer<Scalar> &values, BasisCachePtr basisCache)
+    {
+      // Note that we could avoid copies here by appropriate FieldContainer games using pointers and offsets into the passed-in values container
+      // For the moment, though, we accept the cost for ease/certainty of implementation
+      int pointOffset = 0;
+      Teuchos::Array<int> dimensions(values.rank());
+      values.dimensions(dimensions);
+      
+      int numCells = dimensions[0];
+      int numTotalPoints = dimensions[1];
+      
+      int numValuesPerPoint = values.size() / (numCells * numTotalPoints);
+      
+      Teuchos::Array<int> unionMultiIndex(values.rank()); // keep track of where we are
+      Teuchos::Array<int> subdomainMultiIndex(values.rank()); // keep track of where we are
+      for (auto subdomainCache : _subdomainCaches)
+      {
+        int numPoints = subdomainCache->getRefCellPoints().dimension(0);
+        dimensions[1] = numPoints;
+        Intrepid::FieldContainer<Scalar> subdomainValues(dimensions);
+        _f->values(subdomainValues, subdomainCache);
+        
+        // copy values back
+        for (int cellOrdinal=0; cellOrdinal<numCells; cellOrdinal++)
+        {
+          unionMultiIndex[0] = cellOrdinal;
+          subdomainMultiIndex[0] = cellOrdinal;
+          for (int ptOrdinal=0; ptOrdinal<numPoints; ptOrdinal++)
+          {
+            unionMultiIndex[1] = ptOrdinal + pointOffset;
+            subdomainMultiIndex[1] = ptOrdinal;
+            
+            int unionIndex = values.getEnumeration(unionMultiIndex);
+            int subdomainIndex = subdomainValues.getEnumeration(subdomainMultiIndex);
+            
+            for (int entryOrdinal=0; entryOrdinal<numValuesPerPoint; entryOrdinal++)
+            {
+              values[unionIndex+entryOrdinal] = subdomainValues[subdomainIndex+entryOrdinal];
+            }
+          }
+        }
+        
+        pointOffset += numPoints;
+      }
+    }
+  };
+}
 
 template<int D>
 void multiplyMatrices(const Intrepid::FieldContainer<double> &matrices1, const Intrepid::FieldContainer<double> &matrices2, Intrepid::FieldContainer<double> &result)
@@ -118,7 +180,8 @@ void multiplyMatrices(int dim, const Intrepid::FieldContainer<double> &matrices1
   }
 }
 
-BasisCachePtr BasisCacheFactory::unionBasisCacheForParentCell(RefinementPatternPtr refPattern, const std::vector<BasisCachePtr> &subdomainCaches)
+template<typename Scalar>
+BasisCachePtr BasisCacheFactory<Scalar>::unionBasisCacheForParentCell(RefinementPatternPtr refPattern, const std::vector<BasisCachePtr> &subdomainCaches)
 {
   TEUCHOS_TEST_FOR_EXCEPTION(refPattern->numChildren() != subdomainCaches.size(), std::invalid_argument, "refPattern must have the same number of children as there are subdomain caches provided");
 
@@ -228,4 +291,16 @@ BasisCachePtr BasisCacheFactory::unionBasisCacheForParentCell(RefinementPatternP
   unionCache->setJacobianDet(parentJacobianDeterminant);
   
   return unionCache;
+}
+
+template<typename Scalar>
+TFunctionPtr<Scalar> BasisCacheFactory<Scalar>::unionBasisCacheSubdomainFunctionWrapper(TFunctionPtr<Scalar> subdomainFunction, const std::vector<BasisCachePtr> &subdomainCaches)
+{
+  return Teuchos::rcp( new UnionBasisCacheSubdomainFunctionWrapper<Scalar>(subdomainFunction, subdomainCaches));
+}
+
+namespace Camellia
+{
+  template class BasisCacheFactory<double>;
+  template class UnionBasisCacheSubdomainFunctionWrapper<double>;
 }

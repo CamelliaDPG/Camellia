@@ -437,7 +437,7 @@ void Projector<Scalar>::projectChildFunctionOntoParentBasis(Intrepid::FieldConta
                                                             RefinementPatternPtr refPattern, const std::vector<BasisCachePtr> &subdomainCaches,
                                                             TIPPtr<Scalar> ip, VarPtr v, set<int> fieldIndicesToSkip)
 {
-  auto unionCache = BasisCacheFactory::unionBasisCacheForParentCell(refPattern, subdomainCaches);
+  auto unionCache = BasisCacheFactory<Scalar>::unionBasisCacheForParentCell(refPattern, subdomainCaches);
   
   CellTopoPtr cellTopo = parentBasis->domainTopology();
   DofOrderingPtr dofOrderPtr = Teuchos::rcp(new DofOrdering(cellTopo));
@@ -490,12 +490,8 @@ void Projector<Scalar>::projectChildFunctionOntoParentBasis(Intrepid::FieldConta
   
   ip->computeInnerProductMatrix(gramMatrix, dofOrdering, unionCache);
   
-  ipVector.initialize(0.0);
-  for (auto basisCache : subdomainCaches)
-  {
-    bool sumInto = true;
-    ip->computeInnerProductVector(ipVector, v, childFxn, dofOrdering, basisCache, sumInto);
-  }
+  auto wrappedChildFxn = BasisCacheFactory<Scalar>::unionBasisCacheSubdomainFunctionWrapper(childFxn, subdomainCaches);
+  ip->computeInnerProductVector(ipVector, v, wrappedChildFxn, dofOrdering, unionCache);
   
   map<int,int> oldToNewIndices;
   if (fieldIndicesToSkip.size() > 0)
@@ -591,13 +587,13 @@ void Projector<Scalar>::projectChildFunctionOntoParentBasis(Intrepid::FieldConta
       TEUCHOS_TEST_FOR_EXCEPTION(true, std::invalid_argument, "num quadrature points should be at least as large as the number of dofs onto which we're projecting.");
     }
     
-    {
-      // DEBUGGING
-      cout << "Solving system: Ax=b with A:\n";
-      cout << cellIPMatrix;
-      cout << "b:\n" << cellRHS;
-      Camellia::print("fieldIndicesToSkip", fieldIndicesToSkip);
-    }
+//    {
+//      // DEBUGGING
+//      cout << "Solving system: Ax=b with A:\n";
+//      cout << cellIPMatrix;
+//      cout << "b:\n" << cellRHS;
+//      Camellia::print("fieldIndicesToSkip", fieldIndicesToSkip);
+//    }
     
     int result = SerialDenseWrapper::solveSPDSystemMultipleRHS(x, cellIPMatrix, cellRHS);
     if (result != 0)
@@ -787,13 +783,13 @@ void Projector<Scalar>::projectChildFunctionOntoParentBasisInterpolating(Intrepi
         }
         TIPPtr<Scalar> ipForProjection = (d==0) ? ip_l2 : ip; // just use values at vertices (ignore derivatives)
         set<int> dofsToSkip = allDofs;
-        Camellia::print("allDofs", allDofs);
-        Camellia::print("subcellDofOrdinals", subcellDofOrdinals);
+//        Camellia::print("allDofs", allDofs);
+//        Camellia::print("subcellDofOrdinals", subcellDofOrdinals);
         for (auto dofOrdinal : subcellDofOrdinals)
         {
           dofsToSkip.erase(dofOrdinal);
         }
-        Camellia::print("dofsToSkip", dofsToSkip);
+//        Camellia::print("dofsToSkip", dofsToSkip);
         FieldContainer<Scalar> newBasisCoefficients;
         
         projectChildFunctionOntoParentBasis(newBasisCoefficients, fxnToApproximate, parentBasis, refPattern, subdomainCaches, ipForProjection, v, dofsToSkip);

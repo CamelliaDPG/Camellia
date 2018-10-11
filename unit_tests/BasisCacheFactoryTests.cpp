@@ -39,81 +39,95 @@ namespace
     double expectedJacobianInverseDiagonal = 1.0 / expectedJacobianDiagonal;
     
     GlobalIndexType parentCellID = 0;
-    CellPtr parentCell = mesh->getTopology()->getCell(parentCellID);
     
-    auto parentCache = BasisCache::basisCacheForCell(mesh, parentCellID);
+    bool parentCellIsLocallyKnown = mesh->getTopology()->isValidCellIndex(parentCellID);
     
     double tol=1e-15;
-    auto jacobian = parentCache->getJacobian();
-    auto jacobianInv = parentCache->getJacobianInv();
-    auto jacobianDet = parentCache->getJacobianDet();
-    int numCells = 1;
-    int numPoints = jacobian.dimension(1);
-    for (int cellOrdinal=0; cellOrdinal<numCells; cellOrdinal++)
+    
+    if (parentCellIsLocallyKnown)
     {
-      for (int ptOrdinal=0; ptOrdinal<numPoints; ptOrdinal++)
+      CellPtr parentCell = mesh->getTopology()->getCell(parentCellID);
+      
+      auto parentCache = BasisCache::basisCacheForCell(mesh, parentCellID);
+      
+      auto jacobian = parentCache->getJacobian();
+      auto jacobianInv = parentCache->getJacobianInv();
+      auto jacobianDet = parentCache->getJacobianDet();
+      int numCells = 1;
+      int numPoints = jacobian.dimension(1);
+      for (int cellOrdinal=0; cellOrdinal<numCells; cellOrdinal++)
       {
-        TEST_FLOATING_EQUALITY(expectedJacobianDet, jacobianDet(cellOrdinal,ptOrdinal), tol);
-        for (int d1=0; d1<spaceDim; d1++)
+        for (int ptOrdinal=0; ptOrdinal<numPoints; ptOrdinal++)
         {
-          for (int d2=0; d2<spaceDim; d2++)
+          TEST_FLOATING_EQUALITY(expectedJacobianDet, jacobianDet(cellOrdinal,ptOrdinal), tol);
+          for (int d1=0; d1<spaceDim; d1++)
           {
-            if (d1 == d2)
+            for (int d2=0; d2<spaceDim; d2++)
             {
-              TEST_FLOATING_EQUALITY(expectedJacobianDiagonal, jacobian(cellOrdinal,ptOrdinal,d1,d2), tol);
-              TEST_FLOATING_EQUALITY(expectedJacobianInverseDiagonal, jacobianInv(cellOrdinal,ptOrdinal,d1,d2), tol);
-            }
-            else
-            {
-              TEST_COMPARE(abs(jacobian(cellOrdinal,ptOrdinal,d1,d2)), <, tol);
-              TEST_COMPARE(abs(jacobianInv(cellOrdinal,ptOrdinal,d1,d2)), <, tol);
+              if (d1 == d2)
+              {
+                TEST_FLOATING_EQUALITY(expectedJacobianDiagonal, jacobian(cellOrdinal,ptOrdinal,d1,d2), tol);
+                TEST_FLOATING_EQUALITY(expectedJacobianInverseDiagonal, jacobianInv(cellOrdinal,ptOrdinal,d1,d2), tol);
+              }
+              else
+              {
+                TEST_COMPARE(abs(jacobian(cellOrdinal,ptOrdinal,d1,d2)), <, tol);
+                TEST_COMPARE(abs(jacobianInv(cellOrdinal,ptOrdinal,d1,d2)), <, tol);
+              }
             }
           }
         }
       }
     }
-    
-    vector<GlobalIndexType> cellsToRefine = {0};
+      
+    vector<GlobalIndexType> cellsToRefine = {parentCellID};
     mesh->hRefine(cellsToRefine);
     
-    std::vector<BasisCachePtr> subdomainCaches;
-    auto childIDs = parentCell->getChildIndices(mesh->getTopology());
-    int totalPointCount = 0;
-    for (auto childCellID : childIDs)
+    parentCellIsLocallyKnown = mesh->getTopology()->isValidCellIndex(parentCellID);
+    if (parentCellIsLocallyKnown)
     {
-      auto childCache = BasisCache::basisCacheForCell(mesh, childCellID);
-      subdomainCaches.push_back(childCache);
-      totalPointCount += childCache->getRefCellPoints().dimension(0);
-    }
-    
-    auto unionCache = BasisCacheFactory::unionBasisCacheForParentCell(parentCell->refinementPattern(), subdomainCaches);
-    
-    TEST_EQUALITY(totalPointCount, unionCache->getRefCellPoints().dimension(0));
-    TEST_EQUALITY(totalPointCount, unionCache->getPhysicalCubaturePoints().dimension(1));
-    
-    jacobian = unionCache->getJacobian();
-    jacobianInv = unionCache->getJacobianInv();
-    jacobianDet = unionCache->getJacobianDet();
-  
-    numPoints = totalPointCount;
-    for (int cellOrdinal=0; cellOrdinal<numCells; cellOrdinal++)
-    {
-      for (int ptOrdinal=0; ptOrdinal<numPoints; ptOrdinal++)
+      CellPtr parentCell = mesh->getTopology()->getCell(parentCellID);
+      
+      std::vector<BasisCachePtr> subdomainCaches;
+      auto childIDs = parentCell->getChildIndices(mesh->getTopology());
+      int totalPointCount = 0;
+      for (auto childCellID : childIDs)
       {
-        TEST_FLOATING_EQUALITY(expectedJacobianDet, jacobianDet(cellOrdinal,ptOrdinal), tol);
-        for (int d1=0; d1<spaceDim; d1++)
+        auto childCache = BasisCache::basisCacheForCell(mesh, childCellID);
+        subdomainCaches.push_back(childCache);
+        totalPointCount += childCache->getRefCellPoints().dimension(0);
+      }
+      
+      auto unionCache = BasisCacheFactory<double>::unionBasisCacheForParentCell(parentCell->refinementPattern(), subdomainCaches);
+      
+      TEST_EQUALITY(totalPointCount, unionCache->getRefCellPoints().dimension(0));
+      TEST_EQUALITY(totalPointCount, unionCache->getPhysicalCubaturePoints().dimension(1));
+      
+      auto jacobian = unionCache->getJacobian();
+      auto jacobianInv = unionCache->getJacobianInv();
+      auto jacobianDet = unionCache->getJacobianDet();
+    
+      int numCells = 1;
+      int numPoints = totalPointCount;
+      for (int cellOrdinal=0; cellOrdinal<numCells; cellOrdinal++)
+      {
+        for (int ptOrdinal=0; ptOrdinal<numPoints; ptOrdinal++)
         {
-          for (int d2=0; d2<spaceDim; d2++)
+          TEST_FLOATING_EQUALITY(expectedJacobianDet, jacobianDet(cellOrdinal,ptOrdinal), tol);
+          for (int d1=0; d1<spaceDim; d1++)
           {
-            if (d1 == d2)
+            for (int d2=0; d2<spaceDim; d2++)
             {
-              TEST_FLOATING_EQUALITY(expectedJacobianDiagonal, jacobian(cellOrdinal,ptOrdinal,d1,d2), tol);
-              TEST_FLOATING_EQUALITY(expectedJacobianInverseDiagonal, jacobianInv(cellOrdinal,ptOrdinal,d1,d2), tol);
-            }
-            else
-            {
-              TEST_COMPARE(abs(jacobian(cellOrdinal,ptOrdinal,d1,d2)), <, tol);
-              TEST_COMPARE(abs(jacobianInv(cellOrdinal,ptOrdinal,d1,d2)), <, tol);
+              if (d1 == d2)
+              {
+                TEST_FLOATING_EQUALITY(expectedJacobianDiagonal, jacobian(cellOrdinal,ptOrdinal,d1,d2), tol);
+                TEST_FLOATING_EQUALITY(expectedJacobianInverseDiagonal, jacobianInv(cellOrdinal,ptOrdinal,d1,d2), tol);
+              }
+              else
+              {
+                TEST_COMPARE(abs(jacobian(cellOrdinal,ptOrdinal,d1,d2)), <, tol);
+                TEST_COMPARE(abs(jacobianInv(cellOrdinal,ptOrdinal,d1,d2)), <, tol);
+              }
             }
           }
         }
@@ -133,25 +147,30 @@ namespace
     MeshPtr mesh = MeshFactory::rectilinearMesh(form.bf(), domainDim, meshDim, H1Order);
     
     GlobalIndexType parentCellID = 0;
-    CellPtr parentCell = mesh->getTopology()->getCell(parentCellID);
     
-    vector<GlobalIndexType> cellsToRefine = {0};
+    vector<GlobalIndexType> cellsToRefine = {parentCellID};
     mesh->hRefine(cellsToRefine);
     
-    std::vector<BasisCachePtr> subdomainCaches;
-    auto childIDs = parentCell->getChildIndices(mesh->getTopology());
-    int totalPointCount = 0;
-    for (auto childCellID : childIDs)
+    bool parentCellIsLocallyKnown = mesh->getTopology()->isValidCellIndex(parentCellID);
+    if (parentCellIsLocallyKnown)
     {
-      auto childCache = BasisCache::basisCacheForCell(mesh, childCellID);
-      subdomainCaches.push_back(childCache);
-      totalPointCount += childCache->getRefCellPoints().dimension(0);
+      CellPtr parentCell = mesh->getTopology()->getCell(parentCellID);
+    
+      std::vector<BasisCachePtr> subdomainCaches;
+      auto childIDs = parentCell->getChildIndices(mesh->getTopology());
+      int totalPointCount = 0;
+      for (auto childCellID : childIDs)
+      {
+        auto childCache = BasisCache::basisCacheForCell(mesh, childCellID);
+        subdomainCaches.push_back(childCache);
+        totalPointCount += childCache->getRefCellPoints().dimension(0);
+      }
+      
+      auto unionCache = BasisCacheFactory<double>::unionBasisCacheForParentCell(parentCell->refinementPattern(), subdomainCaches);
+      
+      TEST_EQUALITY(totalPointCount, unionCache->getRefCellPoints().dimension(0));
+      TEST_EQUALITY(totalPointCount, unionCache->getPhysicalCubaturePoints().dimension(1));
     }
-    
-    auto unionCache = BasisCacheFactory::unionBasisCacheForParentCell(parentCell->refinementPattern(), subdomainCaches);
-    
-    TEST_EQUALITY(totalPointCount, unionCache->getRefCellPoints().dimension(0));
-    TEST_EQUALITY(totalPointCount, unionCache->getPhysicalCubaturePoints().dimension(1));
   }
   
   void testUnionCacheIntegrationWorks(int spaceDim, Teuchos::FancyOStream &out, bool &success)
@@ -172,31 +191,44 @@ namespace
     // sanity check: verify that integral on the parent element matches expectations
     double tol = 1e-14;
     GlobalIndexType parentCellID = 0;
-    CellPtr parentCell = mesh->getTopology()->getCell(parentCellID);
-    BasisCachePtr parentCache = BasisCache::basisCacheForCell(mesh, parentCellID);
-    double actualIntegral = f->integrate(parentCache);
-    double err = abs(expectedIntegral - actualIntegral);
-    TEST_COMPARE(err, <, tol);
+    
+    bool parentCellIsLocallyKnown = mesh->getTopology()->isValidCellIndex(parentCellID);
+    if (parentCellIsLocallyKnown)
+    {
+      CellPtr parentCell = mesh->getTopology()->getCell(parentCellID);
+      BasisCachePtr parentCache = BasisCache::basisCacheForCell(mesh, parentCellID);
+      double actualIntegral = f->integrate(parentCache);
+      double err = abs(expectedIntegral - actualIntegral);
+      TEST_COMPARE(err, <, tol);
+    }
     
     vector<GlobalIndexType> cellsToRefine = {0};
     mesh->hRefine(cellsToRefine);
     
-    std::vector<BasisCachePtr> subdomainCaches;
-    auto childIDs = parentCell->getChildIndices(mesh->getTopology());
-    for (auto childCellID : childIDs)
+    parentCellIsLocallyKnown = mesh->getTopology()->isValidCellIndex(parentCellID);
+    if (parentCellIsLocallyKnown)
     {
-      auto childCache = BasisCache::basisCacheForCell(mesh, childCellID);
-      subdomainCaches.push_back(childCache);
+      CellPtr parentCell = mesh->getTopology()->getCell(parentCellID);
+      std::vector<BasisCachePtr> subdomainCaches;
+      auto childIDs = parentCell->getChildIndices(mesh->getTopology());
+      for (auto childCellID : childIDs)
+      {
+        auto childCache = BasisCache::basisCacheForCell(mesh, childCellID);
+        subdomainCaches.push_back(childCache);
+      }
+      
+      auto unionCache = BasisCacheFactory<double>::unionBasisCacheForParentCell(parentCell->refinementPattern(), subdomainCaches);
+    
+      double actualIntegral = f->integrate(unionCache);
+      TEST_FLOATING_EQUALITY(expectedIntegral, actualIntegral, tol);
     }
-    
-    auto unionCache = BasisCacheFactory::unionBasisCacheForParentCell(parentCell->refinementPattern(), subdomainCaches);
-    
-    actualIntegral = f->integrate(unionCache);
-    TEST_FLOATING_EQUALITY(expectedIntegral, actualIntegral, tol);
   }
   
   TEUCHOS_UNIT_TEST( BasisCacheFactory, UnionCacheHasCorrectJacobian_1D )
   {
+    Epetra_MpiComm Comm(MPI_COMM_WORLD);
+    Comm.Barrier(); // set breakpoint here to allow debugger attachment to other MPI processes than the one you automatically attached to.
+    
     int spaceDim = 1;
     testUnionCacheHasCorrectJacobian(spaceDim, out, success);
   }

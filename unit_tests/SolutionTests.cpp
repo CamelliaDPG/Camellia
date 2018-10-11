@@ -2013,6 +2013,8 @@ namespace
     vector<int> meshDim(spaceDim, meshWidth);
     MeshPtr mesh = MeshFactory::rectilinearMesh(form.bf(), domainDim, meshDim, H1Order);
     
+    GlobalIndexType parentCellID = 1;
+    
     SolutionPtr soln = Solution::solution(mesh);
     mesh->registerSolution(soln);
     
@@ -2026,6 +2028,14 @@ namespace
     int solutionOrdinal = 0; // just one solution
     soln->projectOntoMesh(solnMap, solutionOrdinal);
     
+    auto elemType = mesh->getElementType(parentCellID);
+    auto basis = elemType->trialOrderPtr->getBasis(form.u()->ID());
+    
+    Intrepid::FieldContainer<double> basisCoeffs(basis->getCardinality());
+    soln->solnCoeffsForCellID(basisCoeffs, parentCellID, form.u()->ID());
+    
+    out << "parentCoefficients before refinement:\n" << basisCoeffs;
+    
     FunctionPtr u_soln = Function::solution(form.u(), soln);
     
     // sanity check: verify that u_soln and u_exact match in the original mesh
@@ -2033,7 +2043,7 @@ namespace
     double err = (u_soln - u_exact)->l2norm(mesh);
     TEST_COMPARE(err, <, tol);
     
-    vector<GlobalIndexType> cellsToRefine = {1};
+    vector<GlobalIndexType> cellsToRefine = {parentCellID};
     mesh->hRefine(cellsToRefine);
     
     // check that after the forward refinement, u_soln still matches u_exact
@@ -2043,7 +2053,17 @@ namespace
     // for this to be an effective test, we discard parent cell's old coefficients -- these should be recomputed during hUnrefine()
     soln->discardInactiveCellCoefficients();
     
-    mesh->hUnrefine({1});
+    bool parentHasCoefficients = soln->cellHasCoefficientsAssigned(parentCellID, solutionOrdinal);
+    TEST_ASSERT(!parentHasCoefficients);
+    
+    mesh->hUnrefine({parentCellID});
+    
+    parentHasCoefficients = soln->cellHasCoefficientsAssigned(parentCellID, solutionOrdinal);
+    TEST_ASSERT(parentHasCoefficients);
+    
+    soln->solnCoeffsForCellID(basisCoeffs, parentCellID, form.u()->ID());
+    
+    out << "parentCoefficients after unrefinement:\n" << basisCoeffs;
     
     // check that after the unrefinement, u_soln still matches u_exact
     err = (u_soln - u_exact)->l2norm(mesh);

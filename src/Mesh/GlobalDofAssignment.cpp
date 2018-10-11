@@ -537,7 +537,6 @@ void GlobalDofAssignment::didPRefine(const set<GlobalIndexType> &cellIDs, int de
 
 void GlobalDofAssignment::willHUnrefine(const set<GlobalIndexType> &parentCellIDs)   // subclasses should call super
 {
-  cout << "WARNING: GlobalDofAssignment::willHUnrefine has only undergone limited testing.\n";
   
   projectChildCoefficientsOntoParents(parentCellIDs);
   

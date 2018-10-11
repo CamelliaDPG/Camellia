@@ -3955,15 +3955,16 @@ void TSolution<Scalar>::processSideUpgrades( const map<GlobalIndexType, pair< El
 template <typename Scalar>
 void TSolution<Scalar>::projectChildrenOntoParent(GlobalIndexType parentCellID, int solutionOrdinal)
 {
-  // TODO: implement this
-  
-  std::cout << "got to projectChildrenOntoParent.\n";
-  
-  // below is a copy of projectOldCellOntoNewCells() that I've just barely begun to edit
-  // current strategy:
-  // - implement a version of projectFunctionOntoBasisInterpolating that takes *subdomains* for the function evaluation
-  // - use Function::solution() functions for the functions to project
-  // - take the parent's BasisCache and chop it into subdomains in a way that fits with the new projection mechanism
+  static bool haveWarned = false;
+  if (!haveWarned)
+  {
+    int rank = _mesh->Comm()->MyPID();
+    if (rank == 0)
+    {
+      std::cout << "WARNING: unrefinements are a new addition, with limited testing.  Note also that at present skeleton degrees of freedom are *not* mapped from children onto parent during unrefinement (volume degrees of freedom are mapped).\n";
+    }
+    haveWarned = true;
+  }
   
   VarFactoryPtr vf;
   if (_bf != Teuchos::null)
@@ -3988,12 +3989,13 @@ void TSolution<Scalar>::projectChildrenOntoParent(GlobalIndexType parentCellID, 
     subdomainCaches[childOrdinal] = BasisCache::basisCacheForCell(_mesh, childIndices[childOrdinal]);
   }
   
+  int numCells = 1; // just single parent cell handled here
   TSolutionPtr<Scalar> thisPtr(this,false);
   for (auto fieldVar : fieldVars)
   {
     BasisPtr basis = parentTrialOrdering->getBasis(fieldVar->ID());
     int basisCardinality = basis->getCardinality();
-    Intrepid::FieldContainer<Scalar> basisCoefficients(basisCardinality);
+    Intrepid::FieldContainer<Scalar> basisCoefficients(numCells,basisCardinality);
     
     auto childFxn = Function::solution(fieldVar, thisPtr);
     
@@ -4011,209 +4013,7 @@ void TSolution<Scalar>::projectChildrenOntoParent(GlobalIndexType parentCellID, 
   
   _solutionForCellID[solutionOrdinal][parentCellID] = parentSolutionCoefficients;
   
-//
-//  DofOrderingPtr parentTrialOrdering = parentElemType->trialOrderPtr;
-//  set<int> trialIDs = parentTrialOrdering->getVarIDs();
-//
-//  TEUCHOS_TEST_FOR_EXCEPTION(parentTrialOrdering->totalDofs() != oldData.size(), std::invalid_argument,
-//                             "oldElemType trial space does not match old data coefficients size");
-//  map<int, TFunctionPtr<Scalar> > fieldMap;
-//
-//  CellPtr parentCell = _mesh->getTopology()->getCell(parentCellID);
-//  int dummyCubatureDegree = 1;
-//  BasisCachePtr parentRefCellCache = BasisCache::basisCacheForReferenceCell(parentCell->topology(), dummyCubatureDegree);
-//
-//  for (set<int>::iterator trialIDIt = trialIDs.begin(); trialIDIt != trialIDs.end(); trialIDIt++)
-//  {
-//    int trialID = *trialIDIt;
-//    if (oldTrialOrdering->getSidesForVarID(trialID).size() == 1)   // field variable, the only kind we honor right now
-//    {
-//      BasisPtr basis = oldTrialOrdering->getBasis(trialID);
-//      int basisCardinality = basis->getCardinality();
-//      Intrepid::FieldContainer<Scalar> basisCoefficients(basisCardinality);
-//
-//      for (int dofOrdinal=0; dofOrdinal<basisCardinality; dofOrdinal++)
-//      {
-//        int dofIndex = oldElemType->trialOrderPtr->getDofIndex(trialID, dofOrdinal);
-//        basisCoefficients(dofOrdinal) = oldData(dofIndex);
-//      }
-//
-//      //       cout << "basisCoefficients for parent volume trialID " << trialID << ":\n" << basisCoefficients;
-//
-//      TFunctionPtr<Scalar> oldTrialFunction = Teuchos::rcp( new BasisSumFunction(basis, basisCoefficients, parentRefCellCache) );
-//      fieldMap[trialID] = oldTrialFunction;
-//    }
-//  }
-//
-//  int sideDim = _mesh->getTopology()->getDimension() - 1;
-//
-//  int sideCount = parentCell->topology()->getSideCount();
-//  vector< map<int, TFunctionPtr<Scalar>> > traceMap(sideCount);
-//  for (int sideOrdinal=0; sideOrdinal<sideCount; sideOrdinal++)
-//  {
-//    CellTopoPtr sideTopo = parentCell->topology()->getSubcell(sideDim, sideOrdinal);
-//    BasisCachePtr parentSideTopoBasisCache = BasisCache::basisCacheForReferenceCell(sideTopo, dummyCubatureDegree);
-//    for (set<int>::iterator trialIDIt = trialIDs.begin(); trialIDIt != trialIDs.end(); trialIDIt++)
-//    {
-//      int trialID = *trialIDIt;
-//      if (oldTrialOrdering->getSidesForVarID(trialID).size() != 1)   // trace (flux) variable
-//      {
-//        if (!oldTrialOrdering->hasBasisEntry(trialID, sideOrdinal)) continue;
-//        BasisPtr basis = oldTrialOrdering->getBasis(trialID, sideOrdinal);
-//        int basisCardinality = basis->getCardinality();
-//        Intrepid::FieldContainer<Scalar> basisCoefficients(basisCardinality);
-//
-//        for (int dofOrdinal=0; dofOrdinal<basisCardinality; dofOrdinal++)
-//        {
-//          int dofIndex = oldElemType->trialOrderPtr->getDofIndex(trialID, dofOrdinal, sideOrdinal);
-//          basisCoefficients(dofOrdinal) = oldData(dofIndex);
-//        }
-//        TFunctionPtr<Scalar> oldTrialFunction = Teuchos::rcp( new BasisSumFunction(basis, basisCoefficients, parentSideTopoBasisCache) );
-//        traceMap[sideOrdinal][trialID] = oldTrialFunction;
-//      }
-//    }
-//  }
-//
-//  int parent_p_order = oldElemType->trialOrderPtr->maxBasisDegree();
-//
-//  for (int childOrdinal=0; childOrdinal < childIDs.size(); childOrdinal++)
-//  {
-//    GlobalIndexType childID = childIDs[childOrdinal];
-//    if (childID == -1) continue; // indication we should skip this child...
-//    CellPtr childCell = _mesh->getTopology()->getCell(childID);
-//    ElementTypePtr childType = _mesh->getElementType(childID);
-//    int childSideCount = childCell->getSideCount();
-//
-//    int child_p_order = _mesh->getElementType(childID)->trialOrderPtr->maxBasisDegree();
-//    int cubatureDegree = std::max(parent_p_order + child_p_order, child_p_order * 2);
-//
-//    //    cout << "child_p_order = " << child_p_order << endl;
-//    //    cout << "parent_p_order = " << parent_p_order << endl;
-//
-//    BasisCachePtr volumeBasisCache;
-//    vector<BasisCachePtr> sideBasisCache(childSideCount);
-//
-//    if (parentCell->children().size() > 0)
-//    {
-//      RefinementBranch refBranch(1,make_pair(parentCell->refinementPattern().get(), childOrdinal));
-//      volumeBasisCache = BasisCache::basisCacheForRefinedReferenceCell(childCell->topology(), cubatureDegree, refBranch, true);
-//      for (int sideOrdinal = 0; sideOrdinal < childSideCount; sideOrdinal++)
-//      {
-//        CellTopoPtr sideTopo = childCell->topology()->getSubcell(sideDim, sideOrdinal);
-//        unsigned parentSideOrdinal = (childID==cellID) ? sideOrdinal
-//        : parentCell->refinementPattern()->mapSubcellOrdinalFromChildToParent(childOrdinal, sideDim, sideOrdinal);
-//
-//        RefinementBranch sideBranch;
-//        if (parentSideOrdinal != -1)
-//          sideBranch = RefinementPattern::subcellRefinementBranch(refBranch, sideDim, parentSideOrdinal);
-//        if (sideBranch.size()==0)
-//        {
-//          sideBasisCache[sideOrdinal] = BasisCache::basisCacheForReferenceCell(sideTopo, cubatureDegree);
-//        }
-//        else
-//        {
-//          sideBasisCache[sideOrdinal] = BasisCache::basisCacheForRefinedReferenceCell(sideTopo, cubatureDegree, sideBranch);
-//        }
-//      }
-//    }
-//    else
-//    {
-//      volumeBasisCache = BasisCache::basisCacheForReferenceCell(childCell->topology(), cubatureDegree, true);
-//      for (int sideOrdinal = 0; sideOrdinal < childSideCount; sideOrdinal++)
-//      {
-//        CellTopoPtr sideTopo = childCell->topology()->getSubcell(sideDim, sideOrdinal);
-//        sideBasisCache[sideOrdinal] = BasisCache::basisCacheForReferenceCell(sideTopo, cubatureDegree);
-//      }
-//    }
-//
-//    // (re)initialize the FieldContainer storing the solution--element type may have changed (in case of p-refinement)
-//    _solutionForCellID[solutionOrdinal][childID] = Intrepid::FieldContainer<Scalar>(childType->trialOrderPtr->totalDofs());
-//    // project fields
-//    Intrepid::FieldContainer<Scalar> basisCoefficients;
-//    for (typename map<int,TFunctionPtr<Scalar>>::iterator fieldFxnIt=fieldMap.begin(); fieldFxnIt != fieldMap.end(); fieldFxnIt++)
-//    {
-//      int varID = fieldFxnIt->first;
-//      //      cout << "varID: " << varID << endl;
-//      TFunctionPtr<Scalar> fieldFxn = fieldFxnIt->second;
-//      BasisPtr childBasis = childType->trialOrderPtr->getBasis(varID);
-//      basisCoefficients.resize(1,childBasis->getCardinality());
-//      Projector<Scalar>::projectFunctionOntoBasisInterpolating(basisCoefficients, fieldFxn, childBasis, volumeBasisCache);
-//
-//      //      cout << "projected basisCoefficients for child volume trialID " << varID << ":\n" << basisCoefficients;
-//
-//      auto &childSolutionCoefficients = _solutionForCellID[solutionOrdinal][childID];
-//      for (int basisOrdinal=0; basisOrdinal<basisCoefficients.size(); basisOrdinal++)
-//      {
-//        int dofIndex = childType->trialOrderPtr->getDofIndex(varID, basisOrdinal);
-//        childSolutionCoefficients[dofIndex] = basisCoefficients[basisOrdinal];
-//      }
-//    }
-//
-//    // project traces and fluxes
-//    for (int sideOrdinal=0; sideOrdinal<childSideCount; sideOrdinal++)
-//    {
-//      unsigned parentSideOrdinal = (childID==cellID) ? sideOrdinal
-//      : parentCell->refinementPattern()->mapSubcellOrdinalFromChildToParent(childOrdinal, sideDim, sideOrdinal);
-//
-//      map<int,TFunctionPtr<Scalar>>* traceMapForSide = (parentSideOrdinal != -1) ? &traceMap[parentSideOrdinal] : &interiorTraceMap;
-//      // which BasisCache to use depends on whether we want the BasisCache's notion of "physical" space to be in the volume or on the side:
-//      // we want it to be on the side if parent shares the side (and we therefore have proper trace data)
-//      // and on the volume in parent doesn't share the side (in which case we use the interior trace map).
-//      BasisCachePtr basisCacheForSide;
-//
-//      FieldContainer<double> sideParities;
-//      bool parityFlipped = false;
-//      if (parentSideOrdinal != -1)
-//      {
-//        basisCacheForSide = sideBasisCache[sideOrdinal];
-//        /*
-//         Since parent and child share a side, need to worry about parity flips.
-//         If there is a flip, then we need effectively to negate the parity seen
-//         during the projection.  We can achieve this by simply setting child's
-//         parity to match parent's on the child's side.  (If they are the same, there
-//         is no difference; if they are different, then there will be a flip.)
-//         */
-//        sideParities = _mesh->cellSideParitiesForCell(childID);
-//        int parentParity = _mesh->cellSideParitiesForCell(cellID)[parentSideOrdinal];
-//        parityFlipped = sideParities[sideOrdinal] != parentParity;
-//      }
-//      else
-//      {
-//        basisCacheForSide = volumeBasisCache->getSideBasisCache(sideOrdinal);
-//        sideParities = _mesh->cellSideParitiesForCell(childID);
-//      }
-//      basisCacheForSide->setCellSideParities(sideParities);
-//
-//      for (typename map<int,TFunctionPtr<Scalar>>::iterator traceFxnIt=traceMapForSide->begin(); traceFxnIt != traceMapForSide->end(); traceFxnIt++)
-//      {
-//        int varID = traceFxnIt->first;
-//        TFunctionPtr<Scalar> traceFxn = traceFxnIt->second;
-//
-//        bool shouldNegate = parityFlipped && (FLUX == _mesh->bilinearForm()->varFactory()->trial(varID)->varType());
-//        if (shouldNegate)
-//        {
-//          traceFxn = -traceFxn;
-//        }
-//
-//        if (! childType->trialOrderPtr->hasBasisEntry(varID, sideOrdinal)) continue;
-//        BasisPtr childBasis = childType->trialOrderPtr->getBasis(varID, sideOrdinal);
-//        basisCoefficients.resize(1,childBasis->getCardinality());
-//        Projector<Scalar>::projectFunctionOntoBasisInterpolating(basisCoefficients, traceFxn, childBasis, basisCacheForSide);
-//
-//        auto &childSolutionCoefficients = _solutionForCellID[solutionOrdinal][childID];
-//
-//        for (int basisOrdinal=0; basisOrdinal<basisCoefficients.size(); basisOrdinal++)
-//        {
-//          int dofIndex = childType->trialOrderPtr->getDofIndex(varID, basisOrdinal, sideOrdinal);
-//          childSolutionCoefficients[dofIndex] = basisCoefficients[basisOrdinal];
-//          // worth noting that as now set up, the "field traces" may stomp on the true traces, depending on in what order the sides
-//          // are mapped to global dof ordinals.  For right now, I'm not too worried about this.
-//        }
-//      }
-//    }
-//  }
-  
-  clearComputedResiduals(); // force recomputation of energy error (could do something more incisive, just computing the energy error for the new cells)
+  clearComputedResiduals(); // force recomputation of energy error (could do something more incisive, just computing the energy error for the changed cells)
 }
 
 template <typename Scalar>
