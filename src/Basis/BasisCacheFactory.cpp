@@ -218,6 +218,7 @@ BasisCachePtr BasisCacheFactory::unionBasisCacheForParentCell(RefinementPatternP
         }
       }
     }
+    pointOffset += numChildPoints;
   }
   
   unionCache->setRefCellPoints(parentRefCellPoints, parentCubatureWeights);

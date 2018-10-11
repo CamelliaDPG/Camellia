@@ -266,7 +266,7 @@ void Projector<Scalar>::projectFunctionOntoBasisInterpolating(FieldContainer<Sca
   TIPPtr<Scalar> ip;
 
   bool traceVar;
-  unsigned sideOrdinal = -1;
+  int sideOrdinal = -1;
   CellTopoPtr domainTopo;
   if (!domainBasisCache->isSideCache())
   {
@@ -596,6 +596,7 @@ void Projector<Scalar>::projectChildFunctionOntoParentBasis(Intrepid::FieldConta
       cout << "Solving system: Ax=b with A:\n";
       cout << cellIPMatrix;
       cout << "b:\n" << cellRHS;
+      Camellia::print("fieldIndicesToSkip", fieldIndicesToSkip);
     }
     
     int result = SerialDenseWrapper::solveSPDSystemMultipleRHS(x, cellIPMatrix, cellRHS);
@@ -786,10 +787,13 @@ void Projector<Scalar>::projectChildFunctionOntoParentBasisInterpolating(Intrepi
         }
         TIPPtr<Scalar> ipForProjection = (d==0) ? ip_l2 : ip; // just use values at vertices (ignore derivatives)
         set<int> dofsToSkip = allDofs;
+        Camellia::print("allDofs", allDofs);
+        Camellia::print("subcellDofOrdinals", subcellDofOrdinals);
         for (auto dofOrdinal : subcellDofOrdinals)
         {
           dofsToSkip.erase(dofOrdinal);
         }
+        Camellia::print("dofsToSkip", dofsToSkip);
         FieldContainer<Scalar> newBasisCoefficients;
         
         projectChildFunctionOntoParentBasis(newBasisCoefficients, fxnToApproximate, parentBasis, refPattern, subdomainCaches, ipForProjection, v, dofsToSkip);

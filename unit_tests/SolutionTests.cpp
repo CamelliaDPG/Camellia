@@ -2008,13 +2008,6 @@ namespace
     bool conformingTraces = true;
     PoissonFormulation form(spaceDim,conformingTraces);
     
-    int numCellsAddedPerRefinement = 1;
-    for (int d=0; d<spaceDim; d++)
-    {
-      numCellsAddedPerRefinement *= 2;
-    }
-    int numActiveCellsAddedPerRefinement = numCellsAddedPerRefinement - 1; // parent gets deactivated
-    
     int meshWidth = 2;
     vector<double> domainDim(spaceDim, 1.0);
     vector<int> meshDim(spaceDim, meshWidth);
