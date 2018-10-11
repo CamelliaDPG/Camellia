@@ -2729,10 +2729,15 @@ void GDAMinimumRule::getConstrainingEntityInfo(GlobalIndexType cellID, CellConst
     }
     else
     {
+      int sideDim = _meshTopology->getDimension() - 1;
       if (cellConstraints.spatialSliceConstraints != Teuchos::null)
       {
         constrainingInfo = &cellConstraints.spatialSliceConstraints->subcellConstraints[d][scord];
-        ownershipInfo = &cellConstraints.spatialSliceConstraints->owningCellIDForSubcell[d][scord];
+        // spatialSliceConstraints only sets up ownership info for d < sideDim -- maybe it should be otherwise.  For now, we just set to NULL if d >= sideDim
+        if (d < sideDim)
+          ownershipInfo = &cellConstraints.spatialSliceConstraints->owningCellIDForSubcell[d][scord];
+        else
+          ownershipInfo = NULL;
         spaceOnlyConstraint = true;
       }
       else
