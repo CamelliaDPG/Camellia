@@ -192,8 +192,7 @@ namespace
     auto unionCache = BasisCacheFactory::unionBasisCacheForParentCell(parentCell->refinementPattern(), subdomainCaches);
     
     actualIntegral = f->integrate(unionCache);
-    err = abs(expectedIntegral - actualIntegral);
-    TEST_COMPARE(err, <, tol);
+    TEST_FLOATING_EQUALITY(expectedIntegral, actualIntegral, tol);
   }
   
   TEUCHOS_UNIT_TEST( BasisCacheFactory, UnionCacheHasCorrectJacobian_1D )

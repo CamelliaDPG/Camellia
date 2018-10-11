@@ -197,7 +197,7 @@ BasisCachePtr BasisCacheFactory::unionBasisCacheForParentCell(RefinementPatternP
       {
         parentRefCellPoints(ptOrdinal+pointOffset,d1) = parentRefCellPointsForChild(ptOrdinal,d1);
       }
-      parentCubatureWeights(ptOrdinal+pointOffset) = childCubatureWeights(ptOrdinal);
+      parentCubatureWeights(ptOrdinal+pointOffset) = childCubatureWeights(ptOrdinal) * parentJacobianDeterminantForChildPoints(0,ptOrdinal);
     }
     
     auto & childPhysicalPoints = basisCache->getPhysicalCubaturePoints();
