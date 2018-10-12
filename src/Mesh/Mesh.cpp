@@ -970,6 +970,20 @@ void Mesh::hUnrefine(const set<GlobalIndexType> &cellIDs, bool repartitionAndReb
   
   TEUCHOS_TEST_FOR_EXCEPTION(usingMaxRule, std::invalid_argument, "hUnrefine() not supported for maximum rule");
   
+  // do a sanity check that cellIDs are parents
+  int myNonparentsFound = 0;
+  for (auto cellID : cellIDs)
+  {
+    if (myCellsInclude(cellID))
+    {
+      // my cells are all active -- and hence not parents
+      myNonparentsFound++;
+    }
+  }
+  int totalNonParentsFound = 0;
+  Comm()->SumAll(&myNonparentsFound, &totalNonParentsFound, 1);
+  TEUCHOS_TEST_FOR_EXCEPTION(totalNonParentsFound > 0, std::invalid_argument, "cellIDs passed to hUnrefine must be parents!");
+  
   // because unrefinements are destructive (they delete children), need "will" notification instead of "did",
   // so that recipients still have access to child data
   _gda->willHUnrefine(cellIDs);
