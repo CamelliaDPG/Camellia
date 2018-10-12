@@ -1239,7 +1239,10 @@ void BasisCache::setCellSideParities(const FieldContainer<double> &cellSideParit
 {
   TEUCHOS_TEST_FOR_EXCEPTION((cellSideParities.rank() != 2) || (cellSideParities.dimension(1) < _cellTopo->getSideCount()),
                              std::invalid_argument, "Incorrectly sized cellSideParities");
-  _cellSideParities = cellSideParities;
+  if (&_cellSideParities != &cellSideParities) // self-assignment prohibited in FieldContainer
+  {
+    _cellSideParities = cellSideParities;
+  }
 }
 
 void BasisCache::setTransformationFunction(TFunctionPtr<double> fxn, bool composeWithMeshTransformation)
