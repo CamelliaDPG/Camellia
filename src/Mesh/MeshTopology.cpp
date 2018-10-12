@@ -3837,6 +3837,8 @@ void MeshTopology::unrefineCell(IndexType cellIndex, RefinementPatternPtr refPat
   // are such that if this cell is refined again, the existing vertices and edges will be reused.  We can always
   // implement a method to clean up the extra entities, which would involve a renumbering.
   
+//  cout << "unrefine cell " << cellIndex << endl;
+  
   _activeCellCount -= (refPattern->numChildren() - 1);
   _cellCount       -= refPattern->numChildren();
   
@@ -3860,15 +3862,24 @@ void MeshTopology::unrefineCell(IndexType cellIndex, RefinementPatternPtr refPat
     return;
   }
   
-  bool leafNodesOnly = false; // get all descendants, including the cell itself
-  set<GlobalIndexType> descendants = cell->getDescendants(thisPtr, leafNodesOnly);
+  vector<GlobalIndexType> childIDs = cell->getChildIndices(thisPtr);
   
-  TEUCHOS_TEST_FOR_EXCEPTION(descendants.size() != refPattern->numChildren() + 1, std::invalid_argument, "children must be unrefined before unrefine is called on parent");
+  for (auto childID : childIDs)
+  {
+    if (isValidCellIndex(childID))
+    {
+      auto childCell = getCell(childID);
+      TEUCHOS_TEST_FOR_EXCEPTION(childCell->isParent(thisPtr), std::invalid_argument, "children must be unrefined before unrefine is called on parent");
+    }
+  }
   
   int sideDim = this->getDimension() - 1;
   
-  for (GlobalIndexType cellIDToDelete : descendants)
+  childIDs.push_back(cellIndex); // also delete the parent cell
+  
+  for (GlobalIndexType cellIDToDelete : childIDs)
   {
+    if (!isValidCellIndex(cellIDToDelete)) continue; // this child is not locally known
     CellPtr deletedCell = _cells[cellIDToDelete];
     if (_activeCells.find(cellIDToDelete) != _activeCells.end())
     {
@@ -3906,6 +3917,14 @@ void MeshTopology::unrefineCell(IndexType cellIndex, RefinementPatternPtr refPat
   
   // add the cell back in -- this will activate it, establish neighbor relationships, etc.
   this->addCell(cellIndex, cellTopo, cellVertices);
+  
+  // addCell does *not* rediscover parent-child relationships
+  // if the original cell had a parent, we need to tell it about that parent again here
+  if (cell->getParent() != Teuchos::null)
+  {
+    auto childIndices = cell->getParent()->getChildIndices(thisPtr);
+    cell->getParent()->setChildren(childIndices); // this will call setParent() on each of the children
+  }
 }
 
 void MeshTopology::verticesForCell(FieldContainer<double>& vertices, GlobalIndexType cellID) const
