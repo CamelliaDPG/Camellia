@@ -552,22 +552,12 @@ void GlobalDofAssignment::willHUnrefine(const set<GlobalIndexType> &parentCellID
         
         GlobalIndexType firstChildID = childIDs[0];
         
-        // get first active descendant's ID -- we'll assign the parent to that partition
-        while (_meshTopology->isParent(firstChildID))
-        {
-          CellPtr firstChild = _meshTopology->getCell(firstChildID);
-          firstChildID = firstChild->getChildIndices(_meshTopology)[0];
-        }
-        
-        bool leafNodesOnly = true; // active descendants will be the only ones in the _partitions structures
-        set<GlobalIndexType> activeDescendants = parent->getDescendants(_meshTopology, leafNodesOnly);
-        
         partitionForParent = partitionForCellID(firstChildID);
         
         _partitions[partitionForParent].insert(parentID);
         _partitionForCellID[parentID] = partitionForParent;
         
-        for (GlobalIndexType childID : activeDescendants)
+        for (GlobalIndexType childID : childIDs)
         {
           auto partition = _partitionForCellID[childID];
           _partitions[partition].erase(childID);
