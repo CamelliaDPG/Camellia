@@ -1315,7 +1315,7 @@ TEUCHOS_UNIT_TEST( Mesh, SaveAndLoadStokesConforming )
   testSaveAndLoad2D(form.bf(), out, success);
 }
   
-void testUnrefine(int spaceDim, Teuchos::FancyOStream &out, bool &success)
+void testUnrefine(int levels, int spaceDim, Teuchos::FancyOStream &out, bool &success)
 {
   int H1Order = 1; // lowest-order mesh
   bool conformingTraces = true;
@@ -1343,48 +1343,117 @@ void testUnrefine(int spaceDim, Teuchos::FancyOStream &out, bool &success)
   TEST_EQUALITY(numCellsExpected, mesh->getTopology()->cellCount());
   TEST_EQUALITY(numActiveCellsExpected, mesh->numActiveElements());
   
-  int totalDofsBeforeRefinement = mesh->numGlobalDofs();
+  vector<int> dofsAtRefinementLevel;
+  dofsAtRefinementLevel.push_back(mesh->numGlobalDofs());
   
   vector<GlobalIndexType> cellsToRefine = {1};
-  mesh->hRefine(cellsToRefine);
   
-  numCellsExpected += numCellsAddedPerRefinement;
-  TEST_EQUALITY(numCellsExpected, mesh->getTopology()->cellCount());
+  vector<vector<GlobalIndexType>> cellsToRefineAtLevel;
   
-  numActiveCellsExpected += numActiveCellsAddedPerRefinement;
-  TEST_EQUALITY(numActiveCellsExpected, mesh->numActiveElements());
+  auto meshTopo = mesh->getTopology();
   
-  // number of dofs should have changed
-  TEST_INEQUALITY(totalDofsBeforeRefinement, mesh->numGlobalDofs());
+  // forward refinements
+  for (int refLevel=0; refLevel<levels; refLevel++)
+  {
+    cellsToRefineAtLevel.push_back(cellsToRefine);
+    mesh->hRefine(cellsToRefine);
+    
+    numCellsExpected += numCellsAddedPerRefinement * cellsToRefine.size();
+    TEST_EQUALITY(numCellsExpected, mesh->getTopology()->cellCount());
+    
+    numActiveCellsExpected += numActiveCellsAddedPerRefinement * cellsToRefine.size();
+    TEST_EQUALITY(numActiveCellsExpected, mesh->numActiveElements());
+    
+    // number of dofs should have changed
+    dofsAtRefinementLevel.push_back(mesh->numGlobalDofs());
+    TEST_INEQUALITY(dofsAtRefinementLevel[refLevel], dofsAtRefinementLevel[refLevel+1]);
+    
+    std::vector<GlobalIndexType> myRefinedCellChildren; // the ones that are assigned to me
+    for (auto cellID : cellsToRefine)
+    {
+      if (meshTopo->isValidCellIndex(cellID))
+      {
+        auto parentCell = meshTopo->getCell(cellID);
+        auto childIndices = parentCell->getChildIndices(meshTopo);
+        for (auto childID : childIndices)
+        {
+          if (mesh->myCellsInclude(childID))
+          {
+            myRefinedCellChildren.push_back(childID);
+          }
+        }
+      }
+    }
+    
+    std::vector<GlobalIndexType> globalRefinedCellChildren;
+    std::vector<int> offsets;
+    MPIWrapper::allGatherVariable<GlobalIndexType>(*mesh->Comm(), globalRefinedCellChildren, myRefinedCellChildren, offsets);
+    std::sort(globalRefinedCellChildren.begin(), globalRefinedCellChildren.end());
+    
+    cellsToRefine = globalRefinedCellChildren;
+  }
   
-  mesh->hUnrefine({1});
-  
-  numCellsExpected -= numCellsAddedPerRefinement;
-  TEST_EQUALITY(numCellsExpected, mesh->getTopology()->cellCount());
-  
-  numActiveCellsExpected -= numActiveCellsAddedPerRefinement;
-  TEST_EQUALITY(numActiveCellsExpected, mesh->numActiveElements());
-  
-  // number of dofs should be restored to what they were before refinement
-  TEST_EQUALITY(totalDofsBeforeRefinement, mesh->numGlobalDofs());
+  // unrefinements
+  for (int refLevel=levels-1; refLevel>=0; refLevel--)
+  {
+    auto cellsToUnrefine = cellsToRefineAtLevel[refLevel];
+    std::set<GlobalIndexType> cellsToUnrefineSet(cellsToUnrefine.begin(),cellsToUnrefine.end());
+    mesh->hUnrefine(cellsToUnrefineSet);
+    
+    auto globalDofCount = mesh->globalDofCount();
+    TEST_EQUALITY(globalDofCount, dofsAtRefinementLevel[refLevel]);
+    
+    numCellsExpected -= numCellsAddedPerRefinement * cellsToUnrefine.size();
+    TEST_EQUALITY(numCellsExpected, mesh->getTopology()->cellCount());
+    
+    numActiveCellsExpected -= numActiveCellsAddedPerRefinement * cellsToUnrefine.size();
+    TEST_EQUALITY(numActiveCellsExpected, mesh->numActiveElements());
+  }
 }
   
 TEUCHOS_UNIT_TEST( Mesh, Unrefine_1D )
 {
   int spaceDim = 1;
-  testUnrefine(spaceDim, out, success);
+  int levels = 1;
+  testUnrefine(levels, spaceDim, out, success);
 }
   
 TEUCHOS_UNIT_TEST( Mesh, Unrefine_2D )
 {
   int spaceDim = 2;
-  testUnrefine(spaceDim, out, success);
+  int levels = 1;
+  testUnrefine(levels, spaceDim, out, success);
 }
   
 TEUCHOS_UNIT_TEST( Mesh, Unrefine_3D )
 {
   int spaceDim = 3;
-  testUnrefine(spaceDim, out, success);
+  int levels = 1;
+  testUnrefine(levels, spaceDim, out, success);
 }
 
+TEUCHOS_UNIT_TEST( Mesh, Unrefine_2_levels_1D )
+{
+  MPIWrapper::CommWorld()->Barrier();
+  int spaceDim = 1;
+  int levels = 2;
+  testUnrefine(levels, spaceDim, out, success);
+}
+  
+  // the 2-level test in 2D and 3D is complicated by 1-irregularity enforcement.
+  // for now, we don't run these tests.
+//TEUCHOS_UNIT_TEST( Mesh, Unrefine_2_levels_2D )
+//{
+//  int spaceDim = 2;
+//  int levels = 2;
+//  testUnrefine(levels, spaceDim, out, success);
+//}
+//
+//TEUCHOS_UNIT_TEST( Mesh, Unrefine_2_levels_3D )
+//{
+//  int spaceDim = 3;
+//  int levels = 2;
+//  testUnrefine(levels, spaceDim, out, success);
+//}
+  
 } // namespace
