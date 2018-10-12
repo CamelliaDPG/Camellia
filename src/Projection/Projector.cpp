@@ -718,6 +718,12 @@ void Projector<Scalar>::projectChildFunctionOntoParentBasisInterpolating(Intrepi
   int numCells = basisCoefficients.dimension(0);
   FieldContainer<Scalar> wholeBasisCoefficients(numCells, basisCardinality); // will include zeros for any coefficients belonging to other sides for a volume basis, e.g.
   
+  int maxCubatureDegreeSubdomain = 0;
+  for (auto subdomainCache : subdomainCaches)
+  {
+    maxCubatureDegreeSubdomain = std::max(maxCubatureDegreeSubdomain, subdomainCache->cubatureDegree());
+  }
+  
   for (int d=startingDimensionForProjection; d<=domainDim; d++)
   {
     TFunctionPtr<Scalar> projectionThusFar = BasisSumFunction::basisSumFunction(parentBasis, wholeBasisCoefficients);
@@ -760,9 +766,7 @@ void Projector<Scalar>::projectChildFunctionOntoParentBasisInterpolating(Intrepi
         else
         {
           CellTopoPtr subcellTopo = domainTopo->getSubcell(d, subcord);
-          //          Teuchos::RCP<Cubature<double> > subcellCubature = cubFactory.create(subcellTopo, domainBasisCache->cubatureDegree());
-          int dummyDegree = 0;
-          BasisCachePtr subcellCache = Teuchos::rcp( new BasisCache(subcellTopo, dummyDegree, false) );
+          BasisCachePtr subcellCache = Teuchos::rcp( new BasisCache(subcellTopo, maxCubatureDegreeSubdomain, false) );
           int numPoints = subcellCache->getRefCellPoints().dimension(0);
           refCellPoints.resize(numPoints,domainDim);
           cubatureWeightsSubcell = subcellCache->getCubatureWeights();
