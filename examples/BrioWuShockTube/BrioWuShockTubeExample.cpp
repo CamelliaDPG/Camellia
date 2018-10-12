@@ -80,23 +80,65 @@ public:
   }
 };
 
+// this is not a super-efficient way of doing this, I expect.  But it does the job.
+template<typename EntryType>
+void allGatherThenSort(Epetra_CommPtr Comm, std::vector<EntryType> &myEntries, std::vector<EntryType> &globalEntries)
+{
+  std::vector<int> offsets;
+  MPIWrapper::allGatherVariable(*Comm, globalEntries, myEntries, offsets);
+//  int myEntryCount = myEntries.size();
+//  int totalEntryCount = 0;
+//  Comm->SumAll(&myEntryCount, &totalEntryCount, 1);
+//
+//  if (totalEntryCount > 0)
+//  {
+//    int myEntryOffset = 0;
+//    Comm->ScanSum(&myEntryCount, &myEntryOffset, 1);
+//    myEntryOffset -= myEntryCount;
+//
+//    vector<EntryType> globalEntriesVector(totalEntryCount, 0);
+//    for (int i=0; i<myEntryCount; i++)
+//    {
+//      globalEntriesVector[myEntryOffset + i] = myEntries[i];
+//    }
+//    vector<EntryType> gatheredEntriesVector(totalEntryCount, 0);
+//    Comm->SumAll(&globalEntriesVector[0], &gatheredEntriesVector[0], totalEntryCount);
+//
+//    globalEntries = globalEntriesVector;
+//  }
+  
+  std::sort(globalEntries.begin(), globalEntries.end());
+}
+
 // since RefinementStrategy doesn't give a good way to p-coarsen, or to coarsen, then refine,
 // we just implement our own "strategy" object that does our tick-tock thing
 class CoarsenThenRefineStrategy {
-  std::vector<GlobalIndexType> _cellsCoarsened;
+  // we do a series of h-refinements so that we have as many descendants as dofs in the element, then p-coarsen
   Teuchos::RCP<InadmissibilityIndicator> _inadmissibilityIndicator;
   
+  std::vector<GlobalIndexType> _cellsToHUnrefine;
+  
   int _globalPolyOrder; // the L^2 order, which should be reduced to 0 in inadmissible cells
+  int _numHRefinements;
 public:
   CoarsenThenRefineStrategy(int globalPolyOrder, Teuchos::RCP<InadmissibilityIndicator> inadmissibilityIndicator)
   {
     _globalPolyOrder = globalPolyOrder;
     _inadmissibilityIndicator = inadmissibilityIndicator;
+    
+    int numDescendants = 1;
+    _numHRefinements = 0;
+    int numDofsPerElement = _globalPolyOrder + 1;
+    while (numDescendants < numDofsPerElement)
+    {
+      _numHRefinements++;
+      numDescendants *= 2;
+    }
   }
   
   void coarsen()
   {
-    if (_cellsCoarsened.size() > 0)
+    if (_cellsToHUnrefine.size() > 0)
     {
       TEUCHOS_TEST_FOR_EXCEPTION(true, std::invalid_argument, "Must call refine() before another call to coarsen()");
     }
@@ -108,42 +150,81 @@ public:
     std::vector<GlobalIndexType> myCellsToCoarsen;
     _inadmissibilityIndicator->localCellsAboveErrorThreshold(0.5, myCellsToCoarsen);
     
-    GlobalIndexTypeToCast numCellsToCoarsen = 0;
-    GlobalIndexTypeToCast myNumCellsToCoarsen = myCellsToCoarsen.size();
-    mesh->Comm()->SumAll(&myNumCellsToCoarsen, &numCellsToCoarsen, 1);
-    
     vector<GlobalIndexType> cellsToCoarsen;
-    if (numCellsToCoarsen > 0)
+    allGatherThenSort(mesh->Comm(), myCellsToCoarsen, cellsToCoarsen);
+    
+    vector<GlobalIndexType> cellsToHRefine = cellsToCoarsen;
+    auto lineRefPattern = RefinementPattern::regularRefinementPatternLine();
+    auto meshTopo = mesh->getTopology();
+    for (int refNumber = 0; refNumber < _numHRefinements; refNumber++)
     {
-      GlobalIndexTypeToCast myCellOrdinalOffset = 0;
-      mesh->Comm()->ScanSum(&myNumCellsToCoarsen, &myCellOrdinalOffset, 1);
-      myCellOrdinalOffset -= myNumCellsToCoarsen;
+      mesh->hRefine(cellsToHRefine, lineRefPattern);
       
-      vector<GlobalIndexTypeToCast> globalCellsToCoarsenVector(numCellsToCoarsen, 0);
-      for (int i=0; i<myNumCellsToCoarsen; i++)
+      std::vector<GlobalIndexType> myCellsToHRefine; // descendants of cellsToHRefine that have been assigned to me
+      for (auto parentID : cellsToHRefine)
       {
-        globalCellsToCoarsenVector[myCellOrdinalOffset + i] = myCellsToCoarsen[i];
+        if (meshTopo->isValidCellIndex(parentID))
+        {
+          auto childIndices = meshTopo->getCell(parentID)->getChildIndices(meshTopo);
+          for (auto childID : childIndices)
+          {
+            if (mesh->myCellsInclude(childID))
+            {
+              myCellsToHRefine.push_back(childID);
+            }
+          }
+        }
       }
-      vector<GlobalIndexTypeToCast> gatheredCellsToCoarsenVector(numCellsToCoarsen, 0);
-      mesh->Comm()->SumAll(&globalCellsToCoarsenVector[0], &gatheredCellsToCoarsenVector[0], numCellsToCoarsen);
       
-      cellsToCoarsen = vector<GlobalIndexType>(gatheredCellsToCoarsenVector.begin(),gatheredCellsToCoarsenVector.end());
+      allGatherThenSort(mesh->Comm(), myCellsToHRefine, cellsToHRefine);
     }
     
-    std::sort(cellsToCoarsen.begin(), cellsToCoarsen.end());
+    mesh->pRefine(cellsToHRefine, -_globalPolyOrder);
     
-    mesh->pRefine(cellsToCoarsen, -_globalPolyOrder);
-    
-    _cellsCoarsened = cellsToCoarsen;
+    _cellsToHUnrefine = cellsToHRefine;
   }
   
   void refine()
   {
     auto mesh = _inadmissibilityIndicator->mesh();
     
-    mesh->pRefine(_cellsCoarsened, _globalPolyOrder);
+    // reverse the earlier changes
+    mesh->pRefine(_cellsToHUnrefine, _globalPolyOrder);
     
-    _cellsCoarsened.clear();
+    set<GlobalIndexType> cellsToHUnrefineSet;
+    cellsToHUnrefineSet.insert(_cellsToHUnrefine.begin(), _cellsToHUnrefine.end());
+    auto meshTopo = mesh->getTopology();
+    for (int unrefNumber = 0; unrefNumber < _numHRefinements; unrefNumber++)
+    {
+      // we actually need to call hUnrefine on the *parents* of the children that we want to eliminate
+      // so, first, we need to gather those parents
+      std::vector<GlobalIndexType> myParentIDs; // parents of cellsToHUnrefine for which I have the first child assigned to me
+      
+      for (auto childID : cellsToHUnrefineSet)
+      {
+        if (meshTopo->isValidCellIndex(childID))
+        {
+          CellPtr childCell = meshTopo->getCell(childID);
+          CellPtr parentCell = childCell->getParent();
+          
+          if (parentCell->children()[0]->cellIndex() == childID) // child is first child
+          {
+            auto parentID = parentCell->cellIndex();
+            myParentIDs.push_back(parentID);
+          }
+        }
+      }
+      
+      std::vector<GlobalIndexType> allParentIDs;
+      allGatherThenSort(mesh->Comm(), myParentIDs, allParentIDs);
+      
+      cellsToHUnrefineSet.clear();
+      cellsToHUnrefineSet.insert(allParentIDs.begin(), allParentIDs.end());
+      
+      mesh->hUnrefine(cellsToHUnrefineSet);
+    }
+    
+    _cellsToHUnrefine.clear();
   }
 };
 
@@ -568,8 +649,8 @@ int runSolver(Teuchos::RCP<Form> form, double dt, int meshWidth, double x_a, dou
 //    solnIncrement->bf()->setPrintTermWiseIntegrationOutput(true);
   }
   
-  vector<FunctionPtr> functionsToPlot = {p_prev,u_prev,ds};
-  vector<string> functionNames = {"pressure","velocity","entropy change"};
+  vector<FunctionPtr> functionsToPlot = {p_prev,u_prev,v_prev};
+  vector<string> functionNames = {"pressure","u1","u2"};
   
   // history export gets every nonlinear increment as a separate step
   HDF5Exporter solutionHistoryExporter(mesh, "brioWuSolutionHistory", ".");
@@ -631,14 +712,14 @@ int runSolver(Teuchos::RCP<Form> form, double dt, int meshWidth, double x_a, dou
     double totalMass = rho->integrate(mesh);
     double totalXMomentum = m->spatialComponent(1)->integrate(mesh);
     double totalEnergy = E->integrate(mesh);
-    double dsIntegral = ds->integrate(mesh);
+//    double dsIntegral = ds->integrate(mesh); // due to some incompatibility with the p-coarsening, can get spurious values in temp/pressure sometimes, which generates an FPE if we try to take the ln() of a negative number...
     
     if (rank == 0)
     {
       cout << "Total Mass:        " << totalMass << endl;
       cout << "Total x Momentum:    " << totalXMomentum << endl;
       cout << "Total Energy:      " << totalEnergy << endl;
-      cout << "Change in Entropy: " << dsIntegral << endl;
+//      cout << "Change in Entropy: " << dsIntegral << endl;
     }
   };
   
@@ -1144,7 +1225,7 @@ int main(int argc, char *argv[])
       
       // update the left center cell number to be the rightmost of the newly introduced cells
       // again using knowledge of how the elements are numbered...
-      centerCellLeft = cellCount - 1; //
+      centerCellLeft = nextCellID - 1; //
       
       meshTopo->refineCell(centerCellRight, lineRefinement, nextCellID);
       nextCellID += lineRefinement->numChildren();
