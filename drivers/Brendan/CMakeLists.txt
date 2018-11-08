@@ -1,5 +1,6 @@
 project(BDrivers)
 
+add_executable(AcousticsDriver AcousticsDriver.cpp)
 add_executable(LinearElasticity2D LinearElasticity2D.cpp)
 add_executable(LinearElasticity3D LinearElasticity3D.cpp)
 add_executable(LinearElasticity3DGMG LinearElasticity3DGMG.cpp)
@@ -7,6 +8,7 @@ add_executable(OldroydBDriver OldroydBDriver.cpp)
 add_executable(GoalOrientedDPGDriver GoalOrientedDPGDriver.cpp)
 add_executable(GoalOrientedOldroydBDriver GoalOrientedOldroydBDriver.cpp)
 
+target_link_libraries(AcousticsDriver ${Trilinos_LIBRARIES} ${Trilinos_TPL_LIBRARIES} Camellia)
 target_link_libraries(LinearElasticity2D ${Trilinos_LIBRARIES} ${Trilinos_TPL_LIBRARIES} Camellia)
 target_link_libraries(LinearElasticity3D ${Trilinos_LIBRARIES} ${Trilinos_TPL_LIBRARIES} Camellia)
 target_link_libraries(LinearElasticity3DGMG ${Trilinos_LIBRARIES} ${Trilinos_TPL_LIBRARIES} Camellia)

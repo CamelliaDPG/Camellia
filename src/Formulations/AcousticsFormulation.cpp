@@ -1,0 +1,269 @@
+//
+// © 2016 UChicago Argonne.  For licensing details, see LICENSE-Camellia in the licenses directory.
+//
+//
+//  AcousticsFormulation.cpp
+//  Camellia
+//
+//  Created by Brendan Keith 11/18.
+//
+//
+
+#include "AcousticsFormulation.h"
+
+using namespace Camellia;
+
+const string AcousticsFormulation::S_P1 = "p";
+const string AcousticsFormulation::S_P2 = "i p";
+const string AcousticsFormulation::S_Q1 = "q";
+const string AcousticsFormulation::S_Q2 = "i q";
+
+const string AcousticsFormulation::S_U1 = "\\vec{u}";
+const string AcousticsFormulation::S_U2 = "i\\vec{u}";
+const string AcousticsFormulation::S_V1 = "\\vec{v}";
+const string AcousticsFormulation::S_V2 = "i\\vec{v}";
+
+const string AcousticsFormulation::S_P1_HAT = "\\widehat{p}";
+const string AcousticsFormulation::S_P2_HAT = "i\\widehat{p}";
+const string AcousticsFormulation::S_U1_N_HAT = "\\widehat{u}_n";
+const string AcousticsFormulation::S_U2_N_HAT = "i\\widehat{u}_n";
+
+AcousticsFormulation::AcousticsFormulation(int spaceDim, bool useConformingTraces, AcousticsFormulationChoice formulationChoice, double angularFrequency)
+{
+  _spaceDim = spaceDim;
+  _omega = angularFrequency;
+
+  if (formulationChoice == ULTRAWEAK)
+  {
+    Space uSpace = (spaceDim > 1) ? VECTOR_L2 : L2;
+    Space vSpace = (spaceDim > 1) ? HDIV : HGRAD;
+    Space p_hat_space = useConformingTraces ? HGRAD : L2;
+
+    // fields
+    VarPtr p1,p2,u1,u2;
+    // vector<VarPtr> p(2),u(2);
+
+    // traces
+    VarPtr p1_hat,p2_hat,u1_n_hat,u2_n_hat;
+    // vector<VarPtr> p_hat(2),u_n_hat(2);
+
+    // tests
+    VarPtr q1,q2,v1,v2;
+    // vector<VarPtr> q(2),v(2);
+
+    _vf = VarFactory::varFactory();
+    p1 = _vf->fieldVar(S_P1);
+    p2 = _vf->fieldVar(S_P2);
+    u1 = _vf->fieldVar(S_U1, uSpace);
+    u2 = _vf->fieldVar(S_U2, uSpace);
+    // p[0] = p1; u[0] = u1;
+    // p[1] = p2; u[1] = u2;
+
+    TFunctionPtr<double> parity = TFunction<double>::sideParity();
+    
+    if (_spaceDim > 1)
+    {
+      p1_hat = _vf->traceVar(S_P1_HAT, p1, p_hat_space);
+      p2_hat = _vf->traceVar(S_P2_HAT, p2, p_hat_space);
+    }
+    else
+    {
+      p1_hat = _vf->fluxVar(S_P1_HAT, p1 * (Function::normal_1D() * parity), p_hat_space);
+      p2_hat = _vf->fluxVar(S_P2_HAT, p2 * (Function::normal_1D() * parity), p_hat_space);
+    }
+    // p_hat[0] = p1_hat;
+    // p_hat[1] = p2_hat;
+
+    TFunctionPtr<double> n = TFunction<double>::normal();
+
+    if (_spaceDim > 1)
+    {
+      u1_n_hat = _vf->fluxVar(S_U1_N_HAT, u1 * (n * parity));
+      u2_n_hat = _vf->fluxVar(S_U2_N_HAT, u2 * (n * parity));
+    }
+    else
+    {
+      u1_n_hat = _vf->fluxVar(S_U1_N_HAT, u1 * (Function::normal_1D() * parity)); // for _spaceDim==1, the "normal" component is in the flux-ness of phi_hat (it's a plus or minus 1)
+      u2_n_hat = _vf->fluxVar(S_U2_N_HAT, u2 * (Function::normal_1D() * parity));
+    }
+    // u_n_hat[0] = u1_n_hat;
+    // u_n_hat[1] = u2_n_hat;
+
+    q1 = _vf->testVar(S_Q1, HGRAD);
+    q2 = _vf->testVar(S_Q2, HGRAD);
+    v1 = _vf->testVar(S_V1, vSpace);
+    v2 = _vf->testVar(S_V2, vSpace);
+    // vector<VarPtr> q(2), v(2);
+    // q[0] = q1; v[0] = v1;
+    // q[1] = q2; v[1] = v2;
+
+    _AcousticsBF = Teuchos::rcp( new BF(_vf) );
+
+    if (_spaceDim==1)
+    {
+      // for _spaceDim==1, the "normal" component is in the flux-ness of phi_hat (it's a plus or minus 1)
+      _AcousticsBF->addTerm( _omega * u1, v1);
+      _AcousticsBF->addTerm( _omega * u2, v2);
+      _AcousticsBF->addTerm(-p1, v2->dx());
+      _AcousticsBF->addTerm( p2, v1->dx());
+      _AcousticsBF->addTerm(-p1_hat, v2);
+      _AcousticsBF->addTerm( p2_hat, v1);
+
+      _AcousticsBF->addTerm(-_omega * u1, v2);
+      _AcousticsBF->addTerm( _omega * u2, v1);
+      _AcousticsBF->addTerm(-p1, v1->dx());
+      _AcousticsBF->addTerm(-p2, v2->dx());
+      _AcousticsBF->addTerm( p1_hat, v1);
+      _AcousticsBF->addTerm( p2_hat, v2);
+
+      _AcousticsBF->addTerm( _omega * p1, q1);
+      _AcousticsBF->addTerm( _omega * p2, q2);
+      _AcousticsBF->addTerm(-u1, q2->dx());
+      _AcousticsBF->addTerm( u2, q1->dx());
+      _AcousticsBF->addTerm(-u1_n_hat, q2);
+      _AcousticsBF->addTerm( u2_n_hat, q1);
+
+      _AcousticsBF->addTerm(-_omega * p1, q2);
+      _AcousticsBF->addTerm( _omega * p2, q1);
+      _AcousticsBF->addTerm(-u1, q1->dx());
+      _AcousticsBF->addTerm(-u2, q2->dx());
+      _AcousticsBF->addTerm( u1_n_hat, q1);
+      _AcousticsBF->addTerm( u2_n_hat, q2);
+    }
+    else
+    {
+      _AcousticsBF->addTerm( _omega * u1, v1);
+      _AcousticsBF->addTerm(-p2, v1->div());
+      _AcousticsBF->addTerm( p2_hat, v1->dot_normal());
+      _AcousticsBF->addTerm( _omega * u2, v2);
+      _AcousticsBF->addTerm( p1, v2->div());
+      _AcousticsBF->addTerm(-p1_hat, v2->dot_normal());
+
+      // _AcousticsBF->addTerm(-_omega * u1, v2);
+      // _AcousticsBF->addTerm( _omega * u2, v1);
+      // _AcousticsBF->addTerm(-p1, v1->div());
+      // _AcousticsBF->addTerm(-p2, v2->div());
+      // _AcousticsBF->addTerm( p1_hat, v1->dot_normal());
+      // _AcousticsBF->addTerm( p2_hat, v2->dot_normal());
+
+      _AcousticsBF->addTerm( _omega * p1, q1);
+      _AcousticsBF->addTerm(-u2, q1->grad());
+      _AcousticsBF->addTerm( u2_n_hat, q1);
+      _AcousticsBF->addTerm( _omega * p2, q2);
+      _AcousticsBF->addTerm( u1, q2->grad());
+      _AcousticsBF->addTerm(-u1_n_hat, q2);
+
+      // _AcousticsBF->addTerm(-_omega * p1, q2);
+      // _AcousticsBF->addTerm( _omega * p2, q1);
+      // _AcousticsBF->addTerm(-u1, q1->grad());
+      // _AcousticsBF->addTerm(-u2, q2->grad());
+      // _AcousticsBF->addTerm( u1_n_hat, q1);
+      // _AcousticsBF->addTerm( u2_n_hat, q2);
+    }
+  }
+  // else if ((formulationChoice == PRIMAL) || (formulationChoice == CONTINUOUS_GALERKIN))
+  // {
+  //   // field
+  //   VarPtr phi;
+    
+  //   // flux
+  //   VarPtr psi_n_hat;
+    
+  //   // tests
+  //   VarPtr q;
+    
+  //   VarFactoryPtr _vf = VarFactory::varFactory();
+  //   phi = _vf->fieldVar(S_U, HGRAD);
+    
+  //   TFunctionPtr<double> parity = TFunction<double>::sideParity();
+  //   TFunctionPtr<double> n = TFunction<double>::normal();
+    
+  //   if (formulationChoice == PRIMAL)
+  //   {
+  //     if (_spaceDim > 1)
+  //       psi_n_hat = _vf->fluxVar(S_V_N_HAT, -phi->grad() * (n * parity));
+  //     else
+  //       psi_n_hat = _vf->fluxVar(S_V_N_HAT, -phi->dx() * (Function::normal_1D() * parity));
+  //   }
+  //   q = _vf->testVar(S_P, HGRAD);
+    
+  //   _AcousticsBF = BF::bf(_vf);
+  //   _AcousticsBF->addTerm((lengthScale*lengthScale)*phi->grad(), q->grad());
+  //   _AcousticsBF->addTerm(phi, q);
+
+  //   if (formulationChoice == CONTINUOUS_GALERKIN)
+  //   {
+  //     FunctionPtr boundaryIndicator = Function::meshBoundaryCharacteristic();
+  //     _AcousticsBF->addTerm(-(lengthScale*lengthScale)*phi->grad() * n, boundaryIndicator * q);
+  //   }
+  //   else // primal
+  //   {
+  //     _AcousticsBF->addTerm(-(lengthScale*lengthScale)*psi_n_hat, q);
+  //   }
+  // }
+  else
+  {
+    TEUCHOS_TEST_FOR_EXCEPTION(true, std::invalid_argument, "Unsupported AcousticsFormulationChoice");
+  }
+}
+
+BFPtr AcousticsFormulation::bf()
+{
+  return _AcousticsBF;
+}
+
+void AcousticsFormulation::CHECK_VALID_COMPONENT(int i) const // throws exception on bad component value (should be either 1 or 2)
+{
+  if ((i > 2) || (i < 1))
+  {
+    TEUCHOS_TEST_FOR_EXCEPTION(true, std::invalid_argument, "component indices must be either 1 or 2");
+  }
+}
+
+
+// field variables:
+VarPtr AcousticsFormulation::p(int i)
+{
+  CHECK_VALID_COMPONENT(i);
+  static const vector<string> pStrings = {S_P1,S_P2};
+  return _vf->fieldVar(pStrings[i-1]);
+}
+
+VarPtr AcousticsFormulation::u(int i)
+{
+  CHECK_VALID_COMPONENT(i);
+  static const vector<string> uStrings = {S_U1,S_U2};
+  return _vf->fieldVar(uStrings[i-1]);
+}
+
+VarPtr AcousticsFormulation::p_hat(int i)
+{
+  CHECK_VALID_COMPONENT(i);
+  static const vector<string> pHatStrings = {S_P1_HAT,S_P2_HAT};
+  return _vf->traceVar(pHatStrings[i-1]);
+}
+
+VarPtr AcousticsFormulation::u_n_hat(int i)
+{
+  CHECK_VALID_COMPONENT(i);
+  static const vector<string> unHatStrings = {S_U1_N_HAT,S_U2_N_HAT};
+  return _vf->traceVar(unHatStrings[i-1]);
+}
+
+// test variables:
+VarPtr AcousticsFormulation::q(int i)
+{
+  CHECK_VALID_COMPONENT(i);
+  static const vector<string> qStrings = {S_Q1,S_Q2};
+  return _vf->testVar(qStrings[i-1],HGRAD);
+}
+
+VarPtr AcousticsFormulation::v(int i)
+{
+  CHECK_VALID_COMPONENT(i);
+  static const vector<string> vStrings = {S_V1,S_V2};
+  if (_spaceDim > 1)
+    return _vf->testVar(vStrings[i-1], HDIV);
+  else
+    return _vf->testVar(vStrings[i-1], HGRAD);
+}
