@@ -79,6 +79,7 @@ int main(int argc, char *argv[])
   string norm = "Graph";
   string errorIndicator = "Uniform";
   bool useConformingTraces = true;
+  bool impedance = false;
   bool enrichTrial = false;
   string solverChoice = "KLU";
   bool exportSolution = false;
@@ -96,6 +97,7 @@ int main(int argc, char *argv[])
   cmdp.setOption("errorIndicator", &errorIndicator, "Energy, Uniform");
   // cmdp.setOption("conformingTraces", "nonconformingTraces", &useConformingTraces, "use conforming traces");
   cmdp.setOption("solver", &solverChoice, "KLU, SuperLUDist, MUMPS");
+  cmdp.setOption("impedance", "hardBCs", &impedance, "impedance BCs");
   cmdp.setOption("enrichTrial", "standardTrial", &enrichTrial, "enrich pressure variable field by one poly order");
   cmdp.setOption("exportSolution", "skipExport", &exportSolution, "export solution to HDF5");
   cmdp.setOption("outputDir", &outputDir, "output directory");
@@ -239,56 +241,73 @@ int main(int argc, char *argv[])
 
 
   //////////////////////  DECLARE EXACT SOLUTIONS  /////////////////////
-  FunctionPtr p_exact;
+  FunctionPtr p1_exact, p2_exact;
   FunctionPtr xx = x/width, yy = y/height;
-  // p_exact = zero;
-  // p_exact = one;
-  // p_exact = x * x + 2 * x * y;
-  // p_exact = x * x * x * y + 2 * x * y * y;
-  p_exact = sin_pix * sin_piy;
-  // p_exact = xx * (1.0 - xx) * (xx/4.0 + (1.0 - 4.0*xx)*(1.0 - 4.0*xx) ) * yy * (1.0 - yy) * (yy/4.0 + (1.0 - 4.0*yy)*(1.0 - 4.0*yy) );
+  // p1_exact = zero;
+  p1_exact = one;
+  // p1_exact = x * x + 2 * x * y;
+  // p1_exact = x * x * x * y + 2 * x * y * y;
+  // p1_exact = sin_pix * sin_piy;
+  // p1_exact = xx * (1.0 - xx) * (xx/4.0 + (1.0 - 4.0*xx)*(1.0 - 4.0*xx) ) * yy * (1.0 - yy) * (yy/4.0 + (1.0 - 4.0*yy)*(1.0 - 4.0*yy) );
+  p2_exact = one;
+  // p2_exact = sin_pix * sin_piy;
 
 
   ////////////////////////////  DECLARE RHS  ///////////////////////////
-  FunctionPtr f;
-  f = p_exact->dx()->dx() + p_exact->dy()->dy() + omega * omega * p_exact;
+  FunctionPtr f1,f2;
+  f1 = (1.0/omega) * p1_exact->dx()->dx() + (1.0/omega) * p1_exact->dy()->dy() + omega * p1_exact;
+  f2 = (1.0/omega) * p2_exact->dx()->dx() + (1.0/omega) * p2_exact->dy()->dy() + omega * p2_exact;
   RHSPtr rhs = RHS::rhs();
-  rhs->addTerm(f * q1);
-  rhs->addTerm(f * q2);
+  rhs->addTerm(f1 * q1);
+  rhs->addTerm(f2 * q2);
 
 
   ////////////////////  DECLARE BOUNDARY CONDITIONS ////////////////////
   BCPtr bc = BC::bc();
-  if (problemChoice == "SquareDomain" || problemChoice == "RectangularDomain")
-  {
-    SpatialFilterPtr x_equals_zero = SpatialFilter::matchingX(0.0);
-    SpatialFilterPtr y_equals_zero = SpatialFilter::matchingY(0);
-    SpatialFilterPtr x_equals_one = SpatialFilter::matchingX(width);
-    SpatialFilterPtr y_equals_one = SpatialFilter::matchingY(height);
-    bc->addDirichlet(p1_hat, x_equals_zero, p_exact);
-    bc->addDirichlet(p1_hat, y_equals_zero, p_exact);
-    bc->addDirichlet(p1_hat, x_equals_one, p_exact);
-    bc->addDirichlet(p1_hat, y_equals_one, p_exact);
-    bc->addDirichlet(p2_hat, x_equals_zero, p_exact);
-    bc->addDirichlet(p2_hat, y_equals_zero, p_exact);
-    bc->addDirichlet(p2_hat, x_equals_one, p_exact);
-    bc->addDirichlet(p2_hat, y_equals_one, p_exact);
-    // bc->addDirichlet(sigma_n_hat, x_equals_zero, zero);
-    // bc->addDirichlet(sigma_n_hat, y_equals_zero, zero);
-    // bc->addDirichlet(sigma_n_hat, x_equals_one,  zero);
-    // bc->addDirichlet(sigma_n_hat, y_equals_one,  zero);
-  }
-  else
-  {
-    cout << "ERROR: Problem type not currently supported. Returning null.\n";
-    return Teuchos::null;
-  }
+  SpatialFilterPtr x_equals_zero = SpatialFilter::matchingX(0.0);
+  SpatialFilterPtr y_equals_zero = SpatialFilter::matchingY(0);
+  SpatialFilterPtr x_equals_one = SpatialFilter::matchingX(width);
+  SpatialFilterPtr y_equals_one = SpatialFilter::matchingY(height);
+  // if (impedance == false)
+  // {
+    if (problemChoice == "SquareDomain" || problemChoice == "RectangularDomain")
+    {
+      bc->addDirichlet(p1_hat, x_equals_zero, p1_exact);
+      bc->addDirichlet(p1_hat, y_equals_zero, p1_exact);
+      bc->addDirichlet(p1_hat, x_equals_one, p1_exact);
+      // bc->addDirichlet(p1_hat, y_equals_one, p1_exact);
+      bc->addDirichlet(p2_hat, x_equals_zero, p2_exact);
+      bc->addDirichlet(p2_hat, y_equals_zero, p2_exact);
+      bc->addDirichlet(p2_hat, x_equals_one, p2_exact);
+      // bc->addDirichlet(p2_hat, y_equals_one, p2_exact);
+      // bc->addDirichlet(sigma_n_hat, x_equals_zero, zero);
+      // bc->addDirichlet(sigma_n_hat, y_equals_zero, zero);
+      // bc->addDirichlet(sigma_n_hat, x_equals_one,  zero);
+      // bc->addDirichlet(sigma_n_hat, y_equals_one,  zero);
+    }
+    else
+    {
+      cout << "ERROR: Problem type not currently supported. Returning null.\n";
+      return Teuchos::null;
+    }
+  // }
+  // else
+    // bc = Teuchos::null;
 
 
   /////////////////////  DECLARE SOLUTION POINTERS /////////////////////
   SolutionPtr soln = Solution::solution(mesh, bc, rhs, ip);
 
-
+  if (impedance == true)
+  {
+    SpatialFilterPtr boundary = y_equals_one;
+    // SpatialFilterPtr boundary = SpatialFilter::allSpace();
+    FunctionPtr g1,g2;
+    g1 = p1_exact + (1.0/omega) * p2_exact->grad() * n;
+    g2 = p2_exact - (1.0/omega) * p1_exact->grad() * n;
+    form.addImpedanceBCs(soln, boundary, g1, g2);
+    // form.addImpedanceBCs(soln, boundary);
+  }
 
   //////////////////////////////////////////////////////////////////////
   ///////////////////////////////  SOLVE  //////////////////////////////
@@ -378,15 +397,17 @@ int main(int argc, char *argv[])
     FunctionPtr soln_p2 = Function::solution(p2, soln);
     FunctionPtr soln_u1 = Function::solution(u1, soln);
     FunctionPtr soln_u2 = Function::solution(u2, soln);
-    FunctionPtr e_p1   = p_exact - soln_p1;
-    FunctionPtr e_p2   = p_exact - soln_p2;
-    FunctionPtr e_u1_x = p_exact->dx() + soln_u1->x();
-    FunctionPtr e_u2_x = p_exact->dx() + soln_u2->x();
-    FunctionPtr e_u1_y = p_exact->dy() + soln_u1->y();
-    FunctionPtr e_u2_y = p_exact->dy() + soln_u2->y();
-    FunctionPtr solnErrorFunction = e_p1*e_p1+ e_u1_x*e_u1_x + e_u1_y*e_u1_y;
+    FunctionPtr e_p1   = p1_exact - soln_p1;
+    FunctionPtr e_p2   = p2_exact - soln_p2;
+    FunctionPtr e_u1_x = p2_exact->dx() + omega * soln_u1->x();
+    FunctionPtr e_u2_x = p1_exact->dx() - omega * soln_u2->x();
+    FunctionPtr e_u1_y = p2_exact->dy() + omega * soln_u1->y();
+    FunctionPtr e_u2_y = p1_exact->dy() - omega * soln_u2->y();
+    FunctionPtr solnErrorFunction = e_p1*e_p1 + e_p2*e_p2 + e_u1_x*e_u1_x + e_u1_y*e_u1_y + e_u2_x*e_u2_x + e_u2_y*e_u2_y;
+    FunctionPtr solnErrorL2Function = e_p1*e_p1 + e_p2*e_p2;
     double solnError = sqrt(solnErrorFunction->l1norm(mesh));
-    double solnErrorL2 = e_p1->l2norm(mesh);
+    double solnErrorL2 = sqrt(solnErrorL2Function->l1norm(mesh));
+    // double solnErrorL2 = e_p1->l2norm(mesh);
     double energyError = soln->energyErrorTotal();
 
     // compute rates

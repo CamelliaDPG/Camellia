@@ -97,68 +97,68 @@ AcousticsFormulation::AcousticsFormulation(int spaceDim, bool useConformingTrace
     // q[0] = q1; v[0] = v1;
     // q[1] = q2; v[1] = v2;
 
-    _AcousticsBF = Teuchos::rcp( new BF(_vf) );
+    _acousticsBF = Teuchos::rcp( new BF(_vf) );
 
     if (_spaceDim==1)
     {
       // for _spaceDim==1, the "normal" component is in the flux-ness of phi_hat (it's a plus or minus 1)
-      _AcousticsBF->addTerm( _omega * u1, v1);
-      _AcousticsBF->addTerm( _omega * u2, v2);
-      _AcousticsBF->addTerm(-p1, v2->dx());
-      _AcousticsBF->addTerm( p2, v1->dx());
-      _AcousticsBF->addTerm(-p1_hat, v2);
-      _AcousticsBF->addTerm( p2_hat, v1);
+      _acousticsBF->addTerm( _omega * u1, v1);
+      _acousticsBF->addTerm( _omega * u2, v2);
+      _acousticsBF->addTerm(-p1, v2->dx());
+      _acousticsBF->addTerm( p2, v1->dx());
+      _acousticsBF->addTerm(-p1_hat, v2);
+      _acousticsBF->addTerm( p2_hat, v1);
 
-      _AcousticsBF->addTerm(-_omega * u1, v2);
-      _AcousticsBF->addTerm( _omega * u2, v1);
-      _AcousticsBF->addTerm(-p1, v1->dx());
-      _AcousticsBF->addTerm(-p2, v2->dx());
-      _AcousticsBF->addTerm( p1_hat, v1);
-      _AcousticsBF->addTerm( p2_hat, v2);
+      _acousticsBF->addTerm(-_omega * u1, v2);
+      _acousticsBF->addTerm( _omega * u2, v1);
+      _acousticsBF->addTerm(-p1, v1->dx());
+      _acousticsBF->addTerm(-p2, v2->dx());
+      _acousticsBF->addTerm( p1_hat, v1);
+      _acousticsBF->addTerm( p2_hat, v2);
 
-      _AcousticsBF->addTerm( _omega * p1, q1);
-      _AcousticsBF->addTerm( _omega * p2, q2);
-      _AcousticsBF->addTerm(-u1, q2->dx());
-      _AcousticsBF->addTerm( u2, q1->dx());
-      _AcousticsBF->addTerm(-u1_n_hat, q2);
-      _AcousticsBF->addTerm( u2_n_hat, q1);
+      _acousticsBF->addTerm( _omega * p1, q1);
+      _acousticsBF->addTerm( _omega * p2, q2);
+      _acousticsBF->addTerm(-u1, q2->dx());
+      _acousticsBF->addTerm( u2, q1->dx());
+      _acousticsBF->addTerm(-u1_n_hat, q2);
+      _acousticsBF->addTerm( u2_n_hat, q1);
 
-      _AcousticsBF->addTerm(-_omega * p1, q2);
-      _AcousticsBF->addTerm( _omega * p2, q1);
-      _AcousticsBF->addTerm(-u1, q1->dx());
-      _AcousticsBF->addTerm(-u2, q2->dx());
-      _AcousticsBF->addTerm( u1_n_hat, q1);
-      _AcousticsBF->addTerm( u2_n_hat, q2);
+      _acousticsBF->addTerm(-_omega * p1, q2);
+      _acousticsBF->addTerm( _omega * p2, q1);
+      _acousticsBF->addTerm(-u1, q1->dx());
+      _acousticsBF->addTerm(-u2, q2->dx());
+      _acousticsBF->addTerm( u1_n_hat, q1);
+      _acousticsBF->addTerm( u2_n_hat, q2);
     }
     else
     {
-      _AcousticsBF->addTerm( _omega * u1, v1);
-      _AcousticsBF->addTerm(-p2, v1->div());
-      _AcousticsBF->addTerm( p2_hat, v1->dot_normal());
-      _AcousticsBF->addTerm( _omega * u2, v2);
-      _AcousticsBF->addTerm( p1, v2->div());
-      _AcousticsBF->addTerm(-p1_hat, v2->dot_normal());
+      _acousticsBF->addTerm( _omega * u1, v1);
+      _acousticsBF->addTerm(-p2, v1->div());
+      _acousticsBF->addTerm( p2_hat, v1->dot_normal());
+      _acousticsBF->addTerm( _omega * u2, v2);
+      _acousticsBF->addTerm( p1, v2->div());
+      _acousticsBF->addTerm(-p1_hat, v2->dot_normal());
 
-      // _AcousticsBF->addTerm(-_omega * u1, v2);
-      // _AcousticsBF->addTerm( _omega * u2, v1);
-      // _AcousticsBF->addTerm(-p1, v1->div());
-      // _AcousticsBF->addTerm(-p2, v2->div());
-      // _AcousticsBF->addTerm( p1_hat, v1->dot_normal());
-      // _AcousticsBF->addTerm( p2_hat, v2->dot_normal());
+      // _acousticsBF->addTerm(-_omega * u1, v2);
+      // _acousticsBF->addTerm( _omega * u2, v1);
+      // _acousticsBF->addTerm(-p1, v1->div());
+      // _acousticsBF->addTerm(-p2, v2->div());
+      // _acousticsBF->addTerm( p1_hat, v1->dot_normal());
+      // _acousticsBF->addTerm( p2_hat, v2->dot_normal());
 
-      _AcousticsBF->addTerm( _omega * p1, q1);
-      _AcousticsBF->addTerm(-u2, q1->grad());
-      _AcousticsBF->addTerm( u2_n_hat, q1);
-      _AcousticsBF->addTerm( _omega * p2, q2);
-      _AcousticsBF->addTerm( u1, q2->grad());
-      _AcousticsBF->addTerm(-u1_n_hat, q2);
+      _acousticsBF->addTerm( _omega * p1, q1);
+      _acousticsBF->addTerm(-u2, q1->grad());
+      _acousticsBF->addTerm( u2_n_hat, q1);
+      _acousticsBF->addTerm( _omega * p2, q2);
+      _acousticsBF->addTerm( u1, q2->grad());
+      _acousticsBF->addTerm(-u1_n_hat, q2);
 
-      // _AcousticsBF->addTerm(-_omega * p1, q2);
-      // _AcousticsBF->addTerm( _omega * p2, q1);
-      // _AcousticsBF->addTerm(-u1, q1->grad());
-      // _AcousticsBF->addTerm(-u2, q2->grad());
-      // _AcousticsBF->addTerm( u1_n_hat, q1);
-      // _AcousticsBF->addTerm( u2_n_hat, q2);
+      // _acousticsBF->addTerm(-_omega * p1, q2);
+      // _acousticsBF->addTerm( _omega * p2, q1);
+      // _acousticsBF->addTerm(-u1, q1->grad());
+      // _acousticsBF->addTerm(-u2, q2->grad());
+      // _acousticsBF->addTerm( u1_n_hat, q1);
+      // _acousticsBF->addTerm( u2_n_hat, q2);
     }
   }
   // else if ((formulationChoice == PRIMAL) || (formulationChoice == CONTINUOUS_GALERKIN))
@@ -187,18 +187,18 @@ AcousticsFormulation::AcousticsFormulation(int spaceDim, bool useConformingTrace
   //   }
   //   q = _vf->testVar(S_P, HGRAD);
     
-  //   _AcousticsBF = BF::bf(_vf);
-  //   _AcousticsBF->addTerm((lengthScale*lengthScale)*phi->grad(), q->grad());
-  //   _AcousticsBF->addTerm(phi, q);
+  //   _acousticsBF = BF::bf(_vf);
+  //   _acousticsBF->addTerm((lengthScale*lengthScale)*phi->grad(), q->grad());
+  //   _acousticsBF->addTerm(phi, q);
 
   //   if (formulationChoice == CONTINUOUS_GALERKIN)
   //   {
   //     FunctionPtr boundaryIndicator = Function::meshBoundaryCharacteristic();
-  //     _AcousticsBF->addTerm(-(lengthScale*lengthScale)*phi->grad() * n, boundaryIndicator * q);
+  //     _acousticsBF->addTerm(-(lengthScale*lengthScale)*phi->grad() * n, boundaryIndicator * q);
   //   }
   //   else // primal
   //   {
-  //     _AcousticsBF->addTerm(-(lengthScale*lengthScale)*psi_n_hat, q);
+  //     _acousticsBF->addTerm(-(lengthScale*lengthScale)*psi_n_hat, q);
   //   }
   // }
   else
@@ -209,7 +209,7 @@ AcousticsFormulation::AcousticsFormulation(int spaceDim, bool useConformingTrace
 
 BFPtr AcousticsFormulation::bf()
 {
-  return _AcousticsBF;
+  return _acousticsBF;
 }
 
 void AcousticsFormulation::CHECK_VALID_COMPONENT(int i) const // throws exception on bad component value (should be either 1 or 2)
@@ -266,4 +266,45 @@ VarPtr AcousticsFormulation::v(int i)
     return _vf->testVar(vStrings[i-1], HDIV);
   else
     return _vf->testVar(vStrings[i-1], HGRAD);
+}
+
+void AcousticsFormulation::addImpedanceBCs(SolutionPtr soln, SpatialFilterPtr boundary, FunctionPtr g1, FunctionPtr g2)
+{
+
+  Teuchos::RCP<LocalStiffnessMatrixFilter> filter_incr = soln->filter();
+  Teuchos::RCP< PenaltyConstraints > pcRCP;
+  PenaltyConstraints* pc;
+
+  if (filter_incr.get() != NULL)
+  {
+    pc = dynamic_cast<PenaltyConstraints*>(filter_incr.get());
+    if (pc == NULL)
+    {
+      TEUCHOS_TEST_FOR_EXCEPTION(true, std::invalid_argument, "Can't add PenaltyConstraints when a non-PenaltyConstraints LocalStiffnessMatrixFilter already in place");
+    }
+  }
+  else
+  {
+    pcRCP = Teuchos::rcp( new PenaltyConstraints );
+    pc = pcRCP.get();
+  }
+
+  FunctionPtr traceRestriction = Function::meshSkeletonCharacteristic(); // 1 on mesh skeleton, 0 elsewhere
+  LinearTermPtr p1_hat = this->p_hat(1) * traceRestriction;
+  LinearTermPtr p2_hat = this->p_hat(2) * traceRestriction;
+  LinearTermPtr u1_n_hat = this->u_n_hat(1) * traceRestriction;
+  LinearTermPtr u2_n_hat = this->u_n_hat(2) * traceRestriction;
+
+  // bool overrideTypeCheck = true;
+  // p1_hat->addTerm( - u1_n_hat, overrideTypeCheck);
+  // pc->addConstraint(p1_hat == g1, boundary);
+
+  // went into LinearTerm.h and changed the default to overrideTypeCheck=true
+  pc->addConstraint(p1_hat - u1_n_hat == g1, boundary);
+  pc->addConstraint(p2_hat - u2_n_hat == g2, boundary);
+
+  if (pcRCP != Teuchos::null)   // i.e., we're not just adding to a prior PenaltyConstraints object
+  {
+    soln->setFilter(pcRCP);
+  }
 }

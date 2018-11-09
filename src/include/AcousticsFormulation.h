@@ -13,6 +13,8 @@
 
 #include "VarFactory.h"
 #include "BF.h"
+#include "Solution.h"
+#include "PenaltyConstraints.h"
 
 namespace Camellia
 {
@@ -26,7 +28,7 @@ public:
     ULTRAWEAK
   };
 private:
-  BFPtr _AcousticsBF;
+  BFPtr _acousticsBF;
   VarFactoryPtr _vf;
   int _spaceDim;
   double _omega;
@@ -63,7 +65,9 @@ public:
   // test variables:
   VarPtr q(int i);
   VarPtr v(int i);
+
+  // impedance BCs
+  void addImpedanceBCs(SolutionPtr soln, SpatialFilterPtr boundary, FunctionPtr g1=Function::zero(), FunctionPtr g2=Function::zero());
 };
 }
-
 #endif
