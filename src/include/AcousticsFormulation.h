@@ -13,8 +13,9 @@
 
 #include "VarFactory.h"
 #include "BF.h"
+#include "RHS.h"
 #include "Solution.h"
-#include "PenaltyConstraints.h"
+#include "SpatiallyFilteredFunction.h"
 
 namespace Camellia
 {
@@ -28,8 +29,9 @@ public:
     ULTRAWEAK
   };
 private:
-  BFPtr _acousticsBF;
   VarFactoryPtr _vf;
+  BFPtr _acousticsBF;
+  RHSPtr _acousticsRHS;
   int _spaceDim;
   double _omega;
 
@@ -51,6 +53,7 @@ public:
   AcousticsFormulation(int spaceDim, bool useConformingTraces, AcousticsFormulationChoice formulationChoice=ULTRAWEAK, double angularFrequency=1.0);
 
   BFPtr bf();
+  RHSPtr rhs();
 
   void CHECK_VALID_COMPONENT(int i) const; // throws exception on bad component value (should be either 1 or 2)
 
@@ -67,7 +70,7 @@ public:
   VarPtr v(int i);
 
   // impedance BCs
-  void addImpedanceBCs(SolutionPtr soln, SpatialFilterPtr boundary, FunctionPtr g1=Function::zero(), FunctionPtr g2=Function::zero());
+  void addImpedanceBCs(SpatialFilterPtr boundary, FunctionPtr g1=Function::zero(), FunctionPtr g2=Function::zero());
 };
 }
 #endif

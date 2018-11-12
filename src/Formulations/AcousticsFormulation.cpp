@@ -212,6 +212,16 @@ BFPtr AcousticsFormulation::bf()
   return _acousticsBF;
 }
 
+RHSPtr AcousticsFormulation::rhs()
+{
+
+  _acousticsRHS = RHS::rhs();
+  FunctionPtr zero = Function::zero();
+  VarPtr q1 = this->q(1);
+  _acousticsRHS->addTerm(zero * q1);
+  return _acousticsRHS;
+}
+
 void AcousticsFormulation::CHECK_VALID_COMPONENT(int i) const // throws exception on bad component value (should be either 1 or 2)
 {
   if ((i > 2) || (i < 1))
@@ -268,43 +278,17 @@ VarPtr AcousticsFormulation::v(int i)
     return _vf->testVar(vStrings[i-1], HGRAD);
 }
 
-void AcousticsFormulation::addImpedanceBCs(SolutionPtr soln, SpatialFilterPtr boundary, FunctionPtr g1, FunctionPtr g2)
+void AcousticsFormulation::addImpedanceBCs(SpatialFilterPtr boundary, FunctionPtr g1, FunctionPtr g2)
 {
-
-  Teuchos::RCP<LocalStiffnessMatrixFilter> filter_incr = soln->filter();
-  Teuchos::RCP< PenaltyConstraints > pcRCP;
-  PenaltyConstraints* pc;
-
-  if (filter_incr.get() != NULL)
-  {
-    pc = dynamic_cast<PenaltyConstraints*>(filter_incr.get());
-    if (pc == NULL)
-    {
-      TEUCHOS_TEST_FOR_EXCEPTION(true, std::invalid_argument, "Can't add PenaltyConstraints when a non-PenaltyConstraints LocalStiffnessMatrixFilter already in place");
-    }
-  }
-  else
-  {
-    pcRCP = Teuchos::rcp( new PenaltyConstraints );
-    pc = pcRCP.get();
-  }
-
-  FunctionPtr traceRestriction = Function::meshSkeletonCharacteristic(); // 1 on mesh skeleton, 0 elsewhere
-  LinearTermPtr p1_hat = this->p_hat(1) * traceRestriction;
-  LinearTermPtr p2_hat = this->p_hat(2) * traceRestriction;
-  LinearTermPtr u1_n_hat = this->u_n_hat(1) * traceRestriction;
-  LinearTermPtr u2_n_hat = this->u_n_hat(2) * traceRestriction;
-
-  // bool overrideTypeCheck = true;
-  // p1_hat->addTerm( - u1_n_hat, overrideTypeCheck);
-  // pc->addConstraint(p1_hat == g1, boundary);
-
-  // went into LinearTerm.h and changed the default to overrideTypeCheck=true
-  pc->addConstraint(p1_hat - u1_n_hat == g1, boundary);
-  pc->addConstraint(p2_hat - u2_n_hat == g2, boundary);
-
-  if (pcRCP != Teuchos::null)   // i.e., we're not just adding to a prior PenaltyConstraints object
-  {
-    soln->setFilter(pcRCP);
-  }
+  FunctionPtr meshSkeletonCharacteristic = Function::meshSkeletonCharacteristic(); // 1 on mesh skeleton, 0 elsewhere
+  FunctionPtr boundaryFunction = Teuchos::rcp( new SpatiallyFilteredFunction<double>( meshSkeletonCharacteristic, boundary) );
+  VarPtr p1_hat,p2_hat,q1,q2;
+  p1_hat = this->p_hat(1);
+  p2_hat = this->p_hat(2);
+  q1     = this->q(1);
+  q2     = this->q(2);
+  _acousticsBF->addTerm( boundaryFunction * p2_hat, q1);
+  _acousticsBF->addTerm(-boundaryFunction * p1_hat, q2);
+  _acousticsRHS->addTerm( boundaryFunction * g2 * q1);
+  _acousticsRHS->addTerm(-boundaryFunction * g1 * q2);
 }

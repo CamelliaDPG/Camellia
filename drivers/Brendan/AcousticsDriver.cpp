@@ -244,10 +244,10 @@ int main(int argc, char *argv[])
   FunctionPtr p1_exact, p2_exact;
   FunctionPtr xx = x/width, yy = y/height;
   // p1_exact = zero;
-  p1_exact = one;
+  // p1_exact = one;
   // p1_exact = x * x + 2 * x * y;
   // p1_exact = x * x * x * y + 2 * x * y * y;
-  // p1_exact = sin_pix * sin_piy;
+  p1_exact = sin_pix * sin_piy;
   // p1_exact = xx * (1.0 - xx) * (xx/4.0 + (1.0 - 4.0*xx)*(1.0 - 4.0*xx) ) * yy * (1.0 - yy) * (yy/4.0 + (1.0 - 4.0*yy)*(1.0 - 4.0*yy) );
   p2_exact = one;
   // p2_exact = sin_pix * sin_piy;
@@ -257,7 +257,7 @@ int main(int argc, char *argv[])
   FunctionPtr f1,f2;
   f1 = (1.0/omega) * p1_exact->dx()->dx() + (1.0/omega) * p1_exact->dy()->dy() + omega * p1_exact;
   f2 = (1.0/omega) * p2_exact->dx()->dx() + (1.0/omega) * p2_exact->dy()->dy() + omega * p2_exact;
-  RHSPtr rhs = RHS::rhs();
+  RHSPtr rhs = form.rhs();
   rhs->addTerm(f1 * q1);
   rhs->addTerm(f2 * q2);
 
@@ -268,46 +268,55 @@ int main(int argc, char *argv[])
   SpatialFilterPtr y_equals_zero = SpatialFilter::matchingY(0);
   SpatialFilterPtr x_equals_one = SpatialFilter::matchingX(width);
   SpatialFilterPtr y_equals_one = SpatialFilter::matchingY(height);
-  // if (impedance == false)
-  // {
+  if (impedance == false)
+  {
     if (problemChoice == "SquareDomain" || problemChoice == "RectangularDomain")
     {
-      bc->addDirichlet(p1_hat, x_equals_zero, p1_exact);
-      bc->addDirichlet(p1_hat, y_equals_zero, p1_exact);
-      bc->addDirichlet(p1_hat, x_equals_one, p1_exact);
-      // bc->addDirichlet(p1_hat, y_equals_one, p1_exact);
-      bc->addDirichlet(p2_hat, x_equals_zero, p2_exact);
-      bc->addDirichlet(p2_hat, y_equals_zero, p2_exact);
-      bc->addDirichlet(p2_hat, x_equals_one, p2_exact);
-      // bc->addDirichlet(p2_hat, y_equals_one, p2_exact);
-      // bc->addDirichlet(sigma_n_hat, x_equals_zero, zero);
-      // bc->addDirichlet(sigma_n_hat, y_equals_zero, zero);
-      // bc->addDirichlet(sigma_n_hat, x_equals_one,  zero);
-      // bc->addDirichlet(sigma_n_hat, y_equals_one,  zero);
+      SpatialFilterPtr boundary = x_equals_zero | y_equals_zero | x_equals_one | y_equals_one;
+      bc->addDirichlet(p1_hat, boundary, p1_exact);
+      bc->addDirichlet(p2_hat, boundary, p2_exact);
     }
     else
     {
       cout << "ERROR: Problem type not currently supported. Returning null.\n";
       return Teuchos::null;
     }
-  // }
-  // else
-    // bc = Teuchos::null;
+  }
+  else
+  {
+    if (problemChoice == "SquareDomain" || problemChoice == "RectangularDomain")
+    {
+      // SpatialFilterPtr boundary = SpatialFilter::allSpace();
+      SpatialFilterPtr boundary = x_equals_zero | y_equals_zero | x_equals_one | y_equals_one;
+      bc->addDirichlet(u1_n_hat, boundary, zero);
+      bc->addDirichlet(u2_n_hat, boundary, zero);
 
+      FunctionPtr g1,g2;
+      g1 = p1_exact + (1.0/omega) * p2_exact->grad() * n;
+      g2 = p2_exact - (1.0/omega) * p1_exact->grad() * n;
+      form.addImpedanceBCs(boundary, g1, g2);
+      // form.addImpedanceBCs(boundary);
+    }
+    else
+    {
+      cout << "ERROR: Problem type not currently supported. Returning null.\n";
+      return Teuchos::null;
+    }
+  }
 
   /////////////////////  DECLARE SOLUTION POINTERS /////////////////////
   SolutionPtr soln = Solution::solution(mesh, bc, rhs, ip);
 
-  if (impedance == true)
-  {
-    SpatialFilterPtr boundary = y_equals_one;
-    // SpatialFilterPtr boundary = SpatialFilter::allSpace();
-    FunctionPtr g1,g2;
-    g1 = p1_exact + (1.0/omega) * p2_exact->grad() * n;
-    g2 = p2_exact - (1.0/omega) * p1_exact->grad() * n;
-    form.addImpedanceBCs(soln, boundary, g1, g2);
-    // form.addImpedanceBCs(soln, boundary);
-  }
+  // if (impedance == true)
+  // {
+  //   SpatialFilterPtr boundary = y_equals_one;
+  //   // SpatialFilterPtr boundary = SpatialFilter::allSpace();
+  //   FunctionPtr g1,g2;
+  //   g1 = p1_exact + (1.0/omega) * p2_exact->grad() * n;
+  //   g2 = p2_exact - (1.0/omega) * p1_exact->grad() * n;
+  //   form.addImpedanceBCs(soln, boundary, g1, g2);
+  //   // form.addImpedanceBCs(soln, boundary);
+  // }
 
   //////////////////////////////////////////////////////////////////////
   ///////////////////////////////  SOLVE  //////////////////////////////
