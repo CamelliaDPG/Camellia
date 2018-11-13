@@ -1,8 +1,8 @@
 //
 // © 2016 UChicago Argonne.  For licensing details, see LICENSE-Camellia in the licenses directory.
 //
-//  PoissonGoalOrientedDPGDriver.cpp
-//  Driver for goal-oriented adaptive mesh refinement for Poisson's BVP
+//  AcousticsFormulationDriver.cpp
+//  Driver for Acoustics with and without impedance BCs
 //  Camellia
 //
 //  Created by Brendan Keith, November 2018.

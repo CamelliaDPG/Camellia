@@ -338,22 +338,22 @@ int main(int argc, char *argv[])
   //////////////////////  DECLARE EXACT SOLUTIONS  /////////////////////
   FunctionPtr u_exact, v_exact;
   FunctionPtr xx = x/width, yy = y/height;
-  u_exact = zero;
+  // u_exact = zero;
   // u_exact = one;
   // u_exact = x * x + 2 * x * y;
   // u_exact = x * x * x * y + 2 * x * y * y;
-  // u_exact = sin_pix * sin_piy;
+  u_exact = sin_pix * sin_piy;
   // u_exact = xx * (1.0 - xx) * (xx/4.0 + (1.0 - 4.0*xx)*(1.0 - 4.0*xx) ) * yy * (1.0 - yy) * (yy/4.0 + (1.0 - 4.0*yy)*(1.0 - 4.0*yy) );
 
   xx = (width-x)/width;
   yy = (height-y)/height;
   // v_exact = zero;
-  v_exact = one;
+  // v_exact = one;
   // v_exact = x * x + 2 * x * y;
   // v_exact = xx * (1.0 - xx) * (xx/4.0 + (1.0 - 4.0*xx)*(1.0 - 4.0*xx) ) * yy * (1.0 - yy) * (yy/4.0 + (1.0 - 4.0*yy)*(1.0 - 4.0*yy) );
   // v_exact = x * x * x * y + 2 * x * y * y;
   // v_exact = x * (1.0 - x) * y * (1.0 - y);
-  // v_exact = sin_pix * sin_piy;
+  v_exact = sin_pix * sin_piy;
   // v_exact = sin_pix * sin_piy + one;
   // v_exact = sin_pix * sin_piy + x*x;
   // v_exact = cos_pix * cos_piy;
@@ -473,12 +473,12 @@ int main(int argc, char *argv[])
   dataFile << setw(4)  << " Ref"
            << setw(11) << "Elements"
            << setw(10) << "DOFs"
-           // << setw(16) << "DPGresidual"
-           // << setw(9)  << "Rate"
-           // << setw(13) << "DPGerror"
-           // << setw(9) << "Rate"
-           // << setw(13) << "superconv"
-           // << setw(9) << "Rate"
+           << setw(16) << "DPGresidual"
+           << setw(9)  << "Rate"
+           << setw(13) << "DPGerror"
+           << setw(9) << "Rate"
+           << setw(13) << "superconv"
+           << setw(9) << "Rate"
            << setw(16) << "DPG*residual"
            << setw(9)  << "Rate"
            << setw(13) << "DPG*error"
@@ -675,14 +675,14 @@ int main(int argc, char *argv[])
         << " \tSolve Time: " << solveTime
         << " \tTotal Time: " << totalTimer->totalElapsedTime(true)
         << endl;
-      // cout << setprecision(4) 
-      //   << " \nDPG Residual:        " << energyError
-      //   << " \tRate: " << energyRate
-      //   << " \nDPG Error (total):   " << solnError
-      //   << " \tRate: " << solnErrorRate
-      //   << " \nDPG Error (u-comp):  " << solnErrorL2
-      //   << " \tRate: " << solnErrorL2Rate
-      //   << endl;
+      cout << setprecision(4) 
+        << " \nDPG Residual:        " << energyError
+        << " \tRate: " << energyRate
+        << " \nDPG Error (total):   " << solnError
+        << " \tRate: " << solnErrorRate
+        << " \nDPG Error (u-comp):  " << solnErrorL2
+        << " \tRate: " << solnErrorL2Rate
+        << endl;
       cout << setprecision(4) 
         << " \nDPG* Residual:       " << dualSolnResidual
         << " \tRate: " << dualSolnResidualRate
@@ -707,15 +707,15 @@ int main(int argc, char *argv[])
         << setw(9) << numDofs
         << setprecision(4)
         << setw(7) << " "
-        // << setw(9) << energyError
-        // << setw(9) << energyRate
-        // << setw(4) << " "
-        // << setw(9) << solnError
-        // << setw(9) << solnErrorRate
-        // << setw(4) << " "
-        // << setw(9) << solnErrorL2
-        // << setw(9) << solnErrorL2Rate
-        // << setw(7) << " "
+        << setw(9) << energyError
+        << setw(9) << energyRate
+        << setw(4) << " "
+        << setw(9) << solnError
+        << setw(9) << solnErrorRate
+        << setw(4) << " "
+        << setw(9) << solnErrorL2
+        << setw(9) << solnErrorL2Rate
+        << setw(7) << " "
         << setw(9) << dualSolnResidual
         << setw(9) << dualSolnResidualRate
         << setw(4) << " "
