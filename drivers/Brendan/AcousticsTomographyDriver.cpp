@@ -354,7 +354,7 @@ int main(int argc, char *argv[])
   /////////////////////  DECLARE SOLUTION POINTERS /////////////////////
   SolutionPtr soln = Solution::solution(mesh, bc, rhs, ip);
 
-  soln->setGoalOrientedRHS(g_functional);
+  // soln->setGoalOrientedRHS(g_functional);
 
 
   //////////////////////////////////////////////////////////////////////
@@ -445,10 +445,10 @@ int main(int argc, char *argv[])
 
     // compute error in DPG solution
     bool weightFluxesBySideParity = true;
-    FunctionPtr soln_p1 = Function::solution(p1, soln, weightFluxesBySideParity, 0);
-    FunctionPtr soln_p2 = Function::solution(p2, soln, weightFluxesBySideParity, 0);
-    FunctionPtr soln_u1 = Function::solution(u1, soln, weightFluxesBySideParity, 0);
-    FunctionPtr soln_u2 = Function::solution(u2, soln, weightFluxesBySideParity, 0);
+    FunctionPtr soln_p1 = Function::solution(p1, soln);
+    FunctionPtr soln_p2 = Function::solution(p2, soln);
+    FunctionPtr soln_u1 = Function::solution(u1, soln);
+    FunctionPtr soln_u2 = Function::solution(u2, soln);
     FunctionPtr e_p1   = p1_exact - soln_p1;
     FunctionPtr e_p2   = p2_exact - soln_p2;
     FunctionPtr e_u1_x = p2_exact->dx() + omega * soln_u1->x();
