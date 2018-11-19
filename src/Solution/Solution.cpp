@@ -1167,11 +1167,8 @@ void TSolution<Scalar>::populateStiffnessAndLoad()
 
   int localStiffnessTimerHandle = TimeLogger::sharedInstance()->startTimer("local stiffness/load");
   //  cout << "Computing local matrices" << endl;
-  for (elemTypeIt = elementTypes.begin(); elemTypeIt != elementTypes.end(); elemTypeIt++)
+  for (ElementTypePtr elemTypePtr : elementTypes)
   {
-    //cout << "Solution: elementType loop, iteration: " << elemTypeNumber++ << endl;
-    ElementTypePtr elemTypePtr = *(elemTypeIt);
-
     Intrepid::FieldContainer<double> myPhysicalCellNodesForType = _mesh->physicalCellNodes(elemTypePtr);
     Intrepid::FieldContainer<double> myCellSideParitiesForType = _mesh->cellSideParities(elemTypePtr);
     int totalCellsForType = myPhysicalCellNodesForType.dimension(0);
@@ -2168,7 +2165,7 @@ void TSolution<Scalar>::imposeBCs()
   }
   TEUCHOS_TEST_FOR_EXCEPTION(numBCs != i_adjusted, std::invalid_argument, "internal error: numBCs != i_adjusted");
   
-  Epetra_MultiVector v(partMap,1);
+  Epetra_MultiVector v(partMap,_rhsVector->NumVectors());
   v.PutScalar(0.0);
   const int firstSolutionOrdinal = 0, goalSolutionOrdinal = 1;
   const int numSolutions = this->numSolutions();
@@ -2184,7 +2181,7 @@ void TSolution<Scalar>::imposeBCs()
   
   _bcDofCount = MPIWrapper::sum(*this->mesh()->Comm(), GlobalIndexType(numBCs));
   
-  Epetra_MultiVector rhsDirichlet(partMap,1);
+  Epetra_MultiVector rhsDirichlet(partMap,_rhsVector->NumVectors());
   _globalStiffMatrix->Apply(v,rhsDirichlet);
   
   // Update right-hand side
