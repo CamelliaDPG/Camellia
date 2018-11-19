@@ -35,16 +35,23 @@ namespace
     return mesh;
   }
   
-  SolutionPtr simplePoissonSolution(const vector<int> &elementWidths, int H1Order, bool useConformingTraces)
+  SolutionPtr simplePoissonSolution(const vector<int> &elementWidths, int H1Order, bool useConformingTraces, bool homogeneousBCs)
   {
-    // unit forcing, homogeneous BCs
+    // unit forcing
     auto mesh = poissonUniformMesh(elementWidths, H1Order, useConformingTraces);
     const int spaceDim = elementWidths.size();
     PoissonFormulation poissonForm(spaceDim, useConformingTraces);
     auto rhs = poissonForm.rhs(Function::constant(1.0));
     auto u_hat = poissonForm.u_hat();
     auto bc = BC::bc();
-    bc->addDirichlet(u_hat, SpatialFilter::allSpace(), Function::zero());
+    if (homogeneousBCs)
+    {
+      bc->addDirichlet(u_hat, SpatialFilter::allSpace(), Function::zero());
+    }
+    else
+    {
+      bc->addDirichlet(u_hat, SpatialFilter::allSpace(), Function::constant(1.0));
+    }
     auto graphNorm = poissonForm.bf()->graphNorm();
     auto soln = Solution::solution(poissonForm.bf(),mesh,bc,rhs,graphNorm);
     
@@ -53,9 +60,9 @@ namespace
     return soln;
   }
   
-  SolutionPtr simplePoissonSolutionWithSecondaryRHS(const vector<int> &elementWidths, int H1Order, bool useConformingTraces)
+  SolutionPtr simplePoissonSolutionWithSecondaryRHS(const vector<int> &elementWidths, int H1Order, bool useConformingTraces, bool homogeneousBCs)
   {
-    auto soln = simplePoissonSolution(elementWidths, H1Order, useConformingTraces);
+    auto soln = simplePoissonSolution(elementWidths, H1Order, useConformingTraces, homogeneousBCs);
     const int spaceDim = elementWidths.size();
     PoissonFormulation poissonForm(spaceDim, useConformingTraces);
     VarPtr u = poissonForm.u();
@@ -66,9 +73,9 @@ namespace
     return soln;
   }
   
-  SolutionPtr simplePoissonSolutionWithZeroSecondaryRHS(const vector<int> &elementWidths, int H1Order, bool useConformingTraces)
+  SolutionPtr simplePoissonSolutionWithZeroSecondaryRHS(const vector<int> &elementWidths, int H1Order, bool useConformingTraces, bool homogeneousBCs)
   {
-    auto soln = simplePoissonSolution(elementWidths, H1Order, useConformingTraces);
+    auto soln = simplePoissonSolution(elementWidths, H1Order, useConformingTraces, homogeneousBCs);
     const int spaceDim = elementWidths.size();
     PoissonFormulation poissonForm(spaceDim, useConformingTraces);
     VarPtr u = poissonForm.u();
@@ -79,7 +86,7 @@ namespace
     return soln;
   }
   
-  void testPoissonSolveMatches(const vector<int> &elementWidths, int H1Order, bool useConformingTraces, double tol, bool &success, Teuchos::FancyOStream &out)
+  void testPoissonSolveMatches(const vector<int> &elementWidths, int H1Order, bool useConformingTraces, bool homogeneousBCs, double tol, bool &success, Teuchos::FancyOStream &out)
   {
     // simple test that Poisson solve with secondary ("goal-oriented") RHS
     // still (a) has the same primary solution
@@ -87,8 +94,8 @@ namespace
     
     const int spaceDim = elementWidths.size();
     
-    auto soln_OneRHS = simplePoissonSolution                (elementWidths, H1Order, useConformingTraces);
-    auto soln_TwoRHS = simplePoissonSolutionWithSecondaryRHS(elementWidths, H1Order, useConformingTraces);
+    auto soln_OneRHS = simplePoissonSolution                (elementWidths, H1Order, useConformingTraces, homogeneousBCs);
+    auto soln_TwoRHS = simplePoissonSolutionWithSecondaryRHS(elementWidths, H1Order, useConformingTraces, homogeneousBCs);
     
     //    {
     //      // DEBUGGING: write out the matrices and RHSes to file
@@ -189,14 +196,14 @@ namespace
     TEST_COMPARE(u_err_L2, <, tol);
   }
   
-  void testZeroSecondaryRHSHasZeroSolution(const vector<int> &elementWidths, int H1Order, bool useConformingTraces, double tol, bool &success, Teuchos::FancyOStream &out)
+  void testZeroSecondaryRHSHasZeroSolution(const vector<int> &elementWidths, int H1Order, bool useConformingTraces, bool homogeneousBCs, double tol, bool &success, Teuchos::FancyOStream &out)
   {
     // simple test that Poisson solve with a zero secondary ("goal-oriented") RHS
     // has a zero secondary (influence) solution
     
     const int spaceDim = elementWidths.size();
     
-    auto soln_TwoRHS = simplePoissonSolutionWithZeroSecondaryRHS(elementWidths, H1Order, useConformingTraces);
+    auto soln_TwoRHS = simplePoissonSolutionWithZeroSecondaryRHS(elementWidths, H1Order, useConformingTraces, homogeneousBCs);
     
     //    {
     //      // DEBUGGING: write out the matrices and RHSes to file
@@ -238,7 +245,7 @@ namespace
     TEST_COMPARE(sigma_n_hat_err_L2, <, tol);
   }
   
-  void testRefinedSolutionMatches(const vector<int> &elementWidths, int H1Order, bool useConformingTraces, double tol,
+  void testRefinedSolutionMatches(const vector<int> &elementWidths, int H1Order, bool useConformingTraces, bool homogeneousBCs, double tol,
                                   bool &success, Teuchos::FancyOStream &out)
   {
     // simple test that synthetic Poisson solution with secondary ("goal-oriented") RHS
@@ -247,7 +254,7 @@ namespace
     
     const int spaceDim = elementWidths.size();
     
-    auto soln_TwoRHS = simplePoissonSolutionWithSecondaryRHS(elementWidths, H1Order, useConformingTraces);
+    auto soln_TwoRHS = simplePoissonSolutionWithSecondaryRHS(elementWidths, H1Order, useConformingTraces, homogeneousBCs);
     
     auto Comm = soln_TwoRHS->mesh()->Comm();
     int rank = Comm->MyPID();
@@ -407,11 +414,25 @@ namespace
     auto elementWidths = vector<int>(spaceDim,meshWidth);
     int H1Order = 4;
     bool useConformingTraces = true;
+    bool useHomogeneousBCs = true;
     double tol = 1e-14;
     
-    testPoissonSolveMatches(elementWidths, H1Order, useConformingTraces, tol, success, out);
+    testPoissonSolveMatches(elementWidths, H1Order, useConformingTraces, useHomogeneousBCs, tol, success, out);
   }
-  
+
+  TEUCHOS_UNIT_TEST( GoalOriented, PoissonSolveMatches_1D_NonhomogeneousBCs )
+  {
+    const int spaceDim = 1;
+    const int meshWidth = 2;
+    auto elementWidths = vector<int>(spaceDim,meshWidth);
+    int H1Order = 4;
+    bool useConformingTraces = true;
+    bool useHomogeneousBCs = false;
+    double tol = 1e-14;
+    
+    testPoissonSolveMatches(elementWidths, H1Order, useConformingTraces, useHomogeneousBCs, tol, success, out);
+  }
+
   TEUCHOS_UNIT_TEST( GoalOriented, PoissonSolveMatches_2D )
   {
     const int spaceDim = 2;
@@ -419,9 +440,23 @@ namespace
     auto elementWidths = vector<int>(spaceDim,meshWidth);
     int H1Order = 1;
     bool useConformingTraces = true;
+    bool useHomogeneousBCs = true;
     double tol = 1e-14;
     
-    testPoissonSolveMatches(elementWidths, H1Order, useConformingTraces, tol, success, out);
+    testPoissonSolveMatches(elementWidths, H1Order, useConformingTraces, useHomogeneousBCs, tol, success, out);
+  }
+  
+  TEUCHOS_UNIT_TEST( GoalOriented, PoissonSolveMatches_2D_NonhomogeneousBCs )
+  {
+    const int spaceDim = 2;
+    const int meshWidth = 2;
+    auto elementWidths = vector<int>(spaceDim,meshWidth);
+    int H1Order = 1;
+    bool useConformingTraces = true;
+    bool useHomogeneousBCs = false;
+    double tol = 1e-14;
+    
+    testPoissonSolveMatches(elementWidths, H1Order, useConformingTraces, useHomogeneousBCs, tol, success, out);
   }
   
   TEUCHOS_UNIT_TEST( GoalOriented, PoissonSolveMatches_3D )
@@ -431,11 +466,24 @@ namespace
     auto elementWidths = vector<int>(spaceDim,meshWidth);
     int H1Order = 1;
     bool useConformingTraces = true;
+    bool useHomogeneousBCs = true;
     double tol = 1e-13;
     
-    testPoissonSolveMatches(elementWidths, H1Order, useConformingTraces, tol, success, out);
+    testPoissonSolveMatches(elementWidths, H1Order, useConformingTraces, useHomogeneousBCs, tol, success, out);
   }
 
+  TEUCHOS_UNIT_TEST( GoalOriented, PoissonSolveMatches_3D_NonhomogeneousBCs )
+  {
+    const int spaceDim = 3;
+    const int meshWidth = 2;
+    auto elementWidths = vector<int>(spaceDim,meshWidth);
+    int H1Order = 1;
+    bool useConformingTraces = true;
+    bool useHomogeneousBCs = false;
+    double tol = 1e-13;
+    
+    testPoissonSolveMatches(elementWidths, H1Order, useConformingTraces, useHomogeneousBCs, tol, success, out);
+  }
   // The following 1D test fails for reasons that *look* like they do not have to do with goal-oriented stuff.
   // TODO: dig into this, and try adding a refinement test elsewhere (SolutionTests, maybe), and fix whatever's wrong.
   //   (It looks like some of the parent-to-child projection code doesn't quite do the right thing in 1D, which is frankly a
@@ -460,9 +508,10 @@ namespace
     auto elementWidths = vector<int>(spaceDim,meshWidth);
     int H1Order = 1;
     bool useConformingTraces = true;
+    bool useHomogeneousBCs = true;
     double tol = 1e-16;
     
-    testRefinedSolutionMatches(elementWidths, H1Order, useConformingTraces, tol, success, out);
+    testRefinedSolutionMatches(elementWidths, H1Order, useConformingTraces, useHomogeneousBCs, tol, success, out);
   }
   
   TEUCHOS_UNIT_TEST( GoalOriented, ZeroGoalHasZeroSolution_1D )
@@ -472,9 +521,10 @@ namespace
     auto elementWidths = vector<int>(spaceDim,meshWidth);
     int H1Order = 4;
     bool useConformingTraces = true;
+    bool useHomogeneousBCs = true;
     double tol = 1e-16;
     
-    testZeroSecondaryRHSHasZeroSolution(elementWidths, H1Order, useConformingTraces, tol, success, out);
+    testZeroSecondaryRHSHasZeroSolution(elementWidths, H1Order, useConformingTraces, useHomogeneousBCs, tol, success, out);
   }
   
   TEUCHOS_UNIT_TEST( GoalOriented, ZeroGoalHasZeroSolution_2D )
@@ -484,9 +534,10 @@ namespace
     auto elementWidths = vector<int>(spaceDim,meshWidth);
     int H1Order = 1;
     bool useConformingTraces = true;
+    bool useHomogeneousBCs = true;
     double tol = 1e-16;
     
-    testZeroSecondaryRHSHasZeroSolution(elementWidths, H1Order, useConformingTraces, tol, success, out);
+    testZeroSecondaryRHSHasZeroSolution(elementWidths, H1Order, useConformingTraces, useHomogeneousBCs, tol, success, out);
   }
   
 //  TEUCHOS_UNIT_TEST( Int, Assignment )
