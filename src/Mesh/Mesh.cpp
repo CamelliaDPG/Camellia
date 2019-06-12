@@ -1217,6 +1217,19 @@ FieldContainer<double> Mesh::physicalCellNodes( Teuchos::RCP< ElementType > elem
   return physicalNodes;
 }
 
+FieldContainer<double> Mesh::physicalCellNodes( vector<GlobalIndexType> &cellIDs )
+{
+  int numCells = cellIDs.size();
+  auto elemType = getElementType(cellIDs[0]);
+  
+  for (auto cellID : cellIDs)
+  {
+    auto cellElemType = getElementType(cellID);
+    TEUCHOS_TEST_FOR_EXCEPTION(! elemType->equals(cellElemType), std::invalid_argument, "all cellIDs must have same element type in physicalCellNodes");
+  }
+  return physicalCellNodes(elemType, cellIDs);
+}
+
 FieldContainer<double> Mesh::physicalCellNodesForCell( GlobalIndexType cellID )
 {
   CellPtr cell = _meshTopology->getCell(cellID);

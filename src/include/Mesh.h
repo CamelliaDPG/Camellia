@@ -280,6 +280,9 @@ public:
   Intrepid::FieldContainer<double> physicalCellNodesForCell(GlobalIndexType cellID);
   Intrepid::FieldContainer<double> physicalCellNodesGlobal( ElementTypePtr elemType );
 
+  // use this method only if you can ensure the provided cellIDs all have the same type
+  Intrepid::FieldContainer<double> physicalCellNodes(vector<GlobalIndexType> &cellIDs );
+  
   void pRefine(const vector<GlobalIndexType> &cellIDsForPRefinements);
   void pRefine(const vector<GlobalIndexType> &cellIDsForPRefinements, int pToAdd);
   void pRefine(const set<GlobalIndexType> &cellIDsForPRefinements);
