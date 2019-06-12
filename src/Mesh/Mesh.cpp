@@ -1219,7 +1219,7 @@ FieldContainer<double> Mesh::physicalCellNodes( Teuchos::RCP< ElementType > elem
 
 FieldContainer<double> Mesh::physicalCellNodes( vector<GlobalIndexType> &cellIDs )
 {
-  int numCells = cellIDs.size();
+  TEUCHOS_TEST_FOR_EXCEPTION(cellIDs.size() == 0, std::invalid_argument, "cellIDs cannot be empty!");
   auto elemType = getElementType(cellIDs[0]);
   
   for (auto cellID : cellIDs)
