@@ -5,3 +5,4 @@ add_subdirectory(NonconformingPoisson)
 add_subdirectory(ShearAlfvenWave)
 add_subdirectory(ProtoBrioWu)
 
+add_subdirectory(StokesBackwardFacingStep2)
