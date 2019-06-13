@@ -80,7 +80,7 @@ FieldContainer<double> GnuPlotUtil::cellCentroids(MeshPtr mesh)
   return cellCentroids;
 }
 
-void GnuPlotUtil::writeComputationalMeshSkeleton(const string &filePath, MeshPtr mesh, bool labelCells, string rgbColor, string title)
+void GnuPlotUtil::writeComputationalMeshSkeleton(const string &filePath, MeshPtr mesh, bool labelCells, string rgbColor, string title, int labelFontSize)
 {
   TFunctionPtr<double> transformationFunction = mesh->getTransformationFunction();
   if (transformationFunction.get()==NULL)
@@ -202,14 +202,14 @@ void GnuPlotUtil::writeComputationalMeshSkeleton(const string &filePath, MeshPtr
         fout << endl;
       }
     }
-    fout << "# set terminal postscript eps color lw 1 \"Helvetica\" 20\n";
+    fout << "# set terminal postscript eps color lw 1 \"Helvetica\" " << labelFontSize << "\n";
     fout << "# set out '" << filePath << ".eps'\n";
     fout << "# replot\n";
     fout << "# set term pop\n";
     fout.close();
 
     ofstream scriptOut((filePath + ".p").c_str());
-    scriptOut << "set terminal postscript eps color lw 1 \"Helvetica\" 20\n";
+    scriptOut << "set terminal postscript eps color lw 1 \"Helvetica\" " << labelFontSize << "\n";
     scriptOut << "set out '" << filePath << ".eps'\n";
     scriptOut << "set size ratio -1\n";
     scriptOut << "set xrange [" << minX- 0.1*xDiff << ":" << maxX+0.1*xDiff << "] \n";
@@ -238,7 +238,7 @@ void GnuPlotUtil::writeComputationalMeshSkeleton(const string &filePath, MeshPtr
 }
 
 void GnuPlotUtil::writeExactMeshSkeleton(const string &filePath, MeshTopology* meshTopo, int numPointsPerEdge,
-    bool labelCells, string rgbColor, string title)
+    bool labelCells, string rgbColor, string title, int labelFontSize)
 {
   MeshTopologyPtr meshTopoCopy;
   
@@ -332,7 +332,7 @@ void GnuPlotUtil::writeExactMeshSkeleton(const string &filePath, MeshTopology* m
         scriptOut << cellCentroids(i,1) << " center " << endl;
       }
     }
-    scriptOut << "set terminal postscript eps color lw 1 \"Helvetica\" 20\n";
+    scriptOut << "set terminal postscript eps color lw 1 \"Helvetica\" " << labelFontSize << "\n";
     scriptOut << "set out '" << filePath << ".eps'\n";
     //    scriptOut << "replot\n";
     //    scriptOut << "set terminal png\n";
@@ -344,7 +344,7 @@ void GnuPlotUtil::writeExactMeshSkeleton(const string &filePath, MeshTopology* m
   }
 }
 
-void GnuPlotUtil::writeExactMeshSkeleton(const string &filePath, MeshPtr mesh, int numPointsPerEdge, bool labelCells, string rgbColor, string title)
+void GnuPlotUtil::writeExactMeshSkeleton(const string &filePath, MeshPtr mesh, int numPointsPerEdge, bool labelCells, string rgbColor, string title, int labelFontSize)
 {
   int rank = mesh->Comm()->MyPID();
   
@@ -429,7 +429,7 @@ void GnuPlotUtil::writeExactMeshSkeleton(const string &filePath, MeshPtr mesh, i
         scriptOut << cellCentroids(i,1) << " center " << endl;
       }
     }
-    scriptOut << "set terminal postscript eps color lw 1 \"Helvetica\" 20\n";
+    scriptOut << "set terminal postscript eps color lw 1 \"Helvetica\" " << labelFontSize << "\n";
     scriptOut << "set out '" << filePath << ".eps'\n";
     //    scriptOut << "replot\n";
     //    scriptOut << "set terminal png\n";
@@ -496,7 +496,7 @@ void GnuPlotUtil::writeXYPoints(const string &filePath, const FieldContainer<dou
 }
 
 void GnuPlotUtil::writeContourPlotScript(set<double> contourLevels, const vector<string> &filePathsOfData,
-    const string &outputFile, double xTics, double yTics)
+    const string &outputFile, double xTics, double yTics, int labelFontSize)
 {
   ofstream fout((outputFile).c_str());
   ostringstream splotLine;
@@ -538,7 +538,7 @@ void GnuPlotUtil::writeContourPlotScript(set<double> contourLevels, const vector
     fout << "set ytics" << yTics << endl;
   }
   fout << "set style data lines" << endl;
-  fout << "set terminal postscript eps color lw 1 \"Helvetica\" 20\n";
+  fout << "set terminal postscript eps color lw 1 \"Helvetica\" " << labelFontSize << "\n";
   fout << "set out '" << outputFile << ".eps'\n";
   //    fout << "replot" << endl;
   //    fout << "set terminal png\n";

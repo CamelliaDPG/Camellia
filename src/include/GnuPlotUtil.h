@@ -26,17 +26,17 @@ class GnuPlotUtil
   static Intrepid::FieldContainer<double> cellCentroids(MeshPtr mesh);
 
 public:
-  static void writeComputationalMeshSkeleton(const string &filePath, MeshPtr mesh, bool labelCells = false, string rgbColor = "red", string title = "mesh");
+  static void writeComputationalMeshSkeleton(const string &filePath, MeshPtr mesh, bool labelCells = false, string rgbColor = "red", string title = "mesh", int labelFontSize=2);
 
-  static void writeExactMeshSkeleton(const string &filePath, MeshTopology* meshTopo, int numPointsPerEdge, bool labelCells=false, string rgbColor = "red", string title = "mesh");
+  static void writeExactMeshSkeleton(const string &filePath, MeshTopology* meshTopo, int numPointsPerEdge, bool labelCells=false, string rgbColor = "red", string title = "mesh", int labelFontSize=2);
 
-  static void writeExactMeshSkeleton(const string &filePath, MeshPtr mesh, int numPointsPerEdge, bool labelCells=false, string rgbColor = "red", string title = "mesh");
+  static void writeExactMeshSkeleton(const string &filePath, MeshPtr mesh, int numPointsPerEdge, bool labelCells=false, string rgbColor = "red", string title = "mesh", int labelFontSize=2);
 
   // badly named, maybe: we support arbitrary space dimension...
   static void writeXYPoints(const string &filePath, const Intrepid::FieldContainer<double> &dataPoints);
 
   static void writeContourPlotScript(set<double> contourLevels, const vector<string> &filePathsOfData,
-                                     const string &outputFile, double xTics=-1, double yTics=-1);
+                                     const string &outputFile, double xTics=-1, double yTics=-1, int labelFontSize=2);
 };
 }
 
