@@ -63,11 +63,15 @@ specific unit test suites.
 #include "Epetra_SerialComm.h"
 #endif
 
+#include "Kokkos_Core.hpp"
+
 int main( int argc, char* argv[] )
 {
   Teuchos::GlobalMPISession mpiSession(&argc, &argv);
   Teuchos::UnitTestRepository::setGloballyReduceTestResult(true);
 
+  Kokkos::initialize(argc, argv); // initialize Kokkos
+  
 #ifdef HAVE_MPI
   Epetra_MpiComm Comm(MPI_COMM_WORLD);
   //cout << "rank: " << rank << " of " << numProcs << endl;
@@ -77,6 +81,10 @@ int main( int argc, char* argv[] )
 
   Comm.Barrier(); // set breakpoint here to allow debugger attachment to other MPI processes than the one you automatically attached to.
 
+  int result = Teuchos::UnitTestRepository::runUnitTestsFromMain(argc, argv);
+  
+  Kokkos::finalize();
 
-  return Teuchos::UnitTestRepository::runUnitTestsFromMain(argc, argv);
+  return result;
+  
 }
