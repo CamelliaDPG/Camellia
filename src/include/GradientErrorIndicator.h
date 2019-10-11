@@ -33,8 +33,6 @@ namespace Camellia
     //! determine rank-local error measures.  Populates ErrorIndicator::_localErrorMeasures.
     virtual void measureError();
   };
-  
-  template class GradientErrorIndicator<double>;
 }
 
 #endif /* defined(__Camellia__GradientErrorIndicator__) */

@@ -933,6 +933,8 @@ int main(int argc, char *argv[])
     
     RefinementPatternPtr lineRefinement = RefinementPattern::regularRefinementPatternLine();
     
+    int cellCount = meshWidth;
+    
     for (int meshGradingIteration = 0; meshGradingIteration < meshGradingIterations; meshGradingIteration++)
     {
       GlobalIndexType nextCellID = meshTopo->nextCellID();

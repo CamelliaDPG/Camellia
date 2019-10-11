@@ -13,22 +13,6 @@
 
 #include "Tpetra_MultiVectorFiller.hpp"
 
-// explicit instantiations for double:
-namespace Camellia
-{
-  template class DLS<double>;
-  template DLS<double>::DLS(TSolutionPtr<double> solution);
-  template int DLS<double>::assemble();
-  template int DLS<double>::solveProblemLSQR(int maxIters, double tol);
-  template TMatrixPtr<double> DLS<double>::matrix();
-  template TVectorPtr<double> DLS<double>::rhs();
-  template TVectorPtr<double> DLS<double>::lhs();
-  template TVectorPtr<double> DLS<double>::normalDiagInverseSqrt();
-  template TSolutionPtr<double> DLS<double>::solution();
-//  typedef Teuchos::RCP<Tpetra::Map<GlobalIndexType,GlobalIndexType>> SolutionMapPtr;
-//  template SolutionMapPtr DLS<double>::solutionMapPtr();
-}
-
 static const int MAX_BATCH_SIZE_IN_BYTES = 3*1024*1024; // 3 MB
 static const int MIN_BATCH_SIZE_IN_CELLS = 1; // overrides the above, if it results in too-small batches
 
@@ -593,3 +577,6 @@ TSolutionPtr<Scalar> DLS<Scalar>::solution()
 //{
 //  return _dlsToSolnMap;
 //}
+
+// ETI for double 
+template class Camellia::DLS<double>;

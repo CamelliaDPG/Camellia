@@ -13,11 +13,6 @@
 
 using namespace Camellia;
 
-// explicitly instantiate double constructors.
-template EnergyErrorIndicator<double>::EnergyErrorIndicator(TSolutionPtr<double> soln);
-template EnergyErrorIndicator<double>::EnergyErrorIndicator(MeshPtr mesh, TLinearTermPtr<double> residual, TIPPtr<double> ip,
-                                                            int cubatureEnrichmentDegree);
-
 //! Solution-based energy error computation
 template <typename Scalar>
 EnergyErrorIndicator<Scalar>::EnergyErrorIndicator(TSolutionPtr<Scalar> soln) : ErrorIndicator(soln->mesh())
@@ -61,3 +56,6 @@ void EnergyErrorIndicator<Scalar>::measureError()
     _localErrorMeasures[cellID] = error;
   }
 }
+
+// ETI for double 
+template class Camellia::EnergyErrorIndicator<double>;

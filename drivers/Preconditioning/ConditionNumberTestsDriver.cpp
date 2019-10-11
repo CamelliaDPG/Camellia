@@ -68,8 +68,6 @@ void initializeSolutionAndCoarseMesh(SolutionPtr &solution, IPPtr &graphNorm,
   BCPtr bc;
   RHSPtr rhs;
   MeshPtr mesh;
-
-  int rank = Teuchos::GlobalMPISession::getRank();
   
   double width = 1.0; // in each dimension
   vector<double> x0(spaceDim,0); // origin is the default
@@ -89,12 +87,12 @@ void initializeSolutionAndCoarseMesh(SolutionPtr &solution, IPPtr &graphNorm,
     rhs = RHS::rhs();
     FunctionPtr f = Function::constant(1.0);
 
-    VarPtr q = formulation.q();
+    VarPtr q = formulation.v();
     rhs->addTerm( f * q );
 
     bc = BC::bc();
     SpatialFilterPtr boundary = SpatialFilter::allSpace();
-    VarPtr phi_hat = formulation.phi_hat();
+    VarPtr phi_hat = formulation.u_hat();
     bc->addDirichlet(phi_hat, boundary, Function::zero());
   }
   else if (problemChoice == ConvectionDiffusion)

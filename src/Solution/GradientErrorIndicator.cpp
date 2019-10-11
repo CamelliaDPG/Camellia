@@ -17,10 +17,6 @@
 using namespace Camellia;
 using namespace Intrepid;
 
-// explicitly instantiate double constructors.
-template GradientErrorIndicator<double>::GradientErrorIndicator(TSolutionPtr<double> soln, VarPtr varForGradient);
-template GradientErrorIndicator<double>::GradientErrorIndicator(TSolutionPtr<double> soln, VarPtr varForGradient, double hPower);
-
 template <typename Scalar>
 GradientErrorIndicator<Scalar>::GradientErrorIndicator(TSolutionPtr<Scalar> soln, VarPtr varForGradient) : ErrorIndicator(soln->mesh())
 {
@@ -180,3 +176,6 @@ void GradientErrorIndicator<Scalar>::measureError()
     }
   }
 }
+
+// ETI for double 
+template class Camellia::GradientErrorIndicator<double>;

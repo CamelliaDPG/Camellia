@@ -16,10 +16,6 @@
 using namespace Camellia;
 using namespace Intrepid;
 
-// explicitly instantiate double constructors.
-template HessianErrorIndicator<double>::HessianErrorIndicator(TSolutionPtr<double> soln, VarPtr varForHessian);
-template HessianErrorIndicator<double>::HessianErrorIndicator(TSolutionPtr<double> soln, VarPtr varForHessian, double hPower);
-
 template <typename Scalar>
 HessianErrorIndicator<Scalar>::HessianErrorIndicator(TSolutionPtr<Scalar> soln, VarPtr varForHessian) : ErrorIndicator(soln->mesh())
 {
@@ -349,3 +345,6 @@ void HessianErrorIndicator<Scalar>::measureError()
     }
   }
 }
+
+// ETI for double 
+template class Camellia::HessianErrorIndicator<double>;
