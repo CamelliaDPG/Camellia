@@ -19,7 +19,6 @@
 
 #include <Teuchos_GlobalMPISession.hpp>
 
-using namespace Intrepid;
 using namespace Camellia;
 
 GDAMaximumRule2D::GDAMaximumRule2D(MeshPtr mesh, VarFactoryPtr varFactory, DofOrderingFactoryPtr dofOrderingFactory,
@@ -237,8 +236,8 @@ void GDAMaximumRule2D::buildTypeLookups()
   {
     _cellIDsForElementType.push_back( map< ElementType*, vector<GlobalIndexType> >() );
     _elementTypesForPartition.push_back( vector< ElementTypePtr >() );
-    _partitionedPhysicalCellNodesForElementType.push_back( map< ElementType*, FieldContainer<double> >() );
-    _partitionedCellSideParitiesForElementType.push_back( map< ElementType*, FieldContainer<double> >() );
+    _partitionedPhysicalCellNodesForElementType.push_back( map< ElementType*, Intrepid::FieldContainer<double> >() );
+    _partitionedCellSideParitiesForElementType.push_back( map< ElementType*, Intrepid::FieldContainer<double> >() );
     set< GlobalIndexType >::const_iterator elemIterator;
 
 //    cout << "_partitions[" << partitionNumber << "] has " << _partitions[partitionNumber].size() << " cells.\n";
@@ -280,8 +279,8 @@ void GDAMaximumRule2D::buildTypeLookups()
       int numNodes = elemType->cellTopoPtr->getNodeCount();
       vector<GlobalIndexType> cellIDs = _cellIDsForElementType[partitionNumber][elemType.get()];
       GlobalIndexType numCells = cellIDs.size();
-      FieldContainer<double> physicalCellNodes( numCells, numNodes, spaceDim ) ;
-      FieldContainer<double> cellSideParities( numCells, numSides );
+      Intrepid::FieldContainer<double> physicalCellNodes( numCells, numNodes, spaceDim ) ;
+      Intrepid::FieldContainer<double> cellSideParities( numCells, numSides );
       vector<GlobalIndexType>::iterator cellIt;
       GlobalIndexType cellIndex = 0;
 
@@ -313,9 +312,9 @@ void GDAMaximumRule2D::buildTypeLookups()
     GlobalIndexType numCells = globalCellIndices[elemType];
     int spaceDim = elemType->cellTopoPtr->getDimension();
     int numSides = elemType->cellTopoPtr->getSideCount();
-    _physicalCellNodesForElementType[elemType] = FieldContainer<double>(numCells,numSides,spaceDim);
+    _physicalCellNodesForElementType[elemType] = Intrepid::FieldContainer<double>(numCells,numSides,spaceDim);
   }
-  // copy from the local (per-partition) FieldContainers to the global ones
+  // copy from the local (per-partition) Intrepid::FieldContainers to the global ones
   for (PartitionIndexType partitionNumber=0; partitionNumber < _numPartitions; partitionNumber++)
   {
     vector< ElementTypePtr >::iterator elemTypeIt;
@@ -323,14 +322,14 @@ void GDAMaximumRule2D::buildTypeLookups()
          elemTypeIt != _elementTypesForPartition[partitionNumber].end(); elemTypeIt++)
     {
       ElementType* elemType = elemTypeIt->get();
-      FieldContainer<double> partitionedPhysicalCellNodes = _partitionedPhysicalCellNodesForElementType[partitionNumber][elemType];
-      FieldContainer<double> partitionedCellSideParities = _partitionedCellSideParitiesForElementType[partitionNumber][elemType];
+      Intrepid::FieldContainer<double> partitionedPhysicalCellNodes = _partitionedPhysicalCellNodesForElementType[partitionNumber][elemType];
+      Intrepid::FieldContainer<double> partitionedCellSideParities = _partitionedCellSideParitiesForElementType[partitionNumber][elemType];
 
       IndexType numCells = partitionedPhysicalCellNodes.dimension(0);
       int numSides = partitionedPhysicalCellNodes.dimension(1);
       int spaceDim = partitionedPhysicalCellNodes.dimension(2);
 
-      // this copying can be made more efficient by copying a whole FieldContainer at a time
+      // this copying can be made more efficient by copying a whole Intrepid::FieldContainer at a time
       // (but it's probably not worth it, for now)
       for (IndexType cellIndex=0; cellIndex<numCells; cellIndex++)
       {
@@ -385,7 +384,7 @@ int GDAMaximumRule2D::cellPolyOrder(GlobalIndexType cellID)
   return _dofOrderingFactory->trialPolyOrder(elementType(cellID)->trialOrderPtr);
 }
 
-FieldContainer<double> & GDAMaximumRule2D::cellSideParities( ElementTypePtr elemTypePtr )
+Intrepid::FieldContainer<double> & GDAMaximumRule2D::cellSideParities( ElementTypePtr elemTypePtr )
 {
 #ifdef HAVE_MPI
   int partitionNumber     = _partitionPolicy->Comm()->MyPID();
@@ -1083,7 +1082,7 @@ set<GlobalIndexType> GDAMaximumRule2D::partitionOwnedGlobalTraceIndices()
   return traceIndices;
 }
 
-void GDAMaximumRule2D::interpretGlobalCoefficients(GlobalIndexType cellID, FieldContainer<double> &localCoefficients,
+void GDAMaximumRule2D::interpretGlobalCoefficients(GlobalIndexType cellID, Intrepid::FieldContainer<double> &localCoefficients,
     const Epetra_MultiVector &globalCoefficients)
 {
   int numDofs = elementType(cellID)->trialOrderPtr->totalDofs();
@@ -1128,8 +1127,8 @@ void GDAMaximumRule2D::interpretGlobalCoefficients(GlobalIndexType cellID, Field
   }
 }
 
-void GDAMaximumRule2D::interpretLocalData(GlobalIndexType cellID, const FieldContainer<double> &localDofs, FieldContainer<double> &globalDofs,
-    FieldContainer<GlobalIndexType> &globalDofIndices)
+void GDAMaximumRule2D::interpretLocalData(GlobalIndexType cellID, const Intrepid::FieldContainer<double> &localDofs, Intrepid::FieldContainer<double> &globalDofs,
+    Intrepid::FieldContainer<GlobalIndexType> &globalDofIndices)
 {
   // for maximum rule, our interpretation is just a one-to-one mapping
   // TODO: add some sanity checks for the arguments here.
@@ -1142,8 +1141,8 @@ void GDAMaximumRule2D::interpretLocalData(GlobalIndexType cellID, const FieldCon
   }
 }
 
-void GDAMaximumRule2D::interpretLocalBasisCoefficients(GlobalIndexType cellID, int varID, int sideOrdinal, const FieldContainer<double> &basisCoefficients,
-    FieldContainer<double> &globalCoefficients, FieldContainer<GlobalIndexType> &globalDofIndices)
+void GDAMaximumRule2D::interpretLocalBasisCoefficients(GlobalIndexType cellID, int varID, int sideOrdinal, const Intrepid::FieldContainer<double> &basisCoefficients,
+    Intrepid::FieldContainer<double> &globalCoefficients, Intrepid::FieldContainer<GlobalIndexType> &globalDofIndices)
 {
   globalCoefficients = basisCoefficients; // copy
   if (basisCoefficients.rank() != 1)
@@ -1500,7 +1499,7 @@ GlobalIndexType GDAMaximumRule2D::partitionLocalIndexForGlobalDofIndex( GlobalIn
   return _partitionLocalIndexForGlobalDofIndex[ globalDofIndex ];
 }
 
-FieldContainer<double> & GDAMaximumRule2D::physicalCellNodes( ElementTypePtr elemTypePtr)
+Intrepid::FieldContainer<double> & GDAMaximumRule2D::physicalCellNodes( ElementTypePtr elemTypePtr)
 {
 #ifdef HAVE_MPI
   int partitionNumber     = _partitionPolicy->Comm()->MyPID();
@@ -1510,7 +1509,7 @@ FieldContainer<double> & GDAMaximumRule2D::physicalCellNodes( ElementTypePtr ele
   return _partitionedPhysicalCellNodesForElementType[ partitionNumber ][ elemTypePtr.get() ];
 }
 
-FieldContainer<double> & GDAMaximumRule2D::physicalCellNodesGlobal( ElementTypePtr elemTypePtr )
+Intrepid::FieldContainer<double> & GDAMaximumRule2D::physicalCellNodesGlobal( ElementTypePtr elemTypePtr )
 {
   return _physicalCellNodesForElementType[ elemTypePtr.get() ];
 }
@@ -1559,7 +1558,7 @@ void GDAMaximumRule2D::setElementType(GlobalIndexType cellID, ElementTypePtr new
   _elementTypeForCell[cellID] = newType;
 }
 
-void GDAMaximumRule2D::verticesForCell(FieldContainer<double>& vertices, GlobalIndexType cellID)
+void GDAMaximumRule2D::verticesForCell(Intrepid::FieldContainer<double>& vertices, GlobalIndexType cellID)
 {
   CellPtr cell = _meshTopology->getCell(cellID);
   vector<IndexType> vertexIndices = cell->vertices();
@@ -1577,7 +1576,7 @@ void GDAMaximumRule2D::verticesForCell(FieldContainer<double>& vertices, GlobalI
   }
 }
 
-void GDAMaximumRule2D::verticesForCells(FieldContainer<double>& vertices, vector<GlobalIndexType> &cellIDs)
+void GDAMaximumRule2D::verticesForCells(Intrepid::FieldContainer<double>& vertices, vector<GlobalIndexType> &cellIDs)
 {
   // all cells represented in cellIDs must have the same topology
   int spaceDim = _meshTopology->getDimension();
@@ -1600,7 +1599,7 @@ void GDAMaximumRule2D::verticesForCells(FieldContainer<double>& vertices, vector
   for (int cellIndex=0; cellIndex<numCells; cellIndex++)
   {
     int cellID = cellIDs[cellIndex];
-    FieldContainer<double> cellVertices(dim,&vertices(cellIndex,0,0));
+    Intrepid::FieldContainer<double> cellVertices(dim,&vertices(cellIndex,0,0));
     this->verticesForCell(cellVertices, cellID);
     //    cout << "vertices for cellID " << cellID << ":\n" << cellVertices;
   }

@@ -5,7 +5,6 @@
 #include "RHS.h"
 #include "BasisCache.h"
 
-using namespace Intrepid;
 using namespace Camellia;
 
 template <typename Scalar>
@@ -65,7 +64,7 @@ TLinearTermPtr<Scalar> TRHS<Scalar>::linearTermCopy()
 }
 
 template <typename Scalar>
-void TRHS<Scalar>::integrateAgainstStandardBasis(FieldContainer<Scalar> &rhsVector,
+void TRHS<Scalar>::integrateAgainstStandardBasis(Intrepid::FieldContainer<Scalar> &rhsVector,
     Teuchos::RCP<DofOrdering> testOrdering,
     BasisCachePtr basisCache)
 {
@@ -106,7 +105,7 @@ void TRHS<Scalar>::integrateAgainstStandardBasis(FieldContainer<Scalar> &rhsVect
 
     BasisPtr testBasis;
 
-    FieldContainer<Scalar> rhsPointValues; // the rhs method will resize...
+    Intrepid::FieldContainer<Scalar> rhsPointValues; // the rhs method will resize...
 
     rhsVector.initialize(0.0);
 
@@ -127,10 +126,10 @@ void TRHS<Scalar>::integrateAgainstStandardBasis(FieldContainer<Scalar> &rhsVect
 
           testBasis = testOrdering->getBasis(testID);
 
-          Teuchos::RCP< const FieldContainer<Scalar> > testValuesTransformedWeighted;
+          Teuchos::RCP< const Intrepid::FieldContainer<Scalar> > testValuesTransformedWeighted;
 
           testValuesTransformedWeighted = basisCache->getTransformedWeightedValues(testBasis,testOperator);
-          FieldContainer<double> physCubPoints = basisCache->getPhysicalCubaturePoints();
+          Intrepid::FieldContainer<double> physCubPoints = basisCache->getPhysicalCubaturePoints();
 
           vector<int> testDofIndices = testOrdering->getDofIndices(testID,VOLUME_INTERIOR_SIDE_ORDINAL);
 
@@ -170,8 +169,8 @@ void TRHS<Scalar>::integrateAgainstStandardBasis(FieldContainer<Scalar> &rhsVect
 }
 
 template <typename Scalar>
-void TRHS<Scalar>::integrateAgainstOptimalTests(FieldContainer<Scalar> &rhsVector,
-    const FieldContainer<Scalar> &optimalTestWeights,
+void TRHS<Scalar>::integrateAgainstOptimalTests(Intrepid::FieldContainer<Scalar> &rhsVector,
+    const Intrepid::FieldContainer<Scalar> &optimalTestWeights,
     Teuchos::RCP<DofOrdering> testOrdering,
     BasisCachePtr basisCache)
 {
@@ -188,7 +187,7 @@ void TRHS<Scalar>::integrateAgainstOptimalTests(FieldContainer<Scalar> &rhsVecto
   unsigned numTrialDofs = optimalTestWeights.dimension(1);
   unsigned numTestDofs = testOrdering->totalDofs();
 
-  FieldContainer<Scalar> rhsVectorStandardBasis(numCells,numTestDofs);
+  Intrepid::FieldContainer<Scalar> rhsVectorStandardBasis(numCells,numTestDofs);
 
   integrateAgainstStandardBasis(rhsVectorStandardBasis,testOrdering,basisCache);
 
@@ -218,20 +217,20 @@ vector<Camellia::EOperator> TRHS<Scalar>::operatorsForTestID(int testID)
 }
 
 template <typename Scalar>
-void TRHS<Scalar>::rhs(int testVarID, int operatorIndex, Teuchos::RCP<BasisCache> basisCache, FieldContainer<Scalar> &values)
+void TRHS<Scalar>::rhs(int testVarID, int operatorIndex, Teuchos::RCP<BasisCache> basisCache, Intrepid::FieldContainer<Scalar> &values)
 {
   rhs(testVarID, operatorIndex, basisCache->getPhysicalCubaturePoints(), values);
 }
 
 template <typename Scalar>
-void TRHS<Scalar>::rhs(int testVarID, int operatorIndex, const FieldContainer<double> &physicalPoints, FieldContainer<Scalar> &values)
+void TRHS<Scalar>::rhs(int testVarID, int operatorIndex, const Intrepid::FieldContainer<double> &physicalPoints, Intrepid::FieldContainer<Scalar> &values)
 {
   TEUCHOS_TEST_FOR_EXCEPTION(operatorIndex != 0, std::invalid_argument, "base rhs() method called for operatorIndex != 0");
   rhs(testVarID,physicalPoints,values);
 }
 
 template <typename Scalar>
-void TRHS<Scalar>::rhs(int testVarID, const FieldContainer<double> &physicalPoints, FieldContainer<Scalar> &values)
+void TRHS<Scalar>::rhs(int testVarID, const Intrepid::FieldContainer<double> &physicalPoints, Intrepid::FieldContainer<Scalar> &values)
 {
   TEUCHOS_TEST_FOR_EXCEPTION(true, std::invalid_argument, "no rhs() implemented within RHS");
 }

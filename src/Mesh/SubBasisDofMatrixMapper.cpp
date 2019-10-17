@@ -9,10 +9,9 @@
 
 using namespace std;
 
-using namespace Intrepid;
 using namespace Camellia;
 
-SubBasisDofMatrixMapper::SubBasisDofMatrixMapper(const set<int> &basisDofOrdinalFilter, const vector<GlobalIndexType> &mappedGlobalDofOrdinals, const FieldContainer<double> &constraintMatrix)
+SubBasisDofMatrixMapper::SubBasisDofMatrixMapper(const set<int> &basisDofOrdinalFilter, const vector<GlobalIndexType> &mappedGlobalDofOrdinals, const Intrepid::FieldContainer<double> &constraintMatrix)
 {
   _basisDofOrdinalFilter = basisDofOrdinalFilter;
   _mappedGlobalDofOrdinals = mappedGlobalDofOrdinals;
@@ -126,12 +125,12 @@ const set<int> & SubBasisDofMatrixMapper::basisDofOrdinalFilter()
   return _basisDofOrdinalFilter;
 }
 
-const FieldContainer<double> &SubBasisDofMatrixMapper::constraintMatrix()
+const Intrepid::FieldContainer<double> &SubBasisDofMatrixMapper::constraintMatrix()
 {
   return _constraintMatrix;
 }
 
-FieldContainer<double> SubBasisDofMatrixMapper::getConstraintMatrix()
+Intrepid::FieldContainer<double> SubBasisDofMatrixMapper::getConstraintMatrix()
 {
   return _constraintMatrix;
 }
@@ -146,7 +145,7 @@ bool SubBasisDofMatrixMapper::isPermutation()
   return false;
 }
 
-FieldContainer<double> SubBasisDofMatrixMapper::mapData(bool transposeConstraint, FieldContainer<double> &localData, bool applyOnLeftOnly)
+Intrepid::FieldContainer<double> SubBasisDofMatrixMapper::mapData(bool transposeConstraint, Intrepid::FieldContainer<double> &localData, bool applyOnLeftOnly)
 {
   // localData must be rank 2, and must have the same size as FilteredLocalDofOrdinals in its first dimension
   bool didReshape = false;
@@ -179,7 +178,7 @@ FieldContainer<double> SubBasisDofMatrixMapper::mapData(bool transposeConstraint
   }
   // (could also test that the dimensions match what we expect in terms of the size of the mapped global dof ordinals or basisDofOrdinal filter)
 
-  FieldContainer<double> result1(constraintRows,dataCols);
+  Intrepid::FieldContainer<double> result1(constraintRows,dataCols);
 
   char constraintTransposeFlag = transposeConstraint ? 'T' : 'N';
   char dataTransposeFlag = 'N';
@@ -204,7 +203,7 @@ FieldContainer<double> SubBasisDofMatrixMapper::mapData(bool transposeConstraint
   constraintTransposeFlag = (!transposeConstraint) ? 'T' : 'N'; // opposite of the above choice, since now we multiply on the right
   char resultTransposeFlag = 'N';
 
-  FieldContainer<double> result(constraintRows,constraintRows);
+  Intrepid::FieldContainer<double> result(constraintRows,constraintRows);
   SerialDenseWrapper::multiply(result,result1,_constraintMatrix,resultTransposeFlag,constraintTransposeFlag);
 
   return result;
@@ -216,7 +215,7 @@ void SubBasisDofMatrixMapper::mapDataIntoGlobalContainer(const Intrepid::FieldCo
 {
   const set<int>* basisOrdinalFilter = &this->basisDofOrdinalFilter();
   vector<int> dofIndices(basisOrdinalFilter->begin(),basisOrdinalFilter->end());
-  FieldContainer<double> subBasisData(basisOrdinalFilter->size());
+  Intrepid::FieldContainer<double> subBasisData(basisOrdinalFilter->size());
   int dofCount = basisOrdinalFilter->size();
   if (allLocalData.rank()==1)
   {
@@ -237,14 +236,14 @@ void SubBasisDofMatrixMapper::mapDataIntoGlobalContainer(const Intrepid::FieldCo
   this->mapSubBasisDataIntoGlobalContainer(subBasisData, globalIndexToOrdinal, fittableDofsOnly, fittableDofIndices, globalData);
 }
 
-void SubBasisDofMatrixMapper::mapDataIntoGlobalContainer(const FieldContainer<double> &wholeBasisData, const map<GlobalIndexType, unsigned> &globalIndexToOrdinal,
-    bool fittableDofsOnly, const set<GlobalIndexType> &fittableDofIndices, FieldContainer<double> &globalData)
+void SubBasisDofMatrixMapper::mapDataIntoGlobalContainer(const Intrepid::FieldContainer<double> &wholeBasisData, const map<GlobalIndexType, unsigned> &globalIndexToOrdinal,
+    bool fittableDofsOnly, const set<GlobalIndexType> &fittableDofIndices, Intrepid::FieldContainer<double> &globalData)
 {
   // like calling mapData, above, with transposeConstraint = true
 
   const set<int>* basisOrdinalFilter = &this->basisDofOrdinalFilter();
   vector<int> dofIndices(basisOrdinalFilter->begin(),basisOrdinalFilter->end());
-  FieldContainer<double> subBasisData(basisOrdinalFilter->size());
+  Intrepid::FieldContainer<double> subBasisData(basisOrdinalFilter->size());
   int dofCount = basisOrdinalFilter->size();
   if (wholeBasisData.rank()==1)
   {
@@ -265,8 +264,8 @@ void SubBasisDofMatrixMapper::mapDataIntoGlobalContainer(const FieldContainer<do
   this->mapSubBasisDataIntoGlobalContainer(subBasisData, globalIndexToOrdinal, fittableDofsOnly, fittableDofIndices, globalData);
 }
 
-void SubBasisDofMatrixMapper::mapSubBasisDataIntoGlobalContainer(const FieldContainer<double> &subBasisData, const map<GlobalIndexType, unsigned> &globalIndexToOrdinal,
-                                                                 bool fittableDofsOnly, const set<GlobalIndexType> &fittableDofIndices, FieldContainer<double> &globalData)
+void SubBasisDofMatrixMapper::mapSubBasisDataIntoGlobalContainer(const Intrepid::FieldContainer<double> &subBasisData, const map<GlobalIndexType, unsigned> &globalIndexToOrdinal,
+                                                                 bool fittableDofsOnly, const set<GlobalIndexType> &fittableDofIndices, Intrepid::FieldContainer<double> &globalData)
 {
   // like calling mapData, above, with transposeConstraint = true
   
@@ -288,7 +287,7 @@ void SubBasisDofMatrixMapper::mapSubBasisDataIntoGlobalContainer(const FieldCont
   }
   // (could also test that the dimensions match what we expect in terms of the size of the mapped global dof ordinals or basisDofOrdinal filter)
   
-  FieldContainer<double> result1(constraintRows,dataCols);
+  Intrepid::FieldContainer<double> result1(constraintRows,dataCols);
   
   char constraintTransposeFlag = 'T';
   char dataTransposeFlag = 'N';
@@ -334,7 +333,7 @@ set<GlobalIndexType> SubBasisDofMatrixMapper::mappedGlobalDofOrdinalsForBasisOrd
 
 SubBasisDofMapperPtr SubBasisDofMatrixMapper::negatedDofMapper()
 {
-  FieldContainer<double> negatedConstraintMatrix = _constraintMatrix;
+  Intrepid::FieldContainer<double> negatedConstraintMatrix = _constraintMatrix;
   SerialDenseWrapper::multiplyFCByWeight(negatedConstraintMatrix, -1);
   return Teuchos::rcp( new SubBasisDofMatrixMapper(_basisDofOrdinalFilter, _mappedGlobalDofOrdinals, negatedConstraintMatrix) );
 }
@@ -362,7 +361,7 @@ SubBasisDofMapperPtr SubBasisDofMatrixMapper::restrictDofOrdinalFilter(const set
     }
     i++;
   }
-  FieldContainer<double> restrictedConstraintMatrix(rowsToKeep.size(),colsToKeep.size());
+  Intrepid::FieldContainer<double> restrictedConstraintMatrix(rowsToKeep.size(),colsToKeep.size());
   vector<GlobalIndexType> restrictedMappedGlobalDofOrdinals(colsToKeep.size());
   
   int restricted_j = 0;

@@ -65,7 +65,7 @@ namespace Intrepid {
     virtual void getValues(ArrayScalar &          outputValues,
                    const ArrayScalar &    inputPoints,
                    const ArrayScalar &    cellVertices,
-                   const EOperator        operatorType = OPERATOR_VALUE) const;
+                   const EOperator        operatorType = Intrepid::OPERATOR_VALUE) const;
     
     void getVectorizedValues(ArrayScalar& outputValues, 
                              const ArrayScalar & componentOutputValues,

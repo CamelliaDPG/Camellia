@@ -7,7 +7,6 @@
 #include "ConstantScalarFunction.h"
 #include "ParameterFunction.h"
 
-using namespace Intrepid;
 using namespace Camellia;
 
 ParameterFunction::ParameterFunction(double value) : TFunction<double>(0)
@@ -93,7 +92,7 @@ std::vector< TFunctionPtr<double> > ParameterFunction::memberFunctions()
   return {{_fxn}};
 }
 
-void ParameterFunction::values(FieldContainer<double> &values, BasisCachePtr basisCache)
+void ParameterFunction::values(Intrepid::FieldContainer<double> &values, BasisCachePtr basisCache)
 {
   _fxn->values(values, basisCache);
 }

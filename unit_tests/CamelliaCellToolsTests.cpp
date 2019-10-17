@@ -25,7 +25,6 @@
 #include "CamelliaCellTools.h"
 
 using namespace Camellia;
-using namespace Intrepid;
 
 namespace
 {
@@ -56,8 +55,8 @@ TEUCHOS_UNIT_TEST( CamelliaCellTools, GetReferenceSideNormal_Space)
 
     int sideCount = simpleTopo->getSideCount();
 
-    FieldContainer<double> sideNormal(spaceDim);
-    FieldContainer<double> expectedSideNormal(spaceDim);
+    Intrepid::FieldContainer<double> sideNormal(spaceDim);
+    Intrepid::FieldContainer<double> expectedSideNormal(spaceDim);
 
     for (int sideOrdinal=0; sideOrdinal<sideCount; sideOrdinal++)
     {
@@ -67,7 +66,7 @@ TEUCHOS_UNIT_TEST( CamelliaCellTools, GetReferenceSideNormal_Space)
       }
       else
       {
-        CellTools<double>::getReferenceSideNormal(expectedSideNormal, sideOrdinal, shardsTopo);
+        Intrepid::CellTools<double>::getReferenceSideNormal(expectedSideNormal, sideOrdinal, shardsTopo);
       }
 
       CamelliaCellTools::getReferenceSideNormal(sideNormal, sideOrdinal, simpleTopo);
@@ -90,8 +89,8 @@ TEUCHOS_UNIT_TEST( CamelliaCellTools, GetReferenceSideNormal_SpaceTime)
 
     int spaceDim = spaceTimeTopo->getDimension();
 
-    FieldContainer<double> sideNormal(spaceDim);
-    FieldContainer<double> expectedSideNormal(spaceDim);
+    Intrepid::FieldContainer<double> sideNormal(spaceDim);
+    Intrepid::FieldContainer<double> expectedSideNormal(spaceDim);
 
     int sideCount = spaceTimeTopo->getSideCount();
     for (int sideOrdinal = 0; sideOrdinal < sideCount; sideOrdinal++)
@@ -123,8 +122,8 @@ TEUCHOS_UNIT_TEST( CamelliaCellTools, GetReferenceSideNormal_SpaceTime)
         if (spaceTimeTopo->sideIsSpatial(sideOrdinal))
         {
           unsigned spatialSideOrdinal = spaceTimeTopo->getSpatialComponentSideOrdinal(sideOrdinal);
-          FieldContainer<double> spaceSideNormal(spaceDim-1);
-          CellTools<double>::getReferenceSideNormal(spaceSideNormal, spatialSideOrdinal, spaceTopo);
+          Intrepid::FieldContainer<double> spaceSideNormal(spaceDim-1);
+          Intrepid::CellTools<double>::getReferenceSideNormal(spaceSideNormal, spatialSideOrdinal, spaceTopo);
           for (int d=0; d<spaceDim-1; d++)
           {
             expectedSideNormal[d] = spaceSideNormal[d];
@@ -170,13 +169,13 @@ TEUCHOS_UNIT_TEST( CamelliaCellTools, MapToReferenceSubcell_ShardsAndCamelliaAgr
       for (unsigned scord=0; scord < shardsTopo.getSubcellCount(subcellDim); scord++)
       {
         shards::CellTopology shardsSubcellTopo = shardsTopo.getCellTopologyData(subcellDim, scord);
-        FieldContainer<double> refSubcellNodes(shardsSubcellTopo.getVertexCount(), subcellDim);
+        Intrepid::FieldContainer<double> refSubcellNodes(shardsSubcellTopo.getVertexCount(), subcellDim);
         CamelliaCellTools::refCellNodesForTopology(refSubcellNodes, shardsSubcellTopo);
 
-        FieldContainer<double> intrepidParentNodes(shardsSubcellTopo.getVertexCount(),shardsTopo.getDimension());
-        CellTools<double>::mapToReferenceSubcell(intrepidParentNodes, refSubcellNodes, subcellDim, scord, shardsTopo);
+        Intrepid::FieldContainer<double> intrepidParentNodes(shardsSubcellTopo.getVertexCount(),shardsTopo.getDimension());
+        Intrepid::CellTools<double>::mapToReferenceSubcell(intrepidParentNodes, refSubcellNodes, subcellDim, scord, shardsTopo);
 
-        FieldContainer<double> camelliaParentNodes(shardsSubcellTopo.getVertexCount(),shardsTopo.getDimension());
+        Intrepid::FieldContainer<double> camelliaParentNodes(shardsSubcellTopo.getVertexCount(),shardsTopo.getDimension());
         CamelliaCellTools::mapToReferenceSubcell(camelliaParentNodes, refSubcellNodes, subcellDim, scord, simpleTopo);
 
         TEST_COMPARE_FLOATING_ARRAYS(intrepidParentNodes, camelliaParentNodes, 1e-15);
@@ -204,15 +203,15 @@ TEUCHOS_UNIT_TEST( CamelliaCellTools, MapToReferenceSubcell_NodeOrderingAgrees)
       for (unsigned scord=0; scord < shardsTopo.getSubcellCount(subcellDim); scord++)
       {
         shards::CellTopology shardsSubcellTopo = shardsTopo.getCellTopologyData(subcellDim, scord);
-        FieldContainer<double> refSubcellNodes(shardsSubcellTopo.getVertexCount(), subcellDim);
+        Intrepid::FieldContainer<double> refSubcellNodes(shardsSubcellTopo.getVertexCount(), subcellDim);
         CamelliaCellTools::refCellNodesForTopology(refSubcellNodes, shardsSubcellTopo);
 
-        FieldContainer<double> nodesInParentActual(shardsSubcellTopo.getVertexCount(),shardsTopo.getDimension());
+        Intrepid::FieldContainer<double> nodesInParentActual(shardsSubcellTopo.getVertexCount(),shardsTopo.getDimension());
         CamelliaCellTools::mapToReferenceSubcell(nodesInParentActual, refSubcellNodes, subcellDim, scord, simpleTopo);
 
-        FieldContainer<double> refParentNodes(shardsTopo.getNodeCount(),shardsTopo.getDimension());
+        Intrepid::FieldContainer<double> refParentNodes(shardsTopo.getNodeCount(),shardsTopo.getDimension());
         CamelliaCellTools::refCellNodesForTopology(refParentNodes, shardsTopo);
-        FieldContainer<double> nodesInParentExpected(shardsSubcellTopo.getVertexCount(),shardsTopo.getDimension());
+        Intrepid::FieldContainer<double> nodesInParentExpected(shardsSubcellTopo.getVertexCount(),shardsTopo.getDimension());
         for (int subcellNode=0; subcellNode<shardsSubcellTopo.getNodeCount(); subcellNode++)
         {
           int parentNode = simpleTopo->getNodeMap(subcellDim, scord, subcellNode);
@@ -237,14 +236,14 @@ TEUCHOS_UNIT_TEST( CamelliaCellTools, MapToReferenceSubcell_Line_2_x_Line_2 )
   int tensorialDegree = 1;
   CellTopoPtr line_line = CellTopology::cellTopology(line->getShardsTopology(), tensorialDegree);
 
-  FieldContainer<double> sidePoints(2,1); // the points we'll map
+  Intrepid::FieldContainer<double> sidePoints(2,1); // the points we'll map
   sidePoints(0,0) = -0.5;
   sidePoints(1,0) =  0.5;
 
-  FieldContainer<double> volumePoints(2,2);
-  FieldContainer<double> expectedVolumePoints(2,2);
+  Intrepid::FieldContainer<double> volumePoints(2,2);
+  Intrepid::FieldContainer<double> expectedVolumePoints(2,2);
 
-  FieldContainer<double> lineRefNodes(2,1);
+  Intrepid::FieldContainer<double> lineRefNodes(2,1);
   CamelliaCellTools::refCellNodesForTopology(lineRefNodes, line);
 
   TEST_EQUALITY(4, line_line->getSideCount());
@@ -293,7 +292,7 @@ TEUCHOS_UNIT_TEST( CamelliaCellTools, MapToReferenceSubcell_SpaceTime )
     int tensorialDegree = 1;
     CellTopoPtr spaceTimeTopo = CellTopology::cellTopology(spaceTopo->getShardsTopology(), tensorialDegree);
 
-    FieldContainer<double> parentRefNodes(spaceTimeTopo->getVertexCount(),spaceTimeTopo->getDimension());
+    Intrepid::FieldContainer<double> parentRefNodes(spaceTimeTopo->getVertexCount(),spaceTimeTopo->getDimension());
     CamelliaCellTools::refCellNodesForTopology(parentRefNodes, spaceTimeTopo);
 
     int maxSubcellDim = spaceTimeTopo->getDimension();
@@ -302,13 +301,13 @@ TEUCHOS_UNIT_TEST( CamelliaCellTools, MapToReferenceSubcell_SpaceTime )
       for (unsigned scord=0; scord < spaceTimeTopo->getSubcellCount(subcellDim); scord++)
       {
         CellTopoPtr subcellTopo = spaceTimeTopo->getSubcell(subcellDim, scord);
-        FieldContainer<double> refSubcellNodes(subcellTopo->getVertexCount(), subcellDim);
+        Intrepid::FieldContainer<double> refSubcellNodes(subcellTopo->getVertexCount(), subcellDim);
         CamelliaCellTools::refCellNodesForTopology(refSubcellNodes, subcellTopo);
 
-        FieldContainer<double> actualParentNodes(subcellTopo->getVertexCount(),spaceTimeTopo->getDimension());
+        Intrepid::FieldContainer<double> actualParentNodes(subcellTopo->getVertexCount(),spaceTimeTopo->getDimension());
         CamelliaCellTools::mapToReferenceSubcell(actualParentNodes, refSubcellNodes, subcellDim, scord, spaceTimeTopo);
 
-        FieldContainer<double> expectedParentNodes(subcellTopo->getVertexCount(),spaceTimeTopo->getDimension());
+        Intrepid::FieldContainer<double> expectedParentNodes(subcellTopo->getVertexCount(),spaceTimeTopo->getDimension());
 
         int nodeCount = subcellTopo->getNodeCount();
         for (int scNode=0; scNode<nodeCount; scNode++)
@@ -348,10 +347,10 @@ TEUCHOS_UNIT_TEST( CamelliaCellTools, MapToPhysicalFrame)
 
       CellTopoPtr topo = CellTopology::cellTopology(shardsTopo->getShardsTopology(), tensorialDegree);
 
-      FieldContainer<double> refNodes(topo->getNodeCount(),topo->getDimension());
+      Intrepid::FieldContainer<double> refNodes(topo->getNodeCount(),topo->getDimension());
 
       CamelliaCellTools::refCellNodesForTopology(refNodes, topo);
-      FieldContainer<double> physicalNodes(1,topo->getNodeCount(),topo->getDimension());
+      Intrepid::FieldContainer<double> physicalNodes(1,topo->getNodeCount(),topo->getDimension());
 
       // to make the physical cell, multiply node by 1/2/3 in x/y/z and add 1/4/9
       for (int node=0; node < topo->getNodeCount(); node++)
@@ -364,7 +363,7 @@ TEUCHOS_UNIT_TEST( CamelliaCellTools, MapToPhysicalFrame)
       }
 //        cout << "WARNING: in CamelliaCellToolsTests, temporarily replaced the physical nodes with the reference nodes (i.e. just testing the identity mapping right now).\n";
 
-      FieldContainer<double> mappedNodes(1,topo->getNodeCount(),topo->getDimension());
+      Intrepid::FieldContainer<double> mappedNodes(1,topo->getNodeCount(),topo->getDimension());
       CamelliaCellTools::mapToPhysicalFrame(mappedNodes, refNodes, physicalNodes, topo);
 
       TEST_COMPARE_FLOATING_ARRAYS(physicalNodes, mappedNodes, 1e-15);
@@ -385,15 +384,15 @@ TEUCHOS_UNIT_TEST( CamelliaCellTools, SetJacobianForSimpleShardsTopologies )
 
     if (spaceDim == 0) continue; // don't bother testing point topology
 
-    FieldContainer<double> refCellNodes(topo->getNodeCount(),spaceDim);
+    Intrepid::FieldContainer<double> refCellNodes(topo->getNodeCount(),spaceDim);
 
     CamelliaCellTools::refCellNodesForTopology(refCellNodes, topo);
 
-    FieldContainer<double> cellNodes = refCellNodes;
+    Intrepid::FieldContainer<double> cellNodes = refCellNodes;
     cellNodes.resize(1,cellNodes.dimension(0),cellNodes.dimension(1));
     int numPoints = refCellNodes.dimension(0);
-    FieldContainer<double> jacobianCamellia(1,numPoints,spaceDim,spaceDim);
-    FieldContainer<double> jacobianShards(1,numPoints,spaceDim,spaceDim);
+    Intrepid::FieldContainer<double> jacobianCamellia(1,numPoints,spaceDim,spaceDim);
+    Intrepid::FieldContainer<double> jacobianShards(1,numPoints,spaceDim,spaceDim);
     CamelliaCellTools::setJacobian(jacobianCamellia, refCellNodes, cellNodes, topo);
     Intrepid::CellTools<double>::setJacobian(jacobianShards, refCellNodes, cellNodes, topo->getShardsTopology());
 
@@ -433,33 +432,33 @@ TEUCHOS_UNIT_TEST( CamelliaCellTools, SetJacobianForSpaceTimeTopologies )
 
     int spaceTimeDim = topo->getDimension();
 
-    FieldContainer<double> refCellNodesSpace(spaceTopo->getNodeCount(),spaceDim);
-    FieldContainer<double> refCellNodesTime(timeTopo->getNodeCount(),timeDim);
-    FieldContainer<double> refCellNodes(topo->getNodeCount(),spaceTimeDim);
+    Intrepid::FieldContainer<double> refCellNodesSpace(spaceTopo->getNodeCount(),spaceDim);
+    Intrepid::FieldContainer<double> refCellNodesTime(timeTopo->getNodeCount(),timeDim);
+    Intrepid::FieldContainer<double> refCellNodes(topo->getNodeCount(),spaceTimeDim);
 
     CamelliaCellTools::refCellNodesForTopology(refCellNodesSpace, spaceTopo);
     CamelliaCellTools::refCellNodesForTopology(refCellNodesTime, timeTopo);
     CamelliaCellTools::refCellNodesForTopology(refCellNodes, topo);
 
-    FieldContainer<double> cellNodesSpace = refCellNodesSpace;
-    FieldContainer<double> cellNodesTime = refCellNodesTime;
-    FieldContainer<double> cellNodesSpaceTime = refCellNodes;
+    Intrepid::FieldContainer<double> cellNodesSpace = refCellNodesSpace;
+    Intrepid::FieldContainer<double> cellNodesTime = refCellNodesTime;
+    Intrepid::FieldContainer<double> cellNodesSpaceTime = refCellNodes;
     cellNodesSpace.resize(1,cellNodesSpace.dimension(0),cellNodesSpace.dimension(1));
     cellNodesTime.resize(1,cellNodesTime.dimension(0),cellNodesTime.dimension(1));
     cellNodesSpaceTime.resize(1,cellNodesSpaceTime.dimension(0),cellNodesSpaceTime.dimension(1));
     int numPointsSpace = refCellNodesSpace.dimension(0);
     int numPointsTime = refCellNodesTime.dimension(0);
     int numPointsSpaceTime = refCellNodes.dimension(0);
-    FieldContainer<double> jacobianTime(1,numPointsTime,timeDim,timeDim);
-    FieldContainer<double> jacobianSpace(1,numPointsSpace,spaceDim,spaceDim);
-    FieldContainer<double> jacobianSpaceTime(1,numPointsSpaceTime,spaceTimeDim,spaceTimeDim);
+    Intrepid::FieldContainer<double> jacobianTime(1,numPointsTime,timeDim,timeDim);
+    Intrepid::FieldContainer<double> jacobianSpace(1,numPointsSpace,spaceDim,spaceDim);
+    Intrepid::FieldContainer<double> jacobianSpaceTime(1,numPointsSpaceTime,spaceTimeDim,spaceTimeDim);
 
     CamelliaCellTools::setJacobian(jacobianTime, refCellNodesTime, cellNodesTime, timeTopo);
     CamelliaCellTools::setJacobian(jacobianSpace, refCellNodesSpace, cellNodesSpace, spaceTopo);
     CamelliaCellTools::setJacobian(jacobianSpaceTime, refCellNodes, cellNodesSpaceTime, topo);
 
     // combine the Jacobians:
-    FieldContainer<double> expectedJacobian(1,numPointsSpaceTime,spaceTimeDim,spaceTimeDim);
+    Intrepid::FieldContainer<double> expectedJacobian(1,numPointsSpaceTime,spaceTimeDim,spaceTimeDim);
     for (int spaceNode=0; spaceNode<spaceTopo->getNodeCount(); spaceNode++)
     {
       for (int timeNode=0; timeNode<timeTopo->getNodeCount(); timeNode++)
@@ -498,7 +497,7 @@ TEUCHOS_UNIT_TEST( CamelliaCellTools, SetJacobianForSpaceTimeTopologies )
     }
 
     cellNodesSpaceTime.resize(topo->getNodeCount(), topo->getDimension());
-    vector< FieldContainer<double> > tensorComponentNodes;
+    vector< Intrepid::FieldContainer<double> > tensorComponentNodes;
     tensorComponentNodes.push_back(cellNodesSpace);
     tensorComponentNodes.push_back(cellNodesTime);
     tensorComponentNodes[0].resize(spaceTopo->getNodeCount(), spaceTopo->getDimension());
@@ -629,14 +628,14 @@ TEUCHOS_UNIT_TEST( CamelliaCellTools, PermutedReferenceCellPoints_Space_Slow ) /
 
     shards::CellTopology shardsTopo = camelliaTopo->getShardsTopology();
 
-    FieldContainer<double> refPoints(camelliaTopo->getNodeCount(),camelliaTopo->getDimension());
-    FieldContainer<double> topoNodesPermuted(camelliaTopo->getNodeCount(),camelliaTopo->getDimension());
+    Intrepid::FieldContainer<double> refPoints(camelliaTopo->getNodeCount(),camelliaTopo->getDimension());
+    Intrepid::FieldContainer<double> topoNodesPermuted(camelliaTopo->getNodeCount(),camelliaTopo->getDimension());
 
     int permutationCount = camelliaTopo->getNodePermutationCount(); // Camellia CellTopology defines permutations for 3D entities, while shards does not, so using Camellia's permutation count will provide a more rigorous test
 
     CamelliaCellTools::refCellNodesForTopology(refPoints, camelliaTopo);
 
-    FieldContainer<double> permutedRefPoints(camelliaTopo->getNodeCount(),camelliaTopo->getDimension());
+    Intrepid::FieldContainer<double> permutedRefPoints(camelliaTopo->getNodeCount(),camelliaTopo->getDimension());
 
     for (int permutation=0; permutation<permutationCount; permutation++)
     {
@@ -674,14 +673,14 @@ TEUCHOS_UNIT_TEST( CamelliaCellTools, PermutedReferenceCellPoints_SpaceTime_Slow
 
     shards::CellTopology shardsTopo = camelliaTopo->getShardsTopology();
 
-    FieldContainer<double> refPoints(camelliaTopo->getNodeCount(),camelliaTopo->getDimension());
-    FieldContainer<double> topoNodesPermuted(camelliaTopo->getNodeCount(),camelliaTopo->getDimension());
+    Intrepid::FieldContainer<double> refPoints(camelliaTopo->getNodeCount(),camelliaTopo->getDimension());
+    Intrepid::FieldContainer<double> topoNodesPermuted(camelliaTopo->getNodeCount(),camelliaTopo->getDimension());
 
     int permutationCount = camelliaTopo->getNodePermutationCount(); // Camellia CellTopology defines permutations for 3D entities, while shards does not, so using Camellia's permutation count will provide a more rigorous test
 
     CamelliaCellTools::refCellNodesForTopology(refPoints, camelliaTopo);
 
-    FieldContainer<double> permutedRefPoints(camelliaTopo->getNodeCount(),camelliaTopo->getDimension());
+    Intrepid::FieldContainer<double> permutedRefPoints(camelliaTopo->getNodeCount(),camelliaTopo->getDimension());
 
     for (int permutation=0; permutation<permutationCount; permutation++)
     {
@@ -715,8 +714,8 @@ TEUCHOS_UNIT_TEST( CamelliaCellTools, RefCellPointsForTopology )
 
     if (topo->getDimension() == 0) continue; // don't bother testing point topology
 
-    FieldContainer<double> refCellNodesShards(topo->getNodeCount(),topo->getDimension());
-    FieldContainer<double> refCellNodesCamellia(topo->getNodeCount(),topo->getDimension());
+    Intrepid::FieldContainer<double> refCellNodesShards(topo->getNodeCount(),topo->getDimension());
+    Intrepid::FieldContainer<double> refCellNodesCamellia(topo->getNodeCount(),topo->getDimension());
     int permutationCount;
     if (topo->getDimension() <= 2)
     {
@@ -758,14 +757,14 @@ TEUCHOS_UNIT_TEST( CamelliaCellTools, RefCellPointsForTensorTopology )
     int tensorialDegree = 1;
     CellTopoPtr topo = CellTopology::cellTopology(shardsTopo->getShardsTopology(), tensorialDegree);
 
-    FieldContainer<double> refCellNodesShards(shardsTopo->getNodeCount(),shardsTopo->getDimension());
-    FieldContainer<double> refCellNodesCamellia(topo->getNodeCount(),topo->getDimension());
+    Intrepid::FieldContainer<double> refCellNodesShards(shardsTopo->getNodeCount(),shardsTopo->getDimension());
+    Intrepid::FieldContainer<double> refCellNodesCamellia(topo->getNodeCount(),topo->getDimension());
 
     int permutation=0;
     CamelliaCellTools::refCellNodesForTopology(refCellNodesShards, shardsTopo, permutation);
     CamelliaCellTools::refCellNodesForTopology(refCellNodesCamellia, topo, permutation);
 
-    FieldContainer<double> refCellNodesExpected(topo->getNodeCount(),topo->getDimension());
+    Intrepid::FieldContainer<double> refCellNodesExpected(topo->getNodeCount(),topo->getDimension());
 
     if (shardsTopo->getDimension() == 0)
     {

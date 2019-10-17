@@ -15,7 +15,6 @@
 
 #include "Epetra_SerialComm.h"
 
-using namespace Intrepid;
 using namespace Camellia;
 using namespace std;
 
@@ -112,14 +111,14 @@ bool MeshTestUtility::checkLocalGlobalConsistency(MeshPtr mesh, double tol)
   GlobalDofAssignmentPtr gda = mesh->globalDofAssignment();
 
   int numGlobalDofs = gda->globalDofCount();
-  FieldContainer<double> globalCoefficients(numGlobalDofs);
+  Intrepid::FieldContainer<double> globalCoefficients(numGlobalDofs);
   for (int i=0; i<numGlobalDofs; i++)
   {
     globalCoefficients(i) = 2*i + 1; // arbitrary cofficients
   }
-  FieldContainer<double> globalCoefficientsExpected = globalCoefficients;
-  FieldContainer<double> globalCoefficientsActual(numGlobalDofs);
-  FieldContainer<double> localCoefficients;
+  Intrepid::FieldContainer<double> globalCoefficientsExpected = globalCoefficients;
+  Intrepid::FieldContainer<double> globalCoefficientsActual(numGlobalDofs);
+  Intrepid::FieldContainer<double> localCoefficients;
 
   Epetra_SerialComm Comm;
   Epetra_BlockMap map(numGlobalDofs, 1, 0, Comm);
@@ -132,8 +131,8 @@ bool MeshTestUtility::checkLocalGlobalConsistency(MeshPtr mesh, double tol)
   for (GlobalIndexType cellID : cellIDs)
   {
     gda->interpretGlobalCoefficients(cellID, localCoefficients, globalCoefficientsVector);
-    FieldContainer<GlobalIndexType> globalDofIndices;
-    FieldContainer<double> globalCoefficientsForCell;
+    Intrepid::FieldContainer<GlobalIndexType> globalDofIndices;
+    Intrepid::FieldContainer<double> globalCoefficientsForCell;
 
     DofOrderingPtr trialOrder = mesh->getElementType(cellID)->trialOrderPtr;
     set<int> varIDs = trialOrder->getVarIDs();
@@ -156,7 +155,7 @@ bool MeshTestUtility::checkLocalGlobalConsistency(MeshPtr mesh, double tol)
           basis = trialOrder->getBasis(varID,sideOrdinal);
         }
 
-        FieldContainer<double> basisCoefficients(basis->getCardinality());
+        Intrepid::FieldContainer<double> basisCoefficients(basis->getCardinality());
 
         for (int dofOrdinal=0; dofOrdinal<basis->getCardinality(); dofOrdinal++)
         {
@@ -286,8 +285,8 @@ bool MeshTestUtility::checkMeshConsistency(Teuchos::RCP<Mesh> mesh)
         // TODO: modify for 3D
         if ( neighborCellID == elem->getNeighborCellID(sideIndex) )   // peers, then
         {
-          FieldContainer<double> myVertices;
-          FieldContainer<double> neighborVertices;
+          Intrepid::FieldContainer<double> myVertices;
+          Intrepid::FieldContainer<double> neighborVertices;
           mesh->verticesForSide(myVertices,cellID,sideIndex);
           mesh->verticesForSide(neighborVertices,neighborCellID,mySideIndexInNeighbor);
           int numPoints = myVertices.dimension(0);
@@ -314,7 +313,7 @@ bool MeshTestUtility::checkMeshConsistency(Teuchos::RCP<Mesh> mesh)
   static const int NUM_POINTS_1D = 10;
   double x[NUM_POINTS_1D] = {0.11,-0.2,0.313,-0.4,0.54901,-0.6,0.73134,-0.810,0.912,-1.0};
 
-  FieldContainer<double> testPoints1D = FieldContainer<double>(NUM_POINTS_1D,1);
+  Intrepid::FieldContainer<double> testPoints1D = Intrepid::FieldContainer<double>(NUM_POINTS_1D,1);
   for (int i=0; i<NUM_POINTS_1D; i++)
   {
     testPoints1D(i, 0) = x[i];
@@ -569,8 +568,8 @@ bool MeshTestUtility::checkMeshDofConnectivities(Teuchos::RCP<Mesh> mesh)
 }
 
 bool MeshTestUtility::determineRefTestPointsForNeighbors(MeshTopologyViewPtr meshTopo, CellPtr fineCell, unsigned int sideOrdinal,
-    FieldContainer<double> &fineSideRefPoints, FieldContainer<double> &fineCellRefPoints,
-    FieldContainer<double> &coarseSideRefPoints, FieldContainer<double> &coarseCellRefPoints)
+    Intrepid::FieldContainer<double> &fineSideRefPoints, Intrepid::FieldContainer<double> &fineCellRefPoints,
+    Intrepid::FieldContainer<double> &coarseSideRefPoints, Intrepid::FieldContainer<double> &coarseCellRefPoints)
 {
   unsigned spaceDim = meshTopo->getDimension();
   unsigned sideDim = spaceDim - 1;
@@ -582,7 +581,7 @@ bool MeshTestUtility::determineRefTestPointsForNeighbors(MeshTopologyViewPtr mes
     fineCellRefPoints.resize(1,1);
     coarseCellRefPoints.resize(1,1);
 
-    FieldContainer<double> lineRefNodes(2,1);
+    Intrepid::FieldContainer<double> lineRefNodes(2,1);
     CellTopoPtr line = CellTopology::line();
 
     CamelliaCellTools::refCellNodesForTopology(lineRefNodes, line);
@@ -615,21 +614,21 @@ bool MeshTestUtility::determineRefTestPointsForNeighbors(MeshTopologyViewPtr mes
 
   CubatureFactory cubFactory;
   int cubDegree = 4; // fairly arbitrary choice: enough to get a decent number of test points...
-  Teuchos::RCP<Cubature<double> > fineSideTopoCub = cubFactory.create(fineSideTopo, cubDegree);
+  Teuchos::RCP<Intrepid::Cubature<double> > fineSideTopoCub = cubFactory.create(fineSideTopo, cubDegree);
 
   int numCubPoints = fineSideTopoCub->getNumPoints();
 
-  FieldContainer<double> cubPoints(numCubPoints, sideDim);
-  FieldContainer<double> cubWeights(numCubPoints); // we neglect these...
+  Intrepid::FieldContainer<double> cubPoints(numCubPoints, sideDim);
+  Intrepid::FieldContainer<double> cubWeights(numCubPoints); // we neglect these...
 
   fineSideTopoCub->getCubature(cubPoints, cubWeights);
 
-  FieldContainer<double> sideRefCellNodes(fineSideTopo->getNodeCount(),sideDim);
+  Intrepid::FieldContainer<double> sideRefCellNodes(fineSideTopo->getNodeCount(),sideDim);
   CamelliaCellTools::refCellNodesForTopology(sideRefCellNodes, fineSideTopo);
 
   int numTestPoints = numCubPoints + fineSideTopo->getNodeCount();
 
-  FieldContainer<double> testPoints(numTestPoints, sideDim);
+  Intrepid::FieldContainer<double> testPoints(numTestPoints, sideDim);
   for (int ptOrdinal=0; ptOrdinal<testPoints.dimension(0); ptOrdinal++)
   {
     if (ptOrdinal<fineSideTopo->getNodeCount())
@@ -664,14 +663,14 @@ bool MeshTestUtility::determineRefTestPointsForNeighbors(MeshTopologyViewPtr mes
 
   RefinementBranch fineRefBranch = fineCell->refinementBranchForSide(sideOrdinal, meshTopo);
 
-  FieldContainer<double> fineSideNodes(fineSideTopo->getNodeCount(), sideDim);  // relative to the ancestral cell whose neighbor is compatible
+  Intrepid::FieldContainer<double> fineSideNodes(fineSideTopo->getNodeCount(), sideDim);  // relative to the ancestral cell whose neighbor is compatible
   if (fineRefBranch.size() == 0)
   {
     CamelliaCellTools::refCellNodesForTopology(fineSideNodes, coarseSideTopo, composedPermutation);
   }
   else
   {
-    FieldContainer<double> ancestralSideNodes(coarseSideTopo->getNodeCount(), sideDim);
+    Intrepid::FieldContainer<double> ancestralSideNodes(coarseSideTopo->getNodeCount(), sideDim);
     CamelliaCellTools::refCellNodesForTopology(ancestralSideNodes, coarseSideTopo, composedPermutation);
 
     RefinementBranch fineSideRefBranch = RefinementPattern::sideRefinementBranch(fineRefBranch, sideOrdinal);
@@ -695,7 +694,7 @@ bool MeshTestUtility::determineRefTestPointsForNeighbors(MeshTopologyViewPtr mes
   return true; // containers filled....
 }
 
-bool MeshTestUtility::fcsAgree(const FieldContainer<double> &fc1, const FieldContainer<double> &fc2, double tol, double &maxDiff)
+bool MeshTestUtility::fcsAgree(const Intrepid::FieldContainer<double> &fc1, const Intrepid::FieldContainer<double> &fc2, double tol, double &maxDiff)
 {
   if (fc1.size() != fc2.size())
   {
@@ -739,7 +738,7 @@ bool MeshTestUtility::neighborBasesAgreeOnSides(Teuchos::RCP<Mesh> mesh, Epetra_
     ElementTypePtr fineElemType = mesh->getElementType(cellID);
     DofOrderingPtr fineElemTrialOrder = fineElemType->trialOrderPtr;
 
-    FieldContainer<double> fineSolutionCoefficients(fineElemTrialOrder->totalDofs());
+    Intrepid::FieldContainer<double> fineSolutionCoefficients(fineElemTrialOrder->totalDofs());
     mesh->globalDofAssignment()->interpretGlobalCoefficients(cellID, fineSolutionCoefficients, globalSolutionCoefficients);
 //    if ((cellID==0) || (cellID==2)) {
 //      cout << "MeshTestUtility: local coefficients for cell " << cellID << ":\n" << fineSolutionCoefficients;
@@ -748,7 +747,7 @@ bool MeshTestUtility::neighborBasesAgreeOnSides(Teuchos::RCP<Mesh> mesh, Epetra_
     unsigned sideCount = cell->getSideCount();
     for (unsigned sideOrdinal=0; sideOrdinal<sideCount; sideOrdinal++)
     {
-      FieldContainer<double> fineSideRefPoints, fineCellRefPoints, coarseSideRefPoints, coarseCellRefPoints;
+      Intrepid::FieldContainer<double> fineSideRefPoints, fineCellRefPoints, coarseSideRefPoints, coarseCellRefPoints;
       bool hasCoarserNeighbor = determineRefTestPointsForNeighbors(meshTopo, cell, sideOrdinal, fineSideRefPoints, fineCellRefPoints, coarseSideRefPoints, coarseCellRefPoints);
       if (!hasCoarserNeighbor) continue;
 
@@ -780,8 +779,8 @@ bool MeshTestUtility::neighborBasesAgreeOnSides(Teuchos::RCP<Mesh> mesh, Epetra_
 
       // sanity check: do physical points match?
 
-      FieldContainer<double> fineCellPhysicalCubaturePoints = fineCellBasisCache->getPhysicalCubaturePoints();
-      FieldContainer<double> coarseCellPhysicalCubaturePoints = coarseCellBasisCache->getPhysicalCubaturePoints();
+      Intrepid::FieldContainer<double> fineCellPhysicalCubaturePoints = fineCellBasisCache->getPhysicalCubaturePoints();
+      Intrepid::FieldContainer<double> coarseCellPhysicalCubaturePoints = coarseCellBasisCache->getPhysicalCubaturePoints();
 
       double tol = 1e-14;
       double maxDiff = 0;
@@ -794,8 +793,8 @@ bool MeshTestUtility::neighborBasesAgreeOnSides(Teuchos::RCP<Mesh> mesh, Epetra_
 
       if (hasSidePoints)
       {
-        FieldContainer<double> fineSidePhysicalCubaturePoints = fineSideBasisCache->getPhysicalCubaturePoints();
-        FieldContainer<double> coarseSidePhysicalCubaturePoints = coarseSideBasisCache->getPhysicalCubaturePoints();
+        Intrepid::FieldContainer<double> fineSidePhysicalCubaturePoints = fineSideBasisCache->getPhysicalCubaturePoints();
+        Intrepid::FieldContainer<double> coarseSidePhysicalCubaturePoints = coarseSideBasisCache->getPhysicalCubaturePoints();
 
         double tol = 1e-14;
         double maxDiff = 0;
@@ -832,7 +831,7 @@ bool MeshTestUtility::neighborBasesAgreeOnSides(Teuchos::RCP<Mesh> mesh, Epetra_
       ElementTypePtr coarseElementType = mesh->getElementType(neighborCellID);
       DofOrderingPtr coarseElemTrialOrder = coarseElementType->trialOrderPtr;
 
-      FieldContainer<double> coarseSolutionCoefficients(coarseElemTrialOrder->totalDofs());
+      Intrepid::FieldContainer<double> coarseSolutionCoefficients(coarseElemTrialOrder->totalDofs());
       mesh->globalDofAssignment()->interpretGlobalCoefficients(neighborInfo.first, coarseSolutionCoefficients, globalSolutionCoefficients);
 
       set<int> varIDs = fineElemTrialOrder->getVarIDs();
@@ -867,15 +866,15 @@ bool MeshTestUtility::neighborBasesAgreeOnSides(Teuchos::RCP<Mesh> mesh, Epetra_
             continue;
           }
         }
-        FieldContainer<double> localValuesFine = *fineCache->getTransformedValues(fineBasis, OP_VALUE);
-        FieldContainer<double> localValuesCoarse = *coarseCache->getTransformedValues(coarseBasis, OP_VALUE);
+        Intrepid::FieldContainer<double> localValuesFine = *fineCache->getTransformedValues(fineBasis, OP_VALUE);
+        Intrepid::FieldContainer<double> localValuesCoarse = *coarseCache->getTransformedValues(coarseBasis, OP_VALUE);
 
         bool scalarValued = (localValuesFine.rank() == 3);
 
         // the following used if vector or tensor-valued:
         Teuchos::Array<int> valueDim;
         unsigned componentsPerValue = 1;
-        FieldContainer<double> valueContainer; // just used for enumeration computation...
+        Intrepid::FieldContainer<double> valueContainer; // just used for enumeration computation...
         if (!scalarValued)
         {
           localValuesFine.dimensions(valueDim);
@@ -892,8 +891,8 @@ bool MeshTestUtility::neighborBasesAgreeOnSides(Teuchos::RCP<Mesh> mesh, Epetra_
         //            continue;
         //          }
 
-        FieldContainer<double> localPointValuesFine(fineElemTrialOrder->totalDofs());
-        FieldContainer<double> localPointValuesCoarse(coarseElemTrialOrder->totalDofs());
+        Intrepid::FieldContainer<double> localPointValuesFine(fineElemTrialOrder->totalDofs());
+        Intrepid::FieldContainer<double> localPointValuesCoarse(coarseElemTrialOrder->totalDofs());
 
         for (int valueComponentOrdinal=0; valueComponentOrdinal<componentsPerValue; valueComponentOrdinal++)
         {
@@ -973,8 +972,8 @@ bool MeshTestUtility::neighborBasesAgreeOnSides(Teuchos::RCP<Mesh> mesh, Epetra_
 //              cout << coarseSolutionValue << endl;
             }
 
-            FieldContainer<double> globalValuesFromFine, globalValuesFromCoarse;
-            FieldContainer<GlobalIndexType> globalDofIndicesFromFine, globalDofIndicesFromCoarse;
+            Intrepid::FieldContainer<double> globalValuesFromFine, globalValuesFromCoarse;
+            Intrepid::FieldContainer<GlobalIndexType> globalDofIndicesFromFine, globalDofIndicesFromCoarse;
 
             mesh->globalDofAssignment()->interpretLocalData(cellID, localPointValuesFine, globalValuesFromFine, globalDofIndicesFromFine);
             mesh->globalDofAssignment()->interpretLocalData(neighborInfo.first, localPointValuesCoarse, globalValuesFromCoarse, globalDofIndicesFromCoarse);

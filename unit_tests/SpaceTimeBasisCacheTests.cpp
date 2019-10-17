@@ -20,7 +20,6 @@
 #include "TensorBasis.h"
 
 using namespace Camellia;
-using namespace Intrepid;
 
 namespace
 {
@@ -44,9 +43,9 @@ void stripCellDimension(FC &fc)
   fc.resize(dim);
 }
 
-FieldContainer<double> getScaledTranslatedRefNodes(CellTopoPtr topo, double nodeScaling, double nodeTranslation)
+Intrepid::FieldContainer<double> getScaledTranslatedRefNodes(CellTopoPtr topo, double nodeScaling, double nodeTranslation)
 {
-  FieldContainer<double> nodes(topo->getNodeCount(),topo->getDimension());
+  Intrepid::FieldContainer<double> nodes(topo->getNodeCount(),topo->getDimension());
   CamelliaCellTools::refCellNodesForTopology(nodes, topo);
   for (int nodeOrdinal=0; nodeOrdinal<topo->getNodeCount(); nodeOrdinal++)
   {
@@ -140,7 +139,7 @@ void testBasisTransformation(BasisPtr spaceTimeBasis, Camellia::EOperator op,
 
   bool createSideCaches = true;
 
-  typedef Camellia::TensorBasis<double, FieldContainer<double> > TensorBasis;
+  typedef Camellia::TensorBasis<double, Intrepid::FieldContainer<double> > TensorBasis;
   TensorBasis* tensorBasis = dynamic_cast<TensorBasis*>(spaceTimeBasis.get());
 
   BasisPtr spatialBasis = tensorBasis->getSpatialBasis();
@@ -333,8 +332,8 @@ void testPhysicalPointsForSpaceTimeBasisCache(int H1Order, CellTopoPtr spaceTopo
     Camellia::EOperator spaceTimeOp = spatialOp;
 
     vector<Intrepid::EOperator> intrepidOperatorTypes(2);
-    intrepidOperatorTypes[0] = OPERATOR_CURL;
-    intrepidOperatorTypes[1] = OPERATOR_VALUE;
+    intrepidOperatorTypes[0] = Intrepid::OPERATOR_CURL;
+    intrepidOperatorTypes[1] = Intrepid::OPERATOR_VALUE;
 
     CellTopoPtr timeTopo = CellTopology::line();
     CellTopoPtr spaceTimeTopo = CellTopology::cellTopology(spaceTopo,1);
@@ -492,8 +491,8 @@ TEUCHOS_UNIT_TEST( SpaceTimeBasisCache, GetValues )
   Camellia::EOperator spaceTimeOp = OP_CURL;
 
   vector<Intrepid::EOperator> intrepidOperatorTypes(2);
-  intrepidOperatorTypes[0] = OPERATOR_CURL;
-  intrepidOperatorTypes[1] = OPERATOR_VALUE;
+  intrepidOperatorTypes[0] = Intrepid::OPERATOR_CURL;
+  intrepidOperatorTypes[1] = Intrepid::OPERATOR_VALUE;
 
   CellTopoPtr timeTopo = CellTopology::line();
   CellTopoPtr spaceTopo = CellTopology::triangle();

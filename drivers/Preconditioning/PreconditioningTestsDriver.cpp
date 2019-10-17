@@ -36,7 +36,6 @@
 #include <Teuchos_GlobalMPISession.hpp>
 
 using namespace Camellia;
-using namespace Intrepid;
 
 bool runGMGOperatorInDebugMode;
 int maxDofsForKLU;
@@ -1514,14 +1513,14 @@ void run(ProblemChoice problemChoice, int &iterationCount, int spaceDim, int num
         Epetra_CrsMatrix identity(::Copy, A->RowMap(), A->ColMap(), 0);
         int myRows = identity.RowMap().NumMyElements();
         int myCols = identity.ColMap().NumMyElements();
-        FieldContainer<GlobalIndexTypeToCast> colLIDs(myCols);
+        Intrepid::FieldContainer<GlobalIndexTypeToCast> colLIDs(myCols);
         for (int LID=0; LID<myCols; LID++)
         {
           colLIDs[LID] = LID;
         }
         for (int LID=0; LID<myRows; LID++)
         {
-          FieldContainer<double> myData(myCols);
+          Intrepid::FieldContainer<double> myData(myCols);
           for (int j=0; j<myCols; j++)
           {
             if (j==LID) myData(j) = 1.0;

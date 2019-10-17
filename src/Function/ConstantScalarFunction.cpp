@@ -7,7 +7,6 @@
 #include "BasisCache.h"
 
 using namespace Camellia;
-using namespace Intrepid;
 
 template <typename Scalar>
 ConstantScalarFunction<Scalar>::ConstantScalarFunction(Scalar value)

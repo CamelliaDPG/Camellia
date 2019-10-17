@@ -19,7 +19,6 @@
 #include <Teuchos_BLAS.hpp>
 
 using namespace Camellia;
-using namespace Intrepid;
 using namespace std;
 
 namespace
@@ -30,15 +29,15 @@ namespace
     int numCells = 1;
     int numPoints = 1;
     int spaceDim = 2;
-    FieldContainer<double> A(numCells,numPoints,spaceDim,spaceDim);
+    Intrepid::FieldContainer<double> A(numCells,numPoints,spaceDim,spaceDim);
     A(0,0,0,0) = 1.0;
     A(0,0,1,1) = 1.0;
-    FieldContainer<double> expectedInverse = A;
-    FieldContainer<double> expectedDet(numCells,numPoints);
+    Intrepid::FieldContainer<double> expectedInverse = A;
+    Intrepid::FieldContainer<double> expectedDet(numCells,numPoints);
     expectedDet[0] = 1.0;
     
-    FieldContainer<double> detValues(numCells,numPoints);
-    FieldContainer<double> inverse(numCells,numPoints,spaceDim,spaceDim);
+    Intrepid::FieldContainer<double> detValues(numCells,numPoints);
+    Intrepid::FieldContainer<double> inverse(numCells,numPoints,spaceDim,spaceDim);
     
     SerialDenseWrapper::determinantAndInverse(detValues, inverse, A);
     
@@ -71,7 +70,7 @@ namespace
     int numPoints = 3;
     for (int spaceDim=1; spaceDim <= 3; spaceDim++)
     {
-      FieldContainer<double> jacobianData(numCells,numPoints,spaceDim,spaceDim);
+      Intrepid::FieldContainer<double> jacobianData(numCells,numPoints,spaceDim,spaceDim);
       
       // set up some arbitrary data -- hopefully we don't stumble onto singular matrices this way
       for (int cellOrdinal=0; cellOrdinal<numCells; cellOrdinal++)
@@ -89,8 +88,8 @@ namespace
         }
       }
       
-      FieldContainer<double> detValues(numCells,numPoints);
-      FieldContainer<double> outInverses(numCells,numPoints,spaceDim,spaceDim);
+      Intrepid::FieldContainer<double> detValues(numCells,numPoints);
+      Intrepid::FieldContainer<double> outInverses(numCells,numPoints,spaceDim,spaceDim);
       
       int err = SerialDenseWrapper::determinantAndInverse(detValues, outInverses, jacobianData);
       
@@ -103,11 +102,11 @@ namespace
         std::cout << jacobianData;
       }
       
-      FieldContainer<double> expectedDetValues(numCells,numPoints);
-      FieldContainer<double> expectedOutInverses(numCells,numPoints,spaceDim,spaceDim);
+      Intrepid::FieldContainer<double> expectedDetValues(numCells,numPoints);
+      Intrepid::FieldContainer<double> expectedOutInverses(numCells,numPoints,spaceDim,spaceDim);
       
-      CellTools<double>::setJacobianDet(expectedDetValues, jacobianData);
-      CellTools<double>::setJacobianInv(expectedOutInverses, jacobianData );
+      Intrepid::CellTools<double>::setJacobianDet(expectedDetValues, jacobianData);
+      Intrepid::CellTools<double>::setJacobianInv(expectedOutInverses, jacobianData );
       
       SerialDenseWrapper::roundZeros(expectedOutInverses, 1e-14);
       SerialDenseWrapper::roundZeros(outInverses, 1e-14);
@@ -120,9 +119,9 @@ namespace
   TEUCHOS_UNIT_TEST( SerialDenseWrapper, Multiply )
   {
     // X = A * B
-    FieldContainer<double> A(2,2);
-    FieldContainer<double> B(2,2);
-    FieldContainer<double> X(2,2), X_expected(2,2);
+    Intrepid::FieldContainer<double> A(2,2);
+    Intrepid::FieldContainer<double> B(2,2);
+    Intrepid::FieldContainer<double> X(2,2), X_expected(2,2);
     
     A(0,0) = 1.0; A(0,1) = 4.0;
     A(1,0) = 2.0; A(1,1) = 5.0;
@@ -144,8 +143,8 @@ namespace
     // X = A * B
     int m = 20;
     int n = 30;
-    FieldContainer<double> A(m,n);
-    FieldContainer<double> A_T(n,m);
+    Intrepid::FieldContainer<double> A(m,n);
+    Intrepid::FieldContainer<double> A_T(n,m);
     
     for (int i=0; i<A.size(); i++)
     {
@@ -167,9 +166,9 @@ namespace
 //
 //    
 //    // X = A * B
-//    FieldContainer<double> A(2000,2000);
-//    FieldContainer<double> B(2000,2000);
-//    FieldContainer<double> X(2000,2000), X_expected(2000,2000);
+//    Intrepid::FieldContainer<double> A(2000,2000);
+//    Intrepid::FieldContainer<double> B(2000,2000);
+//    Intrepid::FieldContainer<double> X(2000,2000), X_expected(2000,2000);
 //    
 //    A(0,0) = 1.0; A(0,1) = 4.0;
 //    A(1,0) = 2.0; A(1,1) = 5.0;

@@ -19,7 +19,6 @@
 
 using namespace std;
 
-using namespace Intrepid;
 namespace Camellia
 {
   template<typename container_type>

@@ -17,11 +17,10 @@
 #include "SerialDenseWrapper.h"
 #include "SubBasisDofMatrixMapper.h"
 
-using namespace Intrepid;
 using namespace Camellia;
 using namespace std;
 
-void LocalDofMapper::filterData(const vector<int> dofIndices, const FieldContainer<double> &data, FieldContainer<double> &filteredData)
+void LocalDofMapper::filterData(const vector<int> dofIndices, const Intrepid::FieldContainer<double> &data, Intrepid::FieldContainer<double> &filteredData)
 {
   int dofCount = dofIndices.size();
   if (data.rank()==1)
@@ -46,8 +45,8 @@ void LocalDofMapper::filterData(const vector<int> dofIndices, const FieldContain
 }
 
 void LocalDofMapper::addSubBasisMapVectorContribution(int varID, int sideOrdinal, BasisMap &basisMap,
-                                                      const FieldContainer<double> &localData,
-                                                      FieldContainer<double> &globalData,
+                                                      const Intrepid::FieldContainer<double> &localData,
+                                                      Intrepid::FieldContainer<double> &globalData,
                                                       bool fittableGlobalDofsOnly)
 {
   bool volumeRestrictedToSide = false;
@@ -166,7 +165,7 @@ void LocalDofMapper::addSubBasisMapVectorContribution(int varID, int sideOrdinal
       {
         const vector<int>* varDofIndices = &_dofOrdering->getDofIndices(varID, sideOrdinal);
         subBasisDofMapper->mapDataIntoGlobalContainer(localData, *varDofIndices, _globalIndexToOrdinal, fittableGlobalDofsOnly, *fittableDofs, globalData);
-//          basisData = new FieldContainer<double>(varDofIndices->size());
+//          basisData = new Intrepid::FieldContainer<double>(varDofIndices->size());
 //          filterData(*varDofIndices, localData, *basisData);
       }
       else
@@ -180,7 +179,7 @@ void LocalDofMapper::addSubBasisMapVectorContribution(int varID, int sideOrdinal
         {
           // otherwise, localData contains coefficients for the basis restricted to side
           const set<int>* subBasisDofOrdinals = &subBasisDofMapper->basisDofOrdinalFilter();
-          FieldContainer<double> subBasisData(subBasisDofOrdinals->size(),1); // shaped as a matrix, because that's what mapSubBasisDataIntoGlobalContainer expects
+          Intrepid::FieldContainer<double> subBasisData(subBasisDofOrdinals->size(),1); // shaped as a matrix, because that's what mapSubBasisDataIntoGlobalContainer expects
           int i = 0;
           for (int basisDofOrdinal : *subBasisDofOrdinals)
           {
@@ -198,7 +197,7 @@ void LocalDofMapper::addSubBasisMapVectorContribution(int varID, int sideOrdinal
 }
 
 void LocalDofMapper::addReverseSubBasisMapVectorContribution(int varID, int sideOrdinal, BasisMap &basisMap,
-                                                             const FieldContainer<double> &globalCoefficients, FieldContainer<double> &localCoefficients)
+                                                             const Intrepid::FieldContainer<double> &globalCoefficients, Intrepid::FieldContainer<double> &localCoefficients)
 {
   bool transposeConstraint = false; // global to local
   
@@ -266,14 +265,14 @@ void LocalDofMapper::addReverseSubBasisMapVectorContribution(int varID, int side
     }
     else
     {
-      FieldContainer<double> filteredSubBasisData;
+      Intrepid::FieldContainer<double> filteredSubBasisData;
       vector<int> globalOrdinalFilter(globalDofIndices->size());
       for (int subBasisGlobalDofOrdinal=0; subBasisGlobalDofOrdinal<globalDofIndices->size(); subBasisGlobalDofOrdinal++)
       {
         globalOrdinalFilter[subBasisGlobalDofOrdinal] = globalOrdinal(subBasisGlobalDofOrdinal);
       }
       filterData(globalOrdinalFilter, globalCoefficients, filteredSubBasisData);
-      FieldContainer<double> mappedSubBasisData = subBasisDofMapper->mapData(transposeConstraint, filteredSubBasisData, applyOnLeftOnly);
+      Intrepid::FieldContainer<double> mappedSubBasisData = subBasisDofMapper->mapData(transposeConstraint, filteredSubBasisData, applyOnLeftOnly);
       const set<int>* localDofOrdinals = &subBasisDofMapper->basisDofOrdinalFilter();
       
       const vector<int>* localDofIndices = &_dofOrdering->getDofIndices(varID, sideOrdinal);
@@ -304,7 +303,7 @@ void LocalDofMapper::addReverseSubBasisMapVectorContribution(int varID, int side
 }
 
 void LocalDofMapper::addReverseSubBasisMapVectorContribution(int varID, int sideOrdinal, BasisMap &basisMap, const std::map<GlobalIndexType,double> &globalCoefficients,
-                                                             FieldContainer<double> &localCoefficients)
+                                                             Intrepid::FieldContainer<double> &localCoefficients)
 {
   bool transposeConstraint = false; // global to local
   
@@ -367,7 +366,7 @@ void LocalDofMapper::addReverseSubBasisMapVectorContribution(int varID, int side
     }
     else
     {
-      FieldContainer<double> filteredSubBasisData(globalDofIndices->size());
+      Intrepid::FieldContainer<double> filteredSubBasisData(globalDofIndices->size());
       bool nonzerosFound = false;
       for (int subBasisGlobalDofOrdinal=0; subBasisGlobalDofOrdinal<globalDofIndices->size(); subBasisGlobalDofOrdinal++)
       {
@@ -379,7 +378,7 @@ void LocalDofMapper::addReverseSubBasisMapVectorContribution(int varID, int side
         }
       }
       if (!nonzerosFound) continue;
-      FieldContainer<double> mappedSubBasisData = subBasisDofMapper->mapData(transposeConstraint, filteredSubBasisData, applyOnLeftOnly);
+      Intrepid::FieldContainer<double> mappedSubBasisData = subBasisDofMapper->mapData(transposeConstraint, filteredSubBasisData, applyOnLeftOnly);
       const set<int>* localDofOrdinals = &subBasisDofMapper->basisDofOrdinalFilter();
       
       const vector<int>* localDofIndices = &_dofOrdering->getDofIndices(varID, sideOrdinal);
@@ -670,8 +669,8 @@ void LocalDofMapper::mapLocalDataMatrix(const Intrepid::FieldContainer<double> &
   Teuchos::Array<int> coords(2);
   int otherDim = 1 - whichDim;
   
-  FieldContainer<double> dataVector(dataSize);
-  FieldContainer<double> mappedDataVector(mappedDataSize);
+  Intrepid::FieldContainer<double> dataVector(dataSize);
+  Intrepid::FieldContainer<double> mappedDataVector(mappedDataSize);
   
   dim[whichDim] = mappedDataSize;
   mappedData.resize(dim);
@@ -693,7 +692,7 @@ void LocalDofMapper::mapLocalDataMatrix(const Intrepid::FieldContainer<double> &
   }
 }
 
-FieldContainer<double> LocalDofMapper::mapLocalDataMatrix(const FieldContainer<double> &localData, bool fittableGlobalDofsOnly)
+Intrepid::FieldContainer<double> LocalDofMapper::mapLocalDataMatrix(const Intrepid::FieldContainer<double> &localData, bool fittableGlobalDofsOnly)
 {
   int dataSize = localData.dimension(0);
   if (localData.dimension(1) != dataSize)
@@ -701,29 +700,29 @@ FieldContainer<double> LocalDofMapper::mapLocalDataMatrix(const FieldContainer<d
     cout << "Error: localData matrix must be square.\n";
     TEUCHOS_TEST_FOR_EXCEPTION(true, std::invalid_argument, "localData matrix must be square");
   }
-//  FieldContainer<double> dataVector(dataSize);
+//  Intrepid::FieldContainer<double> dataVector(dataSize);
   int mappedDataSize = _globalIndexToOrdinal.size();
-  FieldContainer<double> intermediateDataMatrix(dataSize,mappedDataSize);
+  Intrepid::FieldContainer<double> intermediateDataMatrix(dataSize,mappedDataSize);
   
   mapLocalDataMatrix(localData, fittableGlobalDofsOnly, intermediateDataMatrix, 1);
-  FieldContainer<double> globalData(mappedDataSize,mappedDataSize);
+  Intrepid::FieldContainer<double> globalData(mappedDataSize,mappedDataSize);
 
   mapLocalDataMatrix(intermediateDataMatrix, fittableGlobalDofsOnly, globalData, 0);
   
   return globalData;
 }
 
-FieldContainer<double> LocalDofMapper::fitLocalCoefficients(const FieldContainer<double> &localCoefficients)
+Intrepid::FieldContainer<double> LocalDofMapper::fitLocalCoefficients(const Intrepid::FieldContainer<double> &localCoefficients)
 {
   // solves normal equations (if the localCoefficients are in the range of the global-to-local operator, then the returned coefficients will be the preimage of localCoefficients under that operator)
   if (_varIDToMap == -1)
   {
     int globalIndexCount = _globalIndexToOrdinal.size();
-    FieldContainer<double> allCoefficients(globalIndexCount); // includes both fittable and non-fittable
+    Intrepid::FieldContainer<double> allCoefficients(globalIndexCount); // includes both fittable and non-fittable
     
     set<int> varIDs = _dofOrdering->getVarIDs();
     set<pair<int,int>> varIDsAndSidesWithNonZeros;
-    map<pair<int,int>, FieldContainer<double>> basisCoefficientsForVarOnSide;
+    map<pair<int,int>, Intrepid::FieldContainer<double>> basisCoefficientsForVarOnSide;
     // first, pass through all variables, noting which ones have nonzero coefficients in localCoefficients
     for (int varID : varIDs)
     {
@@ -732,7 +731,7 @@ FieldContainer<double> LocalDofMapper::fitLocalCoefficients(const FieldContainer
       {
         bool nonZeroEntryFound = false;
         vector<int> dofIndices = _dofOrdering->getDofIndices(varID,sideOrdinal);
-        FieldContainer<double> basisCoefficients(dofIndices.size());
+        Intrepid::FieldContainer<double> basisCoefficients(dofIndices.size());
         int basisOrdinal = 0;
         for (int dofIndex : dofIndices)
         {
@@ -797,7 +796,7 @@ FieldContainer<double> LocalDofMapper::fitLocalCoefficients(const FieldContainer
                                                                                        _sideMaps, fittableGlobalDofOrdinalsOnSides,
                                                                                        set<GlobalIndexType>(), varID, sideOrdinal));
       }
-      FieldContainer<double> fittedVarCoefficients = _localDofMapperForVarIDAndSide[varIDAndSide]->fitLocalCoefficients(basisCoefficientsForVarOnSide[varIDAndSide]);
+      Intrepid::FieldContainer<double> fittedVarCoefficients = _localDofMapperForVarIDAndSide[varIDAndSide]->fitLocalCoefficients(basisCoefficientsForVarOnSide[varIDAndSide]);
       vector<GlobalIndexType> fittedVarGlobalIndices = _localDofMapperForVarIDAndSide[varIDAndSide]->fittableGlobalIndices();
       
       int fittedVarGlobalIndexCount = fittedVarCoefficients.size();
@@ -812,7 +811,7 @@ FieldContainer<double> LocalDofMapper::fitLocalCoefficients(const FieldContainer
       }
     }
     vector<GlobalIndexType> fittableIndices = fittableGlobalIndices();
-    FieldContainer<double> fittedCoefficients(fittableIndices.size());
+    Intrepid::FieldContainer<double> fittedCoefficients(fittableIndices.size());
     for (int fittableOrdinal=0; fittableOrdinal<fittableIndices.size(); fittableOrdinal++)
     {
       GlobalIndexType fittableGlobalIndex = fittableIndices[fittableOrdinal];
@@ -838,14 +837,14 @@ FieldContainer<double> LocalDofMapper::fitLocalCoefficients(const FieldContainer
   
   unsigned localDofCount = localCoefficients.size();
   
-  FieldContainer<double> mappedLocalCoefficients = mapLocalData(localCoefficients, true);
+  Intrepid::FieldContainer<double> mappedLocalCoefficients = mapLocalData(localCoefficients, true);
   
   vector<int> ordinalFilter;
   
   vector<GlobalIndexType> fittableOrdinals = fittableGlobalIndices();
   if (fittableOrdinals.size()==0)
   {
-    return FieldContainer<double>(0);
+    return Intrepid::FieldContainer<double>(0);
   }
   
   for (int i=0; i<fittableOrdinals.size(); i++)
@@ -853,21 +852,21 @@ FieldContainer<double> LocalDofMapper::fitLocalCoefficients(const FieldContainer
     ordinalFilter.push_back(_globalIndexToOrdinal[fittableOrdinals[i]]);
   }
   
-  FieldContainer<double> filteredMappedLocalCoefficients(fittableOrdinals.size());
+  Intrepid::FieldContainer<double> filteredMappedLocalCoefficients(fittableOrdinals.size());
   filterData(ordinalFilter, mappedLocalCoefficients, filteredMappedLocalCoefficients);
   
   if (_localCoefficientsFitMatrix.size()==0)
   {
-    FieldContainer<double> localIdentity(localDofCount,localDofCount);
+    Intrepid::FieldContainer<double> localIdentity(localDofCount,localDofCount);
     for (int i=0; i<localDofCount; i++)
     {
       localIdentity(i,i) = 1.0;
     }
-    FieldContainer<double> normalMatrix = mapLocalData(localIdentity, true);
-    FieldContainer<double> filteredNormalMatrix(fittableOrdinals.size(),fittableOrdinals.size());
+    Intrepid::FieldContainer<double> normalMatrix = mapLocalData(localIdentity, true);
+    Intrepid::FieldContainer<double> filteredNormalMatrix(fittableOrdinals.size(),fittableOrdinals.size());
     filterData(ordinalFilter, normalMatrix, filteredNormalMatrix);
     
-    FieldContainer<double> filteredIdentityCoefficients(fittableOrdinals.size(),fittableOrdinals.size());
+    Intrepid::FieldContainer<double> filteredIdentityCoefficients(fittableOrdinals.size(),fittableOrdinals.size());
     for (int i=0; i<fittableOrdinals.size(); i++)
     {
       filteredIdentityCoefficients(i,i) = 1.0;
@@ -889,7 +888,7 @@ FieldContainer<double> LocalDofMapper::fitLocalCoefficients(const FieldContainer
   
   filteredMappedLocalCoefficients.resize(filteredMappedLocalCoefficients.dimension(0),1);
   
-  FieldContainer<double> fittableGlobalCoefficients(fittableOrdinals.size(),1);
+  Intrepid::FieldContainer<double> fittableGlobalCoefficients(fittableOrdinals.size(),1);
   
   //  cout << "localCoefficients:\n" << localCoefficients;
   //  Camellia::print("fittableOrdinals", fittableOrdinals);
@@ -939,8 +938,8 @@ bool LocalDofMapper::isPermutation() const
   return true;
 }
 
-void LocalDofMapper::mapLocalDataVector(const FieldContainer<double> &localData, bool fittableGlobalDofsOnly,
-                                        FieldContainer<double> &mappedDataVector)
+void LocalDofMapper::mapLocalDataVector(const Intrepid::FieldContainer<double> &localData, bool fittableGlobalDofsOnly,
+                                        Intrepid::FieldContainer<double> &mappedDataVector)
 {
   mappedDataVector.initialize(0.0);
   unsigned dofCount;
@@ -1006,9 +1005,9 @@ void LocalDofMapper::mapLocalDataVector(const FieldContainer<double> &localData,
   }
 }
 
-void LocalDofMapper::mapLocalDataVector(const FieldContainer<double> &localData, bool fittableGlobalDofsOnly,
+void LocalDofMapper::mapLocalDataVector(const Intrepid::FieldContainer<double> &localData, bool fittableGlobalDofsOnly,
                                         const vector<pair<int,vector<int>>> &varIDsAndSideOrdinalsToMap,
-                                        FieldContainer<double> &mappedDataVector)
+                                        Intrepid::FieldContainer<double> &mappedDataVector)
 {
   mappedDataVector.initialize(0.0);
   unsigned dofCount;
@@ -1046,7 +1045,7 @@ void LocalDofMapper::mapLocalDataVector(const FieldContainer<double> &localData,
   }
 }
 
-FieldContainer<double> LocalDofMapper::mapLocalData(const FieldContainer<double> &localData, bool fittableGlobalDofsOnly)
+Intrepid::FieldContainer<double> LocalDofMapper::mapLocalData(const Intrepid::FieldContainer<double> &localData, bool fittableGlobalDofsOnly)
 {
   unsigned dofCount;
   if (_varIDToMap == -1)
@@ -1090,12 +1089,12 @@ FieldContainer<double> LocalDofMapper::mapLocalData(const FieldContainer<double>
   Teuchos::Array<int> dim;
   localData.dimensions(dim);
   dim[0] = mappedDofCount;
-  FieldContainer<double> mappedData(dim);
+  Intrepid::FieldContainer<double> mappedData(dim);
   mapLocalDataVector(localData, fittableGlobalDofsOnly, mappedData);
   return mappedData;
 }
 
-Intrepid::FieldContainer<double> LocalDofMapper::mapLocalData(const FieldContainer<double> &localData, bool fittableGlobalDofsOnly,
+Intrepid::FieldContainer<double> LocalDofMapper::mapLocalData(const Intrepid::FieldContainer<double> &localData, bool fittableGlobalDofsOnly,
                                                               const vector<pair<int,vector<int>>> &varIDsAndSideOrdinalsToMap)
 {
   unsigned dofCount;
@@ -1133,12 +1132,12 @@ Intrepid::FieldContainer<double> LocalDofMapper::mapLocalData(const FieldContain
   Teuchos::Array<int> dim;
   localData.dimensions(dim);
   dim[0] = mappedDofCount;
-  FieldContainer<double> mappedData(dim);
+  Intrepid::FieldContainer<double> mappedData(dim);
   mapLocalDataVector(localData, fittableGlobalDofsOnly, varIDsAndSideOrdinalsToMap, mappedData);
   return mappedData;
 }
 
-void LocalDofMapper::mapLocalDataSide(const FieldContainer<double> &localData, FieldContainer<double> &mappedData, bool fittableGlobalDofsOnly, int sideOrdinal)
+void LocalDofMapper::mapLocalDataSide(const Intrepid::FieldContainer<double> &localData, Intrepid::FieldContainer<double> &mappedData, bool fittableGlobalDofsOnly, int sideOrdinal)
 {
   unsigned dofCount;
   if (_varIDToMap == -1)
@@ -1180,7 +1179,7 @@ void LocalDofMapper::mapLocalDataSide(const FieldContainer<double> &localData, F
   }
 }
 
-void LocalDofMapper::mapLocalDataVolume(const FieldContainer<double> &localData, FieldContainer<double> &mappedData, bool fittableGlobalDofsOnly)
+void LocalDofMapper::mapLocalDataVolume(const Intrepid::FieldContainer<double> &localData, Intrepid::FieldContainer<double> &mappedData, bool fittableGlobalDofsOnly)
 {
   unsigned dofCount;
   if (_varIDToMap == -1)
@@ -1221,7 +1220,7 @@ void LocalDofMapper::mapLocalDataVolume(const FieldContainer<double> &localData,
   }
 }
 
-FieldContainer<double> LocalDofMapper::mapGlobalCoefficients(const FieldContainer<double> &globalCoefficients)
+Intrepid::FieldContainer<double> LocalDofMapper::mapGlobalCoefficients(const Intrepid::FieldContainer<double> &globalCoefficients)
 {
   unsigned dofCount;
   if (_varIDToMap == -1)
@@ -1246,7 +1245,7 @@ FieldContainer<double> LocalDofMapper::mapGlobalCoefficients(const FieldContaine
   Teuchos::Array<int> dim;
   globalCoefficients.dimensions(dim);
   dim[dim.size()-1] = mappedDofCount;
-  FieldContainer<double> localCoefficients(dim);
+  Intrepid::FieldContainer<double> localCoefficients(dim);
   
   // map volume data
   for (map< int, BasisMap >::iterator volumeMapIt = _volumeMaps.begin(); volumeMapIt != _volumeMaps.end(); volumeMapIt++)
@@ -1277,7 +1276,7 @@ FieldContainer<double> LocalDofMapper::mapGlobalCoefficients(const FieldContaine
   return localCoefficients;
 }
 
-void LocalDofMapper::mapGlobalCoefficients(const std::map<GlobalIndexType,double> &globalCoefficients, FieldContainer<double> &localCoefficients)
+void LocalDofMapper::mapGlobalCoefficients(const std::map<GlobalIndexType,double> &globalCoefficients, Intrepid::FieldContainer<double> &localCoefficients)
 {
   int mappedDofCount = _dofOrdering->totalDofs();
   localCoefficients.resize(mappedDofCount);

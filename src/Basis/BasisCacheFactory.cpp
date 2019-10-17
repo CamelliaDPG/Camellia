@@ -31,7 +31,7 @@ namespace Camellia {
     
     void values(Intrepid::FieldContainer<Scalar> &values, BasisCachePtr basisCache)
     {
-      // Note that we could avoid copies here by appropriate FieldContainer games using pointers and offsets into the passed-in values container
+      // Note that we could avoid copies here by appropriate Intrepid::FieldContainer games using pointers and offsets into the passed-in values container
       // For the moment, though, we accept the cost for ease/certainty of implementation
       int pointOffset = 0;
       Teuchos::Array<int> dimensions(values.rank());

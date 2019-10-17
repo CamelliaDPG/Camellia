@@ -19,7 +19,6 @@
 #include "Solution.h"
 
 using namespace Camellia;
-using namespace Intrepid;
 
 #include <array>
 
@@ -939,7 +938,7 @@ namespace
       auto testDofs = elemType->testOrderPtr->totalDofs();
       auto trialDofs = elemType->trialOrderPtr->totalDofs();
       int numCells = 1;
-      FieldContainer<double> stiffnessEnriched(numCells,trialDofs,testDofs); // the "rectangular" stiffness matrix
+      Intrepid::FieldContainer<double> stiffnessEnriched(numCells,trialDofs,testDofs); // the "rectangular" stiffness matrix
       bool rowMajor = true; // trial, test, not test, trial
       bool warnAboutNonzeros = false;  // false because we'll do our own check, here
       auto basisCache = BasisCache::basisCacheForCell(mesh, cellID);

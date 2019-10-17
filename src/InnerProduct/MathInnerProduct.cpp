@@ -11,7 +11,6 @@
 
 #include "MathInnerProduct.h"
 
-using namespace Intrepid;
 using namespace Camellia;
 
 void MathInnerProduct::operators(int testID1, int testID2,
@@ -58,10 +57,10 @@ void MathInnerProduct::operators(int testID1, int testID2,
   }
 }
 
-void MathInnerProduct::applyInnerProductData(FieldContainer<double> &testValues1,
-    FieldContainer<double> &testValues2,
+void MathInnerProduct::applyInnerProductData(Intrepid::FieldContainer<double> &testValues1,
+    Intrepid::FieldContainer<double> &testValues2,
     int testID1, int testID2, int operatorIndex,
-    const FieldContainer<double>& physicalPoints)
+    const Intrepid::FieldContainer<double>& physicalPoints)
 {
   // empty implementation -- no weights needed...
 }

@@ -123,7 +123,7 @@ namespace Camellia {
   
   Epetra_SerialDenseMatrix SerialDenseWrapper::convertFCToSDM(const Intrepid::FieldContainer<double> &A, Epetra_DataAccess CV)
   {
-    TEUCHOS_TEST_FOR_EXCEPTION(A.rank() != 2, std::invalid_argument, "A must be a rank 2 FieldContainer.");
+    TEUCHOS_TEST_FOR_EXCEPTION(A.rank() != 2, std::invalid_argument, "A must be a rank 2 Intrepid::FieldContainer.");
     //  FC is row major, SDM expects column major data, so the roles of rows and columns get swapped
     // distance between rows in FC is the column length (dimension 1)
     int n = A.dimension(0);
@@ -448,7 +448,7 @@ namespace Camellia {
       case 5:
         return (((index[0] * fc.dimension(1) + index[1]) * fc.dimension(2) + index[2]) * fc.dimension(3) + index[3]) * fc.dimension(4) + index[4];
       default:
-        TEUCHOS_TEST_FOR_EXCEPTION(true, std::invalid_argument, "Unhandled FieldContainer rank.");
+        TEUCHOS_TEST_FOR_EXCEPTION(true, std::invalid_argument, "Unhandled Intrepid::FieldContainer rank.");
     }
   }
   
@@ -902,8 +902,8 @@ namespace Camellia {
     // x, b = (N,M)
     if ((x.rank() != 2) || (A.rank() != 2) || (b.rank() != 2))
     {
-      std::cout << "x, A, and b must each be a rank 2 FieldContainer!!\n";
-      TEUCHOS_TEST_FOR_EXCEPTION(true, std::invalid_argument, "x, A, and b must each be a rank 2 FieldContainer!!");
+      std::cout << "x, A, and b must each be a rank 2 Intrepid::FieldContainer!!\n";
+      TEUCHOS_TEST_FOR_EXCEPTION(true, std::invalid_argument, "x, A, and b must each be a rank 2 Intrepid::FieldContainer!!");
     }
     if (A.dimension(0) != A.dimension(1))
     {
@@ -946,7 +946,7 @@ namespace Camellia {
     transposeMatrix(b);
     
     // by wrapping the below in braces, we allow the things we allocate there to go out of scope
-    // before the transpose of the x FieldContainer, which as presently implemented copies x.  This can
+    // before the transpose of the x Intrepid::FieldContainer, which as presently implemented copies x.  This can
     // take a sizable chunk of memory for higher-order computations, so being able to reclaim the memory
     // allocated for bSDM--which is the same size as x--actually guarantees that we won't run out of memory
     // during the transposition (we would have run out when allocating bSDM if we were that constrained).
@@ -1209,7 +1209,7 @@ namespace Camellia {
   //! Returns the reciprocal of the 1-norm condition number of the matrix in A
   /*!
    \param A In
-   A rank-2 FieldContainer with equal first and second dimensions.
+   A rank-2 Intrepid::FieldContainer with equal first and second dimensions.
    
    \return the 1-norm condition number if successful; -1 otherwise.
    */
@@ -1229,7 +1229,7 @@ namespace Camellia {
   //! Returns the reciprocal of the 2-norm condition number of the matrix in A
   /*!
    \param A In
-   A rank-2 FieldContainer with equal first and second dimensions.
+   A rank-2 Intrepid::FieldContainer with equal first and second dimensions.
    
    \return the 2-norm condition number if successful; -1 otherwise.
    */
@@ -1282,7 +1282,7 @@ namespace Camellia {
   //  //! Returns true if all the eigenvalues are greater than zero
   //  /*!
   //   \param A In
-  //   A rank-2 FieldContainer with equal first and second dimensions.
+  //   A rank-2 Intrepid::FieldContainer with equal first and second dimensions.
   //
   //   \return true if all the eigenvalues are positive; false otherwise.
   //   */
@@ -1305,7 +1305,7 @@ namespace Camellia {
   //  //! Returns true if all the eigenvalues are greater than or equal to zero
   //  /*!
   //   \param A In
-  //   A rank-2 FieldContainer with equal first and second dimensions.
+  //   A rank-2 Intrepid::FieldContainer with equal first and second dimensions.
   //
   //   \return true if all the eigenvalues are non-negative; false otherwise.
   //   */

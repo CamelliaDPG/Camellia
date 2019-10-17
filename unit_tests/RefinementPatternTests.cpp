@@ -19,7 +19,6 @@
 #include "RefinementPattern.h"
 
 using namespace Camellia;
-using namespace Intrepid;
 
 namespace
 {
@@ -432,8 +431,8 @@ namespace
       if (shardsTopo->getDimension() == 0) continue; // skip the point topology
       RefinementPatternPtr refPattern = RefinementPattern::regularRefinementPattern(shardsTopo);
 
-      FieldContainer<double> childVertices = refPattern->refinedNodes();
-      FieldContainer<double> parentVertices(shardsTopo->getVertexCount(),shardsTopo->getDimension());
+      Intrepid::FieldContainer<double> childVertices = refPattern->refinedNodes();
+      Intrepid::FieldContainer<double> parentVertices(shardsTopo->getVertexCount(),shardsTopo->getDimension());
       CamelliaCellTools::refCellNodesForTopology(parentVertices, shardsTopo);
 
       double tol = 1e-15; // for vertex coordinate equality
@@ -479,8 +478,8 @@ namespace
     CellTopoPtr shardsTopo = CellTopology::line();
     RefinementPatternPtr refPattern = RefinementPattern::regularRefinementPattern(shardsTopo);
 
-    FieldContainer<double> childVertices = refPattern->refinedNodes();
-    FieldContainer<double> parentVertices(shardsTopo->getVertexCount(),shardsTopo->getDimension());
+    Intrepid::FieldContainer<double> childVertices = refPattern->refinedNodes();
+    Intrepid::FieldContainer<double> parentVertices(shardsTopo->getVertexCount(),shardsTopo->getDimension());
     CamelliaCellTools::refCellNodesForTopology(parentVertices, shardsTopo);
 
     double tol = 1e-15; // for vertex coordinate equality
@@ -533,11 +532,11 @@ namespace
       int nodeCount = cellTopo->getNodeCount();
       int spaceDim = cellTopo->getDimension();
 
-      FieldContainer<double> refCellNodes(nodeCount,spaceDim);
+      Intrepid::FieldContainer<double> refCellNodes(nodeCount,spaceDim);
 
       CamelliaCellTools::refCellNodesForTopology(refCellNodes, cellTopo);
 
-      FieldContainer<double> childRefCellNodes = refCellNodes;
+      Intrepid::FieldContainer<double> childRefCellNodes = refCellNodes;
 
       RefinementPatternPtr regularRefinement = RefinementPattern::regularRefinementPattern(cellTopo->getKey());
 
@@ -548,7 +547,7 @@ namespace
         RefinementBranch refBranch;
         refBranch.push_back(make_pair(regularRefinement.get(),childOrdinal));
 
-        FieldContainer<double> expectedPoints(nodeCount,spaceDim);
+        Intrepid::FieldContainer<double> expectedPoints(nodeCount,spaceDim);
         for (int nodeOrdinal=0; nodeOrdinal<nodeCount; nodeOrdinal++)
         {
           for (int d=0; d<spaceDim; d++)
@@ -556,7 +555,7 @@ namespace
             expectedPoints(nodeOrdinal,d) = regularRefinement->refinedNodes()(childOrdinal,nodeOrdinal,d);
           }
         }
-        FieldContainer<double> actualPoints(nodeCount,spaceDim);
+        Intrepid::FieldContainer<double> actualPoints(nodeCount,spaceDim);
         RefinementPattern::mapRefCellPointsToAncestor(refBranch, childRefCellNodes, actualPoints);
 
         TEST_COMPARE_FLOATING_ARRAYS(expectedPoints, actualPoints, 1e-15);
@@ -593,9 +592,9 @@ namespace
             GeneralizedRefinementBranch genRefBranch = RefinementPattern::generalizedRefinementBranchForLeafSubcell(refBranch, subcdim, subcord);
             CellTopoPtr subcellTopo = childTopo->getSubcell(subcdim, subcord);
             int nodeCount = subcellTopo->getNodeCount();
-            FieldContainer<double> refSubcellNodes(nodeCount,subcdim);
+            Intrepid::FieldContainer<double> refSubcellNodes(nodeCount,subcdim);
             CamelliaCellTools::refCellNodesForTopology(refSubcellNodes, subcellTopo);
-            FieldContainer<double> expectedPoints(nodeCount,spaceDim);
+            Intrepid::FieldContainer<double> expectedPoints(nodeCount,spaceDim);
             for (int subcellNode=0; subcellNode<nodeCount; subcellNode++)
             {
               int childNode = childTopo->getNodeMap(subcdim, subcord, subcellNode);
@@ -604,7 +603,7 @@ namespace
                 expectedPoints(subcellNode,d) = regularRefinement->refinedNodes()(childOrdinal,childNode,d);
               }
             }
-            FieldContainer<double> actualPoints(nodeCount,spaceDim);
+            Intrepid::FieldContainer<double> actualPoints(nodeCount,spaceDim);
             RefinementPattern::mapRefCellPointsToAncestor(genRefBranch, refSubcellNodes, actualPoints);
             bool oldSuccess = success;
             success = true;
@@ -635,17 +634,17 @@ namespace
 
     int numPoints = 2;
     int spaceDim = 1;
-    FieldContainer<double> fineLinePoints(numPoints,spaceDim);
+    Intrepid::FieldContainer<double> fineLinePoints(numPoints,spaceDim);
     fineLinePoints(0,0) = -1.0;
     fineLinePoints(1,0) =  1.0;
     
-    FieldContainer<double> expectedCoarsePoints(numPoints,spaceDim);
+    Intrepid::FieldContainer<double> expectedCoarsePoints(numPoints,spaceDim);
     for (int pointOrdinal=0; pointOrdinal<numPoints; pointOrdinal++)
     {
       expectedCoarsePoints(pointOrdinal,0) = fineLinePoints(pointOrdinal,0) * 0.5 + 0.5;
     }
     
-    FieldContainer<double> actualPoints(numPoints,spaceDim);
+    Intrepid::FieldContainer<double> actualPoints(numPoints,spaceDim);
     RefinementPattern::mapRefCellPointsToAncestor(refBranch, fineLinePoints, actualPoints);
     
     double tol = 1e-15;
@@ -676,20 +675,20 @@ namespace
 
     int numPoints = 2;
     int fineDim  = 1;
-    FieldContainer<double> leafSubcellPoints(numPoints, fineDim);
+    Intrepid::FieldContainer<double> leafSubcellPoints(numPoints, fineDim);
     leafSubcellPoints(0,0) = -0.25;
     leafSubcellPoints(1,0) = 0.5;
 
     /* The 0 edge in the triangle's child 1 (the interior triangle) extends from (0.5,0) to (0.5,0.5) in parent */
 
     int volumeDim = 2;
-    FieldContainer<double> expectedPointsInParent(numPoints,volumeDim);
+    Intrepid::FieldContainer<double> expectedPointsInParent(numPoints,volumeDim);
     expectedPointsInParent(0,0) = 0.5;
     expectedPointsInParent(0,1) = 0.25 * leafSubcellPoints(0,0) + 0.25;
     expectedPointsInParent(1,0) = 0.5;
     expectedPointsInParent(1,1) = 0.25 * leafSubcellPoints(1,0) + 0.25;
 
-    FieldContainer<double> actualPoints(numPoints,volumeDim);
+    Intrepid::FieldContainer<double> actualPoints(numPoints,volumeDim);
     RefinementPattern::mapRefCellPointsToAncestor(genRefBranch, leafSubcellPoints, actualPoints);
 
     double tol = 1e-15;
@@ -723,7 +722,7 @@ namespace
 
     int numPoints = 3;
     int fineDim  = 1;
-    FieldContainer<double> leafSubcellPoints(numPoints, fineDim);
+    Intrepid::FieldContainer<double> leafSubcellPoints(numPoints, fineDim);
     leafSubcellPoints(0,0) = -1.0;
     leafSubcellPoints(1,0) = 0.0;
     leafSubcellPoints(2,0) = 1.0;
@@ -731,7 +730,7 @@ namespace
     /* The 10 edge in the hexahedron child 1 extends from vertex 2 to 6 in the child, which is (1,0,-1) to (1,0,0) in parent */
 
     int volumeDim = 3;
-    FieldContainer<double> expectedPointsInParent(numPoints,volumeDim);
+    Intrepid::FieldContainer<double> expectedPointsInParent(numPoints,volumeDim);
     for (int pointOrdinal=0; pointOrdinal<numPoints; pointOrdinal++)
     {
       expectedPointsInParent(pointOrdinal,0) = 1.0;
@@ -739,7 +738,7 @@ namespace
       expectedPointsInParent(pointOrdinal,2) = 0.5 * (leafSubcellPoints(pointOrdinal,0) - 1.0);
     }
 
-    FieldContainer<double> actualPoints(numPoints,volumeDim);
+    Intrepid::FieldContainer<double> actualPoints(numPoints,volumeDim);
     RefinementPattern::mapRefCellPointsToAncestor(genRefBranch, leafSubcellPoints, actualPoints);
 
     double tol = 1e-15;
@@ -787,15 +786,15 @@ namespace
       shards::CellTopology shardsTopo = shardsTopologies[topoOrdinal]->getShardsTopology();
       CellTopoPtr cellTopo = CellTopology::cellTopology(shardsTopo, tensorialDegree);
 
-      FieldContainer<double> spaceRefinedNodes;
+      Intrepid::FieldContainer<double> spaceRefinedNodes;
       RefinementPatternPtr refPatternSpace = RefinementPattern::regularRefinementPattern(shardsTopo.getKey());
       spaceRefinedNodes = refPatternSpace->refinedNodes();
 
       RefinementPatternPtr refPatternTime = RefinementPattern::regularRefinementPattern(CellTopology::line());
-      FieldContainer<double> timeRefinedNodes = refPatternTime->refinedNodes();
+      Intrepid::FieldContainer<double> timeRefinedNodes = refPatternTime->refinedNodes();
 
       RefinementPatternPtr refPatternSpaceTime = RefinementPattern::regularRefinementPattern(cellTopo);
-      FieldContainer<double> spaceTimeRefinedNodes = refPatternSpaceTime->refinedNodes();
+      Intrepid::FieldContainer<double> spaceTimeRefinedNodes = refPatternSpaceTime->refinedNodes();
 
       int numChildrenSpace = spaceRefinedNodes.dimension(0);
       int numChildrenTime = timeRefinedNodes.dimension(0);
@@ -815,7 +814,7 @@ namespace
 
       TEST_EQUALITY(dSpace + dTime, dSpaceTime);
 
-      FieldContainer<double> expectedRefinedNodes(numChildrenSpaceTime,numNodesSpaceTime,dSpaceTime);
+      Intrepid::FieldContainer<double> expectedRefinedNodes(numChildrenSpaceTime,numNodesSpaceTime,dSpaceTime);
 
       int spaceTimeChildOrdinal = 0;
       for (int timeChildOrdinal=0; timeChildOrdinal<numChildrenTime; timeChildOrdinal++)

@@ -75,7 +75,6 @@
 #endif
 
 using namespace Camellia;
-using namespace Intrepid;
 
 const static string SOLVER_TIMER_STRING = "time spent in linear solver";
 
@@ -511,12 +510,12 @@ void TSolution<Scalar>::applyDGJumpTerms()
   set<GlobalIndexType> myCellIDs = _mesh->cellIDsInPartition();
   int sideDim = meshTopo->getDimension() - 1;
   
-  FieldContainer<double> emptyRefPointsVolume(0,meshTopo->getDimension()); // (P,D)
-  FieldContainer<double> emptyRefPointsSide(0,sideDim); // (P,D)
-  FieldContainer<double> emptyCubWeights(1,0); // (C,P)
+  Intrepid::FieldContainer<double> emptyRefPointsVolume(0,meshTopo->getDimension()); // (P,D)
+  Intrepid::FieldContainer<double> emptyRefPointsSide(0,sideDim); // (P,D)
+  Intrepid::FieldContainer<double> emptyCubWeights(1,0); // (C,P)
   
-  map<pair<CellTopologyKey,int>, FieldContainer<double>> cubPointsForSideTopo;
-  map<pair<CellTopologyKey,int>, FieldContainer<double>> cubWeightsForSideTopo;
+  map<pair<CellTopologyKey,int>, Intrepid::FieldContainer<double>> cubPointsForSideTopo;
+  map<pair<CellTopologyKey,int>, Intrepid::FieldContainer<double>> cubWeightsForSideTopo;
   
   CubatureFactory cubFactory;
   
@@ -543,7 +542,7 @@ void TSolution<Scalar>::applyDGJumpTerms()
     CellTopoPtr cellTopo = cell->topology();
     ElementTypePtr elemType = _mesh->getElementType(cellID);
     
-    FieldContainer<double> physicalCellNodes = _mesh->physicalCellNodesForCell(cellID);
+    Intrepid::FieldContainer<double> physicalCellNodes = _mesh->physicalCellNodesForCell(cellID);
     BasisCachePtr cellBasisCacheVolume;
     if (basisCacheForVolumeTopo.find(cellTopo->getKey()) == basisCacheForVolumeTopo.end())
     {
@@ -672,7 +671,7 @@ void TSolution<Scalar>::applyDGJumpTerms()
               int cubDegree = cubKey.second;
               if (sideDim > 0)
               {
-                Teuchos::RCP<Cubature<double> > sideCub;
+                Teuchos::RCP<Intrepid::Cubature<double> > sideCub;
                 if (cubDegree >= 0)
                   sideCub = cubFactory.create(mySideTopo, cubDegree);
                 
@@ -683,8 +682,8 @@ void TSolution<Scalar>::applyDGJumpTerms()
                 else
                   numCubPointsSide = 0;
                 
-                FieldContainer<double> cubPoints(numCubPointsSide, sideDim); // cubature points from the pov of the side (i.e. a (d-1)-dimensional set)
-                FieldContainer<double> cubWeights(numCubPointsSide);
+                Intrepid::FieldContainer<double> cubPoints(numCubPointsSide, sideDim); // cubature points from the pov of the side (i.e. a (d-1)-dimensional set)
+                Intrepid::FieldContainer<double> cubWeights(numCubPointsSide);
                 if (numCubPointsSide > 0)
                   sideCub->getCubature(cubPoints, cubWeights);
                 cubPointsForSideTopo[cubKey] = cubPoints;
@@ -693,8 +692,8 @@ void TSolution<Scalar>::applyDGJumpTerms()
               else
               {
                 int numCubPointsSide = 1;
-                FieldContainer<double> cubPoints(numCubPointsSide, 1); // cubature points from the pov of the side (i.e. a (d-1)-dimensional set)
-                FieldContainer<double> cubWeights(numCubPointsSide);
+                Intrepid::FieldContainer<double> cubPoints(numCubPointsSide, 1); // cubature points from the pov of the side (i.e. a (d-1)-dimensional set)
+                Intrepid::FieldContainer<double> cubWeights(numCubPointsSide);
                 
                 cubPoints.initialize(0.0);
                 cubWeights.initialize(1.0);
@@ -724,13 +723,13 @@ void TSolution<Scalar>::applyDGJumpTerms()
             // filter to include only those members of uBasis that have support on the side
             // (it might be nice to have LinearTerm::values() support this directly, via a basisDofOrdinal container argument...)
             auto filterSideBasisValues = [] (BasisPtr basis, int sideOrdinal,
-                                             FieldContainer<double> &values) -> void
+                                             Intrepid::FieldContainer<double> &values) -> void
             {
               set<int> mySideBasisDofOrdinals = basis->dofOrdinalsForSide(sideOrdinal);
               int numFilteredFields = mySideBasisDofOrdinals.size();
               int numCells = values.dimension(0);
               int numPoints = values.dimension(2);
-              FieldContainer<double> filteredValues(numCells,numFilteredFields,numPoints);
+              Intrepid::FieldContainer<double> filteredValues(numCells,numFilteredFields,numPoints);
               for (int cellOrdinal=0; cellOrdinal<numCells; cellOrdinal++)
               {
                 int filteredDofOrdinal = 0;
@@ -784,7 +783,7 @@ void TSolution<Scalar>::applyDGJumpTerms()
               
               RefinementBranch refinementBranch = cell->refinementBranchForSide(sideOrdinal, meshTopo);
               RefinementBranch sideRefinementBranch = RefinementPattern::sideRefinementBranch(refinementBranch, ancestorSideOrdinal);
-              FieldContainer<double> cellNodes = RefinementPattern::descendantNodesRelativeToAncestorReferenceCell(sideRefinementBranch);
+              Intrepid::FieldContainer<double> cellNodes = RefinementPattern::descendantNodesRelativeToAncestorReferenceCell(sideRefinementBranch);
               
               cellNodes.resize(1,cellNodes.dimension(0),cellNodes.dimension(1));
               BasisCachePtr ancestralBasisCache = Teuchos::rcp(new BasisCache(cellNodes,sideTopo,cubaturePolyOrder,false)); // false: don't create side cache too
@@ -845,7 +844,7 @@ void TSolution<Scalar>::applyDGJumpTerms()
             Intrepid::FieldContainer<double> neighborRefCellPoints = referenceBasisCache->getPhysicalCubaturePoints();
             neighborRefCellPoints.resize(numPoints,sideDim); // strip cell dimension to convert to a "reference" point container
             
-            FieldContainer<double> neighborCellNodes = _mesh->physicalCellNodesForCell(neighborCellID);
+            Intrepid::FieldContainer<double> neighborCellNodes = _mesh->physicalCellNodesForCell(neighborCellID);
             if (basisCacheForNeighborVolumeTopo.find(neighborTopo->getKey()) == basisCacheForNeighborVolumeTopo.end())
             {
               basisCacheForNeighborVolumeTopo[neighborTopo->getKey()] = Teuchos::rcp( new BasisCache(neighborCellNodes, neighborTopo,
@@ -929,7 +928,7 @@ void TSolution<Scalar>::applyDGJumpTerms()
               {
                 for (int j=0; j<colCount; j++)
                 {
-                  // rows in FieldContainer correspond to trial variables, cols to test
+                  // rows in Intrepid::FieldContainer correspond to trial variables, cols to test
                   // in stiffness matrix, it's the opposite.
                   if (values(0,i,j) != 0) // skip 0's, which I believe Epetra should ignore anyway
                   {
@@ -2511,7 +2510,7 @@ void TSolution<Scalar>::integrateBasisFunctions(Intrepid::FieldContainer<Scalar>
       }
     }
   }
-  //FunctionSpaceTools::integrate<double>(values,*trialValuesTransformedWeighted,ones,COMP_BLAS);
+  //FunctionSpaceTools::integrate<double>(values,*trialValuesTransformedWeighted,ones,Intrepid::COMP_BLAS);
 }
 
 template <typename Scalar>
@@ -3318,7 +3317,7 @@ const Intrepid::FieldContainer<Scalar>& TSolution<Scalar>::allCoefficientsForCel
 
   if (_solutionForCellID[solutionOrdinal].find(cellID) == _solutionForCellID[solutionOrdinal].end())
   {
-    // create the FieldContainer; will be filled with zeros
+    // create the Intrepid::FieldContainer; will be filled with zeros
     int numDofs = _mesh->getElementType(cellID)->trialOrderPtr->totalDofs();
     _solutionForCellID[solutionOrdinal][cellID] = Intrepid::FieldContainer<Scalar>(numDofs);
   }
@@ -4286,7 +4285,7 @@ void TSolution<Scalar>::projectOldCellOntoNewCells(GlobalIndexType cellID, Eleme
       }
     }
 
-    // (re)initialize the FieldContainer storing the solution--element type may have changed (in case of p-refinement)
+    // (re)initialize the Intrepid::FieldContainer storing the solution--element type may have changed (in case of p-refinement)
     _solutionForCellID[solutionOrdinal][childID] = Intrepid::FieldContainer<Scalar>(childType->trialOrderPtr->totalDofs());
     // project fields
     Intrepid::FieldContainer<Scalar> basisCoefficients;
@@ -4321,7 +4320,7 @@ void TSolution<Scalar>::projectOldCellOntoNewCells(GlobalIndexType cellID, Eleme
       // and on the volume in parent doesn't share the side (in which case we use the interior trace map).
       BasisCachePtr basisCacheForSide;
       
-      FieldContainer<double> sideParities;
+      Intrepid::FieldContainer<double> sideParities;
       bool parityFlipped = false;
       if (parentSideOrdinal != -1)
       {
@@ -4433,7 +4432,7 @@ void TSolution<Scalar>::reverseParitiesForLocalCoefficients(GlobalIndexType cell
   auto coefficientsEntry = _solutionForCellID[solutionOrdinal].find(cellID);
   if (coefficientsEntry != _solutionForCellID[solutionOrdinal].end())
   {
-    FieldContainer<double>* coefficients = &coefficientsEntry->second;
+    Intrepid::FieldContainer<double>* coefficients = &coefficientsEntry->second;
     DofOrderingPtr trialOrder = _mesh->getElementType(cellID)->trialOrderPtr;
     auto fluxVars = _mesh->bilinearForm()->varFactory()->fluxVars();
     for (VarPtr fluxVar : fluxVars)

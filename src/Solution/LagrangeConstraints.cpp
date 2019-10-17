@@ -14,7 +14,6 @@
 
 #include "CamelliaCellTools.h"
 
-using namespace Intrepid;
 using namespace Camellia;
 
 void LagrangeConstraints::addConstraint(const Constraint &c)
@@ -27,7 +26,7 @@ void LagrangeConstraints::addGlobalConstraint(const Constraint &c)
   _globalConstraints.push_back(c);
 }
 
-void LagrangeConstraints::getCoefficients(FieldContainer<double> &lhs, FieldContainer<double> &rhs,
+void LagrangeConstraints::getCoefficients(Intrepid::FieldContainer<double> &lhs, Intrepid::FieldContainer<double> &rhs,
     int elemConstraintIndex, DofOrderingPtr trialOrdering,
     BasisCachePtr basisCache)
 {

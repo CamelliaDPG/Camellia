@@ -28,7 +28,6 @@
 #endif
 
 using namespace Camellia;
-using namespace Intrepid;
 
 namespace
 {
@@ -41,7 +40,7 @@ namespace
     set<IndexType> knownActiveCells = mesh->getTopology()->getLocallyKnownActiveCellIndices();
     GlobalIndexType maxCellID = *max_element(knownActiveCells.begin(), knownActiveCells.end());
     
-    FieldContainer<int> adjacency(maxCellID+1,maxCellID+1); // we assume that in our tests we don't ever get too many cells!
+    Intrepid::FieldContainer<int> adjacency(maxCellID+1,maxCellID+1); // we assume that in our tests we don't ever get too many cells!
     
     for (GlobalIndexType cellID : myCells)
     {
@@ -463,10 +462,10 @@ namespace
     int rank = Teuchos::GlobalMPISession::getRank();
     
     int n = 16;
-    FieldContainer<double> denseMatrix(n,n);
+    Intrepid::FieldContainer<double> denseMatrix(n,n);
     double value = 0;
     // fill with arbitrary data, taking care to give each entry a unique value, to maximize chances of detecting failure
-    FieldContainer<int> allColumnIndices(n);
+    Intrepid::FieldContainer<int> allColumnIndices(n);
     for (int i=0; i<n; i++)
     {
       allColumnIndices(i) = i;
@@ -504,9 +503,9 @@ namespace
     for (int LID=0; LID<map.NumMyElements(); LID++)
     {
       int GID = map.GID(LID);
-      FieldContainer<double> rowData(n);
+      Intrepid::FieldContainer<double> rowData(n);
       int numEntries;
-      FieldContainer<int> indices(n);
+      Intrepid::FieldContainer<int> indices(n);
       matrix->ExtractGlobalRowCopy(GID, n, numEntries, &rowData(0), &indices(0));
       TEST_EQUALITY(n, numEntries); // row should be full
       for (int j=0; j<numEntries; j++)
@@ -546,9 +545,9 @@ namespace
       for (int localRowOrdinal=0; localRowOrdinal < actualLocalRowCount; localRowOrdinal++)
       {
         GlobalIndexType row = overlapMatrix.Map().GID(localRowOrdinal);
-        FieldContainer<double> rowData(n);
+        Intrepid::FieldContainer<double> rowData(n);
         int numEntries;
-        FieldContainer<int> indices(n);
+        Intrepid::FieldContainer<int> indices(n);
         overlapMatrix.ExtractMyRowCopy(localRowOrdinal, n, numEntries, &rowData(0), &indices(0));
         TEST_EQUALITY(myRowIndices.size(), numEntries); // should have entries for every locally known column
         if (myRowIndices.size() == numEntries)

@@ -15,7 +15,6 @@
 #include "RieszRep.h"
 
 using namespace Camellia;
-using namespace Intrepid;
 
 #include "Teuchos_UnitTestHarness.hpp"
 namespace

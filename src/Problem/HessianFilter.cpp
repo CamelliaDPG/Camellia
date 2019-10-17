@@ -7,10 +7,9 @@
 #include "BasisCache.h"
 #include "DofOrdering.h"
 
-using namespace Intrepid;
 using namespace Camellia;
 
-void HessianFilter::filter(FieldContainer<double> &localStiffnessMatrix, FieldContainer<double> &localRHSVector, BasisCachePtr basisCache, Teuchos::RCP<Mesh> mesh, Teuchos::RCP<BC> bc)
+void HessianFilter::filter(Intrepid::FieldContainer<double> &localStiffnessMatrix, Intrepid::FieldContainer<double> &localRHSVector, BasisCachePtr basisCache, Teuchos::RCP<Mesh> mesh, Teuchos::RCP<BC> bc)
 {
 
   //  cout << "numCells = " << localStiffnessMatrix.dimension(0) << ", numTestDofs = " << localStiffnessMatrix.dimension(1) << ", numTrialDofs = " << localStiffnessMatrix.dimension(2) << endl;
@@ -24,11 +23,11 @@ void HessianFilter::filter(FieldContainer<double> &localStiffnessMatrix, FieldCo
     int numTrialDofs = elemTypePtr->trialOrderPtr->totalDofs();
     //    cout << "num Cells = " << numCells << ",num Trial dofs = " << numTrialDofs << ", numTest = " << numTestDofs << endl;
 
-    FieldContainer<double> cellSideParities = mesh->cellSideParities(elemTypePtr);
+    Intrepid::FieldContainer<double> cellSideParities = mesh->cellSideParities(elemTypePtr);
 
-    FieldContainer<double> hessianStiffness(numCells,numTrialDofs,numTrialDofs );
+    Intrepid::FieldContainer<double> hessianStiffness(numCells,numTrialDofs,numTrialDofs );
     _hessianBF->bubnovStiffness(hessianStiffness, elemTypePtr, cellSideParities, basisCache);
-    //    FieldContainer<double> hessianStiffness(numCells,numTestDofs,numTrialDofs);
+    //    Intrepid::FieldContainer<double> hessianStiffness(numCells,numTestDofs,numTrialDofs);
     //    _hessianBF->stiffnessMatrix(hessianStiffness, elemTypePtr, cellSideParities, basisCache, false);
 
     /*

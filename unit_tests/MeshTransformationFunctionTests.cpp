@@ -20,13 +20,12 @@
 #include "SpaceTimeHeatFormulation.h"
 
 using namespace Camellia;
-using namespace Intrepid;
 
 namespace
 {
   void testTimeCoordinatesOfCell(double t0, double t1, MeshPtr spaceTimeMesh, IndexType cellIndex, Teuchos::FancyOStream &out, bool &success)
   {
-    FieldContainer<double> physicalCellNodes = spaceTimeMesh->physicalCellNodesForCell(cellIndex);
+    Intrepid::FieldContainer<double> physicalCellNodes = spaceTimeMesh->physicalCellNodesForCell(cellIndex);
     CellPtr spaceTimeCell = spaceTimeMesh->getTopology()->getCell(cellIndex);
     CellTopoPtr spaceTimeTopo = spaceTimeCell->topology();
     int spaceDim = spaceTimeTopo->getDimension() - 1;
@@ -46,13 +45,13 @@ namespace
     
     BasisCachePtr basisCache = BasisCache::basisCacheForCell(spaceTimeMesh, cellIndex);
     
-    FieldContainer<double> physicalCellNodesBasisCache = basisCache->getPhysicalCellNodes();
+    Intrepid::FieldContainer<double> physicalCellNodesBasisCache = basisCache->getPhysicalCellNodes();
     TEST_COMPARE_FLOATING_ARRAYS_CAMELLIA(physicalCellNodes, physicalCellNodesBasisCache, 1e-15);
     
-    FieldContainer<double> refCellNodes(spaceTimeTopo->getNodeCount(),spaceTimeTopo->getDimension());
+    Intrepid::FieldContainer<double> refCellNodes(spaceTimeTopo->getNodeCount(),spaceTimeTopo->getDimension());
     CamelliaCellTools::refCellNodesForTopology(refCellNodes, spaceTimeTopo);
     basisCache->setRefCellPoints(refCellNodes);
-    FieldContainer<double> mappedPhysicalCellNodes = basisCache->getPhysicalCubaturePoints();
+    Intrepid::FieldContainer<double> mappedPhysicalCellNodes = basisCache->getPhysicalCubaturePoints();
     TEST_COMPARE_FLOATING_ARRAYS_CAMELLIA(physicalCellNodes, mappedPhysicalCellNodes, 1e-15);
   }
   
@@ -127,7 +126,7 @@ namespace
       testTimeCoordinatesOfCell(t0_top, t1_top, spaceTimeMesh, topCellIndex, out, success);
     }
     
-//    FieldContainer<double> physicalCellNodes = spaceTimeMesh->physicalCellNodesForCell(cellIndex);
+//    Intrepid::FieldContainer<double> physicalCellNodes = spaceTimeMesh->physicalCellNodesForCell(cellIndex);
 //    CellTopoPtr spaceTimeTopo = spaceTimeCell->topology();
 //    unsigned sideTime1 = spaceTimeTopo->getTemporalSideOrdinal(1);
 //    CellTopoPtr spaceTopo = spaceTimeTopo->getSubcell(spaceDim, sideTime0);
@@ -143,13 +142,13 @@ namespace
 //    
 //    BasisCachePtr basisCache = BasisCache::basisCacheForCell(spaceTimeMesh, cellIndex);
 //    
-//    FieldContainer<double> physicalCellNodesBasisCache = basisCache->getPhysicalCellNodes();
+//    Intrepid::FieldContainer<double> physicalCellNodesBasisCache = basisCache->getPhysicalCellNodes();
 //    TEST_COMPARE_FLOATING_ARRAYS_CAMELLIA(physicalCellNodes, physicalCellNodesBasisCache, 1e-15);
 //    
-//    FieldContainer<double> refCellNodes(spaceTimeTopo->getNodeCount(),spaceTimeTopo->getDimension());
+//    Intrepid::FieldContainer<double> refCellNodes(spaceTimeTopo->getNodeCount(),spaceTimeTopo->getDimension());
 //    CamelliaCellTools::refCellNodesForTopology(refCellNodes, spaceTimeTopo);
 //    basisCache->setRefCellPoints(refCellNodes);
-//    FieldContainer<double> mappedPhysicalCellNodes = basisCache->getPhysicalCubaturePoints();
+//    Intrepid::FieldContainer<double> mappedPhysicalCellNodes = basisCache->getPhysicalCubaturePoints();
 //    TEST_COMPARE_FLOATING_ARRAYS_CAMELLIA(physicalCellNodes, mappedPhysicalCellNodes, 1e-15);
   }
 } // namespace

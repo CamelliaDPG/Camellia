@@ -89,7 +89,7 @@ namespace Camellia
       _deviceViewIsCheckedOut = true;
       // ideally, we should guard this so that we don't do unnecessary copies when memory spaces are the same
       // but this is an optimization that we can make at any point
-      // the priority right now is to provide the same interface as Intrepid::FieldContainer, so that we have a
+      // the priority right now is to provide the same interface as FieldContainer, so that we have a
       // drop-in replacement, and to allow us to gradually shift to using Kokkos::View instead.
       // the checkout semantics here allow us at least some guard against accidental usage of UVM.
       Kokkos::deep_copy(_deviceView,_hostView);

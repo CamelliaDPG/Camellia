@@ -14,18 +14,17 @@
 #include "Teuchos_GlobalMPISession.hpp"
 #include "Teuchos_Array.hpp"
 
-using namespace Intrepid;
 using namespace Camellia;
 using namespace std;
 
-void MPIWrapper::allGather(const Epetra_Comm &Comm, FieldContainer<int> &allValues, int myValue)
+void MPIWrapper::allGather(const Epetra_Comm &Comm, Intrepid::FieldContainer<int> &allValues, int myValue)
 {
-  FieldContainer<int> myValueFC(1);
+  Intrepid::FieldContainer<int> myValueFC(1);
   myValueFC[0] = myValue;
   MPIWrapper::allGather(Comm, allValues, myValueFC);
 }
 
-void MPIWrapper::allGather(const Epetra_Comm &Comm, FieldContainer<int> &allValues, FieldContainer<int> &myValues)
+void MPIWrapper::allGather(const Epetra_Comm &Comm, Intrepid::FieldContainer<int> &allValues, Intrepid::FieldContainer<int> &myValues)
 {
   int numProcs = Comm.NumProc();
   if (numProcs != allValues.dimension(0))
@@ -64,7 +63,7 @@ int MPIWrapper::rank()
 }
 
 template<typename ScalarType>
-void MPIWrapper::entryWiseSum(FieldContainer<ScalarType> &values)
+void MPIWrapper::entryWiseSum(Intrepid::FieldContainer<ScalarType> &values)
 {
 #ifdef HAVE_MPI
   Epetra_MpiComm Comm(MPI_COMM_WORLD);
@@ -73,7 +72,7 @@ void MPIWrapper::entryWiseSum(FieldContainer<ScalarType> &values)
 #endif
 }
 
-void MPIWrapper::entryWiseSum(FieldContainer<double> &values)   // sums values entry-wise across all processors
+void MPIWrapper::entryWiseSum(Intrepid::FieldContainer<double> &values)   // sums values entry-wise across all processors
 {
   entryWiseSum<double>(values);
 }
@@ -136,7 +135,7 @@ Teuchos::RCP<Epetra_Distributor> MPIWrapper::getDistributor(const Epetra_Comm &C
 
 // sum the contents of valuesToSum across all processors, and returns the result:
 // (valuesToSum may vary in length across processors)
-double MPIWrapper::sum(const FieldContainer<double> &valuesToSum)
+double MPIWrapper::sum(const Intrepid::FieldContainer<double> &valuesToSum)
 {
   // this is fairly inefficient in the sense that the MPI overhead will dominate the cost here.
   // insofar as it's possible to group such calls into entryWiseSum() calls, this is preferred.
@@ -160,11 +159,11 @@ double MPIWrapper::sum(double mySum)
   return mySum;
 }
 
-void MPIWrapper::entryWiseSum(FieldContainer<int> &values)
+void MPIWrapper::entryWiseSum(Intrepid::FieldContainer<int> &values)
 {
 #ifdef HAVE_MPI
   Epetra_MpiComm Comm(MPI_COMM_WORLD);
-  FieldContainer<int> valuesCopy = values; // it appears this copy is necessary
+  Intrepid::FieldContainer<int> valuesCopy = values; // it appears this copy is necessary
   Comm.SumAll(&valuesCopy[0], &values[0], values.size());
 #else
 #endif
@@ -172,7 +171,7 @@ void MPIWrapper::entryWiseSum(FieldContainer<int> &values)
 
 // sum the contents of valuesToSum across all processors, and returns the result:
 // (valuesToSum may vary in length across processors)
-int MPIWrapper::sum(const FieldContainer<int> &valuesToSum)
+int MPIWrapper::sum(const Intrepid::FieldContainer<int> &valuesToSum)
 {
   // this is fairly inefficient in the sense that the MPI overhead will dominate the cost here.
   // insofar as it's possible to group such calls into entryWiseSum() calls, this is preferred.

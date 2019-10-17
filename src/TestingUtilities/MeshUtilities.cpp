@@ -12,7 +12,6 @@
 #include "MeshFactory.h"
 #include "LinearTerm.h"
 
-using namespace Intrepid;
 using namespace Camellia;
 
 //static const double RAMP_HEIGHT = 0.0;
@@ -230,7 +229,7 @@ MeshPtr MeshUtilities::buildFrontFacingStep(BFPtr bilinearForm, int H1Order, int
 // builds a [0,1]x[0,1] square mesh with evenly spaced horizontal/vertical cells
 MeshPtr MeshUtilities::buildUnitQuadMesh(int horizontalCells, int verticalCells, BFPtr bilinearForm, int H1Order, int pTest)
 {
-  FieldContainer<double> quadPoints(4,2);
+  Intrepid::FieldContainer<double> quadPoints(4,2);
   double squareSize = 1.0;
   quadPoints(0,0) = 0.0; // x1
   quadPoints(0,1) = 0.0; // y1
@@ -258,7 +257,7 @@ double MeshUtilities::computeMaxLocalConditionNumber(IPPtr ip, MeshPtr mesh, boo
 
 //  cout << "Checking condition numbers on rank " << rank << endl;
 
-  FieldContainer<double> maxConditionNumberIPMatrix;
+  Intrepid::FieldContainer<double> maxConditionNumberIPMatrix;
   int maxCellID = -1;
   double myMaxConditionNumber = -1;
   for (vector< ElementPtr >::iterator elemIt = elements.begin(); elemIt != elements.end(); elemIt++)
@@ -269,7 +268,7 @@ double MeshUtilities::computeMaxLocalConditionNumber(IPPtr ip, MeshPtr mesh, boo
     DofOrderingPtr testSpace = (*elemIt)->elementType()->testOrderPtr;
     int testDofs = testSpace->totalDofs();
     int numCells = 1;
-    FieldContainer<double> innerProductMatrix(numCells,testDofs,testDofs);
+    Intrepid::FieldContainer<double> innerProductMatrix(numCells,testDofs,testDofs);
     ip->computeInnerProductMatrix(innerProductMatrix, testSpace, cellBasisCache);
     // reshape:
     innerProductMatrix.resize(testDofs,testDofs);
@@ -290,7 +289,7 @@ double MeshUtilities::computeMaxLocalConditionNumber(IPPtr ip, MeshPtr mesh, boo
     }
   }
 //  cout << "Determined condition numbers on rank " << rank << endl;
-  FieldContainer<double> maxConditionNumbers(numProcs);
+  Intrepid::FieldContainer<double> maxConditionNumbers(numProcs);
   maxConditionNumbers[rank] = myMaxConditionNumber;
   MPIWrapper::entryWiseSum(maxConditionNumbers);
 

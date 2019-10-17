@@ -9,7 +9,6 @@
 #include "Solution.h"
 
 using namespace Camellia;
-using namespace Intrepid;
 using namespace std;
 
 template <typename Scalar>

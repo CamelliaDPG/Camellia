@@ -14,16 +14,15 @@
 #include "TensorBasis.h"
 #include "TypeDefs.h"
 
-using namespace Intrepid;
 using namespace Camellia;
 
 bool SpaceTimeBasisCache::_defaultStoreTransformedValues = false;
 
 // volume constructor
 SpaceTimeBasisCache::SpaceTimeBasisCache(MeshPtr spaceTimeMesh, ElementTypePtr spaceTimeElementType,
-    const FieldContainer<double> &physicalNodesSpatial,
-    const FieldContainer<double> &physicalNodesTemporal,
-    const FieldContainer<double> &physicalNodesSpaceTime,
+    const Intrepid::FieldContainer<double> &physicalNodesSpatial,
+    const Intrepid::FieldContainer<double> &physicalNodesTemporal,
+    const Intrepid::FieldContainer<double> &physicalNodesSpaceTime,
     const std::vector<GlobalIndexType> &cellIDs,
     bool testVsTest, int cubatureDegreeEnrichment)
   : BasisCache(spaceTimeElementType, spaceTimeMesh, testVsTest, cubatureDegreeEnrichment, true, false)
@@ -62,11 +61,11 @@ SpaceTimeBasisCache::SpaceTimeBasisCache(MeshPtr spaceTimeMesh, ElementTypePtr s
 
   this->BasisCache::setPhysicalCellNodes(physicalNodesSpaceTime, cellIDs, createSideCache);
 
-  FieldContainer<double> sideParities(cellCount, sideCount);
+  Intrepid::FieldContainer<double> sideParities(cellCount, sideCount);
   for (int cellOrdinal=0; cellOrdinal<cellCount; cellOrdinal++)
   {
     GlobalIndexType cellID = cellIDs[cellOrdinal];
-    FieldContainer<double> cellSideParities = spaceTimeMesh->cellSideParitiesForCell(cellID);
+    Intrepid::FieldContainer<double> cellSideParities = spaceTimeMesh->cellSideParitiesForCell(cellID);
     for (int sideOrdinal=0; sideOrdinal<sideCount; sideOrdinal++)
     {
       sideParities(cellOrdinal,sideOrdinal) = cellSideParities(0,sideOrdinal);
@@ -76,9 +75,9 @@ SpaceTimeBasisCache::SpaceTimeBasisCache(MeshPtr spaceTimeMesh, ElementTypePtr s
 }
 
 //meshless volume constructor
-SpaceTimeBasisCache::SpaceTimeBasisCache(const FieldContainer<double> &physicalNodesSpatial,
-    const FieldContainer<double> &physicalNodesTemporal,
-    const FieldContainer<double> &physicalCellNodes,
+SpaceTimeBasisCache::SpaceTimeBasisCache(const Intrepid::FieldContainer<double> &physicalNodesSpatial,
+    const Intrepid::FieldContainer<double> &physicalNodesTemporal,
+    const Intrepid::FieldContainer<double> &physicalCellNodes,
     CellTopoPtr cellTopo, int cubDegreeSpaceTime)
   : BasisCache(physicalCellNodes,cellTopo,cubDegreeSpaceTime,false,true)   // false: don't create side caches during construction; true: tensor product topology (which we should have here) --> space-time
 {
@@ -158,9 +157,9 @@ SpaceTimeBasisCache::SpaceTimeBasisCache(int sideOrdinal, Teuchos::RCP<SpaceTime
     // copy the temporalCacheVolume so that we can set a single reference cell point:
     _temporalCache = Teuchos::rcp( new BasisCache(temporalCacheVolume->getPhysicalCellNodes(), temporalCacheVolume->cellTopology(),
                                    temporalCacheVolume->cubatureDegree(), false) );
-    FieldContainer<double> temporalNode(1,1);
+    Intrepid::FieldContainer<double> temporalNode(1,1);
     temporalNode(0,0) = getTemporalNodeCoordinateRefSpace();
-    FieldContainer<double> temporalWeight(1);
+    Intrepid::FieldContainer<double> temporalWeight(1);
     temporalWeight(0) = 1.0;
     bool recomputePhysicalMeasures = false; // because we'll do so in a moment when we set the physical nodes
     _temporalCache->setRefCellPoints(temporalNode, temporalWeight, temporalCacheVolume->cubatureDegree(), recomputePhysicalMeasures);
@@ -243,7 +242,7 @@ double SpaceTimeBasisCache::getTemporalNodeCoordinateRefSpace()
                              "getTemporalNodeCoordinateRefSpace() only supported for side caches for temporal sides");
 
   int temporalNodeOrdinal = this->cellTopology()->getTemporalComponentSideOrdinal(this->getSideIndex());
-  FieldContainer<double> lineRefNodes(2,1);
+  Intrepid::FieldContainer<double> lineRefNodes(2,1);
   CamelliaCellTools::refCellNodesForTopology(lineRefNodes, CellTopology::line());
   return lineRefNodes(temporalNodeOrdinal,0);
 }
@@ -286,9 +285,9 @@ constFCPtr SpaceTimeBasisCache::getTensorBasisValues(TensorBasis<double>* tensor
 }
 
 void SpaceTimeBasisCache::getTensorialComponentPoints(CellTopoPtr spaceTimeTopo,
-    const FieldContainer<double> &tensorPoints,
-    FieldContainer<double> &spatialPoints,
-    FieldContainer<double> &temporalPoints)
+    const Intrepid::FieldContainer<double> &tensorPoints,
+    Intrepid::FieldContainer<double> &spatialPoints,
+    Intrepid::FieldContainer<double> &temporalPoints)
 {
 
   // note that this initial implementation is hackish; it's merely meant to be a placeholder
@@ -363,8 +362,8 @@ void SpaceTimeBasisCache::getTensorialComponentPoints(CellTopoPtr spaceTimeTopo,
   }
 }
 
-void SpaceTimeBasisCache::getReferencePointComponents(const FieldContainer<double> &tensorPoints, FieldContainer<double> &spacePoints,
-    FieldContainer<double> &timePoints)
+void SpaceTimeBasisCache::getReferencePointComponents(const Intrepid::FieldContainer<double> &tensorPoints, Intrepid::FieldContainer<double> &spacePoints,
+    Intrepid::FieldContainer<double> &timePoints)
 {
   // this->cellTopology() refers to volume topology; set thisTopology to be side topology if this is a side cache
   CellTopoPtr thisTopology = this->isSideCache() ? this->cellTopology()->getSide(this->getSideIndex()) : this->cellTopology();
@@ -393,7 +392,7 @@ void SpaceTimeBasisCache::getReferencePointComponents(const FieldContainer<doubl
 
 void SpaceTimeBasisCache::setRefCellPoints(const Intrepid::FieldContainer<double> &pointsRefCell)
 {
-  FieldContainer<double> spaceRefCellPoints, timeRefCellPoints;
+  Intrepid::FieldContainer<double> spaceRefCellPoints, timeRefCellPoints;
 
   getReferencePointComponents(pointsRefCell, spaceRefCellPoints, timeRefCellPoints);
 
@@ -410,7 +409,7 @@ void SpaceTimeBasisCache::setRefCellPoints(const Intrepid::FieldContainer<double
                                            const Intrepid::FieldContainer<double> &cubatureWeights,
                                            int cubatureDegree, bool recomputePhysicalMeasures)
 {
-  FieldContainer<double> spaceRefCellPoints, timeRefCellPoints;
+  Intrepid::FieldContainer<double> spaceRefCellPoints, timeRefCellPoints;
 
   getReferencePointComponents(pointsRefCell, spaceRefCellPoints, timeRefCellPoints);
 
@@ -424,7 +423,7 @@ void SpaceTimeBasisCache::setRefCellPoints(const Intrepid::FieldContainer<double
   {
     int numSpacePoints = spaceRefCellPoints.dimension(0);
     int numTimePoints = timeRefCellPoints.dimension(0);
-    FieldContainer<double> cubatureWeightsSpace(numSpacePoints), cubatureWeightsTime(numTimePoints);
+    Intrepid::FieldContainer<double> cubatureWeightsSpace(numSpacePoints), cubatureWeightsTime(numTimePoints);
 
     if (cubatureWeights.size() == 0)
     {
@@ -591,8 +590,8 @@ constFCPtr SpaceTimeBasisCache::getTransformedWeightedValues(BasisPtr basis, Cam
   constFCPtr unWeightedValues = getTransformedValues(basis,op, useCubPointsSideRefCell);
   Teuchos::Array<int> dimensions;
   unWeightedValues->dimensions(dimensions);
-  Teuchos::RCP< FieldContainer<double> > weightedValues = Teuchos::rcp( new FieldContainer<double>(dimensions) );
-  FunctionSpaceTools::multiplyMeasure<double>(*weightedValues, this->getWeightedMeasures(), *unWeightedValues);
+  Teuchos::RCP< Intrepid::FieldContainer<double> > weightedValues = Teuchos::rcp( new Intrepid::FieldContainer<double>(dimensions) );
+  Intrepid::FunctionSpaceTools::multiplyMeasure<double>(*weightedValues, this->getWeightedMeasures(), *unWeightedValues);
   return weightedValues;
 }
 
@@ -611,8 +610,8 @@ void SpaceTimeBasisCache::setPhysicalCellNodes(const Intrepid::FieldContainer<do
 
   int numCells = physicalCellNodes.dimension(0);
   int spaceNodeDim = max(1,(int)spaceTopo->getDimension()); // if spaceTopo has dim 0, we still include a dummy entry -- but we don't actually store anything meaningful there.
-  FieldContainer<double> physicalCellNodesSpace(numCells, spaceTopo->getNodeCount(), spaceNodeDim);
-  FieldContainer<double> physicalCellNodesTime(numCells, timeTopo->getNodeCount(), timeTopo->getDimension());
+  Intrepid::FieldContainer<double> physicalCellNodesSpace(numCells, spaceTopo->getNodeCount(), spaceNodeDim);
+  Intrepid::FieldContainer<double> physicalCellNodesTime(numCells, timeTopo->getNodeCount(), timeTopo->getDimension());
   for (int cellOrdinal=0; cellOrdinal<numCells; cellOrdinal++)
   {
     vector<unsigned> componentNodes(2);
@@ -685,7 +684,7 @@ Camellia::EOperator SpaceTimeBasisCache::spaceOp(Camellia::EOperator op)
 
 Intrepid::EOperator SpaceTimeBasisCache::spaceOpForSizing(Camellia::EOperator op)
 {
-  // idea here is to return an Intrepid::EOperator that has the same effect on FieldContainer sizing (really, the
+  // idea here is to return an Intrepid::EOperator that has the same effect on Intrepid::FieldContainer sizing (really, the
   // rank of the value) as the Camellia::EOperator provided.
   switch (op)
   {

@@ -14,7 +14,6 @@
 #include "SerialDenseWrapper.h"
 
 using namespace Camellia;
-using namespace Intrepid;
 
 template <typename Scalar>
 HessianErrorIndicator<Scalar>::HessianErrorIndicator(TSolutionPtr<Scalar> soln, VarPtr varForHessian) : ErrorIndicator(soln->mesh())
@@ -77,9 +76,9 @@ void HessianErrorIndicator<Scalar>::measureError()
   
   int cellsAndNeighborsCount = cellsAndNeighbors.size();
   
-  FieldContainer<double> cellValues(cellsAndNeighborsCount,onePoint); // values at cell centers
-  FieldContainer<double> cellCenters(cellsAndNeighborsCount,spaceDim);
-  FieldContainer<double> cellDiameter(cellsAndNeighborsCount,onePoint); // h-values
+  Intrepid::FieldContainer<double> cellValues(cellsAndNeighborsCount,onePoint); // values at cell centers
+  Intrepid::FieldContainer<double> cellCenters(cellsAndNeighborsCount,spaceDim);
+  Intrepid::FieldContainer<double> cellDiameter(cellsAndNeighborsCount,onePoint); // h-values
   
   map<CellTopologyKey,BasisCachePtr> basisCacheForTopology;
   
@@ -106,9 +105,9 @@ void HessianErrorIndicator<Scalar>::measureError()
     CellTopoPtr cellTopo = cell->topology();
     if (basisCacheForTopology.find(cellTopo->getKey()) == basisCacheForTopology.end())
     {
-      FieldContainer<double> centroid(onePoint,spaceDim);
+      Intrepid::FieldContainer<double> centroid(onePoint,spaceDim);
       int nodeCount = cellTopo->getNodeCount();
-      FieldContainer<double> cellNodes(nodeCount,spaceDim);
+      Intrepid::FieldContainer<double> cellNodes(nodeCount,spaceDim);
       CamelliaCellTools::refCellNodesForTopology(cellNodes, cellTopo);
       for (int node=0; node<nodeCount; node++)
       {
@@ -128,7 +127,7 @@ void HessianErrorIndicator<Scalar>::measureError()
     BasisCachePtr basisCache = basisCacheForTopology[cellTopo->getKey()];
     basisCache->setPhysicalCellNodes(_solution->mesh()->physicalCellNodesForCell(cellID), {cellID}, false);
     
-    FieldContainer<double> cellValue(cellValueDim,&cellValues(cellOrdinal,0));
+    Intrepid::FieldContainer<double> cellValue(cellValueDim,&cellValues(cellOrdinal,0));
     solnFunction->values(cellValue, basisCache);
     for (int d=0; d<spaceDim; d++)
     {
@@ -141,9 +140,9 @@ void HessianErrorIndicator<Scalar>::measureError()
   }
   
   // compute the gradients for owned cells
-  FieldContainer<double> Y(spaceDim,spaceDim); // the matrix we'll invert to compute the gradient
-  FieldContainer<double> b(spaceDim); // RHS for matrix problem
-  FieldContainer<double> grad(spaceDim); // LHS for matrix problem
+  Intrepid::FieldContainer<double> Y(spaceDim,spaceDim); // the matrix we'll invert to compute the gradient
+  Intrepid::FieldContainer<double> b(spaceDim); // RHS for matrix problem
+  Intrepid::FieldContainer<double> grad(spaceDim); // LHS for matrix problem
   vector<double> distanceVector(spaceDim);
   map<GlobalIndexType,vector<double>> gradients;
   for (GlobalIndexType myCellID : *myCells)
@@ -158,7 +157,7 @@ void HessianErrorIndicator<Scalar>::measureError()
       BasisCachePtr basisCache = basisCacheForTopology[cellTopo->getKey()];
       basisCache->setPhysicalCellNodes(_solution->mesh()->physicalCellNodesForCell(myCellID), {myCellID}, false);
       
-      FieldContainer<double> cellGrad(cellGradDim,&gradVector[0]);
+      Intrepid::FieldContainer<double> cellGrad(cellGradDim,&gradVector[0]);
       solnFunction->grad(spaceDim)->values(cellGrad, basisCache);
     }
     else
@@ -246,7 +245,7 @@ void HessianErrorIndicator<Scalar>::measureError()
   
   // now, compute Hessian as Y^{-1} * sum_{K'} (y_K' / norm{y_K'} \tensor (grad u(x_K') - grad u(x_K)) / norm{y_K'})
   b.resize(spaceDim, spaceDim); // RHS for matrix problem -- now matrix-valued
-  FieldContainer<double> hessian(spaceDim, spaceDim); // LHS for matrix problem -- now matrix-valued
+  Intrepid::FieldContainer<double> hessian(spaceDim, spaceDim); // LHS for matrix problem -- now matrix-valued
   for (GlobalIndexType myCellID : *myCells)
   {
     // if the cell is at least 1st order in the variable, then compute gradient exactly
@@ -260,7 +259,7 @@ void HessianErrorIndicator<Scalar>::measureError()
       BasisCachePtr basisCache = basisCacheForTopology[cellTopo->getKey()];
       basisCache->setPhysicalCellNodes(_solution->mesh()->physicalCellNodesForCell(myCellID), {myCellID}, false);
       
-      FieldContainer<double> cellHessian(cellHessianDim,&hessian[0]);
+      Intrepid::FieldContainer<double> cellHessian(cellHessianDim,&hessian[0]);
       FunctionPtr solnHessian = solnFunction->hessian(spaceDim);
       solnHessian->values(cellHessian, basisCache);
     }
@@ -318,7 +317,7 @@ void HessianErrorIndicator<Scalar>::measureError()
         }
       }
     
-      FieldContainer<double> lambda_real(spaceDim), lambda_imag(spaceDim);
+      Intrepid::FieldContainer<double> lambda_real(spaceDim), lambda_imag(spaceDim);
       int result = SerialDenseWrapper::eigenvalues(hessian, lambda_real, lambda_imag);
     
       if (result != 0)

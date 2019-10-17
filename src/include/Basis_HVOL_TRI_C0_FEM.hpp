@@ -74,7 +74,7 @@ namespace Intrepid {
     void getValues(ArrayScalar &          outputValues,
                    const ArrayScalar &    inputPoints,
                    const ArrayScalar &    cellVertices,
-                   const EOperator        operatorType = OPERATOR_VALUE) const;
+                   const EOperator        operatorType = Intrepid::OPERATOR_VALUE) const;
     
     /** \brief  Returns spatial locations (coordinates) of degrees of freedom on a
      <strong>reference Quadrilateral</strong>.

@@ -12,7 +12,6 @@
 #include "SubBasisDofPermutationMapper.h"
 #include "SubBasisDofMatrixMapper.h"
 
-using namespace Intrepid;
 using namespace Camellia;
 
 void SubBasisDofMapper::mapSubBasisDataIntoGlobalContainer(const Intrepid::FieldContainer<double> &subBasisData,
@@ -34,7 +33,7 @@ SubBasisDofMapperPtr SubBasisDofMapper::subBasisDofMapper(const set<int> &dofOrd
   return Teuchos::rcp(new SubBasisDofPermutationMapper(dofOrdinalFilter, globalDofOrdinals));
 }
 
-SubBasisDofMapperPtr SubBasisDofMapper::subBasisDofMapper(const set<int> &dofOrdinalFilter, const vector<GlobalIndexType> &globalDofOrdinals, const FieldContainer<double> &constraintMatrix)
+SubBasisDofMapperPtr SubBasisDofMapper::subBasisDofMapper(const set<int> &dofOrdinalFilter, const vector<GlobalIndexType> &globalDofOrdinals, const Intrepid::FieldContainer<double> &constraintMatrix)
 {
   bool checkForPermutation = true;
 

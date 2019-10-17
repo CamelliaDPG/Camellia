@@ -17,7 +17,6 @@
 #include "GlobalDofAssignment.h"
 #include "Solution.h"
 
-using namespace Intrepid;
 using namespace Camellia;
 
 typedef pair<RefinementBranch,vector<GlobalIndexType>> LabeledRefinementBranch; // first cellID indicates the root cell ID; after that, each cellID indicates first child of each refinement
@@ -357,7 +356,7 @@ void CellDataMigration::packSolutionData(Mesh *mesh, GlobalIndexType cellID, boo
         continue; // no dofs to assign; proceed to next solution
       }
       // # dofs per solution
-      const FieldContainer<double>* solnCoeffs = &solutions[i]->allCoefficientsForCellID(cellIDForCoefficients, false, lhsOrdinal); // false: don't warn
+      const Intrepid::FieldContainer<double>* solnCoeffs = &solutions[i]->allCoefficientsForCellID(cellIDForCoefficients, false, lhsOrdinal); // false: don't warn
 //      cout << "cellIDForCoefficients = " << cellIDForCoefficients;
 //      cout << "; lhOrdinal = " << lhsOrdinal;
       int localDofs = solnCoeffs->size();
@@ -649,7 +648,7 @@ void CellDataMigration::unpackSolutionData(Mesh* mesh, GlobalIndexType cellID, c
         TEUCHOS_TEST_FOR_EXCEPTION(true, std::invalid_argument, "localDofs != elemType->trialOrderPtr->totalDofs()");
       }
       
-      FieldContainer<double> solnCoeffs(localDofs);
+      Intrepid::FieldContainer<double> solnCoeffs(localDofs);
       memcpy(&solnCoeffs[0], dataLocation, localDofs * sizeof(double));
       // the dofs themselves
       dataLocation += localDofs * sizeof(double);

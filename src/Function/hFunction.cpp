@@ -7,7 +7,6 @@
 #include "BasisCache.h"
 
 using namespace Camellia;
-using namespace Intrepid;
 using namespace std;
 
 string hFunction::displayString()

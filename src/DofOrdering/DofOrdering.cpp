@@ -10,7 +10,6 @@
 #include "BasisReconciliation.h"
 
 using namespace std;
-using namespace Intrepid;
 using namespace Camellia;
 
 #define INDICES_INDEX(sideOrdinal) (sideOrdinal == VOLUME_INTERIOR_SIDE_ORDINAL) ? _volumeIndex : sideOrdinal
@@ -90,8 +89,8 @@ CellTopoPtr DofOrdering::cellTopology(int sideIndex) const
   return _cellTopologyForSide.find(sideIndex)->second;
 }
 
-void DofOrdering::copyLikeCoefficients( FieldContainer<double> &newValues, Teuchos::RCP<DofOrdering> oldDofOrdering,
-                                        const FieldContainer<double> &oldValues )
+void DofOrdering::copyLikeCoefficients( Intrepid::FieldContainer<double> &newValues, Teuchos::RCP<DofOrdering> oldDofOrdering,
+                                        const Intrepid::FieldContainer<double> &oldValues )
 {
   // copy the coefficients for the bases that agree between the two DofOrderings
   // requires that "like" bases are actually pointers to the same memory location
@@ -160,7 +159,7 @@ void DofOrdering::getDofCoords(Intrepid::FieldContainer<double> &dofCoords, int 
   else
   {
     BasisCachePtr sideCache = basisCache->getSideBasisCache(sideOrdinal);
-    FieldContainer<double> sideDofCoords(basisCardinality, basis->domainTopology()->getDimension());
+    Intrepid::FieldContainer<double> sideDofCoords(basisCardinality, basis->domainTopology()->getDimension());
     basis->getDofCoords(sideDofCoords);
     sideCache->setRefCellPoints(sideDofCoords);
     const Intrepid::FieldContainer<double>* volumeCoords = &sideCache->getPhysicalCubaturePoints();
@@ -189,7 +188,7 @@ void DofOrdering::getDofCoords(const Intrepid::FieldContainer<double> &physicalC
   
   if (sideOrdinal == VOLUME_INTERIOR_SIDE_ORDINAL)
   {
-    FieldContainer<double> refSpaceDofCoords(basisCardinality, spaceDim);
+    Intrepid::FieldContainer<double> refSpaceDofCoords(basisCardinality, spaceDim);
     basis->getDofCoords(refSpaceDofCoords);
     basisCache->setRefCellPoints(refSpaceDofCoords);
     dofCoords = basisCache->getPhysicalCubaturePoints();
@@ -197,7 +196,7 @@ void DofOrdering::getDofCoords(const Intrepid::FieldContainer<double> &physicalC
   else
   {
     BasisCachePtr sideCache = basisCache->getSideBasisCache(sideOrdinal);
-    FieldContainer<double> sideDofCoords(basisCardinality, basis->domainTopology()->getDimension());
+    Intrepid::FieldContainer<double> sideDofCoords(basisCardinality, basis->domainTopology()->getDimension());
     basis->getDofCoords(sideDofCoords);
     sideCache->setRefCellPoints(sideDofCoords);
     dofCoords = sideCache->getPhysicalCubaturePoints();
@@ -424,7 +423,7 @@ void DofOrdering::print(std::ostream& os) const
 void DofOrdering::printDofCoords(int varID, std::ostream& os) const
 {
   // define a lambda to create a point string:
-  auto pointString = [] (int basisOrdinal, FieldContainer<double> &basisDofCoords) -> string
+  auto pointString = [] (int basisOrdinal, Intrepid::FieldContainer<double> &basisDofCoords) -> string
   {
     ostringstream pointStringStream;
     int spaceDim = basisDofCoords.dimension(1);
@@ -448,7 +447,7 @@ void DofOrdering::printDofCoords(int varID, std::ostream& os) const
     BasisPtr basis = getBasis(varID, sideOrdinal);
     const vector<int>* dofIndices = &getDofIndices(varID, sideOrdinal);
     
-    FieldContainer<double> basisDofCoords(basis->getCardinality(), basis->domainTopology()->getDimension());
+    Intrepid::FieldContainer<double> basisDofCoords(basis->getCardinality(), basis->domainTopology()->getDimension());
     if (sideOrdinal == VOLUME_INTERIOR_SIDE_ORDINAL)
     {
       os << "Volume dof ordinal:" << setw(20) << "Local Dof Index:" << setw(20) << "Coordinates:\n" << endl;

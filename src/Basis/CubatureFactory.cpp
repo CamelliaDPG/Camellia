@@ -20,11 +20,10 @@ using namespace Teuchos;
 
 using namespace Camellia;
 
-using namespace Intrepid;
 
 Teuchos::RCP<Intrepid::Cubature<double> > CubatureFactory::create(CellTopoPtr cellTopo, int cubDegree)
 {
-  Teuchos::RCP<Cubature<double> > shardsTopoCub;
+  Teuchos::RCP<Intrepid::Cubature<double> > shardsTopoCub;
   int numShardsTopoCubatures = 0; // 1 or 0
   if (cellTopo->getShardsTopology().getDimension() != 0)
   {
@@ -42,19 +41,19 @@ Teuchos::RCP<Intrepid::Cubature<double> > CubatureFactory::create(CellTopoPtr ce
     if (numShardsTopoCubatures == 1) componentCubatures[0] = shardsTopoCub;
     shards::CellTopology line_2(shards::getCellTopologyData<shards::Line<2> >() );
 
-    Teuchos::RCP<Cubature<double> > lineCub = _cubFactory.create( line_2, cubDegree);
+    Teuchos::RCP<Intrepid::Cubature<double> > lineCub = _cubFactory.create( line_2, cubDegree);
 
     for (int tensorialComponent=0; tensorialComponent<cellTopo->getTensorialDegree(); tensorialComponent++)
     {
       componentCubatures[numShardsTopoCubatures + tensorialComponent] = lineCub;
     }
-    return Teuchos::rcp(new CubatureTensor<double>(componentCubatures));
+    return Teuchos::rcp(new Intrepid::CubatureTensor<double>(componentCubatures));
   }
 }
 
 Teuchos::RCP<Intrepid::Cubature<double> > CubatureFactory::create(CellTopoPtr cellTopo, std::vector<int> cubDegree)
 {
-  Teuchos::RCP<Cubature<double> > shardsTopoCub;
+  Teuchos::RCP<Intrepid::Cubature<double> > shardsTopoCub;
   int degreeOffset = 0;
   if (cubDegree.size() == cellTopo->getDimension())
   {
@@ -67,7 +66,7 @@ Teuchos::RCP<Intrepid::Cubature<double> > CubatureFactory::create(CellTopoPtr ce
   {
     int shardsDegree = cubDegree[0];
     degreeOffset = 1;
-    Teuchos::RCP<Cubature<double> > shardsTopoCub = _cubFactory.create(cellTopo->getShardsTopology(), shardsDegree);
+    Teuchos::RCP<Intrepid::Cubature<double> > shardsTopoCub = _cubFactory.create(cellTopo->getShardsTopology(), shardsDegree);
   }
   else
   {
@@ -86,9 +85,9 @@ Teuchos::RCP<Intrepid::Cubature<double> > CubatureFactory::create(CellTopoPtr ce
 
     for (int tensorialComponent=0; tensorialComponent<cellTopo->getTensorialDegree(); tensorialComponent++)
     {
-      Teuchos::RCP<Cubature<double> > lineCub = _cubFactory.create( line_2, cubDegree[tensorialComponent + degreeOffset]);
+      Teuchos::RCP<Intrepid::Cubature<double> > lineCub = _cubFactory.create( line_2, cubDegree[tensorialComponent + degreeOffset]);
       componentCubatures[1+tensorialComponent] = lineCub;
     }
-    return Teuchos::rcp(new CubatureTensor<double>(componentCubatures));
+    return Teuchos::rcp(new Intrepid::CubatureTensor<double>(componentCubatures));
   }
 }

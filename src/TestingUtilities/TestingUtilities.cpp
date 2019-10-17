@@ -7,7 +7,6 @@
 #include "Element.h"
 #include "RHS.h"
 
-using namespace Intrepid;
 using namespace Camellia;
 
 void TestingUtilities::initializeSolnCoeffs(TSolutionPtr<double> solution)
@@ -20,7 +19,7 @@ void TestingUtilities::initializeSolnCoeffs(TSolutionPtr<double> solution)
     pair<int,int> cellID_dofIndex = it->first;
     int cellID = cellID_dofIndex.first;
     int numLocalTrialDofs = solution->mesh()->getElement(cellID)->elementType()->trialOrderPtr->totalDofs();
-    FieldContainer<double> dofs(numLocalTrialDofs);
+    Intrepid::FieldContainer<double> dofs(numLocalTrialDofs);
     dofs.initialize(0.0);
     for (int solutionOrdinal=0; solutionOrdinal<numSolutions; solutionOrdinal++)
     {
@@ -32,8 +31,8 @@ void TestingUtilities::initializeSolnCoeffs(TSolutionPtr<double> solution)
 // checks if dof has a BC applied to it
 bool TestingUtilities::isBCDof(GlobalIndexType globalDofIndex, TSolutionPtr<double> solution)
 {
-  FieldContainer<GlobalIndexType> globalIndices;
-  FieldContainer<double> globalValues;
+  Intrepid::FieldContainer<GlobalIndexType> globalIndices;
+  Intrepid::FieldContainer<double> globalValues;
   solution->mesh()->boundary().bcsToImpose(globalIndices, globalValues, *(solution->bc()), NULL);
   for (int i = 0; i < globalIndices.size(); i++)
   {
@@ -76,7 +75,7 @@ void TestingUtilities::setSolnCoeffForGlobalDofIndex(TSolutionPtr<double> soluti
       GlobalIndexType cellID = cellID_dofIndex.first;
       int localDofIndex = cellID_dofIndex.second;
       int numLocalTrialDofs = solution->mesh()->getElement(cellID)->elementType()->trialOrderPtr->totalDofs();
-      FieldContainer<double> dofs(numLocalTrialDofs);
+      Intrepid::FieldContainer<double> dofs(numLocalTrialDofs);
       dofs.initialize(0.0); // inefficient; can do better.
       dofs(localDofIndex) = solnCoeff;
       for (int solutionOrdinal=0; solutionOrdinal<numSolutions; solutionOrdinal++)

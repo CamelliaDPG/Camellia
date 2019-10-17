@@ -15,7 +15,6 @@
 #include "SimpleVectorFunction.h"
 #include "SpatialFilter.h"
 
-using namespace Intrepid;
 using namespace Camellia;
 
 class TransformXFunction : public SimpleVectorFunction<double>
@@ -162,8 +161,8 @@ vector<double> PeriodicBC::getMatchingPoint(const std::vector<double> &point, in
   }
 
   int spaceDim = point.size();
-  FieldContainer<double> value(1,1,spaceDim); // (C,P,D)
-  FieldContainer<double> physPoint(1,1,spaceDim);
+  Intrepid::FieldContainer<double> value(1,1,spaceDim); // (C,P,D)
+  Intrepid::FieldContainer<double> physPoint(1,1,spaceDim);
 
   Teuchos::RCP<PhysicalPointCache> dummyCache = Teuchos::rcp( new PhysicalPointCache(physPoint) );
   for (int d=0; d<spaceDim; d++)

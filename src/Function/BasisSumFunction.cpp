@@ -9,10 +9,9 @@
 
 #include "Intrepid_CellTools.hpp"
 
-using namespace Intrepid;
 using namespace Camellia;
 
-BasisSumFunction::BasisSumFunction(BasisPtr basis, const FieldContainer<double> &basisCoefficients,
+BasisSumFunction::BasisSumFunction(BasisPtr basis, const Intrepid::FieldContainer<double> &basisCoefficients,
                                    BasisCachePtr overridingBasisCache, Camellia::EOperator op, bool boundaryValueOnly) : TFunction<double>( BasisFactory::basisFactory()->getBasisRank(basis) )
 {
   // TODO: fix the rank setter here to take into account rank-changing ops (e.g. DIV, GRAD)
@@ -36,7 +35,7 @@ BasisSumFunction::BasisSumFunction(BasisPtr basis, const FieldContainer<double> 
                               "BasisSumFunction: coefficients passed in do not match cardinality of basis.");
 }
 
-void BasisSumFunction::values(FieldContainer<double> &values, BasisCachePtr basisCache)
+void BasisSumFunction::values(Intrepid::FieldContainer<double> &values, BasisCachePtr basisCache)
 {
   CHECK_VALUES_RANK(values);
   if (_overridingBasisCache.get() != NULL)
@@ -49,16 +48,16 @@ void BasisSumFunction::values(FieldContainer<double> &values, BasisCachePtr basi
     CellTopoPtr cellTopo = basisCache->cellTopology();
     if (cellTopo->getDimension() > 0)
     {
-      const FieldContainer<double>* physicalCellNodes = &basisCache->getPhysicalCellNodes();
+      const Intrepid::FieldContainer<double>* physicalCellNodes = &basisCache->getPhysicalCellNodes();
       int numCells = physicalCellNodes->dimension(0);
       int numNodes = physicalCellNodes->dimension(1);
       int spaceDim = physicalCellNodes->dimension(2);
-      FieldContainer<double> relativeReferenceCellNodes(numCells, numNodes, spaceDim);
+      Intrepid::FieldContainer<double> relativeReferenceCellNodes(numCells, numNodes, spaceDim);
       CellTopoPtr domainTopo = _basis->domainTopology();
       
-      FieldContainer<double> cellCenter(cellTopo->getDimension());
+      Intrepid::FieldContainer<double> cellCenter(cellTopo->getDimension());
 
-      FieldContainer<double> refCellNodes(cellTopo->getNodeCount(),cellTopo->getDimension());
+      Intrepid::FieldContainer<double> refCellNodes(cellTopo->getNodeCount(),cellTopo->getDimension());
       CamelliaCellTools::refCellNodesForTopology(refCellNodes, cellTopo);
 
       int nodeCount = cellTopo->getNodeCount();
@@ -71,7 +70,7 @@ void BasisSumFunction::values(FieldContainer<double> &values, BasisCachePtr basi
       }
 
       // Resize initial guess depending on the rank of the physical points array
-      FieldContainer<double> initGuess;
+      Intrepid::FieldContainer<double> initGuess;
 
       // Default: map (C,P,D) array of physical pt. sets to (C,P,D) array. Requires (C,P,D) initial guess.
       initGuess.resize(numCells, numNodes, spaceDim);
@@ -89,7 +88,7 @@ void BasisSumFunction::values(FieldContainer<double> &values, BasisCachePtr basi
 
       CamelliaCellTools::mapToReferenceFrameInitGuess(relativeReferenceCellNodes, initGuess, *physicalCellNodes, _overridingBasisCache);
 
-      FieldContainer<double> oneCellRelativeReferenceNodes(1,numNodes,spaceDim);
+      Intrepid::FieldContainer<double> oneCellRelativeReferenceNodes(1,numNodes,spaceDim);
       for (int n=0; n<numNodes; n++)
       {
         for (int d=0; d<spaceDim; d++)
@@ -98,8 +97,8 @@ void BasisSumFunction::values(FieldContainer<double> &values, BasisCachePtr basi
         }
       }
       bool cachesAgreeOnSideness = basisCache->isSideCache() == _overridingBasisCache->isSideCache();
-      FieldContainer<double> relativeReferencePoints = cachesAgreeOnSideness ? basisCache->getRefCellPoints() : basisCache->getSideRefCellPointsInVolumeCoordinates();
-      FieldContainer<double> refPoints(1,relativeReferencePoints.dimension(0),relativeReferencePoints.dimension(1));
+      Intrepid::FieldContainer<double> relativeReferencePoints = cachesAgreeOnSideness ? basisCache->getRefCellPoints() : basisCache->getSideRefCellPointsInVolumeCoordinates();
+      Intrepid::FieldContainer<double> refPoints(1,relativeReferencePoints.dimension(0),relativeReferencePoints.dimension(1));
       CamelliaCellTools::mapToPhysicalFrame(refPoints, relativeReferencePoints, oneCellRelativeReferenceNodes, basisCache->cellTopology());
       refPoints.resize(refPoints.dimension(1),refPoints.dimension(2)); // strip cell dimension
       _overridingBasisCache->setRefCellPoints(refPoints, basisCache->getCubatureWeights());
@@ -219,7 +218,7 @@ bool BasisSumFunction::boundaryValueOnly()
   return _boundaryValueOnly;
 }
 
-TFunctionPtr<double> BasisSumFunction::basisSumFunction(BasisPtr basis, const FieldContainer<double> &basisCoefficients, Camellia::EOperator op)
+TFunctionPtr<double> BasisSumFunction::basisSumFunction(BasisPtr basis, const Intrepid::FieldContainer<double> &basisCoefficients, Camellia::EOperator op)
 {
   return Teuchos::rcp( new BasisSumFunction(basis,basisCoefficients,Teuchos::null,op) );
 }

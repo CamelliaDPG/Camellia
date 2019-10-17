@@ -89,7 +89,7 @@ public:
   double computeAlternativeNormSqOnCell(TIPPtr<Scalar> ip, GlobalIndexType cellID);
   map<GlobalIndexType,double> computeAlternativeNormSqOnCells(TIPPtr<Scalar> ip, vector<GlobalIndexType> cellIDs);
 
-  // ! if the coefficients are not locally known, will initialize to 0 and return a FieldContainer filled with 0s.
+  // ! if the coefficients are not locally known, will initialize to 0 and return a Intrepid::FieldContainer filled with 0s.
   const Intrepid::FieldContainer<Scalar>& getCoefficientsForCell(GlobalIndexType cellID);
   
   // ! coefficients should be over all test dofs

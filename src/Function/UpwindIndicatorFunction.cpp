@@ -8,7 +8,6 @@
 
 #include "Intrepid_FieldContainer.hpp"
 
-using namespace Intrepid;
 using namespace Camellia;
 
 UpwindIndicatorFunction::UpwindIndicatorFunction(FunctionPtr beta, bool upwind)

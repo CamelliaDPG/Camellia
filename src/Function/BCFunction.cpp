@@ -8,7 +8,6 @@
 #include "BCFunction.h"
 #include "BC.h"
 
-using namespace Intrepid;
 using namespace Camellia;
 
 template <typename Scalar>
@@ -34,12 +33,12 @@ BCFunction<Scalar>::BCFunction(BCPtr bc, int varID, TFunctionPtr<Scalar> spatial
 }
 
 template <typename Scalar>
-void BCFunction<Scalar>::values(FieldContainer<Scalar> &values, BasisCachePtr basisCache)
+void BCFunction<Scalar>::values(Intrepid::FieldContainer<Scalar> &values, BasisCachePtr basisCache)
 {
   int numCells = basisCache->cellIDs().size();
   int numPoints = basisCache->getPhysicalCubaturePoints().dimension(1);
   _imposeHere.resize(numCells,numPoints);
-  FieldContainer<double> unitNormals = basisCache->getSideNormals();
+  Intrepid::FieldContainer<double> unitNormals = basisCache->getSideNormals();
   _bc->imposeBC(values, _imposeHere, _varID, unitNormals, basisCache);
 }
 

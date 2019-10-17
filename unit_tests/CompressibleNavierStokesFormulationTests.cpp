@@ -15,7 +15,6 @@
 #include "SimpleFunction.h"
 
 using namespace Camellia;
-using namespace Intrepid;
 
 #include <array>
 

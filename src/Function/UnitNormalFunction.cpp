@@ -7,7 +7,6 @@
 #include "BasisCache.h"
 
 using namespace Camellia;
-using namespace Intrepid;
 
 UnitNormalFunction::UnitNormalFunction(int comp, bool spaceTime) : TFunction<double>( (comp==-1)? 1 : 0)
 {

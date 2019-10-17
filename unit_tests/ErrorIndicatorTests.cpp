@@ -21,7 +21,6 @@
 #include "SerialDenseWrapper.h"
 
 using namespace Camellia;
-using namespace Intrepid;
 
 namespace
 {
@@ -149,7 +148,7 @@ namespace
     return gradientVector;
   }
   
-  FieldContainer<double> expectedHessian(MeshTopologyViewPtr meshTopo, GlobalIndexType myCellID)
+  Intrepid::FieldContainer<double> expectedHessian(MeshTopologyViewPtr meshTopo, GlobalIndexType myCellID)
   {
     int spaceDim = meshTopo->getDimension();
     Intrepid::FieldContainer<double> Y(spaceDim,spaceDim); // matrix we'll invert
@@ -254,8 +253,8 @@ namespace
 //      }
 //      cout << gradient[spaceDim-1] << ")\n";
       
-      FieldContainer<double> hessian = expectedHessian(meshTopo, cellID);
-      FieldContainer<double> lambda_real(spaceDim), lambda_imag(spaceDim);
+      Intrepid::FieldContainer<double> hessian = expectedHessian(meshTopo, cellID);
+      Intrepid::FieldContainer<double> lambda_real(spaceDim), lambda_imag(spaceDim);
       SerialDenseWrapper::eigenvalues(hessian, lambda_real, lambda_imag);
       double maxLambda = 0;
       for (int d=0; d<spaceDim; d++)

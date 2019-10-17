@@ -20,7 +20,6 @@
 #include "MeshFactory.h"
 
 using namespace Camellia;
-using namespace Intrepid;
 using namespace std;
 
 namespace
@@ -1259,7 +1258,7 @@ TEUCHOS_UNIT_TEST( MeshTopology, UnrefinedSpaceTimeMeshTopologyIsUnconstrained )
   int spaceDim = spaceTopo->getDimension();
   MeshTopologyPtr spatialMeshTopo = Teuchos::rcp( new MeshTopology(spaceDim) );
 
-  FieldContainer<double> cellNodes(spaceTopo->getNodeCount(),spaceTopo->getDimension());
+  Intrepid::FieldContainer<double> cellNodes(spaceTopo->getNodeCount(),spaceTopo->getDimension());
   CamelliaCellTools::refCellNodesForTopology(cellNodes, spaceTopo);
   vector<vector<double>> cellVerticesVector;
   CamelliaCellTools::pointsVectorFromFC(cellVerticesVector, cellNodes);

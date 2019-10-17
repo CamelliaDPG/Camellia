@@ -13,7 +13,6 @@
 
 using namespace Camellia;
 using namespace std;
-using namespace Intrepid;
 
 template <typename Scalar>
 TRefinementStrategy<Scalar>::TRefinementStrategy( ErrorIndicatorPtr errorIndicator, double relativeErrorThreshold,

@@ -6,7 +6,6 @@
 #include "BasisCache.h"
 
 using namespace Camellia;
-using namespace Intrepid;
 
 template <typename Scalar>
 SumFunction<Scalar>::SumFunction(TFunctionPtr<Scalar> f1, TFunctionPtr<Scalar> f2) : TFunction<Scalar>(f1->rank())

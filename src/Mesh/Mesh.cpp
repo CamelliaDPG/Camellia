@@ -39,7 +39,6 @@
 
 #include <algorithm>
 
-using namespace Intrepid;
 using namespace Camellia;
 using namespace std;
 
@@ -345,7 +344,7 @@ vector<int> Mesh::cellTensorPolyOrder(GlobalIndexType cellID)   // aka H1Order
   return _gda->getH1Order(cellID);
 }
 
-vector<GlobalIndexType> Mesh::cellIDsForPoints(const FieldContainer<double> &physicalPoints, bool minusOnesIfOffRank)
+vector<GlobalIndexType> Mesh::cellIDsForPoints(const Intrepid::FieldContainer<double> &physicalPoints, bool minusOnesIfOffRank)
 {
   vector<GlobalIndexType> cellIDs = _meshTopology->cellIDsForPoints(physicalPoints);
 
@@ -388,7 +387,7 @@ MeshPtr Mesh::deepCopy()
   return meshCopy;
 }
 
-vector<ElementPtr> Mesh::elementsForPoints(const FieldContainer<double> &physicalPoints, bool nullElementsIfOffRank)
+vector<ElementPtr> Mesh::elementsForPoints(const Intrepid::FieldContainer<double> &physicalPoints, bool nullElementsIfOffRank)
 {
 
   vector<GlobalIndexType> cellIDs = cellIDsForPoints(physicalPoints, nullElementsIfOffRank);
@@ -588,7 +587,7 @@ void Mesh::enforceOneIrregularity(bool repartitionAndMigrate)
   }
 }
 
-FieldContainer<double> Mesh::cellSideParities( ElementTypePtr elemTypePtr )
+Intrepid::FieldContainer<double> Mesh::cellSideParities( ElementTypePtr elemTypePtr )
 {
   // old version (using lookup table)
   // return dynamic_cast<GDAMaximumRule2D*>(_gda.get())->cellSideParities(elemTypePtr);
@@ -600,10 +599,10 @@ FieldContainer<double> Mesh::cellSideParities( ElementTypePtr elemTypePtr )
   int numCells = cellIDs.size();
   int numSides = elemTypePtr->cellTopoPtr->getSideCount();
 
-  FieldContainer<double> sideParities(numCells, numSides);
+  Intrepid::FieldContainer<double> sideParities(numCells, numSides);
   for (int i=0; i<numCells; i++)
   {
-    FieldContainer<double> iParities = cellSideParitiesForCell(cellIDs[i]);
+    Intrepid::FieldContainer<double> iParities = cellSideParitiesForCell(cellIDs[i]);
     for (int sideOrdinal=0; sideOrdinal<numSides; sideOrdinal++)
     {
       sideParities(i,sideOrdinal) = iParities(0,sideOrdinal);
@@ -613,7 +612,7 @@ FieldContainer<double> Mesh::cellSideParities( ElementTypePtr elemTypePtr )
   return sideParities;
 }
 
-FieldContainer<double> Mesh::cellSideParitiesForCell( GlobalIndexType cellID )
+Intrepid::FieldContainer<double> Mesh::cellSideParitiesForCell( GlobalIndexType cellID )
 {
   return _gda->cellSideParitiesForCell(cellID);
 }
@@ -776,7 +775,7 @@ set<GlobalIndexType> Mesh::getGlobalDofIndices(GlobalIndexType cellID, int varID
   return _gda->getGlobalDofIndices(cellID,varID,sideOrdinal);
 }
 
-map<IndexType, GlobalIndexType> Mesh::getGlobalVertexIDs(const FieldContainer<double> &vertices)
+map<IndexType, GlobalIndexType> Mesh::getGlobalVertexIDs(const Intrepid::FieldContainer<double> &vertices)
 {
   double tol = 1e-12; // tolerance for vertex equality
 
@@ -1076,19 +1075,19 @@ void Mesh::initializePartitionPolicyIfNull(MeshPartitionPolicyPtr &partitionPoli
   }
 }
 
-void Mesh::interpretGlobalCoefficients(GlobalIndexType cellID, FieldContainer<double> &localCoefficients, const Epetra_MultiVector &globalCoefficients)
+void Mesh::interpretGlobalCoefficients(GlobalIndexType cellID, Intrepid::FieldContainer<double> &localCoefficients, const Epetra_MultiVector &globalCoefficients)
 {
   _gda->interpretGlobalCoefficients(cellID, localCoefficients, globalCoefficients);
 }
 
-void Mesh::interpretLocalBasisCoefficients(GlobalIndexType cellID, int varID, int sideOrdinal, const FieldContainer<double> &basisCoefficients,
-    FieldContainer<double> &globalCoefficients, FieldContainer<GlobalIndexType> &globalDofIndices)
+void Mesh::interpretLocalBasisCoefficients(GlobalIndexType cellID, int varID, int sideOrdinal, const Intrepid::FieldContainer<double> &basisCoefficients,
+    Intrepid::FieldContainer<double> &globalCoefficients, Intrepid::FieldContainer<GlobalIndexType> &globalDofIndices)
 {
   _gda->interpretLocalBasisCoefficients(cellID, varID, sideOrdinal, basisCoefficients, globalCoefficients, globalDofIndices);
 }
 
-void Mesh::interpretLocalData(GlobalIndexType cellID, const FieldContainer<double> &localDofs,
-                              FieldContainer<double> &globalDofs, FieldContainer<GlobalIndexType> &globalDofIndices)
+void Mesh::interpretLocalData(GlobalIndexType cellID, const Intrepid::FieldContainer<double> &localDofs,
+                              Intrepid::FieldContainer<double> &globalDofs, Intrepid::FieldContainer<GlobalIndexType> &globalDofIndices)
 {
   _gda->interpretLocalData(cellID, localDofs, globalDofs, globalDofIndices);
 }
@@ -1188,7 +1187,7 @@ GlobalIndexType Mesh::partitionLocalIndexForGlobalDofIndex( GlobalIndexType glob
   return maxRule->partitionLocalIndexForGlobalDofIndex(globalDofIndex);
 }
 
-FieldContainer<double> Mesh::physicalCellNodes( Teuchos::RCP< ElementType > elemTypePtr)
+Intrepid::FieldContainer<double> Mesh::physicalCellNodes( Teuchos::RCP< ElementType > elemTypePtr)
 {
   int rank = Comm()->MyPID();
   vector<GlobalIndexType> cellIDs = _gda->cellIDsOfElementType(rank, elemTypePtr);
@@ -1196,16 +1195,16 @@ FieldContainer<double> Mesh::physicalCellNodes( Teuchos::RCP< ElementType > elem
   return physicalCellNodes(elemTypePtr, cellIDs);
 }
 
-FieldContainer<double> Mesh::physicalCellNodes( Teuchos::RCP< ElementType > elemTypePtr, vector<GlobalIndexType> &cellIDs )
+Intrepid::FieldContainer<double> Mesh::physicalCellNodes( Teuchos::RCP< ElementType > elemTypePtr, vector<GlobalIndexType> &cellIDs )
 {
   int numCells = cellIDs.size();
   int numVertices = elemTypePtr->cellTopoPtr->getVertexCount();
   int spaceDim = _meshTopology->getDimension();
 
-  FieldContainer<double> physicalNodes(numCells, numVertices, spaceDim);
+  Intrepid::FieldContainer<double> physicalNodes(numCells, numVertices, spaceDim);
   for (int i=0; i<numCells; i++)
   {
-    FieldContainer<double> iPhysicalNodes = physicalCellNodesForCell(cellIDs[i]);
+    Intrepid::FieldContainer<double> iPhysicalNodes = physicalCellNodesForCell(cellIDs[i]);
     for (int vertexOrdinal=0; vertexOrdinal<numVertices; vertexOrdinal++)
     {
       for (int d=0; d<spaceDim; d++)
@@ -1217,7 +1216,7 @@ FieldContainer<double> Mesh::physicalCellNodes( Teuchos::RCP< ElementType > elem
   return physicalNodes;
 }
 
-FieldContainer<double> Mesh::physicalCellNodes( vector<GlobalIndexType> &cellIDs )
+Intrepid::FieldContainer<double> Mesh::physicalCellNodes( vector<GlobalIndexType> &cellIDs )
 {
   TEUCHOS_TEST_FOR_EXCEPTION(cellIDs.size() == 0, std::invalid_argument, "cellIDs cannot be empty!");
   auto elemType = getElementType(cellIDs[0]);
@@ -1230,15 +1229,15 @@ FieldContainer<double> Mesh::physicalCellNodes( vector<GlobalIndexType> &cellIDs
   return physicalCellNodes(elemType, cellIDs);
 }
 
-FieldContainer<double> Mesh::physicalCellNodesForCell( GlobalIndexType cellID )
+Intrepid::FieldContainer<double> Mesh::physicalCellNodesForCell( GlobalIndexType cellID )
 {
   CellPtr cell = _meshTopology->getCell(cellID);
   int vertexCount = cell->topology()->getVertexCount();
   int spaceDim = _meshTopology->getDimension();
   int numCells = 1;
-  FieldContainer<double> physicalCellNodes(numCells,vertexCount,spaceDim);
+  Intrepid::FieldContainer<double> physicalCellNodes(numCells,vertexCount,spaceDim);
 
-  FieldContainer<double> cellVertices(vertexCount,spaceDim);
+  Intrepid::FieldContainer<double> cellVertices(vertexCount,spaceDim);
   vector<IndexType> vertexIndices = _meshTopology->getCell(cellID)->vertices();
   for (int vertex=0; vertex<vertexCount; vertex++)
   {
@@ -1251,7 +1250,7 @@ FieldContainer<double> Mesh::physicalCellNodesForCell( GlobalIndexType cellID )
   return physicalCellNodes;
 }
 
-FieldContainer<double> Mesh::physicalCellNodesGlobal( Teuchos::RCP< ElementType > elemTypePtr )
+Intrepid::FieldContainer<double> Mesh::physicalCellNodesGlobal( Teuchos::RCP< ElementType > elemTypePtr )
 {
 //  int numRanks = Teuchos::GlobalMPISession::getNProc();
 
@@ -1525,10 +1524,10 @@ vector<IndexType> Mesh::vertexIndicesForCell(GlobalIndexType cellID)
   return _meshTopology->getCell(cellID)->vertices();
 }
 
-FieldContainer<double> Mesh::vertexCoordinates(GlobalIndexType vertexIndex)
+Intrepid::FieldContainer<double> Mesh::vertexCoordinates(GlobalIndexType vertexIndex)
 {
   int spaceDim = _meshTopology->getDimension();
-  FieldContainer<double> vertex(spaceDim);
+  Intrepid::FieldContainer<double> vertex(spaceDim);
   for (int d=0; d<spaceDim; d++)
   {
     vertex(d) = _meshTopology->getVertex(vertexIndex)[d];
@@ -1551,12 +1550,12 @@ vector< vector<double> > Mesh::verticesForCell(GlobalIndexType cellID)
   return vertices;
 }
 
-void Mesh::verticesForCell(FieldContainer<double>& vertices, GlobalIndexType cellID)
+void Mesh::verticesForCell(Intrepid::FieldContainer<double>& vertices, GlobalIndexType cellID)
 {
   _meshTopology->verticesForCell(vertices,cellID);
 }
 
-void Mesh::verticesForCells(FieldContainer<double>& vertices, vector<GlobalIndexType> &cellIDs)
+void Mesh::verticesForCells(Intrepid::FieldContainer<double>& vertices, vector<GlobalIndexType> &cellIDs)
 {
   // all cells represented in cellIDs must have the same topology
   int spaceDim = _meshTopology->getDimension();
@@ -1579,12 +1578,12 @@ void Mesh::verticesForCells(FieldContainer<double>& vertices, vector<GlobalIndex
   for (int cellIndex=0; cellIndex<numCells; cellIndex++)
   {
     int cellID = cellIDs[cellIndex];
-    FieldContainer<double> cellVertices(dim,&vertices(cellIndex,0,0));
+    Intrepid::FieldContainer<double> cellVertices(dim,&vertices(cellIndex,0,0));
     this->verticesForCell(cellVertices, cellID);
   }
 }
 
-void Mesh::verticesForSide(FieldContainer<double>& vertices, GlobalIndexType cellID, int sideIndex)
+void Mesh::verticesForSide(Intrepid::FieldContainer<double>& vertices, GlobalIndexType cellID, int sideIndex)
 {
   CellPtr cell = _meshTopology->getCell(cellID);
   int spaceDim = _meshTopology->getDimension();
@@ -1628,7 +1627,7 @@ void Mesh::writeMeshPartitionsToFile(const string & fileName)
       {
         CellPtr cell = _meshTopology->getCell(*cellIt);
         int numVertices = cell->topology()->getVertexCount();
-        FieldContainer<double> verts(numVertices,spaceDim); // gets resized inside verticesForCell
+        Intrepid::FieldContainer<double> verts(numVertices,spaceDim); // gets resized inside verticesForCell
         verticesForCell(verts, *cellIt);  //verts(numVertsForCell,dim)
         maxNumVertices = std::max(maxNumVertices,verts.dimension(0));
         maxNumElems = std::max(maxNumElems,(int)cellsInPartition.size());
@@ -1647,7 +1646,7 @@ void Mesh::writeMeshPartitionsToFile(const string & fileName)
       {
         CellPtr cell = _meshTopology->getCell(*cellIt);
         int numVertices = cell->topology()->getVertexCount();
-        FieldContainer<double> vertices(numVertices,spaceDim);
+        Intrepid::FieldContainer<double> vertices(numVertices,spaceDim);
         verticesForCell(vertices, *cellIt);  //vertices(numVertsForCell,dim)
 
         // write vertex coordinates to file
@@ -1676,7 +1675,7 @@ double Mesh::getCellXSize(GlobalIndexType cellID)
   int spaceDim = 2; // assuming 2D
   int numSides = elem->numSides();
   TEUCHOS_TEST_FOR_EXCEPTION(numSides!=4, std::invalid_argument, "Anisotropic cell measures only defined for quads right now.");
-  FieldContainer<double> vertices(numSides,spaceDim);
+  Intrepid::FieldContainer<double> vertices(numSides,spaceDim);
   verticesForCell(vertices, cellID);
   double xDist = vertices(1,0)-vertices(0,0);
   double yDist = vertices(1,1)-vertices(0,1);
@@ -1689,7 +1688,7 @@ double Mesh::getCellYSize(GlobalIndexType cellID)
   int spaceDim = 2; // assuming 2D
   int numSides = elem->numSides();
   TEUCHOS_TEST_FOR_EXCEPTION(numSides!=4, std::invalid_argument, "Anisotropic cell measures only defined for quads right now.");
-  FieldContainer<double> vertices(numSides,spaceDim);
+  Intrepid::FieldContainer<double> vertices(numSides,spaceDim);
   verticesForCell(vertices, cellID);
   double xDist = vertices(3,0)-vertices(0,0);
   double yDist = vertices(3,1)-vertices(0,1);
@@ -1702,7 +1701,7 @@ vector<double> Mesh::getCellOrientation(GlobalIndexType cellID)
   int spaceDim = 2; // assuming 2D
   int numSides = elem->numSides();
   TEUCHOS_TEST_FOR_EXCEPTION(numSides!=4, std::invalid_argument, "Cell orientation only defined for quads right now.");
-  FieldContainer<double> vertices(numSides,spaceDim);
+  Intrepid::FieldContainer<double> vertices(numSides,spaceDim);
   verticesForCell(vertices, cellID);
   double xDist = vertices(3,0)-vertices(0,0);
   double yDist = vertices(3,1)-vertices(0,1);
@@ -1891,7 +1890,7 @@ MeshPtr Mesh::readTriangle(string filePath, TBFPtr<double> bilinearForm, int H1O
   return MeshFactory::readTriangle(filePath, bilinearForm, H1Order, pToAdd);
 }
 
-MeshPtr Mesh::buildQuadMesh(const FieldContainer<double> &quadBoundaryPoints,
+MeshPtr Mesh::buildQuadMesh(const Intrepid::FieldContainer<double> &quadBoundaryPoints,
                             int horizontalElements, int verticalElements,
                             TBFPtr<double> bilinearForm,
                             int H1Order, int pTest, bool triangulate, bool useConformingTraces,
@@ -1904,7 +1903,7 @@ MeshPtr Mesh::buildQuadMesh(const FieldContainer<double> &quadBoundaryPoints,
   return MeshFactory::buildQuadMesh(quadBoundaryPoints, horizontalElements, verticalElements, bilinearForm, H1Order, pTest, triangulate, useConformingTraces, trialOrderEnhancements, testOrderEnhancements);
 }
 
-MeshPtr Mesh::buildQuadMeshHybrid(const FieldContainer<double> &quadBoundaryPoints,
+MeshPtr Mesh::buildQuadMeshHybrid(const Intrepid::FieldContainer<double> &quadBoundaryPoints,
                                   int horizontalElements, int verticalElements,
                                   TBFPtr<double> bilinearForm,
                                   int H1Order, int pTest, bool useConformingTraces)
@@ -1916,7 +1915,7 @@ MeshPtr Mesh::buildQuadMeshHybrid(const FieldContainer<double> &quadBoundaryPoin
                                           H1Order, pTest, useConformingTraces);
 }
 
-void Mesh::quadMeshCellIDs(FieldContainer<int> &cellIDs,
+void Mesh::quadMeshCellIDs(Intrepid::FieldContainer<int> &cellIDs,
                            int horizontalElements, int verticalElements,
                            bool useTriangles)
 {

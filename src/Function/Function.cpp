@@ -1521,8 +1521,7 @@ std::map<GlobalIndexType, double> TFunction<Scalar>::squaredL2NormOfJumps(MeshPt
    with finer quadrature, in the case of a locally refined mesh.
    */
   
-  using namespace Intrepid;
-  
+    
   Epetra_CommPtr Comm = mesh->Comm();
   
   MeshTopologyViewPtr meshTopo = mesh->getTopology();
@@ -1601,12 +1600,12 @@ std::map<GlobalIndexType, double> TFunction<Scalar>::squaredL2NormOfJumps(MeshPt
   
   int sideDim = meshTopo->getDimension() - 1;
   
-  FieldContainer<double> emptyRefPointsVolume(0,meshTopo->getDimension()); // (P,D)
-  FieldContainer<double> emptyRefPointsSide(0,sideDim); // (P,D)
-  FieldContainer<double> emptyCubWeights(1,0); // (C,P)
+  Intrepid::FieldContainer<double> emptyRefPointsVolume(0,meshTopo->getDimension()); // (P,D)
+  Intrepid::FieldContainer<double> emptyRefPointsSide(0,sideDim); // (P,D)
+  Intrepid::FieldContainer<double> emptyCubWeights(1,0); // (C,P)
   
-  map<pair<CellTopologyKey,int>, FieldContainer<double>> cubPointsForSideTopo;
-  map<pair<CellTopologyKey,int>, FieldContainer<double>> cubWeightsForSideTopo;
+  map<pair<CellTopologyKey,int>, Intrepid::FieldContainer<double>> cubPointsForSideTopo;
+  map<pair<CellTopologyKey,int>, Intrepid::FieldContainer<double>> cubWeightsForSideTopo;
   
   CubatureFactory cubFactory;
   
@@ -1623,7 +1622,7 @@ std::map<GlobalIndexType, double> TFunction<Scalar>::squaredL2NormOfJumps(MeshPt
     CellTopoPtr cellTopo = cell->topology();
     ElementTypePtr elemType = mesh->getElementType(cellID);
     
-    FieldContainer<double> physicalCellNodes = mesh->physicalCellNodesForCell(cellID);
+    Intrepid::FieldContainer<double> physicalCellNodes = mesh->physicalCellNodesForCell(cellID);
     BasisCachePtr cellBasisCacheVolume;
     if (basisCacheForVolumeTopo.find(cellTopo->getKey()) == basisCacheForVolumeTopo.end())
     {
@@ -1705,7 +1704,7 @@ std::map<GlobalIndexType, double> TFunction<Scalar>::squaredL2NormOfJumps(MeshPt
         int cubDegree = cubKey.second;
         if (sideDim > 0)
         {
-          Teuchos::RCP<Cubature<double> > sideCub;
+          Teuchos::RCP<Intrepid::Cubature<double> > sideCub;
           if (cubDegree >= 0)
             sideCub = cubFactory.create(mySideTopo, cubDegree);
           
@@ -1716,8 +1715,8 @@ std::map<GlobalIndexType, double> TFunction<Scalar>::squaredL2NormOfJumps(MeshPt
           else
             numCubPointsSide = 0;
           
-          FieldContainer<double> cubPoints(numCubPointsSide, sideDim); // cubature points from the pov of the side (i.e. a (d-1)-dimensional set)
-          FieldContainer<double> cubWeights(numCubPointsSide);
+          Intrepid::FieldContainer<double> cubPoints(numCubPointsSide, sideDim); // cubature points from the pov of the side (i.e. a (d-1)-dimensional set)
+          Intrepid::FieldContainer<double> cubWeights(numCubPointsSide);
           if (numCubPointsSide > 0)
             sideCub->getCubature(cubPoints, cubWeights);
           cubPointsForSideTopo[cubKey] = cubPoints;
@@ -1726,8 +1725,8 @@ std::map<GlobalIndexType, double> TFunction<Scalar>::squaredL2NormOfJumps(MeshPt
         else
         {
           int numCubPointsSide = 1;
-          FieldContainer<double> cubPoints(numCubPointsSide, 1); // cubature points from the pov of the side (i.e. a (d-1)-dimensional set)
-          FieldContainer<double> cubWeights(numCubPointsSide);
+          Intrepid::FieldContainer<double> cubPoints(numCubPointsSide, 1); // cubature points from the pov of the side (i.e. a (d-1)-dimensional set)
+          Intrepid::FieldContainer<double> cubWeights(numCubPointsSide);
           
           cubPoints.initialize(0.0);
           cubWeights.initialize(1.0);
@@ -1778,7 +1777,7 @@ std::map<GlobalIndexType, double> TFunction<Scalar>::squaredL2NormOfJumps(MeshPt
           
           RefinementBranch refinementBranch = cell->refinementBranchForSide(sideOrdinal, meshTopo);
           RefinementBranch sideRefinementBranch = RefinementPattern::sideRefinementBranch(refinementBranch, ancestorSideOrdinal);
-          FieldContainer<double> cellNodes = RefinementPattern::descendantNodesRelativeToAncestorReferenceCell(sideRefinementBranch);
+          Intrepid::FieldContainer<double> cellNodes = RefinementPattern::descendantNodesRelativeToAncestorReferenceCell(sideRefinementBranch);
           
           cellNodes.resize(1,cellNodes.dimension(0),cellNodes.dimension(1));
           BasisCachePtr ancestralBasisCache = Teuchos::rcp(new BasisCache(cellNodes,sideTopo,cubaturePolyOrder,false)); // false: don't create side cache too
@@ -1839,7 +1838,7 @@ std::map<GlobalIndexType, double> TFunction<Scalar>::squaredL2NormOfJumps(MeshPt
         Intrepid::FieldContainer<double> neighborRefCellPoints = referenceBasisCache->getPhysicalCubaturePoints();
         neighborRefCellPoints.resize(numPoints,sideDim); // strip cell dimension to convert to a "reference" point container
         
-        FieldContainer<double> neighborCellNodes = mesh->physicalCellNodesForCell(neighborCellID);
+        Intrepid::FieldContainer<double> neighborCellNodes = mesh->physicalCellNodesForCell(neighborCellID);
         if (basisCacheForNeighborVolumeTopo.find(neighborTopo->getKey()) == basisCacheForNeighborVolumeTopo.end())
         {
           basisCacheForNeighborVolumeTopo[neighborTopo->getKey()] = Teuchos::rcp( new BasisCache(neighborCellNodes, neighborTopo,

@@ -17,7 +17,6 @@
 #include "PoissonFormulation.h"
 
 using namespace Camellia;
-using namespace Intrepid;
 
 #include "Teuchos_UnitTestHarness.hpp"
 namespace
@@ -95,7 +94,7 @@ TEUCHOS_UNIT_TEST( DofOrdering, SidesForVarID )
       
       VarPtr u_hat = form.u_hat();
       
-      FieldContainer<double> localCoefficients(trialOrdering->totalDofs());
+      Intrepid::FieldContainer<double> localCoefficients(trialOrdering->totalDofs());
       for (int sideOrdinal : trialOrdering->getSidesForVarID(u_hat->ID()))
       {
         int numBasisDofs = trialOrdering->getBasisCardinality(u_hat->ID(), sideOrdinal);

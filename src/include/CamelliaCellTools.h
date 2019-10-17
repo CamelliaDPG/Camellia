@@ -50,7 +50,7 @@ public:
                                  CellTopoPtr                   cellTopo,
                                  const double &                threshold = Intrepid::INTREPID_THRESHOLD);
   
-  /** \brief  Variation on Intrepid FunctionSpaceTools computeEdgeMeasure and computeFaceMeasure;
+  /** \brief  Variation on Intrepid Intrepid::FunctionSpaceTools computeEdgeMeasure and computeFaceMeasure;
    intended to support Camellia CellTopology generally, though unlike computeEdgeMeasure we here
    assume that the subcell over which we integrate is of dimension (d-1) for a d-dimensional parent cell.
    Note that this initial implementation does require orthogonality of the transformations in space and

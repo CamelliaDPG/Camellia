@@ -44,7 +44,6 @@
 #include <Teuchos_GlobalMPISession.hpp>
 
 using namespace Camellia;
-using namespace Intrepid;
 
 
 enum ProblemChoice

@@ -30,7 +30,6 @@
 #include <algorithm>
 
 using namespace Camellia;
-using namespace Intrepid;
 using namespace std;
 
 namespace

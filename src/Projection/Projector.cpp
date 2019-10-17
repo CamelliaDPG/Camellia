@@ -26,11 +26,10 @@
 // Teuchos includes
 #include "Teuchos_RCP.hpp"
 
-using namespace Intrepid;
 using namespace Camellia;
 
 template <typename Scalar>
-void Projector<Scalar>::projectFunctionOntoBasis(FieldContainer<Scalar> &basisCoefficients, TFunctionPtr<Scalar> fxn,
+void Projector<Scalar>::projectFunctionOntoBasis(Intrepid::FieldContainer<Scalar> &basisCoefficients, TFunctionPtr<Scalar> fxn,
     BasisPtr basis, BasisCachePtr basisCache, TIPPtr<Scalar> ip, VarPtr v,
     set<int> fieldIndicesToSkip)
 {
@@ -63,8 +62,8 @@ void Projector<Scalar>::projectFunctionOntoBasis(FieldContainer<Scalar> &basisCo
     return;
   }
 
-  FieldContainer<Scalar> gramMatrix(numCells,cardinality,cardinality);
-  FieldContainer<Scalar> ipVector(numCells,cardinality);
+  Intrepid::FieldContainer<Scalar> gramMatrix(numCells,cardinality,cardinality);
+  Intrepid::FieldContainer<Scalar> ipVector(numCells,cardinality);
 
   // fake a DofOrdering
   DofOrderingPtr dofOrdering = Teuchos::rcp( new DofOrdering(basisCache->cellTopology()) );
@@ -101,8 +100,8 @@ void Projector<Scalar>::projectFunctionOntoBasis(FieldContainer<Scalar> &basisCo
       oldToNewIndices[i] = new_index;
     }
 
-    FieldContainer<Scalar> gramMatrixFiltered(numCells,numDofs,numDofs);
-    FieldContainer<Scalar> ipVectorFiltered(numCells,numDofs);
+    Intrepid::FieldContainer<Scalar> gramMatrixFiltered(numCells,numDofs,numDofs);
+    Intrepid::FieldContainer<Scalar> ipVectorFiltered(numCells,numDofs);
     // now filter out the values that we're to skip
 
     for (int cellIndex=0; cellIndex<numCells; cellIndex++)
@@ -146,9 +145,9 @@ void Projector<Scalar>::projectFunctionOntoBasis(FieldContainer<Scalar> &basisCo
     rhsDim[0] = ipVector.dimension(1);
     rhsDim[1] = 1;
     
-    FieldContainer<Scalar> cellIPMatrix(localIPDim, &gramMatrix(cellIndex,0,0));
-    FieldContainer<Scalar> cellRHS(rhsDim, &ipVector(cellIndex,0));
-    FieldContainer<Scalar> x(gramMatrix.dimension(1),1); // 1: number of RHSes in our current solve
+    Intrepid::FieldContainer<Scalar> cellIPMatrix(localIPDim, &gramMatrix(cellIndex,0,0));
+    Intrepid::FieldContainer<Scalar> cellRHS(rhsDim, &ipVector(cellIndex,0));
+    Intrepid::FieldContainer<Scalar> x(gramMatrix.dimension(1),1); // 1: number of RHSes in our current solve
     
     // impose any BCs from the test space:
     if (ip->hasBCsImposed())
@@ -222,7 +221,7 @@ void Projector<Scalar>::projectFunctionOntoBasis(FieldContainer<Scalar> &basisCo
 }
 
 template <typename Scalar>
-void Projector<Scalar>::projectFunctionOntoBasis(FieldContainer<Scalar> &basisCoefficients, TFunctionPtr<Scalar> fxn,
+void Projector<Scalar>::projectFunctionOntoBasis(Intrepid::FieldContainer<Scalar> &basisCoefficients, TFunctionPtr<Scalar> fxn,
     BasisPtr basis, BasisCachePtr basisCache)
 {
   VarFactoryPtr varFactory = VarFactory::varFactory();
@@ -256,7 +255,7 @@ void Projector<Scalar>::projectFunctionOntoBasis(FieldContainer<Scalar> &basisCo
 }
 
 template <typename Scalar>
-void Projector<Scalar>::projectFunctionOntoBasisInterpolating(FieldContainer<Scalar> &basisCoefficients, TFunctionPtr<Scalar> fxn,
+void Projector<Scalar>::projectFunctionOntoBasisInterpolating(Intrepid::FieldContainer<Scalar> &basisCoefficients, TFunctionPtr<Scalar> fxn,
                                                               BasisPtr basis, BasisCachePtr domainBasisCache)
 {
   basisCoefficients.initialize(0);
@@ -298,7 +297,7 @@ void Projector<Scalar>::projectFunctionOntoBasisInterpolating(FieldContainer<Sca
   // for now, make all projections use L^2... (having some issues with gradients and cell Jacobians--I think we need the restriction of the cell Jacobian to the subcell, e.g., and it's not clear how to do that...)
   ip = ip_l2;
 
-  FieldContainer<double> referenceDomainNodes(domainTopo->getVertexCount(),domainDim);
+  Intrepid::FieldContainer<double> referenceDomainNodes(domainTopo->getVertexCount(),domainDim);
   CamelliaCellTools::refCellNodesForTopology(referenceDomainNodes, domainTopo);
 
   int basisCardinality = basis->getCardinality();
@@ -334,7 +333,7 @@ void Projector<Scalar>::projectFunctionOntoBasisInterpolating(FieldContainer<Sca
   }
   
   int numCells = basisCoefficients.dimension(0);
-  FieldContainer<Scalar> wholeBasisCoefficients(numCells, basisCardinality); // will include zeros for any coefficients belonging to other sides for a volume basis, e.g.
+  Intrepid::FieldContainer<Scalar> wholeBasisCoefficients(numCells, basisCardinality); // will include zeros for any coefficients belonging to other sides for a volume basis, e.g.
   
   for (int d=startingDimensionForProjection; d<=domainDim; d++)
   {
@@ -363,8 +362,8 @@ void Projector<Scalar>::projectFunctionOntoBasisInterpolating(FieldContainer<Sca
         
       if (subcellDofOrdinals.size() > 0)
       {
-        FieldContainer<double> refCellPoints;
-        FieldContainer<double> cubatureWeightsSubcell; // allows us to integrate over the fine subcell even when domain is higher-dimensioned
+        Intrepid::FieldContainer<double> refCellPoints;
+        Intrepid::FieldContainer<double> cubatureWeightsSubcell; // allows us to integrate over the fine subcell even when domain is higher-dimensioned
         if (d == 0)
         {
           refCellPoints.resize(1,domainDim);
@@ -378,7 +377,7 @@ void Projector<Scalar>::projectFunctionOntoBasisInterpolating(FieldContainer<Sca
         else
         {
           CellTopoPtr subcellTopo = domainTopo->getSubcell(d, subcord);
-//          Teuchos::RCP<Cubature<double> > subcellCubature = cubFactory.create(subcellTopo, domainBasisCache->cubatureDegree());
+//          Teuchos::RCP<Intrepid::Cubature<double> > subcellCubature = cubFactory.create(subcellTopo, domainBasisCache->cubatureDegree());
           BasisCachePtr subcellCache = Teuchos::rcp( new BasisCache(subcellTopo, domainBasisCache->cubatureDegree(), false) );
           int numPoints = subcellCache->getRefCellPoints().dimension(0);
           refCellPoints.resize(numPoints,domainDim);
@@ -401,7 +400,7 @@ void Projector<Scalar>::projectFunctionOntoBasisInterpolating(FieldContainer<Sca
         {
           dofsToSkip.erase(dofOrdinal);
         }
-        FieldContainer<Scalar> newBasisCoefficients;
+        Intrepid::FieldContainer<Scalar> newBasisCoefficients;
         projectFunctionOntoBasis(newBasisCoefficients, fxnToApproximate, basis, domainBasisCache, ipForProjection, v, dofsToSkip);
         for (int cellOrdinal=0; cellOrdinal<newBasisCoefficients.dimension(0); cellOrdinal++)
         {
@@ -473,8 +472,8 @@ void Projector<Scalar>::projectChildFunctionOntoParentBasis(Intrepid::FieldConta
     return;
   }
   
-  FieldContainer<Scalar> gramMatrix(numCells,cardinality,cardinality);
-  FieldContainer<Scalar> ipVector(numCells,cardinality);
+  Intrepid::FieldContainer<Scalar> gramMatrix(numCells,cardinality,cardinality);
+  Intrepid::FieldContainer<Scalar> ipVector(numCells,cardinality);
   
   // fake a DofOrdering
   DofOrderingPtr dofOrdering = Teuchos::rcp( new DofOrdering(unionCache->cellTopology()) );
@@ -514,8 +513,8 @@ void Projector<Scalar>::projectChildFunctionOntoParentBasis(Intrepid::FieldConta
       oldToNewIndices[i] = new_index;
     }
     
-    FieldContainer<Scalar> gramMatrixFiltered(numCells,numDofs,numDofs);
-    FieldContainer<Scalar> ipVectorFiltered(numCells,numDofs);
+    Intrepid::FieldContainer<Scalar> gramMatrixFiltered(numCells,numDofs,numDofs);
+    Intrepid::FieldContainer<Scalar> ipVectorFiltered(numCells,numDofs);
     // now filter out the values that we're to skip
     
     for (int cellIndex=0; cellIndex<numCells; cellIndex++)
@@ -559,9 +558,9 @@ void Projector<Scalar>::projectChildFunctionOntoParentBasis(Intrepid::FieldConta
     rhsDim[0] = ipVector.dimension(1);
     rhsDim[1] = 1;
     
-    FieldContainer<Scalar> cellIPMatrix(localIPDim, &gramMatrix(cellIndex,0,0));
-    FieldContainer<Scalar> cellRHS(rhsDim, &ipVector(cellIndex,0));
-    FieldContainer<Scalar> x(gramMatrix.dimension(1),1); // 1: number of RHSes in our current solve
+    Intrepid::FieldContainer<Scalar> cellIPMatrix(localIPDim, &gramMatrix(cellIndex,0,0));
+    Intrepid::FieldContainer<Scalar> cellRHS(rhsDim, &ipVector(cellIndex,0));
+    Intrepid::FieldContainer<Scalar> x(gramMatrix.dimension(1),1); // 1: number of RHSes in our current solve
     
     // impose any BCs from the test space:
     TEUCHOS_TEST_FOR_EXCEPTION(ip->hasBCsImposed(), std::invalid_argument, "ip BC imposition not supported for subdomain projection");
@@ -680,7 +679,7 @@ void Projector<Scalar>::projectChildFunctionOntoParentBasisInterpolating(Intrepi
   // for now, make all projections use L^2... (having some issues with gradients and cell Jacobians--I think we need the restriction of the cell Jacobian to the subcell, e.g., and it's not clear how to do that...)
   ip = ip_l2;
   
-  FieldContainer<double> referenceDomainNodes(domainTopo->getVertexCount(),domainDim);
+  Intrepid::FieldContainer<double> referenceDomainNodes(domainTopo->getVertexCount(),domainDim);
   CamelliaCellTools::refCellNodesForTopology(referenceDomainNodes, domainTopo);
   
   int basisCardinality = parentBasis->getCardinality();
@@ -716,7 +715,7 @@ void Projector<Scalar>::projectChildFunctionOntoParentBasisInterpolating(Intrepi
   }
   
   int numCells = basisCoefficients.dimension(0);
-  FieldContainer<Scalar> wholeBasisCoefficients(numCells, basisCardinality); // will include zeros for any coefficients belonging to other sides for a volume basis, e.g.
+  Intrepid::FieldContainer<Scalar> wholeBasisCoefficients(numCells, basisCardinality); // will include zeros for any coefficients belonging to other sides for a volume basis, e.g.
   
   int maxCubatureDegreeSubdomain = 0;
   for (auto subdomainCache : subdomainCaches)
@@ -751,8 +750,8 @@ void Projector<Scalar>::projectChildFunctionOntoParentBasisInterpolating(Intrepi
       
       if (subcellDofOrdinals.size() > 0)
       {
-        FieldContainer<double> refCellPoints;
-        FieldContainer<double> cubatureWeightsSubcell; // allows us to integrate over the fine subcell even when domain is higher-dimensioned
+        Intrepid::FieldContainer<double> refCellPoints;
+        Intrepid::FieldContainer<double> cubatureWeightsSubcell; // allows us to integrate over the fine subcell even when domain is higher-dimensioned
         if (d == 0)
         {
           refCellPoints.resize(1,domainDim);
@@ -794,7 +793,7 @@ void Projector<Scalar>::projectChildFunctionOntoParentBasisInterpolating(Intrepi
           dofsToSkip.erase(dofOrdinal);
         }
 //        Camellia::print("dofsToSkip", dofsToSkip);
-        FieldContainer<Scalar> newBasisCoefficients;
+        Intrepid::FieldContainer<Scalar> newBasisCoefficients;
         
         projectChildFunctionOntoParentBasis(newBasisCoefficients, fxnToApproximate, parentBasis, refPattern, subdomainCaches, ipForProjection, v, dofsToSkip);
         

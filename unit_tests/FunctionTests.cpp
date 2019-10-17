@@ -20,7 +20,6 @@
 #include "Solution.h"
 
 using namespace Camellia;
-using namespace Intrepid;
 
 namespace
 {
@@ -36,7 +35,7 @@ void testSpaceTimeNormalTimeComponent(CellTopoPtr spaceTopo, Teuchos::FancyOStre
   {
     BasisCachePtr spaceTimeSideCache = spaceTimeBasisCache->getSideBasisCache(sideOrdinal);
 
-    FieldContainer<double> spaceTimeNormals(1,spaceTimeSideCache->getRefCellPoints().dimension(0));
+    Intrepid::FieldContainer<double> spaceTimeNormals(1,spaceTimeSideCache->getRefCellPoints().dimension(0));
     spaceTimeNormalComponent->values(spaceTimeNormals,spaceTimeSideCache);
 
     if (spaceTimeTopo->sideIsSpatial(sideOrdinal))
@@ -61,9 +60,9 @@ void testSpaceTimeNormalTimeComponent(CellTopoPtr spaceTopo, Teuchos::FancyOStre
   }
 }
 
-FieldContainer<double> getScaledTranslatedRefNodes(CellTopoPtr topo, double nodeScaling, double nodeTranslation)
+Intrepid::FieldContainer<double> getScaledTranslatedRefNodes(CellTopoPtr topo, double nodeScaling, double nodeTranslation)
 {
-  FieldContainer<double> nodes(topo->getNodeCount(),topo->getDimension());
+  Intrepid::FieldContainer<double> nodes(topo->getNodeCount(),topo->getDimension());
   CamelliaCellTools::refCellNodesForTopology(nodes, topo);
   for (int nodeOrdinal=0; nodeOrdinal<topo->getNodeCount(); nodeOrdinal++)
   {
@@ -76,7 +75,7 @@ FieldContainer<double> getScaledTranslatedRefNodes(CellTopoPtr topo, double node
   return nodes;
 }
 
-void setTemporalNodes(CellTopoPtr spaceTimeTopo, FieldContainer<double> &spaceTimeNodes, double t0, double t1)
+void setTemporalNodes(CellTopoPtr spaceTimeTopo, Intrepid::FieldContainer<double> &spaceTimeNodes, double t0, double t1)
 {
   int d_time = spaceTimeTopo->getDimension() - 1;
   CellTopoPtr spaceTopo = spaceTimeTopo->getTensorialComponent();
@@ -101,7 +100,7 @@ void testSpaceTimeIntegrateByPartsInTime(CellTopoPtr spaceTopo, FunctionPtr f, T
   double spaceNodeScaling = 0.5;
   double spaceNodeTranslation = 0.5; // scale, then translate
   BasisCachePtr spaceTimeBasisCache = BasisCache::basisCacheForReferenceCell(spaceTimeTopo, cubatureDegree, createSideCache);
-  FieldContainer<double> physicalNodesSpaceTime = getScaledTranslatedRefNodes(spaceTimeTopo, spaceNodeScaling, spaceNodeTranslation);
+  Intrepid::FieldContainer<double> physicalNodesSpaceTime = getScaledTranslatedRefNodes(spaceTimeTopo, spaceNodeScaling, spaceNodeTranslation);
   double t0 = 0.0, t1 = 1.0;
   setTemporalNodes(spaceTimeTopo,physicalNodesSpaceTime,t0,t1);
   physicalNodesSpaceTime.resize(1,physicalNodesSpaceTime.dimension(0),physicalNodesSpaceTime.dimension(1));
@@ -131,12 +130,12 @@ void testSpaceTimeIntegralOfSpatiallyVaryingFunction(CellTopoPtr spaceTopo, Func
   double spaceNodeScaling = .5;
   double spaceNodeTranslation = .5; // scale, then translate
   BasisCachePtr spaceBasisCache = BasisCache::basisCacheForReferenceCell(spaceTopo, cubatureDegree, createSideCache);
-  FieldContainer<double> physicalNodesSpace = getScaledTranslatedRefNodes(spaceTopo, spaceNodeScaling, spaceNodeTranslation);
+  Intrepid::FieldContainer<double> physicalNodesSpace = getScaledTranslatedRefNodes(spaceTopo, spaceNodeScaling, spaceNodeTranslation);
   physicalNodesSpace.resize(1,physicalNodesSpace.dimension(0),physicalNodesSpace.dimension(1));
   spaceBasisCache->setPhysicalCellNodes(physicalNodesSpace, vector<GlobalIndexType>(), createSideCache);
   double spatialIntegral = f_spatial->integrate(spaceBasisCache);
   BasisCachePtr spaceTimeBasisCache = BasisCache::basisCacheForReferenceCell(spaceTimeTopo, cubatureDegree, createSideCache);
-  FieldContainer<double> physicalNodesSpaceTime = getScaledTranslatedRefNodes(spaceTimeTopo, spaceNodeScaling, spaceNodeTranslation);
+  Intrepid::FieldContainer<double> physicalNodesSpaceTime = getScaledTranslatedRefNodes(spaceTimeTopo, spaceNodeScaling, spaceNodeTranslation);
   double t0 = 0.0, t1 = .5;
   double temporalExtent = t1 - t0;
   setTemporalNodes(spaceTimeTopo,physicalNodesSpaceTime,t0,t1);
@@ -169,7 +168,7 @@ void testSpaceTimeNormal(CellTopoPtr spaceTopo, Teuchos::FancyOStream &out, bool
   {
     BasisCachePtr spaceTimeSideCache = spaceTimeBasisCache->getSideBasisCache(sideOrdinal);
 
-    FieldContainer<double> spaceTimeNormals(1,spaceTimeSideCache->getRefCellPoints().dimension(0),spaceTimeTopo->getDimension());
+    Intrepid::FieldContainer<double> spaceTimeNormals(1,spaceTimeSideCache->getRefCellPoints().dimension(0),spaceTimeTopo->getDimension());
     spaceTimeNormal->values(spaceTimeNormals,spaceTimeSideCache);
 
     if (spaceTimeTopo->sideIsSpatial(sideOrdinal))
@@ -178,7 +177,7 @@ void testSpaceTimeNormal(CellTopoPtr spaceTopo, Teuchos::FancyOStream &out, bool
       int spatialSideOrdinal = spaceTimeTopo->getSpatialComponentSideOrdinal(sideOrdinal);
       BasisCachePtr spaceSideCache = spaceBasisCache->getSideBasisCache(spatialSideOrdinal);
 
-      FieldContainer<double> spaceNormals(1,spaceSideCache->getRefCellPoints().dimension(0),spaceTopo->getDimension());
+      Intrepid::FieldContainer<double> spaceNormals(1,spaceSideCache->getRefCellPoints().dimension(0),spaceTopo->getDimension());
       spaceNormal->values(spaceNormals, spaceSideCache);
 
       for (int spaceTimePointOrdinal=0; spaceTimePointOrdinal < spaceTimeNormals.dimension(1); spaceTimePointOrdinal++)
@@ -225,8 +224,8 @@ void testSpaceTimeNormal(CellTopoPtr spaceTopo, Teuchos::FancyOStream &out, bool
     
     int nodeCount = cellTopo->getNodeCount();
     int dim = cellTopo->getDimension();
-    FieldContainer<double> refCellNodes(nodeCount, dim);
-    FieldContainer<double> scaledRefCellNodes = refCellNodes;
+    Intrepid::FieldContainer<double> refCellNodes(nodeCount, dim);
+    Intrepid::FieldContainer<double> scaledRefCellNodes = refCellNodes;
     CamelliaCellTools::refCellNodesForTopology(refCellNodes, cellTopo);
     
     double scalingFactor = 2.0;
@@ -245,8 +244,8 @@ void testSpaceTimeNormal(CellTopoPtr spaceTopo, Teuchos::FancyOStream &out, bool
     
     FunctionPtr h = Function::h();
     int numPoints = refBasisCache->getPhysicalCubaturePoints().dimension(1); // C, P, D
-    FieldContainer<double> refValues(cellCount,numPoints);
-    FieldContainer<double> scaledRefValues(cellCount,numPoints);
+    Intrepid::FieldContainer<double> refValues(cellCount,numPoints);
+    Intrepid::FieldContainer<double> scaledRefValues(cellCount,numPoints);
     
     h->values(refValues, refBasisCache);
     h->values(scaledRefValues, scaledBasisCache);

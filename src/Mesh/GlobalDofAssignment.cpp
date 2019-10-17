@@ -24,7 +24,6 @@
 #include "GnuPlotUtil.h" // for writing out mesh skeleton when an error is encountered...
 #include "Solution.h"
 
-using namespace Intrepid;
 using namespace Camellia;
 using namespace std;
 
@@ -362,7 +361,7 @@ const set< GlobalIndexType > & GlobalDofAssignment::cellsInPartition(PartitionIn
   return _partitions[partitionNumber];
 }
 
-FieldContainer<double> GlobalDofAssignment::cellSideParitiesForCell( GlobalIndexType cellID )
+Intrepid::FieldContainer<double> GlobalDofAssignment::cellSideParitiesForCell( GlobalIndexType cellID )
 {
   if (_cellSideParitiesForCellID.find(cellID) == _cellSideParitiesForCellID.end())
   {
@@ -372,7 +371,7 @@ FieldContainer<double> GlobalDofAssignment::cellSideParitiesForCell( GlobalIndex
                              std::invalid_argument, "_cellSideParities is not set for the provided cell!");
   vector<int> parities = _cellSideParitiesForCellID[cellID];
   int numSides = parities.size();
-  FieldContainer<double> cellSideParities(1,numSides);
+  Intrepid::FieldContainer<double> cellSideParities(1,numSides);
   for (int sideIndex=0; sideIndex<numSides; sideIndex++)
   {
     cellSideParities(0,sideIndex) = parities[sideIndex];
@@ -742,7 +741,7 @@ MeshTopologyViewPtr GlobalDofAssignment::getMeshTopology()
   return _meshTopology;
 }
 
-bool GlobalDofAssignment::getPartitions(FieldContainer<GlobalIndexType> &partitions)
+bool GlobalDofAssignment::getPartitions(Intrepid::FieldContainer<GlobalIndexType> &partitions)
 {
   if (_partitions.size() == 0) return false; // false: no partitions set
   int numPartitions = _partitions.size();
@@ -776,11 +775,11 @@ int GlobalDofAssignment::getTestOrderEnrichment()
   return _testOrderEnhancement;
 }
 
-void GlobalDofAssignment::interpretLocalCoefficients(GlobalIndexType cellID, const FieldContainer<double> &localCoefficients,
+void GlobalDofAssignment::interpretLocalCoefficients(GlobalIndexType cellID, const Intrepid::FieldContainer<double> &localCoefficients,
                                                      Epetra_MultiVector &globalCoefficients, int columnOrdinal)
 {
   DofOrderingPtr trialOrder = elementType(cellID)->trialOrderPtr;
-  FieldContainer<double> basisCoefficients; // declared here so that we can sometimes avoid mallocs, if we get lucky in terms of the resize()
+  Intrepid::FieldContainer<double> basisCoefficients; // declared here so that we can sometimes avoid mallocs, if we get lucky in terms of the resize()
   for (set<int>::iterator trialIDIt = trialOrder->getVarIDs().begin(); trialIDIt != trialOrder->getVarIDs().end(); trialIDIt++)
   {
     int trialID = *trialIDIt;
@@ -796,8 +795,8 @@ void GlobalDofAssignment::interpretLocalCoefficients(GlobalIndexType cellID, con
         int localDofIndex = localDofIndices[basisOrdinal];
         basisCoefficients[basisOrdinal] = localCoefficients[localDofIndex];
       }
-      FieldContainer<double> fittedGlobalCoefficients;
-      FieldContainer<GlobalIndexType> fittedGlobalDofIndices;
+      Intrepid::FieldContainer<double> fittedGlobalCoefficients;
+      Intrepid::FieldContainer<GlobalIndexType> fittedGlobalDofIndices;
       interpretLocalBasisCoefficients(cellID, trialID, sideOrdinal, basisCoefficients, fittedGlobalCoefficients, fittedGlobalDofIndices);
       for (int i=0; i<fittedGlobalCoefficients.size(); i++)
       {
@@ -810,11 +809,11 @@ void GlobalDofAssignment::interpretLocalCoefficients(GlobalIndexType cellID, con
 }
 
 template <typename Scalar>
-void GlobalDofAssignment::interpretLocalCoefficients(GlobalIndexType cellID, const FieldContainer<Scalar> &localCoefficients,
+void GlobalDofAssignment::interpretLocalCoefficients(GlobalIndexType cellID, const Intrepid::FieldContainer<Scalar> &localCoefficients,
                                                      TVectorPtr<Scalar> globalCoefficients, int columnOrdinal)
 {
   DofOrderingPtr trialOrder = elementType(cellID)->trialOrderPtr;
-  FieldContainer<Scalar> basisCoefficients; // declared here so that we can sometimes avoid mallocs, if we get lucky in terms of the resize()
+  Intrepid::FieldContainer<Scalar> basisCoefficients; // declared here so that we can sometimes avoid mallocs, if we get lucky in terms of the resize()
   for (set<int>::iterator trialIDIt = trialOrder->getVarIDs().begin(); trialIDIt != trialOrder->getVarIDs().end(); trialIDIt++)
   {
     int trialID = *trialIDIt;
@@ -830,8 +829,8 @@ void GlobalDofAssignment::interpretLocalCoefficients(GlobalIndexType cellID, con
         int localDofIndex = localDofIndices[basisOrdinal];
         basisCoefficients[basisOrdinal] = localCoefficients[localDofIndex];
       }
-      FieldContainer<Scalar> fittedGlobalCoefficients;
-      FieldContainer<GlobalIndexType> fittedGlobalDofIndices;
+      Intrepid::FieldContainer<Scalar> fittedGlobalCoefficients;
+      Intrepid::FieldContainer<GlobalIndexType> fittedGlobalDofIndices;
       interpretLocalBasisCoefficients(cellID, trialID, sideOrdinal, basisCoefficients, fittedGlobalCoefficients, fittedGlobalDofIndices);
       for (int i=0; i<fittedGlobalCoefficients.size(); i++)
       {
@@ -841,7 +840,7 @@ void GlobalDofAssignment::interpretLocalCoefficients(GlobalIndexType cellID, con
     }
   }
 }
-template void GlobalDofAssignment::interpretLocalCoefficients(GlobalIndexType cellID, const FieldContainer<double> &localCoefficients,
+template void GlobalDofAssignment::interpretLocalCoefficients(GlobalIndexType cellID, const Intrepid::FieldContainer<double> &localCoefficients,
                                                               TVectorPtr<double> globalCoefficients, int columnOrdinal);
 
 // ! Returns the smallest dimension along which continuity will be enforced.  GlobalDofAssignment's implementation
@@ -943,7 +942,7 @@ void GlobalDofAssignment::projectParentCoefficientsOntoUnsetChildren()
   }
 }
 
-void GlobalDofAssignment::setPartitions(FieldContainer<GlobalIndexType> &partitionedMesh, bool rebuildDofLookups)
+void GlobalDofAssignment::setPartitions(Intrepid::FieldContainer<GlobalIndexType> &partitionedMesh, bool rebuildDofLookups)
 {
 //  set<unsigned> activeCellIDs = _meshTopology->getActiveCellIndicesGlobal();
 

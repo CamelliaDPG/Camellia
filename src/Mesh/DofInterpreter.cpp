@@ -21,7 +21,6 @@
 #include "Epetra_Distributor.h"
 #include "Teuchos_GlobalMPISession.hpp"
 
-using namespace Intrepid;
 using namespace Camellia;
 using namespace std;
 
@@ -54,7 +53,7 @@ void DofInterpreter::interpretLocalCoefficients(GlobalIndexType cellID, const In
                                                 map<GlobalIndexType,double> &fittedGlobalCoefficients, const set<int> &trialIDsToExclude)
 {
   DofOrderingPtr trialOrder = _mesh->getElementType(cellID)->trialOrderPtr;
-  FieldContainer<double> basisCoefficients; // declared here so that we can sometimes avoid mallocs, if we get lucky in terms of the resize()
+  Intrepid::FieldContainer<double> basisCoefficients; // declared here so that we can sometimes avoid mallocs, if we get lucky in terms of the resize()
   
   fittedGlobalCoefficients.clear();
   
@@ -98,8 +97,8 @@ void DofInterpreter::interpretLocalCoefficients(GlobalIndexType cellID, const In
         int localDofIndex = (*localDofIndices)[basisOrdinal];
         basisCoefficients[basisOrdinal] = localCoefficients[localDofIndex];
       }
-      FieldContainer<double> fittedGlobalCoefficientsFC;
-      FieldContainer<GlobalIndexType> fittedGlobalDofIndices;
+      Intrepid::FieldContainer<double> fittedGlobalCoefficientsFC;
+      Intrepid::FieldContainer<GlobalIndexType> fittedGlobalDofIndices;
       interpretLocalBasisCoefficients(cellID, trialID, sideOrdinal, basisCoefficients, fittedGlobalCoefficientsFC,
                                       fittedGlobalDofIndices);
       for (int i=0; i<fittedGlobalCoefficientsFC.size(); i++)
@@ -111,12 +110,12 @@ void DofInterpreter::interpretLocalCoefficients(GlobalIndexType cellID, const In
   }
 }
 
-void DofInterpreter::interpretLocalCoefficients(GlobalIndexType cellID, const FieldContainer<double> &localCoefficients,
+void DofInterpreter::interpretLocalCoefficients(GlobalIndexType cellID, const Intrepid::FieldContainer<double> &localCoefficients,
                                                 Epetra_MultiVector &globalCoefficients, int columnOrdinal)
 {
   // TODO: make this method call the one above, which takes an STL map as argument.
   DofOrderingPtr trialOrder = _mesh->getElementType(cellID)->trialOrderPtr;
-  FieldContainer<double> basisCoefficients; // declared here so that we can sometimes avoid mallocs, if we get lucky in terms of the resize()
+  Intrepid::FieldContainer<double> basisCoefficients; // declared here so that we can sometimes avoid mallocs, if we get lucky in terms of the resize()
   for (set<int>::iterator trialIDIt = trialOrder->getVarIDs().begin(); trialIDIt != trialOrder->getVarIDs().end(); trialIDIt++)
   {
     int trialID = *trialIDIt;
@@ -132,8 +131,8 @@ void DofInterpreter::interpretLocalCoefficients(GlobalIndexType cellID, const Fi
         int localDofIndex = localDofIndices[basisOrdinal];
         basisCoefficients[basisOrdinal] = localCoefficients[localDofIndex];
       }
-      FieldContainer<double> fittedGlobalCoefficients;
-      FieldContainer<GlobalIndexType> fittedGlobalDofIndices;
+      Intrepid::FieldContainer<double> fittedGlobalCoefficients;
+      Intrepid::FieldContainer<GlobalIndexType> fittedGlobalDofIndices;
       interpretLocalBasisCoefficients(cellID, trialID, sideOrdinal, basisCoefficients, fittedGlobalCoefficients, fittedGlobalDofIndices);
       for (int i=0; i<fittedGlobalCoefficients.size(); i++)
       {
@@ -145,11 +144,11 @@ void DofInterpreter::interpretLocalCoefficients(GlobalIndexType cellID, const Fi
   }
 }
 
-void DofInterpreter::interpretLocalData(GlobalIndexType cellID, const FieldContainer<double> &localStiffnessData, const FieldContainer<double> &localLoadData,
-                                        FieldContainer<double> &globalStiffnessData, FieldContainer<double> &globalLoadData, FieldContainer<GlobalIndexType> &globalDofIndices)
+void DofInterpreter::interpretLocalData(GlobalIndexType cellID, const Intrepid::FieldContainer<double> &localStiffnessData, const Intrepid::FieldContainer<double> &localLoadData,
+                                        Intrepid::FieldContainer<double> &globalStiffnessData, Intrepid::FieldContainer<double> &globalLoadData, Intrepid::FieldContainer<GlobalIndexType> &globalDofIndices)
 {
   this->interpretLocalData(cellID,localStiffnessData,globalStiffnessData,globalDofIndices);
-  FieldContainer<GlobalIndexType> globalDofIndicesForStiffness = globalDofIndices; // copy (for debugging/inspection purposes)
+  Intrepid::FieldContainer<GlobalIndexType> globalDofIndicesForStiffness = globalDofIndices; // copy (for debugging/inspection purposes)
   this->interpretLocalData(cellID,localLoadData,globalLoadData,globalDofIndices);
   for (int i=0; i<globalDofIndicesForStiffness.size(); i++)
   {

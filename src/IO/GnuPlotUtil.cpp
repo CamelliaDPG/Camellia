@@ -10,7 +10,6 @@
 #include "MeshFactory.h"
 #include "MPIWrapper.h"
 
-using namespace Intrepid;
 using namespace Camellia;
 
 MeshPtr gatherMeshToRankZeroIfDistributed(MeshPtr mesh)
@@ -34,14 +33,14 @@ MeshPtr gatherMeshToRankZeroIfDistributed(MeshPtr mesh)
   return mesh;
 }
 
-FieldContainer<double> GnuPlotUtil::cellCentroids(MeshTopology* meshTopo)
+Intrepid::FieldContainer<double> GnuPlotUtil::cellCentroids(MeshTopology* meshTopo)
 {
   // this only works on quads right now
 
   int spaceDim = meshTopo->getDimension(); // not that this will really work in 3D...
   int numActiveElements = meshTopo->activeCellCount();
 
-  FieldContainer<double> cellCentroids(numActiveElements,spaceDim); // used for labelling cells
+  Intrepid::FieldContainer<double> cellCentroids(numActiveElements,spaceDim); // used for labelling cells
 
   vector<IndexType> cellIDs = meshTopo->getActiveCellIndicesGlobal();
 
@@ -57,7 +56,7 @@ FieldContainer<double> GnuPlotUtil::cellCentroids(MeshTopology* meshTopo)
   return cellCentroids;
 }
 
-FieldContainer<double> GnuPlotUtil::cellCentroids(MeshPtr mesh)
+Intrepid::FieldContainer<double> GnuPlotUtil::cellCentroids(MeshPtr mesh)
 {
   // this only works on quads right now
 
@@ -67,7 +66,7 @@ FieldContainer<double> GnuPlotUtil::cellCentroids(MeshPtr mesh)
   vector<GlobalIndexType> cellIDs(cellIDset.begin(),cellIDset.end());
 
   auto numActiveElements = cellIDs.size();
-  FieldContainer<double> cellCentroids(numActiveElements,spaceDim); // used for labelling cells
+  Intrepid::FieldContainer<double> cellCentroids(numActiveElements,spaceDim); // used for labelling cells
 
   for (int cellOrdinal=0; cellOrdinal<numActiveElements; cellOrdinal++)
   {
@@ -106,7 +105,7 @@ void GnuPlotUtil::writeComputationalMeshSkeleton(const string &filePath, MeshPtr
 
     double minX = 1e10, minY = 1e10, maxX = -1e10, maxY = -1e10;
 
-    FieldContainer<double> cellCentroids;
+    Intrepid::FieldContainer<double> cellCentroids;
     set<GlobalIndexType> cellIDset = mesh->getActiveCellIDsGlobal();
     vector<GlobalIndexType> cellIDs(cellIDset.begin(),cellIDset.end());
 
@@ -120,7 +119,7 @@ void GnuPlotUtil::writeComputationalMeshSkeleton(const string &filePath, MeshPtr
       int numPointsPerEdge = max(10,elemType->testOrderPtr->maxBasisDegree() * 2); // 2 points for linear, 4 for quadratic, etc.
       // to start, compute edgePoints on the reference cell
       int numPointsTotal = numEdges*(numPointsPerEdge-1)+1; // -1 because edges share vertices, +1 because we repeat first vertex...
-      FieldContainer<double> edgePoints(numPointsTotal,spaceDim);
+      Intrepid::FieldContainer<double> edgePoints(numPointsTotal,spaceDim);
 
       int ptIndex = 0;
       for (int edgeIndex=0; edgeIndex < edgeLines.size(); edgeIndex++)
@@ -147,7 +146,7 @@ void GnuPlotUtil::writeComputationalMeshSkeleton(const string &filePath, MeshPtr
       //      cout << "--- cellID " << cell->cellID() << " ---\n";
       //      cout << "edgePoints:\n" << edgePoints;
 
-      FieldContainer<double> transformedPoints(1,numPointsTotal,spaceDim);
+      Intrepid::FieldContainer<double> transformedPoints(1,numPointsTotal,spaceDim);
       // compute the transformed points:
       transformationFunction->values(transformedPoints,basisCache);
 
@@ -262,7 +261,7 @@ void GnuPlotUtil::writeExactMeshSkeleton(const string &filePath, MeshTopology* m
     fout << "# x                  y\n";
 
     int numActiveElements = meshTopo->activeCellCount();
-    FieldContainer<double> cellCentroids;
+    Intrepid::FieldContainer<double> cellCentroids;
     if (labelCells)
     {
       cellCentroids = GnuPlotUtil::cellCentroids(meshTopo);
@@ -360,7 +359,7 @@ void GnuPlotUtil::writeExactMeshSkeleton(const string &filePath, MeshPtr mesh, i
     fout << "# x                  y\n";
 
     int numActiveElements = mesh->numActiveElements();
-    FieldContainer<double> cellCentroids;
+    Intrepid::FieldContainer<double> cellCentroids;
     if (labelCells)
     {
       cellCentroids = GnuPlotUtil::cellCentroids(mesh);
@@ -442,9 +441,9 @@ void GnuPlotUtil::writeExactMeshSkeleton(const string &filePath, MeshPtr mesh, i
 }
 
 // badly named, maybe: we support arbitrary space dimension...
-void GnuPlotUtil::writeXYPoints(const string &filePath, const FieldContainer<double> &dataPoints)
+void GnuPlotUtil::writeXYPoints(const string &filePath, const Intrepid::FieldContainer<double> &dataPoints)
 {
-  FieldContainer<double> dataPointsCopy = dataPoints;
+  Intrepid::FieldContainer<double> dataPointsCopy = dataPoints;
 
   if (dataPoints.rank()==3)
   {

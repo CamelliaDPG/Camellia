@@ -47,10 +47,10 @@ namespace Camellia
                            Intrepid::FieldContainer<double> &eigvectors, // if empty, skips eigvector determination
                            bool computeRight); // if computeRight = false, will compute left eigenvectors.
     
-    // ! provides an implementation of getEnumeration that uses std::vector<int> instead.  In the context of debugging, Teuchos::Array<int>, which is what FieldContainer uses, can be prohibitively slow.
+    // ! provides an implementation of getEnumeration that uses std::vector<int> instead.  In the context of debugging, Teuchos::Array<int>, which is what Intrepid::FieldContainer uses, can be prohibitively slow.
     static int getEnumeration(const std::vector<int> &index, const Intrepid::FieldContainer<double> &fc);
 
-    // ! returns a lambda function that depends dynamically on the values in index, and at generation time on the dimensions of fc.  Intended to provide a faster version than either FieldContainer or the above getEnumeration() (which should perhaps be deleted).
+    // ! returns a lambda function that depends dynamically on the values in index, and at generation time on the dimensions of fc.  Intended to provide a faster version than either Intrepid::FieldContainer or the above getEnumeration() (which should perhaps be deleted).
     static std::function<int()> getEnumerator(const std::vector<int> &index, const Intrepid::FieldContainer<double> &fc);
     
     static bool matrixIsSymmetric(Intrepid::FieldContainer<double> &A, double relTol = 1e-12, double absTol = 1e-14);
@@ -104,7 +104,7 @@ namespace Camellia
     //! Returns the reciprocal of the 1-norm condition number of the matrix in A
     /*!
      \param A In
-     A rank-2 FieldContainer with equal first and second dimensions.
+     A rank-2 Intrepid::FieldContainer with equal first and second dimensions.
      
      \return the 1-norm condition number if successful; -1 otherwise.
      */
@@ -113,7 +113,7 @@ namespace Camellia
     //! Returns the reciprocal of the 2-norm condition number of the matrix in A
     /*!
      \param A In
-     A rank-2 FieldContainer with equal first and second dimensions.
+     A rank-2 Intrepid::FieldContainer with equal first and second dimensions.
      
      \return the 2-norm condition number if successful; -1 otherwise.
      */
@@ -123,7 +123,7 @@ namespace Camellia
     //  //! Returns true if all the eigenvalues are greater than zero
     //  /*!
     //   \param A In
-    //   A rank-2 FieldContainer with equal first and second dimensions.
+    //   A rank-2 Intrepid::FieldContainer with equal first and second dimensions.
     //
     //   \return true if all the eigenvalues are positive; false otherwise.
     //   */
@@ -146,7 +146,7 @@ namespace Camellia
     //  //! Returns true if all the eigenvalues are greater than or equal to zero
     //  /*!
     //   \param A In
-    //   A rank-2 FieldContainer with equal first and second dimensions.
+    //   A rank-2 Intrepid::FieldContainer with equal first and second dimensions.
     //
     //   \return true if all the eigenvalues are non-negative; false otherwise.
     //   */

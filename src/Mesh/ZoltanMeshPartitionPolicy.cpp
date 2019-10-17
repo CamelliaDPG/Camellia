@@ -23,7 +23,6 @@
 #include "Epetra_SerialComm.h"
 #endif
 
-using namespace Intrepid;
 using namespace Camellia;
 
 ZoltanMeshPartitionPolicy::ZoltanMeshPartitionPolicy(Epetra_CommPtr Comm) : MeshPartitionPolicy(Comm)
@@ -238,7 +237,7 @@ void ZoltanMeshPartitionPolicy::partitionMesh(Mesh *mesh, PartitionIndexType num
   else     // if just one node, partition = active cellID array
   {
     set<GlobalIndexType> activeCellIDSet = mesh->getActiveCellIDsGlobal();
-    FieldContainer<GlobalIndexType> partitionedActiveCells(numNodes,numActiveElements);
+    Intrepid::FieldContainer<GlobalIndexType> partitionedActiveCells(numNodes,numActiveElements);
     int i=0;
     for (set<GlobalIndexType>::iterator cellIDIt = activeCellIDSet.begin(); cellIDIt != activeCellIDSet.end(); cellIDIt++, i++)
     {
@@ -349,9 +348,9 @@ void ZoltanMeshPartitionPolicy::get_geom_list(void *data, int num_gid_entries, i
 /*int ZoltanMeshPartitionPolicy::get_num_coarse_elem(void *data, int *ierr){
   int myNode = Teuchos::GlobalMPISession::getRank();
 
-  pair< Mesh *, FieldContainer<GlobalIndexType> * > *myData = (pair< Mesh *, FieldContainer<GlobalIndexType> * > *)data;
+  pair< Mesh *, Intrepid::FieldContainer<GlobalIndexType> * > *myData = (pair< Mesh *, Intrepid::FieldContainer<GlobalIndexType> * > *)data;
   Mesh *mesh = myData->first;
-  FieldContainer<GlobalIndexType>* partitionedCells = myData->second;
+  Intrepid::FieldContainer<GlobalIndexType>* partitionedCells = myData->second;
   *ierr = ZOLTAN_OK;
   //  cout << "in num_coarse_elem fn, num coarse elems is " << meshTopology->numInitialElements() <<endl;
   MeshTopologyViewPtr meshTopology = mesh->getTopology();
@@ -373,10 +372,10 @@ void ZoltanMeshPartitionPolicy::get_coarse_elem_list(void *data, int num_gid_ent
   int myNode = Teuchos::GlobalMPISession::getRank();
   int numNodes = Teuchos::GlobalMPISession::getNProc();
 
-  pair< Mesh *, FieldContainer<GlobalIndexType> * > *myData = (pair< Mesh *, FieldContainer<GlobalIndexType> * > *)data;
+  pair< Mesh *, Intrepid::FieldContainer<GlobalIndexType> * > *myData = (pair< Mesh *, Intrepid::FieldContainer<GlobalIndexType> * > *)data;
   Mesh *mesh = myData->first;
   MeshTopologyViewPtr meshTopology = mesh->getTopology();
-  FieldContainer<GlobalIndexType> partitionedCells = *(myData->second);
+  Intrepid::FieldContainer<GlobalIndexType> partitionedCells = *(myData->second);
 
   *ierr = ZOLTAN_OK;
 
@@ -420,7 +419,7 @@ void ZoltanMeshPartitionPolicy::get_coarse_elem_list(void *data, int num_gid_ent
 int ZoltanMeshPartitionPolicy::get_num_children(void *data, int num_gid_entries, int num_lid_entries, ZOLTAN_ID_PTR global_id, ZOLTAN_ID_PTR local_id, int *ierr){
   //  cout << "in get_num_children" << endl;
 
-  pair< Mesh *, FieldContainer<GlobalIndexType> * > *myData = (pair< Mesh *, FieldContainer<GlobalIndexType> * > *)data;
+  pair< Mesh *, Intrepid::FieldContainer<GlobalIndexType> * > *myData = (pair< Mesh *, Intrepid::FieldContainer<GlobalIndexType> * > *)data;
   Mesh *mesh = myData->first;
   MeshTopologyViewPtr meshTopology = mesh->getTopology();
 
@@ -438,10 +437,10 @@ void ZoltanMeshPartitionPolicy::get_children(void *data, int num_gid_entries, in
 
   int myNode = Teuchos::GlobalMPISession::getRank();
 
-  pair< Mesh *, FieldContainer<GlobalIndexType> * > *myData = (pair< Mesh *, FieldContainer<GlobalIndexType> * > *)data;
+  pair< Mesh *, Intrepid::FieldContainer<GlobalIndexType> * > *myData = (pair< Mesh *, Intrepid::FieldContainer<GlobalIndexType> * > *)data;
   Mesh *mesh = myData->first;
   MeshTopologyViewPtr meshTopology = mesh->getTopology();
-  FieldContainer<GlobalIndexType>* partitionedActiveCells = myData->second;
+  Intrepid::FieldContainer<GlobalIndexType>* partitionedActiveCells = myData->second;
 
   int parentID = *parent_gid;
   CellPtr parentCell = meshTopology->getCell(parentID);
@@ -480,7 +479,7 @@ void ZoltanMeshPartitionPolicy::get_child_weight(void *data, int num_gid_entries
   int myNode = Teuchos::GlobalMPISession::getRank();
   int numNodes = Teuchos::GlobalMPISession::getNProc();
 
-  pair< Mesh *, FieldContainer<GlobalIndexType> * > *myData = (pair< Mesh *, FieldContainer<GlobalIndexType> * > *)data;
+  pair< Mesh *, Intrepid::FieldContainer<GlobalIndexType> * > *myData = (pair< Mesh *, Intrepid::FieldContainer<GlobalIndexType> * > *)data;
   Mesh *mesh = myData->first;
   MeshTopologyViewPtr meshTopology = mesh->getTopology();
 

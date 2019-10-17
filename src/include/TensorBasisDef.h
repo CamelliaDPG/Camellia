@@ -353,7 +353,7 @@ void TensorBasis<Scalar,ArrayScalar>::getValues(ArrayScalar &values, const Array
     {
       if (_spatialBasis->rangeDimension() + _temporalBasis->rangeDimension() == values.dimension(2))
       {
-        // then we can/should use OPERATOR_GRAD for the temporal operator as well
+        // then we can/should use Intrepid::OPERATOR_GRAD for the temporal operator as well
         temporalOperator = Intrepid::OPERATOR_GRAD;
       }
     }

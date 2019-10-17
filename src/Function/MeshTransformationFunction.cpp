@@ -23,7 +23,6 @@
 
 #include "BasisCache.h"
 
-using namespace Intrepid;
 using namespace Camellia;
 
 // TODO: move all the stuff to do with transfinite interpolation into ParametricSurface.cpp
@@ -52,8 +51,8 @@ vector< ParametricCurvePtr > edgeLines(MeshPtr mesh, int cellID)
   vector<IndexType> vertexIndices = mesh->vertexIndicesForCell(cellID);
   for (int i=0; i<vertexIndices.size(); i++)
   {
-    FieldContainer<double> v0 = mesh->vertexCoordinates(vertexIndices[i]);
-    FieldContainer<double> v1 = mesh->vertexCoordinates(vertexIndices[(i+1)%vertexIndices.size()]);
+    Intrepid::FieldContainer<double> v0 = mesh->vertexCoordinates(vertexIndices[i]);
+    Intrepid::FieldContainer<double> v1 = mesh->vertexCoordinates(vertexIndices[(i+1)%vertexIndices.size()]);
     // 2D only for now
     TEUCHOS_TEST_FOR_EXCEPTION(v0.dimension(0) != 2, std::invalid_argument, "only 2D supported right now");
     lines.push_back(ParametricCurve::line(v0(0), v0(1), v1(0), v1(1)));
@@ -76,15 +75,15 @@ void roundToOneOrZero(double &value, double tol)
 
 class CellTransformationFunction : public TFunction<double>
 {
-  FieldContainer<double> _basisCoefficients;
+  Intrepid::FieldContainer<double> _basisCoefficients;
   VectorBasisPtr _basis;
   Camellia::EOperator _op;
   int _cellIndex; // index into BasisCache's list of cellIDs; must be set prior to each call to values() (there's a reason why this is a private class!)
 
-  FieldContainer<double> pointLatticeQuad(int numPointsTotal, const vector< ParametricCurvePtr > &edgeFunctions)
+  Intrepid::FieldContainer<double> pointLatticeQuad(int numPointsTotal, const vector< ParametricCurvePtr > &edgeFunctions)
   {
     int spaceDim = 2;
-    FieldContainer<double> pointLattice(numPointsTotal,spaceDim);
+    Intrepid::FieldContainer<double> pointLattice(numPointsTotal,spaceDim);
 
     ParametricSurfacePtr interpolant = ParametricSurface::transfiniteInterpolant(edgeFunctions);
 
@@ -128,7 +127,7 @@ class CellTransformationFunction : public TFunction<double>
   }
 
 protected:
-  CellTransformationFunction(VectorBasisPtr basis, FieldContainer<double> &basisCoefficients, Camellia::EOperator op) : TFunction<double>(1)
+  CellTransformationFunction(VectorBasisPtr basis, Intrepid::FieldContainer<double> &basisCoefficients, Camellia::EOperator op) : TFunction<double>(1)
   {
 //    cout << "CellTransformationFunction constructed for -1 cellIndex with basisCoefficients set...\n";
     _basis = basis;
@@ -147,7 +146,7 @@ public:
     ParametricSurface::basisWeightsForProjectedInterpolant(_basisCoefficients, _basis, mesh, cellID);
   }
 
-  void values(FieldContainer<double> &values, BasisCachePtr basisCache)
+  void values(Intrepid::FieldContainer<double> &values, BasisCachePtr basisCache)
   {
     // sets values(_cellIndex,P,D)
     TEUCHOS_TEST_FOR_EXCEPTION(_cellIndex == -1, std::invalid_argument, "must call setCellIndex before calling values!");
@@ -354,7 +353,7 @@ int MeshTransformationFunction::maxDegree()
   return _maxPolynomialDegree;
 }
 
-bool MeshTransformationFunction::mapRefCellPointsUsingExactGeometry(FieldContainer<double> &cellPoints, const FieldContainer<double> &refCellPoints, GlobalIndexType cellID)
+bool MeshTransformationFunction::mapRefCellPointsUsingExactGeometry(Intrepid::FieldContainer<double> &cellPoints, const Intrepid::FieldContainer<double> &refCellPoints, GlobalIndexType cellID)
 {
   // returns true if the MeshTransformationFunction handles this cell, false otherwise
   // if true, then populates cellPoints
@@ -372,7 +371,7 @@ bool MeshTransformationFunction::mapRefCellPointsUsingExactGeometry(FieldContain
   CellTopoPtr cellTopo = _mesh->getElementType(cellID)->cellTopoPtr;
   bool spaceTime = false;
   CellTopoPtr spaceTimeTopo;
-  FieldContainer<double> refCellPointsSpaceTime, refCellPointsSpace;
+  Intrepid::FieldContainer<double> refCellPointsSpaceTime, refCellPointsSpace;
   double time0, time1;
   if (cellTopo->getTensorialDegree() > 0)
   {
@@ -408,7 +407,7 @@ bool MeshTransformationFunction::mapRefCellPointsUsingExactGeometry(FieldContain
   if (cellTopo->getKey().first == shards::Quadrilateral<4>::key)
   {
     TEUCHOS_TEST_FOR_EXCEPTION(spaceDim != 2, std::invalid_argument, "points must be in 2D for the quad!");
-    FieldContainer<double> parametricPoints(numPoints,spaceDim); // map to (t1,t2) space
+    Intrepid::FieldContainer<double> parametricPoints(numPoints,spaceDim); // map to (t1,t2) space
     int whichCell = 0;
     CamelliaCellTools::mapToPhysicalFrame(parametricPoints,refCellPointsSpace,
                                           ParametricSurface::parametricQuadNodes(),
@@ -463,7 +462,7 @@ void MeshTransformationFunction::updateCells(const set<GlobalIndexType> &cellIDs
   }
 }
 
-void MeshTransformationFunction::values(FieldContainer<double> &values, BasisCachePtr basisCache)
+void MeshTransformationFunction::values(Intrepid::FieldContainer<double> &values, BasisCachePtr basisCache)
 {
   CHECK_VALUES_RANK(values);
   vector<GlobalIndexType> cellIDs = basisCache->cellIDs();

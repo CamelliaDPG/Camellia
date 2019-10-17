@@ -10,7 +10,6 @@
 #include "BasisCache.h"
 
 using namespace Camellia;
-using namespace Intrepid;
 
 SideParityFunction::SideParityFunction() : TFunction<double>(0)
 {
@@ -42,7 +41,7 @@ void SideParityFunction::values(Intrepid::FieldContainer<double> &values, BasisC
     // then we'll use this, and won't require that mesh and cellIDs are set
     if (sideBasisCache->getCellSideParities().dimension(0) != numCells)
     {
-      TEUCHOS_TEST_FOR_EXCEPTION(true, std::invalid_argument, "sideBasisCache->getCellSideParities() is non-empty, but the cell dimension doesn't match that of the values FieldContainer.");
+      TEUCHOS_TEST_FOR_EXCEPTION(true, std::invalid_argument, "sideBasisCache->getCellSideParities() is non-empty, but the cell dimension doesn't match that of the values Intrepid::FieldContainer.");
     }
 
     for (int cellOrdinal=0; cellOrdinal<numCells; cellOrdinal++)

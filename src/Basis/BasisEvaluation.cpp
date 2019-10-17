@@ -19,7 +19,6 @@
 #include "Intrepid_DefaultCubatureFactory.hpp"
 #include "Intrepid_FunctionSpaceTools.hpp"
 
-using namespace Intrepid;
 using namespace Camellia;
 
 void getD2_ij_FromMultiplicities(int &i, int &j, const Teuchos::Array<int> &multiplicities)
@@ -51,7 +50,7 @@ void getD2_ij_FromMultiplicities(int &i, int &j, const Teuchos::Array<int> &mult
 }
 
 FCPtr BasisEvaluation::getValues(BasisPtr basis, Camellia::EOperator op,
-                                 const FieldContainer<double> &refPoints)
+                                 const Intrepid::FieldContainer<double> &refPoints)
 {
   int numPoints = refPoints.dimension(0);
   int spaceDim = refPoints.dimension(1);  // points dimensions are (numPoints, spaceDim)
@@ -62,7 +61,7 @@ FCPtr BasisEvaluation::getValues(BasisPtr basis, Camellia::EOperator op,
 
   int opCardinality = spaceDim; // for now, we assume basis values are in the same spaceDim as points (e.g. vector 1D has just 1 component)
   
-  bool relatedOpIsDkOperator = (relatedOp >= OPERATOR_D1) && (relatedOp <= OPERATOR_D10);
+  bool relatedOpIsDkOperator = (relatedOp >= Intrepid::OPERATOR_D1) && (relatedOp <= Intrepid::OPERATOR_D10);
   if (relatedOpIsDkOperator)
   {
     opCardinality = Intrepid::getDkCardinality(relatedOp, spaceDim);
@@ -71,7 +70,7 @@ FCPtr BasisEvaluation::getValues(BasisPtr basis, Camellia::EOperator op,
   if ((Camellia::EOperator)relatedOp != op)
   {
     // we can assume relatedResults has dimensions (numPoints,basisCardinality,spaceDimOut)
-    FCPtr relatedResults = Teuchos::rcp(new FieldContainer<double>(basisCardinality,numPoints,opCardinality));
+    FCPtr relatedResults = Teuchos::rcp(new Intrepid::FieldContainer<double>(basisCardinality,numPoints,opCardinality));
     basis->getValues(*(relatedResults.get()), refPoints, relatedOp);
     FCPtr result = getComponentOfInterest(relatedResults,op,fs,componentOfInterest);
     if ( result.get() == 0 )
@@ -81,7 +80,7 @@ FCPtr BasisEvaluation::getValues(BasisPtr basis, Camellia::EOperator op,
     return result;
   }
   // if we get here, we should have a standard Intrepid operator, in which case we should
-  // be able to: size a FieldContainer appropriately, and then call basis->getValues
+  // be able to: size a Intrepid::FieldContainer appropriately, and then call basis->getValues
 
   // But let's do just check that we have a standard Intrepid operator
   if ( (op >= Camellia::OP_X) || (op <  Camellia::OP_VALUE) )
@@ -123,17 +122,17 @@ FCPtr BasisEvaluation::getValues(BasisPtr basis, Camellia::EOperator op,
   {
     dimensions.push_back(spaceDim);
   }
-  FCPtr result = Teuchos::rcp(new FieldContainer<double>(dimensions));
+  FCPtr result = Teuchos::rcp(new Intrepid::FieldContainer<double>(dimensions));
   basis->getValues(*(result.get()), refPoints, (Intrepid::EOperator)op);
   return result;
 }
 
 FCPtr BasisEvaluation::getTransformedValues(BasisPtr basis, Camellia::EOperator op,
-    const FieldContainer<double> &referencePoints,
+    const Intrepid::FieldContainer<double> &referencePoints,
     int numCells,
-    const FieldContainer<double> &cellJacobian,
-    const FieldContainer<double> &cellJacobianInv,
-    const FieldContainer<double> &cellJacobianDet)
+    const Intrepid::FieldContainer<double> &cellJacobian,
+    const Intrepid::FieldContainer<double> &cellJacobianInv,
+    const Intrepid::FieldContainer<double> &cellJacobianDet)
 {
   Camellia::EFunctionSpace fs = basis->functionSpace();
   int spaceDim = referencePoints.dimension(1);
@@ -147,7 +146,7 @@ FCPtr BasisEvaluation::getTransformedValues(BasisPtr basis, Camellia::EOperator 
 }
 
 FCPtr BasisEvaluation::getTransformedValues(BasisPtr basis, Camellia::EOperator op,
-                                            const FieldContainer<double> &referencePoints,
+                                            const Intrepid::FieldContainer<double> &referencePoints,
                                             int numCells,
                                             BasisCache* basisCache)
 {
@@ -177,7 +176,7 @@ FCPtr BasisEvaluation::getTransformedVectorValuesWithComponentBasisValues(Vector
   componentReferenceValuesTransformed->dimensions(dimensions);
   dimensions[1] = basis->getCardinality(); // dimensions are (C,F,P,D)
   dimensions.push_back(basis->getNumComponents());
-  Teuchos::RCP<FieldContainer<double> > transformedValues = Teuchos::rcp(new FieldContainer<double>(dimensions));
+  Teuchos::RCP<Intrepid::FieldContainer<double> > transformedValues = Teuchos::rcp(new Intrepid::FieldContainer<double>(dimensions));
   int fieldIndex = 1;
   basis->getVectorizedValues(*transformedValues, *componentReferenceValuesTransformed,fieldIndex);
   return transformedValues;
@@ -185,11 +184,11 @@ FCPtr BasisEvaluation::getTransformedVectorValuesWithComponentBasisValues(Vector
 
 FCPtr BasisEvaluation::getTransformedValuesWithBasisValues(BasisPtr basis, Camellia::EOperator op, int spaceDim,
                                                            constFCPtr referenceValues, int numCells,
-                                                           const FieldContainer<double> &cellJacobian,
-                                                           const FieldContainer<double> &cellJacobianInv,
-                                                           const FieldContainer<double> &cellJacobianDet)
+                                                           const Intrepid::FieldContainer<double> &cellJacobian,
+                                                           const Intrepid::FieldContainer<double> &cellJacobianInv,
+                                                           const Intrepid::FieldContainer<double> &cellJacobianDet)
 {
-  typedef FunctionSpaceTools fst;
+  using fst = Intrepid::FunctionSpaceTools;
 //  int numCells = cellJacobian.dimension(0);
   
 //  int spaceDim = basis->domainTopology()->getDimension(); // changed 2/18/15
@@ -208,7 +207,7 @@ FCPtr BasisEvaluation::getTransformedValuesWithBasisValues(BasisPtr basis, Camel
   Teuchos::Array<int> dimensions;
   referenceValues->dimensions(dimensions);
   dimensions.insert(dimensions.begin(), numCells);
-  Teuchos::RCP<FieldContainer<double> > transformedValues = Teuchos::rcp(new FieldContainer<double>(dimensions));
+  Teuchos::RCP<Intrepid::FieldContainer<double> > transformedValues = Teuchos::rcp(new Intrepid::FieldContainer<double>(dimensions));
   bool vectorizedBasis = functionSpaceIsVectorized(fs);
   if (vectorizedBasis && (op ==  Camellia::OP_VALUE))
   {
@@ -279,9 +278,9 @@ FCPtr BasisEvaluation::getTransformedValuesWithBasisValues(BasisPtr basis, Camel
       int D2 = dimensions[dimensions.size()-1];
       dimensions[dimensions.size()-2] = D2; // put D2 in the D1 spot
       dimensions.pop_back(); // get rid of original D2
-      FieldContainer<double> refValuesSlice(dimensions);
+      Intrepid::FieldContainer<double> refValuesSlice(dimensions);
       dimensions.insert(dimensions.begin(),numCells);
-      FieldContainer<double> transformedValuesSlice(dimensions);
+      Intrepid::FieldContainer<double> transformedValuesSlice(dimensions);
 
 //          int numEntriesPerSlice = refValuesSlice.size();
 //          int numEntriesPerTransformedSlice = transformedValuesSlice.size();
@@ -396,7 +395,7 @@ FCPtr BasisEvaluation::getTransformedValuesWithBasisValues(BasisPtr basis, Camel
                                                            constFCPtr referenceValues, int numCells,
                                                            BasisCache* basisCache)
 {
-  typedef FunctionSpaceTools fst;
+  using fst = Intrepid::FunctionSpaceTools;
   //  int numCells = cellJacobian.dimension(0);
   
   int spaceDim = basisCache->getSpaceDim(); // changed 3-21-16
@@ -407,7 +406,7 @@ FCPtr BasisEvaluation::getTransformedValuesWithBasisValues(BasisPtr basis, Camel
   Teuchos::Array<int> dimensions;
   referenceValues->dimensions(dimensions);
   dimensions.insert(dimensions.begin(), numCells);
-  Teuchos::RCP<FieldContainer<double> > transformedValues = Teuchos::rcp(new FieldContainer<double>(dimensions));
+  Teuchos::RCP<Intrepid::FieldContainer<double> > transformedValues = Teuchos::rcp(new Intrepid::FieldContainer<double>(dimensions));
   bool vectorizedBasis = functionSpaceIsVectorized(fs);
   if (vectorizedBasis && (op ==  Camellia::OP_VALUE))
   {
@@ -479,9 +478,9 @@ FCPtr BasisEvaluation::getTransformedValuesWithBasisValues(BasisPtr basis, Camel
         int D2 = dimensions[dimensions.size()-1];
         dimensions[dimensions.size()-2] = D2; // put D2 in the D1 spot
         dimensions.pop_back(); // get rid of original D2
-        FieldContainer<double> refValuesSlice(dimensions);
+        Intrepid::FieldContainer<double> refValuesSlice(dimensions);
         dimensions.insert(dimensions.begin(),numCells);
-        FieldContainer<double> transformedValuesSlice(dimensions);
+        Intrepid::FieldContainer<double> transformedValuesSlice(dimensions);
         
         //          int numEntriesPerSlice = refValuesSlice.size();
         //          int numEntriesPerTransformedSlice = transformedValuesSlice.size();
@@ -590,7 +589,7 @@ FCPtr BasisEvaluation::getTransformedValuesWithBasisValues(BasisPtr basis, Camel
         //      J^{-1} * OPD2 * J^{-T}
         // where J^{-1} is the inverse Jacabian, and OPD2 is the matrix of reference-space values formed from OP_D2
         
-        const FieldContainer<double> *J_inv = &basisCache->getJacobianInv();
+        const Intrepid::FieldContainer<double> *J_inv = &basisCache->getJacobianInv();
         transformedValues->initialize(0.0);
         int basisCardinality = basis->getCardinality();
         
@@ -768,7 +767,7 @@ FCPtr BasisEvaluation::getComponentOfInterest(constFCPtr values, Camellia::EOper
     int numCells  = values->dimension(0);
     int numFields = values->dimension(1);
     int numPoints = values->dimension(2);
-    result = Teuchos::rcp(new FieldContainer<double>(numCells,numFields,numPoints));
+    result = Teuchos::rcp(new Intrepid::FieldContainer<double>(numCells,numFields,numPoints));
     for (int cellIndex=0; cellIndex<numCells; cellIndex++)
     {
       for (int field=0; field<numFields; field++)
@@ -794,13 +793,13 @@ FCPtr BasisEvaluation::getComponentOfInterest(constFCPtr values, Camellia::EOper
     // the copy is a bit unfortunate, but can't be avoided unless we change a bunch of constFCPtrs to FCPtrs (or vice versa)
     // in the API...
 //    cout << "values:\n" << *values;
-    return Teuchos::rcp( new FieldContainer<double>(*values));
+    return Teuchos::rcp( new Intrepid::FieldContainer<double>(*values));
   }
   Teuchos::Array<int> dimensions;
   values->dimensions(dimensions);
   int opCardinality = dimensions[dimensions.size()-1];
   dimensions.pop_back(); // get rid of last, spatial dimension
-  result = Teuchos::rcp(new FieldContainer<double>(dimensions));
+  result = Teuchos::rcp(new Intrepid::FieldContainer<double>(dimensions));
   
   if (op == Camellia::OP_LAPLACIAN)
   {
@@ -883,7 +882,7 @@ FCPtr BasisEvaluation::getComponentOfInterest(constFCPtr values, Camellia::EOper
   return result;
 }
 
-FCPtr BasisEvaluation::getValuesCrossedWithNormals(constFCPtr values,const FieldContainer<double> &sideNormals)
+FCPtr BasisEvaluation::getValuesCrossedWithNormals(constFCPtr values,const Intrepid::FieldContainer<double> &sideNormals)
 {
   // values should have dimensions (C,basisCardinality,P,D)
   int numCells = sideNormals.dimension(0);
@@ -902,7 +901,7 @@ FCPtr BasisEvaluation::getValuesCrossedWithNormals(constFCPtr values,const Field
     TEUCHOS_TEST_FOR_EXCEPTION(true, std::invalid_argument, "values should have dimensions (C,basisCardinality,P,D)");
   }
 
-  Teuchos::RCP< FieldContainer<double> > result = Teuchos::rcp(new FieldContainer<double>(numCells,basisCardinality,numPoints));
+  Teuchos::RCP< Intrepid::FieldContainer<double> > result = Teuchos::rcp(new Intrepid::FieldContainer<double>(numCells,basisCardinality,numPoints));
   for (int cellIndex=0; cellIndex<numCells; cellIndex++)
   {
     for (int basisOrdinal=0; basisOrdinal<basisCardinality; basisOrdinal++)
@@ -924,7 +923,7 @@ FCPtr BasisEvaluation::getValuesCrossedWithNormals(constFCPtr values,const Field
   return result;
 }
 
-FCPtr BasisEvaluation::getValuesDottedWithNormals(constFCPtr values,const FieldContainer<double> &sideNormals)
+FCPtr BasisEvaluation::getValuesDottedWithNormals(constFCPtr values,const Intrepid::FieldContainer<double> &sideNormals)
 {
   // values should have dimensions (C,basisCardinality,P,D)
   int numCells = sideNormals.dimension(0);
@@ -939,7 +938,7 @@ FCPtr BasisEvaluation::getValuesDottedWithNormals(constFCPtr values,const FieldC
     TEUCHOS_TEST_FOR_EXCEPTION(true, std::invalid_argument, "values should have dimensions (C,basisCardinality,P,D)");
   }
 
-  Teuchos::RCP< FieldContainer<double> > result = Teuchos::rcp(new FieldContainer<double>(numCells,basisCardinality,numPoints));
+  Teuchos::RCP< Intrepid::FieldContainer<double> > result = Teuchos::rcp(new Intrepid::FieldContainer<double>(numCells,basisCardinality,numPoints));
   for (int cellIndex=0; cellIndex<numCells; cellIndex++)
   {
     for (int basisOrdinal=0; basisOrdinal<basisCardinality; basisOrdinal++)
@@ -959,7 +958,7 @@ FCPtr BasisEvaluation::getValuesDottedWithNormals(constFCPtr values,const FieldC
   return result;
 }
 
-FCPtr BasisEvaluation::getValuesTimesNormals(constFCPtr values,const FieldContainer<double> &sideNormals, int normalComponent)
+FCPtr BasisEvaluation::getValuesTimesNormals(constFCPtr values,const Intrepid::FieldContainer<double> &sideNormals, int normalComponent)
 {
   // TODO: write tests against this version of getValuesTimesNormals
   // values should have dimensions (C,basisCardinality,P)
@@ -974,7 +973,7 @@ FCPtr BasisEvaluation::getValuesTimesNormals(constFCPtr values,const FieldContai
     TEUCHOS_TEST_FOR_EXCEPTION(true, std::invalid_argument, "values should have dimensions (C,basisCardinality,P)");
   }
 
-  Teuchos::RCP< FieldContainer<double> > result = Teuchos::rcp(new FieldContainer<double>(numCells,basisCardinality,numPoints));
+  Teuchos::RCP< Intrepid::FieldContainer<double> > result = Teuchos::rcp(new Intrepid::FieldContainer<double>(numCells,basisCardinality,numPoints));
   for (int cellIndex=0; cellIndex<numCells; cellIndex++)
   {
     for (int basisOrdinal=0; basisOrdinal<basisCardinality; basisOrdinal++)
@@ -990,7 +989,7 @@ FCPtr BasisEvaluation::getValuesTimesNormals(constFCPtr values,const FieldContai
   return result;
 }
 
-FCPtr BasisEvaluation::getValuesTimesNormals(constFCPtr values,const FieldContainer<double> &sideNormals)
+FCPtr BasisEvaluation::getValuesTimesNormals(constFCPtr values,const Intrepid::FieldContainer<double> &sideNormals)
 {
   // values should have dimensions (C,basisCardinality,P)
   int numCells = sideNormals.dimension(0);
@@ -1004,7 +1003,7 @@ FCPtr BasisEvaluation::getValuesTimesNormals(constFCPtr values,const FieldContai
     TEUCHOS_TEST_FOR_EXCEPTION(true, std::invalid_argument, "values should have dimensions (C,basisCardinality,P)");
   }
 
-  Teuchos::RCP< FieldContainer<double> > result = Teuchos::rcp(new FieldContainer<double>(numCells,basisCardinality,numPoints,spaceDim));
+  Teuchos::RCP< Intrepid::FieldContainer<double> > result = Teuchos::rcp(new Intrepid::FieldContainer<double>(numCells,basisCardinality,numPoints,spaceDim));
   for (int cellIndex=0; cellIndex<numCells; cellIndex++)
   {
     for (int basisOrdinal=0; basisOrdinal<basisCardinality; basisOrdinal++)
@@ -1035,7 +1034,7 @@ FCPtr BasisEvaluation::getVectorizedValues(constFCPtr values, int spaceDim)
     TEUCHOS_TEST_FOR_EXCEPTION(true, std::invalid_argument, "values should have dimensions (C,basisCardinality,P)");
   }
 
-  Teuchos::RCP< FieldContainer<double> > result = Teuchos::rcp(new FieldContainer<double>(numCells,basisCardinality,numPoints,spaceDim));
+  Teuchos::RCP< Intrepid::FieldContainer<double> > result = Teuchos::rcp(new Intrepid::FieldContainer<double>(numCells,basisCardinality,numPoints,spaceDim));
   for (int cellIndex=0; cellIndex<numCells; cellIndex++)
   {
     for (int basisOrdinal=0; basisOrdinal<basisCardinality; basisOrdinal++)

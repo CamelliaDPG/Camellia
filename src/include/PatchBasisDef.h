@@ -91,7 +91,7 @@ void PatchBasis<Scalar, ArrayScalar>::getValues(ArrayScalar &outputValues, const
   }
   if (operatorType != ::Intrepid::OPERATOR_VALUE)
   {
-    TEUCHOS_TEST_FOR_EXCEPTION(true,std::invalid_argument, "PatchBasis only supports OPERATOR_VALUE right now.");
+    TEUCHOS_TEST_FOR_EXCEPTION(true,std::invalid_argument, "PatchBasis only supports Intrepid::OPERATOR_VALUE right now.");
   }
 
   typedef ::Intrepid::CellTools<double>  CellTools;

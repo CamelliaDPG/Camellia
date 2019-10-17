@@ -39,7 +39,6 @@
 #include "TensorBasis.h"
 
 using namespace Camellia;
-using namespace Intrepid;
 
 namespace
 {
@@ -77,8 +76,8 @@ void testBasisAllDofOrdinalsAssignedToSubcells(BasisPtr basis, Teuchos::FancyOSt
 //    }
     
     gramMatrix.resize(numTestDofs,numTestDofs);
-    FieldContainer<double> lambda_real(numTestDofs), lambda_imag(numTestDofs);
-    FieldContainer<double> eigvectors(numTestDofs, numTestDofs);
+    Intrepid::FieldContainer<double> lambda_real(numTestDofs), lambda_imag(numTestDofs);
+    Intrepid::FieldContainer<double> eigvectors(numTestDofs, numTestDofs);
     bool computeRightEigvectors = true;
     int result = SerialDenseWrapper::eigenvalues(gramMatrix, lambda_real, lambda_imag, eigvectors, computeRightEigvectors);
     
@@ -96,7 +95,7 @@ void testBasisAllDofOrdinalsAssignedToSubcells(BasisPtr basis, Teuchos::FancyOSt
       
       if (lambda_real(i) < 1e-15)
       {
-        // eigvector will be in the ith row of the FieldContainer (ith column per LAPACK, but that's Fortran ordering)
+        // eigvector will be in the ith row of the Intrepid::FieldContainer (ith column per LAPACK, but that's Fortran ordering)
         out << "eigenvector for negative/near zero eigvalue (" << lambda_real(i) << "):\n";
         out << "v = [";
         out << setprecision(15);
@@ -149,14 +148,14 @@ TEUCHOS_UNIT_TEST( Basis, LineC1_Unisolvence )
 
   CellTopoPtr cellTopo = linearBasis->domainTopology();
 
-  FieldContainer<double> refCellNodes(cellTopo->getNodeCount(), cellTopo->getDimension());
+  Intrepid::FieldContainer<double> refCellNodes(cellTopo->getNodeCount(), cellTopo->getDimension());
   CamelliaCellTools::refCellNodesForTopology(refCellNodes, cellTopo);
 
   set<int> knownNodes;
 
-  FieldContainer<double> valuesAtNodes(linearBasis->getCardinality(), cellTopo->getNodeCount()); // (F, P)
+  Intrepid::FieldContainer<double> valuesAtNodes(linearBasis->getCardinality(), cellTopo->getNodeCount()); // (F, P)
 
-  linearBasis->getValues(valuesAtNodes, refCellNodes, OPERATOR_VALUE);
+  linearBasis->getValues(valuesAtNodes, refCellNodes, Intrepid::OPERATOR_VALUE);
 
   for (int basisOrdinal=0; basisOrdinal < linearBasis->getCardinality(); basisOrdinal++)
   {
@@ -185,16 +184,16 @@ TEUCHOS_UNIT_TEST( Basis, DofOrdinalsAssigned_PointBasis )
 TEUCHOS_UNIT_TEST_TEMPLATE_1_DECL( Basis, ScalarPolynomialBasisUnisolvence, ScalarPolynomialBasisType )
 {
   int polyOrder = 1;
-  ScalarPolynomialBasisType basis(polyOrder, POINTTYPE_SPECTRAL);
+  ScalarPolynomialBasisType basis(polyOrder, Intrepid::POINTTYPE_SPECTRAL);
 
   shards::CellTopology cellTopo = basis.getBaseCellTopology();
 
-  FieldContainer<double> dofCoords(basis.getCardinality(), cellTopo.getDimension());
+  Intrepid::FieldContainer<double> dofCoords(basis.getCardinality(), cellTopo.getDimension());
   basis.getDofCoords(dofCoords);
 
-  FieldContainer<double> valuesAtNodes(basis.getCardinality(), dofCoords.dimension(0)); // (F, P)
+  Intrepid::FieldContainer<double> valuesAtNodes(basis.getCardinality(), dofCoords.dimension(0)); // (F, P)
 
-  basis.getValues(valuesAtNodes, dofCoords, OPERATOR_VALUE);
+  basis.getValues(valuesAtNodes, dofCoords, Intrepid::OPERATOR_VALUE);
 
   for (int basisOrdinal=0; basisOrdinal < basis.getCardinality(); basisOrdinal++)
   {
@@ -279,7 +278,7 @@ TEUCHOS_UNIT_TEST_TEMPLATE_1_INSTANT( Basis, ScalarPolynomialBasisUnisolvence, H
     int polyOrder = 5;
     int vectorRank = 1;
     int spaceDim = 2;
-    BasisPtr basis = Teuchos::rcp( new IntrepidBasisWrapper< double, Intrepid::FieldContainer<double> >( Teuchos::rcp( new Intrepid::Basis_HDIV_TRI_In_FEM<double, Intrepid::FieldContainer<double> >(polyOrder, POINTTYPE_EQUISPACED)), spaceDim, vectorRank, fs) );
+    BasisPtr basis = Teuchos::rcp( new IntrepidBasisWrapper< double, Intrepid::FieldContainer<double> >( Teuchos::rcp( new Intrepid::Basis_HDIV_TRI_In_FEM<double, Intrepid::FieldContainer<double> >(polyOrder, Intrepid::POINTTYPE_EQUISPACED)), spaceDim, vectorRank, fs) );
     
     VarFactoryPtr vf = VarFactory::varFactory();
     VarPtr H1Var = vf->testVar("v", HDIV);
@@ -297,7 +296,7 @@ TEUCHOS_UNIT_TEST_TEMPLATE_1_INSTANT( Basis, ScalarPolynomialBasisUnisolvence, H
     int polyOrder = 5;
     int vectorRank = 1;
     int spaceDim = 2;
-    BasisPtr basis = Teuchos::rcp( new IntrepidBasisWrapper< double, Intrepid::FieldContainer<double> >( Teuchos::rcp( new Intrepid::Basis_HDIV_TRI_In_FEM<double, Intrepid::FieldContainer<double> >(polyOrder, POINTTYPE_WARPBLEND)), spaceDim, vectorRank, fs) );
+    BasisPtr basis = Teuchos::rcp( new IntrepidBasisWrapper< double, Intrepid::FieldContainer<double> >( Teuchos::rcp( new Intrepid::Basis_HDIV_TRI_In_FEM<double, Intrepid::FieldContainer<double> >(polyOrder, Intrepid::POINTTYPE_WARPBLEND)), spaceDim, vectorRank, fs) );
     
     VarFactoryPtr vf = VarFactory::varFactory();
     VarPtr H1Var = vf->testVar("v", HDIV);
@@ -320,7 +319,7 @@ TEUCHOS_UNIT_TEST_TEMPLATE_1_INSTANT( Basis, ScalarPolynomialBasisUnisolvence, H
 
     for (int polyOrder=1; polyOrder<7; polyOrder++)
     {
-      BasisPtr basis = Teuchos::rcp( new IntrepidBasisWrapper< double, Intrepid::FieldContainer<double> >( Teuchos::rcp( new Intrepid::Basis_HDIV_TET_In_FEM<double, Intrepid::FieldContainer<double> >(polyOrder, POINTTYPE_WARPBLEND)), spaceDim, vectorRank, fs) );
+      BasisPtr basis = Teuchos::rcp( new IntrepidBasisWrapper< double, Intrepid::FieldContainer<double> >( Teuchos::rcp( new Intrepid::Basis_HDIV_TET_In_FEM<double, Intrepid::FieldContainer<double> >(polyOrder, Intrepid::POINTTYPE_WARPBLEND)), spaceDim, vectorRank, fs) );
       
       testBasisL2Eigenvalues(H1Var, basis, polyOrder, out, success);
     }
@@ -367,12 +366,12 @@ TEUCHOS_UNIT_TEST_TEMPLATE_1_INSTANT( Basis, ScalarPolynomialBasisUnisolvence, H
     int meshWidth = 1;
     vector<int> elementCounts = {meshWidth,meshWidth};
     
-    Intrepid::Basis_HDIV_TRI_In_FEM<double, Intrepid::FieldContainer<double> > basis(polyOrder, POINTTYPE_WARPBLEND);
+    Intrepid::Basis_HDIV_TRI_In_FEM<double, Intrepid::FieldContainer<double> > basis(polyOrder, Intrepid::POINTTYPE_WARPBLEND);
 
     Intrepid::DefaultCubatureFactory<double> cubFactory;
     shards::CellTopology triangleTopo(shards::getCellTopologyData<shards::Triangle<3> >() );
     
-    Teuchos::RCP<Cubature<double> > cellTopoCub = cubFactory.create(triangleTopo, polyOrder);
+    Teuchos::RCP<Intrepid::Cubature<double> > cellTopoCub = cubFactory.create(triangleTopo, polyOrder);
     int numPoints;
   
     numPoints = cellTopoCub->getNumPoints();
@@ -383,10 +382,10 @@ TEUCHOS_UNIT_TEST_TEMPLATE_1_INSTANT( Basis, ScalarPolynomialBasisUnisolvence, H
     cellTopoCub->getCubature(points, weights);
     
     int basisCardinality = basis.getCardinality();
-    FieldContainer<double> basisValues(basisCardinality,numPoints,spaceDim);
-    basis.getValues(basisValues, points, OPERATOR_VALUE);
+    Intrepid::FieldContainer<double> basisValues(basisCardinality,numPoints,spaceDim);
+    basis.getValues(basisValues, points, Intrepid::OPERATOR_VALUE);
     
-    FieldContainer<double> weightedSum(numPoints,spaceDim);
+    Intrepid::FieldContainer<double> weightedSum(numPoints,spaceDim);
     for (int i=0; i<basisCardinality; i++)
     {
       double weight = basisWeights[i];

@@ -49,7 +49,6 @@
 #include "Epetra_Operator_to_Epetra_Matrix.h"
 
 
-using namespace Intrepid;
 using namespace Camellia;
 
 #ifdef USE_HPCTW
@@ -496,14 +495,14 @@ Teuchos::RCP<Epetra_FECrsMatrix> GMGOperator::constructProlongationOperator(Teuc
 //    (*oneElementVector)[0] = 1.0;
     
     // to (possibly) reduce the cost of allocating these containers, declare them outside and resize inside as needed
-    FieldContainer<GlobalIndexTypeToCast> coarseGlobalIndices;
-    FieldContainer<double> coarseGlobalValues;
-    FieldContainer<double> coarseCellCoefficients;
-    FieldContainer<double> mappedCoarseCellCoefficients;
-    FieldContainer<double> globalCoefficients;
-    FieldContainer<GlobalIndexType> globalDofIndices;
-    FieldContainer<double> fineCellCoefficients;
-    FieldContainer<double> basisCoefficients;
+    Intrepid::FieldContainer<GlobalIndexTypeToCast> coarseGlobalIndices;
+    Intrepid::FieldContainer<double> coarseGlobalValues;
+    Intrepid::FieldContainer<double> coarseCellCoefficients;
+    Intrepid::FieldContainer<double> mappedCoarseCellCoefficients;
+    Intrepid::FieldContainer<double> globalCoefficients;
+    Intrepid::FieldContainer<GlobalIndexType> globalDofIndices;
+    Intrepid::FieldContainer<double> fineCellCoefficients;
+    Intrepid::FieldContainer<double> basisCoefficients;
     
     for (int localID=0; localID < fineMap.NumMyElements(); localID++)
     {
@@ -648,7 +647,7 @@ Teuchos::RCP<Epetra_FECrsMatrix> GMGOperator::constructProlongationOperator(Teuc
             }
           }
           
-//          FieldContainer<double> interpretedCoarseData;
+//          Intrepid::FieldContainer<double> interpretedCoarseData;
 //          map<GlobalIndexType,double> fittedGlobalCoefficients;
 //          coarseDofInterpreter->interpretLocalCoefficients(coarseCellID, coarseCellCoefficients, fittedGlobalCoefficients,
 //                                                           varsToExclude);
@@ -856,10 +855,10 @@ Teuchos::RCP<Epetra_SerialDenseMatrix> GMGOperator::fluxDuplicationMapForCoarseC
     // (NOTE: the same thing could be accomplished at the abstract, reference-element level.  It would be more
     //  efficient to construct a matrix like this once for the element type, and then multiply matrices to enforce
     //  conformity...)
-    FieldContainer<double> localData(trialOrderRawPtr->totalDofs());
-    FieldContainer<double> localCoefficients(trialOrderRawPtr->totalDofs());
-    FieldContainer<double> globalCoefficients;
-    FieldContainer<GlobalIndexType> globalDofIndices;
+    Intrepid::FieldContainer<double> localData(trialOrderRawPtr->totalDofs());
+    Intrepid::FieldContainer<double> localCoefficients(trialOrderRawPtr->totalDofs());
+    Intrepid::FieldContainer<double> globalCoefficients;
+    Intrepid::FieldContainer<GlobalIndexType> globalDofIndices;
     GlobalIndexType zeroCellID = 0;
     int indexBase = 0;
     int numDofsSingleElementMesh = coarseSingleCellMesh->numGlobalDofs();
@@ -1500,8 +1499,8 @@ LocalDofMapperPtr GMGOperator::getLocalCoefficientMap(GlobalIndexType fineCellID
   }
 
   // now, correct side parities in dofMapper if the ref space situation differs from the physical space one.
-  FieldContainer<double> coarseCellSideParities = _coarseMesh->globalDofAssignment()->cellSideParitiesForCell(coarseCellID);
-  FieldContainer<double> fineCellSideParities = _fineMesh->globalDofAssignment()->cellSideParitiesForCell(fineCellID);
+  Intrepid::FieldContainer<double> coarseCellSideParities = _coarseMesh->globalDofAssignment()->cellSideParitiesForCell(coarseCellID);
+  Intrepid::FieldContainer<double> fineCellSideParities = _fineMesh->globalDofAssignment()->cellSideParitiesForCell(fineCellID);
 //  cout << "fineCell parities:\n" << fineCellSideParities;
   set<unsigned> fineSidesToCorrect;
   for (unsigned fineSideOrdinal=0; fineSideOrdinal<fineSideCount; fineSideOrdinal++)

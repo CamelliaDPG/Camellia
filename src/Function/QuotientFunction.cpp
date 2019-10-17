@@ -7,7 +7,6 @@
 #include "BasisCache.h"
 
 using namespace Camellia;
-using namespace Intrepid;
 
 template <typename Scalar>
 QuotientFunction<Scalar>::QuotientFunction(TFunctionPtr<Scalar> f, TFunctionPtr<Scalar> scalarDivisor) : TFunction<Scalar>( f->rank() )

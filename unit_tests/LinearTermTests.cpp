@@ -21,7 +21,6 @@
 #include "TypeDefs.h"
 
 using namespace Camellia;
-using namespace Intrepid;
 
 namespace
 {
@@ -595,10 +594,10 @@ TEUCHOS_UNIT_TEST( LinearTerm, FauxSpaceTimeIntegrationByPartsInTime_2D )
       BasisCachePtr basisCache = BasisCache::basisCacheForCell(mesh, cellID);
       int numPoints = basisCache->getRefCellPoints().dimension(0);
       int numCells = 1;
-      FieldContainer<double> actualValues(numCells, numPoints);
+      Intrepid::FieldContainer<double> actualValues(numCells, numPoints);
       lt->evaluate(actualValues, solution, basisCache);
       
-      FieldContainer<double> expectedValues(numCells, numPoints);
+      Intrepid::FieldContainer<double> expectedValues(numCells, numPoints);
       expectedFunction->values(expectedValues, basisCache);
       
       double tol = 1e-14;
@@ -634,10 +633,10 @@ TEUCHOS_UNIT_TEST( LinearTerm, FauxSpaceTimeIntegrationByPartsInTime_2D )
       BasisCachePtr basisCache = BasisCache::basisCacheForCell(mesh, cellID);
       int numPoints = basisCache->getRefCellPoints().dimension(0);
       int numCells = 1;
-      FieldContainer<double> actualValues(numCells, numPoints, spaceDim);
+      Intrepid::FieldContainer<double> actualValues(numCells, numPoints, spaceDim);
       lt->evaluate(actualValues, solution, basisCache);
       
-      FieldContainer<double> expectedValues(numCells, numPoints, spaceDim);
+      Intrepid::FieldContainer<double> expectedValues(numCells, numPoints, spaceDim);
       expectedFunction->values(expectedValues, basisCache);
       
       double tol = 1e-13;
@@ -674,10 +673,10 @@ TEUCHOS_UNIT_TEST( LinearTerm, FauxSpaceTimeIntegrationByPartsInTime_2D )
       BasisCachePtr basisCache = BasisCache::basisCacheForCell(mesh, cellID);
       int numPoints = basisCache->getRefCellPoints().dimension(0);
       int numCells = 1;
-      FieldContainer<double> actualValues(numCells, numPoints, spaceDim);
+      Intrepid::FieldContainer<double> actualValues(numCells, numPoints, spaceDim);
       lt->evaluate(actualValues, solution, basisCache);
       
-      FieldContainer<double> expectedValues(numCells, numPoints, spaceDim);
+      Intrepid::FieldContainer<double> expectedValues(numCells, numPoints, spaceDim);
       expectedFunction->values(expectedValues, basisCache);
       
       double tol = 1e-13;
@@ -713,10 +712,10 @@ TEUCHOS_UNIT_TEST( LinearTerm, FauxSpaceTimeIntegrationByPartsInTime_2D )
       BasisCachePtr basisCache = BasisCache::basisCacheForCell(mesh, cellID);
       int numPoints = basisCache->getRefCellPoints().dimension(0);
       int numCells = 1;
-      FieldContainer<double> actualValues(numCells, numPoints);
+      Intrepid::FieldContainer<double> actualValues(numCells, numPoints);
       lt->evaluate(actualValues, solution, basisCache);
       
-      FieldContainer<double> expectedValues(numCells, numPoints);
+      Intrepid::FieldContainer<double> expectedValues(numCells, numPoints);
       expectedFunction->values(expectedValues, basisCache);
       
       double tol = 1e-13;

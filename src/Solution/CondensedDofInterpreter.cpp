@@ -19,7 +19,6 @@
 #include "RHS.h"
 #include "SerialDenseWrapper.h"
 
-using namespace Intrepid;
 using namespace Camellia;
 
 template <typename Scalar>
@@ -101,16 +100,16 @@ void CondensedDofInterpreter<Scalar>::computeAndStoreLocalStiffnessAndLoad(Globa
   int numTrialDofs = _mesh->getElementType(cellID)->trialOrderPtr->totalDofs();
   BasisCachePtr cellBasisCache = BasisCache::basisCacheForCell(_mesh, cellID);
   BasisCachePtr ipBasisCache = BasisCache::basisCacheForCell(_mesh, cellID, true);
-  _localStiffnessMatrices[cellID] = FieldContainer<Scalar>(1,numTrialDofs,numTrialDofs);
-  _localLoadVectors[cellID] = FieldContainer<Scalar>(1,numTrialDofs);
+  _localStiffnessMatrices[cellID] = Intrepid::FieldContainer<Scalar>(1,numTrialDofs,numTrialDofs);
+  _localLoadVectors[cellID] = Intrepid::FieldContainer<Scalar>(1,numTrialDofs);
   _mesh->bilinearForm()->localStiffnessMatrixAndRHS(_localStiffnessMatrices[cellID], _localLoadVectors[cellID], _ip, ipBasisCache, _rhs, cellBasisCache);
 
   _localStiffnessMatrices[cellID].resize(numTrialDofs,numTrialDofs);
   _localLoadVectors[cellID].resize(numTrialDofs);
 
-  FieldContainer<Scalar> interpretedStiffnessData, interpretedLoadData;
+  Intrepid::FieldContainer<Scalar> interpretedStiffnessData, interpretedLoadData;
 
-  FieldContainer<GlobalIndexType> interpretedDofIndices;
+  Intrepid::FieldContainer<GlobalIndexType> interpretedDofIndices;
 
   _mesh->DofInterpreter::interpretLocalData(cellID, _localStiffnessMatrices[cellID], _localLoadVectors[cellID],
       interpretedStiffnessData, interpretedLoadData, interpretedDofIndices);
@@ -119,7 +118,7 @@ void CondensedDofInterpreter<Scalar>::computeAndStoreLocalStiffnessAndLoad(Globa
 }
 
 template <typename Scalar>
-void CondensedDofInterpreter<Scalar>::getLocalData(GlobalIndexType cellID, FieldContainer<Scalar> &stiffness, FieldContainer<Scalar> &load, FieldContainer<GlobalIndexType> &interpretedDofIndices)
+void CondensedDofInterpreter<Scalar>::getLocalData(GlobalIndexType cellID, Intrepid::FieldContainer<Scalar> &stiffness, Intrepid::FieldContainer<Scalar> &load, Intrepid::FieldContainer<GlobalIndexType> &interpretedDofIndices)
 {
   if (_localStiffnessMatrices.find(cellID) == _localStiffnessMatrices.end())
   {
@@ -134,7 +133,7 @@ void CondensedDofInterpreter<Scalar>::getLocalData(GlobalIndexType cellID, Field
 template <typename Scalar>
 void CondensedDofInterpreter<Scalar>::getLocalData(GlobalIndexType cellID, Teuchos::RCP<Epetra_SerialDenseSolver> &fieldSolver,
                                                    Epetra_SerialSymDenseMatrix &FieldField, Epetra_SerialDenseMatrix &FieldFlux, Epetra_SerialDenseVector &b_field,
-                                                   FieldContainer<GlobalIndexType> &interpretedDofIndices, set<int> &fieldIndices, set<int> &fluxIndices)
+                                                   Intrepid::FieldContainer<GlobalIndexType> &interpretedDofIndices, set<int> &fieldIndices, set<int> &fluxIndices)
 {
   if (_localStiffnessMatrices.find(cellID) == _localStiffnessMatrices.end())
   {
@@ -144,8 +143,8 @@ void CondensedDofInterpreter<Scalar>::getLocalData(GlobalIndexType cellID, Teuch
   // TODO: add caching of fieldSolver, B, b_field
   // (NOTE: when we do this, need to copy b_field before returning; it's modified by caller)
   
-  FieldContainer<double> K = _localStiffnessMatrices[cellID];
-  FieldContainer<double> rhs = _localLoadVectors[cellID];
+  Intrepid::FieldContainer<double> K = _localStiffnessMatrices[cellID];
+  Intrepid::FieldContainer<double> rhs = _localLoadVectors[cellID];
   interpretedDofIndices = _localInterpretedDofIndices[cellID];
   
 //  cout << "rhs for cell " << cellID << ":\n" << rhs;
@@ -184,7 +183,7 @@ void CondensedDofInterpreter<Scalar>::getLocalData(GlobalIndexType cellID, Teuch
 
 template <typename Scalar>
 void CondensedDofInterpreter<Scalar>::getSubmatrices(set<int> fieldIndices, set<int> fluxIndices,
-    const FieldContainer<Scalar> &K, Epetra_SerialDenseMatrix &K_field,
+    const Intrepid::FieldContainer<Scalar> &K, Epetra_SerialDenseMatrix &K_field,
     Epetra_SerialDenseMatrix &K_coupl, Epetra_SerialDenseMatrix &K_flux)
 {
   int numFieldDofs = fieldIndices.size();
@@ -232,7 +231,7 @@ void CondensedDofInterpreter<Scalar>::getSubmatrices(set<int> fieldIndices, set<
 }
 
 template <typename Scalar>
-void CondensedDofInterpreter<Scalar>::getSubvectors(set<int> fieldIndices, set<int> fluxIndices, const FieldContainer<Scalar> &b, Epetra_SerialDenseVector &b_field, Epetra_SerialDenseVector &b_flux)
+void CondensedDofInterpreter<Scalar>::getSubvectors(set<int> fieldIndices, set<int> fluxIndices, const Intrepid::FieldContainer<Scalar> &b, Epetra_SerialDenseVector &b_field, Epetra_SerialDenseVector &b_flux)
 {
 
   int numFieldDofs = fieldIndices.size();
@@ -431,8 +430,8 @@ Teuchos::RCP<Epetra_SerialDenseMatrix> CondensedDofInterpreter<Scalar>::fluxToFi
     
     Epetra_SerialDenseVector b_field;
     
-    FieldContainer<Scalar> K,rhs;
-    FieldContainer<GlobalIndexType> interpretedDofIndices;
+    Intrepid::FieldContainer<Scalar> K,rhs;
+    Intrepid::FieldContainer<GlobalIndexType> interpretedDofIndices;
     
     Teuchos::RCP<Epetra_SerialDenseSolver> fieldSolver;
     Epetra_SerialSymDenseMatrix FieldField;
@@ -954,8 +953,8 @@ set<GlobalIndexType> CondensedDofInterpreter<Scalar>::globalDofIndicesForPartiti
 }
 
 template <typename Scalar>
-void CondensedDofInterpreter<Scalar>::interpretLocalBasisCoefficients(GlobalIndexType cellID, int varID, int sideOrdinal, const FieldContainer<Scalar> &basisCoefficients,
-    FieldContainer<Scalar> &globalCoefficients, FieldContainer<GlobalIndexType> &globalDofIndices)
+void CondensedDofInterpreter<Scalar>::interpretLocalBasisCoefficients(GlobalIndexType cellID, int varID, int sideOrdinal, const Intrepid::FieldContainer<Scalar> &basisCoefficients,
+    Intrepid::FieldContainer<Scalar> &globalCoefficients, Intrepid::FieldContainer<GlobalIndexType> &globalDofIndices)
 {
   int rank = _mesh->Comm()->MyPID();
   // NOTE: cellID MUST belong to this partition, or have been included in "offRankCellsToInclude" constructor argument
@@ -966,8 +965,8 @@ void CondensedDofInterpreter<Scalar>::interpretLocalBasisCoefficients(GlobalInde
     TEUCHOS_TEST_FOR_EXCEPTION(true, std::invalid_argument, "cellID does not belong to partition, and isn't in offRankCellsToInclude");
   }
 
-  FieldContainer<Scalar> interpretedCoefficients;
-  FieldContainer<GlobalIndexType> interpretedDofIndices;
+  Intrepid::FieldContainer<Scalar> interpretedCoefficients;
+  Intrepid::FieldContainer<GlobalIndexType> interpretedDofIndices;
   _mesh->interpretLocalBasisCoefficients(cellID, varID, sideOrdinal, basisCoefficients,
                                          interpretedCoefficients, interpretedDofIndices);
 
@@ -1014,11 +1013,11 @@ void CondensedDofInterpreter<Scalar>::interpretLocalBasisCoefficients(GlobalInde
 }
 
 template <typename Scalar>
-void CondensedDofInterpreter<Scalar>::interpretLocalCoefficients(GlobalIndexType cellID, const FieldContainer<Scalar> &localCoefficients,
+void CondensedDofInterpreter<Scalar>::interpretLocalCoefficients(GlobalIndexType cellID, const Intrepid::FieldContainer<Scalar> &localCoefficients,
                                                                  Epetra_MultiVector &globalCoefficients, int columnOrdinal)
 {
   DofOrderingPtr trialOrder = _mesh->getElementType(cellID)->trialOrderPtr;
-  FieldContainer<Scalar> basisCoefficients; // declared here so that we can sometimes avoid mallocs, if we get lucky in terms of the resize()
+  Intrepid::FieldContainer<Scalar> basisCoefficients; // declared here so that we can sometimes avoid mallocs, if we get lucky in terms of the resize()
   for (int trialID : trialOrder->getVarIDs())
   {
     const vector<int>* sides = &trialOrder->getSidesForVarID(trialID);
@@ -1033,8 +1032,8 @@ void CondensedDofInterpreter<Scalar>::interpretLocalCoefficients(GlobalIndexType
         int localDofIndex = localDofIndices[basisOrdinal];
         basisCoefficients[basisOrdinal] = localCoefficients[localDofIndex];
       }
-      FieldContainer<Scalar> fittedGlobalCoefficients;
-      FieldContainer<GlobalIndexType> fittedGlobalDofIndices;
+      Intrepid::FieldContainer<Scalar> fittedGlobalCoefficients;
+      Intrepid::FieldContainer<GlobalIndexType> fittedGlobalDofIndices;
       interpretLocalBasisCoefficients(cellID, trialID, sideOrdinal, basisCoefficients, fittedGlobalCoefficients, fittedGlobalDofIndices);
       for (int i=0; i<fittedGlobalCoefficients.size(); i++)
       {
@@ -1047,22 +1046,22 @@ void CondensedDofInterpreter<Scalar>::interpretLocalCoefficients(GlobalIndexType
 }
 
 template <typename Scalar>
-void CondensedDofInterpreter<Scalar>::interpretLocalData(GlobalIndexType cellID, const FieldContainer<Scalar> &localData,
-    FieldContainer<Scalar> &globalData, FieldContainer<GlobalIndexType> &globalDofIndices)
+void CondensedDofInterpreter<Scalar>::interpretLocalData(GlobalIndexType cellID, const Intrepid::FieldContainer<Scalar> &localData,
+    Intrepid::FieldContainer<Scalar> &globalData, Intrepid::FieldContainer<GlobalIndexType> &globalDofIndices)
 {
   if (_localStiffnessMatrices.find(cellID) == _localStiffnessMatrices.end())
   {
     computeAndStoreLocalStiffnessAndLoad(cellID);
 //    TEUCHOS_TEST_FOR_EXCEPTION(true, std::invalid_argument, "CondensedDofInterpreter requires both stiffness and load data to be provided.");
   }
-  FieldContainer<Scalar> globalStiffnessData; // dummy container
+  Intrepid::FieldContainer<Scalar> globalStiffnessData; // dummy container
   interpretLocalData(cellID, _localStiffnessMatrices[cellID], localData, globalStiffnessData, globalData, globalDofIndices);
 }
 
 template <typename Scalar>
-void CondensedDofInterpreter<Scalar>::interpretLocalData(GlobalIndexType cellID, const FieldContainer<Scalar> &localStiffnessData, const FieldContainer<Scalar> &localLoadData,
-    FieldContainer<Scalar> &globalStiffnessData, FieldContainer<Scalar> &globalLoadData,
-    FieldContainer<GlobalIndexType> &globalDofIndices)
+void CondensedDofInterpreter<Scalar>::interpretLocalData(GlobalIndexType cellID, const Intrepid::FieldContainer<Scalar> &localStiffnessData, const Intrepid::FieldContainer<Scalar> &localLoadData,
+    Intrepid::FieldContainer<Scalar> &globalStiffnessData, Intrepid::FieldContainer<Scalar> &globalLoadData,
+    Intrepid::FieldContainer<GlobalIndexType> &globalDofIndices)
 {
   // NOTE: cellID MUST belong to this partition, or have been included in "offRankCellsToInclude" constructor argument
   int rank = _mesh->Comm()->MyPID();
@@ -1077,9 +1076,9 @@ void CondensedDofInterpreter<Scalar>::interpretLocalData(GlobalIndexType cellID,
 //    cout << "cellID " << cellID << endl;
 //  }
 
-  FieldContainer<Scalar> interpretedStiffnessData, interpretedLoadData;
+  Intrepid::FieldContainer<Scalar> interpretedStiffnessData, interpretedLoadData;
 
-  FieldContainer<GlobalIndexType> interpretedDofIndices;
+  Intrepid::FieldContainer<GlobalIndexType> interpretedDofIndices;
 
   _mesh->DofInterpreter::interpretLocalData(cellID, localStiffnessData, localLoadData,
       interpretedStiffnessData, interpretedLoadData, interpretedDofIndices);
@@ -1191,7 +1190,7 @@ void CondensedDofInterpreter<Scalar>::interpretLocalData(GlobalIndexType cellID,
 
   b_flux.Multiply('T','N',-1.0,B,Dinvf,1.0); // condensed RHS - f - B^T*inv(D)*g
 
-  // resize output FieldContainers
+  // resize output Intrepid::FieldContainers
   globalDofIndices.resize(fluxCount);
   globalStiffnessData.resize( fluxCount, fluxCount );
   globalLoadData.resize( fluxCount );
@@ -1226,7 +1225,7 @@ void CondensedDofInterpreter<Scalar>::interpretLocalData(GlobalIndexType cellID,
 
 // new version:
 template <typename Scalar>
-void CondensedDofInterpreter<Scalar>::interpretGlobalCoefficients(GlobalIndexType cellID, FieldContainer<Scalar> &localCoefficients,
+void CondensedDofInterpreter<Scalar>::interpretGlobalCoefficients(GlobalIndexType cellID, Intrepid::FieldContainer<Scalar> &localCoefficients,
                                                                   const Epetra_MultiVector &globalCoefficients)
 {
   // here, globalCoefficients correspond to *flux* dofs
@@ -1238,8 +1237,8 @@ void CondensedDofInterpreter<Scalar>::interpretGlobalCoefficients(GlobalIndexTyp
 
   Epetra_SerialDenseVector b_field;
   
-  FieldContainer<Scalar> K,rhs;
-  FieldContainer<GlobalIndexType> interpretedDofIndices;
+  Intrepid::FieldContainer<Scalar> K,rhs;
+  Intrepid::FieldContainer<GlobalIndexType> interpretedDofIndices;
   
   Teuchos::RCP<Epetra_SerialDenseSolver> fieldSolver;
   Epetra_SerialDenseMatrix B;
@@ -1367,19 +1366,19 @@ void CondensedDofInterpreter<Scalar>::setCanSkipLocalFieldInInterpretGlobalCoeff
 }
 
 template <typename Scalar>
-void CondensedDofInterpreter<Scalar>::storeLoadForCell(GlobalIndexType cellID, const FieldContainer<Scalar> &load)
+void CondensedDofInterpreter<Scalar>::storeLoadForCell(GlobalIndexType cellID, const Intrepid::FieldContainer<Scalar> &load)
 {
   _localLoadVectors[cellID] = load;
 }
 
 template <typename Scalar>
-void CondensedDofInterpreter<Scalar>::storeStiffnessForCell(GlobalIndexType cellID, const FieldContainer<Scalar> &stiffness)
+void CondensedDofInterpreter<Scalar>::storeStiffnessForCell(GlobalIndexType cellID, const Intrepid::FieldContainer<Scalar> &stiffness)
 {
   _localStiffnessMatrices[cellID] = stiffness;
 }
 
 template <typename Scalar>
-const FieldContainer<Scalar> & CondensedDofInterpreter<Scalar>::storedLocalLoadForCell(GlobalIndexType cellID)
+const Intrepid::FieldContainer<Scalar> & CondensedDofInterpreter<Scalar>::storedLocalLoadForCell(GlobalIndexType cellID)
 {
   if (_localLoadVectors.find(cellID) == _localLoadVectors.end())
   {
@@ -1397,7 +1396,7 @@ const FieldContainer<Scalar> & CondensedDofInterpreter<Scalar>::storedLocalLoadF
 }
 
 template <typename Scalar>
-const FieldContainer<Scalar> & CondensedDofInterpreter<Scalar>::storedLocalStiffnessForCell(GlobalIndexType cellID)
+const Intrepid::FieldContainer<Scalar> & CondensedDofInterpreter<Scalar>::storedLocalStiffnessForCell(GlobalIndexType cellID)
 {
   if (_localStiffnessMatrices.find(cellID) == _localStiffnessMatrices.end())
   {

@@ -8,7 +8,6 @@
 #include "Mesh.h"
 #include "BasisCache.h"
 
-using namespace Intrepid;
 using namespace Camellia;
 
 
@@ -31,7 +30,7 @@ LinearTermPtr IPSwitcher::evaluate(map< int, TFunctionPtr<double>> &varFunctions
   return Teuchos::rcp((LinearTerm *)NULL);
 }
 
-void IPSwitcher::computeInnerProductMatrix(FieldContainer<double> &innerProduct,
+void IPSwitcher::computeInnerProductMatrix(Intrepid::FieldContainer<double> &innerProduct,
     Teuchos::RCP<DofOrdering> dofOrdering,
     Teuchos::RCP<BasisCache> basisCache)
 {
@@ -48,7 +47,7 @@ void IPSwitcher::computeInnerProductMatrix(FieldContainer<double> &innerProduct,
     BasisCachePtr cellCache = BasisCache::basisCacheForCell(mesh, cellID, true, cubatureEnrichment);
 
     double h = std::min(mesh->getCellXSize(cellID),mesh->getCellYSize(cellID)); //mesh->getCellMeasure(cellID)); // getCellXSize or getCellYSize
-    FieldContainer<double> cellIP(1,numDofs,numDofs);
+    Intrepid::FieldContainer<double> cellIP(1,numDofs,numDofs);
     if (h > _minH)
     {
       _ip1->computeInnerProductMatrix(cellIP,dofOrdering,cellCache);
@@ -76,7 +75,7 @@ double IPSwitcher::computeMaxConditionNumber(DofOrderingPtr testSpace, BasisCach
 }
 
 // compute IP vector when var==fxn
-void IPSwitcher::computeInnerProductVector(FieldContainer<double> &ipVector,
+void IPSwitcher::computeInnerProductVector(Intrepid::FieldContainer<double> &ipVector,
     VarPtr var, TFunctionPtr<double> fxn,
     Teuchos::RCP<DofOrdering> dofOrdering,
     Teuchos::RCP<BasisCache> basisCache)
@@ -94,7 +93,7 @@ void IPSwitcher::computeInnerProductVector(FieldContainer<double> &ipVector,
     BasisCachePtr cellCache = BasisCache::basisCacheForCell(mesh, cellID, true, cubatureEnrichment);
 
     double h = mesh->getCellMeasure(cellID); // getCellXSize or getCellYSize
-    FieldContainer<double> cellVec(1,numDofs);
+    Intrepid::FieldContainer<double> cellVec(1,numDofs);
     if (h<_minH)
     {
       _ip1->computeInnerProductVector(cellVec,var,fxn,dofOrdering,cellCache);

@@ -21,7 +21,6 @@
 #include "Intrepid_FieldContainer.hpp"
 
 using namespace Camellia;
-using namespace Intrepid;
 
 namespace
 {
@@ -30,9 +29,9 @@ namespace
     int testCount = 5, trialCount = 4;
     
     // inputs: square and rectangular identities, and a vector of 1's
-    FieldContainer<double> ip(testCount,testCount);
-    FieldContainer<double> stiffnessEnriched(trialCount,testCount);
-    FieldContainer<double> rhsEnriched(testCount,1);
+    Intrepid::FieldContainer<double> ip(testCount,testCount);
+    Intrepid::FieldContainer<double> stiffnessEnriched(trialCount,testCount);
+    Intrepid::FieldContainer<double> rhsEnriched(testCount,1);
     
     for (int i=0; i<testCount; i++)
     {
@@ -44,8 +43,8 @@ namespace
       stiffnessEnriched(i,i) = 1.0;
     }
     
-    FieldContainer<double> stiffness(trialCount,trialCount);
-    FieldContainer<double> rhs(trialCount,1);
+    Intrepid::FieldContainer<double> stiffness(trialCount,trialCount);
+    Intrepid::FieldContainer<double> rhs(trialCount,1);
     
     TBF<double>::factoredCholeskySolve(ip, stiffnessEnriched, rhsEnriched, stiffness, rhs);
     
@@ -92,11 +91,11 @@ namespace
       BasisCachePtr basisCache = BasisCache::basisCacheForCell(mesh, cellZero);
       BasisCachePtr ipBasisCache = BasisCache::basisCacheForCell(mesh, cellZero, true);
       int numCells = 1;
-      FieldContainer<double> stiffnessExpected(numCells,trialCount,trialCount), rhsExpected(numCells,trialCount);
+      Intrepid::FieldContainer<double> stiffnessExpected(numCells,trialCount,trialCount), rhsExpected(numCells,trialCount);
       bf->setOptimalTestSolver(TBF<>::CHOLESKY);
       bf->localStiffnessMatrixAndRHS(stiffnessExpected, rhsExpected, bf->graphNorm(), ipBasisCache, rhsPtr, basisCache);
       
-      FieldContainer<double> stiffness(numCells,trialCount,trialCount), rhs(numCells,trialCount);
+      Intrepid::FieldContainer<double> stiffness(numCells,trialCount,trialCount), rhs(numCells,trialCount);
       bf->setOptimalTestSolver(TBF<>::FACTORED_CHOLESKY);
       bf->localStiffnessMatrixAndRHS(stiffness, rhs, bf->graphNorm(), ipBasisCache, rhsPtr, basisCache);
       // resize to strip cell dim:
@@ -158,9 +157,9 @@ namespace
           [ -1.75 ]
      */
     
-    FieldContainer<double> ip(testCount,testCount);
-    FieldContainer<double> stiffnessEnriched(trialCount,testCount);
-    FieldContainer<double> rhsEnriched(testCount,1);
+    Intrepid::FieldContainer<double> ip(testCount,testCount);
+    Intrepid::FieldContainer<double> stiffnessEnriched(trialCount,testCount);
+    Intrepid::FieldContainer<double> rhsEnriched(testCount,1);
     
     // column-major order (Fortran's ordering, and LAPACK's):
     ip[0] = 1.0; ip[3] = 0.5; ip[6] = 0.0;
@@ -175,8 +174,8 @@ namespace
     rhsEnriched[1] = 2;
     rhsEnriched[2] = 3;
     
-    FieldContainer<double> stiffnessExpected(trialCount,trialCount);
-    FieldContainer<double> rhsExpected(trialCount,1);
+    Intrepid::FieldContainer<double> stiffnessExpected(trialCount,trialCount);
+    Intrepid::FieldContainer<double> rhsExpected(trialCount,1);
     
     stiffnessExpected[0] = 13.5;     stiffnessExpected[2] = 12.5;
     stiffnessExpected[1] = 12.5;     stiffnessExpected[3] = 13.5;
@@ -184,8 +183,8 @@ namespace
     rhsExpected[0] =  0.75;
     rhsExpected[1] = -1.75;
     
-    FieldContainer<double> stiffness(trialCount,trialCount);
-    FieldContainer<double> rhs(trialCount,1);
+    Intrepid::FieldContainer<double> stiffness(trialCount,trialCount);
+    Intrepid::FieldContainer<double> rhs(trialCount,1);
     
     TBF<double>::factoredCholeskySolve(ip, stiffnessEnriched, rhsEnriched, stiffness, rhs);
     
@@ -242,9 +241,9 @@ namespace
           [ 0 ]
      */
     
-    FieldContainer<double> ip(testCount,testCount);
-    FieldContainer<double> stiffnessEnriched(trialCount,testCount);
-    FieldContainer<double> rhsEnriched(testCount,1);
+    Intrepid::FieldContainer<double> ip(testCount,testCount);
+    Intrepid::FieldContainer<double> stiffnessEnriched(trialCount,testCount);
+    Intrepid::FieldContainer<double> rhsEnriched(testCount,1);
     
     // column-major order (Fortran's ordering, and LAPACK's):
     ip[0] = 1.0; ip[2] = 0.5;
@@ -256,8 +255,8 @@ namespace
     rhsEnriched[0] = 1;
     rhsEnriched[1] = 2;
     
-    FieldContainer<double> stiffnessExpected(trialCount,trialCount);
-    FieldContainer<double> rhsExpected(trialCount,1);
+    Intrepid::FieldContainer<double> stiffnessExpected(trialCount,trialCount);
+    Intrepid::FieldContainer<double> rhsExpected(trialCount,1);
     
     stiffnessExpected[0] = 28.0/3.0;     stiffnessExpected[2] = 20.0/3.0;
     stiffnessExpected[1] = 20.0/3.0;     stiffnessExpected[3] = 16.0/3.0;
@@ -265,8 +264,8 @@ namespace
     rhsExpected[0] = 2.0;
     rhsExpected[1] = 0.0;
     
-    FieldContainer<double> stiffness(trialCount,trialCount);
-    FieldContainer<double> rhs(trialCount,1);
+    Intrepid::FieldContainer<double> stiffness(trialCount,trialCount);
+    Intrepid::FieldContainer<double> rhs(trialCount,1);
     
     TBF<double>::factoredCholeskySolve(ip, stiffnessEnriched, rhsEnriched, stiffness, rhs);
     
@@ -323,9 +322,9 @@ namespace
           [ 1 ]
      */
     
-    FieldContainer<double> ip(testCount,testCount);
-    FieldContainer<double> stiffnessEnriched(trialCount,testCount);
-    FieldContainer<double> rhsEnriched(testCount,1);
+    Intrepid::FieldContainer<double> ip(testCount,testCount);
+    Intrepid::FieldContainer<double> stiffnessEnriched(trialCount,testCount);
+    Intrepid::FieldContainer<double> rhsEnriched(testCount,1);
     
     // column-major order (Fortran's ordering, and LAPACK's):
     ip[0] = 2.0; ip[2] = 0.0;
@@ -337,8 +336,8 @@ namespace
     rhsEnriched[0] = 1;
     rhsEnriched[1] = 2;
     
-    FieldContainer<double> stiffnessExpected(trialCount,trialCount);
-    FieldContainer<double> rhsExpected(trialCount,1);
+    Intrepid::FieldContainer<double> stiffnessExpected(trialCount,trialCount);
+    Intrepid::FieldContainer<double> rhsExpected(trialCount,1);
     
     stiffnessExpected[0] = 4.75;     stiffnessExpected[2] = 3.00;
     stiffnessExpected[1] = 3.00;     stiffnessExpected[3] = 2.00;
@@ -346,8 +345,8 @@ namespace
     rhsExpected[0] = 2;
     rhsExpected[1] = 1;
     
-    FieldContainer<double> stiffness(trialCount,trialCount);
-    FieldContainer<double> rhs(trialCount,1);
+    Intrepid::FieldContainer<double> stiffness(trialCount,trialCount);
+    Intrepid::FieldContainer<double> rhs(trialCount,1);
     
     TBF<double>::factoredCholeskySolve(ip, stiffnessEnriched, rhsEnriched, stiffness, rhs);
     

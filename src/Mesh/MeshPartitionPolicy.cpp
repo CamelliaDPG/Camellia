@@ -12,7 +12,6 @@
 #include "MPIWrapper.h"
 #include "ZoltanMeshPartitionPolicy.h"
 
-using namespace Intrepid;
 using namespace Camellia;
 using namespace std;
 

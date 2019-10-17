@@ -7,7 +7,6 @@
 #include "BasisCache.h"
 
 using namespace Camellia;
-using namespace Intrepid;
 using namespace std;
 
 MinFunction::MinFunction(TFunctionPtr<double> f1, TFunctionPtr<double> f2) : TFunction<double>(f1->rank())

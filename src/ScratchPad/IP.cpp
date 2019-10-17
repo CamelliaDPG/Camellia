@@ -11,7 +11,6 @@
 #include "BasisCache.h"
 #include "CellTopology.h"
 
-using namespace Intrepid;
 using namespace Camellia;
 
 template <typename Scalar>
@@ -87,8 +86,8 @@ void TIP<Scalar>::addBoundaryTerm( VarPtr v )
 }
 
 template <typename Scalar>
-void TIP<Scalar>::applyInnerProductData(FieldContainer<Scalar> &testValues1,
-                                        FieldContainer<Scalar> &testValues2,
+void TIP<Scalar>::applyInnerProductData(Intrepid::FieldContainer<Scalar> &testValues1,
+                                        Intrepid::FieldContainer<Scalar> &testValues2,
                                         int testID1, int testID2, int operatorIndex,
                                         Teuchos::RCP<BasisCache> basisCache)
 {
@@ -96,18 +95,18 @@ void TIP<Scalar>::applyInnerProductData(FieldContainer<Scalar> &testValues1,
 }
 
 template <typename Scalar>
-void TIP<Scalar>::applyInnerProductData(FieldContainer<Scalar> &testValues1,
-                                        FieldContainer<Scalar> &testValues2,
+void TIP<Scalar>::applyInnerProductData(Intrepid::FieldContainer<Scalar> &testValues1,
+                                        Intrepid::FieldContainer<Scalar> &testValues2,
                                         int testID1, int testID2, int operatorIndex,
-                                        const FieldContainer<double>& physicalPoints)
+                                        const Intrepid::FieldContainer<double>& physicalPoints)
 {
   TEUCHOS_TEST_FOR_EXCEPTION(true, std::invalid_argument, "You must override some version of applyInnerProductData!");
 }
 
 template <typename Scalar>
-void TIP<Scalar>::computeInnerProductMatrix(FieldContainer<Scalar> &innerProduct,
+void TIP<Scalar>::computeInnerProductMatrix(Intrepid::FieldContainer<Scalar> &innerProduct,
     Teuchos::RCP<DofOrdering> dofOrdering, shards::CellTopology &cellTopo,
-    FieldContainer<double>& physicalCellNodes)
+    Intrepid::FieldContainer<double>& physicalCellNodes)
 {
   if (_isLegacySubclass)
   {
@@ -121,14 +120,14 @@ void TIP<Scalar>::computeInnerProductMatrix(FieldContainer<Scalar> &innerProduct
 }
 
 template <typename Scalar>
-void TIP<Scalar>::computeInnerProductMatrix(FieldContainer<Scalar> &innerProduct,
+void TIP<Scalar>::computeInnerProductMatrix(Intrepid::FieldContainer<Scalar> &innerProduct,
     Teuchos::RCP<DofOrdering> dofOrdering,
     Teuchos::RCP<BasisCache> basisCache)
 {
   if (_isLegacySubclass)
   {
     // much of this code is the same as what's in the volume integration in computeStiffness...
-    FieldContainer<double> physicalCubaturePoints = basisCache->getPhysicalCubaturePoints();
+    Intrepid::FieldContainer<double> physicalCubaturePoints = basisCache->getPhysicalCubaturePoints();
 
     unsigned numCells = physicalCubaturePoints.dimension(0);
 
@@ -164,8 +163,8 @@ void TIP<Scalar>::computeInnerProductMatrix(FieldContainer<Scalar> &innerProduct
         {
           Camellia::EOperator op1 = *(op1It);
           Camellia::EOperator op2 = *(op2It);
-          FieldContainer<Scalar> test1Values; // these will be resized inside applyOperator..
-          FieldContainer<Scalar> test2Values; // derivative values
+          Intrepid::FieldContainer<Scalar> test1Values; // these will be resized inside applyOperator..
+          Intrepid::FieldContainer<Scalar> test2Values; // derivative values
 
           test1Basis = dofOrdering->getBasis(testID1);
           test2Basis = dofOrdering->getBasis(testID2);
@@ -173,22 +172,22 @@ void TIP<Scalar>::computeInnerProductMatrix(FieldContainer<Scalar> &innerProduct
           int numDofs1 = test1Basis->getCardinality();
           int numDofs2 = test2Basis->getCardinality();
 
-          FieldContainer<Scalar> miniMatrix( numCells, numDofs1, numDofs2 );
+          Intrepid::FieldContainer<Scalar> miniMatrix( numCells, numDofs1, numDofs2 );
 
-          Teuchos::RCP< const FieldContainer<Scalar> > test1ValuesTransformedWeighted, test2ValuesTransformed;
+          Teuchos::RCP< const Intrepid::FieldContainer<Scalar> > test1ValuesTransformedWeighted, test2ValuesTransformed;
 
           test1ValuesTransformedWeighted = basisCache->getTransformedWeightedValues(test1Basis,op1);
           test2ValuesTransformed = basisCache->getTransformedValues(test2Basis,op2);
 
-          FieldContainer<Scalar> innerProductDataAppliedToTest2 = *test2ValuesTransformed; // copy first
-          FieldContainer<Scalar> innerProductDataAppliedToTest1 = *test1ValuesTransformedWeighted; // copy first
+          Intrepid::FieldContainer<Scalar> innerProductDataAppliedToTest2 = *test2ValuesTransformed; // copy first
+          Intrepid::FieldContainer<Scalar> innerProductDataAppliedToTest1 = *test1ValuesTransformedWeighted; // copy first
 
           //cout << "rank of test2ValuesTransformed: " << test2ValuesTransformed->rank() << endl;
           applyInnerProductData(innerProductDataAppliedToTest1, innerProductDataAppliedToTest2,
                                 testID1, testID2, operatorIndex, basisCache);
 
           Intrepid::FunctionSpaceTools::integrate<Scalar>(miniMatrix,innerProductDataAppliedToTest1,
-              innerProductDataAppliedToTest2,COMP_BLAS);
+                                                          innerProductDataAppliedToTest2,Intrepid::COMP_BLAS);
 
           int test1DofOffset = dofOrdering->getDofIndex(testID1,0);
           int test2DofOffset = dofOrdering->getDofIndex(testID2,0);
@@ -215,7 +214,7 @@ void TIP<Scalar>::computeInnerProductMatrix(FieldContainer<Scalar> &innerProduct
   else     // _isLegacySubclass is false
   {
     // innerProduct FC is sized as (C,F,F)
-    const FieldContainer<double>* physicalCubaturePoints = &basisCache->getPhysicalCubaturePoints();
+    const Intrepid::FieldContainer<double>* physicalCubaturePoints = &basisCache->getPhysicalCubaturePoints();
 
     unsigned numCells = physicalCubaturePoints->dimension(0);
     unsigned numDofs = dofOrdering->totalDofs();
@@ -271,7 +270,7 @@ void TIP<Scalar>::computeInnerProductMatrix(FieldContainer<Scalar> &innerProduct
          ztIt != _zeroMeanTerms.end(); ztIt++)
     {
       TLinearTermPtr<Scalar> zt = *ztIt;
-      FieldContainer<Scalar> avgVector(numCells, numDofs);
+      Intrepid::FieldContainer<Scalar> avgVector(numCells, numDofs);
       // Integrate against 1
       zt->integrate(avgVector, dofOrdering, basisCache);
 
@@ -291,7 +290,7 @@ void TIP<Scalar>::computeInnerProductMatrix(FieldContainer<Scalar> &innerProduct
   }
   if (_homogeneousBCs.size() > 0)
   {
-    const FieldContainer<double>* physicalCubaturePoints = &basisCache->getPhysicalCubaturePoints();
+    const Intrepid::FieldContainer<double>* physicalCubaturePoints = &basisCache->getPhysicalCubaturePoints();
     
     unsigned numCells = physicalCubaturePoints->dimension(0);
     
@@ -321,7 +320,7 @@ double TIP<Scalar>::computeMaxConditionNumber(DofOrderingPtr testSpace, BasisCac
 {
   int testDofs = testSpace->totalDofs();
   int numCells = basisCache->cellIDs().size();
-  FieldContainer<Scalar> innerProduct(numCells,testDofs,testDofs);
+  Intrepid::FieldContainer<Scalar> innerProduct(numCells,testDofs,testDofs);
   this->computeInnerProductMatrix(innerProduct, testSpace, basisCache);
   double maxConditionNumber = -1;
   Teuchos::Array<int> cellIP_dim;
@@ -329,7 +328,7 @@ double TIP<Scalar>::computeMaxConditionNumber(DofOrderingPtr testSpace, BasisCac
   cellIP_dim.push_back(testDofs);
   for (int cellIndex=0; cellIndex<numCells; cellIndex++)
   {
-    FieldContainer<Scalar> cellIP = FieldContainer<Scalar>(cellIP_dim,&innerProduct(cellIndex,0,0) );
+    Intrepid::FieldContainer<Scalar> cellIP = Intrepid::FieldContainer<Scalar>(cellIP_dim,&innerProduct(cellIndex,0,0) );
     double conditionNumber = SerialDenseMatrixUtility::estimate2NormConditionNumber(cellIP);
     maxConditionNumber = std::max(maxConditionNumber,conditionNumber);
   }
@@ -338,13 +337,13 @@ double TIP<Scalar>::computeMaxConditionNumber(DofOrderingPtr testSpace, BasisCac
 
 // compute TIP vector when var==fxn
 template <typename Scalar>
-void TIP<Scalar>::computeInnerProductVector(FieldContainer<Scalar> &ipVector,
+void TIP<Scalar>::computeInnerProductVector(Intrepid::FieldContainer<Scalar> &ipVector,
     VarPtr var, TFunctionPtr<Scalar> fxn,
     Teuchos::RCP<DofOrdering> dofOrdering,
     Teuchos::RCP<BasisCache> basisCache, bool sumInto)
 {
   // ipVector FC is sized as (C,F)
-  FieldContainer<double> physicalCubaturePoints = basisCache->getPhysicalCubaturePoints();
+  Intrepid::FieldContainer<double> physicalCubaturePoints = basisCache->getPhysicalCubaturePoints();
 
   if (!fxn.get())
   {

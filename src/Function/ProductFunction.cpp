@@ -8,7 +8,6 @@
 #include "ConstantScalarFunction.h"
 
 using namespace Camellia;
-using namespace Intrepid;
 
 template <typename Scalar>
 string ProductFunction<Scalar>::displayString()

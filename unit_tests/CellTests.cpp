@@ -19,7 +19,6 @@
 #include "MeshFactory.h"
 
 using namespace Camellia;
-using namespace Intrepid;
 
 namespace
 {

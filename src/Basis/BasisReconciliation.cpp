@@ -24,10 +24,9 @@
 #include "Intrepid_FunctionSpaceTools.hpp"
 #include "Intrepid_DefaultCubatureFactory.hpp"
 
-using namespace Intrepid;
 using namespace Camellia;
 
-void sizeFCForBasisValues(FieldContainer<double> &fc, BasisPtr basis, int numPoints, bool includeCellDimension = false, int numBasisFieldsToInclude = -1)
+void sizeFCForBasisValues(Intrepid::FieldContainer<double> &fc, BasisPtr basis, int numPoints, bool includeCellDimension = false, int numBasisFieldsToInclude = -1)
 {
   // values should have shape: (F,P[,D,D,...]) where the # of D's = rank of the basis's range
   Teuchos::Array<int> dim;
@@ -51,7 +50,7 @@ void sizeFCForBasisValues(FieldContainer<double> &fc, BasisPtr basis, int numPoi
   fc.resize(dim);
 }
 
-void sizeFCForTermTracedValues(FieldContainer<double> &fc, LinearTermPtr termTraced, BasisPtr basis, int numPoints, bool includeCellDimension = false, int numBasisFieldsToInclude = -1)
+void sizeFCForTermTracedValues(Intrepid::FieldContainer<double> &fc, LinearTermPtr termTraced, BasisPtr basis, int numPoints, bool includeCellDimension = false, int numBasisFieldsToInclude = -1)
 {
   // values should have shape: (F,P[,D,D,...]) where the # of D's = rank of the basis's range
   Teuchos::Array<int> dim;
@@ -75,7 +74,7 @@ void sizeFCForTermTracedValues(FieldContainer<double> &fc, LinearTermPtr termTra
   fc.resize(dim);
 }
 
-void filterFCValues(FieldContainer<double> &filteredFC, const FieldContainer<double> &fc, set<int> ordinals, int basisCardinality)
+void filterFCValues(Intrepid::FieldContainer<double> &filteredFC, const Intrepid::FieldContainer<double> &fc, set<int> ordinals, int basisCardinality)
 {
   // we use pointer arithmetic here, which doesn't allow Intrepid's safety checks, for two reasons:
   // 1. It's easier to manage in a way that's independent of the rank of the basis
@@ -98,8 +97,8 @@ void filterFCValues(FieldContainer<double> &filteredFC, const FieldContainer<dou
   }
 }
 
-unsigned vertexPermutation(shards::CellTopology &fineTopo, unsigned fineSideIndex, FieldContainer<double> &fineCellNodes,
-                           shards::CellTopology &coarseTopo, unsigned coarseSideIndex, FieldContainer<double> &coarseCellNodes)
+unsigned vertexPermutation(shards::CellTopology &fineTopo, unsigned fineSideIndex, Intrepid::FieldContainer<double> &fineCellNodes,
+                           shards::CellTopology &coarseTopo, unsigned coarseSideIndex, Intrepid::FieldContainer<double> &coarseCellNodes)
 {
   int d = fineTopo.getDimension();
   shards::CellTopology sideTopo = fineTopo.getBaseCellTopologyData(d-1, fineSideIndex);
@@ -245,11 +244,11 @@ SubBasisReconciliationWeights BasisReconciliation::composedSubBasisReconciliatio
   }
   else
   {
-    cWeights.weights = FieldContainer<double>(aWeightsFiltered.fineOrdinals.size(), bWeightsFiltered.coarseOrdinals.size());
+    cWeights.weights = Intrepid::FieldContainer<double>(aWeightsFiltered.fineOrdinals.size(), bWeightsFiltered.coarseOrdinals.size());
     if ((cWeights.weights.size() != 0) && (aWeightsFiltered.weights.size() != 0) && (bWeightsFiltered.weights.size() != 0))
     {
-      FieldContainer<double> aMatrix = aWeightsFiltered.weights;
-      FieldContainer<double> bMatrix = bWeightsFiltered.weights;
+      Intrepid::FieldContainer<double> aMatrix = aWeightsFiltered.weights;
+      Intrepid::FieldContainer<double> bMatrix = bWeightsFiltered.weights;
       SerialDenseWrapper::multiply(cWeights.weights, aWeightsFiltered.weights, bWeightsFiltered.weights);
     }
   }
@@ -349,19 +348,19 @@ SubBasisReconciliationWeights BasisReconciliation::computeConstrainedWeights(uns
 
   CellTopoPtr coarseTopo = coarserBasis->domainTopology();
 
-  FieldContainer<double> fineTopoRefNodes(fineTopo->getVertexCount(), fineTopo->getDimension());
+  Intrepid::FieldContainer<double> fineTopoRefNodes(fineTopo->getVertexCount(), fineTopo->getDimension());
   CamelliaCellTools::refCellNodesForTopology(fineTopoRefNodes, fineTopo);
-  FieldContainer<double> coarseTopoRefNodes(coarseTopo->getVertexCount(), coarseTopo->getDimension());
+  Intrepid::FieldContainer<double> coarseTopoRefNodes(coarseTopo->getVertexCount(), coarseTopo->getDimension());
   CamelliaCellTools::refCellNodesForTopology(coarseTopoRefNodes, coarseTopo);
 
-  FieldContainer<double> coarseVolumeCubaturePoints;
-  FieldContainer<double> fineVolumeCubaturePoints; // points at which the fine basis will be evaluated
-  FieldContainer<double> cubatureWeights;
+  Intrepid::FieldContainer<double> coarseVolumeCubaturePoints;
+  Intrepid::FieldContainer<double> fineVolumeCubaturePoints; // points at which the fine basis will be evaluated
+  Intrepid::FieldContainer<double> cubatureWeights;
 
   if (subcellDimension > 0)
   {
     RefinementBranch subcellRefinements = RefinementPattern::subcellRefinementBranch(refinements, subcellDimension, ancestralSubcellOrdinal);
-    FieldContainer<double> fineSubcellRefNodes;
+    Intrepid::FieldContainer<double> fineSubcellRefNodes;
     if (subcellRefinements.size() > 0)
     {
       fineSubcellRefNodes = RefinementPattern::descendantNodesRelativeToAncestorReferenceCell(subcellRefinements);
@@ -378,7 +377,7 @@ SubBasisReconciliationWeights BasisReconciliation::computeConstrainedWeights(uns
 //    BasisCachePtr fineSubcellCache = Teuchos::rcp( new BasisCache(fineSubcellTopo, cubDegree, false) );
     int numPoints = fineSubcellCache->getRefCellPoints().dimension(0);
     fineVolumeCubaturePoints.resize(numPoints,spaceDim);
-    FieldContainer<double> fineSubcellCubaturePoints = fineSubcellCache->getRefCellPoints();
+    Intrepid::FieldContainer<double> fineSubcellCubaturePoints = fineSubcellCache->getRefCellPoints();
     cubatureWeights = fineSubcellCache->getCubatureWeights();
     if (subcellDimension == spaceDim)
     {
@@ -391,7 +390,7 @@ SubBasisReconciliationWeights BasisReconciliation::computeConstrainedWeights(uns
     }
 
     // now, fineSubcellCache's physicalCubaturePoints are exactly the ones in the ancestral subcell
-    FieldContainer<double> ancestralSubcellCubaturePoints = fineSubcellCache->getPhysicalCubaturePoints();
+    Intrepid::FieldContainer<double> ancestralSubcellCubaturePoints = fineSubcellCache->getPhysicalCubaturePoints();
     ancestralSubcellCubaturePoints.resize(ancestralSubcellCubaturePoints.dimension(1), ancestralSubcellCubaturePoints.dimension(2)); // get rid of cellIndex dimension
 
     // now, we need first to map the ancestralSubcellCubaturePoints to the subcell as seen by the coarse neigbor, then to map those points into the coarse volume topology
@@ -400,7 +399,7 @@ SubBasisReconciliationWeights BasisReconciliation::computeConstrainedWeights(uns
     BasisCachePtr ancestralSubcellCache = Teuchos::rcp( new BasisCache(ancestralSubcellTopo, cubDegree, false) );
     ancestralSubcellCache->setRefCellPoints(ancestralSubcellCubaturePoints);
 
-    FieldContainer<double> coarseSubcellNodes(ancestralSubcellTopo->getNodeCount(), subcellDimension);
+    Intrepid::FieldContainer<double> coarseSubcellNodes(ancestralSubcellTopo->getNodeCount(), subcellDimension);
     // when you set physical cell nodes according to the coarse-to-fine permutation, then the reference-to-physical map
     // is fine-to-coarse (which is what we want).  Because the vertexNodePermutation is fine-to-coarse, we want its inverse:
     unsigned permutationInverse = CamelliaCellTools::permutationInverse(ancestralSubcellTopo, vertexNodePermutation);
@@ -408,7 +407,7 @@ SubBasisReconciliationWeights BasisReconciliation::computeConstrainedWeights(uns
     coarseSubcellNodes.resize(1,coarseSubcellNodes.dimension(0),coarseSubcellNodes.dimension(1));
 
     ancestralSubcellCache->setPhysicalCellNodes(coarseSubcellNodes, vector<GlobalIndexType>(), false);
-    FieldContainer<double> coarseSubcellCubaturePoints = ancestralSubcellCache->getPhysicalCubaturePoints();
+    Intrepid::FieldContainer<double> coarseSubcellCubaturePoints = ancestralSubcellCache->getPhysicalCubaturePoints();
     coarseSubcellCubaturePoints.resize(coarseSubcellCubaturePoints.dimension(1),coarseSubcellCubaturePoints.dimension(2));
 
     coarseVolumeCubaturePoints.resize(numPoints,spaceDim); // points at which the coarse basis will be evaluated
@@ -442,7 +441,7 @@ SubBasisReconciliationWeights BasisReconciliation::computeConstrainedWeights(uns
   BasisCachePtr fineVolumeCache;
   if (refinements.size() > 0)
   {
-    FieldContainer<double> fineVolumeNodes = RefinementPattern::descendantNodesRelativeToAncestorReferenceCell(refinements);
+    Intrepid::FieldContainer<double> fineVolumeNodes = RefinementPattern::descendantNodesRelativeToAncestorReferenceCell(refinements);
     fineVolumeNodes.resize(1, fineVolumeNodes.dimension(0), fineVolumeNodes.dimension(1));
     fineVolumeCache = BasisCache::basisCacheForCellTopology(fineTopo, cubDegree, fineVolumeNodes);
   }
@@ -461,11 +460,11 @@ SubBasisReconciliationWeights BasisReconciliation::computeConstrainedWeights(uns
   
   int numPoints = cubatureWeights.size();
 
-  Teuchos::RCP< const FieldContainer<double> > finerBasisValues = fineVolumeCache->getTransformedValues(finerBasis, OP_VALUE, false);
-  Teuchos::RCP< const FieldContainer<double> > finerBasisValuesWeighted = fineVolumeCache->getTransformedWeightedValues(finerBasis, OP_VALUE, false);
-  Teuchos::RCP< const FieldContainer<double> > coarserBasisValues = coarseVolumeCache->getTransformedValues(coarserBasis, OP_VALUE, false);
+  Teuchos::RCP< const Intrepid::FieldContainer<double> > finerBasisValues = fineVolumeCache->getTransformedValues(finerBasis, OP_VALUE, false);
+  Teuchos::RCP< const Intrepid::FieldContainer<double> > finerBasisValuesWeighted = fineVolumeCache->getTransformedWeightedValues(finerBasis, OP_VALUE, false);
+  Teuchos::RCP< const Intrepid::FieldContainer<double> > coarserBasisValues = coarseVolumeCache->getTransformedValues(coarserBasis, OP_VALUE, false);
 
-  FieldContainer<double> fineBasisValuesFiltered, fineBasisValuesFilteredWeighted, coarserBasisValuesFiltered;
+  Intrepid::FieldContainer<double> fineBasisValuesFiltered, fineBasisValuesFilteredWeighted, coarserBasisValuesFiltered;
   sizeFCForBasisValues(fineBasisValuesFiltered, finerBasis, numPoints, true, weights.fineOrdinals.size());
   sizeFCForBasisValues(fineBasisValuesFilteredWeighted, finerBasis, numPoints, true, weights.fineOrdinals.size());
   sizeFCForBasisValues(coarserBasisValuesFiltered, coarserBasis, numPoints, true, weights.coarseOrdinals.size());
@@ -481,11 +480,11 @@ SubBasisReconciliationWeights BasisReconciliation::computeConstrainedWeights(uns
 //  cout << "coarserBasisValues:\n" << *coarserBasisValues;
 //  cout << "coarserBasisValuesFiltered:\n" << coarserBasisValuesFiltered;
 
-  FieldContainer<double> lhsValues(1,weights.fineOrdinals.size(),weights.fineOrdinals.size());
-  FieldContainer<double> rhsValues(1,weights.fineOrdinals.size(),weights.coarseOrdinals.size());
+  Intrepid::FieldContainer<double> lhsValues(1,weights.fineOrdinals.size(),weights.fineOrdinals.size());
+  Intrepid::FieldContainer<double> rhsValues(1,weights.fineOrdinals.size(),weights.coarseOrdinals.size());
 
-  FunctionSpaceTools::integrate<double>(lhsValues,fineBasisValuesFiltered,fineBasisValuesFilteredWeighted,COMP_BLAS);
-  FunctionSpaceTools::integrate<double>(rhsValues,fineBasisValuesFilteredWeighted,coarserBasisValuesFiltered,COMP_BLAS);
+  Intrepid::FunctionSpaceTools::integrate<double>(lhsValues,fineBasisValuesFiltered,fineBasisValuesFilteredWeighted,Intrepid::COMP_BLAS);
+  Intrepid::FunctionSpaceTools::integrate<double>(rhsValues,fineBasisValuesFilteredWeighted,coarserBasisValuesFiltered,Intrepid::COMP_BLAS);
 
   lhsValues.resize(lhsValues.dimension(1),lhsValues.dimension(2));
   rhsValues.resize(rhsValues.dimension(1),rhsValues.dimension(2));
@@ -587,11 +586,11 @@ SubBasisReconciliationWeights BasisReconciliation::computeConstrainedWeights(uns
 
   int numPoints = fineDomainCache->getPhysicalCubaturePoints().dimension(1); // (C,P,D): 1 is the points dimension
 
-  Teuchos::RCP< const FieldContainer<double> > finerBasisValues = fineDomainCache->getTransformedValues(finerBasis, OP_VALUE, false);
-  Teuchos::RCP< const FieldContainer<double> > finerBasisValuesWeighted = fineDomainCache->getTransformedWeightedValues(finerBasis, OP_VALUE, false);
-  Teuchos::RCP< const FieldContainer<double> > coarserBasisValues = coarseDomainCache->getTransformedValues(coarserBasis, OP_VALUE, false);
+  Teuchos::RCP< const Intrepid::FieldContainer<double> > finerBasisValues = fineDomainCache->getTransformedValues(finerBasis, OP_VALUE, false);
+  Teuchos::RCP< const Intrepid::FieldContainer<double> > finerBasisValuesWeighted = fineDomainCache->getTransformedWeightedValues(finerBasis, OP_VALUE, false);
+  Teuchos::RCP< const Intrepid::FieldContainer<double> > coarserBasisValues = coarseDomainCache->getTransformedValues(coarserBasis, OP_VALUE, false);
 
-  FieldContainer<double> fineBasisValuesFiltered, fineBasisValuesFilteredWeighted, coarserBasisValuesFiltered;
+  Intrepid::FieldContainer<double> fineBasisValuesFiltered, fineBasisValuesFilteredWeighted, coarserBasisValuesFiltered;
   sizeFCForBasisValues(fineBasisValuesFiltered, finerBasis, numPoints, true, weights.fineOrdinals.size());
   sizeFCForBasisValues(fineBasisValuesFilteredWeighted, finerBasis, numPoints, true, weights.fineOrdinals.size());
   sizeFCForBasisValues(coarserBasisValuesFiltered, coarserBasis, numPoints, true, weights.coarseOrdinals.size());
@@ -600,11 +599,11 @@ SubBasisReconciliationWeights BasisReconciliation::computeConstrainedWeights(uns
   filterFCValues(fineBasisValuesFilteredWeighted, *(finerBasisValuesWeighted.get()), weights.fineOrdinals, finerBasis->getCardinality());
   filterFCValues(coarserBasisValuesFiltered, *(coarserBasisValues.get()), weights.coarseOrdinals, coarserBasis->getCardinality());
 
-  FieldContainer<double> lhsValues(1,weights.fineOrdinals.size(),weights.fineOrdinals.size());
-  FieldContainer<double> rhsValues(1,weights.fineOrdinals.size(),weights.coarseOrdinals.size());
+  Intrepid::FieldContainer<double> lhsValues(1,weights.fineOrdinals.size(),weights.fineOrdinals.size());
+  Intrepid::FieldContainer<double> rhsValues(1,weights.fineOrdinals.size(),weights.coarseOrdinals.size());
 
-  FunctionSpaceTools::integrate<double>(lhsValues,fineBasisValuesFiltered,fineBasisValuesFilteredWeighted,COMP_BLAS);
-  FunctionSpaceTools::integrate<double>(rhsValues,fineBasisValuesFilteredWeighted,coarserBasisValuesFiltered,COMP_BLAS);
+  Intrepid::FunctionSpaceTools::integrate<double>(lhsValues,fineBasisValuesFiltered,fineBasisValuesFilteredWeighted,Intrepid::COMP_BLAS);
+  Intrepid::FunctionSpaceTools::integrate<double>(rhsValues,fineBasisValuesFilteredWeighted,coarserBasisValuesFiltered,Intrepid::COMP_BLAS);
 
   lhsValues.resize(lhsValues.dimension(1),lhsValues.dimension(2));
   rhsValues.resize(rhsValues.dimension(1),rhsValues.dimension(2));
@@ -671,7 +670,7 @@ SubBasisReconciliationWeights BasisReconciliation::computeConstrainedWeightsForT
 
   dofOrderPtr->addEntry(fieldID,coarserBasis, coarserBasis->rangeRank());
 
-  FieldContainer<double> coarserBasisValues;
+  Intrepid::FieldContainer<double> coarserBasisValues;
   if (termTraced->rank() == 0)
   {
     int oneCell = 1;
@@ -687,9 +686,9 @@ SubBasisReconciliationWeights BasisReconciliation::computeConstrainedWeightsForT
   // - Make BasisCache::fakeSideCache always (or by default) set up cellSideParities that are 1.0
   int oneCell = 1;
   int numSides = fineDomainCache->cellTopology()->getSideCount();
-  FieldContainer<double> cellSideParities(oneCell,numSides);
+  Intrepid::FieldContainer<double> cellSideParities(oneCell,numSides);
   cellSideParities.initialize(1.0);
-  FieldContainer<double> fineDomainSideNormalsSpaceTime;
+  Intrepid::FieldContainer<double> fineDomainSideNormalsSpaceTime;
   if (fineDomainCache->cellTopology()->getTensorialDegree() > 0)
     fineDomainSideNormalsSpaceTime = fineDomainCache->getSideNormalsSpaceTime();
   BasisCachePtr fakeSideCache = BasisCache::fakeSideCache(fineDomainCache->getSideIndex(), coarseDomainCache,
@@ -708,10 +707,10 @@ SubBasisReconciliationWeights BasisReconciliation::computeConstrainedWeightsForT
     TEUCHOS_TEST_FOR_EXCEPTION(true, std::invalid_argument, "termTraced reconciliation does not yet support rank > 0 terms...");
   }
 
-  Teuchos::RCP< const FieldContainer<double> > finerBasisValues = fineDomainCache->getTransformedValues(finerBasis, OP_VALUE, false);
-  Teuchos::RCP< const FieldContainer<double> > finerBasisValuesWeighted = fineDomainCache->getTransformedWeightedValues(finerBasis, OP_VALUE, false);
+  Teuchos::RCP< const Intrepid::FieldContainer<double> > finerBasisValues = fineDomainCache->getTransformedValues(finerBasis, OP_VALUE, false);
+  Teuchos::RCP< const Intrepid::FieldContainer<double> > finerBasisValuesWeighted = fineDomainCache->getTransformedWeightedValues(finerBasis, OP_VALUE, false);
 
-  FieldContainer<double> fineBasisValuesFiltered, fineBasisValuesFilteredWeighted, coarserBasisValuesFiltered;
+  Intrepid::FieldContainer<double> fineBasisValuesFiltered, fineBasisValuesFilteredWeighted, coarserBasisValuesFiltered;
   sizeFCForBasisValues(fineBasisValuesFiltered, finerBasis, numPoints, true, weights.fineOrdinals.size());
   sizeFCForBasisValues(fineBasisValuesFilteredWeighted, finerBasis, numPoints, true, weights.fineOrdinals.size());
   sizeFCForTermTracedValues(coarserBasisValuesFiltered, termTraced, coarserBasis, numPoints, true, weights.coarseOrdinals.size());
@@ -720,11 +719,11 @@ SubBasisReconciliationWeights BasisReconciliation::computeConstrainedWeightsForT
   filterFCValues(fineBasisValuesFilteredWeighted, *(finerBasisValuesWeighted.get()), weights.fineOrdinals, finerBasis->getCardinality());
   filterFCValues(coarserBasisValuesFiltered, coarserBasisValues, weights.coarseOrdinals, coarserBasis->getCardinality());
 
-  FieldContainer<double> lhsValues(1,weights.fineOrdinals.size(),weights.fineOrdinals.size());
-  FieldContainer<double> rhsValues(1,weights.fineOrdinals.size(),weights.coarseOrdinals.size());
+  Intrepid::FieldContainer<double> lhsValues(1,weights.fineOrdinals.size(),weights.fineOrdinals.size());
+  Intrepid::FieldContainer<double> rhsValues(1,weights.fineOrdinals.size(),weights.coarseOrdinals.size());
 
-  FunctionSpaceTools::integrate<double>(lhsValues,fineBasisValuesFiltered,fineBasisValuesFilteredWeighted,COMP_BLAS);
-  FunctionSpaceTools::integrate<double>(rhsValues,fineBasisValuesFilteredWeighted,coarserBasisValuesFiltered,COMP_BLAS);
+  Intrepid::FunctionSpaceTools::integrate<double>(lhsValues,fineBasisValuesFiltered,fineBasisValuesFilteredWeighted,Intrepid::COMP_BLAS);
+  Intrepid::FunctionSpaceTools::integrate<double>(rhsValues,fineBasisValuesFilteredWeighted,coarserBasisValuesFiltered,Intrepid::COMP_BLAS);
 
   lhsValues.resize(lhsValues.dimension(1),lhsValues.dimension(2));
   rhsValues.resize(rhsValues.dimension(1),rhsValues.dimension(2));
@@ -909,13 +908,13 @@ bool BasisReconciliation::equalWeights(const SubBasisReconciliationWeights &aWei
   return true;
 }
 
-FieldContainer<double> BasisReconciliation::filterBasisValues(const FieldContainer<double> &basisValues, set<int> &filter)
+Intrepid::FieldContainer<double> BasisReconciliation::filterBasisValues(const Intrepid::FieldContainer<double> &basisValues, set<int> &filter)
 {
   Teuchos::Array<int> dim;
   basisValues.dimensions(dim);
   int basisCardinality = dim[0];
   dim[0] = filter.size();
-  FieldContainer<double> filteredValues(dim);
+  Intrepid::FieldContainer<double> filteredValues(dim);
 
   if (filter.size() == 0)   // empty container
   {
@@ -1220,7 +1219,7 @@ unsigned BasisReconciliation::minimumSubcellDimension(BasisPtr basis)
 
   if (fs == FUNCTION_SPACE_UNKNOWN)
   {
-    typedef Camellia::TensorBasis<double, FieldContainer<double> > TensorBasis;
+    typedef Camellia::TensorBasis<double, Intrepid::FieldContainer<double> > TensorBasis;
     TensorBasis* tensorBasis = dynamic_cast<TensorBasis*>(basis.get());
 
     if (tensorBasis != NULL)
@@ -1276,8 +1275,8 @@ unsigned BasisReconciliation::minimumSubcellDimension(BasisPtr basis)
   return minSubcellDimension;
 }
 
-void BasisReconciliation::mapFineSubcellPointsToCoarseDomain(FieldContainer<double> &coarseDomainPoints,
-    const FieldContainer<double> &fineSubcellPoints,
+void BasisReconciliation::mapFineSubcellPointsToCoarseDomain(Intrepid::FieldContainer<double> &coarseDomainPoints,
+    const Intrepid::FieldContainer<double> &fineSubcellPoints,
     unsigned fineSubcellDimension,
     unsigned fineSubcellOrdinalInFineDomain,
     unsigned fineDomainDim,
@@ -1314,7 +1313,7 @@ void BasisReconciliation::mapFineSubcellPointsToCoarseDomain(FieldContainer<doub
   unsigned permutationFromFineDomainToCell = CamelliaCellTools::permutationFromSubsubcellToParent(fineCellTopo, fineDomainDim, fineDomainOrdinalInRefinementLeaf,
       fineSubcellDimension, fineSubcellOrdinalInFineDomain);
 
-  FieldContainer<double> fineSubcellPermutedPoints;
+  Intrepid::FieldContainer<double> fineSubcellPermutedPoints;
   if (permutationFromFineDomainToCell == 0)
   {
     fineSubcellPermutedPoints = fineSubcellPoints; // we could avoid this copy if we made fineSubcellPermutedPoints an RCP, say.  Not sure it matters much, though.
@@ -1362,7 +1361,7 @@ void BasisReconciliation::mapFineSubcellPointsToCoarseDomain(FieldContainer<doub
   genRefBranch[0].previousTierSubcellOrdinal = 0;
   genRefBranch[0].previousTierSubcellPermutation = 0;
 
-  FieldContainer<double> mappedFineSubcellPoints;
+  Intrepid::FieldContainer<double> mappedFineSubcellPoints;
   RefinementPattern::mapRefCellPointsToAncestor(genRefBranch, fineSubcellPermutedPoints, mappedFineSubcellPoints);
 
   if (coarseSubcellDimension > fineSubcellAncestralDimension) // (we handle the (fineSubcellAncestralDimension == 0) case above)
@@ -1384,7 +1383,7 @@ void BasisReconciliation::mapFineSubcellPointsToCoarseDomain(FieldContainer<doub
     if (fineSubcellAncestralDimension > 0)
     {
       // copy
-      FieldContainer<double> ancestralSubcellPoints = mappedFineSubcellPoints;
+      Intrepid::FieldContainer<double> ancestralSubcellPoints = mappedFineSubcellPoints;
       // resize mappedFineSubcellPoints for the coarseSubcellDimension:
       mappedFineSubcellPoints.resize(mappedFineSubcellPoints.dimension(0), coarseSubcellDimension);
       // map
@@ -1394,7 +1393,7 @@ void BasisReconciliation::mapFineSubcellPointsToCoarseDomain(FieldContainer<doub
     else
     {
       CellTopoPtr topo = coarseSubcellTopo;
-      FieldContainer<double> topoRefNodes(topo->getVertexCount(),topo->getDimension());
+      Intrepid::FieldContainer<double> topoRefNodes(topo->getVertexCount(),topo->getDimension());
       CamelliaCellTools::refCellNodesForTopology(topoRefNodes, topo);
       mappedFineSubcellPoints.resize(1, topo->getDimension());
       for (int d=0; d < topo->getDimension(); d++)
@@ -1404,7 +1403,7 @@ void BasisReconciliation::mapFineSubcellPointsToCoarseDomain(FieldContainer<doub
     }
   }
 
-  FieldContainer<double> coarseSubcellPoints;
+  Intrepid::FieldContainer<double> coarseSubcellPoints;
 
   if (coarseSubcellDimension == 0)
   {
@@ -1427,7 +1426,7 @@ void BasisReconciliation::mapFineSubcellPointsToCoarseDomain(FieldContainer<doub
     if (permutationFromCoarseDomainToCell != 0)
     {
       unsigned permutationFromCellToCoarseDomain = CamelliaCellTools::permutationInverse(coarseSubcellTopo, permutationFromCoarseDomainToCell);
-      FieldContainer<double> coarseSubcellPointsCopy = coarseSubcellPoints;
+      Intrepid::FieldContainer<double> coarseSubcellPointsCopy = coarseSubcellPoints;
       CamelliaCellTools::permutedReferenceCellPoints(coarseSubcellTopo, permutationFromCellToCoarseDomain, coarseSubcellPointsCopy, coarseSubcellPoints);
     }
     // TODO: combine the two permutations above.  I think this should be represented by:
@@ -1474,14 +1473,14 @@ void BasisReconciliation::setupFineAndCoarseBasisCachesForReconciliation(BasisCa
   CellTopoPtr coarseTopo = coarserBasis->domainTopology();
   CellTopoPtr coarseSubcellTopo = coarseTopo->getSubcell(coarseSubcellDimension, coarseSubcellOrdinalInCoarseDomain);
 
-  FieldContainer<double> fineTopoRefNodes(fineTopo->getVertexCount(), fineTopo->getDimension());
+  Intrepid::FieldContainer<double> fineTopoRefNodes(fineTopo->getVertexCount(), fineTopo->getDimension());
   CamelliaCellTools::refCellNodesForTopology(fineTopoRefNodes, fineTopo);
-  FieldContainer<double> coarseTopoRefNodes(coarseTopo->getVertexCount(), coarseTopo->getDimension());
+  Intrepid::FieldContainer<double> coarseTopoRefNodes(coarseTopo->getVertexCount(), coarseTopo->getDimension());
   CamelliaCellTools::refCellNodesForTopology(coarseTopoRefNodes, coarseTopo);
 
-  FieldContainer<double> coarseDomainPoints; // these are as seen from the coarse cell's neighbor -- we use the coarseDomainPermutation together with the physicalCellNodes on the coarse domain to convert...
-  FieldContainer<double> fineDomainPoints; // points at which the fine basis will be evaluated
-  FieldContainer<double> cubatureWeightsFineSubcell; // allows us to integrate over the fine subcell even when domain is higher-dimensioned
+  Intrepid::FieldContainer<double> coarseDomainPoints; // these are as seen from the coarse cell's neighbor -- we use the coarseDomainPermutation together with the physicalCellNodes on the coarse domain to convert...
+  Intrepid::FieldContainer<double> fineDomainPoints; // points at which the fine basis will be evaluated
+  Intrepid::FieldContainer<double> cubatureWeightsFineSubcell; // allows us to integrate over the fine subcell even when domain is higher-dimensioned
 
   coarseDomainCache = Teuchos::rcp( new BasisCache(coarseTopo, cubDegree, false));
 
@@ -1490,10 +1489,10 @@ void BasisReconciliation::setupFineAndCoarseBasisCachesForReconciliation(BasisCa
     TEUCHOS_TEST_FOR_EXCEPTION(true, std::invalid_argument, "cellRefinementBranch must have at least one refinement!");
   }
 
-  FieldContainer<double> leafCellNodes = RefinementPattern::descendantNodesRelativeToAncestorReferenceCell(fineCellRefinementBranch);
+  Intrepid::FieldContainer<double> leafCellNodes = RefinementPattern::descendantNodesRelativeToAncestorReferenceCell(fineCellRefinementBranch);
   CellTopoPtr leafCellTopo = RefinementPattern::descendantTopology(fineCellRefinementBranch);
 
-  FieldContainer<double> subcellCubaturePoints;
+  Intrepid::FieldContainer<double> subcellCubaturePoints;
   int numPoints;
 
   if (fineSubcellDimension > 0)
@@ -1576,7 +1575,7 @@ SubBasisReconciliationWeights BasisReconciliation::sumWeights(const SubBasisReco
   weights.coarseOrdinals.insert(aWeights.coarseOrdinals.begin(), aWeights.coarseOrdinals.end());
   weights.coarseOrdinals.insert(bWeights.coarseOrdinals.begin(), bWeights.coarseOrdinals.end());
 
-  // size the weights FieldContainer appropriately:
+  // size the weights Intrepid::FieldContainer appropriately:
   weights.weights.resize(weights.fineOrdinals.size(), weights.coarseOrdinals.size());
 
   map<int, int> aFineOrdinal, bFineOrdinal;  // lookups: key is the basis ordinal; value is the ordinal in the aWeights/bWeights container
@@ -1682,7 +1681,7 @@ SubBasisReconciliationWeights BasisReconciliation::weightsForCoarseSubcell(const
   filteredWeights.coarseOrdinals = coarseDofsToInclude;
   filteredWeights.fineOrdinals = weights.fineOrdinals;
 
-  filteredWeights.weights = FieldContainer<double>(weights.fineOrdinals.size(), columnOrdinalsToInclude.size());
+  filteredWeights.weights = Intrepid::FieldContainer<double>(weights.fineOrdinals.size(), columnOrdinalsToInclude.size());
 
   for (int i=0; i<filteredWeights.weights.dimension(0); i++)
   {

@@ -18,7 +18,6 @@
 #include "PoissonFormulation.h"
 
 using namespace Camellia;
-using namespace Intrepid;
 
 namespace
 {
@@ -27,7 +26,7 @@ class CellIDFunction : public Function
 public:
   CellIDFunction() : Function(0) {}
 
-  virtual void values(FieldContainer<double> &values, BasisCachePtr basisCache)
+  virtual void values(Intrepid::FieldContainer<double> &values, BasisCachePtr basisCache)
   {
     vector<GlobalIndexType> cellIDs = basisCache->cellIDs();
 
@@ -99,8 +98,8 @@ TEUCHOS_UNIT_TEST( MeshTransferFunction, CellMap)
   double yCenterTopRowOfBottomMesh = y_interface - elemHeight / 2.0;
   double yCenterBottomRowOfTopMesh = y_interface + elemHeight / 2.0;
   double xCenter = elemWidth / 2.0;
-  FieldContainer<double> midPointsBottomMesh(horizontalCells, spaceDim);
-  FieldContainer<double> midPointsTopMesh(horizontalCells, spaceDim);
+  Intrepid::FieldContainer<double> midPointsBottomMesh(horizontalCells, spaceDim);
+  Intrepid::FieldContainer<double> midPointsTopMesh(horizontalCells, spaceDim);
   for (int i=0; i<horizontalCells; i++)
   {
     midPointsBottomMesh(i,0) = xCenter;
@@ -283,8 +282,8 @@ TEUCHOS_UNIT_TEST( MeshTransferFunction, CellMapUnderRefinement)
   double yCenterTopRowOfBottomMesh = y_interface - elemHeight / 2.0;
   double yCenterBottomRowOfTopMesh = y_interface + elemHeight / 2.0;
   double xCenter = elemWidth / 2.0;
-  FieldContainer<double> midPointsBottomMesh(horizontalCells, spaceDim);
-  FieldContainer<double> midPointsTopMesh(horizontalCells, spaceDim);
+  Intrepid::FieldContainer<double> midPointsBottomMesh(horizontalCells, spaceDim);
+  Intrepid::FieldContainer<double> midPointsTopMesh(horizontalCells, spaceDim);
   for (int i=0; i<horizontalCells; i++)
   {
     midPointsBottomMesh(i,0) = xCenter;
@@ -490,8 +489,8 @@ TEUCHOS_UNIT_TEST( MeshTransferFunction, FunctionValuesPiecewiseConstant)
   double yCenterTopRowOfBottomMesh = y_interface - elemHeight / 2.0;
   double yCenterBottomRowOfTopMesh = y_interface + elemHeight / 2.0;
   double xCenter = elemWidth / 2.0;
-  FieldContainer<double> midPointsBottomMesh(horizontalCells, spaceDim);
-  FieldContainer<double> midPointsTopMesh(horizontalCells, spaceDim);
+  Intrepid::FieldContainer<double> midPointsBottomMesh(horizontalCells, spaceDim);
+  Intrepid::FieldContainer<double> midPointsTopMesh(horizontalCells, spaceDim);
   for (int i=0; i<horizontalCells; i++)
   {
     midPointsBottomMesh(i,0) = xCenter;
@@ -535,7 +534,7 @@ TEUCHOS_UNIT_TEST( MeshTransferFunction, FunctionValuesPiecewiseConstant)
 
         int numPoints = myCellSideBasisCache->getRefCellPoints().dimension(0);
         int oneCell = 1;
-        FieldContainer<double> actualValues(oneCell,numPoints);
+        Intrepid::FieldContainer<double> actualValues(oneCell,numPoints);
 
         transferFunction.values(actualValues, myCellSideBasisCache);
 
@@ -638,8 +637,8 @@ TEUCHOS_UNIT_TEST( MeshTransferFunction, FunctionValuesWithoutHangingNodes)
   double yCenterTopRowOfBottomMesh = y_interface - elemHeight / 2.0;
   double yCenterBottomRowOfTopMesh = y_interface + elemHeight / 2.0;
   double xCenter = elemWidth / 2.0;
-  FieldContainer<double> midPointsBottomMesh(horizontalCells, spaceDim);
-  FieldContainer<double> midPointsTopMesh(horizontalCells, spaceDim);
+  Intrepid::FieldContainer<double> midPointsBottomMesh(horizontalCells, spaceDim);
+  Intrepid::FieldContainer<double> midPointsTopMesh(horizontalCells, spaceDim);
   for (int i=0; i<horizontalCells; i++)
   {
     midPointsBottomMesh(i,0) = xCenter;
@@ -676,8 +675,8 @@ TEUCHOS_UNIT_TEST( MeshTransferFunction, FunctionValuesWithoutHangingNodes)
 
         int numPoints = myCellSideBasisCache->getRefCellPoints().dimension(0);
         int oneCell = 1;
-        FieldContainer<double> expectedValues(oneCell,numPoints);
-        FieldContainer<double> actualValues(oneCell,numPoints);
+        Intrepid::FieldContainer<double> expectedValues(oneCell,numPoints);
+        Intrepid::FieldContainer<double> actualValues(oneCell,numPoints);
 
         myFunction->values(expectedValues, myCellSideBasisCache);
         transferFunction.values(actualValues, myCellSideBasisCache);
@@ -782,8 +781,8 @@ TEUCHOS_UNIT_TEST( MeshTransferFunction, FunctionValuesWithHangingNodes)
   double yCenterTopRowOfBottomMesh = y_interface - elemHeight / 2.0;
   double yCenterBottomRowOfTopMesh = y_interface + elemHeight / 2.0;
   double xCenter = elemWidth / 2.0;
-  FieldContainer<double> midPointsBottomMesh(horizontalCells, spaceDim);
-  FieldContainer<double> midPointsTopMesh(horizontalCells, spaceDim);
+  Intrepid::FieldContainer<double> midPointsBottomMesh(horizontalCells, spaceDim);
+  Intrepid::FieldContainer<double> midPointsTopMesh(horizontalCells, spaceDim);
   for (int i=0; i<horizontalCells; i++)
   {
     midPointsBottomMesh(i,0) = xCenter;
@@ -825,8 +824,8 @@ TEUCHOS_UNIT_TEST( MeshTransferFunction, FunctionValuesWithHangingNodes)
 
         int numPoints = myCellSideBasisCache->getRefCellPoints().dimension(0);
         int oneCell = 1;
-        FieldContainer<double> expectedValues(oneCell,numPoints);
-        FieldContainer<double> actualValues(oneCell,numPoints);
+        Intrepid::FieldContainer<double> expectedValues(oneCell,numPoints);
+        Intrepid::FieldContainer<double> actualValues(oneCell,numPoints);
 
         myFunction->values(expectedValues, myCellSideBasisCache);
         transferFunction.values(actualValues, myCellSideBasisCache);

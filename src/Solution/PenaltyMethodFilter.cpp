@@ -18,14 +18,13 @@
 
 #include "CamelliaCellTools.h"
 
-using namespace Intrepid;
 using namespace Camellia;
 
 PenaltyMethodFilter::PenaltyMethodFilter(Teuchos::RCP<Constraints> constraints)
 {
   _constraints = constraints;
 }
-void PenaltyMethodFilter::filter(FieldContainer<double> &localStiffnessMatrix, FieldContainer<double> &localRHSVector,
+void PenaltyMethodFilter::filter(Intrepid::FieldContainer<double> &localStiffnessMatrix, Intrepid::FieldContainer<double> &localRHSVector,
                                  BasisCachePtr basisCache, Teuchos::RCP<Mesh> mesh, Teuchos::RCP<BC> bc)
 {
 
@@ -49,41 +48,41 @@ void PenaltyMethodFilter::filter(FieldContainer<double> &localStiffnessMatrix, F
   {
 
     // GET INTEGRATION INFO - get cubature points and side normals to send to Constraints (Cell,Point, spaceDim)
-    FieldContainer<double> sideCubPoints = basisCache->getPhysicalCubaturePointsForSide(sideIndex);
-    FieldContainer<double> sideNormals = basisCache->getSideUnitNormals(sideIndex);
+    Intrepid::FieldContainer<double> sideCubPoints = basisCache->getPhysicalCubaturePointsForSide(sideIndex);
+    Intrepid::FieldContainer<double> sideNormals = basisCache->getSideUnitNormals(sideIndex);
 
     int numPts = sideCubPoints.dimension(1);
 
     // GET CONSTRAINT INFO
-    vector<map<int, FieldContainer<double> > > constrCoeffsVector;
-    vector<FieldContainer<double> > constraintValuesVector;
-    vector<FieldContainer<bool> > imposeHereVector;
+    vector<map<int, Intrepid::FieldContainer<double> > > constrCoeffsVector;
+    vector<Intrepid::FieldContainer<double> > constraintValuesVector;
+    vector<Intrepid::FieldContainer<bool> > imposeHereVector;
     _constraints->getConstraints(sideCubPoints,sideNormals,constrCoeffsVector,constraintValuesVector);
 
     //loop thru constraints
     int i = 0;
-    for (vector<map<int,FieldContainer<double> > >::iterator constrIt = constrCoeffsVector.begin();
+    for (vector<map<int,Intrepid::FieldContainer<double> > >::iterator constrIt = constrCoeffsVector.begin();
          constrIt !=constrCoeffsVector.end(); constrIt++)
     {
-      map<int,FieldContainer<double> > constrCoeffs = *constrIt;
-      FieldContainer<double> constrValues = constraintValuesVector[i];
+      map<int,Intrepid::FieldContainer<double> > constrCoeffs = *constrIt;
+      Intrepid::FieldContainer<double> constrValues = constraintValuesVector[i];
       i++;
 
       double penaltyParameter = 1e7; // (single_precision)^(-1) - perhaps have this computed relative to terms in the matrix?
 
-      for (map<int,FieldContainer<double> >::iterator constrTestIDIt = constrCoeffs.begin();
+      for (map<int,Intrepid::FieldContainer<double> >::iterator constrTestIDIt = constrCoeffs.begin();
            constrTestIDIt !=constrCoeffs.end(); constrTestIDIt++)
       {
-        pair<int,FieldContainer<double> > constrTestPair = *constrTestIDIt;
+        pair<int,Intrepid::FieldContainer<double> > constrTestPair = *constrTestIDIt;
         int testTrialID = constrTestPair.first;
 
         if (! trialOrderPtr->hasBasisEntry(testTrialID, sideIndex)) continue;
         // get basis to integrate for testing fxns
         BasisPtr testTrialBasis = trialOrderPtr->getBasis(testTrialID,sideIndex);
-        FieldContainer<double> testTrialValuesTransformedWeighted = *(basisCache->getTransformedWeightedValues(testTrialBasis,trialOperator,
+        Intrepid::FieldContainer<double> testTrialValuesTransformedWeighted = *(basisCache->getTransformedWeightedValues(testTrialBasis,trialOperator,
             sideIndex,false));
         // make copies b/c we can't fudge with return values from basisCache (const) - dimensions (Cell,Field - basis ordinal, Point)
-        FieldContainer<double> testTrialValuesWeightedCopy = testTrialValuesTransformedWeighted;
+        Intrepid::FieldContainer<double> testTrialValuesWeightedCopy = testTrialValuesTransformedWeighted;
 
         int numDofs2 = trialOrderPtr->getBasisCardinality(testTrialID,sideIndex);
         for (int cellIndex=0; cellIndex<numCells; cellIndex++)
@@ -98,10 +97,10 @@ void PenaltyMethodFilter::filter(FieldContainer<double> &localStiffnessMatrix, F
         }
 
         // loop thru pairs of trialIDs and constr coeffs
-        for (map<int,FieldContainer<double> >::iterator constrIDIt = constrCoeffs.begin();
+        for (map<int,Intrepid::FieldContainer<double> >::iterator constrIDIt = constrCoeffs.begin();
              constrIDIt !=constrCoeffs.end(); constrIDIt++)
         {
-          pair<int,FieldContainer<double> > constrPair = *constrIDIt;
+          pair<int,Intrepid::FieldContainer<double> > constrPair = *constrIDIt;
           int trialID = constrPair.first;
 
           if (! trialOrderPtr->hasBasisEntry(testTrialID, sideIndex)) continue;
@@ -109,9 +108,9 @@ void PenaltyMethodFilter::filter(FieldContainer<double> &localStiffnessMatrix, F
           // get basis to integrate
           BasisPtr trialBasis1 = trialOrderPtr->getBasis(trialID,sideIndex);
           // for trial: the value lives on the side, so we don't use the volume coords either:
-          FieldContainer<double> trialValuesTransformed = *(basisCache->getTransformedValues(trialBasis1,trialOperator,sideIndex,false));
+          Intrepid::FieldContainer<double> trialValuesTransformed = *(basisCache->getTransformedValues(trialBasis1,trialOperator,sideIndex,false));
           // make copies b/c we can't fudge with return values from basisCache (const) - dimensions (Cell,Field - basis ordinal, Point)
-          FieldContainer<double> trialValuesCopy = trialValuesTransformed;
+          Intrepid::FieldContainer<double> trialValuesCopy = trialValuesTransformed;
 
           // transform trial values
           int numDofs1 = trialOrderPtr->getBasisCardinality(trialID,sideIndex);
@@ -130,8 +129,8 @@ void PenaltyMethodFilter::filter(FieldContainer<double> &localStiffnessMatrix, F
 
 
           // integrate the transformed values, add them to the relevant trial/testTrialID dof combos
-          FieldContainer<double> unweightedPenaltyMatrix(numCells,numDofs1,numDofs2);
-          FunctionSpaceTools::integrate<double>(unweightedPenaltyMatrix,trialValuesCopy,testTrialValuesWeightedCopy,COMP_BLAS);
+          Intrepid::FieldContainer<double> unweightedPenaltyMatrix(numCells,numDofs1,numDofs2);
+          Intrepid::FunctionSpaceTools::integrate<double>(unweightedPenaltyMatrix,trialValuesCopy,testTrialValuesWeightedCopy,Intrepid::COMP_BLAS);
 
           for (int cellIndex=0; cellIndex<numCells; cellIndex++)
           {
@@ -151,8 +150,8 @@ void PenaltyMethodFilter::filter(FieldContainer<double> &localStiffnessMatrix, F
         /////////////////////////////////////////////////////////////////////////////////////
 
         // set penalty load
-        FieldContainer<double> unweightedRHSVector(numCells,numDofs2);
-        FunctionSpaceTools::integrate<double>(unweightedRHSVector,constrValues,testTrialValuesWeightedCopy,COMP_BLAS);
+        Intrepid::FieldContainer<double> unweightedRHSVector(numCells,numDofs2);
+        Intrepid::FunctionSpaceTools::integrate<double>(unweightedRHSVector,constrValues,testTrialValuesWeightedCopy,Intrepid::COMP_BLAS);
         for (int cellIndex=0; cellIndex<numCells; cellIndex++)
         {
           for (int testDofIndex=0; testDofIndex<numDofs2; testDofIndex++)

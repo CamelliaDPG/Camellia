@@ -19,7 +19,6 @@
 
 #include <algorithm>
 
-using namespace Intrepid;
 using namespace Camellia;
 using namespace std;
 
@@ -383,7 +382,7 @@ CellPtr MeshTopology::addCell(CellTopoPtrLegacy cellTopo, const vector< vector<d
   return addCell(_nextCellIndex, cellTopo, cellVertices);
 }
 
-CellPtr MeshTopology::addCell(IndexType cellIndex, CellTopoPtr cellTopo, const FieldContainer<double> &cellVertices)
+CellPtr MeshTopology::addCell(IndexType cellIndex, CellTopoPtr cellTopo, const Intrepid::FieldContainer<double> &cellVertices)
 {
   TEUCHOS_TEST_FOR_EXCEPTION(cellTopo->getDimension() != _spaceDim, std::invalid_argument, "cellTopo dimension must match mesh topology dimension");
   TEUCHOS_TEST_FOR_EXCEPTION(cellVertices.dimension(0) != cellTopo->getVertexCount(), std::invalid_argument, "cellVertices must have shape (P,D)");
@@ -734,8 +733,8 @@ void MeshTopology::addEdgeCurve(pair<IndexType,IndexType> edge, ParametricCurveP
   vector<double> v1 = getVertex(edge.second);
 
   int spaceDim = 2; // v0.size();
-  FieldContainer<double> curve0(spaceDim);
-  FieldContainer<double> curve1(spaceDim);
+  Intrepid::FieldContainer<double> curve0(spaceDim);
+  Intrepid::FieldContainer<double> curve1(spaceDim);
   curve->value(0, curve0(0), curve0(1));
   curve->value(1, curve1(0), curve1(1));
   double maxDiff = 0;
@@ -1052,13 +1051,13 @@ bool MeshTopology::cellContainsPoint(GlobalIndexType cellID, const vector<double
   // note that this design, with a single point being passed in, will be quite inefficient
   // if there are many points.  TODO: revise to allow multiple points (returning vector<bool>, maybe)
   int numCells = 1, numPoints = 1;
-  FieldContainer<double> physicalPoints(numCells,numPoints,_spaceDim);
+  Intrepid::FieldContainer<double> physicalPoints(numCells,numPoints,_spaceDim);
   for (int d=0; d<_spaceDim; d++)
   {
     physicalPoints(0,0,d) = point[d];
   }
   //  cout << "cell " << elem->cellID() << ": (" << x << "," << y << ") --> ";
-  FieldContainer<double> refPoints(numCells,numPoints,_spaceDim);
+  Intrepid::FieldContainer<double> refPoints(numCells,numPoints,_spaceDim);
   ConstMeshTopologyPtr thisPtr = Teuchos::rcp(this,false);
   CamelliaCellTools::mapToReferenceFrame(refPoints, physicalPoints, thisPtr, cellID, cubatureDegree);
 
@@ -1073,7 +1072,7 @@ IndexType MeshTopology::cellCount() const
   return _cellCount;
 }
 
-vector<IndexType> MeshTopology::cellIDsForPoints(const FieldContainer<double> &physicalPoints) const
+vector<IndexType> MeshTopology::cellIDsForPoints(const Intrepid::FieldContainer<double> &physicalPoints) const
 {
   // returns a vector of an active element per point, or -1 if there is no locally known element including that point
   vector<GlobalIndexType> cellIDs;
@@ -1137,7 +1136,7 @@ vector<IndexType> MeshTopology::cellIDsForPoints(const FieldContainer<double> &p
         {
           cout << "parent matches, but none of its children do... will return nearest cell centroid\n";
           int numVertices = cell->vertices().size();
-          FieldContainer<double> vertices(numVertices,spaceDim);
+          Intrepid::FieldContainer<double> vertices(numVertices,spaceDim);
           vector<IndexType> vertexIndices = cell->vertices();
 
           //vertices.resize(numVertices,dimension);
@@ -1156,7 +1155,7 @@ vector<IndexType> MeshTopology::cellIDsForPoints(const FieldContainer<double> &p
           {
             CellPtr child = cell->children()[childIndex];
             int numVertices = child->vertices().size();
-            FieldContainer<double> vertices(numVertices,spaceDim);
+            Intrepid::FieldContainer<double> vertices(numVertices,spaceDim);
             vector<IndexType> vertexIndices = child->vertices();
 
             //vertices.resize(numVertices,dimension);
@@ -2221,7 +2220,7 @@ IndexType MeshTopology::getVertexIndexAdding(const vector<double> &vertex, doubl
 }
 
 // key: index in vertices; value: index in _vertices
-vector<IndexType> MeshTopology::getVertexIndices(const FieldContainer<double> &vertices)
+vector<IndexType> MeshTopology::getVertexIndices(const Intrepid::FieldContainer<double> &vertices)
 {
   double tol = 1e-14; // tolerance for vertex equality
 
@@ -2240,7 +2239,7 @@ vector<IndexType> MeshTopology::getVertexIndices(const FieldContainer<double> &v
 }
 
 // key: index in vertices; value: index in _vertices
-map<unsigned, IndexType> MeshTopology::getVertexIndicesMap(const FieldContainer<double> &vertices)
+map<unsigned, IndexType> MeshTopology::getVertexIndicesMap(const Intrepid::FieldContainer<double> &vertices)
 {
   map<unsigned, IndexType> vertexMap;
   vector<IndexType> vertexVector = getVertexIndices(vertices);
@@ -2887,11 +2886,11 @@ void MeshTopology::printAllEntities() const
   }
 }
 
-FieldContainer<double> MeshTopology::physicalCellNodesForCell(IndexType cellIndex, bool includeCellDimension) const
+Intrepid::FieldContainer<double> MeshTopology::physicalCellNodesForCell(IndexType cellIndex, bool includeCellDimension) const
 {
   CellPtr cell = getCell(cellIndex);
   unsigned vertexCount = cell->vertices().size();
-  FieldContainer<double> nodes(vertexCount, _spaceDim);
+  Intrepid::FieldContainer<double> nodes(vertexCount, _spaceDim);
   for (unsigned vertexOrdinal=0; vertexOrdinal<vertexCount; vertexOrdinal++)
   {
     unsigned vertexIndex = cell->vertices()[vertexOrdinal];
@@ -3359,7 +3358,7 @@ void MeshTopology::refineCell(IndexType cellIndex, RefinementPatternPtr refPatte
   }
   
   CellPtr cell = _cells[cellIndex];
-  FieldContainer<double> cellNodes(cell->vertices().size(), _spaceDim);
+  Intrepid::FieldContainer<double> cellNodes(cell->vertices().size(), _spaceDim);
 
   for (int vertexIndex=0; vertexIndex < cellNodes.dimension(0); vertexIndex++)
   {
@@ -3369,7 +3368,7 @@ void MeshTopology::refineCell(IndexType cellIndex, RefinementPatternPtr refPatte
     }
   }
 
-  FieldContainer<double> vertices = refPattern->verticesForRefinement(cellNodes);
+  Intrepid::FieldContainer<double> vertices = refPattern->verticesForRefinement(cellNodes);
   if (_transformationFunction.get())
   {
     bool changedVertices = _transformationFunction->mapRefCellPointsUsingExactGeometry(vertices, refPattern->verticesOnReferenceCell(), cellIndex);
@@ -3481,7 +3480,7 @@ void MeshTopology::refineCellEntities(CellPtr cell, RefinementPatternPtr refPatt
 {
   // ensures that the appropriate child entities exist, and parental relationships are recorded in _parentEntities
 
-  FieldContainer<double> cellNodes(1,cell->vertices().size(), _spaceDim);
+  Intrepid::FieldContainer<double> cellNodes(1,cell->vertices().size(), _spaceDim);
 
   for (int vertexIndex=0; vertexIndex < cellNodes.dimension(1); vertexIndex++)
   {
@@ -3509,7 +3508,7 @@ void MeshTopology::refineCellEntities(CellPtr cell, RefinementPatternPtr refPatt
     for (unsigned subcord = 0; subcord < subcellCount; subcord++)
     {
       RefinementPatternPtr subcellRefPattern = refPattern->patternForSubcell(d, subcord);
-      FieldContainer<double> refinedNodes = subcellRefPattern->refinedNodes(); // NOTE: refinedNodes implicitly assumes that all child topos are the same
+      Intrepid::FieldContainer<double> refinedNodes = subcellRefPattern->refinedNodes(); // NOTE: refinedNodes implicitly assumes that all child topos are the same
       unsigned childCount = refinedNodes.dimension(0);
       if (childCount==1) continue; // we already have the appropriate entities and parent relationships defined...
 
@@ -3548,7 +3547,7 @@ void MeshTopology::refineCellEntities(CellPtr cell, RefinementPatternPtr refPatt
         for (unsigned childIndex=0; childIndex<childCount; childIndex++)
         {
           unsigned nodeCount = refinedNodes.dimension(1);
-          FieldContainer<double> nodesOnSubcell(nodeCount,d);
+          Intrepid::FieldContainer<double> nodesOnSubcell(nodeCount,d);
           for (int nodeIndex=0; nodeIndex<nodeCount; nodeIndex++)
           {
             for (int dimIndex=0; dimIndex<d; dimIndex++)
@@ -3557,10 +3556,10 @@ void MeshTopology::refineCellEntities(CellPtr cell, RefinementPatternPtr refPatt
             }
           }
           //          cout << "nodesOnSubcell:\n" << nodesOnSubcell;
-          FieldContainer<double> nodesOnRefCell(nodeCount,_spaceDim);
+          Intrepid::FieldContainer<double> nodesOnRefCell(nodeCount,_spaceDim);
           CamelliaCellTools::mapToReferenceSubcell(nodesOnRefCell, nodesOnSubcell, d, subcord, cellTopo);
           //          cout << "nodesOnRefCell:\n" << nodesOnRefCell;
-          FieldContainer<double> physicalNodes(1,nodeCount,_spaceDim);
+          Intrepid::FieldContainer<double> physicalNodes(1,nodeCount,_spaceDim);
           // map to physical space:
           CamelliaCellTools::mapToPhysicalFrame(physicalNodes, nodesOnRefCell, cellNodes, cellTopo);
           //          cout << "physicalNodes:\n" << physicalNodes;
@@ -3623,7 +3622,7 @@ void MeshTopology::refineCellEntities(CellPtr cell, RefinementPatternPtr refPatt
 
 void MeshTopology::determineGeneralizedParentsForRefinement(CellPtr cell, RefinementPatternPtr refPattern)
 {
-  FieldContainer<double> cellNodes(1,cell->vertices().size(), _spaceDim);
+  Intrepid::FieldContainer<double> cellNodes(1,cell->vertices().size(), _spaceDim);
 
   for (int vertexIndex=0; vertexIndex < cellNodes.dimension(1); vertexIndex++)
   {
@@ -3651,7 +3650,7 @@ void MeshTopology::determineGeneralizedParentsForRefinement(CellPtr cell, Refine
     for (unsigned subcord = 0; subcord < subcellCount; subcord++)
     {
       RefinementPatternPtr subcellRefPattern = refPattern->patternForSubcell(d, subcord);
-      FieldContainer<double> refinedNodes = subcellRefPattern->refinedNodes(); // refinedNodes implicitly assumes that all child topos are the same
+      Intrepid::FieldContainer<double> refinedNodes = subcellRefPattern->refinedNodes(); // refinedNodes implicitly assumes that all child topos are the same
       unsigned childCount = refinedNodes.dimension(0);
       if (childCount==1) continue; // we already have the appropriate entities and parent relationships defined...
 
@@ -3927,7 +3926,7 @@ void MeshTopology::unrefineCell(IndexType cellIndex, RefinementPatternPtr refPat
   }
 }
 
-void MeshTopology::verticesForCell(FieldContainer<double>& vertices, GlobalIndexType cellID) const
+void MeshTopology::verticesForCell(Intrepid::FieldContainer<double>& vertices, GlobalIndexType cellID) const
 {
   CellPtr cell = getCell(cellID);
   vector<IndexType> vertexIndices = cell->vertices();

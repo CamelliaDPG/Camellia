@@ -22,7 +22,6 @@
 #include "Teuchos_UnitTestHarness.hpp"
 
 using namespace Camellia;
-using namespace Intrepid;
 
 namespace
 {
@@ -32,7 +31,7 @@ void testProjectFunctionOnTensorTopoSides(CellTopoPtr spaceTopo, int H1Order, Ca
   int spaceDim = spaceTopo->getDimension();
   MeshTopologyPtr spatialMeshTopo = Teuchos::rcp( new MeshTopology(spaceDim) );
 
-  FieldContainer<double> cellNodes(spaceTopo->getNodeCount(),spaceTopo->getDimension());
+  Intrepid::FieldContainer<double> cellNodes(spaceTopo->getNodeCount(),spaceTopo->getDimension());
   CamelliaCellTools::refCellNodesForTopology(cellNodes, spaceTopo);
   vector<vector<double>> cellVerticesVector;
   CamelliaCellTools::pointsVectorFromFC(cellVerticesVector, cellNodes);
@@ -47,7 +46,7 @@ void testProjectFunctionOnTensorTopoSides(CellTopoPtr spaceTopo, int H1Order, Ca
   bool createSideCache = true;
 
   IndexType cellID = 0;
-  FieldContainer<double> physicalCellNodes = spaceTimeMeshTopo->physicalCellNodesForCell(cellID);
+  Intrepid::FieldContainer<double> physicalCellNodes = spaceTimeMeshTopo->physicalCellNodesForCell(cellID);
   physicalCellNodes.resize(1,spaceTimeTopo->getNodeCount(),spaceTimeTopo->getDimension());
   BasisCachePtr basisCache = BasisCache::basisCacheForCellTopology(spaceTimeTopo, cubatureDegree,
                              physicalCellNodes, createSideCache);

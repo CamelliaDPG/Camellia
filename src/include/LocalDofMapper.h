@@ -90,7 +90,7 @@ public:
   Intrepid::FieldContainer<double> fitLocalCoefficients(const Intrepid::FieldContainer<double> &localCoefficients); // solves normal equations (if the localCoefficients are in the range of the global-to-local operator, then the returned coefficients will be the preimage of localCoefficients under that operator)
   Intrepid::FieldContainer<double> mapGlobalCoefficients(const Intrepid::FieldContainer<double> &globalCoefficients);
   
-  // ! this version of mapGlobalCoefficients should be more efficient when the number of global coefficients in the map is small (i.e. there would be lots of zeroes in the FieldContainer version)
+  // ! this version of mapGlobalCoefficients should be more efficient when the number of global coefficients in the map is small (i.e. there would be lots of zeroes in the Intrepid::FieldContainer version)
   void mapGlobalCoefficients(const std::map<GlobalIndexType,double> &globalCoefficients, Intrepid::FieldContainer<double> &localCoefficients);
   
   const vector<GlobalIndexType> &fittableGlobalIndices();

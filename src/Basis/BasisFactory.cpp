@@ -42,7 +42,6 @@
 
 #include "TensorBasis.h"
 
-using namespace Intrepid;
 using namespace Camellia;
 
 BasisFactory::BasisFactory()
@@ -195,21 +194,21 @@ BasisPtr BasisFactory::getBasis( int polyOrder, unsigned cellTopoKey, Camellia::
       {
       case Camellia::FUNCTION_SPACE_HGRAD:
       case Camellia::FUNCTION_SPACE_HGRAD_DISC:
-        basis = Teuchos::rcp( new IntrepidBasisWrapper<>( Teuchos::rcp( new Basis_HGRAD_HEX_Cn_FEM<double, Intrepid::FieldContainer<double> >(polyOrder,POINTTYPE_SPECTRAL)),
+          basis = Teuchos::rcp( new IntrepidBasisWrapper<>( Teuchos::rcp( new Intrepid::Basis_HGRAD_HEX_Cn_FEM<double, Intrepid::FieldContainer<double> >(polyOrder,Intrepid::POINTTYPE_SPECTRAL)),
                               spaceDim, scalarRank, fs) );
         break;
       case Camellia::FUNCTION_SPACE_HDIV:
       case Camellia::FUNCTION_SPACE_HDIV_DISC:
-        basis = Teuchos::rcp( new IntrepidBasisWrapper<>( Teuchos::rcp( new Basis_HDIV_HEX_In_FEM<double, Intrepid::FieldContainer<double> >(polyOrder,POINTTYPE_SPECTRAL)),
+          basis = Teuchos::rcp( new IntrepidBasisWrapper<>( Teuchos::rcp( new Intrepid::Basis_HDIV_HEX_In_FEM<double, Intrepid::FieldContainer<double> >(polyOrder,Intrepid::POINTTYPE_SPECTRAL)),
                               spaceDim, vectorRank, fs) );
         break;
       case Camellia::FUNCTION_SPACE_HCURL:
       case Camellia::FUNCTION_SPACE_HCURL_DISC:
-        basis = Teuchos::rcp( new IntrepidBasisWrapper<>( Teuchos::rcp( new Basis_HCURL_HEX_In_FEM<double, Intrepid::FieldContainer<double> >(polyOrder,POINTTYPE_SPECTRAL)),
+          basis = Teuchos::rcp( new IntrepidBasisWrapper<>( Teuchos::rcp( new Intrepid::Basis_HCURL_HEX_In_FEM<double, Intrepid::FieldContainer<double> >(polyOrder,Intrepid::POINTTYPE_SPECTRAL)),
                               spaceDim, vectorRank, fs) );
         break;
       case Camellia::FUNCTION_SPACE_HVOL:
-        basis = Teuchos::rcp( new IntrepidBasisWrapper<>( Teuchos::rcp( new Basis_HGRAD_HEX_Cn_FEM<double, Intrepid::FieldContainer<double> >(polyOrder-1,POINTTYPE_SPECTRAL)),
+          basis = Teuchos::rcp( new IntrepidBasisWrapper<>( Teuchos::rcp( new Intrepid::Basis_HGRAD_HEX_Cn_FEM<double, Intrepid::FieldContainer<double> >(polyOrder-1,Intrepid::POINTTYPE_SPECTRAL)),
                               spaceDim, scalarRank, fs) );
         break;
       default:
@@ -221,21 +220,21 @@ BasisPtr BasisFactory::getBasis( int polyOrder, unsigned cellTopoKey, Camellia::
       {
       case Camellia::FUNCTION_SPACE_HGRAD:
       case Camellia::FUNCTION_SPACE_HGRAD_DISC:
-        basis = Teuchos::rcp( new IntrepidBasisWrapper<>( Teuchos::rcp( new Basis_HGRAD_TET_Cn_FEM<double, Intrepid::FieldContainer<double> >(polyOrder,POINTTYPE_WARPBLEND)),
+          basis = Teuchos::rcp( new IntrepidBasisWrapper<>( Teuchos::rcp( new Intrepid::Basis_HGRAD_TET_Cn_FEM<double, Intrepid::FieldContainer<double> >(polyOrder,Intrepid::POINTTYPE_WARPBLEND)),
                               spaceDim, scalarRank, fs) );
         break;
       case Camellia::FUNCTION_SPACE_HDIV:
       case Camellia::FUNCTION_SPACE_HDIV_DISC:
-        basis = Teuchos::rcp( new IntrepidBasisWrapper<>( Teuchos::rcp( new Basis_HDIV_TET_In_FEM<double, Intrepid::FieldContainer<double> >(polyOrder,POINTTYPE_WARPBLEND)),
+          basis = Teuchos::rcp( new IntrepidBasisWrapper<>( Teuchos::rcp( new Intrepid::Basis_HDIV_TET_In_FEM<double, Intrepid::FieldContainer<double> >(polyOrder,Intrepid::POINTTYPE_WARPBLEND)),
                               spaceDim, vectorRank, fs) );
         break;
       case Camellia::FUNCTION_SPACE_HCURL:
       case Camellia::FUNCTION_SPACE_HCURL_DISC:
-        basis = Teuchos::rcp( new IntrepidBasisWrapper<>( Teuchos::rcp( new Basis_HCURL_TET_In_FEM<double, Intrepid::FieldContainer<double> >(polyOrder,POINTTYPE_WARPBLEND)),
+          basis = Teuchos::rcp( new IntrepidBasisWrapper<>( Teuchos::rcp( new Intrepid::Basis_HCURL_TET_In_FEM<double, Intrepid::FieldContainer<double> >(polyOrder,Intrepid::POINTTYPE_WARPBLEND)),
                               spaceDim, vectorRank, fs) );
         break;
       case Camellia::FUNCTION_SPACE_HVOL:
-        basis = Teuchos::rcp( new IntrepidBasisWrapper<>( Teuchos::rcp( new Basis_HGRAD_TET_Cn_FEM<double, Intrepid::FieldContainer<double> >(polyOrder-1,POINTTYPE_WARPBLEND)),
+          basis = Teuchos::rcp( new IntrepidBasisWrapper<>( Teuchos::rcp( new Intrepid::Basis_HGRAD_TET_Cn_FEM<double, Intrepid::FieldContainer<double> >(polyOrder-1,Intrepid::POINTTYPE_WARPBLEND)),
                               spaceDim, scalarRank, fs) );
         break;
       default:
@@ -252,7 +251,7 @@ BasisPtr BasisFactory::getBasis( int polyOrder, unsigned cellTopoKey, Camellia::
         //} else {
         if (! _useLobattoForQuadHGRAD)
         {
-          basis = Teuchos::rcp( new IntrepidBasisWrapper<>( Teuchos::rcp( new Basis_HGRAD_QUAD_Cn_FEM<double, Intrepid::FieldContainer<double> >(polyOrder,POINTTYPE_SPECTRAL)),
+          basis = Teuchos::rcp( new IntrepidBasisWrapper<>( Teuchos::rcp( new Intrepid::Basis_HGRAD_QUAD_Cn_FEM<double, Intrepid::FieldContainer<double> >(polyOrder,Intrepid::POINTTYPE_SPECTRAL)),
                                 spaceDim, scalarRank, fs) );
         }
         else
@@ -266,7 +265,7 @@ BasisPtr BasisFactory::getBasis( int polyOrder, unsigned cellTopoKey, Camellia::
       case Camellia::FUNCTION_SPACE_HDIV_DISC:
         if (! _useLobattoForQuadHDIV )
         {
-          basis = Teuchos::rcp( new IntrepidBasisWrapper<>( Teuchos::rcp( new Basis_HDIV_QUAD_In_FEM<double, Intrepid::FieldContainer<double> >(polyOrder,POINTTYPE_SPECTRAL)),
+          basis = Teuchos::rcp( new IntrepidBasisWrapper<>( Teuchos::rcp( new Intrepid::Basis_HDIV_QUAD_In_FEM<double, Intrepid::FieldContainer<double> >(polyOrder,Intrepid::POINTTYPE_SPECTRAL)),
                                 spaceDim, vectorRank, fs)
                               );
         }
@@ -285,14 +284,14 @@ BasisPtr BasisFactory::getBasis( int polyOrder, unsigned cellTopoKey, Camellia::
       break;
       case Camellia::FUNCTION_SPACE_HCURL:
       case Camellia::FUNCTION_SPACE_HCURL_DISC:
-        basis = Teuchos::rcp( new IntrepidBasisWrapper<>( Teuchos::rcp( new Basis_HCURL_QUAD_In_FEM<double, Intrepid::FieldContainer<double> >(polyOrder,POINTTYPE_SPECTRAL)),
+          basis = Teuchos::rcp( new IntrepidBasisWrapper<>( Teuchos::rcp( new Intrepid::Basis_HCURL_QUAD_In_FEM<double, Intrepid::FieldContainer<double> >(polyOrder,Intrepid::POINTTYPE_SPECTRAL)),
                               spaceDim, vectorRank, fs)
                             );
         break;
       case(Camellia::FUNCTION_SPACE_HVOL):
           if (!_useLegendreForQuadHVOL)
           {
-            basis = Teuchos::rcp( new IntrepidBasisWrapper<>( Teuchos::rcp( new Intrepid::Basis_HGRAD_QUAD_Cn_FEM<double, Intrepid::FieldContainer<double> >(polyOrder-1,POINTTYPE_SPECTRAL)),
+            basis = Teuchos::rcp( new IntrepidBasisWrapper<>( Teuchos::rcp( new Intrepid::Basis_HGRAD_QUAD_Cn_FEM<double, Intrepid::FieldContainer<double> >(polyOrder-1,Intrepid::POINTTYPE_SPECTRAL)),
                               spaceDim, scalarRank, fs)
                             );
           }
@@ -303,7 +302,7 @@ BasisPtr BasisFactory::getBasis( int polyOrder, unsigned cellTopoKey, Camellia::
           }
         break;
       case(Camellia::FUNCTION_SPACE_REAL_SCALAR):
-        basis = Teuchos::rcp( new IntrepidBasisWrapper<>(Teuchos::rcp( new Basis_HVOL_QUAD_C0_FEM<double, Intrepid::FieldContainer<double> >()),
+          basis = Teuchos::rcp( new IntrepidBasisWrapper<>(Teuchos::rcp( new Intrepid::Basis_HVOL_QUAD_C0_FEM<double, Intrepid::FieldContainer<double> >()),
                               spaceDim, scalarRank, fs)
                             ) ;
         break;
@@ -322,19 +321,19 @@ BasisPtr BasisFactory::getBasis( int polyOrder, unsigned cellTopoKey, Camellia::
       case Camellia::FUNCTION_SPACE_HGRAD:
       case Camellia::FUNCTION_SPACE_HGRAD_DISC:
         TEUCHOS_TEST_FOR_EXCEPTION(polyOrder <= 0, std::invalid_argument, "Constant basis not supported by Intrepid::Basis_HGRAD_TRI_Cn_FEM");
-        basis = Teuchos::rcp( new IntrepidBasisWrapper<>(Teuchos::rcp( new Basis_HGRAD_TRI_Cn_FEM<double, Intrepid::FieldContainer<double> >(polyOrder,POINTTYPE_WARPBLEND)),
+          basis = Teuchos::rcp( new IntrepidBasisWrapper<>(Teuchos::rcp( new Intrepid::Basis_HGRAD_TRI_Cn_FEM<double, Intrepid::FieldContainer<double> >(polyOrder,Intrepid::POINTTYPE_WARPBLEND)),
                               spaceDim, scalarRank, fs)
                             ) ;
         break;
       case Camellia::FUNCTION_SPACE_HDIV:
       case Camellia::FUNCTION_SPACE_HDIV_DISC:
-        basis = Teuchos::rcp( new IntrepidBasisWrapper<>( Teuchos::rcp( new Basis_HDIV_TRI_In_FEM<double, Intrepid::FieldContainer<double> >(polyOrder,POINTTYPE_WARPBLEND)),
+          basis = Teuchos::rcp( new IntrepidBasisWrapper<>( Teuchos::rcp( new Intrepid::Basis_HDIV_TRI_In_FEM<double, Intrepid::FieldContainer<double> >(polyOrder,Intrepid::POINTTYPE_WARPBLEND)),
                               spaceDim, vectorRank, fs)
                             );
         break;
       case Camellia::FUNCTION_SPACE_HCURL:
       case Camellia::FUNCTION_SPACE_HCURL_DISC:
-        basis = Teuchos::rcp( new IntrepidBasisWrapper<>( Teuchos::rcp( new Basis_HCURL_TRI_In_FEM<double, Intrepid::FieldContainer<double> >(polyOrder,POINTTYPE_WARPBLEND)),
+          basis = Teuchos::rcp( new IntrepidBasisWrapper<>( Teuchos::rcp( new Intrepid::Basis_HCURL_TRI_In_FEM<double, Intrepid::FieldContainer<double> >(polyOrder,Intrepid::POINTTYPE_WARPBLEND)),
                               spaceDim, vectorRank, fs)
                             );
         break;
@@ -347,7 +346,7 @@ BasisPtr BasisFactory::getBasis( int polyOrder, unsigned cellTopoKey, Camellia::
           }
           else if (polyOrder >= 1)
           {
-            basis = Teuchos::rcp( new IntrepidBasisWrapper<>( Teuchos::rcp( new Intrepid::Basis_HGRAD_TRI_Cn_FEM<double, Intrepid::FieldContainer<double> >(polyOrder-1,POINTTYPE_WARPBLEND)),
+            basis = Teuchos::rcp( new IntrepidBasisWrapper<>( Teuchos::rcp( new Intrepid::Basis_HGRAD_TRI_Cn_FEM<double, Intrepid::FieldContainer<double> >(polyOrder-1,Intrepid::POINTTYPE_WARPBLEND)),
                                                              spaceDim, scalarRank, fs)
                                  );
           }
@@ -385,7 +384,7 @@ BasisPtr BasisFactory::getBasis( int polyOrder, unsigned cellTopoKey, Camellia::
         }
         else
         {
-          basis = Teuchos::rcp( new IntrepidBasisWrapper<>(Teuchos::rcp( new Intrepid::Basis_HGRAD_LINE_Cn_FEM<double, Intrepid::FieldContainer<double> >(basisPolyOrder,POINTTYPE_SPECTRAL)),
+          basis = Teuchos::rcp( new IntrepidBasisWrapper<>(Teuchos::rcp( new Intrepid::Basis_HGRAD_LINE_Cn_FEM<double, Intrepid::FieldContainer<double> >(basisPolyOrder,Intrepid::POINTTYPE_SPECTRAL)),
                                 spaceDim, scalarRank, fs)
                               );
         }
@@ -398,7 +397,7 @@ BasisPtr BasisFactory::getBasis( int polyOrder, unsigned cellTopoKey, Camellia::
         }
         else
         {
-          basis = Teuchos::rcp( new IntrepidBasisWrapper<>( Teuchos::rcp( new Intrepid::Basis_HGRAD_LINE_Cn_FEM<double, Intrepid::FieldContainer<double> >(polyOrder-1,POINTTYPE_SPECTRAL)),
+          basis = Teuchos::rcp( new IntrepidBasisWrapper<>( Teuchos::rcp( new Intrepid::Basis_HGRAD_LINE_Cn_FEM<double, Intrepid::FieldContainer<double> >(polyOrder-1,Intrepid::POINTTYPE_SPECTRAL)),
                                 spaceDim, scalarRank, fs)
                               );
         }
@@ -572,7 +571,7 @@ BasisPtr BasisFactory::getConformingBasis( int polyOrder, unsigned cellTopoKey, 
         //} else {
         if (! _useLobattoForQuadHGRAD)
         {
-          basis = Teuchos::rcp( new IntrepidBasisWrapper<>( Teuchos::rcp( new Basis_HGRAD_QUAD_Cn_FEM<double, Intrepid::FieldContainer<double> >(polyOrder,POINTTYPE_SPECTRAL)),
+          basis = Teuchos::rcp( new IntrepidBasisWrapper<>( Teuchos::rcp( new Intrepid::Basis_HGRAD_QUAD_Cn_FEM<double, Intrepid::FieldContainer<double> >(polyOrder,Intrepid::POINTTYPE_SPECTRAL)),
                                 spaceDim, scalarRank, fs) );
         }
         else
@@ -586,7 +585,7 @@ BasisPtr BasisFactory::getConformingBasis( int polyOrder, unsigned cellTopoKey, 
       case Camellia::FUNCTION_SPACE_HDIV_DISC:
         if (! _useLobattoForQuadHDIV)
         {
-          basis = Teuchos::rcp( new IntrepidBasisWrapper<>( Teuchos::rcp( new Basis_HDIV_QUAD_In_FEM<double, Intrepid::FieldContainer<double> >(polyOrder,POINTTYPE_SPECTRAL)),
+          basis = Teuchos::rcp( new IntrepidBasisWrapper<>( Teuchos::rcp( new Intrepid::Basis_HDIV_QUAD_In_FEM<double, Intrepid::FieldContainer<double> >(polyOrder,Intrepid::POINTTYPE_SPECTRAL)),
                                 spaceDim, vectorRank, fs)
                               );
         }
@@ -605,17 +604,17 @@ BasisPtr BasisFactory::getConformingBasis( int polyOrder, unsigned cellTopoKey, 
       break;
       case Camellia::FUNCTION_SPACE_HCURL:
       case Camellia::FUNCTION_SPACE_HCURL_DISC:
-        basis = Teuchos::rcp( new IntrepidBasisWrapper<>( Teuchos::rcp( new Basis_HCURL_QUAD_In_FEM<double, Intrepid::FieldContainer<double> >(polyOrder,POINTTYPE_SPECTRAL)),
+          basis = Teuchos::rcp( new IntrepidBasisWrapper<>( Teuchos::rcp( new Intrepid::Basis_HCURL_QUAD_In_FEM<double, Intrepid::FieldContainer<double> >(polyOrder,Intrepid::POINTTYPE_SPECTRAL)),
                               spaceDim, vectorRank, fs)
                             );
         break;
       case Camellia::FUNCTION_SPACE_HVOL:
-        basis = Teuchos::rcp( new IntrepidBasisWrapper<>( Teuchos::rcp( new Intrepid::Basis_HGRAD_QUAD_Cn_FEM<double, Intrepid::FieldContainer<double> >(polyOrder-1,POINTTYPE_SPECTRAL)),
+          basis = Teuchos::rcp( new IntrepidBasisWrapper<>( Teuchos::rcp( new Intrepid::Basis_HGRAD_QUAD_Cn_FEM<double, Intrepid::FieldContainer<double> >(polyOrder-1,Intrepid::POINTTYPE_SPECTRAL)),
                               spaceDim, scalarRank, fs)
                             );
         break;
       case Camellia::FUNCTION_SPACE_REAL_SCALAR:
-        basis = Teuchos::rcp( new IntrepidBasisWrapper<>(Teuchos::rcp( new Basis_HVOL_QUAD_C0_FEM<double, Intrepid::FieldContainer<double> >()),
+          basis = Teuchos::rcp( new IntrepidBasisWrapper<>(Teuchos::rcp( new Intrepid::Basis_HVOL_QUAD_C0_FEM<double, Intrepid::FieldContainer<double> >()),
                               spaceDim, scalarRank, fs)
                             ) ;
         break;
@@ -634,25 +633,25 @@ BasisPtr BasisFactory::getConformingBasis( int polyOrder, unsigned cellTopoKey, 
       case Camellia::FUNCTION_SPACE_HGRAD:
       case Camellia::FUNCTION_SPACE_HGRAD_DISC:
         TEUCHOS_TEST_FOR_EXCEPTION(polyOrder <= 0, std::invalid_argument, "Constant basis not supported by Intrepid::Basis_HGRAD_TRI_Cn_FEM");
-        basis = Teuchos::rcp( new IntrepidBasisWrapper<>(Teuchos::rcp( new Basis_HGRAD_TRI_Cn_FEM<double, Intrepid::FieldContainer<double> >(polyOrder,POINTTYPE_WARPBLEND)),
+          basis = Teuchos::rcp( new IntrepidBasisWrapper<>(Teuchos::rcp( new Intrepid::Basis_HGRAD_TRI_Cn_FEM<double, Intrepid::FieldContainer<double> >(polyOrder,Intrepid::POINTTYPE_WARPBLEND)),
                               spaceDim, scalarRank, fs)
                             ) ;
         break;
       case Camellia::FUNCTION_SPACE_HDIV:
       case Camellia::FUNCTION_SPACE_HDIV_DISC:
-        basis = Teuchos::rcp( new IntrepidBasisWrapper<>( Teuchos::rcp( new Basis_HDIV_TRI_In_FEM<double, Intrepid::FieldContainer<double> >(polyOrder,POINTTYPE_WARPBLEND)),
+          basis = Teuchos::rcp( new IntrepidBasisWrapper<>( Teuchos::rcp( new Intrepid::Basis_HDIV_TRI_In_FEM<double, Intrepid::FieldContainer<double> >(polyOrder,Intrepid::POINTTYPE_WARPBLEND)),
                               spaceDim, vectorRank, fs)
                             );
         break;
       case Camellia::FUNCTION_SPACE_HCURL:
       case Camellia::FUNCTION_SPACE_HCURL_DISC:
-        basis = Teuchos::rcp( new IntrepidBasisWrapper<>( Teuchos::rcp( new Basis_HCURL_TRI_In_FEM<double, Intrepid::FieldContainer<double> >(polyOrder,POINTTYPE_WARPBLEND)),
+          basis = Teuchos::rcp( new IntrepidBasisWrapper<>( Teuchos::rcp( new Intrepid::Basis_HCURL_TRI_In_FEM<double, Intrepid::FieldContainer<double> >(polyOrder,Intrepid::POINTTYPE_WARPBLEND)),
                               spaceDim, vectorRank, fs)
                             );
         break;
       case(Camellia::FUNCTION_SPACE_HVOL):
         TEUCHOS_TEST_FOR_EXCEPTION(polyOrder <= 1, std::invalid_argument, "Constant basis not supported by Intrepid::Basis_HGRAD_TRI_Cn_FEM");
-        basis = Teuchos::rcp( new IntrepidBasisWrapper<>( Teuchos::rcp( new Intrepid::Basis_HGRAD_TRI_Cn_FEM<double, Intrepid::FieldContainer<double> >(polyOrder-1,POINTTYPE_WARPBLEND)),
+          basis = Teuchos::rcp( new IntrepidBasisWrapper<>( Teuchos::rcp( new Intrepid::Basis_HGRAD_TRI_Cn_FEM<double, Intrepid::FieldContainer<double> >(polyOrder-1,Intrepid::POINTTYPE_WARPBLEND)),
                               spaceDim, scalarRank, fs)
                             );
         break;
@@ -685,7 +684,7 @@ BasisPtr BasisFactory::getConformingBasis( int polyOrder, unsigned cellTopoKey, 
         }
         else
         {
-          basis = Teuchos::rcp( new IntrepidBasisWrapper<>(Teuchos::rcp( new Intrepid::Basis_HGRAD_LINE_Cn_FEM<double, Intrepid::FieldContainer<double> >(basisPolyOrder,POINTTYPE_SPECTRAL)),
+          basis = Teuchos::rcp( new IntrepidBasisWrapper<>(Teuchos::rcp( new Intrepid::Basis_HGRAD_LINE_Cn_FEM<double, Intrepid::FieldContainer<double> >(basisPolyOrder,Intrepid::POINTTYPE_SPECTRAL)),
                                 spaceDim, scalarRank, fs)
                               );
         }
@@ -698,7 +697,7 @@ BasisPtr BasisFactory::getConformingBasis( int polyOrder, unsigned cellTopoKey, 
         }
         else
         {
-          basis = Teuchos::rcp( new IntrepidBasisWrapper<>( Teuchos::rcp( new Intrepid::Basis_HGRAD_LINE_Cn_FEM<double, Intrepid::FieldContainer<double> >(polyOrder-1,POINTTYPE_SPECTRAL)),
+          basis = Teuchos::rcp( new IntrepidBasisWrapper<>( Teuchos::rcp( new Intrepid::Basis_HGRAD_LINE_Cn_FEM<double, Intrepid::FieldContainer<double> >(polyOrder-1,Intrepid::POINTTYPE_SPECTRAL)),
                                 spaceDim, scalarRank, fs)
                               );
         }
@@ -915,23 +914,23 @@ BasisPtr BasisFactory::getNodalBasisForCellTopology(unsigned int cellTopoKey)
         _nodalBasisForShardsTopology[cellTopoKey] = Teuchos::rcp( new PointBasis<>() );
         break;
       case shards::Line<2>::key:
-        _nodalBasisForShardsTopology[cellTopoKey] = Teuchos::rcp( new IntrepidBasisWrapper<>( Teuchos::rcp( new Basis_HGRAD_LINE_C1_FEM<double, Intrepid::FieldContainer<double> >()),
+        _nodalBasisForShardsTopology[cellTopoKey] = Teuchos::rcp( new IntrepidBasisWrapper<>( Teuchos::rcp( new Intrepid::Basis_HGRAD_LINE_C1_FEM<double, Intrepid::FieldContainer<double> >()),
                                                         ONE_D, SCALAR_RANK, Camellia::FUNCTION_SPACE_HGRAD) );
         break;
       case shards::Triangle<3>::key:
-        _nodalBasisForShardsTopology[cellTopoKey] = Teuchos::rcp( new IntrepidBasisWrapper<>( Teuchos::rcp( new Basis_HGRAD_TRI_C1_FEM<double, Intrepid::FieldContainer<double> >()),
+        _nodalBasisForShardsTopology[cellTopoKey] = Teuchos::rcp( new IntrepidBasisWrapper<>( Teuchos::rcp( new Intrepid::Basis_HGRAD_TRI_C1_FEM<double, Intrepid::FieldContainer<double> >()),
                                                         TWO_D, SCALAR_RANK, Camellia::FUNCTION_SPACE_HGRAD) );
         break;
       case shards::Quadrilateral<4>::key:
-        _nodalBasisForShardsTopology[cellTopoKey] = Teuchos::rcp( new IntrepidBasisWrapper<>( Teuchos::rcp( new Basis_HGRAD_QUAD_C1_FEM<double, Intrepid::FieldContainer<double> >()),
+        _nodalBasisForShardsTopology[cellTopoKey] = Teuchos::rcp( new IntrepidBasisWrapper<>( Teuchos::rcp( new Intrepid::Basis_HGRAD_QUAD_C1_FEM<double, Intrepid::FieldContainer<double> >()),
                                                         TWO_D, SCALAR_RANK, Camellia::FUNCTION_SPACE_HGRAD) );
         break;
       case shards::Tetrahedron<4>::key:
-        _nodalBasisForShardsTopology[cellTopoKey] = Teuchos::rcp( new IntrepidBasisWrapper<>( Teuchos::rcp( new Basis_HGRAD_TET_C1_FEM<double, Intrepid::FieldContainer<double> >()),
+        _nodalBasisForShardsTopology[cellTopoKey] = Teuchos::rcp( new IntrepidBasisWrapper<>( Teuchos::rcp( new Intrepid::Basis_HGRAD_TET_C1_FEM<double, Intrepid::FieldContainer<double> >()),
                                                         THREE_D, SCALAR_RANK, Camellia::FUNCTION_SPACE_HGRAD) );
         break;
       case shards::Hexahedron<8>::key:
-        _nodalBasisForShardsTopology[cellTopoKey] = Teuchos::rcp( new IntrepidBasisWrapper<>( Teuchos::rcp( new Basis_HGRAD_HEX_C1_FEM<double, Intrepid::FieldContainer<double> >()),
+        _nodalBasisForShardsTopology[cellTopoKey] = Teuchos::rcp( new IntrepidBasisWrapper<>( Teuchos::rcp( new Intrepid::Basis_HGRAD_HEX_C1_FEM<double, Intrepid::FieldContainer<double> >()),
                                                         THREE_D, SCALAR_RANK, Camellia::FUNCTION_SPACE_HGRAD) );
         break;
         

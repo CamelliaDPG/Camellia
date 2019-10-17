@@ -8,7 +8,6 @@
 #include "ExactSolution.h"
 
 using namespace Camellia;
-using namespace Intrepid;
 
 template <typename Scalar>
 ExactSolutionFunction<Scalar>::ExactSolutionFunction(Teuchos::RCP<ExactSolution<Scalar>> exactSolution, int trialID)

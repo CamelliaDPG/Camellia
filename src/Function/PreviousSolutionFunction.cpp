@@ -13,7 +13,6 @@
 #include "InnerProductScratchPad.h"
 #include "Solution.h"
 
-using namespace Intrepid;
 using namespace Camellia;
 
 template <typename Scalar>
@@ -120,7 +119,7 @@ size_t PreviousSolutionFunction<Scalar>::unpackCellData(GlobalIndexType cellID, 
 }
 
 template <typename Scalar>
-void PreviousSolutionFunction<Scalar>::values(FieldContainer<Scalar> &values, BasisCachePtr basisCache)
+void PreviousSolutionFunction<Scalar>::values(Intrepid::FieldContainer<Scalar> &values, BasisCachePtr basisCache)
 {
   int rank = Teuchos::GlobalMPISession::getRank();
   const bool applyCubatureWeights = false;
@@ -147,15 +146,15 @@ void PreviousSolutionFunction<Scalar>::values(FieldContainer<Scalar> &values, Ba
       warningIssued = true;
     }
     // get the physicalPoints, and make a basisCache for each...
-    FieldContainer<double> physicalPoints = basisCache->getPhysicalCubaturePoints();
-    FieldContainer<double> value(1,1); // assumes scalar-valued solution function.
+    Intrepid::FieldContainer<double> physicalPoints = basisCache->getPhysicalCubaturePoints();
+    Intrepid::FieldContainer<double> value(1,1); // assumes scalar-valued solution function.
     int numCells = physicalPoints.dimension(0);
     int numPoints = physicalPoints.dimension(1);
     int spaceDim = physicalPoints.dimension(2);
     physicalPoints.resize(numCells*numPoints,spaceDim);
     vector< ElementPtr > elements = _soln->mesh()->elementsForPoints(physicalPoints, false); // false: don't make elements null just because they're off-rank.
-    FieldContainer<double> point(1,1,spaceDim);
-    FieldContainer<double> refPoint(1,spaceDim);
+    Intrepid::FieldContainer<double> point(1,1,spaceDim);
+    Intrepid::FieldContainer<double> refPoint(1,spaceDim);
     int combinedIndex = 0;
     vector<GlobalIndexType> cellID;
     cellID.push_back(-1);

@@ -21,7 +21,6 @@
 #include "SerialDenseMatrixUtility.h"
 #include "MeshFactory.h"
 
-using namespace Intrepid;
 using namespace Camellia;
 
 HConvergenceStudy::HConvergenceStudy(Teuchos::RCP<ExactSolution<double>> exactSolution,
@@ -154,7 +153,7 @@ double HConvergenceStudy::computeJacobiPreconditionedConditionNumber(int logElem
 {
   // in so many ways, this is not the best way to do this: it's slow both because
   // we do the disk I/O and because we form a sparse matrix using a dense construct
-  // (the FieldContainer), but this allows us to use a condition number computation that
+  // (the Intrepid::FieldContainer), but this allows us to use a condition number computation that
   // I actually trust...
   if ((logElements < _minLogElements) || (logElements > _maxLogElements))
   {
@@ -170,7 +169,7 @@ double HConvergenceStudy::computeJacobiPreconditionedConditionNumber(int logElem
   }
   ostringstream fileName;
   fileName << _globalStiffnessFilePrefix << "_" << logElements << ".dat";
-  FieldContainer<double> globalStiffnessMatrix;
+  Intrepid::FieldContainer<double> globalStiffnessMatrix;
   DataIO::readMatrixFromSparseDataFile(globalStiffnessMatrix, fileName.str());
   SerialDenseMatrixUtility::jacobiScaleMatrix(globalStiffnessMatrix);
   return SerialDenseMatrixUtility::estimate2NormConditionNumber(globalStiffnessMatrix);
@@ -368,7 +367,7 @@ void HConvergenceStudy::solve(Teuchos::RCP<MeshGeometry> geometry, bool useConfo
   computeErrors();
 }
 
-void HConvergenceStudy::solve(const FieldContainer<double> &quadPoints, bool useConformingTraces)
+void HConvergenceStudy::solve(const Intrepid::FieldContainer<double> &quadPoints, bool useConformingTraces)
 {
   // empty enhancements by default
   map<int,int> trialOrderEnhancements;
@@ -376,7 +375,7 @@ void HConvergenceStudy::solve(const FieldContainer<double> &quadPoints, bool use
   this->solve(quadPoints, useConformingTraces, trialOrderEnhancements, testOrderEnhancements);
 }
 
-void HConvergenceStudy::solve(const FieldContainer<double> &quadPoints, bool useConformingTraces,
+void HConvergenceStudy::solve(const Intrepid::FieldContainer<double> &quadPoints, bool useConformingTraces,
                               map<int,int> trialOrderEnhancements,
                               map<int,int> testOrderEnhancements)
 {
@@ -768,7 +767,7 @@ void HConvergenceStudy::writeToFiles(const string & filePathPrefix, int trialID,
     fout << endl;
 
 //    for (int cellID=0; cellID<numElements; cellID++) {
-//      FieldContainer<double> solnCoeffs;
+//      Intrepid::FieldContainer<double> solnCoeffs;
 //      solution.solnCoeffsForCellID(solnCoeffs, cellID, trialID);
 //      cout << "solnCoeffs for cell " << cellID << ":" << endl << solnCoeffs;
 //    }

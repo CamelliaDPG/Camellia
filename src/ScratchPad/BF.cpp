@@ -21,7 +21,6 @@
 #include <iostream>
 #include <sstream>
 
-using namespace Intrepid;
 using namespace std;
 
 namespace Camellia
@@ -143,15 +142,15 @@ namespace Camellia
   }
   
   template <typename Scalar>
-  void TBF<Scalar>::applyBilinearFormData(FieldContainer<Scalar> &trialValues, FieldContainer<Scalar> &testValues,
+  void TBF<Scalar>::applyBilinearFormData(Intrepid::FieldContainer<Scalar> &trialValues, Intrepid::FieldContainer<Scalar> &testValues,
                                           int trialID, int testID, int operatorIndex,
-                                          const FieldContainer<double> &points)
+                                          const Intrepid::FieldContainer<double> &points)
   {
     applyBilinearFormData(trialID,testID,trialValues,testValues,points);
   }
   
   template <typename Scalar>
-  void TBF<Scalar>::applyBilinearFormData(FieldContainer<Scalar> &trialValues, FieldContainer<Scalar> &testValues,
+  void TBF<Scalar>::applyBilinearFormData(Intrepid::FieldContainer<Scalar> &trialValues, Intrepid::FieldContainer<Scalar> &testValues,
                                           int trialID, int testID, int operatorIndex,
                                           Teuchos::RCP<BasisCache> basisCache)
   {
@@ -159,7 +158,7 @@ namespace Camellia
   }
   
   template <typename Scalar>
-  bool TBF<Scalar>::checkSymmetry(FieldContainer<Scalar> &innerProductMatrix)
+  bool TBF<Scalar>::checkSymmetry(Intrepid::FieldContainer<Scalar> &innerProductMatrix)
   {
     double tol = 1e-10;
     int numCells = innerProductMatrix.dimension(0);
@@ -355,12 +354,12 @@ namespace Camellia
         cout << endl << "b(U," << testName(testID) << ") &= " << endl;
         bool first = true;
         int spaceDim = 2;
-        FieldContainer<double> point(1,2); // (0,0)
-        FieldContainer<double> testValueScalar(1,1,1); // 1 cell, 1 basis function, 1 point...
-        FieldContainer<double> testValueVector(1,1,1,spaceDim); // 1 cell, 1 basis function, 1 point, spaceDim dimensions...
-        FieldContainer<double> trialValueScalar(1,1,1); // 1 cell, 1 basis function, 1 point...
-        FieldContainer<double> trialValueVector(1,1,1,spaceDim); // 1 cell, 1 basis function, 1 point, spaceDim dimensions...
-        FieldContainer<double> testValue, trialValue;
+        Intrepid::FieldContainer<double> point(1,2); // (0,0)
+        Intrepid::FieldContainer<double> testValueScalar(1,1,1); // 1 cell, 1 basis function, 1 point...
+        Intrepid::FieldContainer<double> testValueVector(1,1,1,spaceDim); // 1 cell, 1 basis function, 1 point, spaceDim dimensions...
+        Intrepid::FieldContainer<double> trialValueScalar(1,1,1); // 1 cell, 1 basis function, 1 point...
+        Intrepid::FieldContainer<double> trialValueVector(1,1,1,spaceDim); // 1 cell, 1 basis function, 1 point, spaceDim dimensions...
+        Intrepid::FieldContainer<double> testValue, trialValue;
         for (vector<int>::iterator trialIt = _trialIDs.begin(); trialIt != _trialIDs.end(); trialIt++)
         {
           int trialID = *trialIt;
@@ -380,7 +379,7 @@ namespace Camellia
             
             trialValue[0] = 1.0;
             testValue[0] = 1.0;
-            FieldContainer<double> testWeight(1), trialWeight(1); // for storing values that come back from applyBilinearForm
+            Intrepid::FieldContainer<double> testWeight(1), trialWeight(1); // for storing values that come back from applyBilinearForm
             applyBilinearFormData(trialValue,testValue,trialID,testID,operatorIndex,point);
             if ((trialRank==1) && (trialValue.rank() == 3))   // vector that became a scalar (a dot product)
             {
@@ -428,8 +427,8 @@ namespace Camellia
               // scalar & vector: combine into one, in testWeight
               if ( (trialWeight.size() + testWeight.size()) == 3)
               {
-                FieldContainer<double> smaller = (trialWeight.size()==1) ? trialWeight : testWeight;
-                FieldContainer<double> bigger =  (trialWeight.size()==2) ? trialWeight : testWeight;
+                Intrepid::FieldContainer<double> smaller = (trialWeight.size()==1) ? trialWeight : testWeight;
+                Intrepid::FieldContainer<double> bigger =  (trialWeight.size()==2) ? trialWeight : testWeight;
                 testWeight.resize(spaceDim);
                 for (int dim=0; dim<spaceDim; dim++)
                 {
@@ -553,8 +552,8 @@ namespace Camellia
   }
   
   template <typename Scalar>
-  void TBF<Scalar>::stiffnessMatrix(FieldContainer<Scalar> &stiffness, Teuchos::RCP<ElementType> elemType,
-                                    const FieldContainer<double> &cellSideParities, Teuchos::RCP<BasisCache> basisCache)
+  void TBF<Scalar>::stiffnessMatrix(Intrepid::FieldContainer<Scalar> &stiffness, Teuchos::RCP<ElementType> elemType,
+                                    const Intrepid::FieldContainer<double> &cellSideParities, Teuchos::RCP<BasisCache> basisCache)
   {
     if (!_isLegacySubclass)
     {
@@ -565,15 +564,15 @@ namespace Camellia
       // call legacy version:
       DofOrderingPtr testOrdering  = elemType->testOrderPtr;
       DofOrderingPtr trialOrdering = elemType->trialOrderPtr;
-      FieldContainer<double> cellSideParitiesNonConst = cellSideParities; // copy for sake of legacy, non-const argument.
+      Intrepid::FieldContainer<double> cellSideParitiesNonConst = cellSideParities; // copy for sake of legacy, non-const argument.
       stiffnessMatrix(stiffness,trialOrdering,testOrdering,cellSideParitiesNonConst,basisCache);
     }
   }
   
   // can override check for zero cols (i.e. in hessian matrix)
   template <typename Scalar>
-  void TBF<Scalar>::stiffnessMatrix(FieldContainer<Scalar> &stiffness, Teuchos::RCP<ElementType> elemType,
-                                    const FieldContainer<double> &cellSideParities, Teuchos::RCP<BasisCache> basisCache,
+  void TBF<Scalar>::stiffnessMatrix(Intrepid::FieldContainer<Scalar> &stiffness, Teuchos::RCP<ElementType> elemType,
+                                    const Intrepid::FieldContainer<double> &cellSideParities, Teuchos::RCP<BasisCache> basisCache,
                                     bool rowMajor, bool checkForZeroCols)
   {
     // stiffness is sized as (C, FTest, FTrial)
@@ -587,7 +586,7 @@ namespace Camellia
       TLinearTermPtr<Scalar> trialTerm = btIt->first;
       TLinearTermPtr<Scalar> testTerm = btIt->second;
       
-      FieldContainer<double> stiffnessCopyForTermwiseOutput;
+      Intrepid::FieldContainer<double> stiffnessCopyForTermwiseOutput;
       if (_printTermWiseIntegrationOutput)
       {
         // DEBUGGING
@@ -657,9 +656,9 @@ namespace Camellia
   
   // Legacy stiffnessMatrix() method:
   template <typename Scalar>
-  void TBF<Scalar>::stiffnessMatrix(FieldContainer<Scalar> &stiffness, Teuchos::RCP<DofOrdering> trialOrdering,
+  void TBF<Scalar>::stiffnessMatrix(Intrepid::FieldContainer<Scalar> &stiffness, Teuchos::RCP<DofOrdering> trialOrdering,
                                     Teuchos::RCP<DofOrdering> testOrdering,
-                                    FieldContainer<double> &cellSideParities, Teuchos::RCP<BasisCache> basisCache)
+                                    Intrepid::FieldContainer<double> &cellSideParities, Teuchos::RCP<BasisCache> basisCache)
   {
     
     // stiffness dimensions are: (numCells, # testOrdering Dofs, # trialOrdering Dofs)
@@ -742,9 +741,9 @@ namespace Camellia
             TEUCHOS_TEST_FOR_EXCEPTION(true,std::invalid_argument,"OP_TIMES_NORMAL not supported for tests.  Use for trial only");
           }
           
-          Teuchos::RCP < const FieldContainer<Scalar> > testValuesTransformed;
-          Teuchos::RCP < const FieldContainer<Scalar> > trialValuesTransformed;
-          Teuchos::RCP < const FieldContainer<Scalar> > testValuesTransformedWeighted;
+          Teuchos::RCP < const Intrepid::FieldContainer<Scalar> > testValuesTransformed;
+          Teuchos::RCP < const Intrepid::FieldContainer<Scalar> > trialValuesTransformed;
+          Teuchos::RCP < const Intrepid::FieldContainer<Scalar> > testValuesTransformedWeighted;
           
           //cout << "trial is " <<  this->trialName(trialID) << "; test is " << this->testName(testID) << endl;
           
@@ -753,19 +752,19 @@ namespace Camellia
             trialBasis = trialOrdering->getBasis(trialID);
             testBasis = testOrdering->getBasis(testID);
             
-            FieldContainer<Scalar> miniStiffness( numCells, testBasis->getCardinality(), trialBasis->getCardinality() );
+            Intrepid::FieldContainer<Scalar> miniStiffness( numCells, testBasis->getCardinality(), trialBasis->getCardinality() );
             
             trialValuesTransformed = basisCache->getTransformedValues(trialBasis,trialOperator);
             testValuesTransformedWeighted = basisCache->getTransformedWeightedValues(testBasis,testOperator);
             
-            FieldContainer<double> physicalCubaturePoints = basisCache->getPhysicalCubaturePoints();
-            FieldContainer<Scalar> materialDataAppliedToTrialValues = *trialValuesTransformed; // copy first
-            FieldContainer<Scalar> materialDataAppliedToTestValues = *testValuesTransformedWeighted; // copy first
+            Intrepid::FieldContainer<double> physicalCubaturePoints = basisCache->getPhysicalCubaturePoints();
+            Intrepid::FieldContainer<Scalar> materialDataAppliedToTrialValues = *trialValuesTransformed; // copy first
+            Intrepid::FieldContainer<Scalar> materialDataAppliedToTestValues = *testValuesTransformedWeighted; // copy first
             this->applyBilinearFormData(materialDataAppliedToTrialValues, materialDataAppliedToTestValues,
                                         trialID,testID,operatorIndex,basisCache);
             
             //integrate:
-            FunctionSpaceTools::integrate<Scalar>(miniStiffness,materialDataAppliedToTestValues,materialDataAppliedToTrialValues,COMP_BLAS);
+            Intrepid::FunctionSpaceTools::integrate<Scalar>(miniStiffness,materialDataAppliedToTestValues,materialDataAppliedToTrialValues,Intrepid::COMP_BLAS);
             // place in the appropriate spot in the element-stiffness matrix
             // copy goes from (cell,trial_basis_dof,test_basis_dof) to (cell,element_trial_dof,element_test_dof)
             
@@ -816,7 +815,7 @@ namespace Camellia
                 isFlux = true;
               }
               
-              FieldContainer<Scalar> miniStiffness( numCells, testBasis->getCardinality(), trialBasis->getCardinality() );
+              Intrepid::FieldContainer<Scalar> miniStiffness( numCells, testBasis->getCardinality(), trialBasis->getCardinality() );
               
               // for trial: the value lives on the side, so we don't use the volume coords either:
               trialValuesTransformed = basisCache->getTransformedValues(trialBasis,trialOperator,sideOrdinal,false);
@@ -826,7 +825,7 @@ namespace Camellia
               testValuesTransformedWeighted = basisCache->getTransformedWeightedValues(testBasis,testOperator,sideOrdinal,true);
               
               // copy before manipulating trialValues--these are the ones stored in the cache, so we're not allowed to change them!!
-              FieldContainer<Scalar> materialDataAppliedToTrialValues = *trialValuesTransformed;
+              Intrepid::FieldContainer<Scalar> materialDataAppliedToTrialValues = *trialValuesTransformed;
               
               if (isFlux)
               {
@@ -852,8 +851,8 @@ namespace Camellia
                 }
               }
               
-              FieldContainer<double> cubPointsSidePhysical = basisCache->getPhysicalCubaturePointsForSide(sideOrdinal);
-              FieldContainer<Scalar> materialDataAppliedToTestValues = *testValuesTransformedWeighted; // copy first
+              Intrepid::FieldContainer<double> cubPointsSidePhysical = basisCache->getPhysicalCubaturePointsForSide(sideOrdinal);
+              Intrepid::FieldContainer<Scalar> materialDataAppliedToTestValues = *testValuesTransformedWeighted; // copy first
               this->applyBilinearFormData(materialDataAppliedToTrialValues,materialDataAppliedToTestValues,
                                           trialID,testID,operatorIndex,basisCache);
               
@@ -861,7 +860,7 @@ namespace Camellia
               //cout << "sideOrdinal: " << sideOrdinal << "; cubPointsSidePhysical" << endl << cubPointsSidePhysical;
               
               //   d. Sum up (integrate) and place in stiffness matrix according to DofOrdering indices
-              FunctionSpaceTools::integrate<Scalar>(miniStiffness,materialDataAppliedToTestValues,materialDataAppliedToTrialValues,COMP_BLAS);
+              Intrepid::FunctionSpaceTools::integrate<Scalar>(miniStiffness,materialDataAppliedToTestValues,materialDataAppliedToTrialValues, Intrepid::COMP_BLAS);
               
               //checkForZeroRowsAndColumns("side miniStiffness for pre-stiffness", miniStiffness);
               
@@ -901,8 +900,8 @@ namespace Camellia
   
   // No cellSideParities required, no checking of columns, integrates in a bubnov fashion
   template <typename Scalar>
-  void TBF<Scalar>::bubnovStiffness(FieldContainer<Scalar> &stiffness, Teuchos::RCP<ElementType> elemType,
-                                    const FieldContainer<double> &cellSideParities, Teuchos::RCP<BasisCache> basisCache)
+  void TBF<Scalar>::bubnovStiffness(Intrepid::FieldContainer<Scalar> &stiffness, Teuchos::RCP<ElementType> elemType,
+                                    const Intrepid::FieldContainer<double> &cellSideParities, Teuchos::RCP<BasisCache> basisCache)
   {
     // stiffness is sized as (C, FTrial, FTrial)
     stiffness.initialize(0.0);
@@ -921,9 +920,9 @@ namespace Camellia
   }
   
   template <typename Scalar>
-  int TBF<Scalar>::factoredCholeskySolve(FieldContainer<Scalar> &ipMatrix, FieldContainer<Scalar> &stiffnessEnriched,
-                                         FieldContainer<Scalar> &rhsEnriched, FieldContainer<Scalar> &stiffness,
-                                         FieldContainer<Scalar> &rhs)
+  int TBF<Scalar>::factoredCholeskySolve(Intrepid::FieldContainer<Scalar> &ipMatrix, Intrepid::FieldContainer<Scalar> &stiffnessEnriched,
+                                         Intrepid::FieldContainer<Scalar> &rhsEnriched, Intrepid::FieldContainer<Scalar> &stiffness,
+                                         Intrepid::FieldContainer<Scalar> &rhs)
   {
     int N = ipMatrix.dimension(0);
     TEUCHOS_TEST_FOR_EXCEPTION(N != ipMatrix.dimension(1), std::invalid_argument, "ipMatrix must be square");
@@ -939,7 +938,7 @@ namespace Camellia
     Teuchos::BLAS<int, double> blas;
     
     // DPOEQU( N, A, LDA, S, SCOND, AMAX, INFO )
-    FieldContainer<double> scaleFactors(N);
+    Intrepid::FieldContainer<double> scaleFactors(N);
     double scond, amax;
     lapack.POEQU(N, &ipMatrix[0], N, &scaleFactors[0], &scond, &amax, &INFO);
     
@@ -976,7 +975,7 @@ namespace Camellia
         for (int i=j; i<N; i++)
         {
           // lower-triangle is stored in (i,j) where i >= j
-          ipMatrix(j,i) /= scaleFactors[i]; // FieldContainer transposes, effectively
+          ipMatrix(j,i) /= scaleFactors[i]; // Intrepid::FieldContainer transposes, effectively
         }
       }
     }
@@ -1166,7 +1165,7 @@ namespace Camellia
   }
   
   template <typename Scalar>
-  void TBF<Scalar>::localStiffnessMatrixAndRHS_DLS(FieldContainer<Scalar> &stiffnessEnriched, FieldContainer<Scalar> &rhsEnriched,
+  void TBF<Scalar>::localStiffnessMatrixAndRHS_DLS(Intrepid::FieldContainer<Scalar> &stiffnessEnriched, Intrepid::FieldContainer<Scalar> &rhsEnriched,
                                                    TIPPtr<Scalar> ip, BasisCachePtr ipBasisCache, TRHSPtr<Scalar> rhs,
                                                    BasisCachePtr basisCache)
   {
@@ -1213,7 +1212,7 @@ namespace Camellia
       }
       
       timer.ResetStartTime();
-      FieldContainer<double> cellSideParities = basisCache->getCellSideParities();
+      Intrepid::FieldContainer<double> cellSideParities = basisCache->getCellSideParities();
       
       if (ip == Teuchos::null)
       {
@@ -1241,7 +1240,7 @@ namespace Camellia
         localStiffnessEnrichedDim[0] = stiffnessEnriched.dimension(1);
         localStiffnessEnrichedDim[1] = stiffnessEnriched.dimension(2);
         
-        FieldContainer<Scalar> ipMatrix(numCells,numTestDofs,numTestDofs);
+        Intrepid::FieldContainer<Scalar> ipMatrix(numCells,numTestDofs,numTestDofs);
         DofOrderingPtr testOrder = elemType->testOrderPtr;
         timer.ResetStartTime();
         ip->computeInnerProductMatrix(ipMatrix, testOrder, ipBasisCache);
@@ -1261,14 +1260,14 @@ namespace Camellia
         timeK = 0;
         timer.ResetStartTime();
         
-        FieldContainer<Scalar> dummyStiffness(numTrialDofs,numTrialDofs); // computed in factoredCholeskySolve, but ignored
-        FieldContainer<Scalar> dummyRHS(numTrialDofs,1); // computed in factoredCholeskySolve, but ignored
+        Intrepid::FieldContainer<Scalar> dummyStiffness(numTrialDofs,numTrialDofs); // computed in factoredCholeskySolve, but ignored
+        Intrepid::FieldContainer<Scalar> dummyRHS(numTrialDofs,1); // computed in factoredCholeskySolve, but ignored
         for (int cellIndex=0; cellIndex < numCells; cellIndex++)
         {
           int result = 0;
-          FieldContainer<Scalar> cellIPMatrix(localIPDim, &ipMatrix(cellIndex,0,0));
-          FieldContainer<Scalar> cellStiffnessEnriched(localStiffnessEnrichedDim, &stiffnessEnriched(cellIndex,0,0));
-          FieldContainer<Scalar> cellRHSEnriched(localRHSEnrichedDim, &rhsEnriched(cellIndex,0));
+          Intrepid::FieldContainer<Scalar> cellIPMatrix(localIPDim, &ipMatrix(cellIndex,0,0));
+          Intrepid::FieldContainer<Scalar> cellStiffnessEnriched(localStiffnessEnrichedDim, &stiffnessEnriched(cellIndex,0,0));
+          Intrepid::FieldContainer<Scalar> cellRHSEnriched(localRHSEnrichedDim, &rhsEnriched(cellIndex,0));
           
           // impose any BCs from the test space:
           if (ip->hasBCsImposed())
@@ -1319,7 +1318,7 @@ namespace Camellia
   }
   
   template <typename Scalar>
-  void TBF<Scalar>::localStiffnessMatrixAndRHS(FieldContainer<Scalar> &localStiffness, FieldContainer<Scalar> &rhsVector,
+  void TBF<Scalar>::localStiffnessMatrixAndRHS(Intrepid::FieldContainer<Scalar> &localStiffness, Intrepid::FieldContainer<Scalar> &rhsVector,
                                                TIPPtr<Scalar> ip, BasisCachePtr ipBasisCache, TRHSPtr<Scalar> rhs, BasisCachePtr basisCache)
   {
     int timerHandle = TimeLogger::sharedInstance()->startTimer(LOCAL_STIFFNESS_AND_RHS_TIMER_STRING);
@@ -1365,7 +1364,7 @@ namespace Camellia
       }
       
       timer.ResetStartTime();
-      const FieldContainer<double> & cellSideParities = basisCache->getCellSideParities();
+      const Intrepid::FieldContainer<double> & cellSideParities = basisCache->getCellSideParities();
 
       if (ip == Teuchos::null)
       {
@@ -1380,7 +1379,7 @@ namespace Camellia
         
         for (int cellOrdinal=0; cellOrdinal<numCells; cellOrdinal++)
         {
-          FieldContainer<double> cellLocalStiffness(dim, &localStiffness(cellOrdinal,0,0));
+          Intrepid::FieldContainer<double> cellLocalStiffness(dim, &localStiffness(cellOrdinal,0,0));
           SerialDenseWrapper::transposeSquareMatrix(cellLocalStiffness); // transposes data in place
         }
         
@@ -1405,7 +1404,7 @@ namespace Camellia
         
         double timeG, timeB, timeT, timeK; // time to compute Gram matrix, the right-hand side B, time to solve GT = B, and time to compute K = B^T T.
         
-        FieldContainer<Scalar> stiffnessEnriched(numCells,numTrialDofs,numTestDofs);
+        Intrepid::FieldContainer<Scalar> stiffnessEnriched(numCells,numTrialDofs,numTestDofs);
         
         timer.ResetStartTime();
         // RHS:
@@ -1422,13 +1421,13 @@ namespace Camellia
         localStiffnessDim[0] = localStiffness.dimension(1);
         localStiffnessDim[1] = localStiffness.dimension(2);
         
-        FieldContainer<Scalar> ipMatrix(numCells,numTestDofs,numTestDofs);
+        Intrepid::FieldContainer<Scalar> ipMatrix(numCells,numTestDofs,numTestDofs);
         DofOrderingPtr testOrder = elemType->testOrderPtr;
         timer.ResetStartTime();
         ip->computeInnerProductMatrix(ipMatrix, testOrder, ipBasisCache);
         timeG = timer.ElapsedTime();
         
-        FieldContainer<Scalar> rhsEnriched(numCells,numTestDofs);
+        Intrepid::FieldContainer<Scalar> rhsEnriched(numCells,numTestDofs);
         rhs->integrateAgainstStandardBasis(rhsEnriched,testOrder,basisCache);
         
         Teuchos::Array<int> localRHSEnrichedDim(2);
@@ -1445,11 +1444,11 @@ namespace Camellia
         for (int cellIndex=0; cellIndex < numCells; cellIndex++)
         {
           int result = 0;
-          FieldContainer<Scalar> cellIPMatrix(localIPDim, &ipMatrix(cellIndex,0,0));
-          FieldContainer<Scalar> cellStiffnessEnriched(localStiffnessEnrichedDim, &stiffnessEnriched(cellIndex,0,0));
-          FieldContainer<Scalar> cellStiffness(localStiffnessDim, &localStiffness(cellIndex,0,0));
-          FieldContainer<Scalar> cellRHSEnriched(localRHSEnrichedDim, &rhsEnriched(cellIndex,0));
-          FieldContainer<Scalar> cellRHS(localRHSDim, &rhsVector(cellIndex,0));
+          Intrepid::FieldContainer<Scalar> cellIPMatrix(localIPDim, &ipMatrix(cellIndex,0,0));
+          Intrepid::FieldContainer<Scalar> cellStiffnessEnriched(localStiffnessEnrichedDim, &stiffnessEnriched(cellIndex,0,0));
+          Intrepid::FieldContainer<Scalar> cellStiffness(localStiffnessDim, &localStiffness(cellIndex,0,0));
+          Intrepid::FieldContainer<Scalar> cellRHSEnriched(localRHSEnrichedDim, &rhsEnriched(cellIndex,0));
+          Intrepid::FieldContainer<Scalar> cellRHS(localRHSDim, &rhsVector(cellIndex,0));
 
           // impose any BCs from the test space:
           if (ip->hasBCsImposed())
@@ -1478,7 +1477,7 @@ namespace Camellia
         //      cout << "ipMatrix:\n" << ipMatrix;
         
         timer.ResetStartTime();
-        FieldContainer<Scalar> optTestCoeffs(numCells,numTrialDofs,numTestDofs);
+        Intrepid::FieldContainer<Scalar> optTestCoeffs(numCells,numTrialDofs,numTestDofs);
         
         int optSuccess = this->optimalTestWeightsAndStiffness(optTestCoeffs, localStiffness, elemType,
                                                               cellSideParities, basisCache, ip, ipBasisCache);
@@ -1552,10 +1551,10 @@ namespace Camellia
   }
   
   template <typename Scalar>
-  int TBF<Scalar>::optimalTestWeightsAndStiffness(FieldContainer<Scalar> &optimalTestWeights,
-                                                  FieldContainer<Scalar> &stiffnessMatrix,
+  int TBF<Scalar>::optimalTestWeightsAndStiffness(Intrepid::FieldContainer<Scalar> &optimalTestWeights,
+                                                  Intrepid::FieldContainer<Scalar> &stiffnessMatrix,
                                                   ElementTypePtr elemType,
-                                                  const FieldContainer<double> &cellSideParities,
+                                                  const Intrepid::FieldContainer<double> &cellSideParities,
                                                   BasisCachePtr stiffnessBasisCache,
                                                   IPPtr ip, BasisCachePtr ipBasisCache)
   {
@@ -1587,8 +1586,8 @@ namespace Camellia
     // to be memory-efficient, we'll compute directly into optimalTestWeights, but the most natural way to do this
     // is to compute the transpose.
     
-    FieldContainer<Scalar> rectangularStiffnessMatrix(numCells,numTestDofs,numTrialDofs);
-    Teuchos::RCP<FieldContainer<Scalar>> optimalTestRHS;
+    Intrepid::FieldContainer<Scalar> rectangularStiffnessMatrix(numCells,numTestDofs,numTrialDofs);
+    Teuchos::RCP<Intrepid::FieldContainer<Scalar>> optimalTestRHS;
     
     int solvedAll = 0;
     
@@ -1601,7 +1600,7 @@ namespace Camellia
     {
       bfForOptimalTestSolve = _bfForOptimalTestSolve;
       // in this case, we need separate allocation for rectangular stiffness and the "load" for the optimal test solve
-      optimalTestRHS = Teuchos::rcp(new FieldContainer<Scalar>(numCells,numTestDofs,numTrialDofs));
+      optimalTestRHS = Teuchos::rcp(new Intrepid::FieldContainer<Scalar>(numCells,numTestDofs,numTrialDofs));
     }
     else
     {
@@ -1642,7 +1641,7 @@ namespace Camellia
     localStiffnessDim[0] = stiffnessMatrix.dimension(1);
     localStiffnessDim[1] = stiffnessMatrix.dimension(2);
     
-    FieldContainer<Scalar> ipMatrix(numCells,numTestDofs,numTestDofs);
+    Intrepid::FieldContainer<Scalar> ipMatrix(numCells,numTestDofs,numTestDofs);
     DofOrderingPtr testOrder = elemType->testOrderPtr;
     timer.ResetStartTime();
     ip->computeInnerProductMatrix(ipMatrix, testOrder, ipBasisCache);
@@ -1654,11 +1653,11 @@ namespace Camellia
     {
       timer.ResetStartTime();
       int result = 0;
-      FieldContainer<Scalar> cellIPMatrix(localIPDim, &ipMatrix(cellIndex,0,0));
-      FieldContainer<Scalar> cellOptTestRHS(localRectangularStiffnessDim, &(*optimalTestRHS)(cellIndex,0,0));
-      FieldContainer<Scalar> cellRectangularStiffness(localRectangularStiffnessDim, &rectangularStiffnessMatrix(cellIndex,0,0));
-      FieldContainer<Scalar> cellStiffness(localStiffnessDim, &stiffnessMatrix(cellIndex,0,0));
-      FieldContainer<Scalar> cellOptimalWeightsT(cellOptimalWeightsTDim, &optimalTestWeights(cellIndex,0,0));
+      Intrepid::FieldContainer<Scalar> cellIPMatrix(localIPDim, &ipMatrix(cellIndex,0,0));
+      Intrepid::FieldContainer<Scalar> cellOptTestRHS(localRectangularStiffnessDim, &(*optimalTestRHS)(cellIndex,0,0));
+      Intrepid::FieldContainer<Scalar> cellRectangularStiffness(localRectangularStiffnessDim, &rectangularStiffnessMatrix(cellIndex,0,0));
+      Intrepid::FieldContainer<Scalar> cellStiffness(localStiffnessDim, &stiffnessMatrix(cellIndex,0,0));
+      Intrepid::FieldContainer<Scalar> cellOptimalWeightsT(cellOptimalWeightsTDim, &optimalTestWeights(cellIndex,0,0));
       
       // impose any BCs from the test space:
       if (ip->hasBCsImposed())

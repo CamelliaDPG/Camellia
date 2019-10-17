@@ -10,7 +10,6 @@
 #include "CamelliaCellTools.h"
 #include "Mesh.h"
 
-using namespace Intrepid;
 using namespace Camellia;
 
 // constructor:
@@ -30,8 +29,8 @@ Teuchos::RCP< Element > Element::getChild(int childOrdinal)
   return _mesh->getElement( _cell->getChildIndices(_mesh->getTopology())[childOrdinal] );
 }
 
-void Element::getSidePointsInNeighborRefCoords(FieldContainer<double> &neighborRefPoints, int sideIndex,
-    const FieldContainer<double> &refPoints)
+void Element::getSidePointsInNeighborRefCoords(Intrepid::FieldContainer<double> &neighborRefPoints, int sideIndex,
+    const Intrepid::FieldContainer<double> &refPoints)
 {
   // assumes neighbor on the side is a peer.  For what to do if not, see MeshTestSuite::neighborBasesAgreeOnSides().
   // TODO: consider incorporating similar logic here, and reduce the amount of logic in neighborBasesAgreeOnSides().
@@ -45,15 +44,15 @@ void Element::getSidePointsInNeighborRefCoords(FieldContainer<double> &neighborR
   }
   // 2D: assume that neighbor and element both have similarly ordered (CW or CCW) vertices, so that
   //     the transformation is just a flip from (-1,1) to (1,-1)
-  FieldContainer<double> nodesInNeighborRef(1,2,1);
+  Intrepid::FieldContainer<double> nodesInNeighborRef(1,2,1);
   nodesInNeighborRef(0,0,0) = 1.0;
   nodesInNeighborRef(0,1,0) = -1.0;
   shards::CellTopology line_2(shards::getCellTopologyData<shards::Line<2> >() );
   Intrepid::CellTools<double>::mapToPhysicalFrame(neighborRefPoints,refPoints,nodesInNeighborRef,line_2,0);
 }
 
-void Element::getSidePointsInParentRefCoords(FieldContainer<double> &parentRefPoints, int sideIndex,
-    const FieldContainer<double> &childRefPoints)
+void Element::getSidePointsInParentRefCoords(Intrepid::FieldContainer<double> &parentRefPoints, int sideIndex,
+    const Intrepid::FieldContainer<double> &childRefPoints)
 {
   /*
 
@@ -88,7 +87,7 @@ void Element::getSidePointsInParentRefCoords(FieldContainer<double> &parentRefPo
     return;
   }
 
-  FieldContainer<double> childEdgeNodesInParentRef(1,2,1);
+  Intrepid::FieldContainer<double> childEdgeNodesInParentRef(1,2,1);
   int childIndexInParentSide = indexInParentSide(parentSideIndex);
   if (childIndexInParentSide == 0)
   {

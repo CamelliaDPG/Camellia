@@ -21,7 +21,6 @@
 #include "TensorBasis.h"
 #include "VarFactory.h"
 
-using namespace Intrepid;
 using namespace Camellia;
 using namespace std;
 
@@ -53,8 +52,8 @@ void Boundary::buildLookupTables()
 }
 
 template <typename Scalar>
-void Boundary::bcsToImpose(FieldContainer<GlobalIndexType> &globalIndices,
-                           FieldContainer<Scalar> &globalValues, TBC<Scalar> &bc,
+void Boundary::bcsToImpose(Intrepid::FieldContainer<GlobalIndexType> &globalIndices,
+                           Intrepid::FieldContainer<Scalar> &globalValues, TBC<Scalar> &bc,
                            DofInterpreter* dofInterpreter)
 {
   set< GlobalIndexType > rankLocalCells = _mesh->cellIDsInPartition();
@@ -128,7 +127,7 @@ void Boundary::bcsToImpose(FieldContainer<GlobalIndexType> &globalIndices,
                */
               BasisCachePtr basisCacheForImposition = isVolume ? basisCache : basisCache->getSideBasisCache(sideOrdinal);
               int numCells = 1;
-              FieldContainer<double> basisCoefficients(numCells,basis->getCardinality());
+              Intrepid::FieldContainer<double> basisCoefficients(numCells,basis->getCardinality());
               Projector<double>::projectFunctionOntoBasisInterpolating(basisCoefficients, f, basis, basisCacheForImposition);
               basisCoefficients.resize(basis->getCardinality());
               
@@ -139,8 +138,8 @@ void Boundary::bcsToImpose(FieldContainer<GlobalIndexType> &globalIndices,
                 matchingGlobalIndices.insert(subcellGlobalIndices.begin(),subcellGlobalIndices.end());
               }
               
-              FieldContainer<double> globalData;
-              FieldContainer<GlobalIndexType> globalDofIndices;
+              Intrepid::FieldContainer<double> globalData;
+              Intrepid::FieldContainer<GlobalIndexType> globalDofIndices;
 //              dofInterpreter->interpretLocalBasisCoefficients(cellID, var->ID(), sideOrdinal, basisCoefficientsToImpose, globalData, globalDofIndices);
               dofInterpreter->interpretLocalBasisCoefficients(cellID, var->ID(), sideOrdinal, basisCoefficients, globalData, globalDofIndices);
               for (int globalDofOrdinal=0; globalDofOrdinal<globalDofIndices.size(); globalDofOrdinal++)
@@ -253,7 +252,7 @@ void Boundary::bcsToImpose( vector<pair<GlobalIndexType,Scalar>> &globalDofIndic
           GlobalIndexType numCells = 1;
           if (numCells > 0)
           {
-            FieldContainer<double> dirichletValues(numCells,numDofsSide);
+            Intrepid::FieldContainer<double> dirichletValues(numCells,numDofsSide);
             // project bc function onto side basis:
             BCPtr bcPtr = Teuchos::rcp(&bc, false);
             Teuchos::RCP<BCFunction<double>> bcFunction = BCFunction<double>::bcFunction(bcPtr, trialID);
@@ -261,8 +260,8 @@ void Boundary::bcsToImpose( vector<pair<GlobalIndexType,Scalar>> &globalDofIndic
             dirichletValues.resize(numDofsSide);
             if (bcFunction->imposeOnCell(0))
             {
-              FieldContainer<double> globalData;
-              FieldContainer<GlobalIndexType> globalDofIndices;
+              Intrepid::FieldContainer<double> globalData;
+              Intrepid::FieldContainer<GlobalIndexType> globalDofIndices;
 
               dofInterpreter->interpretLocalBasisCoefficients(cellID, trialID, sideOrdinal, dirichletValues, globalData, globalDofIndices);
               for (int globalDofOrdinal=0; globalDofOrdinal<globalDofIndices.size(); globalDofOrdinal++)
@@ -541,10 +540,10 @@ void Boundary::singletonBCsToImpose(vector<pair<GlobalIndexType,Scalar>> &dofInd
         
         for (int dofOrdinal : basisDofOrdinals)
         {
-          FieldContainer<double> basisCoefficients(basisForImposition->getCardinality());
+          Intrepid::FieldContainer<double> basisCoefficients(basisForImposition->getCardinality());
           basisCoefficients[dofOrdinal] = 1.0;
-          FieldContainer<double> globalCoefficients;
-          FieldContainer<GlobalIndexType> globalDofIndices;
+          Intrepid::FieldContainer<double> globalCoefficients;
+          Intrepid::FieldContainer<GlobalIndexType> globalDofIndices;
           dofInterpreter->interpretLocalBasisCoefficients(cellID, trialID, sideForImposition, basisCoefficients,
                                                           globalCoefficients, globalDofIndices);
           double tol = 1e-14;

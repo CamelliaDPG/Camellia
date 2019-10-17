@@ -84,7 +84,7 @@ namespace Intrepid {
     
     switch (operatorType) {
         
-      case OPERATOR_VALUE:
+      case Intrepid::OPERATOR_VALUE:
         for (int i0 = 0; i0 < dim0; i0++) {
           x = inputPoints(i0, 0);
           y = inputPoints(i0, 1);
@@ -94,8 +94,8 @@ namespace Intrepid {
         }
         break;
         
-      case OPERATOR_GRAD:
-      case OPERATOR_D1:
+      case Intrepid::OPERATOR_GRAD:
+      case Intrepid::OPERATOR_D1:
         for (int i0 = 0; i0 < dim0; i0++) {
           x = inputPoints(i0,0);
           y = inputPoints(i0,1);
@@ -106,7 +106,7 @@ namespace Intrepid {
         }
         break;
         
-      case OPERATOR_CURL:
+      case Intrepid::OPERATOR_CURL:
         for (int i0 = 0; i0 < dim0; i0++) {
           x = inputPoints(i0,0);
           y = inputPoints(i0,1);
@@ -117,20 +117,20 @@ namespace Intrepid {
         }
         break;
         
-      case OPERATOR_DIV:
-        TEUCHOS_TEST_FOR_EXCEPTION( (operatorType == OPERATOR_DIV), std::invalid_argument,
+      case Intrepid::OPERATOR_DIV:
+        TEUCHOS_TEST_FOR_EXCEPTION( (operatorType == Intrepid::OPERATOR_DIV), std::invalid_argument,
                            ">>> ERROR (Basis_HGRAD_QUAD_Cr_FEM): DIV is invalid operator for rank-0 (scalar) functions in 2D");
         break;
         
-      case OPERATOR_D2:
-      case OPERATOR_D3:
-      case OPERATOR_D4:
-      case OPERATOR_D5:
-      case OPERATOR_D6:
-      case OPERATOR_D7:
-      case OPERATOR_D8:
-      case OPERATOR_D9:
-      case OPERATOR_D10:
+      case Intrepid::OPERATOR_D2:
+      case Intrepid::OPERATOR_D3:
+      case Intrepid::OPERATOR_D4:
+      case Intrepid::OPERATOR_D5:
+      case Intrepid::OPERATOR_D6:
+      case Intrepid::OPERATOR_D7:
+      case Intrepid::OPERATOR_D8:
+      case Intrepid::OPERATOR_D9:
+      case Intrepid::OPERATOR_D10:
       {
         // outputValues is a rank-3 array with dimensions (basisCardinality_, dim0, DkCardinality)
         int DkCardinality = Intrepid::getDkCardinality(operatorType, 

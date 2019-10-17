@@ -5,7 +5,6 @@
 #include "SpatiallyFilteredFunction.h"
 
 
-using namespace Intrepid;
 using namespace Camellia;
 
 template <typename Scalar>
@@ -28,7 +27,7 @@ std::vector< TFunctionPtr<Scalar> > SpatiallyFilteredFunction<Scalar>::memberFun
 }
 
 template <typename Scalar>
-void SpatiallyFilteredFunction<Scalar>::values(FieldContainer<Scalar> &values, BasisCachePtr basisCache)
+void SpatiallyFilteredFunction<Scalar>::values(Intrepid::FieldContainer<Scalar> &values, BasisCachePtr basisCache)
 {
 //  cout << "Entered SpatiallyFilteredFunction<Scalar>::values()\n";
   int numCells = values.dimension(0);
@@ -44,11 +43,11 @@ void SpatiallyFilteredFunction<Scalar>::values(FieldContainer<Scalar> &values, B
     entriesPerPoint *= dim[d];
     dim[d] = 0; // clear so that these indices point to the start of storage for (cellIndex,ptIndex)
   }
-  FieldContainer<bool> pointsMatch(numCells,numPoints);
+  Intrepid::FieldContainer<bool> pointsMatch(numCells,numPoints);
   if (_sf->matchesPoints(pointsMatch,basisCache))   // SOME point matches
   {
 //    cout << "pointsMatch:\n" << pointsMatch;
-    FieldContainer<Scalar> fValues(fValuesDim);
+    Intrepid::FieldContainer<Scalar> fValues(fValuesDim);
     _f->values(fValues,basisCache);
     for (int cellIndex=0; cellIndex<numCells; cellIndex++)
     {

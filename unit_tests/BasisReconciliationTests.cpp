@@ -25,7 +25,6 @@
 #include "VarFactory.h"
 
 using namespace Camellia;
-using namespace Intrepid;
 
 namespace
 {
@@ -34,10 +33,10 @@ struct hSideTest
 {
   BasisPtr fineBasis;
   int fineSideIndex; // ancestral side index
-  FieldContainer<double> fineCellNodes; // these are actually the ancestral nodes
+  Intrepid::FieldContainer<double> fineCellNodes; // these are actually the ancestral nodes
   BasisPtr coarseBasis;
   int coarseSideIndex;
-  FieldContainer<double> coarseCellNodes;
+  Intrepid::FieldContainer<double> coarseCellNodes;
 
   RefinementBranch volumeRefinements; // how the ancestor topology of fineCellNodes has been refined to get to the descendant of interest...
 };
@@ -47,14 +46,14 @@ struct pSideTest
 {
   BasisPtr fineBasis;
   int fineSideIndex;
-  FieldContainer<double> fineCellNodes;
+  Intrepid::FieldContainer<double> fineCellNodes;
   BasisPtr coarseBasis;
   int coarseSideIndex;
-  FieldContainer<double> coarseCellNodes;
+  Intrepid::FieldContainer<double> coarseCellNodes;
 };
 
 // copied from DPGTests's BasisReconciliationTests
-void addCellDimensionToFC(FieldContainer<double> &fc)
+void addCellDimensionToFC(Intrepid::FieldContainer<double> &fc)
 {
   Teuchos::Array<int> dim;
   int oneCell = 1;
@@ -64,7 +63,7 @@ void addCellDimensionToFC(FieldContainer<double> &fc)
 }
 
 // copied from DPGTests's BasisReconciliationTests
-void stripCellDimensionFromFC(FieldContainer<double> &fc)
+void stripCellDimensionFromFC(Intrepid::FieldContainer<double> &fc)
 {
   Teuchos::Array<int> dim;
   int oneCell = 1;
@@ -78,31 +77,31 @@ void stripCellDimensionFromFC(FieldContainer<double> &fc)
 }
 
 // copied from DPGTests's BasisReconciliationTests
-FieldContainer<double> cubaturePoints(shards::CellTopology cellTopo, int cubatureDegree, unsigned nodePermutation)
+Intrepid::FieldContainer<double> cubaturePoints(shards::CellTopology cellTopo, int cubatureDegree, unsigned nodePermutation)
 {
   BasisCachePtr basisCache = Teuchos::rcp( new BasisCache(cellTopo, cubatureDegree, false) );
-  FieldContainer<double> permutedCellNodes(cellTopo.getNodeCount(),cellTopo.getDimension());
+  Intrepid::FieldContainer<double> permutedCellNodes(cellTopo.getNodeCount(),cellTopo.getDimension());
   CamelliaCellTools::refCellNodesForTopology(permutedCellNodes, cellTopo, nodePermutation);
   permutedCellNodes.resize(1, permutedCellNodes.dimension(0), permutedCellNodes.dimension(1));
   basisCache->setPhysicalCellNodes(permutedCellNodes, vector<GlobalIndexType>(), false);
-  FieldContainer<double> permutedCubaturePoints = basisCache->getPhysicalCubaturePoints();
+  Intrepid::FieldContainer<double> permutedCubaturePoints = basisCache->getPhysicalCubaturePoints();
   permutedCubaturePoints.resize(permutedCubaturePoints.dimension(1), permutedCubaturePoints.dimension(2));
   return permutedCubaturePoints;
 }
 
 // copied from DPGTests's BasisReconciliationTests
-FieldContainer<double> cubaturePoints(shards::CellTopology fineCellTopo, int cubatureDegree,
+Intrepid::FieldContainer<double> cubaturePoints(shards::CellTopology fineCellTopo, int cubatureDegree,
                                       shards::CellTopology coarseCellTopo, unsigned nodePermutation, RefinementBranch &refinements)
 {
   BasisCachePtr fineBasisCache = Teuchos::rcp( new BasisCache(fineCellTopo, cubatureDegree, false) );
-  FieldContainer<double> coarseCellNodes(coarseCellTopo.getNodeCount(),coarseCellTopo.getDimension());
+  Intrepid::FieldContainer<double> coarseCellNodes(coarseCellTopo.getNodeCount(),coarseCellTopo.getDimension());
   CamelliaCellTools::refCellNodesForTopology(coarseCellNodes, coarseCellTopo, nodePermutation);
 
-  FieldContainer<double> fineCellNodesInCoarseCell = RefinementPattern::descendantNodes(refinements,coarseCellNodes);
+  Intrepid::FieldContainer<double> fineCellNodesInCoarseCell = RefinementPattern::descendantNodes(refinements,coarseCellNodes);
   fineCellNodesInCoarseCell.resize(1,fineCellNodesInCoarseCell.dimension(0),fineCellNodesInCoarseCell.dimension(1));
 
   fineBasisCache->setPhysicalCellNodes(fineCellNodesInCoarseCell, vector<GlobalIndexType>(), false);
-  FieldContainer<double> fineCubPoints = fineBasisCache->getPhysicalCubaturePoints();
+  Intrepid::FieldContainer<double> fineCubPoints = fineBasisCache->getPhysicalCubaturePoints();
   fineCubPoints.resize(fineCubPoints.dimension(1), fineCubPoints.dimension(2));
 
   return fineCubPoints;
@@ -127,13 +126,13 @@ RefinementBranch demoRefinementsOnSide(shards::CellTopology cellTopo, unsigned s
 }
 
 // copied from DPGTests's BasisReconciliationTests
-FieldContainer<double> filterValues(FieldContainer<double> &basisValues, set<unsigned> &dofOrdinalFilter, bool includesCellDimension)
+Intrepid::FieldContainer<double> filterValues(Intrepid::FieldContainer<double> &basisValues, set<unsigned> &dofOrdinalFilter, bool includesCellDimension)
 {
   Teuchos::Array<int> dim;
   basisValues.dimensions(dim); // dimensions are ordered (C,F,P[,D,…]) if there is a cell dimension, (F,P[,D,…]) otherwise
   int fieldDimOrdinal = includesCellDimension ? 1 : 0;
   dim[fieldDimOrdinal] = dofOrdinalFilter.size();
-  FieldContainer<double> filteredValues(dim);
+  Intrepid::FieldContainer<double> filteredValues(dim);
   if (dofOrdinalFilter.size() == 0) return filteredValues; // empty container
   int valuesPerField = filteredValues.size() / dofOrdinalFilter.size();
   double *filteredValue = &filteredValues[0];
@@ -150,7 +149,7 @@ FieldContainer<double> filterValues(FieldContainer<double> &basisValues, set<uns
 }
 
 // copied from DPGTests's BasisReconciliationTests
-FieldContainer<double> interpretValues(FieldContainer<double> &fineValues, FieldContainer<double> &weights)
+Intrepid::FieldContainer<double> interpretValues(Intrepid::FieldContainer<double> &fineValues, Intrepid::FieldContainer<double> &weights)
 {
   int fineCount = weights.dimension(0);   // number of fine ordinals
   int coarseCount = weights.dimension(1); // number of coarse ordinals
@@ -158,7 +157,7 @@ FieldContainer<double> interpretValues(FieldContainer<double> &fineValues, Field
   fineValues.dimensions(dim);
   dim[0] = coarseCount; // the shape we want for the final container is now in dim
   int valueCount = fineValues.size() / fineCount;
-  FieldContainer<double> result(coarseCount, valueCount);
+  Intrepid::FieldContainer<double> result(coarseCount, valueCount);
   fineValues.resize(fineCount,valueCount);
   SerialDenseWrapper::multiply(result, weights, fineValues, 'T', 'N');
   result.resize(dim);
@@ -168,8 +167,8 @@ FieldContainer<double> interpretValues(FieldContainer<double> &fineValues, Field
 }
 
 // copied from DPGTests's BasisReconciliationTests
-void interpretSideValues(SubBasisReconciliationWeights weights, const FieldContainer<double> &fineValues, const FieldContainer<double> &coarseValues,
-                         FieldContainer<double> &interpretedFineValues, FieldContainer<double> &filteredCoarseValues)
+void interpretSideValues(SubBasisReconciliationWeights weights, const Intrepid::FieldContainer<double> &fineValues, const Intrepid::FieldContainer<double> &coarseValues,
+                         Intrepid::FieldContainer<double> &interpretedFineValues, Intrepid::FieldContainer<double> &filteredCoarseValues)
 {
   int fineCount = weights.fineOrdinals.size();
   int coarseCount = weights.coarseOrdinals.size();
@@ -182,7 +181,7 @@ void interpretSideValues(SubBasisReconciliationWeights weights, const FieldConta
   interpretedFineValues.resize(dim);
 
   dim[0] = fineCount;
-  FieldContainer<double> filteredFineValues(dim);
+  Intrepid::FieldContainer<double> filteredFineValues(dim);
   int numValuesPerBasisFunction = filteredFineValues.size() / fineCount;
   int filteredIndex = 0;
   for (set<int>::iterator fineIt = weights.fineOrdinals.begin(); fineIt != weights.fineOrdinals.end(); fineIt++)
@@ -227,9 +226,9 @@ RefinementBranch makeRefinementBranch( RefinementPatternPtr refPattern, vector<u
 }
 
 // copied from DPGTests's BasisReconciliationTests
-FieldContainer<double> permutedSidePoints(shards::CellTopology &sideTopo, FieldContainer<double> &pointsRefCell, unsigned permutation)
+Intrepid::FieldContainer<double> permutedSidePoints(shards::CellTopology &sideTopo, Intrepid::FieldContainer<double> &pointsRefCell, unsigned permutation)
 {
-  FieldContainer<double> sideNodes (sideTopo.getNodeCount(), sideTopo.getDimension());
+  Intrepid::FieldContainer<double> sideNodes (sideTopo.getNodeCount(), sideTopo.getDimension());
   CamelliaCellTools::refCellNodesForTopology(sideNodes, sideTopo, permutation);
 
   unsigned cubDegree = 1;
@@ -239,18 +238,18 @@ FieldContainer<double> permutedSidePoints(shards::CellTopology &sideTopo, FieldC
   sideCache->setRefCellPoints(pointsRefCell);
   sideCache->setPhysicalCellNodes(sideNodes, vector<GlobalIndexType>(), false);
 
-  FieldContainer<double> permutedPoints = sideCache->getPhysicalCubaturePoints();
+  Intrepid::FieldContainer<double> permutedPoints = sideCache->getPhysicalCubaturePoints();
   permutedPoints.resize(permutedPoints.dimension(1), permutedPoints.dimension(2));
   return permutedPoints;
 }
 
 // copied from DPGTests's BasisReconciliationTests
-FieldContainer<double> translateQuad(const FieldContainer<double> &quad, double x, double y)
+Intrepid::FieldContainer<double> translateQuad(const Intrepid::FieldContainer<double> &quad, double x, double y)
 {
   vector<double> translations;
   translations.push_back(x);
   translations.push_back(y);
-  FieldContainer<double> translatedQuad = quad;
+  Intrepid::FieldContainer<double> translatedQuad = quad;
   for (int node=0; node < translatedQuad.dimension(0); node++)
   {
     for (int d = 0; d < translatedQuad.dimension(1); d++)
@@ -262,13 +261,13 @@ FieldContainer<double> translateQuad(const FieldContainer<double> &quad, double 
 }
 
 // copied from DPGTests's BasisReconciliationTests
-FieldContainer<double> translateHex(const FieldContainer<double> &hex, double x, double y, double z)
+Intrepid::FieldContainer<double> translateHex(const Intrepid::FieldContainer<double> &hex, double x, double y, double z)
 {
   vector<double> translations;
   translations.push_back(x);
   translations.push_back(y);
   translations.push_back(z);
-  FieldContainer<double> translatedHex = hex;
+  Intrepid::FieldContainer<double> translatedHex = hex;
   for (int node=0; node < translatedHex.dimension(0); node++)
   {
     for (int d = 0; d < translatedHex.dimension(1); d++)
@@ -280,10 +279,10 @@ FieldContainer<double> translateHex(const FieldContainer<double> &hex, double x,
 }
 
 // copied from DPGTests's BasisReconciliationTests
-FieldContainer<double> transformedBasisValuesAtPoints(BasisPtr basis, const FieldContainer<double> &pointsOnFineCell, RefinementBranch refinements)
+Intrepid::FieldContainer<double> transformedBasisValuesAtPoints(BasisPtr basis, const Intrepid::FieldContainer<double> &pointsOnFineCell, RefinementBranch refinements)
 {
   CellTopoPtr cellTopo = basis->domainTopology();
-  FieldContainer<double> refCellNodes;
+  Intrepid::FieldContainer<double> refCellNodes;
   refCellNodes.resize(cellTopo->getNodeCount(),cellTopo->getDimension());
   if (refinements.size() == 0)
   {
@@ -292,7 +291,7 @@ FieldContainer<double> transformedBasisValuesAtPoints(BasisPtr basis, const Fiel
   else
   {
     CellTopoPtr coarseCellTopo = refinements[0].first->parentTopology();
-    FieldContainer<double> coarseCellNodes(coarseCellTopo->getNodeCount(),coarseCellTopo->getDimension());
+    Intrepid::FieldContainer<double> coarseCellNodes(coarseCellTopo->getNodeCount(),coarseCellTopo->getDimension());
     CamelliaCellTools::refCellNodesForTopology(coarseCellNodes, coarseCellTopo);
     refCellNodes = RefinementPattern::descendantNodes(refinements,coarseCellNodes);
   }
@@ -351,17 +350,17 @@ void testHConstraintInternalBasis(BasisPtr fineBasis, RefinementBranch &refineme
     return;
   }
 
-  FieldContainer<double> finePoints = cubaturePoints(fineBasis->domainTopology()->getShardsTopology(), 1, 0);
-  FieldContainer<double> coarsePoints = cubaturePoints(fineBasis->domainTopology()->getShardsTopology(), 1, coarseBasis->domainTopology()->getShardsTopology(), 0, refinements);
+  Intrepid::FieldContainer<double> finePoints = cubaturePoints(fineBasis->domainTopology()->getShardsTopology(), 1, 0);
+  Intrepid::FieldContainer<double> coarsePoints = cubaturePoints(fineBasis->domainTopology()->getShardsTopology(), 1, coarseBasis->domainTopology()->getShardsTopology(), 0, refinements);
 
-  FieldContainer<double> fineBasisValues = transformedBasisValuesAtPoints(fineBasis, finePoints, refinements);
+  Intrepid::FieldContainer<double> fineBasisValues = transformedBasisValuesAtPoints(fineBasis, finePoints, refinements);
   RefinementBranch noRefinements;
-  FieldContainer<double> coarseBasisValues = transformedBasisValuesAtPoints(coarseBasis, coarsePoints, noRefinements);
+  Intrepid::FieldContainer<double> coarseBasisValues = transformedBasisValuesAtPoints(coarseBasis, coarsePoints, noRefinements);
 
   stripCellDimensionFromFC(fineBasisValues);
   stripCellDimensionFromFC(coarseBasisValues);
 
-  FieldContainer<double> interpretedFineBasisValues, filteredCoarseValues;
+  Intrepid::FieldContainer<double> interpretedFineBasisValues, filteredCoarseValues;
   interpretSideValues(weights, fineBasisValues, coarseBasisValues, interpretedFineBasisValues, filteredCoarseValues);
 
   double tol = 1e-14;
@@ -369,8 +368,8 @@ void testHConstraintInternalBasis(BasisPtr fineBasis, RefinementBranch &refineme
 }
 
 // copied from DPGTests's BasisReconciliationTests
-unsigned vertexPermutation(shards::CellTopology &fineTopo, unsigned fineSideIndex, FieldContainer<double> &fineCellNodes,
-                           shards::CellTopology &coarseTopo, unsigned coarseSideIndex, FieldContainer<double> &coarseCellNodes)
+unsigned vertexPermutation(shards::CellTopology &fineTopo, unsigned fineSideIndex, Intrepid::FieldContainer<double> &fineCellNodes,
+                           shards::CellTopology &coarseTopo, unsigned coarseSideIndex, Intrepid::FieldContainer<double> &coarseCellNodes)
 {
   int d = fineTopo.getDimension();
   shards::CellTopology sideTopo = fineTopo.getBaseCellTopologyData(d-1, fineSideIndex);
@@ -410,9 +409,9 @@ unsigned vertexPermutation(shards::CellTopology &fineTopo, unsigned fineSideInde
   TEUCHOS_TEST_FOR_EXCEPTION(true, std::invalid_argument, "matching permutation not found");
 }
 
-void testHConstraintSideBasis(BasisPtr fineBasis, unsigned fineAncestralSideIndex, FieldContainer<double> &fineCellAncestralNodes,
+void testHConstraintSideBasis(BasisPtr fineBasis, unsigned fineAncestralSideIndex, Intrepid::FieldContainer<double> &fineCellAncestralNodes,
                               RefinementBranch &volumeRefinements,
-                              BasisPtr coarseBasis, unsigned coarseSideIndex, FieldContainer<double> &coarseCellNodes,
+                              BasisPtr coarseBasis, unsigned coarseSideIndex, Intrepid::FieldContainer<double> &coarseCellNodes,
                               Teuchos::FancyOStream &out, bool &success)
 {
   // copied from DPGTests's BasisReconciliationTests
@@ -421,7 +420,7 @@ void testHConstraintSideBasis(BasisPtr fineBasis, unsigned fineAncestralSideInde
 
   RefinementBranch sideRefinements = determineSideRefinements(volumeRefinements, fineAncestralSideIndex);
 
-  FieldContainer<double> fineCellNodes = RefinementPattern::descendantNodes(volumeRefinements, fineCellAncestralNodes);
+  Intrepid::FieldContainer<double> fineCellNodes = RefinementPattern::descendantNodes(volumeRefinements, fineCellAncestralNodes);
 
   int spaceDim = fineBasis->domainTopology()->getDimension();
   int sideDim = spaceDim - 1;
@@ -472,8 +471,8 @@ void testHConstraintSideBasis(BasisPtr fineBasis, unsigned fineAncestralSideInde
   shards::CellTopology shardsCoarseSideTopo = coarseSideTopo->getShardsTopology();
 
   int cubDegree = 1;
-  FieldContainer<double> sidePointsFine = cubaturePoints(shardsFineSideTopo, cubDegree, 0);
-  FieldContainer<double> sidePointsCoarse = cubaturePoints(shardsFineSideTopo, cubDegree, shardsCoarseSideTopo, permutation, sideRefinements);
+  Intrepid::FieldContainer<double> sidePointsFine = cubaturePoints(shardsFineSideTopo, cubDegree, 0);
+  Intrepid::FieldContainer<double> sidePointsCoarse = cubaturePoints(shardsFineSideTopo, cubDegree, shardsCoarseSideTopo, permutation, sideRefinements);
 
   cubDegree = fineBasis->getDegree() * 2;
 
@@ -485,23 +484,23 @@ void testHConstraintSideBasis(BasisPtr fineBasis, unsigned fineAncestralSideInde
   fineCache->getSideBasisCache(fineSideIndex)->setRefCellPoints(sidePointsFine);
   coarseCache->getSideBasisCache(coarseSideIndex)->setRefCellPoints(sidePointsCoarse);
 
-  FieldContainer<double> finePointsPhysical = fineCache->getSideBasisCache(fineSideIndex)->getPhysicalCubaturePoints();
-  FieldContainer<double> coarsePointsPhysical = coarseCache->getSideBasisCache(coarseSideIndex)->getPhysicalCubaturePoints();
+  Intrepid::FieldContainer<double> finePointsPhysical = fineCache->getSideBasisCache(fineSideIndex)->getPhysicalCubaturePoints();
+  Intrepid::FieldContainer<double> coarsePointsPhysical = coarseCache->getSideBasisCache(coarseSideIndex)->getPhysicalCubaturePoints();
 
-  FieldContainer<double> finePoints = fineCache->getSideBasisCache(fineSideIndex)->getSideRefCellPointsInVolumeCoordinates();
-  FieldContainer<double> coarsePoints = coarseCache->getSideBasisCache(coarseSideIndex)->getSideRefCellPointsInVolumeCoordinates();
+  Intrepid::FieldContainer<double> finePoints = fineCache->getSideBasisCache(fineSideIndex)->getSideRefCellPointsInVolumeCoordinates();
+  Intrepid::FieldContainer<double> coarsePoints = coarseCache->getSideBasisCache(coarseSideIndex)->getSideRefCellPointsInVolumeCoordinates();
 
   // finePoints and coarsePoints should match
   double tol = 1e-14;
   TEST_COMPARE_FLOATING_ARRAYS_CAMELLIA(finePointsPhysical, coarsePointsPhysical, tol);
 
   bool useVolumeCoordinates = true;
-  FieldContainer<double> fineBasisValues = *fineCache->getSideBasisCache(fineSideIndex)->getTransformedValues(fineBasis, OP_VALUE, useVolumeCoordinates);
-  FieldContainer<double> coarseBasisValues = *coarseCache->getSideBasisCache(coarseSideIndex)->getTransformedValues(coarseBasis, OP_VALUE, useVolumeCoordinates); // basisValuesAtPoints(coarseBasis, coarsePoints);
+  Intrepid::FieldContainer<double> fineBasisValues = *fineCache->getSideBasisCache(fineSideIndex)->getTransformedValues(fineBasis, OP_VALUE, useVolumeCoordinates);
+  Intrepid::FieldContainer<double> coarseBasisValues = *coarseCache->getSideBasisCache(coarseSideIndex)->getTransformedValues(coarseBasis, OP_VALUE, useVolumeCoordinates); // basisValuesAtPoints(coarseBasis, coarsePoints);
   stripCellDimensionFromFC(fineBasisValues);
   stripCellDimensionFromFC(coarseBasisValues);
 
-  FieldContainer<double> interpretedFineBasisValues, filteredCoarseBasisValues;
+  Intrepid::FieldContainer<double> interpretedFineBasisValues, filteredCoarseBasisValues;
   interpretSideValues(weights, fineBasisValues, coarseBasisValues, interpretedFineBasisValues, filteredCoarseBasisValues);
 
   TEST_COMPARE_FLOATING_ARRAYS_CAMELLIA(filteredCoarseBasisValues, interpretedFineBasisValues, tol);
@@ -527,16 +526,16 @@ void testPConstraintInternalBasis(BasisPtr fineBasis, BasisPtr coarseBasis, Teuc
 
     //  cout << "BasisReconciliation: computed weights when matching whole bases.\n";
 
-    FieldContainer<double> points = cubaturePoints(fineBasis->domainTopology()->getShardsTopology(), 5, 0);
+    Intrepid::FieldContainer<double> points = cubaturePoints(fineBasis->domainTopology()->getShardsTopology(), 5, 0);
     RefinementBranch noRefinements;
-    FieldContainer<double> fineBasisValues = transformedBasisValuesAtPoints(fineBasis, points, noRefinements);
-    FieldContainer<double> coarseBasisPoints = cubaturePoints(fineBasis->domainTopology()->getShardsTopology(), 5, permutation);
-    FieldContainer<double> coarseBasisValues = transformedBasisValuesAtPoints(coarseBasis, coarseBasisPoints, noRefinements);
+    Intrepid::FieldContainer<double> fineBasisValues = transformedBasisValuesAtPoints(fineBasis, points, noRefinements);
+    Intrepid::FieldContainer<double> coarseBasisPoints = cubaturePoints(fineBasis->domainTopology()->getShardsTopology(), 5, permutation);
+    Intrepid::FieldContainer<double> coarseBasisValues = transformedBasisValuesAtPoints(coarseBasis, coarseBasisPoints, noRefinements);
 
     stripCellDimensionFromFC(fineBasisValues);
     stripCellDimensionFromFC(coarseBasisValues);
 
-    FieldContainer<double> interpretedFineBasisValues;
+    Intrepid::FieldContainer<double> interpretedFineBasisValues;
     interpretSideValues(weights, fineBasisValues, coarseBasisValues, interpretedFineBasisValues, coarseBasisValues);
 
     double tol = 1e-13;
@@ -544,8 +543,8 @@ void testPConstraintInternalBasis(BasisPtr fineBasis, BasisPtr coarseBasis, Teuc
   }
 }
 
-void testPConstraintSideBasis(BasisPtr fineBasis, unsigned fineSideIndex, FieldContainer<double> &fineCellNodes,
-                              BasisPtr coarseBasis, unsigned coarseSideIndex, FieldContainer<double> &coarseCellNodes,
+void testPConstraintSideBasis(BasisPtr fineBasis, unsigned fineSideIndex, Intrepid::FieldContainer<double> &fineCellNodes,
+                              BasisPtr coarseBasis, unsigned coarseSideIndex, Intrepid::FieldContainer<double> &coarseCellNodes,
                               Teuchos::FancyOStream &out, bool &success)
 {
   BasisReconciliation br;
@@ -573,8 +572,8 @@ void testPConstraintSideBasis(BasisPtr fineBasis, unsigned fineSideIndex, FieldC
 
   SubBasisReconciliationWeights weights = br.constrainedWeights(fineBasis, fineSideIndex, coarseBasis, coarseSideIndex, permutation);
 
-  FieldContainer<double> sidePointsFine = cubaturePoints(sideTopo, 5, 0);
-  FieldContainer<double> sidePointsCoarse = permutedSidePoints(sideTopo,sidePointsFine,permutation);
+  Intrepid::FieldContainer<double> sidePointsFine = cubaturePoints(sideTopo, 5, 0);
+  Intrepid::FieldContainer<double> sidePointsCoarse = permutedSidePoints(sideTopo,sidePointsFine,permutation);
 
   int cubDegree = fineBasis->getDegree() * 2;
   BasisCachePtr fineCache = Teuchos::rcp( new BasisCache(fineCellNodes, fineTopo, cubDegree, true) );
@@ -583,11 +582,11 @@ void testPConstraintSideBasis(BasisPtr fineBasis, unsigned fineSideIndex, FieldC
   fineCache->getSideBasisCache(fineSideIndex)->setRefCellPoints(sidePointsFine);
   coarseCache->getSideBasisCache(coarseSideIndex)->setRefCellPoints(sidePointsCoarse);
 
-  FieldContainer<double> finePointsPhysical = fineCache->getSideBasisCache(fineSideIndex)->getPhysicalCubaturePoints();
-  FieldContainer<double> coarsePointsPhysical = coarseCache->getSideBasisCache(coarseSideIndex)->getPhysicalCubaturePoints();
+  Intrepid::FieldContainer<double> finePointsPhysical = fineCache->getSideBasisCache(fineSideIndex)->getPhysicalCubaturePoints();
+  Intrepid::FieldContainer<double> coarsePointsPhysical = coarseCache->getSideBasisCache(coarseSideIndex)->getPhysicalCubaturePoints();
 
-  FieldContainer<double> finePoints = fineCache->getSideBasisCache(fineSideIndex)->getSideRefCellPointsInVolumeCoordinates();
-  FieldContainer<double> coarsePoints = coarseCache->getSideBasisCache(coarseSideIndex)->getSideRefCellPointsInVolumeCoordinates();
+  Intrepid::FieldContainer<double> finePoints = fineCache->getSideBasisCache(fineSideIndex)->getSideRefCellPointsInVolumeCoordinates();
+  Intrepid::FieldContainer<double> coarsePoints = coarseCache->getSideBasisCache(coarseSideIndex)->getSideRefCellPointsInVolumeCoordinates();
 
   // finePoints and coarsePoints should match
   double tol = 1e-14;
@@ -595,13 +594,13 @@ void testPConstraintSideBasis(BasisPtr fineBasis, unsigned fineSideIndex, FieldC
 
   RefinementBranch noRefinements;
 
-  FieldContainer<double> fineBasisValues = transformedBasisValuesAtPoints(fineBasis, finePoints, noRefinements);
-  FieldContainer<double> coarseBasisValues = transformedBasisValuesAtPoints(coarseBasis, coarsePoints, noRefinements);
+  Intrepid::FieldContainer<double> fineBasisValues = transformedBasisValuesAtPoints(fineBasis, finePoints, noRefinements);
+  Intrepid::FieldContainer<double> coarseBasisValues = transformedBasisValuesAtPoints(coarseBasis, coarsePoints, noRefinements);
 
   stripCellDimensionFromFC(fineBasisValues);
   stripCellDimensionFromFC(coarseBasisValues);
 
-  FieldContainer<double> interpretedFineBasisValues, filteredCoarseBasisValues;
+  Intrepid::FieldContainer<double> interpretedFineBasisValues, filteredCoarseBasisValues;
   interpretSideValues(weights, fineBasisValues, coarseBasisValues, interpretedFineBasisValues, filteredCoarseBasisValues);
 
   TEST_COMPARE_FLOATING_ARRAYS_CAMELLIA(filteredCoarseBasisValues, interpretedFineBasisValues, tol);
@@ -701,10 +700,10 @@ void testHGRADTrace(MeshTopologyPtr meshTopo, int polyOrder, Teuchos::FancyOStre
 
               // lazy way to get the cubature points for subcell:
               BasisCachePtr subcellCache = BasisCache::basisCacheForReferenceCell(subcellTopo1, cubatureDegree);
-              FieldContainer<double> subcellCubPoints1 = subcellCache->getRefCellPoints();
+              Intrepid::FieldContainer<double> subcellCubPoints1 = subcellCache->getRefCellPoints();
               int numPoints = subcellCubPoints1.dimension(0);
 
-              FieldContainer<double> subcellPointsInParent1(numPoints,sideTopo1->getDimension());
+              Intrepid::FieldContainer<double> subcellPointsInParent1(numPoints,sideTopo1->getDimension());
               CamelliaCellTools::mapToReferenceSubcell(subcellPointsInParent1, subcellCubPoints1, d, subcellOrdinalSide1, sideTopo1);
 
 
@@ -715,15 +714,15 @@ void testHGRADTrace(MeshTopologyPtr meshTopo, int polyOrder, Teuchos::FancyOStre
                   side1SubcellToCanonical,
                   canonicalToSide2Subcell);
 
-              FieldContainer<double> subcellCubPoints2(subcellCubPoints1.dimension(0), subcellCubPoints1.dimension(1));
+              Intrepid::FieldContainer<double> subcellCubPoints2(subcellCubPoints1.dimension(0), subcellCubPoints1.dimension(1));
               CamelliaCellTools::permutedReferenceCellPoints(subcellTopo1, subcellPermutationSide1ToSide2, subcellCubPoints1, subcellCubPoints2);
 
-              FieldContainer<double> subcellPointsInParent2(numPoints,sideTopo2->getDimension());
+              Intrepid::FieldContainer<double> subcellPointsInParent2(numPoints,sideTopo2->getDimension());
               CamelliaCellTools::mapToReferenceSubcell(subcellPointsInParent2, subcellCubPoints2, d, subcellOrdinalSide2, sideTopo2);
 
               // sanity check on the mapped points: map from the sides to physical space and make sure they're the same
               bool createSideCaches = true;
-              FieldContainer<double> physicalCellNodes1(cellTopo1->getNodeCount(), cellTopo1->getDimension());
+              Intrepid::FieldContainer<double> physicalCellNodes1(cellTopo1->getNodeCount(), cellTopo1->getDimension());
               meshTopo->verticesForCell(physicalCellNodes1, cellID1);
               physicalCellNodes1.resize(1,physicalCellNodes1.dimension(0),physicalCellNodes1.dimension(1));
               BasisCachePtr basisCacheCell1 = BasisCache::basisCacheForCellTopology(cellTopo1, cubatureDegree,
@@ -731,7 +730,7 @@ void testHGRADTrace(MeshTopologyPtr meshTopo, int polyOrder, Teuchos::FancyOStre
               BasisCachePtr sideCache1 = basisCacheCell1->getSideBasisCache(sideOrdinal1);
               sideCache1->setRefCellPoints(subcellPointsInParent1);
 
-              FieldContainer<double> physicalCellNodes2(cell2->topology()->getNodeCount(), cell2->topology()->getDimension());
+              Intrepid::FieldContainer<double> physicalCellNodes2(cell2->topology()->getNodeCount(), cell2->topology()->getDimension());
               meshTopo->verticesForCell(physicalCellNodes2, cell2->cellIndex());
               physicalCellNodes2.resize(1,physicalCellNodes2.dimension(0),physicalCellNodes2.dimension(1));
               BasisCachePtr basisCacheCell2 = BasisCache::basisCacheForCellTopology(cell2->topology(), cubatureDegree,
@@ -750,14 +749,14 @@ void testHGRADTrace(MeshTopologyPtr meshTopo, int polyOrder, Teuchos::FancyOStre
                 out << "sideCache2->getPhysicalCubaturePoints():\n" << sideCache2->getPhysicalCubaturePoints();
               }
 
-              FieldContainer<double> values1 = *sideCache1->getTransformedValues(basis1, OP_VALUE);
-              FieldContainer<double> values2 = *sideCache2->getTransformedValues(basis2, OP_VALUE);
+              Intrepid::FieldContainer<double> values1 = *sideCache1->getTransformedValues(basis1, OP_VALUE);
+              Intrepid::FieldContainer<double> values2 = *sideCache2->getTransformedValues(basis2, OP_VALUE);
 //
 //                // multiply by the determinant of the Jacobian at each point:
-//                FunctionSpaceTools::multiplyMeasure<double>(values1, sideCache1->getJacobianDet(), values1);
-//                FunctionSpaceTools::multiplyMeasure<double>(values2, sideCache2->getJacobianDet(), values2);
+//                Intrepid::FunctionSpaceTools::multiplyMeasure<double>(values1, sideCache1->getJacobianDet(), values1);
+//                Intrepid::FunctionSpaceTools::multiplyMeasure<double>(values2, sideCache2->getJacobianDet(), values2);
 //
-              FieldContainer<double> values1Filtered(weights.fineOrdinals.size(),numPoints);
+              Intrepid::FieldContainer<double> values1Filtered(weights.fineOrdinals.size(),numPoints);
               int i=0;
               for (auto fineOrdinal : weights.fineOrdinals)
               {
@@ -768,7 +767,7 @@ void testHGRADTrace(MeshTopologyPtr meshTopo, int polyOrder, Teuchos::FancyOStre
                 i++;
               }
 
-              FieldContainer<double> values2Filtered(weights.coarseOrdinals.size(),numPoints);
+              Intrepid::FieldContainer<double> values2Filtered(weights.coarseOrdinals.size(),numPoints);
               i=0;
               for (auto coarseOrdinal : weights.coarseOrdinals)
               {
@@ -783,7 +782,7 @@ void testHGRADTrace(MeshTopologyPtr meshTopo, int polyOrder, Teuchos::FancyOStre
               //            out << " of dimension " << d << " in terms of basis on side1 = sideOrdinal " << side1;
               //            out << " subcell " << subcellOrdinalSide1 << ":\n" << weights.weights;
 
-              FieldContainer<double> weightedValues1(weights.coarseOrdinals.size(),numPoints);
+              Intrepid::FieldContainer<double> weightedValues1(weights.coarseOrdinals.size(),numPoints);
               weightedValues1.initialize(0.0);
               for (int i=0; i<weights.fineOrdinals.size(); i++)
               {
@@ -872,7 +871,7 @@ void testHGRADTrace(MeshTopologyPtr meshTopo, int polyOrder, Teuchos::FancyOStre
 void testHGRADTrace(CellTopoPtr volumeTopo, int polyOrder, Teuchos::FancyOStream &out, bool &success)
 {
   MeshTopologyPtr meshTopo = Teuchos::rcp(new MeshTopology(volumeTopo->getDimension()));
-  FieldContainer<double> refCellNodes(volumeTopo->getNodeCount(), volumeTopo->getDimension());
+  Intrepid::FieldContainer<double> refCellNodes(volumeTopo->getNodeCount(), volumeTopo->getDimension());
   CamelliaCellTools::refCellNodesForTopology(refCellNodes, volumeTopo);
   vector<vector<double>> cellNodesVector;
   CamelliaCellTools::pointsVectorFromFC(cellNodesVector, refCellNodes);
@@ -880,12 +879,12 @@ void testHGRADTrace(CellTopoPtr volumeTopo, int polyOrder, Teuchos::FancyOStream
   testHGRADTrace(meshTopo, polyOrder, out, success);
 }
 
-void testWeightedBasesAgree(FieldContainer<double> &fineBasisValues, FieldContainer<double> &coarseBasisValues,
+void testWeightedBasesAgree(Intrepid::FieldContainer<double> &fineBasisValues, Intrepid::FieldContainer<double> &coarseBasisValues,
                             SubBasisReconciliationWeights &weights,
                             Teuchos::FancyOStream &out, bool &success)
 {
   int numPoints = fineBasisValues.dimension(2);
-  FieldContainer<double> values1Filtered(weights.fineOrdinals.size(),numPoints);
+  Intrepid::FieldContainer<double> values1Filtered(weights.fineOrdinals.size(),numPoints);
   int i=0;
   for (auto fineOrdinal : weights.fineOrdinals)
   {
@@ -896,7 +895,7 @@ void testWeightedBasesAgree(FieldContainer<double> &fineBasisValues, FieldContai
     i++;
   }
 
-  FieldContainer<double> values2Filtered(weights.coarseOrdinals.size(),numPoints);
+  Intrepid::FieldContainer<double> values2Filtered(weights.coarseOrdinals.size(),numPoints);
   i=0;
   for (auto coarseOrdinal : weights.coarseOrdinals)
   {
@@ -907,7 +906,7 @@ void testWeightedBasesAgree(FieldContainer<double> &fineBasisValues, FieldContai
     i++;
   }
 
-  FieldContainer<double> weightedValues1(weights.coarseOrdinals.size(),numPoints);
+  Intrepid::FieldContainer<double> weightedValues1(weights.coarseOrdinals.size(),numPoints);
   weightedValues1.initialize(0.0);
   for (int i=0; i<weights.fineOrdinals.size(); i++)
   {
@@ -1023,28 +1022,28 @@ void testHGRADVolumeNoHangingNodes(MeshTopologyPtr meshTopo, int polyOrder, Teuc
 
           // lazy way to get the cubature points for subcell:
           BasisCachePtr subcellCache = BasisCache::basisCacheForReferenceCell(subcellTopo1, cubatureDegree);
-          FieldContainer<double> subcellCubPoints1 = subcellCache->getRefCellPoints();
+          Intrepid::FieldContainer<double> subcellCubPoints1 = subcellCache->getRefCellPoints();
           int numPoints = subcellCubPoints1.dimension(0);
 
-          FieldContainer<double> subcellPointsInRefCell1(numPoints,cellTopo1->getDimension());
+          Intrepid::FieldContainer<double> subcellPointsInRefCell1(numPoints,cellTopo1->getDimension());
           CamelliaCellTools::mapToReferenceSubcell(subcellPointsInRefCell1, subcellCubPoints1, d, scord1, cellTopo1);
 
-          FieldContainer<double> subcellCubPoints2(subcellCubPoints1.dimension(0), subcellCubPoints1.dimension(1));
+          Intrepid::FieldContainer<double> subcellCubPoints2(subcellCubPoints1.dimension(0), subcellCubPoints1.dimension(1));
           CamelliaCellTools::permutedReferenceCellPoints(subcellTopo1, subcellPermutation1To2, subcellCubPoints1, subcellCubPoints2);
 
-          FieldContainer<double> subcellPointsInRefCell2(numPoints,cellTopo2->getDimension());
+          Intrepid::FieldContainer<double> subcellPointsInRefCell2(numPoints,cellTopo2->getDimension());
           CamelliaCellTools::mapToReferenceSubcell(subcellPointsInRefCell2, subcellCubPoints2, d, scord2, cellTopo2);
 
           // sanity check on the mapped points: map from the sides to physical space and make sure they're the same
           bool createSideCaches = false;
-          FieldContainer<double> physicalCellNodes1(cellTopo1->getNodeCount(), cellTopo1->getDimension());
+          Intrepid::FieldContainer<double> physicalCellNodes1(cellTopo1->getNodeCount(), cellTopo1->getDimension());
           meshTopo->verticesForCell(physicalCellNodes1, cellID1);
           physicalCellNodes1.resize(1,physicalCellNodes1.dimension(0),physicalCellNodes1.dimension(1));
           BasisCachePtr basisCache1 = BasisCache::basisCacheForCellTopology(cellTopo1, cubatureDegree,
                                       physicalCellNodes1, createSideCaches);
           basisCache1->setRefCellPoints(subcellPointsInRefCell1);
 
-          FieldContainer<double> physicalCellNodes2(cellTopo2->getNodeCount(), cellTopo2->getDimension());
+          Intrepid::FieldContainer<double> physicalCellNodes2(cellTopo2->getNodeCount(), cellTopo2->getDimension());
           meshTopo->verticesForCell(physicalCellNodes2, cell2->cellIndex());
           physicalCellNodes2.resize(1,physicalCellNodes2.dimension(0),physicalCellNodes2.dimension(1));
           BasisCachePtr basisCache2 = BasisCache::basisCacheForCellTopology(cellTopo2, cubatureDegree,
@@ -1053,8 +1052,8 @@ void testHGRADVolumeNoHangingNodes(MeshTopologyPtr meshTopo, int polyOrder, Teuc
 
           TEST_COMPARE_FLOATING_ARRAYS_CAMELLIA(basisCache1->getPhysicalCubaturePoints(), basisCache2->getPhysicalCubaturePoints(), 1e-14);
 
-          FieldContainer<double> values1 = *basisCache1->getTransformedValues(basis1, OP_VALUE);
-          FieldContainer<double> values2 = *basisCache2->getTransformedValues(basis2, OP_VALUE);
+          Intrepid::FieldContainer<double> values1 = *basisCache1->getTransformedValues(basis1, OP_VALUE);
+          Intrepid::FieldContainer<double> values2 = *basisCache2->getTransformedValues(basis2, OP_VALUE);
 
           // allow detection of local failure, and print out info just for things that fail
           bool oldSuccess = success;
@@ -1096,8 +1095,8 @@ void testHGRADVolumeNoHangingNodes(MeshTopologyPtr meshTopo, int polyOrder, Teuc
   }
 }
 
-void testMap(const FieldContainer<double> &expectedCoarseSubcellPoints,
-             const FieldContainer<double> &fineSubcellPoints,
+void testMap(const Intrepid::FieldContainer<double> &expectedCoarseSubcellPoints,
+             const Intrepid::FieldContainer<double> &fineSubcellPoints,
              unsigned fineSubcellDimension,
              unsigned fineSubcellOrdinalInFineDomain, unsigned fineDomainDim,
              unsigned fineDomainOrdinalInRefinementLeaf,
@@ -1111,7 +1110,7 @@ void testMap(const FieldContainer<double> &expectedCoarseSubcellPoints,
   // map two points on a fine edge to the coarse volume
   int coarseDim = expectedCoarseSubcellPoints.dimension(1);
   int numPoints = fineSubcellPoints.dimension(0);
-  FieldContainer<double> coarseSubcellPoints(numPoints,coarseDim);
+  Intrepid::FieldContainer<double> coarseSubcellPoints(numPoints,coarseDim);
 
   BasisReconciliation::mapFineSubcellPointsToCoarseDomain(coarseSubcellPoints, fineSubcellPoints, fineSubcellDimension, fineSubcellOrdinalInFineDomain,
       fineDomainDim, fineDomainOrdinalInRefinementLeaf, refBranch,
@@ -1200,7 +1199,7 @@ TEUCHOS_UNIT_TEST( BasisReconciliation, hSide )
 
   double width = 2;
   double height = 2;
-  FieldContainer<double> centeredQuad(4,2);
+  Intrepid::FieldContainer<double> centeredQuad(4,2);
   centeredQuad(0,0) = -width / 2;
   centeredQuad(0,1) = -height / 2;
   centeredQuad(1,0) = width / 2;
@@ -1210,10 +1209,10 @@ TEUCHOS_UNIT_TEST( BasisReconciliation, hSide )
   centeredQuad(3,0) = -width / 2;
   centeredQuad(3,1) = height / 2;
 
-  FieldContainer<double> eastQuad = translateQuad(centeredQuad, width, 0);
-  FieldContainer<double> westQuad = translateQuad(centeredQuad, -width, 0);
-  FieldContainer<double> southQuad = translateQuad(centeredQuad, -height, 0);
-  FieldContainer<double> northQuad = translateQuad(centeredQuad, height, 0);
+  Intrepid::FieldContainer<double> eastQuad = translateQuad(centeredQuad, width, 0);
+  Intrepid::FieldContainer<double> westQuad = translateQuad(centeredQuad, -width, 0);
+  Intrepid::FieldContainer<double> southQuad = translateQuad(centeredQuad, -height, 0);
+  Intrepid::FieldContainer<double> northQuad = translateQuad(centeredQuad, height, 0);
 
   hSideTest test;
 
@@ -1269,7 +1268,7 @@ TEUCHOS_UNIT_TEST( BasisReconciliation, hSide )
   int FRONT = 4; // FRONT is -z direction
   int BACK = 5; // BACK is +z direction
 
-  FieldContainer<double> centeredHex(8,3);
+  Intrepid::FieldContainer<double> centeredHex(8,3);
   double depth = 8;
   centeredHex(0,0) = -width / 2;
   centeredHex(0,1) = -height / 2;
@@ -1303,12 +1302,12 @@ TEUCHOS_UNIT_TEST( BasisReconciliation, hSide )
   centeredHex(7,1) =  height / 2;
   centeredHex(7,2) =  depth / 2;
 
-  FieldContainer<double> eastHex = translateHex(centeredHex, width, 0, 0);
-  FieldContainer<double> westHex = translateHex(centeredHex, -width, 0, 0);
-  FieldContainer<double> northHex = translateHex(centeredHex, 0, height, 0);
-  FieldContainer<double> southHex = translateHex(centeredHex, 0, -height, 0);
-  FieldContainer<double> frontHex = translateHex(centeredHex, 0, 0, -depth);
-  FieldContainer<double> backHex = translateHex(centeredHex, 0, 0, depth);
+  Intrepid::FieldContainer<double> eastHex = translateHex(centeredHex, width, 0, 0);
+  Intrepid::FieldContainer<double> westHex = translateHex(centeredHex, -width, 0, 0);
+  Intrepid::FieldContainer<double> northHex = translateHex(centeredHex, 0, height, 0);
+  Intrepid::FieldContainer<double> southHex = translateHex(centeredHex, 0, -height, 0);
+  Intrepid::FieldContainer<double> frontHex = translateHex(centeredHex, 0, 0, -depth);
+  Intrepid::FieldContainer<double> backHex = translateHex(centeredHex, 0, 0, depth);
 
   test.fineBasis = Camellia::intrepidHexHGRAD(fineOrder);
   test.coarseBasis = Camellia::intrepidHexHGRAD(coarseOrder);
@@ -1495,7 +1494,7 @@ TEUCHOS_UNIT_TEST( BasisReconciliation, HGRADVolume_Hexahedron )
 TEUCHOS_UNIT_TEST( BasisReconciliation, IdentityWeightCompositions )
 {
   // check that when an identity map is composed with another weight container, we get the same thing as when
-  // a manually specified FieldContainer-based identity map is used
+  // a manually specified Intrepid::FieldContainer-based identity map is used
   
   SubBasisReconciliationWeights simpleIdentity;
   SubBasisReconciliationWeights manualIdentity;
@@ -1505,7 +1504,7 @@ TEUCHOS_UNIT_TEST( BasisReconciliation, IdentityWeightCompositions )
   simpleIdentity.isIdentity = true;
   manualIdentity.fineOrdinals = identityOrdinals;
   manualIdentity.coarseOrdinals = identityOrdinals;
-  manualIdentity.weights = FieldContainer<double>(identityOrdinals.size(),identityOrdinals.size());
+  manualIdentity.weights = Intrepid::FieldContainer<double>(identityOrdinals.size(),identityOrdinals.size());
   for (int i=0; i<identityOrdinals.size(); i++)
   {
     manualIdentity.weights(i,i) = 1.0;
@@ -1514,7 +1513,7 @@ TEUCHOS_UNIT_TEST( BasisReconciliation, IdentityWeightCompositions )
   SubBasisReconciliationWeights weights;
   weights.coarseOrdinals = {1,2,3,4};
   weights.fineOrdinals = {4,8,16};
-  weights.weights = FieldContainer<double>(weights.fineOrdinals.size(),weights.coarseOrdinals.size());
+  weights.weights = Intrepid::FieldContainer<double>(weights.fineOrdinals.size(),weights.coarseOrdinals.size());
   for (int i=0; i<weights.fineOrdinals.size(); i++)
   {
     for (int j=0; j<weights.coarseOrdinals.size(); j++)
@@ -1617,17 +1616,17 @@ TEUCHOS_UNIT_TEST( BasisReconciliation, MapFineSubcellPointsToCoarseSubcell_1DLi
 
   int numPoints = 2;
   int spaceDim  = 1;
-  FieldContainer<double> fineSubcellPoints(numPoints, spaceDim);
+  Intrepid::FieldContainer<double> fineSubcellPoints(numPoints, spaceDim);
   fineSubcellPoints(0,0) = -0.5;
   fineSubcellPoints(1,0) =  1.0;
 
-  FieldContainer<double> expectedCoarseSubcellPoints(numPoints,spaceDim);
+  Intrepid::FieldContainer<double> expectedCoarseSubcellPoints(numPoints,spaceDim);
   for (int ptOrdinal=0; ptOrdinal<numPoints; ptOrdinal++)
   {
     expectedCoarseSubcellPoints(ptOrdinal,0) = fineSubcellPoints(ptOrdinal,0) / 4.0 - 0.25;
   }
 
-  FieldContainer<double> coarseSubcellPoints;
+  Intrepid::FieldContainer<double> coarseSubcellPoints;
 
   unsigned fineSubcellDimension = 1; // line
   unsigned fineSubcellOrdinalInFineDomain = 0; // only one
@@ -1662,9 +1661,9 @@ TEUCHOS_UNIT_TEST( BasisReconciliation, MapFineSubcellPointsToCoarseSubcell_1DVe
 
   int numPoints = 1;
   int spaceDim  = 0;
-  FieldContainer<double> fineSubcellPoints(numPoints, spaceDim);
+  Intrepid::FieldContainer<double> fineSubcellPoints(numPoints, spaceDim);
 
-  FieldContainer<double> coarseSubcellPoints;
+  Intrepid::FieldContainer<double> coarseSubcellPoints;
 
   unsigned fineSubcellDimension = 0; // vertex
   unsigned fineSubcellOrdinalInFineDomain = 0; // left vertex
@@ -1703,9 +1702,9 @@ TEUCHOS_UNIT_TEST( BasisReconciliation, MapFineSubcellPointsToCoarseSubcell_1DVe
 
   int numPoints = 1;
   int spaceDim  = 0;
-  FieldContainer<double> fineSubcellPoints(numPoints, spaceDim);
+  Intrepid::FieldContainer<double> fineSubcellPoints(numPoints, spaceDim);
 
-  FieldContainer<double> coarseSubcellPoints;
+  Intrepid::FieldContainer<double> coarseSubcellPoints;
 
   unsigned fineSubcellDimension = 0; // vertex
   unsigned fineSubcellOrdinalInFineDomain = 0; // left vertex
@@ -1742,9 +1741,9 @@ TEUCHOS_UNIT_TEST( BasisReconciliation, MapFineSubcellPointsToCoarseSubcell_Vert
 {
   int numPoints = 1;
   int spaceDim  = 0;
-  FieldContainer<double> fineSubcellPoints(numPoints, spaceDim);
+  Intrepid::FieldContainer<double> fineSubcellPoints(numPoints, spaceDim);
 
-  FieldContainer<double> coarseSubcellPoints;
+  Intrepid::FieldContainer<double> coarseSubcellPoints;
 
   unsigned fineSubcellDimension = 0; // vertex
   unsigned fineSubcellOrdinalInFineDomain = 1; // vertex ordinal 1 in *fine domain*
@@ -1790,18 +1789,18 @@ TEUCHOS_UNIT_TEST( BasisReconciliation, MapFineSubcellPointsToCoarseSubcell_Edge
 
   int numPoints = 2;
   int fineDim  = 1;
-  FieldContainer<double> fineSubcellPoints(numPoints, fineDim);
+  Intrepid::FieldContainer<double> fineSubcellPoints(numPoints, fineDim);
   fineSubcellPoints(0,0) = -0.25;
   fineSubcellPoints(1,0) = 0.5;
 
   int coarseDim = 2;
-  FieldContainer<double> expectedCoarseSubcellPoints(numPoints,coarseDim);
+  Intrepid::FieldContainer<double> expectedCoarseSubcellPoints(numPoints,coarseDim);
   expectedCoarseSubcellPoints(0,0) = -1.0;
   expectedCoarseSubcellPoints(0,1) = -fineSubcellPoints(0,0);
   expectedCoarseSubcellPoints(1,0) = -1.0;
   expectedCoarseSubcellPoints(1,1) = -fineSubcellPoints(1,0);
 
-  FieldContainer<double> coarseSubcellPoints;
+  Intrepid::FieldContainer<double> coarseSubcellPoints;
 
   unsigned fineSubcellDimension = fineDim; // edge
   unsigned fineSubcellOrdinalInFineDomain = 0; // edge
@@ -1841,18 +1840,18 @@ TEUCHOS_UNIT_TEST( BasisReconciliation, MapFineSubcellPointsToCoarseSubcell_Volu
 
   int numPoints = 2;
   int fineDim  = 1;
-  FieldContainer<double> fineSubcellPoints(numPoints, fineDim);
+  Intrepid::FieldContainer<double> fineSubcellPoints(numPoints, fineDim);
   fineSubcellPoints(0,0) = -0.25;
   fineSubcellPoints(1,0) = 0.5;
 
   int coarseDim = 2;
-  FieldContainer<double> expectedCoarseSubcellPoints(numPoints,coarseDim);
+  Intrepid::FieldContainer<double> expectedCoarseSubcellPoints(numPoints,coarseDim);
   expectedCoarseSubcellPoints(0,0) = 0.0;
   expectedCoarseSubcellPoints(0,1) = 0.5 * fineSubcellPoints(0,0) - 0.5;
   expectedCoarseSubcellPoints(1,0) = 0.0;
   expectedCoarseSubcellPoints(1,1) = 0.5 * fineSubcellPoints(1,0) - 0.5;
 
-  FieldContainer<double> coarseSubcellPoints;
+  Intrepid::FieldContainer<double> coarseSubcellPoints;
 
   unsigned fineSubcellDimension = fineDim; // edge
   unsigned fineSubcellOrdinalInFineDomain = 0; // edge
@@ -1921,19 +1920,19 @@ TEUCHOS_UNIT_TEST( BasisReconciliation, MapFineSubcellPointsToCoarseSubcell_Volu
     int numPoints = 2;
     int fineDomainDim  = 2;
     int fineSubcellDim = 1; // edge
-    FieldContainer<double> fineSubcellPoints(numPoints, fineSubcellDim);
+    Intrepid::FieldContainer<double> fineSubcellPoints(numPoints, fineSubcellDim);
     fineSubcellPoints(0,0) = -0.25;
     fineSubcellPoints(1,0) = 0.5;
     
     // coarse face's view of the domain is permuted relative to a top-down view: i.e., we swap x and y.
     int coarseDim = 2;
-    FieldContainer<double> expectedCoarseSubcellPoints(numPoints,coarseDim);
+    Intrepid::FieldContainer<double> expectedCoarseSubcellPoints(numPoints,coarseDim);
     expectedCoarseSubcellPoints(0,0) = 0.5 * fineSubcellPoints(0,0) - 0.5;
     expectedCoarseSubcellPoints(0,1) = 0.0;
     expectedCoarseSubcellPoints(1,0) = 0.5 * fineSubcellPoints(1,0) - 0.5;
     expectedCoarseSubcellPoints(1,1) = 0.0;
     
-    FieldContainer<double> coarseSubcellPoints;
+    Intrepid::FieldContainer<double> coarseSubcellPoints;
     
     unsigned fineSubcellOrdinalInFineDomain = 0; // edge 0 in the fine domain (bottom face goes clockwise when viewed from above)
     unsigned fineDomainOrdinalInRefinementLeaf = 4; // side 4: bottom face
@@ -2029,7 +2028,7 @@ TEUCHOS_UNIT_TEST( BasisReconciliation, MapFineSubcellPointsToCoarseSubcell_Volu
     // In physical space we want to map (0,0) and (0,-1).
     // On the coarse domain this is (0,0) and (-1,0);
     // On the fine domain this is (1,-1) and (-1,-1);
-    FieldContainer<double> fineSubcellPoints(numPoints, fineSubcellDim);
+    Intrepid::FieldContainer<double> fineSubcellPoints(numPoints, fineSubcellDim);
     fineSubcellPoints(0,0) = 1.0;
     fineSubcellPoints(0,1) = -1.0;
     fineSubcellPoints(1,0) = -1.0;
@@ -2037,13 +2036,13 @@ TEUCHOS_UNIT_TEST( BasisReconciliation, MapFineSubcellPointsToCoarseSubcell_Volu
     
     // coarse face's view of the domain is permuted relative to a top-down view: i.e., we swap x and y.
     int coarseDim = 2;
-    FieldContainer<double> expectedCoarseSubcellPoints(numPoints,coarseDim);
+    Intrepid::FieldContainer<double> expectedCoarseSubcellPoints(numPoints,coarseDim);
     expectedCoarseSubcellPoints(0,0) = 0.5 * fineSubcellPoints(0,0) - 0.5;
     expectedCoarseSubcellPoints(0,1) = 0.5 * fineSubcellPoints(0,1) + 0.5;
     expectedCoarseSubcellPoints(1,0) = 0.5 * fineSubcellPoints(1,0) - 0.5;
     expectedCoarseSubcellPoints(1,1) = 0.5 * fineSubcellPoints(1,1) + 0.5;
     
-    FieldContainer<double> coarseSubcellPoints;
+    Intrepid::FieldContainer<double> coarseSubcellPoints;
     
     unsigned fineSubcellOrdinalInFineDomain = 0; // face 0 in the fine domain (bottom face goes clockwise when viewed from above)
     unsigned fineDomainOrdinalInRefinementLeaf = 4; // side 4: bottom face
@@ -2139,7 +2138,7 @@ TEUCHOS_UNIT_TEST( BasisReconciliation, MapFineSubcellPointsToCoarseSubcell_Volu
     // In physical space we want to map (-1,0) and (-1,-1).
     // On the coarse domain this is (0,-1) and (-1,-1);
     // On the fine domain this is (1,-1) and (-1,-1);
-    FieldContainer<double> fineSubcellPoints(numPoints, fineSubcellDim);
+    Intrepid::FieldContainer<double> fineSubcellPoints(numPoints, fineSubcellDim);
     fineSubcellPoints(0,0) = 1.0;
     fineSubcellPoints(0,1) = -1.0;
     fineSubcellPoints(1,0) = -1.0;
@@ -2147,13 +2146,13 @@ TEUCHOS_UNIT_TEST( BasisReconciliation, MapFineSubcellPointsToCoarseSubcell_Volu
     
     // coarse face's view of the domain is permuted relative to a top-down view: i.e., we swap x and y.
     int coarseDim = 2;
-    FieldContainer<double> expectedCoarseSubcellPoints(numPoints,coarseDim);
+    Intrepid::FieldContainer<double> expectedCoarseSubcellPoints(numPoints,coarseDim);
     expectedCoarseSubcellPoints(0,0) = 0.5 * fineSubcellPoints(0,0) - 0.5;
     expectedCoarseSubcellPoints(0,1) = 0.5 * fineSubcellPoints(0,1) - 0.5;
     expectedCoarseSubcellPoints(1,0) = 0.5 * fineSubcellPoints(1,0) - 0.5;
     expectedCoarseSubcellPoints(1,1) = 0.5 * fineSubcellPoints(1,1) - 0.5;
     
-    FieldContainer<double> coarseSubcellPoints;
+    Intrepid::FieldContainer<double> coarseSubcellPoints;
     
     unsigned fineSubcellOrdinalInFineDomain = 0; // face 0 in the fine domain (bottom face goes clockwise when viewed from above)
     unsigned fineDomainOrdinalInRefinementLeaf = 4; // side 4: bottom face
@@ -2249,7 +2248,7 @@ TEUCHOS_UNIT_TEST( BasisReconciliation, MapFineSubcellPointsToCoarseSubcell_Volu
     // In physical space we want to map (0,-0.5) and (0,-1).
     // On the coarse domain this is (-0.5,0) and (-1,0);
     // On the fine domain this is (1,-1) and (-1,-1);
-    FieldContainer<double> fineSubcellPoints(numPoints, fineSubcellDim);
+    Intrepid::FieldContainer<double> fineSubcellPoints(numPoints, fineSubcellDim);
     fineSubcellPoints(0,0) = 1.0;
     fineSubcellPoints(0,1) = -1.0;
     fineSubcellPoints(1,0) = -1.0;
@@ -2257,13 +2256,13 @@ TEUCHOS_UNIT_TEST( BasisReconciliation, MapFineSubcellPointsToCoarseSubcell_Volu
     
     // coarse face's view of the domain is permuted relative to a top-down view: i.e., we swap x and y.
     int coarseDim = 2;
-    FieldContainer<double> expectedCoarseSubcellPoints(numPoints,coarseDim);
+    Intrepid::FieldContainer<double> expectedCoarseSubcellPoints(numPoints,coarseDim);
     expectedCoarseSubcellPoints(0,0) = 0.25 * fineSubcellPoints(0,0) - 0.75;
     expectedCoarseSubcellPoints(0,1) = 0.25 * fineSubcellPoints(0,1) + 0.25;
     expectedCoarseSubcellPoints(1,0) = 0.25 * fineSubcellPoints(1,0) - 0.75;
     expectedCoarseSubcellPoints(1,1) = 0.25 * fineSubcellPoints(1,1) + 0.25;
     
-    FieldContainer<double> coarseSubcellPoints;
+    Intrepid::FieldContainer<double> coarseSubcellPoints;
     
     unsigned fineSubcellOrdinalInFineDomain = 0; // face 0 in the fine domain (bottom face goes clockwise when viewed from above)
     unsigned fineDomainOrdinalInRefinementLeaf = 4; // side 4: bottom face
@@ -2355,19 +2354,19 @@ TEUCHOS_UNIT_TEST( BasisReconciliation, MapFineSubcellPointsToCoarseSubcell_Volu
     int fineSubcellDim = 1; // edge
     
     // fine subcell points are oriented according to the *domain's* view (i.e. the face)
-    FieldContainer<double> fineSubcellPoints(numPoints, fineSubcellDim);
+    Intrepid::FieldContainer<double> fineSubcellPoints(numPoints, fineSubcellDim);
     fineSubcellPoints(0,0) = -1.0;
     fineSubcellPoints(1,0) = 1.0;
     
     int coarseDim = 2;
-    FieldContainer<double> expectedCoarseSubcellPoints(numPoints,coarseDim);
+    Intrepid::FieldContainer<double> expectedCoarseSubcellPoints(numPoints,coarseDim);
     // coarse face's view of the domain is permuted relative to a top-down view: i.e., we swap x and y.
     expectedCoarseSubcellPoints(0,0) = 0.25 * fineSubcellPoints(0,0) - 0.75;
     expectedCoarseSubcellPoints(0,1) = 0.0;
     expectedCoarseSubcellPoints(1,0) = 0.25 * fineSubcellPoints(1,0) - 0.75;
     expectedCoarseSubcellPoints(1,1) = 0.0;
     
-    FieldContainer<double> coarseSubcellPoints;
+    Intrepid::FieldContainer<double> coarseSubcellPoints;
     
     unsigned fineSubcellOrdinalInFineDomain = 0; // edge 0 in the fine domain (bottom face goes clockwise when viewed from above)
     unsigned fineDomainOrdinalInRefinementLeaf = 4; // side 4: bottom face
@@ -2431,13 +2430,13 @@ TEUCHOS_UNIT_TEST( BasisReconciliation, MapFineSubcellPointsToCoarseDomain_Hexah
 
   int numPoints = 3;
   int fineDim  = 1;
-  FieldContainer<double> fineSubcellPoints(numPoints, fineDim);
+  Intrepid::FieldContainer<double> fineSubcellPoints(numPoints, fineDim);
   fineSubcellPoints(0,0) = -1.0;
   fineSubcellPoints(1,0) =  0.0;
   fineSubcellPoints(2,0) =  1.0;
 
   int coarseDim = 2;
-  FieldContainer<double> expectedCoarseDomainPoints(numPoints,coarseDim);
+  Intrepid::FieldContainer<double> expectedCoarseDomainPoints(numPoints,coarseDim);
   for (int coarsePointOrdinal=0; coarsePointOrdinal<numPoints; coarsePointOrdinal++)
   {
     int finePointOrdinal = numPoints - 1 - coarsePointOrdinal; // account for permutation
@@ -2481,7 +2480,7 @@ TEUCHOS_UNIT_TEST( BasisReconciliation, MapFineSubcellPointsToCoarseDomain_Hexah
 
   int numPoints = 3;
   int fineDim  = 1;
-  FieldContainer<double> fineSubcellPoints(numPoints, fineDim);
+  Intrepid::FieldContainer<double> fineSubcellPoints(numPoints, fineDim);
   fineSubcellPoints(0,0) = -1.0;
   fineSubcellPoints(1,0) =  0.0;
   fineSubcellPoints(2,0) =  1.0;
@@ -2506,7 +2505,7 @@ TEUCHOS_UNIT_TEST( BasisReconciliation, MapFineSubcellPointsToCoarseDomain_Hexah
   unsigned coarseDomainOrdinalInRefinementRoot = fineDomainOrdinalInRefinementLeaf;
   unsigned coarseSubcellPermutation = 0;
 
-  FieldContainer<double> expectedCoarseDomainPoints(numPoints,coarseDomainDim);
+  Intrepid::FieldContainer<double> expectedCoarseDomainPoints(numPoints,coarseDomainDim);
   // the coarse domain points expected are the fine subcell points mapped to the fine/coarse reference domain
   CamelliaCellTools::mapToReferenceSubcell(expectedCoarseDomainPoints, fineSubcellPoints,
       fineSubcellDimension, fineSubcellOrdinalInFineDomain, sideTopo);
@@ -2531,7 +2530,7 @@ TEUCHOS_UNIT_TEST( BasisReconciliation, MapFineSubcellPointsToCoarseDomain_Hexah
 
   int numPoints = 3;
   int edgeDim  = 1;
-  FieldContainer<double> fineSubcellPoints(numPoints, edgeDim);
+  Intrepid::FieldContainer<double> fineSubcellPoints(numPoints, edgeDim);
   fineSubcellPoints(0,0) = -1.0;
   fineSubcellPoints(1,0) =  0.0;
   fineSubcellPoints(2,0) =  1.0;
@@ -2583,7 +2582,7 @@ TEUCHOS_UNIT_TEST( BasisReconciliation, MapFineSubcellPointsToCoarseDomain_Hexah
 
       unsigned coarseSubcellPermutation = 0; // since fine ancestral cell and coarse cell are the same, 0.
 
-      FieldContainer<double> coarseDomainPoints(numPoints,coarseDomainDim);
+      Intrepid::FieldContainer<double> coarseDomainPoints(numPoints,coarseDomainDim);
       BasisReconciliation::mapFineSubcellPointsToCoarseDomain(coarseDomainPoints, fineSubcellPoints,
           fineSubcellDimension, fineSubcellOrdinalInFineDomain,
           fineDomainDim, fineDomainOrdinalInRefinementLeaf,
@@ -2597,14 +2596,14 @@ TEUCHOS_UNIT_TEST( BasisReconciliation, MapFineSubcellPointsToCoarseDomain_Hexah
       BasisCachePtr fineCache = cellBasisCache->getSideBasisCache(fineSideOrdinal);
       BasisCachePtr coarseCache = cellBasisCache->getSideBasisCache(coarseSideOrdinal);
 
-      FieldContainer<double> fineDomainPoints(numPoints,fineDomainDim);
+      Intrepid::FieldContainer<double> fineDomainPoints(numPoints,fineDomainDim);
       CamelliaCellTools::mapToReferenceSubcell(fineDomainPoints, fineSubcellPoints, edgeDim, fineEdgeOrdinal, sideTopo);
       fineCache->setRefCellPoints(fineDomainPoints);
 
       coarseCache->setRefCellPoints(coarseDomainPoints);
 
-      FieldContainer<double> finePhysicalPoints = fineCache->getPhysicalCubaturePoints();
-      FieldContainer<double> coarsePhysicalPoints = coarseCache->getPhysicalCubaturePoints();
+      Intrepid::FieldContainer<double> finePhysicalPoints = fineCache->getPhysicalCubaturePoints();
+      Intrepid::FieldContainer<double> coarsePhysicalPoints = coarseCache->getPhysicalCubaturePoints();
 
       out << "Mapping side ordinal " << fineSideOrdinal << ", edge " << fineEdgeOrdinal;
       out << " to side ordinal " << coarseSideOrdinal << ", edge " << coarseEdgeOrdinal;
@@ -2627,12 +2626,12 @@ TEUCHOS_UNIT_TEST( BasisReconciliation, MapFineSubcellPointsToCoarseSubcell_Inte
 
   int numPoints = 2;
   int fineDim  = 1;
-  FieldContainer<double> fineSubcellPoints(numPoints, fineDim);
+  Intrepid::FieldContainer<double> fineSubcellPoints(numPoints, fineDim);
   fineSubcellPoints(0,0) = -0.25;
   fineSubcellPoints(1,0) = 0.5;
 
   int coarseDim = 2;
-  FieldContainer<double> expectedCoarseSubcellPoints(numPoints,coarseDim);
+  Intrepid::FieldContainer<double> expectedCoarseSubcellPoints(numPoints,coarseDim);
   expectedCoarseSubcellPoints(0,0) = 0.5;
   expectedCoarseSubcellPoints(0,1) = 0.25 * fineSubcellPoints(0,0) + 0.25;
   expectedCoarseSubcellPoints(1,0) = 0.5;
@@ -2709,7 +2708,7 @@ TEUCHOS_UNIT_TEST(BasisReconciliation, pSide)
 
   double width = 2;
   double height = 4;
-  FieldContainer<double> centeredQuad(4,2);
+  Intrepid::FieldContainer<double> centeredQuad(4,2);
   centeredQuad(0,0) = -width / 2;
   centeredQuad(0,1) = -height / 2;
   centeredQuad(1,0) = width / 2;
@@ -2719,10 +2718,10 @@ TEUCHOS_UNIT_TEST(BasisReconciliation, pSide)
   centeredQuad(3,0) = -width / 2;
   centeredQuad(3,1) = height / 2;
 
-  FieldContainer<double> eastQuad = translateQuad(centeredQuad, width, 0);
-  FieldContainer<double> westQuad = translateQuad(centeredQuad, -width, 0);
-  FieldContainer<double> southQuad = translateQuad(centeredQuad, -height, 0);
-  FieldContainer<double> northQuad = translateQuad(centeredQuad, height, 0);
+  Intrepid::FieldContainer<double> eastQuad = translateQuad(centeredQuad, width, 0);
+  Intrepid::FieldContainer<double> westQuad = translateQuad(centeredQuad, -width, 0);
+  Intrepid::FieldContainer<double> southQuad = translateQuad(centeredQuad, -height, 0);
+  Intrepid::FieldContainer<double> northQuad = translateQuad(centeredQuad, height, 0);
 
   pSideTest test;
 
@@ -2767,7 +2766,7 @@ TEUCHOS_UNIT_TEST(BasisReconciliation, pSide)
   int FRONT = 4; // FRONT is -z direction
   int BACK = 5; // BACK is +z direction
 
-  FieldContainer<double> centeredHex(8,3);
+  Intrepid::FieldContainer<double> centeredHex(8,3);
   double depth = 8;
   centeredHex(0,0) = -width / 2;
   centeredHex(0,1) = -height / 2;
@@ -2801,12 +2800,12 @@ TEUCHOS_UNIT_TEST(BasisReconciliation, pSide)
   centeredHex(7,1) =  height / 2;
   centeredHex(7,2) =  depth / 2;
 
-  FieldContainer<double> eastHex = translateHex(centeredHex, width, 0, 0);
-  FieldContainer<double> westHex = translateHex(centeredHex, -width, 0, 0);
-  FieldContainer<double> northHex = translateHex(centeredHex, 0, height, 0);
-  FieldContainer<double> southHex = translateHex(centeredHex, 0, -height, 0);
-  FieldContainer<double> frontHex = translateHex(centeredHex, 0, 0, -depth);
-  FieldContainer<double> backHex = translateHex(centeredHex, 0, 0, depth);
+  Intrepid::FieldContainer<double> eastHex = translateHex(centeredHex, width, 0, 0);
+  Intrepid::FieldContainer<double> westHex = translateHex(centeredHex, -width, 0, 0);
+  Intrepid::FieldContainer<double> northHex = translateHex(centeredHex, 0, height, 0);
+  Intrepid::FieldContainer<double> southHex = translateHex(centeredHex, 0, -height, 0);
+  Intrepid::FieldContainer<double> frontHex = translateHex(centeredHex, 0, 0, -depth);
+  Intrepid::FieldContainer<double> backHex = translateHex(centeredHex, 0, 0, depth);
 
   test.fineBasis = Camellia::intrepidHexHGRAD(fineOrder);
   test.coarseBasis = Camellia::intrepidHexHGRAD(coarseOrder);
@@ -2845,7 +2844,7 @@ TEUCHOS_UNIT_TEST(BasisReconciliation, pSide)
   }
 }
 
-void equispacedPoints(int numPoints1D, CellTopoPtr cellTopo, FieldContainer<double> &points)
+void equispacedPoints(int numPoints1D, CellTopoPtr cellTopo, Intrepid::FieldContainer<double> &points)
 {
   if (cellTopo->getDimension() == 0)
   {
@@ -2930,7 +2929,7 @@ void termTracedTest(Teuchos::FancyOStream &out, bool &success, CellTopoPtr volum
 
   vector<RefinementBranch> refinementBranches = {noRefinements,oneRefinement};
 
-  FieldContainer<double> volumeRefNodes(volumeTopo->getVertexCount(), volumeTopo->getDimension());
+  Intrepid::FieldContainer<double> volumeRefNodes(volumeTopo->getVertexCount(), volumeTopo->getDimension());
 
   CamelliaCellTools::refCellNodesForTopology(volumeRefNodes, volumeTopo);
 
@@ -2941,7 +2940,7 @@ void termTracedTest(Teuchos::FancyOStream &out, bool &success, CellTopoPtr volum
   {
     RefinementBranch refBranch = refinementBranches[i];
 
-    FieldContainer<double> refinedNodes = RefinementPattern::descendantNodesRelativeToAncestorReferenceCell(refBranch);
+    Intrepid::FieldContainer<double> refinedNodes = RefinementPattern::descendantNodesRelativeToAncestorReferenceCell(refBranch);
     addCellDimensionToFC(refinedNodes);
     volumeBasisCache->setPhysicalCellNodes(refinedNodes, {}, createSideCache);
 
@@ -2949,7 +2948,7 @@ void termTracedTest(Teuchos::FancyOStream &out, bool &success, CellTopoPtr volum
 
     for (int traceSideOrdinal=0; traceSideOrdinal < volumeTopo->getSideCount(); traceSideOrdinal++)
     {
-      FieldContainer<double> tracePointsSideReferenceSpace;
+      Intrepid::FieldContainer<double> tracePointsSideReferenceSpace;
       CellTopoPtr sideTopo = volumeTopo->getSubcell(spaceDim-1, traceSideOrdinal);
       equispacedPoints(numPoints1D, sideTopo, tracePointsSideReferenceSpace);
       int numPoints = tracePointsSideReferenceSpace.dimension(0);
@@ -2965,11 +2964,11 @@ void termTracedTest(Teuchos::FancyOStream &out, bool &success, CellTopoPtr volum
 
       //        out << "tracePointsSideReferenceSpace:\n" << tracePointsSideReferenceSpace;
 
-      FieldContainer<double> tracePointsFineVolume(numPoints, volumeTopo->getDimension());
+      Intrepid::FieldContainer<double> tracePointsFineVolume(numPoints, volumeTopo->getDimension());
 
       CamelliaCellTools::mapToReferenceSubcell(tracePointsFineVolume, tracePointsSideReferenceSpace, sideTopo->getDimension(), traceSideOrdinal, volumeTopo);
 
-      FieldContainer<double> pointsCoarseVolume(numPoints, volumeTopo->getDimension());
+      Intrepid::FieldContainer<double> pointsCoarseVolume(numPoints, volumeTopo->getDimension());
       RefinementPattern::mapRefCellPointsToAncestor(refBranch, tracePointsFineVolume, pointsCoarseVolume);
 
       //        out << "pointsCoarseVolume:\n" << pointsCoarseVolume;
@@ -2977,7 +2976,7 @@ void termTracedTest(Teuchos::FancyOStream &out, bool &success, CellTopoPtr volum
       volumeBasisCache->setRefCellPoints(pointsCoarseVolume);
 
       int oneCell = 1;
-      FieldContainer<double> fakeParities(oneCell,volumeTopo->getSideCount());
+      Intrepid::FieldContainer<double> fakeParities(oneCell,volumeTopo->getSideCount());
       fakeParities.initialize(1.0);
       BasisCachePtr fakeSideVolumeCache = BasisCache::fakeSideCache(traceSideOrdinal, volumeBasisCache, pointsCoarseVolume,
                                           traceBasisCache->getSideNormals(), fakeParities);
@@ -2998,18 +2997,18 @@ void termTracedTest(Teuchos::FancyOStream &out, bool &success, CellTopoPtr volum
       // fine basis is the line basis (the trace); coarse is the quad basis (the field)
       double tol = 1e-14; // for floating equality
 
-      FieldContainer<double> coarseValuesExpected(oneCell,volumeBasis->getCardinality(),numPoints);
+      Intrepid::FieldContainer<double> coarseValuesExpected(oneCell,volumeBasis->getCardinality(),numPoints);
       traceVar->termTraced()->values(coarseValuesExpected, fieldVar->ID(), volumeBasis, fakeSideVolumeCache);
 
       out << "\ncoarseValuesExpected:\n" << coarseValuesExpected;
 
-      FieldContainer<double> fineValues(oneCell,traceBasis->getCardinality(),numPoints);
+      Intrepid::FieldContainer<double> fineValues(oneCell,traceBasis->getCardinality(),numPoints);
       (1.0 * traceVar)->values(fineValues, traceVar->ID(), traceBasis, traceBasisCache);
       fineValues.resize(traceBasis->getCardinality(),numPoints); // strip cell dimension
 
       out << "fineValues:\n" << fineValues;
 
-      FieldContainer<double> coarseValuesActual(weights.coarseOrdinals.size(), numPoints);
+      Intrepid::FieldContainer<double> coarseValuesActual(weights.coarseOrdinals.size(), numPoints);
       SerialDenseWrapper::multiply(coarseValuesActual, weights.weights, fineValues, 'T', 'N');
 
       out << "coarseValuesActual:\n" << coarseValuesActual;
@@ -3067,7 +3066,7 @@ TEUCHOS_UNIT_TEST( BasisReconciliation, TermTraced_1D )
   refinementBranches.push_back(noRefinements);
   refinementBranches.push_back(oneRefinement);
 
-  FieldContainer<double> lineRefNodes(lineTopo->getVertexCount(), lineTopo->getDimension());
+  Intrepid::FieldContainer<double> lineRefNodes(lineTopo->getVertexCount(), lineTopo->getDimension());
 
   CamelliaCellTools::refCellNodesForTopology(lineRefNodes, lineTopo);
 
@@ -3082,13 +3081,13 @@ TEUCHOS_UNIT_TEST( BasisReconciliation, TermTraced_1D )
       int fineSubcellOrdinalInFineDomain = 0;
 
       int numPoints = 1;
-      FieldContainer<double> vertexPointInLeaf(numPoints, lineTopo->getDimension());
+      Intrepid::FieldContainer<double> vertexPointInLeaf(numPoints, lineTopo->getDimension());
       for (int d=0; d < lineTopo->getDimension(); d++)
       {
         vertexPointInLeaf(0,d) = lineRefNodes(fineVertexOrdinal,d);
       }
 
-      FieldContainer<double> vertexPointInAncestor(numPoints, lineTopo->getDimension());
+      Intrepid::FieldContainer<double> vertexPointInAncestor(numPoints, lineTopo->getDimension());
       RefinementPattern::mapRefCellPointsToAncestor(refBranch, vertexPointInLeaf, vertexPointInAncestor);
 
       lineBasisCache->setRefCellPoints(vertexPointInAncestor);
@@ -3109,13 +3108,13 @@ TEUCHOS_UNIT_TEST( BasisReconciliation, TermTraced_1D )
       double tol = 1e-15; // for floating equality
 
       int oneCell = 1;
-      FieldContainer<double> coarseValuesExpected(oneCell,lineBasisQuadratic->getCardinality(),numPoints);
+      Intrepid::FieldContainer<double> coarseValuesExpected(oneCell,lineBasisQuadratic->getCardinality(),numPoints);
       termTraced->values(coarseValuesExpected, u->ID(), lineBasisQuadratic, lineBasisCache);
 
-      FieldContainer<double> fineValues(pointBasis->getCardinality(),numPoints);
+      Intrepid::FieldContainer<double> fineValues(pointBasis->getCardinality(),numPoints);
       fineValues[0] = 1.0; // pointBasis is identically 1.0
 
-      FieldContainer<double> coarseValuesActual(weights.coarseOrdinals.size(), pointBasis->getCardinality());
+      Intrepid::FieldContainer<double> coarseValuesActual(weights.coarseOrdinals.size(), pointBasis->getCardinality());
       SerialDenseWrapper::multiply(coarseValuesActual, weights.weights, fineValues, 'T', 'N');
 
       int pointOrdinal  = 0;
@@ -3211,7 +3210,7 @@ TEUCHOS_UNIT_TEST( BasisReconciliation, TermTraced_3D_Hexahedron_Slow)
   refinementBranches.push_back(noRefinements);
   refinementBranches.push_back(oneRefinement);
 
-  FieldContainer<double> volumeRefNodes(volumeTopo->getVertexCount(), volumeTopo->getDimension());
+  Intrepid::FieldContainer<double> volumeRefNodes(volumeTopo->getVertexCount(), volumeTopo->getDimension());
 
   CamelliaCellTools::refCellNodesForTopology(volumeRefNodes, volumeTopo);
 
@@ -3226,7 +3225,7 @@ TEUCHOS_UNIT_TEST( BasisReconciliation, TermTraced_3D_Hexahedron_Slow)
 
     // compute some equispaced points on the reference quad:
     int numPoints_x = 5, numPoints_y = 5;
-    FieldContainer<double> tracePointsSideReferenceSpace(numPoints_x * numPoints_y, sideTopo->getDimension());
+    Intrepid::FieldContainer<double> tracePointsSideReferenceSpace(numPoints_x * numPoints_y, sideTopo->getDimension());
     int pointOrdinal = 0;
     for (int pointOrdinal_x=0; pointOrdinal_x < numPoints_x; pointOrdinal_x++)
     {
@@ -3251,11 +3250,11 @@ TEUCHOS_UNIT_TEST( BasisReconciliation, TermTraced_3D_Hexahedron_Slow)
 
       //        out << "tracePointsSideReferenceSpace:\n" << tracePointsSideReferenceSpace;
 
-      FieldContainer<double> tracePointsFineVolume(numPoints, volumeTopo->getDimension());
+      Intrepid::FieldContainer<double> tracePointsFineVolume(numPoints, volumeTopo->getDimension());
 
       CamelliaCellTools::mapToReferenceSubcell(tracePointsFineVolume, tracePointsSideReferenceSpace, sideTopo->getDimension(), traceSideOrdinal, volumeTopo);
 
-      FieldContainer<double> pointsCoarseVolume(numPoints, volumeTopo->getDimension());
+      Intrepid::FieldContainer<double> pointsCoarseVolume(numPoints, volumeTopo->getDimension());
       RefinementPattern::mapRefCellPointsToAncestor(refBranch, tracePointsFineVolume, pointsCoarseVolume);
 
       //        out << "pointsCoarseVolume:\n" << pointsCoarseVolume;
@@ -3274,18 +3273,18 @@ TEUCHOS_UNIT_TEST( BasisReconciliation, TermTraced_3D_Hexahedron_Slow)
       double tol = 1e-14; // for floating equality
 
       int oneCell = 1;
-      FieldContainer<double> coarseValuesExpected(oneCell,volumeBasisQuadratic->getCardinality(),numPoints);
+      Intrepid::FieldContainer<double> coarseValuesExpected(oneCell,volumeBasisQuadratic->getCardinality(),numPoints);
       termTraced->values(coarseValuesExpected, u->ID(), volumeBasisQuadratic, volumeBasisCache);
 
       //        out << "coarseValuesExpected:\n" << coarseValuesExpected;
 
-      FieldContainer<double> fineValues(oneCell,traceBasis->getCardinality(),numPoints);
+      Intrepid::FieldContainer<double> fineValues(oneCell,traceBasis->getCardinality(),numPoints);
       (1.0 * u_hat)->values(fineValues, u_hat->ID(), traceBasis, traceBasisCache);
       fineValues.resize(traceBasis->getCardinality(),numPoints); // strip cell dimension
 
       //        out << "fineValues:\n" << fineValues;
 
-      FieldContainer<double> coarseValuesActual(weights.coarseOrdinals.size(), numPoints);
+      Intrepid::FieldContainer<double> coarseValuesActual(weights.coarseOrdinals.size(), numPoints);
       SerialDenseWrapper::multiply(coarseValuesActual, weights.weights, fineValues, 'T', 'N');
 
       //        out << "coarseValuesActual:\n" << coarseValuesActual;
@@ -3368,7 +3367,7 @@ TEUCHOS_UNIT_TEST( BasisReconciliation, TermTraced_3D_Tetrahedron)
   refinementBranches.push_back(noRefinements);
 //    refinementBranches.push_back(oneRefinement); // wait until we have refinements for tets
 
-  FieldContainer<double> volumeRefNodes(volumeTopo->getVertexCount(), volumeTopo->getDimension());
+  Intrepid::FieldContainer<double> volumeRefNodes(volumeTopo->getVertexCount(), volumeTopo->getDimension());
 
   CamelliaCellTools::refCellNodesForTopology(volumeRefNodes, volumeTopo);
 
@@ -3383,7 +3382,7 @@ TEUCHOS_UNIT_TEST( BasisReconciliation, TermTraced_3D_Tetrahedron)
 
     // compute some equispaced points on the reference triangle:
     int numPoints_x = 5, numPoints_y = 5;
-    FieldContainer<double> tracePointsSideReferenceSpace(numPoints_x * numPoints_y, sideTopo->getDimension());
+    Intrepid::FieldContainer<double> tracePointsSideReferenceSpace(numPoints_x * numPoints_y, sideTopo->getDimension());
     int pointOrdinal = 0;
     for (int pointOrdinal_x=0; pointOrdinal_x < numPoints_x; pointOrdinal_x++)
     {
@@ -3418,11 +3417,11 @@ TEUCHOS_UNIT_TEST( BasisReconciliation, TermTraced_3D_Tetrahedron)
 
       //        out << "tracePointsSideReferenceSpace:\n" << tracePointsSideReferenceSpace;
 
-      FieldContainer<double> tracePointsFineVolume(numPoints, volumeTopo->getDimension());
+      Intrepid::FieldContainer<double> tracePointsFineVolume(numPoints, volumeTopo->getDimension());
 
       CamelliaCellTools::mapToReferenceSubcell(tracePointsFineVolume, tracePointsSideReferenceSpace, sideTopo->getDimension(), traceSideOrdinal, volumeTopo);
 
-      FieldContainer<double> pointsCoarseVolume(numPoints, volumeTopo->getDimension());
+      Intrepid::FieldContainer<double> pointsCoarseVolume(numPoints, volumeTopo->getDimension());
       RefinementPattern::mapRefCellPointsToAncestor(refBranch, tracePointsFineVolume, pointsCoarseVolume);
 
       //        out << "pointsCoarseVolume:\n" << pointsCoarseVolume;
@@ -3441,18 +3440,18 @@ TEUCHOS_UNIT_TEST( BasisReconciliation, TermTraced_3D_Tetrahedron)
       double tol = 1e-13; // for floating equality
 
       int oneCell = 1;
-      FieldContainer<double> coarseValuesExpected(oneCell,volumeBasisQuadratic->getCardinality(),numPoints);
+      Intrepid::FieldContainer<double> coarseValuesExpected(oneCell,volumeBasisQuadratic->getCardinality(),numPoints);
       termTraced->values(coarseValuesExpected, u->ID(), volumeBasisQuadratic, volumeBasisCache);
 
       //        out << "coarseValuesExpected:\n" << coarseValuesExpected;
 
-      FieldContainer<double> fineValues(oneCell,traceBasis->getCardinality(),numPoints);
+      Intrepid::FieldContainer<double> fineValues(oneCell,traceBasis->getCardinality(),numPoints);
       (1.0 * u_hat)->values(fineValues, u_hat->ID(), traceBasis, traceBasisCache);
       fineValues.resize(traceBasis->getCardinality(),numPoints); // strip cell dimension
 
       //        out << "fineValues:\n" << fineValues;
 
-      FieldContainer<double> coarseValuesActual(weights.coarseOrdinals.size(), numPoints);
+      Intrepid::FieldContainer<double> coarseValuesActual(weights.coarseOrdinals.size(), numPoints);
       SerialDenseWrapper::multiply(coarseValuesActual, weights.weights, fineValues, 'T', 'N');
 
       //        out << "coarseValuesActual:\n" << coarseValuesActual;

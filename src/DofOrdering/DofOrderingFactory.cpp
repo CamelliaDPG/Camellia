@@ -17,7 +17,6 @@
 
 #include "CamelliaCellTools.h"
 
-using namespace Intrepid;
 using namespace Camellia;
 
 DofOrderingFactory::DofOrderingFactory(VarFactoryPtr varFactory)
@@ -405,7 +404,7 @@ map<int, BasisPtr> DofOrderingFactory::getPatchBasisUpgradeMap(const DofOrdering
     if (numSides > 1)   // a variable that lives on the sides: we need to match basis
     {
       BasisPtr basis = parentTrialOrdering->getBasis(varID,parentSideIndex);
-      FieldContainer<double> nodes(2,1); // just 1D patches supported right now
+      Intrepid::FieldContainer<double> nodes(2,1); // just 1D patches supported right now
       if (childIndexInParentSide==0)
       {
         nodes(0,0) = -1.0;

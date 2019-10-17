@@ -33,7 +33,7 @@ class GDAMaximumRule2D : public GlobalDofAssignment
   map< GlobalIndexType, pair< ElementTypePtr, ElementTypePtr > > _cellSideUpgrades; // cellID --> (oldType, newType)
 
   map< pair<GlobalIndexType,IndexType>, pair<GlobalIndexType,IndexType> > _dofPairingIndex; // key/values are (cellID,localDofIndex)
-  // note that the FieldContainer for cellSideParities has dimensions (numCellsForType,numSidesForType),
+  // note that the Intrepid::FieldContainer for cellSideParities has dimensions (numCellsForType,numSidesForType),
   // and that the values are 1.0 or -1.0.  These are weights to account for the fact that fluxes are defined in
   // terms of an outward normal, and thus one cell's idea about the flux is the negative of its neighbor's.
   // We decide parity by cellID: the neighbor with the lower cellID gets +1, the higher gets -1.

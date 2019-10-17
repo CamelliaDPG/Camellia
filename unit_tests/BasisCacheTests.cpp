@@ -25,7 +25,6 @@
 #include "Intrepid_FunctionSpaceTools.hpp"
 
 using namespace Camellia;
-using namespace Intrepid;
 
 namespace
 {
@@ -42,14 +41,14 @@ vector< CellTopoPtr > getShardsTopologies()
   return shardsTopologies;
 }
 
-FieldContainer<double> unitCubeNodes()
+Intrepid::FieldContainer<double> unitCubeNodes()
 {
   CellTopoPtr hex = CellTopology::hexahedron();
   // for now, let's use the reference cell.  (Jacobian should be the identity.)
-  FieldContainer<double> refCubePoints(hex->getNodeCount(), hex->getDimension());
+  Intrepid::FieldContainer<double> refCubePoints(hex->getNodeCount(), hex->getDimension());
   CamelliaCellTools::refCellNodesForTopology(refCubePoints, hex);
 
-  FieldContainer<double> cubePoints = refCubePoints;
+  Intrepid::FieldContainer<double> cubePoints = refCubePoints;
   for (int i=0; i<cubePoints.size(); i++)
   {
     cubePoints[i] = (cubePoints[i]+1) / 2;
@@ -63,8 +62,8 @@ TEUCHOS_UNIT_TEST( BasisCache, LineCubature )
   double x0 = 0, x1 = 1;
   BasisCachePtr basisCache = BasisCache::basisCache1D(x0, x1, cubDegree);
 
-  const FieldContainer<double>* cubWeights = &basisCache->getCubatureWeights();
-  const FieldContainer<double>* physicalCubaturePoints = &basisCache->getPhysicalCubaturePoints();
+  const Intrepid::FieldContainer<double>* cubWeights = &basisCache->getCubatureWeights();
+  const Intrepid::FieldContainer<double>* physicalCubaturePoints = &basisCache->getPhysicalCubaturePoints();
 
   // try a line m x + b; the integral on (0,1) should be m / 2 + b.
   double m = 2.0, b = -1;
@@ -86,11 +85,11 @@ TEUCHOS_UNIT_TEST(BasisCache, Jacobian3D)
 
   CellTopoPtr hex = CellTopology::hexahedron();
   // for now, let's use the reference cell.  (Jacobian should be the identity.)
-  FieldContainer<double> refCubePoints(hex->getNodeCount(), hex->getDimension());
+  Intrepid::FieldContainer<double> refCubePoints(hex->getNodeCount(), hex->getDimension());
   CamelliaCellTools::refCellNodesForTopology(refCubePoints, hex);
 
   // small upgrade: unit cube
-  //  FieldContainer<double> cubePoints = unitCubeNodes();
+  //  Intrepid::FieldContainer<double> cubePoints = unitCubeNodes();
 
   int numCells = 1;
   refCubePoints.resize(numCells,8,3); // first argument is cellIndex; we'll just have 1
@@ -103,14 +102,14 @@ TEUCHOS_UNIT_TEST(BasisCache, Jacobian3D)
 
   shards::CellTopology hexTopo(shards::getCellTopologyData<shards::Hexahedron<8> >() );
 
-  FieldContainer<double> physicalCellNodes = refCubePoints;
+  Intrepid::FieldContainer<double> physicalCellNodes = refCubePoints;
   physicalCellNodes.resize(numCells,hexTopo.getVertexCount(),spaceDim);
   BasisCache hexBasisCache( physicalCellNodes, hexTopo, cubDegree);
 
-  FieldContainer<double> referenceToReferenceJacobian = hexBasisCache.getJacobian();
+  Intrepid::FieldContainer<double> referenceToReferenceJacobian = hexBasisCache.getJacobian();
   int numPoints = referenceToReferenceJacobian.dimension(1);
 
-  FieldContainer<double> kronecker(numCells,numPoints,spaceDim,spaceDim);
+  Intrepid::FieldContainer<double> kronecker(numCells,numPoints,spaceDim,spaceDim);
   for (int cellIndex=0; cellIndex<numCells; cellIndex++)
   {
     for (int ptIndex=0; ptIndex<numPoints; ptIndex++)
@@ -155,11 +154,11 @@ TEUCHOS_UNIT_TEST(BasisCache, Jacobian3D)
   physicalCellNodes = unitCubeNodes();
   physicalCellNodes.resize(numCells, hexTopo.getVertexCount(), hexTopo.getDimension());
   hexBasisCache = BasisCache( physicalCellNodes, hexTopo, cubDegree );
-  FieldContainer<double> halfKronecker = kronecker;
+  Intrepid::FieldContainer<double> halfKronecker = kronecker;
   SerialDenseWrapper::multiplyFCByWeight(halfKronecker, 0.5);
 
   maxDiff = 0;
-  FieldContainer<double> referenceToUnitCubeJacobian = hexBasisCache.getJacobian();
+  Intrepid::FieldContainer<double> referenceToUnitCubeJacobian = hexBasisCache.getJacobian();
   for (int valOrdinal=0; valOrdinal<referenceToUnitCubeJacobian.size(); valOrdinal++)
   {
     double diff = abs(halfKronecker[valOrdinal]-referenceToUnitCubeJacobian[valOrdinal]);
@@ -208,7 +207,7 @@ TEUCHOS_UNIT_TEST( BasisCache, SideNormals_Space )
       int numCubPoints = sideCache->getRefCellPoints().dimension(0);
       int spaceDim = sideCache->getSpaceDim();
 
-      FieldContainer<double> sideNormalsExpected(numCells, numCubPoints, spaceDim);
+      Intrepid::FieldContainer<double> sideNormalsExpected(numCells, numCubPoints, spaceDim);
       if (spaceDim == 1)
       {
         for (int ptOrdinal=0; ptOrdinal<numCubPoints; ptOrdinal++)
@@ -225,16 +224,16 @@ TEUCHOS_UNIT_TEST( BasisCache, SideNormals_Space )
       }
       else
       {
-        FieldContainer<double> normalLengths(numCells, numCubPoints);
+        Intrepid::FieldContainer<double> normalLengths(numCells, numCubPoints);
 
-        FieldContainer<double> cellJacobian = sideCache->getJacobian();
-        CellTools<double>::getPhysicalSideNormals(sideNormalsExpected, cellJacobian, sideOrdinal, cellTopo->getShardsTopology());
+        Intrepid::FieldContainer<double> cellJacobian = sideCache->getJacobian();
+        Intrepid::CellTools<double>::getPhysicalSideNormals(sideNormalsExpected, cellJacobian, sideOrdinal, cellTopo->getShardsTopology());
         // make unit length
-        RealSpaceTools<double>::vectorNorm(normalLengths, sideNormalsExpected, NORM_TWO);
-        FunctionSpaceTools::scalarMultiplyDataData<double>(sideNormalsExpected, normalLengths, sideNormalsExpected, true);
+        Intrepid::RealSpaceTools<double>::vectorNorm(normalLengths, sideNormalsExpected, Intrepid::NORM_TWO);
+        Intrepid::FunctionSpaceTools::scalarMultiplyDataData<double>(sideNormalsExpected, normalLengths, sideNormalsExpected, true);
       }
 
-      FieldContainer<double> sideNormals = sideCache->getSideNormals();
+      Intrepid::FieldContainer<double> sideNormals = sideCache->getSideNormals();
 
       TEST_COMPARE_FLOATING_ARRAYS(sideNormalsExpected, sideNormals, 1e-15);
     }
@@ -273,15 +272,15 @@ TEUCHOS_UNIT_TEST( BasisCache, SideNormals_SpaceTime )
       int numCubPoints = sideCacheSpaceTime->getRefCellPoints().dimension(0);
       int dim = sideCacheSpaceTime->getSpaceDim() + 1;
 
-      FieldContainer<double> sideNormalsExpected(numCells, numCubPoints, dim);
+      Intrepid::FieldContainer<double> sideNormalsExpected(numCells, numCubPoints, dim);
 
       if (cellTopo->sideIsSpatial(sideOrdinal))
       {
         unsigned spatialSideOrdinal = cellTopo->getSpatialComponentSideOrdinal(sideOrdinal);
         BasisCachePtr sideCacheSpace = volumeCacheSpace->getSideBasisCache(spatialSideOrdinal);
         // set up cubature points for shards topo
-        FieldContainer<double> refPointsSpaceTimeSide = sideCacheSpaceTime->getRefCellPoints();
-        FieldContainer<double> refPointsSpaceSide(numCubPoints, shardsTopo->getDimension()-1);
+        Intrepid::FieldContainer<double> refPointsSpaceTimeSide = sideCacheSpaceTime->getRefCellPoints();
+        Intrepid::FieldContainer<double> refPointsSpaceSide(numCubPoints, shardsTopo->getDimension()-1);
         for (int ptOrdinal=0; ptOrdinal<numCubPoints; ptOrdinal++)
         {
           for (int d=0; d<shardsTopo->getDimension()-1; d++)
@@ -290,7 +289,7 @@ TEUCHOS_UNIT_TEST( BasisCache, SideNormals_SpaceTime )
           }
         }
         sideCacheSpace->setRefCellPoints(refPointsSpaceSide);
-        FieldContainer<double> sideNormalsSpace = sideCacheSpace->getSideNormals();
+        Intrepid::FieldContainer<double> sideNormalsSpace = sideCacheSpace->getSideNormals();
         for (int cellOrdinal=0; cellOrdinal < numCells; cellOrdinal++)
         {
           for (int ptOrdinal=0; ptOrdinal < numCubPoints; ptOrdinal++)
@@ -313,7 +312,7 @@ TEUCHOS_UNIT_TEST( BasisCache, SideNormals_SpaceTime )
       {
         unsigned temporalNodeOrdinal = cellTopo->getTemporalComponentSideOrdinal(sideOrdinal);
         double timeNormal = (temporalNodeOrdinal == 0) ? -1 : 1;
-        FieldContainer<double> spaceTimeCellJacobian = sideCacheSpaceTime->getJacobian();
+        Intrepid::FieldContainer<double> spaceTimeCellJacobian = sideCacheSpaceTime->getJacobian();
         int d_time = shardsTopo->getDimension();
         for (int cellOrdinal=0; cellOrdinal < numCells; cellOrdinal++)
         {
@@ -332,7 +331,7 @@ TEUCHOS_UNIT_TEST( BasisCache, SideNormals_SpaceTime )
         }
       }
 
-      FieldContainer<double> sideNormals = sideCacheSpaceTime->getSideNormalsSpaceTime();
+      Intrepid::FieldContainer<double> sideNormals = sideCacheSpaceTime->getSideNormalsSpaceTime();
 
       {
         // DEBUGGING:
@@ -361,7 +360,7 @@ TEUCHOS_UNIT_TEST( BasisCache, SetRefCellPoints )
   shards::CellTopology shardsTopo = cellTopo->getShardsTopology();
   BasisCachePtr basisCache = Teuchos::rcp( new BasisCache(shardsTopo, cubDegree, true) ); // true: create side cache, too
 
-  FieldContainer<double> unitQuadNodes(1,cellTopo->getNodeCount(), cellTopo->getDimension());
+  Intrepid::FieldContainer<double> unitQuadNodes(1,cellTopo->getNodeCount(), cellTopo->getDimension());
   unitQuadNodes(0,0,0) = 0.0;
   unitQuadNodes(0,0,1) = 0.0;
   unitQuadNodes(0,1,0) = 1.0;
@@ -376,12 +375,12 @@ TEUCHOS_UNIT_TEST( BasisCache, SetRefCellPoints )
   for (int sideOrdinal=0; sideOrdinal < numSides; sideOrdinal++)
   {
     BasisCachePtr sideBasisCache = basisCache->getSideBasisCache(sideOrdinal);
-    FieldContainer<double> refCellPoints = sideBasisCache->getRefCellPoints();
-    FieldContainer<double> physicalCubaturePointsExpected = sideBasisCache->getPhysicalCubaturePoints();
+    Intrepid::FieldContainer<double> refCellPoints = sideBasisCache->getRefCellPoints();
+    Intrepid::FieldContainer<double> physicalCubaturePointsExpected = sideBasisCache->getPhysicalCubaturePoints();
     //    cout << "side " << sideIndex << " ref cell points:\n" << refCellPoints;
     //    cout << "side " << sideIndex << " physCubature points:\n" << physicalCubaturePointsExpected;
     sideBasisCache->setRefCellPoints(refCellPoints);
-    FieldContainer<double> physicalCubaturePointsActual = sideBasisCache->getPhysicalCubaturePoints();
+    Intrepid::FieldContainer<double> physicalCubaturePointsActual = sideBasisCache->getPhysicalCubaturePoints();
 
     double maxDiff = 0;
     for (int valOrdinal=0; valOrdinal<physicalCubaturePointsActual.size(); valOrdinal++)
@@ -407,23 +406,23 @@ TEUCHOS_UNIT_TEST( BasisCache, SetRefCellPoints )
   int spaceDim = 3;
 
   shards::CellTopology hexTopo(shards::getCellTopologyData<shards::Hexahedron<8> >() );
-  FieldContainer<double> physicalCellNodes = unitCubeNodes();
+  Intrepid::FieldContainer<double> physicalCellNodes = unitCubeNodes();
   physicalCellNodes.resize(numCells,hexTopo.getVertexCount(),spaceDim);
   BasisCache hexBasisCache( physicalCellNodes, hexTopo, cubDegree);
 
-  FieldContainer<double> refCellPointsHex(numPoints,spaceDim);
+  Intrepid::FieldContainer<double> refCellPointsHex(numPoints,spaceDim);
   refCellPointsHex(0,0) = 0.0;
   refCellPointsHex(0,1) = 0.0;
   refCellPointsHex(0,2) = 0.0;
 
-  FieldContainer<double> physicalPointsExpected(numCells,numPoints,spaceDim);
+  Intrepid::FieldContainer<double> physicalPointsExpected(numCells,numPoints,spaceDim);
   physicalPointsExpected(0,0,0) = 0.5;
   physicalPointsExpected(0,0,1) = 0.5;
   physicalPointsExpected(0,0,2) = 0.5;
 
   hexBasisCache.setRefCellPoints(refCellPointsHex);
 
-  FieldContainer<double> physicalPointsActual = hexBasisCache.getPhysicalCubaturePoints();
+  Intrepid::FieldContainer<double> physicalPointsActual = hexBasisCache.getPhysicalCubaturePoints();
 
   double maxDiff = 0;
   for (int valOrdinal=0; valOrdinal<physicalPointsActual.size(); valOrdinal++)
@@ -452,11 +451,11 @@ TEUCHOS_UNIT_TEST( BasisCache, SetRefCellPointsSpaceTimeSide )
   int cubDegree = 2;
   BasisCachePtr basisCache = Teuchos::rcp( new BasisCache(lineLineTopo, cubDegree, true) ); // true: create side caches, too
 
-  FieldContainer<double> refLineNodes(lineTopo->getNodeCount(), lineTopo->getDimension());
+  Intrepid::FieldContainer<double> refLineNodes(lineTopo->getNodeCount(), lineTopo->getDimension());
   CamelliaCellTools::refCellNodesForTopology(refLineNodes, lineTopo);
 
   int numPoints = 2;
-  FieldContainer<double> sideRefCubaturePoints(numPoints,lineTopo->getDimension());
+  Intrepid::FieldContainer<double> sideRefCubaturePoints(numPoints,lineTopo->getDimension());
   sideRefCubaturePoints(0,0) = -0.5;
   sideRefCubaturePoints(1,0) =  0.5;
 
@@ -464,7 +463,7 @@ TEUCHOS_UNIT_TEST( BasisCache, SetRefCellPointsSpaceTimeSide )
   for (int sideOrdinal=0; sideOrdinal < sideCount; sideOrdinal++)
   {
     BasisCachePtr sideBasisCache = basisCache->getSideBasisCache(sideOrdinal);
-    FieldContainer<double> volumeRefPointsExpected(numPoints,lineLineTopo->getDimension());
+    Intrepid::FieldContainer<double> volumeRefPointsExpected(numPoints,lineLineTopo->getDimension());
 
     if (lineLineTopo->sideIsSpatial(sideOrdinal))
     {
@@ -487,7 +486,7 @@ TEUCHOS_UNIT_TEST( BasisCache, SetRefCellPointsSpaceTimeSide )
     }
 
     sideBasisCache->setRefCellPoints(sideRefCubaturePoints);
-    FieldContainer<double> volumeRefPoints = sideBasisCache->getSideRefCellPointsInVolumeCoordinates();
+    Intrepid::FieldContainer<double> volumeRefPoints = sideBasisCache->getSideRefCellPointsInVolumeCoordinates();
 
     TEST_COMPARE_FLOATING_ARRAYS(volumeRefPoints, volumeRefPointsExpected, tol);
 
@@ -523,13 +522,13 @@ TEUCHOS_UNIT_TEST( BasisCache, SetRefCellPointsSpaceTimeSide )
     int H1Order = 3;
     BasisCachePtr basisCache = BasisCache::basisCacheForCellTopology(cellTopo, H1Order, cellNodes);
     Camellia::EOperator op = OP_GRAD;
-    Intrepid::EOperator opIntrepid = OPERATOR_GRAD;
+    Intrepid::EOperator opIntrepid = Intrepid::OPERATOR_GRAD;
     BasisPtr basis = BasisFactory::basisFactory()->getBasis(H1Order, cellTopo, Camellia::FUNCTION_SPACE_HGRAD);
     int basisCardinality = basis->getCardinality();
     
     // get gradients in reference space
     int numPoints = basisCache->getRefCellPoints().dimension(0);
-    FieldContainer<double> values(basisCardinality, numPoints, spaceDim);
+    Intrepid::FieldContainer<double> values(basisCardinality, numPoints, spaceDim);
     basis->getValues(values, basisCache->getRefCellPoints(), opIntrepid);
     
     // if x dimension has doubled, then we expect d/dx to be scaled by 1/2
@@ -545,7 +544,7 @@ TEUCHOS_UNIT_TEST( BasisCache, SetRefCellPointsSpaceTimeSide )
       }
     }
     
-    FieldContainer<double> valuesActual = *basisCache->getTransformedValues(basis, op);
+    Intrepid::FieldContainer<double> valuesActual = *basisCache->getTransformedValues(basis, op);
     TEST_COMPARE_FLOATING_ARRAYS(values, valuesActual, 1e-14);
   }
 
@@ -712,8 +711,8 @@ TEUCHOS_UNIT_TEST( BasisCache, SetRefCellPointsSpaceTimeSide )
       {
         DofOrderingPtr trialOrder = mesh->getElementType(cellID)->trialOrderPtr;
         BasisPtr basis = trialOrder->getBasis(form.u()->ID());
-        FieldContainer<double> cellCoefficients = soln->allCoefficientsForCellID(cellID);
-        FieldContainer<double> basisCoefficients(basis->getCardinality());
+        Intrepid::FieldContainer<double> cellCoefficients = soln->allCoefficientsForCellID(cellID);
+        Intrepid::FieldContainer<double> basisCoefficients(basis->getCardinality());
         const vector<int>* dofIndices = &trialOrder->getDofIndices(form.u()->ID());
         for (int basisOrdinal=0; basisOrdinal<basis->getCardinality(); basisOrdinal++)
         {
@@ -812,8 +811,8 @@ TEUCHOS_UNIT_TEST( BasisCache, SetRefCellPointsSpaceTimeSide )
     {
       DofOrderingPtr trialOrder = mesh->getElementType(cellID)->trialOrderPtr;
       BasisPtr basis = trialOrder->getBasis(form.u()->ID());
-      FieldContainer<double> cellCoefficients = soln->allCoefficientsForCellID(cellID);
-      FieldContainer<double> basisCoefficients(basis->getCardinality());
+      Intrepid::FieldContainer<double> cellCoefficients = soln->allCoefficientsForCellID(cellID);
+      Intrepid::FieldContainer<double> basisCoefficients(basis->getCardinality());
       const vector<int>* dofIndices = &trialOrder->getDofIndices(form.u()->ID());
       for (int basisOrdinal=0; basisOrdinal<basis->getCardinality(); basisOrdinal++)
       {
@@ -909,14 +908,14 @@ TEUCHOS_UNIT_TEST( BasisCache, SetRefCellPointsSpaceTimeSide )
     int H1Order = 3;
     BasisCachePtr basisCache = BasisCache::basisCacheForCellTopology(cellTopo, H1Order, cellNodes);
     Camellia::EOperator op = OP_LAPLACIAN;
-    Intrepid::EOperator opIntrepid = OPERATOR_D2;
+    Intrepid::EOperator opIntrepid = Intrepid::OPERATOR_D2;
     BasisPtr basis = BasisFactory::basisFactory()->getBasis(H1Order, cellTopo, Camellia::FUNCTION_SPACE_HGRAD);
     int basisCardinality = basis->getCardinality();
     
     // get gradients in reference space
     int numPoints = basisCache->getRefCellPoints().dimension(0);
     int refSpaceValuesPerPoint = Intrepid::getDkCardinality(opIntrepid, spaceDim);
-    FieldContainer<double> valuesRefSpace(basisCardinality, numPoints, refSpaceValuesPerPoint);
+    Intrepid::FieldContainer<double> valuesRefSpace(basisCardinality, numPoints, refSpaceValuesPerPoint);
     basis->getValues(valuesRefSpace, basisCache->getRefCellPoints(), opIntrepid);
     
     vector<int> d2_enumeration(3);
@@ -924,7 +923,7 @@ TEUCHOS_UNIT_TEST( BasisCache, SetRefCellPointsSpaceTimeSide )
     d2_enumeration[1] = Intrepid::getDkEnumeration(0,2,0);
     d2_enumeration[2] = Intrepid::getDkEnumeration(0,0,2);
     
-    FieldContainer<double> values(basisCardinality, numPoints);
+    Intrepid::FieldContainer<double> values(basisCardinality, numPoints);
     // if x dimension has doubled, then we expect d/dx to be scaled by 1/2, and d^2/dx^2 to be scaled by 1/4
     // scale values accordingly
     for (int basisOrdinal=0; basisOrdinal < basisCardinality; basisOrdinal++)
@@ -938,7 +937,7 @@ TEUCHOS_UNIT_TEST( BasisCache, SetRefCellPointsSpaceTimeSide )
       }
     }
     
-    FieldContainer<double> valuesActual = *basisCache->getTransformedValues(basis, op);
+    Intrepid::FieldContainer<double> valuesActual = *basisCache->getTransformedValues(basis, op);
     TEST_COMPARE_FLOATING_ARRAYS(values, valuesActual, 1e-13);
   }
 } // namespace

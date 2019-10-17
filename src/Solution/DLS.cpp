@@ -17,7 +17,6 @@ static const int MAX_BATCH_SIZE_IN_BYTES = 3*1024*1024; // 3 MB
 static const int MIN_BATCH_SIZE_IN_CELLS = 1; // overrides the above, if it results in too-small batches
 
 using namespace Camellia;
-using namespace Intrepid;
 using namespace Teuchos;
 using namespace Tpetra;
 
@@ -70,8 +69,8 @@ int DLS<Scalar>::assemble()
   Epetra_BlockMap solnMap = solnLHS->Map();
   
   /**** Start BC determination ****/
-  FieldContainer<GlobalIndexType> bcGlobalIndicesFC;
-  FieldContainer<Scalar> bcGlobalValuesFC;
+  Intrepid::FieldContainer<GlobalIndexType> bcGlobalIndicesFC;
+  Intrepid::FieldContainer<Scalar> bcGlobalValuesFC;
   
   mesh->boundary().bcsToImpose(bcGlobalIndicesFC,bcGlobalValuesFC,*bc,_soln->getDofInterpreter().get());
   
@@ -267,8 +266,8 @@ int DLS<Scalar>::assemble()
   {
     //cout << "Solution: elementType loop, iteration: " << elemTypeNumber++ << endl;
     
-    FieldContainer<double> myPhysicalCellNodesForType = mesh->physicalCellNodes(elemTypePtr);
-    FieldContainer<double> myCellSideParitiesForType = mesh->cellSideParities(elemTypePtr);
+    Intrepid::FieldContainer<double> myPhysicalCellNodesForType = mesh->physicalCellNodes(elemTypePtr);
+    Intrepid::FieldContainer<double> myCellSideParitiesForType = mesh->cellSideParities(elemTypePtr);
     int totalCellsForType = myPhysicalCellNodesForType.dimension(0);
     int startCellIndexForBatch = 0;
     
@@ -293,8 +292,8 @@ int DLS<Scalar>::assemble()
     myPhysicalCellNodesForType.dimensions(nodeDimensions);
     myCellSideParitiesForType.dimensions(parityDimensions);
     
-    FieldContainer<Scalar> localStiffness(maxCellBatch,numTrialDofs,numTestDofs);
-    FieldContainer<Scalar> localRHSVector(maxCellBatch,numTestDofs);
+    Intrepid::FieldContainer<Scalar> localStiffness(maxCellBatch,numTrialDofs,numTestDofs);
+    Intrepid::FieldContainer<Scalar> localRHSVector(maxCellBatch,numTestDofs);
     
     while (startCellIndexForBatch < totalCellsForType)
     {
@@ -312,8 +311,8 @@ int DLS<Scalar>::assemble()
       
       nodeDimensions[0] = numCells;
       parityDimensions[0] = numCells;
-      FieldContainer<double> physicalCellNodes(nodeDimensions,&myPhysicalCellNodesForType(startCellIndexForBatch,0,0));
-      FieldContainer<double> cellSideParities(parityDimensions,&myCellSideParitiesForType(startCellIndexForBatch,0));
+      Intrepid::FieldContainer<double> physicalCellNodes(nodeDimensions,&myPhysicalCellNodesForType(startCellIndexForBatch,0,0));
+      Intrepid::FieldContainer<double> cellSideParities(parityDimensions,&myCellSideParitiesForType(startCellIndexForBatch,0));
       
       bool createSideCacheToo = true;
       basisCache->setPhysicalCellNodes(physicalCellNodes,cellIDs,createSideCacheToo);
@@ -327,17 +326,17 @@ int DLS<Scalar>::assemble()
       
       subTimer.ResetStartTime();
       
-      FieldContainer<GlobalIndexType> globalDofIndicesFC;
+      Intrepid::FieldContainer<GlobalIndexType> globalDofIndicesFC;
       Array<GlobalIndexType> globalDofIndicesNoBCs;
       Array<GlobalIndexType> globalDofIndicesBCs;
       
       Array<int> localStiffnessDim = vector<int>{numTrialDofs,numTestDofs};
       Array<int> localRHSDim       = vector<int>{numTestDofs};
       
-      FieldContainer<Scalar> interpretedStiffness;
+      Intrepid::FieldContainer<Scalar> interpretedStiffness;
       
-      FieldContainer<Scalar> interpretedStiffnessNoBCs;
-      FieldContainer<Scalar> interpretedStiffnessBCs;
+      Intrepid::FieldContainer<Scalar> interpretedStiffnessNoBCs;
+      Intrepid::FieldContainer<Scalar> interpretedStiffnessBCs;
       
       Array<int> dim;
       // determine cellIDs
@@ -349,8 +348,8 @@ int DLS<Scalar>::assemble()
       for (int cellIndex=0; cellIndex<numCells; cellIndex++)
       {
         GlobalIndexType cellID = cellIDsOfType[cellIndex+startCellIndexForBatch];
-        FieldContainer<Scalar> cellStiffness(localStiffnessDim,&localStiffness(cellIndex,0,0)); // shallow copy
-        FieldContainer<Scalar> cellRHS(localRHSDim,&localRHSVector(cellIndex,0)); // shallow copy
+        Intrepid::FieldContainer<Scalar> cellStiffness(localStiffnessDim,&localStiffness(cellIndex,0,0)); // shallow copy
+        Intrepid::FieldContainer<Scalar> cellRHS(localRHSDim,&localRHSVector(cellIndex,0)); // shallow copy
         
         elementTestOffset = elementTestIDOffsets[cellID];
         for (int i=0; i<numTestDofs; i++)

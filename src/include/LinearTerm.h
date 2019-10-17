@@ -111,7 +111,7 @@ public:
   bool isPureBoundaryTerm() const;
   bool isPureVolumeTerm() const;
 
-  // integrate into values FieldContainers:
+  // integrate into values Intrepid::FieldContainers:
   void integrate(Intrepid::FieldContainer<Scalar> &values, DofOrderingPtr thisOrdering,
                  BasisCachePtr basisCache, bool forceBoundaryTerm = false, bool sumInto = true);
   void integrate(Intrepid::FieldContainer<Scalar> &values, DofOrderingPtr thisDofOrdering,
