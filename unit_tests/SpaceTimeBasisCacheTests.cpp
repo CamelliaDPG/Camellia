@@ -12,6 +12,7 @@
 #include "Teuchos_UnitTestHarness.hpp"
 
 #include "BasisFactory.h"
+#include "CamelliaTestingHelpers.h"
 #include "CellTopology.h"
 #include "MPIWrapper.h"
 #include "SpaceTimeBasisCache.h"
@@ -423,7 +424,7 @@ void testPhysicalPointsForSpaceTimeBasisCache(int H1Order, CellTopoPtr spaceTopo
       tensorBasis->getTensorPoints(expectedPhysicalPoints, spatialPoints, temporalPoints);
 
       FC actualPhysicalPoints = sideCache->getPhysicalCubaturePoints();
-      TEST_COMPARE_FLOATING_ARRAYS(expectedPhysicalPoints, actualPhysicalPoints, 1e-15);
+      TEST_COMPARE_FLOATING_ARRAYS_CAMELLIA(expectedPhysicalPoints, actualPhysicalPoints, 1e-15);
     }
   }
 }
