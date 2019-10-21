@@ -1164,7 +1164,7 @@ void TSolution<Scalar>::populateStiffnessAndLoad()
 
   double localStiffnessInterpretationTime = 0, filterApplicationTime = 0;
 
-  int localStiffnessTimerHandle = TimeLogger::sharedInstance()->startTimer("local stiffness/load");
+  int localStiffnessTimerHandle = TimeLogger::sharedInstance()->startTimer(SOLUTION_LOCAL_STIFFNESS_LOAD_TIMER_STRING);
   //  cout << "Computing local matrices" << endl;
   for (ElementTypePtr elemTypePtr : elementTypes)
   {
@@ -1264,6 +1264,7 @@ void TSolution<Scalar>::populateStiffnessAndLoad()
       // determine cellIDs
       vector<GlobalIndexType> cellIDsOfType = _mesh->globalDofAssignment()->cellIDsOfElementType(rank, elemTypePtr);
       
+      int interpretLocalDataTimerHandle = TimeLogger::sharedInstance()->startTimer(SOLUTION_INTERPRET_LOCAL_DATA_TIMER_STRING);
       for (int cellIndex=0; cellIndex<numCells; cellIndex++)
       {
         GlobalIndexType cellID = cellIDsOfType[cellIndex+startCellIndexForBatch];
@@ -1295,8 +1296,8 @@ void TSolution<Scalar>::populateStiffnessAndLoad()
           _rhsVector->SumIntoGlobalValues(globalDofIndices.size(),&globalDofIndicesCast(0),&interpretedRHS[0],GOAL_ORIENTED_RHS_INDEX);
         }
       }
+      TimeLogger::sharedInstance()->stopTimer(interpretLocalDataTimerHandle);
       localStiffnessInterpretationTime += subTimer.ElapsedTime();
-
       startCellIndexForBatch += numCells;
     }
   }

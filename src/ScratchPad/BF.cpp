@@ -25,8 +25,6 @@ using namespace std;
 
 namespace Camellia
 {
-  const static string LOCAL_STIFFNESS_AND_RHS_TIMER_STRING = "local stiffness and RHS assembly";
-  
   template <typename Scalar>
   TBFPtr<Scalar> TBF<Scalar>::bf(VarFactoryPtr &vf)
   {
@@ -45,7 +43,7 @@ namespace Camellia
 //    _useIterativeRefinementsWithSPDSolve = false;
 //    _warnAboutZeroRowsAndColumns = true;
 
-    TimeLogger::sharedInstance()->createTimeEntry(LOCAL_STIFFNESS_AND_RHS_TIMER_STRING);
+    TimeLogger::sharedInstance()->createTimeEntry(BF_LOCAL_STIFFNESS_AND_RHS_TIMER_STRING);
     
     _isLegacySubclass = true;
   }
@@ -59,7 +57,7 @@ namespace Camellia
     _testIDs = _varFactory->testIDs();
     _isLegacySubclass = false;
     
-    TimeLogger::sharedInstance()->createTimeEntry(LOCAL_STIFFNESS_AND_RHS_TIMER_STRING);
+    TimeLogger::sharedInstance()->createTimeEntry(BF_LOCAL_STIFFNESS_AND_RHS_TIMER_STRING);
     
 //    _useQRSolveForOptimalTestFunctions = true;
 //    _useSPDSolveForOptimalTestFunctions = false;
@@ -924,6 +922,7 @@ namespace Camellia
                                          Intrepid::FieldContainer<Scalar> &rhsEnriched, Intrepid::FieldContainer<Scalar> &stiffness,
                                          Intrepid::FieldContainer<Scalar> &rhs)
   {
+    int timerHandle = TimeLogger::sharedInstance()->startTimer(BF_FACTORED_CHOLESKY_SOLVE_TIMER_STRING);
     int N = ipMatrix.dimension(0);
     TEUCHOS_TEST_FOR_EXCEPTION(N != ipMatrix.dimension(1), std::invalid_argument, "ipMatrix must be square");
     int M = stiffnessEnriched.dimension(0);
@@ -1013,6 +1012,7 @@ namespace Camellia
               &rhsEnriched[0], N);
     
     SerialDenseWrapper::multiply(rhs, stiffnessEnriched, rhsEnriched, 'N', 'N');
+    TimeLogger::sharedInstance()->stopTimer(timerHandle);
     return result;
   }
   
@@ -1169,7 +1169,7 @@ namespace Camellia
                                                    TIPPtr<Scalar> ip, BasisCachePtr ipBasisCache, TRHSPtr<Scalar> rhs,
                                                    BasisCachePtr basisCache)
   {
-    int timerHandle = TimeLogger::sharedInstance()->startTimer(LOCAL_STIFFNESS_AND_RHS_TIMER_STRING);
+    int timerHandle = TimeLogger::sharedInstance()->startTimer(BF_LOCAL_STIFFNESS_AND_RHS_TIMER_STRING);
     double testMatrixAssemblyTime = 0, localStiffnessDeterminationTime = 0;
     double rhsDeterminationTime = 0;
     
@@ -1321,7 +1321,7 @@ namespace Camellia
   void TBF<Scalar>::localStiffnessMatrixAndRHS(Intrepid::FieldContainer<Scalar> &localStiffness, Intrepid::FieldContainer<Scalar> &rhsVector,
                                                TIPPtr<Scalar> ip, BasisCachePtr ipBasisCache, TRHSPtr<Scalar> rhs, BasisCachePtr basisCache)
   {
-    int timerHandle = TimeLogger::sharedInstance()->startTimer(LOCAL_STIFFNESS_AND_RHS_TIMER_STRING);
+    int timerHandle = TimeLogger::sharedInstance()->startTimer(BF_LOCAL_STIFFNESS_AND_RHS_TIMER_STRING);
     double testMatrixAssemblyTime = 0, localStiffnessDeterminationTime = 0;
     double rhsDeterminationTime = 0;
     

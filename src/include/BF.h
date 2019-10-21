@@ -20,6 +20,9 @@
 
 namespace Camellia
 {
+  const static string BF_FACTORED_CHOLESKY_SOLVE_TIMER_STRING = "BF factored Cholesky solve";
+  const static string BF_LOCAL_STIFFNESS_AND_RHS_TIMER_STRING = "BF local stiffness and RHS assembly"; //  (includes optimal test solve, if applicable)
+  
 template <typename Scalar>
 class TBF
 {

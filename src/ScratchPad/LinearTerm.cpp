@@ -13,6 +13,7 @@
 #include "SerialDenseWrapper.h"
 #include "Solution.h"
 #include "TensorBasis.h"
+#include "TimeLogger.h"
 
 #include "Epetra_CrsMatrix.h"
 #include "Intrepid_FunctionSpaceTools.hpp"
@@ -205,6 +206,7 @@ template<typename Scalar>
 void TLinearTerm<Scalar>::integrate(Intrepid::FieldContainer<Scalar> &values, DofOrderingPtr thisOrdering,
                                     BasisCachePtr basisCache, bool forceBoundaryTerm, bool sumInto)
 {
+  int timerHandle = TimeLogger::sharedInstance()->startTimer(LINEAR_TERM_INTEGRATION_TIMER_STRING);
   // values has dimensions (numCells, thisFields)
   if (!sumInto) values.initialize();
 
@@ -413,6 +415,7 @@ void TLinearTerm<Scalar>::integrate(Intrepid::FieldContainer<Scalar> &values, Do
       }
     }
   }
+  TimeLogger::sharedInstance()->stopTimer(timerHandle);
 }
 
 template<typename Scalar>
@@ -430,6 +433,7 @@ void TLinearTerm<Scalar>::integrate(Epetra_CrsMatrix* valuesCrsMatrix, Intrepid:
                                     TLinearTermPtr<double> v, DofOrderingPtr vOrdering,
                                     BasisCachePtr basisCache, bool sumInto)
 {
+  int timerHandle = TimeLogger::sharedInstance()->startTimer(LINEAR_TERM_INTEGRATION_TIMER_STRING);
   if (!sumInto) valuesFC.initialize();
   if (u->isZero() || v->isZero()) return;
   int numCells = basisCache->getPhysicalCubaturePoints().dimension(0);
@@ -623,6 +627,7 @@ void TLinearTerm<Scalar>::integrate(Epetra_CrsMatrix* valuesCrsMatrix, Intrepid:
       }
     }
   }
+  TimeLogger::sharedInstance()->stopTimer(timerHandle);
   //  cout << "Integrate complete.\n";
 }
 
@@ -729,7 +734,7 @@ void TLinearTerm<Scalar>::integrate(Intrepid::FieldContainer<Scalar> &values, Do
                                     BasisCachePtr basisCache, bool forceBoundaryTerm)
 {
   // values has dimensions (numCells, thisFields)
-
+  int timerHandle = TimeLogger::sharedInstance()->startTimer(LINEAR_TERM_INTEGRATION_TIMER_STRING);
   if (!fxn.get())
   {
     TEUCHOS_TEST_FOR_EXCEPTION(true, std::invalid_argument, "fxn cannot be null!");
@@ -743,6 +748,7 @@ void TLinearTerm<Scalar>::integrate(Intrepid::FieldContainer<Scalar> &values, Do
   TLinearTermPtr<Scalar> thisPtr = Teuchos::rcp(this, false);
   TLinearTermPtr<Scalar> lt = otherFxnVolumePart * thisPtr + otherFxnBoundaryPart * thisPtr;
 
+  TimeLogger::sharedInstance()->stopTimer(timerHandle);
   lt->integrate(values, thisOrdering, basisCache, forceBoundaryTerm);
 }
 

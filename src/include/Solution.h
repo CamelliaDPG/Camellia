@@ -39,6 +39,9 @@
 
 namespace Camellia
 {
+  const static string SOLUTION_LOCAL_STIFFNESS_LOAD_TIMER_STRING = "Solution: local stiffness/load";
+  const static string SOLUTION_INTERPRET_LOCAL_DATA_TIMER_STRING = "Solution: interpretLocalData";
+  
 template <typename Scalar>
   class TSolution : public Narrator
 {

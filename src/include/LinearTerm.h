@@ -37,6 +37,7 @@
 class Epetra_CrsMatrix;
 namespace Camellia
 {
+  const static string LINEAR_TERM_INTEGRATION_TIMER_STRING = "linear term integration";
 
 template <typename Scalar>
 class TLinearTerm

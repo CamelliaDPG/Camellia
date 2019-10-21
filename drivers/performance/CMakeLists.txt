@@ -1,0 +1,4 @@
+project(performance)
+
+add_executable(StokesAssemblyPerformanceTest "StokesAssemblyPerformanceTest.cpp")
+target_link_libraries(StokesAssemblyPerformanceTest Camellia)
