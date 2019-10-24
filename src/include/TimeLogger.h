@@ -42,6 +42,9 @@ namespace Camellia {
     double totalTime(const std::string &timerName) const;
     const std::map<std::string,double> totalTimes() const;
     
+    //! Sets all time totals to zero
+    void clearTimes();
+    
     static Teuchos::RCP<TimeLogger> sharedInstance();
   };
 }

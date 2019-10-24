@@ -189,6 +189,8 @@ struct TimingResult
   int k_test;
   int trialDofCount;
   int testDofCount;
+  int elementCount;
+  int globalDofCount;
   double optimalTestSolveTime;              // time spent in factored cholesky calls
   double linearTermIntegrationTime;         // time spent in LinearTerm::integrate() methods
   double bfAssemblyOverheadTime;            // beyond optimalTestSolveTime + linearTermIntegrationTime
@@ -302,7 +304,17 @@ void printTimingResult(const TimingResult &timingResult)
       cout << std::setw(40) << timeResult.first;
       cout.setf(std::ios::right, std::ios::adjustfield);
       cout << std::setw(8);
-      cout << timeResult.second << " sec." << endl;
+      if (timingResult.totalAssemblyTime == timeResult.second)
+      {
+        cout << std::scientific;
+        cout << timeResult.second << " sec." << endl;
+      }
+      else
+      {
+        double percentage = timeResult.second / timingResult.totalAssemblyTime * 100.00;
+        cout << std::defaultfloat;
+        cout << percentage << "%\n";
+      }
     }
   }
 }
@@ -319,14 +331,14 @@ int main(int argc, char *argv[])
 
   Teuchos::CommandLineProcessor cmdp(false,true); // false: don't throw exceptions; true: do return errors for unrecognized options
 
-  int k = 1; // poly order for field variables
-  int delta_k = -1;   // test space enrichment
+  int polyOrder_L2 = -1; // poly order for field variables
+  int testSpaceEnrichment = -1;   // test space enrichment
 
   bool conformingTraces = false;
 
-  int numCells = -1;
+  int numCells = 2;
   int spaceDim = 3;
-  bool useCondensedSolve = true;
+  bool useCondensedSolve = false;
 
   bool reportTimings = false;
   
@@ -334,15 +346,14 @@ int main(int argc, char *argv[])
   
   bool pauseOnRankZero = false;
 
-  string problemChoiceString = "Stokes";
   string testNormChoice = "Graph";
 
-  cmdp.setOption("problem",&problemChoiceString,"problem choice: Stokes");
-  cmdp.setOption("testNorm",&testNormChoice,"test norm: Graph, or for ConvectionDiffusion: Robust or CoupledRobust");
+//  cmdp.setOption("problem",&problemChoiceString,"problem choice: Stokes");
+//  cmdp.setOption("testNorm",&testNormChoice,"test norm: Graph, or for ConvectionDiffusion: Robust or CoupledRobust");
 
   cmdp.setOption("numCells",&numCells,"mesh width");
-  cmdp.setOption("polyOrder",&k,"polynomial order for field variable u");
-  cmdp.setOption("delta_k", &delta_k, "test space polynomial order enrichment (use -1 for spaceDim, -2 for polyOrder)");
+  cmdp.setOption("polyOrder_L2",&polyOrder_L2,"L^2 polynomial order for field variables (use -1 to try several)");
+  cmdp.setOption("delta_k", &testSpaceEnrichment, "test space polynomial order enrichment (use -1 to try several)");
   
   cmdp.setOption("useCondensedSolve", "useStandardSolve", &useCondensedSolve);
   cmdp.setOption("useConformingTraces", "useNonConformingTraces", &conformingTraces);
@@ -371,123 +382,156 @@ int main(int argc, char *argv[])
     Comm->Barrier();
   }
 
-  ProblemChoice problemChoice;
-
-  if (problemChoiceString == "Stokes")
+  ProblemChoice problemChoice = Stokes;
+  
+  std::vector<TimingResult> timingResults;
+  
+  std::vector<int> delta_k_choices, k_choices;
+  
+  if (testSpaceEnrichment < 0)
   {
-    problemChoice = Stokes;
+    delta_k_choices = {0,1,2,3};
   }
   else
   {
-    if (rank==0) cout << "Problem choice not recognized.\n";
-#ifdef HAVE_MPI
-    MPI_Finalize();
-#endif
-    return -1;
+    delta_k_choices = {testSpaceEnrichment};
   }
-
-  if (rank==0)
+  if (polyOrder_L2 < 0)
   {
-    cout << "Timing Local Assembly for " << spaceDim << "D " << problemChoiceString << " problem with k = " << k << " on " << numProcs << " MPI ranks.  Initializing meshes...\n";
+    k_choices = {1,2,3,4};
   }
-  
-  auto getDeltaK = [&delta_k, &spaceDim] (int polyOrder) -> int
+  else
   {
-    if (delta_k == -1)
-    {
-      return spaceDim;
-    }
-    else if (delta_k == -2)
-    {
-      return polyOrder;
-    }
-    else
-    {
-      return delta_k;
-    }
-  };
-  
-  TimingResult timingResult;
-  timingResult.k_trial = k;
-  timingResult.k_test  = k + getDeltaK(k) + 1;
-  
-  if (numCells == -1)
-  {
-    numCells = (int)ceil(pow(numProcs,1.0/(double)spaceDim));
+    k_choices = {polyOrder_L2};
   }
   
-  Epetra_Time timer(*Comm);
-  
-  SolutionPtr solution;
-  MeshPtr coarseMesh;
-  IPPtr ip;
-  
-  initializeSolutionAndCoarseMesh(solution, ip, problemChoice, spaceDim, conformingTraces,
-                                  useCondensedSolve, numCells, k, getDeltaK(k), testNormChoice);
-  
-  auto mesh = solution->mesh();
-  
-  int numDofs      = mesh->numGlobalDofs();
-  int numTraceDofs = mesh->numFluxDofs();
-  int numElements  = mesh->numActiveElements();
-  
-  BFPtr bf = solution->mesh()->bilinearForm();
-
-  GlobalIndexType sampleCellID = 0;
-  int totalTrialDofs, totalTestDofs;
-  int rankWithSampleCell = solution->mesh()->Comm()->NumProc();
-  if (solution->mesh()->getTopology()->isValidCellIndex(sampleCellID))
+  for (int k : k_choices)
   {
-    rankWithSampleCell = solution->mesh()->Comm()->MyPID();
-    ElementTypePtr sampleElementType = solution->mesh()->getElementType(sampleCellID);
-    totalTrialDofs = sampleElementType->trialOrderPtr->totalDofs();
-    totalTestDofs = sampleElementType->testOrderPtr->totalDofs();
+    for (int delta_k : delta_k_choices)
+    {
+      TimeLogger::sharedInstance()->clearTimes();
+      
+      TimingResult timingResult;
+      timingResult.k_trial = k;
+      timingResult.k_test  = k + delta_k + 1;
+      
+      Epetra_Time timer(*Comm);
+      
+      SolutionPtr solution;
+      MeshPtr coarseMesh;
+      IPPtr ip;
+      
+      if (rank==0)
+      {
+        cout << "Timing Local Assembly for " << spaceDim << "D Stokes problem with k = " << k << " on " << numProcs << " MPI ranks.  Initializing meshes...\n";
+      }
+      
+      initializeSolutionAndCoarseMesh(solution, ip, problemChoice, spaceDim, conformingTraces,
+                                      useCondensedSolve, numCells, k, delta_k, testNormChoice);
+      
+      auto mesh = solution->mesh();
+      
+      int numDofs      = mesh->numGlobalDofs();
+      int numTraceDofs = mesh->numFluxDofs();
+      int numElements  = mesh->numActiveElements();
+      
+      timingResult.globalDofCount = numDofs;
+      timingResult.elementCount   = numElements;
+      
+      BFPtr bf = solution->mesh()->bilinearForm();
+      
+      GlobalIndexType sampleCellID = 0;
+      int totalTrialDofs, totalTestDofs;
+      int rankWithSampleCell = solution->mesh()->Comm()->NumProc();
+      if (solution->mesh()->getTopology()->isValidCellIndex(sampleCellID))
+      {
+        rankWithSampleCell = solution->mesh()->Comm()->MyPID();
+        ElementTypePtr sampleElementType = solution->mesh()->getElementType(sampleCellID);
+        totalTrialDofs = sampleElementType->trialOrderPtr->totalDofs();
+        totalTestDofs = sampleElementType->testOrderPtr->totalDofs();
+      }
+      
+      Comm = solution->mesh()->Comm();
+      
+      int minRankWithSampleCell;
+      Comm->MinAll(&rankWithSampleCell, &minRankWithSampleCell, 1);
+      Comm->Broadcast(&totalTestDofs, 1, minRankWithSampleCell);
+      Comm->Broadcast(&totalTrialDofs, 1, minRankWithSampleCell);
+      
+      timingResult.trialDofCount = totalTrialDofs;
+      timingResult.testDofCount  = totalTestDofs;
+      
+      double cellHaloTime = solution->mesh()->getTopology()->totalTimeComputingCellHalos();
+      double maxCellHaloTime;
+      solution->mesh()->Comm()->MaxAll(&cellHaloTime, &maxCellHaloTime, 1);
+      
+      if (rank==0)
+      {
+        cout << setprecision(2);
+        cout << "Mesh has " << numDofs;
+        cout << " global degrees of freedom (" << numTraceDofs << " trace dofs) on " << numElements << " elements.\n";
+        cout << totalTrialDofs << " trial dofs per element; " << totalTestDofs << " test dofs.\n";
+        
+        cout << "Maximum time spent determining cell halos: " << maxCellHaloTime << " seconds.\n";
+      }
+      
+      if (useFactoredCholeskyForOptimalTests)
+      {
+        if (rank==0) cout << "Setting optimal test solve to *factored* Cholesky\n";
+        solution->mesh()->bilinearForm()->setOptimalTestSolver(TBF<>::FACTORED_CHOLESKY);
+      }
+      else
+      {
+        if (rank==0) cout << "Setting optimal test solve to standard Cholesky\n";
+        solution->mesh()->bilinearForm()->setOptimalTestSolver(TBF<>::CHOLESKY);
+      }
+      
+      solution->initializeStiffnessAndLoad();
+      double populateStiffnessAndLoadTime = 0.0;
+      timer.ResetStartTime();
+      solution->populateStiffnessAndLoad();
+      populateStiffnessAndLoadTime = timer.ElapsedTime();
+      
+      getTimingResult(timingResult);
+      printTimingResult(timingResult);
+      timingResults.push_back(timingResult);
+    }
   }
   
-  
-  Comm = solution->mesh()->Comm();
-  
-  int minRankWithSampleCell;
-  Comm->MinAll(&rankWithSampleCell, &minRankWithSampleCell, 1);
-  Comm->Broadcast(&totalTestDofs, 1, minRankWithSampleCell);
-  Comm->Broadcast(&totalTrialDofs, 1, minRankWithSampleCell);
-  
-  timingResult.trialDofCount = totalTrialDofs;
-  timingResult.testDofCount  = totalTestDofs;
-  
-  double cellHaloTime = solution->mesh()->getTopology()->totalTimeComputingCellHalos();
-  double maxCellHaloTime;
-  solution->mesh()->Comm()->MaxAll(&cellHaloTime, &maxCellHaloTime, 1);
-  
-  if (rank==0)
+  if (rank == 0)
   {
-    cout << setprecision(2);
-    cout << "Mesh has " << numDofs;
-    cout << " global degrees of freedom (" << numTraceDofs << " trace dofs) on " << numElements << " elements.\n";
-    cout << totalTrialDofs << " trial dofs per element; " << totalTestDofs << " test dofs.\n";
-    
-    cout << "Maximum time spent determining cell halos: " << maxCellHaloTime << " seconds.\n";
+    ofstream fout("StokesAssemblyPerformanceTestTimings.dat");
+    fout << "k_trial\t";
+    fout << "k_test\t";
+    fout << "element_dofs_trial\t";
+    fout << "element_dofs_test\t";
+    fout << "element_count\t";
+    fout << "global_dofs\t";
+    fout << "total_assembly_time\t";
+    fout << "bf_optimal_test_solve\t";
+    fout << "linear_term_integrate\t";
+    fout << "bf_assembly_overhead\t";
+    fout << "solution_interpret_local_data\t";
+    fout << "solution_local_assembly_overhead";
+    fout << std::endl;
+    for (auto timingResult : timingResults)
+    {
+      fout << timingResult.k_trial << "\t";
+      fout << timingResult.k_test << "\t";
+      fout << timingResult.trialDofCount << "\t";
+      fout << timingResult.testDofCount << "\t";
+      fout << timingResult.elementCount << "\t";
+      fout << timingResult.globalDofCount << "\t";
+      fout << timingResult.totalAssemblyTime << "\t";
+      fout << timingResult.optimalTestSolveTime << "\t";
+      fout << timingResult.linearTermIntegrationTime << "\t";
+      fout << timingResult.bfAssemblyOverheadTime << "\t";
+      fout << timingResult.solutionInterpetLocalDataTime << "\t";
+      fout << timingResult.solutionLocalAssemblyOverheadTime;
+      fout << std::endl;
+    }
+    fout.close();
   }
-  
-    if (useFactoredCholeskyForOptimalTests)
-    {
-      if (rank==0) cout << "Setting optimal test solve to *factored* Cholesky\n";
-      solution->mesh()->bilinearForm()->setOptimalTestSolver(TBF<>::FACTORED_CHOLESKY);
-    }
-    else
-    {
-      if (rank==0) cout << "Setting optimal test solve to standard Cholesky\n";
-      solution->mesh()->bilinearForm()->setOptimalTestSolver(TBF<>::CHOLESKY);
-    }
-
-  solution->initializeStiffnessAndLoad();
-  double populateStiffnessAndLoadTime = 0.0;
-  timer.ResetStartTime();
-  solution->populateStiffnessAndLoad();
-  populateStiffnessAndLoadTime = timer.ElapsedTime();
-  
-  getTimingResult(timingResult);
-  printTimingResult(timingResult);
   
   return 0;
 }

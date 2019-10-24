@@ -28,6 +28,15 @@ Teuchos::RCP<TimeLogger> TimeLogger::sharedInstance()
   return _sharedInstance;
 }
 
+//! Sets all time totals to zero
+void TimeLogger::clearTimes()
+{
+  for (auto entry : _totalTimes)
+  {
+    _totalTimes[entry.first] = 0.0;
+  }
+}
+
 void TimeLogger::createTimeEntry(const std::string &timerName)
 {
   if (_totalTimes.find(timerName) == _totalTimes.end())
