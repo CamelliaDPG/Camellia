@@ -1080,8 +1080,8 @@ namespace
         refPoint(0,0) = refCellPoints(vertexOrdinal,0);
         refPoint(0,1) = refCellPoints(vertexOrdinal,1);
         basisCache->setRefCellPoints(refPoint);
-        Intrepid::FieldContainer<double> solnValue(1,1,1);
-        Intrepid::FieldContainer<double> condensedSolnValue(1,1,1);
+        Intrepid::FieldContainer<double> solnValue(1,1);
+        Intrepid::FieldContainer<double> condensedSolnValue(1,1);
         p_soln->values(solnValue, basisCache);
         p_condensed_soln->values(condensedSolnValue, basisCache);
         // both values should be exactly zero; we don't require quite that, just an extremely tight tolerance
