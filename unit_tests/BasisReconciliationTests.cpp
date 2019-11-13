@@ -608,6 +608,9 @@ void testPConstraintSideBasis(BasisPtr fineBasis, unsigned fineSideIndex, Intrep
 
 void testHGRADTrace(MeshTopologyPtr meshTopo, int polyOrder, Teuchos::FancyOStream &out, bool &success)
 {
+  double relTol = 1e-14;
+  double absTol = 1e-16;
+  
   Camellia::EFunctionSpace fsSpace = Camellia::FUNCTION_SPACE_HGRAD;
   Camellia::EFunctionSpace fsTime = Camellia::FUNCTION_SPACE_HGRAD;
   vector<int> H1Orders = {polyOrder,polyOrder};
@@ -740,7 +743,7 @@ void testHGRADTrace(MeshTopologyPtr meshTopo, int polyOrder, Teuchos::FancyOStre
 
               bool oldSuccess = success;
               success = true;
-              TEST_COMPARE_FLOATING_ARRAYS_CAMELLIA(sideCache1->getPhysicalCubaturePoints(), sideCache2->getPhysicalCubaturePoints(), 1e-14);
+              TEST_COMPARE_FLOATING_ARRAYS_CAMELLIA_ABSTOLTOO(sideCache1->getPhysicalCubaturePoints(), sideCache2->getPhysicalCubaturePoints(), relTol, absTol);
               bool justFailed = !success;
               success = success && oldSuccess;
               if (justFailed)
@@ -798,11 +801,10 @@ void testHGRADTrace(MeshTopologyPtr meshTopo, int polyOrder, Teuchos::FancyOStre
                 }
               }
 
-              double tol = 1e-14;
               // allow detection of local failure, and print out info just for things that fail
               oldSuccess = success;
               success = true;
-              TEST_COMPARE_FLOATING_ARRAYS_CAMELLIA(values2Filtered, weightedValues1, tol);
+              TEST_COMPARE_FLOATING_ARRAYS_CAMELLIA_ABSTOLTOO(values2Filtered, weightedValues1, relTol, absTol);
               justFailed = !success;
               // restore global success
               success = oldSuccess && success;
