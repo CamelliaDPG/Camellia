@@ -533,6 +533,75 @@ TEUCHOS_UNIT_TEST( Function, MinAndMaxFunctions )
   actualValue = Function::evaluate(maxFcn, x0, y0);
   TEST_FLOATING_EQUALITY(expectedValue,actualValue,tol);
 }
+  
+TEUCHOS_UNIT_TEST( Function, SolutionFunctionSkeletonRestriction )
+{
+  // In this test, we set up a 2x2 mesh with unit solution values on the lower-left and upper-right cells,
+  // and zero solutions in the others.  The lower-left cell has ID 0; the upper-right, 3.
+  // The idea here is that we have a discontinuous solution, and want to contribute to some global integral
+  // by integrating local contributions.  (It is necessary that the thing you integrate against is in some
+  // sense globally continuous: i.e., the "left" and "right" cell values should be tested with the same test function.)
+  // We test that the integral on each cell matches the expected value.
+  int spaceDim = 2;
+  bool conformingTraces = true;
+  PoissonFormulation form(spaceDim,conformingTraces);
+  
+  int H1Order = 1;
+  vector<int> elemCounts = {2,2};
+  set<int> unitCellIDs = {0,3};
+  
+  MeshPtr mesh = MeshFactory::rectilinearMesh(form.bf(), {1.0,1.0}, elemCounts, H1Order);
+  SolutionPtr solution = Solution::solution(form.bf(), mesh);
+  
+  solution->initializeLHSVector();
+  
+  auto myCellIDs = mesh->cellIDsInPartition();
+  
+  int solutionOrdinal = 0;
+  for (int cellID : myCellIDs)
+  {
+    auto trialOrdering = mesh->getElementType(cellID)->trialOrderPtr;
+    Intrepid::FieldContainer<double> solnCoefficients(trialOrdering->totalDofs());
+    bool hasUnitSolution = unitCellIDs.find(cellID) != unitCellIDs.end();
+    if (hasUnitSolution) solnCoefficients.initialize(1.0);
+    else                 solnCoefficients.initialize(0.0); // this will give all variables a constant 1.0 value
+    
+    solution->setSolnCoeffsForCellID(solnCoefficients, cellID, solutionOrdinal);
+  }
+  
+  FunctionPtr gamma   = Function::meshBoundaryCharacteristic();
+  FunctionPtr gamma_h = Function::meshSkeletonCharacteristic();
+  
+  VarPtr u = form.u();
+  FunctionPtr u_soln = Function::solution(u, solution);
+  // we want the value of u on the mesh boundary, and the average value of u ("left" and "right") on the interior skeleton:
+  //    u_soln * gamma + (gamma_h - gamma) * 0.5 * u_soln;
+  // this simplifies to:
+  //    0.5 * (gamma_h + gamma) * u_soln
+  FunctionPtr u_restriction = 0.5 * (gamma_h + gamma) * u_soln;
+  
+  // set up expected integrals on each cell:
+  // - on cell with zero value, we expect 0
+  // - on a cell with unit value, we expect:
+  //   interior edges: edge_length * 0.5 * 1.0 = 0.5 * 0.5 * 1.0 = 0.25
+  //   boundary edges: edge_length * 1.0 * 1.0 = 0.5
+  //   each cell has 2 interior edges and 2 boundary edges, so the expected integral is 1.5
+  for (int cellID : myCellIDs)
+  {
+    double actualValue = u_restriction->integrate(cellID, mesh);
+    bool hasUnitSolution = unitCellIDs.find(cellID) != unitCellIDs.end();
+    double expectedValue = hasUnitSolution ? 1.5 : 0.0;
+    double tol = 1e-15;
+    if (expectedValue == 0.0)
+    {
+      TEST_COMPARE(abs(actualValue), <, tol);
+    }
+    else
+    {
+      TEST_FLOATING_EQUALITY(actualValue, expectedValue, tol);
+    }
+  }
+}
 
 TEUCHOS_UNIT_TEST( Function, SpaceTimeIntegralLine )
 {
