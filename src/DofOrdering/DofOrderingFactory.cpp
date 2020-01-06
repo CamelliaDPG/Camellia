@@ -404,7 +404,7 @@ map<int, BasisPtr> DofOrderingFactory::getPatchBasisUpgradeMap(const DofOrdering
     if (numSides > 1)   // a variable that lives on the sides: we need to match basis
     {
       BasisPtr basis = parentTrialOrdering->getBasis(varID,parentSideIndex);
-      Intrepid::FieldContainer<double> nodes(2,1); // just 1D patches supported right now
+      Camellia::FieldContainer<double> nodes(2,1); // just 1D patches supported right now
       if (childIndexInParentSide==0)
       {
         nodes(0,0) = -1.0;

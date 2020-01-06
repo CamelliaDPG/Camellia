@@ -31,13 +31,13 @@ protected:
   BCPtr _bc;
   RHSPtr _rhs;
   InnerProductPtr _ip;
-  Intrepid::FieldContainer<double> _quadDomain; // leave empty/unspecified for non-quad domains (not ideal)
+  Camellia::FieldContainer<double> _quadDomain; // leave empty/unspecified for non-quad domains (not ideal)
 public:
   BFPtr bilinearForm();
   BCPtr bc();
   RHSPtr rhs();
   InnerProductPtr innerProduct();
-  Intrepid::FieldContainer<double> quadDomain();
+  Camellia::FieldContainer<double> quadDomain();
 };
 }
 

@@ -203,7 +203,7 @@ VarType TLinearTerm<Scalar>::termType() const
 // fluxes are only defined on the element boundary.
 // TODO: make the code below match the description above.
 template<typename Scalar>
-void TLinearTerm<Scalar>::integrate(Intrepid::FieldContainer<Scalar> &values, DofOrderingPtr thisOrdering,
+void TLinearTerm<Scalar>::integrate(Camellia::FieldContainer<Scalar> &values, DofOrderingPtr thisOrdering,
                                     BasisCachePtr basisCache, bool forceBoundaryTerm, bool sumInto)
 {
   int timerHandle = TimeLogger::sharedInstance()->startTimer(LINEAR_TERM_INTEGRATION_TIMER_STRING);
@@ -228,7 +228,7 @@ void TLinearTerm<Scalar>::integrate(Intrepid::FieldContainer<Scalar> &values, Do
   ltValueDim.push_back(numCells);
   ltValueDim.push_back(0); // # fields -- empty until we have a particular basis
   ltValueDim.push_back(0); // # points -- empty until we know whether we're on side
-  Intrepid::FieldContainer<Scalar> ltValues;
+  Camellia::FieldContainer<Scalar> ltValues;
 
   for (set<int>::iterator varIt = varIDs.begin(); varIt != varIDs.end(); varIt++)
   {
@@ -307,7 +307,7 @@ void TLinearTerm<Scalar>::integrate(Intrepid::FieldContainer<Scalar> &values, Do
 //              if (basisCache->cellIDs()[0]==0) {
 //                if (basisCardinality==1) {
 //                  int cellIndex = 0;
-//                  Intrepid::FieldContainer<double> valueOnSide(1, basisCardinality);
+//                  Camellia::FieldContainer<double> valueOnSide(1, basisCardinality);
 //                  for (int basisOrdinal = 0; basisOrdinal < basisCardinality; basisOrdinal++) {
 //                    for (int ptIndex = 0; ptIndex < numPoints; ptIndex++) {
 //                      valueOnSide(cellIndex,basisOrdinal) += ltValues(cellIndex,basisOrdinal,ptIndex);
@@ -397,7 +397,7 @@ void TLinearTerm<Scalar>::integrate(Intrepid::FieldContainer<Scalar> &values, Do
         //            if (basisCache->cellIDs()[0]==0) {
         //              if (basisCardinality==1) {
         //                int cellIndex = 0;
-        //                Intrepid::FieldContainer<double> valueOnSide(1, basisCardinality);
+        //                Camellia::FieldContainer<double> valueOnSide(1, basisCardinality);
         //                for (int basisOrdinal = 0; basisOrdinal < basisCardinality; basisOrdinal++) {
         //                  for (int ptIndex = 0; ptIndex < numPoints; ptIndex++) {
         //                    valueOnSide(cellIndex,basisOrdinal) += ltValues(cellIndex,basisOrdinal,ptIndex);
@@ -419,7 +419,7 @@ void TLinearTerm<Scalar>::integrate(Intrepid::FieldContainer<Scalar> &values, Do
 }
 
 template<typename Scalar>
-void TLinearTerm<Scalar>::integrate(Intrepid::FieldContainer<Scalar> &values,
+void TLinearTerm<Scalar>::integrate(Camellia::FieldContainer<Scalar> &values,
                                     TLinearTermPtr<Scalar> u, DofOrderingPtr uOrdering,
                                     TLinearTermPtr<Scalar> v, DofOrderingPtr vOrdering,
                                     BasisCachePtr basisCache, bool sumInto)
@@ -428,7 +428,7 @@ void TLinearTerm<Scalar>::integrate(Intrepid::FieldContainer<Scalar> &values,
 }
 
 template<typename Scalar>
-void TLinearTerm<Scalar>::integrate(Epetra_CrsMatrix* valuesCrsMatrix, Intrepid::FieldContainer<double> &valuesFC,
+void TLinearTerm<Scalar>::integrate(Epetra_CrsMatrix* valuesCrsMatrix, Camellia::FieldContainer<double> &valuesFC,
                                     TLinearTermPtr<double> u, DofOrderingPtr uOrdering,
                                     TLinearTermPtr<double> v, DofOrderingPtr vOrdering,
                                     BasisCachePtr basisCache, bool sumInto)
@@ -508,7 +508,7 @@ void TLinearTerm<Scalar>::integrate(Epetra_CrsMatrix* valuesCrsMatrix, Intrepid:
     BasisPtr uBasis = uOrdering->getBasis(uID,uSideIndex);
     int uBasisCardinality = uBasis->getCardinality();
     ltValueDim[1] = uBasisCardinality;
-    Intrepid::FieldContainer<double> uValues(ltValueDim);
+    Camellia::FieldContainer<double> uValues(ltValueDim);
     bool applyCubatureWeights = true, dontApplyCubatureWeights = false;
     u->values(uValues,uID,uBasis,basisCache,applyCubatureWeights);
 
@@ -563,7 +563,7 @@ void TLinearTerm<Scalar>::integrate(Epetra_CrsMatrix* valuesCrsMatrix, Intrepid:
       BasisPtr vBasis = vOrdering->getBasis(vID,vSideIndex);
       int vBasisCardinality = vBasis->getCardinality();
       ltValueDim[1] = vBasisCardinality;
-      Intrepid::FieldContainer<double> vValues(ltValueDim);
+      Camellia::FieldContainer<double> vValues(ltValueDim);
       v->values(vValues, vID, vBasis, basisCache, dontApplyCubatureWeights);
 
       //      cout << "vValues (without cubature weights applied) for v = " << v->displayString() << ":" << endl;
@@ -576,8 +576,11 @@ void TLinearTerm<Scalar>::integrate(Epetra_CrsMatrix* valuesCrsMatrix, Intrepid:
       }
 
       Intrepid::FieldContainer<double> miniMatrix( numCells, uBasisCardinality, vBasisCardinality );
-
-      Intrepid::FunctionSpaceTools::integrate<double>(miniMatrix,uValues,vValues,Intrepid::COMP_BLAS);
+      Intrepid::FieldContainer<double> &uValuesIntrepid = uValues;
+      Intrepid::FieldContainer<double> &vValuesIntrepid = vValues;
+      
+      // the casts above are important to let FunctionSpaceTools invoke BLAS
+      Intrepid::FunctionSpaceTools::integrate<double>(miniMatrix,uValuesIntrepid,vValuesIntrepid,Intrepid::COMP_BLAS);
 
       //      cout << "uValues:" << endl << uValues;
       //      cout << "vValues:" << endl << vValues;
@@ -610,7 +613,7 @@ void TLinearTerm<Scalar>::integrate(Epetra_CrsMatrix* valuesCrsMatrix, Intrepid:
       }
       else     // CrsMatrix version
       {
-        Intrepid::FieldContainer<int> uDofIndicesFC(uDofIndices.size()), vDofIndicesFC(vDofIndices.size());
+        Camellia::FieldContainer<int> uDofIndicesFC(uDofIndices.size()), vDofIndicesFC(vDofIndices.size());
         for (int i=0; i < uBasisCardinality; i++)
         {
           uDofIndicesFC[i] = uDofIndices[i];
@@ -636,12 +639,12 @@ void TLinearTerm<Scalar>::integrate(Epetra_CrsMatrix *values, DofOrderingPtr thi
                                     TLinearTermPtr<double> otherTerm, DofOrderingPtr otherOrdering,
                                     BasisCachePtr basisCache, bool forceBoundaryTerm, bool sumInto)
 {
-  static Intrepid::FieldContainer<double> emptyValues;
+  static Camellia::FieldContainer<double> emptyValues;
   integrate(values, emptyValues, thisOrdering, otherTerm, otherOrdering, basisCache, forceBoundaryTerm, sumInto);
 }
 
 template<typename Scalar>
-void TLinearTerm<Scalar>::integrate(Intrepid::FieldContainer<Scalar> &values, DofOrderingPtr thisOrdering,
+void TLinearTerm<Scalar>::integrate(Camellia::FieldContainer<Scalar> &values, DofOrderingPtr thisOrdering,
                                     TLinearTermPtr<Scalar> otherTerm, DofOrderingPtr otherOrdering,
                                     BasisCachePtr basisCache, bool forceBoundaryTerm, bool sumInto)
 {
@@ -649,7 +652,7 @@ void TLinearTerm<Scalar>::integrate(Intrepid::FieldContainer<Scalar> &values, Do
 }
 
 template<typename Scalar>
-void TLinearTerm<Scalar>::integrate(Epetra_CrsMatrix *valuesCrsMatrix, Intrepid::FieldContainer<double> &valuesFC, DofOrderingPtr thisOrdering,
+void TLinearTerm<Scalar>::integrate(Epetra_CrsMatrix *valuesCrsMatrix, Camellia::FieldContainer<double> &valuesFC, DofOrderingPtr thisOrdering,
                                     TLinearTermPtr<double> otherTerm, DofOrderingPtr otherOrdering,
                                     BasisCachePtr basisCache, bool forceBoundaryTerm, bool sumInto)
 {
@@ -729,7 +732,7 @@ void TLinearTerm<Scalar>::integrate(Epetra_CrsMatrix *valuesCrsMatrix, Intrepid:
 
 // integrate this against otherTerm, where otherVar == fxn
 template<typename Scalar>
-void TLinearTerm<Scalar>::integrate(Intrepid::FieldContainer<Scalar> &values, DofOrderingPtr thisOrdering,
+void TLinearTerm<Scalar>::integrate(Camellia::FieldContainer<Scalar> &values, DofOrderingPtr thisOrdering,
                                     TLinearTermPtr<Scalar> otherTerm, VarPtr otherVar, TFunctionPtr<Scalar> fxn,
                                     BasisCachePtr basisCache, bool forceBoundaryTerm)
 {
@@ -810,7 +813,7 @@ bool TLinearTerm<Scalar>::isZero() const   // true if the TLinearTerm is identic
 //  TLinearTerm can determine its OP_VALUE VarPtrs so that it can construct the right map.  It would probably suffice
 //  if Var learned about its "base", and then in addition to tracking the varIDs set here, we also tracked vars.)
 template<typename Scalar>
-void TLinearTerm<Scalar>::evaluate(Intrepid::FieldContainer<Scalar> &values, TSolutionPtr<Scalar> solution, BasisCachePtr basisCache,
+void TLinearTerm<Scalar>::evaluate(Camellia::FieldContainer<Scalar> &values, TSolutionPtr<Scalar> solution, BasisCachePtr basisCache,
                                    bool applyCubatureWeights, int solutionOrdinal)
 {
   // int sideIndex = basisCache->getSideIndex();
@@ -829,8 +832,8 @@ void TLinearTerm<Scalar>::evaluate(Intrepid::FieldContainer<Scalar> &values, TSo
   scalarFunctionValueDim.append(numPoints);
 
   // (could tune things by pre-allocating this storage)
-  Intrepid::FieldContainer<Scalar> fValues;
-  Intrepid::FieldContainer<Scalar> solnValues;
+  Camellia::FieldContainer<Scalar> fValues;
+  Camellia::FieldContainer<Scalar> solnValues;
 
   Teuchos::Array<int> vectorFunctionValueDim = scalarFunctionValueDim;
   vectorFunctionValueDim.append(spaceDim);
@@ -1089,7 +1092,7 @@ TFunctionPtr<Scalar> TLinearTerm<Scalar>::evaluate(const map< int, TFunctionPtr<
 }
 
 template<typename Scalar>
-void TLinearTerm<Scalar>::multiplyFluxValuesByParity(Intrepid::FieldContainer<Scalar> &fluxValues, BasisCachePtr sideBasisCache)
+void TLinearTerm<Scalar>::multiplyFluxValuesByParity(Camellia::FieldContainer<Scalar> &fluxValues, BasisCachePtr sideBasisCache)
 {
   int numCells  = fluxValues.dimension(0);
   int numFields = fluxValues.dimension(1);
@@ -1115,7 +1118,7 @@ void TLinearTerm<Scalar>::multiplyFluxValuesByParity(Intrepid::FieldContainer<Sc
 // compute the value of linearTerm for non-zero varID at the cubature points, for each basis function in basis
 // values shape: (C,F,P), (C,F,P,D), or (C,F,P,D,D)
 template<typename Scalar>
-void TLinearTerm<Scalar>::values(Intrepid::FieldContainer<Scalar> &values, int varID, BasisPtr basis, BasisCachePtr basisCache,
+void TLinearTerm<Scalar>::values(Camellia::FieldContainer<Scalar> &values, int varID, BasisPtr basis, BasisCachePtr basisCache,
                                  bool applyCubatureWeights, bool naturalBoundaryTermsOnly)
 {
   int sideIndex = basisCache->getSideIndex();
@@ -1134,7 +1137,7 @@ void TLinearTerm<Scalar>::values(Intrepid::FieldContainer<Scalar> &values, int v
   scalarFunctionValueDim.append(numPoints);
 
   // (could tune things by pre-allocating this storage)
-  Intrepid::FieldContainer<Scalar> fValues;
+  Camellia::FieldContainer<Scalar> fValues;
 
   Teuchos::Array<int> vectorFunctionValueDim = scalarFunctionValueDim;
   vectorFunctionValueDim.append(spaceDim);
@@ -1205,7 +1208,7 @@ void TLinearTerm<Scalar>::values(Intrepid::FieldContainer<Scalar> &values, int v
       if ( ls.first->rank() == 0 )   // scalar function -- we can speed things along in this case...
       {
         // E.g. ConstantTFunction<double>::scalarMultiplyBasisValues() knows not to do anything at all if its value is 1.0...
-        Intrepid::FieldContainer<double> weightedBasisValues = *basisValues; // weighted by the scalar function
+        Camellia::FieldContainer<double> weightedBasisValues = *basisValues; // weighted by the scalar function
         ls.first->scalarMultiplyBasisValues(weightedBasisValues,basisCache);
         // bounds check so we can safely do pointer arithmetic below:
         int size = values.size();
@@ -1408,7 +1411,7 @@ void TLinearTerm<Scalar>::values(Intrepid::FieldContainer<Scalar> &values, int v
 // values shape: (C,P), (C,P,D), or (C,P,D,D)
 // TODO: refactor this and the other values() to reduce code redundancy
 template<typename Scalar>
-void TLinearTerm<Scalar>::values(Intrepid::FieldContainer<Scalar> &values, int varID, TFunctionPtr<Scalar> fxn, BasisCachePtr basisCache,
+void TLinearTerm<Scalar>::values(Camellia::FieldContainer<Scalar> &values, int varID, TFunctionPtr<Scalar> fxn, BasisCachePtr basisCache,
                                  bool applyCubatureWeights, bool naturalBoundaryTermsOnly)
 {
   int sideIndex = basisCache->getSideIndex();
@@ -1426,7 +1429,7 @@ void TLinearTerm<Scalar>::values(Intrepid::FieldContainer<Scalar> &values, int v
   scalarFunctionValueDim.append(numPoints);
 
   // (could tune things by pre-allocating this storage)
-  Intrepid::FieldContainer<Scalar> fValues;
+  Camellia::FieldContainer<Scalar> fValues;
 
   Teuchos::Array<int> vectorFunctionValueDim = scalarFunctionValueDim;
   vectorFunctionValueDim.append(spaceDim);
@@ -1469,7 +1472,7 @@ void TLinearTerm<Scalar>::values(Intrepid::FieldContainer<Scalar> &values, int v
     }
     if (ls.second->ID() == varID)
     {
-      Intrepid::FieldContainer<Scalar> fxnValues(fxnValueDim);
+      Camellia::FieldContainer<Scalar> fxnValues(fxnValueDim);
       fxn->values(fxnValues, ls.second->op(), basisCache); // should always use the volume coords (compare with other TLinearTerm<Scalar>::values() function)
       if (applyCubatureWeights)
       {

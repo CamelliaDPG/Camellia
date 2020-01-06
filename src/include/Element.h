@@ -72,10 +72,10 @@ public:
     _globalCellIndex = globalCellIndex;
   }
   int numSides();
-  void getSidePointsInNeighborRefCoords(Intrepid::FieldContainer<double> &neighborRefPoints, int sideIndex,
-                                        const Intrepid::FieldContainer<double> &refPoints);
-  void getSidePointsInParentRefCoords(Intrepid::FieldContainer<double> &parentRefPoints, int sideIndex,
-                                      const Intrepid::FieldContainer<double> &childRefPoints);
+  void getSidePointsInNeighborRefCoords(Camellia::FieldContainer<double> &neighborRefPoints, int sideIndex,
+                                        const Camellia::FieldContainer<double> &refPoints);
+  void getSidePointsInParentRefCoords(Camellia::FieldContainer<double> &parentRefPoints, int sideIndex,
+                                      const Camellia::FieldContainer<double> &childRefPoints);
   ElementPtr getNeighbor(int & mySideIndexInNeighbor, int neighborsSideIndexInMe);
   int getNeighborCellID(int sideIndex);
   int getSideIndexInNeighbor(int sideIndex);

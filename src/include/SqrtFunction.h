@@ -27,7 +27,7 @@ namespace Camellia {
       _f = f;
     }
     ~SqrtFunction() {}
-    void values(Intrepid::FieldContainer<Scalar> &values, BasisCachePtr basisCache)
+    void values(Camellia::FieldContainer<Scalar> &values, BasisCachePtr basisCache)
     {
       _f->values(values,basisCache);
       for (int i=0; i<values.size(); i++)

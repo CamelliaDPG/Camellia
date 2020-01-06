@@ -14,10 +14,10 @@
 
 using namespace Camellia;
 
-void SubBasisDofMapper::mapSubBasisDataIntoGlobalContainer(const Intrepid::FieldContainer<double> &subBasisData,
+void SubBasisDofMapper::mapSubBasisDataIntoGlobalContainer(const Camellia::FieldContainer<double> &subBasisData,
                                                            const std::map<GlobalIndexType, unsigned> &globalIndexToOrdinal,
                                                            bool fittableDofsOnly, const std::set<GlobalIndexType> &fittableDofIndices,
-                                                           Intrepid::FieldContainer<double> &globalData)
+                                                           Camellia::FieldContainer<double> &globalData)
 {
   TEUCHOS_TEST_FOR_EXCEPTION(true, std::invalid_argument, "mapSubBasisDataIntoGlobalContainer not implemented for this SubBasisDofMapper subclass!");
 }
@@ -33,7 +33,7 @@ SubBasisDofMapperPtr SubBasisDofMapper::subBasisDofMapper(const set<int> &dofOrd
   return Teuchos::rcp(new SubBasisDofPermutationMapper(dofOrdinalFilter, globalDofOrdinals));
 }
 
-SubBasisDofMapperPtr SubBasisDofMapper::subBasisDofMapper(const set<int> &dofOrdinalFilter, const vector<GlobalIndexType> &globalDofOrdinals, const Intrepid::FieldContainer<double> &constraintMatrix)
+SubBasisDofMapperPtr SubBasisDofMapper::subBasisDofMapper(const set<int> &dofOrdinalFilter, const vector<GlobalIndexType> &globalDofOrdinals, const Camellia::FieldContainer<double> &constraintMatrix)
 {
   bool checkForPermutation = true;
 

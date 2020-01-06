@@ -111,7 +111,7 @@ size_t PreviousSolutionFunction<Scalar>::unpackCellData(GlobalIndexType cellID, 
   int numDofs = _soln->mesh()->getElementType(cellID)->trialOrderPtr->totalDofs();
   size_t numBytes = numDofs * sizeof(Scalar);
   TEUCHOS_TEST_FOR_EXCEPTION(numBytes > bufferLength, std::invalid_argument, "buffer is too short");
-  Intrepid::FieldContainer<Scalar> cellDofs(numDofs);
+  Camellia::FieldContainer<Scalar> cellDofs(numDofs);
   Scalar* copyToLocation = &cellDofs[0];
   memcpy(copyToLocation, cellData, numBytes);
   _soln->setSolnCoeffsForCellID(cellDofs,cellID,_solnOrdinal);
@@ -119,7 +119,7 @@ size_t PreviousSolutionFunction<Scalar>::unpackCellData(GlobalIndexType cellID, 
 }
 
 template <typename Scalar>
-void PreviousSolutionFunction<Scalar>::values(Intrepid::FieldContainer<Scalar> &values, BasisCachePtr basisCache)
+void PreviousSolutionFunction<Scalar>::values(Camellia::FieldContainer<Scalar> &values, BasisCachePtr basisCache)
 {
   int rank = Teuchos::GlobalMPISession::getRank();
   const bool applyCubatureWeights = false;
@@ -146,15 +146,15 @@ void PreviousSolutionFunction<Scalar>::values(Intrepid::FieldContainer<Scalar> &
       warningIssued = true;
     }
     // get the physicalPoints, and make a basisCache for each...
-    Intrepid::FieldContainer<double> physicalPoints = basisCache->getPhysicalCubaturePoints();
-    Intrepid::FieldContainer<double> value(1,1); // assumes scalar-valued solution function.
+    Camellia::FieldContainer<double> physicalPoints = basisCache->getPhysicalCubaturePoints();
+    Camellia::FieldContainer<double> value(1,1); // assumes scalar-valued solution function.
     int numCells = physicalPoints.dimension(0);
     int numPoints = physicalPoints.dimension(1);
     int spaceDim = physicalPoints.dimension(2);
     physicalPoints.resize(numCells*numPoints,spaceDim);
     vector< ElementPtr > elements = _soln->mesh()->elementsForPoints(physicalPoints, false); // false: don't make elements null just because they're off-rank.
-    Intrepid::FieldContainer<double> point(1,1,spaceDim);
-    Intrepid::FieldContainer<double> refPoint(1,spaceDim);
+    Camellia::FieldContainer<double> point(1,1,spaceDim);
+    Camellia::FieldContainer<double> refPoint(1,spaceDim);
     int combinedIndex = 0;
     vector<GlobalIndexType> cellID;
     cellID.push_back(-1);

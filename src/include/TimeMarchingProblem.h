@@ -36,7 +36,7 @@ public:
                                   vector<Camellia::EOperator> &trialOps,
                                   vector<Camellia::EOperator> &testOps);
 
-  virtual void applyBilinearFormData(Intrepid::FieldContainer<double> &trialValues, Intrepid::FieldContainer<double> &testValues,
+  virtual void applyBilinearFormData(Camellia::FieldContainer<double> &trialValues, Camellia::FieldContainer<double> &testValues,
                                      int trialID, int testID, int operatorIndex,
                                      Teuchos::RCP<BasisCache> basisCache);
 
@@ -52,11 +52,11 @@ public:
   bool nonZeroRHS(int testVarID);
   vector<Camellia::EOperator> operatorsForTestID(int testID);
   virtual void rhs(int testVarID, int operatorIndex, Teuchos::RCP<BasisCache> basisCache,
-                   Intrepid::FieldContainer<double> &values);
+                   Camellia::FieldContainer<double> &values);
 
   // methods that belong to the TimeMarchingProblem:
-  virtual void timeLHS(Intrepid::FieldContainer<double> trialValues, int trialID, Teuchos::RCP<BasisCache> basisCache);
-  virtual void timeRHS(Intrepid::FieldContainer<double> values, int testID, Teuchos::RCP<BasisCache> basisCache);
+  virtual void timeLHS(Camellia::FieldContainer<double> trialValues, int trialID, Teuchos::RCP<BasisCache> basisCache);
+  virtual void timeRHS(Camellia::FieldContainer<double> values, int testID, Teuchos::RCP<BasisCache> basisCache);
 
   void setTimeStepSize(double dt);
   double timeStepSize();

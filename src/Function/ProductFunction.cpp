@@ -213,7 +213,7 @@ std::vector<TFunctionPtr<Scalar>> ProductFunction<Scalar>::memberFunctions()
 }
 
 template <typename Scalar>
-void ProductFunction<Scalar>::values(Intrepid::FieldContainer<Scalar> &values, BasisCachePtr basisCache)
+void ProductFunction<Scalar>::values(Camellia::FieldContainer<Scalar> &values, BasisCachePtr basisCache)
 {
   this->CHECK_VALUES_RANK(values);
   if (( _f2->rank() > 0) && (this->rank() == 0))   // tensor product resulting in scalar value

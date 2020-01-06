@@ -1258,7 +1258,7 @@ TEUCHOS_UNIT_TEST( MeshTopology, UnrefinedSpaceTimeMeshTopologyIsUnconstrained )
   int spaceDim = spaceTopo->getDimension();
   MeshTopologyPtr spatialMeshTopo = Teuchos::rcp( new MeshTopology(spaceDim) );
 
-  Intrepid::FieldContainer<double> cellNodes(spaceTopo->getNodeCount(),spaceTopo->getDimension());
+  Camellia::FieldContainer<double> cellNodes(spaceTopo->getNodeCount(),spaceTopo->getDimension());
   CamelliaCellTools::refCellNodesForTopology(cellNodes, spaceTopo);
   vector<vector<double>> cellVerticesVector;
   CamelliaCellTools::pointsVectorFromFC(cellVerticesVector, cellNodes);

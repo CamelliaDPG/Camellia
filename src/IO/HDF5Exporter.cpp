@@ -667,14 +667,14 @@ void HDF5Exporter::exportFunction(vector<TFunctionPtr<double>> functions, vector
       CellTopoPtr topo = createSideCache ? cellTopoPtr->getSubcell(sideDim, sideOrdinal) : cellTopoPtr;
       BasisCachePtr basisCache = createSideCache ? volumeBasisCache->getSideBasisCache(sideOrdinal) : volumeBasisCache;
 
-      Intrepid::FieldContainer<double> refPoints;
+      Camellia::FieldContainer<double> refPoints;
       getPoints(refPoints, topo, num1DPts);
 
       basisCache->setRefCellPoints(refPoints);
       int numPoints = refPoints.dimension(0);
-      const Intrepid::FieldContainer<double> *physicalPoints = &basisCache->getPhysicalCubaturePoints();
+      const Camellia::FieldContainer<double> *physicalPoints = &basisCache->getPhysicalCubaturePoints();
       // Function Values
-      std::vector< Intrepid::FieldContainer<double> > computedValues(nFcns);
+      std::vector< Camellia::FieldContainer<double> > computedValues(nFcns);
       for (int i = 0; i < nFcns; i++)
       {
         if (functions[i]->rank() == 0)
@@ -1176,14 +1176,14 @@ void HDF5Exporter::exportSolution(std::string superDirectory, std::string solnNa
   exporter.exportSolution(solution, mesh->bilinearForm()->varFactory());
 }
 
-void HDF5Exporter::getPoints(Intrepid::FieldContainer<double> &points, CellTopoPtr cellTopo, int num1DPts)
+void HDF5Exporter::getPoints(Camellia::FieldContainer<double> &points, CellTopoPtr cellTopo, int num1DPts)
 {
   int topoDim = cellTopo->getDimension();
 
   if (cellTopo->getTensorialDegree() > 0)
   {
-    Intrepid::FieldContainer<double> componentPoints;
-    Intrepid::FieldContainer<double> linePoints;
+    Camellia::FieldContainer<double> componentPoints;
+    Camellia::FieldContainer<double> linePoints;
     getPoints(linePoints, CellTopology::line(), num1DPts);
     if (cellTopo->getTensorialComponent()->getDimension() == 0)
     {

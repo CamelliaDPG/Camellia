@@ -44,7 +44,7 @@ protected:
 public:
   ParametricFunction(TFunctionPtr<double> fxn);
   void value(double t, double &x);
-  void values(Intrepid::FieldContainer<double> &values, BasisCachePtr basisCache);
+  void values(Camellia::FieldContainer<double> &values, BasisCachePtr basisCache);
 
   TFunctionPtr<double> dx(); // same function as dt_parametric()
   ParametricFunctionPtr dt_parametric(); // not named dt() to avoid conflict with Function, which means space-time by this...
@@ -66,7 +66,7 @@ private:
   ParametricFunctionPtr _xFxn, _yFxn, _zFxn; // parametric functions (defined on ref line mapped to [0,1])
   TFunctionPtr<double> argumentMap();
 
-  //  void mapRefCellPointsToParameterSpace(Intrepid::FieldContainer<double> &refPoints);
+  //  void mapRefCellPointsToParameterSpace(Camellia::FieldContainer<double> &refPoints);
 protected:
   //  ParametricCurve(ParametricCurvePtr fxn, double t0, double t1);
 public:
@@ -80,7 +80,7 @@ public:
   ParametricCurvePtr interpolatingLine();
 
   double linearLength();
-  void projectionBasedInterpolant(Intrepid::FieldContainer<double> &basisCoefficients, BasisPtr basis1D, int component,
+  void projectionBasedInterpolant(Camellia::FieldContainer<double> &basisCoefficients, BasisPtr basis1D, int component,
                                   double lengthScale, bool useH1); // component 0 for x, 1 for y, 2 for z
 
   // override one of these, according to the space dimension
@@ -88,7 +88,7 @@ public:
   virtual void value(double t, double &x, double &y);
   virtual void value(double t, double &x, double &y, double &z);
 
-  virtual void values(Intrepid::FieldContainer<double> &values, BasisCachePtr basisCache);
+  virtual void values(Camellia::FieldContainer<double> &values, BasisCachePtr basisCache);
 
   virtual ParametricCurvePtr dt_parametric(); // the curve differentiated in t in each component.
 

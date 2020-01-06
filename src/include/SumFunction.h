@@ -39,7 +39,7 @@ public:
   TFunctionPtr<Scalar> grad(int numComponents=-1); // gradient of sum is the sum of gradients
   TFunctionPtr<Scalar> div();  // divergence of sum is sum of divergences
 
-  void values(Intrepid::FieldContainer<Scalar> &values, BasisCachePtr basisCache);
+  void values(Camellia::FieldContainer<Scalar> &values, BasisCachePtr basisCache);
   bool boundaryValueOnly();
 
   string displayString();

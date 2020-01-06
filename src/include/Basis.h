@@ -15,7 +15,7 @@
 #define Camellia_debug_Basis_h
 
 #include "Intrepid_Basis.hpp"
-#include "Intrepid_FieldContainer.hpp"
+#include "Camellia_FieldContainer.hpp"
 #include "Shards_CellTopology.hpp"
 
 #include "CellTopology.h"

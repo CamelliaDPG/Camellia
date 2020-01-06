@@ -18,7 +18,7 @@
 #include "CamelliaIntrepidExtendedTypes.h"
 #include "TypeDefs.h"
 
-#include "Intrepid_FieldContainer.hpp"
+#include "Camellia_FieldContainer.hpp"
 
 #include <string>
 
@@ -32,11 +32,11 @@ class TFunction
 private:
   enum FunctionModificationType { MULTIPLY, DIVIDE }; // private, used by scalarModify[.*]Values
   
-  Scalar evaluateAtMeshPoint(MeshPtr mesh, GlobalIndexType cellID, Intrepid::FieldContainer<double> &physicalPoint);
+  Scalar evaluateAtMeshPoint(MeshPtr mesh, GlobalIndexType cellID, Camellia::FieldContainer<double> &physicalPoint);
 protected:
   int _rank;
   string _displayString; // this is here mostly for identifying functions in the debugger
-  void CHECK_VALUES_RANK(Intrepid::FieldContainer<Scalar> &values); // throws exception on bad values rank
+  void CHECK_VALUES_RANK(Camellia::FieldContainer<Scalar> &values); // throws exception on bad values rank
   double _time;
 public:
   enum JumpCombinationType
@@ -63,8 +63,8 @@ public:
     return false;  // if true, indicates a function defined only on element boundaries (mesh skeleton)
   }
 
-  virtual void values(Intrepid::FieldContainer<Scalar> &values, Camellia::EOperator op, BasisCachePtr basisCache);
-  virtual void values(Intrepid::FieldContainer<Scalar> &values, BasisCachePtr basisCache) = 0;
+  virtual void values(Camellia::FieldContainer<Scalar> &values, Camellia::EOperator op, BasisCachePtr basisCache);
+  virtual void values(Camellia::FieldContainer<Scalar> &values, BasisCachePtr basisCache) = 0;
 
   static TFunctionPtr<Scalar> op(TFunctionPtr<Scalar> f, Camellia::EOperator op);
 
@@ -97,14 +97,14 @@ public:
 
   int rank();
 
-  virtual void addToValues(Intrepid::FieldContainer<Scalar> &valuesToAddTo, BasisCachePtr basisCache);
+  virtual void addToValues(Camellia::FieldContainer<Scalar> &valuesToAddTo, BasisCachePtr basisCache);
 
   Scalar integralOfJump(Teuchos::RCP<Mesh> mesh, GlobalIndexType cellID, int sideIndex, int cubatureDegreeEnrichment);
 
   Scalar integralOfJump(Teuchos::RCP<Mesh> mesh, int cubatureDegreeEnrichment);
 
   Scalar integrate(BasisCachePtr basisCache);
-  void integrate(Intrepid::FieldContainer<Scalar> &cellIntegrals, BasisCachePtr basisCache, bool sumInto=false);
+  void integrate(Camellia::FieldContainer<Scalar> &cellIntegrals, BasisCachePtr basisCache, bool sumInto=false);
 
   // integrate over only one cell
   //  double integrate(int cellID, Teuchos::RCP<Mesh> mesh, int cubatureDegreeEnrichment = 0);
@@ -144,18 +144,18 @@ public:
   std::map<GlobalIndexType, double> squaredL2NormOfJumps(MeshPtr mesh, bool weightBySideMeasure, int cubatureDegreeEnrichment, JumpCombinationType jumpCombination=DIFFERENCE);
   
   // divide values by this function (supported only when this is a scalar--otherwise values would change rank...)
-  virtual void scalarMultiplyFunctionValues(Intrepid::FieldContainer<Scalar> &functionValues, BasisCachePtr basisCache);
+  virtual void scalarMultiplyFunctionValues(Camellia::FieldContainer<Scalar> &functionValues, BasisCachePtr basisCache);
 
   // divide values by this function (supported only when this is a scalar)
-  virtual void scalarDivideFunctionValues(Intrepid::FieldContainer<Scalar> &functionValues, BasisCachePtr basisCache);
+  virtual void scalarDivideFunctionValues(Camellia::FieldContainer<Scalar> &functionValues, BasisCachePtr basisCache);
 
   // divide values by this function (supported only when this is a scalar--otherwise values would change rank...)
-  virtual void scalarMultiplyBasisValues(Intrepid::FieldContainer<double> &basisValues, BasisCachePtr basisCache);
+  virtual void scalarMultiplyBasisValues(Camellia::FieldContainer<double> &basisValues, BasisCachePtr basisCache);
 
   // divide values by this function (supported only when this is a scalar)
-  virtual void scalarDivideBasisValues(Intrepid::FieldContainer<double> &basisValues, BasisCachePtr basisCache);
+  virtual void scalarDivideBasisValues(Camellia::FieldContainer<double> &basisValues, BasisCachePtr basisCache);
 
-  virtual void valuesDottedWithTensor(Intrepid::FieldContainer<Scalar> &values,
+  virtual void valuesDottedWithTensor(Camellia::FieldContainer<Scalar> &values,
                                       TFunctionPtr<Scalar> tensorFunctionOfLikeRank,
                                       BasisCachePtr basisCache);
 
@@ -269,10 +269,10 @@ public:
   static TFunctionPtr<Scalar> yPart(TFunctionPtr<Scalar> vectorFunction);
   static TFunctionPtr<Scalar> zPart(TFunctionPtr<Scalar> vectorFunction);
 private:
-  void scalarModifyFunctionValues(Intrepid::FieldContainer<Scalar> &values, BasisCachePtr basisCache,
+  void scalarModifyFunctionValues(Camellia::FieldContainer<Scalar> &values, BasisCachePtr basisCache,
                                   FunctionModificationType modType);
 
-  void scalarModifyBasisValues(Intrepid::FieldContainer<double> &values, BasisCachePtr basisCache,
+  void scalarModifyBasisValues(Camellia::FieldContainer<double> &values, BasisCachePtr basisCache,
                                FunctionModificationType modType);
 };
 

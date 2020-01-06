@@ -20,7 +20,7 @@
 using namespace Camellia;
 using namespace std;
 
-void LocalDofMapper::filterData(const vector<int> dofIndices, const Intrepid::FieldContainer<double> &data, Intrepid::FieldContainer<double> &filteredData)
+void LocalDofMapper::filterData(const vector<int> dofIndices, const Camellia::FieldContainer<double> &data, Camellia::FieldContainer<double> &filteredData)
 {
   int dofCount = dofIndices.size();
   if (data.rank()==1)
@@ -45,8 +45,8 @@ void LocalDofMapper::filterData(const vector<int> dofIndices, const Intrepid::Fi
 }
 
 void LocalDofMapper::addSubBasisMapVectorContribution(int varID, int sideOrdinal, BasisMap &basisMap,
-                                                      const Intrepid::FieldContainer<double> &localData,
-                                                      Intrepid::FieldContainer<double> &globalData,
+                                                      const Camellia::FieldContainer<double> &localData,
+                                                      Camellia::FieldContainer<double> &globalData,
                                                       bool fittableGlobalDofsOnly)
 {
   bool volumeRestrictedToSide = false;
@@ -165,7 +165,7 @@ void LocalDofMapper::addSubBasisMapVectorContribution(int varID, int sideOrdinal
       {
         const vector<int>* varDofIndices = &_dofOrdering->getDofIndices(varID, sideOrdinal);
         subBasisDofMapper->mapDataIntoGlobalContainer(localData, *varDofIndices, _globalIndexToOrdinal, fittableGlobalDofsOnly, *fittableDofs, globalData);
-//          basisData = new Intrepid::FieldContainer<double>(varDofIndices->size());
+//          basisData = new Camellia::FieldContainer<double>(varDofIndices->size());
 //          filterData(*varDofIndices, localData, *basisData);
       }
       else
@@ -179,7 +179,7 @@ void LocalDofMapper::addSubBasisMapVectorContribution(int varID, int sideOrdinal
         {
           // otherwise, localData contains coefficients for the basis restricted to side
           const set<int>* subBasisDofOrdinals = &subBasisDofMapper->basisDofOrdinalFilter();
-          Intrepid::FieldContainer<double> subBasisData(subBasisDofOrdinals->size(),1); // shaped as a matrix, because that's what mapSubBasisDataIntoGlobalContainer expects
+          Camellia::FieldContainer<double> subBasisData(subBasisDofOrdinals->size(),1); // shaped as a matrix, because that's what mapSubBasisDataIntoGlobalContainer expects
           int i = 0;
           for (int basisDofOrdinal : *subBasisDofOrdinals)
           {
@@ -197,7 +197,7 @@ void LocalDofMapper::addSubBasisMapVectorContribution(int varID, int sideOrdinal
 }
 
 void LocalDofMapper::addReverseSubBasisMapVectorContribution(int varID, int sideOrdinal, BasisMap &basisMap,
-                                                             const Intrepid::FieldContainer<double> &globalCoefficients, Intrepid::FieldContainer<double> &localCoefficients)
+                                                             const Camellia::FieldContainer<double> &globalCoefficients, Camellia::FieldContainer<double> &localCoefficients)
 {
   bool transposeConstraint = false; // global to local
   
@@ -265,14 +265,14 @@ void LocalDofMapper::addReverseSubBasisMapVectorContribution(int varID, int side
     }
     else
     {
-      Intrepid::FieldContainer<double> filteredSubBasisData;
+      Camellia::FieldContainer<double> filteredSubBasisData;
       vector<int> globalOrdinalFilter(globalDofIndices->size());
       for (int subBasisGlobalDofOrdinal=0; subBasisGlobalDofOrdinal<globalDofIndices->size(); subBasisGlobalDofOrdinal++)
       {
         globalOrdinalFilter[subBasisGlobalDofOrdinal] = globalOrdinal(subBasisGlobalDofOrdinal);
       }
       filterData(globalOrdinalFilter, globalCoefficients, filteredSubBasisData);
-      Intrepid::FieldContainer<double> mappedSubBasisData = subBasisDofMapper->mapData(transposeConstraint, filteredSubBasisData, applyOnLeftOnly);
+      Camellia::FieldContainer<double> mappedSubBasisData = subBasisDofMapper->mapData(transposeConstraint, filteredSubBasisData, applyOnLeftOnly);
       const set<int>* localDofOrdinals = &subBasisDofMapper->basisDofOrdinalFilter();
       
       const vector<int>* localDofIndices = &_dofOrdering->getDofIndices(varID, sideOrdinal);
@@ -303,7 +303,7 @@ void LocalDofMapper::addReverseSubBasisMapVectorContribution(int varID, int side
 }
 
 void LocalDofMapper::addReverseSubBasisMapVectorContribution(int varID, int sideOrdinal, BasisMap &basisMap, const std::map<GlobalIndexType,double> &globalCoefficients,
-                                                             Intrepid::FieldContainer<double> &localCoefficients)
+                                                             Camellia::FieldContainer<double> &localCoefficients)
 {
   bool transposeConstraint = false; // global to local
   
@@ -366,7 +366,7 @@ void LocalDofMapper::addReverseSubBasisMapVectorContribution(int varID, int side
     }
     else
     {
-      Intrepid::FieldContainer<double> filteredSubBasisData(globalDofIndices->size());
+      Camellia::FieldContainer<double> filteredSubBasisData(globalDofIndices->size());
       bool nonzerosFound = false;
       for (int subBasisGlobalDofOrdinal=0; subBasisGlobalDofOrdinal<globalDofIndices->size(); subBasisGlobalDofOrdinal++)
       {
@@ -378,7 +378,7 @@ void LocalDofMapper::addReverseSubBasisMapVectorContribution(int varID, int side
         }
       }
       if (!nonzerosFound) continue;
-      Intrepid::FieldContainer<double> mappedSubBasisData = subBasisDofMapper->mapData(transposeConstraint, filteredSubBasisData, applyOnLeftOnly);
+      Camellia::FieldContainer<double> mappedSubBasisData = subBasisDofMapper->mapData(transposeConstraint, filteredSubBasisData, applyOnLeftOnly);
       const set<int>* localDofOrdinals = &subBasisDofMapper->basisDofOrdinalFilter();
       
       const vector<int>* localDofIndices = &_dofOrdering->getDofIndices(varID, sideOrdinal);
@@ -655,8 +655,8 @@ const vector<GlobalIndexType>& LocalDofMapper::fittableGlobalIndices()
 // localData has dimensions (D1,D2)
 // if _globalIndexToOrdinal has size GD, then
 // mappedData has dimensions (DG,GD) or (D1,GD) if whichDim==0 or 1, respectively
-void LocalDofMapper::mapLocalDataMatrix(const Intrepid::FieldContainer<double> &localData, bool fittableGlobalDofsOnly,
-                                        Intrepid::FieldContainer<double> &mappedData, int whichDim)
+void LocalDofMapper::mapLocalDataMatrix(const Camellia::FieldContainer<double> &localData, bool fittableGlobalDofsOnly,
+                                        Camellia::FieldContainer<double> &mappedData, int whichDim)
 {
   TEUCHOS_TEST_FOR_EXCEPTION(localData.rank() != 2, std::invalid_argument, "localData must be rank 2!");
   TEUCHOS_TEST_FOR_EXCEPTION((whichDim != 0) && (whichDim != 1), std::invalid_argument, "whichDim must be 0 or 1");
@@ -669,8 +669,8 @@ void LocalDofMapper::mapLocalDataMatrix(const Intrepid::FieldContainer<double> &
   Teuchos::Array<int> coords(2);
   int otherDim = 1 - whichDim;
   
-  Intrepid::FieldContainer<double> dataVector(dataSize);
-  Intrepid::FieldContainer<double> mappedDataVector(mappedDataSize);
+  Camellia::FieldContainer<double> dataVector(dataSize);
+  Camellia::FieldContainer<double> mappedDataVector(mappedDataSize);
   
   dim[whichDim] = mappedDataSize;
   mappedData.resize(dim);
@@ -692,7 +692,7 @@ void LocalDofMapper::mapLocalDataMatrix(const Intrepid::FieldContainer<double> &
   }
 }
 
-Intrepid::FieldContainer<double> LocalDofMapper::mapLocalDataMatrix(const Intrepid::FieldContainer<double> &localData, bool fittableGlobalDofsOnly)
+Camellia::FieldContainer<double> LocalDofMapper::mapLocalDataMatrix(const Camellia::FieldContainer<double> &localData, bool fittableGlobalDofsOnly)
 {
   int dataSize = localData.dimension(0);
   if (localData.dimension(1) != dataSize)
@@ -700,29 +700,29 @@ Intrepid::FieldContainer<double> LocalDofMapper::mapLocalDataMatrix(const Intrep
     cout << "Error: localData matrix must be square.\n";
     TEUCHOS_TEST_FOR_EXCEPTION(true, std::invalid_argument, "localData matrix must be square");
   }
-//  Intrepid::FieldContainer<double> dataVector(dataSize);
+//  Camellia::FieldContainer<double> dataVector(dataSize);
   int mappedDataSize = _globalIndexToOrdinal.size();
-  Intrepid::FieldContainer<double> intermediateDataMatrix(dataSize,mappedDataSize);
+  Camellia::FieldContainer<double> intermediateDataMatrix(dataSize,mappedDataSize);
   
   mapLocalDataMatrix(localData, fittableGlobalDofsOnly, intermediateDataMatrix, 1);
-  Intrepid::FieldContainer<double> globalData(mappedDataSize,mappedDataSize);
+  Camellia::FieldContainer<double> globalData(mappedDataSize,mappedDataSize);
 
   mapLocalDataMatrix(intermediateDataMatrix, fittableGlobalDofsOnly, globalData, 0);
   
   return globalData;
 }
 
-Intrepid::FieldContainer<double> LocalDofMapper::fitLocalCoefficients(const Intrepid::FieldContainer<double> &localCoefficients)
+Camellia::FieldContainer<double> LocalDofMapper::fitLocalCoefficients(const Camellia::FieldContainer<double> &localCoefficients)
 {
   // solves normal equations (if the localCoefficients are in the range of the global-to-local operator, then the returned coefficients will be the preimage of localCoefficients under that operator)
   if (_varIDToMap == -1)
   {
     int globalIndexCount = _globalIndexToOrdinal.size();
-    Intrepid::FieldContainer<double> allCoefficients(globalIndexCount); // includes both fittable and non-fittable
+    Camellia::FieldContainer<double> allCoefficients(globalIndexCount); // includes both fittable and non-fittable
     
     set<int> varIDs = _dofOrdering->getVarIDs();
     set<pair<int,int>> varIDsAndSidesWithNonZeros;
-    map<pair<int,int>, Intrepid::FieldContainer<double>> basisCoefficientsForVarOnSide;
+    map<pair<int,int>, Camellia::FieldContainer<double>> basisCoefficientsForVarOnSide;
     // first, pass through all variables, noting which ones have nonzero coefficients in localCoefficients
     for (int varID : varIDs)
     {
@@ -731,7 +731,7 @@ Intrepid::FieldContainer<double> LocalDofMapper::fitLocalCoefficients(const Intr
       {
         bool nonZeroEntryFound = false;
         vector<int> dofIndices = _dofOrdering->getDofIndices(varID,sideOrdinal);
-        Intrepid::FieldContainer<double> basisCoefficients(dofIndices.size());
+        Camellia::FieldContainer<double> basisCoefficients(dofIndices.size());
         int basisOrdinal = 0;
         for (int dofIndex : dofIndices)
         {
@@ -796,7 +796,7 @@ Intrepid::FieldContainer<double> LocalDofMapper::fitLocalCoefficients(const Intr
                                                                                        _sideMaps, fittableGlobalDofOrdinalsOnSides,
                                                                                        set<GlobalIndexType>(), varID, sideOrdinal));
       }
-      Intrepid::FieldContainer<double> fittedVarCoefficients = _localDofMapperForVarIDAndSide[varIDAndSide]->fitLocalCoefficients(basisCoefficientsForVarOnSide[varIDAndSide]);
+      Camellia::FieldContainer<double> fittedVarCoefficients = _localDofMapperForVarIDAndSide[varIDAndSide]->fitLocalCoefficients(basisCoefficientsForVarOnSide[varIDAndSide]);
       vector<GlobalIndexType> fittedVarGlobalIndices = _localDofMapperForVarIDAndSide[varIDAndSide]->fittableGlobalIndices();
       
       int fittedVarGlobalIndexCount = fittedVarCoefficients.size();
@@ -811,7 +811,7 @@ Intrepid::FieldContainer<double> LocalDofMapper::fitLocalCoefficients(const Intr
       }
     }
     vector<GlobalIndexType> fittableIndices = fittableGlobalIndices();
-    Intrepid::FieldContainer<double> fittedCoefficients(fittableIndices.size());
+    Camellia::FieldContainer<double> fittedCoefficients(fittableIndices.size());
     for (int fittableOrdinal=0; fittableOrdinal<fittableIndices.size(); fittableOrdinal++)
     {
       GlobalIndexType fittableGlobalIndex = fittableIndices[fittableOrdinal];
@@ -837,14 +837,14 @@ Intrepid::FieldContainer<double> LocalDofMapper::fitLocalCoefficients(const Intr
   
   unsigned localDofCount = localCoefficients.size();
   
-  Intrepid::FieldContainer<double> mappedLocalCoefficients = mapLocalData(localCoefficients, true);
+  Camellia::FieldContainer<double> mappedLocalCoefficients = mapLocalData(localCoefficients, true);
   
   vector<int> ordinalFilter;
   
   vector<GlobalIndexType> fittableOrdinals = fittableGlobalIndices();
   if (fittableOrdinals.size()==0)
   {
-    return Intrepid::FieldContainer<double>(0);
+    return Camellia::FieldContainer<double>(0);
   }
   
   for (int i=0; i<fittableOrdinals.size(); i++)
@@ -852,21 +852,21 @@ Intrepid::FieldContainer<double> LocalDofMapper::fitLocalCoefficients(const Intr
     ordinalFilter.push_back(_globalIndexToOrdinal[fittableOrdinals[i]]);
   }
   
-  Intrepid::FieldContainer<double> filteredMappedLocalCoefficients(fittableOrdinals.size());
+  Camellia::FieldContainer<double> filteredMappedLocalCoefficients(fittableOrdinals.size());
   filterData(ordinalFilter, mappedLocalCoefficients, filteredMappedLocalCoefficients);
   
   if (_localCoefficientsFitMatrix.size()==0)
   {
-    Intrepid::FieldContainer<double> localIdentity(localDofCount,localDofCount);
+    Camellia::FieldContainer<double> localIdentity(localDofCount,localDofCount);
     for (int i=0; i<localDofCount; i++)
     {
       localIdentity(i,i) = 1.0;
     }
-    Intrepid::FieldContainer<double> normalMatrix = mapLocalData(localIdentity, true);
-    Intrepid::FieldContainer<double> filteredNormalMatrix(fittableOrdinals.size(),fittableOrdinals.size());
+    Camellia::FieldContainer<double> normalMatrix = mapLocalData(localIdentity, true);
+    Camellia::FieldContainer<double> filteredNormalMatrix(fittableOrdinals.size(),fittableOrdinals.size());
     filterData(ordinalFilter, normalMatrix, filteredNormalMatrix);
     
-    Intrepid::FieldContainer<double> filteredIdentityCoefficients(fittableOrdinals.size(),fittableOrdinals.size());
+    Camellia::FieldContainer<double> filteredIdentityCoefficients(fittableOrdinals.size(),fittableOrdinals.size());
     for (int i=0; i<fittableOrdinals.size(); i++)
     {
       filteredIdentityCoefficients(i,i) = 1.0;
@@ -888,7 +888,7 @@ Intrepid::FieldContainer<double> LocalDofMapper::fitLocalCoefficients(const Intr
   
   filteredMappedLocalCoefficients.resize(filteredMappedLocalCoefficients.dimension(0),1);
   
-  Intrepid::FieldContainer<double> fittableGlobalCoefficients(fittableOrdinals.size(),1);
+  Camellia::FieldContainer<double> fittableGlobalCoefficients(fittableOrdinals.size(),1);
   
   //  cout << "localCoefficients:\n" << localCoefficients;
   //  Camellia::print("fittableOrdinals", fittableOrdinals);
@@ -938,8 +938,8 @@ bool LocalDofMapper::isPermutation() const
   return true;
 }
 
-void LocalDofMapper::mapLocalDataVector(const Intrepid::FieldContainer<double> &localData, bool fittableGlobalDofsOnly,
-                                        Intrepid::FieldContainer<double> &mappedDataVector)
+void LocalDofMapper::mapLocalDataVector(const Camellia::FieldContainer<double> &localData, bool fittableGlobalDofsOnly,
+                                        Camellia::FieldContainer<double> &mappedDataVector)
 {
   mappedDataVector.initialize(0.0);
   unsigned dofCount;
@@ -1005,9 +1005,9 @@ void LocalDofMapper::mapLocalDataVector(const Intrepid::FieldContainer<double> &
   }
 }
 
-void LocalDofMapper::mapLocalDataVector(const Intrepid::FieldContainer<double> &localData, bool fittableGlobalDofsOnly,
+void LocalDofMapper::mapLocalDataVector(const Camellia::FieldContainer<double> &localData, bool fittableGlobalDofsOnly,
                                         const vector<pair<int,vector<int>>> &varIDsAndSideOrdinalsToMap,
-                                        Intrepid::FieldContainer<double> &mappedDataVector)
+                                        Camellia::FieldContainer<double> &mappedDataVector)
 {
   mappedDataVector.initialize(0.0);
   unsigned dofCount;
@@ -1045,7 +1045,7 @@ void LocalDofMapper::mapLocalDataVector(const Intrepid::FieldContainer<double> &
   }
 }
 
-Intrepid::FieldContainer<double> LocalDofMapper::mapLocalData(const Intrepid::FieldContainer<double> &localData, bool fittableGlobalDofsOnly)
+Camellia::FieldContainer<double> LocalDofMapper::mapLocalData(const Camellia::FieldContainer<double> &localData, bool fittableGlobalDofsOnly)
 {
   unsigned dofCount;
   if (_varIDToMap == -1)
@@ -1089,12 +1089,12 @@ Intrepid::FieldContainer<double> LocalDofMapper::mapLocalData(const Intrepid::Fi
   Teuchos::Array<int> dim;
   localData.dimensions(dim);
   dim[0] = mappedDofCount;
-  Intrepid::FieldContainer<double> mappedData(dim);
+  Camellia::FieldContainer<double> mappedData(dim);
   mapLocalDataVector(localData, fittableGlobalDofsOnly, mappedData);
   return mappedData;
 }
 
-Intrepid::FieldContainer<double> LocalDofMapper::mapLocalData(const Intrepid::FieldContainer<double> &localData, bool fittableGlobalDofsOnly,
+Camellia::FieldContainer<double> LocalDofMapper::mapLocalData(const Camellia::FieldContainer<double> &localData, bool fittableGlobalDofsOnly,
                                                               const vector<pair<int,vector<int>>> &varIDsAndSideOrdinalsToMap)
 {
   unsigned dofCount;
@@ -1132,12 +1132,12 @@ Intrepid::FieldContainer<double> LocalDofMapper::mapLocalData(const Intrepid::Fi
   Teuchos::Array<int> dim;
   localData.dimensions(dim);
   dim[0] = mappedDofCount;
-  Intrepid::FieldContainer<double> mappedData(dim);
+  Camellia::FieldContainer<double> mappedData(dim);
   mapLocalDataVector(localData, fittableGlobalDofsOnly, varIDsAndSideOrdinalsToMap, mappedData);
   return mappedData;
 }
 
-void LocalDofMapper::mapLocalDataSide(const Intrepid::FieldContainer<double> &localData, Intrepid::FieldContainer<double> &mappedData, bool fittableGlobalDofsOnly, int sideOrdinal)
+void LocalDofMapper::mapLocalDataSide(const Camellia::FieldContainer<double> &localData, Camellia::FieldContainer<double> &mappedData, bool fittableGlobalDofsOnly, int sideOrdinal)
 {
   unsigned dofCount;
   if (_varIDToMap == -1)
@@ -1179,7 +1179,7 @@ void LocalDofMapper::mapLocalDataSide(const Intrepid::FieldContainer<double> &lo
   }
 }
 
-void LocalDofMapper::mapLocalDataVolume(const Intrepid::FieldContainer<double> &localData, Intrepid::FieldContainer<double> &mappedData, bool fittableGlobalDofsOnly)
+void LocalDofMapper::mapLocalDataVolume(const Camellia::FieldContainer<double> &localData, Camellia::FieldContainer<double> &mappedData, bool fittableGlobalDofsOnly)
 {
   unsigned dofCount;
   if (_varIDToMap == -1)
@@ -1220,7 +1220,7 @@ void LocalDofMapper::mapLocalDataVolume(const Intrepid::FieldContainer<double> &
   }
 }
 
-Intrepid::FieldContainer<double> LocalDofMapper::mapGlobalCoefficients(const Intrepid::FieldContainer<double> &globalCoefficients)
+Camellia::FieldContainer<double> LocalDofMapper::mapGlobalCoefficients(const Camellia::FieldContainer<double> &globalCoefficients)
 {
   unsigned dofCount;
   if (_varIDToMap == -1)
@@ -1245,7 +1245,7 @@ Intrepid::FieldContainer<double> LocalDofMapper::mapGlobalCoefficients(const Int
   Teuchos::Array<int> dim;
   globalCoefficients.dimensions(dim);
   dim[dim.size()-1] = mappedDofCount;
-  Intrepid::FieldContainer<double> localCoefficients(dim);
+  Camellia::FieldContainer<double> localCoefficients(dim);
   
   // map volume data
   for (map< int, BasisMap >::iterator volumeMapIt = _volumeMaps.begin(); volumeMapIt != _volumeMaps.end(); volumeMapIt++)
@@ -1276,7 +1276,7 @@ Intrepid::FieldContainer<double> LocalDofMapper::mapGlobalCoefficients(const Int
   return localCoefficients;
 }
 
-void LocalDofMapper::mapGlobalCoefficients(const std::map<GlobalIndexType,double> &globalCoefficients, Intrepid::FieldContainer<double> &localCoefficients)
+void LocalDofMapper::mapGlobalCoefficients(const std::map<GlobalIndexType,double> &globalCoefficients, Camellia::FieldContainer<double> &localCoefficients)
 {
   int mappedDofCount = _dofOrdering->totalDofs();
   localCoefficients.resize(mappedDofCount);

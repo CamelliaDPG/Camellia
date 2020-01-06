@@ -27,7 +27,7 @@ class ExactSolutionFunction : public TFunction<Scalar>   // for scalars, for now
   int _trialID;
 public:
   ExactSolutionFunction(Teuchos::RCP<ExactSolution<Scalar>> exactSolution, int trialID);
-  void values(Intrepid::FieldContainer<Scalar> &values, BasisCachePtr basisCache);
+  void values(Camellia::FieldContainer<Scalar> &values, BasisCachePtr basisCache);
 };
 }
 #endif

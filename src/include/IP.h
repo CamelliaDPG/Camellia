@@ -43,20 +43,20 @@ public:
   TIP(TBFPtr<Scalar> bfs);
 
   // legacy DPGInnerProduct::applyInnerProductData() methods:
-  virtual void applyInnerProductData(Intrepid::FieldContainer<Scalar> &testValues1,
-                                     Intrepid::FieldContainer<Scalar> &testValues2,
+  virtual void applyInnerProductData(Camellia::FieldContainer<Scalar> &testValues1,
+                                     Camellia::FieldContainer<Scalar> &testValues2,
                                      int testID1, int testID2, int operatorIndex,
-                                     const Intrepid::FieldContainer<double>& physicalPoints);
-  virtual void applyInnerProductData(Intrepid::FieldContainer<Scalar> &testValues1,
-                                     Intrepid::FieldContainer<Scalar> &testValues2,
+                                     const Camellia::FieldContainer<double>& physicalPoints);
+  virtual void applyInnerProductData(Camellia::FieldContainer<Scalar> &testValues1,
+                                     Camellia::FieldContainer<Scalar> &testValues2,
                                      int testID1, int testID2, int operatorIndex,
                                      BasisCachePtr basisCache);
 
   // legacy DPGInnerProduct::computeInnerProductMatrix() method
-  virtual void computeInnerProductMatrix(Intrepid::FieldContainer<Scalar> &innerProduct,
+  virtual void computeInnerProductMatrix(Camellia::FieldContainer<Scalar> &innerProduct,
                                          Teuchos::RCP<DofOrdering> dofOrdering,
                                          shards::CellTopology &cellTopo,
-                                         Intrepid::FieldContainer<double>& physicalCellNodes);
+                                         Camellia::FieldContainer<double>& physicalCellNodes);
 
   virtual ~TIP() {}
 
@@ -69,11 +69,11 @@ public:
   void addBoundaryTerm( TLinearTermPtr<Scalar> a );
   void addBoundaryTerm( VarPtr v );
 
-  virtual void computeInnerProductMatrix(Intrepid::FieldContainer<Scalar> &innerProduct,
+  virtual void computeInnerProductMatrix(Camellia::FieldContainer<Scalar> &innerProduct,
                                          Teuchos::RCP<DofOrdering> dofOrdering,
                                          Teuchos::RCP<BasisCache> basisCache);
 
-  virtual void computeInnerProductVector(Intrepid::FieldContainer<Scalar> &ipVector,
+  virtual void computeInnerProductVector(Camellia::FieldContainer<Scalar> &ipVector,
                                          VarPtr var, TFunctionPtr<Scalar> fxn,
                                          Teuchos::RCP<DofOrdering> dofOrdering,
                                          Teuchos::RCP<BasisCache> basisCache,

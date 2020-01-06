@@ -29,7 +29,7 @@ public:
   {
     _mesh = mesh; // scalar
   }
-  void values(Intrepid::FieldContainer<double> &values, BasisCachePtr basisCache);
+  void values(Camellia::FieldContainer<double> &values, BasisCachePtr basisCache);
 };
 }
 

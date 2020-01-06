@@ -89,8 +89,8 @@ CellTopoPtr DofOrdering::cellTopology(int sideIndex) const
   return _cellTopologyForSide.find(sideIndex)->second;
 }
 
-void DofOrdering::copyLikeCoefficients( Intrepid::FieldContainer<double> &newValues, Teuchos::RCP<DofOrdering> oldDofOrdering,
-                                        const Intrepid::FieldContainer<double> &oldValues )
+void DofOrdering::copyLikeCoefficients( Camellia::FieldContainer<double> &newValues, Teuchos::RCP<DofOrdering> oldDofOrdering,
+                                        const Camellia::FieldContainer<double> &oldValues )
 {
   // copy the coefficients for the bases that agree between the two DofOrderings
   // requires that "like" bases are actually pointers to the same memory location
@@ -142,7 +142,7 @@ BasisPtr DofOrdering::getBasis(int varID, int sideIndex) const
   return (*entry).second;
 }
 
-void DofOrdering::getDofCoords(Intrepid::FieldContainer<double> &dofCoords, int varID, int sideOrdinal)
+void DofOrdering::getDofCoords(Camellia::FieldContainer<double> &dofCoords, int varID, int sideOrdinal)
 {
   CellTopoPtr volumeTopo = _cellTopologyForSide.find(VOLUME_INTERIOR_SIDE_ORDINAL)->second;
   bool createSideCache = (sideOrdinal != VOLUME_INTERIOR_SIDE_ORDINAL);
@@ -159,10 +159,10 @@ void DofOrdering::getDofCoords(Intrepid::FieldContainer<double> &dofCoords, int 
   else
   {
     BasisCachePtr sideCache = basisCache->getSideBasisCache(sideOrdinal);
-    Intrepid::FieldContainer<double> sideDofCoords(basisCardinality, basis->domainTopology()->getDimension());
+    Camellia::FieldContainer<double> sideDofCoords(basisCardinality, basis->domainTopology()->getDimension());
     basis->getDofCoords(sideDofCoords);
     sideCache->setRefCellPoints(sideDofCoords);
-    const Intrepid::FieldContainer<double>* volumeCoords = &sideCache->getPhysicalCubaturePoints();
+    const Camellia::FieldContainer<double>* volumeCoords = &sideCache->getPhysicalCubaturePoints();
     for (int basisOrdinal=0; basisOrdinal<basisCardinality; basisOrdinal++)
     {
       for (int d=0; d<spaceDim; d++)
@@ -174,8 +174,8 @@ void DofOrdering::getDofCoords(Intrepid::FieldContainer<double> &dofCoords, int 
 }
 
 //
-void DofOrdering::getDofCoords(const Intrepid::FieldContainer<double> &physicalCellNodes,
-                               Intrepid::FieldContainer<double> &dofCoords, int varID, int sideOrdinal)
+void DofOrdering::getDofCoords(const Camellia::FieldContainer<double> &physicalCellNodes,
+                               Camellia::FieldContainer<double> &dofCoords, int varID, int sideOrdinal)
 {
   CellTopoPtr volumeTopo = _cellTopologyForSide.find(VOLUME_INTERIOR_SIDE_ORDINAL)->second;
   bool createSideCache = (sideOrdinal != VOLUME_INTERIOR_SIDE_ORDINAL);
@@ -188,7 +188,7 @@ void DofOrdering::getDofCoords(const Intrepid::FieldContainer<double> &physicalC
   
   if (sideOrdinal == VOLUME_INTERIOR_SIDE_ORDINAL)
   {
-    Intrepid::FieldContainer<double> refSpaceDofCoords(basisCardinality, spaceDim);
+    Camellia::FieldContainer<double> refSpaceDofCoords(basisCardinality, spaceDim);
     basis->getDofCoords(refSpaceDofCoords);
     basisCache->setRefCellPoints(refSpaceDofCoords);
     dofCoords = basisCache->getPhysicalCubaturePoints();
@@ -196,7 +196,7 @@ void DofOrdering::getDofCoords(const Intrepid::FieldContainer<double> &physicalC
   else
   {
     BasisCachePtr sideCache = basisCache->getSideBasisCache(sideOrdinal);
-    Intrepid::FieldContainer<double> sideDofCoords(basisCardinality, basis->domainTopology()->getDimension());
+    Camellia::FieldContainer<double> sideDofCoords(basisCardinality, basis->domainTopology()->getDimension());
     basis->getDofCoords(sideDofCoords);
     sideCache->setRefCellPoints(sideDofCoords);
     dofCoords = sideCache->getPhysicalCubaturePoints();
@@ -423,7 +423,7 @@ void DofOrdering::print(std::ostream& os) const
 void DofOrdering::printDofCoords(int varID, std::ostream& os) const
 {
   // define a lambda to create a point string:
-  auto pointString = [] (int basisOrdinal, Intrepid::FieldContainer<double> &basisDofCoords) -> string
+  auto pointString = [] (int basisOrdinal, Camellia::FieldContainer<double> &basisDofCoords) -> string
   {
     ostringstream pointStringStream;
     int spaceDim = basisDofCoords.dimension(1);
@@ -447,7 +447,7 @@ void DofOrdering::printDofCoords(int varID, std::ostream& os) const
     BasisPtr basis = getBasis(varID, sideOrdinal);
     const vector<int>* dofIndices = &getDofIndices(varID, sideOrdinal);
     
-    Intrepid::FieldContainer<double> basisDofCoords(basis->getCardinality(), basis->domainTopology()->getDimension());
+    Camellia::FieldContainer<double> basisDofCoords(basis->getCardinality(), basis->domainTopology()->getDimension());
     if (sideOrdinal == VOLUME_INTERIOR_SIDE_ORDINAL)
     {
       os << "Volume dof ordinal:" << setw(20) << "Local Dof Index:" << setw(20) << "Coordinates:\n" << endl;
@@ -460,7 +460,7 @@ void DofOrdering::printDofCoords(int varID, std::ostream& os) const
     {
       BasisCachePtr sideCache = basisCache->getSideBasisCache(sideOrdinal);
       sideCache->setRefCellPoints(basisDofCoords);
-      Intrepid::FieldContainer<double> basisDofCoordsVolume = sideCache->getPhysicalCubaturePoints();
+      Camellia::FieldContainer<double> basisDofCoordsVolume = sideCache->getPhysicalCubaturePoints();
       basisDofCoordsVolume.resize(basisDofCoordsVolume.dimension(1),basisDofCoordsVolume.dimension(2));
       
       os << "Side " << sideOrdinal << " dof ordinal:" << setw(20) << "Local Dof Index:" << setw(20) << "Coordinates:\n" << endl;
@@ -527,7 +527,7 @@ void DofOrdering::rebuildIndex()
   _indexNeedsToBeRebuilt = false;
 }
 
-vector<pair<int,vector<int>>> DofOrdering::variablesWithNonZeroEntries(const Intrepid::FieldContainer<double> &localCoefficients, double tol) const
+vector<pair<int,vector<int>>> DofOrdering::variablesWithNonZeroEntries(const Camellia::FieldContainer<double> &localCoefficients, double tol) const
 {
   TEUCHOS_TEST_FOR_EXCEPTION(localCoefficients.size() != this->totalDofs(), std::invalid_argument, "localCoefficients must have size == totalDofs()");
   const set<int>* trialIDs = &this->getVarIDs();

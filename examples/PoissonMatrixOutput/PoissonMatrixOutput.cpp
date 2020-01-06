@@ -84,7 +84,7 @@ int main(int argc, char *argv[])
   DofOrderingPtr testOrdering = mesh->getElementType(cellID)->testOrderPtr;
   
   int testDofCount = testOrdering->totalDofs();
-  Intrepid::FieldContainer<double> ipMatrix(1,testDofCount,testDofCount);
+  Camellia::FieldContainer<double> ipMatrix(1,testDofCount,testDofCount);
   
   cout << "For poly order = " << polyOrder << " and delta_k = " << delta_k;
   cout << ", testDofCount is: " << testDofCount << endl;
@@ -96,14 +96,14 @@ int main(int argc, char *argv[])
   
   ip->printInteractions();
   
-  Intrepid::FieldContainer<double> allDofCoords(testDofCount,spaceDim);
+  Camellia::FieldContainer<double> allDofCoords(testDofCount,spaceDim);
   
   std::set<int> varIDs = testOrdering->getVarIDs();
   for (int varID : varIDs)
   {
     vector<int> dofIndices = testOrdering->getDofIndices(varID);
     int basisCardinality = dofIndices.size();
-    Intrepid::FieldContainer<double> dofCoords(basisCardinality,spaceDim);
+    Camellia::FieldContainer<double> dofCoords(basisCardinality,spaceDim);
     testOrdering->getDofCoords(dofCoords,varID);
     for (int basisOrdinal=0; basisOrdinal<basisCardinality; basisOrdinal++)
     {
@@ -117,7 +117,7 @@ int main(int argc, char *argv[])
   DofOrderingPtr trialOrdering = mesh->getElementType(cellID)->trialOrderPtr;
   int trialDofCount = trialOrdering->totalDofs();
   
-  Intrepid::FieldContainer<double> rectangularBMatrix(1,testDofCount,trialDofCount);
+  Camellia::FieldContainer<double> rectangularBMatrix(1,testDofCount,trialDofCount);
   form.bf()->stiffnessMatrix(rectangularBMatrix, mesh->getElementType(cellID), ipBasisCache->getCellSideParities(), ipBasisCache, false, true);
   
   ipMatrix.resize(testDofCount,testDofCount);
@@ -134,7 +134,7 @@ int main(int argc, char *argv[])
   
   int bcCount = uHatIndices.size();
   
-  Intrepid::FieldContainer<double> rectangularBMatrixAfterBCs(testDofCount,trialDofCount-bcCount);
+  Camellia::FieldContainer<double> rectangularBMatrixAfterBCs(testDofCount,trialDofCount-bcCount);
   int offset = 0;
   for (int trialOrdinal=0; trialOrdinal < trialDofCount; trialOrdinal++)
   {

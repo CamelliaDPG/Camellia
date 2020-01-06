@@ -10,7 +10,7 @@
 #define DPG_MULTI_BASIS
 
 #include "Basis.h"
-#include "Intrepid_FieldContainer.hpp"
+#include "Camellia_FieldContainer.hpp"
 
 #include "CellTopology.h"
 
@@ -23,7 +23,7 @@ template<class Scalar=double, class ArrayScalar=Intrepid::FieldContainer<double>
 template<class Scalar, class ArrayScalar> class MultiBasis : public Basis<Scalar,ArrayScalar>
 {
   CellTopoPtr _cellTopo;
-  Intrepid::FieldContainer<double> _subRefNodes;
+  Camellia::FieldContainer<double> _subRefNodes;
   std::vector< Teuchos::RCP< Basis<Scalar,ArrayScalar> > > _bases;
   int _numLeaves;
 

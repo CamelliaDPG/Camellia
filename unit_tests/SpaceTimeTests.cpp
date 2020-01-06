@@ -310,8 +310,8 @@ void testIntegrateSpaceVaryingFunctionSides(int spaceDim, Teuchos::FancyOStream 
       
       int ownerRankTime1 = mesh->globalDofAssignment()->partitionForCellID(cellIDTime1);
       
-      Intrepid::FieldContainer<double> refPointTime0(1,spaceDim); // spaceDim because spatial side x time
-      Intrepid::FieldContainer<double> refPointTime1(1,spaceDim);
+      Camellia::FieldContainer<double> refPointTime0(1,spaceDim); // spaceDim because spatial side x time
+      Camellia::FieldContainer<double> refPointTime1(1,spaceDim);
       // we don't really care what point we're talking about, so long as the time coordinate is right
       refPointTime0(0,spaceDim-1) = 1.0; // time 0 should get rightmost time (1.0 in ref space)
       refPointTime1(0,spaceDim-1) = -1.0; // time 1 should get leftmost time (-1.0 in ref space)
@@ -329,7 +329,7 @@ void testIntegrateSpaceVaryingFunctionSides(int spaceDim, Teuchos::FancyOStream 
       {
         if (cellTopo->sideIsSpatial(sideOrdinal))
         {
-          Intrepid::FieldContainer<double> valuesTime0(1,1), valuesTime1(1,1);
+          Camellia::FieldContainer<double> valuesTime0(1,1), valuesTime1(1,1);
 
           double valueTime0, valueTime1;
           if (myRank == ownerRankTime0)
@@ -498,14 +498,14 @@ TEUCHOS_UNIT_TEST( SpaceTime, IntegrateSpaceVaryingFunctionSides_3D )
       BasisCachePtr sideCache_t1 = basisCache->getSideBasisCache(sideOrdinal_t1);
       
       int numPoints = 1;
-      Intrepid::FieldContainer<double> refPoint(numPoints,spaceDim);
+      Camellia::FieldContainer<double> refPoint(numPoints,spaceDim);
       sideCache_t0->setRefCellPoints(refPoint);
       sideCache_t1->setRefCellPoints(refPoint);
       
       int numCells = 1;
-      Intrepid::FieldContainer<double> values_t0(numCells,numPoints);
+      Camellia::FieldContainer<double> values_t0(numCells,numPoints);
       n_spaceTime->t()->values(values_t0, sideCache_t0);
-      Intrepid::FieldContainer<double> values_t1(numCells,numPoints);
+      Camellia::FieldContainer<double> values_t1(numCells,numPoints);
       n_spaceTime->t()->values(values_t1, sideCache_t1);
       
       double value_t0_actual = values_t0[0];
@@ -528,9 +528,9 @@ TEUCHOS_UNIT_TEST( SpaceTime, IntegrateSpaceVaryingFunctionSides_3D )
       sideCache_x0->setRefCellPoints(refPoint);
       sideCache_x1->setRefCellPoints(refPoint);
       
-      Intrepid::FieldContainer<double> values_x0(numCells,numPoints);
+      Camellia::FieldContainer<double> values_x0(numCells,numPoints);
       n_spaceTime->t()->values(values_x0, sideCache_x0);
-      Intrepid::FieldContainer<double> values_x1(numCells,numPoints);
+      Camellia::FieldContainer<double> values_x1(numCells,numPoints);
       n_spaceTime->t()->values(values_x1, sideCache_x1);
       
       double value_x0_actual = values_x0[0];

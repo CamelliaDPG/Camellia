@@ -10,7 +10,7 @@
 #include "TypeDefs.h"
 
 // Intrepid includes
-#include "Intrepid_FieldContainer.hpp"
+#include "Camellia_FieldContainer.hpp"
 
 #include "CellTopology.h"
 
@@ -63,9 +63,9 @@ namespace Camellia {
 
     int _refinementOrdinal; // the ordinal of this pattern in the enumeration of known patterns for the topology
     CellTopoPtr _cellTopoPtr;
-    Intrepid::FieldContainer<double> _nodes;
+    Camellia::FieldContainer<double> _nodes;
     vector< vector< unsigned > > _subCells;
-    Intrepid::FieldContainer<double> _vertices;
+    Camellia::FieldContainer<double> _vertices;
 
     vector< CellTopoPtr > _childTopos;
     vector<unsigned> _interiorChildOrdinals; // e.g. 1 for regular triangle refinement pattern
@@ -85,7 +85,7 @@ namespace Camellia {
 
     static map<RefinementPatternKey, Teuchos::RCP<RefinementPattern> > _refPatterns;
     
-    static map< pair< RefinementBranch, unsigned> , Intrepid::FieldContainer<double> > _descendantNodesRelativeToPermutedReferenceCell;
+    static map< pair< RefinementBranch, unsigned> , Camellia::FieldContainer<double> > _descendantNodesRelativeToPermutedReferenceCell;
     
     void determineChildSubcellInfoInSubcellRefinement(unsigned &childSubcellDimension, unsigned &childSubcellOrdinal,
                                                       unsigned &childSubcellPermutation, unsigned &subcellRefChild,
@@ -94,9 +94,9 @@ namespace Camellia {
     
     static RefinementPatternPtr refPatternExtrudedInTime(RefinementPatternPtr spaceRefPattern);
   public:
-    RefinementPattern(CellTopoPtr cellTopoPtr, Intrepid::FieldContainer<double> refinedNodes,
+    RefinementPattern(CellTopoPtr cellTopoPtr, Camellia::FieldContainer<double> refinedNodes,
                       vector< Teuchos::RCP<RefinementPattern> > sideRefinementPatterns, int refinementOrdinal);
-  //  RefinementPattern(Teuchos::RCP< shards::CellTopology > shardsTopoPtr, Intrepid::FieldContainer<double> refinedNodes,
+  //  RefinementPattern(Teuchos::RCP< shards::CellTopology > shardsTopoPtr, Camellia::FieldContainer<double> refinedNodes,
   //                    vector< Teuchos::RCP<RefinementPattern> > sideRefinementPatterns);
 
     //! dimensionRefinementFlags should be 0 for dimensions that are not refined, 1 for dimensions that are refined
@@ -136,8 +136,8 @@ namespace Camellia {
 
   static void initializeAnisotropicRelationships();
 
-  const Intrepid::FieldContainer<double> & verticesOnReferenceCell();
-  Intrepid::FieldContainer<double> verticesForRefinement(Intrepid::FieldContainer<double> &cellNodes);
+  const Camellia::FieldContainer<double> & verticesOnReferenceCell();
+  Camellia::FieldContainer<double> verticesForRefinement(Camellia::FieldContainer<double> &cellNodes);
 
   vector< vector<GlobalIndexType> > children(const map<unsigned, GlobalIndexType> &localToGlobalVertexIndex); // localToGlobalVertexIndex key: index in vertices; value: index in _vertices
   // children returns a vector of global vertex indices for each child
@@ -150,7 +150,7 @@ namespace Camellia {
   MeshTopologyPtr refinementMeshTopology();
 
   unsigned numChildren();
-  const Intrepid::FieldContainer<double> & refinedNodes();
+  const Camellia::FieldContainer<double> & refinedNodes();
 
   const vector< Teuchos::RCP<RefinementPattern> > &sideRefinementPatterns();
   Teuchos::RCP<RefinementPattern> patternForSubcell(unsigned subcdim, unsigned subcord);
@@ -168,7 +168,7 @@ namespace Camellia {
 
   static unsigned mapSideOrdinalFromLeafToAncestor(unsigned descendantSideOrdinal, RefinementBranch &refinements); // given a side ordinal in the leaf node of a branch, returns the corresponding side ordinal in the earliest ancestor in the branch.
 
-  void mapPointsToChildRefCoordinates(const Intrepid::FieldContainer<double> &pointsParentCoords, unsigned childOrdinal, Intrepid::FieldContainer<double> &pointsChildCoords);
+  void mapPointsToChildRefCoordinates(const Camellia::FieldContainer<double> &pointsParentCoords, unsigned childOrdinal, Camellia::FieldContainer<double> &pointsChildCoords);
 
   vector< RefinementPatternRecipe > &relatedRecipes(); // e.g. the anisotropic + isotropic refinements of the quad.  This should be an exhaustive list, and should be in order of increasing fineness--i.e. the isotropic refinement should come at the end of the list.  Unless the list is empty, the current refinement pattern is required to be part of the list.  (A refinement pattern is related to itself.)  It's the job of initializeAnisotropicRelationships to initialize this list for the default refinement patterns that support it.
   void setRelatedRecipes(vector< RefinementPatternRecipe > &recipes);
@@ -177,10 +177,10 @@ namespace Camellia {
 
   static unsigned descendantSubcellOrdinal(RefinementBranch &refBranch, unsigned subcdim, unsigned ancestralSubcord);
 
-  static Intrepid::FieldContainer<double> descendantNodesRelativeToAncestorReferenceCell(RefinementBranch refinementBranch, unsigned ancestorReferenceCellPermutation=0,
+  static Camellia::FieldContainer<double> descendantNodesRelativeToAncestorReferenceCell(RefinementBranch refinementBranch, unsigned ancestorReferenceCellPermutation=0,
                                                                                          bool cacheResults = true);
 
-  static Intrepid::FieldContainer<double> descendantNodes(RefinementBranch refinementBranch, const Intrepid::FieldContainer<double> &ancestorNodes);
+  static Camellia::FieldContainer<double> descendantNodes(RefinementBranch refinementBranch, const Camellia::FieldContainer<double> &ancestorNodes);
 
   static CellTopoPtr descendantTopology(RefinementBranch &refinements);
 
@@ -199,14 +199,17 @@ namespace Camellia {
   // ! returns a generalized refinement branch that has as its leaf the subcell (subcdim, subcord) in the leaf of the volumeRefinementBranch
   static GeneralizedRefinementBranch generalizedRefinementBranchForLeafSubcell(RefinementBranch &volumeRefinementBranch, unsigned subcdim, unsigned subcord);
 
-  static void mapRefCellPointsToAncestor(GeneralizedRefinementBranch &generalizedRefBranch, const Intrepid::FieldContainer<double> &leafRefCellPoints,
-                                         Intrepid::FieldContainer<double> &rootRefCellPoints);
+  static void mapRefCellPointsToAncestor(GeneralizedRefinementBranch &generalizedRefBranch, const Camellia::FieldContainer<double> &leafRefCellPoints,
+                                         Camellia::FieldContainer<double> &rootRefCellPoints);
 
-  static void mapRefCellPointsToAncestor(RefinementBranch &refinementBranch, const Intrepid::FieldContainer<double> &leafRefCellPoints,
-                                         Intrepid::FieldContainer<double> &rootRefCellPoints);
+  static void mapRefCellPointsToAncestor(RefinementBranch &refinementBranch, const Camellia::FieldContainer<double> &leafRefCellPoints,
+                                         Camellia::FieldContainer<double> &rootRefCellPoints);
     
   static pair<unsigned, unsigned> mapSubcellFromDescendantToAncestor(RefinementBranch &refBranch,
                                                                      unsigned subcdim, unsigned childSubcord);
+  
+  // clears static maps that are lazily populated in response to calls to RefinementPattern
+  static void clearStaticMaps();
 };
 
 typedef Teuchos::RCP<RefinementPattern> RefinementPatternPtr;

@@ -857,7 +857,7 @@ CellTopoPtr CellTopology::getTensorialComponent() const
   else return CellTopology::cellTopology(_shardsBaseTopology, _tensorialDegree - 1);
 }
 
-void CellTopology::initializeNodes(const std::vector<Intrepid::FieldContainer<double> > &tensorComponentNodes, Intrepid::FieldContainer<double> &cellNodes)
+void CellTopology::initializeNodes(const std::vector<Camellia::FieldContainer<double> > &tensorComponentNodes, Camellia::FieldContainer<double> &cellNodes)
 {
   if (cellNodes.dimension(0) != this->getNodeCount())
   {
@@ -908,10 +908,10 @@ void CellTopology::initializeNodes(const std::vector<Intrepid::FieldContainer<do
     // after _shardsBaseTopology are lines, but the code that follows does not.  (The argument checks above
     // do also require that the tensorial components are lines.)
     CellTopoPtr tensorComponentTopo = CellTopology::cellTopology(_shardsBaseTopology, _tensorialDegree - 1);
-    Intrepid::FieldContainer<double> componentCellNodes(tensorComponentTopo->getNodeCount(),tensorComponentTopo->getDimension());
+    Camellia::FieldContainer<double> componentCellNodes(tensorComponentTopo->getNodeCount(),tensorComponentTopo->getDimension());
 
-    std::vector<Intrepid::FieldContainer<double> > fewerNodes = tensorComponentNodes;
-    Intrepid::FieldContainer<double> lastNodes = fewerNodes[fewerNodes.size()-1];
+    std::vector<Camellia::FieldContainer<double> > fewerNodes = tensorComponentNodes;
+    Camellia::FieldContainer<double> lastNodes = fewerNodes[fewerNodes.size()-1];
     fewerNodes.pop_back();
 
     tensorComponentTopo->initializeNodes(fewerNodes, componentCellNodes);

@@ -49,7 +49,7 @@ struct CacheInfo
 {
   ElementTypePtr elemType;
   GlobalIndexType cellID;
-  Intrepid::FieldContainer<double> subCellNodes;
+  Camellia::FieldContainer<double> subCellNodes;
 };
 
 // private class ComponentFunction
@@ -72,7 +72,7 @@ public:
   {
     return _vectorFxn->boundaryValueOnly();
   }
-  void values(Intrepid::FieldContainer<double> &values, BasisCachePtr basisCache)
+  void values(Camellia::FieldContainer<double> &values, BasisCachePtr basisCache)
   {
     // note this allocation.  There might be ways of reusing memory here, if we had a slightly richer API.
     int spaceDim = basisCache->getSpaceDim();
@@ -80,7 +80,7 @@ public:
     values.dimensions(dim);
     dim.push_back(spaceDim);
 
-    Intrepid::FieldContainer<double> vectorValues(dim);
+    Camellia::FieldContainer<double> vectorValues(dim);
     _vectorFxn->values(vectorValues, basisCache);
 
     int numValues = values.size();
@@ -106,7 +106,7 @@ public:
   {
     return true;
   }
-  void values(Intrepid::FieldContainer<double> &values, BasisCachePtr basisCache)
+  void values(Camellia::FieldContainer<double> &values, BasisCachePtr basisCache)
   {
     _fxn->values(values, basisCache);
   }
@@ -166,7 +166,7 @@ public:
   {
     return "|_{\\Gamma}";
   }
-  void values(Intrepid::FieldContainer<double> &values, BasisCachePtr basisCache)
+  void values(Camellia::FieldContainer<double> &values, BasisCachePtr basisCache)
   {
     CHECK_VALUES_RANK(values);
     // scalar: values shape is (C,P)
@@ -260,7 +260,7 @@ double TFunction<Scalar>::getTime()
 }
 
 template <typename Scalar>
-void TFunction<Scalar>::values(Intrepid::FieldContainer<Scalar> &values, Camellia::EOperator op, BasisCachePtr basisCache)
+void TFunction<Scalar>::values(Camellia::FieldContainer<Scalar> &values, Camellia::EOperator op, BasisCachePtr basisCache)
 {
   switch (op)
   {
@@ -356,7 +356,7 @@ bool TFunction<Scalar>::equals(TFunctionPtr<Scalar> f, BasisCachePtr basisCacheF
 
   int numCells = basisCacheForCellsToCompare->getPhysicalCubaturePoints().dimension(0);
   // compute L^2 norm of difference on the cells
-  Intrepid::FieldContainer<Scalar> diffs_squared(numCells);
+  Camellia::FieldContainer<Scalar> diffs_squared(numCells);
   (diff*diff)->integrate(diffs_squared, basisCacheForCellsToCompare);
   Scalar sum = 0;
   for (int cellIndex=0; cellIndex<numCells; cellIndex++)
@@ -370,7 +370,7 @@ template <typename Scalar>
 Scalar TFunction<Scalar>::evaluate(MeshPtr mesh, double x)
 {
   int spaceDim = 1;
-  Intrepid::FieldContainer<double> physPoint(1,spaceDim);
+  Camellia::FieldContainer<double> physPoint(1,spaceDim);
 
   if (this->rank() != 0)
   {
@@ -396,7 +396,7 @@ template <typename Scalar>
 Scalar TFunction<Scalar>::evaluate(MeshPtr mesh, double x, double y)
 {
   int spaceDim = 2;
-  Intrepid::FieldContainer<double> physPoint(1,spaceDim);
+  Camellia::FieldContainer<double> physPoint(1,spaceDim);
 
   if (this->rank() != 0)
   {
@@ -423,7 +423,7 @@ template <typename Scalar>
 Scalar TFunction<Scalar>::evaluate(MeshPtr mesh, double x, double y, double z)
 {
   int spaceDim = 3;
-  Intrepid::FieldContainer<double> physPoint(1,spaceDim);
+  Camellia::FieldContainer<double> physPoint(1,spaceDim);
 
   if (this->rank() != 0)
   {
@@ -448,7 +448,7 @@ Scalar TFunction<Scalar>::evaluate(MeshPtr mesh, double x, double y, double z)
 }
   
   template <typename Scalar>
-  Scalar TFunction<Scalar>::evaluateAtMeshPoint(MeshPtr mesh, GlobalIndexType cellID, Intrepid::FieldContainer<double> &physicalPoint)
+  Scalar TFunction<Scalar>::evaluateAtMeshPoint(MeshPtr mesh, GlobalIndexType cellID, Camellia::FieldContainer<double> &physicalPoint)
   {
     Scalar value;
     int spaceDim = mesh->getDimension();
@@ -456,14 +456,14 @@ Scalar TFunction<Scalar>::evaluate(MeshPtr mesh, double x, double y, double z)
     {
       BasisCachePtr basisCache = BasisCache::basisCacheForCell(mesh, cellID);
       
-      Intrepid::FieldContainer<double> refPoint(1,1,spaceDim);
+      Camellia::FieldContainer<double> refPoint(1,1,spaceDim);
       
       physicalPoint.resize(1,1,spaceDim);
       CamelliaCellTools::mapToReferenceFrame(refPoint, physicalPoint, mesh->getTopology(), cellID, basisCache->cubatureDegree());
       refPoint.resize(1,spaceDim);
       basisCache->setRefCellPoints(refPoint);
       
-      Intrepid::FieldContainer<Scalar> valueFC(1,1); // (C,P)
+      Camellia::FieldContainer<Scalar> valueFC(1,1); // (C,P)
       this->values(valueFC,basisCache);
       value = valueFC[0];
     }
@@ -477,10 +477,10 @@ Scalar TFunction<Scalar>::evaluate(MeshPtr mesh, double x, double y, double z)
 template <typename Scalar>
 Scalar TFunction<Scalar>::evaluate(double x)
 {
-  static Intrepid::FieldContainer<Scalar> value(1,1); // (C,P)
-  static Intrepid::FieldContainer<double> physPoint(1,1,1);
+  Camellia::FieldContainer<Scalar> value(1,1); // (C,P)
+  Camellia::FieldContainer<double> physPoint(1,1,1);
 
-  static Teuchos::RCP<PhysicalPointCache> dummyCache = Teuchos::rcp( new PhysicalPointCache(physPoint) );
+  Teuchos::RCP<PhysicalPointCache> dummyCache = Teuchos::rcp( new PhysicalPointCache(physPoint) );
   dummyCache->writablePhysicalCubaturePoints()(0,0,0) = x;
   if (this->rank() != 0)
   {
@@ -499,9 +499,9 @@ Scalar TFunction<Scalar>::evaluate(TFunctionPtr<Scalar> f, double x)
 template <typename Scalar>
 Scalar TFunction<Scalar>::evaluate(double x, double y)
 {
-  static Intrepid::FieldContainer<Scalar> value(1,1);
-  static Intrepid::FieldContainer<double> physPoint(1,1,2);
-  static Teuchos::RCP<PhysicalPointCache> dummyCache = Teuchos::rcp( new PhysicalPointCache(physPoint) );
+  Camellia::FieldContainer<Scalar> value(1,1);
+  Camellia::FieldContainer<double> physPoint(1,1,2);
+  Teuchos::RCP<PhysicalPointCache> dummyCache = Teuchos::rcp( new PhysicalPointCache(physPoint) );
   dummyCache->writablePhysicalCubaturePoints()(0,0,0) = x;
   dummyCache->writablePhysicalCubaturePoints()(0,0,1) = y;
   
@@ -522,9 +522,9 @@ Scalar TFunction<Scalar>::evaluate(TFunctionPtr<Scalar> f, double x, double y)  
 template <typename Scalar>
 Scalar TFunction<Scalar>::evaluate(double x, double y, double z)   // for testing; this isn't super-efficient
 {
-  static Intrepid::FieldContainer<Scalar> value(1,1);
-  static Intrepid::FieldContainer<double> physPoint(1,1,3);
-  static Teuchos::RCP<PhysicalPointCache> dummyCache = Teuchos::rcp( new PhysicalPointCache(physPoint) );
+  Camellia::FieldContainer<Scalar> value(1,1);
+  Camellia::FieldContainer<double> physPoint(1,1,3);
+  Teuchos::RCP<PhysicalPointCache> dummyCache = Teuchos::rcp( new PhysicalPointCache(physPoint) );
   dummyCache->writablePhysicalCubaturePoints()(0,0,0) = x;
   dummyCache->writablePhysicalCubaturePoints()(0,0,1) = y;
   dummyCache->writablePhysicalCubaturePoints()(0,0,2) = z;
@@ -602,7 +602,7 @@ std::vector<GlobalIndexType> TFunction<Scalar>::localCellsWithNegativeValues(Mes
     BasisCachePtr basisCache = BasisCache::basisCacheForCell(mesh, cellID, testVsTest, cubatureDegreeEnrichment);
     int numCells = basisCache->getPhysicalCubaturePoints().dimension(0);
     int numPoints = basisCache->getPhysicalCubaturePoints().dimension(1);
-    Intrepid::FieldContainer<Scalar> fxnValues(numCells,numPoints);
+    Camellia::FieldContainer<Scalar> fxnValues(numCells,numPoints);
     this->values(fxnValues,basisCache);
     
     for (int cellIndex=0; cellIndex<numCells; cellIndex++)
@@ -621,7 +621,7 @@ std::vector<GlobalIndexType> TFunction<Scalar>::localCellsWithNegativeValues(Mes
         auto sideCache = basisCache->getSideBasisCache(sideOrdinal);
         int numCells = basisCache->getPhysicalCubaturePoints().dimension(0);
         int numSidePoints = sideCache->getPhysicalCubaturePoints().dimension(1);
-        Intrepid::FieldContainer<Scalar> fxnValues(numCells,numSidePoints);
+        Camellia::FieldContainer<Scalar> fxnValues(numCells,numSidePoints);
         this->values(fxnValues,sideCache);
         for (int cellIndex=0; cellIndex<numCells; cellIndex++)
         {
@@ -961,7 +961,7 @@ TFunctionPtr<Scalar> TFunction<Scalar>::div()
 }
 
 template <typename Scalar>
-void TFunction<Scalar>::CHECK_VALUES_RANK(Intrepid::FieldContainer<Scalar> &values)   // throws exception on bad values rank
+void TFunction<Scalar>::CHECK_VALUES_RANK(Camellia::FieldContainer<Scalar> &values)   // throws exception on bad values rank
 {
   // values should have shape (C,P,D,D,D,...) where the # of D's = _rank
   if (values.rank() != _rank + 2)
@@ -972,12 +972,12 @@ void TFunction<Scalar>::CHECK_VALUES_RANK(Intrepid::FieldContainer<Scalar> &valu
 }
 
 template <typename Scalar>
-void TFunction<Scalar>::addToValues(Intrepid::FieldContainer<Scalar> &valuesToAddTo, BasisCachePtr basisCache)
+void TFunction<Scalar>::addToValues(Camellia::FieldContainer<Scalar> &valuesToAddTo, BasisCachePtr basisCache)
 {
   CHECK_VALUES_RANK(valuesToAddTo);
   Teuchos::Array<int> dim;
   valuesToAddTo.dimensions(dim);
-  Intrepid::FieldContainer<Scalar> myValues(dim);
+  Camellia::FieldContainer<Scalar> myValues(dim);
   this->values(myValues,basisCache);
   for (int i=0; i<myValues.size(); i++)
   {
@@ -990,7 +990,7 @@ template <typename Scalar>
 Scalar  TFunction<Scalar>::integrate(BasisCachePtr basisCache)
 {
   int numCells = basisCache->getPhysicalCubaturePoints().dimension(0);
-  Intrepid::FieldContainer<Scalar> cellIntegrals(numCells);
+  Camellia::FieldContainer<Scalar> cellIntegrals(numCells);
   this->integrate(cellIntegrals, basisCache);
   Scalar sum = 0;
   for (int cellIndex=0; cellIndex<numCells; cellIndex++)
@@ -1008,7 +1008,7 @@ bool TFunction<Scalar>::isPositive(BasisCachePtr basisCache)
 {
   int numCells = basisCache->getPhysicalCubaturePoints().dimension(0);
   int numPoints = basisCache->getPhysicalCubaturePoints().dimension(1);
-  Intrepid::FieldContainer<double> fxnValues(numCells,numPoints);
+  Camellia::FieldContainer<double> fxnValues(numCells,numPoints);
   this->values(fxnValues, basisCache);
 
 //  print("Cells on which we're checking positivity", basisCache->cellIDs());
@@ -1059,10 +1059,10 @@ bool TFunction<Scalar>::isPositive(Teuchos::RCP<Mesh> mesh, int cubEnrich, bool 
 //    // if we want to check positivity on uniformly spaced points
 //    if (basisCache->cellTopology()->getSideCount()==4)  // tensor product structure only works with quads
 //    {
-//      Intrepid::FieldContainer<double> origPts = basisCache->getRefCellPoints();
+//      Camellia::FieldContainer<double> origPts = basisCache->getRefCellPoints();
 //      int numPts1D = ceil(sqrt(origPts.dimension(0)));
 //      int numPts = numPts1D*numPts1D;
-//      Intrepid::FieldContainer<double> uniformSpacedPts(numPts,origPts.dimension(1));
+//      Camellia::FieldContainer<double> uniformSpacedPts(numPts,origPts.dimension(1));
 //      double h = 1.0/(numPts1D-1);
 //      int iter = 0;
 //      for (int i = 0; i<numPts1D; i++)
@@ -1102,7 +1102,7 @@ template <typename Scalar>
 Scalar TFunction<Scalar>::integrate(GlobalIndexType cellID, Teuchos::RCP<Mesh> mesh, int cubatureDegreeEnrichment, bool testVsTest)
 {
   BasisCachePtr basisCache = BasisCache::basisCacheForCell(mesh,cellID,testVsTest,cubatureDegreeEnrichment);
-  Intrepid::FieldContainer<Scalar> cellIntegral(1);
+  Camellia::FieldContainer<Scalar> cellIntegral(1);
   this->integrate(cellIntegral,basisCache);
   return cellIntegral(0);
 }
@@ -1278,7 +1278,7 @@ Scalar TFunction<Scalar>::integrate(Teuchos::RCP<Mesh> mesh, double tol, bool te
     {
       ElementTypePtr elemType = subCellsToCheck[i].elemType;
       GlobalIndexType cellID = subCellsToCheck[i].cellID;
-      Intrepid::FieldContainer<double> nodes = subCellsToCheck[i].subCellNodes;
+      Camellia::FieldContainer<double> nodes = subCellsToCheck[i].subCellNodes;
       BasisCachePtr basisCache = Teuchos::rcp(new BasisCache(elemType,mesh));
       int cubEnrich = 2; // arbitrary
       BasisCachePtr enrichedCache =  Teuchos::rcp(new BasisCache(elemType,mesh,testVsTest,cubEnrich));
@@ -1288,7 +1288,7 @@ Scalar TFunction<Scalar>::integrate(Teuchos::RCP<Mesh> mesh, double tol, bool te
       enrichedCache->setPhysicalCellNodes(nodes,cellIDs,true);
 
       // calculate relative error for this subcell
-      Intrepid::FieldContainer<double> cellIntegral(1),enrichedCellIntegral(1);
+      Camellia::FieldContainer<double> cellIntegral(1),enrichedCellIntegral(1);
       this->integrate(cellIntegral,basisCache);
       this->integrate(enrichedCellIntegral,enrichedCache);
       double error = abs(enrichedCellIntegral(0)-cellIntegral(0))/abs(enrichedCellIntegral(0)); // relative error
@@ -1328,9 +1328,9 @@ Scalar TFunction<Scalar>::integrate(Teuchos::RCP<Mesh> mesh, double tol, bool te
         int spaceDim = 2;
         int numCells = 1; // cell-by-cell
 
-        Intrepid::FieldContainer<double> oldNodes = newCacheInfo.subCellNodes;
+        Camellia::FieldContainer<double> oldNodes = newCacheInfo.subCellNodes;
         oldNodes.resize(4,spaceDim);
-        Intrepid::FieldContainer<double> newCellNodes(numCells,4,spaceDim);
+        Camellia::FieldContainer<double> newCellNodes(numCells,4,spaceDim);
         double ax,ay,bx,by,cx,cy,dx,dy,ex,ey;
         ax = .5*(oldNodes(1,0)+oldNodes(0,0));
         ay = .5*(oldNodes(1,1)+oldNodes(0,1));
@@ -1404,7 +1404,7 @@ Scalar TFunction<Scalar>::integrate(Teuchos::RCP<Mesh> mesh, double tol, bool te
 }
 
 template <typename Scalar>
-void TFunction<Scalar>::integrate(Intrepid::FieldContainer<Scalar> &cellIntegrals, BasisCachePtr basisCache,
+void TFunction<Scalar>::integrate(Camellia::FieldContainer<Scalar> &cellIntegrals, BasisCachePtr basisCache,
                                   bool sumInto)
 {
   TEUCHOS_TEST_FOR_EXCEPTION(_rank != 0, std::invalid_argument, "can only integrate scalar functions.");
@@ -1421,10 +1421,10 @@ void TFunction<Scalar>::integrate(Intrepid::FieldContainer<Scalar> &cellIntegral
     {
       BasisCachePtr sideCache = basisCache->getSideBasisCache(sideOrdinal);
       int numPoints = sideCache->getPhysicalCubaturePoints().dimension(1);
-      Intrepid::FieldContainer<Scalar> values(numCells,numPoints);
+      Camellia::FieldContainer<Scalar> values(numCells,numPoints);
       this->values(values,sideCache);
 
-      Intrepid::FieldContainer<double> *weightedMeasures = &sideCache->getWeightedMeasures();
+      Camellia::FieldContainer<double> *weightedMeasures = &sideCache->getWeightedMeasures();
       for (int cellIndex=0; cellIndex<numCells; cellIndex++)
       {
         for (int ptIndex=0; ptIndex<numPoints; ptIndex++)
@@ -1438,10 +1438,10 @@ void TFunction<Scalar>::integrate(Intrepid::FieldContainer<Scalar> &cellIntegral
   {
     int numPoints = basisCache->getPhysicalCubaturePoints().dimension(1);
     //  cout << "integrate: basisCache->getPhysicalCubaturePoints():\n" << basisCache->getPhysicalCubaturePoints();
-    Intrepid::FieldContainer<Scalar> values(numCells,numPoints);
+    Camellia::FieldContainer<Scalar> values(numCells,numPoints);
     this->values(values,basisCache);
 
-    Intrepid::FieldContainer<double> *weightedMeasures = &basisCache->getWeightedMeasures();
+    Camellia::FieldContainer<double> *weightedMeasures = &basisCache->getWeightedMeasures();
     for (int cellIndex=0; cellIndex<numCells; cellIndex++)
     {
       for (int ptIndex=0; ptIndex<numPoints; ptIndex++)
@@ -1499,7 +1499,7 @@ Scalar TFunction<Scalar>::integralOfJump(Teuchos::RCP<Mesh> mesh, GlobalIndexTyp
 
   double sideParity = mesh->cellSideParitiesForCell(cellID)[sideIndex];
   // cellIntegral will store the difference between my value and neighbor's
-  Intrepid::FieldContainer<Scalar> cellIntegral(1);
+  Camellia::FieldContainer<Scalar> cellIntegral(1);
   this->integrate(cellIntegral, neighborCache->getSideBasisCache(neighborSideIndex), true);
   //  cout << "Neighbor integral: " << cellIntegral[0] << endl;
   cellIntegral[0] *= -1;
@@ -1600,12 +1600,12 @@ std::map<GlobalIndexType, double> TFunction<Scalar>::squaredL2NormOfJumps(MeshPt
   
   int sideDim = meshTopo->getDimension() - 1;
   
-  Intrepid::FieldContainer<double> emptyRefPointsVolume(0,meshTopo->getDimension()); // (P,D)
-  Intrepid::FieldContainer<double> emptyRefPointsSide(0,sideDim); // (P,D)
-  Intrepid::FieldContainer<double> emptyCubWeights(1,0); // (C,P)
+  Camellia::FieldContainer<double> emptyRefPointsVolume(0,meshTopo->getDimension()); // (P,D)
+  Camellia::FieldContainer<double> emptyRefPointsSide(0,sideDim); // (P,D)
+  Camellia::FieldContainer<double> emptyCubWeights(1,0); // (C,P)
   
-  map<pair<CellTopologyKey,int>, Intrepid::FieldContainer<double>> cubPointsForSideTopo;
-  map<pair<CellTopologyKey,int>, Intrepid::FieldContainer<double>> cubWeightsForSideTopo;
+  map<pair<CellTopologyKey,int>, Camellia::FieldContainer<double>> cubPointsForSideTopo;
+  map<pair<CellTopologyKey,int>, Camellia::FieldContainer<double>> cubWeightsForSideTopo;
   
   CubatureFactory cubFactory;
   
@@ -1622,7 +1622,7 @@ std::map<GlobalIndexType, double> TFunction<Scalar>::squaredL2NormOfJumps(MeshPt
     CellTopoPtr cellTopo = cell->topology();
     ElementTypePtr elemType = mesh->getElementType(cellID);
     
-    Intrepid::FieldContainer<double> physicalCellNodes = mesh->physicalCellNodesForCell(cellID);
+    Camellia::FieldContainer<double> physicalCellNodes = mesh->physicalCellNodesForCell(cellID);
     BasisCachePtr cellBasisCacheVolume;
     if (basisCacheForVolumeTopo.find(cellTopo->getKey()) == basisCacheForVolumeTopo.end())
     {
@@ -1715,8 +1715,8 @@ std::map<GlobalIndexType, double> TFunction<Scalar>::squaredL2NormOfJumps(MeshPt
           else
             numCubPointsSide = 0;
           
-          Intrepid::FieldContainer<double> cubPoints(numCubPointsSide, sideDim); // cubature points from the pov of the side (i.e. a (d-1)-dimensional set)
-          Intrepid::FieldContainer<double> cubWeights(numCubPointsSide);
+          Camellia::FieldContainer<double> cubPoints(numCubPointsSide, sideDim); // cubature points from the pov of the side (i.e. a (d-1)-dimensional set)
+          Camellia::FieldContainer<double> cubWeights(numCubPointsSide);
           if (numCubPointsSide > 0)
             sideCub->getCubature(cubPoints, cubWeights);
           cubPointsForSideTopo[cubKey] = cubPoints;
@@ -1725,8 +1725,8 @@ std::map<GlobalIndexType, double> TFunction<Scalar>::squaredL2NormOfJumps(MeshPt
         else
         {
           int numCubPointsSide = 1;
-          Intrepid::FieldContainer<double> cubPoints(numCubPointsSide, 1); // cubature points from the pov of the side (i.e. a (d-1)-dimensional set)
-          Intrepid::FieldContainer<double> cubWeights(numCubPointsSide);
+          Camellia::FieldContainer<double> cubPoints(numCubPointsSide, 1); // cubature points from the pov of the side (i.e. a (d-1)-dimensional set)
+          Camellia::FieldContainer<double> cubWeights(numCubPointsSide);
           
           cubPoints.initialize(0.0);
           cubWeights.initialize(1.0);
@@ -1742,7 +1742,7 @@ std::map<GlobalIndexType, double> TFunction<Scalar>::squaredL2NormOfJumps(MeshPt
       
       int numCells = 1;
       int numPoints = cellBasisCacheSide->getRefCellPoints().dimension(0);
-      Intrepid::FieldContainer<Scalar> myValues;
+      Camellia::FieldContainer<Scalar> myValues;
       int spaceDim = sideDim + 1;
       if      (this->rank() == 0) myValues.resize(numCells, numPoints);
       else if (this->rank() == 1) myValues.resize(numCells, numPoints, spaceDim);
@@ -1750,7 +1750,7 @@ std::map<GlobalIndexType, double> TFunction<Scalar>::squaredL2NormOfJumps(MeshPt
       else                   TEUCHOS_TEST_FOR_EXCEPTION(true, std::invalid_argument, "unsupported Function rank");
         
       values(myValues, cellBasisCacheSide);
-      Intrepid::FieldContainer<Scalar> neighborValues(myValues); // size according to myValues
+      Camellia::FieldContainer<Scalar> neighborValues(myValues); // size according to myValues
       neighborValues.initialize(0.0); // fill with zeros for the case that we're on the boundary
       if (neighborCellID != -1)
       {
@@ -1766,7 +1766,7 @@ std::map<GlobalIndexType, double> TFunction<Scalar>::squaredL2NormOfJumps(MeshPt
         int nodeCount = sideTopo->getNodeCount();
         
         unsigned permutationFromMeToNeighbor;
-        Intrepid::FieldContainer<double> myRefPoints = cellBasisCacheSide->getRefCellPoints();
+        Camellia::FieldContainer<double> myRefPoints = cellBasisCacheSide->getRefCellPoints();
         
         if (!neighborIsPeer) // then we have some refinements relative to neighbor
         {
@@ -1777,7 +1777,7 @@ std::map<GlobalIndexType, double> TFunction<Scalar>::squaredL2NormOfJumps(MeshPt
           
           RefinementBranch refinementBranch = cell->refinementBranchForSide(sideOrdinal, meshTopo);
           RefinementBranch sideRefinementBranch = RefinementPattern::sideRefinementBranch(refinementBranch, ancestorSideOrdinal);
-          Intrepid::FieldContainer<double> cellNodes = RefinementPattern::descendantNodesRelativeToAncestorReferenceCell(sideRefinementBranch);
+          Camellia::FieldContainer<double> cellNodes = RefinementPattern::descendantNodesRelativeToAncestorReferenceCell(sideRefinementBranch);
           
           cellNodes.resize(1,cellNodes.dimension(0),cellNodes.dimension(1));
           BasisCachePtr ancestralBasisCache = Teuchos::rcp(new BasisCache(cellNodes,sideTopo,cubaturePolyOrder,false)); // false: don't create side cache too
@@ -1823,7 +1823,7 @@ std::map<GlobalIndexType, double> TFunction<Scalar>::squaredL2NormOfJumps(MeshPt
           permutationFromMeToNeighbor = CamelliaCellTools::permutationMatchingOrder(sideTopo, mySideNodes, neighborSideNodes);
         }
         
-        Intrepid::FieldContainer<double> permutedRefNodes(nodeCount,sideDim);
+        Camellia::FieldContainer<double> permutedRefNodes(nodeCount,sideDim);
         CamelliaCellTools::refCellNodesForTopology(permutedRefNodes, sideTopo, permutationFromMeToNeighbor);
         permutedRefNodes.resize(1,nodeCount,sideDim); // add cell dimension to make this a "physical" node container
         if (basisCacheForReferenceCellTopo.find(sideTopo->getKey()) == basisCacheForReferenceCellTopo.end())
@@ -1835,10 +1835,10 @@ std::map<GlobalIndexType, double> TFunction<Scalar>::squaredL2NormOfJumps(MeshPt
         std::vector<GlobalIndexType> cellIDs = {0}; // unused
         referenceBasisCache->setPhysicalCellNodes(permutedRefNodes, cellIDs, false);
         // now, the "physical" points are the ones we should use as ref points for the neighbor
-        Intrepid::FieldContainer<double> neighborRefCellPoints = referenceBasisCache->getPhysicalCubaturePoints();
+        Camellia::FieldContainer<double> neighborRefCellPoints = referenceBasisCache->getPhysicalCubaturePoints();
         neighborRefCellPoints.resize(numPoints,sideDim); // strip cell dimension to convert to a "reference" point container
         
-        Intrepid::FieldContainer<double> neighborCellNodes = mesh->physicalCellNodesForCell(neighborCellID);
+        Camellia::FieldContainer<double> neighborCellNodes = mesh->physicalCellNodesForCell(neighborCellID);
         if (basisCacheForNeighborVolumeTopo.find(neighborTopo->getKey()) == basisCacheForNeighborVolumeTopo.end())
         {
           basisCacheForNeighborVolumeTopo[neighborTopo->getKey()] = Teuchos::rcp( new BasisCache(neighborCellNodes, neighborTopo,
@@ -1860,8 +1860,8 @@ std::map<GlobalIndexType, double> TFunction<Scalar>::squaredL2NormOfJumps(MeshPt
         {
           // Sanity check that the physical points agree:
           double tol = 1e-8;
-          Intrepid::FieldContainer<double> myPhysicalPoints = cellBasisCacheSide->getPhysicalCubaturePoints();
-          Intrepid::FieldContainer<double> neighborPhysicalPoints = neighborSideCache->getPhysicalCubaturePoints();
+          Camellia::FieldContainer<double> myPhysicalPoints = cellBasisCacheSide->getPhysicalCubaturePoints();
+          Camellia::FieldContainer<double> neighborPhysicalPoints = neighborSideCache->getPhysicalCubaturePoints();
           
           bool pointsMatch = (myPhysicalPoints.size() == neighborPhysicalPoints.size()); // true unless we find a point that doesn't match
           double maxDiff = 0.0;
@@ -2139,7 +2139,7 @@ double TFunction<Scalar>::linfinitynorm(MeshPtr mesh, int cubatureDegreeEnrichme
     BasisCachePtr basisCache = BasisCache::basisCacheForCell(mesh, cellID, testVsTest, cubatureDegreeEnrichment);
     int numCells = basisCache->getPhysicalCubaturePoints().dimension(0);
     int numPoints = basisCache->getPhysicalCubaturePoints().dimension(1);
-    Intrepid::FieldContainer<Scalar> fxnValues(numCells,numPoints);
+    Camellia::FieldContainer<Scalar> fxnValues(numCells,numPoints);
     this->values(fxnValues,basisCache);
 
     for (int cellIndex=0; cellIndex<numCells; cellIndex++)
@@ -2167,7 +2167,7 @@ double TFunction<Scalar>::linfinitynorm(MeshPtr mesh, int cubatureDegreeEnrichme
       BasisCachePtr basisCache = BasisCache::basisCacheForCell(mesh, cellID, testVsTest, cubatureDegreeEnrichment);
       int numCells = basisCache->getPhysicalCubaturePoints().dimension(0);
       int numPoints = basisCache->getPhysicalCubaturePoints().dimension(1);
-      Intrepid::FieldContainer<Scalar> fxnValues(numCells,numPoints);
+      Camellia::FieldContainer<Scalar> fxnValues(numCells,numPoints);
       this->values(fxnValues,basisCache);
       
       for (int cellIndex=0; cellIndex<numCells; cellIndex++)
@@ -2185,7 +2185,7 @@ double TFunction<Scalar>::linfinitynorm(MeshPtr mesh, int cubatureDegreeEnrichme
           auto sideCache = basisCache->getSideBasisCache(sideOrdinal);
           int numCells = basisCache->getPhysicalCubaturePoints().dimension(0);
           int numSidePoints = sideCache->getPhysicalCubaturePoints().dimension(1);
-          Intrepid::FieldContainer<Scalar> fxnValues(numCells,numSidePoints);
+          Camellia::FieldContainer<Scalar> fxnValues(numCells,numSidePoints);
           this->values(fxnValues,sideCache);
           for (int cellIndex=0; cellIndex<numCells; cellIndex++)
           {
@@ -2214,7 +2214,7 @@ double TFunction<Scalar>::linfinitynorm(MeshPtr mesh, int cubatureDegreeEnrichme
       BasisCachePtr basisCache = BasisCache::basisCacheForCell(mesh, cellID, testVsTest, cubatureDegreeEnrichment);
       int numCells = basisCache->getPhysicalCubaturePoints().dimension(0);
       int numPoints = basisCache->getPhysicalCubaturePoints().dimension(1);
-      Intrepid::FieldContainer<Scalar> fxnValues(numCells,numPoints);
+      Camellia::FieldContainer<Scalar> fxnValues(numCells,numPoints);
       this->values(fxnValues,basisCache);
       
       for (int cellIndex=0; cellIndex<numCells; cellIndex++)
@@ -2233,7 +2233,7 @@ double TFunction<Scalar>::linfinitynorm(MeshPtr mesh, int cubatureDegreeEnrichme
           auto sideCache = basisCache->getSideBasisCache(sideOrdinal);
           int numCells = basisCache->getPhysicalCubaturePoints().dimension(0);
           int numSidePoints = sideCache->getPhysicalCubaturePoints().dimension(1);
-          Intrepid::FieldContainer<Scalar> fxnValues(numCells,numSidePoints);
+          Camellia::FieldContainer<Scalar> fxnValues(numCells,numSidePoints);
           this->values(fxnValues,sideCache);
           for (int cellIndex=0; cellIndex<numCells; cellIndex++)
           {
@@ -2258,7 +2258,7 @@ std::vector<TFunctionPtr<Scalar>> TFunction<Scalar>::memberFunctions()
   
 // divide values by this function (supported only when this is a scalar--otherwise values would change rank...)
 template <typename Scalar>
-void TFunction<Scalar>::scalarMultiplyFunctionValues(Intrepid::FieldContainer<Scalar> &functionValues, BasisCachePtr basisCache)
+void TFunction<Scalar>::scalarMultiplyFunctionValues(Camellia::FieldContainer<Scalar> &functionValues, BasisCachePtr basisCache)
 {
   // functionValues has dimensions (C,P,...)
   scalarModifyFunctionValues(functionValues,basisCache,MULTIPLY);
@@ -2266,7 +2266,7 @@ void TFunction<Scalar>::scalarMultiplyFunctionValues(Intrepid::FieldContainer<Sc
 
 // divide values by this function (supported only when this is a scalar)
 template <typename Scalar>
-void TFunction<Scalar>::scalarDivideFunctionValues(Intrepid::FieldContainer<Scalar> &functionValues, BasisCachePtr basisCache)
+void TFunction<Scalar>::scalarDivideFunctionValues(Camellia::FieldContainer<Scalar> &functionValues, BasisCachePtr basisCache)
 {
   // functionValues has dimensions (C,P,...)
   scalarModifyFunctionValues(functionValues,basisCache,DIVIDE);
@@ -2276,7 +2276,7 @@ void TFunction<Scalar>::scalarDivideFunctionValues(Intrepid::FieldContainer<Scal
 // should only happen with double valued functions
 // TODO: throw error for complex
 template <typename Scalar>
-void TFunction<Scalar>::scalarMultiplyBasisValues(Intrepid::FieldContainer<double> &basisValues, BasisCachePtr basisCache)
+void TFunction<Scalar>::scalarMultiplyBasisValues(Camellia::FieldContainer<double> &basisValues, BasisCachePtr basisCache)
 {
   // basisValues has dimensions (C,F,P,...)
   //  cout << "scalarMultiplyBasisValues: basisValues:\n" << basisValues;
@@ -2288,14 +2288,14 @@ void TFunction<Scalar>::scalarMultiplyBasisValues(Intrepid::FieldContainer<doubl
 // should only happen with double valued functions
 // TODO: throw error for complex
 template <typename Scalar>
-void TFunction<Scalar>::scalarDivideBasisValues(Intrepid::FieldContainer<double> &basisValues, BasisCachePtr basisCache)
+void TFunction<Scalar>::scalarDivideBasisValues(Camellia::FieldContainer<double> &basisValues, BasisCachePtr basisCache)
 {
   // basisValues has dimensions (C,F,P,...)
   scalarModifyBasisValues(basisValues,basisCache,DIVIDE);
 }
 
 template <typename Scalar>
-void TFunction<Scalar>::valuesDottedWithTensor(Intrepid::FieldContainer<Scalar> &values,
+void TFunction<Scalar>::valuesDottedWithTensor(Camellia::FieldContainer<Scalar> &values,
     TFunctionPtr<Scalar> tensorFunctionOfLikeRank,
     BasisCachePtr basisCache)
 {
@@ -2317,9 +2317,9 @@ void TFunction<Scalar>::valuesDottedWithTensor(Intrepid::FieldContainer<Scalar> 
     tensorValueIndex[d+2] = spaceDim;
   }
   
-  Intrepid::FieldContainer<Scalar> myTensorValues(tensorValueIndex);
+  Camellia::FieldContainer<Scalar> myTensorValues(tensorValueIndex);
   this->values(myTensorValues,basisCache);
-  Intrepid::FieldContainer<Scalar> otherTensorValues(tensorValueIndex);
+  Camellia::FieldContainer<Scalar> otherTensorValues(tensorValueIndex);
   tensorFunctionOfLikeRank->values(otherTensorValues,basisCache);
 
   //  cout << "myTensorValues:\n" << myTensorValues;
@@ -2361,7 +2361,7 @@ void TFunction<Scalar>::valuesDottedWithTensor(Intrepid::FieldContainer<Scalar> 
 }
 
 template <typename Scalar>
-void TFunction<Scalar>::scalarModifyFunctionValues(Intrepid::FieldContainer<Scalar> &values, BasisCachePtr basisCache,
+void TFunction<Scalar>::scalarModifyFunctionValues(Camellia::FieldContainer<Scalar> &values, BasisCachePtr basisCache,
     FunctionModificationType modType)
 {
   TEUCHOS_TEST_FOR_EXCEPTION( rank() != 0, std::invalid_argument, "scalarModifyFunctionValues only supported for scalar functions" );
@@ -2369,7 +2369,7 @@ void TFunction<Scalar>::scalarModifyFunctionValues(Intrepid::FieldContainer<Scal
   int numPoints = values.dimension(1);
   int spaceDim = basisCache->getSpaceDim();
 
-  Intrepid::FieldContainer<Scalar> scalarValues(numCells,numPoints);
+  Camellia::FieldContainer<Scalar> scalarValues(numCells,numPoints);
   this->values(scalarValues,basisCache);
 
   std::vector<int> valueIndex(values.rank());
@@ -2407,7 +2407,7 @@ void TFunction<Scalar>::scalarModifyFunctionValues(Intrepid::FieldContainer<Scal
 // Should only work for doubles
 // TODO: Throw exception for complex
 template <typename Scalar>
-void TFunction<Scalar>::scalarModifyBasisValues(Intrepid::FieldContainer<double> &values, BasisCachePtr basisCache,
+void TFunction<Scalar>::scalarModifyBasisValues(Camellia::FieldContainer<double> &values, BasisCachePtr basisCache,
     FunctionModificationType modType)
 {
   TEUCHOS_TEST_FOR_EXCEPTION( rank() != 0, std::invalid_argument, "scalarModifyBasisValues only supported for scalar functions" );
@@ -2417,7 +2417,7 @@ void TFunction<Scalar>::scalarModifyBasisValues(Intrepid::FieldContainer<double>
 
   int spaceDim = basisCache->getSpaceDim();
 
-  Intrepid::FieldContainer<double> scalarValues(numCells,numPoints);
+  Camellia::FieldContainer<double> scalarValues(numCells,numPoints);
   this->values(scalarValues,basisCache);
 
   //  cout << "scalarModifyBasisValues: scalarValues:\n" << scalarValues;
@@ -2479,14 +2479,14 @@ void TFunction<Scalar>::writeBoundaryValuesToMATLABFile(Teuchos::RCP<Mesh> mesh,
     CellTopoPtr cellTopo = elemTypePtr->cellTopoPtr;
     int numSides = cellTopo->getSideCount();
 
-    Intrepid::FieldContainer<double> physicalCellNodes = mesh->physicalCellNodesGlobal(elemTypePtr);
+    Camellia::FieldContainer<double> physicalCellNodes = mesh->physicalCellNodesGlobal(elemTypePtr);
     int numCells = physicalCellNodes.dimension(0);
     // determine cellIDs
     vector<GlobalIndexType> cellIDs = mesh->globalDofAssignment()->cellIDsOfElementType(rank, elemTypePtr);
     basisCache->setPhysicalCellNodes(physicalCellNodes, cellIDs, true); // true: create side caches
 
     int num1DPts = 15;
-    Intrepid::FieldContainer<double> refPoints(num1DPts,1);
+    Camellia::FieldContainer<double> refPoints(num1DPts,1);
     for (int i=0; i < num1DPts; i++)
     {
       double x = -1.0 + 2.0*(double(i)/double(num1DPts-1));
@@ -2500,13 +2500,13 @@ void TFunction<Scalar>::writeBoundaryValuesToMATLABFile(Teuchos::RCP<Mesh> mesh,
       int numCubPoints = sideBasisCache->getPhysicalCubaturePoints().dimension(1);
 
 
-      Intrepid::FieldContainer<double> computedValues(numCells,numCubPoints); // first arg = 1 cell only
+      Camellia::FieldContainer<double> computedValues(numCells,numCubPoints); // first arg = 1 cell only
       this->values(computedValues,sideBasisCache);
 
       // NOW loop over all cells to write solution to file
       for (int cellIndex=0; cellIndex < numCells; cellIndex++)
       {
-        Intrepid::FieldContainer<double> cellParities = mesh->cellSideParitiesForCell( cellIDs[cellIndex] );
+        Camellia::FieldContainer<double> cellParities = mesh->cellSideParitiesForCell( cellIDs[cellIndex] );
         for (int pointIndex = 0; pointIndex < numCubPoints; pointIndex++)
         {
           for (int dimInd=0; dimInd<spaceDim; dimInd++)
@@ -2539,7 +2539,7 @@ void TFunction<Scalar>::writeValuesToMATLABFile(Teuchos::RCP<Mesh> mesh, const s
   int num1DPts = 15;
 
   int numPoints = num1DPts * num1DPts;
-  Intrepid::FieldContainer<double> refPoints(numPoints,spaceDim);
+  Camellia::FieldContainer<double> refPoints(numPoints,spaceDim);
   for (int xPointIndex = 0; xPointIndex < num1DPts; xPointIndex++)
   {
     for (int yPointIndex = 0; yPointIndex < num1DPts; yPointIndex++)
@@ -2574,15 +2574,15 @@ void TFunction<Scalar>::writeValuesToMATLABFile(Teuchos::RCP<Mesh> mesh, const s
     basisCache = Teuchos::rcp( new BasisCache(elemTypePtr, mesh) );
     basisCache->setRefCellPoints(refPoints);
 
-    Intrepid::FieldContainer<double> physicalCellNodes = mesh->physicalCellNodesGlobal(elemTypePtr);
+    Camellia::FieldContainer<double> physicalCellNodes = mesh->physicalCellNodesGlobal(elemTypePtr);
     int numCells = physicalCellNodes.dimension(0);
     // determine cellIDs
     vector<GlobalIndexType> cellIDs = mesh->globalDofAssignment()->cellIDsOfElementType(rank, elemTypePtr);
     basisCache->setPhysicalCellNodes(physicalCellNodes, cellIDs, false); // false: don't create side cache
 
-    Intrepid::FieldContainer<double> physCubPoints = basisCache->getPhysicalCubaturePoints();
+    Camellia::FieldContainer<double> physCubPoints = basisCache->getPhysicalCubaturePoints();
 
-    Intrepid::FieldContainer<double> computedValues(numCells,numPoints);
+    Camellia::FieldContainer<double> computedValues(numCells,numPoints);
     this->values(computedValues, basisCache);
 
     // NOW loop over all cells to write solution to file
@@ -2809,13 +2809,13 @@ public:
     _f = f;
     _arg_g = arg_g;
   }
-  void values(Intrepid::FieldContainer<double> &values, BasisCachePtr basisCache)
+  void values(Camellia::FieldContainer<double> &values, BasisCachePtr basisCache)
   {
     this->CHECK_VALUES_RANK(values);
     int numCells = basisCache->getPhysicalCubaturePoints().dimension(0);
     int numPoints = basisCache->getPhysicalCubaturePoints().dimension(1);
     int spaceDim = basisCache->getSpaceDim();
-    Intrepid::FieldContainer<double> fArgPoints(numCells,numPoints,spaceDim);
+    Camellia::FieldContainer<double> fArgPoints(numCells,numPoints,spaceDim);
     if (spaceDim==1)   // special case: arg_g is then reasonably scalar-valued
     {
       fArgPoints.resize(numCells,numPoints);

@@ -26,7 +26,7 @@ class CellIDFunction : public Function
 public:
   CellIDFunction() : Function(0) {}
 
-  virtual void values(Intrepid::FieldContainer<double> &values, BasisCachePtr basisCache)
+  virtual void values(Camellia::FieldContainer<double> &values, BasisCachePtr basisCache)
   {
     vector<GlobalIndexType> cellIDs = basisCache->cellIDs();
 
@@ -98,8 +98,8 @@ TEUCHOS_UNIT_TEST( MeshTransferFunction, CellMap)
   double yCenterTopRowOfBottomMesh = y_interface - elemHeight / 2.0;
   double yCenterBottomRowOfTopMesh = y_interface + elemHeight / 2.0;
   double xCenter = elemWidth / 2.0;
-  Intrepid::FieldContainer<double> midPointsBottomMesh(horizontalCells, spaceDim);
-  Intrepid::FieldContainer<double> midPointsTopMesh(horizontalCells, spaceDim);
+  Camellia::FieldContainer<double> midPointsBottomMesh(horizontalCells, spaceDim);
+  Camellia::FieldContainer<double> midPointsTopMesh(horizontalCells, spaceDim);
   for (int i=0; i<horizontalCells; i++)
   {
     midPointsBottomMesh(i,0) = xCenter;
@@ -282,8 +282,8 @@ TEUCHOS_UNIT_TEST( MeshTransferFunction, CellMapUnderRefinement)
   double yCenterTopRowOfBottomMesh = y_interface - elemHeight / 2.0;
   double yCenterBottomRowOfTopMesh = y_interface + elemHeight / 2.0;
   double xCenter = elemWidth / 2.0;
-  Intrepid::FieldContainer<double> midPointsBottomMesh(horizontalCells, spaceDim);
-  Intrepid::FieldContainer<double> midPointsTopMesh(horizontalCells, spaceDim);
+  Camellia::FieldContainer<double> midPointsBottomMesh(horizontalCells, spaceDim);
+  Camellia::FieldContainer<double> midPointsTopMesh(horizontalCells, spaceDim);
   for (int i=0; i<horizontalCells; i++)
   {
     midPointsBottomMesh(i,0) = xCenter;
@@ -489,8 +489,8 @@ TEUCHOS_UNIT_TEST( MeshTransferFunction, FunctionValuesPiecewiseConstant)
   double yCenterTopRowOfBottomMesh = y_interface - elemHeight / 2.0;
   double yCenterBottomRowOfTopMesh = y_interface + elemHeight / 2.0;
   double xCenter = elemWidth / 2.0;
-  Intrepid::FieldContainer<double> midPointsBottomMesh(horizontalCells, spaceDim);
-  Intrepid::FieldContainer<double> midPointsTopMesh(horizontalCells, spaceDim);
+  Camellia::FieldContainer<double> midPointsBottomMesh(horizontalCells, spaceDim);
+  Camellia::FieldContainer<double> midPointsTopMesh(horizontalCells, spaceDim);
   for (int i=0; i<horizontalCells; i++)
   {
     midPointsBottomMesh(i,0) = xCenter;
@@ -534,7 +534,7 @@ TEUCHOS_UNIT_TEST( MeshTransferFunction, FunctionValuesPiecewiseConstant)
 
         int numPoints = myCellSideBasisCache->getRefCellPoints().dimension(0);
         int oneCell = 1;
-        Intrepid::FieldContainer<double> actualValues(oneCell,numPoints);
+        Camellia::FieldContainer<double> actualValues(oneCell,numPoints);
 
         transferFunction.values(actualValues, myCellSideBasisCache);
 
@@ -637,8 +637,8 @@ TEUCHOS_UNIT_TEST( MeshTransferFunction, FunctionValuesWithoutHangingNodes)
   double yCenterTopRowOfBottomMesh = y_interface - elemHeight / 2.0;
   double yCenterBottomRowOfTopMesh = y_interface + elemHeight / 2.0;
   double xCenter = elemWidth / 2.0;
-  Intrepid::FieldContainer<double> midPointsBottomMesh(horizontalCells, spaceDim);
-  Intrepid::FieldContainer<double> midPointsTopMesh(horizontalCells, spaceDim);
+  Camellia::FieldContainer<double> midPointsBottomMesh(horizontalCells, spaceDim);
+  Camellia::FieldContainer<double> midPointsTopMesh(horizontalCells, spaceDim);
   for (int i=0; i<horizontalCells; i++)
   {
     midPointsBottomMesh(i,0) = xCenter;
@@ -675,8 +675,8 @@ TEUCHOS_UNIT_TEST( MeshTransferFunction, FunctionValuesWithoutHangingNodes)
 
         int numPoints = myCellSideBasisCache->getRefCellPoints().dimension(0);
         int oneCell = 1;
-        Intrepid::FieldContainer<double> expectedValues(oneCell,numPoints);
-        Intrepid::FieldContainer<double> actualValues(oneCell,numPoints);
+        Camellia::FieldContainer<double> expectedValues(oneCell,numPoints);
+        Camellia::FieldContainer<double> actualValues(oneCell,numPoints);
 
         myFunction->values(expectedValues, myCellSideBasisCache);
         transferFunction.values(actualValues, myCellSideBasisCache);
@@ -781,8 +781,8 @@ TEUCHOS_UNIT_TEST( MeshTransferFunction, FunctionValuesWithHangingNodes)
   double yCenterTopRowOfBottomMesh = y_interface - elemHeight / 2.0;
   double yCenterBottomRowOfTopMesh = y_interface + elemHeight / 2.0;
   double xCenter = elemWidth / 2.0;
-  Intrepid::FieldContainer<double> midPointsBottomMesh(horizontalCells, spaceDim);
-  Intrepid::FieldContainer<double> midPointsTopMesh(horizontalCells, spaceDim);
+  Camellia::FieldContainer<double> midPointsBottomMesh(horizontalCells, spaceDim);
+  Camellia::FieldContainer<double> midPointsTopMesh(horizontalCells, spaceDim);
   for (int i=0; i<horizontalCells; i++)
   {
     midPointsBottomMesh(i,0) = xCenter;
@@ -824,8 +824,8 @@ TEUCHOS_UNIT_TEST( MeshTransferFunction, FunctionValuesWithHangingNodes)
 
         int numPoints = myCellSideBasisCache->getRefCellPoints().dimension(0);
         int oneCell = 1;
-        Intrepid::FieldContainer<double> expectedValues(oneCell,numPoints);
-        Intrepid::FieldContainer<double> actualValues(oneCell,numPoints);
+        Camellia::FieldContainer<double> expectedValues(oneCell,numPoints);
+        Camellia::FieldContainer<double> actualValues(oneCell,numPoints);
 
         myFunction->values(expectedValues, myCellSideBasisCache);
         transferFunction.values(actualValues, myCellSideBasisCache);

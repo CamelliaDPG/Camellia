@@ -382,7 +382,7 @@ int main(int argc, char *argv[])
       BasisCachePtr basisCache = BasisCache::basisCacheForCell(mesh, cellID);
       int numCells = 1;
       int numPoints = basisCache->getRefCellPoints().dimension(1);
-      Intrepid::FieldContainer<double> values(numCells,numPoints);
+      Camellia::FieldContainer<double> values(numCells,numPoints);
       h->values(values, basisCache);
       my_hMax = max(values[0],my_hMax);
       my_hMin = min(values[0],my_hMin);

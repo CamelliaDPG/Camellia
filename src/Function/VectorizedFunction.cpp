@@ -100,7 +100,7 @@ std::vector<TFunctionPtr<Scalar>> VectorizedFunction<Scalar>::memberFunctions()
 }
 
 template <typename Scalar>
-void VectorizedFunction<Scalar>::values(Intrepid::FieldContainer<Scalar> &values, BasisCachePtr basisCache)
+void VectorizedFunction<Scalar>::values(Camellia::FieldContainer<Scalar> &values, BasisCachePtr basisCache)
 {
   this->CHECK_VALUES_RANK(values);
   // this is not going to be particularly efficient, because values from the components need to be interleaved...
@@ -122,7 +122,7 @@ void VectorizedFunction<Scalar>::values(Intrepid::FieldContainer<Scalar> &values
     }
   }
   dims.pop_back(); // remove the last, dimensions argument
-  Intrepid::FieldContainer<Scalar> compValues(dims);
+  Camellia::FieldContainer<Scalar> compValues(dims);
   int valuesPerComponent = compValues.size();
 
   for (int comp=0; comp < numComponents; comp++)

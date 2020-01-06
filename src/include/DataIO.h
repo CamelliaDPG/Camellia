@@ -57,7 +57,7 @@ public:
     fout.close();
   }
 
-  static void readMatrixFromSparseDataFile(Intrepid::FieldContainer<double> &matrix, string filename)
+  static void readMatrixFromSparseDataFile(Camellia::FieldContainer<double> &matrix, string filename)
   {
     ifstream fin(filename.c_str());
 
@@ -105,7 +105,7 @@ public:
     fin.close();
   }
 
-  static void writeMatrixToSparseDataFile(const Intrepid::FieldContainer<double> &matrix, string filename)
+  static void writeMatrixToSparseDataFile(const Camellia::FieldContainer<double> &matrix, string filename)
   {
     // matlab-friendly format (use spconvert)
     int rows = matrix.dimension(0);

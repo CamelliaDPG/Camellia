@@ -28,7 +28,7 @@ protected:
   bool _conforming;
   bool _onlyDivFreeFunctions;
 
-  Intrepid::FieldContainer<double> _legendreL2normsSquared, _lobattoL2normsSquared;
+  Camellia::FieldContainer<double> _legendreL2normsSquared, _lobattoL2normsSquared;
   void initializeL2normValues();
   int dofOrdinalMap(int xDofOrdinal, int yDofOrdinal, bool divFree) const;
 public:

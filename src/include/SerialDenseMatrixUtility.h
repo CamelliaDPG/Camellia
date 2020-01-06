@@ -14,7 +14,7 @@
 #ifndef Camellia_debug_SerialDenseMatrixUtility_h
 #define Camellia_debug_SerialDenseMatrixUtility_h
 
-#include "Intrepid_FieldContainer.hpp"
+#include "Camellia_FieldContainer.hpp"
 
 #include "Epetra_SerialDenseMatrix.h"
 #include "Epetra_SerialDenseVector.h"
@@ -26,7 +26,7 @@ namespace Camellia
 {
 class SerialDenseMatrixUtility
 {
-  static void transposeSquareMatrix(Intrepid::FieldContainer<double> &A)
+  static void transposeSquareMatrix(Camellia::FieldContainer<double> &A)
   {
     int rows = A.dimension(0), cols = A.dimension(1);
     TEUCHOS_TEST_FOR_EXCEPTION(rows != cols, std::invalid_argument, "matrix not square");
@@ -42,7 +42,7 @@ class SerialDenseMatrixUtility
   }
 
 public:
-  static int solveSystem(Intrepid::FieldContainer<double> &x, Intrepid::FieldContainer<double> &A, Intrepid::FieldContainer<double> &b, bool useATranspose = false)
+  static int solveSystem(Camellia::FieldContainer<double> &x, Camellia::FieldContainer<double> &A, Camellia::FieldContainer<double> &b, bool useATranspose = false)
   {
     // solves Ax = b, where
     // A = (N,N)
@@ -115,7 +115,7 @@ public:
     return 0;
   }
 
-  static void solveSystemMultipleRHS(Intrepid::FieldContainer<double> &x, Intrepid::FieldContainer<double> &A, Intrepid::FieldContainer<double> &b, bool useATranspose = false)
+  static void solveSystemMultipleRHS(Camellia::FieldContainer<double> &x, Camellia::FieldContainer<double> &A, Camellia::FieldContainer<double> &b, bool useATranspose = false)
   {
     // solves Ax = b, where
     // A = (N,N)
@@ -206,7 +206,7 @@ public:
     }
   }
 
-  static void jacobiScaleMatrix(Intrepid::FieldContainer<double> &A)
+  static void jacobiScaleMatrix(Camellia::FieldContainer<double> &A)
   {
     int N = A.dimension(0);
     if ((N != A.dimension(1)) || (A.rank() != 2))
@@ -226,7 +226,7 @@ public:
     }
   }
 
-  static double estimate2NormConditionNumber(Intrepid::FieldContainer<double> &A, bool ignoreZeroEigenvalues = true)
+  static double estimate2NormConditionNumber(Camellia::FieldContainer<double> &A, bool ignoreZeroEigenvalues = true)
   {
     Epetra_SerialDenseSVD svd;
 
@@ -276,7 +276,7 @@ public:
   }
 
 
-  static double estimate1NormConditionNumber(Intrepid::FieldContainer<double> &A, bool useATranspose = false)
+  static double estimate1NormConditionNumber(Camellia::FieldContainer<double> &A, bool useATranspose = false)
   {
     Epetra_SerialDenseSolver solver;
 

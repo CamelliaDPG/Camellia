@@ -440,7 +440,7 @@ namespace
 
   void testOperatorIsSPD(Teuchos::RCP<GMGOperator> op, Teuchos::FancyOStream &out, bool &success)
   {
-    Intrepid::FieldContainer<double> denseMatrix;
+    Camellia::FieldContainer<double> denseMatrix;
     Teuchos::RCP<Epetra_RowMatrix> opMatrix = op->getMatrixRepresentation();
     SerialDenseWrapper::extractFCFromEpetra_RowMatrix(*opMatrix, denseMatrix);
 
@@ -1185,7 +1185,7 @@ void testOperatorIsSPD(int spaceDim, GridType gridType, GMGOperator::SmootherApp
 //    fineSolution->populateStiffnessAndLoad();
 //    op->setFineStiffnessMatrix(fineSolution->getStiffnessMatrix().get());
 //
-//    Intrepid::FieldContainer<double> denseMatrix;
+//    Camellia::FieldContainer<double> denseMatrix;
 //    Teuchos::RCP<Epetra_RowMatrix> opMatrix = op->getMatrixRepresentation();
 //    SerialDenseWrapper::extractFCFromEpetra_RowMatrix(*opMatrix, denseMatrix);
 //

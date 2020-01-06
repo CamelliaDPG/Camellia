@@ -9,8 +9,11 @@
 #ifndef Camellia_Camellia_h
 #define Camellia_Camellia_h
 
+#include "BasisFactory.h"
 #include "BC.h"
 #include "BF.h"
+#include "CamelliaCellTools.h"
+#include "Camellia_FieldContainer.hpp"
 #include "CondensedDofInterpreter.h"
 #include "ConvectionDiffusionFormulation.h"
 #include "ExpFunction.h"
@@ -35,5 +38,26 @@
 #include "TypeDefs.h"
 #include "Var.h"
 #include "VarFactory.h"
+
+namespace Camellia
+{
+  inline void finalize(bool printAllocationReports=false)
+  {
+    CamelliaCellTools::clearStaticMaps();
+    RefinementPattern::clearStaticMaps();
+    
+    BasisFactory::deleteBasisFactory();
+    if (printAllocationReports)
+    {
+      std::string fcAllocationReport         = allocationReport(fcAllocationRecord);
+      std::string deviceViewAllocationReport = allocationReport(deviceViewAllocationRecord);
+      std::cout << "\n***********************  FieldContainer allocation report ***********************\n";
+      std::cout << fcAllocationReport << std::endl;
+      std::cout << "**************************  Device allocation report ****************************\n";
+      std::cout << "** (Note: these are generally not real allocations for non-CUDA memory spaces) **\n";
+      std::cout << deviceViewAllocationReport << std::endl;
+    }
+  }
+}
 
 #endif

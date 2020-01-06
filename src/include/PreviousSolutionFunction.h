@@ -36,7 +36,7 @@ public:
   PreviousSolutionFunction(TSolutionPtr<Scalar> soln, VarPtr var, bool multiplyFluxesByCellParity = true, int solutionOrdinal=0);
   bool boundaryValueOnly();
   void setOverrideMeshCheck(bool value, bool dontWarn=false);
-  void values(Intrepid::FieldContainer<Scalar> &values, BasisCachePtr basisCache);
+  void values(Camellia::FieldContainer<Scalar> &values, BasisCachePtr basisCache);
   static map<int, TFunctionPtr<Scalar> > functionMap( vector< VarPtr > varPtrs, TSolutionPtr<Scalar> soln, int solutionOrdinal);
   string displayString();
   

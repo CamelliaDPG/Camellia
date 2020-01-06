@@ -10,7 +10,7 @@
 // Intrepid includes
 #include "Intrepid_CellTools.hpp"
 #include "Intrepid_DefaultCubatureFactory.hpp"
-#include "Intrepid_FieldContainer.hpp"
+#include "Camellia_FieldContainer.hpp"
 #include "Intrepid_FunctionSpaceTools.hpp"
 
 #include "Teuchos_LAPACK.hpp"
@@ -44,14 +44,14 @@ bool BilinearFormUtility<Scalar>::warnAboutZeroRowsAndColumns()
 }
 
 template <typename Scalar>
-bool BilinearFormUtility<Scalar>::checkForZeroRowsAndColumns(string name, Intrepid::FieldContainer<Scalar> &array, bool checkRows, bool checkCols)
+bool BilinearFormUtility<Scalar>::checkForZeroRowsAndColumns(string name, Camellia::FieldContainer<Scalar> &array, bool checkRows, bool checkCols)
 {
   // for now, only support rank 3 FCs
   double tol = 1e-15;
   static int warningsIssued = 0; // max of 20
   if ( array.rank() != 3)
   {
-    TEUCHOS_TEST_FOR_EXCEPTION( array.rank() != 3, std::invalid_argument, "checkForZeroRowsAndColumns only supports rank-3 Intrepid::FieldContainers.");
+    TEUCHOS_TEST_FOR_EXCEPTION( array.rank() != 3, std::invalid_argument, "checkForZeroRowsAndColumns only supports rank-3 Camellia::FieldContainers.");
   }
   int numCells = array.dimension(0);
   int numRows = array.dimension(1);
@@ -120,8 +120,8 @@ bool BilinearFormUtility<Scalar>::checkForZeroRowsAndColumns(string name, Intrep
 }
 
 template <typename Scalar>
-void BilinearFormUtility<Scalar>::transposeFCMatrices(Intrepid::FieldContainer<Scalar> &fcTranspose,
-    const Intrepid::FieldContainer<Scalar> &fc)
+void BilinearFormUtility<Scalar>::transposeFCMatrices(Camellia::FieldContainer<Scalar> &fcTranspose,
+    const Camellia::FieldContainer<Scalar> &fc)
 {
   // check dimensions
   TEUCHOS_TEST_FOR_EXCEPTION( ( fc.dimension(0) != fcTranspose.dimension(0) ),
@@ -150,9 +150,9 @@ void BilinearFormUtility<Scalar>::transposeFCMatrices(Intrepid::FieldContainer<S
 }
 
 template <typename Scalar>
-void BilinearFormUtility<Scalar>::computeStiffnessMatrix(Intrepid::FieldContainer<Scalar> &stiffness,
-    Intrepid::FieldContainer<Scalar> &innerProductMatrix,
-    Intrepid::FieldContainer<Scalar> &optimalTestWeights)
+void BilinearFormUtility<Scalar>::computeStiffnessMatrix(Camellia::FieldContainer<Scalar> &stiffness,
+    Camellia::FieldContainer<Scalar> &innerProductMatrix,
+    Camellia::FieldContainer<Scalar> &optimalTestWeights)
 {
   // stiffness has dimensions (numCells, numTrialDofs, numTrialDofs)
   // innerProductMatrix has dim. (numCells, numTestDofs, numTestDofs)
@@ -238,23 +238,23 @@ void BilinearFormUtility<Scalar>::computeStiffnessMatrix(Intrepid::FieldContaine
 }
 
 template <typename Scalar>
-void BilinearFormUtility<Scalar>::computeStiffnessMatrixForCell(Intrepid::FieldContainer<Scalar> &stiffness, Teuchos::RCP<Mesh> mesh, int cellID)
+void BilinearFormUtility<Scalar>::computeStiffnessMatrixForCell(Camellia::FieldContainer<Scalar> &stiffness, Teuchos::RCP<Mesh> mesh, int cellID)
 {
   DofOrderingPtr trialOrder = mesh->getElementType(cellID)->trialOrderPtr;
   DofOrderingPtr testOrder  = mesh->getElementType(cellID)->testOrderPtr;
   CellTopoPtr     cellTopo  = mesh->getElementType(cellID)->cellTopoPtr;
-  Intrepid::FieldContainer<double> physicalCellNodes = mesh->physicalCellNodesForCell(cellID);
-  Intrepid::FieldContainer<double> cellSideParities  = mesh->cellSideParitiesForCell(cellID);
+  Camellia::FieldContainer<double> physicalCellNodes = mesh->physicalCellNodesForCell(cellID);
+  Camellia::FieldContainer<double> cellSideParities  = mesh->cellSideParitiesForCell(cellID);
   int numCells = 1;
   stiffness.resize(numCells,testOrder->totalDofs(),trialOrder->totalDofs());
   computeStiffnessMatrix(stiffness,mesh->bilinearForm(),trialOrder,testOrder,cellTopo,physicalCellNodes,cellSideParities);
 }
 
 template <typename Scalar>
-void BilinearFormUtility<Scalar>::computeStiffnessMatrix(Intrepid::FieldContainer<Scalar> &stiffness, TBFPtr<Scalar> bilinearForm,
+void BilinearFormUtility<Scalar>::computeStiffnessMatrix(Camellia::FieldContainer<Scalar> &stiffness, TBFPtr<Scalar> bilinearForm,
     Teuchos::RCP<DofOrdering> trialOrdering, Teuchos::RCP<DofOrdering> testOrdering,
-    CellTopoPtr cellTopo, Intrepid::FieldContainer<double> &physicalCellNodes,
-    Intrepid::FieldContainer<double> &cellSideParities)
+    CellTopoPtr cellTopo, Camellia::FieldContainer<double> &physicalCellNodes,
+    Camellia::FieldContainer<double> &cellSideParities)
 {
   // this method is deprecated--here basically until we can revise tests, etc. to use the BasisCache version
 
@@ -271,12 +271,12 @@ void BilinearFormUtility<Scalar>::computeStiffnessMatrix(Intrepid::FieldContaine
 }
 
 template <typename Scalar>
-void BilinearFormUtility<Scalar>::computeRHS(Intrepid::FieldContainer<Scalar> &rhsVector,
+void BilinearFormUtility<Scalar>::computeRHS(Camellia::FieldContainer<Scalar> &rhsVector,
     TBFPtr<Scalar> bilinearForm, RHS &rhs,
-    Intrepid::FieldContainer<Scalar> &optimalTestWeights,
+    Camellia::FieldContainer<Scalar> &optimalTestWeights,
     Teuchos::RCP<DofOrdering> testOrdering,
     shards::CellTopology &cellTopo,
-    Intrepid::FieldContainer<double> &physicalCellNodes)
+    Camellia::FieldContainer<double> &physicalCellNodes)
 {
   // this method is deprecated--here basically until we can revise tests, etc. to use the BasisCache version
   // Get numerical integration points and weights
@@ -295,7 +295,7 @@ void BilinearFormUtility<Scalar>::computeRHS(Intrepid::FieldContainer<Scalar> &r
 }
 
 template <typename Scalar>
-void BilinearFormUtility<Scalar>::weightCellBasisValues(Intrepid::FieldContainer<double> &basisValues, const Intrepid::FieldContainer<double> &weights, int offset)
+void BilinearFormUtility<Scalar>::weightCellBasisValues(Camellia::FieldContainer<double> &basisValues, const Camellia::FieldContainer<double> &weights, int offset)
 {
   // weights are (numCells, offset+numFields)
   // basisValues are (numCells, numFields, ...)

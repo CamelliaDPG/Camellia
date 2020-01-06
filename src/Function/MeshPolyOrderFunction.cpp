@@ -8,7 +8,7 @@
 
 using namespace Camellia;
 
-void MeshPolyOrderFunction::values(Intrepid::FieldContainer<double> &values, BasisCachePtr basisCache)
+void MeshPolyOrderFunction::values(Camellia::FieldContainer<double> &values, BasisCachePtr basisCache)
 {
   vector<GlobalIndexType> cellIDs = basisCache->cellIDs();
   IndexType cellIndex = 0;

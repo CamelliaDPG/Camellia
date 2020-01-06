@@ -33,14 +33,14 @@ MeshPtr gatherMeshToRankZeroIfDistributed(MeshPtr mesh)
   return mesh;
 }
 
-Intrepid::FieldContainer<double> GnuPlotUtil::cellCentroids(MeshTopology* meshTopo)
+Camellia::FieldContainer<double> GnuPlotUtil::cellCentroids(MeshTopology* meshTopo)
 {
   // this only works on quads right now
 
   int spaceDim = meshTopo->getDimension(); // not that this will really work in 3D...
   int numActiveElements = meshTopo->activeCellCount();
 
-  Intrepid::FieldContainer<double> cellCentroids(numActiveElements,spaceDim); // used for labelling cells
+  Camellia::FieldContainer<double> cellCentroids(numActiveElements,spaceDim); // used for labelling cells
 
   vector<IndexType> cellIDs = meshTopo->getActiveCellIndicesGlobal();
 
@@ -56,7 +56,7 @@ Intrepid::FieldContainer<double> GnuPlotUtil::cellCentroids(MeshTopology* meshTo
   return cellCentroids;
 }
 
-Intrepid::FieldContainer<double> GnuPlotUtil::cellCentroids(MeshPtr mesh)
+Camellia::FieldContainer<double> GnuPlotUtil::cellCentroids(MeshPtr mesh)
 {
   // this only works on quads right now
 
@@ -66,7 +66,7 @@ Intrepid::FieldContainer<double> GnuPlotUtil::cellCentroids(MeshPtr mesh)
   vector<GlobalIndexType> cellIDs(cellIDset.begin(),cellIDset.end());
 
   auto numActiveElements = cellIDs.size();
-  Intrepid::FieldContainer<double> cellCentroids(numActiveElements,spaceDim); // used for labelling cells
+  Camellia::FieldContainer<double> cellCentroids(numActiveElements,spaceDim); // used for labelling cells
 
   for (int cellOrdinal=0; cellOrdinal<numActiveElements; cellOrdinal++)
   {
@@ -105,7 +105,7 @@ void GnuPlotUtil::writeComputationalMeshSkeleton(const string &filePath, MeshPtr
 
     double minX = 1e10, minY = 1e10, maxX = -1e10, maxY = -1e10;
 
-    Intrepid::FieldContainer<double> cellCentroids;
+    Camellia::FieldContainer<double> cellCentroids;
     set<GlobalIndexType> cellIDset = mesh->getActiveCellIDsGlobal();
     vector<GlobalIndexType> cellIDs(cellIDset.begin(),cellIDset.end());
 
@@ -119,7 +119,7 @@ void GnuPlotUtil::writeComputationalMeshSkeleton(const string &filePath, MeshPtr
       int numPointsPerEdge = max(10,elemType->testOrderPtr->maxBasisDegree() * 2); // 2 points for linear, 4 for quadratic, etc.
       // to start, compute edgePoints on the reference cell
       int numPointsTotal = numEdges*(numPointsPerEdge-1)+1; // -1 because edges share vertices, +1 because we repeat first vertex...
-      Intrepid::FieldContainer<double> edgePoints(numPointsTotal,spaceDim);
+      Camellia::FieldContainer<double> edgePoints(numPointsTotal,spaceDim);
 
       int ptIndex = 0;
       for (int edgeIndex=0; edgeIndex < edgeLines.size(); edgeIndex++)
@@ -146,7 +146,7 @@ void GnuPlotUtil::writeComputationalMeshSkeleton(const string &filePath, MeshPtr
       //      cout << "--- cellID " << cell->cellID() << " ---\n";
       //      cout << "edgePoints:\n" << edgePoints;
 
-      Intrepid::FieldContainer<double> transformedPoints(1,numPointsTotal,spaceDim);
+      Camellia::FieldContainer<double> transformedPoints(1,numPointsTotal,spaceDim);
       // compute the transformed points:
       transformationFunction->values(transformedPoints,basisCache);
 
@@ -261,7 +261,7 @@ void GnuPlotUtil::writeExactMeshSkeleton(const string &filePath, MeshTopology* m
     fout << "# x                  y\n";
 
     int numActiveElements = meshTopo->activeCellCount();
-    Intrepid::FieldContainer<double> cellCentroids;
+    Camellia::FieldContainer<double> cellCentroids;
     if (labelCells)
     {
       cellCentroids = GnuPlotUtil::cellCentroids(meshTopo);
@@ -359,7 +359,7 @@ void GnuPlotUtil::writeExactMeshSkeleton(const string &filePath, MeshPtr mesh, i
     fout << "# x                  y\n";
 
     int numActiveElements = mesh->numActiveElements();
-    Intrepid::FieldContainer<double> cellCentroids;
+    Camellia::FieldContainer<double> cellCentroids;
     if (labelCells)
     {
       cellCentroids = GnuPlotUtil::cellCentroids(mesh);
@@ -441,9 +441,9 @@ void GnuPlotUtil::writeExactMeshSkeleton(const string &filePath, MeshPtr mesh, i
 }
 
 // badly named, maybe: we support arbitrary space dimension...
-void GnuPlotUtil::writeXYPoints(const string &filePath, const Intrepid::FieldContainer<double> &dataPoints)
+void GnuPlotUtil::writeXYPoints(const string &filePath, const Camellia::FieldContainer<double> &dataPoints)
 {
-  Intrepid::FieldContainer<double> dataPointsCopy = dataPoints;
+  Camellia::FieldContainer<double> dataPointsCopy = dataPoints;
 
   if (dataPoints.rank()==3)
   {

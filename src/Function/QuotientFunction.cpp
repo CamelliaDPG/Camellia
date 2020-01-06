@@ -111,7 +111,7 @@ std::vector<TFunctionPtr<Scalar>> QuotientFunction<Scalar>::memberFunctions()
 }
 
 template <typename Scalar>
-void QuotientFunction<Scalar>::values(Intrepid::FieldContainer<Scalar> &values, BasisCachePtr basisCache)
+void QuotientFunction<Scalar>::values(Camellia::FieldContainer<Scalar> &values, BasisCachePtr basisCache)
 {
   this->CHECK_VALUES_RANK(values);
   _f->values(values,basisCache);

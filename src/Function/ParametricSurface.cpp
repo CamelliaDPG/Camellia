@@ -182,7 +182,7 @@ public:
   }
 };
 
-void ParametricSurface::basisWeightsForEdgeInterpolant(Intrepid::FieldContainer<double> &edgeInterpolationCoefficients,
+void ParametricSurface::basisWeightsForEdgeInterpolant(Camellia::FieldContainer<double> &edgeInterpolationCoefficients,
     VectorBasisPtr basis,
     MeshPtr mesh, int cellID)
 {
@@ -206,7 +206,7 @@ void ParametricSurface::basisWeightsForEdgeInterpolant(Intrepid::FieldContainer<
 
   set<int> edgeNodeFieldIndices = BasisFactory::basisFactory()->sideFieldIndices(basis,true); // true: include vertex dofs
 
-  Intrepid::FieldContainer<double> dofCoords(compBasis->getCardinality(),2);
+  Camellia::FieldContainer<double> dofCoords(compBasis->getCardinality(),2);
   IntrepidBasisWrapper< double, Intrepid::FieldContainer<double> >* intrepidBasisWrapper = dynamic_cast< IntrepidBasisWrapper< double, Intrepid::FieldContainer<double> >* >(compBasis.get());
   if (!intrepidBasisWrapper)
   {
@@ -247,7 +247,7 @@ void ParametricSurface::basisWeightsForEdgeInterpolant(Intrepid::FieldContainer<
     //    cout << "edgeIndex " << edgeIndex << endl;
     for (int comp=0; comp<numComponents; comp++)
     {
-      Intrepid::FieldContainer<double> basisCoefficients_comp;
+      Camellia::FieldContainer<double> basisCoefficients_comp;
       bool useH1ForEdgeInterpolant = true; // an experiment
       curves[edgeIndex]->projectionBasedInterpolant(basisCoefficients_comp, basis1D, comp, edgeLength, useH1ForEdgeInterpolant);
       //      cout << "for edge " << edgeIndex << " and comp " << comp << ", projection-based interpolant dofs:\n";
@@ -304,14 +304,14 @@ void ParametricSurface::basisWeightsForEdgeInterpolant(Intrepid::FieldContainer<
   }*/
 }
 
-void ParametricSurface::basisWeightsForProjectedInterpolant(Intrepid::FieldContainer<double> &basisCoefficients, VectorBasisPtr basis,
+void ParametricSurface::basisWeightsForProjectedInterpolant(Camellia::FieldContainer<double> &basisCoefficients, VectorBasisPtr basis,
     MeshPtr mesh, int cellID)
 {
   vector< ParametricCurvePtr > curves = mesh->parametricEdgesForCell(cellID);
   Teuchos::RCP<TransfiniteInterpolatingSurface> exactSurface = Teuchos::rcp( new TransfiniteInterpolatingSurface(curves) );
   exactSurface->setNeglectVertices(false);
 
-  Intrepid::FieldContainer<double> edgeInterpolationCoefficients(basis->getCardinality());
+  Camellia::FieldContainer<double> edgeInterpolationCoefficients(basis->getCardinality());
   basisWeightsForEdgeInterpolant(edgeInterpolationCoefficients, basis, mesh, cellID);
 
   set<int> edgeFieldIndices = BasisFactory::basisFactory()->sideFieldIndices(basis,true); // true: include vertex dofs
@@ -333,7 +333,7 @@ void ParametricSurface::basisWeightsForProjectedInterpolant(Intrepid::FieldConta
 
   int cubatureDegree = std::max(maxTestDegree*2,15); // chosen to match that used in edge projection.
   
-  Intrepid::FieldContainer<double> physicalCellNodes;
+  Camellia::FieldContainer<double> physicalCellNodes;
   CellTopoPtr cellTopo = mesh->getElementType(cellID)->cellTopoPtr;
   if (cellTopo->getDimension() == 2)
   {
@@ -343,7 +343,7 @@ void ParametricSurface::basisWeightsForProjectedInterpolant(Intrepid::FieldConta
   {
     // then we interpret this as space-time, and we just treat the first temporal side:
     unsigned temporalSideOrdinal = cellTopo->getTemporalSideOrdinal(0);
-    Intrepid::FieldContainer<double> spaceTimePhysicalNodes = mesh->physicalCellNodesForCell(cellID);
+    Camellia::FieldContainer<double> spaceTimePhysicalNodes = mesh->physicalCellNodesForCell(cellID);
     int sideDim = cellTopo->getDimension() - 1;
     int nodeCount = cellTopo->getNodeCount(sideDim, temporalSideOrdinal);
     physicalCellNodes.resize(1,nodeCount,sideDim);
@@ -450,30 +450,23 @@ void TransfiniteInterpolatingSurface::value(double t1, double t2, double &x, dou
 
 }
 
-Intrepid::FieldContainer<double> & ParametricSurface::parametricQuadNodes()   // for CellTools cellWorkset argument
+Camellia::FieldContainer<double> ParametricSurface::parametricQuadNodes()   // for CellTools cellWorkset argument
 {
-  static Intrepid::FieldContainer<double> quadNodes(1,4,2);
-  static bool quadNodesSet = false;
-  // there's probably a cleaner way to statically initialize this container,
-  // but this setup should still do so exactly once
-  if (!quadNodesSet)
-  {
-    quadNodes(0,0,0) = 0.0;
-    quadNodes(0,0,1) = 0.0;
-    quadNodes(0,1,0) = 1.0;
-    quadNodes(0,0,1) = 0.0;
-    quadNodes(0,2,0) = 1.0;
-    quadNodes(0,2,1) = 1.0;
-    quadNodes(0,3,0) = 0.0;
-    quadNodes(0,3,1) = 1.0;
-    quadNodesSet = true;
-  }
+  Camellia::FieldContainer<double> quadNodes(1,4,2);
+  quadNodes(0,0,0) = 0.0;
+  quadNodes(0,0,1) = 0.0;
+  quadNodes(0,1,0) = 1.0;
+  quadNodes(0,0,1) = 0.0;
+  quadNodes(0,2,0) = 1.0;
+  quadNodes(0,2,1) = 1.0;
+  quadNodes(0,3,0) = 0.0;
+  quadNodes(0,3,1) = 1.0;
   return quadNodes;
 }
 
-void ParametricSurface::values(Intrepid::FieldContainer<double> &values, BasisCachePtr basisCache)
+void ParametricSurface::values(Camellia::FieldContainer<double> &values, BasisCachePtr basisCache)
 {
-  Intrepid::FieldContainer<double> parametricPoints = basisCache->computeParametricPoints();
+  Camellia::FieldContainer<double> parametricPoints = basisCache->computeParametricPoints();
   int numCells = parametricPoints.dimension(0);
   int numPoints = parametricPoints.dimension(1);
 

@@ -20,72 +20,165 @@
 
 namespace Camellia
 {
+  extern const std::string DEFAULT_VIEW_NAME;
+  
+  //! AllocationRecord allows us to track allocations.
+  //! We store two instances of this:
+  //! - one that tracks FieldContainer allocations
+  //! - one that tracks "Device View" allocations (which are no-ops when Device memory space is the same as Host)
+  struct AllocationRecord
+  {
+    int allocationCount = 0;
+    long long bytesAllocatedTotal = 0;
+    long long bytesAllocatedNet = 0;
+    long long bytesAllocatedNetHighWaterMark = 0;
+  };
+  
+  extern AllocationRecord fcAllocationRecord;
+  extern AllocationRecord deviceViewAllocationRecord;
+  
   template<class Scalar, int ArrayTypeId=0>
   class FieldContainer : public Intrepid::FieldContainer<Scalar, ArrayTypeId>
   {
     using FieldContainerBase = Intrepid::FieldContainer<Scalar, ArrayTypeId>;
-    using DeviceView = Kokkos::DynRankView<Scalar>;
+ #ifdef KOKKOS_ENABLE_CUDA
+    using DeviceMemorySpace = Kokkos::CudaSpace; // we want to avoid UVM; Kokkos default may be Kokkos::CudaUVMSpace
+ #else
+    using DeviceMemorySpace = Kokkos::DefaultExecutionSpace::memory_space;
+ #endif
     using HostView   = Kokkos::DynRankView<Scalar, Kokkos::HostSpace, Kokkos::MemoryTraits<Kokkos::Unmanaged> >;
+    using ViewTraits = typename HostView::drvtraits;
+    using DeviceView = Kokkos::DynRankView<typename ViewTraits::value_type, typename ViewTraits::array_layout, DeviceMemorySpace, typename ViewTraits::memory_traits>;
     
     DeviceView  _deviceView;
     HostView    _hostView;
     
     bool _deviceViewIsCheckedOut = false; // it's an error to check out twice without checking back in first; data copies happen at check in
+    bool _deviceViewIsValid      = false; // if invalid, call initializeDeviceView() on checkout
+    bool _hostViewIsValid        = false; // if invalid, call initializeHostView() before access to _hostView -- right now only used for creating mirror in initializeDeviceView()
     
-    const std::string DEFAULT_VIEW_NAME = "Camellia FieldContainer View";
+    bool _fieldContainerDataAllocationRecorded = false; // we don't count deallocation if we didn't count allocation; this allows us to enforce that.
+    int  _fieldContainerAllocationNumber = -1;
     
-    void initializeViews()
+    void initializeHostView()
     {
-      Teuchos::Array<int> dims;
-      this->dimensions(dims);
       const int rank = this->rank();
-      auto dataPtr = this->getData().getRawPtr();
+      Scalar* dataPtr = this->getData().getRawPtr();
+      Kokkos::Array<int,8> dims = {1,1,1,1,1,1,1,1};
+      for (int d=0; d<rank; d++)
+      {
+        dims[d] = this->dimension(d);
+      }
       
       switch (rank)
       {
         case 0:
-          _deviceView = DeviceView(DEFAULT_VIEW_NAME);
           _hostView   = HostView(dataPtr);
           break;
         case 1:
-          _deviceView = DeviceView(DEFAULT_VIEW_NAME,dims[0]);
           _hostView   = HostView(dataPtr,dims[0]);
           break;
         case 2:
-          _deviceView = DeviceView(DEFAULT_VIEW_NAME,dims[0],dims[1]);
           _hostView   = HostView(dataPtr,dims[0],dims[1]);
           break;
         case 3:
-          _deviceView = DeviceView(DEFAULT_VIEW_NAME,dims[0],dims[1],dims[2]);
           _hostView   = HostView(dataPtr,dims[0],dims[1],dims[2]);
           break;
         case 4:
-          _deviceView = DeviceView(DEFAULT_VIEW_NAME,dims[0],dims[1],dims[2],dims[3]);
           _hostView   = HostView(dataPtr,dims[0],dims[1],dims[2],dims[3]);
           break;
         case 5:
-          _deviceView = DeviceView(DEFAULT_VIEW_NAME,dims[0],dims[1],dims[2],dims[3],dims[4]);
           _hostView   = HostView(dataPtr,dims[0],dims[1],dims[2],dims[3],dims[4]);
           break;
         case 6:
-          _deviceView = DeviceView(DEFAULT_VIEW_NAME,dims[0],dims[1],dims[2],dims[3],dims[4],dims[5]);
           _hostView   = HostView(dataPtr,dims[0],dims[1],dims[2],dims[3],dims[4],dims[5]);
           break;
         case 7:
-          _deviceView = DeviceView(DEFAULT_VIEW_NAME,dims[0],dims[1],dims[2],dims[3],dims[4],dims[5],dims[6]);
           _hostView   = HostView(dataPtr,dims[0],dims[1],dims[2],dims[3],dims[4],dims[5],dims[6]);
           break;
         case 8:
-          _deviceView = DeviceView(DEFAULT_VIEW_NAME,dims[0],dims[1],dims[2],dims[3],dims[4],dims[5],dims[6],dims[7]);
           _hostView   = HostView(dataPtr,dims[0],dims[1],dims[2],dims[3],dims[4],dims[5],dims[6],dims[7]);
           break;
         default:
           TEUCHOS_TEST_FOR_EXCEPTION(true,std::invalid_argument,"Unsupported rank");
       }
+      _hostViewIsValid = true;
+    }
+    
+    void initializeDeviceView()
+    {
+      if (!_hostViewIsValid)
+      {
+        initializeHostView();
+      }
+      
+      // if _deviceView has previously been allocated, since we'll implicitly deallocate when we reset _deviceView below, we should
+      // subtract off the previous allocation size.  (This comes up during calls to resize() and clear().)
+      recordDeallocation( _deviceView.size() );
+      _deviceView = Kokkos::create_mirror_view(DeviceMemorySpace(),_hostView);
+      recordAllocation( _deviceView.size() );
+      
+      _deviceViewIsValid = true;
+    }
+    
+    void invalidateViews()
+    {
+      // called when the FC is resized, e.g.
+      _hostViewIsValid   = false;
+      _deviceViewIsValid = false;
+      
+      // record the deallocation
+      if (_deviceViewIsValid)
+      {
+        recordDeallocation(deviceViewAllocationRecord, _deviceView.size() );
+      }
+
+      _deviceView = DeviceView();
+      _hostView   = HostView();
+    }
+    
+    void recordAllocation(AllocationRecord &record, long long entryCount)
+    {
+      record.allocationCount++;
+      long long bytes = sizeof(Scalar) * entryCount;
+      record.bytesAllocatedNet   += bytes;
+      record.bytesAllocatedTotal += bytes;
+      if (record.bytesAllocatedNet > record.bytesAllocatedNetHighWaterMark)
+      {
+        record.bytesAllocatedNetHighWaterMark = record.bytesAllocatedNet;
+      }
+      
+      bool recordIsForFieldContainer = (&record == &fcAllocationRecord);
+      if (recordIsForFieldContainer)
+      {
+        _fieldContainerAllocationNumber = record.allocationCount;
+        _fieldContainerDataAllocationRecorded = true;
+      }
+    }
+    
+    void recordDeallocation(AllocationRecord &record, long long entryCount)
+    {
+      bool recordIsForFieldContainer = (&record == &fcAllocationRecord);
+      if (recordIsForFieldContainer && !_fieldContainerDataAllocationRecorded)
+      {
+        // then don't actually record the deallocation
+        return;
+      }
+      
+      long long bytes = sizeof(Scalar) * entryCount;
+      record.bytesAllocatedNet -= bytes;
+      if (recordIsForFieldContainer)
+      {
+        _fieldContainerDataAllocationRecorded = false; // don't allow to record deallocation twice without recording an allocation
+      }
     }
   public:
     DeviceView checkoutDeviceView()
     {
+      if (!_deviceViewIsValid)
+      {
+        initializeDeviceView();
+      }
       _deviceViewIsCheckedOut = true;
       // ideally, we should guard this so that we don't do unnecessary copies when memory spaces are the same
       // but this is an optimization that we can make at any point
@@ -115,7 +208,18 @@ namespace Camellia
     :
     FieldContainerBase(right)
     {
-      initializeViews();
+      recordAllocation(fcAllocationRecord,this->size());
+      invalidateViews();
+    }
+    
+    /** \brief Copy constructor with Camellia::FieldContainer as source.
+     */
+    FieldContainer(const FieldContainerBase& right)
+    :
+    FieldContainerBase(right)
+    {
+      recordAllocation(fcAllocationRecord,this->size());
+      invalidateViews();
     }
     
     /** \brief Creates a rank-1 FieldContainer with the specified dimension, initialized by 0.
@@ -126,7 +230,8 @@ namespace Camellia
     :
     FieldContainerBase(dim0)
     {
-      initializeViews();
+      recordAllocation(fcAllocationRecord,this->size());
+      invalidateViews();
     }
     
     /** \brief Creates a rank-2 FieldContainer with the specified dimensions, initialized by 0.
@@ -138,7 +243,8 @@ namespace Camellia
     :
     FieldContainerBase(dim0, dim1)
     {
-      initializeViews();
+      recordAllocation(fcAllocationRecord,this->size());
+      invalidateViews();
     }
     
     
@@ -152,7 +258,8 @@ namespace Camellia
     :
     FieldContainerBase(dim0, dim1, dim2)
     {
-      initializeViews();
+      recordAllocation(fcAllocationRecord,this->size());
+      invalidateViews();
     }
     
     /** \brief Creates a rank-4 FieldContainer with the specified dimensions, initialized by 0.
@@ -166,7 +273,8 @@ namespace Camellia
     :
     FieldContainerBase(dim0, dim1, dim2, dim3)
     {
-      initializeViews();
+      recordAllocation(fcAllocationRecord,this->size());
+      invalidateViews();
     }
     
     /** \brief Creates a rank-5 FieldContainer with the specified dimensions, initialized by 0.
@@ -181,7 +289,8 @@ namespace Camellia
     :
     FieldContainerBase(dim0, dim1, dim2, dim3, dim4)
     {
-      initializeViews();
+      recordAllocation(fcAllocationRecord,this->size());
+      invalidateViews();
     }
     
     /** \brief Creates a  FieldContainer of arbitrary rank,, initialized by 0, using dimensions
@@ -194,7 +303,8 @@ namespace Camellia
     :
     FieldContainerBase(dimensions)
     {
-      initializeViews();
+      recordAllocation(fcAllocationRecord,this->size());
+      invalidateViews();
     }
     
     /** \brief Creates a FieldContainer of arbitrary rank, using dimensions specified in the
@@ -213,7 +323,8 @@ namespace Camellia
     :
     FieldContainerBase(dimensions, data)
     {
-      initializeViews();
+      recordAllocation(fcAllocationRecord,this->size());
+      invalidateViews();
     }
     
     /** \brief Creates a FieldContainer of arbitrary rank, using dimensions specified in the
@@ -231,7 +342,7 @@ namespace Camellia
     :
     FieldContainerBase(dimensions, data)
     {
-      initializeViews();
+      invalidateViews();
     }
     
     
@@ -253,7 +364,8 @@ namespace Camellia
     :
     FieldContainerBase(dimensions, data, deep_copy, owns_mem)
     {
-      initializeViews();
+      if (deep_copy) recordAllocation(fcAllocationRecord,this->size());
+      invalidateViews();
     }
     
     /** \brief Creates a FieldContainer either as a wrapper of the shards::Array<Scalar,shards::NaturalOrder>
@@ -271,15 +383,33 @@ namespace Camellia
     :
     FieldContainerBase(data, deep_copy, owns_mem)
     {
-      initializeViews();
+      if (deep_copy) recordAllocation(fcAllocationRecord,this->size());
+      invalidateViews();
+    }
+    
+    ~FieldContainer()
+    {
+      bool ownsMemory = this->getData().has_ownership();
+      
+      if (ownsMemory)
+      {
+        recordDeallocation(fcAllocationRecord,this->size());
+      }
+      invalidateViews();
     }
     
     /** \brief Clears FieldContainer to trivial container (one with rank = 0 and size = 0)
      */
     void clear()
     {
+      bool ownsMemory = this->getData().has_ownership();
+      
+      if (ownsMemory)
+      {
+        recordDeallocation(fcAllocationRecord,this->size());
+      }
       this->FieldContainerBase::clear();
-      initializeViews();
+      invalidateViews();
     }
     
     
@@ -289,8 +419,17 @@ namespace Camellia
      */
     void resize(const int dim0)
     {
+      bool sizeChange = (dim0 != this->size());
+      if (sizeChange)
+      {
+        recordDeallocation(fcAllocationRecord,this->size());
+      }
       this->FieldContainerBase::resize(dim0);
-      initializeViews();
+      invalidateViews();
+      if (sizeChange)
+      {
+        recordAllocation(fcAllocationRecord,this->size());
+      }
     }
     
     /** \brief Resizes FieldContainer to a rank-2 container with specified dimensions, initialized by 0.
@@ -300,8 +439,17 @@ namespace Camellia
      */
     void resize(const int dim0, const int dim1)
     {
+      bool sizeChange = (dim0 * dim1 != this->size());
+      if (sizeChange)
+      {
+        recordDeallocation(fcAllocationRecord,this->size());
+      }
       this->FieldContainerBase::resize(dim0, dim1);
-      initializeViews();
+      invalidateViews();
+      if (sizeChange)
+      {
+        recordAllocation(fcAllocationRecord,this->size());
+      }
     }
     
     /** \brief Resizes FieldContainer to a rank-3 container with specified dimensions, initialized by 0.
@@ -312,8 +460,17 @@ namespace Camellia
      */
     void resize(const int dim0, const int dim1, const int dim2)
     {
+      bool sizeChange = (dim0*dim1*dim2 != this->size());
+      if (sizeChange)
+      {
+        recordDeallocation(fcAllocationRecord,this->size());
+      }
       this->FieldContainerBase::resize(dim0, dim1, dim2);
-      initializeViews();
+      invalidateViews();
+      if (sizeChange)
+      {
+        recordAllocation(fcAllocationRecord,this->size());
+      }
     }
     
     
@@ -326,8 +483,17 @@ namespace Camellia
      */
     void resize(const int dim0, const int dim1, const int dim2, const int dim3)
     {
+      bool sizeChange = (dim0*dim1*dim2*dim3 != this->size());
+      if (sizeChange)
+      {
+        recordDeallocation(fcAllocationRecord,this->size());
+      }
       this->FieldContainerBase::resize(dim0, dim1, dim2, dim3);
-      initializeViews();
+      invalidateViews();
+      if (sizeChange)
+      {
+        recordAllocation(fcAllocationRecord,this->size());
+      }
     }
     
     
@@ -345,8 +511,17 @@ namespace Camellia
                 const int dim3,
                 const int dim4)
     {
+      bool sizeChange = (dim0*dim1*dim2*dim3*dim4 != this->size());
+      if (sizeChange)
+      {
+        recordDeallocation(fcAllocationRecord,this->size());
+      }
       this->FieldContainerBase::resize(dim0, dim1, dim2, dim3, dim4);
-      initializeViews();
+      invalidateViews();
+      if (sizeChange)
+      {
+        recordAllocation(fcAllocationRecord,this->size());
+      }
     }
     
     /** \brief Resizes FieldContainer to arbitrary rank container, initialized by 0, with dimensions
@@ -356,8 +531,22 @@ namespace Camellia
      */
     void resize(const Teuchos::Array<int>& newDimensions)
     {
+      int newSize = 1;
+      for (int i=0; i<newDimensions.size(); i++)
+      {
+        newSize *= newDimensions[i];
+      }
+      bool sizeChange = (newSize != this->size());
+      if (sizeChange)
+      {
+        recordDeallocation(fcAllocationRecord,this->size());
+      }
       this->FieldContainerBase::resize(newDimensions);
-      initializeViews();
+      invalidateViews();
+      if (sizeChange)
+      {
+        recordAllocation(fcAllocationRecord,this->size());
+      }
     }
     
     
@@ -368,8 +557,17 @@ namespace Camellia
      */
     void resize(const FieldContainer<Scalar, ArrayTypeId>& anotherContainer)
     {
+      bool sizeChange = (anotherContainer.size() != this->size());
+      if (sizeChange)
+      {
+        recordDeallocation(fcAllocationRecord,this->size());
+      }
       this->FieldContainerBase::resize(anotherContainer);
-      initializeViews();
+      invalidateViews();
+      if (sizeChange)
+      {
+        recordAllocation(fcAllocationRecord,this->size());
+      }
     }
     
     
@@ -417,10 +615,32 @@ namespace Camellia
                 const Intrepid::EOperator       operatorType,
                 const int                       spaceDim)
     {
+      int oldSize = this->size();
       this->FieldContainerBase::resize(numPoints,numFields,spaceType,operatorType,spaceDim);
-      initializeViews();
+      invalidateViews();
+      if (oldSize != this->size())
+      {
+        recordDeallocation(fcAllocationRecord,oldSize);
+        recordAllocation(fcAllocationRecord,this->size());
+      }
+    }
+    
+    /** \brief Assignment operator <var>*this = right</var>.
+     */
+    FieldContainer<Scalar>& operator  = (const FieldContainer<Scalar>& right)
+    {
+      TEUCHOS_TEST_FOR_EXCEPTION( ( this == &right ),
+                                 std::invalid_argument,
+                                 ">>> ERROR (FieldContainer): Invalid right-hand side to '='. Self-assignment prohibited.");
+      
+      this->FieldContainerBase::operator=(right);
+      // base assignment does deep copy; record the allocation
+      recordAllocation(fcAllocationRecord,this->size());
+      return *this;
     }
   };
+  
+  std::string allocationReport(AllocationRecord &record);
 }
 
 #endif // Camellia_FieldContainer_hpp

@@ -60,7 +60,7 @@ std::vector<GlobalIndexType> cellsMatchingX(MeshPtr mesh, double x)
   auto meshTopo = mesh->getTopology();
   
   int spaceDim = mesh->getDimension();
-  Intrepid::FieldContainer<double> testPoint(1,spaceDim);
+  Camellia::FieldContainer<double> testPoint(1,spaceDim);
   double yBottom = (x <= X_STEP) ? Y_STEP : Y_BOTTOM;
   testPoint(0,0) = x;
   testPoint(0,1) = (yBottom + Y_TOP) / 2.0;
@@ -119,7 +119,7 @@ std::vector<GlobalIndexType> cellsMatchingX(MeshPtr mesh, double x)
 std::vector<GlobalIndexType> cellsMatchingX(MeshPtr mesh, double x, int verticalTestPoints)
 {
   int spaceDim = mesh->getDimension();
-  Intrepid::FieldContainer<double> testPoints(verticalTestPoints,spaceDim);
+  Camellia::FieldContainer<double> testPoints(verticalTestPoints,spaceDim);
   double yBottom = (x <= X_STEP) ? Y_STEP : Y_BOTTOM;
   double height  = Y_TOP - yBottom;
   for (int pointOrdinal=0; pointOrdinal<verticalTestPoints; pointOrdinal++)
@@ -149,7 +149,7 @@ double lineIntegral(MeshPtr mesh, double x, FunctionPtr f, int numRefinementsPer
   auto elemType = mesh->getElementType(0);
   BasisCachePtr basisCache = Teuchos::rcp( new BasisCache(elemType, mesh) );
   bool createSideCache = true;
-  Intrepid::FieldContainer<double> physicalCellNodes = mesh->physicalCellNodes(cells);
+  Camellia::FieldContainer<double> physicalCellNodes = mesh->physicalCellNodes(cells);
   basisCache->setPhysicalCellNodes(physicalCellNodes, cells, createSideCache);
   
   // use knowledge of mesh layout: we want the east side of matching cells, unless we're on the left side of the mesh

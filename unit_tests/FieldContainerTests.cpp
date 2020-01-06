@@ -22,8 +22,8 @@ namespace
   {
     Camellia::FieldContainer<double> testContainer(3,3,3);
     testContainer[4] = 300.0;
-    std::cout << "testContainer: " << testContainer;
     testContainer.resize(3);
     
+    // TODO: finish this test
   }
 } // namespace

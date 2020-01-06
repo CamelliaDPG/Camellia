@@ -18,7 +18,7 @@ private:
   Teuchos::RCP<Constraints> _constraints;
 public:
   PenaltyMethodFilter(Teuchos::RCP<Constraints> constraints);
-  virtual void filter(Intrepid::FieldContainer<double> &localStiffnessMatrix, Intrepid::FieldContainer<double> &localRHSVector,
+  virtual void filter(Camellia::FieldContainer<double> &localStiffnessMatrix, Camellia::FieldContainer<double> &localRHSVector,
                       BasisCachePtr basisCache, Teuchos::RCP<Mesh> mesh, Teuchos::RCP<BC> bc) ;
 };
 }

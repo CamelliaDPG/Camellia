@@ -29,7 +29,7 @@ public:
     _virtualTerms = virtualTerms;
   }
   
-  virtual void localStiffnessMatrixAndRHS(Intrepid::FieldContainer<double> &localStiffness, Intrepid::FieldContainer<double> &rhsVector,
+  virtual void localStiffnessMatrixAndRHS(Camellia::FieldContainer<double> &localStiffness, Camellia::FieldContainer<double> &rhsVector,
                                           IPPtr ip, BasisCachePtr ipBasisCache,
                                           RHSPtr rhs, BasisCachePtr basisCache) {
     double testMatrixAssemblyTime = 0, testMatrixInversionTime = 0, localStiffnessDeterminationFromTestsTime = 0;
@@ -143,7 +143,7 @@ public:
       cout << "numTestDofs: " << numTestDofs << endl;
     }
     
-    Intrepid::FieldContainer<double> rhsVectorTest(numCells,testOrderInterior->totalDofs()); // rhsVector is zero for the "trace" test dofs
+    Camellia::FieldContainer<double> rhsVectorTest(numCells,testOrderInterior->totalDofs()); // rhsVector is zero for the "trace" test dofs
     {
       // project the load f onto the space of interior test dofs.
       LinearTermPtr f = rhs->linearTerm();
@@ -153,7 +153,7 @@ public:
         
         if (testIDs.find(v->ID()) != testIDs.end()) {
           BasisPtr testInteriorBasis = testOrderInterior->getBasis(v->ID());
-          Intrepid::FieldContainer<double> fValues(numCells,testInteriorBasis->getCardinality());
+          Camellia::FieldContainer<double> fValues(numCells,testInteriorBasis->getCardinality());
 //          DofOrderingPtr oneVarOrderingTest = Teuchos::rcp(new DofOrdering(testInteriorBasis->domainTopology()));
           DofOrderingPtr oneVarOrderingTest = Teuchos::rcp(new DofOrdering);
           oneVarOrderingTest->addEntry(v->ID(), testInteriorBasis, testInteriorBasis->rangeRank());
@@ -170,7 +170,7 @@ public:
           }
           
           LinearTermPtr v_lt = 1.0 * v;
-          Intrepid::FieldContainer<double> l2(numCells,testInteriorBasis->getCardinality(),testInteriorBasis->getCardinality());
+          Camellia::FieldContainer<double> l2(numCells,testInteriorBasis->getCardinality(),testInteriorBasis->getCardinality());
           v_lt->integrate(l2,oneVarOrderingTest,v_lt,oneVarOrderingTest,basisCache,basisCache->isSideCache());
 
           Teuchos::Array<int> testTestDim(2), testOneDim(2);
@@ -178,10 +178,10 @@ public:
           testTestDim[1] = testInteriorBasis->getCardinality();
           testOneDim[0] = testInteriorBasis->getCardinality();
           testOneDim[1] = 1;
-          Intrepid::FieldContainer<double> projection(testOneDim);
+          Camellia::FieldContainer<double> projection(testOneDim);
           for (int cellOrdinal=0; cellOrdinal<numCells; cellOrdinal++) {
-            Intrepid::FieldContainer<double> l2cell(testTestDim,&l2(cellOrdinal,0,0));
-            Intrepid::FieldContainer<double> f_cell(testOneDim,&fValues(cellOrdinal,0));
+            Camellia::FieldContainer<double> l2cell(testTestDim,&l2(cellOrdinal,0,0));
+            Camellia::FieldContainer<double> f_cell(testOneDim,&fValues(cellOrdinal,0));
             
             SerialDenseWrapper::solveSystemUsingQR(projection, l2cell, f_cell);
             
@@ -197,7 +197,7 @@ public:
     
     // project strong operator applied to field terms, and use this to populate the top left portion of stiffness matrix:
     {
-      Intrepid::FieldContainer<double> trialFieldTestInterior(numCells, fieldOrder->totalDofs(), testOrderInterior->totalDofs());
+      Camellia::FieldContainer<double> trialFieldTestInterior(numCells, fieldOrder->totalDofs(), testOrderInterior->totalDofs());
       for (int eqn=0; eqn<numEquations; eqn++) {
         LinearTermPtr Au = _virtualTerms.getFieldOperators()[eqn];
         VarPtr v = _virtualTerms.getFieldTestVars()[eqn];
@@ -213,8 +213,8 @@ public:
 //          DofOrderingPtr oneVarOrderingTest = Teuchos::rcp(new DofOrdering(vBasis->domainTopology()));
           DofOrderingPtr oneVarOrderingTest = Teuchos::rcp(new DofOrdering());
           oneVarOrderingTest->addEntry(v->ID(), vBasis, vBasis->rangeRank());
-          Intrepid::FieldContainer<double> Au_values(numCells,vBasis->getCardinality(),fieldTrialBasis->getCardinality());
-          Intrepid::FieldContainer<double> l2(numCells,vBasis->getCardinality(),vBasis->getCardinality());
+          Camellia::FieldContainer<double> Au_values(numCells,vBasis->getCardinality(),fieldTrialBasis->getCardinality());
+          Camellia::FieldContainer<double> l2(numCells,vBasis->getCardinality(),vBasis->getCardinality());
 
           DofOrderingPtr oneVarOrderingTrial = Teuchos::rcp(new DofOrdering());
 //          DofOrderingPtr oneVarOrderingTrial = Teuchos::rcp(new DofOrdering(fieldTrialBasis->domainTopology()));
@@ -245,10 +245,10 @@ public:
           testTestDim[1] = vBasis->getCardinality();
           trialTestDim[0] = vBasis->getCardinality();
           trialTestDim[1] = fieldTrialBasis->getCardinality();
-          Intrepid::FieldContainer<double> projection(trialTestDim);
+          Camellia::FieldContainer<double> projection(trialTestDim);
           for (int cellOrdinal=0; cellOrdinal<numCells; cellOrdinal++) {
-            Intrepid::FieldContainer<double> l2cell(testTestDim,&l2(cellOrdinal,0,0));
-            Intrepid::FieldContainer<double> AuCell(trialTestDim,&Au_values(cellOrdinal,0,0));
+            Camellia::FieldContainer<double> l2cell(testTestDim,&l2(cellOrdinal,0,0));
+            Camellia::FieldContainer<double> AuCell(trialTestDim,&Au_values(cellOrdinal,0,0));
             // TODO: confirm that I'm doing the right projection here.  I could be missing a key point, but it seems to me that we must
             //       project onto an *orthonormal* basis here, to achieve the required identity structure of the (field,field) part of the
             //       Gram matrix.  OTOH, it looks to me like the computation here achieves exactly that, even though I didn't initially
@@ -271,8 +271,8 @@ public:
       trialTestDim[0] = fieldOrder->totalDofs();
       trialTestDim[1] = testOrderInterior->totalDofs();
       for (int cellOrdinal=0; cellOrdinal<numCells; cellOrdinal++) {
-        Intrepid::FieldContainer<double> trialFieldTrialField(fieldOrder->totalDofs(), fieldOrder->totalDofs());
-        Intrepid::FieldContainer<double> trialTestCell(trialTestDim, &trialFieldTestInterior(cellOrdinal,0,0));
+        Camellia::FieldContainer<double> trialFieldTrialField(fieldOrder->totalDofs(), fieldOrder->totalDofs());
+        Camellia::FieldContainer<double> trialTestCell(trialTestDim, &trialFieldTestInterior(cellOrdinal,0,0));
         SerialDenseWrapper::multiply(trialFieldTrialField, trialTestCell, trialTestCell, 'N', 'T'); // transpose the second one
         // now, accumulate into localStiffness
         for (int i=0; i<trialFieldTrialField.dimension(0); i++) {
@@ -290,9 +290,9 @@ public:
         trialTestDim[1] = testOrderInterior->totalDofs();
         oneTestDim[0] = 1;
         oneTestDim[1] = testOrderInterior->totalDofs();
-        Intrepid::FieldContainer<double> trialTestCell(trialTestDim, &trialFieldTestInterior(cellOrdinal,0,0));
-        Intrepid::FieldContainer<double> rhsTestCell(oneTestDim, &rhsVectorTest(cellOrdinal,0));
-        Intrepid::FieldContainer<double> rhsTrialCell(1, fieldOrder->totalDofs());
+        Camellia::FieldContainer<double> trialTestCell(trialTestDim, &trialFieldTestInterior(cellOrdinal,0,0));
+        Camellia::FieldContainer<double> rhsTestCell(oneTestDim, &rhsVectorTest(cellOrdinal,0));
+        Camellia::FieldContainer<double> rhsTrialCell(1, fieldOrder->totalDofs());
         
         SerialDenseWrapper::multiply(rhsTrialCell, rhsTestCell, trialTestCell, 'N', 'T');
         
@@ -303,14 +303,14 @@ public:
       }
     }
     
-    Intrepid::FieldContainer<double> ipMatrixTraceIncludingInterior(numCells,numTestTraceDofsIncludingInterior,numTestTraceDofsIncludingInterior);
+    Camellia::FieldContainer<double> ipMatrixTraceIncludingInterior(numCells,numTestTraceDofsIncludingInterior,numTestTraceDofsIncludingInterior);
     int numTestTerms = _virtualTerms.getTestNormOperators().size();
     for (int i=0; i<numTestTerms; i++) {
       LinearTermPtr testTerm = _virtualTerms.getTestNormOperators()[i];
       LinearTermPtr boundaryTerm = _virtualTerms.getTestNormBoundaryOperators()[i];
       testTerm->integrate(ipMatrixTraceIncludingInterior,testOrderTrace,boundaryTerm,testOrderTrace,ipBasisCache,ipBasisCache->isSideCache());
     }
-    Intrepid::FieldContainer<double> ipMatrixTrace(numCells,numTestTraceDofs,numTestTraceDofs);
+    Camellia::FieldContainer<double> ipMatrixTrace(numCells,numTestTraceDofs,numTestTraceDofs);
     for (int cellOrdinal=0; cellOrdinal<numCells; cellOrdinal++) {
       for (int i_dofIndex=0; i_dofIndex<numTestTraceDofsIncludingInterior; i_dofIndex++) {
         if (remappedTraceIndices.find(i_dofIndex) == remappedTraceIndices.end()) {
@@ -335,8 +335,8 @@ public:
     cout << "NOTE: we do not yet enforce continuity on the trace test space.\n"; // I *think* this is fine, but I'm not dead certain -- we do of course in the end enforce continuity in GDAMinimumRule
     
     // now, determine the trace part of the bilinear form matrix
-    Intrepid::FieldContainer<double> bfMatrixTraceTraceIncludingTestInterior(numCells,testOrderTrace->totalDofs(),traceOrder->totalDofs());
-    Intrepid::FieldContainer<double> bfMatrixFieldTraceIncludingTestInterior(numCells,testOrderTrace->totalDofs(),fieldOrder->totalDofs());
+    Camellia::FieldContainer<double> bfMatrixTraceTraceIncludingTestInterior(numCells,testOrderTrace->totalDofs(),traceOrder->totalDofs());
+    Camellia::FieldContainer<double> bfMatrixFieldTraceIncludingTestInterior(numCells,testOrderTrace->totalDofs(),fieldOrder->totalDofs());
     for (int eqn=0; eqn<numEquations; eqn++) {
       VarPtr traceVar = _virtualTerms.getTraceVars()[eqn];
       LinearTermPtr termTraced = traceVar->termTraced();
@@ -360,8 +360,8 @@ public:
       termTraced->integrate(bfMatrixFieldTraceIncludingTestInterior,fieldOrder,-testTerm,testOrderTrace,basisCache,basisCache->isSideCache());
     }
     
-    Intrepid::FieldContainer<double> bfMatrixFieldTrace(numCells,numTestTraceDofs,bfMatrixFieldTraceIncludingTestInterior.dimension(2));
-    Intrepid::FieldContainer<double> bfMatrixTraceTrace(numCells,numTestTraceDofs,bfMatrixTraceTraceIncludingTestInterior.dimension(2));
+    Camellia::FieldContainer<double> bfMatrixFieldTrace(numCells,numTestTraceDofs,bfMatrixFieldTraceIncludingTestInterior.dimension(2));
+    Camellia::FieldContainer<double> bfMatrixTraceTrace(numCells,numTestTraceDofs,bfMatrixTraceTraceIncludingTestInterior.dimension(2));
     for (int cellOrdinal=0; cellOrdinal<numCells; cellOrdinal++) {
       for (int i_dofIndex=0; i_dofIndex<numTestTraceDofsIncludingInterior; i_dofIndex++) {
         if (remappedTraceIndices.find(i_dofIndex) == remappedTraceIndices.end()) {
@@ -397,14 +397,14 @@ public:
     fieldFieldStiffDim[0] = fieldOrder->totalDofs();
     fieldFieldStiffDim[1] = fieldOrder->totalDofs();
     
-    Intrepid::FieldContainer<double> traceTraceStiffCell(traceTraceStiffDim);
-    Intrepid::FieldContainer<double> fieldTraceStiffCell(fieldTraceStiffDim);
-    Intrepid::FieldContainer<double> fieldFieldStiffCell(fieldFieldStiffDim);
+    Camellia::FieldContainer<double> traceTraceStiffCell(traceTraceStiffDim);
+    Camellia::FieldContainer<double> fieldTraceStiffCell(fieldTraceStiffDim);
+    Camellia::FieldContainer<double> fieldFieldStiffCell(fieldFieldStiffDim);
     for (int cellOrdinal=0; cellOrdinal<numCells; cellOrdinal++) {
-      Intrepid::FieldContainer<double> ipMatrixCell(ipMatrixDim,&ipMatrixTrace(cellOrdinal,0,0));
+      Camellia::FieldContainer<double> ipMatrixCell(ipMatrixDim,&ipMatrixTrace(cellOrdinal,0,0));
       
-      Intrepid::FieldContainer<double> optTestCoeffsTraceTrace(numTestTraceDofs,traceOrder->totalDofs());
-      Intrepid::FieldContainer<double> bfMatrixTraceTraceCell(bfMatrixTraceTraceDim,&bfMatrixTraceTrace(cellOrdinal,0,0));
+      Camellia::FieldContainer<double> optTestCoeffsTraceTrace(numTestTraceDofs,traceOrder->totalDofs());
+      Camellia::FieldContainer<double> bfMatrixTraceTraceCell(bfMatrixTraceTraceDim,&bfMatrixTraceTrace(cellOrdinal,0,0));
       int result = SerialDenseWrapper::solveSystemUsingQR(optTestCoeffsTraceTrace, ipMatrixCell, bfMatrixTraceTraceCell);
       SerialDenseWrapper::multiply(traceTraceStiffCell, bfMatrixTraceTraceCell, optTestCoeffsTraceTrace, 'T', 'N');
       
@@ -418,7 +418,7 @@ public:
       }
 
       // because of the way the matrix blocks line up, we actually don't have to do a second inversion of ipMatrixCell for this part
-      Intrepid::FieldContainer<double> bfMatrixFieldTraceCell(bfMatrixFieldTraceDim,&bfMatrixFieldTrace(cellOrdinal,0,0));
+      Camellia::FieldContainer<double> bfMatrixFieldTraceCell(bfMatrixFieldTraceDim,&bfMatrixFieldTrace(cellOrdinal,0,0));
       SerialDenseWrapper::multiply(fieldTraceStiffCell, bfMatrixFieldTraceCell, optTestCoeffsTraceTrace, 'T', 'N');
 
       // copy into the appropriate spots in localStiffness (taking advantage of symmetry):
@@ -433,7 +433,7 @@ public:
       
       // because of the way the matrix blocks line up, we do have some trace contributions in the (field, field) portion of the matrix
       // these get added to the field contributions (hence the +=)
-      Intrepid::FieldContainer<double> optTestCoeffsFieldTrace(numTestTraceDofs,fieldOrder->totalDofs());
+      Camellia::FieldContainer<double> optTestCoeffsFieldTrace(numTestTraceDofs,fieldOrder->totalDofs());
       result = SerialDenseWrapper::solveSystemUsingQR(optTestCoeffsFieldTrace, ipMatrixCell, bfMatrixFieldTraceCell);
       SerialDenseWrapper::multiply(fieldFieldStiffCell, bfMatrixFieldTraceCell, optTestCoeffsFieldTrace, 'T', 'N');
       for (int i=0; i<fieldFieldStiffDim[0]; i++) {

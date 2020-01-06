@@ -15,7 +15,7 @@
 #include "TypeDefs.h"
 
 // Intrepid includes
-#include "Intrepid_FieldContainer.hpp"
+#include "Camellia_FieldContainer.hpp"
 
 // Epetra includes
 #include "EpetraExt_ConfigDefs.h"
@@ -74,13 +74,13 @@ class Mesh : public RefinementObserver, public DofInterpreter
 
   vector< Teuchos::RCP<RefinementObserver> > _registeredObservers; // meshes that should be modified upon refinement (must differ from this only in bilinearForm; must have identical geometry & cellIDs)
 
-  map<IndexType, GlobalIndexType> getGlobalVertexIDs(const Intrepid::FieldContainer<double> &vertexCoordinates);
+  map<IndexType, GlobalIndexType> getGlobalVertexIDs(const Camellia::FieldContainer<double> &vertexCoordinates);
 
   ElementPtr addElement(const vector<IndexType> & vertexIndices, ElementTypePtr elemType);
   void addChildren(ElementPtr parent, vector< vector<IndexType> > &children,
                    vector< vector< pair< IndexType, IndexType> > > &childrenForSide);
 
-  Intrepid::FieldContainer<double> physicalCellNodes( Teuchos::RCP< ElementType > elemTypePtr, vector<GlobalIndexType> &cellIDs );
+  Camellia::FieldContainer<double> physicalCellNodes( Teuchos::RCP< ElementType > elemTypePtr, vector<GlobalIndexType> &cellIDs );
 
   void setElementType(GlobalIndexType cellID, ElementTypePtr newType, bool sideUpgradeOnly);
 
@@ -88,7 +88,7 @@ class Mesh : public RefinementObserver, public DofInterpreter
 
   GlobalIndexType getVertexIndex(double x, double y, double tol=1e-14);
 
-  void verticesForCells(Intrepid::FieldContainer<double>& vertices, vector<GlobalIndexType> &cellIDs);
+  void verticesForCells(Camellia::FieldContainer<double>& vertices, vector<GlobalIndexType> &cellIDs);
 
   static map<int,int> _emptyIntIntMap; // just defined here to implement a default argument to constructor (there's got to be a better way)
 public:
@@ -138,32 +138,32 @@ public:
   static MeshPtr readTriangle(string filePath, TBFPtr<double> bilinearForm, int H1Order, int pToAdd);
 
   // deprecated static constructors (use MeshFactory methods instead):
-  static MeshPtr buildQuadMesh(const Intrepid::FieldContainer<double> &quadBoundaryPoints,
+  static MeshPtr buildQuadMesh(const Camellia::FieldContainer<double> &quadBoundaryPoints,
                                int horizontalElements, int verticalElements,
                                TBFPtr<double> bilinearForm,
                                int H1Order, int pTest, bool triangulate=false, bool useConformingTraces=true,
                                map<int,int> trialOrderEnhancements=_emptyIntIntMap,
                                map<int,int> testOrderEnhancements=_emptyIntIntMap);
-  static MeshPtr buildQuadMeshHybrid(const Intrepid::FieldContainer<double> &quadBoundaryPoints,
+  static MeshPtr buildQuadMeshHybrid(const Camellia::FieldContainer<double> &quadBoundaryPoints,
                                      int horizontalElements, int verticalElements,
                                      TBFPtr<double> bilinearForm,
                                      int H1Order, int pTest, bool useConformingTraces=true);
-  static void quadMeshCellIDs(Intrepid::FieldContainer<int> &cellIDs,
+  static void quadMeshCellIDs(Camellia::FieldContainer<int> &cellIDs,
                               int horizontalElements, int verticalElements,
                               bool useTriangles);
 
   GlobalIndexType activeCellOffset();
 
-  Intrepid::FieldContainer<double> cellSideParities( ElementTypePtr elemTypePtr);
-  Intrepid::FieldContainer<double> cellSideParitiesForCell( GlobalIndexType cellID );
+  Camellia::FieldContainer<double> cellSideParities( ElementTypePtr elemTypePtr);
+  Camellia::FieldContainer<double> cellSideParitiesForCell( GlobalIndexType cellID );
 
   TBFPtr<double> bilinearForm();
   void setBilinearForm( TBFPtr<double>);
 
   //! This method should probably be moved to MeshTopology; its implementation is independent of Mesh.
   //  bool cellContainsPoint(GlobalIndexType cellID, vector<double> &point);
-  std::vector<GlobalIndexType> cellIDsForPoints(const Intrepid::FieldContainer<double> &physicalPoints, bool minusOnesForOffRank=true);
-  std::vector<ElementPtr> elementsForPoints(const Intrepid::FieldContainer<double> &physicalPoints, bool nullElementsIfOffRank=true);
+  std::vector<GlobalIndexType> cellIDsForPoints(const Camellia::FieldContainer<double> &physicalPoints, bool minusOnesForOffRank=true);
+  std::vector<ElementPtr> elementsForPoints(const Camellia::FieldContainer<double> &physicalPoints, bool nullElementsIfOffRank=true);
 
   vector< Teuchos::RCP< ElementType > > elementTypes(PartitionIndexType partitionNumber=-1); // returns *all* elementTypes by default
 
@@ -242,11 +242,11 @@ public:
   // ! For curvilinear geometry, call this after mesh initialization.
   void initializeTransformationFunction();
   
-  void interpretGlobalCoefficients(GlobalIndexType cellID, Intrepid::FieldContainer<double> &localCoefficients, const Epetra_MultiVector &globalCoefficients);
-  void interpretLocalBasisCoefficients(GlobalIndexType cellID, int varID, int sideOrdinal, const Intrepid::FieldContainer<double> &basisCoefficients,
-                                       Intrepid::FieldContainer<double> &globalCoefficients, Intrepid::FieldContainer<GlobalIndexType> &globalDofIndices);
-  void interpretLocalData(GlobalIndexType cellID, const Intrepid::FieldContainer<double> &localData,
-                          Intrepid::FieldContainer<double> &globalData, Intrepid::FieldContainer<GlobalIndexType> &globalDofIndices);
+  void interpretGlobalCoefficients(GlobalIndexType cellID, Camellia::FieldContainer<double> &localCoefficients, const Epetra_MultiVector &globalCoefficients);
+  void interpretLocalBasisCoefficients(GlobalIndexType cellID, int varID, int sideOrdinal, const Camellia::FieldContainer<double> &basisCoefficients,
+                                       Camellia::FieldContainer<double> &globalCoefficients, Camellia::FieldContainer<GlobalIndexType> &globalDofIndices);
+  void interpretLocalData(GlobalIndexType cellID, const Camellia::FieldContainer<double> &localData,
+                          Camellia::FieldContainer<double> &globalData, Camellia::FieldContainer<GlobalIndexType> &globalDofIndices);
 
   bool isLocallyOwnedGlobalDofIndex(GlobalIndexType globalDofIndex) const;
   
@@ -276,12 +276,12 @@ public:
   PartitionIndexType partitionForGlobalDofIndex( GlobalIndexType globalDofIndex );
   PartitionIndexType partitionLocalIndexForGlobalDofIndex( GlobalIndexType globalDofIndex );
 
-  Intrepid::FieldContainer<double> physicalCellNodes( ElementTypePtr elemType);
-  Intrepid::FieldContainer<double> physicalCellNodesForCell(GlobalIndexType cellID);
-  Intrepid::FieldContainer<double> physicalCellNodesGlobal( ElementTypePtr elemType );
+  Camellia::FieldContainer<double> physicalCellNodes( ElementTypePtr elemType);
+  Camellia::FieldContainer<double> physicalCellNodesForCell(GlobalIndexType cellID);
+  Camellia::FieldContainer<double> physicalCellNodesGlobal( ElementTypePtr elemType );
 
   // use this method only if you can ensure the provided cellIDs all have the same type
-  Intrepid::FieldContainer<double> physicalCellNodes(vector<GlobalIndexType> &cellIDs );
+  Camellia::FieldContainer<double> physicalCellNodes(vector<GlobalIndexType> &cellIDs );
   
   void pRefine(const vector<GlobalIndexType> &cellIDsForPRefinements);
   void pRefine(const vector<GlobalIndexType> &cellIDsForPRefinements, int pToAdd);
@@ -322,10 +322,10 @@ public:
 
   vector< vector<double> > verticesForCell(GlobalIndexType cellID);
   vector<IndexType> vertexIndicesForCell(GlobalIndexType cellID);
-  Intrepid::FieldContainer<double> vertexCoordinates(GlobalIndexType vertexIndex);
+  Camellia::FieldContainer<double> vertexCoordinates(GlobalIndexType vertexIndex);
 
-  void verticesForCell(Intrepid::FieldContainer<double>& vertices, GlobalIndexType cellID);
-  void verticesForSide(Intrepid::FieldContainer<double>& vertices, GlobalIndexType cellID, int sideOrdinal);
+  void verticesForCell(Camellia::FieldContainer<double>& vertices, GlobalIndexType cellID);
+  void verticesForSide(Camellia::FieldContainer<double>& vertices, GlobalIndexType cellID, int sideOrdinal);
 
   void unregisterObserver(RefinementObserver* observer);
   void unregisterObserver(Teuchos::RCP<RefinementObserver> observer);

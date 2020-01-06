@@ -17,7 +17,7 @@ ExactSolutionFunction<Scalar>::ExactSolutionFunction(Teuchos::RCP<ExactSolution<
   _trialID = trialID;
 }
 template <typename Scalar>
-void ExactSolutionFunction<Scalar>::values(Intrepid::FieldContainer<Scalar> &values, BasisCachePtr basisCache)
+void ExactSolutionFunction<Scalar>::values(Camellia::FieldContainer<Scalar> &values, BasisCachePtr basisCache)
 {
   _exactSolution->solutionValues(values,_trialID,basisCache);
 }

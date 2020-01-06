@@ -14,13 +14,13 @@ string hFunction::displayString()
   return "h";
 }
 
-void hFunction::values(Intrepid::FieldContainer<double> &values, BasisCachePtr basisCache)
+void hFunction::values(Camellia::FieldContainer<double> &values, BasisCachePtr basisCache)
 {
   this->CHECK_VALUES_RANK(values);
   int numCells = values.dimension(0);
   int numPoints = values.dimension(1);
 
-  Intrepid::FieldContainer<double> cellMeasures = basisCache->getCellMeasures();
+  Camellia::FieldContainer<double> cellMeasures = basisCache->getCellMeasures();
   int dimension = basisCache->cellTopology()->getDimension();
   
   for (int cellIndex=0; cellIndex<numCells; cellIndex++)

@@ -65,7 +65,7 @@ int main(int argc, char *argv[])
   DofOrderingPtr testOrdering = mesh->getElementType(cellID)->testOrderPtr;
   
   int testDofCount = testOrdering->totalDofs();
-  Intrepid::FieldContainer<double> ipMatrix(1,testDofCount,testDofCount);
+  Camellia::FieldContainer<double> ipMatrix(1,testDofCount,testDofCount);
   
   cout << "For poly order = " << polyOrder << " and delta_k = " << delta_k;
   cout << ", testDofCount is: " << testDofCount << endl;
@@ -78,14 +78,14 @@ int main(int argc, char *argv[])
   
   ip->printInteractions();
   
-  Intrepid::FieldContainer<double> allDofCoords(testDofCount,spaceDim);
+  Camellia::FieldContainer<double> allDofCoords(testDofCount,spaceDim);
   
   std::set<int> varIDs = testOrdering->getVarIDs();
   for (int varID : varIDs)
   {
     vector<int> dofIndices = testOrdering->getDofIndices(varID);
     int basisCardinality = dofIndices.size();
-    Intrepid::FieldContainer<double> dofCoords(basisCardinality,spaceDim);
+    Camellia::FieldContainer<double> dofCoords(basisCardinality,spaceDim);
     testOrdering->getDofCoords(dofCoords,varID);
     for (int basisOrdinal=0; basisOrdinal<basisCardinality; basisOrdinal++)
     {

@@ -22,7 +22,7 @@ namespace Camellia
 class hFunction : public TFunction<double>
 {
 public:
-  void values(Intrepid::FieldContainer<double> &values, BasisCachePtr basisCache);
+  void values(Camellia::FieldContainer<double> &values, BasisCachePtr basisCache);
   string displayString();
 };
 }

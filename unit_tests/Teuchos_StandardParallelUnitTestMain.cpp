@@ -65,6 +65,8 @@ specific unit test suites.
 
 #include "Kokkos_Core.hpp"
 
+#include "Camellia.h"
+
 int main( int argc, char* argv[] )
 {
   Teuchos::GlobalMPISession mpiSession(&argc, &argv);
@@ -83,6 +85,10 @@ int main( int argc, char* argv[] )
 
   int result = Teuchos::UnitTestRepository::runUnitTestsFromMain(argc, argv);
   
+  int rank = Comm.MyPID();
+  bool printAllocationReport = (rank == 0);
+  
+  Camellia::finalize(printAllocationReport);
   Kokkos::finalize();
 
   return result;

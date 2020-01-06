@@ -33,7 +33,7 @@ class MeshGeometry
   map< Edge, ParametricCurvePtr > _edgeToCurveMap;
   vector< CellTopoPtr > _cellTopos;
 
-  void initializeVerticesFromFieldContainer(const vector<Intrepid::FieldContainer<double> > &vertices)
+  void initializeVerticesFromFieldContainer(const vector<Camellia::FieldContainer<double> > &vertices)
   {
     IndexType numVertices = vertices.size();
     if (numVertices == 0) return;

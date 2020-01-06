@@ -365,9 +365,9 @@ bool SpatialFilter::matchesPoint(const vector<double> &point)
   }
 }
 
-bool SpatialFilter::matchesPoints(Intrepid::FieldContainer<bool> &pointsMatch, BasisCachePtr basisCache)
+bool SpatialFilter::matchesPoints(Camellia::FieldContainer<bool> &pointsMatch, BasisCachePtr basisCache)
 {
-  const Intrepid::FieldContainer<double>* points = &(basisCache->getPhysicalCubaturePoints());
+  const Camellia::FieldContainer<double>* points = &(basisCache->getPhysicalCubaturePoints());
   //    cout << "points:\n" << *points;
   int numCells = points->dimension(0);
   int numPoints = points->dimension(1);
@@ -561,12 +561,12 @@ bool SpatialFilterLogicalOr::matchesPoint(double x, double y, double z, double t
   return _sf1->matchesPoint(x,y,z,t) || _sf2->matchesPoint(x,y,z,t);
 }
 
-bool SpatialFilterLogicalOr::matchesPoints(Intrepid::FieldContainer<bool> &pointsMatch, BasisCachePtr basisCache)
+bool SpatialFilterLogicalOr::matchesPoints(Camellia::FieldContainer<bool> &pointsMatch, BasisCachePtr basisCache)
 {
-  const Intrepid::FieldContainer<double>* points = &(basisCache->getPhysicalCubaturePoints());
+  const Camellia::FieldContainer<double>* points = &(basisCache->getPhysicalCubaturePoints());
   int numCells = points->dimension(0);
   int numPoints = points->dimension(1);
-  Intrepid::FieldContainer<bool> pointsMatch2(pointsMatch);
+  Camellia::FieldContainer<bool> pointsMatch2(pointsMatch);
   bool somePointMatches1 = _sf1->matchesPoints(pointsMatch,basisCache);
   bool somePointMatches2 = _sf2->matchesPoints(pointsMatch2,basisCache);
   if ( !somePointMatches2 )
@@ -630,13 +630,13 @@ bool SpatialFilterLogicalAnd::matchesPoint(double x, double y, double z, double 
   return _sf1->matchesPoint(x,y,z,t) && _sf2->matchesPoint(x,y,z,t);
 }
 
-bool SpatialFilterLogicalAnd::matchesPoints(Intrepid::FieldContainer<bool> &pointsMatch, BasisCachePtr basisCache)
+bool SpatialFilterLogicalAnd::matchesPoints(Camellia::FieldContainer<bool> &pointsMatch, BasisCachePtr basisCache)
 {
-  const Intrepid::FieldContainer<double>* points = &(basisCache->getPhysicalCubaturePoints());
+  const Camellia::FieldContainer<double>* points = &(basisCache->getPhysicalCubaturePoints());
   int numCells = points->dimension(0);
   int numPoints = points->dimension(1);
-  Intrepid::FieldContainer<bool> pointsMatch1(pointsMatch);
-  Intrepid::FieldContainer<bool> pointsMatch2(pointsMatch);
+  Camellia::FieldContainer<bool> pointsMatch1(pointsMatch);
+  Camellia::FieldContainer<bool> pointsMatch2(pointsMatch);
   bool somePointMatches1 = _sf1->matchesPoints(pointsMatch1,basisCache);
   bool somePointMatches2 = _sf2->matchesPoints(pointsMatch2,basisCache);
   bool samePointsMatch = false;
@@ -693,9 +693,9 @@ bool NegatedSpatialFilter::matchesPoint(double x, double y, double z, double t)
   return ! _filterToNegate->matchesPoint(x,y,z,t);
 }
 
-bool NegatedSpatialFilter::matchesPoints(Intrepid::FieldContainer<bool> &pointsMatch, BasisCachePtr basisCache)
+bool NegatedSpatialFilter::matchesPoints(Camellia::FieldContainer<bool> &pointsMatch, BasisCachePtr basisCache)
 {
-  const Intrepid::FieldContainer<double>* points = &(basisCache->getPhysicalCubaturePoints());
+  const Camellia::FieldContainer<double>* points = &(basisCache->getPhysicalCubaturePoints());
   int numCells = points->dimension(0);
   int numPoints = points->dimension(1);
   _filterToNegate->matchesPoints(pointsMatch,basisCache);

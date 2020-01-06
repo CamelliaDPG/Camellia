@@ -6,7 +6,7 @@
 
 #include "Intrepid_CellTools.hpp"
 #include "Intrepid_DefaultCubatureFactory.hpp"
-#include "Intrepid_FieldContainer.hpp"
+#include "Camellia_FieldContainer.hpp"
 #include "Intrepid_FunctionSpaceTools.hpp"
 
 #include "MathInnerProduct.h"
@@ -57,10 +57,10 @@ void MathInnerProduct::operators(int testID1, int testID2,
   }
 }
 
-void MathInnerProduct::applyInnerProductData(Intrepid::FieldContainer<double> &testValues1,
-    Intrepid::FieldContainer<double> &testValues2,
+void MathInnerProduct::applyInnerProductData(Camellia::FieldContainer<double> &testValues1,
+    Camellia::FieldContainer<double> &testValues2,
     int testID1, int testID2, int operatorIndex,
-    const Intrepid::FieldContainer<double>& physicalPoints)
+    const Camellia::FieldContainer<double>& physicalPoints)
 {
   // empty implementation -- no weights needed...
 }

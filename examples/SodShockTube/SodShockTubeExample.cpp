@@ -281,7 +281,7 @@ void writeFunctions(MeshPtr mesh, int meshWidth, int polyOrder, double x_a, std:
     TEUCHOS_TEST_FOR_EXCEPTION(true, std::invalid_argument, "writeFunctions() only supports 1D meshes");
   }
   int numPoints = max(polyOrder*2 + 1, 2); // polyOrder * 2 will, hopefully, give reasonable approximation of high-order curves
-  Intrepid::FieldContainer<double> refCellPoints(numPoints,1);
+  Camellia::FieldContainer<double> refCellPoints(numPoints,1);
   double dx = 2.0 / (refCellPoints.size() - 1); // 2.0 is the size of the reference element
   for (int i=0; i<refCellPoints.size(); i++)
   {
@@ -292,7 +292,7 @@ void writeFunctions(MeshPtr mesh, int meshWidth, int polyOrder, double x_a, std:
 //  cout << "refCellPoints:\n" << refCellPoints;
   
   int numFunctions = functionNames.size();
-  vector<Intrepid::FieldContainer<double>> pointData(numFunctions, Intrepid::FieldContainer<double>(meshWidth,numPoints));
+  vector<Camellia::FieldContainer<double>> pointData(numFunctions, Camellia::FieldContainer<double>(meshWidth,numPoints));
   for (int functionOrdinal=0; functionOrdinal<numFunctions; functionOrdinal++)
   {
     pointData[functionOrdinal].initialize(0.0);
@@ -311,7 +311,7 @@ void writeFunctions(MeshPtr mesh, int meshWidth, int polyOrder, double x_a, std:
       auto f = functions[functionOrdinal];
       auto name = functionNames[functionOrdinal];
       
-      Intrepid::FieldContainer<double> localData(cellDim, &pointData[functionOrdinal](cellID,0));
+      Camellia::FieldContainer<double> localData(cellDim, &pointData[functionOrdinal](cellID,0));
       
       f->values(localData, basisCache);
     }
@@ -326,7 +326,7 @@ void writeFunctions(MeshPtr mesh, int meshWidth, int polyOrder, double x_a, std:
   for (int functionOrdinal=0; functionOrdinal<functionNames.size(); functionOrdinal++)
   {
     int totalPoints = meshWidth*(numPoints-1); // cells overlap; eliminate duplicates
-    Intrepid::FieldContainer<double> xyPoints(totalPoints,2);
+    Camellia::FieldContainer<double> xyPoints(totalPoints,2);
     
     ostringstream fileName;
     fileName << filePrefix << "_" << functionNames[functionOrdinal] << ".dat";

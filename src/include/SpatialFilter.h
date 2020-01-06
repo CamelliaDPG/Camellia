@@ -21,7 +21,7 @@
 
 // Teuchos includes
 #include "Teuchos_RCP.hpp"
-#include "Intrepid_FieldContainer.hpp"
+#include "Camellia_FieldContainer.hpp"
 
 namespace Camellia
 {
@@ -33,7 +33,7 @@ public:
   virtual bool matchesPoint(double x, double y, double z);
   virtual bool matchesPoint(double x, double y, double z, double t);
   virtual bool matchesPoint(const vector<double>&point);
-  virtual bool matchesPoints(Intrepid::FieldContainer<bool> &pointsMatch, BasisCachePtr basisCache);
+  virtual bool matchesPoints(Camellia::FieldContainer<bool> &pointsMatch, BasisCachePtr basisCache);
   
   virtual bool matchesSpatialSides(); // default: true
   virtual bool matchesTemporalSides(); // default: false
@@ -84,7 +84,7 @@ class SpatialFilterLogicalOr : public SpatialFilter
   SpatialFilterPtr _sf1, _sf2;
 public:
   SpatialFilterLogicalOr(SpatialFilterPtr sf1, SpatialFilterPtr sf2);
-  bool matchesPoints(Intrepid::FieldContainer<bool> &pointsMatch, BasisCachePtr basisCache);
+  bool matchesPoints(Camellia::FieldContainer<bool> &pointsMatch, BasisCachePtr basisCache);
 
   //  bool matchesPoint( double x, double y ) {
   //    return _sf1->matchesPoint(x,y) || _sf2->matchesPoint(x,y);
@@ -103,7 +103,7 @@ class SpatialFilterLogicalAnd : public SpatialFilter
   SpatialFilterPtr _sf1, _sf2;
 public:
   SpatialFilterLogicalAnd(SpatialFilterPtr sf1, SpatialFilterPtr sf2);
-  bool matchesPoints(Intrepid::FieldContainer<bool> &pointsMatch, BasisCachePtr basisCache);
+  bool matchesPoints(Camellia::FieldContainer<bool> &pointsMatch, BasisCachePtr basisCache);
 
   //  bool matchesPoint( double x, double y ) {
   //    return _sf1->matchesPoint(x,y) || _sf2->matchesPoint(x,y);
@@ -122,7 +122,7 @@ class NegatedSpatialFilter : public SpatialFilter
   SpatialFilterPtr _filterToNegate;
 public:
   NegatedSpatialFilter(SpatialFilterPtr FilterToNegate);
-  bool matchesPoints(Intrepid::FieldContainer<bool> &pointsMatch, BasisCachePtr basisCache);
+  bool matchesPoints(Camellia::FieldContainer<bool> &pointsMatch, BasisCachePtr basisCache);
 
   virtual bool matchesPoint(double x);
   virtual bool matchesPoint(double x, double y);

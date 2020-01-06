@@ -29,7 +29,7 @@ public:
   TFunctionPtr<double> y();
   TFunctionPtr<double> z();
 
-  void values(Intrepid::FieldContainer<double> &values, BasisCachePtr basisCache);
+  void values(Camellia::FieldContainer<double> &values, BasisCachePtr basisCache);
   bool boundaryValueOnly();
 
   std::vector< TFunctionPtr<double> > memberFunctions();
@@ -47,7 +47,7 @@ public:
   TFunctionPtr<double> y();
   TFunctionPtr<double> z();
 
-  void values(Intrepid::FieldContainer<double> &values, BasisCachePtr basisCache);
+  void values(Camellia::FieldContainer<double> &values, BasisCachePtr basisCache);
   bool boundaryValueOnly();
 
   std::vector< TFunctionPtr<double> > memberFunctions();

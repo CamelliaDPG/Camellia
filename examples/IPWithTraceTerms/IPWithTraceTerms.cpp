@@ -81,7 +81,7 @@ double conditionNumberForGram(CellTopoPtr cellTopo, int polyOrder, Space fs, dou
   ipBasisCache->setPhysicalCellNodes(physicalCellNodes, cellIDs, createSideCacheToo);
   
   int testDofCount = testOrdering->totalDofs();
-  Intrepid::FieldContainer<double> ipMatrix(1,testDofCount,testDofCount);
+  Camellia::FieldContainer<double> ipMatrix(1,testDofCount,testDofCount);
   
   ip->computeInnerProductMatrix(ipMatrix,testOrdering,ipBasisCache);
   

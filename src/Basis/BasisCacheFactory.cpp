@@ -29,9 +29,9 @@ namespace Camellia {
       
     }
     
-    void values(Intrepid::FieldContainer<Scalar> &values, BasisCachePtr basisCache)
+    void values(Camellia::FieldContainer<Scalar> &values, BasisCachePtr basisCache)
     {
-      // Note that we could avoid copies here by appropriate Intrepid::FieldContainer games using pointers and offsets into the passed-in values container
+      // Note that we could avoid copies here by appropriate Camellia::FieldContainer games using pointers and offsets into the passed-in values container
       // For the moment, though, we accept the cost for ease/certainty of implementation
       int pointOffset = 0;
       Teuchos::Array<int> dimensions(values.rank());
@@ -48,7 +48,7 @@ namespace Camellia {
       {
         int numPoints = subdomainCache->getRefCellPoints().dimension(0);
         dimensions[1] = numPoints;
-        Intrepid::FieldContainer<Scalar> subdomainValues(dimensions);
+        Camellia::FieldContainer<Scalar> subdomainValues(dimensions);
         _f->values(subdomainValues, subdomainCache);
         
         // copy values back
@@ -78,7 +78,7 @@ namespace Camellia {
 }
 
 template<int D>
-void multiplyMatrices(const Intrepid::FieldContainer<double> &matrices1, const Intrepid::FieldContainer<double> &matrices2, Intrepid::FieldContainer<double> &result)
+void multiplyMatrices(const Camellia::FieldContainer<double> &matrices1, const Camellia::FieldContainer<double> &matrices2, Camellia::FieldContainer<double> &result)
 {
   int numCells = matrices1.dimension(0);
   int numPoints = matrices1.dimension(1);
@@ -156,7 +156,7 @@ void multiplyMatrices(const Intrepid::FieldContainer<double> &matrices1, const I
   }
 }
 
-void multiplyMatrices(int dim, const Intrepid::FieldContainer<double> &matrices1, const Intrepid::FieldContainer<double> &matrices2, Intrepid::FieldContainer<double> &result)
+void multiplyMatrices(int dim, const Camellia::FieldContainer<double> &matrices1, const Camellia::FieldContainer<double> &matrices2, Camellia::FieldContainer<double> &result)
 {
   if (dim == 1)
   {
@@ -204,13 +204,13 @@ BasisCachePtr BasisCacheFactory<Scalar>::unionBasisCacheForParentCell(Refinement
     TEUCHOS_TEST_FOR_EXCEPTION(subdomainNumCells != numCells, std::invalid_argument, "subdomainCaches must agree on the number of cells");
   }
   
-  Intrepid::FieldContainer<double> parentPhysicalPoints(numCells, numPoints, volumeDim);
-  Intrepid::FieldContainer<double> parentRefCellPoints(numPoints, topoDim);
+  Camellia::FieldContainer<double> parentPhysicalPoints(numCells, numPoints, volumeDim);
+  Camellia::FieldContainer<double> parentRefCellPoints(numPoints, topoDim);
   
-  Intrepid::FieldContainer<double> parentCubatureWeights(numPoints);
-  Intrepid::FieldContainer<double> parentJacobian(numCells,numPoints,volumeDim,volumeDim);
-  Intrepid::FieldContainer<double> parentJacobianInverse(numCells,numPoints,volumeDim,volumeDim);
-  Intrepid::FieldContainer<double> parentJacobianDeterminant(numCells,numPoints);
+  Camellia::FieldContainer<double> parentCubatureWeights(numPoints);
+  Camellia::FieldContainer<double> parentJacobian(numCells,numPoints,volumeDim,volumeDim);
+  Camellia::FieldContainer<double> parentJacobianInverse(numCells,numPoints,volumeDim,volumeDim);
+  Camellia::FieldContainer<double> parentJacobianDeterminant(numCells,numPoints);
   
   auto refinementMeshTopo = refPattern->refinementMeshTopology();
 
@@ -231,25 +231,25 @@ BasisCachePtr BasisCacheFactory<Scalar>::unionBasisCacheForParentCell(Refinement
     auto childNodes = refinementMeshTopo->physicalCellNodesForCell(childIDInMeshTopo,includeCellDimension);
     
     // compute Jacobian of the reference-space transformation from the reference cell for child to the refinement pattern's geometry for the child
-    Intrepid::FieldContainer<double> parentToChildJacobian(numCells, numChildPoints, topoDim, topoDim);
+    Camellia::FieldContainer<double> parentToChildJacobian(numCells, numChildPoints, topoDim, topoDim);
     CamelliaCellTools::setJacobian(parentToChildJacobian, basisCache->getRefCellPoints(), childNodes, refPattern->childTopology(childIDInMeshTopo-1));
     
     // Jacobian values that basisCache has for points are for the transformation from reference cell for child to physical space
     // we want to transform these to Jacobian values for the transformation from reference cell for *parent* to physical space
     // We therefore want the *inverse* of the parent-to-child Jacobian applied to the Jacobian that basisCache has
-    Intrepid::FieldContainer<double> parentToChildJacobianInverse(numCells, numChildPoints, topoDim, topoDim);
-    Intrepid::FieldContainer<double> parentToChildJacobianDeterminant(numCells, numChildPoints);
+    Camellia::FieldContainer<double> parentToChildJacobianInverse(numCells, numChildPoints, topoDim, topoDim);
+    Camellia::FieldContainer<double> parentToChildJacobianDeterminant(numCells, numChildPoints);
     SerialDenseWrapper::determinantAndInverse(parentToChildJacobianDeterminant, parentToChildJacobianInverse, parentToChildJacobian);
     
-    Intrepid::FieldContainer<double> parentJacobianForChildPoints(numCells, numChildPoints, volumeDim, volumeDim);
-    Intrepid::FieldContainer<double> parentJacobianInverseForChildPoints(numCells, numChildPoints, volumeDim, volumeDim);
-    Intrepid::FieldContainer<double> parentJacobianDeterminantForChildPoints(numCells, numChildPoints);
+    Camellia::FieldContainer<double> parentJacobianForChildPoints(numCells, numChildPoints, volumeDim, volumeDim);
+    Camellia::FieldContainer<double> parentJacobianInverseForChildPoints(numCells, numChildPoints, volumeDim, volumeDim);
+    Camellia::FieldContainer<double> parentJacobianDeterminantForChildPoints(numCells, numChildPoints);
     
     multiplyMatrices(volumeDim, parentToChildJacobianInverse, basisCache->getJacobian(), parentJacobianForChildPoints);
     
     SerialDenseWrapper::determinantAndInverse(parentJacobianDeterminantForChildPoints, parentJacobianInverseForChildPoints, parentJacobianForChildPoints);
     
-    Intrepid::FieldContainer<double> parentRefCellPointsForChild(numChildPoints, topoDim);
+    Camellia::FieldContainer<double> parentRefCellPointsForChild(numChildPoints, topoDim);
     RefinementPattern::mapRefCellPointsToAncestor(refBranch, basisCache->getRefCellPoints(), parentRefCellPointsForChild);
     
     auto & childCubatureWeights = basisCache->getCubatureWeights();

@@ -13,7 +13,7 @@
 
 // Intrepid includes
 #include "Intrepid_Basis.hpp"
-#include "Intrepid_FieldContainer.hpp"
+#include "Camellia_FieldContainer.hpp"
 
 // Shards includes
 #include "Shards_CellTopology.hpp"
@@ -97,7 +97,7 @@ public:
   BasisPtr getNodalBasisForCellTopology(unsigned cellTopoKey);
 
   Camellia::MultiBasisPtr getMultiBasis(vector< BasisPtr > &bases);
-  PatchBasisPtr getPatchBasis(BasisPtr parent, Intrepid::FieldContainer<double> &patchNodesInParentRefCell, unsigned cellTopoKey = shards::Line<2>::key);
+  PatchBasisPtr getPatchBasis(BasisPtr parent, Camellia::FieldContainer<double> &patchNodesInParentRefCell, unsigned cellTopoKey = shards::Line<2>::key);
 
   BasisPtr addToPolyOrder(BasisPtr basis, int pToAdd);
   BasisPtr setPolyOrder(BasisPtr basis, int polyOrderToSet);
@@ -122,6 +122,7 @@ public:
   void setUseLobattoForQuadHDiv(bool value);
 
   static Teuchos::RCP<BasisFactory> basisFactory(); // shared, global BasisFactory
+  static void deleteBasisFactory(); // delete shared, global BasisFactory -- used during Camellia::finalize()
 };
 }
 

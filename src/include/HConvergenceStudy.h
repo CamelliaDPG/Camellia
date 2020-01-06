@@ -95,10 +95,10 @@ public:
   void setLagrangeConstraints(Teuchos::RCP<LagrangeConstraints> lagrangeConstraints);
   void setReportConditionNumber(bool value);
   void setReportRelativeErrors(bool reportRelativeErrors);
-  void solve(const Intrepid::FieldContainer<double> &quadPoints, bool useConformingTraces,
+  void solve(const Camellia::FieldContainer<double> &quadPoints, bool useConformingTraces,
              map<int,int> trialOrderEnhancements,
              map<int,int> testOrderEnhancements);
-  void solve(const Intrepid::FieldContainer<double> &quadPoints, bool useConformingTraces = true);
+  void solve(const Camellia::FieldContainer<double> &quadPoints, bool useConformingTraces = true);
   void solve(Teuchos::RCP< MeshGeometry > geometry, bool useConformingTraces=true);
   TSolutionPtr<double> getSolution(int logElements); // logElements: a number between minLogElements and maxLogElements
   void writeToFiles(const string & filePathPrefix, int trialID, int traceID = -1, bool writeMATLABPlotData = false);

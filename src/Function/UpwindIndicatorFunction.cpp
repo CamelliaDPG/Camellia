@@ -6,7 +6,7 @@
 
 #include "BasisCache.h"
 
-#include "Intrepid_FieldContainer.hpp"
+#include "Camellia_FieldContainer.hpp"
 
 using namespace Camellia;
 
@@ -40,7 +40,7 @@ bool UpwindIndicatorFunction::isZero(BasisCachePtr basisCache)
     _beta[d]->values(_valuesBuffers[d],basisCache);
   }
   
-  const Intrepid::FieldContainer<double> *sideNormals = &(basisCache->getSideNormals());
+  const Camellia::FieldContainer<double> *sideNormals = &(basisCache->getSideNormals());
   
   for (int cellOrdinal=0; cellOrdinal<numCells; cellOrdinal++)
   {
@@ -65,7 +65,7 @@ std::vector< TFunctionPtr<double> > UpwindIndicatorFunction::memberFunctions()
   return {{_beta}};
 }
 
-void UpwindIndicatorFunction::values(Intrepid::FieldContainer<double> &values, BasisCachePtr basisCache)
+void UpwindIndicatorFunction::values(Camellia::FieldContainer<double> &values, BasisCachePtr basisCache)
 {
   int numCells = basisCache->getPhysicalCubaturePoints().dimension(0);
   int numPoints = basisCache->getPhysicalCubaturePoints().dimension(1);
@@ -78,7 +78,7 @@ void UpwindIndicatorFunction::values(Intrepid::FieldContainer<double> &values, B
     _valuesBuffers[d].resize(numCells,numPoints);
     _beta[d]->values(_valuesBuffers[d],basisCache);
   }
-  const Intrepid::FieldContainer<double> *sideNormals = &(basisCache->getSideNormals());
+  const Camellia::FieldContainer<double> *sideNormals = &(basisCache->getSideNormals());
   
   for (int cellOrdinal=0; cellOrdinal<numCells; cellOrdinal++)
   {

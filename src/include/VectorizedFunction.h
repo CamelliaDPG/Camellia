@@ -40,7 +40,7 @@ public:
   VectorizedFunction(TFunctionPtr<Scalar> f1, TFunctionPtr<Scalar> f2);
   VectorizedFunction(TFunctionPtr<Scalar> f1, TFunctionPtr<Scalar> f2, TFunctionPtr<Scalar> f3);
   VectorizedFunction(TFunctionPtr<Scalar> f1, TFunctionPtr<Scalar> f2, TFunctionPtr<Scalar> f3, TFunctionPtr<Scalar> f4);
-  void values(Intrepid::FieldContainer<Scalar> &values, BasisCachePtr basisCache);
+  void values(Camellia::FieldContainer<Scalar> &values, BasisCachePtr basisCache);
 
   std::vector< TFunctionPtr<Scalar> > memberFunctions();
   

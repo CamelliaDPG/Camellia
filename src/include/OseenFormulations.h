@@ -315,7 +315,7 @@ class VGPOseenProblem
 
   Teuchos::RCP< VGPOseenFormulation > _vgpOseenFormulation;
 
-  void init(TFunctionPtr<double> Re, Intrepid::FieldContainer<double> &quadPoints, int horizontalCells,
+  void init(TFunctionPtr<double> Re, Camellia::FieldContainer<double> &quadPoints, int horizontalCells,
             int verticalCells, int H1Order, int pToAdd,
             TFunctionPtr<double> u1_exact, TFunctionPtr<double> u2_exact, TFunctionPtr<double> p_exact, bool enrichVelocity, bool scaleSigmaByMu)
   {
@@ -362,13 +362,13 @@ class VGPOseenProblem
     _soln->setIP( _vgpOseenFormulation->graphNorm() );
   }
 public:
-  VGPOseenProblem(TFunctionPtr<double> Re, Intrepid::FieldContainer<double> &quadPoints, int horizontalCells,
+  VGPOseenProblem(TFunctionPtr<double> Re, Camellia::FieldContainer<double> &quadPoints, int horizontalCells,
                   int verticalCells, int H1Order, int pToAdd,
                   TFunctionPtr<double> u1_exact, TFunctionPtr<double> u2_exact, TFunctionPtr<double> p_exact, bool enrichVelocity, bool scaleSigmaByMu)
   {
     init(Re,quadPoints,horizontalCells,verticalCells,H1Order,pToAdd,u1_exact,u2_exact,p_exact, enrichVelocity, scaleSigmaByMu);
   }
-  VGPOseenProblem(double Re, Intrepid::FieldContainer<double> &quadPoints, int horizontalCells,
+  VGPOseenProblem(double Re, Camellia::FieldContainer<double> &quadPoints, int horizontalCells,
                   int verticalCells, int H1Order, int pToAdd,
                   TFunctionPtr<double> u1_exact, TFunctionPtr<double> u2_exact, TFunctionPtr<double> p_exact, bool enrichVelocity, bool scaleSigmaByMu)
   {

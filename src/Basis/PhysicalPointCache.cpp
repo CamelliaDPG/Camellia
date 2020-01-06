@@ -13,11 +13,11 @@
 
 using namespace Camellia;
 
-PhysicalPointCache::PhysicalPointCache(const Intrepid::FieldContainer<double> &physCubPoints) : BasisCache()
+PhysicalPointCache::PhysicalPointCache(const Camellia::FieldContainer<double> &physCubPoints) : BasisCache()
 {
   _physCubPoints = physCubPoints;
 }
-const Intrepid::FieldContainer<double> & PhysicalPointCache::getPhysicalCubaturePoints()   // overrides super
+const Camellia::FieldContainer<double> & PhysicalPointCache::getPhysicalCubaturePoints()   // overrides super
 {
   return _physCubPoints;
 }
@@ -25,7 +25,7 @@ int PhysicalPointCache::getSpaceDim()
 {
   return _physCubPoints.dimension(2);
 }
-Intrepid::FieldContainer<double> & PhysicalPointCache::writablePhysicalCubaturePoints()   // allows overwriting the contents
+Camellia::FieldContainer<double> & PhysicalPointCache::writablePhysicalCubaturePoints()   // allows overwriting the contents
 {
   return _physCubPoints;
 }

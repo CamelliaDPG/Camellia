@@ -146,7 +146,7 @@ class GDAMinimumRule : public GlobalDofAssignment
                                  AnnotatedEntity* &constrainingInfo, OwnershipInfo* &ownershipInfo, bool &spaceOnlyConstraint);
   
   void getGlobalDofIndices(GlobalIndexType cellID, int varID, int sideOrdinal,
-                           Intrepid::FieldContainer<GlobalIndexType> &globalDofIndices);
+                           Camellia::FieldContainer<GlobalIndexType> &globalDofIndices);
   
   vector<GlobalIndexType> getGlobalDofOrdinalsForSubcell(GlobalIndexType cellID, VarPtr var, int d, int scord);
   
@@ -215,17 +215,17 @@ public:
   GlobalIndexType numPartitionOwnedGlobalFluxIndices();
   GlobalIndexType numPartitionOwnedGlobalTraceIndices();
 
-  void interpretLocalData(GlobalIndexType cellID, const Intrepid::FieldContainer<double> &localData,
-                          Intrepid::FieldContainer<double> &globalData,
-                          Intrepid::FieldContainer<GlobalIndexType> &globalDofIndices);
+  void interpretLocalData(GlobalIndexType cellID, const Camellia::FieldContainer<double> &localData,
+                          Camellia::FieldContainer<double> &globalData,
+                          Camellia::FieldContainer<GlobalIndexType> &globalDofIndices);
   void interpretLocalBasisCoefficients(GlobalIndexType cellID, int varID, int sideOrdinal,
-                                       const Intrepid::FieldContainer<double> &basisCoefficients,
-                                       Intrepid::FieldContainer<double> &globalCoefficients,
-                                       Intrepid::FieldContainer<GlobalIndexType> &globalDofIndices);
-  void interpretGlobalCoefficients(GlobalIndexType cellID, Intrepid::FieldContainer<double> &localCoefficients,
+                                       const Camellia::FieldContainer<double> &basisCoefficients,
+                                       Camellia::FieldContainer<double> &globalCoefficients,
+                                       Camellia::FieldContainer<GlobalIndexType> &globalDofIndices);
+  void interpretGlobalCoefficients(GlobalIndexType cellID, Camellia::FieldContainer<double> &localCoefficients,
                                    const Epetra_MultiVector &globalCoefficients);
   template <typename Scalar>
-  void interpretGlobalCoefficients2(GlobalIndexType cellID, Intrepid::FieldContainer<Scalar> &localCoefficients,
+  void interpretGlobalCoefficients2(GlobalIndexType cellID, Camellia::FieldContainer<Scalar> &localCoefficients,
                                     const TVectorPtr<Scalar> globalCoefficients);
   IndexType localDofCount(); // local to the MPI node
 

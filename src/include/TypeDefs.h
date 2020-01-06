@@ -18,7 +18,7 @@
 #include <Tpetra_MultiVector.hpp>
 #include <Tpetra_CrsMatrix.hpp>
 
-#include <Intrepid_FieldContainer.hpp>
+#include "Camellia_FieldContainer.hpp"
 
 // Epetra includes
 #ifdef HAVE_MPI
@@ -42,8 +42,8 @@ typedef int GlobalIndexTypeToCast; // for constructing Epetra_Maps, etc.  (these
 typedef unsigned long EntityHandle; // identical to MOAB's EntityHandle type.  We define our own because we don't want to require MOAB, at least not yet.
 
 // Trilinos typedefs
-typedef Teuchos::RCP< Intrepid::FieldContainer<double> > FCPtr;
-typedef Teuchos::RCP< const Intrepid::FieldContainer<double> > constFCPtr;
+typedef Teuchos::RCP< Camellia::FieldContainer<double> > FCPtr;
+typedef Teuchos::RCP< const Camellia::FieldContainer<double> > constFCPtr;
   
   typedef Teuchos::RCP<Epetra_Comm> Epetra_CommPtr;
   typedef Teuchos::RCP<Teuchos::Comm<int>> Teuchos_CommPtr;

@@ -21,7 +21,7 @@ using namespace Camellia;
 
 static const double PI  = 3.141592653589793238462;
 
-//  void mapRefCellPointsToParameterSpace(Intrepid::FieldContainer<double> &refPoints);
+//  void mapRefCellPointsToParameterSpace(Camellia::FieldContainer<double> &refPoints);
 
 static void CHECK_FUNCTION_ONLY_DEPENDS_ON_1D_SPACE(TFunctionPtr<double> fxn)
 {
@@ -74,27 +74,27 @@ std::vector< TFunctionPtr<double> > ParametricFunction::memberFunctions()
 void ParametricFunction::value(double t, double &x)
 {
   t = remapForSubCurve(t);
-  static Intrepid::FieldContainer<double> onePoint(1,1,1);
-  static Teuchos::RCP< PhysicalPointCache > onePointCache = Teuchos::rcp( new PhysicalPointCache(onePoint) );
-  static Intrepid::FieldContainer<double> oneValue(1,1);
+  Camellia::FieldContainer<double> onePoint(1,1,1);
+  Teuchos::RCP< PhysicalPointCache > onePointCache = Teuchos::rcp( new PhysicalPointCache(onePoint) );
+  Camellia::FieldContainer<double> oneValue(1,1);
   onePointCache->writablePhysicalCubaturePoints()(0,0,0) = t;
   _underlyingFxn->values(oneValue, onePointCache);
   x = oneValue[0];
 }
-void ParametricFunction::values(Intrepid::FieldContainer<double> &values, BasisCachePtr basisCache)
+void ParametricFunction::values(Camellia::FieldContainer<double> &values, BasisCachePtr basisCache)
 {
-  Intrepid::FieldContainer<double> parametricPoints = basisCache->computeParametricPoints();
+  Camellia::FieldContainer<double> parametricPoints = basisCache->computeParametricPoints();
   BasisCachePtr parametricCache = Teuchos::rcp( new PhysicalPointCache(parametricPoints) );
   int numParametricCells = 1;
   int numPoints = parametricPoints.dimension(1);
-  Intrepid::FieldContainer<double> mappedPoints(numParametricCells,numPoints);
+  Camellia::FieldContainer<double> mappedPoints(numParametricCells,numPoints);
   _argMap->values(mappedPoints, parametricCache);
   mappedPoints.resize(numParametricCells,numPoints,1); // 1: spaceDim
   parametricCache = Teuchos::rcp(new PhysicalPointCache(mappedPoints));
   Teuchos::Array<int> dimensions;
   values.dimensions(dimensions);
   dimensions[0] = numParametricCells;
-  Intrepid::FieldContainer<double> parametricValues(dimensions);
+  Camellia::FieldContainer<double> parametricValues(dimensions);
   _underlyingFxn->values(parametricValues, parametricCache);
 
   // parametricValues has dimensions (C,P) == (1,P)
@@ -108,7 +108,7 @@ void ParametricFunction::values(Intrepid::FieldContainer<double> &values, BasisC
     // HGRADtransformGRAD outputs to (C,F,P,D), and values has shape (C,P,D), so we should reshape it
     values.resize(numCells,1,numPoints,1);
 
-    Intrepid::FieldContainer<double> jacobianInverse = basisCache->getJacobianInv();
+    Camellia::FieldContainer<double> jacobianInverse = basisCache->getJacobianInv();
 
     // modify the jacobianInverse to account for the fact that we're on [0,1], not [-1,1]
     // basisCache's transformation goes from [-1,1] to [x0,x1]
@@ -358,7 +358,7 @@ std::vector< TFunctionPtr<double> > ParametricCurve::memberFunctions()
   return members;
 }
 
-void ParametricCurve::projectionBasedInterpolant(Intrepid::FieldContainer<double> &basisCoefficients, BasisPtr basis1D, int component,
+void ParametricCurve::projectionBasedInterpolant(Camellia::FieldContainer<double> &basisCoefficients, BasisPtr basis1D, int component,
     double lengthScale, bool useH1)
 {
 
@@ -423,7 +423,7 @@ void ParametricCurve::projectionBasedInterpolant(Intrepid::FieldContainer<double
   // the line should live in the space spanned by basis.  It would be a bit cheaper to solve a system
   // to interpolate pointwise, but since it's easy to code, we'll just do a projection.  Since the
   // exact function we're after is in the space, mathematically it amounts to the same thing.
-  Intrepid::FieldContainer<double> linearBasisCoefficients;
+  Camellia::FieldContainer<double> linearBasisCoefficients;
   Projector<double>::projectFunctionOntoBasis(linearBasisCoefficients, lineComponent, basis1D, basisCache, ip_H1, v);
 
   //  cout << "linearBasisCoefficients:\n" << linearBasisCoefficients;
@@ -458,7 +458,7 @@ void ParametricCurve::value(double t, double &x, double &y, double &z)
   _zFxn->value(t,z);
 }
 
-void ParametricCurve::values(Intrepid::FieldContainer<double> &values, BasisCachePtr basisCache)
+void ParametricCurve::values(Camellia::FieldContainer<double> &values, BasisCachePtr basisCache)
 {
   CHECK_VALUES_RANK(values);
   int numCells = values.dimension(0); // likely to be 1--in any case, we're the same on each cell
@@ -466,11 +466,11 @@ void ParametricCurve::values(Intrepid::FieldContainer<double> &values, BasisCach
   int spaceDim = values.dimension(2);
   if (_xFxn.get())   // then this curve is defined by some Functions of x (not by overriding the value() methods)
   {
-    Intrepid::FieldContainer<double> xValues(1,numPoints);
+    Camellia::FieldContainer<double> xValues(1,numPoints);
     _xFxn->values(xValues, basisCache);
-    vector< Intrepid::FieldContainer<double>* > valuesFCs;
+    vector< Camellia::FieldContainer<double>* > valuesFCs;
     valuesFCs.push_back(&xValues);
-    Intrepid::FieldContainer<double> yValues, zValues;
+    Camellia::FieldContainer<double> yValues, zValues;
     if (_yFxn.get())
     {
       yValues.resize(1,numPoints);
@@ -666,7 +666,7 @@ ParametricCurvePtr ParametricCurve::line(double x0, double y0, double x1, double
   return ParametricCurve::curve(xFxn,yFxn);
 }
 //
-//void ParametricCurve::mapRefCellPointsToParameterSpace(Intrepid::FieldContainer<double> &refPoints) {
+//void ParametricCurve::mapRefCellPointsToParameterSpace(Camellia::FieldContainer<double> &refPoints) {
 //  int numPoints = refPoints.dimension(0);
 //  int spaceDim = refPoints.dimension(1);
 //  if (spaceDim != 1) {
@@ -689,7 +689,7 @@ public:
     _parametricGradient = parametricGradient;
     _convertBasisCacheToParametricSpace = convertBasisCacheToParametricSpace;
   }
-  void values(Intrepid::FieldContainer<double> &values, BasisCachePtr basisCache)
+  void values(Camellia::FieldContainer<double> &values, BasisCachePtr basisCache)
   {
     if (basisCache->cellTopology()->getTensorialDegree() > 0)
     {
@@ -700,7 +700,7 @@ public:
     int numPoints = basisCache->getPhysicalCubaturePoints().dimension(1);
     Teuchos::Array<int> dimensions;
     values.dimensions(dimensions);
-    Intrepid::FieldContainer<double> parametricValuesMultiCell(dimensions);
+    Camellia::FieldContainer<double> parametricValuesMultiCell(dimensions);
     // this is formally multi-cell, but I think in practice it will generally be just one
     // (one reason I'm not worrying about extra copies of data for each cell in parametricValuesMultiCell
     //  — I'm expecting there just to be one cell, therefore just one copy.)
@@ -730,10 +730,10 @@ public:
     using fst = Intrepid::FunctionSpaceTools;
     // HGRADtransformGRAD expects (F,P,D) for input, which here can be understood as (1,P,D)--one field
     dimensions[0] = 1; // one cell
-    // get a Intrepid::FieldContainer referring just to the first cell's values (all cells have the same values)
-    Intrepid::FieldContainer<double> parametricValues(dimensions, &parametricValuesMultiCell[0]); // shallow copy
+    // get a Camellia::FieldContainer referring just to the first cell's values (all cells have the same values)
+    Camellia::FieldContainer<double> parametricValues(dimensions, &parametricValuesMultiCell[0]); // shallow copy
 
-    Intrepid::FieldContainer<double> jacobianInverse = basisCache->getJacobianInv();
+    Camellia::FieldContainer<double> jacobianInverse = basisCache->getJacobianInv();
 
     if ((cellTopoKey == shards::Line<2>::key) || (cellTopoKey == shards::Quadrilateral<4>::key))
     {
@@ -772,7 +772,7 @@ public:
 //      cout << "Parametric points:\n" << basisCache->computeParametricPoints();
       for (int d=0; d<spaceDim; d++)   // d is the function component index
       {
-        Intrepid::FieldContainer<double> parametricValues_d (1,numPoints,spaceDim); // F,P,D
+        Camellia::FieldContainer<double> parametricValues_d (1,numPoints,spaceDim); // F,P,D
         for (int ptIndex=0; ptIndex<numPoints; ptIndex++)
         {
           for (int derivative_direction=0; derivative_direction<spaceDim; derivative_direction++)
@@ -781,7 +781,7 @@ public:
           }
         }
 //        cout << "for d=" << d << ", parametricValues_d:\n" << parametricValues_d;
-        Intrepid::FieldContainer<double> values_d(numCells,1,numPoints,spaceDim);
+        Camellia::FieldContainer<double> values_d(numCells,1,numPoints,spaceDim);
 //        cout << "jacobianInverse:\n" << jacobianInverse;
         fst::HGRADtransformGRAD<double>(values_d, jacobianInverse, parametricValues_d);
         // now, place values_d in the appropriate spots in values

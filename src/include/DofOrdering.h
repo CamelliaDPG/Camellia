@@ -11,7 +11,7 @@
 
 // Intrepid includes
 #include "Intrepid_Basis.hpp"
-#include "Intrepid_FieldContainer.hpp"
+#include "Camellia_FieldContainer.hpp"
 
 // Shards includes
 #include "Shards_CellTopology.hpp"
@@ -62,8 +62,8 @@ public:
   bool hasBasisEntry(int varID, int sideIndex) const;
   bool hasSideVarIDs();
 
-  void copyLikeCoefficients( Intrepid::FieldContainer<double> &newValues, Teuchos::RCP<DofOrdering> oldDofOrdering,
-                             const Intrepid::FieldContainer<double> &oldValues );
+  void copyLikeCoefficients( Camellia::FieldContainer<double> &newValues, Teuchos::RCP<DofOrdering> oldDofOrdering,
+                             const Camellia::FieldContainer<double> &oldValues );
 
   // get the varIndex variable's dof with basis ordinal dofId in the Dof ordering:
   int getDofIndex(int varID, int basisDofOrdinal, int sideIndex=VOLUME_INTERIOR_SIDE_ORDINAL, int subSideIndex = -1);
@@ -86,13 +86,13 @@ public:
   // ! returns the dof coordinates (nodes in case of a nodal basis) for the variable on the side indicated.
   // ! The order of the coordinates corresponds to the basis ordering.  The coordinates are in volume reference space.
   // ! dofCoords shape: (F,D), where D is the dimension of the volume topology.
-  void getDofCoords(Intrepid::FieldContainer<double> &dofCoords, int varID, int sideOrdinal = VOLUME_INTERIOR_SIDE_ORDINAL);
+  void getDofCoords(Camellia::FieldContainer<double> &dofCoords, int varID, int sideOrdinal = VOLUME_INTERIOR_SIDE_ORDINAL);
 
   // ! returns the dof coordinates (nodes in case of a nodal basis) for the variable on the side indicated, given a physical cell
   // ! with nodes as indicated.
   // ! The order of the coordinates corresponds to the basis ordering.  The coordinates are in physical space.
   // ! dofCoords shape: (C,F,D), where D is the dimension of the volume topology.
-  void getDofCoords(const Intrepid::FieldContainer<double> &physicalCellNodes, Intrepid::FieldContainer<double> &dofCoords,
+  void getDofCoords(const Camellia::FieldContainer<double> &physicalCellNodes, Camellia::FieldContainer<double> &dofCoords,
                     int varID, int sideOrdinal = VOLUME_INTERIOR_SIDE_ORDINAL);
   
   bool hasEntryForVarID( int varID ); // returns true if we have any basis on any side for varID
@@ -132,7 +132,7 @@ public:
   bool isTrialOrdering() const;
   
   // ! Returns vector containing (varID,vector<sideOrdinal>) entries corresponding to variables with nonzero coefficients in the provided container
-  vector<pair<int,vector<int>>> variablesWithNonZeroEntries(const Intrepid::FieldContainer<double> &localCoefficients, double tol = 0.0) const;
+  vector<pair<int,vector<int>>> variablesWithNonZeroEntries(const Camellia::FieldContainer<double> &localCoefficients, double tol = 0.0) const;
 };
 }
 

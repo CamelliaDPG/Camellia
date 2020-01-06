@@ -14,7 +14,7 @@ Exp<Scalar>::Exp(TFunctionPtr<Scalar> power) : _power(power)
 {}
 
 template<class Scalar>
-void Exp<Scalar>::values(Intrepid::FieldContainer<Scalar> &values, BasisCachePtr basisCache)
+void Exp<Scalar>::values(Camellia::FieldContainer<Scalar> &values, BasisCachePtr basisCache)
 {
   // first, fill values container with _power values:
   _power->values(values,basisCache);
@@ -228,7 +228,7 @@ Ln<Scalar>::Ln(TFunctionPtr<Scalar> argument) : _argument(argument)
 {}
 
 template<class Scalar>
-void Ln<Scalar>::values(Intrepid::FieldContainer<Scalar> &values, BasisCachePtr basisCache)
+void Ln<Scalar>::values(Camellia::FieldContainer<Scalar> &values, BasisCachePtr basisCache)
 {
   // first, fill values container with _argument values:
   _argument->values(values,basisCache);

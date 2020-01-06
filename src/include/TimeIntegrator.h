@@ -30,7 +30,7 @@ public:
   {
     return 1./__invDt;
   }
-  void values(Intrepid::FieldContainer<double> &values, BasisCachePtr basisCache)
+  void values(Camellia::FieldContainer<double> &values, BasisCachePtr basisCache)
   {
     CHECK_VALUES_RANK(values);
     values.initialize(__invDt);

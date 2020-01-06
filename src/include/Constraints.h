@@ -16,7 +16,7 @@
 
 // abstract class
 
-#include "Intrepid_FieldContainer.hpp"
+#include "Camellia_FieldContainer.hpp"
 
 using namespace std;
 
@@ -26,10 +26,10 @@ class Constraints
 {
 public:
   //given trialID, field container for constraint matrix gives one coeff per point
-  virtual void getConstraints(Intrepid::FieldContainer<double> &physicalPoints,
-                              Intrepid::FieldContainer<double> &unitNormals,
-                              vector<map<int,Intrepid::FieldContainer<double > > > &constraintCoeffs,
-                              vector<Intrepid::FieldContainer<double > > &constraintValues) {};
+  virtual void getConstraints(Camellia::FieldContainer<double> &physicalPoints,
+                              Camellia::FieldContainer<double> &unitNormals,
+                              vector<map<int,Camellia::FieldContainer<double > > > &constraintCoeffs,
+                              vector<Camellia::FieldContainer<double > > &constraintValues) {};
   // TODO - figure out some way to skip over edges, points, or variables we don't use
 };
 }

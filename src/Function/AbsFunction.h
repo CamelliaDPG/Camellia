@@ -23,7 +23,7 @@ namespace Camellia
     TFunctionPtr<double> dy();
     TFunctionPtr<double> dz();
     
-    void values(Intrepid::FieldContainer<double> &values, BasisCachePtr basisCache);
+    void values(Camellia::FieldContainer<double> &values, BasisCachePtr basisCache);
     bool boundaryValueOnly();
     
     string displayString();

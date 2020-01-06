@@ -26,7 +26,7 @@ void LagrangeConstraints::addGlobalConstraint(const Constraint &c)
   _globalConstraints.push_back(c);
 }
 
-void LagrangeConstraints::getCoefficients(Intrepid::FieldContainer<double> &lhs, Intrepid::FieldContainer<double> &rhs,
+void LagrangeConstraints::getCoefficients(Camellia::FieldContainer<double> &lhs, Camellia::FieldContainer<double> &rhs,
     int elemConstraintIndex, DofOrderingPtr trialOrdering,
     BasisCachePtr basisCache)
 {

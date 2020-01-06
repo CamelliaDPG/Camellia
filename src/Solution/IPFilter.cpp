@@ -18,7 +18,7 @@ IPFilter::IPFilter(IPPtr ip)
   _ip = ip;
 }
 
-void IPFilter::filter(Intrepid::FieldContainer<double> &localStiffnessMatrix, Intrepid::FieldContainer<double> &localRHSVector,
+void IPFilter::filter(Camellia::FieldContainer<double> &localStiffnessMatrix, Camellia::FieldContainer<double> &localRHSVector,
                       BasisCachePtr basisCache, Teuchos::RCP<Mesh> mesh, Teuchos::RCP<BC> bc)
 {
   Teuchos::Array<int> dim(localStiffnessMatrix.rank());
@@ -26,7 +26,7 @@ void IPFilter::filter(Intrepid::FieldContainer<double> &localStiffnessMatrix, In
   {
     dim[rank] = localStiffnessMatrix.dimension(rank);
   }
-  Intrepid::FieldContainer<double> ipMatrix(dim);
+  Camellia::FieldContainer<double> ipMatrix(dim);
   GlobalIndexType sampleCellID = basisCache->cellIDs()[0];
   ElementTypePtr elemType = mesh->getElementType(sampleCellID);
   DofOrderingPtr dofOrdering = elemType->trialOrderPtr;

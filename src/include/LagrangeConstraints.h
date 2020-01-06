@@ -32,7 +32,7 @@ public:
   void addConstraint(const Constraint &c);
   void addConstraint(const Constraint &c, SpatialFilterPtr sf);
   void addGlobalConstraint(const Constraint &c);
-  void getCoefficients(Intrepid::FieldContainer<double> &lhs, Intrepid::FieldContainer<double> &rhs,
+  void getCoefficients(Camellia::FieldContainer<double> &lhs, Camellia::FieldContainer<double> &rhs,
                        int elemConstraintIndex, DofOrderingPtr trialOrdering,
                        BasisCachePtr basisCache);
   int numElementConstraints();

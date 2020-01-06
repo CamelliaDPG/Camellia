@@ -42,7 +42,7 @@ double ExactSolution<Scalar>::L2NormOfError(TSolutionPtr<Scalar> solution, int t
   {
     ElementTypePtr elemTypePtr = *(elemTypeIt);
     int numCells = mesh->cellIDsOfType(elemTypePtr).size();
-    Intrepid::FieldContainer<double> errorSquaredPerCell(numCells);
+    Camellia::FieldContainer<double> errorSquaredPerCell(numCells);
 
     const vector<int>* sides = &elemTypePtr->trialOrderPtr->getSidesForVarID(trialID);
     
@@ -61,7 +61,7 @@ double ExactSolution<Scalar>::L2NormOfError(TSolutionPtr<Scalar> solution, int t
 }
 
 template <typename Scalar>
-void ExactSolution<Scalar>::L2NormOfError(Intrepid::FieldContainer<double> &errorSquaredPerCell, TSolutionPtr<Scalar> solution, ElementTypePtr elemTypePtr, int trialID, int sideIndex, int cubDegree, double solutionLift)
+void ExactSolution<Scalar>::L2NormOfError(Camellia::FieldContainer<double> &errorSquaredPerCell, TSolutionPtr<Scalar> solution, ElementTypePtr elemTypePtr, int trialID, int sideIndex, int cubDegree, double solutionLift)
 {
 //  BasisCache(ElementTypePtr elemType, Teuchos::RCP<Mesh> mesh = Teuchos::rcp( (Mesh*) NULL ), bool testVsTest=false, int cubatureDegreeEnrichment = 0)
 
@@ -94,7 +94,7 @@ void ExactSolution<Scalar>::L2NormOfError(Intrepid::FieldContainer<double> &erro
   }
 
   // much of this code is the same as what's in the volume integration in computeStiffness...
-  Intrepid::FieldContainer<double> physicalCellNodes = solution->mesh()->physicalCellNodes(elemTypePtr);
+  Camellia::FieldContainer<double> physicalCellNodes = solution->mesh()->physicalCellNodes(elemTypePtr);
   vector<GlobalIndexType> cellIDs = solution->mesh()->cellIDsOfType(elemTypePtr);
   basisCache->setPhysicalCellNodes(physicalCellNodes, cellIDs, true);
 
@@ -103,8 +103,8 @@ void ExactSolution<Scalar>::L2NormOfError(Intrepid::FieldContainer<double> &erro
     basisCache = basisCache->getSideBasisCache(sideIndex);
   }
 
-  Intrepid::FieldContainer<double> weightedMeasure = basisCache->getWeightedMeasures();
-  Intrepid::FieldContainer<double> weightedErrorSquared;
+  Camellia::FieldContainer<double> weightedMeasure = basisCache->getWeightedMeasures();
+  Camellia::FieldContainer<double> weightedErrorSquared;
 
   int numCells = basisCache->getPhysicalCubaturePoints().dimension(0);
   int numCubPoints = basisCache->getPhysicalCubaturePoints().dimension(1);
@@ -120,8 +120,8 @@ void ExactSolution<Scalar>::L2NormOfError(Intrepid::FieldContainer<double> &erro
     dimensions.push_back(spaceDim);
   }
 
-  Intrepid::FieldContainer<Scalar> computedValues(dimensions);
-  Intrepid::FieldContainer<Scalar> exactValues(dimensions);
+  Camellia::FieldContainer<Scalar> computedValues(dimensions);
+  Camellia::FieldContainer<Scalar> exactValues(dimensions);
 
   if (solutionLift != 0.0)
   {
@@ -138,7 +138,7 @@ void ExactSolution<Scalar>::L2NormOfError(Intrepid::FieldContainer<double> &erro
 //  cout << "ExactSolution: exact values:\n" << exactValues;
 //  cout << "ExactSolution: computed values:\n" << computedValues;
 
-  Intrepid::FieldContainer<double> errorSquared(numCells,numCubPoints);
+  Camellia::FieldContainer<double> errorSquared(numCells,numCubPoints);
 
   squaredDifference(errorSquared,computedValues,exactValues);
 
@@ -174,7 +174,7 @@ bool ExactSolution<Scalar>::functionDefined(int trialID)
 }
 
 template <typename Scalar>
-void ExactSolution<Scalar>::squaredDifference(Intrepid::FieldContainer<double> &diffSquared, Intrepid::FieldContainer<Scalar> &values1, Intrepid::FieldContainer<Scalar> &values2)
+void ExactSolution<Scalar>::squaredDifference(Camellia::FieldContainer<double> &diffSquared, Camellia::FieldContainer<Scalar> &values1, Camellia::FieldContainer<Scalar> &values2)
 {
   // two possibilities for values:
   // (C,P) or (C,P,D)
@@ -205,8 +205,8 @@ void ExactSolution<Scalar>::squaredDifference(Intrepid::FieldContainer<double> &
 }
 
 template <typename Scalar>
-void ExactSolution<Scalar>::solutionValues(Intrepid::FieldContainer<Scalar> &values, int trialID,
-    Intrepid::FieldContainer<double> &physicalPoints)
+void ExactSolution<Scalar>::solutionValues(Camellia::FieldContainer<Scalar> &values, int trialID,
+    Camellia::FieldContainer<double> &physicalPoints)
 {
   int numCells = physicalPoints.dimension(0);
   int numPoints = physicalPoints.dimension(1);
@@ -221,7 +221,7 @@ void ExactSolution<Scalar>::solutionValues(Intrepid::FieldContainer<Scalar> &val
   {
     for (int ptIndex=0; ptIndex<numPoints; ptIndex++)
     {
-      Intrepid::FieldContainer<double> point(pointDimensions,&physicalPoints(cellIndex,ptIndex,0));
+      Camellia::FieldContainer<double> point(pointDimensions,&physicalPoints(cellIndex,ptIndex,0));
       Scalar value = solutionValue(trialID, point);
       values(cellIndex,ptIndex) = value;
     }
@@ -229,7 +229,7 @@ void ExactSolution<Scalar>::solutionValues(Intrepid::FieldContainer<Scalar> &val
 }
 
 template <typename Scalar>
-void ExactSolution<Scalar>::solutionValues(Intrepid::FieldContainer<Scalar> &values, int trialID, BasisCachePtr basisCache)
+void ExactSolution<Scalar>::solutionValues(Camellia::FieldContainer<Scalar> &values, int trialID, BasisCachePtr basisCache)
 {
   if (_exactFunctions.find(trialID) != _exactFunctions.end() )
   {
@@ -237,11 +237,11 @@ void ExactSolution<Scalar>::solutionValues(Intrepid::FieldContainer<Scalar> &val
     return;
   }
 
-  // TODO: change ExactSolution<Scalar>::solutionValues (below) to take a *const* points Intrepid::FieldContainer, to avoid this copy:
-  Intrepid::FieldContainer<double> points = basisCache->getPhysicalCubaturePoints();
+  // TODO: change ExactSolution<Scalar>::solutionValues (below) to take a *const* points Camellia::FieldContainer, to avoid this copy:
+  Camellia::FieldContainer<double> points = basisCache->getPhysicalCubaturePoints();
   if (basisCache->getSideIndex() >= 0)
   {
-    Intrepid::FieldContainer<double> unitNormals = basisCache->getSideNormals();
+    Camellia::FieldContainer<double> unitNormals = basisCache->getSideNormals();
     this->solutionValues(values,trialID,points,unitNormals);
   }
   else
@@ -251,10 +251,10 @@ void ExactSolution<Scalar>::solutionValues(Intrepid::FieldContainer<Scalar> &val
 }
 
 template <typename Scalar>
-void ExactSolution<Scalar>::solutionValues(Intrepid::FieldContainer<Scalar> &values,
+void ExactSolution<Scalar>::solutionValues(Camellia::FieldContainer<Scalar> &values,
     int trialID,
-    Intrepid::FieldContainer<double> &physicalPoints,
-    Intrepid::FieldContainer<double> &unitNormals)
+    Camellia::FieldContainer<double> &physicalPoints,
+    Camellia::FieldContainer<double> &unitNormals)
 {
   int numCells = physicalPoints.dimension(0);
   int numPoints = physicalPoints.dimension(1);
@@ -269,8 +269,8 @@ void ExactSolution<Scalar>::solutionValues(Intrepid::FieldContainer<Scalar> &val
   {
     for (int ptIndex=0; ptIndex<numPoints; ptIndex++)
     {
-      Intrepid::FieldContainer<double> point(pointDimensions,&physicalPoints(cellIndex,ptIndex,0));
-      Intrepid::FieldContainer<double> unitNormal(pointDimensions,&unitNormals(cellIndex,ptIndex,0));
+      Camellia::FieldContainer<double> point(pointDimensions,&physicalPoints(cellIndex,ptIndex,0));
+      Camellia::FieldContainer<double> unitNormal(pointDimensions,&unitNormals(cellIndex,ptIndex,0));
       Scalar value = solutionValue(trialID, point, unitNormal);
       values(cellIndex,ptIndex) = value;
     }
@@ -310,7 +310,7 @@ ExactSolution<Scalar>::ExactSolution(TBFPtr<Scalar> bf, TBCPtr<Scalar> bc, TRHSP
 }
 
 template <typename Scalar>
-Scalar ExactSolution<Scalar>::solutionValue(int trialID, Intrepid::FieldContainer<double> &physicalPoint)
+Scalar ExactSolution<Scalar>::solutionValue(int trialID, Camellia::FieldContainer<double> &physicalPoint)
 {
   TEUCHOS_TEST_FOR_EXCEPTION(true, std::invalid_argument, "Unimplemented method.");
   return 0;
@@ -330,8 +330,8 @@ Scalar ExactSolution<Scalar>::solutionValue(int trialID, Intrepid::FieldContaine
 }
 
 template <typename Scalar>
-Scalar ExactSolution<Scalar>::solutionValue(int trialID, Intrepid::FieldContainer<double> &physicalPoint,
-    Intrepid::FieldContainer<double> &unitNormal)
+Scalar ExactSolution<Scalar>::solutionValue(int trialID, Camellia::FieldContainer<double> &physicalPoint,
+    Camellia::FieldContainer<double> &unitNormal)
 {
   TEUCHOS_TEST_FOR_EXCEPTION(true, std::invalid_argument, "Unimplemented method.");
   return 0;

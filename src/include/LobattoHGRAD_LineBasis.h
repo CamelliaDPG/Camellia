@@ -16,7 +16,7 @@
 #define Camellia_debug_LobattoHGRAD_LineBasis_h
 
 #include "Basis.h"
-#include "Intrepid_FieldContainer.hpp"
+#include "Camellia_FieldContainer.hpp"
 
 namespace Camellia
 {
@@ -28,7 +28,7 @@ protected:
   int _degree;
   bool _conforming;
 
-  Intrepid::FieldContainer<double> _lobattoL2norms;
+  Camellia::FieldContainer<double> _lobattoL2norms;
   void initializeL2normValues();
 public:
   LobattoHGRAD_LineBasis(int degree, bool conforming); // conforming means vertex dofs defined...

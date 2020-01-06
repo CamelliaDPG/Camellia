@@ -15,7 +15,7 @@
 #ifndef Camellia_debug_Legendre_hpp
 #define Camellia_debug_Legendre_hpp
 
-#include "Intrepid_FieldContainer.hpp"
+#include "Camellia_FieldContainer.hpp"
 
 #include "SimpleFunction.h"
 
@@ -30,8 +30,8 @@ namespace Camellia {
 
   class LegendreFunction : public SimpleFunction<double> {
     int _polyOrder;
-    Intrepid::FieldContainer<double> _values;
-    Intrepid::FieldContainer<double> _derivatives;
+    Camellia::FieldContainer<double> _values;
+    Camellia::FieldContainer<double> _derivatives;
 
     bool _derivative; // whether this is the derivative of the Lobatto function
   public:

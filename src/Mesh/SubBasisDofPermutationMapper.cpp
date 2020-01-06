@@ -41,7 +41,7 @@ const set<int> & SubBasisDofPermutationMapper::basisDofOrdinalFilter()
 {
   return _basisDofOrdinalFilter;
 }
-Intrepid::FieldContainer<double> SubBasisDofPermutationMapper::mapData(bool transposeConstraintMatrix, Intrepid::FieldContainer<double> &data, bool applyOnLeftOnly)
+Camellia::FieldContainer<double> SubBasisDofPermutationMapper::mapData(bool transposeConstraintMatrix, Camellia::FieldContainer<double> &data, bool applyOnLeftOnly)
 {
   if (transposeConstraintMatrix)
   {
@@ -55,7 +55,7 @@ Intrepid::FieldContainer<double> SubBasisDofPermutationMapper::mapData(bool tran
     // data should come out such that the ordering corresponds to that of the _basisDofOrdinalFilter
     Teuchos::Array<int> dim;
     data.dimensions(dim);
-    Intrepid::FieldContainer<double> dataPermuted(dim);
+    Camellia::FieldContainer<double> dataPermuted(dim);
     if (dim.size() == 1)
     {
       TEUCHOS_TEST_FOR_EXCEPTION(_inversePermutation.size() != dim[0], std::invalid_argument, "unexpected data length");
@@ -97,8 +97,8 @@ Intrepid::FieldContainer<double> SubBasisDofPermutationMapper::mapData(bool tran
   }
 }
 
-void SubBasisDofPermutationMapper::mapDataIntoGlobalContainer(const Intrepid::FieldContainer<double> &wholeBasisData, const map<GlobalIndexType, unsigned int> &globalIndexToOrdinal,
-    bool fittableDofsOnly, const set<GlobalIndexType> &fittableDofIndices, Intrepid::FieldContainer<double> &globalData)
+void SubBasisDofPermutationMapper::mapDataIntoGlobalContainer(const Camellia::FieldContainer<double> &wholeBasisData, const map<GlobalIndexType, unsigned int> &globalIndexToOrdinal,
+    bool fittableDofsOnly, const set<GlobalIndexType> &fittableDofIndices, Camellia::FieldContainer<double> &globalData)
 {
   // like calling mapData, above, with transposeConstraintMatrix = true
 
@@ -114,10 +114,10 @@ void SubBasisDofPermutationMapper::mapDataIntoGlobalContainer(const Intrepid::Fi
   }
 }
 
-void SubBasisDofPermutationMapper::mapDataIntoGlobalContainer(const Intrepid::FieldContainer<double> &allLocalData, const vector<int> &basisOrdinalsInLocalData,
+void SubBasisDofPermutationMapper::mapDataIntoGlobalContainer(const Camellia::FieldContainer<double> &allLocalData, const vector<int> &basisOrdinalsInLocalData,
                                                               const map<GlobalIndexType, unsigned> &globalIndexToOrdinal,
                                                               bool fittableDofsOnly, const set<GlobalIndexType> &fittableDofIndices,
-                                                              Intrepid::FieldContainer<double> &globalData)
+                                                              Camellia::FieldContainer<double> &globalData)
 {
   // like calling mapData, above, with transposeConstraintMatrix = true
   
@@ -133,10 +133,10 @@ void SubBasisDofPermutationMapper::mapDataIntoGlobalContainer(const Intrepid::Fi
   }
 }
 
-Intrepid::FieldContainer<double> SubBasisDofPermutationMapper::getConstraintMatrix()
+Camellia::FieldContainer<double> SubBasisDofPermutationMapper::getConstraintMatrix()
 {
   // identity (permutation comes by virtue of ordering in globalDofOrdinals)
-  Intrepid::FieldContainer<double> matrix(_basisDofOrdinalFilter.size(),_globalDofOrdinals.size());
+  Camellia::FieldContainer<double> matrix(_basisDofOrdinalFilter.size(),_globalDofOrdinals.size());
   for (int i=0; i<_basisDofOrdinalFilter.size(); i++)
   {
     if (!_negate)

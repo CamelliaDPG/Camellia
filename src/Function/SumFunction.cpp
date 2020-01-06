@@ -47,7 +47,7 @@ TLinearTermPtr<Scalar> SumFunction<Scalar>::jacobian(const map<int, TFunctionPtr
 }
 
 template <typename Scalar>
-void SumFunction<Scalar>::values(Intrepid::FieldContainer<Scalar> &values, BasisCachePtr basisCache)
+void SumFunction<Scalar>::values(Camellia::FieldContainer<Scalar> &values, BasisCachePtr basisCache)
 {
   this->CHECK_VALUES_RANK(values);
   _f1->values(values,basisCache);

@@ -75,7 +75,7 @@ bool ConstantVectorFunction<Scalar>::isZero()
 }
 
 template <typename Scalar>
-void ConstantVectorFunction<Scalar>::values(Intrepid::FieldContainer<Scalar> &values, BasisCachePtr basisCache)
+void ConstantVectorFunction<Scalar>::values(Camellia::FieldContainer<Scalar> &values, BasisCachePtr basisCache)
 {
   this->CHECK_VALUES_RANK(values);
   int spaceDim = values.dimension(2);

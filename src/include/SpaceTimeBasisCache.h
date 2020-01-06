@@ -18,8 +18,8 @@ class SpaceTimeBasisCache : public BasisCache
 {
   static bool _defaultStoreTransformedValues; // default for new SpaceTimeBasisCaches (see static setter, below)
   
-  typedef Teuchos::RCP< Intrepid::FieldContainer<double> > FCPtr;
-  typedef Teuchos::RCP< const Intrepid::FieldContainer<double> > constFCPtr;
+  typedef Teuchos::RCP< Camellia::FieldContainer<double> > FCPtr;
+  typedef Teuchos::RCP< const Camellia::FieldContainer<double> > constFCPtr;
 
   BasisCachePtr _spatialCache, _temporalCache;
   bool _storeTransformedValues;
@@ -42,50 +42,50 @@ class SpaceTimeBasisCache : public BasisCache
                                   constFCPtr temporalValues,
                                   Intrepid::EOperator spaceOp,
                                   Intrepid::EOperator timeOp) const;
-  void getReferencePointComponents(const Intrepid::FieldContainer<double> &tensorRefPoints,
-                                   Intrepid::FieldContainer<double> &spaceRefPoints,
-                                   Intrepid::FieldContainer<double> &timeRefPoints);
+  void getReferencePointComponents(const Camellia::FieldContainer<double> &tensorRefPoints,
+                                   Camellia::FieldContainer<double> &spaceRefPoints,
+                                   Camellia::FieldContainer<double> &timeRefPoints);
   double getTemporalNodeCoordinateRefSpace(); // for temporal sides
 protected:
   virtual void createSideCaches();
 public:
   // volume constructors:
   SpaceTimeBasisCache(MeshPtr spaceTimeMesh, ElementTypePtr spaceTimeElementType,
-                      const Intrepid::FieldContainer<double> &physicalNodesSpatial,
-                      const Intrepid::FieldContainer<double> &physicalNodesTemporal,
-                      const Intrepid::FieldContainer<double> &physicalNodesSpaceTime,
+                      const Camellia::FieldContainer<double> &physicalNodesSpatial,
+                      const Camellia::FieldContainer<double> &physicalNodesTemporal,
+                      const Camellia::FieldContainer<double> &physicalNodesSpaceTime,
                       const std::vector<GlobalIndexType> &cellIDs,
                       bool testVsTest, int cubatureDegreeEnrichment);
-  SpaceTimeBasisCache(const Intrepid::FieldContainer<double> &physicalNodesSpatial,
-                      const Intrepid::FieldContainer<double> &physicalNodesTemporal,
-                      const Intrepid::FieldContainer<double> &physicalCellNodes,
+  SpaceTimeBasisCache(const Camellia::FieldContainer<double> &physicalNodesSpatial,
+                      const Camellia::FieldContainer<double> &physicalNodesTemporal,
+                      const Camellia::FieldContainer<double> &physicalCellNodes,
                       CellTopoPtr cellTopo, int cubDegree);
   SpaceTimeBasisCache(CellTopoPtr cellTopo,
-                      const Intrepid::FieldContainer<double> &physicalNodesSpatial,
-                      const Intrepid::FieldContainer<double> &physicalNodesTemporal,
-                      const Intrepid::FieldContainer<double> &physicalCellNodes,
-                      const Intrepid::FieldContainer<double> &refCellPointsSpatial,
-                      const Intrepid::FieldContainer<double> &refCellPointsTemporal,
-                      const Intrepid::FieldContainer<double> &refCellPoints);
+                      const Camellia::FieldContainer<double> &physicalNodesSpatial,
+                      const Camellia::FieldContainer<double> &physicalNodesTemporal,
+                      const Camellia::FieldContainer<double> &physicalCellNodes,
+                      const Camellia::FieldContainer<double> &refCellPointsSpatial,
+                      const Camellia::FieldContainer<double> &refCellPointsTemporal,
+                      const Camellia::FieldContainer<double> &refCellPoints);
 
 
   BasisCachePtr getSpatialBasisCache();
   BasisCachePtr getTemporalBasisCache();
 
-  virtual void setRefCellPoints(const Intrepid::FieldContainer<double> &pointsRefCell);
-  virtual void setRefCellPoints(const Intrepid::FieldContainer<double> &pointsRefCell,
-                                const Intrepid::FieldContainer<double> &cubatureWeights,
+  virtual void setRefCellPoints(const Camellia::FieldContainer<double> &pointsRefCell);
+  virtual void setRefCellPoints(const Camellia::FieldContainer<double> &pointsRefCell,
+                                const Camellia::FieldContainer<double> &cubatureWeights,
                                 int cubatureDegree = -1, bool recomputePhysicalMeasures = true);
 
-  virtual void setPhysicalCellNodes(const Intrepid::FieldContainer<double> &physicalCellNodes,
+  virtual void setPhysicalCellNodes(const Camellia::FieldContainer<double> &physicalCellNodes,
                                     const std::vector<GlobalIndexType> &cellIDs, bool createSideCacheToo);
 
   virtual constFCPtr getValues(BasisPtr basis, Camellia::EOperator op, bool useCubPointsSideRefCell = false);
   virtual constFCPtr getTransformedValues(BasisPtr basis, Camellia::EOperator op, bool useCubPointsSideRefCell = false);
   virtual constFCPtr getTransformedWeightedValues(BasisPtr basis, Camellia::EOperator op, bool useCubPointsSideRefCell = false);
 
-  static void getTensorialComponentPoints(CellTopoPtr spaceTimeTopo, const Intrepid::FieldContainer<double> &tensorPoints,
-                                          Intrepid::FieldContainer<double> &spatialPoints, Intrepid::FieldContainer<double> &temporalPoints);
+  static void getTensorialComponentPoints(CellTopoPtr spaceTimeTopo, const Camellia::FieldContainer<double> &tensorPoints,
+                                          Camellia::FieldContainer<double> &spatialPoints, Camellia::FieldContainer<double> &temporalPoints);
   static void setDefaultStoreTransformedValues(bool storeValues);
 };
 }

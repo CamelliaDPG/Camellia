@@ -25,7 +25,7 @@ public:
     return name.str();
   }
   
-  virtual void values(Intrepid::FieldContainer<Scalar> &values, BasisCachePtr basisCache)
+  virtual void values(Camellia::FieldContainer<Scalar> &values, BasisCachePtr basisCache)
   {
     this->CHECK_VALUES_RANK(values);
     int numCells = values.dimension(0);
@@ -81,7 +81,7 @@ public:
     name << "cos(" << _arg->displayString() << ")";
     return name.str();
   }
-  virtual void values(Intrepid::FieldContainer<Scalar> &values, BasisCachePtr basisCache)
+  virtual void values(Camellia::FieldContainer<Scalar> &values, BasisCachePtr basisCache)
   {
     this->CHECK_VALUES_RANK(values);
     int numCells = values.dimension(0);

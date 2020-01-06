@@ -12,7 +12,7 @@
 #include "Teuchos_UnitTestHarness.hpp"
 #include "Teuchos_UnitTestHelpers.hpp"
 
-#include "Intrepid_FieldContainer.hpp"
+#include "Camellia_FieldContainer.hpp"
 
 #include "Intrepid_HGRAD_LINE_Cn_FEM.hpp"
 #include "Intrepid_HGRAD_QUAD_Cn_FEM.hpp"
@@ -32,7 +32,7 @@ using namespace Camellia;
 
 namespace
 {
-typedef Intrepid::FieldContainer<double> FC;
+typedef Camellia::FieldContainer<double> FC;
 
 BasisPtr getSpatialBasis(CellTopoPtr cellTopo, Camellia::EFunctionSpace fs, int spatialPolyOrder)
 {
@@ -278,14 +278,14 @@ void testBasisOrdinalsForSubcell(CellTopoPtr spaceTopo, bool useHGRADInTime, int
         CellTopoPtr subcellTopo = spaceTimeTopo->getSubcell(subcellDim, subcellOrdinal);
         // lazy way to get the cubature points for subcell:
         BasisCachePtr subcellCache = BasisCache::basisCacheForReferenceCell(subcellTopo, cubDegree);
-        Intrepid::FieldContainer<double> subcellCubPoints = subcellCache->getRefCellPoints();
+        Camellia::FieldContainer<double> subcellCubPoints = subcellCache->getRefCellPoints();
 
         int numPoints = subcellCubPoints.dimension(0);
-        Intrepid::FieldContainer<double> subcellPointsInParent(numPoints,spaceTimeTopo->getDimension());
+        Camellia::FieldContainer<double> subcellPointsInParent(numPoints,spaceTimeTopo->getDimension());
         CamelliaCellTools::mapToReferenceSubcell(subcellPointsInParent, subcellCubPoints, subcellDim, subcellOrdinal, spaceTimeTopo);
 
         vector<int> dofOrdinals = tensorBasis->dofOrdinalsForSubcell(subcellDim, subcellOrdinal);
-        Intrepid::FieldContainer<double> values(tensorBasis->getCardinality(), numPoints);
+        Camellia::FieldContainer<double> values(tensorBasis->getCardinality(), numPoints);
         tensorBasis->getValues(values, subcellPointsInParent, Intrepid::OPERATOR_VALUE);
 
         for (auto dofOrdinal : dofOrdinals)
@@ -572,7 +572,7 @@ TEUCHOS_UNIT_TEST( TensorBasis, GetTensorValues )
     out << "temporalValues:\n" << temporalValues;
 
     sizeFCForBasisValues(tensorValuesActual, tensorBasis, numTensorPoints, op);
-    vector<FC> componentValues(2);
+    vector< Intrepid::FieldContainer<double> > componentValues(2);
     componentValues[0] = spatialValues;
     componentValues[1] = temporalValues;
 

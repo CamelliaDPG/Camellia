@@ -16,7 +16,7 @@
 
 // abstract class
 
-#include "Intrepid_FieldContainer.hpp"
+#include "Camellia_FieldContainer.hpp"
 #include "BasisCache.h"
 #include "BCFunction.h"
 #include "SpatialFilter.h"
@@ -42,13 +42,13 @@ protected:
 public:
   TBC(bool legacySubclass) : _legacyBCSubclass(legacySubclass) {}
   virtual bool bcsImposed(int varID); // returns true if there are any BCs anywhere imposed on varID
-  virtual void imposeBC(Intrepid::FieldContainer<Scalar> &dirichletValues, Intrepid::FieldContainer<bool> &imposeHere,
-                        int varID, Intrepid::FieldContainer<double> &unitNormals, BasisCachePtr basisCache);
+  virtual void imposeBC(Camellia::FieldContainer<Scalar> &dirichletValues, Camellia::FieldContainer<bool> &imposeHere,
+                        int varID, Camellia::FieldContainer<double> &unitNormals, BasisCachePtr basisCache);
 
-  virtual void imposeBC(int varID, Intrepid::FieldContainer<double> &physicalPoints,
-                        Intrepid::FieldContainer<double> &unitNormals,
-                        Intrepid::FieldContainer<Scalar> &dirichletValues,
-                        Intrepid::FieldContainer<bool> &imposeHere);
+  virtual void imposeBC(int varID, Camellia::FieldContainer<double> &physicalPoints,
+                        Camellia::FieldContainer<double> &unitNormals,
+                        Camellia::FieldContainer<Scalar> &dirichletValues,
+                        Camellia::FieldContainer<bool> &imposeHere);
 
   virtual bool singlePointBC(int varID); // override if you want to implement a BC at a single, arbitrary point (and nowhere else).
   virtual Scalar valueForSinglePointBC(int varID);
@@ -59,7 +59,7 @@ public:
   bool isLegacySubclass();
 
   // basisCoefficients has dimensions (C,F)
-  virtual void coefficientsForBC(Intrepid::FieldContainer<double> &basisCoefficients, Teuchos::RCP<BCFunction<Scalar>> bcFxn, BasisPtr basis, BasisCachePtr sideBasisCache);
+  virtual void coefficientsForBC(Camellia::FieldContainer<double> &basisCoefficients, Teuchos::RCP<BCFunction<Scalar>> bcFxn, BasisPtr basis, BasisCachePtr sideBasisCache);
 
   virtual ~TBC() {}
 

@@ -26,7 +26,7 @@
 #include "Epetra_SerialComm.h"
 #include "Teuchos_Comm.hpp"
 
-#include "Intrepid_FieldContainer.hpp"
+#include "Camellia_FieldContainer.hpp"
 
 namespace Camellia
 {
@@ -41,10 +41,10 @@ public:
   template<typename Scalar>
   static void allGather(const Epetra_Comm &Comm, std::vector<Scalar> &allValues, std::vector<Scalar> myValues);
   
-  static void allGather(const Epetra_Comm &Comm, Intrepid::FieldContainer<int> &allValues, int myValue);
+  static void allGather(const Epetra_Comm &Comm, Camellia::FieldContainer<int> &allValues, int myValue);
   static void allGather(const Epetra_Comm &Comm,
-                        Intrepid::FieldContainer<int> &values,
-                        Intrepid::FieldContainer<int> &myValues); // assumes myValues is same size on every proc.
+                        Camellia::FieldContainer<int> &values,
+                        Camellia::FieldContainer<int> &myValues); // assumes myValues is same size on every proc.
 
   template<typename DataType>
   static void allGatherVariable(const Epetra_Comm &Comm,
@@ -54,9 +54,9 @@ public:
   
   template<typename Scalar>
   static void allGatherVariable(const Epetra_Comm &Comm,
-                                Intrepid::FieldContainer<Scalar> &gatheredValues,
-                                Intrepid::FieldContainer<Scalar> &myValues,
-                                Intrepid::FieldContainer<int> &offsets);
+                                Camellia::FieldContainer<Scalar> &gatheredValues,
+                                Camellia::FieldContainer<Scalar> &myValues,
+                                Camellia::FieldContainer<int> &offsets);
   
   static Teuchos::RCP<Epetra_Distributor> getDistributor(const Epetra_Comm &Comm);
   
@@ -70,11 +70,11 @@ public:
 
   //! sum values entry-wise across all processors in Comm
   template<typename ScalarType>
-  static void entryWiseSum(const Epetra_Comm &Comm, Intrepid::FieldContainer<ScalarType> &values);
+  static void entryWiseSum(const Epetra_Comm &Comm, Camellia::FieldContainer<ScalarType> &values);
   
   //! sum values entry-wise across all processors in Comm, after casting
   template<typename ScalarType, typename ScalarTypeToCast>
-  static void entryWiseSumAfterCasting(const Epetra_Comm &Comm, Intrepid::FieldContainer<ScalarType> &values);
+  static void entryWiseSumAfterCasting(const Epetra_Comm &Comm, Camellia::FieldContainer<ScalarType> &values);
   
   //! sum values entry-wise across all processors in Comm
   template<typename ScalarType>
@@ -82,14 +82,14 @@ public:
   
   //! sum values entry-wise across all processors
   template<typename ScalarType>
-  static void entryWiseSum(Intrepid::FieldContainer<ScalarType> &values);
+  static void entryWiseSum(Camellia::FieldContainer<ScalarType> &values);
   
   //! sum values entry-wise across all processors
   template<typename ScalarType>
   static void entryWiseSum(std::vector<ScalarType> &values);
   
   //! sums values entry-wise across all processors
-  static void entryWiseSum(Intrepid::FieldContainer<double> &values);
+  static void entryWiseSum(Camellia::FieldContainer<double> &values);
   
   //! sum values entry-wise across all processors in Comm: char specialization because Epetra_Comm does not provide
   static void entryWiseSum(const Epetra_Comm &Comm, std::vector<char> &values)
@@ -132,13 +132,13 @@ public:
   
   // sum the contents of valuesToSum across all processors, and returns the result:
   // (valuesToSum may vary in length across processors)
-  static double sum(const Intrepid::FieldContainer<double> &valuesToSum);
+  static double sum(const Camellia::FieldContainer<double> &valuesToSum);
   static double sum(double myValue);
 
-  static void entryWiseSum(Intrepid::FieldContainer<int> &values); // sums values entry-wise across all processors
+  static void entryWiseSum(Camellia::FieldContainer<int> &values); // sums values entry-wise across all processors
   // sum the contents of valuesToSum across all processors, and returns the result:
   // (valuesToSum may vary in length across processors)
-  static int sum(const Intrepid::FieldContainer<int> &valuesToSum);
+  static int sum(const Camellia::FieldContainer<int> &valuesToSum);
   static int sum(int myValue);
   
   //! sum value across communicator
@@ -199,26 +199,26 @@ public:
   
   //! sum values entry-wise across all processors in Comm
   template<typename ScalarType>
-  void MPIWrapper::entryWiseSum(const Epetra_Comm &Comm, Intrepid::FieldContainer<ScalarType> &values)
+  void MPIWrapper::entryWiseSum(const Epetra_Comm &Comm, Camellia::FieldContainer<ScalarType> &values)
   {
-    Intrepid::FieldContainer<ScalarType> valuesCopy = values; // it appears this copy is necessary
+    Camellia::FieldContainer<ScalarType> valuesCopy = values; // it appears this copy is necessary
     Comm.SumAll(&valuesCopy[0], &values[0], values.size());
   }
   
   template<typename ScalarType, typename ScalarTypeToCast>
-  void MPIWrapper::entryWiseSumAfterCasting(const Epetra_Comm &Comm, Intrepid::FieldContainer<ScalarType> &values)
+  void MPIWrapper::entryWiseSumAfterCasting(const Epetra_Comm &Comm, Camellia::FieldContainer<ScalarType> &values)
   {
 #ifdef HAVE_MPI
     // cast to ScalarTypeToCast:
     Teuchos::Array<int> dim;
     values.dimensions(dim);
-    Intrepid::FieldContainer<ScalarTypeToCast> valuesCast(dim);
+    Camellia::FieldContainer<ScalarTypeToCast> valuesCast(dim);
     for (int i=0; i<values.size(); i++)
     {
       valuesCast[i] = (ScalarTypeToCast) values[i];
     }
     
-    Intrepid::FieldContainer<ScalarTypeToCast> valuesCastCopy = valuesCast; // it appears this copy is necessary
+    Camellia::FieldContainer<ScalarTypeToCast> valuesCastCopy = valuesCast; // it appears this copy is necessary
     Comm.SumAll(&valuesCastCopy[0], &valuesCast[0], valuesCast.size());
     
     // copy back to original container:
@@ -371,8 +371,8 @@ public:
   
   // \brief Resizes gatheredValues to be the size of the sum of the myValues containers, and fills it with the values from those containers.
   template<typename Scalar>
-  void MPIWrapper::allGatherVariable(const Epetra_Comm &Comm, Intrepid::FieldContainer<Scalar> &gatheredValues,
-                                     Intrepid::FieldContainer<Scalar> &myValues, Intrepid::FieldContainer<int> &offsets)
+  void MPIWrapper::allGatherVariable(const Epetra_Comm &Comm, Camellia::FieldContainer<Scalar> &gatheredValues,
+                                     Camellia::FieldContainer<Scalar> &myValues, Camellia::FieldContainer<int> &offsets)
   {
     std::vector<int> valuesSizes(Comm.NumProc());
     

@@ -340,7 +340,7 @@ namespace
       ElementTypePtr elementType = mesh->getElementType(cellID);
       DofOrderingPtr testOrder = elementType->testOrderPtr;
       int numTestDofs = testOrder->totalDofs();
-      Intrepid::FieldContainer<double> gramMatrix(numCells,numTestDofs,numTestDofs);
+      Camellia::FieldContainer<double> gramMatrix(numCells,numTestDofs,numTestDofs);
       bool testVsTest = true;
       BasisCachePtr basisCache = BasisCache::basisCacheForCell(mesh, cellID, testVsTest);
       ip->computeInnerProductMatrix(gramMatrix, testOrder, basisCache);

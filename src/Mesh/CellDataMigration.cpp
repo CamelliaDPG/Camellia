@@ -28,7 +28,7 @@ typedef pair<LabeledRefinementBranch, vector<vector<double>> > RootedLabeledRefi
 #define WRITE_ADVANCE(dataLocation,variable) writeAndAdvance(dataLocation,&variable,sizeof(variable))
 #define WRITE_ADVANCE_ARRAY(dataLocation,array) if (array.size() > 0) writeAndAdvance(dataLocation,&array[0],sizeof(array[0])*array.size())
 
-std::vector<std::pair<std::pair<GlobalIndexType,bool>,Intrepid::FieldContainer<double>>> CellDataMigration::solutionCoefficients;
+std::vector<std::pair<std::pair<GlobalIndexType,bool>,Camellia::FieldContainer<double>>> CellDataMigration::solutionCoefficients;
 
 void CellDataMigration::addMigratedGeometry(MeshTopology* meshTopo,
                                             const vector<RootedLabeledRefinementBranch> &rootedLabeledBranches)
@@ -356,7 +356,7 @@ void CellDataMigration::packSolutionData(Mesh *mesh, GlobalIndexType cellID, boo
         continue; // no dofs to assign; proceed to next solution
       }
       // # dofs per solution
-      const Intrepid::FieldContainer<double>* solnCoeffs = &solutions[i]->allCoefficientsForCellID(cellIDForCoefficients, false, lhsOrdinal); // false: don't warn
+      const Camellia::FieldContainer<double>* solnCoeffs = &solutions[i]->allCoefficientsForCellID(cellIDForCoefficients, false, lhsOrdinal); // false: don't warn
 //      cout << "cellIDForCoefficients = " << cellIDForCoefficients;
 //      cout << "; lhOrdinal = " << lhsOrdinal;
       int localDofs = solnCoeffs->size();
@@ -388,7 +388,7 @@ void CellDataMigration::processSolutionCoefficients(Mesh* mesh)
   {
     GlobalIndexType cellID = entry.first.first;
     bool coefficientsBelongToParent = entry.first.second;
-    const Intrepid::FieldContainer<double>& solnCoeffs = entry.second;
+    const Camellia::FieldContainer<double>& solnCoeffs = entry.second;
     
     int numLHSes = solutions[solnOrdinal]->numSolutions();
     for (int lhsOrdinal=0; lhsOrdinal<numLHSes; lhsOrdinal++)
@@ -648,7 +648,7 @@ void CellDataMigration::unpackSolutionData(Mesh* mesh, GlobalIndexType cellID, c
         TEUCHOS_TEST_FOR_EXCEPTION(true, std::invalid_argument, "localDofs != elemType->trialOrderPtr->totalDofs()");
       }
       
-      Intrepid::FieldContainer<double> solnCoeffs(localDofs);
+      Camellia::FieldContainer<double> solnCoeffs(localDofs);
       memcpy(&solnCoeffs[0], dataLocation, localDofs * sizeof(double));
       // the dofs themselves
       dataLocation += localDofs * sizeof(double);
