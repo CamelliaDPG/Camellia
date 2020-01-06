@@ -32,7 +32,7 @@ public:
     _qoi = qoi;
   }
 
-  void filter(Intrepid::FieldContainer<double> &localStiffnessMatrix, Intrepid::FieldContainer<double> &localRHSVector,
+  void filter(Camellia::FieldContainer<double> &localStiffnessMatrix, Camellia::FieldContainer<double> &localRHSVector,
               BasisCachePtr basisCache, Teuchos::RCP<Mesh> mesh, Teuchos::RCP<BC> bc)
   {
     // localStiffnessMatrix has dimensions (C,F,F) where F are the fields for the trial space basis
@@ -47,7 +47,7 @@ public:
     // Assumes that all elements are of like type--but they'd have to be, to have a single localStiffness FC
     ElementTypePtr elemType = mesh->getElementType(basisCache->cellIDs()[0]);
 
-    Intrepid::FieldContainer<double> qoiLoad(numCells,numFields);
+    Camellia::FieldContainer<double> qoiLoad(numCells,numFields);
     _qoi->integrate(qoiLoad,elemType->trialOrderPtr,basisCache);
 
     for (int cellIndex=0; cellIndex<numCells; cellIndex++)

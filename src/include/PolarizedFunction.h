@@ -29,7 +29,7 @@ class PolarizedFunction : public TFunction<Scalar>   // takes a 2D Function of x
   TFunctionPtr<Scalar> _f;
 public:
   PolarizedFunction( TFunctionPtr<Scalar> f_of_xAsR_yAsTheta );
-  void values(Intrepid::FieldContainer<Scalar> &values, BasisCachePtr basisCache);
+  void values(Camellia::FieldContainer<Scalar> &values, BasisCachePtr basisCache);
 
   TFunctionPtr<Scalar> dx();
   TFunctionPtr<Scalar> dy();

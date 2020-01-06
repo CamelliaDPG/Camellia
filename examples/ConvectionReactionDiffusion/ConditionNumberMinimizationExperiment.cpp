@@ -19,7 +19,7 @@ using namespace Camellia;
 
 double conditionNumberLAPACK(const Epetra_RowMatrix &stiffnessMatrix, bool diagScaling)
 {
-  Intrepid::FieldContainer<double> A;
+  Camellia::FieldContainer<double> A;
   SerialDenseWrapper::extractFCFromEpetra_RowMatrix(stiffnessMatrix, A);
   if (diagScaling)
   {

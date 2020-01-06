@@ -30,7 +30,7 @@ EnergyErrorFunction::EnergyErrorFunction(RieszRepPtr rieszRep)
   _rieszRep = rieszRep;
 }
 
-void EnergyErrorFunction::values(Intrepid::FieldContainer<double> &values,
+void EnergyErrorFunction::values(Camellia::FieldContainer<double> &values,
                                  BasisCachePtr basisCache)
 {
   // values should have shape: (C,P)

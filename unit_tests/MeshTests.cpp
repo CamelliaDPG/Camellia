@@ -804,7 +804,7 @@ TEUCHOS_UNIT_TEST( Mesh, ParitySpaceTime1D )
   for (set<GlobalIndexType>::iterator cellIDIt = cellIDs.begin(); cellIDIt != cellIDs.end(); cellIDIt++)
   {
     GlobalIndexType cellID = *cellIDIt;
-    Intrepid::FieldContainer<double> parities = spaceTimeMesh->globalDofAssignment()->cellSideParitiesForCell(cellID);
+    Camellia::FieldContainer<double> parities = spaceTimeMesh->globalDofAssignment()->cellSideParitiesForCell(cellID);
     CellPtr cell = spaceTimeMesh->getTopology()->getCell(cellID);
     for (int sideOrdinal=0; sideOrdinal<cell->getSideCount(); sideOrdinal++)
     {
@@ -819,7 +819,7 @@ TEUCHOS_UNIT_TEST( Mesh, ParitySpaceTime1D )
         pair<GlobalIndexType, unsigned> neighborInfo = cell->getNeighborInfo(sideOrdinal,spaceTimeMesh->getTopology());
         GlobalIndexType neighborCellID = neighborInfo.first;
         unsigned neighborSide = neighborInfo.second;
-        Intrepid::FieldContainer<double> neighborParities = spaceTimeMesh->globalDofAssignment()->cellSideParitiesForCell(neighborCellID);
+        Camellia::FieldContainer<double> neighborParities = spaceTimeMesh->globalDofAssignment()->cellSideParitiesForCell(neighborCellID);
         double neighborParity = neighborParities[neighborSide];
         TEST_EQUALITY(parity, -neighborParity);
       }
@@ -1137,7 +1137,7 @@ TEUCHOS_UNIT_TEST( Mesh, NormalSpaceTime1D )
     CellPtr cell = spaceTimeMesh->getTopology()->getCell(cellID);
     for (int sideOrdinal=0; sideOrdinal<cell->getSideCount(); sideOrdinal++)
     {
-      Intrepid::FieldContainer<double> sideNormalsSpaceTime = basisCache->getSideBasisCache(sideOrdinal)->getSideNormalsSpaceTime();
+      Camellia::FieldContainer<double> sideNormalsSpaceTime = basisCache->getSideBasisCache(sideOrdinal)->getSideNormalsSpaceTime();
       int numPoints = sideNormalsSpaceTime.dimension(1);
 
       // check that the normals are unit length:
@@ -1159,7 +1159,7 @@ TEUCHOS_UNIT_TEST( Mesh, NormalSpaceTime1D )
         GlobalIndexType neighborCellID = neighborInfo.first;
         unsigned neighborSide = neighborInfo.second;
         BasisCachePtr neighborBasisCache = BasisCache::basisCacheForCell(spaceTimeMesh,neighborCellID);
-        Intrepid::FieldContainer<double> neighborSideNormals = neighborBasisCache->getSideBasisCache(neighborSide)->getSideNormalsSpaceTime();
+        Camellia::FieldContainer<double> neighborSideNormals = neighborBasisCache->getSideBasisCache(neighborSide)->getSideNormalsSpaceTime();
 
         // NOTE: here we implicitly assume that the normals at each point will be the same, because we don't
         //       do anything to make neighbors' physical points come in the same order.  For now, this is true

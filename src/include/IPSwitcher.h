@@ -30,11 +30,11 @@ class IPSwitcher : public IP
 public:
   IPSwitcher(IPPtr ip1, IPPtr ip2, double minH);
 
-  void computeInnerProductMatrix(Intrepid::FieldContainer<double> &innerProduct,
+  void computeInnerProductMatrix(Camellia::FieldContainer<double> &innerProduct,
                                  Teuchos::RCP<DofOrdering> dofOrdering,
                                  Teuchos::RCP<BasisCache> basisCache);
 
-  void computeInnerProductVector(Intrepid::FieldContainer<double> &ipVector,
+  void computeInnerProductVector(Camellia::FieldContainer<double> &ipVector,
                                  VarPtr var, TFunctionPtr<double> fxn,
                                  Teuchos::RCP<DofOrdering> dofOrdering,
                                  Teuchos::RCP<BasisCache> basisCache);

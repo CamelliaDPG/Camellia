@@ -36,7 +36,7 @@ public:
     _absoluteValue = takeAbsoluteValue;
   }
 
-  void values(Intrepid::FieldContainer<double> &values, BasisCachePtr basisCache)
+  void values(Camellia::FieldContainer<double> &values, BasisCachePtr basisCache)
   {
     if (basisCache->isSideCache())
     {
@@ -52,9 +52,9 @@ public:
 
     MeshPtr mesh = basisCache->mesh();
     vector<GlobalIndexType> cellIDs = basisCache->cellIDs();
-    Intrepid::FieldContainer<double> cellIntegrals(numCells);
+    Camellia::FieldContainer<double> cellIntegrals(numCells);
 
-    //    Intrepid::FieldContainer<double> cellIntegralsOnSide(numCells); // DEBUGGING
+    //    Camellia::FieldContainer<double> cellIntegralsOnSide(numCells); // DEBUGGING
 
     int numSides = basisCache->cellTopology()->getSideCount();
 
@@ -71,7 +71,7 @@ public:
       //      }
     }
 
-    Intrepid::FieldContainer<double> cellMeasures = basisCache->getCellMeasures();
+    Camellia::FieldContainer<double> cellMeasures = basisCache->getCellMeasures();
 
     // weight by cellMeasure (so that the integral of this function makes sense), and take absolute value if requested
     for (int cellIndex=0; cellIndex < numCells; cellIndex++)

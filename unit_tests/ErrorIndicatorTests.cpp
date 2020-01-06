@@ -111,8 +111,8 @@ namespace
   vector<double> expectedGradient(MeshTopologyViewPtr meshTopo, GlobalIndexType myCellID)
   {
     int spaceDim = meshTopo->getDimension();
-    Intrepid::FieldContainer<double> Y(spaceDim,spaceDim); // matrix we'll invert
-    Intrepid::FieldContainer<double> valueDiffs(spaceDim);
+    Camellia::FieldContainer<double> Y(spaceDim,spaceDim); // matrix we'll invert
+    Camellia::FieldContainer<double> valueDiffs(spaceDim);
     vector<double> centroid = meshTopo->getCellCentroid(myCellID);
     double myValue = cellValue(centroid);
     CellPtr cell = meshTopo->getCell(myCellID);
@@ -137,7 +137,7 @@ namespace
         valueDiffs(d1) += y[d1] * (neighborValue - myValue) / y_mag_squared;
       }
     }
-    Intrepid::FieldContainer<double> gradient(spaceDim);
+    Camellia::FieldContainer<double> gradient(spaceDim);
     
     SerialDenseWrapper::solveSystem(gradient, Y, valueDiffs);
     vector<double> gradientVector(spaceDim);
@@ -148,11 +148,11 @@ namespace
     return gradientVector;
   }
   
-  Intrepid::FieldContainer<double> expectedHessian(MeshTopologyViewPtr meshTopo, GlobalIndexType myCellID)
+  Camellia::FieldContainer<double> expectedHessian(MeshTopologyViewPtr meshTopo, GlobalIndexType myCellID)
   {
     int spaceDim = meshTopo->getDimension();
-    Intrepid::FieldContainer<double> Y(spaceDim,spaceDim); // matrix we'll invert
-    Intrepid::FieldContainer<double> gradientDiffsOuterProduct(spaceDim,spaceDim); // RHS
+    Camellia::FieldContainer<double> Y(spaceDim,spaceDim); // matrix we'll invert
+    Camellia::FieldContainer<double> gradientDiffsOuterProduct(spaceDim,spaceDim); // RHS
     vector<double> centroid = meshTopo->getCellCentroid(myCellID);
     vector<double> myGradient = expectedGradient(meshTopo, myCellID);
     CellPtr cell = meshTopo->getCell(myCellID);
@@ -177,7 +177,7 @@ namespace
         }
       }
     }
-    Intrepid::FieldContainer<double> hessian(spaceDim, spaceDim);
+    Camellia::FieldContainer<double> hessian(spaceDim, spaceDim);
     SerialDenseWrapper::solveSystem(hessian, Y, gradientDiffsOuterProduct);
     
     // symmetrize:
@@ -253,8 +253,8 @@ namespace
 //      }
 //      cout << gradient[spaceDim-1] << ")\n";
       
-      Intrepid::FieldContainer<double> hessian = expectedHessian(meshTopo, cellID);
-      Intrepid::FieldContainer<double> lambda_real(spaceDim), lambda_imag(spaceDim);
+      Camellia::FieldContainer<double> hessian = expectedHessian(meshTopo, cellID);
+      Camellia::FieldContainer<double> lambda_real(spaceDim), lambda_imag(spaceDim);
       SerialDenseWrapper::eigenvalues(hessian, lambda_real, lambda_imag);
       double maxLambda = 0;
       for (int d=0; d<spaceDim; d++)

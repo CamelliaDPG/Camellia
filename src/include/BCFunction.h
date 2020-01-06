@@ -10,7 +10,7 @@
 
 #include "TypeDefs.h"
 
-#include "Intrepid_FieldContainer.hpp"
+#include "Camellia_FieldContainer.hpp"
 
 #include "Function.h"
 
@@ -19,13 +19,13 @@ namespace Camellia
 template <typename Scalar>
 class BCFunction : public TFunction<Scalar>
 {
-  Intrepid::FieldContainer<bool> _imposeHere;
+  Camellia::FieldContainer<bool> _imposeHere;
   int _varID;
   BCPtr _bc;
   TFunctionPtr<Scalar> _spatiallyFilteredFunction;
 public:
   BCFunction(BCPtr bc, int varID, TFunctionPtr<Scalar> spatiallyFilteredFunction, int rank);
-  void values(Intrepid::FieldContainer<Scalar> &values, BasisCachePtr basisCache);
+  void values(Camellia::FieldContainer<Scalar> &values, BasisCachePtr basisCache);
   bool imposeOnCell(int cellIndex);
   int varID();
 

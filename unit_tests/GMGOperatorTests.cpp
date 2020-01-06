@@ -65,8 +65,8 @@ namespace
     int myRowCount = P->Map().NumMyElements();
     
     GlobalIndexTypeToCast globalEntryCount = P->Map().NumGlobalElements();
-    Intrepid::FieldContainer<GlobalIndexTypeToCast> colIndices(globalEntryCount);
-    Intrepid::FieldContainer<double> colValues(globalEntryCount);
+    Camellia::FieldContainer<GlobalIndexTypeToCast> colIndices(globalEntryCount);
+    Camellia::FieldContainer<double> colValues(globalEntryCount);
     
 //    printMapSummary(P->Map(), "P->Map()");
     
@@ -455,7 +455,7 @@ namespace
       bool warnAboutOffRank = false;
       set<GlobalIndexType> myCellIDs = coarseSoln->mesh()->cellIDsInPartition();
       for (GlobalIndexType cellID : myCellIDs) {
-        Intrepid::FieldContainer<double> coefficients = coarseSoln->allCoefficientsForCellID(cellID, warnAboutOffRank);
+        Camellia::FieldContainer<double> coefficients = coarseSoln->allCoefficientsForCellID(cellID, warnAboutOffRank);
         out << "\n\n******************** Dofs for cell " << cellID << " (exactSoln) ********************\n\n";
         DofOrderingPtr trialOrder = mesh->getElementType(cellID)->trialOrderPtr;
         printLabeledDofCoefficients(out, form.bf()->varFactory(), trialOrder, coefficients);
@@ -488,7 +488,7 @@ namespace
     bool warnAboutOffRank = false;
     set<GlobalIndexType> myCellIDs = fineSoln->mesh()->cellIDsInPartition();
     for (GlobalIndexType cellID : myCellIDs) {
-      Intrepid::FieldContainer<double> coefficients = fineSoln->allCoefficientsForCellID(cellID, warnAboutOffRank);
+      Camellia::FieldContainer<double> coefficients = fineSoln->allCoefficientsForCellID(cellID, warnAboutOffRank);
       out << "\n\n******************** Dofs for cell " << cellID << " (exactSoln) ********************\n\n";
       DofOrderingPtr trialOrder = fineMesh->getElementType(cellID)->trialOrderPtr;
       printLabeledDofCoefficients(out, form.bf()->varFactory(), trialOrder, coefficients);
@@ -523,7 +523,7 @@ namespace
     TEST_COMPARE(energyError, <, tol);
     
     for (GlobalIndexType cellID : myCellIDs) {
-      Intrepid::FieldContainer<double> coefficients = fineSoln->allCoefficientsForCellID(cellID, warnAboutOffRank);
+      Camellia::FieldContainer<double> coefficients = fineSoln->allCoefficientsForCellID(cellID, warnAboutOffRank);
       out << "\n\n******************** Dofs for cell " << cellID << " (fineSoln) ********************\n\n";
       DofOrderingPtr trialOrder = fineMesh->getElementType(cellID)->trialOrderPtr;
       printLabeledDofCoefficients(out, form.bf()->varFactory(), trialOrder, coefficients);
@@ -701,7 +701,7 @@ namespace
     VarFactoryPtr vf = bf->varFactory();
     //    for (set<GlobalIndexType>::iterator cellIDIt = cellIDs.begin(); cellIDIt != cellIDs.end(); cellIDIt++) {
     //      cout << "\n\n******************** Dofs for cell " << *cellIDIt << " (fineSoln before subtracting exact) ********************\n";
-    //      Intrepid::FieldContainer<double> coefficients = fineSoln->allCoefficientsForCellID(*cellIDIt, warnAboutOffRank);
+    //      Camellia::FieldContainer<double> coefficients = fineSoln->allCoefficientsForCellID(*cellIDIt, warnAboutOffRank);
     //      DofOrderingPtr trialOrder = fineMesh->getElementType(*cellIDIt)->trialOrderPtr;
     //      printLabeledDofCoefficients(vf, trialOrder, coefficients);
     //    }
@@ -709,14 +709,14 @@ namespace
     set<GlobalIndexType> myCellIDs = fineSoln->mesh()->cellIDsInPartition();
     
     for (GlobalIndexType cellID : myCellIDs) {
-      Intrepid::FieldContainer<double> coefficients = exactSoln->allCoefficientsForCellID(cellID, warnAboutOffRank);
+      Camellia::FieldContainer<double> coefficients = exactSoln->allCoefficientsForCellID(cellID, warnAboutOffRank);
       out << "\n\n******************** Dofs for cell " << cellID << " (exactSoln) ********************\n\n";
       DofOrderingPtr trialOrder = fineMesh->getElementType(cellID)->trialOrderPtr;
       printLabeledDofCoefficients(out, form.bf()->varFactory(), trialOrder, coefficients);
     }
     
     for (GlobalIndexType cellID : myCellIDs) {
-      Intrepid::FieldContainer<double> coefficients = fineSoln->allCoefficientsForCellID(cellID, warnAboutOffRank);
+      Camellia::FieldContainer<double> coefficients = fineSoln->allCoefficientsForCellID(cellID, warnAboutOffRank);
       out << "\n\n******************** Dofs for cell " << cellID << " (fineSoln) ********************\n\n";
       DofOrderingPtr trialOrder = fineMesh->getElementType(cellID)->trialOrderPtr;
       printLabeledDofCoefficients(out, form.bf()->varFactory(), trialOrder, coefficients);
@@ -725,8 +725,8 @@ namespace
     fineSoln->addSolution(exactSoln, -1.0); // should recover zero solution this way
         
     for (GlobalIndexType cellID : myCellIDs) {
-      Intrepid::FieldContainer<double> coefficients = fineSoln->allCoefficientsForCellID(cellID, warnAboutOffRank);
-      Intrepid::FieldContainer<double> expectedCoefficients(coefficients.size()); // zero coefficients
+      Camellia::FieldContainer<double> coefficients = fineSoln->allCoefficientsForCellID(cellID, warnAboutOffRank);
+      Camellia::FieldContainer<double> expectedCoefficients(coefficients.size()); // zero coefficients
       
       TEST_COMPARE_FLOATING_ARRAYS_CAMELLIA_ABSTOLTOO(coefficients, expectedCoefficients, tol, tol);
       //    cout << "\n\n******************** Dofs for cell " << cellID << " (fineSoln after subtracting exact) ********************\n\n";
@@ -839,7 +839,7 @@ namespace
 ////        set<GlobalIndexType> cellIDs = coarseSoln->mesh()->cellIDsInPartition();
 //    //    for (set<GlobalIndexType>::iterator cellIDIt = cellIDs.begin(); cellIDIt != cellIDs.end(); cellIDIt++) {
 //    //      cout << "\n\n******************** Dofs for cell " << *cellIDIt << " (fineSoln before subtracting exact) ********************\n";
-//    //      Intrepid::FieldContainer<double> coefficients = fineSoln->allCoefficientsForCellID(*cellIDIt, warnAboutOffRank);
+//    //      Camellia::FieldContainer<double> coefficients = fineSoln->allCoefficientsForCellID(*cellIDIt, warnAboutOffRank);
 //    //      DofOrderingPtr trialOrder = fineMesh->getElementType(*cellIDIt)->trialOrderPtr;
 //    //      printLabeledDofCoefficients(vf, trialOrder, coefficients);
 //    //    }
@@ -847,7 +847,7 @@ namespace
 //    set<GlobalIndexType> myCellIDs = fineSoln->mesh()->cellIDsInPartition();
 //    
 //    for (GlobalIndexType cellID : myCellIDs) {
-//      Intrepid::FieldContainer<double> coefficients = coarseSoln->allCoefficientsForCellID(cellID, warnAboutOffRank);
+//      Camellia::FieldContainer<double> coefficients = coarseSoln->allCoefficientsForCellID(cellID, warnAboutOffRank);
 //      out << "\n\n******************** Dofs for cell " << cellID << " (coarseSoln) ********************\n\n";
 //      DofOrderingPtr trialOrder = coarseMesh->getElementType(cellID)->trialOrderPtr;
 //      printLabeledDofCoefficients(out, formConforming.bf()->varFactory(), trialOrder, coefficients);
@@ -863,7 +863,7 @@ namespace
 //    TEST_COMPARE(energyError, <, tol);
 //    
 //    for (GlobalIndexType cellID : myCellIDs) {
-//      Intrepid::FieldContainer<double> coefficients = exactSoln->allCoefficientsForCellID(cellID, warnAboutOffRank);
+//      Camellia::FieldContainer<double> coefficients = exactSoln->allCoefficientsForCellID(cellID, warnAboutOffRank);
 //      out << "\n\n******************** Dofs for cell " << cellID << " (exactSoln) ********************\n\n";
 //      DofOrderingPtr trialOrder = coarseMesh->getElementType(cellID)->trialOrderPtr;
 //      printLabeledDofCoefficients(out, formConforming.bf()->varFactory(), trialOrder, coefficients);
@@ -876,8 +876,8 @@ namespace
 //    coarseSoln->importSolutionForOffRankCells(cellIDs);
 //    
 //    for (GlobalIndexType cellID : cellIDs) {
-//      Intrepid::FieldContainer<double> coefficients = coarseSoln->allCoefficientsForCellID(cellID, warnAboutOffRank);
-//      Intrepid::FieldContainer<double> expectedCoefficients(coefficients.size()); // zero coefficients
+//      Camellia::FieldContainer<double> coefficients = coarseSoln->allCoefficientsForCellID(cellID, warnAboutOffRank);
+//      Camellia::FieldContainer<double> expectedCoefficients(coefficients.size()); // zero coefficients
 //      
 //      TEST_COMPARE_FLOATING_ARRAYS_CAMELLIA_ABSTOLTOO(coefficients, expectedCoefficients, tol, tol);
 //      //    cout << "\n\n******************** Dofs for cell " << cellID << " (fineSoln after subtracting exact) ********************\n\n";

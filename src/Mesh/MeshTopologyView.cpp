@@ -194,7 +194,7 @@ template void MeshTopologyView::cellHalo<set<GlobalIndexType>>(set<GlobalIndexTy
 template void MeshTopologyView::cellHalo<RangeList<GlobalIndexType>>(RangeList<GlobalIndexType> &haloCellIndices, const set<GlobalIndexType> &cellIndices,
                                                                      unsigned dimForNeighborRelation) const;
 
-std::vector<IndexType> MeshTopologyView::cellIDsForPoints(const Intrepid::FieldContainer<double> &physicalPoints) const
+std::vector<IndexType> MeshTopologyView::cellIDsForPoints(const Camellia::FieldContainer<double> &physicalPoints) const
 {
   std::vector<IndexType> descendentIDs = _meshTopo->cellIDsForPoints(physicalPoints);
   vector<IndexType> myIDs;
@@ -1010,7 +1010,7 @@ bool MeshTopologyView::isValidCellIndex(IndexType cellIndex) const
   return _allKnownCells.find(cellIndex) != _allKnownCells.end();
 }
 
-Intrepid::FieldContainer<double> MeshTopologyView::physicalCellNodesForCell(IndexType cellIndex, bool includeCellDimension) const
+Camellia::FieldContainer<double> MeshTopologyView::physicalCellNodesForCell(IndexType cellIndex, bool includeCellDimension) const
 {
   return _meshTopo->physicalCellNodesForCell(cellIndex,includeCellDimension);
 }
@@ -1065,7 +1065,7 @@ void MeshTopologyView::setGlobalDofAssignment(GlobalDofAssignment* gda)
   _gda = gda;
 }
 
-void MeshTopologyView::verticesForCell(Intrepid::FieldContainer<double>& vertices, IndexType cellID) const
+void MeshTopologyView::verticesForCell(Camellia::FieldContainer<double>& vertices, IndexType cellID) const
 {
   _meshTopo->verticesForCell(vertices, cellID);
 }

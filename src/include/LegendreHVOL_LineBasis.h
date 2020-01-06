@@ -18,7 +18,7 @@
 #define Camellia_debug_LegendreHVOL_LineBasis_h
 
 #include "Basis.h"
-#include "Intrepid_FieldContainer.hpp"
+#include "Camellia_FieldContainer.hpp"
 
 namespace Camellia
 {
@@ -29,7 +29,7 @@ protected:
   void initializeTags() const;
   int _degree;
 
-  Intrepid::FieldContainer<double> _legendreL2norms;
+  Camellia::FieldContainer<double> _legendreL2norms;
   void initializeL2normValues();
 public:
   LegendreHVOL_LineBasis(int degree); // conforming means not strictly hierarchical, but has e.g. vertex dofs defined...

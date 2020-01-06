@@ -19,7 +19,7 @@
 // Epetra includes
 #include <Epetra_Map.h>
 
-#include "Intrepid_FieldContainer.hpp"
+#include "Camellia_FieldContainer.hpp"
 #include "Epetra_SerialDenseMatrix.h"
 #include "Epetra_SerialDenseVector.h"
 
@@ -39,7 +39,7 @@ class TRieszRep
 {
 private:
 
-  map<GlobalIndexType, Intrepid::FieldContainer<Scalar> > _rieszRepDofs; // from cellID to dofs of riesz representation
+  map<GlobalIndexType, Camellia::FieldContainer<Scalar> > _rieszRepDofs; // from cellID to dofs of riesz representation
   map<GlobalIndexType, double > _rieszRepNormSquared; // from cellID to norm squared of riesz inversion
 
   MeshPtr _mesh;
@@ -73,7 +73,7 @@ public:
   MeshPtr mesh();
 
   // for testing
-  map<GlobalIndexType,Intrepid::FieldContainer<Scalar> > integrateFunctional();
+  map<GlobalIndexType,Camellia::FieldContainer<Scalar> > integrateFunctional();
 
   void computeRieszRep(int cubatureEnrichment=0);
 
@@ -84,16 +84,16 @@ public:
 
   void distributeDofs();
 
-  void computeRepresentationValues(Intrepid::FieldContainer<Scalar> &values, int testID, EOperator op, BasisCachePtr basisCache);
+  void computeRepresentationValues(Camellia::FieldContainer<Scalar> &values, int testID, EOperator op, BasisCachePtr basisCache);
 
   double computeAlternativeNormSqOnCell(TIPPtr<Scalar> ip, GlobalIndexType cellID);
   map<GlobalIndexType,double> computeAlternativeNormSqOnCells(TIPPtr<Scalar> ip, vector<GlobalIndexType> cellIDs);
 
-  // ! if the coefficients are not locally known, will initialize to 0 and return a Intrepid::FieldContainer filled with 0s.
-  const Intrepid::FieldContainer<Scalar>& getCoefficientsForCell(GlobalIndexType cellID);
+  // ! if the coefficients are not locally known, will initialize to 0 and return a Camellia::FieldContainer filled with 0s.
+  const Camellia::FieldContainer<Scalar>& getCoefficientsForCell(GlobalIndexType cellID);
   
   // ! coefficients should be over all test dofs
-  void setCoefficientsForCell(GlobalIndexType cellID, const Intrepid::FieldContainer<Scalar>& coefficients);
+  void setCoefficientsForCell(GlobalIndexType cellID, const Camellia::FieldContainer<Scalar>& coefficients);
   
   static TFunctionPtr<Scalar> repFunction( VarPtr var, TRieszRepPtr<Scalar> rep );
   static TRieszRepPtr<Scalar> rieszRep(MeshPtr mesh, TIPPtr<Scalar> ip, TLinearTermPtr<Scalar> functional);
@@ -158,13 +158,13 @@ public:
     return Teuchos::rcp(new RepFunction<Scalar>(_testID,_rep,OP_DIV));
   }
 
-  void values(Intrepid::FieldContainer<Scalar> &values, BasisCachePtr basisCache)
+  void values(Camellia::FieldContainer<Scalar> &values, BasisCachePtr basisCache)
   {
     _rep->computeRepresentationValues(values, _testID, _op, basisCache);
   }
 
   // for specifying an operator
-  void values(Intrepid::FieldContainer<Scalar> &values, EOperator op, BasisCachePtr basisCache)
+  void values(Camellia::FieldContainer<Scalar> &values, EOperator op, BasisCachePtr basisCache)
   {
     _rep->computeRepresentationValues(values, _testID, op, basisCache);
   }
@@ -195,7 +195,7 @@ public:
       std::cout << "In RepFunction, bufferLength " << bufferLength << " is not enough to fill required " << numBytes << " bytes.\n";
       TEUCHOS_TEST_FOR_EXCEPTION(numBytes > bufferLength, std::invalid_argument, "buffer is too short");
     }
-    Intrepid::FieldContainer<Scalar> cellDofs(numDofs);
+    Camellia::FieldContainer<Scalar> cellDofs(numDofs);
     Scalar* copyToLocation = &cellDofs[0];
     memcpy(copyToLocation, cellData, numBytes);
     _rep->setCoefficientsForCell(cellID, cellDofs);

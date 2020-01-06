@@ -46,11 +46,11 @@ PatchBasis<Scalar, ArrayScalar>::PatchBasis(BasisPtr parentBasis, ArrayScalar &p
   // I don't think we actually need _parentRefNodes...
   // TODO: delete this
   // otherwise, set parent's ref nodes to be that of Line<2>
-  _parentRefNodes = ::Intrepid::FieldContainer<double>(1,2,1); // for convenience in mapToPhysicalFrame, make this a rank-3 container
+  _parentRefNodes = ::Camellia::FieldContainer<double>(1,2,1); // for convenience in mapToPhysicalFrame, make this a rank-3 container
   _parentRefNodes(0,0,0) = 0.0;
   _parentRefNodes(0,1,0) = 1.0;
 
-  //  _childRefNodes = Intrepid::FieldContainer<double>(1,2,1);
+  //  _childRefNodes = Camellia::FieldContainer<double>(1,2,1);
   //  _childRefNodes(0,0,0) = -1.0;
   //  _childRefNodes(0,1,0) = 1.0;
 

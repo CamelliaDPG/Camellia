@@ -402,8 +402,8 @@ TEUCHOS_UNIT_TEST( LinearTerm, CompareFauxWithTrueSpaceTime_1D )
     int numPoints = fauxBasisCache->getRefCellPoints().dimension(0);
 
     // compare values:
-    Intrepid::FieldContainer<double> lt1FauxValues(1,vBasisFaux->getCardinality(),numPoints);
-    Intrepid::FieldContainer<double> lt1TrueValues(1,vBasisTrue->getCardinality(),numPoints);
+    Camellia::FieldContainer<double> lt1FauxValues(1,vBasisFaux->getCardinality(),numPoints);
+    Camellia::FieldContainer<double> lt1TrueValues(1,vBasisTrue->getCardinality(),numPoints);
     lt1_faux->values(lt1FauxValues, vIDFaux, vBasisFaux, fauxBasisCache);
     lt1_true->values(lt1TrueValues, vIDTrue, vBasisTrue, trueBasisCache);
 
@@ -411,8 +411,8 @@ TEUCHOS_UNIT_TEST( LinearTerm, CompareFauxWithTrueSpaceTime_1D )
     TEST_COMPARE_FLOATING_ARRAYS(lt1FauxValues, lt1TrueValues, tol);
 
     // compare integrals:
-    Intrepid::FieldContainer<double> lt1FauxIntegrals(1,vOrderFaux->totalDofs());
-    Intrepid::FieldContainer<double> lt1TrueIntegrals(1,vOrderTrue->totalDofs());
+    Camellia::FieldContainer<double> lt1FauxIntegrals(1,vOrderFaux->totalDofs());
+    Camellia::FieldContainer<double> lt1TrueIntegrals(1,vOrderTrue->totalDofs());
     lt1_faux->integrate(lt1FauxIntegrals, vOrderFaux, fauxBasisCache);
     lt1_true->integrate(lt1TrueIntegrals, vOrderTrue, trueBasisCache);
     SerialDenseWrapper::roundZeros(lt1FauxIntegrals,1e-15);
@@ -432,10 +432,10 @@ TEUCHOS_UNIT_TEST( LinearTerm, CompareFauxWithTrueSpaceTime_1D )
       unsigned fauxSideOrdinal = trueToFauxSideOrdinal[sideOrdinal];
       out << "Checking that values on true side " << sideOrdinal << " match faux side " << fauxSideOrdinal << endl;
       BasisCachePtr fauxSideCache = fauxBasisCache->getSideBasisCache(fauxSideOrdinal);
-      Intrepid::FieldContainer<double> trueRefPoints = trueSideCache->getRefCellPoints();
+      Camellia::FieldContainer<double> trueRefPoints = trueSideCache->getRefCellPoints();
       int numPoints = trueRefPoints.dimension(0);
 
-      Intrepid::FieldContainer<double> fauxRefPoints(numPoints,sideDim);
+      Camellia::FieldContainer<double> fauxRefPoints(numPoints,sideDim);
       for (int fauxPointOrdinal=0; fauxPointOrdinal<numPoints; fauxPointOrdinal++)
       {
         int truePointOrdinal = orientationReversedForTrueSide[sideOrdinal] ? numPoints - fauxPointOrdinal - 1 : fauxPointOrdinal;
@@ -449,15 +449,15 @@ TEUCHOS_UNIT_TEST( LinearTerm, CompareFauxWithTrueSpaceTime_1D )
       fauxSideCache->setRefCellPoints(fauxRefPoints);
 
       // compare values:
-      Intrepid::FieldContainer<double> lt2FauxValues(1,vBasisFaux->getCardinality(),numPoints);
-      Intrepid::FieldContainer<double> lt2TrueValues(1,vBasisTrue->getCardinality(),numPoints);
+      Camellia::FieldContainer<double> lt2FauxValues(1,vBasisFaux->getCardinality(),numPoints);
+      Camellia::FieldContainer<double> lt2TrueValues(1,vBasisTrue->getCardinality(),numPoints);
       lt2_faux->values(lt2FauxValues, vIDFaux, vBasisFaux, fauxSideCache);
       lt2_true->values(lt2TrueValues, vIDTrue, vBasisTrue, trueSideCache);
       TEST_COMPARE_FLOATING_ARRAYS(lt2FauxValues, lt2TrueValues, tol);
 
       // compare integrals:
-      Intrepid::FieldContainer<double> lt2FauxIntegrals(1,vOrderFaux->totalDofs());
-      Intrepid::FieldContainer<double> lt2TrueIntegrals(1,vOrderTrue->totalDofs());
+      Camellia::FieldContainer<double> lt2FauxIntegrals(1,vOrderFaux->totalDofs());
+      Camellia::FieldContainer<double> lt2TrueIntegrals(1,vOrderTrue->totalDofs());
       lt2_faux->integrate(lt2FauxIntegrals, vOrderFaux, fauxSideCache);
       lt2_true->integrate(lt2TrueIntegrals, vOrderTrue, trueSideCache);
       SerialDenseWrapper::roundZeros(lt2FauxIntegrals,1e-15);
@@ -500,13 +500,13 @@ TEUCHOS_UNIT_TEST( LinearTerm, SpaceTimeIntegration_1D)
 
     int numPoints = basisCache->getRefCellPoints().dimension(0);
     // compute values:
-    Intrepid::FieldContainer<double> lt1Values(1,vBasis->getCardinality(),numPoints);
+    Camellia::FieldContainer<double> lt1Values(1,vBasis->getCardinality(),numPoints);
     lt1->values(lt1Values, vID, vBasis, basisCache);
 
     double tol=1e-14;
 
     // compute integrals:
-    Intrepid::FieldContainer<double> lt1IntegralsExpected(1,vOrder->totalDofs());
+    Camellia::FieldContainer<double> lt1IntegralsExpected(1,vOrder->totalDofs());
     for (int basisOrdinal=0; basisOrdinal<vBasis->getCardinality(); basisOrdinal++)
     {
       int dofIndex = vOrder->getDofIndex(vID, basisOrdinal);
@@ -518,7 +518,7 @@ TEUCHOS_UNIT_TEST( LinearTerm, SpaceTimeIntegration_1D)
       }
     }
 
-    Intrepid::FieldContainer<double> lt1IntegralsActual(1,vOrder->totalDofs());
+    Camellia::FieldContainer<double> lt1IntegralsActual(1,vOrder->totalDofs());
     lt1->integrate(lt1IntegralsActual, vOrder, basisCache);
     SerialDenseWrapper::roundZeros(lt1IntegralsActual,1e-15);
     SerialDenseWrapper::roundZeros(lt1IntegralsExpected,1e-15);
@@ -531,11 +531,11 @@ TEUCHOS_UNIT_TEST( LinearTerm, SpaceTimeIntegration_1D)
       int numPoints = sideCache->getRefCellPoints().dimension(0);
 
       // compute values:
-      Intrepid::FieldContainer<double> lt2Values(1,vBasis->getCardinality(),numPoints);
+      Camellia::FieldContainer<double> lt2Values(1,vBasis->getCardinality(),numPoints);
       lt2->values(lt2Values, vID, vBasis, sideCache);
 
       // compute integrals:
-      Intrepid::FieldContainer<double> lt2IntegralsExpected(1,vOrder->totalDofs());
+      Camellia::FieldContainer<double> lt2IntegralsExpected(1,vOrder->totalDofs());
       for (int basisOrdinal=0; basisOrdinal<vBasis->getCardinality(); basisOrdinal++)
       {
         int dofIndex = vOrder->getDofIndex(vID, basisOrdinal);
@@ -547,7 +547,7 @@ TEUCHOS_UNIT_TEST( LinearTerm, SpaceTimeIntegration_1D)
         }
       }
 
-      Intrepid::FieldContainer<double> lt2IntegralsActual(1,vOrder->totalDofs());
+      Camellia::FieldContainer<double> lt2IntegralsActual(1,vOrder->totalDofs());
       lt2->integrate(lt2IntegralsActual, vOrder, sideCache);
       SerialDenseWrapper::roundZeros(lt2IntegralsActual,1e-15);
       SerialDenseWrapper::roundZeros(lt2IntegralsExpected,1e-15);
@@ -594,10 +594,10 @@ TEUCHOS_UNIT_TEST( LinearTerm, FauxSpaceTimeIntegrationByPartsInTime_2D )
       BasisCachePtr basisCache = BasisCache::basisCacheForCell(mesh, cellID);
       int numPoints = basisCache->getRefCellPoints().dimension(0);
       int numCells = 1;
-      Intrepid::FieldContainer<double> actualValues(numCells, numPoints);
+      Camellia::FieldContainer<double> actualValues(numCells, numPoints);
       lt->evaluate(actualValues, solution, basisCache);
       
-      Intrepid::FieldContainer<double> expectedValues(numCells, numPoints);
+      Camellia::FieldContainer<double> expectedValues(numCells, numPoints);
       expectedFunction->values(expectedValues, basisCache);
       
       double tol = 1e-14;
@@ -633,10 +633,10 @@ TEUCHOS_UNIT_TEST( LinearTerm, FauxSpaceTimeIntegrationByPartsInTime_2D )
       BasisCachePtr basisCache = BasisCache::basisCacheForCell(mesh, cellID);
       int numPoints = basisCache->getRefCellPoints().dimension(0);
       int numCells = 1;
-      Intrepid::FieldContainer<double> actualValues(numCells, numPoints, spaceDim);
+      Camellia::FieldContainer<double> actualValues(numCells, numPoints, spaceDim);
       lt->evaluate(actualValues, solution, basisCache);
       
-      Intrepid::FieldContainer<double> expectedValues(numCells, numPoints, spaceDim);
+      Camellia::FieldContainer<double> expectedValues(numCells, numPoints, spaceDim);
       expectedFunction->values(expectedValues, basisCache);
       
       double tol = 1e-13;
@@ -673,10 +673,10 @@ TEUCHOS_UNIT_TEST( LinearTerm, FauxSpaceTimeIntegrationByPartsInTime_2D )
       BasisCachePtr basisCache = BasisCache::basisCacheForCell(mesh, cellID);
       int numPoints = basisCache->getRefCellPoints().dimension(0);
       int numCells = 1;
-      Intrepid::FieldContainer<double> actualValues(numCells, numPoints, spaceDim);
+      Camellia::FieldContainer<double> actualValues(numCells, numPoints, spaceDim);
       lt->evaluate(actualValues, solution, basisCache);
       
-      Intrepid::FieldContainer<double> expectedValues(numCells, numPoints, spaceDim);
+      Camellia::FieldContainer<double> expectedValues(numCells, numPoints, spaceDim);
       expectedFunction->values(expectedValues, basisCache);
       
       double tol = 1e-13;
@@ -712,10 +712,10 @@ TEUCHOS_UNIT_TEST( LinearTerm, FauxSpaceTimeIntegrationByPartsInTime_2D )
       BasisCachePtr basisCache = BasisCache::basisCacheForCell(mesh, cellID);
       int numPoints = basisCache->getRefCellPoints().dimension(0);
       int numCells = 1;
-      Intrepid::FieldContainer<double> actualValues(numCells, numPoints);
+      Camellia::FieldContainer<double> actualValues(numCells, numPoints);
       lt->evaluate(actualValues, solution, basisCache);
       
-      Intrepid::FieldContainer<double> expectedValues(numCells, numPoints);
+      Camellia::FieldContainer<double> expectedValues(numCells, numPoints);
       expectedFunction->values(expectedValues, basisCache);
       
       double tol = 1e-13;

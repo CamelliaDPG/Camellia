@@ -16,7 +16,7 @@
 #define Camellia_debug_MeshTopology_h
 
 #include "Shards_CellTopology.hpp"
-#include "Intrepid_FieldContainer.hpp"
+#include "Camellia_FieldContainer.hpp"
 
 #include "Cell.h"
 #include "EntitySet.h"
@@ -102,9 +102,9 @@ class MeshTopology : public MeshTopologyView
   void determineGeneralizedParentsForRefinement(CellPtr cell, RefinementPatternPtr refPattern);
   
   IndexType getVertexIndexAdding(const vector<double> &vertex, double tol);
-  vector<IndexType> getVertexIndices(const Intrepid::FieldContainer<double> &vertices);
+  vector<IndexType> getVertexIndices(const Camellia::FieldContainer<double> &vertices);
   vector<IndexType> getVertexIndices(const vector< vector<double> > &vertices);
-  map<unsigned, IndexType> getVertexIndicesMap(const Intrepid::FieldContainer<double> &vertices);
+  map<unsigned, IndexType> getVertexIndicesMap(const Camellia::FieldContainer<double> &vertices);
   set<IndexType> getEntitiesForSide(IndexType sideEntityIndex, unsigned d) const;
   void init(unsigned spaceDim);
   void printVertex(IndexType vertexIndex) const;
@@ -122,7 +122,7 @@ class MeshTopology : public MeshTopologyView
   void deepCopyCells();
 
   CellPtr addCell(IndexType cellIndex, CellTopoPtr cellTopo, const vector< vector<double> > &cellVertices);
-  CellPtr addCell(IndexType cellIndex, CellTopoPtr cellTopo, const Intrepid::FieldContainer<double> &cellVertices);
+  CellPtr addCell(IndexType cellIndex, CellTopoPtr cellTopo, const Camellia::FieldContainer<double> &cellVertices);
   CellPtr addCell(IndexType cellIndex, CellTopoPtrLegacy cellTopo, const vector< vector<double> > &cellVertices);
 public:
   MeshTopology(unsigned spaceDim, vector<PeriodicBCPtr> periodicBCs=vector<PeriodicBCPtr>());
@@ -131,7 +131,7 @@ public:
   virtual ~MeshTopology() {}
 
   CellPtr addCell(CellTopoPtr cellTopo, const vector< vector<double> > &cellVertices);
-  CellPtr addCell(CellTopoPtr cellTopo, const Intrepid::FieldContainer<double> &cellVertices);
+  CellPtr addCell(CellTopoPtr cellTopo, const Camellia::FieldContainer<double> &cellVertices);
   CellPtr addCell(CellTopoPtrLegacy cellTopo, const vector< vector<double> > &cellVertices);
   
   // ! adds cell with the specified cellIndex, which must be less than _nextCellIndex
@@ -168,7 +168,7 @@ public:
   bool cellHasCurvedEdges(IndexType cellIndex) const;
 
   bool cellContainsPoint(GlobalIndexType cellID, const std::vector<double> &point, int cubatureDegree) const;
-  std::vector<IndexType> cellIDsForPoints(const Intrepid::FieldContainer<double> &physicalPoints) const;
+  std::vector<IndexType> cellIDsForPoints(const Camellia::FieldContainer<double> &physicalPoints) const;
 
   bool entityIsAncestor(unsigned d, IndexType ancestor, IndexType descendent) const;
   bool entityIsGeneralizedAncestor(unsigned ancestorDimension, IndexType ancestor,
@@ -221,7 +221,7 @@ public:
   bool isBoundarySide(IndexType sideEntityIndex) const;
   bool isValidCellIndex(IndexType cellIndex) const;
   
-  Intrepid::FieldContainer<double> physicalCellNodesForCell(IndexType cellIndex, bool includeCellDimension = false) const;
+  Camellia::FieldContainer<double> physicalCellNodesForCell(IndexType cellIndex, bool includeCellDimension = false) const;
   void refineCell(IndexType cellIndex, RefinementPatternPtr refPattern, IndexType firstChildCellIndex);
   
   // ! Unrefine so that the specified cellIndex is an active cell (i.e., discard the cell's children)
@@ -299,7 +299,7 @@ public:
   vector< pair<IndexType,unsigned> > getConstrainingSideAncestry(IndexType sideEntityIndex) const;   // pair: first is the sideEntityIndex of the ancestor; second is the refinementIndex of the refinement to get from parent to child (see _parentEntities and _childEntities)
 
   // ! Fills the provided container with the vertices for the requested cell
-  void verticesForCell(Intrepid::FieldContainer<double>& vertices, IndexType cellID) const;
+  void verticesForCell(Camellia::FieldContainer<double>& vertices, IndexType cellID) const;
   
   const map<EntityHandle, EntitySetPtr>& getEntitySets() const;
   const map<string, vector<pair<EntityHandle, int>>>& getTagSetsInteger() const; // tags with integer value, applied to EntitySets.

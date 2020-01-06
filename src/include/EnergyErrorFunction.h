@@ -30,7 +30,7 @@ namespace Camellia
     EnergyErrorFunction(SolutionPtr soln);
     EnergyErrorFunction(RieszRepPtr rieszRep);
     
-    virtual void values(Intrepid::FieldContainer<double> &values, BasisCachePtr basisCache);
+    virtual void values(Camellia::FieldContainer<double> &values, BasisCachePtr basisCache);
     
     static FunctionPtr energyErrorFunction(SolutionPtr soln);
   };

@@ -48,7 +48,7 @@ public:
   TFunctionPtr<double> grad(int numComponents=-1); // gradient of sum is the sum of gradients
   TFunctionPtr<double> div();  // divergence of sum is sum of divergences
 
-  void values(Intrepid::FieldContainer<double> &values, BasisCachePtr basisCache);
+  void values(Camellia::FieldContainer<double> &values, BasisCachePtr basisCache);
   bool boundaryValueOnly();
 
   std::vector< TFunctionPtr<double> > memberFunctions();

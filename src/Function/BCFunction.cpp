@@ -2,7 +2,7 @@
 // © 2016 UChicago Argonne.  For licensing details, see LICENSE-Camellia in the licenses directory.
 //
 
-#include "Intrepid_FieldContainer.hpp"
+#include "Camellia_FieldContainer.hpp"
 #include "BasisCache.h"
 
 #include "BCFunction.h"
@@ -33,12 +33,12 @@ BCFunction<Scalar>::BCFunction(BCPtr bc, int varID, TFunctionPtr<Scalar> spatial
 }
 
 template <typename Scalar>
-void BCFunction<Scalar>::values(Intrepid::FieldContainer<Scalar> &values, BasisCachePtr basisCache)
+void BCFunction<Scalar>::values(Camellia::FieldContainer<Scalar> &values, BasisCachePtr basisCache)
 {
   int numCells = basisCache->cellIDs().size();
   int numPoints = basisCache->getPhysicalCubaturePoints().dimension(1);
   _imposeHere.resize(numCells,numPoints);
-  Intrepid::FieldContainer<double> unitNormals = basisCache->getSideNormals();
+  Camellia::FieldContainer<double> unitNormals = basisCache->getSideNormals();
   _bc->imposeBC(values, _imposeHere, _varID, unitNormals, basisCache);
 }
 

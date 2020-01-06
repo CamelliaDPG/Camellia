@@ -31,7 +31,7 @@ namespace Camellia {
     SubBasisReconciliationWeights newWeights;
     newWeights.fineOrdinals = identityWeights.fineOrdinals;
     newWeights.coarseOrdinals = identityWeights.coarseOrdinals;
-    newWeights.weights = Intrepid::FieldContainer<double>(newWeights.fineOrdinals.size(),newWeights.coarseOrdinals.size());
+    newWeights.weights = Camellia::FieldContainer<double>(newWeights.fineOrdinals.size(),newWeights.coarseOrdinals.size());
     for (int i=0; i<newWeights.weights.dimension(0); i++)
     {
       newWeights.weights(i,i) = 1.0;
@@ -556,7 +556,7 @@ int GDAMinimumRule::getH1OrderOnEdge(GlobalIndexType cellID, unsigned edgeOrdina
   return getH1Order(constrainingCellID)[0];
 }
 
-void GDAMinimumRule::interpretGlobalCoefficients(GlobalIndexType cellID, Intrepid::FieldContainer<double> &localCoefficients,
+void GDAMinimumRule::interpretGlobalCoefficients(GlobalIndexType cellID, Camellia::FieldContainer<double> &localCoefficients,
                                                  const Epetra_MultiVector &globalCoefficients)
 {
   CellConstraints constraints = getCellConstraints(cellID);
@@ -569,7 +569,7 @@ void GDAMinimumRule::interpretGlobalCoefficients(GlobalIndexType cellID, Intrepi
     
     if (useFieldContainer)
     {
-      Intrepid::FieldContainer<double> globalCoefficientsFC(globalIndexVector->size());
+      Camellia::FieldContainer<double> globalCoefficientsFC(globalIndexVector->size());
       Epetra_BlockMap partMap = globalCoefficients.Map();
       for (int i=0; i<globalIndexVector->size(); i++)
       {
@@ -609,7 +609,7 @@ void GDAMinimumRule::interpretGlobalCoefficients(GlobalIndexType cellID, Intrepi
   }
   else
   {
-    Intrepid::FieldContainer<double> globalCoefficientsFC(globalIndexVector->size());
+    Camellia::FieldContainer<double> globalCoefficientsFC(globalIndexVector->size());
     Epetra_BlockMap partMap = globalCoefficients.Map();
     
     for (int vectorOrdinal=0; vectorOrdinal < globalCoefficients.NumVectors(); vectorOrdinal++)
@@ -646,7 +646,7 @@ void GDAMinimumRule::interpretGlobalCoefficients(GlobalIndexType cellID, Intrepi
 }
 
 template <typename Scalar>
-void GDAMinimumRule::interpretGlobalCoefficients2(GlobalIndexType cellID, Intrepid::FieldContainer<Scalar> &localCoefficients, const TVectorPtr<Scalar> globalCoefficients)
+void GDAMinimumRule::interpretGlobalCoefficients2(GlobalIndexType cellID, Camellia::FieldContainer<Scalar> &localCoefficients, const TVectorPtr<Scalar> globalCoefficients)
 {
   LocalDofMapperPtr dofMapper = getDofMapper(cellID);
   vector<GlobalIndexType> globalIndexVector = dofMapper->globalIndices();
@@ -661,7 +661,7 @@ void GDAMinimumRule::interpretGlobalCoefficients2(GlobalIndexType cellID, Intrep
   {
     // TODO: Test whether this is actually correct
     Teuchos::ArrayRCP<Scalar> globalCoefficientsArray = globalCoefficients->getDataNonConst(globalIndexVector.size());
-    Intrepid::FieldContainer<Scalar> globalCoefficientsFC(globalIndexVector.size());
+    Camellia::FieldContainer<Scalar> globalCoefficientsFC(globalIndexVector.size());
     Teuchos::ArrayView<Scalar> arrayView = globalCoefficientsArray.view(0,globalIndexVector.size());
     globalCoefficientsFC.setValues(arrayView);
     // ConstMapPtr partMap = globalCoefficients->getMap();
@@ -681,13 +681,13 @@ void GDAMinimumRule::interpretGlobalCoefficients2(GlobalIndexType cellID, Intrep
   {
     TEUCHOS_TEST_FOR_EXCEPTION(true, std::invalid_argument, "InterpretGlobalCoefficients not implemented for more than one vector");
     // Teuchos::ArrayRCP<Teuchos::ArrayRCP<Scalar>> globalCoefficients2DArray = globalCoefficients->get2dViewNonConst(globalIndexVector.size());
-    // Intrepid::FieldContainer<Scalar> globalCoefficientsFC(globalCoefficients.numVectors(), globalIndexVector.size());
+    // Camellia::FieldContainer<Scalar> globalCoefficientsFC(globalCoefficients.numVectors(), globalIndexVector.size());
     // for (int vectorOrdinal=0; vectorOrdinal < globalCoefficients.numVectors(); vectorOrdinal++) {
     //   Teuchos::ArrayRCP<Scalar> globalCoefficientsArray = globalCoefficients2DArray[vectorOrdinal];
     //   Teuchos::ArrayView<Scalar> arrayView = globalCoefficientsArray.view(0,globalIndexVector.size());
     //   globalCoefficientsFC.setValues(arrayView);
     // }
-    //   Intrepid::FieldContainer<Scalar> globalCoefficientsFC(globalCoefficients.NumVectors(), globalIndexVector.size());
+    //   Camellia::FieldContainer<Scalar> globalCoefficientsFC(globalCoefficients.NumVectors(), globalIndexVector.size());
     //   Epetra_BlockMap partMap = globalCoefficients.Map();
     //   for (int vectorOrdinal=0; vectorOrdinal < globalCoefficients.NumVectors(); vectorOrdinal++) {
     //     for (int i=0; i<globalIndexVector.size(); i++) {
@@ -707,10 +707,10 @@ void GDAMinimumRule::interpretGlobalCoefficients2(GlobalIndexType cellID, Intrep
 //  cout << " to localData:\n " << localDofs;
 }
 
-template void GDAMinimumRule::interpretGlobalCoefficients2(GlobalIndexType cellID, Intrepid::FieldContainer<double> &localCoefficients, const TVectorPtr<double> globalCoefficients);
+template void GDAMinimumRule::interpretGlobalCoefficients2(GlobalIndexType cellID, Camellia::FieldContainer<double> &localCoefficients, const TVectorPtr<double> globalCoefficients);
 
-void GDAMinimumRule::interpretLocalData(GlobalIndexType cellID, const Intrepid::FieldContainer<double> &localData,
-                                        Intrepid::FieldContainer<double> &globalData, Intrepid::FieldContainer<GlobalIndexType> &globalDofIndices)
+void GDAMinimumRule::interpretLocalData(GlobalIndexType cellID, const Camellia::FieldContainer<double> &localData,
+                                        Camellia::FieldContainer<double> &globalData, Camellia::FieldContainer<GlobalIndexType> &globalDofIndices)
 {
   // we allow interpreting trial x trial, trial x other, or other x trial; the latter two involve only one mapping
   
@@ -793,7 +793,7 @@ void GDAMinimumRule::interpretLocalData(GlobalIndexType cellID, const Intrepid::
 //    }
 //  } else if (globalData.rank() == 2) {
 //    cout << "globalData.rank() == 2.\n";
-//    Intrepid::FieldContainer<double> globalDataCopy = globalData;
+//    Camellia::FieldContainer<double> globalDataCopy = globalData;
 //    map<GlobalIndexType,int> globalIndexToOrdinalMap;
 //    for (int i=0; i<globalIndexVector.size(); i++) {
 //      GlobalIndexType globalIndex = globalIndexVector[i];
@@ -820,8 +820,8 @@ void GDAMinimumRule::interpretLocalData(GlobalIndexType cellID, const Intrepid::
 //    cout << "globalIndices:\n" << globalDofIndices;
 }
 
-void GDAMinimumRule::interpretLocalBasisCoefficients(GlobalIndexType cellID, int varID, int sideOrdinal, const Intrepid::FieldContainer<double> &basisCoefficients,
-                                                     Intrepid::FieldContainer<double> &globalCoefficients, Intrepid::FieldContainer<GlobalIndexType> &globalDofIndices)
+void GDAMinimumRule::interpretLocalBasisCoefficients(GlobalIndexType cellID, int varID, int sideOrdinal, const Camellia::FieldContainer<double> &basisCoefficients,
+                                                     Camellia::FieldContainer<double> &globalCoefficients, Camellia::FieldContainer<GlobalIndexType> &globalDofIndices)
 {
   LocalDofMapperPtr dofMapper = getDofMapper(cellID, varID, sideOrdinal);
   
@@ -1417,7 +1417,7 @@ BasisMap GDAMinimumRule::getBasisMap(GlobalIndexType cellID, SubcellDofIndices& 
     {
       fineOrdinalRowLookup[fineOrdinalsVector[i]] = i;
     }
-    Intrepid::FieldContainer<double> weights(fineOrdinals.size(),partition.size());
+    Camellia::FieldContainer<double> weights(fineOrdinals.size(),partition.size());
     int col=0;
     for (set<GlobalIndexType>::iterator globalDofIt=partition.begin(); globalDofIt != partition.end(); globalDofIt++)
     {
@@ -2250,7 +2250,7 @@ BasisMap GDAMinimumRule::getBasisMap(GlobalIndexType cellID, SubcellDofIndices& 
         os << "var " << var->ID() << ", ";
         os << "weightsForGlobalOrdinal[" << DEBUG_GLOBAL_DOF << "]";
         
-        Intrepid::FieldContainer<double> dofCoords;
+        Camellia::FieldContainer<double> dofCoords;
         trialOrdering->getDofCoords(_mesh->physicalCellNodesForCell(cellID),
                                     dofCoords, var->ID(), sideOrdinal);
         
@@ -2342,7 +2342,7 @@ BasisMap GDAMinimumRule::getBasisMap(GlobalIndexType cellID, SubcellDofIndices& 
     {
       fineOrdinalRowLookup[fineOrdinalsVector[i]] = i;
     }
-    Intrepid::FieldContainer<double> weights(fineOrdinals.size(),partition.size());
+    Camellia::FieldContainer<double> weights(fineOrdinals.size(),partition.size());
     int col=0;
     for (set<GlobalIndexType>::iterator globalDofIt=partition.begin(); globalDofIt != partition.end(); globalDofIt++)
     {

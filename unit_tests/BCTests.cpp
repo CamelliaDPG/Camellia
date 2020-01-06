@@ -66,7 +66,7 @@ void testSpaceTimeTraceBCFunction(int spaceDim, Teuchos::FancyOStream &out, bool
       BasisPtr basis = trialOrder->getBasis(u_hat->ID(),sideOrdinal);
 
       int numCells = 1;
-      Intrepid::FieldContainer<double> dirichletValues(numCells,basis->getCardinality());
+      Camellia::FieldContainer<double> dirichletValues(numCells,basis->getCardinality());
       // project bc function onto side basis:
       Teuchos::RCP<BCFunction<double>> bcFunction = BCFunction<double>::bcFunction(bc, u_hat->ID());
       bc->coefficientsForBC(dirichletValues, bcFunction, basis, basisCache->getSideBasisCache(sideOrdinal));
@@ -121,8 +121,8 @@ void testSpaceTimeTraceBCFunction(int spaceDim, Teuchos::FancyOStream &out, bool
     tagBC->addDirichlet(var, tagID, phi_value);
     SolutionPtr soln = Solution::solution(form.bf(), mesh, tagBC);
     
-    Intrepid::FieldContainer<GlobalIndexType> bcGlobalIndicesLegacy, bcGlobalIndicesTags;
-    Intrepid::FieldContainer<double> bcGlobalValuesLegacy, bcGlobalValuesTags;
+    Camellia::FieldContainer<GlobalIndexType> bcGlobalIndicesLegacy, bcGlobalIndicesTags;
+    Camellia::FieldContainer<double> bcGlobalValuesLegacy, bcGlobalValuesTags;
     
     // we can safely assume that the two Solution objects have equivalent DofInterpreter
     Teuchos::RCP<DofInterpreter> dofInterpreter = legacySoln->getDofInterpreter();

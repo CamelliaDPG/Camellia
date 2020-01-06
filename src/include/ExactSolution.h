@@ -19,7 +19,7 @@
 
 // Intrepid includes
 #include "Intrepid_Basis.hpp"
-#include "Intrepid_FieldContainer.hpp"
+#include "Camellia_FieldContainer.hpp"
 
 // Teuchos includes
 #include "Teuchos_RCP.hpp"
@@ -42,7 +42,7 @@ protected:
   TBCPtr<Scalar> _bc;
   TRHSPtr<Scalar> _rhs;
   // TODO: Fix this for complex (use norm)
-  void squaredDifference(Intrepid::FieldContainer<double> &diffSquared, Intrepid::FieldContainer<Scalar> &values1, Intrepid::FieldContainer<Scalar> &values2);
+  void squaredDifference(Camellia::FieldContainer<double> &diffSquared, Camellia::FieldContainer<Scalar> &values1, Camellia::FieldContainer<Scalar> &values2);
 
   int _H1Order;
   map< int, TFunctionPtr<Scalar> > _exactFunctions; // var ID --> function
@@ -55,23 +55,23 @@ public:
   const map< int, TFunctionPtr<Scalar> > exactFunctions(); // not supported by legacy subclasses
   virtual bool functionDefined(int trialID); // not supported by legacy subclasses
   void setSolutionFunction( VarPtr var, TFunctionPtr<Scalar> varFunction );
-  void solutionValues(Intrepid::FieldContainer<Scalar> &values, int trialID, BasisCachePtr basisCache);
-  void solutionValues(Intrepid::FieldContainer<Scalar> &values,
+  void solutionValues(Camellia::FieldContainer<Scalar> &values, int trialID, BasisCachePtr basisCache);
+  void solutionValues(Camellia::FieldContainer<Scalar> &values,
                       int trialID,
-                      Intrepid::FieldContainer<double> &physicalPoints);
-  void solutionValues(Intrepid::FieldContainer<Scalar> &values,
+                      Camellia::FieldContainer<double> &physicalPoints);
+  void solutionValues(Camellia::FieldContainer<Scalar> &values,
                       int trialID,
-                      Intrepid::FieldContainer<double> &physicalPoints,
-                      Intrepid::FieldContainer<double> &unitNormals);
+                      Camellia::FieldContainer<double> &physicalPoints,
+                      Camellia::FieldContainer<double> &unitNormals);
   virtual Scalar solutionValue(int trialID,
-                               Intrepid::FieldContainer<double> &physicalPoint);
+                               Camellia::FieldContainer<double> &physicalPoint);
   virtual Scalar solutionValue(int trialID,
-                               Intrepid::FieldContainer<double> &physicalPoint,
-                               Intrepid::FieldContainer<double> &unitNormal);
+                               Camellia::FieldContainer<double> &physicalPoint,
+                               Camellia::FieldContainer<double> &unitNormal);
   virtual int H1Order(); // return -1 for non-polynomial solutions
   // TODO: Fix this for complex
   double L2NormOfError(TSolutionPtr<Scalar> solution, int trialID, int cubDegree=-1);
-  void L2NormOfError(Intrepid::FieldContainer<double> &errorSquaredPerCell, TSolutionPtr<Scalar> solution, ElementTypePtr elemTypePtr, int trialID, int sideIndex=VOLUME_INTERIOR_SIDE_ORDINAL, int cubDegree=-1, double solutionLift=0.0);
+  void L2NormOfError(Camellia::FieldContainer<double> &errorSquaredPerCell, TSolutionPtr<Scalar> solution, ElementTypePtr elemTypePtr, int trialID, int sideIndex=VOLUME_INTERIOR_SIDE_ORDINAL, int cubDegree=-1, double solutionLift=0.0);
 
   virtual ~ExactSolution() {}
 };

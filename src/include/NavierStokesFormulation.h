@@ -411,7 +411,7 @@ class VGPNavierStokesProblem
     _solver = Teuchos::rcp( new Amesos2Solver() );
   }
 
-  void init(TFunctionPtr<double> Re, Intrepid::FieldContainer<double> &quadPoints, int horizontalCells,
+  void init(TFunctionPtr<double> Re, Camellia::FieldContainer<double> &quadPoints, int horizontalCells,
             int verticalCells, int H1Order, int pToAdd,
             TFunctionPtr<double> u1_0, TFunctionPtr<double> u2_0, TFunctionPtr<double> f1, TFunctionPtr<double> f2, bool useEnrichedVelocity,
             bool enhanceFluxes)
@@ -472,7 +472,7 @@ class VGPNavierStokesProblem
 
     _solver = Teuchos::rcp( new Amesos2Solver() );
   }
-  void init(TFunctionPtr<double> Re, Intrepid::FieldContainer<double> &quadPoints, int horizontalCells,
+  void init(TFunctionPtr<double> Re, Camellia::FieldContainer<double> &quadPoints, int horizontalCells,
             int verticalCells, int H1Order, int pToAdd,
             TFunctionPtr<double> u1_exact, TFunctionPtr<double> u2_exact, TFunctionPtr<double> p_exact, bool enrichVelocity,
             bool enhanceFluxes)
@@ -544,7 +544,7 @@ public:
     // note that this constructor leaves BC enforcement up to the user
   }
 
-  VGPNavierStokesProblem(TFunctionPtr<double> Re, Intrepid::FieldContainer<double> &quadPoints, int horizontalCells,
+  VGPNavierStokesProblem(TFunctionPtr<double> Re, Camellia::FieldContainer<double> &quadPoints, int horizontalCells,
                          int verticalCells, int H1Order, int pToAdd,
                          TFunctionPtr<double> u1_0, TFunctionPtr<double> u2_0, TFunctionPtr<double> f1, TFunctionPtr<double> f2,
                          bool enrichVelocity = false, bool enhanceFluxes = false)
@@ -552,7 +552,7 @@ public:
     init(Re,quadPoints,horizontalCells,verticalCells,H1Order,pToAdd,u1_0,u2_0,f1,f2,enrichVelocity, enhanceFluxes);
     // this constructor enforces Dirichlet BCs on the velocity at each iterate, and disregards accumulated trace and flux data
   }
-  VGPNavierStokesProblem(double Re, Intrepid::FieldContainer<double> &quadPoints, int horizontalCells,
+  VGPNavierStokesProblem(double Re, Camellia::FieldContainer<double> &quadPoints, int horizontalCells,
                          int verticalCells, int H1Order, int pToAdd,
                          TFunctionPtr<double> u1_0, TFunctionPtr<double> u2_0, TFunctionPtr<double> f1, TFunctionPtr<double> f2,
                          bool enrichVelocity = false, bool enhanceFluxes = false)
@@ -560,7 +560,7 @@ public:
     init(TFunction<double>::constant(Re),quadPoints,horizontalCells,verticalCells,H1Order,pToAdd,u1_0,u2_0,f1,f2, enrichVelocity, enhanceFluxes);
     // this constructor enforces Dirichlet BCs on the velocity at each iterate, and disregards accumulated trace and flux data
   }
-  VGPNavierStokesProblem(TFunctionPtr<double> Re, Intrepid::FieldContainer<double> &quadPoints, int horizontalCells,
+  VGPNavierStokesProblem(TFunctionPtr<double> Re, Camellia::FieldContainer<double> &quadPoints, int horizontalCells,
                          int verticalCells, int H1Order, int pToAdd,
                          TFunctionPtr<double> u1_exact, TFunctionPtr<double> u2_exact, TFunctionPtr<double> p_exact, bool enrichVelocity,
                          bool enhanceFluxes)
@@ -569,7 +569,7 @@ public:
     // this constructor enforces Dirichlet BCs on the velocity on first iterate, and zero BCs on later (does *not* disregard accumulated trace and flux data)
   }
 
-  VGPNavierStokesProblem(double Re, Intrepid::FieldContainer<double> &quadPoints, int horizontalCells,
+  VGPNavierStokesProblem(double Re, Camellia::FieldContainer<double> &quadPoints, int horizontalCells,
                          int verticalCells, int H1Order, int pToAdd,
                          TFunctionPtr<double> u1_exact, TFunctionPtr<double> u2_exact, TFunctionPtr<double> p_exact,
                          bool enrichVelocity, bool enhanceFluxes = false)
@@ -670,7 +670,7 @@ public:
         for (GlobalIndexType cellID : *myCellIDs)
         {
           int numSides = _mesh->getTopology()->getCell(cellID)->getSideCount();
-          Intrepid::FieldContainer<double> solnCoeffs;
+          Camellia::FieldContainer<double> solnCoeffs;
           for (int sideIndex=0; sideIndex<numSides; sideIndex++)
           {
             for (int i=0; i<fluxIDs.size(); i++)

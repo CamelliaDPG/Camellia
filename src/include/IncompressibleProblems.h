@@ -336,7 +336,7 @@ class CylinderProblem : public IncompressibleProblem
       double radius = _radius;
       bool enforceOneIrregularity = true;
 
-      Intrepid::FieldContainer<double> horizontalBandPoints(6,hemkerMeshNoCurves->getDimension());
+      Camellia::FieldContainer<double> horizontalBandPoints(6,hemkerMeshNoCurves->getDimension());
       // ESE band
       horizontalBandPoints(0,0) =   radius * 3;
       horizontalBandPoints(0,1) = - radius / 2;
@@ -357,7 +357,7 @@ class CylinderProblem : public IncompressibleProblem
       horizontalBandPoints(5,0) =   radius * 3;
       horizontalBandPoints(5,1) = - radius * 3;
 
-      Intrepid::FieldContainer<double> verticalBandPoints(4,hemkerMeshNoCurves->getDimension());
+      Camellia::FieldContainer<double> verticalBandPoints(4,hemkerMeshNoCurves->getDimension());
       // NNE band
       verticalBandPoints(0,0) =   radius / 2;
       verticalBandPoints(0,1) =   radius * 3;
@@ -402,7 +402,7 @@ class CylinderProblem : public IncompressibleProblem
       }
 
       RefinementPatternPtr verticalCut, horizontalCut;
-      Intrepid::FieldContainer<double> vertices;
+      Camellia::FieldContainer<double> vertices;
 
       if (!_steady)
       {
@@ -578,7 +578,7 @@ class SquareCylinderProblem : public CylinderProblem
       // to find the thin banded elements, note that radius * 3 will be outside the bounding square
       // and that radius / 2 will be inside the band
 
-      Intrepid::FieldContainer<double> horizontalBandPoints(4,2);
+      Camellia::FieldContainer<double> horizontalBandPoints(4,2);
       if (!_steady)
         horizontalBandPoints.resize(4,3);
       // E band
@@ -595,7 +595,7 @@ class SquareCylinderProblem : public CylinderProblem
       horizontalBandPoints(3,0) =   radius * 3;
       horizontalBandPoints(3,1) = - radius * 3;
 
-      Intrepid::FieldContainer<double> verticalBandPoints(2,2);
+      Camellia::FieldContainer<double> verticalBandPoints(2,2);
       if (!_steady)
         verticalBandPoints.resize(2,3);
       // N band
@@ -621,7 +621,7 @@ class SquareCylinderProblem : public CylinderProblem
         horizontalCut = RefinementPattern::yAnisotropicRefinementPatternQuad();
       }
 
-      Intrepid::FieldContainer<double> vertices(8,3);
+      Camellia::FieldContainer<double> vertices(8,3);
       if (_steady)
       {
         vertices.resize(4,2);

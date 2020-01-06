@@ -27,7 +27,7 @@ public:
   VarFunction(VarPtr var);
   
   // ! This is an abstract function, not valid for direct evaluation: hence, calling values will throw an exception.
-  void values(Intrepid::FieldContainer<Scalar> &values, BasisCachePtr basisCache);
+  void values(Camellia::FieldContainer<Scalar> &values, BasisCachePtr basisCache);
   TFunctionPtr<Scalar> x();
   TFunctionPtr<Scalar> y();
   TFunctionPtr<Scalar> z();

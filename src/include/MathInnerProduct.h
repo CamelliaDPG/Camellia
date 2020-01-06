@@ -31,10 +31,10 @@ public:
                  vector<Camellia::EOperator> &testOp1,
                  vector<Camellia::EOperator> &testOp2);
 
-  void applyInnerProductData(Intrepid::FieldContainer<double> &testValues1,
-                             Intrepid::FieldContainer<double> &testValues2,
+  void applyInnerProductData(Camellia::FieldContainer<double> &testValues1,
+                             Camellia::FieldContainer<double> &testValues2,
                              int testID1, int testID2, int operatorIndex,
-                             const Intrepid::FieldContainer<double>& physicalPoints);
+                             const Camellia::FieldContainer<double>& physicalPoints);
 };
 }
 

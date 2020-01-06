@@ -34,7 +34,7 @@ std::vector< TFunctionPtr<double> > AbsFunction::memberFunctions()
   return {{_f}};
 }
 
-void AbsFunction::values(Intrepid::FieldContainer<double> &values, BasisCachePtr basisCache)
+void AbsFunction::values(Camellia::FieldContainer<double> &values, BasisCachePtr basisCache)
 {
   this->CHECK_VALUES_RANK(values);
   _f->values(values,basisCache);

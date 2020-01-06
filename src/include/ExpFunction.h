@@ -27,7 +27,7 @@ namespace Camellia
     TFunctionPtr<Scalar> _power;
   public:
     Exp(TFunctionPtr<Scalar> power);
-    void values(Intrepid::FieldContainer<Scalar> &values, BasisCachePtr basisCache);
+    void values(Camellia::FieldContainer<Scalar> &values, BasisCachePtr basisCache);
     TFunctionPtr<Scalar> dx();
     TFunctionPtr<Scalar> dy();
     TFunctionPtr<Scalar> dz();
@@ -46,7 +46,7 @@ namespace Camellia
     TFunctionPtr<Scalar> _argument;
   public:
     Ln(TFunctionPtr<Scalar> argument);
-    void values(Intrepid::FieldContainer<Scalar> &values, BasisCachePtr basisCache);
+    void values(Camellia::FieldContainer<Scalar> &values, BasisCachePtr basisCache);
     TFunctionPtr<Scalar> dx();
     TFunctionPtr<Scalar> dy();
     TFunctionPtr<Scalar> dz();

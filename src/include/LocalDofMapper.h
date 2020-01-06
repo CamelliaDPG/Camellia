@@ -40,20 +40,20 @@ class LocalDofMapper   // maps a whole trial ordering
   int _sideOrdinalToMap;
   int _varIDToMap;
 
-  void filterData(const vector<int> dofIndices, const Intrepid::FieldContainer<double> &data, Intrepid::FieldContainer<double> &filteredData);
-  void addSubBasisMapVectorContribution(int varID, int sideIndex, BasisMap &basisMap, const Intrepid::FieldContainer<double> &localData, Intrepid::FieldContainer<double> &globalData, bool fittableGlobalDofsOnly);
-  void addReverseSubBasisMapVectorContribution(int varID, int sideOrdinal, BasisMap &basisMap, const Intrepid::FieldContainer<double> &globalData, Intrepid::FieldContainer<double> &localData);
-  void addReverseSubBasisMapVectorContribution(int varID, int sideOrdinal, BasisMap &basisMap, const std::map<GlobalIndexType,double> &globalCoefficients, Intrepid::FieldContainer<double> &localCoefficients);
+  void filterData(const vector<int> dofIndices, const Camellia::FieldContainer<double> &data, Camellia::FieldContainer<double> &filteredData);
+  void addSubBasisMapVectorContribution(int varID, int sideIndex, BasisMap &basisMap, const Camellia::FieldContainer<double> &localData, Camellia::FieldContainer<double> &globalData, bool fittableGlobalDofsOnly);
+  void addReverseSubBasisMapVectorContribution(int varID, int sideOrdinal, BasisMap &basisMap, const Camellia::FieldContainer<double> &globalData, Camellia::FieldContainer<double> &localData);
+  void addReverseSubBasisMapVectorContribution(int varID, int sideOrdinal, BasisMap &basisMap, const std::map<GlobalIndexType,double> &globalCoefficients, Camellia::FieldContainer<double> &localCoefficients);
   
-  Intrepid::FieldContainer<double> mapLocalDataMatrix(const Intrepid::FieldContainer<double> &localData, bool fittableGlobalDofsOnly);
+  Camellia::FieldContainer<double> mapLocalDataMatrix(const Camellia::FieldContainer<double> &localData, bool fittableGlobalDofsOnly);
   
-  void mapLocalDataVector(const Intrepid::FieldContainer<double> &localData, bool fittableGlobalDofsOnly,
-                          Intrepid::FieldContainer<double> &mappedDataVector);
-  void mapLocalDataVector(const Intrepid::FieldContainer<double> &localData, bool fittableGlobalDofsOnly,
+  void mapLocalDataVector(const Camellia::FieldContainer<double> &localData, bool fittableGlobalDofsOnly,
+                          Camellia::FieldContainer<double> &mappedDataVector);
+  void mapLocalDataVector(const Camellia::FieldContainer<double> &localData, bool fittableGlobalDofsOnly,
                           const std::vector<std::pair<int,std::vector<int>>> &varIDsAndSideOrdinalsToMap,
-                          Intrepid::FieldContainer<double> &mappedDataVector);
+                          Camellia::FieldContainer<double> &mappedDataVector);
   
-  Intrepid::FieldContainer<double> _localCoefficientsFitMatrix; // used for fitLocalCoefficients
+  Camellia::FieldContainer<double> _localCoefficientsFitMatrix; // used for fitLocalCoefficients
   vector<GlobalIndexType> _globalIndices;
 
   // the following is used by LocalDofMappers that have varIDToMap = -1 when fitLocalCoefficients() is called
@@ -71,27 +71,27 @@ public:
   // ! Returns an STL map from the local dof indices to the global dof indices.  Throws an exception if isPermutation() returns false.
   const std::map<int, GlobalIndexType> &getPermutationMap();
   
-  Intrepid::FieldContainer<double> mapLocalData(const Intrepid::FieldContainer<double> &localData, bool fittableGlobalDofsOnly);
+  Camellia::FieldContainer<double> mapLocalData(const Camellia::FieldContainer<double> &localData, bool fittableGlobalDofsOnly);
   
-  Intrepid::FieldContainer<double> mapLocalData(const Intrepid::FieldContainer<double> &localData, bool fittableGlobalDofsOnly,
+  Camellia::FieldContainer<double> mapLocalData(const Camellia::FieldContainer<double> &localData, bool fittableGlobalDofsOnly,
                                                 const std::vector<std::pair<int,std::vector<int>>> &varIDsAndSideOrdinalsToMap);
   
-  void mapLocalDataSide(const Intrepid::FieldContainer<double> &localData, Intrepid::FieldContainer<double> &mappedData, bool fittableGlobalDofsOnly, int sideOrdinal);
-  void mapLocalDataVolume(const Intrepid::FieldContainer<double> &localData, Intrepid::FieldContainer<double> &mappedData, bool fittableGlobalDofsOnly);
+  void mapLocalDataSide(const Camellia::FieldContainer<double> &localData, Camellia::FieldContainer<double> &mappedData, bool fittableGlobalDofsOnly, int sideOrdinal);
+  void mapLocalDataVolume(const Camellia::FieldContainer<double> &localData, Camellia::FieldContainer<double> &mappedData, bool fittableGlobalDofsOnly);
 
   // Like the other mapLocalDataMatrix, but only applies the mapping in one of the two dimensions of localData
   // whichDim may be 0 or 1
-  void mapLocalDataMatrix(const Intrepid::FieldContainer<double> &localData, bool fittableGlobalDofsOnly,
-                          Intrepid::FieldContainer<double> &mappedData, int whichDim);
+  void mapLocalDataMatrix(const Camellia::FieldContainer<double> &localData, bool fittableGlobalDofsOnly,
+                          Camellia::FieldContainer<double> &mappedData, int whichDim);
   
   //! Returns true if the action of the LocalDofMapper is equivalent to a relabeling of the local dofs as global dofs (i.e. it is one-to-one and all weights are unity.)
   bool isPermutation() const;
   
-  Intrepid::FieldContainer<double> fitLocalCoefficients(const Intrepid::FieldContainer<double> &localCoefficients); // solves normal equations (if the localCoefficients are in the range of the global-to-local operator, then the returned coefficients will be the preimage of localCoefficients under that operator)
-  Intrepid::FieldContainer<double> mapGlobalCoefficients(const Intrepid::FieldContainer<double> &globalCoefficients);
+  Camellia::FieldContainer<double> fitLocalCoefficients(const Camellia::FieldContainer<double> &localCoefficients); // solves normal equations (if the localCoefficients are in the range of the global-to-local operator, then the returned coefficients will be the preimage of localCoefficients under that operator)
+  Camellia::FieldContainer<double> mapGlobalCoefficients(const Camellia::FieldContainer<double> &globalCoefficients);
   
-  // ! this version of mapGlobalCoefficients should be more efficient when the number of global coefficients in the map is small (i.e. there would be lots of zeroes in the Intrepid::FieldContainer version)
-  void mapGlobalCoefficients(const std::map<GlobalIndexType,double> &globalCoefficients, Intrepid::FieldContainer<double> &localCoefficients);
+  // ! this version of mapGlobalCoefficients should be more efficient when the number of global coefficients in the map is small (i.e. there would be lots of zeroes in the Camellia::FieldContainer version)
+  void mapGlobalCoefficients(const std::map<GlobalIndexType,double> &globalCoefficients, Camellia::FieldContainer<double> &localCoefficients);
   
   const vector<GlobalIndexType> &fittableGlobalIndices();
   const vector<GlobalIndexType> &globalIndices();

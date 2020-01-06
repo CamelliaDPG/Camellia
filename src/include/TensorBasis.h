@@ -91,7 +91,7 @@ public:
    \param  componentOutputValues  [in] - values for each component.  Should be ordered (C,F,P,D,...) or (F,P,D,...).
 
    */
-  void getTensorValues(ArrayScalar& outputValues, std::vector< ArrayScalar> & componentOutputValues,
+  void getTensorValues(ArrayScalar& outputValues, const std::vector< ArrayScalar> & componentOutputValues,
                        std::vector<Intrepid::EOperator> operatorTypes) const;
 
   /** \brief  Returns the basis corresponding to the provided tensorial rank.

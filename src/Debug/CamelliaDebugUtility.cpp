@@ -180,14 +180,14 @@ namespace Camellia
   }
   
   void printLabeledDofCoefficients(VarFactoryPtr vf, DofOrderingPtr dofOrdering,
-                                   const Intrepid::FieldContainer<double> &dofCoefficients,
+                                   const Camellia::FieldContainer<double> &dofCoefficients,
                                    bool trialSpaceDofs)
   {
     printLabeledDofCoefficients(std::cout, vf, dofOrdering, dofCoefficients, trialSpaceDofs);
   }
   
   void printLabeledDofCoefficients(ostream &out, VarFactoryPtr vf, DofOrderingPtr dofOrdering,
-                                   const Intrepid::FieldContainer<double> &dofCoefficients,
+                                   const Camellia::FieldContainer<double> &dofCoefficients,
                                    bool trialSpaceDofs)
   {
     if (dofOrdering->totalDofs() != dofCoefficients.size())

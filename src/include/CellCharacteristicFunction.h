@@ -37,7 +37,7 @@ public:
   {
     _cellIDs = cellIDs;
   }
-  void values(Intrepid::FieldContainer<double> &values, BasisCachePtr basisCache)
+  void values(Camellia::FieldContainer<double> &values, BasisCachePtr basisCache)
   {
     CHECK_VALUES_RANK(values);
     vector<GlobalIndexType> cellIDs = basisCache->cellIDs();

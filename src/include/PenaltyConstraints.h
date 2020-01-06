@@ -31,7 +31,7 @@ public:
     Constraint sfc = Constraint::spatiallyFilteredConstraint(c,sf);
     _constraints.push_back(sfc);
   }
-  void filter(Intrepid::FieldContainer<double> &localStiffnessMatrix, Intrepid::FieldContainer<double> &localRHSVector,
+  void filter(Camellia::FieldContainer<double> &localStiffnessMatrix, Camellia::FieldContainer<double> &localRHSVector,
               BasisCachePtr basisCache, Teuchos::RCP<Mesh> mesh, Teuchos::RCP<BC> bc)
   {
     // localStiffnessMatrix has dimensions (C,F,F) where F are the fields for the trial space basis
@@ -48,8 +48,8 @@ public:
     // Assumes that all elements are of like type--but they'd have to be, to have a single localStiffness FC
     ElementTypePtr elemType = mesh->getElementType(basisCache->cellIDs()[0]);
 
-    Intrepid::FieldContainer<double> constraintMatrix(numCells,numFields,numFields);
-    Intrepid::FieldContainer<double> constraintLoad(numCells,numFields);
+    Camellia::FieldContainer<double> constraintMatrix(numCells,numFields,numFields);
+    Camellia::FieldContainer<double> constraintLoad(numCells,numFields);
     for (vector<Constraint>::iterator constIt = _constraints.begin(); constIt != _constraints.end(); constIt++)
     {
       LinearTermPtr lt = constIt->linearTerm();

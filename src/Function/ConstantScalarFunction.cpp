@@ -37,7 +37,7 @@ bool ConstantScalarFunction<Scalar>::isZero()
 }
 
 template <typename Scalar>
-void ConstantScalarFunction<Scalar>::values(Intrepid::FieldContainer<Scalar> &values, BasisCachePtr basisCache)
+void ConstantScalarFunction<Scalar>::values(Camellia::FieldContainer<Scalar> &values, BasisCachePtr basisCache)
 {
   this->CHECK_VALUES_RANK(values);
   for (int i=0; i < values.size(); i++)
@@ -46,7 +46,7 @@ void ConstantScalarFunction<Scalar>::values(Intrepid::FieldContainer<Scalar> &va
   }
 }
 template <typename Scalar>
-void ConstantScalarFunction<Scalar>::scalarMultiplyFunctionValues(Intrepid::FieldContainer<Scalar> &values, BasisCachePtr basisCache)
+void ConstantScalarFunction<Scalar>::scalarMultiplyFunctionValues(Camellia::FieldContainer<Scalar> &values, BasisCachePtr basisCache)
 {
   if (_value != 1.0)
   {
@@ -57,7 +57,7 @@ void ConstantScalarFunction<Scalar>::scalarMultiplyFunctionValues(Intrepid::Fiel
   }
 }
 template <typename Scalar>
-void ConstantScalarFunction<Scalar>::scalarDivideFunctionValues(Intrepid::FieldContainer<Scalar> &values, BasisCachePtr basisCache)
+void ConstantScalarFunction<Scalar>::scalarDivideFunctionValues(Camellia::FieldContainer<Scalar> &values, BasisCachePtr basisCache)
 {
   if (_value != 1.0)
   {
@@ -68,13 +68,13 @@ void ConstantScalarFunction<Scalar>::scalarDivideFunctionValues(Intrepid::FieldC
   }
 }
 template <typename Scalar>
-void ConstantScalarFunction<Scalar>::scalarMultiplyBasisValues(Intrepid::FieldContainer<double> &basisValues, BasisCachePtr basisCache)
+void ConstantScalarFunction<Scalar>::scalarMultiplyBasisValues(Camellia::FieldContainer<double> &basisValues, BasisCachePtr basisCache)
 {
   // we don't actually care about the shape of basisValues--just use the FunctionValues versions:
   scalarMultiplyFunctionValues(basisValues,basisCache);
 }
 template <typename Scalar>
-void ConstantScalarFunction<Scalar>::scalarDivideBasisValues(Intrepid::FieldContainer<double> &basisValues, BasisCachePtr basisCache)
+void ConstantScalarFunction<Scalar>::scalarDivideBasisValues(Camellia::FieldContainer<double> &basisValues, BasisCachePtr basisCache)
 {
   scalarDivideFunctionValues(basisValues,basisCache);
 }

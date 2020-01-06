@@ -25,7 +25,7 @@ public:
   SideParityFunction();
   bool boundaryValueOnly();
   string displayString();
-  void values(Intrepid::FieldContainer<double> &values, BasisCachePtr basisCache);
+  void values(Camellia::FieldContainer<double> &values, BasisCachePtr basisCache);
 };
 }
 

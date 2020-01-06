@@ -186,7 +186,7 @@ void TensorBasis<Scalar, ArrayScalar>::getTensorPoints(ArrayScalar& tensorPoints
 }
 
 template<class Scalar, class ArrayScalar>
-void TensorBasis<Scalar,ArrayScalar>::getTensorValues(ArrayScalar& outputValues, std::vector< ArrayScalar> & componentOutputValuesVector,
+void TensorBasis<Scalar,ArrayScalar>::getTensorValues(ArrayScalar& outputValues, const std::vector< ArrayScalar> & componentOutputValuesVector,
     std::vector<Intrepid::EOperator> operatorTypes) const
 {
   // outputValues can have dimensions (C,F,P,...) or (F,P,...)

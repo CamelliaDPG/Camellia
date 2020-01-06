@@ -31,12 +31,12 @@ using namespace Camellia;
 // time slice utilities assume a tensor product cell in the time dimension
 // and further assume that if there are nodeCount vertices in the spatial element, then the nodes in space-time
 // will be ordered such that nodes(i) and nodes(i+nodeCount) correspond to each other
-vector< vector<double> > timeSliceForCell(Intrepid::FieldContainer<double> &physicalCellNodes, double t)
+vector< vector<double> > timeSliceForCell(Camellia::FieldContainer<double> &physicalCellNodes, double t)
 {
   int nodeCount = physicalCellNodes.dimension(1) / 2;
   int spaceDim = physicalCellNodes.dimension(2) - 1; // # of true spatial dimensions
   int d_time = spaceDim; // the index for the time dimension
-//  Intrepid::FieldContainer<double> slice(1,nodeCount,spaceDim);
+//  Camellia::FieldContainer<double> slice(1,nodeCount,spaceDim);
   vector< vector<double> > sliceVertices;
   for (int i=0; i<nodeCount; i++)
   {
@@ -58,7 +58,7 @@ vector< vector<double> > timeSliceForCell(Intrepid::FieldContainer<double> &phys
   return sliceVertices;
 }
 
-bool cellMatches(Intrepid::FieldContainer<double> physicalNodes, double t)
+bool cellMatches(Camellia::FieldContainer<double> physicalNodes, double t)
 {
   int nodeCount = physicalNodes.dimension(1);
   int spaceDim = physicalNodes.dimension(2) - 1; // # of true spatial dimensions
@@ -96,7 +96,7 @@ map<IndexType,IndexType> MeshTools::mapActiveCellIndices(MeshTopologyViewPtr mes
 {
   const set<IndexType>* activeCellIndices = &meshTopoFrom->getLocallyKnownActiveCellIndices();
   vector<vector<double>> centroid(activeCellIndices->size());
-  Intrepid::FieldContainer<double> centroidFC(activeCellIndices->size(),1,meshTopoFrom->getDimension());
+  Camellia::FieldContainer<double> centroidFC(activeCellIndices->size(),1,meshTopoFrom->getDimension());
   int cellOrdinal = 0;
   for (IndexType cellIndex : *activeCellIndices)
   {
@@ -149,7 +149,7 @@ MeshPtr MeshTools::timeSliceMesh(MeshPtr spaceTimeMesh, double t,
   set<IndexType> cellIDsToCheck = rootCellIDs;
   for (IndexType rootCellID : rootCellIDs)
   {
-    Intrepid::FieldContainer<double> physicalNodes = meshTopoLocal->physicalCellNodesForCell(rootCellID, true);
+    Camellia::FieldContainer<double> physicalNodes = meshTopoLocal->physicalCellNodesForCell(rootCellID, true);
     if (cellMatches(physicalNodes, t))   // cell and some subset of its descendents should be included in slice mesh
     {
       vector< vector< double > > sliceNodes = timeSliceForCell(physicalNodes, t);
@@ -183,7 +183,7 @@ MeshPtr MeshTools::timeSliceMesh(MeshPtr spaceTimeMesh, double t,
       for (int childOrdinal=0; childOrdinal<spaceTimeChildren.size(); childOrdinal++)
       {
         IndexType childID = spaceTimeChildren[childOrdinal];
-        Intrepid::FieldContainer<double> childNodes = meshTopo->physicalCellNodesForCell(childID, true);
+        Camellia::FieldContainer<double> childNodes = meshTopo->physicalCellNodesForCell(childID, true);
         if (cellMatches(childNodes, t))
         {
           vector< vector<double> > childSlice = timeSliceForCell(childNodes, t);
@@ -214,7 +214,7 @@ public:
     _spaceTimeFunction = spaceTimeFunction;
     _t = t;
   }
-  void values(Intrepid::FieldContainer<double> &values, BasisCachePtr sliceBasisCache)
+  void values(Camellia::FieldContainer<double> &values, BasisCachePtr sliceBasisCache)
   {
     vector<GlobalIndexType> sliceCellIDs = sliceBasisCache->cellIDs();
 
@@ -227,11 +227,11 @@ public:
     {
       offset[0] = cellOrdinal;
       int enumeration = SerialDenseWrapper::getEnumeration(offset,values);
-      Intrepid::FieldContainer<double>valuesForCell(dim,&values[enumeration]);
+      Camellia::FieldContainer<double>valuesForCell(dim,&values[enumeration]);
       GlobalIndexType sliceCellID = sliceCellIDs[cellOrdinal];
       int numPoints = sliceBasisCache->getPhysicalCubaturePoints().dimension(1);
       int spaceDim = sliceBasisCache->getPhysicalCubaturePoints().dimension(2);
-      Intrepid::FieldContainer<double> spaceTimePhysicalPoints(1,numPoints,spaceDim+1);
+      Camellia::FieldContainer<double> spaceTimePhysicalPoints(1,numPoints,spaceDim+1);
       for (int ptOrdinal=0; ptOrdinal<numPoints; ptOrdinal++)
       {
         for (int d=0; d<spaceDim; d++)
@@ -244,7 +244,7 @@ public:
       GlobalIndexType cellID = _cellIDMap[sliceCellID];
       BasisCachePtr spaceTimeBasisCache = BasisCache::basisCacheForCell(_spaceTimeMesh, cellID);
 
-      Intrepid::FieldContainer<double> spaceTimeRefPoints(1,numPoints,spaceDim+1);
+      Camellia::FieldContainer<double> spaceTimeRefPoints(1,numPoints,spaceDim+1);
       CamelliaCellTools::mapToReferenceFrame(spaceTimeRefPoints, spaceTimePhysicalPoints, _spaceTimeMesh->getTopology(), cellID, spaceTimeBasisCache->cubatureDegree());
       spaceTimeRefPoints.resize(numPoints,spaceDim+1);
       spaceTimeBasisCache->setRefCellPoints(spaceTimeRefPoints);

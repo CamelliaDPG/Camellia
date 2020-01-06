@@ -237,8 +237,8 @@ namespace
       
       TEST_EQUALITY(topo->isParent(cellIndex), view->isParent(cellIndex));
       
-      Intrepid::FieldContainer<double> topoPhysicalNodes = topo->physicalCellNodesForCell(cellIndex);
-      Intrepid::FieldContainer<double> viewPhysicalNodes = view->physicalCellNodesForCell(cellIndex);
+      Camellia::FieldContainer<double> topoPhysicalNodes = topo->physicalCellNodesForCell(cellIndex);
+      Camellia::FieldContainer<double> viewPhysicalNodes = view->physicalCellNodesForCell(cellIndex);
       TEST_COMPARE_ARRAYS(topoPhysicalNodes, viewPhysicalNodes); // could relax to floating equality
       
       topo->verticesForCell(topoPhysicalNodes, cellIndex);
@@ -260,7 +260,7 @@ namespace
     
     // TODO: test agreement of the following:
     /*
-     vector<IndexType> cellIDsForPoints(const Intrepid::FieldContainer<double> &physicalPoints);
+     vector<IndexType> cellIDsForPoints(const Camellia::FieldContainer<double> &physicalPoints);
      */
   }
   

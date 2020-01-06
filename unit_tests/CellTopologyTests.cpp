@@ -12,7 +12,7 @@
 #include "Teuchos_UnitTestHarness.hpp"
 #include "Teuchos_UnitTestHelpers.hpp"
 
-#include "Intrepid_FieldContainer.hpp"
+#include "Camellia_FieldContainer.hpp"
 
 #include "CellTopology.h"
 
@@ -130,20 +130,20 @@ vector< CellTopoPtr > getShardsTopologies()
 
 TEUCHOS_UNIT_TEST( CellTopology, InitializeNodesLine)
 {
-  Intrepid::FieldContainer<double> lineNodes_x(2,1);
+  Camellia::FieldContainer<double> lineNodes_x(2,1);
 
   lineNodes_x(0,0) =  0;
   lineNodes_x(1,0) =  1;
 
-  vector< Intrepid::FieldContainer<double> > tensorComponentNodes(1);
+  vector< Camellia::FieldContainer<double> > tensorComponentNodes(1);
   tensorComponentNodes[0] = lineNodes_x;
 
-  Intrepid::FieldContainer<double> expectedNodes(2,1);
+  Camellia::FieldContainer<double> expectedNodes(2,1);
   // expect to get all the x0's then all the x1's, etc.
   expectedNodes(0,0) = lineNodes_x(0,0);
   expectedNodes(1,0) = lineNodes_x(1,0);
 
-  Intrepid::FieldContainer<double> actualNodes(2,1);
+  Camellia::FieldContainer<double> actualNodes(2,1);
 
   shards::CellTopology shardsLine(shards::getCellTopologyData<shards::Line<2> >() );
 
@@ -197,19 +197,19 @@ TEUCHOS_UNIT_TEST( CellTopology, GetNodeFromTensorialComponentNodes)
 
 TEUCHOS_UNIT_TEST( CellTopology, InitializeNodesQuad)
 {
-  Intrepid::FieldContainer<double> lineNodes_x(2,1);
-  Intrepid::FieldContainer<double> lineNodes_y(2,1);
+  Camellia::FieldContainer<double> lineNodes_x(2,1);
+  Camellia::FieldContainer<double> lineNodes_y(2,1);
 
   lineNodes_x(0,0) =  0;
   lineNodes_x(1,0) =  1;
   lineNodes_y(0,0) =  2;
   lineNodes_y(1,0) =  4;
 
-  vector< Intrepid::FieldContainer<double> > tensorComponentNodes(2);
+  vector< Camellia::FieldContainer<double> > tensorComponentNodes(2);
   tensorComponentNodes[0] = lineNodes_x;
   tensorComponentNodes[1] = lineNodes_y;
 
-  Intrepid::FieldContainer<double> expectedNodes(4,2);
+  Camellia::FieldContainer<double> expectedNodes(4,2);
   // expect to see a copy of lineNodes_x with y0 as last dimension, then another copy with y1
   expectedNodes(0,0) = lineNodes_x(0,0);
   expectedNodes(0,1) = lineNodes_y(0,0);
@@ -223,7 +223,7 @@ TEUCHOS_UNIT_TEST( CellTopology, InitializeNodesQuad)
   expectedNodes(3,0) = lineNodes_x(1,0);
   expectedNodes(3,1) = lineNodes_y(1,0);
 
-  Intrepid::FieldContainer<double> actualNodes(4,2);
+  Camellia::FieldContainer<double> actualNodes(4,2);
   actualNodes.initialize(-17); // to make clear what, if anything, is not being set
 
   shards::CellTopology shardsLine(shards::getCellTopologyData<shards::Line<2> >() );
@@ -238,9 +238,9 @@ TEUCHOS_UNIT_TEST( CellTopology, InitializeNodesQuad)
 
 TEUCHOS_UNIT_TEST( CellTopology, InitializeNodesHexahedron)
 {
-  Intrepid::FieldContainer<double> lineNodes_x(2,1);
-  Intrepid::FieldContainer<double> lineNodes_y(2,1);
-  Intrepid::FieldContainer<double> lineNodes_z(2,1);
+  Camellia::FieldContainer<double> lineNodes_x(2,1);
+  Camellia::FieldContainer<double> lineNodes_y(2,1);
+  Camellia::FieldContainer<double> lineNodes_z(2,1);
 
   lineNodes_x(0,0) =  0;
   lineNodes_x(1,0) =  1;
@@ -249,12 +249,12 @@ TEUCHOS_UNIT_TEST( CellTopology, InitializeNodesHexahedron)
   lineNodes_z(0,0) = -3;
   lineNodes_z(1,0) =  3;
 
-  vector< Intrepid::FieldContainer<double> > tensorComponentNodes(3);
+  vector< Camellia::FieldContainer<double> > tensorComponentNodes(3);
   tensorComponentNodes[0] = lineNodes_x;
   tensorComponentNodes[1] = lineNodes_y;
   tensorComponentNodes[2] = lineNodes_z;
 
-  Intrepid::FieldContainer<double> expectedNodes(8,3);
+  Camellia::FieldContainer<double> expectedNodes(8,3);
   expectedNodes(0,0) = lineNodes_x(0,0);
   expectedNodes(0,1) = lineNodes_y(0,0);
   expectedNodes(0,2) = lineNodes_z(0,0);
@@ -288,7 +288,7 @@ TEUCHOS_UNIT_TEST( CellTopology, InitializeNodesHexahedron)
   expectedNodes(7,1) = lineNodes_y(1,0);
   expectedNodes(7,2) = lineNodes_z(1,0);
 
-  Intrepid::FieldContainer<double> actualNodes(8,3);
+  Camellia::FieldContainer<double> actualNodes(8,3);
   actualNodes.initialize(-17); // to make clear what, if anything, is not being set
 
   shards::CellTopology shardsLine(shards::getCellTopologyData<shards::Line<2> >() );

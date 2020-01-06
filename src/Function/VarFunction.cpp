@@ -101,7 +101,7 @@ TFunctionPtr<Scalar> VarFunction<Scalar>::dz()
 }
 
 template <typename Scalar>
-void VarFunction<Scalar>::values(Intrepid::FieldContainer<Scalar> &values, BasisCachePtr basisCache)
+void VarFunction<Scalar>::values(Camellia::FieldContainer<Scalar> &values, BasisCachePtr basisCache)
 {
   // This is an abstract function -- becomes concrete when evaluated at a Solution object.
   // Therefore, we should not ever call values on this...

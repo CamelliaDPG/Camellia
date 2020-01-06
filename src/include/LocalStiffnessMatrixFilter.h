@@ -11,7 +11,7 @@
 
 #include "Mesh.h" // contains bilinear form and boundary too
 #include "BC.h"
-#include "Intrepid_FieldContainer.hpp"
+#include "Camellia_FieldContainer.hpp"
 
 using namespace std;
 
@@ -21,14 +21,14 @@ class LocalStiffnessMatrixFilter
 {
 public:
   LocalStiffnessMatrixFilter() {}
-  virtual void filter(Intrepid::FieldContainer<double> &localStiffnessMatrix, Intrepid::FieldContainer<double> &localRHSVector,
+  virtual void filter(Camellia::FieldContainer<double> &localStiffnessMatrix, Camellia::FieldContainer<double> &localRHSVector,
                       BasisCachePtr basisCache, Teuchos::RCP<Mesh> mesh, Teuchos::RCP<BC> bc)
   {
     TEUCHOS_TEST_FOR_EXCEPTION(true,std::invalid_argument,"LocalStiffnessMatrixFilter::filter() unimplemented.");
   }
 
-  //  virtual void filter(Intrepid::FieldContainer<double> &localStiffnessMatrix, Intrepid::FieldContainer<double> &localRHSVector,
-  //                      const Intrepid::FieldContainer<double> &physicalCellNodes,
+  //  virtual void filter(Camellia::FieldContainer<double> &localStiffnessMatrix, Camellia::FieldContainer<double> &localRHSVector,
+  //                      const Camellia::FieldContainer<double> &physicalCellNodes,
   //                      vector<int> &cellIDs, Teuchos::RCP<Mesh> mesh, Teuchos::RCP<BC> bc) = 0;
   // localStiffnessMatrix has dimensions (numCells, numTrialDofs, numTrialDofs)
   // physicalCellNodes has dimensions (numCells, numVerticesPerCell, numDimensions)

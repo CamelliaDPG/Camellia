@@ -51,7 +51,7 @@ class MeshTransferFunction : public TFunction<double>, public RefinementObserver
   void rebuildMaps();
 public:
   MeshTransferFunction(TFunctionPtr<double> originalFunction, MeshPtr originalMesh, MeshPtr newMesh, double interface_t);
-  virtual void values(Intrepid::FieldContainer<double> &values, BasisCachePtr basisCache);
+  virtual void values(Camellia::FieldContainer<double> &values, BasisCachePtr basisCache);
 
   bool boundaryValueOnly();
 

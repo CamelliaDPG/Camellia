@@ -47,7 +47,7 @@ private:
   set<double> _fieldTimeVals;
   set<double> _traceTimeVals;
 
-  void getPoints(Intrepid::FieldContainer<double> &points, CellTopoPtr cellTopo, int num1DPts);
+  void getPoints(Camellia::FieldContainer<double> &points, CellTopoPtr cellTopo, int num1DPts);
 public:
   HDF5Exporter(MeshPtr mesh, std::string outputDirName="output", std::string outputDirSuperPath = ".");
   ~HDF5Exporter();

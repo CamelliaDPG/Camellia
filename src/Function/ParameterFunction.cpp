@@ -92,7 +92,7 @@ std::vector< TFunctionPtr<double> > ParameterFunction::memberFunctions()
   return {{_fxn}};
 }
 
-void ParameterFunction::values(Intrepid::FieldContainer<double> &values, BasisCachePtr basisCache)
+void ParameterFunction::values(Camellia::FieldContainer<double> &values, BasisCachePtr basisCache)
 {
   _fxn->values(values, basisCache);
 }

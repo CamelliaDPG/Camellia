@@ -11,7 +11,7 @@
 
 #include "MPIWrapper.h"
 
-#include "Intrepid_FieldContainer.hpp"
+#include "Camellia_FieldContainer.hpp"
 #include "Teuchos_GlobalMPISession.hpp"
 
 using namespace Camellia;
@@ -27,7 +27,7 @@ TEUCHOS_UNIT_TEST_TEMPLATE_1_DECL( MPIWrapper, AllGatherVariable, Scalar )
   int myRank = Teuchos::GlobalMPISession::getRank();
   int numProcs = Teuchos::GlobalMPISession::getNProc();
 
-  Intrepid::FieldContainer<int> expectedOffsets(numProcs);
+  Camellia::FieldContainer<int> expectedOffsets(numProcs);
   int numGlobalEntries = 0; // counts the total number of entries
   for (int i=0; i < numProcs; i++)
   {
@@ -41,7 +41,7 @@ TEUCHOS_UNIT_TEST_TEMPLATE_1_DECL( MPIWrapper, AllGatherVariable, Scalar )
   int myOffset = expectedOffsets[myRank];
 
   // put a variable number of values on each processor
-  Intrepid::FieldContainer<Scalar> myValues(myRank+1);
+  Camellia::FieldContainer<Scalar> myValues(myRank+1);
   for (int i=0; i<=myRank; i++)
   {
     myValues[i] = myOffset + i;
@@ -53,14 +53,14 @@ TEUCHOS_UNIT_TEST_TEMPLATE_1_DECL( MPIWrapper, AllGatherVariable, Scalar )
 //    }
 //    std::cout << std::endl;
 
-  Intrepid::FieldContainer<Scalar> allValuesExpected(numGlobalEntries);
+  Camellia::FieldContainer<Scalar> allValuesExpected(numGlobalEntries);
   for (int i=0; i<numGlobalEntries; i++)
   {
     allValuesExpected[i] = i;
   }
 
-  Intrepid::FieldContainer<Scalar> allValues;
-  Intrepid::FieldContainer<int> offsets;
+  Camellia::FieldContainer<Scalar> allValues;
+  Camellia::FieldContainer<int> offsets;
   MPIWrapper::allGatherVariable(*MPIWrapper::CommWorld(),allValues,myValues,offsets);
 
   TEST_COMPARE_ARRAYS(expectedOffsets, offsets);

@@ -35,7 +35,7 @@ public:
     _f1->setTime(time);
     _f2->setTime(time);
   }
-  virtual void values(Intrepid::FieldContainer<Scalar> &values, BasisCachePtr basisCache)
+  virtual void values(Camellia::FieldContainer<Scalar> &values, BasisCachePtr basisCache)
   {
     int numCells = values.dimension(0);
     int numPoints = values.dimension(1);
@@ -44,8 +44,8 @@ public:
     Teuchos::Array<int> dim;
     values.dimensions(dim);
     Teuchos::Array<int> valuesDim = dim;
-    Intrepid::FieldContainer<Scalar> f1Values;
-    Intrepid::FieldContainer<Scalar> f2Values;
+    Camellia::FieldContainer<Scalar> f1Values;
+    Camellia::FieldContainer<Scalar> f2Values;
 
     int entriesPerPoint = 1;
     for (int d=2; d<values.rank(); d++)
@@ -53,9 +53,9 @@ public:
       entriesPerPoint *= dim[d];
       dim[d] = 0; // clear so that these indices point to the start of storage for (cellIndex,ptIndex)
     }
-    //    const Intrepid::FieldContainer<double> *points = &(basisCache->getPhysicalCubaturePoints());
-    Intrepid::FieldContainer<bool> pointsMatch1(numCells,numPoints);
-    Intrepid::FieldContainer<bool> pointsMatch2(numCells,numPoints);
+    //    const Camellia::FieldContainer<double> *points = &(basisCache->getPhysicalCubaturePoints());
+    Camellia::FieldContainer<bool> pointsMatch1(numCells,numPoints);
+    Camellia::FieldContainer<bool> pointsMatch2(numCells,numPoints);
 
     bool somePointMatches1 = _sf1->matchesPoints(pointsMatch1,basisCache);
     bool somePointMatches2 = _sf2->matchesPoints(pointsMatch2,basisCache);
@@ -167,7 +167,7 @@ void TBC<Scalar>::addSinglePointBC( int fieldID, Scalar value, MeshPtr mesh, Glo
 {
   TEUCHOS_TEST_FOR_EXCEPTION(mesh->getTopology()->isDistributed(), std::invalid_argument, "addSinglePointBC() not supported for distributed MeshTopology.  Use addSpatialPointBC instead");
   if (vertexNumber == -1) vertexNumber = 0;
-  Intrepid::FieldContainer<double> vertexCoords = mesh->vertexCoordinates(vertexNumber);
+  Camellia::FieldContainer<double> vertexCoords = mesh->vertexCoordinates(vertexNumber);
   vector<double> vertex(vertexCoords.size());
   for (int i=0; i<vertex.size(); i++)
     vertex[i] = vertexCoords[i];
@@ -290,20 +290,20 @@ bool TBC<Scalar>::bcsImposed(int varID)
 }
 
 template <typename Scalar>
-void TBC<Scalar>::imposeBC(Intrepid::FieldContainer<Scalar> &dirichletValues, Intrepid::FieldContainer<bool> &imposeHere,
-                           int varID, Intrepid::FieldContainer<double> &unitNormals, BasisCachePtr basisCache)
+void TBC<Scalar>::imposeBC(Camellia::FieldContainer<Scalar> &dirichletValues, Camellia::FieldContainer<bool> &imposeHere,
+                           int varID, Camellia::FieldContainer<double> &unitNormals, BasisCachePtr basisCache)
 {
   if (_legacyBCSubclass)
   {
     // by default, call legacy version:
     // (basisCache->getPhysicalCubaturePoints() doesn't really return *cubature* points, but the boundary points
     //  that we're interested in)
-    Intrepid::FieldContainer<double> physicalPoints = basisCache->getPhysicalCubaturePoints();
+    Camellia::FieldContainer<double> physicalPoints = basisCache->getPhysicalCubaturePoints();
     imposeBC(varID,physicalPoints,unitNormals,dirichletValues,imposeHere);
   }
   else
   {
-    Intrepid::FieldContainer<double> physicalPoints = basisCache->getPhysicalCubaturePoints();
+    Camellia::FieldContainer<double> physicalPoints = basisCache->getPhysicalCubaturePoints();
 
     int numCells = physicalPoints.dimension(0);
     int numPoints = physicalPoints.dimension(1);
@@ -358,10 +358,10 @@ void TBC<Scalar>::imposeBC(Intrepid::FieldContainer<Scalar> &dirichletValues, In
 }
 
 template <typename Scalar>
-void TBC<Scalar>::imposeBC(int varID, Intrepid::FieldContainer<double> &physicalPoints,
-                           Intrepid::FieldContainer<double> &unitNormals,
-                           Intrepid::FieldContainer<Scalar> &dirichletValues,
-                           Intrepid::FieldContainer<bool> &imposeHere)
+void TBC<Scalar>::imposeBC(int varID, Camellia::FieldContainer<double> &physicalPoints,
+                           Camellia::FieldContainer<double> &unitNormals,
+                           Camellia::FieldContainer<Scalar> &dirichletValues,
+                           Camellia::FieldContainer<bool> &imposeHere)
 {
   if (_legacyBCSubclass)
   {
@@ -429,7 +429,7 @@ bool TBC<Scalar>::shouldImposeZeroMeanConstraint(int varID)
 
 // basisCoefficients has dimensions (C,F)
 template <typename Scalar>
-void TBC<Scalar>::coefficientsForBC(Intrepid::FieldContainer<double> &basisCoefficients, Teuchos::RCP<BCFunction<Scalar>> bcFxn,
+void TBC<Scalar>::coefficientsForBC(Camellia::FieldContainer<double> &basisCoefficients, Teuchos::RCP<BCFunction<Scalar>> bcFxn,
                                     BasisPtr basis, BasisCachePtr sideBasisCache)
 {
   int numFieldsExpected;

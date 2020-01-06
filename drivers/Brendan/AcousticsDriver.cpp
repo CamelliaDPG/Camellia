@@ -377,8 +377,8 @@ int main(int argc, char *argv[])
     soln->solve(solver);
     double solveTime = solverTime->stop();
 
-    Intrepid::FieldContainer<GlobalIndexType> bcGlobalIndicesFC;
-    Intrepid::FieldContainer<double> bcGlobalValuesFC;
+    Camellia::FieldContainer<GlobalIndexType> bcGlobalIndicesFC;
+    Camellia::FieldContainer<double> bcGlobalValuesFC;
       
     mesh->boundary().bcsToImpose(bcGlobalIndicesFC,bcGlobalValuesFC,*soln->bc(), soln->getDofInterpreter().get());
 

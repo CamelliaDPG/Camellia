@@ -28,15 +28,15 @@ MeshPtr singleCellSpaceTimeMesh(CellTopoPtr spaceTopo, vector<int> H1Order)
   int tensorialDegree = 1;
   CellTopoPtr tensorTopo = CellTopology::cellTopology(spaceTopo, tensorialDegree);
 
-  Intrepid::FieldContainer<double> timeNodes(timeTopo->getNodeCount(), timeTopo->getDimension());
+  Camellia::FieldContainer<double> timeNodes(timeTopo->getNodeCount(), timeTopo->getDimension());
   double t0 = 0, t1 = 1;
   // time will go from t0 to t1:
   timeNodes(0,0) = t0;
   timeNodes(1,0) = t1;
 
-  Intrepid::FieldContainer<double> spaceNodes(spaceTopo->getNodeCount(), spaceTopo->getDimension());
+  Camellia::FieldContainer<double> spaceNodes(spaceTopo->getNodeCount(), spaceTopo->getDimension());
   CamelliaCellTools::refCellNodesForTopology(spaceNodes, spaceTopo);
-  Intrepid::FieldContainer<double> tensorNodesFC(tensorTopo->getNodeCount(), tensorTopo->getDimension());
+  Camellia::FieldContainer<double> tensorNodesFC(tensorTopo->getNodeCount(), tensorTopo->getDimension());
   tensorTopo->initializeNodes({spaceNodes, timeNodes}, tensorNodesFC);
 
   vector<vector<double> > tensorNodes;
@@ -75,7 +75,7 @@ void testConstantBasisSpaceTime(CellTopoPtr spaceTopo, bool testSides, Teuchos::
   typedef Camellia::TensorBasis<double, Intrepid::FieldContainer<double> > TensorBasis;
   Teuchos::RCP<TensorBasis> tensorBasis = Teuchos::rcp( new TensorBasis(spaceBasis, timeBasis) );
 
-  Intrepid::FieldContainer<double> basisCoefficients(tensorBasis->getCardinality());
+  Camellia::FieldContainer<double> basisCoefficients(tensorBasis->getCardinality());
   basisCoefficients.initialize(CONST_VALUE);
 
   FunctionPtr basisSumFunction = BasisSumFunction::basisSumFunction(tensorBasis, basisCoefficients);

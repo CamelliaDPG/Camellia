@@ -153,7 +153,7 @@ namespace
         gdaMinRule->printConstraintInfo(cellID);
 
         DofOrderingPtr trialOrder = form.solution()->mesh()->getElementType(cellID)->trialOrderPtr;
-        Intrepid::FieldContainer<double> dofCoefficients(trialOrder->totalDofs());
+        Camellia::FieldContainer<double> dofCoefficients(trialOrder->totalDofs());
         dofCoefficients[82] = 1.0;
         printLabeledDofCoefficients(form.bf()->varFactory(), trialOrder, dofCoefficients);
 
@@ -284,10 +284,10 @@ namespace
       {
         out << "******** SIDE " << sideOrdinal << " ********" << endl;
         BasisPtr basis = trialOrder->getBasis(tc->ID(),sideOrdinal);
-        Intrepid::FieldContainer<double> fluxValues(basis->getCardinality());
+        Camellia::FieldContainer<double> fluxValues(basis->getCardinality());
         fluxValues.initialize(CONST_VALUE);
-        Intrepid::FieldContainer<double> globalData;
-        Intrepid::FieldContainer<GlobalIndexType> globalDofIndices;
+        Camellia::FieldContainer<double> globalData;
+        Camellia::FieldContainer<GlobalIndexType> globalDofIndices;
         dofInterpreter->interpretLocalBasisCoefficients(cellID, tc->ID(), sideOrdinal, fluxValues, globalData, globalDofIndices);
         // sanity check on the interpreted global values
         for (int basisOrdinal=0; basisOrdinal<globalData.size(); basisOrdinal++)

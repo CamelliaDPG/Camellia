@@ -27,7 +27,7 @@ public:
   TFunctionPtr<Scalar> y();
   TFunctionPtr<Scalar> z();
 
-  void values(Intrepid::FieldContainer<Scalar> &values, BasisCachePtr basisCache);
+  void values(Camellia::FieldContainer<Scalar> &values, BasisCachePtr basisCache);
   std::vector<Scalar> value();
 };
 }

@@ -15,7 +15,7 @@
 #ifndef Camellia_debug_Lobatto_hpp
 #define Camellia_debug_Lobatto_hpp
 
-#include "Intrepid_FieldContainer.hpp"
+#include "Camellia_FieldContainer.hpp"
 #include "SimpleFunction.h"
 
 namespace Camellia {
@@ -26,7 +26,7 @@ namespace Camellia {
     // n: poly order; valuesArray should have n+2 entries...
     static void values(ArrayScalar &valuesArray, ArrayScalar &derivativeValuesArray, Scalar x, int n, bool conforming);
     static void values(ArrayScalar &valuesArray, ArrayScalar &derivativeValuesArray, ArrayScalar &secondDerivativesArray, Scalar x, int n, bool conforming);
-    static void l2norms(ArrayScalar &normValues, int n, bool conforming);  // should normValues be ArrayScalar, or hard-coded Intrepid::FieldContainer<double>?  I think the latter, actually...
+    static void l2norms(ArrayScalar &normValues, int n, bool conforming);  // should normValues be ArrayScalar, or hard-coded Camellia::FieldContainer<double>?  I think the latter, actually...
   };
 
   template<class Scalar=double> class LobattoFunction;
@@ -34,8 +34,8 @@ namespace Camellia {
   template<class Scalar>
   class LobattoFunction : public SimpleFunction<Scalar> {
     int _polyOrder;
-    Intrepid::FieldContainer<Scalar> _values;
-    Intrepid::FieldContainer<Scalar> _derivatives;
+    Camellia::FieldContainer<Scalar> _values;
+    Camellia::FieldContainer<Scalar> _derivatives;
 
     bool _conforming;
     bool _derivative; // whether this is the derivative of the Lobatto function

@@ -27,7 +27,7 @@
 
 #include "TypeDefs.h"
 
-#include "Intrepid_FieldContainer.hpp"
+#include "Camellia_FieldContainer.hpp"
 #include "Epetra_Vector.h"
 
 #include <set>
@@ -62,26 +62,26 @@ public:
   virtual set<GlobalIndexType> globalDofIndicesForPartition(PartitionIndexType rank) = 0;
   virtual bool isLocallyOwnedGlobalDofIndex(GlobalIndexType globalDofIndex) const = 0;
 
-  virtual void interpretLocalData(GlobalIndexType cellID, const Intrepid::FieldContainer<double> &localData,
-                                  Intrepid::FieldContainer<double> &globalData, Intrepid::FieldContainer<GlobalIndexType> &globalDofIndices) = 0;
+  virtual void interpretLocalData(GlobalIndexType cellID, const Camellia::FieldContainer<double> &localData,
+                                  Camellia::FieldContainer<double> &globalData, Camellia::FieldContainer<GlobalIndexType> &globalDofIndices) = 0;
 
-  virtual void interpretLocalData(GlobalIndexType cellID, const Intrepid::FieldContainer<double> &localStiffnessData, const Intrepid::FieldContainer<double> &localLoadData,
-                                  Intrepid::FieldContainer<double> &globalStiffnessData, Intrepid::FieldContainer<double> &globalLoadData, Intrepid::FieldContainer<GlobalIndexType> &globalDofIndices);
+  virtual void interpretLocalData(GlobalIndexType cellID, const Camellia::FieldContainer<double> &localStiffnessData, const Camellia::FieldContainer<double> &localLoadData,
+                                  Camellia::FieldContainer<double> &globalStiffnessData, Camellia::FieldContainer<double> &globalLoadData, Camellia::FieldContainer<GlobalIndexType> &globalDofIndices);
   
   //!! Determines global coefficients corresponding to the provided local coefficients; in the case of minimum-rule meshes, this will be computed using a least-squares fit.  If some of the corresponding global coefficients are off-rank in globalCoefficients, these will be ignored.  (See the version of interpretLocalCoefficients that takes an STL map for an alternative that will include all global coefficients, regardless of data distribution.)
   //!! columnOrdinal specifies into which column in the globalCoefficients Multi-Vector the result should be stored.
-  virtual void interpretLocalCoefficients(GlobalIndexType cellID, const Intrepid::FieldContainer<double> &localCoefficients,
+  virtual void interpretLocalCoefficients(GlobalIndexType cellID, const Camellia::FieldContainer<double> &localCoefficients,
                                           Epetra_MultiVector &globalCoefficients, int columnOrdinal);
   
   //!! Determines global coefficients corresponding to the provided local coefficients; in the case of minimum-rule meshes, this will be computed using a least-squares fit.
-  virtual void interpretLocalCoefficients(GlobalIndexType cellID, const Intrepid::FieldContainer<double> &localCoefficients,
+  virtual void interpretLocalCoefficients(GlobalIndexType cellID, const Camellia::FieldContainer<double> &localCoefficients,
                                           std::map<GlobalIndexType,double> &fittedGlobalCoefficients,
                                           const std::set<int> &trialIDsToExclude);
 
-  virtual void interpretLocalBasisCoefficients(GlobalIndexType cellID, int varID, int sideOrdinal, const Intrepid::FieldContainer<double> &basisCoefficients,
-                                               Intrepid::FieldContainer<double> &globalCoefficients, Intrepid::FieldContainer<GlobalIndexType> &globalDofIndices) = 0;
+  virtual void interpretLocalBasisCoefficients(GlobalIndexType cellID, int varID, int sideOrdinal, const Camellia::FieldContainer<double> &basisCoefficients,
+                                               Camellia::FieldContainer<double> &globalCoefficients, Camellia::FieldContainer<GlobalIndexType> &globalDofIndices) = 0;
 
-  virtual void interpretGlobalCoefficients(GlobalIndexType cellID, Intrepid::FieldContainer<double> &localDofs, const Epetra_MultiVector &globalDofs) = 0;
+  virtual void interpretGlobalCoefficients(GlobalIndexType cellID, Camellia::FieldContainer<double> &localDofs, const Epetra_MultiVector &globalDofs) = 0;
 
   //!! Returns the global dof indices for the cell.  Only guaranteed to provide correct values for cells that belong to the local partition.
   virtual set<GlobalIndexType> globalDofIndicesForCell(GlobalIndexType cellID) = 0;

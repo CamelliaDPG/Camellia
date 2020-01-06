@@ -35,7 +35,7 @@ void testSpaceTimeNormalTimeComponent(CellTopoPtr spaceTopo, Teuchos::FancyOStre
   {
     BasisCachePtr spaceTimeSideCache = spaceTimeBasisCache->getSideBasisCache(sideOrdinal);
 
-    Intrepid::FieldContainer<double> spaceTimeNormals(1,spaceTimeSideCache->getRefCellPoints().dimension(0));
+    Camellia::FieldContainer<double> spaceTimeNormals(1,spaceTimeSideCache->getRefCellPoints().dimension(0));
     spaceTimeNormalComponent->values(spaceTimeNormals,spaceTimeSideCache);
 
     if (spaceTimeTopo->sideIsSpatial(sideOrdinal))
@@ -60,9 +60,9 @@ void testSpaceTimeNormalTimeComponent(CellTopoPtr spaceTopo, Teuchos::FancyOStre
   }
 }
 
-Intrepid::FieldContainer<double> getScaledTranslatedRefNodes(CellTopoPtr topo, double nodeScaling, double nodeTranslation)
+Camellia::FieldContainer<double> getScaledTranslatedRefNodes(CellTopoPtr topo, double nodeScaling, double nodeTranslation)
 {
-  Intrepid::FieldContainer<double> nodes(topo->getNodeCount(),topo->getDimension());
+  Camellia::FieldContainer<double> nodes(topo->getNodeCount(),topo->getDimension());
   CamelliaCellTools::refCellNodesForTopology(nodes, topo);
   for (int nodeOrdinal=0; nodeOrdinal<topo->getNodeCount(); nodeOrdinal++)
   {
@@ -75,7 +75,7 @@ Intrepid::FieldContainer<double> getScaledTranslatedRefNodes(CellTopoPtr topo, d
   return nodes;
 }
 
-void setTemporalNodes(CellTopoPtr spaceTimeTopo, Intrepid::FieldContainer<double> &spaceTimeNodes, double t0, double t1)
+void setTemporalNodes(CellTopoPtr spaceTimeTopo, Camellia::FieldContainer<double> &spaceTimeNodes, double t0, double t1)
 {
   int d_time = spaceTimeTopo->getDimension() - 1;
   CellTopoPtr spaceTopo = spaceTimeTopo->getTensorialComponent();
@@ -100,7 +100,7 @@ void testSpaceTimeIntegrateByPartsInTime(CellTopoPtr spaceTopo, FunctionPtr f, T
   double spaceNodeScaling = 0.5;
   double spaceNodeTranslation = 0.5; // scale, then translate
   BasisCachePtr spaceTimeBasisCache = BasisCache::basisCacheForReferenceCell(spaceTimeTopo, cubatureDegree, createSideCache);
-  Intrepid::FieldContainer<double> physicalNodesSpaceTime = getScaledTranslatedRefNodes(spaceTimeTopo, spaceNodeScaling, spaceNodeTranslation);
+  Camellia::FieldContainer<double> physicalNodesSpaceTime = getScaledTranslatedRefNodes(spaceTimeTopo, spaceNodeScaling, spaceNodeTranslation);
   double t0 = 0.0, t1 = 1.0;
   setTemporalNodes(spaceTimeTopo,physicalNodesSpaceTime,t0,t1);
   physicalNodesSpaceTime.resize(1,physicalNodesSpaceTime.dimension(0),physicalNodesSpaceTime.dimension(1));
@@ -130,12 +130,12 @@ void testSpaceTimeIntegralOfSpatiallyVaryingFunction(CellTopoPtr spaceTopo, Func
   double spaceNodeScaling = .5;
   double spaceNodeTranslation = .5; // scale, then translate
   BasisCachePtr spaceBasisCache = BasisCache::basisCacheForReferenceCell(spaceTopo, cubatureDegree, createSideCache);
-  Intrepid::FieldContainer<double> physicalNodesSpace = getScaledTranslatedRefNodes(spaceTopo, spaceNodeScaling, spaceNodeTranslation);
+  Camellia::FieldContainer<double> physicalNodesSpace = getScaledTranslatedRefNodes(spaceTopo, spaceNodeScaling, spaceNodeTranslation);
   physicalNodesSpace.resize(1,physicalNodesSpace.dimension(0),physicalNodesSpace.dimension(1));
   spaceBasisCache->setPhysicalCellNodes(physicalNodesSpace, vector<GlobalIndexType>(), createSideCache);
   double spatialIntegral = f_spatial->integrate(spaceBasisCache);
   BasisCachePtr spaceTimeBasisCache = BasisCache::basisCacheForReferenceCell(spaceTimeTopo, cubatureDegree, createSideCache);
-  Intrepid::FieldContainer<double> physicalNodesSpaceTime = getScaledTranslatedRefNodes(spaceTimeTopo, spaceNodeScaling, spaceNodeTranslation);
+  Camellia::FieldContainer<double> physicalNodesSpaceTime = getScaledTranslatedRefNodes(spaceTimeTopo, spaceNodeScaling, spaceNodeTranslation);
   double t0 = 0.0, t1 = .5;
   double temporalExtent = t1 - t0;
   setTemporalNodes(spaceTimeTopo,physicalNodesSpaceTime,t0,t1);
@@ -168,7 +168,7 @@ void testSpaceTimeNormal(CellTopoPtr spaceTopo, Teuchos::FancyOStream &out, bool
   {
     BasisCachePtr spaceTimeSideCache = spaceTimeBasisCache->getSideBasisCache(sideOrdinal);
 
-    Intrepid::FieldContainer<double> spaceTimeNormals(1,spaceTimeSideCache->getRefCellPoints().dimension(0),spaceTimeTopo->getDimension());
+    Camellia::FieldContainer<double> spaceTimeNormals(1,spaceTimeSideCache->getRefCellPoints().dimension(0),spaceTimeTopo->getDimension());
     spaceTimeNormal->values(spaceTimeNormals,spaceTimeSideCache);
 
     if (spaceTimeTopo->sideIsSpatial(sideOrdinal))
@@ -177,7 +177,7 @@ void testSpaceTimeNormal(CellTopoPtr spaceTopo, Teuchos::FancyOStream &out, bool
       int spatialSideOrdinal = spaceTimeTopo->getSpatialComponentSideOrdinal(sideOrdinal);
       BasisCachePtr spaceSideCache = spaceBasisCache->getSideBasisCache(spatialSideOrdinal);
 
-      Intrepid::FieldContainer<double> spaceNormals(1,spaceSideCache->getRefCellPoints().dimension(0),spaceTopo->getDimension());
+      Camellia::FieldContainer<double> spaceNormals(1,spaceSideCache->getRefCellPoints().dimension(0),spaceTopo->getDimension());
       spaceNormal->values(spaceNormals, spaceSideCache);
 
       for (int spaceTimePointOrdinal=0; spaceTimePointOrdinal < spaceTimeNormals.dimension(1); spaceTimePointOrdinal++)
@@ -224,8 +224,8 @@ void testSpaceTimeNormal(CellTopoPtr spaceTopo, Teuchos::FancyOStream &out, bool
     
     int nodeCount = cellTopo->getNodeCount();
     int dim = cellTopo->getDimension();
-    Intrepid::FieldContainer<double> refCellNodes(nodeCount, dim);
-    Intrepid::FieldContainer<double> scaledRefCellNodes = refCellNodes;
+    Camellia::FieldContainer<double> refCellNodes(nodeCount, dim);
+    Camellia::FieldContainer<double> scaledRefCellNodes = refCellNodes;
     CamelliaCellTools::refCellNodesForTopology(refCellNodes, cellTopo);
     
     double scalingFactor = 2.0;
@@ -244,8 +244,8 @@ void testSpaceTimeNormal(CellTopoPtr spaceTopo, Teuchos::FancyOStream &out, bool
     
     FunctionPtr h = Function::h();
     int numPoints = refBasisCache->getPhysicalCubaturePoints().dimension(1); // C, P, D
-    Intrepid::FieldContainer<double> refValues(cellCount,numPoints);
-    Intrepid::FieldContainer<double> scaledRefValues(cellCount,numPoints);
+    Camellia::FieldContainer<double> refValues(cellCount,numPoints);
+    Camellia::FieldContainer<double> scaledRefValues(cellCount,numPoints);
     
     h->values(refValues, refBasisCache);
     h->values(scaledRefValues, scaledBasisCache);
@@ -333,7 +333,7 @@ void testSpaceTimeNormal(CellTopoPtr spaceTopo, Teuchos::FancyOStream &out, bool
     for (int cellID : myCellIDs)
     {
       auto testOrdering = mesh->getElementType(cellID)->testOrderPtr;
-      Intrepid::FieldContainer<double> rieszCoefficients(testOrdering->totalDofs());
+      Camellia::FieldContainer<double> rieszCoefficients(testOrdering->totalDofs());
       bool hasUnitSolution = unitCellIDs.find(cellID) != unitCellIDs.end();
       if (hasUnitSolution) rieszCoefficients.initialize(1.0);
       else                 rieszCoefficients.initialize(0.0); // this will give all variables a constant 1.0 value
@@ -400,7 +400,7 @@ void testSpaceTimeNormal(CellTopoPtr spaceTopo, Teuchos::FancyOStream &out, bool
     for (GlobalIndexType cellID : myCellIDs)
     {
       auto trialOrdering = mesh->getElementType(cellID)->trialOrderPtr;
-      Intrepid::FieldContainer<double> solnCoefficients(trialOrdering->totalDofs());
+      Camellia::FieldContainer<double> solnCoefficients(trialOrdering->totalDofs());
       bool hasUnitSolution = unitCellIDs.find(cellID) != unitCellIDs.end();
       if (hasUnitSolution) solnCoefficients.initialize(1.0);
       else                 solnCoefficients.initialize(0.0); // this will give all variables a constant 1.0 value
@@ -473,7 +473,7 @@ void testSpaceTimeNormal(CellTopoPtr spaceTopo, Teuchos::FancyOStream &out, bool
     for (int cellID : myCellIDs)
     {
       auto trialOrdering = mesh->getElementType(cellID)->trialOrderPtr;
-      Intrepid::FieldContainer<double> solnCoefficients(trialOrdering->totalDofs());
+      Camellia::FieldContainer<double> solnCoefficients(trialOrdering->totalDofs());
       bool hasUnitSolution = unitCellIDs.find(cellID) != unitCellIDs.end();
       if (hasUnitSolution) solnCoefficients.initialize(1.0);
       else                 solnCoefficients.initialize(0.0); // this will give all variables a constant 1.0 value
@@ -532,75 +532,6 @@ TEUCHOS_UNIT_TEST( Function, MinAndMaxFunctions )
   expectedValue = 2.0;
   actualValue = Function::evaluate(maxFcn, x0, y0);
   TEST_FLOATING_EQUALITY(expectedValue,actualValue,tol);
-}
-  
-TEUCHOS_UNIT_TEST( Function, SolutionFunctionSkeletonRestriction )
-{
-  // In this test, we set up a 2x2 mesh with unit solution values on the lower-left and upper-right cells,
-  // and zero solutions in the others.  The lower-left cell has ID 0; the upper-right, 3.
-  // The idea here is that we have a discontinuous solution, and want to contribute to some global integral
-  // by integrating local contributions.  (It is necessary that the thing you integrate against is in some
-  // sense globally continuous: i.e., the "left" and "right" cell values should be tested with the same test function.)
-  // We test that the integral on each cell matches the expected value.
-  int spaceDim = 2;
-  bool conformingTraces = true;
-  PoissonFormulation form(spaceDim,conformingTraces);
-  
-  int H1Order = 1;
-  vector<int> elemCounts = {2,2};
-  set<int> unitCellIDs = {0,3};
-  
-  MeshPtr mesh = MeshFactory::rectilinearMesh(form.bf(), {1.0,1.0}, elemCounts, H1Order);
-  SolutionPtr solution = Solution::solution(form.bf(), mesh);
-  
-  solution->initializeLHSVector();
-  
-  auto myCellIDs = mesh->cellIDsInPartition();
-  
-  int solutionOrdinal = 0;
-  for (int cellID : myCellIDs)
-  {
-    auto trialOrdering = mesh->getElementType(cellID)->trialOrderPtr;
-    Intrepid::FieldContainer<double> solnCoefficients(trialOrdering->totalDofs());
-    bool hasUnitSolution = unitCellIDs.find(cellID) != unitCellIDs.end();
-    if (hasUnitSolution) solnCoefficients.initialize(1.0);
-    else                 solnCoefficients.initialize(0.0); // this will give all variables a constant 1.0 value
-    
-    solution->setSolnCoeffsForCellID(solnCoefficients, cellID, solutionOrdinal);
-  }
-  
-  FunctionPtr gamma   = Function::meshBoundaryCharacteristic();
-  FunctionPtr gamma_h = Function::meshSkeletonCharacteristic();
-  
-  VarPtr u = form.u();
-  FunctionPtr u_soln = Function::solution(u, solution);
-  // we want the value of u on the mesh boundary, and the average value of u ("left" and "right") on the interior skeleton:
-  //    u_soln * gamma + (gamma_h - gamma) * 0.5 * u_soln;
-  // this simplifies to:
-  //    0.5 * (gamma_h + gamma) * u_soln
-  FunctionPtr u_restriction = 0.5 * (gamma_h + gamma) * u_soln;
-  
-  // set up expected integrals on each cell:
-  // - on cell with zero value, we expect 0
-  // - on a cell with unit value, we expect:
-  //   interior edges: edge_length * 0.5 * 1.0 = 0.5 * 0.5 * 1.0 = 0.25
-  //   boundary edges: edge_length * 1.0 * 1.0 = 0.5
-  //   each cell has 2 interior edges and 2 boundary edges, so the expected integral is 1.5
-  for (int cellID : myCellIDs)
-  {
-    double actualValue = u_restriction->integrate(cellID, mesh);
-    bool hasUnitSolution = unitCellIDs.find(cellID) != unitCellIDs.end();
-    double expectedValue = hasUnitSolution ? 1.5 : 0.0;
-    double tol = 1e-15;
-    if (expectedValue == 0.0)
-    {
-      TEST_COMPARE(abs(actualValue), <, tol);
-    }
-    else
-    {
-      TEST_FLOATING_EQUALITY(actualValue, expectedValue, tol);
-    }
-  }
 }
 
 TEUCHOS_UNIT_TEST( Function, SpaceTimeIntegralLine )

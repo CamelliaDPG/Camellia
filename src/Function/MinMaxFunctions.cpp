@@ -34,10 +34,10 @@ std::vector< TFunctionPtr<double> > MinFunction::memberFunctions()
   return {{_f1,_f2}};
 }
 
-void MinFunction::values(Intrepid::FieldContainer<double> &values, BasisCachePtr basisCache)
+void MinFunction::values(Camellia::FieldContainer<double> &values, BasisCachePtr basisCache)
 {
   this->CHECK_VALUES_RANK(values);
-  Intrepid::FieldContainer<double> values2(values);
+  Camellia::FieldContainer<double> values2(values);
   _f1->values(values,basisCache);
   _f2->values(values2,basisCache);
   for(int i = 0; i < values.size(); i++)
@@ -97,10 +97,10 @@ std::vector< TFunctionPtr<double> > MaxFunction::memberFunctions()
   return {{_f1,_f2}};
 }
 
-void MaxFunction::values(Intrepid::FieldContainer<double> &values, BasisCachePtr basisCache)
+void MaxFunction::values(Camellia::FieldContainer<double> &values, BasisCachePtr basisCache)
 {
   this->CHECK_VALUES_RANK(values);
-  Intrepid::FieldContainer<double> values2(values);
+  Camellia::FieldContainer<double> values2(values);
   _f1->values(values,basisCache);
   _f2->values(values2,basisCache);
   for(int i = 0; i < values.size(); i++)

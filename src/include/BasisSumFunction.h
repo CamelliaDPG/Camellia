@@ -11,7 +11,7 @@
 #include "Teuchos_RCP.hpp"
 
 // Intrepid includes
-#include "Intrepid_FieldContainer.hpp"
+#include "Camellia_FieldContainer.hpp"
 
 #include "Function.h"
 #include "BasisCache.h"
@@ -24,15 +24,15 @@ class BasisSumFunction : public TFunction<double>
 {
 private:
   BasisPtr _basis;
-  Intrepid::FieldContainer<double> _coefficients;
+  Camellia::FieldContainer<double> _coefficients;
   Camellia::EOperator _op;
   bool _boundaryValueOnly;
   BasisCachePtr _overridingBasisCache;
 public:
-  BasisSumFunction(BasisPtr basis, const Intrepid::FieldContainer<double> &basisCoefficients,
+  BasisSumFunction(BasisPtr basis, const Camellia::FieldContainer<double> &basisCoefficients,
                    BasisCachePtr overridingBasisCache = Teuchos::null,
                    Camellia::EOperator op = OP_VALUE, bool boundaryValueOnly = false);
-  void values(Intrepid::FieldContainer<double> &values, BasisCachePtr basisCache);
+  void values(Camellia::FieldContainer<double> &values, BasisCachePtr basisCache);
 
   TFunctionPtr<double> x();
   TFunctionPtr<double> y();
@@ -44,7 +44,7 @@ public:
 
   bool boundaryValueOnly();
 
-  static TFunctionPtr<double> basisSumFunction(BasisPtr basis, const Intrepid::FieldContainer<double> &basisCoefficients, Camellia::EOperator op = OP_VALUE);
+  static TFunctionPtr<double> basisSumFunction(BasisPtr basis, const Camellia::FieldContainer<double> &basisCoefficients, Camellia::EOperator op = OP_VALUE);
 };
 }
 

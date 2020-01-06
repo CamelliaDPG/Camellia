@@ -33,7 +33,7 @@ class GDAMaximumRule2D : public GlobalDofAssignment
   map< GlobalIndexType, pair< ElementTypePtr, ElementTypePtr > > _cellSideUpgrades; // cellID --> (oldType, newType)
 
   map< pair<GlobalIndexType,IndexType>, pair<GlobalIndexType,IndexType> > _dofPairingIndex; // key/values are (cellID,localDofIndex)
-  // note that the Intrepid::FieldContainer for cellSideParities has dimensions (numCellsForType,numSidesForType),
+  // note that the Camellia::FieldContainer for cellSideParities has dimensions (numCellsForType,numSidesForType),
   // and that the values are 1.0 or -1.0.  These are weights to account for the fact that fluxes are defined in
   // terms of an outward normal, and thus one cell's idea about the flux is the negative of its neighbor's.
   // We decide parity by cellID: the neighbor with the lower cellID gets +1, the higher gets -1.
@@ -48,16 +48,16 @@ class GDAMaximumRule2D : public GlobalDofAssignment
   
   map<GlobalIndexType, PartitionIndexType> _partitionForGlobalDofIndex;
   map<GlobalIndexType, IndexType> _partitionLocalIndexForGlobalDofIndex;
-  vector< map< ElementType*, Intrepid::FieldContainer<double> > > _partitionedPhysicalCellNodesForElementType;
-  vector< map< ElementType*, Intrepid::FieldContainer<double> > > _partitionedCellSideParitiesForElementType;
-  map< ElementType*, Intrepid::FieldContainer<double> > _physicalCellNodesForElementType; // for uniform mesh, just a single entry..
+  vector< map< ElementType*, Camellia::FieldContainer<double> > > _partitionedPhysicalCellNodesForElementType;
+  vector< map< ElementType*, Camellia::FieldContainer<double> > > _partitionedCellSideParitiesForElementType;
+  map< ElementType*, Camellia::FieldContainer<double> > _physicalCellNodesForElementType; // for uniform mesh, just a single entry..
   vector< set<GlobalIndexType> > _partitionedGlobalDofIndices;
   map<GlobalIndexType, IndexType> _partitionLocalCellIndices; // keys are cellIDs; index is relative to both MPI node and ElementType
   map<GlobalIndexType, IndexType> _globalCellIndices; // keys are cellIDs; index is relative to ElementType
 
   map< pair<GlobalIndexType,IndexType>, GlobalIndexType> _localToGlobalMap; // pair<cellID, localDofIndex> --> globalDofIndex
 
-  map<unsigned, GlobalIndexType> getGlobalVertexIDs(const Intrepid::FieldContainer<double> &vertexCoordinates);
+  map<unsigned, GlobalIndexType> getGlobalVertexIDs(const Camellia::FieldContainer<double> &vertexCoordinates);
 
   void addDofPairing(GlobalIndexType cellID1, IndexType dofIndex1, GlobalIndexType cellID2, IndexType dofIndex2);
   void buildTypeLookups();
@@ -69,8 +69,8 @@ class GDAMaximumRule2D : public GlobalDofAssignment
   void matchNeighbor(GlobalIndexType cellID, int sideOrdinal);
   map< int, BasisPtr > multiBasisUpgradeMap(CellPtr parent, unsigned sideOrdinal, unsigned bigNeighborPolyOrder);
 
-  void verticesForCells(Intrepid::FieldContainer<double>& vertices, vector<GlobalIndexType> &cellIDs);
-  void verticesForCell(Intrepid::FieldContainer<double>& vertices, GlobalIndexType cellID);
+  void verticesForCells(Camellia::FieldContainer<double>& vertices, vector<GlobalIndexType> &cellIDs);
+  void verticesForCell(Camellia::FieldContainer<double>& vertices, GlobalIndexType cellID);
 
   bool _enforceMBFluxContinuity;
 
@@ -82,7 +82,7 @@ public:
   virtual vector<GlobalIndexType> cellIDsOfElementType(PartitionIndexType partitionNumber, ElementTypePtr elemTypePtr);
   
   //  GlobalIndexType cellID(ElementTypePtr elemType, IndexType cellIndex, PartitionIndexType partitionNumber);
-  Intrepid::FieldContainer<double> & cellSideParities( ElementTypePtr elemTypePtr );
+  Camellia::FieldContainer<double> & cellSideParities( ElementTypePtr elemTypePtr );
 
   GlobalDofAssignmentPtr deepCopy();
 
@@ -117,10 +117,10 @@ public:
   set<GlobalIndexType> globalDofIndicesForPartition(PartitionIndexType partitionNumber);
 
   GlobalIndexType globalDofCount();
-  void interpretLocalData(GlobalIndexType cellID, const Intrepid::FieldContainer<double> &localDofs, Intrepid::FieldContainer<double> &globalDofs, Intrepid::FieldContainer<GlobalIndexType> &globalDofIndices);
-  void interpretLocalBasisCoefficients(GlobalIndexType cellID, int varID, int sideOrdinal, const Intrepid::FieldContainer<double> &basisCoefficients,
-                                       Intrepid::FieldContainer<double> &globalCoefficients, Intrepid::FieldContainer<GlobalIndexType> &globalDofIndices);
-  void interpretGlobalCoefficients(GlobalIndexType cellID, Intrepid::FieldContainer<double> &localCoefficients, const Epetra_MultiVector &globalCoefficients);
+  void interpretLocalData(GlobalIndexType cellID, const Camellia::FieldContainer<double> &localDofs, Camellia::FieldContainer<double> &globalDofs, Camellia::FieldContainer<GlobalIndexType> &globalDofIndices);
+  void interpretLocalBasisCoefficients(GlobalIndexType cellID, int varID, int sideOrdinal, const Camellia::FieldContainer<double> &basisCoefficients,
+                                       Camellia::FieldContainer<double> &globalCoefficients, Camellia::FieldContainer<GlobalIndexType> &globalDofIndices);
+  void interpretGlobalCoefficients(GlobalIndexType cellID, Camellia::FieldContainer<double> &localCoefficients, const Epetra_MultiVector &globalCoefficients);
   
   bool isLocallyOwnedGlobalDofIndex(GlobalIndexType globalDofIndex) const;
   
@@ -141,8 +141,8 @@ public:
   set<GlobalIndexType> partitionOwnedGlobalTraceIndices();
   set<GlobalIndexType> partitionOwnedIndicesForVariables(set<int> varIDs);
   
-  Intrepid::FieldContainer<double> & physicalCellNodes( ElementTypePtr elemTypePtr );
-  Intrepid::FieldContainer<double> & physicalCellNodesGlobal( ElementTypePtr elemTypePtr );
+  Camellia::FieldContainer<double> & physicalCellNodes( ElementTypePtr elemTypePtr );
+  Camellia::FieldContainer<double> & physicalCellNodesGlobal( ElementTypePtr elemTypePtr );
 
   void rebuildLookups();
 

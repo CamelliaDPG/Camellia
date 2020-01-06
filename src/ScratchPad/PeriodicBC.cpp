@@ -161,8 +161,8 @@ vector<double> PeriodicBC::getMatchingPoint(const std::vector<double> &point, in
   }
 
   int spaceDim = point.size();
-  Intrepid::FieldContainer<double> value(1,1,spaceDim); // (C,P,D)
-  Intrepid::FieldContainer<double> physPoint(1,1,spaceDim);
+  Camellia::FieldContainer<double> value(1,1,spaceDim); // (C,P,D)
+  Camellia::FieldContainer<double> physPoint(1,1,spaceDim);
 
   Teuchos::RCP<PhysicalPointCache> dummyCache = Teuchos::rcp( new PhysicalPointCache(physPoint) );
   for (int d=0; d<spaceDim; d++)

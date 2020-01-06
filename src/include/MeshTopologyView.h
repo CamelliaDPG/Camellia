@@ -28,7 +28,7 @@
 #include "TypeDefs.h"
 
 #include "EpetraExt_HDF5.h"
-#include "Intrepid_FieldContainer.hpp"
+#include "Camellia_FieldContainer.hpp"
 
 #ifndef HAVE_EPETRAEXT_HDF5
 #warning "HAVE_EPETRAEXT_HDF5 is not defined."
@@ -73,7 +73,7 @@ namespace Camellia {
     virtual long long approximateMemoryFootprint() const;
     
     std::vector<IndexType> cellIDsWithCentroids(const std::vector<std::vector<double>> &centroids, double tol=1e-14) const;
-    virtual std::vector<IndexType> cellIDsForPoints(const Intrepid::FieldContainer<double> &physicalPoints) const;
+    virtual std::vector<IndexType> cellIDsForPoints(const Camellia::FieldContainer<double> &physicalPoints) const;
     virtual IndexType cellCount() const;
     
     // ! Returns the global active cell count.
@@ -137,13 +137,13 @@ namespace Camellia {
     
     virtual std::vector<IndexType> getVertexIndicesMatching(const std::vector<double> &vertexInitialCoordinates, double tol=1e-14) const;
 
-    virtual Intrepid::FieldContainer<double> physicalCellNodesForCell(IndexType cellIndex, bool includeCellDimension = false) const;
+    virtual Camellia::FieldContainer<double> physicalCellNodesForCell(IndexType cellIndex, bool includeCellDimension = false) const;
     
     virtual Teuchos::RCP<MeshTransformationFunction> transformationFunction() const;
     
     virtual void setGlobalDofAssignment(GlobalDofAssignment* gda); // for cubature degree lookups
     
-    virtual void verticesForCell(Intrepid::FieldContainer<double>& vertices, IndexType cellID) const;
+    virtual void verticesForCell(Camellia::FieldContainer<double>& vertices, IndexType cellID) const;
     
     virtual MeshTopologyViewPtr getView(const std::set<IndexType> &activeCellIndices) const;
     

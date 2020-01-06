@@ -69,8 +69,8 @@ int DLS<Scalar>::assemble()
   Epetra_BlockMap solnMap = solnLHS->Map();
   
   /**** Start BC determination ****/
-  Intrepid::FieldContainer<GlobalIndexType> bcGlobalIndicesFC;
-  Intrepid::FieldContainer<Scalar> bcGlobalValuesFC;
+  Camellia::FieldContainer<GlobalIndexType> bcGlobalIndicesFC;
+  Camellia::FieldContainer<Scalar> bcGlobalValuesFC;
   
   mesh->boundary().bcsToImpose(bcGlobalIndicesFC,bcGlobalValuesFC,*bc,_soln->getDofInterpreter().get());
   
@@ -233,8 +233,10 @@ int DLS<Scalar>::assemble()
     elementTestOffset += mesh->getElementType(cellID)->testOrderPtr->totalDofs();
   }
   
-  _dlsMatrix = rcp(new TMatrix<Scalar>(testMap,solnMapNoBCs,maxTrialCount,DynamicProfile));
-  CrsMatrix<Scalar,IndexType,GlobalIndexType> bcImpositionMatrix(testMap,numBCs,StaticProfile);
+  auto DynamicProfileType = Tpetra::ProfileType(Tpetra::StaticProfile+1);
+  auto StaticProfileType  = Tpetra::ProfileType(Tpetra::StaticProfile);
+  _dlsMatrix = rcp(new TMatrix<Scalar>(testMap,solnMapNoBCs,maxTrialCount,DynamicProfileType));
+  CrsMatrix<Scalar,IndexType,GlobalIndexType> bcImpositionMatrix(testMap,numBCs,StaticProfileType);
   int numCols = 1;
   _rhsVector = rcp(new TVector<Scalar>(testMap,numCols));
   _lhsVector = rcp(new TVector<Scalar>(solnMapNoBCs,numCols));
@@ -266,8 +268,8 @@ int DLS<Scalar>::assemble()
   {
     //cout << "Solution: elementType loop, iteration: " << elemTypeNumber++ << endl;
     
-    Intrepid::FieldContainer<double> myPhysicalCellNodesForType = mesh->physicalCellNodes(elemTypePtr);
-    Intrepid::FieldContainer<double> myCellSideParitiesForType = mesh->cellSideParities(elemTypePtr);
+    Camellia::FieldContainer<double> myPhysicalCellNodesForType = mesh->physicalCellNodes(elemTypePtr);
+    Camellia::FieldContainer<double> myCellSideParitiesForType = mesh->cellSideParities(elemTypePtr);
     int totalCellsForType = myPhysicalCellNodesForType.dimension(0);
     int startCellIndexForBatch = 0;
     
@@ -292,8 +294,8 @@ int DLS<Scalar>::assemble()
     myPhysicalCellNodesForType.dimensions(nodeDimensions);
     myCellSideParitiesForType.dimensions(parityDimensions);
     
-    Intrepid::FieldContainer<Scalar> localStiffness(maxCellBatch,numTrialDofs,numTestDofs);
-    Intrepid::FieldContainer<Scalar> localRHSVector(maxCellBatch,numTestDofs);
+    Camellia::FieldContainer<Scalar> localStiffness(maxCellBatch,numTrialDofs,numTestDofs);
+    Camellia::FieldContainer<Scalar> localRHSVector(maxCellBatch,numTestDofs);
     
     while (startCellIndexForBatch < totalCellsForType)
     {
@@ -311,8 +313,8 @@ int DLS<Scalar>::assemble()
       
       nodeDimensions[0] = numCells;
       parityDimensions[0] = numCells;
-      Intrepid::FieldContainer<double> physicalCellNodes(nodeDimensions,&myPhysicalCellNodesForType(startCellIndexForBatch,0,0));
-      Intrepid::FieldContainer<double> cellSideParities(parityDimensions,&myCellSideParitiesForType(startCellIndexForBatch,0));
+      Camellia::FieldContainer<double> physicalCellNodes(nodeDimensions,&myPhysicalCellNodesForType(startCellIndexForBatch,0,0));
+      Camellia::FieldContainer<double> cellSideParities(parityDimensions,&myCellSideParitiesForType(startCellIndexForBatch,0));
       
       bool createSideCacheToo = true;
       basisCache->setPhysicalCellNodes(physicalCellNodes,cellIDs,createSideCacheToo);
@@ -326,17 +328,17 @@ int DLS<Scalar>::assemble()
       
       subTimer.ResetStartTime();
       
-      Intrepid::FieldContainer<GlobalIndexType> globalDofIndicesFC;
+      Camellia::FieldContainer<GlobalIndexType> globalDofIndicesFC;
       Array<GlobalIndexType> globalDofIndicesNoBCs;
       Array<GlobalIndexType> globalDofIndicesBCs;
       
       Array<int> localStiffnessDim = vector<int>{numTrialDofs,numTestDofs};
       Array<int> localRHSDim       = vector<int>{numTestDofs};
       
-      Intrepid::FieldContainer<Scalar> interpretedStiffness;
+      Camellia::FieldContainer<Scalar> interpretedStiffness;
       
-      Intrepid::FieldContainer<Scalar> interpretedStiffnessNoBCs;
-      Intrepid::FieldContainer<Scalar> interpretedStiffnessBCs;
+      Camellia::FieldContainer<Scalar> interpretedStiffnessNoBCs;
+      Camellia::FieldContainer<Scalar> interpretedStiffnessBCs;
       
       Array<int> dim;
       // determine cellIDs
@@ -348,8 +350,8 @@ int DLS<Scalar>::assemble()
       for (int cellIndex=0; cellIndex<numCells; cellIndex++)
       {
         GlobalIndexType cellID = cellIDsOfType[cellIndex+startCellIndexForBatch];
-        Intrepid::FieldContainer<Scalar> cellStiffness(localStiffnessDim,&localStiffness(cellIndex,0,0)); // shallow copy
-        Intrepid::FieldContainer<Scalar> cellRHS(localRHSDim,&localRHSVector(cellIndex,0)); // shallow copy
+        Camellia::FieldContainer<Scalar> cellStiffness(localStiffnessDim,&localStiffness(cellIndex,0,0)); // shallow copy
+        Camellia::FieldContainer<Scalar> cellRHS(localRHSDim,&localRHSVector(cellIndex,0)); // shallow copy
         
         elementTestOffset = elementTestIDOffsets[cellID];
         for (int i=0; i<numTestDofs; i++)

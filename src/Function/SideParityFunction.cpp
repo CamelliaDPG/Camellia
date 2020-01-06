@@ -26,7 +26,7 @@ string SideParityFunction::displayString()
   return "sgn(n)";
 }
 
-void SideParityFunction::values(Intrepid::FieldContainer<double> &values, BasisCachePtr sideBasisCache)
+void SideParityFunction::values(Camellia::FieldContainer<double> &values, BasisCachePtr sideBasisCache)
 {
   this->CHECK_VALUES_RANK(values);
   int numCells = values.dimension(0);
@@ -41,7 +41,7 @@ void SideParityFunction::values(Intrepid::FieldContainer<double> &values, BasisC
     // then we'll use this, and won't require that mesh and cellIDs are set
     if (sideBasisCache->getCellSideParities().dimension(0) != numCells)
     {
-      TEUCHOS_TEST_FOR_EXCEPTION(true, std::invalid_argument, "sideBasisCache->getCellSideParities() is non-empty, but the cell dimension doesn't match that of the values Intrepid::FieldContainer.");
+      TEUCHOS_TEST_FOR_EXCEPTION(true, std::invalid_argument, "sideBasisCache->getCellSideParities() is non-empty, but the cell dimension doesn't match that of the values Camellia::FieldContainer.");
     }
 
     for (int cellOrdinal=0; cellOrdinal<numCells; cellOrdinal++)

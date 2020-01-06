@@ -18,7 +18,7 @@
 
 #include "TypeDefs.h"
 
-#include "Intrepid_FieldContainer.hpp"
+#include "Camellia_FieldContainer.hpp"
 
 #include "BasisCache.h"
 
@@ -42,15 +42,15 @@ public:
   virtual bool nonZeroRHS(int testVarID);
   virtual vector<Camellia::EOperator> operatorsForTestID(int testID);
   // TODO: change the API here so that values is the first argument (fitting a convention in the rest of the code)
-  virtual void rhs(int testVarID, int operatorIndex, Teuchos::RCP<BasisCache> basisCache, Intrepid::FieldContainer<Scalar> &values);
-  virtual void rhs(int testVarID, int operatorIndex, const Intrepid::FieldContainer<double> &physicalPoints, Intrepid::FieldContainer<Scalar> &values);
-  virtual void rhs(int testVarID, const Intrepid::FieldContainer<double> &physicalPoints, Intrepid::FieldContainer<Scalar> &values);
+  virtual void rhs(int testVarID, int operatorIndex, Teuchos::RCP<BasisCache> basisCache, Camellia::FieldContainer<Scalar> &values);
+  virtual void rhs(int testVarID, int operatorIndex, const Camellia::FieldContainer<double> &physicalPoints, Camellia::FieldContainer<Scalar> &values);
+  virtual void rhs(int testVarID, const Camellia::FieldContainer<double> &physicalPoints, Camellia::FieldContainer<Scalar> &values);
   // physPoints (numCells,numPoints,spaceDim)
   // values: either (numCells,numPoints) or (numCells,numPoints,spaceDim)
 
-  virtual void integrateAgainstStandardBasis(Intrepid::FieldContainer<Scalar> &rhsVector, Teuchos::RCP<DofOrdering> testOrdering,
+  virtual void integrateAgainstStandardBasis(Camellia::FieldContainer<Scalar> &rhsVector, Teuchos::RCP<DofOrdering> testOrdering,
       BasisCachePtr basisCache);
-  virtual void integrateAgainstOptimalTests(Intrepid::FieldContainer<Scalar> &rhsVector, const Intrepid::FieldContainer<Scalar> &optimalTestWeights,
+  virtual void integrateAgainstOptimalTests(Camellia::FieldContainer<Scalar> &rhsVector, const Camellia::FieldContainer<Scalar> &optimalTestWeights,
       Teuchos::RCP<DofOrdering> testOrdering, BasisCachePtr basisCache);
 
   void addTerm( TLinearTermPtr<Scalar> rhsTerm );

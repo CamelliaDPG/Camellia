@@ -282,7 +282,7 @@ void MeshTransferFunction::rebuildMaps()
   // here typically only need to be done once per solve on newMesh, and this during the determination of boundary conditions.
 }
 
-void MeshTransferFunction::values(Intrepid::FieldContainer<double> &values, BasisCachePtr basisCache)
+void MeshTransferFunction::values(Camellia::FieldContainer<double> &values, BasisCachePtr basisCache)
 {
   // incoming basisCache should be defined on newMesh
   if (basisCache->mesh().get() != _newMesh.get())
@@ -294,7 +294,7 @@ void MeshTransferFunction::values(Intrepid::FieldContainer<double> &values, Basi
   // to be general and to keep this first version simple, we just iterate over the cells in basisCache,
   // creating BasisCache(s) on originalMesh
 
-  Intrepid::FieldContainer<double> refCellPoints = basisCache->getRefCellPoints();
+  Camellia::FieldContainer<double> refCellPoints = basisCache->getRefCellPoints();
 
   Teuchos::Array<int> valuesLocation(values.rank());
   Teuchos::Array<int> valuesDimOneCell;
@@ -325,7 +325,7 @@ void MeshTransferFunction::values(Intrepid::FieldContainer<double> &values, Basi
       TEUCHOS_TEST_FOR_EXCEPTION(true, std::invalid_argument, "CellSide not found!");
     }
 
-    Intrepid::FieldContainer<double> newMeshCellReferencePoints;
+    Camellia::FieldContainer<double> newMeshCellReferencePoints;
 
     // in newMesh, may have to map upward to an ancestor
     if (newMeshActiveCellSide == newMeshAncestralCellSide)
@@ -354,7 +354,7 @@ void MeshTransferFunction::values(Intrepid::FieldContainer<double> &values, Basi
       BasisCachePtr ancestorSideBasisCache = ancestorBasisCache->getSideBasisCache(newMeshAncestralCellSide.second);
       ancestorSideBasisCache->setRefCellPoints(newMeshCellReferencePoints);
 
-      Intrepid::FieldContainer<double> originalPhysicalPoints(1,newMeshCellReferencePoints.dimension(0), _newMesh->getDimension());
+      Camellia::FieldContainer<double> originalPhysicalPoints(1,newMeshCellReferencePoints.dimension(0), _newMesh->getDimension());
 
       for (int pointOrdinal=0; pointOrdinal<newMeshCellReferencePoints.dimension(0); pointOrdinal++)
       {
@@ -364,7 +364,7 @@ void MeshTransferFunction::values(Intrepid::FieldContainer<double> &values, Basi
         }
       }
 
-      Intrepid::FieldContainer<double> ancestorPhysicalPoints = ancestorSideBasisCache->getPhysicalCubaturePoints();
+      Camellia::FieldContainer<double> ancestorPhysicalPoints = ancestorSideBasisCache->getPhysicalCubaturePoints();
       double tol = 1e-15;
       double maxDiff = 0;
       for (int pointOrdinal=0; pointOrdinal<newMeshCellReferencePoints.dimension(0); pointOrdinal++)
@@ -393,7 +393,7 @@ void MeshTransferFunction::values(Intrepid::FieldContainer<double> &values, Basi
     CellPtr originalMeshAncestralCell = _gatheredOriginalMeshTopologyOnInterface->getCell(originalMeshAncestralCellSide.first);
     CellTopoPtr sideTopo = originalMeshAncestralCell->topology()->getSide(originalMeshAncestralCellSide.second);
 
-    Intrepid::FieldContainer<double> originalMeshCellReferencePoints(newMeshCellReferencePoints.dimension(0), newMeshCellReferencePoints.dimension(1));
+    Camellia::FieldContainer<double> originalMeshCellReferencePoints(newMeshCellReferencePoints.dimension(0), newMeshCellReferencePoints.dimension(1));
     CamelliaCellTools::permutedReferenceCellPoints(sideTopo, newMeshAncestralCellSidePermutation, newMeshCellReferencePoints, originalMeshCellReferencePoints);
 
     // in originalMesh, may have to map downward to descendants
@@ -408,7 +408,7 @@ void MeshTransferFunction::values(Intrepid::FieldContainer<double> &values, Basi
       BasisCachePtr originalBasisCacheSide = originalBasisCache->getSideBasisCache(originalMeshAncestralCellSide.second);
       originalBasisCacheSide->setRefCellPoints(originalMeshCellReferencePoints);
       int enumeration = values.getEnumeration(valuesLocation);
-      Intrepid::FieldContainer<double> cellValues(valuesDimOneCell, &values[enumeration]);
+      Camellia::FieldContainer<double> cellValues(valuesDimOneCell, &values[enumeration]);
       _originalFunction->values(cellValues, originalBasisCacheSide);
     }
     else
@@ -422,7 +422,7 @@ void MeshTransferFunction::values(Intrepid::FieldContainer<double> &values, Basi
 
       for (int pointOrdinal=0; pointOrdinal<numPoints; pointOrdinal++)
       {
-        Intrepid::FieldContainer<double> parentPointFC(1,sideDim);
+        Camellia::FieldContainer<double> parentPointFC(1,sideDim);
         vector<double> refPointParent(sideDim);
         for (int d=0; d<sideDim; d++)
         {
@@ -445,7 +445,7 @@ void MeshTransferFunction::values(Intrepid::FieldContainer<double> &values, Basi
 
           branch.push_back(childOrdinalVolume);
 
-          Intrepid::FieldContainer<double> childPoint(1,sideDim);
+          Camellia::FieldContainer<double> childPoint(1,sideDim);
           sideRefPattern->mapPointsToChildRefCoordinates(parentPointFC, childOrdinalInSide, childPoint);
           parentPointFC = childPoint;
 
@@ -465,7 +465,7 @@ void MeshTransferFunction::values(Intrepid::FieldContainer<double> &values, Basi
         int enumeration = values.getEnumeration(valuesLocation);
         valuesLocation[1] = 0; // clear
 
-        Intrepid::FieldContainer<double> pointValues(valuesDimOneCellOnePoint, &values[enumeration]);
+        Camellia::FieldContainer<double> pointValues(valuesDimOneCellOnePoint, &values[enumeration]);
         
         int deltaP = _originalMesh->globalDofAssignment()->getPRefinementDegree(originalMeshAncestralCellSide.first);
         auto elemTypeKey = _originalMesh->globalDofAssignment()->getElementTypeLookupKey(cell->topology(),deltaP);

@@ -236,7 +236,7 @@ MeshPtr MeshFactory::quadMesh(Teuchos::ParameterList &parameters, Epetra_CommPtr
     }
     vector< CellTopoPtr > cellTopos(numElements, topo);
 
-    Intrepid::FieldContainer<double> quadBoundaryPoints(4,2);
+    Camellia::FieldContainer<double> quadBoundaryPoints(4,2);
     quadBoundaryPoints(0,0) = x0;
     quadBoundaryPoints(0,1) = y0;
     quadBoundaryPoints(1,0) = x0 + width;
@@ -335,7 +335,7 @@ public:
   }
 };*/
 
-MeshPtr MeshFactory::quadMesh(TBFPtr<double> bf, int H1Order, Intrepid::FieldContainer<double> &quadNodes, int pToAddTest,
+MeshPtr MeshFactory::quadMesh(TBFPtr<double> bf, int H1Order, Camellia::FieldContainer<double> &quadNodes, int pToAddTest,
                               Epetra_CommPtr Comm)
 {
   if (quadNodes.size() != 8)
@@ -434,7 +434,7 @@ MeshTopologyPtr MeshFactory::quadMeshTopology(double width, double height, int h
 
   int spaceDim = 2;
 
-  Intrepid::FieldContainer<double> quadBoundaryPoints(4,spaceDim);
+  Camellia::FieldContainer<double> quadBoundaryPoints(4,spaceDim);
   quadBoundaryPoints(0,0) = x0;
   quadBoundaryPoints(0,1) = y0;
   quadBoundaryPoints(1,0) = x0 + width;
@@ -875,7 +875,7 @@ MeshPtr MeshFactory::readTriangle(string filePath, TBFPtr<double> bilinearForm, 
   return mesh;
 }
 
-MeshPtr MeshFactory::buildQuadMesh(const Intrepid::FieldContainer<double> &quadBoundaryPoints,
+MeshPtr MeshFactory::buildQuadMesh(const Camellia::FieldContainer<double> &quadBoundaryPoints,
                                    int horizontalElements, int verticalElements,
                                    TBFPtr<double> bilinearForm,
                                    int H1Order, int pTest, bool triangulate, bool useConformingTraces,
@@ -922,7 +922,7 @@ MeshPtr MeshFactory::buildQuadMesh(const Intrepid::FieldContainer<double> &quadB
   return quadMesh(pl);
 }
 
-MeshPtr MeshFactory::buildQuadMeshHybrid(const Intrepid::FieldContainer<double> &quadBoundaryPoints,
+MeshPtr MeshFactory::buildQuadMeshHybrid(const Camellia::FieldContainer<double> &quadBoundaryPoints,
     int horizontalElements, int verticalElements,
     TBFPtr<double> bilinearForm,
     int H1Order, int pTest, bool useConformingTraces)
@@ -1001,7 +1001,7 @@ MeshPtr MeshFactory::buildQuadMeshHybrid(const Intrepid::FieldContainer<double> 
   return Teuchos::rcp( new Mesh(vertices,allElementVertices,bilinearForm,H1Order,pToAddToTest,useConformingTraces));
 }
 
-void MeshFactory::quadMeshCellIDs(Intrepid::FieldContainer<int> &cellIDs, int horizontalElements, int verticalElements, bool useTriangles)
+void MeshFactory::quadMeshCellIDs(Camellia::FieldContainer<int> &cellIDs, int horizontalElements, int verticalElements, bool useTriangles)
 {
   // populates cellIDs with either (h,v) or (h,v,2)
   // where h: horizontalElements (indexed by i, below)
@@ -1066,7 +1066,7 @@ MeshGeometryPtr MeshFactory::shiftedHemkerGeometry(double xLeft, double xRight, 
   int spaceDim = 2;
   vector< vector<double> > vertices;
   vector<double> innerVertex(spaceDim), outerVertex(spaceDim);
-  Intrepid::FieldContainer<double> innerVertices(numPoints,spaceDim), outerVertices(numPoints,spaceDim); // these are just for easy debugging output
+  Camellia::FieldContainer<double> innerVertices(numPoints,spaceDim), outerVertices(numPoints,spaceDim); // these are just for easy debugging output
 
   vector<IndexType> innerVertexIndices;
   vector<IndexType> outerVertexIndices;
@@ -1305,7 +1305,7 @@ MeshGeometryPtr MeshFactory::halfHemkerGeometry(double xLeft, double xRight, dou
   int spaceDim = 2;
   vector< vector<double> > vertices;
   vector<double> innerVertex(spaceDim), outerVertex(spaceDim);
-  Intrepid::FieldContainer<double> innerVertices(numPoints,spaceDim), outerVertices(numPoints,spaceDim); // these are just for easy debugging output
+  Camellia::FieldContainer<double> innerVertices(numPoints,spaceDim), outerVertices(numPoints,spaceDim); // these are just for easy debugging output
 
   vector<IndexType> innerVertexIndices;
   vector<IndexType> outerVertexIndices;
@@ -1577,7 +1577,7 @@ MeshGeometryPtr MeshFactory::halfConfinedCylinderGeometry(double cylinderRadius)
   int spaceDim = 2;
   vector< vector<double> > vertices;
   vector<double> innerVertex(spaceDim), outerVertex(spaceDim);
-  Intrepid::FieldContainer<double> innerVertices(numPoints,spaceDim), outerVertices(numPoints,spaceDim); // these are just for easy debugging output
+  Camellia::FieldContainer<double> innerVertices(numPoints,spaceDim), outerVertices(numPoints,spaceDim); // these are just for easy debugging output
 
   vector<IndexType> innerVertexIndices;
   vector<IndexType> outerVertexIndices;
@@ -2001,7 +2001,7 @@ MeshGeometryPtr MeshFactory::confinedCylinderGeometry(double cylinderRadius)
   int spaceDim = 2;
   vector< vector<double> > vertices;
   vector<double> innerVertex(spaceDim), outerVertex(spaceDim);
-  Intrepid::FieldContainer<double> innerVertices(numPoints,spaceDim), outerVertices(numPoints,spaceDim); // these are just for easy debugging output
+  Camellia::FieldContainer<double> innerVertices(numPoints,spaceDim), outerVertices(numPoints,spaceDim); // these are just for easy debugging output
 
   vector<IndexType> innerVertexIndices;
   vector<IndexType> outerVertexIndices;
@@ -2727,7 +2727,7 @@ MeshTopologyPtr MeshFactory::spaceTimeMeshTopology(MeshTopologyPtr spatialMeshTo
   for (int timeSubdivision=0; timeSubdivision<temporalDivisions; timeSubdivision++)
   {
     vector<double> spaceTimeVertex(spaceTimeDim);
-    Intrepid::FieldContainer<double> timeValues(2,1);
+    Camellia::FieldContainer<double> timeValues(2,1);
     timeValues[0] = t0 + timeSubdivision * (t1-t0) / temporalDivisions;
     timeValues[1] = t0 + (timeSubdivision+1) * (t1-t0) / temporalDivisions;
     for (int i=0; i<timeValues.size(); i++)
@@ -2749,15 +2749,15 @@ MeshTopologyPtr MeshFactory::spaceTimeMeshTopology(MeshTopologyPtr spatialMeshTo
   // later, we might want to enforce 1-irregularity, at least
   set<IndexType> cellIndices = rootSpatialTopology->baseMeshTopology()->getRootCellIndicesGlobal();
   int tensorialDegree = 1;
-  vector< Intrepid::FieldContainer<double> > componentNodes(2);
-  Intrepid::FieldContainer<double> spatialCellNodes;
-  Intrepid::FieldContainer<double> spaceTimeCellNodes;
+  vector< Camellia::FieldContainer<double> > componentNodes(2);
+  Camellia::FieldContainer<double> spatialCellNodes;
+  Camellia::FieldContainer<double> spaceTimeCellNodes;
 
   map<IndexType,IndexType> cellIDMap; // from space-time ID (in first temporal subdivision) to corresponding spatial ID
 
   for (int timeSubdivision=0; timeSubdivision<temporalDivisions; timeSubdivision++)
   {
-    Intrepid::FieldContainer<double> timeValues(2,1);
+    Camellia::FieldContainer<double> timeValues(2,1);
     timeValues[0] = t0 + timeSubdivision * (t1-t0) / temporalDivisions;
     timeValues[1] = t0 + (timeSubdivision+1) * (t1-t0) / temporalDivisions;
     componentNodes[1] = timeValues;

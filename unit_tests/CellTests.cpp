@@ -12,7 +12,7 @@
 #include "Teuchos_UnitTestHarness.hpp"
 #include "Teuchos_UnitTestHelpers.hpp"
 
-#include "Intrepid_FieldContainer.hpp"
+#include "Camellia_FieldContainer.hpp"
 
 #include "CamelliaCellTools.h"
 #include "Cell.h"

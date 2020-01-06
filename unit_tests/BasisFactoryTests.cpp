@@ -42,7 +42,7 @@ TEUCHOS_UNIT_TEST( BasisFactory, GetNodalBasisForCellTopology_Shards )
   {
     CellTopoPtr topo = shardsTopologies[topoOrdinal];
 
-    Intrepid::FieldContainer<double> refNodes(topo->getNodeCount(),topo->getDimension());
+    Camellia::FieldContainer<double> refNodes(topo->getNodeCount(),topo->getDimension());
     CamelliaCellTools::refCellNodesForTopology(refNodes, topo);
 
     BasisPtr nodalBasis = BasisFactory::basisFactory()->getNodalBasisForCellTopology(topo);
@@ -51,7 +51,7 @@ TEUCHOS_UNIT_TEST( BasisFactory, GetNodalBasisForCellTopology_Shards )
 
     TEST_EQUALITY(nodalBasis->getCardinality(), topo->getNodeCount());
 
-    Intrepid::FieldContainer<double> basisValues(nodalBasis->getCardinality(),topo->getNodeCount());
+    Camellia::FieldContainer<double> basisValues(nodalBasis->getCardinality(),topo->getNodeCount());
 
     nodalBasis->getValues(basisValues, refNodes, Intrepid::OPERATOR_VALUE);
 
@@ -82,7 +82,7 @@ TEUCHOS_UNIT_TEST( BasisFactory, GetNodalBasisForCellTopology_SpaceTime )
     CellTopoPtr shardsTopo = shardsTopologies[topoOrdinal];
     CellTopoPtr topo = CellTopology::cellTopology(shardsTopo->getShardsTopology(), tensorialDegree);
 
-    Intrepid::FieldContainer<double> refNodes(topo->getNodeCount(),topo->getDimension());
+    Camellia::FieldContainer<double> refNodes(topo->getNodeCount(),topo->getDimension());
     CamelliaCellTools::refCellNodesForTopology(refNodes, topo);
 
     BasisPtr nodalBasis = BasisFactory::basisFactory()->getNodalBasisForCellTopology(topo);
@@ -90,7 +90,7 @@ TEUCHOS_UNIT_TEST( BasisFactory, GetNodalBasisForCellTopology_SpaceTime )
 
     TEST_EQUALITY(nodalBasis->getCardinality(), topo->getNodeCount());
 
-    Intrepid::FieldContainer<double> basisValues(nodalBasis->getCardinality(),topo->getNodeCount());
+    Camellia::FieldContainer<double> basisValues(nodalBasis->getCardinality(),topo->getNodeCount());
 
 //      cout << "refNodes:\n" << refNodes;
 
@@ -126,7 +126,7 @@ TEUCHOS_UNIT_TEST( BasisFactory, GetConformingBasisDomainEqualsCellTopology_Shar
   {
     CellTopoPtr topo = shardsTopologies[topoOrdinal];
 
-    Intrepid::FieldContainer<double> refNodes(topo->getNodeCount(),topo->getDimension());
+    Camellia::FieldContainer<double> refNodes(topo->getNodeCount(),topo->getDimension());
     CamelliaCellTools::refCellNodesForTopology(refNodes, topo);
 
     BasisPtr conformingBasis = BasisFactory::basisFactory()->getConformingBasis(polyOrder, topo, fs);
@@ -147,7 +147,7 @@ TEUCHOS_UNIT_TEST( BasisFactory, GetConformingBasisDomainEqualsCellTopology_Spac
     CellTopoPtr shardsTopo = shardsTopologies[topoOrdinal];
     CellTopoPtr topo = CellTopology::cellTopology(shardsTopo->getShardsTopology(), tensorialDegree);
 
-    Intrepid::FieldContainer<double> refNodes(topo->getNodeCount(),topo->getDimension());
+    Camellia::FieldContainer<double> refNodes(topo->getNodeCount(),topo->getDimension());
     CamelliaCellTools::refCellNodesForTopology(refNodes, topo);
 
     BasisPtr conformingBasis = BasisFactory::basisFactory()->getConformingBasis(polyOrder, topo, fs);

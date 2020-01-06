@@ -19,7 +19,7 @@
 // Teuchos includes
 #include "Teuchos_RCP.hpp"
 
-#include "Intrepid_FieldContainer.hpp"
+#include "Camellia_FieldContainer.hpp"
 
 #include "Element.h"
 
@@ -39,7 +39,7 @@ public:
   void setMesh(MeshPtr mesh);
 
   template <typename Scalar>
-  void bcsToImpose(Intrepid::FieldContainer<GlobalIndexType> &globalIndices, Intrepid::FieldContainer<Scalar> &globalValues, TBC<Scalar> &bc,
+  void bcsToImpose(Camellia::FieldContainer<GlobalIndexType> &globalIndices, Camellia::FieldContainer<Scalar> &globalValues, TBC<Scalar> &bc,
                    DofInterpreter* dofInterpreter);
 
   //! Determine rank-local values to impose for the "point" boundary conditions (e.g., a point condition on a pressure variable)

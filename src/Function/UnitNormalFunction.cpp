@@ -68,7 +68,7 @@ string UnitNormalFunction::displayString()
   }
 }
 
-void UnitNormalFunction::values(Intrepid::FieldContainer<double> &values, BasisCachePtr basisCache)
+void UnitNormalFunction::values(Camellia::FieldContainer<double> &values, BasisCachePtr basisCache)
 {
   this->CHECK_VALUES_RANK(values);
   int numCells = values.dimension(0);
@@ -86,7 +86,7 @@ void UnitNormalFunction::values(Intrepid::FieldContainer<double> &values, BasisC
       TEUCHOS_TEST_FOR_EXCEPTION(values.dimension(2) != spaceDim, std::invalid_argument, "For spatial normals, values.dimension(2) should be spaceDim.");
     }
   }
-  const Intrepid::FieldContainer<double> *sideNormals = _spaceTime ? &(basisCache->getSideNormalsSpaceTime()) : &(basisCache->getSideNormals());
+  const Camellia::FieldContainer<double> *sideNormals = _spaceTime ? &(basisCache->getSideNormalsSpaceTime()) : &(basisCache->getSideNormals());
 
   int comp = _comp;
   if (comp == -2)

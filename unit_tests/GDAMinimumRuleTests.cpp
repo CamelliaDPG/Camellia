@@ -70,7 +70,7 @@ namespace
    */
   
   // copied from BasisReconciliation.cpp -- likely, this method should be in a utility class somewhere
-  void filterFCValues(Intrepid::FieldContainer<double> &filteredFC, const Intrepid::FieldContainer<double> &fc,
+  void filterFCValues(Camellia::FieldContainer<double> &filteredFC, const Camellia::FieldContainer<double> &fc,
                       set<int> &ordinals, int basisCardinality)
   {
     // we use pointer arithmetic here, which doesn't allow Intrepid's safety checks, for two reasons:
@@ -458,7 +458,7 @@ namespace
           basisMap = gda->getBasisMap(cellID, dofOwnershipInfo, var, sideOrdinal);
         }
         
-        Intrepid::FieldContainer<double> dofCoordsFC;
+        Camellia::FieldContainer<double> dofCoordsFC;
         trialOrder->getDofCoords(mesh->physicalCellNodesForCell(cellID), dofCoordsFC, var->ID(), sideOrdinal);
         
         for (SubBasisDofMapperPtr subBasisMap : basisMap)
@@ -843,7 +843,7 @@ namespace
           {
             CellTopoPtr subcell = domainTopo->getSubcell(subcdim, subcord);
             unsigned subcordInCell = CamelliaCellTools::subcellOrdinalMap(cellTopo, domainDim, domainOrdinalInCell, subcdim, subcord);
-            Intrepid::FieldContainer<double> subcellPoints;
+            Camellia::FieldContainer<double> subcellPoints;
             if (subcdim==0)
             {
               subcellPoints.resize(1,1); // vertex; don't need points as such
@@ -853,17 +853,17 @@ namespace
               CellTopoPtr subcellTopo = domainTopo->getSubcell(subcdim, subcord);
               auto cubature = cubFactory.create(subcellTopo, cubDegree);
               subcellPoints.resize(cubature->getNumPoints(),cubature->getDimension());
-              Intrepid::FieldContainer<double> weights(cubature->getNumPoints()); // we ignore these
+              Camellia::FieldContainer<double> weights(cubature->getNumPoints()); // we ignore these
               cubature->getCubature(subcellPoints, weights);
             }
             int numPoints = subcellPoints.dimension(0);
             
             // map the subcellPoints to the fine domain
-            Intrepid::FieldContainer<double> fineDomainPoints(numPoints,domainDim);
+            Camellia::FieldContainer<double> fineDomainPoints(numPoints,domainDim);
             CamelliaCellTools::mapToReferenceSubcell(fineDomainPoints, subcellPoints, subcdim, subcord, domainTopo);
             
             domainBasisCache->setRefCellPoints(fineDomainPoints);
-            Intrepid::FieldContainer<double> fineValuesAllPoints = *domainBasisCache->getTransformedValues(fineBasis, OP_VALUE);
+            Camellia::FieldContainer<double> fineValuesAllPoints = *domainBasisCache->getTransformedValues(fineBasis, OP_VALUE);
             // strip cell dimension:
             fineValuesAllPoints.resize(fineBasis->getCardinality(), numPoints);
 
@@ -929,7 +929,7 @@ namespace
             unsigned ancestralToConstrainingSubcellPermutation = CamelliaCellTools::permutationComposition(constrainingSubcellTopo, ancestralToCanonicalSubcellPermutation,
                                                                                                            canonicalToConstrainingSubcellPermutation);
 
-            Intrepid::FieldContainer<double> constrainingDomainPoints;
+            Camellia::FieldContainer<double> constrainingDomainPoints;
             BasisReconciliation::mapFineSubcellPointsToCoarseDomain(constrainingDomainPoints,
                                                                     subcellPoints,
                                                                     subcdim,
@@ -946,8 +946,8 @@ namespace
             constrainingDomainBasisCache->setRefCellPoints(constrainingDomainPoints);
             
             // As a sanity check, compare the physical points for coarse and fine:
-            Intrepid::FieldContainer<double> finePhysicalPoints = domainBasisCache->getPhysicalCubaturePoints();
-            Intrepid::FieldContainer<double> coarsePhysicalPoints = constrainingDomainBasisCache->getPhysicalCubaturePoints();
+            Camellia::FieldContainer<double> finePhysicalPoints = domainBasisCache->getPhysicalCubaturePoints();
+            Camellia::FieldContainer<double> coarsePhysicalPoints = constrainingDomainBasisCache->getPhysicalCubaturePoints();
             bool oldSuccess = success;
             success = true;
             TEST_COMPARE_FLOATING_ARRAYS_CAMELLIA(finePhysicalPoints, coarsePhysicalPoints, 1e-15);
@@ -960,7 +960,7 @@ namespace
             }
             success = success && oldSuccess;
             
-            Intrepid::FieldContainer<double> constrainingBasisValuesAllPoints = *constrainingDomainBasisCache->getTransformedValues(constrainingBasis, OP_VALUE);
+            Camellia::FieldContainer<double> constrainingBasisValuesAllPoints = *constrainingDomainBasisCache->getTransformedValues(constrainingBasis, OP_VALUE);
             // strip cell dimension:
             constrainingBasisValuesAllPoints.resize(constrainingBasis->getCardinality(), numPoints);
             
@@ -988,7 +988,7 @@ namespace
             
             for (int pointOrdinal=0; pointOrdinal<numPoints; pointOrdinal++)
             {
-              Intrepid::FieldContainer<double> fineValues(fineBasis->getCardinality());
+              Camellia::FieldContainer<double> fineValues(fineBasis->getCardinality());
               for (int basisOrdinal=0; basisOrdinal<fineBasis->getCardinality(); basisOrdinal++)
               {
                 fineValues(basisOrdinal) = fineValuesAllPoints(basisOrdinal,pointOrdinal);
@@ -998,16 +998,16 @@ namespace
               {
                 // filter fine values according to what subBasisMap knows about.
                 set<int> basisOrdinalFilter = subBasisMap->basisDofOrdinalFilter();
-                Intrepid::FieldContainer<double> fineFilteredValues(basisOrdinalFilter.size());
+                Camellia::FieldContainer<double> fineFilteredValues(basisOrdinalFilter.size());
                 filterFCValues(fineFilteredValues, fineValues, basisOrdinalFilter, fineBasis->getCardinality());
-                Intrepid::FieldContainer<double> mappedValues = subBasisMap->mapFineData(fineFilteredValues);
+                Camellia::FieldContainer<double> mappedValues = subBasisMap->mapFineData(fineFilteredValues);
                 vector<GlobalIndexType> globalIndices = subBasisMap->mappedGlobalDofOrdinals();
                 for (int i=0; i<globalIndices.size(); i++)
                 {
                   fineGlobalValues[globalIndices[i]] += mappedValues(i);
                 }
               }
-              Intrepid::FieldContainer<double> constrainingBasisValues(constrainingBasis->getCardinality());
+              Camellia::FieldContainer<double> constrainingBasisValues(constrainingBasis->getCardinality());
               for (int basisOrdinal=0; basisOrdinal<constrainingBasis->getCardinality(); basisOrdinal++)
               {
                 constrainingBasisValues(basisOrdinal) = constrainingBasisValuesAllPoints(basisOrdinal,pointOrdinal);
@@ -1017,10 +1017,10 @@ namespace
               {
                 // filter constrainingBasisValues here according to what subBasisMap knows about.
                 set<int> basisOrdinalFilter = subBasisMap->basisDofOrdinalFilter();
-                Intrepid::FieldContainer<double> filteredConstrainingValues(basisOrdinalFilter.size());
+                Camellia::FieldContainer<double> filteredConstrainingValues(basisOrdinalFilter.size());
                 filterFCValues(filteredConstrainingValues, constrainingBasisValues, basisOrdinalFilter,
                                constrainingBasis->getCardinality());
-                Intrepid::FieldContainer<double> mappedValues = subBasisMap->mapFineData(filteredConstrainingValues);
+                Camellia::FieldContainer<double> mappedValues = subBasisMap->mapFineData(filteredConstrainingValues);
                 vector<GlobalIndexType> globalIndices = subBasisMap->mappedGlobalDofOrdinals();
                 for (int i=0; i<globalIndices.size(); i++)
                 {
@@ -1088,9 +1088,9 @@ namespace
                 {
                   // filter fine values according to what subBasisMap knows about.
                   set<int> basisOrdinalFilter = subBasisMap->basisDofOrdinalFilter();
-                  Intrepid::FieldContainer<double> fineFilteredValues(basisOrdinalFilter.size());
+                  Camellia::FieldContainer<double> fineFilteredValues(basisOrdinalFilter.size());
                   filterFCValues(fineFilteredValues, fineValues, basisOrdinalFilter, fineBasis->getCardinality());
-                  Intrepid::FieldContainer<double> mappedValues = subBasisMap->mapFineData(fineFilteredValues);
+                  Camellia::FieldContainer<double> mappedValues = subBasisMap->mapFineData(fineFilteredValues);
                   vector<GlobalIndexType> globalIndices = subBasisMap->mappedGlobalDofOrdinals();
                   print("basisOrdinalFilter",basisOrdinalFilter);
                   print("globalIndices", globalIndices);
@@ -1154,9 +1154,9 @@ namespace
                   {
                     // filter fine values according to what subBasisMap knows about.
                     set<int> basisOrdinalFilter = subBasisMap->basisDofOrdinalFilter();
-                    Intrepid::FieldContainer<double> fineFilteredValues(basisOrdinalFilter.size());
+                    Camellia::FieldContainer<double> fineFilteredValues(basisOrdinalFilter.size());
                     filterFCValues(fineFilteredValues, fineValues, basisOrdinalFilter, fineBasis->getCardinality());
-                    Intrepid::FieldContainer<double> mappedValues = subBasisMap->mapFineData(fineFilteredValues);
+                    Camellia::FieldContainer<double> mappedValues = subBasisMap->mapFineData(fineFilteredValues);
                     vector<GlobalIndexType> globalIndices = subBasisMap->mappedGlobalDofOrdinals();
                     print("basisOrdinalFilter",basisOrdinalFilter);
                     print("globalIndices", globalIndices);
@@ -1938,8 +1938,8 @@ namespace
     bc->addDirichlet(u_hat, SpatialFilter::allSpace(), Function::constant(prescribedValue));
     soln->initializeLHSVector();
     
-    Intrepid::FieldContainer<GlobalIndexType> bcGlobalIndicesFC;
-    Intrepid::FieldContainer<double> bcGlobalValuesFC;
+    Camellia::FieldContainer<GlobalIndexType> bcGlobalIndicesFC;
+    Camellia::FieldContainer<double> bcGlobalValuesFC;
 
     //     mesh->boundary().bcsToImpose(bcGlobalIndices,bcGlobalValues,*bc, myGlobalIndicesSet, mesh->globalDofAssignment().get());
     mesh->boundary().bcsToImpose(bcGlobalIndicesFC,bcGlobalValuesFC,*bc, mesh->globalDofAssignment().get());
@@ -1987,7 +1987,7 @@ namespace
     // for each of my cells, find vertices on the mesh boundary.
     set<GlobalIndexType> myCellIDs = mesh->cellIDsInPartition();
     int numPoints = 4;
-    Intrepid::FieldContainer<double> refLinePoints(numPoints,1);
+    Camellia::FieldContainer<double> refLinePoints(numPoints,1);
     refLinePoints(0,0) = -1.0;
     refLinePoints(1,0) = -0.5;
     refLinePoints(2,0) =  0.5;
@@ -1995,7 +1995,7 @@ namespace
     
     double tol = 1e-14;
     FunctionPtr u_soln = Function::solution(u_hat, soln);
-    Intrepid::FieldContainer<double> phiValues(1,numPoints);
+    Camellia::FieldContainer<double> phiValues(1,numPoints);
     for (GlobalIndexType cellID : myCellIDs)
     {
       DofOrderingPtr trialOrder = mesh->getElementType(cellID)->trialOrderPtr;
@@ -2012,7 +2012,7 @@ namespace
         
         // are there some physical points that lie on the boundary?
         // we expect to match prescribedValue at these
-        const Intrepid::FieldContainer<double>* physicalPoints = &sideCache->getPhysicalCubaturePoints();
+        const Camellia::FieldContainer<double>* physicalPoints = &sideCache->getPhysicalCubaturePoints();
         for (int pointOrdinal=0; pointOrdinal<numPoints; pointOrdinal++)
         {
           double x = (*physicalPoints)(0,pointOrdinal,0);
@@ -2120,12 +2120,12 @@ namespace
       Teuchos::RCP<Epetra_Vector> XLocal = Teuchos::rcp( new Epetra_Vector(localXMap) );
       (*XLocal)[0] = 1.0;
       
-      Intrepid::FieldContainer<double> localCoefficients;
+      Camellia::FieldContainer<double> localCoefficients;
       minRule->interpretGlobalCoefficients(cellID, localCoefficients, *XLocal);
       
       DofOrderingPtr trialOrder = mesh->getElementType(cellID)->trialOrderPtr;
       BasisPtr basis = trialOrder->getBasis(u_hat->ID(), cellSideOrdinal);
-      Intrepid::FieldContainer<double> localBasisCoefficients(basis->getCardinality());
+      Camellia::FieldContainer<double> localBasisCoefficients(basis->getCardinality());
       
       for (int basisOrdinal=0; basisOrdinal<basis->getCardinality(); basisOrdinal++)
       {
@@ -2133,8 +2133,8 @@ namespace
         localBasisCoefficients[basisOrdinal] = localCoefficients[localDofIndex];
       }
       
-      Intrepid::FieldContainer<double> globalCoefficients;
-      Intrepid::FieldContainer<GlobalIndexType> globalDofIndices;
+      Camellia::FieldContainer<double> globalCoefficients;
+      Camellia::FieldContainer<GlobalIndexType> globalDofIndices;
       minRule->interpretLocalBasisCoefficients(cellID, u_hat->ID(), cellSideOrdinal,
                                                localBasisCoefficients, globalCoefficients, globalDofIndices);
       

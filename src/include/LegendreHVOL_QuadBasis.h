@@ -16,7 +16,7 @@
 #define Camellia_debug_LegendreHVOL_QuadBasis_h
 
 #include "Basis.h"
-#include "Intrepid_FieldContainer.hpp"
+#include "Camellia_FieldContainer.hpp"
 
 namespace Camellia
 {
@@ -28,7 +28,7 @@ protected:
   int _degree_x, _degree_y;
   bool _conforming;
 
-  Intrepid::FieldContainer<double> _legendreL2normsSquared, _lobattoL2normsSquared;
+  Camellia::FieldContainer<double> _legendreL2normsSquared, _lobattoL2normsSquared;
   void initializeL2normValues();
   int dofOrdinalMap(int xDofOrdinal, int yDofOrdinal) const;
 public:

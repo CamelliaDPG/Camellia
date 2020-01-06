@@ -68,9 +68,9 @@ void GradientErrorIndicator<Scalar>::measureError()
   
   int cellsAndNeighborsCount = cellsAndNeighbors.size();
   
-  Intrepid::FieldContainer<double> cellValues(cellsAndNeighborsCount,onePoint); // values at cell centers
-  Intrepid::FieldContainer<double> cellCenters(cellsAndNeighborsCount,spaceDim);
-  Intrepid::FieldContainer<double> cellDiameter(cellsAndNeighborsCount,onePoint); // h-values
+  Camellia::FieldContainer<double> cellValues(cellsAndNeighborsCount,onePoint); // values at cell centers
+  Camellia::FieldContainer<double> cellCenters(cellsAndNeighborsCount,spaceDim);
+  Camellia::FieldContainer<double> cellDiameter(cellsAndNeighborsCount,onePoint); // h-values
   
   map<CellTopologyKey,BasisCachePtr> basisCacheForTopology;
   
@@ -91,9 +91,9 @@ void GradientErrorIndicator<Scalar>::measureError()
     CellTopoPtr cellTopo = cell->topology();
     if (basisCacheForTopology.find(cellTopo->getKey()) == basisCacheForTopology.end())
     {
-      Intrepid::FieldContainer<double> centroid(onePoint,spaceDim);
+      Camellia::FieldContainer<double> centroid(onePoint,spaceDim);
       int nodeCount = cellTopo->getNodeCount();
-      Intrepid::FieldContainer<double> cellNodes(nodeCount,spaceDim);
+      Camellia::FieldContainer<double> cellNodes(nodeCount,spaceDim);
       CamelliaCellTools::refCellNodesForTopology(cellNodes, cellTopo);
       for (int node=0; node<nodeCount; node++)
       {
@@ -113,7 +113,7 @@ void GradientErrorIndicator<Scalar>::measureError()
     BasisCachePtr basisCache = basisCacheForTopology[cellTopo->getKey()];
     basisCache->setPhysicalCellNodes(_solution->mesh()->physicalCellNodesForCell(cellID), {cellID}, false);
     
-    Intrepid::FieldContainer<double> cellValue(cellValueDim,&cellValues(cellOrdinal,0));
+    Camellia::FieldContainer<double> cellValue(cellValueDim,&cellValues(cellOrdinal,0));
     solnFunction->values(cellValue, basisCache);
     for (int d=0; d<spaceDim; d++)
     {
@@ -126,9 +126,9 @@ void GradientErrorIndicator<Scalar>::measureError()
   }
   
   // now compute the gradients requested
-  Intrepid::FieldContainer<double> Y(spaceDim,spaceDim); // the matrix we'll invert to compute the gradient
-  Intrepid::FieldContainer<double> b(spaceDim); // RHS for matrix problem
-  Intrepid::FieldContainer<double> grad(spaceDim); // LHS for matrix problem
+  Camellia::FieldContainer<double> Y(spaceDim,spaceDim); // the matrix we'll invert to compute the gradient
+  Camellia::FieldContainer<double> b(spaceDim); // RHS for matrix problem
+  Camellia::FieldContainer<double> grad(spaceDim); // LHS for matrix problem
   vector<double> distanceVector(spaceDim);
   for (GlobalIndexType myCellID : *myCells)
   {

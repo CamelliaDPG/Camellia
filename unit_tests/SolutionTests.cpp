@@ -12,7 +12,7 @@
 #include "Teuchos_UnitTestHarness.hpp"
 #include "Teuchos_UnitTestHelpers.hpp"
 
-#include "Intrepid_FieldContainer.hpp"
+#include "Camellia_FieldContainer.hpp"
 
 #include "CamelliaCellTools.h"
 #include "CamelliaDebugUtility.h"
@@ -259,7 +259,7 @@ namespace
     // set up some dummy data
     for (GlobalIndexType cellID : myCells)
     {
-      Intrepid::FieldContainer<double> cellDofs(mesh->getElementType(cellID)->trialOrderPtr->totalDofs());
+      Camellia::FieldContainer<double> cellDofs(mesh->getElementType(cellID)->trialOrderPtr->totalDofs());
       cellDofs.initialize((double)rank);
       const int solutionOrdinal = 0;
       soln->setLocalCoefficientsForCell(cellID, cellDofs, solutionOrdinal);
@@ -278,7 +278,7 @@ namespace
     
     for (GlobalIndexType cellID : myCellsAndNeighbors)
     {
-      Intrepid::FieldContainer<double> cellDofs = soln->allCoefficientsForCellID(cellID, false); // false: don't warn about off-rank requests
+      Camellia::FieldContainer<double> cellDofs = soln->allCoefficientsForCellID(cellID, false); // false: don't warn about off-rank requests
       
       TEST_ASSERT(cellDofs.size() == mesh->getElementType(cellID)->trialOrderPtr->totalDofs());
       
@@ -409,9 +409,9 @@ namespace
   //    double weight = 3.141592;
   //    double tol = 1e-12;
   //
-  //    Intrepid::FieldContainer<double> expectedValuesU(_testPoints.dimension(0));
-  //    Intrepid::FieldContainer<double> expectedValuesSIGMA1(_testPoints.dimension(0));
-  //    Intrepid::FieldContainer<double> expectedValuesSIGMA2(_testPoints.dimension(0));
+  //    Camellia::FieldContainer<double> expectedValuesU(_testPoints.dimension(0));
+  //    Camellia::FieldContainer<double> expectedValuesSIGMA1(_testPoints.dimension(0));
+  //    Camellia::FieldContainer<double> expectedValuesSIGMA2(_testPoints.dimension(0));
   //    _confusionSolution2_2x2->solutionValues(expectedValuesU, ConfusionBilinearForm::U_ID, _testPoints);
   //    _confusionSolution2_2x2->solutionValues(expectedValuesSIGMA1, ConfusionBilinearForm::SIGMA_1_ID, _testPoints);
   //    _confusionSolution2_2x2->solutionValues(expectedValuesSIGMA2, ConfusionBilinearForm::SIGMA_2_ID, _testPoints);
@@ -421,9 +421,9 @@ namespace
   //    SerialDenseWrapper::multiplyFCByWeight(expectedValuesSIGMA2, weight+1.0);
   //
   //    _confusionSolution1_2x2->addSolution(_confusionSolution2_2x2, weight);
-  //    Intrepid::FieldContainer<double> valuesU(_testPoints.dimension(0));
-  //    Intrepid::FieldContainer<double> valuesSIGMA1(_testPoints.dimension(0));
-  //    Intrepid::FieldContainer<double> valuesSIGMA2(_testPoints.dimension(0));
+  //    Camellia::FieldContainer<double> valuesU(_testPoints.dimension(0));
+  //    Camellia::FieldContainer<double> valuesSIGMA1(_testPoints.dimension(0));
+  //    Camellia::FieldContainer<double> valuesSIGMA2(_testPoints.dimension(0));
   //
   //    _confusionSolution1_2x2->solutionValues(valuesU, ConfusionBilinearForm::U_ID, _testPoints);
   //    _confusionSolution1_2x2->solutionValues(valuesSIGMA1, ConfusionBilinearForm::SIGMA_1_ID, _testPoints);
@@ -456,7 +456,7 @@ namespace
   //
   //  TEUCHOS_UNIT_TEST( Solution, AddSolutionCondensed ) // copied pretty much wholesale from DPGTests
   //  {
-  //    Intrepid::FieldContainer<double> quadPoints(4,2);
+  //    Camellia::FieldContainer<double> quadPoints(4,2);
   //
   //    quadPoints(0,0) = 0.0; // x1
   //    quadPoints(0,1) = 0.0; // y1
@@ -611,14 +611,14 @@ namespace
   //
   //    GlobalIndexType cellID = 0;
   //
-  //    Intrepid::FieldContainer<double> soln1_cell0 = soln1->allCoefficientsForCellID(cellID);
-  //    Intrepid::FieldContainer<double> soln2_cell0 = soln2->allCoefficientsForCellID(cellID);
+  //    Camellia::FieldContainer<double> soln1_cell0 = soln1->allCoefficientsForCellID(cellID);
+  //    Camellia::FieldContainer<double> soln2_cell0 = soln2->allCoefficientsForCellID(cellID);
   //
   //    //  cout << "soln1_cell0:\n" << soln1_cell0;
   //
   //    {
   //      // DEBUGGING: check for linear dependence of cell0 coefficients on the lhsVector coefficients
-  //      Intrepid::FieldContainer<double> soln1_doubled = soln1_cell0;
+  //      Camellia::FieldContainer<double> soln1_doubled = soln1_cell0;
   //      SerialDenseWrapper::multiplyFCByWeight(soln1_doubled, soln2_coefficientWeight);
   //      double tol = 1e-14;
   //      double maxDiff = 0;
@@ -631,8 +631,8 @@ namespace
   //
   //    soln1->addSolution(soln2, weight);
   //
-  //    Intrepid::FieldContainer<double> actualValues = soln1->allCoefficientsForCellID(cellID);
-  //    Intrepid::FieldContainer<double> expectedValues = soln1_cell0;
+  //    Camellia::FieldContainer<double> actualValues = soln1->allCoefficientsForCellID(cellID);
+  //    Camellia::FieldContainer<double> expectedValues = soln1_cell0;
   //    SerialDenseWrapper::multiplyFCByWeight(expectedValues, soln2_coefficientWeight * weight + 1);
   //    double maxDiff = 0;
   //    if ( !TestSuite::fcsAgree(expectedValues, actualValues, tol, maxDiff) )
@@ -673,9 +673,9 @@ namespace
   //    _confusionSolution1_2x2->solve();
   //    _confusionSolution2_2x2->solve();
   //
-  //    Intrepid::FieldContainer<double> expectedValuesU(_testPoints.dimension(0));
-  //    Intrepid::FieldContainer<double> expectedValuesSIGMA1(_testPoints.dimension(0));
-  //    Intrepid::FieldContainer<double> expectedValuesSIGMA2(_testPoints.dimension(0));
+  //    Camellia::FieldContainer<double> expectedValuesU(_testPoints.dimension(0));
+  //    Camellia::FieldContainer<double> expectedValuesSIGMA1(_testPoints.dimension(0));
+  //    Camellia::FieldContainer<double> expectedValuesSIGMA2(_testPoints.dimension(0));
   //    _confusionSolution2_2x2->solutionValues(expectedValuesU, ConfusionBilinearForm::U_ID, _testPoints);
   //    _confusionSolution2_2x2->solutionValues(expectedValuesSIGMA1, ConfusionBilinearForm::SIGMA_1_ID, _testPoints);
   //    _confusionSolution2_2x2->solutionValues(expectedValuesSIGMA2, ConfusionBilinearForm::SIGMA_2_ID, _testPoints);
@@ -687,13 +687,13 @@ namespace
   //    Teuchos::RCP< Epetra_FEVector > vector1_copy = Teuchos::rcp( new Epetra_FEVector(*_confusionSolution1_2x2->getLHSVector().get()) );
   //    Teuchos::RCP< Epetra_FEVector > vector2 = _confusionSolution2_2x2->getLHSVector();
   //
-  //    map<GlobalIndexType, Intrepid::FieldContainer<double> > cellCoefficientsForRank;
+  //    map<GlobalIndexType, Camellia::FieldContainer<double> > cellCoefficientsForRank;
   //    set<GlobalIndexType> rankLocalCells = _confusionSolution1_2x2->mesh()->cellIDsInPartition();
   //
   //    for (set<GlobalIndexType>::iterator cellIDIt = rankLocalCells.begin(); cellIDIt != rankLocalCells.end(); cellIDIt++)
   //    {
   //      GlobalIndexType cellID = *cellIDIt;
-  //      Intrepid::FieldContainer<double> coefficients = _confusionSolution1_2x2->allCoefficientsForCellID(cellID);
+  //      Camellia::FieldContainer<double> coefficients = _confusionSolution1_2x2->allCoefficientsForCellID(cellID);
   //      cellCoefficientsForRank[cellID] = coefficients;
   //    }
   //
@@ -718,8 +718,8 @@ namespace
   //    for (set<GlobalIndexType>::iterator cellIDIt = rankLocalCells.begin(); cellIDIt != rankLocalCells.end(); cellIDIt++)
   //    {
   //      GlobalIndexType cellID = *cellIDIt;
-  //      Intrepid::FieldContainer<double> actualCoefficients = _confusionSolution1_2x2->allCoefficientsForCellID(cellID);
-  //      Intrepid::FieldContainer<double> expectedCoefficients = cellCoefficientsForRank[cellID];
+  //      Camellia::FieldContainer<double> actualCoefficients = _confusionSolution1_2x2->allCoefficientsForCellID(cellID);
+  //      Camellia::FieldContainer<double> expectedCoefficients = cellCoefficientsForRank[cellID];
   //      SerialDenseWrapper::multiplyFCByWeight(expectedCoefficients, weight + 1.0);
   //      double maxDiff = 0;
   //      if (! TestSuite::fcsAgree(expectedCoefficients, actualCoefficients, tol, maxDiff) )
@@ -742,9 +742,9 @@ namespace
   //    //    cout << lhsVector->Map().GID(i) << ": " << lhsVector->Values()[i] << endl;
   //    //  }
   //
-  //    Intrepid::FieldContainer<double> valuesU(_testPoints.dimension(0));
-  //    Intrepid::FieldContainer<double> valuesSIGMA1(_testPoints.dimension(0));
-  //    Intrepid::FieldContainer<double> valuesSIGMA2(_testPoints.dimension(0));
+  //    Camellia::FieldContainer<double> valuesU(_testPoints.dimension(0));
+  //    Camellia::FieldContainer<double> valuesSIGMA1(_testPoints.dimension(0));
+  //    Camellia::FieldContainer<double> valuesSIGMA2(_testPoints.dimension(0));
   //
   //    _confusionSolution1_2x2->solutionValues(valuesU, ConfusionBilinearForm::U_ID, _testPoints);
   //    _confusionSolution1_2x2->solutionValues(valuesSIGMA1, ConfusionBilinearForm::SIGMA_1_ID, _testPoints);
@@ -1038,8 +1038,8 @@ namespace
       out << "L2 norm of difference is " << diff << "; tol is " << tol << endl;
       success=false;
       int cellID = 6;
-      Intrepid::FieldContainer<double> cell6coeffs_standard = solution->allCoefficientsForCellID(cellID, false); // false: don't warn if off-rank
-      Intrepid::FieldContainer<double> cell6coeffs_condensed = condensedSolution->allCoefficientsForCellID(cellID, false); // false: don't warn if off-rank
+      Camellia::FieldContainer<double> cell6coeffs_standard = solution->allCoefficientsForCellID(cellID, false); // false: don't warn if off-rank
+      Camellia::FieldContainer<double> cell6coeffs_condensed = condensedSolution->allCoefficientsForCellID(cellID, false); // false: don't warn if off-rank
       if (rank==0)
       {
         out << "cell " << cellID << ", standard solution coefficients:\n" << cell6coeffs_standard;
@@ -1074,14 +1074,14 @@ namespace
       {
         CellPtr cell = mesh->getTopology()->getCell(cellID);
         BasisCachePtr basisCache = BasisCache::basisCacheForCell(mesh, cellID);
-        Intrepid::FieldContainer<double> refCellPoints(cell->topology()->getVertexCount(),cell->topology()->getDimension());
+        Camellia::FieldContainer<double> refCellPoints(cell->topology()->getVertexCount(),cell->topology()->getDimension());
         CamelliaCellTools::refCellNodesForTopology(refCellPoints, cell->topology());
-        Intrepid::FieldContainer<double> refPoint(1,cell->topology()->getDimension());
+        Camellia::FieldContainer<double> refPoint(1,cell->topology()->getDimension());
         refPoint(0,0) = refCellPoints(vertexOrdinal,0);
         refPoint(0,1) = refCellPoints(vertexOrdinal,1);
         basisCache->setRefCellPoints(refPoint);
-        Intrepid::FieldContainer<double> solnValue(1,1);
-        Intrepid::FieldContainer<double> condensedSolnValue(1,1);
+        Camellia::FieldContainer<double> solnValue(1,1);
+        Camellia::FieldContainer<double> condensedSolnValue(1,1);
         p_soln->values(solnValue, basisCache);
         p_condensed_soln->values(condensedSolnValue, basisCache);
         // both values should be exactly zero; we don't require quite that, just an extremely tight tolerance
@@ -1107,7 +1107,7 @@ namespace
   
   TEUCHOS_UNIT_TEST( Solution, CondensedSolveWithZeroMeanConstraintMinRule_Slow)
   {
-    bool minRule = false;
+    bool minRule = true;
     testCondensedSolveZeroMeanConstraint(minRule, out, success);
   }
   
@@ -1169,7 +1169,7 @@ namespace
     // for each of my cells, find vertices on the mesh boundary.
     set<GlobalIndexType> myCellIDs = mesh->cellIDsInPartition();
     int numPoints = 4;
-    Intrepid::FieldContainer<double> refLinePoints(numPoints,1);
+    Camellia::FieldContainer<double> refLinePoints(numPoints,1);
     refLinePoints(0,0) = -1.0;
     refLinePoints(1,0) = -0.5;
     refLinePoints(2,0) =  0.5;
@@ -1177,7 +1177,7 @@ namespace
     
     double tol = 1e-14;
     FunctionPtr u_soln = Function::solution(u_hat, soln);
-    Intrepid::FieldContainer<double> uValues(1,numPoints);
+    Camellia::FieldContainer<double> uValues(1,numPoints);
     for (GlobalIndexType cellID : myCellIDs)
     {
       DofOrderingPtr trialOrder = mesh->getElementType(cellID)->trialOrderPtr;
@@ -1194,7 +1194,7 @@ namespace
         
         // are there some physical points that lie on the boundary?
         // we expect to match prescribedValue at these
-        const Intrepid::FieldContainer<double>* physicalPoints = &sideCache->getPhysicalCubaturePoints();
+        const Camellia::FieldContainer<double>* physicalPoints = &sideCache->getPhysicalCubaturePoints();
         for (int pointOrdinal=0; pointOrdinal<numPoints; pointOrdinal++)
         {
           double x = (*physicalPoints)(0,pointOrdinal,0);
@@ -1248,7 +1248,7 @@ namespace
     soln->projectOntoMesh(functionMap, solutionOrdinal);
     
     // Now, manually project onto the basis for the trace to compute some expected coefficients
-    Intrepid::FieldContainer<double> basisCoefficientsExpected;
+    Camellia::FieldContainer<double> basisCoefficientsExpected;
     
     double tol = 1e-15;
     
@@ -1272,7 +1272,7 @@ namespace
         
         Projector<double>::projectFunctionOntoBasis(basisCoefficientsExpected, f, sideBasis, sideBasisCache);
         
-        Intrepid::FieldContainer<double> basisCoefficientsActual(sideBasis->getCardinality());
+        Camellia::FieldContainer<double> basisCoefficientsActual(sideBasis->getCardinality());
         
         soln->solnCoeffsForCellID(basisCoefficientsActual,cellID,uhat->ID(),sideOrdinal);
         
@@ -1284,7 +1284,7 @@ namespace
       }
       //      { // DEBUGGING:
       //        cout << "CellID " << cellID << " info:\n";
-      //        Intrepid::FieldContainer<double> localCoefficients = soln->allCoefficientsForCellID(cellID);
+      //        Camellia::FieldContainer<double> localCoefficients = soln->allCoefficientsForCellID(cellID);
       //        Camellia::printLabeledDofCoefficients(vf, trialOrder, localCoefficients);
       //      }
     }
@@ -1340,7 +1340,7 @@ namespace
       set<GlobalIndexType> cellIDs = mesh->getTopology()->getMyActiveCellIndices();
       for (GlobalIndexType cellID : cellIDs)
       {
-        Intrepid::FieldContainer<double> coefficients;
+        Camellia::FieldContainer<double> coefficients;
         int sideOrdinal = 3;
         solution->solnCoeffsForCellID(coefficients, cellID, sigma_n_hat->ID(), sideOrdinal);
         out << "coefficients for side ordinal 3: \n" << coefficients;
@@ -1655,7 +1655,7 @@ namespace
     
     //    for (GlobalIndexType cellID=0; cellID <= 1; cellID++) {
     //      cout << "CellID " << cellID << " info:\n";
-    //      Intrepid::FieldContainer<double> localCoefficients = spaceTimeSolution->allCoefficientsForCellID(cellID);
+    //      Camellia::FieldContainer<double> localCoefficients = spaceTimeSolution->allCoefficientsForCellID(cellID);
     //
     //      DofOrderingPtr trialOrder = spaceTimeMesh->getElementType(cellID)->trialOrderPtr;
     //
@@ -1688,11 +1688,11 @@ namespace
           for (int sideOrdinal=0; sideOrdinal<sideCount; sideOrdinal++)
           {
             BasisCachePtr sideCache = basisCache->getSideBasisCache(sideOrdinal);
-            Intrepid::FieldContainer<double> physicalPoints = sideCache->getPhysicalCubaturePoints();
+            Camellia::FieldContainer<double> physicalPoints = sideCache->getPhysicalCubaturePoints();
             int numPoints = physicalPoints.dimension(1); // (C,P,D)
             out << "physicalPoints for side " << sideOrdinal << ":\n" << physicalPoints;
-            Intrepid::FieldContainer<double> actualValues(1,numPoints); // assumes scalar-valued
-            Intrepid::FieldContainer<double> expectedValues(1,numPoints); // assumes scalar-valued
+            Camellia::FieldContainer<double> actualValues(1,numPoints); // assumes scalar-valued
+            Camellia::FieldContainer<double> expectedValues(1,numPoints); // assumes scalar-valued
             f_actual->values(actualValues, sideCache);
             f_expected->values(expectedValues, sideCache);
             TEST_COMPARE_FLOATING_ARRAYS(expectedValues, actualValues, tol);
@@ -1700,11 +1700,11 @@ namespace
         }
         else
         {
-          Intrepid::FieldContainer<double> physicalPoints = basisCache->getPhysicalCubaturePoints();
+          Camellia::FieldContainer<double> physicalPoints = basisCache->getPhysicalCubaturePoints();
           int numPoints = physicalPoints.dimension(1); // (C,P,D)
           out << "physicalPoints:\n" << physicalPoints;
-          Intrepid::FieldContainer<double> actualValues(1,numPoints); // assumes scalar-valued
-          Intrepid::FieldContainer<double> expectedValues(1,numPoints); // assumes scalar-valued
+          Camellia::FieldContainer<double> actualValues(1,numPoints); // assumes scalar-valued
+          Camellia::FieldContainer<double> expectedValues(1,numPoints); // assumes scalar-valued
           f_actual->values(actualValues, basisCache);
           f_expected->values(expectedValues, basisCache);
           TEST_COMPARE_FLOATING_ARRAYS(expectedValues, actualValues, tol);
@@ -2030,7 +2030,7 @@ namespace
     auto elemType = mesh->getElementType(parentCellID);
     auto basis = elemType->trialOrderPtr->getBasis(form.u()->ID());
     
-    Intrepid::FieldContainer<double> basisCoeffs(basis->getCardinality());
+    Camellia::FieldContainer<double> basisCoeffs(basis->getCardinality());
     soln->solnCoeffsForCellID(basisCoeffs, parentCellID, form.u()->ID());
     
     out << "parentCoefficients before refinement:\n" << basisCoeffs;

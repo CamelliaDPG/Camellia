@@ -35,18 +35,18 @@ public:
   //! returns true if the sub basis map is a simple permutation -- always true for SubBasisDofPermutationMapper
   bool isPermutation();
   
-  Intrepid::FieldContainer<double> mapData(bool transposeConstraint, Intrepid::FieldContainer<double> &localData, bool applyOnLeftOnly = false);
+  Camellia::FieldContainer<double> mapData(bool transposeConstraint, Camellia::FieldContainer<double> &localData, bool applyOnLeftOnly = false);
   
-  void mapDataIntoGlobalContainer(const Intrepid::FieldContainer<double> &allLocalData, const vector<int> &basisOrdinalsInLocalData,
+  void mapDataIntoGlobalContainer(const Camellia::FieldContainer<double> &allLocalData, const vector<int> &basisOrdinalsInLocalData,
                                   const map<GlobalIndexType, unsigned> &globalIndexToOrdinal,
-                                  bool fittableDofsOnly, const set<GlobalIndexType> &fittableDofIndices, Intrepid::FieldContainer<double> &globalData);
-  void mapDataIntoGlobalContainer(const Intrepid::FieldContainer<double> &wholeBasisData, const map<GlobalIndexType, unsigned> &globalIndexToOrdinal,
-                                  bool fittableDofsOnly, const set<GlobalIndexType> &fittableDofIndices, Intrepid::FieldContainer<double> &globalData);
+                                  bool fittableDofsOnly, const set<GlobalIndexType> &fittableDofIndices, Camellia::FieldContainer<double> &globalData);
+  void mapDataIntoGlobalContainer(const Camellia::FieldContainer<double> &wholeBasisData, const map<GlobalIndexType, unsigned> &globalIndexToOrdinal,
+                                  bool fittableDofsOnly, const set<GlobalIndexType> &fittableDofIndices, Camellia::FieldContainer<double> &globalData);
 
   const std::vector<GlobalIndexType> &mappedGlobalDofOrdinals();
   std::set<GlobalIndexType> mappedGlobalDofOrdinalsForBasisOrdinals(std::set<int> &basisDofOrdinals);
   
-  Intrepid::FieldContainer<double> getConstraintMatrix();
+  Camellia::FieldContainer<double> getConstraintMatrix();
 
   SubBasisDofMapperPtr negatedDofMapper(); // this mapper, but negated.
   

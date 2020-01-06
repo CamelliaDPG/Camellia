@@ -251,7 +251,7 @@ public:
     _cellIDs.insert(cellIDs.begin(),cellIDs.end());
   }
   
-  void values(Intrepid::FieldContainer<double> &values, BasisCachePtr basisCache)
+  void values(Camellia::FieldContainer<double> &values, BasisCachePtr basisCache)
   {
     vector<GlobalIndexType> cellIDs = basisCache->cellIDs();
     IndexType cellIndex = 0;
@@ -356,7 +356,7 @@ public:
 
 double conditionNumberLAPACK(const Epetra_RowMatrix &stiffnessMatrix)
 {
-  Intrepid::FieldContainer<double> A;
+  Camellia::FieldContainer<double> A;
   SerialDenseWrapper::extractFCFromEpetra_RowMatrix(stiffnessMatrix, A);
   
   bool use2norm = false;
@@ -368,7 +368,7 @@ double conditionNumberLAPACK(const Epetra_RowMatrix &stiffnessMatrix)
   {
     if (use2norm)
     {
-      Intrepid::FieldContainer<double> lambda_real(A.dimension(0)), lambda_imag(A.dimension(0));
+      Camellia::FieldContainer<double> lambda_real(A.dimension(0)), lambda_imag(A.dimension(0));
       SerialDenseWrapper::eigenvalues(A, lambda_real, lambda_imag);
       double max_eig = 0.0, min_eig = 1e300;
       for (int i=0; i<lambda_real.size(); i++)
@@ -394,13 +394,13 @@ double conditionNumberLAPACK(const Epetra_RowMatrix &stiffnessMatrix)
 
 void writeEigenValues(const Epetra_RowMatrix &stiffnessMatrix, string filename)
 {
-  Intrepid::FieldContainer<double> A;
+  Camellia::FieldContainer<double> A;
   SerialDenseWrapper::extractFCFromEpetra_RowMatrix(stiffnessMatrix, A);
   
   int rank = stiffnessMatrix.Comm().MyPID();
   if (rank == 0)
   {
-    Intrepid::FieldContainer<double> lambda_real(A.dimension(0)), lambda_imag(A.dimension(0));
+    Camellia::FieldContainer<double> lambda_real(A.dimension(0)), lambda_imag(A.dimension(0));
     SerialDenseWrapper::eigenvalues(A, lambda_real, lambda_imag);
     
     ofstream fout(filename);
@@ -424,7 +424,7 @@ double h_mean(MeshPtr mesh)
     BasisCachePtr basisCache = BasisCache::basisCacheForCell(mesh, cellID);
     int numCells = 1;
     int numPoints = basisCache->getRefCellPoints().dimension(1);
-    Intrepid::FieldContainer<double> values(numCells,numPoints);
+    Camellia::FieldContainer<double> values(numCells,numPoints);
     h->values(values, basisCache);
     my_hMax = max(values[0],my_hMax);
     my_hMin = min(values[0],my_hMin);

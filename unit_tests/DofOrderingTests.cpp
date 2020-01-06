@@ -94,7 +94,7 @@ TEUCHOS_UNIT_TEST( DofOrdering, SidesForVarID )
       
       VarPtr u_hat = form.u_hat();
       
-      Intrepid::FieldContainer<double> localCoefficients(trialOrdering->totalDofs());
+      Camellia::FieldContainer<double> localCoefficients(trialOrdering->totalDofs());
       for (int sideOrdinal : trialOrdering->getSidesForVarID(u_hat->ID()))
       {
         int numBasisDofs = trialOrdering->getBasisCardinality(u_hat->ID(), sideOrdinal);

@@ -25,7 +25,7 @@ class QuotientFunction : public TFunction<Scalar>
   TFunctionPtr<Scalar> _f, _scalarDivisor;
 public:
   QuotientFunction(TFunctionPtr<Scalar> f, TFunctionPtr<Scalar> scalarDivisor);
-  void values(Intrepid::FieldContainer<Scalar> &values, BasisCachePtr basisCache);
+  void values(Camellia::FieldContainer<Scalar> &values, BasisCachePtr basisCache);
   TFunctionPtr<Scalar> x();
   TFunctionPtr<Scalar> y();
   TFunctionPtr<Scalar> z();

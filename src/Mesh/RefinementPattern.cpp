@@ -20,9 +20,9 @@ using namespace Camellia;
 // define our static maps:
 map< RefinementPatternKey, RefinementPatternPtr > RefinementPattern::_refPatterns;
 
-map< pair<RefinementBranch, unsigned>, Intrepid::FieldContainer<double> > RefinementPattern::_descendantNodesRelativeToPermutedReferenceCell;
+map< pair<RefinementBranch, unsigned>, Camellia::FieldContainer<double> > RefinementPattern::_descendantNodesRelativeToPermutedReferenceCell;
 
-RefinementPattern::RefinementPattern(CellTopoPtr cellTopoPtr, Intrepid::FieldContainer<double> refinedNodes, vector< RefinementPatternPtr > sideRefinementPatterns,
+RefinementPattern::RefinementPattern(CellTopoPtr cellTopoPtr, Camellia::FieldContainer<double> refinedNodes, vector< RefinementPatternPtr > sideRefinementPatterns,
                                      int refinementOrdinal)
 {
   _cellTopoPtr = cellTopoPtr;
@@ -105,7 +105,7 @@ RefinementPattern::RefinementPattern(CellTopoPtr cellTopoPtr, Intrepid::FieldCon
     }
     _subCells.push_back(subCellNodes);
   }
-  // copy these to Intrepid::FieldContainer
+  // copy these to Camellia::FieldContainer
   int numVertices = vertices.size();
   _vertices.resize(numVertices, spaceDim);
   for (int vertexIndex=0; vertexIndex<numVertices; vertexIndex++)
@@ -120,7 +120,7 @@ RefinementPattern::RefinementPattern(CellTopoPtr cellTopoPtr, Intrepid::FieldCon
   _refinementTopology = Teuchos::rcp( new MeshTopology(spaceDim) );
   RefinementPatternPtr thisPtr = Teuchos::rcp( this, false );
 
-  Intrepid::FieldContainer<double> refCellNodes(cellTopoPtr->getNodeCount(),spaceDim);
+  Camellia::FieldContainer<double> refCellNodes(cellTopoPtr->getNodeCount(),spaceDim);
   CamelliaCellTools::refCellNodesForTopology(refCellNodes, cellTopoPtr);
   vector< vector<double> > refCellNodesVector;
   for (int nodeIndex=0; nodeIndex<refCellNodes.dimension(0); nodeIndex++)
@@ -408,7 +408,7 @@ RefinementPatternPtr RefinementPattern::anisotropicRefinementPattern(CellTopoPtr
   
   int numChildren = 1 << numRefinedDimensions;
   int nodeCount = cellTopo->getNodeCount();
-  Intrepid::FieldContainer<double> refinedNodes(numChildren,nodeCount,spaceDim);
+  Camellia::FieldContainer<double> refinedNodes(numChildren,nodeCount,spaceDim);
   
   // supported cell topologies / refinement combinations:
   // - hypercubes (any dimension combination)
@@ -419,7 +419,7 @@ RefinementPatternPtr RefinementPattern::anisotropicRefinementPattern(CellTopoPtr
     RefinementPatternPtr lineRefPattern = regularRefinementPatternLine();
     RefinementPatternPtr noRefinementLinePattern = noRefinementPatternLine();
     int childOrdinal = 0;
-    Intrepid::FieldContainer<double> previousDimensionNodes;
+    Camellia::FieldContainer<double> previousDimensionNodes;
     int previousDimensionChildCount = 1;
     int nodeCount = 1;
     for (int d=0; d<spaceDim; d++)
@@ -447,7 +447,7 @@ RefinementPatternPtr RefinementPattern::anisotropicRefinementPattern(CellTopoPtr
         
         // The general rule: take each previous child and combine it with the children
         // in the present dimension (1 or 2 of them).
-        Intrepid::FieldContainer<double> thisDimensionNodes(numChildren,nodeCount,d+1);
+        Camellia::FieldContainer<double> thisDimensionNodes(numChildren,nodeCount,d+1);
         // TODO: finish this
         
         previousDimensionNodes = thisDimensionNodes;
@@ -653,11 +653,11 @@ double RefinementPattern::distance(const vector<double> &v1, const vector<double
   return sqrt(distance);
 }
 
-Intrepid::FieldContainer<double> RefinementPattern::verticesForRefinement(Intrepid::FieldContainer<double> &cellNodes)
+Camellia::FieldContainer<double> RefinementPattern::verticesForRefinement(Camellia::FieldContainer<double> &cellNodes)
 {
   // compute the post-refinement physical vertices for the parent cell(s) given in cellNodes
 
-  Intrepid::FieldContainer<double> verticesFC;
+  Camellia::FieldContainer<double> verticesFC;
   bool singleCellNode = false;
   if ( cellNodes.rank() == 2)
   {
@@ -686,7 +686,7 @@ Intrepid::FieldContainer<double> RefinementPattern::verticesForRefinement(Intrep
   return verticesFC;
 }
 
-const Intrepid::FieldContainer<double> & RefinementPattern::verticesOnReferenceCell()
+const Camellia::FieldContainer<double> & RefinementPattern::verticesOnReferenceCell()
 {
   return _vertices;
 }
@@ -751,6 +751,12 @@ vector< vector< pair< unsigned, unsigned> > > & RefinementPattern::childrenForSi
 CellTopoPtr RefinementPattern::childTopology(unsigned childIndex)
 {
   return _childTopos[childIndex];
+}
+
+void RefinementPattern::clearStaticMaps()
+{
+  _refPatterns.clear();
+  _descendantNodesRelativeToPermutedReferenceCell.clear();
 }
 
 // ! returns a generalized refinement branch that has as its leaf the subcell (subcdim, subcord) in the leaf of the volumeRefinementBranch
@@ -907,7 +913,7 @@ GeneralizedRefinementBranch RefinementPattern::generalizedRefinementBranchForLea
 void RefinementPattern::initializeAnisotropicRelationships()
 {
   static bool initialized = false;
-
+  
   // guard to avoid nested calls to this method...
   if (!initialized)
   {
@@ -1049,8 +1055,8 @@ RefinementPatternKey RefinementPattern::getKey() const
   return {_cellTopoPtr->getKey(),_refinementOrdinal};
 }
 
-void RefinementPattern::mapPointsToChildRefCoordinates(const Intrepid::FieldContainer<double> &pointsParentCoords, unsigned childOrdinal,
-    Intrepid::FieldContainer<double> &pointsChildCoords)
+void RefinementPattern::mapPointsToChildRefCoordinates(const Camellia::FieldContainer<double> &pointsParentCoords, unsigned childOrdinal,
+    Camellia::FieldContainer<double> &pointsChildCoords)
 {
   int cubatureDegree = 1;
   CamelliaCellTools::mapToReferenceFrame(pointsChildCoords, pointsParentCoords, _refinementTopology, childOrdinal, cubatureDegree);
@@ -1270,16 +1276,16 @@ RefinementPatternPtr RefinementPattern::noRefinementPattern(CellTopoPtr cellTopo
       refinementOrdinal = 0;
       break;
     case 1:
-      refinementOrdinal = REFINEMENT_PATTERN_ORDINAL_1D(0);
+      refinementOrdinal = REFINEMENT_PATTERN_ORDINAL_1D(0);        // macro subtracts input from 1 in each bit; no refinement in 1D: 1
       break;
     case 2:
-      refinementOrdinal = REFINEMENT_PATTERN_ORDINAL_2D(0,0);
+      refinementOrdinal = REFINEMENT_PATTERN_ORDINAL_2D(0,0);      // macro subtracts input from 1 in each bit; no refinement in 2D: 3
       break;
     case 3:
-      refinementOrdinal = REFINEMENT_PATTERN_ORDINAL_3D(0,0,0);
+      refinementOrdinal = REFINEMENT_PATTERN_ORDINAL_3D(0,0,0);    // macro subtracts input from 1 in each bit; no refinement in 3D: 7
       break;
     case 4:
-      refinementOrdinal = REFINEMENT_PATTERN_ORDINAL_4D(0,0,0,0);
+      refinementOrdinal = REFINEMENT_PATTERN_ORDINAL_4D(0,0,0,0);  // macro subtracts input from 1 in each bit; no refinement in 4D: 15
       break;
       
     default:
@@ -1302,7 +1308,7 @@ RefinementPatternPtr RefinementPattern::noRefinementPattern(CellTopoPtr cellTopo
     }
     if (d >= 1)
     {
-      Intrepid::FieldContainer<double> cellPoints(cellTopo->getVertexCount(),d);
+      Camellia::FieldContainer<double> cellPoints(cellTopo->getVertexCount(),d);
       CamelliaCellTools::refCellNodesForTopology(cellPoints, cellTopo);
       cellPoints.resize(1,cellPoints.dimension(0),cellPoints.dimension(1));
       _refPatterns[key] = Teuchos::rcp( new RefinementPattern(cellTopo, cellPoints, sideRefPatterns, refinementOrdinal) );
@@ -1324,40 +1330,17 @@ RefinementPatternPtr RefinementPattern::noRefinementPattern(Teuchos::RCP< shards
 
 Teuchos::RCP<RefinementPattern> RefinementPattern::noRefinementPatternLine()
 {
-  static RefinementPatternPtr refPattern;
-
-  if (refPattern.get() == NULL)
-  {
-    Teuchos::RCP< shards::CellTopology > line_2_ptr = Teuchos::rcp(new shards::CellTopology(shards::getCellTopologyData<shards::Line<2> >() ));
-    refPattern = noRefinementPattern(line_2_ptr);
-  }
-
-  return refPattern;
+  return noRefinementPattern(CellTopology::line());
 }
 
 Teuchos::RCP<RefinementPattern> RefinementPattern::noRefinementPatternTriangle()
 {
-  static RefinementPatternPtr refPattern;
-
-  if (refPattern.get() == NULL)
-  {
-    Teuchos::RCP< shards::CellTopology > tri_3_ptr = Teuchos::rcp(new shards::CellTopology(shards::getCellTopologyData<shards::Triangle<3> >() ));
-    refPattern = noRefinementPattern(tri_3_ptr);
-  }
-
-  return refPattern;
+  return noRefinementPattern(CellTopology::triangle());
 }
 
 Teuchos::RCP<RefinementPattern> RefinementPattern::noRefinementPatternQuad()
 {
-  static RefinementPatternPtr refPattern;
-
-  if (refPattern.get() == NULL)
-  {
-    Teuchos::RCP< shards::CellTopology > quad_4_ptr = Teuchos::rcp(new shards::CellTopology(shards::getCellTopologyData<shards::Quadrilateral<4> >() ));
-    refPattern = noRefinementPattern(quad_4_ptr);
-  }
-  return refPattern;
+  return noRefinementPattern(CellTopology::quad());
 }
 
 unsigned RefinementPattern::numChildren()
@@ -1466,8 +1449,8 @@ RefinementPatternPtr RefinementPattern::refPatternExtrudedInTime(RefinementPatte
   int tensorialDegree = 1;
   RefinementPatternPtr lineRefPattern = noRefinementPatternLine();
   
-  Intrepid::FieldContainer<double> tensorRefNodes = spaceRefPattern->refinedNodes();
-  Intrepid::FieldContainer<double> lineRefNodes = lineRefPattern->refinedNodes();
+  Camellia::FieldContainer<double> tensorRefNodes = spaceRefPattern->refinedNodes();
+  Camellia::FieldContainer<double> lineRefNodes = lineRefPattern->refinedNodes();
   
   int numChildrenForTensor = tensorRefNodes.dimension(0);
   int nodesPerTensorChild = tensorRefNodes.dimension(1);
@@ -1475,7 +1458,7 @@ RefinementPatternPtr RefinementPattern::refPatternExtrudedInTime(RefinementPatte
   int numChildrenForLine = lineRefNodes.dimension(0);
   int nodesPerLineChild = lineRefNodes.dimension(1);
   int spaceDimForLine = lineRefNodes.dimension(2);
-  Intrepid::FieldContainer<double> newTensorRefNodes(numChildrenForTensor*numChildrenForLine,
+  Camellia::FieldContainer<double> newTensorRefNodes(numChildrenForTensor*numChildrenForLine,
                                            nodesPerTensorChild*nodesPerLineChild,
                                            spaceDimForTensor + spaceDimForLine);
   for (int tensorChildOrdinal=0; tensorChildOrdinal<numChildrenForTensor; tensorChildOrdinal++)
@@ -1546,9 +1529,11 @@ RefinementPatternPtr RefinementPattern::refPatternExtrudedInTime(RefinementPatte
 
 RefinementPatternPtr RefinementPattern::regularRefinementPatternPoint()
 {
-  static RefinementPatternPtr refPattern;
-
-  if (refPattern.get() == NULL)
+  const int refinementOrdinal = 0;
+  const auto pointKey = CellTopology::point()->getKey();
+  RefinementPatternKey refKey = {pointKey,refinementOrdinal};
+  
+  if (_refPatterns.find(refKey) == _refPatterns.end())
   {
     CellTopoPtr point = CellTopology::point();
 
@@ -1556,40 +1541,42 @@ RefinementPatternPtr RefinementPattern::regularRefinementPatternPoint()
     const int numNodesPerChild = 1;
     const int spaceDim = 0;
 
-    Intrepid::FieldContainer<double> points(numChildren,numNodesPerChild,spaceDim);
+    Camellia::FieldContainer<double> points(numChildren,numNodesPerChild,spaceDim);
     int refinementOrdinal = 0;
-    refPattern = Teuchos::rcp( new RefinementPattern(point,points,vector< RefinementPatternPtr >(), refinementOrdinal) );
+    _refPatterns[refKey] = Teuchos::rcp( new RefinementPattern(point,points,vector< RefinementPatternPtr >(), refinementOrdinal) );
   }
-  return refPattern;
+  return _refPatterns[refKey];
 }
 
 RefinementPatternPtr RefinementPattern::regularRefinementPatternLine()
 {
-  static RefinementPatternPtr refPattern;
-
-  if (refPattern.get() == NULL)
+  const int refinementOrdinal = REFINEMENT_PATTERN_ORDINAL_1D(1);
+  const auto lineKey = CellTopology::line()->getKey();
+  RefinementPatternKey refKey = {lineKey,refinementOrdinal};
+  
+  if (_refPatterns.find(refKey) == _refPatterns.end())
   {
     CellTopoPtr line = CellTopology::line();
 
-    Intrepid::FieldContainer<double> linePoints(2,2,1);
+    Camellia::FieldContainer<double> linePoints(2,2,1);
     linePoints(0,0,0) = -1.0;
     linePoints(0,1,0) =  0.0;
     linePoints(1,0,0) =  0.0;
     linePoints(1,1,0) =  1.0;
-    int refinementOrdinal = REFINEMENT_PATTERN_ORDINAL_1D(1);
-    refPattern = Teuchos::rcp( new RefinementPattern(line,linePoints,vector< RefinementPatternPtr >(),refinementOrdinal) );
+    _refPatterns[refKey] = Teuchos::rcp( new RefinementPattern(line,linePoints,vector< RefinementPatternPtr >(),refinementOrdinal) );
   }
-  return refPattern;
+  return _refPatterns[refKey];
 }
 
 Teuchos::RCP<RefinementPattern> RefinementPattern::regularRefinementPatternTriangle()
 {
-  static RefinementPatternPtr refPattern;
+  int refinementOrdinal = REFINEMENT_PATTERN_ORDINAL_2D(1,1);
+  const auto triangleKey = CellTopology::triangle()->getKey();
+  RefinementPatternKey refKey = {triangleKey,refinementOrdinal};
 
-  if (refPattern.get() == NULL)
+  if (_refPatterns.find(refKey) == _refPatterns.end())
   {
-
-    Intrepid::FieldContainer<double> triPoints(4,3,2);
+    Camellia::FieldContainer<double> triPoints(4,3,2);
     triPoints(0,0,0) = 0.0; // x1
     triPoints(0,0,1) = 0.0; // y1
     triPoints(0,1,0) = 0.5;
@@ -1616,20 +1603,22 @@ Teuchos::RCP<RefinementPattern> RefinementPattern::regularRefinementPatternTrian
     triPoints(3,2,1) = 1.0;
     CellTopoPtr triangle = CellTopology::triangle();
 
-    int refinementOrdinal = REFINEMENT_PATTERN_ORDINAL_2D(1,1);
-    refPattern = Teuchos::rcp( new RefinementPattern(triangle,triPoints,vector<RefinementPatternPtr>(3,regularRefinementPatternLine()),refinementOrdinal) );
+    _refPatterns[refKey] = Teuchos::rcp( new RefinementPattern(triangle,triPoints,vector<RefinementPatternPtr>(3,regularRefinementPatternLine()),refinementOrdinal) );
   }
-  return refPattern;
+  return _refPatterns[refKey];
 }
 
 Teuchos::RCP<RefinementPattern> RefinementPattern::regularRefinementPatternQuad()
 {
-  static RefinementPatternPtr refPattern;
-
-  if (refPattern.get() == NULL)
+  int refinementOrdinal = REFINEMENT_PATTERN_ORDINAL_2D(1,1);
+  
+  const auto quadKey = CellTopology::quad()->getKey();
+  RefinementPatternKey refKey = {quadKey,refinementOrdinal};
+  
+  if (_refPatterns.find(refKey) == _refPatterns.end())
   {
     // order of the sub-elements is CCW starting at bottom left
-    Intrepid::FieldContainer<double> quadPoints(4,4,2);
+    Camellia::FieldContainer<double> quadPoints(4,4,2);
     quadPoints(0,0,0) = -1.0; // x1
     quadPoints(0,0,1) = -1.0; // y1
     quadPoints(0,1,0) = 0.0;
@@ -1664,17 +1653,18 @@ Teuchos::RCP<RefinementPattern> RefinementPattern::regularRefinementPatternQuad(
     quadPoints(3,3,1) = 1.0;
     CellTopoPtr quad = CellTopology::quad();
 
-    int refinementOrdinal = REFINEMENT_PATTERN_ORDINAL_2D(1,1);
-    refPattern = Teuchos::rcp( new RefinementPattern(quad,quadPoints,vector<RefinementPatternPtr>(4,regularRefinementPatternLine()),refinementOrdinal) );
+    _refPatterns[refKey] = Teuchos::rcp( new RefinementPattern(quad,quadPoints,vector<RefinementPatternPtr>(4,regularRefinementPatternLine()),refinementOrdinal) );
   }
-  return refPattern;
+  return _refPatterns[refKey];
 }
 
 Teuchos::RCP<RefinementPattern> RefinementPattern::regularRefinementPatternHexahedron()
 {
-  static RefinementPatternPtr refPattern;
-
-  if (refPattern.get() == NULL)
+  int refinementOrdinal = REFINEMENT_PATTERN_ORDINAL_3D(1,1,1);
+  const auto hexKey = CellTopology::hexahedron()->getKey();
+  RefinementPatternKey refKey = {hexKey,refinementOrdinal};
+  
+  if (_refPatterns.find(refKey) == _refPatterns.end())
   {
     // order of the sub-elements is CCW starting at bottom left
     unsigned spaceDim = 3;
@@ -1683,8 +1673,8 @@ Teuchos::RCP<RefinementPattern> RefinementPattern::regularRefinementPatternHexah
     // (exceptions: CellTopology object, and the CamelliaCellTools::refCellNodesForTopology() call.)
     unsigned numChildren = 1 << spaceDim; // 2^3
     unsigned numNodesPerChild = 1 << spaceDim; // 2^3
-    Intrepid::FieldContainer<double> hexPoints(numChildren,numNodesPerChild,spaceDim);
-    Intrepid::FieldContainer<double> refHexPoints(numNodesPerChild,spaceDim);
+    Camellia::FieldContainer<double> hexPoints(numChildren,numNodesPerChild,spaceDim);
+    Camellia::FieldContainer<double> refHexPoints(numNodesPerChild,spaceDim);
     CellTopoPtr hexTopo = CellTopology::hexahedron();
     CamelliaCellTools::refCellNodesForTopology(refHexPoints, hexTopo);
 
@@ -1716,10 +1706,10 @@ Teuchos::RCP<RefinementPattern> RefinementPattern::regularRefinementPatternHexah
     }
 
 //    cout << "regular hex refinement, hexPoints:\n" << hexPoints;
-    int refinementOrdinal = REFINEMENT_PATTERN_ORDINAL_3D(1,1,1);
-    refPattern = Teuchos::rcp( new RefinementPattern(hexTopo,hexPoints,vector<RefinementPatternPtr>(6,regularRefinementPatternQuad()),refinementOrdinal) );
+    
+    _refPatterns[refKey] = Teuchos::rcp( new RefinementPattern(hexTopo,hexPoints,vector<RefinementPatternPtr>(6,regularRefinementPatternQuad()),refinementOrdinal) );
   }
-  return refPattern;
+  return _refPatterns[refKey];
 }
 
 RefinementPatternPtr RefinementPattern::regularRefinementPattern(unsigned cellTopoKey)
@@ -1778,8 +1768,8 @@ RefinementPatternPtr RefinementPattern::regularRefinementPattern(Camellia::CellT
       priorLookupKey.second++;
     }
 
-    Intrepid::FieldContainer<double> tensorRefNodes = tensorRefPattern->refinedNodes();
-    Intrepid::FieldContainer<double> lineRefNodes = lineRefPattern->refinedNodes();
+    Camellia::FieldContainer<double> tensorRefNodes = tensorRefPattern->refinedNodes();
+    Camellia::FieldContainer<double> lineRefNodes = lineRefPattern->refinedNodes();
 
     int maxTensorialDegreeKnown = priorLookupKey.second-1;
 
@@ -1791,7 +1781,7 @@ RefinementPatternPtr RefinementPattern::regularRefinementPattern(Camellia::CellT
       int numChildrenForLine = lineRefNodes.dimension(0);
       int nodesPerLineChild = lineRefNodes.dimension(1);
       int spaceDimForLine = lineRefNodes.dimension(2);
-      Intrepid::FieldContainer<double> newTensorRefNodes(numChildrenForTensor*numChildrenForLine,
+      Camellia::FieldContainer<double> newTensorRefNodes(numChildrenForTensor*numChildrenForLine,
           nodesPerTensorChild*nodesPerLineChild,
           spaceDimForTensor + spaceDimForLine);
       for (int tensorChildOrdinal=0; tensorChildOrdinal<numChildrenForTensor; tensorChildOrdinal++)
@@ -1890,7 +1880,7 @@ Teuchos::RCP<RefinementPattern> RefinementPattern::xAnisotropicRefinementPattern
   if (_refPatterns.find(key) == _refPatterns.end())
   {
     // order of the sub-elements is CCW starting at bottom left
-    Intrepid::FieldContainer<double> quadPoints(2,4,2);
+    Camellia::FieldContainer<double> quadPoints(2,4,2);
     quadPoints(0,0,0) = -1.0; // x1
     quadPoints(0,0,1) = -1.0; // y1
     quadPoints(0,1,0) = 0.0;
@@ -1947,7 +1937,7 @@ Teuchos::RCP<RefinementPattern> RefinementPattern::yAnisotropicRefinementPattern
   if (_refPatterns.find(key) == _refPatterns.end())
   {
     // order of the sub-elements is CCW starting at bottom left
-    Intrepid::FieldContainer<double> quadPoints(2,4,2);
+    Camellia::FieldContainer<double> quadPoints(2,4,2);
     quadPoints(0,0,0) = -1.0; // x1
     quadPoints(0,0,1) = -1.0; // y1
     quadPoints(0,1,0) = 1.0;
@@ -2014,7 +2004,7 @@ RefinementPatternPtr RefinementPattern::patternForSubcell(unsigned subcdim, unsi
   return _patternForSubcell[subcdim][subcord];
 }
 
-const Intrepid::FieldContainer<double> & RefinementPattern::refinedNodes()
+const Camellia::FieldContainer<double> & RefinementPattern::refinedNodes()
 {
   return _nodes;
 }
@@ -2123,7 +2113,7 @@ RefinementBranch RefinementPattern::subcellRefinementBranch(RefinementBranch &vo
   return subcellRefinements;
 }
 
-Intrepid::FieldContainer<double> RefinementPattern::descendantNodesRelativeToAncestorReferenceCell(RefinementBranch refinementBranch,
+Camellia::FieldContainer<double> RefinementPattern::descendantNodesRelativeToAncestorReferenceCell(RefinementBranch refinementBranch,
                                                                                          unsigned ancestorReferenceCellPermutation, bool cacheResults)
 {
   if (_descendantNodesRelativeToPermutedReferenceCell.find({refinementBranch,ancestorReferenceCellPermutation}) != _descendantNodesRelativeToPermutedReferenceCell.end())
@@ -2131,10 +2121,10 @@ Intrepid::FieldContainer<double> RefinementPattern::descendantNodesRelativeToAnc
   
   
   CellTopoPtr parentTopo = refinementBranch[0].first->parentTopology();
-  Intrepid::FieldContainer<double> ancestorNodes(parentTopo->getNodeCount(), parentTopo->getDimension());
+  Camellia::FieldContainer<double> ancestorNodes(parentTopo->getNodeCount(), parentTopo->getDimension());
   CamelliaCellTools::refCellNodesForTopology(ancestorNodes, parentTopo, ancestorReferenceCellPermutation);
 
-  Intrepid::FieldContainer<double> nodes = descendantNodes(refinementBranch, ancestorNodes);
+  Camellia::FieldContainer<double> nodes = descendantNodes(refinementBranch, ancestorNodes);
   if (cacheResults)
   {
     _descendantNodesRelativeToPermutedReferenceCell[{refinementBranch,ancestorReferenceCellPermutation}] = nodes;
@@ -2142,7 +2132,7 @@ Intrepid::FieldContainer<double> RefinementPattern::descendantNodesRelativeToAnc
   return nodes;
 }
 
-Intrepid::FieldContainer<double> RefinementPattern::descendantNodes(RefinementBranch refinementBranch, const Intrepid::FieldContainer<double> &ancestorNodes)
+Camellia::FieldContainer<double> RefinementPattern::descendantNodes(RefinementBranch refinementBranch, const Camellia::FieldContainer<double> &ancestorNodes)
 {
   // NOTE: this is definitely not the most efficient way to compute this...
   vector< vector<double> > vertices;
@@ -2235,10 +2225,10 @@ RefinementBranch RefinementPattern::sideRefinementBranch(RefinementBranch &volum
   return sideRefinements;
 }
 
-void RefinementPattern::mapRefCellPointsToAncestor(RefinementBranch &refBranch, const Intrepid::FieldContainer<double> &leafRefCellPoints,
-    Intrepid::FieldContainer<double> &rootRefCellPoints)
+void RefinementPattern::mapRefCellPointsToAncestor(RefinementBranch &refBranch, const Camellia::FieldContainer<double> &leafRefCellPoints,
+    Camellia::FieldContainer<double> &rootRefCellPoints)
 {
-  Intrepid::FieldContainer<double> fineCellRefNodes;
+  Camellia::FieldContainer<double> fineCellRefNodes;
   if (refBranch.size() == 0)
   {
     rootRefCellPoints = leafRefCellPoints;
@@ -2260,7 +2250,7 @@ void RefinementPattern::mapRefCellPointsToAncestor(RefinementBranch &refBranch, 
 }
 
 void RefinementPattern::mapRefCellPointsToAncestor(GeneralizedRefinementBranch &generalizedRefBranch,
-    const Intrepid::FieldContainer<double> &leafRefCellPoints, Intrepid::FieldContainer<double> &rootRefCellPoints)
+    const Camellia::FieldContainer<double> &leafRefCellPoints, Camellia::FieldContainer<double> &rootRefCellPoints)
 {
   int tierCount = generalizedRefBranch.size();
   rootRefCellPoints = leafRefCellPoints;
@@ -2268,7 +2258,7 @@ void RefinementPattern::mapRefCellPointsToAncestor(GeneralizedRefinementBranch &
 
   for (int tierNumber = tierCount-1; tierNumber >= 0; tierNumber--)
   {
-    Intrepid::FieldContainer<double> rootRefCellPointsCopy = rootRefCellPoints;
+    Camellia::FieldContainer<double> rootRefCellPointsCopy = rootRefCellPoints;
 
     RefinementBranchTier* refTier = &generalizedRefBranch[tierNumber];
     if (refTier->rootDimension > refTier->leafSubcellDimension)
@@ -2307,7 +2297,7 @@ void RefinementPattern::mapRefCellPointsToAncestor(GeneralizedRefinementBranch &
 //                                                     rootRefCellPoints, rootRefCellPointsCopy); // assigns to rootRefCellPointsCopy
 //      cout << "ancestral refPoints permuted:\n" << rootRefCellPointsCopy;
       
-//      Intrepid::FieldContainer<double> parentCellRefPoints(numPoints, parentCell->getDimension());
+//      Camellia::FieldContainer<double> parentCellRefPoints(numPoints, parentCell->getDimension());
 //      CamelliaCellTools::mapToReferenceSubcell(parentCellRefPoints, rootRefCellPoints,
 //                                               generalizedRefBranch[tierNumber].rootDimension,
 //                                               generalizedRefBranch[tierNumber].previousTierSubcellOrdinal, parentCell);
@@ -2329,7 +2319,7 @@ void RefinementPattern::mapRefCellPointsToAncestor(GeneralizedRefinementBranch &
         CamelliaCellTools::permutedReferenceCellPoints(rootSubcellTopo, refTier->previousTierSubcellPermutation,
                                                        rootRefCellPoints, rootRefCellPointsCopy); // assigns to rootRefCellPointsCopy
 //        cout << "ancestral refPoints permuted:\n" << rootRefCellPointsCopy;
-        Intrepid::FieldContainer<double> parentCellRefPoints(numPoints, parentCell->getDimension());
+        Camellia::FieldContainer<double> parentCellRefPoints(numPoints, parentCell->getDimension());
         CamelliaCellTools::mapToReferenceSubcell(parentCellRefPoints, rootRefCellPointsCopy,
                                                  generalizedRefBranch[tierNumber].rootDimension,
                                                  generalizedRefBranch[tierNumber].previousTierSubcellOrdinal, parentCell);
@@ -2343,7 +2333,7 @@ void RefinementPattern::mapRefCellPointsToAncestor(GeneralizedRefinementBranch &
         int nodeCount = refTier->previousTierTopo->getNodeCount();
         int spaceDim = refTier->previousTierTopo->getDimension();
         if (spaceDim==0) continue; // node-to-node map; just leave rootRefCellPoints as is
-        Intrepid::FieldContainer<double> previousTierRefNodes(nodeCount,spaceDim);
+        Camellia::FieldContainer<double> previousTierRefNodes(nodeCount,spaceDim);
         CamelliaCellTools::refCellNodesForTopology(previousTierRefNodes, refTier->previousTierTopo);
         
         // all points will be identical, but if we get a request that involves several copies of a node (vertex),

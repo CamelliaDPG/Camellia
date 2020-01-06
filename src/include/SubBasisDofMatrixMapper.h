@@ -19,7 +19,7 @@
 
 #include <iostream>
 
-#include "Intrepid_FieldContainer.hpp"
+#include "Camellia_FieldContainer.hpp"
 #include "SubBasisDofMapper.h"
 
 namespace Camellia
@@ -28,11 +28,11 @@ class SubBasisDofMatrixMapper : public SubBasisDofMapper   // subclass that mult
 {
   std::set<int> _basisDofOrdinalFilter;
   std::vector<GlobalIndexType> _mappedGlobalDofOrdinals;
-  Intrepid::FieldContainer<double> _constraintMatrix;
+  Camellia::FieldContainer<double> _constraintMatrix;
 public:
   SubBasisDofMatrixMapper(const std::set<int> &basisDofOrdinalFilter,
                           const std::vector<GlobalIndexType> &mappedGlobalDofOrdinals,
-                          const Intrepid::FieldContainer<double> &constraintMatrix);
+                          const Camellia::FieldContainer<double> &constraintMatrix);
   const set<int> &basisDofOrdinalFilter();
   
   //! returns true if the sub basis map is a simple permutation, negated  -- SubBasisDofMatrixMapper always returns false
@@ -41,16 +41,16 @@ public:
   //! returns true if the sub basis map is a simple permutation -- SubBasisDofMatrixMapper always returns false
   bool isPermutation();
   
-  Intrepid::FieldContainer<double> mapData(bool transposeConstraint, Intrepid::FieldContainer<double> &localData, bool applyOnLeftOnly = false);
+  Camellia::FieldContainer<double> mapData(bool transposeConstraint, Camellia::FieldContainer<double> &localData, bool applyOnLeftOnly = false);
   
-  void mapDataIntoGlobalContainer(const Intrepid::FieldContainer<double> &allLocalData, const vector<int> &basisOrdinalsInLocalData,
+  void mapDataIntoGlobalContainer(const Camellia::FieldContainer<double> &allLocalData, const vector<int> &basisOrdinalsInLocalData,
                                   const map<GlobalIndexType, unsigned> &globalIndexToOrdinal,
-                                  bool fittableDofsOnly, const set<GlobalIndexType> &fittableDofIndices, Intrepid::FieldContainer<double> &globalData);
-  void mapDataIntoGlobalContainer(const Intrepid::FieldContainer<double> &wholeBasisData, const std::map<GlobalIndexType, unsigned> &globalIndexToOrdinal,
-                                  bool fittableDofsOnly, const std::set<GlobalIndexType> &fittableDofIndices, Intrepid::FieldContainer<double> &globalData);
+                                  bool fittableDofsOnly, const set<GlobalIndexType> &fittableDofIndices, Camellia::FieldContainer<double> &globalData);
+  void mapDataIntoGlobalContainer(const Camellia::FieldContainer<double> &wholeBasisData, const std::map<GlobalIndexType, unsigned> &globalIndexToOrdinal,
+                                  bool fittableDofsOnly, const std::set<GlobalIndexType> &fittableDofIndices, Camellia::FieldContainer<double> &globalData);
 
-  void mapSubBasisDataIntoGlobalContainer(const Intrepid::FieldContainer<double> &subBasisData, const std::map<GlobalIndexType, unsigned> &globalIndexToOrdinal,
-                                          bool fittableDofsOnly, const std::set<GlobalIndexType> &fittableDofIndices, Intrepid::FieldContainer<double> &globalData);
+  void mapSubBasisDataIntoGlobalContainer(const Camellia::FieldContainer<double> &subBasisData, const std::map<GlobalIndexType, unsigned> &globalIndexToOrdinal,
+                                          bool fittableDofsOnly, const std::set<GlobalIndexType> &fittableDofIndices, Camellia::FieldContainer<double> &globalData);
   
   const std::vector<GlobalIndexType> &mappedGlobalDofOrdinals();
   std::set<GlobalIndexType> mappedGlobalDofOrdinalsForBasisOrdinals(std::set<int> &basisDofOrdinals);
@@ -59,8 +59,8 @@ public:
   SubBasisDofMapperPtr restrictDofOrdinalFilter(const set<int> &newDofOrdinalFilter); // this dof mapper, restricted to the specified basisDofOrdinals
   SubBasisDofMapperPtr restrictGlobalDofOrdinals(const set<GlobalIndexType> &newGlobalDofOrdinals); // this dof mapper, restricted to the specified global dof ordinals
 
-  const Intrepid::FieldContainer<double> &constraintMatrix();
-  Intrepid::FieldContainer<double> getConstraintMatrix();
+  const Camellia::FieldContainer<double> &constraintMatrix();
+  Camellia::FieldContainer<double> getConstraintMatrix();
 };
 }
 

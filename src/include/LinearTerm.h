@@ -49,26 +49,26 @@ class TLinearTerm
   Camellia::VarType _termType; // shouldn't mix
 
   // for the Riesz inversion evaluation
-  std::map< ElementType*, Intrepid::FieldContainer<double> > _rieszRepresentationForElementType;
-  std::map< ElementType*, Intrepid::FieldContainer<double> > _rieszRHSForElementType;
+  std::map< ElementType*, Camellia::FieldContainer<double> > _rieszRepresentationForElementType;
+  std::map< ElementType*, Camellia::FieldContainer<double> > _rieszRHSForElementType;
   std::map< int, double > _energyNormForCellIDGlobal;
 
   // some private utility methods:
-  static void integrate(Epetra_CrsMatrix *valuesCrsMatrix, Intrepid::FieldContainer<double> &valuesFC,
+  static void integrate(Epetra_CrsMatrix *valuesCrsMatrix, Camellia::FieldContainer<double> &valuesFC,
                         TLinearTermPtr<double> u, DofOrderingPtr uOrdering,
                         TLinearTermPtr<double> v, DofOrderingPtr vOrdering,
                         BasisCachePtr basisCache, bool sumInto=true);
-  static void integrate(Intrepid::FieldContainer<Scalar> &values,
+  static void integrate(Camellia::FieldContainer<Scalar> &values,
                         TLinearTermPtr<Scalar> u, DofOrderingPtr uOrdering,
                         TLinearTermPtr<Scalar> v, DofOrderingPtr vOrdering,
                         BasisCachePtr basisCache, bool sumInto=true);
-  static void multiplyFluxValuesByParity(Intrepid::FieldContainer<Scalar> &fluxValues, BasisCachePtr sideBasisCache);
+  static void multiplyFluxValuesByParity(Camellia::FieldContainer<Scalar> &fluxValues, BasisCachePtr sideBasisCache);
 
   // poor man's templating: just provide both versions of the values argument, making the other version null or size 0
-  void integrate(Epetra_CrsMatrix *valuesCrsMatrix, Intrepid::FieldContainer<double> &valuesFC, DofOrderingPtr thisDofOrdering,
+  void integrate(Epetra_CrsMatrix *valuesCrsMatrix, Camellia::FieldContainer<double> &valuesFC, DofOrderingPtr thisDofOrdering,
                  TLinearTermPtr<double> otherTerm, DofOrderingPtr otherDofOrdering,
                  BasisCachePtr basisCache, bool forceBoundaryTerm = false, bool sumInto = true);
-  void integrate(Epetra_CrsMatrix *valuesCrsMatrix, Intrepid::FieldContainer<double> &valuesFC, DofOrderingPtr thisDofOrdering,
+  void integrate(Epetra_CrsMatrix *valuesCrsMatrix, Camellia::FieldContainer<double> &valuesFC, DofOrderingPtr thisDofOrdering,
                  TLinearTermPtr<double> otherTerm, VarPtr otherVarID, TFunctionPtr<double> fxn,
                  BasisCachePtr basisCache, bool forceBoundaryTerm = false);
 
@@ -98,7 +98,7 @@ public:
    */
   double computeNorm(TIPPtr<Scalar> ip, MeshPtr mesh, int cubatureEnrichment = 0);
 
-  void evaluate(Intrepid::FieldContainer<Scalar> &values, TSolutionPtr<Scalar> solution, BasisCachePtr basisCache,
+  void evaluate(Camellia::FieldContainer<Scalar> &values, TSolutionPtr<Scalar> solution, BasisCachePtr basisCache,
                 bool applyCubatureWeights = false, int solutionOrdinal = 0);
 
   TFunctionPtr<Scalar> evaluate(const Teuchos::map< int, TFunctionPtr<Scalar>> &varFunctions);
@@ -112,13 +112,13 @@ public:
   bool isPureBoundaryTerm() const;
   bool isPureVolumeTerm() const;
 
-  // integrate into values Intrepid::FieldContainers:
-  void integrate(Intrepid::FieldContainer<Scalar> &values, DofOrderingPtr thisOrdering,
+  // integrate into values Camellia::FieldContainers:
+  void integrate(Camellia::FieldContainer<Scalar> &values, DofOrderingPtr thisOrdering,
                  BasisCachePtr basisCache, bool forceBoundaryTerm = false, bool sumInto = true);
-  void integrate(Intrepid::FieldContainer<Scalar> &values, DofOrderingPtr thisDofOrdering,
+  void integrate(Camellia::FieldContainer<Scalar> &values, DofOrderingPtr thisDofOrdering,
                  TLinearTermPtr<Scalar> otherTerm, DofOrderingPtr otherDofOrdering,
                  BasisCachePtr basisCache, bool forceBoundaryTerm = false, bool sumInto = true);
-  void integrate(Intrepid::FieldContainer<Scalar> &values, DofOrderingPtr thisDofOrdering,
+  void integrate(Camellia::FieldContainer<Scalar> &values, DofOrderingPtr thisDofOrdering,
                  TLinearTermPtr<Scalar> otherTerm, VarPtr otherVarID, TFunctionPtr<Scalar> fxn,
                  BasisCachePtr basisCache, bool forceBoundaryTerm = false);
 
@@ -132,12 +132,12 @@ public:
 
   // compute the value of linearTerm for non-zero varID at the cubature points, for each basis function in basis
   // values shape: (C,F,P), (C,F,P,D), or (C,F,P,D,D)
-  void values(Intrepid::FieldContainer<Scalar> &values, int varID, BasisPtr basis, BasisCachePtr basisCache,
+  void values(Camellia::FieldContainer<Scalar> &values, int varID, BasisPtr basis, BasisCachePtr basisCache,
               bool applyCubatureWeights = false, bool naturalBoundaryTermsOnly = false);
 
   // compute the value of linearTerm for varID = fxn
   // values shape: (C,P), (C,P,D), or (C,P,D,D)
-  void values(Intrepid::FieldContainer<Scalar> &values, int varID, TFunctionPtr<Scalar> fxn, BasisCachePtr basisCache,
+  void values(Camellia::FieldContainer<Scalar> &values, int varID, TFunctionPtr<Scalar> fxn, BasisCachePtr basisCache,
               bool applyCubatureWeights, bool naturalBoundaryTermsOnly = false);
 
   int rank() const;  // 0 for scalar, 1 for vector, etc.

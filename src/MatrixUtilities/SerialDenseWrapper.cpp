@@ -9,7 +9,7 @@
 
 #include "SerialDenseWrapper.h"
 
-#include "Intrepid_FieldContainer.hpp"
+#include "Camellia_FieldContainer.hpp"
 
 #include "Epetra_CrsMatrix.h"
 #include "Epetra_DataAccess.h"
@@ -33,7 +33,7 @@
 
 namespace Camellia {
   
-  void SerialDenseWrapper::transposeSquareMatrix(Intrepid::FieldContainer<double> &A)
+  void SerialDenseWrapper::transposeSquareMatrix(Camellia::FieldContainer<double> &A)
   {
     TEUCHOS_TEST_FOR_EXCEPTION(A.rank() != 2, std::invalid_argument, "A must be rank 2!");
     int rows = A.dimension(0), cols = A.dimension(1);
@@ -49,10 +49,10 @@ namespace Camellia {
     }
   }
   
-  double SerialDenseWrapper::condest(const Intrepid::FieldContainer<double> &A, bool assumeSPD)
+  double SerialDenseWrapper::condest(const Camellia::FieldContainer<double> &A, bool assumeSPD)
   {
     // copy, since LAPACK will want to overwrite
-    Intrepid::FieldContainer<double> A_copy = A;
+    Camellia::FieldContainer<double> A_copy = A;
     
     Teuchos::LAPACK<int, double> lapack;
     Teuchos::BLAS<int, double> blas;
@@ -85,8 +85,8 @@ namespace Camellia {
       
       if (INFO != 0) result = INFO;
       
-      Intrepid::FieldContainer<double> WORK(3*N);
-      Intrepid::FieldContainer<int> IWORK(N);
+      Camellia::FieldContainer<double> WORK(3*N);
+      Camellia::FieldContainer<int> IWORK(N);
       
       double rcond;
       lapack.POCON(UPLO, N, &A_copy[0], N, A_norm, &rcond, &WORK[0], &IWORK[0], &INFO);
@@ -98,15 +98,15 @@ namespace Camellia {
     }
     else
     {
-      Intrepid::FieldContainer<int> IPIV(N);
+      Camellia::FieldContainer<int> IPIV(N);
       
       // factor
       lapack.GETRF(N, N, &A_copy[0], N, &IPIV[0], &INFO);
       
       if (INFO != 0) result = INFO;
       
-      Intrepid::FieldContainer<double> WORK(4*N);
-      Intrepid::FieldContainer<int> IWORK(N);
+      Camellia::FieldContainer<double> WORK(4*N);
+      Camellia::FieldContainer<int> IWORK(N);
 
       char NORM = '1'; // 1-norm
       double rcond;
@@ -121,9 +121,9 @@ namespace Camellia {
     return condest;
   }
   
-  Epetra_SerialDenseMatrix SerialDenseWrapper::convertFCToSDM(const Intrepid::FieldContainer<double> &A, Epetra_DataAccess CV)
+  Epetra_SerialDenseMatrix SerialDenseWrapper::convertFCToSDM(const Camellia::FieldContainer<double> &A, Epetra_DataAccess CV)
   {
-    TEUCHOS_TEST_FOR_EXCEPTION(A.rank() != 2, std::invalid_argument, "A must be a rank 2 Intrepid::FieldContainer.");
+    TEUCHOS_TEST_FOR_EXCEPTION(A.rank() != 2, std::invalid_argument, "A must be a rank 2 Camellia::FieldContainer.");
     //  FC is row major, SDM expects column major data, so the roles of rows and columns get swapped
     // distance between rows in FC is the column length (dimension 1)
     int n = A.dimension(0);
@@ -133,7 +133,7 @@ namespace Camellia {
     return Amatrix;
   }
   
-  void SerialDenseWrapper::convertSDMToFC(Intrepid::FieldContainer<double>& A_fc, const Epetra_SerialDenseMatrix &A)
+  void SerialDenseWrapper::convertSDMToFC(Camellia::FieldContainer<double>& A_fc, const Epetra_SerialDenseMatrix &A)
   {
     int n = A.M();
     int m = A.N();
@@ -141,11 +141,11 @@ namespace Camellia {
     dim[0] = m;
     dim[1] = n;
     double * firstEntry = (double *) &A(0,0); // again, casting away the const.  OK since we copy below.
-    A_fc = Intrepid::FieldContainer<double>(dim,firstEntry,true); // true: copy
+    A_fc = Camellia::FieldContainer<double>(dim,firstEntry,true); // true: copy
   }\
   
   // gives X = scalarA*A+scalarB*B (overwrites A)
-  void SerialDenseWrapper::add(Intrepid::FieldContainer<double> &X, const Intrepid::FieldContainer<double> &A, const Intrepid::FieldContainer<double> &B,
+  void SerialDenseWrapper::add(Camellia::FieldContainer<double> &X, const Camellia::FieldContainer<double> &A, const Camellia::FieldContainer<double> &B,
                                double scalarA, double scalarB)
   {
     Epetra_SerialDenseMatrix AMatrix = convertFCToSDM(A);
@@ -156,7 +156,7 @@ namespace Camellia {
     convertSDMToFC(X,AMatrix);
   }
   
-  double SerialDenseWrapper::dot(const Intrepid::FieldContainer<double> &a, const Intrepid::FieldContainer<double> &b)
+  double SerialDenseWrapper::dot(const Camellia::FieldContainer<double> &a, const Camellia::FieldContainer<double> &b)
   {
     if (((a.rank() != 1) && (a.rank() != 2)) || ((b.rank() != 1) && (b.rank() != 2)))
     {
@@ -192,8 +192,8 @@ namespace Camellia {
     return sum;
   }
   
-  int SerialDenseWrapper::determinantAndInverse(Intrepid::FieldContainer<double> &detValues, Intrepid::FieldContainer<double> &outInverses,
-                                                const Intrepid::FieldContainer<double> &inMatrices)
+  int SerialDenseWrapper::determinantAndInverse(Camellia::FieldContainer<double> &detValues, Camellia::FieldContainer<double> &outInverses,
+                                                const Camellia::FieldContainer<double> &inMatrices)
   {
     // uses LAPACK LU factorization to compute the determinant and inverse of a matrix
     // inMatrices and outMatrices should have shape (C,P,D,D)--this initial implementation is meant for computing Jacobian determinants and inverses
@@ -223,9 +223,9 @@ namespace Camellia {
       TEUCHOS_TEST_FOR_EXCEPTION(true, std::invalid_argument, "outInverses must have shape (C,P,D,D)");
     }
     
-    Intrepid::FieldContainer<double> workspace = inMatrices; // copy, since the below will overwrite the matrix data
+    Camellia::FieldContainer<double> workspace = inMatrices; // copy, since the below will overwrite the matrix data
     
-    Intrepid::FieldContainer<int> pivots(spaceDim);
+    Camellia::FieldContainer<int> pivots(spaceDim);
     
     int errOut = 0;
     
@@ -278,18 +278,18 @@ namespace Camellia {
     return errOut;
   }
 
-  int SerialDenseWrapper::eigenvalues(const Intrepid::FieldContainer<double> &A,
-                                      Intrepid::FieldContainer<double> &lambda_real, Intrepid::FieldContainer<double> &lambda_imag)
+  int SerialDenseWrapper::eigenvalues(const Camellia::FieldContainer<double> &A,
+                                      Camellia::FieldContainer<double> &lambda_real, Camellia::FieldContainer<double> &lambda_imag)
   {
-    Intrepid::FieldContainer<double> eigvectors;
+    Camellia::FieldContainer<double> eigvectors;
     bool computeRight = true; // ignored for empty eigvectors container
     return eigenvalues(A, lambda_real, lambda_imag, eigvectors, computeRight);
   }
   
-  int SerialDenseWrapper::eigenvalues(const Intrepid::FieldContainer<double> &A,
-                                      Intrepid::FieldContainer<double> &lambda_real,
-                                      Intrepid::FieldContainer<double> &lambda_imag,
-                                      Intrepid::FieldContainer<double> &eigvectors, // if empty, skips eigvector determination
+  int SerialDenseWrapper::eigenvalues(const Camellia::FieldContainer<double> &A,
+                                      Camellia::FieldContainer<double> &lambda_real,
+                                      Camellia::FieldContainer<double> &lambda_imag,
+                                      Camellia::FieldContainer<double> &eigvectors, // if empty, skips eigvector determination
                                       bool computeRight)
   {
 //    GEEV (const char JOBVL, const char JOBVR, const OrdinalType n, ScalarType *A, const OrdinalType lda, MagnitudeType *WR, MagnitudeType *WI, ScalarType *VL, const OrdinalType ldvl, ScalarType *VR, const OrdinalType ldvr, ScalarType *WORK, const OrdinalType lwork, MagnitudeType *RWORK, OrdinalType *info) const
@@ -322,18 +322,18 @@ namespace Camellia {
       }
     }
     
-    Intrepid::FieldContainer<double> A_copy = A; // A_copy will be overwritten; therefore we can't use the const input A
+    Camellia::FieldContainer<double> A_copy = A; // A_copy will be overwritten; therefore we can't use the const input A
     int LDA = N;
     int LDVL = N;
     int LDVR = N;
     int LWORK = 4*N;
-    Intrepid::FieldContainer<double> WORK(LWORK);
+    Camellia::FieldContainer<double> WORK(LWORK);
     int INFO;
     lapack.GEEV(JOBVL, JOBVR, N, &A_copy[0], LDA, &lambda_real[0], &lambda_imag[0], VL, LDVL, VR, LDVR, &WORK[0], LWORK, &INFO);
     return INFO;
   }
   
-  int SerialDenseWrapper::extractFCFromEpetra_RowMatrix(const Epetra_RowMatrix &A, Intrepid::FieldContainer<double> &A_fc)
+  int SerialDenseWrapper::extractFCFromEpetra_RowMatrix(const Epetra_RowMatrix &A, Camellia::FieldContainer<double> &A_fc)
   {
     int myRank = A.Comm().MyPID();
     GlobalIndexTypeToCast numRowsGlobal = A.NumGlobalRows();
@@ -350,8 +350,8 @@ namespace Camellia {
     if (myRank == 0)
     {
       int maxCols = A0.NumGlobalCols(); // upper bound on columns for any row
-      Intrepid::FieldContainer<int> localColIDs(maxCols); // upper bound on columns for any row
-      Intrepid::FieldContainer<double> values(maxCols);
+      Camellia::FieldContainer<int> localColIDs(maxCols); // upper bound on columns for any row
+      Camellia::FieldContainer<double> values(maxCols);
       
       for (int myRow=0; myRow < numRowsGlobal; myRow++)
       {
@@ -392,8 +392,8 @@ namespace Camellia {
       int numCols = -1;
       int err = A.NumMyRowEntries(myRow, numCols);
       TEUCHOS_TEST_FOR_EXCEPTION(err !=0, std::invalid_argument, "Error encountered during row extraction");
-      Intrepid::FieldContainer<int> localColIDs(numCols);
-      Intrepid::FieldContainer<double> values(numCols);
+      Camellia::FieldContainer<int> localColIDs(numCols);
+      Camellia::FieldContainer<double> values(numCols);
       int numColsExtracted = 0;
       if (numCols > 0)
       {
@@ -411,7 +411,7 @@ namespace Camellia {
     return 0;*/
   }
   
-  void SerialDenseWrapper::filterMatrix(Intrepid::FieldContainer<double> &filteredMatrix, const Intrepid::FieldContainer<double> &matrix,
+  void SerialDenseWrapper::filterMatrix(Camellia::FieldContainer<double> &filteredMatrix, const Camellia::FieldContainer<double> &matrix,
                                         const std::set<int> &rowOrdinals, const std::set<int> &colOrdinals)
   {
     TEUCHOS_TEST_FOR_EXCEPTION(matrix.rank() != 2, std::invalid_argument, "matrix must have rank 2");
@@ -448,11 +448,32 @@ namespace Camellia {
       case 5:
         return (((index[0] * fc.dimension(1) + index[1]) * fc.dimension(2) + index[2]) * fc.dimension(3) + index[3]) * fc.dimension(4) + index[4];
       default:
-        TEUCHOS_TEST_FOR_EXCEPTION(true, std::invalid_argument, "Unhandled Intrepid::FieldContainer rank.");
+        TEUCHOS_TEST_FOR_EXCEPTION(true, std::invalid_argument, "Unhandled Camellia::FieldContainer rank.");
     }
   }
   
-  std::function<int()> SerialDenseWrapper::getEnumerator(const std::vector<int> &index, const Intrepid::FieldContainer<double> &fc)
+  int SerialDenseWrapper::getEnumeration(const std::vector<int> &index, const Camellia::FieldContainer<double> &fc)
+  {
+    switch (fc.rank())
+    {
+      case 0:
+        return 0;
+      case 1:
+        return index[0];
+      case 2:
+        return index[0] * fc.dimension(1) + index[1];
+      case 3:
+        return (index[0] * fc.dimension(1) + index[1]) * fc.dimension(2) + index[2];
+      case 4:
+        return ((index[0] * fc.dimension(1) + index[1]) * fc.dimension(2) + index[2]) * fc.dimension(3) + index[3];
+      case 5:
+        return (((index[0] * fc.dimension(1) + index[1]) * fc.dimension(2) + index[2]) * fc.dimension(3) + index[3]) * fc.dimension(4) + index[4];
+      default:
+        TEUCHOS_TEST_FOR_EXCEPTION(true, std::invalid_argument, "Unhandled Camellia::FieldContainer rank.");
+    }
+  }
+  
+  std::function<int()> SerialDenseWrapper::getEnumerator(const std::vector<int> &index, const Camellia::FieldContainer<double> &fc)
   {
     std::function<int()> enumerator;
     int dim1, dim2, dim3, dim4;
@@ -520,7 +541,7 @@ namespace Camellia {
     return enumerator;
   }
   
-  bool SerialDenseWrapper::matrixIsSymmetric(Intrepid::FieldContainer<double> &A, double relTol, double absTol)
+  bool SerialDenseWrapper::matrixIsSymmetric(Camellia::FieldContainer<double> &A, double relTol, double absTol)
   {
     TEUCHOS_TEST_FOR_EXCEPTION(A.rank() != 2, std::invalid_argument, "A must have rank 2");
     int numRows = A.dimension(0);
@@ -544,7 +565,7 @@ namespace Camellia {
     return true;
   }
   
-  bool SerialDenseWrapper::matrixIsSymmetric(Intrepid::FieldContainer<double> &A, std::vector<std::pair<int,int>> &asymmetricEntries,
+  bool SerialDenseWrapper::matrixIsSymmetric(Camellia::FieldContainer<double> &A, std::vector<std::pair<int,int>> &asymmetricEntries,
                                              double relTol, double absTol)
   {
     TEUCHOS_TEST_FOR_EXCEPTION(A.rank() != 2, std::invalid_argument, "A must have rank 2");
@@ -571,13 +592,13 @@ namespace Camellia {
   }
   
   // gives X = A*B.  Must pass in 2D arrays, even for vectors!
-  void SerialDenseWrapper::multiply(Intrepid::FieldContainer<double> &X, const Intrepid::FieldContainer<double> &A,
-                                    const Intrepid::FieldContainer<double> &B, char TransposeA, char TransposeB)
+  void SerialDenseWrapper::multiply(Camellia::FieldContainer<double> &X, const Camellia::FieldContainer<double> &A,
+                                    const Camellia::FieldContainer<double> &B, char TransposeA, char TransposeB)
   {
     multiplyAndAdd(X,A,B,TransposeA,TransposeB,1.0,0.0);
   }
   
-  void SerialDenseWrapper::multiplyFCByWeight(Intrepid::FieldContainer<double> & fc, double weight)
+  void SerialDenseWrapper::multiplyFCByWeight(Camellia::FieldContainer<double> & fc, double weight)
   {
     int size = fc.size();
     double *valuePtr = &fc[0]; // to make this as fast as possible, do some pointer arithmetic...
@@ -590,8 +611,8 @@ namespace Camellia {
   
   // wrapper for SDM multiply + add routine.  Must pass in 2D arrays, even for vectors!
   // X = ScalarThis*X + ScalarAB*A*B
-  void SerialDenseWrapper::multiplyAndAdd(Intrepid::FieldContainer<double> &X, const Intrepid::FieldContainer<double> &A,
-                                          const Intrepid::FieldContainer<double> &B,
+  void SerialDenseWrapper::multiplyAndAdd(Camellia::FieldContainer<double> &X, const Camellia::FieldContainer<double> &A,
+                                          const Camellia::FieldContainer<double> &B,
                                           char TransposeA, char TransposeB, double ScalarAB, double ScalarThis)
   {
     TEUCHOS_TEST_FOR_EXCEPTION(X.rank() != 2, std::invalid_argument, "multiplyAndAdd() only supports rank-2 containers.");
@@ -665,10 +686,10 @@ namespace Camellia {
     }
   }
   
-  Intrepid::FieldContainer<double> SerialDenseWrapper::getSubMatrix(Intrepid::FieldContainer<double> &A, std::set<unsigned> &rowIndices,
+  Camellia::FieldContainer<double> SerialDenseWrapper::getSubMatrix(Camellia::FieldContainer<double> &A, std::set<unsigned> &rowIndices,
                                                                     std::set<unsigned> &colIndices, bool warnOfNonzeroOffBlockEntries)
   {
-    Intrepid::FieldContainer<double> subMatrix(rowIndices.size(),colIndices.size());
+    Camellia::FieldContainer<double> subMatrix(rowIndices.size(),colIndices.size());
     
     unsigned subrowIndex = 0;
     for (std::set<unsigned>::iterator rowIndexIt = rowIndices.begin(); rowIndexIt != rowIndices.end(); rowIndexIt++, subrowIndex++)
@@ -717,7 +738,7 @@ namespace Camellia {
     return subMatrix;
   }
   
-  void SerialDenseWrapper::roundZeros(Intrepid::FieldContainer<double> &A, double tol)
+  void SerialDenseWrapper::roundZeros(Camellia::FieldContainer<double> &A, double tol)
   {
     for (int i=0; i<A.size(); i++)
     {
@@ -725,7 +746,7 @@ namespace Camellia {
     }
   }
   
-  void SerialDenseWrapper::scaleBySymmetricDiagonal(Intrepid::FieldContainer<double> &A)
+  void SerialDenseWrapper::scaleBySymmetricDiagonal(Camellia::FieldContainer<double> &A)
   {
     // requires that A's diagonal be non-negative in every entry
     // the below is a first pass implementation--would be more efficient not to construct the diagonal matrix explicitly
@@ -738,7 +759,7 @@ namespace Camellia {
     //    std::cout << "A before scaling:\n" << A;
     
     int N = A.dimension(0);
-    Intrepid::FieldContainer<double> diag_inv_sqrt(N,N);
+    Camellia::FieldContainer<double> diag_inv_sqrt(N,N);
     for (int i=0; i<N; i++)
     {
       double diag_ii = A(i,i);
@@ -749,15 +770,15 @@ namespace Camellia {
       }
       diag_inv_sqrt(i,i) = 1.0 / sqrt(diag_ii);
     }
-    Intrepid::FieldContainer<double> A_temp(N,N); // not sure if we can safely use A while multiplying by A
+    Camellia::FieldContainer<double> A_temp(N,N); // not sure if we can safely use A while multiplying by A
     multiply(A_temp, diag_inv_sqrt, A);
     multiply(A, A_temp, diag_inv_sqrt);
     
     //    std::cout << "A after scaling:\n" << A;
   }
   
-  int SerialDenseWrapper::solveSystem(Intrepid::FieldContainer<double> &x, Intrepid::FieldContainer<double> &A,
-                                      Intrepid::FieldContainer<double> &b, bool useATranspose)
+  int SerialDenseWrapper::solveSystem(Camellia::FieldContainer<double> &x, Camellia::FieldContainer<double> &A,
+                                      Camellia::FieldContainer<double> &b, bool useATranspose)
   {
     // solves Ax = b, where
     // A = (N,N)
@@ -774,9 +795,9 @@ namespace Camellia {
     return solveSystemMultipleRHS(x, A, b, useATranspose);
   }
   
-  int SerialDenseWrapper::solveSystemLeastSquares(Intrepid::FieldContainer<double> &x,
-                                                  const Intrepid::FieldContainer<double> &A,
-                                                  const Intrepid::FieldContainer<double> &b)
+  int SerialDenseWrapper::solveSystemLeastSquares(Camellia::FieldContainer<double> &x,
+                                                  const Camellia::FieldContainer<double> &A,
+                                                  const Camellia::FieldContainer<double> &b)
   {
     // solves Ax = b, where
     // A = (N,M), N >= M
@@ -785,7 +806,7 @@ namespace Camellia {
     //   OR
     // b = (N,L)
     // x = (M,L)
-    Intrepid::FieldContainer<double> bCopy = b;
+    Camellia::FieldContainer<double> bCopy = b;
     
     if (bCopy.rank()==1)
     {
@@ -810,20 +831,20 @@ namespace Camellia {
       TEUCHOS_TEST_FOR_EXCEPTION(true, std::invalid_argument, "x.dimension(0) != M");
     }
     
-    Intrepid::FieldContainer<double> A_T = A;
+    Camellia::FieldContainer<double> A_T = A;
     transposeMatrix(A_T);
     
-    Intrepid::FieldContainer<double> ATA(M,M);
+    Camellia::FieldContainer<double> ATA(M,M);
     multiply(ATA, A_T, A);
     
-    Intrepid::FieldContainer<double> ATb(M,L);
+    Camellia::FieldContainer<double> ATb(M,L);
     multiply(ATb, A_T, b);
     
     return solveSystemMultipleRHS(x, ATA, ATb, false);
   }
   
-  int SerialDenseWrapper::solveSystemMultipleRHS(Intrepid::FieldContainer<double> &x, Intrepid::FieldContainer<double> &A,
-                                                 Intrepid::FieldContainer<double> &b, bool useATranspose)
+  int SerialDenseWrapper::solveSystemMultipleRHS(Camellia::FieldContainer<double> &x, Camellia::FieldContainer<double> &A,
+                                                 Camellia::FieldContainer<double> &b, bool useATranspose)
   {
     // solves Ax = b, where
     // A = (N,N)
@@ -893,8 +914,8 @@ namespace Camellia {
     return 0;
   }
   
-  int SerialDenseWrapper::solveSystemUsingQR(Intrepid::FieldContainer<double> &x, Intrepid::FieldContainer<double> &A,
-                                             Intrepid::FieldContainer<double> &b, bool useATranspose, // would be better default to true because that involves no data movement
+  int SerialDenseWrapper::solveSystemUsingQR(Camellia::FieldContainer<double> &x, Camellia::FieldContainer<double> &A,
+                                             Camellia::FieldContainer<double> &b, bool useATranspose, // would be better default to true because that involves no data movement
                                              bool allowOverwriteOfA)
   {
     // solves Ax = b, where
@@ -902,8 +923,8 @@ namespace Camellia {
     // x, b = (N,M)
     if ((x.rank() != 2) || (A.rank() != 2) || (b.rank() != 2))
     {
-      std::cout << "x, A, and b must each be a rank 2 Intrepid::FieldContainer!!\n";
-      TEUCHOS_TEST_FOR_EXCEPTION(true, std::invalid_argument, "x, A, and b must each be a rank 2 Intrepid::FieldContainer!!");
+      std::cout << "x, A, and b must each be a rank 2 Camellia::FieldContainer!!\n";
+      TEUCHOS_TEST_FOR_EXCEPTION(true, std::invalid_argument, "x, A, and b must each be a rank 2 Camellia::FieldContainer!!");
     }
     if (A.dimension(0) != A.dimension(1))
     {
@@ -946,7 +967,7 @@ namespace Camellia {
     transposeMatrix(b);
     
     // by wrapping the below in braces, we allow the things we allocate there to go out of scope
-    // before the transpose of the x Intrepid::FieldContainer, which as presently implemented copies x.  This can
+    // before the transpose of the x Camellia::FieldContainer, which as presently implemented copies x.  This can
     // take a sizable chunk of memory for higher-order computations, so being able to reclaim the memory
     // allocated for bSDM--which is the same size as x--actually guarantees that we won't run out of memory
     // during the transposition (we would have run out when allocating bSDM if we were that constrained).
@@ -1032,7 +1053,7 @@ namespace Camellia {
     return 0;
   }
 
-  int SerialDenseWrapper::solveSPDSystemLAPACKCholesky(Intrepid::FieldContainer<double> &bx, Intrepid::FieldContainer<double> &A_SPD)
+  int SerialDenseWrapper::solveSPDSystemLAPACKCholesky(Camellia::FieldContainer<double> &bx, Camellia::FieldContainer<double> &A_SPD)
   {
     int N = A_SPD.dimension(0);
     TEUCHOS_TEST_FOR_EXCEPTION(N != A_SPD.dimension(1), std::invalid_argument, "A must be square!");
@@ -1060,8 +1081,8 @@ namespace Camellia {
     return result;
   }
   
-  int SerialDenseWrapper::solveSPDSystemMultipleRHS(Intrepid::FieldContainer<double> &x, Intrepid::FieldContainer<double> &A_SPD,
-                                                    Intrepid::FieldContainer<double> &b, bool allowOverwriteOfA)
+  int SerialDenseWrapper::solveSPDSystemMultipleRHS(Camellia::FieldContainer<double> &x, Camellia::FieldContainer<double> &A_SPD,
+                                                    Camellia::FieldContainer<double> &b, bool allowOverwriteOfA)
   {
     // solves Ax = b, where
     // A = (N,N)
@@ -1122,8 +1143,8 @@ namespace Camellia {
     return result;
   }
   
-//  int SerialDenseWrapper::solveSPDSystemMultipleRHS(Intrepid::FieldContainer<double> &x, Intrepid::FieldContainer<double> &A_SPD,
-//                                                    Intrepid::FieldContainer<double> &b, bool allowOverwriteOfA)
+//  int SerialDenseWrapper::solveSPDSystemMultipleRHS(Camellia::FieldContainer<double> &x, Camellia::FieldContainer<double> &A_SPD,
+//                                                    Camellia::FieldContainer<double> &b, bool allowOverwriteOfA)
 //  {
 //    // solves Ax = b, where
 //    // A = (N,N)
@@ -1184,7 +1205,7 @@ namespace Camellia {
 //    return result;
 //  }
   
-  void SerialDenseWrapper::transposeMatrix(Intrepid::FieldContainer<double> &A)
+  void SerialDenseWrapper::transposeMatrix(Camellia::FieldContainer<double> &A)
   {
     int n = A.dimension(0);
     int m = A.dimension(1);
@@ -1194,7 +1215,7 @@ namespace Camellia {
     }
     else
     {
-      Intrepid::FieldContainer<double> A_copy = A;
+      Camellia::FieldContainer<double> A_copy = A;
       A.resize(m,n);
       for (int i=0; i<n; i++)
       {
@@ -1209,11 +1230,11 @@ namespace Camellia {
   //! Returns the reciprocal of the 1-norm condition number of the matrix in A
   /*!
    \param A In
-   A rank-2 Intrepid::FieldContainer with equal first and second dimensions.
+   A rank-2 Camellia::FieldContainer with equal first and second dimensions.
    
    \return the 1-norm condition number if successful; -1 otherwise.
    */
-  double SerialDenseWrapper::getMatrixConditionNumber(Intrepid::FieldContainer<double> &A)
+  double SerialDenseWrapper::getMatrixConditionNumber(Camellia::FieldContainer<double> &A)
   {
     Epetra_SerialDenseMatrix AMatrix = convertFCToSDM(A);
     Epetra_SerialDenseSolver solver;
@@ -1229,11 +1250,11 @@ namespace Camellia {
   //! Returns the reciprocal of the 2-norm condition number of the matrix in A
   /*!
    \param A In
-   A rank-2 Intrepid::FieldContainer with equal first and second dimensions.
+   A rank-2 Camellia::FieldContainer with equal first and second dimensions.
    
    \return the 2-norm condition number if successful; -1 otherwise.
    */
-  double SerialDenseWrapper::getMatrixConditionNumber2Norm(Intrepid::FieldContainer<double> &A, bool ignoreZeroEigenvalues)
+  double SerialDenseWrapper::getMatrixConditionNumber2Norm(Camellia::FieldContainer<double> &A, bool ignoreZeroEigenvalues)
   {
     Epetra_SerialDenseSVD svd;
     
@@ -1282,11 +1303,11 @@ namespace Camellia {
   //  //! Returns true if all the eigenvalues are greater than zero
   //  /*!
   //   \param A In
-  //   A rank-2 Intrepid::FieldContainer with equal first and second dimensions.
+  //   A rank-2 Camellia::FieldContainer with equal first and second dimensions.
   //
   //   \return true if all the eigenvalues are positive; false otherwise.
   //   */
-  //  static bool matrixIsPositiveDefinite(Intrepid::FieldContainer<double> &A)
+  //  static bool matrixIsPositiveDefinite(Camellia::FieldContainer<double> &A)
   //  {
   //    cout << "WARNING: matrixIsPositiveDefinite() does not work.  Need to set up an eigenvalue solve, not an SVD!\n";
   //    /*
@@ -1305,17 +1326,17 @@ namespace Camellia {
   //  //! Returns true if all the eigenvalues are greater than or equal to zero
   //  /*!
   //   \param A In
-  //   A rank-2 Intrepid::FieldContainer with equal first and second dimensions.
+  //   A rank-2 Camellia::FieldContainer with equal first and second dimensions.
   //
   //   \return true if all the eigenvalues are non-negative; false otherwise.
   //   */
-  //  static bool matrixIsPositiveSemiDefinite(Intrepid::FieldContainer<double> &A)
+  //  static bool matrixIsPositiveSemiDefinite(Camellia::FieldContainer<double> &A)
   //  {
   //    cout << "WARNING: matrixIsPositiveSemiDefinite() does not work.  Need to set up an eigenvalue solve, not an SVD!\n";
   //    return getMatrixConditionNumber2Norm(A, true) > 0.0;
   //  }
   
-  void SerialDenseWrapper::writeMatrixToMatlabFile(const std::string& filePath, Intrepid::FieldContainer<double> &A)
+  void SerialDenseWrapper::writeMatrixToMatlabFile(const std::string& filePath, Camellia::FieldContainer<double> &A)
   {
     int N = A.dimension(0);
     int M = A.dimension(1);
@@ -1335,7 +1356,7 @@ namespace Camellia {
   }
   
   
-  void SerialDenseWrapper::addFCs(Intrepid::FieldContainer<double> &A, const Intrepid::FieldContainer<double> &B,
+  void SerialDenseWrapper::addFCs(Camellia::FieldContainer<double> &A, const Camellia::FieldContainer<double> &B,
                                   double B_weight, double A_weight)
   {
     if (A.size() != B.size() )

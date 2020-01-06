@@ -7,7 +7,7 @@
 #ifndef SerialDenseWrapper_h
 #define SerialDenseWrapper_h
 
-#include "Intrepid_FieldContainer.hpp"
+#include "Camellia_FieldContainer.hpp"
 
 #include "Epetra_RowMatrix.h"
 #include "Epetra_SerialDenseMatrix.h"
@@ -19,115 +19,117 @@ namespace Camellia
 {
   class SerialDenseWrapper
   {
-    static Epetra_SerialDenseMatrix convertFCToSDM(const Intrepid::FieldContainer<double> &A, Epetra_DataAccess CV = ::Copy);
-    static void convertSDMToFC(Intrepid::FieldContainer<double>& A_fc, const Epetra_SerialDenseMatrix &A);
+    static Epetra_SerialDenseMatrix convertFCToSDM(const Camellia::FieldContainer<double> &A, Epetra_DataAccess CV = ::Copy);
+    static void convertSDMToFC(Camellia::FieldContainer<double>& A_fc, const Epetra_SerialDenseMatrix &A);
   public:
     // gives X = scalarA*A+scalarB*B (overwrites A)
-    static void add(Intrepid::FieldContainer<double> &X, const Intrepid::FieldContainer<double> &A, const Intrepid::FieldContainer<double> &B, double scalarA = 1.0, double scalarB = 1.0);
+    static void add(Camellia::FieldContainer<double> &X, const Camellia::FieldContainer<double> &A, const Camellia::FieldContainer<double> &B, double scalarA = 1.0, double scalarB = 1.0);
     
-    static double condest(const Intrepid::FieldContainer<double> &A, bool assumeSPD = false);
+    static double condest(const Camellia::FieldContainer<double> &A, bool assumeSPD = false);
     
-    static double dot(const Intrepid::FieldContainer<double> &a, const Intrepid::FieldContainer<double> &b);
+    static double dot(const Camellia::FieldContainer<double> &a, const Camellia::FieldContainer<double> &b);
     
-    static int determinantAndInverse(Intrepid::FieldContainer<double> &detValues, Intrepid::FieldContainer<double> &outInverses,
-                                     const Intrepid::FieldContainer<double> &inMatrices);
+    static int determinantAndInverse(Camellia::FieldContainer<double> &detValues, Camellia::FieldContainer<double> &outInverses,
+                                     const Camellia::FieldContainer<double> &inMatrices);
     
-    static int extractFCFromEpetra_RowMatrix(const Epetra_RowMatrix &A, Intrepid::FieldContainer<double> &A_fc);
+    static int extractFCFromEpetra_RowMatrix(const Epetra_RowMatrix &A, Camellia::FieldContainer<double> &A_fc);
     
-    static void filterMatrix(Intrepid::FieldContainer<double> &filteredMatrix, const Intrepid::FieldContainer<double> &matrix,
+    static void filterMatrix(Camellia::FieldContainer<double> &filteredMatrix, const Camellia::FieldContainer<double> &matrix,
                              const std::set<int> &rowOrdinals, const std::set<int> &colOrdinals);
     
-    static int eigenvalues(const Intrepid::FieldContainer<double> &A,
-                           Intrepid::FieldContainer<double> &lambda_real,
-                           Intrepid::FieldContainer<double> &lambda_imag);
+    static int eigenvalues(const Camellia::FieldContainer<double> &A,
+                           Camellia::FieldContainer<double> &lambda_real,
+                           Camellia::FieldContainer<double> &lambda_imag);
     
-    static int eigenvalues(const Intrepid::FieldContainer<double> &A,
-                           Intrepid::FieldContainer<double> &lambda_real,
-                           Intrepid::FieldContainer<double> &lambda_imag,
-                           Intrepid::FieldContainer<double> &eigvectors, // if empty, skips eigvector determination
+    static int eigenvalues(const Camellia::FieldContainer<double> &A,
+                           Camellia::FieldContainer<double> &lambda_real,
+                           Camellia::FieldContainer<double> &lambda_imag,
+                           Camellia::FieldContainer<double> &eigvectors, // if empty, skips eigvector determination
                            bool computeRight); // if computeRight = false, will compute left eigenvectors.
     
     // ! provides an implementation of getEnumeration that uses std::vector<int> instead.  In the context of debugging, Teuchos::Array<int>, which is what Intrepid::FieldContainer uses, can be prohibitively slow.
+    static int getEnumeration(const std::vector<int> &index, const Camellia::FieldContainer<double> &fc);
+    
     static int getEnumeration(const std::vector<int> &index, const Intrepid::FieldContainer<double> &fc);
 
-    // ! returns a lambda function that depends dynamically on the values in index, and at generation time on the dimensions of fc.  Intended to provide a faster version than either Intrepid::FieldContainer or the above getEnumeration() (which should perhaps be deleted).
-    static std::function<int()> getEnumerator(const std::vector<int> &index, const Intrepid::FieldContainer<double> &fc);
+    // ! returns a lambda function that depends dynamically on the values in index, and at generation time on the dimensions of fc.  Intended to provide a faster version than either Camellia::FieldContainer or the above getEnumeration() (which should perhaps be deleted).
+    static std::function<int()> getEnumerator(const std::vector<int> &index, const Camellia::FieldContainer<double> &fc);
     
-    static bool matrixIsSymmetric(Intrepid::FieldContainer<double> &A, double relTol = 1e-12, double absTol = 1e-14);
+    static bool matrixIsSymmetric(Camellia::FieldContainer<double> &A, double relTol = 1e-12, double absTol = 1e-14);
     
-    static bool matrixIsSymmetric(Intrepid::FieldContainer<double> &A, std::vector<std::pair<int,int>> &asymmetricEntries,
+    static bool matrixIsSymmetric(Camellia::FieldContainer<double> &A, std::vector<std::pair<int,int>> &asymmetricEntries,
                                   double relTol = 1e-12, double absTol = 1e-14);
     
     // gives X = A*B.  Must pass in 2D arrays, even for vectors!
-    static void multiply(Intrepid::FieldContainer<double> &X, const Intrepid::FieldContainer<double> &A,
-                         const Intrepid::FieldContainer<double> &B, char TransposeA = 'N', char TransposeB = 'N');
+    static void multiply(Camellia::FieldContainer<double> &X, const Camellia::FieldContainer<double> &A,
+                         const Camellia::FieldContainer<double> &B, char TransposeA = 'N', char TransposeB = 'N');
     
-    static void multiplyFCByWeight(Intrepid::FieldContainer<double> & fc, double weight);
+    static void multiplyFCByWeight(Camellia::FieldContainer<double> & fc, double weight);
     
     // wrapper for SDM multiply + add routine.  Must pass in 2D arrays, even for vectors!
     // X = ScalarThis*X + ScalarAB*A*B
-    static void multiplyAndAdd(Intrepid::FieldContainer<double> &X, const Intrepid::FieldContainer<double> &A,
-                               const Intrepid::FieldContainer<double> &B,
+    static void multiplyAndAdd(Camellia::FieldContainer<double> &X, const Camellia::FieldContainer<double> &A,
+                               const Camellia::FieldContainer<double> &B,
                                char TransposeA, char TransposeB, double ScalarAB, double ScalarThis);
     
-    static Intrepid::FieldContainer<double> getSubMatrix(Intrepid::FieldContainer<double> &A, std::set<unsigned> &rowIndices,
+    static Camellia::FieldContainer<double> getSubMatrix(Camellia::FieldContainer<double> &A, std::set<unsigned> &rowIndices,
                                                          std::set<unsigned> &colIndices, bool warnOfNonzeroOffBlockEntries = false);
     
-    static void roundZeros(Intrepid::FieldContainer<double> &A, double tol);
+    static void roundZeros(Camellia::FieldContainer<double> &A, double tol);
     
-    static void scaleBySymmetricDiagonal(Intrepid::FieldContainer<double> &A);
+    static void scaleBySymmetricDiagonal(Camellia::FieldContainer<double> &A);
     
-    static int solveSystem(Intrepid::FieldContainer<double> &x, Intrepid::FieldContainer<double> &A,
-                           Intrepid::FieldContainer<double> &b, bool useATranspose = false);
+    static int solveSystem(Camellia::FieldContainer<double> &x, Camellia::FieldContainer<double> &A,
+                           Camellia::FieldContainer<double> &b, bool useATranspose = false);
     
-    static int solveSystemLeastSquares(Intrepid::FieldContainer<double> &x,
-                                       const Intrepid::FieldContainer<double> &A,
-                                       const Intrepid::FieldContainer<double> &b);
+    static int solveSystemLeastSquares(Camellia::FieldContainer<double> &x,
+                                       const Camellia::FieldContainer<double> &A,
+                                       const Camellia::FieldContainer<double> &b);
     
-    static int solveSystemMultipleRHS(Intrepid::FieldContainer<double> &x, Intrepid::FieldContainer<double> &A,
-                                      Intrepid::FieldContainer<double> &b, bool useATranspose = false);
+    static int solveSystemMultipleRHS(Camellia::FieldContainer<double> &x, Camellia::FieldContainer<double> &A,
+                                      Camellia::FieldContainer<double> &b, bool useATranspose = false);
     
-    static int solveSystemUsingQR(Intrepid::FieldContainer<double> &x, Intrepid::FieldContainer<double> &A,
-                                  Intrepid::FieldContainer<double> &b, bool useATranspose = false, // would be better default to true because that involves no data movement
+    static int solveSystemUsingQR(Camellia::FieldContainer<double> &x, Camellia::FieldContainer<double> &A,
+                                  Camellia::FieldContainer<double> &b, bool useATranspose = false, // would be better default to true because that involves no data movement
                                   bool allowOverwriteOfA = false);
     
     // ! A_SPD is left as in lower-triangular factored format; bx on input is the RHS b; on output, it's the solution x = A \ b.
-    static int solveSPDSystemLAPACKCholesky(Intrepid::FieldContainer<double> &bx, Intrepid::FieldContainer<double> &A_SPD);
+    static int solveSPDSystemLAPACKCholesky(Camellia::FieldContainer<double> &bx, Camellia::FieldContainer<double> &A_SPD);
     
-    static int solveSPDSystemMultipleRHS(Intrepid::FieldContainer<double> &x, Intrepid::FieldContainer<double> &A_SPD,
-                                         Intrepid::FieldContainer<double> &b, bool allowOverwriteOfA = false);
+    static int solveSPDSystemMultipleRHS(Camellia::FieldContainer<double> &x, Camellia::FieldContainer<double> &A_SPD,
+                                         Camellia::FieldContainer<double> &b, bool allowOverwriteOfA = false);
     
-    static void transposeMatrix(Intrepid::FieldContainer<double> &A);
+    static void transposeMatrix(Camellia::FieldContainer<double> &A);
     
-    static void transposeSquareMatrix(Intrepid::FieldContainer<double> &A);
+    static void transposeSquareMatrix(Camellia::FieldContainer<double> &A);
     
     //! Returns the reciprocal of the 1-norm condition number of the matrix in A
     /*!
      \param A In
-     A rank-2 Intrepid::FieldContainer with equal first and second dimensions.
+     A rank-2 Camellia::FieldContainer with equal first and second dimensions.
      
      \return the 1-norm condition number if successful; -1 otherwise.
      */
-    static double getMatrixConditionNumber(Intrepid::FieldContainer<double> &A);
+    static double getMatrixConditionNumber(Camellia::FieldContainer<double> &A);
     
     //! Returns the reciprocal of the 2-norm condition number of the matrix in A
     /*!
      \param A In
-     A rank-2 Intrepid::FieldContainer with equal first and second dimensions.
+     A rank-2 Camellia::FieldContainer with equal first and second dimensions.
      
      \return the 2-norm condition number if successful; -1 otherwise.
      */
-    static double getMatrixConditionNumber2Norm(Intrepid::FieldContainer<double> &A, bool ignoreZeroEigenvalues = true);
+    static double getMatrixConditionNumber2Norm(Camellia::FieldContainer<double> &A, bool ignoreZeroEigenvalues = true);
     
     // These methods for testing positive (semi)definiteness do not work.  As noted in comments below, need to do an eigenvalue solve.
     //  //! Returns true if all the eigenvalues are greater than zero
     //  /*!
     //   \param A In
-    //   A rank-2 Intrepid::FieldContainer with equal first and second dimensions.
+    //   A rank-2 Camellia::FieldContainer with equal first and second dimensions.
     //
     //   \return true if all the eigenvalues are positive; false otherwise.
     //   */
-    //  static bool matrixIsPositiveDefinite(Intrepid::FieldContainer<double> &A)
+    //  static bool matrixIsPositiveDefinite(Camellia::FieldContainer<double> &A)
     //  {
     //    cout << "WARNING: matrixIsPositiveDefinite() does not work.  Need to set up an eigenvalue solve, not an SVD!\n";
     //    /*
@@ -146,20 +148,20 @@ namespace Camellia
     //  //! Returns true if all the eigenvalues are greater than or equal to zero
     //  /*!
     //   \param A In
-    //   A rank-2 Intrepid::FieldContainer with equal first and second dimensions.
+    //   A rank-2 Camellia::FieldContainer with equal first and second dimensions.
     //
     //   \return true if all the eigenvalues are non-negative; false otherwise.
     //   */
-    //  static bool matrixIsPositiveSemiDefinite(Intrepid::FieldContainer<double> &A)
+    //  static bool matrixIsPositiveSemiDefinite(Camellia::FieldContainer<double> &A)
     //  {
     //    cout << "WARNING: matrixIsPositiveSemiDefinite() does not work.  Need to set up an eigenvalue solve, not an SVD!\n";
     //    return getMatrixConditionNumber2Norm(A, true) > 0.0;
     //  }
     
-    static void writeMatrixToMatlabFile(const std::string& filePath, Intrepid::FieldContainer<double> &A);
+    static void writeMatrixToMatlabFile(const std::string& filePath, Camellia::FieldContainer<double> &A);
     
     
-    static void addFCs(Intrepid::FieldContainer<double> &A, const Intrepid::FieldContainer<double> &B,
+    static void addFCs(Camellia::FieldContainer<double> &A, const Camellia::FieldContainer<double> &B,
                        double B_weight = 1.0, double A_weight = 1.0);
   };
 }

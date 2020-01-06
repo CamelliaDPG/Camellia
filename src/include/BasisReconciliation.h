@@ -14,7 +14,7 @@
 #ifndef Camellia_debug_BasisReconciliation_h
 #define Camellia_debug_BasisReconciliation_h
 
-#include "Intrepid_FieldContainer.hpp"
+#include "Camellia_FieldContainer.hpp"
 
 #include "RefinementPattern.h"
 
@@ -26,7 +26,7 @@ namespace Camellia
 {
 struct SubBasisReconciliationWeights
 {
-  Intrepid::FieldContainer<double> weights; // indices are (fine, coarse)
+  Camellia::FieldContainer<double> weights; // indices are (fine, coarse)
   std::set<int> fineOrdinals;
   std::set<int> coarseOrdinals;
   
@@ -44,13 +44,13 @@ class BasisReconciliation
   // cached values:
   typedef unsigned Permutation;
   typedef pair< Camellia::Basis<>*, Camellia::Basis<>*> BasisPair; // fineBasis first.
-  map< pair<BasisPair, Permutation>, Intrepid::FieldContainer<double> > _simpleReconciliationWeights; // simple: no sides involved
+  map< pair<BasisPair, Permutation>, Camellia::FieldContainer<double> > _simpleReconciliationWeights; // simple: no sides involved
   map< pair< pair< SideBasisRestriction, SideBasisRestriction >, Permutation >, SubBasisReconciliationWeights > _sideReconciliationWeights;
 private:
   typedef pair< BasisPair, RefinementBranch > RefinedBasisPair; // fineBasis (the one on the refined element) is first in the BasisPair
   typedef pair< pair< SideBasisRestriction, SideBasisRestriction >, RefinementBranch > SideRefinedBasisPair;
   typedef pair< pair< SubcellBasisRestriction, SubcellBasisRestriction >, RefinementBranch > SubcellRefinedBasisPair;
-  map< pair<RefinedBasisPair, Permutation>, Intrepid::FieldContainer<double> > _simpleReconcilationWeights_h;
+  map< pair<RefinedBasisPair, Permutation>, Camellia::FieldContainer<double> > _simpleReconcilationWeights_h;
   map< pair< SideRefinedBasisPair, Permutation> , SubBasisReconciliationWeights > _sideReconcilationWeights_h;
 
   // this is the only map that actually needs to remain, after the code simplification described above...
@@ -75,7 +75,7 @@ private:
   typedef pair<PermutedRefinedBasisPairDomainOrdinals, FieldOps> TermTracedCacheKey;
   map<TermTracedCacheKey, SubBasisReconciliationWeights> _termsTraced;
   
-  static Intrepid::FieldContainer<double> filterBasisValues(const Intrepid::FieldContainer<double> &basisValues, std::set<int> &filter);
+  static Camellia::FieldContainer<double> filterBasisValues(const Camellia::FieldContainer<double> &basisValues, std::set<int> &filter);
 
   static SubBasisReconciliationWeights filterToInclude(std::set<int> &rowOrdinals, std::set<int> &colOrdinals, const SubBasisReconciliationWeights &weights);
 public:
@@ -160,7 +160,7 @@ public:
 
 public:
   // !! this method exposed publicly primarily for testing purposes.
-  static void mapFineSubcellPointsToCoarseDomain(Intrepid::FieldContainer<double> &coarseDomainPoints, const Intrepid::FieldContainer<double> &fineSubcellPoints,
+  static void mapFineSubcellPointsToCoarseDomain(Camellia::FieldContainer<double> &coarseDomainPoints, const Camellia::FieldContainer<double> &fineSubcellPoints,
       unsigned fineSubcellDimension,
       unsigned fineSubcellOrdinalInFineDomain,
       unsigned fineDomainDim,

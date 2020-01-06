@@ -39,9 +39,9 @@ public:
 
   void updateCells(const set<GlobalIndexType> &cellIDs);
 
-  void values(Intrepid::FieldContainer<double> &values, BasisCachePtr basisCache);
+  void values(Camellia::FieldContainer<double> &values, BasisCachePtr basisCache);
 
-  bool mapRefCellPointsUsingExactGeometry(Intrepid::FieldContainer<double> &cellPoints, const Intrepid::FieldContainer<double> &refCellPoints, GlobalIndexType cellID);
+  bool mapRefCellPointsUsingExactGeometry(Camellia::FieldContainer<double> &cellPoints, const Camellia::FieldContainer<double> &refCellPoints, GlobalIndexType cellID);
 
   TFunctionPtr<double> dx();
   TFunctionPtr<double> dy();

@@ -37,9 +37,9 @@ private:
   };
   
   //helper functions for query functions
-  //  int getNextActiveIndex(Intrepid::FieldContainer<int> &partitionedActiveCells);
-  //  static GlobalIndexType getIndexOfGID(int myNode, Intrepid::FieldContainer<GlobalIndexType> &partitionedActiveCells,GlobalIndexType globalID);
-  //  vector<GlobalIndexType> getListOfActiveGlobalIDs(Intrepid::FieldContainer<GlobalIndexType> partitionedActiveCells);
+  //  int getNextActiveIndex(Camellia::FieldContainer<int> &partitionedActiveCells);
+  //  static GlobalIndexType getIndexOfGID(int myNode, Camellia::FieldContainer<GlobalIndexType> &partitionedActiveCells,GlobalIndexType globalID);
+  //  vector<GlobalIndexType> getListOfActiveGlobalIDs(Camellia::FieldContainer<GlobalIndexType> partitionedActiveCells);
 
   static set<GlobalIndexType> getRankLocalCellIDs(Mesh* mesh);
 

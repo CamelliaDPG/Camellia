@@ -27,7 +27,7 @@ public:
   virtual Scalar value(double x, double y);
   virtual Scalar value(double x, double y, double z);
   virtual Scalar value(double x, double y, double z, double t);
-  virtual void values(Intrepid::FieldContainer<Scalar> &values, BasisCachePtr basisCache);
+  virtual void values(Camellia::FieldContainer<Scalar> &values, BasisCachePtr basisCache);
 };
 }
 #endif

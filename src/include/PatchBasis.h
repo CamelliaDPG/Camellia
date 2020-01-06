@@ -7,7 +7,7 @@
 #ifndef DPG_PATCH_BASIS
 #define DPG_PATCH_BASIS
 
-#include "Intrepid_FieldContainer.hpp"
+#include "Camellia_FieldContainer.hpp"
 
 // Shards includes
 #include "Shards_CellTopology.hpp"

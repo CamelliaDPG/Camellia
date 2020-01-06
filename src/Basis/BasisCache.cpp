@@ -135,7 +135,7 @@ void BasisCache::initVolumeCache(bool createSideCacheToo, bool tensorProductTopo
       numCubPoints = 0;
     }
 
-    _cubPoints = Intrepid::FieldContainer<double>(numCubPoints, cubDim);
+    _cubPoints = Camellia::FieldContainer<double>(numCubPoints, cubDim);
     _cubWeights.resize(numCubPoints);
 
     if (numCubPoints > 0)
@@ -171,7 +171,7 @@ void BasisCache::initVolumeCache(bool createSideCacheToo, bool tensorProductTopo
   }
 }
 
-void BasisCache::initVolumeCache(const Intrepid::FieldContainer<double> &refPoints, const Intrepid::FieldContainer<double> &cubWeights)
+void BasisCache::initVolumeCache(const Camellia::FieldContainer<double> &refPoints, const Camellia::FieldContainer<double> &cubWeights)
 {
   // lightweight guy for when the ref points are known in advance
   _sideIndex = -1;
@@ -298,7 +298,7 @@ BasisCache::BasisCache(ElementTypePtr elemType, MeshPtr mesh, bool testVsTest,
   initVolumeCache(createSideCacheToo, tensorProductTopologyMeansSpaceTime);
 }
 
-BasisCache::BasisCache(const Intrepid::FieldContainer<double> &physicalCellNodes, CellTopoPtr cellTopo,
+BasisCache::BasisCache(const Camellia::FieldContainer<double> &physicalCellNodes, CellTopoPtr cellTopo,
                        DofOrdering &trialOrdering, int maxTestDegree, bool createSideCacheToo, bool tensorProductTopologyMeansSpaceTime)
 {
   _cellTopo = cellTopo;
@@ -310,7 +310,7 @@ BasisCache::BasisCache(const Intrepid::FieldContainer<double> &physicalCellNodes
   setPhysicalCellNodes(physicalCellNodes,vector<GlobalIndexType>(),createSideCacheToo);
 }
 
-BasisCache::BasisCache(const Intrepid::FieldContainer<double> &physicalCellNodes,
+BasisCache::BasisCache(const Camellia::FieldContainer<double> &physicalCellNodes,
                        shards::CellTopology &cellTopo,
                        DofOrdering &trialOrdering, int maxTestDegree, bool createSideCacheToo)
 {
@@ -324,8 +324,8 @@ BasisCache::BasisCache(const Intrepid::FieldContainer<double> &physicalCellNodes
   setPhysicalCellNodes(physicalCellNodes,vector<GlobalIndexType>(),createSideCacheToo);
 }
 
-BasisCache::BasisCache(const Intrepid::FieldContainer<double> &physicalCellNodes, CellTopoPtr cellTopo,
-                       const Intrepid::FieldContainer<double> &refCellPoints, const Intrepid::FieldContainer<double> &cubWeights, int cubatureDegree)
+BasisCache::BasisCache(const Camellia::FieldContainer<double> &physicalCellNodes, CellTopoPtr cellTopo,
+                       const Camellia::FieldContainer<double> &refCellPoints, const Camellia::FieldContainer<double> &cubWeights, int cubatureDegree)
 {
   _cellTopo = cellTopo;
   _isSideCache = false;
@@ -349,7 +349,7 @@ BasisCache::BasisCache(shards::CellTopology &cellTopo, int cubDegree, bool creat
   initVolumeCache(createSideCacheToo, tensorProductTopologyMeansSpaceTime);
 }
 
-BasisCache::BasisCache(const Intrepid::FieldContainer<double> &physicalCellNodes, shards::CellTopology &cellTopo, int cubDegree, bool createSideCacheToo)
+BasisCache::BasisCache(const Camellia::FieldContainer<double> &physicalCellNodes, shards::CellTopology &cellTopo, int cubDegree, bool createSideCacheToo)
 {
   // NOTE that this constructor's a bit dangerous, in that we lack information about the brokenness
   // of the sides; we may under-integrate for cells with broken sides...
@@ -365,7 +365,7 @@ BasisCache::BasisCache(const Intrepid::FieldContainer<double> &physicalCellNodes
   setPhysicalCellNodes(physicalCellNodes,vector<GlobalIndexType>(),createSideCacheToo);
 }
 
-BasisCache::BasisCache(const Intrepid::FieldContainer<double> &physicalCellNodes, CellTopoPtr cellTopo, int cubDegree, bool createSideCacheToo, bool tensorProductTopologyMeansSpaceTime)
+BasisCache::BasisCache(const Camellia::FieldContainer<double> &physicalCellNodes, CellTopoPtr cellTopo, int cubDegree, bool createSideCacheToo, bool tensorProductTopologyMeansSpaceTime)
 {
   // NOTE that this constructor's a bit dangerous, in that we lack information about the brokenness
   // of the sides; we may under-integrate for cells with broken sides...
@@ -381,9 +381,9 @@ BasisCache::BasisCache(const Intrepid::FieldContainer<double> &physicalCellNodes
 }
 
 // "fake" side constructor
-BasisCache::BasisCache(int fakeSideOrdinal, BasisCachePtr volumeCache, const Intrepid::FieldContainer<double> &volumeRefPoints,
-                       const Intrepid::FieldContainer<double> &sideNormals, const Intrepid::FieldContainer<double> &cellSideParities,
-                       Intrepid::FieldContainer<double> sideNormalsSpaceTime)
+BasisCache::BasisCache(int fakeSideOrdinal, BasisCachePtr volumeCache, const Camellia::FieldContainer<double> &volumeRefPoints,
+                       const Camellia::FieldContainer<double> &sideNormals, const Camellia::FieldContainer<double> &cellSideParities,
+                       Camellia::FieldContainer<double> sideNormalsSpaceTime)
 {
   _cellTopo = volumeCache->cellTopology(); // VOLUME cell topo.
   _isSideCache = true;
@@ -513,8 +513,8 @@ BasisCache::BasisCache(int sideIndex, BasisCachePtr volumeCache, int trialDegree
 }
 
 // side constructor with specific ref points
-BasisCache::BasisCache(int sideIndex, BasisCachePtr volumeCache, const Intrepid::FieldContainer<double> &refPoints,
-                       const Intrepid::FieldContainer<double> &cubWeights, int cubatureDegree)
+BasisCache::BasisCache(int sideIndex, BasisCachePtr volumeCache, const Camellia::FieldContainer<double> &refPoints,
+                       const Camellia::FieldContainer<double> &cubWeights, int cubatureDegree)
 {
   _cellTopo = volumeCache->cellTopology(); // VOLUME cell topo.
   _isSideCache = true;
@@ -566,7 +566,7 @@ CellTopoPtr BasisCache::cellTopology()
   return _cellTopo;
 }
 
-Intrepid::FieldContainer<double> BasisCache::computeParametricPoints()
+Camellia::FieldContainer<double> BasisCache::computeParametricPoints()
 {
   if (_cubPoints.size()==0)
   {
@@ -592,7 +592,7 @@ Intrepid::FieldContainer<double> BasisCache::computeParametricPoints()
   else
   {
     TEUCHOS_TEST_FOR_EXCEPTION(true, std::invalid_argument, "Unsupported cellTopo");
-    return Intrepid::FieldContainer<double>(0);
+    return Camellia::FieldContainer<double>(0);
   }
 }
 
@@ -679,8 +679,8 @@ void BasisCache::setCubaturePhase(int phaseOrdinal)
   int offset = _phasePointOrdinalOffsets[phaseOrdinal];
   int phasePointCount = _phasePointOrdinalOffsets[phaseOrdinal+1] - offset;
   int cubSpaceDim = _allCubPoints.dimension(1);
-  Intrepid::FieldContainer<double> cubPoints(phasePointCount, cubSpaceDim);
-  Intrepid::FieldContainer<double> cubWeights(phasePointCount);
+  Camellia::FieldContainer<double> cubPoints(phasePointCount, cubSpaceDim);
+  Camellia::FieldContainer<double> cubWeights(phasePointCount);
   for (int ptOrdinal=0; ptOrdinal<phasePointCount; ptOrdinal++)
   {
     cubWeights(ptOrdinal) = _allCubWeights(offset+ptOrdinal);
@@ -800,7 +800,7 @@ void BasisCache::discardPhysicalNodeInfo()
   // probably not that useful.  Plus, if we are reusing a BasisCache
   // it's not infrequently the case that the sizes next time we fill
   // them will be the same...
-  // resize all the related Intrepid::FieldContainers to reclaim their memory
+  // resize all the related Camellia::FieldContainers to reclaim their memory
 //  _cellIDs.clear();
 //  _cellJacobian.resize(0);
 //  _cellJacobInv.resize(0);
@@ -816,31 +816,31 @@ void BasisCache::discardPhysicalNodeInfo()
   _sideNormalsIsValid = false;
 }
 
-Intrepid::FieldContainer<double> & BasisCache::getWeightedMeasures()
+Camellia::FieldContainer<double> & BasisCache::getWeightedMeasures()
 {
   if (!_weightedMeasureIsValid) recomputeMeasures();
   return _weightedMeasure;
 }
 
-const Intrepid::FieldContainer<double> &BasisCache::getPhysicalCellNodes()
+const Camellia::FieldContainer<double> &BasisCache::getPhysicalCellNodes()
 {
   return _physicalCellNodes;
 }
 
-const Intrepid::FieldContainer<double> & BasisCache::getPhysicalCubaturePoints()
+const Camellia::FieldContainer<double> & BasisCache::getPhysicalCubaturePoints()
 {
   if (!_physCubPointsIsValid) determinePhysicalPoints();
   return _physCubPoints;
 }
 
-Intrepid::FieldContainer<double> BasisCache::getCellMeasures()
+Camellia::FieldContainer<double> BasisCache::getCellMeasures()
 {
   if (_cubWeights.size() != 0)
   {
     if (!_weightedMeasureIsValid) recomputeMeasures();
     int numCells = _weightedMeasure.dimension(0);
     int numPoints = _weightedMeasure.dimension(1);
-    Intrepid::FieldContainer<double> cellMeasures(numCells);
+    Camellia::FieldContainer<double> cellMeasures(numCells);
     for (int cellIndex=0; cellIndex<numCells; cellIndex++)
     {
       for (int ptIndex=0; ptIndex<numPoints; ptIndex++)
@@ -853,7 +853,7 @@ Intrepid::FieldContainer<double> BasisCache::getCellMeasures()
   else if (_mesh != Teuchos::null)
   {
     int cellOrdinal = 0;
-    Intrepid::FieldContainer<double> cellMeasures(_cellIDs.size());
+    Camellia::FieldContainer<double> cellMeasures(_cellIDs.size());
     for (GlobalIndexType cellID : _cellIDs)
     {
       cellMeasures(cellOrdinal) = _mesh->getCellMeasure(cellID);
@@ -866,22 +866,22 @@ Intrepid::FieldContainer<double> BasisCache::getCellMeasures()
   }
 }
 
-const Intrepid::FieldContainer<double> & BasisCache::getCubatureWeights()
+const Camellia::FieldContainer<double> & BasisCache::getCubatureWeights()
 {
   return _cubWeights;
 }
 
-const Intrepid::FieldContainer<double> & BasisCache::getJacobian()
+const Camellia::FieldContainer<double> & BasisCache::getJacobian()
 {
   if (!_cellJacobianIsValid) determineJacobian();
   return _cellJacobian;
 }
-const Intrepid::FieldContainer<double> & BasisCache::getJacobianDet()
+const Camellia::FieldContainer<double> & BasisCache::getJacobianDet()
 {
   if (!_cellJacobianDeterminantIsValid) determineJacobianInverseAndDeterminant();
   return _cellJacobDet;
 }
-const Intrepid::FieldContainer<double> & BasisCache::getJacobianInv()
+const Camellia::FieldContainer<double> & BasisCache::getJacobianInv()
 {
   if (!_cellJacobianInverseIsValid) determineJacobianInverseAndDeterminant();
   return _cellJacobInv;
@@ -890,7 +890,7 @@ const Intrepid::FieldContainer<double> & BasisCache::getJacobianInv()
 constFCPtr BasisCache::getValues(BasisPtr basis, Camellia::EOperator op,
                                  bool useCubPointsSideRefCell)
 {
-  const Intrepid::FieldContainer<double>* cubPoints;
+  const Camellia::FieldContainer<double>* cubPoints;
   if (useCubPointsSideRefCell)
   {
     TEUCHOS_TEST_FOR_EXCEPTION(_cubPointsSideRefCell.size()==0,std::invalid_argument,"useCubPointsSideRefCell = true, but _cubPointsSideRefCell is empty!");
@@ -934,7 +934,7 @@ constFCPtr BasisCache::getValues(BasisPtr basis, Camellia::EOperator op,
     return result;
   }
   // if we get here, we should have a standard Intrepid operator, in which case we should
-  // be able to: size a Intrepid::FieldContainer appropriately, and then call basis->getValues
+  // be able to: size a Camellia::FieldContainer appropriately, and then call basis->getValues
 
   // But let's do just check that we have a standard Intrepid operator
   if ( (op >= Camellia::OP_X) || (op <  Camellia::OP_VALUE) )
@@ -1064,7 +1064,7 @@ constFCPtr BasisCache::getTransformedWeightedValues(BasisPtr basis, Camellia::EO
   constFCPtr unWeightedValues = getTransformedValues(basis,op, useCubPointsSideRefCell);
   Teuchos::Array<int> dimensions;
   unWeightedValues->dimensions(dimensions);
-  Teuchos::RCP< Intrepid::FieldContainer<double> > weightedValues = Teuchos::rcp( new Intrepid::FieldContainer<double>(dimensions) );
+  Teuchos::RCP< Camellia::FieldContainer<double> > weightedValues = Teuchos::rcp( new Camellia::FieldContainer<double>(dimensions) );
   fst::multiplyMeasure<double>(*weightedValues, getWeightedMeasures(), *unWeightedValues);
   if (CACHE_TRANSFORMED_VALUES)
     _knownValuesTransformedWeighted[key] = weightedValues;
@@ -1099,7 +1099,7 @@ constFCPtr BasisCache::getTransformedWeightedValues(BasisPtr basis, Camellia::EO
   return _basisCacheSides[sideOrdinal]->getTransformedWeightedValues(basis,op,useCubPointsSideRefCell);
 }
 
-const Intrepid::FieldContainer<double> & BasisCache::getPhysicalCubaturePointsForSide(int sideOrdinal)
+const Camellia::FieldContainer<double> & BasisCache::getPhysicalCubaturePointsForSide(int sideOrdinal)
 {
   return _basisCacheSides[sideOrdinal]->getPhysicalCubaturePoints();
 }
@@ -1127,17 +1127,17 @@ int BasisCache::getSideIndex() const
   return _sideIndex;
 }
 
-const Intrepid::FieldContainer<double> & BasisCache::getSideUnitNormals(int sideOrdinal)
+const Camellia::FieldContainer<double> & BasisCache::getSideUnitNormals(int sideOrdinal)
 {
   return _basisCacheSides[sideOrdinal]->getSideNormals();
 }
 
-const Intrepid::FieldContainer<double>& BasisCache::getRefCellPoints()
+const Camellia::FieldContainer<double>& BasisCache::getRefCellPoints()
 {
   return _cubPoints;
 }
 
-Intrepid::FieldContainer<double> BasisCache::getRefCellPointsForPhysicalPoints(const Intrepid::FieldContainer<double> &physicalPoints, int cellIndex)
+Camellia::FieldContainer<double> BasisCache::getRefCellPointsForPhysicalPoints(const Camellia::FieldContainer<double> &physicalPoints, int cellIndex)
 {
   int numPoints = physicalPoints.dimension(0);
   int spaceDim = physicalPoints.dimension(1);
@@ -1148,12 +1148,12 @@ Intrepid::FieldContainer<double> BasisCache::getRefCellPointsForPhysicalPoints(c
     TEUCHOS_TEST_FOR_EXCEPTION(true, std::invalid_argument, "BasisCache::getRefCellPointsForPhysicalPoints does not support tensorial degree > 1.");
   }
 
-  Intrepid::FieldContainer<double> refCellPoints(numPoints,spaceDim);
+  Camellia::FieldContainer<double> refCellPoints(numPoints,spaceDim);
   Intrepid::CellTools<double>::mapToReferenceFrame(refCellPoints,physicalPoints,_physicalCellNodes,_cellTopo->getShardsTopology(),cellIndex);
   return refCellPoints;
 }
 
-const Intrepid::FieldContainer<double> &BasisCache::getSideRefCellPointsInVolumeCoordinates()
+const Camellia::FieldContainer<double> &BasisCache::getSideRefCellPointsInVolumeCoordinates()
 {
   if (! isSideCache())
   {
@@ -1163,13 +1163,13 @@ const Intrepid::FieldContainer<double> &BasisCache::getSideRefCellPointsInVolume
   return _cubPointsSideRefCell;
 }
 
-void BasisCache::setRefCellPoints(const Intrepid::FieldContainer<double> &pointsRefCell)
+void BasisCache::setRefCellPoints(const Camellia::FieldContainer<double> &pointsRefCell)
 {
-  Intrepid::FieldContainer<double> cubWeights;
+  Camellia::FieldContainer<double> cubWeights;
   this->setRefCellPoints(pointsRefCell, cubWeights);
 }
 
-void BasisCache::setRefCellPoints(const Intrepid::FieldContainer<double> &pointsRefCell, const Intrepid::FieldContainer<double> &cubWeights,
+void BasisCache::setRefCellPoints(const Camellia::FieldContainer<double> &pointsRefCell, const Camellia::FieldContainer<double> &cubWeights,
                                   int cubatureDegree, bool recomputePhysicalMeasures)
 {
   _cubPoints = pointsRefCell;
@@ -1202,13 +1202,13 @@ void BasisCache::setRefCellPoints(const Intrepid::FieldContainer<double> &points
   _physCubPointsIsValid = false;
 }
 
-const Intrepid::FieldContainer<double> & BasisCache::getSideNormals()
+const Camellia::FieldContainer<double> & BasisCache::getSideNormals()
 {
   if (!_sideNormalsIsValid) determineSideNormals();
   return _sideNormals;
 }
 
-const Intrepid::FieldContainer<double> & BasisCache::getSideNormalsSpaceTime()
+const Camellia::FieldContainer<double> & BasisCache::getSideNormalsSpaceTime()
 {
   if (!_sideNormalsIsValid) determineSideNormals();
   if (_cellTopo->getTensorialDegree() == 0)
@@ -1218,13 +1218,13 @@ const Intrepid::FieldContainer<double> & BasisCache::getSideNormalsSpaceTime()
   return _sideNormalsSpaceTime;
 }
 
-void BasisCache::setSideNormals(Intrepid::FieldContainer<double> &sideNormals)
+void BasisCache::setSideNormals(Camellia::FieldContainer<double> &sideNormals)
 {
   _sideNormals = sideNormals;
   _sideNormalsIsValid = true;
 }
 
-const Intrepid::FieldContainer<double> & BasisCache::getCellSideParities()
+const Camellia::FieldContainer<double> & BasisCache::getCellSideParities()
 {
   return _cellSideParities;
 }
@@ -1234,11 +1234,11 @@ void BasisCache::setCellIDs(const std::vector<GlobalIndexType> &cellIDs)
   _cellIDs = cellIDs;
 }
 
-void BasisCache::setCellSideParities(const Intrepid::FieldContainer<double> &cellSideParities)
+void BasisCache::setCellSideParities(const Camellia::FieldContainer<double> &cellSideParities)
 {
   TEUCHOS_TEST_FOR_EXCEPTION((cellSideParities.rank() != 2) || (cellSideParities.dimension(1) < _cellTopo->getSideCount()),
                              std::invalid_argument, "Incorrectly sized cellSideParities");
-  if (&_cellSideParities != &cellSideParities) // self-assignment prohibited in Intrepid::FieldContainer
+  if (&_cellSideParities != &cellSideParities) // self-assignment prohibited in Camellia::FieldContainer
   {
     _cellSideParities = cellSideParities;
   }
@@ -1292,14 +1292,14 @@ void BasisCache::determinePhysicalPoints()
     // unsupported for now
     TEUCHOS_TEST_FOR_EXCEPTION(true, std::invalid_argument, "Reference-cell based transformations presently unsupported");
     // (what we need to do here is either copy the _cubPoints to _numCells locations in _physCubPoints,
-    //  or make the relevant Function simply work on the reference points, returning a Intrepid::FieldContainer
+    //  or make the relevant Function simply work on the reference points, returning a Camellia::FieldContainer
     //  with a numCells dimension.  The latter makes more sense to me--and is more efficient.  The Function should
     //  simply call BasisCache->getRefCellPoints()...  On this idea, we don't even have to do anything special in
     //  BasisCache: the if clause above only serves to save us a little computational effort.)
   }
   if ( ! TFunction<double>::isNull(_transformationFxn) )
   {
-    Intrepid::FieldContainer<double> newPhysCubPoints(_numCells,numPoints,cellDim);
+    Camellia::FieldContainer<double> newPhysCubPoints(_numCells,numPoints,cellDim);
     BasisCachePtr thisPtr = Teuchos::rcp(this,false);
 
     // the usual story: we don't want to use the transformation Function inside the BasisCache
@@ -1362,7 +1362,7 @@ void BasisCache::determineJacobian()
     if (_composeTransformationFxnWithMeshTransformation)
     {
       // then we need to multiply one Jacobian by the other
-      Intrepid::FieldContainer<double> fxnJacobian(_numCells,numCubPoints,cellDim,cellDim);
+      Camellia::FieldContainer<double> fxnJacobian(_numCells,numCubPoints,cellDim,cellDim);
       // a little quirky, but since _transformationFxn calls BasisCache in its values determination,
       // we disable the _transformationFxn during the call to grad()->values()
       // TODO: consider moving this logic (turning on/off the BasisCache's transformation function during the values call for gradients) into MeshTransformationFunction.  It seems like that's better from an encapsulation point of view.  Unless it is the case that sometimes we *do* want the transformationFunction gradient to be transformed according to some BasisCache's transformation function.  But that seems unlikely.
@@ -1374,7 +1374,7 @@ void BasisCache::determineJacobian()
 //      cout << "fxnJacobian:\n" << fxnJacobian;
 //      cout << "_cellJacobian before multiplication:\n" << _cellJacobian;
       // TODO: check that the order of multiplication is correct!
-      Intrepid::FieldContainer<double> cellJacobianToMultiply(_cellJacobian); // tensorMultiplyDataData doesn't support multiplying in place
+      Camellia::FieldContainer<double> cellJacobianToMultiply(_cellJacobian); // tensorMultiplyDataData doesn't support multiplying in place
       fst::tensorMultiplyDataData<double>( _cellJacobian, fxnJacobian, cellJacobianToMultiply );
 //      cout << "_cellJacobian after multiplication:\n" << _cellJacobian;
     }
@@ -1407,25 +1407,25 @@ void BasisCache::determineJacobianInverseAndDeterminant()
   _cellJacobianDeterminantIsValid = true;
 }
 
-void BasisCache::setJacobian(const Intrepid::FieldContainer<double> &jacobian)
+void BasisCache::setJacobian(const Camellia::FieldContainer<double> &jacobian)
 {
   _cellJacobian = jacobian;
   _cellJacobianIsValid = true;
 }
 
-void BasisCache::setJacobianDet(const Intrepid::FieldContainer<double> &jacobianDet)
+void BasisCache::setJacobianDet(const Camellia::FieldContainer<double> &jacobianDet)
 {
   _cellJacobDet = jacobianDet;
   _cellJacobianDeterminantIsValid = true;
 }
 
-void BasisCache::setJacobianInv(const Intrepid::FieldContainer<double> &jacobianInv)
+void BasisCache::setJacobianInv(const Camellia::FieldContainer<double> &jacobianInv)
 {
   _cellJacobInv = jacobianInv;
   _cellJacobianInverseIsValid = true;
 }
 
-void BasisCache::setPhysicalCellNodes(const Intrepid::FieldContainer<double> &physicalCellNodes,
+void BasisCache::setPhysicalCellNodes(const Camellia::FieldContainer<double> &physicalCellNodes,
                                       const vector<GlobalIndexType> &cellIDs, bool createSideCacheToo)
 {
   discardPhysicalNodeInfo(); // necessary to get rid of transformed values, which will no longer be valid
@@ -1476,7 +1476,7 @@ void BasisCache::setPhysicalCellNodes(const Intrepid::FieldContainer<double> &ph
   }
 }
 
-void BasisCache::setPhysicalCubaturePoints(const Intrepid::FieldContainer<double> &physicalCubaturePoints)
+void BasisCache::setPhysicalCubaturePoints(const Camellia::FieldContainer<double> &physicalCubaturePoints)
 {
   _physCubPoints = physicalCubaturePoints;
   _physCubPointsIsValid = true;
@@ -1506,12 +1506,12 @@ BasisCachePtr BasisCache::parametric1DCache(int cubatureDegree)
   return BasisCache::basisCache1D(0, 1, cubatureDegree);
 }
 
-BasisCachePtr BasisCache::parametricQuadCache(int cubatureDegree, const Intrepid::FieldContainer<double> &refCellPoints, int sideCacheIndex)
+BasisCachePtr BasisCache::parametricQuadCache(int cubatureDegree, const Camellia::FieldContainer<double> &refCellPoints, int sideCacheIndex)
 {
   int numCells = 1;
   int numVertices = 4;
   int spaceDim = 2;
-  Intrepid::FieldContainer<double> physicalCellNodes(numCells,numVertices,spaceDim);
+  Camellia::FieldContainer<double> physicalCellNodes(numCells,numVertices,spaceDim);
   physicalCellNodes(0,0,0) = 0;
   physicalCellNodes(0,0,1) = 0;
   physicalCellNodes(0,1,0) = 1;
@@ -1543,7 +1543,7 @@ BasisCachePtr BasisCache::parametricQuadCache(int cubatureDegree)
   int numCells = 1;
   int numVertices = 4;
   int spaceDim = 2;
-  Intrepid::FieldContainer<double> physicalCellNodes(numCells,numVertices,spaceDim);
+  Camellia::FieldContainer<double> physicalCellNodes(numCells,numVertices,spaceDim);
   physicalCellNodes(0,0,0) = 0;
   physicalCellNodes(0,0,1) = 0;
   physicalCellNodes(0,1,0) = 1;
@@ -1562,7 +1562,7 @@ BasisCachePtr BasisCache::basisCache1D(double x0, double x1, int cubatureDegree)
   int numCells = 1;
   int numVertices = 2;
   int spaceDim = 1;
-  Intrepid::FieldContainer<double> physicalCellNodes(numCells,numVertices,spaceDim);
+  Camellia::FieldContainer<double> physicalCellNodes(numCells,numVertices,spaceDim);
   physicalCellNodes(0,0,0) = x0;
   physicalCellNodes(0,1,0) = x1;
   shards::CellTopology line_2(shards::getCellTopologyData<shards::Line<2> >() );
@@ -1588,15 +1588,15 @@ BasisCachePtr BasisCache::basisCacheForCell(MeshPtr mesh, ConstMeshTopologyViewP
   // mesh is allowed to be null
   vector<GlobalIndexType> cellIDs(1,cellID);
   bool includeCellDimension = true;
-  Intrepid::FieldContainer<double> physicalCellNodes = meshTopology->physicalCellNodesForCell(cellID, includeCellDimension);
+  Camellia::FieldContainer<double> physicalCellNodes = meshTopology->physicalCellNodesForCell(cellID, includeCellDimension);
   if (tensorProductTopologyMeansSpaceTime && (elemType->cellTopoPtr->getTensorialDegree() > 0))
   {
     CellTopoPtr spaceTimeTopo = elemType->cellTopoPtr;
     // check that the physical nodes are in fact in a tensor product structure:
     CellTopoPtr spaceTopo = elemType->cellTopoPtr->getTensorialComponent();
     CellTopoPtr timeTopo = CellTopology::line();
-    Intrepid::FieldContainer<double> physicalCellNodesSpace(1, spaceTopo->getNodeCount(), spaceTopo->getDimension());
-    Intrepid::FieldContainer<double> physicalCellNodesTime(1, timeTopo->getNodeCount(), timeTopo->getDimension());
+    Camellia::FieldContainer<double> physicalCellNodesSpace(1, spaceTopo->getNodeCount(), spaceTopo->getDimension());
+    Camellia::FieldContainer<double> physicalCellNodesTime(1, timeTopo->getNodeCount(), timeTopo->getDimension());
     vector<unsigned> componentNodes(2);
     for (int spaceNodeOrdinal=0; spaceNodeOrdinal<spaceTopo->getNodeCount(); spaceNodeOrdinal++)
     {
@@ -1662,7 +1662,7 @@ BasisCachePtr BasisCache::basisCacheForCell(MeshPtr mesh, ConstMeshTopologyViewP
 }
 
 BasisCachePtr BasisCache::basisCacheForCellTopology(CellTopoPtr cellTopo, int cubatureDegree,
-    const Intrepid::FieldContainer<double> &physicalCellNodes,
+    const Camellia::FieldContainer<double> &physicalCellNodes,
     bool createSideCacheToo,
     bool tensorProductTopologyMeansSpaceTime)
 {
@@ -1673,10 +1673,10 @@ BasisCachePtr BasisCache::basisCacheForCellTopology(CellTopoPtr cellTopo, int cu
 
     // check that the physical nodes are in fact in a tensor product structure:
     CellTopoPtr spaceTopo = spaceTimeTopo->getTensorialComponent();
-    Intrepid::FieldContainer<double> physicalCellNodesSpace(numCells, spaceTopo->getNodeCount(), max((int)spaceTopo->getDimension(),1));
+    Camellia::FieldContainer<double> physicalCellNodesSpace(numCells, spaceTopo->getNodeCount(), max((int)spaceTopo->getDimension(),1));
 
     CellTopoPtr timeTopo = CellTopology::line();
-    Intrepid::FieldContainer<double> physicalCellNodesTime(numCells, timeTopo->getNodeCount(), timeTopo->getDimension());
+    Camellia::FieldContainer<double> physicalCellNodesTime(numCells, timeTopo->getNodeCount(), timeTopo->getDimension());
 
     if (spaceTopo->getDimension()==0)   // spatial topology is just a Node; handle this separately
     {
@@ -1772,7 +1772,7 @@ BasisCachePtr BasisCache::basisCacheForReferenceCell(shards::CellTopology &shard
 
 BasisCachePtr BasisCache::basisCacheForReferenceCell(CellTopoPtr cellTopo, int cubatureDegree, bool createSideCacheToo, bool tensorProductTopologyMeansSpaceTime)
 {
-  Intrepid::FieldContainer<double> cellNodes(cellTopo->getNodeCount(),cellTopo->getDimension());
+  Camellia::FieldContainer<double> cellNodes(cellTopo->getNodeCount(),cellTopo->getDimension());
   CamelliaCellTools::refCellNodesForTopology(cellNodes, cellTopo);
   cellNodes.resize(1,cellNodes.dimension(0),cellNodes.dimension(1));
 
@@ -1783,7 +1783,7 @@ BasisCachePtr BasisCache::basisCacheForReferenceCell(CellTopoPtr cellTopo, int c
 BasisCachePtr BasisCache::basisCacheForRefinedReferenceCell(CellTopoPtr cellTopo, int cubatureDegree,
     RefinementBranch refinementBranch, bool createSideCacheToo, bool tensorProductTopologyMeansSpaceTime)
 {
-  Intrepid::FieldContainer<double> cellNodes = RefinementPattern::descendantNodesRelativeToAncestorReferenceCell(refinementBranch);
+  Camellia::FieldContainer<double> cellNodes = RefinementPattern::descendantNodesRelativeToAncestorReferenceCell(refinementBranch);
 
   cellNodes.resize(1,cellNodes.dimension(0),cellNodes.dimension(1));
   
@@ -1795,7 +1795,7 @@ BasisCachePtr BasisCache::basisCacheForRefinedReferenceCell(CellTopoPtr cellTopo
 BasisCachePtr BasisCache::basisCacheForRefinedReferenceCell(shards::CellTopology &cellTopo, int cubatureDegree,
     RefinementBranch refinementBranch, bool createSideCacheToo)
 {
-  Intrepid::FieldContainer<double> cellNodes = RefinementPattern::descendantNodesRelativeToAncestorReferenceCell(refinementBranch);
+  Camellia::FieldContainer<double> cellNodes = RefinementPattern::descendantNodesRelativeToAncestorReferenceCell(refinementBranch);
 
   cellNodes.resize(1,cellNodes.dimension(0),cellNodes.dimension(1));
   BasisCachePtr basisCache = Teuchos::rcp(new BasisCache(cellNodes,cellTopo,cubatureDegree,createSideCacheToo));
@@ -1806,7 +1806,7 @@ BasisCachePtr BasisCache::basisCacheForRefinedReferenceCell(int cubatureDegree, 
                                                             bool createSideCacheToo, bool tensorProductTopologyMeansSpaceTime)
 {
   CellTopoPtr cellTopo = RefinementPattern::descendantTopology(refinementBranch);
-  Intrepid::FieldContainer<double> cellNodes = RefinementPattern::descendantNodesRelativeToAncestorReferenceCell(refinementBranch);
+  Camellia::FieldContainer<double> cellNodes = RefinementPattern::descendantNodesRelativeToAncestorReferenceCell(refinementBranch);
   
   cellNodes.resize(1,cellNodes.dimension(0),cellNodes.dimension(1));
   BasisCachePtr basisCache = BasisCache::basisCacheForCellTopology(cellTopo, cubatureDegree, cellNodes, createSideCacheToo, tensorProductTopologyMeansSpaceTime);
@@ -1816,7 +1816,7 @@ BasisCachePtr BasisCache::basisCacheForRefinedReferenceCell(int cubatureDegree, 
 BasisCachePtr BasisCache::quadBasisCache(double width, double height, int cubDegree, bool createSideCacheToo)
 {
   shards::CellTopology quad_4(shards::getCellTopologyData<shards::Quadrilateral<4> >() );
-  Intrepid::FieldContainer<double> physicalCellNodes(1,4,2);
+  Camellia::FieldContainer<double> physicalCellNodes(1,4,2);
   physicalCellNodes(0,0,0) = 0;
   physicalCellNodes(0,0,1) = 0;
   physicalCellNodes(0,1,0) = width;
@@ -1836,7 +1836,7 @@ void BasisCache::determineSideNormals()
     int numPoints = _cubPointsSideRefCell.dimension(0);
     if (_cellTopo->getDimension() > 1)
     {
-      Intrepid::FieldContainer<double> normalLengths(_numCells, numPoints);
+      Camellia::FieldContainer<double> normalLengths(_numCells, numPoints);
       
       if (_cellTopo->getTensorialDegree() == 0)
       {
@@ -1955,9 +1955,9 @@ BasisCachePtr BasisCache::sideBasisCache(Teuchos::RCP<BasisCache> volumeCache, i
 }
 
 // ! As the name suggests, this method is not meant for widespread use.  Intended mainly for flux-to-field mappings
-BasisCachePtr BasisCache::fakeSideCache(int fakeSideOrdinal, BasisCachePtr volumeCache, const Intrepid::FieldContainer<double> &volumeRefPoints,
-                                        const Intrepid::FieldContainer<double> &sideNormals, const Intrepid::FieldContainer<double> &cellSideParities,
-                                        Intrepid::FieldContainer<double> fakeSideNormalsSpaceTime)
+BasisCachePtr BasisCache::fakeSideCache(int fakeSideOrdinal, BasisCachePtr volumeCache, const Camellia::FieldContainer<double> &volumeRefPoints,
+                                        const Camellia::FieldContainer<double> &sideNormals, const Camellia::FieldContainer<double> &cellSideParities,
+                                        Camellia::FieldContainer<double> fakeSideNormalsSpaceTime)
 {
   int numSides = volumeCache->cellTopology()->getSideCount();
 

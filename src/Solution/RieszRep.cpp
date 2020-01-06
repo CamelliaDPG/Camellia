@@ -30,11 +30,11 @@ MeshPtr TRieszRep<Scalar>::mesh()
 }
 
 template <typename Scalar>
-map<GlobalIndexType,Intrepid::FieldContainer<Scalar> > TRieszRep<Scalar>::integrateFunctional()
+map<GlobalIndexType,Camellia::FieldContainer<Scalar> > TRieszRep<Scalar>::integrateFunctional()
 {
   // NVR: changed this to only return integrated values for rank-local cells.
 
-  map<GlobalIndexType,Intrepid::FieldContainer<Scalar> > cellRHS;
+  map<GlobalIndexType,Camellia::FieldContainer<Scalar> > cellRHS;
   set<GlobalIndexType> cellIDs = _mesh->cellIDsInPartition();
   for (set<GlobalIndexType>::iterator cellIDIt=cellIDs.begin(); cellIDIt !=cellIDs.end(); cellIDIt++)
   {
@@ -46,10 +46,10 @@ map<GlobalIndexType,Intrepid::FieldContainer<Scalar> > TRieszRep<Scalar>::integr
     int cubEnrich = 0; // set to zero for release
     BasisCachePtr basisCache = BasisCache::basisCacheForCell(_mesh,cellID,true,cubEnrich);
 
-    Intrepid::FieldContainer<Scalar> rhsValues(1,numTestDofs);
+    Camellia::FieldContainer<Scalar> rhsValues(1,numTestDofs);
     _functional->integrate(rhsValues, testOrderingPtr, basisCache);
 
-    Intrepid::FieldContainer<Scalar> rhsVals(numTestDofs);
+    Camellia::FieldContainer<Scalar> rhsVals(numTestDofs);
     for (int i = 0; i<numTestDofs; i++)
     {
       rhsVals(i) = rhsValues(0,i);
@@ -74,14 +74,14 @@ void TRieszRep<Scalar>::computeRieszRep(int cubatureEnrichment)
 
     BasisCachePtr basisCache = BasisCache::basisCacheForCell(_mesh,cellID,true,cubatureEnrichment);
 
-    Intrepid::FieldContainer<Scalar> rhsValues(1,numTestDofs);
+    Camellia::FieldContainer<Scalar> rhsValues(1,numTestDofs);
     _functional->integrate(rhsValues, testOrderingPtr, basisCache);
     if (_printAll)
     {
       cout << "RieszRep: LinearTerm values for cell " << cellID << ":\n " << rhsValues << endl;
     }
 
-    Intrepid::FieldContainer<Scalar> ipMatrix(1,numTestDofs,numTestDofs);
+    Camellia::FieldContainer<Scalar> ipMatrix(1,numTestDofs,numTestDofs);
     _ip->computeInnerProductMatrix(ipMatrix,testOrderingPtr, basisCache);
 
     bool printOutRiesz = false;
@@ -93,7 +93,7 @@ void TRieszRep<Scalar>::computeRieszRep(int cubatureEnrichment)
 
     // TODO: replace this with something that uses Cholesky (see BF::factoredCholeskySolve())
     rhsValues.resize(numTestDofs,1);
-    Intrepid::FieldContainer<Scalar> rieszRepDofs = rhsValues; // copy so we can do the dot product below after solving
+    Camellia::FieldContainer<Scalar> rieszRepDofs = rhsValues; // copy so we can do the dot product below after solving
     ipMatrix.resize(numTestDofs,numTestDofs);
     rhsValues.resize(numTestDofs,1);
     
@@ -124,7 +124,7 @@ void TRieszRep<Scalar>::computeRieszRep(int cubatureEnrichment)
       cout << " ================================================================" << endl;
     }
 
-    Intrepid::FieldContainer<Scalar> dofs(numTestDofs);
+    Camellia::FieldContainer<Scalar> dofs(numTestDofs);
     for (int i = 0; i<numTestDofs; i++)
     {
       dofs(i) = rieszRepDofs(i,0);
@@ -162,9 +162,9 @@ const map<GlobalIndexType,double> & TRieszRep<Scalar>::getNormsSquared()
   return _rieszRepNormSquared;
 }
 
-// computes riesz representation over a single element - map is from int (testID) to Intrepid::FieldContainer of values (sized cellIndex, numPoints)
+// computes riesz representation over a single element - map is from int (testID) to Camellia::FieldContainer of values (sized cellIndex, numPoints)
 template <typename Scalar>
-void TRieszRep<Scalar>::computeRepresentationValues(Intrepid::FieldContainer<Scalar> &values, int testID, Camellia::EOperator op, BasisCachePtr basisCache)
+void TRieszRep<Scalar>::computeRepresentationValues(Camellia::FieldContainer<Scalar> &values, int testID, Camellia::EOperator op, BasisCachePtr basisCache)
 {
 
   if (_repsNotComputed)
@@ -187,7 +187,7 @@ void TRieszRep<Scalar>::computeRepresentationValues(Intrepid::FieldContainer<Sca
   bool testBasisIsVolumeBasis = (spaceDim == testBasis->domainTopology()->getDimension());
   bool useCubPointsSideRefCell = testBasisIsVolumeBasis && basisCache->isSideCache();
 
-  Teuchos::RCP< const Intrepid::FieldContainer<double> > transformedBasisValues = basisCache->getTransformedValues(testBasis,op,useCubPointsSideRefCell);
+  Teuchos::RCP< const Camellia::FieldContainer<double> > transformedBasisValues = basisCache->getTransformedValues(testBasis,op,useCubPointsSideRefCell);
 
   int rank = values.rank() - 2; // if values are shaped as (C,P), scalar...
   if (rank > 1)
@@ -250,7 +250,7 @@ double TRieszRep<Scalar>::computeAlternativeNormSqOnCell(TIPPtr<Scalar> ip, Glob
   Teuchos::RCP<BasisCache> basisCache =   BasisCache::basisCacheForCell(_mesh, cellID, testVsTest,1);
 
   int numDofs = testOrdering->totalDofs();
-  Intrepid::FieldContainer<Scalar> ipMat(1,numDofs,numDofs);
+  Camellia::FieldContainer<Scalar> ipMat(1,numDofs,numDofs);
   ip->computeInnerProductMatrix(ipMat,testOrdering,basisCache);
 
   if (_rieszRepDofs.find(cellID) == _rieszRepDofs.end())
@@ -284,7 +284,7 @@ TRieszRepPtr<Scalar> TRieszRep<Scalar>::rieszRep(MeshPtr mesh, TIPPtr<Scalar> ip
 }
 
 template <typename Scalar>
-const Intrepid::FieldContainer<Scalar> & TRieszRep<Scalar>::getCoefficientsForCell(GlobalIndexType cellID)
+const Camellia::FieldContainer<Scalar> & TRieszRep<Scalar>::getCoefficientsForCell(GlobalIndexType cellID)
 {
   if (_rieszRepDofs.find(cellID) == _rieszRepDofs.end())
   {
@@ -292,7 +292,7 @@ const Intrepid::FieldContainer<Scalar> & TRieszRep<Scalar>::getCoefficientsForCe
     std::cout << "WARNING: request for getCoefficientsForCell in RieszRep for cell " << cellID;
     std::cout << ", which does not have coefficients (locally) set; initializing coefficients to 0.0.\n";
     int testSize = _mesh->getElementType(cellID)->testOrderPtr->totalDofs();
-    Intrepid::FieldContainer<Scalar> coefficients(testSize);
+    Camellia::FieldContainer<Scalar> coefficients(testSize);
     coefficients.initialize(0.0);
     _rieszRepDofs[cellID] = coefficients;
   }
@@ -300,7 +300,7 @@ const Intrepid::FieldContainer<Scalar> & TRieszRep<Scalar>::getCoefficientsForCe
 }
 
 template <typename Scalar>
-void TRieszRep<Scalar>::setCoefficientsForCell(GlobalIndexType cellID, const Intrepid::FieldContainer<Scalar> &coefficients)
+void TRieszRep<Scalar>::setCoefficientsForCell(GlobalIndexType cellID, const Camellia::FieldContainer<Scalar> &coefficients)
 {
   int expectedTestSize = _mesh->getElementType(cellID)->testOrderPtr->totalDofs();
   if (coefficients.size() != expectedTestSize)

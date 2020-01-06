@@ -32,13 +32,13 @@ vector<Scalar> SimpleVectorFunction<Scalar>::value(double x, double y, double z)
 }
 
 template <typename Scalar>
-void SimpleVectorFunction<Scalar>::values(Intrepid::FieldContainer<Scalar> &values, BasisCachePtr basisCache)
+void SimpleVectorFunction<Scalar>::values(Camellia::FieldContainer<Scalar> &values, BasisCachePtr basisCache)
 {
   this->CHECK_VALUES_RANK(values);
   int numCells = values.dimension(0);
   int numPoints = values.dimension(1);
 
-  const Intrepid::FieldContainer<double> *points = &(basisCache->getPhysicalCubaturePoints());
+  const Camellia::FieldContainer<double> *points = &(basisCache->getPhysicalCubaturePoints());
   int spaceDim = points->dimension(2);
   for (int cellIndex=0; cellIndex<numCells; cellIndex++)
   {

@@ -27,7 +27,7 @@ private:
   TFunctionPtr<Scalar> _f1, _f2;
 public:
   ProductFunction(TFunctionPtr<Scalar> f1, TFunctionPtr<Scalar> f2);
-  void values(Intrepid::FieldContainer<Scalar> &values, BasisCachePtr basisCache);
+  void values(Camellia::FieldContainer<Scalar> &values, BasisCachePtr basisCache);
   virtual bool boundaryValueOnly();
 
   TFunctionPtr<Scalar> f1();

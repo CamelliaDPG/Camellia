@@ -42,7 +42,7 @@ public:
 //  FunctionPtr _function;
 //public:
 //  SqrtFunction(FunctionPtr function) : Function(0), _function(function) {}
-//  void values(Intrepid::FieldContainer<double> &values, BasisCachePtr basisCache) {
+//  void values(Camellia::FieldContainer<double> &values, BasisCachePtr basisCache) {
 //    int numCells = values.dimension(0);
 //    int numPoints = values.dimension(1);
 //
@@ -62,7 +62,7 @@ public:
 //  double _bound;
 //public:
 //  BoundedSqrtFunction(FunctionPtr function, double bound) : Function(0), _function(function), _bound(bound) {}
-//  void values(Intrepid::FieldContainer<double> &values, BasisCachePtr basisCache) {
+//  void values(Camellia::FieldContainer<double> &values, BasisCachePtr basisCache) {
 //    int numCells = values.dimension(0);
 //    int numPoints = values.dimension(1);
 //

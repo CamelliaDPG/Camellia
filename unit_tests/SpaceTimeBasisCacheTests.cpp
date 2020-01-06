@@ -23,7 +23,7 @@ using namespace Camellia;
 
 namespace
 {
-typedef Intrepid::FieldContainer<double> FC;
+typedef Camellia::FieldContainer<double> FC;
 
 void addCellDimension(FC &fc)
 {
@@ -43,9 +43,9 @@ void stripCellDimension(FC &fc)
   fc.resize(dim);
 }
 
-Intrepid::FieldContainer<double> getScaledTranslatedRefNodes(CellTopoPtr topo, double nodeScaling, double nodeTranslation)
+Camellia::FieldContainer<double> getScaledTranslatedRefNodes(CellTopoPtr topo, double nodeScaling, double nodeTranslation)
 {
-  Intrepid::FieldContainer<double> nodes(topo->getNodeCount(),topo->getDimension());
+  Camellia::FieldContainer<double> nodes(topo->getNodeCount(),topo->getDimension());
   CamelliaCellTools::refCellNodesForTopology(nodes, topo);
   for (int nodeOrdinal=0; nodeOrdinal<topo->getNodeCount(); nodeOrdinal++)
   {
@@ -182,7 +182,7 @@ void testBasisTransformation(BasisPtr spaceTimeBasis, Camellia::EOperator op,
 
   FC expectedValues = spaceTimeValues;
   expectedValues.initialize(0.0); // zero out
-  vector<FC> componentValues = {spaceValues, timeValues};
+  vector< Intrepid::FieldContainer<double> > componentValues = {spaceValues, timeValues};
   vector<Intrepid::EOperator> componentOps = {spaceOpForSizing, timeOpForSizing};
   tensorBasis->getTensorValues(expectedValues, componentValues, componentOps);
 
@@ -525,7 +525,7 @@ TEUCHOS_UNIT_TEST( SpaceTimeBasisCache, GetValues )
 
     TensorBasis<>* tensorBasis = dynamic_cast<TensorBasis<>*>(spaceTimeBasis.get());
 
-    vector<FC> componentValues(2);
+    vector< Intrepid::FieldContainer<double> > componentValues(2);
     componentValues[0] = transformedSpatialValues;
     componentValues[1] = transformedTemporalValues;
     FC transformedSpaceTimeValuesExpected = transformedSpaceTimeValues;

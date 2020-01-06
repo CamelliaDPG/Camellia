@@ -37,8 +37,8 @@ void TimeMarchingProblem::trialTestOperators(int trialID, int testID,
 }
 
 
-void TimeMarchingProblem::applyBilinearFormData(Intrepid::FieldContainer<double> &trialValues,
-    Intrepid::FieldContainer<double> &testValues,
+void TimeMarchingProblem::applyBilinearFormData(Camellia::FieldContainer<double> &trialValues,
+    Camellia::FieldContainer<double> &testValues,
     int trialID, int testID, int operatorIndex,
     Teuchos::RCP<BasisCache> basisCache)
 {
@@ -105,7 +105,7 @@ bool TimeMarchingProblem::testHasTimeDerivative(int testID)
 }
 
 void TimeMarchingProblem::rhs(int testID, int operatorIndex, Teuchos::RCP<BasisCache> basisCache,
-                              Intrepid::FieldContainer<double> &values)
+                              Camellia::FieldContainer<double> &values)
 {
   if (testHasTimeDerivative(testID))
   {
@@ -127,12 +127,12 @@ void TimeMarchingProblem::setTimeStepSize(double dt)
   _dt = dt;
 }
 
-void TimeMarchingProblem::timeLHS(Intrepid::FieldContainer<double> trialValues, int trialID, Teuchos::RCP<BasisCache> basisCache)
+void TimeMarchingProblem::timeLHS(Camellia::FieldContainer<double> trialValues, int trialID, Teuchos::RCP<BasisCache> basisCache)
 {
   // default implementation leaves trialValues as they are.
 }
 
-void TimeMarchingProblem::timeRHS(Intrepid::FieldContainer<double> testValues, int testID, Teuchos::RCP<BasisCache> basisCache)
+void TimeMarchingProblem::timeRHS(Camellia::FieldContainer<double> testValues, int testID, Teuchos::RCP<BasisCache> basisCache)
 {
   // default implementation leaves testValues as they are.
 }

@@ -16,13 +16,13 @@ namespace Camellia
   {
     std::vector<FunctionPtr> _beta;
     bool _upwind;
-    std::vector<Intrepid::FieldContainer<double>> _valuesBuffers;
+    std::vector<Camellia::FieldContainer<double>> _valuesBuffers;
   public:
     UpwindIndicatorFunction(FunctionPtr beta, bool upwind);
     
     bool isZero(BasisCachePtr basisCache);
     
-    void values(Intrepid::FieldContainer<double> &values, BasisCachePtr basisCache);
+    void values(Camellia::FieldContainer<double> &values, BasisCachePtr basisCache);
     
     std::vector< TFunctionPtr<double> > memberFunctions();
     

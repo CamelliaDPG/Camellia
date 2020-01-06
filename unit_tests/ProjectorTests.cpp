@@ -31,7 +31,7 @@ void testProjectFunctionOnTensorTopoSides(CellTopoPtr spaceTopo, int H1Order, Ca
   int spaceDim = spaceTopo->getDimension();
   MeshTopologyPtr spatialMeshTopo = Teuchos::rcp( new MeshTopology(spaceDim) );
 
-  Intrepid::FieldContainer<double> cellNodes(spaceTopo->getNodeCount(),spaceTopo->getDimension());
+  Camellia::FieldContainer<double> cellNodes(spaceTopo->getNodeCount(),spaceTopo->getDimension());
   CamelliaCellTools::refCellNodesForTopology(cellNodes, spaceTopo);
   vector<vector<double>> cellVerticesVector;
   CamelliaCellTools::pointsVectorFromFC(cellVerticesVector, cellNodes);
@@ -46,14 +46,14 @@ void testProjectFunctionOnTensorTopoSides(CellTopoPtr spaceTopo, int H1Order, Ca
   bool createSideCache = true;
 
   IndexType cellID = 0;
-  Intrepid::FieldContainer<double> physicalCellNodes = spaceTimeMeshTopo->physicalCellNodesForCell(cellID);
+  Camellia::FieldContainer<double> physicalCellNodes = spaceTimeMeshTopo->physicalCellNodesForCell(cellID);
   physicalCellNodes.resize(1,spaceTimeTopo->getNodeCount(),spaceTimeTopo->getDimension());
   BasisCachePtr basisCache = BasisCache::basisCacheForCellTopology(spaceTimeTopo, cubatureDegree,
                              physicalCellNodes, createSideCache);
 
   BasisFactoryPtr basisFactory = BasisFactory::basisFactory();
 
-  Intrepid::FieldContainer<double> basisCoefficients;
+  Camellia::FieldContainer<double> basisCoefficients;
 
   double tol = 1e-15;
 

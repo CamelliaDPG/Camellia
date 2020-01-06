@@ -108,7 +108,7 @@ bool PolarizedFunction<Scalar>::isZero()
 }
 
 template <typename Scalar>
-void PolarizedFunction<Scalar>::values(Intrepid::FieldContainer<Scalar> &values, BasisCachePtr basisCache)
+void PolarizedFunction<Scalar>::values(Camellia::FieldContainer<Scalar> &values, BasisCachePtr basisCache)
 {
   this->CHECK_VALUES_RANK(values);
   static const double PI  = 3.141592653589793238462;
@@ -116,8 +116,8 @@ void PolarizedFunction<Scalar>::values(Intrepid::FieldContainer<Scalar> &values,
   int numCells = values.dimension(0);
   int numPoints = values.dimension(1);
 
-  const Intrepid::FieldContainer<double> *points = &(basisCache->getPhysicalCubaturePoints());
-  Intrepid::FieldContainer<double> polarPoints = *points;
+  const Camellia::FieldContainer<double> *points = &(basisCache->getPhysicalCubaturePoints());
+  Camellia::FieldContainer<double> polarPoints = *points;
   for (int cellIndex=0; cellIndex<numCells; cellIndex++)
   {
     for (int ptIndex=0; ptIndex<numPoints; ptIndex++)

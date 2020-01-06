@@ -52,8 +52,8 @@ void Boundary::buildLookupTables()
 }
 
 template <typename Scalar>
-void Boundary::bcsToImpose(Intrepid::FieldContainer<GlobalIndexType> &globalIndices,
-                           Intrepid::FieldContainer<Scalar> &globalValues, TBC<Scalar> &bc,
+void Boundary::bcsToImpose(Camellia::FieldContainer<GlobalIndexType> &globalIndices,
+                           Camellia::FieldContainer<Scalar> &globalValues, TBC<Scalar> &bc,
                            DofInterpreter* dofInterpreter)
 {
   set< GlobalIndexType > rankLocalCells = _mesh->cellIDsInPartition();
@@ -127,7 +127,7 @@ void Boundary::bcsToImpose(Intrepid::FieldContainer<GlobalIndexType> &globalIndi
                */
               BasisCachePtr basisCacheForImposition = isVolume ? basisCache : basisCache->getSideBasisCache(sideOrdinal);
               int numCells = 1;
-              Intrepid::FieldContainer<double> basisCoefficients(numCells,basis->getCardinality());
+              Camellia::FieldContainer<double> basisCoefficients(numCells,basis->getCardinality());
               Projector<double>::projectFunctionOntoBasisInterpolating(basisCoefficients, f, basis, basisCacheForImposition);
               basisCoefficients.resize(basis->getCardinality());
               
@@ -138,8 +138,8 @@ void Boundary::bcsToImpose(Intrepid::FieldContainer<GlobalIndexType> &globalIndi
                 matchingGlobalIndices.insert(subcellGlobalIndices.begin(),subcellGlobalIndices.end());
               }
               
-              Intrepid::FieldContainer<double> globalData;
-              Intrepid::FieldContainer<GlobalIndexType> globalDofIndices;
+              Camellia::FieldContainer<double> globalData;
+              Camellia::FieldContainer<GlobalIndexType> globalDofIndices;
 //              dofInterpreter->interpretLocalBasisCoefficients(cellID, var->ID(), sideOrdinal, basisCoefficientsToImpose, globalData, globalDofIndices);
               dofInterpreter->interpretLocalBasisCoefficients(cellID, var->ID(), sideOrdinal, basisCoefficients, globalData, globalDofIndices);
               for (int globalDofOrdinal=0; globalDofOrdinal<globalDofIndices.size(); globalDofOrdinal++)
@@ -252,7 +252,7 @@ void Boundary::bcsToImpose( vector<pair<GlobalIndexType,Scalar>> &globalDofIndic
           GlobalIndexType numCells = 1;
           if (numCells > 0)
           {
-            Intrepid::FieldContainer<double> dirichletValues(numCells,numDofsSide);
+            Camellia::FieldContainer<double> dirichletValues(numCells,numDofsSide);
             // project bc function onto side basis:
             BCPtr bcPtr = Teuchos::rcp(&bc, false);
             Teuchos::RCP<BCFunction<double>> bcFunction = BCFunction<double>::bcFunction(bcPtr, trialID);
@@ -260,8 +260,8 @@ void Boundary::bcsToImpose( vector<pair<GlobalIndexType,Scalar>> &globalDofIndic
             dirichletValues.resize(numDofsSide);
             if (bcFunction->imposeOnCell(0))
             {
-              Intrepid::FieldContainer<double> globalData;
-              Intrepid::FieldContainer<GlobalIndexType> globalDofIndices;
+              Camellia::FieldContainer<double> globalData;
+              Camellia::FieldContainer<GlobalIndexType> globalDofIndices;
 
               dofInterpreter->interpretLocalBasisCoefficients(cellID, trialID, sideOrdinal, dirichletValues, globalData, globalDofIndices);
               for (int globalDofOrdinal=0; globalDofOrdinal<globalDofIndices.size(); globalDofOrdinal++)
@@ -540,10 +540,10 @@ void Boundary::singletonBCsToImpose(vector<pair<GlobalIndexType,Scalar>> &dofInd
         
         for (int dofOrdinal : basisDofOrdinals)
         {
-          Intrepid::FieldContainer<double> basisCoefficients(basisForImposition->getCardinality());
+          Camellia::FieldContainer<double> basisCoefficients(basisForImposition->getCardinality());
           basisCoefficients[dofOrdinal] = 1.0;
-          Intrepid::FieldContainer<double> globalCoefficients;
-          Intrepid::FieldContainer<GlobalIndexType> globalDofIndices;
+          Camellia::FieldContainer<double> globalCoefficients;
+          Camellia::FieldContainer<GlobalIndexType> globalDofIndices;
           dofInterpreter->interpretLocalBasisCoefficients(cellID, trialID, sideForImposition, basisCoefficients,
                                                           globalCoefficients, globalDofIndices);
           double tol = 1e-14;
@@ -583,8 +583,8 @@ void Boundary::singletonBCsToImpose(vector<pair<GlobalIndexType,Scalar>> &dofInd
 
 namespace Camellia
 {
-  template void Boundary::bcsToImpose(Intrepid::FieldContainer<GlobalIndexType> &globalIndices,
-                                      Intrepid::FieldContainer<double> &globalValues, TBC<double> &bc,
+  template void Boundary::bcsToImpose(Camellia::FieldContainer<GlobalIndexType> &globalIndices,
+                                      Camellia::FieldContainer<double> &globalValues, TBC<double> &bc,
                                       DofInterpreter* dofInterpreter);
   template void Boundary::bcsToImpose(vector<pair<GlobalIndexType, double>> &globalDofIndicesAndValues,
                                       TBC<double> &bc, GlobalIndexType cellID,

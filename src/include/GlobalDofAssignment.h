@@ -101,7 +101,7 @@ public:
 //  virtual GlobalIndexType cellID(ElementTypePtr elemTypePtr, IndexType cellIndex, PartitionIndexType partitionNumber);
   virtual vector<GlobalIndexType> cellIDsOfElementType(PartitionIndexType partitionNumber, ElementTypePtr elemTypePtr);
   const set< GlobalIndexType > &cellsInPartition(PartitionIndexType partitionNumber) const;
-  Intrepid::FieldContainer<double> cellSideParitiesForCell( GlobalIndexType cellID );
+  Camellia::FieldContainer<double> cellSideParitiesForCell( GlobalIndexType cellID );
 
   // after calling any of these, must call rebuildLookups
   virtual void didHRefine(const set<GlobalIndexType> &parentCellIDs); // subclasses should call super
@@ -131,7 +131,7 @@ public:
   MeshPtr getMesh();
   MeshTopologyViewPtr getMeshTopology();
 
-  bool getPartitions(Intrepid::FieldContainer<GlobalIndexType> &partitions);
+  bool getPartitions(Camellia::FieldContainer<GlobalIndexType> &partitions);
   PartitionIndexType getPartitionCount();
 
   const map<GlobalIndexType,int>& getCellPRefinements() const;
@@ -148,22 +148,22 @@ public:
   virtual GlobalIndexType numPartitionOwnedGlobalFluxIndices() = 0;
   virtual GlobalIndexType numPartitionOwnedGlobalTraceIndices() = 0;
 
-  virtual void interpretLocalData(GlobalIndexType cellID, const Intrepid::FieldContainer<double> &localData,
-                                  Intrepid::FieldContainer<double> &globalData,
-                                  Intrepid::FieldContainer<GlobalIndexType> &globalDofIndices) = 0;
-  void interpretLocalCoefficients(GlobalIndexType cellID, const Intrepid::FieldContainer<double> &localCoefficients,
+  virtual void interpretLocalData(GlobalIndexType cellID, const Camellia::FieldContainer<double> &localData,
+                                  Camellia::FieldContainer<double> &globalData,
+                                  Camellia::FieldContainer<GlobalIndexType> &globalDofIndices) = 0;
+  void interpretLocalCoefficients(GlobalIndexType cellID, const Camellia::FieldContainer<double> &localCoefficients,
                                   Epetra_MultiVector &globalCoefficients, int columnOrdinal);
   template <typename Scalar>
-  void interpretLocalCoefficients(GlobalIndexType cellID, const Intrepid::FieldContainer<Scalar> &localCoefficients,
+  void interpretLocalCoefficients(GlobalIndexType cellID, const Camellia::FieldContainer<Scalar> &localCoefficients,
                                   TVectorPtr<Scalar> globalCoefficients, int columnOrdinal);
   virtual void interpretLocalBasisCoefficients(GlobalIndexType cellID, int varID, int sideOrdinal,
-                                               const Intrepid::FieldContainer<double> &basisCoefficients,
-                                               Intrepid::FieldContainer<double> &globalCoefficients,
-                                               Intrepid::FieldContainer<GlobalIndexType> &globalDofIndices) = 0;
-  virtual void interpretGlobalCoefficients(GlobalIndexType cellID, Intrepid::FieldContainer<double> &localCoefficients,
+                                               const Camellia::FieldContainer<double> &basisCoefficients,
+                                               Camellia::FieldContainer<double> &globalCoefficients,
+                                               Camellia::FieldContainer<GlobalIndexType> &globalDofIndices) = 0;
+  virtual void interpretGlobalCoefficients(GlobalIndexType cellID, Camellia::FieldContainer<double> &localCoefficients,
                                            const Epetra_MultiVector &globalCoefficients) = 0;
   // template <typename Scalar>
-  //   virtual void interpretGlobalCoefficients(GlobalIndexType cellID, Intrepid::FieldContainer<Scalar> &localCoefficients, const TVectorPtr<Scalar> globalCoefficients) = 0;
+  //   virtual void interpretGlobalCoefficients(GlobalIndexType cellID, Camellia::FieldContainer<Scalar> &localCoefficients, const TVectorPtr<Scalar> globalCoefficients) = 0;
 
   virtual set<GlobalIndexType> globalDofIndicesForCell(GlobalIndexType cellID) = 0;
 
@@ -205,7 +205,7 @@ public:
   void unregisterSolution(TSolutionPtr<double> solution);
 
   void setPartitions(std::vector< std::set<IndexType> > &partitions, bool rebuildLookups=true);
-  void setPartitions(Intrepid::FieldContainer<GlobalIndexType> &partitions, bool rebuildLookups=true);
+  void setPartitions(Camellia::FieldContainer<GlobalIndexType> &partitions, bool rebuildLookups=true);
   void setPartitionPolicy( MeshPartitionPolicyPtr partitionPolicy, bool repartitionAndMigrate=true );
 
   // static constructors:

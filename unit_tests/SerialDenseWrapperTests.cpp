@@ -14,7 +14,7 @@
 #include "SerialDenseWrapper.h"
 
 #include "Intrepid_CellTools.hpp"
-#include "Intrepid_FieldContainer.hpp"
+#include "Camellia_FieldContainer.hpp"
 
 #include <Teuchos_BLAS.hpp>
 
@@ -29,15 +29,15 @@ namespace
     int numCells = 1;
     int numPoints = 1;
     int spaceDim = 2;
-    Intrepid::FieldContainer<double> A(numCells,numPoints,spaceDim,spaceDim);
+    Camellia::FieldContainer<double> A(numCells,numPoints,spaceDim,spaceDim);
     A(0,0,0,0) = 1.0;
     A(0,0,1,1) = 1.0;
-    Intrepid::FieldContainer<double> expectedInverse = A;
-    Intrepid::FieldContainer<double> expectedDet(numCells,numPoints);
+    Camellia::FieldContainer<double> expectedInverse = A;
+    Camellia::FieldContainer<double> expectedDet(numCells,numPoints);
     expectedDet[0] = 1.0;
     
-    Intrepid::FieldContainer<double> detValues(numCells,numPoints);
-    Intrepid::FieldContainer<double> inverse(numCells,numPoints,spaceDim,spaceDim);
+    Camellia::FieldContainer<double> detValues(numCells,numPoints);
+    Camellia::FieldContainer<double> inverse(numCells,numPoints,spaceDim,spaceDim);
     
     SerialDenseWrapper::determinantAndInverse(detValues, inverse, A);
     
@@ -70,7 +70,7 @@ namespace
     int numPoints = 3;
     for (int spaceDim=1; spaceDim <= 3; spaceDim++)
     {
-      Intrepid::FieldContainer<double> jacobianData(numCells,numPoints,spaceDim,spaceDim);
+      Camellia::FieldContainer<double> jacobianData(numCells,numPoints,spaceDim,spaceDim);
       
       // set up some arbitrary data -- hopefully we don't stumble onto singular matrices this way
       for (int cellOrdinal=0; cellOrdinal<numCells; cellOrdinal++)
@@ -88,8 +88,8 @@ namespace
         }
       }
       
-      Intrepid::FieldContainer<double> detValues(numCells,numPoints);
-      Intrepid::FieldContainer<double> outInverses(numCells,numPoints,spaceDim,spaceDim);
+      Camellia::FieldContainer<double> detValues(numCells,numPoints);
+      Camellia::FieldContainer<double> outInverses(numCells,numPoints,spaceDim,spaceDim);
       
       int err = SerialDenseWrapper::determinantAndInverse(detValues, outInverses, jacobianData);
       
@@ -102,8 +102,8 @@ namespace
         std::cout << jacobianData;
       }
       
-      Intrepid::FieldContainer<double> expectedDetValues(numCells,numPoints);
-      Intrepid::FieldContainer<double> expectedOutInverses(numCells,numPoints,spaceDim,spaceDim);
+      Camellia::FieldContainer<double> expectedDetValues(numCells,numPoints);
+      Camellia::FieldContainer<double> expectedOutInverses(numCells,numPoints,spaceDim,spaceDim);
       
       Intrepid::CellTools<double>::setJacobianDet(expectedDetValues, jacobianData);
       Intrepid::CellTools<double>::setJacobianInv(expectedOutInverses, jacobianData );
@@ -119,9 +119,9 @@ namespace
   TEUCHOS_UNIT_TEST( SerialDenseWrapper, Multiply )
   {
     // X = A * B
-    Intrepid::FieldContainer<double> A(2,2);
-    Intrepid::FieldContainer<double> B(2,2);
-    Intrepid::FieldContainer<double> X(2,2), X_expected(2,2);
+    Camellia::FieldContainer<double> A(2,2);
+    Camellia::FieldContainer<double> B(2,2);
+    Camellia::FieldContainer<double> X(2,2), X_expected(2,2);
     
     A(0,0) = 1.0; A(0,1) = 4.0;
     A(1,0) = 2.0; A(1,1) = 5.0;
@@ -143,8 +143,8 @@ namespace
     // X = A * B
     int m = 20;
     int n = 30;
-    Intrepid::FieldContainer<double> A(m,n);
-    Intrepid::FieldContainer<double> A_T(n,m);
+    Camellia::FieldContainer<double> A(m,n);
+    Camellia::FieldContainer<double> A_T(n,m);
     
     for (int i=0; i<A.size(); i++)
     {
@@ -166,9 +166,9 @@ namespace
 //
 //    
 //    // X = A * B
-//    Intrepid::FieldContainer<double> A(2000,2000);
-//    Intrepid::FieldContainer<double> B(2000,2000);
-//    Intrepid::FieldContainer<double> X(2000,2000), X_expected(2000,2000);
+//    Camellia::FieldContainer<double> A(2000,2000);
+//    Camellia::FieldContainer<double> B(2000,2000);
+//    Camellia::FieldContainer<double> X(2000,2000), X_expected(2000,2000);
 //    
 //    A(0,0) = 1.0; A(0,1) = 4.0;
 //    A(1,0) = 2.0; A(1,1) = 5.0;
