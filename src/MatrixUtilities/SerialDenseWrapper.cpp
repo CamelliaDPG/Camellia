@@ -140,9 +140,13 @@ namespace Camellia {
     Teuchos::Array<int> dim(2);
     dim[0] = m;
     dim[1] = n;
-    double * firstEntry = (double *) &A(0,0); // again, casting away the const.  OK since we copy below.
-    A_fc = Camellia::FieldContainer<double>(dim,firstEntry,true); // true: copy
-  }\
+    const double * A_Entry = &A(0,0);
+    TEUCHOS_TEST_FOR_EXCEPTION(A_fc.dimension(0) != m, std::invalid_argument, "A_fc dimension 0 must match A.N()");
+    TEUCHOS_TEST_FOR_EXCEPTION(A_fc.dimension(1) != n, std::invalid_argument, "A_fc dimension 1 must match A.M()");
+    double * A_fc_Entry = (double*) &A_fc(0,0);
+    // deep copy, respecting whatever ownership that A_fc was initialized with
+    memcpy(A_fc_Entry, A_Entry, n*m*sizeof(double));
+  }
   
   // gives X = scalarA*A+scalarB*B (overwrites A)
   void SerialDenseWrapper::add(Camellia::FieldContainer<double> &X, const Camellia::FieldContainer<double> &A, const Camellia::FieldContainer<double> &B,
@@ -907,6 +911,8 @@ namespace Camellia {
     
     transposeMatrix(b);
     
+    transposeMatrix(x);
+    
     convertSDMToFC(x,xVectors);
     
     transposeMatrix(x);
@@ -1086,11 +1092,16 @@ namespace Camellia {
   {
     // solves Ax = b, where
     // A = (N,N)
-    // x, b = (N)
+    // x, b = (N,nRHS)
     Epetra_SerialSpdDenseSolver solver;
     
     int N = A_SPD.dimension(0);
     int nRHS = b.dimension(1);
+    
+    TEUCHOS_TEST_FOR_EXCEPTION(A_SPD.dimension(1) != N, std::invalid_argument, "A's first and second dimensions should match.");
+    TEUCHOS_TEST_FOR_EXCEPTION(x.dimension(1) != nRHS, std::invalid_argument, "x's second dimension should match b's second dimension (# RHSes).");
+    TEUCHOS_TEST_FOR_EXCEPTION(x.dimension(0) != N,    std::invalid_argument, "x's first dimension should match A's first and second dimension.");
+    TEUCHOS_TEST_FOR_EXCEPTION(b.dimension(0) != N,    std::invalid_argument, "b's first dimension should match A's first and second dimension.");
     
     int result = 0;
     
@@ -1135,6 +1146,9 @@ namespace Camellia {
       std::cout << "BilinearForm::optimalTestWeights: Solve FAILED with error: " << info << std::endl;
       result = info;
     }
+    
+    // we don't actually need a full transpose of x here (the data gets overwritten in the call to convertSDMToFC) -- it's enough to size x appropriately…
+    x.resize(x.dimension(1), x.dimension(0));
     
     convertSDMToFC(x,xVectors);
     

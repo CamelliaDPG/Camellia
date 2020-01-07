@@ -140,6 +140,9 @@ namespace
     RangeList<int> mylist;
     set<int> myset;
     
+    // test empty range as well
+    testSetAndRangeListAgreeInIteration(myset, mylist, out, success);
+    
     for (int item : itemsToAdd)
     {
       mylist.insert(item);

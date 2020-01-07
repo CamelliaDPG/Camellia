@@ -79,7 +79,7 @@ namespace Camellia
     RangeListIterator(RangeList<IntegerType>* rangeList, bool initializeToEnd)
     {
       _rangeList = rangeList;
-      if (!initializeToEnd)
+      if (!initializeToEnd && (rangeList->size() != 0)) // for empty list: begin() is the same as end()
       {
         _currentRangeOrdinal = 0;
         _currentValue = _rangeList->_rangeBegins[_currentRangeOrdinal];

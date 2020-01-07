@@ -13,12 +13,16 @@
 
 #include "Camellia_FieldContainer.hpp"
 
+#include <set>
+
 namespace Camellia
 {
   const std::string DEFAULT_VIEW_NAME = "Camellia FieldContainer View";
   
   AllocationRecord fcAllocationRecord;
   AllocationRecord deviceViewAllocationRecord;
+  std::set<long long> outstandingFCAllocationNumbers;
+  bool recordOutstandingFCAllocationNumbers = false; // roughly 8% performance penalty for all of runTests if this is true, but very useful for tracking down unfreed allocations.
   
   std::string allocationReport(AllocationRecord &record)
   {
