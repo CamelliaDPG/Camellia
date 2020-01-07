@@ -56,6 +56,17 @@ namespace Camellia
       std::cout << "**************************  Device allocation report ****************************\n";
       std::cout << "** (Note: these are generally not real allocations for non-CUDA memory spaces) **\n";
       std::cout << deviceViewAllocationReport << std::endl;
+
+      if (recordOutstandingFCAllocationNumbers)
+      {
+        std::cout << "There are " << outstandingFCAllocationNumbers.size() << " outstanding FC allocation numbers.\n";
+        std::cout << "Outstanding FC allocation numbers: ";
+        for (auto allocationNumber : outstandingFCAllocationNumbers)
+        {
+          std::cout << allocationNumber << " ";
+        }
+        std::cout << std::endl;
+      }
     }
   }
 }

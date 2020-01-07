@@ -18,6 +18,8 @@
 
 #include "Kokkos_DynRankView.hpp"
 
+#include <set>
+
 namespace Camellia
 {
   extern const std::string DEFAULT_VIEW_NAME;
@@ -36,6 +38,8 @@ namespace Camellia
   
   extern AllocationRecord fcAllocationRecord;
   extern AllocationRecord deviceViewAllocationRecord;
+  extern std::set<long long> outstandingFCAllocationNumbers;
+  extern bool recordOutstandingFCAllocationNumbers; // if false, we skip tracking of the outstanding FC numbers, which does have some performance cost (about 8% penalty for the test suite as a whole)
   
   template<class Scalar, int ArrayTypeId=0>
   class FieldContainer : public Intrepid::FieldContainer<Scalar, ArrayTypeId>
@@ -153,6 +157,10 @@ namespace Camellia
       {
         _fieldContainerAllocationNumber = record.allocationCount;
         _fieldContainerDataAllocationRecorded = true;
+        if (recordOutstandingFCAllocationNumbers)
+        {
+          outstandingFCAllocationNumbers.insert(_fieldContainerAllocationNumber);
+        }
       }
     }
     
@@ -170,6 +178,18 @@ namespace Camellia
       if (recordIsForFieldContainer)
       {
         _fieldContainerDataAllocationRecorded = false; // don't allow to record deallocation twice without recording an allocation
+        if (recordOutstandingFCAllocationNumbers)
+        {
+          if (outstandingFCAllocationNumbers.find(_fieldContainerAllocationNumber) != outstandingFCAllocationNumbers.end())
+          {
+            outstandingFCAllocationNumbers.erase(_fieldContainerAllocationNumber);
+          }
+          else
+          {
+            std::cout << "WARNING: deallocation event for FC allocation number " << _fieldContainerAllocationNumber;
+            std::cout << ", but that allocation number is not contained in outstandingFCAllocationNumbers.\n";
+          }
+        }
       }
     }
   public:
@@ -391,7 +411,7 @@ namespace Camellia
     {
       bool ownsMemory = this->getData().has_ownership();
       
-      if (ownsMemory)
+      if (ownsMemory || (this->size() == 0))
       {
         recordDeallocation(fcAllocationRecord,this->size());
       }
@@ -404,7 +424,7 @@ namespace Camellia
     {
       bool ownsMemory = this->getData().has_ownership();
       
-      if (ownsMemory)
+      if (ownsMemory || (this->size() == 0))
       {
         recordDeallocation(fcAllocationRecord,this->size());
       }
@@ -632,6 +652,7 @@ namespace Camellia
       TEUCHOS_TEST_FOR_EXCEPTION( ( this == &right ),
                                  std::invalid_argument,
                                  ">>> ERROR (FieldContainer): Invalid right-hand side to '='. Self-assignment prohibited.");
+      recordDeallocation(fcAllocationRecord,this->size());
       
       this->FieldContainerBase::operator=(right);
       // base assignment does deep copy; record the allocation

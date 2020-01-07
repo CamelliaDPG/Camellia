@@ -19,6 +19,8 @@ namespace Camellia
 {
   class SerialDenseWrapper
   {
+  public:
+    // the following made public so we can test them.  They are not intended for general use, however.
     static Epetra_SerialDenseMatrix convertFCToSDM(const Camellia::FieldContainer<double> &A, Epetra_DataAccess CV = ::Copy);
     static void convertSDMToFC(Camellia::FieldContainer<double>& A_fc, const Epetra_SerialDenseMatrix &A);
   public:
