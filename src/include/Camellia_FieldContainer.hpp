@@ -118,9 +118,9 @@ namespace Camellia
       
       // if _deviceView has previously been allocated, since we'll implicitly deallocate when we reset _deviceView below, we should
       // subtract off the previous allocation size.  (This comes up during calls to resize() and clear().)
-      recordDeallocation( _deviceView.size() );
+      recordDeallocation(deviceViewAllocationRecord, _deviceView.size());
       _deviceView = Kokkos::create_mirror_view(DeviceMemorySpace(),_hostView);
-      recordAllocation( _deviceView.size() );
+      recordAllocation(deviceViewAllocationRecord, _deviceView.size());
       
       _deviceViewIsValid = true;
     }
@@ -128,13 +128,13 @@ namespace Camellia
     void invalidateViews()
     {
       // called when the FC is resized, e.g.
-      _hostViewIsValid   = false;
-      _deviceViewIsValid = false;
+      _hostViewIsValid = false;
       
       // record the deallocation
       if (_deviceViewIsValid)
       {
-        recordDeallocation(deviceViewAllocationRecord, _deviceView.size() );
+        _deviceViewIsValid = false;
+        recordDeallocation(deviceViewAllocationRecord, _deviceView.size());
       }
 
       _deviceView = DeviceView();
