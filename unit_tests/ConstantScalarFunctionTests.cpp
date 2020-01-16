@@ -18,7 +18,7 @@ using namespace Camellia;
 
 namespace
 {
-  TEUCHOS_UNIT_TEST( ConstantScalarFunction, isZero )
+  TEUCHOS_UNIT_TEST( ConstantScalarFunction, Scalar_isZero )
   {
     auto f0 = ConstantScalarFunction<double>(0.0);
     TEST_EQUALITY( f0.isZero(), true );
@@ -27,14 +27,14 @@ namespace
     TEST_EQUALITY( f1.isZero(), false );
   }
 
-  TEUCHOS_UNIT_TEST( ConstantScalarFunction, displayString )
+  TEUCHOS_UNIT_TEST( ConstantScalarFunction, Scalar_displayString )
   {
     string str = "UNIT_TEST_ConstantScalarFunction_displayString";
     auto f = ConstantScalarFunction<double>(0.0, str);
     TEST_EQUALITY( str.compare(f.displayString()), 0 );
   }
 
-  TEUCHOS_UNIT_TEST( ConstantScalarFunction, values )
+  TEUCHOS_UNIT_TEST( ConstantScalarFunction, Scalar_values )
   {
     const int dim0 = 5, dim1 = 2;
     auto fc = FieldContainer<double>(dim0,dim1);
@@ -46,7 +46,7 @@ namespace
     }
   }
 
-  TEUCHOS_UNIT_TEST( ConstantScalarFunction, scalarMultiplyFunctionValues )
+  TEUCHOS_UNIT_TEST( ConstantScalarFunction, Scalar_multiply )
   {
     const int dim0 = 5, dim1 = 2;
     auto fc = FieldContainer<double>(dim0,dim1);
@@ -60,7 +60,7 @@ namespace
     }
   }
 
-  TEUCHOS_UNIT_TEST( ConstantScalarFunction, scalarDivideFunctionValues )
+  TEUCHOS_UNIT_TEST( ConstantScalarFunction, Scalar_divide )
   {
     const int dim0 = 5, dim1 = 2;
     auto fc = FieldContainer<double>(dim0,dim1);
