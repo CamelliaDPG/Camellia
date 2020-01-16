@@ -52,7 +52,8 @@ namespace Camellia
  #endif
     using HostView   = Kokkos::DynRankView<Scalar, Kokkos::HostSpace, Kokkos::MemoryTraits<Kokkos::Unmanaged> >;
     using ViewTraits = typename HostView::drvtraits;
-    using DeviceView = Kokkos::DynRankView<typename ViewTraits::value_type, typename ViewTraits::array_layout, DeviceMemorySpace, typename ViewTraits::memory_traits>;
+    //using DeviceView = Kokkos::DynRankView<typename ViewTraits::value_type, typename ViewTraits::array_layout, DeviceMemorySpace, typename ViewTraits::memory_traits>;
+    using DeviceView = Kokkos::DynRankView<typename ViewTraits::value_type, typename ViewTraits::array_layout, DeviceMemorySpace>;
     
     DeviceView  _deviceView;
     HostView    _hostView;
@@ -113,6 +114,7 @@ namespace Camellia
     {
       if (!_hostViewIsValid)
       {
+        //std::cout << "initializeHostView..." << std::endl;
         initializeHostView();
       }
       
@@ -197,14 +199,19 @@ namespace Camellia
     {
       if (!_deviceViewIsValid)
       {
+        //std::cout << "initializeDeviceView..." << std::endl;
         initializeDeviceView();
       }
       _deviceViewIsCheckedOut = true;
+      //queryHostViewMetadata();
+      //queryDeviceViewMetadata();
+      
       // ideally, we should guard this so that we don't do unnecessary copies when memory spaces are the same
       // but this is an optimization that we can make at any point
       // the priority right now is to provide the same interface as FieldContainer, so that we have a
       // drop-in replacement, and to allow us to gradually shift to using Kokkos::View instead.
       // the checkout semantics here allow us at least some guard against accidental usage of UVM.
+      //std::cout << std::endl << "deep_copy host2device..." << std::endl;
       Kokkos::deep_copy(_deviceView,_hostView);
       return _deviceView;
     }
@@ -212,6 +219,7 @@ namespace Camellia
     void checkinDeviceView()
     {
       // copy back to host
+      //std::cout << "deep_copy device2host..." << std::endl;
       Kokkos::deep_copy(_hostView,_deviceView);
     }
     
@@ -589,7 +597,7 @@ namespace Camellia
         recordAllocation(fcAllocationRecord,this->size());
       }
     }
-    
+
     
     /** \brief Resizes FieldContainer to a container whose rank depends on the specified field and
      operator types and the space dimension, initialized by 0. The admissible combinations of these
@@ -658,6 +666,30 @@ namespace Camellia
       // base assignment does deep copy; record the allocation
       recordAllocation(fcAllocationRecord,this->size());
       return *this;
+    }
+    
+    /** \brief Print metadata info for member variable _hostView
+     */
+    void queryHostViewMetadata() {
+      std::cout << "  _hostView.rank()    = " <<   _hostView.rank() << std::endl;
+      std::cout << "  _hostView.data()    = " <<   _hostView.data() << std::endl;
+      for (int i = 0; i < _hostView.rank(); i++) {
+        std::cout << "  _hostView.extent(" << std::setw(1) << i << ") = " << _hostView.extent(i) << std::endl;
+      }
+      std::cout << "  _hostView.size()    = " <<   _hostView.size() << std::endl;
+      std::cout << "typeid(_hostView  )   = " << typeid(_hostView  ).name() << std::endl;
+    }
+    
+    /** \brief Print metadata info for member variable _deviceView
+    */
+    void queryDeviceViewMetadata() {
+      std::cout << "_deviceView.rank()    = " << _deviceView.rank() << std::endl;
+      std::cout << "_deviceView.data()    = " << _deviceView.data() << std::endl;
+      for (int i = 0; i < _hostView.rank(); i++) {
+        std::cout << "_deviceView.extent(" << std::setw(1) << i << ") = " << _deviceView.extent(i) << std::endl;
+      }
+      std::cout << "_deviceView.size()    = " << _deviceView.size() << std::endl;
+      std::cout << "typeid(_deviceView)   = " << typeid(_deviceView).name() << std::endl;
     }
   };
   
