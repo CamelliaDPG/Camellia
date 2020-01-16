@@ -44,6 +44,8 @@ namespace Camellia
   template<class Scalar, int ArrayTypeId=0>
   class FieldContainer : public Intrepid::FieldContainer<Scalar, ArrayTypeId>
   {
+    
+  public:
     using FieldContainerBase = Intrepid::FieldContainer<Scalar, ArrayTypeId>;
  #ifdef KOKKOS_ENABLE_CUDA
     using DeviceMemorySpace = Kokkos::CudaSpace; // we want to avoid UVM; Kokkos default may be Kokkos::CudaUVMSpace
@@ -55,6 +57,7 @@ namespace Camellia
     //using DeviceView = Kokkos::DynRankView<typename ViewTraits::value_type, typename ViewTraits::array_layout, DeviceMemorySpace, typename ViewTraits::memory_traits>;
     using DeviceView = Kokkos::DynRankView<typename ViewTraits::value_type, typename ViewTraits::array_layout, DeviceMemorySpace>;
     
+  private:
     DeviceView  _deviceView;
     HostView    _hostView;
     
@@ -194,6 +197,7 @@ namespace Camellia
         }
       }
     }
+    
   public:
     DeviceView checkoutDeviceView()
     {
@@ -274,7 +278,6 @@ namespace Camellia
       recordAllocation(fcAllocationRecord,this->size());
       invalidateViews();
     }
-    
     
     /** \brief Creates a rank-3 FieldContainer with the specified dimensions, initialized by 0.
      
@@ -373,7 +376,6 @@ namespace Camellia
       invalidateViews();
     }
     
-    
     /** \brief Creates a FieldContainer of arbitrary rank, using dimensions specified in the
      <var><b>dimensions</b></var> array, and either wraps (shallow-copies) Scalar*
      <var><b>data</b></var>, or deep-copies it, based on the value of the parameter
@@ -440,7 +442,6 @@ namespace Camellia
       invalidateViews();
     }
     
-    
     /** \brief Resizes FieldContainer to a rank-1 container with the specified dimension, initialized by 0.
      
      \param dim0    [in]      - dimension for the 1st index
@@ -501,7 +502,6 @@ namespace Camellia
       }
     }
     
-    
     /** \brief Resizes FieldContainer to a rank-4 container with specified dimensions, initialized by 0.
      
      \param dim0    [in]      - dimension for the 1st index
@@ -523,7 +523,6 @@ namespace Camellia
         recordAllocation(fcAllocationRecord,this->size());
       }
     }
-    
     
     /** \brief Resizes FieldContainer to a rank-5 container with specified dimensions, initialized by 0.
      
@@ -577,7 +576,6 @@ namespace Camellia
       }
     }
     
-    
     /** \brief Resizes FieldContainer to have the same rank and dimensions as another FieldContainer,
      and initializes by 0.
      
@@ -597,7 +595,6 @@ namespace Camellia
         recordAllocation(fcAllocationRecord,this->size());
       }
     }
-
     
     /** \brief Resizes FieldContainer to a container whose rank depends on the specified field and
      operator types and the space dimension, initialized by 0. The admissible combinations of these
