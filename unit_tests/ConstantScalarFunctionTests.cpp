@@ -41,8 +41,10 @@ namespace
     auto f = ConstantScalarFunction<double>(1.0);
     BasisCachePtr voidBasisCache;
     f.values(fc, voidBasisCache);
+    double expectedValue = 1.0;
+    double tol = 1.0e-14;
     for (int i = 0; i < dim0*dim1; i++) {
-      TEST_EQUALITY( fc[i], 1.0 );
+      TEST_FLOATING_EQUALITY(expectedValue,fc[i],tol);
     }
   }
 
@@ -55,8 +57,10 @@ namespace
     BasisCachePtr voidBasisCache;
     f1.values(fc, voidBasisCache);
     f2.scalarMultiplyFunctionValues(fc, voidBasisCache);
+    double expectedValue = 2.0;
+    double tol = 1.0e-14;
     for (int i = 0; i < dim0*dim1; i++) {
-      TEST_EQUALITY( fc[i], 2.0 );
+      TEST_FLOATING_EQUALITY(expectedValue,fc[i],tol);
     }
   }
 
@@ -69,8 +73,10 @@ namespace
     BasisCachePtr voidBasisCache;
     f1.values(fc, voidBasisCache);
     f2.scalarDivideFunctionValues(fc, voidBasisCache);
+    double expectedValue = 0.5;
+    double tol = 1.0e-14;
     for (int i = 0; i < dim0*dim1; i++) {
-      TEST_EQUALITY( fc[i], 0.5 );
+      TEST_FLOATING_EQUALITY(expectedValue,fc[i],tol);
     }
   }
 
