@@ -41,7 +41,6 @@ void ConstantScalarFunction<Scalar>::values(Camellia::FieldContainer<Scalar> &va
 {
   this->CHECK_VALUES_RANK(values);
   auto dv = values.checkoutDeviceView();
-  //auto value = _value;
   Kokkos::deep_copy(dv, _value);
   values.checkinDeviceView();
 }
