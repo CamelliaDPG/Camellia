@@ -50,30 +50,14 @@ void ConstantScalarFunction<Scalar>::scalarMultiplyFunctionValues(Camellia::Fiel
 {
   if (_value != 1.0)
   {
+    this->CHECK_VALUES_RANK(values);
     auto dv = values.checkoutDeviceView();
     auto value = _value;
-    
-    const int dim0 = (dv.rank() > 0) ? dv.extent(0) : 1;
-    const int dim1 = (dv.rank() > 1) ? dv.extent(1) : 1;
-    const int dim2 = (dv.rank() > 2) ? dv.extent(2) : 1;
-    const int dim3 = (dv.rank() > 3) ? dv.extent(3) : 1;
-    const int dim4 = (dv.rank() > 4) ? dv.extent(4) : 1;
-    const int dim5 = (dv.rank() > 5) ? dv.extent(5) : 1;
-    const int dim6 = (dv.rank() > 6) ? dv.extent(6) : 1;
-    
+    const int dim0 = dv.extent(0); // numCells
+    const int dim1 = dv.extent(1); // numPoints
     Kokkos::parallel_for("ConstantScalarFunction_multiply", dim0, KOKKOS_LAMBDA (const int i0) {
       for (int i1 = 0; i1 < dim1; i1++) {
-        for (int i2 = 0; i2 < dim2; i2++) {
-          for (int i3 = 0; i3 < dim3; i3++) {
-            for (int i4 = 0; i4 < dim4; i4++) {
-              for (int i5 = 0; i5 < dim5; i5++) {
-                for (int i6 = 0; i6 < dim6; i6++) {
-                  dv.access(i0,i1,i2,i3,i4,i5,i6) *= value;
-                }
-              }
-            }
-          }
-        }
+        dv(i0,i1) *= value;
       }
     });
     values.checkinDeviceView();
@@ -85,30 +69,14 @@ void ConstantScalarFunction<Scalar>::scalarDivideFunctionValues(Camellia::FieldC
 {
   if (_value != 1.0)
   {
+    this->CHECK_VALUES_RANK(values);
     auto dv = values.checkoutDeviceView();
     auto value = _value;
-    
-    const int dim0 = (dv.rank() > 0) ? dv.extent(0) : 1;
-    const int dim1 = (dv.rank() > 1) ? dv.extent(1) : 1;
-    const int dim2 = (dv.rank() > 2) ? dv.extent(2) : 1;
-    const int dim3 = (dv.rank() > 3) ? dv.extent(3) : 1;
-    const int dim4 = (dv.rank() > 4) ? dv.extent(4) : 1;
-    const int dim5 = (dv.rank() > 5) ? dv.extent(5) : 1;
-    const int dim6 = (dv.rank() > 6) ? dv.extent(6) : 1;
-    
+    const int dim0 = dv.extent(0); // numCells
+    const int dim1 = dv.extent(1); // numPoints
     Kokkos::parallel_for("ConstantScalarFunction_divide", dim0, KOKKOS_LAMBDA (const int i0) {
       for (int i1 = 0; i1 < dim1; i1++) {
-        for (int i2 = 0; i2 < dim2; i2++) {
-          for (int i3 = 0; i3 < dim3; i3++) {
-            for (int i4 = 0; i4 < dim4; i4++) {
-              for (int i5 = 0; i5 < dim5; i5++) {
-                for (int i6 = 0; i6 < dim6; i6++) {
-                  dv.access(i0,i1,i2,i3,i4,i5,i6) /= value;
-                }
-              }
-            }
-          }
-        }
+        dv(i0,i1) /= value;
       }
     });
     values.checkinDeviceView();
