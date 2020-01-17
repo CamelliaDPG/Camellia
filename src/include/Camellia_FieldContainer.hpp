@@ -207,8 +207,8 @@ namespace Camellia
         initializeDeviceView();
       }
       _deviceViewIsCheckedOut = true;
-      //queryHostViewMetadata();
-      //queryDeviceViewMetadata();
+      //printHostViewMetadata();
+      //printDeviceViewMetadata();
       
       // ideally, we should guard this so that we don't do unnecessary copies when memory spaces are the same
       // but this is an optimization that we can make at any point
@@ -667,26 +667,26 @@ namespace Camellia
     
     /** \brief Print metadata info for member variable _hostView
      */
-    void queryHostViewMetadata() {
-      std::cout << "  _hostView.rank()    = " <<   _hostView.rank() << std::endl;
-      std::cout << "  _hostView.data()    = " <<   _hostView.data() << std::endl;
+    void printHostViewMetadata(std::ostream &out = std::cout) {
+      out << "  _hostView.rank()    = " <<   _hostView.rank() << std::endl;
+      out << "  _hostView.data()    = " <<   _hostView.data() << std::endl;
       for (int i = 0; i < _hostView.rank(); i++) {
-        std::cout << "  _hostView.extent(" << std::setw(1) << i << ") = " << _hostView.extent(i) << std::endl;
+        out << "  _hostView.extent(" << std::setw(1) << i << ") = " << _hostView.extent(i) << std::endl;
       }
-      std::cout << "  _hostView.size()    = " <<   _hostView.size() << std::endl;
-      std::cout << "typeid(_hostView  )   = " << typeid(_hostView  ).name() << std::endl;
+      out << "  _hostView.size()    = " <<   _hostView.size() << std::endl;
+      out << "typeid(_hostView  )   = " << typeid(_hostView  ).name() << std::endl;
     }
     
     /** \brief Print metadata info for member variable _deviceView
     */
-    void queryDeviceViewMetadata() {
-      std::cout << "_deviceView.rank()    = " << _deviceView.rank() << std::endl;
-      std::cout << "_deviceView.data()    = " << _deviceView.data() << std::endl;
+    void printDeviceViewMetadata(std::ostream &out = std::cout) {
+      out << "_deviceView.rank()    = " << _deviceView.rank() << std::endl;
+      out << "_deviceView.data()    = " << _deviceView.data() << std::endl;
       for (int i = 0; i < _hostView.rank(); i++) {
-        std::cout << "_deviceView.extent(" << std::setw(1) << i << ") = " << _deviceView.extent(i) << std::endl;
+        out << "_deviceView.extent(" << std::setw(1) << i << ") = " << _deviceView.extent(i) << std::endl;
       }
-      std::cout << "_deviceView.size()    = " << _deviceView.size() << std::endl;
-      std::cout << "typeid(_deviceView)   = " << typeid(_deviceView).name() << std::endl;
+      out << "_deviceView.size()    = " << _deviceView.size() << std::endl;
+      out << "typeid(_deviceView)   = " << typeid(_deviceView).name() << std::endl;
     }
   };
   
