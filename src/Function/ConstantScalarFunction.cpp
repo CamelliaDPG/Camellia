@@ -40,39 +40,56 @@ template <typename Scalar>
 void ConstantScalarFunction<Scalar>::values(Camellia::FieldContainer<Scalar> &values, BasisCachePtr basisCache)
 {
   this->CHECK_VALUES_RANK(values);
-  for (int i=0; i < values.size(); i++)
-  {
-    values[i] = _value;
-  }
+  auto dv = values.checkoutDeviceView();
+  Kokkos::deep_copy(dv, _value);
+  values.checkinDeviceView();
 }
+
 template <typename Scalar>
 void ConstantScalarFunction<Scalar>::scalarMultiplyFunctionValues(Camellia::FieldContainer<Scalar> &values, BasisCachePtr basisCache)
 {
   if (_value != 1.0)
   {
-    for (int i=0; i < values.size(); i++)
-    {
-      values[i] *= _value;
-    }
+    this->CHECK_VALUES_RANK(values);
+    auto dv = values.checkoutDeviceView();
+    auto value = _value;
+    const int dim0 = dv.extent(0); // numCells
+    const int dim1 = dv.extent(1); // numPoints
+    Kokkos::parallel_for("ConstantScalarFunction_multiply", dim0, KOKKOS_LAMBDA (const int i0) {
+      for (int i1 = 0; i1 < dim1; i1++) {
+        dv(i0,i1) *= value;
+      }
+    });
+    values.checkinDeviceView();
   }
 }
+
 template <typename Scalar>
 void ConstantScalarFunction<Scalar>::scalarDivideFunctionValues(Camellia::FieldContainer<Scalar> &values, BasisCachePtr basisCache)
 {
   if (_value != 1.0)
   {
-    for (int i=0; i < values.size(); i++)
-    {
-      values[i] /= _value;
-    }
+    this->CHECK_VALUES_RANK(values);
+    auto dv = values.checkoutDeviceView();
+    auto value = _value;
+    const int dim0 = dv.extent(0); // numCells
+    const int dim1 = dv.extent(1); // numPoints
+    Kokkos::parallel_for("ConstantScalarFunction_divide", dim0, KOKKOS_LAMBDA (const int i0) {
+      for (int i1 = 0; i1 < dim1; i1++) {
+        dv(i0,i1) /= value;
+      }
+    });
+    values.checkinDeviceView();
   }
 }
+
 template <typename Scalar>
 void ConstantScalarFunction<Scalar>::scalarMultiplyBasisValues(Camellia::FieldContainer<double> &basisValues, BasisCachePtr basisCache)
 {
   // we don't actually care about the shape of basisValues--just use the FunctionValues versions:
   scalarMultiplyFunctionValues(basisValues,basisCache);
 }
+
 template <typename Scalar>
 void ConstantScalarFunction<Scalar>::scalarDivideBasisValues(Camellia::FieldContainer<double> &basisValues, BasisCachePtr basisCache)
 {
