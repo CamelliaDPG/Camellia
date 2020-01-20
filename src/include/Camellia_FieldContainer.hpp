@@ -199,7 +199,7 @@ namespace Camellia
     }
     
   public:
-    DeviceView checkoutDeviceView()
+    DeviceView checkoutDeviceView(bool deepCopyFromHost=true)
     {
       if (!_deviceViewIsValid)
       {
@@ -216,15 +216,21 @@ namespace Camellia
       // drop-in replacement, and to allow us to gradually shift to using Kokkos::View instead.
       // the checkout semantics here allow us at least some guard against accidental usage of UVM.
       //std::cout << std::endl << "deep_copy host2device..." << std::endl;
-      Kokkos::deep_copy(_deviceView,_hostView);
+      if (deepCopyFromHost)
+      {
+        Kokkos::deep_copy(_deviceView,_hostView);
+      }
       return _deviceView;
     }
     
-    void checkinDeviceView()
+    void checkinDeviceView(bool deepCopyToHost=true)
     {
       // copy back to host
       //std::cout << "deep_copy device2host..." << std::endl;
-      Kokkos::deep_copy(_hostView,_deviceView);
+      if (deepCopyToHost)
+      {
+        Kokkos::deep_copy(_hostView,_deviceView);
+      }
     }
     
     /** \brief Default constructor.

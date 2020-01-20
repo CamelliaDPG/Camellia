@@ -643,6 +643,74 @@ TEUCHOS_UNIT_TEST( Function, SpaceTimeNormalTimeComponentTetrahedron )
   testSpaceTimeNormalTimeComponent(CellTopology::tetrahedron(), out, success);
 }
 
+// locally defined function class for the ValuesDevicePath test below
+class FunctionNoDevicePath : public TFunction<double>
+{
+private:
+  double _value = 1.0;
+public:
+  FunctionNoDevicePath(double value) : TFunction<>(0) // rank 0 (scalar) function
+  {
+    _value = value;
+  }
+  
+  std::string displayString() override
+  {
+    return "FunctionNoDevicePath (for test)";
+  }
+  
+  void values(Camellia::FieldContainer<double> &values, BasisCachePtr basisCache) override
+  {
+    for (int i=0; i<values.size(); i++)
+    {
+      values[i] = _value;
+    }
+  }
+};
+  
+TEUCHOS_UNIT_TEST( Function, ValuesDevicePath )
+{
+  const int dim0 = 5, dim1 = 2;
+  const double existingValue = 3.141592; // the value already in the view prior to calling values()
+  const double constantValue = 1.5;      // function value
+  double expectedValue;
+  
+  FunctionNoDevicePath f(constantValue); // class does not implement the device-path values(); relies on base class implementation
+  
+  std::vector<ValueModificationType> modTypes = {ASSIGN, ADD, SUBTRACT, MULTIPLY, DIVIDE};
+  for (auto modType : modTypes)
+  {
+    switch (modType)
+    {
+      case Camellia::ASSIGN:
+        expectedValue = constantValue;
+        break;
+      case Camellia::ADD:
+        expectedValue = existingValue + constantValue;
+        break;
+      case Camellia::SUBTRACT:
+        expectedValue = existingValue - constantValue;
+        break;
+      case Camellia::MULTIPLY:
+        expectedValue = existingValue * constantValue;
+        break;
+      case Camellia::DIVIDE:
+        expectedValue = existingValue / constantValue;
+    }
+    auto fc = FieldContainer<double>(dim0,dim1);
+    auto fcView = fc.checkoutDeviceView(false); // false: don't copy from host
+    Kokkos::deep_copy( fcView, existingValue);
+    
+    BasisCachePtr nullBasisCache;
+    f.TFunction<double>::values(fcView, modType, nullBasisCache); // device path
+    fc.checkinDeviceView(true); // true: copy back to host
+    double tol = 1.0e-14;
+    for (int i = 0; i < dim0*dim1; i++) {
+      TEST_FLOATING_EQUALITY(expectedValue,fc[i],tol);
+    }
+  }
+}
+  
 TEUCHOS_UNIT_TEST( Function, VectorMultiply )
 {
   FunctionPtr x2 = Function::xn(2);

@@ -9,12 +9,12 @@
 //  Camellia
 //
 //  Created by Nathan Roberts on 3/30/12.
-//  Copyright (c) 2012 __MyCompanyName__. All rights reserved.
 //
 
 #ifndef Camellia_Function_h
 #define Camellia_Function_h
 
+#include "AssignValue.h"
 #include "CamelliaIntrepidExtendedTypes.h"
 #include "TypeDefs.h"
 
@@ -66,6 +66,9 @@ public:
   virtual void values(Camellia::FieldContainer<Scalar> &values, Camellia::EOperator op, BasisCachePtr basisCache);
   virtual void values(Camellia::FieldContainer<Scalar> &values, BasisCachePtr basisCache) = 0;
 
+  // device-path values -- subclasses should override.   Default implementation is inefficient!
+  virtual void values(typename Camellia::FieldContainer<Scalar>::DeviceView &values, ValueModificationType modType, BasisCachePtr basisCache);
+  
   static TFunctionPtr<Scalar> op(TFunctionPtr<Scalar> f, Camellia::EOperator op);
 
   virtual TFunctionPtr<Scalar> x();

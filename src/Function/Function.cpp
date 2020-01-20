@@ -262,38 +262,55 @@ double TFunction<Scalar>::getTime()
 template <typename Scalar>
 void TFunction<Scalar>::values(Camellia::FieldContainer<Scalar> &values, Camellia::EOperator op, BasisCachePtr basisCache)
 {
-  switch (op)
+  auto thisPtr = Teuchos::rcp(this,false); // false: does not own memory
+  return TFunction<Scalar>::op(thisPtr, op)->values(values,basisCache);
+}
+ 
+template <typename Scalar>
+void TFunction<Scalar>::values(typename Camellia::FieldContainer<Scalar>::DeviceView &values, ValueModificationType modType,
+                               BasisCachePtr basisCache)
+{
+  /*
+   This implementation is inherently inefficient.  The only reason to provide it is a kind of bootstrapping;
+   by having it in place we can implement and test new Function implementations prior to having all of them in place.
+   
+   For that reason, we emit warnings to the console when this method gets called.
+   */
+  std::cout << "WARNING: Function implementation with displayString '" << this->displayString();
+  std::cout << "' does not provide a device-path values() implementation.  The base class implementation is inherently inefficient, so this should be fixed.\n";
+  
+  Teuchos::Array<int> dim(values.rank());
+  for (int i=0; i<values.rank(); i++)
   {
-  case Camellia::OP_VALUE:
-    this->values(values, basisCache);
-    break;
-  case Camellia::OP_DX:
-    this->dx()->values(values, basisCache);
-    break;
-  case Camellia::OP_DY:
-    this->dy()->values(values, basisCache);
-    break;
-  case Camellia::OP_DZ:
-    this->dz()->values(values, basisCache);
-    break;
-  case Camellia::OP_GRAD:
-    this->grad()->values(values, basisCache);
-    break;
-  case Camellia::OP_DIV:
-    this->div()->values(values, basisCache);
-    break;
-  default:
-    TEUCHOS_TEST_FOR_EXCEPTION(true, std::invalid_argument, "unsupported operator");
-    break;
+    dim[i] = values.extent_int(i);
   }
-  if (op==Camellia::OP_VALUE)
+  Camellia::FieldContainer<Scalar> fc(dim);
+  this->values(fc, basisCache);              // either happens on host or ends with deep_copy to host (one inefficiency)
+  auto fcView = fc.checkoutDeviceView(true); // true: deep_copy from host (the other main inefficiency)
+  
+  using array_index_type = Kokkos::MDRangePolicy< Kokkos::Rank<6> >::array_index_type;
+  Kokkos::Array<array_index_type,6> mdRangeEnd = {1,1,1,1,1,1}; // fully specifies all 6 MD dimensions
+  int numRanksToCopy = (dim.size() <= 6) ? dim.size() : 6;
+  for (int i=0; i<numRanksToCopy; i++)
   {
-
+    mdRangeEnd[i] = dim[i];
   }
-  else
+  Kokkos::Array<array_index_type,6> mdRangeBegin = {0,0,0,0,0,0};
+  const int dim6 = fcView.extent_int(6);
+  
+  Kokkos::MDRangePolicy< Kokkos::Rank<6> > mdRangePolicy(mdRangeBegin,mdRangeEnd);
+  
+  Kokkos::parallel_for("Function base class device-path values() implementation", mdRangePolicy,
+  KOKKOS_LAMBDA (const array_index_type i0, const array_index_type i1, const array_index_type i2,
+                 const array_index_type i3, const array_index_type i4, const array_index_type i5)
   {
-    TEUCHOS_TEST_FOR_EXCEPTION(true, std::invalid_argument, "unsupported operator");
-  }
+    for (int i6 = 0; i6<dim6; i6++)
+    {
+      Scalar &entry    = values(i0,i1,i2,i3,i4,i5,i6);
+      Scalar &newValue = fcView(i0,i1,i2,i3,i4,i5,i6);
+      assignValue(entry, modType, newValue);
+    }
+  });
 }
 
 template <typename Scalar>
