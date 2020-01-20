@@ -438,23 +438,23 @@ VarPtr Var::dt() const
 
 VarPtr Var::x() const
 {
-  TEUCHOS_TEST_FOR_EXCEPTION( _op !=  Camellia::OP_VALUE, std::invalid_argument, "operators can only be applied to raw vars, not vars that have been operated on.");
+  Camellia::EOperator op = combineOperators(_op, Camellia::OP_X);
   TEUCHOS_TEST_FOR_EXCEPTION( _rank != 1, std::invalid_argument, "x() only supported for vars of rank 1.");
-  return Teuchos::rcp( new Var(_id, _rank-1, _name, OP_X, UNKNOWN_FS, _varType ) );
+  return Teuchos::rcp( new Var(_id, _rank-1, _name, op, UNKNOWN_FS, _varType ) );
 }
 
 VarPtr Var::y() const
 {
-  TEUCHOS_TEST_FOR_EXCEPTION( _op !=  Camellia::OP_VALUE, std::invalid_argument, "operators can only be applied to raw vars, not vars that have been operated on.");
+  Camellia::EOperator op = combineOperators(_op, Camellia::OP_Y);
   TEUCHOS_TEST_FOR_EXCEPTION( _rank != 1, std::invalid_argument, "y() only supported for vars of rank 1.");
-  return Teuchos::rcp( new Var(_id, _rank-1, _name, OP_Y, UNKNOWN_FS, _varType ) );
+  return Teuchos::rcp( new Var(_id, _rank-1, _name, op, UNKNOWN_FS, _varType ) );
 }
 
 VarPtr Var::z() const
 {
-  TEUCHOS_TEST_FOR_EXCEPTION( _op !=  Camellia::OP_VALUE, std::invalid_argument, "operators can only be applied to raw vars, not vars that have been operated on.");
+  Camellia::EOperator op = combineOperators(_op, Camellia::OP_Z);
   TEUCHOS_TEST_FOR_EXCEPTION( _rank != 1, std::invalid_argument, "z() only supported for vars of rank 1.");
-  return Teuchos::rcp( new Var(_id, _rank-1, _name, OP_Z, UNKNOWN_FS, _varType ) );
+  return Teuchos::rcp( new Var(_id, _rank-1, _name, op, UNKNOWN_FS, _varType ) );
 }
 
 VarPtr Var::t() const

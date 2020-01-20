@@ -166,46 +166,102 @@ void SimpleSolutionFunction<Scalar>::values(Camellia::FieldContainer<Scalar> &va
 }
 
 template <typename Scalar>
+TFunctionPtr<Scalar> SimpleSolutionFunction<Scalar>::curl()
+{
+  if (_var->op() == Camellia::OP_VALUE)
+  {
+    const int spaceDim = _soln->mesh()->getDimension();
+    return TFunction<Scalar>::solution(_var->curl(spaceDim), _soln, _weightFluxesBySideParity);
+  }
+  else
+  {
+    return this->TFunction<Scalar>::curl();
+  }
+}
+
+template <typename Scalar>
+TFunctionPtr<Scalar> SimpleSolutionFunction<Scalar>::div()
+{
+  if (_var->op() == Camellia::OP_VALUE)
+  {
+    return TFunction<Scalar>::solution(_var->div(), _soln, _weightFluxesBySideParity);
+  }
+  else
+  {
+    return this->TFunction<Scalar>::div();
+  }
+}
+
+template <typename Scalar>
 TFunctionPtr<Scalar> SimpleSolutionFunction<Scalar>::dx()
 {
-  return TFunction<Scalar>::solution(_var->dx(), _soln, _weightFluxesBySideParity);
-//  if (_var->op() != Camellia::OP_VALUE)
-//  {
-//    return TFunction<Scalar>::null();
-//  }
-//  else
-//  {
-//    return TFunction<Scalar>::solution(_var->dx(), _soln, _weightFluxesBySideParity);
-//  }
+  if (_var->op() == Camellia::OP_GRAD)
+  {
+    const int spaceDim = _soln->mesh()->getDimension();
+    std::vector< TFunctionPtr<Scalar> > gradDxComponents;
+    for (int d=0; d<spaceDim; d++)
+    {
+      gradDxComponents.push_back(this->spatialComponent(d+1)->dx());
+    }
+    return Function::vectorize(gradDxComponents);
+  }
+  else
+  {
+    return TFunction<Scalar>::solution(_var->dx(), _soln, _weightFluxesBySideParity);
+  }
 }
 
 template <typename Scalar>
 TFunctionPtr<Scalar> SimpleSolutionFunction<Scalar>::dy()
 {
-  return TFunction<Scalar>::solution(_var->dy(), _soln, _weightFluxesBySideParity);
-//  if (_var->op() != Camellia::OP_VALUE)
-//  {
-//    return TFunction<Scalar>::null();
-//  }
-//  else
-//  {
-//    return TFunction<Scalar>::solution(_var->dy(), _soln, _weightFluxesBySideParity);
-//  }
+  if (_var->op() == Camellia::OP_GRAD)
+  {
+    const int spaceDim = _soln->mesh()->getDimension();
+    std::vector< TFunctionPtr<Scalar> > gradDyComponents;
+    for (int d=0; d<spaceDim; d++)
+    {
+      gradDyComponents.push_back(this->spatialComponent(d+1)->dy());
+    }
+    return Function::vectorize(gradDyComponents);
+  }
+  else
+  {
+    return TFunction<Scalar>::solution(_var->dy(), _soln, _weightFluxesBySideParity);
+  }
 }
 
 template <typename Scalar>
 TFunctionPtr<Scalar> SimpleSolutionFunction<Scalar>::dz()
 {
-  return TFunction<Scalar>::solution(_var->dz(), _soln, _weightFluxesBySideParity);
-  
-//  if (_var->op() != Camellia::OP_VALUE)
-//  {
-//    return TFunction<Scalar>::null();
-//  }
-//  else
-//  {
-//    return TFunction<Scalar>::solution(_var->dz(), _soln, _weightFluxesBySideParity);
-//  }
+  if (_var->op() == Camellia::OP_GRAD)
+  {
+    const int spaceDim = _soln->mesh()->getDimension();
+    std::vector< TFunctionPtr<Scalar> > gradDzComponents;
+    for (int d=0; d<spaceDim; d++)
+    {
+      gradDzComponents.push_back(this->spatialComponent(d+1)->dz());
+    }
+    return Function::vectorize(gradDzComponents);
+  }
+  else
+  {
+    return TFunction<Scalar>::solution(_var->dz(), _soln, _weightFluxesBySideParity);
+  }
+}
+
+template <typename Scalar>
+TFunctionPtr<Scalar> SimpleSolutionFunction<Scalar>::grad(int spaceDim)
+{
+  if (_var->op() == Camellia::OP_VALUE)
+  {
+    if (spaceDim == -1) spaceDim = _soln->mesh()->getDimension();
+    TEUCHOS_TEST_FOR_EXCEPTION(spaceDim != _soln->mesh()->getDimension(), std::invalid_argument, "spaceDim argument to grad() must match dimension of the mesh.");
+    return TFunction<Scalar>::solution(_var->grad(), _soln, _weightFluxesBySideParity);
+  }
+  else
+  {
+    return this->TFunction<Scalar>::grad(spaceDim);
+  }
 }
 
 template <typename Scalar>

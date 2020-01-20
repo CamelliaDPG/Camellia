@@ -37,7 +37,10 @@ public:
   TFunctionPtr<Scalar> dx();
   TFunctionPtr<Scalar> dy();
   TFunctionPtr<Scalar> dz();
-  // for reasons of efficiency, may want to implement div() and grad() as well
+  
+  TFunctionPtr<Scalar> div();
+  TFunctionPtr<Scalar> grad(int spaceDim=-1);
+  TFunctionPtr<Scalar> curl();
 
   void importCellData(std::vector<GlobalIndexType> cellIDs);
 
