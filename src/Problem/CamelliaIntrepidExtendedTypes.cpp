@@ -131,6 +131,18 @@ EOperator Camellia::combineOperators(EOperator op_first, EOperator op_second)
     case OP_VALUE:
       return op_second;
       break;
+    case OP_GRAD:
+      switch (op_second) {
+        case OP_X:
+          return OP_DX;
+        case OP_Y:
+          return OP_DY;
+        case OP_Z:
+          return OP_DZ;
+        default:
+          TEUCHOS_TEST_FOR_EXCEPTION(true, std::invalid_argument, "Unsupported op combination");
+          break;
+      }
     case OP_DX:
       switch (op_second) {
         case OP_DX:
