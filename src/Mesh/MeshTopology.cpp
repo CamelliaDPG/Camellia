@@ -2543,9 +2543,11 @@ void MeshTopology::initializeTransformationFunction(MeshPtr mesh)
 {
   if ((_cellIDsWithCurves.size() > 0) && (mesh != Teuchos::null))
   {
+    // to avoid a circular reference, get a weak pointer to mesh
+    MeshPtr meshWeakPtr = Teuchos::rcp(mesh.get(), false); // false: weak reference
     // mesh transformation function expects global ID type
     set<GlobalIndexType> cellIDsGlobal(_cellIDsWithCurves.begin(),_cellIDsWithCurves.end());
-    _transformationFunction = Teuchos::rcp(new MeshTransformationFunction(mesh, cellIDsGlobal));
+    _transformationFunction = Teuchos::rcp(new MeshTransformationFunction(meshWeakPtr, cellIDsGlobal));
   }
   else
   {
