@@ -534,6 +534,372 @@ TEUCHOS_UNIT_TEST( Function, MinAndMaxFunctions )
   TEST_FLOATING_EQUALITY(expectedValue,actualValue,tol);
 }
 
+TEUCHOS_UNIT_TEST( Function, NeighborFunction )
+{
+  // In this test, we set up a 2x2 mesh with unit solution values on the lower-left and upper-right cells,
+  // and zero solutions in the others.  The lower-left cell has ID 0; the upper-right, 3.
+  // We test the values pointwise.
+  int spaceDim = 2;
+  bool conformingTraces = true;
+  PoissonFormulation form(spaceDim,conformingTraces);
+  
+  int H1Order = 1;
+  vector<int> elemCounts = {2,2};
+  set<int> unitCellIDs = {0,3};
+  
+  MeshPtr mesh = MeshFactory::rectilinearMesh(form.bf(), {1.0,1.0}, elemCounts, H1Order);
+  SolutionPtr solution = Solution::solution(form.bf(), mesh);
+  
+  solution->initializeLHSVector();
+  
+  auto myCellIDs = mesh->cellIDsInPartition();
+  
+  int solutionOrdinal = 0;
+  for (int cellID : myCellIDs)
+  {
+    auto trialOrdering = mesh->getElementType(cellID)->trialOrderPtr;
+    Intrepid::FieldContainer<double> solnCoefficients(trialOrdering->totalDofs());
+    bool hasUnitSolution = unitCellIDs.find(cellID) != unitCellIDs.end();
+    if (hasUnitSolution) solnCoefficients.initialize(1.0);
+    else                 solnCoefficients.initialize(0.0); // this will give all variables a constant 1.0 value
+    
+    solution->setSolnCoeffsForCellID(solnCoefficients, cellID, solutionOrdinal);
+  }
+  
+  VarPtr u = form.u();
+  FunctionPtr u_soln = Function::solution(u, solution);
+  auto u_neighbor = Function::neighborFunction(u_soln, mesh);
+  
+  std::vector<GlobalIndexType> myCellIDsVector(myCellIDs.begin(),myCellIDs.end());
+  u_neighbor->importCellData(myCellIDsVector);
+  
+  for (int cellID : myCellIDs)
+  {
+    bool cellHasUnitSolution = unitCellIDs.find(cellID) != unitCellIDs.end();
+    double myValue = cellHasUnitSolution ? 1.0 : 0.0;
+    
+    auto basisCache = BasisCache::basisCacheForCell(mesh, cellID);
+    int sideCount = basisCache->cellTopology()->getSideCount();
+    for (int sideOrdinal=0; sideOrdinal<sideCount; sideOrdinal++)
+    {
+      // for boundary sides, the "neighbor" value is the same as the value in the current cell
+      // for non-boundary sides, the neighbor value is 1.0 - myValue
+      bool isBoundary = mesh->getTopology()->getCell(cellID)->isBoundary(sideOrdinal);
+      double expectedValue = isBoundary ? myValue : 1.0 - myValue;
+      auto sideBasisCache = basisCache->getSideBasisCache(sideOrdinal);
+      int numCells = 1;
+      int numPoints = sideBasisCache->getRefCellPoints().dimension(0); // (P,D) container
+      Camellia::FieldContainer<double> neighborValues(numCells,numPoints);
+      u_neighbor->values(neighborValues, sideBasisCache);
+      
+      double tol = 1e-15;
+      for (int pointOrdinal=0; pointOrdinal<numPoints; pointOrdinal++)
+      {
+        auto actualValue = neighborValues(0,pointOrdinal);
+        if (expectedValue == 0.0)
+        {
+          TEST_COMPARE(abs(actualValue), <, tol);
+        }
+        else
+        {
+          TEST_FLOATING_EQUALITY(actualValue, expectedValue, tol);
+        }
+      }
+    }
+  }
+}
+
+TEUCHOS_UNIT_TEST( Function, NeighborFunctionWithNormal )
+{
+  /*
+    *-------*-------*
+    |       |       |
+    |   1   |   3   |
+    |       |       |
+    *-------*-------*
+    |       |       |
+    |   0   |   2   |
+    |       |       |
+    *-------*-------*
+  */
+  
+  // In this test, we set up a 2x2 mesh with a linear solution everywhere ( u(x,y) = x ).
+  // We test the neighbor values on the mesh skeleton pointwise for the normal flux ( grad(u)*n ).
+  int spaceDim = 2;
+  bool conformingTraces = true;
+  PoissonFormulation form(spaceDim,conformingTraces);
+  
+  int H1Order = 1;
+  vector<int> elemCounts = {2,2};
+  MeshPtr mesh = MeshFactory::rectilinearMesh(form.bf(), {1.0,1.0}, elemCounts, H1Order);
+  SolutionPtr solution = Solution::solution(form.bf(), mesh);
+  
+  FunctionPtr x = Function::xn(1);
+  FunctionPtr u_exact = x;
+  BCPtr bc = BC::bc();
+  bc->addDirichlet(form.u(), SpatialFilter::allSpace(), u_exact);
+  
+  FunctionPtr n = Function::normal();
+  auto u_neighbor = Function::neighborFunction(u_exact->grad(2)*n, mesh);
+  
+  auto myCellIDs = mesh->cellIDsInPartition();
+  std::vector<GlobalIndexType> myCellIDsVector(myCellIDs.begin(),myCellIDs.end());
+  u_neighbor->importCellData(myCellIDsVector);
+  
+  for (int cellID : myCellIDs)
+  {
+    auto basisCache = BasisCache::basisCacheForCell(mesh, cellID);
+    int sideCount = basisCache->cellTopology()->getSideCount();
+    for (int sideOrdinal=0; sideOrdinal<sideCount; sideOrdinal++)
+    {
+      auto sideBasisCache = basisCache->getSideBasisCache(sideOrdinal);
+      
+      // for sides normal to x, the "neighbor" value is +1 or -1, depending on the neighbor's normal direction
+      // for sides normal to y, the "neighbor" value is 0
+      double expectedValue;
+      bool isBoundary = mesh->getTopology()->getCell(cellID)->isBoundary(sideOrdinal);
+      auto normal_x = sideBasisCache->getSideNormals()[0];
+      if (isBoundary) { expectedValue =  normal_x; }
+      else            { expectedValue = -normal_x; }
+      
+      int numCells = 1;
+      int numPoints = sideBasisCache->getRefCellPoints().dimension(0); // (P,D) container
+      Camellia::FieldContainer<double> neighborValues(numCells,numPoints);
+      u_neighbor->values(neighborValues, sideBasisCache);
+      
+      double tol = 1e-13;
+      for (int pointOrdinal=0; pointOrdinal<numPoints; pointOrdinal++)
+      {
+        auto actualValue = neighborValues(0,pointOrdinal);
+        if (expectedValue == 0.0)
+        {
+          TEST_COMPARE(abs(actualValue), <, tol);
+        }
+        else
+        {
+          TEST_FLOATING_EQUALITY(actualValue, expectedValue, tol);
+        }
+      }
+    }
+  }
+}
+  
+TEUCHOS_UNIT_TEST( Function, NeighborFunctionWithHangingNode )
+{
+  // In this test, we set up a 2x2 mesh with unit solution values on the lower-left through upper-right cells,
+  // and zero solutions in the others.  The lower-left cell has ID 0; the upper-right, 3.
+  // We refine the lower-left cell, resulting in something of the form
+  /*
+   _________________
+   |       |       |
+   |   1   |   3   |
+   |       |       |
+   |_______|_______|
+   | 7 | 6 |       |
+   |___|___|   2   |
+   | 4 | 5 |       |
+   |___|___|_______|
+   
+   Here, 4,6,3 have unit values.
+   */
+  // We test the values pointwise.
+  int spaceDim = 2;
+  bool conformingTraces = true;
+  PoissonFormulation form(spaceDim,conformingTraces);
+  
+  enum ExpectedValueCategory
+  {
+    ZERO,
+    ONE,
+    ZERO_FOR_X_LESS_THAN_POINT_25, // (1.0 above 0.25)
+    ZERO_FOR_Y_LESS_THAN_POINT_25  // (1.0 above 0.25)
+  };
+  
+  std::map<int, std::vector<ExpectedValueCategory> > expectedValueMap; // index: [cellID][sideOrdinal]
+  expectedValueMap[1] = {ZERO_FOR_X_LESS_THAN_POINT_25,ONE,ZERO,ZERO}; // side numbering: SENW
+  expectedValueMap[2] = {ZERO,ZERO,ONE,ZERO_FOR_Y_LESS_THAN_POINT_25};
+  expectedValueMap[3] = {ZERO,ONE,ONE,ZERO};
+  expectedValueMap[4] = {ONE,ZERO,ZERO,ONE};
+  expectedValueMap[5] = {ZERO,ZERO,ONE,ONE};
+  expectedValueMap[6] = {ZERO,ZERO,ZERO,ZERO};
+  expectedValueMap[7] = {ONE,ONE,ZERO,ZERO};
+  
+  int H1Order = 1;
+  vector<int> elemCounts = {2,2};
+  set<int> unitCellIDs = {3,4,6};
+  
+  MeshPtr mesh = MeshFactory::rectilinearMesh(form.bf(), {1.0,1.0}, elemCounts, H1Order);
+  const vector<GlobalIndexType> cellsToHRefine = {0};
+  mesh->hRefine(cellsToHRefine);
+  
+  SolutionPtr solution = Solution::solution(form.bf(), mesh);
+  
+  solution->initializeLHSVector();
+  
+  auto myCellIDs = mesh->cellIDsInPartition();
+  
+  int solutionOrdinal = 0;
+  for (int cellID : myCellIDs)
+  {
+    auto trialOrdering = mesh->getElementType(cellID)->trialOrderPtr;
+    Intrepid::FieldContainer<double> solnCoefficients(trialOrdering->totalDofs());
+    bool hasUnitSolution = unitCellIDs.find(cellID) != unitCellIDs.end();
+    if (hasUnitSolution) solnCoefficients.initialize(1.0); // this will give all variables a constant 1.0 value
+    else                 solnCoefficients.initialize(0.0);
+    
+    solution->setSolnCoeffsForCellID(solnCoefficients, cellID, solutionOrdinal);
+  }
+  
+  VarPtr u = form.u();
+  FunctionPtr u_soln = Function::solution(u, solution);
+  auto u_neighbor = Function::neighborFunction(u_soln, mesh);
+  
+  std::vector<GlobalIndexType> myCellIDsVector(myCellIDs.begin(),myCellIDs.end());
+  u_neighbor->importCellData(myCellIDsVector);
+  
+  for (int cellID : myCellIDs)
+  {
+    out << "Checking cell " << cellID << std::endl;
+    auto basisCache = BasisCache::basisCacheForCell(mesh, cellID);
+    int sideCount = basisCache->cellTopology()->getSideCount();
+    for (int sideOrdinal=0; sideOrdinal<sideCount; sideOrdinal++)
+    {
+      out << "Checking side " << sideOrdinal << std::endl;
+      auto expectedValueCategory = expectedValueMap[cellID][sideOrdinal];
+      auto sideBasisCache = basisCache->getSideBasisCache(sideOrdinal);
+      int numCells = 1;
+      int numPoints = sideBasisCache->getRefCellPoints().dimension(0); // (P,D) container
+      Camellia::FieldContainer<double> neighborValues(numCells,numPoints);
+      u_neighbor->values(neighborValues, sideBasisCache);
+      
+      double tol = 1e-15;
+      auto &physicalPoints = sideBasisCache->getPhysicalCubaturePoints();
+      for (int pointOrdinal=0; pointOrdinal<numPoints; pointOrdinal++)
+      {
+        double expectedValue;
+        double x = physicalPoints(0,pointOrdinal,0);
+        double y = physicalPoints(0,pointOrdinal,1);
+        out << "Checking point (" << x << "," << y << ")" << std::endl;
+        switch (expectedValueCategory) {
+          case ZERO:
+            expectedValue = 0.0;
+            break;
+          case ONE:
+            expectedValue = 1.0;
+            break;
+          case ZERO_FOR_X_LESS_THAN_POINT_25:
+            if (x == 0.25)
+            {
+              expectedValue = 0.5; // two cells match the point at 0.25, and we take the average
+            }
+            else if (x < 0.25)
+            {
+              expectedValue = 0.0;
+            }
+            else
+            {
+              expectedValue = 1.0;
+            }
+            break;
+          case ZERO_FOR_Y_LESS_THAN_POINT_25:
+            if (y == 0.25)
+            {
+              expectedValue = 0.5; // two cells match the point at 0.25, and we take the average
+            }
+            else if (y < 0.25)
+            {
+              expectedValue = 0.0;
+            }
+            else
+            {
+              expectedValue = 1.0;
+            }
+            break;
+        }
+        
+        auto actualValue = neighborValues(0,pointOrdinal);
+        if (expectedValue == 0.0)
+        {
+          TEST_COMPARE(abs(actualValue), <, tol);
+        }
+        else
+        {
+          TEST_FLOATING_EQUALITY(actualValue, expectedValue, tol);
+        }
+      }
+    }
+  }
+}
+  
+TEUCHOS_UNIT_TEST( Function, SolutionFunctionSkeletonRestriction )
+{
+  // In this test, we set up a 2x2 mesh with unit solution values on the lower-left and upper-right cells,
+  // and zero solutions in the others.  The lower-left cell has ID 0; the upper-right, 3.
+  // The idea here is that we have a discontinuous solution, and want to contribute to some global integral
+  // by integrating local contributions.  (It is necessary that the thing you integrate against is in some
+  // sense globally continuous: i.e., the "left" and "right" cell values should be tested with the same test function.)
+  // We test that the integral on each cell matches the expected value.
+  int spaceDim = 2;
+  bool conformingTraces = true;
+  PoissonFormulation form(spaceDim,conformingTraces);
+  
+  int H1Order = 1;
+  vector<int> elemCounts = {2,2};
+  set<int> unitCellIDs = {0,3};
+  
+  MeshPtr mesh = MeshFactory::rectilinearMesh(form.bf(), {1.0,1.0}, elemCounts, H1Order);
+  SolutionPtr solution = Solution::solution(form.bf(), mesh);
+  
+  solution->initializeLHSVector();
+  
+  auto myCellIDs = mesh->cellIDsInPartition();
+  
+  int solutionOrdinal = 0;
+  for (int cellID : myCellIDs)
+  {
+    auto trialOrdering = mesh->getElementType(cellID)->trialOrderPtr;
+    Intrepid::FieldContainer<double> solnCoefficients(trialOrdering->totalDofs());
+    bool hasUnitSolution = unitCellIDs.find(cellID) != unitCellIDs.end();
+    if (hasUnitSolution) solnCoefficients.initialize(1.0);
+    else                 solnCoefficients.initialize(0.0); // this will give all variables a constant 1.0 value
+    
+    solution->setSolnCoeffsForCellID(solnCoefficients, cellID, solutionOrdinal);
+  }
+  
+  FunctionPtr gamma   = Function::meshBoundaryCharacteristic();
+  FunctionPtr gamma_h = Function::meshSkeletonCharacteristic();
+  
+  VarPtr u = form.u();
+  FunctionPtr u_soln = Function::solution(u, solution);
+  // we want the value of u on the mesh boundary, and the average value of u ("left" and "right") on the interior skeleton:
+  //    u_soln * gamma + (gamma_h - gamma) * 0.5 * u_soln;
+  // this simplifies to:
+  //    0.5 * (gamma_h + gamma) * u_soln
+  FunctionPtr u_restriction = 0.5 * (gamma_h + gamma) * u_soln;
+  
+  // set up expected integrals on each cell:
+  // - on cell with zero value, we expect 0
+  // - on a cell with unit value, we expect:
+  //   interior edges: edge_length * 0.5 * 1.0 = 0.5 * 0.5 * 1.0 = 0.25
+  //   boundary edges: edge_length * 1.0 * 1.0 = 0.5
+  //   each cell has 2 interior edges and 2 boundary edges, so the expected integral is 1.5
+  for (int cellID : myCellIDs)
+  {
+    double actualValue = u_restriction->integrate(cellID, mesh);
+    bool hasUnitSolution = unitCellIDs.find(cellID) != unitCellIDs.end();
+    double expectedValue = hasUnitSolution ? 1.5 : 0.0;
+    double tol = 1e-15;
+    if (expectedValue == 0.0)
+    {
+      TEST_COMPARE(abs(actualValue), <, tol);
+    }
+    else
+    {
+      TEST_FLOATING_EQUALITY(actualValue, expectedValue, tol);
+    }
+  }
+}
+
 TEUCHOS_UNIT_TEST( Function, SpaceTimeIntegralLine )
 {
   FunctionPtr x = Function::xn(1);
