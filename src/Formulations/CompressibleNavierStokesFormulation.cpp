@@ -582,6 +582,10 @@ CompressibleNavierStokesFormulation::CompressibleNavierStokesFormulation(MeshTop
     _solnIncrement->loadFromHDF5(savedSolutionAndMeshPrefix+"_increment.soln");
     _solnPrevTime->loadFromHDF5(savedSolutionAndMeshPrefix+"_prevtime.soln");
   }
+  
+  // avoid circular references when setting up bf object
+  SolutionPtr backgroundFlowWeakReference = Teuchos::rcp(_backgroundFlow.get(), false);
+  SolutionPtr solnPrevTimeWeakReference   = Teuchos::rcp(_solnPrevTime.get(), false);
 
   // Previous solution values
   FunctionPtr rho_prev;
@@ -595,54 +599,54 @@ CompressibleNavierStokesFormulation::CompressibleNavierStokesFormulation(MeshTop
   switch (_spaceDim)
   {
     case 1:
-      rho_prev = Function::solution(this->rho(), _backgroundFlow);
-      u1_prev = Function::solution(this->u(1), _backgroundFlow);
-      T_prev  = Function::solution(this->T(), _backgroundFlow);
-      D11_prev = Function::solution(this->D(1,1), _backgroundFlow);
-      q1_prev = Function::solution(this->q(1), _backgroundFlow);
-      rho_prev_time = Function::solution(this->rho(), _solnPrevTime);
-      u1_prev_time = Function::solution(this->u(1), _solnPrevTime);
-      T_prev_time  = Function::solution(this->T(), _solnPrevTime);
+      rho_prev = Function::solution(this->rho(), backgroundFlowWeakReference);
+      u1_prev = Function::solution(this->u(1), backgroundFlowWeakReference);
+      T_prev  = Function::solution(this->T(), backgroundFlowWeakReference);
+      D11_prev = Function::solution(this->D(1,1), backgroundFlowWeakReference);
+      q1_prev = Function::solution(this->q(1), backgroundFlowWeakReference);
+      rho_prev_time = Function::solution(this->rho(), solnPrevTimeWeakReference);
+      u1_prev_time = Function::solution(this->u(1), solnPrevTimeWeakReference);
+      T_prev_time  = Function::solution(this->T(), solnPrevTimeWeakReference);
       break;
     case 2:
-      rho_prev = Function::solution(this->rho(), _backgroundFlow);
-      u1_prev = Function::solution(this->u(1), _backgroundFlow);
-      u2_prev = Function::solution(this->u(2), _backgroundFlow);
-      T_prev  = Function::solution(this->T(), _backgroundFlow);
-      D11_prev = Function::solution(this->D(1,1), _backgroundFlow);
-      D12_prev = Function::solution(this->D(1,2), _backgroundFlow);
-      D21_prev = Function::solution(this->D(2,1), _backgroundFlow);
-      D22_prev = Function::solution(this->D(2,2), _backgroundFlow);
-      q1_prev = Function::solution(this->q(1), _backgroundFlow);
-      q2_prev = Function::solution(this->q(2), _backgroundFlow);
-      rho_prev_time = Function::solution(this->rho(), _solnPrevTime);
-      u1_prev_time = Function::solution(this->u(1), _solnPrevTime);
-      u2_prev_time = Function::solution(this->u(2), _solnPrevTime);
-      T_prev_time  = Function::solution(this->T(), _solnPrevTime);
+      rho_prev = Function::solution(this->rho(), backgroundFlowWeakReference);
+      u1_prev = Function::solution(this->u(1), backgroundFlowWeakReference);
+      u2_prev = Function::solution(this->u(2), backgroundFlowWeakReference);
+      T_prev  = Function::solution(this->T(), backgroundFlowWeakReference);
+      D11_prev = Function::solution(this->D(1,1), backgroundFlowWeakReference);
+      D12_prev = Function::solution(this->D(1,2), backgroundFlowWeakReference);
+      D21_prev = Function::solution(this->D(2,1), backgroundFlowWeakReference);
+      D22_prev = Function::solution(this->D(2,2), backgroundFlowWeakReference);
+      q1_prev = Function::solution(this->q(1), backgroundFlowWeakReference);
+      q2_prev = Function::solution(this->q(2), backgroundFlowWeakReference);
+      rho_prev_time = Function::solution(this->rho(), solnPrevTimeWeakReference);
+      u1_prev_time = Function::solution(this->u(1), solnPrevTimeWeakReference);
+      u2_prev_time = Function::solution(this->u(2), solnPrevTimeWeakReference);
+      T_prev_time  = Function::solution(this->T(), solnPrevTimeWeakReference);
       break;
     case 3:
-      rho_prev = Function::solution(this->rho(), _backgroundFlow);
-      u1_prev = Function::solution(this->u(1), _backgroundFlow);
-      u2_prev = Function::solution(this->u(2), _backgroundFlow);
-      u3_prev = Function::solution(this->u(3), _backgroundFlow);
-      T_prev  = Function::solution(this->T(), _backgroundFlow);
-      D11_prev = Function::solution(this->D(1,1), _backgroundFlow);
-      D12_prev = Function::solution(this->D(1,2), _backgroundFlow);
-      D13_prev = Function::solution(this->D(1,3), _backgroundFlow);
-      D21_prev = Function::solution(this->D(2,1), _backgroundFlow);
-      D22_prev = Function::solution(this->D(2,2), _backgroundFlow);
-      D23_prev = Function::solution(this->D(2,3), _backgroundFlow);
-      D31_prev = Function::solution(this->D(3,1), _backgroundFlow);
-      D32_prev = Function::solution(this->D(3,2), _backgroundFlow);
-      D33_prev = Function::solution(this->D(3,3), _backgroundFlow);
-      q1_prev = Function::solution(this->q(1), _backgroundFlow);
-      q2_prev = Function::solution(this->q(2), _backgroundFlow);
-      q3_prev = Function::solution(this->q(3), _backgroundFlow);
-      rho_prev_time = Function::solution(this->rho(), _solnPrevTime);
-      u1_prev_time = Function::solution(this->u(1), _solnPrevTime);
-      u2_prev_time = Function::solution(this->u(2), _solnPrevTime);
-      u3_prev_time = Function::solution(this->u(3), _solnPrevTime);
-      T_prev_time  = Function::solution(this->T(), _solnPrevTime);
+      rho_prev = Function::solution(this->rho(), backgroundFlowWeakReference);
+      u1_prev = Function::solution(this->u(1), backgroundFlowWeakReference);
+      u2_prev = Function::solution(this->u(2), backgroundFlowWeakReference);
+      u3_prev = Function::solution(this->u(3), backgroundFlowWeakReference);
+      T_prev  = Function::solution(this->T(), backgroundFlowWeakReference);
+      D11_prev = Function::solution(this->D(1,1), backgroundFlowWeakReference);
+      D12_prev = Function::solution(this->D(1,2), backgroundFlowWeakReference);
+      D13_prev = Function::solution(this->D(1,3), backgroundFlowWeakReference);
+      D21_prev = Function::solution(this->D(2,1), backgroundFlowWeakReference);
+      D22_prev = Function::solution(this->D(2,2), backgroundFlowWeakReference);
+      D23_prev = Function::solution(this->D(2,3), backgroundFlowWeakReference);
+      D31_prev = Function::solution(this->D(3,1), backgroundFlowWeakReference);
+      D32_prev = Function::solution(this->D(3,2), backgroundFlowWeakReference);
+      D33_prev = Function::solution(this->D(3,3), backgroundFlowWeakReference);
+      q1_prev = Function::solution(this->q(1), backgroundFlowWeakReference);
+      q2_prev = Function::solution(this->q(2), backgroundFlowWeakReference);
+      q3_prev = Function::solution(this->q(3), backgroundFlowWeakReference);
+      rho_prev_time = Function::solution(this->rho(), solnPrevTimeWeakReference);
+      u1_prev_time = Function::solution(this->u(1), solnPrevTimeWeakReference);
+      u2_prev_time = Function::solution(this->u(2), solnPrevTimeWeakReference);
+      u3_prev_time = Function::solution(this->u(3), solnPrevTimeWeakReference);
+      T_prev_time  = Function::solution(this->T(), solnPrevTimeWeakReference);
       break;
     default:
       TEUCHOS_TEST_FOR_EXCEPTION(true, std::invalid_argument, "_spaceDim must be 1,2, or 3!");
