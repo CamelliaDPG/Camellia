@@ -6,6 +6,7 @@ option(BUILD_DPGTESTS_DRIVER "Build DPGTests driver" OFF)
 option(BUILD_EXPERIMENTAL_DRIVERS "Build drivers in experimental directory" OFF)
 option(BUILD_PERFORMANCE_TEST_DRIVERS "Build drivers in performance directory" ON)
 option(BUILD_PRECONDITIONING_DRIVERS "Build drivers in Preconditioning directory" OFF)
+option(BUILD_STEFAN_DRIVERS "Build drivers in Stefan directory" ON)
 
 # Include headers from DPGTests for some drivers
 include_directories(DPGTests)
@@ -49,3 +50,10 @@ if (BUILD_EXPERIMENTAL_DRIVERS)
   MESSAGE("Setting up makefiles for drivers in drivers/experimental, because BUILD_EXPERIMENTAL_DRIVERS is ON.")
   add_subdirectory(experimental)
 endif(BUILD_EXPERIMENTAL_DRIVERS)
+
+if (BUILD_STEFAN_DRIVERS)
+  add_subdirectory(Stefan)
+  MESSAGE("Setting up makefiles for drivers in drivers/Stefan, because BUILD_STEFAN_DRIVERS is ON.")
+else()
+  MESSAGE("Not setting up makefiles for drivers in drivers/Stefan, because BUILD_STEFAN_DRIVERS is OFF.")
+endif(BUILD_STEFAN_DRIVERS)

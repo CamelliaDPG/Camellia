@@ -1474,13 +1474,15 @@ void CamelliaCellTools::getTensorPoints(Camellia::FieldContainer<double>& tensor
 
 // copied from Intrepid's CellTools and specialized to allow use when we have curvilinear geometry
 void CamelliaCellTools::mapToReferenceFrameInitGuess(      Camellia::FieldContainer<double>  &        refPoints,
-    const Camellia::FieldContainer<double>  &        initGuess,
-    const Camellia::FieldContainer<double>  &        physPoints,
-    BasisCachePtr basisCache)
+                                                     const Camellia::FieldContainer<double>  &        initGuess,
+                                                     const Camellia::FieldContainer<double>  &        physPoints,
+                                                     BasisCachePtr basisCache)
 {
-  int spaceDim  = basisCache->cellTopology()->getDimension();
-  int numPoints;
-  int numCells=physPoints.dimension(0);
+  TEUCHOS_TEST_FOR_EXCEPTION(physPoints.rank() != 3, std::invalid_argument, "physPoints should have shape (C,P,D)");
+  
+  const int spaceDim  = basisCache->cellTopology()->getDimension();
+  const int numCells  = physPoints.dimension(0);
+  const int numPoints = physPoints.dimension(1);
 
   // Temp arrays for Newton iterates and Jacobians. Resize according to rank of ref. point array
   Camellia::FieldContainer<double> xOld;
@@ -1489,7 +1491,7 @@ void CamelliaCellTools::mapToReferenceFrameInitGuess(      Camellia::FieldContai
   Camellia::FieldContainer<double> cellCenter(spaceDim);
 
   // Default: map (C,P,D) array of physical pt. sets to (C,P,D) array. Requires (C,P,D) temp arrays and (C,P,D,D) Jacobians.
-  numPoints = physPoints.dimension(1);
+  
   xOld.resize(numCells, numPoints, spaceDim);
   xTem.resize(numCells, numPoints, spaceDim);
   error.resize(numCells,numPoints);
@@ -1555,6 +1557,8 @@ void CamelliaCellTools::mapToReferenceFrameInitGuess(       Camellia::FieldConta
     const Camellia::FieldContainer<double>  &        physPoints,
     ConstMeshTopologyViewPtr meshTopo, IndexType cellID, int cubatureDegree)
 {
+  TEUCHOS_TEST_FOR_EXCEPTION(physPoints.rank() != 3, std::invalid_argument, "physPoints should have shape (C,P,D)");
+  
   CellPtr cell = meshTopo->getCell(cellID);
 
   BasisCachePtr basisCache = BasisCache::basisCacheForReferenceCell(cell->topology(), cubatureDegree);
@@ -1574,9 +1578,11 @@ void CamelliaCellTools::mapToReferenceFrameInitGuess(       Camellia::FieldConta
 
 // copied from Intrepid's CellTools and specialized to allow use when we have curvilinear geometry
 void CamelliaCellTools::mapToReferenceFrame(      Camellia::FieldContainer<double>      &        refPoints,
-    const Camellia::FieldContainer<double>      &        physPoints,
-    ConstMeshTopologyViewPtr meshTopo, IndexType cellID, int cubatureDegree)
+                                            const Camellia::FieldContainer<double>      &        physPoints,
+                                            ConstMeshTopologyViewPtr meshTopo, IndexType cellID, int cubatureDegree)
 {
+  TEUCHOS_TEST_FOR_EXCEPTION(physPoints.rank() != 3, std::invalid_argument, "physPoints should have shape (C,P,D)");
+  
   CellPtr cell = meshTopo->getCell(cellID);
   CellTopoPtr cellTopo = cell->topology();
   int spaceDim  = cellTopo->getDimension();

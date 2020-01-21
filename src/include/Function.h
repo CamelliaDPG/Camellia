@@ -232,6 +232,13 @@ public:
   static TFunctionPtr<double> heaviside(double xValue);
   static TFunctionPtr<double> heavisideY(double yValue);
   
+  //! neighborFunction is defined on the mesh skeleton; evaluates f from the point of view of the neighbor on each face.
+  //! on the mesh boundary, simply computes f on the (interior) element.
+  //! Note: for data-dependent f, importCellData() should be called prior to evaluation, passing in the cells whose neighbor values will
+  //!       be computed.  This allows appropriate MPI communication to occur.
+  //! Typically, this means doing something like: neighborFunction->importCellData(mesh->cellIDsInPartition()) after the data has changed.
+  static TFunctionPtr<Scalar> neighborFunction(TFunctionPtr<Scalar> f, MeshPtr mesh);
+  
   // ! Square root of the specified function.
   static TFunctionPtr<Scalar> sqrtFunction(TFunctionPtr<Scalar> f);
 
