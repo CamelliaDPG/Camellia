@@ -383,12 +383,16 @@ IdealMHDFormulation::IdealMHDFormulation(MeshTopologyPtr meshTopo, Teuchos::Para
   // to avoid needing a bunch of casts below, do a cast once here:
   FunctionPtr dt = (FunctionPtr)_dt;
   
+  // avoid circular references when setting up bf object
+  SolutionPtr backgroundFlowWeakReference = Teuchos::rcp(_backgroundFlow.get(), false);
+  SolutionPtr solnPrevTimeWeakReference   = Teuchos::rcp(_solnPrevTime.get(), false);
+  
   bool weightFluxesByParity = true; // TODO: decide whether true or false is more appropriate (so far, we haven't used the DPG fluxes that are stored here...)
   for (auto varEntry : trialVars)
   {
     VarPtr var = varEntry.second;
-    _backgroundFlowMap  [var->ID()] = Function::solution(var, _backgroundFlow, weightFluxesByParity, backgroundFlowIdentifierExponent);
-    _solnPreviousTimeMap[var->ID()] = Function::solution(var, _solnPrevTime,   weightFluxesByParity, previousTimeIdentifierExponent);
+    _backgroundFlowMap  [var->ID()] = Function::solution(var, backgroundFlowWeakReference, weightFluxesByParity, backgroundFlowIdentifierExponent);
+    _solnPreviousTimeMap[var->ID()] = Function::solution(var, solnPrevTimeWeakReference,   weightFluxesByParity, previousTimeIdentifierExponent);
     _solnIncrementMap   [var->ID()] = Function::solution(var, _solnIncrement,  weightFluxesByParity, "");
   }
   
