@@ -7,7 +7,8 @@
 #include "BasisCache.h"
 
 using namespace Camellia;
-using namespace std;
+using std::sin;
+using std::cos;
 
 template<class Scalar>
 class Sin : public TFunction<Scalar>
@@ -18,27 +19,27 @@ public:
   {
     _arg = arg;
   }
-  string displayString()
+  std::string displayString()
   {
-    ostringstream name;
+    std::ostringstream name;
     name << "sin(" << _arg->displayString() << ")";
     return name.str();
   }
-  
   virtual void values(Camellia::FieldContainer<Scalar> &values, BasisCachePtr basisCache)
   {
     this->CHECK_VALUES_RANK(values);
-    int numCells = values.dimension(0);
-    int numPoints = values.dimension(1);
-    
     _arg->values(values, basisCache);
-    for (int cellOrdinal=0; cellOrdinal<numCells; cellOrdinal++)
-    {
-      for (int ptOrdinal=0; ptOrdinal<numPoints; ptOrdinal++)
-      {
-        values(cellOrdinal,ptOrdinal) = std::sin(values(cellOrdinal,ptOrdinal));
+    auto dv = values.checkoutDeviceView();
+    TEUCHOS_TEST_FOR_EXCEPTION(dv.rank() != 2, std::invalid_argument, "rank is not equal to 2");
+    const int numCells  = dv.extent(0);
+    const int numPoints = dv.extent(1);
+    
+    Kokkos::parallel_for("Sin_values", numCells, KOKKOS_LAMBDA (const int cellOrdinal) {
+      for (int pointOrdinal=0; pointOrdinal<numPoints; pointOrdinal++) {
+        dv(cellOrdinal,pointOrdinal) = sin(dv(cellOrdinal,pointOrdinal));
       }
-    }
+    });
+    values.checkinDeviceView();
   }
   
   TFunctionPtr<Scalar> dx()
@@ -75,26 +76,27 @@ public:
   {
     _arg = arg;
   }
-  string displayString()
+  std::string displayString()
   {
-    ostringstream name;
+    std::ostringstream name;
     name << "cos(" << _arg->displayString() << ")";
     return name.str();
   }
   virtual void values(Camellia::FieldContainer<Scalar> &values, BasisCachePtr basisCache)
   {
     this->CHECK_VALUES_RANK(values);
-    int numCells = values.dimension(0);
-    int numPoints = values.dimension(1);
-    
     _arg->values(values, basisCache);
-    for (int cellOrdinal=0; cellOrdinal<numCells; cellOrdinal++)
-    {
-      for (int ptOrdinal=0; ptOrdinal<numPoints; ptOrdinal++)
-      {
-        values(cellOrdinal,ptOrdinal) = std::cos(values(cellOrdinal,ptOrdinal));
+    auto dv = values.checkoutDeviceView();
+    TEUCHOS_TEST_FOR_EXCEPTION(dv.rank() != 2, std::invalid_argument, "rank is not equal to 2");
+    const int numCells  = dv.extent(0);
+    const int numPoints = dv.extent(1);
+    
+    Kokkos::parallel_for("Cos_values", numCells, KOKKOS_LAMBDA (const int cellOrdinal) {
+      for (int pointOrdinal=0; pointOrdinal<numPoints; pointOrdinal++) {
+        dv(cellOrdinal,pointOrdinal) = cos(dv(cellOrdinal,pointOrdinal));
       }
-    }
+    });
+    values.checkinDeviceView();
   }
   
   TFunctionPtr<Scalar> dx()
@@ -122,7 +124,7 @@ public:
   }
 };
 
-string Sin_y::displayString()
+std::string Sin_y::displayString()
 {
   return "\\sin y";
 }
@@ -144,7 +146,7 @@ TFunctionPtr<double> Sin_y::dz()
   return TFunction<double>::zero();
 }
 
-string Cos_y::displayString()
+std::string Cos_y::displayString()
 {
   return "\\cos y";
 }
@@ -166,7 +168,7 @@ TFunctionPtr<double> Cos_y::dz()
   return TFunction<double>::zero();
 }
 
-string Sin_x::displayString()
+std::string Sin_x::displayString()
 {
   return "\\sin x";
 }
@@ -188,7 +190,7 @@ TFunctionPtr<double> Sin_x::dz()
   return TFunction<double>::zero();
 }
 
-string Cos_x::displayString()
+std::string Cos_x::displayString()
 {
   return "\\cos x";
 }
@@ -228,9 +230,9 @@ TFunctionPtr<double> Cos_ax::dy()
   return TFunction<double>::zero();
 }
 
-string Cos_ax::displayString()
+std::string Cos_ax::displayString()
 {
-  ostringstream ss;
+  std::ostringstream ss;
   ss << "\\cos( " << _a << " x )";
   return ss.str();
 }
@@ -252,9 +254,9 @@ TFunctionPtr<double> Cos_ay::dy()
   return -_a * (TFunctionPtr<double>) Teuchos::rcp(new Sin_ay(_a));
 }
 
-string Cos_ay::displayString()
+std::string Cos_ay::displayString()
 {
-  ostringstream ss;
+  std::ostringstream ss;
   ss << "\\cos( " << _a << " y )";
   return ss.str();
 }
@@ -277,9 +279,9 @@ TFunctionPtr<double> Sin_ax::dy()
 {
   return TFunction<double>::zero();
 }
-string Sin_ax::displayString()
+std::string Sin_ax::displayString()
 {
-  ostringstream ss;
+  std::ostringstream ss;
   ss << "\\sin( " << _a << " x )";
   return ss.str();
 }
@@ -300,9 +302,9 @@ TFunctionPtr<double> Sin_ay::dy()
 {
   return _a * (TFunctionPtr<double>) Teuchos::rcp(new Cos_ay(_a));
 }
-string Sin_ay::displayString()
+std::string Sin_ay::displayString()
 {
-  ostringstream ss;
+  std::ostringstream ss;
   ss << "\\sin( " << _a << " y )";
   return ss.str();
 }
@@ -326,9 +328,9 @@ TFunctionPtr<double> ArcTan_ax::dy()
 {
   return TFunction<double>::zero();
 }
-string ArcTan_ax::displayString()
+std::string ArcTan_ax::displayString()
 {
-  ostringstream ss;
+  std::ostringstream ss;
   ss << "\\atan( " << _a << " x )";
   return ss.str();
 }
@@ -352,9 +354,9 @@ TFunctionPtr<double> ArcTan_ay::dy()
   TFunctionPtr<double> y2  = TFunction<double>::yn(2);
   return _a * one/(y2 + one);
 }
-string ArcTan_ay::displayString()
+std::string ArcTan_ay::displayString()
 {
-  ostringstream ss;
+  std::ostringstream ss;
   ss << "\\atan( " << _a << " y )";
   return ss.str();
 }

@@ -7,7 +7,8 @@
 #include "BasisCache.h"
 
 using namespace Camellia;
-using namespace std;
+using std::fmin;
+using std::fmax;
 
 MinFunction::MinFunction(TFunctionPtr<double> f1, TFunctionPtr<double> f2) : TFunction<double>(f1->rank())
 {
@@ -22,9 +23,9 @@ bool MinFunction::boundaryValueOnly()
   return _f1->boundaryValueOnly() || _f2->boundaryValueOnly();
 }
 
-string MinFunction::displayString()
+std::string MinFunction::displayString()
 {
-  ostringstream ss;
+  std::ostringstream ss;
   ss << "\\min( " << _f1->displayString() << " , " << _f2->displayString() << " )";
   return ss.str();
 }
@@ -40,10 +41,34 @@ void MinFunction::values(Camellia::FieldContainer<double> &values, BasisCachePtr
   Camellia::FieldContainer<double> values2(values);
   _f1->values(values,basisCache);
   _f2->values(values2,basisCache);
-  for(int i = 0; i < values.size(); i++)
-  {
-    values[i] = std::min(values[i],values2[i]);
-  }
+  
+  auto dv = values.checkoutDeviceView();
+  auto dv2 = values2.checkoutDeviceView();
+  
+  const int dim0 = (dv.rank() > 0) ? dv.extent(0) : 1;
+  const int dim1 = (dv.rank() > 1) ? dv.extent(1) : 1;
+  const int dim2 = (dv.rank() > 2) ? dv.extent(2) : 1;
+  const int dim3 = (dv.rank() > 3) ? dv.extent(3) : 1;
+  const int dim4 = (dv.rank() > 4) ? dv.extent(4) : 1;
+  const int dim5 = (dv.rank() > 5) ? dv.extent(5) : 1;
+  const int dim6 = (dv.rank() > 6) ? dv.extent(6) : 1;
+  
+  Kokkos::parallel_for("MinFunction_values", dim0, KOKKOS_LAMBDA (const int i0) {
+    for (int i1 = 0; i1 < dim1; i1++) {
+      for (int i2 = 0; i2 < dim2; i2++) {
+        for (int i3 = 0; i3 < dim3; i3++) {
+          for (int i4 = 0; i4 < dim4; i4++) {
+            for (int i5 = 0; i5 < dim5; i5++) {
+              for (int i6 = 0; i6 < dim6; i6++) {
+                dv.access(i0,i1,i2,i3,i4,i5,i6) = fmin(dv.access(i0,i1,i2,i3,i4,i5,i6),dv2.access(i0,i1,i2,i3,i4,i5,i6));
+              }
+            }
+          }
+        }
+      }
+    }
+  });
+  values.checkinDeviceView();
 }
 
 TFunctionPtr<double> MinFunction::x()
@@ -85,9 +110,9 @@ bool MaxFunction::boundaryValueOnly()
   return _f1->boundaryValueOnly() || _f2->boundaryValueOnly();
 }
 
-string MaxFunction::displayString()
+std::string MaxFunction::displayString()
 {
-  ostringstream ss;
+  std::ostringstream ss;
   ss << "\\max( " << _f1->displayString() << " , " << _f2->displayString() << " )";
   return ss.str();
 }
@@ -103,10 +128,34 @@ void MaxFunction::values(Camellia::FieldContainer<double> &values, BasisCachePtr
   Camellia::FieldContainer<double> values2(values);
   _f1->values(values,basisCache);
   _f2->values(values2,basisCache);
-  for(int i = 0; i < values.size(); i++)
-  {
-    values[i] = std::max(values[i],values2[i]);
-  }
+  
+  auto dv = values.checkoutDeviceView();
+  auto dv2 = values2.checkoutDeviceView();
+  
+  const int dim0 = (dv.rank() > 0) ? dv.extent(0) : 1;
+  const int dim1 = (dv.rank() > 1) ? dv.extent(1) : 1;
+  const int dim2 = (dv.rank() > 2) ? dv.extent(2) : 1;
+  const int dim3 = (dv.rank() > 3) ? dv.extent(3) : 1;
+  const int dim4 = (dv.rank() > 4) ? dv.extent(4) : 1;
+  const int dim5 = (dv.rank() > 5) ? dv.extent(5) : 1;
+  const int dim6 = (dv.rank() > 6) ? dv.extent(6) : 1;
+  
+  Kokkos::parallel_for("MaxFunction_values", dim0, KOKKOS_LAMBDA (const int i0) {
+    for (int i1 = 0; i1 < dim1; i1++) {
+      for (int i2 = 0; i2 < dim2; i2++) {
+        for (int i3 = 0; i3 < dim3; i3++) {
+          for (int i4 = 0; i4 < dim4; i4++) {
+            for (int i5 = 0; i5 < dim5; i5++) {
+              for (int i6 = 0; i6 < dim6; i6++) {
+                dv.access(i0,i1,i2,i3,i4,i5,i6) = fmax(dv.access(i0,i1,i2,i3,i4,i5,i6),dv2.access(i0,i1,i2,i3,i4,i5,i6));
+              }
+            }
+          }
+        }
+      }
+    }
+  });
+  values.checkinDeviceView();
 }
 
 TFunctionPtr<double> MaxFunction::x()

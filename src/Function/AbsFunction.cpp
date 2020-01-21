@@ -9,6 +9,7 @@
 #include "AbsFunction.h"
 
 using namespace Camellia;
+using std::fabs;
 
 AbsFunction::AbsFunction(TFunctionPtr<double> f) : TFunction<double>(f->rank())
 {
@@ -38,10 +39,15 @@ void AbsFunction::values(Camellia::FieldContainer<double> &values, BasisCachePtr
 {
   this->CHECK_VALUES_RANK(values);
   _f->values(values,basisCache);
-  for(int i = 0; i < values.size(); i++)
-  {
-    values[i] = std::abs(values[i]);
-  }
+  auto dv = values.checkoutDeviceView();
+  const int dim0 = dv.extent(0);
+  const int dim1 = dv.extent(1);
+  Kokkos::parallel_for("AbsFunction_values", dim0, KOKKOS_LAMBDA (const int i0) {
+    for (int i1 = 0; i1 < dim1; i1++) {
+      dv(i0,i1) = fabs(dv(i0,i1));
+    }
+  });
+  values.checkinDeviceView();
 }
 
 TFunctionPtr<double> AbsFunction::dx()

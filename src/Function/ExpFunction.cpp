@@ -7,7 +7,7 @@
 #include "BasisCache.h"
 
 using namespace Camellia;
-using namespace std;
+using std::log;
 
 template<class Scalar>
 Exp<Scalar>::Exp(TFunctionPtr<Scalar> power) : _power(power)
@@ -18,15 +18,16 @@ void Exp<Scalar>::values(Camellia::FieldContainer<Scalar> &values, BasisCachePtr
 {
   // first, fill values container with _power values:
   _power->values(values,basisCache);
-  int numCells = values.dimension(0);
-  int numPoints = values.dimension(1);
-  for (int cellOrdinal=0; cellOrdinal<numCells; cellOrdinal++)
-  {
-    for (int pointOrdinal=0; pointOrdinal<numPoints; pointOrdinal++)
-    {
-      values(cellOrdinal,pointOrdinal) = std::exp(values(cellOrdinal,pointOrdinal));
+  auto dv = values.checkoutDeviceView();
+  TEUCHOS_TEST_FOR_EXCEPTION(dv.rank() != 2, std::invalid_argument, "rank is not equal to 2");
+  const int numCells  = dv.extent(0);
+  const int numPoints = dv.extent(1);
+  Kokkos::parallel_for("Exp_values", numCells, KOKKOS_LAMBDA (const int cellOrdinal) {
+    for (int pointOrdinal=0; pointOrdinal<numPoints; pointOrdinal++) {
+      dv(cellOrdinal,pointOrdinal) = std::exp(dv(cellOrdinal,pointOrdinal));
     }
-  }
+  });
+  values.checkinDeviceView();
 }
 
 /*
@@ -58,7 +59,7 @@ TFunctionPtr<Scalar> Exp<Scalar>::dz()
 template<class Scalar>
 std::string Exp<Scalar>::displayString()
 {
-  ostringstream str;
+  std::ostringstream str;
   str << "e^{" << _power->displayString() << "}";
   return str.str();
 }
@@ -75,7 +76,7 @@ TFunctionPtr<Scalar> Exp<Scalar>::exp(TFunctionPtr<Scalar> f)
   return Teuchos::rcp(new Exp<Scalar>(f));
 }
 
-string Exp_x::displayString()
+std::string Exp_x::displayString()
 {
   return "e^x";
 }
@@ -96,7 +97,7 @@ TFunctionPtr<double> Exp_x::dz()
   return Function::zero();
 }
 
-string Exp_y::displayString()
+std::string Exp_y::displayString()
 {
   return "e^y";
 }
@@ -117,7 +118,7 @@ TFunctionPtr<double> Exp_y::dz()
   return Function::zero();
 }
 
-string Exp_z::displayString()
+std::string Exp_z::displayString()
 {
   return "e^z";
 }
@@ -154,9 +155,9 @@ TFunctionPtr<double> Exp_ax::dy()
 {
   return Function::zero();
 }
-string Exp_ax::displayString()
+std::string Exp_ax::displayString()
 {
-  ostringstream ss;
+  std::ostringstream ss;
   ss << "\\exp( " << _a << " x )";
   return ss.str();
 }
@@ -177,9 +178,9 @@ TFunctionPtr<double> Exp_ay::dy()
 {
   return _a * (TFunctionPtr<double>) Teuchos::rcp(new Exp_ay(_a));
 }
-string Exp_ay::displayString()
+std::string Exp_ay::displayString()
 {
-  ostringstream ss;
+  std::ostringstream ss;
   ss << "\\exp( " << _a << " y )";
   return ss.str();
 }
@@ -216,9 +217,9 @@ TFunctionPtr<double> Exp_at::dt()
 {
   return _a * (TFunctionPtr<double>) Teuchos::rcp(new Exp_at(_a));
 }
-string Exp_at::displayString()
+std::string Exp_at::displayString()
 {
-  ostringstream ss;
+  std::ostringstream ss;
   ss << "\\exp( " << _a << " t )";
   return ss.str();
 }
@@ -232,15 +233,16 @@ void Ln<Scalar>::values(Camellia::FieldContainer<Scalar> &values, BasisCachePtr 
 {
   // first, fill values container with _argument values:
   _argument->values(values,basisCache);
-  int numCells = values.dimension(0);
-  int numPoints = values.dimension(1);
-  for (int cellOrdinal=0; cellOrdinal<numCells; cellOrdinal++)
-  {
-    for (int pointOrdinal=0; pointOrdinal<numPoints; pointOrdinal++)
-    {
-      values(cellOrdinal,pointOrdinal) = log(values(cellOrdinal,pointOrdinal));
+  auto dv = values.checkoutDeviceView();
+  TEUCHOS_TEST_FOR_EXCEPTION(dv.rank() != 2, std::invalid_argument, "rank is not equal to 2");
+  const int numCells  = dv.extent(0);
+  const int numPoints = dv.extent(1);
+  Kokkos::parallel_for("Ln_values", numCells, KOKKOS_LAMBDA (const int cellOrdinal) {
+    for (int pointOrdinal=0; pointOrdinal<numPoints; pointOrdinal++) {
+      dv(cellOrdinal,pointOrdinal) = log(dv(cellOrdinal,pointOrdinal));
     }
-  }
+  });
+  values.checkinDeviceView();
 }
 
 /*
@@ -268,7 +270,7 @@ TFunctionPtr<Scalar> Ln<Scalar>::dz()
 template<class Scalar>
 std::string Ln<Scalar>::displayString()
 {
-  ostringstream str;
+  std::ostringstream str;
   str << "{\\rm ln} (" << _argument->displayString() << ")";
   return str.str();
 }
