@@ -56,10 +56,11 @@ void ConstantScalarFunction<Scalar>::values(typename Camellia::FieldContainer<Sc
   {
     const int dim0 = values.extent_int(0);
     const int dim1 = values.extent_int(1);
-    Kokkos::parallel_for("ConstantScalarFunction mod assignement", dim0, KOKKOS_LAMBDA (const int i0) {
+    auto value = _value;
+    Kokkos::parallel_for("ConstantScalarFunction mod assignment", dim0, KOKKOS_LAMBDA (const int i0) {
       for (int i1 = 0; i1 < dim1; i1++) {
         auto & entry = values(i0, i1);
-        assignValue(entry, modType, _value);
+        assignValue(entry, modType, value);
       }
     });
   }
@@ -93,7 +94,7 @@ void ConstantScalarFunction<Scalar>::scalarModifyFunctionValues(Camellia::FieldC
   {
     for (int i6 = 0; i6<dim6; i6++)
     {
-      assignValue(dv(i0,i1,i2,i3,i4,i5,i6),modType,value);
+      assignValue(dv.access(i0,i1,i2,i3,i4,i5,i6),modType,value);
     }
   });
   values.checkinDeviceView(true); // true: copy to host

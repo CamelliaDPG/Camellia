@@ -79,20 +79,27 @@ void ConstantVectorFunction<Scalar>::values(Camellia::FieldContainer<Scalar> &va
 {
   this->CHECK_VALUES_RANK(values);
   int spaceDim = values.dimension(2);
-  if (spaceDim > _value.size())
-  {
-    TEUCHOS_TEST_FOR_EXCEPTION(true, std::invalid_argument, "spaceDim is greater than length of vector...");
-  }
-  // values are stored in (C,P,D) order, the important thing here being that we can do this:
-  for (int i=0; i < values.size(); )
-  {
-    for (int d=0; d < spaceDim; d++)
-    {
-      values[i++] = _value[d];
+  TEUCHOS_TEST_FOR_EXCEPTION(spaceDim > _value.size(), std::invalid_argument, "spaceDim is greater than length of vector...");
+  
+  Camellia::FieldContainer<Scalar> value(_value.size());
+  for (int i = 0; i < _value.size(); i++) { value(i) = _value[i]; }
+  auto dv_value = value.checkoutDeviceView();
+  
+  auto dv = values.checkoutDeviceView(false); // false: don't deep_copy from host (will overwrite values)
+  const int dim0 = dv.extent(0); // (C) numCells
+  const int dim1 = dv.extent(1); // (P) numPoints
+  const int dim2 = dv.extent(2); // (D) spaceDim
+  
+  Kokkos::parallel_for("ConstantVectorFunction_values", dim0, KOKKOS_LAMBDA (const int i0) {
+    for (int i1 = 0; i1 < dim1; i1++) {
+      for (int i2 = 0; i2 < dim2; i2++) {
+        dv(i0,i1,i2) = dv_value(i2);
+      }
     }
-  }
+  });
+  value.checkinDeviceView(false);
+  values.checkinDeviceView();
 }
-
 namespace Camellia
 {
 template class ConstantVectorFunction<double>;
