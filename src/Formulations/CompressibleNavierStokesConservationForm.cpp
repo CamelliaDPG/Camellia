@@ -384,6 +384,10 @@ CompressibleNavierStokesConservationForm::CompressibleNavierStokesConservationFo
     _solnPrevTime->loadFromHDF5(savedSolutionAndMeshPrefix+"_prevtime.soln");
   }
   
+  // avoid circular references when setting up bf object
+  SolutionPtr backgroundFlowWeakReference = Teuchos::rcp(_backgroundFlow.get(), false);
+  SolutionPtr solnPrevTimeWeakReference   = Teuchos::rcp(_solnPrevTime.get(), false);
+  
   // Previous solution values
   std::string backgroundFlowIdentifierExponent = "";
   std::string previousTimeIdentifierExponent = "";
@@ -392,10 +396,10 @@ CompressibleNavierStokesConservationForm::CompressibleNavierStokesConservationFo
     backgroundFlowIdentifierExponent = "k";
     previousTimeIdentifierExponent = "k-1";
   }
-  FunctionPtr rho_prev = Function::solution(rho, _backgroundFlow, backgroundFlowIdentifierExponent);
-  FunctionPtr rho_prev_time = Function::solution(rho, _solnPrevTime, previousTimeIdentifierExponent);
-  FunctionPtr E_prev       = Function::solution(E, _backgroundFlow, backgroundFlowIdentifierExponent);
-  FunctionPtr E_prev_time  = Function::solution(E, _solnPrevTime, previousTimeIdentifierExponent);
+  FunctionPtr rho_prev = Function::solution(rho, backgroundFlowWeakReference, backgroundFlowIdentifierExponent);
+  FunctionPtr rho_prev_time = Function::solution(rho, solnPrevTimeWeakReference, previousTimeIdentifierExponent);
+  FunctionPtr E_prev       = Function::solution(E, backgroundFlowWeakReference, backgroundFlowIdentifierExponent);
+  FunctionPtr E_prev_time  = Function::solution(E, solnPrevTimeWeakReference, previousTimeIdentifierExponent);
   
   vector<FunctionPtr> q_prev(spaceDim);
   vector<FunctionPtr> m_prev(spaceDim);
@@ -407,14 +411,14 @@ CompressibleNavierStokesConservationForm::CompressibleNavierStokesConservationFo
   
   for (int d1=0; d1<spaceDim; d1++)
   {
-    m_prev[d1]      = Function::solution(m[d1], _backgroundFlow, backgroundFlowIdentifierExponent);
-    m_prev_time[d1] = Function::solution(m[d1], _solnPrevTime, previousTimeIdentifierExponent);
+    m_prev[d1]      = Function::solution(m[d1], backgroundFlowWeakReference, backgroundFlowIdentifierExponent);
+    m_prev_time[d1] = Function::solution(m[d1], solnPrevTimeWeakReference, previousTimeIdentifierExponent);
     if (!_pureEulerMode)
     {
-      q_prev[d1]      = Function::solution(q[d1], _backgroundFlow, backgroundFlowIdentifierExponent);
+      q_prev[d1]      = Function::solution(q[d1], backgroundFlowWeakReference, backgroundFlowIdentifierExponent);
       for (int d2=0; d2<spaceDim; d2++)
       {
-        D_prev[d1][d2] = Function::solution(D[d1][d2], _backgroundFlow, backgroundFlowIdentifierExponent);
+        D_prev[d1][d2] = Function::solution(D[d1][d2], backgroundFlowWeakReference, backgroundFlowIdentifierExponent);
       }
     }
     m_prev_dot_m_prev = m_prev_dot_m_prev + m_prev[d1] * m_prev[d1];
