@@ -69,26 +69,13 @@ void ConstantScalarFunction<Scalar>::values(typename Camellia::FieldContainer<Sc
 template <typename Scalar>
 void ConstantScalarFunction<Scalar>::scalarModifyFunctionValues(Camellia::FieldContainer<Scalar> &values, ValueModificationType modType, BasisCachePtr basisCache)
 {
-  Teuchos::Array<int> dim(values.rank());
-  values.dimensions(dim);
-  
   const bool copyFromHost = (modType != ASSIGN);
   auto dv = values.checkoutDeviceView(copyFromHost);
-
-  using array_index_type = Kokkos::MDRangePolicy< Kokkos::Rank<6> >::array_index_type;
-  Kokkos::Array<array_index_type,6> mdRangeEnd = {1,1,1,1,1,1}; // fully specifies all 6 MD dimensions
-  int numRanksToCopy = (dim.size() <= 6) ? dim.size() : 6;
-  for (int i=0; i<numRanksToCopy; i++)
-  {
-    mdRangeEnd[i] = dim[i];
-  }
-  Kokkos::Array<array_index_type,6> mdRangeBegin = {0,0,0,0,0,0};
   const int dim6 = dv.extent_int(6);
-
-  Kokkos::MDRangePolicy< Kokkos::Rank<6> > mdRangePolicy(mdRangeBegin,mdRangeEnd);
-
+  
   auto value = _value;
-  Kokkos::parallel_for("ConstantScalarFunction_scalarModifyFunctionValues", mdRangePolicy,
+  using array_index_type = Kokkos::MDRangePolicy< Kokkos::Rank<6> >::array_index_type;
+  Kokkos::parallel_for("ConstantScalarFunction_scalarModifyFunctionValues", values.getMDRangePolicy6(),
   KOKKOS_LAMBDA (const array_index_type i0, const array_index_type i1, const array_index_type i2,
                  const array_index_type i3, const array_index_type i4, const array_index_type i5)
   {

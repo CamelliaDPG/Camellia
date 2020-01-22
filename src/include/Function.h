@@ -30,8 +30,6 @@ template <typename Scalar>
 class TFunction
 {
 private:
-  enum FunctionModificationType { MULTIPLY, DIVIDE }; // private, used by scalarModify[.*]Values
-  
   Scalar evaluateAtMeshPoint(MeshPtr mesh, GlobalIndexType cellID, Camellia::FieldContainer<double> &physicalPoint);
 protected:
   int _rank;
@@ -39,6 +37,7 @@ protected:
   void CHECK_VALUES_RANK(Camellia::FieldContainer<Scalar> &values); // throws exception on bad values rank
   double _time;
 public:
+  enum FunctionModificationType { MULTIPLY, DIVIDE }; // used by scalarModify[.*]Values
   enum JumpCombinationType
   {
     DIFFERENCE,
@@ -146,13 +145,13 @@ public:
   // ! Returned map will have as keys the cell IDs of MPI-local cells.
   std::map<GlobalIndexType, double> squaredL2NormOfJumps(MeshPtr mesh, bool weightBySideMeasure, int cubatureDegreeEnrichment, JumpCombinationType jumpCombination=DIFFERENCE);
   
-  // divide values by this function (supported only when this is a scalar--otherwise values would change rank...)
+  // multiply values by this function (supported only when this is a scalar--otherwise values would change rank...)
   virtual void scalarMultiplyFunctionValues(Camellia::FieldContainer<Scalar> &functionValues, BasisCachePtr basisCache);
 
   // divide values by this function (supported only when this is a scalar)
   virtual void scalarDivideFunctionValues(Camellia::FieldContainer<Scalar> &functionValues, BasisCachePtr basisCache);
 
-  // divide values by this function (supported only when this is a scalar--otherwise values would change rank...)
+  // multiply values by this function (supported only when this is a scalar--otherwise values would change rank...)
   virtual void scalarMultiplyBasisValues(Camellia::FieldContainer<double> &basisValues, BasisCachePtr basisCache);
 
   // divide values by this function (supported only when this is a scalar)
@@ -271,7 +270,7 @@ public:
   static TFunctionPtr<Scalar> xPart(TFunctionPtr<Scalar> vectorFunction);
   static TFunctionPtr<Scalar> yPart(TFunctionPtr<Scalar> vectorFunction);
   static TFunctionPtr<Scalar> zPart(TFunctionPtr<Scalar> vectorFunction);
-private:
+
   void scalarModifyFunctionValues(Camellia::FieldContainer<Scalar> &values, BasisCachePtr basisCache,
                                   FunctionModificationType modType);
 

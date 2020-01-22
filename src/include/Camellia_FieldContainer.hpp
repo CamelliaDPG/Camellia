@@ -670,7 +670,43 @@ namespace Camellia
       recordAllocation(fcAllocationRecord,this->size());
       return *this;
     }
-    
+
+    static Kokkos::MDRangePolicy< Kokkos::Rank<2> > getMDRangePolicy2(typename Camellia::FieldContainer<Scalar>::DeviceView &dv) {
+      using array_index_type = Kokkos::MDRangePolicy< Kokkos::Rank<2> >::array_index_type;
+      Kokkos::Array<array_index_type,2> mdRangeBegin = {0,0};
+      Kokkos::Array<array_index_type,2> mdRangeEnd   = {1,1};
+      int numRanks = std::min((int) dv.rank(), 2);
+      for (int i=0; i<numRanks; i++)
+      {
+        mdRangeEnd[i] = dv.extent_int(i);
+      }
+      return Kokkos::MDRangePolicy< Kokkos::Rank<2> >(mdRangeBegin,mdRangeEnd);
+    }
+
+    static Kokkos::MDRangePolicy< Kokkos::Rank<6> > getMDRangePolicy6(typename Camellia::FieldContainer<Scalar>::DeviceView &dv) {
+      using array_index_type = Kokkos::MDRangePolicy< Kokkos::Rank<6> >::array_index_type;
+      Kokkos::Array<array_index_type,6> mdRangeBegin = {0,0,0,0,0,0};
+      Kokkos::Array<array_index_type,6> mdRangeEnd   = {1,1,1,1,1,1};
+      int numRanks = std::min((int) dv.rank(), 6);
+      for (int i=0; i<numRanks; i++)
+      {
+        mdRangeEnd[i] = dv.extent_int(i);
+      }
+      return Kokkos::MDRangePolicy< Kokkos::Rank<6> >(mdRangeBegin,mdRangeEnd);
+    }
+
+    Kokkos::MDRangePolicy< Kokkos::Rank<2> > getMDRangePolicy2() {
+      TEUCHOS_TEST_FOR_EXCEPTION( !(this->_deviceViewIsCheckedOut), std::invalid_argument,
+                                  "getMDRangePolicy _deviceView is not checked out." );
+      return getMDRangePolicy2(this->_deviceView);
+    }
+
+    Kokkos::MDRangePolicy< Kokkos::Rank<6> > getMDRangePolicy6() {
+      TEUCHOS_TEST_FOR_EXCEPTION( !(this->_deviceViewIsCheckedOut), std::invalid_argument,
+                                  "getMDRangePolicy _deviceView is not checked out." );
+      return getMDRangePolicy6(this->_deviceView);
+    }
+
     /** \brief Print metadata info for member variable _hostView
      */
     void printHostViewMetadata(std::ostream &out = std::cout) {

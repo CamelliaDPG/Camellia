@@ -725,4 +725,97 @@ TEUCHOS_UNIT_TEST( Function, VectorMultiply )
   double tol = 1e-14;
   TEST_FLOATING_EQUALITY(expectedValue,actualValue,tol);
 }
+
+TEUCHOS_UNIT_TEST( Function, AddToValues )
+{
+  const int dim0 = 5, dim1 = 2;
+  auto fc = FieldContainer<double>(dim0,dim1);
+  auto f1 = TFunction<double>::constant(1.0);
+  auto f2 = TFunction<double>::constant(2.0);
+  BasisCachePtr voidBasisCache;
+  
+  double expectedValue = 3.0;
+  double tol = 1.0e-14;
+  
+  f1->values(fc, voidBasisCache);
+  f2->addToValues(fc, voidBasisCache);
+  
+  for (int i = 0; i < dim0*dim1; i++) {
+    TEST_FLOATING_EQUALITY(expectedValue,fc[i],tol);
+  }
+}
+
+TEUCHOS_UNIT_TEST( Function, ScalarModifyFunctionValues )
+{
+  const int dim0 = 5, dim1 = 2;
+  auto fc_mul = FieldContainer<double>(dim0,dim1);
+  auto fc_div = FieldContainer<double>(dim0,dim1);
+  auto f2 = TFunction<double>::constant(2.0);
+  auto f4 = TFunction<double>::constant(4.0);
+  BasisCachePtr voidBasisCache;
+  
+  double expectedValueMultiply = 8.0;
+  double expectedValueDivide   = 0.5;
+  double tol = 1.0e-14;
+  
+  f2->values(fc_mul, voidBasisCache);
+  f2->values(fc_div, voidBasisCache);
+  f4->scalarMultiplyFunctionValues(fc_mul, voidBasisCache);
+  f4->scalarDivideFunctionValues  (fc_div, voidBasisCache);
+  
+  for (int i = 0; i < dim0*dim1; i++) {
+    TEST_FLOATING_EQUALITY(expectedValueMultiply,fc_mul[i],tol);
+    TEST_FLOATING_EQUALITY(expectedValueDivide  ,fc_div[i],tol);
+  }
+}
+
+TEUCHOS_UNIT_TEST( Function, ScalarModifyBasisValues )
+{
+  const int dim0 = 5, dim1 = 2, dim2 = 2;
+  auto fc_mul = FieldContainer<double>(dim0,dim1,dim2);
+  auto fc_div = FieldContainer<double>(dim0,dim1,dim2);
+  std::vector<double> v2 = {2.0,2.0};
+  auto f2 = TFunction<double>::constant(v2);
+  auto f4 = TFunction<double>::constant(4.0);
+  f4 = TFunction<double>::min(f4,4.0);
+  BasisCachePtr voidBasisCache;
+  
+  double expectedValueMultiply = 8.0;
+  double expectedValueDivide   = 0.5;
+  double tol = 1.0e-14;
+  
+  f2->values(fc_mul, voidBasisCache);
+  f2->values(fc_div, voidBasisCache);
+  f4->scalarMultiplyBasisValues(fc_mul, voidBasisCache);
+  f4->scalarDivideBasisValues  (fc_div, voidBasisCache);
+  
+  for (int i = 0; i < dim0*dim1*dim2; i++) {
+    TEST_FLOATING_EQUALITY(expectedValueMultiply,fc_mul[i],tol);
+    TEST_FLOATING_EQUALITY(expectedValueDivide  ,fc_div[i],tol);
+  }
+}
+
+TEUCHOS_UNIT_TEST( Function, ValuesDottedWithTensor )
+{
+  std::vector<double> v1 = {1.0,2.0};
+  std::vector<double> v2 = {1.0,2.0};
+  auto f1 = TFunction<double>::constant(v1);
+  auto f2 = TFunction<double>::constant(v2);
+  
+  bool conformingTraces = true; int spaceDim = 2;
+  PoissonFormulation form(spaceDim,conformingTraces);
+  MeshPtr mesh = MeshFactory::rectilinearMesh(form.bf(), {1.0,1.0}, {1,1}, 1);
+  
+  // |1.0| dotProd |1.0| = 1.0*1.0 + 2.0*2.0 = 5.0
+  // |2.0|         |2.0|
+  double expectedValue = 5.0;
+  double tol = 1.0e-14;
+  
+  for (int cellID : mesh->cellIDsInPartition()) {
+    auto fc = FieldContainer<double>(1,1);
+    BasisCachePtr basisCache = BasisCache::basisCacheForCell(mesh, cellID);
+    f1->valuesDottedWithTensor(fc, f2, basisCache);
+    TEST_FLOATING_EQUALITY(expectedValue,fc(0,0),tol);
+  }
+}
 } // namespace

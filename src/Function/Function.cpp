@@ -9,6 +9,7 @@
 
 #include "Function.h"
 
+#include "AssignValue.h"
 #include "BasisCache.h"
 #include "CamelliaCellTools.h"
 #include "CamelliaDebugUtility.h"
@@ -276,6 +277,26 @@ void TFunction<Scalar>::values(typename Camellia::FieldContainer<Scalar>::Device
    
    For that reason, we emit warnings to the console when this method gets called.
    */
+<<<<<<< HEAD
+  bool printWarning = false;
+  if (printWarning) {
+    std::cout << "WARNING: Function implementation with displayString '" << this->displayString();
+    std::cout << "' does not provide a device-path values() implementation.  The base class implementation is inherently inefficient, so this should be fixed.\n";
+  }
+  
+  Teuchos::Array<int> dim(values.rank());
+  for (int i=0; i<values.rank(); i++)
+  {
+    dim[i] = values.extent_int(i);
+  }
+  Camellia::FieldContainer<Scalar> fc(dim);
+  this->values(fc, basisCache);              // either happens on host or ends with deep_copy to host (one inefficiency)
+  auto fcView = fc.checkoutDeviceView(true); // true: deep_copy from host (the other main inefficiency)
+  
+  const int dim6 = fcView.extent_int(6);
+  using array_index_type = Kokkos::MDRangePolicy< Kokkos::Rank<6> >::array_index_type;
+  Kokkos::parallel_for("Function base class device-path values() implementation", fc.getMDRangePolicy6(),
+=======
   std::cout << "WARNING: Function implementation with displayString '" << this->displayString();
   std::cout << "' does not provide a device-path values() implementation.  The base class implementation is inherently inefficient, so this should be fixed.\n";
   
@@ -301,6 +322,7 @@ void TFunction<Scalar>::values(typename Camellia::FieldContainer<Scalar>::Device
   Kokkos::MDRangePolicy< Kokkos::Rank<6> > mdRangePolicy(mdRangeBegin,mdRangeEnd);
   
   Kokkos::parallel_for("Function base class device-path values() implementation", mdRangePolicy,
+>>>>>>> kokkos-dev
   KOKKOS_LAMBDA (const array_index_type i0, const array_index_type i1, const array_index_type i2,
                  const array_index_type i3, const array_index_type i4, const array_index_type i5)
   {
@@ -311,6 +333,10 @@ void TFunction<Scalar>::values(typename Camellia::FieldContainer<Scalar>::Device
       assignValue(entry, modType, newValue);
     }
   });
+<<<<<<< HEAD
+  fc.checkinDeviceView(false);
+=======
+>>>>>>> kokkos-dev
 }
 
 template <typename Scalar>
@@ -983,8 +1009,10 @@ void TFunction<Scalar>::CHECK_VALUES_RANK(Camellia::FieldContainer<Scalar> &valu
   // values should have shape (C,P,D,D,D,...) where the # of D's = _rank
   if (values.rank() != _rank + 2)
   {
-    cout << "values has incorrect rank.\n";
-    TEUCHOS_TEST_FOR_EXCEPTION( values.rank() != _rank + 2, std::invalid_argument, "values has incorrect rank." );
+    cout << "values has incorrect rank." << endl;
+    cout << "values.rank() = " << values.rank() << endl;
+    cout << "      _rank   = " <<       _rank   << endl;
+    TEUCHOS_TEST_FOR_EXCEPTION(true, std::invalid_argument, "values has incorrect rank.");
   }
 }
 
@@ -992,15 +1020,9 @@ template <typename Scalar>
 void TFunction<Scalar>::addToValues(Camellia::FieldContainer<Scalar> &valuesToAddTo, BasisCachePtr basisCache)
 {
   CHECK_VALUES_RANK(valuesToAddTo);
-  Teuchos::Array<int> dim;
-  valuesToAddTo.dimensions(dim);
-  Camellia::FieldContainer<Scalar> myValues(dim);
-  this->values(myValues,basisCache);
-  for (int i=0; i<myValues.size(); i++)
-  {
-    //cout << "otherValue = " << valuesToAddTo[i] << "; myValue = " << myValues[i] << endl;
-    valuesToAddTo[i] += myValues[i];
-  }
+  auto dv = valuesToAddTo.checkoutDeviceView();
+  this->values(dv, ValueModificationType::ADD, basisCache);
+  valuesToAddTo.checkinDeviceView();
 }
 
 template <typename Scalar>
@@ -2296,9 +2318,7 @@ template <typename Scalar>
 void TFunction<Scalar>::scalarMultiplyBasisValues(Camellia::FieldContainer<double> &basisValues, BasisCachePtr basisCache)
 {
   // basisValues has dimensions (C,F,P,...)
-  //  cout << "scalarMultiplyBasisValues: basisValues:\n" << basisValues;
   scalarModifyBasisValues(basisValues,basisCache,MULTIPLY);
-  //  cout << "scalarMultiplyBasisValues: modified basisValues:\n" << basisValues;
 }
 
 // divide values by this function (supported only when this is a scalar)
@@ -2316,15 +2336,13 @@ void TFunction<Scalar>::valuesDottedWithTensor(Camellia::FieldContainer<Scalar> 
     TFunctionPtr<Scalar> tensorFunctionOfLikeRank,
     BasisCachePtr basisCache)
 {
-  TEUCHOS_TEST_FOR_EXCEPTION( _rank != tensorFunctionOfLikeRank->rank(),std::invalid_argument,
-                              "Can't dot functions of unlike rank");
-  TEUCHOS_TEST_FOR_EXCEPTION( values.rank() != 2, std::invalid_argument,
-                              "values container should have size (numCells, numPoints" );
-  int numCells = values.dimension(0);
-  int numPoints = values.dimension(1);
-  int spaceDim = basisCache->getSpaceDim();
-
-  values.initialize(0.0);
+  TEUCHOS_TEST_FOR_EXCEPTION(_rank != tensorFunctionOfLikeRank->rank(),std::invalid_argument,"can't dot functions of unlike rank");
+  auto dv = values.checkoutDeviceView(false);
+  TEUCHOS_TEST_FOR_EXCEPTION(dv.rank() != 2, std::invalid_argument, "values should be a (C,P)-container");
+  Kokkos::deep_copy(dv, 0.0); // initialize
+  const int numCells  = dv.extent_int(0);
+  const int numPoints = dv.extent_int(1);
+  const int spaceDim  = basisCache->getSpaceDim();
 
   std::vector<int> tensorValueIndex(_rank+2); // +2 for numCells, numPoints indices
   tensorValueIndex[0] = numCells;
@@ -2335,90 +2353,83 @@ void TFunction<Scalar>::valuesDottedWithTensor(Camellia::FieldContainer<Scalar> 
   }
   
   Camellia::FieldContainer<Scalar> myTensorValues(tensorValueIndex);
-  this->values(myTensorValues,basisCache);
+  auto dv_myTensorValues = myTensorValues.checkoutDeviceView(false);
+  this->values(dv_myTensorValues,ValueModificationType::ASSIGN,basisCache);
+  
   Camellia::FieldContainer<Scalar> otherTensorValues(tensorValueIndex);
-  tensorFunctionOfLikeRank->values(otherTensorValues,basisCache);
+  auto dv_otherTensorValues = otherTensorValues.checkoutDeviceView(false);
+  tensorFunctionOfLikeRank->values(dv_otherTensorValues,ValueModificationType::ASSIGN,basisCache);
 
-  //  cout << "myTensorValues:\n" << myTensorValues;
-  //  cout << "otherTensorValues:\n" << otherTensorValues;
-
-  // clear out the spatial indices of tensorValueIndex so we can use it as index
-  for (int d=0; d<_rank; d++)
-  {
-    tensorValueIndex[d+2] = 0;
-  }
+  const int dim2 = (_rank+2 > 2) ? spaceDim : 1;
+  const int dim3 = (_rank+2 > 3) ? spaceDim : 1;
+  const int dim4 = (_rank+2 > 4) ? spaceDim : 1;
+  const int dim5 = (_rank+2 > 5) ? spaceDim : 1;
+  const int dim6 = (_rank+2 > 6) ? spaceDim : 1;
   
-  auto getMyTensorValuesEnumeration = SerialDenseWrapper::getEnumerator(tensorValueIndex, myTensorValues);
-  auto getOtherTensorValuesEnumeration = SerialDenseWrapper::getEnumerator(tensorValueIndex, otherTensorValues);
-  
-  int entriesPerPoint = 1;
-  for (int d=0; d<_rank; d++)
+  Kokkos::fence(); // TODO: check if we can wait for only the kernels we need to wait on
+  using array_index_type = Kokkos::MDRangePolicy< Kokkos::Rank<2> >::array_index_type;
+  Kokkos::parallel_for("valuesDottedWithTensor", values.getMDRangePolicy2(),
+  KOKKOS_LAMBDA (const array_index_type i0, const array_index_type i1)
   {
-    entriesPerPoint *= spaceDim;
-  }
-  for (int cellIndex=0; cellIndex<numCells; cellIndex++)
-  {
-    tensorValueIndex[0] = cellIndex;
-    for (int ptIndex=0; ptIndex<numPoints; ptIndex++)
-    {
-      tensorValueIndex[1] = ptIndex;
-      Scalar *myValue = &myTensorValues[ getMyTensorValuesEnumeration() ];
-      Scalar *otherValue = &otherTensorValues[ getOtherTensorValuesEnumeration() ];
-      Scalar *value = &values(cellIndex,ptIndex);
-
-      for (int entryIndex=0; entryIndex<entriesPerPoint; entryIndex++)
-      {
-        *value += *myValue * *otherValue;
-        //        cout << "myValue: " << *myValue << "; otherValue: " << *otherValue << endl;
-        myValue++;
-        otherValue++;
+    for (int i2 = 0; i2 < dim2; i2++) {
+      for (int i3 = 0; i3 < dim3; i3++) {
+        for (int i4 = 0; i4 < dim4; i4++) {
+          for (int i5 = 0; i5 < dim5; i5++) {
+            for (int i6 = 0; i6 < dim6; i6++) {
+              Scalar myValue = dv_myTensorValues.access(i0,i1,i2,i3,i4,i5,i6);
+              Scalar otherValue = dv_otherTensorValues.access(i0,i1,i2,i3,i4,i5,i6);
+              dv(i0,i1) += myValue * otherValue;
+            }
+          }
+        }
       }
     }
-  }
+  });
+  myTensorValues.checkinDeviceView(false);
+  otherTensorValues.checkinDeviceView(false);
+  values.checkinDeviceView();
 }
 
 template <typename Scalar>
 void TFunction<Scalar>::scalarModifyFunctionValues(Camellia::FieldContainer<Scalar> &values, BasisCachePtr basisCache,
     FunctionModificationType modType)
 {
-  TEUCHOS_TEST_FOR_EXCEPTION( rank() != 0, std::invalid_argument, "scalarModifyFunctionValues only supported for scalar functions" );
-  int numCells = values.dimension(0);
-  int numPoints = values.dimension(1);
-  int spaceDim = basisCache->getSpaceDim();
-
+  TEUCHOS_TEST_FOR_EXCEPTION(rank() != 0, std::invalid_argument, "scalarModifyFunctionValues: only supported for scalar functions");
+  
+  ValueModificationType valueModType;
+  if (modType == MULTIPLY) {
+    valueModType = ValueModificationType::MULTIPLY;
+  } else if (modType == DIVIDE) {
+    valueModType = ValueModificationType::DIVIDE;
+  } else {
+    TEUCHOS_TEST_FOR_EXCEPTION(true, std::invalid_argument, "scalarModifyFunctionValues: invalid modType");
+  }
+  
+  auto dv = values.checkoutDeviceView();
+  TEUCHOS_TEST_FOR_EXCEPTION(dv.rank() < 2, std::invalid_argument, "scalarModifyFunctionValues: rank is smaller than 2");
+  
+  const int numCells  = dv.extent_int(0);
+  const int numPoints = dv.extent_int(1);
+  const int dim6 = (dv.rank() > 6) ? dv.extent_int(6) : 1;
+  
   Camellia::FieldContainer<Scalar> scalarValues(numCells,numPoints);
-  this->values(scalarValues,basisCache);
-
-  std::vector<int> valueIndex(values.rank());
+  auto dv_scalar = scalarValues.checkoutDeviceView(false);
+  this->values(dv_scalar,ValueModificationType::ASSIGN,basisCache);
   
-  auto getValuesEnumeration = SerialDenseWrapper::getEnumerator(valueIndex, values);
-  
-  int entriesPerPoint = 1;
-  for (int d=0; d < values.rank()-2; d++)    // -2 for numCells, numPoints indices
+  Kokkos::fence();
+  using array_index_type = Kokkos::MDRangePolicy< Kokkos::Rank<6> >::array_index_type;
+  Kokkos::parallel_for("scalarModifyFunctionValues", values.getMDRangePolicy6(),
+  KOKKOS_LAMBDA (const array_index_type i0, const array_index_type i1, const array_index_type i2,
+                 const array_index_type i3, const array_index_type i4, const array_index_type i5)
   {
-    entriesPerPoint *= spaceDim;
-  }
-  for (int cellIndex=0; cellIndex<numCells; cellIndex++)
-  {
-    valueIndex[0] = cellIndex;
-    for (int ptIndex=0; ptIndex<numPoints; ptIndex++)
+    Scalar scalarValue = dv_scalar(i0,i1);
+    for (int i6 = 0; i6 < dim6; i6++)
     {
-      valueIndex[1] = ptIndex;
-      Scalar *value = &values[ getValuesEnumeration() ];
-      Scalar scalarValue = scalarValues(cellIndex,ptIndex);
-      for (int entryIndex=0; entryIndex<entriesPerPoint; entryIndex++)
-      {
-        if (modType == MULTIPLY)
-        {
-          *value++ *= scalarValue;
-        }
-        else if (modType == DIVIDE)
-        {
-          *value++ /= scalarValue;
-        }
-      }
+      assignValue(dv.access(i0,i1,i2,i3,i4,i5,i6),valueModType,scalarValue);
     }
-  }
+  });
+  scalarValues.checkinDeviceView(false);
+  values.checkinDeviceView();
 }
 
 // Should only work for doubles
@@ -2427,53 +2438,43 @@ template <typename Scalar>
 void TFunction<Scalar>::scalarModifyBasisValues(Camellia::FieldContainer<double> &values, BasisCachePtr basisCache,
     FunctionModificationType modType)
 {
-  TEUCHOS_TEST_FOR_EXCEPTION( rank() != 0, std::invalid_argument, "scalarModifyBasisValues only supported for scalar functions" );
-  int numCells = values.dimension(0);
-  int numFields = values.dimension(1);
-  int numPoints = values.dimension(2);
-
-  int spaceDim = basisCache->getSpaceDim();
+  TEUCHOS_TEST_FOR_EXCEPTION(rank() != 0, std::invalid_argument, "scalarModifyBasisValues: only supported for scalar functions");
+  
+  ValueModificationType valueModType;
+  if (modType == MULTIPLY) {
+    valueModType = ValueModificationType::MULTIPLY;
+  } else if (modType == DIVIDE) {
+    valueModType = ValueModificationType::DIVIDE;
+  } else {
+    TEUCHOS_TEST_FOR_EXCEPTION(true, std::invalid_argument, "scalarModifyBasisValues: invalid modType");
+  }
+  
+  auto dv = values.checkoutDeviceView();
+  TEUCHOS_TEST_FOR_EXCEPTION(dv.rank() < 3, std::invalid_argument, "scalarModifyBasisValues: rank is smaller than 3");
+  
+  const int numCells  = dv.extent_int(0);
+  const int numFields = dv.extent_int(1);
+  const int numPoints = dv.extent_int(2);
+  const int dim6 = (dv.rank() > 6) ? dv.extent_int(6) : 1;
 
   Camellia::FieldContainer<double> scalarValues(numCells,numPoints);
-  this->values(scalarValues,basisCache);
-
-  //  cout << "scalarModifyBasisValues: scalarValues:\n" << scalarValues;
-
-  std::vector<int> valueIndex(values.rank());
-
-  auto getValuesEnumeration = SerialDenseWrapper::getEnumerator(valueIndex, values);
+  auto dv_scalar = scalarValues.checkoutDeviceView(false);
+  this->values(dv_scalar,ValueModificationType::ASSIGN,basisCache);
   
-  int entriesPerPoint = 1;
-  for (int d=0; d<values.rank()-3; d++)    // -3 for numCells, numFields, numPoints indices
+  Kokkos::fence();
+  using array_index_type = Kokkos::MDRangePolicy< Kokkos::Rank<6> >::array_index_type;
+  Kokkos::parallel_for("scalarModifyBasisValues", values.getMDRangePolicy6(),
+  KOKKOS_LAMBDA (const array_index_type i0, const array_index_type i1, const array_index_type i2,
+                 const array_index_type i3, const array_index_type i4, const array_index_type i5)
   {
-    entriesPerPoint *= spaceDim;
-  }
-  for (int cellIndex=0; cellIndex<numCells; cellIndex++)
-  {
-    valueIndex[0] = cellIndex;
-    for (int fieldIndex=0; fieldIndex<numFields; fieldIndex++)
+    Scalar scalarValue = dv_scalar(i0,i2);
+    for (int i6 = 0; i6 < dim6; i6++)
     {
-      valueIndex[1] = fieldIndex;
-      for (int ptIndex=0; ptIndex<numPoints; ptIndex++)
-      {
-        valueIndex[2] = ptIndex;
-        double scalarValue = scalarValues(cellIndex,ptIndex);
-        double *value = &values[ getValuesEnumeration() ];
-        for (int entryIndex=0; entryIndex<entriesPerPoint; entryIndex++)
-        {
-          if (modType == MULTIPLY)
-          {
-            *value++ *= scalarValue;
-          }
-          else if (modType == DIVIDE)
-          {
-            *value++ /= scalarValue;
-          }
-        }
-      }
+      assignValue(dv.access(i0,i1,i2,i3,i4,i5,i6),valueModType,scalarValue);
     }
-  }
-  //  cout << "scalarModifyBasisValues: values:\n" << values;
+  });
+  scalarValues.checkinDeviceView(false);
+  values.checkinDeviceView();
 }
 
 // Not sure if this will work for complex
