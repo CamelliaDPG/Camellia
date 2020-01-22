@@ -22,7 +22,7 @@
 class UPrev : public Function
 {
 public:
-  UPrev() : Function(0) {}
+  UPrev() : Function("UPrev",0) {}
   void values(FieldContainer<double> &values, BasisCachePtr basisCache)
   {
     int numCells = values.dimension(0);
@@ -47,6 +47,8 @@ class BoundaryLayerFunction : public SimpleFunction<double>
   double _eps;
 public:
   BoundaryLayerFunction(double eps)
+  :
+  SimpleFunction<double>("BoundaryLayerFunction")
   {
     _eps = eps;
   }
@@ -824,7 +826,7 @@ class CellIDFilteredFunction : public Function
   FunctionPtr _fxn;
   set<int> _cellIDs;
 public:
-  CellIDFilteredFunction(FunctionPtr fxn, set<int> cellIDs) : Function(fxn->rank())
+  CellIDFilteredFunction(FunctionPtr fxn, set<int> cellIDs) : Function("CellIDFilteredFunction", fxn->rank())
   {
     _fxn = fxn;
     _cellIDs = cellIDs;

@@ -8,7 +8,7 @@
 using namespace Camellia;
 
 template <typename Scalar>
-SpatiallyFilteredFunction<Scalar>::SpatiallyFilteredFunction(TFunctionPtr<Scalar> f, SpatialFilterPtr sf) : TFunction<Scalar>(f->rank())
+SpatiallyFilteredFunction<Scalar>::SpatiallyFilteredFunction(TFunctionPtr<Scalar> f, SpatialFilterPtr sf) : TFunction<Scalar>("SpatiallyFilteredFunction", f->rank())
 {
   _f = f;
   _sf = sf;

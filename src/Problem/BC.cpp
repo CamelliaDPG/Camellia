@@ -22,7 +22,7 @@ class BCLogicalOrFunction : public TFunction<Scalar>
   SpatialFilterPtr _sf1, _sf2;
 
 public:
-  BCLogicalOrFunction(TFunctionPtr<Scalar> f1, SpatialFilterPtr sf1, TFunctionPtr<Scalar> f2, SpatialFilterPtr sf2) : TFunction<Scalar>(f1->rank())
+  BCLogicalOrFunction(TFunctionPtr<Scalar> f1, SpatialFilterPtr sf1, TFunctionPtr<Scalar> f2, SpatialFilterPtr sf2) : TFunction<Scalar>("BCLogicalOrFunction", f1->rank())
   {
     _f1 = f1;
     _sf1 = sf1;

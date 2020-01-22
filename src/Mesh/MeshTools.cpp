@@ -207,7 +207,7 @@ class SliceFunction : public TFunction<double>
   double _t;
 public:
   SliceFunction(MeshPtr spaceTimeMesh, map<GlobalIndexType, GlobalIndexType> &cellIDMap,
-                TFunctionPtr<double> spaceTimeFunction, double t) : TFunction<double>(spaceTimeFunction->rank())
+                TFunctionPtr<double> spaceTimeFunction, double t) : TFunction<double>("SliceFunction", spaceTimeFunction->rank())
   {
     _spaceTimeMesh = spaceTimeMesh;
     _cellIDMap = cellIDMap;

@@ -10,13 +10,13 @@ using namespace Camellia;
 using namespace std;
 
 template <typename Scalar>
-VectorizedFunction<Scalar>::VectorizedFunction(const vector< TFunctionPtr<Scalar> > &fxns) : TFunction<Scalar>(fxns[0]->rank() + 1)
+VectorizedFunction<Scalar>::VectorizedFunction(const vector< TFunctionPtr<Scalar> > &fxns) : TFunction<Scalar>("VectorizedFunction", fxns[0]->rank() + 1)
 {
   _fxns = fxns;
 }
 
 template <typename Scalar>
-VectorizedFunction<Scalar>::VectorizedFunction(TFunctionPtr<Scalar> f1, TFunctionPtr<Scalar> f2) : TFunction<Scalar>(f1->rank() + 1)
+VectorizedFunction<Scalar>::VectorizedFunction(TFunctionPtr<Scalar> f1, TFunctionPtr<Scalar> f2) : TFunction<Scalar>("VectorizedFunction", f1->rank() + 1)
 {
   TEUCHOS_TEST_FOR_EXCEPTION(f1->rank() != f2->rank(), std::invalid_argument, "function ranks do not match");
   _fxns.push_back(f1);
@@ -24,7 +24,7 @@ VectorizedFunction<Scalar>::VectorizedFunction(TFunctionPtr<Scalar> f1, TFunctio
 }
 
 template <typename Scalar>
-VectorizedFunction<Scalar>::VectorizedFunction(TFunctionPtr<Scalar> f1, TFunctionPtr<Scalar> f2, TFunctionPtr<Scalar> f3) : TFunction<Scalar>(f1->rank() + 1)
+VectorizedFunction<Scalar>::VectorizedFunction(TFunctionPtr<Scalar> f1, TFunctionPtr<Scalar> f2, TFunctionPtr<Scalar> f3) : TFunction<Scalar>("VectorizedFunction", f1->rank() + 1)
 {
   TEUCHOS_TEST_FOR_EXCEPTION(f1->rank() != f2->rank(), std::invalid_argument, "function ranks do not match");
   TEUCHOS_TEST_FOR_EXCEPTION(f3->rank() != f2->rank(), std::invalid_argument, "function ranks do not match");
@@ -34,7 +34,7 @@ VectorizedFunction<Scalar>::VectorizedFunction(TFunctionPtr<Scalar> f1, TFunctio
 }
 
 template <typename Scalar>
-VectorizedFunction<Scalar>::VectorizedFunction(TFunctionPtr<Scalar> f1, TFunctionPtr<Scalar> f2, TFunctionPtr<Scalar> f3, TFunctionPtr<Scalar> f4) : TFunction<Scalar>(f1->rank() + 1)
+VectorizedFunction<Scalar>::VectorizedFunction(TFunctionPtr<Scalar> f1, TFunctionPtr<Scalar> f2, TFunctionPtr<Scalar> f3, TFunctionPtr<Scalar> f4) : TFunction<Scalar>("VectorizedFunction", f1->rank() + 1)
 {
   TEUCHOS_TEST_FOR_EXCEPTION(f1->rank() != f2->rank(), std::invalid_argument, "function ranks do not match");
   TEUCHOS_TEST_FOR_EXCEPTION(f2->rank() != f3->rank(), std::invalid_argument, "function ranks do not match");

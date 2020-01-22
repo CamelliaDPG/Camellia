@@ -76,7 +76,7 @@ public:
 class GDAMinimumRuleTests_U0 : public Function
 {
 public:
-  GDAMinimumRuleTests_U0() : Function(0) {}
+  GDAMinimumRuleTests_U0() : Function("GDAMinimumRuleTests_U0",0) {}
   void values(FieldContainer<double> &values, BasisCachePtr basisCache)
   {
     int numCells = values.dimension(0);

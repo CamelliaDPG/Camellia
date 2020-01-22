@@ -14,7 +14,7 @@ class Sin : public TFunction<Scalar>
 {
   TFunctionPtr<Scalar> _arg;
 public:
-  Sin(TFunctionPtr<Scalar> arg) : TFunction<Scalar>(0) // Sin is scalar-valued
+  Sin(TFunctionPtr<Scalar> arg) : TFunction<Scalar>("Sin",0) // Sin is scalar-valued
   {
     _arg = arg;
   }
@@ -71,7 +71,7 @@ class Cos : public TFunction<Scalar>
 {
   TFunctionPtr<Scalar> _arg;
 public:
-  Cos(TFunctionPtr<Scalar> arg) : TFunction<Scalar>(0) // Cos is scalar-valued
+  Cos(TFunctionPtr<Scalar> arg) : TFunction<Scalar>("Cos",0) // Cos is scalar-valued
   {
     _arg = arg;
   }
@@ -211,6 +211,7 @@ TFunctionPtr<double> Cos_x::dz()
 }
 
 Cos_ax::Cos_ax(double a, double b)
+: SimpleFunction<double>("Cos_ax")
 {
   _a = a;
   _b = b;
@@ -236,6 +237,7 @@ string Cos_ax::displayString()
 }
 
 Cos_ay::Cos_ay(double a)
+: SimpleFunction<double>("Cos_ay")
 {
   _a = a;
 }
@@ -261,6 +263,7 @@ string Cos_ay::displayString()
 
 
 Sin_ax::Sin_ax(double a, double b)
+: SimpleFunction<double>("Sin_ax")
 {
   _a = a;
   _b = b;
@@ -285,6 +288,7 @@ string Sin_ax::displayString()
 }
 
 Sin_ay::Sin_ay(double a)
+: SimpleFunction<double>("Sin_ay")
 {
   _a = a;
 }
@@ -308,6 +312,7 @@ string Sin_ay::displayString()
 }
 
 ArcTan_ax::ArcTan_ax(double a, double b)
+: SimpleFunction<double>("ArcTan_ax")
 {
   _a = a;
   _b = b;
@@ -334,6 +339,7 @@ string ArcTan_ax::displayString()
 }
 
 ArcTan_ay::ArcTan_ay(double a, double b)
+: SimpleFunction<double>("ArcTan_ay")
 {
   _a = a;
   _b = b;

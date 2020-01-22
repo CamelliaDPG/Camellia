@@ -47,7 +47,7 @@ void ParametricFunction::setArgumentMap()
   _argMap = _t0 + t * (_t1 - _t0);
 }
 
-ParametricFunction::ParametricFunction(TFunctionPtr<double> fxn, double t0, double t1, int derivativeOrder) : TFunction<double>(fxn->rank())
+ParametricFunction::ParametricFunction(TFunctionPtr<double> fxn, double t0, double t1, int derivativeOrder) : TFunction<double>("ParametricFunction", fxn->rank())
 {
   CHECK_FUNCTION_ONLY_DEPENDS_ON_1D_SPACE(fxn);
   _underlyingFxn = fxn;
@@ -56,7 +56,7 @@ ParametricFunction::ParametricFunction(TFunctionPtr<double> fxn, double t0, doub
   _derivativeOrder = derivativeOrder;
   setArgumentMap();
 }
-ParametricFunction::ParametricFunction(TFunctionPtr<double> fxn) : TFunction<double>(fxn->rank())
+ParametricFunction::ParametricFunction(TFunctionPtr<double> fxn) : TFunction<double>("ParametricFunction", fxn->rank())
 {
   CHECK_FUNCTION_ONLY_DEPENDS_ON_1D_SPACE(fxn);
   _underlyingFxn = fxn;
@@ -308,14 +308,14 @@ public:
   }
 };
 
-ParametricCurve::ParametricCurve(Teuchos::RCP<ParametricFunction> xFxn_x_as_t, Teuchos::RCP<ParametricFunction> yFxn_x_as_t, Teuchos::RCP<ParametricFunction> zFxn_x_as_t) : TFunction<double>(1)
+ParametricCurve::ParametricCurve(Teuchos::RCP<ParametricFunction> xFxn_x_as_t, Teuchos::RCP<ParametricFunction> yFxn_x_as_t, Teuchos::RCP<ParametricFunction> zFxn_x_as_t) : TFunction<double>("ParametricCurve",1)
 {
   _xFxn = xFxn_x_as_t;
   _yFxn = yFxn_x_as_t;
   _zFxn = zFxn_x_as_t;
 }
 
-ParametricCurve::ParametricCurve() : TFunction<double>(1)
+ParametricCurve::ParametricCurve() : TFunction<double>("ParametricCurve", 1)
 {
 //  cout << "ParametricCurve().\n";
 }
@@ -684,7 +684,7 @@ class ParametricGradientWrapper : public TFunction<double>
   TFunctionPtr<double> _parametricGradient;
   bool _convertBasisCacheToParametricSpace;
 public:
-  ParametricGradientWrapper(TFunctionPtr<double> parametricGradient, bool convertBasisCacheToParametricSpace = false) : TFunction<double>(parametricGradient->rank())
+  ParametricGradientWrapper(TFunctionPtr<double> parametricGradient, bool convertBasisCacheToParametricSpace = false) : TFunction<double>("ParametricGradientWrapper",parametricGradient->rank())
   {
     _parametricGradient = parametricGradient;
     _convertBasisCacheToParametricSpace = convertBasisCacheToParametricSpace;

@@ -21,11 +21,13 @@ using namespace Camellia;
 using namespace std;
 
 EnergyErrorFunction::EnergyErrorFunction(SolutionPtr soln)
+: TFunction<double>("EnergyErrorFunction")
 {
   _soln = soln;
 }
 
 EnergyErrorFunction::EnergyErrorFunction(RieszRepPtr rieszRep)
+: TFunction<double>("EnergyErrorFunction")
 {
   _rieszRep = rieszRep;
 }

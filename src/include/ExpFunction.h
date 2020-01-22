@@ -59,6 +59,7 @@ namespace Camellia
 class Exp_x : public SimpleFunction<double>
 {
 public:
+  Exp_x();
   double value(double x, double y);
   TFunctionPtr<double> dx();
   TFunctionPtr<double> dy();
@@ -69,6 +70,7 @@ public:
 class Exp_y : public SimpleFunction<double>
 {
 public:
+  Exp_y();
   double value(double x, double y);
   TFunctionPtr<double> dx();
   TFunctionPtr<double> dy();
@@ -79,6 +81,7 @@ public:
 class Exp_z : public SimpleFunction<double>
 {
 public:
+  Exp_z();
   double value(double x, double y, double z);
   TFunctionPtr<double> dx();
   TFunctionPtr<double> dy();

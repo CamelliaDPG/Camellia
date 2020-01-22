@@ -22,6 +22,7 @@ namespace Camellia
 class hFunction : public TFunction<double>
 {
 public:
+  hFunction() : TFunction<double>("hFunction") {}
   void values(Camellia::FieldContainer<double> &values, BasisCachePtr basisCache);
   string displayString();
 };

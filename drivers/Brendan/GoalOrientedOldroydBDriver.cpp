@@ -131,7 +131,10 @@ public:
 class ParabolicInflowFunction_U1 : public SimpleFunction<double> {
   double _height; // height of channel
 public:
-  ParabolicInflowFunction_U1(double height) {
+  ParabolicInflowFunction_U1(double height)
+  : 
+  SimpleFunction<double>("ParabolicInflowFunction_U1")
+  {
     _height = height;
   }
   double value(double x, double y) {
@@ -145,7 +148,10 @@ class ParabolicInflowFunction_Tun : public SimpleFunction<double> {
   double _muP; // polymeric viscosity
   double _lambda; // relaxation time
 public:
-  ParabolicInflowFunction_Tun(double height, double muP, double lambda, int i, int j) {
+  ParabolicInflowFunction_Tun(double height, double muP, double lambda, int i, int j)
+  : 
+  SimpleFunction<double>("ParabolicInflowFunction_Tun")
+  {
     _i = i;
     _j = j;
     _height = height;

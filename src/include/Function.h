@@ -26,6 +26,10 @@ using namespace std;
 
 namespace Camellia
 {
+  extern std::map<std::string,int> callsToFunctionsWithoutDevicePathImplementations; // count these to have an idea which are the best functions to tackle next
+  
+  std::string functionsWithoutDevicePathImplementationsReport(); // summarizes what's in callsToFunctionsWithoutDevicePathImplementations
+  
 template <typename Scalar>
 class TFunction
 {
@@ -35,7 +39,8 @@ private:
   Scalar evaluateAtMeshPoint(MeshPtr mesh, GlobalIndexType cellID, Camellia::FieldContainer<double> &physicalPoint);
 protected:
   int _rank;
-  string _displayString; // this is here mostly for identifying functions in the debugger
+  string _displayString; // human-readable function representation
+  string _className;     // Function subclass identifier; should match the C++ class name
   void CHECK_VALUES_RANK(Camellia::FieldContainer<Scalar> &values); // throws exception on bad values rank
   double _time;
 public:
@@ -46,7 +51,14 @@ public:
   };
   TFunction();
   TFunction(int rank);
+  TFunction(const std::string &className);
+  TFunction(const std::string &className,int rank);
   virtual ~TFunction() {}
+  
+  const std::string & getClassName() const
+  {
+    return _className;
+  }
 
   virtual void setTime(double time);
   virtual double getTime();

@@ -9,7 +9,7 @@
 using namespace Camellia;
 using namespace std;
 
-MinFunction::MinFunction(TFunctionPtr<double> f1, TFunctionPtr<double> f2) : TFunction<double>(f1->rank())
+MinFunction::MinFunction(TFunctionPtr<double> f1, TFunctionPtr<double> f2) : TFunction<double>("MinFunction", f1->rank())
 {
   TEUCHOS_TEST_FOR_EXCEPTION( f1->rank() != f2->rank(), std::invalid_argument, "both functions must be of like rank.");
   _f1 = f1;
@@ -72,7 +72,7 @@ TFunctionPtr<double> MinFunction::z()
   return min(_f1->z(),_f2->z());
 }
 
-MaxFunction::MaxFunction(TFunctionPtr<double> f1, TFunctionPtr<double> f2) : TFunction<double>(f1->rank())
+MaxFunction::MaxFunction(TFunctionPtr<double> f1, TFunctionPtr<double> f2) : TFunction<double>("MaxFunction", f1->rank())
 {
   TEUCHOS_TEST_FOR_EXCEPTION( f1->rank() != f2->rank(), std::invalid_argument, "both functions must be of like rank.");
   _f1 = f1;

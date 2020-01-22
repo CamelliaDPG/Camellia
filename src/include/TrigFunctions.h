@@ -21,6 +21,8 @@ namespace Camellia
 {
 class Cos_y : public SimpleFunction<double>
 {
+public:
+  Cos_y() : SimpleFunction<double>("Cos_y") {}
   double value(double x, double y);
   TFunctionPtr<double> dx();
   TFunctionPtr<double> dy();
@@ -30,6 +32,8 @@ class Cos_y : public SimpleFunction<double>
 
 class Sin_y : public SimpleFunction<double>
 {
+public:
+  Sin_y() : SimpleFunction<double>("Sin_y") {}
   double value(double x, double y);
   TFunctionPtr<double> dx();
   TFunctionPtr<double> dy();
@@ -39,6 +43,8 @@ class Sin_y : public SimpleFunction<double>
 
 class Cos_x : public SimpleFunction<double>
 {
+public:
+  Cos_x() : SimpleFunction<double>("Cos_x") {}
   double value(double x, double y);
   TFunctionPtr<double> dx();
   TFunctionPtr<double> dy();
@@ -48,6 +54,8 @@ class Cos_x : public SimpleFunction<double>
 
 class Sin_x : public SimpleFunction<double>
 {
+public:
+  Sin_x() : SimpleFunction<double>("Sin_x") {}
   double value(double x, double y);
   TFunctionPtr<double> dx();
   TFunctionPtr<double> dy();
