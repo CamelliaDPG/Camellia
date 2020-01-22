@@ -12,7 +12,7 @@ using namespace Camellia;
 using namespace std;
 
 template <typename Scalar>
-PolarizedFunction<Scalar>::PolarizedFunction( TFunctionPtr<Scalar> f_of_xAsR_yAsTheta ) : TFunction<Scalar>(f_of_xAsR_yAsTheta->rank())
+PolarizedFunction<Scalar>::PolarizedFunction( TFunctionPtr<Scalar> f_of_xAsR_yAsTheta ) : TFunction<Scalar>("PolarizedFunction", f_of_xAsR_yAsTheta->rank())
 {
   _f = f_of_xAsR_yAsTheta;
 }

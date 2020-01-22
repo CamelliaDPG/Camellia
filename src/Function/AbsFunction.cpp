@@ -11,7 +11,7 @@
 using namespace Camellia;
 using std::fabs;
 
-AbsFunction::AbsFunction(TFunctionPtr<double> f) : TFunction<double>(f->rank())
+AbsFunction::AbsFunction(TFunctionPtr<double> f) : TFunction<double>("AbsFunction",f->rank())
 {
   TEUCHOS_TEST_FOR_EXCEPTION( f->rank() != 0, std::invalid_argument, "AbsFunction only supports Functions of rank 0.");
   _f = f;

@@ -110,7 +110,7 @@ private:
   TRieszRepPtr<Scalar> _rep;
   EOperator _op;
 public:
-  RepFunction( VarPtr var, TRieszRepPtr<Scalar> rep ) : TFunction<Scalar>( var->rank() )
+  RepFunction( VarPtr var, TRieszRepPtr<Scalar> rep ) : TFunction<Scalar>( "RepFunction", var->rank() )
   {
     _testID = var->ID();
     _op = var->op();
@@ -126,7 +126,7 @@ public:
   }
 
   // specification of function rank
-  RepFunction(int testID, TRieszRepPtr<Scalar> rep, EOperator op, int fxnRank): TFunction<Scalar>(fxnRank)
+  RepFunction(int testID, TRieszRepPtr<Scalar> rep, EOperator op, int fxnRank): TFunction<Scalar>( "RepFunction", fxnRank )
   {
     _testID = testID;
     _rep = rep;

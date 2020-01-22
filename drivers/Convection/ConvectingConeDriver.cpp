@@ -37,6 +37,7 @@ class Cone_U0 : public SimpleFunction<double>
   bool _usePeriodicData; // if true, for x > 0.5 we set x = x-1; similarly for y
 public:
   Cone_U0(double x0 = 0, double y0 = 0.25, double r = 0.1, double h = 1.0, bool usePeriodicData = true)
+  : public SimpleFunction<double>("Cone_U0")
   {
     _x0 = x0;
     _y0 = y0;

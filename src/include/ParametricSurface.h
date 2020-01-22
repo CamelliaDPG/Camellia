@@ -33,7 +33,7 @@ typedef Teuchos::RCP<ParametricSurface> ParametricSurfacePtr;
 class ParametricSurface : public TFunction<double>
 {
 public:
-  ParametricSurface() : TFunction<double>(1)   // vector valued
+  ParametricSurface() : TFunction<double>("ParametricSurface",1)   // vector valued
   {
 
   }

@@ -23,6 +23,7 @@ namespace Camellia {
     TFunctionPtr<Scalar> _f;
   public:
     SqrtFunction(TFunctionPtr<Scalar> f)
+    : TFunction<Scalar>("SqrtFunction")
     {
       _f = f;
     }

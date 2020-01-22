@@ -14,7 +14,7 @@ using namespace std;
 
 template <typename Scalar>
 SimpleSolutionFunction<Scalar>::SimpleSolutionFunction(VarPtr var, TSolutionPtr<Scalar> soln,
-                                                       bool weightFluxesBySideParity, int solutionOrdinal, const std::string &solutionIdentifierExponent) : TFunction<Scalar>(var->rank())
+                                                       bool weightFluxesBySideParity, int solutionOrdinal, const std::string &solutionIdentifierExponent) : TFunction<Scalar>("SimpleSolutionFunction", var->rank())
 {
   _var = var;
   _soln = soln;

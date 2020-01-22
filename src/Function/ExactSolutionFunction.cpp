@@ -11,7 +11,7 @@ using namespace Camellia;
 
 template <typename Scalar>
 ExactSolutionFunction<Scalar>::ExactSolutionFunction(Teuchos::RCP<ExactSolution<Scalar>> exactSolution, int trialID)
-  : TFunction<Scalar>(exactSolution->exactFunctions().find(trialID)->second->rank())
+  : TFunction<Scalar>("ExactSolutionFunction", exactSolution->exactFunctions().find(trialID)->second->rank())
 {
   _exactSolution = exactSolution;
   _trialID = trialID;

@@ -11,7 +11,7 @@
 
 using namespace Camellia;
 
-SideParityFunction::SideParityFunction() : TFunction<double>(0)
+SideParityFunction::SideParityFunction() : TFunction<double>("SideParityFunction",0)
 {
   //  cout << "SideParityFunction constructor.\n";
 }

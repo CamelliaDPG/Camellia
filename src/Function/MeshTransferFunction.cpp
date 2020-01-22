@@ -17,7 +17,7 @@ using namespace std;
 using namespace Camellia;
 
 MeshTransferFunction::MeshTransferFunction(TFunctionPtr<double> originalFunction, MeshPtr originalMesh,
-    MeshPtr newMesh, double interface_t) : TFunction<double>(originalFunction->rank())
+    MeshPtr newMesh, double interface_t) : TFunction<double>("MeshTransferFunction",originalFunction->rank())
 {
   _originalFunction = originalFunction;
   _originalMesh = originalMesh;

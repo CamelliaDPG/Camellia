@@ -9,12 +9,12 @@
 
 using namespace Camellia;
 
-ParameterFunction::ParameterFunction(double value) : TFunction<double>(0)
+ParameterFunction::ParameterFunction(double value) : TFunction<double>("ParameterFunction",0)
 {
   setValue(value);
 }
 
-ParameterFunction::ParameterFunction(TFunctionPtr<double> fxn) : TFunction<double>(fxn->rank())
+ParameterFunction::ParameterFunction(TFunctionPtr<double> fxn) : TFunction<double>("ParameterFunction",fxn->rank())
 {
   setValue(fxn);
 }

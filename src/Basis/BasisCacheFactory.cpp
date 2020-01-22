@@ -24,7 +24,7 @@ namespace Camellia {
     TFunctionPtr<Scalar> _f;
   public:
     UnionBasisCacheSubdomainFunctionWrapper(TFunctionPtr<Scalar> f, const std::vector<BasisCachePtr> &subdomainCaches)
-    : Function(f->rank()), _subdomainCaches(subdomainCaches), _f(f)
+    : Function("UnionBasisCacheSubdomainFunctionWrapper",f->rank()), _subdomainCaches(subdomainCaches), _f(f)
     {
       
     }

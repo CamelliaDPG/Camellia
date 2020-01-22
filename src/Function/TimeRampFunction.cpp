@@ -14,6 +14,7 @@
 using namespace Camellia;
 
 TimeRampFunction::TimeRampFunction(double timeScale)
+: SimpleFunction<double>("TimeRampFunction")
 {
   _timeScale = timeScale;
 }

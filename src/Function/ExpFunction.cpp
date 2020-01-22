@@ -10,7 +10,7 @@ using namespace Camellia;
 using std::log;
 
 template<class Scalar>
-Exp<Scalar>::Exp(TFunctionPtr<Scalar> power) : _power(power)
+Exp<Scalar>::Exp(TFunctionPtr<Scalar> power) : TFunction<Scalar>("Exp",0), _power(power)
 {}
 
 template<class Scalar>
@@ -76,7 +76,12 @@ TFunctionPtr<Scalar> Exp<Scalar>::exp(TFunctionPtr<Scalar> f)
   return Teuchos::rcp(new Exp<Scalar>(f));
 }
 
-std::string Exp_x::displayString()
+Exp_x::Exp_x()
+:
+SimpleFunction<double>("Exp_x")
+{}
+
+string Exp_x::displayString()
 {
   return "e^x";
 }
@@ -97,7 +102,11 @@ TFunctionPtr<double> Exp_x::dz()
   return Function::zero();
 }
 
-std::string Exp_y::displayString()
+Exp_y::Exp_y()
+:
+SimpleFunction<double>("Exp_y")
+{}
+string Exp_y::displayString()
 {
   return "e^y";
 }
@@ -118,7 +127,12 @@ TFunctionPtr<double> Exp_y::dz()
   return Function::zero();
 }
 
-std::string Exp_z::displayString()
+Exp_z::Exp_z()
+:
+SimpleFunction<double>("Exp_z")
+{}
+
+string Exp_z::displayString()
 {
   return "e^z";
 }
@@ -140,6 +154,7 @@ TFunctionPtr<double> Exp_z::dz()
 }
 
 Exp_ax::Exp_ax(double a)
+: SimpleFunction<double>("Exp_ax")
 {
   _a = a;
 }
@@ -163,6 +178,7 @@ std::string Exp_ax::displayString()
 }
 
 Exp_ay::Exp_ay(double a)
+: SimpleFunction<double>("Exp_ay")
 {
   _a = a;
 }
@@ -186,6 +202,7 @@ std::string Exp_ay::displayString()
 }
 
 Exp_at::Exp_at(double a)
+: SimpleFunction<double>("Exp_at")
 {
   _a = a;
 }
@@ -225,7 +242,10 @@ std::string Exp_at::displayString()
 }
 
 template<class Scalar>
-Ln<Scalar>::Ln(TFunctionPtr<Scalar> argument) : _argument(argument)
+Ln<Scalar>::Ln(TFunctionPtr<Scalar> argument)
+:
+TFunction<Scalar>("Ln"),
+_argument(argument)
 {}
 
 template<class Scalar>

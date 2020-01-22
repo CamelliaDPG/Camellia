@@ -18,7 +18,7 @@ using namespace Camellia;
 template <typename Scalar>
 PreviousSolutionFunction<Scalar>::PreviousSolutionFunction(TSolutionPtr<Scalar> soln, LinearTermPtr solnExpression,
                                                            bool multiplyFluxesByCellParity, int solnOrdinal)
-: TFunction<Scalar>(solnExpression->rank()),
+: TFunction<Scalar>("PreviousSolutionFunction", solnExpression->rank()),
 _overrideMeshCheck(false), _soln(soln), _solnExpression(solnExpression), _solnOrdinal(solnOrdinal)
 {
   if (solnExpression->rank() == -1)
@@ -34,7 +34,7 @@ _overrideMeshCheck(false), _soln(soln), _solnExpression(solnExpression), _solnOr
 template <typename Scalar>
 PreviousSolutionFunction<Scalar>::PreviousSolutionFunction(TSolutionPtr<Scalar> soln, VarPtr var,
                                                            bool multiplyFluxesByCellParity, int solnOrdinal)
-: TFunction<Scalar>(var->rank()),
+: TFunction<Scalar>("PreviousSolutionFunction", var->rank()),
 _overrideMeshCheck(false), _soln(soln), _solnExpression(1.0 * var), _solnOrdinal(solnOrdinal)
 {
   if ((var->varType() == FLUX) && multiplyFluxesByCellParity)

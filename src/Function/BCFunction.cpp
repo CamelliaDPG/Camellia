@@ -25,7 +25,7 @@ Teuchos::RCP<BCFunction<Scalar>> BCFunction<Scalar>::bcFunction(BCPtr bc, int va
 }
 
 template <typename Scalar>
-BCFunction<Scalar>::BCFunction(BCPtr bc, int varID, TFunctionPtr<Scalar> spatiallyFilteredFunction, int rank) : TFunction<Scalar>(rank)
+BCFunction<Scalar>::BCFunction(BCPtr bc, int varID, TFunctionPtr<Scalar> spatiallyFilteredFunction, int rank) : TFunction<Scalar>("BCFunction", rank)
 {
   _bc = bc;
   _varID = varID;

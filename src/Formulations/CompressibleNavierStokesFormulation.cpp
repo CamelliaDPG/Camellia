@@ -18,6 +18,7 @@
 #include "PenaltyConstraints.h"
 #include "PoissonFormulation.h"
 #include "SimpleFunction.h"
+#include "SqrtFunction.h"
 #include "TrigFunctions.h"
 #include "PolarizedFunction.h"
 #include "SuperLUDistSolver.h"
@@ -28,7 +29,9 @@ class Exp_ay2 : public SimpleFunction<double>
 {
   double _a;
 public:
-  Exp_ay2(double a) : _a(a) {}
+  Exp_ay2(double a) :
+  SimpleFunction<double>("Exp_ay2"),
+  _a(a) {}
   double value(double x, double y)
   {
     return exp(_a*y*y);
@@ -40,38 +43,40 @@ class Log_ay2b : public SimpleFunction<double>
   double _a;
   double _b;
 public:
-  Log_ay2b(double a, double b) : _a(a), _b(b) {}
+  Log_ay2b(double a, double b) :
+  SimpleFunction<double>("Exp_ay2"),
+  _a(a), _b(b) {}
   double value(double x, double y)
   {
     return log(_a*y*y+_b);
   }
 };
 
-class SqrtFunction : public Function {
-  private:
-    FunctionPtr _function;
-  public:
-    SqrtFunction(FunctionPtr function) : Function(0), _function(function) {}
-    void values(Camellia::FieldContainer<double> &values, BasisCachePtr basisCache) {
-      int numCells = values.dimension(0);
-      int numPoints = values.dimension(1);
-
-      _function->values(values, basisCache);
-
-      for (int cellIndex=0; cellIndex<numCells; cellIndex++) {
-        for (int ptIndex=0; ptIndex<numPoints; ptIndex++) {
-          values(cellIndex, ptIndex) = sqrt(values(cellIndex, ptIndex));
-        }
-      }
-    }
-};
+//class SqrtFunction : public Function {
+//  private:
+//    FunctionPtr _function;
+//  public:
+//    SqrtFunction(FunctionPtr function) : Function("SqrtFunction",0), _function(function) {}
+//    void values(Camellia::FieldContainer<double> &values, BasisCachePtr basisCache) {
+//      int numCells = values.dimension(0);
+//      int numPoints = values.dimension(1);
+//
+//      _function->values(values, basisCache);
+//
+//      for (int cellIndex=0; cellIndex<numCells; cellIndex++) {
+//        for (int ptIndex=0; ptIndex<numPoints; ptIndex++) {
+//          values(cellIndex, ptIndex) = sqrt(values(cellIndex, ptIndex));
+//        }
+//      }
+//    }
+//};
 
 class BoundedSqrtFunction : public Function {
   private:
     FunctionPtr _function;
     double _bound;
   public:
-    BoundedSqrtFunction(FunctionPtr function, double bound) : Function(0), _function(function), _bound(bound) {}
+    BoundedSqrtFunction(FunctionPtr function, double bound) : Function("BoundedSqrtFunction",0), _function(function), _bound(bound) {}
     void values(Camellia::FieldContainer<double> &values, BasisCachePtr basisCache) {
       int numCells = values.dimension(0);
       int numPoints = values.dimension(1);

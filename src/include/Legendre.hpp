@@ -35,7 +35,10 @@ namespace Camellia {
 
     bool _derivative; // whether this is the derivative of the Lobatto function
   public:
-    LegendreFunction(int polyOrder, bool derivative = false) {
+    LegendreFunction(int polyOrder, bool derivative = false)
+    :
+    SimpleFunction<double>("LegendreFunction")
+    {
       _polyOrder = polyOrder;
       _values.resize(_polyOrder+1);
       _derivatives.resize(_polyOrder+1);

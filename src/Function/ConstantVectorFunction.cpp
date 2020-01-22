@@ -11,7 +11,7 @@ using namespace Camellia;
 using namespace std;
 
 template <typename Scalar>
-ConstantVectorFunction<Scalar>::ConstantVectorFunction(vector<Scalar> value) : TFunction<Scalar>(1)
+ConstantVectorFunction<Scalar>::ConstantVectorFunction(vector<Scalar> value) : TFunction<Scalar>("ConstantVectorFunction",1)
 {
   _value = value;
 }

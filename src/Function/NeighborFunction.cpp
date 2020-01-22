@@ -14,7 +14,7 @@ using namespace std;
 
 template <typename Scalar>
 NeighborFunction<Scalar>::NeighborFunction(TFunctionPtr<Scalar> fxn, MeshPtr mesh)
-: TFunction<Scalar>(fxn->rank()),
+: TFunction<Scalar>("NeighborFunction", fxn->rank()),
   _fxn(fxn),
   _mesh(mesh)
 {}

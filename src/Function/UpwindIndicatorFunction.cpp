@@ -11,6 +11,7 @@
 using namespace Camellia;
 
 UpwindIndicatorFunction::UpwindIndicatorFunction(FunctionPtr beta, bool upwind)
+: TFunction<double>("UpwindIndicatorFunction")
 {
   // upwind = true  means this is the DG '-' operator  (beta * n > 0)
   // upwind = false means this is the DG '+' operator  (beta * n < 0)

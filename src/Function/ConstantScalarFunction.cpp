@@ -10,6 +10,7 @@ using namespace Camellia;
 
 template <typename Scalar>
 ConstantScalarFunction<Scalar>::ConstantScalarFunction(Scalar value)
+: SimpleFunction<Scalar>("ConstantScalarFunction")
 {
   _value = value;
   ostringstream valueStream;
@@ -19,6 +20,7 @@ ConstantScalarFunction<Scalar>::ConstantScalarFunction(Scalar value)
 
 template <typename Scalar>
 ConstantScalarFunction<Scalar>::ConstantScalarFunction(Scalar value, string stringDisplay)
+: SimpleFunction<Scalar>("ConstantScalarFunction")
 {
   _value = value;
   _stringDisplay = stringDisplay;
