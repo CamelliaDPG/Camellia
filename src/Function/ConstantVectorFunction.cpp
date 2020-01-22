@@ -78,28 +78,32 @@ template <typename Scalar>
 void ConstantVectorFunction<Scalar>::values(Camellia::FieldContainer<Scalar> &values, BasisCachePtr basisCache)
 {
   this->CHECK_VALUES_RANK(values);
-  int spaceDim = values.dimension(2);
-  TEUCHOS_TEST_FOR_EXCEPTION(spaceDim > _value.size(), std::invalid_argument, "spaceDim is greater than length of vector...");
+  auto dv = values.checkoutDeviceView(false); // false: don't deep_copy from host (will overwrite values)
+  this->values(dv, ASSIGN, basisCache);
+  values.checkinDeviceView();
+}
+
+template <typename Scalar>
+void ConstantVectorFunction<Scalar>::values(typename Camellia::FieldContainer<Scalar>::DeviceView &values, ValueModificationType modType, BasisCachePtr basisCache)
+{
+  const int dim2 = values.extent_int(2);
+  TEUCHOS_TEST_FOR_EXCEPTION(dim2 > _value.size(), std::invalid_argument, "spaceDim is greater than length of vector...");
   
   Camellia::FieldContainer<Scalar> value(_value.size());
   for (int i = 0; i < _value.size(); i++) { value(i) = _value[i]; }
   auto dv_value = value.checkoutDeviceView();
   
-  auto dv = values.checkoutDeviceView(false); // false: don't deep_copy from host (will overwrite values)
-  const int dim0 = dv.extent(0); // (C) numCells
-  const int dim1 = dv.extent(1); // (P) numPoints
-  const int dim2 = dv.extent(2); // (D) spaceDim
-  
-  Kokkos::parallel_for("ConstantVectorFunction_values", dim0, KOKKOS_LAMBDA (const int i0) {
-    for (int i1 = 0; i1 < dim1; i1++) {
-      for (int i2 = 0; i2 < dim2; i2++) {
-        dv(i0,i1,i2) = dv_value(i2);
-      }
+  using array_index_type = Kokkos::MDRangePolicy< Kokkos::Rank<2> >::array_index_type;
+  Kokkos::parallel_for("ConstantVectorFunction_values", Camellia::FieldContainer<Scalar>::getMDRangePolicy2(values),
+  KOKKOS_LAMBDA (const array_index_type i0, const array_index_type i1) {
+    for (int i2 = 0; i2 < dim2; i2++)
+    {
+      assignValue(values(i0,i1,i2), modType, dv_value(i2));
     }
   });
   value.checkinDeviceView(false);
-  values.checkinDeviceView();
 }
+
 namespace Camellia
 {
 template class ConstantVectorFunction<double>;
