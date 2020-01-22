@@ -28,7 +28,7 @@ namespace Camellia
 {
   extern std::map<std::string,int> callsToFunctionsWithoutDevicePathImplementations; // count these to have an idea which are the best functions to tackle next
   
-  std::string functionsWithoutDevicePathImplementationsReport(); // summarizes what's in callsToFunctionsWithoutDevicePathImplementations
+  std::string functionsWithoutDevicePathImplementationsReport(const int maxNumEntriesToReport); // summarizes what's in callsToFunctionsWithoutDevicePathImplementations
   
 template <typename Scalar>
 class TFunction

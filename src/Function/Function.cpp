@@ -48,7 +48,7 @@ namespace Camellia
 {
   std::map<std::string,int> callsToFunctionsWithoutDevicePathImplementations;
   
-  std::string functionsWithoutDevicePathImplementationsReport()
+  std::string functionsWithoutDevicePathImplementationsReport(const int maxNumEntriesToReport)
   {
     std::multimap<int,std::string> sortedByCount;
     for (auto entry : callsToFunctionsWithoutDevicePathImplementations)
@@ -58,13 +58,18 @@ namespace Camellia
     
     ostringstream report;
     report << "These are the functions that were called that do not have their own device-path values() implementation:\n";
-    for (auto entry : sortedByCount)
+    int entriesReported = 0;
+    for (auto rit=sortedByCount.rbegin(); rit!=sortedByCount.rend(); ++rit)
     {
-      report << entry.second << " (" << entry.first << ")\n";
+      report << rit->second << " (" << rit->first << ")\n";
+      entriesReported++;
+      if (entriesReported >= maxNumEntriesToReport)
+      {
+        break;
+      }
     }
     return report.str();
   }
-  
   
 // for adaptive quadrature
 struct CacheInfo
@@ -314,12 +319,13 @@ void TFunction<Scalar>::values(typename Camellia::FieldContainer<Scalar>::Device
    
    For that reason, we emit warnings to the console when this method gets called.
    */
-<<<<<<< HEAD
   bool printWarning = false;
   if (printWarning) {
     std::cout << "WARNING: Function implementation with displayString '" << this->displayString();
     std::cout << "' does not provide a device-path values() implementation.  The base class implementation is inherently inefficient, so this should be fixed.\n";
   }
+  
+  callsToFunctionsWithoutDevicePathImplementations[this->getClassName()]++;
   
   Teuchos::Array<int> dim(values.rank());
   for (int i=0; i<values.rank(); i++)
@@ -333,33 +339,6 @@ void TFunction<Scalar>::values(typename Camellia::FieldContainer<Scalar>::Device
   const int dim6 = fcView.extent_int(6);
   using array_index_type = Kokkos::MDRangePolicy< Kokkos::Rank<6> >::array_index_type;
   Kokkos::parallel_for("Function base class device-path values() implementation", fc.getMDRangePolicy6(),
-=======
-  std::cout << "WARNING: Function implementation with displayString '" << this->displayString();
-  std::cout << "' does not provide a device-path values() implementation.  The base class implementation is inherently inefficient, so this should be fixed.\n";
-  
-  Teuchos::Array<int> dim(values.rank());
-  for (int i=0; i<values.rank(); i++)
-  {
-    dim[i] = values.extent_int(i);
-  }
-  Camellia::FieldContainer<Scalar> fc(dim);
-  this->values(fc, basisCache);              // either happens on host or ends with deep_copy to host (one inefficiency)
-  auto fcView = fc.checkoutDeviceView(true); // true: deep_copy from host (the other main inefficiency)
-  
-  using array_index_type = Kokkos::MDRangePolicy< Kokkos::Rank<6> >::array_index_type;
-  Kokkos::Array<array_index_type,6> mdRangeEnd = {1,1,1,1,1,1}; // fully specifies all 6 MD dimensions
-  int numRanksToCopy = (dim.size() <= 6) ? dim.size() : 6;
-  for (int i=0; i<numRanksToCopy; i++)
-  {
-    mdRangeEnd[i] = dim[i];
-  }
-  Kokkos::Array<array_index_type,6> mdRangeBegin = {0,0,0,0,0,0};
-  const int dim6 = fcView.extent_int(6);
-  
-  Kokkos::MDRangePolicy< Kokkos::Rank<6> > mdRangePolicy(mdRangeBegin,mdRangeEnd);
-  
-  Kokkos::parallel_for("Function base class device-path values() implementation", mdRangePolicy,
->>>>>>> kokkos-dev
   KOKKOS_LAMBDA (const array_index_type i0, const array_index_type i1, const array_index_type i2,
                  const array_index_type i3, const array_index_type i4, const array_index_type i5)
   {
@@ -370,10 +349,7 @@ void TFunction<Scalar>::values(typename Camellia::FieldContainer<Scalar>::Device
       assignValue(entry, modType, newValue);
     }
   });
-<<<<<<< HEAD
   fc.checkinDeviceView(false);
-=======
->>>>>>> kokkos-dev
 }
 
 template <typename Scalar>

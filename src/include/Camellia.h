@@ -67,6 +67,13 @@ namespace Camellia
         }
         std::cout << std::endl;
       }
+      
+      const int maxNumEntries = 10;
+      std::string noDevicePathReport = functionsWithoutDevicePathImplementationsReport(maxNumEntries);
+      if (callsToFunctionsWithoutDevicePathImplementations.size() > 0)
+      {
+        std::cout << noDevicePathReport;
+      }
     }
   }
 }
