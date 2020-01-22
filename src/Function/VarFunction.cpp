@@ -12,7 +12,7 @@ using namespace Camellia;
 using namespace std;
 
 template <typename Scalar>
-VarFunction<Scalar>::VarFunction(VarPtr var) : TFunction<Scalar>(var->rank())
+VarFunction<Scalar>::VarFunction(VarPtr var) : TFunction<Scalar>("VarFunction",var->rank())
 {
   _var = var;
 }

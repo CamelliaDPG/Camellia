@@ -45,6 +45,26 @@
 
 namespace Camellia
 {
+  std::map<std::string,int> callsToFunctionsWithoutDevicePathImplementations;
+  
+  std::string functionsWithoutDevicePathImplementationsReport()
+  {
+    std::multimap<int,std::string> sortedByCount;
+    for (auto entry : callsToFunctionsWithoutDevicePathImplementations)
+    {
+      sortedByCount.insert(std::make_pair(entry.second, entry.first));
+    }
+    
+    ostringstream report;
+    report << "These are the functions that were called that do not have their own device-path values() implementation:\n";
+    for (auto entry : sortedByCount)
+    {
+      report << entry.second << " (" << entry.first << ")\n";
+    }
+    return report.str();
+  }
+  
+  
 // for adaptive quadrature
 struct CacheInfo
 {
@@ -61,6 +81,8 @@ class ComponentFunction : public TFunction<Scalar>
   int _component;
 public:
   ComponentFunction(TFunctionPtr<Scalar> vectorFunction, int componentIndex)
+  :
+  TFunction<Scalar>("ComponentFunction")
   {
     _vectorFxn = vectorFunction;
     _component = componentIndex;
@@ -98,7 +120,7 @@ class CellBoundaryRestrictedFunction : public TFunction<Scalar>
 {
   TFunctionPtr<Scalar> _fxn;
 public:
-  CellBoundaryRestrictedFunction(TFunctionPtr<Scalar> fxn) : TFunction<Scalar>(fxn->rank())
+  CellBoundaryRestrictedFunction(TFunctionPtr<Scalar> fxn) : TFunction<Scalar>("CellBoundaryRestrictedFunction",fxn->rank())
   {
     _fxn = fxn;
   }
@@ -118,6 +140,8 @@ class HeavisideFunction : public SimpleFunction<double>
   double _xShift;
 public:
   HeavisideFunction(double xShift=0.0)
+  :
+  SimpleFunction<double>("HeavisideFunction")
   {
     _xShift = xShift;
   }
@@ -138,6 +162,8 @@ class HeavisideFunctionY : public SimpleFunction<double>
   double _yShift;
 public:
   HeavisideFunctionY(double yShift=0.0)
+  :
+  SimpleFunction<double>("HeavisideFunctionY")
   {
     _yShift = yShift;
   }
@@ -156,7 +182,7 @@ public:
 class MeshBoundaryCharacteristicFunction : public TFunction<double>
 {
 public:
-  MeshBoundaryCharacteristicFunction() : TFunction<double>(0)
+  MeshBoundaryCharacteristicFunction() : TFunction<double>("MeshBoundaryCharacteristicFunction",0)
   {
   }
   bool boundaryValueOnly()
@@ -205,8 +231,9 @@ class MeshSkeletonCharacteristicFunction : public SimpleFunction<double>
 {
 public:
   MeshSkeletonCharacteristicFunction()
-  {
-  }
+  :
+  SimpleFunction<double>("MeshSkeletonCharacteristicFunction")
+  {}
   bool boundaryValueOnly()
   {
     return true;
@@ -222,18 +249,27 @@ public:
 };
 
 template <typename Scalar>
-TFunction<Scalar>::TFunction()
+TFunction<Scalar>::TFunction() : TFunction("(missing class name)",0) {}
+  
+template <typename Scalar>
+TFunction<Scalar>::TFunction(const std::string &className)
 {
   _rank = 0;
   _displayString = this->displayString();
   _time = 0;
+  _className = className;
 }
+
 template <typename Scalar>
-TFunction<Scalar>::TFunction(int rank)
+TFunction<Scalar>::TFunction(int rank) : TFunction("(missing class name)",rank) {}
+  
+template <typename Scalar>
+TFunction<Scalar>::TFunction(const std::string &className, int rank)
 {
   _rank = rank;
   _displayString = this->displayString();
   _time = 0;
+  _className = className;
 }
 
 template <typename Scalar>
@@ -2811,7 +2847,7 @@ class ComposedFunction : public TFunction<double>
 {
   TFunctionPtr<double> _f, _arg_g;
 public:
-  ComposedFunction(TFunctionPtr<double> f, TFunctionPtr<double> arg_g) : TFunction<double>(f->rank())
+  ComposedFunction(TFunctionPtr<double> f, TFunctionPtr<double> arg_g) : TFunction<double>("ComposedFunction", f->rank())
   {
     _f = f;
     _arg_g = arg_g;

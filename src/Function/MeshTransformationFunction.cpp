@@ -127,7 +127,7 @@ class CellTransformationFunction : public TFunction<double>
   }
 
 protected:
-  CellTransformationFunction(VectorBasisPtr basis, Camellia::FieldContainer<double> &basisCoefficients, Camellia::EOperator op) : TFunction<double>(1)
+  CellTransformationFunction(VectorBasisPtr basis, Camellia::FieldContainer<double> &basisCoefficients, Camellia::EOperator op) : TFunction<double>("CellTransformationFunction", 1)
   {
 //    cout << "CellTransformationFunction constructed for -1 cellIndex with basisCoefficients set...\n";
     _basis = basis;
@@ -136,7 +136,7 @@ protected:
     _cellIndex = -1;
   }
 public:
-  CellTransformationFunction(MeshPtr mesh, int cellID, const vector< ParametricCurvePtr > &edgeFunctions) : TFunction<double>(1)
+  CellTransformationFunction(MeshPtr mesh, int cellID, const vector< ParametricCurvePtr > &edgeFunctions) : TFunction<double>("CellTransformationFunction", 1)
   {
 //    cout << "CellTransformationFunction constructed for cellID " << cellID << " with edgeFunctions.\n";
     _cellIndex = -1;
@@ -332,7 +332,7 @@ public:
 };
 
 // protected method; used for dx(), dy(), dz():
-MeshTransformationFunction::MeshTransformationFunction(MeshPtr mesh, map< GlobalIndexType, TFunctionPtr<double>> cellTransforms, Camellia::EOperator op) : TFunction<double>(1)
+MeshTransformationFunction::MeshTransformationFunction(MeshPtr mesh, map< GlobalIndexType, TFunctionPtr<double>> cellTransforms, Camellia::EOperator op) : TFunction<double>("MeshTransformationFunction", 1)
 {
   _mesh = mesh;
   _cellTransforms = cellTransforms;
@@ -340,7 +340,7 @@ MeshTransformationFunction::MeshTransformationFunction(MeshPtr mesh, map< Global
   _maxPolynomialDegree = 1; // 1 is the degree of the identity transform (x,y) -> (x,y)
 }
 
-MeshTransformationFunction::MeshTransformationFunction(MeshPtr mesh, set<GlobalIndexType> cellIDsToTransform) : TFunction<double>(1)   // vector-valued Function
+MeshTransformationFunction::MeshTransformationFunction(MeshPtr mesh, set<GlobalIndexType> cellIDsToTransform) : TFunction<double>("MeshTransformationFunction", 1)   // vector-valued Function
 {
   _op = OP_VALUE;
   _mesh = mesh;

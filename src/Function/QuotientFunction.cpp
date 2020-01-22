@@ -9,7 +9,7 @@
 using namespace Camellia;
 
 template <typename Scalar>
-QuotientFunction<Scalar>::QuotientFunction(TFunctionPtr<Scalar> f, TFunctionPtr<Scalar> scalarDivisor) : TFunction<Scalar>( f->rank() )
+QuotientFunction<Scalar>::QuotientFunction(TFunctionPtr<Scalar> f, TFunctionPtr<Scalar> scalarDivisor) : TFunction<Scalar>("QuotientFunction", f->rank() )
 {
   if ( scalarDivisor->rank() != 0 )
   {

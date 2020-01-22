@@ -8,7 +8,7 @@
 
 using namespace Camellia;
 
-UnitNormalFunction::UnitNormalFunction(int comp, bool spaceTime) : TFunction<double>( (comp==-1)? 1 : 0)
+UnitNormalFunction::UnitNormalFunction(int comp, bool spaceTime) : TFunction<double>("UnitNormalFunction", (comp==-1)? 1 : 0)
 {
   _comp = comp;
   _spaceTime = spaceTime;

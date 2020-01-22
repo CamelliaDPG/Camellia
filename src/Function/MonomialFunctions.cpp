@@ -26,7 +26,7 @@ string Xn::displayString()
   }
   return ss.str();
 }
-Xn::Xn(int n)
+Xn::Xn(int n) : SimpleFunction<double>("Xn")
 {
   _n = n;
 }
@@ -77,7 +77,7 @@ string Yn::displayString()
   }
   return ss.str();
 }
-Yn::Yn(int n)
+Yn::Yn(int n) : SimpleFunction<double>("Yn")
 {
   _n = n;
 }
@@ -129,7 +129,7 @@ string Zn::displayString()
   }
   return ss.str();
 }
-Zn::Zn(int n)
+Zn::Zn(int n) : SimpleFunction<double>("Zn")
 {
   _n = n;
 }
@@ -181,7 +181,7 @@ string Tn::displayString()
   }
   return ss.str();
 }
-Tn::Tn(int n)
+Tn::Tn(int n) : SimpleFunction<double>("Tn")
 {
   _n = n;
 }

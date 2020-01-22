@@ -180,7 +180,7 @@ int ProductFunction<Scalar>::productRank(TFunctionPtr<Scalar> f1, TFunctionPtr<S
 }
 
 template <typename Scalar>
-ProductFunction<Scalar>::ProductFunction(TFunctionPtr<Scalar> f1, TFunctionPtr<Scalar> f2) : TFunction<Scalar>( productRank(f1,f2) )
+ProductFunction<Scalar>::ProductFunction(TFunctionPtr<Scalar> f1, TFunctionPtr<Scalar> f2) : TFunction<Scalar>("ProductFunction", productRank(f1,f2) )
 {
   // for simplicity of values() code, ensure that rank of f1 ≤ rank of f2:
   if ( f1->rank() <= f2->rank() )
