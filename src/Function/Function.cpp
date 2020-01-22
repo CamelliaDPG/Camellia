@@ -23,6 +23,7 @@
 #include "MPIWrapper.h"
 #include "MinMaxFunctions.h"
 #include "MonomialFunctions.h"
+#include "NeighborFunction.h"
 #include "PhysicalPointCache.h"
 #include "PolarizedFunction.h"
 #include "ProductFunction.h"
@@ -683,6 +684,12 @@ std::vector<GlobalIndexType> TFunction<Scalar>::localCellsWithNegativeValues(Mes
   }
   
   return myCellsWithNegativeValues;
+}
+
+template <typename Scalar>
+TFunctionPtr<Scalar> TFunction<Scalar>::neighborFunction(TFunctionPtr<Scalar> f, MeshPtr mesh)
+{
+  return Teuchos::rcp(new NeighborFunction<Scalar>(f,mesh));
 }
   
 template <typename Scalar>

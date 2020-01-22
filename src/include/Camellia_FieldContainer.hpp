@@ -72,7 +72,7 @@ namespace Camellia
     {
       const int rank = this->rank();
       Scalar* dataPtr = this->getData().getRawPtr();
-      Kokkos::Array<int,8> dims = {1,1,1,1,1,1,1,1};
+      Kokkos::Array<int,7> dims = {1,1,1,1,1,1,1}; // maximum rank of DynRankView is 7
       for (int d=0; d<rank; d++)
       {
         dims[d] = this->dimension(d);
@@ -103,9 +103,6 @@ namespace Camellia
           break;
         case 7:
           _hostView   = HostView(dataPtr,dims[0],dims[1],dims[2],dims[3],dims[4],dims[5],dims[6]);
-          break;
-        case 8:
-          _hostView   = HostView(dataPtr,dims[0],dims[1],dims[2],dims[3],dims[4],dims[5],dims[6],dims[7]);
           break;
         default:
           TEUCHOS_TEST_FOR_EXCEPTION(true,std::invalid_argument,"Unsupported rank");

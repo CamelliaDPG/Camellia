@@ -101,18 +101,18 @@ MultiBasis<Scalar, ArrayScalar>::MultiBasis(vector< Teuchos::RCP< Basis<Scalar,A
 
 // whenever side cubature is determined (e.g. in BasisCache; elsewhere??), make sure this gets called when basis is MultiBasis...
 template<class Scalar, class ArrayScalar>
-void MultiBasis<Scalar, ArrayScalar>::getCubature(ArrayScalar &cubaturePoints, ArrayScalar &cubatureWeights, int maxTestDegree) const
+void MultiBasis<Scalar, ArrayScalar>::getCubature(CamelliaArrayScalar &cubaturePoints, CamelliaArrayScalar &cubatureWeights, int maxTestDegree) const
 {
   typedef Intrepid::CellTools<Scalar>  CellTools;
   // maxTestDegree: the maximum degree of functions being integrated against us.
   int numBases = _bases.size();
   int spaceDim = _cellTopo->getDimension();
-  vector< ArrayScalar > cubPointsVector, cubWeightsVector;
+  vector< CamelliaArrayScalar > cubPointsVector, cubWeightsVector;
   int totalCubPoints=0;
   Intrepid::DefaultCubatureFactory<Scalar>  cubFactory;
   for (int basisIndex=0; basisIndex<numBases; basisIndex++)
   {
-    ArrayScalar cubPointsForBasis, cubWeightsForBasis;
+    CamelliaArrayScalar cubPointsForBasis, cubWeightsForBasis;
     int numCubPoints;
     MultiBasis<Scalar, ArrayScalar>* multiBasis = dynamic_cast< MultiBasis<Scalar, ArrayScalar>*>(_bases[basisIndex].get());
 
@@ -134,13 +134,13 @@ void MultiBasis<Scalar, ArrayScalar>::getCubature(ArrayScalar &cubaturePoints, A
     cubPointsForBasis.dimensions(dimensions);
 
     // map to quasi-physical frame (from the sub-ref cell to the ref cell)
-    ArrayScalar cubPointsInRefCell(dimensions);
+    CamelliaArrayScalar cubPointsInRefCell(dimensions);
     CellTools::mapToPhysicalFrame (cubPointsInRefCell, cubPointsForBasis, _subRefNodes, _cellTopo->getShardsTopology(), basisIndex);
 
     // weight according to (sub-)cell measure
-    ArrayScalar cellJacobian,cellJacobInv,cellJacobDet;
+    CamelliaArrayScalar cellJacobian,cellJacobInv,cellJacobDet;
     computeCellJacobians(cellJacobian,cellJacobInv,cellJacobDet, cubPointsForBasis,basisIndex);
-    ArrayScalar weightedMeasure(1,numCubPoints);
+    CamelliaArrayScalar weightedMeasure(1,numCubPoints);
     Intrepid::FunctionSpaceTools::computeCellMeasure<Scalar>(weightedMeasure,cellJacobDet,cubWeightsForBasis);
     weightedMeasure.resize(numCubPoints);
 

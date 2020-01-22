@@ -22,6 +22,8 @@ namespace Camellia
 template<class Scalar=double, class ArrayScalar=Intrepid::FieldContainer<double> > class MultiBasis;
 template<class Scalar, class ArrayScalar> class MultiBasis : public Basis<Scalar,ArrayScalar>
 {
+  using CamelliaArrayScalar = Camellia::FieldContainer<double>;
+  
   CellTopoPtr _cellTopo;
   Camellia::FieldContainer<double> _subRefNodes;
   std::vector< Teuchos::RCP< Basis<Scalar,ArrayScalar> > > _bases;
@@ -65,7 +67,7 @@ public:
 
   int relativeToAbsoluteDofOrdinal(int basisDofOrdinal, int leafOrdinal) const;
 
-  void getCubature(ArrayScalar &cubaturePoints, ArrayScalar &cubatureWeights, int maxTestDegree) const;
+  void getCubature(CamelliaArrayScalar &cubaturePoints, CamelliaArrayScalar &cubatureWeights, int maxTestDegree) const;
 
   void printInfo() const;
 };
