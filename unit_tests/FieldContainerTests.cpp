@@ -20,14 +20,99 @@ using namespace Camellia;
 
 namespace
 {
-  void getDataCopy(Camellia::FieldContainer<double>& dataCopy, const double *dataPtr, int n, int m)
+  TEUCHOS_UNIT_TEST( FieldContainer, HostAllocationRecorded )
   {
-    Teuchos::Array<int> dim(2);
-    dim[0] = m;
-    dim[1] = n;
-    double * firstEntry = (double *) dataPtr; // casting away the const.  OK since we copy below.
-    dataCopy = Camellia::FieldContainer<double>(dim,firstEntry,true); // true: copy
+    const auto initialCount               = fcAllocationRecord.allocationCount;
+    const auto initialBytesAllocatedTotal = fcAllocationRecord.bytesAllocatedTotal;
+    const auto initialNetBytesAllocated   = fcAllocationRecord.bytesAllocatedNet;
+    
+    const int dim0 = 5;
+    using Scalar = double;
+    Camellia::FieldContainer<Scalar> values(dim0);
+    
+    const int newBytesExpected = values.size() * sizeof(Scalar);
+    TEST_EQUALITY(initialBytesAllocatedTotal + newBytesExpected, fcAllocationRecord.bytesAllocatedTotal);
+    TEST_EQUALITY(initialNetBytesAllocated   + newBytesExpected, fcAllocationRecord.bytesAllocatedNet);
+    TEST_EQUALITY(initialCount + 1, fcAllocationRecord.allocationCount);
   }
+  
+  TEUCHOS_UNIT_TEST( FieldContainer, DeviceAllocationRecorded )
+  {
+    const int dim0 = 5;
+    using Scalar = double;
+    Camellia::FieldContainer<Scalar> values(dim0);
+    
+    const auto initialCount               = deviceViewAllocationRecord.allocationCount;
+    const auto initialBytesAllocatedTotal = deviceViewAllocationRecord.bytesAllocatedTotal;
+    const auto initialNetBytesAllocated   = deviceViewAllocationRecord.bytesAllocatedNet;
+   
+    auto dv = values.checkoutDeviceView();  // DeviceView is initialized lazily on checkout
+    
+    const int newBytesExpected = values.size() * sizeof(Scalar);
+    TEST_EQUALITY(initialBytesAllocatedTotal + newBytesExpected, deviceViewAllocationRecord.bytesAllocatedTotal);
+    TEST_EQUALITY(initialNetBytesAllocated   + newBytesExpected, deviceViewAllocationRecord.bytesAllocatedNet);
+    TEST_EQUALITY(initialCount + 1, deviceViewAllocationRecord.allocationCount);
+    
+    values.checkinDeviceView();
+  }
+  
+  TEUCHOS_UNIT_TEST( FieldContainer, DeviceToHostDeepCopyRecorded )
+  {
+    const auto initialCount      = deviceToHostDeepCopyRecord.deepCopyCount;
+    const auto initialByteCount  = deviceToHostDeepCopyRecord.bytesDeepCopied;
+    
+    const int dim0 = 5;
+    using Scalar = double;
+    Camellia::FieldContainer<Scalar> values(dim0);
+    
+    auto dv = values.checkoutDeviceView(false); // false: don't deep copy from host to device (unnecessary here)
+    values.checkinDeviceView(true); // true: do deep copy from device to host
+    
+    const int newBytesExpected = values.size() * sizeof(Scalar);
+    TEST_EQUALITY(initialByteCount + newBytesExpected, deviceToHostDeepCopyRecord.bytesDeepCopied);
+    TEST_EQUALITY(initialCount + 1, deviceToHostDeepCopyRecord.deepCopyCount);
+  }
+  
+  TEUCHOS_UNIT_TEST( FieldContainer, HostToDeviceDeepCopyRecordedConstCase )
+  {
+    const auto initialCount      = hostToDeviceDeepCopyRecord.deepCopyCount;
+    const auto initialByteCount  = hostToDeviceDeepCopyRecord.bytesDeepCopied;
+    
+    const int dim0 = 5;
+    using Scalar = double;
+    const Camellia::FieldContainer<Scalar> values(dim0);
+    
+    auto dv = values.checkoutDeviceView(); // first checkout should copy
+    values.checkinDeviceView();
+    
+    const int newBytesExpected = values.size() * sizeof(Scalar);
+    TEST_EQUALITY(initialByteCount + newBytesExpected, hostToDeviceDeepCopyRecord.bytesDeepCopied);
+    TEST_EQUALITY(initialCount + 1, hostToDeviceDeepCopyRecord.deepCopyCount);
+    
+    auto dvSecondCheckout = values.checkoutDeviceView(); // no copy here
+    values.checkinDeviceView();
+    
+    // the counts should be the same as after the first checkout
+    TEST_EQUALITY(initialByteCount + newBytesExpected, hostToDeviceDeepCopyRecord.bytesDeepCopied);
+    TEST_EQUALITY(initialCount + 1, hostToDeviceDeepCopyRecord.deepCopyCount);
+  }
+  
+  TEUCHOS_UNIT_TEST( FieldContainer, HostToDeviceDeepCopyRecorded )
+  {
+    const auto initialCount      = hostToDeviceDeepCopyRecord.deepCopyCount;
+    const auto initialByteCount  = hostToDeviceDeepCopyRecord.bytesDeepCopied;
+    
+    const int dim0 = 5;
+    using Scalar = double;
+    Camellia::FieldContainer<Scalar> values(dim0);
+    
+    auto dv = values.checkoutDeviceView(true); // true: deep copy
+    
+    const int newBytesExpected = values.size() * sizeof(Scalar);
+    TEST_EQUALITY(initialByteCount + newBytesExpected, hostToDeviceDeepCopyRecord.bytesDeepCopied);
+    TEST_EQUALITY(initialCount + 1, hostToDeviceDeepCopyRecord.deepCopyCount);
+  }
+  
   
   TEUCHOS_UNIT_TEST( FieldContainer, convertSDMToFC_DataOwnership )
   {

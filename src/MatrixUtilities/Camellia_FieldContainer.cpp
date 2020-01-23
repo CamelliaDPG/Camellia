@@ -24,6 +24,9 @@ namespace Camellia
   std::set<long long> outstandingFCAllocationNumbers;
   bool recordOutstandingFCAllocationNumbers = false; // roughly 8% performance penalty for all of runTests if this is true, but very useful for tracking down unfreed allocations.
   
+  DeepCopyRecord deviceToHostDeepCopyRecord;
+  DeepCopyRecord hostToDeviceDeepCopyRecord;
+  
   std::string allocationReport(AllocationRecord &record)
   {
     std::ostringstream allocationReportStream;

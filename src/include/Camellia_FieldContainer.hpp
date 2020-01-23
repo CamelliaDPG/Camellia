@@ -41,6 +41,22 @@ namespace Camellia
   extern std::set<long long> outstandingFCAllocationNumbers;
   extern bool recordOutstandingFCAllocationNumbers; // if false, we skip tracking of the outstanding FC numbers, which does have some performance cost (about 8% penalty for the test suite as a whole)
   
+  struct DeepCopyRecord
+  {
+    int deepCopyCount = 0;
+    long long bytesDeepCopied = 0;
+  };
+  
+  extern DeepCopyRecord deviceToHostDeepCopyRecord;
+  extern DeepCopyRecord hostToDeviceDeepCopyRecord;
+  
+  template<typename Scalar>
+  void recordDeepCopy(DeepCopyRecord &record, long long entryCount)
+  {
+    record.deepCopyCount++;
+    record.bytesDeepCopied += entryCount * sizeof(Scalar);
+  }
+  
   template<typename Scalar>
   void recordAllocation(AllocationRecord &record, long long entryCount)
   {
@@ -74,19 +90,58 @@ namespace Camellia
  #endif
     using HostView   = Kokkos::DynRankView<Scalar, Kokkos::HostSpace, Kokkos::MemoryTraits<Kokkos::Unmanaged> >;
     using ViewTraits = typename HostView::drvtraits;
-    //using DeviceView = Kokkos::DynRankView<typename ViewTraits::value_type, typename ViewTraits::array_layout, DeviceMemorySpace, typename ViewTraits::memory_traits>;
     using DeviceView = Kokkos::DynRankView<typename ViewTraits::value_type, typename ViewTraits::array_layout, DeviceMemorySpace>;
+    using DeviceViewConst = Kokkos::DynRankView<const typename ViewTraits::value_type, typename ViewTraits::array_layout, DeviceMemorySpace>;
+    using HostViewConst   = Kokkos::DynRankView<const Scalar, Kokkos::HostSpace, Kokkos::MemoryTraits<Kokkos::Unmanaged> >;
     
   private:
-    DeviceView  _deviceView;
-    HostView    _hostView;
+    mutable DeviceView      _deviceView;
+    mutable HostView        _hostView;
+    mutable DeviceViewConst _deviceViewConst;
+    mutable HostViewConst   _hostViewConst;
     
-    bool _deviceViewIsCheckedOut = false; // it's an error to check out twice without checking back in first; data copies happen at check in
-    bool _deviceViewIsValid      = false; // if invalid, call initializeDeviceView() on checkout
+    mutable bool _deviceViewIsCheckedOut = false; // it's an error to check out twice without checking back in first; data copies happen at check in
+    mutable bool _deviceViewIsValid      = false; // if invalid, call initializeDeviceView() on checkout
     bool _hostViewIsValid        = false; // if invalid, call initializeHostView() before access to _hostView -- right now only used for creating mirror in initializeDeviceView()
     
-    bool _fieldContainerDataAllocationRecorded = false; // we don't count deallocation if we didn't count allocation; this allows us to enforce that.
-    int  _fieldContainerAllocationNumber = -1;
+    mutable bool _hostViewConstIsValid   = false; // if invalid, call initializeHostViewConst() before access to _hostViewConst -- right now only used for creating mirror in initializeDeviceView()
+    
+    mutable bool _fieldContainerDataAllocationRecorded = false; // we don't count deallocation if we didn't count allocation; this allows us to enforce that.
+    mutable int  _fieldContainerAllocationNumber = -1;
+    
+    template<typename ViewType>
+    ViewType allocateView(const std::string &label) const
+    {
+      const int rank = this->rank();
+      Kokkos::Array<int,7> dims = {1,1,1,1,1,1,1}; // maximum rank of DynRankView is 7
+      for (int d=0; d<rank; d++)
+      {
+        dims[d] = this->dimension(d);
+      }
+      
+      switch (rank)
+      {
+        case 0:
+          return ViewType(Kokkos::ViewAllocateWithoutInitializing(label));
+        case 1:
+          return ViewType(Kokkos::ViewAllocateWithoutInitializing(label),dims[0]);
+        case 2:
+          return ViewType(Kokkos::ViewAllocateWithoutInitializing(label),dims[0],dims[1]);
+        case 3:
+          return ViewType(Kokkos::ViewAllocateWithoutInitializing(label),dims[0],dims[1],dims[2]);
+        case 4:
+          return ViewType(Kokkos::ViewAllocateWithoutInitializing(label),dims[0],dims[1],dims[2],dims[3]);
+          break;
+        case 5:
+          return ViewType(Kokkos::ViewAllocateWithoutInitializing(label),dims[0],dims[1],dims[2],dims[3],dims[4]);
+        case 6:
+          return ViewType(Kokkos::ViewAllocateWithoutInitializing(label),dims[0],dims[1],dims[2],dims[3],dims[4],dims[5]);
+        case 7:
+          return ViewType(Kokkos::ViewAllocateWithoutInitializing(label),dims[0],dims[1],dims[2],dims[3],dims[4],dims[5],dims[6]);
+        default:
+          TEUCHOS_TEST_FOR_EXCEPTION(true,std::invalid_argument,"Unsupported rank");
+      }
+    }
     
     void initializeHostView()
     {
@@ -130,11 +185,52 @@ namespace Camellia
       _hostViewIsValid = true;
     }
     
+    void initializeHostViewConst() const
+    {
+      const int rank = this->rank();
+      const Scalar* dataPtr = this->getData().getRawPtr();
+      Kokkos::Array<int,7> dims = {1,1,1,1,1,1,1}; // maximum rank of DynRankView is 7
+      for (int d=0; d<rank; d++)
+      {
+        dims[d] = this->dimension(d);
+      }
+      
+      switch (rank)
+      {
+        case 0:
+          _hostViewConst  = HostViewConst(dataPtr);
+          break;
+        case 1:
+          _hostViewConst  = HostViewConst(dataPtr,dims[0]);
+          break;
+        case 2:
+          _hostViewConst  = HostViewConst(dataPtr,dims[0],dims[1]);
+          break;
+        case 3:
+          _hostViewConst  = HostViewConst(dataPtr,dims[0],dims[1],dims[2]);
+          break;
+        case 4:
+          _hostViewConst  = HostViewConst(dataPtr,dims[0],dims[1],dims[2],dims[3]);
+          break;
+        case 5:
+          _hostViewConst  = HostViewConst(dataPtr,dims[0],dims[1],dims[2],dims[3],dims[4]);
+          break;
+        case 6:
+          _hostViewConst  = HostViewConst(dataPtr,dims[0],dims[1],dims[2],dims[3],dims[4],dims[5]);
+          break;
+        case 7:
+          _hostViewConst  = HostViewConst(dataPtr,dims[0],dims[1],dims[2],dims[3],dims[4],dims[5],dims[6]);
+          break;
+        default:
+          TEUCHOS_TEST_FOR_EXCEPTION(true,std::invalid_argument,"Unsupported rank");
+      }
+      _hostViewConstIsValid = true;
+    }
+    
     void initializeDeviceView()
     {
       if (!_hostViewIsValid)
       {
-        //std::cout << "initializeHostView..." << std::endl;
         initializeHostView();
       }
       
@@ -147,10 +243,29 @@ namespace Camellia
       _deviceViewIsValid = true;
     }
     
+    // const version
+    void initializeDeviceViewConst() const
+    {
+      if (!_hostViewConstIsValid)
+      {
+        initializeHostViewConst();
+      }
+      
+      // if _deviceView has previously been allocated, since we'll implicitly deallocate when we reset _deviceView below, we should
+      // subtract off the previous allocation size.  (This comes up during calls to resize() and clear().)
+      recordDeallocation(deviceViewAllocationRecord, _deviceView.size());
+      const std::string label = "Camellia::FieldContainer device view";
+      _deviceView = allocateView<DeviceView>(label);
+      recordAllocation(deviceViewAllocationRecord, _deviceView.size());
+      
+      _deviceViewIsValid = true;
+    }
+    
     void invalidateViews()
     {
       // called when the FC is resized, e.g.
       _hostViewIsValid = false;
+      _hostViewConstIsValid = false;
       
       // record the deallocation
       if (_deviceViewIsValid)
@@ -159,11 +274,12 @@ namespace Camellia
         recordDeallocation(deviceViewAllocationRecord, _deviceView.size());
       }
 
-      _deviceView = DeviceView();
-      _hostView   = HostView();
+      _deviceView      = DeviceView();
+      _hostView        = HostView();
+      _hostViewConst   = HostViewConst();
     }
     
-    void recordAllocation(AllocationRecord &record, long long entryCount)
+    void recordAllocation(AllocationRecord &record, long long entryCount) const
     {
       Camellia::recordAllocation<Scalar>(record, entryCount);
       
@@ -179,7 +295,7 @@ namespace Camellia
       }
     }
     
-    void recordDeallocation(AllocationRecord &record, long long entryCount)
+    void recordDeallocation(AllocationRecord &record, long long entryCount) const
     {
       bool recordIsForFieldContainer = (&record == &fcAllocationRecord);
       if (recordIsForFieldContainer && !_fieldContainerDataAllocationRecorded)
@@ -228,7 +344,21 @@ namespace Camellia
       if (deepCopyFromHost)
       {
         Kokkos::deep_copy(_deviceView,_hostView);
+        recordDeepCopy<Scalar>(hostToDeviceDeepCopyRecord, _hostView.size());
       }
+      return _deviceView;
+    }
+    
+    DeviceViewConst checkoutDeviceView() const
+    {
+      if (!_deviceViewIsValid)
+      {
+        initializeDeviceViewConst();
+        Kokkos::deep_copy(_deviceView,_hostViewConst);
+        recordDeepCopy<Scalar>(hostToDeviceDeepCopyRecord, _hostViewConst.size());
+      }
+      _deviceViewIsCheckedOut = true;
+      
       return _deviceView;
     }
     
@@ -239,7 +369,14 @@ namespace Camellia
       if (deepCopyToHost)
       {
         Kokkos::deep_copy(_hostView,_deviceView);
+        recordDeepCopy<Scalar>(deviceToHostDeepCopyRecord, _hostView.size());
       }
+      _deviceViewIsCheckedOut = false;
+    }
+    
+    void checkinDeviceView() const
+    {
+      _deviceViewIsCheckedOut = false;
     }
     
     /** \brief Default constructor.
