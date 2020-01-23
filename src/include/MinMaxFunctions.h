@@ -30,6 +30,7 @@ public:
   TFunctionPtr<double> z();
 
   void values(Camellia::FieldContainer<double> &values, BasisCachePtr basisCache);
+  void values(typename Camellia::FieldContainer<double>::DeviceView &values, ValueModificationType modType, BasisCachePtr basisCache) override;
   bool boundaryValueOnly();
 
   std::vector< TFunctionPtr<double> > memberFunctions();
@@ -48,6 +49,7 @@ public:
   TFunctionPtr<double> z();
 
   void values(Camellia::FieldContainer<double> &values, BasisCachePtr basisCache);
+  void values(typename Camellia::FieldContainer<double>::DeviceView &values, ValueModificationType modType, BasisCachePtr basisCache) override;
   bool boundaryValueOnly();
 
   std::vector< TFunctionPtr<double> > memberFunctions();

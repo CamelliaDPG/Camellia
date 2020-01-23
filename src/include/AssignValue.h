@@ -17,7 +17,9 @@ namespace Camellia {
     ADD,
     SUBTRACT,
     MULTIPLY,
-    DIVIDE
+    DIVIDE,
+    MINIMUM,
+    MAXIMUM
   };
   
   template<typename Scalar>
@@ -39,6 +41,12 @@ namespace Camellia {
         break;
       case SUBTRACT:
         existingValue -= valueToAssign;
+        break;
+      case MINIMUM:
+        existingValue = std::fmin(existingValue, valueToAssign);
+        break;
+      case MAXIMUM:
+        existingValue = std::fmax(existingValue, valueToAssign);
     }
   }
 }

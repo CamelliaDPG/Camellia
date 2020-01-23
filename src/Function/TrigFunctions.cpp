@@ -19,27 +19,36 @@ public:
   {
     _arg = arg;
   }
+  
   std::string displayString()
   {
     std::ostringstream name;
     name << "sin(" << _arg->displayString() << ")";
     return name.str();
   }
-  virtual void values(Camellia::FieldContainer<Scalar> &values, BasisCachePtr basisCache)
+  
+  virtual void values(FieldContainer<Scalar> &values, BasisCachePtr basisCache)
   {
     this->CHECK_VALUES_RANK(values);
-    _arg->values(values, basisCache);
-    auto dv = values.checkoutDeviceView();
-    TEUCHOS_TEST_FOR_EXCEPTION(dv.rank() != 2, std::invalid_argument, "rank is not equal to 2");
-    const int numCells  = dv.extent(0);
-    const int numPoints = dv.extent(1);
-    
-    Kokkos::parallel_for("Sin_values", numCells, KOKKOS_LAMBDA (const int cellOrdinal) {
-      for (int pointOrdinal=0; pointOrdinal<numPoints; pointOrdinal++) {
-        dv(cellOrdinal,pointOrdinal) = sin(dv(cellOrdinal,pointOrdinal));
+    auto dv = values.checkoutDeviceView(false); // false: don't deep_copy from host (will overwrite values)
+    this->values(dv, ASSIGN, basisCache);
+    values.checkinDeviceView();
+  }
+  
+  virtual void values(typename FieldContainer<Scalar>::DeviceView &values, ValueModificationType modType, BasisCachePtr basisCache)
+  {
+    TEUCHOS_TEST_FOR_EXCEPTION(values.rank() != 2, std::invalid_argument, "rank is not equal to 2");
+    auto dv = FieldContainer<Scalar>::getDeviceView(values);
+    _arg->values(dv, ASSIGN, basisCache);
+    Kokkos::fence();
+    const int dim0 = values.extent_int(0);
+    const int dim1 = values.extent_int(1);
+    Kokkos::parallel_for("Sin_values", dim0, KOKKOS_LAMBDA (const int i0) {
+      for (int i1 = 0; i1 < dim1; i1++) {
+        assignValue(values(i0,i1), modType, sin(dv(i0,i1)));
       }
     });
-    values.checkinDeviceView();
+    FieldContainer<Scalar>::recordDeviceViewDeallocation(dv);
   }
   
   TFunctionPtr<Scalar> dx()
@@ -76,27 +85,36 @@ public:
   {
     _arg = arg;
   }
+  
   std::string displayString()
   {
     std::ostringstream name;
     name << "cos(" << _arg->displayString() << ")";
     return name.str();
   }
-  virtual void values(Camellia::FieldContainer<Scalar> &values, BasisCachePtr basisCache)
+  
+  virtual void values(FieldContainer<Scalar> &values, BasisCachePtr basisCache)
   {
     this->CHECK_VALUES_RANK(values);
-    _arg->values(values, basisCache);
-    auto dv = values.checkoutDeviceView();
-    TEUCHOS_TEST_FOR_EXCEPTION(dv.rank() != 2, std::invalid_argument, "rank is not equal to 2");
-    const int numCells  = dv.extent(0);
-    const int numPoints = dv.extent(1);
-    
-    Kokkos::parallel_for("Cos_values", numCells, KOKKOS_LAMBDA (const int cellOrdinal) {
-      for (int pointOrdinal=0; pointOrdinal<numPoints; pointOrdinal++) {
-        dv(cellOrdinal,pointOrdinal) = cos(dv(cellOrdinal,pointOrdinal));
+    auto dv = values.checkoutDeviceView(false); // false: don't deep_copy from host (will overwrite values)
+    this->values(dv, ASSIGN, basisCache);
+    values.checkinDeviceView();
+  }
+  
+  virtual void values(typename FieldContainer<Scalar>::DeviceView &values, ValueModificationType modType, BasisCachePtr basisCache)
+  {
+    TEUCHOS_TEST_FOR_EXCEPTION(values.rank() != 2, std::invalid_argument, "rank is not equal to 2");
+    auto dv = FieldContainer<Scalar>::getDeviceView(values);
+    _arg->values(dv, ASSIGN, basisCache);
+    Kokkos::fence();
+    const int dim0 = values.extent_int(0);
+    const int dim1 = values.extent_int(1);
+    Kokkos::parallel_for("Cos_values", dim0, KOKKOS_LAMBDA (const int i0) {
+      for (int i1 = 0; i1 < dim1; i1++) {
+        assignValue(values(i0,i1), modType, cos(dv(i0,i1)));
       }
     });
-    values.checkinDeviceView();
+    FieldContainer<Scalar>::recordDeviceViewDeallocation(dv);
   }
   
   TFunctionPtr<Scalar> dx()

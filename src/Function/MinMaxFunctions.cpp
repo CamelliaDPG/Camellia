@@ -35,40 +35,41 @@ std::vector< TFunctionPtr<double> > MinFunction::memberFunctions()
   return {{_f1,_f2}};
 }
 
-void MinFunction::values(Camellia::FieldContainer<double> &values, BasisCachePtr basisCache)
+void MinFunction::values(FieldContainer<double> &values, BasisCachePtr basisCache)
 {
   this->CHECK_VALUES_RANK(values);
-  Camellia::FieldContainer<double> values2(values);
-  _f1->values(values,basisCache);
-  _f2->values(values2,basisCache);
-  
-  auto dv = values.checkoutDeviceView();
-  auto dv2 = values2.checkoutDeviceView();
-  
-  const int dim0 = (dv.rank() > 0) ? dv.extent(0) : 1;
-  const int dim1 = (dv.rank() > 1) ? dv.extent(1) : 1;
-  const int dim2 = (dv.rank() > 2) ? dv.extent(2) : 1;
-  const int dim3 = (dv.rank() > 3) ? dv.extent(3) : 1;
-  const int dim4 = (dv.rank() > 4) ? dv.extent(4) : 1;
-  const int dim5 = (dv.rank() > 5) ? dv.extent(5) : 1;
-  const int dim6 = (dv.rank() > 6) ? dv.extent(6) : 1;
-  
-  Kokkos::parallel_for("MinFunction_values", dim0, KOKKOS_LAMBDA (const int i0) {
-    for (int i1 = 0; i1 < dim1; i1++) {
-      for (int i2 = 0; i2 < dim2; i2++) {
-        for (int i3 = 0; i3 < dim3; i3++) {
-          for (int i4 = 0; i4 < dim4; i4++) {
-            for (int i5 = 0; i5 < dim5; i5++) {
-              for (int i6 = 0; i6 < dim6; i6++) {
-                dv.access(i0,i1,i2,i3,i4,i5,i6) = fmin(dv.access(i0,i1,i2,i3,i4,i5,i6),dv2.access(i0,i1,i2,i3,i4,i5,i6));
-              }
-            }
-          }
-        }
-      }
-    }
-  });
+  auto dv = values.checkoutDeviceView(false); // false: don't deep_copy from host (will overwrite values)
+  this->values(dv, ASSIGN, basisCache);
   values.checkinDeviceView();
+}
+
+void MinFunction::values(typename FieldContainer<double>::DeviceView &values, ValueModificationType modType, BasisCachePtr basisCache)
+{
+  if (modType == ASSIGN)
+  {
+    _f1->values(values, ValueModificationType::ASSIGN, basisCache);
+    Kokkos::fence();
+    _f2->values(values, ValueModificationType::MINIMUM, basisCache);
+  }
+  else
+  {
+    auto minValues = FieldContainer<double>::getDeviceView(values);
+    _f1->values(minValues, ValueModificationType::ASSIGN, basisCache);
+    Kokkos::fence();
+    _f2->values(minValues, ValueModificationType::MINIMUM, basisCache);
+    Kokkos::fence();
+    const int dim6 = (values.rank() > 6) ? values.extent_int(6) : 1;
+    using array_index_type = Kokkos::MDRangePolicy< Kokkos::Rank<6> >::array_index_type;
+    Kokkos::parallel_for("MinFunction_values", FieldContainer<double>::getMDRangePolicy6(values),
+    KOKKOS_LAMBDA (const array_index_type i0, const array_index_type i1, const array_index_type i2,
+                   const array_index_type i3, const array_index_type i4, const array_index_type i5)
+    {
+      for (int i6 = 0; i6 < dim6; i6++) {
+        assignValue(values.access(i0,i1,i2,i3,i4,i5,i6), modType, minValues.access(i0,i1,i2,i3,i4,i5,i6));
+      }
+    });
+    FieldContainer<double>::recordDeviceViewDeallocation(minValues);
+  }
 }
 
 TFunctionPtr<double> MinFunction::x()
@@ -122,40 +123,41 @@ std::vector< TFunctionPtr<double> > MaxFunction::memberFunctions()
   return {{_f1,_f2}};
 }
 
-void MaxFunction::values(Camellia::FieldContainer<double> &values, BasisCachePtr basisCache)
+void MaxFunction::values(FieldContainer<double> &values, BasisCachePtr basisCache)
 {
   this->CHECK_VALUES_RANK(values);
-  Camellia::FieldContainer<double> values2(values);
-  _f1->values(values,basisCache);
-  _f2->values(values2,basisCache);
-  
-  auto dv = values.checkoutDeviceView();
-  auto dv2 = values2.checkoutDeviceView();
-  
-  const int dim0 = (dv.rank() > 0) ? dv.extent(0) : 1;
-  const int dim1 = (dv.rank() > 1) ? dv.extent(1) : 1;
-  const int dim2 = (dv.rank() > 2) ? dv.extent(2) : 1;
-  const int dim3 = (dv.rank() > 3) ? dv.extent(3) : 1;
-  const int dim4 = (dv.rank() > 4) ? dv.extent(4) : 1;
-  const int dim5 = (dv.rank() > 5) ? dv.extent(5) : 1;
-  const int dim6 = (dv.rank() > 6) ? dv.extent(6) : 1;
-  
-  Kokkos::parallel_for("MaxFunction_values", dim0, KOKKOS_LAMBDA (const int i0) {
-    for (int i1 = 0; i1 < dim1; i1++) {
-      for (int i2 = 0; i2 < dim2; i2++) {
-        for (int i3 = 0; i3 < dim3; i3++) {
-          for (int i4 = 0; i4 < dim4; i4++) {
-            for (int i5 = 0; i5 < dim5; i5++) {
-              for (int i6 = 0; i6 < dim6; i6++) {
-                dv.access(i0,i1,i2,i3,i4,i5,i6) = fmax(dv.access(i0,i1,i2,i3,i4,i5,i6),dv2.access(i0,i1,i2,i3,i4,i5,i6));
-              }
-            }
-          }
-        }
-      }
-    }
-  });
+  auto dv = values.checkoutDeviceView(false); // false: don't deep_copy from host (will overwrite values)
+  this->values(dv, ASSIGN, basisCache);
   values.checkinDeviceView();
+}
+
+void MaxFunction::values(typename FieldContainer<double>::DeviceView &values, ValueModificationType modType, BasisCachePtr basisCache)
+{
+  if (modType == ASSIGN)
+  {
+    _f1->values(values, ValueModificationType::ASSIGN, basisCache);
+    Kokkos::fence();
+    _f2->values(values, ValueModificationType::MAXIMUM, basisCache);
+  }
+  else
+  {
+    auto maxValues = FieldContainer<double>::getDeviceView(values);
+    _f1->values(maxValues, ValueModificationType::ASSIGN, basisCache);
+    Kokkos::fence();
+    _f2->values(maxValues, ValueModificationType::MAXIMUM, basisCache);
+    Kokkos::fence();
+    const int dim6 = (values.rank() > 6) ? values.extent_int(6) : 1;
+    using array_index_type = Kokkos::MDRangePolicy< Kokkos::Rank<6> >::array_index_type;
+    Kokkos::parallel_for("MaxFunction_values", FieldContainer<double>::getMDRangePolicy6(values),
+    KOKKOS_LAMBDA (const array_index_type i0, const array_index_type i1, const array_index_type i2,
+                   const array_index_type i3, const array_index_type i4, const array_index_type i5)
+    {
+      for (int i6 = 0; i6 < dim6; i6++) {
+        assignValue(values.access(i0,i1,i2,i3,i4,i5,i6), modType, maxValues.access(i0,i1,i2,i3,i4,i5,i6));
+      }
+    });
+    FieldContainer<double>::recordDeviceViewDeallocation(maxValues);
+  }
 }
 
 TFunctionPtr<double> MaxFunction::x()
