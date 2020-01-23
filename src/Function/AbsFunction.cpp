@@ -35,19 +35,28 @@ std::vector< TFunctionPtr<double> > AbsFunction::memberFunctions()
   return {{_f}};
 }
 
-void AbsFunction::values(Camellia::FieldContainer<double> &values, BasisCachePtr basisCache)
+void AbsFunction::values(FieldContainer<double> &values, BasisCachePtr basisCache)
 {
   this->CHECK_VALUES_RANK(values);
-  _f->values(values,basisCache);
-  auto dv = values.checkoutDeviceView();
-  const int dim0 = dv.extent(0);
-  const int dim1 = dv.extent(1);
+  auto dv = values.checkoutDeviceView(false); // false: don't deep_copy from host (will overwrite values)
+  this->values(dv, ASSIGN, basisCache);
+  values.checkinDeviceView();
+}
+
+void AbsFunction::values(typename FieldContainer<double>::DeviceView &values, ValueModificationType modType, BasisCachePtr basisCache)
+{
+  TEUCHOS_TEST_FOR_EXCEPTION(values.rank() != 2, std::invalid_argument, "rank is not equal to 2");
+  auto dv = FieldContainer<double>::getDeviceView(values);
+  _f->values(dv, ASSIGN, basisCache);
+  Kokkos::fence();
+  const int dim0 = values.extent_int(0);
+  const int dim1 = values.extent_int(1);
   Kokkos::parallel_for("AbsFunction_values", dim0, KOKKOS_LAMBDA (const int i0) {
     for (int i1 = 0; i1 < dim1; i1++) {
-      dv(i0,i1) = fabs(dv(i0,i1));
+      assignValue(values(i0,i1), modType, fabs(dv(i0,i1)));
     }
   });
-  values.checkinDeviceView();
+  FieldContainer<double>::recordDeviceViewDeallocation(dv);
 }
 
 TFunctionPtr<double> AbsFunction::dx()

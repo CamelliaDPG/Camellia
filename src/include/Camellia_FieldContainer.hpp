@@ -41,6 +41,26 @@ namespace Camellia
   extern std::set<long long> outstandingFCAllocationNumbers;
   extern bool recordOutstandingFCAllocationNumbers; // if false, we skip tracking of the outstanding FC numbers, which does have some performance cost (about 8% penalty for the test suite as a whole)
   
+  template<typename Scalar>
+  void recordAllocation(AllocationRecord &record, long long entryCount)
+  {
+    record.allocationCount++;
+    long long bytes = sizeof(Scalar) * entryCount;
+    record.bytesAllocatedNet   += bytes;
+    record.bytesAllocatedTotal += bytes;
+    if (record.bytesAllocatedNet > record.bytesAllocatedNetHighWaterMark)
+    {
+      record.bytesAllocatedNetHighWaterMark = record.bytesAllocatedNet;
+    }
+  }
+
+  template<typename Scalar>
+  void recordDeallocation(AllocationRecord &record, long long entryCount)
+  {
+    long long bytes = sizeof(Scalar) * entryCount;
+    record.bytesAllocatedNet -= bytes;
+  }
+
   template<class Scalar, int ArrayTypeId=0>
   class FieldContainer : public Intrepid::FieldContainer<Scalar, ArrayTypeId>
   {
@@ -145,14 +165,7 @@ namespace Camellia
     
     void recordAllocation(AllocationRecord &record, long long entryCount)
     {
-      record.allocationCount++;
-      long long bytes = sizeof(Scalar) * entryCount;
-      record.bytesAllocatedNet   += bytes;
-      record.bytesAllocatedTotal += bytes;
-      if (record.bytesAllocatedNet > record.bytesAllocatedNetHighWaterMark)
-      {
-        record.bytesAllocatedNetHighWaterMark = record.bytesAllocatedNet;
-      }
+      Camellia::recordAllocation<Scalar>(record, entryCount);
       
       bool recordIsForFieldContainer = (&record == &fcAllocationRecord);
       if (recordIsForFieldContainer)
@@ -175,8 +188,7 @@ namespace Camellia
         return;
       }
       
-      long long bytes = sizeof(Scalar) * entryCount;
-      record.bytesAllocatedNet -= bytes;
+      Camellia::recordDeallocation<Scalar>(record, entryCount);
       if (recordIsForFieldContainer)
       {
         _fieldContainerDataAllocationRecorded = false; // don't allow to record deallocation twice without recording an allocation
@@ -666,6 +678,16 @@ namespace Camellia
       // base assignment does deep copy; record the allocation
       recordAllocation(fcAllocationRecord,this->size());
       return *this;
+    }
+
+    static DeviceView getDeviceView(typename Camellia::FieldContainer<Scalar>::DeviceView &dv) {
+      DeviceView deviceView = Kokkos::create_mirror(DeviceMemorySpace(), dv);
+      //recordAllocation(deviceViewAllocationRecord, deviceView.size()); // TODO: need static recordAllocation method
+      return deviceView;
+    }
+
+    static void recordDeviceViewDeallocation(typename Camellia::FieldContainer<Scalar>::DeviceView &dv) {
+      //recordDeallocation(deviceViewAllocationRecord, dv.size()); // TODO: need static recordDeallocation method
     }
 
     static Kokkos::MDRangePolicy< Kokkos::Rank<2> > getMDRangePolicy2(typename Camellia::FieldContainer<Scalar>::DeviceView &dv) {

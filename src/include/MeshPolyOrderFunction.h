@@ -30,6 +30,7 @@ public:
     _mesh = mesh; // scalar
   }
   void values(Camellia::FieldContainer<double> &values, BasisCachePtr basisCache);
+  void values(typename Camellia::FieldContainer<double>::DeviceView &values, ValueModificationType modType, BasisCachePtr basisCache) override;
 };
 }
 
