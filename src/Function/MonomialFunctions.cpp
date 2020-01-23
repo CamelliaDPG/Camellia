@@ -41,8 +41,8 @@ void Xn::values(Camellia::FieldContainer<double> &values, BasisCachePtr basisCac
 
 void Xn::values(typename Camellia::FieldContainer<double>::DeviceView &values, ValueModificationType modType, BasisCachePtr basisCache)
 {
-  auto points = basisCache->getPhysicalCubaturePoints(); // (C,P,D) FieldContainer
-  auto devicePoints = points.checkoutDeviceView(true); // true: copy from host
+  auto & points = basisCache->getPhysicalCubaturePoints(); // (C,P,D) FieldContainer
+  auto devicePoints = points.checkoutDeviceView();
   const int n = _n;
   Kokkos::parallel_for("Xn values() functor", Camellia::FieldContainer<double>::getMDRangePolicy2(values),
   KOKKOS_LAMBDA (const int i0, const int i1) {
@@ -52,7 +52,7 @@ void Xn::values(typename Camellia::FieldContainer<double>::DeviceView &values, V
     const double value = pow(x,n);
     assignValue(entry, modType, value);
   });
-  points.checkinDeviceView(false); // false: don't copy back to host
+  points.checkinDeviceView();
 }
 
 TFunctionPtr<double> Xn::dx()
@@ -112,8 +112,8 @@ void Yn::values(Camellia::FieldContainer<double> &values, BasisCachePtr basisCac
 
 void Yn::values(typename Camellia::FieldContainer<double>::DeviceView &values, ValueModificationType modType, BasisCachePtr basisCache)
 {
-  auto points = basisCache->getPhysicalCubaturePoints(); // (C,P,D) FieldContainer
-  auto devicePoints = points.checkoutDeviceView(true); // true: copy from host
+  const auto & points = basisCache->getPhysicalCubaturePoints(); // (C,P,D) FieldContainer
+  auto devicePoints = points.checkoutDeviceView();
   const int n = _n;
   Kokkos::parallel_for("Yn values() functor", Camellia::FieldContainer<double>::getMDRangePolicy2(values),
   KOKKOS_LAMBDA (const int i0, const int i1) {
@@ -123,7 +123,7 @@ void Yn::values(typename Camellia::FieldContainer<double>::DeviceView &values, V
     const double value = pow(y,n);
     assignValue(entry, modType, value);
   });
-  points.checkinDeviceView(false); // false: don't copy back to host
+  points.checkinDeviceView();
 }
 
 TFunctionPtr<double> Yn::dx()
@@ -184,8 +184,8 @@ void Zn::values(Camellia::FieldContainer<double> &values, BasisCachePtr basisCac
 
 void Zn::values(typename Camellia::FieldContainer<double>::DeviceView &values, ValueModificationType modType, BasisCachePtr basisCache)
 {
-  auto points = basisCache->getPhysicalCubaturePoints(); // (C,P,D) FieldContainer
-  auto devicePoints = points.checkoutDeviceView(true); // true: copy from host
+  const auto & points = basisCache->getPhysicalCubaturePoints(); // (C,P,D) FieldContainer
+  auto devicePoints = points.checkoutDeviceView();
   const int n = _n;
   Kokkos::parallel_for("Zn values() functor", Camellia::FieldContainer<double>::getMDRangePolicy2(values),
   KOKKOS_LAMBDA (const int i0, const int i1) {
@@ -195,7 +195,7 @@ void Zn::values(typename Camellia::FieldContainer<double>::DeviceView &values, V
     const double value = pow(z,n);
     assignValue(entry, modType, value);
   });
-  points.checkinDeviceView(false); // false: don't copy back to host
+  points.checkinDeviceView();
 }
 TFunctionPtr<double> Zn::dx()
 {
@@ -254,8 +254,8 @@ void Tn::values(Camellia::FieldContainer<double> &values, BasisCachePtr basisCac
 
 void Tn::values(typename Camellia::FieldContainer<double>::DeviceView &values, ValueModificationType modType, BasisCachePtr basisCache)
 {
-  auto points = basisCache->getPhysicalCubaturePoints(); // (C,P,D) FieldContainer
-  auto devicePoints = points.checkoutDeviceView(true); // true: copy from host
+  const auto & points = basisCache->getPhysicalCubaturePoints(); // (C,P,D) FieldContainer
+  auto devicePoints = points.checkoutDeviceView();
   const int n = _n;
   const int spaceDim = basisCache->cellTopology()->getDimension() - 1; // we're assuming a space-time context
   Kokkos::parallel_for("Tn values() functor", Camellia::FieldContainer<double>::getMDRangePolicy2(values),
@@ -266,7 +266,7 @@ void Tn::values(typename Camellia::FieldContainer<double>::DeviceView &values, V
     const double value = pow(t,n);
     assignValue(entry, modType, value);
   });
-  points.checkinDeviceView(false); // false: don't copy back to host
+  points.checkinDeviceView();
 }
 
 TFunctionPtr<double> Tn::dx()

@@ -56,6 +56,12 @@ namespace Camellia
       std::cout << "**************************  Device allocation report ****************************\n";
       std::cout << "** (Note: these are generally not real allocations for non-CUDA memory spaces) **\n";
       std::cout << deviceViewAllocationReport << std::endl;
+      std::cout << "\n************************** Deep Copy Report ******************************\n";
+      std::cout <<   "** (Note: only counts calls to Kokkos::deep_copy() from FieldContainer) **\n";
+      std::cout << "device-to-host: " << deviceToHostDeepCopyRecord.deepCopyCount << " deep copies, ";
+      std::cout << deviceToHostDeepCopyRecord.bytesDeepCopied << " bytes copied.\n";
+      std::cout << "host-to-device: " << hostToDeviceDeepCopyRecord.deepCopyCount << " deep copies, ";
+      std::cout << hostToDeviceDeepCopyRecord.bytesDeepCopied << " bytes copied.\n\n";
 
       if (recordOutstandingFCAllocationNumbers)
       {
