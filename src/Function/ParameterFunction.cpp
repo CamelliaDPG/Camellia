@@ -94,8 +94,17 @@ std::vector< TFunctionPtr<double> > ParameterFunction::memberFunctions()
 
 void ParameterFunction::values(Camellia::FieldContainer<double> &values, BasisCachePtr basisCache)
 {
-  _fxn->values(values, basisCache);
+  this->CHECK_VALUES_RANK(values);
+  auto dv = values.checkoutDeviceView(false); // false: don't deep_copy from host (will overwrite values)
+  this->values(dv, ASSIGN, basisCache);
+  values.checkinDeviceView();
 }
+
+void ParameterFunction::values(typename Camellia::FieldContainer<double>::DeviceView &values, ValueModificationType modType, BasisCachePtr basisCache)
+{
+  _fxn->values(values,modType,basisCache);
+}
+
 bool ParameterFunction::boundaryValueOnly()
 {
   return _fxn->boundaryValueOnly();
