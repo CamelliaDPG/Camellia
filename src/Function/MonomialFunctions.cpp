@@ -26,14 +26,35 @@ string Xn::displayString()
   }
   return ss.str();
 }
-Xn::Xn(int n) : SimpleFunction<double>("Xn")
+Xn::Xn(int n) : TFunction<double>("Xn")
 {
   _n = n;
 }
-double Xn::value(double x)
+
+void Xn::values(Camellia::FieldContainer<double> &values, BasisCachePtr basisCache)
 {
-  return pow(x,_n);
+  this->CHECK_VALUES_RANK(values);
+  auto dv = values.checkoutDeviceView(false); // false: don't deep_copy from host (will overwrite values)
+  this->values(dv, ASSIGN, basisCache);
+  values.checkinDeviceView();
 }
+
+void Xn::values(typename Camellia::FieldContainer<double>::DeviceView &values, ValueModificationType modType, BasisCachePtr basisCache)
+{
+  auto points = basisCache->getPhysicalCubaturePoints(); // (C,P,D) FieldContainer
+  auto devicePoints = points.checkoutDeviceView(true); // true: copy from host
+  const int n = _n;
+  Kokkos::parallel_for("Xn values() functor", Camellia::FieldContainer<double>::getMDRangePolicy2(values),
+  KOKKOS_LAMBDA (const int i0, const int i1) {
+    auto & entry = values(i0, i1);
+    const int xDim = 0;
+    const auto x = devicePoints(i0,i1,xDim);
+    const double value = pow(x,n);
+    assignValue(entry, modType, value);
+  });
+  points.checkinDeviceView(false); // false: don't copy back to host
+}
+
 TFunctionPtr<double> Xn::dx()
 {
   if (_n == 0)
@@ -77,13 +98,32 @@ string Yn::displayString()
   }
   return ss.str();
 }
-Yn::Yn(int n) : SimpleFunction<double>("Yn")
+Yn::Yn(int n) : TFunction<double>("Yn")
 {
   _n = n;
 }
-double Yn::value(double x, double y)
+void Yn::values(Camellia::FieldContainer<double> &values, BasisCachePtr basisCache)
 {
-  return pow(y,_n);
+  this->CHECK_VALUES_RANK(values);
+  auto dv = values.checkoutDeviceView(false); // false: don't deep_copy from host (will overwrite values)
+  this->values(dv, ASSIGN, basisCache);
+  values.checkinDeviceView();
+}
+
+void Yn::values(typename Camellia::FieldContainer<double>::DeviceView &values, ValueModificationType modType, BasisCachePtr basisCache)
+{
+  auto points = basisCache->getPhysicalCubaturePoints(); // (C,P,D) FieldContainer
+  auto devicePoints = points.checkoutDeviceView(true); // true: copy from host
+  const int n = _n;
+  Kokkos::parallel_for("Yn values() functor", Camellia::FieldContainer<double>::getMDRangePolicy2(values),
+  KOKKOS_LAMBDA (const int i0, const int i1) {
+    auto & entry = values(i0, i1);
+    const int yDim = 1;
+    const auto y = devicePoints(i0,i1,yDim);
+    const double value = pow(y,n);
+    assignValue(entry, modType, value);
+  });
+  points.checkinDeviceView(false); // false: don't copy back to host
 }
 
 TFunctionPtr<double> Yn::dx()
@@ -129,15 +169,34 @@ string Zn::displayString()
   }
   return ss.str();
 }
-Zn::Zn(int n) : SimpleFunction<double>("Zn")
+Zn::Zn(int n) : TFunction<double>("Zn")
 {
   _n = n;
 }
-double Zn::value(double x, double y, double z)
+
+void Zn::values(Camellia::FieldContainer<double> &values, BasisCachePtr basisCache)
 {
-  return pow(z,_n);
+  this->CHECK_VALUES_RANK(values);
+  auto dv = values.checkoutDeviceView(false); // false: don't deep_copy from host (will overwrite values)
+  this->values(dv, ASSIGN, basisCache);
+  values.checkinDeviceView();
 }
 
+void Zn::values(typename Camellia::FieldContainer<double>::DeviceView &values, ValueModificationType modType, BasisCachePtr basisCache)
+{
+  auto points = basisCache->getPhysicalCubaturePoints(); // (C,P,D) FieldContainer
+  auto devicePoints = points.checkoutDeviceView(true); // true: copy from host
+  const int n = _n;
+  Kokkos::parallel_for("Zn values() functor", Camellia::FieldContainer<double>::getMDRangePolicy2(values),
+  KOKKOS_LAMBDA (const int i0, const int i1) {
+    auto & entry = values(i0, i1);
+    const int zDim = 2;
+    const auto z = devicePoints(i0,i1,zDim);
+    const double value = pow(z,n);
+    assignValue(entry, modType, value);
+  });
+  points.checkinDeviceView(false); // false: don't copy back to host
+}
 TFunctionPtr<double> Zn::dx()
 {
   return TFunction<double>::zero();
@@ -181,21 +240,33 @@ string Tn::displayString()
   }
   return ss.str();
 }
-Tn::Tn(int n) : SimpleFunction<double>("Tn")
+Tn::Tn(int n) : TFunction<double>("Tn")
 {
   _n = n;
 }
-double Tn::value(double x, double t)
+void Tn::values(Camellia::FieldContainer<double> &values, BasisCachePtr basisCache)
 {
-  return pow(t,_n);
+  this->CHECK_VALUES_RANK(values);
+  auto dv = values.checkoutDeviceView(false); // false: don't deep_copy from host (will overwrite values)
+  this->values(dv, ASSIGN, basisCache);
+  values.checkinDeviceView();
 }
-double Tn::value(double x, double y, double t)
+
+void Tn::values(typename Camellia::FieldContainer<double>::DeviceView &values, ValueModificationType modType, BasisCachePtr basisCache)
 {
-  return pow(t,_n);
-}
-double Tn::value(double x, double y, double z, double t)
-{
-  return pow(t,_n);
+  auto points = basisCache->getPhysicalCubaturePoints(); // (C,P,D) FieldContainer
+  auto devicePoints = points.checkoutDeviceView(true); // true: copy from host
+  const int n = _n;
+  const int spaceDim = basisCache->cellTopology()->getDimension() - 1; // we're assuming a space-time context
+  Kokkos::parallel_for("Tn values() functor", Camellia::FieldContainer<double>::getMDRangePolicy2(values),
+  KOKKOS_LAMBDA (const int i0, const int i1) {
+    auto & entry = values(i0, i1);
+    const int tDim = spaceDim;
+    const auto t = devicePoints(i0,i1,tDim);
+    const double value = pow(t,n);
+    assignValue(entry, modType, value);
+  });
+  points.checkinDeviceView(false); // false: don't copy back to host
 }
 
 TFunctionPtr<double> Tn::dx()

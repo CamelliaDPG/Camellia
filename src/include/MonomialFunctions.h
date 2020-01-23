@@ -15,62 +15,64 @@
 #ifndef Camellia_MonomialFunctions_h
 #define Camellia_MonomialFunctions_h
 
-#include "SimpleFunction.h"
+#include "Function.h"
 
 namespace Camellia
 {
-class Xn : public SimpleFunction<double>
+class Xn : public TFunction<double>
 {
   int _n;
 public:
   Xn(int n);
-  double value(double x);
-  TFunctionPtr<double> dx();
-  TFunctionPtr<double> dy();
-  TFunctionPtr<double> dz();
-  TFunctionPtr<double> dt();
-  string displayString();
+  void values(Camellia::FieldContainer<double> &values, BasisCachePtr basisCache) override;
+  void values(typename Camellia::FieldContainer<double>::DeviceView &values, ValueModificationType modType, BasisCachePtr basisCache) override;
+  TFunctionPtr<double> dx() override;
+  TFunctionPtr<double> dy() override;
+  TFunctionPtr<double> dz() override;
+  TFunctionPtr<double> dt() override;
+  string displayString() override;
 };
 
-class Yn : public SimpleFunction<double>
+class Yn : public TFunction<double>
 {
   int _n;
 public:
   Yn(int n);
-  double value(double x, double y);
-  TFunctionPtr<double> dx();
-  TFunctionPtr<double> dy();
-  TFunctionPtr<double> dz();
-  TFunctionPtr<double> dt();
-  string displayString();
+  void values(Camellia::FieldContainer<double> &values, BasisCachePtr basisCache) override;
+  void values(typename Camellia::FieldContainer<double>::DeviceView &values, ValueModificationType modType, BasisCachePtr basisCache) override;
+  TFunctionPtr<double> dx() override;
+  TFunctionPtr<double> dy() override;
+  TFunctionPtr<double> dz() override;
+  TFunctionPtr<double> dt() override;
+  string displayString() override;
 };
 
-class Zn : public SimpleFunction<double>
+class Zn : public TFunction<double>
 {
   int _n;
 public:
   Zn(int n);
-  double value(double x, double y, double z);
-  TFunctionPtr<double> dx();
-  TFunctionPtr<double> dy();
-  TFunctionPtr<double> dz();
-  TFunctionPtr<double> dt();
-  string displayString();
+  void values(Camellia::FieldContainer<double> &values, BasisCachePtr basisCache) override;
+  void values(typename Camellia::FieldContainer<double>::DeviceView &values, ValueModificationType modType, BasisCachePtr basisCache) override;
+  TFunctionPtr<double> dx() override;
+  TFunctionPtr<double> dy() override;
+  TFunctionPtr<double> dz() override;
+  TFunctionPtr<double> dt() override;
+  string displayString() override;
 };
 
-class Tn : public SimpleFunction<double>
+class Tn : public TFunction<double>
 {
   int _n;
 public:
   Tn(int n);
-  double value(double x, double t);
-  double value(double x, double y, double t);
-  double value(double x, double y, double z, double t);
-  TFunctionPtr<double> dx();
-  TFunctionPtr<double> dy();
-  TFunctionPtr<double> dz();
-  TFunctionPtr<double> dt();
-  string displayString();
+  void values(Camellia::FieldContainer<double> &values, BasisCachePtr basisCache) override;
+  void values(typename Camellia::FieldContainer<double>::DeviceView &values, ValueModificationType modType, BasisCachePtr basisCache) override;
+  TFunctionPtr<double> dx() override;
+  TFunctionPtr<double> dy() override;
+  TFunctionPtr<double> dz() override;
+  TFunctionPtr<double> dt() override;
+  string displayString() override;
 };
 }
 #endif
