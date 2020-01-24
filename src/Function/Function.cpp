@@ -2314,11 +2314,16 @@ std::vector<TFunctionPtr<Scalar>> TFunction<Scalar>::memberFunctions()
   return std::vector<TFunctionPtr<Scalar>>();
 }
   
-// divide values by this function (supported only when this is a scalar--otherwise values would change rank...)
+// multiply values by this function (supported only when this is a scalar--otherwise values would change rank...)
 template <typename Scalar>
 void TFunction<Scalar>::scalarMultiplyFunctionValues(Camellia::FieldContainer<Scalar> &functionValues, BasisCachePtr basisCache)
 {
   // functionValues has dimensions (C,P,...)
+  scalarModifyFunctionValues(functionValues,basisCache,MULTIPLY);
+}
+template <typename Scalar>
+void TFunction<Scalar>::scalarMultiplyFunctionValues(typename FieldContainer<Scalar>::DeviceView &functionValues, BasisCachePtr basisCache)
+{
   scalarModifyFunctionValues(functionValues,basisCache,MULTIPLY);
 }
 
@@ -2329,8 +2334,13 @@ void TFunction<Scalar>::scalarDivideFunctionValues(Camellia::FieldContainer<Scal
   // functionValues has dimensions (C,P,...)
   scalarModifyFunctionValues(functionValues,basisCache,DIVIDE);
 }
+template <typename Scalar>
+void TFunction<Scalar>::scalarDivideFunctionValues(typename FieldContainer<Scalar>::DeviceView &functionValues, BasisCachePtr basisCache)
+{
+  scalarModifyFunctionValues(functionValues,basisCache,DIVIDE);
+}
 
-// divide values by this function (supported only when this is a scalar--otherwise values would change rank...)
+// multiply values by this function (supported only when this is a scalar--otherwise values would change rank...)
 // should only happen with double valued functions
 // TODO: throw error for complex
 template <typename Scalar>
@@ -2355,8 +2365,17 @@ void TFunction<Scalar>::valuesDottedWithTensor(Camellia::FieldContainer<Scalar> 
     TFunctionPtr<Scalar> tensorFunctionOfLikeRank,
     BasisCachePtr basisCache)
 {
+  auto dv = values.checkoutDeviceView(false); // false: don't deep_copy from host (will overwrite values)
+  valuesDottedWithTensor(dv, tensorFunctionOfLikeRank, basisCache);
+  values.checkinDeviceView();
+}
+
+template <typename Scalar>
+void TFunction<Scalar>::valuesDottedWithTensor(typename FieldContainer<Scalar>::DeviceView &dv,
+    TFunctionPtr<Scalar> tensorFunctionOfLikeRank,
+    BasisCachePtr basisCache)
+{
   TEUCHOS_TEST_FOR_EXCEPTION(_rank != tensorFunctionOfLikeRank->rank(),std::invalid_argument,"can't dot functions of unlike rank");
-  auto dv = values.checkoutDeviceView(false);
   TEUCHOS_TEST_FOR_EXCEPTION(dv.rank() != 2, std::invalid_argument, "values should be a (C,P)-container");
   Kokkos::deep_copy(dv, 0.0); // initialize
   const int numCells  = dv.extent_int(0);
@@ -2371,6 +2390,7 @@ void TFunction<Scalar>::valuesDottedWithTensor(Camellia::FieldContainer<Scalar> 
     tensorValueIndex[d+2] = spaceDim;
   }
   
+  // TODO: use a DeviceView instead of FC
   Camellia::FieldContainer<Scalar> myTensorValues(tensorValueIndex);
   auto dv_myTensorValues = myTensorValues.checkoutDeviceView(false);
   this->values(dv_myTensorValues,ValueModificationType::ASSIGN,basisCache);
@@ -2385,9 +2405,9 @@ void TFunction<Scalar>::valuesDottedWithTensor(Camellia::FieldContainer<Scalar> 
   const int dim5 = (_rank+2 > 5) ? spaceDim : 1;
   const int dim6 = (_rank+2 > 6) ? spaceDim : 1;
   
-  Kokkos::fence(); // TODO: check if we can wait for only the kernels we need to wait on
+  Kokkos::fence();
   using array_index_type = Kokkos::MDRangePolicy< Kokkos::Rank<2> >::array_index_type;
-  Kokkos::parallel_for("valuesDottedWithTensor", values.getMDRangePolicy2(),
+  Kokkos::parallel_for("valuesDottedWithTensor", FieldContainer<Scalar>::getMDRangePolicy2(dv),
   KOKKOS_LAMBDA (const array_index_type i0, const array_index_type i1)
   {
     for (int i2 = 0; i2 < dim2; i2++) {
@@ -2406,11 +2426,19 @@ void TFunction<Scalar>::valuesDottedWithTensor(Camellia::FieldContainer<Scalar> 
   });
   myTensorValues.checkinDeviceView(false);
   otherTensorValues.checkinDeviceView(false);
-  values.checkinDeviceView();
 }
 
 template <typename Scalar>
 void TFunction<Scalar>::scalarModifyFunctionValues(Camellia::FieldContainer<Scalar> &values, BasisCachePtr basisCache,
+    FunctionModificationType modType)
+{
+  auto dv = values.checkoutDeviceView();
+  scalarModifyFunctionValues(dv, basisCache, modType);
+  values.checkinDeviceView();
+}
+
+template <typename Scalar>
+void TFunction<Scalar>::scalarModifyFunctionValues(typename FieldContainer<Scalar>::DeviceView &dv, BasisCachePtr basisCache,
     FunctionModificationType modType)
 {
   TEUCHOS_TEST_FOR_EXCEPTION(rank() != 0, std::invalid_argument, "scalarModifyFunctionValues: only supported for scalar functions");
@@ -2424,20 +2452,20 @@ void TFunction<Scalar>::scalarModifyFunctionValues(Camellia::FieldContainer<Scal
     TEUCHOS_TEST_FOR_EXCEPTION(true, std::invalid_argument, "scalarModifyFunctionValues: invalid modType");
   }
   
-  auto dv = values.checkoutDeviceView();
   TEUCHOS_TEST_FOR_EXCEPTION(dv.rank() < 2, std::invalid_argument, "scalarModifyFunctionValues: rank is smaller than 2");
   
   const int numCells  = dv.extent_int(0);
   const int numPoints = dv.extent_int(1);
   const int dim6 = (dv.rank() > 6) ? dv.extent_int(6) : 1;
   
+  // TODO: use a DeviceView instead of FC
   Camellia::FieldContainer<Scalar> scalarValues(numCells,numPoints);
   auto dv_scalar = scalarValues.checkoutDeviceView(false);
   this->values(dv_scalar,ValueModificationType::ASSIGN,basisCache);
   
   Kokkos::fence();
   using array_index_type = Kokkos::MDRangePolicy< Kokkos::Rank<6> >::array_index_type;
-  Kokkos::parallel_for("scalarModifyFunctionValues", values.getMDRangePolicy6(),
+  Kokkos::parallel_for("scalarModifyFunctionValues", FieldContainer<Scalar>::getMDRangePolicy6(dv),
   KOKKOS_LAMBDA (const array_index_type i0, const array_index_type i1, const array_index_type i2,
                  const array_index_type i3, const array_index_type i4, const array_index_type i5)
   {
@@ -2448,7 +2476,6 @@ void TFunction<Scalar>::scalarModifyFunctionValues(Camellia::FieldContainer<Scal
     }
   });
   scalarValues.checkinDeviceView(false);
-  values.checkinDeviceView();
 }
 
 // Should only work for doubles

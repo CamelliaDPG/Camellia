@@ -213,17 +213,57 @@ std::vector<TFunctionPtr<Scalar>> ProductFunction<Scalar>::memberFunctions()
 }
 
 template <typename Scalar>
-void ProductFunction<Scalar>::values(Camellia::FieldContainer<Scalar> &values, BasisCachePtr basisCache)
+void ProductFunction<Scalar>::values(FieldContainer<Scalar> &values, BasisCachePtr basisCache)
 {
   this->CHECK_VALUES_RANK(values);
-  if (( _f2->rank() > 0) && (this->rank() == 0))   // tensor product resulting in scalar value
+  auto dv = values.checkoutDeviceView(false); // false: don't deep_copy from host (will overwrite values)
+  this->values(dv, ASSIGN, basisCache);
+  values.checkinDeviceView();
+}
+
+template <typename Scalar>
+void ProductFunction<Scalar>::values(typename FieldContainer<Scalar>::DeviceView &values, ValueModificationType modType, BasisCachePtr basisCache)
+{
+  if (modType == ASSIGN)
   {
-    _f2->valuesDottedWithTensor(values, _f1, basisCache);
+    if (( _f2->rank() > 0) && (this->rank() == 0)) // tensor product resulting in scalar value
+    {
+      _f2->valuesDottedWithTensor(values, _f1, basisCache);
+    }
+    else // scalar multiplication by f1, then
+    {
+      _f2->values(values, ValueModificationType::ASSIGN, basisCache);
+      Kokkos::fence();
+      _f1->scalarMultiplyFunctionValues(values, basisCache);
+    }
   }
-  else     // scalar multiplication by f1, then
+  else
   {
-    _f2->values(values,basisCache);
-    _f1->scalarMultiplyFunctionValues(values, basisCache);
+    auto tensorValues = FieldContainer<Scalar>::getDeviceView(values);
+    if (( _f2->rank() > 0) && (this->rank() == 0)) // tensor product resulting in scalar value
+    {
+      _f2->valuesDottedWithTensor(tensorValues, _f1, basisCache);
+    }
+    else // scalar multiplication by f1, then
+    {
+      _f2->values(tensorValues, ValueModificationType::ASSIGN, basisCache);
+      Kokkos::fence();
+      _f1->scalarMultiplyFunctionValues(tensorValues, basisCache);
+      
+    }
+    Kokkos::fence();
+
+    const int dim6 = (values.rank() > 6) ? values.extent_int(6) : 1;
+    using array_index_type = Kokkos::MDRangePolicy< Kokkos::Rank<6> >::array_index_type;
+    Kokkos::parallel_for("ProductFunction_values", FieldContainer<double>::getMDRangePolicy6(values),
+    KOKKOS_LAMBDA (const array_index_type i0, const array_index_type i1, const array_index_type i2,
+                   const array_index_type i3, const array_index_type i4, const array_index_type i5)
+    {
+      for (int i6 = 0; i6 < dim6; i6++) {
+        assignValue(values.access(i0,i1,i2,i3,i4,i5,i6), modType, tensorValues.access(i0,i1,i2,i3,i4,i5,i6));
+      }
+    });
+    FieldContainer<Scalar>::recordDeviceViewDeallocation(tensorValues);
   }
 }
 
