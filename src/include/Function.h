@@ -159,9 +159,11 @@ public:
   
   // multiply values by this function (supported only when this is a scalar--otherwise values would change rank...)
   virtual void scalarMultiplyFunctionValues(Camellia::FieldContainer<Scalar> &functionValues, BasisCachePtr basisCache);
+  virtual void scalarMultiplyFunctionValues(typename Camellia::FieldContainer<Scalar>::DeviceView &functionValues, BasisCachePtr basisCache);
 
   // divide values by this function (supported only when this is a scalar)
   virtual void scalarDivideFunctionValues(Camellia::FieldContainer<Scalar> &functionValues, BasisCachePtr basisCache);
+  virtual void scalarDivideFunctionValues(typename Camellia::FieldContainer<Scalar>::DeviceView &functionValues, BasisCachePtr basisCache);
 
   // multiply values by this function (supported only when this is a scalar--otherwise values would change rank...)
   virtual void scalarMultiplyBasisValues(Camellia::FieldContainer<double> &basisValues, BasisCachePtr basisCache);
@@ -170,6 +172,9 @@ public:
   virtual void scalarDivideBasisValues(Camellia::FieldContainer<double> &basisValues, BasisCachePtr basisCache);
 
   virtual void valuesDottedWithTensor(Camellia::FieldContainer<Scalar> &values,
+                                      TFunctionPtr<Scalar> tensorFunctionOfLikeRank,
+                                      BasisCachePtr basisCache);
+  virtual void valuesDottedWithTensor(typename Camellia::FieldContainer<Scalar>::DeviceView &values,
                                       TFunctionPtr<Scalar> tensorFunctionOfLikeRank,
                                       BasisCachePtr basisCache);
 
@@ -291,6 +296,8 @@ public:
   static TFunctionPtr<Scalar> zPart(TFunctionPtr<Scalar> vectorFunction);
 
   void scalarModifyFunctionValues(Camellia::FieldContainer<Scalar> &values, BasisCachePtr basisCache,
+                                  FunctionModificationType modType);
+  void scalarModifyFunctionValues(typename Camellia::FieldContainer<Scalar>::DeviceView &values, BasisCachePtr basisCache,
                                   FunctionModificationType modType);
 
   void scalarModifyBasisValues(Camellia::FieldContainer<double> &values, BasisCachePtr basisCache,
