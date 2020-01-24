@@ -103,16 +103,21 @@ template <typename Scalar>
 void VectorizedFunction<Scalar>::values(Camellia::FieldContainer<Scalar> &values, BasisCachePtr basisCache)
 {
   this->CHECK_VALUES_RANK(values);
-  // this is not going to be particularly efficient, because values from the components need to be interleaved...
-  Teuchos::Array<int> dims;
-  values.dimensions(dims);
-  int numComponents = dims[dims.size()-1];
+  auto dv = values.checkoutDeviceView(false); // false: don't deep_copy from host (will overwrite values)
+  this->values(dv, ASSIGN, basisCache);
+  values.checkinDeviceView();
+}
+
+template <typename Scalar>
+void VectorizedFunction<Scalar>::values(typename FieldContainer<Scalar>::DeviceView &values, ValueModificationType modType, BasisCachePtr basisCache)
+{
+  const int numComponents = values.extent_int(values.rank()-1);
   TEUCHOS_TEST_FOR_EXCEPTION( numComponents > _fxns.size(), std::invalid_argument, "too many components requested" );
-  if (numComponents != _fxns.size())
+  if (numComponents < _fxns.size())
   {
-    // we're asking for fewer components than we have functions.  We're going to say that's OK so long as the
-    // unused functions are 0.
-    for (int i=numComponents; i<_fxns.size(); i++)
+    // We're asking for fewer components than we have functions.
+    // We're going to say that's OK so long as the unused functions are 0.
+    for (int i = numComponents; i < _fxns.size(); i++)
     {
       if (!_fxns[i]->isZero())
       {
@@ -121,19 +126,53 @@ void VectorizedFunction<Scalar>::values(Camellia::FieldContainer<Scalar> &values
       }
     }
   }
-  dims.pop_back(); // remove the last, dimensions argument
-  Camellia::FieldContainer<Scalar> compValues(dims);
-  int valuesPerComponent = compValues.size();
-
-  for (int comp=0; comp < numComponents; comp++)
+  Teuchos::Array<int> dims;
+  for (int d = 0; d < values.rank()-1; d++)
+  {
+    dims.push_back(values.extent_int(d));
+  }
+  Camellia::FieldContainer<Scalar> compValues(dims); // TODO: create DeviceView directly w/o using FC
+  auto dv_compValues = compValues.checkoutDeviceView(false);
+  const int fxnRank = dv_compValues.rank();
+  
+  // At the expense of additional memory usage this could be parallelized further
+  for (int comp = 0; comp < numComponents; comp++)
   {
     TFunctionPtr<Scalar> fxn = _fxns[comp];
-    fxn->values(compValues, basisCache);
-    for (int i=0; i < valuesPerComponent; i++)
+    fxn->values(dv_compValues, ASSIGN, basisCache);
+    Kokkos::fence();
+    
+    using array_index_type = Kokkos::MDRangePolicy< Kokkos::Rank<6> >::array_index_type;
+    Kokkos::parallel_for("VectorizedFunction_values", compValues.getMDRangePolicy6(),
+    KOKKOS_LAMBDA (const array_index_type i0, const array_index_type i1, const array_index_type i2,
+                   const array_index_type i3, const array_index_type i4, const array_index_type i5)
     {
-      values[ numComponents * i + comp ] = compValues[ i ];
-    }
+      switch (fxnRank)
+      {
+        case 0:
+          assignValue(values(0,comp), modType, dv_compValues(0));
+          break;
+        case 1:
+          assignValue(values(i0,comp), modType, dv_compValues(i0));
+          break;
+        case 2:
+          assignValue(values(i0,i1,comp), modType, dv_compValues(i0,i1));
+          break;
+        case 3:
+          assignValue(values(i0,i1,i2,comp), modType, dv_compValues(i0,i1,i2));
+          break;
+        case 4:
+          assignValue(values(i0,i1,i2,i3,comp), modType, dv_compValues(i0,i1,i2,i3));
+          break;
+        case 5:
+          assignValue(values(i0,i1,i2,i3,i4,comp), modType, dv_compValues(i0,i1,i2,i3,i4));
+          break;
+        case 6:
+          assignValue(values(i0,i1,i2,i3,i4,i5,comp), modType, dv_compValues(i0,i1,i2,i3,i4,i5));
+      }
+    });
   }
+  compValues.checkinDeviceView(false);
 }
 
 template <typename Scalar>
