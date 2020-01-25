@@ -26,6 +26,7 @@ class QuotientFunction : public TFunction<Scalar>
 public:
   QuotientFunction(TFunctionPtr<Scalar> f, TFunctionPtr<Scalar> scalarDivisor);
   void values(Camellia::FieldContainer<Scalar> &values, BasisCachePtr basisCache);
+  void values(typename Camellia::FieldContainer<Scalar>::DeviceView &values, ValueModificationType modType, BasisCachePtr basisCache) override;
   TFunctionPtr<Scalar> x();
   TFunctionPtr<Scalar> y();
   TFunctionPtr<Scalar> z();
