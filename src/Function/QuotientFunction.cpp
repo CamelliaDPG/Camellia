@@ -114,8 +114,39 @@ template <typename Scalar>
 void QuotientFunction<Scalar>::values(Camellia::FieldContainer<Scalar> &values, BasisCachePtr basisCache)
 {
   this->CHECK_VALUES_RANK(values);
-  _f->values(values,basisCache);
-  _scalarDivisor->scalarDivideFunctionValues(values, basisCache);
+  auto dv = values.checkoutDeviceView(false); // false: don't deep_copy from host (will overwrite values)
+  this->values(dv, ASSIGN, basisCache);
+  values.checkinDeviceView();
+}
+
+template <typename Scalar>
+void QuotientFunction<Scalar>::values(typename Camellia::FieldContainer<Scalar>::DeviceView &values, ValueModificationType modType,  BasisCachePtr basisCache)
+{
+  if (modType == ASSIGN)
+  {
+    _f->values(values, ValueModificationType::ASSIGN, basisCache);
+    Kokkos::fence();
+    _scalarDivisor->scalarDivideFunctionValues(values, basisCache);
+  }
+  else
+  {
+    auto quotientValues = FieldContainer<Scalar>::getDeviceView(values);
+    _f->values(quotientValues, ValueModificationType::ASSIGN, basisCache);
+    Kokkos::fence();
+    _scalarDivisor->scalarDivideFunctionValues(quotientValues, basisCache);
+    Kokkos::fence();
+    const int dim6 = (values.rank() > 6) ? values.extent_int(6) : 1;
+    using array_index_type = Kokkos::MDRangePolicy< Kokkos::Rank<6> >::array_index_type;
+    Kokkos::parallel_for("QuotientFunction_values", FieldContainer<Scalar>::getMDRangePolicy6(values),
+    KOKKOS_LAMBDA (const array_index_type i0, const array_index_type i1, const array_index_type i2,
+                   const array_index_type i3, const array_index_type i4, const array_index_type i5)
+    {
+      for (int i6 = 0; i6 < dim6; i6++) {
+        assignValue(values.access(i0,i1,i2,i3,i4,i5,i6), modType, quotientValues.access(i0,i1,i2,i3,i4,i5,i6));
+      }
+    });
+    FieldContainer<Scalar>::recordDeviceViewDeallocation(quotientValues);
+  }
 }
 
 template <typename Scalar>

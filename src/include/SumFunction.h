@@ -40,6 +40,7 @@ public:
   TFunctionPtr<Scalar> div();  // divergence of sum is sum of divergences
 
   void values(Camellia::FieldContainer<Scalar> &values, BasisCachePtr basisCache);
+  void values(typename Camellia::FieldContainer<Scalar>::DeviceView &values, ValueModificationType modType, BasisCachePtr basisCache) override;
   bool boundaryValueOnly();
 
   string displayString();
