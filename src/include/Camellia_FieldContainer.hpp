@@ -819,12 +819,12 @@ namespace Camellia
 
     static DeviceView getDeviceView(typename Camellia::FieldContainer<Scalar>::DeviceView &dv) {
       DeviceView deviceView = Kokkos::create_mirror(DeviceMemorySpace(), dv);
-      //recordAllocation(deviceViewAllocationRecord, deviceView.size()); // TODO: need static recordAllocation method
+      Camellia::recordAllocation<Scalar>(deviceViewAllocationRecord, deviceView.size());
       return deviceView;
     }
 
     static void recordDeviceViewDeallocation(typename Camellia::FieldContainer<Scalar>::DeviceView &dv) {
-      //recordDeallocation(deviceViewAllocationRecord, dv.size()); // TODO: need static recordDeallocation method
+      Camellia::recordDeallocation<Scalar>(deviceViewAllocationRecord, dv.size());
     }
 
     static Kokkos::MDRangePolicy< Kokkos::Rank<2> > getMDRangePolicy2(typename Camellia::FieldContainer<Scalar>::DeviceView &dv) {
