@@ -68,54 +68,52 @@ string UnitNormalFunction::displayString()
   }
 }
 
-void UnitNormalFunction::values(Camellia::FieldContainer<double> &values, BasisCachePtr basisCache)
+void UnitNormalFunction::values(FieldContainer<double> &values, BasisCachePtr basisCache)
 {
   this->CHECK_VALUES_RANK(values);
-  int numCells = values.dimension(0);
-  int numPoints = values.dimension(1);
+  auto dv = values.checkoutDeviceView(false); // false: don't deep_copy from host (will overwrite values)
+  this->values(dv, ASSIGN, basisCache);
+  values.checkinDeviceView();
+}
+
+void UnitNormalFunction::values(typename FieldContainer<double>::DeviceView &values, ValueModificationType modType, BasisCachePtr basisCache)
+{
   int spaceDim = basisCache->getSpaceDim();
   if (_comp == -1)
   {
-    // check the the "D" dimension of values is correct:
+    // check that the "D" dimension of values is correct:
     if (_spaceTime)
     {
-      TEUCHOS_TEST_FOR_EXCEPTION(values.dimension(2) != spaceDim+1, std::invalid_argument, "For space-time normals, values.dimension(2) should be spaceDim + 1.");
+      TEUCHOS_TEST_FOR_EXCEPTION(values.extent_int(2) != spaceDim+1, std::invalid_argument, "For space-time normals, values.dimension(2) should be spaceDim + 1.");
     }
     else
     {
-      TEUCHOS_TEST_FOR_EXCEPTION(values.dimension(2) != spaceDim, std::invalid_argument, "For spatial normals, values.dimension(2) should be spaceDim.");
+      TEUCHOS_TEST_FOR_EXCEPTION(values.extent_int(2) != spaceDim, std::invalid_argument, "For spatial normals, values.dimension(2) should be spaceDim.");
     }
   }
   const Camellia::FieldContainer<double> *sideNormals = _spaceTime ? &(basisCache->getSideNormalsSpaceTime()) : &(basisCache->getSideNormals());
-
-  int comp = _comp;
-  if (comp == -2)
+  auto dv_sideNormals = sideNormals->checkoutDeviceView();
+  const int comp = (_comp == -2) ? spaceDim : _comp;
+  const bool spaceTime = _spaceTime;
+  using array_index_type = Kokkos::MDRangePolicy< Kokkos::Rank<2> >::array_index_type;
+  Kokkos::parallel_for("UnitNormalFunction_values", FieldContainer<double>::getMDRangePolicy2(values),
+  KOKKOS_LAMBDA (const array_index_type i0, const array_index_type i1)
   {
-    // want to select the temporal component, t()
-    comp = spaceDim;
-  }
-  for (int cellIndex=0; cellIndex<numCells; cellIndex++)
-  {
-    for (int ptIndex=0; ptIndex<numPoints; ptIndex++)
+    if (comp == -1)
     {
-      if (comp == -1)
+      for (int i2 = 0; i2 < spaceDim; i2++)
       {
-        for (int d=0; d<spaceDim; d++)
-        {
-          double nd = (*sideNormals)(cellIndex,ptIndex,d);
-          values(cellIndex,ptIndex,d) = nd;
-        }
-        if (_spaceTime)
-        {
-          double nd = (*sideNormals)(cellIndex,ptIndex,spaceDim);
-          values(cellIndex,ptIndex,spaceDim) = nd;
-        }
+        assignValue(values(i0,i1,i2), modType, dv_sideNormals(i0,i1,i2));
       }
-      else
+      if (spaceTime)
       {
-        double ni = (*sideNormals)(cellIndex,ptIndex,comp);
-        values(cellIndex,ptIndex) = ni;
+        assignValue(values(i0,i1,spaceDim), modType, dv_sideNormals(i0,i1,spaceDim));
       }
     }
-  }
+    else
+    {
+      assignValue(values(i0,i1), modType, dv_sideNormals(i0,i1,comp));
+    }
+  });
+  sideNormals->checkinDeviceView();
 }
