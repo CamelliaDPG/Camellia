@@ -108,44 +108,45 @@ bool PolarizedFunction<Scalar>::isZero()
 }
 
 template <typename Scalar>
-void PolarizedFunction<Scalar>::values(Camellia::FieldContainer<Scalar> &values, BasisCachePtr basisCache)
+void PolarizedFunction<Scalar>::values(FieldContainer<Scalar> &values, BasisCachePtr basisCache)
 {
   this->CHECK_VALUES_RANK(values);
-  static const double PI  = 3.141592653589793238462;
+  auto dv = values.checkoutDeviceView(false); // false: don't deep_copy from host (will overwrite values)
+  this->values(dv, ASSIGN, basisCache);
+  values.checkinDeviceView();
+}
 
-  int numCells = values.dimension(0);
-  int numPoints = values.dimension(1);
-
+template <typename Scalar>
+void PolarizedFunction<Scalar>::values(typename FieldContainer<Scalar>::DeviceView &values, ValueModificationType modType, BasisCachePtr basisCache)
+{
+  static const double PI = 3.141592653589793238462;
   const Camellia::FieldContainer<double> *points = &(basisCache->getPhysicalCubaturePoints());
   Camellia::FieldContainer<double> polarPoints = *points;
-  for (int cellIndex=0; cellIndex<numCells; cellIndex++)
+  auto dv_polarPoints = polarPoints.checkoutDeviceView();
+  TEUCHOS_TEST_FOR_EXCEPTION(dv_polarPoints.rank() != 3, std::invalid_argument, "rank is not equal to 3");
+  using array_index_type = Kokkos::MDRangePolicy< Kokkos::Rank<2> >::array_index_type;
+  Kokkos::parallel_for("PolarizedFunction_values", FieldContainer<Scalar>::getMDRangePolicy2(dv_polarPoints),
+  KOKKOS_LAMBDA (const array_index_type i0, const array_index_type i1)
   {
-    for (int ptIndex=0; ptIndex<numPoints; ptIndex++)
-    {
-      double x = (*points)(cellIndex,ptIndex,0);
-      double y = (*points)(cellIndex,ptIndex,1);
-      double r = sqrt(x * x + y * y);
-      double theta = (r != 0) ? acos(x/r) : 0;
-      // now x = r cos theta, but need to guarantee that y = r sin theta (might differ in sign)
-      // according to the acos docs, theta will be in [0, pi], so the rule is: (y < 0) ==> theta := 2 pi - theta;
-      if (y < 0) theta = 2*PI-theta;
-
-      polarPoints(cellIndex, ptIndex, 0) = r;
-      polarPoints(cellIndex, ptIndex, 1) = theta;
-      //      if (r == 0) {
-      //        cout << "r == 0!" << endl;
-      //      }
-    }
-  }
+    double x = dv_polarPoints(i0,i1,0);
+    double y = dv_polarPoints(i0,i1,1);
+    double r = sqrt(x * x + y * y);
+    double theta = (r != 0) ? acos(x/r) : 0;
+    // now x = r cos(theta), but need to guarantee that y = r sin(theta); (might differ in sign)
+    // according to the acos docs, theta will be in [0, pi], so the rule is: (y < 0) ==> theta := 2 pi - theta;
+    if (y < 0) theta = 2*PI-theta;
+    dv_polarPoints(i0,i1,0) = r;
+    dv_polarPoints(i0,i1,1) = theta;
+  });
+  polarPoints.checkinDeviceView();
   BasisCachePtr dummyBasisCache = Teuchos::rcp( new PhysicalPointCache( polarPoints ) );
-  _f->values(values,dummyBasisCache);
+  _f->values(values, modType, dummyBasisCache);
   if (_f->isZero())
   {
-    cout << "Warning: in PolarizedFunction, we are being asked for values when _f is zero.  This shouldn't happen.\n";
+    cout << "Warning: in PolarizedFunction, we are being asked for values when _f is zero. This shouldn't happen.\n";
   }
-  //  cout << "polarPoints: \n" << polarPoints;
-  //  cout << "PolarizedFunction, values: \n" << values;
 }
+
 namespace Camellia
 {
 template class PolarizedFunction<double>;

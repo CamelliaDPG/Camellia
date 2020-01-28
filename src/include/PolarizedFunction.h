@@ -30,6 +30,7 @@ class PolarizedFunction : public TFunction<Scalar>   // takes a 2D Function of x
 public:
   PolarizedFunction( TFunctionPtr<Scalar> f_of_xAsR_yAsTheta );
   void values(Camellia::FieldContainer<Scalar> &values, BasisCachePtr basisCache);
+  void values(typename Camellia::FieldContainer<Scalar>::DeviceView &values, ValueModificationType modType, BasisCachePtr basisCache) override;
 
   TFunctionPtr<Scalar> dx();
   TFunctionPtr<Scalar> dy();
