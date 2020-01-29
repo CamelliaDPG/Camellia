@@ -263,6 +263,23 @@ void testSpaceTimeNormal(CellTopoPtr spaceTopo, Teuchos::FancyOStream &out, bool
       }
       maxDiff = max(maxDiff,diff);
     }
+    
+    // Test device path values implementation with a different modType
+    auto dv_scaledRefValues = scaledRefValues.checkoutDeviceView();
+    h->values(dv_scaledRefValues, ValueModificationType::ADD, scaledBasisCache);
+    scaledRefValues.checkinDeviceView();
+    for (int i=0; i<refValues.size(); i++)
+    {
+      double expected = 2.0 * (refValues[i] * scalingFactor);
+      double actual = scaledRefValues[i];
+      double diff = abs(expected-actual);
+      if (diff > tol)
+      {
+        success = false;
+      }
+      maxDiff = max(maxDiff,diff);
+    }
+    
     if (!success)
     {
       out << "Expected and actual values differ; refValues were:\n" << refValues;
