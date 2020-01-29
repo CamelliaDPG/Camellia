@@ -1184,4 +1184,62 @@ TEUCHOS_UNIT_TEST( Function, ValuesDottedWithTensor )
     TEST_FLOATING_EQUALITY(expectedValue,fc(0,0),tol);
   }
 }
+
+TEUCHOS_UNIT_TEST( Function, MeshBoundaryCharacteristic )
+{
+  FunctionPtr gamma = Function::meshBoundaryCharacteristic();
+  
+  bool conformingTraces = true; int spaceDim = 2;
+  PoissonFormulation form(spaceDim,conformingTraces);
+  MeshPtr mesh1 = MeshFactory::rectilinearMesh(form.bf(), {1.0,1.0}, {1,1}, 1);
+  
+  double tol = 1.0e-14;
+  double expectedValue0 = 0.0;
+  double expectedValue1 = 1.0;
+  double expectedValue2 = 2.0;
+  
+  for (int cellID : mesh1->cellIDsInPartition())
+  {
+    BasisCachePtr basisCache = BasisCache::basisCacheForCell(mesh1, cellID);
+    int sideCount = basisCache->cellTopology()->getSideCount();
+    for (int sideOrdinal = 0; sideOrdinal < sideCount; sideOrdinal++)
+    {
+      BasisCachePtr sideBasisCache = basisCache->getSideBasisCache(sideOrdinal);
+      auto fc = FieldContainer<double>(1,1);
+      gamma->values(fc, sideBasisCache);
+      TEST_FLOATING_EQUALITY(expectedValue1, fc(0,0), tol);
+      auto dv = fc.checkoutDeviceView();
+      gamma->values(dv, ValueModificationType::ADD, sideBasisCache);
+      fc.checkinDeviceView();
+      TEST_FLOATING_EQUALITY(expectedValue2, fc(0,0), tol);
+    }
+  }
+  
+  /*
+    *-----*-----*
+    |     |     |
+    |  0  |  1  |
+    |     |     |
+    *-----*-----*
+  */
+  MeshPtr mesh2 = MeshFactory::rectilinearMesh(form.bf(), {1.0,1.0}, {2,1}, 1);
+  double expectedValue[2][4] = { {1, 0, 1, 1}, {1, 1, 1, 0} };
+  for (int cellID : mesh2->cellIDsInPartition())
+  {
+    BasisCachePtr basisCache = BasisCache::basisCacheForCell(mesh2, cellID);
+    int sideCount = basisCache->cellTopology()->getSideCount();
+    for (int sideOrdinal = 0; sideOrdinal < sideCount; sideOrdinal++)
+    {
+      BasisCachePtr sideBasisCache = basisCache->getSideBasisCache(sideOrdinal);
+      auto fc = FieldContainer<double>(1,1);
+      gamma->values(fc, sideBasisCache);
+      TEST_FLOATING_EQUALITY(expectedValue[cellID][sideOrdinal], fc(0,0), tol);
+      auto dv = fc.checkoutDeviceView();
+      gamma->values(dv, ValueModificationType::SUBTRACT, sideBasisCache);
+      fc.checkinDeviceView();
+      TEST_FLOATING_EQUALITY(expectedValue0, fc(0,0), tol);
+    }
+  }
+}
+
 } // namespace
