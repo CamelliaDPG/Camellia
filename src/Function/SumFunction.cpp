@@ -66,7 +66,7 @@ void SumFunction<Scalar>::values(typename Camellia::FieldContainer<Scalar>::Devi
   }
   else
   {
-    auto sumValues = FieldContainer<Scalar>::getDeviceView(values);
+    auto sumValues = basisCache->checkoutScratchStorage<Scalar>(values);
     _f1->values(sumValues, ValueModificationType::ASSIGN, basisCache);
     Kokkos::fence();
     _f2->values(sumValues, ValueModificationType::ADD, basisCache);
@@ -81,7 +81,7 @@ void SumFunction<Scalar>::values(typename Camellia::FieldContainer<Scalar>::Devi
         assignValue(values.access(i0,i1,i2,i3,i4,i5,i6), modType, sumValues.access(i0,i1,i2,i3,i4,i5,i6));
       }
     });
-    FieldContainer<Scalar>::recordDeviceViewDeallocation(sumValues);
+    basisCache->checkinScratchStorage<Scalar>(sumValues);
   }
 }
 

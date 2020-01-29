@@ -71,12 +71,13 @@ public:
 
 class SpatialFilterUnfiltered : public SpatialFilter
 {
-  bool matchesPoint(vector<double> &point);
+public:
+  virtual bool matchesPoint(const vector<double> &point) override;
 
-  virtual bool matchesPoint(double x);
-  virtual bool matchesPoint(double x, double y);
-  virtual bool matchesPoint(double x, double y, double z);
-  virtual bool matchesPoint(double x, double y, double z, double t);
+  virtual bool matchesPoint(double x) override;
+  virtual bool matchesPoint(double x, double y) override;
+  virtual bool matchesPoint(double x, double y, double z) override;
+  virtual bool matchesPoint(double x, double y, double z, double t) override;
 };
 
 class SpatialFilterLogicalOr : public SpatialFilter
@@ -84,18 +85,18 @@ class SpatialFilterLogicalOr : public SpatialFilter
   SpatialFilterPtr _sf1, _sf2;
 public:
   SpatialFilterLogicalOr(SpatialFilterPtr sf1, SpatialFilterPtr sf2);
-  bool matchesPoints(Camellia::FieldContainer<bool> &pointsMatch, BasisCachePtr basisCache);
+  bool matchesPoints(Camellia::FieldContainer<bool> &pointsMatch, BasisCachePtr basisCache)  override;
 
   //  bool matchesPoint( double x, double y ) {
   //    return _sf1->matchesPoint(x,y) || _sf2->matchesPoint(x,y);
   //  }
-  virtual bool matchesPoint(double x);
-  virtual bool matchesPoint(double x, double y);
-  virtual bool matchesPoint(double x, double y, double z);
-  virtual bool matchesPoint(double x, double y, double z, double t);
+  virtual bool matchesPoint(double x) override;
+  virtual bool matchesPoint(double x, double y) override;
+  virtual bool matchesPoint(double x, double y, double z) override;
+  virtual bool matchesPoint(double x, double y, double z, double t) override;
   
-  virtual bool matchesSpatialSides();
-  virtual bool matchesTemporalSides();
+  virtual bool matchesSpatialSides() override;
+  virtual bool matchesTemporalSides() override;
 };
 
 class SpatialFilterLogicalAnd : public SpatialFilter
@@ -103,18 +104,18 @@ class SpatialFilterLogicalAnd : public SpatialFilter
   SpatialFilterPtr _sf1, _sf2;
 public:
   SpatialFilterLogicalAnd(SpatialFilterPtr sf1, SpatialFilterPtr sf2);
-  bool matchesPoints(Camellia::FieldContainer<bool> &pointsMatch, BasisCachePtr basisCache);
+  bool matchesPoints(Camellia::FieldContainer<bool> &pointsMatch, BasisCachePtr basisCache) override;
 
   //  bool matchesPoint( double x, double y ) {
   //    return _sf1->matchesPoint(x,y) || _sf2->matchesPoint(x,y);
   //  }
-  virtual bool matchesPoint(double x);
-  virtual bool matchesPoint(double x, double y);
-  virtual bool matchesPoint(double x, double y, double z);
-  virtual bool matchesPoint(double x, double y, double z, double t);
+  virtual bool matchesPoint(double x) override;
+  virtual bool matchesPoint(double x, double y) override;
+  virtual bool matchesPoint(double x, double y, double z) override;
+  virtual bool matchesPoint(double x, double y, double z, double t) override;
   
-  virtual bool matchesSpatialSides();
-  virtual bool matchesTemporalSides();
+  virtual bool matchesSpatialSides() override;
+  virtual bool matchesTemporalSides() override;
 };
 
 class NegatedSpatialFilter : public SpatialFilter
@@ -122,18 +123,18 @@ class NegatedSpatialFilter : public SpatialFilter
   SpatialFilterPtr _filterToNegate;
 public:
   NegatedSpatialFilter(SpatialFilterPtr FilterToNegate);
-  bool matchesPoints(Camellia::FieldContainer<bool> &pointsMatch, BasisCachePtr basisCache);
+  bool matchesPoints(Camellia::FieldContainer<bool> &pointsMatch, BasisCachePtr basisCache) override;
 
-  virtual bool matchesPoint(double x);
-  virtual bool matchesPoint(double x, double y);
-  virtual bool matchesPoint(double x, double y, double z);
-  virtual bool matchesPoint(double x, double y, double z, double t);
+  virtual bool matchesPoint(double x) override;
+  virtual bool matchesPoint(double x, double y) override;
+  virtual bool matchesPoint(double x, double y, double z) override;
+  virtual bool matchesPoint(double x, double y, double z, double t) override;
   
   // ! Returns the same result as _filterToNegate; the negation is understood to happen in space or time, not both
-  virtual bool matchesSpatialSides();
+  virtual bool matchesSpatialSides() override;
   
   // ! Returns the same result as _filterToNegate; the negation is understood to happen in space or time, not both
-  virtual bool matchesTemporalSides();
+  virtual bool matchesTemporalSides() override;
 };
 
 SpatialFilterPtr operator!(SpatialFilterPtr sf);

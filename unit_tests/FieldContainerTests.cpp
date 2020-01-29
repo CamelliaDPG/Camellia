@@ -73,6 +73,27 @@ namespace
     TEST_EQUALITY(initialCount + 1, deviceToHostDeepCopyRecord.deepCopyCount);
   }
   
+  TEUCHOS_UNIT_TEST( FieldContainer, GetDeviceViewAllocatesSeparateStorage )
+  {
+    // test that FieldContainer's getDeviceView actually allocates new storage, rather than returning a separate view object pointing to same data
+    const double tol = 1e-15;
+    const int dim0 = 5;
+    using Scalar = double;
+    Camellia::FieldContainer<Scalar> values(dim0);
+    auto dvValues = values.checkoutDeviceView();
+    Kokkos::deep_copy(dvValues, 1.0);
+    auto dvValuesScratch = Camellia::FieldContainer<Scalar>::getDeviceView(dvValues);
+    Camellia::FieldContainer<Scalar>::recordDeviceViewDeallocation(dvValuesScratch);
+    Kokkos::deep_copy(dvValuesScratch, 2.0); // should not change dvValues
+    values.checkinDeviceView(); // deep copies dvValues back to host
+    
+    double expectedValue = 1.0;
+    for (int i=0; i<dim0; i++)
+    {
+      TEST_FLOATING_EQUALITY(expectedValue, values[i], tol);
+    }
+  }
+  
   TEUCHOS_UNIT_TEST( FieldContainer, HostToDeviceDeepCopyRecordedConstCase )
   {
     const auto initialCount      = hostToDeviceDeepCopyRecord.deepCopyCount;

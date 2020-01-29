@@ -740,7 +740,7 @@ void testHGRADTrace(MeshTopologyPtr meshTopo, int polyOrder, Teuchos::FancyOStre
 
               bool oldSuccess = success;
               success = true;
-              TEST_COMPARE_FLOATING_ARRAYS_CAMELLIA(sideCache1->getPhysicalCubaturePoints(), sideCache2->getPhysicalCubaturePoints(), 1e-14);
+              TEST_COMPARE_FLOATING_ARRAYS_CAMELLIA_ABSTOLTOO(sideCache1->getPhysicalCubaturePoints(), sideCache2->getPhysicalCubaturePoints(), 1e-14, 1e-16);
               bool justFailed = !success;
               success = success && oldSuccess;
               if (justFailed)
@@ -1050,7 +1050,7 @@ void testHGRADVolumeNoHangingNodes(MeshTopologyPtr meshTopo, int polyOrder, Teuc
                                       physicalCellNodes2, createSideCaches);
           basisCache2->setRefCellPoints(subcellPointsInRefCell2);
 
-          TEST_COMPARE_FLOATING_ARRAYS_CAMELLIA(basisCache1->getPhysicalCubaturePoints(), basisCache2->getPhysicalCubaturePoints(), 1e-14);
+          TEST_COMPARE_FLOATING_ARRAYS_CAMELLIA_ABSTOLTOO(basisCache1->getPhysicalCubaturePoints(), basisCache2->getPhysicalCubaturePoints(), 1e-14, 1e-16);
 
           Camellia::FieldContainer<double> values1 = *basisCache1->getTransformedValues(basis1, OP_VALUE);
           Camellia::FieldContainer<double> values2 = *basisCache2->getTransformedValues(basis2, OP_VALUE);

@@ -26,7 +26,7 @@ template<class Scalar>
 void Exp<Scalar>::values(typename FieldContainer<Scalar>::DeviceView &values, ValueModificationType modType, BasisCachePtr basisCache)
 {
   TEUCHOS_TEST_FOR_EXCEPTION(values.rank() != 2, std::invalid_argument, "rank is not equal to 2");
-  auto dv = FieldContainer<Scalar>::getDeviceView(values);
+  auto dv = basisCache->checkoutScratchStorage<Scalar>(values);
   _power->values(dv, ASSIGN, basisCache);
   Kokkos::fence();
   const int dim0 = values.extent_int(0);
@@ -36,7 +36,7 @@ void Exp<Scalar>::values(typename FieldContainer<Scalar>::DeviceView &values, Va
       assignValue(values(i0,i1), modType, std::exp(dv(i0,i1)));
     }
   });
-  FieldContainer<Scalar>::recordDeviceViewDeallocation(dv);
+  basisCache->checkinScratchStorage<Scalar>(dv);
 }
 
 /*
@@ -270,7 +270,7 @@ template<class Scalar>
 void Ln<Scalar>::values(typename Camellia::FieldContainer<Scalar>::DeviceView &values, ValueModificationType modType, BasisCachePtr basisCache)
 {
   TEUCHOS_TEST_FOR_EXCEPTION(values.rank() != 2, std::invalid_argument, "rank is not equal to 2");
-  auto dv = FieldContainer<Scalar>::getDeviceView(values);
+  auto dv = basisCache->checkoutScratchStorage<Scalar>(values);
   _argument->values(dv, ASSIGN, basisCache);
   Kokkos::fence();
   const int dim0 = values.extent_int(0);
@@ -280,7 +280,7 @@ void Ln<Scalar>::values(typename Camellia::FieldContainer<Scalar>::DeviceView &v
       assignValue(values(i0,i1), modType, log(dv(i0,i1)));
     }
   });
-  FieldContainer<Scalar>::recordDeviceViewDeallocation(dv);
+  basisCache->checkinScratchStorage<Scalar>(dv);
 }
 
 /*

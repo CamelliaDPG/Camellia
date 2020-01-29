@@ -346,20 +346,7 @@ void TFunction<Scalar>::values(typename Camellia::FieldContainer<Scalar>::Device
   Camellia::FieldContainer<Scalar> fc(dim);
   this->values(fc, basisCache);              // either happens on host or ends with deep_copy to host (one inefficiency)
   auto fcView = fc.checkoutDeviceView(true); // true: deep_copy from host (the other main inefficiency)
-  
-  const int dim6 = fcView.extent_int(6);
-  using array_index_type = Kokkos::MDRangePolicy< Kokkos::Rank<6> >::array_index_type;
-  Kokkos::parallel_for("Function base class device-path values() implementation", fc.getMDRangePolicy6(),
-  KOKKOS_LAMBDA (const array_index_type i0, const array_index_type i1, const array_index_type i2,
-                 const array_index_type i3, const array_index_type i4, const array_index_type i5)
-  {
-    for (int i6 = 0; i6<dim6; i6++)
-    {
-      Scalar &entry    = values(i0,i1,i2,i3,i4,i5,i6);
-      Scalar &newValue = fcView(i0,i1,i2,i3,i4,i5,i6);
-      assignValue(entry, modType, newValue);
-    }
-  });
+  assignValues<Scalar>(values, modType, fcView);
   fc.checkinDeviceView(false);
 }
 

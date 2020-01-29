@@ -450,7 +450,7 @@ bool SpatialFilterUnfiltered::matchesPoint(double x, double y, double z, double 
   return true;
 }
 
-bool SpatialFilterUnfiltered::matchesPoint(vector<double> &point)
+bool SpatialFilterUnfiltered::matchesPoint(const vector<double> &point)
 {
   return true;
 }

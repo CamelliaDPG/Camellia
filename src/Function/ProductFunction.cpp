@@ -239,16 +239,16 @@ void ProductFunction<Scalar>::values(typename FieldContainer<Scalar>::DeviceView
   }
   else
   {
-    auto tensorValues = FieldContainer<Scalar>::getDeviceView(values);
+    auto valuesScratch = basisCache->checkoutScratchStorage<Scalar>(values);
     if (( _f2->rank() > 0) && (this->rank() == 0)) // tensor product resulting in scalar value
     {
-      _f2->valuesDottedWithTensor(tensorValues, _f1, basisCache);
+      _f2->valuesDottedWithTensor(valuesScratch, _f1, basisCache);
     }
     else // scalar multiplication by f1, then
     {
-      _f2->values(tensorValues, ValueModificationType::ASSIGN, basisCache);
+      _f2->values(valuesScratch, ValueModificationType::ASSIGN, basisCache);
       Kokkos::fence();
-      _f1->scalarMultiplyFunctionValues(tensorValues, basisCache);
+      _f1->scalarMultiplyFunctionValues(valuesScratch, basisCache);
       
     }
     Kokkos::fence();
@@ -260,10 +260,10 @@ void ProductFunction<Scalar>::values(typename FieldContainer<Scalar>::DeviceView
                    const array_index_type i3, const array_index_type i4, const array_index_type i5)
     {
       for (int i6 = 0; i6 < dim6; i6++) {
-        assignValue(values.access(i0,i1,i2,i3,i4,i5,i6), modType, tensorValues.access(i0,i1,i2,i3,i4,i5,i6));
+        assignValue(values.access(i0,i1,i2,i3,i4,i5,i6), modType, valuesScratch.access(i0,i1,i2,i3,i4,i5,i6));
       }
     });
-    FieldContainer<Scalar>::recordDeviceViewDeallocation(tensorValues);
+    basisCache->checkinScratchStorage<Scalar>(valuesScratch);
   }
 }
 

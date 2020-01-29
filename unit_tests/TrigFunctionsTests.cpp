@@ -25,8 +25,11 @@ namespace
     auto f = TFunction<double>::constant(1.0);
     auto f_sin = TrigFunctions<double>::sin(f);
     
-    BasisCachePtr voidBasisCache;
-    f_sin->values(fc, voidBasisCache);
+    const double x0 = 0.0, x1 = 1.0;
+    const int quadratureDegree = 2;
+    BasisCachePtr simpleBasisCache = BasisCache::basisCache1D(x0, x1, quadratureDegree);
+    
+    f_sin->values(fc, simpleBasisCache);
     const double sin1 = 0.8414709848078965;
     const double tol = 1.0e-13;
     for (int i = 0; i < dim0*dim1; i++) {
@@ -41,8 +44,11 @@ namespace
     auto f = TFunction<double>::constant(1.0);
     auto f_cos = TrigFunctions<double>::cos(f);
     
-    BasisCachePtr voidBasisCache;
-    f_cos->values(fc, voidBasisCache);
+    const double x0 = 0.0, x1 = 1.0;
+    const int quadratureDegree = 2;
+    BasisCachePtr simpleBasisCache = BasisCache::basisCache1D(x0, x1, quadratureDegree);
+    
+    f_cos->values(fc, simpleBasisCache);
     const double cos1 = 0.5403023058681397;
     const double tol = 1.0e-13;
     for (int i = 0; i < dim0*dim1; i++) {

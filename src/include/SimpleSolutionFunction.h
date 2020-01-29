@@ -29,27 +29,32 @@ class SimpleSolutionFunction : public TFunction<Scalar>
   std::string _solutionIdentifierExponent; // used in displayString (allows disambiguation of solutions; if non-empty means we'll drop the \overline business)
 public:
   SimpleSolutionFunction(VarPtr var, TSolutionPtr<Scalar> soln, bool weightFluxesBySideParity, int solutionOrdinal, const std::string &solutionIdentifierExponent="");
-  void values(Camellia::FieldContainer<Scalar> &values, BasisCachePtr basisCache);
-  TFunctionPtr<Scalar> x();
-  TFunctionPtr<Scalar> y();
-  TFunctionPtr<Scalar> z();
-
-  TFunctionPtr<Scalar> dx();
-  TFunctionPtr<Scalar> dy();
-  TFunctionPtr<Scalar> dz();
   
-  TFunctionPtr<Scalar> div();
-  TFunctionPtr<Scalar> grad(int spaceDim=-1);
-  TFunctionPtr<Scalar> curl();
-
-  void importCellData(std::vector<GlobalIndexType> cellIDs);
-
-  size_t getCellDataSize(GlobalIndexType cellID); // size in bytes
-  void packCellData(GlobalIndexType cellID, char* cellData, size_t bufferLength);
-  size_t unpackCellData(GlobalIndexType cellID, const char* cellData, size_t bufferLength); // returns bytes consumed
+  void values(Camellia::FieldContainer<Scalar> &values, BasisCachePtr basisCache) override;
   
-  std::string displayString();
-  bool boundaryValueOnly();
+  // device path:
+  void values(typename Camellia::FieldContainer<Scalar>::DeviceView &values, ValueModificationType modType, BasisCachePtr basisCache) override;
+  
+  TFunctionPtr<Scalar> x() override;
+  TFunctionPtr<Scalar> y() override;
+  TFunctionPtr<Scalar> z() override;
+
+  TFunctionPtr<Scalar> dx() override;
+  TFunctionPtr<Scalar> dy() override;
+  TFunctionPtr<Scalar> dz() override;
+  
+  TFunctionPtr<Scalar> div() override;
+  TFunctionPtr<Scalar> grad(int spaceDim=-1) override;
+  TFunctionPtr<Scalar> curl() override;
+
+  void importCellData(std::vector<GlobalIndexType> cellIDs) override;
+
+  size_t getCellDataSize(GlobalIndexType cellID) override; // size in bytes
+  void packCellData(GlobalIndexType cellID, char* cellData, size_t bufferLength) override;
+  size_t unpackCellData(GlobalIndexType cellID, const char* cellData, size_t bufferLength) override; // returns bytes consumed
+  
+  std::string displayString() override;
+  bool boundaryValueOnly() override;
 };
 }
 

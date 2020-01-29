@@ -30,11 +30,16 @@
 #include "Mesh.h"
 #include "TypeDefs.h"
 
+#include <array>
+
 namespace Camellia
 {
 // only works properly with bases obtained from the BasisFactory.
 class BasisCache
 {
+public:
+  template<typename Scalar>
+  using DeviceView = typename Camellia::FieldContainer<Scalar>::DeviceView;
 private:
   IndexType _numCells;
   int _spaceDim;
@@ -141,6 +146,16 @@ protected:
 
   void cubatureDegreeForElementType(ElementTypePtr elemType, bool testVsTest, int &cubatureDegree);
   void cubatureDegreeForElementType(ElementTypePtr elemType, bool testVsTest, int &cubatureDegreeSpace, int &cubatureDegreeTime);
+  
+  using ScratchStorageDimensions = std::vector<int>;
+  
+  template<typename Scalar>
+  using ScratchStorageEntry = std::pair<DeviceView<Scalar>, bool>; // true: checked out right now
+  
+  template<typename Scalar>
+  using ScratchStorageCache = std::map<ScratchStorageDimensions, std::vector< ScratchStorageEntry<Scalar> > >;
+  
+  ScratchStorageCache<double> _doubleScratchStorageCache; // for now, we only support double.  Could add support for int, complex, float, etc.
 public:
   BasisCache(ElementTypePtr elemType, MeshPtr mesh = Teuchos::rcp( (Mesh*) NULL ), bool testVsTest=false,
              int cubatureDegreeEnrichment = 0, bool tensorProductTopologyMeansSpaceTime = true); // use testVsTest=true for test space inner product
@@ -163,8 +178,14 @@ public:
   BasisCache(const Camellia::FieldContainer<double> &physicalCellNodes, shards::CellTopology &cellTopo,
              DofOrdering &trialOrdering, int maxTestDegree, bool createSideCacheToo = false);
   
-  virtual ~BasisCache() {}
+  virtual ~BasisCache() noexcept(false);
 
+  template<typename Scalar>
+  DeviceView<Scalar> checkoutScratchStorage(DeviceView<Scalar> &dv);
+  
+  template<typename Scalar>
+  void checkinScratchStorage(DeviceView<Scalar> &scratchView);
+  
   // ! Returns true if the operator given is supported by getTransformedValues().
   // ! Right now, we can compute transformations for any first-order operators, and for d^2/{dx_i dx_j} second-order operators when i==j, but not when i!=j.
   static bool canComputeTransformedValues(Camellia::EOperator op);
