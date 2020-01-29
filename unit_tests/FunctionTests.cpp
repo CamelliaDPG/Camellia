@@ -1202,6 +1202,25 @@ TEUCHOS_UNIT_TEST( Function, ValuesDottedWithTensor )
   }
 }
 
+TEUCHOS_UNIT_TEST( Function, Equals )
+{
+  auto f1 = TFunction<double>::constant(1.00);
+  auto f2 = TFunction<double>::constant(1.05);
+  auto f3 = TFunction<double>::constant(0.05);
+  
+  int spaceDim = 2; bool conformingTraces = true;
+  PoissonFormulation form(spaceDim,conformingTraces);
+  MeshPtr mesh = MeshFactory::rectilinearMesh(form.bf(), {1.0,1.0}, {1,1}, 1);
+  
+  double tol = 1.0e-14;
+  for (int cellID : mesh->cellIDsInPartition()) {
+    BasisCachePtr basisCache = BasisCache::basisCacheForCell(mesh, cellID);
+    TEST_EQUALITY(f1->equals(f2        , basisCache, tol), false);
+    TEST_EQUALITY(f2->equals(f1+f3     , basisCache, tol), true );
+    TEST_EQUALITY(f3->equals((f2-f1)*f1, basisCache, tol), true );
+  }
+}
+
 TEUCHOS_UNIT_TEST( Function, MeshBoundaryCharacteristic )
 {
   FunctionPtr gamma = Function::meshBoundaryCharacteristic();

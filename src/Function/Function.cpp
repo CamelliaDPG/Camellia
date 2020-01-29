@@ -410,13 +410,15 @@ bool TFunction<Scalar>::equals(TFunctionPtr<Scalar> f, BasisCachePtr basisCacheF
 
   int numCells = basisCacheForCellsToCompare->getPhysicalCubaturePoints().dimension(0);
   // compute L^2 norm of difference on the cells
-  Camellia::FieldContainer<Scalar> diffs_squared(numCells);
+  FieldContainer<Scalar> diffs_squared(numCells);
   (diff*diff)->integrate(diffs_squared, basisCacheForCellsToCompare);
+  auto dv = diffs_squared.checkoutDeviceView();
   Scalar sum = 0;
-  for (int cellIndex=0; cellIndex<numCells; cellIndex++)
-  {
-    sum += diffs_squared[cellIndex];
-  }
+  Kokkos::parallel_reduce("Equals", numCells, KOKKOS_LAMBDA (const int cellIndex, Scalar& lsum) {
+    lsum += dv(cellIndex);
+  }, sum);
+  diffs_squared.checkinDeviceView(false);
+
   return sqrt(abs(sum)) < tol;
 }
 
