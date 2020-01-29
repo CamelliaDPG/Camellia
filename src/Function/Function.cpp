@@ -199,26 +199,37 @@ public:
   {
     return "|_{\\Gamma}";
   }
-  void values(Camellia::FieldContainer<double> &values, BasisCachePtr basisCache)
+  void values(FieldContainer<double> &values, BasisCachePtr basisCache)
   {
-    CHECK_VALUES_RANK(values);
-    // scalar: values shape is (C,P)
-    int numCells = values.dimension(0);
-    int numPoints = values.dimension(1);
+    this->CHECK_VALUES_RANK(values);
+    auto dv = values.checkoutDeviceView(false); // false: don't deep_copy from host (will overwrite values)
+    this->values(dv, ASSIGN, basisCache);
+    values.checkinDeviceView();
+  }
+  void values(typename FieldContainer<double>::DeviceView &values, ValueModificationType modType, BasisCachePtr basisCache)
+  {
+    TEUCHOS_TEST_FOR_EXCEPTION(values.rank() != 2, std::invalid_argument, "rank is not equal to 2");
+    int numCells  = values.extent_int(0);
+    int numPoints = values.extent_int(1);
     int sideIndex = basisCache->getSideIndex();
     MeshPtr mesh = basisCache->mesh();
     TEUCHOS_TEST_FOR_EXCEPTION(mesh.get() == NULL, std::invalid_argument, "MeshBoundaryCharacteristicFunction requires a mesh!");
     TEUCHOS_TEST_FOR_EXCEPTION(sideIndex == -1, std::invalid_argument, "MeshBoundaryCharacteristicFunction is only defined on cell boundaries");
-    for (int cellIndex=0; cellIndex<numCells; cellIndex++)
+    Camellia::FieldContainer<bool> cellOnBoundary(numCells);
+    for (int cellIndex = 0; cellIndex < numCells; cellIndex++)
     {
       int cellID = basisCache->cellIDs()[cellIndex];
-      bool onBoundary = mesh->getTopology()->getCell(cellID)->isBoundary(sideIndex);
-      double value = onBoundary ? 1 : 0;
-      for (int pointIndex=0; pointIndex<numPoints; pointIndex++)
-      {
-        values(cellIndex,pointIndex) = value;
-      }
+      cellOnBoundary(cellIndex) = mesh->getTopology()->getCell(cellID)->isBoundary(sideIndex);
     }
+    auto dv_cellOnBoundary = cellOnBoundary.checkoutDeviceView();
+    Kokkos::parallel_for("MeshBoundaryCharacteristic_values", numCells, KOKKOS_LAMBDA (const int i0) {
+      double value = dv_cellOnBoundary(i0) ? 1 : 0;
+      for (int i1 = 0; i1 < numPoints; i1++)
+      {
+        assignValue(values(i0,i1), modType, value);
+      }
+    });
+    cellOnBoundary.checkinDeviceView(false);
   }
   TFunctionPtr<double> dx()
   {
