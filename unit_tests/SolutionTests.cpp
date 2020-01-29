@@ -333,6 +333,7 @@ namespace
     TEST_COMPARE(err, <, tol);
     
     solutionAdded->addSolution(solution, 1.0);
+    
     err = (2 * uHatSoln - uHatSolnAdded)->l2norm(poissonMesh);
     TEST_COMPARE(err, <, tol);
   }
@@ -1287,6 +1288,39 @@ namespace
       //        Camellia::FieldContainer<double> localCoefficients = soln->allCoefficientsForCellID(cellID);
       //        Camellia::printLabeledDofCoefficients(vf, trialOrder, localCoefficients);
       //      }
+    }
+  }
+  
+  TEUCHOS_UNIT_TEST( Solution, ProjectTrace_1D)
+  {
+    const double tol = 1e-15;
+    const int spaceDim = 1;
+    const int elementWidth = 2; // use two elements so that there is one shared trace dof (hardens test slightly)
+    const int H1Order = 1;
+    bool useConformingTraces = true; // does not matter in 1D
+    MeshPtr poissonMesh = poissonUniformMesh(spaceDim, elementWidth, H1Order, useConformingTraces);
+    
+    PoissonFormulation poissonForm(spaceDim, useConformingTraces);
+    
+    VarPtr u_hat = poissonForm.u_hat();
+    const double constantValue = 1.0;
+    FunctionPtr value = Function::constant(constantValue);
+    SolutionPtr solution = Solution::solution(poissonMesh);
+    const int solutionOrdinal = 0;
+    solution->projectOntoMesh({{u_hat->ID(), value}}, solutionOrdinal);
+    
+    double expectedCoefficientValue = constantValue; // constant basis at points; always has value 1.0
+    const auto & myCellIDs = poissonMesh->cellIDsInPartition();
+    for (auto cellID : myCellIDs)
+    {
+      auto trialDofOrdering  = poissonMesh->getElementType(cellID)->trialOrderPtr;
+      auto leftSideDofIndex  = trialDofOrdering->getDofIndex(u_hat->ID(), 0, 0); // dofOrdinal on side, sideOrdinal
+      auto rightSideDofIndex = trialDofOrdering->getDofIndex(u_hat->ID(), 0, 1); // dofOrdinal on side, sideOrdinal
+      auto cellCoefficients  = solution->allCoefficientsForCellID(cellID);
+      auto leftCoefficient   = cellCoefficients(leftSideDofIndex);
+      auto rightCoefficient  = cellCoefficients(rightSideDofIndex);
+      TEST_FLOATING_EQUALITY(expectedCoefficientValue, leftCoefficient, tol);
+      TEST_FLOATING_EQUALITY(expectedCoefficientValue, rightCoefficient, tol);
     }
   }
   

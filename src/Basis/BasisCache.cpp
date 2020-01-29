@@ -23,6 +23,8 @@
 
 #include "Teuchos_GlobalMPISession.hpp"
 
+#include <array>
+
 using namespace std;
 using namespace Camellia;
 
@@ -556,6 +558,23 @@ BasisCache::BasisCache(int sideIndex, BasisCachePtr volumeCache, const Camellia:
   setPhysicalCellNodes(volumeCache->getPhysicalCellNodes(), volumeCache->cellIDs(), false); // false: don't create side caches...
 }
 
+BasisCache::~BasisCache() noexcept(false)
+{
+  for (auto & mapEntry : _doubleScratchStorageCache)
+  {
+    using Scalar = double;
+    auto & storageCacheVector = mapEntry.second;
+    for (ScratchStorageEntry<Scalar> &entry : storageCacheVector)
+    {
+      // all scratch views should have been checked back in; assert this
+      const bool isCheckedOut = entry.second;
+      TEUCHOS_TEST_FOR_EXCEPTION(isCheckedOut, std::invalid_argument, "Scratch view was checked out without being checked back in");
+      FieldContainer<Scalar>::recordDeviceViewDeallocation(entry.first);
+    }
+  }
+  _doubleScratchStorageCache.clear();
+}
+
 const vector<GlobalIndexType> & BasisCache::cellIDs()
 {
   return _cellIDs;
@@ -564,6 +583,61 @@ const vector<GlobalIndexType> & BasisCache::cellIDs()
 CellTopoPtr BasisCache::cellTopology()
 {
   return _cellTopo;
+}
+
+template<>
+BasisCache::DeviceView<double> BasisCache::checkoutScratchStorage<double>(BasisCache::DeviceView<double> &dv)
+{
+  using Scalar = double;
+  ScratchStorageDimensions dim(dv.rank());
+  for (int i=0; i<dv.rank(); i++)
+  {
+    dim[i] = dv.extent_int(i);
+  }
+  if (_doubleScratchStorageCache.find(dim) == _doubleScratchStorageCache.end())
+  {
+    // no views of these dimensions have been requested before
+    // then create a single
+    BasisCache::DeviceView<Scalar> scratchView = FieldContainer<Scalar>::getDeviceView(dv);
+    ScratchStorageEntry<Scalar> entry {scratchView,false}; // false: not checked out
+    _doubleScratchStorageCache[dim] = std::vector< ScratchStorageEntry<Scalar> > {entry};
+  }
+  auto & scratchStorageVector = _doubleScratchStorageCache.find(dim)->second;
+  for (auto & entry : scratchStorageVector)
+  {
+    bool & checkedOut = entry.second;
+    if (!checkedOut)
+    {
+      checkedOut = true;
+      return entry.first;
+    }
+  }
+  // if we get here, all matching entries are checked out; create a new one
+  BasisCache::DeviceView<Scalar> scratchView = FieldContainer<Scalar>::getDeviceView(dv);
+  ScratchStorageEntry<Scalar> entry {scratchView,true}; // true: is checked out (will be on return)
+  scratchStorageVector.push_back(entry);
+  return entry.first;
+}
+
+template<>
+void BasisCache::checkinScratchStorage<double>(BasisCache::DeviceView<double> &scratchView)
+{
+  ScratchStorageDimensions dim(scratchView.rank());
+  for (int i=0; i<scratchView.rank(); i++)
+  {
+    dim[i] = scratchView.extent_int(i);
+  }
+  TEUCHOS_TEST_FOR_EXCEPTION(_doubleScratchStorageCache.find(dim) == _doubleScratchStorageCache.end(), std::invalid_argument, "checkin of unrecognized scratch view");
+  auto & scratchStorageVector = _doubleScratchStorageCache.find(dim)->second;
+  for (auto & entry : scratchStorageVector)
+  {
+    if (entry.first == scratchView)
+    {
+      entry.second = false; // no longer checked out
+      return;
+    }
+  }
+  TEUCHOS_TEST_FOR_EXCEPTION(true, std::invalid_argument, "checkin of unrecognized scratch view");
 }
 
 Camellia::FieldContainer<double> BasisCache::computeParametricPoints()

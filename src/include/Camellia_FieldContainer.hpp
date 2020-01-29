@@ -131,7 +131,6 @@ namespace Camellia
           return ViewType(Kokkos::ViewAllocateWithoutInitializing(label),dims[0],dims[1],dims[2]);
         case 4:
           return ViewType(Kokkos::ViewAllocateWithoutInitializing(label),dims[0],dims[1],dims[2],dims[3]);
-          break;
         case 5:
           return ViewType(Kokkos::ViewAllocateWithoutInitializing(label),dims[0],dims[1],dims[2],dims[3],dims[4]);
         case 6:
@@ -385,6 +384,7 @@ namespace Camellia
     :
     FieldContainerBase()
     { }
+    
     
     /** \brief Copy constructor.
      */

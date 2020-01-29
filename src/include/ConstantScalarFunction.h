@@ -38,9 +38,9 @@ public:
   // device path:
   void values(typename Camellia::FieldContainer<Scalar>::DeviceView &values, ValueModificationType modType, BasisCachePtr basisCache) override;
 
-  virtual Scalar value(double x);
-  virtual Scalar value(double x, double y);
-  virtual Scalar value(double x, double y, double z);
+  virtual Scalar value(double x) override;
+  virtual Scalar value(double x, double y) override;
+  virtual Scalar value(double x, double y, double z) override;
 
   using SimpleFunction<Scalar>::value; // avoid compiler warnings about the value() method below.
   Scalar value();

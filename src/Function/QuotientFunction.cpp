@@ -130,7 +130,7 @@ void QuotientFunction<Scalar>::values(typename Camellia::FieldContainer<Scalar>:
   }
   else
   {
-    auto quotientValues = FieldContainer<Scalar>::getDeviceView(values);
+    auto quotientValues = basisCache->checkoutScratchStorage<Scalar>(values);
     _f->values(quotientValues, ValueModificationType::ASSIGN, basisCache);
     Kokkos::fence();
     _scalarDivisor->scalarDivideFunctionValues(quotientValues, basisCache);
@@ -145,7 +145,7 @@ void QuotientFunction<Scalar>::values(typename Camellia::FieldContainer<Scalar>:
         assignValue(values.access(i0,i1,i2,i3,i4,i5,i6), modType, quotientValues.access(i0,i1,i2,i3,i4,i5,i6));
       }
     });
-    FieldContainer<Scalar>::recordDeviceViewDeallocation(quotientValues);
+    basisCache->checkinScratchStorage<Scalar>(quotientValues);
   }
 }
 

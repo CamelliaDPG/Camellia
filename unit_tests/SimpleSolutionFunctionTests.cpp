@@ -13,6 +13,7 @@
 #include "BasisCache.h"
 #include "ConvectionDiffusionReactionFormulation.h"
 #include "MeshFactory.h"
+#include "PoissonFormulation.h"
 #include "SimpleSolutionFunction.h"
 #include "Solution.h"
 #include "TypeDefs.h"
@@ -21,8 +22,59 @@ using namespace Camellia;
 
 namespace
 {
+  void testDevicePathValues(ValueModificationType modType, Teuchos::FancyOStream &out, bool &success)
+  {
+    const double tol = 1e-15;
+    const int spaceDim = 1;
+    const int elementWidth = 1;
+    const int H1Order = 1;
+    const int testSpaceEnrichment = 1;
+    bool useConformingTraces = true; // does not matter in 1D
+    
+    vector<double> dimensions(spaceDim,1.0);
+    
+    PoissonFormulation poissonForm(spaceDim, useConformingTraces);
+    MeshPtr poissonMesh = MeshFactory::rectilinearMesh(poissonForm.bf(), dimensions, {elementWidth}, H1Order, testSpaceEnrichment);
+    
+    VarPtr u = poissonForm.u();
+    const double two = 2.0;
+    FunctionPtr two_Function = Function::constant(two);
+    SolutionPtr solution = Solution::solution(poissonMesh);
+    const int solutionOrdinal = 0;
+    solution->projectOntoMesh({{u->ID(), two_Function}}, solutionOrdinal);
+    
+    bool weightFluxesBySideParity = false; // does not matter for fields
+    // this simple solution function has value 2 everywhere:
+    SimpleSolutionFunction<double> two_SimpleSolutionFunction(u, solution, weightFluxesBySideParity, solutionOrdinal);
+    
+    double startingValue = 3.141592; // value to initialized the input view with
+    double expectedValue = startingValue;
+    assignValue(expectedValue, modType, two);
+    
+    const auto & myCellIDs = poissonMesh->cellIDsInPartition();
+    for (auto cellID : myCellIDs)
+    {
+      BasisCachePtr basisCache = BasisCache::basisCacheForCell(poissonMesh, cellID);
+      
+      const int oneCell = 1;
+      const int numPoints = basisCache->getPhysicalCubaturePoints().dimension(1); // points have shape (C,P,D)
+      Camellia::FieldContainer<double> values(oneCell, numPoints);
+      
+      values.initialize(startingValue);
+      auto dvValues = values.checkoutDeviceView();
+      two_SimpleSolutionFunction.values(dvValues, modType, basisCache);
+      
+      values.checkinDeviceView(); // deep copies back to host, so we can do the comparison on host
+      
+      for (int pointOrdinal=0; pointOrdinal<numPoints; pointOrdinal++)
+      {
+        TEST_FLOATING_EQUALITY(expectedValue, values(0,pointOrdinal), tol);
+      }
+    }
+  }
+  
   // test variable in H(div) with the operator specified
-  void testDivOp(Camellia::EOperator op, Teuchos::FancyOStream &out, bool &success)
+  void testHDivOp(Camellia::EOperator op, Teuchos::FancyOStream &out, bool &success)
   {
     int spaceDim = 2;
     FunctionPtr beta = Function::constant(std::vector<double>({1.0,1.0}));
@@ -68,12 +120,54 @@ namespace
   TEUCHOS_UNIT_TEST( SimpleSolutionFunction, Value )
   {
     Camellia::EOperator op = OP_VALUE;
-    testDivOp(op, out, success);
+    testHDivOp(op, out, success);
   }
   
   TEUCHOS_UNIT_TEST( SimpleSolutionFunction, Div )
   {
     Camellia::EOperator op = OP_DIV;
-    testDivOp(op, out, success);
+    testHDivOp(op, out, success);
+  }
+  
+  TEUCHOS_UNIT_TEST( SimpleSolutionFunction, Value_DevicePathValues_ASSIGN )
+  {
+    ValueModificationType modType = ASSIGN;
+    testDevicePathValues(modType, out, success);
+  }
+  
+  TEUCHOS_UNIT_TEST( SimpleSolutionFunction, Value_DevicePathValues_ADD )
+  {
+    ValueModificationType modType = ADD;
+    testDevicePathValues(modType, out, success);
+  }
+  
+  TEUCHOS_UNIT_TEST( SimpleSolutionFunction, Value_DevicePathValues_DIVIDE )
+  {
+    ValueModificationType modType = DIVIDE;
+    testDevicePathValues(modType, out, success);
+  }
+  
+  TEUCHOS_UNIT_TEST( SimpleSolutionFunction, Value_DevicePathValues_MULTIPLY )
+  {
+    ValueModificationType modType = MULTIPLY;
+    testDevicePathValues(modType, out, success);
+  }
+  
+  TEUCHOS_UNIT_TEST( SimpleSolutionFunction, Value_DevicePathValues_SUBTRACT )
+  {
+    ValueModificationType modType = SUBTRACT;
+    testDevicePathValues(modType, out, success);
+  }
+  
+  TEUCHOS_UNIT_TEST( SimpleSolutionFunction, Value_DevicePathValues_MINIMUM )
+  {
+    ValueModificationType modType = MINIMUM;
+    testDevicePathValues(modType, out, success);
+  }
+  
+  TEUCHOS_UNIT_TEST( SimpleSolutionFunction, Value_DevicePathValues_MAXIMUM )
+  {
+    ValueModificationType modType = MAXIMUM;
+    testDevicePathValues(modType, out, success);
   }
 } // namespace

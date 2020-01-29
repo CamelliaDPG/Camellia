@@ -101,10 +101,25 @@ void SimpleSolutionFunction<Scalar>::importCellData(std::vector<GlobalIndexType>
 template <typename Scalar>
 void SimpleSolutionFunction<Scalar>::values(Camellia::FieldContainer<Scalar> &values, BasisCachePtr basisCache)
 {
+  // if the device-path values() supports this basisCache, then call that and return.
+  // otherwise, use the legacy "host-path" implementation below
+  if (basisCache->mesh() != Teuchos::null)
+  {
+    this->CHECK_VALUES_RANK(values);
+    auto dv = values.checkoutDeviceView(false); // false: don't deep_copy from host (will overwrite values)
+    this->values(dv, ASSIGN, basisCache);
+    values.checkinDeviceView();
+    return;
+  }
+  
+  // legacy, host implementation follows
   bool dontWeightForCubature = false;
   if (basisCache->mesh() != Teuchos::null)   // then we assume that the BasisCache is appropriate for solution's mesh...
   {
-    _soln->solutionValues(values, _var->ID(), basisCache, dontWeightForCubature, _var->op(), _solutionOrdinal);
+    using DeviceView = typename Camellia::FieldContainer<Scalar>::DeviceView;
+    DeviceView dvValues = values.checkoutDeviceView(false); // false: don't deep_copy from host (will overwrite values)
+    _soln->solutionValues(dvValues, _var->ID(), basisCache, dontWeightForCubature, _var->op(), _solutionOrdinal);
+    values.checkinDeviceView();
   }
   else
   {
@@ -162,6 +177,41 @@ void SimpleSolutionFunction<Scalar>::values(Camellia::FieldContainer<Scalar> &va
     {
       Function::sideParity()->scalarMultiplyFunctionValues(values, basisCache);
     }
+  }
+}
+
+template <typename Scalar>
+void SimpleSolutionFunction<Scalar>::values(typename Camellia::FieldContainer<Scalar>::DeviceView &values, ValueModificationType modType, BasisCachePtr basisCache)
+{
+  bool dontWeightForCubature = false;
+  if (basisCache->mesh() != Teuchos::null)   // then we assume that the BasisCache is appropriate for solution's mesh...
+  {
+    using DeviceView = typename Camellia::FieldContainer<Scalar>::DeviceView;
+    DeviceView valuesToAssign = values;
+    if (modType != ASSIGN)
+    {
+      // need to place solution values in a separate container prior to combining
+      valuesToAssign = basisCache->checkoutScratchStorage<Scalar>(values);
+    }
+    _soln->solutionValues(valuesToAssign, _var->ID(), basisCache, dontWeightForCubature, _var->op(), _solutionOrdinal);
+    if (_weightFluxesBySideParity) // makes for non-uniquely-valued Functions.
+    {
+      if (_var->varType()==FLUX)
+      {
+        Kokkos::fence();
+        Function::sideParity()->values(valuesToAssign, ValueModificationType::MULTIPLY, basisCache);
+      }
+    }
+    if (modType != ASSIGN)
+    {
+      Kokkos::fence();
+      assignValues<Scalar>(values, modType, valuesToAssign);
+      basisCache->checkinScratchStorage<Scalar>(valuesToAssign);
+    }
+  }
+  else
+  {
+    TEUCHOS_TEST_FOR_EXCEPTION(true, std::invalid_argument, "SimpleSolutionFunction<Scalar> device-path values() does not support evaluation on BasisCaches that don't have meshes defined.");
   }
 }
 

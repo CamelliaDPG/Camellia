@@ -38,7 +38,7 @@ public:
   virtual void values(typename FieldContainer<Scalar>::DeviceView &values, ValueModificationType modType, BasisCachePtr basisCache)
   {
     TEUCHOS_TEST_FOR_EXCEPTION(values.rank() != 2, std::invalid_argument, "rank is not equal to 2");
-    auto dv = FieldContainer<Scalar>::getDeviceView(values);
+    auto dv = basisCache->checkoutScratchStorage<Scalar>(values);
     _arg->values(dv, ASSIGN, basisCache);
     Kokkos::fence();
     const int dim0 = values.extent_int(0);
@@ -48,7 +48,7 @@ public:
         assignValue(values(i0,i1), modType, sin(dv(i0,i1)));
       }
     });
-    FieldContainer<Scalar>::recordDeviceViewDeallocation(dv);
+    basisCache->checkinScratchStorage<Scalar>(dv);
   }
   
   TFunctionPtr<Scalar> dx()
@@ -104,7 +104,7 @@ public:
   virtual void values(typename FieldContainer<Scalar>::DeviceView &values, ValueModificationType modType, BasisCachePtr basisCache)
   {
     TEUCHOS_TEST_FOR_EXCEPTION(values.rank() != 2, std::invalid_argument, "rank is not equal to 2");
-    auto dv = FieldContainer<Scalar>::getDeviceView(values);
+    auto dv = basisCache->checkoutScratchStorage<Scalar>(values);
     _arg->values(dv, ASSIGN, basisCache);
     Kokkos::fence();
     const int dim0 = values.extent_int(0);
@@ -114,7 +114,7 @@ public:
         assignValue(values(i0,i1), modType, cos(dv(i0,i1)));
       }
     });
-    FieldContainer<Scalar>::recordDeviceViewDeallocation(dv);
+    basisCache->checkinScratchStorage<Scalar>(dv);
   }
   
   TFunctionPtr<Scalar> dx()

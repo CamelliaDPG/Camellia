@@ -11,7 +11,7 @@
 #include "GlobalDofAssignment.h"
 #include "TimeLogger.h"
 
-#include "Tpetra_MultiVectorFiller.hpp"
+#include "Tpetra_FEMultiVector.hpp"
 
 static const int MAX_BATCH_SIZE_IN_BYTES = 3*1024*1024; // 3 MB
 static const int MIN_BATCH_SIZE_IN_CELLS = 1; // overrides the above, if it results in too-small batches
@@ -244,8 +244,13 @@ int DLS<Scalar>::assemble()
 //  cout << "Test map has " << testMap->getGlobalNumElements() << " global elements.\n";
 //  cout << "Trial map has " << solnMapNoBCs->getGlobalNumElements() << " global elements.\n";
 
+  // the following importer construction code lightly adapted from a FEMultiVector unit test
+//  const auto INVALID = Teuchos::OrdinalTraits<GlobalIndexType>::invalid ();
+//  Teuchos::RCP<const Tpetra::Map<IndexType,GlobalIndexType> > overlapMap    = Teuchos::rcp(new Tpetra::Map<IndexType,GlobalIndexType>(INVALID,overlapList(),0,TeuchosComm));
+//  Teuchos::RCP<const Tpetra::Import<IndexType,GlobalIndexType> > importer   = Teuchos::rcp(new Tpetra::Import<IndexType,GlobalIndexType>(map,overlapMap));
   
-  MultiVectorFiller<TVector<Scalar>> diagFiller(solnMapNoBCs, numCols);
+  using FEVector = Tpetra::FEMultiVector<Scalar,IndexType,GlobalIndexType>;
+//  FEVector diagFiller(solnMapNoBCs, numCols); // TODO: work out how to construct an appropriate importer here
   
   vector< ElementTypePtr > elementTypes = mesh->elementTypes(rank);
   
@@ -446,7 +451,7 @@ int DLS<Scalar>::assemble()
             rowValues[i] = rowValues[i] * rowValues[i];
 //            cout << "adding " << rowValues[i] << " to diagonal value with global index " << globalDofIndicesNoBCs[i] << endl;
           }
-          diagFiller.sumIntoGlobalValues(globalDofIndicesNoBCs, 0, rowValues);
+//          diagFiller.sumIntoGlobalValues(globalDofIndicesNoBCs, 0, rowValues);
         }
         
         // insert into bcImpositionMatrix
@@ -495,7 +500,8 @@ int DLS<Scalar>::assemble()
 //  cout << "_dlsMatrix range Map, global element count: " << _dlsMatrix->getRangeMap()->getGlobalNumElements() << endl;
   
   _diag_sqrt_inverse = rcp( new Vector<Scalar,IndexType,GlobalIndexType>(solnMapNoBCs) );
-  diagFiller.globalAssemble(*_diag_sqrt_inverse);
+//  diagFiller.globalAssemble(*_diag_sqrt_inverse);
+  std::cout << "WARNING: due to Tpetra's replacement of MultiVectorFiller, this code is at present incomplete.  Need to adopt Tpetra_FEMultiVector.\n";
   inverseSquareRoot(_diag_sqrt_inverse);
   
   RCP<Vector<Scalar,IndexType,GlobalIndexType>> matrixScalingVector = rcp( new Vector<Scalar,IndexType,GlobalIndexType>(_dlsMatrix->getDomainMap()) );

@@ -48,15 +48,27 @@ template <typename Scalar>
 private:
   int _cubatureEnrichmentDegree;
   
+  template<class MapType, class KeyType, class ValueType>
+  inline
+  void replaceMapEntry(MapType &map, KeyType &key, ValueType &value)
+  {
+    // for const values, maps don't let you do map[key] = value
+    // counter-intuitively, they also don't replace the value of an existing key when you do .insert()
+    // this is a one-line invocation that does map[key] = value for this case
+    map.erase(key);
+    map.insert(std::make_pair(key,value));
+    invalidateCachedBasisCoefficientsForFields();
+  }
+  
   // first index into _solutionForCellID corresponds to the index of the RHS (0 for primary, 1 for influence, at present)
-  std::vector<std::map< GlobalIndexType, Camellia::FieldContainer<Scalar> > > _solutionForCellID;
+  std::vector<std::map< GlobalIndexType, const Camellia::FieldContainer<Scalar> > > _solutionForCellID;
   std::map< GlobalIndexType, double > _energyErrorForCell; // this is *just* for the primary solution.  Use RieszRep if dealing with the influence function...
 
-  map< GlobalIndexType, Camellia::FieldContainer<double> > _residualForCell;
-  std::map< GlobalIndexType, Camellia::FieldContainer<double> > _errorRepresentationForCell;
+  map< GlobalIndexType, const Camellia::FieldContainer<double> > _residualForCell;
+  std::map< GlobalIndexType, const Camellia::FieldContainer<double> > _errorRepresentationForCell;
 
   // evaluates the inversion of the RHS
-  std::map< GlobalIndexType,Camellia::FieldContainer<Scalar> > _rhsRepresentationForCell;
+  std::map< GlobalIndexType, const Camellia::FieldContainer<Scalar> > _rhsRepresentationForCell;
 
   MeshPtr _mesh;
   TBCPtr<Scalar> _bc;
@@ -121,6 +133,24 @@ private:
   void setGlobalSolutionFromCellLocalCoefficients();
 
   void gatherSolutionData(); // get all solution data onto every node (not what we should do in the end)
+  
+  /*
+   The following containers store cached FieldContainers to allow reuse of data copied to device in solutionValues().
+   It may be that once Solution itself stores device views these will become unnecessary.
+   
+   Right now, these only store coefficients for a single batch of cellIDs; this reflects what we expect to be
+   standard usage in the context of e.g. nonlinear solves: you have a BasisCache for a batch of cellIDs that you use
+   to compute a bunch of (background flow) data based on solution values, but once you are done with that BasisCache,
+   you move on to the next batch of cell IDs, and don't need the solution values again (until the next update, at which
+   point the solution will have changed, and therefore the cached data will have been invalidated).
+   
+   For other use cases, we could increase caching (and therefore reuse) by having a lookup based on the batch of cellIDs,
+   but this would introduce some additional complexity and memory costs.
+   */
+  std::vector< Teuchos::RCP<const Camellia::FieldContainer<Scalar> > > _cachedCellBasisCoefficientsForFields; // these are in field ID order
+  std::vector<int> _cachedCellBasisCoefficientsForFieldsCellIDs; // which cells are represented above?
+  void invalidateCachedBasisCoefficientsForFields();
+  
 //protected:
   // Pretty sure this is cruft... commenting it out
 //  Camellia::FieldContainer<Scalar> solutionForElementTypeGlobal(ElementTypePtr elemType); // probably should be deprecated…
@@ -212,6 +242,8 @@ public:
                       const Camellia::FieldContainer<double> &physicalPoints, int solutionOrdinal=0); // searches for the elements that match the points provided
   void solutionValues(Camellia::FieldContainer<Scalar> &values, int trialID, BasisCachePtr basisCache,
                       bool weightForCubature = false, Camellia::EOperator op = OP_VALUE, int solutionOrdinal=0);
+  void solutionValues(typename Camellia::FieldContainer<Scalar>::DeviceView &values, int trialID, BasisCachePtr basisCache,
+                      bool weightForCubature = false, Camellia::EOperator op = OP_VALUE, int solutionOrdinal=0);
 
   void solnCoeffsForCellID(Camellia::FieldContainer<Scalar> &solnCoeffs, GlobalIndexType cellID, int trialID, int sideIndex=VOLUME_INTERIOR_SIDE_ORDINAL,
                            int solutionOrdinal=0);
@@ -219,7 +251,7 @@ public:
                               int sideIndex, int solutionOrdinal);
   void setSolnCoeffsForCellID(const Camellia::FieldContainer<Scalar> &solnCoeffsToSet, GlobalIndexType cellID, int solutionOrdinal);
 
-  const std::vector< std::map< GlobalIndexType, Camellia::FieldContainer<Scalar> > > & solutionForCellID() const;
+  const std::vector< std::map< GlobalIndexType, const Camellia::FieldContainer<Scalar> > > & solutionForCellID() const;
 
   double meshMeasure();
 

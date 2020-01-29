@@ -120,7 +120,7 @@ TSolution<Scalar>::TSolution(const TSolution<Scalar> &soln) : Narrator("Solution
   _bc = soln.bc();
   _rhs = soln.rhs();
   _ip = soln.ip();
-  _solutionForCellID = soln.solutionForCellID();
+  _solutionForCellID = vector< map< GlobalIndexType, const Camellia::FieldContainer<Scalar> > >(soln.solutionForCellID());
   _filter = soln.filter();
   _lagrangeConstraints = soln.lagrangeConstraints();
   _reportConditionNumber = false;
@@ -233,12 +233,12 @@ void TSolution<Scalar>::addSolution(Teuchos::RCP< TSolution<Scalar> > otherSoln,
       }
       else
       {
-        myCoefficients.resize(_mesh->getElementType(cellID)->trialOrderPtr->totalDofs());
+        myCoefficients = Camellia::FieldContainer<Scalar>(_mesh->getElementType(cellID)->trialOrderPtr->totalDofs());
       }
 
       bool warnAboutOffRank = false;
       Camellia::FieldContainer<Scalar> otherCoefficients = otherSoln->allCoefficientsForCellID(cellID, warnAboutOffRank, solutionOrdinal);
-
+      
       SerialDenseWrapper::addFCs(myCoefficients, otherCoefficients, weight);
 
       if (replaceBoundaryTerms)
@@ -252,16 +252,14 @@ void TSolution<Scalar>::addSolution(Teuchos::RCP< TSolution<Scalar> > otherSoln,
           myCoefficients[traceDofIndex] = otherCoefficients[traceDofIndex];
         }
       }
-      _solutionForCellID[solutionOrdinal][cellID] = myCoefficients;
+      replaceMapEntry(_solutionForCellID[solutionOrdinal],cellID,myCoefficients);
     }
   }
-
   setGlobalSolutionFromCellLocalCoefficients();
   importSolution();
-
+  
   clearComputedResiduals();
-
-  return;
+  invalidateCachedBasisCoefficientsForFields();
 }
 
 template <typename Scalar>
@@ -314,8 +312,7 @@ void TSolution<Scalar>::addSolution(Teuchos::RCP< TSolution<Scalar> > otherSoln,
           }
         }
       }
-
-      _solutionForCellID[solutionOrdinal][cellID] = myCoefficients;
+      replaceMapEntry(_solutionForCellID[solutionOrdinal],cellID, myCoefficients);
     }
   }
 
@@ -324,6 +321,7 @@ void TSolution<Scalar>::addSolution(Teuchos::RCP< TSolution<Scalar> > otherSoln,
   importSolution();
 
   clearComputedResiduals();
+  invalidateCachedBasisCoefficientsForFields();
 }
 
 template <typename Scalar>
@@ -331,76 +329,6 @@ void TSolution<Scalar>::addReplaceSolution(Teuchos::RCP< TSolution<Scalar> > oth
 {
   double myWeight = 1.0; // how to weight current solution when doing the adding...
   this->addReplaceSolution(otherSoln, weight, myWeight, varsToAdd, varsToReplace, allowEmptyCells);
-//  // In many situations, we can't legitimately add two condensed solution _lhsVectors together and back out the other (field) dofs.
-//  // E.g., consider a nonlinear problem in which the bilinear form (and therefore stiffness matrix) depends on background data.
-//  // Even a linear problem with two solutions with different RHS data would require us to accumulate the local load vectors.
-//  // For this reason, we don't attempt to add the two _lhsVectors together.  Instead, we add their respective cell-local
-//  // (expanded, basically) coefficients together, and then glean the condensed representation from that using the private
-//  // setGlobalSolutionFromCellLocalCoefficients() method.
-//
-//  const set<GlobalIndexType> & myCellIDs = _mesh->cellIDsInPartition();
-//
-//  int myLHSCount    = this->numSolutions();
-//  int otherLHSCount = otherSoln->numSolutions();
-//
-//  TEUCHOS_TEST_FOR_EXCEPTION(myLHSCount != otherLHSCount, std::invalid_argument, "Added solutions must have the same number of components.  Right now, this means that they must agree in whether they have a goal-oriented RHS or not.")
-//
-//  for (int solutionOrdinal=0; solutionOrdinal < myLHSCount; solutionOrdinal++)
-//  {
-//    for (GlobalIndexType cellID : myCellIDs)
-//    {
-//      Camellia::FieldContainer<Scalar> myCoefficients;
-//      if (_solutionForCellID[solutionOrdinal].find(cellID) != _solutionForCellID[solutionOrdinal].end())
-//      {
-//        myCoefficients = _solutionForCellID[solutionOrdinal][cellID];
-//      }
-//      else
-//      {
-//        myCoefficients.resize(_mesh->getElementType(cellID)->trialOrderPtr->totalDofs());
-//      }
-//
-//      bool warnAboutOffRankImports = true;
-//      Camellia::FieldContainer<Scalar> otherCoefficients = otherSoln->allCoefficientsForCellID(cellID, warnAboutOffRankImports, solutionOrdinal);
-//
-//      DofOrderingPtr trialOrder = _mesh->getElementType(cellID)->trialOrderPtr;
-//      for (set<int>::iterator varIDIt = varsToAdd.begin(); varIDIt != varsToAdd.end(); varIDIt++)
-//      {
-//        int varID = *varIDIt;
-//        const vector<int>* sidesForVar = &trialOrder->getSidesForVarID(varID);
-//        for (vector<int>::const_iterator sideIt = sidesForVar->begin(); sideIt != sidesForVar->end(); sideIt++)
-//        {
-//          int sideOrdinal = *sideIt;
-//          vector<int> dofIndices = trialOrder->getDofIndices(varID, sideOrdinal);
-//          for (vector<int>::iterator dofIndexIt = dofIndices.begin(); dofIndexIt != dofIndices.end(); dofIndexIt++)
-//          {
-//            int dofIndex = *dofIndexIt;
-//            myCoefficients[dofIndex] += weight * otherCoefficients[dofIndex];
-//          }
-//        }
-//      }
-//      for (set<int>::iterator varIDIt = varsToReplace.begin(); varIDIt != varsToReplace.end(); varIDIt++)
-//      {
-//        int varID = *varIDIt;
-//        const vector<int>* sidesForVar = &trialOrder->getSidesForVarID(varID);
-//        for (vector<int>::const_iterator sideIt = sidesForVar->begin(); sideIt != sidesForVar->end(); sideIt++)
-//        {
-//          int sideOrdinal = *sideIt;
-//          vector<int> dofIndices = trialOrder->getDofIndices(varID, sideOrdinal);
-//          for (vector<int>::iterator dofIndexIt = dofIndices.begin(); dofIndexIt != dofIndices.end(); dofIndexIt++)
-//          {
-//            int dofIndex = *dofIndexIt;
-//            myCoefficients[dofIndex] = otherCoefficients[dofIndex];
-//          }
-//        }
-//      }
-//
-//      _solutionForCellID[solutionOrdinal][cellID] = myCoefficients;
-//    }
-//  }
-//
-//  setGlobalSolutionFromCellLocalCoefficients();
-//
-//  clearComputedResiduals();
 }
 
 template <typename Scalar>
@@ -465,14 +393,14 @@ void TSolution<Scalar>::addReplaceSolution(Teuchos::RCP< TSolution<Scalar> > oth
           }
         }
       }
-      
-      _solutionForCellID[solutionOrdinal][cellID] = myCoefficients;
+      replaceMapEntry(_solutionForCellID[solutionOrdinal],cellID, myCoefficients);
     }
   }
   
   setGlobalSolutionFromCellLocalCoefficients();
   
   clearComputedResiduals();
+  invalidateCachedBasisCoefficientsForFields();
 }
 
 
@@ -1080,9 +1008,10 @@ int TSolution<Scalar>::solve(bool useMumps)
 template <typename Scalar>
 void TSolution<Scalar>::setSolution(Teuchos::RCP< TSolution<Scalar> > otherSoln)
 {
-  _solutionForCellID = otherSoln->solutionForCellID();
+  _solutionForCellID = vector< map< GlobalIndexType, const Camellia::FieldContainer<Scalar> > >(otherSoln->solutionForCellID());
   _lhsVector = Teuchos::rcp( new Epetra_FEVector(*otherSoln->getLHSVector()) );
   clearComputedResiduals();
+  invalidateCachedBasisCoefficientsForFields();
 }
 
 template <typename Scalar>
@@ -1100,6 +1029,7 @@ void TSolution<Scalar>::initializeLHSVector()
 
   setGlobalSolutionFromCellLocalCoefficients();
   clearComputedResiduals();
+  invalidateCachedBasisCoefficientsForFields();
 }
 
 template <typename Scalar>
@@ -1138,6 +1068,13 @@ void TSolution<Scalar>::initializeStiffnessAndLoad()
   
   int numSolutions = this->numSolutions();
   _rhsVector = Teuchos::rcp(new Epetra_FEVector(partMap, numSolutions));
+}
+
+template <typename Scalar>
+void TSolution<Scalar>::invalidateCachedBasisCoefficientsForFields()
+{
+  _cachedCellBasisCoefficientsForFields.clear();
+  _cachedCellBasisCoefficientsForFieldsCellIDs.clear();
 }
 
 template <typename Scalar>
@@ -1771,36 +1708,22 @@ void TSolution<Scalar>::importSolution()
     {
       Camellia::FieldContainer<Scalar> cellDofs(_mesh->getElementType(cellID)->trialOrderPtr->totalDofs());
       _dofInterpreter->interpretGlobalCoefficients(cellID,cellDofs,solnCoeff);
-      _solutionForCellID[0][cellID] = cellDofs;
+      replaceMapEntry(_solutionForCellID[0], cellID, cellDofs);
     }
     else
     {
-//      { // DEBUGGING
-//        cout << "For multi-solution, passing solnCoeff to interpretGlobalCoefficients:\n";
-//        int myLength = solnCoeff.MyLength();
-//        int myRank = Comm->MyPID();
-//        for (int solutionOrdinal=0; solutionOrdinal<numSolutions; solutionOrdinal++)
-//        {
-//          for (int localOrdinal=0; localOrdinal<myLength; localOrdinal++)
-//          {
-//            cout << "On rank " << myRank << ", solnCoeff[" << solutionOrdinal << "][" << localOrdinal << "] = ";
-//            cout << solnCoeff[solutionOrdinal][localOrdinal] << endl;;
-//          }
-//        }
-//      }
-      
       Camellia::FieldContainer<Scalar> cellDofs(numSolutions,_mesh->getElementType(cellID)->trialOrderPtr->totalDofs());
       _dofInterpreter->interpretGlobalCoefficients(cellID,cellDofs,solnCoeff);
 //      cout << "cellDofs returned by interpretGlobalCoefficients (for multi-solution):\n" << cellDofs;
       int numDofs = _mesh->getElementType(cellID)->trialOrderPtr->totalDofs();
       for (int solutionOrdinal=0; solutionOrdinal<numSolutions; solutionOrdinal++)
       {
-        _solutionForCellID[solutionOrdinal][cellID].resize(numDofs);
-        auto & solutionForCell = _solutionForCellID[solutionOrdinal][cellID];
+        Camellia::FieldContainer<Scalar> solutionForCell(numDofs);
         for (int dofOrdinal=0; dofOrdinal<numDofs; dofOrdinal++)
         {
           solutionForCell(dofOrdinal) = cellDofs(solutionOrdinal,dofOrdinal);
         }
+        replaceMapEntry(_solutionForCellID[solutionOrdinal],cellID, solutionForCell);
       }
     }
   }
@@ -1907,11 +1830,11 @@ void TSolution<Scalar>::importSolutionForOffRankCells(const std::set<GlobalIndex
         TEUCHOS_TEST_FOR_EXCEPTION(true, std::invalid_argument, "solution not found for cell");
       }
 
-      Camellia::FieldContainer<Scalar>* solnCoeffs = &_solutionForCellID[solutionOrdinal][cellID];
-      sizes[cellOrdinal] += solnCoeffs->size();
-      for (int dofOrdinal=0; dofOrdinal < solnCoeffs->size(); dofOrdinal++)
+      const Camellia::FieldContainer<Scalar>& solnCoeffs = _solutionForCellID[solutionOrdinal][cellID];
+      sizes[cellOrdinal] += solnCoeffs.size();
+      for (int dofOrdinal=0; dofOrdinal < solnCoeffs.size(); dofOrdinal++)
       {
-        dataToExport.push_back((*solnCoeffs)[dofOrdinal]);
+        dataToExport.push_back(solnCoeffs[dofOrdinal]);
       }
     }
   }
@@ -1958,7 +1881,7 @@ void TSolution<Scalar>::importSolutionForOffRankCells(const std::set<GlobalIndex
       copyFromLocation += objSize * cellDofs.size();
       copyToLocation += cellDofs.size(); // copyToLocation has type Scalar*, so this moves the pointer the same # of bytes
       dofsImported += cellDofs.size();
-      _solutionForCellID[solutionOrdinal][cellID] = cellDofs;
+      replaceMapEntry(_solutionForCellID[solutionOrdinal], cellID, cellDofs);
     }
   }
 
@@ -2001,7 +1924,7 @@ void TSolution<Scalar>::importGlobalSolution()
     {
       Camellia::FieldContainer<Scalar> cellDofs(_mesh->getElementType(cellID)->trialOrderPtr->totalDofs());
       _dofInterpreter->interpretGlobalCoefficients(cellID,cellDofs,solnCoeff);
-      _solutionForCellID[0][cellID] = cellDofs;
+      replaceMapEntry(_solutionForCellID[0], cellID, cellDofs);
     }
     else
     {
@@ -2010,12 +1933,12 @@ void TSolution<Scalar>::importGlobalSolution()
       int numDofs = _mesh->getElementType(cellID)->trialOrderPtr->totalDofs();
       for (int solutionOrdinal=0; solutionOrdinal<solutionCount; solutionOrdinal++)
       {
-        auto & solutionForCell = _solutionForCellID[solutionOrdinal][cellID];
-        solutionForCell.resize(numDofs);
+        Camellia::FieldContainer<Scalar> solutionForCell(numDofs);
         for (int dofOrdinal=0; dofOrdinal<numDofs; dofOrdinal++)
         {
           solutionForCell(dofOrdinal) = cellDofs(solutionOrdinal,dofOrdinal);
         }
+        replaceMapEntry(_solutionForCellID[solutionOrdinal], cellID, solutionForCell);
       }
     }
   }
@@ -2737,7 +2660,7 @@ void TSolution<Scalar>::computeErrorRepresentation()
       cout << "WARNING: computeErrorRepresentation: call to solveSystemUsingQR failed with error code " << result << endl;
     }
     errorRepresentation.resize(1,numTestDofs);
-    _errorRepresentationForCell[cellID] = errorRepresentation;
+    replaceMapEntry(_errorRepresentationForCell, cellID, errorRepresentation);
   }
 }
 
@@ -2805,7 +2728,7 @@ void TSolution<Scalar>::computeResiduals()
 
 //    cout << "computeResiduals(): residual values:\n" << residual;
 
-    _residualForCell[cellID] = residual;
+    replaceMapEntry(_residualForCell, cellID, residual);
 //    cout << "computed residual vector for cell " << cellID << "; nonzeros:\n";
 //    double tol = 1e-15;
 //    for (int i=0; i< _residualForCell[cellID].size(); i++) {
@@ -2936,7 +2859,7 @@ void TSolution<Scalar>::solutionValues(Camellia::FieldContainer<Scalar> &values,
 //      cout << "In TSolution<Scalar>::solutionValues() on rank " << rank << ", data for cellID " << cellID << " found; container size is " << _solutionForCellID[solutionOrdinal][cellID].size() << endl;
     }
 
-    Camellia::FieldContainer<Scalar>& solnCoeffs = _solutionForCellID[solutionOrdinal][cellID];
+    const Camellia::FieldContainer<Scalar>& solnCoeffs = _solutionForCellID[solutionOrdinal][cellID];
 
     DofOrderingPtr trialOrder = _mesh->getElementType(cellID)->trialOrderPtr;
 
@@ -3005,6 +2928,169 @@ void TSolution<Scalar>::solutionValues(Camellia::FieldContainer<Scalar> &values,
       }
     }
   }
+}
+
+template <typename Scalar>
+void TSolution<Scalar>::solutionValues(typename Camellia::FieldContainer<Scalar>::DeviceView &values, int trialID, BasisCachePtr basisCache,
+                                       bool weightForCubature, Camellia::EOperator op, int solutionOrdinal)
+{
+  Kokkos::deep_copy(values,0.0);
+  const vector<GlobalIndexType> & cellIDs = basisCache->cellIDs();
+  int numCells = cellIDs.size();
+  TEUCHOS_TEST_FOR_EXCEPTION(numCells != values.dimension(0), std::invalid_argument, "first dimension of values should == numCells.");
+  if (numCells == 0) return;
+  
+  // all cells belonging to the BasisCache must have the same type (discretization order, etc.); get the basis information from the first cell
+  DofOrderingPtr trialOrder = _mesh->getElementType(cellIDs[0])->trialOrderPtr;
+  
+  auto bf = (_bf != Teuchos::null) ? _bf : _mesh->bilinearForm();
+  bool fluxOrTrace = bf->isFluxOrTrace(trialID);
+  
+  int sideIndex = basisCache->getSideIndex();
+  
+  Teuchos::RCP<const Camellia::FieldContainer<double>> solnBasisCoefficientsForCell;
+  if (!fluxOrTrace && (cellIDs != _cachedCellBasisCoefficientsForFieldsCellIDs))
+  {
+    // set up a new cache
+    invalidateCachedBasisCoefficientsForFields();
+    
+    std::vector< VarPtr > fieldVars = bf->varFactory()->fieldVars();
+    
+    _cachedCellBasisCoefficientsForFields.resize(fieldVars.size());
+    
+    for (int fieldVarOrdinal = 0; fieldVarOrdinal<fieldVars.size(); fieldVarOrdinal++)
+    {
+      const int fieldID = fieldVars[fieldVarOrdinal]->ID();
+      const vector<int> &dofIndicesVector = trialOrder->getDofIndices(fieldID);
+      const int basisCardinality = dofIndicesVector.size();
+      
+      Teuchos::RCP< Camellia::FieldContainer<double> > fieldBasisCoefficientsForCell = Teuchos::rcp(new FieldContainer<double>(numCells, basisCardinality));
+      
+      for (int cellIndex = 0; cellIndex < numCells; cellIndex++)
+      {
+        GlobalIndexType cellID = cellIDs[cellIndex];
+        
+        if ( _solutionForCellID[solutionOrdinal].find(cellID) == _solutionForCellID[solutionOrdinal].end() )
+        {
+          // cellID not known -- default values for that cell to 0
+          continue;
+        }
+        
+        const Camellia::FieldContainer<Scalar>& solnCoeffs = _solutionForCellID[solutionOrdinal][cellID];
+        for (int dofOrdinal=0; dofOrdinal < basisCardinality; dofOrdinal++)
+        {
+          int localDofIndex = dofIndicesVector[dofOrdinal];
+          (*fieldBasisCoefficientsForCell)(cellIndex,dofOrdinal) = solnCoeffs(localDofIndex);
+        }
+      }
+      _cachedCellBasisCoefficientsForFields[fieldVarOrdinal] = fieldBasisCoefficientsForCell;
+      if (fieldID == trialID)
+      {
+        solnBasisCoefficientsForCell = fieldBasisCoefficientsForCell;
+      }
+    }
+    
+    _cachedCellBasisCoefficientsForFieldsCellIDs = cellIDs;
+  }
+  else if (fluxOrTrace)
+  {
+    // we could add caching for flux and trace coefficients, but this is a much less common use case, I think, so for now we don't.
+    const vector<int> &dofIndicesVector = trialOrder->getDofIndices(trialID,sideIndex);
+    const int basisCardinality = dofIndicesVector.size();
+    
+    // pointer to non-const FC; we'll assign this to the pointer to const once we've filled it in.
+    auto writableSolnBasisCoefficientsForCell = Teuchos::rcp(new Camellia::FieldContainer<double>(numCells,basisCardinality));
+    for (int cellIndex = 0; cellIndex < numCells; cellIndex++)
+    {
+      GlobalIndexType cellID = cellIDs[cellIndex];
+      
+      if ( _solutionForCellID[solutionOrdinal].find(cellID) == _solutionForCellID[solutionOrdinal].end() )
+      {
+        // cellID not known -- default values for that cell to 0
+        continue;
+      }
+      
+      const Camellia::FieldContainer<Scalar>& solnCoeffs = _solutionForCellID[solutionOrdinal][cellID];
+      for (int dofOrdinal=0; dofOrdinal < basisCardinality; dofOrdinal++)
+      {
+        int localDofIndex = dofIndicesVector[dofOrdinal];
+        (*writableSolnBasisCoefficientsForCell)(cellIndex,dofOrdinal) = solnCoeffs(localDofIndex);
+      }
+    }
+    solnBasisCoefficientsForCell = writableSolnBasisCoefficientsForCell; // strong reference; will reclaim memory when this goes out of scope
+  }
+  else
+  {
+    // field variable; can use cache
+    std::vector< VarPtr > fieldVars = bf->varFactory()->fieldVars();
+    for (int fieldVarOrdinal = 0; fieldVarOrdinal<fieldVars.size(); fieldVarOrdinal++)
+    {
+      const int fieldID = fieldVars[fieldVarOrdinal]->ID();
+      if (fieldID == trialID)
+      {
+        solnBasisCoefficientsForCell = _cachedCellBasisCoefficientsForFields[fieldVarOrdinal];
+        break;
+      }
+    }
+    TEUCHOS_TEST_FOR_EXCEPTION(solnBasisCoefficientsForCell == Teuchos::null, std::invalid_argument, "Cached solution coefficients not found.");
+  }
+  
+  
+  bool forceVolumeCoords = false; // used for evaluating fields on sides...
+  
+  if ( ( sideIndex != -1 ) && !fluxOrTrace)
+  {
+    forceVolumeCoords = true;
+  }
+  if ( (sideIndex == -1 ) && _mesh->bilinearForm()->isFluxOrTrace(trialID) )
+  {
+    TEUCHOS_TEST_FOR_EXCEPTION(true, std::invalid_argument,
+                               "solutionValues doesn't support evaluation of trace or flux variables on element interiors.");
+  }
+  
+  BasisPtr basis;
+  if (fluxOrTrace)
+  {
+    if (! trialOrder->hasBasisEntry(trialID, sideIndex)) return; // this variable doesn't have any dofs that contribute
+    basis = trialOrder->getBasis(trialID, sideIndex);
+  }
+  else
+  {
+    basis = trialOrder->getBasis(trialID);
+  }
+  
+  int basisCardinality = basis->getCardinality();
+  
+  Teuchos::RCP<const Camellia::FieldContainer<Scalar> > transformedValuesFCPtr;
+  if (weightForCubature)
+  {
+    transformedValuesFCPtr = basisCache->getTransformedWeightedValues(basis,op,forceVolumeCoords);
+  }
+  else
+  {
+    transformedValuesFCPtr = basisCache->getTransformedValues(basis,op,forceVolumeCoords);
+  }
+  
+  auto dvTransformedValues = transformedValuesFCPtr->checkoutDeviceView();
+  auto dvSolutionBasisCoefficientsForCell = solnBasisCoefficientsForCell->checkoutDeviceView();
+  
+  auto rangePolicy = Camellia::FieldContainer<double>::getMDRangePolicy6(values);
+  
+  Kokkos::parallel_for("Solution::solutionValues() accumulate", rangePolicy,
+  KOKKOS_LAMBDA (const int cellOrdinal, const int pointOrdinal, const int d0, const int d1, const int d2, const int d3)
+  {
+    Scalar cellPointValue = 0.0;
+    for (int dofOrdinal=0; dofOrdinal < basisCardinality; dofOrdinal++)
+    {
+      const auto &basisCoefficient = dvSolutionBasisCoefficientsForCell(cellOrdinal,dofOrdinal);
+      const auto &basisValue       = dvTransformedValues.access(cellOrdinal,dofOrdinal,pointOrdinal,d0,d1,d2,d3);
+      cellPointValue += basisValue * basisCoefficient;
+    }
+    values.access(cellOrdinal,pointOrdinal,d0,d1,d2,d3) = cellPointValue;
+  });
+  
+  transformedValuesFCPtr->checkinDeviceView();
+  solnBasisCoefficientsForCell->checkinDeviceView(); // const FC: won't deep copy back to host
 }
 
 template <typename Scalar>
@@ -3325,7 +3411,8 @@ const Camellia::FieldContainer<Scalar>& TSolution<Scalar>::allCoefficientsForCel
   {
     // create the Camellia::FieldContainer; will be filled with zeros
     int numDofs = _mesh->getElementType(cellID)->trialOrderPtr->totalDofs();
-    _solutionForCellID[solutionOrdinal][cellID] = Camellia::FieldContainer<Scalar>(numDofs);
+    Camellia::FieldContainer<Scalar> zeroCoeffs(numDofs);
+    replaceMapEntry(_solutionForCellID[solutionOrdinal], cellID, zeroCoeffs);
   }
   
   bool cellIsRankLocal = (cellRank == myRank);
@@ -3388,7 +3475,7 @@ void TSolution<Scalar>::setLocalCoefficientsForCell(GlobalIndexType cellID, cons
   {
     TEUCHOS_TEST_FOR_EXCEPTION(true, std::invalid_argument, "coefficients container doesn't have the right shape; should be rank 1");
   }
-  _solutionForCellID[solutionNumber][cellID] = coefficients;
+  replaceMapEntry(_solutionForCellID[solutionNumber], cellID, coefficients);
 }
 
 template <typename Scalar>
@@ -3414,7 +3501,7 @@ void TSolution<Scalar>::setGoalOrientedRHS( LinearTermPtr goalOrientedRHS)
 template <typename Scalar>
 void TSolution<Scalar>::setSolnCoeffsForCellID(const Camellia::FieldContainer<Scalar> &solnCoeffsToSet, GlobalIndexType cellID, int solutionOrdinal)
 {
-  _solutionForCellID[solutionOrdinal][cellID] = solnCoeffsToSet;
+  replaceMapEntry(_solutionForCellID[solutionOrdinal], cellID, solnCoeffsToSet);
   _mesh->globalDofAssignment()->interpretLocalCoefficients(cellID,solnCoeffsToSet,*_lhsVector,solutionOrdinal);
 }
 
@@ -3428,23 +3515,24 @@ void TSolution<Scalar>::setSolnCoeffsForCellID(const Camellia::FieldContainer<Sc
   BasisPtr basis = trialOrder->getBasis(trialID,sideIndex);
 
   int basisCardinality = basis->getCardinality();
-  if ( _solutionForCellID[solutionOrdinal].find(cellID) == _solutionForCellID[solutionOrdinal].end() )
+  auto existingCellIt = _solutionForCellID[solutionOrdinal].find(cellID);
+  bool cellCoefficientsFound = existingCellIt != _solutionForCellID[solutionOrdinal].end();
+  Camellia::FieldContainer<double> solutionForCell;
+  if (cellCoefficientsFound)
   {
-    // allocate new storage
-    _solutionForCellID[solutionOrdinal][cellID] = Camellia::FieldContainer<Scalar>(trialOrder->totalDofs());
+    solutionForCell = existingCellIt->second;
   }
-  if (_solutionForCellID[solutionOrdinal][cellID].size() != trialOrder->totalDofs())
+  else
   {
-    // resize
-    _solutionForCellID[solutionOrdinal][cellID].resize(trialOrder->totalDofs());
+    solutionForCell = Camellia::FieldContainer<double>(trialOrder->totalDofs());
   }
   TEUCHOS_TEST_FOR_EXCEPTION(solnCoeffsToSet.size() != basisCardinality, std::invalid_argument, "solnCoeffsToSet.size() != basisCardinality");
-  auto &solutionForCell = _solutionForCellID[solutionOrdinal][cellID];
   for (int dofOrdinal=0; dofOrdinal < basisCardinality; dofOrdinal++)
   {
     int localDofIndex = trialOrder->getDofIndex(trialID, dofOrdinal, sideIndex);
     solutionForCell(localDofIndex) = solnCoeffsToSet[dofOrdinal];
   }
+  replaceMapEntry(_solutionForCellID[solutionOrdinal], cellID, solutionForCell);
   
   if (_lhsVector != Teuchos::null) // if _lhsVector hasn't been initialized, don't map back to global solution vector
   {
@@ -3470,7 +3558,7 @@ void TSolution<Scalar>::setSolnCoeffsForCellID(const Camellia::FieldContainer<Sc
 
 // protected method; used for solution comparison...
 template <typename Scalar>
-const vector< map< GlobalIndexType, Camellia::FieldContainer<Scalar> > > & TSolution<Scalar>::solutionForCellID() const
+const vector< map< GlobalIndexType, const Camellia::FieldContainer<Scalar> > > & TSolution<Scalar>::solutionForCellID() const
 {
   return _solutionForCellID;
 }
@@ -3949,7 +4037,7 @@ void TSolution<Scalar>::processSideUpgrades( const map<GlobalIndexType, pair< El
       Camellia::FieldContainer<Scalar> newCoefficients(newTrialOrdering->totalDofs());
       newTrialOrdering->copyLikeCoefficients( newCoefficients, oldTrialOrdering, _solutionForCellID[solutionOrdinal][cellID] );
       //    cout << "processSideUpgrades: setting solution for cell ID " << cellID << endl;
-      _solutionForCellID[solutionOrdinal][cellID] = newCoefficients;
+      replaceMapEntry(_solutionForCellID[solutionOrdinal], cellID, newCoefficients);
     }
   }
 }
@@ -4012,8 +4100,7 @@ void TSolution<Scalar>::projectChildrenOntoParent(GlobalIndexType parentCellID, 
   }
   
   // TODO: treat traces
-  
-  _solutionForCellID[solutionOrdinal][parentCellID] = parentSolutionCoefficients;
+  replaceMapEntry(_solutionForCellID[solutionOrdinal], parentCellID, parentSolutionCoefficients);
   
   clearComputedResiduals(); // force recomputation of energy error (could do something more incisive, just computing the energy error for the changed cells)
 }
@@ -4292,7 +4379,8 @@ void TSolution<Scalar>::projectOldCellOntoNewCells(GlobalIndexType cellID, Eleme
     }
 
     // (re)initialize the Camellia::FieldContainer storing the solution--element type may have changed (in case of p-refinement)
-    _solutionForCellID[solutionOrdinal][childID] = Camellia::FieldContainer<Scalar>(childType->trialOrderPtr->totalDofs());
+    Camellia::FieldContainer<Scalar> childSolutionCoefficients(childType->trialOrderPtr->totalDofs());
+    
     // project fields
     Camellia::FieldContainer<Scalar> basisCoefficients;
     for (typename map<int,TFunctionPtr<Scalar>>::iterator fieldFxnIt=fieldMap.begin(); fieldFxnIt != fieldMap.end(); fieldFxnIt++)
@@ -4306,7 +4394,6 @@ void TSolution<Scalar>::projectOldCellOntoNewCells(GlobalIndexType cellID, Eleme
 
 //      cout << "projected basisCoefficients for child volume trialID " << varID << ":\n" << basisCoefficients;
 
-      auto &childSolutionCoefficients = _solutionForCellID[solutionOrdinal][childID];
       for (int basisOrdinal=0; basisOrdinal<basisCoefficients.size(); basisOrdinal++)
       {
         int dofIndex = childType->trialOrderPtr->getDofIndex(varID, basisOrdinal);
@@ -4365,8 +4452,6 @@ void TSolution<Scalar>::projectOldCellOntoNewCells(GlobalIndexType cellID, Eleme
         basisCoefficients.resize(1,childBasis->getCardinality());
         Projector<Scalar>::projectFunctionOntoBasisInterpolating(basisCoefficients, traceFxn, childBasis, basisCacheForSide);
         
-        auto &childSolutionCoefficients = _solutionForCellID[solutionOrdinal][childID];
-
         for (int basisOrdinal=0; basisOrdinal<basisCoefficients.size(); basisOrdinal++)
         {
           int dofIndex = childType->trialOrderPtr->getDofIndex(varID, basisOrdinal, sideOrdinal);
@@ -4375,6 +4460,7 @@ void TSolution<Scalar>::projectOldCellOntoNewCells(GlobalIndexType cellID, Eleme
           // are mapped to global dof ordinals.  For right now, I'm not too worried about this.
         }
       }
+      replaceMapEntry(_solutionForCellID[solutionOrdinal], childID, childSolutionCoefficients);
     }
   }
 
@@ -4438,7 +4524,7 @@ void TSolution<Scalar>::reverseParitiesForLocalCoefficients(GlobalIndexType cell
   auto coefficientsEntry = _solutionForCellID[solutionOrdinal].find(cellID);
   if (coefficientsEntry != _solutionForCellID[solutionOrdinal].end())
   {
-    Camellia::FieldContainer<double>* coefficients = &coefficientsEntry->second;
+    Camellia::FieldContainer<double> coefficients = coefficientsEntry->second; // copy so we can modify
     DofOrderingPtr trialOrder = _mesh->getElementType(cellID)->trialOrderPtr;
     auto fluxVars = _mesh->bilinearForm()->varFactory()->fluxVars();
     for (VarPtr fluxVar : fluxVars)
@@ -4448,10 +4534,11 @@ void TSolution<Scalar>::reverseParitiesForLocalCoefficients(GlobalIndexType cell
         auto dofIndices = &trialOrder->getDofIndices(fluxVar->ID(),side);
         for (auto dofIndex : *dofIndices)
         {
-          (*coefficients)[dofIndex] *= -1.0;
+          coefficients[dofIndex] *= -1.0;
         }
       }
     }
+    replaceMapEntry(_solutionForCellID[solutionOrdinal], cellID, coefficients); // put back the modified coefficients
   }
 }
 
