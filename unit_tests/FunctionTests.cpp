@@ -658,8 +658,12 @@ TEUCHOS_UNIT_TEST( Function, NeighborFunctionWithNormal )
       // for sides normal to y, the "neighbor" value is 0
       double expectedValue;
       bool isBoundary = mesh->getTopology()->getCell(cellID)->isBoundary(sideOrdinal);
-      auto normal_x = sideBasisCache->getSideNormals()[0];
-      if (isBoundary) { expectedValue =  normal_x; }
+      // given a single cell and straight edges, the side normal values will be the same at every (C,P) index
+      const int sampleCellOrdinal = 0;
+      const int sampleCellPoint   = 0;
+      const int dim_x             = 0; // since the gradient of x vanishes at all sides for which the y component is nonzero, we only need to consider the x component of the normal
+      auto normal_x = sideBasisCache->getSideNormals()(sampleCellOrdinal,sampleCellPoint,dim_x);
+      if (isBoundary) { expectedValue =  normal_x; } // on the boundary, neighbor function duplicates the interior of the cell
       else            { expectedValue = -normal_x; }
       
       int numCells = 1;
