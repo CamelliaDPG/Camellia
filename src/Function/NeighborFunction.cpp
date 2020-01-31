@@ -149,9 +149,11 @@ void NeighborFunction<Scalar>::values(Camellia::FieldContainer<Scalar> &values, 
   FieldContainer<double> valuesOneCell(oneCell,numPoints);
   if (_fxn->rank() > 0)
   {
-    Teuchos::Array<int> dims(_fxn->rank() + 1);
-    dims[0] = numPoints;
-    for (int i=1; i < dims.size(); i++)
+    Teuchos::Array<int> dims(_fxn->rank() + 2);
+    const int oneCell = 1;
+    dims[0] = oneCell;
+    dims[1] = numPoints;
+    for (int i=2; i < dims.size(); i++)
     {
       dims[i] = spaceDim;
     }
