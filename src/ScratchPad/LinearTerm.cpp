@@ -151,6 +151,40 @@ void TLinearTerm<Scalar>::addVar(vector<Scalar> vector_weight, VarPtr var)   // 
   TFunctionPtr<Scalar> weightFn = Teuchos::rcp( new ConstantVectorFunction<Scalar>(vector_weight) );
   addVar( weightFn, var );
 }
+  
+template<typename Scalar>
+void TLinearTerm<Scalar>::collectTerms()
+{
+  std::set<int> summandsClaimed;
+  std::vector< TLinearSummand<Scalar> > newSummands;
+  for (int i=0; i<_summands.size(); i++)
+  {
+    if (summandsClaimed.find(i) != summandsClaimed.end())
+    {
+      continue;
+    }
+    VarPtr iVar   = _summands[i].second;
+    int iVarID    = iVar->ID();
+    EOperator iOp = iVar->op();
+    FunctionPtr iWeight = _summands[i].first;
+    for (int j=i+1; j<_summands.size(); j++)
+    {
+      if (summandsClaimed.find(j) != summandsClaimed.end())
+      {
+        continue;
+      }
+      int jVarID    = _summands[j].second->ID();
+      EOperator jOp = _summands[j].second->op();
+      if ((jVarID == iVarID) && (iOp == jOp))
+      {
+        summandsClaimed.insert(j);
+        iWeight = iWeight + _summands[j].first;
+      }
+    }
+    newSummands.push_back(std::make_pair(iWeight, iVar));
+  }
+  _summands = newSummands;
+}
 
 template<typename Scalar>
 double TLinearTerm<Scalar>::computeNorm(TIPPtr<Scalar> ip, MeshPtr mesh, int cubatureEnrichment)

@@ -148,6 +148,10 @@ public:
 
   void addTerm(const TLinearTerm<Scalar> &a, bool overrideTypeCheck=false);
   void addTerm(TLinearTermPtr<Scalar> aPtr, bool overrideTypeCheck=false);
+  
+  //! when several summands have like var and op, combine them into one summand with the sum of their function weights
+  void collectTerms();
+  
   // operator overloading niceties:
 
   TLinearTerm<Scalar>& operator=(const TLinearTerm<Scalar> &rhs);
