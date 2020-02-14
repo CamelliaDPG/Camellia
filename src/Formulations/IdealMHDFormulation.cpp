@@ -608,6 +608,7 @@ IdealMHDFormulation::IdealMHDFormulation(MeshTopologyPtr meshTopo, Teuchos::Para
     auto fluxJacobian = flux->jacobian(_backgroundFlowMap);   // should be just the flux (dropping Bx * Bx bit, which has zero Jacobian, in 1D)
     Camellia::EOperator gradOp = (_spaceDim > 1) ? OP_GRAD : OP_DX;
     
+    fluxJacobian->collectTerms();
     _bf->      addTerm(-fluxJacobian, testVar->applyOp(gradOp)); // negative from integration by parts
     _steadyBF->addTerm(-fluxJacobian, testVar->applyOp(gradOp));
     if (!picardIteration) // Picard doesn't evaluate the previous on RHS

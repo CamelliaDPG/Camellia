@@ -11,6 +11,7 @@
 
 #include "Teuchos_UnitTestHarness.hpp"
 
+#include "ConstantScalarFunction.h"
 #include "Function.h"
 #include "MeshFactory.h"
 #include "MeshPartitionPolicy.h"
@@ -329,6 +330,44 @@ void testFauxSpaceTimeIntegrationByPartsInTime(int spaceDim, Teuchos::FancyOStre
 //    }
 
   TEST_COMPARE(norm, <, tol);
+}
+  
+TEUCHOS_UNIT_TEST( LinearTerm, CollectTerms )
+{
+  using Scalar = double;
+  VarPtr v1 = Teuchos::rcp(new Var(2, 0, "v1", OP_VALUE, HGRAD));
+  VarPtr v2 = Teuchos::rcp(new Var(1, 0, "v2", OP_VALUE, HGRAD));
+  LinearTermPtr lt = v1->dx() + v2 + 3.0 * v1 + 5.0 * v2 + 8.0 * v1->dx();
+  out << "lt->displayString() prior to collectTerms: " << lt->displayString() << std::endl;
+  lt->collectTerms();
+  out << "lt->displayString() after collectTerms:    " << lt->displayString() << std::endl;
+  // expect: 9.0 * v1->dx() + 6.0 * v2 + 3.0 * v1
+  // it would be nice to be generic as to the order, but that is the order we expect,
+  // and it's much simpler to write the test assuming that order.
+  // similarly, we don't *have* to assume that the constant functions get combined on sum, but it's much easier to test if we do assume that
+  auto summands = lt->summands();
+  TEST_EQUALITY(summands.size(), 3);
+  // first summand: 9.0 * v1->dx()
+  TEST_EQUALITY(v1->ID(), summands[0].second->ID());
+  TEST_EQUALITY(OP_DX,    summands[0].second->op());
+  FunctionPtr weight = summands[0].first;
+  ConstantScalarFunction<Scalar>* weightConstant = dynamic_cast<ConstantScalarFunction<Scalar>*> (weight.get());
+  TEST_ASSERT(weightConstant != NULL);
+  TEST_EQUALITY(9.0, weightConstant->value());
+  // second summand: 6.0 * v2
+  TEST_EQUALITY(v2->ID(), summands[1].second->ID());
+  TEST_EQUALITY(OP_VALUE, summands[1].second->op());
+  weight = summands[1].first;
+  weightConstant = dynamic_cast<ConstantScalarFunction<Scalar>*> (weight.get());
+  TEST_ASSERT(weightConstant != NULL);
+  TEST_EQUALITY(6.0, weightConstant->value());
+  // third summand: 3.0 * v1
+  TEST_EQUALITY(v1->ID(), summands[2].second->ID());
+  TEST_EQUALITY(OP_VALUE, summands[2].second->op());
+  weight = summands[2].first;
+  weightConstant = dynamic_cast<ConstantScalarFunction<Scalar>*> (weight.get());
+  TEST_ASSERT(weightConstant != NULL);
+  TEST_EQUALITY(3.0, weightConstant->value());
 }
 
 TEUCHOS_UNIT_TEST( LinearTerm, CompareFauxWithTrueSpaceTime_1D )
