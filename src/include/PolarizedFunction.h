@@ -29,20 +29,20 @@ class PolarizedFunction : public TFunction<Scalar>   // takes a 2D Function of x
   TFunctionPtr<Scalar> _f;
 public:
   PolarizedFunction( TFunctionPtr<Scalar> f_of_xAsR_yAsTheta );
-  void values(Camellia::FieldContainer<Scalar> &values, BasisCachePtr basisCache);
+  void values(Camellia::FieldContainer<Scalar> &values, BasisCachePtr basisCache) override;
   void values(typename Camellia::FieldContainer<Scalar>::DeviceView &values, ValueModificationType modType, BasisCachePtr basisCache) override;
 
-  TFunctionPtr<Scalar> dx();
-  TFunctionPtr<Scalar> dy();
+  TFunctionPtr<Scalar> dx() override;
+  TFunctionPtr<Scalar> dy() override;
 
   Teuchos::RCP<PolarizedFunction<Scalar> > dtheta();
   Teuchos::RCP<PolarizedFunction<Scalar> > dr();
   
-  std::vector< TFunctionPtr<Scalar> > memberFunctions();
+  std::vector< TFunctionPtr<Scalar> > memberFunctions() override;
 
-  virtual string displayString(); // for PolarizedFunction, this should be _f->displayString() + "(r,theta)";
+  virtual string displayString() override; // for PolarizedFunction, this should be _f->displayString() + "(r,theta)";
 
-  bool isZero();
+  bool isZero() override;
 
   static Teuchos::RCP<PolarizedFunction<double> > r();
   static Teuchos::RCP<PolarizedFunction<double> > sin_theta();

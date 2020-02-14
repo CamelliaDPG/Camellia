@@ -178,7 +178,7 @@ public:
   BasisCache(const Camellia::FieldContainer<double> &physicalCellNodes, shards::CellTopology &cellTopo,
              DofOrdering &trialOrdering, int maxTestDegree, bool createSideCacheToo = false);
   
-  virtual ~BasisCache() noexcept(false);
+  virtual ~BasisCache();
 
   template<typename Scalar>
   DeviceView<Scalar> checkoutScratchStorage(DeviceView<Scalar> &dv);

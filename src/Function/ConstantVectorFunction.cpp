@@ -93,13 +93,10 @@ void ConstantVectorFunction<Scalar>::values(typename Camellia::FieldContainer<Sc
   for (int i = 0; i < _value.size(); i++) { value(i) = _value[i]; }
   auto dv_value = value.checkoutDeviceView();
   
-  using array_index_type = Kokkos::MDRangePolicy< Kokkos::Rank<2> >::array_index_type;
-  Kokkos::parallel_for("ConstantVectorFunction_values", Camellia::FieldContainer<Scalar>::getMDRangePolicy2(values),
-  KOKKOS_LAMBDA (const array_index_type i0, const array_index_type i1) {
-    for (int i2 = 0; i2 < dim2; i2++)
-    {
-      assignValue(values(i0,i1,i2), modType, dv_value(i2));
-    }
+  using array_index_type = Kokkos::MDRangePolicy< Kokkos::Rank<3> >::array_index_type;
+  Kokkos::parallel_for("ConstantVectorFunction_values", Camellia::FieldContainer<Scalar>::getMDRangePolicy3(values),
+  KOKKOS_LAMBDA (const array_index_type i0, const array_index_type i1, const array_index_type i2) {
+    assignValue(values(i0,i1,i2), modType, dv_value(i2));
   });
   value.checkinDeviceView(false);
 }

@@ -29,6 +29,7 @@
 #include "PoissonFormulation.h"
 #include "RefinementStrategy.h"
 #include "RHS.h"
+#include "SharedScratchStorage.h"
 #include "SimpleFunction.h"
 #include "Solution.h"
 #include "Solver.h"
@@ -45,17 +46,45 @@ namespace Camellia
   {
     CamelliaCellTools::clearStaticMaps();
     RefinementPattern::clearStaticMaps();
+    clearSharedScratchStorage();
+    
+    auto sharedScratchStorageHitCount = SharedScratchStorage<double>::sharedScratchStorage().hitCount();
     
     BasisFactory::deleteBasisFactory();
     if (printAllocationReports)
     {
+      std::cout << "SharedScratchStorage avoided " << sharedScratchStorageHitCount << " device allocations.\n";
+      
       std::string fcAllocationReport         = allocationReport(fcAllocationRecord);
       std::string deviceViewAllocationReport = allocationReport(deviceViewAllocationRecord);
       std::cout << "\n***********************  FieldContainer allocation report ***********************\n";
       std::cout << fcAllocationReport << std::endl;
-      std::cout << "**************************  Device allocation report ****************************\n";
-      std::cout << "** (Note: these are generally not real allocations for non-CUDA memory spaces) **\n";
-      std::cout << deviceViewAllocationReport << std::endl;
+      
+      constexpr bool memorySpacesMatch = std::is_same<HostMemorySpace, DeviceMemorySpace>::value;
+      if (memorySpacesMatch)
+      {
+        std::cout << "**************************** \"Device\" allocation report ************************************\n";
+        std::cout << "** (These are allocations that really occurred on host, but would be on device for CUDA ) **\n";
+        std::cout << deviceViewAllocationReport << std::endl;
+        AllocationRecord totalDeviceAllocationReport;
+        totalDeviceAllocationReport.allocationCount = deviceViewAllocationRecord.allocationCount + deviceViewFakeAllocationRecord.allocationCount;
+        totalDeviceAllocationReport.bytesAllocatedNet = deviceViewAllocationRecord.bytesAllocatedNet + deviceViewFakeAllocationRecord.bytesAllocatedNet;
+        totalDeviceAllocationReport.bytesAllocatedNetHighWaterMark = deviceViewAllocationRecord.bytesAllocatedNetHighWaterMark + deviceViewFakeAllocationRecord.bytesAllocatedNetHighWaterMark;
+        totalDeviceAllocationReport.bytesAllocatedTotal = deviceViewAllocationRecord.bytesAllocatedTotal + deviceViewFakeAllocationRecord.bytesAllocatedTotal;
+        std::string totalDeviceViewAllocationReport = allocationReport(totalDeviceAllocationReport);
+        std::cout << "**************************** Total Device allocation report *****************************************\n";
+        std::cout << "** ( These are allocations that would be on device for CUDA, some of which were avoided on host  ) **\n";
+        std::cout << "** (Note that due to SharedScratchStorage, the actual numbers on CUDA may be substantially lower ) **\n";
+        std::cout << totalDeviceViewAllocationReport << std::endl;
+      }
+      else
+      {
+        std::cout << "**************************  Device allocation report ****************************\n";
+        std::cout << "**                                                                             **\n";
+        std::cout << deviceViewAllocationReport << std::endl;
+      }
+      
+      // TODO: fix deep copy report (and records) to reflect a real/fake deep copy distinction
       std::cout << "\n************************** Deep Copy Report ******************************\n";
       std::cout <<   "** (Note: only counts calls to Kokkos::deep_copy() from FieldContainer) **\n";
       std::cout << "device-to-host: " << deviceToHostDeepCopyRecord.deepCopyCount << " deep copies, ";

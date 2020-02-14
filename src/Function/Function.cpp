@@ -210,7 +210,6 @@ public:
   {
     TEUCHOS_TEST_FOR_EXCEPTION(values.rank() != 2, std::invalid_argument, "rank is not equal to 2");
     int numCells  = values.extent_int(0);
-    int numPoints = values.extent_int(1);
     int sideIndex = basisCache->getSideIndex();
     MeshPtr mesh = basisCache->mesh();
     TEUCHOS_TEST_FOR_EXCEPTION(mesh.get() == NULL, std::invalid_argument, "MeshBoundaryCharacteristicFunction requires a mesh!");
@@ -222,12 +221,11 @@ public:
       cellOnBoundary(cellIndex) = mesh->getTopology()->getCell(cellID)->isBoundary(sideIndex);
     }
     auto dv_cellOnBoundary = cellOnBoundary.checkoutDeviceView();
-    Kokkos::parallel_for("MeshBoundaryCharacteristic_values", numCells, KOKKOS_LAMBDA (const int i0) {
+    auto rangePolicy = FieldContainer<double>::getMDRangePolicy2(values);
+    Kokkos::parallel_for("MeshBoundaryCharacteristic_values", rangePolicy,
+    KOKKOS_LAMBDA (const int i0, const int i1) {
       double value = dv_cellOnBoundary(i0) ? 1 : 0;
-      for (int i1 = 0; i1 < numPoints; i1++)
-      {
-        assignValue(values(i0,i1), modType, value);
-      }
+      assignValue(values(i0,i1), modType, value);
     });
     cellOnBoundary.checkinDeviceView(false);
   }
@@ -2390,13 +2388,10 @@ void TFunction<Scalar>::valuesDottedWithTensor(typename FieldContainer<Scalar>::
     tensorValueIndex[d+2] = spaceDim;
   }
   
-  // TODO: use a DeviceView instead of FC
-  Camellia::FieldContainer<Scalar> myTensorValues(tensorValueIndex);
-  auto dv_myTensorValues = myTensorValues.checkoutDeviceView(false);
+  auto dv_myTensorValues = Allocation<Scalar>::checkoutDeviceView(tensorValueIndex);
   this->values(dv_myTensorValues,ValueModificationType::ASSIGN,basisCache);
   
-  Camellia::FieldContainer<Scalar> otherTensorValues(tensorValueIndex);
-  auto dv_otherTensorValues = otherTensorValues.checkoutDeviceView(false);
+  auto dv_otherTensorValues = Allocation<Scalar>::checkoutDeviceView(tensorValueIndex);
   tensorFunctionOfLikeRank->values(dv_otherTensorValues,ValueModificationType::ASSIGN,basisCache);
 
   const int dim2 = (_rank+2 > 2) ? spaceDim : 1;
@@ -2424,8 +2419,8 @@ void TFunction<Scalar>::valuesDottedWithTensor(typename FieldContainer<Scalar>::
       }
     }
   });
-  myTensorValues.checkinDeviceView(false);
-  otherTensorValues.checkinDeviceView(false);
+  Allocation<Scalar>::checkinDeviceView(dv_myTensorValues);
+  Allocation<Scalar>::checkinDeviceView(dv_otherTensorValues);
 }
 
 template <typename Scalar>
@@ -2458,9 +2453,8 @@ void TFunction<Scalar>::scalarModifyFunctionValues(typename FieldContainer<Scala
   const int numPoints = dv.extent_int(1);
   const int dim6 = (dv.rank() > 6) ? dv.extent_int(6) : 1;
   
-  // TODO: use a DeviceView instead of FC
-  Camellia::FieldContainer<Scalar> scalarValues(numCells,numPoints);
-  auto dv_scalar = scalarValues.checkoutDeviceView(false);
+  const std::vector<int> dims {numCells, numPoints};
+  auto dv_scalar = Allocation<Scalar>::checkoutDeviceView(dims);
   this->values(dv_scalar,ValueModificationType::ASSIGN,basisCache);
   
   Kokkos::fence();
@@ -2475,7 +2469,7 @@ void TFunction<Scalar>::scalarModifyFunctionValues(typename FieldContainer<Scala
       assignValue(dv.access(i0,i1,i2,i3,i4,i5,i6),valueModType,scalarValue);
     }
   });
-  scalarValues.checkinDeviceView(false);
+  Allocation<Scalar>::checkinDeviceView(dv_scalar);
 }
 
 // Should only work for doubles
@@ -2503,8 +2497,8 @@ void TFunction<Scalar>::scalarModifyBasisValues(Camellia::FieldContainer<double>
   const int numPoints = dv.extent_int(2);
   const int dim6 = (dv.rank() > 6) ? dv.extent_int(6) : 1;
 
-  Camellia::FieldContainer<double> scalarValues(numCells,numPoints);
-  auto dv_scalar = scalarValues.checkoutDeviceView(false);
+  std::vector<int> dims {numCells, numPoints};
+  auto dv_scalar = Allocation<Scalar>::checkoutDeviceView(dims);
   this->values(dv_scalar,ValueModificationType::ASSIGN,basisCache);
   
   Kokkos::fence();
@@ -2519,7 +2513,7 @@ void TFunction<Scalar>::scalarModifyBasisValues(Camellia::FieldContainer<double>
       assignValue(dv.access(i0,i1,i2,i3,i4,i5,i6),valueModType,scalarValue);
     }
   });
-  scalarValues.checkinDeviceView(false);
+  Allocation<Scalar>::checkinDeviceView(dv_scalar);
   values.checkinDeviceView();
 }
 

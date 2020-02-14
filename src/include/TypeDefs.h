@@ -7,6 +7,8 @@
 #ifndef TypeDefs_h
 #define TypeDefs_h
 
+#include "Kokkos_DynRankView.hpp"
+
 // #include <Teuchos_ScalarTraits.hpp>
 #include <Teuchos_RCP.hpp>
 // #include <Teuchos_GlobalMPISession.hpp>
@@ -17,8 +19,6 @@
 #include <Tpetra_Map.hpp>
 #include <Tpetra_MultiVector.hpp>
 #include <Tpetra_CrsMatrix.hpp>
-
-#include "Camellia_FieldContainer.hpp"
 
 // Epetra includes
 #ifdef HAVE_MPI
@@ -40,10 +40,6 @@ typedef int GlobalIndexTypeToCast; // for constructing Epetra_Maps, etc.  (these
 #define MATERIAL_SET_TAG_NAME   "MATERIAL_SET"
 #define NEUMANN_SET_TAG_NAME   "NEUMANN_SET"
 typedef unsigned long EntityHandle; // identical to MOAB's EntityHandle type.  We define our own because we don't want to require MOAB, at least not yet.
-
-// Trilinos typedefs
-typedef Teuchos::RCP< Camellia::FieldContainer<double> > FCPtr;
-typedef Teuchos::RCP< const Camellia::FieldContainer<double> > constFCPtr;
   
   typedef Teuchos::RCP<Epetra_Comm> Epetra_CommPtr;
   typedef Teuchos::RCP<Teuchos::Comm<int>> Teuchos_CommPtr;
@@ -191,6 +187,28 @@ using TVector = Tpetra::MultiVector<Scalar,IndexType,GlobalIndexType>;
 template <typename Scalar>
 using TVectorPtr = Teuchos::RCP< TVector<Scalar> >;
 // typedef TVectorPtr<double> VectorPtr;
+  
+#ifdef KOKKOS_ENABLE_CUDA
+  using DeviceMemorySpace = Kokkos::CudaSpace; // we want to avoid UVM; Kokkos default may be Kokkos::CudaUVMSpace
+#else
+  using DeviceMemorySpace = Kokkos::DefaultExecutionSpace::memory_space;
+#endif
+  using HostMemorySpace   = Kokkos::HostSpace::memory_space;
+  
+  template<typename Scalar>
+  using HostView   = Kokkos::DynRankView<Scalar, Kokkos::HostSpace, Kokkos::MemoryTraits<Kokkos::Unmanaged> >;
+  
+  template<typename Scalar>
+  using ViewTraits = typename HostView<Scalar>::drvtraits;
+  
+  template<typename Scalar>
+  using DeviceView = Kokkos::DynRankView<typename ViewTraits<Scalar>::value_type, typename ViewTraits<Scalar>::array_layout, DeviceMemorySpace>;
+  
+  template<typename Scalar>
+  using DeviceViewConst = Kokkos::DynRankView<const typename ViewTraits<Scalar>::value_type, typename ViewTraits<Scalar>::array_layout, DeviceMemorySpace>;
+  
+  template<typename Scalar>
+  using HostViewConst   = Kokkos::DynRankView<const Scalar, Kokkos::HostSpace, Kokkos::MemoryTraits<Kokkos::Unmanaged> >;
 }
 
 #endif

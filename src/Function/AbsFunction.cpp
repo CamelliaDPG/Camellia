@@ -7,6 +7,7 @@
 //
 
 #include "AbsFunction.h"
+#include "BasisCache.h"
 
 using namespace Camellia;
 using std::fabs;
@@ -46,17 +47,15 @@ void AbsFunction::values(FieldContainer<double> &values, BasisCachePtr basisCach
 void AbsFunction::values(typename FieldContainer<double>::DeviceView &values, ValueModificationType modType, BasisCachePtr basisCache)
 {
   TEUCHOS_TEST_FOR_EXCEPTION(values.rank() != 2, std::invalid_argument, "rank is not equal to 2");
-  auto dv = FieldContainer<double>::getDeviceView(values);
+  auto dv = basisCache->checkoutScratchStorage<double>(values);
   _f->values(dv, ASSIGN, basisCache);
   Kokkos::fence();
-  const int dim0 = values.extent_int(0);
-  const int dim1 = values.extent_int(1);
-  Kokkos::parallel_for("AbsFunction_values", dim0, KOKKOS_LAMBDA (const int i0) {
-    for (int i1 = 0; i1 < dim1; i1++) {
-      assignValue(values(i0,i1), modType, fabs(dv(i0,i1)));
-    }
+  auto rangePolicy = Camellia::FieldContainer<double>::getMDRangePolicy2(values);
+  Kokkos::parallel_for("AbsFunction_values", rangePolicy,
+  KOKKOS_LAMBDA (const int i0, const int i1) {
+    assignValue(values(i0,i1), modType, fabs(dv(i0,i1)));
   });
-  FieldContainer<double>::recordDeviceViewDeallocation(dv);
+  basisCache->checkinScratchStorage<double>(dv);
 }
 
 TFunctionPtr<double> AbsFunction::dx()

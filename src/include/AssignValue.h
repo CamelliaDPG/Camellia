@@ -52,11 +52,14 @@ namespace Camellia {
     }
   }
   
-  template<typename Scalar, ValueModificationType modType>
+  template<typename Scalar, ValueModificationType modType, int rank=7>
   struct AssignValuesFunctor
   {
     using DeviceView = typename Camellia::FieldContainer<Scalar>::DeviceView;
-    using array_index_type = Kokkos::MDRangePolicy< Kokkos::Rank<6> >::array_index_type;
+    using array_index_type = typename Kokkos::MDRangePolicy< Kokkos::Rank<6> >::array_index_type; // hard-coding the rank because MDRangePolicy not defined for rank 1 
+    
+    template< bool B, class T = void >
+    using enable_if_t = typename std::enable_if<B,T>::type;
     
     DeviceView _toValues;
     DeviceView _fromValues;
@@ -69,9 +72,62 @@ namespace Camellia {
     _dim6(_toValues.extent_int(6))
     {}
 
+    template <int M = rank>
     KOKKOS_INLINE_FUNCTION
-    void operator()(const array_index_type i0, const array_index_type i1, const array_index_type i2,
-                    const array_index_type i3, const array_index_type i4, const array_index_type i5) const
+    enable_if_t<M==1>
+    operator()(const array_index_type i0) const
+    {
+      assignValue(_toValues.access(i0),modType,_fromValues.access(i0));
+    }
+    
+    template <int M = rank>
+    KOKKOS_INLINE_FUNCTION
+    enable_if_t<M==2>
+    operator()(const array_index_type i0, const array_index_type i1) const
+    {
+      assignValue(_toValues.access(i0,i1),modType,_fromValues.access(i0,i1));
+    }
+    
+    template <int M = rank>
+    KOKKOS_INLINE_FUNCTION
+    enable_if_t<M==3>
+    operator()(const array_index_type i0, const array_index_type i1, const array_index_type i2) const
+    {
+      assignValue(_toValues.access(i0,i1,i2),modType,_fromValues.access(i0,i1,i2));
+    }
+    
+    template <int M = rank>
+    KOKKOS_INLINE_FUNCTION
+    enable_if_t<M==4>
+    operator()(const array_index_type i0, const array_index_type i1, const array_index_type i2,
+               const array_index_type i3) const
+    {
+      assignValue(_toValues.access(i0,i1,i2,i3),modType,_fromValues.access(i0,i1,i2,i3));
+    }
+    
+    template <int M = rank>
+    KOKKOS_INLINE_FUNCTION
+    enable_if_t<M==5>
+    operator()(const array_index_type i0, const array_index_type i1, const array_index_type i2,
+               const array_index_type i3, const array_index_type i4) const
+    {
+      assignValue(_toValues.access(i0,i1,i2,i3,i4),modType,_fromValues.access(i0,i1,i2,i3,i4));
+    }
+    
+    template <int M = rank>
+    KOKKOS_INLINE_FUNCTION
+    enable_if_t<M==6>
+    operator()(const array_index_type i0, const array_index_type i1, const array_index_type i2,
+               const array_index_type i3, const array_index_type i4, const array_index_type i5) const
+    {
+      assignValue(_toValues.access(i0,i1,i2,i3,i4,i5),modType,_fromValues.access(i0,i1,i2,i3,i4,i5));
+    }
+    
+    template <int M = rank>
+    KOKKOS_INLINE_FUNCTION
+    enable_if_t<M==7>
+    operator()(const array_index_type i0, const array_index_type i1, const array_index_type i2,
+               const array_index_type i3, const array_index_type i4, const array_index_type i5) const
     {
       for (int i6 = 0; i6<_dim6; i6++)
       {
@@ -83,9 +139,60 @@ namespace Camellia {
   template<typename Scalar, ValueModificationType modType>
   void assignValues(typename Camellia::FieldContainer<Scalar>::DeviceView &toValues, typename Camellia::FieldContainer<Scalar>::DeviceView &fromValues)
   {
-    auto rangePolicy = Camellia::FieldContainer<Scalar>::getMDRangePolicy6(toValues);
-    AssignValuesFunctor<Scalar,modType> functor(toValues, fromValues);
-    Kokkos::parallel_for( rangePolicy , functor, "AssignValuesFunctor");
+    const int rank = toValues.rank();
+    switch (rank)
+    {
+      case 1:
+      {
+        AssignValuesFunctor<Scalar,modType,1> functor(toValues, fromValues);
+        Kokkos::parallel_for( toValues.extent(0), functor, "AssignValuesFunctor");
+      }
+        break;
+      case 2:
+      {
+        auto rangePolicy = Camellia::FieldContainer<Scalar>::getMDRangePolicy2(toValues);
+        AssignValuesFunctor<Scalar,modType,2> functor(toValues, fromValues);
+        Kokkos::parallel_for( rangePolicy, functor, "AssignValuesFunctor");
+      }
+        break;
+      case 3:
+      {
+        auto rangePolicy = Camellia::FieldContainer<Scalar>::getMDRangePolicy3(toValues);
+        AssignValuesFunctor<Scalar,modType,3> functor(toValues, fromValues);
+        Kokkos::parallel_for( rangePolicy, functor, "AssignValuesFunctor");
+      }
+        break;
+      case 4:
+      {
+        auto rangePolicy = Camellia::FieldContainer<Scalar>::getMDRangePolicy4(toValues);
+        AssignValuesFunctor<Scalar,modType,4> functor(toValues, fromValues);
+        Kokkos::parallel_for( rangePolicy, functor, "AssignValuesFunctor");
+      }
+        break;
+      case 5:
+      {
+        auto rangePolicy = Camellia::FieldContainer<Scalar>::getMDRangePolicy5(toValues);
+        AssignValuesFunctor<Scalar,modType,5> functor(toValues, fromValues);
+        Kokkos::parallel_for( rangePolicy, functor, "AssignValuesFunctor");
+      }
+        break;
+      case 6:
+      {
+        auto rangePolicy = Camellia::FieldContainer<Scalar>::getMDRangePolicy6(toValues);
+        AssignValuesFunctor<Scalar,modType,6> functor(toValues, fromValues);
+        Kokkos::parallel_for( rangePolicy, functor, "AssignValuesFunctor");
+      }
+        break;
+      case 7:
+      {
+        auto rangePolicy = Camellia::FieldContainer<Scalar>::getMDRangePolicy6(toValues); // range policy only goes up to rank 6
+        AssignValuesFunctor<Scalar,modType,7> functor(toValues, fromValues);
+        Kokkos::parallel_for( rangePolicy, functor, "AssignValuesFunctor");
+      }
+        break;
+      default:
+        TEUCHOS_TEST_FOR_EXCEPTION(true, std::invalid_argument, "Unsupported rank");
+    }
   }
   
   template<typename Scalar>

@@ -20,14 +20,14 @@ class ConstantVectorFunction : public TFunction<Scalar>
   std::vector<Scalar> _value;
 public:
   ConstantVectorFunction(std::vector<Scalar> value);
-  string displayString();
-  bool isZero();
+  string displayString() override;
+  bool isZero() override;
 
-  TFunctionPtr<Scalar> x();
-  TFunctionPtr<Scalar> y();
-  TFunctionPtr<Scalar> z();
+  TFunctionPtr<Scalar> x() override;
+  TFunctionPtr<Scalar> y() override;
+  TFunctionPtr<Scalar> z() override;
 
-  void values(Camellia::FieldContainer<Scalar> &values, BasisCachePtr basisCache);
+  void values(Camellia::FieldContainer<Scalar> &values, BasisCachePtr basisCache) override;
   void values(typename Camellia::FieldContainer<Scalar>::DeviceView &values, ValueModificationType modType, BasisCachePtr basisCache) override;
   std::vector<Scalar> value();
 };

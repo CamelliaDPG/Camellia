@@ -5,6 +5,7 @@
 #include "BasisFactory.h"
 #include "BasisSumFunction.h"
 #include "CamelliaCellTools.h"
+#include "Camellia_KokkosAllocations.h"
 #include "TypeDefs.h"
 
 #include "Intrepid_CellTools.hpp"
@@ -309,7 +310,7 @@ void BasisSumFunction::values(typename Camellia::FieldContainer<double>::DeviceV
       double & value = basisSumValues.access(i0,i1,i2,i3,i4,i5,0);
       assignValue(entry, modType, value);
     });
-    FieldContainer<double>::recordDeviceViewDeallocation(basisSumValues);
+    Allocation<double>::recordDeviceViewDeallocation(basisSumValues);
   }
   _coefficients.checkinDeviceView(false);
   transformedValues->checkinDeviceView();

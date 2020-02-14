@@ -41,6 +41,13 @@ namespace
         break;
       case Camellia::DIVIDE:
         expectedValue = existingValue / constantValue;
+        break;
+      case Camellia::MINIMUM:
+        expectedValue = std::min(existingValue, constantValue);
+        break;
+      case Camellia::MAXIMUM:
+        expectedValue = std::max(existingValue, constantValue);
+        break;
     }
     auto fc = FieldContainer<double>(dim0,dim1);
     auto fcView = fc.checkoutDeviceView(false); // false: don't copy from host

@@ -27,15 +27,15 @@ namespace Camellia
     TFunctionPtr<Scalar> _power;
   public:
     Exp(TFunctionPtr<Scalar> power);
-    void values(Camellia::FieldContainer<Scalar> &values, BasisCachePtr basisCache);
+    void values(Camellia::FieldContainer<Scalar> &values, BasisCachePtr basisCache) override;
     void values(typename Camellia::FieldContainer<Scalar>::DeviceView &values, ValueModificationType modType, BasisCachePtr basisCache) override;
-    TFunctionPtr<Scalar> dx();
-    TFunctionPtr<Scalar> dy();
-    TFunctionPtr<Scalar> dz();
+    TFunctionPtr<Scalar> dx() override;
+    TFunctionPtr<Scalar> dy() override;
+    TFunctionPtr<Scalar> dz() override;
     
-    std::vector< TFunctionPtr<Scalar> > memberFunctions();
+    std::vector< TFunctionPtr<Scalar> > memberFunctions() override;
     
-    std::string displayString();
+    std::string displayString() override;
     
     static TFunctionPtr<Scalar> exp(TFunctionPtr<Scalar> power);
   };
@@ -47,15 +47,15 @@ namespace Camellia
     TFunctionPtr<Scalar> _argument;
   public:
     Ln(TFunctionPtr<Scalar> argument);
-    void values(Camellia::FieldContainer<Scalar> &values, BasisCachePtr basisCache);
+    void values(Camellia::FieldContainer<Scalar> &values, BasisCachePtr basisCache) override;
     void values(typename Camellia::FieldContainer<Scalar>::DeviceView &values, ValueModificationType modType, BasisCachePtr basisCache) override;
-    TFunctionPtr<Scalar> dx();
-    TFunctionPtr<Scalar> dy();
-    TFunctionPtr<Scalar> dz();
+    TFunctionPtr<Scalar> dx() override;
+    TFunctionPtr<Scalar> dy() override;
+    TFunctionPtr<Scalar> dz() override;
     
-    std::vector< TFunctionPtr<Scalar> > memberFunctions();
+    std::vector< TFunctionPtr<Scalar> > memberFunctions() override;
     
-    std::string displayString();
+    std::string displayString() override;
   };
   
 class Exp_x : public SimpleFunction<double>

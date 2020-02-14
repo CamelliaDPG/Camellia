@@ -19,17 +19,17 @@ namespace Camellia
   public:
     AbsFunction(TFunctionPtr<double> f);
     
-    TFunctionPtr<double> dx();
-    TFunctionPtr<double> dy();
-    TFunctionPtr<double> dz();
+    TFunctionPtr<double> dx() override;
+    TFunctionPtr<double> dy() override;
+    TFunctionPtr<double> dz() override;
     
-    void values(Camellia::FieldContainer<double> &values, BasisCachePtr basisCache);
+    void values(Camellia::FieldContainer<double> &values, BasisCachePtr basisCache) override;
     void values(typename Camellia::FieldContainer<double>::DeviceView &values, ValueModificationType modType, BasisCachePtr basisCache) override;
-    bool boundaryValueOnly();
+    bool boundaryValueOnly() override;
     
-    string displayString();
+    string displayString() override;
     
-    std::vector< TFunctionPtr<double> > memberFunctions();
+    std::vector< TFunctionPtr<double> > memberFunctions() override;
   };
 }
 

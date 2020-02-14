@@ -42,16 +42,19 @@ namespace
     using Scalar = double;
     Camellia::FieldContainer<Scalar> values(dim0);
     
-    const auto initialCount               = deviceViewAllocationRecord.allocationCount;
-    const auto initialBytesAllocatedTotal = deviceViewAllocationRecord.bytesAllocatedTotal;
-    const auto initialNetBytesAllocated   = deviceViewAllocationRecord.bytesAllocatedNet;
+    const auto initialCount               = deviceViewAllocationRecord.allocationCount     + deviceViewFakeAllocationRecord.allocationCount;
+    const auto initialBytesAllocatedTotal = deviceViewAllocationRecord.bytesAllocatedTotal + deviceViewFakeAllocationRecord.bytesAllocatedTotal;
+    const auto initialNetBytesAllocated   = deviceViewAllocationRecord.bytesAllocatedNet   + deviceViewFakeAllocationRecord.bytesAllocatedNet;
    
     auto dv = values.checkoutDeviceView();  // DeviceView is initialized lazily on checkout
     
-    const int newBytesExpected = values.size() * sizeof(Scalar);
-    TEST_EQUALITY(initialBytesAllocatedTotal + newBytesExpected, deviceViewAllocationRecord.bytesAllocatedTotal);
-    TEST_EQUALITY(initialNetBytesAllocated   + newBytesExpected, deviceViewAllocationRecord.bytesAllocatedNet);
-    TEST_EQUALITY(initialCount + 1, deviceViewAllocationRecord.allocationCount);
+    const int newBytesExpected       = values.size() * sizeof(Scalar);
+    const int newCount               = deviceViewAllocationRecord.allocationCount + deviceViewFakeAllocationRecord.allocationCount;
+    const int newBytesAllocatedTotal = deviceViewAllocationRecord.bytesAllocatedTotal + deviceViewFakeAllocationRecord.bytesAllocatedTotal;
+    const int newNetBytesAllocated   = deviceViewAllocationRecord.bytesAllocatedNet + deviceViewFakeAllocationRecord.bytesAllocatedNet;
+    TEST_EQUALITY(initialBytesAllocatedTotal + newBytesExpected, newBytesAllocatedTotal);
+    TEST_EQUALITY(initialNetBytesAllocated   + newBytesExpected, newNetBytesAllocated  );
+    TEST_EQUALITY(                             initialCount + 1,  newCount             );
     
     values.checkinDeviceView();
   }
@@ -75,15 +78,15 @@ namespace
   
   TEUCHOS_UNIT_TEST( FieldContainer, GetDeviceViewAllocatesSeparateStorage )
   {
-    // test that FieldContainer's getDeviceView actually allocates new storage, rather than returning a separate view object pointing to same data
+    // test that Camellia::Allocation<Scalar>::allocateDeviceViewMatchingView() actually allocates new storage, rather than returning a separate view object pointing to same data
+    // TODO: create AllocationTests.cpp, move this test there, and put it in an "Allocation" test group
     const double tol = 1e-15;
     const int dim0 = 5;
     using Scalar = double;
     Camellia::FieldContainer<Scalar> values(dim0);
     auto dvValues = values.checkoutDeviceView();
     Kokkos::deep_copy(dvValues, 1.0);
-    auto dvValuesScratch = Camellia::FieldContainer<Scalar>::getDeviceView(dvValues);
-    Camellia::FieldContainer<Scalar>::recordDeviceViewDeallocation(dvValuesScratch);
+    auto dvValuesScratch = Camellia::Allocation<Scalar>::allocateDeviceViewMatchingView(dvValues);
     Kokkos::deep_copy(dvValuesScratch, 2.0); // should not change dvValues
     values.checkinDeviceView(); // deep copies dvValues back to host
     
@@ -92,6 +95,7 @@ namespace
     {
       TEST_FLOATING_EQUALITY(expectedValue, values[i], tol);
     }
+    Camellia::Allocation<Scalar>::recordDeviceViewDeallocation(dvValuesScratch);
   }
   
   TEUCHOS_UNIT_TEST( FieldContainer, HostToDeviceDeepCopyRecordedConstCase )
