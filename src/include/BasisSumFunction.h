@@ -33,6 +33,7 @@ public:
                    BasisCachePtr overridingBasisCache = Teuchos::null,
                    Camellia::EOperator op = OP_VALUE, bool boundaryValueOnly = false);
   void values(Camellia::FieldContainer<double> &values, BasisCachePtr basisCache);
+  void values(typename Camellia::FieldContainer<double>::DeviceView &values, ValueModificationType modType, BasisCachePtr basisCache) override;
 
   TFunctionPtr<double> x();
   TFunctionPtr<double> y();
