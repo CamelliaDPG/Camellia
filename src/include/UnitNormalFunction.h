@@ -26,14 +26,14 @@ class UnitNormalFunction : public TFunction<double>
 public:
   UnitNormalFunction(int comp=-1, bool spaceTime = false); // -1: the vector normal.  Otherwise, picks out the comp component
 
-  TFunctionPtr<double> x();
-  TFunctionPtr<double> y();
-  TFunctionPtr<double> z();
-  TFunctionPtr<double> t();
+  TFunctionPtr<double> x() override;
+  TFunctionPtr<double> y() override;
+  TFunctionPtr<double> z() override;
+  TFunctionPtr<double> t() override;
 
-  bool boundaryValueOnly();
-  string displayString();
-  void values(Camellia::FieldContainer<double> &values, BasisCachePtr basisCache);
+  bool boundaryValueOnly() override;
+  string displayString() override;
+  void values(Camellia::FieldContainer<double> &values, BasisCachePtr basisCache) override;
   void values(typename Camellia::FieldContainer<double>::DeviceView &values, ValueModificationType modType, BasisCachePtr basisCache) override;
 };
 }

@@ -94,26 +94,27 @@ void UnitNormalFunction::values(typename FieldContainer<double>::DeviceView &val
   const Camellia::FieldContainer<double> *sideNormals = _spaceTime ? &(basisCache->getSideNormalsSpaceTime()) : &(basisCache->getSideNormals());
   auto dv_sideNormals = sideNormals->checkoutDeviceView();
   const int comp = (_comp == -2) ? spaceDim : _comp;
-  const bool spaceTime = _spaceTime;
   using array_index_type = Kokkos::MDRangePolicy< Kokkos::Rank<2> >::array_index_type;
-  Kokkos::parallel_for("UnitNormalFunction_values", FieldContainer<double>::getMDRangePolicy2(values),
-  KOKKOS_LAMBDA (const array_index_type i0, const array_index_type i1)
+  
+  auto dv_sideNormals_subview = (comp >= 0) ? Kokkos::subview(dv_sideNormals, Kokkos::ALL, Kokkos::ALL, comp       )
+                                            : Kokkos::subview(dv_sideNormals, Kokkos::ALL, Kokkos::ALL, Kokkos::ALL);
+  if (comp == -1)
   {
-    if (comp == -1)
+    auto rangePolicy = FieldContainer<double>::getMDRangePolicy3(values);
+    Kokkos::parallel_for("UnitNormalFunction_values", rangePolicy,
+    KOKKOS_LAMBDA (const array_index_type i0, const array_index_type i1, const array_index_type i2)
     {
-      for (int i2 = 0; i2 < spaceDim; i2++)
-      {
-        assignValue(values(i0,i1,i2), modType, dv_sideNormals(i0,i1,i2));
-      }
-      if (spaceTime)
-      {
-        assignValue(values(i0,i1,spaceDim), modType, dv_sideNormals(i0,i1,spaceDim));
-      }
-    }
-    else
+      assignValue(values(i0,i1,i2), modType, dv_sideNormals_subview(i0,i1,i2));
+    });
+  }
+  else if (comp >= 0)
+  {
+    auto rangePolicy = FieldContainer<double>::getMDRangePolicy2(values);
+    Kokkos::parallel_for("UnitNormalFunction_values - single component", rangePolicy,
+    KOKKOS_LAMBDA (const array_index_type i0, const array_index_type i1)
     {
-      assignValue(values(i0,i1), modType, dv_sideNormals(i0,i1,comp));
-    }
-  });
+      assignValue(values(i0,i1), modType, dv_sideNormals_subview(i0,i1));
+    });
+  }
   sideNormals->checkinDeviceView();
 }

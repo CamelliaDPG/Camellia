@@ -56,14 +56,12 @@ void ConstantScalarFunction<Scalar>::values(typename Camellia::FieldContainer<Sc
   }
   else
   {
-    const int dim0 = values.extent_int(0);
-    const int dim1 = values.extent_int(1);
     auto value = _value;
-    Kokkos::parallel_for("ConstantScalarFunction mod assignment", dim0, KOKKOS_LAMBDA (const int i0) {
-      for (int i1 = 0; i1 < dim1; i1++) {
-        auto & entry = values(i0, i1);
-        assignValue(entry, modType, value);
-      }
+    auto rangePolicy = FieldContainer<Scalar>::getMDRangePolicy2(values);
+    Kokkos::parallel_for("ConstantScalarFunction mod assignment", rangePolicy,
+    KOKKOS_LAMBDA (const int i0, const int i1) {
+      auto & entry = values(i0, i1);
+      assignValue(entry, modType, value);
     });
   }
 }

@@ -126,13 +126,12 @@ void VectorizedFunction<Scalar>::values(typename FieldContainer<Scalar>::DeviceV
       }
     }
   }
-  Teuchos::Array<int> dims;
+  std::vector<int> dims;
   for (int d = 0; d < values.rank()-1; d++)
   {
     dims.push_back(values.extent_int(d));
   }
-  Camellia::FieldContainer<Scalar> compValues(dims); // TODO: create DeviceView directly w/o using FC
-  auto dv_compValues = compValues.checkoutDeviceView(false);
+  auto dv_compValues = Allocation<Scalar>::checkoutDeviceView(dims);
   const int fxnRank = dv_compValues.rank();
   
   // At the expense of additional memory usage this could be parallelized further
@@ -143,7 +142,8 @@ void VectorizedFunction<Scalar>::values(typename FieldContainer<Scalar>::DeviceV
     Kokkos::fence();
     
     using array_index_type = Kokkos::MDRangePolicy< Kokkos::Rank<6> >::array_index_type;
-    Kokkos::parallel_for("VectorizedFunction_values", compValues.getMDRangePolicy6(),
+    auto rangePolicy = FieldContainer<Scalar>::getMDRangePolicy6(dv_compValues);
+    Kokkos::parallel_for("VectorizedFunction_values", rangePolicy,
     KOKKOS_LAMBDA (const array_index_type i0, const array_index_type i1, const array_index_type i2,
                    const array_index_type i3, const array_index_type i4, const array_index_type i5)
     {
@@ -172,7 +172,7 @@ void VectorizedFunction<Scalar>::values(typename FieldContainer<Scalar>::DeviceV
       }
     });
   }
-  compValues.checkinDeviceView(false);
+  Allocation<Scalar>::checkinDeviceView(dv_compValues);
 }
 
 template <typename Scalar>

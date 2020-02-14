@@ -26,29 +26,29 @@ class SumFunction : public TFunction<Scalar>
 public:
   SumFunction(TFunctionPtr<Scalar> f1, TFunctionPtr<Scalar> f2);
 
-  TFunctionPtr<Scalar> x();
-  TFunctionPtr<Scalar> y();
-  TFunctionPtr<Scalar> z();
-  TFunctionPtr<Scalar> t();
+  TFunctionPtr<Scalar> x() override;
+  TFunctionPtr<Scalar> y() override;
+  TFunctionPtr<Scalar> z() override;
+  TFunctionPtr<Scalar> t() override;
 
-  TFunctionPtr<Scalar> dx();
-  TFunctionPtr<Scalar> dy();
-  TFunctionPtr<Scalar> dz();
-  TFunctionPtr<Scalar> dt();
+  TFunctionPtr<Scalar> dx() override;
+  TFunctionPtr<Scalar> dy() override;
+  TFunctionPtr<Scalar> dz() override;
+  TFunctionPtr<Scalar> dt() override;
 
-  TFunctionPtr<Scalar> grad(int numComponents=-1); // gradient of sum is the sum of gradients
-  TFunctionPtr<Scalar> div();  // divergence of sum is sum of divergences
+  TFunctionPtr<Scalar> grad(int numComponents=-1) override; // gradient of sum is the sum of gradients
+  TFunctionPtr<Scalar> div() override;  // divergence of sum is sum of divergences
 
-  void values(Camellia::FieldContainer<Scalar> &values, BasisCachePtr basisCache);
+  void values(Camellia::FieldContainer<Scalar> &values, BasisCachePtr basisCache) override;
   void values(typename Camellia::FieldContainer<Scalar>::DeviceView &values, ValueModificationType modType, BasisCachePtr basisCache) override;
-  bool boundaryValueOnly();
+  bool boundaryValueOnly() override;
 
-  string displayString();
+  string displayString() override;
   
-  TFunctionPtr<Scalar> evaluateAt(const map<int, TFunctionPtr<Scalar> > &valueMap);
-  TLinearTermPtr<Scalar> jacobian(const map<int, TFunctionPtr<Scalar> > &valueMap);
+  TFunctionPtr<Scalar> evaluateAt(const map<int, TFunctionPtr<Scalar> > &valueMap) override;
+  TLinearTermPtr<Scalar> jacobian(const map<int, TFunctionPtr<Scalar> > &valueMap) override;
   
-  std::vector< TFunctionPtr<Scalar> > memberFunctions();
+  std::vector< TFunctionPtr<Scalar> > memberFunctions() override;
 };
 }
 

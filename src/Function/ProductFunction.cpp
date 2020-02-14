@@ -249,20 +249,9 @@ void ProductFunction<Scalar>::values(typename FieldContainer<Scalar>::DeviceView
       _f2->values(valuesScratch, ValueModificationType::ASSIGN, basisCache);
       Kokkos::fence();
       _f1->scalarMultiplyFunctionValues(valuesScratch, basisCache);
-      
     }
     Kokkos::fence();
-
-    const int dim6 = (values.rank() > 6) ? values.extent_int(6) : 1;
-    using array_index_type = Kokkos::MDRangePolicy< Kokkos::Rank<6> >::array_index_type;
-    Kokkos::parallel_for("ProductFunction_values", FieldContainer<double>::getMDRangePolicy6(values),
-    KOKKOS_LAMBDA (const array_index_type i0, const array_index_type i1, const array_index_type i2,
-                   const array_index_type i3, const array_index_type i4, const array_index_type i5)
-    {
-      for (int i6 = 0; i6 < dim6; i6++) {
-        assignValue(values.access(i0,i1,i2,i3,i4,i5,i6), modType, valuesScratch.access(i0,i1,i2,i3,i4,i5,i6));
-      }
-    });
+    assignValues<Scalar>(values, modType, valuesScratch);
     basisCache->checkinScratchStorage<Scalar>(valuesScratch);
   }
 }

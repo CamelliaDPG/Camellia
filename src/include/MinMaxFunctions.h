@@ -25,17 +25,17 @@ class MinFunction : public TFunction<double>
 public:
   MinFunction(TFunctionPtr<double> f1, TFunctionPtr<double> f2);
 
-  TFunctionPtr<double> x();
-  TFunctionPtr<double> y();
-  TFunctionPtr<double> z();
+  TFunctionPtr<double> x() override;
+  TFunctionPtr<double> y() override;
+  TFunctionPtr<double> z() override;
 
-  void values(Camellia::FieldContainer<double> &values, BasisCachePtr basisCache);
+  void values(Camellia::FieldContainer<double> &values, BasisCachePtr basisCache) override;
   void values(typename Camellia::FieldContainer<double>::DeviceView &values, ValueModificationType modType, BasisCachePtr basisCache) override;
-  bool boundaryValueOnly();
+  bool boundaryValueOnly() override;
 
-  std::vector< TFunctionPtr<double> > memberFunctions();
+  std::vector< TFunctionPtr<double> > memberFunctions() override;
   
-  string displayString();
+  string displayString() override;
 };
 
 class MaxFunction : public TFunction<double>
@@ -44,17 +44,17 @@ class MaxFunction : public TFunction<double>
 public:
   MaxFunction(TFunctionPtr<double> f1, TFunctionPtr<double> f2);
 
-  TFunctionPtr<double> x();
-  TFunctionPtr<double> y();
-  TFunctionPtr<double> z();
+  TFunctionPtr<double> x() override;
+  TFunctionPtr<double> y() override;
+  TFunctionPtr<double> z() override;
 
-  void values(Camellia::FieldContainer<double> &values, BasisCachePtr basisCache);
+  void values(Camellia::FieldContainer<double> &values, BasisCachePtr basisCache) override;
   void values(typename Camellia::FieldContainer<double>::DeviceView &values, ValueModificationType modType, BasisCachePtr basisCache) override;
-  bool boundaryValueOnly();
+  bool boundaryValueOnly() override;
 
-  std::vector< TFunctionPtr<double> > memberFunctions();
+  std::vector< TFunctionPtr<double> > memberFunctions() override;
   
-  string displayString();
+  string displayString() override;
 };
 }
 

@@ -43,7 +43,7 @@ void MinFunction::values(FieldContainer<double> &values, BasisCachePtr basisCach
   values.checkinDeviceView();
 }
 
-void MinFunction::values(typename FieldContainer<double>::DeviceView &values, ValueModificationType modType, BasisCachePtr basisCache)
+void MinFunction::values(DeviceView<double> &values, ValueModificationType modType, BasisCachePtr basisCache)
 {
   if (modType == ASSIGN)
   {
@@ -53,22 +53,13 @@ void MinFunction::values(typename FieldContainer<double>::DeviceView &values, Va
   }
   else
   {
-    auto minValues = FieldContainer<double>::getDeviceView(values);
+    auto minValues = Allocation<double>::checkoutDeviceView(values);
     _f1->values(minValues, ValueModificationType::ASSIGN, basisCache);
     Kokkos::fence();
     _f2->values(minValues, ValueModificationType::MINIMUM, basisCache);
     Kokkos::fence();
-    const int dim6 = (values.rank() > 6) ? values.extent_int(6) : 1;
-    using array_index_type = Kokkos::MDRangePolicy< Kokkos::Rank<6> >::array_index_type;
-    Kokkos::parallel_for("MinFunction_values", FieldContainer<double>::getMDRangePolicy6(values),
-    KOKKOS_LAMBDA (const array_index_type i0, const array_index_type i1, const array_index_type i2,
-                   const array_index_type i3, const array_index_type i4, const array_index_type i5)
-    {
-      for (int i6 = 0; i6 < dim6; i6++) {
-        assignValue(values.access(i0,i1,i2,i3,i4,i5,i6), modType, minValues.access(i0,i1,i2,i3,i4,i5,i6));
-      }
-    });
-    FieldContainer<double>::recordDeviceViewDeallocation(minValues);
+    assignValues<double>(values, modType, minValues);
+    Allocation<double>::checkinDeviceView(minValues);
   }
 }
 
@@ -141,22 +132,13 @@ void MaxFunction::values(typename FieldContainer<double>::DeviceView &values, Va
   }
   else
   {
-    auto maxValues = FieldContainer<double>::getDeviceView(values);
+    auto maxValues = Allocation<double>::checkoutDeviceView(values);
     _f1->values(maxValues, ValueModificationType::ASSIGN, basisCache);
     Kokkos::fence();
     _f2->values(maxValues, ValueModificationType::MAXIMUM, basisCache);
     Kokkos::fence();
-    const int dim6 = (values.rank() > 6) ? values.extent_int(6) : 1;
-    using array_index_type = Kokkos::MDRangePolicy< Kokkos::Rank<6> >::array_index_type;
-    Kokkos::parallel_for("MaxFunction_values", FieldContainer<double>::getMDRangePolicy6(values),
-    KOKKOS_LAMBDA (const array_index_type i0, const array_index_type i1, const array_index_type i2,
-                   const array_index_type i3, const array_index_type i4, const array_index_type i5)
-    {
-      for (int i6 = 0; i6 < dim6; i6++) {
-        assignValue(values.access(i0,i1,i2,i3,i4,i5,i6), modType, maxValues.access(i0,i1,i2,i3,i4,i5,i6));
-      }
-    });
-    FieldContainer<double>::recordDeviceViewDeallocation(maxValues);
+    assignValues<double>(values, modType, maxValues);
+    Allocation<double>::checkinDeviceView(maxValues);
   }
 }
 

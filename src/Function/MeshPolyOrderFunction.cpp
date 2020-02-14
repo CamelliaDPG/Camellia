@@ -25,12 +25,11 @@ void MeshPolyOrderFunction::values(typename FieldContainer<double>::DeviceView &
   for (int i = 0; i < cellIDs.size(); i++) { cellPolyOrder(i) = _mesh->cellPolyOrder(cellIDs[i]); }
   auto dv_cellPolyOrder = cellPolyOrder.checkoutDeviceView();
   
-  const int numPoints = values.extent_int(1);
-  Kokkos::parallel_for("MeshPolyOrderFunction_values", cellIDs.size(), KOKKOS_LAMBDA (const int cellIndex) {
-    int polyOrder = dv_cellPolyOrder(cellIndex);
-    for (int ptIndex = 0; ptIndex < numPoints; ptIndex++) {
-      assignValue(values(cellIndex, ptIndex), modType, polyOrder-1.0);
-    }
+  auto rangePolicy = FieldContainer<double>::getMDRangePolicy2(values);
+  Kokkos::parallel_for("MeshPolyOrderFunction_values", rangePolicy,
+  KOKKOS_LAMBDA (const int cellOrdinal, const int pointOrdinal) {
+    int polyOrder = dv_cellPolyOrder(cellOrdinal);
+    assignValue(values(cellOrdinal, pointOrdinal), modType, polyOrder-1.0);
   });
   cellPolyOrder.checkinDeviceView(false);
 }

@@ -26,17 +26,27 @@ template<class Scalar>
 void Exp<Scalar>::values(typename FieldContainer<Scalar>::DeviceView &values, ValueModificationType modType, BasisCachePtr basisCache)
 {
   TEUCHOS_TEST_FOR_EXCEPTION(values.rank() != 2, std::invalid_argument, "rank is not equal to 2");
-  auto dv = basisCache->checkoutScratchStorage<Scalar>(values);
-  _power->values(dv, ASSIGN, basisCache);
-  Kokkos::fence();
-  const int dim0 = values.extent_int(0);
-  const int dim1 = values.extent_int(1);
-  Kokkos::parallel_for("Exp_values", dim0, KOKKOS_LAMBDA (const int i0) {
-    for (int i1 = 0; i1 < dim1; i1++) {
+  auto rangePolicy = FieldContainer<Scalar>::getMDRangePolicy2(values);
+  if (modType == ASSIGN)
+  {
+    _power->values(values, ASSIGN, basisCache);
+    Kokkos::fence();
+    Kokkos::parallel_for("Exp_values", rangePolicy,
+    KOKKOS_LAMBDA (const int i0, const int i1) {
+      values(i0,i1) = std::exp(values(i0,i1));
+    });
+  }
+  else
+  {
+    auto dv = basisCache->checkoutScratchStorage<Scalar>(values);
+    _power->values(dv, ASSIGN, basisCache);
+    Kokkos::fence();
+    Kokkos::parallel_for("Exp_values", rangePolicy,
+    KOKKOS_LAMBDA (const int i0, const int i1) {
       assignValue(values(i0,i1), modType, std::exp(dv(i0,i1)));
-    }
-  });
-  basisCache->checkinScratchStorage<Scalar>(dv);
+    });
+    basisCache->checkinScratchStorage<Scalar>(dv);
+  }
 }
 
 /*
