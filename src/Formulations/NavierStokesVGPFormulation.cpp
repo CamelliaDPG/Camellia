@@ -14,7 +14,6 @@
 #include "ExpFunction.h"
 #include "MeshFactory.h"
 #include "PenaltyConstraints.h"
-#include "PreviousSolutionFunction.h"
 #include "RieszRep.h"
 #include "TrigFunctions.h"
 
@@ -487,27 +486,23 @@ NavierStokesVGPFormulation::NavierStokesVGPFormulation(MeshTopologyViewPtr meshT
 
     mesh->registerObserver(streamMesh); // refine streamMesh whenever mesh is refined
 
-    LinearTermPtr u1_dy = Re * this->sigma(1,2);
-    LinearTermPtr u2_dx = Re * this->sigma(2,1);
-
-    TFunctionPtr<double> vorticity = Teuchos::rcp( new PreviousSolutionFunction<double>(_backgroundFlow, u2_dx - u1_dy) );
+    FunctionPtr u1_dy = Re * Function::solution(this->sigma(1,2), _backgroundFlow);
+    FunctionPtr u2_dx = Re * Function::solution(this->sigma(2,1), _backgroundFlow);
+    
+    FunctionPtr vorticity = u2_dx - u1_dy;
     RHSPtr streamRHS = RHS::rhs();
     VarPtr v_stream = _streamFormulation->v();
     streamRHS->addTerm( -vorticity * v_stream );
-    bool dontWarnAboutOverriding = true;
-    ((PreviousSolutionFunction<double>*) vorticity.get())->setOverrideMeshCheck(true,dontWarnAboutOverriding);
 
     /* Stream function phi is such that
      *    d/dx phi = -u2
      *    d/dy phi =  u1
      * Therefore, psi = grad phi = (-u2, u1), and psi * n = u1 n2 - u2 n1
      */
-
-    TFunctionPtr<double> u1_soln = Teuchos::rcp( new PreviousSolutionFunction<double>(_backgroundFlow, this->u(1) ) );
-    TFunctionPtr<double> u2_soln = Teuchos::rcp( new PreviousSolutionFunction<double>(_backgroundFlow, this->u(2) ) );
-    ((PreviousSolutionFunction<double>*) u1_soln.get())->setOverrideMeshCheck(true,dontWarnAboutOverriding);
-    ((PreviousSolutionFunction<double>*) u2_soln.get())->setOverrideMeshCheck(true,dontWarnAboutOverriding);
-
+    
+    FunctionPtr u1_soln = Function::solution(this->u(1), _backgroundFlow);
+    FunctionPtr u2_soln = Function::solution(this->u(2), _backgroundFlow);
+    
     TFunctionPtr<double> n = TFunction<double>::normal();
 
     BCPtr streamBC = BC::bc();

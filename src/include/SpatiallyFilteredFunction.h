@@ -29,6 +29,8 @@ class SpatiallyFilteredFunction : public TFunction<Scalar>
 public:
   SpatiallyFilteredFunction(TFunctionPtr<Scalar> f, SpatialFilterPtr sf);
   virtual void values(Camellia::FieldContainer<Scalar> &values, BasisCachePtr basisCache);
+  void values(DeviceView<Scalar> &values, ValueModificationType modType, BasisCachePtr basisCache);
+  
   bool boundaryValueOnly();
 
   TFunctionPtr<Scalar> curl();

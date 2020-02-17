@@ -17,7 +17,7 @@
 #include "MeshFactory.h"
 #include "PenaltyConstraints.h"
 #include "PoissonFormulation.h"
-#include "PreviousSolutionFunction.h"
+#include "RHS.h"
 #include "SimpleFunction.h"
 #include "SuperLUDistSolver.h"
 
@@ -888,15 +888,13 @@ void StokesVGPFormulation::initializeSolution(MeshTopologyPtr meshTopo, int fiel
 
     mesh->registerObserver(streamMesh); // refine streamMesh whenever mesh is refined
 
-    LinearTermPtr u1_dy = (1.0 / _mu) * this->sigma(1,2);
-    LinearTermPtr u2_dx = (1.0 / _mu) * this->sigma(2,1);
-
-    TFunctionPtr<double> vorticity = Teuchos::rcp( new PreviousSolutionFunction<double>(_solution, u2_dx - u1_dy) );
+    FunctionPtr u1_dy = (1.0 / _mu) * Function::solution(this->sigma(1,2), _solution);
+    FunctionPtr u2_dx = (1.0 / _mu) * Function::solution(this->sigma(2,1), _solution);
+    
+    FunctionPtr vorticity = u2_dx - u1_dy;
     RHSPtr streamRHS = RHS::rhs();
     VarPtr q_stream = _streamFormulation->v();
     streamRHS->addTerm( -vorticity * q_stream );
-    bool dontWarnAboutOverriding = true;
-    ((PreviousSolutionFunction<double>*) vorticity.get())->setOverrideMeshCheck(true,dontWarnAboutOverriding);
 
     /* Stream function phi is such that
      *    d/dx phi = -u2
@@ -904,10 +902,8 @@ void StokesVGPFormulation::initializeSolution(MeshTopologyPtr meshTopo, int fiel
      * Therefore, psi = grad phi = (-u2, u1), and psi * n = u1 n2 - u2 n1
      */
 
-    TFunctionPtr<double> u1_soln = Teuchos::rcp( new PreviousSolutionFunction<double>(_solution, this->u(1) ) );
-    TFunctionPtr<double> u2_soln = Teuchos::rcp( new PreviousSolutionFunction<double>(_solution, this->u(2) ) );
-    ((PreviousSolutionFunction<double>*) u1_soln.get())->setOverrideMeshCheck(true,dontWarnAboutOverriding);
-    ((PreviousSolutionFunction<double>*) u2_soln.get())->setOverrideMeshCheck(true,dontWarnAboutOverriding);
+    FunctionPtr u1_soln = Function::solution(this->u(1), _solution);
+    FunctionPtr u2_soln = Function::solution(this->u(2), _solution);
 
     TFunctionPtr<double> n = TFunction<double>::normal();
 
@@ -1389,9 +1385,10 @@ TFunctionPtr<double> StokesVGPFormulation::getVelocitySolution()
 
 TFunctionPtr<double> StokesVGPFormulation::getVorticity()
 {
-  LinearTermPtr u1_dy = (1.0 / _mu) * this->sigma(1,2);
-  LinearTermPtr u2_dx = (1.0 / _mu) * this->sigma(2,1);
-
-  TFunctionPtr<double> vorticity = Teuchos::rcp( new PreviousSolutionFunction<double>(_solution, u2_dx - u1_dy) );
-  return vorticity;
+  FunctionPtr u1_dy = (1.0 / _mu) * Function::solution(this->sigma(1,2), _solution);
+  FunctionPtr u2_dx = (1.0 / _mu) * Function::solution(this->sigma(2,1), _solution);
+  
+  FunctionPtr vorticity = u2_dx - u1_dy;
+  
+  return vorticity; 
 }

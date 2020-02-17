@@ -32,18 +32,18 @@ public:
   BasisSumFunction(BasisPtr basis, const Camellia::FieldContainer<double> &basisCoefficients,
                    BasisCachePtr overridingBasisCache = Teuchos::null,
                    Camellia::EOperator op = OP_VALUE, bool boundaryValueOnly = false);
-  void values(Camellia::FieldContainer<double> &values, BasisCachePtr basisCache);
+  void values(Camellia::FieldContainer<double> &values, BasisCachePtr basisCache) override;
   void values(typename Camellia::FieldContainer<double>::DeviceView &values, ValueModificationType modType, BasisCachePtr basisCache) override;
 
-  TFunctionPtr<double> x();
-  TFunctionPtr<double> y();
-  TFunctionPtr<double> z();
+  TFunctionPtr<double> x() override;
+  TFunctionPtr<double> y() override;
+  TFunctionPtr<double> z() override;
 
-  TFunctionPtr<double> dx();
-  TFunctionPtr<double> dy();
-  TFunctionPtr<double> dz();
+  TFunctionPtr<double> dx() override;
+  TFunctionPtr<double> dy() override;
+  TFunctionPtr<double> dz() override;
 
-  bool boundaryValueOnly();
+  bool boundaryValueOnly() override;
 
   static TFunctionPtr<double> basisSumFunction(BasisPtr basis, const Camellia::FieldContainer<double> &basisCoefficients, Camellia::EOperator op = OP_VALUE);
 };

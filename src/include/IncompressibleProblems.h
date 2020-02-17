@@ -249,6 +249,21 @@ public:
     double enlargement_factor = 1.1*sqrt(2);
     _enlarged_radius = radius * enlargement_factor;
   }
+  void matchesPoints(DeviceView<bool> pointsMatch, DeviceViewConst<double> points)
+  {
+    double enlarged_radius_squared = _enlarged_radius * _enlarged_radius;
+    auto rangePolicy = Camellia::FieldContainer<bool>::getMDRangePolicy2(pointsMatch);
+    Kokkos::parallel_for(rangePolicy, KOKKOS_LAMBDA(const int cellOrdinal, const int pointOrdinal)
+    {
+      const double & x = points(cellOrdinal,pointOrdinal,0);
+      const double & y = points(cellOrdinal,pointOrdinal,1);
+      if (x*x + y*y < enlarged_radius_squared)
+      {
+        pointsMatch(cellOrdinal,pointOrdinal) = true;
+      }
+    });
+  }
+  
   bool matchesPoint(double x, double y)
   {
     if (x*x + y*y < _enlarged_radius * _enlarged_radius)

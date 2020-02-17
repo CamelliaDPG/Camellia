@@ -113,6 +113,51 @@ public:
     }
     return inflow;
   }
+  void matchesPoints(DeviceView<bool> pointsMatch, DeviceViewConst<double> points)
+  {
+    auto rangePolicy = Camellia::FieldContainer<bool>::getMDRangePolicy2(pointsMatch);
+    const double xLeft   = _xLeft;
+    const double xMiddle = _xMiddle;
+    const double xRight  = _xRight;
+    const double yBottom = _yBottom;
+    const double yMiddle = _yMiddle;
+    const double yTop    = _yTop;
+    Kokkos::parallel_for(rangePolicy, KOKKOS_LAMBDA(const int cellOrdinal, const int pointOrdinal)
+    {
+      const double tol = 1e-14;
+      const double & x = points(cellOrdinal,pointOrdinal,0);
+      const double & y = points(cellOrdinal,pointOrdinal,1);
+      
+      bool inflow = false;
+//      inflow = inflow || ((abs(x-xLeft)   < tol) && (y > yMiddle));
+//      inflow = inflow || ((abs(x-xRight)  < tol) && (y < yMiddle));
+//      inflow = inflow || ((abs(y-yBottom) < tol) && (x < xMiddle));
+//      inflow = inflow || ((abs(y-yTop)    < tol) && (x > xMiddle));
+      
+      if (abs(x-xLeft)<tol)
+      {
+        inflow = (y > yMiddle);
+      }
+      else if (abs(x-xRight)<tol)
+      {
+        inflow = (y < yMiddle);
+      }
+      else if (abs(y-yBottom)<tol)
+      {
+        inflow = (x < xMiddle);
+      }
+      else if (abs(y-yTop)<tol)
+      {
+        inflow = (x > xMiddle);
+      }
+      else
+      {
+        inflow = false; // not a boundary point at all...
+      }
+      
+      pointsMatch(cellOrdinal,pointOrdinal) = inflow;
+    });
+  }
 };
 
 TEUCHOS_UNIT_TEST( MeshTools, MeshSlice_Polynomial )

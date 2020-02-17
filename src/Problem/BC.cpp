@@ -18,99 +18,30 @@ using namespace Camellia;
 template <typename Scalar>
 class BCLogicalOrFunction : public TFunction<Scalar>
 {
-  TFunctionPtr<Scalar> _f1, _f2;
-  SpatialFilterPtr _sf1, _sf2;
-
+  TFunctionPtr<Scalar> _f;
 public:
   BCLogicalOrFunction(TFunctionPtr<Scalar> f1, SpatialFilterPtr sf1, TFunctionPtr<Scalar> f2, SpatialFilterPtr sf2) : TFunction<Scalar>("BCLogicalOrFunction", f1->rank())
   {
-    _f1 = f1;
-    _sf1 = sf1;
-    _f2 = f2;
-    _sf2 = sf2;
+    // The logic here is: If sf1 matches, use f1 to compute the values.
+    //                    If sf1 does not match, and sf2 does, use f2 to compute the values.
+    //                    The filter sf2 & !sf1 implements the clause "sf1 does not match, and sf2 does"
+    auto f1_filtered = SpatiallyFilteredFunction<Scalar>::spatiallyFilteredFunction(f1, sf1);
+    SpatialFilterPtr sf2_minus_sf1 = sf2 & !sf1;
+    auto f2_filtered = SpatiallyFilteredFunction<Scalar>::spatiallyFilteredFunction(f1, sf2_minus_sf1);
+    _f = f1_filtered + f2_filtered;
   }
   void setTime(double time)
   {
     this->_time = time;
-    _f1->setTime(time);
-    _f2->setTime(time);
+    _f->setTime(time);
   }
   virtual void values(Camellia::FieldContainer<Scalar> &values, BasisCachePtr basisCache)
   {
-    int numCells = values.dimension(0);
-    int numPoints = values.dimension(1);
-    values.initialize(0.0);
-
-    Teuchos::Array<int> dim;
-    values.dimensions(dim);
-    Teuchos::Array<int> valuesDim = dim;
-    Camellia::FieldContainer<Scalar> f1Values;
-    Camellia::FieldContainer<Scalar> f2Values;
-
-    int entriesPerPoint = 1;
-    for (int d=2; d<values.rank(); d++)
-    {
-      entriesPerPoint *= dim[d];
-      dim[d] = 0; // clear so that these indices point to the start of storage for (cellIndex,ptIndex)
-    }
-    //    const Camellia::FieldContainer<double> *points = &(basisCache->getPhysicalCubaturePoints());
-    Camellia::FieldContainer<bool> pointsMatch1(numCells,numPoints);
-    Camellia::FieldContainer<bool> pointsMatch2(numCells,numPoints);
-
-    bool somePointMatches1 = _sf1->matchesPoints(pointsMatch1,basisCache);
-    bool somePointMatches2 = _sf2->matchesPoints(pointsMatch2,basisCache);
-
-    if ( somePointMatches1 )
-    {
-      f1Values.resize(valuesDim);
-      _f1->values(f1Values,basisCache);
-    }
-    if ( somePointMatches2)
-    {
-      f2Values.resize(valuesDim);
-      _f2->values(f2Values,basisCache);
-    }
-    if (somePointMatches1 || somePointMatches2)
-    {
-      for (int cellIndex=0; cellIndex<numCells; cellIndex++)
-      {
-        dim[0] = cellIndex;
-        for (int ptIndex=0; ptIndex<numPoints; ptIndex++)
-        {
-          dim[1] = ptIndex;
-          if ( pointsMatch1(cellIndex,ptIndex) )
-          {
-            if (f1Values.size() == 0)
-            {
-              // resize, and compute f1
-              f1Values.resize(valuesDim);
-              _f1->values(f1Values,basisCache);
-            }
-            Scalar* value = &values[values.getEnumeration(dim)];
-            Scalar* f1Value = &f1Values[f1Values.getEnumeration(dim)];
-            for (int entryIndex=0; entryIndex<entriesPerPoint; entryIndex++)
-            {
-              *value++ = *f1Value++;
-            }
-          }
-          else if ( pointsMatch2(cellIndex,ptIndex) )
-          {
-            if (f2Values.size() == 0)
-            {
-              // resize, and compute f2
-              f2Values.resize(valuesDim);
-              _f2->values(f2Values,basisCache);
-            }
-            Scalar* value = &values[values.getEnumeration(dim)];
-            Scalar* f2Value = &f2Values[f2Values.getEnumeration(dim)];
-            for (int entryIndex=0; entryIndex<entriesPerPoint; entryIndex++)
-            {
-              *value++ = *f2Value++;
-            }
-          }
-        }
-      }
-    }
+    _f->values(values, basisCache);
+  }
+  virtual void values(DeviceView<Scalar> &values, ValueModificationType modType, BasisCachePtr basisCache)
+  {
+    _f->values(values, modType, basisCache);
   }
 };
 
@@ -355,6 +286,69 @@ void TBC<Scalar>::imposeBC(Camellia::FieldContainer<Scalar> &dirichletValues, Ca
       f->values(dirichletValues,basisCache);
     }
   }
+}
+
+template <typename Scalar>
+void TBC<Scalar>::imposeBC(DeviceView<Scalar> dirichletValues, DeviceView<bool> imposeHere,
+                           int varID, DeviceViewConst<Scalar> unitNormals, BasisCachePtr basisCache)
+{
+  Camellia::FieldContainer<double> physicalPoints = basisCache->getPhysicalCubaturePoints();
+  
+  int numCells = physicalPoints.dimension(0);
+  int numPoints = physicalPoints.dimension(1);
+  int spaceDim = physicalPoints.dimension(2);
+  
+  TEUCHOS_TEST_FOR_EXCEPTION( ( dirichletValues.dimension(0) != numCells )
+                             || ( dirichletValues.dimension(1) != numPoints )
+                             || ( dirichletValues.rank() != 2  ),
+                             std::invalid_argument,
+                             "dirichletValues dimensions should be (numCells,numPoints).");
+  TEUCHOS_TEST_FOR_EXCEPTION( ( imposeHere.dimension(0) != numCells )
+                             || ( imposeHere.dimension(1) != numPoints )
+                             || ( imposeHere.rank() != 2  ),
+                             std::invalid_argument,
+                             "imposeHere dimensions should be (numCells,numPoints).");
+  
+  TEUCHOS_TEST_FOR_EXCEPTION( spaceDim > 3, std::invalid_argument,
+                             "spaceDim > 3 not yet supported by imposeBC." );
+  
+  Kokkos::deep_copy(imposeHere,false);
+  
+  if ( _dirichletBCs.find(varID) == _dirichletBCs.end() )
+  {
+    TEUCHOS_TEST_FOR_EXCEPTION(true, std::invalid_argument, "Attempt to impose BC on varID without BCs.");
+  }
+  
+  TDirichletBC<Scalar> bc = _dirichletBCs[varID];
+  SpatialFilterPtr filter = bc.first;
+  TFunctionPtr<Scalar> f = bc.second;
+  
+  auto & points        = basisCache->getPhysicalCubaturePoints();
+  auto pointsView      = points.checkoutDeviceView();
+  
+  if (basisCache->isSideCache())
+  {
+    unsigned sideOrdinal = basisCache->getSideIndex();
+    // for non-space-time BasisCaches, every side is spatial
+    bool isSpatialSide = !basisCache->cellTopologyIsSpaceTime() || basisCache->cellTopology()->sideIsSpatial(sideOrdinal);
+    
+    if (isSpatialSide && filter->matchesSpatialSides())
+    {
+      filter->matchesPoints(imposeHere,pointsView);
+      f->values(dirichletValues,ASSIGN,basisCache);
+    }
+    else if (!isSpatialSide && filter->matchesTemporalSides())
+    {
+      filter->matchesPoints(imposeHere,pointsView);
+      f->values(dirichletValues,ASSIGN,basisCache);
+    }
+  }
+  else
+  {
+    filter->matchesPoints(imposeHere,pointsView);
+    f->values(dirichletValues,ASSIGN,basisCache);
+  }
+  points.checkinDeviceView();
 }
 
 template <typename Scalar>

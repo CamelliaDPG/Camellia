@@ -1810,16 +1810,18 @@ namespace Camellia
                                                      int solutionOrdinal)
   {
     TLinearTermPtr<Scalar> functional = Teuchos::rcp(new LinearTerm());
-    for (typename vector< TBilinearTerm<Scalar> >:: iterator btIt = _terms.begin();
-         btIt != _terms.end(); btIt++)
+    auto trialVarMap = _varFactory->trialVars();
+    std::vector<VarPtr> trialVars;
+    for (auto trialEntry : trialVarMap)
     {
-      TBilinearTerm<Scalar> bt = *btIt;
-      TLinearTermPtr<Scalar> trialTerm = btIt->first;
-      TLinearTermPtr<Scalar> testTerm = btIt->second;
-      bool multiplyFluxesByParity = true; // default for PreviousSolutionFunction constructor
-      TFunctionPtr<Scalar> trialValue = Teuchos::rcp( new PreviousSolutionFunction<Scalar>(trialSolution, trialTerm,
-                                                                                           multiplyFluxesByParity, solutionOrdinal) );
-      static_cast< PreviousSolutionFunction<Scalar>* >(trialValue.get())->setOverrideMeshCheck(overrideMeshCheck);
+      trialVars.push_back(trialEntry.second);
+    }
+    auto solnMap = PreviousSolutionFunction<Scalar>::functionMap(trialVars, trialSolution, solutionOrdinal);
+    for (TBilinearTerm<Scalar> & bt : _terms)
+    {
+      TLinearTermPtr<Scalar> trialTerm = bt.first;
+      TLinearTermPtr<Scalar> testTerm  = bt.second;
+      TFunctionPtr<Scalar> trialValue = trialTerm->evaluate(solnMap);
       if ( (! excludeBoundaryTerms) || (! trialValue->boundaryValueOnly()) )
       {
 //        cout << "Adding " << (trialValue * testTerm)->displayString() << " to functional.\n";
