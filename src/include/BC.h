@@ -44,7 +44,10 @@ public:
   virtual bool bcsImposed(int varID); // returns true if there are any BCs anywhere imposed on varID
   virtual void imposeBC(Camellia::FieldContainer<Scalar> &dirichletValues, Camellia::FieldContainer<bool> &imposeHere,
                         int varID, Camellia::FieldContainer<double> &unitNormals, BasisCachePtr basisCache);
-
+  
+  virtual void imposeBC(DeviceView<Scalar> dirichletValues, DeviceView<bool> imposeHere,
+                        int varID, DeviceViewConst<Scalar> unitNormals, BasisCachePtr basisCache);
+  
   virtual void imposeBC(int varID, Camellia::FieldContainer<double> &physicalPoints,
                         Camellia::FieldContainer<double> &unitNormals,
                         Camellia::FieldContainer<Scalar> &dirichletValues,

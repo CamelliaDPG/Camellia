@@ -18,7 +18,6 @@
 #include "PenaltyConstraints.h"
 #include "PoissonFormulation.h"
 #include "H1ProjectionFormulation.h"
-#include "PreviousSolutionFunction.h"
 #include "SimpleFunction.h"
 #include "SuperLUDistSolver.h"
 #include "LagrangeConstraints.h"
@@ -1606,9 +1605,10 @@ TFunctionPtr<double> OldroydBFormulationUWReduced::getVelocitySolution()
 
 TFunctionPtr<double> OldroydBFormulationUWReduced::getVorticity()
 {
-  LinearTermPtr u1_dy = (1.0 / _muS) * this->L(1,2);
-  LinearTermPtr u2_dx = (1.0 / _muS) * this->L(2,1);
-
-  TFunctionPtr<double> vorticity = Teuchos::rcp( new PreviousSolutionFunction<double>(_backgroundFlow, u2_dx - u1_dy) );
+  FunctionPtr u1_dy = (1.0 / _muS) * Function::solution(this->L(1,2), _backgroundFlow);
+  FunctionPtr u2_dx = (1.0 / _muS) * Function::solution(this->L(2,1), _backgroundFlow);
+  
+  FunctionPtr vorticity = u2_dx - u1_dy;
+  
   return vorticity;
 }

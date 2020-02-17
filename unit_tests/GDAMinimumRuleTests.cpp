@@ -1186,6 +1186,21 @@ namespace
       bool zMatch = (abs(z) < tol) || (abs(z-1.0) < tol);
       return xMatch || yMatch || zMatch;
     }
+    void matchesPoints(DeviceView<bool> pointsMatch, DeviceViewConst<double> points)
+    {
+      auto rangePolicy = Camellia::FieldContainer<bool>::getMDRangePolicy2(pointsMatch);
+      Kokkos::parallel_for(rangePolicy, KOKKOS_LAMBDA(const int cellOrdinal, const int pointOrdinal)
+      {
+        const double tol = 1e-14;
+        const double & x = points(cellOrdinal,pointOrdinal,0);
+        const double & y = points(cellOrdinal,pointOrdinal,1);
+        const double & z = points(cellOrdinal,pointOrdinal,2);
+        bool xMatch = (abs(x) < tol) || (abs(x-1.0) < tol);
+        bool yMatch = (abs(y) < tol) || (abs(y-1.0) < tol);
+        bool zMatch = (abs(z) < tol) || (abs(z-1.0) < tol);
+        pointsMatch(cellOrdinal,pointOrdinal) = xMatch || yMatch || zMatch;
+      });
+    }
   };
   
   // ! copied from DPGTests GDAMinimumRuleTests

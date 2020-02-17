@@ -70,6 +70,70 @@ void SpatiallyFilteredFunction<Scalar>::values(Camellia::FieldContainer<Scalar> 
 }
 
 template <typename Scalar>
+void SpatiallyFilteredFunction<Scalar>::values(DeviceView<Scalar> &values, ValueModificationType modType, BasisCachePtr basisCache)
+{
+  int numCells = values.extent_int(0);
+  int numPoints = values.extent_int(1);
+  
+  auto &points = basisCache->getPhysicalCubaturePoints();
+  auto pointsView = points.checkoutDeviceView();
+  
+  DeviceView<bool> filterMatches = SharedScratchStorage<bool>::sharedScratchStorage().checkoutScratchStorage({numCells, numPoints});
+  _sf->matchesPoints(filterMatches, pointsView);
+  
+  Kokkos::fence(); // ensure matchesPoints has completed prior to reducing over filterMatches
+  
+  // notionally somePointMatches is boolean, but to use Kokkos automatic reduction inference, we need int
+  int somePointMatches = false;
+  auto rangePolicy = FieldContainer<bool>::getMDRangePolicy2(filterMatches);
+  Kokkos::parallel_reduce("SpatiallyFilteredFunction: some point matches", rangePolicy,
+  KOKKOS_LAMBDA (const int& i, const int &j, int& localSum )
+  {
+    localSum |= filterMatches(i,j);
+  },somePointMatches);
+
+  DeviceView<Scalar> functionValues = SharedScratchStorage<Scalar>::sharedScratchStorage().checkoutScratchStorageMatchingDeviceView(values);
+  if (somePointMatches)
+  {
+    _f->values(functionValues,ASSIGN,basisCache);
+    Kokkos::fence(); // ensure functionValues is filled before filtering
+  }
+  
+  if ( !somePointMatches && ((modType == ASSIGN) || (modType == MULTIPLY)))
+  {
+    // no point matched ==> our value is everywhere 0
+    // if we're assigning:   fill with 0.
+    // if we're multiplying: fill with 0.
+    Kokkos::deep_copy(values, 0.0);
+  }
+  else if ( !somePointMatches && ((modType == ADD) || (modType == SUBTRACT)))
+  {
+    // no point matched ==> our value is everywhere 0
+    // if we're adding to or subtracting from values, we should leave values just as it is.
+  }
+  else
+  {
+    const int dim6 = functionValues.extent_int(6);
+    using array_index_type = Kokkos::MDRangePolicy< Kokkos::Rank<6> >::array_index_type;
+    Kokkos::parallel_for("SpatiallyFilteredFunction assignment", FieldContainer<double>::getMDRangePolicy6(values),
+    KOKKOS_LAMBDA (const array_index_type i0, const array_index_type i1, const array_index_type i2,
+                   const array_index_type i3, const array_index_type i4, const array_index_type i5)
+    {
+      for (int i6=0; i6<dim6; i6++)
+      {
+        const Scalar value = filterMatches(i0, i1) ? functionValues.access(i0,i1,i2,i3,i4,i5,i6) : 0.0;
+        assignValue(values.access(i0,i1,i2,i3,i4,i5,i6),modType,value);
+      }
+    });
+  }
+  
+  Kokkos::fence(); // ensure we're done with the containers before we return them
+  points.checkinDeviceView();
+  SharedScratchStorage<bool>::sharedScratchStorage().checkinScratchStorage(filterMatches);
+  SharedScratchStorage<Scalar>::sharedScratchStorage().checkinScratchStorage(functionValues);
+}
+
+template <typename Scalar>
 TFunctionPtr<Scalar> SpatiallyFilteredFunction<Scalar>::curl()
 {
   return Teuchos::rcp( new SpatiallyFilteredFunction<Scalar>(_f->curl(), _sf));

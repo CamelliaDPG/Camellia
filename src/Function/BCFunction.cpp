@@ -43,6 +43,38 @@ void BCFunction<Scalar>::values(Camellia::FieldContainer<Scalar> &values, BasisC
 }
 
 template <typename Scalar>
+void BCFunction<Scalar>::values(DeviceView<Scalar> &values, ValueModificationType modType, BasisCachePtr basisCache)
+{
+  int numCells = basisCache->cellIDs().size();
+  int numPoints = basisCache->getPhysicalCubaturePoints().dimension(1);
+  _imposeHere.resize(numCells,numPoints);
+  DeviceView<bool> imposeHereView = _imposeHere.checkoutDeviceView(false); // don't deep copy; _bc will overwrite
+  DeviceViewConst<Scalar> unitNormalsView = basisCache->getSideNormals().checkoutDeviceView();
+  
+  if (modType == ASSIGN)
+  {
+    _bc->imposeBC(values, imposeHereView, _varID, unitNormalsView, basisCache);
+  }
+  else
+  {
+    DeviceView<Scalar> bcValues = SharedScratchStorage<Scalar>::sharedScratchStorage().checkoutScratchStorageMatchingDeviceView(values);
+    // bcValues comes to us uninitialized, and _bc will not necessarily overwrite the whole container, so we should clear first
+    Kokkos::deep_copy(bcValues, 0.0);
+    _bc->imposeBC(bcValues, imposeHereView, _varID, unitNormalsView, basisCache);
+    
+    Kokkos::fence(); // ensure that imposeBC completes before we assignValues
+    assignValues<Scalar>(values, modType, bcValues);
+    Kokkos::fence(); // ensure that assignValues completes before we return bcValues
+    SharedScratchStorage<Scalar>::sharedScratchStorage().checkinScratchStorage(bcValues);
+  }
+  
+//  points.checkinDeviceView();
+  basisCache->getSideNormals().checkinDeviceView();
+  _imposeHere.checkinDeviceView();
+  basisCache->getSideNormals().checkinDeviceView();
+}
+
+template <typename Scalar>
 bool BCFunction<Scalar>::imposeOnCell(int cellIndex)
 {
   // returns true if at least one cubature point lies within the SpatialFilter or equivalent

@@ -16,6 +16,18 @@ public:
     _xToMatch = xToMatch;
     _tol = tol;
   }
+  void matchesPoints(DeviceView<bool> pointsMatch, DeviceViewConst<double> points)
+  {
+    double xToMatch = _xToMatch;
+    double tol      = _tol;
+    auto rangePolicy = Camellia::FieldContainer<bool>::getMDRangePolicy2(pointsMatch);
+    Kokkos::parallel_for(rangePolicy, KOKKOS_LAMBDA(const int cellOrdinal, const int pointOrdinal)
+    {
+      const double & x = points(cellOrdinal,pointOrdinal,0);
+      pointsMatch(cellOrdinal,pointOrdinal) = (std::abs(x-xToMatch) < tol);
+    });
+  }
+  
   bool matchesPoint(double x)
   {
     if (abs(x-_xToMatch)<_tol)
@@ -47,6 +59,19 @@ public:
     _yToMatch = yToMatch;
     _tol = tol;
   }
+  
+  void matchesPoints(DeviceView<bool> pointsMatch, DeviceViewConst<double> points)
+  {
+    double yToMatch = _yToMatch;
+    double tol      = _tol;
+    auto rangePolicy = Camellia::FieldContainer<bool>::getMDRangePolicy2(pointsMatch);
+    Kokkos::parallel_for(rangePolicy, KOKKOS_LAMBDA(const int cellOrdinal, const int pointOrdinal)
+    {
+      const double & y = points(cellOrdinal,pointOrdinal,1);
+      pointsMatch(cellOrdinal,pointOrdinal) = (std::abs(y-yToMatch) < tol);
+    });
+  }
+  
   bool matchesPoint(double x, double y)
   {
     if (abs(y-_yToMatch)<_tol)
@@ -74,6 +99,17 @@ public:
     _zToMatch = zToMatch;
     _tol = tol;
   }
+  void matchesPoints(DeviceView<bool> pointsMatch, DeviceViewConst<double> points)
+  {
+    double zToMatch = _zToMatch;
+    double tol      = _tol;
+    auto rangePolicy = Camellia::FieldContainer<bool>::getMDRangePolicy2(pointsMatch);
+    Kokkos::parallel_for(rangePolicy, KOKKOS_LAMBDA(const int cellOrdinal, const int pointOrdinal)
+    {
+      const double & z = points(cellOrdinal,pointOrdinal,2);
+      pointsMatch(cellOrdinal,pointOrdinal) = (std::abs(z-zToMatch) < tol);
+    });
+  }
   bool matchesPoint(double x, double y, double z)
   {
     if (abs(z-_zToMatch)<_tol)
@@ -98,6 +134,18 @@ public:
     _tToMatch = tToMatch;
     _matchSpatialSides = matchSpatialSides;
     _tol = tol;
+  }
+  void matchesPoints(DeviceView<bool> pointsMatch, DeviceViewConst<double> points)
+  {
+    double tToMatch  = _tToMatch;
+    double tol       = _tol;
+    auto rangePolicy = Camellia::FieldContainer<bool>::getMDRangePolicy2(pointsMatch);
+    const int tComp  = points.extent_int(3)-1;
+    Kokkos::parallel_for(rangePolicy, KOKKOS_LAMBDA(const int cellOrdinal, const int pointOrdinal)
+    {
+      const double & t = points(cellOrdinal,pointOrdinal,tComp);
+      pointsMatch(cellOrdinal,pointOrdinal) = (std::abs(t-tToMatch) < tol);
+    });
   }
   bool matchesPoint(double x, double t)
   {
@@ -144,13 +192,21 @@ public:
 
 class SpatialFilterLessThanX : public SpatialFilter
 {
-  double _tol;
   double _xToMatch;
 public:
-  SpatialFilterLessThanX(double xToMatch, double tol=1e-14)
+  SpatialFilterLessThanX(double xToMatch)
   {
     _xToMatch = xToMatch;
-    _tol = tol;
+  }
+  void matchesPoints(DeviceView<bool> pointsMatch, DeviceViewConst<double> points)
+  {
+    double xToMatch = _xToMatch;
+    auto rangePolicy = Camellia::FieldContainer<bool>::getMDRangePolicy2(pointsMatch);
+    Kokkos::parallel_for(rangePolicy, KOKKOS_LAMBDA(const int cellOrdinal, const int pointOrdinal)
+    {
+      const double & x = points(cellOrdinal,pointOrdinal,0);
+      pointsMatch(cellOrdinal,pointOrdinal) = (x<xToMatch);
+    });
   }
   bool matchesPoint(double x)
   {
@@ -175,13 +231,21 @@ public:
 
 class SpatialFilterLessThanY : public SpatialFilter
 {
-  double _tol;
   double _yToMatch;
 public:
-  SpatialFilterLessThanY(double yToMatch, double tol=1e-14)
+  SpatialFilterLessThanY(double yToMatch)
   {
     _yToMatch = yToMatch;
-    _tol = tol;
+  }
+  void matchesPoints(DeviceView<bool> pointsMatch, DeviceViewConst<double> points)
+  {
+    double yToMatch = _yToMatch;
+    auto rangePolicy = Camellia::FieldContainer<bool>::getMDRangePolicy2(pointsMatch);
+    Kokkos::parallel_for(rangePolicy, KOKKOS_LAMBDA(const int cellOrdinal, const int pointOrdinal)
+    {
+      const double & y = points(cellOrdinal,pointOrdinal,1);
+      pointsMatch(cellOrdinal,pointOrdinal) = (y<yToMatch);
+    });
   }
   bool matchesPoint(double x, double y)
   {
@@ -202,13 +266,21 @@ public:
 
 class SpatialFilterLessThanZ : public SpatialFilter
 {
-  double _tol;
   double _zToMatch;
 public:
-  SpatialFilterLessThanZ(double zToMatch, double tol=1e-14)
+  SpatialFilterLessThanZ(double zToMatch)
   {
     _zToMatch = zToMatch;
-    _tol = tol;
+  }
+  void matchesPoints(DeviceView<bool> pointsMatch, DeviceViewConst<double> points)
+  {
+    double zToMatch = _zToMatch;
+    auto rangePolicy = Camellia::FieldContainer<bool>::getMDRangePolicy2(pointsMatch);
+    Kokkos::parallel_for(rangePolicy, KOKKOS_LAMBDA(const int cellOrdinal, const int pointOrdinal)
+    {
+      const double & z = points(cellOrdinal,pointOrdinal,2);
+      pointsMatch(cellOrdinal,pointOrdinal) = (z<zToMatch);
+    });
   }
   bool matchesPoint(double x, double y, double z)
   {
@@ -225,13 +297,21 @@ public:
 
 class SpatialFilterGreaterThanX : public SpatialFilter
 {
-  double _tol;
   double _xToMatch;
 public:
-  SpatialFilterGreaterThanX(double xToMatch, double tol=1e-14)
+  SpatialFilterGreaterThanX(double xToMatch)
   {
     _xToMatch = xToMatch;
-    _tol = tol;
+  }
+  void matchesPoints(DeviceView<bool> pointsMatch, DeviceViewConst<double> points)
+  {
+    double xToMatch = _xToMatch;
+    auto rangePolicy = Camellia::FieldContainer<bool>::getMDRangePolicy2(pointsMatch);
+    Kokkos::parallel_for(rangePolicy, KOKKOS_LAMBDA(const int cellOrdinal, const int pointOrdinal)
+    {
+      const double & x = points(cellOrdinal,pointOrdinal,0);
+      pointsMatch(cellOrdinal,pointOrdinal) = (x>xToMatch);
+    });
   }
   bool matchesPoint(double x)
   {
@@ -256,13 +336,21 @@ public:
 
 class SpatialFilterGreaterThanY : public SpatialFilter
 {
-  double _tol;
   double _yToMatch;
 public:
-  SpatialFilterGreaterThanY(double yToMatch, double tol=1e-14)
+  SpatialFilterGreaterThanY(double yToMatch)
   {
     _yToMatch = yToMatch;
-    _tol = tol;
+  }
+  void matchesPoints(DeviceView<bool> pointsMatch, DeviceViewConst<double> points)
+  {
+    double yToMatch = _yToMatch;
+    auto rangePolicy = Camellia::FieldContainer<bool>::getMDRangePolicy2(pointsMatch);
+    Kokkos::parallel_for(rangePolicy, KOKKOS_LAMBDA(const int cellOrdinal, const int pointOrdinal)
+    {
+      const double & y = points(cellOrdinal,pointOrdinal,1);
+      pointsMatch(cellOrdinal,pointOrdinal) = (y>yToMatch);
+    });
   }
   bool matchesPoint(double x, double y)
   {
@@ -283,13 +371,21 @@ public:
 
 class SpatialFilterGreaterThanZ : public SpatialFilter
 {
-  double _tol;
   double _zToMatch;
 public:
-  SpatialFilterGreaterThanZ(double zToMatch, double tol=1e-14)
+  SpatialFilterGreaterThanZ(double zToMatch)
   {
     _zToMatch = zToMatch;
-    _tol = tol;
+  }
+  void matchesPoints(DeviceView<bool> pointsMatch, DeviceViewConst<double> points)
+  {
+    double zToMatch = _zToMatch;
+    auto rangePolicy = Camellia::FieldContainer<bool>::getMDRangePolicy2(pointsMatch);
+    Kokkos::parallel_for(rangePolicy, KOKKOS_LAMBDA(const int cellOrdinal, const int pointOrdinal)
+    {
+      const double & z = points(cellOrdinal,pointOrdinal,2);
+      pointsMatch(cellOrdinal,pointOrdinal) = (z>zToMatch);
+    });
   }
   bool matchesPoint(double x, double y, double z)
   {
@@ -430,6 +526,11 @@ SpatialFilterPtr SpatialFilter::negatedFilter(SpatialFilterPtr filterToNegate)
   return Teuchos::rcp( new NegatedSpatialFilter(filterToNegate) );
 }
 
+void SpatialFilterUnfiltered::matchesPoints(DeviceView<bool> pointsMatch, DeviceViewConst<double> points)
+{
+  Kokkos::deep_copy(pointsMatch, true);
+}
+
 bool SpatialFilterUnfiltered::matchesPoint(double x)
 {
   return true;
@@ -561,6 +662,24 @@ bool SpatialFilterLogicalOr::matchesPoint(double x, double y, double z, double t
   return _sf1->matchesPoint(x,y,z,t) || _sf2->matchesPoint(x,y,z,t);
 }
 
+void SpatialFilterLogicalOr::matchesPoints(DeviceView<bool> pointsMatch, DeviceViewConst<double> points)
+{
+  auto pointsMatch2 = SharedScratchStorage<bool>::sharedScratchStorage().checkoutScratchStorageMatchingDeviceView(pointsMatch);
+  Kokkos::deep_copy(pointsMatch2,false);
+  
+  _sf1->matchesPoints(pointsMatch, points);
+  _sf2->matchesPoints(pointsMatch2, points);
+  
+  Kokkos::fence();
+  
+  auto rangePolicy = Camellia::FieldContainer<bool>::getMDRangePolicy2(pointsMatch);
+  Kokkos::parallel_for(rangePolicy, KOKKOS_LAMBDA(const int cellOrdinal, const int pointOrdinal)
+  {
+    pointsMatch(cellOrdinal,pointOrdinal) = pointsMatch(cellOrdinal,pointOrdinal) || pointsMatch2(cellOrdinal,pointOrdinal);
+  });
+  SharedScratchStorage<bool>::sharedScratchStorage().checkinScratchStorage(pointsMatch2);
+}
+
 bool SpatialFilterLogicalOr::matchesPoints(Camellia::FieldContainer<bool> &pointsMatch, BasisCachePtr basisCache)
 {
   const Camellia::FieldContainer<double>* points = &(basisCache->getPhysicalCubaturePoints());
@@ -610,6 +729,25 @@ SpatialFilterLogicalAnd::SpatialFilterLogicalAnd(SpatialFilterPtr sf1, SpatialFi
   _sf1 = sf1;
   _sf2 = sf2;
 }
+
+void SpatialFilterLogicalAnd::matchesPoints(DeviceView<bool> pointsMatch, DeviceViewConst<double> points)
+{
+  auto pointsMatch2 = SharedScratchStorage<bool>::sharedScratchStorage().checkoutScratchStorageMatchingDeviceView(pointsMatch);
+  Kokkos::deep_copy(pointsMatch2,false);
+  
+  _sf1->matchesPoints(pointsMatch, points);
+  _sf2->matchesPoints(pointsMatch2, points);
+  
+  Kokkos::fence();
+  
+  auto rangePolicy = Camellia::FieldContainer<bool>::getMDRangePolicy2(pointsMatch);
+  Kokkos::parallel_for(rangePolicy, KOKKOS_LAMBDA(const int cellOrdinal, const int pointOrdinal)
+  {
+    pointsMatch(cellOrdinal,pointOrdinal) = pointsMatch(cellOrdinal,pointOrdinal) && pointsMatch2(cellOrdinal,pointOrdinal);
+  });
+  SharedScratchStorage<bool>::sharedScratchStorage().checkinScratchStorage(pointsMatch2);
+}
+
 bool SpatialFilterLogicalAnd::matchesPoint(double x)
 {
   return _sf1->matchesPoint(x) && _sf2->matchesPoint(x);
@@ -673,6 +811,20 @@ NegatedSpatialFilter::NegatedSpatialFilter(SpatialFilterPtr filterToNegate)
 {
   _filterToNegate = filterToNegate;
 }
+
+void NegatedSpatialFilter::matchesPoints(DeviceView<bool> pointsMatch, DeviceViewConst<double> points)
+{
+  _filterToNegate->matchesPoints(pointsMatch, points);
+  
+  Kokkos::fence();
+  
+  auto rangePolicy = Camellia::FieldContainer<bool>::getMDRangePolicy2(pointsMatch);
+  Kokkos::parallel_for(rangePolicy, KOKKOS_LAMBDA(const int cellOrdinal, const int pointOrdinal)
+  {
+    pointsMatch(cellOrdinal,pointOrdinal) = ! pointsMatch(cellOrdinal,pointOrdinal);
+  });
+}
+
 bool NegatedSpatialFilter::matchesPoint(double x)
 {
   return ! _filterToNegate->matchesPoint(x);

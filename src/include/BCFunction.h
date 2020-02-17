@@ -26,6 +26,8 @@ class BCFunction : public TFunction<Scalar>
 public:
   BCFunction(BCPtr bc, int varID, TFunctionPtr<Scalar> spatiallyFilteredFunction, int rank);
   void values(Camellia::FieldContainer<Scalar> &values, BasisCachePtr basisCache);
+  void values(DeviceView<Scalar> &values, ValueModificationType modType, BasisCachePtr basisCache);
+  
   bool imposeOnCell(int cellIndex);
   int varID();
 

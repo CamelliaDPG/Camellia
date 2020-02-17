@@ -194,12 +194,12 @@ void PreviousSolutionFunction<Scalar>::values(Camellia::FieldContainer<Scalar> &
 template <typename Scalar>
 map<int, TFunctionPtr<Scalar> > PreviousSolutionFunction<Scalar>::functionMap( vector< VarPtr > varPtrs, TSolutionPtr<Scalar> soln, int solnOrdinal)
 {
+  // TODO: move this somewhere else.  Solution? Function?  Somewhere else; the PreviousSolutionFunction class should be eliminated soon.
   map<int, TFunctionPtr<Scalar> > functionMap;
-  bool multiplyFluxesByParity = true; // constructor's default
-  for (vector< VarPtr >::iterator varIt = varPtrs.begin(); varIt != varPtrs.end(); varIt++)
+  for (VarPtr var : varPtrs)
   {
-    VarPtr var = *varIt;
-    functionMap[var->ID()] = Teuchos::rcp( new PreviousSolutionFunction<Scalar>(soln, var, multiplyFluxesByParity, solnOrdinal));
+    const bool multiplyFluxesByParity = true; // constructor's default
+    functionMap[var->ID()] =  Function::solution(var, soln, multiplyFluxesByParity, solnOrdinal);
   }
   return functionMap;
 }

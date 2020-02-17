@@ -24,6 +24,18 @@ public:
   {
     _RAMP_HEIGHT = rampHeight;
   }
+  void matchesPoints(DeviceView<bool> pointsMatch, DeviceViewConst<double> points)
+  {
+    double tol = 1e-14;
+    double rampHeight = _RAMP_HEIGHT;
+    auto rangePolicy = Camellia::FieldContainer<bool>::getMDRangePolicy2(pointsMatch);
+    Kokkos::parallel_for(rangePolicy, KOKKOS_LAMBDA(const int cellOrdinal, const int pointOrdinal)
+    {
+      const double &x = points(cellOrdinal,pointOrdinal,0);
+      const double &y = points(cellOrdinal,pointOrdinal,1);
+      pointsMatch(cellOrdinal,pointOrdinal) = (abs(rampHeight*(x-1)-y)<tol) && (x>1.0);
+    });
+  }
   bool matchesPoint(double x, double y)
   {
     double tol = 1e-14;

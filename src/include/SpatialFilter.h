@@ -35,6 +35,8 @@ public:
   virtual bool matchesPoint(const vector<double>&point);
   virtual bool matchesPoints(Camellia::FieldContainer<bool> &pointsMatch, BasisCachePtr basisCache);
   
+  virtual void matchesPoints(DeviceView<bool> pointsMatch, DeviceViewConst<double>) = 0;
+  
   virtual bool matchesSpatialSides(); // default: true
   virtual bool matchesTemporalSides(); // default: false
 
@@ -72,6 +74,8 @@ public:
 class SpatialFilterUnfiltered : public SpatialFilter
 {
 public:
+  void matchesPoints(DeviceView<bool> pointsMatch, DeviceViewConst<double>) override;
+  
   virtual bool matchesPoint(const vector<double> &point) override;
 
   virtual bool matchesPoint(double x) override;
@@ -85,6 +89,8 @@ class SpatialFilterLogicalOr : public SpatialFilter
   SpatialFilterPtr _sf1, _sf2;
 public:
   SpatialFilterLogicalOr(SpatialFilterPtr sf1, SpatialFilterPtr sf2);
+  
+  void matchesPoints(DeviceView<bool> pointsMatch, DeviceViewConst<double>) override;
   bool matchesPoints(Camellia::FieldContainer<bool> &pointsMatch, BasisCachePtr basisCache)  override;
 
   //  bool matchesPoint( double x, double y ) {
@@ -105,6 +111,7 @@ class SpatialFilterLogicalAnd : public SpatialFilter
 public:
   SpatialFilterLogicalAnd(SpatialFilterPtr sf1, SpatialFilterPtr sf2);
   bool matchesPoints(Camellia::FieldContainer<bool> &pointsMatch, BasisCachePtr basisCache) override;
+  void matchesPoints(DeviceView<bool> pointsMatch, DeviceViewConst<double>) override;
 
   //  bool matchesPoint( double x, double y ) {
   //    return _sf1->matchesPoint(x,y) || _sf2->matchesPoint(x,y);
@@ -124,6 +131,7 @@ class NegatedSpatialFilter : public SpatialFilter
 public:
   NegatedSpatialFilter(SpatialFilterPtr FilterToNegate);
   bool matchesPoints(Camellia::FieldContainer<bool> &pointsMatch, BasisCachePtr basisCache) override;
+  void matchesPoints(DeviceView<bool> pointsMatch, DeviceViewConst<double>) override;
 
   virtual bool matchesPoint(double x) override;
   virtual bool matchesPoint(double x, double y) override;
