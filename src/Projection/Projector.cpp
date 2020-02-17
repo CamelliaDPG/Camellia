@@ -33,7 +33,6 @@ void Projector<Scalar>::projectFunctionOntoBasis(Camellia::FieldContainer<Scalar
     BasisPtr basis, BasisCachePtr basisCache, TIPPtr<Scalar> ip, VarPtr v,
     set<int> fieldIndicesToSkip)
 {
-  TEUCHOS_FUNC_TIME_MONITOR("Projector<Scalar>::projectFunctionOntoBasis");
   CellTopoPtr cellTopo = basis->domainTopology();
   DofOrderingPtr dofOrderPtr = Teuchos::rcp(new DofOrdering(cellTopo));
 
@@ -225,7 +224,6 @@ template <typename Scalar>
 void Projector<Scalar>::projectFunctionOntoBasis(Camellia::FieldContainer<Scalar> &basisCoefficients, TFunctionPtr<Scalar> fxn,
     BasisPtr basis, BasisCachePtr basisCache)
 {
-  TEUCHOS_FUNC_TIME_MONITOR("Projector<Scalar>::projectFunctionOntoBasis - default IP");
   VarFactoryPtr varFactory = VarFactory::varFactory();
   VarPtr var;
   if (! basisCache->isSideCache())
@@ -260,7 +258,6 @@ template <typename Scalar>
 void Projector<Scalar>::projectFunctionOntoBasisInterpolating(Camellia::FieldContainer<Scalar> &basisCoefficients, TFunctionPtr<Scalar> fxn,
                                                               BasisPtr basis, BasisCachePtr domainBasisCache)
 {
-  TEUCHOS_FUNC_TIME_MONITOR("Projector<Scalar>::projectFunctionOntoBasisInterpolating");
   basisCoefficients.initialize(0);
   CellTopoPtr basisDomainTopo = basis->domainTopology();
   unsigned basisDomainDim = basisDomainTopo->getDimension();
@@ -439,7 +436,6 @@ void Projector<Scalar>::projectChildFunctionOntoParentBasis(Camellia::FieldConta
                                                             RefinementPatternPtr refPattern, const std::vector<BasisCachePtr> &subdomainCaches,
                                                             TIPPtr<Scalar> ip, VarPtr v, set<int> fieldIndicesToSkip)
 {
-  TEUCHOS_FUNC_TIME_MONITOR("Projector<Scalar>::projectChildFunctionOntoParentBasis");
   auto unionCache = BasisCacheFactory<Scalar>::unionBasisCacheForParentCell(refPattern, subdomainCaches);
   
   CellTopoPtr cellTopo = parentBasis->domainTopology();
@@ -642,7 +638,6 @@ template <typename Scalar>
 void Projector<Scalar>::projectChildFunctionOntoParentBasisInterpolating(Camellia::FieldContainer<Scalar> &basisCoefficients, TFunctionPtr<Scalar> childFxn,
                                                                          BasisPtr parentBasis, RefinementPatternPtr refPattern, const std::vector<BasisCachePtr> &subdomainCaches)
 {
-  TEUCHOS_FUNC_TIME_MONITOR("Projector<Scalar>::projectChildFunctionOntoParentBasisInterpolating");
   basisCoefficients.initialize(0);
   CellTopoPtr basisDomainTopo = parentBasis->domainTopology();
   unsigned basisDomainDim = basisDomainTopo->getDimension();
