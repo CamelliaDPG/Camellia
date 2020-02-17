@@ -109,6 +109,8 @@ namespace Camellia
       {
         std::cout << noDevicePathReport;
       }
+      
+      Teuchos::TimeMonitor::summarize(); // prints to console.  TODO: output to a log file
     }
   }
 }
