@@ -35,16 +35,9 @@ std::vector< TFunctionPtr<double> > MinFunction::memberFunctions()
   return {{_f1,_f2}};
 }
 
-void MinFunction::values(FieldContainer<double> &values, BasisCachePtr basisCache)
-{
-  this->CHECK_VALUES_RANK(values);
-  auto dv = values.checkoutDeviceView(false); // false: don't deep_copy from host (will overwrite values)
-  this->values(dv, ASSIGN, basisCache);
-  values.checkinDeviceView();
-}
-
 void MinFunction::values(DeviceView<double> &values, ValueModificationType modType, BasisCachePtr basisCache)
 {
+  TEUCHOS_FUNC_TIME_MONITOR("MinFunction values()");
   if (modType == ASSIGN)
   {
     _f1->values(values, ValueModificationType::ASSIGN, basisCache);
@@ -114,16 +107,9 @@ std::vector< TFunctionPtr<double> > MaxFunction::memberFunctions()
   return {{_f1,_f2}};
 }
 
-void MaxFunction::values(FieldContainer<double> &values, BasisCachePtr basisCache)
-{
-  this->CHECK_VALUES_RANK(values);
-  auto dv = values.checkoutDeviceView(false); // false: don't deep_copy from host (will overwrite values)
-  this->values(dv, ASSIGN, basisCache);
-  values.checkinDeviceView();
-}
-
 void MaxFunction::values(typename FieldContainer<double>::DeviceView &values, ValueModificationType modType, BasisCachePtr basisCache)
 {
+  TEUCHOS_FUNC_TIME_MONITOR("MaxFunction values()");
   if (modType == ASSIGN)
   {
     _f1->values(values, ValueModificationType::ASSIGN, basisCache);

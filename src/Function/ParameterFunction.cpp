@@ -92,16 +92,9 @@ std::vector< TFunctionPtr<double> > ParameterFunction::memberFunctions()
   return {{_fxn}};
 }
 
-void ParameterFunction::values(Camellia::FieldContainer<double> &values, BasisCachePtr basisCache)
-{
-  this->CHECK_VALUES_RANK(values);
-  auto dv = values.checkoutDeviceView(false); // false: don't deep_copy from host (will overwrite values)
-  this->values(dv, ASSIGN, basisCache);
-  values.checkinDeviceView();
-}
-
 void ParameterFunction::values(typename Camellia::FieldContainer<double>::DeviceView &values, ValueModificationType modType, BasisCachePtr basisCache)
 {
+  TEUCHOS_FUNC_TIME_MONITOR("ParameterFunction values()");
   _fxn->values(values,modType,basisCache);
 }
 

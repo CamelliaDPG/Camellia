@@ -24,8 +24,8 @@ namespace
     auto fc = FieldContainer<double>(dim0,dim1);
     auto f = TFunction<double>::constant(-1.0);
     auto f_abs = AbsFunction(f);
-    BasisCachePtr voidBasisCache;
-    f_abs.values(fc, voidBasisCache);
+    BasisCachePtr nullBasisCache;
+    f_abs.TFunction<double>::values(fc, nullBasisCache);
     double expectedValue = 1.0;
     double tol = 1.0e-14;
     for (int i = 0; i < dim0*dim1; i++) {

@@ -27,7 +27,6 @@ public:
   TFunctionPtr<Scalar> y() override;
   TFunctionPtr<Scalar> z() override;
 
-  void values(Camellia::FieldContainer<Scalar> &values, BasisCachePtr basisCache) override;
   void values(typename Camellia::FieldContainer<Scalar>::DeviceView &values, ValueModificationType modType, BasisCachePtr basisCache) override;
   std::vector<Scalar> value();
 };

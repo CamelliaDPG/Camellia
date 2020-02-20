@@ -23,7 +23,6 @@ namespace Camellia
     TFunctionPtr<double> dy() override;
     TFunctionPtr<double> dz() override;
     
-    void values(Camellia::FieldContainer<double> &values, BasisCachePtr basisCache) override;
     void values(typename Camellia::FieldContainer<double>::DeviceView &values, ValueModificationType modType, BasisCachePtr basisCache) override;
     bool boundaryValueOnly() override;
     

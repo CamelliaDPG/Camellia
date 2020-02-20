@@ -152,18 +152,10 @@ BasisSumFunction::BasisSumFunction(BasisPtr basis, const Camellia::FieldContaine
 //  }
 //}
 
-// New host implementation
-void BasisSumFunction::values(Camellia::FieldContainer<double> &values, BasisCachePtr basisCache)
-{
-  this->CHECK_VALUES_RANK(values);
-  auto dv = values.checkoutDeviceView(false); // false: don't deep_copy from host (will overwrite values)
-  this->values(dv, ASSIGN, basisCache);
-  values.checkinDeviceView();
-}
-
 // New device implementation
-void BasisSumFunction::values(typename Camellia::FieldContainer<double>::DeviceView &values, ValueModificationType modType, BasisCachePtr basisCache)
+void BasisSumFunction::values(DeviceView<double> &values, ValueModificationType modType, BasisCachePtr basisCache)
 {
+  TEUCHOS_FUNC_TIME_MONITOR("BasisSumFunction values()");
   if (_overridingBasisCache.get() != NULL)
   {
     // we want to transform the physical "cubature" points given by basisCache into reference points on the _overridingBasisCache,

@@ -317,6 +317,25 @@ void TFunction<Scalar>::values(Camellia::FieldContainer<Scalar> &values, Camelli
   auto thisPtr = Teuchos::rcp(this,false); // false: does not own memory
   return TFunction<Scalar>::op(thisPtr, op)->values(values,basisCache);
 }
+  
+template <typename Scalar>
+void TFunction<Scalar>::values(Camellia::FieldContainer<Scalar> &values, BasisCachePtr basisCache)
+{
+  TEUCHOS_FUNC_TIME_MONITOR("Function::values() - host path");
+  this->CHECK_VALUES_RANK(values);
+  auto dv = values.checkoutDeviceView(false); // false: don't deep_copy from host (will overwrite values)
+  if (!_callingDevicePathValues)
+  {
+    _callingDevicePathValues = true;
+    this->values(dv, ASSIGN, basisCache);
+    _callingDevicePathValues = false;
+  }
+  else
+  {
+    TEUCHOS_TEST_FOR_EXCEPTION(true, std::invalid_argument, "Function subclasses should implement at least one of the two values() methods, preferably the \"device-path\" variant");
+  }
+  values.checkinDeviceView();
+}
  
 template <typename Scalar>
 void TFunction<Scalar>::values(typename Camellia::FieldContainer<Scalar>::DeviceView &values, ValueModificationType modType,

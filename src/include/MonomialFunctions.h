@@ -24,7 +24,6 @@ class Xn : public TFunction<double>
   int _n;
 public:
   Xn(int n);
-  void values(Camellia::FieldContainer<double> &values, BasisCachePtr basisCache) override;
   void values(typename Camellia::FieldContainer<double>::DeviceView &values, ValueModificationType modType, BasisCachePtr basisCache) override;
   TFunctionPtr<double> dx() override;
   TFunctionPtr<double> dy() override;
@@ -38,7 +37,6 @@ class Yn : public TFunction<double>
   int _n;
 public:
   Yn(int n);
-  void values(Camellia::FieldContainer<double> &values, BasisCachePtr basisCache) override;
   void values(typename Camellia::FieldContainer<double>::DeviceView &values, ValueModificationType modType, BasisCachePtr basisCache) override;
   TFunctionPtr<double> dx() override;
   TFunctionPtr<double> dy() override;
@@ -52,7 +50,6 @@ class Zn : public TFunction<double>
   int _n;
 public:
   Zn(int n);
-  void values(Camellia::FieldContainer<double> &values, BasisCachePtr basisCache) override;
   void values(typename Camellia::FieldContainer<double>::DeviceView &values, ValueModificationType modType, BasisCachePtr basisCache) override;
   TFunctionPtr<double> dx() override;
   TFunctionPtr<double> dy() override;
@@ -66,7 +63,6 @@ class Tn : public TFunction<double>
   int _n;
 public:
   Tn(int n);
-  void values(Camellia::FieldContainer<double> &values, BasisCachePtr basisCache) override;
   void values(typename Camellia::FieldContainer<double>::DeviceView &values, ValueModificationType modType, BasisCachePtr basisCache) override;
   TFunctionPtr<double> dx() override;
   TFunctionPtr<double> dy() override;

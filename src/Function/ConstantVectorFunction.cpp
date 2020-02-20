@@ -75,17 +75,9 @@ bool ConstantVectorFunction<Scalar>::isZero()
 }
 
 template <typename Scalar>
-void ConstantVectorFunction<Scalar>::values(Camellia::FieldContainer<Scalar> &values, BasisCachePtr basisCache)
-{
-  this->CHECK_VALUES_RANK(values);
-  auto dv = values.checkoutDeviceView(false); // false: don't deep_copy from host (will overwrite values)
-  this->values(dv, ASSIGN, basisCache);
-  values.checkinDeviceView();
-}
-
-template <typename Scalar>
 void ConstantVectorFunction<Scalar>::values(typename Camellia::FieldContainer<Scalar>::DeviceView &values, ValueModificationType modType, BasisCachePtr basisCache)
 {
+  TEUCHOS_FUNC_TIME_MONITOR("ConstantVectorFunction values()");
   const int dim2 = values.extent_int(2);
   TEUCHOS_TEST_FOR_EXCEPTION(dim2 > _value.size(), std::invalid_argument, "spaceDim is greater than length of vector...");
   

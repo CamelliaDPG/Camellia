@@ -1119,13 +1119,13 @@ TEUCHOS_UNIT_TEST( Function, AddToValues )
   auto fc = FieldContainer<double>(dim0,dim1);
   auto f1 = TFunction<double>::constant(1.0);
   auto f2 = TFunction<double>::constant(2.0);
-  BasisCachePtr voidBasisCache;
+  BasisCachePtr nullBasisCache;
   
   double expectedValue = 3.0;
   double tol = 1.0e-14;
   
-  f1->values(fc, voidBasisCache);
-  f2->addToValues(fc, voidBasisCache);
+  f1->values(fc, nullBasisCache);
+  f2->addToValues(fc, nullBasisCache);
   
   for (int i = 0; i < dim0*dim1; i++) {
     TEST_FLOATING_EQUALITY(expectedValue,fc[i],tol);
@@ -1139,16 +1139,16 @@ TEUCHOS_UNIT_TEST( Function, ScalarModifyFunctionValues )
   auto fc_div = FieldContainer<double>(dim0,dim1);
   auto f2 = TFunction<double>::constant(2.0);
   auto f4 = TFunction<double>::constant(4.0);
-  BasisCachePtr voidBasisCache;
+  BasisCachePtr nullBasisCache;
   
   double expectedValueMultiply = 8.0;
   double expectedValueDivide   = 0.5;
   double tol = 1.0e-14;
   
-  f2->values(fc_mul, voidBasisCache);
-  f2->values(fc_div, voidBasisCache);
-  f4->scalarMultiplyFunctionValues(fc_mul, voidBasisCache);
-  f4->scalarDivideFunctionValues  (fc_div, voidBasisCache);
+  f2->values(fc_mul, nullBasisCache);
+  f2->values(fc_div, nullBasisCache);
+  f4->scalarMultiplyFunctionValues(fc_mul, nullBasisCache);
+  f4->scalarDivideFunctionValues  (fc_div, nullBasisCache);
   
   for (int i = 0; i < dim0*dim1; i++) {
     TEST_FLOATING_EQUALITY(expectedValueMultiply,fc_mul[i],tol);
@@ -1165,16 +1165,16 @@ TEUCHOS_UNIT_TEST( Function, ScalarModifyBasisValues )
   auto f2 = TFunction<double>::constant(v2);
   auto f4 = TFunction<double>::constant(4.0);
   f4 = TFunction<double>::min(f4,4.0);
-  BasisCachePtr voidBasisCache;
+  BasisCachePtr nullBasisCache;
   
   double expectedValueMultiply = 8.0;
   double expectedValueDivide   = 0.5;
   double tol = 1.0e-14;
   
-  f2->values(fc_mul, voidBasisCache);
-  f2->values(fc_div, voidBasisCache);
-  f4->scalarMultiplyBasisValues(fc_mul, voidBasisCache);
-  f4->scalarDivideBasisValues  (fc_div, voidBasisCache);
+  f2->values(fc_mul, nullBasisCache);
+  f2->values(fc_div, nullBasisCache);
+  f4->scalarMultiplyBasisValues(fc_mul, nullBasisCache);
+  f4->scalarDivideBasisValues  (fc_div, nullBasisCache);
   
   for (int i = 0; i < dim0*dim1*dim2; i++) {
     TEST_FLOATING_EQUALITY(expectedValueMultiply,fc_mul[i],tol);

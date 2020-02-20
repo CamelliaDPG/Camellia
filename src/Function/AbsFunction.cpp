@@ -36,18 +36,11 @@ std::vector< TFunctionPtr<double> > AbsFunction::memberFunctions()
   return {{_f}};
 }
 
-void AbsFunction::values(FieldContainer<double> &values, BasisCachePtr basisCache)
-{
-  this->CHECK_VALUES_RANK(values);
-  auto dv = values.checkoutDeviceView(false); // false: don't deep_copy from host (will overwrite values)
-  this->values(dv, ASSIGN, basisCache);
-  values.checkinDeviceView();
-}
-
 void AbsFunction::values(typename FieldContainer<double>::DeviceView &values, ValueModificationType modType, BasisCachePtr basisCache)
 {
+  TEUCHOS_FUNC_TIME_MONITOR("AbsFunction values()");
   TEUCHOS_TEST_FOR_EXCEPTION(values.rank() != 2, std::invalid_argument, "rank is not equal to 2");
-  auto dv = basisCache->checkoutScratchStorage<double>(values);
+  auto dv = SharedScratchStorage<double>::sharedScratchStorage().checkoutScratchStorageMatchingDeviceView(values);
   _f->values(dv, ASSIGN, basisCache);
   Kokkos::fence();
   auto rangePolicy = Camellia::FieldContainer<double>::getMDRangePolicy2(values);
@@ -55,7 +48,7 @@ void AbsFunction::values(typename FieldContainer<double>::DeviceView &values, Va
   KOKKOS_LAMBDA (const int i0, const int i1) {
     assignValue(values(i0,i1), modType, fabs(dv(i0,i1)));
   });
-  basisCache->checkinScratchStorage<double>(dv);
+  SharedScratchStorage<double>::sharedScratchStorage().checkinScratchStorage(dv);
 }
 
 TFunctionPtr<double> AbsFunction::dx()
