@@ -501,20 +501,6 @@ void TSolution<Scalar>::applyDGJumpTerms()
       // TODO: relax this assumption
       TEUCHOS_TEST_FOR_EXCEPTION(trialTerm->rank() > 0, std::invalid_argument, "Only scalar-valued DG jump terms are supported right now");
       TEUCHOS_TEST_FOR_EXCEPTION(testTerm->rank() > 0, std::invalid_argument, "Only scalar-valued DG jump terms are supported right now");
-      
-      const std::set<int> * trialVarIDs = &trialTerm->varIDs();
-      const std::set<int> * testVarIDs = &testTerm->varIDs();
-      
-      for (int trialVarID : *trialVarIDs)
-      {
-        int trialDegree = trialOrder->getBasis(trialVarID)->getDegree();
-        
-        for (int testVarID : *testVarIDs)
-        {
-          int testDegree = testOrder->getBasis(testVarID)->getDegree();
-          int myMaxCubatureDegree = max(myMaxCubatureDegree,testDegree+trialDegree);
-        }
-      }
     }
     
     for (TBilinearTerm<Scalar> bilinearTerm : *bilinearTerms)
@@ -1080,6 +1066,7 @@ void TSolution<Scalar>::invalidateCachedBasisCoefficientsForFields()
 template <typename Scalar>
 void TSolution<Scalar>::populateStiffnessAndLoad()
 {
+  TEUCHOS_FUNC_TIME_MONITOR("Solution::populateStiffnessAndLoad");
   narrate("populateStiffnessAndLoad()");
   Epetra_CommPtr Comm = _mesh->Comm();
   int rank = Comm->MyPID();
@@ -1499,6 +1486,7 @@ void TSolution<Scalar>::setProblem(TSolverPtr<Scalar> solver)
 template <typename Scalar>
 int TSolution<Scalar>::solveWithPrepopulatedStiffnessAndLoad(TSolverPtr<Scalar> solver, bool callResolveInsteadOfSolve)
 {
+  TEUCHOS_FUNC_TIME_MONITOR("Solution::solveWithPrepopulatedStiffnessAndLoad");
   narrate("solveWithPrepopulatedStiffnessAndLoad()");
   
   int timerHandle = TimeLogger::sharedInstance()->startTimer(SOLVER_TIMER_STRING);
@@ -1663,6 +1651,7 @@ TRHSPtr<Scalar> TSolution<Scalar>::rhs() const
 template <typename Scalar>
 void TSolution<Scalar>::importSolution()
 {
+  TEUCHOS_FUNC_TIME_MONITOR("Solution::importSolution");
   Epetra_CommPtr Comm = _mesh->Comm();
   Epetra_Time timer(*Comm);
 
@@ -1971,6 +1960,7 @@ TBFPtr<Scalar> TSolution<Scalar>::bf() const
 template <typename Scalar>
 void TSolution<Scalar>::imposeBCs()
 {
+  TEUCHOS_FUNC_TIME_MONITOR("Solution::imposeBCs");
   narrate("imposeBCs()");
   int rank = _mesh->Comm()->MyPID();
 
@@ -2813,6 +2803,8 @@ template <typename Scalar>
 void TSolution<Scalar>::solutionValues(Camellia::FieldContainer<Scalar> &values, int trialID, BasisCachePtr basisCache,
                                        bool weightForCubature, Camellia::EOperator op, int solutionOrdinal)
 {
+  // TODO: consider rewriting this to simply call the device-path variant below.  (This implementation preceded that one.)
+  TEUCHOS_FUNC_TIME_MONITOR("Solution::solutionValues - host path");
   values.initialize(0.0);
   vector<GlobalIndexType> cellIDs = basisCache->cellIDs();
   int sideIndex = basisCache->getSideIndex();
@@ -2934,6 +2926,7 @@ template <typename Scalar>
 void TSolution<Scalar>::solutionValues(typename Camellia::FieldContainer<Scalar>::DeviceView &values, int trialID, BasisCachePtr basisCache,
                                        bool weightForCubature, Camellia::EOperator op, int solutionOrdinal)
 {
+  TEUCHOS_FUNC_TIME_MONITOR("Solution::solutionValues");
   Kokkos::deep_copy(values,0.0);
   const vector<GlobalIndexType> & cellIDs = basisCache->cellIDs();
   int numCells = cellIDs.size();
@@ -2951,6 +2944,7 @@ void TSolution<Scalar>::solutionValues(typename Camellia::FieldContainer<Scalar>
   Teuchos::RCP<const Camellia::FieldContainer<double>> solnBasisCoefficientsForCell;
   if (!fluxOrTrace && (cellIDs != _cachedCellBasisCoefficientsForFieldsCellIDs))
   {
+    TEUCHOS_FUNC_TIME_MONITOR("Solution::solutionValues - set up new coefficients cache");
     // set up a new cache
     invalidateCachedBasisCoefficientsForFields();
     
@@ -2994,6 +2988,7 @@ void TSolution<Scalar>::solutionValues(typename Camellia::FieldContainer<Scalar>
   }
   else if (fluxOrTrace)
   {
+    TEUCHOS_FUNC_TIME_MONITOR("Solution::solutionValues - flux or trace coefficients");
     // we could add caching for flux and trace coefficients, but this is a much less common use case, I think, so for now we don't.
     const vector<int> &dofIndicesVector = trialOrder->getDofIndices(trialID,sideIndex);
     const int basisCardinality = dofIndicesVector.size();
@@ -3021,6 +3016,7 @@ void TSolution<Scalar>::solutionValues(typename Camellia::FieldContainer<Scalar>
   }
   else
   {
+    TEUCHOS_FUNC_TIME_MONITOR("Solution::solutionValues - look up field coefficients from cache");
     // field variable; can use cache
     std::vector< VarPtr > fieldVars = bf->varFactory()->fieldVars();
     for (int fieldVarOrdinal = 0; fieldVarOrdinal<fieldVars.size(); fieldVarOrdinal++)
@@ -3034,7 +3030,6 @@ void TSolution<Scalar>::solutionValues(typename Camellia::FieldContainer<Scalar>
     }
     TEUCHOS_TEST_FOR_EXCEPTION(solnBasisCoefficientsForCell == Teuchos::null, std::invalid_argument, "Cached solution coefficients not found.");
   }
-  
   
   bool forceVolumeCoords = false; // used for evaluating fields on sides...
   
