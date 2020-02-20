@@ -27,7 +27,7 @@ namespace
     const double x0 = 0.0, x1 = 1.0;
     const int quadratureDegree = 2;
     BasisCachePtr simpleBasisCache = BasisCache::basisCache1D(x0, x1, quadratureDegree);
-    f_exp.values(fc, simpleBasisCache);
+    f_exp.Function::values(fc, simpleBasisCache);
     const double e2 = 7.3890560989306502;
     const double tol = 1.0e-13;
     for (int i = 0; i < dim0*dim1; i++) {
@@ -44,7 +44,7 @@ namespace
     const double x0 = 0.0, x1 = 1.0;
     const int quadratureDegree = 2;
     BasisCachePtr simpleBasisCache = BasisCache::basisCache1D(x0, x1, quadratureDegree);
-    f_ln.values(fc, simpleBasisCache);
+    f_ln.Function::values(fc, simpleBasisCache);
     const double ln2 = 0.6931471805599453;
     const double tol = 1.0e-13;
     for (int i = 0; i < dim0*dim1; i++) {

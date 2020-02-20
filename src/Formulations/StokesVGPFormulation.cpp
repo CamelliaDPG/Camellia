@@ -1301,7 +1301,7 @@ void StokesVGPFormulation::takeTimeStep()
   TEUCHOS_TEST_FOR_EXCEPTION(!_timeStepping, std::invalid_argument, "takeTimeStep() only supported for time-stepping formulation.");
   ConstantScalarFunction<double>* dtValueFxn = dynamic_cast<ConstantScalarFunction<double>*>(_dt->getValue().get());
 
-  double dt = dtValueFxn->value(0);
+  double dt = dtValueFxn->value();
   _time += dt;
   _t->setValue(_time);
 

@@ -43,8 +43,8 @@ namespace
     auto fc = FieldContainer<double>(dim0,dim1,dim2);
     std::vector<double> value = {0.0,1.0};
     auto f = ConstantVectorFunction<double>(value);
-    BasisCachePtr voidBasisCache;
-    f.values(fc, voidBasisCache);
+    BasisCachePtr nullBasisCache;
+    f.Function::values(fc, nullBasisCache);
     double expectedValue0 = 0.0;
     double expectedValue1 = 1.0;
     double tol = 1.0e-14;
@@ -60,8 +60,8 @@ namespace
     auto fc = FieldContainer<double>(dim0,dim1,dim2);
     std::vector<double> value = {0.0,1.0,2.0};
     auto f = ConstantVectorFunction<double>(value);
-    BasisCachePtr voidBasisCache;
-    f.values(fc, voidBasisCache);
+    BasisCachePtr nullBasisCache;
+    f.Function::values(fc, nullBasisCache);
     double expectedValue0 = 0.0;
     double expectedValue1 = 1.0;
     double expectedValue2 = 2.0;

@@ -68,16 +68,9 @@ string UnitNormalFunction::displayString()
   }
 }
 
-void UnitNormalFunction::values(FieldContainer<double> &values, BasisCachePtr basisCache)
-{
-  this->CHECK_VALUES_RANK(values);
-  auto dv = values.checkoutDeviceView(false); // false: don't deep_copy from host (will overwrite values)
-  this->values(dv, ASSIGN, basisCache);
-  values.checkinDeviceView();
-}
-
 void UnitNormalFunction::values(typename FieldContainer<double>::DeviceView &values, ValueModificationType modType, BasisCachePtr basisCache)
 {
+  TEUCHOS_FUNC_TIME_MONITOR("UnitNormalFunction values()");
   int spaceDim = basisCache->getSpaceDim();
   if (_comp == -1)
   {

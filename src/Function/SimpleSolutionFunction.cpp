@@ -101,6 +101,7 @@ void SimpleSolutionFunction<Scalar>::importCellData(std::vector<GlobalIndexType>
 template <typename Scalar>
 void SimpleSolutionFunction<Scalar>::values(Camellia::FieldContainer<Scalar> &values, BasisCachePtr basisCache)
 {
+  TEUCHOS_FUNC_TIME_MONITOR("SimpleSolutionFunction values() - host path");
   // if the device-path values() supports this basisCache, then call that and return.
   // otherwise, use the legacy "host-path" implementation below
   if (basisCache->mesh() != Teuchos::null)
@@ -181,8 +182,9 @@ void SimpleSolutionFunction<Scalar>::values(Camellia::FieldContainer<Scalar> &va
 }
 
 template <typename Scalar>
-void SimpleSolutionFunction<Scalar>::values(typename Camellia::FieldContainer<Scalar>::DeviceView &values, ValueModificationType modType, BasisCachePtr basisCache)
+void SimpleSolutionFunction<Scalar>::values(DeviceView<Scalar> &values, ValueModificationType modType, BasisCachePtr basisCache)
 {
+  TEUCHOS_FUNC_TIME_MONITOR("SimpleSolutionFunction values()");
   bool dontWeightForCubature = false;
   if (basisCache->mesh() != Teuchos::null)   // then we assume that the BasisCache is appropriate for solution's mesh...
   {

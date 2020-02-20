@@ -48,7 +48,6 @@ public:
   TFunctionPtr<double> grad(int numComponents=-1) override; // gradient of sum is the sum of gradients
   TFunctionPtr<double> div() override;  // divergence of sum is sum of divergences
 
-  void values(Camellia::FieldContainer<double> &values, BasisCachePtr basisCache) override;
   void values(typename Camellia::FieldContainer<double>::DeviceView &values, ValueModificationType modType, BasisCachePtr basisCache) override;
   bool boundaryValueOnly() override;
 

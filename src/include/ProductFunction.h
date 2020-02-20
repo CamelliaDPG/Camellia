@@ -27,7 +27,6 @@ private:
   TFunctionPtr<Scalar> _f1, _f2;
 public:
   ProductFunction(TFunctionPtr<Scalar> f1, TFunctionPtr<Scalar> f2);
-  void values(Camellia::FieldContainer<Scalar> &values, BasisCachePtr basisCache) override;
   void values(typename Camellia::FieldContainer<Scalar>::DeviceView &values, ValueModificationType modType, BasisCachePtr basisCache) override;
   virtual bool boundaryValueOnly() override;
 

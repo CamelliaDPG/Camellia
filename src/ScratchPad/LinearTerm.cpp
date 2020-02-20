@@ -240,6 +240,7 @@ template<typename Scalar>
 void TLinearTerm<Scalar>::integrate(Camellia::FieldContainer<Scalar> &values, DofOrderingPtr thisOrdering,
                                     BasisCachePtr basisCache, bool forceBoundaryTerm, bool sumInto)
 {
+  TEUCHOS_FUNC_TIME_MONITOR("LinearTerm integrate one term");
   int timerHandle = TimeLogger::sharedInstance()->startTimer(LINEAR_TERM_INTEGRATION_TIMER_STRING);
   // values has dimensions (numCells, thisFields)
   if (!sumInto) values.initialize();
@@ -467,6 +468,7 @@ void TLinearTerm<Scalar>::integrate(Epetra_CrsMatrix* valuesCrsMatrix, Camellia:
                                     TLinearTermPtr<double> v, DofOrderingPtr vOrdering,
                                     BasisCachePtr basisCache, bool sumInto)
 {
+  TEUCHOS_FUNC_TIME_MONITOR("LinearTerm integrate two terms");
   int timerHandle = TimeLogger::sharedInstance()->startTimer(LINEAR_TERM_INTEGRATION_TIMER_STRING);
   if (!sumInto) valuesFC.initialize();
   if (u->isZero() || v->isZero()) return;
@@ -690,6 +692,7 @@ void TLinearTerm<Scalar>::integrate(Epetra_CrsMatrix *valuesCrsMatrix, Camellia:
                                     TLinearTermPtr<double> otherTerm, DofOrderingPtr otherOrdering,
                                     BasisCachePtr basisCache, bool forceBoundaryTerm, bool sumInto)
 {
+  TEUCHOS_FUNC_TIME_MONITOR("LinearTerm integrate two terms");
   // values has dimensions (numCells, otherFields, thisFields)
   // note that this means when we call the private integrate, we need to use otherTerm as the first TLinearTerm argument
   if (!sumInto) valuesFC.initialize();
@@ -770,6 +773,7 @@ void TLinearTerm<Scalar>::integrate(Camellia::FieldContainer<Scalar> &values, Do
                                     TLinearTermPtr<Scalar> otherTerm, VarPtr otherVar, TFunctionPtr<Scalar> fxn,
                                     BasisCachePtr basisCache, bool forceBoundaryTerm)
 {
+  TEUCHOS_FUNC_TIME_MONITOR("LinearTerm integrate two terms, one evaluated at var=fxn");
   // values has dimensions (numCells, thisFields)
   int timerHandle = TimeLogger::sharedInstance()->startTimer(LINEAR_TERM_INTEGRATION_TIMER_STRING);
   if (!fxn.get())
@@ -825,11 +829,8 @@ void TLinearTerm<Scalar>::integrate(Camellia::FieldContainer<Scalar> &values, Do
 template<typename Scalar>
 bool TLinearTerm<Scalar>::isZero() const   // true if the TLinearTerm is identically zero
 {
-  // DEBUGGING test: pretend we're NEVER zero
-  //return false;
-  for (typename vector< TLinearSummand<Scalar> >::const_iterator lsIt = _summands.begin(); lsIt != _summands.end(); lsIt++)
+  for (TLinearSummand<Scalar> ls : _summands)
   {
-    TLinearSummand<Scalar> ls = *lsIt;
     TFunctionPtr<Scalar> f = ls.first;
     if (! f->isZero() )
     {
@@ -841,17 +842,14 @@ bool TLinearTerm<Scalar>::isZero() const   // true if the TLinearTerm is identic
 
 // compute the value of linearTerm for solution at the BasisCache points
 // values shape: (C,P), (C,P,D), or (C,P,D,D)
-// TODO: consider rewriting this to set up a map varID->simpleSolutionFxn (where SimpleSolutionFunction is a
-//       new class that is just the Solution evaluated at a given varID, might support non-value op as well).
-// (The SimpleSolutionFunction class is now written, though untested.  What remains is to add something such that
-//  TLinearTerm can determine its OP_VALUE VarPtrs so that it can construct the right map.  It would probably suffice
-//  if Var learned about its "base", and then in addition to tracking the varIDs set here, we also tracked vars.)
+// TODO: consider rewriting this to set up a map varID->simpleSolutionFxn (SimpleSolutionFunction
+  //     is just the Solution evaluated for a given varID; this supports non-value op as well).  This implementation could
+  //     then call one of the other LinearTerm::evaluate() methods.
 template<typename Scalar>
 void TLinearTerm<Scalar>::evaluate(Camellia::FieldContainer<Scalar> &values, TSolutionPtr<Scalar> solution, BasisCachePtr basisCache,
                                    bool applyCubatureWeights, int solutionOrdinal)
 {
-  // int sideIndex = basisCache->getSideIndex();
-  //  bool boundaryTerm = (sideIndex != -1);
+  TEUCHOS_FUNC_TIME_MONITOR("LinearTerm::evaluate() - solution argument");
 
   int valuesRankExpected = _rank + 2; // 2 for scalar, 3 for vector, etc.
   TEUCHOS_TEST_FOR_EXCEPTION( valuesRankExpected != values.rank(), std::invalid_argument,
@@ -1078,6 +1076,7 @@ TFunctionPtr<Scalar> TLinearTerm<Scalar>::evaluate(const map< int, TFunctionPtr<
 template<typename Scalar>
 TFunctionPtr<Scalar> TLinearTerm<Scalar>::evaluate(const map< int, TFunctionPtr<Scalar>> &varFunctions, bool boundaryPart)
 {
+  TEUCHOS_FUNC_TIME_MONITOR("LinearTerm::evaluate() - map argument");
   // NOTE that if boundaryPart is false, then we exclude terms that are defined only on the boundary
   // and if boundaryPart is true, then we exclude terms that are defined everywhere
   // so that the whole TLinearTerm is the sum of the two options

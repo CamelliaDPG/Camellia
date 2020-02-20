@@ -25,8 +25,8 @@ namespace
     auto f1 = TFunction<double>::constant(1.0);
     auto f2 = TFunction<double>::constant(2.0);
     auto f_min = MinFunction(f1,f2);
-    BasisCachePtr voidBasisCache;
-    f_min.values(fc, voidBasisCache);
+    BasisCachePtr nullBasisCache;
+    f_min.Function::values(fc, nullBasisCache);
     double expectedValue = 1.0;
     double tol = 1.0e-14;
     for (int i = 0; i < dim0*dim1; i++) {
@@ -41,8 +41,8 @@ namespace
     auto f1 = TFunction<double>::constant(1.0);
     auto f2 = TFunction<double>::constant(2.0);
     auto f_max = MaxFunction(f1,f2);
-    BasisCachePtr voidBasisCache;
-    f_max.values(fc, voidBasisCache);
+    BasisCachePtr nullBasisCache;
+    f_max.Function::values(fc, nullBasisCache);
     double expectedValue = 2.0;
     double tol = 1.0e-14;
     for (int i = 0; i < dim0*dim1; i++) {

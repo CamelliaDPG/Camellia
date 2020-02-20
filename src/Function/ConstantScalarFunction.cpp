@@ -10,7 +10,7 @@ using namespace Camellia;
 
 template <typename Scalar>
 ConstantScalarFunction<Scalar>::ConstantScalarFunction(Scalar value)
-: SimpleFunction<Scalar>("ConstantScalarFunction")
+: TFunction<Scalar>("ConstantScalarFunction",0)
 {
   _value = value;
   ostringstream valueStream;
@@ -20,7 +20,7 @@ ConstantScalarFunction<Scalar>::ConstantScalarFunction(Scalar value)
 
 template <typename Scalar>
 ConstantScalarFunction<Scalar>::ConstantScalarFunction(Scalar value, string stringDisplay)
-: SimpleFunction<Scalar>("ConstantScalarFunction")
+: TFunction<Scalar>("ConstantScalarFunction",0)
 {
   _value = value;
   _stringDisplay = stringDisplay;
@@ -39,17 +39,9 @@ bool ConstantScalarFunction<Scalar>::isZero()
 }
 
 template <typename Scalar>
-void ConstantScalarFunction<Scalar>::values(Camellia::FieldContainer<Scalar> &values, BasisCachePtr basisCache)
-{
-  this->CHECK_VALUES_RANK(values);
-  auto dv = values.checkoutDeviceView(false); // false: don't deep_copy from host (will overwrite values)
-  this->values(dv, ASSIGN, basisCache);
-  values.checkinDeviceView();
-}
-
-template <typename Scalar>
 void ConstantScalarFunction<Scalar>::values(typename Camellia::FieldContainer<Scalar>::DeviceView &values, ValueModificationType modType, BasisCachePtr basisCache)
 {
+  TEUCHOS_FUNC_TIME_MONITOR("ConstantScalarFunction values()");
   if (modType == ASSIGN)
   {
     Kokkos::deep_copy(values, _value);
@@ -116,24 +108,6 @@ template <typename Scalar>
 void ConstantScalarFunction<Scalar>::scalarDivideBasisValues(Camellia::FieldContainer<double> &basisValues, BasisCachePtr basisCache)
 {
   scalarDivideFunctionValues(basisValues,basisCache);
-}
-
-template <typename Scalar>
-Scalar ConstantScalarFunction<Scalar>::value(double x)
-{
-  return value();
-}
-
-template <typename Scalar>
-Scalar ConstantScalarFunction<Scalar>::value(double x, double y)
-{
-  return value();
-}
-
-template <typename Scalar>
-Scalar ConstantScalarFunction<Scalar>::value(double x, double y, double z)
-{
-  return value();
 }
 
 template <typename Scalar>

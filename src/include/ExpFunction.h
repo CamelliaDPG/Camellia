@@ -27,7 +27,6 @@ namespace Camellia
     TFunctionPtr<Scalar> _power;
   public:
     Exp(TFunctionPtr<Scalar> power);
-    void values(Camellia::FieldContainer<Scalar> &values, BasisCachePtr basisCache) override;
     void values(typename Camellia::FieldContainer<Scalar>::DeviceView &values, ValueModificationType modType, BasisCachePtr basisCache) override;
     TFunctionPtr<Scalar> dx() override;
     TFunctionPtr<Scalar> dy() override;
@@ -47,7 +46,6 @@ namespace Camellia
     TFunctionPtr<Scalar> _argument;
   public:
     Ln(TFunctionPtr<Scalar> argument);
-    void values(Camellia::FieldContainer<Scalar> &values, BasisCachePtr basisCache) override;
     void values(typename Camellia::FieldContainer<Scalar>::DeviceView &values, ValueModificationType modType, BasisCachePtr basisCache) override;
     TFunctionPtr<Scalar> dx() override;
     TFunctionPtr<Scalar> dy() override;
