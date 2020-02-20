@@ -213,17 +213,9 @@ std::vector<TFunctionPtr<Scalar>> ProductFunction<Scalar>::memberFunctions()
 }
 
 template <typename Scalar>
-void ProductFunction<Scalar>::values(FieldContainer<Scalar> &values, BasisCachePtr basisCache)
-{
-  this->CHECK_VALUES_RANK(values);
-  auto dv = values.checkoutDeviceView(false); // false: don't deep_copy from host (will overwrite values)
-  this->values(dv, ASSIGN, basisCache);
-  values.checkinDeviceView();
-}
-
-template <typename Scalar>
 void ProductFunction<Scalar>::values(typename FieldContainer<Scalar>::DeviceView &values, ValueModificationType modType, BasisCachePtr basisCache)
 {
+  TEUCHOS_FUNC_TIME_MONITOR("ProductFunction values()");
   if (modType == ASSIGN)
   {
     if (( _f2->rank() > 0) && (this->rank() == 0)) // tensor product resulting in scalar value

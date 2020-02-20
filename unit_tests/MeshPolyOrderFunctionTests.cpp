@@ -39,7 +39,7 @@ namespace
     for (int cellID : myCellIDs) {
       auto fc = FieldContainer<double>(1,1);
       BasisCachePtr basisCache = BasisCache::basisCacheForCell(mesh, cellID);
-      f.values(fc, basisCache);
+      f.TFunction<double>::values(fc, basisCache);
       TEST_FLOATING_EQUALITY(expectedValue,fc(0,0),tol);
     }
   }

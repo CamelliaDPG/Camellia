@@ -302,6 +302,7 @@ void GDAMinimumRule::willHUnrefine(const set<GlobalIndexType> &parentCellIDs)
 void GDAMinimumRule::distributeCellGlobalDofs(const map<GlobalIndexType, SubcellDofIndices> &myCellGlobalDofs,
                                               const set<GlobalIndexType> &remoteCellIDs)
 {
+  TEUCHOS_FUNC_TIME_MONITOR("GDAMinimumRule::distributeCellGlobalDofs");
   int timerHandle = TimeLogger::sharedInstance()->startTimer("distributeCellGlobalDofs");
   
   int rank = _mesh->Comm()->MyPID();
@@ -336,6 +337,7 @@ void GDAMinimumRule::distributeCellGlobalDofs(const map<GlobalIndexType, Subcell
 void GDAMinimumRule::distributeGlobalDofOwnership(const map<GlobalIndexType, SubcellDofIndices> &myOwnedGlobalDofs,
                                                   const set<GlobalIndexType> &remoteCellIDs)
 {
+  TEUCHOS_FUNC_TIME_MONITOR("GDAMinimumRule::distributeGlobalDofOwnership");
   int timerHandle = TimeLogger::sharedInstance()->startTimer("distributeGlobalDofOwnership");
   
   int rank = _mesh->Comm()->MyPID();
@@ -394,6 +396,7 @@ void GDAMinimumRule::distributeSubcellDofIndices(Epetra_CommPtr Comm, const map<
                                                  const map<GlobalIndexType, PartitionIndexType> &remoteCellOwners,
                                                  map<GlobalIndexType, SubcellDofIndices> &remotelyOwnedGlobalDofs)
 {
+  TEUCHOS_FUNC_TIME_MONITOR("GDAMinimumRule::distributeSubcellDofIndices");
   int timerHandle = TimeLogger::sharedInstance()->startTimer("distributeSubcellDofIndices");
   
   // sort by partition # using map
@@ -559,6 +562,7 @@ int GDAMinimumRule::getH1OrderOnEdge(GlobalIndexType cellID, unsigned edgeOrdina
 void GDAMinimumRule::interpretGlobalCoefficients(GlobalIndexType cellID, Camellia::FieldContainer<double> &localCoefficients,
                                                  const Epetra_MultiVector &globalCoefficients)
 {
+  TEUCHOS_FUNC_TIME_MONITOR("GDAMinimumRule::interpretGlobalCoefficients");
   CellConstraints constraints = getCellConstraints(cellID);
   LocalDofMapperPtr dofMapper = getDofMapper(cellID);
   const vector<GlobalIndexType>* globalIndexVector = &dofMapper->globalIndices();
@@ -648,6 +652,7 @@ void GDAMinimumRule::interpretGlobalCoefficients(GlobalIndexType cellID, Camelli
 template <typename Scalar>
 void GDAMinimumRule::interpretGlobalCoefficients2(GlobalIndexType cellID, Camellia::FieldContainer<Scalar> &localCoefficients, const TVectorPtr<Scalar> globalCoefficients)
 {
+  TEUCHOS_FUNC_TIME_MONITOR("GDAMinimumRule::interpretGlobalCoefficients2");
   LocalDofMapperPtr dofMapper = getDofMapper(cellID);
   vector<GlobalIndexType> globalIndexVector = dofMapper->globalIndices();
 
@@ -712,6 +717,7 @@ template void GDAMinimumRule::interpretGlobalCoefficients2(GlobalIndexType cellI
 void GDAMinimumRule::interpretLocalData(GlobalIndexType cellID, const Camellia::FieldContainer<double> &localData,
                                         Camellia::FieldContainer<double> &globalData, Camellia::FieldContainer<GlobalIndexType> &globalDofIndices)
 {
+  TEUCHOS_FUNC_TIME_MONITOR("GDAMinimumRule::interpretLocalData");
   // we allow interpreting trial x trial, trial x other, or other x trial; the latter two involve only one mapping
   
   int numLocalTrialDofs = _mesh->getElementType(cellID)->trialOrderPtr->totalDofs();
@@ -823,6 +829,7 @@ void GDAMinimumRule::interpretLocalData(GlobalIndexType cellID, const Camellia::
 void GDAMinimumRule::interpretLocalBasisCoefficients(GlobalIndexType cellID, int varID, int sideOrdinal, const Camellia::FieldContainer<double> &basisCoefficients,
                                                      Camellia::FieldContainer<double> &globalCoefficients, Camellia::FieldContainer<GlobalIndexType> &globalDofIndices)
 {
+  TEUCHOS_FUNC_TIME_MONITOR("GDAMinimumRule::interpretLocalBasisCoefficients");
   LocalDofMapperPtr dofMapper = getDofMapper(cellID, varID, sideOrdinal);
   
   if (dofMapper->isPermutation())
@@ -900,6 +907,7 @@ typedef vector< SubBasisDofMapperPtr > BasisMap;
 // volume variable version
 BasisMap GDAMinimumRule::getBasisMap(GlobalIndexType cellID, SubcellDofIndices& subcellDofIndices, VarPtr var)
 {
+  TEUCHOS_FUNC_TIME_MONITOR("GDAMinimumRule::getBasisMap");
   BasisMap varVolumeMap;
   
   vector<SubBasisMapInfo> subBasisMaps;
@@ -1442,6 +1450,7 @@ BasisMap GDAMinimumRule::getBasisMap(GlobalIndexType cellID, SubcellDofIndices& 
 
 BasisMap GDAMinimumRule::getBasisMapDiscontinuousVolumeRestrictedToSide(GlobalIndexType cellID, SubcellDofIndices& dofOwnershipInfo, VarPtr var, int sideOrdinal)
 {
+  TEUCHOS_FUNC_TIME_MONITOR("GDAMinimumRule::getBasisMapDiscontinuousVolumeRestrictedToSide");
    BasisMap volumeMap = getBasisMap(cellID, dofOwnershipInfo, var);
 
   // We're interested in the restriction of the map to the side
@@ -1510,6 +1519,7 @@ BasisMap GDAMinimumRule::getBasisMapDiscontinuousVolumeRestrictedToSide(GlobalIn
 // trace variable version
 BasisMap GDAMinimumRule::getBasisMap(GlobalIndexType cellID, SubcellDofIndices& subcellDofIndices, VarPtr var, int sideOrdinal)
 {
+  TEUCHOS_FUNC_TIME_MONITOR("GDAMinimumRule::getBasisMap - trace variable variant");
   // TODO: looks like we don't use the subcellDofIndices argument.  Consider excising.
   
   vector<SubBasisMapInfo> subBasisMaps;
@@ -2375,6 +2385,7 @@ BasisMap GDAMinimumRule::getBasisMap(GlobalIndexType cellID, SubcellDofIndices& 
 
 CellConstraints GDAMinimumRule::getCellConstraints(GlobalIndexType cellID)
 {
+  TEUCHOS_FUNC_TIME_MONITOR("GDAMinimumRule::getCellConstraints");
   if (_constraintsCache.find(cellID) == _constraintsCache.end())
   {
 //    cout << "Getting cell constraints for cellID " << cellID << endl;
@@ -2786,6 +2797,7 @@ unsigned GDAMinimumRule::getConstraintPermutation(GlobalIndexType cellID, unsign
 
 set<GlobalIndexType> GDAMinimumRule::getFittableGlobalDofIndices(GlobalIndexType cellID, int sideOrdinal, int varID)
 {
+  TEUCHOS_FUNC_TIME_MONITOR("GDAMinimumRule::getFittableGlobalDofIndices");
   pair<GlobalIndexType,pair<int,unsigned>> key = {cellID,{varID,sideOrdinal}};
   if (_fittableGlobalIndicesCache.find(key) != _fittableGlobalIndicesCache.end())
   {
@@ -2869,6 +2881,7 @@ set<GlobalIndexType> GDAMinimumRule::getFittableGlobalDofIndices(GlobalIndexType
 
 SubcellDofIndices & GDAMinimumRule::getOwnedGlobalDofIndices(GlobalIndexType cellID)
 {
+  TEUCHOS_FUNC_TIME_MONITOR("GDAMinimumRule::getOwnedGlobalDofIndices");
   if (_ownedGlobalDofIndicesCache.find(cellID) != _ownedGlobalDofIndicesCache.end())
   {
     return _ownedGlobalDofIndicesCache[cellID];
@@ -3046,6 +3059,7 @@ SubcellDofIndices & GDAMinimumRule::getOwnedGlobalDofIndices(GlobalIndexType cel
 
 SubcellDofIndices& GDAMinimumRule::getGlobalDofIndices(GlobalIndexType cellID)
 {
+  TEUCHOS_FUNC_TIME_MONITOR("GDAMinimumRule::getGlobalDofIndices");
   if (_globalDofIndicesForCellCache.find(cellID) == _globalDofIndicesForCellCache.end())
   {
     const set<GlobalIndexType>* myCellIDs = &this->cellsInPartition(-1);
@@ -3125,6 +3139,7 @@ vector<GlobalIndexType> GDAMinimumRule::getGlobalDofOrdinalsForSubcell(GlobalInd
 
 LocalDofMapperPtr GDAMinimumRule::getDofMapper(GlobalIndexType cellID, int varIDToMap, int sideOrdinalToMap)
 {
+  TEUCHOS_FUNC_TIME_MONITOR("GDAMinimumRule::getDofMapper");
   if ((varIDToMap == -1) && (sideOrdinalToMap == -1))
   {
     // a mapper for the whole dof ordering: we cache these separately...
@@ -3398,6 +3413,7 @@ void GDAMinimumRule::printGlobalDofInfo()
 
 void GDAMinimumRule::rebuildLookups()
 {
+  TEUCHOS_FUNC_TIME_MONITOR("GDAMinimumRule::rebuildLookups()");
   int timerHandle = TimeLogger::sharedInstance()->startTimer("rebuildLookups");
   
   clearCaches();

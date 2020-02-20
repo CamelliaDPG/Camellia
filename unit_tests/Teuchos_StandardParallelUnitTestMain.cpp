@@ -53,9 +53,9 @@ specific unit test suites.
 
 */
 
-
-#include "Teuchos_UnitTestRepository.hpp"
 #include "Teuchos_GlobalMPISession.hpp"
+#include "Teuchos_StackedTimer.hpp"
+#include "Teuchos_UnitTestRepository.hpp"
 
 #ifdef HAVE_MPI
 #include "Epetra_MpiComm.h"
@@ -74,18 +74,32 @@ int main( int argc, char* argv[] )
 
   Kokkos::initialize(argc, argv); // initialize Kokkos
   
-#ifdef HAVE_MPI
-  Epetra_MpiComm Comm(MPI_COMM_WORLD);
-  //cout << "rank: " << rank << " of " << numProcs << endl;
-#else
-  Epetra_SerialComm Comm;
-#endif
+  Teuchos::RCP<const Teuchos::Comm<int>> comm = Teuchos::DefaultComm<int>::getComm();
 
-  Comm.Barrier(); // set breakpoint here to allow debugger attachment to other MPI processes than the one you automatically attached to.
-
-  int result = Teuchos::UnitTestRepository::runUnitTestsFromMain(argc, argv);
+  std::string timingsFilePath = "./test-timings.log";
+  // parse CLI input to look for timing output request
+  {
+    auto & cmdp = Teuchos::UnitTestRepository::getCLP();
+    cmdp.setOption("test-timings-log", &timingsFilePath, "File for stacked timer log output; will overwrite existing");
+  }
   
-  int rank = Comm.MyPID();
+  comm->barrier(); // set breakpoint here to allow debugger attachment to other MPI processes than the one you automatically attached to.
+
+  auto timer = Teuchos::TimeMonitor::getStackedTimer();
+  int result = Teuchos::UnitTestRepository::runUnitTestsFromMain(argc, argv);
+  Teuchos::StackedTimer::OutputOptions options;
+  options.output_histogram = true;
+  options.output_fraction  = true;
+  options.output_minmax    = true;
+  timer->stop ("Teuchos::StackedTimer");
+  
+  if ( timingsFilePath != "" )
+  {
+    std::ofstream fout(timingsFilePath.c_str());
+    timer->report(fout, comm, options);
+  }
+
+  int rank = comm->getRank();
   bool printAllocationReport = (rank == 0);
   
   Camellia::finalize(printAllocationReport);

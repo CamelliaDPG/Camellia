@@ -19,7 +19,7 @@
 namespace Camellia
 {
 template <typename Scalar>
-class ConstantScalarFunction : public SimpleFunction<Scalar>
+class ConstantScalarFunction : public TFunction<Scalar>
 {
   double _value;
   string _stringDisplay;
@@ -28,7 +28,6 @@ public:
   ConstantScalarFunction(Scalar value, string stringDisplay);
   string displayString() override;
   bool isZero() override;
-  void values(Camellia::FieldContainer<Scalar> &values, BasisCachePtr basisCache) override;
   void scalarModifyFunctionValues(Camellia::FieldContainer<Scalar> &values, ValueModificationType modType, BasisCachePtr basisCache);
   void scalarMultiplyFunctionValues(Camellia::FieldContainer<Scalar> &values, BasisCachePtr basisCache) override;
   void scalarDivideFunctionValues(Camellia::FieldContainer<Scalar> &values, BasisCachePtr basisCache) override;
@@ -38,13 +37,8 @@ public:
   // device path:
   void values(typename Camellia::FieldContainer<Scalar>::DeviceView &values, ValueModificationType modType, BasisCachePtr basisCache) override;
 
-  virtual Scalar value(double x) override;
-  virtual Scalar value(double x, double y) override;
-  virtual Scalar value(double x, double y, double z) override;
-
-  using SimpleFunction<Scalar>::value; // avoid compiler warnings about the value() method below.
   Scalar value();
-
+  
   TFunctionPtr<Scalar> dx() override;
   TFunctionPtr<Scalar> dy() override;
   TFunctionPtr<Scalar> dz() override;  // Hmm... a design issue: if we implement dz() then grad() will return a 3D function, not what we want...  It may be that grad() should require a spaceDim argument.  I'm not sure.

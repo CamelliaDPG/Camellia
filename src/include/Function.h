@@ -41,6 +41,12 @@ protected:
   string _className;     // Function subclass identifier; should match the C++ class name
   void CHECK_VALUES_RANK(Camellia::FieldContainer<Scalar> &values); // throws exception on bad values rank
   double _time;
+  // subclasses are required to implement either the "host-path" (FieldContainer argument) values() method
+  // or the "device-path" (View argument) values() method, and we provide default implementations for each
+  // in the base class which call the other method.  The following member variable allows us to detect when
+  // a subclass has failed to implement either values() method, avoiding an infinite loop created by the two
+  // base class implementations calling each other.  We can then fail cleanly, throwing an exception.
+  bool _callingDevicePathValues = false;
 public:
   enum FunctionModificationType { MULTIPLY, DIVIDE }; // used by scalarModify[.*]Values
   enum JumpCombinationType
@@ -75,7 +81,9 @@ public:
   }
 
   virtual void values(Camellia::FieldContainer<Scalar> &values, Camellia::EOperator op, BasisCachePtr basisCache);
-  virtual void values(Camellia::FieldContainer<Scalar> &values, BasisCachePtr basisCache) = 0;
+  
+  // "host-path" values.  Default implementation calls the device-path values() method below.
+  virtual void values(Camellia::FieldContainer<Scalar> &values, BasisCachePtr basisCache);
 
   // device-path values -- subclasses should override.   Default implementation is inefficient!
   virtual void values(typename Camellia::FieldContainer<Scalar>::DeviceView &values, ValueModificationType modType, BasisCachePtr basisCache);

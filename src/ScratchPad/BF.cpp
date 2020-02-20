@@ -935,6 +935,7 @@ namespace Camellia
                                          Camellia::FieldContainer<Scalar> &rhsEnriched, Camellia::FieldContainer<Scalar> &stiffness,
                                          Camellia::FieldContainer<Scalar> &rhs)
   {
+    TEUCHOS_FUNC_TIME_MONITOR("BF::factoredCholeskySolve");
     int timerHandle = TimeLogger::sharedInstance()->startTimer(BF_FACTORED_CHOLESKY_SOLVE_TIMER_STRING);
     int N = ipMatrix.dimension(0);
     TEUCHOS_TEST_FOR_EXCEPTION(N != ipMatrix.dimension(1), std::invalid_argument, "ipMatrix must be square");
@@ -1182,6 +1183,7 @@ namespace Camellia
                                                    TIPPtr<Scalar> ip, BasisCachePtr ipBasisCache, TRHSPtr<Scalar> rhs,
                                                    BasisCachePtr basisCache)
   {
+    TEUCHOS_FUNC_TIME_MONITOR("BF::localStiffnessMatrixAndRHS_DLS");
     int timerHandle = TimeLogger::sharedInstance()->startTimer(BF_LOCAL_STIFFNESS_AND_RHS_TIMER_STRING);
     double testMatrixAssemblyTime = 0, localStiffnessDeterminationTime = 0;
     double rhsDeterminationTime = 0;
@@ -1334,6 +1336,7 @@ namespace Camellia
   void TBF<Scalar>::localStiffnessMatrixAndRHS(Camellia::FieldContainer<Scalar> &localStiffness, Camellia::FieldContainer<Scalar> &rhsVector,
                                                TIPPtr<Scalar> ip, BasisCachePtr ipBasisCache, TRHSPtr<Scalar> rhs, BasisCachePtr basisCache)
   {
+    TEUCHOS_FUNC_TIME_MONITOR("BF::localStiffnessMatrixAndRHS");
     int timerHandle = TimeLogger::sharedInstance()->startTimer(BF_LOCAL_STIFFNESS_AND_RHS_TIMER_STRING);
     double testMatrixAssemblyTime = 0, localStiffnessDeterminationTime = 0;
     double rhsDeterminationTime = 0;
@@ -1571,6 +1574,7 @@ namespace Camellia
                                                   BasisCachePtr stiffnessBasisCache,
                                                   IPPtr ip, BasisCachePtr ipBasisCache)
   {
+    TEUCHOS_FUNC_TIME_MONITOR("BF::optimalTestWeightsAndStiffness");
     DofOrderingPtr trialOrdering = elemType->trialOrderPtr;
     DofOrderingPtr testOrdering = elemType->testOrderPtr;
     
@@ -1870,7 +1874,7 @@ namespace Camellia
   template <typename Scalar>
   map<int, TFunctionPtr<Scalar> > TBF<Scalar>::applyAdjointOperatorDPGstar(TRieszRepPtr<double> dualSolution)
   {
-
+    TEUCHOS_FUNC_TIME_MONITOR("BF::applyAdjointOperatorDPGstar");
     // group test functional contributions based on trial variables (field only)
     map<int, TLinearTermPtr<Scalar>> testTermsForVarID;
     for (TBilinearTerm<Scalar> bt : _terms)

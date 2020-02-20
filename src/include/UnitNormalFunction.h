@@ -33,7 +33,6 @@ public:
 
   bool boundaryValueOnly() override;
   string displayString() override;
-  void values(Camellia::FieldContainer<double> &values, BasisCachePtr basisCache) override;
   void values(typename Camellia::FieldContainer<double>::DeviceView &values, ValueModificationType modType, BasisCachePtr basisCache) override;
 };
 }

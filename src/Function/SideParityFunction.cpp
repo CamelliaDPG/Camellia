@@ -26,16 +26,9 @@ string SideParityFunction::displayString()
   return "sgn(n)";
 }
 
-void SideParityFunction::values(Camellia::FieldContainer<double> &values, BasisCachePtr sideBasisCache)
-{
-  this->CHECK_VALUES_RANK(values);
-  auto dv = values.checkoutDeviceView(false); // false: don't deep_copy from host (will overwrite values)
-  this->values(dv, ASSIGN, sideBasisCache);
-  values.checkinDeviceView();
-}
-
 void SideParityFunction::values(typename FieldContainer<double>::DeviceView &values, ValueModificationType modType, BasisCachePtr sideBasisCache)
 {
+  TEUCHOS_FUNC_TIME_MONITOR("SideParityFunction values()");
   TEUCHOS_TEST_FOR_EXCEPTION(values.rank() != 2, std::invalid_argument, "rank is not equal to 2");
   const int numCells  = values.extent_int(0);
   const int sideIndex = sideBasisCache->getSideIndex();

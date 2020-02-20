@@ -31,16 +31,9 @@ Xn::Xn(int n) : TFunction<double>("Xn")
   _n = n;
 }
 
-void Xn::values(Camellia::FieldContainer<double> &values, BasisCachePtr basisCache)
-{
-  this->CHECK_VALUES_RANK(values);
-  auto dv = values.checkoutDeviceView(false); // false: don't deep_copy from host (will overwrite values)
-  this->values(dv, ASSIGN, basisCache);
-  values.checkinDeviceView();
-}
-
 void Xn::values(typename Camellia::FieldContainer<double>::DeviceView &values, ValueModificationType modType, BasisCachePtr basisCache)
 {
+  TEUCHOS_FUNC_TIME_MONITOR("Xn values()");
   auto & points = basisCache->getPhysicalCubaturePoints(); // (C,P,D) FieldContainer
   auto devicePoints = points.checkoutDeviceView();
   const int n = _n;
@@ -102,16 +95,10 @@ Yn::Yn(int n) : TFunction<double>("Yn")
 {
   _n = n;
 }
-void Yn::values(Camellia::FieldContainer<double> &values, BasisCachePtr basisCache)
-{
-  this->CHECK_VALUES_RANK(values);
-  auto dv = values.checkoutDeviceView(false); // false: don't deep_copy from host (will overwrite values)
-  this->values(dv, ASSIGN, basisCache);
-  values.checkinDeviceView();
-}
 
 void Yn::values(typename Camellia::FieldContainer<double>::DeviceView &values, ValueModificationType modType, BasisCachePtr basisCache)
 {
+  TEUCHOS_FUNC_TIME_MONITOR("Yn values()");
   const auto & points = basisCache->getPhysicalCubaturePoints(); // (C,P,D) FieldContainer
   auto devicePoints = points.checkoutDeviceView();
   const int n = _n;
@@ -174,16 +161,9 @@ Zn::Zn(int n) : TFunction<double>("Zn")
   _n = n;
 }
 
-void Zn::values(Camellia::FieldContainer<double> &values, BasisCachePtr basisCache)
-{
-  this->CHECK_VALUES_RANK(values);
-  auto dv = values.checkoutDeviceView(false); // false: don't deep_copy from host (will overwrite values)
-  this->values(dv, ASSIGN, basisCache);
-  values.checkinDeviceView();
-}
-
 void Zn::values(typename Camellia::FieldContainer<double>::DeviceView &values, ValueModificationType modType, BasisCachePtr basisCache)
 {
+  TEUCHOS_FUNC_TIME_MONITOR("Zn values()");
   const auto & points = basisCache->getPhysicalCubaturePoints(); // (C,P,D) FieldContainer
   auto devicePoints = points.checkoutDeviceView();
   const int n = _n;
@@ -244,16 +224,10 @@ Tn::Tn(int n) : TFunction<double>("Tn")
 {
   _n = n;
 }
-void Tn::values(Camellia::FieldContainer<double> &values, BasisCachePtr basisCache)
-{
-  this->CHECK_VALUES_RANK(values);
-  auto dv = values.checkoutDeviceView(false); // false: don't deep_copy from host (will overwrite values)
-  this->values(dv, ASSIGN, basisCache);
-  values.checkinDeviceView();
-}
 
 void Tn::values(typename Camellia::FieldContainer<double>::DeviceView &values, ValueModificationType modType, BasisCachePtr basisCache)
 {
+  TEUCHOS_FUNC_TIME_MONITOR("Tn values()");
   const auto & points = basisCache->getPhysicalCubaturePoints(); // (C,P,D) FieldContainer
   auto devicePoints = points.checkoutDeviceView();
   const int n = _n;

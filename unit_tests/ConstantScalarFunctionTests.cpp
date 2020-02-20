@@ -89,11 +89,11 @@ namespace
         fc[i] = value1;
       }
       auto f = ConstantScalarFunction<double>(value2);
-      BasisCachePtr voidBasisCache;
+      BasisCachePtr nullBasisCache;
       if (modType == MULTIPLY)
-        f.scalarMultiplyFunctionValues(fc, voidBasisCache);
+        f.scalarMultiplyFunctionValues(fc, nullBasisCache);
       else
-        f.scalarDivideFunctionValues(fc, voidBasisCache);
+        f.scalarDivideFunctionValues(fc, nullBasisCache);
       double tol = 1.0e-14;
       for (int i = 0; i < fc.size(); i++) {
         TEST_FLOATING_EQUALITY(expectedValue,fc[i],tol);
@@ -152,8 +152,8 @@ namespace
     const int dim0 = 5, dim1 = 2;
     auto fc = FieldContainer<double>(dim0,dim1);
     auto f = ConstantScalarFunction<double>(1.0);
-    BasisCachePtr voidBasisCache;
-    f.values(fc, voidBasisCache);
+    BasisCachePtr nullBasisCache;
+    f.Function::values(fc, nullBasisCache);
     double expectedValue = 1.0;
     double tol = 1.0e-14;
     for (int i = 0; i < dim0*dim1; i++) {
