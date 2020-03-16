@@ -655,9 +655,10 @@ void NavierStokesVGPFormulation::addInflowCondition(SpatialFilterPtr inflowRegio
     TFunctionPtr<double> u3_hat_prev;
     if (spaceDim == 3) u3_hat_prev = TFunction<double>::solution(u3_hat,backgroundFlowWeakReference);
 
-    _solnIncrement->bc()->addDirichlet(u1_hat, inflowRegion, u->x() - u1_hat_prev);
-    _solnIncrement->bc()->addDirichlet(u2_hat, inflowRegion, u->y() - u2_hat_prev);
-    if (spaceDim==3) _solnIncrement->bc()->addDirichlet(u3_hat, inflowRegion, u->z() - u3_hat_prev);
+    FunctionPtr traceFxn = Function::meshSkeletonCharacteristic();
+    _solnIncrement->bc()->addDirichlet(u1_hat, inflowRegion, u->x() * traceFxn - u1_hat_prev);
+    _solnIncrement->bc()->addDirichlet(u2_hat, inflowRegion, u->y() * traceFxn - u2_hat_prev);
+    if (spaceDim==3) _solnIncrement->bc()->addDirichlet(u3_hat, inflowRegion, u->z() * traceFxn - u3_hat_prev);
   }
 }
 

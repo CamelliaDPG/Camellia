@@ -1810,8 +1810,9 @@ namespace
     FunctionPtr parity = Function::sideParity();
     FunctionPtr f_flux = Function::xn(2) * n->x() * parity + Function::yn(1) * n->y() * parity + Function::zn(1) * n->z() * parity;
     
+    FunctionPtr traceFxn = Function::meshSkeletonCharacteristic();
     map<int, FunctionPtr > functionMap;
-    functionMap[uhat->ID()] = Function::xn(1);
+    functionMap[uhat->ID()] = Function::xn(1) * traceFxn;
     functionMap[fhat->ID()] = f_flux;
     functionMap[u->ID()] = Function::xn(1);
     functionMap[sigma->ID()] = Function::vectorize(Function::xn(1), Function::yn(1));
@@ -1932,8 +1933,9 @@ namespace
     FunctionPtr parity = Function::sideParity();
     FunctionPtr f_flux = Function::xn(2) * n->x() * parity + Function::yn(1) * n->y() * parity + Function::zn(1) * n->z() * parity;
     
+    FunctionPtr traceFxn = Function::meshSkeletonCharacteristic();
     map<int, FunctionPtr > functionMap;
-    functionMap[uhat->ID()] = Function::xn(1);
+    functionMap[uhat->ID()] = Function::xn(1) * traceFxn;
     functionMap[fhat->ID()] = f_flux;
     functionMap[u->ID()] = Function::xn(1);
     functionMap[sigma->ID()] = Function::vectorize(Function::xn(1), Function::yn(1), Function::zn(1));
