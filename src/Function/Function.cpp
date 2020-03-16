@@ -1836,34 +1836,30 @@ std::map<GlobalIndexType, double> TFunction<Scalar>::squaredL2NormOfJumps(MeshPt
           vector<IndexType> ancestorSideNodes, neighborSideNodes; // this will list the indices as seen by MeshTopology
           
           CellTopoPtr sideTopo = ancestor->topology()->getSide(ancestorSideOrdinal);
-          nodeCount = sideTopo->getNodeCount();
           
-          for (int node=0; node<nodeCount; node++)
-          {
-            int nodeInCell = cellTopo->getNodeMap(sideDim, sideOrdinal, node);
-            ancestorSideNodes.push_back(ancestor->vertices()[nodeInCell]);
-            int nodeInNeighborCell = neighborTopo->getNodeMap(sideDim, mySideOrdinalInNeighbor, node);
-            neighborSideNodes.push_back(neighbor->vertices()[nodeInNeighborCell]);
-          }
-          // now, we want to know what permutation of the side topology takes us from my order to neighbor's
-          // TODO: make sure I'm not going the wrong direction here; it's easy to get confused.
-          permutationFromMeToNeighbor = CamelliaCellTools::permutationMatchingOrder(sideTopo, ancestorSideNodes, neighborSideNodes);
+          // the following permutations map from canonical ordering to that seen by the cell
+          // we want to construct a mapping that takes us from ancestor's ordering to neighbor's
+          unsigned ancestorSidePermutation = ancestor->subcellPermutation(sideDim, sideOrdinal);
+          unsigned neighborSidePermutation = neighbor->subcellPermutation(sideDim, mySideOrdinalInNeighbor);
+          
+          // invert ancestor permutation; this takes us from my ordering to canonical
+          unsigned ancestorInverse = CamelliaCellTools::permutationInverse(sideTopo, ancestorSidePermutation);
+          // compose this with neighbor permutation; this takes us from canonical to neighbor
+          permutationFromMeToNeighbor = CamelliaCellTools::permutationComposition(sideTopo, ancestorInverse, neighborSidePermutation);
         }
         else
         {
-          nodeCount = cellTopo->getSide(sideOrdinal)->getNodeCount();
+          // neighbor is peer, but might not be active (i.e., might have descendants)
           
-          vector<IndexType> mySideNodes, neighborSideNodes; // this will list the indices as seen by MeshTopology
-          for (int node=0; node<nodeCount; node++)
-          {
-            int nodeInCell = cellTopo->getNodeMap(sideDim, sideOrdinal, node);
-            mySideNodes.push_back(cell->vertices()[nodeInCell]);
-            int nodeInNeighborCell = neighborTopo->getNodeMap(sideDim, mySideOrdinalInNeighbor, node);
-            neighborSideNodes.push_back(neighbor->vertices()[nodeInNeighborCell]);
-          }
-          // now, we want to know what permutation of the side topology takes us from my order to neighbor's
-          // TODO: make sure I'm not going the wrong direction here; it's easy to get confused.
-          permutationFromMeToNeighbor = CamelliaCellTools::permutationMatchingOrder(sideTopo, mySideNodes, neighborSideNodes);
+          // the following permutations map from canonical ordering to that seen by the cell
+          // we want to construct a mapping that takes us from my ordering to neighbor's
+          unsigned mySidePermutation       = cell->subcellPermutation(sideDim, sideOrdinal);
+          unsigned neighborSidePermutation = neighbor->subcellPermutation(sideDim, mySideOrdinalInNeighbor);
+          
+          // invert my permutation; this takes us from my ordering to canonical
+          unsigned myInverse = CamelliaCellTools::permutationInverse(sideTopo, mySidePermutation);
+          // compose this with neighbor permutation; this takes us from canonical to neighbor
+          permutationFromMeToNeighbor = CamelliaCellTools::permutationComposition(sideTopo, myInverse, neighborSidePermutation);
         }
         
         Camellia::FieldContainer<double> permutedRefNodes(nodeCount,sideDim);
@@ -1900,6 +1896,9 @@ std::map<GlobalIndexType, double> TFunction<Scalar>::squaredL2NormOfJumps(MeshPt
         neighborSideCache->setMesh(mesh);
         neighborSideCache->setRefCellPoints(neighborRefCellPoints, emptyCubWeights, cubaturePolyOrder, false);
         neighborSideCache->setPhysicalCellNodes(neighborCellNodes, {neighborCellID}, false);
+        
+        // if there aren't periodic BCs, perform the sanity check.  If there are periodic BCs, we expect to fail the check...
+        if (meshTopo->getPeriodicBCs().size() == 0)
         {
           // Sanity check that the physical points agree:
           double tol = 1e-8;

@@ -11,8 +11,6 @@
 #include "GlobalDofAssignment.h"
 #include "TimeLogger.h"
 
-#include "Tpetra_MultiVectorFiller.hpp"
-
 static const int MAX_BATCH_SIZE_IN_BYTES = 3*1024*1024; // 3 MB
 static const int MIN_BATCH_SIZE_IN_CELLS = 1; // overrides the above, if it results in too-small batches
 
@@ -244,8 +242,10 @@ int DLS<Scalar>::assemble()
 //  cout << "Test map has " << testMap->getGlobalNumElements() << " global elements.\n";
 //  cout << "Trial map has " << solnMapNoBCs->getGlobalNumElements() << " global elements.\n";
 
-  
-  MultiVectorFiller<TVector<Scalar>> diagFiller(solnMapNoBCs, numCols);
+  TEUCHOS_TEST_FOR_EXCEPTION(true, invalid_argument, "Implementation incomplete - rewrite with MultiVectorFiller replacement!");
+  // commented out diagFiller here and below because Tpetra has removed MultiVectorFiller.
+  // (The DLS code here is a prototype implementation that is not currently used anywhere...)
+  //MultiVectorFiller<TVector<Scalar>> diagFiller(solnMapNoBCs, numCols);
   
   vector< ElementTypePtr > elementTypes = mesh->elementTypes(rank);
   
@@ -446,7 +446,7 @@ int DLS<Scalar>::assemble()
             rowValues[i] = rowValues[i] * rowValues[i];
 //            cout << "adding " << rowValues[i] << " to diagonal value with global index " << globalDofIndicesNoBCs[i] << endl;
           }
-          diagFiller.sumIntoGlobalValues(globalDofIndicesNoBCs, 0, rowValues);
+//          diagFiller.sumIntoGlobalValues(globalDofIndicesNoBCs, 0, rowValues);
         }
         
         // insert into bcImpositionMatrix
@@ -495,7 +495,7 @@ int DLS<Scalar>::assemble()
 //  cout << "_dlsMatrix range Map, global element count: " << _dlsMatrix->getRangeMap()->getGlobalNumElements() << endl;
   
   _diag_sqrt_inverse = rcp( new Vector<Scalar,IndexType,GlobalIndexType>(solnMapNoBCs) );
-  diagFiller.globalAssemble(*_diag_sqrt_inverse);
+//  diagFiller.globalAssemble(*_diag_sqrt_inverse);
   inverseSquareRoot(_diag_sqrt_inverse);
   
   RCP<Vector<Scalar,IndexType,GlobalIndexType>> matrixScalingVector = rcp( new Vector<Scalar,IndexType,GlobalIndexType>(_dlsMatrix->getDomainMap()) );
