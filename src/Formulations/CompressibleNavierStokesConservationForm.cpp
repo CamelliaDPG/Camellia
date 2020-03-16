@@ -1170,16 +1170,17 @@ std::map<int, FunctionPtr> CompressibleNavierStokesConservationForm::exactSoluti
   FunctionPtr         te = exactSolution_te(velocity, rho, T, includeFluxParity);
   FunctionPtr         tc = exactSolution_tc(velocity, rho, T, includeFluxParity);
   
+  FunctionPtr traceFxn = Function::meshSkeletonCharacteristic();
   map<int, FunctionPtr> solnMap;
   solnMap[this->E()->ID()]     = E;
-  solnMap[this->T_hat()->ID()] = T;
+  solnMap[this->T_hat()->ID()] = T * traceFxn;
   solnMap[this->rho()->ID()]   = rho;
   solnMap[this->tc()->ID()]    = tc;
   solnMap[this->te()->ID()]    = te;
   for (int d1=0; d1<_spaceDim; d1++)
   {
     solnMap[this->m(d1+1)->ID()]     = u[d1] * rho;
-    solnMap[this->u_hat(d1+1)->ID()] = u[d1];
+    solnMap[this->u_hat(d1+1)->ID()] = u[d1] * traceFxn;
     
     solnMap[this->q(d1+1)->ID()]     = q[d1];
     

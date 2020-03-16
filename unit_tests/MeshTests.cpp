@@ -1255,11 +1255,12 @@ void testSaveAndLoad2D(BFPtr bf, Teuchos::FancyOStream &out, bool &success)
     SolutionPtr solution = Solution::solution(form.bf(), mesh);
     mesh->registerSolution(solution);
     
+    FunctionPtr traceFxn = Function::meshSkeletonCharacteristic();
     map<int, FunctionPtr> solutionMap;
     FunctionPtr x = Function::xn();
     solutionMap[form.u()->ID()] = x;
     solutionMap[form.sigma()->ID()] = Function::constant({1.0,0.0});
-    solutionMap[form.u_hat()->ID()] = x;
+    solutionMap[form.u_hat()->ID()] = x * traceFxn;
     FunctionPtr n = Function::normal();
     FunctionPtr n_parity = Function::normal() * Function::sideParity();
     solutionMap[form.sigma_n_hat()->ID()] = Function::constant({1.0,0.0}) * n_parity;
@@ -1269,6 +1270,7 @@ void testSaveAndLoad2D(BFPtr bf, Teuchos::FancyOStream &out, bool &success)
     
     // sanity check: make sure that the difference *before* refinement is 0
     double tol = 1e-14;
+    
     for (auto entry : solutionMap)
     {
       int varID = entry.first;

@@ -120,6 +120,7 @@ TEUCHOS_UNIT_TEST( MeshRefinement, TraceTermProjection )
 
   FunctionPtr sigma_exact = (spaceDim > 1) ? u_exact->grad() : u_exact->dx();
 
+  FunctionPtr traceFxn = Function::meshSkeletonCharacteristic();
   map<int, FunctionPtr> sigmaMap;
   sigmaMap[sigma->ID()] = sigma_exact;
 
@@ -131,7 +132,7 @@ TEUCHOS_UNIT_TEST( MeshRefinement, TraceTermProjection )
 
   FunctionPtr sigma_err = sigma_exact - sigma_soln;
   FunctionPtr sigma_n_err = sigma_n_exact - sigma_n_soln;
-  FunctionPtr u_hat_err = u_exact - u_hat_soln;
+  FunctionPtr u_hat_err = u_exact * traceFxn - u_hat_soln;
 
   double err_L2 = sigma_err->l2norm(mesh);
 

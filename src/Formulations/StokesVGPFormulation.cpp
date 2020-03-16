@@ -550,9 +550,10 @@ void StokesVGPFormulation::addInflowCondition(SpatialFilterPtr inflowRegion, TFu
     u2_hat_prev = TFunction<double>::solution(this->u_hat(2), prevSolnWeakRef);
     if (_spaceDim==3) u3_hat_prev = TFunction<double>::solution(this->u_hat(3), prevSolnWeakRef);
     TFunctionPtr<double> thetaFxn = _theta; // cast to allow use of TFunctionPtr<double> operator overloads
-    _solution->bc()->addDirichlet(u1_hat, inflowRegion, thetaFxn * u->x() + (1.-thetaFxn)* u1_hat_prev);
-    _solution->bc()->addDirichlet(u2_hat, inflowRegion, thetaFxn * u->y() + (1.-thetaFxn)* u2_hat_prev);
-    if (_spaceDim==3) _solution->bc()->addDirichlet(u3_hat, inflowRegion, thetaFxn * u->z() + (1.-thetaFxn)* u3_hat_prev);
+    FunctionPtr traceFxn = Function::meshSkeletonCharacteristic();
+    _solution->bc()->addDirichlet(u1_hat, inflowRegion, thetaFxn * u->x() * traceFxn + (1.-thetaFxn)* u1_hat_prev);
+    _solution->bc()->addDirichlet(u2_hat, inflowRegion, thetaFxn * u->y() * traceFxn + (1.-thetaFxn)* u2_hat_prev);
+    if (_spaceDim==3) _solution->bc()->addDirichlet(u3_hat, inflowRegion, thetaFxn * u->z() * traceFxn + (1.-thetaFxn)* u3_hat_prev);
   }
 }
 

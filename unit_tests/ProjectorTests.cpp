@@ -75,6 +75,7 @@ void testProjectFunctionOnTensorTopoSides(CellTopoPtr spaceTopo, int H1Order, Ca
       Projector<double>::projectFunctionOntoBasis(basisCoefficients, f, sideBasis, sideBasisCache);
     }
 
+    FunctionPtr traceFxn = Function::meshSkeletonCharacteristic();
     basisCoefficients.resize(sideBasis->getCardinality());
     FunctionPtr projectedFunction = BasisSumFunction::basisSumFunction(sideBasis, basisCoefficients);
 
@@ -89,6 +90,12 @@ void testProjectFunctionOnTensorTopoSides(CellTopoPtr spaceTopo, int H1Order, Ca
 
     TEST_FLOATING_EQUALITY(expectedIntegral,actualIntegral,tol);
 
+    if (f->boundaryValueOnly())
+    {
+      // then restrict the projected function as well, so that we can legitimately take the difference below
+      projectedFunction = projectedFunction * traceFxn;
+    }
+    
     double integralOfDifference = (projectedFunction - f)->integrate(sideBasisCache);
 
     TEST_ASSERT(abs(integralOfDifference) < tol);
