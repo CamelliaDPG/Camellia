@@ -16,6 +16,7 @@
 #define Camellia_SimpleSolutionFunction_h
 
 #include "Function.h"
+#include "Solution.h" // required for SolutionComponent enumeration
 
 namespace Camellia
 {
@@ -25,10 +26,11 @@ class SimpleSolutionFunction : public TFunction<Scalar>
   TSolutionPtr<Scalar> _soln;
   VarPtr _var;
   bool _weightFluxesBySideParity;
-  int _solutionOrdinal;
+  SolutionComponent _solutionComponent;
+  int _solutionStage;
   std::string _solutionIdentifierExponent; // used in displayString (allows disambiguation of solutions; if non-empty means we'll drop the \overline business)
 public:
-  SimpleSolutionFunction(VarPtr var, TSolutionPtr<Scalar> soln, bool weightFluxesBySideParity, int solutionOrdinal, const std::string &solutionIdentifierExponent="");
+  SimpleSolutionFunction(VarPtr var, TSolutionPtr<Scalar> soln, bool weightFluxesBySideParity, SolutionComponent solutionComponent=STANDARD_SOLUTION, int solutionStage=0, const std::string &solutionIdentifierExponent="");
   void values(Camellia::FieldContainer<Scalar> &values, BasisCachePtr basisCache);
   TFunctionPtr<Scalar> x();
   TFunctionPtr<Scalar> y();

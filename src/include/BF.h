@@ -162,7 +162,7 @@ public:
                        const Camellia::FieldContainer<double> &cellSideParities, Teuchos::RCP<BasisCache> basisCache);
 
   TLinearTermPtr<Scalar> testFunctional(TSolutionPtr<Scalar> trialSolution, bool excludeBoundaryTerms=false, bool overrideMeshCheck=false,
-                                        int solutionOrdinal=0);
+                                        SolutionComponent solutionComponent=STANDARD_SOLUTION, int solutionStage=0);
   //! takes as argument a map that has trialID keys and FunctionPtr values.  Omitted trialIDs are taken to be zero.
   TLinearTermPtr<Scalar> testFunctional(const std::map<int,FunctionPtr> &solnMap);
 

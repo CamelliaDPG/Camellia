@@ -848,7 +848,7 @@ bool TLinearTerm<Scalar>::isZero() const   // true if the TLinearTerm is identic
 //  if Var learned about its "base", and then in addition to tracking the varIDs set here, we also tracked vars.)
 template<typename Scalar>
 void TLinearTerm<Scalar>::evaluate(Camellia::FieldContainer<Scalar> &values, TSolutionPtr<Scalar> solution, BasisCachePtr basisCache,
-                                   bool applyCubatureWeights, int solutionOrdinal)
+                                   bool applyCubatureWeights, SolutionComponent solutionComponent, int solutionStage)
 {
   // int sideIndex = basisCache->getSideIndex();
   //  bool boundaryTerm = (sideIndex != -1);
@@ -928,8 +928,7 @@ void TLinearTerm<Scalar>::evaluate(Camellia::FieldContainer<Scalar> &values, TSo
     }
 
     f->values(fValues,basisCache);
-    solution->solutionValues(solnValues,var->ID(),basisCache,
-                             applyCubatureWeights,var->op(),solutionOrdinal);
+    solution->solutionValues(solnValues,var->ID(),basisCache,solutionComponent,solutionStage,applyCubatureWeights,var->op());
 
     std::vector<int> fDim(fValues.rank());
     std::vector<int> solnDim(solnValues.rank());

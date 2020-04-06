@@ -58,7 +58,7 @@ TLinearTermPtr<Scalar> TRHS<Scalar>::linearTerm()
 }
 
 template <typename Scalar>
-TLinearTermPtr<Scalar> TRHS<Scalar>::linearTermCopy()
+TLinearTermPtr<Scalar> TRHS<Scalar>::linearTermCopy() const
 {
   return Teuchos::rcp( new TLinearTerm<Scalar> (*_lt) );
 }
@@ -233,6 +233,15 @@ template <typename Scalar>
 void TRHS<Scalar>::rhs(int testVarID, const Camellia::FieldContainer<double> &physicalPoints, Camellia::FieldContainer<Scalar> &values)
 {
   TEUCHOS_TEST_FOR_EXCEPTION(true, std::invalid_argument, "no rhs() implemented within RHS");
+}
+
+template <typename Scalar>
+TRHSPtr<Scalar> TRHS<Scalar>::rhsCopy() const
+{
+  auto ltCopy = this->linearTermCopy();
+  TRHSPtr<Scalar> newRHS = Teuchos::rcp( new TRHS<Scalar>(false) );
+  newRHS->addTerm(ltCopy);
+  return newRHS;
 }
 
 namespace Camellia

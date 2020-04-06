@@ -48,11 +48,14 @@ namespace
     std::map< int,TFunctionPtr<Scalar> > exactSolutionMap;
     exactSolutionMap[divVar->ID()] = exactSolution;
     
-    const int solutionOrdinal = 0;
+    const SolutionComponent solutionComponent = STANDARD_SOLUTION;
+    const int solutionStage = 0;
+    const int solutionOrdinal = solution->solutionOrdinal(solutionComponent, solutionStage);
     solution->projectOntoMesh(exactSolutionMap, solutionOrdinal);
     
     bool weightFluxesBySideParity = false; // not applicable here
-    SimpleSolutionFunction<Scalar> simpleSolutionFunction = SimpleSolutionFunction<Scalar>(divVar, solution, weightFluxesBySideParity, solutionOrdinal);
+    SimpleSolutionFunction<Scalar> simpleSolutionFunction = SimpleSolutionFunction<Scalar>(divVar, solution, weightFluxesBySideParity,
+                                                                                           solutionComponent, solutionStage);
     
     FunctionPtr f = Teuchos::rcp(&simpleSolutionFunction, false); // false: does not own memory
     // check that our projection succeeded:

@@ -102,19 +102,33 @@ void HDF5Exporter::exportSolution(TSolutionPtr<double> solution, std::vector<TFu
   vector<TFunctionPtr<double>> traceFunctions;
   vector<string> traceFunctionNames;
   
-  int numSolutions = solution->numSolutions();
-  for (int solutionOrdinal=0; solutionOrdinal<numSolutions; solutionOrdinal++)
+  int numSolutionComponents = solution->numRHSes();
+  for (int solutionComponentOrdinal=0; solutionComponentOrdinal<numSolutionComponents; solutionComponentOrdinal++)
   {
+    int solutionStage = 0; // right now, we only support output for solution stage 0
+    SolutionComponent solutionComponent;
+    if (solutionComponentOrdinal == 0)
+    {
+      solutionComponent = STANDARD_SOLUTION;
+    }
+    else if (solutionComponentOrdinal == 1)
+    {
+      solutionComponent = INFLUENCE_SOLUTION;
+    }
+    else
+    {
+      TEUCHOS_TEST_FOR_EXCEPTION(true, std::invalid_argument, "unhandled solution component selection");
+    }
     string namePrefix;
-    if      (solutionOrdinal == 0) namePrefix = "";
-    else if (solutionOrdinal == 1) namePrefix = "influence_";
-    else                           namePrefix = "unlabelled_"; // not *yet* supported by Solution, but could be someday...
+    if      (solutionComponent == STANDARD_SOLUTION)  namePrefix = "";
+    else if (solutionComponent == INFLUENCE_SOLUTION) namePrefix = "influence_";
+    else                                              namePrefix = "unlabelled_";
     bool dontWeightByParity = false; // inconsequential for field variables; allows unique value for traces...
     
     for (int i=0; i < fieldTrialIDs.size(); i++)
     {
       fieldVars.push_back(varFactory->trial(fieldTrialIDs[i]));
-      TFunctionPtr<double> fieldFunction = TFunction<double>::solution(fieldVars[i], solution, dontWeightByParity, solutionOrdinal);
+      TFunctionPtr<double> fieldFunction = TFunction<double>::solution(fieldVars[i], solution, dontWeightByParity, solutionComponent, solutionStage);
       string fieldFunctionName = namePrefix + fieldVars[i]->name();
       fieldFunctions.push_back(fieldFunction);
       fieldFunctionNames.push_back(fieldFunctionName);
@@ -122,7 +136,7 @@ void HDF5Exporter::exportSolution(TSolutionPtr<double> solution, std::vector<TFu
     for (int i=0; i < traceTrialIDs.size(); i++)
     {
       traceVars.push_back(varFactory->trial(traceTrialIDs[i]));
-      TFunctionPtr<double> traceFunction = TFunction<double>::solution(traceVars[i], solution, dontWeightByParity, solutionOrdinal);
+      TFunctionPtr<double> traceFunction = TFunction<double>::solution(traceVars[i], solution, dontWeightByParity, solutionComponent, solutionStage);
       string traceFunctionName = namePrefix + traceVars[i]->name();
       traceFunctions.push_back(traceFunction);
       traceFunctionNames.push_back(traceFunctionName);

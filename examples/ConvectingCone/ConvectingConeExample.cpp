@@ -1,6 +1,5 @@
 #include "HDF5Exporter.h"
 #include "MeshFactory.h"
-#include "PreviousSolutionFunction.h"
 #include "RefinementStrategy.h"
 #include "SimpleFunction.h"
 #include "Solver.h"

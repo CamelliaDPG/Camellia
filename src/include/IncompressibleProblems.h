@@ -86,8 +86,7 @@ class AnalyticalIncompressibleProblem : public IncompressibleProblem
     void projectExactSolution(SolutionPtr solution)
     {
       TEUCHOS_ASSERT(solution->numSolutions() == 1);
-      const int solutionOrdinal = 0;
-      solution->projectOntoMesh(_exactMap, solutionOrdinal);
+      solution->projectOntoMesh(_exactMap);
     }
 
     virtual void setBCs(SpaceTimeIncompressibleFormulationPtr form)

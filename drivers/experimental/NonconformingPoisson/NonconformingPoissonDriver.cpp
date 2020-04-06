@@ -230,7 +230,6 @@ void runSolve(vector<vector<double>> domainDim, int numElements, int polyOrder, 
   if (problemChoice == SINUSOIDAL_MANUFACTURED)
   {
     SolutionPtr bestApproximation = Solution::solution(bf, mesh, bc, rhs, ip);
-    int solutionOrdinal = 0;
     map<int, FunctionPtr> exactSolutionMap;
     exactSolutionMap[form.u()->ID()] = u_exact;
     exactSolutionMap[form.u_hat()->ID()] = u_exact;
@@ -239,7 +238,7 @@ void runSolve(vector<vector<double>> domainDim, int numElements, int polyOrder, 
     FunctionPtr n = Function::normal();
     FunctionPtr sgn = Function::sideParity();
     exactSolutionMap[form.sigma_n_hat()->ID()] = sigma_exact * n * sgn;
-    bestApproximation->projectOntoMesh(exactSolutionMap, solutionOrdinal);
+    bestApproximation->projectOntoMesh(exactSolutionMap);
     
     int cubatureEnrichment = 4;
     

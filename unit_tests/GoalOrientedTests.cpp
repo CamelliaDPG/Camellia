@@ -205,21 +205,7 @@ namespace
     
     auto soln_TwoRHS = simplePoissonSolutionWithZeroSecondaryRHS(elementWidths, H1Order, useConformingTraces, homogeneousBCs);
     
-    //    {
-    //      // DEBUGGING: write out the matrices and RHSes to file
-    //      soln_TwoRHS->setWriteMatrixToMatrixMarketFile(true, "/tmp/A_two.dat");
-    //      soln_TwoRHS->setWriteRHSToMatrixMarketFile(true, "/tmp/b_two.dat");
-    //    }
-    
     soln_TwoRHS->solve();
-    
-    //    {
-    //      // DEBUGGING:
-    //      auto lhs_TwoRHS = soln_TwoRHS->getLHSVector();
-    //      bool includeHeaders = true;
-    //
-    //      EpetraExt::MultiVectorToMatrixMarketFile("/tmp/x_two.dat",*lhs_TwoRHS,0,0,includeHeaders);
-    //    }
     
     // high-level check below -- check that the solution is zero
     PoissonFormulation poissonForm(spaceDim, useConformingTraces);
@@ -229,11 +215,12 @@ namespace
     VarPtr sigma_n_hat = poissonForm.sigma_n_hat();
     
     const bool weightFluxesByParity = false; // should not matter
-    const int solutionOrdinal = 1; // secondary solution
-    auto u_influence           = Function::solution(u,           soln_TwoRHS, weightFluxesByParity, solutionOrdinal);
-    auto u_hat_influence       = Function::solution(u_hat,       soln_TwoRHS, weightFluxesByParity, solutionOrdinal);
-    auto sigma_influence       = Function::solution(sigma,       soln_TwoRHS, weightFluxesByParity, solutionOrdinal);
-    auto sigma_n_hat_influence = Function::solution(sigma_n_hat, soln_TwoRHS, weightFluxesByParity, solutionOrdinal);
+    const SolutionComponent solutionComponent = INFLUENCE_SOLUTION; // secondary solution
+    const int solutionStage = 0;
+    auto u_influence           = Function::solution(u,           soln_TwoRHS, weightFluxesByParity, solutionComponent, solutionStage);
+    auto u_hat_influence       = Function::solution(u_hat,       soln_TwoRHS, weightFluxesByParity, solutionComponent, solutionStage);
+    auto sigma_influence       = Function::solution(sigma,       soln_TwoRHS, weightFluxesByParity, solutionComponent, solutionStage);
+    auto sigma_n_hat_influence = Function::solution(sigma_n_hat, soln_TwoRHS, weightFluxesByParity, solutionComponent, solutionStage);
     // u_influence should be zero; test this:
     auto u_err_L2 = u_influence->l2norm(soln_TwoRHS->mesh());
     TEST_COMPARE(u_err_L2, <, tol);
@@ -365,8 +352,10 @@ namespace
       VarPtr u = poissonForm.u();
       
       bool weightFluxesByParity = false;
-      auto u_0 = Function::solution(u, soln_TwoRHS, weightFluxesByParity, 0);
-      auto u_1 = Function::solution(u, soln_TwoRHS, weightFluxesByParity, 1);
+      
+      int solutionStage = 0;
+      auto u_0 = Function::solution(u, soln_TwoRHS, weightFluxesByParity, STANDARD_SOLUTION, solutionStage);
+      auto u_1 = Function::solution(u, soln_TwoRHS, weightFluxesByParity, INFLUENCE_SOLUTION, solutionStage);
       auto u_diff   = u_0 - u_1;
       
       auto u_err_L2 = u_diff->l2norm(soln_TwoRHS->mesh());

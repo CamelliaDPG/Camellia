@@ -14,12 +14,16 @@ using namespace std;
 
 template <typename Scalar>
 SimpleSolutionFunction<Scalar>::SimpleSolutionFunction(VarPtr var, TSolutionPtr<Scalar> soln,
-                                                       bool weightFluxesBySideParity, int solutionOrdinal, const std::string &solutionIdentifierExponent) : TFunction<Scalar>("SimpleSolutionFunction", var->rank())
+                                                       bool weightFluxesBySideParity, SolutionComponent solutionComponent, int solutionStage,
+                                                       const std::string &solutionIdentifierExponent)
+:
+TFunction<Scalar>("SimpleSolutionFunction", var->rank())
 {
   _var = var;
   _soln = soln;
   _weightFluxesBySideParity = weightFluxesBySideParity;
-  _solutionOrdinal = solutionOrdinal;
+  _solutionComponent = solutionComponent;
+  _solutionStage = solutionStage;
   if (solutionIdentifierExponent != "")
     _solutionIdentifierExponent = solutionIdentifierExponent;
   else
@@ -50,18 +54,20 @@ string SimpleSolutionFunction<Scalar>::displayString()
 template <typename Scalar>
 size_t SimpleSolutionFunction<Scalar>::getCellDataSize(GlobalIndexType cellID)
 {
+  const int solutionOrdinal = _soln->solutionOrdinal(_solutionComponent,_solutionStage);
   bool warnAboutOffRankImports = true;
-  auto & cellDofs = _soln->allCoefficientsForCellID(cellID, warnAboutOffRankImports, _solutionOrdinal);
+  auto & cellDofs = _soln->allCoefficientsForCellID(cellID, warnAboutOffRankImports, solutionOrdinal);
   return cellDofs.size() * sizeof(Scalar); // size in bytes
 }
 
 template <typename Scalar>
 void SimpleSolutionFunction<Scalar>::packCellData(GlobalIndexType cellID, char* cellData, size_t bufferLength)
 {
+  const int solutionOrdinal = _soln->solutionOrdinal(_solutionComponent,_solutionStage);
   size_t requiredLength = getCellDataSize(cellID);
   TEUCHOS_TEST_FOR_EXCEPTION(requiredLength > bufferLength, std::invalid_argument, "Buffer length too small");
   bool warnAboutOffRankImports = true;
-  auto & cellDofs = _soln->allCoefficientsForCellID(cellID, warnAboutOffRankImports, _solutionOrdinal);
+  auto & cellDofs = _soln->allCoefficientsForCellID(cellID, warnAboutOffRankImports, solutionOrdinal);
   size_t objSize = sizeof(Scalar);
   const Scalar* copyFromLocation = &cellDofs[0];
   memcpy(cellData, copyFromLocation, objSize * cellDofs.size());
@@ -70,15 +76,14 @@ void SimpleSolutionFunction<Scalar>::packCellData(GlobalIndexType cellID, char* 
 template <typename Scalar>
 size_t SimpleSolutionFunction<Scalar>::unpackCellData(GlobalIndexType cellID, const char* cellData, size_t bufferLength)
 {
-//  Epetra_CommPtr Comm = _soln->mesh()->Comm();
-//  int rank = Comm->MyPID();
+  const int solutionOrdinal = _soln->solutionOrdinal(_solutionComponent,_solutionStage);
   int numDofs = _soln->mesh()->getElementType(cellID)->trialOrderPtr->totalDofs();
   size_t numBytes = numDofs * sizeof(Scalar);
   TEUCHOS_TEST_FOR_EXCEPTION(numBytes > bufferLength, std::invalid_argument, "buffer is too short");
   Camellia::FieldContainer<Scalar> cellDofs(numDofs);
   Scalar* copyToLocation = &cellDofs[0];
   memcpy(copyToLocation, cellData, numBytes);
-  _soln->setSolnCoeffsForCellID(cellDofs,cellID,_solutionOrdinal);
+  _soln->setSolnCoeffsForCellID(cellDofs,cellID,solutionOrdinal);
   return numBytes;
 }
 
@@ -104,11 +109,10 @@ void SimpleSolutionFunction<Scalar>::values(Camellia::FieldContainer<Scalar> &va
   bool dontWeightForCubature = false;
   if (basisCache->mesh() != Teuchos::null)   // then we assume that the BasisCache is appropriate for solution's mesh...
   {
-    _soln->solutionValues(values, _var->ID(), basisCache, dontWeightForCubature, _var->op(), _solutionOrdinal);
+    _soln->solutionValues(values, _var->ID(), basisCache, _solutionComponent, _solutionStage, dontWeightForCubature, _var->op());
   }
   else
   {
-    TEUCHOS_TEST_FOR_EXCEPTION(_solutionOrdinal != 0, std::invalid_argument, "SimpleSolutionFunction only supports non-zero solutionOrdinals for BasisCaches with meshes defined.");
     // the following adapted from PreviousSolutionFunction.  Probably would do well to consolidate
     // that class with this one at some point...
     LinearTermPtr solnExpression = 1.0 * _var;
@@ -150,7 +154,10 @@ void SimpleSolutionFunction<Scalar>::values(Camellia::FieldContainer<Scalar> &va
         basisCacheOnePoint->setRefCellPoints(refPoint);
         //          cout << "refCellPoints:\n " << refPoint;
         //          cout << "physicalCubaturePoints:\n " << basisCacheOnePoint->getPhysicalCubaturePoints();
-        solnExpression->evaluate(value, _soln, basisCacheOnePoint);
+        const bool applyCubatureWeights = false;
+        const SolutionComponent solutionComponent = STANDARD_SOLUTION;
+        const int solutionStage = 0;
+        solnExpression->evaluate(value, _soln, basisCacheOnePoint, applyCubatureWeights, _solutionComponent, _solutionStage);
         //          cout << "value at point (" << point(0,0) << ", " << point(0,1) << ") = " << value(0,0) << endl;
         values(cellIndex,ptIndex) = value(0,0);
       }
