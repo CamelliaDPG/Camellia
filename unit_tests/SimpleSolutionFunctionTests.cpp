@@ -40,12 +40,11 @@ namespace
     const double two = 2.0;
     FunctionPtr two_Function = Function::constant(two);
     SolutionPtr solution = Solution::solution(poissonMesh);
-    const int solutionOrdinal = 0;
-    solution->projectOntoMesh({{u->ID(), two_Function}}, solutionOrdinal);
+    solution->projectOntoMesh({{u->ID(), two_Function}});
     
     bool weightFluxesBySideParity = false; // does not matter for fields
     // this simple solution function has value 2 everywhere:
-    SimpleSolutionFunction<double> two_SimpleSolutionFunction(u, solution, weightFluxesBySideParity, solutionOrdinal);
+    SimpleSolutionFunction<double> two_SimpleSolutionFunction(u, solution, weightFluxesBySideParity);
     
     double startingValue = 3.141592; // value to initialized the input view with
     double expectedValue = startingValue;
@@ -64,7 +63,7 @@ namespace
       auto dvValues = values.checkoutDeviceView();
       two_SimpleSolutionFunction.values(dvValues, modType, basisCache);
       
-      values.checkinDeviceView(); // deep copies back to host, so we can do the comparison on host
+      values.checkinDeviceView(true); // deep copies back to host, so we can do the comparison on host
       
       for (int pointOrdinal=0; pointOrdinal<numPoints; pointOrdinal++)
       {
