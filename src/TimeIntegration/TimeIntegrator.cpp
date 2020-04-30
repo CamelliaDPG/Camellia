@@ -31,8 +31,7 @@ TimeIntegrator::TimeIntegrator(BFPtr steadyJacobian, SteadyResidual &steadyResid
   RHSPtr nullRHS = Teuchos::rcp((RHS*)NULL);
   IPPtr nullIP = Teuchos::rcp((IP*)NULL);
   _prevTimeSolution = Teuchos::rcp(new TSolution<double>(mesh, nullBC, nullRHS, nullIP) );
-  const int solutionOrdinal = 0;
-  _prevTimeSolution->projectOntoMesh(initialCondition, solutionOrdinal);
+  _prevTimeSolution->projectOntoMesh(initialCondition);
   if (_nonlinear)
   {
     _prevNLSolution = Teuchos::rcp(new TSolution<double>(mesh, nullBC, nullRHS, nullIP) );

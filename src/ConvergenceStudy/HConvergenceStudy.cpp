@@ -287,9 +287,8 @@ TSolutionPtr<double> HConvergenceStudy::bestApproximation(Teuchos::RCP<Mesh> mes
   bestApproximation->setCubatureEnrichmentDegree(_cubatureDegreeForExact);
   
   TEUCHOS_ASSERT(bestApproximation->numSolutions() == 1);
-  const int solutionOrdinal = 0;
   
-  bestApproximation->projectOntoMesh(_exactSolutionFunctions,solutionOrdinal);
+  bestApproximation->projectOntoMesh(_exactSolutionFunctions);
   return bestApproximation;
 }
 

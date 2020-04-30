@@ -17,6 +17,7 @@
 #include "CamelliaCellTools.h"
 #include "CamelliaDebugUtility.h"
 #include "Cell.h"
+#include "ERKTableau.h"
 #include "GlobalDofAssignment.h"
 #include "GnuPlotUtil.h"
 #include "HDF5Exporter.h"
@@ -27,6 +28,7 @@
 #include "Projector.h"
 #include "RHS.h"
 #include "Solution.h"
+#include "SolutionStage.h"
 #include "StokesVGPFormulation.h"
 #include "Var.h"
 
@@ -261,8 +263,7 @@ namespace
     {
       Camellia::FieldContainer<double> cellDofs(mesh->getElementType(cellID)->trialOrderPtr->totalDofs());
       cellDofs.initialize((double)rank);
-      const int solutionOrdinal = 0;
-      soln->setLocalCoefficientsForCell(cellID, cellDofs, solutionOrdinal);
+      soln->setLocalCoefficientsForCell(cellID, cellDofs);
     }
     
     set<GlobalIndexType> myCellsAndNeighbors;
@@ -311,8 +312,7 @@ namespace
     VarPtr u_hat = poissonForm.u_hat();
     FunctionPtr value = Function::constant(1.0);
     SolutionPtr solution = Solution::solution(poissonMesh);
-    const int solutionOrdinal = 0;
-    solution->projectOntoMesh({{u_hat->ID(), value}}, solutionOrdinal);
+    solution->projectOntoMesh({{u_hat->ID(), value}});
     
     SolutionPtr solutionAdded = Solution::solution(poissonMesh);
     solutionAdded->addSolution(solution, 1.0);
@@ -1111,6 +1111,256 @@ namespace
     testCondensedSolveZeroMeanConstraint(minRule, out, success);
   }
   
+  void testERKTableauConvergenceRate(ERKTableauPtr tableau, const double dt_initial, Teuchos::FancyOStream &out, bool &success)
+  {
+    /*
+     In this test, we solve an exponential decay problem
+     u' = - lambda u
+     which has solution
+     u(t) = u_0 e^(-lambda t)
+     using an ERKTableau, and we check that this has the right convergence rate in the time step.
+     
+     Because the ERKTableau solve is embedded within Solution, we do need to set up a variational
+     formulation.  Because we are only concerned with temporal convergence here, we can manage
+     with a very simple formulation: one constant variable, one 1D element.
+     */
+    const double rateTolerance = 1e-2; // look for rates in range expectedRate ± rateTolerance
+    const double errTolerance = 1e-18; // for linear term check; will loosen later
+    const double t_final    = 10 * dt_initial;
+    SolutionStagePtr solnStage = SolutionStage::solutionStage(tableau, dt_initial);
+    
+    const double lambda  = 1.0;
+    const double u0      = 1.0;
+    const double u_final = u0 * exp(-lambda * t_final);
+    
+    VarFactoryPtr vf = VarFactory::varFactory();
+    auto u = vf->fieldVar("u");
+    auto v = vf->testVar("v", L2);
+    
+    FunctionPtr dt = solnStage->dt();
+    
+    BFPtr bf = BF::bf(vf);
+    bf->addTerm(u / dt, v);
+    
+    const double xLeft = 0.0;
+    const double xRight = 1.0;
+    const int H1Order = 1; // --> constant L^2 variables
+    const int numElements = 1;
+    const int delta_k = 0; // Bubnov-Galerkin
+    
+    auto mesh = MeshFactory::intervalMesh(bf, xLeft, xRight, numElements, H1Order, delta_k);
+    auto soln = Solution::solution(bf, mesh);
+    auto solnWeakPtr = Teuchos::rcp(soln.get(), false); // avoid circular strong reference
+    
+    const bool weightFluxesBySideParity = false; // not applicable here
+    const int solutionStage = -1; // the "current" previous solution
+    auto u_prev = Function::solution(u, solnWeakPtr, weightFluxesBySideParity, STANDARD_SOLUTION, solutionStage);
+    
+    RHSPtr rhs = RHS::rhs();
+    rhs->addTerm((1/dt) * u_prev * v - lambda * u_prev * v); // soln will end up adding a -(1/dt) * u_prev * v term
+    
+    soln->setRHS(rhs);
+    soln->setSolutionStage(solnStage); // soln will modify the RHS, adding -(1/dt) * u_prev * v term
+    
+    soln->setBC(BC::bc());
+    
+    std::map<int, FunctionPtr> initialSoln;
+    initialSoln[u->ID()] = Function::constant(u0);
+    soln->projectOntoMesh(initialSoln);
+    
+    // let's confirm that the RHS is as we expect it to be; should be equal to
+    //  - lambda * u_prev * v
+    LinearTermPtr expectedRHSTerm = - lambda * u_prev * v;
+    LinearTermPtr actualRHSTerm = soln->rhs()->linearTerm();
+    LinearTermPtr errTerm = actualRHSTerm - expectedRHSTerm;
+    IPPtr testIP = IP::ip();
+    testIP->addTerm(v);
+    double err = errTerm->computeNorm(testIP, mesh);
+    
+    TEST_COMPARE(err, <, errTolerance);
+    
+    while (solnStage->getTime() < t_final)
+    {
+      soln->solve();
+    }
+    
+    double err_initial = (u_final - u_prev)->l2norm(mesh);
+    out << "err_initial = " << err_initial << std::endl;
+    
+    // compute again, this time with time step cut in half:
+    solnStage->setTime(0);
+    soln->projectOntoMesh(initialSoln);
+    solnStage->setTimeStep(dt_initial/2.0);
+    while (solnStage->getTime() < t_final)
+    {
+      soln->solve();
+    }
+    
+    double err_final = (u_final - u_prev)->l2norm(mesh);
+    out << "err_final = " << err_final << std::endl;
+    
+    double err_rate = std::log(err_initial / err_final) / std::log(2.0);
+    out << "err_rate = " << err_rate << std::endl;
+    
+    double expectedRate = tableau->expectedRate();
+    
+    bool rateMatches = (err_rate < expectedRate + rateTolerance) && (err_rate > expectedRate - rateTolerance);
+    if (!rateMatches)
+    {
+      success = false;
+      out << "FAILURE: actual rate of " << err_rate << " is not within " << rateTolerance << " of expected rate of ";
+      out << expectedRate << std::endl;
+    }
+  }
+  
+  TEUCHOS_UNIT_TEST( Solution, ERKTableauConvergenceRateForwardEuler )
+  {
+    ERKTableauPtr tableau = ERKTableau::forwardEuler();
+    const double dt_initial = .001;
+    testERKTableauConvergenceRate(tableau, dt_initial, out, success);
+  }
+  
+  TEUCHOS_UNIT_TEST( Solution, ERKTableauConvergenceRateHeun )
+  {
+    ERKTableauPtr tableau = ERKTableau::heun();
+    const double dt_initial = .001;
+    testERKTableauConvergenceRate(tableau, dt_initial, out, success);
+  }
+  
+  /*
+   NOTE: we do not include a test for the rate of RK4 because the rate test
+         above for dt_initial > .001 appears to be in the pre-asymptotic regime
+         (rates are higher than expected), while dt_initial <= .001 gives
+         err of 0 to machine precision, so that rates are nan or -inf.
+         There is likely a better way to test the rate of RK4.  For now, we
+         make do with the single-step test below.
+   */
+  
+  TEUCHOS_UNIT_TEST( Solution, ERKTableauConvergenceRateSSPRK3 )
+  {
+    ERKTableauPtr tableau = ERKTableau::ssprk3();
+    const double dt_initial = .001;
+    testERKTableauConvergenceRate(tableau, dt_initial, out, success);
+  }
+  
+  void testERKTableauSingleStep(ERKTableauPtr tableau, Teuchos::FancyOStream &out, bool &success)
+  {
+    /*
+     In this test, we solve an exponential decay problem
+     u' = - lambda u
+     which has solution
+     u(t) = u_0 e^(-lambda t)
+     using an ERKTableau, and we check that solution after the first step matches the expected value
+     (computed manually).
+     
+     Because the ERKTableau solve is embedded within Solution, we do need to set up a variational
+     formulation.  Because we are only concerned with temporal convergence here, we can manage
+     with a very simple formulation: one constant variable, one 1D element.
+     */
+    const double relTolerance = 1e-16;
+    const double dtValue = 0.01;
+    SolutionStagePtr solnStage = SolutionStage::solutionStage(tableau, dtValue);
+    
+    const double lambda  = 1.0;
+    const double u0      = 1.0;
+    
+    using std::vector;
+    vector<double> k(tableau->numStages());
+    for (int stageOrdinal=1; stageOrdinal<=tableau->numStages(); stageOrdinal++)
+    {
+      const int i = stageOrdinal-1;
+      double u_for_stage = u0;
+      for (int j=0; j<i; j++)
+      {
+        const double a_ij = tableau->a(i, j);
+        u_for_stage += dtValue * a_ij * k[j];
+      }
+      k[i] = - lambda * u_for_stage;
+    }
+    
+    double u_expected = u0;
+    for (int stageOrdinal=1; stageOrdinal<=tableau->numStages(); stageOrdinal++)
+    {
+      const int i=stageOrdinal-1;
+      const double b_i = tableau->b(i);
+      u_expected += dtValue * b_i * k[i];
+    }
+    
+    VarFactoryPtr vf = VarFactory::varFactory();
+    auto u = vf->fieldVar("u");
+    auto v = vf->testVar("v", L2);
+    
+    FunctionPtr dt = solnStage->dt();
+    
+    BFPtr bf = BF::bf(vf);
+    bf->addTerm(u / dt, v);
+    
+    const double xLeft = 0.0;
+    const double xRight = 1.0;
+    const int H1Order = 1; // --> constant L^2 variables
+    const int numElements = 1;
+    const int delta_k = 0; // Bubnov-Galerkin
+    
+    auto mesh = MeshFactory::intervalMesh(bf, xLeft, xRight, numElements, H1Order, delta_k);
+    auto soln = Solution::solution(bf, mesh);
+    auto solnWeakPtr = Teuchos::rcp(soln.get(), false); // avoid circular strong reference
+    
+    const bool weightFluxesBySideParity = false; // not applicable here
+    const int solutionStage = -1; // the "current" previous solution
+    auto u_prev = Function::solution(u, solnWeakPtr, weightFluxesBySideParity, STANDARD_SOLUTION, solutionStage);
+    
+    RHSPtr rhs = RHS::rhs();
+    rhs->addTerm((1./dt) * u_prev * v - lambda * u_prev * v); // soln will end up adding a -(1/dt) * u_prev * v term
+    
+    soln->setRHS(rhs);
+    soln->setSolutionStage(solnStage); // soln will modify the RHS, adding -(1/dt) * u_prev * v term
+    
+    soln->setBC(BC::bc());
+    
+    std::map<int, FunctionPtr> initialSoln;
+    initialSoln[u->ID()] = Function::constant(u0);
+    soln->projectOntoMesh(initialSoln);
+    
+    // single step:
+    soln->solve();
+    
+    // single, constant element of width 1: the value is the same as the integral
+    double u_value = u_prev->integrate(mesh);
+    out << "actual u   = " << u_value << std::endl;
+    out << "expected u = " << u_expected << std::endl;
+    
+    double err = (u_expected - u_prev)->l2norm(mesh);
+    out << "err = " << err << std::endl;
+    
+    double relErr = u_expected * err;
+    out << "relErr = " << relErr << std::endl;
+    TEST_COMPARE(relErr, <, relTolerance);
+  }
+  
+  TEUCHOS_UNIT_TEST( Solution, ERKTableauSingleStepForwardEuler )
+  {
+    ERKTableauPtr tableau = ERKTableau::forwardEuler();
+    testERKTableauSingleStep(tableau, out, success);
+  }
+  
+  TEUCHOS_UNIT_TEST( Solution, ERKTableauSingleStepHeun )
+  {
+    ERKTableauPtr tableau = ERKTableau::heun();
+    testERKTableauSingleStep(tableau, out, success);
+  }
+
+  TEUCHOS_UNIT_TEST( Solution, ERKTableauSingleStepRK4 )
+  {
+    ERKTableauPtr tableau = ERKTableau::rk4();
+    testERKTableauSingleStep(tableau, out, success);
+  }
+  
+  TEUCHOS_UNIT_TEST( Solution, ERKTableauSingleStepSSPRK3 )
+  {
+    ERKTableauPtr tableau = ERKTableau::ssprk3();
+    testERKTableauSingleStep(tableau, out, success);
+  }
+  
   TEUCHOS_UNIT_TEST( Solution, ImportOffRankCellData_1D )
   {
     int spaceDim = 1;
@@ -1244,8 +1494,7 @@ namespace
     map<int, FunctionPtr > functionMap;
     functionMap[uhat->ID()] = f;
     
-    const int solutionOrdinal = 0;
-    soln->projectOntoMesh(functionMap, solutionOrdinal);
+    soln->projectOntoMesh(functionMap);
     
     // Now, manually project onto the basis for the trace to compute some expected coefficients
     Camellia::FieldContainer<double> basisCoefficientsExpected;
@@ -1326,8 +1575,7 @@ namespace
     VarPtr sigma_n_hat = form.sigma_n_hat();
     solutionMap[sigma_n_hat->ID()] = exactFxn;
     
-    const int solutionOrdinal = 0;
-    solution->projectOntoMesh(solutionMap, solutionOrdinal);
+    solution->projectOntoMesh(solutionMap);
     
     double tol = 1e-14;
     FunctionPtr solnFxn = Function::solution(sigma_n_hat, solution, false);
@@ -1370,8 +1618,7 @@ namespace
     
     solutionMap[sigma_n_hat->ID()] = exactFxn;
     
-    const int solutionOrdinal = 0;
-    solution->projectOntoMesh(solutionMap, solutionOrdinal);
+    solution->projectOntoMesh(solutionMap);
     FunctionPtr solnFxn = Function::solution(sigma_n_hat, solution, false);
     
     // as sanity check, confirm that (solnFxn == exactFxn) before refinement
@@ -1448,8 +1695,7 @@ namespace
     
     solutionMap[sigma_n_hat->ID()] = exactFxn;
     
-    const int solutionOrdinal = 0;
-    solution->projectOntoMesh(solutionMap, solutionOrdinal);
+    solution->projectOntoMesh(solutionMap);
     FunctionPtr solnFxn = Function::solution(sigma_n_hat, solution, false);
     
     // as sanity check, confirm that (solnFxn == exactFxn) before refinement
@@ -1566,8 +1812,7 @@ namespace
     
     solutionMap[sigma_n_hat->ID()] = exactFxn;
     
-    const int solutionOrdinal = 0;
-    solution->projectOntoMesh(solutionMap, solutionOrdinal);
+    solution->projectOntoMesh(solutionMap);
     FunctionPtr solnFxn = Function::solution(sigma_n_hat, solution, false);
 
     // as sanity check, confirm that (solnFxn == exactFxn) before refinement
@@ -1650,8 +1895,7 @@ namespace
     map<int, FunctionPtr > functionMap;
     
     functionMap[uhat->ID()] = f;
-    const int solutionOrdinal = 0;
-    spaceTimeSolution->projectOntoMesh(functionMap, solutionOrdinal);
+    spaceTimeSolution->projectOntoMesh(functionMap);
     
     //    for (GlobalIndexType cellID=0; cellID <= 1; cellID++) {
     //      cout << "CellID " << cellID << " info:\n";
@@ -1816,8 +2060,7 @@ namespace
     functionMap[fhat->ID()] = f_flux;
     functionMap[u->ID()] = Function::xn(1);
     functionMap[sigma->ID()] = Function::vectorize(Function::xn(1), Function::yn(1));
-    const int solutionOrdinal = 0;
-    spaceTimeSolution->projectOntoMesh(functionMap, solutionOrdinal);
+    spaceTimeSolution->projectOntoMesh(functionMap);
     
     double tol = 1e-14;
     for (map<int, FunctionPtr >::iterator entryIt = functionMap.begin(); entryIt != functionMap.end(); entryIt++)
@@ -1939,8 +2182,7 @@ namespace
     functionMap[fhat->ID()] = f_flux;
     functionMap[u->ID()] = Function::xn(1);
     functionMap[sigma->ID()] = Function::vectorize(Function::xn(1), Function::yn(1), Function::zn(1));
-    const int solutionOrdinal = 0;
-    spaceTimeSolution->projectOntoMesh(functionMap, solutionOrdinal);
+    spaceTimeSolution->projectOntoMesh(functionMap);
     
     double tol = 1e-14;
     for (map<int, FunctionPtr >::iterator entryIt = functionMap.begin(); entryIt != functionMap.end(); entryIt++)
@@ -2026,8 +2268,7 @@ namespace
     std::map<int, FunctionPtr> solnMap;
     solnMap[form.u()->ID()] = u_exact;
     
-    int solutionOrdinal = 0; // just one solution
-    soln->projectOntoMesh(solnMap, solutionOrdinal);
+    soln->projectOntoMesh(solnMap);
     
     auto elemType = mesh->getElementType(parentCellID);
     auto basis = elemType->trialOrderPtr->getBasis(form.u()->ID());
@@ -2054,12 +2295,12 @@ namespace
     // for this to be an effective test, we discard parent cell's old coefficients -- these should be recomputed during hUnrefine()
     soln->discardInactiveCellCoefficients();
     
-    bool parentHasCoefficients = soln->cellHasCoefficientsAssigned(parentCellID, solutionOrdinal);
+    bool parentHasCoefficients = soln->cellHasCoefficientsAssigned(parentCellID);
     TEST_ASSERT(!parentHasCoefficients);
     
     mesh->hUnrefine({parentCellID});
     
-    parentHasCoefficients = soln->cellHasCoefficientsAssigned(parentCellID, solutionOrdinal);
+    parentHasCoefficients = soln->cellHasCoefficientsAssigned(parentCellID);
     TEST_ASSERT(parentHasCoefficients);
     
     soln->solnCoeffsForCellID(basisCoeffs, parentCellID, form.u()->ID());

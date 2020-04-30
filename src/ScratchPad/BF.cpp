@@ -976,6 +976,7 @@ namespace Camellia
     if (INFO != 0)
     {
       cout << "dpotrf_ result: " << INFO << endl;
+      TEUCHOS_TEST_FOR_EXCEPTION(true, std::invalid_argument, "Cholesky factorization failed");
       result = INFO;
     }
     
@@ -1421,7 +1422,7 @@ namespace Camellia
         
         timer.ResetStartTime();
         // RHS:
-        this->stiffnessMatrix(stiffnessEnriched, elemType, cellSideParities, basisCache, true, true);
+        this->stiffnessMatrix(stiffnessEnriched, elemType, cellSideParities, basisCache, true, _warnAboutZeroRowsAndColumns);
         timeB = timer.ElapsedTime();
         
         Teuchos::Array<int> localIPDim(2);
@@ -1807,7 +1808,7 @@ namespace Camellia
   
   template <typename Scalar>
   TLinearTermPtr<Scalar> TBF<Scalar>::testFunctional(TSolutionPtr<Scalar> trialSolution, bool excludeBoundaryTerms, bool overrideMeshCheck,
-                                                     int solutionOrdinal)
+                                                     SolutionComponent solutionComponent, int solutionStage)
   {
     TLinearTermPtr<Scalar> functional = Teuchos::rcp(new LinearTerm());
     for (typename vector< TBilinearTerm<Scalar> >:: iterator btIt = _terms.begin();
@@ -1818,7 +1819,7 @@ namespace Camellia
       TLinearTermPtr<Scalar> testTerm = btIt->second;
       bool multiplyFluxesByParity = true; // default for PreviousSolutionFunction constructor
       TFunctionPtr<Scalar> trialValue = Teuchos::rcp( new PreviousSolutionFunction<Scalar>(trialSolution, trialTerm,
-                                                                                           multiplyFluxesByParity, solutionOrdinal) );
+                                                                                           multiplyFluxesByParity, solutionComponent, solutionStage) );
       static_cast< PreviousSolutionFunction<Scalar>* >(trialValue.get())->setOverrideMeshCheck(overrideMeshCheck);
       if ( (! excludeBoundaryTerms) || (! trialValue->boundaryValueOnly()) )
       {

@@ -572,10 +572,9 @@ CompressibleNavierStokesFormulation::CompressibleNavierStokesFormulation(MeshTop
     
     TEUCHOS_ASSERT(_backgroundFlow->numSolutions() == 1);
     TEUCHOS_ASSERT(_solnPrevTime->numSolutions() == 1);
-    const int solutionOrdinal = 0;
 
-    _backgroundFlow->projectOntoMesh(initialGuess, solutionOrdinal);
-    _solnPrevTime->projectOntoMesh(initialGuess, solutionOrdinal);
+    _backgroundFlow->projectOntoMesh(initialGuess);
+    _solnPrevTime->projectOntoMesh(initialGuess);
   }
   else
   {

@@ -34,8 +34,7 @@ int main(int argc, char *argv[])
   map<int, FunctionPtr> exactMap;
   exactMap[phi->ID()] = phi_exact;
   
-  int solutionOrdinal = 0;
-  soln->projectOntoMesh(exactMap, solutionOrdinal);
+  soln->projectOntoMesh(exactMap);
   
   return 0;
 }

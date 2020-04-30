@@ -253,7 +253,6 @@ void testIntegrateSpaceVaryingFunctionSides(int spaceDim, Teuchos::FancyOStream 
     
     // set 1 values for time 0 children
     projectionMap[spaceTimeTrace->ID()] = Function::constant(1.0);
-    const int solutionOrdinal = 0; // only one solution in this test
     for (int childCellID : childrenTime0)
     {
       if (rankLocalCells.find(childCellID) != rankLocalCells.end())
@@ -262,7 +261,7 @@ void testIntegrateSpaceVaryingFunctionSides(int spaceDim, Teuchos::FancyOStream 
         {
           if (cellTopo->sideIsSpatial(sideOrdinal))
           {
-            solution->projectOntoCell(projectionMap, childCellID, sideOrdinal, solutionOrdinal);
+            solution->projectOntoCell(projectionMap, childCellID, sideOrdinal);
           }
         }
       }
@@ -278,7 +277,7 @@ void testIntegrateSpaceVaryingFunctionSides(int spaceDim, Teuchos::FancyOStream 
         {
           if (cellTopo->sideIsSpatial(sideOrdinal))
           {
-            solution->projectOntoCell(projectionMap, childCellID, sideOrdinal, solutionOrdinal);
+            solution->projectOntoCell(projectionMap, childCellID, sideOrdinal);
           }
         }
       }

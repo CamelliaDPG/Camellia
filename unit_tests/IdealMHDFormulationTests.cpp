@@ -860,9 +860,8 @@ namespace
     valueMap[form->m(2)->ID()] = m->spatialComponent(2);
     valueMap[form->m(3)->ID()] = m->spatialComponent(3);
     
-    int solutionOrdinal = 0;
-    form->solutionPreviousTimeStep()->projectOntoMesh(valueMap, solutionOrdinal);
-    form->solution()->projectOntoMesh(valueMap, solutionOrdinal);
+    form->solutionPreviousTimeStep()->projectOntoMesh(valueMap);
+    form->solution()->projectOntoMesh(valueMap);
     form->setBx(Function::zero());
     auto lt = bf->testFunctional(valueMap);
     out << "lt: " << lt->displayString() << endl;
@@ -923,9 +922,8 @@ namespace
     valueMap[form->m(2)->ID()] = m->spatialComponent(2);
     valueMap[form->m(3)->ID()] = m->spatialComponent(3);
     
-    int solutionOrdinal = 0;
-    form->solutionPreviousTimeStep()->projectOntoMesh(valueMap, solutionOrdinal);
-    form->solution()->projectOntoMesh(valueMap, solutionOrdinal);
+    form->solutionPreviousTimeStep()->projectOntoMesh(valueMap);
+    form->solution()->projectOntoMesh(valueMap);
     
     auto mesh = form->solution()->mesh();
     auto ip = form->solutionIncrement()->ip();

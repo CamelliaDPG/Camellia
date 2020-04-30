@@ -184,8 +184,7 @@ namespace
     soln->setCubatureEnrichmentDegree(beta_degree); //set to match the degree of beta
     mesh->registerSolution(soln);
     
-    const int solutionOrdinal = 0;
-    soln->projectOntoMesh(solnMap, solutionOrdinal);
+    soln->projectOntoMesh(solnMap);
     
     // now, we should have zero energy error
     double energyError = soln->energyErrorTotal();

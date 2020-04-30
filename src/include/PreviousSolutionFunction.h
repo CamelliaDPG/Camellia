@@ -30,14 +30,17 @@ class PreviousSolutionFunction : public TFunction<Scalar>
   bool _overrideMeshCheck;
   TSolutionPtr<Scalar> _soln;
   LinearTermPtr _solnExpression;
-  int _solnOrdinal;
+  SolutionComponent _solnComponent;
+  int _stageNumber;
 public:
-  PreviousSolutionFunction(TSolutionPtr<Scalar> soln, LinearTermPtr solnExpression, bool multiplyFluxesByCellParity = true, int solutionOrdinal=0);
-  PreviousSolutionFunction(TSolutionPtr<Scalar> soln, VarPtr var, bool multiplyFluxesByCellParity = true, int solutionOrdinal=0);
+  PreviousSolutionFunction(TSolutionPtr<Scalar> soln, LinearTermPtr solnExpression, bool multiplyFluxesByCellParity = true,
+                           SolutionComponent solutionComponent = STANDARD_SOLUTION, int stageNumber = 0);
+  PreviousSolutionFunction(TSolutionPtr<Scalar> soln, VarPtr var, bool multiplyFluxesByCellParity = true,
+                           SolutionComponent solutionComponent = STANDARD_SOLUTION, int stageNumber = 0);
   bool boundaryValueOnly();
   void setOverrideMeshCheck(bool value, bool dontWarn=false);
   void values(Camellia::FieldContainer<Scalar> &values, BasisCachePtr basisCache);
-  static map<int, TFunctionPtr<Scalar> > functionMap( vector< VarPtr > varPtrs, TSolutionPtr<Scalar> soln, int solutionOrdinal);
+  static map<int, TFunctionPtr<Scalar> > functionMap( vector< VarPtr > varPtrs, TSolutionPtr<Scalar> soln, SolutionComponent solutionComponent, int stageNumber);
   string displayString();
   
   void importCellData(std::vector<GlobalIndexType> cellIDs);

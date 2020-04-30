@@ -57,8 +57,10 @@ public:
   void addTerm( VarPtr v );
 
   TLinearTermPtr<Scalar> linearTerm(); // MUTABLE reference (change this, RHS will change!)
-  TLinearTermPtr<Scalar> linearTermCopy(); // copy of RHS as a LinearTerm
+  TLinearTermPtr<Scalar> linearTermCopy() const; // copy of RHS as a LinearTerm
 
+  TRHSPtr<Scalar> rhsCopy() const;
+  
   virtual ~TRHS() {}
 
   static TRHSPtr<Scalar> rhs()

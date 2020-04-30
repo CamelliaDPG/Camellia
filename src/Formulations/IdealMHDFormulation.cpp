@@ -1279,11 +1279,10 @@ void IdealMHDFormulation::setInitialCondition(FunctionPtr rho, FunctionPtr u, Fu
 
 void IdealMHDFormulation::setInitialState(const std::map<int, FunctionPtr> &initialState)
 {
-  const int solutionOrdinal = 0;
-  _backgroundFlow->projectOntoMesh(initialState, solutionOrdinal);
+  _backgroundFlow->projectOntoMesh(initialState);
   if (!_spaceTime)
   {
-    _solnPrevTime->projectOntoMesh(initialState, solutionOrdinal);
+    _solnPrevTime->projectOntoMesh(initialState);
   }
 }
 

@@ -622,8 +622,7 @@ TEUCHOS_UNIT_TEST( LinearTerm, FauxSpaceTimeIntegrationByPartsInTime_2D )
     LinearTermPtr lt = weight * u;
     
     SolutionPtr solution = Solution::solution(form.bf(), mesh);
-    const int solutionOrdinal = 0;
-    solution->projectOntoMesh({{u->ID(), u_exact}}, solutionOrdinal);
+    solution->projectOntoMesh({{u->ID(), u_exact}});
     
     GlobalIndexType cellID = 0;
     // do comparison on the MPI rank that owns cellID
@@ -634,7 +633,10 @@ TEUCHOS_UNIT_TEST( LinearTerm, FauxSpaceTimeIntegrationByPartsInTime_2D )
       int numPoints = basisCache->getRefCellPoints().dimension(0);
       int numCells = 1;
       Camellia::FieldContainer<double> actualValues(numCells, numPoints);
-      lt->evaluate(actualValues, solution, basisCache);
+      bool applyCubatureWeights = false;
+      SolutionComponent solutionComponent = STANDARD_SOLUTION;
+      int solutionStage = 0;
+      lt->evaluate(actualValues, solution, basisCache, applyCubatureWeights, solutionComponent, solutionStage);
       
       Camellia::FieldContainer<double> expectedValues(numCells, numPoints);
       expectedFunction->values(expectedValues, basisCache);
@@ -661,8 +663,7 @@ TEUCHOS_UNIT_TEST( LinearTerm, FauxSpaceTimeIntegrationByPartsInTime_2D )
     LinearTermPtr lt = weight * u->grad();
     
     SolutionPtr solution = Solution::solution(form.bf(), mesh);
-    const int solutionOrdinal = 0;
-    solution->projectOntoMesh({{u->ID(), u_exact}}, solutionOrdinal);
+    solution->projectOntoMesh({{u->ID(), u_exact}});
     
     GlobalIndexType cellID = 0;
     // do comparison on the MPI rank that owns cellID
@@ -673,7 +674,11 @@ TEUCHOS_UNIT_TEST( LinearTerm, FauxSpaceTimeIntegrationByPartsInTime_2D )
       int numPoints = basisCache->getRefCellPoints().dimension(0);
       int numCells = 1;
       Camellia::FieldContainer<double> actualValues(numCells, numPoints, spaceDim);
-      lt->evaluate(actualValues, solution, basisCache);
+      
+      bool applyCubatureWeights = false;
+      SolutionComponent solutionComponent = STANDARD_SOLUTION;
+      int solutionStage = 0;
+      lt->evaluate(actualValues, solution, basisCache, applyCubatureWeights, solutionComponent, solutionStage);
       
       Camellia::FieldContainer<double> expectedValues(numCells, numPoints, spaceDim);
       expectedFunction->values(expectedValues, basisCache);
@@ -701,8 +706,7 @@ TEUCHOS_UNIT_TEST( LinearTerm, FauxSpaceTimeIntegrationByPartsInTime_2D )
     LinearTermPtr lt = weight * u;
     
     SolutionPtr solution = Solution::solution(form.bf(), mesh);
-    const int solutionOrdinal = 0;
-    solution->projectOntoMesh({{u->ID(), u_exact}}, solutionOrdinal);
+    solution->projectOntoMesh({{u->ID(), u_exact}});
     
     GlobalIndexType cellID = 0;
     // do comparison on the MPI rank that owns cellID
@@ -713,7 +717,10 @@ TEUCHOS_UNIT_TEST( LinearTerm, FauxSpaceTimeIntegrationByPartsInTime_2D )
       int numPoints = basisCache->getRefCellPoints().dimension(0);
       int numCells = 1;
       Camellia::FieldContainer<double> actualValues(numCells, numPoints, spaceDim);
-      lt->evaluate(actualValues, solution, basisCache);
+      bool applyCubatureWeights = false;
+      SolutionComponent solutionComponent = STANDARD_SOLUTION;
+      int solutionStage = 0;
+      lt->evaluate(actualValues, solution, basisCache, applyCubatureWeights, solutionComponent, solutionStage);
       
       Camellia::FieldContainer<double> expectedValues(numCells, numPoints, spaceDim);
       expectedFunction->values(expectedValues, basisCache);
@@ -740,8 +747,7 @@ TEUCHOS_UNIT_TEST( LinearTerm, FauxSpaceTimeIntegrationByPartsInTime_2D )
     LinearTermPtr lt = weight * u->grad();
     
     SolutionPtr solution = Solution::solution(form.bf(), mesh);
-    const int solutionOrdinal = 0;
-    solution->projectOntoMesh({{u->ID(), u_exact}}, solutionOrdinal);
+    solution->projectOntoMesh({{u->ID(), u_exact}});
     
     GlobalIndexType cellID = 0;
     // do comparison on the MPI rank that owns cellID
@@ -752,7 +758,10 @@ TEUCHOS_UNIT_TEST( LinearTerm, FauxSpaceTimeIntegrationByPartsInTime_2D )
       int numPoints = basisCache->getRefCellPoints().dimension(0);
       int numCells = 1;
       Camellia::FieldContainer<double> actualValues(numCells, numPoints);
-      lt->evaluate(actualValues, solution, basisCache);
+      bool applyCubatureWeights = false;
+      SolutionComponent solutionComponent = STANDARD_SOLUTION;
+      int solutionStage = 0;
+      lt->evaluate(actualValues, solution, basisCache, applyCubatureWeights, solutionComponent, solutionStage);
       
       Camellia::FieldContainer<double> expectedValues(numCells, numPoints);
       expectedFunction->values(expectedValues, basisCache);

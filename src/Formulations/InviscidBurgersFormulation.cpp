@@ -122,8 +122,7 @@ InviscidBurgersFormulation::InviscidBurgersFormulation(MeshTopologyPtr meshTopo,
       initialGuess[uhat()->ID()] = Function::constant(1);
 
     TEUCHOS_ASSERT(_solutionBackground->numSolutions() == 1);
-    const int solutionOrdinal = 0;
-    _solutionBackground->projectOntoMesh(initialGuess, solutionOrdinal);
+    _solutionBackground->projectOntoMesh(initialGuess);
   }
   else
   {

@@ -291,8 +291,7 @@ SpaceTimeCompressibleFormulation::SpaceTimeCompressibleFormulation(Teuchos::RCP<
       initialGuess[u(3)->ID()] = problem->u3_exact();
     initialGuess[T()->ID()] = problem->T_exact();
     TEUCHOS_ASSERT(_solutionBackground->numSolutions() == 1);
-    const int solutionOrdinal = 0;
-    _solutionBackground->projectOntoMesh(initialGuess, solutionOrdinal);
+    _solutionBackground->projectOntoMesh(initialGuess);
   }
   else
   {

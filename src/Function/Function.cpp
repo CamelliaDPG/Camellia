@@ -2724,21 +2724,27 @@ TFunctionPtr<Scalar> TFunction<Scalar>::solution(VarPtr var, TSolutionPtr<Scalar
 {
   TEUCHOS_TEST_FOR_EXCEPTION(var->varType() == FLUX, std::invalid_argument, "For flux variables, must provide a weightFluxesBySideParity argument");
   bool weightFluxesBySideParity = false; // inconsequential for non-fluxes
-  int solutionOrdinal = 0;
-  return Teuchos::rcp( new SimpleSolutionFunction<Scalar>(var, soln, weightFluxesBySideParity, solutionOrdinal, solutionIdentifierExponent) );
+  SolutionComponent solutionComponent = STANDARD_SOLUTION;
+  // if soln has a tableau defined, then default stage should be current stage, which we get with a -1 value
+  // if soln does not have a tableau defined, the default stage is 0
+  int solutionStage = (soln->getSolutionStage() != Teuchos::null) ? -1 : 0;
+  return Teuchos::rcp( new SimpleSolutionFunction<Scalar>(var, soln, weightFluxesBySideParity, solutionComponent, solutionStage, solutionIdentifierExponent) );
 }
 
 template <typename Scalar>
 TFunctionPtr<Scalar> TFunction<Scalar>::solution(VarPtr var, TSolutionPtr<Scalar> soln, bool weightFluxesBySideParity, const std::string &solutionIdentifierExponent)
 {
-  int solutionOrdinal = 0;
-  return Teuchos::rcp( new SimpleSolutionFunction<Scalar>(var, soln, weightFluxesBySideParity, solutionOrdinal, solutionIdentifierExponent) );
+  SolutionComponent solutionComponent = STANDARD_SOLUTION;
+  // if soln has a tableau defined, then default stage should be current stage, which we get with a -1 value
+  // if soln does not have a tableau defined, the default stage is 0
+  int solutionStage = (soln->getSolutionStage() != Teuchos::null) ? -1 : 0;
+  return Teuchos::rcp( new SimpleSolutionFunction<Scalar>(var, soln, weightFluxesBySideParity, solutionComponent, solutionStage, solutionIdentifierExponent) );
 }
 
   template <typename Scalar>
-  TFunctionPtr<Scalar> TFunction<Scalar>::solution(VarPtr var, TSolutionPtr<Scalar> soln, bool weightFluxesBySideParity, int solutionOrdinal, const std::string &solutionIdentifierExponent)
+  TFunctionPtr<Scalar> TFunction<Scalar>::solution(VarPtr var, TSolutionPtr<Scalar> soln, bool weightFluxesBySideParity, SolutionComponent solutionComponent, int solutionStage, const std::string &solutionIdentifierExponent)
   {
-    return Teuchos::rcp( new SimpleSolutionFunction<Scalar>(var, soln, weightFluxesBySideParity, solutionOrdinal, solutionIdentifierExponent) );
+    return Teuchos::rcp( new SimpleSolutionFunction<Scalar>(var, soln, weightFluxesBySideParity, solutionComponent, solutionStage, solutionIdentifierExponent) );
   }
   
   template <typename Scalar>

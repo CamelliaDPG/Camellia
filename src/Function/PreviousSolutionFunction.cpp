@@ -17,9 +17,9 @@ using namespace Camellia;
 
 template <typename Scalar>
 PreviousSolutionFunction<Scalar>::PreviousSolutionFunction(TSolutionPtr<Scalar> soln, LinearTermPtr solnExpression,
-                                                           bool multiplyFluxesByCellParity, int solnOrdinal)
+                                                           bool multiplyFluxesByCellParity, SolutionComponent solutionComponent, int stageNumber)
 : TFunction<Scalar>("PreviousSolutionFunction", solnExpression->rank()),
-_overrideMeshCheck(false), _soln(soln), _solnExpression(solnExpression), _solnOrdinal(solnOrdinal)
+_overrideMeshCheck(false), _soln(soln), _solnExpression(solnExpression), _solnComponent(solutionComponent), _stageNumber(stageNumber)
 {
   if (solnExpression->rank() == -1)
   {
@@ -33,9 +33,9 @@ _overrideMeshCheck(false), _soln(soln), _solnExpression(solnExpression), _solnOr
 }
 template <typename Scalar>
 PreviousSolutionFunction<Scalar>::PreviousSolutionFunction(TSolutionPtr<Scalar> soln, VarPtr var,
-                                                           bool multiplyFluxesByCellParity, int solnOrdinal)
+                                                           bool multiplyFluxesByCellParity, SolutionComponent solutionComponent, int stageNumber)
 : TFunction<Scalar>("PreviousSolutionFunction", var->rank()),
-_overrideMeshCheck(false), _soln(soln), _solnExpression(1.0 * var), _solnOrdinal(solnOrdinal)
+_overrideMeshCheck(false), _soln(soln), _solnExpression(1.0 * var), _solnComponent(solutionComponent), _stageNumber(stageNumber)
 {
   if ((var->varType() == FLUX) && multiplyFluxesByCellParity)
   {
@@ -53,8 +53,9 @@ bool PreviousSolutionFunction<Scalar>::boundaryValueOnly()   // fluxes and trace
 template <typename Scalar>
 size_t PreviousSolutionFunction<Scalar>::getCellDataSize(GlobalIndexType cellID)
 {
+  const int solutionOrdinal = _soln->solutionOrdinal(_solnComponent,_stageNumber);
   bool warnAboutOffRankImports = true;
-  auto & cellDofs = _soln->allCoefficientsForCellID(cellID, warnAboutOffRankImports, _solnOrdinal);
+  auto & cellDofs = _soln->allCoefficientsForCellID(cellID, warnAboutOffRankImports, solutionOrdinal);
   return cellDofs.size() * sizeof(Scalar); // size in bytes
 }
 
@@ -77,10 +78,11 @@ void PreviousSolutionFunction<Scalar>::importCellData(std::vector<GlobalIndexTyp
 template <typename Scalar>
 void PreviousSolutionFunction<Scalar>::packCellData(GlobalIndexType cellID, char* cellData, size_t bufferLength)
 {
+  const int solutionOrdinal = _soln->solutionOrdinal(_solnComponent,_stageNumber);
   size_t requiredLength = getCellDataSize(cellID);
   TEUCHOS_TEST_FOR_EXCEPTION(requiredLength > bufferLength, std::invalid_argument, "Buffer length too small");
   bool warnAboutOffRankImports = true;
-  auto & cellDofs = _soln->allCoefficientsForCellID(cellID, warnAboutOffRankImports, _solnOrdinal);
+  auto & cellDofs = _soln->allCoefficientsForCellID(cellID, warnAboutOffRankImports, solutionOrdinal);
   size_t objSize = sizeof(Scalar);
   const Scalar* copyFromLocation = &cellDofs[0];
   memcpy(cellData, copyFromLocation, objSize * cellDofs.size());
@@ -106,6 +108,7 @@ void PreviousSolutionFunction<Scalar>::setOverrideMeshCheck(bool value, bool don
 template <typename Scalar>
 size_t PreviousSolutionFunction<Scalar>::unpackCellData(GlobalIndexType cellID, const char* cellData, size_t bufferLength)
 {
+  const int solutionOrdinal = _soln->solutionOrdinal(_solnComponent,_stageNumber);
   //  Epetra_CommPtr Comm = _soln->mesh()->Comm();
   //  int rank = Comm->MyPID();
   int numDofs = _soln->mesh()->getElementType(cellID)->trialOrderPtr->totalDofs();
@@ -114,7 +117,7 @@ size_t PreviousSolutionFunction<Scalar>::unpackCellData(GlobalIndexType cellID, 
   Camellia::FieldContainer<Scalar> cellDofs(numDofs);
   Scalar* copyToLocation = &cellDofs[0];
   memcpy(copyToLocation, cellData, numBytes);
-  _soln->setSolnCoeffsForCellID(cellDofs,cellID,_solnOrdinal);
+  _soln->setSolnCoeffsForCellID(cellDofs,cellID,solutionOrdinal);
   return numBytes;
 }
 
@@ -126,7 +129,7 @@ void PreviousSolutionFunction<Scalar>::values(Camellia::FieldContainer<Scalar> &
   
   if (_overrideMeshCheck)
   {
-    _solnExpression->evaluate(values, _soln, basisCache, applyCubatureWeights, _solnOrdinal);
+    _solnExpression->evaluate(values, _soln, basisCache, applyCubatureWeights, _solnComponent, _stageNumber);
     return;
   }
   if (!basisCache.get()) cout << "basisCache is nil!\n";
@@ -134,7 +137,7 @@ void PreviousSolutionFunction<Scalar>::values(Camellia::FieldContainer<Scalar> &
   // values are stored in (C,P,D) order
   if (basisCache->mesh().get() == _soln->mesh().get())
   {
-    _solnExpression->evaluate(values, _soln, basisCache, applyCubatureWeights, _solnOrdinal);
+    _solnExpression->evaluate(values, _soln, basisCache, applyCubatureWeights, _solnComponent, _stageNumber);
   }
   else
   {
@@ -183,7 +186,7 @@ void PreviousSolutionFunction<Scalar>::values(Camellia::FieldContainer<Scalar> &
         basisCacheOnePoint->setRefCellPoints(refPoint);
         //          cout << "refCellPoints:\n " << refPoint;
         //          cout << "physicalCubaturePoints:\n " << basisCacheOnePoint->getPhysicalCubaturePoints();
-        _solnExpression->evaluate(value, _soln, basisCacheOnePoint, applyCubatureWeights, _solnOrdinal);
+        _solnExpression->evaluate(value, _soln, basisCacheOnePoint, applyCubatureWeights, _solnComponent, _stageNumber);
         //          cout << "value at point (" << point(0,0) << ", " << point(0,1) << ") = " << value(0,0) << endl;
         values(cellIndex,ptIndex) = value(0,0);
       }
@@ -192,14 +195,15 @@ void PreviousSolutionFunction<Scalar>::values(Camellia::FieldContainer<Scalar> &
 }
 
 template <typename Scalar>
-map<int, TFunctionPtr<Scalar> > PreviousSolutionFunction<Scalar>::functionMap( vector< VarPtr > varPtrs, TSolutionPtr<Scalar> soln, int solnOrdinal)
+map<int, TFunctionPtr<Scalar> > PreviousSolutionFunction<Scalar>::functionMap( vector< VarPtr > varPtrs, TSolutionPtr<Scalar> soln,
+                                                                              SolutionComponent solutionComponent, int stageNumber)
 {
   map<int, TFunctionPtr<Scalar> > functionMap;
   bool multiplyFluxesByParity = true; // constructor's default
   for (vector< VarPtr >::iterator varIt = varPtrs.begin(); varIt != varPtrs.end(); varIt++)
   {
     VarPtr var = *varIt;
-    functionMap[var->ID()] = Teuchos::rcp( new PreviousSolutionFunction<Scalar>(soln, var, multiplyFluxesByParity, solnOrdinal));
+    functionMap[var->ID()] = Teuchos::rcp( new PreviousSolutionFunction<Scalar>(soln, var, multiplyFluxesByParity, solutionComponent, stageNumber));
   }
   return functionMap;
 }

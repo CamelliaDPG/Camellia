@@ -72,6 +72,7 @@ private:
   // if _cubDegree is -1, use _cubDegrees
   // (_cubDegree == -1) <=> (_cubDegrees.size() > 0)
   int _cubDegree;
+  int _cubatureEnrichmentDegree = 0;
   vector<int> _cubDegrees;
 
   // containers specifically for sides:
@@ -81,7 +82,7 @@ private:
 
   CellTopoPtr _cellTopo;
 
-  void initCubatureDegree(int maxTrialDegree, int maxTestDegree);
+  void initCubatureDegree(int maxTrialDegree, int maxTestDegree, int cubatureEnrichmentDegree);
   void initCubatureDegree(std::vector<int> &maxTrialDegrees, std::vector<int> &maxTestDegrees);
 
   void initVolumeCache(bool createSideCacheToo, bool interpretTensorTopologyAsSpaceTime);
@@ -90,8 +91,11 @@ private:
   void determineJacobian();
   void determineJacobianInverseAndDeterminant();
   void determinePhysicalPoints();
-
+  
   int maxTestDegree();
+  
+  //! if testVsTest = true, maxTrialDegree refers to un-enriched degree of test space
+  int maxTrialDegree();
 
   void findMaximumDegreeBasisForSides(DofOrdering &trialOrdering);
   
@@ -191,6 +195,7 @@ public:
   CellTopoPtr cellTopology();
 
   int cubatureDegree();
+  int cubatureEnrichmentDegree();
 
   int getCubaturePhaseCount();
   void setMaxPointsPerCubaturePhase(int maxPoints);
@@ -261,6 +266,8 @@ public:
   bool cellTopologyIsSpaceTime();
 
   void setTransformationFunction(TFunctionPtr<double> fxn, bool composeWithMeshTransformation = true);
+  
+  bool testVsTest();
 
   // static convenience constructors:
   static BasisCachePtr parametric1DCache(int cubatureDegree);

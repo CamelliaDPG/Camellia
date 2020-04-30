@@ -102,9 +102,8 @@ namespace
     for (GlobalIndexType cellID : *myCells)
     {
       functionMap[var->ID()] = f;
-      const int solutionOrdinal = 0;
       const int ALL_SIDES = -1;
-      soln->projectOntoCell(functionMap, cellID, ALL_SIDES, solutionOrdinal);
+      soln->projectOntoCell(functionMap, cellID, ALL_SIDES);
     }
   }
   
