@@ -89,11 +89,10 @@ void HDF5Exporter::exportSolution(TSolutionPtr<double> solution, double timeVal,
 void HDF5Exporter::exportSolution(TSolutionPtr<double> solution, std::vector<TFunctionPtr<double>> otherFunctions, std::vector<std::string> otherFunctionNames,
                                   double timeVal, unsigned int defaultNum1DPts, map_int_int cellIDToNum1DPts, set<GlobalIndexType> cellIndices)
 {
-  // TODO: change this to get VarFactoryPtr from solution
-  VarFactoryPtr varFactory = _mesh->bilinearForm()->varFactory();
+  VarFactoryPtr varFactory = _mesh->varFactory();
 
-  vector<int> fieldTrialIDs = _mesh->bilinearForm()->trialVolumeIDs();
-  vector<int> traceTrialIDs = _mesh->bilinearForm()->trialBoundaryIDs();
+  vector<int> fieldTrialIDs = solution->bf()->trialVolumeIDs();
+  vector<int> traceTrialIDs = solution->bf()->trialBoundaryIDs();
   vector<VarPtr> fieldVars;
   vector<VarPtr> traceVars;
 

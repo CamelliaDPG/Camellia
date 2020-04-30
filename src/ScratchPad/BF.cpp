@@ -976,6 +976,7 @@ namespace Camellia
     if (INFO != 0)
     {
       cout << "dpotrf_ result: " << INFO << endl;
+      TEUCHOS_TEST_FOR_EXCEPTION(true, std::invalid_argument, "Cholesky factorization failed");
       result = INFO;
     }
     
@@ -1421,7 +1422,7 @@ namespace Camellia
         
         timer.ResetStartTime();
         // RHS:
-        this->stiffnessMatrix(stiffnessEnriched, elemType, cellSideParities, basisCache, true, true);
+        this->stiffnessMatrix(stiffnessEnriched, elemType, cellSideParities, basisCache, true, _warnAboutZeroRowsAndColumns);
         timeB = timer.ElapsedTime();
         
         Teuchos::Array<int> localIPDim(2);

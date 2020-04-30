@@ -932,6 +932,76 @@ void TSolution<Scalar>::applyDGJumpTerms()
   err = timeApplyJumpTermsVector.MaxValue( &_maxTimeApplyJumpTerms );
 }
 
+template <typename Scalar>
+void TSolution<Scalar>::getBasisCoefficientsForCell(Camellia::FieldContainer<Scalar> &basisCoefficients, int trialID,
+                                                    GlobalIndexType cellID, SolutionComponent standardOrInfluence, int stageOrdinal,
+                                                    int sideIndex)
+{
+  const int solutionOrdinal = this->solutionOrdinal(standardOrInfluence, stageOrdinal);
+  if ((_solutionStage != Teuchos::null) && (stageOrdinal == -1))
+  {
+    // stageOrdinal == -1 means "current stage" previous solution
+    stageOrdinal = _solutionStage->getStage();
+  }
+  bool fluxOrTrace;
+  if (_bf != Teuchos::null)
+    fluxOrTrace = _bf->isFluxOrTrace(trialID);
+  else
+    fluxOrTrace = _mesh->bilinearForm()->isFluxOrTrace(trialID);
+  
+  if ( _solutionForCellID[solutionOrdinal].find(cellID) == _solutionForCellID[solutionOrdinal].end() )
+  {
+    TEUCHOS_TEST_FOR_EXCEPTION(true, std::invalid_argument, "solution not found for cell ID");
+  }
+    
+  DofOrderingPtr trialOrder = _mesh->getElementType(cellID)->trialOrderPtr;
+  
+  BasisPtr basis;
+  if (fluxOrTrace)
+  {
+    if (! trialOrder->hasBasisEntry(trialID, sideIndex))
+    {
+      TEUCHOS_TEST_FOR_EXCEPTION(true, std::invalid_argument, "No basis found");
+    }
+    basis = trialOrder->getBasis(trialID, sideIndex);
+  }
+  else
+  {
+    basis = trialOrder->getBasis(trialID);
+  }
+  
+  int basisCardinality = basis->getCardinality();
+    
+  const vector<int> *dofIndices = fluxOrTrace ? &(trialOrder->getDofIndices(trialID,sideIndex))
+                                              : &(trialOrder->getDofIndices(trialID));
+    
+  basisCoefficients.resize(basisCardinality);
+  const int baseSolutionOrdinal = (standardOrInfluence == STANDARD_SOLUTION) ? 0 : 1;
+  Camellia::FieldContainer<Scalar>& solnCoeffs = _solutionForCellID[baseSolutionOrdinal][cellID];
+  for (int dofOrdinal=0; dofOrdinal < basisCardinality; dofOrdinal++)
+  {
+    int localDofIndex = (*dofIndices)[dofOrdinal];
+    basisCoefficients(dofOrdinal) = (solnCoeffs)(localDofIndex);
+  }
+  if (_solutionStage != Teuchos::null)
+  {
+    // accumulate into basisCoeffs:
+    for (int previousStageOrdinal=1; previousStageOrdinal<stageOrdinal; previousStageOrdinal++)
+    {
+      const int previousSolutionOrdinal = this->solutionOrdinal(standardOrInfluence, previousStageOrdinal);
+      Camellia::FieldContainer<Scalar>& solnIncrementCoeffs = _solutionForCellID[previousSolutionOrdinal][cellID];
+      const int i = stageOrdinal - 1;
+      const int j = previousStageOrdinal - 1;
+      const double a_ij = _solutionStage->tableau()->a(i, j);
+      for (int dofOrdinal=0; dofOrdinal < basisCardinality; dofOrdinal++)
+      {
+        int localDofIndex = (*dofIndices)[dofOrdinal];
+        basisCoefficients(dofOrdinal) += a_ij * (solnIncrementCoeffs)(localDofIndex);
+      }
+    }
+  }
+}
+
 // ! After a problem has been set up (stiffness matrix, rhs assembled; BCs imposed), this method will compute and return a condition number estimate using AztecOO.
 template <typename Scalar>
 double TSolution<Scalar>::conditionNumberEstimate(int &errCode) const
@@ -963,13 +1033,6 @@ GlobalIndexType TSolution<Scalar>::elementLagrangeIndex(GlobalIndexType cellID, 
   }
   return globalIndex + localCellOrdinal * numElementConstraints + lagrangeOrdinal;
 }
-
-//// ! provides the GID and LID corresponding to a global lagrange constraint
-//template <typename Scalar>
-//GlobalIndexType TSolution<Scalar>::globalLagrangeIndex(int lagrangeOrdinal) const
-//{
-//  
-//}
 
 template <typename Scalar>
 const std::string & TSolution<Scalar>::getIdentifier() const
@@ -1027,7 +1090,7 @@ void TSolution<Scalar>::initializeLHSVector()
   
   int numSolutions = this->numSolutions();
   _lhsVector = Teuchos::rcp(new Epetra_FEVector(partMap,numSolutions,true));
-  
+    
   const int numRHSes = (_goalOrientedRHS == Teuchos::null) ? 1 : 2;
   _lhsVectorCurrentStage = Teuchos::rcp(new Epetra_FEVector(partMap,numRHSes,true));
 
@@ -1611,10 +1674,7 @@ int TSolution<Scalar>::solve(TSolverPtr<Scalar> solver)
   
   const int numStages = (_solutionStage == Teuchos::null) ? 1 : tableau->numStages();
   
-  if (_lhsVector == Teuchos::null)
-  {
-    initializeLHSVector();
-  }
+  initializeLHSVector();
   
   double t_n = -1.0; // initial time; only used when _solutionStage is not null
   double dt  = 0.;   // time step; only used when _solutionStage is not null
@@ -1931,7 +1991,18 @@ void TSolution<Scalar>::importSolutionForOffRankCells(const std::set<GlobalIndex
   vector<int> sizes(numCellsToExport,0);
   vector<Scalar> dataToExport;
   
-  int solutionCount = numSolutions();
+  int solutionCount;
+  if (_solutionStage == Teuchos::null)
+  {
+    solutionCount = numSolutions();
+  }
+  else
+  {
+    // if we have a tableau, the appropriate thing is to import solutions for prior stages
+    const int stageNumber = _solutionStage->getStage();
+    // this will be the first solution ordinal belonging to the current stage:
+    solutionCount = solutionOrdinal(STANDARD_SOLUTION, stageNumber);
+  }
   
   for (int cellOrdinal=0; cellOrdinal<numCellsToExport; cellOrdinal++)
   {
@@ -2938,27 +3009,19 @@ void TSolution<Scalar>::solutionValues(Camellia::FieldContainer<Scalar> &values,
                                        bool weightForCubature, Camellia::EOperator op)
 {
   const int solutionOrdinal = this->solutionOrdinal(standardOrInfluence, stageOrdinal);
-  if ((_solutionStage != Teuchos::null) && (stageOrdinal == -1))
-  {
-    // stageOrdinal == -1 means "current stage" previous solution
-    stageOrdinal = _solutionStage->getStage();
-  }
   values.initialize(0.0);
   vector<GlobalIndexType> cellIDs = basisCache->cellIDs();
   int sideIndex = basisCache->getSideIndex();
   bool forceVolumeCoords = false; // used for evaluating fields on sides...
   bool fluxOrTrace;
-  if (_bf != Teuchos::null)
-    fluxOrTrace = _bf->isFluxOrTrace(trialID);
-  else
-    fluxOrTrace = _mesh->bilinearForm()->isFluxOrTrace(trialID);
+  BFPtr bf = (_bf != Teuchos::null) ? _bf : _mesh->bilinearForm();
+  fluxOrTrace = bf->isFluxOrTrace(trialID);
+  
   if ( ( sideIndex != -1 ) && !fluxOrTrace)
   {
     forceVolumeCoords = true;
-    //    TEUCHOS_TEST_FOR_EXCEPTION(true, std::invalid_argument,
-    //                       "solutionValues doesn't support evaluation of field variables along sides (not yet anyway).");
   }
-  if ( (sideIndex == -1 ) && _mesh->bilinearForm()->isFluxOrTrace(trialID) )
+  if ( (sideIndex == -1 ) && bf->isFluxOrTrace(trialID) )
   {
     TEUCHOS_TEST_FOR_EXCEPTION(true, std::invalid_argument,
                                "solutionValues doesn't support evaluation of trace or flux variables on element interiors.");
@@ -2978,14 +3041,7 @@ void TSolution<Scalar>::solutionValues(Camellia::FieldContainer<Scalar> &values,
     if ( _solutionForCellID[solutionOrdinal].find(cellID) == _solutionForCellID[solutionOrdinal].end() )
     {
       // cellID not known -- default values for that cell to 0
-//      int rank = Teuchos::GlobalMPISession::getRank();
-//      cout << "In TSolution<Scalar>::solutionValues() on rank " << rank << ", data for cellID " << cellID << " not found; defaulting to 0.\n" ;
       continue;
-    }
-    else
-    { // DEBUGGING
-//      int rank = Teuchos::GlobalMPISession::getRank();
-//      cout << "In TSolution<Scalar>::solutionValues() on rank " << rank << ", data for cellID " << cellID << " found; container size is " << _solutionForCellID[solutionOrdinal][cellID].size() << endl;
     }
 
     DofOrderingPtr trialOrder = _mesh->getElementType(cellID)->trialOrderPtr;
@@ -3013,34 +3069,8 @@ void TSolution<Scalar>::solutionValues(Camellia::FieldContainer<Scalar> &values,
       transformedValues = basisCache->getTransformedValues(basis,op,forceVolumeCoords);
     }
 
-    const vector<int> *dofIndices = fluxOrTrace ? &(trialOrder->getDofIndices(trialID,sideIndex))
-                                                : &(trialOrder->getDofIndices(trialID));
-    
     Camellia::FieldContainer<Scalar> basisCoeffs(basisCardinality);
-    const int baseSolutionOrdinal = (standardOrInfluence == STANDARD_SOLUTION) ? 0 : 1;
-    Camellia::FieldContainer<Scalar>& solnCoeffs = _solutionForCellID[baseSolutionOrdinal][cellID];
-    for (int dofOrdinal=0; dofOrdinal < basisCardinality; dofOrdinal++)
-    {
-      int localDofIndex = (*dofIndices)[dofOrdinal];
-      basisCoeffs(dofOrdinal) = (solnCoeffs)(localDofIndex);
-    }
-    if (_solutionStage != Teuchos::null)
-    {
-      // accumulate into basisCoeffs:
-      for (int previousStageOrdinal=1; previousStageOrdinal<stageOrdinal; previousStageOrdinal++)
-      {
-        const int previousSolutionOrdinal = this->solutionOrdinal(standardOrInfluence, previousStageOrdinal);
-        Camellia::FieldContainer<Scalar>& solnIncrementCoeffs = _solutionForCellID[previousSolutionOrdinal][cellID];
-        const int i = stageOrdinal - 1;
-        const int j = previousStageOrdinal - 1;
-        const double a_ij = _solutionStage->tableau()->a(i, j);
-        for (int dofOrdinal=0; dofOrdinal < basisCardinality; dofOrdinal++)
-        {
-          int localDofIndex = (*dofIndices)[dofOrdinal];
-          basisCoeffs(dofOrdinal) += a_ij * (solnIncrementCoeffs)(localDofIndex);
-        }
-      }
-    }
+    getBasisCoefficientsForCell(basisCoeffs, trialID, cellID, standardOrInfluence, stageOrdinal, sideIndex);
     
     int rank = transformedValues->rank() - 3; // 3 ==> scalar valued, 4 ==> vector, etc.
 
@@ -3470,15 +3500,12 @@ template <typename Scalar>
 void TSolution<Scalar>::setRHS( TRHSPtr<Scalar> rhs )
 {
   _rhsWithoutTableauModification = rhs;
+  _rhs = rhs;
   const bool haveTableau = (_solutionStage != Teuchos::null);
-  if (haveTableau)
+  if (haveTableau && (rhs != Teuchos::null))
   {
     _rhs = _rhsWithoutTableauModification->rhsCopy();
     _rhs->addTerm(this->rhsTableauModificationTerm());
-  }
-  else
-  {
-    _rhs = rhs;
   }
   clearComputedResiduals();
 }
@@ -3496,14 +3523,17 @@ void TSolution<Scalar>::setSolutionStage( SolutionStagePtr solutionStage )
   _solutionForCellID.resize(numSolutions());
   
   const bool haveTableau = (_solutionStage != Teuchos::null);
-  if (haveTableau)
+  if (_rhsWithoutTableauModification != Teuchos::null)
   {
-    _rhs = _rhsWithoutTableauModification->rhsCopy();
-    _rhs->addTerm(this->rhsTableauModificationTerm());
-  }
-  else
-  {
-    _rhs = _rhsWithoutTableauModification;
+    if (haveTableau)
+    {
+      _rhs = _rhsWithoutTableauModification->rhsCopy();
+      _rhs->addTerm(this->rhsTableauModificationTerm());
+    }
+    else
+    {
+      _rhs = _rhsWithoutTableauModification;
+    }
   }
 }
 
