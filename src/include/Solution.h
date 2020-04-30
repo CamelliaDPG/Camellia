@@ -140,6 +140,9 @@ public:
                                                                    int solutionNumber=0); // coefficients for all solution variables
   void setLocalCoefficientsForCell(GlobalIndexType cellID, const Camellia::FieldContainer<Scalar> &coefficients, int solutionNumber=0);
 
+  void getBasisCoefficientsForCell(Camellia::FieldContainer<Scalar> &basisCoefficients, int trialID, GlobalIndexType cellID,
+                                   SolutionComponent standardOrInfluence, int stageOrdinal, int sideIndex = -1);
+  
   Teuchos::RCP<DofInterpreter> getDofInterpreter() const;
   void setDofInterpreter(Teuchos::RCP<DofInterpreter> dofInterpreter);
 

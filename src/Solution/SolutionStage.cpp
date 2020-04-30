@@ -23,7 +23,12 @@ _tableau(tableau)
   _dt = Teuchos::rcp(new ParameterFunction(initialTimeStep));
 }
 
-FunctionPtr SolutionStage::dt() const
+void SolutionStage::addObserver(SolutionStageObserverPtr solnStageObserver)
+{
+  _solnStageObservers.push_back(solnStageObserver);
+}
+
+ParameterFunctionPtr SolutionStage::dt() const
 {
   return _dt;
 }
@@ -40,7 +45,14 @@ int SolutionStage::getStage() const
 
 void SolutionStage::setStage(int solutionStage)
 {
-  _solutionStage = solutionStage;
+  if (_solutionStage != solutionStage) // only notify observers if solution stage *changes*
+  {
+    _solutionStage = solutionStage;
+    for (auto observer : _solnStageObservers)
+    {
+      observer->setStage(solutionStage);
+    }
+  }
 }
 
 ERKTableauPtr SolutionStage::tableau() const
