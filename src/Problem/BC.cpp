@@ -298,13 +298,13 @@ void TBC<Scalar>::imposeBC(DeviceView<Scalar> dirichletValues, DeviceView<bool> 
   int numPoints = physicalPoints.dimension(1);
   int spaceDim = physicalPoints.dimension(2);
   
-  TEUCHOS_TEST_FOR_EXCEPTION( ( dirichletValues.dimension(0) != numCells )
-                             || ( dirichletValues.dimension(1) != numPoints )
+  TEUCHOS_TEST_FOR_EXCEPTION( ( dirichletValues.extent_int(0) != numCells )
+                             || ( dirichletValues.extent_int(1) != numPoints )
                              || ( dirichletValues.rank() != 2  ),
                              std::invalid_argument,
                              "dirichletValues dimensions should be (numCells,numPoints).");
-  TEUCHOS_TEST_FOR_EXCEPTION( ( imposeHere.dimension(0) != numCells )
-                             || ( imposeHere.dimension(1) != numPoints )
+  TEUCHOS_TEST_FOR_EXCEPTION( ( imposeHere.extent_int(0) != numCells )
+                             || ( imposeHere.extent_int(1) != numPoints )
                              || ( imposeHere.rank() != 2  ),
                              std::invalid_argument,
                              "imposeHere dimensions should be (numCells,numPoints).");

@@ -3120,7 +3120,7 @@ void TSolution<Scalar>::solutionValues(typename Camellia::FieldContainer<Scalar>
   Kokkos::deep_copy(values,0.0);
   const vector<GlobalIndexType> & cellIDs = basisCache->cellIDs();
   int numCells = cellIDs.size();
-  TEUCHOS_TEST_FOR_EXCEPTION(numCells != values.dimension(0), std::invalid_argument, "first dimension of values should == numCells.");
+  TEUCHOS_TEST_FOR_EXCEPTION(numCells != values.extent_int(0), std::invalid_argument, "first dimension of values should == numCells.");
   if (numCells == 0) return;
   
   // all cells belonging to the BasisCache must have the same type (discretization order, etc.); get the basis information from the first cell

@@ -11,6 +11,8 @@
 #include "GlobalDofAssignment.h"
 #include "TimeLogger.h"
 
+#include "Tpetra_FEMultiVector.hpp"
+
 static const int MAX_BATCH_SIZE_IN_BYTES = 3*1024*1024; // 3 MB
 static const int MIN_BATCH_SIZE_IN_CELLS = 1; // overrides the above, if it results in too-small batches
 
@@ -27,7 +29,8 @@ DLS<Scalar>::DLS(TSolutionPtr<Scalar> solution)
 template<typename Scalar>
 void inverseSquareRoot(RCP<Vector<Scalar,IndexType,GlobalIndexType>> vector)
 {
-  auto diagValues_2d = vector->template getLocalView<Kokkos::HostSpace> ();
+  auto diagValues_2d_device = vector->template getLocalView<Kokkos::DefaultExecutionSpace> ();
+  auto diagValues_2d = Kokkos::create_mirror_view_and_copy(Kokkos::HostSpace(), diagValues_2d_device);
   // getLocalView returns a 2-D View by default.  We want a 1-D
   // View, so we take a subview.
   auto diagValues_1d = Kokkos::subview (diagValues_2d, Kokkos::ALL (), 0);
@@ -496,6 +499,7 @@ int DLS<Scalar>::assemble()
   
   _diag_sqrt_inverse = rcp( new Vector<Scalar,IndexType,GlobalIndexType>(solnMapNoBCs) );
 //  diagFiller.globalAssemble(*_diag_sqrt_inverse);
+  std::cout << "WARNING: due to Tpetra's replacement of MultiVectorFiller, this code is at present incomplete.  Need to adopt Tpetra_FEMultiVector.\n";
   inverseSquareRoot(_diag_sqrt_inverse);
   
   RCP<Vector<Scalar,IndexType,GlobalIndexType>> matrixScalingVector = rcp( new Vector<Scalar,IndexType,GlobalIndexType>(_dlsMatrix->getDomainMap()) );

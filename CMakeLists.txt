@@ -144,7 +144,7 @@ IF(NOT CMAKE_CXX_FLAGS)
   SET(CMAKE_CXX_FLAGS ${Trilinos_CXX_COMPILER_FLAGS})
 ENDIF() 
 
-SET(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -fPIC -g")
+#SET(CMAKE_CXX_FLAGS ${CMAKE_CXX_FLAGS} -fPIC -g)
 MESSAGE("CMAKE_CXX_FLAGS = ${CMAKE_CXX_FLAGS}")
 
 # If you haven't already set the C compiler, use the same compiler
@@ -158,7 +158,7 @@ IF (NOT CMAKE_C_FLAGS)
   SET(CMAKE_C_FLAGS ${Trilinos_C_COMPILER_FLAGS})
 ENDIF()
 
-SET(CMAKE_C_FLAGS "${CMAKE_C_FLAGS} -fPIC -g")
+#SET(CMAKE_C_FLAGS "${CMAKE_C_FLAGS} -fPIC -g")
 #MESSAGE("CMAKE_C_FLAGS = ${CMAKE_C_FLAGS}")
 
 # If you haven't already set the Fortran compiler, use the same compiler
