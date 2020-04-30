@@ -130,7 +130,7 @@ void PolarizedFunction<Scalar>::values(typename FieldContainer<Scalar>::DeviceVi
     dv_polarPoints(i0,i1,0) = r;
     dv_polarPoints(i0,i1,1) = theta;
   });
-  polarPoints.checkinDeviceView();
+  polarPoints.checkinDeviceView(true);
   BasisCachePtr dummyBasisCache = Teuchos::rcp( new PhysicalPointCache( polarPoints ) );
   _f->values(values, modType, dummyBasisCache);
   if (_f->isZero())

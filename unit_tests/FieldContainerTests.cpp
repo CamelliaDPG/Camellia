@@ -56,7 +56,7 @@ namespace
     TEST_EQUALITY(initialNetBytesAllocated   + newBytesExpected, newNetBytesAllocated  );
     TEST_EQUALITY(                             initialCount + 1,  newCount             );
     
-    values.checkinDeviceView();
+    values.checkinDeviceView(false); // false: don't deep copy to host
   }
   
   TEUCHOS_UNIT_TEST( FieldContainer, DeviceToHostDeepCopyRecorded )
@@ -88,7 +88,7 @@ namespace
     Kokkos::deep_copy(dvValues, 1.0);
     auto dvValuesScratch = Camellia::Allocation<Scalar>::allocateDeviceViewMatchingView(dvValues);
     Kokkos::deep_copy(dvValuesScratch, 2.0); // should not change dvValues
-    values.checkinDeviceView(); // deep copies dvValues back to host
+    values.checkinDeviceView(true); // deep copies dvValues back to host
     
     double expectedValue = 1.0;
     for (int i=0; i<dim0; i++)
@@ -108,14 +108,14 @@ namespace
     const Camellia::FieldContainer<Scalar> values(dim0);
     
     auto dv = values.checkoutDeviceView(); // first checkout should copy
-    values.checkinDeviceView();
+    values.checkinDeviceView(false);  // false: don't deep copy to host
     
     const int newBytesExpected = values.size() * sizeof(Scalar);
     TEST_EQUALITY(initialByteCount + newBytesExpected, hostToDeviceDeepCopyRecord.bytesDeepCopied);
     TEST_EQUALITY(initialCount + 1, hostToDeviceDeepCopyRecord.deepCopyCount);
     
     auto dvSecondCheckout = values.checkoutDeviceView(); // no copy here
-    values.checkinDeviceView();
+    values.checkinDeviceView(false); // false: don't deep copy to host
     
     // the counts should be the same as after the first checkout
     TEST_EQUALITY(initialByteCount + newBytesExpected, hostToDeviceDeepCopyRecord.bytesDeepCopied);

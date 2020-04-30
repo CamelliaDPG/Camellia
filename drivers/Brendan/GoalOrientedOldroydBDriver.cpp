@@ -1053,9 +1053,8 @@ int main(int argc, char *argv[])
 
         // construct DPG* solution
         bool excludeBoundaryTerms = false;
-        const bool overrideMeshCheck = false; // testFunctional() default for third argument
         const int solutionOrdinal = 1; // solution corresponding to second RHS
-        LinearTermPtr influence = form.bf()->testFunctional(solutionIncrement,excludeBoundaryTerms,overrideMeshCheck,solutionOrdinal);
+        LinearTermPtr influence = form.bf()->testFunctional(solutionIncrement,excludeBoundaryTerms,solutionOrdinal);
         RieszRepPtr dualSoln = Teuchos::rcp(new RieszRep(mesh, form.bf()->graphNorm(), influence));
         dualSoln->computeRieszRep();
 

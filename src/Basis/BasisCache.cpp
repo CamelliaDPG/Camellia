@@ -67,9 +67,9 @@ bool BasisCache::canComputeTransformedValues(Camellia::EOperator op)
 }
 
 // ! Requires that _cellTopo be initialized
-void BasisCache::initCubatureDegree(int maxTrialDegree, int maxTestDegree)
+void BasisCache::initCubatureDegree(int maxTrialDegree, int maxTestDegree, int cubatureEnrichmentDegree)
 {
-  _cubDegree = maxTrialDegree + maxTestDegree;
+  _cubDegree = maxTrialDegree + maxTestDegree + cubatureEnrichmentDegree;
 
   if (! _isSideCache)
   {
@@ -81,6 +81,7 @@ void BasisCache::initCubatureDegree(int maxTrialDegree, int maxTestDegree)
     CellTopoPtr side = _cellTopo->getSubcell(sideDim,_sideIndex); // create relevant subcell (side) topology
     _cubDegree = boundDegreeToMaxCubatureForCellTopo(_cubDegree, side->getShardsTopology().getKey());
   }
+  _cubatureEnrichmentDegree = cubatureEnrichmentDegree;
   _maxTestDegree = maxTestDegree;
   _maxTrialDegree = maxTrialDegree;
 }
@@ -231,7 +232,7 @@ BasisCache::BasisCache(CellTopoPtr cellTopo, int cubDegree, bool createSideCache
   findMaximumDegreeBasisForSides(trialOrdering); // should fill with NULL ptrs
 
   _isSideCache = false;
-  initCubatureDegree(0, cubDegree);
+  initCubatureDegree(0, cubDegree, 0);
   initVolumeCache(createSideCacheToo, tensorProductTopologyMeansSpaceTime);
 }
 
@@ -264,7 +265,7 @@ BasisCache::BasisCache(ElementTypePtr elemType, MeshPtr mesh, bool testVsTest,
   bool createSideCacheToo = !testVsTest && elemType->trialOrderPtr->hasSideVarIDs();
 
   _isSideCache = false;
-  initCubatureDegree(_maxTrialDegree, _maxTestDegree + cubatureDegreeEnrichment);
+  initCubatureDegree(_maxTrialDegree, _maxTestDegree, cubatureDegreeEnrichment);
   initVolumeCache(createSideCacheToo, tensorProductTopologyMeansSpaceTime);
 }
 
@@ -297,7 +298,7 @@ BasisCache::BasisCache(ElementTypePtr elemType, MeshPtr mesh, bool testVsTest,
   findMaximumDegreeBasisForSides( *(elemType->trialOrderPtr) );
 
   _isSideCache = false;
-  initCubatureDegree(_maxTrialDegree, _maxTestDegree + cubatureDegreeEnrichment);
+  initCubatureDegree(_maxTrialDegree, _maxTestDegree, cubatureDegreeEnrichment);
   initVolumeCache(createSideCacheToo, tensorProductTopologyMeansSpaceTime);
 }
 
@@ -308,7 +309,7 @@ BasisCache::BasisCache(const Camellia::FieldContainer<double> &physicalCellNodes
   findMaximumDegreeBasisForSides(trialOrdering);
 
   _isSideCache = false;
-  initCubatureDegree(trialOrdering.maxBasisDegree(), maxTestDegree);
+  initCubatureDegree(trialOrdering.maxBasisDegree(), maxTestDegree, 0);
   initVolumeCache(createSideCacheToo, tensorProductTopologyMeansSpaceTime);
   setPhysicalCellNodes(physicalCellNodes,vector<GlobalIndexType>(),createSideCacheToo);
 }
@@ -321,7 +322,7 @@ BasisCache::BasisCache(const Camellia::FieldContainer<double> &physicalCellNodes
   findMaximumDegreeBasisForSides(trialOrdering);
 
   _isSideCache = false;
-  initCubatureDegree(trialOrdering.maxBasisDegree(), maxTestDegree);
+  initCubatureDegree(trialOrdering.maxBasisDegree(), maxTestDegree, 0);
   bool tensorProductTopologyMeansSpaceTime = true; // doesn't matter for shards topologies (they're not tensor products)
   initVolumeCache(createSideCacheToo, tensorProductTopologyMeansSpaceTime);
   setPhysicalCellNodes(physicalCellNodes,vector<GlobalIndexType>(),createSideCacheToo);
@@ -332,7 +333,7 @@ BasisCache::BasisCache(const Camellia::FieldContainer<double> &physicalCellNodes
 {
   _cellTopo = cellTopo;
   _isSideCache = false;
-  initCubatureDegree(cubatureDegree,0);
+  initCubatureDegree(cubatureDegree,0,0);
   
   initVolumeCache(refCellPoints, cubWeights);
   setPhysicalCellNodes(physicalCellNodes,vector<GlobalIndexType>(),false);
@@ -347,7 +348,7 @@ BasisCache::BasisCache(shards::CellTopology &cellTopo, int cubDegree, bool creat
   findMaximumDegreeBasisForSides(trialOrdering); // should fill with NULL ptrs
 
   _isSideCache = false;
-  initCubatureDegree(0, cubDegree);
+  initCubatureDegree(0, cubDegree, 0);
   bool tensorProductTopologyMeansSpaceTime = true; // doesn't matter for shards topologies (they're not tensor products)
   initVolumeCache(createSideCacheToo, tensorProductTopologyMeansSpaceTime);
 }
@@ -361,7 +362,7 @@ BasisCache::BasisCache(const Camellia::FieldContainer<double> &physicalCellNodes
   findMaximumDegreeBasisForSides(trialOrdering); // should fill with NULL ptrs
 
   _isSideCache = false;
-  initCubatureDegree(0, cubDegree);
+  initCubatureDegree(0, cubDegree, 0);
   bool tensorProductTopologyMeansSpaceTime = true; // doesn't matter for shards topologies (they're not tensor products)
   initVolumeCache(createSideCacheToo, tensorProductTopologyMeansSpaceTime);
 
@@ -377,7 +378,7 @@ BasisCache::BasisCache(const Camellia::FieldContainer<double> &physicalCellNodes
   findMaximumDegreeBasisForSides(trialOrdering); // should fill with NULL ptrs
 
   _isSideCache = false;
-  initCubatureDegree(0, cubDegree);
+  initCubatureDegree(0, cubDegree, 0);
   initVolumeCache(createSideCacheToo, tensorProductTopologyMeansSpaceTime);
 
   setPhysicalCellNodes(physicalCellNodes,vector<GlobalIndexType>(),createSideCacheToo);
@@ -456,7 +457,7 @@ BasisCache::BasisCache(int sideIndex, BasisCachePtr volumeCache, int trialDegree
   int sideDim = _cellTopo->getDimension() - 1;
   CellTopoPtr side = _cellTopo->getSubcell(sideDim,sideIndex); // create relevant subcell (side) topology
 
-  initCubatureDegree(trialDegree, testDegree);
+  initCubatureDegree(trialDegree, testDegree, 0);
 
   if (sideDim > 0)
   {
@@ -534,7 +535,7 @@ BasisCache::BasisCache(int sideIndex, BasisCachePtr volumeCache, const Camellia:
   int sideDim = _cellTopo->getDimension() - 1;
   CellTopoPtr side = _cellTopo->getSubcell(sideDim,sideIndex); // create relevant subcell (side) topology
   
-  initCubatureDegree(cubatureDegree, 0);
+  initCubatureDegree(cubatureDegree, 0, 0);
 
   _cubPoints = refPoints;
   _cubWeights = cubWeights;
@@ -619,6 +620,11 @@ Camellia::FieldContainer<double> BasisCache::computeParametricPoints()
 int BasisCache::cubatureDegree()
 {
   return _cubDegree;
+}
+
+int BasisCache::cubatureEnrichmentDegree()
+{
+  return _cubatureEnrichmentDegree;
 }
 
 int BasisCache::getCubaturePhaseCount()
@@ -1467,14 +1473,6 @@ void BasisCache::setPhysicalCellNodes(const Camellia::FieldContainer<double> &ph
   _weightedMeasureIsValid = false;
   _sideNormalsIsValid = false;
   _physCubPointsIsValid = false;
-  
-//  // compute physicalCubaturePoints, the transformed cubature points on each cell:
-//  determinePhysicalPoints(); // when using _transformationFxn, important to have physical points before Jacobian is computed
-////  cout << "physicalCellNodes:\n" << physicalCellNodes;
-//  determineJacobian();
-
-  // recompute weighted measure at the new physical points
-//  recomputeMeasures();
 
   if ( ! isSideCache() && createSideCacheToo )
   {
@@ -1511,6 +1509,11 @@ void BasisCache::setPhysicalCubaturePoints(const Camellia::FieldContainer<double
 }
 
 int BasisCache::maxTestDegree()
+{
+  return _maxTestDegree;
+}
+
+int BasisCache::maxTrialDegree()
 {
   return _maxTestDegree;
 }
@@ -1575,6 +1578,11 @@ BasisCachePtr BasisCache::parametricQuadCache(int cubatureDegree)
 
   shards::CellTopology quad_4(shards::getCellTopologyData<shards::Quadrilateral<4> >() );
   return Teuchos::rcp( new BasisCache(physicalCellNodes, quad_4, cubatureDegree));
+}
+
+bool BasisCache::testVsTest()
+{
+  return _maxTrialDegree == _maxTestDegree;
 }
 
 BasisCachePtr BasisCache::basisCache1D(double x0, double x1, int cubatureDegree)   // x0 and x1: physical space endpoints

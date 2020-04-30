@@ -348,7 +348,7 @@ void TBC<Scalar>::imposeBC(DeviceView<Scalar> dirichletValues, DeviceView<bool> 
     filter->matchesPoints(imposeHere,pointsView);
     f->values(dirichletValues,ASSIGN,basisCache);
   }
-  points.checkinDeviceView();
+  points.checkinDeviceView(false); // false: don't deep copy to host (no changes to points)
 }
 
 template <typename Scalar>

@@ -45,7 +45,7 @@ void Xn::values(typename Camellia::FieldContainer<double>::DeviceView &values, V
     const double value = pow(x,n);
     assignValue(entry, modType, value);
   });
-  points.checkinDeviceView();
+  points.checkinDeviceView(true);
 }
 
 TFunctionPtr<double> Xn::dx()
@@ -110,7 +110,7 @@ void Yn::values(typename Camellia::FieldContainer<double>::DeviceView &values, V
     const double value = pow(y,n);
     assignValue(entry, modType, value);
   });
-  points.checkinDeviceView();
+  points.checkinDeviceView(true);
 }
 
 TFunctionPtr<double> Yn::dx()
@@ -175,7 +175,7 @@ void Zn::values(typename Camellia::FieldContainer<double>::DeviceView &values, V
     const double value = pow(z,n);
     assignValue(entry, modType, value);
   });
-  points.checkinDeviceView();
+  points.checkinDeviceView(true);
 }
 TFunctionPtr<double> Zn::dx()
 {
@@ -240,7 +240,7 @@ void Tn::values(typename Camellia::FieldContainer<double>::DeviceView &values, V
     const double value = pow(t,n);
     assignValue(entry, modType, value);
   });
-  points.checkinDeviceView();
+  points.checkinDeviceView(true);
 }
 
 TFunctionPtr<double> Tn::dx()

@@ -29,6 +29,13 @@
 
 namespace Camellia
 {
+  //! SolutionComponent is used to distinguish between the usual solution and the influence (goal-oriented) solution.
+  enum SolutionComponent : short
+  {
+    STANDARD_SOLUTION,
+    INFLUENCE_SOLUTION
+  };
+  
 // Basic typedefs
 typedef int IndexType;
 typedef int GlobalIndexType;
@@ -54,6 +61,7 @@ class Element;
 class ElementType;
 class EntitySet;
 class ErrorIndicator;
+class ERKTableau;
 class GlobalDofAssignment;
 class LagrangeConstraints;
 class Mesh;
@@ -62,6 +70,7 @@ class MeshTopology;
 class MeshTopologyView;
 class ParameterFunction;
 class RefinementPattern;
+class SolutionStage;
 class SpatialFilter;
 class Var;
 class VarFactory;
@@ -94,6 +103,7 @@ typedef Teuchos::RCP<DofOrdering> DofOrderingPtr;
 typedef Teuchos::RCP<DofOrderingFactory> DofOrderingFactoryPtr;
 typedef Teuchos::RCP<Element> ElementPtr;
 typedef Teuchos::RCP<ElementType> ElementTypePtr;
+typedef Teuchos::RCP<ERKTableau> ERKTableauPtr;
 typedef Teuchos::RCP<EntitySet> EntitySetPtr;
 typedef Teuchos::RCP<ErrorIndicator> ErrorIndicatorPtr;
 typedef Teuchos::RCP<GlobalDofAssignment> GlobalDofAssignmentPtr;
@@ -103,6 +113,7 @@ typedef Teuchos::RCP<MeshTopology> MeshTopologyPtr;
 typedef Teuchos::RCP<MeshTopologyView> MeshTopologyViewPtr;
 typedef Teuchos::RCP<ParameterFunction> ParameterFunctionPtr;
 typedef Teuchos::RCP<RefinementPattern> RefinementPatternPtr;
+typedef Teuchos::RCP<SolutionStage> SolutionStagePtr;
 typedef Teuchos::RCP<SpatialFilter> SpatialFilterPtr;
 typedef Teuchos::RCP<Var> VarPtr;
 typedef Teuchos::RCP<VarFactory> VarFactoryPtr;

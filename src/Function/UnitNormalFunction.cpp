@@ -109,5 +109,5 @@ void UnitNormalFunction::values(typename FieldContainer<double>::DeviceView &val
       assignValue(values(i0,i1), modType, dv_sideNormals_subview(i0,i1));
     });
   }
-  sideNormals->checkinDeviceView();
+  sideNormals->checkinDeviceView(false); // false: don't deep copy to host (no changes to sideNormals)
 }

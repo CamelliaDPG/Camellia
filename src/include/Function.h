@@ -286,7 +286,7 @@ public:
   // ! When weightFluxesBySideParity = true, the solution function will be non-uniquely-valued
   static TFunctionPtr<Scalar> solution(VarPtr var, TSolutionPtr<Scalar> soln, bool weightFluxesBySideParity, const std::string &solutionIdentifierExponent="");
   // ! Use this for solutions with multiple RHSes (including influence computations)
-  static TFunctionPtr<Scalar> solution(VarPtr var, TSolutionPtr<Scalar> soln, bool weightFluxesBySideParity, int solutionOrdinal, const std::string &solutionIdentifierExponent="");
+  static TFunctionPtr<Scalar> solution(VarPtr var, TSolutionPtr<Scalar> soln, bool weightFluxesBySideParity, SolutionComponent solutionComponent, int solutionStage, const std::string &solutionIdentifierExponent="");
   static TFunctionPtr<double> zero(int rank=0);
   static TFunctionPtr<Scalar> restrictToCellBoundary(TFunctionPtr<Scalar> f);
 

@@ -267,7 +267,7 @@ void testSpaceTimeNormal(CellTopoPtr spaceTopo, Teuchos::FancyOStream &out, bool
     // Test device path values implementation with a different modType
     auto dv_scaledRefValues = scaledRefValues.checkoutDeviceView();
     h->values(dv_scaledRefValues, ValueModificationType::ADD, scaledBasisCache);
-    scaledRefValues.checkinDeviceView();
+    scaledRefValues.checkinDeviceView(true); // true: copy back to host
     for (int i=0; i<refValues.size(); i++)
     {
       double expected = 2.0 * (refValues[i] * scalingFactor);
@@ -413,7 +413,9 @@ void testSpaceTimeNormal(CellTopoPtr spaceTopo, Teuchos::FancyOStream &out, bool
     
     auto myCellIDs = mesh->cellIDsInPartition();
     
-    int solutionOrdinal = 1; // use the second solution for our actual test
+    SolutionComponent solutionComponent = INFLUENCE_SOLUTION; // use the second solution for our actual test
+    int solutionStage = 0;
+    int solutionOrdinal = solution->solutionOrdinal(solutionComponent, solutionStage);
     for (GlobalIndexType cellID : myCellIDs)
     {
       auto trialOrdering = mesh->getElementType(cellID)->trialOrderPtr;
@@ -432,7 +434,7 @@ void testSpaceTimeNormal(CellTopoPtr spaceTopo, Teuchos::FancyOStream &out, bool
     }
     
     bool weightByParity = false;
-    FunctionPtr u_goal = Function::solution(form.u(), solution, weightByParity, solutionOrdinal);
+    FunctionPtr u_goal = Function::solution(form.u(), solution, weightByParity, solutionComponent, solutionStage);
     
     // we expect the jumps to be 1 everywhere on the interior; each interior side has unit length,
     // and each cell has two interior sides, so that we have a total cell contribution of 2.0 on
@@ -486,7 +488,9 @@ void testSpaceTimeNormal(CellTopoPtr spaceTopo, Teuchos::FancyOStream &out, bool
     
     auto myCellIDs = mesh->cellIDsInPartition();
     
-    int solutionOrdinal = 1; // use the second solution for our actual test
+    SolutionComponent solutionComponent = INFLUENCE_SOLUTION; // use the second solution for our actual test
+    int solutionStage = 0;
+    int solutionOrdinal = solution->solutionOrdinal(solutionComponent, solutionStage);
     for (int cellID : myCellIDs)
     {
       auto trialOrdering = mesh->getElementType(cellID)->trialOrderPtr;
@@ -505,7 +509,7 @@ void testSpaceTimeNormal(CellTopoPtr spaceTopo, Teuchos::FancyOStream &out, bool
     }
     
     bool weightByParity = false;
-    FunctionPtr u_goal = Function::solution(form.u(), solution, weightByParity, solutionOrdinal);
+    FunctionPtr u_goal = Function::solution(form.u(), solution, weightByParity, solutionComponent, solutionStage);
     
     // we expect the jumps to be 1 everywhere on the interior; each interior side has length 0.5,
     // and each cell has two interior sides, so that we have a total cell contribution of (2 * 0.5 * 0.5) = 0.5
@@ -571,7 +575,6 @@ TEUCHOS_UNIT_TEST( Function, NeighborFunction )
   
   auto myCellIDs = mesh->cellIDsInPartition();
   
-  int solutionOrdinal = 0;
   for (int cellID : myCellIDs)
   {
     auto trialOrdering = mesh->getElementType(cellID)->trialOrderPtr;
@@ -580,7 +583,7 @@ TEUCHOS_UNIT_TEST( Function, NeighborFunction )
     if (hasUnitSolution) solnCoefficients.initialize(1.0);
     else                 solnCoefficients.initialize(0.0); // this will give all variables a constant 1.0 value
     
-    solution->setSolnCoeffsForCellID(solnCoefficients, cellID, solutionOrdinal);
+    solution->setSolnCoeffsForCellID(solnCoefficients, cellID);
   }
   
   VarPtr u = form.u();
@@ -759,7 +762,6 @@ TEUCHOS_UNIT_TEST( Function, NeighborFunctionWithHangingNode )
   
   auto myCellIDs = mesh->cellIDsInPartition();
   
-  int solutionOrdinal = 0;
   for (int cellID : myCellIDs)
   {
     auto trialOrdering = mesh->getElementType(cellID)->trialOrderPtr;
@@ -768,7 +770,7 @@ TEUCHOS_UNIT_TEST( Function, NeighborFunctionWithHangingNode )
     if (hasUnitSolution) solnCoefficients.initialize(1.0); // this will give all variables a constant 1.0 value
     else                 solnCoefficients.initialize(0.0);
     
-    solution->setSolnCoeffsForCellID(solnCoefficients, cellID, solutionOrdinal);
+    solution->setSolnCoeffsForCellID(solnCoefficients, cellID);
   }
   
   VarPtr u = form.u();
@@ -875,7 +877,6 @@ TEUCHOS_UNIT_TEST( Function, SolutionFunctionSkeletonRestriction )
   
   auto myCellIDs = mesh->cellIDsInPartition();
   
-  int solutionOrdinal = 0;
   for (int cellID : myCellIDs)
   {
     auto trialOrdering = mesh->getElementType(cellID)->trialOrderPtr;
@@ -884,7 +885,7 @@ TEUCHOS_UNIT_TEST( Function, SolutionFunctionSkeletonRestriction )
     if (hasUnitSolution) solnCoefficients.initialize(1.0);
     else                 solnCoefficients.initialize(0.0); // this will give all variables a constant 1.0 value
     
-    solution->setSolnCoeffsForCellID(solnCoefficients, cellID, solutionOrdinal);
+    solution->setSolnCoeffsForCellID(solnCoefficients, cellID);
   }
   
   FunctionPtr gamma   = Function::meshBoundaryCharacteristic();
@@ -1250,7 +1251,7 @@ TEUCHOS_UNIT_TEST( Function, MeshBoundaryCharacteristic )
       TEST_FLOATING_EQUALITY(expectedValue1, fc(0,0), tol);
       auto dv = fc.checkoutDeviceView();
       gamma->values(dv, ValueModificationType::ADD, sideBasisCache);
-      fc.checkinDeviceView();
+      fc.checkinDeviceView(true); // true: deep copy to host
       TEST_FLOATING_EQUALITY(expectedValue2, fc(0,0), tol);
     }
   }
@@ -1276,7 +1277,7 @@ TEUCHOS_UNIT_TEST( Function, MeshBoundaryCharacteristic )
       TEST_FLOATING_EQUALITY(expectedValue[cellID][sideOrdinal], fc(0,0), tol);
       auto dv = fc.checkoutDeviceView();
       gamma->values(dv, ValueModificationType::SUBTRACT, sideBasisCache);
-      fc.checkinDeviceView();
+      fc.checkinDeviceView(true); // true: copy to host
       TEST_FLOATING_EQUALITY(expectedValue0, fc(0,0), tol);
     }
   }

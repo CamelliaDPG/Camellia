@@ -338,9 +338,14 @@ void Projector<Scalar>::projectFunctionOntoBasisInterpolating(Camellia::FieldCon
   int numCells = basisCoefficients.dimension(0);
   Camellia::FieldContainer<Scalar> wholeBasisCoefficients(numCells, basisCardinality); // will include zeros for any coefficients belonging to other sides for a volume basis, e.g.
   
+  FunctionPtr traceFxn = Function::meshSkeletonCharacteristic();
   for (int d=startingDimensionForProjection; d<=domainDim; d++)
   {
     TFunctionPtr<Scalar> projectionThusFar = BasisSumFunction::basisSumFunction(basis, wholeBasisCoefficients);
+    if (fxn->boundaryValueOnly())
+    {
+      projectionThusFar = projectionThusFar * traceFxn;
+    }
     TFunctionPtr<Scalar> fxnToApproximate = fxn - projectionThusFar;
     int subcellCount = domainTopo->getSubcellCount(d);
     for (int subcord=0; subcord<subcellCount; subcord++)

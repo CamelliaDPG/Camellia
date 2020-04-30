@@ -204,7 +204,7 @@ public:
     this->CHECK_VALUES_RANK(values);
     auto dv = values.checkoutDeviceView(false); // false: don't deep_copy from host (will overwrite values)
     this->values(dv, ASSIGN, basisCache);
-    values.checkinDeviceView();
+    values.checkinDeviceView(true);
   }
   void values(typename FieldContainer<double>::DeviceView &values, ValueModificationType modType, BasisCachePtr basisCache)
   {
@@ -334,7 +334,7 @@ void TFunction<Scalar>::values(Camellia::FieldContainer<Scalar> &values, BasisCa
   {
     TEUCHOS_TEST_FOR_EXCEPTION(true, std::invalid_argument, "Function subclasses should implement at least one of the two values() methods, preferably the \"device-path\" variant");
   }
-  values.checkinDeviceView();
+  values.checkinDeviceView(true);
 }
  
 template <typename Scalar>
@@ -1058,7 +1058,7 @@ void TFunction<Scalar>::addToValues(Camellia::FieldContainer<Scalar> &valuesToAd
   CHECK_VALUES_RANK(valuesToAddTo);
   auto dv = valuesToAddTo.checkoutDeviceView();
   this->values(dv, ValueModificationType::ADD, basisCache);
-  valuesToAddTo.checkinDeviceView();
+  valuesToAddTo.checkinDeviceView(true);
 }
 
 template <typename Scalar>
@@ -1868,34 +1868,30 @@ std::map<GlobalIndexType, double> TFunction<Scalar>::squaredL2NormOfJumps(MeshPt
           vector<IndexType> ancestorSideNodes, neighborSideNodes; // this will list the indices as seen by MeshTopology
           
           CellTopoPtr sideTopo = ancestor->topology()->getSide(ancestorSideOrdinal);
-          nodeCount = sideTopo->getNodeCount();
           
-          for (int node=0; node<nodeCount; node++)
-          {
-            int nodeInCell = cellTopo->getNodeMap(sideDim, sideOrdinal, node);
-            ancestorSideNodes.push_back(ancestor->vertices()[nodeInCell]);
-            int nodeInNeighborCell = neighborTopo->getNodeMap(sideDim, mySideOrdinalInNeighbor, node);
-            neighborSideNodes.push_back(neighbor->vertices()[nodeInNeighborCell]);
-          }
-          // now, we want to know what permutation of the side topology takes us from my order to neighbor's
-          // TODO: make sure I'm not going the wrong direction here; it's easy to get confused.
-          permutationFromMeToNeighbor = CamelliaCellTools::permutationMatchingOrder(sideTopo, ancestorSideNodes, neighborSideNodes);
+          // the following permutations map from canonical ordering to that seen by the cell
+          // we want to construct a mapping that takes us from ancestor's ordering to neighbor's
+          unsigned ancestorSidePermutation = ancestor->subcellPermutation(sideDim, sideOrdinal);
+          unsigned neighborSidePermutation = neighbor->subcellPermutation(sideDim, mySideOrdinalInNeighbor);
+          
+          // invert ancestor permutation; this takes us from my ordering to canonical
+          unsigned ancestorInverse = CamelliaCellTools::permutationInverse(sideTopo, ancestorSidePermutation);
+          // compose this with neighbor permutation; this takes us from canonical to neighbor
+          permutationFromMeToNeighbor = CamelliaCellTools::permutationComposition(sideTopo, ancestorInverse, neighborSidePermutation);
         }
         else
         {
-          nodeCount = cellTopo->getSide(sideOrdinal)->getNodeCount();
+          // neighbor is peer, but might not be active (i.e., might have descendants)
           
-          vector<IndexType> mySideNodes, neighborSideNodes; // this will list the indices as seen by MeshTopology
-          for (int node=0; node<nodeCount; node++)
-          {
-            int nodeInCell = cellTopo->getNodeMap(sideDim, sideOrdinal, node);
-            mySideNodes.push_back(cell->vertices()[nodeInCell]);
-            int nodeInNeighborCell = neighborTopo->getNodeMap(sideDim, mySideOrdinalInNeighbor, node);
-            neighborSideNodes.push_back(neighbor->vertices()[nodeInNeighborCell]);
-          }
-          // now, we want to know what permutation of the side topology takes us from my order to neighbor's
-          // TODO: make sure I'm not going the wrong direction here; it's easy to get confused.
-          permutationFromMeToNeighbor = CamelliaCellTools::permutationMatchingOrder(sideTopo, mySideNodes, neighborSideNodes);
+          // the following permutations map from canonical ordering to that seen by the cell
+          // we want to construct a mapping that takes us from my ordering to neighbor's
+          unsigned mySidePermutation       = cell->subcellPermutation(sideDim, sideOrdinal);
+          unsigned neighborSidePermutation = neighbor->subcellPermutation(sideDim, mySideOrdinalInNeighbor);
+          
+          // invert my permutation; this takes us from my ordering to canonical
+          unsigned myInverse = CamelliaCellTools::permutationInverse(sideTopo, mySidePermutation);
+          // compose this with neighbor permutation; this takes us from canonical to neighbor
+          permutationFromMeToNeighbor = CamelliaCellTools::permutationComposition(sideTopo, myInverse, neighborSidePermutation);
         }
         
         Camellia::FieldContainer<double> permutedRefNodes(nodeCount,sideDim);
@@ -1932,6 +1928,9 @@ std::map<GlobalIndexType, double> TFunction<Scalar>::squaredL2NormOfJumps(MeshPt
         neighborSideCache->setMesh(mesh);
         neighborSideCache->setRefCellPoints(neighborRefCellPoints, emptyCubWeights, cubaturePolyOrder, false);
         neighborSideCache->setPhysicalCellNodes(neighborCellNodes, {neighborCellID}, false);
+        
+        // if there aren't periodic BCs, perform the sanity check.  If there are periodic BCs, we expect to fail the check...
+        if (meshTopo->getPeriodicBCs().size() == 0)
         {
           // Sanity check that the physical points agree:
           double tol = 1e-8;
@@ -2384,7 +2383,7 @@ void TFunction<Scalar>::valuesDottedWithTensor(Camellia::FieldContainer<Scalar> 
 {
   auto dv = values.checkoutDeviceView(false); // false: don't deep_copy from host (will overwrite values)
   valuesDottedWithTensor(dv, tensorFunctionOfLikeRank, basisCache);
-  values.checkinDeviceView();
+  values.checkinDeviceView(true);
 }
 
 template <typename Scalar>
@@ -2448,7 +2447,7 @@ void TFunction<Scalar>::scalarModifyFunctionValues(Camellia::FieldContainer<Scal
 {
   auto dv = values.checkoutDeviceView();
   scalarModifyFunctionValues(dv, basisCache, modType);
-  values.checkinDeviceView();
+  values.checkinDeviceView(true);
 }
 
 template <typename Scalar>
@@ -2533,7 +2532,7 @@ void TFunction<Scalar>::scalarModifyBasisValues(Camellia::FieldContainer<double>
     }
   });
   Allocation<Scalar>::checkinDeviceView(dv_scalar);
-  values.checkinDeviceView();
+  values.checkinDeviceView(true);
 }
 
 // Not sure if this will work for complex
@@ -2759,21 +2758,27 @@ TFunctionPtr<Scalar> TFunction<Scalar>::solution(VarPtr var, TSolutionPtr<Scalar
 {
   TEUCHOS_TEST_FOR_EXCEPTION(var->varType() == FLUX, std::invalid_argument, "For flux variables, must provide a weightFluxesBySideParity argument");
   bool weightFluxesBySideParity = false; // inconsequential for non-fluxes
-  int solutionOrdinal = 0;
-  return Teuchos::rcp( new SimpleSolutionFunction<Scalar>(var, soln, weightFluxesBySideParity, solutionOrdinal, solutionIdentifierExponent) );
+  SolutionComponent solutionComponent = STANDARD_SOLUTION;
+  // if soln has a tableau defined, then default stage should be current stage, which we get with a -1 value
+  // if soln does not have a tableau defined, the default stage is 0
+  int solutionStage = (soln->getSolutionStage() != Teuchos::null) ? -1 : 0;
+  return Teuchos::rcp( new SimpleSolutionFunction<Scalar>(var, soln, weightFluxesBySideParity, solutionComponent, solutionStage, solutionIdentifierExponent) );
 }
 
 template <typename Scalar>
 TFunctionPtr<Scalar> TFunction<Scalar>::solution(VarPtr var, TSolutionPtr<Scalar> soln, bool weightFluxesBySideParity, const std::string &solutionIdentifierExponent)
 {
-  int solutionOrdinal = 0;
-  return Teuchos::rcp( new SimpleSolutionFunction<Scalar>(var, soln, weightFluxesBySideParity, solutionOrdinal, solutionIdentifierExponent) );
+  SolutionComponent solutionComponent = STANDARD_SOLUTION;
+  // if soln has a tableau defined, then default stage should be current stage, which we get with a -1 value
+  // if soln does not have a tableau defined, the default stage is 0
+  int solutionStage = (soln->getSolutionStage() != Teuchos::null) ? -1 : 0;
+  return Teuchos::rcp( new SimpleSolutionFunction<Scalar>(var, soln, weightFluxesBySideParity, solutionComponent, solutionStage, solutionIdentifierExponent) );
 }
 
   template <typename Scalar>
-  TFunctionPtr<Scalar> TFunction<Scalar>::solution(VarPtr var, TSolutionPtr<Scalar> soln, bool weightFluxesBySideParity, int solutionOrdinal, const std::string &solutionIdentifierExponent)
+  TFunctionPtr<Scalar> TFunction<Scalar>::solution(VarPtr var, TSolutionPtr<Scalar> soln, bool weightFluxesBySideParity, SolutionComponent solutionComponent, int solutionStage, const std::string &solutionIdentifierExponent)
   {
-    return Teuchos::rcp( new SimpleSolutionFunction<Scalar>(var, soln, weightFluxesBySideParity, solutionOrdinal, solutionIdentifierExponent) );
+    return Teuchos::rcp( new SimpleSolutionFunction<Scalar>(var, soln, weightFluxesBySideParity, solutionComponent, solutionStage, solutionIdentifierExponent) );
   }
   
   template <typename Scalar>

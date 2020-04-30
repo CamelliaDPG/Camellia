@@ -847,7 +847,7 @@ bool TLinearTerm<Scalar>::isZero() const   // true if the TLinearTerm is identic
   //     then call one of the other LinearTerm::evaluate() methods.
 template<typename Scalar>
 void TLinearTerm<Scalar>::evaluate(Camellia::FieldContainer<Scalar> &values, TSolutionPtr<Scalar> solution, BasisCachePtr basisCache,
-                                   bool applyCubatureWeights, int solutionOrdinal)
+                                   bool applyCubatureWeights, SolutionComponent solutionComponent, int solutionStage)
 {
   TEUCHOS_FUNC_TIME_MONITOR("LinearTerm::evaluate() - solution argument");
 
@@ -926,8 +926,7 @@ void TLinearTerm<Scalar>::evaluate(Camellia::FieldContainer<Scalar> &values, TSo
     }
 
     f->values(fValues,basisCache);
-    solution->solutionValues(solnValues,var->ID(),basisCache,
-                             applyCubatureWeights,var->op(),solutionOrdinal);
+    solution->solutionValues(solnValues,var->ID(),basisCache,solutionComponent,solutionStage,applyCubatureWeights,var->op());
 
     std::vector<int> fDim(fValues.rank());
     std::vector<int> solnDim(solnValues.rank());
@@ -1070,7 +1069,27 @@ TLinearTermPtr<Scalar> TLinearTerm<Scalar>::getPartMatchingVariable( VarPtr varT
 template<typename Scalar>
 TFunctionPtr<Scalar> TLinearTerm<Scalar>::evaluate(const map< int, TFunctionPtr<Scalar>> &varFunctions)
 {
-  return evaluate(varFunctions,false) + evaluate(varFunctions, true);
+  FunctionPtr volumePart   = evaluate(varFunctions,false);
+  FunctionPtr boundaryPart = evaluate(varFunctions, true);
+  
+  if (volumePart->isZero())
+  {
+    if (! boundaryPart->boundaryValueOnly())
+    {
+      // we should restrict it to the boundary
+      FunctionPtr traceFxn = Function::meshSkeletonCharacteristic();
+      boundaryPart = boundaryPart * traceFxn;
+    }
+    return boundaryPart;
+  }
+  else if (boundaryPart->isZero())
+  {
+    return volumePart;
+  }
+  else
+  {
+    TEUCHOS_TEST_FOR_EXCEPTION(true, std::invalid_argument, "evaluate() has nonzero trace-valued and volume-valued parts; call LinearTerm::getPart()->evaluate() to specify which of these you want");
+  }
 }
 
 template<typename Scalar>

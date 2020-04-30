@@ -11,6 +11,7 @@ template <typename Scalar>
 SumFunction<Scalar>::SumFunction(TFunctionPtr<Scalar> f1, TFunctionPtr<Scalar> f2) : TFunction<Scalar>("SumFunction", f1->rank())
 {
   TEUCHOS_TEST_FOR_EXCEPTION( f1->rank() != f2->rank(), std::invalid_argument, "summands must be of like rank.");
+  TEUCHOS_TEST_FOR_EXCEPTION( f1->boundaryValueOnly() != f2->boundaryValueOnly(), std::invalid_argument, "summands must agree on boundaryValueOnly()" );
   _f1 = f1;
   _f2 = f2;
 }
@@ -18,8 +19,8 @@ SumFunction<Scalar>::SumFunction(TFunctionPtr<Scalar> f1, TFunctionPtr<Scalar> f
 template <typename Scalar>
 bool SumFunction<Scalar>::boundaryValueOnly()
 {
-  // if either summand is BVO, then so is the sum...
-  return _f1->boundaryValueOnly() || _f2->boundaryValueOnly();
+  // we enforce agreement on boundaryValueOnly() in constructor
+  return _f1->boundaryValueOnly();
 }
 
 template <typename Scalar>

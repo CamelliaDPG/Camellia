@@ -32,7 +32,7 @@ public:
     this->CHECK_VALUES_RANK(values);
     auto dv = values.checkoutDeviceView(false); // false: don't deep_copy from host (will overwrite values)
     this->values(dv, ASSIGN, basisCache);
-    values.checkinDeviceView();
+    values.checkinDeviceView(true);
   }
   
   virtual void values(typename FieldContainer<Scalar>::DeviceView &values, ValueModificationType modType, BasisCachePtr basisCache)
@@ -96,7 +96,7 @@ public:
     this->CHECK_VALUES_RANK(values);
     auto dv = values.checkoutDeviceView(false); // false: don't deep_copy from host (will overwrite values)
     this->values(dv, ASSIGN, basisCache);
-    values.checkinDeviceView();
+    values.checkinDeviceView(true);
   }
   
   virtual void values(typename FieldContainer<Scalar>::DeviceView &values, ValueModificationType modType, BasisCachePtr basisCache)

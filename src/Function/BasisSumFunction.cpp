@@ -212,7 +212,7 @@ void BasisSumFunction::values(DeviceView<double> &values, ValueModificationType 
       });
       Kokkos::fence();
       cellCenter.checkinDeviceView(false);
-      initGuess.checkinDeviceView();
+      initGuess.checkinDeviceView(true);
 
       CamelliaCellTools::mapToReferenceFrameInitGuess(relativeReferenceCellNodes, initGuess, *physicalCellNodes, _overridingBasisCache);
       auto dv_relativeReferenceCellNodes = relativeReferenceCellNodes.checkoutDeviceView();
@@ -228,7 +228,7 @@ void BasisSumFunction::values(DeviceView<double> &values, ValueModificationType 
       });
       Kokkos::fence();
       relativeReferenceCellNodes.checkinDeviceView(false);
-      oneCellRelativeReferenceNodes.checkinDeviceView();
+      oneCellRelativeReferenceNodes.checkinDeviceView(true);
       
       bool cachesAgreeOnSideness = basisCache->isSideCache() == _overridingBasisCache->isSideCache();
       Camellia::FieldContainer<double> relativeReferencePoints = cachesAgreeOnSideness ? basisCache->getRefCellPoints() : basisCache->getSideRefCellPointsInVolumeCoordinates();
@@ -305,7 +305,7 @@ void BasisSumFunction::values(DeviceView<double> &values, ValueModificationType 
     Allocation<double>::recordDeviceViewDeallocation(basisSumValues);
   }
   _coefficients.checkinDeviceView(false);
-  transformedValues->checkinDeviceView();
+  transformedValues->checkinDeviceView(true);
 }
 
 TFunctionPtr<double> BasisSumFunction::x()

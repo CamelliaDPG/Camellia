@@ -55,8 +55,7 @@ namespace Camellia
   void AnalyticalCompressibleProblem::projectExactSolution(SolutionPtr solution)
   {
     TEUCHOS_ASSERT(solution->numSolutions() == 1);
-    const int solutionOrdinal = 0;
-    solution->projectOntoMesh(_exactMap,solutionOrdinal);
+    solution->projectOntoMesh(_exactMap);
   }
 
   void AnalyticalCompressibleProblem::setBCs(SpaceTimeCompressibleFormulationPtr form)

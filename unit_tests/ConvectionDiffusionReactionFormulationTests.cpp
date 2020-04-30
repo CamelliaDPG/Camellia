@@ -171,10 +171,11 @@ namespace
     VarPtr sigma = form.sigma();
     VarPtr sigma_n = form.sigma_n();
     
+    FunctionPtr traceFxn = Function::meshSkeletonCharacteristic();
     map<int, FunctionPtr> solnMap;
     solnMap[u->ID()] = u_exact;
     solnMap[sigma->ID()] = sqrt(epsilon) * u_exact->grad();
-    solnMap[u_hat->ID()] = u_hat->termTraced()->evaluate(solnMap);
+    solnMap[u_hat->ID()] = u_hat->termTraced()->evaluate(solnMap) * traceFxn;
     solnMap[sigma_n->ID()] = sigma_n->termTraced()->evaluate(solnMap);
     
     MeshPtr mesh = MeshFactory::rectilinearMesh(form.bf(), meshDim, elementWidths, H1Order, delta_k);
@@ -183,8 +184,7 @@ namespace
     soln->setCubatureEnrichmentDegree(beta_degree); //set to match the degree of beta
     mesh->registerSolution(soln);
     
-    const int solutionOrdinal = 0;
-    soln->projectOntoMesh(solnMap, solutionOrdinal);
+    soln->projectOntoMesh(solnMap);
     
     // now, we should have zero energy error
     double energyError = soln->energyErrorTotal();

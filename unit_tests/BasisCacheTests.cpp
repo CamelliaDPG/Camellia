@@ -694,8 +694,7 @@ TEUCHOS_UNIT_TEST( BasisCache, SetRefCellPointsSpaceTimeSide )
       SolutionPtr soln = Solution::solution(mesh);
       map<int, FunctionPtr> functionMap;
       functionMap[form.u()->ID()] = f;
-      const int solutionOrdinal = 0;
-      soln->projectOntoMesh(functionMap, solutionOrdinal);
+      soln->projectOntoMesh(functionMap);
       // confirm that the projection worked:
       FunctionPtr f_soln = Function::solution(form.u(), soln);
       err = (f - f_soln)->l2norm(mesh);
@@ -794,8 +793,7 @@ TEUCHOS_UNIT_TEST( BasisCache, SetRefCellPointsSpaceTimeSide )
     SolutionPtr soln = Solution::solution(mesh);
     map<int, FunctionPtr> functionMap;
     functionMap[form.u()->ID()] = f;
-    const int solutionOrdinal = 0;
-    soln->projectOntoMesh(functionMap, solutionOrdinal);
+    soln->projectOntoMesh(functionMap);
     // confirm that the projection worked:
     FunctionPtr f_soln = Function::solution(form.u(), soln);
     err = (f - f_soln)->l2norm(mesh);

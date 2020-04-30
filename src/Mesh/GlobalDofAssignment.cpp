@@ -263,7 +263,6 @@ void GlobalDofAssignment::assignParities( GlobalIndexType cellID )
       if (soln->cellHasCoefficientsAssigned(cellID,solutionOrdinal))
       {
         soln->reverseParitiesForLocalCoefficients(cellID, sidesWithChangedParities, solutionOrdinal);
-  //      cout << "Reversing parities for cellID " << cellID << " on " << sidesWithChangedParities.size() << " sides." << endl;
       }
     }
   }

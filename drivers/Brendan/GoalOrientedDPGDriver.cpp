@@ -523,10 +523,9 @@ int main(int argc, char *argv[])
 
     // compute error rep function / influence function
     bool excludeBoundaryTerms = false;
-    const bool overrideMeshCheck = false; // testFunctional() default for third argument
     const int solutionOrdinal = 1; // solution corresponding to second RHS
     LinearTermPtr residual = rhs()->linearTerm() - bf->testFunctional(soln,excludeBoundaryTerms);
-    LinearTermPtr influence = bf->testFunctional(soln,excludeBoundaryTerms,overrideMeshCheck,solutionOrdinal);
+    LinearTermPtr influence = bf->testFunctional(soln,excludeBoundaryTerms,solutionOrdinal);
     RieszRepPtr rieszResidual = Teuchos::rcp(new RieszRep(mesh, ip, residual));
     RieszRepPtr dualSoln = Teuchos::rcp(new RieszRep(mesh, ip, influence));
     rieszResidual->computeRieszRep();

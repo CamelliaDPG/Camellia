@@ -11,7 +11,6 @@
 #include "HDF5Exporter.h"
 #include "MeshFactory.h"
 #include "ParameterFunction.h"
-#include "PreviousSolutionFunction.h"
 #include "SimpleFunction.h"
 #include "StokesVGPFormulation.h"
 

@@ -556,9 +556,8 @@ int runSolver(Teuchos::RCP<Form> form, bool conservationVariables, double dt, do
   
   // project the initial state both onto the solution object representing the previous time state,
   // as well as the current state (the latter is the initial guess for the current time step).
-  const int solutionOrdinal = 0;
-  form->solutionPreviousTimeStep()->projectOntoMesh(initialState, solutionOrdinal);
-  form->solution()->projectOntoMesh(initialState, solutionOrdinal);
+  form->solutionPreviousTimeStep()->projectOntoMesh(initialState);
+  form->solution()->projectOntoMesh(initialState);
   
   MeshPtr mesh = form->solutionIncrement()->mesh();
   

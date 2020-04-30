@@ -977,6 +977,7 @@ namespace Camellia
     if (INFO != 0)
     {
       cout << "dpotrf_ result: " << INFO << endl;
+      TEUCHOS_TEST_FOR_EXCEPTION(true, std::invalid_argument, "Cholesky factorization failed");
       result = INFO;
     }
     
@@ -1424,7 +1425,7 @@ namespace Camellia
         
         timer.ResetStartTime();
         // RHS:
-        this->stiffnessMatrix(stiffnessEnriched, elemType, cellSideParities, basisCache, true, true);
+        this->stiffnessMatrix(stiffnessEnriched, elemType, cellSideParities, basisCache, true, _warnAboutZeroRowsAndColumns);
         timeB = timer.ElapsedTime();
         
         Teuchos::Array<int> localIPDim(2);
@@ -1810,8 +1811,8 @@ namespace Camellia
   }
   
   template <typename Scalar>
-  TLinearTermPtr<Scalar> TBF<Scalar>::testFunctional(TSolutionPtr<Scalar> trialSolution, bool excludeBoundaryTerms, bool overrideMeshCheck,
-                                                     int solutionOrdinal)
+  TLinearTermPtr<Scalar> TBF<Scalar>::testFunctional(TSolutionPtr<Scalar> trialSolution, bool excludeBoundaryTerms,
+                                                     SolutionComponent solutionComponent, int solutionStage)
   {
     TLinearTermPtr<Scalar> functional = Teuchos::rcp(new LinearTerm());
     auto trialVarMap = _varFactory->trialVars();
@@ -1820,7 +1821,7 @@ namespace Camellia
     {
       trialVars.push_back(trialEntry.second);
     }
-    auto solnMap = PreviousSolutionFunction<Scalar>::functionMap(trialVars, trialSolution, solutionOrdinal);
+    auto solnMap = PreviousSolutionFunction<Scalar>::functionMap(trialVars, trialSolution, solutionComponent, solutionStage);
     for (TBilinearTerm<Scalar> & bt : _terms)
     {
       TLinearTermPtr<Scalar> trialTerm = bt.first;
@@ -1828,7 +1829,6 @@ namespace Camellia
       TFunctionPtr<Scalar> trialValue = trialTerm->evaluate(solnMap);
       if ( (! excludeBoundaryTerms) || (! trialValue->boundaryValueOnly()) )
       {
-//        cout << "Adding " << (trialValue * testTerm)->displayString() << " to functional.\n";
         functional = functional + trialValue * testTerm;
       }
     }

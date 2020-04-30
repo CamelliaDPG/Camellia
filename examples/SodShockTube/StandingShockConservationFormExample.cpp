@@ -168,8 +168,7 @@ int main(int argc, char *argv[])
     initialGuess[form->tm(1)->ID()]    = (rho * u * u + form->R() * rho * T) * n_x;
   }
   
-  const int solutionOrdinal = 0;
-  form->solution()->projectOntoMesh(initialGuess, solutionOrdinal);
+  form->solution()->projectOntoMesh(initialGuess);
   
   HDF5Exporter solutionExporter(form->solutionIncrement()->mesh(), "standingShockSolution", ".");
   HDF5Exporter solutionIncrementExporter(form->solutionIncrement()->mesh(), "standingShockSolutionIncrement", ".");

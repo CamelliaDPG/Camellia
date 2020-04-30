@@ -69,9 +69,9 @@ void BCFunction<Scalar>::values(DeviceView<Scalar> &values, ValueModificationTyp
   }
   
 //  points.checkinDeviceView();
-  basisCache->getSideNormals().checkinDeviceView();
-  _imposeHere.checkinDeviceView();
-  basisCache->getSideNormals().checkinDeviceView();
+  basisCache->getSideNormals().checkinDeviceView(false);
+  _imposeHere.checkinDeviceView(true);
+  basisCache->getSideNormals().checkinDeviceView(false);
 }
 
 template <typename Scalar>

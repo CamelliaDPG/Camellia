@@ -63,7 +63,7 @@ namespace Camellia
       return Allocation<Scalar>::allocateDeviceView(dims,label);
     }
     
-    void initializeHostView(Scalar* dataPtr) const
+    void initializeHostView(Scalar* dataPtr)
     {
       const int rank = this->rank();
       Kokkos::Array<int,7> dims = {1,1,1,1,1,1,1}; // maximum rank of DynRankView is 7
@@ -110,18 +110,23 @@ namespace Camellia
       initializeHostView(dataPtr);
     }
     
-    void initializeHostView() const
-    {
-      Scalar* dataPtr = const_cast<Scalar *>( this->getData().getRawPtr() );
-      initializeHostView(dataPtr);
-    }
-    
-    void initializeDeviceView() const
+    void initializeDeviceView()
     {
       if (!_hostViewIsValid)
       {
         initializeHostView();
       }
+      
+      // if _deviceView has previously been checked out, we should check it back in. (This comes up during calls to resize() and clear().)
+      Allocation<Scalar>::checkinMirrorView(_deviceView);
+      _deviceView = Allocation<Scalar>::checkoutMirrorView(_hostView);
+      
+      _deviceViewIsValid = true;
+    }
+    
+    void initializeDeviceView() const
+    {
+      TEUCHOS_TEST_FOR_EXCEPTION(!_hostViewIsValid, std::invalid_argument, "call to initializeDeviceView() for const FC requires that host view be valid");
       
       // if _deviceView has previously been checked out, we should check it back in. (This comes up during calls to resize() and clear().)
       Allocation<Scalar>::checkinMirrorView(_deviceView);
@@ -229,7 +234,7 @@ namespace Camellia
       return _deviceView;
     }
     
-    void checkinDeviceView(bool deepCopyToHost=true)
+    void checkinDeviceView(bool deepCopyToHost) const
     {
       // copy back to host
       //std::cout << "deep_copy device2host..." << std::endl;
@@ -238,11 +243,6 @@ namespace Camellia
         Kokkos::deep_copy(_hostView,_deviceView);
         recordDeepCopy<Scalar>(deviceToHostDeepCopyRecord, _hostView.size());
       }
-      _deviceViewIsCheckedOut = false;
-    }
-    
-    void checkinDeviceView() const
-    {
       _deviceViewIsCheckedOut = false;
     }
     

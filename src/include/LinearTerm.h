@@ -99,7 +99,7 @@ public:
   double computeNorm(TIPPtr<Scalar> ip, MeshPtr mesh, int cubatureEnrichment = 0);
 
   void evaluate(Camellia::FieldContainer<Scalar> &values, TSolutionPtr<Scalar> solution, BasisCachePtr basisCache,
-                bool applyCubatureWeights = false, int solutionOrdinal = 0);
+                bool applyCubatureWeights = false, SolutionComponent solutionComponent = STANDARD_SOLUTION, int solutionStage = 0);
 
   TFunctionPtr<Scalar> evaluate(const Teuchos::map< int, TFunctionPtr<Scalar>> &varFunctions);
   TFunctionPtr<Scalar> evaluate(const Teuchos::map< int, TFunctionPtr<Scalar>> &varFunctions, bool boundaryPart);

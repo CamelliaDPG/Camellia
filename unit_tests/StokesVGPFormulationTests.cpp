@@ -69,8 +69,7 @@ void projectExactSolution(StokesVGPFormulation &form, SolutionPtr stokesSolution
     exactMap[form.u_hat(comp_i)->ID()] = ui;
   }
   
-  const int solutionOrdinal = 0;
-  stokesSolution->projectOntoMesh(exactMap, solutionOrdinal);
+  stokesSolution->projectOntoMesh(exactMap);
 }
 
 void setupExactSolution(StokesVGPFormulation &form, FunctionPtr u, FunctionPtr p,
@@ -203,8 +202,7 @@ TEUCHOS_UNIT_TEST( StokesVGPFormulation, StreamFormulationConsistency )
   exactMap[phi_hat->ID()] = phi_hat_exact;
   exactMap[psi_n_hat->ID()] = psi_n_hat_exact;
 
-  const int solutionOrdinal = 0;
-  streamSoln->projectOntoMesh(exactMap, solutionOrdinal);
+  streamSoln->projectOntoMesh(exactMap);
 
   double energyError = streamSoln->energyErrorTotal();
 
@@ -565,8 +563,7 @@ TEUCHOS_UNIT_TEST( StokesVGPFormulation, Projection_2D_Slow )
     
     FunctionPtr tn1_exact = solnToProject[tn1_hat->ID()];
     
-    const int solutionOrdinal = 0;
-    form.solution()->projectOntoMesh(solnToProject, solutionOrdinal);
+    form.solution()->projectOntoMesh(solnToProject);
     
     // sanity check: did the projection work?
     FunctionPtr u1_soln = Function::solution(u1, form.solution());
@@ -577,14 +574,15 @@ TEUCHOS_UNIT_TEST( StokesVGPFormulation, Projection_2D_Slow )
     FunctionPtr tn1_hat_soln = Function::solution(tn1_hat, form.solution(), weightByParity);
     
     double tol = 1e-11;
+    FunctionPtr traceFxn = Function::meshSkeletonCharacteristic();
     double err;
     err = (u1_soln - u1_exact)->l2norm(mesh);
     TEST_COMPARE(err, <, tol);
-    err = (u1_hat_soln - u1_exact)->l2norm(mesh);
+    err = (u1_hat_soln - u1_exact*traceFxn)->l2norm(mesh);
     TEST_COMPARE(err, <, tol);
     err = (u2_soln - u2_exact)->l2norm(mesh);
     TEST_COMPARE(err, <, tol);
-    err = (u2_hat_soln - u2_exact)->l2norm(mesh);
+    err = (u2_hat_soln - u2_exact*traceFxn)->l2norm(mesh);
     TEST_COMPARE(err, <, tol);
     err = (tn1_hat_soln - tn1_exact)->l2norm(mesh);
     TEST_COMPARE(err, <, tol);
@@ -605,7 +603,7 @@ TEUCHOS_UNIT_TEST( StokesVGPFormulation, Projection_2D_Slow )
       }
     };
     
-    int meshOrdinal = 0;
+//    int meshOrdinal = 0;
 //    outputMesh(meshOrdinal++);
     
     {
@@ -621,18 +619,17 @@ TEUCHOS_UNIT_TEST( StokesVGPFormulation, Projection_2D_Slow )
     }
 //    outputMesh(meshOrdinal++);
     
-    int rank = mesh->Comm()->MyPID();
-
-    int activeElements = mesh->numActiveElements();
+//    int rank = mesh->Comm()->MyPID();
+//    int activeElements = mesh->numActiveElements();
 //    cout << "active elements seen by rank " << rank << ": " << activeElements << endl;
     
     err = (u1_soln - u1_exact)->l2norm(mesh);
     TEST_COMPARE(err, <, tol);
-    err = (u1_hat_soln - u1_exact)->l2norm(mesh);
+    err = (u1_hat_soln - u1_exact*traceFxn)->l2norm(mesh);
     TEST_COMPARE(err, <, tol);
     err = (u2_soln - u2_exact)->l2norm(mesh);
     TEST_COMPARE(err, <, tol);
-    err = (u2_hat_soln - u2_exact)->l2norm(mesh);
+    err = (u2_hat_soln - u2_exact*traceFxn)->l2norm(mesh);
     TEST_COMPARE(err, <, tol);
     err = (tn1_hat_soln - tn1_exact)->l2norm(mesh);
     TEST_COMPARE(err, <, tol);
@@ -652,11 +649,11 @@ TEUCHOS_UNIT_TEST( StokesVGPFormulation, Projection_2D_Slow )
 
     err = (u1_soln - u1_exact)->l2norm(mesh);
     TEST_COMPARE(err, <, tol);
-    err = (u1_hat_soln - u1_exact)->l2norm(mesh);
+    err = (u1_hat_soln - u1_exact*traceFxn)->l2norm(mesh);
     TEST_COMPARE(err, <, tol);
     err = (u2_soln - u2_exact)->l2norm(mesh);
     TEST_COMPARE(err, <, tol);
-    err = (u2_hat_soln - u2_exact)->l2norm(mesh);
+    err = (u2_hat_soln - u2_exact*traceFxn)->l2norm(mesh);
     TEST_COMPARE(err, <, tol);
     
     if (!success)

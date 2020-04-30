@@ -534,11 +534,12 @@ MeshTopologyPtr MeshFactory::intervalMeshTopology(double xLeft, double xRight, i
   vector< vector<double> > vertices(n+1);
   vector<double> vertex(1);
   double length = xRight - xLeft;
+  double elementWidth = length / n;
   vector< vector<IndexType> > elementVertices(n);
   vector<IndexType> oneElement(2);
   for (int i=0; i<n+1; i++)
   {
-    vertex[0] = xLeft + (i * length) / n;
+    vertex[0] = xLeft + i * elementWidth;
     //    cout << "vertex " << i << ": " << vertex[0] << endl;
     vertices[i] = vertex;
     if (i != n)

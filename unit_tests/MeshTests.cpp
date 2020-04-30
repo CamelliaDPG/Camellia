@@ -850,14 +850,13 @@ TEUCHOS_UNIT_TEST( Mesh, ParitySpaceTime1D )
     
     auto mesh = MeshFactory::rectilinearMesh(form.bf(), dims, elemCounts, H1Order);
     
-    int solutionOrdinal = 0;
     map<int,FunctionPtr> functionMap;
     
     functionMap[form.u()->ID()] = Function::constant(1.0);
     functionMap[form.u_hat()->ID()] = Function::constant(1.0);
     SolutionPtr solution = Solution::solution(form.bf(), mesh);
     mesh->registerSolution(solution);
-    solution()->projectOntoMesh(functionMap, solutionOrdinal);
+    solution()->projectOntoMesh(functionMap);
     
     // before we p-refine, print constraint report:
     //  GDAMinimumRule* minRule = dynamic_cast<GDAMinimumRule *>(mesh->globalDofAssignment().get());
@@ -900,13 +899,12 @@ TEUCHOS_UNIT_TEST( Mesh, ParitySpaceTime1D )
     MeshPtr mesh = Teuchos::rcp( new Mesh(meshTopo, form.bf(), H1Order, delta_k) ) ;
     meshTopo->initializeTransformationFunction(mesh);
     
-    int solutionOrdinal = 0;
     map<int,FunctionPtr> functionMap;
     
     functionMap[form.u()->ID()] = Function::constant(1.0);
     SolutionPtr solution = Solution::solution(form.bf(), mesh);
     mesh->registerSolution(solution);
-    solution()->projectOntoMesh(functionMap, solutionOrdinal);
+    solution()->projectOntoMesh(functionMap);
     
     std::set<GlobalIndexType> cellsToHxRefine = {0, 1, 2, 3, 4, 5, 6, 7, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20, 21, 22, 23, 24, 25, 26, 27, 28, 29, 30, 31, 32, 33, 34, 35};
     //  print("cellsToHRefine", cellsToHRefine);
@@ -960,13 +958,12 @@ TEUCHOS_UNIT_TEST( Mesh, ParitySpaceTime1D )
     MeshPtr mesh = Teuchos::rcp( new Mesh(meshTopo, form.bf(), H1Order, delta_k) ) ;
     meshTopo->initializeTransformationFunction(mesh);
     
-    int solutionOrdinal = 0;
     map<int,FunctionPtr> functionMap;
     
     functionMap[form.u()->ID()] = Function::constant(1.0);
     SolutionPtr solution = Solution::solution(form.bf(), mesh);
     mesh->registerSolution(solution);
-    solution()->projectOntoMesh(functionMap, solutionOrdinal);
+    solution()->projectOntoMesh(functionMap);
     
     // check that cell neighbors are all well-ordered in terms of fineness in h and p
     // (i.e. finer in h and finer in p is OK, but finer in one and coarser in the other not)
@@ -1062,13 +1059,12 @@ TEUCHOS_UNIT_TEST( Mesh, PRefine2D )
   
   auto mesh = MeshFactory::rectilinearMesh(form.bf(), dims, elemCounts, H1Order);
   
-  int solutionOrdinal = 0;
   map<int,FunctionPtr> functionMap;
   
   functionMap[form.u()->ID()] = Function::constant(1.0);
   SolutionPtr solution = Solution::solution(form.bf(), mesh);
   mesh->registerSolution(solution);
-  solution()->projectOntoMesh(functionMap, solutionOrdinal);
+  solution()->projectOntoMesh(functionMap);
   
   // before we p-refine, print constraint report:
 //  GDAMinimumRule* minRule = dynamic_cast<GDAMinimumRule *>(mesh->globalDofAssignment().get());
@@ -1104,13 +1100,12 @@ TEUCHOS_UNIT_TEST( Mesh, PRefine2D )
     MeshPtr mesh = Teuchos::rcp( new Mesh(meshTopo, form.bf(), H1Order, delta_k) ) ;
     meshTopo->initializeTransformationFunction(mesh);
     
-    int solutionOrdinal = 0;
     map<int,FunctionPtr> functionMap;
     
     functionMap[form.u()->ID()] = Function::constant(1.0);
     SolutionPtr solution = Solution::solution(form.bf(), mesh);
     mesh->registerSolution(solution);
-    solution()->projectOntoMesh(functionMap, solutionOrdinal);
+    solution()->projectOntoMesh(functionMap);
     
     std::set<GlobalIndexType> cellsToPRefine = mesh->getActiveCellIDsGlobal();
     cellsToPRefine.erase(1);
@@ -1232,8 +1227,7 @@ void testSaveAndLoad2D(BFPtr bf, Teuchos::FancyOStream &out, bool &success)
     VarPtr u = form.u();
     solutionMap[u->ID()] = exactFxn;
     
-    const int solutionOrdinal = 0;
-    solution->projectOntoMesh(solutionMap, solutionOrdinal);
+    solution->projectOntoMesh(solutionMap);
     
     FunctionPtr solnFxn = Function::solution(u, solution, false);
     double err = (solnFxn - exactFxn)->l2norm(mesh);
@@ -1255,20 +1249,21 @@ void testSaveAndLoad2D(BFPtr bf, Teuchos::FancyOStream &out, bool &success)
     SolutionPtr solution = Solution::solution(form.bf(), mesh);
     mesh->registerSolution(solution);
     
+    FunctionPtr traceFxn = Function::meshSkeletonCharacteristic();
     map<int, FunctionPtr> solutionMap;
     FunctionPtr x = Function::xn();
     solutionMap[form.u()->ID()] = x;
     solutionMap[form.sigma()->ID()] = Function::constant({1.0,0.0});
-    solutionMap[form.u_hat()->ID()] = x;
+    solutionMap[form.u_hat()->ID()] = x * traceFxn;
     FunctionPtr n = Function::normal();
     FunctionPtr n_parity = Function::normal() * Function::sideParity();
     solutionMap[form.sigma_n_hat()->ID()] = Function::constant({1.0,0.0}) * n_parity;
     
-    const int solutionOrdinal = 0;
-    solution->projectOntoMesh(solutionMap,solutionOrdinal);
+    solution->projectOntoMesh(solutionMap);
     
     // sanity check: make sure that the difference *before* refinement is 0
     double tol = 1e-14;
+    
     for (auto entry : solutionMap)
     {
       int varID = entry.first;

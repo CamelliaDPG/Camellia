@@ -118,8 +118,7 @@ int main(int argc, char *argv[])
     // compute the L2 best approximation
     if (choice == PoissonFormulation::ULTRAWEAK) {
       SolutionPtr bae = Solution::solution(bf,mesh,bc,rhs,ip);
-      int solutionOrdinal = 0;
-      bae->projectOntoMesh(exactSolutionMap, solutionOrdinal);
+      bae->projectOntoMesh(exactSolutionMap);
     }
     int cubatureEnrichment = 4;
     

@@ -61,7 +61,7 @@ private:
   }
   
   // first index into _solutionForCellID corresponds to the index of the RHS (0 for primary, 1 for influence, at present)
-  std::vector<std::map< GlobalIndexType, const Camellia::FieldContainer<Scalar> > > _solutionForCellID;
+  std::vector<std::map< GlobalIndexType, Camellia::FieldContainer<Scalar> > > _solutionForCellID;
   std::map< GlobalIndexType, double > _energyErrorForCell; // this is *just* for the primary solution.  Use RieszRep if dealing with the influence function...
 
   map< GlobalIndexType, const Camellia::FieldContainer<double> > _residualForCell;
@@ -75,8 +75,10 @@ private:
   Teuchos::RCP<DofInterpreter> _dofInterpreter; // defaults to Mesh
   Teuchos::RCP<DofInterpreter> _oldDofInterpreter; // the one saved when we turn on condensed solve
   TBFPtr<Scalar> _bf;
-  TRHSPtr<Scalar> _rhs;
+  TRHSPtr<Scalar> _rhs, _rhsWithoutTableauModification;
   TIPPtr<Scalar> _ip;
+  
+  SolutionStagePtr _solutionStage;
   
   LinearTermPtr _goalOrientedRHS;  // trial space functional.
   
@@ -85,7 +87,8 @@ private:
 
   Teuchos::RCP<Epetra_CrsMatrix> _globalStiffMatrix;
   Teuchos::RCP<Epetra_FEVector> _rhsVector;
-  Teuchos::RCP<Epetra_FEVector> _lhsVector;
+  Teuchos::RCP<Epetra_FEVector> _lhsVector; // 1 or 2 wide for steady; for RK schemes, this is numStages + 1 wide (assuming no goal-oriented RHS)
+  Teuchos::RCP<Epetra_FEVector> _lhsVectorCurrentStage; // for RK schemes, this is 1 wide (assuming no goal-oriented RHS)
 
   TMatrixPtr<Scalar> _globalStiffMatrix2;
   TVectorPtr<Scalar> _rhsVector2;
@@ -151,9 +154,8 @@ private:
   std::vector<int> _cachedCellBasisCoefficientsForFieldsCellIDs; // which cells are represented above?
   void invalidateCachedBasisCoefficientsForFields();
   
-//protected:
-  // Pretty sure this is cruft... commenting it out
-//  Camellia::FieldContainer<Scalar> solutionForElementTypeGlobal(ElementTypePtr elemType); // probably should be deprecated…
+protected:
+  RHSPtr rhsWithoutTableauModification() const;
 public:
   TSolution(TBFPtr<Scalar> bf, MeshPtr mesh, TBCPtr<Scalar> bc = Teuchos::null,
             TRHSPtr<Scalar> rhs = Teuchos::null, TIPPtr<Scalar> ip = Teuchos::null);
@@ -166,8 +168,11 @@ public:
 
   const Camellia::FieldContainer<Scalar>& allCoefficientsForCellID(GlobalIndexType cellID, bool warnAboutOffRankImports=true,
                                                                    int solutionNumber=0); // coefficients for all solution variables
-  void setLocalCoefficientsForCell(GlobalIndexType cellID, const Camellia::FieldContainer<Scalar> &coefficients, int solutionNumber);
+  void setLocalCoefficientsForCell(GlobalIndexType cellID, const Camellia::FieldContainer<Scalar> &coefficients, int solutionNumber=0);
 
+  void getBasisCoefficientsForCell(Camellia::FieldContainer<Scalar> &basisCoefficients, int trialID, GlobalIndexType cellID,
+                                   SolutionComponent standardOrInfluence, int stageOrdinal, int sideIndex = -1);
+  
   Teuchos::RCP<DofInterpreter> getDofInterpreter() const;
   void setDofInterpreter(Teuchos::RCP<DofInterpreter> dofInterpreter);
 
@@ -182,7 +187,7 @@ public:
   Epetra_MultiVector* getGlobalCoefficients();
   TVectorPtr<Scalar> getGlobalCoefficients2();
 
-  bool cellHasCoefficientsAssigned(GlobalIndexType cellID, int solutionOrdinal);
+  bool cellHasCoefficientsAssigned(GlobalIndexType cellID, int solutionOrdinal=0);
   void clearComputedResiduals();
 
   bool getZMCsAsGlobalLagrange() const;
@@ -239,19 +244,22 @@ public:
   void setSolution(TSolutionPtr<Scalar> soln); // thisSoln = soln
 
   void solutionValues(Camellia::FieldContainer<Scalar> &values, int trialID,
-                      const Camellia::FieldContainer<double> &physicalPoints, int solutionOrdinal=0); // searches for the elements that match the points provided
+                      const Camellia::FieldContainer<double> &physicalPoints, SolutionComponent standardOrInfluence=STANDARD_SOLUTION,
+                      int stageOrdinal=0); // searches for the elements that match the points provided
   void solutionValues(Camellia::FieldContainer<Scalar> &values, int trialID, BasisCachePtr basisCache,
-                      bool weightForCubature = false, Camellia::EOperator op = OP_VALUE, int solutionOrdinal=0);
+                      SolutionComponent standardOrInfluence=STANDARD_SOLUTION, int stageOrdinal=0,
+                      bool weightForCubature = false, Camellia::EOperator op = OP_VALUE);
   void solutionValues(typename Camellia::FieldContainer<Scalar>::DeviceView &values, int trialID, BasisCachePtr basisCache,
-                      bool weightForCubature = false, Camellia::EOperator op = OP_VALUE, int solutionOrdinal=0);
+                      SolutionComponent standardOrInfluence=STANDARD_SOLUTION, int stageOrdinal=0,
+                      bool weightForCubature = false, Camellia::EOperator op = OP_VALUE);
 
   void solnCoeffsForCellID(Camellia::FieldContainer<Scalar> &solnCoeffs, GlobalIndexType cellID, int trialID, int sideIndex=VOLUME_INTERIOR_SIDE_ORDINAL,
                            int solutionOrdinal=0);
   void setSolnCoeffsForCellID(const Camellia::FieldContainer<Scalar> &solnCoeffsToSet, GlobalIndexType cellID, int trialID,
-                              int sideIndex, int solutionOrdinal);
-  void setSolnCoeffsForCellID(const Camellia::FieldContainer<Scalar> &solnCoeffsToSet, GlobalIndexType cellID, int solutionOrdinal);
+                              int sideIndex, int solutionOrdinal=0);
+  void setSolnCoeffsForCellID(const Camellia::FieldContainer<Scalar> &solnCoeffsToSet, GlobalIndexType cellID, int solutionOrdinal=0);
 
-  const std::vector< std::map< GlobalIndexType, const Camellia::FieldContainer<Scalar> > > & solutionForCellID() const;
+  const std::vector< std::map< GlobalIndexType, Camellia::FieldContainer<Scalar> > > & solutionForCellID() const;
 
   double meshMeasure();
 
@@ -266,26 +274,36 @@ public:
   // ! provides the GID (in stiffness/load) corresponding to an element lagrange constraint
   GlobalIndexType elementLagrangeIndex(GlobalIndexType cellID, int lagrangeOrdinal) const;
   
-  // ! returns the number of solutions we're solving for; right now, this is 1 or 2 (2 in the case that goal-oriented RHS is set).
+  //! returns the number of RHSes we use in the solve for; right now, this is 1 or 2 (2 in the case that goal-oriented RHS is set).
+  int numRHSes() const;
+  
+  //! total number of solutions in lhsVector() -- (numStages+1) * numRHSes.
   int numSolutions() const;
+  
+  //! number of stages in the ERKTableau (0 if no ERKTableau is set).
+  int numStages() const;
+  
+  //! get the index in lhsVector (and _solutionForCellID) for specified solutionComponent, solutionStage
+  //! Note that solutionStage == -1 uses the current stage, as defined by _solutionStage.
+  int solutionOrdinal(SolutionComponent solutionComponent, int solutionStage) const;
   
   void processSideUpgrades( const std::map<GlobalIndexType, std::pair< ElementTypePtr, ElementTypePtr > > &cellSideUpgrades);
   void processSideUpgrades( const std::map<GlobalIndexType, std::pair< ElementTypePtr, ElementTypePtr > > &cellSideUpgrades, const std::set<GlobalIndexType> &cellIDsToSkip );
 
-  void projectOntoMesh(const std::map<int, TFunctionPtr<Scalar> > &functionMap, int solutionOrdinal);
-  void projectOntoCell(const std::map<int, TFunctionPtr<Scalar> > &functionMap, GlobalIndexType cellID, int sideIndex, int solutionOrdinal);
+  void projectOntoMesh(const std::map<int, TFunctionPtr<Scalar> > &functionMap, int solutionOrdinal=0);
+  void projectOntoCell(const std::map<int, TFunctionPtr<Scalar> > &functionMap, GlobalIndexType cellID, int sideIndex, int solutionOrdinal=0);
   void projectFieldVariablesOntoOtherSolution(TSolutionPtr<Scalar> otherSoln);
 
   // ! project child coefficients onto parent; useful for unrefinement.  Caller is responsible for ensuring
   // ! that all child coefficient data is rank-local.  (See implementation of GlobalDofAssignment::projectChildCoefficientsOntoParents() for an example of how to do this.)
-  void projectChildrenOntoParent(GlobalIndexType parentCellID, int solutionOrdinal);
+  void projectChildrenOntoParent(GlobalIndexType parentCellID, int solutionOrdinal=0);
   
   void projectOldCellOntoNewCells(GlobalIndexType cellID, ElementTypePtr oldElemType,
-                                  const vector<GlobalIndexType> &childIDs, int solutionOrdinal);
+                                  const vector<GlobalIndexType> &childIDs, int solutionOrdinal=0);
   void projectOldCellOntoNewCells(GlobalIndexType cellID, ElementTypePtr oldElemType,
                                   const Camellia::FieldContainer<Scalar> &oldData,
                                   const std::vector<GlobalIndexType> &childIDs, int solutonOrdinal);
-  void reverseParitiesForLocalCoefficients(GlobalIndexType cellID, const vector<int> &sidesWithChangedParities, int solutionOrdinal);
+  void reverseParitiesForLocalCoefficients(GlobalIndexType cellID, const vector<int> &sidesWithChangedParities, int solutionOrdinal=0);
 
   void setLagrangeConstraints( Teuchos::RCP<LagrangeConstraints> lagrangeConstraints);
   void setFilter(Teuchos::RCP<LocalStiffnessMatrixFilter> newFilter);
@@ -314,6 +332,12 @@ public:
 
   void setBC( TBCPtr<Scalar> );
   void setRHS( TRHSPtr<Scalar> );
+  SolutionStagePtr getSolutionStage() const;
+  void setSolutionStage( SolutionStagePtr solutionStage );
+  
+  //! returns the term that will be added to RHS if a SolutionStage is set
+  //! (this is the bf evaluated at the previous solution)
+  LinearTermPtr rhsTableauModificationTerm();
   
   // ! set an RHS involving trial-space variables.  Principal application at the moment
   // ! is for goal-oriented adaptivity (hence the name), but more generally this belongs to the DPG* method.
@@ -339,8 +363,8 @@ public:
   void condensedSolve(TSolverPtr<Scalar> globalSolver = Teuchos::rcp(new TAmesos2Solver<Scalar>()), bool reduceMemoryFootprint = false,
                       std::set<GlobalIndexType> offRankCellsToInclude = std::set<GlobalIndexType>()); // when reduceMemoryFootprint is true, local stiffness matrices will be computed twice, rather than stored for reuse
 #endif
-//  void readFromFile(const std::string &filePath, int solutionOrdinal);
-//  void writeToFile(const std::string &filePath, int solutionOrdinal);
+//  void readFromFile(const std::string &filePath, int solutionOrdinal=0);
+//  void writeToFile(const std::string &filePath, int solutionOrdinal=0);
 
 #ifdef HAVE_EPETRAEXT_HDF5
   void save(std::string meshAndSolutionPrefix);

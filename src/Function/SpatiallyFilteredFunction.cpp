@@ -128,7 +128,7 @@ void SpatiallyFilteredFunction<Scalar>::values(DeviceView<Scalar> &values, Value
   }
   
   Kokkos::fence(); // ensure we're done with the containers before we return them
-  points.checkinDeviceView();
+  points.checkinDeviceView(true);
   SharedScratchStorage<bool>::sharedScratchStorage().checkinScratchStorage(filterMatches);
   SharedScratchStorage<Scalar>::sharedScratchStorage().checkinScratchStorage(functionValues);
 }

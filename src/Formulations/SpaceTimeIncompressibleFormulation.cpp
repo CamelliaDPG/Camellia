@@ -248,9 +248,8 @@ SpaceTimeIncompressibleFormulation::SpaceTimeIncompressibleFormulation(Teuchos::
     //   + (problem->u2_exact()*problem->u2_exact()-problem->sigma2_exact()->y()+problem->p_exact())*n_x->y();
 
     TEUCHOS_ASSERT(_solutionBackground->numSolutions() == 1);
-    const int solutionOrdinal = 0;
     
-    _solutionBackground->projectOntoMesh(initialGuess, solutionOrdinal);
+    _solutionBackground->projectOntoMesh(initialGuess);
   }
   else
   {

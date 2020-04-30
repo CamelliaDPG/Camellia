@@ -348,7 +348,7 @@ void runSolve(vector<vector<double>> domainDim, int numElements, double dt, doub
   {
     // Compute best approximation (L2 projection)
     SolutionPtr bestApproximation = Solution::solution(bf, mesh, bc, rhs, ip);
-    int solutionOrdinal = 0;
+    int solutionOrdinal;
     map<int, FunctionPtr> exactSolutionMap;
     FunctionPtr sigma_exact = u_exact->grad();
     exactSolutionMap[form.u()->ID()] = u_exact;
@@ -364,7 +364,7 @@ void runSolve(vector<vector<double>> domainDim, int numElements, double dt, doub
         }
       }
     }
-    bestApproximation->projectOntoMesh(exactSolutionMap, solutionOrdinal);
+    bestApproximation->projectOntoMesh(exactSolutionMap);
     
     // Compute error for each variable
     int cubatureEnrichment = 4;

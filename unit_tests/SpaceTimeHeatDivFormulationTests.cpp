@@ -54,8 +54,7 @@ namespace
     FunctionPtr uhat = u_lt->evaluate(exactMap);
     exactMap[form.uhat()->ID()] = uhat;
 
-    const int solutionOrdinal = 0;
-    heatSolution->projectOntoMesh(exactMap, solutionOrdinal);
+    heatSolution->projectOntoMesh(exactMap);
   }
 
   void setupExactSolution(SpaceTimeHeatDivFormulation &form, FunctionPtr u,
