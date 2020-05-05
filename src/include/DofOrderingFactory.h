@@ -42,7 +42,7 @@ class DofOrderingFactory
 private:
   struct Comparator
   {
-    bool operator() (const DofOrderingPtr &lhs, const DofOrderingPtr &rhs)
+    bool operator() (const DofOrderingPtr &lhs, const DofOrderingPtr &rhs) const
     {
       // return true if lhs < rhs
       set<int> lhsVarIDs = lhs->getVarIDs();
