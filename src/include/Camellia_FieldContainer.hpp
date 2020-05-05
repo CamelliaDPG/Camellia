@@ -251,10 +251,12 @@ namespace Camellia
     FieldContainer()
     :
     FieldContainerBase()
-    { }
+    {
+      initializeHostView();
+    }
     
     
-    /** \brief Copy constructor.
+    /** \brief Copy constructor with Camellia::FieldContainer as source.
      */
     FieldContainer(const FieldContainer& right)
     :
@@ -262,9 +264,10 @@ namespace Camellia
     {
       recordAllocation(fcAllocationRecord,this->size());
       invalidateViews();
+      initializeHostView();
     }
     
-    /** \brief Copy constructor with Camellia::FieldContainer as source.
+    /** \brief Copy constructor.
      */
     FieldContainer(const FieldContainerBase& right)
     :
@@ -272,6 +275,7 @@ namespace Camellia
     {
       recordAllocation(fcAllocationRecord,this->size());
       invalidateViews();
+      initializeHostView();
     }
     
     /** \brief Creates a rank-1 FieldContainer with the specified dimension, initialized by 0.
@@ -284,6 +288,7 @@ namespace Camellia
     {
       recordAllocation(fcAllocationRecord,this->size());
       invalidateViews();
+      initializeHostView();
     }
     
     /** \brief Creates a rank-2 FieldContainer with the specified dimensions, initialized by 0.
@@ -297,6 +302,7 @@ namespace Camellia
     {
       recordAllocation(fcAllocationRecord,this->size());
       invalidateViews();
+      initializeHostView();
     }
     
     /** \brief Creates a rank-3 FieldContainer with the specified dimensions, initialized by 0.
@@ -311,6 +317,7 @@ namespace Camellia
     {
       recordAllocation(fcAllocationRecord,this->size());
       invalidateViews();
+      initializeHostView();
     }
     
     /** \brief Creates a rank-4 FieldContainer with the specified dimensions, initialized by 0.
@@ -326,6 +333,7 @@ namespace Camellia
     {
       recordAllocation(fcAllocationRecord,this->size());
       invalidateViews();
+      initializeHostView();
     }
     
     /** \brief Creates a rank-5 FieldContainer with the specified dimensions, initialized by 0.
@@ -342,6 +350,7 @@ namespace Camellia
     {
       recordAllocation(fcAllocationRecord,this->size());
       invalidateViews();
+      initializeHostView();
     }
     
     /** \brief Creates a  FieldContainer of arbitrary rank,, initialized by 0, using dimensions
@@ -356,6 +365,7 @@ namespace Camellia
     {
       recordAllocation(fcAllocationRecord,this->size());
       invalidateViews();
+      initializeHostView();
     }
     
     /** \brief Creates a FieldContainer of arbitrary rank, using dimensions specified in the
@@ -376,6 +386,7 @@ namespace Camellia
     {
       recordAllocation(fcAllocationRecord,this->size());
       invalidateViews();
+      initializeHostView();
     }
     
     /** \brief Creates a FieldContainer of arbitrary rank, using dimensions specified in the
@@ -394,6 +405,7 @@ namespace Camellia
     FieldContainerBase(dimensions, data)
     {
       invalidateViews();
+      initializeHostView();
     }
     
     /** \brief Creates a FieldContainer of arbitrary rank, using dimensions specified in the
@@ -416,6 +428,7 @@ namespace Camellia
     {
       if (deep_copy) recordAllocation(fcAllocationRecord,this->size());
       invalidateViews();
+      initializeHostView();
     }
     
     /** \brief Creates a FieldContainer either as a wrapper of the shards::Array<Scalar,shards::NaturalOrder>
@@ -435,6 +448,7 @@ namespace Camellia
     {
       if (deep_copy) recordAllocation(fcAllocationRecord,this->size());
       invalidateViews();
+      initializeHostView();
     }
     
     ~FieldContainer()
@@ -460,6 +474,7 @@ namespace Camellia
       }
       this->FieldContainerBase::clear();
       invalidateViews();
+      initializeHostView();
     }
     
     /** \brief Resizes FieldContainer to a rank-1 container with the specified dimension, initialized by 0.
@@ -475,6 +490,7 @@ namespace Camellia
       }
       this->FieldContainerBase::resize(dim0);
       invalidateViews();
+      initializeHostView();
       if (sizeChange)
       {
         recordAllocation(fcAllocationRecord,this->size());
@@ -495,6 +511,7 @@ namespace Camellia
       }
       this->FieldContainerBase::resize(dim0, dim1);
       invalidateViews();
+      initializeHostView();
       if (sizeChange)
       {
         recordAllocation(fcAllocationRecord,this->size());
@@ -516,6 +533,7 @@ namespace Camellia
       }
       this->FieldContainerBase::resize(dim0, dim1, dim2);
       invalidateViews();
+      initializeHostView();
       if (sizeChange)
       {
         recordAllocation(fcAllocationRecord,this->size());
@@ -538,6 +556,7 @@ namespace Camellia
       }
       this->FieldContainerBase::resize(dim0, dim1, dim2, dim3);
       invalidateViews();
+      initializeHostView();
       if (sizeChange)
       {
         recordAllocation(fcAllocationRecord,this->size());
@@ -565,6 +584,7 @@ namespace Camellia
       }
       this->FieldContainerBase::resize(dim0, dim1, dim2, dim3, dim4);
       invalidateViews();
+      initializeHostView();
       if (sizeChange)
       {
         recordAllocation(fcAllocationRecord,this->size());
@@ -590,6 +610,7 @@ namespace Camellia
       }
       this->FieldContainerBase::resize(newDimensions);
       invalidateViews();
+      initializeHostView();
       if (sizeChange)
       {
         recordAllocation(fcAllocationRecord,this->size());
@@ -610,6 +631,7 @@ namespace Camellia
       }
       this->FieldContainerBase::resize(anotherContainer);
       invalidateViews();
+      initializeHostView();
       if (sizeChange)
       {
         recordAllocation(fcAllocationRecord,this->size());
@@ -682,6 +704,8 @@ namespace Camellia
       this->FieldContainerBase::operator=(right);
       // base assignment does deep copy; record the allocation
       recordAllocation(fcAllocationRecord,this->size());
+      this->invalidateViews();
+      this->initializeHostView();
       return *this;
     }
 
