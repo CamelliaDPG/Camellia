@@ -20,6 +20,31 @@ using namespace Camellia;
 
 namespace
 {
+  TEUCHOS_UNIT_TEST( FieldContainer, AssignmentOperator )
+  {
+    const int numCells  = 1;
+    const int numPoints = 1;
+    const int spaceDim  = 1;
+    const double x = 1.0;
+    Camellia::FieldContainer<double> points(numCells,numPoints,spaceDim);
+    points(0,0,0) = x;
+    
+    Camellia::FieldContainer<double> myPoints = points;
+    TEST_EQUALITY(myPoints(0,0,0), x);
+    
+    auto myPointsDeviceView = myPoints.checkoutDeviceView();
+    double xDevice;
+    const int cellOrdinal = 0;
+    const int d = 0;
+    Kokkos::parallel_reduce("x device reduction", numPoints, KOKKOS_LAMBDA (const int pointOrdinal, double& lvalue)
+    {
+      lvalue += myPointsDeviceView(cellOrdinal,pointOrdinal,d);
+    }, xDevice);
+    
+    TEST_EQUALITY(x, xDevice);
+    myPoints.checkinDeviceView(false);
+  }
+  
   TEUCHOS_UNIT_TEST( FieldContainer, HostAllocationRecorded )
   {
     const auto initialCount               = fcAllocationRecord.allocationCount;
