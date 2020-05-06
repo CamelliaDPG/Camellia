@@ -152,6 +152,7 @@ private:
    */
   std::vector< Teuchos::RCP<const Camellia::FieldContainer<Scalar> > > _cachedCellBasisCoefficientsForFields; // these are in field ID order
   std::vector<int> _cachedCellBasisCoefficientsForFieldsCellIDs; // which cells are represented above?
+  int _cachedCellBasisCoefficientsForFieldsSolutionOrdinal = -2; // which solution ordinal do they correspond to?
   void invalidateCachedBasisCoefficientsForFields();
   
 protected:

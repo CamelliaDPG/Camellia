@@ -1276,6 +1276,7 @@ namespace
         const double a_ij = tableau->a(i, j);
         u_for_stage += dtValue * a_ij * k[j];
       }
+      out << "u for stage " << stageOrdinal << ": " << u_for_stage << std::endl;
       k[i] = - lambda * u_for_stage;
     }
     
@@ -1360,6 +1361,106 @@ namespace
   {
     ERKTableauPtr tableau = ERKTableau::ssprk3();
     testERKTableauSingleStep(tableau, out, success);
+  }
+
+  void testERKTableauSolutionValues(ERKTableauPtr tableau, Teuchos::FancyOStream &out, bool &success)
+  {
+    // no solve here; we just load up the LHS vector with arbitrary data and check that solutionValues
+    // returns the appropriately weighted result
+    const double relTolerance = 1e-16;
+    
+    const double dtValue = 0.01;
+    SolutionStagePtr solnStage = SolutionStage::solutionStage(tableau, dtValue);
+    
+    const double lambda  = 1.0;
+    const double u0      = 1.0;
+    
+    using std::vector;
+    vector<double> k(tableau->numStages());
+    vector<double> solnForStageOrdinal(1+tableau->numStages()); // what actually is stored in solution vector
+    solnForStageOrdinal[0] = u0;
+    vector<double> uForStageOrdinal(1+tableau->numStages()); // the "stage solution" for the stage ordinal: u0 + …
+    uForStageOrdinal[0] = u0;
+    for (int stageOrdinal=1; stageOrdinal<=tableau->numStages(); stageOrdinal++)
+    {
+      const int i = stageOrdinal-1;
+      double u_for_stage = u0;
+      for (int j=0; j<i; j++)
+      {
+        const double a_ij = tableau->a(i, j);
+        u_for_stage += a_ij * solnForStageOrdinal[j+1];
+      }
+      uForStageOrdinal[stageOrdinal] = u_for_stage;
+      out << "u for stage " << stageOrdinal << ": " << u_for_stage << std::endl;
+      k[i] = - lambda * u_for_stage;
+      solnForStageOrdinal[stageOrdinal] = dtValue * k[i];
+    }
+    
+    VarFactoryPtr vf = VarFactory::varFactory();
+    auto u = vf->fieldVar("u");
+    auto v = vf->testVar("v", L2);
+    
+    FunctionPtr dt = solnStage->dt();
+    
+    BFPtr bf = BF::bf(vf);
+    bf->addTerm(u / dt, v);
+    
+    const double xLeft = 0.0;
+    const double xRight = 1.0;
+    const int H1Order = 1; // --> constant L^2 variables
+    const int numElements = 1;
+    const int delta_k = 0; // Bubnov-Galerkin
+    
+    auto mesh = MeshFactory::intervalMesh(bf, xLeft, xRight, numElements, H1Order, delta_k);
+    auto soln = Solution::solution(bf, mesh);
+    auto solnWeakPtr = Teuchos::rcp(soln.get(), false); // avoid circular strong reference
+    
+    const bool weightFluxesBySideParity = false; // not applicable here
+    const int solutionStage = -1; // the "current" previous solution
+    auto u_prev = Function::solution(u, solnWeakPtr, weightFluxesBySideParity, STANDARD_SOLUTION, solutionStage);
+    
+    RHSPtr rhs = RHS::rhs();
+    rhs->addTerm((1./dt) * u_prev * v - lambda * u_prev * v); // soln will end up adding a -(1/dt) * u_prev * v term
+    
+    soln->setRHS(rhs);
+    soln->setSolutionStage(solnStage); // soln will modify the RHS, adding -(1/dt) * u_prev * v term
+    
+    std::map<int, FunctionPtr> solnValues;
+    for (int i=0; i<solnForStageOrdinal.size(); i++)
+    {
+      solnValues[u->ID()] = Function::constant(solnForStageOrdinal[i]);
+      soln->projectOntoMesh(solnValues,i);
+    }
+    
+    for (int stageOrdinal=0; stageOrdinal<solnForStageOrdinal.size(); stageOrdinal++)
+    {
+      out << "Testing stage " << stageOrdinal << std::endl;
+      auto u_prev = Function::solution(u, solnWeakPtr, weightFluxesBySideParity, STANDARD_SOLUTION, stageOrdinal);
+      // single, constant element of width 1: the value is the same as the integral
+      const double u_value    = u_prev->integrate(mesh);
+      const double u_expected = uForStageOrdinal[stageOrdinal];
+      out << "actual u   = " << u_value << std::endl;
+      out << "expected u = " << u_expected << std::endl;
+      
+      double err = (u_expected - u_prev)->l2norm(mesh);
+      out << "err = " << err << std::endl;
+      
+      double relErr = u_expected * err;
+      out << "relErr = " << relErr << std::endl;
+      TEST_COMPARE(relErr, <, relTolerance);
+    }
+  }
+
+  TEUCHOS_UNIT_TEST( Solution, ERKTableauSolutionValues_Heun )
+  {
+    ERKTableauPtr tableau = ERKTableau::heun();
+    testERKTableauSolutionValues(tableau, out, success);
+  }
+
+  TEUCHOS_UNIT_TEST( Solution, ERKTableauSolutionValues_SSPRK3 )
+  {
+    ERKTableauPtr tableau = ERKTableau::ssprk3();
+    testERKTableauSolutionValues(tableau, out, success);
   }
   
   TEUCHOS_UNIT_TEST( Solution, ImportOffRankCellData_1D )
@@ -2223,6 +2324,7 @@ namespace
     {
       int trialID = entryIt->first;
       VarPtr trialVar = varFactory->trial(trialID);
+      out << "testing " << trialVar->name() << std::endl;
       FunctionPtr f_expected = entryIt->second;
       FunctionPtr f_actual = Function::solution(trialVar, spaceTimeSolution, false);
       
