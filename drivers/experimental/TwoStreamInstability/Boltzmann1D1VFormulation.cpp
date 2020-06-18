@@ -925,7 +925,11 @@ void Boltzmann1D1VFormulation::takeTimeStep()
     }
     if ( !_haveTableau )
     {
-      _boltzmannSolnPrev->setSolution(_boltzmannSoln);
+      if (substepOrdinal == numSubsteps-1)
+      {
+        // last substep
+        _boltzmannSolnPrev->setSolution(_boltzmannSoln);
+      }
       // if we have a tableau, then electric field will be updated when the solution stage is set.
       updateElectricField();
     }
