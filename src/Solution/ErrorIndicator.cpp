@@ -11,6 +11,7 @@
 #include "ErrorIndicator.h"
 
 #include "EnergyErrorIndicator.h"
+#include "FunctionErrorIndicator.h"
 #include "GradientErrorIndicator.h"
 #include "HessianErrorIndicator.h"
 
@@ -76,6 +77,7 @@ double ErrorIndicator::totalError() const
 // instantiate these for Scalar = double
 template ErrorIndicatorPtr ErrorIndicator::energyErrorIndicator<double>(TSolutionPtr<double> solution);
 template ErrorIndicatorPtr ErrorIndicator::energyErrorIndicator<double>(MeshPtr mesh,TLinearTermPtr<double> residual, TIPPtr<double> ip, int quadratureEnrichmentDegree);
+template ErrorIndicatorPtr ErrorIndicator::functionErrorIndicator<double>(MeshPtr mesh, FunctionPtr f, int quadratureEnrichment);
 template ErrorIndicatorPtr ErrorIndicator::gradientErrorIndicator<double>(TSolutionPtr<double> solution, VarPtr scalarVar);
 template ErrorIndicatorPtr ErrorIndicator::hessianErrorIndicator<double>(TSolutionPtr<double> solution, VarPtr scalarVar);
 
@@ -93,11 +95,16 @@ ErrorIndicatorPtr ErrorIndicator::energyErrorIndicator(MeshPtr mesh, TLinearTerm
 }
 
 template <typename Scalar>
+ErrorIndicatorPtr ErrorIndicator::functionErrorIndicator(MeshPtr mesh, FunctionPtr f, int quadratureEnrichment)
+{
+  return Teuchos::rcp( new FunctionErrorIndicator<Scalar>(mesh,f,quadratureEnrichment));
+}
+
+template <typename Scalar>
 ErrorIndicatorPtr ErrorIndicator::gradientErrorIndicator(TSolutionPtr<Scalar> solution, VarPtr scalarVar)
 {
   return Teuchos::rcp( new GradientErrorIndicator<Scalar>(solution, scalarVar) );
 }
-
 
 template <typename Scalar>
 ErrorIndicatorPtr ErrorIndicator::hessianErrorIndicator(TSolutionPtr<Scalar> solution, VarPtr scalarVar)

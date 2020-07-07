@@ -78,6 +78,20 @@ namespace Camellia {
       }
     }
     
+    std::pair<GlobalIndexType,int> & dofIndexRangeForVarOnSubcell(unsigned d, unsigned scord, int varID)
+    {
+      int entryCount = subcellDofIndices[d][scord].size();
+      for (int entryOrdinal=0; entryOrdinal<entryCount; entryOrdinal++)
+      {
+        int entryVarID = subcellDofIndices[d][scord][entryOrdinal].first;
+        if (varID == entryVarID)
+        {
+          return subcellDofIndices[d][scord][entryOrdinal].second;
+        }
+      }
+      TEUCHOS_TEST_FOR_EXCEPTION(true,std::invalid_argument,"Entry not found");
+    }
+    
     std::vector<GlobalIndexType> dofIndicesForVarOnSubcell(unsigned d, unsigned scord, int varID)
     {
       TEUCHOS_TEST_FOR_EXCEPTION(d >= subcellDofIndices.size(), std::invalid_argument, "d is out of range");

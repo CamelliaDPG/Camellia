@@ -204,6 +204,8 @@ public:
   vector<TSolutionPtr<double>> getRegisteredSolutions();
   void unregisterSolution(TSolutionPtr<double> solution);
 
+  virtual void setAllowMeshTopologyPruning(bool allowMeshTopologyPruning) = 0;
+  
   void setPartitions(std::vector< std::set<IndexType> > &partitions, bool rebuildLookups=true);
   void setPartitions(Camellia::FieldContainer<GlobalIndexType> &partitions, bool rebuildLookups=true);
   void setPartitionPolicy( MeshPartitionPolicyPtr partitionPolicy, bool repartitionAndMigrate=true );

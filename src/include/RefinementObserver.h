@@ -41,12 +41,18 @@ public:
   virtual void pRefine(const set<GlobalIndexType> &cellIDs, bool repartitionAndRebuild) {}
   virtual void hUnrefine(const set<GlobalIndexType> &cellIDs, bool repartitionAndRebuild) {}
 
-  virtual void willHUnrefine(const set<GlobalIndexType> &cellIDs, bool didRepartitionAndRebuild) {}
-  virtual void willHUnrefine(MeshTopologyPtr meshToRefine, const set<GlobalIndexType> &cellIDs, bool didRepartitionAndRebuild)
+  virtual void willHUnrefine(const set<GlobalIndexType> &cellIDs, bool willRepartitionAndRebuild) {}
+  virtual void willHUnrefine(MeshTopologyPtr meshToRefine, const set<GlobalIndexType> &cellIDs, bool willRepartitionAndRebuild)
   {
-    willHUnrefine(cellIDs, didRepartitionAndRebuild);
+    willHUnrefine(cellIDs, willRepartitionAndRebuild);
   }
-
+  
+  virtual void didHUnrefine(const set<GlobalIndexType> &cellIDs, bool didRepartitionAndRebuild) {}
+  virtual void didHUnrefine(MeshTopologyPtr meshToRefine, const set<GlobalIndexType> &cellIDs, bool didRepartitionAndRebuild)
+  {
+    didHUnrefine(cellIDs, didRepartitionAndRebuild);
+  }
+  
   virtual void didRepartition(MeshTopologyPtr meshTopo) {}
 };
 }

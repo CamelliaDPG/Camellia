@@ -147,6 +147,14 @@ public:
   //! Destructor
   ~GMGOperator() {}
   //@}
+  
+  GMGOperator(GMGOperator::MultigridStrategy multigridStrategy, BCPtr zeroBCs, MeshPtr coarseMesh, IPPtr coarseIP,
+              MeshPtr fineMesh, Teuchos::RCP<DofInterpreter> fineDofInterpreter, Epetra_Map finePartitionMap,
+              Teuchos::RCP<Solver> coarseSolver, bool useStaticCondensation, Teuchos::RCP<BasisReconciliation> sharedBasisReconciliation);
+  
+  GMGOperator(GMGOperator::MultigridStrategy multigridStrategy, BCPtr zeroBCs, MeshPtr coarseMesh, IPPtr coarseIP,
+              MeshPtr fineMesh, Teuchos::RCP<DofInterpreter> fineDofInterpreter, Epetra_Map finePartitionMap,
+              bool useStaticCondensation, Teuchos::RCP<BasisReconciliation> sharedBasisReconciliation);
 
   //! @name Constructor (for coarsest grid operator)
   //@{

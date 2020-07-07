@@ -216,7 +216,7 @@ void BasisCache::createSideCaches()
     }
 
     BasisCachePtr thisPtr = Teuchos::rcp( this, false ); // presumption is that side cache doesn't outlive volume...
-    BasisCachePtr sideCache = Teuchos::rcp( new BasisCache(sideOrdinal, thisPtr, maxTrialDegreeOnSide, _maxTestDegree, multiBasisIfAny));
+    BasisCachePtr sideCache = Teuchos::rcp( new BasisCache(sideOrdinal, thisPtr, maxTrialDegreeOnSide, _maxTestDegree, multiBasisIfAny, _cubatureEnrichmentDegree));
     _basisCacheSides.push_back(sideCache);
   }
 }
@@ -435,7 +435,7 @@ BasisCache::BasisCache(int fakeSideOrdinal, BasisCachePtr volumeCache, const Cam
 }
 
 // side constructor
-BasisCache::BasisCache(int sideIndex, BasisCachePtr volumeCache, int trialDegree, int testDegree, BasisPtr multiBasisIfAny)
+BasisCache::BasisCache(int sideIndex, BasisCachePtr volumeCache, int trialDegree, int testDegree, BasisPtr multiBasisIfAny, int cubatureEnrichmentDegree)
 {
   _cellTopo = volumeCache->cellTopology(); // VOLUME cell topo.
   _isSideCache = true;
@@ -454,7 +454,7 @@ BasisCache::BasisCache(int sideIndex, BasisCachePtr volumeCache, int trialDegree
   int sideDim = _cellTopo->getDimension() - 1;
   CellTopoPtr side = _cellTopo->getSubcell(sideDim,sideIndex); // create relevant subcell (side) topology
 
-  initCubatureDegree(trialDegree, testDegree, 0);
+  initCubatureDegree(trialDegree, testDegree, cubatureEnrichmentDegree);
 
   if (sideDim > 0)
   {
@@ -1284,7 +1284,7 @@ void BasisCache::determinePhysicalPoints()
     {
       if ( ! isSideCache() )
       {
-          CamelliaCellTools::mapToPhysicalFrame(_physCubPoints,_cubPoints,_physicalCellNodes,_cellTopo);
+        CamelliaCellTools::mapToPhysicalFrame(_physCubPoints,_cubPoints,_physicalCellNodes,_cellTopo);
       }
       else
       {

@@ -165,13 +165,24 @@ Teuchos::RCP<GMGOperator> GMGSolver::gmgOperatorFromMeshSequence(const std::vect
                                                                  bool useDiagonalSchwarzWeighting,
                                                                  Teuchos::RCP<BasisReconciliation> sharedBasisReconciliation)
 {
-  TEUCHOS_TEST_FOR_EXCEPTION(meshesCoarseToFine.size() < 2, std::invalid_argument, "meshesCoarseToFine must have at least two meshes");
+  if (multigridStrategy != GMGOperator::SMOOTHER_ONLY)
+  {
+    TEUCHOS_TEST_FOR_EXCEPTION(meshesCoarseToFine.size() < 2, std::invalid_argument, "meshesCoarseToFine must have at least two meshes, unless multigrid strategy is SMOOTHER_ONLY");
+  }
+  
   Teuchos::RCP<GMGOperator> coarseOperator = Teuchos::null, finerOperator = Teuchos::null, finestOperator = Teuchos::null;
   
   Teuchos::RCP<DofInterpreter> fineDofInterpreter = fineSolution->getDofInterpreter();
   IPPtr ip = fineSolution->ip();
   BCPtr zeroBCs = fineSolution->bc()->copyImposingZero();
   Epetra_Map finePartitionMap = fineSolution->getPartitionMap();
+  
+  if (multigridStrategy == GMGOperator::SMOOTHER_ONLY)
+  {
+    MeshPtr mesh = meshesCoarseToFine[0];
+    return Teuchos::rcp(new GMGOperator(GMGOperator::SMOOTHER_ONLY, zeroBCs, mesh, ip, mesh, fineDofInterpreter, finePartitionMap,
+                                        useStaticCondensationInCoarseSolve, sharedBasisReconciliation));
+  }
   
   int cubatureEnrichmentDegree = fineSolution->cubatureEnrichmentDegree();
   

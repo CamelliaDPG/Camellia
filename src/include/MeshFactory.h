@@ -116,7 +116,8 @@ public:
                                  int H1Order, int pToAddTest=-1, vector<double> x0 = vector<double>(),
                                  map<int,int> trialOrderEnhancements = map<int,int>(),
                                  map<int,int> testOrderEnhancements = map<int,int>(),
-                                 Epetra_CommPtr Comm = Teuchos::null);
+                                 Epetra_CommPtr Comm = Teuchos::null,
+                                 bool allowMeshTopologyPruning = true);
 
   static MeshTopologyPtr rectilinearMeshTopology(vector<double> dimensions, vector<int> elementCounts,
                                                  vector<double> x0 = vector<double>(),

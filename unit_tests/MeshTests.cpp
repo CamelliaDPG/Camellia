@@ -159,6 +159,52 @@ MeshPtr makeTestMesh( int spaceDim, bool spaceTime )
       TEUCHOS_TEST_EQUALITY(localDofs, globalDofs, out, success);
     }
   }
+
+  TEUCHOS_UNIT_TEST( Mesh, ConvectionMeshDiagonalRefinement )
+  {
+    VarFactoryPtr vf = VarFactory::varFactory();
+    auto u     = vf->fieldVar("u");
+    
+    VarPtr u_hat;
+    
+    u_hat = vf->traceVar("u_hat", u);
+
+    auto v     = vf->testVar("v", HGRAD);
+     
+    FunctionPtr n = Function::normal();
+    
+    // convection for b = (1,1):
+    BFPtr bf = BF::bf(vf);
+    bf->addTerm(-u, v->dx() + v->dy());
+    bf->addTerm(u_hat, (n->x() + n->y()) * v);
+    
+    const double x0     = 0.0;
+    const double y0     = 0.0;
+    const double width  = 1.0;
+    const double height = 1.0;
+    const int meshWidth = 2;
+    const bool divideIntoTriangles = false;
+    
+    PeriodicBCPtr xLeftToRight     = PeriodicBC::xIdentification(x0, x0+width);
+    std::vector<PeriodicBCPtr> quadMeshPeriodicBCs {xLeftToRight};
+    
+    auto meshTopo = MeshFactory::quadMeshTopology(width,height,meshWidth,meshWidth,divideIntoTriangles,x0,y0,quadMeshPeriodicBCs);
+
+    const int H1Order = 2;
+    const int delta_k = 2;
+    MeshPtr mesh = Teuchos::rcp( new Mesh(meshTopo, bf, H1Order, delta_k) );
+    
+    // refine lower left, upper right cells
+    const std::set<GlobalIndexType> cellsToRefine {0,3};
+    auto refPattern = RefinementPattern::regularRefinementPatternQuad();
+    mesh->hRefine(cellsToRefine, refPattern);
+    
+    // the main point of this test is to verify that things above run to completion (there was a suspected bug);
+    // just to check that the refinement occurred, check the number of active cells:
+    const int initialElementCount  = meshWidth * meshWidth;
+    const int expectedElementCount = initialElementCount + 2 * (refPattern->numChildren() - 1);
+    TEST_EQUALITY(expectedElementCount, mesh->numActiveElements());
+  }
   
   // until we find a way to simplify this test, commenting it out.  (It's pretty slow!)
 //  TEUCHOS_UNIT_TEST( Mesh, EnforceRegularityBigQuadMesh_Slow )
