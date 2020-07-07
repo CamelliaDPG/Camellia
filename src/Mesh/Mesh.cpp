@@ -1306,6 +1306,12 @@ void Mesh::repartitionAndRebuild()
   _gda->repartitionAndMigrate();
   _boundary.buildLookupTables();
   
+  auto registeredSolutions = _gda->getRegisteredSolutions();
+  for (auto soln : registeredSolutions)
+  {
+    soln->discardInactiveCellCoefficients();
+  }
+  
   MeshTopology* meshTopologyInstance = dynamic_cast<MeshTopology*>(_meshTopology.get());
   
   if (meshTopologyInstance != NULL)

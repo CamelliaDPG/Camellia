@@ -4191,6 +4191,7 @@ void TSolution<Scalar>::projectOntoMesh(const map<int, TFunctionPtr<Scalar> > &f
 {
   if (_lhsVector.get()==NULL)
   {
+    // NOTE: initializeLHSVector() does MPI communication; this is not ideal, given that projectOntoMesh does not otherwise require this (and doesn't actually use LHS vector.  Can we eliminate this??
     initializeLHSVector();
   }
 
