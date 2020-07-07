@@ -733,7 +733,6 @@ RefinementBranch Cell::refinementBranchForSubcell(unsigned subcdim, unsigned sub
   IndexType subcellEntityIndex = entityIndex(subcdim, subcord);
 
   pair<IndexType, unsigned> constrainingEntity = meshTopoViewForCellValidity->getConstrainingEntity(subcdim, subcellEntityIndex);
-//  IndexType constrainingEntityIndex = _meshTopo->getConstrainingEntityIndex(subcdim, subcellEntityIndex);
   IndexType constrainingEntityIndex = constrainingEntity.first;
   unsigned constrainingEntityDim = constrainingEntity.second;
 

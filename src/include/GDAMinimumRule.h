@@ -145,9 +145,6 @@ class GDAMinimumRule : public GlobalDofAssignment
   void getConstrainingEntityInfo(GlobalIndexType cellID, CellConstraints &cellConstraints, VarPtr var, int d, int scord,
                                  AnnotatedEntity* &constrainingInfo, OwnershipInfo* &ownershipInfo, bool &spaceOnlyConstraint);
   
-  void getGlobalDofIndices(GlobalIndexType cellID, int varID, int sideOrdinal,
-                           Camellia::FieldContainer<GlobalIndexType> &globalDofIndices);
-  
   vector<GlobalIndexType> getGlobalDofOrdinalsForSubcell(GlobalIndexType cellID, VarPtr var, int d, int scord);
   
   SubcellDofIndices & getOwnedGlobalDofIndices(GlobalIndexType cellID);
@@ -182,57 +179,59 @@ public:
   
   // ! Default is false.  Checking constraint consistency is useful for debugging purposes, though.
   void setCheckConstraintConsistency(bool value);
-  void setCellPRefinements(const map<GlobalIndexType,int>& pRefinements);
+  void setCellPRefinements(const map<GlobalIndexType,int>& pRefinements) override;
   
-  GlobalDofAssignmentPtr deepCopy();
+  GlobalDofAssignmentPtr deepCopy() override;
   
-  void didHRefine(const set<GlobalIndexType> &parentCellIDs);
-  void didPRefine(const set<GlobalIndexType> &cellIDs, int deltaP);
-  void willHUnrefine(const set<GlobalIndexType> &parentCellIDs);
+  void didHRefine(const set<GlobalIndexType> &parentCellIDs) override;
+  void didPRefine(const set<GlobalIndexType> &cellIDs, int deltaP) override;
+  void willHUnrefine(const set<GlobalIndexType> &parentCellIDs) override;
 
-  void didChangePartitionPolicy();
+  void didChangePartitionPolicy() override;
   
   int getH1OrderOnEdge(GlobalIndexType cellID, unsigned edgeOrdinal);
   
-  GlobalIndexType globalDofCount();
+  GlobalIndexType globalDofCount() override;
   
   //!! Returns the global dof indices for the indicated cell.  Only guaranteed to provide correct values for cells that belong to the local partition.
-  set<GlobalIndexType> globalDofIndicesForCell(GlobalIndexType cellID);
+  set<GlobalIndexType> globalDofIndicesForCell(GlobalIndexType cellID) override;
   
   //!! Returns the global dof indices for the indicated subcell.  Only guaranteed to provide correct values for cells that belong to the local partition.
-  set<GlobalIndexType> globalDofIndicesForVarOnSubcell(int varID, GlobalIndexType cellID, unsigned dim, unsigned subcellOrdinal);
+  set<GlobalIndexType> globalDofIndicesForVarOnSubcell(int varID, GlobalIndexType cellID, unsigned dim, unsigned subcellOrdinal) override;
   
   // ! Returns the global dof indices, in the same order as the basis ordinals, for a discontinuous variable.
   // ! For minimum-rule meshes, may throw an exception if invoked with a continuous variable's ID as argument.
-  vector<GlobalIndexType> globalDofIndicesForFieldVariable(GlobalIndexType cellID, int varID);
+  vector<GlobalIndexType> globalDofIndicesForFieldVariable(GlobalIndexType cellID, int varID) override;
   
   //!! Returns the global dof indices for the partition.
-  set<GlobalIndexType> globalDofIndicesForPartition(PartitionIndexType partitionNumber);
+  set<GlobalIndexType> globalDofIndicesForPartition(PartitionIndexType partitionNumber) override;
 
-  bool isLocallyOwnedGlobalDofIndex(GlobalIndexType globalDofIndex) const;
+  bool isLocallyOwnedGlobalDofIndex(GlobalIndexType globalDofIndex) const override;
 
-  GlobalIndexType numPartitionOwnedGlobalFieldIndices();
-  GlobalIndexType numPartitionOwnedGlobalFluxIndices();
-  GlobalIndexType numPartitionOwnedGlobalTraceIndices();
+  GlobalIndexType numPartitionOwnedGlobalFieldIndices() override;
+  GlobalIndexType numPartitionOwnedGlobalFluxIndices() override;
+  GlobalIndexType numPartitionOwnedGlobalTraceIndices() override;
 
   void interpretLocalData(GlobalIndexType cellID, const Camellia::FieldContainer<double> &localData,
                           Camellia::FieldContainer<double> &globalData,
-                          Camellia::FieldContainer<GlobalIndexType> &globalDofIndices);
+                          Camellia::FieldContainer<GlobalIndexType> &globalDofIndices) override;
   void interpretLocalBasisCoefficients(GlobalIndexType cellID, int varID, int sideOrdinal,
                                        const Camellia::FieldContainer<double> &basisCoefficients,
                                        Camellia::FieldContainer<double> &globalCoefficients,
-                                       Camellia::FieldContainer<GlobalIndexType> &globalDofIndices);
+                                       Camellia::FieldContainer<GlobalIndexType> &globalDofIndices) override;
   void interpretGlobalCoefficients(GlobalIndexType cellID, Camellia::FieldContainer<double> &localCoefficients,
-                                   const Epetra_MultiVector &globalCoefficients);
+                                   const Epetra_MultiVector &globalCoefficients) override;
   template <typename Scalar>
   void interpretGlobalCoefficients2(GlobalIndexType cellID, Camellia::FieldContainer<Scalar> &localCoefficients,
                                     const TVectorPtr<Scalar> globalCoefficients);
-  IndexType localDofCount(); // local to the MPI node
+  IndexType localDofCount() override; // local to the MPI node
 
-  PartitionIndexType partitionForGlobalDofIndex( GlobalIndexType globalDofIndex );
+  PartitionIndexType partitionForGlobalDofIndex( GlobalIndexType globalDofIndex ) override;
   void printConstraintInfo(GlobalIndexType cellID);
   void printGlobalDofInfo();
-  void rebuildLookups();
+  void rebuildLookups() override;
+  
+  void setAllowMeshTopologyPruning(bool allowMeshTopologyPruning) override;
   
   static void distributeSubcellDofIndices(Epetra_CommPtr Comm,
                                           const map<GlobalIndexType, SubcellDofIndices> &rankLocalCellDofIndices,

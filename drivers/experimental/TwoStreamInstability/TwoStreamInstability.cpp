@@ -4,9 +4,11 @@
 
 #include "AbsFunction.h"
 #include "Boltzmann1D1VFormulation.h"
+#include "ErrorIndicator.h"
 #include "ERKTableau.h"
 #include "ExpFunction.h"
 #include "HDF5Exporter.h"
+#include "RefinementStrategy.h"
 #include "RHS.h"
 #include "Solution.h"
 #include "TrigFunctions.h"
@@ -45,6 +47,44 @@ public:
   }
 };
 
+static const std::string S_TWO_STREAM   = "two-stream";
+static const std::string S_BUMP_ON_TAIL = "bump-on-tail";
+
+enum ProblemChoice
+{
+  TWO_STREAM,
+  BUMP_ON_TAIL
+};
+
+static const std::map<std::string, ProblemChoice> stringToProblemChoice {{S_BUMP_ON_TAIL,BUMP_ON_TAIL},{S_TWO_STREAM,TWO_STREAM}};
+static const std::map<ProblemChoice, std::string> problemChoiceToString {{BUMP_ON_TAIL,S_BUMP_ON_TAIL},{TWO_STREAM,S_TWO_STREAM}};
+
+ProblemChoice getProblemChoice(const std::string &problemChoiceString)
+{
+  const auto &entry = stringToProblemChoice.find(problemChoiceString);
+  if (entry == stringToProblemChoice.end())
+  {
+    TEUCHOS_TEST_FOR_EXCEPTION(true, std::invalid_argument, "Unrecognized problem choice string");
+  }
+  else
+  {
+    return entry->second;
+  }
+}
+
+std::string getProblemChoiceString(ProblemChoice problem)
+{
+  const auto &entry = problemChoiceToString.find(problem);
+  if (entry == problemChoiceToString.end())
+  {
+    TEUCHOS_TEST_FOR_EXCEPTION(true, std::invalid_argument, "Unrecognized problem choice");
+  }
+  else
+  {
+    return entry->second;
+  }
+}
+
 int main(int argc, char *argv[])
 {
   Teuchos::GlobalMPISession mpiSession(&argc, &argv, NULL); // initialize MPI
@@ -68,6 +108,9 @@ int main(int argc, char *argv[])
   double v0     = -10.0;
   double vWidth =  20.0;
   
+  bool useAdaptivity = false;
+  double refinementThreshold = 0.20;
+  
   int xElements = 30;
   int vElements = 40;
   int delta_k   = 2;
@@ -77,6 +120,8 @@ int main(int argc, char *argv[])
   int outputFrequency = 10; // number of time steps to take before outputting viz.
   double timeStepC0 = -1.0;
   bool useL2Trace = true;
+  std::string problemChoiceString = "two-stream"; // "bump-on-tail" the alternative
+  ProblemChoice problemChoice = TWO_STREAM;
   
   cmdp.setOption("useL2Trace", "useH1Trace", &useL2Trace);
   cmdp.setOption("implicit", "explicit", &implicit);
@@ -89,6 +134,8 @@ int main(int argc, char *argv[])
   cmdp.setOption("numTimeSteps", &numTimeSteps);
   cmdp.setOption("outputFrequency", &outputFrequency);
   cmdp.setOption("timeStepC0", &timeStepC0);
+  cmdp.setOption("useAdaptivity", "useFixedMesh", &useAdaptivity);
+  cmdp.setOption("problem", &problemChoiceString);
   
   if (cmdp.parse(argc,argv) != Teuchos::CommandLineProcessor::PARSE_SUCCESSFUL)
   {
@@ -99,6 +146,16 @@ int main(int argc, char *argv[])
   }
   
   const int rank = mpiSession.getRank();
+  
+  problemChoice = getProblemChoice(problemChoiceString);
+  
+  if (problemChoice == BUMP_ON_TAIL)
+  {
+    k_x = 0.3;
+    xWidth =  2 * M_PI / k_x;
+    u0 = 4.5;
+    n0 = 0.1;
+  }
   
   Boltzmann1D1VFormulation::Boltzmann1D1VFormulationChoice formulationChoice;
   using FormulationChoice = Camellia::Boltzmann1D1VFormulation::Boltzmann1D1VFormulationChoice;
@@ -131,16 +188,76 @@ int main(int argc, char *argv[])
     erkTableau = ERKTableau::ssprk3();
   }
   
-  double dt = dt_max;
-  Boltzmann1D1VFormulation form(formulationChoice, q, eps0, m, dt, x0, xWidth, xElements, v0, vWidth, vElements, H1Order, delta_k, erkTableau);
+  int xElementsCoarse = xElements;
+  int vElementsCoarse = vElements;
+  int numRefinements = 0;
+  while ((vElementsCoarse % 2 == 0) && (xElementsCoarse % 2 == 0) && (xElementsCoarse > 128))
+  {
+    numRefinements++;
+    vElementsCoarse /= 2;
+    xElementsCoarse /= 2;
+  }
+  if (rank == 0)
+  {
+    std::cout << "Coarse mesh: " << xElementsCoarse << " x " << vElementsCoarse << std::endl;
+    std::cout << "Fine mesh is the result of " << numRefinements << " uniform refinements.\n";
+  }
   
-  double n = 0.5 * n0;
-  FunctionPtr fM_u0        = Teuchos::rcp(new Maxwellian1V( u0, sigma, n) );
-  FunctionPtr fM_minus_u0  = Teuchos::rcp(new Maxwellian1V(-u0, sigma, n) );
+  double dt = dt_max;
+  Boltzmann1D1VFormulation form(formulationChoice, q, eps0, m, dt, x0, xWidth, xElementsCoarse, v0, vWidth, vElementsCoarse, H1Order, delta_k, erkTableau, numRefinements);
+  
+  FunctionPtr f0;
   FunctionPtr cos_kx       = Teuchos::rcp(new Cos_ax(k_x));
-  FunctionPtr f0           = (fM_u0 + fM_minus_u0) * (1. + gamma * cos_kx);
+  
+  if (problemChoice == TWO_STREAM)
+  {
+    double n = 0.5 * n0;
+    FunctionPtr fM_u0        = Teuchos::rcp(new Maxwellian1V( u0, sigma, n) );
+    FunctionPtr fM_minus_u0  = Teuchos::rcp(new Maxwellian1V(-u0, sigma, n) );
+    f0                       = (fM_u0 + fM_minus_u0) * (1. + gamma * cos_kx);
+  }
+  else if (problemChoice == BUMP_ON_TAIL)
+  {
+    FunctionPtr fM_0 = Teuchos::rcp(new Maxwellian1V( 0.0, 1.0, 1.0-n0) );
+    FunctionPtr fM_b = Teuchos::rcp(new Maxwellian1V(  u0, 0.5,     n0) );
+    f0               = (fM_0 + 0.5 * fM_b) * (1. + gamma * cos_kx);
+    std::cout << "f0 for bump-on-tail: " << f0 << "\n";
+  }
   
   form.setInitialConditions(f0);
+  
+  if (useAdaptivity)
+  {
+    // adapt to capture initial conditions well
+    FunctionPtr f_soln = Function::solution(form.f(), form.boltzmannSolution());
+    
+    FunctionPtr f0_err = f0 - f_soln;
+    int quadratureEnrichment = 4;
+    
+    auto errorIndicator = ErrorIndicator::functionErrorIndicator<double>(form.boltzmannMesh(), f0_err, quadratureEnrichment);
+    
+    auto refStrategy = Teuchos::rcp(new TRefinementStrategy<double>(errorIndicator, refinementThreshold));
+    
+    double errTol = 1e-3;
+    
+    double f0_norm = f0->l2norm(form.boltzmannMesh(), quadratureEnrichment);
+    double relErr = f0_err->l2norm(form.boltzmannMesh(), quadratureEnrichment) / f0_norm;
+    
+    int numInitialRefinements = 0;
+    while (relErr > errTol)
+    {
+      if (rank==0)
+      {
+        std::cout << "After " << numInitialRefinements << " refinements, phase space mesh has " << form.boltzmannMesh()->numActiveElements() << " elements and relErr is " << relErr << ".\n";
+        std::cout << "Physical mesh has " << form.gaussMesh()->numActiveElements() << " elements.\n";
+      }
+      refStrategy->refine();
+      form.setInitialConditions(f0); // do projection again
+      numInitialRefinements++;
+      relErr = f0_err->l2norm(form.boltzmannMesh(), quadratureEnrichment) / f0_norm;
+    }
+    if (rank==0) std::cout << "Completed " << numInitialRefinements << " refinements to capture initial solution; mesh has " << form.boltzmannMesh()->numActiveElements() << " elements.\n";
+  }
   
   std::ostringstream suffix;
   if (implicit)
@@ -160,11 +277,21 @@ int main(int argc, char *argv[])
   suffix << "_H1Order" << H1Order;
   suffix << "_" << xElements << "x" << vElements;
   
+  std::string problemPrefix;
+  if (problemChoice == TWO_STREAM)
+  {
+    problemPrefix = "TwoStream";
+  }
+  else if (problemChoice == BUMP_ON_TAIL)
+  {
+    problemPrefix = "BumpOnTail";
+  }
+  
   std::ostringstream boltzmannSS;
-  boltzmannSS << "TwoStreamBoltzmann" << suffix.str();
+  boltzmannSS << problemPrefix <<"Boltzmann" << suffix.str();
   
   std::ostringstream gaussSS;
-  gaussSS << "TwoStreamGauss" << suffix.str();
+  gaussSS << problemPrefix << "Gauss" << suffix.str();
   
 //  std::cout << "boltzmann name: " << boltzmannSS.str() << std::endl;
 //  std::cout << "gauss name: " << gaussSS.str() << std::endl;

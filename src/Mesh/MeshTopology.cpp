@@ -493,18 +493,22 @@ IndexType MeshTopology::addCell(IndexType cellIndex, CellTopoPtr cellTopo, const
 
       if (d == 0)   // vertex --> should set parent relationships for any vertices that are equivalent via periodic BCs
       {
+//        {
+//          std::cout << "added {" << cellIndex << "," << j << "} as active cell entry for vertex " << entityIndex << std::endl;
+//        }
         if (_periodicBCIndicesMatchingNode.find(entityIndex) != _periodicBCIndicesMatchingNode.end())
         {
-          for (set< pair<int, int> >::iterator bcIt = _periodicBCIndicesMatchingNode[entityIndex].begin(); bcIt != _periodicBCIndicesMatchingNode[entityIndex].end(); bcIt++)
+          for (const auto &bcMatch : _periodicBCIndicesMatchingNode[entityIndex])
           {
-            IndexType equivalentNode = _equivalentNodeViaPeriodicBC[make_pair(entityIndex, *bcIt)];
+            IndexType equivalentNode = _equivalentNodeViaPeriodicBC[make_pair(entityIndex, bcMatch)];
             if (_activeCellsForEntities[d].size() <= equivalentNode)   // expand container
             {
               _activeCellsForEntities[d].resize(equivalentNode + 100, vector< pair<IndexType, unsigned> >());
             }
-            _activeCellsForEntities[d][equivalentNode].push_back(make_pair(cellIndex, j));
+            auto & activeCellsForCanonicalVertex = _activeCellsForEntities[d][equivalentNode];
+            activeCellsForCanonicalVertex.push_back(make_pair(cellIndex, j));
             // now that we've added, sort:
-            std::sort(_activeCellsForEntities[d][equivalentNode].begin(), _activeCellsForEntities[d][equivalentNode].end());
+            std::sort(activeCellsForCanonicalVertex.begin(), activeCellsForCanonicalVertex.end());
           }
         }
       }
@@ -1506,47 +1510,6 @@ void MeshTopology::deactivateCell(CellPtr cell)
           //          cout << "(" << entryIt->first << "," << entryIt->second << ") ";
           //        }
           //        cout << endl;
-        }
-      }
-      if (d == 0)   // vertex --> should delete entries for any that are equivalent via periodic BCs
-      {
-        if (_periodicBCIndicesMatchingNode.find(entityIndex) != _periodicBCIndicesMatchingNode.end())
-        {
-          for (set< pair<int, int> >::iterator bcIt = _periodicBCIndicesMatchingNode[entityIndex].begin(); bcIt != _periodicBCIndicesMatchingNode[entityIndex].end(); bcIt++)
-          {
-            IndexType equivalentNode = _equivalentNodeViaPeriodicBC[make_pair(entityIndex, *bcIt)];
-            if (_activeCellsForEntities[d].size() <= equivalentNode)
-            {
-              cout << "WARNING: Entity index is out of bounds for _activeCellsForEntities[" << d << "][" << equivalentNode << "]\n";
-            }
-            else
-            {
-
-              vector<unsigned> indicesToDelete;
-              int i = 0;
-              for (vector< pair<IndexType, unsigned> >::iterator entryIt = _activeCellsForEntities[d][equivalentNode].begin();
-                   entryIt != _activeCellsForEntities[d][equivalentNode].end(); entryIt++, i++)
-              {
-                if ((entryIt->first == cell->cellIndex()) && (entryIt->second  == j))
-                {
-                  indicesToDelete.push_back(i);
-                }
-              }
-              // delete in reverse order
-              for (int j=indicesToDelete.size()-1; j > 0; j--)
-              {
-                int i = indicesToDelete[j];
-                _activeCellsForEntities[d][equivalentNode].erase(_activeCellsForEntities[d][equivalentNode].begin() + i);
-              }
-
-              unsigned eraseCount = indicesToDelete.size();
-
-              if (eraseCount==0)
-              {
-                cout << "WARNING: attempt was made to deactivate a non-active subcell topology...\n";
-              }
-            }
-          }
         }
       }
     }
@@ -3683,8 +3646,20 @@ void MeshTopology::determineGeneralizedParentsForRefinement(CellPtr cell, Refine
             {
               IndexType subcellEntityIndex = this->getSubEntityIndex(d, childEntityIndex, subcdim, subcord);
 
+              IndexType equivalentNode = subcellEntityIndex;
+              if (subcdim == 0)
+              {
+                if (_periodicBCIndicesMatchingNode.find(subcellEntityIndex) != _periodicBCIndicesMatchingNode.end())
+                {
+                  for (const auto &periodicBC : _periodicBCIndicesMatchingNode[subcellEntityIndex])
+                  {
+                    equivalentNode = _equivalentNodeViaPeriodicBC[make_pair(subcellEntityIndex, periodicBC)];
+                  }
+                }
+              }
+              
               // if this is a vertex that also belongs to the parent, then its parentage will already be handled...
-              if ((subcdim==0) && (parentVertexIndexSet.find(subcellEntityIndex) != parentVertexIndexSet.end() ))
+              if ((subcdim==0) && ((parentVertexIndexSet.find(subcellEntityIndex) != parentVertexIndexSet.end() ) || (parentVertexIndexSet.find(equivalentNode) != parentVertexIndexSet.end() )))
               {
                 continue;
               }

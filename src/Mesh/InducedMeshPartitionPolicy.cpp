@@ -95,12 +95,12 @@ InducedMeshPartitionPolicy::~InducedMeshPartitionPolicy()
 //  }
 }
 
-void InducedMeshPartitionPolicy::didHRefine(MeshTopologyPtr meshToRefine, const set<GlobalIndexType> &cellIDs, RefinementPatternPtr refPattern)
+void InducedMeshPartitionPolicy::didHRefine(MeshTopologyPtr meshToRefine, const set<GlobalIndexType> &cellIDs, RefinementPatternPtr refPattern, bool didRepartitionAndRebuild)
 {
   // TODO: update _cellIDMap
 }
 
-void InducedMeshPartitionPolicy::didHUnrefine(MeshTopologyPtr meshToRefine, const set<GlobalIndexType> &cellIDs)
+void InducedMeshPartitionPolicy::didHUnrefine(MeshTopologyPtr meshToRefine, const set<GlobalIndexType> &cellIDs, bool didRepartitionAndRebuild)
 {
   // TODO: update _cellIDMap
 }
