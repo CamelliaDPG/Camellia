@@ -616,7 +616,16 @@ void CellDataMigration::unpackSolutionData(Mesh* mesh, GlobalIndexType cellID, c
     cout << "unpackData called for a non-rank-local cellID " << cellID << "\n";
     TEUCHOS_TEST_FOR_EXCEPTION(true, std::invalid_argument, "unpackData called for a non-rank-local cellID");
   }
-  ElementTypePtr elemType = mesh->getElementType(cellID);
+  ElementTypePtr elemType;
+  if (!coefficientsBelongToParent)
+  {
+    elemType = mesh->getElementType(cellID);
+  }
+  else
+  {
+    GlobalIndexType parentCellID = mesh->getTopology()->getCell(cellID)->getParent()->cellIndex();
+    elemType = mesh->getElementType(parentCellID);
+  }
   vector<TSolutionPtr<double>> solutions = mesh->globalDofAssignment()->getRegisteredSolutions();
   int numSolutions = solutions.size();
   int numSolutionsPacked;
