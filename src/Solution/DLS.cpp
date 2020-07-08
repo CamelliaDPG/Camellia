@@ -25,7 +25,7 @@ DLS<Scalar>::DLS(TSolutionPtr<Scalar> solution)
 }
 
 template<typename Scalar>
-void inverseSquareRoot(RCP<Vector<Scalar,IndexType,GlobalIndexType>> vector)
+void inverseSquareRoot(RCP<Vector<Scalar>> vector)
 {
   auto diagValues_2d = vector->template getLocalView<Kokkos::HostSpace> ();
   // getLocalView returns a 2-D View by default.  We want a 1-D
@@ -38,7 +38,7 @@ void inverseSquareRoot(RCP<Vector<Scalar,IndexType,GlobalIndexType>> vector)
     Scalar squaredValue = diagValues_1d(localID);
     if (squaredValue == 0.0)
     {
-      GlobalIndexType GID = vector->getMap()->getGlobalElement(localID);
+      auto GID = vector->getMap()->getGlobalElement(localID);
       cout << "WARNING: for globalID " << GID << ", encountered zero value in inverseSquareRoot().\n";
     }
     diagValues_1d(localID) = 1.0 / sqrt(squaredValue);
@@ -51,6 +51,9 @@ int DLS<Scalar>::assemble()
 {
   using namespace Tpetra;
   using namespace Teuchos;
+  
+  using LO = ::Tpetra::Details::DefaultTypes::local_ordinal_type;
+  using GO = ::Tpetra::Details::DefaultTypes::global_ordinal_type;
   
   // will take BCs into account
   
@@ -72,11 +75,11 @@ int DLS<Scalar>::assemble()
   
   mesh->boundary().bcsToImpose(bcGlobalIndicesFC,bcGlobalValuesFC,*bc,_soln->getDofInterpreter().get());
   
-  map<int,vector<pair<GlobalIndexType,Scalar>>> bcValuesToSend; // key to outer map: recipient PID
-  vector<pair<GlobalIndexType,Scalar>> bcsToImposeThisRank;
+  map<int,vector<pair<GO,Scalar>>> bcValuesToSend; // key to outer map: recipient PID
+  vector<pair<GO,Scalar>> bcsToImposeThisRank;
   for (int i=0; i<bcGlobalIndicesFC.size(); i++)
   {
-    GlobalIndexType globalIndex = bcGlobalIndicesFC[i];
+    GO globalIndex = bcGlobalIndicesFC[i];
     double value = bcGlobalValuesFC[i];
     int owner = dofInterpreter->partitionForGlobalDofIndex(globalIndex);
     if (owner != rank)
@@ -88,7 +91,7 @@ int DLS<Scalar>::assemble()
       bcsToImposeThisRank.push_back({globalIndex,value});
     }
   }
-  vector<pair<GlobalIndexType,Scalar>> offRankBCs;
+  vector<pair<GO,Scalar>> offRankBCs;
   MPIWrapper::sendDataVectors(mesh->Comm(), bcValuesToSend, offRankBCs);
   
   bcsToImposeThisRank.insert(bcsToImposeThisRank.begin(),offRankBCs.begin(),offRankBCs.end());
@@ -142,7 +145,7 @@ int DLS<Scalar>::assemble()
   }
   
   int numBCs = bcsToImposeThisRank.size()-numDuplicates;
-  vector<GlobalIndexTypeToCast> bcGlobalIndices(numBCs);
+  vector<GO> bcGlobalIndices(numBCs);
   vector<double> bcGlobalValues(numBCs);
   int i_adjusted = 0; // adjusted to eliminate duplicates
   for (int i=0; i<bcsToImposeThisRank.size(); i++)
@@ -156,7 +159,7 @@ int DLS<Scalar>::assemble()
       value += bcsToImposeThisRank[i].second;
     }
     value /= thisBCduplicateCount; // average all values together
-    bcGlobalIndices[i_adjusted] = bcsToImposeThisRank[i].first;
+    bcGlobalIndices[i_adjusted] = static_cast<GO>(bcsToImposeThisRank[i].first);
     bcGlobalValues[i_adjusted] = bcsToImposeThisRank[i].second;
     i_adjusted++;
   }
@@ -164,19 +167,19 @@ int DLS<Scalar>::assemble()
   
   Teuchos_CommPtr TeuchosComm = mesh->TeuchosComm();
   
-  GlobalIndexType indexBase = 0;
-  GlobalIndexType invalid = OrdinalTraits<global_size_t>::invalid();
-  typedef RCP<Map<IndexType,GlobalIndexType>> MapRCP;
-  MapRCP bcMap = rcp( new Map<IndexType,GlobalIndexType>(invalid, &bcGlobalIndices[0], bcGlobalIndices.size(),
+  GO indexBase = 0;
+  GO invalid = OrdinalTraits<global_size_t>::invalid();
+  typedef RCP<Map<LO,GO>> MapRCP;
+  MapRCP bcMap = rcp( new Map<LO,GO>(invalid, &bcGlobalIndices[0], bcGlobalIndices.size(),
                                                indexBase, TeuchosComm));
   
   int localDofCountWithBCs = solnMap.NumMyElements();
   int localDofCountNoBCs = localDofCountWithBCs - numBCs;
-  vector<GlobalIndexType> myGlobalIndicesNoBCs(localDofCountNoBCs);
+  vector<GO> myGlobalIndicesNoBCs(localDofCountNoBCs);
   int noBC_LID = 0;
   for (int i=0; i<localDofCountWithBCs; i++)
   {
-    GlobalIndexType globalID = solnMap.GID(i);
+    GO globalID = solnMap.GID(i);
     if (std::find(bcGlobalIndices.begin(),bcGlobalIndices.end(),globalID) == bcGlobalIndices.end())
     {
       myGlobalIndicesNoBCs[noBC_LID] = solnMap.GID(i);
@@ -193,11 +196,11 @@ int DLS<Scalar>::assemble()
     bcValues.replaceLocalValue(i,colZero,bcGlobalValues[i]);
     // TODO:  figure out if it's worth revealing to the outside world which GIDs have been eliminated through BCs
     //        (if so, here would be a place to record those things)
-    // GlobalIndexType fullSolnGID = bcGlobalIndices[i];
+    // GO fullSolnGID = bcGlobalIndices[i];
     
   }
   
-  MapRCP solnMapNoBCs = rcp( new Map<IndexType,GlobalIndexType>(invalid, &myGlobalIndicesNoBCs[0], localDofCountNoBCs,
+  MapRCP solnMapNoBCs = rcp( new Map<LO,GO>(invalid, &myGlobalIndicesNoBCs[0], localDofCountNoBCs,
                                                                 indexBase, TeuchosComm));
   
   /****** End BC determination ******/
@@ -207,24 +210,24 @@ int DLS<Scalar>::assemble()
    dofs.  These are completely discontinuous, so the only communication happens due to the trial space
    overlap between ranks.
    */
-//  GlobalIndexType testIDOffset;
+//  GO testIDOffset;
 //  int ownedCellCount = mesh->cellIDsInPartition().size();
-  IndexType localTestCount = 0;
-  IndexType maxTrialCount = 0; // on this processor
+  GO localTestCount = 0;
+  LO maxTrialCount = 0; // on this processor
   for (GlobalIndexType cellID : mesh->cellIDsInPartition())
   {
     localTestCount += mesh->getElementType(cellID)->testOrderPtr->totalDofs();
     maxTrialCount = max(maxTrialCount,mesh->getElementType(cellID)->trialOrderPtr->totalDofs());
   }
-  typedef Map<IndexType,GlobalIndexType> Map;
+  typedef Map<LO,GO> Map;
   typedef RCP<Map> MapRCP;
   MapRCP testMap = rcp( new Map(invalid, localTestCount, indexBase, TeuchosComm) );
-  GlobalIndexType localTestOffset = localTestCount;
+  GO localTestOffset = localTestCount;
   mesh->Comm()->ScanSum(&localTestCount, &localTestOffset, 1);
   localTestOffset -= localTestCount;
 
-  GlobalIndexType elementTestOffset = localTestOffset;
-  map<GlobalIndexType,GlobalIndexType> elementTestIDOffsets;
+  GO elementTestOffset = localTestOffset;
+  map<GO,GO> elementTestIDOffsets;
   for (GlobalIndexType cellID : mesh->cellIDsInPartition())
   {
     elementTestIDOffsets[cellID] = elementTestOffset;
@@ -234,7 +237,7 @@ int DLS<Scalar>::assemble()
   auto DynamicProfileType = Tpetra::ProfileType(Tpetra::StaticProfile+1);
   auto StaticProfileType  = Tpetra::ProfileType(Tpetra::StaticProfile);
   _dlsMatrix = rcp(new TMatrix<Scalar>(testMap,solnMapNoBCs,maxTrialCount,DynamicProfileType));
-  CrsMatrix<Scalar,IndexType,GlobalIndexType> bcImpositionMatrix(testMap,numBCs,StaticProfileType);
+  CrsMatrix<Scalar,LO,GO> bcImpositionMatrix(testMap,numBCs,StaticProfileType);
   int numCols = 1;
   _rhsVector = rcp(new TVector<Scalar>(testMap,numCols));
   _lhsVector = rcp(new TVector<Scalar>(solnMapNoBCs,numCols));
@@ -258,7 +261,7 @@ int DLS<Scalar>::assemble()
     bf = mesh->bilinearForm();
   }
   
-  Epetra_Map timeMap(numProcs,indexBase,*Comm);
+  Epetra_Map timeMap(static_cast<int>(numProcs),static_cast<int>(indexBase),*Comm);
   Epetra_Time timer(*Comm);
   Epetra_Time subTimer(*Comm);
   
@@ -329,8 +332,8 @@ int DLS<Scalar>::assemble()
       subTimer.ResetStartTime();
       
       Camellia::FieldContainer<GlobalIndexType> globalDofIndicesFC;
-      Array<GlobalIndexType> globalDofIndicesNoBCs;
-      Array<GlobalIndexType> globalDofIndicesBCs;
+      Array<GO> globalDofIndicesNoBCs;
+      Array<GO> globalDofIndicesBCs;
       
       Array<int> localStiffnessDim = vector<int>{numTrialDofs,numTestDofs};
       Array<int> localRHSDim       = vector<int>{numTestDofs};
@@ -344,7 +347,7 @@ int DLS<Scalar>::assemble()
       // determine cellIDs
       vector<GlobalIndexType> cellIDsOfType = mesh->globalDofAssignment()->cellIDsOfElementType(rank, elemTypePtr);
       
-      vector<GlobalIndexType> testGlobalIndices(numTestDofs);
+      vector<GO> testGlobalIndices(numTestDofs);
       Array<Scalar> rowValues;
       
       for (int cellIndex=0; cellIndex<numCells; cellIndex++)
@@ -356,7 +359,7 @@ int DLS<Scalar>::assemble()
         elementTestOffset = elementTestIDOffsets[cellID];
         for (int i=0; i<numTestDofs; i++)
         {
-          testGlobalIndices[i] = i + elementTestOffset;
+          testGlobalIndices[i] = static_cast<GO>(i + elementTestOffset);
           // "replace" below because we know, a priori, that this test globalID is only on this element
           // (implied by the discontinuity of test functions)
           _rhsVector->sumIntoGlobalValue(testGlobalIndices[i],colZero,cellRHS(i));
@@ -390,7 +393,7 @@ int DLS<Scalar>::assemble()
 //            {
 //              rowValues[i] = interpretedStiffness(i,j);
 //            }
-//            GlobalIndexType globalTestID = elementTestOffset + j;
+//            GO globalTestID = static_cast<GO>(elementTestOffset + j);
 //            _dlsMatrix->insertGlobalValues(globalTestID, numTrialValues, &rowValues[0], &globalDofIndices(0));
 //          }
 //        }
@@ -405,11 +408,11 @@ int DLS<Scalar>::assemble()
         
         for (int i=0; i<globalDofIndicesFC.size(); i++)
         {
-          GlobalIndexType solnGlobalID = globalDofIndicesFC(i);
+          GO solnGlobalID = globalDofIndicesFC(i);
           if (std::find(bcGlobalIndices.begin(),bcGlobalIndices.end(),solnGlobalID) == bcGlobalIndices.end())
           {
             // then this is not an eliminated global ID
-            globalDofIndicesNoBCs[noBCOffset] = globalDofIndicesFC(i);
+            globalDofIndicesNoBCs[noBCOffset] = static_cast<GO>(globalDofIndicesFC(i));
             for (int j=0; j<numTestDofs; j++)
             {
               interpretedStiffnessNoBCs(noBCOffset,j) = interpretedStiffness(i,j);
@@ -419,7 +422,7 @@ int DLS<Scalar>::assemble()
           }
           else
           {
-            globalDofIndicesBCs[bcOffset] = globalDofIndicesFC(i);
+            globalDofIndicesBCs[bcOffset] = static_cast<GO>(globalDofIndicesFC(i));
             for (int j=0; j<numTestDofs; j++)
             {
               interpretedStiffnessBCs(bcOffset,j) = interpretedStiffness(i,j);
@@ -438,7 +441,7 @@ int DLS<Scalar>::assemble()
             rowValues[i] = interpretedStiffnessNoBCs(i,j);
           }
           
-          GlobalIndexType globalTestID = elementTestOffset + j;
+          GO globalTestID = elementTestOffset + j;
           _dlsMatrix->insertGlobalValues(globalTestID, globalDofIndicesNoBCs, rowValues);
           
           for (int i=0; i<rowValues.size(); i++)
@@ -478,12 +481,12 @@ int DLS<Scalar>::assemble()
   // in terms of setting up the various maps in the first place -- maybe it would be better to expand
   // bcMap beyond the indices that match BCs, for instance).
   TVector<Scalar> bcValues_domainMap(bcImpositionMatrix.getDomainMap(),1);
-  Tpetra::Import<IndexType,GlobalIndexType> domainMapImporter(bcMap, bcImpositionMatrix.getDomainMap());
+  Tpetra::Import<LO,GO> domainMapImporter(bcMap, bcImpositionMatrix.getDomainMap());
   bcValues_domainMap.doImport(bcValues, domainMapImporter, INSERT);
   TVector<Scalar> bcApplication_rangeMap(bcImpositionMatrix.getRangeMap(),1);
   bcImpositionMatrix.apply(bcValues_domainMap,bcApplication_rangeMap,NO_TRANS);
   TVector<Scalar> bcApplication_rhsMap(_rhsVector->getMap(),1);
-  Tpetra::Import<IndexType,GlobalIndexType> rhsMapImporter(bcApplication_rangeMap.getMap(), bcApplication_rhsMap.getMap());
+  Tpetra::Import<LO,GO> rhsMapImporter(bcApplication_rangeMap.getMap(), bcApplication_rhsMap.getMap());
   bcApplication_rhsMap.doImport(bcApplication_rangeMap, rhsMapImporter, INSERT);
   _rhsVector->update(-1.0, bcApplication_rhsMap, 1.0);
   
@@ -494,13 +497,13 @@ int DLS<Scalar>::assemble()
 //  cout << "_dlsMatrix row Map, global element count: " << _dlsMatrix->getRowMap()->getGlobalNumElements() << endl;
 //  cout << "_dlsMatrix range Map, global element count: " << _dlsMatrix->getRangeMap()->getGlobalNumElements() << endl;
   
-  _diag_sqrt_inverse = rcp( new Vector<Scalar,IndexType,GlobalIndexType>(solnMapNoBCs) );
+  _diag_sqrt_inverse = rcp( new Vector<Scalar>(solnMapNoBCs) );
 //  diagFiller.globalAssemble(*_diag_sqrt_inverse);
   inverseSquareRoot(_diag_sqrt_inverse);
   
-  RCP<Vector<Scalar,IndexType,GlobalIndexType>> matrixScalingVector = rcp( new Vector<Scalar,IndexType,GlobalIndexType>(_dlsMatrix->getDomainMap()) );
+  RCP<Vector<Scalar,LO,GO>> matrixScalingVector = rcp( new Vector<Scalar,LO,GO>(_dlsMatrix->getDomainMap()) );
 
-  Tpetra::Import<IndexType,GlobalIndexType> scalingImporter(_diag_sqrt_inverse->getMap(), matrixScalingVector->getMap());
+  Tpetra::Import<LO,GO> scalingImporter(_diag_sqrt_inverse->getMap(), matrixScalingVector->getMap());
   matrixScalingVector->doImport(*_diag_sqrt_inverse, scalingImporter, INSERT);
   
   _dlsMatrix->rightScale(*matrixScalingVector);
@@ -508,7 +511,7 @@ int DLS<Scalar>::assemble()
   // Commented out because I'm pretty sure this should be redundant with the (identical) code above
 //  // now that we've scaled the DLS matrix, let's use diagFiller to export to _diag_sqrt_inverse constructed with
 //  // the map we'll want to use to scale the solution:
-//  _diag_sqrt_inverse = rcp( new Vector<Scalar,IndexType,GlobalIndexType>(solnMapNoBCs) );
+//  _diag_sqrt_inverse = rcp( new Vector<Scalar,LO,GO>(solnMapNoBCs) );
 //  diagFiller.globalAssemble(*_diag_sqrt_inverse);
 //  inverseSquareRoot(_diag_sqrt_inverse);
 
