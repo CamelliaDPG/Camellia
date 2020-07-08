@@ -191,14 +191,14 @@ template <typename Scalar=double>
 class TAmesos2Solver;
 typedef TAmesos2Solver<double> Amesos2Solver;
 
-typedef Teuchos::RCP< Tpetra::Map<IndexType,GlobalIndexType> > MapPtr;
-typedef Teuchos::RCP< const Tpetra::Map<IndexType,GlobalIndexType> > ConstMapPtr;
+typedef Teuchos::RCP< Tpetra::Map<> > MapPtr;
+typedef Teuchos::RCP< const Tpetra::Map<> > ConstMapPtr;
 template <typename Scalar>
-using TMatrix = Tpetra::CrsMatrix<Scalar,IndexType,GlobalIndexType>;
+using TMatrix = Tpetra::CrsMatrix<Scalar>;
 template <typename Scalar>
 using TMatrixPtr = Teuchos::RCP< TMatrix<Scalar> >;
 template <typename Scalar>
-using TVector = Tpetra::MultiVector<Scalar,IndexType,GlobalIndexType>;
+using TVector = Tpetra::MultiVector<Scalar>;
 template <typename Scalar>
 using TVectorPtr = Teuchos::RCP< TVector<Scalar> >;
 // typedef TVectorPtr<double> VectorPtr;
