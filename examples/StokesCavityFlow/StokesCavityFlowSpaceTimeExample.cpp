@@ -22,6 +22,8 @@ class SpaceTimeRampBoundaryFunction_U1 : public SimpleFunction<double>
   int _polyOrder;
 public:
   SpaceTimeRampBoundaryFunction_U1(double eps, bool useVerticalBCs, int polyOrder)
+  :
+  SimpleFunction<double>("StokesCavityFlowSpaceTimeExample-SpaceTimeRampBoundaryFunction_U1")
   {
     _eps = eps;
     _useVerticalBCs = useVerticalBCs;
@@ -121,6 +123,8 @@ class TimeRampSpaceTime : public SimpleFunction<double>
   double _timeScale;
 public:
   TimeRampSpaceTime(double timeScale)
+  :
+  SimpleFunction<double>("StokesCavityFlowSpaceTimeExample-TimeRampSpaceTime")
   {
     _timeScale = timeScale;
   }

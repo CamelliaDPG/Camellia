@@ -12,6 +12,8 @@ class LidVelocity : public SimpleFunction<double>
   double _eps; // interpolation width
 public:
   LidVelocity(double eps)
+  :
+  SimpleFunction<double>("ch03-StokesCavity-LidVelocity")
   {
     _eps = eps;
   }
