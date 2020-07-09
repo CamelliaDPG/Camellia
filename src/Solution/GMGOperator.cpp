@@ -2541,6 +2541,8 @@ std::string GMGOperator::smootherString(SmootherChoice choice)
       return "Point Jacobi";
     case POINT_SYMMETRIC_GAUSS_SEIDEL:
       return "Point Symmetric Gauss-Seidel";
+    default:
+      return "Unknown smoother type";
   }
 }
 

@@ -138,12 +138,6 @@ namespace Camellia
     {
       return !(a == b);
     }
-    
-    // one way conversion: iterator -> const_iterator
-    operator RangeListIterator() const
-    {
-      return *this;
-    }
   };
   
 }
