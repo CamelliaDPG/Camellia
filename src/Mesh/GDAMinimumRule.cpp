@@ -3016,7 +3016,8 @@ SubcellDofIndices & GDAMinimumRule::getOwnedGlobalDofIndices(GlobalIndexType cel
           {
             // already processed this guy on this cell: just copy
             pair<unsigned,unsigned> previousConstrainedSubcell = (*entitiesClaimedForVariable)[owningSubcellEntity];
-            scInfo.subcellDofIndices[d][scord][var->ID()] = scInfo.subcellDofIndices[previousConstrainedSubcell.first][previousConstrainedSubcell.second][var->ID()];
+            auto & varRange = scInfo.dofIndexRangeForVarOnSubcell(previousConstrainedSubcell.first, previousConstrainedSubcell.second, var->ID());
+            scInfo.setDofIndicesForVarOnSubcell(d, scord, var->ID(), varRange);
             continue;
           }
 
@@ -3585,6 +3586,23 @@ void GDAMinimumRule::rebuildLookups()
   distributeCellGlobalDofs(_globalDofIndicesForCellCache, nonLocalCellNeighbors);
   
   TimeLogger::sharedInstance()->stopTimer(timerHandle);
+}
+
+void GDAMinimumRule::setAllowMeshTopologyPruning(bool allowMeshTopologyPruning)
+{
+  const bool oldSetting = _allowMeshTopologyPruning;
+  if (oldSetting != allowMeshTopologyPruning)
+  {
+    this->_allowMeshTopologyPruning = allowMeshTopologyPruning;
+    if (!_allowMeshTopologyPruning)
+    {
+      MeshTopology* meshTopo = dynamic_cast<MeshTopology*>(_meshTopology.get());
+      if (meshTopo->pruningOrdinal() >= 0) // pruningOrdinal starts at -1; will be 0 after first pruning
+      {
+        TEUCHOS_TEST_FOR_EXCEPTION(true, std::invalid_argument, "Must set allowMeshTopologyPruning to false *before* any pruning has taken place…");
+      }
+    }
+  }
 }
 
 namespace Camellia

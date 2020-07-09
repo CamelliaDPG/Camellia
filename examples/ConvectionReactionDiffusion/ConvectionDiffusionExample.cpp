@@ -70,6 +70,8 @@ class ExpTerm : public SimpleFunction<double>
   WeightType _denominator;
 public:
   ExpTerm(WeightType weight, bool xTerm)
+  :
+  SimpleFunction<double>("ConvectionDiffusionExample-ExpTerm")
   {
     _weight = weight;
     _xTerm = xTerm;
@@ -133,7 +135,9 @@ class CheckerboardFunction : public SimpleFunction<double>
   double _otherValue;
 public:
   CheckerboardFunction(double interval, double lowerLeftValue, double otherValue)
-  : _interval(interval), _lowerLeftValue(lowerLeftValue), _otherValue(otherValue)
+  :
+  SimpleFunction<double>("ConvectionDiffusionExample-CheckerboardFunction"),
+  _interval(interval), _lowerLeftValue(lowerLeftValue), _otherValue(otherValue)
   {}
   
   double value(double x, double y)

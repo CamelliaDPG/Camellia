@@ -873,6 +873,135 @@ TEUCHOS_UNIT_TEST(MeshTopology, GetRootMeshTopology)
     TEST_EQUALITY(bottomCell->getNeighbor(0, meshTopo)->cellIndex(), topCellIndex);
     TEST_EQUALITY(topCell->getNeighbor(2, meshTopo)->cellIndex(), bottomCellIndex);
   }
+
+  TEUCHOS_UNIT_TEST( MeshTopology, PeriodicBCsWithRefinement_2D )
+  {
+    /*
+     Initial mesh:
+     
+     02-----12-----22
+      |  2  |  3  |
+     01-----11-----21
+      |  0  |  1  |
+     00-----10-----20
+     
+     6 ----- 7-----8
+      |  2  |  3  |
+     3 -----4 ----- 5
+      |  0  |  1  |
+     0 ----- 1----- 2
+     */
+    vector<double> v00 {0,0}, v01 {0,1}, v02 {0,2}, // 0, 1, 2
+                   v10 {1,0}, v11 {1,1}, v12 {1,2}, // 3, 4, 5
+                   v20 {2,0}, v21 {2,1}, v22 {2,2}; // 6, 7, 8
+    vector<vector<double>> vertices {v00, v10, v20,
+                                     v01, v11, v21,
+                                     v02, v12, v22};
+    vector<vector<IndexType>> elementVertices;
+    // cell 0:
+    elementVertices.push_back({0,1,4,3}); // cell 0
+    elementVertices.push_back({1,2,5,4}); // cell 1
+    elementVertices.push_back({3,4,7,6}); // cell 2
+    elementVertices.push_back({4,5,8,7}); // cell 3
+    
+    vector<CellTopoPtr> cellTopos(4,CellTopology::quad());
+    MeshGeometryPtr geometry = Teuchos::rcp(new MeshGeometry(vertices,elementVertices,cellTopos));
+    PeriodicBCPtr leftEqualsRight = PeriodicBC::xIdentification(v00[0], v22[0]);
+    
+    MeshTopologyPtr meshTopo = Teuchos::rcp( new MeshTopology(geometry, {leftEqualsRight}) );
+    
+    IndexType leftCellIndex = 0, rightCellIndex = 1;
+    
+    CellPtr leftCell  = meshTopo->getCell(leftCellIndex);
+    CellPtr rightCell = meshTopo->getCell(rightCellIndex);
+    
+    const int RIGHT_SIDE = 1;
+    const int TOP_SIDE   = 2;
+    const int LEFT_SIDE = 3;
+    TEST_EQUALITY(rightCell->getNeighbor(RIGHT_SIDE, meshTopo)->cellIndex(), leftCellIndex);
+    TEST_EQUALITY(leftCell->getNeighbor(LEFT_SIDE, meshTopo)->cellIndex(), rightCellIndex);
+    
+    auto refPattern = RefinementPattern::regularRefinementPatternQuad();
+    
+    const int numRefinements = 2;
+    
+    for (int refinementOrdinal=0; refinementOrdinal<numRefinements; refinementOrdinal++)
+    {
+      out << "*** REFINEMENT " << refinementOrdinal << " ***\n";
+      meshTopo->refineCell(leftCellIndex, refPattern, meshTopo->nextCellID());
+      meshTopo->refineCell(rightCellIndex, refPattern, meshTopo->nextCellID());
+      
+      // new left cell is the first child: (they go counter-clockwise, starting at the bottom left)
+      leftCell = leftCell->children()[0];
+      leftCellIndex = leftCell->cellIndex();
+      // new right cell is the second child:
+      rightCell = rightCell->children()[1];
+      rightCellIndex = rightCell->cellIndex();
+      
+      auto leftCellUpperNeighbor = leftCell->getNeighbor(TOP_SIDE, meshTopo);
+      auto leftCellUpperNeighborIndex = leftCellUpperNeighbor->cellIndex();
+      
+      auto rightCellUpperNeighbor = rightCell->getNeighbor(TOP_SIDE, meshTopo);
+      auto rightCellUpperNeighborIndex = rightCellUpperNeighbor->cellIndex();
+      
+      TEST_EQUALITY(rightCell->getNeighbor(RIGHT_SIDE, meshTopo)->cellIndex(), leftCellIndex);
+      TEST_EQUALITY(leftCell->getNeighbor(LEFT_SIDE, meshTopo)->cellIndex(), rightCellIndex);
+    
+      // local vertex ordering is CCW:
+      const int LOWER_LEFT  = 0;
+      const int LOWER_RIGHT = 1;
+      const int UPPER_RIGHT = 2;
+      const int UPPER_LEFT  = 3;
+      
+      const int vertexDim = 0;
+      std::vector<IndexType> rightCellLowerRightVertexVector {rightCell->vertices()[LOWER_RIGHT]};
+      auto canonicalRightVertexIndex = meshTopo->getCanonicalEntityNodesViaPeriodicBCs(vertexDim, rightCellLowerRightVertexVector)[0];
+      auto activeCellsForLowerRightVertex = meshTopo->getActiveCellIndices(vertexDim, canonicalRightVertexIndex);
+      TEST_EQUALITY(activeCellsForLowerRightVertex.size(), 2); // left and right cell should match
+      if (activeCellsForLowerRightVertex.size() != 2)
+      {
+        out << "activeCellsForLowerRightVertex has " << activeCellsForLowerRightVertex.size() << " entries: ";
+        for (auto & entry : activeCellsForLowerRightVertex)
+        {
+          out << "{" << entry.first << "," << entry.second << "} ";
+        }
+        out << std::endl;
+      }
+      if (activeCellsForLowerRightVertex.size() >= 2)
+      {
+        // active cells should be sorted by cell index.  leftCellIndex should be maintained as less than rightCellIndex, due to the order of refinements above
+        TEST_EQUALITY( activeCellsForLowerRightVertex[0].first,  leftCellIndex );
+        unsigned expectedVertexOrdinal = LOWER_LEFT; // lower-right vertex in mesh matches lower-left due to periodic BC
+        TEST_EQUALITY( activeCellsForLowerRightVertex[0].second, expectedVertexOrdinal);
+        // second active cell is the right cell
+        TEST_EQUALITY( activeCellsForLowerRightVertex[1].first,  rightCellIndex );
+        expectedVertexOrdinal = LOWER_RIGHT; // lower-right vertex in mesh is lower-right in right cell
+        TEST_EQUALITY( activeCellsForLowerRightVertex[1].second, expectedVertexOrdinal);
+      }
+      
+      auto activeCellsForUpperLeftVertex = meshTopo->getActiveCellIndices(vertexDim, leftCell->vertices()[UPPER_LEFT]); // upper left in left cell, not in mesh as a whole
+      
+      // upper left vertex matches not only the left and right cell, but also their upper neighbors
+      // order is: left cell, left upper neighbor, right cell, right upper neighbor
+      using std::vector;
+      using std::pair;
+      vector< pair<IndexType,unsigned> > expectedActiveCells { {leftCellIndex, UPPER_LEFT}, {leftCellUpperNeighborIndex, LOWER_LEFT}, {rightCellIndex, UPPER_RIGHT}, {rightCellUpperNeighborIndex, LOWER_RIGHT} };
+      
+      TEST_EQUALITY(activeCellsForUpperLeftVertex.size(), expectedActiveCells.size()); // left and right cell should match
+      if (activeCellsForUpperLeftVertex.size() == expectedActiveCells.size())
+      {
+        for (int i=0; i<activeCellsForUpperLeftVertex.size(); i++)
+        {
+          auto cellIndex      = activeCellsForUpperLeftVertex[i].first;
+          auto subcellOrdinal = activeCellsForUpperLeftVertex[i].second;
+          auto expectedCellIndex = expectedActiveCells[i].first;
+          auto expectedSubcellOrdinal = expectedActiveCells[i].second;
+          TEST_EQUALITY(cellIndex, expectedCellIndex);
+          TEST_EQUALITY(subcellOrdinal, expectedSubcellOrdinal);
+        }
+      }
+    }
+  }
   
   TEUCHOS_UNIT_TEST( MeshTopology, PruneRefinedMesh_1D)
   {

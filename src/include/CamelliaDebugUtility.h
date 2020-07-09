@@ -22,39 +22,33 @@
 
 namespace Camellia
 {
-  template<typename data_type>
-  void print(std::string name, std::set<data_type> &data);
+  void print(const std::string &name, const std::map<unsigned, unsigned> &data);
+  void print(const std::string &name, const std::map<unsigned, double> &data);
+  void print(const std::string &name, const std::map<int, double> &data);
   
-  template<typename key_type, typename value_type>
-  void print(std::string name, std::map<key_type, value_type> &data);
+  void print(const std::string &name, const std::vector<int> &data);
+  void print(const std::string &name, const std::vector<unsigned> &data);
+  void print(const std::string &name, const std::vector<long long> &data);
+  void print(const std::string &name, const std::vector<double> &data);
   
-  void print(std::string name, std::map<unsigned, unsigned> data);
-  void print(std::string name, std::map<unsigned, double> data);
-  void print(std::string name, std::map<int, double> data);
+  void print(const std::string &name, const std::set<unsigned> &data);
+  void print(const std::string &name, const std::set<int> &data);
+  void print(const std::string &name, const std::set<long long> &data);
+  void print(const std::string &name, const std::set<double> &data);
   
-  void print(std::string name, std::vector<int> data);
-  void print(std::string name, std::vector<unsigned> data);
-  void print(std::string name, std::vector<long long> data);
-  void print(std::string name, std::vector<double> data);
+  void print(std::ostream &out, const std::string &name, const std::map<unsigned, unsigned> &data);
+  void print(std::ostream &out, const std::string &name, const std::map<unsigned, double> &data);
+  void print(std::ostream &out, const std::string &name, const std::map<int, double> &data);
   
-  void print(std::string name, std::set<unsigned> data);
-  void print(std::string name, std::set<int> data);
-  void print(std::string name, std::set<long long> data);
-  void print(std::string name, std::set<double> data);
+  void print(std::ostream &out, const std::string &name, const std::vector<int> &data);
+  void print(std::ostream &out, const std::string &name, const std::vector<unsigned> &data);
+  void print(std::ostream &out, const std::string &name, const std::vector<long long> &data);
+  void print(std::ostream &out, const std::string &name, const std::vector<double> &data);
   
-  void print(std::ostream &out, std::string name, std::map<unsigned, unsigned> data);
-  void print(std::ostream &out, std::string name, std::map<unsigned, double> data);
-  void print(std::ostream &out, std::string name, std::map<int, double> data);
-  
-  void print(std::ostream &out, std::string name, std::vector<int> data);
-  void print(std::ostream &out, std::string name, std::vector<unsigned> data);
-  void print(std::ostream &out, std::string name, std::vector<long long> data);
-  void print(std::ostream &out, std::string name, std::vector<double> data);
-  
-  void print(std::ostream &out, std::string name, std::set<unsigned> data);
-  void print(std::ostream &out, std::string name, std::set<int> data);
-  void print(std::ostream &out, std::string name, std::set<long long> data);
-  void print(std::ostream &out, std::string name, std::set<double> data);
+  void print(std::ostream &out, const std::string &name, const std::set<unsigned> &data);
+  void print(std::ostream &out, const std::string &name, const std::set<int> &data);
+  void print(std::ostream &out, const std::string &name, const std::set<long long> &data);
+  void print(std::ostream &out, const std::string &name, const std::set<double> &data);
   
   // ! prints out the coefficients for each variable, labelled using the names from the VarFactory.
   // ! If the trialSpaceDofs boolean is set to true, interprets the variable IDs as trial space variables;

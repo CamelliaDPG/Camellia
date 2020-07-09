@@ -114,19 +114,26 @@ Mesh::Mesh(MeshTopologyViewPtr meshTopology, TBFPtr<double> bilinearForm, vector
 
 Mesh::Mesh(MeshTopologyViewPtr meshTopology, TBFPtr<double> bilinearForm, int H1Order, int pToAddTest,
            map<int,int> trialOrderEnhancements, map<int,int> testOrderEnhancements,
-           MeshPartitionPolicyPtr partitionPolicy, Epetra_CommPtr Comm) : DofInterpreter(Teuchos::rcp(this,false))
+           MeshPartitionPolicyPtr meshPartitionPolicy, Epetra_CommPtr Comm)
+:
+Mesh::Mesh(meshTopology, bilinearForm, H1Order, pToAddTest, trialOrderEnhancements, testOrderEnhancements, meshPartitionPolicy, Comm, (meshTopology->getPeriodicBCs().size() == 0))
+{}
+
+Mesh::Mesh(MeshTopologyViewPtr meshTopology, TBFPtr<double> bilinearForm, int H1Order, int pToAddTest,
+           map<int,int> trialOrderEnhancements, map<int,int> testOrderEnhancements,
+           MeshPartitionPolicyPtr partitionPolicy, Epetra_CommPtr Comm, bool allowMeshTopologyPruning) : DofInterpreter(Teuchos::rcp(this,false))
 {
   _meshTopology = meshTopology;
   _pToAddToTest = pToAddTest;
 
   DofOrderingFactoryPtr dofOrderingFactoryPtr = Teuchos::rcp( new DofOrderingFactory(bilinearForm, trialOrderEnhancements,testOrderEnhancements) );
   _enforceMBFluxContinuity = false;
-//  MeshPartitionPolicyPtr partitionPolicy = Teuchos::rcp( new MeshPartitionPolicy() );
   initializePartitionPolicyIfNull(partitionPolicy, Comm);
 
   MeshPtr thisPtr = Teuchos::rcp(this, false);
   _gda = Teuchos::rcp( new GDAMinimumRule(thisPtr, bilinearForm->varFactory(), dofOrderingFactoryPtr,
                                           partitionPolicy, H1Order, pToAddTest));
+  _gda->setAllowMeshTopologyPruning(allowMeshTopologyPruning);
   _gda->repartitionAndMigrate();
 
   setBilinearForm(bilinearForm);
@@ -993,7 +1000,7 @@ void Mesh::hUnrefine(const set<GlobalIndexType> &cellIDs, bool repartitionAndReb
   TEUCHOS_TEST_FOR_EXCEPTION(!meshTopologyInstance, std::invalid_argument, "Mesh::hUnrefine() called when _meshTopology is not an instance of MeshTopology--likely Mesh initialized with a pure MeshTopologyView, which cannot be h-unrefined.");
   MeshTopologyPtr writableMeshTopology = Teuchos::rcp(meshTopologyInstance, false);
   
-  // notify observers that of the unrefinement that will soon happen
+  // notify observers of the unrefinement that's coming (gives a chance to project onto parent, etc.)
   for (auto observer  : _registeredObservers)
   {
     observer->willHUnrefine(writableMeshTopology, cellIDs, repartitionAndRebuild);
@@ -1044,8 +1051,12 @@ void Mesh::hUnrefine(const set<GlobalIndexType> &cellIDs, bool repartitionAndReb
   
   if (repartitionAndRebuild)
   {
-    _gda->repartitionAndMigrate();
-    _boundary.buildLookupTables();
+    this->repartitionAndRebuild();
+  }
+  
+  for (auto observer  : _registeredObservers)
+  {
+    observer->didHUnrefine(writableMeshTopology, cellIDs, repartitionAndRebuild);
   }
 }
 
@@ -1294,6 +1305,12 @@ void Mesh::repartitionAndRebuild()
 {
   _gda->repartitionAndMigrate();
   _boundary.buildLookupTables();
+  
+  auto registeredSolutions = _gda->getRegisteredSolutions();
+  for (auto soln : registeredSolutions)
+  {
+    soln->discardInactiveCellCoefficients();
+  }
   
   MeshTopology* meshTopologyInstance = dynamic_cast<MeshTopology*>(_meshTopology.get());
   

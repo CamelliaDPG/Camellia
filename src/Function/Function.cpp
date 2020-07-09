@@ -1644,6 +1644,7 @@ std::map<GlobalIndexType, double> TFunction<Scalar>::squaredL2NormOfJumps(MeshPt
       case DIFFERENCE:
         return v1-v2;
       case SUM:
+      default: // gcc 9.3 warns about control reaching the end of a non-void function if we omit default: here (even though we've exhausted JumpCombinationType)
         return v1+v2;
     }
   };

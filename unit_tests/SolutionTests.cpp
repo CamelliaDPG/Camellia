@@ -2406,13 +2406,16 @@ namespace
     
     soln->projectOntoMesh(solnMap);
     
-    auto elemType = mesh->getElementType(parentCellID);
-    auto basis = elemType->trialOrderPtr->getBasis(form.u()->ID());
-    
-    Camellia::FieldContainer<double> basisCoeffs(basis->getCardinality());
-    soln->solnCoeffsForCellID(basisCoeffs, parentCellID, form.u()->ID());
-    
-    out << "parentCoefficients before refinement:\n" << basisCoeffs;
+    if (mesh->myCellsInclude(parentCellID))
+    {
+      auto elemType = mesh->getElementType(parentCellID);
+      auto basis = elemType->trialOrderPtr->getBasis(form.u()->ID());
+      
+      Camellia::FieldContainer<double> basisCoeffs(basis->getCardinality());
+      soln->solnCoeffsForCellID(basisCoeffs, parentCellID, form.u()->ID());
+      
+      out << "parentCoefficients before refinement:\n" << basisCoeffs;
+    }
     
     FunctionPtr u_soln = Function::solution(form.u(), soln);
     
@@ -2436,12 +2439,20 @@ namespace
     
     mesh->hUnrefine({parentCellID});
     
-    parentHasCoefficients = soln->cellHasCoefficientsAssigned(parentCellID);
-    TEST_ASSERT(parentHasCoefficients);
+    if (mesh->myCellsInclude(parentCellID))
+    {
+      parentHasCoefficients = soln->cellHasCoefficientsAssigned(parentCellID);
+      TEST_ASSERT(parentHasCoefficients);
+      
+      auto elemType = mesh->getElementType(parentCellID);
+      auto basis = elemType->trialOrderPtr->getBasis(form.u()->ID());
+      
+      Camellia::FieldContainer<double> basisCoeffs(basis->getCardinality());
+
+      soln->solnCoeffsForCellID(basisCoeffs, parentCellID, form.u()->ID());
     
-    soln->solnCoeffsForCellID(basisCoeffs, parentCellID, form.u()->ID());
-    
-    out << "parentCoefficients after unrefinement:\n" << basisCoeffs;
+      out << "parentCoefficients after unrefinement:\n" << basisCoeffs;
+    }
     
     // check that after the unrefinement, u_soln still matches u_exact
     err = (u_soln - u_exact)->l2norm(mesh);

@@ -62,6 +62,10 @@ namespace Camellia {
     static ErrorIndicatorPtr energyErrorIndicator(MeshPtr mesh, TLinearTermPtr<Scalar> residual, TIPPtr<Scalar> ip,
                                                   int quadratureEnrichment);
     
+    //! Use the L^2 norm of the function specified as error indicator.
+    template <typename Scalar>
+    static ErrorIndicatorPtr functionErrorIndicator(MeshPtr mesh, FunctionPtr f, int quadratureEnrichment);
+    
     template <typename Scalar>
     static ErrorIndicatorPtr gradientErrorIndicator(TSolutionPtr<Scalar> solution, VarPtr scalarVar);
     

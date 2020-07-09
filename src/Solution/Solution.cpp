@@ -4159,9 +4159,12 @@ template <typename Scalar>
 MapPtr TSolution<Scalar>::getPartitionMap2(PartitionIndexType rank, set<GlobalIndexType> & myGlobalIndicesSet, GlobalIndexType numGlobalDofs,
     int zeroMeanConstraintsSize, Teuchos_CommPtr Comm )
 {
+  using LO = ::Tpetra::Details::DefaultTypes::local_ordinal_type;
+  using GO = ::Tpetra::Details::DefaultTypes::global_ordinal_type;
+  
   int numGlobalLagrange = _lagrangeConstraints->numGlobalConstraints();
   vector< ElementPtr > elements = _mesh->elementsInPartition(rank);
-  IndexType numMyElements = elements.size();
+  LO numMyElements = elements.size();
   int numElementLagrange = _lagrangeConstraints->numElementConstraints() * numMyElements;
   int globalNumElementLagrange = _lagrangeConstraints->numElementConstraints() * _mesh->numActiveElements();
 
@@ -4179,10 +4182,10 @@ MapPtr TSolution<Scalar>::getPartitionMap2(PartitionIndexType rank, set<GlobalIn
     localDofsSize += zeroMeanConstraintsSize + numGlobalLagrange;
   }
 
-  GlobalIndexType *myGlobalIndices;
+  GO *myGlobalIndices;
   if (localDofsSize!=0)
   {
-    myGlobalIndices = new GlobalIndexType[ localDofsSize ];
+    myGlobalIndices = new GO[ localDofsSize ];
   }
   else
   {
@@ -4190,16 +4193,16 @@ MapPtr TSolution<Scalar>::getPartitionMap2(PartitionIndexType rank, set<GlobalIn
   }
 
   // copy from set object into the allocated array
-  GlobalIndexType offset = 0;
-  for (set<GlobalIndexType>::iterator indexIt = myGlobalIndicesSet.begin(); indexIt != myGlobalIndicesSet.end(); indexIt++ )
+  GO offset = 0;
+  for (GlobalIndexType globalIndex : myGlobalIndicesSet)
   {
-    myGlobalIndices[offset++] = *indexIt;
+    myGlobalIndices[offset++] = static_cast<GO>(globalIndex);
   }
-  GlobalIndexType cellOffset = _mesh->activeCellOffset() * _lagrangeConstraints->numElementConstraints();
-  GlobalIndexType globalIndex = cellOffset + numGlobalDofs;
+  GO cellOffset = _mesh->activeCellOffset() * _lagrangeConstraints->numElementConstraints();
+  GO globalIndex = cellOffset + numGlobalDofs;
   for (int elemLagrangeIndex=0; elemLagrangeIndex<_lagrangeConstraints->numElementConstraints(); elemLagrangeIndex++)
   {
-    for (IndexType cellIndex=0; cellIndex<numMyElements; cellIndex++)
+    for (LO cellIndex=0; cellIndex<numMyElements; cellIndex++)
     {
       myGlobalIndices[offset++] = globalIndex++;
     }
@@ -4226,8 +4229,8 @@ MapPtr TSolution<Scalar>::getPartitionMap2(PartitionIndexType rank, set<GlobalIn
   int totalRows = numGlobalDofs + globalNumElementLagrange + numGlobalLagrange + zeroMeanConstraintsSize;
 
   int indexBase = 0;
-  const Teuchos::ArrayView<const GlobalIndexType> rankGlobalIndices(myGlobalIndices, localDofsSize);
-  MapPtr partMap = Teuchos::rcp( new Tpetra::Map<IndexType,GlobalIndexType>(totalRows, rankGlobalIndices, indexBase, Comm) );
+  const Teuchos::ArrayView<const GO> rankGlobalIndices(myGlobalIndices, localDofsSize);
+  MapPtr partMap = Teuchos::rcp( new Tpetra::Map<>(totalRows, rankGlobalIndices, indexBase, Comm) );
 
   if (localDofsSize!=0)
   {
@@ -4336,6 +4339,7 @@ void TSolution<Scalar>::projectOntoMesh(const map<int, TFunctionPtr<Scalar> > &f
 {
   if (_lhsVector.get()==NULL)
   {
+    // NOTE: initializeLHSVector() does MPI communication; this is not ideal, given that projectOntoMesh does not otherwise require this (and doesn't actually use LHS vector.  Can we eliminate this??
     initializeLHSVector();
   }
 

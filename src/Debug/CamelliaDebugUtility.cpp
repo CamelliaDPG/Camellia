@@ -17,34 +17,38 @@
 
 #include <iostream>
 
-using namespace std;
-
 namespace Camellia
 {
   template<typename container_type>
-  void print(ostream &out, string name, container_type &data)
+  void print(ostream &out, const std::string &name, const container_type &data)
   {
     out << name << ": ";
-    for (typename container_type::iterator dataIt=data.begin(); dataIt != data.end(); dataIt++)
+    for (const auto & entry : data)
     {
-      out << *dataIt << " ";
+      out << entry << " ";
     }
     out << endl;
   }
   
   template<typename key_type, typename value_type>
-  void print(ostream &out, string name, map<key_type, value_type> &data)
+  void print(ostream &out, const std::string &name, const map<key_type, value_type> &data)
   {
     out << name << ": ";
-    for (typename map<key_type, value_type>::iterator dataIt=data.begin(); dataIt != data.end(); dataIt++)
+    for (const auto & entry : data)
     {
-      out << "(" << dataIt->first << " => " << dataIt->second << ") ";
+      out << "(" << entry.first << " => " << entry.second << ") ";
     }
     out << endl;
   }
+
+  template<typename data_type>
+  void print(const std::string &name, const std::set<data_type> &data);
+
+  template<typename key_type, typename value_type>
+  void print(const std::string &name, const std::map<key_type, value_type> &data);
   
 //  template<typename data_type>
-//  void print(string name, vector<data_type> &data)
+//  void print(const std::string &name, const vector<data_type> &data)
 //  {
 //    cout << name << ": ";
 //    for (int i=0; i<data.size(); i++)
@@ -55,7 +59,7 @@ namespace Camellia
 //  }
 //  
 //  template<typename data_type>
-//  void print(string name, set<data_type> &data)
+//  void print(const std::string &name, const set<data_type> &data)
 //  {
 //    cout << name << ": ";
 //    for (typename set<data_type>::iterator dataIt=data.begin(); dataIt != data.end(); dataIt++)
@@ -66,115 +70,115 @@ namespace Camellia
 //  }
   
   template<typename container_type>
-  void print(string name, container_type &data)
+  void print(const std::string &name, const container_type &data)
   {
     print<container_type>(cout,name,data);
   }
   
   template<typename key_type, typename value_type>
-  void print(string name, map<key_type, value_type> &data)
+  void print(const std::string &name, const map<key_type, value_type> &data)
   {
     print<key_type,value_type>(cout,name,data);
   }
   
-  template void print<int,double>(string name, map<int, double> &data);
-  template void print<int,int>(string name, map<int, int> &data);
-  template void print<string,double>(string name, map<string, double> &data);
+  template void print<int,double>(const std::string &name, const std::map<int, double> &data);
+  template void print<int,int>(const std::string &name, const std::map<int, int> &data);
+  template void print<string,double>(const std::string &name, const std::map<string, double> &data);
   
-  void print(string name, map<int, double> data)
+  void print(const std::string &name, const std::map<int, double> &data)
   {
     print<int, double>(name, data);
   }
   
-  void print(string name, map<unsigned, double> data)
+  void print(const std::string &name, const std::map<unsigned, double> &data)
   {
     print<unsigned, double>(name, data);
   }
   
-  void print(string name, map<unsigned, unsigned> data)
+  void print(const std::string &name, const std::map<unsigned, unsigned> &data)
   {
     print<unsigned, unsigned>(name, data);
   }
   
-  void print(string name, vector<long long> data)
+  void print(const std::string &name, const vector<long long> &data)
   {
     print<vector<long long>>(name, data);
   }
   
-  void print(string name, vector<int> data)
+  void print(const std::string &name, const vector<int> &data)
   {
     print<vector<int>>(name, data);
   }
-  void print(string name, vector<unsigned> data)
+  void print(const std::string &name, const vector<unsigned> &data)
   {
     print<vector<unsigned>>(name, data);
   }
-  void print(string name, vector<double> data)
+  void print(const std::string &name, const vector<double> &data)
   {
     print<vector<double>>(name,data);
   }
-  void print(string name, set<unsigned> data)
+  void print(const std::string &name, const set<unsigned> &data)
   {
     print<set<unsigned>>(name, data);
   }
-  void print(string name, set<int> data)
+  void print(const std::string &name, const set<int> &data)
   {
     print<set<int>>(name, data);
   }
-  void print(string name, set<long long> data)
+  void print(const std::string &name, const set<long long> &data)
   {
     print<set<long long>>(name, data);
   }
-  void print(string name, set<double> data)
+  void print(const std::string &name, const set<double> &data)
   {
     print<set<double>>(name, data);
   }
   
-  void print(ostream &out, string name, map<int, double> data)
+  void print(ostream &out, const std::string &name, const map<int, double> &data)
   {
     print<int, double>(out, name, data);
   }
   
-  void print(ostream &out, string name, map<unsigned, double> data)
+  void print(ostream &out, const std::string &name, const map<unsigned, double> &data)
   {
     print<unsigned, double>(out, name, data);
   }
   
-  void print(ostream &out, string name, map<unsigned, unsigned> data)
+  void print(ostream &out, const std::string &name, const map<unsigned, unsigned> &data)
   {
     print<unsigned, unsigned>(out, name, data);
   }
   
-  void print(ostream &out, string name, vector<long long> data)
+  void print(ostream &out, const std::string &name, const vector<long long> &data)
   {
     print<vector<long long>>(out, name, data);
   }
   
-  void print(ostream &out, string name, vector<int> data)
+  void print(ostream &out, const std::string &name, const vector<int> &data)
   {
     print<vector<int>>(out, name, data);
   }
-  void print(ostream &out, string name, vector<unsigned> data)
+  void print(ostream &out, const std::string &name, const vector<unsigned> &data)
   {
     print<vector<unsigned>>(out, name, data);
   }
-  void print(ostream &out, string name, vector<double> data)
+  void print(ostream &out, const std::string &name, const vector<double> &data)
   {
     print<vector<double>>(out, name, data);
   }
-  void print(ostream &out, string name, set<unsigned> data)
+  void print(ostream &out, const std::string &name, const set<unsigned> &data)
   {
     print<set<unsigned>>(out, name, data);
   }
-  void print(ostream &out, string name, set<int> data)
+  void print(ostream &out, const std::string &name, const set<int> &data)
   {
     print<set<int>>(out, name, data);
   }
-  void print(ostream &out, string name, set<long long> data)
+  void print(ostream &out, const std::string &name, const set<long long> &data)
   {
     print<set<long long>>(out, name, data);
   }
-  void print(ostream &out, string name, set<double> data)
+  void print(ostream &out, const std::string &name, const set<double> &data)
   {
     print<set<double>>(out, name, data);
   }

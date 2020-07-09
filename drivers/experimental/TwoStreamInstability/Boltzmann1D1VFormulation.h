@@ -18,12 +18,15 @@
 #include "TypeDefs.h"
 
 #include "BF.h"
+#include "GMGSolver.h"
+#include "PhasePhysicalMeshMap1D1V.h"
 #include "QuadraturePointFunction.h"
 #include "SolutionStage.h"
 #include "VarFactory.h"
 
 namespace Camellia
 {
+
   class Boltzmann1D1VFormulation : public SolutionStageObserver
 {
 public:
@@ -64,8 +67,13 @@ private:
   Teuchos::RCP<QuadraturePointFunction> _f_velocityIntegral; // integral of f over all velocity space
   FunctionPtr _E_extruded;  // E solution extended to the Boltzmann mesh
   
+  // TODO: consider whether these are still useful; PhasePhysicalMeshMap1D1V should provide everything we need (and if it doesn't, make it so)
   std::map<GlobalIndexType, std::vector<GlobalIndexType> > _spatialCellIDToPhaseSpaceCellIDs;
-  std::map<GlobalIndexType, GlobalIndexType> _phaseSpaceCellIDToSpatialCellID;
+  std::map<GlobalIndexType, std::set<GlobalIndexType> > _phaseSpaceCellIDToSpatialCellID;
+  
+  Teuchos::RCP<PhasePhysicalMeshMap1D1V> _phaseSpacePhysicalMeshMap;
+  
+  Teuchos::RCP<GMGSolver> _gmgSolver;
   
   // Boltzmann itself (discretization is 2D because 1D1V):
   static const string S_F;       // trial variable - distribution function f
@@ -83,7 +91,8 @@ public:
   Boltzmann1D1VFormulation(Boltzmann1D1VFormulationChoice formulationChoice, double q, double eps0, double m, double dt,
                            const double x0, const double xWidth, const int xElements,
                            const double v0, const double vWidth, const int vElements,
-                           const int H1Order, const int delta_k, ERKTableauPtr erkTableau);
+                           const int H1Order, const int delta_k, ERKTableauPtr erkTableau,
+                           const int numUniformRefinements = 0);
 
   //! set initial conditions.  Solves for initial E, E_hat, and sets t=0;
   void setInitialConditions(FunctionPtr f0);
@@ -109,6 +118,8 @@ public:
   MeshPtr boltzmannMesh();
   MeshPtr gaussMesh();
   
+  Teuchos::RCP<PhasePhysicalMeshMap1D1V> phaseSpacePhysicalMeshMap();
+  
   SolutionPtr boltzmannSolution();
   SolutionPtr boltzmannPreviousSolution();
   SolutionPtr gaussSolution();
@@ -125,8 +136,15 @@ public:
   const std::map<GlobalIndexType, std::vector<GlobalIndexType> > &spatialCellIDToPhaseSpaceCellIDsMap();
   
   //! map that is reverse of the above; there is exactly one spatial cell for each phase space cell
-  const std::map<GlobalIndexType, GlobalIndexType> &phaseSpaceCellIDToSpatialCellID();
+  const std::map<GlobalIndexType, std::set<GlobalIndexType> > &phaseSpaceCellIDToSpatialCellIDs();
 };
+
+// TODO: move this somewhere more generic: a TensorUtilities.h, or something
+KOKKOS_INLINE_FUNCTION int getTensorPointOrdinal(const int spatialPointOrdinal, const int velocityPointOrdinal, const int numSpatialPoints)
+{
+  return spatialPointOrdinal + numSpatialPoints * velocityPointOrdinal;
+}
+
 }
 
 #endif

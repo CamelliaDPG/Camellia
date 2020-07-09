@@ -1530,6 +1530,11 @@ void GDAMaximumRule2D::rebuildLookups()
   }
 }
 
+void GDAMaximumRule2D::setAllowMeshTopologyPruning(bool allowMeshTopologyPruning)
+{
+  TEUCHOS_TEST_FOR_EXCEPTION(allowMeshTopologyPruning, std::invalid_argument, "GDAMaximumRule2D does not support MeshTopology pruning");
+}
+
 void GDAMaximumRule2D::setElementType(GlobalIndexType cellID, ElementTypePtr newType, bool sideUpgradeOnly)
 {
   CellPtr cell = _meshTopology->getCell(cellID);

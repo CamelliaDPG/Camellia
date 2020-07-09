@@ -1,6 +1,7 @@
 #include "HDF5Exporter.h"
 #include "MeshFactory.h"
 #include "RefinementStrategy.h"
+#include "RHS.h"
 #include "SimpleFunction.h"
 #include "Solver.h"
 #include "TypeDefs.h"
@@ -17,6 +18,8 @@ class InitialConditions : public SimpleFunction<double>
   double _r0;  // width control
 public:
   InitialConditions(double r = 0.15)
+  :
+  SimpleFunction<double>("ConvectingConeExample-InitialConditions")
   {
     _r0 = r;
   }

@@ -21,9 +21,9 @@ namespace Camellia
     TVectorPtr<Scalar> _rhsVector; // adjusted according to BC values
     TSolutionPtr<Scalar> _soln;
     
-    Teuchos::RCP<Tpetra::Vector<Scalar,IndexType,GlobalIndexType>> _diag_sqrt_inverse; // inverse of the diagonal of the normal matrix (A^T * A)
+    Teuchos::RCP<Tpetra::Vector<Scalar>> _diag_sqrt_inverse; // inverse of the diagonal of the normal matrix (A^T * A)
     
-    typedef Teuchos::RCP<Tpetra::Map<GlobalIndexType,GlobalIndexType>>  SolutionMapPtr;
+    typedef Teuchos::RCP<Tpetra::Map<>>  SolutionMapPtr;
     // Tpetra Map that goes from our DLS solution to the _soln LHS vector:
     SolutionMapPtr _dlsToSolnMap;
     // (the reason being that we'll eliminate BCs from our DLS LHS, but these exist explicitly in _soln)

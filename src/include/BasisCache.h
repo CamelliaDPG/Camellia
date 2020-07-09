@@ -133,7 +133,7 @@ protected:
   virtual void createSideCaches();
 
   // protected side cache constructor:
-  BasisCache(int sideIndex, BasisCachePtr volumeCache, int trialDegree, int testDegree, BasisPtr multiBasisIfAny);
+  BasisCache(int sideIndex, BasisCachePtr volumeCache, int trialDegree, int testDegree, BasisPtr multiBasisIfAny, int cubatureEnrichmentDegree=0);
 
   // protected "fake" side cache constructor:
   BasisCache(int fakeSideOrdinal, BasisCachePtr volumeCache, const Camellia::FieldContainer<double> &volumeRefPoints,

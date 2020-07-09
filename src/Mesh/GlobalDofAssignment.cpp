@@ -139,7 +139,7 @@ GlobalDofAssignment::GlobalDofAssignment( GlobalDofAssignment &otherGDA ) : DofI
   _partitionForCellID = otherGDA._partitionForCellID;
 
   _activeCellMap = Teuchos::rcp( new Epetra_Map(*otherGDA._activeCellMap) );
-//  _activeCellMap2 = Teuchos::rcp( new Tpetra::Map<IndexType,GlobalIndexType>(*otherGDA._activeCellMap2) );
+//  _activeCellMap2 = Teuchos::rcp( new Tpetra::Map<>(*otherGDA._activeCellMap2) );
 
   _numPartitions = otherGDA._numPartitions;
 
@@ -392,16 +392,26 @@ void GlobalDofAssignment::constructActiveCellMap()
 
 void GlobalDofAssignment::constructActiveCellMap2()
 {
-  const set<GlobalIndexType>* cellIDs = &cellsInPartition(-1);
-  const vector<GlobalIndexType> myCellIDsVector(cellIDs->begin(), cellIDs->end());
-  Teuchos::ArrayView< const GlobalIndexType > myCellIDsAV(myCellIDsVector);
+  using LO = ::Tpetra::Details::DefaultTypes::local_ordinal_type;
+  using GO = ::Tpetra::Details::DefaultTypes::global_ordinal_type;
+  
+  const set<GlobalIndexType> & cellIDs = cellsInPartition(-1);
+  vector<GO> myCellIDsVector(cellIDs.size());
+  
+  int i=0;
+  for (const GlobalIndexType & cellID : cellIDs)
+  {
+    myCellIDsVector[i++] = static_cast<GO>(cellID);
+  }
+  
+  Teuchos::ArrayView< const GO > myCellIDsAV(myCellIDsVector);
 
   int indexBase = 0;
   if (myCellIDsVector.size()==0)
-    _activeCellMap2 = Teuchos::rcp( new Tpetra::Map<IndexType,GlobalIndexType>(Teuchos::OrdinalTraits<Tpetra::global_size_t>::invalid(),
+    _activeCellMap2 = Teuchos::rcp( new Tpetra::Map<>(Teuchos::OrdinalTraits<Tpetra::global_size_t>::invalid(),
                                     myCellIDsVector.size(), indexBase, _partitionPolicy->TeuchosComm()) );
   else
-    _activeCellMap2 = Teuchos::rcp( new Tpetra::Map<IndexType,GlobalIndexType>(Teuchos::OrdinalTraits<Tpetra::global_size_t>::invalid(),
+    _activeCellMap2 = Teuchos::rcp( new Tpetra::Map<>(Teuchos::OrdinalTraits<Tpetra::global_size_t>::invalid(),
                                     myCellIDsAV, indexBase, _partitionPolicy->TeuchosComm()) );
 }
 

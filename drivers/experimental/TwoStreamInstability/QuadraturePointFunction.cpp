@@ -22,6 +22,9 @@ bool QuadraturePointFunction::boundaryValueOnly()
 
 void QuadraturePointFunction::updateValues()
 {
+  // willUpdateValues() may do MPI communication, so it must be called unconditionally
+  willUpdateValues();
+  
   // for now, we are writing this with the assumption that all elements have the same ElementType
   // let's check that that's true on the elements that we see locally:
   auto & cellIDs = _mesh->cellIDsInPartition();
@@ -36,55 +39,26 @@ void QuadraturePointFunction::updateValues()
     auto thisElemType = _mesh->getElementType(cellID);
     TEUCHOS_TEST_FOR_EXCEPTION(!thisElemType->equals(*elemType), std::invalid_argument, "Right now, QuadraturePointFunction only supports meshes with the same ElementType across all cells.");
   }
-  // if we get here, then elemType is filled with the element type common to all the elements we see
-  bool testVsTest = false; // NOTE that if we want to support using this for test inner product weights, we should add some API that sets this to true
-  BasisCachePtr basisCache = BasisCache::basisCacheForCellType(_mesh, elemType, testVsTest, _quadratureEnrichment);
   
   std::vector<GlobalIndexType> cellIDsVector(cellIDs.begin(),cellIDs.end());
-  basisCache->setCellIDs(cellIDsVector);
+  _cellIDs = cellIDsVector;
   
-  const int numCells = cellIDs.size();
-  const int fxnRank  = this->rank();
-  const int spaceDim = basisCache->cellTopology()->getDimension();
-  
-  willUpdateValues();
-  
-  if (!_boundaryValueOnly)
+  if (elemType != Teuchos::null)
   {
-    auto numPoints = basisCache->getRefCellPoints().dimension(0);
-    int numEntriesPerCell = numPoints;
-    for (int d=0; d<fxnRank; d++)
-    {
-      numEntriesPerCell *= spaceDim;
-    }
+    // if we get here, then elemType is filled with the element type common to all the elements we see
+    bool testVsTest = false; // NOTE that if we want to support using this for test inner product weights, we should add some API that sets this to true
+    BasisCachePtr basisCache = BasisCache::basisCacheForCellType(_mesh, elemType, testVsTest, _quadratureEnrichment);
     
-    if (fxnRank == 0)
-    {
-      _valuesForActiveCells = FieldContainer<double>(numCells,numPoints);
-    }
-    else if (fxnRank == 1)
-    {
-      _valuesForActiveCells = FieldContainer<double>(numCells,numPoints,spaceDim);
-    }
-    else if (fxnRank == 2)
-    {
-      _valuesForActiveCells = FieldContainer<double>(numCells,numPoints,spaceDim,spaceDim);
-    }
-    else
-    {
-      TEUCHOS_TEST_FOR_EXCEPTION(true, std::invalid_argument, "unsupported function rank");
-    }
     
-    this->updateValues(_valuesForActiveCells, basisCache);
-  }
-  else // _boundaryValueOnly = true
-  {
-    const int sideCount = elemType->cellTopoPtr->getSideCount();
-    _sideValuesForActiveCells = std::vector< FieldContainer<double> >(sideCount);
-    for (int sideOrdinal=0; sideOrdinal<sideCount; sideOrdinal++)
+    basisCache->setCellIDs(cellIDsVector);
+    
+    const int numCells = cellIDs.size();
+    const int fxnRank  = this->rank();
+    const int spaceDim = basisCache->cellTopology()->getDimension();
+    
+    if (!_boundaryValueOnly)
     {
-      BasisCachePtr sideBasisCache = basisCache->getSideBasisCache(sideOrdinal);
-      const int numPoints = sideBasisCache->getRefCellPoints().dimension(0);
+      auto numPoints = basisCache->getRefCellPoints().dimension(0);
       int numEntriesPerCell = numPoints;
       for (int d=0; d<fxnRank; d++)
       {
@@ -93,24 +67,57 @@ void QuadraturePointFunction::updateValues()
       
       if (fxnRank == 0)
       {
-        _sideValuesForActiveCells[sideOrdinal] = FieldContainer<double>(numCells,numPoints);
+        _valuesForActiveCells = FieldContainer<double>(numCells,numPoints);
       }
       else if (fxnRank == 1)
       {
-        _sideValuesForActiveCells[sideOrdinal] = FieldContainer<double>(numCells,numPoints,spaceDim);
+        _valuesForActiveCells = FieldContainer<double>(numCells,numPoints,spaceDim);
       }
       else if (fxnRank == 2)
       {
-        _sideValuesForActiveCells[sideOrdinal] = FieldContainer<double>(numCells,numPoints,spaceDim,spaceDim);
+        _valuesForActiveCells = FieldContainer<double>(numCells,numPoints,spaceDim,spaceDim);
       }
       else
       {
         TEUCHOS_TEST_FOR_EXCEPTION(true, std::invalid_argument, "unsupported function rank");
       }
-      this->updateValues(_sideValuesForActiveCells[sideOrdinal], sideBasisCache);
+      
+      this->updateValues(_valuesForActiveCells, basisCache);
+    }
+    else // _boundaryValueOnly = true
+    {
+      const int sideCount = elemType->cellTopoPtr->getSideCount();
+      _sideValuesForActiveCells = std::vector< FieldContainer<double> >(sideCount);
+      for (int sideOrdinal=0; sideOrdinal<sideCount; sideOrdinal++)
+      {
+        BasisCachePtr sideBasisCache = basisCache->getSideBasisCache(sideOrdinal);
+        const int numPoints = sideBasisCache->getRefCellPoints().dimension(0);
+        int numEntriesPerCell = numPoints;
+        for (int d=0; d<fxnRank; d++)
+        {
+          numEntriesPerCell *= spaceDim;
+        }
+        
+        if (fxnRank == 0)
+        {
+          _sideValuesForActiveCells[sideOrdinal] = FieldContainer<double>(numCells,numPoints);
+        }
+        else if (fxnRank == 1)
+        {
+          _sideValuesForActiveCells[sideOrdinal] = FieldContainer<double>(numCells,numPoints,spaceDim);
+        }
+        else if (fxnRank == 2)
+        {
+          _sideValuesForActiveCells[sideOrdinal] = FieldContainer<double>(numCells,numPoints,spaceDim,spaceDim);
+        }
+        else
+        {
+          TEUCHOS_TEST_FOR_EXCEPTION(true, std::invalid_argument, "unsupported function rank");
+        }
+        this->updateValues(_sideValuesForActiveCells[sideOrdinal], sideBasisCache);
+      }
     }
   }
-  _cellIDs = cellIDsVector;
 }
 
 void QuadraturePointFunction::values(Camellia::FieldContainer<double> &values, BasisCachePtr basisCache)

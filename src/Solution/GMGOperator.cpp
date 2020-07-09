@@ -56,7 +56,7 @@ extern "C" void HPM_Start(char *);
 extern "C" void HPM_Stop(char *);
 #endif
 
-GMGOperator::GMGOperator(BCPtr zeroBCs, MeshPtr coarseMesh, IPPtr coarseIP,
+GMGOperator::GMGOperator(GMGOperator::MultigridStrategy multigridStrategy, BCPtr zeroBCs, MeshPtr coarseMesh, IPPtr coarseIP,
                          MeshPtr fineMesh, Teuchos::RCP<DofInterpreter> fineDofInterpreter, Epetra_Map finePartitionMap,
                          Teuchos::RCP<Solver> coarseSolver, bool useStaticCondensation, Teuchos::RCP<BasisReconciliation> sharedBasisReconciliation) :
 Narrator("GMGOperator"),
@@ -90,7 +90,7 @@ _finePartitionMap(finePartitionMap), _br(sharedBasisReconciliation)
   
   // additive implies a two-level operator.
   _smootherApplicationType = MULTIPLICATIVE; // this field is deprecated
-  _multigridStrategy = V_CYCLE;
+  _multigridStrategy = multigridStrategy;
 
   _levelOfFill = 2;
   _fillRatio = 5.0;
@@ -153,10 +153,21 @@ _finePartitionMap(finePartitionMap), _br(sharedBasisReconciliation)
   _timeConstruction += constructionTimer.ElapsedTime();
 }
 
+GMGOperator::GMGOperator(BCPtr zeroBCs, MeshPtr coarseMesh, IPPtr coarseIP,
+                         MeshPtr fineMesh, Teuchos::RCP<DofInterpreter> fineDofInterpreter, Epetra_Map finePartitionMap,
+                         Teuchos::RCP<Solver> coarseSolver, bool useStaticCondensation, Teuchos::RCP<BasisReconciliation> sharedBasisReconciliation)
+: GMGOperator(V_CYCLE, zeroBCs, coarseMesh, coarseIP, fineMesh, fineDofInterpreter, finePartitionMap, coarseSolver, useStaticCondensation, sharedBasisReconciliation) {}
+
+
+GMGOperator::GMGOperator(GMGOperator::MultigridStrategy multigridStrategy, BCPtr zeroBCs, MeshPtr coarseMesh, IPPtr coarseIP,
+                         MeshPtr fineMesh, Teuchos::RCP<DofInterpreter> fineDofInterpreter, Epetra_Map finePartitionMap,
+                         bool useStaticCondensation, Teuchos::RCP<BasisReconciliation> sharedBasisReconciliation)
+: GMGOperator(multigridStrategy, zeroBCs, coarseMesh, coarseIP, fineMesh, fineDofInterpreter, finePartitionMap, Teuchos::null, useStaticCondensation, sharedBasisReconciliation) {}
+
 GMGOperator::GMGOperator(BCPtr zeroBCs, MeshPtr coarseMesh, IPPtr coarseIP, MeshPtr fineMesh,
                          Teuchos::RCP<DofInterpreter> fineDofInterpreter, Epetra_Map finePartitionMap,
                          bool useStaticCondensation, Teuchos::RCP<BasisReconciliation> sharedBasisReconciliation)
-: GMGOperator(zeroBCs, coarseMesh, coarseIP, fineMesh,fineDofInterpreter, finePartitionMap, Teuchos::null, useStaticCondensation, sharedBasisReconciliation) {}
+: GMGOperator(zeroBCs, coarseMesh, coarseIP, fineMesh, fineDofInterpreter, finePartitionMap, Teuchos::null, useStaticCondensation, sharedBasisReconciliation) {}
 
 void GMGOperator::clearTimings()
 {
@@ -2130,7 +2141,10 @@ void GMGOperator::setFineCoarseRolesSwapped(bool value)
 void GMGOperator::setFineStiffnessMatrix(Epetra_CrsMatrix *fineStiffness)
 {
   _fineStiffnessMatrix = fineStiffness;
-  computeCoarseStiffnessMatrix(fineStiffness);
+  if (_multigridStrategy != SMOOTHER_ONLY)
+  {
+    computeCoarseStiffnessMatrix(fineStiffness);
+  }
   setUpSmoother(fineStiffness);
   
   if (_coarseOperator != Teuchos::null)
@@ -2527,6 +2541,8 @@ std::string GMGOperator::smootherString(SmootherChoice choice)
       return "Point Jacobi";
     case POINT_SYMMETRIC_GAUSS_SEIDEL:
       return "Point Symmetric Gauss-Seidel";
+    default:
+      return "Unknown smoother type";
   }
 }
 
