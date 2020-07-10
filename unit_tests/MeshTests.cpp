@@ -628,8 +628,8 @@ MeshPtr makeTestMesh( int spaceDim, bool spaceTime )
       if (cellNeighborIDs != expectedNeighbors)
       {
         out << "NeighborIDs for cell " << cell->cellIndex() << " do not match expected.\n";
-        print(out, "neighborIDs", cellNeighborIDs);
-        print(out, "expectedNeighborIDs", expectedNeighbors);
+        Camellia::print(out, "neighborIDs", cellNeighborIDs);
+        Camellia::print(out, "expectedNeighborIDs", expectedNeighbors);
         success = false;
       }
     };
