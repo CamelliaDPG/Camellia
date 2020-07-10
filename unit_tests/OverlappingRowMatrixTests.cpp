@@ -363,8 +363,8 @@ namespace
       }
       else
       {
-        print("expectedGlobalDofIndices", expectedGlobalDofIndices);
-        print("actualGlobalDofIndices", actualGlobalDofIndices);
+        Camellia::print("expectedGlobalDofIndices", expectedGlobalDofIndices);
+        Camellia::print("actualGlobalDofIndices", actualGlobalDofIndices);
       }
     }
   }

@@ -181,7 +181,7 @@ namespace
     auto colMap = feMatrix->ColMap();
     
     auto & myCellIDs = mesh->cellIDsInPartition();
-    print(out, "myCellIDs", myCellIDs);
+    Camellia::print(out, "myCellIDs", myCellIDs);
     for (GlobalIndexType myCellID : myCellIDs)
     {
       out << "cellID " << myCellID << endl;
