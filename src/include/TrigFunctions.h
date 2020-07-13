@@ -63,27 +63,30 @@ public:
   std::string displayString();
 };
 
-class Cos_ax : public SimpleFunction<double>
+class Cos_ax : public TFunction<double>
 {
   double _a,_b;
 public:
   Cos_ax(double a, double b=0);
-  double value(double x);
-  TFunctionPtr<double> dx();
-  TFunctionPtr<double> dy();
+  TFunctionPtr<double> dx() override;
+  TFunctionPtr<double> dy() override;
 
-  std::string displayString();
+  void values(typename FieldContainer<double>::DeviceView &values, ValueModificationType modType, BasisCachePtr basisCache) override;
+  
+  std::string displayString() override;
 };
 
-class Sin_ax : public SimpleFunction<double>
+class Sin_ax : public TFunction<double>
 {
   double _a, _b;
 public:
   Sin_ax(double a, double b=0);
-  double value(double x);
-  TFunctionPtr<double> dx();
-  TFunctionPtr<double> dy();
-  std::string displayString();
+  TFunctionPtr<double> dx() override;
+  TFunctionPtr<double> dy() override;
+  
+  void values(typename FieldContainer<double>::DeviceView &values, ValueModificationType modType, BasisCachePtr basisCache) override;
+  
+  std::string displayString() override;
 };
 
 class Cos_ay : public SimpleFunction<double>
