@@ -227,15 +227,28 @@ TFunctionPtr<double> Cos_x::dz()
 }
 
 Cos_ax::Cos_ax(double a, double b)
-: SimpleFunction<double>("Cos_ax")
+: TFunction<double>("Cos_ax",0)
 {
   _a = a;
   _b = b;
 }
-double Cos_ax::value(double x)
+
+void Cos_ax::values(typename FieldContainer<double>::DeviceView &values, ValueModificationType modType, BasisCachePtr basisCache)
 {
-  return std::cos( _a * x + _b);
+  TEUCHOS_TEST_FOR_EXCEPTION(values.rank() != 2, std::invalid_argument, "rank is not equal to 2");
+  const Camellia::FieldContainer<double> &physicalPoints = basisCache->getPhysicalCubaturePoints();
+  auto pointsView = physicalPoints.checkoutDeviceView(); // (C,P,D)
+  auto rangePolicy = FieldContainer<double>::getMDRangePolicy2(values); // (C,P) dimension
+  double a = this->_a;
+  double b = this->_b;
+  Kokkos::parallel_for("Cos_ax values", rangePolicy,
+  KOKKOS_LAMBDA (const int cellOrdinal, const int pointOrdinal) {
+    const double &x = pointsView(cellOrdinal,pointOrdinal,0);
+    assignValue(values(cellOrdinal,pointOrdinal), modType, std::cos(a * x + b) );
+  });
+  physicalPoints.checkinDeviceView(false);
 }
+
 TFunctionPtr<double> Cos_ax::dx()
 {
   return -_a * (TFunctionPtr<double>) Teuchos::rcp(new Sin_ax(_a,_b));
@@ -279,15 +292,28 @@ std::string Cos_ay::displayString()
 
 
 Sin_ax::Sin_ax(double a, double b)
-: SimpleFunction<double>("Sin_ax")
+: TFunction<double>("Sin_ax",0)
 {
   _a = a;
   _b = b;
 }
-double Sin_ax::value(double x)
+
+void Sin_ax::values(typename FieldContainer<double>::DeviceView &values, ValueModificationType modType, BasisCachePtr basisCache)
 {
-  return std::sin( _a * x + _b);
+  TEUCHOS_TEST_FOR_EXCEPTION(values.rank() != 2, std::invalid_argument, "rank is not equal to 2");
+  const Camellia::FieldContainer<double> &physicalPoints = basisCache->getPhysicalCubaturePoints();
+  auto pointsView = physicalPoints.checkoutDeviceView(); // (C,P,D)
+  auto rangePolicy = FieldContainer<double>::getMDRangePolicy2(values); // (C,P) dimension
+  double a = this->_a;
+  double b = this->_b;
+  Kokkos::parallel_for("Cos_ax values", rangePolicy,
+  KOKKOS_LAMBDA (const int cellOrdinal, const int pointOrdinal) {
+    const double &x = pointsView(cellOrdinal,pointOrdinal,0);
+    assignValue(values(cellOrdinal,pointOrdinal), modType, std::sin(a * x + b) );
+  });
+  physicalPoints.checkinDeviceView(false);
 }
+
 TFunctionPtr<double> Sin_ax::dx()
 {
   return _a * (TFunctionPtr<double>) Teuchos::rcp(new Cos_ax(_a,_b));
