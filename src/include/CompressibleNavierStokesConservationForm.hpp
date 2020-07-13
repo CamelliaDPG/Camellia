@@ -153,8 +153,8 @@ namespace Camellia
     int nonlinearIterationCount();
     
     // ! Loads the mesh and solution from disk, if they were previously saved using save().  In the present
-    // ! implementation, assumes that the constructor arguments provided to CompressibleNavierStokesFormulation were the same
-    // ! on the CompressibleNavierStokesFormulation on which save() was invoked as they were for this CompressibleNavierStokesFormulation.
+    // ! implementation, assumes that the constructor arguments provided to CompressibleNavierStokesConservationForm were the same
+    // ! on the CompressibleNavierStokesConservationForm on which save() was invoked as they were for this CompressibleNavierStokesConservationForm instance.
     void load(std::string prefixString);
     
     // ! Returns viscosity mu.

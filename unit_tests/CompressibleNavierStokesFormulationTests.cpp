@@ -11,8 +11,9 @@
 
 #include "MeshFactory.h"
 #include "CompressibleNavierStokesFormulation.h"
-#include "CompressibleNavierStokesFormulationRefactor.hpp"
+#include "RHS.h"
 #include "SimpleFunction.h"
+#include "Solution.h"
 
 using namespace Camellia;
 
@@ -44,7 +45,7 @@ namespace
     double Re    = TEST_RE; // Reynolds number
     
     bool useConformingTraces = true;
-    auto form = CompressibleNavierStokesFormulationRefactor::steadyFormulation(spaceDim, Re, useConformingTraces,
+    auto form = CompressibleNavierStokesFormulation::steadyFormulation(spaceDim, Re, useConformingTraces,
                                                                                meshTopo, polyOrder, delta_k);
     
     // sanity checks that the constructor has set things up the way we assume:
@@ -110,15 +111,15 @@ namespace
     double dt    = 1.0; // only used for unsteady
     
     bool useConformingTraces = true;
-    Teuchos::RCP<CompressibleNavierStokesFormulationRefactor> form;
+    Teuchos::RCP<CompressibleNavierStokesFormulation> form;
     if (steady)
     {
-      form = CompressibleNavierStokesFormulationRefactor::steadyFormulation(spaceDim, Re, useConformingTraces,
+      form = CompressibleNavierStokesFormulation::steadyFormulation(spaceDim, Re, useConformingTraces,
                                                                             meshTopo, polyOrder, delta_k);
     }
     else
     {
-      form = CompressibleNavierStokesFormulationRefactor::timeSteppingFormulation(spaceDim, Re, useConformingTraces,
+      form = CompressibleNavierStokesFormulation::timeSteppingFormulation(spaceDim, Re, useConformingTraces,
                                                                                   meshTopo, polyOrder, delta_k);
       form->setTimeStep(dt);
     }
@@ -272,7 +273,7 @@ namespace
     testResidual_1D(u, rho, T, cubatureEnrichment, tol, steady, out, success);
   }
   
-  TEUCHOS_UNIT_TEST(CompressibleNavierStokesFormulationRefactor, Forcing_1D_Steady_AllZero)
+  TEUCHOS_UNIT_TEST(CompressibleNavierStokesFormulation, Forcing_1D_Steady_AllZero)
   {
     double tol = 1e-16;
     int cubatureEnrichment = 0;
@@ -285,7 +286,7 @@ namespace
     testForcing_1D(u, rho, T, f_c, f_m, f_e, cubatureEnrichment, tol, out, success);
   }
   
-  TEUCHOS_UNIT_TEST(CompressibleNavierStokesFormulationRefactor, Forcing_1D_Steady_LinearTemp)
+  TEUCHOS_UNIT_TEST(CompressibleNavierStokesFormulation, Forcing_1D_Steady_LinearTemp)
   {
     double tol = 1e-16;
     int cubatureEnrichment = 0;
@@ -298,7 +299,7 @@ namespace
     testForcing_1D(u, rho, T, f_c, f_m, f_e, cubatureEnrichment, tol, out, success);
   }
   
-  TEUCHOS_UNIT_TEST(CompressibleNavierStokesFormulationRefactor, Forcing_1D_Steady_LinearDensityUnitVelocity)
+  TEUCHOS_UNIT_TEST(CompressibleNavierStokesFormulation, Forcing_1D_Steady_LinearDensityUnitVelocity)
   {
     double tol = 1e-16;
     int cubatureEnrichment = 0;
@@ -311,7 +312,7 @@ namespace
     testForcing_1D(u, rho, T, f_c, f_m, f_e, cubatureEnrichment, tol, out, success);
   }
   
-  TEUCHOS_UNIT_TEST(CompressibleNavierStokesFormulationRefactor, Forcing_1D_Steady_LinearVelocity)
+  TEUCHOS_UNIT_TEST(CompressibleNavierStokesFormulation, Forcing_1D_Steady_LinearVelocity)
   {
     double tol = 1e-16;
     int cubatureEnrichment = 0;
@@ -325,7 +326,7 @@ namespace
     testForcing_1D(u, rho, T, f_c, f_m, f_e, cubatureEnrichment, tol, out, success);
   }
   
-  TEUCHOS_UNIT_TEST(CompressibleNavierStokesFormulationRefactor, Forcing_1D_Steady_LinearTempUnitDensity)
+  TEUCHOS_UNIT_TEST(CompressibleNavierStokesFormulation, Forcing_1D_Steady_LinearTempUnitDensity)
   {
     double tol = 1e-16;
     int cubatureEnrichment = 2;
@@ -339,7 +340,7 @@ namespace
     testForcing_1D(u, rho, T, f_c, f_m, f_e, cubatureEnrichment, tol, out, success);
   }
   
-  TEUCHOS_UNIT_TEST(CompressibleNavierStokesFormulationRefactor, Forcing_1D_Steady_LinearVelocityUnitDensity)
+  TEUCHOS_UNIT_TEST(CompressibleNavierStokesFormulation, Forcing_1D_Steady_LinearVelocityUnitDensity)
   {
     double tol = 1e-16;
     int cubatureEnrichment = 2;
@@ -353,7 +354,7 @@ namespace
     testForcing_1D(u, rho, T, f_c, f_m, f_e, cubatureEnrichment, tol, out, success);
   }
   
-  TEUCHOS_UNIT_TEST(CompressibleNavierStokesFormulationRefactor, Forcing_1D_Steady_QuadraticTemp)
+  TEUCHOS_UNIT_TEST(CompressibleNavierStokesFormulation, Forcing_1D_Steady_QuadraticTemp)
   {
     double tol = 1e-16;
     int cubatureEnrichment = 0;
@@ -367,7 +368,7 @@ namespace
     testForcing_1D(u, rho, T, f_c, f_m, f_e, cubatureEnrichment, tol, out, success);
   }
   
-  TEUCHOS_UNIT_TEST(CompressibleNavierStokesFormulationRefactor, Residual_1D_Steady_AllZero)
+  TEUCHOS_UNIT_TEST(CompressibleNavierStokesFormulation, Residual_1D_Steady_AllZero)
   {
     double tol = 1e-16;
     int cubatureEnrichment = 0;
@@ -377,7 +378,7 @@ namespace
     testSteadyResidual_1D(u, rho, T, cubatureEnrichment, tol, out, success);
   }
   
-  TEUCHOS_UNIT_TEST(CompressibleNavierStokesFormulationRefactor, Residual_1D_Steady_AllOne)
+  TEUCHOS_UNIT_TEST(CompressibleNavierStokesFormulation, Residual_1D_Steady_AllOne)
   {
     double tol = 1e-13;
     int cubatureEnrichment = 0;
@@ -387,7 +388,7 @@ namespace
     testSteadyResidual_1D(u, rho, T, cubatureEnrichment, tol, out, success);
   }
   
-  TEUCHOS_UNIT_TEST(CompressibleNavierStokesFormulationRefactor, Residual_1D_Steady_UnitDensity)
+  TEUCHOS_UNIT_TEST(CompressibleNavierStokesFormulation, Residual_1D_Steady_UnitDensity)
   {
     double tol = 1e-15;
     int cubatureEnrichment = 0;
@@ -397,7 +398,7 @@ namespace
     testSteadyResidual_1D(u, rho, T, cubatureEnrichment, tol, out, success);
   }
   
-  TEUCHOS_UNIT_TEST(CompressibleNavierStokesFormulationRefactor, Residual_1D_Steady_UnitTemp)
+  TEUCHOS_UNIT_TEST(CompressibleNavierStokesFormulation, Residual_1D_Steady_UnitTemp)
   {
     double tol = 1e-15;
     int cubatureEnrichment = 0;
@@ -407,7 +408,7 @@ namespace
     testSteadyResidual_1D(u, rho, T, cubatureEnrichment, tol, out, success);
   }
   
-  TEUCHOS_UNIT_TEST(CompressibleNavierStokesFormulationRefactor, Residual_1D_Steady_UnitVelocity)
+  TEUCHOS_UNIT_TEST(CompressibleNavierStokesFormulation, Residual_1D_Steady_UnitVelocity)
   {
     double tol = 1e-15;
     int cubatureEnrichment = 0;
@@ -417,7 +418,7 @@ namespace
     testSteadyResidual_1D(u, rho, T, cubatureEnrichment, tol, out, success);
   }
   
-  TEUCHOS_UNIT_TEST(CompressibleNavierStokesFormulationRefactor, Residual_1D_Steady_LinearDensity)
+  TEUCHOS_UNIT_TEST(CompressibleNavierStokesFormulation, Residual_1D_Steady_LinearDensity)
   {
     double tol = 1e-15;
     int cubatureEnrichment = 3;
@@ -427,7 +428,7 @@ namespace
     testSteadyResidual_1D(u, rho, T, cubatureEnrichment, tol, out, success);
   }
   
-  TEUCHOS_UNIT_TEST(CompressibleNavierStokesFormulationRefactor, Residual_1D_Steady_LinearDensityUnitVelocity)
+  TEUCHOS_UNIT_TEST(CompressibleNavierStokesFormulation, Residual_1D_Steady_LinearDensityUnitVelocity)
   {
     double tol = 1e-14;
     int cubatureEnrichment = 0;
@@ -437,7 +438,7 @@ namespace
     testSteadyResidual_1D(u, rho, T, cubatureEnrichment, tol, out, success);
   }
   
-  TEUCHOS_UNIT_TEST(CompressibleNavierStokesFormulationRefactor, Residual_1D_Steady_LinearTemp)
+  TEUCHOS_UNIT_TEST(CompressibleNavierStokesFormulation, Residual_1D_Steady_LinearTemp)
   {
     double tol = 1e-15;
     int cubatureEnrichment = 3;
@@ -447,7 +448,7 @@ namespace
     testSteadyResidual_1D(u, rho, T, cubatureEnrichment, tol, out, success);
   }
   
-  TEUCHOS_UNIT_TEST(CompressibleNavierStokesFormulationRefactor, Residual_1D_Steady_LinearTempUnitDensity)
+  TEUCHOS_UNIT_TEST(CompressibleNavierStokesFormulation, Residual_1D_Steady_LinearTempUnitDensity)
   {
     double tol = 1e-15;
     int cubatureEnrichment = 2;
@@ -458,7 +459,7 @@ namespace
     testSteadyResidual_1D(u, rho, T, cubatureEnrichment, tol, out, success);
   }
   
-  TEUCHOS_UNIT_TEST(CompressibleNavierStokesFormulationRefactor, Residual_1D_Steady_LinearVelocity)
+  TEUCHOS_UNIT_TEST(CompressibleNavierStokesFormulation, Residual_1D_Steady_LinearVelocity)
   {
     double tol = 1e-15;
     int cubatureEnrichment = 3;
@@ -468,7 +469,7 @@ namespace
     testSteadyResidual_1D(u, rho, T, cubatureEnrichment, tol, out, success);
   }
   
-  TEUCHOS_UNIT_TEST(CompressibleNavierStokesFormulationRefactor, Residual_1D_Steady_LinearVelocityLinearDensityLinearTemp)
+  TEUCHOS_UNIT_TEST(CompressibleNavierStokesFormulation, Residual_1D_Steady_LinearVelocityLinearDensityLinearTemp)
   {
     double tol = 1e-13;
     int cubatureEnrichment = 4;
@@ -479,7 +480,7 @@ namespace
     testSteadyResidual_1D(u, rho, T, cubatureEnrichment, tol, out, success);
   }
   
-  TEUCHOS_UNIT_TEST(CompressibleNavierStokesFormulationRefactor, Residual_1D_Steady_LinearVelocityUnitDensity)
+  TEUCHOS_UNIT_TEST(CompressibleNavierStokesFormulation, Residual_1D_Steady_LinearVelocityUnitDensity)
   {
     double tol = 1e-14;
     int cubatureEnrichment = 3;
@@ -490,7 +491,7 @@ namespace
     testSteadyResidual_1D(u, rho, T, cubatureEnrichment, tol, out, success);
   }
   
-  TEUCHOS_UNIT_TEST(CompressibleNavierStokesFormulationRefactor, Residual_1D_Steady_QuadraticTemp)
+  TEUCHOS_UNIT_TEST(CompressibleNavierStokesFormulation, Residual_1D_Steady_QuadraticTemp)
   {
     double tol = 1e-15;
     int cubatureEnrichment = 2;
@@ -501,7 +502,7 @@ namespace
     testSteadyResidual_1D(u, rho, T, cubatureEnrichment, tol, out, success);
   }
   
-  TEUCHOS_UNIT_TEST(CompressibleNavierStokesFormulationRefactor, Residual_1D_Transient_AllZero)
+  TEUCHOS_UNIT_TEST(CompressibleNavierStokesFormulation, Residual_1D_Transient_AllZero)
   {
     double tol = 1e-15;
     int cubatureEnrichment = 0;
@@ -511,7 +512,7 @@ namespace
     testTransientResidual_1D(u, rho, T, cubatureEnrichment, tol, out, success);
   }
   
-  TEUCHOS_UNIT_TEST(CompressibleNavierStokesFormulationRefactor, Residual_1D_Transient_AllOne)
+  TEUCHOS_UNIT_TEST(CompressibleNavierStokesFormulation, Residual_1D_Transient_AllOne)
   {
     double tol = 1e-13;
     int cubatureEnrichment = 0;
@@ -521,7 +522,7 @@ namespace
     testTransientResidual_1D(u, rho, T, cubatureEnrichment, tol, out, success);
   }
   
-  TEUCHOS_UNIT_TEST(CompressibleNavierStokesFormulationRefactor, Residual_1D_Transient_UnitDensity)
+  TEUCHOS_UNIT_TEST(CompressibleNavierStokesFormulation, Residual_1D_Transient_UnitDensity)
   {
     double tol = 1e-15;
     int cubatureEnrichment = 0;
@@ -531,7 +532,7 @@ namespace
     testTransientResidual_1D(u, rho, T, cubatureEnrichment, tol, out, success);
   }
   
-  TEUCHOS_UNIT_TEST(CompressibleNavierStokesFormulationRefactor, Residual_1D_Transient_UnitTemp)
+  TEUCHOS_UNIT_TEST(CompressibleNavierStokesFormulation, Residual_1D_Transient_UnitTemp)
   {
     double tol = 1e-15;
     int cubatureEnrichment = 0;
@@ -541,7 +542,7 @@ namespace
     testTransientResidual_1D(u, rho, T, cubatureEnrichment, tol, out, success);
   }
   
-  TEUCHOS_UNIT_TEST(CompressibleNavierStokesFormulationRefactor, Residual_1D_Transient_UnitVelocity)
+  TEUCHOS_UNIT_TEST(CompressibleNavierStokesFormulation, Residual_1D_Transient_UnitVelocity)
   {
     double tol = 1e-15;
     int cubatureEnrichment = 0;
@@ -551,7 +552,7 @@ namespace
     testTransientResidual_1D(u, rho, T, cubatureEnrichment, tol, out, success);
   }
   
-  TEUCHOS_UNIT_TEST(CompressibleNavierStokesFormulationRefactor, Residual_1D_Transient_LinearDensity)
+  TEUCHOS_UNIT_TEST(CompressibleNavierStokesFormulation, Residual_1D_Transient_LinearDensity)
   {
     double tol = 1e-15;
     int cubatureEnrichment = 3;
@@ -561,7 +562,7 @@ namespace
     testTransientResidual_1D(u, rho, T, cubatureEnrichment, tol, out, success);
   }
   
-  TEUCHOS_UNIT_TEST(CompressibleNavierStokesFormulationRefactor, Residual_1D_Transient_LinearDensityUnitVelocity)
+  TEUCHOS_UNIT_TEST(CompressibleNavierStokesFormulation, Residual_1D_Transient_LinearDensityUnitVelocity)
   {
     double tol = 1e-14;
     int cubatureEnrichment = 0;
@@ -571,7 +572,7 @@ namespace
     testTransientResidual_1D(u, rho, T, cubatureEnrichment, tol, out, success);
   }
   
-  TEUCHOS_UNIT_TEST(CompressibleNavierStokesFormulationRefactor, Residual_1D_Transient_LinearTemp)
+  TEUCHOS_UNIT_TEST(CompressibleNavierStokesFormulation, Residual_1D_Transient_LinearTemp)
   {
     double tol = 1e-15;
     int cubatureEnrichment = 3;
@@ -581,7 +582,7 @@ namespace
     testTransientResidual_1D(u, rho, T, cubatureEnrichment, tol, out, success);
   }
   
-  TEUCHOS_UNIT_TEST(CompressibleNavierStokesFormulationRefactor, Residual_1D_Transient_LinearTempUnitDensity)
+  TEUCHOS_UNIT_TEST(CompressibleNavierStokesFormulation, Residual_1D_Transient_LinearTempUnitDensity)
   {
     double tol = 1e-15;
     int cubatureEnrichment = 2;
@@ -592,7 +593,7 @@ namespace
     testTransientResidual_1D(u, rho, T, cubatureEnrichment, tol, out, success);
   }
   
-  TEUCHOS_UNIT_TEST(CompressibleNavierStokesFormulationRefactor, Residual_1D_Transient_LinearVelocity)
+  TEUCHOS_UNIT_TEST(CompressibleNavierStokesFormulation, Residual_1D_Transient_LinearVelocity)
   {
     double tol = 1e-15;
     int cubatureEnrichment = 3;
@@ -602,7 +603,7 @@ namespace
     testTransientResidual_1D(u, rho, T, cubatureEnrichment, tol, out, success);
   }
   
-  TEUCHOS_UNIT_TEST(CompressibleNavierStokesFormulationRefactor, Residual_1D_Transient_LinearVelocityLinearDensityLinearTemp)
+  TEUCHOS_UNIT_TEST(CompressibleNavierStokesFormulation, Residual_1D_Transient_LinearVelocityLinearDensityLinearTemp)
   {
     double tol = 1e-13;
     int cubatureEnrichment = 4;
@@ -613,7 +614,7 @@ namespace
     testTransientResidual_1D(u, rho, T, cubatureEnrichment, tol, out, success);
   }
   
-  TEUCHOS_UNIT_TEST(CompressibleNavierStokesFormulationRefactor, Residual_1D_Transient_LinearVelocityUnitDensity)
+  TEUCHOS_UNIT_TEST(CompressibleNavierStokesFormulation, Residual_1D_Transient_LinearVelocityUnitDensity)
   {
     double tol = 1e-14;
     int cubatureEnrichment = 3;
@@ -624,7 +625,7 @@ namespace
     testTransientResidual_1D(u, rho, T, cubatureEnrichment, tol, out, success);
   }
   
-  TEUCHOS_UNIT_TEST(CompressibleNavierStokesFormulationRefactor, Residual_1D_Transient_QuadraticTemp)
+  TEUCHOS_UNIT_TEST(CompressibleNavierStokesFormulation, Residual_1D_Transient_QuadraticTemp)
   {
     double tol = 1e-15;
     int cubatureEnrichment = 2;
@@ -637,7 +638,7 @@ namespace
   
 
   // Test below would work for Euler, I think, but compressible NS has viscosity...
-//  TEUCHOS_UNIT_TEST(CompressibleNavierStokesFormulationRefactor, Residual_1D_Steady_Shock)
+//  TEUCHOS_UNIT_TEST(CompressibleNavierStokesFormulation, Residual_1D_Steady_Shock)
 //  {
 //    // Impose Rankine-Hugoniot shock conditions (standing shock)
 //    // We expect a zero residual

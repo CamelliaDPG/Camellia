@@ -8,7 +8,6 @@
 #include "HDF5Exporter.h"
 #include "MeshFactory.h"
 #include "CompressibleNavierStokesFormulation.h"
-#include "CompressibleNavierStokesFormulationRefactor.hpp"
 #include "SimpleFunction.h"
 #include "SuperLUDistSolver.h"
 
@@ -48,7 +47,7 @@ int main(int argc, char *argv[])
   double Re    = 1e2; // Reynolds number
   
   bool useConformingTraces = true;
-  auto form = CompressibleNavierStokesFormulationRefactor::steadyFormulation(spaceDim, Re, useConformingTraces,
+  auto form = CompressibleNavierStokesFormulation::steadyFormulation(spaceDim, Re, useConformingTraces,
                                                                              meshTopo, polyOrder, delta_k);
   form->solutionIncrement()->setUseCondensedSolve(useCondensedSolve);
   form->solutionIncrement()->setCubatureEnrichmentDegree(cubatureEnrichment);
