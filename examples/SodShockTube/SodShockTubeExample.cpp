@@ -10,7 +10,6 @@
 #include "HDF5Exporter.h"
 #include "MeshFactory.h"
 #include "CompressibleNavierStokesFormulation.h"
-#include "CompressibleNavierStokesFormulationRefactor.hpp"
 #include "CompressibleNavierStokesConservationForm.hpp"
 #include "LagrangeConstraints.h"
 #include "SimpleFunction.h"
@@ -57,7 +56,7 @@ FunctionPtr pressure<CompressibleNavierStokesConservationForm>(Teuchos::RCP<Comp
 }
 
 template<>
-FunctionPtr pressure<CompressibleNavierStokesFormulationRefactor>(Teuchos::RCP<CompressibleNavierStokesFormulationRefactor> form, bool previousTimeStep)
+FunctionPtr pressure<CompressibleNavierStokesFormulation>(Teuchos::RCP<CompressibleNavierStokesFormulation> form, bool previousTimeStep)
 {
   SolutionPtr soln = previousTimeStep ? form->solutionPreviousTimeStep() : form->solution();
   double R = form->R();
@@ -76,7 +75,7 @@ FunctionPtr energy<CompressibleNavierStokesConservationForm>(Teuchos::RCP<Compre
 }
 
 template<>
-FunctionPtr energy<CompressibleNavierStokesFormulationRefactor>(Teuchos::RCP<CompressibleNavierStokesFormulationRefactor> form, bool previousTimeStep)
+FunctionPtr energy<CompressibleNavierStokesFormulation>(Teuchos::RCP<CompressibleNavierStokesFormulation> form, bool previousTimeStep)
 {
   SolutionPtr soln = previousTimeStep ? form->solutionPreviousTimeStep() : form->solution();
   double Cv = form->Cv();
@@ -97,7 +96,7 @@ FunctionPtr momentum<CompressibleNavierStokesConservationForm>(Teuchos::RCP<Comp
 }
 
 template<>
-FunctionPtr momentum<CompressibleNavierStokesFormulationRefactor>(Teuchos::RCP<CompressibleNavierStokesFormulationRefactor> form, bool previousTimeStep)
+FunctionPtr momentum<CompressibleNavierStokesFormulation>(Teuchos::RCP<CompressibleNavierStokesFormulation> form, bool previousTimeStep)
 {
   SolutionPtr soln = previousTimeStep ? form->solutionPreviousTimeStep() : form->solution();
   FunctionPtr rho = Function::solution(form->rho(), soln);
@@ -123,7 +122,7 @@ FunctionPtr momentumFlux<CompressibleNavierStokesConservationForm>(Teuchos::RCP<
 }
 
 template<>
-FunctionPtr momentumFlux<CompressibleNavierStokesFormulationRefactor>(Teuchos::RCP<CompressibleNavierStokesFormulationRefactor> form, bool previousTimeStep)
+FunctionPtr momentumFlux<CompressibleNavierStokesFormulation>(Teuchos::RCP<CompressibleNavierStokesFormulation> form, bool previousTimeStep)
 {
   SolutionPtr soln = previousTimeStep ? form->solutionPreviousTimeStep() : form->solution();
   FunctionPtr rho = Function::solution(form->rho(), soln);
@@ -148,7 +147,7 @@ FunctionPtr velocity<CompressibleNavierStokesConservationForm>(Teuchos::RCP<Comp
 }
 
 template<>
-FunctionPtr velocity<CompressibleNavierStokesFormulationRefactor>(Teuchos::RCP<CompressibleNavierStokesFormulationRefactor> form, bool previousTimeStep)
+FunctionPtr velocity<CompressibleNavierStokesFormulation>(Teuchos::RCP<CompressibleNavierStokesFormulation> form, bool previousTimeStep)
 {
   SolutionPtr soln = previousTimeStep ? form->solutionPreviousTimeStep() : form->solution();
   FunctionPtr u   = Function::solution(form->u(1), soln);
@@ -172,7 +171,7 @@ FunctionPtr temperature<CompressibleNavierStokesConservationForm>(Teuchos::RCP<C
 }
 
 template<>
-FunctionPtr temperature<CompressibleNavierStokesFormulationRefactor>(Teuchos::RCP<CompressibleNavierStokesFormulationRefactor> form, bool previousTimeStep)
+FunctionPtr temperature<CompressibleNavierStokesFormulation>(Teuchos::RCP<CompressibleNavierStokesFormulation> form, bool previousTimeStep)
 {
   SolutionPtr soln = previousTimeStep ? form->solutionPreviousTimeStep() : form->solution();
   FunctionPtr T = Function::solution(form->T(), soln);
@@ -180,7 +179,7 @@ FunctionPtr temperature<CompressibleNavierStokesFormulationRefactor>(Teuchos::RC
 }
 
 template<>
-void addConservationConstraint(Teuchos::RCP<CompressibleNavierStokesFormulationRefactor> form)
+void addConservationConstraint(Teuchos::RCP<CompressibleNavierStokesFormulation> form)
 {
   cout << "WARNING: addConservationConstraint unimplemented for primitive-variable formulation...\n";
   // TODO: implement this
@@ -248,7 +247,7 @@ void setVelocityOrMomentum<CompressibleNavierStokesConservationForm>(Teuchos::RC
 }
 
 template<>
-void setVelocityOrMomentum<CompressibleNavierStokesFormulationRefactor>(Teuchos::RCP<CompressibleNavierStokesFormulationRefactor> form, std::map<int, FunctionPtr> &initialStateMap,
+void setVelocityOrMomentum<CompressibleNavierStokesFormulation>(Teuchos::RCP<CompressibleNavierStokesFormulation> form, std::map<int, FunctionPtr> &initialStateMap,
                                                                         FunctionPtr u, FunctionPtr rho, FunctionPtr T)
 {
   initialStateMap[form->u(1)->ID()]    = u;
@@ -264,7 +263,7 @@ void setTempOrEnergy<CompressibleNavierStokesConservationForm>(Teuchos::RCP<Comp
 }
 
 template<>
-void setTempOrEnergy<CompressibleNavierStokesFormulationRefactor>(Teuchos::RCP<CompressibleNavierStokesFormulationRefactor> form, std::map<int, FunctionPtr> &initialStateMap,
+void setTempOrEnergy<CompressibleNavierStokesFormulation>(Teuchos::RCP<CompressibleNavierStokesFormulation> form, std::map<int, FunctionPtr> &initialStateMap,
                                                                         FunctionPtr u, FunctionPtr rho, FunctionPtr T)
 {
   initialStateMap[form->T()->ID()]     = T;
@@ -988,14 +987,14 @@ int main(int argc, char *argv[])
   {
     if (useEuler)
     {
-      auto form = CompressibleNavierStokesFormulationRefactor::timeSteppingEulerFormulation(spaceDim, useConformingTraces,
+      auto form = CompressibleNavierStokesFormulation::timeSteppingEulerFormulation(spaceDim, useConformingTraces,
                                                                                             meshTopo, polyOrder, delta_k);
       return runSolver(form, useConservationFormulation, dt, finalTime, meshWidth, x_a, x_b, polyOrder, cubatureEnrichment, useCondensedSolve,
                        nonlinearTolerance, continuationSteps, continuationTolerance, normChoice, enforceConservationUsingLagrangeMultipliers);
     }
     else
     {
-      auto form = CompressibleNavierStokesFormulationRefactor::timeSteppingFormulation(spaceDim, Re, useConformingTraces,
+      auto form = CompressibleNavierStokesFormulation::timeSteppingFormulation(spaceDim, Re, useConformingTraces,
                                                                                        meshTopo, polyOrder, delta_k);
       return runSolver(form, useConservationFormulation, dt, finalTime, meshWidth, x_a, x_b, polyOrder, cubatureEnrichment, useCondensedSolve,
                        nonlinearTolerance, continuationSteps, continuationTolerance, normChoice, enforceConservationUsingLagrangeMultipliers);

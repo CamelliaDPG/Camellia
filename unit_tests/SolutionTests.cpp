@@ -1872,7 +1872,7 @@ namespace
       HDF5Exporter exporter(mesh, "ProjectFluxOnRefinedMesh2D_2x2_Starting, after one refinement");
       exporter.exportFunction({solnFxn-exactFxn,solnFxn, exactFxn},{"error", "solution", "exact"},0);
       
-      print("myCells",mesh->cellIDsInPartition());
+      Camellia::print("myCells",mesh->cellIDsInPartition());
       
 //      set<GlobalIndexType> cellsToReportOn = mesh->getActiveCellIDsGlobal();
 //      print("allCells", cellsToReportOn);
@@ -1907,7 +1907,7 @@ namespace
         HDF5Exporter exporter(mesh, "ProjectFluxOnRefinedMesh2D_2x2_Starting");
         exporter.exportFunction({solnFxn-exactFxn,solnFxn, exactFxn},{"error", "solution", "exact"},0);
         
-        print("myCells",mesh->cellIDsInPartition());
+        Camellia::print("myCells",mesh->cellIDsInPartition());
         
         vector<GlobalIndexType> cellsToReportOn = {8,9,15};
         

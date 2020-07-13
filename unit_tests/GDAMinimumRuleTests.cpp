@@ -495,8 +495,8 @@ namespace
                 {
                   int myRank = mesh->Comm()->MyPID();
                   out << "dof coords for global dof index " << globalDofOrdinal << " disagree on rank " << myRank << endl;
-                  print(out, "first entry", prevDofCoord);
-                  print(out, "current entry", dofCoords);
+                  Camellia::print(out, "first entry", prevDofCoord);
+                  Camellia::print(out, "current entry", dofCoords);
                 }
               }
               else
@@ -577,8 +577,8 @@ namespace
                 int firstRank = firstRankForGlobalIndexType[globalDofIndex];
                 out << "dof coords for global dof index " << globalDofIndex << " disagree between first rank " << firstRank;
                 out << " and current rank " << rank << endl;
-                print(out, "first rank", prevDofCoord);
-                print(out, "current rank", dofCoord);
+                Camellia::print(out, "first rank", prevDofCoord);
+                Camellia::print(out, "current rank", dofCoord);
               }
             }
             else
@@ -632,8 +632,8 @@ namespace
                 int firstRank = firstRankForGlobalIndexType[globalDofIndex];
                 out << "dof coords for global dof index " << globalDofIndex << " disagree between first rank " << firstRank;
                 out << " and current rank " << rank << endl;
-                print(out, "first rank", prevDofCoord);
-                print(out, "current rank", dofCoord);
+                Camellia::print(out, "first rank", prevDofCoord);
+                Camellia::print(out, "current rank", dofCoord);
               }
             }
             else
@@ -689,8 +689,8 @@ namespace
                 int firstRank = firstRankForGlobalIndexType[globalDofIndex];
                 out << "dof coords for global dof index " << globalDofIndex << " disagree between first rank " << firstRank;
                 out << " and current rank " << rank << endl;
-                print(out, "first rank", prevDofCoord);
-                print(out, "current rank", dofCoord);
+                Camellia::print(out, "first rank", prevDofCoord);
+                Camellia::print(out, "current rank", dofCoord);
               }
             }
             else
@@ -1059,8 +1059,8 @@ namespace
                 cout << ", side " << constrainingSideOrdinal << ")\n";
                 out << "nonzeroCoarseGlobalValues.size() = " << nonzeroCoarseGlobalValues.size();
                 out << " != " << nonzeroFineGlobalValues.size() << " = nonzeroFineGlobalValues().size()\n";
-                print("nonzeroCoarseGlobalValues", nonzeroCoarseGlobalValues);
-                print("nonzeroFineGlobalValues", nonzeroFineGlobalValues);
+                Camellia::print("nonzeroCoarseGlobalValues", nonzeroCoarseGlobalValues);
+                Camellia::print("nonzeroFineGlobalValues", nonzeroFineGlobalValues);
                 cout << "physical point: (";
                 for (int d=0; d < meshTopo->getDimension(); d++)
                 {
@@ -1091,8 +1091,8 @@ namespace
                   filterFCValues(fineFilteredValues, fineValues, basisOrdinalFilter, fineBasis->getCardinality());
                   Camellia::FieldContainer<double> mappedValues = subBasisMap->mapFineData(fineFilteredValues);
                   vector<GlobalIndexType> globalIndices = subBasisMap->mappedGlobalDofOrdinals();
-                  print("basisOrdinalFilter",basisOrdinalFilter);
-                  print("globalIndices", globalIndices);
+                  Camellia::print("basisOrdinalFilter",basisOrdinalFilter);
+                  Camellia::print("globalIndices", globalIndices);
                   cout << "fineFilteredValues:\n" << fineFilteredValues;
                   cout << "mappedValues:\n" << mappedValues;
                 }
@@ -1125,8 +1125,8 @@ namespace
                   cout << ", subcell ordinal " << subcord << " of dimension " << subcdim << endl;
                   cout << "(comparing with coarse cell " << constrainingCell->cellIndex();
                   cout << ", side " << constrainingSideOrdinal << ")\n";
-                  print("nonzeroCoarseGlobalValues", nonzeroCoarseGlobalValues);
-                  print("nonzeroFineGlobalValues", nonzeroFineGlobalValues);
+		  Camellia::print("nonzeroCoarseGlobalValues", nonzeroCoarseGlobalValues);
+		  Camellia::print("nonzeroFineGlobalValues", nonzeroFineGlobalValues);
                   cout << "physical point: (";
                   for (int d=0; d < meshTopo->getDimension(); d++)
                   {
@@ -1157,8 +1157,8 @@ namespace
                     filterFCValues(fineFilteredValues, fineValues, basisOrdinalFilter, fineBasis->getCardinality());
                     Camellia::FieldContainer<double> mappedValues = subBasisMap->mapFineData(fineFilteredValues);
                     vector<GlobalIndexType> globalIndices = subBasisMap->mappedGlobalDofOrdinals();
-                    print("basisOrdinalFilter",basisOrdinalFilter);
-                    print("globalIndices", globalIndices);
+		    Camellia::print("basisOrdinalFilter",basisOrdinalFilter);
+		    Camellia::print("globalIndices", globalIndices);
                     cout << "fineFilteredValues:\n" << fineFilteredValues;
                     cout << "mappedValues:\n" << mappedValues;
                   }
