@@ -108,6 +108,13 @@ MeshPtr TRefinementStrategy<Scalar>::mesh()
 template <typename Scalar>
 void TRefinementStrategy<Scalar>::refine(bool printToConsole)
 {
+  const bool unrefine = false;
+  this->refineAndUnrefine(unrefine, printToConsole);
+}
+
+template <typename Scalar>
+void TRefinementStrategy<Scalar>::refineAndUnrefine(bool unrefine, bool printToConsole)
+{
   // greedy refinement algorithm - mark cells for refinement
   MeshPtr mesh = this->mesh();
 
@@ -121,21 +128,6 @@ void TRefinementStrategy<Scalar>::refine(bool printToConsole)
   {
     cellMeasuresLocal[cellID] = mesh->getCellMeasure(cellID);
   }
-
-//  if ( printToConsole && _reportPerCellErrors )
-//  {
-//    cout << "per-cell Energy Error Squared for cells with > 0.1% of squared energy error\n";
-//    for (GlobalIndexType cellID : cellIDs)
-//    {
-//      double cellEnergyError = energyError.find(cellID)->second;
-////      cout << "cellID " << cellID << " has energy error (not squared) " << cellEnergyError << endl;
-//      double percent = (cellEnergyError*cellEnergyError) / (totalEnergyError*totalEnergyError) * 100;
-//      if (percent > 0.1)
-//      {
-//        cout << cellID << ": " << cellEnergyError*cellEnergyError << " ( " << percent << " %)\n";
-//      }
-//    }
-//  }
 
   // record results prior to refinement
   RefinementResults results = setResults(mesh->numActiveElements(), mesh->numGlobalDofs(), totalError);
@@ -216,19 +208,74 @@ void TRefinementStrategy<Scalar>::refine(bool printToConsole)
   std::sort(cellsToRefine.begin(), cellsToRefine.end());
   std::sort(cellsToPRefine.begin(), cellsToPRefine.end());
   
+  std::set<GlobalIndexType> parentCellsToUnrefine;
+  
+  if (unrefine)
+  {
+    vector<GlobalIndexType> localCellsBelowThreshold;
+    getCellsBelowUnrefinementErrorThreshhold(localCellsBelowThreshold);
+    
+    vector<GlobalIndexType> localCellsToUnrefine;
+    
+    auto meshTopo = _errorIndicator->mesh()->getTopology();
+    for (const auto &localCellID : localCellsBelowThreshold)
+    {
+      auto parentCell = meshTopo->getCell(localCellID);
+      bool hasChildMarkedForRefinement = false;
+      auto childIDs   = parentCell->getChildIndices(meshTopo);
+      for (const auto &childID : childIDs)
+      {
+        if (std::find(cellsToRefine.begin(), cellsToRefine.end(), childID) != cellsToRefine.end())
+        {
+          hasChildMarkedForRefinement = true;
+          break;
+        }
+        else if (std::find(cellsToPRefine.begin(), cellsToPRefine.end(), childID) != cellsToPRefine.end())
+        {
+          hasChildMarkedForRefinement = true;
+          break;
+        }
+      }
+      if (!hasChildMarkedForRefinement)
+      {
+        localCellsToUnrefine.push_back(localCellID);
+      }
+    }
+    
+    GlobalIndexTypeToCast numCellsToHUnrefine = 0;
+    GlobalIndexTypeToCast myNumCellsToHUnrefine = localCellsToUnrefine.size();
+    mesh->Comm()->SumAll(&myNumCellsToHUnrefine, &numCellsToHUnrefine, 1);
+    GlobalIndexTypeToCast myCellOrdinalOffset = 0;
+    mesh->Comm()->ScanSum(&myNumCellsToHUnrefine, &myCellOrdinalOffset, 1);
+    myCellOrdinalOffset -= myNumCellsToHUnrefine;
+      
+    vector<GlobalIndexTypeToCast> globalCellsToUnrefineVector(numCellsToHUnrefine, 0);
+    for (int i=0; i<myNumCellsToHUnrefine; i++)
+    {
+      globalCellsToUnrefineVector[myCellOrdinalOffset + i] = localCellsToUnrefine[i];
+    }
+    vector<GlobalIndexTypeToCast> gatheredCellsToUnrefineVector(numCellsToHUnrefine, 0);
+    mesh->Comm()->SumAll(&globalCellsToUnrefineVector[0], &gatheredCellsToUnrefineVector[0], numCellsToHUnrefine);
+
+    parentCellsToUnrefine = std::set<GlobalIndexType>(gatheredCellsToUnrefineVector.begin(),gatheredCellsToUnrefineVector.end());
+  }
+  
+  
   if (printToConsole)
   {
-    if (cellsToRefine.size() > 0) Camellia::print("cells for h-refinement", cellsToRefine);
-    if (cellsToPRefine.size() > 0) Camellia::print("cells for p-refinement", cellsToPRefine);
+    if (cellsToRefine.size() > 0)         Camellia::print("cells for h-refinement", cellsToRefine);
+    if (cellsToPRefine.size() > 0)        Camellia::print("cells for p-refinement", cellsToPRefine);
+    if (parentCellsToUnrefine.size() > 0) Camellia::print("cells for unrefinement", parentCellsToUnrefine);
   }
+  
   refineCells(cellsToRefine);
   pRefineCells(mesh, cellsToPRefine);
+  unrefineCells(parentCellsToUnrefine);
 
   bool repartitionAndRebuild = false;
   if (_enforceOneIrregularity)
   {
     mesh->enforceOneIrregularity(repartitionAndRebuild);
-//    cout << "Enforced one irregularity.\n";
   }
 
   // now, repartition and rebuild:
@@ -254,50 +301,17 @@ void TRefinementStrategy<Scalar>::getCellsAboveErrorThreshhold(vector<GlobalInde
   
   double errorThreshold = maxError * _relativeErrorThreshold;
   _errorIndicator->localCellsAboveErrorThreshold(errorThreshold, cellsToRefine);
+}
 
+template <typename Scalar>
+void TRefinementStrategy<Scalar>::getCellsBelowUnrefinementErrorThreshhold(vector<GlobalIndexType> &cellsToUnrefine)
+{
+  _errorIndicator->gatherParentError();
   
-//  // greedy refinement algorithm - mark cells for refinement
-//  MeshPtr mesh = this->mesh();
-//  const map<GlobalIndexType,double>* rankLocalEnergy = &_solution->rankLocalEnergyError();
-//  const set<GlobalIndexType>* myCellIDs = &mesh->cellIDsInPartition();
-//
-//  double localMaxError = 0.0;
-//
-//  for (GlobalIndexType cellID : *myCellIDs)
-//  {
-//    double cellEnergyError = rankLocalEnergy->find(cellID)->second;
-//    localMaxError = max(cellEnergyError,localMaxError);
-//  }
-//  
-//  double globalMaxError = 0.0;
-//  mesh->Comm()->MaxAll(&localMaxError, &globalMaxError, 1);
-//  
-//  vector<GlobalIndexType> myCellsToRefine;
-//  for (GlobalIndexType cellID : *myCellIDs)
-//  {
-//    double cellEnergyError = rankLocalEnergy->find(cellID)->second;
-//    if ( cellEnergyError >= globalMaxError * _relativeEnergyThreshold )
-//    {
-//      myCellsToRefine.push_back(cellID);
-//    }
-//  }
-//  
-//  GlobalIndexTypeToCast numCellsToRefine = 0;
-//  GlobalIndexTypeToCast myNumCellsToRefine = myCellsToRefine.size();
-//  mesh->Comm()->SumAll(&myNumCellsToRefine, &numCellsToRefine, 1);
-//  GlobalIndexTypeToCast myCellOrdinalOffset = 0;
-//  mesh->Comm()->ScanSum(&myNumCellsToRefine, &myCellOrdinalOffset, 1);
-//  myCellOrdinalOffset -= myNumCellsToRefine;
-//  
-//  vector<GlobalIndexTypeToCast> globalCellsToRefineVector(numCellsToRefine, 0);
-//  for (int i=0; i<myNumCellsToRefine; i++)
-//  {
-//    globalCellsToRefineVector[myCellOrdinalOffset + i] = myCellsToRefine[i];
-//  }
-//  vector<GlobalIndexTypeToCast> gatheredCellsToRefineVector(numCellsToRefine, 0);
-//  mesh->Comm()->SumAll(&globalCellsToRefineVector[0], &gatheredCellsToRefineVector[0], numCellsToRefine);
-//  
-//  cellsToRefine = vector<GlobalIndexType>(gatheredCellsToRefineVector.begin(), gatheredCellsToRefineVector.end());
+  double minError = _errorIndicator->minParentError();
+ 
+  double errorThreshold = minError * _unrefinementThreshold;
+  _errorIndicator->localParentCellsBelowErrorThreshold(errorThreshold, cellsToUnrefine);
 }
 
 // defaults to h-refinement
@@ -364,6 +378,12 @@ RefinementResults TRefinementStrategy<Scalar>::setResults(GlobalIndexType numEle
 }
 
 template <typename Scalar>
+void TRefinementStrategy<Scalar>::setUnrefinementThreshold(double value)
+{
+  _unrefinementThreshold = value;
+}
+
+template <typename Scalar>
 double TRefinementStrategy<Scalar>::getEnergyError(int refinementNumber)
 {
   if (refinementNumber < _results.size())
@@ -400,6 +420,13 @@ GlobalIndexType TRefinementStrategy<Scalar>::getNumDofs(int refinementNumber)
   {
     TEUCHOS_TEST_FOR_EXCEPTION(true, std::invalid_argument, "refinementNumber out of bounds!");
   }
+}
+
+template <typename Scalar>
+void TRefinementStrategy<Scalar>::unrefineCells(const std::set<GlobalIndexType> &cellIDs)
+{
+  const bool repartitionAndRebuild = false;
+  this->mesh()->hUnrefine(cellIDs, repartitionAndRebuild);
 }
 
 namespace Camellia

@@ -12,6 +12,7 @@
 
 #include "EnergyErrorIndicator.h"
 #include "FunctionErrorIndicator.h"
+#include "GlobalDofAssignment.h"
 #include "GradientErrorIndicator.h"
 #include "HessianErrorIndicator.h"
 
@@ -30,6 +31,18 @@ void ErrorIndicator::localCellsAboveErrorThreshold(double threshold, vector<Glob
     if (cellError > threshold)
     {
       cellsAboveThreshold.push_back(cellID);
+    }
+  }
+}
+
+void ErrorIndicator::localParentCellsBelowErrorThreshold(double threshold, vector<GlobalIndexType> &cellsBelowThreshold)
+{
+  for (auto measureEntry : _parentErrorMeasures) {
+    GlobalIndexType cellID = measureEntry.first;
+    double cellError = measureEntry.second;
+    if (cellError < threshold)
+    {
+      cellsBelowThreshold.push_back(cellID);
     }
   }
 }
@@ -60,6 +73,126 @@ double ErrorIndicator::maxLocalError() const
 MeshPtr ErrorIndicator::mesh() const
 {
   return _mesh;
+}
+
+double ErrorIndicator::minError() const
+{
+  double localMinError  = std::numeric_limits<double>::max();
+  for (const auto & errEntry : _localErrorMeasures)
+  {
+    localMinError = std::fmin(localMinError, errEntry.second);
+  }
+  
+  double globalMinError = localMinError;
+  _mesh->Comm()->MinAll(&localMinError, &globalMinError, 1);
+  return globalMinError;
+}
+
+double ErrorIndicator::minParentError() const
+{
+  double localMinError  = std::numeric_limits<double>::max();
+  for (const auto & errEntry : _parentErrorMeasures)
+  {
+    localMinError = std::fmin(localMinError, errEntry.second);
+  }
+  
+  double globalMinError = localMinError;
+  _mesh->Comm()->MinAll(&localMinError, &globalMinError, 1);
+  return globalMinError;
+}
+
+void ErrorIndicator::gatherParentError()
+{
+  // this method fills _parentErrorMeasures; clear it first
+  _parentErrorMeasures.clear();
+  
+  // "owner" of the parent is the owner of the first child
+  
+  // We will communicate the off-rank error values for each child to the parent's owner.
+  // MPIWrapper::sendDataMaps has signature
+  /* sendDataMaps(Epetra_CommPtr Comm,
+                  const std::map<int,std::map<KeyType,ValueType>> &recipientDataMaps,
+                  std::map<KeyType,ValueType> &receivedMap);*/
+  // where ValueType and KeyType can be of arbitrary fixed-size type
+  // and the keys to recipientDataMaps are the MPI ranks (PIDs) of the recipients
+  // for us, KeyType can be cellID; the ValueType can be double
+  map<int, map<GlobalIndexType,double > > recipientDataMaps;
+  map<GlobalIndexType, double > receivedMap;
+  
+  const int myPID = _mesh->Comm()->MyPID();
+  
+  auto meshTopo = _mesh->getTopology();
+  
+  // want to send errors I know to parent's owner
+  const auto &myCellIDs = _mesh->cellIDsInPartition();
+  std::set<GlobalIndexType> myParentCellIDs;
+  for (const auto & cellID : myCellIDs)
+  {
+    CellPtr cell   = meshTopo->getCell(cellID);
+    CellPtr parent = cell->getParent();
+    
+    if (parent != Teuchos::null)
+    {
+      // check that all siblings are active (if not, parent is not eligible for unrefinement, and should be ignored)
+      bool parentHasGrandchildren = false;
+      for (const auto & childCell : parent->children())
+      {
+        if (childCell->numChildren() > 0)
+        {
+          // parent has grandchildren. ==> cellID's error can/should be ignored; its parent is not eligible for refinement.
+          parentHasGrandchildren = true;
+          break;
+        }
+      }
+      if (parentHasGrandchildren)
+      {
+        // go to next cell in myCellIDs
+        continue;
+      }
+      
+      const GlobalIndexType firstChildID = parent->children()[0]->cellIndex();
+      const int ownerPID = _mesh->globalDofAssignment()->partitionForCellID( firstChildID );
+      if (ownerPID != myPID)
+      {
+        auto localErrorEntry = _localErrorMeasures.find(cellID);
+        TEUCHOS_TEST_FOR_EXCEPTION(localErrorEntry == _localErrorMeasures.end(), std::invalid_argument, "cellID not found.  Did you remember to call measureError()?");
+        double childError = localErrorEntry->second;
+        recipientDataMaps[ownerPID][cellID] = childError;
+      }
+      else
+      {
+        myParentCellIDs.insert(parent->cellIndex());
+      }
+    }
+  }
+  
+  std::map<GlobalIndexType,double> receivedErrorValues;
+  MPIWrapper::sendDataMaps(_mesh->Comm(), recipientDataMaps, receivedErrorValues);
+    
+  for (auto parentCellID : myParentCellIDs)
+  {
+    CellPtr parent = meshTopo->getCell(parentCellID);
+    double parentError = 0.0;
+    auto childIDs = parent->getChildIndices(meshTopo);
+    for (auto childID : childIDs)
+    {
+      double childError = 0.0;
+      if (myCellIDs.find(childID) != myCellIDs.end())
+      {
+        auto localErrorEntry = _localErrorMeasures.find(childID);
+        TEUCHOS_TEST_FOR_EXCEPTION(localErrorEntry == _localErrorMeasures.end(), std::invalid_argument, "local error for childID " + std::to_string(childID) + " not found.  Did you remember to call measureError()?");
+        childError = localErrorEntry->second;
+      }
+      else
+      {
+        auto remoteErrorEntry = receivedErrorValues.find(childID);
+        TEUCHOS_TEST_FOR_EXCEPTION(remoteErrorEntry == _localErrorMeasures.end(), std::invalid_argument, "remote error for childID " + std::to_string(childID) + " not found.  Did you remember to call measureError()?");
+        childError = remoteErrorEntry->second;
+      }
+      parentError += childError;
+    }
+    _parentErrorMeasures[parentCellID] = parentError;
+  }
 }
 
 double ErrorIndicator::totalError() const

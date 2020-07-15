@@ -43,6 +43,7 @@ protected:
   ErrorIndicatorPtr _errorIndicator;
 
   double _relativeErrorThreshold;
+  double _unrefinementThreshold;
   bool _enforceOneIrregularity;
   bool _reportPerCellErrors;
   vector< RefinementResults > _results;
@@ -60,18 +61,24 @@ public:
   
   double computeTotalEnergyError();
   
-  // ! Set the energy threshold (relative to maximum element error) to use for refinements
+  //! Set the energy threshold (relative to maximum element error) to use for refinements
   void setRelativeErrorThreshold(double value);
   void setEnforceOneIrregularity(bool value);
 
+  //! Set the energy threshold (relative to minimum parent-element error) to use for unrefinements
+  void setUnrefinementThreshold(double value);
+  
   virtual void refine(bool printToConsole=false);
+  virtual void refineAndUnrefine(bool unrefine, bool printToConsole);
   virtual void hRefineUniformly();
 
   virtual void refineCells(vector<GlobalIndexType> &cellIDs);
+  virtual void unrefineCells(const std::set<GlobalIndexType> &cellIDs);
   static void pRefineCells(MeshPtr mesh, const vector<GlobalIndexType> &cellIDs);
   static void hRefineCells(MeshPtr mesh, const vector<GlobalIndexType> &cellIDs);
   static void hRefineUniformly(MeshPtr mesh);
   void getCellsAboveErrorThreshhold(vector<GlobalIndexType> &cellsToRefine);
+  void getCellsBelowUnrefinementErrorThreshhold(vector<GlobalIndexType> &cellsToUnrefine);
   void setMinH(double value);
   void setReportPerCellErrors(bool value);
 

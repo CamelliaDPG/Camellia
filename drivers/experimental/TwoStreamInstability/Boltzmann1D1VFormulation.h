@@ -55,6 +55,13 @@ private:
   SolutionPtr _gaussSoln;
   double _t = 0; // current time
   
+  //! on each refinement, refine any element with error greater than threshold times the maximum element error.  Values > 1.0 mean no refinement
+  double _refinementThreshold   = 1.1;
+  //! on each unrefinement, unrefine any parent element with error below threshold times the minimum parent-element error.  Values < 1.0 mean no unrefinement.
+  double _unrefinementThreshold = 0.0;
+  
+  RefinementStrategyPtr _refStrategy;
+  
   // set by user:
   ParameterFunctionPtr _dt;
   ParameterFunctionPtr _q;
@@ -128,6 +135,12 @@ public:
   
   bool usesImplicitSolve() const;
   bool hasL2Trace() const;
+  
+  /** \brief  Sets thresholds for adaptivity
+      \param  refinementThreshold   [in]  - on each refinement, refine any element with error greater than refinementThreshold times the maximum element error.  Values > 1.0 mean no refinement.
+      \param  unrefinementThreshold [in]  - on each unrefinement, unrefine any parent element with error below threshold times the minimum parent-element error.  Values < 1.0 mean no unrefinement.
+  */
+  void setRefinementThresholds(double refinementThreshold, double unrefinementThreshold);
   
   //! notification that the boltzmann solve has set the RK stage:
   void setStage(const int stageNumber);
