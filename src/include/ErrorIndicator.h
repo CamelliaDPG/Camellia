@@ -32,6 +32,7 @@ namespace Camellia {
   protected:
     MeshPtr _mesh;
     std::map<GlobalIndexType,double> _localErrorMeasures; // cellID -> error measure
+    std::map<GlobalIndexType,double> _parentErrorMeasures; // cellID -> error measure
   public:
     ErrorIndicator(MeshPtr mesh);
     
@@ -41,6 +42,9 @@ namespace Camellia {
     //! adds to the provided container rank-local cells with error above the threshold
     virtual void localCellsAboveErrorThreshold(double threshold, vector<GlobalIndexType> &cellsAboveThreshold);
     
+    //! adds to the provided container locally-owned parents cells with error below the threshold
+    virtual void localParentCellsBelowErrorThreshold(double threshold, vector<GlobalIndexType> &cellsBelowThreshold);
+    
     //! determine rank-local error measures.  Subclasses should populate _localErrorMeasures
     virtual void measureError() = 0;
     
@@ -49,6 +53,15 @@ namespace Camellia {
     
     //! return maximum error measure (MPI collective method).
     virtual double maxError() const;
+    
+    //! return minimum error measure across all cells (MPI collective method).
+    virtual double minError() const;
+    
+    //! return minimum error measure across all parent cells that have no grandchildren (MPI collective method).
+    virtual double minParentError() const;
+    
+    //! for all parents of leaf cells (in the h-refinement sense) gather the child error sum to the processor that owns the first child (MPI collective method).
+    virtual void gatherParentError();
     
     MeshPtr mesh() const;
     

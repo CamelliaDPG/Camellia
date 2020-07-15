@@ -16,6 +16,7 @@
 #include "GMGSolver.h"
 #include "MeshFactory.h"
 #include "ParameterFunction.h"
+#include "RefinementStrategy.h"
 #include "RHS.h"
 #include "Solution.h"
 #include "SolutionStage.h"
@@ -93,6 +94,7 @@ class VelocitySpace1DIntegral : public QuadraturePointFunction
       const int numPointSets = levelNumberPairs.size();
       
       int pointSetNumber = 0; // increments at bottom of levelNumberPair loop
+      _pointSetNumbers.clear();
       for (const auto &levelNumberPair : levelNumberPairs)
       {
         _pointSetNumbers[levelNumberPair] = pointSetNumber++;
@@ -709,6 +711,7 @@ _formulationChoice(formulationChoice)
     
     gaussMesh->registerSolution(_gaussSoln);
     boltzmannMesh->registerSolution(_boltzmannSoln);
+    boltzmannMesh->registerSolution(_boltzmannSolnPrev);
     
     IPPtr boltzmannTestNorm = IP::ip();
     const bool useSimpleL2Norm = false;
@@ -870,6 +873,19 @@ void Boltzmann1D1VFormulation::setInitialConditions(FunctionPtr f0)
   _t = 0;
 }
 
+void Boltzmann1D1VFormulation::setRefinementThresholds(double refinementThreshold, double unrefinementThreshold)
+{
+  _refinementThreshold = refinementThreshold;
+  _unrefinementThreshold = unrefinementThreshold;
+  
+  if (_refStrategy == Teuchos::null)
+  {
+    _refStrategy = RefinementStrategy::energyErrorRefinementStrategy(_boltzmannSoln, _refinementThreshold);
+  }
+  _refStrategy->setRelativeErrorThreshold(_refinementThreshold);
+  _refStrategy->setUnrefinementThreshold(_unrefinementThreshold);
+}
+
 void Boltzmann1D1VFormulation::setStage(const int stageNumber)
 {
   updateElectricField();
@@ -898,8 +914,8 @@ void Boltzmann1D1VFormulation::takeTimeStep()
 
     //    auto multigridStrategy = GMGOperator::V_CYCLE;
     auto multigridStrategy = GMGOperator::SMOOTHER_ONLY;
-    GMGOperator::SmootherChoice smootherChoice = GMGOperator::IFPACK_ADDITIVE_SCHWARZ;
-//    GMGOperator::SmootherChoice smootherChoice = GMGOperator::CAMELLIA_ADDITIVE_SCHWARZ;
+//    GMGOperator::SmootherChoice smootherChoice = GMGOperator::IFPACK_ADDITIVE_SCHWARZ;
+    GMGOperator::SmootherChoice smootherChoice = GMGOperator::CAMELLIA_ADDITIVE_SCHWARZ; // CAMELLIA_ADDITIVE_SCHWARZ defines cells as blocks; Ifpack's defines all cells on the MPI rank as a block, making MPI scaling less predictable.  (Camellia's implementation is likely less well-optimized, though.)
 //    GMGOperator::SmootherChoice smootherChoice = GMGOperator::BLOCK_SYMMETRIC_GAUSS_SEIDEL; // as configured, this is very slow; I think it's treating all data on an MPI rank as a block…
 //    GMGOperator::SmootherChoice smootherChoice = GMGOperator::POINT_SYMMETRIC_GAUSS_SEIDEL;
     vector<MeshPtr> meshes;
@@ -978,6 +994,16 @@ void Boltzmann1D1VFormulation::takeTimeStep()
     {
       if (substepOrdinal == numSubsteps-1)
       {
+        const bool useAdaptivity = _refStrategy != Teuchos::null;
+        
+        if (useAdaptivity)
+        {
+          // for now, print refinement info to console on rank 0.
+          const bool printToConsole = _boltzmannSoln->mesh()->Comm()->MyPID() == 0;
+          const bool doUnrefinements = (_unrefinementThreshold >= 1.0);
+          _refStrategy->refineAndUnrefine(doUnrefinements, printToConsole);
+        }
+        
         // last substep
         _boltzmannSolnPrev->setSolution(_boltzmannSoln);
       }

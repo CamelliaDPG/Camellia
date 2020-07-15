@@ -886,6 +886,7 @@ void GlobalDofAssignment::projectChildCoefficientsOntoParents(const std::set<Glo
         {
           auto childID = childIndices[childOrdinal];
           auto childPartition = partitionForCellID(childID);
+          TEUCHOS_TEST_FOR_EXCEPTION(childPartition == -1, std::invalid_argument, "child cell ID " + std::to_string(childID) + ": partition not found.  Perhaps it's not an active cell?");
           if (childPartition != myRank)
           {
             offRankCellsNeeded.insert(childID);

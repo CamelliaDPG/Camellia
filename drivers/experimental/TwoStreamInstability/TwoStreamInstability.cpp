@@ -109,7 +109,10 @@ int main(int argc, char *argv[])
   double vWidth =  20.0;
   
   bool useAdaptivity = false;
-  double refinementThreshold = 0.20;
+  double refinementThresholdForInitialData   = 0.20; // moderately aggressive refinement
+  double refinementThreshold   = 0.999999; // essentially, refine just the maximum error element (and any that thanks to solution symmetry have same error)
+//  double unrefinementThreshold = 1.000001; // similarly, unrefine just the minimum-error parent element
+  double unrefinementThreshold = 0.0; // no unrefinements (any value < 1 will get us no unrefinements)
   
   int xElements = 30;
   int vElements = 40;
@@ -221,7 +224,7 @@ int main(int argc, char *argv[])
     FunctionPtr fM_0 = Teuchos::rcp(new Maxwellian1V( 0.0, 1.0, 1.0-n0) );
     FunctionPtr fM_b = Teuchos::rcp(new Maxwellian1V(  u0, 0.5,     n0) );
     f0               = (fM_0 + 0.5 * fM_b) * (1. + gamma * cos_kx);
-    std::cout << "f0 for bump-on-tail: " << f0 << "\n";
+    std::cout << "f0 for bump-on-tail: " << f0->displayString() << "\n";
   }
   
   form.setInitialConditions(f0);
@@ -236,9 +239,10 @@ int main(int argc, char *argv[])
     
     auto errorIndicator = ErrorIndicator::functionErrorIndicator<double>(form.boltzmannMesh(), f0_err, quadratureEnrichment);
     
-    auto refStrategy = Teuchos::rcp(new TRefinementStrategy<double>(errorIndicator, refinementThreshold));
+    auto refStrategy = Teuchos::rcp(new TRefinementStrategy<double>(errorIndicator, refinementThresholdForInitialData));
     
     double errTol = 1e-3;
+//    double errTol = 1e-1; // LOOSE FOR DEBUGGING
     
     double f0_norm = f0->l2norm(form.boltzmannMesh(), quadratureEnrichment);
     double relErr = f0_err->l2norm(form.boltzmannMesh(), quadratureEnrichment) / f0_norm;
@@ -251,14 +255,16 @@ int main(int argc, char *argv[])
         std::cout << "After " << numInitialRefinements << " refinements, phase space mesh has " << form.boltzmannMesh()->numActiveElements() << " elements and relErr is " << relErr << ".\n";
         std::cout << "Physical mesh has " << form.gaussMesh()->numActiveElements() << " elements.\n";
       }
-      refStrategy->refine();
+      refStrategy->refine(rank==0);
       form.setInitialConditions(f0); // do projection again
       numInitialRefinements++;
       relErr = f0_err->l2norm(form.boltzmannMesh(), quadratureEnrichment) / f0_norm;
     }
     if (rank==0) std::cout << "Completed " << numInitialRefinements << " refinements to capture initial solution; mesh has " << form.boltzmannMesh()->numActiveElements() << " elements.\n";
+    
+    form.setRefinementThresholds(refinementThreshold, unrefinementThreshold);
   }
-  
+    
   std::ostringstream suffix;
   if (implicit)
   {
