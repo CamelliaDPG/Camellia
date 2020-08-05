@@ -210,7 +210,15 @@ void PhasePhysicalMeshMap1D1V::rebuildMap()
       }
       double topWidth = meshTopo_2D->getVertex(vertexIndices[2])[DIM_X] - meshTopo_2D->getVertex(vertexIndices[3])[DIM_X];
       const double diff = std::fabs(topWidth-width);
-      TEUCHOS_TEST_FOR_EXCEPTION( diff >= 1e-12 * width , std::invalid_argument, "width at top and bottom of element are required to match!");
+      const double tol  = std::max(1e-12 * width, 1e-12);
+      if (diff > tol)
+      {
+        using std::to_string;
+        using std::cout;
+        using std::endl;
+        cout << "width at top and bottom of element are required to match! topWidth: " << topWidth << "; bottom width: " << width << " (diff: " << diff << ")\n";
+        TEUCHOS_TEST_FOR_EXCEPTION( diff > tol , std::invalid_argument, "width at top and bottom of element are required to match! topWidth: " + to_string(topWidth) + "; bottom width: " + to_string(width) + " (diff: " + to_string(diff) + ")");
+      }
     }
     vertex_1D[0] = xLeft;
     auto meshTopo_1D = _mesh_1D->getTopology();
@@ -218,7 +226,14 @@ void PhasePhysicalMeshMap1D1V::rebuildMap()
     const unsigned leftVertexOrdinal  = 0;
     const unsigned rightVertexOrdinal = 1;
     const unsigned vertexDim          = 0;
-    meshTopo_1D->getVertexIndex(vertex_1D, leftVertexIndex);
+    bool vertexFound = meshTopo_1D->getVertexIndex(vertex_1D, leftVertexIndex);
+    if (!vertexFound)
+    {
+      // for debugging, try the lookup again:
+      meshTopo_1D->getVertexIndex(vertex_1D, leftVertexIndex);
+      meshTopo_1D->printAllEntitiesInBaseMeshTopology();
+      TEUCHOS_TEST_FOR_EXCEPTION(!vertexFound, std::invalid_argument, "vertex at coordinate " + std::to_string(xLeft) + " not found!")
+    }
     std::vector<IndexType> vertexNodeVector {leftVertexIndex};
     IndexType leftVertexIndexForCellLookup = meshTopo_1D->baseMeshTopology()->getCanonicalEntityNodesViaPeriodicBCs(vertexDim, vertexNodeVector)[0];
     
@@ -237,7 +252,14 @@ void PhasePhysicalMeshMap1D1V::rebuildMap()
     
     IndexType rightVertexIndex;
     vertex_1D[0] = xLeft + width; // xRight
-    meshTopo_1D->getVertexIndex(vertex_1D, rightVertexIndex);
+    vertexFound = meshTopo_1D->getVertexIndex(vertex_1D, rightVertexIndex);
+    if (!vertexFound)
+    {
+      // for debugging, try the lookup again:
+      meshTopo_1D->getVertexIndex(vertex_1D, leftVertexIndex);
+      meshTopo_1D->printAllEntitiesInBaseMeshTopology();
+      TEUCHOS_TEST_FOR_EXCEPTION(!vertexFound, std::invalid_argument, "vertex at coordinate " + std::to_string(xLeft) + " not found!")
+    }
     vertexNodeVector[0] = rightVertexIndex;
     IndexType rightVertexIndexForCellLookup = meshTopo_1D->baseMeshTopology()->getCanonicalEntityNodesViaPeriodicBCs(vertexDim, vertexNodeVector)[0];
     cellPairsWithVertex = meshTopo_1D->getCellsContainingEntity(0, rightVertexIndexForCellLookup);

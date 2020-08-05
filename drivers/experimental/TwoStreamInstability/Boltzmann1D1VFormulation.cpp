@@ -376,6 +376,12 @@ public:
     // It is also worth noting that creating basisCache_1D below is an inefficiency: those basis values won't
     // be reused beyond the body of this method…
     
+    const int rank = MPIWrapper::CommWorld()->MyPID();
+    
+    TEUCHOS_TEST_FOR_EXCEPTION(basisCache == Teuchos::null, std::invalid_argument, "On rank " + std::to_string(rank) + ", null pointer on line " + std::to_string(__LINE__) );
+    TEUCHOS_TEST_FOR_EXCEPTION(_g_1D == Teuchos::null, std::invalid_argument, "On rank " + std::to_string(rank) + ", null pointer on line " + std::to_string(__LINE__) );
+    TEUCHOS_TEST_FOR_EXCEPTION(_phaseSpacePhysicalMeshMap == Teuchos::null, std::invalid_argument, "On rank " + std::to_string(rank) + ", null pointer on line " + std::to_string(__LINE__) );
+    
     bool isSideCache = (basisCache->getSideIndex() != -1);
     int physicalSpaceSideOrdinal;
     if (!isSideCache)
@@ -453,6 +459,8 @@ public:
       auto offsets            = basisCachePair.second;
       
       BasisCachePtr basisCacheToUse = inPhysicalVolume ? physicalBasisCache : physicalBasisCache->getSideBasisCache(physicalSpaceSideOrdinal);
+      
+      TEUCHOS_TEST_FOR_EXCEPTION(basisCacheToUse == Teuchos::null, std::invalid_argument, "On rank " + std::to_string(rank) + ", null pointer on line " + std::to_string(__LINE__) );
       
       const int numCells  = 1;
       const int numPoints = basisCacheToUse->getRefCellPoints().dimension(0);
@@ -873,17 +881,21 @@ void Boltzmann1D1VFormulation::setInitialConditions(FunctionPtr f0)
   _t = 0;
 }
 
-void Boltzmann1D1VFormulation::setRefinementThresholds(double refinementThreshold, double unrefinementThreshold)
+void Boltzmann1D1VFormulation::setRefinementThresholds(double refinementThreshold, int maxElements, int maxRefinementLevel)
 {
   _refinementThreshold = refinementThreshold;
-  _unrefinementThreshold = unrefinementThreshold;
+  _maxElements = maxElements;
+  _maxRefinementLevel = maxRefinementLevel;
   
   if (_refStrategy == Teuchos::null)
   {
     _refStrategy = RefinementStrategy::energyErrorRefinementStrategy(_boltzmannSoln, _refinementThreshold);
   }
   _refStrategy->setRelativeErrorThreshold(_refinementThreshold);
-  _refStrategy->setUnrefinementThreshold(_unrefinementThreshold);
+  _refStrategy->setMaxElements(_maxElements);
+  _refStrategy->setMaximumRefinementLevel(_maxRefinementLevel);
+  const int H1Order = _boltzmannSoln->mesh()->globalDofAssignment()->getInitialH1Order()[0];
+  _refStrategy->setMaxP(H1Order); // disallow p refinements (these would require revision of VelocitySpaceExtrusion)
 }
 
 void Boltzmann1D1VFormulation::setStage(const int stageNumber)
@@ -902,13 +914,14 @@ void Boltzmann1D1VFormulation::takeTimeStep()
   // for explicit, we do each solve just once per time step.
   const bool implicit = _formulationChoice == ULTRAWEAK_IMPLICIT_H1_TRACE || _formulationChoice == ULTRAWEAK_IMPLICIT_L2_TRACE;
   int numSubsteps = implicit ? 3 : 1;
+//  int numSubsteps = implicit ? 1 : 1; // 1 for implicit for faster debugging
   
   bool useGMG = true;
   if (useGMG && (_gmgSolver == Teuchos::null))
   {
     int kCoarse = 0;
     const double cgTol = 1e-6;
-    const int maxIters = 200;
+    const int maxIters = 2000;
 
     bool useCondensedSolve = _boltzmannSoln->usesCondensedSolve();
 
@@ -1000,7 +1013,7 @@ void Boltzmann1D1VFormulation::takeTimeStep()
         {
           // for now, print refinement info to console on rank 0.
           const bool printToConsole = _boltzmannSoln->mesh()->Comm()->MyPID() == 0;
-          const bool doUnrefinements = (_unrefinementThreshold >= 1.0);
+          const bool doUnrefinements = (_maxElements < std::numeric_limits<int>::max());
           _refStrategy->refineAndUnrefine(doUnrefinements, printToConsole);
         }
         

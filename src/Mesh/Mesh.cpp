@@ -519,6 +519,11 @@ void Mesh::enforceOneIrregularity(bool repartitionAndMigrate)
       for (auto entry : irregularCellsToRefineGlobal)
       {
         RefinementPatternKey refKey = entry.first;
+//        // DEBUGGING
+//        if (rank == 0)
+//        {
+//          Camellia::print("cells to h-refine for 1-irregularity", entry.second);
+//        }
         hRefine(entry.second, RefinementPattern::refinementPattern(refKey), false); // false: don't repartition and rebuild, yet.
       }
       meshChanged = true;
@@ -1053,6 +1058,8 @@ void Mesh::hUnrefine(const set<GlobalIndexType> &cellIDs, bool repartitionAndReb
   {
     this->repartitionAndRebuild();
   }
+  
+  _gda->didHUnrefine(writableMeshTopology, cellIDs, repartitionAndRebuild);
   
   for (auto observer  : _registeredObservers)
   {

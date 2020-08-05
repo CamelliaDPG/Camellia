@@ -43,11 +43,12 @@ protected:
   ErrorIndicatorPtr _errorIndicator;
 
   double _relativeErrorThreshold;
-  double _unrefinementThreshold;
+  int _maxElementCount = std::numeric_limits<int>::max();
   bool _enforceOneIrregularity;
   bool _reportPerCellErrors;
   vector< RefinementResults > _results;
   double _min_h;
+  int _maxRefinementLevel = std::numeric_limits<int>::max(); // as measured from coarse/initial mesh, which is level 0.  Default: no maximum.
   int _max_p;
   bool _preferPRefinements;
   
@@ -65,8 +66,8 @@ public:
   void setRelativeErrorThreshold(double value);
   void setEnforceOneIrregularity(bool value);
 
-  //! Set the energy threshold (relative to minimum parent-element error) to use for unrefinements
-  void setUnrefinementThreshold(double value);
+  //! Set a maximum number of active elements; used in refineAndUnrefine.  Enough unrefinements will be performed to reduce the number of active elements to the specified count.
+  void setMaxElements(int maxElementCount);
   
   virtual void refine(bool printToConsole=false);
   virtual void refineAndUnrefine(bool unrefine, bool printToConsole);
@@ -78,8 +79,9 @@ public:
   static void hRefineCells(MeshPtr mesh, const vector<GlobalIndexType> &cellIDs);
   static void hRefineUniformly(MeshPtr mesh);
   void getCellsAboveErrorThreshhold(vector<GlobalIndexType> &cellsToRefine);
-  void getCellsBelowUnrefinementErrorThreshhold(vector<GlobalIndexType> &cellsToUnrefine);
   void setMinH(double value);
+  void setMaxP(int max_p);
+  void setMaximumRefinementLevel(int maxLevel);
   void setReportPerCellErrors(bool value);
 
   double getEnergyError(int refinementNumber);
