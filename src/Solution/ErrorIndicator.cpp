@@ -15,6 +15,7 @@
 #include "GlobalDofAssignment.h"
 #include "GradientErrorIndicator.h"
 #include "HessianErrorIndicator.h"
+#include "MPIGlobalMinMax.h"
 
 using namespace Camellia;
 
@@ -193,6 +194,91 @@ void ErrorIndicator::gatherParentError()
     }
     _parentErrorMeasures[parentCellID] = parentError;
   }
+}
+
+std::vector< std::pair<GlobalIndexType,double> > ErrorIndicator::globalMinimumErrorParentCells(const int cellReductionTarget, const std::set<GlobalIndexType> &excludedChildren)
+{
+  gatherParentError();
+  
+  auto meshTopo = _mesh->getTopology();
+  std::map<GlobalIndexType,double> parentErrorMeasures;
+  for (const auto &entry : _parentErrorMeasures)
+  {
+    // check children:
+    auto parentCell = meshTopo->getCell(entry.first);
+    auto childIDs = parentCell->getChildIndices(meshTopo);
+    bool hasExcludedChild = false;
+    for (const auto & childID : childIDs)
+    {
+      if (excludedChildren.find(childID) != excludedChildren.end())
+      {
+        hasExcludedChild = true;
+        break;
+      }
+    }
+    if (!hasExcludedChild)
+    {
+      parentErrorMeasures[entry.first] = entry.second;
+    }
+  }
+  
+  auto comm = _mesh->Comm();
+  
+  const int maxGatherCount = std::max(10000,cellReductionTarget*4);
+  auto globalEntries = MPIGlobalMinMax::globalMinimums(comm, parentErrorMeasures, cellReductionTarget, maxGatherCount);
+  
+  
+  const int myPID = comm->MyPID();
+  
+  const auto &myCellIDs = _mesh->cellIDsInPartition();
+  std::set<GlobalIndexType> myParentCellIDs;
+  for (const auto & cellID : myCellIDs)
+  {
+    CellPtr cell   = meshTopo->getCell(cellID);
+    CellPtr parent = cell->getParent();
+    
+    if (parent != Teuchos::null)
+    {
+      const GlobalIndexType firstChildID = parent->children()[0]->cellIndex();
+      const int ownerPID = _mesh->globalDofAssignment()->partitionForCellID( firstChildID );
+      // NOTE: if first child has children, ownerPID will be -1.  But that also means that this parent is not eligible for refinement, so we can safely omit it from the list (effectively, this parent is then not owned by any PID).
+      if (ownerPID == myPID)
+      {
+        myParentCellIDs.insert(parent->cellIndex());
+      }
+    }
+  }
+  
+  // do a global sum to get the child counts for each entry
+  std::vector<int> localChildCount(globalEntries.size());
+  int i=0;
+  for (const auto &entry : globalEntries)
+  {
+    const auto & parentCellID = entry.first;
+    if (myParentCellIDs.find(parentCellID) != myParentCellIDs.end())
+    {
+      localChildCount[i] = meshTopo->getCell(parentCellID)->numChildren();
+    }
+    i++;
+  }
+  
+  std::vector<int> globalChildCount(globalEntries.size());
+  comm->SumAll(&localChildCount[0], &globalChildCount[0], globalEntries.size());
+  
+  // now, go through global entries again, counting children until we pass the target
+  int cellReduction = 0;
+  int j=0;
+  for (j=0; j<globalChildCount.size(); j++)
+  {
+    cellReduction += globalChildCount[j] - 1; // -1 because the parent cell will remain
+    if (cellReduction >= cellReductionTarget)
+    {
+      break;
+    }
+  }
+  // we want the first j+1 entries; delete the rest
+  globalEntries.erase(globalEntries.begin()+j+1, globalEntries.end());
+  return globalEntries;
 }
 
 double ErrorIndicator::totalError() const

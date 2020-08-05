@@ -101,12 +101,15 @@ public:
 //  virtual GlobalIndexType cellID(ElementTypePtr elemTypePtr, IndexType cellIndex, PartitionIndexType partitionNumber);
   virtual vector<GlobalIndexType> cellIDsOfElementType(PartitionIndexType partitionNumber, ElementTypePtr elemTypePtr);
   const set< GlobalIndexType > &cellsInPartition(PartitionIndexType partitionNumber) const;
+  
   Camellia::FieldContainer<double> cellSideParitiesForCell( GlobalIndexType cellID );
+  int sideParity(GlobalIndexType cellID, unsigned int sideOrdinal);
 
   // after calling any of these, must call rebuildLookups
   virtual void didHRefine(const set<GlobalIndexType> &parentCellIDs); // subclasses should call super
   virtual void didPRefine(const set<GlobalIndexType> &cellIDs, int deltaP); // subclasses should call super
   virtual void willHUnrefine(const set<GlobalIndexType> &parentCellIDs); // subclasses should call super
+  virtual void didHUnrefine(MeshTopologyPtr meshToRefine, const set<GlobalIndexType> &cellIDs, bool didRepartitionAndRebuild);
 
   virtual void didChangePartitionPolicy() = 0; // called by superclass after setPartitionPolicy() is invoked
 

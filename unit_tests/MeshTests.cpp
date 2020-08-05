@@ -105,6 +105,39 @@ MeshPtr makeTestMesh( int spaceDim, bool spaceTime )
   }
   return mesh;
 }
+
+  void checkMeshParities( MeshPtr mesh, Teuchos::FancyOStream &out, bool &success)
+  {
+    const auto & myCellIDs = mesh->cellIDsInPartition();
+    
+    auto globalDofAssignment = mesh->globalDofAssignment();
+    
+    for (auto & cellID : myCellIDs)
+    {
+      CellPtr cell = mesh->getTopology()->getCell(cellID);
+      int sideCount = cell->getSideCount();
+      for (int sideOrdinal=0; sideOrdinal<sideCount; sideOrdinal++)
+      {
+        auto neighborInfo = cell->getNeighborInfo(sideOrdinal, mesh->getTopology());
+        const IndexType & neighborCellID = neighborInfo.first;
+        const auto & mySideOrdinalInNeighbor = neighborInfo.second;
+        out << "cell " << cellID << " neighbor on side " << sideOrdinal << ": " << neighborCellID;
+        if (neighborCellID != -1)
+        {
+          int myParity       = globalDofAssignment->sideParity(cellID, sideOrdinal);
+          int neighborParity = globalDofAssignment->sideParity(neighborCellID, mySideOrdinalInNeighbor);
+          out << "; cell has parity " << myParity << "; neighbor has parity " << neighborParity << " on its side " << mySideOrdinalInNeighbor << std::endl;
+          TEST_EQUALITY(myParity, -neighborParity);
+        }
+        else
+        {
+          out << std::endl;
+        }
+        
+      }
+    }
+  }
+
   TEUCHOS_UNIT_TEST( Mesh, ActiveCellOffset )
   {
     MPIWrapper::CommWorld()->Barrier();
@@ -1448,6 +1481,8 @@ void testUnrefine(int levels, int spaceDim, Teuchos::FancyOStream &out, bool &su
     
     numActiveCellsExpected -= numActiveCellsAddedPerRefinement * cellsToUnrefine.size();
     TEST_EQUALITY(numActiveCellsExpected, mesh->numActiveElements());
+    
+    checkMeshParities(mesh, out, success);
   }
 }
   
@@ -1478,6 +1513,39 @@ TEUCHOS_UNIT_TEST( Mesh, Unrefine_2_levels_1D )
   int spaceDim = 1;
   int levels = 2;
   testUnrefine(levels, spaceDim, out, success);
+}
+
+TEUCHOS_UNIT_TEST( Mesh, Unrefine_2D_Parities )
+{
+  const int spaceDim = 2;
+  
+  // trying to reproduce a failure (believed to be parity-related) we see in some solutions
+  int H1Order = 1; // lowest-order mesh
+  bool conformingTraces = true;
+  PoissonFormulation form(spaceDim,conformingTraces);
+  
+  vector<double> domainDim {2.0, 1.0};
+  vector<int> meshDim {2, 1};
+  
+  // defaults for mesh, except override to disallow mesh topology pruning.
+  // (When mesh topology pruning is enabled, GDA aggressively resets parities.  More careful logic regarding parities is required for the non-pruned case.)
+  int pToAddTestDefault = -1;
+  vector<double> x0_default;
+  map<int,int> emptyMap;
+  bool allowMeshTopologyPruning = false;
+  MeshPtr mesh = MeshFactory::rectilinearMesh(form.bf(), domainDim, meshDim, H1Order, pToAddTestDefault, x0_default, emptyMap, emptyMap, Teuchos::null, allowMeshTopologyPruning);
+
+  std::vector<GlobalIndexType> cellsToRefine {1};
+  mesh->hRefine(cellsToRefine);
+  checkMeshParities(mesh, out, success);
+  
+  cellsToRefine = {0};
+  mesh->hRefine(cellsToRefine);
+  checkMeshParities(mesh, out, success);
+  
+  std::set<GlobalIndexType> cellsToUnrefine {0};
+  mesh->hUnrefine(cellsToUnrefine);
+  checkMeshParities(mesh, out, success);
 }
   
   // the 2-level test in 2D and 3D is complicated by 1-irregularity enforcement.

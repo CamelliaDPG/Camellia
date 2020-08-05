@@ -7,6 +7,7 @@
 #include "ErrorIndicator.h"
 #include "ERKTableau.h"
 #include "ExpFunction.h"
+#include "GlobalDofAssignment.h"
 #include "HDF5Exporter.h"
 #include "RefinementStrategy.h"
 #include "RHS.h"
@@ -85,6 +86,31 @@ std::string getProblemChoiceString(ProblemChoice problem)
   }
 }
 
+void checkMeshParities( MeshPtr mesh)
+{
+  const auto & myCellIDs = mesh->cellIDsInPartition();
+  
+  auto globalDofAssignment = mesh->globalDofAssignment();
+  
+  for (auto & cellID : myCellIDs)
+  {
+    CellPtr cell = mesh->getTopology()->getCell(cellID);
+    int sideCount = cell->getSideCount();
+    for (int sideOrdinal=0; sideOrdinal<sideCount; sideOrdinal++)
+    {
+      auto neighborInfo = cell->getNeighborInfo(sideOrdinal, mesh->getTopology());
+      const IndexType & neighborCellID = neighborInfo.first;
+      const auto & mySideOrdinalInNeighbor = neighborInfo.second;
+      if (neighborCellID != -1)
+      {
+        int myParity       = globalDofAssignment->sideParity(cellID, sideOrdinal);
+        int neighborParity = globalDofAssignment->sideParity(neighborCellID, mySideOrdinalInNeighbor);
+        TEUCHOS_TEST_FOR_EXCEPTION(myParity != -neighborParity, std::invalid_argument, "inconsistent parities");
+      }
+    }
+  }
+}
+
 int main(int argc, char *argv[])
 {
   Teuchos::GlobalMPISession mpiSession(&argc, &argv, NULL); // initialize MPI
@@ -110,9 +136,10 @@ int main(int argc, char *argv[])
   
   bool useAdaptivity = false;
   double refinementThresholdForInitialData   = 0.20; // moderately aggressive refinement
-  double refinementThreshold   = 0.999999; // essentially, refine just the maximum error element (and any that thanks to solution symmetry have same error)
+//  double refinementThreshold   = 0.999999; // essentially, refine just the maximum error element (and any that thanks to solution symmetry have same error)
 //  double unrefinementThreshold = 1.000001; // similarly, unrefine just the minimum-error parent element
-  double unrefinementThreshold = 0.0; // no unrefinements (any value < 1 will get us no unrefinements)
+  double refinementThreshold = 0.80; // refine elements with at least 80% of the maximum per-element error
+  int maxElements = 64 * 64; // do unrefinements to keep total mesh size smaller than this
   
   int xElements = 30;
   int vElements = 40;
@@ -125,6 +152,7 @@ int main(int argc, char *argv[])
   bool useL2Trace = true;
   std::string problemChoiceString = "two-stream"; // "bump-on-tail" the alternative
   ProblemChoice problemChoice = TWO_STREAM;
+  int maximumRefinementLevel = std::numeric_limits<int>::max(); // default to no maximum refinement level
   
   cmdp.setOption("useL2Trace", "useH1Trace", &useL2Trace);
   cmdp.setOption("implicit", "explicit", &implicit);
@@ -134,6 +162,8 @@ int main(int argc, char *argv[])
   cmdp.setOption("delta_k", &delta_k);
   cmdp.setOption("dt", &dt_max );
   cmdp.setOption("u0", &u0);
+  cmdp.setOption("maxElements", &maxElements);
+  cmdp.setOption("maximumRefinementLevel", &maximumRefinementLevel);
   cmdp.setOption("numTimeSteps", &numTimeSteps);
   cmdp.setOption("outputFrequency", &outputFrequency);
   cmdp.setOption("timeStepC0", &timeStepC0);
@@ -262,7 +292,7 @@ int main(int argc, char *argv[])
     }
     if (rank==0) std::cout << "Completed " << numInitialRefinements << " refinements to capture initial solution; mesh has " << form.boltzmannMesh()->numActiveElements() << " elements.\n";
     
-    form.setRefinementThresholds(refinementThreshold, unrefinementThreshold);
+    form.setRefinementThresholds(refinementThreshold, maxElements, maximumRefinementLevel);
   }
     
   std::ostringstream suffix;
@@ -353,7 +383,10 @@ int main(int argc, char *argv[])
     
     form.takeTimeStep();
     t += dt;
-    const bool computeMinimum_bn = true; // average value on a side
+    
+    checkMeshParities(form.boltzmannMesh());
+    
+    const bool computeMinimum_bn = false; // average value on a side
     if ((timeStepNumber % outputFrequency == 0) || (timeStepNumber == numTimeSteps))
     {
       double min_bn = 1000;

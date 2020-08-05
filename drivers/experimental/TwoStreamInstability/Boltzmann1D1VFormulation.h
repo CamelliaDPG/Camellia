@@ -57,8 +57,10 @@ private:
   
   //! on each refinement, refine any element with error greater than threshold times the maximum element error.  Values > 1.0 mean no refinement
   double _refinementThreshold   = 1.1;
-  //! on each unrefinement, unrefine any parent element with error below threshold times the minimum parent-element error.  Values < 1.0 mean no unrefinement.
-  double _unrefinementThreshold = 0.0;
+  //! unrefinements will be performed to ensure that the mesh has no more than _maxElements active elements
+  int _maxElements = std::numeric_limits<int>::max();
+  
+  int _maxRefinementLevel = std::numeric_limits<int>::max();
   
   RefinementStrategyPtr _refStrategy;
   
@@ -138,9 +140,10 @@ public:
   
   /** \brief  Sets thresholds for adaptivity
       \param  refinementThreshold   [in]  - on each refinement, refine any element with error greater than refinementThreshold times the maximum element error.  Values > 1.0 mean no refinement.
-      \param  unrefinementThreshold [in]  - on each unrefinement, unrefine any parent element with error below threshold times the minimum parent-element error.  Values < 1.0 mean no unrefinement.
+      \param  maxElements [in]  - maximum number of active elements allowed in the mesh (unrefinements will be performed to maintain this rule)
+      \param  maxRefinementLevel [in]  - maximum levels of refinement
   */
-  void setRefinementThresholds(double refinementThreshold, double unrefinementThreshold);
+  void setRefinementThresholds(double refinementThreshold, int maxElements, int maxRefinementLevel);
   
   //! notification that the boltzmann solve has set the RK stage:
   void setStage(const int stageNumber);

@@ -108,7 +108,7 @@ MeshPtr TRefinementStrategy<Scalar>::mesh()
 template <typename Scalar>
 void TRefinementStrategy<Scalar>::refine(bool printToConsole)
 {
-  const bool unrefine = false;
+  const bool unrefine = (_maxElementCount != std::numeric_limits<int>::max());
   this->refineAndUnrefine(unrefine, printToConsole);
 }
 
@@ -117,14 +117,15 @@ void TRefinementStrategy<Scalar>::refineAndUnrefine(bool unrefine, bool printToC
 {
   // greedy refinement algorithm - mark cells for refinement
   MeshPtr mesh = this->mesh();
+  auto meshTopo = mesh->getTopology();
 
   vector<GlobalIndexType> localCellsToRefine;
   getCellsAboveErrorThreshhold(localCellsToRefine); // calls _errorIndicator->measureError()
   double totalError = _errorIndicator->totalError();
   
   map<GlobalIndexType, double> cellMeasuresLocal;
-  const set<GlobalIndexType>* myCellIDs = &mesh->cellIDsInPartition();
-  for (GlobalIndexType cellID : *myCellIDs)
+  const set<GlobalIndexType> & myCellIDs = mesh->cellIDsInPartition();
+  for (GlobalIndexType cellID : myCellIDs)
   {
     cellMeasuresLocal[cellID] = mesh->getCellMeasure(cellID);
   }
@@ -142,24 +143,30 @@ void TRefinementStrategy<Scalar>::refineAndUnrefine(bool unrefine, bool printToC
     double h = pow(cellMeasuresLocal[cellID], 1.0 / meshDim); // dth root of volume measure = h
     int p = mesh->cellPolyOrder(cellID);
 
+    const int cellLevel = mesh->getTopology()->getCell(cellID)->level();
+    
+    const bool canHRefine = ((h > _min_h) && (cellLevel < _maxRefinementLevel));
+    const bool canPRefine = (p < _max_p);
+    
     if (!_preferPRefinements)
     {
-      if (h > _min_h)
+      // prefer h refinements
+      if (canHRefine)
       {
         myCellsToHRefine.push_back(cellID);
       }
-      else
+      else if (canPRefine)
       {
         myCellsToPRefine.push_back(cellID);
       }
     }
     else
     {
-      if (p < _max_p)
+      if (canPRefine)
       {
         myCellsToPRefine.push_back(cellID);
       }
-      else
+      else if (canHRefine)
       {
         myCellsToHRefine.push_back(cellID);
       }
@@ -212,54 +219,117 @@ void TRefinementStrategy<Scalar>::refineAndUnrefine(bool unrefine, bool printToC
   
   if (unrefine)
   {
-    vector<GlobalIndexType> localCellsBelowThreshold;
-    getCellsBelowUnrefinementErrorThreshhold(localCellsBelowThreshold);
-    
-    vector<GlobalIndexType> localCellsToUnrefine;
-    
-    auto meshTopo = _errorIndicator->mesh()->getTopology();
-    for (const auto &localCellID : localCellsBelowThreshold)
+    int numCellsToBeAdded = 0;
+    int localNumCellsToBeAdded = 0;
+    std::set<GlobalIndexType> cellsToRefineSet(cellsToRefine.begin(),cellsToRefine.end());
+    for (const auto & cellID : cellsToRefine)
     {
-      auto parentCell = meshTopo->getCell(localCellID);
-      bool hasChildMarkedForRefinement = false;
-      auto childIDs   = parentCell->getChildIndices(meshTopo);
-      for (const auto &childID : childIDs)
+      if (myCellIDs.find(cellID) != myCellIDs.end())
       {
-        if (std::find(cellsToRefine.begin(), cellsToRefine.end(), childID) != cellsToRefine.end())
+        CellPtr cell = meshTopo->getCell(cellID);
+        auto cellTopoKey = cell->topology()->getKey();
+        RefinementPatternPtr refPattern = RefinementPattern::regularRefinementPattern(cellTopoKey);
+        
+        localNumCellsToBeAdded += refPattern->numChildren() - 1; // -1 because the parent cell will no longer be active
+        
+        if (_enforceOneIrregularity)
         {
-          hasChildMarkedForRefinement = true;
-          break;
+          // if any of cell's neighbors are at a lower level of refinement than cell, then they too will be refined during 1-irregularity enforcement
+          // (there can be a cascade, but for present purposes -- estimating the number of new cells that will be added -- we don't worry about that)
+          auto neighbors = cell->getNeighbors(meshTopo);
+          for (auto neighbor : neighbors)
+          {
+            if (cellsToRefineSet.find(neighbor->cellIndex()) != cellsToRefineSet.end())
+            {
+              // the neighbor will be refined anyway prior to 1-irregularity enforcement; will be counted by its owner
+              continue;
+            }
+            // we are making an assumption here that we're doing isotropic refinements; if not, then level comparison isn't the right thing to check
+            // (anisotropic refinements are not a heavily exercised code path…)
+            if (neighbor->level() < cell->level())
+            {
+              localNumCellsToBeAdded += refPattern->numChildren() - 1;  // -1 because the parent cell will no longer be active
+            }
+          }
         }
-        else if (std::find(cellsToPRefine.begin(), cellsToPRefine.end(), childID) != cellsToPRefine.end())
-        {
-          hasChildMarkedForRefinement = true;
-          break;
-        }
-      }
-      if (!hasChildMarkedForRefinement)
-      {
-        localCellsToUnrefine.push_back(localCellID);
+        
       }
     }
-    
-    GlobalIndexTypeToCast numCellsToHUnrefine = 0;
-    GlobalIndexTypeToCast myNumCellsToHUnrefine = localCellsToUnrefine.size();
-    mesh->Comm()->SumAll(&myNumCellsToHUnrefine, &numCellsToHUnrefine, 1);
-    GlobalIndexTypeToCast myCellOrdinalOffset = 0;
-    mesh->Comm()->ScanSum(&myNumCellsToHUnrefine, &myCellOrdinalOffset, 1);
-    myCellOrdinalOffset -= myNumCellsToHUnrefine;
-      
-    vector<GlobalIndexTypeToCast> globalCellsToUnrefineVector(numCellsToHUnrefine, 0);
-    for (int i=0; i<myNumCellsToHUnrefine; i++)
-    {
-      globalCellsToUnrefineVector[myCellOrdinalOffset + i] = localCellsToUnrefine[i];
-    }
-    vector<GlobalIndexTypeToCast> gatheredCellsToUnrefineVector(numCellsToHUnrefine, 0);
-    mesh->Comm()->SumAll(&globalCellsToUnrefineVector[0], &gatheredCellsToUnrefineVector[0], numCellsToHUnrefine);
+    mesh->Comm()->SumAll(&localNumCellsToBeAdded, &numCellsToBeAdded, 1);
 
-    parentCellsToUnrefine = std::set<GlobalIndexType>(gatheredCellsToUnrefineVector.begin(),gatheredCellsToUnrefineVector.end());
+    const int numActiveCellsAfterRefinement = mesh->numActiveElements() + numCellsToBeAdded;
+    const int cellReductionTarget = std::max(numActiveCellsAfterRefinement - _maxElementCount, 0);
+    
+    // if a child has been marked for refinement, we're not allowed to unrefine its parent:
+    std::set<GlobalIndexType> childCellsToExclude(cellsToRefine.begin(),cellsToRefine.end());
+    childCellsToExclude.insert(cellsToPRefine.begin(), cellsToPRefine.end());
+    
+    if (_enforceOneIrregularity)
+    {
+      std::set<GlobalIndexType> myAdditionalChildCellsToExclude;
+      // peer neighbors of cellsToRefine should also be excluded from having their parents unrefined
+      for (const auto & myCellID : myCellIDs)
+      {
+        if (childCellsToExclude.find(myCellID) != childCellsToExclude.end())
+        {
+          // this cell is already excluded; no need to check it further
+          continue;
+        }
+        
+        CellPtr myCell = meshTopo->getCell(myCellID);
+        const unsigned int sideCount = myCell->getSideCount();
+        for (unsigned int sideOrdinal=0; sideOrdinal<sideCount; sideOrdinal++)
+        {
+          auto neighborInfo = myCell->getNeighborInfo(sideOrdinal, meshTopo);
+          auto neighborCellID = neighborInfo.first;
+          if (childCellsToExclude.find(neighborCellID) != childCellsToExclude.end())
+          {
+            // neighbor is marked for refinement; myCell's parent should not be unrefined if myCell is a peer of neighbor
+            CellPtr neighborCell = meshTopo->getCell(neighborCellID);
+            const unsigned & mySideOrdinalInNeighbor = neighborInfo.second;
+            auto neighborNeighborInfo = neighborCell->getNeighborInfo(mySideOrdinalInNeighbor, meshTopo);
+            bool isPeer = neighborNeighborInfo.first == myCellID;
+            if (isPeer)
+            {
+              myAdditionalChildCellsToExclude.insert(myCellID);
+              break; // no need to check further neighbors
+            }
+          }
+          else if (neighborCellID != -1)
+          {
+            CellPtr neighbor = meshTopo->getCell(neighborCellID);
+            if (neighbor->isParent(meshTopo))
+            {
+              // if neighbor is refined along side, then we should not unrefine myCell's parent
+              const auto sideOrdinalInNeighbor = neighborInfo.second;
+              const bool neighborSideIsRefined = (neighbor->refinementPattern()->childrenForSides()[sideOrdinalInNeighbor].size() > 1);
+              if (neighborSideIsRefined)
+              {
+                myAdditionalChildCellsToExclude.insert(myCellID);
+                break; // already excluded; no need to check further neighbors…
+              }
+            }
+          }
+        }
+      }
+      
+      std::vector<GlobalIndexType> myAdditionalChildCellsToExcludeVector(myAdditionalChildCellsToExclude.begin(),myAdditionalChildCellsToExclude.end());
+      std::vector<GlobalIndexType> globalAdditionalChildCellsToExclude;
+      
+      std::vector<int> offsets;
+      MPIWrapper::allGatherVariable(*mesh->Comm(), globalAdditionalChildCellsToExclude, myAdditionalChildCellsToExcludeVector, offsets);
+      
+      childCellsToExclude.insert(globalAdditionalChildCellsToExclude.begin(),globalAdditionalChildCellsToExclude.end());
+    }
+    
+    std::vector< std::pair<GlobalIndexType,double> > parentEntries = _errorIndicator->globalMinimumErrorParentCells(cellReductionTarget, childCellsToExclude);
+    
+    parentCellsToUnrefine = std::set<GlobalIndexType>();
+    for (const auto &entry : parentEntries)
+    {
+      parentCellsToUnrefine.insert(entry.first);
+    }
   }
-  
   
   if (printToConsole)
   {
@@ -301,17 +371,6 @@ void TRefinementStrategy<Scalar>::getCellsAboveErrorThreshhold(vector<GlobalInde
   
   double errorThreshold = maxError * _relativeErrorThreshold;
   _errorIndicator->localCellsAboveErrorThreshold(errorThreshold, cellsToRefine);
-}
-
-template <typename Scalar>
-void TRefinementStrategy<Scalar>::getCellsBelowUnrefinementErrorThreshhold(vector<GlobalIndexType> &cellsToUnrefine)
-{
-  _errorIndicator->gatherParentError();
-  
-  double minError = _errorIndicator->minParentError();
- 
-  double errorThreshold = minError * _unrefinementThreshold;
-  _errorIndicator->localParentCellsBelowErrorThreshold(errorThreshold, cellsToUnrefine);
 }
 
 // defaults to h-refinement
@@ -362,6 +421,24 @@ void TRefinementStrategy<Scalar>::hRefineUniformly(MeshPtr mesh)
 }
 
 template <typename Scalar>
+void TRefinementStrategy<Scalar>::setMaxElements(int maxElementCount)
+{
+  _maxElementCount = maxElementCount;
+}
+
+template <typename Scalar>
+void TRefinementStrategy<Scalar>::setMaxP(int max_p)
+{
+  _max_p = max_p;
+}
+
+template <typename Scalar>
+void TRefinementStrategy<Scalar>::setMaximumRefinementLevel(int maxLevel)
+{
+  _maxRefinementLevel = maxLevel;
+}
+
+template <typename Scalar>
 void TRefinementStrategy<Scalar>::setRelativeErrorThreshold(double value)
 {
   _relativeErrorThreshold = value;
@@ -375,12 +452,6 @@ RefinementResults TRefinementStrategy<Scalar>::setResults(GlobalIndexType numEle
   solnResults.numDofs = numDofs;
   solnResults.totalEnergyError = totalEnergyError;
   return solnResults;
-}
-
-template <typename Scalar>
-void TRefinementStrategy<Scalar>::setUnrefinementThreshold(double value)
-{
-  _unrefinementThreshold = value;
 }
 
 template <typename Scalar>

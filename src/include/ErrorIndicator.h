@@ -45,6 +45,8 @@ namespace Camellia {
     //! adds to the provided container locally-owned parents cells with error below the threshold
     virtual void localParentCellsBelowErrorThreshold(double threshold, vector<GlobalIndexType> &cellsBelowThreshold);
     
+    std::vector< std::pair<GlobalIndexType,double> > globalMinimumErrorParentCells(const int cellReductionTarget, const std::set<GlobalIndexType> &excludedChildren);
+    
     //! determine rank-local error measures.  Subclasses should populate _localErrorMeasures
     virtual void measureError() = 0;
     
