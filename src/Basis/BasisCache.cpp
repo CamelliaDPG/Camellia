@@ -1791,6 +1791,12 @@ BasisCachePtr BasisCache::basisCacheForReferenceCell(CellTopoPtr cellTopo, int c
 BasisCachePtr BasisCache::basisCacheForRefinedReferenceCell(CellTopoPtr cellTopo, int cubatureDegree,
     RefinementBranch refinementBranch, bool createSideCacheToo, bool tensorProductTopologyMeansSpaceTime)
 {
+  if (refinementBranch.size() == 0)
+  {
+    // no refinements; we want the full reference cell
+    return basisCacheForReferenceCell(cellTopo, cubatureDegree, createSideCacheToo, tensorProductTopologyMeansSpaceTime);
+  }
+  
   Camellia::FieldContainer<double> cellNodes = RefinementPattern::descendantNodesRelativeToAncestorReferenceCell(refinementBranch);
 
   cellNodes.resize(1,cellNodes.dimension(0),cellNodes.dimension(1));

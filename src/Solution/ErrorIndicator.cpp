@@ -16,6 +16,7 @@
 #include "GradientErrorIndicator.h"
 #include "HessianErrorIndicator.h"
 #include "MPIGlobalMinMax.h"
+#include "UnrefinementProjectionErrorIndicator.h"
 
 using namespace Camellia;
 
@@ -53,20 +54,24 @@ const std::map<GlobalIndexType,double> & ErrorIndicator::localErrorMeasures() co
   return _localErrorMeasures;
 }
 
-double ErrorIndicator::maxError() const
+double ErrorIndicator::maxError(const std::set<GlobalIndexType> localCellsToExclude) const
 {
-  double localMax = maxLocalError();
+  double localMax = maxLocalError(localCellsToExclude);
   double globalMax;
   _mesh->Comm()->MaxAll(&localMax, &globalMax, 1);
   return globalMax;
 }
 
-double ErrorIndicator::maxLocalError() const
+double ErrorIndicator::maxLocalError(const std::set<GlobalIndexType> localCellsToExclude) const
 {
   double maxErr = 0;
   for (auto measureEntry : _localErrorMeasures) {
-    double cellError = measureEntry.second;
-    maxErr = max(maxErr,cellError);
+    auto & cellID = measureEntry.first;
+    if (localCellsToExclude.find(cellID) == localCellsToExclude.end())
+    {
+      double & cellError = measureEntry.second;
+      maxErr = max(maxErr,cellError);
+    }
   }
   return maxErr;
 }
@@ -102,7 +107,7 @@ double ErrorIndicator::minParentError() const
   return globalMinError;
 }
 
-void ErrorIndicator::gatherParentError()
+void ErrorIndicator::gatherParentError(const std::set<GlobalIndexType> &excludedChildren)
 {
   // this method fills _parentErrorMeasures; clear it first
   _parentErrorMeasures.clear();
@@ -136,6 +141,7 @@ void ErrorIndicator::gatherParentError()
     {
       // check that all siblings are active (if not, parent is not eligible for unrefinement, and should be ignored)
       bool parentHasGrandchildren = false;
+      bool parentHasExcludedChild = false;
       for (const auto & childCell : parent->children())
       {
         if (childCell->numChildren() > 0)
@@ -144,8 +150,13 @@ void ErrorIndicator::gatherParentError()
           parentHasGrandchildren = true;
           break;
         }
+        if (excludedChildren.find(childCell->cellIndex()) != excludedChildren.end())
+        {
+          parentHasExcludedChild = true;
+          break;
+        }
       }
-      if (parentHasGrandchildren)
+      if (parentHasGrandchildren || parentHasExcludedChild)
       {
         // go to next cell in myCellIDs
         continue;
@@ -198,7 +209,13 @@ void ErrorIndicator::gatherParentError()
 
 std::vector< std::pair<GlobalIndexType,double> > ErrorIndicator::globalMinimumErrorParentCells(const int cellReductionTarget, const std::set<GlobalIndexType> &excludedChildren)
 {
-  gatherParentError();
+  if (cellReductionTarget == 0)
+  {
+    // can skip computing errors, etc.
+    return std::vector< std::pair<GlobalIndexType,double> >();
+  }
+  
+  gatherParentError(excludedChildren);
   
   auto meshTopo = _mesh->getTopology();
   std::map<GlobalIndexType,double> parentErrorMeasures;
@@ -226,7 +243,6 @@ std::vector< std::pair<GlobalIndexType,double> > ErrorIndicator::globalMinimumEr
   
   const int maxGatherCount = std::max(10000,cellReductionTarget*4);
   auto globalEntries = MPIGlobalMinMax::globalMinimums(comm, parentErrorMeasures, cellReductionTarget, maxGatherCount);
-  
   
   const int myPID = comm->MyPID();
   
@@ -273,11 +289,13 @@ std::vector< std::pair<GlobalIndexType,double> > ErrorIndicator::globalMinimumEr
     cellReduction += globalChildCount[j] - 1; // -1 because the parent cell will remain
     if (cellReduction >= cellReductionTarget)
     {
+      // want to include the jth entry among globalEntries; so increment j…
+      j++;
       break;
     }
   }
-  // we want the first j+1 entries; delete the rest
-  globalEntries.erase(globalEntries.begin()+j+1, globalEntries.end());
+  // we want the first j entries; delete the rest
+  globalEntries.erase(globalEntries.begin()+j, globalEntries.end());
   return globalEntries;
 }
 
@@ -299,6 +317,7 @@ template ErrorIndicatorPtr ErrorIndicator::energyErrorIndicator<double>(MeshPtr 
 template ErrorIndicatorPtr ErrorIndicator::functionErrorIndicator<double>(MeshPtr mesh, FunctionPtr f, int quadratureEnrichment);
 template ErrorIndicatorPtr ErrorIndicator::gradientErrorIndicator<double>(TSolutionPtr<double> solution, VarPtr scalarVar);
 template ErrorIndicatorPtr ErrorIndicator::hessianErrorIndicator<double>(TSolutionPtr<double> solution, VarPtr scalarVar);
+template ErrorIndicatorPtr ErrorIndicator::unrefinementProjectionErrorIndicator<double>(TSolutionPtr<double> solution, VarPtr scalarVar);
 
 template <typename Scalar>
 ErrorIndicatorPtr ErrorIndicator::energyErrorIndicator(TSolutionPtr<Scalar> solution)
@@ -329,4 +348,10 @@ template <typename Scalar>
 ErrorIndicatorPtr ErrorIndicator::hessianErrorIndicator(TSolutionPtr<Scalar> solution, VarPtr scalarVar)
 {
   return Teuchos::rcp( new HessianErrorIndicator<Scalar>(solution, scalarVar) );
+}
+
+template <typename Scalar>
+ErrorIndicatorPtr ErrorIndicator::unrefinementProjectionErrorIndicator(TSolutionPtr<Scalar> solution, VarPtr scalarVar)
+{
+  return Teuchos::rcp( new UnrefinementProjectionErrorIndicator(solution, scalarVar) );
 }

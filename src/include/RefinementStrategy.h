@@ -41,6 +41,7 @@ protected:
 
   static RefinementResults setResults(GlobalIndexType numElements, GlobalIndexType numDofs, double totalEnergyError);
   ErrorIndicatorPtr _errorIndicator;
+  ErrorIndicatorPtr _unrefinementErrorIndicator; // defaults to null, in which case _errorIndicator will be used
 
   double _relativeErrorThreshold;
   int _maxElementCount = std::numeric_limits<int>::max();
@@ -62,6 +63,12 @@ public:
   
   double computeTotalEnergyError();
   
+  ErrorIndicatorPtr errorIndicator() const;
+  
+  //! unrefinement error indicator is used for determining parent errors to guide unrefinements; if null, the error indicator determined at construction will be used
+  void setUnrefinementErrorIndicator(ErrorIndicatorPtr unrefinementErrorIndicator);
+  ErrorIndicatorPtr unrefinementErrorIndicator() const;
+  
   //! Set the energy threshold (relative to maximum element error) to use for refinements
   void setRelativeErrorThreshold(double value);
   void setEnforceOneIrregularity(bool value);
@@ -78,7 +85,10 @@ public:
   static void pRefineCells(MeshPtr mesh, const vector<GlobalIndexType> &cellIDs);
   static void hRefineCells(MeshPtr mesh, const vector<GlobalIndexType> &cellIDs);
   static void hRefineUniformly(MeshPtr mesh);
-  void getCellsAboveErrorThreshhold(vector<GlobalIndexType> &cellsToRefine);
+
+  std::set<GlobalIndexType> localCellsIneligibleForRefinement();
+  
+  void getCellsAboveErrorThreshhold(vector<GlobalIndexType> &cellsToRefine, std::set<GlobalIndexType> localCellsToExclude = std::set<GlobalIndexType>());
   void setMinH(double value);
   void setMaxP(int max_p);
   void setMaximumRefinementLevel(int maxLevel);

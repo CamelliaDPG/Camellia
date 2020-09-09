@@ -2,17 +2,24 @@
 // © 2016-2018 UChicago Argonne.  For licensing details, see LICENSE-Camellia in the licenses directory.
 //
 
+#include "Camellia.h"
+
 #include "AbsFunction.h"
+#include "BasisSumFunction.h"
 #include "Boltzmann1D1VFormulation.h"
 #include "ErrorIndicator.h"
 #include "ERKTableau.h"
 #include "ExpFunction.h"
 #include "GlobalDofAssignment.h"
 #include "HDF5Exporter.h"
+#include "Projector.h"
 #include "RefinementStrategy.h"
 #include "RHS.h"
 #include "Solution.h"
 #include "TrigFunctions.h"
+
+#include <sys/stat.h>
+#include <sys/types.h>
 
 using namespace Camellia;
 
@@ -111,6 +118,1058 @@ void checkMeshParities( MeshPtr mesh)
   }
 }
 
+// the following is somewhat specific to our situation; it assumes:
+// - the two meshes share a coarse initial mesh (i.e., cell levels are comparable)
+// - all refinements are isotropic
+// - the meshes are not distributed (all geometry is locally known)
+class MeshMap
+{
+  std::map<GlobalIndexType,int> _coarseLevelForFineCell;
+  std::map<GlobalIndexType,GlobalIndexType> _coarseCellForFineCell;
+  
+  IndexType coarseCellMatchingVertices(MeshTopologyViewPtr coarseMeshTopo, const std::vector<IndexType> &vertices)
+  {
+    bool firstVertex = true;
+    unsigned vertexDim = 0;
+    set<IndexType> matchingCells;
+    for (const auto & vertexIndex : vertices)
+    {
+      set< pair<IndexType, unsigned> > matchingCellPairs = coarseMeshTopo->getCellsContainingEntity(vertexDim, vertexIndex);
+      set<IndexType> matchingCellsIntersection;
+      for (const auto & cellPairEntry : matchingCellPairs)
+      {
+        IndexType cellID = cellPairEntry.first;
+        if (firstVertex)
+        {
+          matchingCellsIntersection.insert(cellID);
+        }
+        else
+        {
+          if (matchingCells.find(cellID) != matchingCells.end())
+          {
+            matchingCellsIntersection.insert(cellID);
+          }
+        }
+      }
+      matchingCells = matchingCellsIntersection;
+      firstVertex = false;
+    }
+    if (matchingCells.size() == 0)
+    {
+      return -1; // not found
+    }
+    else if (matchingCells.size() == 1)
+    {
+      return *matchingCells.begin();
+    }
+    else
+    {
+      TEUCHOS_TEST_FOR_EXCEPTION(true, std::invalid_argument, "Expected at most one matching cells; got several");
+    }
+  }
+public:
+  MeshMap(MeshPtr coarseMesh, MeshPtr fineMesh)
+  {
+    auto fineMeshTopo   = fineMesh->getTopology();
+    auto coarseMeshTopo = coarseMesh->getTopology();
+    
+    const auto & myFineCells = fineMesh->cellIDsInPartition();
+    for (auto fineCellID : myFineCells)
+    {
+      auto fineCell         = fineMeshTopo->getCell(fineCellID);
+      auto fineCellAncestor = fineCell;
+      while (fineCellAncestor != Teuchos::null)
+      {
+        const auto & fineCellVertexIndices = fineCellAncestor->vertices();
+        std::vector<IndexType> coarseCellVertexIndices(fineCellVertexIndices.size(), -1);
+        int vertexOrdinal = 0;
+        bool allVerticesFound = true;
+        for (const auto & fineCellVertexIndex : fineCellVertexIndices)
+        {
+          const auto &vertexCoords = fineMeshTopo->getVertex(fineCellVertexIndex);
+          bool vertexFound = coarseMeshTopo->getVertexIndex(vertexCoords, coarseCellVertexIndices[vertexOrdinal]);
+          vertexOrdinal++;
+          if (!vertexFound)
+          {
+            allVerticesFound = false;
+            break;
+          }
+        }
+        if (allVerticesFound)
+        {
+          IndexType coarseCellID = coarseCellMatchingVertices(coarseMeshTopo, coarseCellVertexIndices);
+          if (coarseCellID != -1)
+          {
+            _coarseLevelForFineCell[fineCellID] = fineCellAncestor->level();
+            _coarseCellForFineCell[fineCellID]  = coarseCellID;
+            break; // cell found; break out of the while loop
+          }
+        }
+        fineCellAncestor = fineCellAncestor->getParent();
+      }
+    }
+  }
+  
+  int coarseLevelForFineCell(GlobalIndexType fineCellIndex) const
+  {
+    auto entryIt = _coarseLevelForFineCell.find(fineCellIndex);
+    TEUCHOS_TEST_FOR_EXCEPTION(entryIt == _coarseLevelForFineCell.end(), std::invalid_argument, "fine cell not found");
+    return entryIt->second;
+  }
+  
+  //! Note that the coarse cell may correspond to an ancestor of fineCellIndex; use coarseLevelForFineCell() to determine how many levels to go up
+  GlobalIndexType coarseCellForFineCell(GlobalIndexType fineCellIndex) const
+  {
+    auto entryIt = _coarseCellForFineCell.find(fineCellIndex);
+    TEUCHOS_TEST_FOR_EXCEPTION(entryIt == _coarseCellForFineCell.end(), std::invalid_argument, "fine cell not found");
+    return entryIt->second;
+  }
+};
+
+void interpolateToFineSolution(VarPtr var, SolutionPtr coarseSolution, SolutionPtr fineSolution, MeshMap fineToCoarseMap, BasisReconciliation &br)
+{
+  MeshPtr coarseMesh = coarseSolution->mesh();
+  MeshPtr fineMesh = fineSolution->mesh();
+  
+  const auto & myFineCells = fineMesh->cellIDsInPartition();
+  
+  // the coarse cell distribution over MPI ranks need not have anything to do with the fine distribution; the fine distribution drives things
+  // therefore, we need to do MPI communication for coarse cell solutions; we request the coarse cell IDs that correspond to local fine cells
+  std::set<GlobalIndexType> coarseCellsToRequest;
+  for (const auto & fineCellID : myFineCells)
+  {
+    auto coarseCellID = fineToCoarseMap.coarseCellForFineCell(fineCellID);
+    if (! coarseMesh->myCellsInclude(coarseCellID))
+    {
+      coarseCellsToRequest.insert(coarseCellID);
+    }
+  }
+  coarseSolution->importSolutionForOffRankCells(coarseCellsToRequest);
+  
+  Camellia::FieldContainer<double> coarseBasisCoefficients, fineBasisCoefficients;
+  
+  for (const auto & fineCellID : myFineCells)
+  {
+    auto coarseCellID = fineToCoarseMap.coarseCellForFineCell(fineCellID);
+    auto coarseLevel  = fineToCoarseMap.coarseLevelForFineCell(fineCellID);
+   
+//    std::cout << "fine cell: " << fineCellID << "; coarse cell: " << coarseCellID << " (level: " << coarseLevel << ")\n";
+    
+    int dummyCubatureDegree = 1;
+    BasisCachePtr coarseRefCellCache = BasisCache::basisCacheForReferenceCell(coarseMesh->getTopology()->getCell(coarseCellID)->topology(), dummyCubatureDegree);
+    
+    auto coarseDofOrdering = coarseMesh->getElementType(coarseCellID)->trialOrderPtr;
+    const bool warnAboutOffRankImports = false; // we did this import for coarse solution above, so it's fresh, and we don't need the warning…
+    const auto & coarseCellAllCoefficients = coarseSolution->allCoefficientsForCellID(coarseCellID, warnAboutOffRankImports);
+    
+    auto coarseBasis = coarseDofOrdering->getBasis(var->ID());
+    const int coarseBasisCardinality = coarseBasis->getCardinality();
+    coarseBasisCoefficients.resize(coarseBasisCardinality);
+    const auto & coarseDofIndices = coarseDofOrdering->getDofIndices(var->ID());
+    
+    for (auto dofOrdinal=0; dofOrdinal<coarseBasisCardinality; dofOrdinal++)
+    {
+      const auto & dofIndex = coarseDofIndices[dofOrdinal];
+      coarseBasisCoefficients(dofOrdinal) = coarseCellAllCoefficients(dofIndex);
+    }
+    
+//    std::cout << "coarseBasisCoefficients:\n" << coarseBasisCoefficients;
+    
+    auto fineDofOrdering = fineMesh->getElementType(fineCellID)->trialOrderPtr;
+    auto fineBasis = fineDofOrdering->getBasis(var->ID());
+    const auto & fineDofIndices = fineDofOrdering->getDofIndices(var->ID());
+  
+    CellPtr fineCell         = fineMesh->getTopology()->getCell(fineCellID);
+    
+    RefinementBranch fineCellRefBranch = fineCell->refinementBranch(); // starts at level 0
+    RefinementBranch fineCellRefBranchToAncestor(fineCellRefBranch.begin() + coarseLevel, fineCellRefBranch.end()); // starts at ancestor corresponding to coarse cell
+    
+    const SubBasisReconciliationWeights & weights = br.constrainedWeights(fineBasis, fineCellRefBranchToAncestor, coarseBasis, 0);
+    
+    // it should be the case that weights has entries for each coarse coefficient
+    TEUCHOS_TEST_FOR_EXCEPTION(weights.coarseOrdinals.size() != coarseBasisCardinality, std::invalid_argument, "invalid coarseOrdinals set");
+    
+    fineBasisCoefficients.resize(fineBasis->getCardinality()); // 1: cell dimension (projection below could happen for multiple cells; we're doing just one.)
+    fineBasisCoefficients.initialize(0.0);
+    
+    const auto & fineDofOrdinals = weights.fineOrdinals;
+    for (int coarseDofOrdinal=0; coarseDofOrdinal<coarseBasisCardinality; coarseDofOrdinal++)
+    {
+      const double & coarseCoefficient = coarseBasisCoefficients(coarseDofOrdinal);
+      auto fineIter = fineDofOrdinals.begin();
+      for (int i=0; i<fineDofOrdinals.size(); i++)
+      {
+        int fineDofOrdinal = *fineIter++;
+        fineBasisCoefficients(fineDofOrdinal) += coarseCoefficient * weights.weights(i,coarseDofOrdinal);
+      }
+    }
+    
+    auto fineCellAllCoefficients = fineSolution->allCoefficientsForCellID(fineCellID);
+    for (auto dofOrdinal=0; dofOrdinal<fineDofIndices.size(); dofOrdinal++)
+    {
+      const auto & dofIndex = fineDofIndices[dofOrdinal];
+      fineCellAllCoefficients(dofIndex) = fineBasisCoefficients(0,dofOrdinal);
+    }
+    fineSolution->setLocalCoefficientsForCell(fineCellID, fineCellAllCoefficients);
+  }
+}
+
+std::map<GlobalIndexType, std::vector<double> > readOverkillSolutionCoefficients(Boltzmann1D1VFormulation &fineForm, const int timeStepNumber, const std::string &overkillSolutionDir)
+{
+  std::map<GlobalIndexType, std::vector<double> > mySolnCoefficients;
+
+  using std::cout;
+  using std::cerr;
+  using std::endl;
+  using std::flush;
+  using std::string;
+  using std::to_string;
+  
+  auto comm = fineForm.boltzmannMesh()->Comm();
+  
+  const int rank = comm->MyPID();
+  
+  if (rank == 0)
+  {
+    // does directory already exist?
+    struct stat sb;
+    int stat_result = stat(overkillSolutionDir.c_str(), &sb);
+    if (stat_result == 0 && S_ISDIR(sb.st_mode))
+    {
+      // file exists and is directory
+    }
+    else if (stat_result == 0 && ! S_ISDIR(sb.st_mode))
+    {
+      // file exists but is not a directory
+      cerr << "The specified path for the overkill solution " << overkillSolutionDir << " exists, but is not a directory!\n";
+      exit(1);
+    }
+    else
+    {
+      cerr << "Directory " << overkillSolutionDir << " does not exist; exiting.\n";
+      exit(1);
+    }
+  }
+
+  auto f = fineForm.f();
+
+  // file that stores f coefficients in our proprietary format
+  string solnFile_f = overkillSolutionDir + "/OverkillSolution_" + to_string(timeStepNumber) + ".soln_f";
+  
+  // collect all solution data onto rank 0
+  auto allActiveCellIDs = fineForm.boltzmannMesh()->getActiveCellIDsGlobal();
+    
+  // send from rank 0 to all ranks -- memory inefficient, but a simple implementation
+  int numRecipients = (rank == 0) ? comm->NumProc() : 0;
+  
+  std::vector<int> recipients(numRecipients);
+  for (int i=0; i<numRecipients; i++)
+  {
+    recipients[i] = i;
+  }
+  
+  std::vector< std::vector<double> > packedSolutions(numRecipients);
+  
+  if (rank == 0)
+  {
+    std::ifstream solnFileStream(solnFile_f, std::ios::in | std::ios::binary);
+    if (!solnFileStream)
+    {
+      cout << "Failed to open file " << solnFile_f << endl;
+      exit(1);
+    }
+    
+    GlobalIndexType cellCount;
+    solnFileStream.read((char*) &cellCount, sizeof(cellCount));
+    
+    TEUCHOS_TEST_FOR_EXCEPTION(cellCount != allActiveCellIDs.size(), std::invalid_argument, "Invalid cell count");
+    
+    for (int cellOrdinal=0; cellOrdinal<cellCount; cellOrdinal++)
+    {
+      GlobalIndexType cellID;
+      solnFileStream.read((char*) &cellID, sizeof(cellID));
+      
+      TEUCHOS_TEST_FOR_EXCEPTION(allActiveCellIDs.find(cellID) == allActiveCellIDs.end(), std::invalid_argument, "Invalid cell ID");
+      
+      auto dofIndices = fineForm.boltzmannMesh()->getElementType(cellID)->trialOrderPtr->getDofIndices(f->ID());
+      
+      int dofCount;
+      solnFileStream.read((char*) &dofCount, sizeof(dofCount));
+      
+      TEUCHOS_TEST_FOR_EXCEPTION(dofCount != dofIndices.size(), std::invalid_argument, "Invalid dof count");
+      
+      std::vector<double> coefficients(dofCount);
+      
+      solnFileStream.read((char*) &coefficients[0], dofCount * sizeof(double));
+      
+      int partitionForCell = fineForm.boltzmannMesh()->partitionForCellID(cellID);
+      packedSolutions[partitionForCell].insert(packedSolutions[partitionForCell].end(), coefficients.begin(), coefficients.end());
+    }
+    
+    solnFileStream.close();
+  }
+  
+  // send from rank 0 to all ranks
+  std::vector<double> receivedPackedSolution;
+  MPIWrapper::sendDataVectors(comm, recipients, packedSolutions, receivedPackedSolution);
+  
+  int offset = 0;
+  const auto &myCellIDs = fineForm.boltzmannMesh()->cellIDsInPartition();
+  for (const auto &cellID : myCellIDs)
+  {
+    int dofCount = fineForm.boltzmannMesh()->getElementType(cellID)->trialOrderPtr->getBasisCardinality(f->ID(), VOLUME_INTERIOR_SIDE_ORDINAL);
+    
+    TEUCHOS_TEST_FOR_EXCEPTION(dofCount + offset > receivedPackedSolution.size(), std::invalid_argument, "out of bounds");
+    
+    std::vector<double> coefficients(receivedPackedSolution.begin() + offset, receivedPackedSolution.begin() + offset + dofCount);
+    
+    offset += dofCount;
+    
+    mySolnCoefficients[cellID] = coefficients;
+  }
+  
+  return mySolnCoefficients;
+}
+
+void convertOverkillSolution(Boltzmann1D1VFormulation &fineForm, const int numTimeSteps, const std::string &overkillSolutionDir)
+{
+  using std::cout;
+  using std::cerr;
+  using std::endl;
+  using std::flush;
+  using std::string;
+  using std::to_string;
+  
+  const int rank = fineForm.boltzmannMesh()->Comm()->MyPID();
+  
+  const bool readOverkillFromFile = true;
+  if (readOverkillFromFile)
+  {
+    if (rank == 0)
+    {
+      cout << "Will convert overkill solution in directory: " << overkillSolutionDir << endl;
+    }
+  }
+  
+  if (rank == 0)
+  {
+    // does directory already exist?
+    struct stat sb;
+    int stat_result = stat(overkillSolutionDir.c_str(), &sb);
+    if (stat_result == 0 && S_ISDIR(sb.st_mode))
+    {
+      // file exists and is directory
+    }
+    else if (stat_result == 0 && ! S_ISDIR(sb.st_mode))
+    {
+      // file exists but is not a directory
+      cerr << "The specified path for the overkill solution " << overkillSolutionDir << " exists, but is not a directory!\n";
+      exit(1);
+    }
+    else
+    {
+      int success = mkdir(overkillSolutionDir.c_str(), S_IRWXU | S_IRWXG);
+      if (success != 0)
+      {
+        cerr << "Failed to create directory " << overkillSolutionDir << "; exiting.\n";
+        return;
+      }
+    }
+  }
+  
+  int timeStepNumber = 0;
+  string solnFile = overkillSolutionDir + "/OverkillSolution_" + to_string(timeStepNumber) + ".soln";
+  fineForm.boltzmannSolution()->loadFromHDF5(solnFile);
+  
+  FunctionPtr f_fine     = Function::solution(fineForm.f(),     fineForm.boltzmannSolution());
+  
+  auto f = fineForm.f();
+  
+  // output just the f basis coefficients
+  string solnFile_f = overkillSolutionDir + "/OverkillSolution_" + to_string(timeStepNumber) + ".soln_f";
+  
+  // collect all solution data onto rank 0
+  auto allActiveCellIDs = fineForm.boltzmannMesh()->getActiveCellIDsGlobal();
+  std::set<GlobalIndexType> noCellIDs;
+  auto & cellIDsToImport = (rank == 0) ? allActiveCellIDs : noCellIDs;
+  
+  auto writeSolution = [&] () -> void
+  {
+    fineForm.boltzmannSolution()->importSolutionForOffRankCells(cellIDsToImport);
+    
+    if (rank == 0)
+    {
+      std::ofstream solnFileStream(solnFile_f, std::ios::out | std::ios::binary);
+      if (!solnFileStream)
+      {
+        cout << "Failed to open file " << solnFile_f << endl;
+        exit(1);
+      }
+      
+      GlobalIndexType cellCount = allActiveCellIDs.size();
+      solnFileStream.write((char*) &cellCount, sizeof(cellCount));
+      
+      for (const auto &cellID : allActiveCellIDs)
+      {
+        auto dofIndices = fineForm.boltzmannMesh()->getElementType(cellID)->trialOrderPtr->getDofIndices(f->ID());
+        
+        solnFileStream.write((char*) &cellID, sizeof(cellID));
+        
+        int dofCount = dofIndices.size();
+        solnFileStream.write((char*) &dofCount, sizeof(dofCount));
+        
+        bool warnAboutOffRank = false; // don't warn
+        const auto & solnCoefficients = fineForm.boltzmannSolution()->allCoefficientsForCellID(cellID, warnAboutOffRank);
+        
+        for (const auto &dofIndex : dofIndices)
+        {
+          solnFileStream.write((char*) &solnCoefficients(dofIndex), sizeof(double));
+        }
+      }
+      
+      solnFileStream.close();
+      
+      if (rank == 0)
+      {
+        cerr << "Completed conversion for time step number: " << timeStepNumber << "/" << numTimeSteps << "\r" << flush;
+      }
+    }
+  };
+  
+  writeSolution();
+    
+  for (timeStepNumber=1; timeStepNumber<=numTimeSteps; timeStepNumber++)
+  {
+    solnFile = overkillSolutionDir + "/OverkillSolution_" + to_string(timeStepNumber) + ".soln";
+    fineForm.boltzmannSolution()->loadFromHDF5(solnFile);
+    
+    solnFile_f = overkillSolutionDir + "/OverkillSolution_" + to_string(timeStepNumber) + ".soln_f";
+    
+    writeSolution();
+    
+    if (rank == 0)
+    {
+      cerr << "Completed conversion for time step number: " << timeStepNumber << "/" << numTimeSteps << "\r" << flush;
+    }
+  }
+  cerr << endl;
+  
+  if (rank == 0)
+  {
+    cout << "File conversion completed.\n";
+  }
+}
+
+double overkillSolutionErrorL2Norm(VarPtr fieldVar, SolutionPtr interpolatedSolutionOnOverkillMesh, const std::map<GlobalIndexType, std::vector<double> > &localOverkillSolution, bool overkillOnly = false)
+{
+  // we rely on the fact that the overkill mesh is uniform; we can precompute the integrals of pairs of basis functions to accelerate the error evaluation on each cell
+  
+  auto mesh = interpolatedSolutionOnOverkillMesh->mesh();
+  
+  const auto & myCellIDs = mesh->cellIDsInPartition();
+  
+  // we tolerate an empty localOverkillSolution, but we don't tolerate one that is non-empty but misses owned cells
+  bool haveOverkillSolution = (localOverkillSolution.size() > 0);
+  
+  double myErrorSquaredSum = 0;
+  if (myCellIDs.size() > 0)
+  {
+    GlobalIndexType representativeCellID = *myCellIDs.begin();
+    auto varBasis =  mesh->getElementType(representativeCellID)->trialOrderPtr->getBasis(fieldVar->ID());
+    int dofCount = varBasis->getCardinality();
+    
+    FieldContainer<double> representativeIntegrals(dofCount,dofCount);
+    BasisCachePtr basisCache = BasisCache::basisCacheForCell(mesh, representativeCellID);
+    
+    FieldContainer<double> basisCoefficients_i(dofCount), basisCoefficients_j(dofCount);
+    for (int i=0; i<dofCount; i++)
+    {
+      basisCoefficients_i.initialize(0);
+      basisCoefficients_i[i] = 1.0;
+      
+      FunctionPtr fxn_i = Teuchos::rcp(new BasisSumFunction(varBasis, basisCoefficients_i));
+      
+      for (int j=0; j<dofCount; j++)
+      {
+        basisCoefficients_j.initialize(0);
+        basisCoefficients_j[j] = 1.0;
+        
+        FunctionPtr fxn_j = Teuchos::rcp(new BasisSumFunction(varBasis, basisCoefficients_j));
+        
+        double integral = (fxn_i * fxn_j)->integrate(basisCache);
+        representativeIntegrals(i,j) = integral;
+      }
+    }
+    
+    auto & dofIndices = mesh->getElementType(representativeCellID)->trialOrderPtr->getDofIndices(fieldVar->ID());
+    FieldContainer<double> errorCoefficients(dofCount);
+    for (const auto &cellID : myCellIDs)
+    {
+      if (haveOverkillSolution && !overkillOnly)
+      {
+        const auto &allCoefficients = interpolatedSolutionOnOverkillMesh->allCoefficientsForCellID(cellID);
+        
+        auto overkillEntry = localOverkillSolution.find(cellID);
+        TEUCHOS_TEST_FOR_EXCEPTION(overkillEntry == localOverkillSolution.end(), std::invalid_argument, "entry for overkill solution not found");
+        
+        const auto &overkillSoln    = overkillEntry->second;
+        TEUCHOS_TEST_FOR_EXCEPTION(overkillSoln.size() != dofCount, std::invalid_argument, "overkill solution sized incorrectly");
+        
+        for (int dofOrdinal=0; dofOrdinal<dofCount; dofOrdinal++)
+        {
+          errorCoefficients(dofOrdinal) = overkillSoln[dofOrdinal] - allCoefficients(dofIndices[dofOrdinal]);
+        }
+      }
+      else if (haveOverkillSolution)
+      {
+        auto overkillEntry = localOverkillSolution.find(cellID);
+        TEUCHOS_TEST_FOR_EXCEPTION(overkillEntry == localOverkillSolution.end(), std::invalid_argument, "entry for overkill solution not found");
+        
+        const auto &overkillSoln    = overkillEntry->second;
+        TEUCHOS_TEST_FOR_EXCEPTION(overkillSoln.size() != dofCount, std::invalid_argument, "overkill solution sized incorrectly");
+        
+        for (int dofOrdinal=0; dofOrdinal<dofCount; dofOrdinal++)
+        {
+          errorCoefficients(dofOrdinal) = overkillSoln[dofOrdinal];
+        }
+      }
+      else
+      {
+        const auto &allCoefficients = interpolatedSolutionOnOverkillMesh->allCoefficientsForCellID(cellID);
+        for (int dofOrdinal=0; dofOrdinal<dofCount; dofOrdinal++)
+        {
+          errorCoefficients(dofOrdinal) = allCoefficients(dofIndices[dofOrdinal]);
+        }
+      }
+      
+      for (int i=0; i<dofCount; i++)
+      {
+        for (int j=0; j<dofCount; j++)
+        {
+          myErrorSquaredSum += errorCoefficients[i] * errorCoefficients[j] * representativeIntegrals(i,j);
+        }
+      }
+    }
+  }
+  double globalErrorSquaredSum = MPIWrapper::sum(*mesh->Comm(), myErrorSquaredSum);
+  return std::sqrt(globalErrorSquaredSum);
+}
+
+double l2NormOfUniformSolution(VarPtr fieldVar, SolutionPtr interpolatedSolutionOnOverkillMesh)
+{
+  std::map<GlobalIndexType, std::vector<double> > emptyOverkillSolution;
+  
+  return overkillSolutionErrorL2Norm(fieldVar, interpolatedSolutionOnOverkillMesh, emptyOverkillSolution);
+}
+
+void runAdaptiveComparisonExperiment(Boltzmann1D1VFormulation &adaptiveForm, Boltzmann1D1VFormulation &fineForm, Boltzmann1D1VFormulation &modestForm,
+                                     double refinementThreshold, bool gateRefinements, int maxElements, int maximumRefinementLevel, FunctionPtr f0, const int numTimeSteps, const double dt,
+                                     const std::string &outputDir, const bool writeOverkillSolutionAndQuit, const std::string &overkillSolutionDir, bool saveViz,
+                                     bool useEnergyForUnrefinements, int solutionOutputFrequency, int solutionComparisonFrequency, int overkillTimeStepsBetweenComparisons)
+{
+  using std::cout;
+  using std::cerr;
+  using std::endl;
+  using std::flush;
+  using std::string;
+  using std::to_string;
+  
+  auto comm = adaptiveForm.boltzmannMesh()->Comm();
+  const int rank = comm->MyPID();
+  
+  if (writeOverkillSolutionAndQuit)
+  {
+    int numFineElements     = fineForm.boltzmannMesh()->numActiveElements();
+    int numFineDofs         = fineForm.boltzmannMesh()->numGlobalDofs();
+    
+    if (rank == 0)
+    {
+      // does directory already exist?
+      struct stat sb;
+      int stat_result = stat(overkillSolutionDir.c_str(), &sb);
+      if (stat_result == 0 && S_ISDIR(sb.st_mode))
+      {
+        // file exists and is directory
+      }
+      else if (stat_result == 0 && ! S_ISDIR(sb.st_mode))
+      {
+        // file exists but is not a directory
+        cerr << "The specified path for the overkill solution " << overkillSolutionDir << " exists, but is not a directory!\n";
+        exit(1);
+      }
+      else
+      {
+        int success = mkdir(overkillSolutionDir.c_str(), S_IRWXU | S_IRWXG);
+        if (success != 0)
+        {
+          cerr << "Failed to create directory " << overkillSolutionDir << "; exiting.\n";
+          return;
+        }
+      }
+      
+      cout << "Computing overkill solution and writing to disk in directory: " << overkillSolutionDir << "\n";
+      cout << "Overkill mesh has " << numFineElements << " elements and " << numFineDofs << " degrees of freedom.\n";
+      cout << "Simulation will run for " << numTimeSteps << " time steps with dt=" << dt << endl;
+    }
+    fineForm.setInitialConditions(f0);
+    
+    auto mesh = fineForm.boltzmannMesh();
+    auto soln = fineForm.boltzmannSolution();
+          
+    const int numSubsteps = 3;
+    fineForm.setSubstepsForImplicit(numSubsteps);
+    
+    auto f = fineForm.f();
+    int timeStepNumber = 0;
+    int solutionNumber = 0;
+    int numSolutions = numTimeSteps / solutionOutputFrequency;
+    
+    // output just the f basis coefficients
+    string solnFile_f = overkillSolutionDir + "/OverkillSolution_" + to_string(solutionNumber) + ".soln_f";
+    
+    // collect all solution data onto rank 0
+    auto allActiveCellIDs = fineForm.boltzmannMesh()->getActiveCellIDsGlobal();
+    std::set<GlobalIndexType> noCellIDs;
+    auto & cellIDsToImport = (rank == 0) ? allActiveCellIDs : noCellIDs;
+    
+    auto writeSolution = [&] () -> void
+    {
+      fineForm.boltzmannSolution()->importSolutionForOffRankCells(cellIDsToImport);
+      
+      if (rank == 0)
+      {
+        std::ofstream solnFileStream(solnFile_f, std::ios::out | std::ios::binary);
+        if (!solnFileStream)
+        {
+          cout << "Failed to open file " << solnFile_f << endl;
+          exit(1);
+        }
+        
+        GlobalIndexType cellCount = allActiveCellIDs.size();
+        solnFileStream.write((char*) &cellCount, sizeof(cellCount));
+        
+        for (const auto &cellID : allActiveCellIDs)
+        {
+          auto dofIndices = fineForm.boltzmannMesh()->getElementType(cellID)->trialOrderPtr->getDofIndices(f->ID());
+          
+          solnFileStream.write((char*) &cellID, sizeof(cellID));
+          
+          int dofCount = dofIndices.size();
+          solnFileStream.write((char*) &dofCount, sizeof(dofCount));
+          
+          bool warnAboutOffRank = false; // don't warn
+          const auto & solnCoefficients = fineForm.boltzmannSolution()->allCoefficientsForCellID(cellID, warnAboutOffRank);
+          
+          for (const auto &dofIndex : dofIndices)
+          {
+            solnFileStream.write((char*) &solnCoefficients(dofIndex), sizeof(double));
+          }
+        }
+        
+        solnFileStream.close();
+        
+        if (rank == 0)
+        {
+          cerr << "Wrote solution number: " << solutionNumber << "/" << numSolutions << "\r" << flush;
+        }
+      }
+    };
+    
+    writeSolution();
+    
+    for (timeStepNumber=1; timeStepNumber<=numTimeSteps; timeStepNumber++)
+    {
+      fineForm.takeTimeStep();
+      
+      if (timeStepNumber % solutionOutputFrequency == 0)
+      {
+        solutionNumber = timeStepNumber / solutionOutputFrequency;
+        solnFile_f = overkillSolutionDir + "/OverkillSolution_" + to_string(solutionNumber) + ".soln_f";
+        writeSolution();
+      }
+      
+      if (rank == 0)
+      {
+        cerr << "Wrote solution number: " << solutionNumber << "/" << numSolutions << "\r" << flush;
+      }
+    }
+    if (rank == 0)
+    {
+      cerr << "\n";
+      cout << "Finished writing out overkill solution.\n";
+    }
+    return;
+  }
+  
+  if (rank == 0)
+  {
+    cout << "Will read overkill solution from directory: " << overkillSolutionDir << endl;
+  }
+  
+  if (rank == 0)
+  {
+    // does directory already exist?
+    struct stat sb;
+    int stat_result = stat(outputDir.c_str(), &sb);
+    if (stat_result == 0 && S_ISDIR(sb.st_mode))
+    {
+      // file exists and is directory
+    }
+    else if (stat_result == 0 && ! S_ISDIR(sb.st_mode))
+    {
+      // file exists but is not a directory
+      cerr << "The specified path for output " << outputDir << " exists, but is not a directory!\n";
+      exit(1);
+    }
+    else
+    {
+      int success = mkdir(outputDir.c_str(), S_IRWXU | S_IRWXG);
+      if (success != 0)
+      {
+        cerr << "Failed to create directory " << outputDir << "; exiting.\n";
+        return;
+      }
+    }
+  }
+  
+  std::string errorFilePath          = outputDir + "/fineAdaptiveErrorCompared.dat";
+  std::string iterationCountFilePath = outputDir + "/fineAdaptiveIterationCounts.dat";
+  std::fstream errorStream, iterationCountStream;
+  if (rank == 0)
+  {
+    errorStream.open(errorFilePath, std::ios::out);
+    iterationCountStream.open(iterationCountFilePath, std::ios::out);
+    if (!errorStream.is_open())
+    {
+      std::cout << "Failed to open file " << errorFilePath << " on rank 0.\n";
+      return;
+    }
+    else
+    {
+      std::cout << "Will write L^2 error data to " << errorFilePath << "\n";
+    }
+    if (!iterationCountStream.is_open())
+    {
+      std::cout << "Failed to open file " << iterationCountFilePath << " on rank 0.\n";
+      return;
+    }
+    else
+    {
+      std::cout << "Will write iteration counts to " << iterationCountFilePath << "\n";
+    }
+  }
+  
+  MeshMap fineToModestMap(modestForm.boltzmannMesh(), fineForm.boltzmannMesh());
+  
+  // set initial conditions on adaptive form:
+  adaptiveForm.setInitialConditions(f0);
+
+  ErrorIndicatorPtr unrefinementErrorIndicator;
+  if (!useEnergyForUnrefinements)
+  {
+    unrefinementErrorIndicator = ErrorIndicator::unrefinementProjectionErrorIndicator(adaptiveForm.boltzmannSolution(), adaptiveForm.f());
+  }
+  adaptiveForm.setRefinementThresholds(refinementThreshold, maxElements, maximumRefinementLevel, unrefinementErrorIndicator, gateRefinements);
+  
+  auto boltzmannMesh = adaptiveForm.boltzmannMesh();
+  auto gaussMesh     = adaptiveForm.gaussMesh();
+  
+  bool outputOverkillSolution = false;
+  
+  Teuchos::RCP<HDF5Exporter> boltzmannFineViz, boltzmannModestViz, boltzmannAdaptiveViz;
+  if (saveViz)
+  {
+    if (outputOverkillSolution)
+    {
+      boltzmannFineViz     = Teuchos::rcp( new HDF5Exporter (fineForm.boltzmannMesh(),   "boltzmannFine",     outputDir));
+    }
+    boltzmannModestViz   = Teuchos::rcp( new HDF5Exporter (modestForm.boltzmannMesh(),   "boltzmannModest",   outputDir));
+    boltzmannAdaptiveViz = Teuchos::rcp( new HDF5Exporter (adaptiveForm.boltzmannMesh(), "boltzmannAdaptive", outputDir));
+  }
+  
+  BasisReconciliation br;
+    
+  // adapt to capture initial data:
+  {
+    FunctionPtr f_soln = Function::solution(adaptiveForm.f(), adaptiveForm.boltzmannSolution());
+    
+    FunctionPtr f0_err = f0 - f_soln;
+    int quadratureEnrichment = 4;
+    
+    auto errorIndicator = ErrorIndicator::functionErrorIndicator<double>(boltzmannMesh, f0_err, quadratureEnrichment);
+    
+    double refinementThresholdForInitialData = 0.20;
+    auto refStrategy = Teuchos::rcp(new TRefinementStrategy<double>(errorIndicator, refinementThresholdForInitialData));
+    refStrategy->setMaxElements(maxElements);
+    refStrategy->setUnrefinementErrorIndicator(unrefinementErrorIndicator);
+    
+    double f0_norm = f0->l2norm(boltzmannMesh, quadratureEnrichment);
+    double relErr = f0_err->l2norm(boltzmannMesh, quadratureEnrichment) / f0_norm;
+    
+    int numInitialRefinements = 0;
+    while (boltzmannMesh->numActiveElements() < maxElements * 0.90)
+    {
+      if (rank==0)
+      {
+        std::cout << "After " << numInitialRefinements << " refinements, phase space mesh has " << boltzmannMesh->numActiveElements() << " elements and relErr is " << relErr << ".\n";
+        std::cout << "Physical mesh has " << gaussMesh->numActiveElements() << " elements.\n";
+      }
+      const bool unrefine = true;
+      const bool printToConsole = (rank == 0);
+      refStrategy->refineAndUnrefine(unrefine, printToConsole);
+      adaptiveForm.setInitialConditions(f0); // do projection again
+      numInitialRefinements++;
+      relErr = f0_err->l2norm(boltzmannMesh, quadratureEnrichment) / f0_norm;
+      
+      if (boltzmannMesh->numActiveElements() > maxElements)
+      {
+        // do one more refine + unrefine, and then switch to unrefinements only
+        refStrategy->refineAndUnrefine(unrefine, printToConsole);
+        while (boltzmannMesh->numActiveElements() > maxElements)
+        {
+          // repeat until unrefinement gets us down to maxElements or below
+          if (rank==0)
+          {
+            std::cout << "After " << numInitialRefinements << " refinements, phase space mesh has " << boltzmannMesh->numActiveElements() << " elements and relErr is " << relErr << ".\n";
+            std::cout << "Physical mesh has " << gaussMesh->numActiveElements() << " elements.\n";
+          }
+          
+          refStrategy->setRelativeErrorThreshold(1.1); // ensure one unrefinement-only pass
+          refStrategy->refineAndUnrefine(unrefine, printToConsole);
+          refStrategy->setRelativeErrorThreshold(refinementThresholdForInitialData);
+          
+          adaptiveForm.setInitialConditions(f0); // do projection again
+          numInitialRefinements++;
+          relErr = f0_err->l2norm(boltzmannMesh, quadratureEnrichment) / f0_norm;
+          
+          if (numInitialRefinements > 25)
+          {
+            // that seems like too many; break
+            TEUCHOS_TEST_FOR_EXCEPTION(true, std::invalid_argument, "Could not get initial mesh down to maxElements through refine/unrefine after 25 adaptive steps");
+          }
+        }
+      }
+    }
+    if (rank==0)
+    {
+      std::cout << "After " << numInitialRefinements << " refinements, phase space mesh has " << boltzmannMesh->numActiveElements() << " elements and relErr is " << relErr << ".\n";
+      std::cout << "Physical mesh has " << gaussMesh->numActiveElements() << " elements.\n";
+    }
+    
+  }
+  
+  // set initial conditions for the other two forms:
+  modestForm.setInitialConditions(f0);
+  
+  auto f = fineForm.f();
+  int timeStepNumber = 0;
+  int overkillStepNumber = 0;
+  
+  std::map<GlobalIndexType, std::vector<double> > localOverkillCoefficients;
+  
+  localOverkillCoefficients = readOverkillSolutionCoefficients(fineForm, overkillStepNumber, overkillSolutionDir);
+  
+  FunctionPtr f_modest   = Function::solution(modestForm.f(),   modestForm.boltzmannSolution());
+  FunctionPtr f_adaptive = Function::solution(adaptiveForm.f(), adaptiveForm.boltzmannSolution());
+
+  SolutionPtr projectedModestSoln   = Solution::solution(fineForm.boltzmannMesh()->bilinearForm(), fineForm.boltzmannMesh());
+  SolutionPtr projectedAdaptiveSoln = Solution::solution(fineForm.boltzmannMesh()->bilinearForm(), fineForm.boltzmannMesh());
+  
+  MeshMap fineToAdaptiveMap(adaptiveForm.boltzmannMesh(), fineForm.boltzmannMesh());
+  
+  interpolateToFineSolution(f, modestForm.boltzmannSolution(),   projectedModestSoln,   fineToModestMap,   br);
+  interpolateToFineSolution(f, adaptiveForm.boltzmannSolution(), projectedAdaptiveSoln, fineToAdaptiveMap, br);
+  
+  double adaptiveErr = overkillSolutionErrorL2Norm(f, projectedAdaptiveSoln, localOverkillCoefficients);
+  double modestErr   = overkillSolutionErrorL2Norm(f, projectedModestSoln, localOverkillCoefficients);
+  
+  double adaptiveSolnNorm = l2NormOfUniformSolution(f, projectedAdaptiveSoln);
+  double modestSolnNorm   = l2NormOfUniformSolution(f, projectedModestSoln);
+  double fineSolnNorm     = overkillSolutionErrorL2Norm(f, fineForm.boltzmannSolution(), localOverkillCoefficients, true);
+  
+  if (rank == 0)
+  {
+    std::cout << "Initial data, L^2 norm of adaptive solution: " << adaptiveSolnNorm << std::endl;
+    std::cout << "Initial data, L^2 norm of modest solution:   " << modestSolnNorm << std::endl;
+    std::cout << "Initial data, L^2 norm of fine solution:     " << fineSolnNorm << std::endl;
+    
+    std::cout << "Initial data, relative error in adaptive solution: " << adaptiveErr / fineSolnNorm << std::endl;
+    std::cout << "Initial data, relative error in modest solution:   " << modestErr / fineSolnNorm << std::endl;
+  }
+  
+  double t = 0.0;
+  if (saveViz)
+  {
+    boltzmannAdaptiveViz->exportSolution(adaptiveForm.boltzmannSolution(), t);
+    boltzmannModestViz->exportSolution(  modestForm.boltzmannSolution(),   t);
+    
+    if (outputOverkillSolution)
+    {
+      boltzmannFineViz->exportSolution(    fineForm.boltzmannSolution(),     t);
+    }
+  }
+  
+  int numAdaptiveElements = adaptiveForm.boltzmannMesh()->numActiveElements();
+  int numAdaptiveDofs     = adaptiveForm.boltzmannMesh()->numGlobalDofs();
+  
+  int numModestElements   = modestForm.boltzmannMesh()->numActiveElements();
+  int numModestDofs       = modestForm.boltzmannMesh()->numGlobalDofs();
+  
+  int numFineElements     = fineForm.boltzmannMesh()->numActiveElements();
+  int numFineDofs         = fineForm.boltzmannMesh()->numGlobalDofs();
+  
+  if (rank == 0)
+  {
+    using std::cout;
+    using std::endl;
+    
+    cout << "Fine mesh has     " << numFineElements     << " elements and " << numFineDofs     << " degrees of freedom.\n";
+    cout << "Modest mesh has   " << numModestElements   << " elements and " << numModestDofs   << " degrees of freedom.\n";
+    cout << "Adaptive mesh has " << numAdaptiveElements << " elements and " << numAdaptiveDofs << " degrees of freedom.\n";
+  }
+  
+  if (rank == 0)
+  {
+    errorStream << "Step\tUniform\tAdaptive\n";
+    errorStream << 0 << "\t" << modestErr / fineSolnNorm << "\t" << adaptiveErr / fineSolnNorm << "\n";
+    errorStream.flush();
+    
+    iterationCountStream << "Time Step\tSubstep\tAdaptive\tUniform\n";
+    iterationCountStream.flush();
+  }
+  
+  const auto & adaptiveIterationCounts = adaptiveForm.iterationCounts();
+  const auto & uniformIterationCounts  = modestForm.iterationCounts();
+  
+  const int numSubsteps = 3;
+  adaptiveForm.setSubstepsForImplicit(numSubsteps);
+  modestForm.setSubstepsForImplicit(numSubsteps);
+  fineForm.setSubstepsForImplicit(numSubsteps);
+  
+  // set up timers
+  int numProcs = comm->NumProc();
+  int indexBase = 0;
+  Epetra_Time adaptiveTimer(*comm);
+  Epetra_Time modestTimer  (*comm);
+  
+  double adaptiveTime = 0.;
+  double modestTime   = 0.;
+  Epetra_Map timeMap(numProcs,indexBase,*comm);
+    
+  for (timeStepNumber=1; timeStepNumber<=numTimeSteps; timeStepNumber++)
+  {
+    adaptiveTimer.ResetStartTime();
+    adaptiveForm.takeTimeStep();
+    {
+      double myAdaptiveElapsedTime        = adaptiveTimer.ElapsedTime();
+      double globalMaxAdaptiveElapsedTime = 0.0;
+      comm->MaxAll(&myAdaptiveElapsedTime, &globalMaxAdaptiveElapsedTime, 1);
+      adaptiveTime += globalMaxAdaptiveElapsedTime;
+    }
+    
+    numAdaptiveElements = adaptiveForm.boltzmannMesh()->numActiveElements();
+    numAdaptiveDofs     = adaptiveForm.boltzmannMesh()->numGlobalDofs();
+    if (rank == 0)
+    {
+      std::cout << "After time step " << timeStepNumber << ", adaptive mesh has " << numAdaptiveElements << " elements and " << numAdaptiveDofs << " degrees of freedom.\n";
+    }
+    
+    modestTimer.ResetStartTime();
+    modestForm.takeTimeStep();
+    {
+      double myModestElapsedTime        = modestTimer.ElapsedTime();
+      double globalMaxModestElapsedTime = 0.0;
+      comm->MaxAll(&myModestElapsedTime, &globalMaxModestElapsedTime, 1);
+      modestTime += globalMaxModestElapsedTime;
+    }
+    
+    t += dt;
+    
+    bool doComparison = (timeStepNumber % solutionComparisonFrequency == 0);
+    if (doComparison)
+    {
+      overkillStepNumber += overkillTimeStepsBetweenComparisons;
+      localOverkillCoefficients = readOverkillSolutionCoefficients(fineForm, overkillStepNumber, overkillSolutionDir);
+      
+      // adaptive mesh will have changed; build a fresh map.  (We could do this in a more granular fashion, by making MeshMap a RefinementObserver and updating on refinement, unrefinement.)
+      fineToAdaptiveMap = MeshMap(adaptiveForm.boltzmannMesh(), fineForm.boltzmannMesh());
+      
+      interpolateToFineSolution(f, modestForm.boltzmannSolution(),   projectedModestSoln,   fineToModestMap,   br);
+      interpolateToFineSolution(f, adaptiveForm.boltzmannSolution(), projectedAdaptiveSoln, fineToAdaptiveMap, br);
+      
+      if (saveViz)
+      {
+        boltzmannAdaptiveViz->exportSolution(adaptiveForm.boltzmannSolution(), t);
+        boltzmannModestViz->exportSolution(  modestForm.boltzmannSolution(),   t);
+        
+        if (outputOverkillSolution)
+        {
+          boltzmannFineViz->exportSolution(fineForm.boltzmannSolution(), t);
+        }
+      }
+          
+      adaptiveErr  = overkillSolutionErrorL2Norm(f, projectedAdaptiveSoln, localOverkillCoefficients);
+      modestErr    = overkillSolutionErrorL2Norm(f, projectedModestSoln, localOverkillCoefficients);
+      fineSolnNorm = overkillSolutionErrorL2Norm(f, fineForm.boltzmannSolution(), localOverkillCoefficients, true);
+      
+      if (rank == 0)
+      {
+        std::cout << "Time step " << timeStepNumber << ", relative error in adaptive solution: " << adaptiveErr / fineSolnNorm << std::endl;
+        std::cout << "Time step " << timeStepNumber << ", relative error in modest solution:   " << modestErr / fineSolnNorm << std::endl;
+        
+        errorStream << timeStepNumber << "\t" << modestErr / fineSolnNorm << "\t" << adaptiveErr / fineSolnNorm << "\n";
+        errorStream.flush();
+      }
+    }
+        
+    if (rank == 0)
+    {
+      // this assumes that each has the same number of substeps (right now, that's true of our implementation)
+      const int numSubsteps = adaptiveIterationCounts[timeStepNumber-1].size();
+      for (int substep=0; substep<numSubsteps; substep++)
+      {
+        iterationCountStream << timeStepNumber << "\t" << substep << "\t";
+        iterationCountStream << adaptiveIterationCounts[timeStepNumber-1][substep] << "\t";
+        iterationCountStream << uniformIterationCounts[timeStepNumber-1][substep]  << "\n";
+        iterationCountStream.flush();
+      }
+    }
+  }
+  if (rank == 0)
+  {
+    errorStream.close();
+  }
+  
+  // write summary to file
+  if (rank == 0)
+  {
+    std::string summaryFilePath        = outputDir + "/overkillComparisonSummary.txt";
+    std::fstream summaryStream;
+    if (rank == 0)
+    {
+      summaryStream.open(summaryFilePath, std::ios::out);
+      if (!summaryStream.is_open())
+      {
+        std::cout << "Failed to open file " << summaryFilePath << " on rank 0.\n";
+        return;
+      }
+    }
+    
+    summaryStream << "Ran for " << numTimeSteps << " time steps with dt=" << dt << endl;
+    summaryStream << "Overkill mesh:        " << numFineElements << " elements, " << numFineDofs << " degrees of freedom.\n";
+    summaryStream << "Uniform mesh:         " << numModestElements << " elements, " << numModestDofs << " degrees of freedom.\n";
+    summaryStream << "Final adaptive mesh:  " << numAdaptiveElements << " elements, " << numAdaptiveDofs << " degrees of freedom.\n";
+    summaryStream << "Field polynomial order of non-overkill meshes (one less than H^1 order): " << adaptiveForm.boltzmannMesh()->globalDofAssignment()->getInitialH1Order()[0]-1 << endl;
+    summaryStream << "Relative L^2 error for adaptive solution at final time: " << adaptiveErr / fineSolnNorm << endl;
+    summaryStream << "Relative L^2 error for uniform solution at final time:  " << modestErr / fineSolnNorm << endl;
+    summaryStream << "Total solve time for adaptive solution (max across MPI ranks): " << adaptiveTime << endl;
+    summaryStream << "Total solve time for uniform solution (max across MPI ranks):  " << modestTime << endl;
+    
+    summaryStream.close();
+    std::cout << "Wrote run summary to " << summaryFilePath << "\n";
+  }
+}
+
 int main(int argc, char *argv[])
 {
   Teuchos::GlobalMPISession mpiSession(&argc, &argv, NULL); // initialize MPI
@@ -119,7 +1178,7 @@ int main(int argc, char *argv[])
   
   mpiSession.barrier();
   
-  bool implicit = false;
+  bool implicit = true;
   double k_x    = 0.2; // wavelength
   double u0     = 3.0; // initial drift velocity
   double gamma  = 1e-3; // initial perturbation
@@ -140,19 +1199,33 @@ int main(int argc, char *argv[])
 //  double unrefinementThreshold = 1.000001; // similarly, unrefine just the minimum-error parent element
   double refinementThreshold = 0.80; // refine elements with at least 80% of the maximum per-element error
   int maxElements = 64 * 64; // do unrefinements to keep total mesh size smaller than this
+  bool gateRefinements = true;
   
-  int xElements = 30;
-  int vElements = 40;
+  int xElements = 8;
+  int vElements = 8;
   int delta_k   = 2;
-  double dt_max = 1e-3;
+  double dt_max = 1e-1;
   int H1Order = 2; // this gives f, E (which are in L^2) a polynomial order of 1
-  int numTimeSteps = 100;
+  int numTimeSteps = 500;
   int outputFrequency = 10; // number of time steps to take before outputting viz.
   double timeStepC0 = -1.0;
   bool useL2Trace = true;
   std::string problemChoiceString = "two-stream"; // "bump-on-tail" the alternative
   ProblemChoice problemChoice = TWO_STREAM;
   int maximumRefinementLevel = std::numeric_limits<int>::max(); // default to no maximum refinement level
+  bool runOverkillVersusAdaptiveComparison = false;
+  bool useEnergyForUnrefinements = false;
+  bool saveOverkillSolutionAndQuit = false;
+  bool convertOverkillSolutionFiles = false;
+  std::string overkillSolutionDir = "";
+  int overkillRefinementLevel = 5; // would take a coarse 8x8 mesh to 256x256
+  int overkillH1Order = 5;
+  int uniformMeshRefinementLevel = 3; // would take a coarse 8x8 mesh to 64x64 (this is used for overkill experiment)
+  bool saveViz = true;
+  std::string outputDir = "/tmp";
+  int solutionOutputFrequency = 1;
+  int overkillTimeStepsBetweenComparisons = 1;
+  int solutionComparisonFrequency = 1;
   
   cmdp.setOption("useL2Trace", "useH1Trace", &useL2Trace);
   cmdp.setOption("implicit", "explicit", &implicit);
@@ -164,11 +1237,26 @@ int main(int argc, char *argv[])
   cmdp.setOption("u0", &u0);
   cmdp.setOption("maxElements", &maxElements);
   cmdp.setOption("maximumRefinementLevel", &maximumRefinementLevel);
+  cmdp.setOption("viz", "noViz", &saveViz);
+  cmdp.setOption("gateRefinements", "dontGateRefinements", &gateRefinements);
   cmdp.setOption("numTimeSteps", &numTimeSteps);
   cmdp.setOption("outputFrequency", &outputFrequency);
+  cmdp.setOption("outputDir", &outputDir);
   cmdp.setOption("timeStepC0", &timeStepC0);
   cmdp.setOption("useAdaptivity", "useFixedMesh", &useAdaptivity);
   cmdp.setOption("problem", &problemChoiceString);
+  cmdp.setOption("refinementThreshold", &refinementThreshold);
+  cmdp.setOption("useEnergyForUnrefinements", "useL2ProjectionForUnrefinements", &useEnergyForUnrefinements);
+  cmdp.setOption("runOverkillVersusAdaptiveComparison", "runStandard", &runOverkillVersusAdaptiveComparison);
+  cmdp.setOption("saveOverkillSolutionAndQuit", "dontSolveOverkill", &saveOverkillSolutionAndQuit);
+  cmdp.setOption("solutionOutputFrequency", &solutionOutputFrequency);
+  cmdp.setOption("solutionComparisonFrequency", &solutionComparisonFrequency);
+  cmdp.setOption("overkillTimeStepsBetweenComparisons", &overkillTimeStepsBetweenComparisons);
+  cmdp.setOption("convertOverkillSolution", "dontConvertOverkillSolution", &convertOverkillSolutionFiles);
+  cmdp.setOption("overkillSolutionDir", &overkillSolutionDir);
+  cmdp.setOption("overkillMeshRefinementLevel", &overkillRefinementLevel);
+  cmdp.setOption("overkillH1Order", &overkillH1Order);
+  cmdp.setOption("uniformMeshRefinementLevel", &uniformMeshRefinementLevel);
   
   if (cmdp.parse(argc,argv) != Teuchos::CommandLineProcessor::PARSE_SUCCESSFUL)
   {
@@ -224,17 +1312,17 @@ int main(int argc, char *argv[])
   int xElementsCoarse = xElements;
   int vElementsCoarse = vElements;
   int numRefinements = 0;
-  while ((vElementsCoarse % 2 == 0) && (xElementsCoarse % 2 == 0) && (xElementsCoarse > 128))
+  while ((vElementsCoarse % 2 == 0) && (xElementsCoarse % 2 == 0) && (xElementsCoarse > 2))
   {
     numRefinements++;
     vElementsCoarse /= 2;
     xElementsCoarse /= 2;
   }
-  if (rank == 0)
-  {
-    std::cout << "Coarse mesh: " << xElementsCoarse << " x " << vElementsCoarse << std::endl;
-    std::cout << "Fine mesh is the result of " << numRefinements << " uniform refinements.\n";
-  }
+//  if (rank == 0)
+//  {
+//    std::cout << "Coarse mesh: " << xElementsCoarse << " x " << vElementsCoarse << std::endl;
+//    std::cout << "Fine mesh is the result of " << numRefinements << " uniform refinements.\n";
+//  }
   
   double dt = dt_max;
   Boltzmann1D1VFormulation form(formulationChoice, q, eps0, m, dt, x0, xWidth, xElementsCoarse, v0, vWidth, vElementsCoarse, H1Order, delta_k, erkTableau, numRefinements);
@@ -255,6 +1343,44 @@ int main(int argc, char *argv[])
     FunctionPtr fM_b = Teuchos::rcp(new Maxwellian1V(  u0, 0.5,     n0) );
     f0               = (fM_0 + 0.5 * fM_b) * (1. + gamma * cos_kx);
     std::cout << "f0 for bump-on-tail: " << f0->displayString() << "\n";
+  }
+  
+  if (convertOverkillSolutionFiles)
+  {
+    Boltzmann1D1VFormulation fineForm    (formulationChoice, q, eps0, m, dt, x0, xWidth, xElementsCoarse, v0, vWidth, vElementsCoarse, overkillH1Order, delta_k, erkTableau, numRefinements+overkillRefinementLevel);
+    convertOverkillSolution(fineForm, numTimeSteps, overkillSolutionDir);
+    return 0; // exit
+  }
+  else if (runOverkillVersusAdaptiveComparison)
+  {
+    Boltzmann1D1VFormulation fineForm    (formulationChoice, q, eps0, m, dt, x0, xWidth, xElementsCoarse, v0, vWidth, vElementsCoarse, overkillH1Order, delta_k, erkTableau, numRefinements+overkillRefinementLevel);
+    Boltzmann1D1VFormulation adaptiveForm(formulationChoice, q, eps0, m, dt, x0, xWidth, xElementsCoarse, v0, vWidth, vElementsCoarse, H1Order,         delta_k, erkTableau, numRefinements  );
+    Boltzmann1D1VFormulation modestForm  (formulationChoice, q, eps0, m, dt, x0, xWidth, xElementsCoarse, v0, vWidth, vElementsCoarse, H1Order,         delta_k, erkTableau, numRefinements+uniformMeshRefinementLevel);
+    
+//    {
+//      // DEBUGGING/PROFILING
+//      // how much memory does the fine form MeshTopology take up?
+//      if (rank == 0)
+//      {
+//        std::cout << "overkill mesh, approximate footprint for base MeshTopology:\n";
+//        fineForm.boltzmannMesh()->getTopology()->baseMeshTopology()->printApproximateMemoryReport();
+//      }
+//    }
+    
+    const int maxAdaptiveMeshElements = modestForm.boltzmannMesh()->numActiveElements();
+    
+    if (overkillSolutionDir == "")
+    {
+      std::cout << "overkillSolutionDir must be specified!\n";
+      exit(1);
+    }
+    
+    runAdaptiveComparisonExperiment(adaptiveForm, fineForm, modestForm, refinementThreshold, gateRefinements, maxAdaptiveMeshElements, numRefinements+overkillRefinementLevel, f0, numTimeSteps, dt, outputDir, saveOverkillSolutionAndQuit, overkillSolutionDir, saveViz, useEnergyForUnrefinements, solutionOutputFrequency, solutionComparisonFrequency, overkillTimeStepsBetweenComparisons );
+    
+    const bool printAllocationReport = true;
+    Camellia::finalize(printAllocationReport);
+    
+    return 0; // exit
   }
   
   form.setInitialConditions(f0);
@@ -292,7 +1418,12 @@ int main(int argc, char *argv[])
     }
     if (rank==0) std::cout << "Completed " << numInitialRefinements << " refinements to capture initial solution; mesh has " << form.boltzmannMesh()->numActiveElements() << " elements.\n";
     
-    form.setRefinementThresholds(refinementThreshold, maxElements, maximumRefinementLevel);
+    ErrorIndicatorPtr unrefinementErrorIndicator;
+    if (!useEnergyForUnrefinements)
+    {
+      unrefinementErrorIndicator = ErrorIndicator::unrefinementProjectionErrorIndicator(form.boltzmannSolution(), form.f());
+    }
+    form.setRefinementThresholds(refinementThreshold, maxElements, maximumRefinementLevel, unrefinementErrorIndicator, gateRefinements);
   }
     
   std::ostringstream suffix;
@@ -332,10 +1463,14 @@ int main(int argc, char *argv[])
 //  std::cout << "boltzmann name: " << boltzmannSS.str() << std::endl;
 //  std::cout << "gauss name: " << gaussSS.str() << std::endl;
   
-  const std::string directoryPath = "/tmp";
+  const std::string directoryPath = outputDir;
   
-  HDF5Exporter boltzmannViz(form.boltzmannMesh(), boltzmannSS.str(), directoryPath);
-  HDF5Exporter gaussViz(form.gaussMesh(), gaussSS.str(), directoryPath);
+  Teuchos::RCP<HDF5Exporter> boltzmannViz, gaussViz;
+  if (saveViz)
+  {
+    boltzmannViz = Teuchos::rcp(new HDF5Exporter(form.boltzmannMesh(), boltzmannSS.str(), directoryPath));
+    gaussViz = Teuchos::rcp(new HDF5Exporter (form.gaussMesh(), gaussSS.str(), directoryPath) );
+  }
   
   std::ostringstream E_magnitudeFilePath;
   E_magnitudeFilePath << directoryPath << "/" << "E_magnitude" << suffix.str() << ".dat";
@@ -355,8 +1490,11 @@ int main(int argc, char *argv[])
   }
   
   double t = 0.0;
-  gaussViz.exportSolution(form.gaussSolution(),t);
-  boltzmannViz.exportSolution(form.boltzmannSolution(),t);
+  if (saveViz)
+  {
+    gaussViz->exportSolution(form.gaussSolution(),t);
+    boltzmannViz->exportSolution(form.boltzmannSolution(),t);
+  }
   
   FunctionPtr E_soln = Function::solution(form.E(), form.gaussSolution());
   FunctionPtr E_squared = E_soln * E_soln;
@@ -421,8 +1559,11 @@ int main(int argc, char *argv[])
       }
       
       double E_mag = E_squared->integrate(form.gaussMesh());
-      boltzmannViz.exportSolution(form.boltzmannSolution(),t);
-      gaussViz.exportSolution(form.gaussSolution(),t);
+      if (saveViz)
+      {
+        boltzmannViz->exportSolution(form.boltzmannSolution(),t);
+        gaussViz->exportSolution(form.gaussSolution(),t);
+      }
       if (rank == 0)
       {
         std::cout << "Completed time step " << timeStepNumber << " (t = " << t << ")" << std::endl;
