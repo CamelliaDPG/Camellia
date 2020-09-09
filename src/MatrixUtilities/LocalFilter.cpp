@@ -47,7 +47,6 @@ LocalFilter::LocalFilter(const Teuchos::RefCountPtr<const Epetra_RowMatrix>& Mat
 
 //  Camellia::print("new LocalFilter's subdomain rows",whichLocalRows);
   
-  _ordinalLookup = std::vector<int>(Matrix->NumMyRows(), -1);
   int i=0;
   for (int myRow : _subdomainRows)
   {
@@ -162,8 +161,9 @@ ExtractMyRowCopy(int MyRowOrdinal, int Length, int & NumEntries,
 
   for (int j = 0 ; j < Nnz ; ++j) {
     // only local indices
-    if (_ordinalLookup[Indices_[j]] != -1 ) {
-      Indices[NumEntries] = _ordinalLookup[Indices_[j]];
+    auto ordinalEntry = _ordinalLookup.find(Indices_[j]);
+    if (ordinalEntry != _ordinalLookup.end() ) {
+      Indices[NumEntries] = ordinalEntry->second;
       Values[NumEntries] = Values_[j];
       ++NumEntries;
     }
@@ -206,10 +206,10 @@ int LocalFilter::Apply(const Epetra_MultiVector& X,
     IFPACK_CHK_ERR(ierr);
 
     for (int j = 0 ; j < Nnz ; ++j) {
-      // include if
-      if (_ordinalLookup[Indices_[j]] != -1) {
+      auto ordinalEntry = _ordinalLookup.find(Indices_[j]);
+      if (ordinalEntry != _ordinalLookup.end() ) {
         for (int k = 0 ; k < NumVectors ; ++k)
-          Y_ptr[k][i_ordinal] += Values_[j] * X_ptr[k][_ordinalLookup[Indices_[j]]];
+          Y_ptr[k][i_ordinal] += Values_[j] * X_ptr[k][ordinalEntry->second];
       }
     }
     i_ordinal++;

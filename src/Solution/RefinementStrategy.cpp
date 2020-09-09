@@ -68,6 +68,12 @@ RefinementStrategyPtr TRefinementStrategy<Scalar>::energyErrorRefinementStrategy
 }
 
 template <typename Scalar>
+ErrorIndicatorPtr TRefinementStrategy<Scalar>::errorIndicator() const
+{
+  return _errorIndicator;
+}
+
+template <typename Scalar>
 RefinementStrategyPtr TRefinementStrategy<Scalar>::gradientRefinementStrategy(SolutionPtr soln, VarPtr scalarVar, double relativeEnergyThreshold)
 {
   ErrorIndicatorPtr errorIndicator = ErrorIndicator::gradientErrorIndicator(soln, scalarVar);
@@ -119,17 +125,21 @@ void TRefinementStrategy<Scalar>::refineAndUnrefine(bool unrefine, bool printToC
   MeshPtr mesh = this->mesh();
   auto meshTopo = mesh->getTopology();
 
-  vector<GlobalIndexType> localCellsToRefine;
-  getCellsAboveErrorThreshhold(localCellsToRefine); // calls _errorIndicator->measureError()
-  double totalError = _errorIndicator->totalError();
-  
-  map<GlobalIndexType, double> cellMeasuresLocal;
   const set<GlobalIndexType> & myCellIDs = mesh->cellIDsInPartition();
+  // these cell measure determinations are redundant with localCellsIneligibleForRefinement().  Consider adding a state variable to track these, either in Mesh or in RefinementStrategy.  (An optimization of what is likely not a large cost.)
+  map<GlobalIndexType, double> cellMeasuresLocal;
   for (GlobalIndexType cellID : myCellIDs)
   {
     cellMeasuresLocal[cellID] = mesh->getCellMeasure(cellID);
   }
-
+  const double meshDim = mesh->getDimension();
+  
+  std::set<GlobalIndexType> localCellsToExcludeFromRefinement = localCellsIneligibleForRefinement(); // exclude cells that can't be refined further from the max error computation
+  
+  vector<GlobalIndexType> localCellsToRefine;
+  getCellsAboveErrorThreshhold(localCellsToRefine, localCellsToExcludeFromRefinement); // calls _errorIndicator->measureError()
+  double totalError = _errorIndicator->totalError();
+  
   // record results prior to refinement
   RefinementResults results = setResults(mesh->numActiveElements(), mesh->numGlobalDofs(), totalError);
   _results.push_back(results);
@@ -137,7 +147,6 @@ void TRefinementStrategy<Scalar>::refineAndUnrefine(bool unrefine, bool printToC
   vector<GlobalIndexType> myCellsToHRefine;
   vector<GlobalIndexType> myCellsToPRefine;
   
-  double meshDim = mesh->getDimension();
   for (GlobalIndexType cellID : localCellsToRefine)
   {
     double h = pow(cellMeasuresLocal[cellID], 1.0 / meshDim); // dth root of volume measure = h
@@ -322,7 +331,9 @@ void TRefinementStrategy<Scalar>::refineAndUnrefine(bool unrefine, bool printToC
       childCellsToExclude.insert(globalAdditionalChildCellsToExclude.begin(),globalAdditionalChildCellsToExclude.end());
     }
     
-    std::vector< std::pair<GlobalIndexType,double> > parentEntries = _errorIndicator->globalMinimumErrorParentCells(cellReductionTarget, childCellsToExclude);
+    ErrorIndicatorPtr unrefinementErrorIndicator = (_unrefinementErrorIndicator == Teuchos::null) ? _errorIndicator : _unrefinementErrorIndicator;
+    
+    std::vector< std::pair<GlobalIndexType,double> > parentEntries = unrefinementErrorIndicator->globalMinimumErrorParentCells(cellReductionTarget, childCellsToExclude);
     
     parentCellsToUnrefine = std::set<GlobalIndexType>();
     for (const auto &entry : parentEntries)
@@ -362,12 +373,12 @@ void TRefinementStrategy<Scalar>::refineAndUnrefine(bool unrefine, bool printToC
 }
 
 template <typename Scalar>
-void TRefinementStrategy<Scalar>::getCellsAboveErrorThreshhold(vector<GlobalIndexType> &cellsToRefine)
+void TRefinementStrategy<Scalar>::getCellsAboveErrorThreshhold(vector<GlobalIndexType> &cellsToRefine, std::set<GlobalIndexType> localCellsToExclude)
 {
   // measure error
   _errorIndicator->measureError();
   
-  double maxError = _errorIndicator->maxError();
+  double maxError = _errorIndicator->maxError(localCellsToExclude);
   
   double errorThreshold = maxError * _relativeErrorThreshold;
   _errorIndicator->localCellsAboveErrorThreshold(errorThreshold, cellsToRefine);
@@ -421,6 +432,37 @@ void TRefinementStrategy<Scalar>::hRefineUniformly(MeshPtr mesh)
 }
 
 template <typename Scalar>
+std::set<GlobalIndexType> TRefinementStrategy<Scalar>::localCellsIneligibleForRefinement()
+{
+  auto mesh = this->mesh();
+  const set<GlobalIndexType> & myCellIDs = mesh->cellIDsInPartition();
+  map<GlobalIndexType, double> cellMeasuresLocal;
+  for (GlobalIndexType cellID : myCellIDs)
+  {
+    cellMeasuresLocal[cellID] = mesh->getCellMeasure(cellID);
+  }
+  
+  std::set<GlobalIndexType> localCellsToExcludeFromRefinement;
+  double meshDim = mesh->getDimension();
+  for (GlobalIndexType cellID : myCellIDs)
+  {
+    double h = pow(cellMeasuresLocal[cellID], 1.0 / meshDim); // dth root of volume measure = h
+    int p = mesh->cellPolyOrder(cellID);
+
+    const int cellLevel = mesh->getTopology()->getCell(cellID)->level();
+    
+    const bool canHRefine = ((h > _min_h) && (cellLevel < _maxRefinementLevel));
+    const bool canPRefine = (p < _max_p);
+    
+    if (!canHRefine && !canPRefine)
+    {
+      localCellsToExcludeFromRefinement.insert(cellID);
+    }
+  }
+  return localCellsToExcludeFromRefinement;
+}
+
+template <typename Scalar>
 void TRefinementStrategy<Scalar>::setMaxElements(int maxElementCount)
 {
   _maxElementCount = maxElementCount;
@@ -452,6 +494,12 @@ RefinementResults TRefinementStrategy<Scalar>::setResults(GlobalIndexType numEle
   solnResults.numDofs = numDofs;
   solnResults.totalEnergyError = totalEnergyError;
   return solnResults;
+}
+
+template <typename Scalar>
+void TRefinementStrategy<Scalar>::setUnrefinementErrorIndicator(ErrorIndicatorPtr unrefinementErrorIndicator)
+{
+  _unrefinementErrorIndicator = unrefinementErrorIndicator;
 }
 
 template <typename Scalar>

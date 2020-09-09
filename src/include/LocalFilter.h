@@ -389,7 +389,7 @@ namespace Camellia {
   private:
     //! Camellia additions:
     std::vector<int> _subdomainRows;
-    std::vector<int> _ordinalLookup; // indices are the local map's ordinals; values are the subdomain ordinals.  -1 for ordinals not present in subdomain
+    std::map<int,int> _ordinalLookup; // indices are the local map's ordinals; values are the subdomain ordinals.  No entry for ordinals not present in subdomain
     
     //! Pointer to the matrix to be preconditioned.
     Teuchos::RefCountPtr<const Epetra_RowMatrix> Matrix_;

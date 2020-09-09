@@ -51,10 +51,10 @@ namespace Camellia {
     virtual void measureError() = 0;
     
     //! returns maximum rank-local error measure
-    virtual double maxLocalError() const;
+    virtual double maxLocalError(const std::set<GlobalIndexType> localCellsToExclude = std::set<GlobalIndexType>()) const;
     
     //! return maximum error measure (MPI collective method).
-    virtual double maxError() const;
+    virtual double maxError(const std::set<GlobalIndexType> localCellsToExclude = std::set<GlobalIndexType>()) const;
     
     //! return minimum error measure across all cells (MPI collective method).
     virtual double minError() const;
@@ -63,7 +63,7 @@ namespace Camellia {
     virtual double minParentError() const;
     
     //! for all parents of leaf cells (in the h-refinement sense) gather the child error sum to the processor that owns the first child (MPI collective method).
-    virtual void gatherParentError();
+    virtual void gatherParentError(const std::set<GlobalIndexType> &excludedChildren);
     
     MeshPtr mesh() const;
     
@@ -86,6 +86,10 @@ namespace Camellia {
     
     template <typename Scalar>
     static ErrorIndicatorPtr hessianErrorIndicator(TSolutionPtr<Scalar> solution, VarPtr scalarVar);
+    
+    //! Measure parent error by doing a projection of the children's data onto the parent and evaluating the difference in the L^2 norm of the specified variable.
+    template <typename Scalar>
+    static ErrorIndicatorPtr unrefinementProjectionErrorIndicator(TSolutionPtr<Scalar> solution, VarPtr scalarVar);
   };
 }
 

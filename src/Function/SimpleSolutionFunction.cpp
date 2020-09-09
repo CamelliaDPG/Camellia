@@ -155,8 +155,6 @@ void SimpleSolutionFunction<Scalar>::values(Camellia::FieldContainer<Scalar> &va
         //          cout << "refCellPoints:\n " << refPoint;
         //          cout << "physicalCubaturePoints:\n " << basisCacheOnePoint->getPhysicalCubaturePoints();
         const bool applyCubatureWeights = false;
-        const SolutionComponent solutionComponent = STANDARD_SOLUTION;
-        const int solutionStage = 0;
         solnExpression->evaluate(value, _soln, basisCacheOnePoint, applyCubatureWeights, _solutionComponent, _solutionStage);
         //          cout << "value at point (" << point(0,0) << ", " << point(0,1) << ") = " << value(0,0) << endl;
         values(cellIndex,ptIndex) = value(0,0);
