@@ -47,8 +47,8 @@ namespace Camellia {
   template<typename A>
   long long approximateVectorSizeLLVM(const std::vector<A> &someVector)   // in bytes
   {
-    // 24 bytes for the vector itself; nodes are 32 bytes + sizeof(pair<A,B>) each
-    // if A and B are containers, this won't count their contents...
+    // 24 bytes for the vector itself; entries are sizeof(A) each
+    // if A is a container, this won't count its contents...
     std::vector<int> emptyVector;
     int VECTOR_OVERHEAD = sizeof(someVector);
     
