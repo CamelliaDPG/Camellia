@@ -902,6 +902,7 @@ void runAdaptiveComparisonExperiment(Boltzmann1D1VFormulation &adaptiveForm, Bol
     auto refStrategy = Teuchos::rcp(new TRefinementStrategy<double>(errorIndicator, refinementThresholdForInitialData));
     refStrategy->setMaxElements(maxElements);
     refStrategy->setUnrefinementErrorIndicator(unrefinementErrorIndicator);
+    refStrategy->setMaximumRefinementLevel(maximumRefinementLevel);
     
     double f0_norm = f0->l2norm(boltzmannMesh, quadratureEnrichment);
     double relErr = f0_err->l2norm(boltzmannMesh, quadratureEnrichment) / f0_norm;
@@ -1124,8 +1125,6 @@ void runAdaptiveComparisonExperiment(Boltzmann1D1VFormulation &adaptiveForm, Bol
         
     if (rank == 0)
     {
-      // this assumes that each has the same number of substeps (right now, that's true of our implementation)
-      const int numSubsteps = adaptiveIterationCounts[timeStepNumber-1].size();
       for (int substep=0; substep<numSubsteps; substep++)
       {
         iterationCountStream << timeStepNumber << "\t" << substep << "\t";
@@ -1194,7 +1193,6 @@ int main(int argc, char *argv[])
   double vWidth =  20.0;
   
   bool useAdaptivity = false;
-  double refinementThresholdForInitialData   = 0.20; // moderately aggressive refinement
 //  double refinementThreshold   = 0.999999; // essentially, refine just the maximum error element (and any that thanks to solution symmetry have same error)
 //  double unrefinementThreshold = 1.000001; // similarly, unrefine just the minimum-error parent element
   double refinementThreshold = 0.80; // refine elements with at least 80% of the maximum per-element error
@@ -1309,23 +1307,9 @@ int main(int argc, char *argv[])
     erkTableau = ERKTableau::ssprk3();
   }
   
-  int xElementsCoarse = xElements;
-  int vElementsCoarse = vElements;
-  int numRefinements = 0;
-  while ((vElementsCoarse % 2 == 0) && (xElementsCoarse % 2 == 0) && (xElementsCoarse > 2))
-  {
-    numRefinements++;
-    vElementsCoarse /= 2;
-    xElementsCoarse /= 2;
-  }
-//  if (rank == 0)
-//  {
-//    std::cout << "Coarse mesh: " << xElementsCoarse << " x " << vElementsCoarse << std::endl;
-//    std::cout << "Fine mesh is the result of " << numRefinements << " uniform refinements.\n";
-//  }
-  
+  const int numUniformRefinements = 0;
   double dt = dt_max;
-  Boltzmann1D1VFormulation form(formulationChoice, q, eps0, m, dt, x0, xWidth, xElementsCoarse, v0, vWidth, vElementsCoarse, H1Order, delta_k, erkTableau, numRefinements);
+  Boltzmann1D1VFormulation form(formulationChoice, q, eps0, m, dt, x0, xWidth, xElements, v0, vWidth, vElements, H1Order, delta_k, erkTableau, numUniformRefinements);
   
   FunctionPtr f0;
   FunctionPtr cos_kx       = Teuchos::rcp(new Cos_ax(k_x));
@@ -1347,15 +1331,15 @@ int main(int argc, char *argv[])
   
   if (convertOverkillSolutionFiles)
   {
-    Boltzmann1D1VFormulation fineForm    (formulationChoice, q, eps0, m, dt, x0, xWidth, xElementsCoarse, v0, vWidth, vElementsCoarse, overkillH1Order, delta_k, erkTableau, numRefinements+overkillRefinementLevel);
+    Boltzmann1D1VFormulation fineForm    (formulationChoice, q, eps0, m, dt, x0, xWidth, xElements, v0, vWidth, vElements, overkillH1Order, delta_k, erkTableau, numUniformRefinements+overkillRefinementLevel);
     convertOverkillSolution(fineForm, numTimeSteps, overkillSolutionDir);
     return 0; // exit
   }
   else if (runOverkillVersusAdaptiveComparison)
   {
-    Boltzmann1D1VFormulation fineForm    (formulationChoice, q, eps0, m, dt, x0, xWidth, xElementsCoarse, v0, vWidth, vElementsCoarse, overkillH1Order, delta_k, erkTableau, numRefinements+overkillRefinementLevel);
-    Boltzmann1D1VFormulation adaptiveForm(formulationChoice, q, eps0, m, dt, x0, xWidth, xElementsCoarse, v0, vWidth, vElementsCoarse, H1Order,         delta_k, erkTableau, numRefinements  );
-    Boltzmann1D1VFormulation modestForm  (formulationChoice, q, eps0, m, dt, x0, xWidth, xElementsCoarse, v0, vWidth, vElementsCoarse, H1Order,         delta_k, erkTableau, numRefinements+uniformMeshRefinementLevel);
+    Boltzmann1D1VFormulation fineForm    (formulationChoice, q, eps0, m, dt, x0, xWidth, xElements, v0, vWidth, vElements, overkillH1Order, delta_k, erkTableau, numUniformRefinements+overkillRefinementLevel);
+    Boltzmann1D1VFormulation adaptiveForm(formulationChoice, q, eps0, m, dt, x0, xWidth, xElements, v0, vWidth, vElements, H1Order,         delta_k, erkTableau, numUniformRefinements  );
+    Boltzmann1D1VFormulation modestForm  (formulationChoice, q, eps0, m, dt, x0, xWidth, xElements, v0, vWidth, vElements, H1Order,         delta_k, erkTableau, numUniformRefinements+uniformMeshRefinementLevel);
     
 //    {
 //      // DEBUGGING/PROFILING
@@ -1375,7 +1359,7 @@ int main(int argc, char *argv[])
       exit(1);
     }
     
-    runAdaptiveComparisonExperiment(adaptiveForm, fineForm, modestForm, refinementThreshold, gateRefinements, maxAdaptiveMeshElements, numRefinements+overkillRefinementLevel, f0, numTimeSteps, dt, outputDir, saveOverkillSolutionAndQuit, overkillSolutionDir, saveViz, useEnergyForUnrefinements, solutionOutputFrequency, solutionComparisonFrequency, overkillTimeStepsBetweenComparisons );
+    runAdaptiveComparisonExperiment(adaptiveForm, fineForm, modestForm, refinementThreshold, gateRefinements, maxAdaptiveMeshElements, numUniformRefinements+overkillRefinementLevel, f0, numTimeSteps, dt, outputDir, saveOverkillSolutionAndQuit, overkillSolutionDir, saveViz, useEnergyForUnrefinements, solutionOutputFrequency, solutionComparisonFrequency, overkillTimeStepsBetweenComparisons );
     
     const bool printAllocationReport = true;
     Camellia::finalize(printAllocationReport);
@@ -1385,9 +1369,9 @@ int main(int argc, char *argv[])
   
   form.setInitialConditions(f0);
   
+  // adapt to capture initial data:
   if (useAdaptivity)
   {
-    // adapt to capture initial conditions well
     FunctionPtr f_soln = Function::solution(form.f(), form.boltzmannSolution());
     
     FunctionPtr f0_err = f0 - f_soln;
@@ -1395,33 +1379,69 @@ int main(int argc, char *argv[])
     
     auto errorIndicator = ErrorIndicator::functionErrorIndicator<double>(form.boltzmannMesh(), f0_err, quadratureEnrichment);
     
+    double refinementThresholdForInitialData = 0.20;
     auto refStrategy = Teuchos::rcp(new TRefinementStrategy<double>(errorIndicator, refinementThresholdForInitialData));
-    
-    double errTol = 1e-3;
-//    double errTol = 1e-1; // LOOSE FOR DEBUGGING
+    refStrategy->setMaxElements(maxElements);
+    ErrorIndicatorPtr unrefinementErrorIndicator;
+    if (!useEnergyForUnrefinements)
+    {
+      unrefinementErrorIndicator = ErrorIndicator::unrefinementProjectionErrorIndicator(form.boltzmannSolution(), form.f());
+    }
+    refStrategy->setUnrefinementErrorIndicator(unrefinementErrorIndicator);
+    refStrategy->setMaximumRefinementLevel(maximumRefinementLevel);
+    refStrategy->setMaxP(H1Order);
     
     double f0_norm = f0->l2norm(form.boltzmannMesh(), quadratureEnrichment);
     double relErr = f0_err->l2norm(form.boltzmannMesh(), quadratureEnrichment) / f0_norm;
     
     int numInitialRefinements = 0;
-    while (relErr > errTol)
+    while (form.boltzmannMesh()->numActiveElements() < maxElements * 0.90)
     {
       if (rank==0)
       {
         std::cout << "After " << numInitialRefinements << " refinements, phase space mesh has " << form.boltzmannMesh()->numActiveElements() << " elements and relErr is " << relErr << ".\n";
         std::cout << "Physical mesh has " << form.gaussMesh()->numActiveElements() << " elements.\n";
       }
-      refStrategy->refine(rank==0);
+      const bool unrefine = true;
+      const bool printToConsole = (rank == 0);
+      refStrategy->refineAndUnrefine(unrefine, printToConsole);
       form.setInitialConditions(f0); // do projection again
       numInitialRefinements++;
       relErr = f0_err->l2norm(form.boltzmannMesh(), quadratureEnrichment) / f0_norm;
+      
+      if (form.boltzmannMesh()->numActiveElements() > maxElements)
+      {
+        // do one more refine + unrefine, and then switch to unrefinements only
+        refStrategy->refineAndUnrefine(unrefine, printToConsole);
+        while (form.boltzmannMesh()->numActiveElements() > maxElements)
+        {
+          // repeat until unrefinement gets us down to maxElements or below
+          if (rank==0)
+          {
+            std::cout << "After " << numInitialRefinements << " refinements, phase space mesh has " << form.boltzmannMesh()->numActiveElements() << " elements and relErr is " << relErr << ".\n";
+            std::cout << "Physical mesh has " << form.gaussMesh()->numActiveElements() << " elements.\n";
+          }
+          
+          refStrategy->setRelativeErrorThreshold(1.1); // ensure one unrefinement-only pass
+          refStrategy->refineAndUnrefine(unrefine, printToConsole);
+          refStrategy->setRelativeErrorThreshold(refinementThresholdForInitialData);
+          
+          form.setInitialConditions(f0); // do projection again
+          numInitialRefinements++;
+          relErr = f0_err->l2norm(form.boltzmannMesh(), quadratureEnrichment) / f0_norm;
+          
+          if (numInitialRefinements > 25)
+          {
+            // that seems like too many; break
+            TEUCHOS_TEST_FOR_EXCEPTION(true, std::invalid_argument, "Could not get initial mesh down to maxElements through refine/unrefine after 25 adaptive steps");
+          }
+        }
+      }
     }
-    if (rank==0) std::cout << "Completed " << numInitialRefinements << " refinements to capture initial solution; mesh has " << form.boltzmannMesh()->numActiveElements() << " elements.\n";
-    
-    ErrorIndicatorPtr unrefinementErrorIndicator;
-    if (!useEnergyForUnrefinements)
+    if (rank==0)
     {
-      unrefinementErrorIndicator = ErrorIndicator::unrefinementProjectionErrorIndicator(form.boltzmannSolution(), form.f());
+      std::cout << "After " << numInitialRefinements << " refinements, phase space mesh has " << form.boltzmannMesh()->numActiveElements() << " elements and relErr is " << relErr << ".\n";
+      std::cout << "Physical mesh has " << form.gaussMesh()->numActiveElements() << " elements.\n";
     }
     form.setRefinementThresholds(refinementThreshold, maxElements, maximumRefinementLevel, unrefinementErrorIndicator, gateRefinements);
   }
