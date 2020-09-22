@@ -61,6 +61,24 @@ namespace
     
     return meshTopo;
   }
+
+void refineCells( MeshTopologyPtr meshTopo, std::vector<GlobalIndexType> cellIDs, RefinementPatternPtr refPattern )
+{
+  GlobalIndexType nextCellID = meshTopo->nextCellID();
+  for (auto cellID : cellIDs)
+  {
+    meshTopo->refineCell(cellID, refPattern, nextCellID);
+    nextCellID += refPattern->numChildren();
+  }
+}
+
+void unrefineCells( MeshTopologyPtr meshTopo, std::vector<GlobalIndexType> parentCellIDs, RefinementPatternPtr refPattern )
+{
+  for (auto parentCellID: parentCellIDs)
+  {
+    meshTopo->unrefineCell(parentCellID, refPattern);
+  }
+}
   
 void testConstraints( MeshTopology* mesh, unsigned entityDim, map<unsigned,pair<IndexType,unsigned> > &expectedConstraints, Teuchos::FancyOStream &out, bool &success)
 {
@@ -1129,6 +1147,76 @@ TEUCHOS_UNIT_TEST(MeshTopology, GetRootMeshTopology)
     testPruneAddPrune(meshTopo, out, success);
   }
   
+  TEUCHOS_UNIT_TEST( MeshTopology, QuadMeshRefineUnrefineNeighborRelationships )
+  {
+    // this ends up producing a 2-irregular mesh through an unrefinement, which should be supported by MeshTopology
+    // (when this test was written, there was an issue with unrefinement and neighbor relationships)
+    MeshTopologyPtr meshTopo = MeshFactory::rectilinearMeshTopology({1.0,1.0}, {2,2});
+    std::vector<GlobalIndexType> cellsToRefine;
+    cellsToRefine = {1};
+    RefinementPatternPtr refPattern = RefinementPattern::regularRefinementPatternQuad();
+    refineCells(meshTopo, cellsToRefine, refPattern);
+    cellsToRefine = {0, 5};
+    refineCells(meshTopo, cellsToRefine, refPattern);
+    
+    std::vector<GlobalIndexType> cellsToUnrefine = {0};
+    std::set<GlobalIndexType> cellIDsExpectedToBeInvalidated;
+    for (auto parentID : cellsToUnrefine)
+    {
+      auto cell = meshTopo->getCell(parentID);
+      auto childIndices = cell->getChildIndices(meshTopo);
+      cellIDsExpectedToBeInvalidated.insert(childIndices.begin(), childIndices.end());
+    }
+    unrefineCells(meshTopo, cellsToUnrefine, refPattern);
+    
+    // check that cells were invalidated:
+    for (auto invalidCellID : cellIDsExpectedToBeInvalidated)
+    {
+      if (meshTopo->isValidCellIndex(invalidCellID))
+      {
+        out << "After unrefinement, meshTopo incorrectly indicates cell index " << invalidCellID << " is valid.\n";
+        success = false;
+      }
+    }
+    
+//    // one neighbor relationship is incorrect, we believe: cell 5, side 0.  Let's look there:
+//    CellPtr cell5 = meshTopo->getCell(5);
+//    CellPtr neighbor0 = cell5->getNeighbor(0, meshTopo);
+    
+    auto activeCellIndices = meshTopo->getLocallyKnownActiveCellIndices();
+    for (const auto & activeCellIndex : activeCellIndices)
+    {
+      auto cell = meshTopo->getCell(activeCellIndex);
+      while (cell != Teuchos::null)
+      {
+        int sideCount = cell->getSideCount();
+        for (int sideOrdinal=0; sideOrdinal<sideCount; sideOrdinal++)
+        {
+          auto neighborInfo = cell->getNeighborInfo(sideOrdinal, meshTopo);
+          unsigned edgeDim = 1;
+          auto sideEntityIndex = cell->entityIndex(edgeDim, sideOrdinal);
+          bool isBoundarySide = meshTopo->isBoundarySide(sideEntityIndex);
+          
+          auto neighborCellIndex = neighborInfo.first;
+          
+          if (isBoundarySide)
+          {
+            TEST_EQUALITY(neighborCellIndex, -1);
+          }
+          else
+          {
+            if (! meshTopo->isValidCellIndex(neighborCellIndex))
+            {
+              out << "FAILURE: cell " << cell->cellIndex() << " has invalid neighbor " << neighborCellIndex << " on side " << sideOrdinal << ".\n";
+              success = false;
+            }
+          }
+        }
+        cell = cell->getParent();
+      }
+    }
+  }
+
   TEUCHOS_UNIT_TEST( MeshTopology, TriangleEnforceOneIrregularity )
   {
     // test a particular case that has been a challenge previously

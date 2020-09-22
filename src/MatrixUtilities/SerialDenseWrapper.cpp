@@ -10,6 +10,7 @@
 #include "SerialDenseWrapper.h"
 
 #include "Camellia_FieldContainer.hpp"
+#include "Camellia_matrix.hpp"
 
 #include "Epetra_CrsMatrix.h"
 #include "Epetra_DataAccess.h"
@@ -227,59 +228,119 @@ namespace Camellia {
       TEUCHOS_TEST_FOR_EXCEPTION(true, std::invalid_argument, "outInverses must have shape (C,P,D,D)");
     }
     
-    Camellia::FieldContainer<double> workspace = inMatrices; // copy, since the below will overwrite the matrix data
-    
-    Camellia::FieldContainer<int> pivots(spaceDim);
-    
-    int errOut = 0;
-    
-    int err;
-    
-    Teuchos::LAPACK<int, double> lapack;
-    
-    outInverses.initialize(0); // initial 0's make seeding the identity simpler below
-    
-    for (int cellOrdinal=0; cellOrdinal < numCells; cellOrdinal++)
+    if ((spaceDim >= 1) && (spaceDim <= 3))
     {
-      for (int ptOrdinal=0; ptOrdinal < numPoints; ptOrdinal++)
+      for (int cellOrdinal=0; cellOrdinal < numCells; cellOrdinal++)
       {
-        double *matData = &workspace(cellOrdinal,ptOrdinal,0,0);
-        
-        lapack.GETRF(spaceDim, spaceDim, matData, spaceDim, &pivots(0), &err);
-        
-        if (err != 0)
+        for (int ptOrdinal=0; ptOrdinal < numPoints; ptOrdinal++)
         {
-          errOut = err;
-        }
-        
-        // determinant:
-        // determinant is the product of the diagonal entries, times 1 or -1 depending on pivots
-        int pivotParity = 1;
-        double det = 1.0;
-        for (int d=0; d<spaceDim; d++)
-        {
-          if (pivots[d] != d+1) pivotParity *= -1;
-          det *= matData[d*spaceDim + d];
-        }
-        det *= pivotParity;
-        detValues(cellOrdinal,ptOrdinal) = det;
-        
-        // inverse:
-        double *outData = &outInverses(cellOrdinal,ptOrdinal,0,0);
-        // populate outData matrix with identity so we'll get the inverse out...
-        for (int d=0; d<spaceDim; d++)
-        {
-          outData[d*spaceDim + d] = 1.0;
-        }
-        
-        lapack.GETRS('N', spaceDim, spaceDim, matData, spaceDim, &pivots(0), outData, spaceDim, &err);
-        if (err != 0)
-        {
-          errOut = err;
+          if (spaceDim == 1)
+          {
+            const double & value                   = inMatrices(cellOrdinal,ptOrdinal,0,0);
+            detValues(cellOrdinal,ptOrdinal)       = value;
+            outInverses(cellOrdinal,ptOrdinal,0,0) = 1.0 / value;
+          }
+          else if (spaceDim == 2)
+          {
+            Matrix<double, 2, 2> mat2, mat2_inv;
+            for (int d1=0; d1<spaceDim; d1++)
+            {
+              for (int d2=0; d2<spaceDim; d2++)
+              {
+                mat2(d1,d2) = inMatrices(cellOrdinal,ptOrdinal,d1,d2);
+              }
+            }
+            detValues(cellOrdinal,ptOrdinal) = determinant(mat2);
+            mat2_inv = invert(mat2);
+            for (int d1=0; d1<spaceDim; d1++)
+            {
+              for (int d2=0; d2<spaceDim; d2++)
+              {
+                outInverses(cellOrdinal,ptOrdinal,d1,d2) = mat2_inv(d1,d2);
+              }
+            }
+          }
+          else if (spaceDim == 3)
+          {
+            Matrix<double, 3, 3> mat3, mat3_inv;
+            for (int d1=0; d1<spaceDim; d1++)
+            {
+              for (int d2=0; d2<spaceDim; d2++)
+              {
+                mat3(d1,d2) = inMatrices(cellOrdinal,ptOrdinal,d1,d2);
+              }
+            }
+            detValues(cellOrdinal,ptOrdinal) = determinant(mat3);
+            mat3_inv = invert(mat3);
+            for (int d1=0; d1<spaceDim; d1++)
+            {
+              for (int d2=0; d2<spaceDim; d2++)
+              {
+                outInverses(cellOrdinal,ptOrdinal,d1,d2) = mat3_inv(d1,d2);
+              }
+            }
+          }
         }
       }
+      return 0; // success
     }
-    return errOut;
+    else
+    {
+      // more general, LAPACK-based version
+      Camellia::FieldContainer<double> workspace = inMatrices; // copy, since the below will overwrite the matrix data
+      
+      Camellia::FieldContainer<int> pivots(spaceDim);
+      
+      int errOut = 0;
+      
+      int err;
+      
+      Teuchos::LAPACK<int, double> lapack;
+      
+      outInverses.initialize(0); // initial 0's make seeding the identity simpler below
+      
+      for (int cellOrdinal=0; cellOrdinal < numCells; cellOrdinal++)
+      {
+        for (int ptOrdinal=0; ptOrdinal < numPoints; ptOrdinal++)
+        {
+          double *matData = &workspace(cellOrdinal,ptOrdinal,0,0);
+          
+          lapack.GETRF(spaceDim, spaceDim, matData, spaceDim, &pivots(0), &err);
+          
+          if (err != 0)
+          {
+            errOut = err;
+          }
+          
+          // determinant:
+          // determinant is the product of the diagonal entries, times 1 or -1 depending on pivots
+          int pivotParity = 1;
+          double det = 1.0;
+          for (int d=0; d<spaceDim; d++)
+          {
+            if (pivots[d] != d+1) pivotParity *= -1;
+            det *= matData[d*spaceDim + d];
+          }
+          det *= pivotParity;
+          detValues(cellOrdinal,ptOrdinal) = det;
+          
+          // inverse:
+          double *outData = &outInverses(cellOrdinal,ptOrdinal,0,0);
+          // populate outData matrix with identity so we'll get the inverse out...
+          for (int d=0; d<spaceDim; d++)
+          {
+            outData[d*spaceDim + d] = 1.0;
+          }
+          
+          lapack.GETRS('N', spaceDim, spaceDim, matData, spaceDim, &pivots(0), outData, spaceDim, &err);
+          if (err != 0)
+          {
+            errOut = err;
+          }
+        }
+      }
+      return errOut;
+    }
   }
 
   int SerialDenseWrapper::eigenvalues(const Camellia::FieldContainer<double> &A,

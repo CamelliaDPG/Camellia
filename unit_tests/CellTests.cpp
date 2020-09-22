@@ -147,7 +147,149 @@ namespace
     out << "Checking cell AEF\n";
     checkBoundarySubcells(AEF_boundary);
   }
+
+TEUCHOS_UNIT_TEST( Cell, EntitiesOnNeighborInterfacesHangingNodes_2D )
+{
+  // this test confirms that we get neighbor interfaces at all levels of the hierarchy when there are hanging nodes
   
+  double width=1.0, height=1.0;
+  int horizontalElements=2, verticalElements=1;
+  MeshTopologyPtr meshTopo = MeshFactory::quadMeshTopology(width,height,horizontalElements,verticalElements);
+  
+  IndexType firstChildCellIndex = meshTopo->nextCellID();
+  IndexType cellToRefine = 0;
+  RefinementPatternPtr quadRefPattern = RefinementPattern::regularRefinementPatternQuad();
+  meshTopo->refineCell(cellToRefine, quadRefPattern, firstChildCellIndex);
+  
+  CellPtr cell1 = meshTopo->getCell(1); // the neighbor, which is unrefined
+  const unsigned SIDE_DIM = 1;
+  
+  const unsigned sideCount = cell1->getSideCount();
+  unsigned sharedSideOrdinalInCell1 = -1;
+  unsigned sharedSideOrdinalInCell0 = -1;
+  for (unsigned sideOrdinal=0; sideOrdinal<sideCount; sideOrdinal++)
+  {
+    auto neighbor = cell1->getNeighbor(sideOrdinal, meshTopo);
+    if (neighbor != Teuchos::null)
+    {
+      sharedSideOrdinalInCell1 = sideOrdinal;
+      
+      auto neighborInfo = cell1->getNeighborInfo(sideOrdinal, meshTopo);
+      sharedSideOrdinalInCell0 = neighborInfo.second;
+      break;
+    }
+  }
+  
+  std::set<IndexType> expectedSideEntityIndices;
+  expectedSideEntityIndices.insert(cell1->entityIndex(SIDE_DIM, sharedSideOrdinalInCell1));
+  
+  CellPtr cell0 = meshTopo->getCell(0); // the parent cell, which is refined
+  vector< pair<GlobalIndexType, unsigned> > childrenOnRightSide = cell0->childrenForSide(sharedSideOrdinalInCell0);
+  
+  for (const auto &childEntry : childrenOnRightSide )
+  {
+    const auto & cellID    = childEntry.first;
+    const auto & childSideOrdinal = childEntry.second;
+    
+    CellPtr childCell = meshTopo->getCell(cellID);
+    IndexType rightSideChildCell = childCell->entityIndex(SIDE_DIM, childSideOrdinal);
+    expectedSideEntityIndices.insert(rightSideChildCell);
+  }
+  
+  const bool peersOnly = false;
+  auto sideEntitiesVector = cell1->entitiesOnNeighborInterfaces(SIDE_DIM, peersOnly, meshTopo);
+  
+  std::set<IndexType> actualSideEntityIndices(sideEntitiesVector.begin(), sideEntitiesVector.end());
+  
+  if (actualSideEntityIndices.size() != expectedSideEntityIndices.size())
+  {
+    out << "Number of side entity indices (" << actualSideEntityIndices.size() << ") does not match expected (" << expectedSideEntityIndices.size() << ")\n";
+    success = false;
+  }
+  else
+  {
+    auto actualIt   = actualSideEntityIndices.begin();
+    auto expectedIt = expectedSideEntityIndices.begin();
+    while (actualIt != actualSideEntityIndices.end())
+    {
+      TEST_EQUALITY(*actualIt, *expectedIt);
+      actualIt++;
+      expectedIt++;
+    }
+  }
+}
+
+TEUCHOS_UNIT_TEST( Cell, EntitiesOnNeighborInterfacesHangingNodes_3D )
+{
+  // this test confirms that we get neighbor interfaces at all levels of the hierarchy when there are hanging nodes
+  
+  std::vector<double> widths {2.0,1.0,1.0};
+  std::vector<int> elementCounts {2, 1, 1};
+  MeshTopologyPtr meshTopo = MeshFactory::rectilinearMeshTopology(widths, elementCounts);
+  
+  CellPtr cell0 = meshTopo->getCell(0);
+  const unsigned sideCount = cell0->getSideCount();
+  unsigned sharedSideOrdinalInCell1 = -1;
+  unsigned sharedSideOrdinalInCell0 = -1;
+  for (unsigned sideOrdinal=0; sideOrdinal<sideCount; sideOrdinal++)
+  {
+    auto neighbor = cell0->getNeighbor(sideOrdinal, meshTopo);
+    if (neighbor != Teuchos::null)
+    {
+      sharedSideOrdinalInCell0 = sideOrdinal;
+      
+      auto neighborInfo = cell0->getNeighborInfo(sideOrdinal, meshTopo);
+      sharedSideOrdinalInCell1 = neighborInfo.second;
+      break;
+    }
+  }
+  
+  IndexType firstChildCellIndex = meshTopo->nextCellID();
+  IndexType cellToRefine = 0;
+  RefinementPatternPtr refPattern = RefinementPattern::regularRefinementPatternHexahedron();
+  meshTopo->refineCell(cellToRefine, refPattern, firstChildCellIndex);
+  
+  CellPtr cell1 = meshTopo->getCell(1); // the neighbor, which is unrefined
+  const unsigned SIDE_DIM = 2;
+  
+  std::set<IndexType> expectedSideEntityIndices;
+  expectedSideEntityIndices.insert(cell1->entityIndex(SIDE_DIM, sharedSideOrdinalInCell1));
+    
+  vector< pair<GlobalIndexType, unsigned> > childrenOnRightSide = cell0->childrenForSide(sharedSideOrdinalInCell0);
+  
+  for (const auto &childEntry : childrenOnRightSide )
+  {
+    const auto & cellID    = childEntry.first;
+    const auto & childSideOrdinal = childEntry.second;
+    
+    CellPtr childCell = meshTopo->getCell(cellID);
+    IndexType rightSideChildCell = childCell->entityIndex(SIDE_DIM, childSideOrdinal);
+    expectedSideEntityIndices.insert(rightSideChildCell);
+  }
+  
+  const bool peersOnly = false;
+  auto sideEntitiesVector = cell1->entitiesOnNeighborInterfaces(SIDE_DIM, peersOnly, meshTopo);
+  
+  std::set<IndexType> actualSideEntityIndices(sideEntitiesVector.begin(), sideEntitiesVector.end());
+  
+  if (actualSideEntityIndices.size() != expectedSideEntityIndices.size())
+  {
+    out << "Number of side entity indices (" << actualSideEntityIndices.size() << ") does not match expected (" << expectedSideEntityIndices.size() << ")\n";
+    success = false;
+  }
+  else
+  {
+    auto actualIt   = actualSideEntityIndices.begin();
+    auto expectedIt = expectedSideEntityIndices.begin();
+    while (actualIt != actualSideEntityIndices.end())
+    {
+      TEST_EQUALITY(*actualIt, *expectedIt);
+      actualIt++;
+      expectedIt++;
+    }
+  }
+}
+
 TEUCHOS_UNIT_TEST( Cell, FindSubcellOrdinalInSide )
 {
   double width=1.0, height=1.0;

@@ -241,7 +241,7 @@ void TLinearTerm<Scalar>::integrate(Camellia::FieldContainer<Scalar> &values, Do
                                     BasisCachePtr basisCache, bool forceBoundaryTerm, bool sumInto)
 {
   TEUCHOS_FUNC_TIME_MONITOR("LinearTerm integrate one term");
-  int timerHandle = TimeLogger::sharedInstance()->startTimer(LINEAR_TERM_INTEGRATION_TIMER_STRING);
+  int timerHandle = TimeLogger::sharedInstance()->startTimer(LINEAR_TERM_INTEGRATION_TIMER_1_STRING);
   // values has dimensions (numCells, thisFields)
   if (!sumInto) values.initialize();
 
@@ -469,9 +469,13 @@ void TLinearTerm<Scalar>::integrate(Epetra_CrsMatrix* valuesCrsMatrix, Camellia:
                                     BasisCachePtr basisCache, bool sumInto)
 {
   TEUCHOS_FUNC_TIME_MONITOR("LinearTerm integrate two terms");
-  int timerHandle = TimeLogger::sharedInstance()->startTimer(LINEAR_TERM_INTEGRATION_TIMER_STRING);
+  int timerHandle = TimeLogger::sharedInstance()->startTimer(LINEAR_TERM_INTEGRATION_TIMER_2_STRING);
   if (!sumInto) valuesFC.initialize();
-  if (u->isZero() || v->isZero()) return;
+  if (u->isZero() || v->isZero())
+  {
+    TimeLogger::sharedInstance()->stopTimer(timerHandle);
+    return;
+  }
   int numCells = basisCache->getPhysicalCubaturePoints().dimension(0);
   // will integrate either in volume or along a side, depending on the type of BasisCache passed in
   if (valuesCrsMatrix==NULL)   // then the FC is the one to fill
@@ -775,7 +779,7 @@ void TLinearTerm<Scalar>::integrate(Camellia::FieldContainer<Scalar> &values, Do
 {
   TEUCHOS_FUNC_TIME_MONITOR("LinearTerm integrate two terms, one evaluated at var=fxn");
   // values has dimensions (numCells, thisFields)
-  int timerHandle = TimeLogger::sharedInstance()->startTimer(LINEAR_TERM_INTEGRATION_TIMER_STRING);
+  int timerHandle = TimeLogger::sharedInstance()->startTimer(LINEAR_TERM_INTEGRATION_TIMER_3_STRING);
   if (!fxn.get())
   {
     TEUCHOS_TEST_FOR_EXCEPTION(true, std::invalid_argument, "fxn cannot be null!");

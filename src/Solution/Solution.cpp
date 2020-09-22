@@ -3690,8 +3690,16 @@ void TSolution<Scalar>::setGoalOrientedRHS( LinearTermPtr goalOrientedRHS)
 template <typename Scalar>
 void TSolution<Scalar>::setSolnCoeffsForCellID(const Camellia::FieldContainer<Scalar> &solnCoeffsToSet, GlobalIndexType cellID, int solutionOrdinal)
 {
+  ElementTypePtr elemTypePtr = _mesh->getElementType(cellID);
+  const int dofCount = elemTypePtr->trialOrderPtr->totalDofs();
+  
+  TEUCHOS_TEST_FOR_EXCEPTION(dofCount != solnCoeffsToSet.size(), std::invalid_argument, "solnCoeffsToSet size incorrect: expected " + std::to_string(dofCount) + " but solnCoeffsToSet.size() = " + std::to_string(solnCoeffsToSet.size()));
+  
   replaceMapEntry(_solutionForCellID[solutionOrdinal], cellID, solnCoeffsToSet);
-  _mesh->globalDofAssignment()->interpretLocalCoefficients(cellID,solnCoeffsToSet,*_lhsVector,solutionOrdinal);
+  if (_lhsVector != Teuchos::null)
+  {
+    _mesh->globalDofAssignment()->interpretLocalCoefficients(cellID,solnCoeffsToSet,*_lhsVector,solutionOrdinal);
+  }
 }
 
 template <typename Scalar>
@@ -4870,12 +4878,15 @@ void TSolution<Scalar>::saveToHDF5(string filename)
 template <typename Scalar>
 void TSolution<Scalar>::loadFromHDF5(string filename)
 {
+  // clear cell-local solution data first; this allows setGlobalSolutionFromCellLocalCoefficients(), called by initializeLHSVector(),
+  // to skip trying to set the LHS vector from the cell-local data.  We overwrite it on Import() below anyway.
+  this->clear();
   initializeLHSVector();
   
   Epetra_CommPtr Comm = _mesh->Comm();
 
   EpetraExt::HDF5 hdf5(*Comm);
-  hdf5.Open(filename);
+  hdf5.Open(filename, H5F_ACC_RDONLY);
   Epetra_MultiVector *lhsVec;
   Epetra_Map partMap = getPartitionMap();
   hdf5.Read("Solution", partMap, lhsVec);
@@ -4883,6 +4894,8 @@ void TSolution<Scalar>::loadFromHDF5(string filename)
   Epetra_Import  solnImporter(_lhsVector->Map(), lhsVec->Map());
   _lhsVector->Import(*lhsVec, solnImporter, Insert);
 
+  delete lhsVec;
+  
   hdf5.Close();
   importSolution();
 }

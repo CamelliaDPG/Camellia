@@ -436,6 +436,47 @@ void GlobalDofAssignment::determineMinimumSubcellDimensionForContinuityEnforceme
   _minContinuityDimension = globalMinimumSubcellDimension;
 }
 
+void GlobalDofAssignment::didHUnrefine(MeshTopologyPtr meshToRefine, const set<GlobalIndexType> &cellIDs, bool didRepartitionAndRebuild)
+{
+  // look for any cells whose parities might need to be reassigned
+  // these include the unrefined cell, its neighbors, and its neighbors' descendants along the shared sides.
+  for (GlobalIndexType parentID : cellIDs)
+  {
+    if (_meshTopology->isValidCellIndex(parentID))
+    {
+      assignParities(parentID);
+      // neighbors and their descendants on the side should be invalidated
+      CellPtr parentCell = _meshTopology->getCell(parentID);
+      unsigned int sideCount = parentCell->getSideCount();
+      for (unsigned int sideOrdinal=0; sideOrdinal<sideCount; sideOrdinal++)
+      {
+        const auto neighborInfo = parentCell->getNeighborInfo(sideOrdinal, _meshTopology);
+        const auto & neighborCellID = neighborInfo.first;
+        const auto & mySideIndexInNeighbor = neighborInfo.second;
+        if (neighborCellID != -1)
+        {
+          assignParities(neighborCellID);
+        }
+        if (_meshTopology->isValidCellIndex(neighborCellID))
+        {
+          CellPtr neighborCell = _meshTopology->getCell(neighborCellID);
+          const bool leafNodesOnly = false;
+          vector< pair< GlobalIndexType, unsigned> > neighborDescendants = neighborCell->getDescendantsForSide(mySideIndexInNeighbor, _meshTopology, leafNodesOnly);
+          for (const auto &descendantEntry : neighborDescendants)
+          {
+            const GlobalIndexType & descendantID = descendantEntry.first;
+            if (_meshTopology->isValidCellIndex(descendantID))
+            {
+              assignParities(descendantID);
+            }
+          }
+        }
+      }
+    }
+  }
+  
+}
+
 ElementTypePtr GlobalDofAssignment::elementType(GlobalIndexType cellID)
 {
   pair<CellTopologyKey, int> key = getElementTypeLookupKey(cellID);
@@ -886,6 +927,7 @@ void GlobalDofAssignment::projectChildCoefficientsOntoParents(const std::set<Glo
         {
           auto childID = childIndices[childOrdinal];
           auto childPartition = partitionForCellID(childID);
+          TEUCHOS_TEST_FOR_EXCEPTION(childPartition == -1, std::invalid_argument, "child cell ID " + std::to_string(childID) + ": partition not found.  Perhaps it's not an active cell?");
           if (childPartition != myRank)
           {
             offRankCellsNeeded.insert(childID);
@@ -928,24 +970,55 @@ void GlobalDofAssignment::projectParentCoefficientsOntoUnsetChildren()
 
         CellPtr cell = _meshTopology->getCell(cellID);
         CellPtr parent = cell->getParent();
-        if (parent.get()==NULL) continue;
-        GlobalIndexType parentCellID = parent->cellIndex();
-        if (! soln->cellHasCoefficientsAssigned(parentCellID,lhsOrdinal)) continue;
+        if (parent == Teuchos::null) continue;
+        
+        // proceed up the refinement hierarchy looking for an ancestor that has solution data
+        std::vector<GlobalIndexType> projectionsNeeded {cellID}; // from coarsest to finest, these are the ancestral cells that need solution coefficients
+        CellPtr ancestor = parent;
+        while (true)
+        {
+          GlobalIndexType ancestorCellID = ancestor->cellIndex();
+          if (soln->cellHasCoefficientsAssigned(ancestorCellID,lhsOrdinal))
+          {
+            break;
+          }
+          else
+          {
+            projectionsNeeded.insert(projectionsNeeded.begin(), ancestorCellID);
+          }
+          if (ancestor->getParent() == Teuchos::null)
+          {
+            break;
+          }
+          else
+          {
+            ancestor = ancestor->getParent();
+          }
+        }
+        GlobalIndexType ancestorCellID = ancestor->cellIndex();
+        if (! soln->cellHasCoefficientsAssigned(ancestorCellID,lhsOrdinal)) continue;
 
-        int childOrdinal = -1;
-        vector<IndexType> childIndices = parent->getChildIndices(_meshTopology);
-        for (int i=0; i<childIndices.size(); i++)
+        for (auto childCellID : projectionsNeeded)
         {
-          if (childIndices[i]==cellID) childOrdinal = i;
-          else childIndices[i] = -1; // indication that Solution should not compute the projection for this child
+          CellPtr childCell = _meshTopology->getCell(childCellID);
+          parent = childCell->getParent();
+          int childOrdinal = -1;
+          vector<IndexType> childIndices = parent->getChildIndices(_meshTopology);
+          for (int i=0; i<childIndices.size(); i++)
+          {
+            if (childIndices[i]==childCellID) childOrdinal = i;
+            else childIndices[i] = -1; // indication that Solution should not compute the projection for this child
+          }
+          if (childOrdinal == -1)
+          {
+            cout << "ERROR: child not found.\n";
+            TEUCHOS_TEST_FOR_EXCEPTION(true, std::invalid_argument, "child not found!");
+          }
+    //      cout << "determining cellID " << parent->cellIndex() << "'s child " << childOrdinal << "'s coefficients.\n";
+          soln->projectOldCellOntoNewCells(parent->cellIndex(), elementType(parent->cellIndex()), childIndices, lhsOrdinal);
         }
-        if (childOrdinal == -1)
-        {
-          cout << "ERROR: child not found.\n";
-          TEUCHOS_TEST_FOR_EXCEPTION(true, std::invalid_argument, "child not found!");
-        }
-  //      cout << "determining cellID " << parent->cellIndex() << "'s child " << childOrdinal << "'s coefficients.\n";
-        soln->projectOldCellOntoNewCells(parent->cellIndex(), elementType(parentCellID), childIndices, lhsOrdinal);
+        
+        
       }
     }
   }
@@ -1036,6 +1109,21 @@ void GlobalDofAssignment::setPartitionPolicy( MeshPartitionPolicyPtr partitionPo
   {
     repartitionAndMigrate();
   }
+}
+
+int GlobalDofAssignment::sideParity(GlobalIndexType cellID, unsigned int sideOrdinal)
+{
+  auto parityEntry = _cellSideParitiesForCellID.find(cellID);
+  if (parityEntry == _cellSideParitiesForCellID.end())
+  {
+    assignParities(cellID);
+    parityEntry = _cellSideParitiesForCellID.find(cellID);
+    TEUCHOS_TEST_FOR_EXCEPTION(parityEntry == _cellSideParitiesForCellID.end(), std::invalid_argument, "No entry for parity found even after call to assignParities()");
+  }
+  
+  const auto & parities = parityEntry->second;
+  TEUCHOS_TEST_FOR_EXCEPTION(sideOrdinal >= parities.size(), std::invalid_argument, "sideOrdinal " + std::to_string(sideOrdinal) + " is out of bounds; there are " + std::to_string(parities.size()) + " sides…" );
+  return parities[sideOrdinal];
 }
 
 PartitionIndexType GlobalDofAssignment::partitionForCellID( GlobalIndexType cellID )

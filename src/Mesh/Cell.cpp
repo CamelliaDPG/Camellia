@@ -24,9 +24,7 @@ vector< pair< unsigned, unsigned > > Cell::boundarySubcells()
     //   - check whether any of these sides are on the mesh boundary
     //   - if all descendants belong to some side on the mesh boundary, then the sc belongs to mesh boundary
     //   - if it does, add it to _boundarySubcells
-    
-    // TODO: implement the computation here...
-    
+        
     int spaceDim = _cellTopo->getDimension();
     int sideDim = spaceDim - 1;
     
@@ -145,8 +143,11 @@ vector<IndexType> Cell::entitiesOnNeighborInterfaces(unsigned dimensionOfInteres
   int sideCount = _cellTopo->getSideCount();
   for (unsigned sideOrdinal=0; sideOrdinal<sideCount; sideOrdinal++)
   {
-    IndexType sideEntityIndex = entityIndex(sideDim, sideOrdinal);
-    sidesOfInterest.push_back(sideEntityIndex);
+    if ( !isBoundary(sideOrdinal) )
+    {
+      IndexType sideEntityIndex = entityIndex(sideDim, sideOrdinal);
+      sidesOfInterest.push_back(sideEntityIndex);
+    }
   }
   
   if (!peersOnly)

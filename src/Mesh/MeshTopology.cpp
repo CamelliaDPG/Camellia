@@ -568,22 +568,32 @@ IndexType MeshTopology::addCell(IndexType cellIndex, CellTopoPtr cellTopo, const
       MeshTopologyPtr thisPtr = Teuchos::rcp(this,false);
       if (firstCell->isParent(thisPtr))
       {
-        vector< pair< GlobalIndexType, unsigned> > firstCellDescendants = firstCell->getDescendantsForSide(firstNeighbor.second, thisPtr);
+        const bool leafNodesOnly = false; // we want to set the neighbor relationship for all levels of refinement hierarchy
+        vector< pair< GlobalIndexType, unsigned> > firstCellDescendants = firstCell->getDescendantsForSide(firstNeighbor.second, thisPtr, leafNodesOnly);
         for (pair< GlobalIndexType, unsigned> descendantEntry : firstCellDescendants)
         {
           GlobalIndexType childCellIndex = descendantEntry.first;
           unsigned childSideOrdinal = descendantEntry.second;
-          getCell(childCellIndex)->setNeighbor(childSideOrdinal, secondNeighbor.first, secondNeighbor.second);
+          // if the child is not locally known, presumably we don't need the neighbor relation set
+          if (isValidCellIndex(childCellIndex))
+          {
+            getCell(childCellIndex)->setNeighbor(childSideOrdinal, secondNeighbor.first, secondNeighbor.second);
+          }
         }
       }
       if (secondCell->isParent(thisPtr))
       {
-        vector< pair< GlobalIndexType, unsigned> > secondCellDescendants = secondCell->getDescendantsForSide(secondNeighbor.second, thisPtr);
+        const bool leafNodesOnly = false; // we want to set the neighbor relationship for all levels of refinement hierarchy
+        vector< pair< GlobalIndexType, unsigned> > secondCellDescendants = secondCell->getDescendantsForSide(secondNeighbor.second, thisPtr, leafNodesOnly);
         for (pair< GlobalIndexType, unsigned> descendantEntry : secondCellDescendants)
         {
           GlobalIndexType childCellIndex = descendantEntry.first;
           unsigned childSideOrdinal = descendantEntry.second;
-          getCell(childCellIndex)->setNeighbor(childSideOrdinal, firstNeighbor.first, firstNeighbor.second);
+          // if the child is not locally known, presumably we don't need the neighbor relation set
+          if (isValidCellIndex(childCellIndex))
+          {
+            getCell(childCellIndex)->setNeighbor(childSideOrdinal, firstNeighbor.first, firstNeighbor.second);
+          }
         }
       }
     }
@@ -2038,18 +2048,36 @@ bool MeshTopology::getVertexIndex(const vector<double> &vertex, IndexType &verte
   // (this is inefficient, and perhaps should be revisited.)
   
   vector<double> vertexForLowerBound;
+  double magnitude = 0.0;
+  double x_magnitude = (_spaceDim > 0) ? std::fabs(vertex[0]) : 0.0;
   for (int d=0; d<_spaceDim; d++)
   {
-    vertexForLowerBound.push_back(vertex[d]-tol);
+    double vertexForLowerBound_d;
+    if (std::fabs(vertex[d]) < tol)
+    {
+      vertexForLowerBound_d = -tol;
+    }
+    else if (vertex[d] < 0.0)
+    {
+      vertexForLowerBound_d = vertex[d] * (1.0 + tol);
+    }
+    else
+    {
+      vertexForLowerBound_d = vertex[d] * (1.0 - tol);
+    }
+    vertexForLowerBound.push_back(vertexForLowerBound_d);
+    magnitude += vertex[d] * vertex[d];
   }
+  magnitude = std::sqrt(magnitude);
 
   auto lowerBoundIt = _vertexMap.lower_bound(vertexForLowerBound);
   long bestMatchIndex = -1;
-  double bestMatchDistance = tol;
+  double bestMatchDistance = (magnitude > tol) ? tol * magnitude : tol;
   double xDist = 0; // xDist because vector<double> sorts according to the first entry: so we'll end up looking at
   // all the vertices that are near (x,...) in x...
   
-  while ((lowerBoundIt != _vertexMap.end()) && (xDist < tol))
+  double xTol = (x_magnitude > tol) ? x_magnitude * tol : tol;
+  while ((lowerBoundIt != _vertexMap.end()) && (xDist < xTol))
   {
     double dist = 0;
     for (int d=0; d<_spaceDim; d++)
@@ -2068,6 +2096,7 @@ bool MeshTopology::getVertexIndex(const vector<double> &vertex, IndexType &verte
   }
   if (bestMatchIndex == -1)
   {
+    vertexIndex = -1;
     return false;
   }
   else
@@ -3889,6 +3918,7 @@ void MeshTopology::unrefineCell(IndexType cellIndex, RefinementPatternPtr refPat
     }
     
     _cells.erase(cellIDToDelete);
+    _validCells.remove(cellIDToDelete);
   }
   
   // add the cell back in -- this will activate it, establish neighbor relationships, etc.

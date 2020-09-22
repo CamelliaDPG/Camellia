@@ -78,7 +78,7 @@ namespace Camellia
         pointEnd   = _pointStartEndPairs[_currentCellOrdinal].second;
         numPointsInCurrentCell = pointEnd - pointStart;
         
-        while ((_currentCellOrdinal >= 0) && (numPointsInCurrentCell == 0))
+        while ((_currentCellOrdinal > 0) && (numPointsInCurrentCell == 0))
         {
           _currentCellOrdinal--;
           
@@ -87,7 +87,7 @@ namespace Camellia
           numPointsInCurrentCell = pointEnd - pointStart;
         }
         
-        if (_currentCellOrdinal < 0)
+        if (numPointsInCurrentCell == 0) // then we've reached the first cell without finding any further points
         {
           _isValid = false;
         }

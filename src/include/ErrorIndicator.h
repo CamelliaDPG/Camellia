@@ -32,6 +32,7 @@ namespace Camellia {
   protected:
     MeshPtr _mesh;
     std::map<GlobalIndexType,double> _localErrorMeasures; // cellID -> error measure
+    std::map<GlobalIndexType,double> _parentErrorMeasures; // cellID -> error measure
   public:
     ErrorIndicator(MeshPtr mesh);
     
@@ -41,14 +42,28 @@ namespace Camellia {
     //! adds to the provided container rank-local cells with error above the threshold
     virtual void localCellsAboveErrorThreshold(double threshold, vector<GlobalIndexType> &cellsAboveThreshold);
     
+    //! adds to the provided container locally-owned parents cells with error below the threshold
+    virtual void localParentCellsBelowErrorThreshold(double threshold, vector<GlobalIndexType> &cellsBelowThreshold);
+    
+    std::vector< std::pair<GlobalIndexType,double> > globalMinimumErrorParentCells(const int cellReductionTarget, const std::set<GlobalIndexType> &excludedChildren);
+    
     //! determine rank-local error measures.  Subclasses should populate _localErrorMeasures
     virtual void measureError() = 0;
     
     //! returns maximum rank-local error measure
-    virtual double maxLocalError() const;
+    virtual double maxLocalError(const std::set<GlobalIndexType> localCellsToExclude = std::set<GlobalIndexType>()) const;
     
     //! return maximum error measure (MPI collective method).
-    virtual double maxError() const;
+    virtual double maxError(const std::set<GlobalIndexType> localCellsToExclude = std::set<GlobalIndexType>()) const;
+    
+    //! return minimum error measure across all cells (MPI collective method).
+    virtual double minError() const;
+    
+    //! return minimum error measure across all parent cells that have no grandchildren (MPI collective method).
+    virtual double minParentError() const;
+    
+    //! for all parents of leaf cells (in the h-refinement sense) gather the child error sum to the processor that owns the first child (MPI collective method).
+    virtual void gatherParentError(const std::set<GlobalIndexType> &excludedChildren);
     
     MeshPtr mesh() const;
     
@@ -71,6 +86,10 @@ namespace Camellia {
     
     template <typename Scalar>
     static ErrorIndicatorPtr hessianErrorIndicator(TSolutionPtr<Scalar> solution, VarPtr scalarVar);
+    
+    //! Measure parent error by doing a projection of the children's data onto the parent and evaluating the difference in the L^2 norm of the specified variable.
+    template <typename Scalar>
+    static ErrorIndicatorPtr unrefinementProjectionErrorIndicator(TSolutionPtr<Scalar> solution, VarPtr scalarVar);
   };
 }
 

@@ -10,12 +10,14 @@
 //
 
 #include "Boltzmann1D1VFormulation.h"
+#include "CamelliaMemoryTools.h"
 #include "CubatureFactory.h"
 #include "ERKTableau.h"
 #include "GlobalDofAssignment.h"
 #include "GMGSolver.h"
 #include "MeshFactory.h"
 #include "ParameterFunction.h"
+#include "RefinementStrategy.h"
 #include "RHS.h"
 #include "Solution.h"
 #include "SolutionStage.h"
@@ -93,6 +95,7 @@ class VelocitySpace1DIntegral : public QuadraturePointFunction
       const int numPointSets = levelNumberPairs.size();
       
       int pointSetNumber = 0; // increments at bottom of levelNumberPair loop
+      _pointSetNumbers.clear();
       for (const auto &levelNumberPair : levelNumberPairs)
       {
         _pointSetNumbers[levelNumberPair] = pointSetNumber++;
@@ -374,6 +377,12 @@ public:
     // It is also worth noting that creating basisCache_1D below is an inefficiency: those basis values won't
     // be reused beyond the body of this method…
     
+    const int rank = MPIWrapper::CommWorld()->MyPID();
+    
+    TEUCHOS_TEST_FOR_EXCEPTION(basisCache == Teuchos::null, std::invalid_argument, "On rank " + std::to_string(rank) + ", null pointer on line " + std::to_string(__LINE__) );
+    TEUCHOS_TEST_FOR_EXCEPTION(_g_1D == Teuchos::null, std::invalid_argument, "On rank " + std::to_string(rank) + ", null pointer on line " + std::to_string(__LINE__) );
+    TEUCHOS_TEST_FOR_EXCEPTION(_phaseSpacePhysicalMeshMap == Teuchos::null, std::invalid_argument, "On rank " + std::to_string(rank) + ", null pointer on line " + std::to_string(__LINE__) );
+    
     bool isSideCache = (basisCache->getSideIndex() != -1);
     int physicalSpaceSideOrdinal;
     if (!isSideCache)
@@ -452,6 +461,8 @@ public:
       
       BasisCachePtr basisCacheToUse = inPhysicalVolume ? physicalBasisCache : physicalBasisCache->getSideBasisCache(physicalSpaceSideOrdinal);
       
+      TEUCHOS_TEST_FOR_EXCEPTION(basisCacheToUse == Teuchos::null, std::invalid_argument, "On rank " + std::to_string(rank) + ", null pointer on line " + std::to_string(__LINE__) );
+      
       const int numCells  = 1;
       const int numPoints = basisCacheToUse->getRefCellPoints().dimension(0);
       Camellia::FieldContainer<double> values(numCells,numPoints);
@@ -508,6 +519,11 @@ Boltzmann1D1VFormulation::Boltzmann1D1VFormulation(Boltzmann1D1VFormulationChoic
 :
 _formulationChoice(formulationChoice)
 {
+//  {
+//    double memoryUsageInGigabytes = memoryHighWaterMarkInGigabytes();
+//    std::cout << "At start of Boltzmann1D1VFormulation construction, memory HWM:      " << memoryUsageInGigabytes << " GB.\n";
+//  }
+  
   const int spaceDim = 1;
 //  const int velocityDim = 1;
   _delta_k = delta_k;
@@ -672,7 +688,7 @@ _formulationChoice(formulationChoice)
       _boltzmannSolnPrev = Solution::solution(_boltzmannBF,boltzmannMesh);
     }
     
-    _f_velocityIntegral = Teuchos::rcp( new VelocitySpace1DIntegral(_gaussSoln->mesh(), _boltzmannSolnPrev, f, _spatialCellIDToPhaseSpaceCellIDs, meshMapWeakPtr) );
+    _f_velocityIntegral = Teuchos::rcp( new VelocitySpace1DIntegral(_gaussSoln->mesh(), _boltzmannSoln, f, _spatialCellIDToPhaseSpaceCellIDs, meshMapWeakPtr) );
     
     // set RHS for the two problems
     auto gaussRHS = RHS::rhs();
@@ -709,6 +725,7 @@ _formulationChoice(formulationChoice)
     
     gaussMesh->registerSolution(_gaussSoln);
     boltzmannMesh->registerSolution(_boltzmannSoln);
+    boltzmannMesh->registerSolution(_boltzmannSolnPrev);
     
     IPPtr boltzmannTestNorm = IP::ip();
     const bool useSimpleL2Norm = false;
@@ -757,6 +774,10 @@ _formulationChoice(formulationChoice)
   {
     TEUCHOS_TEST_FOR_EXCEPTION(true, std::invalid_argument, "Unsupported Boltzmann1D1VFormulationChoice");
   }
+//  {
+//    double memoryUsageInGigabytes = memoryHighWaterMarkInGigabytes();
+//    std::cout << "At conclusion of Boltzmann1D1VFormulation construction, memory HWM: " << memoryUsageInGigabytes << " GB.\n";
+//  }
 }
 
 MeshPtr Boltzmann1D1VFormulation::boltzmannMesh()
@@ -817,6 +838,11 @@ VarPtr Boltzmann1D1VFormulation::E_hat()
   return vf->trialVar(S_E_HAT);
 }
 
+const std::vector< std::vector<int> > & Boltzmann1D1VFormulation::iterationCounts() const
+{
+  return _iterationCounts;
+}
+
 const std::map<GlobalIndexType, std::set<GlobalIndexType> > & Boltzmann1D1VFormulation::phaseSpaceCellIDToSpatialCellIDs()
 {
   return _phaseSpaceCellIDToSpatialCellID;
@@ -870,6 +896,31 @@ void Boltzmann1D1VFormulation::setInitialConditions(FunctionPtr f0)
   _t = 0;
 }
 
+void Boltzmann1D1VFormulation::setIterativeSolveOutputLevel(int azOutputLevel)
+{
+  _aztecOutputLevel = azOutputLevel;
+}
+
+void Boltzmann1D1VFormulation::setRefinementThresholds(double refinementThreshold, int maxElements, int maxRefinementLevel, ErrorIndicatorPtr unrefinementErrorIndicator, bool gateRefinements)
+{
+  _refinementThreshold = refinementThreshold;
+  _maxElements = maxElements;
+  _maxRefinementLevel = maxRefinementLevel;
+  _lastRefinementMaxElementError = -1.0;
+  _gateRefinements = gateRefinements;
+  
+  if (_refStrategy == Teuchos::null)
+  {
+    _refStrategy = RefinementStrategy::energyErrorRefinementStrategy(_boltzmannSoln, _refinementThreshold);
+  }
+  _refStrategy->setRelativeErrorThreshold(_refinementThreshold);
+  _refStrategy->setMaxElements(_maxElements);
+  _refStrategy->setMaximumRefinementLevel(_maxRefinementLevel);
+  _refStrategy->setUnrefinementErrorIndicator(unrefinementErrorIndicator);
+  const int H1Order = _boltzmannSoln->mesh()->globalDofAssignment()->getInitialH1Order()[0];
+  _refStrategy->setMaxP(H1Order); // disallow p refinements (these would require revision of VelocitySpaceExtrusion)
+}
+
 void Boltzmann1D1VFormulation::setStage(const int stageNumber)
 {
   updateElectricField();
@@ -880,26 +931,45 @@ void Boltzmann1D1VFormulation::setTimeStep(double dt)
   _dt->setValue(dt);
 }
 
+void Boltzmann1D1VFormulation::setSubstepsForImplicit(int numSubsteps)
+{
+  _numSubstepsForImplicit = numSubsteps;
+}
+
 void Boltzmann1D1VFormulation::takeTimeStep()
 {
   // for implicit solves, we cycle through the f solve and the E solve a few times;
   // for explicit, we do each solve just once per time step.
   const bool implicit = _formulationChoice == ULTRAWEAK_IMPLICIT_H1_TRACE || _formulationChoice == ULTRAWEAK_IMPLICIT_L2_TRACE;
-  int numSubsteps = implicit ? 3 : 1;
+  int numSubsteps = implicit ? _numSubstepsForImplicit : 1;
+//  int numSubsteps = implicit ? 1 : 1; // 1 for implicit for faster debugging
+  
+  const bool useAdaptivity = _refStrategy != Teuchos::null;
+  
+  if (_haveTableau && useAdaptivity)
+  {
+    // the logic below only does adaptivity for the non-tableau (implicit, right now) case; probably user mis-specified something
+    TEUCHOS_TEST_FOR_EXCEPTION(true, std::invalid_argument, "adaptivity is only supported for implicit time-stepping");
+  }
   
   bool useGMG = true;
   if (useGMG && (_gmgSolver == Teuchos::null))
   {
+//    {
+//      double memoryUsageInGigabytes = memoryHighWaterMarkInGigabytes();
+//      std::cout << "Before GMG construction, memory HWM: " << memoryUsageInGigabytes << " GB.\n";
+//    }
+    
     int kCoarse = 0;
     const double cgTol = 1e-6;
-    const int maxIters = 200;
+    const int maxIters = 10000;
 
     bool useCondensedSolve = _boltzmannSoln->usesCondensedSolve();
 
     //    auto multigridStrategy = GMGOperator::V_CYCLE;
     auto multigridStrategy = GMGOperator::SMOOTHER_ONLY;
-    GMGOperator::SmootherChoice smootherChoice = GMGOperator::IFPACK_ADDITIVE_SCHWARZ;
-//    GMGOperator::SmootherChoice smootherChoice = GMGOperator::CAMELLIA_ADDITIVE_SCHWARZ;
+//    GMGOperator::SmootherChoice smootherChoice = GMGOperator::IFPACK_ADDITIVE_SCHWARZ;
+    GMGOperator::SmootherChoice smootherChoice = GMGOperator::CAMELLIA_ADDITIVE_SCHWARZ; // CAMELLIA_ADDITIVE_SCHWARZ defines cells as blocks; Ifpack's defines all cells on the MPI rank as a block, making MPI scaling less predictable.  (Camellia's implementation is likely less well-optimized, though.)
 //    GMGOperator::SmootherChoice smootherChoice = GMGOperator::BLOCK_SYMMETRIC_GAUSS_SEIDEL; // as configured, this is very slow; I think it's treating all data on an MPI rank as a block…
 //    GMGOperator::SmootherChoice smootherChoice = GMGOperator::POINT_SYMMETRIC_GAUSS_SEIDEL;
     vector<MeshPtr> meshes;
@@ -918,17 +988,29 @@ void Boltzmann1D1VFormulation::takeTimeStep()
     
     _gmgSolver->setSmootherType(smootherChoice);
     
-    const int azOutputLevel = 10;
-    _gmgSolver->setAztecOutput(azOutputLevel);
+    _gmgSolver->setAztecOutput(_aztecOutputLevel);
+    
+//    {
+//      double memoryUsageInGigabytes = memoryHighWaterMarkInGigabytes();
+//      std::cout << "After GMG construction, memory HWM:  " << memoryUsageInGigabytes << " GB.\n";
+//    }
   }
+  
+  std::vector<int> substepIterationCounts(numSubsteps);
   
   for (int substepOrdinal=0; substepOrdinal < numSubsteps; substepOrdinal++)
   {
     // solve for f:
     if (_gmgSolver == Teuchos::null)
+    {
       _boltzmannSoln->solve();
+      substepIterationCounts[substepOrdinal] = -1; // -1 to indicate not an iterative solver
+    }
     else
+    {
       _boltzmannSoln->solve(_gmgSolver);
+      substepIterationCounts[substepOrdinal] = _gmgSolver->iterationCount();
+    }
     
     const bool correctConservation = false;
     
@@ -978,6 +1060,42 @@ void Boltzmann1D1VFormulation::takeTimeStep()
     {
       if (substepOrdinal == numSubsteps-1)
       {
+        const bool useAdaptivity = _refStrategy != Teuchos::null;
+        
+        if (useAdaptivity)
+        {
+          bool shouldRefine;
+          if (_gateRefinements)
+          {
+            // we compute error indicator first; if no refinement-eligible element has error greater than what would have been refined last time, then we don't do a refinement step now.
+            
+            auto localCellsToExclude = _refStrategy->localCellsIneligibleForRefinement();
+            
+            ErrorIndicatorPtr errorIndicator = _refStrategy->errorIndicator();
+            errorIndicator->measureError();
+            const double maxError = errorIndicator->maxError(localCellsToExclude);
+            
+            shouldRefine = maxError > _refinementThreshold * _lastRefinementMaxElementError;
+            
+            if (shouldRefine)
+            {
+              _lastRefinementMaxElementError = maxError;
+            }
+          }
+          else
+          {
+            shouldRefine = true;
+          }
+          
+          if (shouldRefine)
+          {
+            // for now, print refinement info to console on rank 0.
+            const bool printToConsole = _boltzmannSoln->mesh()->Comm()->MyPID() == 0;
+            const bool doUnrefinements = (_maxElements < std::numeric_limits<int>::max());
+            _refStrategy->refineAndUnrefine(doUnrefinements, printToConsole);
+          }
+        }
+        
         // last substep
         _boltzmannSolnPrev->setSolution(_boltzmannSoln);
       }
@@ -985,6 +1103,8 @@ void Boltzmann1D1VFormulation::takeTimeStep()
       updateElectricField();
     }
   }
+  
+  _iterationCounts.push_back(substepIterationCounts);
   
   _t += _dt->getConstantValue();
 }

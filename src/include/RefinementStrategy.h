@@ -41,12 +41,15 @@ protected:
 
   static RefinementResults setResults(GlobalIndexType numElements, GlobalIndexType numDofs, double totalEnergyError);
   ErrorIndicatorPtr _errorIndicator;
+  ErrorIndicatorPtr _unrefinementErrorIndicator; // defaults to null, in which case _errorIndicator will be used
 
   double _relativeErrorThreshold;
+  int _maxElementCount = std::numeric_limits<int>::max();
   bool _enforceOneIrregularity;
   bool _reportPerCellErrors;
   vector< RefinementResults > _results;
   double _min_h;
+  int _maxRefinementLevel = std::numeric_limits<int>::max(); // as measured from coarse/initial mesh, which is level 0.  Default: no maximum.
   int _max_p;
   bool _preferPRefinements;
   
@@ -60,19 +63,35 @@ public:
   
   double computeTotalEnergyError();
   
-  // ! Set the energy threshold (relative to maximum element error) to use for refinements
+  ErrorIndicatorPtr errorIndicator() const;
+  
+  //! unrefinement error indicator is used for determining parent errors to guide unrefinements; if null, the error indicator determined at construction will be used
+  void setUnrefinementErrorIndicator(ErrorIndicatorPtr unrefinementErrorIndicator);
+  ErrorIndicatorPtr unrefinementErrorIndicator() const;
+  
+  //! Set the energy threshold (relative to maximum element error) to use for refinements
   void setRelativeErrorThreshold(double value);
   void setEnforceOneIrregularity(bool value);
 
+  //! Set a maximum number of active elements; used in refineAndUnrefine.  Enough unrefinements will be performed to reduce the number of active elements to the specified count.
+  void setMaxElements(int maxElementCount);
+  
   virtual void refine(bool printToConsole=false);
+  virtual void refineAndUnrefine(bool unrefine, bool printToConsole);
   virtual void hRefineUniformly();
 
   virtual void refineCells(vector<GlobalIndexType> &cellIDs);
+  virtual void unrefineCells(const std::set<GlobalIndexType> &cellIDs);
   static void pRefineCells(MeshPtr mesh, const vector<GlobalIndexType> &cellIDs);
   static void hRefineCells(MeshPtr mesh, const vector<GlobalIndexType> &cellIDs);
   static void hRefineUniformly(MeshPtr mesh);
-  void getCellsAboveErrorThreshhold(vector<GlobalIndexType> &cellsToRefine);
+
+  std::set<GlobalIndexType> localCellsIneligibleForRefinement();
+  
+  void getCellsAboveErrorThreshhold(vector<GlobalIndexType> &cellsToRefine, std::set<GlobalIndexType> localCellsToExclude = std::set<GlobalIndexType>());
   void setMinH(double value);
+  void setMaxP(int max_p);
+  void setMaximumRefinementLevel(int maxLevel);
   void setReportPerCellErrors(bool value);
 
   double getEnergyError(int refinementNumber);
