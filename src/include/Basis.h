@@ -18,6 +18,8 @@
 #include "Camellia_FieldContainer.hpp"
 #include "Shards_CellTopology.hpp"
 
+#include "Intrepid2_Basis.hpp"
+
 #include "CellTopology.h"
 #include "CamelliaIntrepidExtendedTypes.h"
 
@@ -146,6 +148,53 @@ public:
   void getValues(ArrayScalar &values, const ArrayScalar &refPoints, Intrepid::EOperator operatorType) const;
   
   void getDofCoords(ArrayScalar & DofCoords) const;
+};
+
+template<class Scalar=double, class ArrayScalar=Intrepid::FieldContainer<double> > class Intrepid2BasisWrapper;
+template<class Scalar, class ArrayScalar> class Intrepid2BasisWrapper : public Basis<Scalar,ArrayScalar>
+{
+private:
+  Teuchos::RCP< Intrepid2::Basis<Kokkos::DefaultExecutionSpace,Scalar,Scalar> > _intrepid2Basis;
+  Teuchos::RCP< Camellia::Basis<Scalar,ArrayScalar> > _continuousBasis; // continuous version of the same basis, if this basis is discontinuous
+protected:
+  void initializeTags() const;
+public:
+  Intrepid2BasisWrapper(Teuchos::RCP< Intrepid2::Basis<Kokkos::DefaultExecutionSpace,Scalar,Scalar> > intrepid2Basis,
+                        int rangeDimension, int rangeRank, Camellia::EFunctionSpace functionSpace);
+
+  Teuchos::RCP< Intrepid2::Basis<Kokkos::DefaultExecutionSpace,Scalar,Scalar> > intrepid2Basis();
+
+  virtual bool isConforming() const;
+  virtual bool isNodal() const;
+
+  virtual std::set<int> dofOrdinalsForSide(int sideOrdinal) const;
+  
+  void getValues(ArrayScalar &values, const ArrayScalar &refPoints, Intrepid::EOperator operatorType) const;
+  
+  void getDofCoords(ArrayScalar & DofCoords) const;
+  
+  static Intrepid2::EOperator intrepidOpToIntrepid2Op(const Intrepid::EOperator &op)
+  {
+    switch (op)
+    {
+      case Intrepid::OPERATOR_VALUE: return Intrepid2::OPERATOR_VALUE;
+      case Intrepid::OPERATOR_GRAD:  return Intrepid2::OPERATOR_GRAD;
+      case Intrepid::OPERATOR_CURL:  return Intrepid2::OPERATOR_CURL;
+      case Intrepid::OPERATOR_DIV:   return Intrepid2::OPERATOR_DIV;
+      case Intrepid::OPERATOR_D1:    return Intrepid2::OPERATOR_D1;
+      case Intrepid::OPERATOR_D2:    return Intrepid2::OPERATOR_D2;
+      case Intrepid::OPERATOR_D3:    return Intrepid2::OPERATOR_D3;
+      case Intrepid::OPERATOR_D4:    return Intrepid2::OPERATOR_D4;
+      case Intrepid::OPERATOR_D5:    return Intrepid2::OPERATOR_D5;
+      case Intrepid::OPERATOR_D6:    return Intrepid2::OPERATOR_D6;
+      case Intrepid::OPERATOR_D7:    return Intrepid2::OPERATOR_D7;
+      case Intrepid::OPERATOR_D8:    return Intrepid2::OPERATOR_D8;
+      case Intrepid::OPERATOR_D9:    return Intrepid2::OPERATOR_D9;
+      case Intrepid::OPERATOR_D10:   return Intrepid2::OPERATOR_D10;
+      case Intrepid::OPERATOR_MAX:   return Intrepid2::OPERATOR_MAX;
+      
+    }
+  }
 };
 } // namespace Camellia
 

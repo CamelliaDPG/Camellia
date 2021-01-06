@@ -13,7 +13,6 @@
 #include "Intrepid_HCURL_QUAD_In_FEM.hpp"
 
 #include "Intrepid_HGRAD_TRI_Cn_FEM.hpp"
-#include "Intrepid_HDIV_TRI_In_FEM.hpp"
 #include "Intrepid_HCURL_TRI_In_FEM.hpp"
 
 #include "Intrepid_HGRAD_LINE_Cn_FEM.hpp"
@@ -25,6 +24,9 @@
 #include "Intrepid_HGRAD_TET_Cn_FEM.hpp"
 #include "Intrepid_HDIV_TET_In_FEM.hpp"
 #include "Intrepid_HCURL_TET_In_FEM.hpp"
+
+// ultimately, we will be replacing all Intrepid bases with Intrepid2 bases. We start with HDIV_TRI here because there may be bugs in Intrepid's HDIV_TRI implementation.
+#include "Intrepid2_HDIV_TRI_In_FEM.hpp"
 
 #include "Basis_HVOL_QUAD_C0_FEM.hpp"
 #include "Basis_HVOL_TRI_C0_FEM.hpp"
@@ -329,7 +331,8 @@ BasisPtr BasisFactory::getBasis( int polyOrder, unsigned cellTopoKey, Camellia::
         break;
       case Camellia::FUNCTION_SPACE_HDIV:
       case Camellia::FUNCTION_SPACE_HDIV_DISC:
-          basis = Teuchos::rcp( new IntrepidBasisWrapper<>( Teuchos::rcp( new Intrepid::Basis_HDIV_TRI_In_FEM<double, ArrayScalar >(polyOrder,Intrepid::POINTTYPE_WARPBLEND)),
+          // ultimately, we will be replacing all Intrepid bases with Intrepid2 bases. We start with HDIV_TRI here because there may be bugs in Intrepid's HDIV_TRI implementation.
+          basis = Teuchos::rcp( new Intrepid2BasisWrapper<>( Teuchos::rcp( new Intrepid2::Basis_HDIV_TRI_In_FEM<Kokkos::DefaultExecutionSpace, double, double >(polyOrder,Intrepid2::POINTTYPE_WARPBLEND)),
                               spaceDim, vectorRank, fs)
                             );
         break;
@@ -382,7 +385,7 @@ BasisPtr BasisFactory::getBasis( int polyOrder, unsigned cellTopoKey, Camellia::
           // return value: the Intrepid guys will always say HGRAD, and the Legendre HVOL.  Need to look at the
           // way this gets used to see if the conflation will make a difference in e.g. p-refinements.
           bool conformingFalse = false;
-          basis = Teuchos::rcp( new LobattoHGRAD_LineBasis<>(basisPolyOrder, false) );
+          basis = Teuchos::rcp( new LobattoHGRAD_LineBasis<>(basisPolyOrder, conformingFalse) );
         }
         else
         {
@@ -641,7 +644,8 @@ BasisPtr BasisFactory::getConformingBasis( int polyOrder, unsigned cellTopoKey, 
         break;
       case Camellia::FUNCTION_SPACE_HDIV:
       case Camellia::FUNCTION_SPACE_HDIV_DISC:
-          basis = Teuchos::rcp( new IntrepidBasisWrapper<>( Teuchos::rcp( new Intrepid::Basis_HDIV_TRI_In_FEM<double, ArrayScalar >(polyOrder,Intrepid::POINTTYPE_WARPBLEND)),
+          // ultimately, we will be replacing all Intrepid bases with Intrepid2 bases. We start with HDIV_TRI here because there may be bugs in Intrepid's HDIV_TRI implementation.
+          basis = Teuchos::rcp( new Intrepid2BasisWrapper<>( Teuchos::rcp( new Intrepid2::Basis_HDIV_TRI_In_FEM<Kokkos::DefaultExecutionSpace, double, double >(polyOrder,Intrepid2::POINTTYPE_WARPBLEND)),
                               spaceDim, vectorRank, fs)
                             );
         break;

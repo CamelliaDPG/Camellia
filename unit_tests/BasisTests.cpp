@@ -236,7 +236,8 @@ TEUCHOS_UNIT_TEST_TEMPLATE_1_INSTANT( Basis, ScalarPolynomialBasisUnisolvence, H
   {
     Space space = HDIV;
     success = true;
-    for (int k=1; k<10; k++) // poly order k
+    const int max_k = Intrepid2::Parameters::MaxOrder; // we're now using Intrepid2 basis functions for HDIV…
+    for (int k=1; k<=max_k; k++) // poly order k
     {
       bool newSuccess = true;
       testTriangleBasisL2Eigenvalues(k, space, out, newSuccess);

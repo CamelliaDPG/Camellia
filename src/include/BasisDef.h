@@ -16,7 +16,6 @@
 #include "Teuchos_TestForException.hpp"
 
 #include "Intrepid_Basis.hpp"
-//#include "Intrepid_HGRAD_QUAD_Cn_FEM.hpp"
 
 namespace Camellia
 {
@@ -249,50 +248,6 @@ const std::vector<int> &Basis<Scalar,ArrayScalar>::dofOrdinalsForSubcell(int sub
   return _tagToOrdinal[subcellDim][subcellIndex];
 }
   
-//  template<class Scalar, class ArrayScalar>
-//  void Basis<Scalar,ArrayScalar>::dofOrdinalsForSubcell(int subcellDim, int subcellIndex, std::vector<int> &dofOrdinals) const
-//{
-//  if (!_basisTagsAreSet)
-//  {
-//    initializeTagsAndTrim();
-//    _basisTagsAreSet = true;
-//  }
-//
-//  int firstDofOrdinal = -1;
-//  if (_tagToOrdinal.size() > subcellDim)
-//  {
-//    if (_tagToOrdinal[subcellDim].size() > subcellIndex)
-//    {
-//      if (_tagToOrdinal[subcellDim][subcellIndex].size() > 0)
-//      {
-//        firstDofOrdinal = _tagToOrdinal[subcellDim][subcellIndex][0];
-//      }
-//    }
-//  }
-//  if (firstDofOrdinal == -1)   // no matching dof ordinals
-//  {
-//    dofOrdinals.resize(0);
-//    return;
-//  }
-//  int numDofs = _ordinalToTag.at(firstDofOrdinal)[3];
-////  int numDofs = _tagToOrdinal[subcellDim][subcellIndex].size();
-//  dofOrdinals.resize(numDofs);
-//  
-//  for (int dofIndex=0; dofIndex<numDofs; dofIndex++)
-//  {
-//    int dofOrdinal = _tagToOrdinal.at(subcellDim).at(subcellIndex).at(dofIndex); // -1 indicates invalid entry...
-//    if (dofOrdinal >= 0)
-//    {
-//      dofOrdinals[dofIndex] = dofOrdinal;
-//    }
-//    else
-//    {
-//      TEUCHOS_TEST_FOR_EXCEPTION(true, std::invalid_argument, "invalid entry encountered in _tagToOrdinal");
-//    }
-//  }
-//  std::sort(dofOrdinals.begin(), dofOrdinals.end());
-//}
-
 template<class Scalar, class ArrayScalar>
 std::vector<int> Basis<Scalar,ArrayScalar>::dofOrdinalsForSubcell(int subcellDim, int subcellIndex, int minimumSubSubcellDimension) const
 {
@@ -687,6 +642,196 @@ void IntrepidBasisWrapper<Scalar,ArrayScalar>::getValues(ArrayScalar &values, co
 {
   this->CHECK_VALUES_ARGUMENTS(values,refPoints,operatorType);
   return _intrepidBasis->getValues(values,refPoints,operatorType);
+}
+
+template<class Scalar, class ArrayScalar>
+bool Intrepid2BasisWrapper<Scalar,ArrayScalar>::isConforming() const
+{
+  bool isDiscontinuous =  Camellia::functionSpaceIsDiscontinuous(this->_functionSpace);
+  
+  bool functionSpaceIsL2 = (this->_functionSpace == FUNCTION_SPACE_HVOL) || (this->_functionSpace == FUNCTION_SPACE_VECTOR_HVOL) || (this->_functionSpace == FUNCTION_SPACE_TENSOR_HVOL);
+  
+  if (isDiscontinuous && !functionSpaceIsL2)
+    return false; // discontinuous and not L^2: definitely not conforming
+  else if (isDiscontinuous && functionSpaceIsL2)
+    return false; // not discontinuous but L^2: definitely not conforming (and a bit weird!)
+  else // not discontinuous
+    return true;  // in the usual case, if not discontinuous, we are conforming.  There could be exceptions to this, but not among the Intrepid2 bases we expect to support.
+}
+
+template<class Scalar, class ArrayScalar>
+bool Intrepid2BasisWrapper<Scalar,ArrayScalar>::isNodal() const
+{
+  if (_intrepid2Basis->getBasisType() == Intrepid2::BASIS_FEM_LAGRANGIAN)
+    return true; // for Lagrangian, we know it's nodal
+  else
+    return false; // we're not sure about non-Lagrangian bases, but in general they are not nodal
+}
+
+template<class Scalar, class ArrayScalar>
+Intrepid2BasisWrapper<Scalar,ArrayScalar>::Intrepid2BasisWrapper(Teuchos::RCP< Intrepid2::Basis<Kokkos::DefaultExecutionSpace,Scalar,Scalar> > intrepid2Basis,
+    int rangeDimension, int rangeRank,
+    Camellia::EFunctionSpace fs)
+{
+  _intrepid2Basis = intrepid2Basis;
+  this->_rangeDimension = rangeDimension;
+  this->_rangeRank = rangeRank;
+  this->_functionSpace = fs;
+  this->_basisCardinality = _intrepid2Basis->getCardinality();
+  this->_basisDegree = _intrepid2Basis->getDegree();
+  this->_domainTopology = CellTopology::cellTopology( _intrepid2Basis->getBaseCellTopology() );
+
+  bool isDiscontinuous =  Camellia::functionSpaceIsDiscontinuous(this->_functionSpace);
+  
+  if (isDiscontinuous)
+  {
+    bool upgradeHVOL = true;
+    Camellia::EFunctionSpace continuousFS = Camellia::continuousSpaceForDiscontinuous(fs,upgradeHVOL);
+    this->_continuousBasis = Teuchos::rcp( new Intrepid2BasisWrapper(intrepid2Basis, rangeDimension,
+                                                                     rangeRank, continuousFS));
+  }
+}
+
+template<class Scalar, class ArrayScalar>
+void Intrepid2BasisWrapper<Scalar,ArrayScalar>::initializeTags() const
+{
+  using OrdinalToTagType = typename Intrepid2::Basis<Kokkos::DefaultExecutionSpace,Scalar,Scalar>::OrdinalTypeArray2DHost;
+  using TagToOrdinalType = typename Intrepid2::Basis<Kokkos::DefaultExecutionSpace,Scalar,Scalar>::OrdinalTypeArray3DHost;
+    
+  TagToOrdinalType tagToOrdinalIntrepid2 = _intrepid2Basis->getAllDofOrdinal();
+  OrdinalToTagType ordinalToTagIntrepid2 = _intrepid2Basis->getAllDofTags();
+  
+  /*
+     mutable std::vector<std::vector<int> > _ordinalToTag;
+     mutable std::vector<std::vector<std::vector<int> > > _tagToOrdinal;
+   */
+  
+  using std::vector;
+  vector<int> ttoInnermost(tagToOrdinalIntrepid2.extent_int(2),-1);
+  vector<vector<int>> ttoSecond(tagToOrdinalIntrepid2.extent_int(1),ttoInnermost);
+  this->_tagToOrdinal = vector<vector<vector<int>>>(tagToOrdinalIntrepid2.extent_int(0),ttoSecond);
+  
+  vector<int> ottInner(ordinalToTagIntrepid2.extent_int(1));
+  this->_ordinalToTag = vector<vector<int>>(ordinalToTagIntrepid2.extent_int(0),ottInner);
+//  this->_tagToOrdinal = ArrayScalar(tagToOrdinalIntrepid2.extent_int(0),tagToOrdinalIntrepid2.extent_int(1),tagToOrdinalIntrepid2.extent_int(2));
+//  this->_ordinalToTag = ArrayScalar(ordinalToTagIntrepid2.extent_int(0),ordinalToTagIntrepid2.extent_int(2));
+
+  for (int i=0; i<tagToOrdinalIntrepid2.extent_int(0); i++)
+  {
+    for (int j=0; j<tagToOrdinalIntrepid2.extent_int(1); j++)
+    {
+      for (int k=0; k<tagToOrdinalIntrepid2.extent_int(2); k++)
+      {
+        this->_tagToOrdinal[i][j][k] = tagToOrdinalIntrepid2(i,j,k);
+      }
+    }
+  }
+  
+  for (int i=0; i<ordinalToTagIntrepid2.extent_int(0); i++)
+  {
+    for (int j=0; j<ordinalToTagIntrepid2.extent_int(1); j++)
+    {
+      this->_ordinalToTag[i][j] = ordinalToTagIntrepid2(i,j);
+    }
+  }
+  
+  bool isDiscontinuous =  Camellia::functionSpaceIsDiscontinuous(this->_functionSpace);
+
+  // if this is an L^2 basis (potentially wrapping a non-L^2 Intrepid basis--to date, Intrepid doesn't have any L^2 bases, so we usually use H^1 of one lower degree for L^2),
+  // then we should rework the data structures a bit...
+  if (isDiscontinuous)
+  {
+    std::vector<int> tag(4);
+    int domainDimension = this->domainTopology()->getDimension();
+    this->_ordinalToTag = std::vector< std::vector<int> >(this->_basisCardinality);
+    this->_tagToOrdinal = std::vector<std::vector<std::vector<int> > >(domainDimension + 1);
+    for (int d=0; d<=domainDimension; d++)
+    {
+      int subcellCount = this->domainTopology()->getSubcellCount(d);
+      this->_tagToOrdinal[d].resize(subcellCount);
+    }
+    this->_tagToOrdinal[domainDimension] = std::vector<std::vector<int> >(1);
+    this->_tagToOrdinal[domainDimension][0] = std::vector<int>(this->_basisCardinality);
+
+//    for (int d=0; d<this->_tagToOrdinal.size(); d++)
+//    {
+//      for (int subcOrd=0; subcOrd < this->_tagToOrdinal[d].size(); subcOrd++)
+//      {
+//        for (int subcDofOrd=0; subcDofOrd< this->_tagToOrdinal[d][subcOrd].size(); subcDofOrd++)
+//        {
+//          this->_tagToOrdinal[d][subcOrd][subcDofOrd] = -1;
+//        }
+//      }
+//    }
+
+    for (int dofOrdinal = 0; dofOrdinal < this->_basisCardinality; dofOrdinal++)
+    {
+      tag[0] = domainDimension; // dimension of the subcell
+      tag[1] = 0; // subcell ordinal
+      tag[2] = dofOrdinal; // ordinal of the dof relative to subcell
+      tag[3] = this->_basisCardinality; // total # of dofs associated with subcell
+      this->_ordinalToTag[dofOrdinal] = tag;
+      this->_tagToOrdinal[domainDimension][0][dofOrdinal] = dofOrdinal;
+    }
+  }
+}
+
+template<class Scalar, class ArrayScalar>
+Teuchos::RCP< Intrepid2::Basis<Kokkos::DefaultExecutionSpace,Scalar,Scalar> > Intrepid2BasisWrapper<Scalar,ArrayScalar>::intrepid2Basis()
+{
+  return _intrepid2Basis;
+}
+  
+  template<class Scalar, class ArrayScalar>
+  void Intrepid2BasisWrapper<Scalar, ArrayScalar>::getDofCoords(ArrayScalar & dofCoords) const
+  {
+    Camellia::FieldContainer<Scalar> dofCoordsCamellia = dofCoords;
+    
+    auto dofCoordsView = dofCoordsCamellia.checkoutDeviceView(false); // false: don't deep copy from host
+    _intrepid2Basis->getDofCoords( dofCoordsView );
+    
+    // client code will depend on host availability of dof coords; let's copy from device if need be
+    dofCoordsCamellia.checkinDeviceView(true); // true: copy from device to host
+    
+    dofCoords = dofCoordsCamellia;
+  }
+
+  template<class Scalar, class ArrayScalar>
+  std::set<int> Intrepid2BasisWrapper<Scalar,ArrayScalar>::dofOrdinalsForSide(int sideOrdinal) const
+  {
+    if (this->_continuousBasis == Teuchos::null)
+    {
+      return this->Basis<Scalar,ArrayScalar>::dofOrdinalsForSide(sideOrdinal);
+    }
+    else
+    {
+      return this->_continuousBasis->dofOrdinalsForSide(sideOrdinal);
+    }
+  }
+  
+template<class Scalar, class ArrayScalar>
+void Intrepid2BasisWrapper<Scalar,ArrayScalar>::getValues(ArrayScalar &values, const ArrayScalar &refPoints, Intrepid::EOperator operatorType) const
+{
+  this->CHECK_VALUES_ARGUMENTS(values,refPoints,operatorType);
+  
+  // TODO: write a different getValues() that accepts Kokkos views as arguments, and then make sure that's most commonly called (or even delete this one).
+  // (This version does a bunch of extra copies to achieve compatibility with the original Intrepid basis interface.)
+  
+  Camellia::FieldContainer<Scalar> refPointsCamellia = refPoints;
+  Camellia::FieldContainer<Scalar> valuesCamellia = values;
+  
+  auto refPointsView = refPointsCamellia.checkoutDeviceView(true); // true: do deep copy from host
+  auto valuesView    = valuesCamellia.checkoutDeviceView(false);   // false: don't deep copy from host
+  
+  Intrepid2::EOperator opIntrepid2 = intrepidOpToIntrepid2Op(operatorType);
+  
+  _intrepid2Basis->getValues(valuesView,refPointsView,opIntrepid2);
+  
+  refPointsCamellia.checkinDeviceView(false); // false: don't deep copy from device to host
+  valuesCamellia.checkinDeviceView(true);     // true: do deep copy from device to host
+  
+  // finally, copy back to the Intrepid FieldContainer that was passed in:
+  values = valuesCamellia;
 }
 
 } // namespace Camellia

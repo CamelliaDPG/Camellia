@@ -161,23 +161,37 @@ DofOrderingPtr DofOrderingFactory::trialOrdering(vector<int> &polyOrder,
 
     Camellia::EFunctionSpace temporalFS = FUNCTION_SPACE_HVOL;
     Camellia::EFunctionSpace spatialFS = fs; // default to using fs for the spatial component
-    if (fs == FUNCTION_SPACE_HGRAD)
+    
+    /*
+     The determination of temporalFS is a bit hackish, because we don't require explicit selection of
+     a temporal discretization.  When an HGRAD or HVOL space of some kind is requested, we use the specified
+     space for spatialFS, and the scalar HGRAD or HVOL space (respectively) for the temporalFS.
+     
+     It may be worth redesigning the way that space-time variables are constructed in VarFactory to address this;
+     probably they should have an explicit function space in space, and a separate one in time.
+     */
+    switch (fs)
     {
-      temporalFS = FUNCTION_SPACE_HGRAD;
-    }
-    else if (fs == FUNCTION_SPACE_HVOL)
-    {
-      temporalFS = FUNCTION_SPACE_HVOL;
-    }
-    else if (fs == FUNCTION_SPACE_HVOL_SPACE_HGRAD_TIME)
-    {
-      spatialFS = FUNCTION_SPACE_HVOL;
-      temporalFS = FUNCTION_SPACE_HGRAD;
-    }
-    else if (fs == FUNCTION_SPACE_HGRAD_SPACE_HVOL_TIME)
-    {
-      spatialFS = FUNCTION_SPACE_HGRAD;
-      temporalFS = FUNCTION_SPACE_HVOL;
+      case FUNCTION_SPACE_HGRAD:
+      case FUNCTION_SPACE_HVOL:
+        temporalFS = spatialFS;
+        break;
+      case FUNCTION_SPACE_VECTOR_HVOL:
+        temporalFS = FUNCTION_SPACE_HVOL;
+        break;
+      case FUNCTION_SPACE_VECTOR_HGRAD:
+        temporalFS = FUNCTION_SPACE_HGRAD;
+        break;
+      case FUNCTION_SPACE_HVOL_SPACE_HGRAD_TIME:
+        spatialFS = FUNCTION_SPACE_HVOL;
+        temporalFS = FUNCTION_SPACE_HGRAD;
+        break;
+      case FUNCTION_SPACE_HGRAD_SPACE_HVOL_TIME:
+        spatialFS = FUNCTION_SPACE_HGRAD;
+        temporalFS = FUNCTION_SPACE_HVOL;
+        break;
+      default:
+        temporalFS = FUNCTION_SPACE_UNKNOWN;
     }
     
     VarType varType = _varFactory->trial(trialID)->varType();
