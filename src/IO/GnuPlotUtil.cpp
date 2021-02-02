@@ -141,7 +141,7 @@ void GnuPlotUtil::writeComputationalMeshSkeleton(const string &filePath, MeshPtr
       }
       // make a one-cell BasisCache initialized with the edgePoints on the ref cell:
       BasisCachePtr basisCache = BasisCache::basisCacheForCell(mesh, cellID);
-      basisCache->setRefCellPoints(edgePoints);
+      basisCache->setRefCellPointsFC(edgePoints);
 
       //      cout << "--- cellID " << cell->cellID() << " ---\n";
       //      cout << "edgePoints:\n" << edgePoints;

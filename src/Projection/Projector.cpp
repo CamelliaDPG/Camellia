@@ -387,21 +387,21 @@ void Projector<Scalar>::projectFunctionOntoBasisInterpolating(Camellia::FieldCon
           CellTopoPtr subcellTopo = domainTopo->getSubcell(d, subcord);
 //          Teuchos::RCP<Intrepid::Cubature<double> > subcellCubature = cubFactory.create(subcellTopo, domainBasisCache->cubatureDegree());
           BasisCachePtr subcellCache = Teuchos::rcp( new BasisCache(subcellTopo, domainBasisCache->cubatureDegree(), false) );
-          int numPoints = subcellCache->getRefCellPoints().dimension(0);
+          int numPoints = subcellCache->getRefCellPointsFC().dimension(0);
           refCellPoints.resize(numPoints,domainDim);
-          cubatureWeightsSubcell = subcellCache->getCubatureWeights();
+          cubatureWeightsSubcell = subcellCache->getCubatureWeightsFC();
 
           if (d == domainDim)
           {
-            refCellPoints = subcellCache->getRefCellPoints();
+            refCellPoints = subcellCache->getRefCellPointsFC();
           }
           else
           {
-            CamelliaCellTools::mapToReferenceSubcell(refCellPoints, subcellCache->getRefCellPoints(), d,
+            CamelliaCellTools::mapToReferenceSubcell(refCellPoints, subcellCache->getRefCellPointsFC(), d,
                 subcord, domainTopo);
           }
         }
-        domainBasisCache->setRefCellPoints(refCellPoints, cubatureWeightsSubcell, domainBasisCache->cubatureDegree());
+        domainBasisCache->setRefCellPointsFC(refCellPoints, cubatureWeightsSubcell, domainBasisCache->cubatureDegree());
         TIPPtr<Scalar> ipForProjection = (d==0) ? ip_l2 : ip; // just use values at vertices (ignore derivatives)
         set<int> dofsToSkip = allDofs;
         for (auto dofOrdinal : subcellDofOrdinals)
@@ -776,23 +776,23 @@ void Projector<Scalar>::projectChildFunctionOntoParentBasisInterpolating(Camelli
         {
           CellTopoPtr subcellTopo = domainTopo->getSubcell(d, subcord);
           BasisCachePtr subcellCache = Teuchos::rcp( new BasisCache(subcellTopo, maxCubatureDegreeSubdomain, false) );
-          int numPoints = subcellCache->getRefCellPoints().dimension(0);
+          int numPoints = subcellCache->getRefCellPointsFC().dimension(0);
           refCellPoints.resize(numPoints,domainDim);
-          cubatureWeightsSubcell = subcellCache->getCubatureWeights();
+          cubatureWeightsSubcell = subcellCache->getCubatureWeightsFC();
           
           if (d == domainDim)
           {
-            refCellPoints = subcellCache->getRefCellPoints();
+            refCellPoints = subcellCache->getRefCellPointsFC();
           }
           else
           {
-            CamelliaCellTools::mapToReferenceSubcell(refCellPoints, subcellCache->getRefCellPoints(), d,
+            CamelliaCellTools::mapToReferenceSubcell(refCellPoints, subcellCache->getRefCellPointsFC(), d,
                                                      subcord, domainTopo);
           }
         }
         for (auto subdomainCache : subdomainCaches)
         {
-          subdomainCache->setRefCellPoints(refCellPoints, cubatureWeightsSubcell, subdomainCache->cubatureDegree());
+          subdomainCache->setRefCellPointsFC(refCellPoints, cubatureWeightsSubcell, subdomainCache->cubatureDegree());
         }
         TIPPtr<Scalar> ipForProjection = (d==0) ? ip_l2 : ip; // just use values at vertices (ignore derivatives)
         set<int> dofsToSkip = allDofs;

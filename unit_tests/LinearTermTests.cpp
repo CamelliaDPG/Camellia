@@ -437,8 +437,8 @@ TEUCHOS_UNIT_TEST( LinearTerm, CompareFauxWithTrueSpaceTime_1D )
     BasisCachePtr fauxBasisCache = BasisCache::basisCacheForCell(fauxMesh, cellID);
     BasisCachePtr trueBasisCache = BasisCache::basisCacheForCell(trueMesh, cellID);
     // make sure the BasisCaches agree on which points and their ordering:
-    fauxBasisCache->setRefCellPoints(trueBasisCache->getRefCellPoints(), trueBasisCache->getCubatureWeights());
-    int numPoints = fauxBasisCache->getRefCellPoints().dimension(0);
+    fauxBasisCache->setRefCellPointsFC(trueBasisCache->getRefCellPointsFC(), trueBasisCache->getCubatureWeightsFC());
+    int numPoints = fauxBasisCache->getRefCellPointsFC().dimension(0);
 
     // compare values:
     Camellia::FieldContainer<double> lt1FauxValues(1,vBasisFaux->getCardinality(),numPoints);
@@ -471,7 +471,7 @@ TEUCHOS_UNIT_TEST( LinearTerm, CompareFauxWithTrueSpaceTime_1D )
       unsigned fauxSideOrdinal = trueToFauxSideOrdinal[sideOrdinal];
       out << "Checking that values on true side " << sideOrdinal << " match faux side " << fauxSideOrdinal << endl;
       BasisCachePtr fauxSideCache = fauxBasisCache->getSideBasisCache(fauxSideOrdinal);
-      Camellia::FieldContainer<double> trueRefPoints = trueSideCache->getRefCellPoints();
+      Camellia::FieldContainer<double> trueRefPoints = trueSideCache->getRefCellPointsFC();
       int numPoints = trueRefPoints.dimension(0);
 
       Camellia::FieldContainer<double> fauxRefPoints(numPoints,sideDim);
@@ -485,7 +485,7 @@ TEUCHOS_UNIT_TEST( LinearTerm, CompareFauxWithTrueSpaceTime_1D )
 
         fauxRefPoints(fauxPointOrdinal,0) = trueRefPoints(truePointOrdinal,0);
       }
-      fauxSideCache->setRefCellPoints(fauxRefPoints);
+      fauxSideCache->setRefCellPointsFC(fauxRefPoints);
 
       // compare values:
       Camellia::FieldContainer<double> lt2FauxValues(1,vBasisFaux->getCardinality(),numPoints);
@@ -537,7 +537,7 @@ TEUCHOS_UNIT_TEST( LinearTerm, SpaceTimeIntegration_1D)
 
     BasisCachePtr basisCache = BasisCache::basisCacheForCell(mesh, cellID);
 
-    int numPoints = basisCache->getRefCellPoints().dimension(0);
+    int numPoints = basisCache->getRefCellPointsFC().dimension(0);
     // compute values:
     Camellia::FieldContainer<double> lt1Values(1,vBasis->getCardinality(),numPoints);
     lt1->values(lt1Values, vID, vBasis, basisCache);
@@ -567,7 +567,7 @@ TEUCHOS_UNIT_TEST( LinearTerm, SpaceTimeIntegration_1D)
     {
       BasisCachePtr sideCache = basisCache->getSideBasisCache(sideOrdinal);
       out << "Checking space-time LinearTerm integration on side " << sideOrdinal << endl;
-      int numPoints = sideCache->getRefCellPoints().dimension(0);
+      int numPoints = sideCache->getRefCellPointsFC().dimension(0);
 
       // compute values:
       Camellia::FieldContainer<double> lt2Values(1,vBasis->getCardinality(),numPoints);
@@ -630,7 +630,7 @@ TEUCHOS_UNIT_TEST( LinearTerm, FauxSpaceTimeIntegrationByPartsInTime_2D )
     if (myCells->find(cellID) != myCells->end())
     {
       BasisCachePtr basisCache = BasisCache::basisCacheForCell(mesh, cellID);
-      int numPoints = basisCache->getRefCellPoints().dimension(0);
+      int numPoints = basisCache->getRefCellPointsFC().dimension(0);
       int numCells = 1;
       Camellia::FieldContainer<double> actualValues(numCells, numPoints);
       bool applyCubatureWeights = false;
@@ -671,7 +671,7 @@ TEUCHOS_UNIT_TEST( LinearTerm, FauxSpaceTimeIntegrationByPartsInTime_2D )
     if (myCells->find(cellID) != myCells->end())
     {
       BasisCachePtr basisCache = BasisCache::basisCacheForCell(mesh, cellID);
-      int numPoints = basisCache->getRefCellPoints().dimension(0);
+      int numPoints = basisCache->getRefCellPointsFC().dimension(0);
       int numCells = 1;
       Camellia::FieldContainer<double> actualValues(numCells, numPoints, spaceDim);
       
@@ -714,7 +714,7 @@ TEUCHOS_UNIT_TEST( LinearTerm, FauxSpaceTimeIntegrationByPartsInTime_2D )
     if (myCells->find(cellID) != myCells->end())
     {
       BasisCachePtr basisCache = BasisCache::basisCacheForCell(mesh, cellID);
-      int numPoints = basisCache->getRefCellPoints().dimension(0);
+      int numPoints = basisCache->getRefCellPointsFC().dimension(0);
       int numCells = 1;
       Camellia::FieldContainer<double> actualValues(numCells, numPoints, spaceDim);
       bool applyCubatureWeights = false;
@@ -755,7 +755,7 @@ TEUCHOS_UNIT_TEST( LinearTerm, FauxSpaceTimeIntegrationByPartsInTime_2D )
     if (myCells->find(cellID) != myCells->end())
     {
       BasisCachePtr basisCache = BasisCache::basisCacheForCell(mesh, cellID);
-      int numPoints = basisCache->getRefCellPoints().dimension(0);
+      int numPoints = basisCache->getRefCellPointsFC().dimension(0);
       int numCells = 1;
       Camellia::FieldContainer<double> actualValues(numCells, numPoints);
       bool applyCubatureWeights = false;

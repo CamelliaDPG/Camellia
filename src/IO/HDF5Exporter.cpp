@@ -683,7 +683,7 @@ void HDF5Exporter::exportFunction(vector<TFunctionPtr<double>> functions, vector
       Camellia::FieldContainer<double> refPoints;
       getPoints(refPoints, topo, num1DPts);
 
-      basisCache->setRefCellPoints(refPoints);
+      basisCache->setRefCellPointsFC(refPoints);
       int numPoints = refPoints.dimension(0);
       const Camellia::FieldContainer<double> *physicalPoints = &basisCache->getPhysicalCubaturePoints();
       // Function Values

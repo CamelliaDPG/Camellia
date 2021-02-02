@@ -368,7 +368,7 @@ std::pair<BasisCachePtr, std::vector<int> > PhasePhysicalMeshMap1D1V::physicalCe
 {
   auto elemType = _mesh_1D->getElementType(physicalCellID);
   BasisCachePtr basisCache =  BasisCache::basisCacheForCellType(_mesh_1D, elemType, testVsTest, quadratureEnrichment);
-  auto refPointsStandard = basisCache->getRefCellPoints();
+  auto refPointsStandard = basisCache->getRefCellPointsFC();
   std::vector<double> xCoordsInAncestors;
   auto physicalCellNodes = _mesh_1D->physicalCellNodesForCell(physicalCellID);
   auto xCoordsEntry = _physicalCellIDToRefSpaceXCoordInAncestor.find(physicalCellID);
@@ -380,7 +380,7 @@ std::pair<BasisCachePtr, std::vector<int> > PhasePhysicalMeshMap1D1V::physicalCe
   {
     basisCache->setPhysicalCellNodes(physicalCellNodes, {physicalCellID}, true);
     const int pointStart = 0;
-    const int pointEnd   = basisCache->getRefCellPoints().dimension(0);
+    const int pointEnd   = basisCache->getRefCellPointsFC().dimension(0);
     return {basisCache, std::vector<int>{pointStart,pointEnd} };
   }
   
@@ -451,7 +451,7 @@ std::pair<BasisCachePtr, std::vector<int> > PhasePhysicalMeshMap1D1V::physicalCe
     }
     pointOffsets[level+1] = pointOffset;
   }
-  basisCache->setRefCellPoints(allRefPoints);
+  basisCache->setRefCellPointsFC(allRefPoints);
   basisCache->setPhysicalCellNodes(physicalCellNodes, {physicalCellID}, true);
   return {basisCache,pointOffsets};
 }

@@ -1080,7 +1080,7 @@ namespace
         Camellia::FieldContainer<double> refPoint(1,cell->topology()->getDimension());
         refPoint(0,0) = refCellPoints(vertexOrdinal,0);
         refPoint(0,1) = refCellPoints(vertexOrdinal,1);
-        basisCache->setRefCellPoints(refPoint);
+        basisCache->setRefCellPointsFC(refPoint);
         Camellia::FieldContainer<double> solnValue(1,1);
         Camellia::FieldContainer<double> condensedSolnValue(1,1);
         p_soln->values(solnValue, basisCache);
@@ -1541,7 +1541,7 @@ namespace
       for (int sideOrdinal=0; sideOrdinal<sideCount; sideOrdinal++)
       {
         BasisCachePtr sideCache = basisCache->getSideBasisCache(sideOrdinal);
-        sideCache->setRefCellPoints(refLinePoints);
+        sideCache->setRefCellPointsFC(refLinePoints);
         u_soln->values(uValues, sideCache);
         
         // are there some physical points that lie on the boundary?

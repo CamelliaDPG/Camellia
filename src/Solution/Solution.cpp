@@ -6,6 +6,7 @@
 
 // Intrepid includes
 #include "Camellia_FieldContainer.hpp"
+#include "Camellia_FieldContainerConversion.hpp"
 #include "Intrepid_CellTools.hpp"
 #include "Intrepid_FunctionSpaceTools.hpp"
 #include "Intrepid_Basis.hpp"
@@ -588,21 +589,32 @@ void TSolution<Scalar>::applyDGJumpTerms()
               int cubDegree = cubKey.second;
               if (sideDim > 0)
               {
-                Teuchos::RCP<Intrepid::Cubature<double> > sideCub;
+                using ExecSpaceType = Camellia::DeviceMemorySpace::execution_space;
+                using Cubature = Intrepid2::Cubature<ExecSpaceType,double,double>;
+                Teuchos::RCP< Cubature > sideCub;
+                
                 if (cubDegree >= 0)
                   sideCub = cubFactory.create(mySideTopo, cubDegree);
                 
-                int numCubPointsSide;
+                Camellia::FieldContainer<double> cubPoints, cubWeights;
                 
                 if (sideCub != Teuchos::null)
-                  numCubPointsSide = sideCub->getNumPoints();
+                {
+                  auto tensorCubatureWeights = sideCub->allocateCubatureWeights();
+                  auto tensorCubaturePoints = sideCub->allocateCubaturePoints();
+                  
+                  sideCub->getCubature(tensorCubaturePoints, tensorCubatureWeights);
+                  
+                  cubPoints  = FieldContainerConversion<double>::fromTensorPoints(tensorCubaturePoints);
+                  cubWeights = FieldContainerConversion<double>::fromTensorData(tensorCubatureWeights);
+                }
                 else
-                  numCubPointsSide = 0;
+                {
+                  int numCubPointsSide = 0;
+                  cubPoints = Camellia::FieldContainer<double>(numCubPointsSide, sideDim); // cubature points from the pov of the side (i.e. a (d-1)-dimensional set)
+                  cubWeights = Camellia::FieldContainer<double>(numCubPointsSide);
+                }
                 
-                Camellia::FieldContainer<double> cubPoints(numCubPointsSide, sideDim); // cubature points from the pov of the side (i.e. a (d-1)-dimensional set)
-                Camellia::FieldContainer<double> cubWeights(numCubPointsSide);
-                if (numCubPointsSide > 0)
-                  sideCub->getCubature(cubPoints, cubWeights);
                 cubPointsForSideTopo[cubKey] = cubPoints;
                 cubWeightsForSideTopo[cubKey] = cubWeights;
               }
@@ -620,13 +632,13 @@ void TSolution<Scalar>::applyDGJumpTerms()
             }
             if (cellBasisCacheSide->cubatureDegree() != cubaturePolyOrder)
             {
-              cellBasisCacheSide->setRefCellPoints(cubPointsForSideTopo[cubKey], cubWeightsForSideTopo[cubKey], cubaturePolyOrder, false);
+              cellBasisCacheSide->setRefCellPointsFC(cubPointsForSideTopo[cubKey], cubWeightsForSideTopo[cubKey], cubaturePolyOrder, false);
             }
             cellBasisCacheSide->setPhysicalCellNodes(cellBasisCacheVolume->getPhysicalCellNodes(), {cellID}, false);
             
             int numCells = 1;
             int numTrialFields = trialBasis->getCardinality();
-            int numPoints = cellBasisCacheSide->getRefCellPoints().dimension(0);
+            int numPoints = cellBasisCacheSide->getRefCellPointsFC().dimension(0);
             Camellia::FieldContainer<double> trial_values(numCells, numTrialFields, numPoints);
             trialTerm->values(trial_values, trialVarID, trialBasis, cellBasisCacheSide);
             
@@ -689,7 +701,7 @@ void TSolution<Scalar>::applyDGJumpTerms()
             int nodeCount = sideTopo->getNodeCount();
             
             unsigned permutationFromMeToNeighbor;
-            Camellia::FieldContainer<double> myRefPoints = cellBasisCacheSide->getRefCellPoints();
+            Camellia::FieldContainer<double> myRefPoints = cellBasisCacheSide->getRefCellPointsFC();
             
             if (!neighborIsPeer) // then we have some refinements relative to neighbor
             {
@@ -705,7 +717,7 @@ void TSolution<Scalar>::applyDGJumpTerms()
               cellNodes.resize(1,cellNodes.dimension(0),cellNodes.dimension(1));
               BasisCachePtr ancestralBasisCache = Teuchos::rcp(new BasisCache(cellNodes,sideTopo,cubaturePolyOrder,false)); // false: don't create side cache too
               
-              ancestralBasisCache->setRefCellPoints(myRefPoints, emptyCubWeights, cubaturePolyOrder, true);
+              ancestralBasisCache->setRefCellPointsFC(myRefPoints, emptyCubWeights, cubaturePolyOrder, true);
               
               // now, the "physical" points in ancestral cache are the ones we want
               myRefPoints = ancestralBasisCache->getPhysicalCubaturePoints();
@@ -749,7 +761,7 @@ void TSolution<Scalar>::applyDGJumpTerms()
               basisCacheForReferenceCellTopo[sideTopo->getKey()] = BasisCache::basisCacheForReferenceCell(sideTopo, -1);
             }
             BasisCachePtr referenceBasisCache = basisCacheForReferenceCellTopo[sideTopo->getKey()];
-            referenceBasisCache->setRefCellPoints(myRefPoints,emptyCubWeights,cubaturePolyOrder,false);
+            referenceBasisCache->setRefCellPointsFC(myRefPoints,emptyCubWeights,cubaturePolyOrder,false);
             std::vector<GlobalIndexType> cellIDs = {0}; // unused
             referenceBasisCache->setPhysicalCellNodes(permutedRefNodes, cellIDs, false);
             // now, the "physical" points are the ones we should use as ref points for the neighbor
@@ -772,7 +784,7 @@ void TSolution<Scalar>::applyDGJumpTerms()
               = Teuchos::rcp( new BasisCache(mySideOrdinalInNeighbor, neighborVolumeCache, emptyRefPointsSide, emptyCubWeights, -1));
             }
             BasisCachePtr neighborSideCache = basisCacheForSideOnNeighborVolumeTopo[neighborSideCacheKey];
-            neighborSideCache->setRefCellPoints(neighborRefCellPoints, emptyCubWeights, cubaturePolyOrder, false);
+            neighborSideCache->setRefCellPointsFC(neighborRefCellPoints, emptyCubWeights, cubaturePolyOrder, false);
             neighborSideCache->setPhysicalCellNodes(neighborCellNodes, {neighborCellID}, false);
             
             // if there aren't periodic BCs, perform the sanity check.  If there are periodic BCs, we expect to fail the check...
@@ -3340,7 +3352,7 @@ void TSolution<Scalar>::solutionValues(Camellia::FieldContainer<Scalar> &values,
       refElemPoints.resize(numPoints,spaceDim);
 
       BasisCachePtr basisCache = BasisCache::basisCacheForCell(_mesh, cellID);
-      basisCache->setRefCellPoints(refElemPoints);
+      basisCache->setRefCellPointsFC(refElemPoints);
       std::vector<int> dim;
       values.dimensions(dim);
       dim[0] = 1; // one cell
@@ -3433,7 +3445,7 @@ void TSolution<Scalar>::solutionValues(Camellia::FieldContainer<Scalar> &values,
       int basisRank = trialOrder->getBasisRank(trialID);
 
       BasisCachePtr basisCache = BasisCache::basisCacheForCell(_mesh, cellID);
-      basisCache->setRefCellPoints(refElemPoint);
+      basisCache->setRefCellPointsFC(refElemPoint);
       Teuchos::Array<int> dim;
       dim.push_back(1); // one cell
       dim.push_back(1); // one point

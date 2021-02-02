@@ -834,4 +834,20 @@ void Intrepid2BasisWrapper<Scalar,ArrayScalar>::getValues(ArrayScalar &values, c
   values = valuesCamellia;
 }
 
+template<class Scalar, class ArrayScalar>
+Intrepid2::BasisValues<Scalar,typename Intrepid2BasisWrapper<Scalar,ArrayScalar>::ExecSpaceType>
+Intrepid2BasisWrapper<Scalar,ArrayScalar>::allocateBasisValues( Intrepid2::TensorPoints<Scalar,typename Intrepid2BasisWrapper::ExecSpaceType> points,
+                                                                const Intrepid2::EOperator op) const
+{
+  return _intrepid2Basis->allocateBasisValues(points,op);
+}
+
+template<class Scalar, class ArrayScalar>
+void Intrepid2BasisWrapper<Scalar,ArrayScalar>::getValues(Intrepid2::BasisValues<Scalar,typename Intrepid2BasisWrapper<Scalar,ArrayScalar>::ExecSpaceType> outputValues,
+                                                          const Intrepid2::TensorPoints<Scalar,typename Intrepid2BasisWrapper<Scalar,ArrayScalar>::ExecSpaceType> inputPoints,
+                                                          const Intrepid2::EOperator op) const
+{
+  _intrepid2Basis->getValues(outputValues,inputPoints,op);
+}
+
 } // namespace Camellia

@@ -58,7 +58,7 @@ void QuadraturePointFunction::updateValues()
     
     if (!_boundaryValueOnly)
     {
-      auto numPoints = basisCache->getRefCellPoints().dimension(0);
+      auto numPoints = basisCache->getRefCellPointsFC().dimension(0);
       int numEntriesPerCell = numPoints;
       for (int d=0; d<fxnRank; d++)
       {
@@ -91,7 +91,7 @@ void QuadraturePointFunction::updateValues()
       for (int sideOrdinal=0; sideOrdinal<sideCount; sideOrdinal++)
       {
         BasisCachePtr sideBasisCache = basisCache->getSideBasisCache(sideOrdinal);
-        const int numPoints = sideBasisCache->getRefCellPoints().dimension(0);
+        const int numPoints = sideBasisCache->getRefCellPointsFC().dimension(0);
         int numEntriesPerCell = numPoints;
         for (int d=0; d<fxnRank; d++)
         {
@@ -139,7 +139,7 @@ void QuadraturePointFunction::values(Camellia::FieldContainer<double> &values, B
   TEUCHOS_TEST_FOR_EXCEPTION(numPoints != storedValuesContainer.dimension(1), std::invalid_argument, "Inconsistent point count.");
   
   const int fxnRank  = this->rank();
-  auto spaceDim = basisCache->getRefCellPoints().dimension(1);
+  auto spaceDim = basisCache->getRefCellPointsFC().dimension(1);
   int numEntriesPerCell = numPoints;
   for (int d=0; d<fxnRank; d++)
   {

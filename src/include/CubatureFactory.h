@@ -26,7 +26,7 @@
  */
 
 // Intrepid includes:
-#include "Intrepid_DefaultCubatureFactory.hpp"
+#include "Intrepid2_DefaultCubatureFactory.hpp"
 
 // Camellia includes:
 #include "CellTopology.h"
@@ -36,7 +36,8 @@ namespace Camellia
 
 class CubatureFactory
 {
-
+  using ExecSpaceType = Camellia::DeviceMemorySpace::execution_space;
+  using Cubature      = Intrepid2::Cubature<ExecSpaceType,double,double>;
 public:
 
   //@{ Constructors/Destructors
@@ -55,7 +56,7 @@ public:
 
     \return Cubature object.
     */
-  Teuchos::RCP<Intrepid::Cubature<double> > create(CellTopoPtr cellTopo, int cubDegree);
+  Teuchos::RCP<Cubature> create(CellTopoPtr cellTopo, int cubDegree);
 
   //! Creates cubature object cubature degree that may vary according to dimension
   /*!
@@ -66,12 +67,8 @@ public:
 
    \return Cubature object.
    */
-  Teuchos::RCP<Intrepid::Cubature<double> > create(CellTopoPtr cellTopo, std::vector<int> cubDegree);
+  Teuchos::RCP<Cubature> create(CellTopoPtr cellTopo, std::vector<int> cubDegree);
   //@}
-
-private:
-  Intrepid::DefaultCubatureFactory<double> _cubFactory;
-
 }; // class CubatureFactory
 
 } // namespace Camellia

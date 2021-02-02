@@ -230,7 +230,7 @@ void testBasisTransformation(BasisPtr spaceTimeBasis, Camellia::EOperator op,
       temporalRefPoint(0,0) = lineRefNodes(temporalNodeOrdinal,0);
       FC temporalCubatureWeight(1);
       temporalCubatureWeight(0) = 1.0;
-      onePointTemporalBasisCache->setRefCellPoints(temporalRefPoint, temporalCubatureWeight);
+      onePointTemporalBasisCache->setRefCellPointsFC(temporalRefPoint, temporalCubatureWeight);
       FC timeValues = *onePointTemporalBasisCache->getTransformedValues(temporalBasis, timeOp);
 
 //        { // DEBUGGING
@@ -269,7 +269,7 @@ void testSpaceTimeSideMeasure(CellTopoPtr spaceTopo, Teuchos::FancyOStream &out,
   spaceNodes.resize(1,spaceNodes.dimension(0),spaceNodes.dimension(1));
   spatialBasisCache->setPhysicalCellNodes(spaceNodes, vector<GlobalIndexType>(), createSideCaches);
 
-//    cout << "spatial cubature weights:\n" << spatialBasisCache->getCubatureWeights();
+//    cout << "spatial cubature weights:\n" << spatialBasisCache->getCubatureWeightsFC();
   double t0 = 0.0, t1 = 1.0;
   double temporalExtent = t1-t0; // 1.0
   double spatialMeasure = spatialBasisCache->getCellMeasures()(0); // measure of the reference-space cell
@@ -296,15 +296,15 @@ void testSpaceTimeSideMeasure(CellTopoPtr spaceTopo, Teuchos::FancyOStream &out,
         int spatialSideOrdinal = cellTopo->getSpatialComponentSideOrdinal(sideOrdinal);
         expectedMeasure = spatialSideMeasures[spatialSideOrdinal] * temporalExtent;
   //        cout << "spatial weights:\n" << spatialBasisCache->getSideBasisCache(spatialSideOrdinal)->getWeightedMeasures();
-  //        cout << "spatial cubature weights:\n" << spatialBasisCache->getSideBasisCache(spatialSideOrdinal)->getCubatureWeights();
+  //        cout << "spatial cubature weights:\n" << spatialBasisCache->getSideBasisCache(spatialSideOrdinal)->getCubatureWeightsFC();
       }
       else
       {
         expectedMeasure = spatialMeasure;
-  //        cout << "spatial cubature weights:\n" << spatialBasisCache->getCubatureWeights();
+  //        cout << "spatial cubature weights:\n" << spatialBasisCache->getCubatureWeightsFC();
   //        cout << "spatial weights:\n" << spatialBasisCache->getWeightedMeasures();
       }
-  //      cout << "sideOrdinal " << sideOrdinal << ", space-time cubature weights: \n" << spaceTimeBasisCache->getSideBasisCache(sideOrdinal)->getCubatureWeights();
+  //      cout << "sideOrdinal " << sideOrdinal << ", space-time cubature weights: \n" << spaceTimeBasisCache->getSideBasisCache(sideOrdinal)->getCubatureWeightsFC();
   //      cout << "sideOrdinal " << sideOrdinal << ", space-time weights: \n" << spaceTimeBasisCache->getSideBasisCache(sideOrdinal)->getWeightedMeasures();
       double actualMeasure = spaceTimeBasisCache->getSideBasisCache(sideOrdinal)->getCellMeasures()(0);
       TEST_FLOATING_EQUALITY(actualMeasure, expectedMeasure, 1e-14);

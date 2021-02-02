@@ -294,7 +294,7 @@ void MeshTransferFunction::values(Camellia::FieldContainer<double> &values, Basi
   // to be general and to keep this first version simple, we just iterate over the cells in basisCache,
   // creating BasisCache(s) on originalMesh
 
-  Camellia::FieldContainer<double> refCellPoints = basisCache->getRefCellPoints();
+  Camellia::FieldContainer<double> refCellPoints = basisCache->getRefCellPointsFC();
 
   Teuchos::Array<int> valuesLocation(values.rank());
   Teuchos::Array<int> valuesDimOneCell;
@@ -352,7 +352,7 @@ void MeshTransferFunction::values(Camellia::FieldContainer<double> &values, Basi
       // DEBUGGING
       BasisCachePtr ancestorBasisCache = BasisCache::basisCacheForCell(_newMesh, newMeshAncestralCellSide.first);
       BasisCachePtr ancestorSideBasisCache = ancestorBasisCache->getSideBasisCache(newMeshAncestralCellSide.second);
-      ancestorSideBasisCache->setRefCellPoints(newMeshCellReferencePoints);
+      ancestorSideBasisCache->setRefCellPointsFC(newMeshCellReferencePoints);
 
       Camellia::FieldContainer<double> originalPhysicalPoints(1,newMeshCellReferencePoints.dimension(0), _newMesh->getDimension());
 
@@ -406,7 +406,7 @@ void MeshTransferFunction::values(Camellia::FieldContainer<double> &values, Basi
       BasisCachePtr originalBasisCache = BasisCache::basisCacheForCell(_gatheredOriginalMeshTopologyOnInterface, originalMeshAncestralCellSide.first,
                                                                        elemType);
       BasisCachePtr originalBasisCacheSide = originalBasisCache->getSideBasisCache(originalMeshAncestralCellSide.second);
-      originalBasisCacheSide->setRefCellPoints(originalMeshCellReferencePoints);
+      originalBasisCacheSide->setRefCellPointsFC(originalMeshCellReferencePoints);
       int enumeration = values.getEnumeration(valuesLocation);
       Camellia::FieldContainer<double> cellValues(valuesDimOneCell, &values[enumeration]);
       _originalFunction->values(cellValues, originalBasisCacheSide);
@@ -474,7 +474,7 @@ void MeshTransferFunction::values(Camellia::FieldContainer<double> &values, Basi
                                                                          elemType);
         
         BasisCachePtr originalMeshBasisCacheSide = basisCache->getSideBasisCache(sideOrdinal);
-        originalMeshBasisCacheSide->setRefCellPoints(parentPointFC);
+        originalMeshBasisCacheSide->setRefCellPointsFC(parentPointFC);
 
         _originalFunction->values(pointValues, originalMeshBasisCacheSide);
       }

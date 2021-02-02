@@ -72,8 +72,8 @@ public:
   BasisCachePtr getSpatialBasisCache();
   BasisCachePtr getTemporalBasisCache();
 
-  virtual void setRefCellPoints(const Camellia::FieldContainer<double> &pointsRefCell);
-  virtual void setRefCellPoints(const Camellia::FieldContainer<double> &pointsRefCell,
+  virtual void setRefCellPointsFC(const Camellia::FieldContainer<double> &pointsRefCell);
+  virtual void setRefCellPointsFC(const Camellia::FieldContainer<double> &pointsRefCell,
                                 const Camellia::FieldContainer<double> &cubatureWeights,
                                 int cubatureDegree = -1, bool recomputePhysicalMeasures = true);
 

@@ -62,7 +62,7 @@ TEUCHOS_UNIT_TEST( BasisCache, LineCubature )
   double x0 = 0, x1 = 1;
   BasisCachePtr basisCache = BasisCache::basisCache1D(x0, x1, cubDegree);
 
-  const Camellia::FieldContainer<double>* cubWeights = &basisCache->getCubatureWeights();
+  const Camellia::FieldContainer<double>* cubWeights = &basisCache->getCubatureWeightsFC();
   const Camellia::FieldContainer<double>* physicalCubaturePoints = &basisCache->getPhysicalCubaturePoints();
 
   // try a line m x + b; the integral on (0,1) should be m / 2 + b.
@@ -204,7 +204,7 @@ TEUCHOS_UNIT_TEST( BasisCache, SideNormals_Space )
     {
       int numCells = 1;
       BasisCachePtr sideCache = volumeCache->getSideBasisCache(sideOrdinal);
-      int numCubPoints = sideCache->getRefCellPoints().dimension(0);
+      int numCubPoints = sideCache->getRefCellPointsFC().dimension(0);
       int spaceDim = sideCache->getSpaceDim();
 
       Camellia::FieldContainer<double> sideNormalsExpected(numCells, numCubPoints, spaceDim);
@@ -269,7 +269,7 @@ TEUCHOS_UNIT_TEST( BasisCache, SideNormals_SpaceTime )
     {
       int numCells = 1;
       BasisCachePtr sideCacheSpaceTime = volumeCacheSpaceTime->getSideBasisCache(sideOrdinal);
-      int numCubPoints = sideCacheSpaceTime->getRefCellPoints().dimension(0);
+      int numCubPoints = sideCacheSpaceTime->getRefCellPointsFC().dimension(0);
       int dim = sideCacheSpaceTime->getSpaceDim() + 1;
 
       Camellia::FieldContainer<double> sideNormalsExpected(numCells, numCubPoints, dim);
@@ -279,7 +279,7 @@ TEUCHOS_UNIT_TEST( BasisCache, SideNormals_SpaceTime )
         unsigned spatialSideOrdinal = cellTopo->getSpatialComponentSideOrdinal(sideOrdinal);
         BasisCachePtr sideCacheSpace = volumeCacheSpace->getSideBasisCache(spatialSideOrdinal);
         // set up cubature points for shards topo
-        Camellia::FieldContainer<double> refPointsSpaceTimeSide = sideCacheSpaceTime->getRefCellPoints();
+        Camellia::FieldContainer<double> refPointsSpaceTimeSide = sideCacheSpaceTime->getRefCellPointsFC();
         Camellia::FieldContainer<double> refPointsSpaceSide(numCubPoints, shardsTopo->getDimension()-1);
         for (int ptOrdinal=0; ptOrdinal<numCubPoints; ptOrdinal++)
         {
@@ -288,7 +288,7 @@ TEUCHOS_UNIT_TEST( BasisCache, SideNormals_SpaceTime )
             refPointsSpaceSide(ptOrdinal,d) = refPointsSpaceTimeSide(ptOrdinal,d);
           }
         }
-        sideCacheSpace->setRefCellPoints(refPointsSpaceSide);
+        sideCacheSpace->setRefCellPointsFC(refPointsSpaceSide);
         Camellia::FieldContainer<double> sideNormalsSpace = sideCacheSpace->getSideNormals();
         for (int cellOrdinal=0; cellOrdinal < numCells; cellOrdinal++)
         {
@@ -375,11 +375,11 @@ TEUCHOS_UNIT_TEST( BasisCache, SetRefCellPoints )
   for (int sideOrdinal=0; sideOrdinal < numSides; sideOrdinal++)
   {
     BasisCachePtr sideBasisCache = basisCache->getSideBasisCache(sideOrdinal);
-    Camellia::FieldContainer<double> refCellPoints = sideBasisCache->getRefCellPoints();
+    Camellia::FieldContainer<double> refCellPoints = sideBasisCache->getRefCellPointsFC();
     Camellia::FieldContainer<double> physicalCubaturePointsExpected = sideBasisCache->getPhysicalCubaturePoints();
     //    cout << "side " << sideIndex << " ref cell points:\n" << refCellPoints;
     //    cout << "side " << sideIndex << " physCubature points:\n" << physicalCubaturePointsExpected;
-    sideBasisCache->setRefCellPoints(refCellPoints);
+    sideBasisCache->setRefCellPointsFC(refCellPoints);
     Camellia::FieldContainer<double> physicalCubaturePointsActual = sideBasisCache->getPhysicalCubaturePoints();
 
     double maxDiff = 0;
@@ -420,7 +420,7 @@ TEUCHOS_UNIT_TEST( BasisCache, SetRefCellPoints )
   physicalPointsExpected(0,0,1) = 0.5;
   physicalPointsExpected(0,0,2) = 0.5;
 
-  hexBasisCache.setRefCellPoints(refCellPointsHex);
+  hexBasisCache.setRefCellPointsFC(refCellPointsHex);
 
   Camellia::FieldContainer<double> physicalPointsActual = hexBasisCache.getPhysicalCubaturePoints();
 
@@ -485,7 +485,7 @@ TEUCHOS_UNIT_TEST( BasisCache, SetRefCellPointsSpaceTimeSide )
       }
     }
 
-    sideBasisCache->setRefCellPoints(sideRefCubaturePoints);
+    sideBasisCache->setRefCellPointsFC(sideRefCubaturePoints);
     Camellia::FieldContainer<double> volumeRefPoints = sideBasisCache->getSideRefCellPointsInVolumeCoordinates();
 
     TEST_COMPARE_FLOATING_ARRAYS(volumeRefPoints, volumeRefPointsExpected, tol);
@@ -527,9 +527,9 @@ TEUCHOS_UNIT_TEST( BasisCache, SetRefCellPointsSpaceTimeSide )
     int basisCardinality = basis->getCardinality();
     
     // get gradients in reference space
-    int numPoints = basisCache->getRefCellPoints().dimension(0);
+    int numPoints = basisCache->getRefCellPointsFC().dimension(0);
     Camellia::FieldContainer<double> values(basisCardinality, numPoints, spaceDim);
-    basis->getValues(values, basisCache->getRefCellPoints(), opIntrepid);
+    basis->getValues(values, basisCache->getRefCellPointsFC(), opIntrepid);
     
     // if x dimension has doubled, then we expect d/dx to be scaled by 1/2
     // scale values accordingly
@@ -911,10 +911,10 @@ TEUCHOS_UNIT_TEST( BasisCache, SetRefCellPointsSpaceTimeSide )
     int basisCardinality = basis->getCardinality();
     
     // get gradients in reference space
-    int numPoints = basisCache->getRefCellPoints().dimension(0);
+    int numPoints = basisCache->getRefCellPointsFC().dimension(0);
     int refSpaceValuesPerPoint = Intrepid::getDkCardinality(opIntrepid, spaceDim);
     Camellia::FieldContainer<double> valuesRefSpace(basisCardinality, numPoints, refSpaceValuesPerPoint);
-    basis->getValues(valuesRefSpace, basisCache->getRefCellPoints(), opIntrepid);
+    basis->getValues(valuesRefSpace, basisCache->getRefCellPointsFC(), opIntrepid);
     
     vector<int> d2_enumeration(3);
     d2_enumeration[0] = Intrepid::getDkEnumeration(2,0,0);

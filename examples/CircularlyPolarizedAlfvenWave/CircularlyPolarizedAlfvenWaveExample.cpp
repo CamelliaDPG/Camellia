@@ -96,7 +96,7 @@ void writeFunctions(MeshPtr mesh, int meshWidth, int polyOrder, double x_a, std:
   for (auto cellID : myCellIDs)
   {
     BasisCachePtr basisCache = BasisCache::basisCacheForCell(mesh, cellID);
-    basisCache->setRefCellPoints(refCellPoints);
+    basisCache->setRefCellPointsFC(refCellPoints);
     
     for (int functionOrdinal=0; functionOrdinal<numFunctions; functionOrdinal++)
     {

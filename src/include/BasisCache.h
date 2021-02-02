@@ -40,24 +40,23 @@ class BasisCache
 public:
   template<typename Scalar>
   using DeviceView = typename Camellia::FieldContainer<Scalar>::DeviceView;
+  using ExecSpaceType = Camellia::DeviceMemorySpace::execution_space;
 private:
   IndexType _numCells;
   int _spaceDim;
   bool _isSideCache;
   int _sideIndex;
 
-  int _maxPointsPerCubaturePhase; // default: -1 (infinite)
-  int _cubaturePhase; // index of the cubature phase; defaults to 0
-  int _cubaturePhaseCount; // how many phases to get through all the points
-  std::vector<int> _phasePointOrdinalOffsets;
-
   MeshPtr _mesh;
-  Camellia::FieldContainer<double> _cubPoints, _cubWeights;
-  Camellia::FieldContainer<double> _allCubPoints, _allCubWeights; // when using phased cubature points, these store the whole set
+  // Intrepid2 supports economical storage for tensor-product quadrature:
+  Intrepid2::TensorPoints<double,ExecSpaceType> _cubPoints;
+  Intrepid2::TensorData<double, ExecSpaceType>  _cubWeights;
+  // FC containers kept around for compatibility, for now, with existing code.  Plan is to remove support for this as part of 2.0.
+  Camellia::FieldContainer<double> _cubPointsFC, _cubWeightsFC;
 
-  Camellia::FieldContainer<double> _cellJacobian;
-  Camellia::FieldContainer<double> _cellJacobInv;
-  Camellia::FieldContainer<double> _cellJacobDet;
+  Camellia::FieldContainer<double> _cellJacobianFC;
+  Camellia::FieldContainer<double> _cellJacobInvFC;
+  Camellia::FieldContainer<double> _cellJacobDetFC;
   Camellia::FieldContainer<double> _weightedMeasure;
   Camellia::FieldContainer<double> _physCubPoints;
   Camellia::FieldContainer<double> _cellSideParities;
@@ -81,7 +80,8 @@ private:
   vector<int> _cubDegrees;
 
   // containers specifically for sides:
-  Camellia::FieldContainer<double> _cubPointsSideRefCell; // the _cubPoints is the one in the side coordinates; this one in volume coords
+  Intrepid2::TensorPoints<double,ExecSpaceType> _cubPointsSideRefCell; // in volume coords
+  Camellia::FieldContainer<double> _cubPointsSideRefCellFC; // _cubPoints is the one in the side coordinates; this one in volume coords
   Camellia::FieldContainer<double> _sideNormals;
   Camellia::FieldContainer<double> _sideNormalsSpaceTime; // for space-time CellTopologies, a copy of _sideNormals that includes the temporal component
 
@@ -112,11 +112,14 @@ protected:
     _isSideCache = false;  // for the sake of some hackish subclassing
   }
 
+  map< pair< Camellia::Basis<>*, Intrepid2::EOperator >,
+       Intrepid2::BasisValues<double,ExecSpaceType> > _knownValues;
+  
   map< pair< Camellia::Basis<>*, Camellia::EOperator >,
-       Teuchos::RCP< const Camellia::FieldContainer<double> > > _knownValues;
+       Teuchos::RCP< const Camellia::FieldContainer<double> > > _knownValuesFC;
 
   map< pair< Camellia::Basis<>*, Camellia::EOperator >,
-       Teuchos::RCP< const Camellia::FieldContainer<double> > > _knownValuesTransformed;
+       Teuchos::RCP< const Camellia::FieldContainer<double> > > _knownValuesTransformedFC;
 
   map< pair< Camellia::Basis<>*, Camellia::EOperator >,
        Teuchos::RCP< const Camellia::FieldContainer<double> > > _knownValuesTransformedDottedWithNormal;
@@ -197,6 +200,9 @@ public:
   Camellia::FieldContainer<double> & getWeightedMeasures();
   Camellia::FieldContainer<double> getCellMeasures();
 
+  Intrepid2::BasisValues<double,ExecSpaceType> getValues(Intrepid2BasisWrapper<double>* intrepid2Basis, Intrepid2::EOperator op,
+                                                         const Intrepid2::TensorPoints<double,ExecSpaceType> inputPoints);
+  
   virtual Teuchos::RCP< const Camellia::FieldContainer<double> > getValues(BasisPtr basis, Camellia::EOperator op, bool useCubPointsSideRefCell = false);
   virtual Teuchos::RCP< const Camellia::FieldContainer<double> > getTransformedValues(BasisPtr basis, Camellia::EOperator op, bool useCubPointsSideRefCell = false);
   virtual Teuchos::RCP< const Camellia::FieldContainer<double> > getTransformedWeightedValues(BasisPtr basis, Camellia::EOperator op, bool useCubPointsSideRefCell = false);
@@ -217,10 +223,6 @@ public:
 
   int cubatureDegree();
   int cubatureEnrichmentDegree();
-
-  int getCubaturePhaseCount();
-  void setMaxPointsPerCubaturePhase(int maxPoints);
-  void setCubaturePhase(int phaseOrdinal);
 
   MeshPtr mesh();
   void setMesh(MeshPtr mesh);
@@ -249,7 +251,9 @@ public:
   
   virtual void setPhysicalCubaturePoints(const Camellia::FieldContainer<double> &physicalCubaturePoints);
 
-  const Camellia::FieldContainer<double> & getCubatureWeights();
+  const Intrepid2::TensorData<double, ExecSpaceType> getCubatureWeights() const;
+  
+  const Camellia::FieldContainer<double> & getCubatureWeightsFC();
 
   const Camellia::FieldContainer<double> & getSideUnitNormals(int sideOrdinal);
 
@@ -258,14 +262,16 @@ public:
                                     const std::vector<GlobalIndexType> &cellIDs, bool createSideCacheToo);
 
   /*** Methods added for BC support below ***/
-  // setRefCellPoints overwrites _cubPoints -- for when cubature is not your interest
+  // setRefCellPointsFC overwrites _cubPoints -- for when cubature is not your interest
   // (this comes up in imposeBC)
-  virtual void setRefCellPoints(const Camellia::FieldContainer<double> &pointsRefCell);
-  virtual void setRefCellPoints(const Camellia::FieldContainer<double> &pointsRefCell,
+  virtual void setRefCellPointsFC(const Camellia::FieldContainer<double> &pointsRefCell);
+  virtual void setRefCellPointsFC(const Camellia::FieldContainer<double> &pointsRefCell,
                                 const Camellia::FieldContainer<double> &cubatureWeights,
                                 int cubatureDegree = -1, bool recomputePhysicalMeasures = true);
-  const Camellia::FieldContainer<double> &getRefCellPoints();
+  const Camellia::FieldContainer<double> &getRefCellPointsFC();
   const Camellia::FieldContainer<double> &getSideRefCellPointsInVolumeCoordinates();
+  
+  const Intrepid2::TensorPoints<double,ExecSpaceType> getRefCellPoints() const;
 
   // physicalPoints: (P,D).  cellIndex indexes into BasisCache's physicalCellNodes
   Camellia::FieldContainer<double> getRefCellPointsForPhysicalPoints(const Camellia::FieldContainer<double> &physicalPoints, int cellIndex=0);

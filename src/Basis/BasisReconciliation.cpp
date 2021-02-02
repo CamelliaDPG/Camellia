@@ -375,10 +375,10 @@ SubBasisReconciliationWeights BasisReconciliation::computeConstrainedWeights(uns
 
     BasisCachePtr fineSubcellCache = BasisCache::basisCacheForCellTopology(fineSubcellTopo, cubDegree, fineSubcellRefNodes);
 //    BasisCachePtr fineSubcellCache = Teuchos::rcp( new BasisCache(fineSubcellTopo, cubDegree, false) );
-    int numPoints = fineSubcellCache->getRefCellPoints().dimension(0);
+    int numPoints = fineSubcellCache->getRefCellPointsFC().dimension(0);
     fineVolumeCubaturePoints.resize(numPoints,spaceDim);
-    Camellia::FieldContainer<double> fineSubcellCubaturePoints = fineSubcellCache->getRefCellPoints();
-    cubatureWeights = fineSubcellCache->getCubatureWeights();
+    Camellia::FieldContainer<double> fineSubcellCubaturePoints = fineSubcellCache->getRefCellPointsFC();
+    cubatureWeights = fineSubcellCache->getCubatureWeightsFC();
     if (subcellDimension == spaceDim)
     {
       fineVolumeCubaturePoints = fineSubcellCubaturePoints;
@@ -397,7 +397,7 @@ SubBasisReconciliationWeights BasisReconciliation::computeConstrainedWeights(uns
 
     CellTopoPtr ancestralSubcellTopo = (subcellRefinements.size() > 0) ? subcellRefinements[0].first->parentTopology() : fineSubcellTopo;
     BasisCachePtr ancestralSubcellCache = Teuchos::rcp( new BasisCache(ancestralSubcellTopo, cubDegree, false) );
-    ancestralSubcellCache->setRefCellPoints(ancestralSubcellCubaturePoints);
+    ancestralSubcellCache->setRefCellPointsFC(ancestralSubcellCubaturePoints);
 
     Camellia::FieldContainer<double> coarseSubcellNodes(ancestralSubcellTopo->getNodeCount(), subcellDimension);
     // when you set physical cell nodes according to the coarse-to-fine permutation, then the reference-to-physical map
@@ -451,12 +451,12 @@ SubBasisReconciliationWeights BasisReconciliation::computeConstrainedWeights(uns
     fineVolumeCache = BasisCache::basisCacheForCellTopology(fineTopo, cubDegree, fineTopoRefNodes);
     fineTopoRefNodes.resize(fineTopoRefNodes.dimension(1),fineTopoRefNodes.dimension(2));
   }
-  fineVolumeCache->setRefCellPoints(fineVolumeCubaturePoints, cubatureWeights);
+  fineVolumeCache->setRefCellPointsFC(fineVolumeCubaturePoints, cubatureWeights);
 
   coarseTopoRefNodes.resize(1,coarseTopoRefNodes.dimension(0),coarseTopoRefNodes.dimension(1));
   BasisCachePtr coarseVolumeCache = BasisCache::basisCacheForCellTopology(coarseTopo, cubDegree, coarseTopoRefNodes);
   coarseTopoRefNodes.resize(coarseTopoRefNodes.dimension(1),coarseTopoRefNodes.dimension(2));
-  coarseVolumeCache->setRefCellPoints(coarseVolumeCubaturePoints);
+  coarseVolumeCache->setRefCellPointsFC(coarseVolumeCubaturePoints);
   
   int numPoints = cubatureWeights.size();
 
@@ -585,8 +585,8 @@ SubBasisReconciliationWeights BasisReconciliation::computeConstrainedWeights(uns
 //  cout << "fineDomainCache->getPhysicalCubaturePoints():\n" << fineDomainCache->getPhysicalCubaturePoints();
 //  cout << "coarseDomainCache->getPhysicalCubaturePoints():\n" << coarseDomainCache->getPhysicalCubaturePoints();
 
-//  cout << "fineDomainCache->getRefCellPoints():\n" << fineDomainCache->getRefCellPoints();
-//  cout << "coarseDomainCache->getRefCellPoints():\n" << coarseDomainCache->getRefCellPoints();
+//  cout << "fineDomainCache->getRefCellPointsFC():\n" << fineDomainCache->getRefCellPointsFC();
+//  cout << "coarseDomainCache->getRefCellPointsFC():\n" << coarseDomainCache->getRefCellPointsFC();
 
 //  cout << "fineDomainCache->getPhysicalCellNodes():\n" << fineDomainCache->getPhysicalCellNodes();
 //  cout << "coarseDomainCache->getPhysicalCellNodes():\n" << coarseDomainCache->getPhysicalCellNodes();
@@ -676,7 +676,7 @@ SubBasisReconciliationWeights BasisReconciliation::computeConstrainedWeightsForT
       coarseSubcellDimension, coarserBasis, coarseSubcellOrdinalInCoarseDomain,
       coarseDomainOrdinalInCoarseCellTopo, coarseSubcellPermutation);
 
-  int numPoints = fineDomainCache->getRefCellPoints().dimension(0); // (P,D): 0 is the points dimension
+  int numPoints = fineDomainCache->getRefCellPointsFC().dimension(0); // (P,D): 0 is the points dimension
 
   // set up a dummy DofOrdering for the coarse domain:
   CellTopoPtr coarseDomainTopo = coarserBasis->domainTopology();
@@ -706,7 +706,7 @@ SubBasisReconciliationWeights BasisReconciliation::computeConstrainedWeightsForT
   if (fineDomainCache->cellTopology()->getTensorialDegree() > 0)
     fineDomainSideNormalsSpaceTime = fineDomainCache->getSideNormalsSpaceTime();
   BasisCachePtr fakeSideCache = BasisCache::fakeSideCache(fineDomainCache->getSideIndex(), coarseDomainCache,
-                                                          coarseDomainCache->getRefCellPoints(),
+                                                          coarseDomainCache->getRefCellPointsFC(),
                                                           fineDomainCache->getSideNormals(), cellSideParities,
                                                           fineDomainSideNormalsSpaceTime);
   termTraced->values(coarserBasisValues, fieldID, coarserBasis, fakeSideCache);
@@ -1519,10 +1519,10 @@ void BasisReconciliation::setupFineAndCoarseBasisCachesForReconciliation(BasisCa
   if (fineSubcellDimension > 0)
   {
     BasisCachePtr fineSubcellCache = Teuchos::rcp( new BasisCache(fineSubcellTopo, cubDegree, false) );
-    numPoints = fineSubcellCache->getRefCellPoints().dimension(0);
+    numPoints = fineSubcellCache->getRefCellPointsFC().dimension(0);
     fineDomainPoints.resize(numPoints,fineDomainDim);
-    subcellCubaturePoints = fineSubcellCache->getRefCellPoints();
-    cubatureWeightsFineSubcell = fineSubcellCache->getCubatureWeights();
+    subcellCubaturePoints = fineSubcellCache->getRefCellPointsFC();
+    cubatureWeightsFineSubcell = fineSubcellCache->getCubatureWeightsFC();
     if (fineSubcellDimension == fineDomainDim)
     {
       fineDomainPoints = subcellCubaturePoints;
@@ -1579,8 +1579,8 @@ void BasisReconciliation::setupFineAndCoarseBasisCachesForReconciliation(BasisCa
   {
     fineDomainCache = fineCellCache;
   }
-  fineDomainCache->setRefCellPoints(fineDomainPoints, cubatureWeightsFineSubcell);
-  coarseDomainCache->setRefCellPoints(coarseDomainPoints);
+  fineDomainCache->setRefCellPointsFC(fineDomainPoints, cubatureWeightsFineSubcell);
+  coarseDomainCache->setRefCellPointsFC(coarseDomainPoints);
 
   coarseTopoRefNodes.resize(1,coarseTopoRefNodes.dimension(0),coarseTopoRefNodes.dimension(1));
   coarseDomainCache->setPhysicalCellNodes(coarseTopoRefNodes, vector<GlobalIndexType>(), false);

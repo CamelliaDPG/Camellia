@@ -7,6 +7,7 @@
 #include "MeshTestUtility.h"
 
 #include "BasisCache.h"
+#include "Camellia_FieldContainerConversion.hpp"
 #include "CamelliaCellTools.h"
 #include "CubatureFactory.h"
 #include "GDAMaximumRule2D.h"
@@ -614,15 +615,20 @@ bool MeshTestUtility::determineRefTestPointsForNeighbors(MeshTopologyViewPtr mes
 
   CubatureFactory cubFactory;
   int cubDegree = 4; // fairly arbitrary choice: enough to get a decent number of test points...
-  Teuchos::RCP<Intrepid::Cubature<double> > fineSideTopoCub = cubFactory.create(fineSideTopo, cubDegree);
+  
+  using ExecSpaceType = Camellia::DeviceMemorySpace::execution_space;
+  using Cubature = Intrepid2::Cubature<ExecSpaceType,double,double>;
+  Teuchos::RCP< Cubature > fineSideTopoCub = cubFactory.create(fineSideTopo, cubDegree);
 
   int numCubPoints = fineSideTopoCub->getNumPoints();
 
-  Camellia::FieldContainer<double> cubPoints(numCubPoints, sideDim);
-  Camellia::FieldContainer<double> cubWeights(numCubPoints); // we neglect these...
-
-  fineSideTopoCub->getCubature(cubPoints, cubWeights);
-
+  auto tensorCubatureWeights = fineSideTopoCub->allocateCubatureWeights();
+  auto tensorCubaturePoints = fineSideTopoCub->allocateCubaturePoints(); // we neglect these
+  
+  fineSideTopoCub->getCubature(tensorCubaturePoints, tensorCubatureWeights);
+  
+  Camellia::FieldContainer<double> cubPoints  = FieldContainerConversion<double>::fromTensorPoints(tensorCubaturePoints);
+  
   Camellia::FieldContainer<double> sideRefCellNodes(fineSideTopo->getNodeCount(),sideDim);
   CamelliaCellTools::refCellNodesForTopology(sideRefCellNodes, fineSideTopo);
 
@@ -678,7 +684,7 @@ bool MeshTestUtility::determineRefTestPointsForNeighbors(MeshTopologyViewPtr mes
   }
 
   BasisCachePtr sideTopoCache = Teuchos::rcp( new BasisCache(fineSideTopo, 1, false) );
-  sideTopoCache->setRefCellPoints(testPoints);
+  sideTopoCache->setRefCellPointsFC(testPoints);
 
   // add cell dimension
   fineSideNodes.resize(1,fineSideNodes.dimension(0), fineSideNodes.dimension(1));
@@ -763,18 +769,18 @@ bool MeshTestUtility::neighborBasesAgreeOnSides(Teuchos::RCP<Mesh> mesh, Epetra_
 
       BasisCachePtr fineSideBasisCache = fineCellBasisCache->getSideBasisCache(sideOrdinal);
 
-      fineCellBasisCache->setRefCellPoints(fineCellRefPoints);
+      fineCellBasisCache->setRefCellPointsFC(fineCellRefPoints);
 
       BasisCachePtr coarseCellBasisCache = BasisCache::basisCacheForCell(mesh, neighborInfo.first);
       BasisCachePtr coarseSideBasisCache = coarseCellBasisCache->getSideBasisCache(neighborInfo.second);
 
-      coarseCellBasisCache->setRefCellPoints(coarseCellRefPoints);
+      coarseCellBasisCache->setRefCellPointsFC(coarseCellRefPoints);
 
       bool hasSidePoints = (fineSideRefPoints.size() > 0);
       if (hasSidePoints)
       {
-        fineSideBasisCache->setRefCellPoints(fineSideRefPoints);
-        coarseSideBasisCache->setRefCellPoints(coarseSideRefPoints);
+        fineSideBasisCache->setRefCellPointsFC(fineSideRefPoints);
+        coarseSideBasisCache->setRefCellPointsFC(coarseSideRefPoints);
       }
 
       // sanity check: do physical points match?
