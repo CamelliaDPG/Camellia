@@ -112,7 +112,7 @@ void testPhysicalPointsAgree(const PhasePhysicalMeshMap1D1V &phasePhysicalMap, T
       auto physicalPointIterator = phasePhysicalMap.getPhysicalPointIterator(basisCache, phaseSpaceCellID, physicalBasisCachePairs);
       
       const int numPhysicalPoints   = physicalPointIterator.numPhysicalPoints();
-      const int numPhaseSpacePoints = basisCache->getRefCellPoints().dimension(0);
+      const int numPhaseSpacePoints = basisCache->getRefCellPointsFC().dimension(0);
       const int numVelocityPoints   = numPhaseSpacePoints / numPhysicalPoints;
       
       TEUCHOS_TEST_FOR_EXCEPTION(numVelocityPoints * numPhysicalPoints != numPhaseSpacePoints, std::invalid_argument, "physical points do not evenly divide phase space points");
@@ -166,9 +166,9 @@ void testPhysicalPointsAgree(const PhasePhysicalMeshMap1D1V &phasePhysicalMap, T
           out << "phase space cubature points:\n" << phaseSpacePhysCubPoints;
           out << "physical cubature points:\n" << physicalPhysCubPoints;
           
-          out << "phase space reference points:\n" << basisCache->getRefCellPoints();
+          out << "phase space reference points:\n" << basisCache->getRefCellPointsFC();
           out << "phase space reference points in volume:\n" << basisCache->getSideRefCellPointsInVolumeCoordinates();
-          out << "physical ref points:\n" << physicalBasisCache->getRefCellPoints();
+          out << "physical ref points:\n" << physicalBasisCache->getRefCellPointsFC();
 
         }
       }

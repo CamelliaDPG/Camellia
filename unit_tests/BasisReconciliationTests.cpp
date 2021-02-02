@@ -235,7 +235,7 @@ Camellia::FieldContainer<double> permutedSidePoints(shards::CellTopology &sideTo
   unsigned oneCell = 1;
   sideNodes.resize(oneCell,sideNodes.dimension(0),sideNodes.dimension(1));
   BasisCachePtr sideCache = Teuchos::rcp( new BasisCache(sideTopo, cubDegree, false) );
-  sideCache->setRefCellPoints(pointsRefCell);
+  sideCache->setRefCellPointsFC(pointsRefCell);
   sideCache->setPhysicalCellNodes(sideNodes, vector<GlobalIndexType>(), false);
 
   Camellia::FieldContainer<double> permutedPoints = sideCache->getPhysicalCubaturePoints();
@@ -299,7 +299,7 @@ Camellia::FieldContainer<double> transformedBasisValuesAtPoints(BasisPtr basis, 
 
   int dummyCubatureDegree = 1;
   BasisCachePtr basisCache = Teuchos::rcp( new BasisCache(cellTopo, dummyCubatureDegree, false) );
-  basisCache->setRefCellPoints(pointsOnFineCell);
+  basisCache->setRefCellPointsFC(pointsOnFineCell);
   basisCache->setPhysicalCellNodes(refCellNodes, vector<GlobalIndexType>(), false);
   return *(basisCache->getTransformedValues(basis, OP_VALUE).get());
 }
@@ -481,8 +481,8 @@ void testHConstraintSideBasis(BasisPtr fineBasis, unsigned fineAncestralSideInde
   BasisCachePtr fineCache = Teuchos::rcp( new BasisCache(fineCellNodes, shardsFineTopo, cubDegree, true) );
   BasisCachePtr coarseCache = Teuchos::rcp( new BasisCache(coarseCellNodes, shardsCoarseTopo, cubDegree, true) );
 
-  fineCache->getSideBasisCache(fineSideIndex)->setRefCellPoints(sidePointsFine);
-  coarseCache->getSideBasisCache(coarseSideIndex)->setRefCellPoints(sidePointsCoarse);
+  fineCache->getSideBasisCache(fineSideIndex)->setRefCellPointsFC(sidePointsFine);
+  coarseCache->getSideBasisCache(coarseSideIndex)->setRefCellPointsFC(sidePointsCoarse);
 
   Camellia::FieldContainer<double> finePointsPhysical = fineCache->getSideBasisCache(fineSideIndex)->getPhysicalCubaturePoints();
   Camellia::FieldContainer<double> coarsePointsPhysical = coarseCache->getSideBasisCache(coarseSideIndex)->getPhysicalCubaturePoints();
@@ -579,8 +579,8 @@ void testPConstraintSideBasis(BasisPtr fineBasis, unsigned fineSideIndex, Camell
   BasisCachePtr fineCache = Teuchos::rcp( new BasisCache(fineCellNodes, fineTopo, cubDegree, true) );
   BasisCachePtr coarseCache = Teuchos::rcp( new BasisCache(coarseCellNodes, coarseTopo, cubDegree, true) );
 
-  fineCache->getSideBasisCache(fineSideIndex)->setRefCellPoints(sidePointsFine);
-  coarseCache->getSideBasisCache(coarseSideIndex)->setRefCellPoints(sidePointsCoarse);
+  fineCache->getSideBasisCache(fineSideIndex)->setRefCellPointsFC(sidePointsFine);
+  coarseCache->getSideBasisCache(coarseSideIndex)->setRefCellPointsFC(sidePointsCoarse);
 
   Camellia::FieldContainer<double> finePointsPhysical = fineCache->getSideBasisCache(fineSideIndex)->getPhysicalCubaturePoints();
   Camellia::FieldContainer<double> coarsePointsPhysical = coarseCache->getSideBasisCache(coarseSideIndex)->getPhysicalCubaturePoints();
@@ -700,7 +700,7 @@ void testHGRADTrace(MeshTopologyPtr meshTopo, int polyOrder, Teuchos::FancyOStre
 
               // lazy way to get the cubature points for subcell:
               BasisCachePtr subcellCache = BasisCache::basisCacheForReferenceCell(subcellTopo1, cubatureDegree);
-              Camellia::FieldContainer<double> subcellCubPoints1 = subcellCache->getRefCellPoints();
+              Camellia::FieldContainer<double> subcellCubPoints1 = subcellCache->getRefCellPointsFC();
               int numPoints = subcellCubPoints1.dimension(0);
 
               Camellia::FieldContainer<double> subcellPointsInParent1(numPoints,sideTopo1->getDimension());
@@ -728,7 +728,7 @@ void testHGRADTrace(MeshTopologyPtr meshTopo, int polyOrder, Teuchos::FancyOStre
               BasisCachePtr basisCacheCell1 = BasisCache::basisCacheForCellTopology(cellTopo1, cubatureDegree,
                                               physicalCellNodes1, createSideCaches);
               BasisCachePtr sideCache1 = basisCacheCell1->getSideBasisCache(sideOrdinal1);
-              sideCache1->setRefCellPoints(subcellPointsInParent1);
+              sideCache1->setRefCellPointsFC(subcellPointsInParent1);
 
               Camellia::FieldContainer<double> physicalCellNodes2(cell2->topology()->getNodeCount(), cell2->topology()->getDimension());
               meshTopo->verticesForCell(physicalCellNodes2, cell2->cellIndex());
@@ -736,7 +736,7 @@ void testHGRADTrace(MeshTopologyPtr meshTopo, int polyOrder, Teuchos::FancyOStre
               BasisCachePtr basisCacheCell2 = BasisCache::basisCacheForCellTopology(cell2->topology(), cubatureDegree,
                                               physicalCellNodes2, createSideCaches);
               BasisCachePtr sideCache2 = basisCacheCell2->getSideBasisCache(sideOrdinal2);
-              sideCache2->setRefCellPoints(subcellPointsInParent2);
+              sideCache2->setRefCellPointsFC(subcellPointsInParent2);
 
               bool oldSuccess = success;
               success = true;
@@ -857,8 +857,8 @@ void testHGRADTrace(MeshTopologyPtr meshTopo, int polyOrder, Teuchos::FancyOStre
                     cell2->topology(),
                     d, basis2, subcellOrdinalSide2,
                     sideOrdinal2, subcellPermutationCell1ToCell2);
-                out << "side1Cache->getRefCellPoints():\n" << side1Cache->getRefCellPoints();
-                out << "side2Cache->getRefCellPoints():\n" << side2Cache->getRefCellPoints();
+                out << "side1Cache->getRefCellPointsFC():\n" << side1Cache->getRefCellPointsFC();
+                out << "side2Cache->getRefCellPointsFC():\n" << side2Cache->getRefCellPointsFC();
               }
             }
           }
@@ -1022,7 +1022,7 @@ void testHGRADVolumeNoHangingNodes(MeshTopologyPtr meshTopo, int polyOrder, Teuc
 
           // lazy way to get the cubature points for subcell:
           BasisCachePtr subcellCache = BasisCache::basisCacheForReferenceCell(subcellTopo1, cubatureDegree);
-          Camellia::FieldContainer<double> subcellCubPoints1 = subcellCache->getRefCellPoints();
+          Camellia::FieldContainer<double> subcellCubPoints1 = subcellCache->getRefCellPointsFC();
           int numPoints = subcellCubPoints1.dimension(0);
 
           Camellia::FieldContainer<double> subcellPointsInRefCell1(numPoints,cellTopo1->getDimension());
@@ -1041,14 +1041,14 @@ void testHGRADVolumeNoHangingNodes(MeshTopologyPtr meshTopo, int polyOrder, Teuc
           physicalCellNodes1.resize(1,physicalCellNodes1.dimension(0),physicalCellNodes1.dimension(1));
           BasisCachePtr basisCache1 = BasisCache::basisCacheForCellTopology(cellTopo1, cubatureDegree,
                                       physicalCellNodes1, createSideCaches);
-          basisCache1->setRefCellPoints(subcellPointsInRefCell1);
+          basisCache1->setRefCellPointsFC(subcellPointsInRefCell1);
 
           Camellia::FieldContainer<double> physicalCellNodes2(cellTopo2->getNodeCount(), cellTopo2->getDimension());
           meshTopo->verticesForCell(physicalCellNodes2, cell2->cellIndex());
           physicalCellNodes2.resize(1,physicalCellNodes2.dimension(0),physicalCellNodes2.dimension(1));
           BasisCachePtr basisCache2 = BasisCache::basisCacheForCellTopology(cellTopo2, cubatureDegree,
                                       physicalCellNodes2, createSideCaches);
-          basisCache2->setRefCellPoints(subcellPointsInRefCell2);
+          basisCache2->setRefCellPointsFC(subcellPointsInRefCell2);
 
           TEST_COMPARE_FLOATING_ARRAYS_CAMELLIA_ABSTOLTOO(basisCache1->getPhysicalCubaturePoints(), basisCache2->getPhysicalCubaturePoints(), 1e-14, 1e-16);
 
@@ -2598,9 +2598,9 @@ TEUCHOS_UNIT_TEST( BasisReconciliation, MapFineSubcellPointsToCoarseDomain_Hexah
 
       Camellia::FieldContainer<double> fineDomainPoints(numPoints,fineDomainDim);
       CamelliaCellTools::mapToReferenceSubcell(fineDomainPoints, fineSubcellPoints, edgeDim, fineEdgeOrdinal, sideTopo);
-      fineCache->setRefCellPoints(fineDomainPoints);
+      fineCache->setRefCellPointsFC(fineDomainPoints);
 
-      coarseCache->setRefCellPoints(coarseDomainPoints);
+      coarseCache->setRefCellPointsFC(coarseDomainPoints);
 
       Camellia::FieldContainer<double> finePhysicalPoints = fineCache->getPhysicalCubaturePoints();
       Camellia::FieldContainer<double> coarsePhysicalPoints = coarseCache->getPhysicalCubaturePoints();
@@ -2960,7 +2960,7 @@ void termTracedTest(Teuchos::FancyOStream &out, bool &success, CellTopoPtr volum
       out << "\n\n*****      Side Ordinal " << traceSideOrdinal << "      *****\n\n\n";
 
       BasisCachePtr traceBasisCache = volumeBasisCache->getSideBasisCache(traceSideOrdinal);
-      traceBasisCache->setRefCellPoints(tracePointsSideReferenceSpace);
+      traceBasisCache->setRefCellPointsFC(tracePointsSideReferenceSpace);
 
       //        out << "tracePointsSideReferenceSpace:\n" << tracePointsSideReferenceSpace;
 
@@ -2973,7 +2973,7 @@ void termTracedTest(Teuchos::FancyOStream &out, bool &success, CellTopoPtr volum
 
       //        out << "pointsCoarseVolume:\n" << pointsCoarseVolume;
 
-      volumeBasisCache->setRefCellPoints(pointsCoarseVolume);
+      volumeBasisCache->setRefCellPointsFC(pointsCoarseVolume);
 
       int oneCell = 1;
       Camellia::FieldContainer<double> fakeParities(oneCell,volumeTopo->getSideCount());
@@ -3090,7 +3090,7 @@ TEUCHOS_UNIT_TEST( BasisReconciliation, TermTraced_1D )
       Camellia::FieldContainer<double> vertexPointInAncestor(numPoints, lineTopo->getDimension());
       RefinementPattern::mapRefCellPointsToAncestor(refBranch, vertexPointInLeaf, vertexPointInAncestor);
 
-      lineBasisCache->setRefCellPoints(vertexPointInAncestor);
+      lineBasisCache->setRefCellPointsFC(vertexPointInAncestor);
 
       SubBasisReconciliationWeights weights = BasisReconciliation::computeConstrainedWeightsForTermTraced(termTraced, u->ID(), pointTopo->getDimension(),
                                               pointBasis, fineSubcellOrdinalInFineDomain, refBranch, fineVertexOrdinal,
@@ -3246,7 +3246,7 @@ TEUCHOS_UNIT_TEST( BasisReconciliation, TermTraced_3D_Hexahedron_Slow)
       out << "\n\n*****      Side Ordinal " << traceSideOrdinal << "      *****\n\n\n";
 
       BasisCachePtr traceBasisCache = volumeBasisCache->getSideBasisCache(traceSideOrdinal);
-      traceBasisCache->setRefCellPoints(tracePointsSideReferenceSpace);
+      traceBasisCache->setRefCellPointsFC(tracePointsSideReferenceSpace);
 
       //        out << "tracePointsSideReferenceSpace:\n" << tracePointsSideReferenceSpace;
 
@@ -3259,7 +3259,7 @@ TEUCHOS_UNIT_TEST( BasisReconciliation, TermTraced_3D_Hexahedron_Slow)
 
       //        out << "pointsCoarseVolume:\n" << pointsCoarseVolume;
 
-      volumeBasisCache->setRefCellPoints(pointsCoarseVolume);
+      volumeBasisCache->setRefCellPointsFC(pointsCoarseVolume);
 
       int fineSubcellOrdinalInFineDomain = 0; // since the side *is* both domain and subcell, it's necessarily ordinal 0 in the domain
       SubBasisReconciliationWeights weights = BasisReconciliation::computeConstrainedWeightsForTermTraced(termTraced, u->ID(), sideTopo->getDimension(),
@@ -3413,7 +3413,7 @@ TEUCHOS_UNIT_TEST( BasisReconciliation, TermTraced_3D_Tetrahedron)
       out << "\n\n*****      Side Ordinal " << traceSideOrdinal << "      *****\n\n\n";
 
       BasisCachePtr traceBasisCache = volumeBasisCache->getSideBasisCache(traceSideOrdinal);
-      traceBasisCache->setRefCellPoints(tracePointsSideReferenceSpace);
+      traceBasisCache->setRefCellPointsFC(tracePointsSideReferenceSpace);
 
       //        out << "tracePointsSideReferenceSpace:\n" << tracePointsSideReferenceSpace;
 
@@ -3426,7 +3426,7 @@ TEUCHOS_UNIT_TEST( BasisReconciliation, TermTraced_3D_Tetrahedron)
 
       //        out << "pointsCoarseVolume:\n" << pointsCoarseVolume;
 
-      volumeBasisCache->setRefCellPoints(pointsCoarseVolume);
+      volumeBasisCache->setRefCellPointsFC(pointsCoarseVolume);
 
       int fineSubcellOrdinalInFineDomain = 0; // since the side *is* both domain and subcell, it's necessarily ordinal 0 in the domain
       SubBasisReconciliationWeights weights = BasisReconciliation::computeConstrainedWeightsForTermTraced(termTraced, u->ID(), sideTopo->getDimension(),

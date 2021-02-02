@@ -532,7 +532,7 @@ TEUCHOS_UNIT_TEST( MeshTransferFunction, FunctionValuesPiecewiseConstant)
 
         double expectedValue = (double) originalCellSide.first;
 
-        int numPoints = myCellSideBasisCache->getRefCellPoints().dimension(0);
+        int numPoints = myCellSideBasisCache->getRefCellPointsFC().dimension(0);
         int oneCell = 1;
         Camellia::FieldContainer<double> actualValues(oneCell,numPoints);
 
@@ -673,7 +673,7 @@ TEUCHOS_UNIT_TEST( MeshTransferFunction, FunctionValuesWithoutHangingNodes)
         BasisCachePtr myCellBasisCache = BasisCache::basisCacheForCell(topMesh, myCellID);
         BasisCachePtr myCellSideBasisCache = myCellBasisCache->getSideBasisCache(sideOrdinal);
 
-        int numPoints = myCellSideBasisCache->getRefCellPoints().dimension(0);
+        int numPoints = myCellSideBasisCache->getRefCellPointsFC().dimension(0);
         int oneCell = 1;
         Camellia::FieldContainer<double> expectedValues(oneCell,numPoints);
         Camellia::FieldContainer<double> actualValues(oneCell,numPoints);
@@ -822,7 +822,7 @@ TEUCHOS_UNIT_TEST( MeshTransferFunction, FunctionValuesWithHangingNodes)
         BasisCachePtr myCellBasisCache = BasisCache::basisCacheForCell(topMesh, myCellID);
         BasisCachePtr myCellSideBasisCache = myCellBasisCache->getSideBasisCache(sideOrdinal);
 
-        int numPoints = myCellSideBasisCache->getRefCellPoints().dimension(0);
+        int numPoints = myCellSideBasisCache->getRefCellPointsFC().dimension(0);
         int oneCell = 1;
         Camellia::FieldContainer<double> expectedValues(oneCell,numPoints);
         Camellia::FieldContainer<double> actualValues(oneCell,numPoints);

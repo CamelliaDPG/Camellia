@@ -153,8 +153,9 @@ public:
 template<class Scalar=double, class ArrayScalar=Intrepid::FieldContainer<double> > class Intrepid2BasisWrapper;
 template<class Scalar, class ArrayScalar> class Intrepid2BasisWrapper : public Basis<Scalar,ArrayScalar>
 {
+  using ExecSpaceType = Camellia::DeviceMemorySpace::execution_space;
 private:
-  Teuchos::RCP< Intrepid2::Basis<Kokkos::DefaultExecutionSpace,Scalar,Scalar> > _intrepid2Basis;
+  Teuchos::RCP< Intrepid2::Basis<ExecSpaceType,Scalar,Scalar> > _intrepid2Basis;
   Teuchos::RCP< Camellia::Basis<Scalar,ArrayScalar> > _continuousBasis; // continuous version of the same basis, if this basis is discontinuous
 protected:
   void initializeTags() const;
@@ -170,6 +171,15 @@ public:
   virtual std::set<int> dofOrdinalsForSide(int sideOrdinal) const;
   
   void getValues(ArrayScalar &values, const ArrayScalar &refPoints, Intrepid::EOperator operatorType) const;
+  
+  //! allocation method for Intrepid2-style getValues() output argument.
+  Intrepid2::BasisValues<Scalar,ExecSpaceType> allocateBasisValues( Intrepid2::TensorPoints<Scalar,ExecSpaceType> points,
+                                                                    const Intrepid2::EOperator op = Intrepid2::OPERATOR_VALUE) const;
+  
+  //! Intrepid2-style getValues() method.  This is part of the API that will be performance-optimized.  (Allows use of Intrepid2's sum factorization facilities, etc.)
+  void getValues( Intrepid2::BasisValues<Scalar,ExecSpaceType> outputValues,
+                  const Intrepid2::TensorPoints<Scalar,ExecSpaceType>  inputPoints,
+                  const Intrepid2::EOperator op = Intrepid2::OPERATOR_VALUE ) const;
   
   void getDofCoords(ArrayScalar & DofCoords) const;
   

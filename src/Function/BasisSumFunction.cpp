@@ -99,16 +99,16 @@ BasisSumFunction::BasisSumFunction(BasisPtr basis, const Camellia::FieldContaine
 //        }
 //      }
 //      bool cachesAgreeOnSideness = basisCache->isSideCache() == _overridingBasisCache->isSideCache();
-//      Camellia::FieldContainer<double> relativeReferencePoints = cachesAgreeOnSideness ? basisCache->getRefCellPoints() : basisCache->getSideRefCellPointsInVolumeCoordinates();
+//      Camellia::FieldContainer<double> relativeReferencePoints = cachesAgreeOnSideness ? basisCache->getRefCellPointsFC() : basisCache->getSideRefCellPointsInVolumeCoordinates();
 //      Camellia::FieldContainer<double> refPoints(1,relativeReferencePoints.dimension(0),relativeReferencePoints.dimension(1));
 //      CamelliaCellTools::mapToPhysicalFrame(refPoints, relativeReferencePoints, oneCellRelativeReferenceNodes, basisCache->cellTopology());
 //      refPoints.resize(refPoints.dimension(1),refPoints.dimension(2)); // strip cell dimension
-//      _overridingBasisCache->setRefCellPoints(refPoints, basisCache->getCubatureWeights());
+//      _overridingBasisCache->setRefCellPointsFC(refPoints, basisCache->getCubatureWeightsFC());
 //      basisCache = _overridingBasisCache;
 //    }
 //    else // if (cellTopo->getDimension() == 0)
 //    {
-//      _overridingBasisCache->setRefCellPoints(basisCache->getRefCellPoints(), basisCache->getCubatureWeights());
+//      _overridingBasisCache->setRefCellPointsFC(basisCache->getRefCellPointsFC(), basisCache->getCubatureWeightsFC());
 //    }
 //  }
 //
@@ -231,16 +231,16 @@ void BasisSumFunction::values(DeviceView<double> &values, ValueModificationType 
       oneCellRelativeReferenceNodes.checkinDeviceView(true);
       
       bool cachesAgreeOnSideness = basisCache->isSideCache() == _overridingBasisCache->isSideCache();
-      Camellia::FieldContainer<double> relativeReferencePoints = cachesAgreeOnSideness ? basisCache->getRefCellPoints() : basisCache->getSideRefCellPointsInVolumeCoordinates();
+      Camellia::FieldContainer<double> relativeReferencePoints = cachesAgreeOnSideness ? basisCache->getRefCellPointsFC() : basisCache->getSideRefCellPointsInVolumeCoordinates();
       Camellia::FieldContainer<double> refPoints(1,relativeReferencePoints.dimension(0),relativeReferencePoints.dimension(1));
       CamelliaCellTools::mapToPhysicalFrame(refPoints, relativeReferencePoints, oneCellRelativeReferenceNodes, basisCache->cellTopology());
       refPoints.resize(refPoints.dimension(1),refPoints.dimension(2)); // strip cell dimension
-      _overridingBasisCache->setRefCellPoints(refPoints, basisCache->getCubatureWeights());
+      _overridingBasisCache->setRefCellPointsFC(refPoints, basisCache->getCubatureWeightsFC());
       basisCache = _overridingBasisCache;
     }
     else // if (cellTopo->getDimension() == 0)
     {
-      _overridingBasisCache->setRefCellPoints(basisCache->getRefCellPoints(), basisCache->getCubatureWeights());
+      _overridingBasisCache->setRefCellPointsFC(basisCache->getRefCellPointsFC(), basisCache->getCubatureWeightsFC());
     }
   }
 

@@ -278,7 +278,7 @@ void testBasisOrdinalsForSubcell(CellTopoPtr spaceTopo, bool useHGRADInTime, int
         CellTopoPtr subcellTopo = spaceTimeTopo->getSubcell(subcellDim, subcellOrdinal);
         // lazy way to get the cubature points for subcell:
         BasisCachePtr subcellCache = BasisCache::basisCacheForReferenceCell(subcellTopo, cubDegree);
-        Camellia::FieldContainer<double> subcellCubPoints = subcellCache->getRefCellPoints();
+        Camellia::FieldContainer<double> subcellCubPoints = subcellCache->getRefCellPointsFC();
 
         int numPoints = subcellCubPoints.dimension(0);
         Camellia::FieldContainer<double> subcellPointsInParent(numPoints,spaceTimeTopo->getDimension());

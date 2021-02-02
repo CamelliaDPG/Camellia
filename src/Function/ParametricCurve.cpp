@@ -715,12 +715,12 @@ public:
       BasisCachePtr parametricCache;
       if (cellTopoKey == shards::Quadrilateral<4>::key)
       {
-        parametricCache = BasisCache::parametricQuadCache(basisCache->cubatureDegree(), basisCache->getRefCellPoints());
+        parametricCache = BasisCache::parametricQuadCache(basisCache->cubatureDegree(), basisCache->getRefCellPointsFC());
       }
       else if (cellTopoKey == shards::Line<2>::key)
       {
         parametricCache = BasisCache::parametric1DCache(basisCache->cubatureDegree());
-        parametricCache->setRefCellPoints(basisCache->getRefCellPoints());
+        parametricCache->setRefCellPointsFC(basisCache->getRefCellPointsFC());
       }
       _parametricGradient->values(parametricValuesMultiCell, parametricCache);
     }

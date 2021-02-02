@@ -95,12 +95,12 @@ namespace
       {
         auto childCache = BasisCache::basisCacheForCell(mesh, childCellID);
         subdomainCaches.push_back(childCache);
-        totalPointCount += childCache->getRefCellPoints().dimension(0);
+        totalPointCount += childCache->getRefCellPointsFC().dimension(0);
       }
       
       auto unionCache = BasisCacheFactory<double>::unionBasisCacheForParentCell(parentCell->refinementPattern(), subdomainCaches);
       
-      TEST_EQUALITY(totalPointCount, unionCache->getRefCellPoints().dimension(0));
+      TEST_EQUALITY(totalPointCount, unionCache->getRefCellPointsFC().dimension(0));
       TEST_EQUALITY(totalPointCount, unionCache->getPhysicalCubaturePoints().dimension(1));
       
       auto jacobian = unionCache->getJacobian();
@@ -163,12 +163,12 @@ namespace
       {
         auto childCache = BasisCache::basisCacheForCell(mesh, childCellID);
         subdomainCaches.push_back(childCache);
-        totalPointCount += childCache->getRefCellPoints().dimension(0);
+        totalPointCount += childCache->getRefCellPointsFC().dimension(0);
       }
       
       auto unionCache = BasisCacheFactory<double>::unionBasisCacheForParentCell(parentCell->refinementPattern(), subdomainCaches);
       
-      TEST_EQUALITY(totalPointCount, unionCache->getRefCellPoints().dimension(0));
+      TEST_EQUALITY(totalPointCount, unionCache->getRefCellPointsFC().dimension(0));
       TEST_EQUALITY(totalPointCount, unionCache->getPhysicalCubaturePoints().dimension(1));
     }
   }

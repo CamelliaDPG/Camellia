@@ -167,7 +167,7 @@ void SimpleSolutionFunction<Scalar>::values(Camellia::FieldContainer<Scalar> &va
         CamelliaCellTools::mapToReferenceFrame(refPoint,point,_soln->mesh()->getTopology(), cellID[0],
                                                _soln->mesh()->globalDofAssignment()->getCubatureDegree(cellID[0]));
         refPoint.resize(1,spaceDim);
-        basisCacheOnePoint->setRefCellPoints(refPoint);
+        basisCacheOnePoint->setRefCellPointsFC(refPoint);
         //          cout << "refCellPoints:\n " << refPoint;
         //          cout << "physicalCubaturePoints:\n " << basisCacheOnePoint->getPhysicalCubaturePoints();
         const bool applyCubatureWeights = false;

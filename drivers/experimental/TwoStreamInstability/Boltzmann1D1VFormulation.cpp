@@ -70,7 +70,7 @@ class VelocitySpace1DIntegral : public QuadraturePointFunction
     const GlobalIndexType sampleSpatialCellID = 0;
     BasisCachePtr sampleSpatialBasisCache = BasisCache::basisCacheForCell(_spatialMesh, sampleSpatialCellID);
     const int spatialQuadratureDegree = sampleSpatialBasisCache->cubatureDegree();
-    _numPoints1D = sampleSpatialBasisCache->getRefCellPoints().dimension(0);
+    _numPoints1D = sampleSpatialBasisCache->getRefCellPointsFC().dimension(0);
     
     auto phaseSpaceMesh = _phaseSpaceSolution->mesh();
     auto & localCellIDs = phaseSpaceMesh->cellIDsInPartition();
@@ -142,7 +142,7 @@ class VelocitySpace1DIntegral : public QuadraturePointFunction
         pointSetNumber++;
       }
       
-      basisCache->setRefCellPoints(tensorPoints);
+      basisCache->setRefCellPointsFC(tensorPoints);
       auto basisValues = basisCache->getTransformedValues(fBasis, OP_VALUE);
       
       int basisCardinality = fBasis->getCardinality();
@@ -464,7 +464,7 @@ public:
       TEUCHOS_TEST_FOR_EXCEPTION(basisCacheToUse == Teuchos::null, std::invalid_argument, "On rank " + std::to_string(rank) + ", null pointer on line " + std::to_string(__LINE__) );
       
       const int numCells  = 1;
-      const int numPoints = basisCacheToUse->getRefCellPoints().dimension(0);
+      const int numPoints = basisCacheToUse->getRefCellPointsFC().dimension(0);
       Camellia::FieldContainer<double> values(numCells,numPoints);
       
       _g_1D->values(values, basisCacheToUse);
@@ -477,7 +477,7 @@ public:
       return;
     }
  
-    const int numPhaseSpacePoints = basisCache->getRefCellPoints().dimension(0);
+    const int numPhaseSpacePoints = basisCache->getRefCellPointsFC().dimension(0);
     
     for (int phaseSpaceCellOrdinal = 0; phaseSpaceCellOrdinal < phaseSpaceCellIDs.size(); phaseSpaceCellOrdinal++)
     {

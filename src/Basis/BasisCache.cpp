@@ -11,9 +11,12 @@
 #include "Intrepid_CellTools.hpp"
 #include "Intrepid_FunctionSpaceTools.hpp"
 
+#include "Intrepid2_Cubature.hpp"
+
 #include "BasisCache.h"
 #include "BasisFactory.h"
 #include "BasisEvaluation.h"
+#include "Camellia_FieldContainerConversion.hpp"
 #include "CamelliaCellTools.h"
 #include "CubatureFactory.h"
 #include "Function.h"
@@ -119,7 +122,8 @@ void BasisCache::initVolumeCache(bool createSideCacheToo, bool tensorProductTopo
   if (_cellTopo->getDimension() > 0)
   {
     CubatureFactory cubFactory;
-    Teuchos::RCP<Intrepid::Cubature<double> > cellTopoCub;
+    using Cubature = Intrepid2::Cubature<ExecSpaceType,double,double>;
+    Teuchos::RCP< Cubature > cellTopoCub;
     
     if (_cubDegree >= 0)
       cellTopoCub = cubFactory.create(_cellTopo, _cubDegree);
@@ -132,34 +136,30 @@ void BasisCache::initVolumeCache(bool createSideCacheToo, bool tensorProductTopo
     {
       cubDim       = cellTopoCub->getDimension();
       numCubPoints = cellTopoCub->getNumPoints();
+      _cubWeights = cellTopoCub->allocateCubatureWeights();
+      _cubPoints  = cellTopoCub->allocateCubaturePoints();
+      
+      cellTopoCub->getCubature(_cubPoints, _cubWeights);
+      
+      _cubPointsFC  = FieldContainerConversion<double>::fromTensorPoints(_cubPoints);
+      _cubWeightsFC = FieldContainerConversion<double>::fromTensorData(_cubWeights);
     }
     else
     {
       cubDim = _cellTopo->getDimension();
       numCubPoints = 0;
     }
-
-    _cubPoints = Camellia::FieldContainer<double>(numCubPoints, cubDim);
-    _cubWeights.resize(numCubPoints);
-
-    if (numCubPoints > 0)
-      cellTopoCub->getCubature(_cubPoints, _cubWeights);
   }
   else
   {
     _cubDegree = 1;
     int numCubPointsSide = 1;
-    _cubPoints.resize(numCubPointsSide, 1); // cubature points from the pov of the side (i.e. a (d-1)-dimensional set)
-    _cubWeights.resize(numCubPointsSide);
+    _cubPointsFC.resize(numCubPointsSide, 1); // cubature points from the pov of the side (i.e. a (d-1)-dimensional set)
+    _cubWeightsFC.resize(numCubPointsSide);
 
-    _cubPoints.initialize(0.0);
-    _cubWeights.initialize(1.0);
+    _cubPointsFC.initialize(0.0);
+    _cubWeightsFC.initialize(1.0);
   }
-
-  _maxPointsPerCubaturePhase = -1;
-  _cubaturePhase = 0;
-  _cubaturePhaseCount = 1;
-  _phasePointOrdinalOffsets.push_back(0);
 
   _cellJacobianIsValid = false;
   _cellJacobianInverseIsValid = false;
@@ -182,13 +182,8 @@ void BasisCache::initVolumeCache(const Camellia::FieldContainer<double> &refPoin
   _spaceDim = _cellTopo->getDimension();
   _isSideCache = false; // VOLUME constructor
   
-  _cubPoints = refPoints;
-  _cubWeights = cubWeights;
-  
-  _maxPointsPerCubaturePhase = -1;
-  _cubaturePhase = 0;
-  _cubaturePhaseCount = 1;
-  _phasePointOrdinalOffsets.push_back(0);
+  _cubPointsFC = refPoints;
+  _cubWeightsFC = cubWeights;
   
   _cellJacobianIsValid = false;
   _cellJacobianInverseIsValid = false;
@@ -395,41 +390,37 @@ BasisCache::BasisCache(int fakeSideOrdinal, BasisCachePtr volumeCache, const Cam
   _basisCacheVolume = volumeCache;
   _spaceDim = volumeCache->getSpaceDim();
 
-  _cubPoints.resize(0); // force an exception if true side reference points are ever accessed in fake side BasisCache
+  _cubPointsFC.resize(0); // force an exception if true side reference points are ever accessed in fake side BasisCache
 
   int numCells = volumeCache->getPhysicalCubaturePoints().dimension(0);
   int numPoints = volumeRefPoints.dimension(0);
   _physCubPoints.resize(numCells,numPoints,_spaceDim);
-  _cubPointsSideRefCell = volumeRefPoints;
+  _cubPointsSideRefCellFC = volumeRefPoints;
   _sideNormals = sideNormals;
   _sideNormalsSpaceTime = sideNormalsSpaceTime;
   _cellSideParities = cellSideParities;
-  _maxPointsPerCubaturePhase = -1; // default: -1 (infinite)
-  _cubaturePhase = 0; // index of the cubature phase; defaults to 0
-  _cubaturePhaseCount = 1; // how many phases to get through all the points
-  _phasePointOrdinalOffsets.push_back(0);
-
+  
   // the assumption is that if you're using this constructor, the volume points provided are already in reference space
   // so that the transformations are all identities
   int cellDim = _cellTopo->getDimension(); // for space-time, cellDim = _spaceDim + 1
-  _cellJacobian.resize(numCells, numPoints, cellDim, cellDim);
-  _cellJacobInv.resize(numCells, numPoints, cellDim, cellDim);
-  _cellJacobDet.resize(numCells, numPoints);
-  _cellJacobian.initialize(0.0);
-  _cellJacobInv.initialize(0.0);
+  _cellJacobianFC.resize(numCells, numPoints, cellDim, cellDim);
+  _cellJacobInvFC.resize(numCells, numPoints, cellDim, cellDim);
+  _cellJacobDetFC.resize(numCells, numPoints);
+  _cellJacobianFC.initialize(0.0);
+  _cellJacobInvFC.initialize(0.0);
   for (int cellOrdinal=0; cellOrdinal<numCells; cellOrdinal++)
   {
     for (int pointOrdinal=0; pointOrdinal<numPoints; pointOrdinal++)
     {
       for (int d=0; d<cellDim; d++)
       {
-        _cellJacobian(cellOrdinal,pointOrdinal,d,d) = 1.0;
-        _cellJacobInv(cellOrdinal,pointOrdinal,d,d) = 1.0;
+        _cellJacobianFC(cellOrdinal,pointOrdinal,d,d) = 1.0;
+        _cellJacobInvFC(cellOrdinal,pointOrdinal,d,d) = 1.0;
       }
     }
   }
   
-  _cellJacobDet.initialize(1.0);
+  _cellJacobDetFC.initialize(1.0);
   _cellJacobianIsValid = true;
   _cellJacobianInverseIsValid = true;
   _cellJacobianDeterminantIsValid = true;
@@ -462,7 +453,8 @@ BasisCache::BasisCache(int sideIndex, BasisCachePtr volumeCache, int trialDegree
   if (sideDim > 0)
   {
     CubatureFactory cubFactory;
-    Teuchos::RCP<Intrepid::Cubature<double> > sideCub;
+    using Cubature = Intrepid2::Cubature<ExecSpaceType,double,double>;
+    Teuchos::RCP< Cubature > sideCub;
     if (_cubDegree >= 0)
       sideCub = cubFactory.create(side, _cubDegree);
     else if (_cubDegrees.size() > 0)
@@ -471,49 +463,55 @@ BasisCache::BasisCache(int sideIndex, BasisCachePtr volumeCache, int trialDegree
     int numCubPointsSide;
     
     if (sideCub != Teuchos::null)
-      numCubPointsSide = sideCub->getNumPoints();
-    else
-      numCubPointsSide = 0;
-    
-    _cubPoints.resize(numCubPointsSide, sideDim); // cubature points from the pov of the side (i.e. a (d-1)-dimensional set)
-    _cubWeights.resize(numCubPointsSide);
-    if ( multiBasisIfAny.get() == NULL )
     {
-      if (numCubPointsSide > 0)
-        sideCub->getCubature(_cubPoints, _cubWeights);
+      numCubPointsSide = sideCub->getNumPoints();
+      _cubWeights = sideCub->allocateCubatureWeights();
+      _cubPoints = sideCub->allocateCubaturePoints();
+      
+      sideCub->getCubature(_cubPoints, _cubWeights);
+      
+      _cubPointsFC  = FieldContainerConversion<double>::fromTensorPoints(_cubPoints);
+      _cubWeightsFC = FieldContainerConversion<double>::fromTensorData(_cubWeights);
     }
     else
+    {
+      numCubPointsSide = 0;
+      _cubPointsFC.resize(numCubPointsSide, sideDim); // cubature points from the pov of the side (i.e. a (d-1)-dimensional set)
+      _cubWeightsFC.resize(numCubPointsSide);
+    }
+    
+    if ( multiBasisIfAny.get() != NULL )
     {
       MultiBasis<>* multiBasis = (MultiBasis<>*) multiBasisIfAny.get();
 
       int cubatureEnrichment = (multiBasis->getDegree() < _maxTrialDegree) ? _maxTrialDegree - multiBasis->getDegree() : 0;
-      multiBasis->getCubature(_cubPoints, _cubWeights, _maxTestDegree + cubatureEnrichment);
+      multiBasis->getCubature(_cubPointsFC, _cubWeightsFC, _maxTestDegree + cubatureEnrichment);
 
-      numCubPointsSide = _cubPoints.dimension(0);
+      numCubPointsSide = _cubPointsFC.dimension(0);
     }
 
-    _cubPointsSideRefCell.resize(numCubPointsSide, sideDim + 1); // cubPointsSide from the pov of the ref cell
+    _cubPointsSideRefCellFC.resize(numCubPointsSide, sideDim + 1); // cubPointsSide from the pov of the ref cell
     if (numCubPointsSide > 0)
-      CamelliaCellTools::mapToReferenceSubcell(_cubPointsSideRefCell, _cubPoints, sideDim, _sideIndex, _cellTopo);
+    {
+      CamelliaCellTools::mapToReferenceSubcell(_cubPointsSideRefCellFC, _cubPointsFC, sideDim, _sideIndex, _cellTopo);
+      // TODO: create the TensorPoints _cubPointsSideRefCell directly from _cubPoints
+      // for now, we create it from _cubPointsSideRefCellFC (and lose any tensor product structure)
+      _cubPointsSideRefCell = FieldContainerConversion<double>::toTensorPoints(_cubPointsSideRefCellFC);
+    }
   }
   else
   {
     _cubDegree = 1;
     int numCubPointsSide = 1;
-    _cubPoints.resize(numCubPointsSide, 1); // cubature points from the pov of the side (i.e. a (d-1)-dimensional set)
-    _cubWeights.resize(numCubPointsSide);
+    _cubPointsFC.resize(numCubPointsSide, 1); // cubature points from the pov of the side (i.e. a (d-1)-dimensional set)
+    _cubWeightsFC.resize(numCubPointsSide);
 
-    _cubPoints.initialize(0.0);
-    _cubWeights.initialize(1.0);
+    _cubPointsFC.initialize(0.0);
+    _cubWeightsFC.initialize(1.0);
 
-    _cubPointsSideRefCell.resize(numCubPointsSide, sideDim + 1); // cubPointsSide from the pov of the ref cell
-    CamelliaCellTools::mapToReferenceSubcell(_cubPointsSideRefCell, _cubPoints, sideDim, _sideIndex, _cellTopo);
+    _cubPointsSideRefCellFC.resize(numCubPointsSide, sideDim + 1); // cubPointsSide from the pov of the ref cell
+    CamelliaCellTools::mapToReferenceSubcell(_cubPointsSideRefCellFC, _cubPointsFC, sideDim, _sideIndex, _cellTopo);
   }
-
-  _maxPointsPerCubaturePhase = -1; // default: -1 (infinite)
-  _cubaturePhase = 0; // index of the cubature phase; defaults to 0
-  _cubaturePhaseCount = 1; // how many phases to get through all the points
-  _phasePointOrdinalOffsets.push_back(0);
 }
 
 // side constructor with specific ref points
@@ -537,18 +535,14 @@ BasisCache::BasisCache(int sideIndex, BasisCachePtr volumeCache, const Camellia:
   
   initCubatureDegree(cubatureDegree, 0, 0);
 
-  _cubPoints = refPoints;
-  _cubWeights = cubWeights;
+  // TODO: initialized _cubPoints (the Intrepid2 container) and _cubWeights appropriately
+  _cubPointsFC = refPoints;
+  _cubWeightsFC = cubWeights;
   
-  int numCubPointsSide = _cubPoints.dimension(0);
+  int numCubPointsSide = _cubPointsFC.dimension(0);
   
-  _cubPointsSideRefCell.resize(numCubPointsSide, sideDim + 1); // cubPointsSide from the pov of the ref cell
-  CamelliaCellTools::mapToReferenceSubcell(_cubPointsSideRefCell, _cubPoints, sideDim, _sideIndex, _cellTopo);
-  
-  _maxPointsPerCubaturePhase = -1; // default: -1 (infinite)
-  _cubaturePhase = 0; // index of the cubature phase; defaults to 0
-  _cubaturePhaseCount = 1; // how many phases to get through all the points
-  _phasePointOrdinalOffsets.push_back(0);
+  _cubPointsSideRefCellFC.resize(numCubPointsSide, sideDim + 1); // cubPointsSide from the pov of the ref cell
+  CamelliaCellTools::mapToReferenceSubcell(_cubPointsSideRefCellFC, _cubPointsFC, sideDim, _sideIndex, _cellTopo);
   
   _cellJacobianIsValid = false;
   _cellJacobianInverseIsValid = false;
@@ -589,7 +583,7 @@ void BasisCache::checkinScratchStorage<double>(BasisCache::DeviceView<double> &s
 
 Camellia::FieldContainer<double> BasisCache::computeParametricPoints()
 {
-  if (_cubPoints.size()==0)
+  if (_cubPointsFC.size()==0)
   {
     TEUCHOS_TEST_FOR_EXCEPTION(true, std::invalid_argument, "computeParametricPoints() requires reference cell points to be defined.");
   }
@@ -600,14 +594,14 @@ Camellia::FieldContainer<double> BasisCache::computeParametricPoints()
   if (_cellTopo->getShardsTopology().getKey()==shards::Quadrilateral<4>::key)
   {
     int cubatureDegree = 0;
-    BasisCachePtr parametricCache = BasisCache::parametricQuadCache(cubatureDegree, getRefCellPoints(), this->getSideIndex());
+    BasisCachePtr parametricCache = BasisCache::parametricQuadCache(cubatureDegree, getRefCellPointsFC(), this->getSideIndex());
     return parametricCache->getPhysicalCubaturePoints();
   }
   else if (_cellTopo->getShardsTopology().getKey()==shards::Line<2>::key)
   {
     int cubatureDegree = 0;  // we throw away the computed cubature points, so let's create as few as possible...
     BasisCachePtr parametricCache = BasisCache::parametric1DCache(cubatureDegree);
-    parametricCache->setRefCellPoints(this->getRefCellPoints());
+    parametricCache->setRefCellPointsFC(this->getRefCellPointsFC());
     return parametricCache->getPhysicalCubaturePoints();
   }
   else
@@ -625,11 +619,6 @@ int BasisCache::cubatureDegree()
 int BasisCache::cubatureEnrichmentDegree()
 {
   return _cubatureEnrichmentDegree;
-}
-
-int BasisCache::getCubaturePhaseCount()
-{
-  return _cubaturePhaseCount;
 }
 
 void BasisCache::cubatureDegreeForElementType(ElementTypePtr elemType, bool testVsTest, int &cubatureDegree)
@@ -662,60 +651,6 @@ bool BasisCache::cellTopologyIsSpaceTime()
 void BasisCache::cubatureDegreeForElementType(ElementTypePtr elemType, bool testVsTest, int &cubatureDegreeSpace, int &cubatureDegreeTime)
 {
   TEUCHOS_TEST_FOR_EXCEPTION(true, std::invalid_argument, "Method not yet implemented");
-}
-
-void BasisCache::setMaxPointsPerCubaturePhase(int maxPoints)
-{
-  if (_maxPointsPerCubaturePhase == -1)
-  {
-    _allCubPoints = _cubPoints;
-    _allCubWeights = _cubWeights;
-  }
-
-  _maxPointsPerCubaturePhase = maxPoints;
-
-  int totalPointCount = _allCubPoints.dimension(0);
-
-  if (_maxPointsPerCubaturePhase != -1)
-  {
-    _cubaturePhaseCount = (int) ceil((double)totalPointCount / _maxPointsPerCubaturePhase);
-
-    _phasePointOrdinalOffsets = vector<int>(_cubaturePhaseCount+1);
-    for (int phaseOrdinal=0; phaseOrdinal<_cubaturePhaseCount; phaseOrdinal++)
-    {
-      _phasePointOrdinalOffsets[phaseOrdinal] = phaseOrdinal * (totalPointCount / _cubaturePhaseCount);
-    }
-    _phasePointOrdinalOffsets[_cubaturePhaseCount] = totalPointCount;
-    _cubPoints.resize(0); // should trigger error if setCubaturePhase isn't called
-    _cubWeights.resize(0);
-  }
-  else
-  {
-    _cubaturePhaseCount = 1;
-    _phasePointOrdinalOffsets = vector<int>(2);
-    _phasePointOrdinalOffsets[0] = 0;
-    _phasePointOrdinalOffsets[1] = totalPointCount;
-
-    setRefCellPoints(_allCubPoints, _allCubWeights);
-  }
-}
-
-void BasisCache::setCubaturePhase(int phaseOrdinal)
-{
-  int offset = _phasePointOrdinalOffsets[phaseOrdinal];
-  int phasePointCount = _phasePointOrdinalOffsets[phaseOrdinal+1] - offset;
-  int cubSpaceDim = _allCubPoints.dimension(1);
-  Camellia::FieldContainer<double> cubPoints(phasePointCount, cubSpaceDim);
-  Camellia::FieldContainer<double> cubWeights(phasePointCount);
-  for (int ptOrdinal=0; ptOrdinal<phasePointCount; ptOrdinal++)
-  {
-    cubWeights(ptOrdinal) = _allCubWeights(offset+ptOrdinal);
-    for (int d=0; d<cubSpaceDim; d++)
-    {
-      cubPoints(ptOrdinal,d) = _allCubPoints(offset+ptOrdinal,d);
-    }
-  }
-  setRefCellPoints(cubPoints, cubWeights);
 }
 
 void BasisCache::findMaximumDegreeBasisForSides(DofOrdering &trialOrdering)
@@ -817,7 +752,7 @@ void BasisCache::setMesh(MeshPtr mesh)
 void BasisCache::discardPhysicalNodeInfo()
 {
   // discard physicalNodes and all transformed basis values.
-  _knownValuesTransformed.clear();
+  _knownValuesTransformedFC.clear();
   _knownValuesTransformedWeighted.clear();
   _knownValuesTransformedDottedWithNormal.clear();
   _knownValuesTransformedWeighted.clear();
@@ -830,7 +765,7 @@ void BasisCache::discardPhysicalNodeInfo()
 //  _cellIDs.clear();
 //  _cellJacobian.resize(0);
 //  _cellJacobInv.resize(0);
-//  _cellJacobDet.resize(0);
+//  _cellJacobDetFC.resize(0);
 //  _weightedMeasure.resize(0);
 //  _physCubPoints.resize(0);
   
@@ -861,7 +796,7 @@ const Camellia::FieldContainer<double> & BasisCache::getPhysicalCubaturePoints()
 
 Camellia::FieldContainer<double> BasisCache::getCellMeasures()
 {
-  if (_cubWeights.size() != 0)
+  if (_cubWeightsFC.size() != 0)
   {
     if (!_weightedMeasureIsValid) recomputeMeasures();
     int numCells = _weightedMeasure.dimension(0);
@@ -892,25 +827,51 @@ Camellia::FieldContainer<double> BasisCache::getCellMeasures()
   }
 }
 
-const Camellia::FieldContainer<double> & BasisCache::getCubatureWeights()
+const Intrepid2::TensorData<double,typename BasisCache::ExecSpaceType> BasisCache::getCubatureWeights() const
 {
   return _cubWeights;
+}
+
+const Camellia::FieldContainer<double> & BasisCache::getCubatureWeightsFC()
+{
+  return _cubWeightsFC;
 }
 
 const Camellia::FieldContainer<double> & BasisCache::getJacobian()
 {
   if (!_cellJacobianIsValid) determineJacobian();
-  return _cellJacobian;
+  return _cellJacobianFC;
 }
 const Camellia::FieldContainer<double> & BasisCache::getJacobianDet()
 {
   if (!_cellJacobianDeterminantIsValid) determineJacobianInverseAndDeterminant();
-  return _cellJacobDet;
+  return _cellJacobDetFC;
 }
 const Camellia::FieldContainer<double> & BasisCache::getJacobianInv()
 {
   if (!_cellJacobianInverseIsValid) determineJacobianInverseAndDeterminant();
-  return _cellJacobInv;
+  return _cellJacobInvFC;
+}
+
+Intrepid2::BasisValues<double,typename BasisCache::ExecSpaceType>
+BasisCache::getValues(Intrepid2BasisWrapper<double>* intrepid2Basis, Intrepid2::EOperator op,
+                      const Intrepid2::TensorPoints<double,ExecSpaceType> inputPoints)
+{
+  pair< Camellia::Basis<>*, Intrepid2::EOperator> key = make_pair(intrepid2Basis, op);
+  
+  auto resultFound = _knownValues.find(key);
+  if (resultFound != _knownValues.end())
+  {
+    return resultFound->second;
+  }
+  else
+  {
+    auto result = BasisEvaluation::getValues(intrepid2Basis, op, inputPoints);
+    pair< pair< Camellia::Basis<>*, Intrepid2::EOperator>, Intrepid2::BasisValues<double,ExecSpaceType> > resultEntry {key, result};
+    _knownValues.insert(resultEntry);
+//    _knownValues[key] = result; // TODO: submit Intrepid2 PR with default constructor for BasisValues — that will allow use to write this instead of the more complex thing above.
+    return result;
+  }
 }
 
 constFCPtr BasisCache::getValues(BasisPtr basis, Camellia::EOperator op,
@@ -919,19 +880,19 @@ constFCPtr BasisCache::getValues(BasisPtr basis, Camellia::EOperator op,
   const Camellia::FieldContainer<double>* cubPoints;
   if (useCubPointsSideRefCell)
   {
-    TEUCHOS_TEST_FOR_EXCEPTION(_cubPointsSideRefCell.size()==0,std::invalid_argument,"useCubPointsSideRefCell = true, but _cubPointsSideRefCell is empty!");
-    cubPoints = &_cubPointsSideRefCell;
+    TEUCHOS_TEST_FOR_EXCEPTION(_cubPointsSideRefCellFC.size()==0,std::invalid_argument,"useCubPointsSideRefCell = true, but _cubPointsSideRefCell is empty!");
+    cubPoints = &_cubPointsSideRefCellFC;
   }
   else
   {
-    cubPoints = &_cubPoints;
+    cubPoints = &_cubPointsFC;
   }
   // first, let's check whether the exact request is already known
   pair< Camellia::Basis<>*, Camellia::EOperator> key = make_pair(basis.get(), op);
 
-  if (_knownValues.find(key) != _knownValues.end() )
+  if (_knownValuesFC.find(key) != _knownValuesFC.end() )
   {
-    return _knownValues[key];
+    return _knownValuesFC[key];
   }
   int componentOfInterest = -1;
   // otherwise, lookup to see whether a related value is already known
@@ -942,21 +903,21 @@ constFCPtr BasisCache::getValues(BasisPtr basis, Camellia::EOperator op,
   if ((Camellia::EOperator)relatedOp != op)
   {
     relatedKey = make_pair(basis.get(), (Camellia::EOperator) relatedOp);
-    if (_knownValues.find(relatedKey) == _knownValues.end() )
+    if (_knownValuesFC.find(relatedKey) == _knownValuesFC.end() )
     {
       // we can assume relatedResults has dimensions (numPoints,basisCardinality,spaceDim)
       FCPtr relatedResults = BasisEvaluation::getValues(basis,(Camellia::EOperator)relatedOp,*cubPoints);
-      _knownValues[relatedKey] = relatedResults;
+      _knownValuesFC[relatedKey] = relatedResults;
     }
 
-    constFCPtr relatedResults = _knownValues[relatedKey];
+    constFCPtr relatedResults = _knownValuesFC[relatedKey];
     //    constFCPtr relatedResults = _knownValues[key];
     constFCPtr result = BasisEvaluation::getComponentOfInterest(relatedResults,op,fs,componentOfInterest);
     if ( result.get() == 0 )
     {
       result = relatedResults;
     }
-    _knownValues[key] = result;
+    _knownValuesFC[key] = result;
     return result;
   }
   // if we get here, we should have a standard Intrepid operator, in which case we should
@@ -968,19 +929,20 @@ constFCPtr BasisCache::getValues(BasisPtr basis, Camellia::EOperator op,
     TEUCHOS_TEST_FOR_EXCEPTION(true,std::invalid_argument,"Unknown operator.");
   }
   FCPtr result = BasisEvaluation::getValues(basis,op,*cubPoints);
-  _knownValues[key] = result;
+  _knownValuesFC[key] = result;
   return result;
 }
 
-constFCPtr BasisCache::getTransformedValues(BasisPtr basis, Camellia::EOperator op,
-    bool useCubPointsSideRefCell)
+constFCPtr BasisCache::getTransformedValues(BasisPtr basis, Camellia::EOperator op, bool useCubPointsSideRefCell)
 {
   TEUCHOS_TEST_FOR_EXCEPTION(!canComputeTransformedValues(op), std::invalid_argument, "computing transformed values of this operator is not supported");
   
+  Intrepid2BasisWrapper<double>* basisAsIntrepid2 = dynamic_cast<Intrepid2BasisWrapper<double>*>(basis.get());
+  
   pair<Camellia::Basis<>*, Camellia::EOperator> key = make_pair(basis.get(), op);
-  if (_knownValuesTransformed.find(key) != _knownValuesTransformed.end())
+  if (_knownValuesTransformedFC.find(key) != _knownValuesTransformedFC.end())
   {
-    return _knownValuesTransformed[key];
+    return _knownValuesTransformedFC[key];
   }
 
   int componentOfInterest;
@@ -988,7 +950,7 @@ constFCPtr BasisCache::getTransformedValues(BasisPtr basis, Camellia::EOperator 
   Intrepid::EOperator relatedOp = BasisEvaluation::relatedOperator(op, fs, _spaceDim, componentOfInterest);
 
   pair<Camellia::Basis<>*, Camellia::EOperator> relatedKey = make_pair(basis.get(),(Camellia::EOperator) relatedOp);
-  if (_knownValuesTransformed.find(relatedKey) == _knownValuesTransformed.end())
+  if (_knownValuesTransformedFC.find(relatedKey) == _knownValuesTransformedFC.end())
   {
     constFCPtr transformedValues;
     bool vectorizedBasis = functionSpaceIsVectorized(fs);
@@ -1004,9 +966,19 @@ constFCPtr BasisCache::getTransformedValues(BasisPtr basis, Camellia::EOperator 
     }
     else
     {
-      constFCPtr referenceValues = getValues(basis,(Camellia::EOperator) relatedOp, useCubPointsSideRefCell);
-//      cout << "_cellJacobInv:\n" << _cellJacobInv;
-//      cout << "referenceValues:\n"  << *referenceValues;
+      constFCPtr referenceValues;
+      if (basisAsIntrepid2 != NULL)
+      {
+        auto intrepid2Op = Intrepid2BasisWrapper<double>::intrepidOpToIntrepid2Op(relatedOp);
+        const auto &points = useCubPointsSideRefCell ? _cubPointsSideRefCell : _cubPoints;
+        auto basisValues = getValues(basisAsIntrepid2,intrepid2Op,points);
+        auto convertedBasisValues = FieldContainerConversion<double>::fromBasisValues(basisValues);
+        referenceValues = Teuchos::rcp(new FieldContainer<double>(convertedBasisValues));
+      }
+      else
+      {
+        referenceValues = getValues(basis,(Camellia::EOperator) relatedOp, useCubPointsSideRefCell);
+      }
       // TODO: revisit the way we determine numCells??
       int numCells = getPhysicalCubaturePoints().dimension(0);
       if (numCells == 0)   // can happen for certain BasisCaches used in SpaceTimeBasisCache
@@ -1021,9 +993,9 @@ constFCPtr BasisCache::getTransformedValues(BasisPtr basis, Camellia::EOperator 
             referenceValues, numCells, this);
 //      cout << "transformedValues:\n" << *transformedValues;
     }
-    _knownValuesTransformed[relatedKey] = transformedValues;
+    _knownValuesTransformedFC[relatedKey] = transformedValues;
   }
-  constFCPtr relatedValuesTransformed = _knownValuesTransformed[relatedKey];
+  constFCPtr relatedValuesTransformed = _knownValuesTransformedFC[relatedKey];
   constFCPtr result;
   if (   (op != Camellia::OP_CROSS_NORMAL)   && (op != Camellia::OP_DOT_NORMAL)
          && (op != Camellia::OP_TIMES_NORMAL)   && (op != Camellia::OP_VECTORIZE_VALUE)
@@ -1075,7 +1047,7 @@ constFCPtr BasisCache::getTransformedValues(BasisPtr basis, Camellia::EOperator 
     }
   }
   if (CACHE_TRANSFORMED_VALUES)
-    _knownValuesTransformed[key] = result;
+    _knownValuesTransformedFC[key] = result;
   return result;
 }
 
@@ -1158,9 +1130,14 @@ const Camellia::FieldContainer<double> & BasisCache::getSideUnitNormals(int side
   return _basisCacheSides[sideOrdinal]->getSideNormals();
 }
 
-const Camellia::FieldContainer<double>& BasisCache::getRefCellPoints()
+const Intrepid2::TensorPoints<double,typename BasisCache::ExecSpaceType> BasisCache::getRefCellPoints() const
 {
   return _cubPoints;
+}
+
+const Camellia::FieldContainer<double>& BasisCache::getRefCellPointsFC()
+{
+  return _cubPointsFC;
 }
 
 Camellia::FieldContainer<double> BasisCache::getRefCellPointsForPhysicalPoints(const Camellia::FieldContainer<double> &physicalPoints, int cellIndex)
@@ -1186,19 +1163,20 @@ const Camellia::FieldContainer<double> &BasisCache::getSideRefCellPointsInVolume
     TEUCHOS_TEST_FOR_EXCEPTION(true, std::invalid_argument,
                                "getSideRefCellPointsInVolumeCoordinates() only supported for side caches.");
   }
-  return _cubPointsSideRefCell;
+  return _cubPointsSideRefCellFC;
 }
 
-void BasisCache::setRefCellPoints(const Camellia::FieldContainer<double> &pointsRefCell)
+void BasisCache::setRefCellPointsFC(const Camellia::FieldContainer<double> &pointsRefCell)
 {
   Camellia::FieldContainer<double> cubWeights;
-  this->setRefCellPoints(pointsRefCell, cubWeights);
+  this->setRefCellPointsFC(pointsRefCell, cubWeights);
 }
 
-void BasisCache::setRefCellPoints(const Camellia::FieldContainer<double> &pointsRefCell, const Camellia::FieldContainer<double> &cubWeights,
-                                  int cubatureDegree, bool recomputePhysicalMeasures)
+void BasisCache::setRefCellPointsFC(const Camellia::FieldContainer<double> &pointsRefCell, const Camellia::FieldContainer<double> &cubWeights,
+                                    int cubatureDegree, bool recomputePhysicalMeasures)
 {
-  _cubPoints = pointsRefCell;
+  // TODO: set _cubPoints, _cubWeights (Intrepid2 containers) appropriately
+  _cubPointsFC = pointsRefCell;
   _cubDegree = cubatureDegree;
   int numPoints = pointsRefCell.dimension(0);
 
@@ -1206,19 +1184,19 @@ void BasisCache::setRefCellPoints(const Camellia::FieldContainer<double> &points
   {
     int cellDim = _cellTopo->getDimension(); // will be _spaceDim + 1 for space-time CellTopologies.
     // for side cache, cellDim is the spatial dimension of the volume cache's cellTopology
-    _cubPointsSideRefCell.resize(numPoints, cellDim);
+    _cubPointsSideRefCellFC.resize(numPoints, cellDim);
     // _cellTopo is the volume cell topology for side basis caches.
     int sideDim = cellDim - 1;
-    CamelliaCellTools::mapToReferenceSubcell(_cubPointsSideRefCell, _cubPoints, sideDim, _sideIndex, _cellTopo);
+    CamelliaCellTools::mapToReferenceSubcell(_cubPointsSideRefCellFC, _cubPointsFC, sideDim, _sideIndex, _cellTopo);
   }
 
-  _knownValues.clear();
-  _knownValuesTransformed.clear();
+  _knownValuesFC.clear();
+  _knownValuesTransformedFC.clear();
   _knownValuesTransformedWeighted.clear();
   _knownValuesTransformedDottedWithNormal.clear();
   _knownValuesTransformedWeighted.clear();
 
-  _cubWeights = cubWeights;
+  _cubWeightsFC = cubWeights;
 
   _cellJacobianIsValid = false;
   _cellJacobianInverseIsValid = false;
@@ -1294,7 +1272,7 @@ void BasisCache::determinePhysicalPoints()
     _physCubPoints = _physicalCellNodes;
     return;
   }
-  int numPoints = isSideCache() ? _cubPointsSideRefCell.dimension(0) : _cubPoints.dimension(0);
+  int numPoints = isSideCache() ? _cubPointsSideRefCellFC.dimension(0) : _cubPointsFC.dimension(0);
   if ( TFunction<double>::isNull(_transformationFxn) || _composeTransformationFxnWithMeshTransformation)
   {
     // _spaceDim for side cache refers to the volume cache's spatial dimension
@@ -1304,11 +1282,11 @@ void BasisCache::determinePhysicalPoints()
     {
       if ( ! isSideCache() )
       {
-        CamelliaCellTools::mapToPhysicalFrame(_physCubPoints,_cubPoints,_physicalCellNodes,_cellTopo);
+        CamelliaCellTools::mapToPhysicalFrame(_physCubPoints,_cubPointsFC,_physicalCellNodes,_cellTopo);
       }
       else
       {
-        CamelliaCellTools::mapToPhysicalFrame(_physCubPoints,_cubPointsSideRefCell,_physicalCellNodes,_cellTopo);
+        CamelliaCellTools::mapToPhysicalFrame(_physCubPoints,_cubPointsSideRefCellFC,_physicalCellNodes,_cellTopo);
       }
     }
   }
@@ -1320,7 +1298,7 @@ void BasisCache::determinePhysicalPoints()
     // (what we need to do here is either copy the _cubPoints to _numCells locations in _physCubPoints,
     //  or make the relevant Function simply work on the reference points, returning a Camellia::FieldContainer
     //  with a numCells dimension.  The latter makes more sense to me--and is more efficient.  The Function should
-    //  simply call BasisCache->getRefCellPoints()...  On this idea, we don't even have to do anything special in
+    //  simply call BasisCache->getRefCellPointsFC()...  On this idea, we don't even have to do anything special in
     //  BasisCache: the if clause above only serves to save us a little computational effort.)
   }
   if ( ! TFunction<double>::isNull(_transformationFxn) )
@@ -1336,9 +1314,9 @@ void BasisCache::determinePhysicalPoints()
     {
       // size cell Jacobian containers—the dimensions are used even for HGRAD basis OP_VALUE, which
       // may legitimately be invoked by transformationFxn, below...
-      _cellJacobian.resize(_numCells, numPoints, cellDim, cellDim);
-      _cellJacobInv.resize(_numCells, numPoints, cellDim, cellDim);
-      _cellJacobDet.resize(_numCells, numPoints);
+      _cellJacobianFC.resize(_numCells, numPoints, cellDim, cellDim);
+      _cellJacobInvFC.resize(_numCells, numPoints, cellDim, cellDim);
+      _cellJacobDetFC.resize(_numCells, numPoints);
       // (the sizes here agree with what's done in determineJacobian, so the resizing there should be
       //  basically free if we've done it here.)
     }
@@ -1362,10 +1340,10 @@ void BasisCache::determineJacobian()
   }
 
   // Compute cell Jacobians, their inverses and their determinants
-  int numCubPoints = isSideCache() ? _cubPointsSideRefCell.dimension(0) : _cubPoints.dimension(0);
+  int numCubPoints = isSideCache() ? _cubPointsSideRefCellFC.dimension(0) : _cubPointsFC.dimension(0);
 
   // Containers for Jacobian
-  _cellJacobian.resize(_numCells, numCubPoints, cellDim, cellDim);
+  _cellJacobianFC.resize(_numCells, numCubPoints, cellDim, cellDim);
 
   if (numCubPoints == 0)
   {
@@ -1376,9 +1354,9 @@ void BasisCache::determineJacobian()
   if ( TFunction<double>::isNull(_transformationFxn) || _composeTransformationFxnWithMeshTransformation)
   {
     if (!isSideCache())
-      CamelliaCellTools::setJacobian(_cellJacobian, _cubPoints, _physicalCellNodes, _cellTopo);
+      CamelliaCellTools::setJacobian(_cellJacobianFC, _cubPointsFC, _physicalCellNodes, _cellTopo);
     else
-      CamelliaCellTools::setJacobian(_cellJacobian, _cubPointsSideRefCell, _physicalCellNodes, _cellTopo);
+      CamelliaCellTools::setJacobian(_cellJacobianFC, _cubPointsSideRefCellFC, _physicalCellNodes, _cellTopo);
   }
   _cellJacobianIsValid = true;
 
@@ -1400,13 +1378,13 @@ void BasisCache::determineJacobian()
 //      cout << "fxnJacobian:\n" << fxnJacobian;
 //      cout << "_cellJacobian before multiplication:\n" << _cellJacobian;
       // TODO: check that the order of multiplication is correct!
-      Camellia::FieldContainer<double> cellJacobianToMultiply(_cellJacobian); // tensorMultiplyDataData doesn't support multiplying in place
-      fst::tensorMultiplyDataData<double>( _cellJacobian, fxnJacobian, cellJacobianToMultiply );
+      Camellia::FieldContainer<double> cellJacobianToMultiply(_cellJacobianFC); // tensorMultiplyDataData doesn't support multiplying in place
+      fst::tensorMultiplyDataData<double>( _cellJacobianFC, fxnJacobian, cellJacobianToMultiply );
 //      cout << "_cellJacobian after multiplication:\n" << _cellJacobian;
     }
     else
     {
-      _transformationFxn->grad()->values( _cellJacobian, thisPtr );
+      _transformationFxn->grad()->values( _cellJacobianFC, thisPtr );
     }
   }
 }
@@ -1424,30 +1402,30 @@ void BasisCache::determineJacobianInverseAndDeterminant()
   }
   
   // Compute cell Jacobians, their inverses and their determinants
-  int numCubPoints = isSideCache() ? _cubPointsSideRefCell.dimension(0) : _cubPoints.dimension(0);
+  int numCubPoints = isSideCache() ? _cubPointsSideRefCellFC.dimension(0) : _cubPointsFC.dimension(0);
   
-  _cellJacobInv.resize(_numCells, numCubPoints, cellDim, cellDim);
-  _cellJacobDet.resize(_numCells, numCubPoints);
-  SerialDenseWrapper::determinantAndInverse(_cellJacobDet, _cellJacobInv, getJacobian());
+  _cellJacobInvFC.resize(_numCells, numCubPoints, cellDim, cellDim);
+  _cellJacobDetFC.resize(_numCells, numCubPoints);
+  SerialDenseWrapper::determinantAndInverse(_cellJacobDetFC, _cellJacobInvFC, getJacobian());
   _cellJacobianInverseIsValid = true;
   _cellJacobianDeterminantIsValid = true;
 }
 
 void BasisCache::setJacobian(const Camellia::FieldContainer<double> &jacobian)
 {
-  _cellJacobian = jacobian;
+  _cellJacobianFC = jacobian;
   _cellJacobianIsValid = true;
 }
 
 void BasisCache::setJacobianDet(const Camellia::FieldContainer<double> &jacobianDet)
 {
-  _cellJacobDet = jacobianDet;
+  _cellJacobDetFC = jacobianDet;
   _cellJacobianDeterminantIsValid = true;
 }
 
 void BasisCache::setJacobianInv(const Camellia::FieldContainer<double> &jacobianInv)
 {
-  _cellJacobInv = jacobianInv;
+  _cellJacobInvFC = jacobianInv;
   _cellJacobianInverseIsValid = true;
 }
 
@@ -1551,12 +1529,12 @@ BasisCachePtr BasisCache::parametricQuadCache(int cubatureDegree, const Camellia
 
   if (!creatingSideCache)
   {
-    parametricCache->setRefCellPoints(refCellPoints);
+    parametricCache->setRefCellPointsFC(refCellPoints);
     return parametricCache;
   }
   else
   {
-    parametricCache->getSideBasisCache(sideCacheIndex)->setRefCellPoints(refCellPoints);
+    parametricCache->getSideBasisCache(sideCacheIndex)->setRefCellPointsFC(refCellPoints);
     return parametricCache->getSideBasisCache(sideCacheIndex);
   }
 }
@@ -1867,7 +1845,7 @@ void BasisCache::determineSideNormals()
 {
   if ( isSideCache() )
   {
-    int numPoints = _cubPointsSideRefCell.dimension(0);
+    int numPoints = _cubPointsSideRefCellFC.dimension(0);
     if (_cellTopo->getDimension() > 1)
     {
       Camellia::FieldContainer<double> normalLengths(_numCells, numPoints);
@@ -1931,20 +1909,20 @@ void BasisCache::recomputeMeasures()
   if (_cellTopo->getDimension() == 0)
   {
     // then we define the measure of the domain as 1...
-    int numCubPoints = isSideCache() ? _cubPointsSideRefCell.dimension(0) : _cubPoints.dimension(0);
+    int numCubPoints = isSideCache() ? _cubPointsSideRefCellFC.dimension(0) : _cubPointsFC.dimension(0);
     _weightedMeasure.resize(_numCells, numCubPoints);
     _weightedMeasure.initialize(1.0);
     return;
   }
-  if (_cubWeights.size() > 0)
+  if (_cubWeightsFC.size() > 0)
   {
-    // a bit ugly: "_cubPoints" may not be cubature points at all, but just points of interest...  If they're not cubature points, then _cubWeights will be cleared out.  See setRefCellPoints, above.
-    int numCubPoints = isSideCache() ? _cubPointsSideRefCell.dimension(0) : _cubPoints.dimension(0);
+    // a bit ugly: "_cubPoints" may not be cubature points at all, but just points of interest...  If they're not cubature points, then _cubWeights will be cleared out.  See setRefCellPointsFC, above.
+    int numCubPoints = isSideCache() ? _cubPointsSideRefCellFC.dimension(0) : _cubPointsFC.dimension(0);
     // TODO: rename _cubPoints and related methods...
     _weightedMeasure.resize(_numCells, numCubPoints);
     if (! isSideCache())
     {
-      fst::computeCellMeasure<double>(_weightedMeasure, getJacobianDet(), _cubWeights);
+      fst::computeCellMeasure<double>(_weightedMeasure, getJacobianDet(), _cubWeightsFC);
     }
     else
     {
@@ -1955,7 +1933,7 @@ void BasisCache::recomputeMeasures()
       }
       else
       {
-        CamelliaCellTools::computeSideMeasure(_weightedMeasure, getJacobian(), _cubWeights, _sideIndex, _cellTopo);
+        CamelliaCellTools::computeSideMeasure(_weightedMeasure, getJacobian(), _cubWeightsFC, _sideIndex, _cellTopo);
       }
     }
   }

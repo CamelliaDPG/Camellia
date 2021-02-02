@@ -334,14 +334,14 @@ void testIntegrateSpaceVaryingFunctionSides(int spaceDim, Teuchos::FancyOStream 
           if (myRank == ownerRankTime0)
           {
             BasisCachePtr sideBasisCacheTime0 = basisCacheTime0->getSideBasisCache(sideOrdinal);
-            sideBasisCacheTime0->setRefCellPoints(refPointTime0);
+            sideBasisCacheTime0->setRefCellPointsFC(refPointTime0);
             solnFxn->values(valuesTime0, sideBasisCacheTime0);
             valueTime0 = valuesTime0[0];
           }
           if (myRank == ownerRankTime1)
           {
             BasisCachePtr sideBasisCacheTime1 = basisCacheTime1->getSideBasisCache(sideOrdinal);
-            sideBasisCacheTime1->setRefCellPoints(refPointTime1);
+            sideBasisCacheTime1->setRefCellPointsFC(refPointTime1);
             solnFxn->values(valuesTime1, sideBasisCacheTime1);
             valueTime1 = valuesTime1[0];
           }
@@ -498,8 +498,8 @@ TEUCHOS_UNIT_TEST( SpaceTime, IntegrateSpaceVaryingFunctionSides_3D )
       
       int numPoints = 1;
       Camellia::FieldContainer<double> refPoint(numPoints,spaceDim);
-      sideCache_t0->setRefCellPoints(refPoint);
-      sideCache_t1->setRefCellPoints(refPoint);
+      sideCache_t0->setRefCellPointsFC(refPoint);
+      sideCache_t1->setRefCellPointsFC(refPoint);
       
       int numCells = 1;
       Camellia::FieldContainer<double> values_t0(numCells,numPoints);
@@ -524,8 +524,8 @@ TEUCHOS_UNIT_TEST( SpaceTime, IntegrateSpaceVaryingFunctionSides_3D )
       BasisCachePtr sideCache_x0 = basisCache->getSideBasisCache(sideOrdinal_x0);
       BasisCachePtr sideCache_x1 = basisCache->getSideBasisCache(sideOrdinal_x1);
       
-      sideCache_x0->setRefCellPoints(refPoint);
-      sideCache_x1->setRefCellPoints(refPoint);
+      sideCache_x0->setRefCellPointsFC(refPoint);
+      sideCache_x1->setRefCellPointsFC(refPoint);
       
       Camellia::FieldContainer<double> values_x0(numCells,numPoints);
       n_spaceTime->t()->values(values_x0, sideCache_x0);

@@ -19,6 +19,7 @@
 #include "Epetra_SerialDistributor.h"
 
 #include "BasisFactory.h"
+#include "Camellia_FieldContainerConversion.hpp"
 #include "CamelliaCellTools.h"
 #include "CamelliaTestingHelpers.h"
 #include "CubatureFactory.h"
@@ -851,9 +852,12 @@ namespace
             {
               CellTopoPtr subcellTopo = domainTopo->getSubcell(subcdim, subcord);
               auto cubature = cubFactory.create(subcellTopo, cubDegree);
-              subcellPoints.resize(cubature->getNumPoints(),cubature->getDimension());
-              Camellia::FieldContainer<double> weights(cubature->getNumPoints()); // we ignore these
-              cubature->getCubature(subcellPoints, weights);
+              
+              auto tensorCubatureWeights = cubature->allocateCubatureWeights();
+              auto tensorCubaturePoints = cubature->allocateCubaturePoints();
+              
+              cubature->getCubature(tensorCubaturePoints, tensorCubatureWeights);
+              subcellPoints = FieldContainerConversion<double>::fromTensorPoints(tensorCubaturePoints);
             }
             int numPoints = subcellPoints.dimension(0);
             
@@ -861,7 +865,7 @@ namespace
             Camellia::FieldContainer<double> fineDomainPoints(numPoints,domainDim);
             CamelliaCellTools::mapToReferenceSubcell(fineDomainPoints, subcellPoints, subcdim, subcord, domainTopo);
             
-            domainBasisCache->setRefCellPoints(fineDomainPoints);
+            domainBasisCache->setRefCellPointsFC(fineDomainPoints);
             Camellia::FieldContainer<double> fineValuesAllPoints = *domainBasisCache->getTransformedValues(fineBasis, OP_VALUE);
             // strip cell dimension:
             fineValuesAllPoints.resize(fineBasis->getCardinality(), numPoints);
@@ -942,7 +946,7 @@ namespace
                                                                     domainDim,
                                                                     constrainingDomainOrdinal,
                                                                     ancestralToConstrainingSubcellPermutation);
-            constrainingDomainBasisCache->setRefCellPoints(constrainingDomainPoints);
+            constrainingDomainBasisCache->setRefCellPointsFC(constrainingDomainPoints);
             
             // As a sanity check, compare the physical points for coarse and fine:
             Camellia::FieldContainer<double> finePhysicalPoints = domainBasisCache->getPhysicalCubaturePoints();
@@ -2021,7 +2025,7 @@ namespace
       for (int sideOrdinal=0; sideOrdinal<sideCount; sideOrdinal++)
       {
         BasisCachePtr sideCache = basisCache->getSideBasisCache(sideOrdinal);
-        sideCache->setRefCellPoints(refLinePoints);
+        sideCache->setRefCellPointsFC(refLinePoints);
         u_soln->values(phiValues, sideCache);
         
         // are there some physical points that lie on the boundary?

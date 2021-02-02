@@ -161,7 +161,7 @@ void DofOrdering::getDofCoords(Camellia::FieldContainer<double> &dofCoords, int 
     BasisCachePtr sideCache = basisCache->getSideBasisCache(sideOrdinal);
     Camellia::FieldContainer<double> sideDofCoords(basisCardinality, basis->domainTopology()->getDimension());
     basis->getDofCoords(sideDofCoords);
-    sideCache->setRefCellPoints(sideDofCoords);
+    sideCache->setRefCellPointsFC(sideDofCoords);
     const Camellia::FieldContainer<double>* volumeCoords = &sideCache->getPhysicalCubaturePoints();
     for (int basisOrdinal=0; basisOrdinal<basisCardinality; basisOrdinal++)
     {
@@ -190,7 +190,7 @@ void DofOrdering::getDofCoords(const Camellia::FieldContainer<double> &physicalC
   {
     Camellia::FieldContainer<double> refSpaceDofCoords(basisCardinality, spaceDim);
     basis->getDofCoords(refSpaceDofCoords);
-    basisCache->setRefCellPoints(refSpaceDofCoords);
+    basisCache->setRefCellPointsFC(refSpaceDofCoords);
     dofCoords = basisCache->getPhysicalCubaturePoints();
   }
   else
@@ -198,7 +198,7 @@ void DofOrdering::getDofCoords(const Camellia::FieldContainer<double> &physicalC
     BasisCachePtr sideCache = basisCache->getSideBasisCache(sideOrdinal);
     Camellia::FieldContainer<double> sideDofCoords(basisCardinality, basis->domainTopology()->getDimension());
     basis->getDofCoords(sideDofCoords);
-    sideCache->setRefCellPoints(sideDofCoords);
+    sideCache->setRefCellPointsFC(sideDofCoords);
     dofCoords = sideCache->getPhysicalCubaturePoints();
   }
 }
@@ -459,7 +459,7 @@ void DofOrdering::printDofCoords(int varID, std::ostream& os) const
     else
     {
       BasisCachePtr sideCache = basisCache->getSideBasisCache(sideOrdinal);
-      sideCache->setRefCellPoints(basisDofCoords);
+      sideCache->setRefCellPointsFC(basisDofCoords);
       Camellia::FieldContainer<double> basisDofCoordsVolume = sideCache->getPhysicalCubaturePoints();
       basisDofCoordsVolume.resize(basisDofCoordsVolume.dimension(1),basisDofCoordsVolume.dimension(2));
       

@@ -162,7 +162,7 @@ SpaceTimeBasisCache::SpaceTimeBasisCache(int sideOrdinal, Teuchos::RCP<SpaceTime
     Camellia::FieldContainer<double> temporalWeight(1);
     temporalWeight(0) = 1.0;
     bool recomputePhysicalMeasures = false; // because we'll do so in a moment when we set the physical nodes
-    _temporalCache->setRefCellPoints(temporalNode, temporalWeight, temporalCacheVolume->cubatureDegree(), recomputePhysicalMeasures);
+    _temporalCache->setRefCellPointsFC(temporalNode, temporalWeight, temporalCacheVolume->cubatureDegree(), recomputePhysicalMeasures);
 
     bool createSideCache = true;
     vector<GlobalIndexType> cellIDs; //empty
@@ -390,7 +390,7 @@ void SpaceTimeBasisCache::getReferencePointComponents(const Camellia::FieldConta
   }
 }
 
-void SpaceTimeBasisCache::setRefCellPoints(const Camellia::FieldContainer<double> &pointsRefCell)
+void SpaceTimeBasisCache::setRefCellPointsFC(const Camellia::FieldContainer<double> &pointsRefCell)
 {
   Camellia::FieldContainer<double> spaceRefCellPoints, timeRefCellPoints;
 
@@ -398,14 +398,14 @@ void SpaceTimeBasisCache::setRefCellPoints(const Camellia::FieldContainer<double
 
   if (spaceRefCellPoints.size() > 0)   // if size is zero, it's a node, and we let _spatialCache do what it likes for setting up ref cell points.
   {
-    _spatialCache->setRefCellPoints(spaceRefCellPoints);
+    _spatialCache->setRefCellPointsFC(spaceRefCellPoints);
   }
-  _temporalCache->setRefCellPoints(timeRefCellPoints);
+  _temporalCache->setRefCellPointsFC(timeRefCellPoints);
 
-  this->BasisCache::setRefCellPoints(pointsRefCell);
+  this->BasisCache::setRefCellPointsFC(pointsRefCell);
 }
 
-void SpaceTimeBasisCache::setRefCellPoints(const Camellia::FieldContainer<double> &pointsRefCell,
+void SpaceTimeBasisCache::setRefCellPointsFC(const Camellia::FieldContainer<double> &pointsRefCell,
                                            const Camellia::FieldContainer<double> &cubatureWeights,
                                            int cubatureDegree, bool recomputePhysicalMeasures)
 {
@@ -416,8 +416,8 @@ void SpaceTimeBasisCache::setRefCellPoints(const Camellia::FieldContainer<double
   if (spaceRefCellPoints.size() == 0)
   {
     // then the cubature weights belong just to the temporal points:
-    _temporalCache->setRefCellPoints(timeRefCellPoints, cubatureWeights, cubatureDegree, recomputePhysicalMeasures);
-    this->BasisCache::setRefCellPoints(pointsRefCell, cubatureWeights, cubatureDegree, recomputePhysicalMeasures);
+    _temporalCache->setRefCellPointsFC(timeRefCellPoints, cubatureWeights, cubatureDegree, recomputePhysicalMeasures);
+    this->BasisCache::setRefCellPointsFC(pointsRefCell, cubatureWeights, cubatureDegree, recomputePhysicalMeasures);
   }
   else
   {
@@ -462,11 +462,11 @@ void SpaceTimeBasisCache::setRefCellPoints(const Camellia::FieldContainer<double
       }
     }
 
-    _spatialCache->setRefCellPoints(spaceRefCellPoints, cubatureWeightsSpace, cubatureDegree, recomputePhysicalMeasures);
-    _temporalCache->setRefCellPoints(timeRefCellPoints, cubatureWeightsTime, cubatureDegree, recomputePhysicalMeasures);
+    _spatialCache->setRefCellPointsFC(spaceRefCellPoints, cubatureWeightsSpace, cubatureDegree, recomputePhysicalMeasures);
+    _temporalCache->setRefCellPointsFC(timeRefCellPoints, cubatureWeightsTime, cubatureDegree, recomputePhysicalMeasures);
   }
 
-  this->BasisCache::setRefCellPoints(pointsRefCell, cubatureWeights, cubatureDegree, recomputePhysicalMeasures);
+  this->BasisCache::setRefCellPointsFC(pointsRefCell, cubatureWeights, cubatureDegree, recomputePhysicalMeasures);
 }
 
 constFCPtr SpaceTimeBasisCache::getValues(BasisPtr basis, Camellia::EOperator op, bool useCubPointsSideRefCell)
@@ -517,9 +517,9 @@ constFCPtr SpaceTimeBasisCache::getTransformedValues(BasisPtr basis, Camellia::E
 
   if (_storeTransformedValues)
   {
-    if (_knownValuesTransformed.find(key) != _knownValuesTransformed.end())
+    if (_knownValuesTransformedFC.find(key) != _knownValuesTransformedFC.end())
     {
-      return _knownValuesTransformed[key];
+      return _knownValuesTransformedFC[key];
     }
   }
   
@@ -579,7 +579,7 @@ constFCPtr SpaceTimeBasisCache::getTransformedValues(BasisPtr basis, Camellia::E
                                            spaceOpForSizing, timeOpForSizing);
   if (_storeTransformedValues)
   {
-    _knownValuesTransformed[key] = values;
+    _knownValuesTransformedFC[key] = values;
   }
   
   return values;

@@ -2240,7 +2240,7 @@ void RefinementPattern::mapRefCellPointsToAncestor(RefinementBranch &refBranch, 
   CellTopoPtr leafCellTopo = refBranch[refBranch.size() - 1].first->childTopology(refBranch[refBranch.size() - 1].second);
   BasisCachePtr fineCellCache = Teuchos::rcp( new BasisCache(leafCellTopo, minCubDegree, false) ); // could be more efficient by doing what BasisCache does in terms of the physical cell mapping, instead of using BasisCache (which sets up a bunch of data structures that we just throw away here)
 
-  fineCellCache->setRefCellPoints(leafRefCellPoints);
+  fineCellCache->setRefCellPointsFC(leafRefCellPoints);
 
   fineCellRefNodes.resize(1,fineCellRefNodes.dimension(0),fineCellRefNodes.dimension(1));
   fineCellCache->setPhysicalCellNodes(fineCellRefNodes, vector<GlobalIndexType>(), false);

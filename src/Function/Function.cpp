@@ -11,6 +11,7 @@
 
 #include "AssignValue.h"
 #include "BasisCache.h"
+#include "Camellia_FieldContainerConversion.hpp"
 #include "CamelliaCellTools.h"
 #include "CamelliaDebugUtility.h"
 #include "CellCharacteristicFunction.h"
@@ -534,7 +535,7 @@ Scalar TFunction<Scalar>::evaluate(MeshPtr mesh, double x, double y, double z)
       physicalPoint.resize(1,1,spaceDim);
       CamelliaCellTools::mapToReferenceFrame(refPoint, physicalPoint, mesh->getTopology(), cellID, basisCache->cubatureDegree());
       refPoint.resize(1,spaceDim);
-      basisCache->setRefCellPoints(refPoint);
+      basisCache->setRefCellPointsFC(refPoint);
       
       Camellia::FieldContainer<Scalar> valueFC(1,1); // (C,P)
       this->values(valueFC,basisCache);
@@ -1134,7 +1135,7 @@ bool TFunction<Scalar>::isPositive(Teuchos::RCP<Mesh> mesh, int cubEnrich, bool 
 //    // if we want to check positivity on uniformly spaced points
 //    if (basisCache->cellTopology()->getSideCount()==4)  // tensor product structure only works with quads
 //    {
-//      Camellia::FieldContainer<double> origPts = basisCache->getRefCellPoints();
+//      Camellia::FieldContainer<double> origPts = basisCache->getRefCellPointsFC();
 //      int numPts1D = ceil(sqrt(origPts.dimension(0)));
 //      int numPts = numPts1D*numPts1D;
 //      Camellia::FieldContainer<double> uniformSpacedPts(numPts,origPts.dimension(1));
@@ -1149,7 +1150,7 @@ bool TFunction<Scalar>::isPositive(Teuchos::RCP<Mesh> mesh, int cubEnrich, bool 
 //          iter++;
 //        }
 //      }
-//      basisCache->setRefCellPoints(uniformSpacedPts);
+//      basisCache->setRefCellPointsFC(uniformSpacedPts);
 //    }
 
     bool isPositiveOnCell = this->isPositive(basisCache);
@@ -1780,21 +1781,30 @@ std::map<GlobalIndexType, double> TFunction<Scalar>::squaredL2NormOfJumps(MeshPt
         int cubDegree = cubKey.second;
         if (sideDim > 0)
         {
-          Teuchos::RCP<Intrepid::Cubature<double> > sideCub;
+          using ExecSpaceType = Camellia::DeviceMemorySpace::execution_space;
+          using Cubature = Intrepid2::Cubature<ExecSpaceType,double,double>;
+          Teuchos::RCP< Cubature > sideCub;
           if (cubDegree >= 0)
             sideCub = cubFactory.create(mySideTopo, cubDegree);
           
-          int numCubPointsSide;
+          Camellia::FieldContainer<double> cubPoints, cubWeights;
           
           if (sideCub != Teuchos::null)
-            numCubPointsSide = sideCub->getNumPoints();
+          {
+            auto tensorCubatureWeights = sideCub->allocateCubatureWeights();
+            auto tensorCubaturePoints = sideCub->allocateCubaturePoints();
+            
+            sideCub->getCubature(tensorCubaturePoints, tensorCubatureWeights);
+            
+            cubPoints  = FieldContainerConversion<double>::fromTensorPoints(tensorCubaturePoints);
+            cubWeights = FieldContainerConversion<double>::fromTensorData(tensorCubatureWeights);
+          }
           else
-            numCubPointsSide = 0;
-          
-          Camellia::FieldContainer<double> cubPoints(numCubPointsSide, sideDim); // cubature points from the pov of the side (i.e. a (d-1)-dimensional set)
-          Camellia::FieldContainer<double> cubWeights(numCubPointsSide);
-          if (numCubPointsSide > 0)
-            sideCub->getCubature(cubPoints, cubWeights);
+          {
+            int numCubPointsSide = 0;
+            cubPoints = Camellia::FieldContainer<double>(numCubPointsSide, sideDim); // cubature points from the pov of the side (i.e. a (d-1)-dimensional set)
+            cubWeights = Camellia::FieldContainer<double>(numCubPointsSide);
+          }
           cubPointsForSideTopo[cubKey] = cubPoints;
           cubWeightsForSideTopo[cubKey] = cubWeights;
         }
@@ -1812,12 +1822,12 @@ std::map<GlobalIndexType, double> TFunction<Scalar>::squaredL2NormOfJumps(MeshPt
       }
       if (cellBasisCacheSide->cubatureDegree() != cubaturePolyOrder)
       {
-        cellBasisCacheSide->setRefCellPoints(cubPointsForSideTopo[cubKey], cubWeightsForSideTopo[cubKey], cubaturePolyOrder, false);
+        cellBasisCacheSide->setRefCellPointsFC(cubPointsForSideTopo[cubKey], cubWeightsForSideTopo[cubKey], cubaturePolyOrder, false);
       }
       cellBasisCacheSide->setPhysicalCellNodes(cellBasisCacheVolume->getPhysicalCellNodes(), {cellID}, false);
       
       int numCells = 1;
-      int numPoints = cellBasisCacheSide->getRefCellPoints().dimension(0);
+      int numPoints = cellBasisCacheSide->getRefCellPointsFC().dimension(0);
       Camellia::FieldContainer<Scalar> myValues;
       int spaceDim = sideDim + 1;
       if      (this->rank() == 0) myValues.resize(numCells, numPoints);
@@ -1842,7 +1852,7 @@ std::map<GlobalIndexType, double> TFunction<Scalar>::squaredL2NormOfJumps(MeshPt
         int nodeCount = sideTopo->getNodeCount();
         
         unsigned permutationFromMeToNeighbor;
-        Camellia::FieldContainer<double> myRefPoints = cellBasisCacheSide->getRefCellPoints();
+        Camellia::FieldContainer<double> myRefPoints = cellBasisCacheSide->getRefCellPointsFC();
         
         if (!neighborIsPeer) // then we have some refinements relative to neighbor
         {
@@ -1858,7 +1868,7 @@ std::map<GlobalIndexType, double> TFunction<Scalar>::squaredL2NormOfJumps(MeshPt
           cellNodes.resize(1,cellNodes.dimension(0),cellNodes.dimension(1));
           BasisCachePtr ancestralBasisCache = Teuchos::rcp(new BasisCache(cellNodes,sideTopo,cubaturePolyOrder,false)); // false: don't create side cache too
           
-          ancestralBasisCache->setRefCellPoints(myRefPoints, emptyCubWeights, cubaturePolyOrder, true);
+          ancestralBasisCache->setRefCellPointsFC(myRefPoints, emptyCubWeights, cubaturePolyOrder, true);
           
           // now, the "physical" points in ancestral cache are the ones we want
           myRefPoints = ancestralBasisCache->getPhysicalCubaturePoints();
@@ -1903,7 +1913,7 @@ std::map<GlobalIndexType, double> TFunction<Scalar>::squaredL2NormOfJumps(MeshPt
           basisCacheForReferenceCellTopo[sideTopo->getKey()] = BasisCache::basisCacheForReferenceCell(sideTopo, -1);
         }
         BasisCachePtr referenceBasisCache = basisCacheForReferenceCellTopo[sideTopo->getKey()];
-        referenceBasisCache->setRefCellPoints(myRefPoints,emptyCubWeights,cubaturePolyOrder,false);
+        referenceBasisCache->setRefCellPointsFC(myRefPoints,emptyCubWeights,cubaturePolyOrder,false);
         std::vector<GlobalIndexType> cellIDs = {0}; // unused
         referenceBasisCache->setPhysicalCellNodes(permutedRefNodes, cellIDs, false);
         // now, the "physical" points are the ones we should use as ref points for the neighbor
@@ -1927,7 +1937,7 @@ std::map<GlobalIndexType, double> TFunction<Scalar>::squaredL2NormOfJumps(MeshPt
         }
         BasisCachePtr neighborSideCache = basisCacheForSideOnNeighborVolumeTopo[neighborSideCacheKey];
         neighborSideCache->setMesh(mesh);
-        neighborSideCache->setRefCellPoints(neighborRefCellPoints, emptyCubWeights, cubaturePolyOrder, false);
+        neighborSideCache->setRefCellPointsFC(neighborRefCellPoints, emptyCubWeights, cubaturePolyOrder, false);
         neighborSideCache->setPhysicalCellNodes(neighborCellNodes, {neighborCellID}, false);
         
         // if there aren't periodic BCs, perform the sanity check.  If there are periodic BCs, we expect to fail the check...
@@ -2573,7 +2583,7 @@ void TFunction<Scalar>::writeBoundaryValuesToMATLABFile(Teuchos::RCP<Mesh> mesh,
     for (int sideIndex=0; sideIndex < numSides; sideIndex++)
     {
       BasisCachePtr sideBasisCache = basisCache->getSideBasisCache(sideIndex);
-      sideBasisCache->setRefCellPoints(refPoints);
+      sideBasisCache->setRefCellPointsFC(refPoints);
       int numCubPoints = sideBasisCache->getPhysicalCubaturePoints().dimension(1);
 
 
@@ -2649,7 +2659,7 @@ void TFunction<Scalar>::writeValuesToMATLABFile(Teuchos::RCP<Mesh> mesh, const s
   for (ElementTypePtr elemTypePtr : elementTypes)   //thru quads/triangles/etc
   {
     basisCache = Teuchos::rcp( new BasisCache(elemTypePtr, mesh) );
-    basisCache->setRefCellPoints(refPoints);
+    basisCache->setRefCellPointsFC(refPoints);
 
     Camellia::FieldContainer<double> physicalCellNodes = mesh->physicalCellNodesGlobal(elemTypePtr);
     int numCells = physicalCellNodes.dimension(0);

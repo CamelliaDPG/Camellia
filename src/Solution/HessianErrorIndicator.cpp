@@ -121,7 +121,7 @@ void HessianErrorIndicator<Scalar>::measureError()
         centroid(0,d) /= nodeCount;
       }
       basisCacheForTopology[cellTopo->getKey()] = BasisCache::basisCacheForReferenceCell(cellTopo, 0); // 0 cubature degree
-      basisCacheForTopology[cellTopo->getKey()]->setRefCellPoints(centroid);
+      basisCacheForTopology[cellTopo->getKey()]->setRefCellPointsFC(centroid);
       basisCacheForTopology[cellTopo->getKey()]->setMesh(_solution->mesh());
     }
     BasisCachePtr basisCache = basisCacheForTopology[cellTopo->getKey()];

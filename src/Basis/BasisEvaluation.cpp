@@ -49,6 +49,16 @@ void getD2_ij_FromMultiplicities(int &i, int &j, const Teuchos::Array<int> &mult
   TEUCHOS_TEST_FOR_EXCEPTION(true, std::invalid_argument, "i,j not identified from multiplicities...")
 }
 
+//! Intrepid2-style getValues()
+Intrepid2::BasisValues<double,typename BasisEvaluation::ExecSpaceType>
+BasisEvaluation::getValues(Intrepid2BasisWrapper<double>* intrepid2Basis, Intrepid2::EOperator op,
+                           const Intrepid2::TensorPoints<double,ExecSpaceType> inputPoints)
+{
+  auto outputValues = intrepid2Basis->allocateBasisValues(inputPoints, op);
+  intrepid2Basis->getValues(outputValues, inputPoints, op);
+  return outputValues;
+}
+
 FCPtr BasisEvaluation::getValues(BasisPtr basis, Camellia::EOperator op,
                                  const Camellia::FieldContainer<double> &refPoints)
 {

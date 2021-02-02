@@ -1514,7 +1514,7 @@ void CamelliaCellTools::mapToReferenceFrameInitGuess(      Camellia::FieldContai
 
     // compute Jacobians at the old iterates and their inverses.
     xOld.resize(numPoints,spaceDim); // BasisCache expects (P,D) sizing...
-    basisCache->setRefCellPoints(xOld);
+    basisCache->setRefCellPointsFC(xOld);
     xOld.resize(numCells,numPoints,spaceDim);
 
     // The Newton step.

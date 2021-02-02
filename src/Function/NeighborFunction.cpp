@@ -128,7 +128,7 @@ void NeighborFunction<Scalar>::values(Camellia::FieldContainer<Scalar> &values, 
   // by default, populate values with _fxn on this cell -- for boundary cells, this is exactly what we want
   // we'll overwrite the rest…  (This is another example of inefficient computation that could be addressed when optimizing)
   _fxn->values(values, basisCache);
-  auto &sideRefPoints = basisCache->getRefCellPoints();
+  auto &sideRefPoints = basisCache->getRefCellPointsFC();
   
   // allPhysicalPoints is used cell-wise below for a sanity check
   auto &allPhysicalPoints = basisCache->getPhysicalCubaturePoints();
@@ -178,7 +178,7 @@ void NeighborFunction<Scalar>::values(Camellia::FieldContainer<Scalar> &values, 
   {
     cellOrdinal++;
     auto cell = meshTopo->getCell(cellID);
-    auto mySideRefPoints = basisCache->getRefCellPoints();
+    auto mySideRefPoints = basisCache->getRefCellPointsFC();
     
     pair<GlobalIndexType,unsigned> neighborInfo = cell->getNeighborInfo(sideOrdinal, meshTopo);
     GlobalIndexType neighborCellID = neighborInfo.first;
@@ -212,7 +212,7 @@ void NeighborFunction<Scalar>::values(Camellia::FieldContainer<Scalar> &values, 
         cellNodes.resize(1,cellNodes.dimension(0),cellNodes.dimension(1));
         BasisCachePtr ancestralBasisCache = Teuchos::rcp(new BasisCache(cellNodes,sideTopo,dummyQuadratureOrder,false)); // false: don't create side cache too
         
-        ancestralBasisCache->setRefCellPoints(mySideRefPoints, emptyQuadratureWeights, dummyQuadratureOrder, true);
+        ancestralBasisCache->setRefCellPointsFC(mySideRefPoints, emptyQuadratureWeights, dummyQuadratureOrder, true);
         
         // now, the "physical" points in ancestral cache are the ones we want
         mySideRefPoints = ancestralBasisCache->getPhysicalCubaturePoints();
@@ -258,7 +258,7 @@ void NeighborFunction<Scalar>::values(Camellia::FieldContainer<Scalar> &values, 
         basisCacheForReferenceCellTopo[sideTopo->getKey()] = BasisCache::basisCacheForReferenceCell(sideTopo, -1);
       }
       BasisCachePtr referenceBasisCache = basisCacheForReferenceCellTopo[sideTopo->getKey()];
-      referenceBasisCache->setRefCellPoints(mySideRefPoints,emptyQuadratureWeights,dummyQuadratureOrder,false);
+      referenceBasisCache->setRefCellPointsFC(mySideRefPoints,emptyQuadratureWeights,dummyQuadratureOrder,false);
       std::vector<GlobalIndexType> cellIDs = {0}; // unused
       referenceBasisCache->setPhysicalCellNodes(permutedRefNodes, cellIDs, false);
       // now, the "physical" points are the ones we should use as ref points for the neighbor
@@ -282,7 +282,7 @@ void NeighborFunction<Scalar>::values(Camellia::FieldContainer<Scalar> &values, 
       }
       BasisCachePtr neighborSideCache = basisCacheForSideOnNeighborVolumeTopo[neighborSideCacheKey];
       neighborSideCache->setMesh(_mesh);
-      neighborSideCache->setRefCellPoints(neighborRefCellPoints, emptyQuadratureWeights, dummyQuadratureOrder, false);
+      neighborSideCache->setRefCellPointsFC(neighborRefCellPoints, emptyQuadratureWeights, dummyQuadratureOrder, false);
       neighborSideCache->setPhysicalCellNodes(neighborCellNodes, {neighborCellID}, false);
       
       // if there aren't periodic BCs, perform the sanity check.  If there are periodic BCs, we expect to fail the check...
@@ -404,7 +404,7 @@ void NeighborFunction<Scalar>::values(Camellia::FieldContainer<Scalar> &values, 
           }
           BasisCachePtr childSideCache = basisCacheForSideOnNeighborVolumeTopo[childSideCacheKey];
           childSideCache->setMesh(_mesh);
-          childSideCache->setRefCellPoints(childRefCellPoints, emptyQuadratureWeights, dummyQuadratureOrder, false);
+          childSideCache->setRefCellPointsFC(childRefCellPoints, emptyQuadratureWeights, dummyQuadratureOrder, false);
           childSideCache->setPhysicalCellNodes(childCellNodes, {childCellID}, false);
           
           Teuchos::Array<int> childValueDims; // (C,P,...)

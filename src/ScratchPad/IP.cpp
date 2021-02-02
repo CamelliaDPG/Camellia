@@ -228,18 +228,6 @@ void TIP<Scalar>::computeInnerProductMatrix(Camellia::FieldContainer<Scalar> &in
 
     innerProduct.initialize(0.0);
 
-//    int totalBasisCardinality = dofOrdering->getTotalBasisCardinality();
-    // want to fit all basis values in 256K with a little room to spare -- 32768 doubles would be no room to spare
-    // 256K is the size of Sandy Bridge's L2 cache.  Blue Gene Q has 32 MB shared L2 cache, so maybe there we could go bigger
-    // (fitting within L1 is likely a non-starter for 3D DPG)
-//    int maxValuesAllowed = 30000;
-//    int maxPointsPerPhase = std::max(2, maxValuesAllowed / totalBasisCardinality); // minimally, compute 2 points at once
-
-//    basisCache->setMaxPointsPerCubaturePhase(maxPointsPerPhase);
-//    basisCache->setMaxPointsPerCubaturePhase(-1); // old behavior
-
-//    for (int phase=0; phase < basisCache->getCubaturePhaseCount(); phase++) {
-//      basisCache->setCubaturePhase(phase);
     for (typename vector< TLinearTermPtr<Scalar> >:: iterator ltIt = _linearTerms.begin();
          ltIt != _linearTerms.end(); ltIt++)
     {
@@ -247,9 +235,6 @@ void TIP<Scalar>::computeInnerProductMatrix(Camellia::FieldContainer<Scalar> &in
       // integrate lt against itself
       lt->integrate(innerProduct,dofOrdering,lt,dofOrdering,basisCache,basisCache->isSideCache());
     }
-//    }
-
-//    basisCache->setMaxPointsPerCubaturePhase(-1); // infinite (BasisCache doesn't yet properly support phased *side* caches)
 
     bool enforceNumericalSymmetry = false;
     if (enforceNumericalSymmetry)

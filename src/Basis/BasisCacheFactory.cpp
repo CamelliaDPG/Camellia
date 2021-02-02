@@ -46,7 +46,7 @@ namespace Camellia {
       Teuchos::Array<int> subdomainMultiIndex(values.rank()); // keep track of where we are
       for (auto subdomainCache : _subdomainCaches)
       {
-        int numPoints = subdomainCache->getRefCellPoints().dimension(0);
+        int numPoints = subdomainCache->getRefCellPointsFC().dimension(0);
         dimensions[1] = numPoints;
         Camellia::FieldContainer<Scalar> subdomainValues(dimensions);
         _f->values(subdomainValues, subdomainCache);
@@ -199,7 +199,7 @@ BasisCachePtr BasisCacheFactory<Scalar>::unionBasisCacheForParentCell(Refinement
   int numCells = subdomainCaches[0]->getJacobian().dimension(0);
   for (auto & basisCache : subdomainCaches)
   {
-    numPoints += basisCache->getRefCellPoints().dimension(0);
+    numPoints += basisCache->getRefCellPointsFC().dimension(0);
     int subdomainNumCells = basisCache->getJacobian().dimension(0);
     TEUCHOS_TEST_FOR_EXCEPTION(subdomainNumCells != numCells, std::invalid_argument, "subdomainCaches must agree on the number of cells");
   }
@@ -220,7 +220,7 @@ BasisCachePtr BasisCacheFactory<Scalar>::unionBasisCacheForParentCell(Refinement
   {
     childIDInMeshTopo++;
     
-    auto & childRefCellPoints = basisCache->getRefCellPoints();
+    auto & childRefCellPoints = basisCache->getRefCellPointsFC();
     
     int numChildPoints = childRefCellPoints.dimension(0);
     
@@ -232,7 +232,7 @@ BasisCachePtr BasisCacheFactory<Scalar>::unionBasisCacheForParentCell(Refinement
     
     // compute Jacobian of the reference-space transformation from the reference cell for child to the refinement pattern's geometry for the child
     Camellia::FieldContainer<double> parentToChildJacobian(numCells, numChildPoints, topoDim, topoDim);
-    CamelliaCellTools::setJacobian(parentToChildJacobian, basisCache->getRefCellPoints(), childNodes, refPattern->childTopology(childIDInMeshTopo-1));
+    CamelliaCellTools::setJacobian(parentToChildJacobian, basisCache->getRefCellPointsFC(), childNodes, refPattern->childTopology(childIDInMeshTopo-1));
     
     // Jacobian values that basisCache has for points are for the transformation from reference cell for child to physical space
     // we want to transform these to Jacobian values for the transformation from reference cell for *parent* to physical space
@@ -250,9 +250,9 @@ BasisCachePtr BasisCacheFactory<Scalar>::unionBasisCacheForParentCell(Refinement
     SerialDenseWrapper::determinantAndInverse(parentJacobianDeterminantForChildPoints, parentJacobianInverseForChildPoints, parentJacobianForChildPoints);
     
     Camellia::FieldContainer<double> parentRefCellPointsForChild(numChildPoints, topoDim);
-    RefinementPattern::mapRefCellPointsToAncestor(refBranch, basisCache->getRefCellPoints(), parentRefCellPointsForChild);
+    RefinementPattern::mapRefCellPointsToAncestor(refBranch, basisCache->getRefCellPointsFC(), parentRefCellPointsForChild);
     
-    auto & childCubatureWeights = basisCache->getCubatureWeights();
+    auto & childCubatureWeights = basisCache->getCubatureWeightsFC();
     
     for (int ptOrdinal=0; ptOrdinal<numChildPoints; ptOrdinal++)
     {
@@ -284,7 +284,7 @@ BasisCachePtr BasisCacheFactory<Scalar>::unionBasisCacheForParentCell(Refinement
     pointOffset += numChildPoints;
   }
   
-  unionCache->setRefCellPoints(parentRefCellPoints, parentCubatureWeights);
+  unionCache->setRefCellPointsFC(parentRefCellPoints, parentCubatureWeights);
   unionCache->setPhysicalCubaturePoints(parentPhysicalPoints);
   unionCache->setJacobian(parentJacobian);
   unionCache->setJacobianInv(parentJacobianInverse);

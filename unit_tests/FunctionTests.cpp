@@ -35,7 +35,7 @@ void testSpaceTimeNormalTimeComponent(CellTopoPtr spaceTopo, Teuchos::FancyOStre
   {
     BasisCachePtr spaceTimeSideCache = spaceTimeBasisCache->getSideBasisCache(sideOrdinal);
 
-    Camellia::FieldContainer<double> spaceTimeNormals(1,spaceTimeSideCache->getRefCellPoints().dimension(0));
+    Camellia::FieldContainer<double> spaceTimeNormals(1,spaceTimeSideCache->getRefCellPointsFC().dimension(0));
     spaceTimeNormalComponent->values(spaceTimeNormals,spaceTimeSideCache);
 
     if (spaceTimeTopo->sideIsSpatial(sideOrdinal))
@@ -168,7 +168,7 @@ void testSpaceTimeNormal(CellTopoPtr spaceTopo, Teuchos::FancyOStream &out, bool
   {
     BasisCachePtr spaceTimeSideCache = spaceTimeBasisCache->getSideBasisCache(sideOrdinal);
 
-    Camellia::FieldContainer<double> spaceTimeNormals(1,spaceTimeSideCache->getRefCellPoints().dimension(0),spaceTimeTopo->getDimension());
+    Camellia::FieldContainer<double> spaceTimeNormals(1,spaceTimeSideCache->getRefCellPointsFC().dimension(0),spaceTimeTopo->getDimension());
     spaceTimeNormal->values(spaceTimeNormals,spaceTimeSideCache);
 
     if (spaceTimeTopo->sideIsSpatial(sideOrdinal))
@@ -177,7 +177,7 @@ void testSpaceTimeNormal(CellTopoPtr spaceTopo, Teuchos::FancyOStream &out, bool
       int spatialSideOrdinal = spaceTimeTopo->getSpatialComponentSideOrdinal(sideOrdinal);
       BasisCachePtr spaceSideCache = spaceBasisCache->getSideBasisCache(spatialSideOrdinal);
 
-      Camellia::FieldContainer<double> spaceNormals(1,spaceSideCache->getRefCellPoints().dimension(0),spaceTopo->getDimension());
+      Camellia::FieldContainer<double> spaceNormals(1,spaceSideCache->getRefCellPointsFC().dimension(0),spaceTopo->getDimension());
       spaceNormal->values(spaceNormals, spaceSideCache);
 
       for (int spaceTimePointOrdinal=0; spaceTimePointOrdinal < spaceTimeNormals.dimension(1); spaceTimePointOrdinal++)
@@ -608,7 +608,7 @@ TEUCHOS_UNIT_TEST( Function, NeighborFunction )
       double expectedValue = isBoundary ? myValue : 1.0 - myValue;
       auto sideBasisCache = basisCache->getSideBasisCache(sideOrdinal);
       int numCells = 1;
-      int numPoints = sideBasisCache->getRefCellPoints().dimension(0); // (P,D) container
+      int numPoints = sideBasisCache->getRefCellPointsFC().dimension(0); // (P,D) container
       Camellia::FieldContainer<double> neighborValues(numCells,numPoints);
       u_neighbor->values(neighborValues, sideBasisCache);
       
@@ -687,7 +687,7 @@ TEUCHOS_UNIT_TEST( Function, NeighborFunctionWithNormal )
       else            { expectedValue = -normal_x; }
       
       int numCells = 1;
-      int numPoints = sideBasisCache->getRefCellPoints().dimension(0); // (P,D) container
+      int numPoints = sideBasisCache->getRefCellPointsFC().dimension(0); // (P,D) container
       Camellia::FieldContainer<double> neighborValues(numCells,numPoints);
       u_neighbor->values(neighborValues, sideBasisCache);
       
@@ -791,7 +791,7 @@ TEUCHOS_UNIT_TEST( Function, NeighborFunctionWithHangingNode )
       auto expectedValueCategory = expectedValueMap[cellID][sideOrdinal];
       auto sideBasisCache = basisCache->getSideBasisCache(sideOrdinal);
       int numCells = 1;
-      int numPoints = sideBasisCache->getRefCellPoints().dimension(0); // (P,D) container
+      int numPoints = sideBasisCache->getRefCellPointsFC().dimension(0); // (P,D) container
       Camellia::FieldContainer<double> neighborValues(numCells,numPoints);
       u_neighbor->values(neighborValues, sideBasisCache);
       
