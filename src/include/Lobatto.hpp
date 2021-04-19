@@ -41,7 +41,7 @@ namespace Camellia {
     bool _derivative; // whether this is the derivative of the Lobatto function
   public:
     LobattoFunction(int polyOrder, bool conforming, bool derivative = false)
-    : SimpleFunction<double>("LobattoFunction")
+    : SimpleFunction<double>("LobattoFunction",TFunction<Scalar>::VARIES_IN_DIMENSION_0)
     {
       _polyOrder = polyOrder;
       _values.resize(_polyOrder+1);

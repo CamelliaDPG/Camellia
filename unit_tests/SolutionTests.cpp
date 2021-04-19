@@ -24,6 +24,7 @@
 #include "MeshFactory.h"
 #include "MeshTools.h"
 #include "MeshUtilities.h"
+#include "MonomialFunctions.h"
 #include "PoissonFormulation.h"
 #include "Projector.h"
 #include "RHS.h"
@@ -115,6 +116,48 @@ namespace
       mesh->Comm()->MaxAll(&myChildWithNeighborCellID, &globalChildWithNeighborCellID, 1);
       cellsToRefine = {(GlobalIndexType)globalChildWithNeighborCellID};
     }
+    return mesh;
+  }
+
+  MeshPtr makeSingleElementExtrudedTestMesh( int baseSpaceDim, int numTensorExtrusions, std::vector<int> H1Orders )
+  {
+    TEUCHOS_TEST_FOR_EXCEPTION(H1Orders.size() != numTensorExtrusions+1, std::invalid_argument, "number of H1Orders must be 1 for base dim, plus 1 for each extrusion dimension");
+    
+    MeshPtr mesh;
+
+    std::vector<double> x0        (baseSpaceDim, 0.0);
+    std::vector<double> xWidths   (baseSpaceDim, 1.0);
+    std::vector<int>    meshWidths(baseSpaceDim, 1  );
+    auto baseMeshTopology = MeshFactory::rectilinearMeshTopology(xWidths, meshWidths, x0);
+    
+    std::vector<double> v0         (numTensorExtrusions, 0.0);
+    std::vector<double> vWidths    (numTensorExtrusions, 0.5);
+    std::vector<int>    vMeshWidths(numTensorExtrusions, 1);
+    MeshTopologyPtr extrudedMeshTopology = baseMeshTopology;
+    for (int d=0; d<numTensorExtrusions; d++)
+    {
+      const double v0_d    = v0[d];
+      const double v1_d    = v0[d] + vWidths[d];
+      const int vMeshWidth = vMeshWidths[d];
+      extrudedMeshTopology = MeshFactory::extrudedMeshTopology(extrudedMeshTopology, v0_d, v1_d, vMeshWidth);
+    }
+    
+    ////////////////////   DECLARE VARIABLES   ///////////////////////
+    // define test variables
+    VarFactoryPtr varFactory = VarFactory::varFactory();
+    VarPtr v = varFactory->testVar("v", HGRAD);
+
+    // define trial variables
+    VarPtr u    = varFactory->fieldVar("u");
+    VarPtr uhat = varFactory->fluxVar("uhat");
+
+    ////////////////////   DEFINE BILINEAR FORM   ///////////////////////
+    BFPtr bf = BF::bf(varFactory);
+
+    ////////////////////   BUILD MESH   ///////////////////////
+    int pToAdd = 1;
+    mesh = Teuchos::rcp( new Mesh (extrudedMeshTopology, bf, H1Orders, pToAdd) );
+
     return mesh;
   }
   
@@ -1776,6 +1819,7 @@ namespace
     
     if (!success)
     {
+#ifdef HAVE_EPETRAEXT_HDF5
       HDF5Exporter exporter(mesh, "projectFluxOnRefinedMesh2DFailure");
       exporter.exportFunction({solnFxn-exactFxn,solnFxn, exactFxn},{"error", "solution", "exact"},0);
       
@@ -1791,6 +1835,7 @@ namespace
           out << "error on cell " << cellID << ": " << errOnCell << endl;
         }
       }
+#endif
     }
   }
   
@@ -1869,6 +1914,7 @@ namespace
 
     if (!success)
     {
+#ifdef HAVE_EPETRAEXT_HDF5
       HDF5Exporter exporter(mesh, "ProjectFluxOnRefinedMesh2D_2x2_Starting, after one refinement");
       exporter.exportFunction({solnFxn-exactFxn,solnFxn, exactFxn},{"error", "solution", "exact"},0);
       
@@ -1888,6 +1934,7 @@ namespace
           cout << "error on cell " << cellID << ": " << errOnCell << endl;
         }
       }
+#endif
     }
     
     cellIDs = {4};
@@ -1903,7 +1950,7 @@ namespace
       if (!success)
       {
         outputMesh(0);
-        
+#ifdef HAVE_EPETRAEXT_HDF5
         HDF5Exporter exporter(mesh, "ProjectFluxOnRefinedMesh2D_2x2_Starting");
         exporter.exportFunction({solnFxn-exactFxn,solnFxn, exactFxn},{"error", "solution", "exact"},0);
         
@@ -1921,6 +1968,7 @@ namespace
             cout << "error on cell " << cellID << ": " << errOnCell << endl;
           }
         }
+#endif
       }
     }
   }
@@ -2009,10 +2057,10 @@ namespace
     ////////////////////   DECLARE VARIABLES   ///////////////////////
     // define test variables
     VarFactoryPtr varFactory = VarFactory::varFactory();
-    VarPtr v = varFactory->testVar("v", HGRAD);
+    VarPtr v = varFactory->testVarSpaceTime("v", HGRAD);
     
     // define trial variables
-    VarPtr uhat = varFactory->fluxVar("uhat");
+    VarPtr uhat = varFactory->fluxVarSpaceTime("uhat");
     
     ////////////////////   DEFINE BILINEAR FORM   ///////////////////////
     BFPtr bf = Teuchos::rcp( new BF(varFactory) );
@@ -2159,14 +2207,14 @@ namespace
     ////////////////////   DECLARE VARIABLES   ///////////////////////
     // define test variables
     VarFactoryPtr varFactory = VarFactory::varFactory();
-    VarPtr tau = varFactory->testVar("tau", HDIV);
-    VarPtr v = varFactory->testVar("v", HGRAD);
+    VarPtr tau = varFactory->testVarSpaceTime("tau", HDIV);
+    VarPtr v = varFactory->testVarSpaceTime("v", HGRAD);
     
     // define trial variables
-    VarPtr uhat = varFactory->traceVar("uhat");
-    VarPtr fhat = varFactory->fluxVar("fhat");
-    VarPtr u = varFactory->fieldVar("u");
-    VarPtr sigma = varFactory->fieldVar("sigma", VECTOR_L2);
+    VarPtr uhat = varFactory->traceVarSpaceTime("uhat");
+    VarPtr fhat = varFactory->fluxVarSpaceTime("fhat");
+    VarPtr u = varFactory->fieldVarSpaceTime("u");
+    VarPtr sigma = varFactory->fieldVarSpaceTime("sigma", VECTOR_L2);
     
     ////////////////////   DEFINE BILINEAR FORM   ///////////////////////
     BFPtr bf = Teuchos::rcp( new BF(varFactory) );
@@ -2182,6 +2230,7 @@ namespace
     ////////////////////   BUILD MESH   ///////////////////////
     int H1Order = 3, pToAdd = 2;
     Teuchos::RCP<Mesh> spaceTimeMesh = Teuchos::rcp( new Mesh (spaceTimeMeshTopology, bf, H1Order, pToAdd) );
+    spaceTimeMesh->setTensorTopologyMeansSpaceTime(true);
     
     SolutionPtr spaceTimeSolution = Teuchos::rcp( new Solution(spaceTimeMesh) );
     
@@ -2208,6 +2257,141 @@ namespace
       double err_L2 = (f_actual - f_expected)->l2norm(spaceTimeMesh);
       TEST_COMPARE(err_L2, <, tol);
     }
+  }
+
+  void testProjectExtrudedMesh(int baseDim, int extrusionDim, double tol, Teuchos::FancyOStream &out, bool &success)
+  {
+    // project an exactly-recoverable function onto a single-element mesh.
+    // We use H^1 order of 2, which means L^2 variables get linear bases.
+    std::vector<int> H1Orders(1+extrusionDim, 2); // we set one polynomial order in the base dimension, and one in each extrusion dimension
+    auto mesh = makeSingleElementExtrudedTestMesh(baseDim, extrusionDim, H1Orders);
+    SolutionPtr soln = Solution::solution(mesh);
+    
+    FunctionPtr f = Function::constant(1.0);
+    for (int d=0; d<baseDim+extrusionDim; d++)
+    {
+      FunctionPtr xi = MonomialFunction::xi_n(d,1);
+      f = xi * f;
+    }
+    
+    std::map<int,FunctionPtr> projectionMap;
+    VarPtr uField = mesh->bilinearForm()->varFactory()->fieldVar("u");
+    projectionMap[uField->ID()] = f;
+    
+    soln->projectOntoMesh(projectionMap);
+    
+    FunctionPtr u_soln = Function::solution(uField, soln);
+    
+    double err_l2 = (f - u_soln)->l2norm(mesh);
+    
+    TEST_COMPARE(err_l2, <, tol);
+  }
+
+  void testProjectExtrudedMeshConstantExtrusions(int baseDim, int extrusionDim, double tol, Teuchos::FancyOStream &out, bool &success)
+  {
+    // project a spatial (base-mesh) function onto an extruded mesh
+    // test that the derivative in extruded directions is zero
+    std::vector<int> H1Orders(1+extrusionDim, 2); // we set one polynomial order in the base dimension, and one in each extrusion dimension
+    auto mesh = makeSingleElementExtrudedTestMesh(baseDim, extrusionDim, H1Orders);
+    SolutionPtr soln = Solution::solution(mesh);
+    
+    FunctionPtr f = Function::xn(1);
+    
+    std::map<int,FunctionPtr> projectionMap;
+    VarPtr uField = mesh->bilinearForm()->varFactory()->fieldVar("u");
+    projectionMap[uField->ID()] = f;
+    
+    soln->projectOntoMesh(projectionMap);
+    
+    FunctionPtr u_soln = Function::solution(uField, soln);
+    
+    // di() is 1-based; di(1) means dx(), etc.
+    for (int i=1; i<=baseDim+extrusionDim; i++)
+    {
+      out << "checking di, i=" << i << std::endl;
+      double err_l2 = (f->di(i) - u_soln->di(i))->l2norm(mesh);
+      TEST_COMPARE(err_l2, <, tol);
+    }
+  }
+
+  TEUCHOS_UNIT_TEST( Solution, ProjectOnExtrudedTensorMesh1D1V )
+  {
+    const double tol = 1e-14;
+    const int baseDim = 1;
+    const int extrusionDim = 1;
+    testProjectExtrudedMesh(baseDim, extrusionDim, tol, out, success);
+  }
+
+  TEUCHOS_UNIT_TEST( Solution, ProjectOnExtrudedTensorMesh1D2V )
+  {
+    const double tol = 1e-14;
+    const int baseDim = 1;
+    const int extrusionDim = 2;
+    testProjectExtrudedMesh(baseDim, extrusionDim, tol, out, success);
+  }
+
+  TEUCHOS_UNIT_TEST( Solution, ProjectOnExtrudedTensorMesh1D3V )
+  {
+    const double tol = 1e-14;
+    const int baseDim = 1;
+    const int extrusionDim = 3;
+    testProjectExtrudedMesh(baseDim, extrusionDim, tol, out, success);
+  }
+
+  TEUCHOS_UNIT_TEST( Solution, ProjectOnExtrudedTensorMesh2D3V )
+  {
+    const double tol = 1e-14;
+    const int baseDim = 2;
+    const int extrusionDim = 3;
+    testProjectExtrudedMesh(baseDim, extrusionDim, tol, out, success);
+  }
+
+  TEUCHOS_UNIT_TEST( Solution, ProjectOnExtrudedTensorMesh3D3V )
+  {
+    const double tol = 1e-12;
+    const int baseDim = 3;
+    const int extrusionDim = 3;
+    testProjectExtrudedMesh(baseDim, extrusionDim, tol, out, success);
+  }
+
+  TEUCHOS_UNIT_TEST( Solution, ProjectOnExtrudedTensorMeshConstantExtrusions1D1V )
+  {
+    const double tol = 1e-14;
+    const int baseDim = 1;
+    const int extrusionDim = 1;
+    testProjectExtrudedMeshConstantExtrusions(baseDim, extrusionDim, tol, out, success);
+  }
+
+  TEUCHOS_UNIT_TEST( Solution, ProjectOnExtrudedTensorMeshConstantExtrusions1D2V )
+  {
+    const double tol = 1e-14;
+    const int baseDim = 1;
+    const int extrusionDim = 2;
+    testProjectExtrudedMeshConstantExtrusions(baseDim, extrusionDim, tol, out, success);
+  }
+
+  TEUCHOS_UNIT_TEST( Solution, ProjectOnExtrudedTensorMeshConstantExtrusions1D3V )
+  {
+    const double tol = 1e-14;
+    const int baseDim = 1;
+    const int extrusionDim = 3;
+    testProjectExtrudedMeshConstantExtrusions(baseDim, extrusionDim, tol, out, success);
+  }
+
+  TEUCHOS_UNIT_TEST( Solution, ProjectOnExtrudedTensorMeshConstantExtrusions2D3V )
+  {
+    const double tol = 1e-14;
+    const int baseDim = 2;
+    const int extrusionDim = 3;
+    testProjectExtrudedMeshConstantExtrusions(baseDim, extrusionDim, tol, out, success);
+  }
+
+  TEUCHOS_UNIT_TEST( Solution, ProjectOnExtrudedTensorMeshConstantExtrusions3D3V )
+  {
+    const double tol = 1e-12;
+    const int baseDim = 3;
+    const int extrusionDim = 3;
+    testProjectExtrudedMeshConstantExtrusions(baseDim, extrusionDim, tol, out, success);
   }
   
   TEUCHOS_UNIT_TEST( Solution, ProjectOnTensorMesh3D_Slow )
@@ -2281,14 +2465,14 @@ namespace
     ////////////////////   DECLARE VARIABLES   ///////////////////////
     // define test variables
     VarFactoryPtr varFactory = VarFactory::varFactory();
-    VarPtr tau = varFactory->testVar("tau", HDIV);
-    VarPtr v = varFactory->testVar("v", HGRAD);
+    VarPtr tau = varFactory->testVarSpaceTime("tau", HDIV);
+    VarPtr v = varFactory->testVarSpaceTime("v", HGRAD);
     
     // define trial variables
-    VarPtr uhat = varFactory->traceVar("uhat");
-    VarPtr fhat = varFactory->fluxVar("fhat");
-    VarPtr u = varFactory->fieldVar("u");
-    VarPtr sigma = varFactory->fieldVar("sigma", VECTOR_L2);
+    VarPtr uhat = varFactory->traceVarSpaceTime("uhat");
+    VarPtr fhat = varFactory->fluxVarSpaceTime("fhat");
+    VarPtr u = varFactory->fieldVarSpaceTime("u");
+    VarPtr sigma = varFactory->fieldVarSpaceTime("sigma", VECTOR_L2);
     
     ////////////////////   DEFINE BILINEAR FORM   ///////////////////////
     BFPtr bf = Teuchos::rcp( new BF(varFactory) );
@@ -2304,6 +2488,7 @@ namespace
     ////////////////////   BUILD MESH   ///////////////////////
     int H1Order = 4, pToAdd = 2;
     Teuchos::RCP<Mesh> spaceTimeMesh = Teuchos::rcp( new Mesh (spaceTimeMeshTopology, bf, H1Order, pToAdd) );
+    spaceTimeMesh->setTensorTopologyMeansSpaceTime(true);
     
     SolutionPtr spaceTimeSolution = Teuchos::rcp( new Solution(spaceTimeMesh) );
     
@@ -2346,6 +2531,7 @@ namespace
     IPPtr ip = bf->graphNorm();
     SolutionPtr soln = Solution::solution(mesh,bc,rhs,ip);
     
+#ifdef HAVE_EPETRAEXT_HDF5
     string filePrefix = "SavedSolution";
     soln->save(filePrefix);
     
@@ -2361,6 +2547,9 @@ namespace
     set<GlobalIndexType> cellsToRefine;
     cellsToRefine.insert(0);
     loadedMesh->pRefine(cellsToRefine);
+#else
+    out << "SKIPPING testSaveAndLoad2D() test because Trilinos built without Epetra HDF5 support.\n";
+#endif
   }
   
   TEUCHOS_UNIT_TEST( Solution, SaveAndLoadPoissonConforming )

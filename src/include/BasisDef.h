@@ -17,6 +17,8 @@
 
 #include "Intrepid_Basis.hpp"
 
+#include "Camellia_KokkosHelpers.h"
+
 namespace Camellia
 {
 template<class Scalar, class ArrayScalar>
@@ -420,35 +422,37 @@ Camellia::EFunctionSpace Basis<Scalar,ArrayScalar>::functionSpace(int tensorialR
   template<class Scalar, class ArrayScalar>
   Camellia::EFunctionSpace Basis<Scalar,ArrayScalar>::functionSpace(int subcDim, int subcOrdinal) const
   {
-    switch (this->_functionSpace)
-    {
-      case FUNCTION_SPACE_HGRAD_SPACE_HVOL_TIME:
-      case FUNCTION_SPACE_HVOL_SPACE_HGRAD_TIME:
-      {
-        TEUCHOS_TEST_FOR_EXCEPTION(this->_domainTopology()->getTensorialDegree() == 0, std::invalid_argument, "mixed function spaces only supported for tensorial domains");
-        CellTopoPtr subcell= this->_domainTopology()->getSubcell(subcDim,subcOrdinal);
-        if (subcell->getTensorialDegree() < this->_domainTopology()->getTensorialDegree())
-        {
-          // then this is the spatial part
-          return this->functionSpace(0); // 0: tensorial rank of spatial part
-        }
-        else
-        {
-          // any tensorial subcell other than Node x Line_2 has a mixed function space; Node x Line_2 has the temporal function space
-          if (subcell->getNodeCount() == 2)
-          {
-            return this->functionSpace(1); // 1: tensorial rank of temporal part
-          }
-          else
-          {
-            return this->_functionSpace;
-          }
-        }
-      }
-        break;
-      default:
-        return this->_functionSpace;
-    }
+    // TODO: determine how this is used, and whether we should revise it now that we've eliminated the space-time enums used in the code commented out below…
+    return this->_functionSpace;
+//    switch (this->_functionSpace)
+//    {
+//      case FUNCTION_SPACE_HGRAD_SPACE_HVOL_TIME:
+//      case FUNCTION_SPACE_HVOL_SPACE_HGRAD_TIME:
+//      {
+//        TEUCHOS_TEST_FOR_EXCEPTION(this->_domainTopology()->getTensorialDegree() == 0, std::invalid_argument, "mixed function spaces only supported for tensorial domains");
+//        CellTopoPtr subcell= this->_domainTopology()->getSubcell(subcDim,subcOrdinal);
+//        if (subcell->getTensorialDegree() < this->_domainTopology()->getTensorialDegree())
+//        {
+//          // then this is the spatial part
+//          return this->functionSpace(0); // 0: tensorial rank of spatial part
+//        }
+//        else
+//        {
+//          // any tensorial subcell other than Node x Line_2 has a mixed function space; Node x Line_2 has the temporal function space
+//          if (subcell->getNodeCount() == 2)
+//          {
+//            return this->functionSpace(1); // 1: tensorial rank of temporal part
+//          }
+//          else
+//          {
+//            return this->_functionSpace;
+//          }
+//        }
+//      }
+//        break;
+//      default:
+//        return this->_functionSpace;
+//    }
   }
 
   template<class Scalar, class ArrayScalar>
@@ -788,7 +792,15 @@ Teuchos::RCP< Intrepid2::Basis<Kokkos::DefaultExecutionSpace,Scalar,Scalar> > In
     Camellia::FieldContainer<Scalar> dofCoordsCamellia = dofCoords;
     
     auto dofCoordsView = dofCoordsCamellia.checkoutDeviceView(false); // false: don't deep copy from host
-    _intrepid2Basis->getDofCoords( dofCoordsView );
+    
+    // on CUDA, layouts may differ; we therefore allocate a second view and copy.  This is obviously inefficient; we should use Intrepid2-compatible views in all performance-critical code.
+    using ExecSpaceType = Camellia::DeviceMemorySpace::execution_space;
+    using Intrepid2Values = Intrepid2::Basis<ExecSpaceType,double,double>::OutputViewType;
+    Intrepid2Values intrepid2DofCoords = Allocation<Scalar>::allocateIntrepid2DeviceViewMatchingView(dofCoordsView);
+    
+    _intrepid2Basis->getDofCoords( intrepid2DofCoords );
+    
+    deepCopy(dofCoordsView,intrepid2DofCoords);
     
     // client code will depend on host availability of dof coords; let's copy from device if need be
     dofCoordsCamellia.checkinDeviceView(true); // true: copy from device to host
@@ -825,7 +837,16 @@ void Intrepid2BasisWrapper<Scalar,ArrayScalar>::getValues(ArrayScalar &values, c
   
   Intrepid2::EOperator opIntrepid2 = intrepidOpToIntrepid2Op(operatorType);
   
-  _intrepid2Basis->getValues(valuesView,refPointsView,opIntrepid2);
+  // on CUDA, layouts may differ; we therefore allocate a second view and copy.  This is obviously inefficient; we should use Intrepid2-compatible views in all performance-critical code.
+  using ExecSpaceType = Camellia::DeviceMemorySpace::execution_space;
+  using Intrepid2Values = Intrepid2::Basis<ExecSpaceType,double,double>::OutputViewType;
+  Intrepid2Values intrepid2Values = Allocation<Scalar>::allocateIntrepid2DeviceViewMatchingView(valuesView);
+  Intrepid2Values intrepid2Points = Allocation<Scalar>::allocateIntrepid2DeviceViewMatchingView(refPointsView);
+  deepCopy(intrepid2Points, refPointsView);
+
+  _intrepid2Basis->getValues(intrepid2Values,intrepid2Points,opIntrepid2);
+
+  deepCopy(valuesView,intrepid2Values);
   
   refPointsCamellia.checkinDeviceView(false); // false: don't deep copy from device to host
   valuesCamellia.checkinDeviceView(true);     // true: do deep copy from device to host

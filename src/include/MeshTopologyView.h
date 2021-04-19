@@ -27,6 +27,7 @@
 
 #include "TypeDefs.h"
 
+#include "EpetraExt_ConfigDefs.h"
 #include "EpetraExt_HDF5.h"
 #include "Camellia_FieldContainer.hpp"
 
@@ -72,7 +73,7 @@ namespace Camellia {
     // ! This method only gets within a factor of 2 or so, but can give a rough estimate
     virtual long long approximateMemoryFootprint() const;
     
-    std::vector<IndexType> cellIDsWithCentroids(const std::vector<std::vector<double>> &centroids, double tol=1e-14) const;
+    virtual std::vector<IndexType> cellIDsWithCentroids(const std::vector<std::vector<double>> &centroids, double tol=1e-14) const;
     virtual std::vector<IndexType> cellIDsForPoints(const Camellia::FieldContainer<double> &physicalPoints) const;
     virtual IndexType cellCount() const;
     
@@ -166,9 +167,11 @@ namespace Camellia {
     static MeshTopologyViewPtr readFromFile(Epetra_CommPtr Comm, std::string filename);
     void writeToFile(std::string filename) const;
     
+#ifdef HAVE_EPETRAEXT_HDF5
     // HDF5 support
     static MeshTopologyViewPtr readFromHDF5(Epetra_CommPtr comm, EpetraExt::HDF5 &hdf5);
     void writeToHDF5(Epetra_CommPtr comm, EpetraExt::HDF5 &hdf5) const;
+#endif
   };
 
 }

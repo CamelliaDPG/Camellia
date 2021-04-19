@@ -374,16 +374,6 @@ CellPtr MeshTopology::addCell(CellTopoPtr cellTopo, const vector< vector<double>
 
 CellPtr MeshTopology::addCell(CellTopoPtr cellTopo, const Camellia::FieldContainer<double> &cellVertices)
 {
-  return addCell(_nextCellIndex, cellTopo, cellVertices);
-}
-
-CellPtr MeshTopology::addCell(CellTopoPtrLegacy cellTopo, const vector< vector<double> > &cellVertices)
-{
-  return addCell(_nextCellIndex, cellTopo, cellVertices);
-}
-
-CellPtr MeshTopology::addCell(IndexType cellIndex, CellTopoPtr cellTopo, const Camellia::FieldContainer<double> &cellVertices)
-{
   TEUCHOS_TEST_FOR_EXCEPTION(cellTopo->getDimension() != _spaceDim, std::invalid_argument, "cellTopo dimension must match mesh topology dimension");
   TEUCHOS_TEST_FOR_EXCEPTION(cellVertices.dimension(0) != cellTopo->getVertexCount(), std::invalid_argument, "cellVertices must have shape (P,D)");
   TEUCHOS_TEST_FOR_EXCEPTION(cellVertices.dimension(1) != cellTopo->getDimension(), std::invalid_argument, "cellVertices must have shape (P,D)");
@@ -397,7 +387,7 @@ CellPtr MeshTopology::addCell(IndexType cellIndex, CellTopoPtr cellTopo, const C
       cellVertexVector[vertexOrdinal][d] = cellVertices(vertexOrdinal,d);
     }
   }
-  return addCell(cellIndex, cellTopo, cellVertexVector);
+  return addCell(cellTopo, cellVertexVector);
 }
 
 CellPtr MeshTopology::addCell(IndexType cellIndex, CellTopoPtr cellTopo, const vector<vector<double> > &cellVertices)
@@ -411,18 +401,6 @@ CellPtr MeshTopology::addCell(IndexType cellIndex, CellTopoPtr cellTopo, const v
   vector<IndexType> vertexIndices = getVertexIndices(cellVertices);
   addCell(cellIndex, cellTopo, vertexIndices);
   return _cells[cellIndex];
-}
-
-CellPtr MeshTopology::addCell(IndexType cellIndex, CellTopoPtrLegacy shardsTopo, const vector<vector<double> > &cellVertices)
-{
-  CellTopoPtr cellTopo = CellTopology::cellTopology(*shardsTopo);
-  return addCell(cellIndex, cellTopo, cellVertices);
-}
-
-IndexType MeshTopology::addCell(IndexType cellIndex, CellTopoPtrLegacy shardsTopo, const vector<IndexType> &cellVertices, IndexType parentCellIndex)
-{
-  CellTopoPtr cellTopo = CellTopology::cellTopology(*shardsTopo);
-  return addCell(cellIndex, cellTopo, cellVertices, parentCellIndex);
 }
 
 IndexType MeshTopology::addCell(IndexType cellIndex, CellTopoPtr cellTopo, const vector<IndexType> &cellVertices, IndexType parentCellIndex)
@@ -1240,7 +1218,7 @@ CellPtr MeshTopology::findCellWithVertices(const vector< vector<double> > &cellV
     IndexType vertexIndex;
     if (! getVertexIndex(vertex, vertexIndex) )
     {
-      cout << "vertex not found. returning NULL.\n";
+//      cout << "vertex not found. returning NULL.\n";
       return cell;
     }
     // otherwise, vertexIndex has been populated
@@ -1531,7 +1509,6 @@ MeshTopologyPtr MeshTopology::deepCopy() const
 {
   MeshTopologyPtr meshTopoCopy = Teuchos::rcp( new MeshTopology(*this) );
   meshTopoCopy->deepCopyCells();
-  // TODO: also deep-copy EntitySets
   map<EntityHandle, EntitySetPtr> newEntitySets;
   for (auto entry : _entitySets)
   {
@@ -3795,11 +3772,6 @@ void MeshTopology::setEdgeToCurveMap(const map< pair<IndexType, IndexType>, Para
     addEdgeCurve(edgeIt->first, edgeIt->second);
   }
   initializeTransformationFunction(mesh);
-}
-
-void MeshTopology::setGlobalDofAssignment(GlobalDofAssignment* gda)   // for cubature degree lookups
-{
-  _gda = gda;
 }
 
 void MeshTopology::setEntityGeneralizedParent(unsigned entityDim, IndexType entityIndex, unsigned parentDim, IndexType parentEntityIndex)

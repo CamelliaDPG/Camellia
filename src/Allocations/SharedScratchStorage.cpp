@@ -60,53 +60,56 @@ namespace Camellia
   
   template<typename Scalar>
   typename SharedScratchStorage<Scalar>::DeviceView
-  SharedScratchStorage<Scalar>::checkoutScratchStorage(const ScratchStorageDimensions &dim)
+  SharedScratchStorage<Scalar>::checkoutScratchStorage(const ScratchStorageDimensions &dim, std::string description)
   {
+    using std::get;
     if (_scratchStorageCache.find(dim) == _scratchStorageCache.end())
     {
       // no views of these dimensions have been requested before
       // then create a single
       DeviceView scratchView = allocateView(dim, SHARED_SCRATCH_STORAGE_LABEL);
-      ScratchStorageEntry entry {scratchView,false}; // false: not checked out
+      ScratchStorageEntry entry {scratchView,false,description}; // false: not checked out
       _scratchStorageCache[dim] = std::vector< ScratchStorageEntry > {entry};
     }
     auto & scratchStorageVector = _scratchStorageCache.find(dim)->second;
     for (auto & entry : scratchStorageVector)
     {
-      bool & checkedOut = entry.second;
+      bool & checkedOut = get<1>(entry);
       if (!checkedOut)
       {
         checkedOut = true;
+        get<2>(entry) = description;
         _hitCount++;
-        return entry.first;
+        return get<0>(entry);
       }
     }
     // if we get here, all matching entries are checked out; create a new one
     DeviceView scratchView = allocateView(dim, SHARED_SCRATCH_STORAGE_LABEL);
-    ScratchStorageEntry entry {scratchView,true}; // true: is checked out (will be, on return)
+    ScratchStorageEntry entry {scratchView,true,description}; // true: is checked out (will be, on return)
     scratchStorageVector.push_back(entry);
-    return entry.first;
+    return get<0>(entry);
   }
   
   template<typename Scalar>
   typename SharedScratchStorage<Scalar>::DeviceView
-  SharedScratchStorage<Scalar>::checkoutScratchStorageMatchingDeviceView(SharedScratchStorage<Scalar>::DeviceView &dv)
+  SharedScratchStorage<Scalar>::checkoutScratchStorageMatchingDeviceView(SharedScratchStorage<Scalar>::DeviceView &dv, std::string description)
   {
     ScratchStorageDimensions dim = viewDimensions(dv);
-    return checkoutScratchStorage(dim);
+    return checkoutScratchStorage(dim, description);
   }
   
   template<typename Scalar>
   typename SharedScratchStorage<Scalar>::DeviceView
-  SharedScratchStorage<Scalar>::checkoutScratchStorageMatchingHostView(SharedScratchStorage<Scalar>::HostView &hostView)
+  SharedScratchStorage<Scalar>::checkoutScratchStorageMatchingHostView(SharedScratchStorage<Scalar>::HostView &hostView, std::string description)
   {
     ScratchStorageDimensions dim = viewDimensions(hostView);
-    return checkoutScratchStorage(dim);
+    return checkoutScratchStorage(dim, description);
   }
   
   template<typename Scalar>
   void SharedScratchStorage<Scalar>::checkinScratchStorage(DeviceView &scratchView)
   {
+    using std::get;
     ScratchStorageDimensions dim(scratchView.rank());
     for (int i=0; i<scratchView.rank(); i++)
     {
@@ -116,9 +119,9 @@ namespace Camellia
     auto & scratchStorageVector = _scratchStorageCache.find(dim)->second;
     for (auto & entry : scratchStorageVector)
     {
-      if (entry.first == scratchView)
+      if (get<0>(entry) == scratchView)
       {
-        entry.second = false; // no longer checked out
+        get<1>(entry) = false; // no longer checked out
         return;
       }
     }
@@ -128,15 +131,17 @@ namespace Camellia
   template<typename Scalar>
   void SharedScratchStorage<Scalar>::clear() // should be called during finalize()
   {
+    using std::get;
     for (auto & mapEntry : _scratchStorageCache)
     {
       auto & storageCacheVector = mapEntry.second;
       for (ScratchStorageEntry &entry : storageCacheVector)
       {
         // all scratch views should have been checked back in; assert this
-        const bool isCheckedOut = entry.second;
-        TEUCHOS_TEST_FOR_EXCEPTION(isCheckedOut, std::invalid_argument, "Scratch view was checked out without being checked back in");
-        Allocation<Scalar>::recordDeviceViewDeallocation(entry.first);
+        const bool & isCheckedOut = get<1>(entry);
+        const std::string & description = get<2>(entry);
+        TEUCHOS_TEST_FOR_EXCEPTION(isCheckedOut, std::invalid_argument, "Scratch view was checked out without being checked back in; last checked out with description '" + description + "'");
+        Allocation<Scalar>::recordDeviceViewDeallocation(get<0>(entry));
       }
     }
     _scratchStorageCache.clear();

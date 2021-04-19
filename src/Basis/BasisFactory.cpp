@@ -41,6 +41,7 @@
 #include "LobattoHGRAD_LineBasis.h"
 
 #include "PointBasis.h"
+#include "PolynomialOrder.hpp"
 
 #include "TensorBasis.h"
 
@@ -60,73 +61,75 @@ BasisFactory::BasisFactory()
   _useLegendreForQuadHVOL = false;
 }
 
-BasisPtr BasisFactory::getBasis(std::vector<int> &H1Order, CellTopoPtr cellTopo, Camellia::EFunctionSpace functionSpaceForSpatialTopology,
-                                Camellia::EFunctionSpace functionSpaceForTemporalTopology)
+BasisPtr BasisFactory::getBasis(const std::vector<int> &H1Orders, CellTopoPtr cellTopo, const std::vector<FSE> &functionSpaces)
 {
-  if (H1Order.size() == 0)
+  PolynomialOrder::checkPolyOrderValidity(H1Orders, cellTopo);
+  TEUCHOS_TEST_FOR_EXCEPTION(functionSpaces.size() != H1Orders.size(), std::invalid_argument, "functionSpaces.size() must match H1Orders.size()");
+  
+  if (H1Orders.size() == 1)
   {
-    cout << "H1Order cannot be empty.\n";
-    TEUCHOS_TEST_FOR_EXCEPTION(true, std::invalid_argument, "H1Order cannot be empty.");
+    const int &polyOrder = H1Orders[0];
+    const auto shardsKey = cellTopo->getShardsTopology().getKey();
+    const auto &fs       = functionSpaces[0];
+    
+    pair< pair<int,int>, Camellia::EFunctionSpace > key = make_pair( make_pair(polyOrder, shardsKey), fs );
+    if (_existingBases.find(key) == _existingBases.end())
+    {
+      // First, we call getBasis(), and if the one that it returns is conforming, we just use that.
+      BasisPtr basis = getBasis(polyOrder, shardsKey, fs);
+      
+      _existingBases[key] = basis;
+      _polyOrders[basis.get()] = polyOrder;
+      _functionSpaces[basis.get()] = fs;
+      _cellTopoKeys[basis.get()] = shardsKey;
+    }
+    return _existingBases[key];
   }
-  if (H1Order.size() > 2)
+  else // more than one tensorial component
   {
-    cout << "BasisFactory does not yet support tensor product bases of tensorial degree > 1.\n";
-    TEUCHOS_TEST_FOR_EXCEPTION(true, std::invalid_argument, "BasisFactory does not yet support tensor product bases of tensorial degree > 1.");
-  }
-  if (H1Order.size() == 1)
-  {
-    return getBasis(H1Order[0], cellTopo, functionSpaceForSpatialTopology);
-  }
-  else
-  {
-    return getBasis(H1Order[0], cellTopo, functionSpaceForSpatialTopology, H1Order[1], functionSpaceForTemporalTopology);
+    const std::vector<int> H1OrdersTruncated(H1Orders.begin(),H1Orders.end()-1);
+    const std::vector<FSE> functionSpacesTruncated(functionSpaces.begin(),functionSpaces.end()-1);
+    CellTopoPtr componentTopo = CellTopology::cellTopology(cellTopo->getShardsTopology(), cellTopo->getTensorialDegree() - 1);
+    BasisPtr componentBasis = getBasis(H1OrdersTruncated, componentTopo, functionSpacesTruncated);
+    
+    const std::vector<int> H1OrdersFinal {H1Orders[H1Orders.size()-1]};
+    const std::vector<FSE> functionSpaceFinal {functionSpaces[functionSpaces.size()-1]};
+    
+    auto key = make_tuple(componentBasis.get(), H1OrdersFinal[0], functionSpaceFinal[0]);
+    if (_tensorBases.find(key) == _tensorBases.end())
+    {
+      BasisPtr extrusionBasis = getBasis(H1OrdersFinal, CellTopology::line(), functionSpaceFinal);
+      
+      using TensorBasis = Camellia::TensorBasis<double, Intrepid::FieldContainer<double> >;
+
+      bool rangeDimensionIsSum = true; // This means, e.g., OPERATOR_GRAD is evaluated for all dimensions (contrast with space-time basis)
+      _tensorBases[key] = Teuchos::rcp( new TensorBasis(componentBasis, extrusionBasis, rangeDimensionIsSum) );
+    }
+    return _tensorBases[key];
   }
 }
 
-BasisPtr BasisFactory::getBasis(int H1Order, CellTopoPtr cellTopo, Camellia::EFunctionSpace functionSpaceForSpatialTopology,
-                                int temporalH1Order, Camellia::EFunctionSpace functionSpaceForTemporalTopology)
+BasisPtr BasisFactory::getBasis( int polyOrder, CellTopoPtr cellTopo, Camellia::EFunctionSpace fs )
 {
-  if (cellTopo->getTensorialDegree() > 1)
+  if (cellTopo->getTensorialDegree() > 0)
   {
-    cout << "BasisFactory::getBasis() only handles 0 or 1 tensorial degree elements.\n";
-    TEUCHOS_TEST_FOR_EXCEPTION(true, std::invalid_argument, "BasisFactory::getBasis() only handles 0 or 1 tensorial degree elements.");
+    // then we need to call the getBasis() that takes std::vector arguments
+    std::vector<int> H1Orders(cellTopo->getTensorialDegree()+1,polyOrder);
+    std::vector<Camellia::EFunctionSpace> functionSpaces(cellTopo->getTensorialDegree()+1,fs);
+    return getBasis(H1Orders, cellTopo, functionSpaces);
   }
-
-  if (temporalH1Order == -1)
+  else
   {
-    temporalH1Order = _defaultTemporalPolyOrder;
-    if (functionSpaceForTemporalTopology == FUNCTION_SPACE_HVOL)
-    {
-      temporalH1Order++;
-    }
+    // we can call the one that takes a shards key
+    return getBasis(polyOrder, cellTopo->getShardsTopology().getKey(), fs);
   }
-
-  BasisPtr basisForShardsTopo = getBasis(H1Order, cellTopo->getShardsTopology().getKey(), functionSpaceForSpatialTopology);
-
-  if (cellTopo->getTensorialDegree() == 0) return basisForShardsTopo;
-
-  // if we get here, have tensorial degree exactly 1.
-
-  unsigned lineKey = shards::Line<2>::key;
-  pair< pair<Camellia::Basis<>*, int>, Camellia::EFunctionSpace> key = make_pair( make_pair(basisForShardsTopo.get(), temporalH1Order), functionSpaceForTemporalTopology );
-
-  if (_spaceTimeBases.find(key) != _spaceTimeBases.end()) return _spaceTimeBases[key];
-
-  BasisPtr temporalBasis = getBasis(temporalH1Order, lineKey, functionSpaceForTemporalTopology);
-
-  typedef Camellia::TensorBasis<double, Intrepid::FieldContainer<double> > TensorBasis;
-  Teuchos::RCP<TensorBasis> tensorBasis = Teuchos::rcp( new TensorBasis(basisForShardsTopo, temporalBasis) );
-
-  _spaceTimeBases[key] = tensorBasis;
-
-  return tensorBasis;
 }
 
 BasisPtr BasisFactory::getBasis( int polyOrder, unsigned cellTopoKey, Camellia::EFunctionSpace fs)
 {
-  if (fs != Camellia::FUNCTION_SPACE_REAL_SCALAR)
+  if ((fs != Camellia::FUNCTION_SPACE_REAL_SCALAR) && (cellTopoKey != shards::Node::key))
   {
-    TEUCHOS_TEST_FOR_EXCEPTION(polyOrder == 0, std::invalid_argument, "polyOrder = 0 unsupported");
+    TEUCHOS_TEST_FOR_EXCEPTION(polyOrder == 0, std::invalid_argument, "polyOrder = 0 unsupported, except for constant basis");
   }
 
   BasisPtr basis;
@@ -430,79 +433,317 @@ BasisPtr BasisFactory::getBasis( int polyOrder, unsigned cellTopoKey, Camellia::
   return basis;
 }
 
-BasisPtr BasisFactory::getConformingBasis(std::vector<int> &H1Order, CellTopoPtr cellTopo, Camellia::EFunctionSpace functionSpaceForSpatialTopology,
-    Camellia::EFunctionSpace functionSpaceForTemporalTopology)
+BasisPtr BasisFactory::getConformingBasis( const std::vector<int> &polyOrder, CellTopoPtr cellTopo, const Camellia::EFunctionSpace fs)
 {
-  if (H1Order.size() == 0)
+  const int requiredPolyOrders = cellTopo->getTensorialDegree() + 1;
+  if (polyOrder.size() == 1)
   {
-    cout << "H1Order cannot be empty.\n";
-    TEUCHOS_TEST_FOR_EXCEPTION(true, std::invalid_argument, "H1Order cannot be empty.");
-  }
-  if (H1Order.size() > 2)
-  {
-    cout << "BasisFactory does not yet support tensor product bases of tensorial degree > 1.\n";
-    TEUCHOS_TEST_FOR_EXCEPTION(true, std::invalid_argument, "BasisFactory does not yet support tensor product bases of tensorial degree > 1.");
-  }
-  if (H1Order.size() == 1)
-  {
-    return getConformingBasis(H1Order[0], cellTopo, functionSpaceForSpatialTopology,
-                              _defaultTemporalPolyOrder, functionSpaceForTemporalTopology);
+    std::vector<int> polyOrderReplicated(requiredPolyOrders, polyOrder[0]);
+    std::vector<Camellia::EFunctionSpace> functionSpaces(requiredPolyOrders, fs);
+    return getConformingBasis(polyOrderReplicated, cellTopo, functionSpaces);
   }
   else
   {
-    return getConformingBasis(H1Order[0], cellTopo, functionSpaceForSpatialTopology, H1Order[1], functionSpaceForTemporalTopology);
+    std::vector<Camellia::EFunctionSpace> functionSpaces(polyOrder.size(), fs);
+    return getConformingBasis(polyOrder, cellTopo, functionSpaces);
   }
 }
 
-BasisPtr BasisFactory::getConformingBasis( int polyOrder, CellTopoPtr cellTopo, Camellia::EFunctionSpace fs,
-    int temporalPolyOrder, FSE functionSpaceForTemporalTopology)
+BasisPtr BasisFactory::getConformingBasis(const std::vector<int> &H1OrdersIn, CellTopoPtr cellTopo, const std::vector<FSE> &functionSpacesIn)
 {
-  // this method is fairly redundant with getBasis(), but it provides the chance to offer different bases when a conforming basis is
-  // required.
+  PolynomialOrder::checkPolyOrderValidity(H1OrdersIn, cellTopo);
+  TEUCHOS_TEST_FOR_EXCEPTION(functionSpacesIn.size() != H1OrdersIn.size(), std::invalid_argument, "functionSpaces.size() must match H1Orders.size()");
   
-  if (temporalPolyOrder == -1)
+  std::vector<int> H1Orders;
+  std::vector<Camellia::EFunctionSpace> functionSpaces;
+  if (H1OrdersIn.size() == 1)
   {
-    temporalPolyOrder = _defaultTemporalPolyOrder;
-  }
-
-  BasisPtr basisForShardsTopo = getConformingBasis(polyOrder, cellTopo->getShardsTopology().getKey(), fs);
-
-  if (cellTopo->getTensorialDegree() == 0) return basisForShardsTopo;
-
-  // if we get here, have tensorial degree exactly 1.
-
-  unsigned lineKey = shards::Line<2>::key;
-  pair< pair<Camellia::Basis<>*, int>, Camellia::EFunctionSpace> key = make_pair( make_pair(basisForShardsTopo.get(), temporalPolyOrder), functionSpaceForTemporalTopology );
-
-  if (_conformingSpaceTimeBases.find(key) != _conformingSpaceTimeBases.end()) return _conformingSpaceTimeBases[key];
-
-  BasisPtr temporalBasis;
-  if (functionSpaceForTemporalTopology == FUNCTION_SPACE_HVOL)
-  {
-    temporalBasis = getConformingBasis(temporalPolyOrder + 1, lineKey, functionSpaceForTemporalTopology);
+    // isotropic; replicate to match tensorial degree
+    const int requiredPolyOrders = cellTopo->getTensorialDegree() + 1;
+    H1Orders = std::vector<int>(requiredPolyOrders, H1OrdersIn[0]);
+    functionSpaces = std::vector<Camellia::EFunctionSpace>(requiredPolyOrders, functionSpacesIn[0]);
   }
   else
   {
-    temporalBasis = getConformingBasis(temporalPolyOrder, lineKey, functionSpaceForTemporalTopology);
+    H1Orders = H1OrdersIn;
+    functionSpaces = functionSpacesIn;
   }
+  
+  if (cellTopo->getTensorialDegree() == 0)
+  {
+    const int &polyOrder = H1Orders[0];
+    const auto shardsKey = cellTopo->getShardsTopology().getKey();
+    const auto &fs       = functionSpaces[0];
+    
+    // NOTE: the logic here does not support anisotropic polynomial orders for shards quadrilaterals and hexahedra because these have zero tensorial degree.
+    // (We may want to change this once we are more fully using Intrepid2 basis functions.)
+    
+    pair< pair<int,int>, Camellia::EFunctionSpace > key = make_pair( make_pair(polyOrder, shardsKey), fs );
+    if (_conformingBases.find(key) == _conformingBases.end())
+    {
+      BasisPtr basis;
+      const int spaceDim = cellTopo->getDimension();
+      
+      // First, we call getBasis(), and if the one that it returns is conforming, we just use that.
+      BasisPtr standardBasis = getBasis(polyOrder, shardsKey, fs);
+      
+      if (standardBasis->isConforming())
+      {
+        basis = standardBasis;
+      }
+      else
+      {
+        // confirm that what is requested is isotropic in H1Order:
+        for (int d=0; d<H1Orders.size(); d++)
+        {
+          TEUCHOS_TEST_FOR_EXCEPTION(H1Orders[d] != polyOrder, std::invalid_argument, "Anisotropic polynomial order not (yet) supported here.");
+        }
+        
+        if (fs == Camellia::FUNCTION_SPACE_VECTOR_HGRAD)
+        {
+          BasisPtr componentBasis = BasisFactory::getConformingBasis(polyOrder, shardsKey, Camellia::FUNCTION_SPACE_HGRAD);
+          basis = Teuchos::rcp( new VectorizedBasis<>(componentBasis,spaceDim) ); // 3-21-13: changed behavior for 1D vectors, but I don't think we use these right now.
+        }
+        else if (fs == Camellia::FUNCTION_SPACE_VECTOR_HVOL)
+        {
+          BasisPtr componentBasis = BasisFactory::getConformingBasis(polyOrder, shardsKey, Camellia::FUNCTION_SPACE_HVOL);
+          basis = Teuchos::rcp( new VectorizedBasis<>(componentBasis,spaceDim) );
+        }
+        else
+        {
+          const int scalarRank = 0, vectorRank = 1;
+          switch (shardsKey)
+          {
+          case shards::Quadrilateral<4>::key:
+            switch(fs)
+            {
+            case Camellia::FUNCTION_SPACE_HGRAD:
+            case Camellia::FUNCTION_SPACE_HGRAD_DISC:
+              //if (polyOrder==0) {
+              //  basis = Teuchos::rcp( new Basis_HVOL_QUAD_C0_FEM<double, ArrayScalar >() ) ;
+              //} else {
+              if (! _useLobattoForQuadHGRAD)
+              {
+                basis = Teuchos::rcp( new IntrepidBasisWrapper<>( Teuchos::rcp( new Intrepid::Basis_HGRAD_QUAD_Cn_FEM<double, ArrayScalar >(polyOrder,Intrepid::POINTTYPE_SPECTRAL)),
+                                      spaceDim, scalarRank, fs) );
+              }
+              else
+              {
+                bool conformingTrue = true;
+                basis = Teuchos::rcp( new LobattoHGRAD_QuadBasis<double, Intrepid::FieldContainer<double> >(polyOrder,conformingTrue) );
+              }
+              //}
+              break;
+            case Camellia::FUNCTION_SPACE_HDIV:
+            case Camellia::FUNCTION_SPACE_HDIV_DISC:
+              if (! _useLobattoForQuadHDIV)
+              {
+                basis = Teuchos::rcp( new IntrepidBasisWrapper<>( Teuchos::rcp( new Intrepid::Basis_HDIV_QUAD_In_FEM<double, ArrayScalar >(polyOrder,Intrepid::POINTTYPE_SPECTRAL)),
+                                      spaceDim, vectorRank, fs)
+                                    );
+              }
+              else
+              {
+                bool conformingTrue = true;
+                basis = Teuchos::rcp( new LobattoHDIV_QuadBasis<double, Intrepid::FieldContainer<double> >(polyOrder,conformingTrue) );
+              }
+              break;
+            case Camellia::FUNCTION_SPACE_HDIV_FREE:
+            {
+              bool conformingTrue = true;
+              bool divFreeTrue = true;
+              basis = Teuchos::rcp( new LobattoHDIV_QuadBasis<double, Intrepid::FieldContainer<double> >(polyOrder,conformingTrue,divFreeTrue) );
+            }
+            break;
+            case Camellia::FUNCTION_SPACE_HCURL:
+            case Camellia::FUNCTION_SPACE_HCURL_DISC:
+                basis = Teuchos::rcp( new IntrepidBasisWrapper<>( Teuchos::rcp( new Intrepid::Basis_HCURL_QUAD_In_FEM<double, ArrayScalar >(polyOrder,Intrepid::POINTTYPE_SPECTRAL)),
+                                    spaceDim, vectorRank, fs)
+                                  );
+              break;
+            case Camellia::FUNCTION_SPACE_HVOL:
+                basis = Teuchos::rcp( new IntrepidBasisWrapper<>( Teuchos::rcp( new Intrepid::Basis_HGRAD_QUAD_Cn_FEM<double, ArrayScalar >(polyOrder-1,Intrepid::POINTTYPE_SPECTRAL)),
+                                    spaceDim, scalarRank, fs)
+                                  );
+              break;
+            case Camellia::FUNCTION_SPACE_REAL_SCALAR:
+                basis = Teuchos::rcp( new IntrepidBasisWrapper<>(Teuchos::rcp( new Intrepid::Basis_HVOL_QUAD_C0_FEM<double, ArrayScalar >()),
+                                    spaceDim, scalarRank, fs)
+                                  ) ;
+              break;
+            default:
+              TEUCHOS_TEST_FOR_EXCEPTION( ( (fs != Camellia::FUNCTION_SPACE_HGRAD) &&
+                                            (fs != Camellia::FUNCTION_SPACE_HDIV) &&
+                                            (fs != Camellia::FUNCTION_SPACE_HCURL) &&
+                                            (fs != Camellia::FUNCTION_SPACE_HVOL) ),
+                                          std::invalid_argument,
+                                          "Unhandled function space for quad_4. Please use HGRAD, HDIV, HCURL, or HVOL.");
+            }
+            break;
+          case shards::Triangle<3>::key:
+            switch(fs)
+            {
+            case Camellia::FUNCTION_SPACE_HGRAD:
+            case Camellia::FUNCTION_SPACE_HGRAD_DISC:
+              TEUCHOS_TEST_FOR_EXCEPTION(polyOrder <= 0, std::invalid_argument, "Constant basis not supported by Intrepid::Basis_HGRAD_TRI_Cn_FEM");
+                basis = Teuchos::rcp( new IntrepidBasisWrapper<>(Teuchos::rcp( new Intrepid::Basis_HGRAD_TRI_Cn_FEM<double, ArrayScalar >(polyOrder,Intrepid::POINTTYPE_WARPBLEND)),
+                                    spaceDim, scalarRank, fs)
+                                  ) ;
+              break;
+            case Camellia::FUNCTION_SPACE_HDIV:
+            case Camellia::FUNCTION_SPACE_HDIV_DISC:
+                // ultimately, we will be replacing all Intrepid bases with Intrepid2 bases. We start with HDIV_TRI here because there may be bugs in Intrepid's HDIV_TRI implementation.
+                basis = Teuchos::rcp( new Intrepid2BasisWrapper<>( Teuchos::rcp( new Intrepid2::Basis_HDIV_TRI_In_FEM<Kokkos::DefaultExecutionSpace, double, double >(polyOrder,Intrepid2::POINTTYPE_WARPBLEND)),
+                                    spaceDim, vectorRank, fs)
+                                  );
+              break;
+            case Camellia::FUNCTION_SPACE_HCURL:
+            case Camellia::FUNCTION_SPACE_HCURL_DISC:
+                basis = Teuchos::rcp( new IntrepidBasisWrapper<>( Teuchos::rcp( new Intrepid::Basis_HCURL_TRI_In_FEM<double, ArrayScalar >(polyOrder,Intrepid::POINTTYPE_WARPBLEND)),
+                                    spaceDim, vectorRank, fs)
+                                  );
+              break;
+            case(Camellia::FUNCTION_SPACE_HVOL):
+              TEUCHOS_TEST_FOR_EXCEPTION(polyOrder <= 1, std::invalid_argument, "Constant basis not supported by Intrepid::Basis_HGRAD_TRI_Cn_FEM");
+                basis = Teuchos::rcp( new IntrepidBasisWrapper<>( Teuchos::rcp( new Intrepid::Basis_HGRAD_TRI_Cn_FEM<double, ArrayScalar >(polyOrder-1,Intrepid::POINTTYPE_WARPBLEND)),
+                                    spaceDim, scalarRank, fs)
+                                  );
+              break;
+            default:
+              TEUCHOS_TEST_FOR_EXCEPTION( ( (fs != Camellia::FUNCTION_SPACE_HGRAD) &&
+                                            (fs != Camellia::FUNCTION_SPACE_HDIV) &&
+                                            (fs != Camellia::FUNCTION_SPACE_HCURL) &&
+                                            (fs != Camellia::FUNCTION_SPACE_HVOL) ),
+                                          std::invalid_argument,
+                                          "Unhandled function space for tri_3. Please use HGRAD, HDIV, HCURL, or HVOL.");
+            }
+            break;
+          case shards::Line<2>::key:
+            switch(fs)
+            {
+            case Camellia::FUNCTION_SPACE_HGRAD:
+            case Camellia::FUNCTION_SPACE_HGRAD_DISC:
+            {
+              int basisPolyOrder = _useEnrichedTraces ? polyOrder : polyOrder - 1;
 
-  typedef Camellia::TensorBasis<double, Intrepid::FieldContainer<double> > TensorBasis;
-  Teuchos::RCP<TensorBasis> tensorBasis = Teuchos::rcp( new TensorBasis(basisForShardsTopo, temporalBasis) );
+              if (_useLobattoForLineHGRAD)
+              {
+                // we use Legendre for HGRAD and HVOL both on the line--since we don't actually
+                // take derivatives of traces, this makes sense.
+                // but I do have some concern that there may be logic errors to do with the basis's functionSpace()
+                // return value: the Intrepid guys will always say HGRAD, and the Legendre HVOL.  Need to look at the
+                // way this gets used to see if the conflation will make a difference in e.g. p-refinements.
+                bool conformingTrue = true;
+                basis = Teuchos::rcp( new LobattoHGRAD_LineBasis<>(basisPolyOrder, conformingTrue) );
+              }
+              else
+              {
+                basis = Teuchos::rcp( new IntrepidBasisWrapper<>(Teuchos::rcp( new Intrepid::Basis_HGRAD_LINE_Cn_FEM<double, ArrayScalar >(basisPolyOrder,Intrepid::POINTTYPE_SPECTRAL)),
+                                      spaceDim, scalarRank, fs)
+                                    );
+              }
+            }
+            break;
+            case Camellia::FUNCTION_SPACE_HVOL:
+              if (_useLegendreForLineHVOL)   // not actually conforming, except in the L^2 sense...
+              {
+                basis = Teuchos::rcp( new LegendreHVOL_LineBasis<>(polyOrder-1) );
+              }
+              else
+              {
+                basis = Teuchos::rcp( new IntrepidBasisWrapper<>( Teuchos::rcp( new Intrepid::Basis_HGRAD_LINE_Cn_FEM<double, ArrayScalar >(polyOrder-1,Intrepid::POINTTYPE_SPECTRAL)),
+                                      spaceDim, scalarRank, fs)
+                                    );
+              }
+              break;
+            default:
+              TEUCHOS_TEST_FOR_EXCEPTION( ( (fs != Camellia::FUNCTION_SPACE_HGRAD) &&
+                                            (fs != Camellia::FUNCTION_SPACE_HVOL) ),
+                                          std::invalid_argument,
+                                          "Unhandled function space for line_2. Please use HGRAD or HVOL.");
+            }
+            break;
+          case shards::Node::key: // point topology
+            switch (fs)
+            {
+            case Camellia::FUNCTION_SPACE_HGRAD:
+            case Camellia::FUNCTION_SPACE_HGRAD_DISC:
+            case Camellia::FUNCTION_SPACE_HVOL:
+              basis = Teuchos::rcp( new PointBasis<>() );
+              break;
+            default:
+              TEUCHOS_TEST_FOR_EXCEPTION(true, std::invalid_argument, "Unsupported function space for point topology.");
+            }
+            break;
+          default:
+            TEUCHOS_TEST_FOR_EXCEPTION( ( (shardsKey != shards::Quadrilateral<4>::key)        &&
+                                          (shardsKey != shards::Triangle<3>::key)             &&
+                                          (shardsKey != shards::Line<2>::key)                 &&
+                                          (shardsKey != shards::Node::key)),
+                                        std::invalid_argument,
+                                        "Unknown cell topology for basis selection. Please use Node, Line_2, Quadrilateral_4, or Triangle_3.");
 
-  _conformingSpaceTimeBases[key] = tensorBasis;
+          }
+        }
+      }
+      
+      _conformingBases[key] = basis;
+      _polyOrders[basis.get()] = polyOrder;
+      _functionSpaces[basis.get()] = fs;
+      _cellTopoKeys[basis.get()] = shardsKey;
+    }
+    return _conformingBases[key];
+  }
+  else // more than one tensorial component
+  {
+    const std::vector<int> H1OrdersTruncated(H1Orders.begin(),H1Orders.end()-1);
+    const std::vector<FSE> functionSpacesTruncated(functionSpaces.begin(),functionSpaces.end()-1);
+    CellTopoPtr componentTopo = CellTopology::cellTopology(cellTopo->getShardsTopology(), cellTopo->getTensorialDegree() - 1);
+    BasisPtr componentBasis = getConformingBasis(H1OrdersTruncated, componentTopo, functionSpacesTruncated);
+    
+    const std::vector<int> H1OrdersFinal {H1Orders[H1Orders.size()-1]};
+    const std::vector<FSE> functionSpaceFinal {functionSpaces[functionSpaces.size()-1]};
+    
+    
+    auto key = make_tuple(componentBasis.get(), H1OrdersFinal[0], functionSpaceFinal[0]);
+    if (_conformingTensorBases.find(key) == _conformingTensorBases.end())
+    {
+      BasisPtr extrusionBasis = getConformingBasis(H1OrdersFinal, CellTopology::line(), functionSpaceFinal);
+      
+      using TensorBasis = Camellia::TensorBasis<double, Intrepid::FieldContainer<double> >;
 
-  return tensorBasis;
+      bool rangeDimensionIsSum = true; // This means, e.g., OPERATOR_GRAD is evaluated for all dimensions (contrast with space-time basis)
+      _conformingTensorBases[key] = Teuchos::rcp( new TensorBasis(componentBasis, extrusionBasis, rangeDimensionIsSum) );
+    }
+    return _conformingTensorBases[key];
+  }
+}
+
+BasisPtr BasisFactory::getConformingBasis( int polyOrder, CellTopoPtr cellTopo, Camellia::EFunctionSpace fs )
+{
+  if (cellTopo->getTensorialDegree() > 0)
+  {
+    // then we need to call the getConformingBasis() that takes std::vector arguments
+    std::vector<int> H1Orders(cellTopo->getTensorialDegree()+1,polyOrder);
+    std::vector<Camellia::EFunctionSpace> functionSpaces(cellTopo->getTensorialDegree()+1,fs);
+    return getConformingBasis(H1Orders, cellTopo, functionSpaces);
+  }
+  else
+  {
+    // we can call the one that takes a shards key
+    return getConformingBasis(polyOrder, cellTopo->getShardsTopology().getKey(), fs);
+  }
 }
 
 BasisPtr BasisFactory::getConformingBasis( int polyOrder, unsigned cellTopoKey, Camellia::EFunctionSpace fs )
 {
-  // this method is fairly redundant with getBasis(), but it provides the chance to offer different bases when a conforming basis is
-  // required.
-
-  if (fs != Camellia::FUNCTION_SPACE_REAL_SCALAR)
-  {
-    TEUCHOS_TEST_FOR_EXCEPTION(polyOrder == 0, std::invalid_argument, "polyOrder = 0 unsupported");
-  }
+  // This method provides the chance to offer different bases when a conforming basis is required.
+  // Specifically, getBasis() returns non-conforming basis for the relevant cell topo/function space combinations when:
+  // - _useLobattoForQuadHGRAD is true
+  // - _useLobattoForQuadHDIV  is true
+  // - _useLegendreForQuadHVOL is true
+  // - _useLobattoForLineHGRAD is true
+  // and for FUNCTION_SPACE_HDIV_FREE no matter what.
 
   BasisPtr basis;
   pair< pair<int,int>, Camellia::EFunctionSpace > key = make_pair( make_pair(polyOrder, cellTopoKey), fs );
@@ -520,50 +761,7 @@ BasisPtr BasisFactory::getConformingBasis( int polyOrder, unsigned cellTopoKey, 
     basis = _conformingBases[key];
     return basis;
   }
-
-  int spaceDim;
-  bool threeD = (cellTopoKey == shards::Hexahedron<8>::key) || (cellTopoKey == shards::Tetrahedron<4>::key);
-  bool twoD = (cellTopoKey == shards::Quadrilateral<4>::key) || (cellTopoKey == shards::Triangle<3>::key);
-  bool oneD = (cellTopoKey == shards::Line<2>::key);
-  bool zeroD = (cellTopoKey == shards::Node::key);
-
-  if (threeD)
-  {
-    // for now, we don't have any Lobatto, etc. implemented in 3D, so we just return whatever getBasis returns.
-    return getBasis(polyOrder, cellTopoKey, fs);
-  }
   
-  if (zeroD)
-  {
-    spaceDim = 0;
-  }
-  else if (oneD)
-  {
-    spaceDim = 1;
-  }
-  else if (twoD)
-  {
-    spaceDim = 2;
-  }
-  else
-  {
-    TEUCHOS_TEST_FOR_EXCEPTION(true, std::invalid_argument, "cellTopoKey unrecognized");
-  }
-
-  int scalarRank = 0, vectorRank = 1;
-
-  if (fs == Camellia::FUNCTION_SPACE_VECTOR_HGRAD)
-  {
-    BasisPtr componentBasis = BasisFactory::getConformingBasis(polyOrder, cellTopoKey, Camellia::FUNCTION_SPACE_HGRAD);
-    basis = Teuchos::rcp( new VectorizedBasis<>(componentBasis,spaceDim) ); // 3-21-13: changed behavior for 1D vectors, but I don't think we use these right now.
-  }
-  else if (fs == Camellia::FUNCTION_SPACE_VECTOR_HVOL)
-  {
-    BasisPtr componentBasis = BasisFactory::getConformingBasis(polyOrder, cellTopoKey, Camellia::FUNCTION_SPACE_HVOL);
-    basis = Teuchos::rcp( new VectorizedBasis<>(componentBasis,spaceDim) );
-  }
-  else
-  {
     switch (cellTopoKey)
     {
     case shards::Quadrilateral<4>::key:
@@ -571,33 +769,26 @@ BasisPtr BasisFactory::getConformingBasis( int polyOrder, unsigned cellTopoKey, 
       {
       case Camellia::FUNCTION_SPACE_HGRAD:
       case Camellia::FUNCTION_SPACE_HGRAD_DISC:
-        //if (polyOrder==0) {
-        //  basis = Teuchos::rcp( new Basis_HVOL_QUAD_C0_FEM<double, ArrayScalar >() ) ;
-        //} else {
-        if (! _useLobattoForQuadHGRAD)
-        {
-          basis = Teuchos::rcp( new IntrepidBasisWrapper<>( Teuchos::rcp( new Intrepid::Basis_HGRAD_QUAD_Cn_FEM<double, ArrayScalar >(polyOrder,Intrepid::POINTTYPE_SPECTRAL)),
-                                spaceDim, scalarRank, fs) );
-        }
-        else
+        if (_useLobattoForQuadHGRAD)
         {
           bool conformingTrue = true;
           basis = Teuchos::rcp( new LobattoHGRAD_QuadBasis<double, Intrepid::FieldContainer<double> >(polyOrder,conformingTrue) );
         }
-        //}
+        else
+        {
+          TEUCHOS_TEST_FOR_EXCEPTION(true, std::invalid_argument, "non-conforming basis should only be returned by getBasis() here if _useLobattoForQuadHGRAD is true");
+        }
         break;
       case Camellia::FUNCTION_SPACE_HDIV:
       case Camellia::FUNCTION_SPACE_HDIV_DISC:
-        if (! _useLobattoForQuadHDIV)
-        {
-          basis = Teuchos::rcp( new IntrepidBasisWrapper<>( Teuchos::rcp( new Intrepid::Basis_HDIV_QUAD_In_FEM<double, ArrayScalar >(polyOrder,Intrepid::POINTTYPE_SPECTRAL)),
-                                spaceDim, vectorRank, fs)
-                              );
-        }
-        else
+        if (_useLobattoForQuadHDIV)
         {
           bool conformingTrue = true;
           basis = Teuchos::rcp( new LobattoHDIV_QuadBasis<double, Intrepid::FieldContainer<double> >(polyOrder,conformingTrue) );
+        }
+        else
+        {
+          TEUCHOS_TEST_FOR_EXCEPTION(true, std::invalid_argument, "non-conforming basis should only be returned by getBasis() here if _useLobattoForQuadHDIV is true");
         }
         break;
       case Camellia::FUNCTION_SPACE_HDIV_FREE:
@@ -607,67 +798,8 @@ BasisPtr BasisFactory::getConformingBasis( int polyOrder, unsigned cellTopoKey, 
         basis = Teuchos::rcp( new LobattoHDIV_QuadBasis<double, Intrepid::FieldContainer<double> >(polyOrder,conformingTrue,divFreeTrue) );
       }
       break;
-      case Camellia::FUNCTION_SPACE_HCURL:
-      case Camellia::FUNCTION_SPACE_HCURL_DISC:
-          basis = Teuchos::rcp( new IntrepidBasisWrapper<>( Teuchos::rcp( new Intrepid::Basis_HCURL_QUAD_In_FEM<double, ArrayScalar >(polyOrder,Intrepid::POINTTYPE_SPECTRAL)),
-                              spaceDim, vectorRank, fs)
-                            );
-        break;
-      case Camellia::FUNCTION_SPACE_HVOL:
-          basis = Teuchos::rcp( new IntrepidBasisWrapper<>( Teuchos::rcp( new Intrepid::Basis_HGRAD_QUAD_Cn_FEM<double, ArrayScalar >(polyOrder-1,Intrepid::POINTTYPE_SPECTRAL)),
-                              spaceDim, scalarRank, fs)
-                            );
-        break;
-      case Camellia::FUNCTION_SPACE_REAL_SCALAR:
-          basis = Teuchos::rcp( new IntrepidBasisWrapper<>(Teuchos::rcp( new Intrepid::Basis_HVOL_QUAD_C0_FEM<double, ArrayScalar >()),
-                              spaceDim, scalarRank, fs)
-                            ) ;
-        break;
       default:
-        TEUCHOS_TEST_FOR_EXCEPTION( ( (fs != Camellia::FUNCTION_SPACE_HGRAD) &&
-                                      (fs != Camellia::FUNCTION_SPACE_HDIV) &&
-                                      (fs != Camellia::FUNCTION_SPACE_HCURL) &&
-                                      (fs != Camellia::FUNCTION_SPACE_HVOL) ),
-                                    std::invalid_argument,
-                                    "Unhandled function space for quad_4. Please use HGRAD, HDIV, HCURL, or HVOL.");
-      }
-      break;
-    case shards::Triangle<3>::key:
-      switch(fs)
-      {
-      case Camellia::FUNCTION_SPACE_HGRAD:
-      case Camellia::FUNCTION_SPACE_HGRAD_DISC:
-        TEUCHOS_TEST_FOR_EXCEPTION(polyOrder <= 0, std::invalid_argument, "Constant basis not supported by Intrepid::Basis_HGRAD_TRI_Cn_FEM");
-          basis = Teuchos::rcp( new IntrepidBasisWrapper<>(Teuchos::rcp( new Intrepid::Basis_HGRAD_TRI_Cn_FEM<double, ArrayScalar >(polyOrder,Intrepid::POINTTYPE_WARPBLEND)),
-                              spaceDim, scalarRank, fs)
-                            ) ;
-        break;
-      case Camellia::FUNCTION_SPACE_HDIV:
-      case Camellia::FUNCTION_SPACE_HDIV_DISC:
-          // ultimately, we will be replacing all Intrepid bases with Intrepid2 bases. We start with HDIV_TRI here because there may be bugs in Intrepid's HDIV_TRI implementation.
-          basis = Teuchos::rcp( new Intrepid2BasisWrapper<>( Teuchos::rcp( new Intrepid2::Basis_HDIV_TRI_In_FEM<Kokkos::DefaultExecutionSpace, double, double >(polyOrder,Intrepid2::POINTTYPE_WARPBLEND)),
-                              spaceDim, vectorRank, fs)
-                            );
-        break;
-      case Camellia::FUNCTION_SPACE_HCURL:
-      case Camellia::FUNCTION_SPACE_HCURL_DISC:
-          basis = Teuchos::rcp( new IntrepidBasisWrapper<>( Teuchos::rcp( new Intrepid::Basis_HCURL_TRI_In_FEM<double, ArrayScalar >(polyOrder,Intrepid::POINTTYPE_WARPBLEND)),
-                              spaceDim, vectorRank, fs)
-                            );
-        break;
-      case(Camellia::FUNCTION_SPACE_HVOL):
-        TEUCHOS_TEST_FOR_EXCEPTION(polyOrder <= 1, std::invalid_argument, "Constant basis not supported by Intrepid::Basis_HGRAD_TRI_Cn_FEM");
-          basis = Teuchos::rcp( new IntrepidBasisWrapper<>( Teuchos::rcp( new Intrepid::Basis_HGRAD_TRI_Cn_FEM<double, ArrayScalar >(polyOrder-1,Intrepid::POINTTYPE_WARPBLEND)),
-                              spaceDim, scalarRank, fs)
-                            );
-        break;
-      default:
-        TEUCHOS_TEST_FOR_EXCEPTION( ( (fs != Camellia::FUNCTION_SPACE_HGRAD) &&
-                                      (fs != Camellia::FUNCTION_SPACE_HDIV) &&
-                                      (fs != Camellia::FUNCTION_SPACE_HCURL) &&
-                                      (fs != Camellia::FUNCTION_SPACE_HVOL) ),
-                                    std::invalid_argument,
-                                    "Unhandled function space for tri_3. Please use HGRAD, HDIV, HCURL, or HVOL.");
+        TEUCHOS_TEST_FOR_EXCEPTION( true, std::invalid_argument, "Unhandled case for quad_4.");
       }
       break;
     case shards::Line<2>::key:
@@ -690,53 +822,18 @@ BasisPtr BasisFactory::getConformingBasis( int polyOrder, unsigned cellTopoKey, 
         }
         else
         {
-          basis = Teuchos::rcp( new IntrepidBasisWrapper<>(Teuchos::rcp( new Intrepid::Basis_HGRAD_LINE_Cn_FEM<double, ArrayScalar >(basisPolyOrder,Intrepid::POINTTYPE_SPECTRAL)),
-                                spaceDim, scalarRank, fs)
-                              );
+          TEUCHOS_TEST_FOR_EXCEPTION(true, std::invalid_argument, "non-conforming basis should only be returned by getBasis() here if _useLobattoForLineHGRAD is true");
         }
       }
       break;
-      case Camellia::FUNCTION_SPACE_HVOL:
-        if (_useLegendreForLineHVOL)   // not actually conforming, except in the L^2 sense...
-        {
-          basis = Teuchos::rcp( new LegendreHVOL_LineBasis<>(polyOrder-1) );
-        }
-        else
-        {
-          basis = Teuchos::rcp( new IntrepidBasisWrapper<>( Teuchos::rcp( new Intrepid::Basis_HGRAD_LINE_Cn_FEM<double, ArrayScalar >(polyOrder-1,Intrepid::POINTTYPE_SPECTRAL)),
-                                spaceDim, scalarRank, fs)
-                              );
-        }
-        break;
       default:
-        TEUCHOS_TEST_FOR_EXCEPTION( ( (fs != Camellia::FUNCTION_SPACE_HGRAD) &&
-                                      (fs != Camellia::FUNCTION_SPACE_HVOL) ),
-                                    std::invalid_argument,
-                                    "Unhandled function space for line_2. Please use HGRAD or HVOL.");
-      }
-      break;
-    case shards::Node::key: // point topology
-      switch (fs)
-      {
-      case Camellia::FUNCTION_SPACE_HGRAD:
-      case Camellia::FUNCTION_SPACE_HGRAD_DISC:
-      case Camellia::FUNCTION_SPACE_HVOL:
-        basis = Teuchos::rcp( new PointBasis<>() );
-        break;
-      default:
-        TEUCHOS_TEST_FOR_EXCEPTION(true, std::invalid_argument, "Unsupported function space for point topology.");
+        TEUCHOS_TEST_FOR_EXCEPTION( true, std::invalid_argument, "Unhandled case for line_2.");
       }
       break;
     default:
-      TEUCHOS_TEST_FOR_EXCEPTION( ( (cellTopoKey != shards::Quadrilateral<4>::key)        &&
-                                    (cellTopoKey != shards::Triangle<3>::key)             &&
-                                    (cellTopoKey != shards::Line<2>::key)                 &&
-                                    (cellTopoKey != shards::Node::key)),
-                                  std::invalid_argument,
-                                  "Unknown cell topology for basis selction. Please use Node, Line_2, Quadrilateral_4, or Triangle_3.");
-
+      TEUCHOS_TEST_FOR_EXCEPTION( true, std::invalid_argument, "Unhandled cell topology.");
     }
-  }
+  
   _conformingBases[key] = basis;
   _polyOrders[basis.get()] = polyOrder;
   _functionSpaces[basis.get()] = fs;
@@ -744,15 +841,10 @@ BasisPtr BasisFactory::getConformingBasis( int polyOrder, unsigned cellTopoKey, 
   return basis;
 }
 
-BasisPtr BasisFactory::getContinuousBasis(BasisPtr basis)
+BasisPtr BasisFactory::getContinuousBasis(BasisPtr basis, bool tensorBasisMeansSpaceTime)
 {
   TensorBasis<>* tensorBasis = dynamic_cast<TensorBasis<>*>(basis.get());
-  
-  bool spaceTime;
-  if (tensorBasis)
-    spaceTime = true;
-  else
-    spaceTime = false;
+  const bool spaceTime = tensorBasisMeansSpaceTime && (tensorBasis != NULL);
   
   BasisPtr spatialBasis, temporalBasis, spaceTimeBasis, basisForImposition;
   if (!spaceTime)
@@ -783,8 +875,7 @@ BasisPtr BasisFactory::getContinuousBasis(BasisPtr basis)
   else if (Camellia::functionSpaceIsDiscontinuous(spatialBasis->functionSpace()))
   {
     Camellia::EFunctionSpace fsContinuous = Camellia::continuousSpaceForDiscontinuous((spatialBasis->functionSpace()));
-    spatialBasis = getBasis(spatialBasis->getDegree(), spatialBasis->domainTopology(), fsContinuous,
-                                                          Camellia::FUNCTION_SPACE_HGRAD);
+    spatialBasis = getBasis(spatialBasis->getDegree(), spatialBasis->domainTopology(), fsContinuous);
   }
   if (temporalBasis.get())
   {
@@ -796,8 +887,7 @@ BasisPtr BasisFactory::getContinuousBasis(BasisPtr basis)
     else if (Camellia::functionSpaceIsDiscontinuous(temporalBasis->functionSpace()))
     {
       Camellia::EFunctionSpace fsContinuous = Camellia::continuousSpaceForDiscontinuous((temporalBasis->functionSpace()));
-      temporalBasis = getBasis(temporalBasis->getDegree(), temporalBasis->domainTopology(), fsContinuous,
-                                                             Camellia::FUNCTION_SPACE_HGRAD);
+      temporalBasis = getBasis(temporalBasis->getDegree(), temporalBasis->domainTopology(), fsContinuous);
     }
   }
   if (spaceTime)
@@ -809,7 +899,8 @@ BasisPtr BasisFactory::getContinuousBasis(BasisPtr basis)
     else
     {
       vector<int> H1Orders = {spatialBasis->getDegree(),temporalBasis->getDegree()};
-      spaceTimeBasis = getBasis(H1Orders, spaceTimeBasis->domainTopology(), spatialBasis->functionSpace(), temporalBasis->functionSpace());
+      spaceTimeBasis = getSpaceTimeConformingBasis(spatialBasis->getDegree(), temporalBasis->getDegree(), spaceTimeBasis->domainTopology(),
+                                                   spatialBasis->functionSpace(), temporalBasis->functionSpace());
       basisForImposition = spaceTimeBasis;
     }
   }
@@ -1014,35 +1105,56 @@ BasisPtr BasisFactory::getNodalBasisForCellTopology(unsigned int cellTopoKey)
   return _nodalBasisForShardsTopology[cellTopoKey];
 }
 
-PatchBasisPtr BasisFactory::getPatchBasis(BasisPtr parent, Camellia::FieldContainer<double> &patchNodesInParentRefCell, unsigned cellTopoKey)
+BasisPtr BasisFactory::getSpaceTimeConformingBasis( const std::vector<int> &polyOrderSpace, const int polyOrderTime,
+                                                   CellTopoPtr spaceTimeCellTopo, const Camellia::EFunctionSpace spatialFS, const Camellia::EFunctionSpace temporalFS)
 {
-  TEUCHOS_TEST_FOR_EXCEPTION(cellTopoKey != shards::Line<2>::key, std::invalid_argument, "getPatchBasis only supports lines right now.");
-  TEUCHOS_TEST_FOR_EXCEPTION(patchNodesInParentRefCell.dimension(0) != 2, std::invalid_argument, "should be just 2 points in patchNodes.");
-  TEUCHOS_TEST_FOR_EXCEPTION(patchNodesInParentRefCell.dimension(1) != 1, std::invalid_argument, "patchNodes.dimension(1) != 1.");
-  TEUCHOS_TEST_FOR_EXCEPTION(! basisKnown(parent), std::invalid_argument, "parentBasis not registered with BasisFactory.");
-  vector<double> points;
-  for (int i=0; i<patchNodesInParentRefCell.size(); i++)
+  auto spatialTopo = spaceTimeCellTopo->getTensorialComponent();
+  const int requiredPolyOrders = spatialTopo->getTensorialDegree() + 1;
+  if (polyOrderSpace.size() == 1)
   {
-    points.push_back(patchNodesInParentRefCell[i]);
+    std::vector<int> polyOrder(requiredPolyOrders, polyOrderSpace[0]);
+    std::vector<Camellia::EFunctionSpace> functionSpaces(requiredPolyOrders, spatialFS);
+    return getSpaceTimeConformingBasis(polyOrder, polyOrderTime, spaceTimeCellTopo, functionSpaces, temporalFS);
   }
-  pair<Camellia::Basis<>*, vector<double> > key = make_pair( parent.get(), points );
-  map< pair<Camellia::Basis<>*, vector<double> >, PatchBasisPtr >::iterator entry = _patchBases.find(key);
-  if ( entry != _patchBases.end() )
+  else
   {
-    return entry->second;
+    std::vector<Camellia::EFunctionSpace> functionSpaces(requiredPolyOrders, spatialFS);
+    return getSpaceTimeConformingBasis(polyOrderSpace, polyOrderTime, spaceTimeCellTopo, functionSpaces, temporalFS);
   }
-  shards::CellTopology line_2(shards::getCellTopologyData<shards::Line<2> >() );
-  PatchBasisPtr patchBasis = Teuchos::rcp( new PatchBasis<>(parent, patchNodesInParentRefCell, line_2));
-
-  _patchBasisSet.insert(patchBasis.get());
-  _patchBases[key] = patchBasis;
-  _polyOrders[patchBasis.get()] = _polyOrders[parent.get()];
-  _functionSpaces[patchBasis.get()] = _functionSpaces[parent.get()];
-  _cellTopoKeys[patchBasis.get()] = cellTopoKey;
-
-  return patchBasis;
 }
 
+BasisPtr BasisFactory::getSpaceTimeConformingBasis( const std::vector<int> &polyOrderSpace, const int polyOrderTime,
+                                                   CellTopoPtr spaceTimeCellTopo, const std::vector<Camellia::EFunctionSpace> &spatialFS, const Camellia::EFunctionSpace temporalFS)
+{
+  const int tensorialDegree = spaceTimeCellTopo->getTensorialDegree();
+  TEUCHOS_TEST_FOR_EXCEPTION(spaceTimeCellTopo->getTensorialDegree() == 0, std::invalid_argument, "Space-time basis requires tensorial degree of at least 1");
+  auto spaceCellTopo = CellTopology::cellTopology(spaceTimeCellTopo->getShardsTopology(), tensorialDegree-1);
+  BasisPtr spatialBasis  = getConformingBasis(polyOrderSpace, spaceCellTopo, spatialFS);
+  
+  auto key = make_tuple(spatialBasis.get(), polyOrderTime, temporalFS);
+  if (_conformingSpaceTimeBases.find(key) == _conformingSpaceTimeBases.end())
+  {
+    BasisPtr temporalBasis = getConformingBasis(polyOrderTime, CellTopology::line(), temporalFS);
+    
+    using TensorBasis = Camellia::TensorBasis<double, Intrepid::FieldContainer<double> >;
+
+    bool rangeDimensionIsSum = false; // This means, e.g., OPERATOR_GRAD is evaluated for spatial dimensions only
+    _conformingSpaceTimeBases[key] = Teuchos::rcp( new TensorBasis(spatialBasis, temporalBasis, rangeDimensionIsSum) );
+  }
+  return _conformingSpaceTimeBases[key];
+}
+
+BasisPtr BasisFactory::getSpaceTimeConformingBasis( const int polyOrderSpace, const int polyOrderTime,
+                                                   CellTopoPtr spaceTimeCellTopo, const FSE spatialFS, const FSE temporalFS)
+{
+  // Line has tensorial degree zero (and there we get to choose 1 polynomial order, and 1 function space).
+  // We get one more choice for each tensorial extrusion in space.
+  // The number of choices we get for poly order, function space in *spatial* dimensions is thus exactly the tensorial degree of the *space-time* topology.
+  const int tensorialDegree = spaceTimeCellTopo->getTensorialDegree();
+  std::vector<int> polyOrderSpaceVector(tensorialDegree,polyOrderSpace);
+  std::vector<FSE> spatialFunctionSpaces(tensorialDegree,spatialFS);
+  return getSpaceTimeConformingBasis(polyOrderSpaceVector, polyOrderTime, spaceTimeCellTopo, spatialFunctionSpaces, temporalFS);
+}
 
 void BasisFactory::registerBasis( BasisPtr basis, int basisRank, int polyOrder, int cellTopoKey, Camellia::EFunctionSpace fs )
 {
@@ -1126,11 +1238,6 @@ bool BasisFactory::isMultiBasis(BasisPtr basis)
 {
   MultiBasis<>* multiBasis = dynamic_cast< MultiBasis<>*>(basis.get());
   return multiBasis != NULL;
-}
-
-bool BasisFactory::isPatchBasis(BasisPtr basis)
-{
-  return _patchBasisSet.find(basis.get()) != _patchBasisSet.end();
 }
 
 void BasisFactory::setUseEnrichedTraces( bool value )

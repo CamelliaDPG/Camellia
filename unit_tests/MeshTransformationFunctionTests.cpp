@@ -93,6 +93,7 @@ namespace
     spaceTimeMeshTopology->setEdgeToCurveMap(edgeToCurveMap, Teuchos::null);
     
     MeshPtr spaceTimeMesh = MeshFactory::minRuleMesh(spaceTimeMeshTopology, form.bf(), {H1OrderSpace, H1OrderTime}, delta_k);
+    spaceTimeMesh->setTensorTopologyMeansSpaceTime(true);
     
     spaceTimeMeshTopology->initializeTransformationFunction(spaceTimeMesh);
 

@@ -315,7 +315,8 @@ void Projector<Scalar>::projectFunctionOntoBasisInterpolating(Camellia::FieldCon
   int startingDimensionForProjection; // 0 to start with vertices, e.g.
   if (Camellia::functionSpaceIsDiscontinuous(basis->functionSpace()))
   {
-    continuousBasis = BasisFactory::basisFactory()->getContinuousBasis(basis);
+    const bool spaceTime = domainBasisCache->cellTopologyIsSpaceTime();
+    continuousBasis = BasisFactory::basisFactory()->getContinuousBasis(basis, spaceTime);
     startingDimensionForProjection = domainDim;
   }
   else
@@ -704,7 +705,8 @@ void Projector<Scalar>::projectChildFunctionOntoParentBasisInterpolating(Camelli
   int startingDimensionForProjection; // 0 to start with vertices, e.g.
   if (Camellia::functionSpaceIsDiscontinuous(parentBasis->functionSpace()))
   {
-    continuousBasis = BasisFactory::basisFactory()->getContinuousBasis(parentBasis);
+    bool spaceTime = subdomainCaches[0]->cellTopologyIsSpaceTime();
+    continuousBasis = BasisFactory::basisFactory()->getContinuousBasis(parentBasis, spaceTime);
     startingDimensionForProjection = domainDim;
   }
   else

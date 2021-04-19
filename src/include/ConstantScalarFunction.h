@@ -41,8 +41,10 @@ public:
   
   TFunctionPtr<Scalar> dx() override;
   TFunctionPtr<Scalar> dy() override;
-  TFunctionPtr<Scalar> dz() override;  // Hmm... a design issue: if we implement dz() then grad() will return a 3D function, not what we want...  It may be that grad() should require a spaceDim argument.  I'm not sure.
+  TFunctionPtr<Scalar> dz() override;
   TFunctionPtr<Scalar> dt() override;
+  
+  TFunctionPtr<Scalar> di(int i) override;
 };
 }
 

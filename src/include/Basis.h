@@ -202,7 +202,7 @@ public:
       case Intrepid::OPERATOR_D9:    return Intrepid2::OPERATOR_D9;
       case Intrepid::OPERATOR_D10:   return Intrepid2::OPERATOR_D10;
       case Intrepid::OPERATOR_MAX:   return Intrepid2::OPERATOR_MAX;
-      
+      default:                       return Intrepid2::OPERATOR_MAX;
     }
   }
 };

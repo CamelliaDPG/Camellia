@@ -43,11 +43,8 @@ Camellia::EFunctionSpace Camellia::efsForSpace(Space space)
   case HDIV_FREE:
     return Camellia::FUNCTION_SPACE_HDIV_FREE;
 
-  // space-time:
-  case HGRAD_SPACE_L2_TIME:
-    return Camellia::FUNCTION_SPACE_HGRAD_SPACE_HVOL_TIME;
-  case L2_SPACE_HGRAD_TIME:
-    return Camellia::FUNCTION_SPACE_HVOL_SPACE_HGRAD_TIME;
+  case UNKNOWN_FS:
+    return Camellia::FUNCTION_SPACE_UNKNOWN;
       
   default:
     TEUCHOS_TEST_FOR_EXCEPTION(true, std::invalid_argument, "Unknown function space.");
@@ -68,10 +65,6 @@ int Camellia::rankForSpace(Space space)
     case L2:
       return 0;
     case CONSTANT_SCALAR:
-      return 0;
-      
-    case HGRAD_SPACE_L2_TIME:
-    case L2_SPACE_HGRAD_TIME:
       return 0;
       
     case HDIV_DISC:
@@ -129,12 +122,6 @@ Space Camellia::spaceForEFS(Camellia::EFunctionSpace efs)
 
   case Camellia::FUNCTION_SPACE_VECTOR_HGRAD_DISC:
     return VECTOR_HGRAD_DISC;
-
-  // space-time:
-    case Camellia::FUNCTION_SPACE_HGRAD_SPACE_HVOL_TIME:
-      return HGRAD_SPACE_L2_TIME;
-    case Camellia::FUNCTION_SPACE_HVOL_SPACE_HGRAD_TIME:
-      return L2_SPACE_HGRAD_TIME;
 
   case Camellia::FUNCTION_SPACE_HDIV_FREE:
     return HDIV_FREE;
@@ -235,7 +222,7 @@ VarPtr Var::varForTrialID(int trialID, TBFPtr<Scalar> bf)
 template VarPtr Var::varForTrialID(int trialID, TBFPtr<double> bf);
 
 Var::Var(int ID, int rank, string name, Camellia::EOperator op, Space fs, VarType varType, LinearTermPtr termTraced,
-         bool definedOnTemporalInterfaces)
+         bool definedOnTemporalInterfaces, Space temporalFS)
 {
   _id = ID;
   _rank = rank;
@@ -245,6 +232,7 @@ Var::Var(int ID, int rank, string name, Camellia::EOperator op, Space fs, VarTyp
   _varType = varType;
   _termTraced = termTraced;
   _definedOnTemporalInterfaces = definedOnTemporalInterfaces;
+  _temporalFS = temporalFS;
 }
 
 VarPtr Var::applyOp(Camellia::EOperator op, int spaceDim) const
@@ -398,11 +386,21 @@ VarPtr Var::di(int i) const
   switch (i)
   {
     case 1:
-      return this->dx();
+//      return this->dx();
     case 2:
-      return this->dy();
+//      return this->dy();
     case 3:
-      return this->dz();
+//      return this->dz();
+    case 4:
+    case 5:
+    case 6:
+    case 7:
+    {
+      Camellia::EOperator di_op = static_cast<Camellia::EOperator>(Camellia::OP_DI1 + (i-1));
+      Camellia::EOperator op = combineOperators(_op, di_op);
+      TEUCHOS_TEST_FOR_EXCEPTION( _rank != 0, std::invalid_argument, "di() only supported for vars of rank 0.");
+      return Teuchos::rcp( new Var(_id, _rank, _name, op, UNKNOWN_FS, _varType, _termTraced, _definedOnTemporalInterfaces, _temporalFS) );
+    }
     default:
       TEUCHOS_TEST_FOR_EXCEPTION(true, std::invalid_argument, "Unsupported value of i");
   }
@@ -412,21 +410,21 @@ VarPtr Var::dx() const
 {
   Camellia::EOperator op = combineOperators(_op, Camellia::OP_DX);
   TEUCHOS_TEST_FOR_EXCEPTION( _rank != 0, std::invalid_argument, "dx() only supported for vars of rank 0.");
-  return Teuchos::rcp( new Var(_id, _rank, _name, op, UNKNOWN_FS, _varType ) );
+  return Teuchos::rcp( new Var(_id, _rank, _name, op, UNKNOWN_FS, _varType, _termTraced, _definedOnTemporalInterfaces, _temporalFS ) );
 }
 
 VarPtr Var::dy() const
 {
   Camellia::EOperator op = combineOperators(_op, Camellia::OP_DY);
   TEUCHOS_TEST_FOR_EXCEPTION( _rank != 0, std::invalid_argument, "dy() only supported for vars of rank 0.");
-  return Teuchos::rcp( new Var(_id, _rank, _name, op, UNKNOWN_FS, _varType ) );
+  return Teuchos::rcp( new Var(_id, _rank, _name, op, UNKNOWN_FS, _varType, _termTraced, _definedOnTemporalInterfaces, _temporalFS ) );
 }
 
 VarPtr Var::dz() const
 {
   Camellia::EOperator op = combineOperators(_op, Camellia::OP_DZ);
   TEUCHOS_TEST_FOR_EXCEPTION( _rank != 0, std::invalid_argument, "dz() only supported for vars of rank 0.");
-  return Teuchos::rcp( new Var(_id, _rank, _name, op, UNKNOWN_FS, _varType ) );
+  return Teuchos::rcp( new Var(_id, _rank, _name, op, UNKNOWN_FS, _varType, _termTraced, _definedOnTemporalInterfaces, _temporalFS ) );
 }
 
 VarPtr Var::dt() const
@@ -496,7 +494,22 @@ LinearTermPtr Var::dot_normal() const
   return var * n;
 }
 
+bool Var::isSpaceTime() const
+{
+  return _temporalFS != UNKNOWN_FS;
+}
 
+void Var::setTemporalFunctionSpace(const Space &fs)
+{
+  bool validOption = (fs == UNKNOWN_FS) || (fs == L2) || (fs == HGRAD) || (fs == HGRAD_DISC);
+  TEUCHOS_TEST_FOR_EXCEPTION(!validOption, std::invalid_argument, "Invalid temporal function space choice.");
+  _temporalFS = fs;
+}
+
+Space Var::temporalFunctionSpace() const
+{
+  return _temporalFS;
+}
 
 // ! i is 1-based ordinal; 1 for x, 2 for y, 3 for z
 VarPtr Var::spatialComponent(int i) const

@@ -28,7 +28,8 @@ public:
   void values(Camellia::FieldContainer<Scalar> &values, BasisCachePtr basisCache);
   void values(DeviceView<Scalar> &values, ValueModificationType modType, BasisCachePtr basisCache);
   
-  bool imposeOnCell(int cellIndex);
+  //! cellOrdinal is the ordinal in the last basisCache seen by a call to values
+  bool imposeOnCell(int cellOrdinal);
   int varID();
 
   TFunctionPtr<Scalar> curl();

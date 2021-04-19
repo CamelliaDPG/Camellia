@@ -35,6 +35,8 @@ public:
   TFunctionPtr<Scalar> dy() override;
   TFunctionPtr<Scalar> dz() override;
   TFunctionPtr<Scalar> dt() override;
+  
+  TFunctionPtr<Scalar> di(int i) override; // 1 for dx(), 2 for dy(), 3 for dz()
 
   TFunctionPtr<Scalar> grad(int numComponents=-1) override; // gradient of sum is the sum of gradients
   TFunctionPtr<Scalar> div() override;  // divergence of sum is sum of divergences

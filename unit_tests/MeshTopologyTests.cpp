@@ -16,6 +16,7 @@
 #include "MeshTopology.h"
 #include "MPIWrapper.h"
 #include "PoissonFormulation.h"
+#include "SpaceTimeHeatFormulation.h"
 
 #include "MeshFactory.h"
 
@@ -869,6 +870,36 @@ TEUCHOS_UNIT_TEST(MeshTopology, GetRootMeshTopology)
     TEST_EQUALITY(leftCell->getNeighbor(0, meshTopo)->cellIndex(), rightCellIndex);
     TEST_EQUALITY(rightCell->getNeighbor(1, meshTopo)->cellIndex(), leftCellIndex);
   }
+
+  TEUCHOS_UNIT_TEST( MeshTopology, PeriodicBCs_1D_Extruded )
+  {
+    vector<double> A = {-1.0}, B = {0.0}, C = {1.0};
+    vector<vector<double>> vertices = {A, B, C};
+    vector<vector<IndexType>> elementVertices;
+    // cell 0:
+    elementVertices.push_back({0,1});
+    // cell 1:
+    elementVertices.push_back({1,2});
+    vector<CellTopoPtr> cellTopos(2,CellTopology::line());
+    MeshGeometryPtr geometry = Teuchos::rcp(new MeshGeometry(vertices,elementVertices,cellTopos));
+    PeriodicBCPtr leftEqualsRight = PeriodicBC::xIdentification(A[0], C[0]);
+    
+    MeshTopologyPtr meshTopo = Teuchos::rcp( new MeshTopology(geometry, {leftEqualsRight}) );
+    
+    IndexType leftCellIndex = 0, rightCellIndex = 1;
+    
+    MeshTopologyPtr meshTopoExtruded = MeshFactory::extrudedMeshTopology(meshTopo, 0.0, 1.0, 1);
+    // cell numbering remains the same, since extent in extruded dimension is 1
+    
+    CellPtr leftCell  = meshTopoExtruded->getCell(leftCellIndex);
+    CellPtr rightCell = meshTopoExtruded->getCell(rightCellIndex);
+    
+    const unsigned  leftSide = leftCell->topology()->getSpatialSideOrdinal(0);
+    const unsigned rightSide = rightCell->topology()->getSpatialSideOrdinal(1);
+    
+    TEST_EQUALITY(leftCell->getNeighbor(leftSide, meshTopo)->cellIndex(), rightCellIndex);
+    TEST_EQUALITY(rightCell->getNeighbor(rightSide, meshTopo)->cellIndex(), leftCellIndex);
+  }
   
   TEUCHOS_UNIT_TEST( MeshTopology, PeriodicBCs_2D )
   {
@@ -1408,8 +1439,10 @@ TEUCHOS_UNIT_TEST(MeshTopology, GetRootMeshTopology)
     
     int spaceDim = 2;
     bool conformingTraces = false;
-    PoissonFormulation formulation(spaceDim, conformingTraces);
-    BFPtr bf = formulation.bf();
+    const double epsilon = 1.0;
+    SpaceTimeHeatFormulation form(spaceDim, epsilon, conformingTraces);
+    
+    BFPtr bf = form.bf();
     
     int H1Order = 1, delta_k = 1;
     MeshPtr mesh = Teuchos::rcp( new Mesh(meshTopo, bf, H1Order, delta_k) );

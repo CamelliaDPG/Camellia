@@ -500,8 +500,27 @@ void CellDataMigration::unpackGeometryData(Mesh* mesh, GlobalIndexType cellID, c
                                            vector<RootedLabeledRefinementBranch> &cellHaloGeometry)
 {
   MeshTopology* meshTopo = dynamic_cast<MeshTopology*>(mesh->getTopology().get());
-  TEUCHOS_TEST_FOR_EXCEPTION(meshTopo==NULL, std::invalid_argument, "unpackGeometryData() called on a Mesh that does not have a full MeshTopology as its MeshTopologyView");
+  if (meshTopo == NULL)
+  {
+    // then the MeshTopology had better *not* be distributed
+    // there should be two ints, numLabeledBranches, numHandles, both 0, and nothing else
   
+    int numLabeledBranches;
+    
+    memcpy(&numLabeledBranches, dataLocation, sizeof(numLabeledBranches));
+    dataLocation += sizeof(numLabeledBranches);
+    
+    TEUCHOS_TEST_FOR_EXCEPTION(numLabeledBranches != 0, std::invalid_argument, "unpackGeometryData() called with nontrivial migrated geometry on a Mesh that does not have a full MeshTopology as its MeshTopologyView");
+    
+    int numHandles;
+    memcpy(&numHandles, dataLocation, sizeof(numHandles));
+    dataLocation += sizeof(numHandles);
+    
+    TEUCHOS_TEST_FOR_EXCEPTION(numHandles != 0, std::invalid_argument, "unpackGeometryData() called with nontrivial migrated geometry on a Mesh that does not have a full MeshTopology as its MeshTopologyView");
+    
+    return;
+  }
+    
   cellHaloGeometry.clear();
   int numLabeledBranches;
   

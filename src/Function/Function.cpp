@@ -148,7 +148,7 @@ class HeavisideFunction : public SimpleFunction<double>
 public:
   HeavisideFunction(double xShift=0.0)
   :
-  SimpleFunction<double>("HeavisideFunction")
+  SimpleFunction<double>("HeavisideFunction",VARIES_IN_DIMENSION_0)
   {
     _xShift = xShift;
   }
@@ -170,7 +170,7 @@ class HeavisideFunctionY : public SimpleFunction<double>
 public:
   HeavisideFunctionY(double yShift=0.0)
   :
-  SimpleFunction<double>("HeavisideFunctionY")
+  SimpleFunction<double>("HeavisideFunctionY",VARIES_IN_DIMENSION_0)
   {
     _yShift = yShift;
   }
@@ -248,7 +248,7 @@ class MeshSkeletonCharacteristicFunction : public SimpleFunction<double>
 public:
   MeshSkeletonCharacteristicFunction()
   :
-  SimpleFunction<double>("MeshSkeletonCharacteristicFunction")
+  SimpleFunction<double>("MeshSkeletonCharacteristicFunction",VARIES_IN_NO_DIMENSION)
   {}
   bool boundaryValueOnly()
   {
@@ -258,7 +258,7 @@ public:
   {
     return "|_{\\Gamma_h}";
   }
-  double value(double x)
+  double value()
   {
     return 1.0;
   }
@@ -286,6 +286,16 @@ TFunction<Scalar>::TFunction(const std::string &className, int rank)
   _displayString = this->displayString();
   _time = 0;
   _className = className;
+}
+
+template <typename Scalar>
+TFunction<Scalar>::TFunction(const std::string &className, int rank, int variationDimensions)
+{
+  _rank = rank;
+  _displayString = this->displayString();
+  _time = 0;
+  _className = className;
+  _variationDimensions = variationDimensions;
 }
 
 template <typename Scalar>
@@ -847,6 +857,11 @@ TFunctionPtr<Scalar> TFunction<Scalar>::dt()
 template <typename Scalar>
 TFunctionPtr<Scalar> TFunction<Scalar>::di(int i) // 1-based: 1 for dx, 2 for dy(), 3 for dz()
 {
+  const int dimensionEnumValue = 1 << (i-1);
+  const bool variesInDimension = dimensionEnumValue & _variationDimensions;
+  
+  if (!variesInDimension) return Function::zero(_rank);
+  
   switch (i) {
     case 1: return dx();
     case 2: return dy();
@@ -2150,8 +2165,7 @@ std::map<GlobalIndexType, double> TFunction<Scalar>::squaredL2NormOfJumps(MeshPt
 }
 
 template <typename Scalar>
-Scalar TFunction<Scalar>::integrate(MeshPtr mesh, int cubatureDegreeEnrichment, bool testVsTest, bool requireSideCache,
-                                    bool spatialSidesOnly)
+Scalar TFunction<Scalar>::integrate(MeshPtr mesh, int cubatureDegreeEnrichment, bool testVsTest, bool requireSideCache, bool spatialSidesOnly)
 {
   Scalar integral = 0;
   MeshTopologyViewPtr meshTopoView = mesh->getTopology();
@@ -2852,6 +2866,18 @@ template <typename Scalar>
 TFunctionPtr<double> TFunction<Scalar>::tn(int n)
 {
   return Teuchos::rcp( new Tn(n) );
+}
+
+template <typename Scalar>
+int TFunction<Scalar>::variationDimensions() const
+{
+  return _variationDimensions;
+}
+
+template <typename Scalar>
+void TFunction<Scalar>::setVariationDimensions(int variationDimensions)
+{
+  _variationDimensions = variationDimensions;
 }
 
 template <typename Scalar>

@@ -85,8 +85,6 @@ class MeshTopology : public MeshTopologyView
   map< pair<IndexType, IndexType>, ParametricCurvePtr > _edgeToCurveMap;
   Teuchos::RCP<MeshTransformationFunction> _transformationFunction; // for dealing with those curves
 
-  IndexType addCell(IndexType cellIndex, CellTopoPtrLegacy cellTopo, const vector<IndexType> &cellVertices, IndexType parentCellIndex = -1);
-  IndexType addCell(IndexType cellIndex, CellTopoPtr cellTopo, const vector<IndexType> &cellVertices, IndexType parentCellIndex = -1);
   void addCellForSide(IndexType cellIndex, unsigned sideOrdinal, IndexType sideEntityIndex);
   void addEdgeCurve(pair<IndexType,IndexType> edge, ParametricCurvePtr curve);
   //  IndexType addEntity(const shards::CellTopology &entityTopo, const vector<IndexType> &entityVertices, unsigned &entityPermutation); // returns the entityIndex
@@ -112,18 +110,16 @@ class MeshTopology : public MeshTopologyView
   void refineCellEntities(CellPtr cell, RefinementPatternPtr refPattern); // ensures that the appropriate child entities exist, and parental relationships are recorded in _parentEntities
   void setEntityGeneralizedParent(unsigned entityDim, IndexType entityIndex, unsigned parentDim, IndexType parentEntityIndex);
 
-  GlobalDofAssignment* _gda; // for cubature degree lookups
-
   map<string, long long> approximateMemoryCosts() const; // for each private variable
 
   void addSideForEntity(unsigned entityDim, IndexType entityIndex, IndexType sideEntityIndex); // maintains _sidesForEntities container
 
-  // ! private method for deep-copying Cells during MeshToplogy::deepCopy()
+  //! private method for deep-copying Cells during MeshToplogy::deepCopy()
   void deepCopyCells();
 
+protected:
+  virtual IndexType addCell(IndexType cellIndex, CellTopoPtr cellTopo, const vector<IndexType> &cellVertices, IndexType parentCellIndex = -1);
   CellPtr addCell(IndexType cellIndex, CellTopoPtr cellTopo, const vector< vector<double> > &cellVertices);
-  CellPtr addCell(IndexType cellIndex, CellTopoPtr cellTopo, const Camellia::FieldContainer<double> &cellVertices);
-  CellPtr addCell(IndexType cellIndex, CellTopoPtrLegacy cellTopo, const vector< vector<double> > &cellVertices);
 public:
   MeshTopology(unsigned spaceDim, vector<PeriodicBCPtr> periodicBCs=vector<PeriodicBCPtr>());
   MeshTopology(MeshGeometryPtr meshGeometry, vector<PeriodicBCPtr> periodicBCs=vector<PeriodicBCPtr>());
@@ -131,29 +127,30 @@ public:
   virtual ~MeshTopology() {}
 
   CellPtr addCell(CellTopoPtr cellTopo, const vector< vector<double> > &cellVertices);
-  CellPtr addCell(CellTopoPtr cellTopo, const Camellia::FieldContainer<double> &cellVertices);
-  CellPtr addCell(CellTopoPtrLegacy cellTopo, const vector< vector<double> > &cellVertices);
   
-  // ! adds cell with the specified cellIndex, which must be less than _nextCellIndex
+  //! Adds a new cell.  Constructs a vector<vector<double> > container of cellVertices, and calls the public method addCell(CellTopoPtr, const vector< vector<double> > &).
+  CellPtr addCell(CellTopoPtr cellTopo, const Camellia::FieldContainer<double> &cellVertices);
+  
+  //! adds cell with the specified cellIndex, which must be less than _nextCellIndex (calls private addCell() method).
   CellPtr addMigratedCell(IndexType cellIndex, CellTopoPtr cellTopo, const vector<vector<double>> &cellVertices);
   
-  void addVertex(const std::vector<double>& vertex);
+  virtual void addVertex(const std::vector<double>& vertex);
 
   void applyTag(std::string tagName, int tagID, EntitySetPtr entitySet);
   
   // ! This method only gets within a factor of 2 or so, but can give a rough estimate (in bytes)
   long long approximateMemoryFootprint() const;
 
-  const MeshTopology* baseMeshTopology() const; // returns this
+  const MeshTopology* baseMeshTopology() const; // returns this (overrides MeshTopologyView::baseMeshTopology())
   
   EntitySetPtr createEntitySet();
   EntitySetPtr getEntitySet(EntityHandle entitySetHandle) const;
   vector<EntityHandle> getEntityHandlesForCell(IndexType cellIndex) const;
   
-  // ! creates a copy of this, deep-copying each Cell and all lookup tables (but does not deep copy any other objects, e.g. PeriodicBCPtrs and the
-  Teuchos::RCP<MeshTopology> deepCopy() const;
+  //! creates a copy of this, deep-copying each Cell and all lookup tables (but does not deep copy any other objects, e.g. PeriodicBCPtrs and the like
+  virtual Teuchos::RCP<MeshTopology> deepCopy() const;
 
-  // ! This method only gets within a factor of 2 or so, but can give rough estimates
+  //! This method only gets within a factor of 2 or so, but can give rough estimates
   void printApproximateMemoryReport() const;
 
   bool entityHasParent(unsigned d, IndexType entityIndex) const;
@@ -167,7 +164,7 @@ public:
   //  pair< CellPtr, unsigned > getCellAncestralNeighbor(unsigned cellIndex, unsigned sideIndex);
   bool cellHasCurvedEdges(IndexType cellIndex) const;
 
-  bool cellContainsPoint(GlobalIndexType cellID, const std::vector<double> &point, int cubatureDegree) const;
+  virtual bool cellContainsPoint(GlobalIndexType cellID, const std::vector<double> &point, int cubatureDegree) const;
   std::vector<IndexType> cellIDsForPoints(const Camellia::FieldContainer<double> &physicalPoints) const;
 
   bool entityIsAncestor(unsigned d, IndexType ancestor, IndexType descendent) const;
@@ -179,7 +176,7 @@ public:
   
   virtual bool isDistributed() const;
   
-  CellPtr findCellWithVertices(const vector< vector<double> > &cellVertices) const;
+  virtual CellPtr findCellWithVertices(const vector< vector<double> > &cellVertices) const;
 
   vector<IndexType> getChildEntities(unsigned d, IndexType entityIndex) const;
   set<IndexType> getChildEntitiesSet(unsigned d, IndexType entityIndex) const;
@@ -221,14 +218,14 @@ public:
   bool isBoundarySide(IndexType sideEntityIndex) const;
   bool isValidCellIndex(IndexType cellIndex) const;
   
-  Camellia::FieldContainer<double> physicalCellNodesForCell(IndexType cellIndex, bool includeCellDimension = false) const;
-  void refineCell(IndexType cellIndex, RefinementPatternPtr refPattern, IndexType firstChildCellIndex);
+  virtual Camellia::FieldContainer<double> physicalCellNodesForCell(IndexType cellIndex, bool includeCellDimension = false) const;
+  virtual void refineCell(IndexType cellIndex, RefinementPatternPtr refPattern, IndexType firstChildCellIndex);
   
   // ! Unrefine so that the specified cellIndex is an active cell (i.e., discard the cell's children)
   // ! at present, only one-level unrefinements are supported (i.e., cell's children should be active, not themselves parents)
   // ! refPattern should match the refinement that was done on the cell (this is for counting purposes, to avoid MPI communication
   // ! when the cell is not locally known)
-  void unrefineCell(IndexType cellIndex, RefinementPatternPtr refPattern);
+  virtual void unrefineCell(IndexType cellIndex, RefinementPatternPtr refPattern);
   
   // ! Returns the global cell count.
   IndexType cellCount() const;
@@ -238,8 +235,6 @@ public:
 
   // ! Returns the global active cell count.
   IndexType activeCellCount() const;
-
-  void setGlobalDofAssignment(GlobalDofAssignment* gda); // for cubature degree lookups
 
   // ! MPI-collective method for distributed MeshTopology.  The vector returned is ordered by the MPI rank that owns the cell indices (i.e. cell indices belonging to a single rank will be contiguous in this container).
   vector<IndexType> getActiveCellIndicesGlobal() const;
@@ -286,7 +281,7 @@ public:
   // ! Returns a counter, incremented when pruneToInclude was last called.  Allows caching of things that depend on ownedCellIndices (used in MeshTopologyView's determination of *its* ownedCellIndices).
   int pruningOrdinal() const;
   
-  virtual const std::vector<PeriodicBCPtr> & getPeriodicBCs() const;
+  const std::vector<PeriodicBCPtr> & getPeriodicBCs() const;
 
   // ! Generates a transformation function if edge-to-curve map has been set.  Particularly useful for cases where a null Mesh was previously provided, resulting in a null transformation function.
   void initializeTransformationFunction(MeshPtr mesh);
@@ -299,7 +294,7 @@ public:
   vector< pair<IndexType,unsigned> > getConstrainingSideAncestry(IndexType sideEntityIndex) const;   // pair: first is the sideEntityIndex of the ancestor; second is the refinementIndex of the refinement to get from parent to child (see _parentEntities and _childEntities)
 
   // ! Fills the provided container with the vertices for the requested cell
-  void verticesForCell(Camellia::FieldContainer<double>& vertices, IndexType cellID) const;
+  virtual void verticesForCell(Camellia::FieldContainer<double>& vertices, IndexType cellID) const;
   
   const map<EntityHandle, EntitySetPtr>& getEntitySets() const;
   const map<string, vector<pair<EntityHandle, int>>>& getTagSetsInteger() const; // tags with integer value, applied to EntitySets.

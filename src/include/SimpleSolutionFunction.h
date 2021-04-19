@@ -44,6 +44,8 @@ public:
   TFunctionPtr<Scalar> dy() override;
   TFunctionPtr<Scalar> dz() override;
   
+  TFunctionPtr<Scalar> di(int i) override;
+  
   TFunctionPtr<Scalar> div() override;
   TFunctionPtr<Scalar> grad(int spaceDim=-1) override;
   TFunctionPtr<Scalar> curl() override;

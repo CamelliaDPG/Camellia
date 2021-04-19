@@ -89,11 +89,14 @@ FCPtr BasisEvaluation::getValues(BasisPtr basis, Camellia::EOperator op,
     }
     return result;
   }
-  // if we get here, we should have a standard Intrepid operator, in which case we should
+  // if we get here, we should have a standard Intrepid operator *or* OP_DIn, in which case we should
   // be able to: size a Camellia::FieldContainer appropriately, and then call basis->getValues
 
-  // But let's do just check that we have a standard Intrepid operator
-  if ( (op >= Camellia::OP_X) || (op <  Camellia::OP_VALUE) )
+  // Let's assert that that's the case:
+  const bool standardIntrepidOperator = (op >= Camellia::OP_VALUE) && (op <= Camellia::OP_D10);
+  const bool camelliaOpDIn            = (op >= Camellia::OP_DI1)   && (op <= Camellia::OP_DI7);
+  const bool validOperator = standardIntrepidOperator || camelliaOpDIn;
+  if ( !validOperator )
   {
     TEUCHOS_TEST_FOR_EXCEPTION(true,std::invalid_argument,"Unknown operator.");
   }
@@ -103,7 +106,8 @@ FCPtr BasisEvaluation::getValues(BasisPtr basis, Camellia::EOperator op,
   dimensions.push_back(basisCardinality);
   dimensions.push_back(numPoints);
   int basisRank = basis->rangeRank();
-  if (((basisRank == 0) && (op ==  Camellia::OP_VALUE)))
+  const bool opValue = (op ==  Camellia::OP_VALUE);
+  if (((basisRank == 0) && (opValue || camelliaOpDIn)))
   {
     // scalar; leave as is
   }
@@ -245,8 +249,6 @@ FCPtr BasisEvaluation::getTransformedValuesWithBasisValues(BasisPtr basis, Camel
       fst::HDIVtransformVALUE<double>(*transformedValues,cellJacobian,cellJacobianDet,*referenceValues);
         break;
       case Camellia::FUNCTION_SPACE_HVOL:
-      case Camellia::FUNCTION_SPACE_HVOL_SPACE_HGRAD_TIME:
-      case Camellia::FUNCTION_SPACE_HGRAD_SPACE_HVOL_TIME:
 //        {
 //          static bool haveWarned = false;
 //          if (!haveWarned) {
@@ -444,8 +446,6 @@ FCPtr BasisEvaluation::getTransformedValuesWithBasisValues(BasisPtr basis, Camel
         fst::HDIVtransformVALUE<double>(*transformedValues,basisCache->getJacobian(),basisCache->getJacobianDet(),*referenceValues);
         break;
       case Camellia::FUNCTION_SPACE_HVOL:
-      case Camellia::FUNCTION_SPACE_HVOL_SPACE_HGRAD_TIME:
-      case Camellia::FUNCTION_SPACE_HGRAD_SPACE_HVOL_TIME:
         //        {
         //          static bool haveWarned = false;
         //          if (!haveWarned) {
@@ -470,7 +470,31 @@ FCPtr BasisEvaluation::getTransformedValuesWithBasisValues(BasisPtr basis, Camel
       case Camellia::FUNCTION_SPACE_HVOL:
       case Camellia::FUNCTION_SPACE_HGRAD:
       case Camellia::FUNCTION_SPACE_HGRAD_DISC:
-        fst::HGRADtransformGRAD<double>(*transformedValues,basisCache->getJacobianInv(),*referenceValues);
+      {
+        // We do the multiply manually, since spaceDim > 3 not supported by HGRADtransformGRAD…
+        const Camellia::FieldContainer<double> &jacobianInverse = basisCache->getJacobianInv();
+        const int cellCount  = jacobianInverse.dimension(0);
+        const int pointCount = jacobianInverse.dimension(1);
+        const int fieldCount = referenceValues->dimension(0);
+        for (int cell=0; cell<cellCount; cell++)
+        {
+          for (int field=0; field<fieldCount; field++)
+          {
+            for (int point=0; point<pointCount; point++)
+            {
+              for (int row=0; row<spaceDim; row++)
+              {
+                double value = 0;
+                for (int col=0; col<spaceDim; col++)
+                {
+                  value += jacobianInverse(cell,point,col,row) * (*referenceValues)(field,point,col);
+                }
+                (*transformedValues)(cell,field,point,row) = value;
+              }
+            }
+          }
+        }
+      }
         break;
       case Camellia::FUNCTION_SPACE_VECTOR_HVOL:
       case Camellia::FUNCTION_SPACE_VECTOR_HGRAD:
@@ -650,9 +674,48 @@ FCPtr BasisEvaluation::getTransformedValuesWithBasisValues(BasisPtr basis, Camel
         break;
     }
       break;
-
     default:
-      TEUCHOS_TEST_FOR_EXCEPTION(true,std::invalid_argument, "unhandled transformation");
+      if (Camellia::EOperator(relatedOp) == op)
+      {
+        switch (op)
+        {
+          case OP_DI1:
+          case OP_DI2:
+          case OP_DI3:
+          case OP_DI4:
+          case OP_DI5:
+          case OP_DI6:
+          case OP_DI7:
+          {
+            const int comp = op - OP_DI1;
+            const int basisCardinality = basis->getCardinality();
+            const int numPoints = referenceValues->dimension(1);
+
+            // assumption is that it's an HGRAD function space; we are doing HGRAD_transform_GRAD, but with a single component, and a diagonal Jacobian
+            
+            for (int cellOrdinal=0; cellOrdinal<numCells; cellOrdinal++)
+            {
+              const double extrusionWidth = basisCache->extrusionWidth(comp, cellOrdinal);
+              const double jacobianInverse = 2.0 / extrusionWidth; // 2.0: length of the reference-space line element
+              for (int fieldOrdinal=0; fieldOrdinal<basisCardinality; fieldOrdinal++)
+              {
+                for (int pointOrdinal=0; pointOrdinal<numPoints; pointOrdinal++)
+                {
+                  const double & refValue = (*referenceValues)(fieldOrdinal,pointOrdinal);
+                  (*transformedValues)(cellOrdinal,fieldOrdinal,pointOrdinal) = jacobianInverse * refValue;
+                }
+              }
+            }
+          }
+            break;
+          default:
+            TEUCHOS_TEST_FOR_EXCEPTION(true, std::invalid_argument, "unhandled transformation")
+        }
+      }
+      else
+      {
+        TEUCHOS_TEST_FOR_EXCEPTION(true,std::invalid_argument, "unhandled transformation");
+      }
       break;
   }
   
@@ -670,6 +733,8 @@ Intrepid::EOperator BasisEvaluation::relatedOperator(Camellia::EOperator op, Cam
   Intrepid::EOperator relatedOp = (Intrepid::EOperator) op;
   componentOfInterest = -1;
 
+  const bool camelliaOpDIn = (op >= Camellia::OP_DI1)   && (op <= Camellia::OP_DI7);
+  
   bool vectorizedBasis = Camellia::functionSpaceIsVectorized(fs);
 
   if (   vectorizedBasis
@@ -685,6 +750,11 @@ Intrepid::EOperator BasisEvaluation::relatedOperator(Camellia::EOperator op, Cam
   else if ((op==OP_DX) || (op==OP_DY) || (op==OP_DZ))
   {
     componentOfInterest = op - OP_DX;
+    relatedOp = Intrepid::OPERATOR_GRAD;
+  }
+  else if (camelliaOpDIn)
+  {
+    componentOfInterest = op - Camellia::OP_DI1;
     relatedOp = Intrepid::OPERATOR_GRAD;
   }
   else if (   (op==OP_CROSS_NORMAL)   || (op==OP_DOT_NORMAL)     || (op==OP_TIMES_NORMAL)

@@ -75,14 +75,14 @@ void BCFunction<Scalar>::values(DeviceView<Scalar> &values, ValueModificationTyp
 }
 
 template <typename Scalar>
-bool BCFunction<Scalar>::imposeOnCell(int cellIndex)
+bool BCFunction<Scalar>::imposeOnCell(int cellOrdinal)
 {
   // returns true if at least one cubature point lies within the SpatialFilter or equivalent
   // MUST call values() with appropriate basisCache before calling this...
   int numPoints = _imposeHere.dimension(1);
   for (int ptIndex=0; ptIndex < numPoints; ptIndex++)
   {
-    if (_imposeHere(cellIndex,ptIndex)) return true;
+    if (_imposeHere(cellOrdinal,ptIndex)) return true;
   }
   return false;
 }

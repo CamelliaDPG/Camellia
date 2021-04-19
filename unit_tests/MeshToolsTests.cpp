@@ -43,7 +43,7 @@ class Cone_U0 : public SimpleFunction<double>
 public:
   Cone_U0(double x0 = 0, double y0 = 0.25, double r = 0.1, double h = 1.0, bool usePeriodicData = true)
   :
-  SimpleFunction<double>("Cone_U0")
+  SimpleFunction<double>("Cone_U0", VARIES_IN_DIMENSION_0 | VARIES_IN_DIMENSION_1)
   {
     _x0 = x0;
     _y0 = y0;

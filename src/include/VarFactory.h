@@ -52,8 +52,8 @@ public:
   bool hasSpaceOnlyTrialVariable() const;
   
   // accessors:
-  VarPtr test(int testID);
-  VarPtr trial(int trialID);
+  VarPtr test(int testID) const;
+  VarPtr trial(int trialID) const;
 
   std::vector<int> testIDs();
 
@@ -66,12 +66,19 @@ public:
   VarPtr testVar(std::string name, Space fs, int ID = -1);
   VarPtr fieldVar(std::string name, Space fs = L2, int ID = -1);
 
+  VarPtr testVarSpaceTime(std::string name, Space fs, Space temporalFS = HGRAD, int ID = -1);
+  VarPtr fieldVarSpaceTime(std::string name, Space fs = L2, Space temporalFS = L2, int ID = -1);
+  
   // fluxes are trace variables which trace a term involving a normal (and which therefore
   // need to be multiplied by a sgn(n) term; i.e. the two cells which see a side will see opposite
   // values of the flux variable).
   VarPtr fluxVar(std::string name, LinearTermPtr termTraced, Space fs = L2, int ID = -1);
   VarPtr fluxVar(std::string name, VarPtr termTraced, Space fs = L2, int ID = -1);
   VarPtr fluxVar(std::string name, Space fs = L2, int ID = -1);
+  
+  VarPtr fluxVarSpaceTime(std::string name, LinearTermPtr termTraced, Space fs = L2, Space temporalFS = L2, int ID = -1);
+  VarPtr fluxVarSpaceTime(std::string name, VarPtr termTraced, Space fs = L2, Space temporalFS = L2, int ID = -1);
+  VarPtr fluxVarSpaceTime(std::string name, Space fs = L2, Space temporalFS = L2, int ID = -1);
 
   // Methods for creating space-time fluxes that are not defined on purely temporal interfaces:
   VarPtr fluxVarSpaceOnly(std::string name, LinearTermPtr termTraced, Space fs = L2, int ID = -1);
@@ -81,11 +88,15 @@ public:
   VarPtr traceVar(std::string name, LinearTermPtr termTraced, Space fs = HGRAD, int ID = -1);
   VarPtr traceVar(std::string name, VarPtr termTraced, Space fs = HGRAD, int ID = -1);
   VarPtr traceVar(std::string name, Space fs = HGRAD, int ID = -1);
+  
+  VarPtr traceVarSpaceTime(std::string name, LinearTermPtr termTraced, Space fs = HGRAD, Space temporalFS = HGRAD, int ID = -1);
+  VarPtr traceVarSpaceTime(std::string name, VarPtr termTraced, Space fs = HGRAD, Space temporalFS = HGRAD, int ID = -1);
+  VarPtr traceVarSpaceTime(std::string name, Space fs = HGRAD, Space temporalFS = HGRAD, int ID = -1);
 
   // Methods for creating space-time traces that are not defined on purely temporal interfaces:
-  VarPtr traceVarSpaceOnly(std::string name, LinearTermPtr termTraced, Space fs = HGRAD_SPACE_L2_TIME, int ID = -1);
-  VarPtr traceVarSpaceOnly(std::string name, VarPtr termTraced, Space fs = HGRAD_SPACE_L2_TIME, int ID = -1);
-  VarPtr traceVarSpaceOnly(std::string name, Space fs = HGRAD_SPACE_L2_TIME, int ID = -1);
+  VarPtr traceVarSpaceOnly(std::string name, LinearTermPtr termTraced, Space fs = HGRAD, int ID = -1);
+  VarPtr traceVarSpaceOnly(std::string name, VarPtr termTraced, Space fs = HGRAD, int ID = -1);
+  VarPtr traceVarSpaceOnly(std::string name, Space fs = HGRAD, int ID = -1);
 
   const std::map< int, VarPtr > & testVars() const;
   const std::map< int, VarPtr > & trialVars() const;
@@ -99,6 +110,8 @@ public:
   // returns a new VarFactory with the same test space, and a subspace of the trial space
   VarFactoryPtr trialSubFactory(std::vector< VarPtr > &trialVars) const;
 
+  bool isFluxOrTrace(int trialID) const;
+  
   static VarFactoryPtr varFactory()
   {
     return Teuchos::rcp(new VarFactory);

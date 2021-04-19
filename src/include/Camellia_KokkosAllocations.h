@@ -16,6 +16,8 @@
 #include <set>
 #include "TypeDefs.h"
 
+#include "Intrepid2_ScalarView.hpp"
+
 namespace Camellia
 {
   //! AllocationRecord allows us to track allocations.
@@ -77,10 +79,15 @@ namespace Camellia
   class Allocation {
     template< bool B, class T = void >
     using enable_if_t = typename std::enable_if<B,T>::type;
+    
+    using Intrepid2View = Intrepid2::ScalarView<Scalar,Camellia::DeviceExecutionSpace>;
   public:
     static DeviceView<Scalar> allocateDeviceView(const std::vector<int> &dims, const std::string &label);
     static DeviceView<Scalar> allocateDeviceViewMatchingView(DeviceView<Scalar> &dv);
     static void recordDeviceViewDeallocation(DeviceView<Scalar> &dv);
+    
+    static Intrepid2View allocateIntrepid2DeviceViewMatchingView(DeviceView<Scalar> &dv);
+    static Intrepid2View allocateIntrepid2DeviceView(const std::vector<int> &dims, const std::string &label);
     
     static DeviceView<Scalar> checkoutMirrorView(HostView<Scalar> &hostView); // does not result in an allocation if HostMemorySpace is same as DeviceMemorySpace
     
@@ -89,6 +96,11 @@ namespace Camellia
     static DeviceView<Scalar> checkoutDeviceView(const std::vector<int> &dims);
     static DeviceView<Scalar> checkoutDeviceView(DeviceView<Scalar> &deviceView); // does not result in an allocation if HostMemorySpace is same as DeviceMemorySpace
     static void checkinDeviceView(DeviceView<Scalar> &deviceView);
+    
+    // TODO: consider implementing, using these:
+//    static Intrepid2View checkoutIntrepid2DeviceView(const std::vector<int> &dims);
+//    static Intrepid2View checkoutIntrepid2DeviceView(DeviceView<Scalar> &deviceView);
+//    static void checkinIntrepid2DeviceView(Intrepid2::ScalarView<Scalar,Camellia::DeviceExecutionSpace> &intrepid2DeviceView);
   };
 }
 

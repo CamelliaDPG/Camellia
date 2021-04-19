@@ -881,7 +881,7 @@ set<GlobalIndexType> GDAMaximumRule2D::globalDofIndicesForCell(GlobalIndexType c
   return dofIndices;
 }
 
-set<GlobalIndexType> GDAMaximumRule2D::globalDofIndicesForVarOnSubcell(int varID, GlobalIndexType cellID, unsigned dim, unsigned subcellOrdinal)
+set<GlobalIndexType> GDAMaximumRule2D::globalDofIndicesForVarOnSubcell(int varID, GlobalIndexType cellID, unsigned dim, unsigned subcellOrdinal, bool upgradeToContinuousBasis, bool tensorTopologyMeansSpaceTime)
 {
   set<GlobalIndexType> dofIndices;
   
@@ -890,7 +890,12 @@ set<GlobalIndexType> GDAMaximumRule2D::globalDofIndicesForVarOnSubcell(int varID
   
   for (int sideOrdinal : sides)
   {
-    BasisPtr basis = BasisFactory::basisFactory()->getContinuousBasis(elementType(cellID)->trialOrderPtr->getBasis(varID,sideOrdinal));
+    BasisPtr basis = elementType(cellID)->trialOrderPtr->getBasis(varID,sideOrdinal);
+    if (upgradeToContinuousBasis)
+    {
+      bool spaceTime = _mesh->tensorTopologyMeansSpaceTime() && elemType->cellTopoPtr->sideIsSpatial(sideOrdinal);
+      basis = BasisFactory::basisFactory()->getContinuousBasis(basis, spaceTime);
+    }
     
     int domainSubcellOrdinal;
     if (sides.size() == 1) // volume variable, we assume: domain is the cell
@@ -1321,7 +1326,7 @@ void GDAMaximumRule2D::matchNeighbor(GlobalIndexType cellID, int sideIndex)
 
   int changed = _dofOrderingFactory->matchSides(elemTrialOrdering, sideIndex, cellTopo,
                 neighborTrialOrdering, sideIndexInNeighbor, neighborTopo);
-  // changed == 1 for me, 2 for neighbor, 0 for neither, -1 for PatchBasis
+  // changed == 1 for me, 2 for neighbor, 0 for neither
   if (changed==1)
   {
     vector< VarPtr > traces = _varFactory->traceVars();
@@ -1383,13 +1388,13 @@ void GDAMaximumRule2D::matchNeighbor(GlobalIndexType cellID, int sideIndex)
     setElementType( neighborCellID, newType, true); // true: sideUpgradeOnly
     //return NEIGHBOR_NEEDED_NEW;
   }
-  else if (changed == -1)     // PatchBasis
+  else if (changed == 0) // neither
   {
-    TEUCHOS_TEST_FOR_EXCEPTION(true, std::invalid_argument, "PatchBasis not supported by GDAMaximumRule2D.  Use GDAMinimumRule.");
+    //return NEITHER_NEEDED_NEW;
   }
   else
   {
-    //return NEITHER_NEEDED_NEW;
+    TEUCHOS_TEST_FOR_EXCEPTION(true, std::invalid_argument, "Unsupported result from DofOrderingFactory::matchSides().");
   }
 }
 

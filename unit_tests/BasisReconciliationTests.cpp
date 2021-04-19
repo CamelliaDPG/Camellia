@@ -610,7 +610,6 @@ void testHGRADTrace(MeshTopologyPtr meshTopo, int polyOrder, Teuchos::FancyOStre
 {
   Camellia::EFunctionSpace fsSpace = Camellia::FUNCTION_SPACE_HGRAD;
   Camellia::EFunctionSpace fsTime = Camellia::FUNCTION_SPACE_HGRAD;
-  vector<int> H1Orders = {polyOrder,polyOrder};
 
   int spaceDim = meshTopo->getDimension();
   int sideDim = spaceDim - 1;
@@ -620,7 +619,14 @@ void testHGRADTrace(MeshTopologyPtr meshTopo, int polyOrder, Teuchos::FancyOStre
   for (int sideEntityIndex=0; sideEntityIndex<sideCount; sideEntityIndex++)
   {
     CellTopoPtr sideTopo = meshTopo->getEntityTopology(sideDim, sideEntityIndex);
-    basisForSideEntity[sideEntityIndex] = BasisFactory::basisFactory()->getBasis(H1Orders, sideTopo, fsSpace, fsTime);
+    if (sideTopo->getTensorialDegree() > 0)
+    {
+      basisForSideEntity[sideEntityIndex] = BasisFactory::basisFactory()->getSpaceTimeConformingBasis(polyOrder, polyOrder, sideTopo, fsSpace, fsTime);
+    }
+    else
+    {
+      basisForSideEntity[sideEntityIndex] = BasisFactory::basisFactory()->getBasis(polyOrder, sideTopo, fsSpace);
+    }
   }
 
 //    meshTopo->printAllEntities();
@@ -941,8 +947,7 @@ void testHGRADVolumeNoHangingNodes(MeshTopologyPtr meshTopo, int polyOrder, Teuc
 {
   Camellia::EFunctionSpace fsSpace = Camellia::FUNCTION_SPACE_HGRAD;
   Camellia::EFunctionSpace fsTime = Camellia::FUNCTION_SPACE_HGRAD;
-  vector<int> H1Orders = {polyOrder,polyOrder};
-
+  
   int spaceDim = meshTopo->getDimension();
   int sideDim = spaceDim - 1;
 
@@ -952,7 +957,14 @@ void testHGRADVolumeNoHangingNodes(MeshTopologyPtr meshTopo, int polyOrder, Teuc
   for (IndexType cellIndex : cellIndices)
   {
     CellTopoPtr cellTopo = meshTopo->getCell(cellIndex)->topology();
-    basisForCell[cellIndex] = BasisFactory::basisFactory()->getBasis(H1Orders, cellTopo, fsSpace, fsTime);
+    if (cellTopo->getTensorialDegree() > 0)
+    {
+      basisForCell[cellIndex] = BasisFactory::basisFactory()->getSpaceTimeConformingBasis(polyOrder, polyOrder, cellTopo, fsSpace, fsTime);
+    }
+    else
+    {
+      basisForCell[cellIndex] = BasisFactory::basisFactory()->getBasis(polyOrder, cellTopo, fsSpace);
+    }
   }
 
 //    meshTopo->printAllEntities();

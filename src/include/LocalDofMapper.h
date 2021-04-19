@@ -95,7 +95,7 @@ public:
   
   const vector<GlobalIndexType> &fittableGlobalIndices();
   const vector<GlobalIndexType> &globalIndices();
-  set<GlobalIndexType> globalIndicesForSubcell(int varID, unsigned d, unsigned subcord);
+  set<GlobalIndexType> globalIndicesForSubcell(int varID, unsigned d, unsigned subcord, bool upgradeToContinuousBasis, bool tensorTopologyMeansSpaceTime);
 
   void printMappingReport();
 

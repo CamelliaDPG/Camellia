@@ -78,9 +78,9 @@ public:
   vector<unsigned> boundarySides();
 
   GlobalIndexType cellIndex();
-  const vector< Teuchos::RCP< Cell > > &children();
+  virtual const vector< Teuchos::RCP< Cell > > &children();
   void setChildren(const vector<GlobalIndexType> &childIndices);
-  vector<IndexType> getChildIndices(ConstMeshTopologyViewPtr meshTopoViewForCellValidity);
+  virtual vector<IndexType> getChildIndices(ConstMeshTopologyViewPtr meshTopoViewForCellValidity);
   vector< pair<IndexType, unsigned> > childrenForSide(unsigned sideOrdinal);
   // !! returns the ordinal of the specified child in the parent's children container (which matches the order in RefinementPattern).  Returns -1 if the cell has no child with the specified cellIndex.
   int findChildOrdinal(IndexType childCellIndex);
@@ -88,7 +88,7 @@ public:
 
   set<IndexType> getDescendants(ConstMeshTopologyViewPtr meshTopoViewForCellValidity, bool leafNodesOnly = true);
   vector< pair< IndexType, unsigned> > getDescendantsForSide(int sideOrdinal, ConstMeshTopologyViewPtr meshTopoViewForCellValidity, bool leafNodesOnly = true);
-  IndexType entityIndex(unsigned subcdim, unsigned subcord);
+  virtual IndexType entityIndex(unsigned subcdim, unsigned subcord);
   vector<IndexType> getEntityIndices(unsigned subcdim);
 
   vector<IndexType> getEntityVertexIndices(unsigned subcdim, unsigned subcord);
@@ -96,7 +96,7 @@ public:
   Teuchos::RCP<Cell> getParent();
   void setParent(Teuchos::RCP<Cell> parent);
 
-  bool isBoundary(unsigned sideOrdinal);
+  virtual bool isBoundary(unsigned sideOrdinal);
   bool isDescendant(IndexType ancestralCellIndex); // true if the provided cell index is one of this cell's ancestors
   bool isInteriorChild();
   bool isParent(ConstMeshTopologyViewPtr meshTopoViewForCellValidity);
@@ -114,7 +114,8 @@ public:
   RefinementPatternPtr refinementPattern();
   void setRefinementPattern(RefinementPatternPtr refPattern);
 
-  RefinementBranch refinementBranch();
+  //! Returns the RefinementBranch relative to the specified ancestral cell ID; if -1 (the default) is specified, returns refinement branch up to the root level.
+  virtual RefinementBranch refinementBranch(IndexType ancestralCellID = -1);
   GlobalIndexType rootCellIndex();
   
   RefinementBranch refinementBranchForSide(unsigned sideOrdinal, ConstMeshTopologyViewPtr meshTopoViewForCellValidity);
@@ -136,16 +137,16 @@ public:
 
   CellTopoPtr topology();
 
-  Teuchos::RCP<Cell> getNeighbor(unsigned sideOrdinal, ConstMeshTopologyViewPtr meshTopoViewForCellValidity);
-  pair<GlobalIndexType, unsigned> getNeighborInfo(unsigned sideOrdinal, ConstMeshTopologyViewPtr meshTopoViewForCellValidity); // (neighborCellIndex, neighborSideOrdinal)
-  void setNeighbor(unsigned sideOrdinal, GlobalIndexType neighborCellIndex, unsigned neighborSideOrdinal, bool allowSameCellIndex = false);
+  virtual Teuchos::RCP<Cell> getNeighbor(unsigned sideOrdinal, ConstMeshTopologyViewPtr meshTopoViewForCellValidity);
+  virtual pair<GlobalIndexType, unsigned> getNeighborInfo(unsigned sideOrdinal, ConstMeshTopologyViewPtr meshTopoViewForCellValidity); // (neighborCellIndex, neighborSideOrdinal)
+  virtual void setNeighbor(unsigned sideOrdinal, GlobalIndexType neighborCellIndex, unsigned neighborSideOrdinal, bool allowSameCellIndex = false);
   std::vector< Teuchos::RCP<Cell> > getNeighbors(ConstMeshTopologyViewPtr meshTopoViewForCellValidity);
   
   std::set<GlobalIndexType> getActiveNeighborIndices(ConstMeshTopologyViewPtr meshTopoViewForCellValidity);
   std::set<GlobalIndexType> getActiveNeighborIndices(unsigned dimensionForNeighborRelation, ConstMeshTopologyViewPtr meshTopoViewForCellValidity);
   std::set<GlobalIndexType> getPeerNeighborIndices(unsigned dimensionForNeighborRelation, ConstMeshTopologyViewPtr meshTopoViewForCellValidity);
-  std::vector<IndexType> entitiesOnNeighborInterfaces(unsigned dimensionOfInterest, bool peersOnly,
-                                                      ConstMeshTopologyViewPtr meshTopoViewForCellValidity);
+  virtual std::vector<IndexType> entitiesOnNeighborInterfaces(unsigned dimensionOfInterest, bool peersOnly,
+                                                              ConstMeshTopologyViewPtr meshTopoViewForCellValidity);
   
   // ! returns subcells that lie on the mesh boundary as a vector of (scdim, scord) pairs
   // ! this is a somewhat expensive operation the first time; the result is cached for reuse

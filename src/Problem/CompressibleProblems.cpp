@@ -361,7 +361,7 @@ namespace Camellia
     }
   }
   
-  Noh_u1::Noh_u1() : SimpleFunction<double>("Noh_u1")
+  Noh_u1::Noh_u1() : SimpleFunction<double>("Noh_u1", VARIES_IN_DIMENSION_0 | VARIES_IN_DIMENSION_1)
   {}
   
   double Noh_u1::value(double x, double y)
@@ -370,7 +370,7 @@ namespace Camellia
     return -cos(theta);
   }
 
-  Noh_u2::Noh_u2() : SimpleFunction<double>("Noh_u2")
+  Noh_u2::Noh_u2() : SimpleFunction<double>("Noh_u2", VARIES_IN_DIMENSION_0 | VARIES_IN_DIMENSION_1)
   {}
   
   double Noh_u2::value(double x, double y)
@@ -500,7 +500,7 @@ namespace Camellia
     _gamma = 5./3.;
     // double p0 = 1e-3;
     double rho0 = 1;
-    double u0 = 1;
+//    double u0 = 1;
     // double a0 = sqrt(_gamma*p0/rho0);
     // double M_inf = u0/a0;
     // _Cv = 1./(_gamma*(_gamma-1)*M_inf*M_inf);

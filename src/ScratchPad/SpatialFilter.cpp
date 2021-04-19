@@ -6,121 +6,68 @@
 
 using namespace Camellia;
 
-class SpatialFilterMatchingX : public SpatialFilter
+class SpatialFilterMatchingComponent : public SpatialFilter
 {
   double _tol;
-  double _xToMatch;
+  int    _comp;
+  double _compValueToMatch;
 public:
-  SpatialFilterMatchingX(double xToMatch, double tol=1e-14)
-  {
-    _xToMatch = xToMatch;
-    _tol = tol;
-  }
-  void matchesPoints(DeviceView<bool> pointsMatch, DeviceViewConst<double> points)
-  {
-    double xToMatch = _xToMatch;
-    double tol      = _tol;
-    auto rangePolicy = Camellia::FieldContainer<bool>::getMDRangePolicy2(pointsMatch);
-    Kokkos::parallel_for(rangePolicy, KOKKOS_LAMBDA(const int cellOrdinal, const int pointOrdinal)
-    {
-      const double & x = points(cellOrdinal,pointOrdinal,0);
-      pointsMatch(cellOrdinal,pointOrdinal) = (std::abs(x-xToMatch) < tol);
-    });
-  }
-  
-  bool matchesPoint(double x)
-  {
-    if (abs(x-_xToMatch)<_tol)
-    {
-      return true;
-    }
-    else
-    {
-      return false;
-    }
-  }
-  bool matchesPoint(double x, double y)
-  {
-    return matchesPoint(x);
-  }
-  bool matchesPoint(double x, double y, double z)
-  {
-    return matchesPoint(x);
-  }
-};
+  SpatialFilterMatchingComponent(int comp, double compValueToMatch, double tol=1e-14)
+  :
+  _tol(tol),
+  _comp(comp),
+  _compValueToMatch(compValueToMatch)
+  {}
 
-class SpatialFilterMatchingY : public SpatialFilter
-{
-  double _tol;
-  double _yToMatch;
-public:
-  SpatialFilterMatchingY(double yToMatch, double tol=1e-14)
+  virtual void matchesPoints(DeviceView<bool> pointsMatch, DeviceViewConst<double> points) override
   {
-    _yToMatch = yToMatch;
-    _tol = tol;
-  }
-  
-  void matchesPoints(DeviceView<bool> pointsMatch, DeviceViewConst<double> points)
-  {
-    double yToMatch = _yToMatch;
-    double tol      = _tol;
+    int    comp             = _comp;
+    double compValueToMatch = _compValueToMatch;
+    double tol              = _tol;
     auto rangePolicy = Camellia::FieldContainer<bool>::getMDRangePolicy2(pointsMatch);
     Kokkos::parallel_for(rangePolicy, KOKKOS_LAMBDA(const int cellOrdinal, const int pointOrdinal)
     {
-      const double & y = points(cellOrdinal,pointOrdinal,1);
-      pointsMatch(cellOrdinal,pointOrdinal) = (std::abs(y-yToMatch) < tol);
+      const double & compValue = points(cellOrdinal,pointOrdinal,comp);
+      pointsMatch(cellOrdinal,pointOrdinal) = (std::abs(compValue-compValueToMatch) < tol);
     });
   }
   
-  bool matchesPoint(double x, double y)
+  virtual bool matchesPoint(double x) override
   {
-    if (abs(y-_yToMatch)<_tol)
+    if (_comp == 0)
     {
-      return true;
+      return (std::abs(x-_compValueToMatch) < _tol);
     }
-    else
-    {
-      return false;
-    }
+    return false;
   }
-  bool matchesPoint(double x, double y, double z)
+  
+  virtual bool matchesPoint(double x, double y) override
   {
+    if (_comp == 1)
+    {
+      return (std::abs(y-_compValueToMatch) < _tol);
+    }
+    return matchesPoint(x);
+  }
+  
+  virtual bool matchesPoint(double x, double y, double z) override
+  {
+    if (_comp == 2)
+    {
+      return (std::abs(z-_compValueToMatch) < _tol);
+    }
     return matchesPoint(x,y);
   }
-};
-
-class SpatialFilterMatchingZ : public SpatialFilter
-{
-  double _tol;
-  double _zToMatch;
-public:
-  SpatialFilterMatchingZ(double zToMatch, double tol=1e-14)
+  
+  virtual bool matchesPoint(double x, double y, double z, double t) override
   {
-    _zToMatch = zToMatch;
-    _tol = tol;
-  }
-  void matchesPoints(DeviceView<bool> pointsMatch, DeviceViewConst<double> points)
-  {
-    double zToMatch = _zToMatch;
-    double tol      = _tol;
-    auto rangePolicy = Camellia::FieldContainer<bool>::getMDRangePolicy2(pointsMatch);
-    Kokkos::parallel_for(rangePolicy, KOKKOS_LAMBDA(const int cellOrdinal, const int pointOrdinal)
+    if (_comp == 3)
     {
-      const double & z = points(cellOrdinal,pointOrdinal,2);
-      pointsMatch(cellOrdinal,pointOrdinal) = (std::abs(z-zToMatch) < tol);
-    });
-  }
-  bool matchesPoint(double x, double y, double z)
-  {
-    if (abs(z-_zToMatch)<_tol)
-    {
-      return true;
+      return (std::abs(t-_compValueToMatch) < _tol);
     }
-    else
-    {
-      return false;
-    }
+    return matchesPoint(x,y,z);
   }
+  
 };
 
 class SpatialFilterMatchingT : public SpatialFilter
@@ -436,9 +383,39 @@ bool SpatialFilter::matchesPoint(double x, double y, double z, double t)
   TEUCHOS_TEST_FOR_EXCEPTION(true, std::invalid_argument, "matchesPoint(x,y,z,t) unimplemented.");
 }
 
+bool SpatialFilter::matchesPoint(double x0, double x1, double x2, double x3, double x4)
+{
+  cout << "matchesPoint() unimplemented.\n";
+  TEUCHOS_TEST_FOR_EXCEPTION(true, std::invalid_argument, "5-argument matchesPoint() unimplemented.");
+}
+
+bool SpatialFilter::matchesPoint(double x0, double x1, double x2, double x3, double x4, double x5)
+{
+  cout << "matchesPoint() unimplemented.\n";
+  TEUCHOS_TEST_FOR_EXCEPTION(true, std::invalid_argument, "6-argument matchesPoint() unimplemented.");
+}
+
+bool SpatialFilter::matchesPoint(double x0, double x1, double x2, double x3, double x4, double x5, double x6)
+{
+  cout << "matchesPoint() unimplemented.\n";
+  TEUCHOS_TEST_FOR_EXCEPTION(true, std::invalid_argument, "7-argument matchesPoint() unimplemented.");
+}
+
 bool SpatialFilter::matchesPoint(const vector<double> &point)
 {
-  if (point.size() == 4)
+  if (point.size() == 7)
+  {
+    return matchesPoint(point[0],point[1],point[2],point[3],point[4],point[5],point[6]);
+  }
+  else if (point.size() == 6)
+  {
+    return matchesPoint(point[0],point[1],point[2],point[3],point[4],point[5]);
+  }
+  else if (point.size() == 5)
+  {
+    return matchesPoint(point[0],point[1],point[2],point[3],point[4]);
+  }
+  else if (point.size() == 4)
   {
     return matchesPoint(point[0],point[1],point[2],point[3]);
   }
@@ -556,19 +533,24 @@ bool SpatialFilterUnfiltered::matchesPoint(const vector<double> &point)
   return true;
 }
 
+SpatialFilterPtr SpatialFilter::matchingComponent(int comp, double compValue)
+{
+  return Teuchos::rcp( new SpatialFilterMatchingComponent(comp,compValue) );
+}
+
 SpatialFilterPtr SpatialFilter::matchingX(double x)
 {
-  return Teuchos::rcp( new SpatialFilterMatchingX(x) );
+  return Teuchos::rcp( new SpatialFilterMatchingComponent(0,x) );
 }
 
 SpatialFilterPtr SpatialFilter::matchingY(double y)
 {
-  return Teuchos::rcp( new SpatialFilterMatchingY(y) );
+  return Teuchos::rcp( new SpatialFilterMatchingComponent(1,y) );
 }
 
 SpatialFilterPtr SpatialFilter::matchingZ(double z)
 {
-  return Teuchos::rcp( new SpatialFilterMatchingZ(z) );
+  return Teuchos::rcp( new SpatialFilterMatchingComponent(2,z) );
 }
 
 SpatialFilterPtr SpatialFilter::matchingT(double t, bool matchSpatialSides)

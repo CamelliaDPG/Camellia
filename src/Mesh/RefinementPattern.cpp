@@ -2238,6 +2238,9 @@ void RefinementPattern::mapRefCellPointsToAncestor(RefinementBranch &refBranch, 
 
   int minCubDegree = 1;
   CellTopoPtr leafCellTopo = refBranch[refBranch.size() - 1].first->childTopology(refBranch[refBranch.size() - 1].second);
+  
+  TEUCHOS_TEST_FOR_EXCEPTION(leafRefCellPoints.rank() != 2, std::invalid_argument, "leafRefCellPoints must have shape (P,D)");
+  TEUCHOS_TEST_FOR_EXCEPTION(leafRefCellPoints.dimension(1) != leafCellTopo->getDimension(), std::invalid_argument, "leafRefCellPoints must have shape (P,D)");
   BasisCachePtr fineCellCache = Teuchos::rcp( new BasisCache(leafCellTopo, minCubDegree, false) ); // could be more efficient by doing what BasisCache does in terms of the physical cell mapping, instead of using BasisCache (which sets up a bunch of data structures that we just throw away here)
 
   fineCellCache->setRefCellPointsFC(leafRefCellPoints);

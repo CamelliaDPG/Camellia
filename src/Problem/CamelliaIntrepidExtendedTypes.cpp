@@ -62,11 +62,9 @@ bool Camellia::functionSpaceIsDiscontinuous(Camellia::EFunctionSpace fs)
   case FUNCTION_SPACE_VECTOR_HGRAD_DISC:
   case FUNCTION_SPACE_TENSOR_HGRAD_DISC:
     return true;
-    break;
   default:
-    break;
+    return false;
   }
-  return false;
 }
 
 EFunctionSpace Camellia::discontinuousSpaceForContinuous(Camellia::EFunctionSpace fs_continuous)
@@ -87,11 +85,9 @@ EFunctionSpace Camellia::discontinuousSpaceForContinuous(Camellia::EFunctionSpac
     return FUNCTION_SPACE_VECTOR_HGRAD_DISC;
   case FUNCTION_SPACE_TENSOR_HGRAD:
     return FUNCTION_SPACE_TENSOR_HGRAD_DISC;
-    break;
   default:
     TEUCHOS_TEST_FOR_EXCEPTION(true, std::invalid_argument, "No known discontinuous version for fs_continuous.");
     return fs_continuous;
-    break;
   }
 }
 
@@ -117,11 +113,9 @@ EFunctionSpace Camellia::continuousSpaceForDiscontinuous(Camellia::EFunctionSpac
     return FUNCTION_SPACE_VECTOR_HGRAD;
   case FUNCTION_SPACE_TENSOR_HGRAD_DISC:
     return FUNCTION_SPACE_TENSOR_HGRAD;
-    break;
   default:
     TEUCHOS_TEST_FOR_EXCEPTION(true, std::invalid_argument, "No known continuous version for fs_disc.");
     return fs_disc;
-    break;
   }
 }
 
@@ -130,7 +124,6 @@ EOperator Camellia::combineOperators(EOperator op_first, EOperator op_second)
   switch (op_first) {
     case OP_VALUE:
       return op_second;
-      break;
     case OP_GRAD:
       switch (op_second) {
         case OP_X:
@@ -147,13 +140,10 @@ EOperator Camellia::combineOperators(EOperator op_first, EOperator op_second)
       switch (op_second) {
         case OP_DX:
           return OP_DXDX;
-          break;
         case OP_DY:
           return OP_DXDY;
-          break;
         case OP_DZ:
           return OP_DXDZ;
-          break;
         default:
           TEUCHOS_TEST_FOR_EXCEPTION(true, std::invalid_argument, "Unsupported op combination");
           break;
@@ -162,13 +152,10 @@ EOperator Camellia::combineOperators(EOperator op_first, EOperator op_second)
       switch (op_second) {
         case OP_DX:
           return OP_DXDY;
-          break;
         case OP_DY:
           return OP_DYDY;
-          break;
         case OP_DZ:
           return OP_DYDZ;
-          break;
         default:
           TEUCHOS_TEST_FOR_EXCEPTION(true, std::invalid_argument, "Unsupported op combination");
           break;
@@ -177,13 +164,10 @@ EOperator Camellia::combineOperators(EOperator op_first, EOperator op_second)
       switch (op_second) {
         case OP_DX:
           return OP_DXDZ;
-          break;
         case OP_DY:
           return OP_DYDZ;
-          break;
         case OP_DZ:
           return OP_DZDZ;
-          break;
         default:
           TEUCHOS_TEST_FOR_EXCEPTION(true, std::invalid_argument, "Unsupported op combination");
           break;
@@ -259,90 +243,61 @@ const std::string & Camellia::operatorName(Camellia::EOperator op)
   {
   case  Camellia::OP_VALUE:
     return S_OP_VALUE;
-    break;
   case Camellia::OP_GRAD:
     return S_OP_GRAD;
-    break;
   case Camellia::OP_CURL:
     return S_OP_CURL;
-    break;
   case Camellia::OP_DIV:
     return S_OP_DIV;
-    break;
   case Camellia::OP_D1:
     return S_OP_D1;
-    break;
   case Camellia::OP_D2:
     return S_OP_D2;
-    break;
   case Camellia::OP_D3:
     return S_OP_D3;
-    break;
   case Camellia::OP_D4:
     return S_OP_D4;
-    break;
   case Camellia::OP_D5:
     return S_OP_D5;
-    break;
   case Camellia::OP_D6:
     return S_OP_D6;
-    break;
   case Camellia::OP_D7:
     return S_OP_D7;
-    break;
   case Camellia::OP_D8:
     return S_OP_D8;
-    break;
   case Camellia::OP_D9:
     return S_OP_D9;
-    break;
   case Camellia::OP_D10:
     return S_OP_D10;
-    break;
   case Camellia::OP_X:
     return S_OP_X;
-    break;
   case Camellia::OP_Y:
     return S_OP_Y;
-    break;
   case Camellia::OP_Z:
     return S_OP_Z;
-    break;
   case Camellia::OP_DX:
     return S_OP_DX;
-    break;
   case Camellia::OP_DY:
     return S_OP_DY;
-    break;
   case Camellia::OP_DZ:
     return S_OP_DZ;
-    break;
   case Camellia::OP_DT:
     return S_OP_DT;
-    break;
   case Camellia::OP_CROSS_NORMAL:
     return S_OP_CROSS_NORMAL;
-    break;
   case Camellia::OP_DOT_NORMAL:
     return S_OP_DOT_NORMAL;
-    break;
   case Camellia::OP_TIMES_NORMAL:
     return S_OP_TIMES_NORMAL;
-    break;
   case Camellia::OP_TIMES_NORMAL_X:
     return S_OP_TIMES_NORMAL_X;
-    break;
   case Camellia::OP_TIMES_NORMAL_Y:
     return S_OP_TIMES_NORMAL_Y;
-    break;
   case Camellia::OP_TIMES_NORMAL_Z:
     return S_OP_TIMES_NORMAL_Z;
-    break;
   case Camellia::OP_VECTORIZE_VALUE:
     return S_OP_VECTORIZE_VALUE;
-    break;
   default:
     return S_OP_UNKNOWN;
-    break;
   }
 }

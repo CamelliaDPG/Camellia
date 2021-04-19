@@ -182,45 +182,14 @@ vector<double> PeriodicBC::getMatchingPoint(const std::vector<double> &point, in
 
 std::vector<int> PeriodicBC::getMatchingSides(const std::vector<double> &point)
 {
-  // returns 0 if the point matches pointFilter0, 1 if it matches pointFilter1, -1 otherwise.
-  vector<int> matches;
-  if (point.size() == 1)
+  vector<int> matches; // contains 0 if point filter 0 matches, 1 if point filter 1 matches.
+  if (_pointFilter0->matchesPoint(point))
   {
-    if (_pointFilter0->matchesPoint(point[0]))
-    {
-      matches.push_back(0);
-    }
-    if (_pointFilter1->matchesPoint(point[0]))
-    {
-      matches.push_back(1);
-    }
+    matches.push_back(0);
   }
-  else if (point.size() == 2)
+  if (_pointFilter1->matchesPoint(point))
   {
-    if (_pointFilter0->matchesPoint(point[0],point[1]))
-    {
-      matches.push_back(0);
-    }
-    else if (_pointFilter1->matchesPoint(point[0],point[1]))
-    {
-      matches.push_back(1);
-    }
-  }
-  else if (point.size() == 3)
-  {
-    if (_pointFilter0->matchesPoint(point[0],point[1],point[2]))
-    {
-      matches.push_back(0);
-    }
-    else if (_pointFilter1->matchesPoint(point[0],point[1],point[2]))
-    {
-      matches.push_back(1);
-    }
-  }
-  else
-  {
-    cout << "Unsupported point size.\n";
-    TEUCHOS_TEST_FOR_EXCEPTION(true, std::invalid_argument, "Unsupported point size");
+    matches.push_back(1);
   }
   return matches;
 }

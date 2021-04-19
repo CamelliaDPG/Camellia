@@ -28,6 +28,8 @@
 
 #include "Camellia_FieldContainer.hpp"
 
+#include "Epetra_Distributor.h"
+
 namespace Camellia
 {
 // static class to provide a FieldContainer-based interface to some common MPI tasks
@@ -134,12 +136,14 @@ public:
   // (valuesToSum may vary in length across processors)
   static double sum(const Camellia::FieldContainer<double> &valuesToSum);
   static double sum(double myValue);
-
+  static double sum(const Epetra_Comm &Comm, double mySum);
+  
   static void entryWiseSum(Camellia::FieldContainer<int> &values); // sums values entry-wise across all processors
   // sum the contents of valuesToSum across all processors, and returns the result:
   // (valuesToSum may vary in length across processors)
   static int sum(const Camellia::FieldContainer<int> &valuesToSum);
   static int sum(int myValue);
+  static int sum(const Epetra_Comm &Comm, int mySum);
   
   //! sum value across communicator
   template<typename ScalarType>
@@ -280,10 +284,25 @@ public:
     {
       TEUCHOS_TEST_FOR_EXCEPTION(recipients[i-1] >= recipients[i], std::invalid_argument, "recipients list must be in numerical order, and populated with distinct recipients");
     }
+    TEUCHOS_TEST_FOR_EXCEPTION(dataVectors.size() != numRecipients, std::invalid_argument, "dataVectors and recipients list must be the same length");
     
     Teuchos::RCP<Epetra_Distributor> distributor = MPIWrapper::getDistributor(*Comm);
     
-    TEUCHOS_TEST_FOR_EXCEPTION(dataVectors.size() != numRecipients, std::invalid_argument, "dataVectors and recipients list must be the same length");
+    if (distributor == Teuchos::null)
+    {
+      // this can happen when Comm is a SerialComm object (Epetra_Distributor doesn't handle the serial case appropriately; Do() returns an error code)
+      TEUCHOS_TEST_FOR_EXCEPTION(recipients.size() > 1, std::invalid_argument, "In serial, recipients list must be empty or include exactly one (zero) entry");
+      if (recipients.size() == 1)
+      {
+        TEUCHOS_TEST_FOR_EXCEPTION(recipients[0] != 0, std::invalid_argument, "In serial, recipients list must be empty or include exactly one (zero) entry");
+        receivedVector = dataVectors[0];
+      }
+      else
+      {
+        receivedVector = std::vector<DataType>();
+      }
+      return;
+    }
     
     const int *recipientPtr = (numRecipients > 0) ? &recipients[0] : NULL;
     
@@ -307,6 +326,8 @@ public:
 
     int len_import_chars = 0;
     int err = distributor->Do(export_chars, (int)sizeof(DataType), lengthForEachSendProcPtr, len_import_chars, import_chars);
+    
+    TEUCHOS_TEST_FOR_EXCEPTION(err != 0, std::invalid_argument, "Epetra_Distributor returned an error.");
     
     DataType* recvd_rows = reinterpret_cast<DataType*>(import_chars);
     int numEntriesReceived = len_import_chars/sizeof(DataType);

@@ -50,7 +50,6 @@ public:
       double yBottom, double yTop,
       double cylinderRadius, double embeddedSquareSideLength);
 
-
   static MeshGeometryPtr halfHemkerGeometry(double xLeft, double xRight, double meshHeight, double cylinderRadius);
 
   static MeshGeometryPtr confinedCylinderGeometry(double cylinderRadius);
@@ -73,6 +72,8 @@ public:
                                      TBFPtr<double> bilinearForm,
                                      int H1Order, int pTest, bool useConformingTraces);
 
+  static MeshTopologyPtr extrudedMeshTopology(MeshTopologyPtr baseMeshTopology, double v0, double v1, int divisionsInNewDimension=1);
+  
   static MeshTopologyPtr importMOABMesh(string filePath, bool readInParallel=false);
   
   static MeshPtr intervalMesh(TBFPtr<double> bf, double xLeft, double xRight, int numElements, int H1Order, int delta_k); // 1D equispaced
@@ -80,10 +81,10 @@ public:
   static MeshTopologyPtr intervalMeshTopology(double xLeft, double xRight, int numElements, bool periodicBCs=false); // 1D equispaced
   static MeshTopologyPtr intervalMeshTopology(double xLeft, double xRight, int numElements, vector<PeriodicBCPtr> periodicBCs);
 
-  static MeshPtr minRuleMesh(MeshTopologyPtr meshTopo, TBFPtr<double> bf, int H1Order, int delta_k,  Epetra_CommPtr Comm = Teuchos::null);
+  static MeshPtr minRuleMesh(MeshTopologyViewPtr meshTopo, TBFPtr<double> bf, int H1Order, int delta_k, Epetra_CommPtr Comm = Teuchos::null, bool allowPruning = true);
   
-  static MeshPtr minRuleMesh(MeshTopologyPtr meshTopo, TBFPtr<double> bf, vector<int> H1Order, int delta_k,
-                             Epetra_CommPtr Comm = Teuchos::null);
+  static MeshPtr minRuleMesh(MeshTopologyViewPtr meshTopo, TBFPtr<double> bf, vector<int> H1Order, int delta_k,
+                             Epetra_CommPtr Comm = Teuchos::null, bool allowPruning = true);
   
   static MeshPtr quadMesh(Teuchos::ParameterList &parameters, Epetra_CommPtr Comm = Teuchos::null);
 
@@ -132,6 +133,8 @@ public:
                                Epetra_CommPtr Comm = Teuchos::null);
 
   static MeshTopologyPtr spaceTimeMeshTopology(MeshTopologyPtr spatialMeshTopology, double t0, double t1, int temporalDivisions=1);
+  
+  static Intrepid2::Data<double, Kokkos::HostSpace> vertexDivisions1D(const double &startCoord, const double &domainExtent, const int &numElements);
 };
 }
 

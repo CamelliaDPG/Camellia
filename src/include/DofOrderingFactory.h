@@ -174,17 +174,11 @@ public:
   void assignMultiBasis(DofOrderingPtr &trialOrdering, int sideIndex,
                         CellTopoPtr cellTopo,
                         vector< pair< DofOrderingPtr,int > > &childTrialOrdersForSide );
-  void assignPatchBasis(DofOrderingPtr &childTrialOrdering, int childSideIndex,
-                        const DofOrderingPtr parentTrialOrdering, int parentSideIndex,
-                        int childIndexInParentSide, CellTopoPtr childCellTopo);
   DofOrderingPtr upgradeSide(DofOrderingPtr dofOrdering,
                              CellTopoPtr cellTopo,
                              map<int,BasisPtr> varIDsToUpgrade,
                              int sideToUpgrade);
   map<int, BasisPtr> getMultiBasisUpgradeMap(vector< pair< DofOrderingPtr,int > > &childTrialOrdersForSide);
-  map<int, BasisPtr> getPatchBasisUpgradeMap(const DofOrderingPtr childTrialOrdering, int childSideIndex,
-      const DofOrderingPtr parentTrialOrdering, int parentSideIndex,
-      int childIndexInParentSide);
   bool sideHasMultiBasis(DofOrderingPtr &trialOrdering, int sideIndex);
 
   //  DofOrderingPtr trialOrdering(int polyOrder, int* sidePolyOrder, const shards::CellTopology &cellTopo,

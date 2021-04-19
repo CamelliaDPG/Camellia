@@ -197,7 +197,7 @@ public:
   set<GlobalIndexType> globalDofIndicesForCell(GlobalIndexType cellID) override;
   
   //!! Returns the global dof indices for the indicated subcell.  Only guaranteed to provide correct values for cells that belong to the local partition.
-  set<GlobalIndexType> globalDofIndicesForVarOnSubcell(int varID, GlobalIndexType cellID, unsigned dim, unsigned subcellOrdinal) override;
+  set<GlobalIndexType> globalDofIndicesForVarOnSubcell(int varID, GlobalIndexType cellID, unsigned dim, unsigned subcellOrdinal, bool upgradeToContinuousBasis, bool tensorTopologyMeansSpaceTime) override;
   
   // ! Returns the global dof indices, in the same order as the basis ordinals, for a discontinuous variable.
   // ! For minimum-rule meshes, may throw an exception if invoked with a continuous variable's ID as argument.

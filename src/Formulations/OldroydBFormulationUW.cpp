@@ -269,9 +269,9 @@ OldroydBFormulationUW::OldroydBFormulationUW(MeshTopologyPtr meshTopo, Teuchos::
   }
   else
   {
+    Space uHatSpace = useConformingTraces ? HGRAD : L2;
     if (_includeVelocityTracesInFluxTerm)
     {
-      Space uHatSpace = useConformingTraces ? HGRAD_SPACE_L2_TIME : L2;
       if (spaceDim > 0) u1_hat = _vf->traceVarSpaceOnly(S_U1_HAT, one * u1, uHatSpace);
       if (spaceDim > 1) u2_hat = _vf->traceVarSpaceOnly(S_U2_HAT, one * u2, uHatSpace);
       if (spaceDim > 2) u3_hat = _vf->traceVarSpaceOnly(S_U3_HAT, one * u3, uHatSpace);
@@ -279,9 +279,9 @@ OldroydBFormulationUW::OldroydBFormulationUW(MeshTopologyPtr meshTopo, Teuchos::
     else
     {
       Space uHatSpace = useConformingTraces ? HGRAD : L2;
-      if (spaceDim > 0) u1_hat = _vf->traceVar(S_U1_HAT, one * u1, uHatSpace);
-      if (spaceDim > 1) u2_hat = _vf->traceVar(S_U2_HAT, one * u2, uHatSpace);
-      if (spaceDim > 2) u3_hat = _vf->traceVar(S_U3_HAT, one * u3, uHatSpace);
+      if (spaceDim > 0) u1_hat = _vf->traceVarSpaceTime(S_U1_HAT, one * u1, uHatSpace, uHatSpace);
+      if (spaceDim > 1) u2_hat = _vf->traceVarSpaceTime(S_U2_HAT, one * u2, uHatSpace, uHatSpace);
+      if (spaceDim > 2) u3_hat = _vf->traceVarSpaceTime(S_U3_HAT, one * u3, uHatSpace, uHatSpace);
     }
   }
 
@@ -1203,15 +1203,19 @@ void OldroydBFormulationUW::initializeSolution(MeshTopologyPtr meshTopo, int fie
   MeshPtr mesh;
   if (savedSolutionAndMeshPrefix == "")
   {
-    if (_spaceTime) H1Order.push_back(temporalPolyOrder); // "H1Order" is a bit misleading for space-time; in fact in BasisFactory we ensure that the polynomial order in time is whatever goes in this slot, regardless of function space.  This is disanalogous to what happens in space, so we might want to revisit that at some point.
+    if (_spaceTime) H1Order.push_back(temporalPolyOrder+1);
     mesh = Teuchos::rcp( new Mesh(meshTopo, _oldroydBBF, H1Order, delta_k, _trialVariablePolyOrderAdjustments) ) ;
     _solution = TSolution<double>::solution(mesh,bc);
   }
   else
   {
+#ifdef HAVE_EPETRAEXT_HDF5
     mesh = MeshFactory::loadFromHDF5(_oldroydBBF, savedSolutionAndMeshPrefix+".mesh");
     _solution = TSolution<double>::solution(mesh, bc);
     _solution->loadFromHDF5(savedSolutionAndMeshPrefix+".soln");
+#else
+    TEUCHOS_TEST_FOR_EXCEPTION(true, std::invalid_argument, "File I/O is not supported when Trilinos was built without EpetraExt_ENABLE_HDF5=ON");
+#endif
   }
 
   RHSPtr rhs = this->rhs(forcingFunction, _neglectFluxesOnRHS); // in transient case, this will refer to _previousSolution
@@ -1251,7 +1255,11 @@ void OldroydBFormulationUW::initializeSolution(MeshTopologyPtr meshTopo, int fie
     }
     else
     {
+#ifdef HAVE_EPETRAEXT_HDF5
       streamMesh = MeshFactory::loadFromHDF5(_streamFormulation->bf(), savedSolutionAndMeshPrefix+"_stream.mesh");
+#else
+      TEUCHOS_TEST_FOR_EXCEPTION(true, std::invalid_argument, "File I/O is not supported when Trilinos was built without EpetraExt_ENABLE_HDF5=ON");
+#endif
     }
 
     mesh->registerObserver(streamMesh); // refine streamMesh whenever mesh is refined
@@ -1288,7 +1296,11 @@ void OldroydBFormulationUW::initializeSolution(MeshTopologyPtr meshTopo, int fie
 
     if (savedSolutionAndMeshPrefix != "")
     {
+#ifdef HAVE_EPETRAEXT_HDF5
       _streamSolution->loadFromHDF5(savedSolutionAndMeshPrefix + "_stream.soln");
+#else
+  TEUCHOS_TEST_FOR_EXCEPTION(true, std::invalid_argument, "File I/O is not supported when Trilinos was built without EpetraExt_ENABLE_HDF5=ON");
+#endif
     }
   }
 }
@@ -1803,6 +1815,7 @@ TRieszRepPtr<double> OldroydBFormulationUW::rieszResidual(FunctionPtr forcingFun
 // ! Saves the solution(s) and mesh to an HDF5 format.
 void OldroydBFormulationUW::save(std::string prefixString)
 {
+#ifdef HAVE_EPETRAEXT_HDF5
   _backgroundFlow->mesh()->saveToHDF5(prefixString+".mesh");
   _backgroundFlow->saveToHDF5(prefixString+".soln");
 
@@ -1811,6 +1824,9 @@ void OldroydBFormulationUW::save(std::string prefixString)
     _streamSolution->mesh()->saveToHDF5(prefixString+"_stream.mesh");
     _streamSolution->saveToHDF5(prefixString + "_stream.soln");
   }
+#else
+  TEUCHOS_TEST_FOR_EXCEPTION(true, std::invalid_argument, "File I/O is not supported when Trilinos was built without EpetraExt_ENABLE_HDF5=ON");
+#endif
 }
 
 // ! set current time step used for transient solve

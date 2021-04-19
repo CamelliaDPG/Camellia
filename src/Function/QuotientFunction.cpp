@@ -51,6 +51,18 @@ TFunctionPtr<Scalar> QuotientFunction<Scalar>::evaluateAt(const map<int, TFuncti
 }
 
 template <typename Scalar>
+TFunctionPtr<Scalar> QuotientFunction<Scalar>::di(int i) // 1 for dx(), 2 for dy(), 3 for dz()
+{
+  auto f_di = _f->di(i);
+  auto scalarDivisor_di = _scalarDivisor->di(i);
+  if ( (f_di == Teuchos::null) || (scalarDivisor_di == Teuchos::null) )
+  {
+    return Teuchos::null;
+  }
+  return f_di / _scalarDivisor - _f * scalarDivisor_di / (_scalarDivisor * _scalarDivisor);
+}
+
+template <typename Scalar>
 TFunctionPtr<Scalar> QuotientFunction<Scalar>::dx()
 {
   if ( (_f->dx().get() == NULL) || (_scalarDivisor->dx().get() == NULL) )

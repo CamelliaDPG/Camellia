@@ -59,12 +59,15 @@ int boundDegreeToMaxCubatureForCellTopo(int degree, unsigned cellTopoKey)
 
 bool BasisCache::canComputeTransformedValues(Camellia::EOperator op)
 {
-  // a bit ugly, in that this depends on
   if ((OP_VALUE <= op) && (op <= OP_D1)) // zero order and first order intrepid operators all supported
+    return true;
+  if ((OP_I1 <= op) && (op <= OP_I7)) // Camellia numbered component operators (OP_I1 synonymous with OP_X, etc.)
     return true;
   if ((OP_D2 <= op) && (op <= OP_D10)) // can't transform general second order and above
     return false;
   if ((OP_X <= op) && (op <= OP_DZDZ)) // zero and first order Camellia operators, and second-order with i==j
+    return true;
+  if ((OP_DI1 <= op) && (op <= OP_DI7)) // Camellia gradient component operators (OP_DI1 synonymous with OP_DX, etc.)
     return true;
   return false;
 }
@@ -653,6 +656,32 @@ void BasisCache::cubatureDegreeForElementType(ElementTypePtr elemType, bool test
   TEUCHOS_TEST_FOR_EXCEPTION(true, std::invalid_argument, "Method not yet implemented");
 }
 
+double BasisCache::extrusionWidth(const int &d, const int &cellOrdinal)
+{
+  const auto meshTopo = _mesh->getTopology();
+  const auto &vertexIndices = meshTopo->getCell(_cellIDs[cellOrdinal])->vertices();
+  const double tol = 1e-14;
+  double maxValue = std::numeric_limits<double>::min();
+  double minValue = std::numeric_limits<double>::max();
+  for (const auto & vertexIndex : vertexIndices)
+  {
+    const double & coord = meshTopo->getVertex(vertexIndex)[d];
+    maxValue = std::max(coord,maxValue);
+    minValue = std::min(coord,minValue);
+  }
+  // sanity check: all vertices are either maxValue or minValue (otherwise it's not an orthogonal extrusion)
+  for (const auto & vertexIndex : vertexIndices)
+  {
+    const double & coord = meshTopo->getVertex(vertexIndex)[d];
+    const bool matchesMax = std::fabs(coord-maxValue) < tol;
+    const bool matchesMin = std::fabs(coord-minValue) < tol;
+    
+    TEUCHOS_TEST_FOR_EXCEPTION(!matchesMax && !matchesMin, std::invalid_argument, "Not an orthogonal extrusion in the specified dimension.");
+  }
+  // TODO: worry about the case where the jacobian is negative (and therefore the width should be negative, too).
+  return maxValue - minValue;
+}
+
 void BasisCache::findMaximumDegreeBasisForSides(DofOrdering &trialOrdering)
 {
   _maxDegreeBasisForSide.clear();
@@ -920,11 +949,14 @@ constFCPtr BasisCache::getValues(BasisPtr basis, Camellia::EOperator op,
     _knownValuesFC[key] = result;
     return result;
   }
-  // if we get here, we should have a standard Intrepid operator, in which case we should
+  // if we get here, we should have a standard Intrepid operator *or* OP_DIn, in which case we should
   // be able to: size a Camellia::FieldContainer appropriately, and then call basis->getValues
 
-  // But let's do just check that we have a standard Intrepid operator
-  if ( (op >= Camellia::OP_X) || (op <  Camellia::OP_VALUE) )
+  // Let's assert that that's the case:
+  const bool standardIntrepidOperator = (op >= Camellia::OP_VALUE) && (op <= Camellia::OP_D10);
+  const bool camelliaOpDIn            = (op >= Camellia::OP_DI1)   && (op <= Camellia::OP_DI7);
+  const bool validOperator = standardIntrepidOperator || camelliaOpDIn;
+  if ( !validOperator )
   {
     TEUCHOS_TEST_FOR_EXCEPTION(true,std::invalid_argument,"Unknown operator.");
   }
@@ -997,10 +1029,14 @@ constFCPtr BasisCache::getTransformedValues(BasisPtr basis, Camellia::EOperator 
   }
   constFCPtr relatedValuesTransformed = _knownValuesTransformedFC[relatedKey];
   constFCPtr result;
-  if (   (op != Camellia::OP_CROSS_NORMAL)   && (op != Camellia::OP_DOT_NORMAL)
-         && (op != Camellia::OP_TIMES_NORMAL)   && (op != Camellia::OP_VECTORIZE_VALUE)
-         && (op != Camellia::OP_TIMES_NORMAL_X) && (op != Camellia::OP_TIMES_NORMAL_Y)
-         && (op != Camellia::OP_TIMES_NORMAL_Z) && (op != Camellia::OP_TIMES_NORMAL_T)
+  if (op == (Camellia::EOperator)relatedOp)
+  {
+    result = relatedValuesTransformed;
+  }
+  else if (   (op != Camellia::OP_CROSS_NORMAL)   && (op != Camellia::OP_DOT_NORMAL)
+           && (op != Camellia::OP_TIMES_NORMAL)   && (op != Camellia::OP_VECTORIZE_VALUE)
+           && (op != Camellia::OP_TIMES_NORMAL_X) && (op != Camellia::OP_TIMES_NORMAL_Y)
+           && (op != Camellia::OP_TIMES_NORMAL_Z) && (op != Camellia::OP_TIMES_NORMAL_T)
      )
   {
     result = BasisEvaluation::getComponentOfInterest(relatedValuesTransformed,op,fs,componentOfInterest);
@@ -1175,7 +1211,7 @@ void BasisCache::setRefCellPointsFC(const Camellia::FieldContainer<double> &poin
 void BasisCache::setRefCellPointsFC(const Camellia::FieldContainer<double> &pointsRefCell, const Camellia::FieldContainer<double> &cubWeights,
                                     int cubatureDegree, bool recomputePhysicalMeasures)
 {
-  // TODO: set _cubPoints, _cubWeights (Intrepid2 containers) appropriately
+  // TODO: consider setting _cubPoints, _cubWeights (Intrepid2 containers) appropriately: but check setRefCellPoints() methods below…
   _cubPointsFC = pointsRefCell;
   _cubDegree = cubatureDegree;
   int numPoints = pointsRefCell.dimension(0);
@@ -1204,6 +1240,21 @@ void BasisCache::setRefCellPointsFC(const Camellia::FieldContainer<double> &poin
   _weightedMeasureIsValid = false;
   _sideNormalsIsValid = false;
   _physCubPointsIsValid = false;
+}
+
+void BasisCache::setRefCellPoints(Intrepid2::TensorPoints<double,ExecSpaceType> pointsRefCell)
+{
+  Intrepid2::TensorData<double,ExecSpaceType> emptyWeights;
+  setRefCellPoints(pointsRefCell, emptyWeights);
+}
+
+void BasisCache::setRefCellPoints(Intrepid2::TensorPoints<double,ExecSpaceType> pointsRefCell, Intrepid2::TensorData<double,ExecSpaceType> weightsRefCell)
+{
+  _cubPoints = pointsRefCell;
+  _cubWeights = weightsRefCell;
+  auto pointsRefCellFC  = FieldContainerConversion<double>::fromTensorPoints(pointsRefCell);
+  auto weightsRefCellFC = FieldContainerConversion<double>::fromTensorData(weightsRefCell);
+  setRefCellPointsFC(pointsRefCellFC, weightsRefCellFC);
 }
 
 const Camellia::FieldContainer<double> & BasisCache::getSideNormals()
@@ -1576,10 +1627,10 @@ BasisCachePtr BasisCache::basisCache1D(double x0, double x1, int cubatureDegree)
 }
 
 BasisCachePtr BasisCache::basisCacheForCell(MeshPtr mesh, GlobalIndexType cellID,
-                                            bool testVsTest, int cubatureDegreeEnrichment, bool tensorProductTopologyMeansSpaceTime)
+                                            bool testVsTest, int cubatureDegreeEnrichment)
 {
   ElementTypePtr elemType = mesh->getElementType(cellID);
-  return basisCacheForCell(mesh,mesh->getTopology(),cellID,elemType,testVsTest,cubatureDegreeEnrichment,tensorProductTopologyMeansSpaceTime);
+  return basisCacheForCell(mesh,mesh->getTopology(),cellID,elemType,testVsTest,cubatureDegreeEnrichment,mesh->tensorTopologyMeansSpaceTime());
 }
 
 BasisCachePtr BasisCache::basisCacheForCell(ConstMeshTopologyViewPtr meshTopology, GlobalIndexType cellID, ElementTypePtr elemType,
@@ -1755,10 +1806,9 @@ BasisCachePtr BasisCache::basisCacheForCellTopology(CellTopoPtr cellTopo, int cu
   return basisCache;
 }
 
-BasisCachePtr BasisCache::basisCacheForCellType(MeshPtr mesh, ElementTypePtr elemType, bool testVsTest,
-    int cubatureDegreeEnrichment, bool tensorProductTopologyMeansSpaceTime)   // for cells on the local MPI node
+BasisCachePtr BasisCache::basisCacheForCellType(MeshPtr mesh, ElementTypePtr elemType, bool testVsTest, int cubatureDegreeEnrichment)   // for cells on the local MPI node
 {
-  BasisCachePtr basisCache = Teuchos::rcp( new BasisCache(elemType, mesh, testVsTest, cubatureDegreeEnrichment, tensorProductTopologyMeansSpaceTime) );
+  BasisCachePtr basisCache = Teuchos::rcp( new BasisCache(elemType, mesh, testVsTest, cubatureDegreeEnrichment) );
   bool createSideCache = true;
   vector<GlobalIndexType> cellIDs = mesh->cellIDsOfType(elemType);
   if (cellIDs.size() > 0)

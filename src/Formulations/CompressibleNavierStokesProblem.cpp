@@ -20,7 +20,7 @@ class Exp_ay2 : public SimpleFunction<double>
 public:
   Exp_ay2(double a)
   :
-  SimpleFunction<double>("Exp_ay2"),
+  SimpleFunction<double>("Exp_ay2",VARIES_IN_DIMENSION_1),
   _a(a)
   {}
   double value(double x, double y)
@@ -35,7 +35,7 @@ class Log_ay2b : public SimpleFunction<double>
   double _b;
 public:
   Log_ay2b(double a, double b) :
-  SimpleFunction<double>("Log_ay2b"),
+  SimpleFunction<double>("Log_ay2b",VARIES_IN_DIMENSION_1),
   _a(a), _b(b) {}
   double value(double x, double y)
   {

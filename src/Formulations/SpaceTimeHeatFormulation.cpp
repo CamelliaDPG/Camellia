@@ -56,18 +56,19 @@ SpaceTimeHeatFormulation::SpaceTimeHeatFormulation(int spaceDim, double epsilon,
   VarPtr q;
 
   _vf = VarFactory::varFactory();
-  u = _vf->fieldVar(S_U);
+  u = _vf->fieldVarSpaceTime(S_U);
 
-  sigma1 = _vf->fieldVar(S_SIGMA1);
-  if (spaceDim > 1) sigma2 = _vf->fieldVar(S_SIGMA2);
+  sigma1 = _vf->fieldVarSpaceTime(S_SIGMA1);
+  if (spaceDim > 1) sigma2 = _vf->fieldVarSpaceTime(S_SIGMA2);
   if (spaceDim==3)
   {
-    sigma3 = _vf->fieldVar(S_SIGMA3);
+    sigma3 = _vf->fieldVarSpaceTime(S_SIGMA3);
   }
 
-  Space uHatSpace = useConformingTraces ? HGRAD : L2;
+  Space uHatFunctionSpace = useConformingTraces ? HGRAD : L2;
+  Space uHatTemporalFS = uHatFunctionSpace; // TODO: determine whether this, or HGRAD, is more appropriate
 
-  u_hat = _vf->traceVar(S_U_HAT, 1.0 * u, uHatSpace);
+  u_hat = _vf->traceVarSpaceTime(S_U_HAT, 1.0 * u, uHatFunctionSpace, uHatTemporalFS);
 
   TFunctionPtr<double> n_x = TFunction<double>::normal(); // spatial normal
   TFunctionPtr<double> n_x_parity = n_x * TFunction<double>::sideParity();
@@ -88,12 +89,12 @@ SpaceTimeHeatFormulation::SpaceTimeHeatFormulation(int spaceDim, double epsilon,
   }
   sigma_n_hat = _vf->fluxVarSpaceOnly(S_SIGMA_N_HAT, sigma_n_lt);
 
-  v = _vf->testVar(S_V, HGRAD);
+  v = _vf->testVarSpaceTime(S_V, HGRAD);
 
   if (_spaceDim > 1)
-    tau = _vf->testVar(S_TAU, HDIV); // vector
+    tau = _vf->testVarSpaceTime(S_TAU, HDIV); // vector
   else
-    tau = _vf->testVar(S_TAU, HGRAD); // scalar
+    tau = _vf->testVarSpaceTime(S_TAU, HGRAD); // scalar
 
   _bf = Teuchos::rcp( new BF(_vf) );
   // v terms
@@ -161,13 +162,19 @@ void SpaceTimeHeatFormulation::initializeSolution(MeshTopologyPtr meshTopo, int 
   if (savedSolutionAndMeshPrefix == "")
   {
     mesh = Teuchos::rcp( new Mesh(meshTopo, _bf, H1Order, delta_k) ) ;
+    mesh->setTensorTopologyMeansSpaceTime(true);
     _solution = TSolution<double>::solution(mesh,bc);
   }
   else
   {
+#ifdef HAVE_EPETRAEXT_HDF5
     mesh = MeshFactory::loadFromHDF5(_bf, savedSolutionAndMeshPrefix+".mesh");
+    mesh->setTensorTopologyMeansSpaceTime(true);
     _solution = TSolution<double>::solution(mesh, bc);
     _solution->loadFromHDF5(savedSolutionAndMeshPrefix+".soln");
+#else
+    TEUCHOS_TEST_FOR_EXCEPTION(true, std::invalid_argument, "File I/O is not supported when Trilinos was built without EpetraExt_ENABLE_HDF5=ON");
+#endif
   }
 
   RHSPtr rhs = this->rhs(forcingFunction); // in transient case, this will refer to _previousSolution
@@ -261,8 +268,12 @@ VarPtr SpaceTimeHeatFormulation::tau()
 // ! Saves the solution(s) and mesh to an HDF5 format.
 void SpaceTimeHeatFormulation::save(std::string prefixString)
 {
+#ifdef HAVE_EPETRAEXT_HDF5
   _solution->mesh()->saveToHDF5(prefixString+".mesh");
   _solution->saveToHDF5(prefixString+".soln");
+#else
+  TEUCHOS_TEST_FOR_EXCEPTION(true, std::invalid_argument, "File I/O is not supported when Trilinos was built without EpetraExt_ENABLE_HDF5=ON");
+#endif
 }
 
 // ! Returns the solution

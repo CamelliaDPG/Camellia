@@ -15,8 +15,9 @@
 #include "CamelliaTestingHelpers.h"
 #include "CellTopology.h"
 #include "MPIWrapper.h"
-#include "SpaceTimeBasisCache.h"
 #include "PoissonFormulation.h"
+#include "SpaceTimeHeatFormulation.h"
+#include "SpaceTimeBasisCache.h"
 #include "TensorBasis.h"
 
 using namespace Camellia;
@@ -84,11 +85,13 @@ MeshPtr getSpaceTimeMesh(CellTopoPtr spaceTopo, int H1Order=2, double refCellExp
   MeshTopologyPtr meshTopo = Teuchos::rcp( new MeshTopology(tensorTopo->getDimension()) );
   meshTopo->addCell(tensorTopo, tensorNodes);
 
-  PoissonFormulation form(spaceTopo->getDimension(), false); // arbitrary; we don't actually use the BF in any meaningful way
+  double epsilon = 1.0;
+  SpaceTimeHeatFormulation form(spaceTopo->getDimension(), epsilon, false); // arbitrary; we don't actually use the BF in any meaningful way, though it is important that the BF uses space-time variables…
 
   int delta_k = 1;
   MeshPtr mesh = Teuchos::rcp( new Mesh(meshTopo, form.bf(), H1Order, delta_k) );
 
+  mesh->setTensorTopologyMeansSpaceTime(true);
   return mesh;
 }
 
@@ -344,8 +347,7 @@ void testPhysicalPointsForSpaceTimeBasisCache(int H1Order, CellTopoPtr spaceTopo
 
     BasisPtr spatialBasis = basisFactory->getBasis(H1Order, spaceTopo, spatialFS);
 
-    spaceTimeBasis = basisFactory->getBasis(H1Order, spaceTimeTopo, spatialFS,
-                                            timePolyOrder + 1, temporalFS);
+    spaceTimeBasis = basisFactory->getSpaceTimeConformingBasis(H1Order, timePolyOrder+1, spaceTimeTopo, spatialFS, temporalFS);
 
     BasisCachePtr basisCache = BasisCache::basisCacheForCell(mesh, cellID);
 
@@ -505,8 +507,7 @@ TEUCHOS_UNIT_TEST( SpaceTimeBasisCache, GetValues )
   int spaceH1Order = 2;
   BasisPtr spatialBasis = basisFactory->getBasis(spaceH1Order, spaceTopo, spatialFS);
 
-  BasisPtr spaceTimeBasis = basisFactory->getBasis(spaceH1Order, spaceTimeTopo, spatialFS,
-                            timeH1Order, temporalFS);
+  BasisPtr spaceTimeBasis = basisFactory->getSpaceTimeConformingBasis(spaceH1Order, timeH1Order, spaceTimeTopo, spatialFS, temporalFS);
 
   GlobalIndexType cellID = 0;
   if (mesh->getTopology()->isValidCellIndex(cellID))
@@ -539,8 +540,7 @@ TEUCHOS_UNIT_TEST( SpaceTimeBasisCache, TransformedBasisValuesLine )
   CellTopoPtr spaceTopo = CellTopology::line();
   CellTopoPtr spaceTimeTopo = CellTopology::cellTopology(spaceTopo, 1);
   int H1Order = 2;
-  BasisPtr basis = BasisFactory::basisFactory()->getBasis(H1Order, spaceTimeTopo, Camellia::FUNCTION_SPACE_HGRAD,
-                   H1Order, Camellia::FUNCTION_SPACE_HGRAD);
+  BasisPtr basis = BasisFactory::basisFactory()->getSpaceTimeConformingBasis(H1Order, H1Order, spaceTimeTopo, Camellia::FUNCTION_SPACE_HGRAD, Camellia::FUNCTION_SPACE_HGRAD);
   Camellia::EOperator op = OP_VALUE;
   out << "testing with op = OP_VALUE\n";
   testBasisTransformation(basis,op,spaceTopo,out,success);
@@ -557,8 +557,7 @@ TEUCHOS_UNIT_TEST( SpaceTimeBasisCache, TransformedBasisValuesQuadHGRAD )
   CellTopoPtr spaceTopo = CellTopology::quad();
   CellTopoPtr spaceTimeTopo = CellTopology::cellTopology(spaceTopo, 1);
   int H1Order = 2;
-  BasisPtr basis = BasisFactory::basisFactory()->getBasis(H1Order, spaceTimeTopo, Camellia::FUNCTION_SPACE_HGRAD,
-                   H1Order, Camellia::FUNCTION_SPACE_HGRAD);
+  BasisPtr basis = BasisFactory::basisFactory()->getSpaceTimeConformingBasis(H1Order, H1Order, spaceTimeTopo, Camellia::FUNCTION_SPACE_HGRAD, Camellia::FUNCTION_SPACE_HGRAD);
   Camellia::EOperator op = OP_VALUE;
   out << "testing with op = OP_VALUE\n";
   testBasisTransformation(basis,op,spaceTopo,out,success);
@@ -575,8 +574,7 @@ TEUCHOS_UNIT_TEST( SpaceTimeBasisCache, TransformedBasisValuesQuadHDIV )
   CellTopoPtr spaceTopo = CellTopology::quad();
   CellTopoPtr spaceTimeTopo = CellTopology::cellTopology(spaceTopo, 1);
   int H1Order = 2;
-  BasisPtr basis = BasisFactory::basisFactory()->getBasis(H1Order, spaceTimeTopo, Camellia::FUNCTION_SPACE_HDIV,
-                   H1Order, Camellia::FUNCTION_SPACE_HGRAD);
+  BasisPtr basis = BasisFactory::basisFactory()->getSpaceTimeConformingBasis(H1Order, H1Order, spaceTimeTopo, Camellia::FUNCTION_SPACE_HDIV, Camellia::FUNCTION_SPACE_HGRAD);
   Camellia::EOperator op = OP_VALUE;
   out << "testing with op = OP_VALUE\n";
   testBasisTransformation(basis,op,spaceTopo,out,success);

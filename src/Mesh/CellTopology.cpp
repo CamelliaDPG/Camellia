@@ -298,6 +298,22 @@ unsigned CellTopology::getVertexCount() const
   return baseVertexCount * two_pow;
 }
 
+unsigned CellTopology::getExtrudedSideOrdinal(unsigned sideOrdinalInBaseTopology)
+{
+  unsigned extrudedSideOrdinal = sideOrdinalInBaseTopology;
+  
+  unsigned baseSideCount = _shardsBaseTopology.getSubcellCount(_shardsBaseTopology.getDimension()-1);
+  TEUCHOS_TEST_FOR_EXCEPTION(sideOrdinalInBaseTopology > baseSideCount, std::invalid_argument, "side ordinal out of bounds");
+
+  for (int r=1; r<=_tensorialDegree; r++)
+  {
+    CellTopoPtr tensorTopo = CellTopology::cellTopology(_shardsBaseTopology, r);
+    const unsigned sideDim = tensorTopo->getDimension() - 1; // this is the sideDim in tensorTopo, one greater than the side to which extrudedSideOrdinal refers
+    extrudedSideOrdinal = tensorTopo->getExtrudedSubcellOrdinal(sideDim-1, extrudedSideOrdinal);
+  }
+  return extrudedSideOrdinal;
+}
+
 /** \brief  Edge boundary subcell count of this cell topology */
 unsigned CellTopology::getEdgeCount() const
 {
@@ -867,21 +883,17 @@ void CellTopology::initializeNodes(const std::vector<Camellia::FieldContainer<do
   {
     TEUCHOS_TEST_FOR_EXCEPTION(true, std::invalid_argument, "cellNodes.dimension(1) != this->getDimension()");
   }
-  if (tensorComponentNodes.size() != this->getTensorialDegree() + 1)
+  
+  if (_tensorialDegree==0)
   {
-    TEUCHOS_TEST_FOR_EXCEPTION(true, std::invalid_argument, "tensorComponentNodes.size() != this->getTensorialDegree() + 1");
+    cellNodes = tensorComponentNodes[0];
+    if (_shardsBaseTopology.getDimension() == 0)
+    {
+      cellNodes.resize(1, 1); // the values inside should be ignored, but calling code may require a container that contains one point.
+    }
+    return;
   }
-  // nodes are ordered as they are in the shards topology, but then repeated for each tensor component choice
-  // i.e. if there are N nodes in the shards topology, the first N nodes here will be those with the 0-index of each tensorComponent node selected
-  //      Will the next N be the (1,0,0,...,0) or the (0,0,0,...,1)?  I think the consistent choice is the former...
-  if (tensorComponentNodes[0].dimension(0) != _shardsBaseTopology.getNodeCount())
-  {
-    TEUCHOS_TEST_FOR_EXCEPTION(true, std::invalid_argument, "the first tensor component must have the same number of nodes as the underlying shards CellTopology.");
-  }
-  if (tensorComponentNodes[0].dimension(1) != _shardsBaseTopology.getDimension())
-  {
-    TEUCHOS_TEST_FOR_EXCEPTION(true, std::invalid_argument, "the first tensor component must have the same dimension as the underlying shards CellTopology.");
-  }
+  
   for (int degreeOrdinal=1; degreeOrdinal<tensorComponentNodes.size(); degreeOrdinal++)
   {
     if (tensorComponentNodes[degreeOrdinal].dimension(0) != 2)
@@ -890,47 +902,73 @@ void CellTopology::initializeNodes(const std::vector<Camellia::FieldContainer<do
     }
     if (tensorComponentNodes[degreeOrdinal].dimension(1) != 1)
     {
-      TEUCHOS_TEST_FOR_EXCEPTION(true, std::invalid_argument, "tensor components must be one-dimensional!");
+      TEUCHOS_TEST_FOR_EXCEPTION(true, std::invalid_argument, "tensor components beyond the first must be one-dimensional!");
     }
   }
-
-  if (_tensorialDegree==0)
+  
+  if (_shardsBaseTopology.getNodeCount() == 0)
   {
-    cellNodes = tensorComponentNodes[0];
-    if (_shardsBaseTopology.getDimension() == 0)
-    {
-      cellNodes.resize(1, 1); // the values inside will be ignored, but for the tensor product logic below to work, we do need to have a container that contains one point.
-    }
+    // "Node" base topology; let's instead use the equivalent line-based tensor topology
+    unsigned lineTensorDegree = _tensorialDegree - 1;
+    
+    const std::vector<Camellia::FieldContainer<double> > lineTensorComponentNodes(tensorComponentNodes.begin() + 1, tensorComponentNodes.end());
+    
+    CellTopoPtr line = CellTopology::line();
+    CellTopoPtr lineBasedTensorTopo = CellTopology::cellTopology(line->getShardsTopology(), lineTensorDegree);
+    
+    lineBasedTensorTopo->initializeNodes(lineTensorComponentNodes, cellNodes);
+    return;
   }
-  else
+  
+  // note that the construction of tensorComponentTopo here does assume that all the tensorial components
+  // after _shardsBaseTopology are lines, but the code that follows does not.  (The argument checks above
+  // do also require that the tensorial components are lines.)
+  CellTopoPtr tensorComponentTopo; // CellTopo of one lower tensorial degree
+  if (_tensorialDegree > 0)
   {
-    // note that the construction of tensorComponentTopo here does assume that all the tensorial components
-    // after _shardsBaseTopology are lines, but the code that follows does not.  (The argument checks above
-    // do also require that the tensorial components are lines.)
-    CellTopoPtr tensorComponentTopo = CellTopology::cellTopology(_shardsBaseTopology, _tensorialDegree - 1);
-    Camellia::FieldContainer<double> componentCellNodes(tensorComponentTopo->getNodeCount(),tensorComponentTopo->getDimension());
+    tensorComponentTopo = CellTopology::cellTopology(_shardsBaseTopology, _tensorialDegree - 1);
+  }
+  
+  Camellia::FieldContainer<double> componentCellNodes; // the cellNodes for the CellTopology of one lower tensorial degree
+  Camellia::FieldContainer<double> lastNodes; // cellNodes for the final line topo that we're taking the tensor product with
+  if (tensorComponentNodes.size() == 2) // partial decomposition
+  {
+    componentCellNodes = tensorComponentNodes[0];
+    lastNodes          = tensorComponentNodes[1];
+  }
+  else if (tensorComponentNodes.size() == this->getTensorialDegree() + 1) // full decomposition
+  {
+    componentCellNodes = Camellia::FieldContainer<double>(tensorComponentTopo->getNodeCount(),tensorComponentTopo->getDimension());
 
     std::vector<Camellia::FieldContainer<double> > fewerNodes = tensorComponentNodes;
-    Camellia::FieldContainer<double> lastNodes = fewerNodes[fewerNodes.size()-1];
+    lastNodes = fewerNodes[fewerNodes.size()-1];
     fewerNodes.pop_back();
 
     tensorComponentTopo->initializeNodes(fewerNodes, componentCellNodes);
+  }
 
-    // now the component nodes get stacked atop each other
-    int nodeOrdinal=0;
-    for (int lastNodesOrdinal=0; lastNodesOrdinal<lastNodes.dimension(0); lastNodesOrdinal++)
+  const int penultimateNodeCount = componentCellNodes.dimension(0);
+  const int lastNodeCount        = lastNodes.dimension(0);
+  
+  TEUCHOS_TEST_FOR_EXCEPTION(penultimateNodeCount * lastNodeCount != this->getNodeCount(), std::invalid_argument, "node counts do not match");
+  
+  const int penultimateSpaceDim = componentCellNodes.dimension(1);
+  TEUCHOS_TEST_FOR_EXCEPTION(penultimateSpaceDim + 1 != this->getDimension(), std::invalid_argument, "spatial dimensions are not as expected");
+  
+  // stack component nodes on top of each other
+  int nodeOrdinal=0;
+  for (int lastNodesOrdinal=0; lastNodesOrdinal<lastNodes.dimension(0); lastNodesOrdinal++)
+  {
+    for (int componentNodeOrdinal=0; componentNodeOrdinal<componentCellNodes.dimension(0); componentNodeOrdinal++, nodeOrdinal++)
     {
-      for (int componentNodeOrdinal=0; componentNodeOrdinal<componentCellNodes.dimension(0); componentNodeOrdinal++, nodeOrdinal++)
+      for (int d=0; d<tensorComponentTopo->getDimension(); d++)
       {
-        for (int d=0; d<tensorComponentTopo->getDimension(); d++)
-        {
-          cellNodes(nodeOrdinal,d) = componentCellNodes(componentNodeOrdinal,d);
-        }
-        int dOffset = tensorComponentTopo->getDimension();
-        for (int d=0; d<lastNodes.dimension(1); d++)
-        {
-          cellNodes(nodeOrdinal,d+dOffset) = lastNodes(lastNodesOrdinal,d);
-        }
+        cellNodes(nodeOrdinal,d) = componentCellNodes(componentNodeOrdinal,d);
+      }
+      int dOffset = tensorComponentTopo->getDimension();
+      for (int d=0; d<lastNodes.dimension(1); d++)
+      {
+        cellNodes(nodeOrdinal,d+dOffset) = lastNodes(lastNodesOrdinal,d);
       }
     }
   }
@@ -940,6 +978,12 @@ bool CellTopology::isHypercube() const
 {
   unsigned baseKey = _shardsBaseTopology.getBaseKey();
   return (baseKey==shards::Node::key) || (baseKey==shards::Line<2>::key) || (baseKey==shards::Quadrilateral<4>::key) || (baseKey==shards::Hexahedron<8>::key);
+}
+
+bool CellTopology::sideIsExtrudedInFinalDimension( unsigned sideOrdinal ) const
+{
+  if (_tensorialDegree == 0) return false;
+  else return sideIsSpatial(sideOrdinal);
 }
 
 bool CellTopology::sideIsSpatial(unsigned sideOrdinal) const
@@ -972,11 +1016,10 @@ CellTopoPtr CellTopology::cellTopology(const shards::CellTopology &shardsCellTop
 
 CellTopoPtr CellTopology::cellTopology(CellTopoPtr baseTopo, unsigned tensorialDegree)
 {
-  if (baseTopo->getTensorialDegree() != 0)
-  {
-    cout << "ERROR: this constructor does not support baseTopo's with tensorialDegree > 0.\n";
-  }
-  return cellTopology(baseTopo->getShardsTopology(),tensorialDegree);
+  // the following is primarily intended to catch underflow
+  TEUCHOS_TEST_FOR_EXCEPTION(tensorialDegree > 1000, std::invalid_argument, "Unsupported tensorialDegree");
+  const unsigned totalTensorialDegree = tensorialDegree + baseTopo->getTensorialDegree();
+  return cellTopology(baseTopo->getShardsTopology(),totalTensorialDegree);
 }
 
 CellTopoPtr CellTopology::cellTopology(CellTopologyKey key)

@@ -495,9 +495,9 @@ set<GlobalIndexType> CondensedDofInterpreter<Scalar>::globalDofIndicesForCell(Gl
 }
 
 template <typename Scalar>
-set<GlobalIndexType> CondensedDofInterpreter<Scalar>::globalDofIndicesForVarOnSubcell(int varID, GlobalIndexType cellID, unsigned dim, unsigned subcellOrdinal)
+set<GlobalIndexType> CondensedDofInterpreter<Scalar>::globalDofIndicesForVarOnSubcell(int varID, GlobalIndexType cellID, unsigned dim, unsigned subcellOrdinal, bool upgradeToContinuousBasis, bool tensorTopologyMeansSpaceTime)
 {
-  set<GlobalIndexType> interpretedDofIndicesForCell = _mesh->globalDofIndicesForVarOnSubcell(varID, cellID, dim, subcellOrdinal);
+  set<GlobalIndexType> interpretedDofIndicesForCell = _mesh->globalDofIndicesForVarOnSubcell(varID, cellID, dim, subcellOrdinal, upgradeToContinuousBasis, tensorTopologyMeansSpaceTime);
   set<GlobalIndexType> globalDofIndices;
   
   for (GlobalIndexType interpretedDofIndex : interpretedDofIndicesForCell)

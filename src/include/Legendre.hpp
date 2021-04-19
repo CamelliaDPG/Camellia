@@ -37,7 +37,7 @@ namespace Camellia {
   public:
     LegendreFunction(int polyOrder, bool derivative = false)
     :
-    SimpleFunction<double>("LegendreFunction")
+    SimpleFunction<double>("LegendreFunction",VARIES_IN_DIMENSION_0)
     {
       _polyOrder = polyOrder;
       _values.resize(_polyOrder+1);
