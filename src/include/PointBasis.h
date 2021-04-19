@@ -42,6 +42,9 @@ public:
 
   void getValues(ArrayScalar &outputValues, const ArrayScalar &  inputPoints,
                  const Intrepid::EOperator operatorType) const;
+  
+  //! Returns true.
+  bool isConforming() const;
 };
 
 typedef Teuchos::RCP< PointBasis<> > PointBasisPtr;

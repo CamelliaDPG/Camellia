@@ -90,17 +90,19 @@ class Mesh : public RefinementObserver, public DofInterpreter
 
   void verticesForCells(Camellia::FieldContainer<double>& vertices, vector<GlobalIndexType> &cellIDs);
 
+  bool _tensorTopologyMeansSpaceTime = false;
+  
   static map<int,int> _emptyIntIntMap; // just defined here to implement a default argument to constructor (there's got to be a better way)
 public:
   // Preferred Constructor for min rule, n-D, single H1Order
   Mesh(MeshTopologyViewPtr meshTopology, VarFactoryPtr varFactory, int H1Order, int pToAddTest,
        map<int,int> trialOrderEnhancements=_emptyIntIntMap, map<int,int> testOrderEnhancements=_emptyIntIntMap,
-       MeshPartitionPolicyPtr meshPartitionPolicy = Teuchos::null, Epetra_CommPtr Comm = Teuchos::null);
+       MeshPartitionPolicyPtr meshPartitionPolicy = Teuchos::null, Epetra_CommPtr Comm = Teuchos::null, bool allowPruning = true);
 
   // Preferred Constructor for min rule, n-D, vector H1Order for tensor topologies (tensorial degree 0 and 1 supported)
   Mesh(MeshTopologyViewPtr meshTopology, VarFactoryPtr varFactory, vector<int> H1Order, int pToAddTest,
        map<int,int> trialOrderEnhancements=_emptyIntIntMap, map<int,int> testOrderEnhancements=_emptyIntIntMap,
-       MeshPartitionPolicyPtr meshPartitionPolicy = Teuchos::null, Epetra_CommPtr Comm = Teuchos::null);
+       MeshPartitionPolicyPtr meshPartitionPolicy = Teuchos::null, Epetra_CommPtr Comm = Teuchos::null, bool allowPruning = true);
 
   // legacy (max rule 2D) constructor:
   Mesh(const vector<vector<double> > &vertices, vector< vector<IndexType> > &elementVertices,
@@ -121,7 +123,7 @@ public:
   // Constructor for min rule, n-D, vector H1Order for tensor topologies (tensorial degree 0 and 1 supported)
   Mesh(MeshTopologyViewPtr meshTopology, TBFPtr<double> bilinearForm, vector<int> H1Order, int pToAddTest,
        map<int,int> trialOrderEnhancements=_emptyIntIntMap, map<int,int> testOrderEnhancements=_emptyIntIntMap,
-       MeshPartitionPolicyPtr meshPartitionPolicy = Teuchos::null, Epetra_CommPtr Comm = Teuchos::null);
+       MeshPartitionPolicyPtr meshPartitionPolicy = Teuchos::null, Epetra_CommPtr Comm = Teuchos::null, bool allowPruning = true);
 
   // ! Constructor for a single-element mesh extracted from an existing mesh
   Mesh(MeshPtr mesh, GlobalIndexType cellID, Epetra_CommPtr Comm);
@@ -222,7 +224,7 @@ public:
   set<GlobalIndexType> globalDofIndicesForCell(GlobalIndexType cellID);
   
   //!! Returns the global dof indices for the indicated subcell.  Only guaranteed to provide correct values for cells that belong to the local partition.
-  set<GlobalIndexType> globalDofIndicesForVarOnSubcell(int varID, GlobalIndexType cellID, unsigned dim, unsigned subcellOrdinal);
+  set<GlobalIndexType> globalDofIndicesForVarOnSubcell(int varID, GlobalIndexType cellID, unsigned dim, unsigned subcellOrdinal, bool upgradeToContinuousBasis, bool tensorTopologyMeansSpaceTime);
   
   DofOrderingFactory & getDofOrderingFactory();
 
@@ -322,6 +324,9 @@ public:
 
   void setUsePatchBasis( bool value );
   bool usePatchBasis();
+  
+  bool tensorTopologyMeansSpaceTime() const;
+  void setTensorTopologyMeansSpaceTime(bool value);
 
   MeshTopologyViewPtr getTopology();
 

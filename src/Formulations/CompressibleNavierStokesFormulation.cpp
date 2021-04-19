@@ -245,44 +245,71 @@ CompressibleNavierStokesFormulation::CompressibleNavierStokesFormulation(MeshTop
   
   _vf = VarFactory::varFactory();
   
-  rho = _vf->fieldVar(S_rho);
-  
-  for (int d=0; d<spaceDim; d++)
+  if (!_spaceTime)
   {
-    u[d] = _vf->fieldVar(S_u[d]);
+    rho = _vf->fieldVar(S_rho);
+    
+    for (int d=0; d<spaceDim; d++)
+    {
+      u[d] = _vf->fieldVar(S_u[d]);
+    }
+    T = _vf->fieldVar(S_T);
   }
-  T = _vf->fieldVar(S_T);
+  else
+  {
+    rho = _vf->fieldVarSpaceTime(S_rho);
+    
+    for (int d=0; d<spaceDim; d++)
+    {
+      u[d] = _vf->fieldVarSpaceTime(S_u[d]);
+    }
+    T = _vf->fieldVarSpaceTime(S_T);
+  }
   
   if (!_pureEulerMode)
   {
-    for (int d1=0; d1<spaceDim; d1++)
+    if (!_spaceTime)
     {
-      q[d1] = _vf->fieldVar(S_q[d1]);
-      for (int d2=0; d2<spaceDim; d2++)
+      for (int d1=0; d1<spaceDim; d1++)
       {
-        D[d1][d2] = _vf->fieldVar(S_D[d1][d2]);
-      }
-    }
-    FunctionPtr one = Function::constant(1.0); // reuse Function to take advantage of accelerated BasisReconciliation (probably this is not the cleanest way to do this, but it should work)
-    if (! _spaceTime)
-    {
-      Space uHatSpace = useConformingTraces ? HGRAD : L2;
-      for (int d=0; d<spaceDim; d++)
-      {
-        u_hat[d] = _vf->traceVar(S_u_hat[d], one * u[d], uHatSpace);
+        q[d1] = _vf->fieldVar(S_q[d1]);
+        for (int d2=0; d2<spaceDim; d2++)
+        {
+          D[d1][d2] = _vf->fieldVar(S_D[d1][d2]);
+        }
       }
     }
     else
     {
-      Space uHatSpace = useConformingTraces ? HGRAD_SPACE_L2_TIME : L2;
+      for (int d1=0; d1<spaceDim; d1++)
+      {
+        q[d1] = _vf->fieldVarSpaceTime(S_q[d1]);
+        for (int d2=0; d2<spaceDim; d2++)
+        {
+          D[d1][d2] = _vf->fieldVarSpaceTime(S_D[d1][d2]);
+        }
+      }
+    }
+    FunctionPtr one = Function::constant(1.0); // reuse Function to take advantage of accelerated BasisReconciliation (probably this is not the cleanest way to do this, but it should work)
+    
+    Space uHatSpace = useConformingTraces ? HGRAD : L2;
+    Space THatSpace = useConformingTraces ? HGRAD : L2;
+    if (! _spaceTime)
+    {
+      for (int d=0; d<spaceDim; d++)
+      {
+        u_hat[d] = _vf->traceVar(S_u_hat[d], one * u[d], uHatSpace);
+      }
+      T_hat = _vf->traceVar(S_T_hat, one * T, THatSpace);
+    }
+    else
+    {
       for (int d=0; d<spaceDim; d++)
       {
         u_hat[d] = _vf->traceVarSpaceOnly(S_u_hat[d], one * u[d], uHatSpace);
       }
+      T_hat = _vf->traceVarSpaceOnly(S_T_hat, one * T, THatSpace);
     }
-    
-    Space THatSpace = useConformingTraces ? HGRAD_SPACE_L2_TIME : L2;
-    T_hat = _vf->traceVarSpaceOnly(S_T_hat, one * T, THatSpace);
   }
   
   // FunctionPtr n = Function::normal();
@@ -362,6 +389,7 @@ CompressibleNavierStokesFormulation::CompressibleNavierStokesFormulation(MeshTop
   }
   else
   {
+#ifdef HAVE_EPETRAEXT_HDF5
     mesh = MeshFactory::loadFromHDF5(_bf, savedSolutionAndMeshPrefix+".mesh");
     _backgroundFlow = Solution::solution(_bf, mesh, bc);
     _solnIncrement = Solution::solution(_bf, mesh, bc);
@@ -369,6 +397,9 @@ CompressibleNavierStokesFormulation::CompressibleNavierStokesFormulation(MeshTop
     _backgroundFlow->loadFromHDF5(savedSolutionAndMeshPrefix+".soln");
     _solnIncrement->loadFromHDF5(savedSolutionAndMeshPrefix+"_increment.soln");
     _solnPrevTime->loadFromHDF5(savedSolutionAndMeshPrefix+"_prevtime.soln");
+#else
+    TEUCHOS_TEST_FOR_EXCEPTION(true, std::invalid_argument, "File I/O is not supported when Trilinos was built without EpetraExt_ENABLE_HDF5=ON");
+#endif
   }
   
   // avoid circular references when setting up bf object

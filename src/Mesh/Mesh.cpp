@@ -46,7 +46,7 @@ map<int,int> Mesh::_emptyIntIntMap;
 
 Mesh::Mesh(MeshTopologyViewPtr meshTopology, VarFactoryPtr varFactory, vector<int> H1Order, int pToAddTest,
            map<int,int> trialOrderEnhancements, map<int,int> testOrderEnhancements,
-           MeshPartitionPolicyPtr partitionPolicy, Epetra_CommPtr Comm) : DofInterpreter(Teuchos::rcp(this,false))
+           MeshPartitionPolicyPtr partitionPolicy, Epetra_CommPtr Comm, bool allowMeshTopologyPruning) : DofInterpreter(Teuchos::rcp(this,false))
 {
   _meshTopology = meshTopology;
   _pToAddToTest = pToAddTest;
@@ -58,6 +58,7 @@ Mesh::Mesh(MeshTopologyViewPtr meshTopology, VarFactoryPtr varFactory, vector<in
   MeshPtr thisPtr = Teuchos::rcp(this, false);
   _gda = Teuchos::rcp( new GDAMinimumRule(thisPtr, varFactory, dofOrderingFactoryPtr,
                                           partitionPolicy, H1Order, pToAddTest));
+  _gda->setAllowMeshTopologyPruning(allowMeshTopologyPruning);
   _gda->repartitionAndMigrate();
 
   _varFactory = varFactory;
@@ -68,7 +69,7 @@ Mesh::Mesh(MeshTopologyViewPtr meshTopology, VarFactoryPtr varFactory, vector<in
 
 Mesh::Mesh(MeshTopologyViewPtr meshTopology, VarFactoryPtr varFactory, int H1Order, int pToAddTest,
            map<int,int> trialOrderEnhancements, map<int,int> testOrderEnhancements,
-           MeshPartitionPolicyPtr partitionPolicy, Epetra_CommPtr Comm) : DofInterpreter(Teuchos::rcp(this,false))
+           MeshPartitionPolicyPtr partitionPolicy, Epetra_CommPtr Comm, bool allowMeshTopologyPruning) : DofInterpreter(Teuchos::rcp(this,false))
 {
   _meshTopology = meshTopology;
   _pToAddToTest = pToAddTest;
@@ -80,6 +81,7 @@ Mesh::Mesh(MeshTopologyViewPtr meshTopology, VarFactoryPtr varFactory, int H1Ord
   MeshPtr thisPtr = Teuchos::rcp(this, false);
   _gda = Teuchos::rcp( new GDAMinimumRule(thisPtr, varFactory, dofOrderingFactoryPtr,
                                           partitionPolicy, H1Order, pToAddTest));
+  _gda->setAllowMeshTopologyPruning(allowMeshTopologyPruning);
   _gda->repartitionAndMigrate();
 
   _varFactory = varFactory;
@@ -90,7 +92,7 @@ Mesh::Mesh(MeshTopologyViewPtr meshTopology, VarFactoryPtr varFactory, int H1Ord
 
 Mesh::Mesh(MeshTopologyViewPtr meshTopology, TBFPtr<double> bilinearForm, vector<int> H1Order, int pToAddTest,
            map<int,int> trialOrderEnhancements, map<int,int> testOrderEnhancements,
-           MeshPartitionPolicyPtr partitionPolicy, Epetra_CommPtr Comm) : DofInterpreter(Teuchos::rcp(this,false))
+           MeshPartitionPolicyPtr partitionPolicy, Epetra_CommPtr Comm, bool allowMeshTopologyPruning) : DofInterpreter(Teuchos::rcp(this,false))
 {
   _meshTopology = meshTopology;
   _pToAddToTest = pToAddTest;
@@ -103,6 +105,7 @@ Mesh::Mesh(MeshTopologyViewPtr meshTopology, TBFPtr<double> bilinearForm, vector
   MeshPtr thisPtr = Teuchos::rcp(this, false);
   _gda = Teuchos::rcp( new GDAMinimumRule(thisPtr, bilinearForm->varFactory(), dofOrderingFactoryPtr,
                                           partitionPolicy, H1Order, pToAddTest));
+  _gda->setAllowMeshTopologyPruning(allowMeshTopologyPruning);
   _gda->repartitionAndMigrate();
 
   setBilinearForm(bilinearForm);
@@ -836,9 +839,9 @@ set<GlobalIndexType> Mesh::globalDofIndicesForCell(GlobalIndexType cellID)
   return _gda->globalDofIndicesForCell(cellID);
 }
 
-set<GlobalIndexType> Mesh::globalDofIndicesForVarOnSubcell(int varID, GlobalIndexType cellID, unsigned dim, unsigned subcellOrdinal)
+set<GlobalIndexType> Mesh::globalDofIndicesForVarOnSubcell(int varID, GlobalIndexType cellID, unsigned dim, unsigned subcellOrdinal, bool upgradeToContinuousBasis, bool tensorTopologyMeansSpaceTime)
 {
-  return _gda->globalDofIndicesForVarOnSubcell(varID, cellID, dim, subcellOrdinal);
+  return _gda->globalDofIndicesForVarOnSubcell(varID, cellID, dim, subcellOrdinal, upgradeToContinuousBasis, tensorTopologyMeansSpaceTime);
 }
 
 set<GlobalIndexType> Mesh::globalDofIndicesForPartition(PartitionIndexType partitionNumber)
@@ -1331,6 +1334,16 @@ void Mesh::repartitionAndRebuild()
       (*observerIt)->didRepartition(writableMeshTopology);
     }
   }
+}
+
+void Mesh::setTensorTopologyMeansSpaceTime(bool value)
+{
+  _tensorTopologyMeansSpaceTime = value;
+}
+
+bool Mesh::tensorTopologyMeansSpaceTime() const
+{
+  return _tensorTopologyMeansSpaceTime;
 }
 
 int Mesh::testSpaceEnrichment() const

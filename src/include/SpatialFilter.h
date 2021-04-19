@@ -32,6 +32,9 @@ public:
   virtual bool matchesPoint(double x, double y);
   virtual bool matchesPoint(double x, double y, double z);
   virtual bool matchesPoint(double x, double y, double z, double t);
+  virtual bool matchesPoint(double x0, double x1, double x2, double x3, double x4);
+  virtual bool matchesPoint(double x0, double x1, double x2, double x3, double x4, double x5);
+  virtual bool matchesPoint(double x0, double x1, double x2, double x3, double x4, double x5, double x6);
   virtual bool matchesPoint(const vector<double>&point);
   virtual bool matchesPoints(Camellia::FieldContainer<bool> &pointsMatch, BasisCachePtr basisCache);
   
@@ -52,6 +55,8 @@ public:
   
   static SpatialFilterPtr matchingT(double t, bool matchSpatialSides = false); // matchesSpatialSides() is false; matchesTemporalSides() is true
 
+  static SpatialFilterPtr matchingComponent(int comp, double value);
+  
   static SpatialFilterPtr lessThanX(double x);
   static SpatialFilterPtr lessThanY(double y);
   static SpatialFilterPtr lessThanZ(double z);

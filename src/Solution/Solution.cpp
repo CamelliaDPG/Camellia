@@ -943,7 +943,7 @@ void TSolution<Scalar>::getBasisCoefficientsForCell(Camellia::FieldContainer<Sca
   if (_bf != Teuchos::null)
     fluxOrTrace = _bf->isFluxOrTrace(trialID);
   else
-    fluxOrTrace = _mesh->bilinearForm()->isFluxOrTrace(trialID);
+    fluxOrTrace = _mesh->varFactory()->isFluxOrTrace(trialID);
   
   if ( _solutionForCellID[solutionOrdinal].find(cellID) == _solutionForCellID[solutionOrdinal].end() )
   {
@@ -1636,9 +1636,11 @@ int TSolution<Scalar>::solveWithPrepopulatedStiffnessAndLoad(TSolverPtr<Scalar> 
     if (rank==0) cout << "**** WARNING: in Solution.solve(), solver->solve() failed with error code " << solveSuccess << ". ****\n";
     if (_saveMeshOnSolveError)
     {
+#ifdef HAVE_EPETRAEXT_HDF5
       string savePrefix = "solveFailure";
       if (rank==0) cout << "**** Outputting solution and mesh with prefix " << savePrefix << ". ****\n";
       save(savePrefix);
+#endif
     }
   }
 
@@ -3137,8 +3139,8 @@ void TSolution<Scalar>::solutionValues(typename Camellia::FieldContainer<Scalar>
   // all cells belonging to the BasisCache must have the same type (discretization order, etc.); get the basis information from the first cell
   DofOrderingPtr trialOrder = _mesh->getElementType(cellIDs[0])->trialOrderPtr;
   
-  auto bf = (_bf != Teuchos::null) ? _bf : _mesh->bilinearForm();
-  bool fluxOrTrace = bf->isFluxOrTrace(trialID);
+  auto vf = (_bf != Teuchos::null) ? _bf->varFactory() : _mesh->varFactory();
+  bool fluxOrTrace = vf->isFluxOrTrace(trialID);
   
   int sideIndex = basisCache->getSideIndex();
   
@@ -3150,7 +3152,7 @@ void TSolution<Scalar>::solutionValues(typename Camellia::FieldContainer<Scalar>
     // set up a new cache
     invalidateCachedBasisCoefficientsForFields();
     
-    std::vector< VarPtr > fieldVars = bf->varFactory()->fieldVars();
+    std::vector< VarPtr > fieldVars = vf->fieldVars();
     
     _cachedCellBasisCoefficientsForFields.resize(fieldVars.size());
     
@@ -3223,7 +3225,7 @@ void TSolution<Scalar>::solutionValues(typename Camellia::FieldContainer<Scalar>
   {
     TEUCHOS_FUNC_TIME_MONITOR("Solution::solutionValues - look up field coefficients from cache");
     // field variable; can use cache
-    std::vector< VarPtr > fieldVars = bf->varFactory()->fieldVars();
+    std::vector< VarPtr > fieldVars = vf->fieldVars();
     for (int fieldVarOrdinal = 0; fieldVarOrdinal<fieldVars.size(); fieldVarOrdinal++)
     {
       const int fieldID = fieldVars[fieldVarOrdinal]->ID();
@@ -3242,7 +3244,7 @@ void TSolution<Scalar>::solutionValues(typename Camellia::FieldContainer<Scalar>
   {
     forceVolumeCoords = true;
   }
-  if ( (sideIndex == -1 ) && _mesh->bilinearForm()->isFluxOrTrace(trialID) )
+  if ( (sideIndex == -1 ) && _mesh->varFactory()->isFluxOrTrace(trialID) )
   {
     TEUCHOS_TEST_FOR_EXCEPTION(true, std::invalid_argument,
                                "solutionValues doesn't support evaluation of trace or flux variables on element interiors.");
@@ -4380,7 +4382,7 @@ void TSolution<Scalar>::projectOntoCell(const map<int, TFunctionPtr<Scalar> > &f
   if (_bf != Teuchos::null)
     vf = _bf->varFactory();
   else
-    vf = _mesh->bilinearForm()->varFactory();
+    vf = _mesh->varFactory();
 
   for (typename map<int, TFunctionPtr<Scalar> >::const_iterator functionIt = functionMap.begin(); functionIt !=functionMap.end(); functionIt++)
   {
@@ -4390,7 +4392,7 @@ void TSolution<Scalar>::projectOntoCell(const map<int, TFunctionPtr<Scalar> > &f
     if (_bf != Teuchos::null)
       fluxOrTrace = _bf->isFluxOrTrace(trialID);
     else
-      fluxOrTrace = _mesh->bilinearForm()->isFluxOrTrace(trialID);
+      fluxOrTrace = _mesh->varFactory()->isFluxOrTrace(trialID);
     VarPtr trialVar = vf->trial(trialID);
     TFunctionPtr<Scalar> function = functionIt->second;
 

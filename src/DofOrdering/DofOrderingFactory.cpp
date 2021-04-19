@@ -16,6 +16,7 @@
 #include "Basis.h"
 
 #include "CamelliaCellTools.h"
+#include "PolynomialOrder.hpp"
 
 using namespace Camellia;
 
@@ -51,6 +52,9 @@ DofOrderingFactory::DofOrderingFactory(TBFPtr<double> bilinearForm,
 
 DofOrderingPtr DofOrderingFactory::testOrdering(vector<int> &polyOrder, CellTopoPtr cellTopo)
 {
+  PolynomialOrder::checkPolyOrderValidity(polyOrder, cellTopo);
+  const int polyOrderTime = PolynomialOrder::temporalPolyOrder(polyOrder);
+  
   auto key = make_pair(polyOrder,cellTopo->getKey());
   if (_testOrderings.find(key) != _testOrderings.end()) return _testOrderings[key];
   
@@ -61,19 +65,20 @@ DofOrderingPtr DofOrderingFactory::testOrdering(vector<int> &polyOrder, CellTopo
   DofOrderingPtr testOrder = Teuchos::rcp(new DofOrdering(cellTopo));
 
   vector<int> testIDPolyOrder(polyOrder.size());
+  vector<Camellia::EFunctionSpace> testIDFunctionSpace(polyOrder.size());
 
   for (int testID : testIDs)
   {
-    // Camellia::EFunctionSpace fs = _bilinearForm->functionSpaceForTest(testID);
-    Camellia::EFunctionSpace fs = efsForSpace(_varFactory->test(testID)->space());
+    VarPtr testVar = _varFactory->test(testID);
+    Camellia::EFunctionSpace fs = efsForSpace(testVar->space());
     BasisPtr basis;
+    const int testPolyOrderTime = polyOrderTime + getTestOrderEnhancement(testID);
     for (int pComponent = 0; pComponent < polyOrder.size(); pComponent++)
     {
       testIDPolyOrder[pComponent] = polyOrder[pComponent] + getTestOrderEnhancement(testID);
+      testIDFunctionSpace[pComponent] = fs;
     }
-    Camellia::EFunctionSpace fsTemporal = FUNCTION_SPACE_HGRAD; // tests should use HGRAD, so we can take time derivatives...
-    
-    VarPtr testVar = _varFactory->test(testID);
+    Camellia::EFunctionSpace fsTemporal = efsForSpace(testVar->temporalFunctionSpace());
     
     VarType varType = testVar->varType();
     if ((varType == FLUX) || (varType == TRACE))
@@ -83,10 +88,10 @@ DofOrderingPtr DofOrderingFactory::testOrdering(vector<int> &polyOrder, CellTopo
       for (int sideOrdinal=0; sideOrdinal<numSides; sideOrdinal++)
       {
         CellTopoPtr sideTopo = cellTopo->getSubcell(sideDim, sideOrdinal);
-        basis = BasisFactory::basisFactory()->getConformingBasis( testIDPolyOrder, sideTopo, fs, fsTemporal );
-        int basisRank = basis->rangeRank();
         
-        bool temporalSide = ! cellTopo->sideIsSpatial(sideOrdinal);
+        // temporalSide: somewhat confusingly, this means the *normal* in the time dimension has unit length.  (i.e., this is a side that is not extruded in time.)
+        // (sideIsSpatial() means the side is a side of the spatial cell topology, extruded in time.)
+        bool temporalSide = testVar->isSpaceTime() && !cellTopo->sideIsSpatial(sideOrdinal);
         
         if ( temporalSide && !testVar->isDefinedOnTemporalInterface() )
         {
@@ -94,12 +99,42 @@ DofOrderingPtr DofOrderingFactory::testOrdering(vector<int> &polyOrder, CellTopo
           continue;
         }
         
+        if (testVar->isSpaceTime() && cellTopo->sideIsSpatial(sideOrdinal))
+        {
+          basis = BasisFactory::basisFactory()->getSpaceTimeConformingBasis(testIDPolyOrder, testPolyOrderTime, sideTopo, testIDFunctionSpace, fsTemporal);
+        }
+        else
+        {
+          basis = BasisFactory::basisFactory()->getConformingBasis( testIDPolyOrder, sideTopo, testIDFunctionSpace );
+        }
+        int basisRank = basis->rangeRank();
+        
         testOrder->addEntry(testID,basis,basisRank,sideOrdinal);
       }
     }
     else
     {
-      basis = BasisFactory::basisFactory()->getBasis( testIDPolyOrder, cellTopo, fs, fsTemporal);
+      if (testVar->isSpaceTime())
+      {
+        vector<int> testIDPolyOrderSpace;
+        vector<Camellia::EFunctionSpace> testIDFunctionSpaceSpace;
+        if (testIDPolyOrder.size() == 1)
+        {
+          // isotropic in space-time
+          testIDPolyOrderSpace = testIDPolyOrder;
+          testIDFunctionSpaceSpace = testIDFunctionSpace;
+        }
+        else
+        {
+          testIDPolyOrderSpace = vector<int>(testIDPolyOrder.begin(),testIDPolyOrder.end()-1);
+          testIDFunctionSpaceSpace = vector<Camellia::EFunctionSpace>(testIDFunctionSpace.begin(),testIDFunctionSpace.end()-1);
+        }
+        basis = BasisFactory::basisFactory()->getSpaceTimeConformingBasis(testIDPolyOrderSpace, testPolyOrderTime, cellTopo, testIDFunctionSpaceSpace, fsTemporal);
+      }
+      else
+      {
+        basis = BasisFactory::basisFactory()->getConformingBasis( testIDPolyOrder, cellTopo, testIDFunctionSpace );
+      }
       int basisRank = basis->rangeRank();
       testOrder->addEntry(testID,basis,basisRank);
     }
@@ -121,6 +156,9 @@ DofOrderingPtr DofOrderingFactory::trialOrdering(vector<int> &polyOrder,
     CellTopoPtr cellTopo,
     bool conformingVertices)
 {
+  PolynomialOrder::checkPolyOrderValidity(polyOrder, cellTopo);
+  const int polyOrderTime = PolynomialOrder::temporalPolyOrder(polyOrder);
+  
   auto key = make_pair(make_pair(polyOrder,cellTopo->getKey()),conformingVertices);
   if (_trialOrderings.find(key) != _trialOrderings.end()) return _trialOrderings[key];
   
@@ -139,80 +177,68 @@ DofOrderingPtr DofOrderingFactory::trialOrdering(vector<int> &polyOrder,
   DofOrderingPtr traceOrder = Teuchos::rcp(new DofOrdering(cellTopo));
   DofOrderingPtr fieldOrder = Teuchos::rcp(new DofOrdering(cellTopo));
 
-  // VarFactory vf = _bilinearForm->varFactory();
-
   vector<int> trialIDPolyOrder(polyOrder.size());
-
-  for (trialIterator = trialIDs.begin(); trialIterator != trialIDs.end(); trialIterator++)
+  
+  for (const int &trialID : trialIDs)
   {
-    int trialID = *trialIterator;
     VarPtr trialVar = _varFactory->trialVars().find(trialID)->second;
+    Camellia::EFunctionSpace fs         = efsForSpace(trialVar->space());
+    Camellia::EFunctionSpace temporalFS = efsForSpace(trialVar->temporalFunctionSpace());
+    
     int trialOrderEnhancement = getTrialOrderEnhancement(trialID);
     for (int pComponent = 0; pComponent < polyOrder.size(); pComponent++)
     {
       trialIDPolyOrder[pComponent] = polyOrder[pComponent] + trialOrderEnhancement; // uses the fact that map defaults to 0 for entries that aren't found
     }
-
-    Camellia::EFunctionSpace fs = efsForSpace(_varFactory->trial(trialID)->space());
+    const int trialIDPolyOrderTime = polyOrderTime + trialOrderEnhancement;
 
     BasisPtr basis;
 
     int basisRank;
 
-    Camellia::EFunctionSpace temporalFS = FUNCTION_SPACE_HVOL;
-    Camellia::EFunctionSpace spatialFS = fs; // default to using fs for the spatial component
-    
-    /*
-     The determination of temporalFS is a bit hackish, because we don't require explicit selection of
-     a temporal discretization.  When an HGRAD or HVOL space of some kind is requested, we use the specified
-     space for spatialFS, and the scalar HGRAD or HVOL space (respectively) for the temporalFS.
-     
-     It may be worth redesigning the way that space-time variables are constructed in VarFactory to address this;
-     probably they should have an explicit function space in space, and a separate one in time.
-     */
-    switch (fs)
-    {
-      case FUNCTION_SPACE_HGRAD:
-      case FUNCTION_SPACE_HVOL:
-        temporalFS = spatialFS;
-        break;
-      case FUNCTION_SPACE_VECTOR_HVOL:
-        temporalFS = FUNCTION_SPACE_HVOL;
-        break;
-      case FUNCTION_SPACE_VECTOR_HGRAD:
-        temporalFS = FUNCTION_SPACE_HGRAD;
-        break;
-      case FUNCTION_SPACE_HVOL_SPACE_HGRAD_TIME:
-        spatialFS = FUNCTION_SPACE_HVOL;
-        temporalFS = FUNCTION_SPACE_HGRAD;
-        break;
-      case FUNCTION_SPACE_HGRAD_SPACE_HVOL_TIME:
-        spatialFS = FUNCTION_SPACE_HGRAD;
-        temporalFS = FUNCTION_SPACE_HVOL;
-        break;
-      default:
-        temporalFS = FUNCTION_SPACE_UNKNOWN;
-    }
-    
-    VarType varType = _varFactory->trial(trialID)->varType();
+   VarType varType = _varFactory->trial(trialID)->varType();
     if ((varType == FLUX) || (varType == TRACE))
     {
       int sideDim = cellTopo->getDimension() - 1;
       int numSides = cellTopo->getSideCount();
       for (int sideOrdinal=0; sideOrdinal<numSides; sideOrdinal++)
       {
-        CellTopoPtr sideTopo = cellTopo->getSubcell(sideDim, sideOrdinal);
-        basis = BasisFactory::basisFactory()->getConformingBasis( trialIDPolyOrder, sideTopo, spatialFS, temporalFS );
-        basisRank = basis->rangeRank();
-
-        bool temporalSide = ! cellTopo->sideIsSpatial(sideOrdinal);
-
+        // temporalSide: somewhat confusingly, this means the *normal* in the time dimension has unit length.  (i.e., this is a side that is not extruded in time.)
+        // (sideIsSpatial() means the side is a side of the spatial cell topology, extruded in time.)
+        bool temporalSide = trialVar->isSpaceTime() && !cellTopo->sideIsSpatial(sideOrdinal);
         if ( temporalSide && !trialVar->isDefinedOnTemporalInterface() )
         {
           // skip adding on this side
           continue;
         }
-
+        
+        vector<int> trialIDPolyOrderSide = PolynomialOrder::sidePolynomialOrder(trialIDPolyOrder, cellTopo, sideOrdinal);
+        
+        CellTopoPtr sideTopo = cellTopo->getSubcell(sideDim, sideOrdinal);
+        if (trialVar->isSpaceTime() && cellTopo->sideIsSpatial(sideOrdinal))
+        {
+          // side is extruded in time
+          vector<int> trialIDPolyOrderSideSpatialPart;
+          if (trialIDPolyOrderSide.size() == 1)
+          {
+            // isotropic (on side, anyway)
+            trialIDPolyOrderSideSpatialPart = trialIDPolyOrderSide;
+          }
+          else
+          {
+            // spatial part is all but the last entry, which belongs to time
+            trialIDPolyOrderSideSpatialPart = vector<int>(trialIDPolyOrderSide.begin(),trialIDPolyOrderSide.end()-1);
+            // sanity check: the last entry in trialIDPolyOrderSide should match trialIDPolyOrderTime
+            TEUCHOS_TEST_FOR_EXCEPTION(trialIDPolyOrderTime != trialIDPolyOrderSide[trialIDPolyOrderSide.size()-1], std::logic_error, "poly order in time does not match the final poly order in a side that is extruded in time.");
+          }
+          basis = BasisFactory::basisFactory()->getSpaceTimeConformingBasis(trialIDPolyOrderSideSpatialPart, trialIDPolyOrderTime, sideTopo, fs, temporalFS);
+        }
+        else
+        {
+          basis = BasisFactory::basisFactory()->getConformingBasis( trialIDPolyOrderSide, sideTopo, fs );
+        }
+        int basisRank = basis->rangeRank();
+        
         trialOrder->addEntry(trialID,basis,basisRank,sideOrdinal);
         traceOrder->addEntry(trialID,basis,basisRank,sideOrdinal);
       }
@@ -227,7 +253,25 @@ DofOrderingPtr DofOrderingFactory::trialOrdering(vector<int> &polyOrder,
     }
     else
     {
-      basis = BasisFactory::basisFactory()->getConformingBasis(trialIDPolyOrder, cellTopo, spatialFS, temporalFS);
+      if (trialVar->isSpaceTime())
+      {
+        vector<int> trialIDPolyOrderSpace;
+        if (trialIDPolyOrder.size() == 1)
+        {
+          // isotropic in space-time
+          trialIDPolyOrderSpace = trialIDPolyOrder;
+        }
+        else
+        {
+          trialIDPolyOrderSpace = vector<int>(trialIDPolyOrder.begin(),trialIDPolyOrder.end()-1);
+        }
+        
+        basis = BasisFactory::basisFactory()->getSpaceTimeConformingBasis(trialIDPolyOrderSpace, trialIDPolyOrderTime, cellTopo, fs, temporalFS);
+      }
+      else
+      {
+        basis = BasisFactory::basisFactory()->getConformingBasis(trialIDPolyOrder, cellTopo, fs);
+      }
       basisRank = basis->rangeRank();
       trialOrder->addEntry(trialID,basis,basisRank,VOLUME_INTERIOR_SIDE_ORDINAL);
       fieldOrder->addEntry(trialID,basis,basisRank,VOLUME_INTERIOR_SIDE_ORDINAL);
@@ -404,38 +448,6 @@ map<int, BasisPtr> DofOrderingFactory::getMultiBasisUpgradeMap(vector< pair< Dof
   return varIDsToUpgrade;
 }
 
-map<int, BasisPtr> DofOrderingFactory::getPatchBasisUpgradeMap(const DofOrderingPtr childTrialOrdering, int childSideIndex,
-    const DofOrderingPtr parentTrialOrdering, int parentSideIndex,
-    int childIndexInParentSide)
-{
-  set<int> varIDs = childTrialOrdering->getVarIDs();
-  map<int, BasisPtr> varIDsToUpgrade;
-  set<int>::iterator idIt;
-  for (idIt = varIDs.begin(); idIt != varIDs.end(); idIt++)
-  {
-    int varID = *idIt;
-    int numSides = childTrialOrdering->getSidesForVarID(varID).size();
-    if (numSides > 1)   // a variable that lives on the sides: we need to match basis
-    {
-      BasisPtr basis = parentTrialOrdering->getBasis(varID,parentSideIndex);
-      Camellia::FieldContainer<double> nodes(2,1); // just 1D patches supported right now
-      if (childIndexInParentSide==0)
-      {
-        nodes(0,0) = -1.0;
-        nodes(1,0) = 0.0;
-      }
-      else
-      {
-        nodes(0,0) = 0.0;
-        nodes(1,0) = 1.0;
-      }
-      BasisPtr patchBasis = BasisFactory::basisFactory()->getPatchBasis(basis, nodes);
-      varIDsToUpgrade[varID] = patchBasis;
-    }
-  }
-  return varIDsToUpgrade;
-}
-
 int DofOrderingFactory::getTestOrderEnhancement(int varID) const
 {
   auto foundEntry = _testOrderEnhancements.find(varID);
@@ -460,16 +472,6 @@ void DofOrderingFactory::assignMultiBasis(DofOrderingPtr &trialOrdering, int sid
 {
   map<int, BasisPtr> varIDsToUpgrade = getMultiBasisUpgradeMap(childTrialOrdersForSide);
   trialOrdering = upgradeSide(trialOrdering,cellTopo,varIDsToUpgrade,sideIndex);
-}
-
-void DofOrderingFactory::assignPatchBasis(DofOrderingPtr &childTrialOrdering, int childSideIndex,
-    const DofOrderingPtr parentTrialOrdering, int parentSideIndex,
-    int childIndexInParentSide, CellTopoPtr childCellTopo)
-{
-  TEUCHOS_TEST_FOR_EXCEPTION(childIndexInParentSide >= 2, std::invalid_argument, "assignPatchBasis only supports 2 children on a side right now.");
-  map<int, BasisPtr> varIDsToUpgrade = getPatchBasisUpgradeMap(childTrialOrdering, childSideIndex, parentTrialOrdering,
-                                       parentSideIndex, childIndexInParentSide);
-  childTrialOrdering = upgradeSide(childTrialOrdering,childCellTopo,varIDsToUpgrade,childSideIndex);
 }
 
 bool DofOrderingFactory::sideHasMultiBasis(DofOrderingPtr &trialOrdering, int sideIndex)
@@ -550,10 +552,6 @@ int DofOrderingFactory::matchSides(DofOrderingPtr &firstOrdering, int firstSideI
     {
       BasisPtr firstBasis = firstOrdering->getBasis(varID,firstSideIndex);
       BasisPtr secondBasis = secondOrdering->getBasis(varID,secondSideIndex);
-      if (BasisFactory::basisFactory()->isPatchBasis(firstBasis) || BasisFactory::basisFactory()->isPatchBasis(secondBasis))
-      {
-        return -1; // then we need to deal with ancestors, etc.--and we can't do that here
-      }
 
       // use cardinality instead of degree to compare so that multiBasis > singleBasis
       if ( firstBasis->getCardinality() > secondBasis->getCardinality() )
@@ -815,11 +813,7 @@ DofOrderingPtr DofOrderingFactory::setSidePolyOrder(DofOrderingPtr dofOrdering, 
       BasisPtr basis = dofOrdering->getBasis(varID,sideOrdinal);
       if (replacePatchBasis)
       {
-        if (BasisFactory::basisFactory()->isPatchBasis(basis))
-        {
-          // if we have a PatchBasis, then we want to get the underlying basis...
-          basis = ((PatchBasis<>*)basis.get())->nonPatchAncestorBasis();
-        }
+        TEUCHOS_TEST_FOR_EXCEPTION(true, std::invalid_argument, "Unexpected value replacePatchBasis = true");
       }
       fs = BasisFactory::basisFactory()->getBasisFunctionSpace(basis);
       int basisRank = BasisFactory::basisFactory()->getBasisRank(basis);

@@ -216,13 +216,7 @@ namespace Camellia
   template <typename Scalar>
   bool TBF<Scalar>::isFluxOrTrace(int trialID)
   {
-    VarPtr trialVar = _varFactory->trial(trialID);
-    if (trialVar.get() == NULL)   // if unknown trial ID, then it's not a flux or a trace!
-    {
-      return false;
-    }
-    VarType varType = trialVar->varType();
-    return (varType == FLUX) || (varType == TRACE);
+    return _varFactory->isFluxOrTrace(trialID);
   }
   
   template <typename Scalar>

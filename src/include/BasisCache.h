@@ -240,6 +240,8 @@ public:
   // ! sets an externally-computed jacobian inverse; sets _jacobianInvIsValid to true
   void setJacobianInv(const Camellia::FieldContainer<double> &jacobianInv);
 
+  double extrusionWidth(const int &d, const int &cellOrdinal);
+  
   // ! Returns true if the second-order derivatives of the reference-to-physical transformation may be ignored.
   bool neglectHessian() const;
   
@@ -272,6 +274,9 @@ public:
   const Camellia::FieldContainer<double> &getSideRefCellPointsInVolumeCoordinates();
   
   const Intrepid2::TensorPoints<double,ExecSpaceType> getRefCellPoints() const;
+  
+  void setRefCellPoints(Intrepid2::TensorPoints<double,ExecSpaceType> pointsRefCell);
+  void setRefCellPoints(Intrepid2::TensorPoints<double,ExecSpaceType> pointsRefCell, Intrepid2::TensorData<double,ExecSpaceType> weightsRefCell);
 
   // physicalPoints: (P,D).  cellIndex indexes into BasisCache's physicalCellNodes
   Camellia::FieldContainer<double> getRefCellPointsForPhysicalPoints(const Camellia::FieldContainer<double> &physicalPoints, int cellIndex=0);
@@ -305,24 +310,24 @@ public:
                                          bool testVsTest = false, int cubatureDegreeEnrichment = 0,
                                          bool tensorProductTopologyMeansSpaceTime=true);
   static BasisCachePtr basisCacheForCell(MeshPtr mesh, GlobalIndexType cellID, bool testVsTest = false,
-                                         int cubatureDegreeEnrichment = 0, bool tensorProductTopologyMeansSpaceTime=true);
+                                         int cubatureDegreeEnrichment = 0);
   //! bottleneck basisCacheForCell method:
   static BasisCachePtr basisCacheForCell(MeshPtr mesh, ConstMeshTopologyViewPtr meshTopology, GlobalIndexType cellID, ElementTypePtr elemType,
-                                         bool testVsTest, int cubatureDegreeEnrichment, bool tensorProductTopologyMeansSpaceTime);
+                                         bool testVsTest, int cubatureDegreeEnrichment, bool tensorTopologyMeansSpaceTime);
   static BasisCachePtr basisCacheForCellType(MeshPtr mesh, ElementTypePtr elemType, bool testVsTest = false,
-      int cubatureDegreeEnrichment = 0, bool tensorProductTopologyMeansSpaceTime=true); // for cells on the local MPI node
+      int cubatureDegreeEnrichment = 0); // for cells on the local MPI node
   static BasisCachePtr basisCacheForReferenceCell(shards::CellTopology &cellTopo, int cubatureDegree, bool createSideCacheToo=false);
   static BasisCachePtr basisCacheForRefinedReferenceCell(shards::CellTopology &cellTopo, int cubatureDegree, RefinementBranch refinementBranch, bool createSideCacheToo=false);
 
   static BasisCachePtr basisCacheForCellTopology(CellTopoPtr cellTopo, int cubatureDegree,
-      const Camellia::FieldContainer<double> &physicalCellNodes,
-      bool createSideCacheToo=false,
-      bool tensorProductTopologyMeansSpaceTime=true);
+                                                 const Camellia::FieldContainer<double> &physicalCellNodes,
+                                                 bool createSideCacheToo=false,
+                                                 bool tensorProductTopologyMeansSpaceTime=true);
 
   static BasisCachePtr basisCacheForReferenceCell(CellTopoPtr cellTopo, int cubatureDegree, bool createSideCacheToo=false,
-      bool tensorProductTopologyMeansSpaceTime=true);
+                                                  bool tensorProductTopologyMeansSpaceTime=true);
   static BasisCachePtr basisCacheForRefinedReferenceCell(CellTopoPtr cellTopo, int cubatureDegree, RefinementBranch refinementBranch,
-      bool createSideCacheToo=false, bool tensorProductTopologyMeansSpaceTime=true);
+                                                         bool createSideCacheToo=false, bool tensorProductTopologyMeansSpaceTime=true);
   
   static BasisCachePtr basisCacheForRefinedReferenceCell(int cubatureDegree, RefinementBranch refinementBranch, bool createSideCacheToo = false, bool tensorProductTopologyMeansSpaceTime=true);
 

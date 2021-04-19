@@ -163,6 +163,11 @@ public:
    */
   unsigned getSpatialSideOrdinal(unsigned sideOrdinalInSpatialComponentTopology);
   
+  /** \brief  Returns the ordinal of the extruded side corresponding to the provided side ordinal in the base topology.
+   *  \param  sideOrdinalInBaseTopology      [in]  - the side ordinal in the shards/base topology, where "this" is baseTopology x (Line_2)^tensorialDegree
+   */
+  unsigned getExtrudedSideOrdinal(unsigned sideOrdinalInBaseTopology);
+  
   /** \brief  Mapping from this CellTopology's side ordinal of dimension d-1 to the corresponding
    *          node ordinal in the Line_2 topology; that is, if
    *              this = (shardsTopo x Line_2 x Line_2 ...) x Line_2,
@@ -228,6 +233,11 @@ public:
    *  \param  sideOrdinal [in] Ordinal of the side.
    */
   bool sideIsSpatial( unsigned sideOrdinal ) const;
+  
+  /** \brief  Returns true if the specified side has extension in the final tensorial dimension.  For topologies with zero _tensorialDegree, returns false; for topologies with positive _tensorialDegree, this is synonymous with sideIsSpatial().
+   *  \param  sideOrdinal [in] Ordinal of the side.
+   */
+  bool sideIsExtrudedInFinalDimension( unsigned sideOrdinal ) const;
 
   bool isHypercube() const;
 

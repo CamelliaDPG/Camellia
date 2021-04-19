@@ -296,7 +296,6 @@ void TBC<Scalar>::imposeBC(DeviceView<Scalar> dirichletValues, DeviceView<bool> 
   
   int numCells = physicalPoints.dimension(0);
   int numPoints = physicalPoints.dimension(1);
-  int spaceDim = physicalPoints.dimension(2);
   
   TEUCHOS_TEST_FOR_EXCEPTION( ( dirichletValues.extent_int(0) != numCells )
                              || ( dirichletValues.extent_int(1) != numPoints )
@@ -309,8 +308,10 @@ void TBC<Scalar>::imposeBC(DeviceView<Scalar> dirichletValues, DeviceView<bool> 
                              std::invalid_argument,
                              "imposeHere dimensions should be (numCells,numPoints).");
   
-  TEUCHOS_TEST_FOR_EXCEPTION( spaceDim > 3, std::invalid_argument,
-                             "spaceDim > 3 not yet supported by imposeBC." );
+  // Not sure why this exception is thrown -- where do we assume spaceDim ≤ 3 -- commenting out for now.
+//  int spaceDim = physicalPoints.dimension(2);
+//  TEUCHOS_TEST_FOR_EXCEPTION( spaceDim > 3, std::invalid_argument,
+//                             "spaceDim > 3 not yet supported by imposeBC." );
   
   Kokkos::deep_copy(imposeHere,false);
   

@@ -7,6 +7,7 @@
 #include "CamelliaCellTools.h"
 #include "CamelliaDebugUtility.h"
 #include "CellDataMigration.h"
+#include "ExtrudedMeshTopology.h"
 #include "GlobalDofAssignment.h"
 #include "GnuPlotUtil.h"
 #include "MOABReader.h"
@@ -34,6 +35,150 @@ static ParametricCurvePtr parametricRect(double width, double height, double x0,
 }
 
 map<int,int> MeshFactory::_emptyIntIntMap;
+
+MeshTopologyPtr MeshFactory::extrudedMeshTopology(MeshTopologyPtr baseMeshTopology, double v0, double v1, int newDimensionSubdivisions)
+{
+  // we allow spatialMeshTopology to have been refined; we start with a coarse space-time topology matching the root spatial topology,
+  // and then refine accordingly...
+
+  // (For now, though, we do make the assumption that all refinements are regular (isotropic).)
+
+  int baseDim = baseMeshTopology->getDimension();
+  int extrudedDim = baseDim + 1;
+
+  set<IndexType> rootCellIndices = baseMeshTopology->getRootCellIndicesGlobal();
+  
+  MeshTopologyViewPtr rootSpatialTopology = baseMeshTopology->getView(rootCellIndices);
+  MeshTopologyPtr extrudedTopology = Teuchos::rcp( new MeshTopology( extrudedDim, baseMeshTopology->getPeriodicBCs() ));
+
+  /*
+   This is something of a conceit, but it's nice if the vertex indices in the extruded mesh topology are
+   in the following relationship to the baseMeshTopology:
+
+   If v is a vertexIndex in baseMeshTopology and spatialMeshTopology has N vertices, then
+   - (v,t0) has vertexIndex v in extrudedMeshTopology, and
+   - (v,t1) has vertexIndex v+N in extrudedMeshTopology.
+  */
+
+  IndexType N = baseMeshTopology->getEntityCount(0);
+  for (int subdivision=0; subdivision<newDimensionSubdivisions; subdivision++)
+  {
+    vector<double> extrudedVertex(extrudedDim);
+    Camellia::FieldContainer<double> vValues(2,1);
+    vValues[0] = v0 + subdivision * (v1-v0) / newDimensionSubdivisions;
+    vValues[1] = v0 + (subdivision+1) * (v1-v0) / newDimensionSubdivisions;
+    for (int i=0; i<vValues.size(); i++)
+    {
+      for (IndexType vertexIndex=0; vertexIndex<N; vertexIndex++)
+      {
+        const vector<double> *baseVertex = &baseMeshTopology->getVertex(vertexIndex);
+        for (int d=0; d<baseDim; d++)
+        {
+          extrudedVertex[d] = (*baseVertex)[d];
+        }
+        extrudedVertex[baseDim] = vValues(i,0);
+        extrudedTopology->addVertex(extrudedVertex);
+      }
+    }
+  }
+
+  set<IndexType> cellIndices = rootSpatialTopology->baseMeshTopology()->getRootCellIndicesGlobal();
+  int tensorialDegree = 1;
+  vector< Camellia::FieldContainer<double> > componentNodes(2);
+  Camellia::FieldContainer<double> baseCellNodes;
+  Camellia::FieldContainer<double> extrudedCellNodes;
+
+  map<IndexType,IndexType> cellIDMap; // from space-time ID (in first temporal subdivision) to corresponding spatial ID
+
+  for (int subdivision=0; subdivision<newDimensionSubdivisions; subdivision++)
+  {
+    Camellia::FieldContainer<double> vValues(2,1);
+    vValues[0] = v0 + subdivision * (v1-v0) / newDimensionSubdivisions;
+    vValues[1] = v0 + (subdivision+1) * (v1-v0) / newDimensionSubdivisions;
+    componentNodes[1] = vValues;
+
+    for (const IndexType & cellIndex : cellIndices)
+    {
+      CellPtr baseCell = rootSpatialTopology->getCell(cellIndex);
+      CellTopoPtr extrudedCellTopology = CellTopology::cellTopology(baseCell->topology(), tensorialDegree);
+      int vertexCount = baseCell->topology()->getVertexCount();
+
+      baseCellNodes.resize(vertexCount,baseDim);
+      const vector<IndexType>& vertexIndices = baseCell->vertices();
+      for (int vertex=0; vertex<vertexCount; vertex++)
+      {
+        IndexType vertexIndex = vertexIndices[vertex];
+        for (int i=0; i<baseDim; i++)
+        {
+          baseCellNodes(vertex,i) = baseMeshTopology->getVertex(vertexIndex)[i];
+        }
+      }
+      componentNodes[0] = baseCellNodes;
+
+      extrudedCellNodes.resize(extrudedCellTopology->getVertexCount(),extrudedDim);
+      extrudedCellTopology->initializeNodes(componentNodes, extrudedCellNodes);
+
+      CellPtr extrudedCell = extrudedTopology->addCell(extrudedCellTopology, extrudedCellNodes);
+      if (subdivision==0) cellIDMap[extrudedCell->cellIndex()] = cellIndex;
+    }
+  }
+  
+  bool noCellsToRefine = false;
+
+  GlobalIndexType newCellID = extrudedTopology->nextCellID();
+  
+  while (!noCellsToRefine)
+  {
+    noCellsToRefine = true;
+
+    // TODO: check whether the set conversion here is necessary; putting it right now to avoid changing the effect of the code below.  (The vector is not sorted by cell index, but by owning MPI rank followed by cell index.  So there certainly could be some change in the execution.)
+    vector<IndexType> activeSpaceTimeCellIndicesVector = extrudedTopology->getActiveCellIndicesGlobal();
+    set<IndexType> activeSpaceTimeCellIndices(activeSpaceTimeCellIndicesVector.begin(), activeSpaceTimeCellIndicesVector.end());
+    for (set<IndexType>::iterator cellIt = activeSpaceTimeCellIndices.begin(); cellIt != activeSpaceTimeCellIndices.end(); cellIt++)
+    {
+      IndexType spaceTimeCellIndex = *cellIt;
+      if (cellIDMap.find(spaceTimeCellIndex) != cellIDMap.end())
+      {
+        IndexType spatialCellIndex = cellIDMap[spaceTimeCellIndex];
+        CellPtr spatialCell = baseMeshTopology->getCell(spatialCellIndex);
+        if (spatialCell->isParent(baseMeshTopology))
+        {
+          noCellsToRefine = false; // indicate we refined some on this pass...
+
+          CellPtr spaceTimeCell = extrudedTopology->getCell(*cellIt);
+          RefinementPatternPtr refPattern = RefinementPattern::regularRefinementPattern(spaceTimeCell->topology());
+          extrudedTopology->refineCell(spaceTimeCellIndex, refPattern, newCellID);
+          
+          newCellID += refPattern->numChildren();
+
+          vector<CellPtr> spatialChildren = spatialCell->children();
+          for (int childOrdinal=0; childOrdinal<spatialChildren.size(); childOrdinal++)
+          {
+            CellPtr spatialChild = spatialChildren[childOrdinal];
+            int vertexCount = spatialChild->topology()->getVertexCount();
+
+            vector< vector<double> > childNodes(vertexCount);
+
+            baseCellNodes.resize(vertexCount,baseDim);
+            const vector<IndexType>* vertexIndices = &spatialChild->vertices();
+            for (int vertex=0; vertex<vertexCount; vertex++)
+            {
+              IndexType vertexIndex = (*vertexIndices)[vertex];
+              childNodes[vertex] = baseMeshTopology->getVertex(vertexIndex);
+              childNodes[vertex].push_back(v0);
+            }
+
+            CellPtr spaceTimeChild = extrudedTopology->findCellWithVertices(childNodes);
+            cellIDMap[spaceTimeChild->cellIndex()] = spatialChild->cellIndex();
+          }
+        }
+      }
+    }
+  }
+
+  return extrudedTopology;
+}
+
 
 #ifdef HAVE_EPETRAEXT_HDF5
 MeshPtr MeshFactory::loadFromHDF5(TBFPtr<double> bf, string filename, Epetra_CommPtr Comm)
@@ -171,22 +316,19 @@ MeshPtr MeshFactory::loadFromHDF5(TBFPtr<double> bf, string filename, Epetra_Com
 // end HAVE_EPETRAEXT_HDF5 include guard
 #endif
 
-MeshPtr MeshFactory::minRuleMesh(MeshTopologyPtr meshTopo, TBFPtr<double> bf, int H1Order, int delta_k,
-                                 Epetra_CommPtr Comm)
+MeshPtr MeshFactory::minRuleMesh(MeshTopologyViewPtr meshTopo, TBFPtr<double> bf, int H1Order, int delta_k,
+                                 Epetra_CommPtr Comm, bool allowPruning)
 {
-  std::vector<int> H1OrderVector(2);
-  H1OrderVector[0] = H1Order;
-  H1OrderVector[1] = H1Order;
-  return minRuleMesh(meshTopo,bf,H1OrderVector,delta_k,Comm);
+  std::vector<int> H1OrderVector {H1Order};
+  return minRuleMesh(meshTopo,bf,H1OrderVector,delta_k,Comm,allowPruning);
 }
 
-MeshPtr MeshFactory::minRuleMesh(MeshTopologyPtr meshTopo, TBFPtr<double> bf, vector<int> H1Order, int delta_k,
-                                 Epetra_CommPtr Comm)
+MeshPtr MeshFactory::minRuleMesh(MeshTopologyViewPtr meshTopo, TBFPtr<double> bf, vector<int> H1Order, int delta_k,
+                                 Epetra_CommPtr Comm, bool allowPruning)
 {
   std::map<int,int> emptyMap;
   MeshPartitionPolicyPtr nullPartitionPolicy = Teuchos::null;
-  MeshPtr mesh = Teuchos::rcp( new Mesh (meshTopo, bf, H1Order, delta_k, emptyMap, emptyMap, nullPartitionPolicy, Comm) );
-  mesh->enforceOneIrregularity();
+  MeshPtr mesh = Teuchos::rcp( new Mesh (meshTopo, bf, H1Order, delta_k, emptyMap, emptyMap, nullPartitionPolicy, Comm, allowPruning) );
   return mesh;
 }
 
@@ -576,7 +718,7 @@ MeshPtr MeshFactory::rectilinearMesh(TBFPtr<double> bf, vector<double> dimension
 MeshTopologyPtr MeshFactory::rectilinearMeshTopology(vector<double> dimensions, vector<int> elementCounts, vector<double> x0,
                                                      vector<PeriodicBCPtr> periodicBCs)
 {
-  int spaceDim = dimensions.size();
+  const int spaceDim = dimensions.size();
 
   if (x0.size()==0)
   {
@@ -2700,6 +2842,7 @@ MeshGeometryPtr MeshFactory::confinedCylinderGeometry(double cylinderRadius)
   return Teuchos::rcp( new MeshGeometry(vertices, elementVertices, edgeToCurveMap) );
 }
 
+
 MeshTopologyPtr MeshFactory::spaceTimeMeshTopology(MeshTopologyPtr spatialMeshTopology, double t0, double t1, int temporalDivisions)
 {
   // we allow spatialMeshTopology to have been refined; we start with a coarse space-time topology matching the root spatial topology,
@@ -2858,4 +3001,21 @@ MeshTopologyPtr MeshFactory::spaceTimeMeshTopology(MeshTopologyPtr spatialMeshTo
   }
 
   return spaceTimeTopology;
+}
+
+Intrepid2::Data<double, Kokkos::HostSpace> MeshFactory::vertexDivisions1D(const double &startCoord, const double &domainExtent, const int &numElements)
+{
+  const int numVertices = numElements+1;
+  Kokkos::View<double*,Kokkos::HostSpace> vertexView("vertexDivisions1D View", numVertices);
+  Kokkos::Array<int,1> extents {numVertices};
+  Kokkos::Array<Intrepid2::DataVariationType,1> variationTypes {Intrepid2::GENERAL};
+  
+  for (int vertexNumber=0; vertexNumber<numVertices; vertexNumber++)
+  {
+    vertexView(vertexNumber) = startCoord + vertexNumber * domainExtent / numElements;
+  }
+  
+  Intrepid2::Data<double, Kokkos::HostSpace> vertexData(vertexView,extents,variationTypes);
+  
+  return vertexData;
 }

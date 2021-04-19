@@ -65,6 +65,12 @@ void PointBasis<Scalar,ArrayScalar>::initializeTags() const
 }
 
 template<class Scalar, class ArrayScalar>
+bool PointBasis<Scalar,ArrayScalar>::isConforming() const
+{
+  return true;
+}
+
+template<class Scalar, class ArrayScalar>
 void PointBasis<Scalar, ArrayScalar>::getValues(ArrayScalar &outputValues, const ArrayScalar &  inputPoints,
     const Intrepid::EOperator operatorType) const
 {

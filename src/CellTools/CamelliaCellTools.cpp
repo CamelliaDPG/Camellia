@@ -1560,8 +1560,7 @@ void CamelliaCellTools::mapToReferenceFrameInitGuess(       Camellia::FieldConta
   TEUCHOS_TEST_FOR_EXCEPTION(physPoints.rank() != 3, std::invalid_argument, "physPoints should have shape (C,P,D)");
   
   CellPtr cell = meshTopo->getCell(cellID);
-
-  BasisCachePtr basisCache = BasisCache::basisCacheForReferenceCell(cell->topology(), cubatureDegree);
+  BasisCachePtr basisCache = BasisCache::basisCacheForReferenceCell(cell->topology(), cubatureDegree, false, false); // false, false: don't create side cache; don't assume tensor topology => space-time
 
   if (meshTopo->transformationFunction() != Teuchos::null)
   {

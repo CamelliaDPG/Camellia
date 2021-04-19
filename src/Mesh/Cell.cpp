@@ -540,24 +540,7 @@ vector<IndexType> Cell::getEntityIndices(unsigned subcdim)
   vector<IndexType> cellEntityIndices(entityCount);
   for (int j=0; j<entityCount; j++)
   {
-    IndexType entityIndex;
-    set< IndexType > nodes;
-    if (subcdim != 0)
-    {
-      int entityNodeCount = _cellTopo->getNodeCount(subcdim, j);
-      for (int node=0; node<entityNodeCount; node++)
-      {
-        unsigned nodeIndexInCell = _cellTopo->getNodeMap(subcdim, j, node);
-        nodes.insert(_vertices[nodeIndexInCell]);
-      }
-    }
-    else
-    {
-      nodes.insert(_vertices[j]);
-    }
-
-    entityIndex = _meshTopo->getEntityIndex(subcdim, nodes);
-    cellEntityIndices[j] = entityIndex;
+    cellEntityIndices[j] = this->entityIndex(subcdim, j);
   }
   return cellEntityIndices;
 }
@@ -651,10 +634,10 @@ bool Cell::isParent(ConstMeshTopologyViewPtr meshTopoViewForCellValidity)
 //  return false;
 }
 
-RefinementBranch Cell::refinementBranch()
+RefinementBranch Cell::refinementBranch(IndexType ancestralCellID)
 {
   RefinementBranch refBranch;
-  if (_parent == Teuchos::null)
+  if ((_parent == Teuchos::null) || (ancestralCellID == _cellIndex))
   {
     refBranch.push_back({RefinementPattern::noRefinementPattern(_cellTopo).get(),0});
   }
@@ -662,13 +645,18 @@ RefinementBranch Cell::refinementBranch()
   {
     CellPtr parent = _parent;
     GlobalIndexType cellIndex = _cellIndex;
-    while (parent != Teuchos::null) {
+    while ((parent != Teuchos::null) && (cellIndex != ancestralCellID)) {
       RefinementPatternPtr refPattern = parent->refinementPattern();
       unsigned childOrdinal = parent->findChildOrdinal(cellIndex);
       refBranch.insert(refBranch.begin(), {refPattern.get(),childOrdinal});
       
       cellIndex = parent->cellIndex();
       parent = parent->getParent();
+    }
+    if (ancestralCellID != -1)
+    {
+      // then check that we did find the specified cell
+      TEUCHOS_TEST_FOR_EXCEPTION(ancestralCellID != cellIndex, std::invalid_argument, "specified ancestralCellID not found among cell's ancestors");
     }
   }
   return refBranch;
@@ -737,7 +725,7 @@ RefinementBranch Cell::refinementBranchForSubcell(unsigned subcdim, unsigned sub
   IndexType constrainingEntityIndex = constrainingEntity.first;
   unsigned constrainingEntityDim = constrainingEntity.second;
 
-  CellPtr currentAncestor = _meshTopo->getCell(_cellIndex);
+  CellPtr currentAncestor = meshTopoViewForCellValidity->getCell(_cellIndex);
   vector< CellPtr > ancestors;
   vector< unsigned > childOrdinals;
 

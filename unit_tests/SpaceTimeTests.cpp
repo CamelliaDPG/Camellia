@@ -44,6 +44,7 @@ MeshPtr singleElementSpaceTimeMesh(int spaceDim, int H1Order, bool conforming = 
   H1OrderVector[0] = H1Order;
   H1OrderVector[1] = H1Order;
   MeshPtr mesh = Teuchos::rcp( new Mesh(spaceTimeMeshTopo, form.bf(), H1OrderVector, delta_k) ) ;
+  mesh->setTensorTopologyMeansSpaceTime(true);
   return mesh;
 }
 void testIntegrateConstantFunctionVolume(int spaceDim, Teuchos::FancyOStream &out, bool &success)
@@ -184,6 +185,9 @@ void testIntegrateSpaceVaryingFunctionSides(int spaceDim, Teuchos::FancyOStream 
 //    gdaMinRule->printGlobalDofInfo();
 //    cout << "Cell 1 constraint info before refinement:\n";
 //    gdaMinRule->printConstraintInfo(1); // cell 1
+    
+    const int numElementsExpectedInitialMesh = numTimeSlabs * elementCounts[0];
+    TEST_EQUALITY(numElementsExpectedInitialMesh, mesh->numElements());
     
     int numGlobalDofsInitialMeshExpected = 6;
     int numGlobalDofsInitialMesh = mesh->numGlobalDofs();

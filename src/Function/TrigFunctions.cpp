@@ -15,7 +15,7 @@ class Sin : public TFunction<Scalar>
 {
   TFunctionPtr<Scalar> _arg;
 public:
-  Sin(TFunctionPtr<Scalar> arg) : TFunction<Scalar>("Sin",0) // Sin is scalar-valued
+  Sin(TFunctionPtr<Scalar> arg) : TFunction<Scalar>("Sin",0,arg->variationDimensions()) // Sin is scalar-valued
   {
     _arg = arg;
   }
@@ -79,7 +79,7 @@ class Cos : public TFunction<Scalar>
 {
   TFunctionPtr<Scalar> _arg;
 public:
-  Cos(TFunctionPtr<Scalar> arg) : TFunction<Scalar>("Cos",0) // Cos is scalar-valued
+  Cos(TFunctionPtr<Scalar> arg) : TFunction<Scalar>("Cos",0,arg->variationDimensions()) // Cos is scalar-valued
   {
     _arg = arg;
   }
@@ -227,7 +227,7 @@ TFunctionPtr<double> Cos_x::dz()
 }
 
 Cos_ax::Cos_ax(double a, double b)
-: TFunction<double>("Cos_ax",0)
+: TFunction<double>("Cos_ax",0,VARIES_IN_DIMENSION_0)
 {
   _a = a;
   _b = b;
@@ -257,6 +257,10 @@ TFunctionPtr<double> Cos_ax::dy()
 {
   return TFunction<double>::zero();
 }
+TFunctionPtr<double> Cos_ax::dz()
+{
+  return TFunction<double>::zero();
+}
 
 std::string Cos_ax::displayString()
 {
@@ -266,7 +270,7 @@ std::string Cos_ax::displayString()
 }
 
 Cos_ay::Cos_ay(double a)
-: SimpleFunction<double>("Cos_ay")
+: SimpleFunction<double>("Cos_ay",VARIES_IN_DIMENSION_1)
 {
   _a = a;
 }
@@ -281,6 +285,10 @@ TFunctionPtr<double> Cos_ay::dx()
 TFunctionPtr<double> Cos_ay::dy()
 {
   return -_a * (TFunctionPtr<double>) Teuchos::rcp(new Sin_ay(_a));
+}
+TFunctionPtr<double> Cos_ay::dz()
+{
+  return TFunction<double>::zero();
 }
 
 std::string Cos_ay::displayString()
@@ -322,6 +330,10 @@ TFunctionPtr<double> Sin_ax::dy()
 {
   return TFunction<double>::zero();
 }
+TFunctionPtr<double> Sin_ax::dz()
+{
+  return TFunction<double>::zero();
+}
 std::string Sin_ax::displayString()
 {
   std::ostringstream ss;
@@ -330,7 +342,7 @@ std::string Sin_ax::displayString()
 }
 
 Sin_ay::Sin_ay(double a)
-: SimpleFunction<double>("Sin_ay")
+: SimpleFunction<double>("Sin_ay",VARIES_IN_DIMENSION_1)
 {
   _a = a;
 }
@@ -346,6 +358,10 @@ TFunctionPtr<double> Sin_ay::dy()
 {
   return _a * (TFunctionPtr<double>) Teuchos::rcp(new Cos_ay(_a));
 }
+TFunctionPtr<double> Sin_ay::dz()
+{
+  return TFunction<double>::zero();
+}
 std::string Sin_ay::displayString()
 {
   std::ostringstream ss;
@@ -354,7 +370,7 @@ std::string Sin_ay::displayString()
 }
 
 ArcTan_ax::ArcTan_ax(double a, double b)
-: SimpleFunction<double>("ArcTan_ax")
+: SimpleFunction<double>("ArcTan_ax",VARIES_IN_DIMENSION_0)
 {
   _a = a;
   _b = b;
@@ -373,6 +389,10 @@ TFunctionPtr<double> ArcTan_ax::dy()
 {
   return TFunction<double>::zero();
 }
+TFunctionPtr<double> ArcTan_ax::dz()
+{
+  return TFunction<double>::zero();
+}
 std::string ArcTan_ax::displayString()
 {
   std::ostringstream ss;
@@ -381,7 +401,7 @@ std::string ArcTan_ax::displayString()
 }
 
 ArcTan_ay::ArcTan_ay(double a, double b)
-: SimpleFunction<double>("ArcTan_ay")
+: SimpleFunction<double>("ArcTan_ay",VARIES_IN_DIMENSION_1)
 {
   _a = a;
   _b = b;
@@ -399,6 +419,10 @@ TFunctionPtr<double> ArcTan_ay::dy()
   TFunctionPtr<double> one = TFunction<double>::constant(1);
   TFunctionPtr<double> y2  = TFunction<double>::yn(2);
   return _a * one/(y2 + one);
+}
+TFunctionPtr<double> ArcTan_ay::dz()
+{
+  return TFunction<double>::zero();
 }
 std::string ArcTan_ay::displayString()
 {

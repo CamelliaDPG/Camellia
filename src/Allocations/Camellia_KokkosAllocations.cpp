@@ -89,6 +89,43 @@ namespace Camellia
     Camellia::recordAllocation<Scalar>(deviceViewAllocationRecord, deviceView.size());
     return deviceView;
   }
+
+  template<typename Scalar>
+  Intrepid2::ScalarView<Scalar, Camellia::DeviceExecutionSpace> Allocation<Scalar>::allocateIntrepid2DeviceView(const std::vector<int> &dims, const std::string &label)
+  {
+    using ScalarView = Intrepid2::ScalarView<Scalar, Camellia::DeviceExecutionSpace>;
+      
+    const auto rank = dims.size();
+    ScalarView scalarView;
+    switch (rank) {
+      case 1: scalarView = ScalarView(label, dims[0]); break;
+      case 2: scalarView = ScalarView(label, dims[0], dims[1]); break;
+      case 3: scalarView = ScalarView(label, dims[0], dims[1], dims[2]); break;
+      case 4: scalarView = ScalarView(label, dims[0], dims[1], dims[2], dims[3]); break;
+      case 5: scalarView = ScalarView(label, dims[0], dims[1], dims[2], dims[3], dims[4]); break;
+      case 6: scalarView = ScalarView(label, dims[0], dims[1], dims[2], dims[3], dims[4], dims[5]); break;
+      case 7: scalarView = ScalarView(label, dims[0], dims[1], dims[2], dims[3], dims[4], dims[5], dims[6]); break;
+      default: TEUCHOS_TEST_FOR_EXCEPTION(true, std::invalid_argument, "Unsupported rank")
+    }
+    Camellia::recordAllocation<Scalar>(deviceViewAllocationRecord, scalarView.size());
+    return scalarView;
+  }
+
+  template<typename Scalar>
+  Intrepid2::ScalarView<Scalar, Camellia::DeviceExecutionSpace> Allocation<Scalar>::allocateIntrepid2DeviceViewMatchingView(DeviceView<Scalar> &dv)
+  {
+    using ScalarView = Intrepid2::ScalarView<Scalar, Camellia::DeviceExecutionSpace>;
+    
+    const std::string viewLabel = "Intrepid2 ScalarView matching Camellia DeviceView.";
+    const auto rank = dv.rank();
+    std::vector<int> dims;
+    for (int i=0; i<rank; i++)
+    {
+      dims.push_back(dv.extent_int(i));
+    }
+    
+    return allocateIntrepid2DeviceView(dims, viewLabel);
+  }
   
   // this struct effectively allows us to implement different versions of Allocation<Scalar>::checkoutMirrorView() on host and device
   template<typename Scalar, bool memorySpacesMatch>
@@ -163,6 +200,12 @@ namespace Camellia
       }
     }
   }
+//
+//  template<typename Scalar>
+//  void Allocation<Scalar>::checkinDeviceView(Intrepid2::ScalarView<Scalar,Camellia::DeviceExecutionSpace> &intrepid2DeviceView)
+//  {
+//
+//  }
   
   template<typename Scalar>
   void Allocation<Scalar>::recordDeviceViewDeallocation(DeviceView<Scalar> &dv) {

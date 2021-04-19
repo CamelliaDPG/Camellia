@@ -47,7 +47,18 @@ protected:
   // a subclass has failed to implement either values() method, avoiding an infinite loop created by the two
   // base class implementations calling each other.  We can then fail cleanly, throwing an exception.
   bool _callingDevicePathValues = false;
+  
+  int _variationDimensions = 0xff; // bitwise or of VariationDimension enum values below; default says varies in all dimensions
 public:
+  enum VariationDimension { VARIES_IN_NO_DIMENSION = 0x00,
+                            VARIES_IN_DIMENSION_0  = 0x01,
+                            VARIES_IN_DIMENSION_1  = 0x02,
+                            VARIES_IN_DIMENSION_2  = 0x04,
+                            VARIES_IN_DIMENSION_3  = 0x08,
+                            VARIES_IN_DIMENSION_4  = 0x10,
+                            VARIES_IN_DIMENSION_5  = 0x20,
+                            VARIES_IN_DIMENSION_6  = 0x40,
+                            VARIES_IN_DIMENSION_7  = 0x80 }; // used by di() default implementation
   enum FunctionModificationType { MULTIPLY, DIVIDE }; // used by scalarModify[.*]Values
   enum JumpCombinationType
   {
@@ -58,6 +69,7 @@ public:
   TFunction(int rank);
   TFunction(const std::string &className);
   TFunction(const std::string &className,int rank);
+  TFunction(const std::string &className,int rank,int variationDimensions);
   virtual ~TFunction() {}
   
   const std::string & getClassName() const
@@ -132,8 +144,8 @@ public:
   //  double integrate(int cellID, Teuchos::RCP<Mesh> mesh, int cubatureDegreeEnrichment = 0);
   Scalar integrate(GlobalIndexType cellID, Teuchos::RCP<Mesh> mesh, int cubatureDegreeEnrichment = 0, bool testVsTest = false);
 
-  // ! Returns true if the Function guarantees that the value is zero at each point in the BasisCache
-  // ! A false value does not necessarily mean that the Function is anywhere nonzero.
+  //! Returns true if the Function guarantees that the value is zero at each point in the BasisCache
+  //! A false value does not necessarily mean that the Function is anywhere nonzero.
   virtual bool isZero(BasisCachePtr basisCache);
   
   Scalar integrate( Teuchos::RCP<Mesh> mesh, int cubatureDegreeEnrichment = 0, bool testVsTest = false, bool requireSideCaches = false,
@@ -149,20 +161,20 @@ public:
   double l2norm(Teuchos::RCP<Mesh> mesh, int cubatureDegreeEnrichment = 0, bool spatialSidesOnly = false);
   double linfinitynorm(MeshPtr mesh, int cubatureDegreeEnrichment = 0);
   
-  // ! returns the maximum value at quadrature points.  Performs MPI communication.
+  //! returns the maximum value at quadrature points.  Performs MPI communication.
   double maximumValue(MeshPtr mesh, int cubatureDegreeEnrichment = 0);
   
-  // ! returns the minimum value at quadrature points.  Performs MPI communication.
+  //! returns the minimum value at quadrature points.  Performs MPI communication.
   double minimumValue(MeshPtr mesh, int cubatureDegreeEnrichment = 0);
   
-  // ! returns locally-owned cells which take a negative value at quadrature points.  Does not perform MPI communication.
+  //! returns locally-owned cells which take a negative value at quadrature points.  Does not perform MPI communication.
   std::vector<GlobalIndexType> localCellsWithNegativeValues(MeshPtr mesh, int cubatureDegreeEnrichment = 0);
   
-  // ! computes the squared L^2 norm of the jumps of this Function along the mesh skeleton (external boundary values are treated as zero, so the jump
-  // ! along the boundary is the value of the Function itself)
-  // ! if weightBySideMeasure is true, then the edge lengths (2D) or face area will be used to weight the integral of the squared jump.
-  // ! cubatureDegreeEnrichment is relative to the H^1 order of the mesh's trial space.
-  // ! Returned map will have as keys the cell IDs of MPI-local cells.
+  //! computes the squared L^2 norm of the jumps of this Function along the mesh skeleton (external boundary values are treated as zero, so the jump
+  //! along the boundary is the value of the Function itself)
+  //! if weightBySideMeasure is true, then the edge lengths (2D) or face area will be used to weight the integral of the squared jump.
+  //! cubatureDegreeEnrichment is relative to the H^1 order of the mesh's trial space.
+  //! Returned map will have as keys the cell IDs of MPI-local cells.
   std::map<GlobalIndexType, double> squaredL2NormOfJumps(MeshPtr mesh, bool weightBySideMeasure, int cubatureDegreeEnrichment, JumpCombinationType jumpCombination=DIFFERENCE);
   
   // multiply values by this function (supported only when this is a scalar--otherwise values would change rank...)
@@ -239,6 +251,12 @@ public:
   virtual std::vector< TFunctionPtr<Scalar> > memberFunctions();
   
   void importDataForOffRankCells(MeshPtr mesh, const std::set<GlobalIndexType> &offRankCells);
+  
+  //! bitwise or of dimensions in which the Function might vary, as defined in the VariationDimension enum.
+  int variationDimensions() const;
+  
+  //! set to be the bitwise or of dimensions in which the Function might vary, as defined in the VariationDimension enum.
+  void setVariationDimensions(int variationDimensions);
   
   static bool isNull(TFunctionPtr<Scalar> f);
 

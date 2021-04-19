@@ -80,7 +80,7 @@ namespace
       }
     }
       
-    vector<GlobalIndexType> cellsToRefine = {parentCellID};
+    vector<GlobalIndexType> cellsToRefine {parentCellID};
     mesh->hRefine(cellsToRefine);
     
     parentCellIsLocallyKnown = mesh->getTopology()->isValidCellIndex(parentCellID);
@@ -226,9 +226,6 @@ namespace
   
   TEUCHOS_UNIT_TEST( BasisCacheFactory, UnionCacheHasCorrectJacobian_1D )
   {
-    Epetra_MpiComm Comm(MPI_COMM_WORLD);
-    Comm.Barrier(); // set breakpoint here to allow debugger attachment to other MPI processes than the one you automatically attached to.
-    
     int spaceDim = 1;
     testUnionCacheHasCorrectJacobian(spaceDim, out, success);
   }

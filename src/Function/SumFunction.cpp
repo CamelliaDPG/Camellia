@@ -138,6 +138,18 @@ TFunctionPtr<Scalar> SumFunction<Scalar>::dz()
 }
 
 template <typename Scalar>
+TFunctionPtr<Scalar> SumFunction<Scalar>::di(int i) // 1 for dx(), 2 for dy(), 3 for dz()
+{
+  auto f1_di = _f1->di(i);
+  auto f2_di = _f2->di(i);
+  if ( (f1_di == Teuchos::null) || (f2_di == Teuchos::null) )
+  {
+    return Teuchos::null;
+  }
+  return f1_di + f2_di;
+}
+
+template <typename Scalar>
 TFunctionPtr<Scalar> SumFunction<Scalar>::dt()
 {
   if ( (_f1->dt() == Teuchos::null) || (_f2->dt() == Teuchos::null) )

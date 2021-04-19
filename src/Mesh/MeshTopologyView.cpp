@@ -1077,15 +1077,21 @@ MeshTopologyViewPtr MeshTopologyView::getView(const set<IndexType> &activeCells)
 
 MeshTopologyViewPtr MeshTopologyView::readFromFile(Epetra_CommPtr Comm, string filename)
 {
+#ifdef HAVE_EPETRAEXT_HDF5
   EpetraExt::HDF5 hdf5(*Comm);
   hdf5.Open(filename);
   MeshTopologyViewPtr meshTopoView = readFromHDF5(Comm, hdf5);
   hdf5.Close();
   return meshTopoView;
+#else
+  // no file reading if we don't have HDF5 support…
+  return Teuchos::null;
+#endif
 }
 
 void MeshTopologyView::writeToFile(string filename) const
 {
+#ifdef HAVE_EPETRAEXT_HDF5
   Epetra_CommPtr comm = Comm();
   if (comm == Teuchos::null)
   {
@@ -1097,8 +1103,10 @@ void MeshTopologyView::writeToFile(string filename) const
   
   writeToHDF5(comm, hdf5);
   hdf5.Close();
+#endif
 }
 
+#ifdef HAVE_EPETRAEXT_HDF5
 MeshTopologyViewPtr MeshTopologyView::readFromHDF5(Epetra_CommPtr Comm, EpetraExt::HDF5 &hdf5)
 {
   int numChunks;
@@ -1260,3 +1268,4 @@ void MeshTopologyView::writeToHDF5(Epetra_CommPtr Comm, EpetraExt::HDF5 &hdf5) c
     }
   }
 }
+#endif // ifdef HAVE_EPETRAEXT_HDF5

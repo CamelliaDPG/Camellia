@@ -32,25 +32,39 @@ namespace Camellia
     OP_Y,         // 15
     OP_Z,         // 16
     OP_T,         // 17
-    OP_DX,        // 18
-    OP_DY,        // 19
-    OP_DZ,        // 20
-    OP_DT,        // 21
-    OP_CROSS_NORMAL,    // 22
-    OP_DOT_NORMAL,      // 23
-    OP_TIMES_NORMAL,    // 24
-    OP_TIMES_NORMAL_X,  // 25
-    OP_TIMES_NORMAL_Y,  // 26
-    OP_TIMES_NORMAL_Z,  // 27
-    OP_TIMES_NORMAL_T,  // 28
-    OP_VECTORIZE_VALUE, // 29
-    OP_LAPLACIAN,       // 30
-    OP_DXDX,            // 31
-    OP_DXDY,            // 32
-    OP_DXDZ,            // 33
-    OP_DYDY,            // 34
-    OP_DYDZ,            // 35
-    OP_DZDZ             // 36
+    OP_I1,        // 18, synonymous with OP_X
+    OP_I2,        // 19, synonymous with OP_Y
+    OP_I3,        // 20, synonymous with OP_Z
+    OP_I4,        // 21
+    OP_I5,        // 22
+    OP_I6,        // 23
+    OP_I7,        // 24
+    OP_DX,        // 25
+    OP_DY,        // 26
+    OP_DZ,        // 27
+    OP_DT,        // 28
+    OP_DI1,       // 29, synonymous with OP_DX
+    OP_DI2,       // 30, synonymous with OP_DY
+    OP_DI3,       // 31, synonymous with OP_DZ
+    OP_DI4,       // 32
+    OP_DI5,       // 33
+    OP_DI6,       // 34
+    OP_DI7,       // 35
+    OP_CROSS_NORMAL,    // 36
+    OP_DOT_NORMAL,      // 37
+    OP_TIMES_NORMAL,    // 38
+    OP_TIMES_NORMAL_X,  // 39
+    OP_TIMES_NORMAL_Y,  // 40
+    OP_TIMES_NORMAL_Z,  // 41
+    OP_TIMES_NORMAL_T,  // 42
+    OP_VECTORIZE_VALUE, // 43
+    OP_LAPLACIAN,       // 44
+    OP_DXDX,            // 45
+    OP_DXDY,            // 46
+    OP_DXDZ,            // 47
+    OP_DYDY,            // 48
+    OP_DYDZ,            // 49
+    OP_DZDZ             // 50
   };
 
   enum EFunctionSpace   // the first four copied from Intrepid::EFunctionSpace
@@ -73,8 +87,6 @@ namespace Camellia
     FUNCTION_SPACE_TENSOR_HVOL_DISC,
     FUNCTION_SPACE_REAL_SCALAR,
     FUNCTION_SPACE_HDIV_FREE,
-    FUNCTION_SPACE_HGRAD_SPACE_HVOL_TIME,
-    FUNCTION_SPACE_HVOL_SPACE_HGRAD_TIME,
     FUNCTION_SPACE_UNKNOWN
   };
 

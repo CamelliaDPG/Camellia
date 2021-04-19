@@ -30,6 +30,18 @@ string ProductFunction<Scalar>::displayString()
 }
 
 template <typename Scalar>
+TFunctionPtr<Scalar> ProductFunction<Scalar>::di(int i) // 1 for dx(), 2 for dy(), 3 for dz()
+{
+  auto f1_di = _f1->di(i);
+  auto f2_di = _f2->di(i);
+  if ( (f1_di == Teuchos::null) || (f2_di == Teuchos::null) )
+  {
+    return Teuchos::null;
+  }
+  return _f1 * f2_di + f1_di * _f2;
+}
+
+template <typename Scalar>
 TFunctionPtr<Scalar> ProductFunction<Scalar>::dx()
 {
   if ( (_f1->dx().get() == NULL) || (_f2->dx().get() == NULL) )

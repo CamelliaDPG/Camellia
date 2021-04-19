@@ -134,7 +134,9 @@ void Boundary::bcsToImpose(Camellia::FieldContainer<GlobalIndexType> &globalIndi
               set<GlobalIndexType> matchingGlobalIndices;
               for (unsigned matchingSubcell : matchingSubcells)
               {
-                set<GlobalIndexType> subcellGlobalIndices = dofInterpreter->globalDofIndicesForVarOnSubcell(var->ID(),cellID,d,matchingSubcell);
+                const bool upgradeToContinuousBasis = true;
+                const bool tensorTopologyMeansSpaceTime = _mesh->tensorTopologyMeansSpaceTime();
+                set<GlobalIndexType> subcellGlobalIndices = dofInterpreter->globalDofIndicesForVarOnSubcell(var->ID(),cellID,d,matchingSubcell,upgradeToContinuousBasis,tensorTopologyMeansSpaceTime);
                 matchingGlobalIndices.insert(subcellGlobalIndices.begin(),subcellGlobalIndices.end());
               }
               
@@ -249,16 +251,17 @@ void Boundary::bcsToImpose( vector<pair<GlobalIndexType,Scalar>> &globalDofIndic
             numDofsSide = basis->getCardinality();
           }
           
-          GlobalIndexType numCells = 1;
-          if (numCells > 0)
           {
+            const GlobalIndexType numCells = 1;
+            const int cellOrdinal = 0;
             Camellia::FieldContainer<double> dirichletValues(numCells,numDofsSide);
             // project bc function onto side basis:
             BCPtr bcPtr = Teuchos::rcp(&bc, false);
             Teuchos::RCP<BCFunction<double>> bcFunction = BCFunction<double>::bcFunction(bcPtr, trialID);
             bcPtr->coefficientsForBC(dirichletValues, bcFunction, basis, basisCache->getSideBasisCache(sideOrdinal));
             dirichletValues.resize(numDofsSide);
-            if (bcFunction->imposeOnCell(0))
+            
+            if (bcFunction->imposeOnCell(cellOrdinal))
             {
               Camellia::FieldContainer<double> globalData;
               Camellia::FieldContainer<GlobalIndexType> globalDofIndices;
@@ -312,7 +315,6 @@ void Boundary::singletonBCsToImpose(vector<pair<GlobalIndexType,Scalar>> &dofInd
   {
     if (bc.singlePointBC(trialID))
     {
-      auto knownActiveCells = &_mesh->getTopology()->getLocallyKnownActiveCellIndices();
       vector<double> spatialVertex = bc.pointForSpatialPointBC(trialID);
       vector<IndexType> matchingVertices = _mesh->getTopology()->getVertexIndicesMatching(spatialVertex);
       
@@ -467,55 +469,14 @@ void Boundary::singletonBCsToImpose(vector<pair<GlobalIndexType,Scalar>> &dofInd
             temporalBasis = tensorBasis->getTemporalBasis();
           }
         }
-        bool constantSpatialBasis = false;
         // upgrade bases to continuous ones of the same cardinality, if they are discontinuous.
-        if (spatialBasis->getDegree() == 0)
-        {
-          constantSpatialBasis = true;
-        }
-        else if ((spatialBasis->functionSpace() == Camellia::FUNCTION_SPACE_HVOL) ||
-                 (spatialBasis->functionSpace() == Camellia::FUNCTION_SPACE_HVOL_DISC))
-        {
-          spatialBasis = BasisFactory::basisFactory()->getBasis(spatialBasis->getDegree(), spatialBasis->domainTopology(), Camellia::FUNCTION_SPACE_HGRAD);
-        }
-        else if (Camellia::functionSpaceIsDiscontinuous(spatialBasis->functionSpace()))
-        {
-          Camellia::EFunctionSpace fsContinuous = Camellia::continuousSpaceForDiscontinuous((spatialBasis->functionSpace()));
-          spatialBasis = BasisFactory::basisFactory()->getBasis(spatialBasis->getDegree(), spatialBasis->domainTopology(), fsContinuous,
-                                                                Camellia::FUNCTION_SPACE_HGRAD);
-        }
-        if (temporalBasis.get())
-        {
-          if ((temporalBasis->functionSpace() == Camellia::FUNCTION_SPACE_HVOL) ||
-              (temporalBasis->functionSpace() == Camellia::FUNCTION_SPACE_HVOL_DISC))
-          {
-            temporalBasis = BasisFactory::basisFactory()->getBasis(temporalBasis->getDegree(), temporalBasis->domainTopology(), Camellia::FUNCTION_SPACE_HGRAD);
-          }
-          else if (Camellia::functionSpaceIsDiscontinuous(temporalBasis->functionSpace()))
-          {
-            Camellia::EFunctionSpace fsContinuous = Camellia::continuousSpaceForDiscontinuous((temporalBasis->functionSpace()));
-            temporalBasis = BasisFactory::basisFactory()->getBasis(temporalBasis->getDegree(), temporalBasis->domainTopology(), fsContinuous,
-                                                                   Camellia::FUNCTION_SPACE_HGRAD);
-          }
-        }
-        if (spaceTime)
-        {
-          if (constantSpatialBasis)
-          { // then use the original basis for imposition
-            basisForImposition = spaceTimeBasis;
-          }
-          else
-          {
-            vector<int> H1Orders = {spatialBasis->getDegree(),temporalBasis->getDegree()};
-            spaceTimeBasis = BasisFactory::basisFactory()->getBasis(H1Orders, spaceTimeBasis->domainTopology(), spatialBasis->functionSpace(), temporalBasis->functionSpace());
-            basisForImposition = spaceTimeBasis;
-          }
-        }
-        else
-        {
-          basisForImposition = spatialBasis;
-        }
-        vector<int> spatialDofOrdinalsForVertex = constantSpatialBasis ? vector<int>{0} : spatialBasis->dofOrdinalsForVertex(vertexOrdinalInSide);
+        const bool spaceTime = _mesh->tensorTopologyMeansSpaceTime() && (elemType->cellTopoPtr->sideIsSpatial(sideForImposition) || (sideForImposition == VOLUME_INTERIOR_SIDE_ORDINAL));
+        BasisPtr basis = trialOrderingPtr->getBasis(trialID,sideForImposition);
+        basisForImposition = BasisFactory::basisFactory()->getContinuousBasis(basis, spaceTime);
+        
+        const bool basisIsConstant = basis->getCardinality() == 1;
+        
+        vector<int> spatialDofOrdinalsForVertex = basisIsConstant ? vector<int>{0} : basisForImposition->dofOrdinalsForVertex(vertexOrdinalInSide);
         if (spatialDofOrdinalsForVertex.size() != 1)
         {
           cout << "ERROR: spatialDofOrdinalsForVertex.size() != 1 during singleton BC imposition.\n";

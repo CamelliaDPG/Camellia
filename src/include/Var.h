@@ -23,7 +23,7 @@
 
 namespace Camellia
 {
-enum Space { HGRAD, HCURL, HDIV, HGRAD_DISC, HCURL_DISC, HDIV_DISC, HDIV_FREE, L2, CONSTANT_SCALAR, VECTOR_HGRAD, VECTOR_HGRAD_DISC, VECTOR_L2, HGRAD_SPACE_L2_TIME, L2_SPACE_HGRAD_TIME, UNKNOWN_FS };
+enum Space { HGRAD, HCURL, HDIV, HGRAD_DISC, HCURL_DISC, HDIV_DISC, HDIV_FREE, L2, CONSTANT_SCALAR, VECTOR_HGRAD, VECTOR_HGRAD_DISC, VECTOR_L2, UNKNOWN_FS };
 enum VarType { TEST, FIELD, TRACE, FLUX, UNKNOWN_TYPE, MIXED_TYPE };
 
 Camellia::EFunctionSpace efsForSpace(Space space);
@@ -41,10 +41,12 @@ class Var   // really Var x Operator
   LinearTermPtr _termTraced; // for trace variables, optionally allows identification with fields
   //  map< Camellia::EOperator, VarPtr > _relatedVars; // grad, div, etc. could be cached here
   bool _definedOnTemporalInterfaces;
+  
+  Space _temporalFS;
 public:
   Var(int ID, int rank, std::string name, Camellia::EOperator op =  Camellia::OP_VALUE,
       Camellia::Space fs = Camellia::UNKNOWN_FS, Camellia::VarType varType = Camellia::UNKNOWN_TYPE, LinearTermPtr termTraced = Teuchos::rcp((LinearTerm*) NULL),
-      bool definedOnTemporalInterfaces = true);
+      bool definedOnTemporalInterfaces = true, Space temporalFS = UNKNOWN_FS);
 
   int ID() const;
   const std::string & name() const;
@@ -91,6 +93,18 @@ public:
    */
   bool isDefinedOnTemporalInterface() const;
 
+  /** \brief True for space-time variables (those for which setTemporalFunctionSpace() has been called with an argument other than UNKNOWN_FS).
+   */
+  bool isSpaceTime() const;
+  
+  /** \brief Sets the function space to use for the extruded time dimension in space-time meshes.  Valid options are HGRAD, L2, HGRAD_DISC.  UNKNOWN_FS is the default, and indicates that the variable does not support a temporal extrusion.
+  */
+  void setTemporalFunctionSpace(const Space &fs);
+  
+  /** \brief Sets the function space to use for the extruded time dimension in space-time meshes.  Valid options are HGRAD, L2, HGRAD_DISC.  UNKNOWN_FS is the default, and indicates that the variable does not support a temporal extrusion.
+  */
+  Space temporalFunctionSpace() const;
+  
   template <typename Scalar>
   static VarPtr varForTrialID(int trialID, TBFPtr<Scalar> bf);
 };

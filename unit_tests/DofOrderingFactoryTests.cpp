@@ -29,7 +29,10 @@ TEUCHOS_UNIT_TEST( DofOrderingFactory, SpaceTimeTestsUseHGRADInTime )
 {
   int spaceDim = 3;
   bool useConformingTraces = false;
-  PoissonFormulation form(spaceDim, useConformingTraces);
+  
+  const double epsilon = 1.0;
+  SpaceTimeHeatFormulation form(spaceDim, epsilon, useConformingTraces);
+  
   BFPtr bf = form.bf();
 
   DofOrderingFactory factory(bf);
@@ -123,8 +126,8 @@ TEUCHOS_UNIT_TEST( DofOrderingFactory, SpaceTimeTracesTimeBasisCardinality )
     int spacePolyOrder = 2;
     int H1Order = spacePolyOrder + 1;
     vector<int> polyOrder(2); // space, time
-    polyOrder[0] = spacePolyOrder;
-    polyOrder[1] = spacePolyOrder;
+    polyOrder[0] = H1Order;
+    polyOrder[1] = H1Order;
     
     CellTopoPtr spaceTopo = CellTopology::line();
     int tensorialDegree = 1;

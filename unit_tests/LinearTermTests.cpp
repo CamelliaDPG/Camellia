@@ -147,6 +147,7 @@ void setFauxSpaceTimeHeatFormulation(int spaceDim, double epsilon, bool useConfo
   
   MeshPtr mesh = Teuchos::rcp( new Mesh(spaceTimeMeshTopo, form.bf(), H1OrderVector, delta_k,
                                         map<int,int>(), map<int,int>(), inducedPartitionPolicy) ) ;
+  mesh->setTensorTopologyMeansSpaceTime(true);
   return mesh;
 }
 

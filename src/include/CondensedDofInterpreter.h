@@ -143,7 +143,7 @@ public:
   bool isLocallyOwnedGlobalDofIndex(GlobalIndexType globalDofIndex) const;
   
   set<GlobalIndexType> globalDofIndicesForCell(GlobalIndexType cellID);
-  set<GlobalIndexType> globalDofIndicesForVarOnSubcell(int varID, GlobalIndexType cellID, unsigned dim, unsigned subcellOrdinal);
+  set<GlobalIndexType> globalDofIndicesForVarOnSubcell(int varID, GlobalIndexType cellID, unsigned dim, unsigned subcellOrdinal, bool upgradeToContinuousBasis, bool tensorTopologyMeansSpaceTime);
 
   GlobalIndexType condensedGlobalIndex(GlobalIndexType meshGlobalIndex); // meshGlobalIndex aka interpretedGlobalIndex
 

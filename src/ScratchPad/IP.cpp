@@ -585,12 +585,13 @@ pair<TIPPtr<Scalar>, VarPtr> TIP<Scalar>::standardInnerProductForFunctionSpace(C
   case Camellia::FUNCTION_SPACE_HDIV_DISC:
     ip->addTerm(var->div());
     break;
-      // space-time:
-    case Camellia::FUNCTION_SPACE_HGRAD_SPACE_HVOL_TIME:
-      ip->addTerm(var->grad()); // by default, grad means spatial gradient
-      // space-time:
-    case Camellia::FUNCTION_SPACE_HVOL_SPACE_HGRAD_TIME:
-      ip->addTerm(var->dt());
+      // TODO: check the logic of this for space-time test variables, now that we've revised Var to have an explicit, separate function space defined in temporal dimension
+//      // space-time:
+//    case Camellia::FUNCTION_SPACE_HGRAD_SPACE_HVOL_TIME:
+//      ip->addTerm(var->grad()); // by default, grad means spatial gradient
+//      // space-time:
+//    case Camellia::FUNCTION_SPACE_HVOL_SPACE_HGRAD_TIME:
+//      ip->addTerm(var->dt());
   case Camellia::FUNCTION_SPACE_REAL_SCALAR:
     break;
 

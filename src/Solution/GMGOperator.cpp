@@ -810,11 +810,15 @@ Teuchos::RCP<Epetra_CrsMatrix> GMGOperator::constructProlongationOperator()
 
 void GMGOperator::exportFunction()
 {
+#ifdef HAVE_EPETRAEXT_HDF5
   if (_functionExporter != Teuchos::null)
   {
     _functionExporter->exportFunction(_functionToExport, _functionToExportName, _exportTimeStep);
     _exportTimeStep++;
   }
+#else
+  TEUCHOS_TEST_FOR_EXCEPTION(true, std::invalid_argument, "File I/O is not supported when Trilinos was built without EpetraExt_ENABLE_HDF5=ON");
+#endif
 }
 
 Teuchos::RCP<Epetra_SerialDenseMatrix> GMGOperator::fluxDuplicationMapForCoarseCell(GlobalIndexType coarseCellID) const
@@ -1200,7 +1204,8 @@ LocalDofMapperPtr GMGOperator::getLocalCoefficientMap(GlobalIndexType fineCellID
         {
           // This will cause an error in BasisReconciliation; can we find equivalent continuous basis?
           // (necessary when using a non-conforming coarse mesh, though not at present an issue for fields, as here)
-          coarseBasis = BasisFactory::basisFactory()->getContinuousBasis(coarseBasis);
+          bool spaceTime = _coarseMesh->tensorTopologyMeansSpaceTime();
+          coarseBasis = BasisFactory::basisFactory()->getContinuousBasis(coarseBasis, spaceTime);
           TEUCHOS_TEST_FOR_EXCEPTION(fineBasis->functionSpace() != coarseBasis->functionSpace(), std::invalid_argument, "Even after getting continuous basis for coarseBasis, fine and coarse function spaces disagree");
         }
         SubBasisReconciliationWeights weights = _br->constrainedWeights(fineBasis, refBranch, coarseBasis, vertexNodePermutation);
@@ -1428,7 +1433,7 @@ LocalDofMapperPtr GMGOperator::getLocalCoefficientMap(GlobalIndexType fineCellID
             {
               // This will cause an error in BasisReconciliation; can we find equivalent continuous basis?
               // (necessary when using a non-conforming coarse mesh, though not at present an issue for fields, as here)
-              coarseBasis = BasisFactory::basisFactory()->getContinuousBasis(coarseBasis);
+              coarseBasis = BasisFactory::basisFactory()->getContinuousBasis(coarseBasis,_coarseMesh->tensorTopologyMeansSpaceTime());
               TEUCHOS_TEST_FOR_EXCEPTION(fineBasis->functionSpace() != coarseBasis->functionSpace(), std::invalid_argument, "Even after getting continuous basis for coarseBasis, fine and coarse function spaces disagree");
             }
             SubBasisReconciliationWeights weights = _br->constrainedWeights(fineBasis, sideRefBranches[sideOrdinal], coarseBasis, vertexNodePermutation);
@@ -2162,6 +2167,7 @@ void GMGOperator::setFillRatio(double fillRatio)
 //  cout << "fill ratio set to " << fillRatio << endl;
 }
 
+#ifdef HAVE_EPETRAEXT_HDF5
 void GMGOperator::setFunctionExporter(Teuchos::RCP<HDF5Exporter> exporter, FunctionPtr function, string functionName)
 {
   _functionExporter = exporter;
@@ -2169,6 +2175,7 @@ void GMGOperator::setFunctionExporter(Teuchos::RCP<HDF5Exporter> exporter, Funct
   _functionToExportName = functionName;
   _exportTimeStep = 0;
 }
+#endif
 
 void GMGOperator::setIsFinest(bool value)
 {

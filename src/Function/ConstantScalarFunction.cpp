@@ -117,6 +117,12 @@ Scalar ConstantScalarFunction<Scalar>::value()
 }
 
 template <typename Scalar>
+TFunctionPtr<Scalar> ConstantScalarFunction<Scalar>::di(int i)
+{
+  return TFunction<Scalar>::zero();
+}
+
+template <typename Scalar>
 TFunctionPtr<Scalar> ConstantScalarFunction<Scalar>::dx()
 {
   return TFunction<Scalar>::zero();

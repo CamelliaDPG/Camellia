@@ -89,7 +89,7 @@ TFunctionPtr<Scalar> Exp<Scalar>::exp(TFunctionPtr<Scalar> f)
 
 Exp_x::Exp_x()
 :
-SimpleFunction<double>("Exp_x")
+SimpleFunction<double>("Exp_x",VARIES_IN_DIMENSION_0)
 {}
 
 string Exp_x::displayString()
@@ -115,7 +115,7 @@ TFunctionPtr<double> Exp_x::dz()
 
 Exp_y::Exp_y()
 :
-SimpleFunction<double>("Exp_y")
+SimpleFunction<double>("Exp_y",VARIES_IN_DIMENSION_1)
 {}
 string Exp_y::displayString()
 {
@@ -140,7 +140,7 @@ TFunctionPtr<double> Exp_y::dz()
 
 Exp_z::Exp_z()
 :
-SimpleFunction<double>("Exp_z")
+SimpleFunction<double>("Exp_z",VARIES_IN_DIMENSION_2)
 {}
 
 string Exp_z::displayString()
@@ -165,7 +165,7 @@ TFunctionPtr<double> Exp_z::dz()
 }
 
 Exp_ax::Exp_ax(double a)
-: SimpleFunction<double>("Exp_ax")
+: SimpleFunction<double>("Exp_ax",VARIES_IN_DIMENSION_0)
 {
   _a = a;
 }
@@ -189,7 +189,7 @@ std::string Exp_ax::displayString()
 }
 
 Exp_ay::Exp_ay(double a)
-: SimpleFunction<double>("Exp_ay")
+: SimpleFunction<double>("Exp_ay",VARIES_IN_DIMENSION_1)
 {
   _a = a;
 }
@@ -213,7 +213,7 @@ std::string Exp_ay::displayString()
 }
 
 Exp_at::Exp_at(double a)
-: SimpleFunction<double>("Exp_at")
+: SimpleFunction<double>("Exp_at",0xff) // since we don't know which dimension t belongs to, can't limit variation: 0xff says could vary in any dimension…
 {
   _a = a;
 }

@@ -96,10 +96,21 @@ bool VarFactory::hasSpaceOnlyTrialVariable() const
   return false;
 }
 
-// accessors:
-VarPtr VarFactory::test(int testID)
+bool VarFactory::isFluxOrTrace(int trialID) const
 {
-  map< int, VarPtr >::iterator testIt = _testVarsByID.find(testID);
+  VarPtr trialVar = this->trial(trialID);
+  if (trialVar.get() == NULL)   // if unknown trial ID, then it's not a flux or a trace!
+  {
+    return false;
+  }
+  VarType varType = trialVar->varType();
+  return (varType == FLUX) || (varType == TRACE);
+}
+
+// accessors:
+VarPtr VarFactory::test(int testID) const
+{
+  auto testIt = _testVarsByID.find(testID);
   if (testIt == _testVarsByID.end())
   {
     // return null, then
@@ -107,9 +118,10 @@ VarPtr VarFactory::test(int testID)
   }
   return testIt->second;
 }
-VarPtr VarFactory::trial(int trialID)
+
+VarPtr VarFactory::trial(int trialID) const
 {
-  map< int, VarPtr >::iterator trialIt = _trialVarsByID.find(trialID);
+  auto trialIt = _trialVarsByID.find(trialID);
   if (trialIt == _trialVarsByID.end())
   {
     // return null, then
@@ -140,24 +152,6 @@ vector<int> VarFactory::trialIDs()
   return trialIDs;
 }
 
-// when there are other scratchpads (e.g. BilinearFormScratchPad), we'll want to share
-// the variables.  The basic function of the factory is to assign unique test/trial IDs.
-
-VarPtr VarFactory::testVar(string name, Space fs, int ID)
-{
-  if ( _testVars.find(name) != _testVars.end() )
-  {
-    return _testVars[name];
-  }
-
-  ID = getTestID(ID);
-  int rank = Camellia::rankForSpace(fs);
-
-  _testVars[name] = Teuchos::rcp( new Var( ID, rank, name,
-                                  Camellia::OP_VALUE, fs, TEST) );
-  _testVarsByID[ID] = _testVars[name];
-  return _testVarsByID[ID];
-}
 VarPtr VarFactory::fieldVar(string name, Space fs, int ID)
 {
   if (_trialVars.find(name) != _trialVars.end())
@@ -168,6 +162,23 @@ VarPtr VarFactory::fieldVar(string name, Space fs, int ID)
   int rank = Camellia::rankForSpace(fs);
   _trialVars[name] = Teuchos::rcp( new Var( ID, rank, name,
                                    Camellia::OP_VALUE, fs, FIELD) );
+  _trialVarsByID[ID] = _trialVars[name];
+  return _trialVarsByID[ID];
+}
+
+VarPtr VarFactory::fieldVarSpaceTime(string name, Space fs, Space temporalFS, int ID)
+{
+  if (_trialVars.find(name) != _trialVars.end())
+  {
+    return _trialVars[name];
+  }
+  ID = getTrialID(ID);
+  int rank = Camellia::rankForSpace(fs);
+  bool definedOnTemporalInterfaces = true;  // at the moment, this does not make any difference for volumetric variables
+  LinearTermPtr termTraced = Teuchos::null; // not meaningful for volumetric variables
+  _trialVars[name] = Teuchos::rcp( new Var( ID, rank, name,
+                                           Camellia::OP_VALUE, fs, FIELD,
+                                           termTraced, definedOnTemporalInterfaces, temporalFS) );
   _trialVarsByID[ID] = _trialVars[name];
   return _trialVarsByID[ID];
 }
@@ -196,6 +207,32 @@ VarPtr VarFactory::fluxVar(string name, Space fs, int ID)
   return fluxVar(name, Teuchos::rcp((LinearTerm*)NULL), fs, ID);
 }
 
+VarPtr VarFactory::fluxVarSpaceTime(string name, LinearTermPtr termTraced, Space fs, Space temporalFS, int ID)
+{
+  if (_trialVars.find(name) != _trialVars.end())
+  {
+    return _trialVars[name];
+  }
+  int rank = Camellia::rankForSpace(fs);
+  ID = getTrialID(ID);
+  const bool isDefinedOnTemporalInterfaces = true;
+  _trialVars[name] = Teuchos::rcp( new Var( ID, rank, name,
+                                           Camellia::OP_VALUE, fs, FLUX, termTraced,
+                                           isDefinedOnTemporalInterfaces, temporalFS) );
+  _trialVarsByID[ID] = _trialVars[name];
+  return _trialVarsByID[ID];
+}
+
+VarPtr VarFactory::fluxVarSpaceTime(string name, VarPtr termTraced, Space fs, Space temporalFS, int ID)
+{
+  return fluxVarSpaceTime(name, 1.0 * termTraced, fs, temporalFS, ID);
+}
+
+VarPtr VarFactory::fluxVarSpaceTime(string name, Space fs, Space temporalFS, int ID)
+{
+  return fluxVarSpaceTime(name, Teuchos::rcp((LinearTerm*)NULL), fs, temporalFS, ID);
+}
+
 VarPtr VarFactory::fluxVarSpaceOnly(string name, LinearTermPtr termTraced, Space fs, int ID)
 {
   if (_trialVars.find(name) != _trialVars.end())
@@ -205,8 +242,18 @@ VarPtr VarFactory::fluxVarSpaceOnly(string name, LinearTermPtr termTraced, Space
   int rank = Camellia::rankForSpace(fs);
   ID = getTrialID(ID);
   bool isDefinedOnTemporalInterfaces = false;
+  // if spatial FS is valid for temporal FS, use that; otherwise default to L2 (since a flux)
+  Space temporalFS;
+  if ((fs == HGRAD) || (fs == L2))
+  {
+    temporalFS = fs;
+  }
+  else
+  {
+    temporalFS = L2;
+  }
   _trialVars[name] = Teuchos::rcp( new Var( ID, rank, name,
-                                   Camellia::OP_VALUE, fs, FLUX, termTraced, isDefinedOnTemporalInterfaces) );
+                                   Camellia::OP_VALUE, fs, FLUX, termTraced, isDefinedOnTemporalInterfaces, temporalFS) );
   _trialVarsByID[ID] = _trialVars[name];
   return _trialVarsByID[ID];
 }
@@ -245,6 +292,31 @@ VarPtr VarFactory::traceVar(string name, Space fs, int ID)
   return traceVar(name, Teuchos::rcp((LinearTerm*)NULL), fs, ID);
 }
 
+VarPtr VarFactory::traceVarSpaceTime(string name, LinearTermPtr termTraced, Space fs, Space temporalFS, int ID)
+{
+  if (_trialVars.find(name) != _trialVars.end() )
+  {
+    return _trialVars[name];
+  }
+  int rank = rankForSpace(fs);
+  ID = getTrialID(ID);
+  const bool definedOnTemporalInterfaces = true;
+  _trialVars[name] = Teuchos::rcp( new Var( ID, rank, name,
+                                   Camellia::OP_VALUE, fs, TRACE, termTraced, definedOnTemporalInterfaces, temporalFS) );
+  _trialVarsByID[ID] = _trialVars[name];
+  return _trialVarsByID[ID];
+}
+
+VarPtr VarFactory::traceVarSpaceTime(string name, VarPtr termTraced, Space fs, Space temporalFS, int ID)
+{
+  return traceVarSpaceTime(name, 1.0 * termTraced, fs, temporalFS, ID);
+}
+
+VarPtr VarFactory::traceVarSpaceTime(string name, Space fs, Space temporalFS, int ID)
+{
+  return traceVarSpaceTime(name, Teuchos::rcp((LinearTerm*)NULL), fs, temporalFS, ID);
+}
+
 VarPtr VarFactory::traceVarSpaceOnly(string name, LinearTermPtr termTraced, Space fs, int ID)
 {
   if (_trialVars.find(name) != _trialVars.end() )
@@ -254,8 +326,18 @@ VarPtr VarFactory::traceVarSpaceOnly(string name, LinearTermPtr termTraced, Spac
   int rank = rankForSpace(fs);
   ID = getTrialID(ID);
   bool isDefinedOnTemporalInterfaces = false;
+  // if spatial FS is valid for temporal FS, use that; otherwise default to HGRAD (since a trace)
+  Space temporalFS;
+  if ((fs == HGRAD) || (fs == L2))
+  {
+    temporalFS = fs;
+  }
+  else
+  {
+    temporalFS = HGRAD;
+  }
   _trialVars[name] = Teuchos::rcp( new Var( ID, rank, name,
-                                   Camellia::OP_VALUE, fs, TRACE, termTraced, isDefinedOnTemporalInterfaces) );
+                                   Camellia::OP_VALUE, fs, TRACE, termTraced, isDefinedOnTemporalInterfaces, temporalFS) );
   _trialVarsByID[ID] = _trialVars[name];
   return _trialVarsByID[ID];
 }
@@ -275,6 +357,40 @@ VarPtr VarFactory::testVar(const std::string &name) const
   auto entry = _testVars.find(name);
   TEUCHOS_TEST_FOR_EXCEPTION (entry == _testVars.end(), std::invalid_argument, "Unknown variable name");
   return entry->second;
+}
+
+VarPtr VarFactory::testVar(string name, Space fs, int ID)
+{
+  if ( _testVars.find(name) != _testVars.end() )
+  {
+    return _testVars[name];
+  }
+
+  ID = getTestID(ID);
+  int rank = Camellia::rankForSpace(fs);
+
+  _testVars[name] = Teuchos::rcp( new Var( ID, rank, name,
+                                  Camellia::OP_VALUE, fs, TEST) );
+  _testVarsByID[ID] = _testVars[name];
+  return _testVarsByID[ID];
+}
+
+VarPtr VarFactory::testVarSpaceTime(string name, Space fs, Space temporalFS, int ID)
+{
+  if ( _testVars.find(name) != _testVars.end() )
+  {
+    return _testVars[name];
+  }
+
+  ID = getTestID(ID);
+  int rank = Camellia::rankForSpace(fs);
+
+  bool definedOnTemporalInterfaces = true;  // at the moment, this does not make any difference for volumetric variables
+  LinearTermPtr termTraced = Teuchos::null; // not meaningful for volumetric variables
+  _testVars[name] = Teuchos::rcp( new Var( ID, rank, name,
+                                  Camellia::OP_VALUE, fs, TEST, termTraced, definedOnTemporalInterfaces, temporalFS) );
+  _testVarsByID[ID] = _testVars[name];
+  return _testVarsByID[ID];
 }
 
 const map< int, VarPtr > & VarFactory::testVars() const

@@ -861,7 +861,7 @@ void OldroydBFormulationUWReduced::setForcingFunction(FunctionPtr forcingFunctio
 //   MeshPtr mesh;
 //   if (savedSolutionAndMeshPrefix == "")
 //   {
-//     if (_spaceTime) H1Order.push_back(temporalPolyOrder); // "H1Order" is a bit misleading for space-time; in fact in BasisFactory we ensure that the polynomial order in time is whatever goes in this slot, regardless of function space.  This is disanalogous to what happens in space, so we might want to revisit that at some point.
+//     if (_spaceTime) H1Order.push_back(temporalPolyOrder+1);
 //     mesh = Teuchos::rcp( new Mesh(meshTopo, _oldroydBBF, H1Order, delta_k, _trialVariablePolyOrderAdjustments) ) ;
 //     _solution = TSolution<double>::solution(mesh,bc);
 //   }
@@ -1374,6 +1374,7 @@ TRieszRepPtr<double> OldroydBFormulationUWReduced::rieszResidual(FunctionPtr for
 // ! Saves the solution(s) and mesh to an HDF5 format.
 void OldroydBFormulationUWReduced::save(std::string prefixString)
 {
+#ifdef HAVE_EPETRAEXT_HDF5
   _backgroundFlow->mesh()->saveToHDF5(prefixString+".mesh");
   _backgroundFlow->saveToHDF5(prefixString+".soln");
 
@@ -1382,6 +1383,9 @@ void OldroydBFormulationUWReduced::save(std::string prefixString)
     _streamSolution->mesh()->saveToHDF5(prefixString+"_stream.mesh");
     _streamSolution->saveToHDF5(prefixString + "_stream.soln");
   }
+#else
+  TEUCHOS_TEST_FOR_EXCEPTION(true, std::invalid_argument, "File I/O is not supported when Trilinos was built without EpetraExt_ENABLE_HDF5=ON");
+#endif
 }
 
 // ! set current time step used for transient solve

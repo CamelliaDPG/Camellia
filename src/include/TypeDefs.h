@@ -204,6 +204,7 @@ using TVectorPtr = Teuchos::RCP< TVector<Scalar> >;
 #else
   using DeviceMemorySpace = Kokkos::DefaultExecutionSpace::memory_space;
 #endif
+  using DeviceExecutionSpace = DeviceMemorySpace::execution_space;
   using HostMemorySpace   = Kokkos::HostSpace::memory_space;
   
   template<typename Scalar>

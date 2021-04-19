@@ -8,17 +8,22 @@
 using namespace Camellia;
 
 template <typename Scalar>
-SimpleFunction<Scalar>::SimpleFunction(const std::string &className)
+SimpleFunction<Scalar>::SimpleFunction(const std::string &className, int variationDimensions)
 :
-TFunction<Scalar>(className)
+TFunction<Scalar>(className,0,variationDimensions)
 {}
 
+template <typename Scalar>
+Scalar SimpleFunction<Scalar>::value()
+{
+  TEUCHOS_TEST_FOR_EXCEPTION(true, std::invalid_argument, "Unimplemented method. Subclasses of SimpleFunction must implement value() for some number of arguments < spaceDim");
+  return 0;
+}
 
 template <typename Scalar>
 Scalar SimpleFunction<Scalar>::value(double x)
 {
-  TEUCHOS_TEST_FOR_EXCEPTION(true, std::invalid_argument, "Unimplemented method. Subclasses of SimpleFunction must implement value() for some number of arguments < spaceDim");
-  return 0;
+  return value();
 }
 
 template <typename Scalar>

@@ -29,6 +29,7 @@ public:
   TFunctionPtr<double> dy() override;
   TFunctionPtr<double> dz() override;
   TFunctionPtr<double> dt() override;
+  TFunctionPtr<double> di(int i) override;
   string displayString() override;
 };
 
@@ -42,6 +43,7 @@ public:
   TFunctionPtr<double> dy() override;
   TFunctionPtr<double> dz() override;
   TFunctionPtr<double> dt() override;
+  TFunctionPtr<double> di(int i) override;
   string displayString() override;
 };
 
@@ -55,6 +57,7 @@ public:
   TFunctionPtr<double> dy() override;
   TFunctionPtr<double> dz() override;
   TFunctionPtr<double> dt() override;
+  TFunctionPtr<double> di(int i) override;
   string displayString() override;
 };
 
@@ -69,6 +72,23 @@ public:
   TFunctionPtr<double> dz() override;
   TFunctionPtr<double> dt() override;
   string displayString() override;
+};
+
+class MonomialFunction : public TFunction<double>
+{
+  int _comp;
+  int _n;
+public:
+  MonomialFunction(int componentDimension, int power);
+  
+  void values(typename Camellia::FieldContainer<double>::DeviceView &values, ValueModificationType modType, BasisCachePtr basisCache) override;
+  TFunctionPtr<double> dx() override;
+  TFunctionPtr<double> dy() override;
+  TFunctionPtr<double> dz() override;
+  TFunctionPtr<double> di(int i) override;
+  string displayString() override;
+  
+  static TFunctionPtr<double> xi_n(int i, int n);
 };
 }
 #endif

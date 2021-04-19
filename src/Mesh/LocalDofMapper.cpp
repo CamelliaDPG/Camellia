@@ -565,7 +565,7 @@ const vector<GlobalIndexType> &LocalDofMapper::globalIndices()
   return _globalIndices;
 }
 
-set<GlobalIndexType> LocalDofMapper::globalIndicesForSubcell(int varID, unsigned d, unsigned subcord)
+set<GlobalIndexType> LocalDofMapper::globalIndicesForSubcell(int varID, unsigned d, unsigned subcord, bool upgradeToContinuousBasis, bool tensorTopologyMeansSpaceTime)
 {
 //  typedef vector< SubBasisDofMapperPtr > BasisMap; // taken together, these maps map a whole basis
 //  map< int, BasisMap > _volumeMaps; // keys are var IDs (fields)
@@ -580,7 +580,12 @@ set<GlobalIndexType> LocalDofMapper::globalIndicesForSubcell(int varID, unsigned
     BasisMap volumeMap  = entry.second;
     if (entry.first != varID) continue;
     
-    BasisPtr volumeBasis = BasisFactory::basisFactory()->getContinuousBasis(_dofOrdering->getBasis(varID));
+    BasisPtr volumeBasis = _dofOrdering->getBasis(varID);
+    if (upgradeToContinuousBasis)
+    {
+      bool spaceTime = tensorTopologyMeansSpaceTime && (volumeBasis->domainTopology()->getTensorialDegree() > 0);
+      volumeBasis = BasisFactory::basisFactory()->getContinuousBasis(volumeBasis, spaceTime);
+    }
     
     vector<int> dofOrdinalsVector = volumeBasis->dofOrdinalsForSubcell(d, subcord, 0);
     set<int> dofOrdinals(dofOrdinalsVector.begin(), dofOrdinalsVector.end());
@@ -607,7 +612,12 @@ set<GlobalIndexType> LocalDofMapper::globalIndicesForSubcell(int varID, unsigned
       
       if (!_dofOrdering->hasBasisEntry(varID, sideOrdinal)) continue;
       
-      BasisPtr sideBasis = BasisFactory::basisFactory()->getContinuousBasis(_dofOrdering->getBasis(varID,sideOrdinal));
+      BasisPtr sideBasis = _dofOrdering->getBasis(varID,sideOrdinal);
+      if (upgradeToContinuousBasis)
+      {
+        bool spaceTime = tensorTopologyMeansSpaceTime && (sideBasis->domainTopology()->getTensorialDegree() > 0);
+        sideBasis = BasisFactory::basisFactory()->getContinuousBasis(sideBasis, spaceTime);
+      }
       
       vector<int> dofOrdinalsVector = sideBasis->dofOrdinalsForSubcell(d, sideSubcellOrdinal, 0);
       set<int> dofOrdinals(dofOrdinalsVector.begin(), dofOrdinalsVector.end());

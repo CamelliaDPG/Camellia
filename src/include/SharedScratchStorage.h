@@ -24,12 +24,12 @@ namespace Camellia {
     using HostView   = Camellia::HostView<Scalar>;
     
     using ScratchStorageDimensions = std::vector<int>;
-    using ScratchStorageEntry = std::pair<DeviceView, bool>; // true means checked out right now
+    using ScratchStorageEntry = std::tuple<DeviceView, bool, std::string>; // true means checked out right now
     using ScratchStorageCache = std::map<ScratchStorageDimensions, std::vector<ScratchStorageEntry> >;
     
-    DeviceView checkoutScratchStorage(const ScratchStorageDimensions &dims);
-    DeviceView checkoutScratchStorageMatchingDeviceView(DeviceView &deviceView);
-    DeviceView checkoutScratchStorageMatchingHostView(HostView &hostView);
+    DeviceView checkoutScratchStorage(const ScratchStorageDimensions &dims, std::string description="");
+    DeviceView checkoutScratchStorageMatchingDeviceView(DeviceView &deviceView, std::string description="");
+    DeviceView checkoutScratchStorageMatchingHostView(HostView &hostView, std::string description="");
     
     void checkinScratchStorage(DeviceView &scratchView);
     

@@ -1268,6 +1268,7 @@ void testSaveAndLoad2D(BFPtr bf, Teuchos::FancyOStream &out, bool &success)
     mesh->hRefine(activeCells, quadRefinement);
   }
   
+#ifdef HAVE_EPETRAEXT_HDF5
   string meshFile = "/tmp/SavedMesh.HDF5";
   mesh->saveToHDF5(meshFile);
 
@@ -1285,6 +1286,9 @@ void testSaveAndLoad2D(BFPtr bf, Teuchos::FancyOStream &out, bool &success)
   
   // delete the file we created
   remove(meshFile.c_str());
+#else
+  out << "SKIPPING testSaveAndLoad() because Trilinos built without Epetra HDF5 support.\n";
+#endif
 }
   
   TEUCHOS_UNIT_TEST( Mesh, ProjectFieldSolution )

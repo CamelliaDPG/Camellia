@@ -55,13 +55,13 @@ SpaceTimeHeatDivFormulation::SpaceTimeHeatDivFormulation(int spaceDim, double ep
   VarPtr tau;
 
   _vf = VarFactory::varFactory();
-  u = _vf->fieldVar(s_u);
+  u = _vf->fieldVarSpaceTime(s_u);
 
-  sigma1 = _vf->fieldVar(s_sigma1);
-  if (spaceDim > 1) sigma2 = _vf->fieldVar(s_sigma2);
+  sigma1 = _vf->fieldVarSpaceTime(s_sigma1);
+  if (spaceDim > 1) sigma2 = _vf->fieldVarSpaceTime(s_sigma2);
   if (spaceDim==3)
   {
-    sigma3 = _vf->fieldVar(s_sigma3);
+    sigma3 = _vf->fieldVarSpaceTime(s_sigma3);
   }
 
   Space uHatSpace = useConformingTraces ? HGRAD : L2;
@@ -86,14 +86,14 @@ SpaceTimeHeatDivFormulation::SpaceTimeHeatDivFormulation(int spaceDim, double ep
   {
     tc_lt = -sigma1 * n_x_parity->x() - sigma2 * n_x_parity->y() - sigma3 * n_x_parity->z() + u*n_xt_parity->t();
   }
-  tc = _vf->fluxVar(s_tc, tc_lt);
+  tc = _vf->fluxVarSpaceTime(s_tc, tc_lt);
 
-  v = _vf->testVar(s_v, HGRAD);
+  v = _vf->testVarSpaceTime(s_v, HGRAD);
 
-  if (_spaceDim > 1)
-    tau = _vf->testVar(s_tau, HDIV); // vector
-  else
-    tau = _vf->testVar(s_tau, HGRAD); // scalar
+  if (_spaceDim > 1) // vector
+    tau = _vf->testVarSpaceTime(s_tau, HDIV,  HGRAD);
+  else // scalar
+    tau = _vf->testVarSpaceTime(s_tau, HGRAD, HGRAD);
 
   _bf = Teuchos::rcp( new BF(_vf) );
   // v terms
@@ -174,13 +174,19 @@ void SpaceTimeHeatDivFormulation::initializeSolution(MeshTopologyPtr meshTopo, i
   if (savedSolutionAndMeshPrefix == "")
   {
     mesh = Teuchos::rcp( new Mesh(meshTopo, _bf, H1Order, delta_k) ) ;
+    mesh->setTensorTopologyMeansSpaceTime(true);
     _solution = TSolution<double>::solution(mesh,bc);
   }
   else
   {
+#ifdef HAVE_EPETRAEXT_HDF5
     mesh = MeshFactory::loadFromHDF5(_bf, savedSolutionAndMeshPrefix+".mesh");
+    mesh->setTensorTopologyMeansSpaceTime(true);
     _solution = TSolution<double>::solution(mesh, bc);
     _solution->loadFromHDF5(savedSolutionAndMeshPrefix+".soln");
+#else
+    TEUCHOS_TEST_FOR_EXCEPTION(true, std::invalid_argument, "File I/O is not supported when Trilinos was built without EpetraExt_ENABLE_HDF5=ON");
+#endif
   }
 
   IPPtr ip = _ips.at(norm);
@@ -276,8 +282,12 @@ VarPtr SpaceTimeHeatDivFormulation::tau()
 // ! Saves the solution(s) and mesh to an HDF5 format.
 void SpaceTimeHeatDivFormulation::save(std::string prefixString)
 {
+#ifdef HAVE_EPETRAEXT_HDF5
   _solution->mesh()->saveToHDF5(prefixString+".mesh");
   _solution->saveToHDF5(prefixString+".soln");
+#else
+  TEUCHOS_TEST_FOR_EXCEPTION(true, std::invalid_argument, "File I/O is not supported when Trilinos was built without EpetraExt_ENABLE_HDF5=ON");
+#endif
 }
 
 // ! Returns the solution

@@ -22,8 +22,9 @@ template <typename Scalar>
 class SimpleFunction : public TFunction<Scalar>
 {
 public:
-  SimpleFunction(const std::string &className);
+  SimpleFunction(const std::string &className, int variationDimensions);
   virtual ~SimpleFunction() {}
+  virtual Scalar value();
   virtual Scalar value(double x);
   virtual Scalar value(double x, double y);
   virtual Scalar value(double x, double y, double z);

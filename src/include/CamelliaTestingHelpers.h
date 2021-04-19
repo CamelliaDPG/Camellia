@@ -75,7 +75,13 @@ bool compareFloatingArraysCamellia(const Array1 &a1, const std::string &a1_name,
                                      );
   
   
-
+  template <class Scalar1, class Scalar2>
+  KOKKOS_INLINE_FUNCTION
+  bool
+  errMeetsAbsAndRelTol( const Scalar1 &s1, const Scalar2 &s2, const double &relTol, const double &absTol )
+  {
+    return fabs( s1 - s2 ) <= absTol + fabs(s1) * relTol;
+  }
 } // namespace Camellia
 
 /** \brief Assert that a1.size()==a2.size() and rel_error(a[i],b[i]) <= tol, i=0...., where the error is relative to the maximum entry in the arrays.

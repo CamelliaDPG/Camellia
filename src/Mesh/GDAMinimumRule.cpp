@@ -422,73 +422,78 @@ void GDAMinimumRule::distributeSubcellDofIndices(Epetra_CommPtr Comm, const map<
   
   int myRequestCount = myRequest.size();
   
-  Teuchos::RCP<Epetra_Distributor> distributor = MPIWrapper::getDistributor(*Comm);
+  int globalRequestCount = MPIWrapper::sum(*Comm, myRequestCount);
   
-  GlobalIndexTypeToCast* myRequestPtr = NULL;
-  int *myRequestOwnersPtr = NULL;
-  if (myRequest.size() > 0)
+  if (globalRequestCount != 0)
   {
-    myRequestPtr = &myRequest[0];
-    myRequestOwnersPtr = &myRequestOwners[0];
-  }
-  int numCellsToExport = 0;
-  GlobalIndexTypeToCast* cellIDsToExport = NULL;  // we are responsible for deleting the allocated arrays
-  int* exportRecipients = NULL;
-  
-  distributor->CreateFromRecvs(myRequestCount, myRequestPtr, myRequestOwnersPtr, true, numCellsToExport, cellIDsToExport, exportRecipients);
-  
-  vector<int> sizes(numCellsToExport);
-  vector<char> dataToExport;
-  for (int cellOrdinal=0; cellOrdinal<numCellsToExport; cellOrdinal++)
-  {
-    GlobalIndexType cellID = cellIDsToExport[cellOrdinal];
+    Teuchos::RCP<Epetra_Distributor> distributor = MPIWrapper::getDistributor(*Comm);
     
-    if (myOwnedGlobalDofs.find(cellID) == myOwnedGlobalDofs.end())
+    GlobalIndexTypeToCast* myRequestPtr = NULL;
+    int *myRequestOwnersPtr = NULL;
+    if (myRequest.size() > 0)
     {
-      TEUCHOS_TEST_FOR_EXCEPTION(true, std::invalid_argument, "Entry for local cellID not found in mySubcellOwnership map");
+      myRequestPtr = &myRequest[0];
+      myRequestOwnersPtr = &myRequestOwners[0];
     }
-    const SubcellDofIndices* cellDofIndexInfo = &myOwnedGlobalDofs.find(cellID)->second;
-    int cellIDSize = sizeof(cellID);
-    int dataSize = cellDofIndexInfo->dataSize();
-    sizes[cellOrdinal] = cellIDSize + dataSize;
-    int startIndex = dataToExport.size();
-    dataToExport.resize(dataToExport.size() + sizes[cellOrdinal]);
+    int numCellsToExport = 0;
+    GlobalIndexTypeToCast* cellIDsToExport = NULL;  // we are responsible for deleting the allocated arrays
+    int* exportRecipients = NULL;
     
-    char *writeLocation = &dataToExport[startIndex];
-    memcpy(writeLocation, &cellID, cellIDSize);
-    writeLocation = &dataToExport[startIndex+cellIDSize];
-    cellDofIndexInfo->write(writeLocation, dataSize);
+    distributor->CreateFromRecvs(myRequestCount, myRequestPtr, myRequestOwnersPtr, true, numCellsToExport, cellIDsToExport, exportRecipients);
+    
+    vector<int> sizes(numCellsToExport);
+    vector<char> dataToExport;
+    for (int cellOrdinal=0; cellOrdinal<numCellsToExport; cellOrdinal++)
+    {
+      GlobalIndexType cellID = cellIDsToExport[cellOrdinal];
+      
+      if (myOwnedGlobalDofs.find(cellID) == myOwnedGlobalDofs.end())
+      {
+        TEUCHOS_TEST_FOR_EXCEPTION(true, std::invalid_argument, "Entry for local cellID not found in mySubcellOwnership map");
+      }
+      const SubcellDofIndices* cellDofIndexInfo = &myOwnedGlobalDofs.find(cellID)->second;
+      int cellIDSize = sizeof(cellID);
+      int dataSize = cellDofIndexInfo->dataSize();
+      sizes[cellOrdinal] = cellIDSize + dataSize;
+      int startIndex = dataToExport.size();
+      dataToExport.resize(dataToExport.size() + sizes[cellOrdinal]);
+      
+      char *writeLocation = &dataToExport[startIndex];
+      memcpy(writeLocation, &cellID, cellIDSize);
+      writeLocation = &dataToExport[startIndex+cellIDSize];
+      cellDofIndexInfo->write(writeLocation, dataSize);
+    }
+    
+    int importLength = 0;
+    char* globalData = NULL;
+    int* sizePtr = NULL;
+    char* dataToExportPtr = NULL;
+    if (numCellsToExport > 0)
+    {
+      sizePtr = &sizes[0];
+      dataToExportPtr = &dataToExport[0];
+    }
+    int objSize = sizeof(char);
+    distributor->Do(dataToExportPtr, objSize, sizePtr, importLength, globalData);
+    const char* globalDataStart = globalData;
+    const char* copyFromLocation = globalData;
+    for (int cellOrdinal=0; cellOrdinal<myRequest.size(); cellOrdinal++)
+    {
+      GlobalIndexType cellID;
+      memcpy(&cellID, copyFromLocation, sizeof(cellID));
+      copyFromLocation += sizeof(cellID);
+      SubcellDofIndices subcellDofIndices;
+      int bytesRead = copyFromLocation - globalDataStart;
+      int bytesLeft = importLength - bytesRead;
+      TEUCHOS_TEST_FOR_EXCEPTION(bytesLeft <= 0, std::invalid_argument, "Invalid read requested");
+      subcellDofIndices.read(copyFromLocation, bytesLeft);
+      remotelyOwnedGlobalDofs[cellID] = subcellDofIndices;
+    }
+    
+    if( cellIDsToExport != 0 ) delete [] cellIDsToExport;
+    if( exportRecipients != 0 ) delete [] exportRecipients;
+    if (globalData != 0 ) delete [] globalData;
   }
-  
-  int importLength = 0;
-  char* globalData = NULL;
-  int* sizePtr = NULL;
-  char* dataToExportPtr = NULL;
-  if (numCellsToExport > 0)
-  {
-    sizePtr = &sizes[0];
-    dataToExportPtr = &dataToExport[0];
-  }
-  int objSize = sizeof(char);
-  distributor->Do(dataToExportPtr, objSize, sizePtr, importLength, globalData);
-  const char* globalDataStart = globalData;
-  const char* copyFromLocation = globalData;
-  for (int cellOrdinal=0; cellOrdinal<myRequest.size(); cellOrdinal++)
-  {
-    GlobalIndexType cellID;
-    memcpy(&cellID, copyFromLocation, sizeof(cellID));
-    copyFromLocation += sizeof(cellID);
-    SubcellDofIndices subcellDofIndices;
-    int bytesRead = copyFromLocation - globalDataStart;
-    int bytesLeft = importLength - bytesRead;
-    TEUCHOS_TEST_FOR_EXCEPTION(bytesLeft <= 0, std::invalid_argument, "Invalid read requested");
-    subcellDofIndices.read(copyFromLocation, bytesLeft);
-    remotelyOwnedGlobalDofs[cellID] = subcellDofIndices;
-  }
-  
-  if( cellIDsToExport != 0 ) delete [] cellIDsToExport;
-  if( exportRecipients != 0 ) delete [] exportRecipients;
-  if (globalData != 0 ) delete [] globalData;
   
   TimeLogger::sharedInstance()->stopTimer(timerHandle);
 }
@@ -513,10 +518,10 @@ set<GlobalIndexType> GDAMinimumRule::globalDofIndicesForCell(GlobalIndexType cel
   return globalDofIndices;
 }
 
-set<GlobalIndexType> GDAMinimumRule::globalDofIndicesForVarOnSubcell(int varID, GlobalIndexType cellID, unsigned int dim, unsigned int subcellOrdinal)
+set<GlobalIndexType> GDAMinimumRule::globalDofIndicesForVarOnSubcell(int varID, GlobalIndexType cellID, unsigned int dim, unsigned int subcellOrdinal, bool upgradeToContinuousBasis, bool tensorTopologyMeansSpaceTime)
 {
   LocalDofMapperPtr dofMapper = getDofMapper(cellID);
-  set<GlobalIndexType> globalDofIndices = dofMapper->globalIndicesForSubcell(varID, dim, subcellOrdinal);
+  set<GlobalIndexType> globalDofIndices = dofMapper->globalIndicesForSubcell(varID, dim, subcellOrdinal, upgradeToContinuousBasis, tensorTopologyMeansSpaceTime);
   
   return globalDofIndices;
 }
@@ -2406,14 +2411,15 @@ CellConstraints GDAMinimumRule::getCellConstraints(GlobalIndexType cellID)
     AnnotatedEntity emptyConstraintInfo;
     emptyConstraintInfo.cellID = -1;
 
-    for (int d=0; d<=spaceDim; d++)
+    const int d_min = minimumSubcellDimensionForContinuityEnforcement();
+    for (int d=d_min; d<=spaceDim; d++)
     {
       int scCount = topo->getSubcellCount(d);
       processedSubcells[d] = vector<bool>(scCount, false);
       constrainingSubcellInfo[d] = vector< AnnotatedEntity >(scCount, emptyConstraintInfo);
     }
 
-    for (int d=sideDim; d >= 0; d--)
+    for (int d=sideDim; d >= d_min; d--)
     {
       int scCount = topo->getSubcellCount(d);
       for (int subcord=0; subcord < scCount; subcord++)   // subcell ordinals in cell
@@ -2579,7 +2585,7 @@ CellConstraints GDAMinimumRule::getCellConstraints(GlobalIndexType cellID)
 
     // determine subcell ownership from the perspective of the cell
     cellConstraints.owningCellIDForSubcell = vector< vector< OwnershipInfo > >(spaceDim+1);
-    for (int d=0; d<spaceDim; d++)
+    for (int d=d_min; d<spaceDim; d++)
     {
       vector<IndexType> scIndices = cell->getEntityIndices(d);
       unsigned scCount = scIndices.size();
@@ -2798,16 +2804,26 @@ unsigned GDAMinimumRule::getConstraintPermutation(GlobalIndexType cellID, unsign
 set<GlobalIndexType> GDAMinimumRule::getFittableGlobalDofIndices(GlobalIndexType cellID, int sideOrdinal, int varID)
 {
   TEUCHOS_FUNC_TIME_MONITOR("GDAMinimumRule::getFittableGlobalDofIndices");
+  
+  // returns the global dof indices for basis functions which have support on the given side.  This is determined by taking the union of the global dof indices defined on all the constraining sides for the given side (the constraining sides are by definition unconstrained).
+  
+  int sideDim = _meshTopology->getDimension() - 1;
+  const int d_min = minimumSubcellDimensionForContinuityEnforcement();
+  if (d_min > sideDim)
+  {
+    // no dofs on sides; return empty set
+    return set<GlobalIndexType>();
+  }
+  
   pair<GlobalIndexType,pair<int,unsigned>> key = {cellID,{varID,sideOrdinal}};
   if (_fittableGlobalIndicesCache.find(key) != _fittableGlobalIndicesCache.end())
   {
     return _fittableGlobalIndicesCache[key];
   }
   
-  // returns the global dof indices for basis functions which have support on the given side.  This is determined by taking the union of the global dof indices defined on all the constraining sides for the given side (the constraining sides are by definition unconstrained).
   SubcellDofIndices subcellDofIndices = getGlobalDofIndices(cellID);
   CellPtr cell = _meshTopology->getCell(cellID);
-  int sideDim = _meshTopology->getDimension() - 1;
+  
 
   CellConstraints constraints = getCellConstraints(cellID);
   GlobalIndexType constrainingCellID = constraints.subcellConstraints[sideDim][sideOrdinal].cellID;
@@ -2928,7 +2944,9 @@ SubcellDofIndices & GDAMinimumRule::getOwnedGlobalDofIndices(GlobalIndexType cel
 
   map< pair<unsigned,IndexType>, pair<unsigned, unsigned> > entitiesClaimed; // maps from the constraining entity claimed to the (d, scord) entry that claimed it.
   map< pair<unsigned,IndexType>, pair<unsigned, unsigned> > entitiesClaimedSpaceOnlyVariables; // for variables with var->isDefinedOnTemporalInterface()==false
-  for (int d=0; d<=spaceDim; d++)
+  
+  const int d_min = minimumSubcellDimensionForContinuityEnforcement();
+  for (int d=d_min; d<=spaceDim; d++)
   {
     int scCount = topo->getSubcellCount(d);
     for (int scord=0; scord<scCount; scord++)
@@ -3435,7 +3453,7 @@ void GDAMinimumRule::rebuildLookups()
 
   _cellDofOffsets.clear(); // within the partition, offsets for the owned dofs in cell
 
-  // TODO: add some sort of check here, and warning if mesh must be 1-irregular but isn't.
+  // Here, we check and warn if mesh must be 1-irregular but isn't.
   // (Need to examine variables to see if there are any that require reconciliation for d < sideDim; otherwise we can do without 1-irregularity.)
   int irregularity = _mesh->irregularity();
   if (irregularity > 1)
@@ -3456,7 +3474,8 @@ void GDAMinimumRule::rebuildLookups()
   set<GlobalIndexType> nonLocalCellNeighbors; // cells whose dofs I need to label, but aren't in myCells
   
   bool isPureView = (NULL == dynamic_cast<MeshTopology*>(_meshTopology.get()));
-  if (isPureView)
+  bool hasBaseMeshTopology = (NULL != _meshTopology->baseMeshTopology());  // SubExtrudedMeshTopology does not have a base MeshTopology, for example
+  if (isPureView && hasBaseMeshTopology)
   {
     // then we should get dof info for ancestors of the fine cells owned by _meshTopology->baseMeshTopology()
     // add these to nonLocalCellNeighbors
@@ -3593,13 +3612,21 @@ void GDAMinimumRule::setAllowMeshTopologyPruning(bool allowMeshTopologyPruning)
   const bool oldSetting = _allowMeshTopologyPruning;
   if (oldSetting != allowMeshTopologyPruning)
   {
-    this->_allowMeshTopologyPruning = allowMeshTopologyPruning;
-    if (!_allowMeshTopologyPruning)
+    // We disallow mesh topology pruning (aka properly distributed MeshTopology) when periodicBCs are present
+    if (_mesh->getTopology()->getPeriodicBCs().size() == 0)
     {
-      MeshTopology* meshTopo = dynamic_cast<MeshTopology*>(_meshTopology.get());
-      if (meshTopo->pruningOrdinal() >= 0) // pruningOrdinal starts at -1; will be 0 after first pruning
+      this->_allowMeshTopologyPruning = allowMeshTopologyPruning;
+      if (!_allowMeshTopologyPruning)
       {
-        TEUCHOS_TEST_FOR_EXCEPTION(true, std::invalid_argument, "Must set allowMeshTopologyPruning to false *before* any pruning has taken place…");
+        MeshTopology* meshTopo = dynamic_cast<MeshTopology*>(_meshTopology.get());
+        if (meshTopo != NULL)
+        {
+          // if _meshTopology is not a MeshTopology, we assume pruning is not possible/has not taken place
+          if (meshTopo->pruningOrdinal() >= 0) // pruningOrdinal starts at -1; will be 0 after first pruning
+          {
+            TEUCHOS_TEST_FOR_EXCEPTION(true, std::invalid_argument, "Must set allowMeshTopologyPruning to false *before* any pruning has taken place…");
+          }
+        }
       }
     }
   }

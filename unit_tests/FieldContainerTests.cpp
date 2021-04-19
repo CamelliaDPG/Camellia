@@ -73,14 +73,26 @@ namespace
    
     auto dv = values.checkoutDeviceView();  // DeviceView is initialized lazily on checkout
     
-    const int newBytesExpected       = values.size() * sizeof(Scalar);
-    const int newCount               = deviceViewAllocationRecord.allocationCount + deviceViewFakeAllocationRecord.allocationCount;
+    // Camellia::Allocation uses SharedScratchStorage in checkoutMirrorView, so the checkout may not result in a new allocation
+    const int newCount = deviceViewAllocationRecord.allocationCount + deviceViewFakeAllocationRecord.allocationCount;
+    int newBytesExpected;
+    if (newCount == initialCount)
+    {
+      // reuse case: all counts should match initial
+      newBytesExpected = 0;
+    }
+    else
+    {
+      // new allocation
+      TEST_EQUALITY( initialCount + 1,  newCount );
+      newBytesExpected = values.size() * sizeof(Scalar);
+    }
+    
     const int newBytesAllocatedTotal = deviceViewAllocationRecord.bytesAllocatedTotal + deviceViewFakeAllocationRecord.bytesAllocatedTotal;
     const int newNetBytesAllocated   = deviceViewAllocationRecord.bytesAllocatedNet + deviceViewFakeAllocationRecord.bytesAllocatedNet;
     TEST_EQUALITY(initialBytesAllocatedTotal + newBytesExpected, newBytesAllocatedTotal);
     TEST_EQUALITY(initialNetBytesAllocated   + newBytesExpected, newNetBytesAllocated  );
-    TEST_EQUALITY(                             initialCount + 1,  newCount             );
-    
+        
     values.checkinDeviceView(false); // false: don't deep copy to host
   }
   

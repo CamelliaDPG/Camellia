@@ -24,7 +24,6 @@
 #include "Basis.h"
 
 #include "MultiBasis.h"
-#include "PatchBasis.h"
 #include "VectorizedBasis.h"
 
 #include "CamelliaIntrepidExtendedTypes.h"
@@ -43,10 +42,14 @@ private:
   _existingBases; // keys are ((polyOrder,cellTopoKey),fs))
   map< pair< pair<int,int>, Camellia::EFunctionSpace >, BasisPtr >
   _conformingBases; // keys are ((polyOrder,cellTopoKey),fs))
-  map< pair< pair< Camellia::Basis<>*, int>, Camellia::EFunctionSpace>, BasisPtr >
-  _spaceTimeBases; // keys are (shards Topo basis, temporal degree, temporal function space)
-  map< pair< pair< Camellia::Basis<>*, int>, Camellia::EFunctionSpace>, BasisPtr >
-  _conformingSpaceTimeBases; // keys are (shards Topo basis, temporal degree, temporal function space)
+  map< tuple<Camellia::Basis<>*, int, Camellia::EFunctionSpace>, BasisPtr >
+  _spaceTimeBases; // keys are (one-lower tensorial degree basis, temporal degree, temporal function space)
+  map< tuple<Camellia::Basis<>*, int, Camellia::EFunctionSpace>, BasisPtr >
+  _conformingSpaceTimeBases; // keys are (one-lower tensorial degree basis, temporal degree, temporal function space)
+  map< tuple<Camellia::Basis<>*, int, Camellia::EFunctionSpace>, BasisPtr >
+  _tensorBases; // keys are (one-lower tensorial degree basis, final tensorial polynomial degree, final function space)
+  map< tuple<Camellia::Basis<>*, int, Camellia::EFunctionSpace>, BasisPtr >
+  _conformingTensorBases; // keys are (one-lower tensorial degree basis, final tensorial polynomial degree, final function space)
 
   map<unsigned, BasisPtr> _nodalBasisForShardsTopology;
   map<CellTopologyKey, BasisPtr> _nodalBasisForTopology;
@@ -59,9 +62,6 @@ private:
   map< Camellia::Basis<>*, int > _cellTopoKeys; // allows lookup of cellTopoKeys
   set< Camellia::Basis<>*> _multiBases;
   map< vector< Camellia::Basis<>* >, Camellia::MultiBasisPtr > _multiBasesMap;
-  map< pair< Camellia::Basis<>*, vector<double> >, PatchBasisPtr > _patchBases;
-  set< Camellia::Basis<>* > _patchBasisSet;
-
   int _defaultTemporalPolyOrder;
   
   bool _useEnrichedTraces; // i.e. p+1, not p (default is true: this is what we need to prove optimal convergence)
@@ -73,31 +73,34 @@ private:
 public:
   BasisFactory();
 
-  // This version of getBasis is meant eventually to support tensorial polynomial orders; right now, it does so for space-time
-  BasisPtr getBasis(std::vector<int> &H1Order, CellTopoPtr cellTopo, FSE functionSpaceForSpatialTopology,
-                    FSE functionSpaceForTemporalTopology = Camellia::FUNCTION_SPACE_HVOL);
+  BasisPtr getBasis(const std::vector<int> &H1Orders, CellTopoPtr cellTopo, FSE functionSpace);
+  BasisPtr getBasis(const std::vector<int> &H1Orders, CellTopoPtr cellTopo, const std::vector<FSE> &functionSpaces);
 
-  // This version of getBasis handles 0 or 1 temporal dimensions; calls the other version:
-  BasisPtr getBasis(int H1Order, CellTopoPtr cellTopo, FSE functionSpaceForSpatialTopology, int temporalH1Order = -1,
-                    FSE functionSpaceForTemporalTopology = Camellia::FUNCTION_SPACE_HVOL);
-  BasisPtr getBasis( int H1Order, unsigned cellTopoKey, FSE fs);
+  BasisPtr getBasis( int polyOrder, unsigned cellTopoKey, FSE fs );
+  BasisPtr getBasis( int polyOrder, CellTopoPtr cellTopo, FSE fs );
 
-  // This version of getConformingBasis is meant eventually to support tensorial polynomial orders; right now, it does so for space-time
-  BasisPtr getConformingBasis(std::vector<int> &H1Order, CellTopoPtr cellTopo, FSE functionSpaceForSpatialTopology,
-                              FSE functionSpaceForTemporalTopology = Camellia::FUNCTION_SPACE_HVOL);
+  BasisPtr getConformingBasis(const std::vector<int> &H1Orders, CellTopoPtr cellTopo, const FSE functionSpace);
+  BasisPtr getConformingBasis(const std::vector<int> &H1Orders, CellTopoPtr cellTopo, const std::vector<FSE> &functionSpaces);
 
   BasisPtr getConformingBasis( int polyOrder, unsigned cellTopoKey, FSE fs );
-  BasisPtr getConformingBasis( int polyOrder, CellTopoPtr cellTopo, FSE fs, int temporalPolyOrder = -1,
-                               FSE functionSpaceForTemporalTopology = Camellia::FUNCTION_SPACE_HVOL);
+  BasisPtr getConformingBasis( int polyOrder, CellTopoPtr cellTopo, FSE fs );
 
-  // ! For L^2 bases that wrap an H^1-conforming basis, returns the H^1-conforming basis.
-  BasisPtr getContinuousBasis( BasisPtr basis );
+  BasisPtr getSpaceTimeConformingBasis( const std::vector<int> &polyOrderSpace, const int polyOrderTime,
+                                       CellTopoPtr spaceTimeCellTopo, const std::vector<FSE> &spatialFS, const FSE temporalFS);
+  BasisPtr getSpaceTimeConformingBasis( const std::vector<int> &polyOrderSpace, const int polyOrderTime,
+                                       CellTopoPtr spaceTimeCellTopo, const FSE spatialFS, const FSE temporalFS);
+  
+  BasisPtr getSpaceTimeConformingBasis( const int polyOrderSpace, const int polyOrderTime,
+                                       CellTopoPtr spaceTimeCellTopo, const FSE spatialFS, const FSE temporalFS);
+  
+  //! For L^2 bases that wrap an H^1-conforming basis, returns the H^1-conforming basis.
+  //! If spaceTime is true, then the basis must be a tensor basis, and the last tensorial component is treated as the temporal component.
+  BasisPtr getContinuousBasis( BasisPtr basis, bool spaceTime );
   
   BasisPtr getNodalBasisForCellTopology(CellTopoPtr cellTopo);
   BasisPtr getNodalBasisForCellTopology(unsigned cellTopoKey);
 
   Camellia::MultiBasisPtr getMultiBasis(vector< BasisPtr > &bases);
-  PatchBasisPtr getPatchBasis(BasisPtr parent, Camellia::FieldContainer<double> &patchNodesInParentRefCell, unsigned cellTopoKey = shards::Line<2>::key);
 
   BasisPtr addToPolyOrder(BasisPtr basis, int pToAdd);
   BasisPtr setPolyOrder(BasisPtr basis, int polyOrderToSet);
@@ -108,7 +111,6 @@ public:
 
   bool basisKnown(BasisPtr basis);
   bool isMultiBasis(BasisPtr basis);
-  bool isPatchBasis(BasisPtr basis);
 
   void registerBasis( BasisPtr basis, int basisRank, int polyOrder, int cellTopoKey, FSE fs );
 

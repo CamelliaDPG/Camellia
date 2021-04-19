@@ -221,48 +221,96 @@ StokesVGPFormulation::StokesVGPFormulation(Teuchos::ParameterList &parameters)
   VarPtr q;
 
   _vf = VarFactory::varFactory();
-  u1 = _vf->fieldVar(S_U1);
-  u2 = _vf->fieldVar(S_U2);
-  if (spaceDim==3) u3 = _vf->fieldVar(S_U3);
+  if (!_spaceTime)
+  {
+    u1 = _vf->fieldVar(S_U1);
+    u2 = _vf->fieldVar(S_U2);
+    if (spaceDim==3) u3 = _vf->fieldVar(S_U3);
+  }
+  else
+  {
+    u1 = _vf->fieldVarSpaceTime(S_U1);
+    u2 = _vf->fieldVarSpaceTime(S_U2);
+    if (spaceDim==3) u3 = _vf->fieldVarSpaceTime(S_U3);
+  }
 
   vector<VarPtr> u(spaceDim);
   u[0] = u1;
   u[1] = u2;
   if (spaceDim==3) u[2] = u3;
 
-  p = _vf->fieldVar(S_P);
-
   vector<vector<LinearTermPtr>> sigma(spaceDim,vector<LinearTermPtr>(spaceDim));
-  sigma11 = _vf->fieldVar(S_SIGMA11);
-  sigma12 = _vf->fieldVar(S_SIGMA12);
-  sigma21 = _vf->fieldVar(S_SIGMA21);
-  sigma[0][0] = 1.0 * sigma11;
-  sigma[0][1] = 1.0 * sigma12;
-  sigma[1][0] = 1.0 * sigma21;
-  if (!_useStrongConservation || (spaceDim == 3))
+  if (!_spaceTime)
   {
-    sigma22 = _vf->fieldVar(S_SIGMA22);
-    sigma[1][1] = 1.0 * sigma22;
-  }
-  else
-    sigma[1][1] = - sigma11;
-  if (spaceDim==3)
-  {
-    sigma13 = _vf->fieldVar(S_SIGMA13);
-    sigma23 = _vf->fieldVar(S_SIGMA23);
-    sigma31 = _vf->fieldVar(S_SIGMA31);
-    sigma32 = _vf->fieldVar(S_SIGMA32);
-    sigma[0][2] = 1.0 * sigma13;
-    sigma[1][2] = 1.0 * sigma23;
-    sigma[2][0] = 1.0 * sigma31;
-    sigma[2][1] = 1.0 * sigma32;
-    if (!_useStrongConservation)
+    p = _vf->fieldVar(S_P);
+
+    sigma11 = _vf->fieldVar(S_SIGMA11);
+    sigma12 = _vf->fieldVar(S_SIGMA12);
+    sigma21 = _vf->fieldVar(S_SIGMA21);
+    sigma[0][0] = 1.0 * sigma11;
+    sigma[0][1] = 1.0 * sigma12;
+    sigma[1][0] = 1.0 * sigma21;
+    if (!_useStrongConservation || (spaceDim == 3))
     {
-      sigma33 = _vf->fieldVar(S_SIGMA33);
-      sigma[2][2] = 1.0 * sigma33;
+      sigma22 = _vf->fieldVar(S_SIGMA22);
+      sigma[1][1] = 1.0 * sigma22;
     }
     else
-      sigma[2][2] = - sigma11 - sigma22;
+      sigma[1][1] = - sigma11;
+    if (spaceDim==3)
+    {
+      sigma13 = _vf->fieldVar(S_SIGMA13);
+      sigma23 = _vf->fieldVar(S_SIGMA23);
+      sigma31 = _vf->fieldVar(S_SIGMA31);
+      sigma32 = _vf->fieldVar(S_SIGMA32);
+      sigma[0][2] = 1.0 * sigma13;
+      sigma[1][2] = 1.0 * sigma23;
+      sigma[2][0] = 1.0 * sigma31;
+      sigma[2][1] = 1.0 * sigma32;
+      if (!_useStrongConservation)
+      {
+        sigma33 = _vf->fieldVar(S_SIGMA33);
+        sigma[2][2] = 1.0 * sigma33;
+      }
+      else
+        sigma[2][2] = - sigma11 - sigma22;
+    }
+  }
+  else
+  {
+    p = _vf->fieldVarSpaceTime(S_P);
+
+    sigma11 = _vf->fieldVarSpaceTime(S_SIGMA11);
+    sigma12 = _vf->fieldVarSpaceTime(S_SIGMA12);
+    sigma21 = _vf->fieldVarSpaceTime(S_SIGMA21);
+    sigma[0][0] = 1.0 * sigma11;
+    sigma[0][1] = 1.0 * sigma12;
+    sigma[1][0] = 1.0 * sigma21;
+    if (!_useStrongConservation || (spaceDim == 3))
+    {
+      sigma22 = _vf->fieldVarSpaceTime(S_SIGMA22);
+      sigma[1][1] = 1.0 * sigma22;
+    }
+    else
+      sigma[1][1] = - sigma11;
+    if (spaceDim==3)
+    {
+      sigma13 = _vf->fieldVarSpaceTime(S_SIGMA13);
+      sigma23 = _vf->fieldVarSpaceTime(S_SIGMA23);
+      sigma31 = _vf->fieldVarSpaceTime(S_SIGMA31);
+      sigma32 = _vf->fieldVarSpaceTime(S_SIGMA32);
+      sigma[0][2] = 1.0 * sigma13;
+      sigma[1][2] = 1.0 * sigma23;
+      sigma[2][0] = 1.0 * sigma31;
+      sigma[2][1] = 1.0 * sigma32;
+      if (!_useStrongConservation)
+      {
+        sigma33 = _vf->fieldVarSpaceTime(S_SIGMA33);
+        sigma[2][2] = 1.0 * sigma33;
+      }
+      else
+        sigma[2][2] = - sigma11 - sigma22;
+    }
   }
 
   FunctionPtr one = Function::constant(1.0); // reuse Function to take advantage of accelerated BasisReconciliation (probably this is not the cleanest way to do this, but it should work)
@@ -277,7 +325,7 @@ StokesVGPFormulation::StokesVGPFormulation(Teuchos::ParameterList &parameters)
   {
     if (_includeVelocityTracesInFluxTerm)
     {
-      Space uHatSpace = useConformingTraces ? HGRAD_SPACE_L2_TIME : L2;
+      Space uHatSpace = useConformingTraces ? HGRAD : L2;
       if (spaceDim > 0) u1_hat = _vf->traceVarSpaceOnly(S_U1_HAT, one * u1, uHatSpace);
       if (spaceDim > 1) u2_hat = _vf->traceVarSpaceOnly(S_U2_HAT, one * u2, uHatSpace);
       if (spaceDim > 2) u3_hat = _vf->traceVarSpaceOnly(S_U3_HAT, one * u3, uHatSpace);
@@ -285,9 +333,9 @@ StokesVGPFormulation::StokesVGPFormulation(Teuchos::ParameterList &parameters)
     else
     {
       Space uHatSpace = useConformingTraces ? HGRAD : L2;
-      if (spaceDim > 0) u1_hat = _vf->traceVar(S_U1_HAT, one * u1, uHatSpace);
-      if (spaceDim > 1) u2_hat = _vf->traceVar(S_U2_HAT, one * u2, uHatSpace);
-      if (spaceDim > 2) u3_hat = _vf->traceVar(S_U3_HAT, one * u3, uHatSpace);
+      if (spaceDim > 0) u1_hat = _vf->traceVarSpaceTime(S_U1_HAT, one * u1, uHatSpace, uHatSpace);
+      if (spaceDim > 1) u2_hat = _vf->traceVarSpaceTime(S_U2_HAT, one * u2, uHatSpace, uHatSpace);
+      if (spaceDim > 2) u3_hat = _vf->traceVarSpaceTime(S_U3_HAT, one * u3, uHatSpace, uHatSpace);
     }
   }
 
@@ -330,9 +378,9 @@ StokesVGPFormulation::StokesVGPFormulation(Teuchos::ParameterList &parameters)
   {
     if (_includeVelocityTracesInFluxTerm)
     {
-      t1n = _vf->fluxVar(S_TN1_HAT, tn_lt[0]);
-      t2n = _vf->fluxVar(S_TN2_HAT, tn_lt[1]);
-      if (spaceDim == 3) t3n = _vf->fluxVar(S_TN3_HAT, tn_lt[2]);
+      t1n = _vf->fluxVarSpaceTime(S_TN1_HAT, tn_lt[0]);
+      t2n = _vf->fluxVarSpaceTime(S_TN2_HAT, tn_lt[1]);
+      if (spaceDim == 3) t3n = _vf->fluxVarSpaceTime(S_TN3_HAT, tn_lt[2]);
     }
     else
     {
@@ -348,13 +396,26 @@ StokesVGPFormulation::StokesVGPFormulation(Teuchos::ParameterList &parameters)
     if (spaceDim == 3) t3n = _vf->fluxVar(S_TN3_HAT, tn_lt[2]);
   }
 
-  v1 = _vf->testVar(S_V1, HGRAD);
-  v2 = _vf->testVar(S_V2, HGRAD);
-  if (spaceDim == 3) v3 = _vf->testVar(S_V3, HGRAD);
+  if (!_spaceTime)
+  {
+    v1 = _vf->testVar(S_V1, HGRAD);
+    v2 = _vf->testVar(S_V2, HGRAD);
+    if (spaceDim == 3) v3 = _vf->testVar(S_V3, HGRAD);
 
-  tau1 = _vf->testVar(S_TAU1, HDIV);
-  tau2 = _vf->testVar(S_TAU2, HDIV);
-  if (spaceDim == 3) tau3 = _vf->testVar(S_TAU3, HDIV);
+    tau1 = _vf->testVar(S_TAU1, HDIV);
+    tau2 = _vf->testVar(S_TAU2, HDIV);
+    if (spaceDim == 3) tau3 = _vf->testVar(S_TAU3, HDIV);
+  }
+  else
+  {
+    v1 = _vf->testVarSpaceTime(S_V1, HGRAD);
+    v2 = _vf->testVarSpaceTime(S_V2, HGRAD);
+    if (spaceDim == 3) v3 = _vf->testVarSpaceTime(S_V3, HGRAD);
+
+    tau1 = _vf->testVarSpaceTime(S_TAU1, HDIV);
+    tau2 = _vf->testVarSpaceTime(S_TAU2, HDIV);
+    if (spaceDim == 3) tau3 = _vf->testVarSpaceTime(S_TAU3, HDIV);
+  }
 
   // now that we have all our variables defined, process any adjustments
   map<int,VarPtr> trialVars = _vf->trialVars();
@@ -829,14 +890,17 @@ void StokesVGPFormulation::initializeSolution(MeshTopologyPtr meshTopo, int fiel
   MeshPtr mesh;
   if (savedSolutionAndMeshPrefix == "")
   {
-    if (_spaceTime) H1Order.push_back(temporalPolyOrder); // "H1Order" is a bit misleading for space-time; in fact in BasisFactory we ensure that the polynomial order in time is whatever goes in this slot, regardless of function space.  This is disanalogous to what happens in space, so we might want to revisit that at some point.
+    if (_spaceTime) H1Order.push_back(temporalPolyOrder+1);
     mesh = Teuchos::rcp( new Mesh(meshTopo, _stokesBF, H1Order, delta_k, _trialVariablePolyOrderAdjustments) ) ;
+    mesh->setTensorTopologyMeansSpaceTime(_spaceTime);
     _solution = TSolution<double>::solution(mesh,bc);
     if (_timeStepping) _previousSolution = TSolution<double>::solution(mesh,bc);
   }
   else
   {
+#ifdef HAVE_EPETRAEXT_HDF5
     mesh = MeshFactory::loadFromHDF5(_stokesBF, savedSolutionAndMeshPrefix+".mesh");
+    mesh->setTensorTopologyMeansSpaceTime(_spaceTime);
     _solution = TSolution<double>::solution(mesh, bc);
     _solution->loadFromHDF5(savedSolutionAndMeshPrefix+".soln");
     if (_timeStepping)
@@ -844,6 +908,9 @@ void StokesVGPFormulation::initializeSolution(MeshTopologyPtr meshTopo, int fiel
       _previousSolution = TSolution<double>::solution(mesh,bc);
       _previousSolution->loadFromHDF5(savedSolutionAndMeshPrefix+"_previous.soln");
     }
+#else
+    TEUCHOS_TEST_FOR_EXCEPTION(true, std::invalid_argument, "File I/O is not supported when Trilinos was built without EpetraExt_ENABLE_HDF5=ON");
+#endif
   }
 
   RHSPtr rhs = this->rhs(forcingFunction); // in transient case, this will refer to _previousSolution
@@ -871,7 +938,7 @@ void StokesVGPFormulation::initializeSolution(MeshTopologyPtr meshTopo, int fiel
   _time = 0;
   _t->setTime(_time);
 
-  if (_spaceDim==2)
+  if ((_spaceDim==2) && (!_spaceTime))
   {
     // finally, set up a stream function solve for 2D
     _streamFormulation = Teuchos::rcp( new PoissonFormulation(_spaceDim,_useConformingTraces) );
@@ -884,7 +951,11 @@ void StokesVGPFormulation::initializeSolution(MeshTopologyPtr meshTopo, int fiel
     }
     else
     {
+#ifdef HAVE_EPETRAEXT_HDF5
       streamMesh = MeshFactory::loadFromHDF5(_streamFormulation->bf(), savedSolutionAndMeshPrefix+"_stream.mesh");
+#else
+  TEUCHOS_TEST_FOR_EXCEPTION(true, std::invalid_argument, "File I/O is not supported when Trilinos was built without EpetraExt_ENABLE_HDF5=ON");
+#endif
     }
 
     mesh->registerObserver(streamMesh); // refine streamMesh whenever mesh is refined
@@ -920,7 +991,11 @@ void StokesVGPFormulation::initializeSolution(MeshTopologyPtr meshTopo, int fiel
 
     if (savedSolutionAndMeshPrefix != "")
     {
+#ifdef HAVE_EPETRAEXT_HDF5
       _streamSolution->loadFromHDF5(savedSolutionAndMeshPrefix + "_stream.soln");
+#else
+      TEUCHOS_TEST_FOR_EXCEPTION(true, std::invalid_argument, "File I/O is not supported when Trilinos was built without EpetraExt_ENABLE_HDF5=ON");
+#endif
     }
   }
 }
@@ -1171,6 +1246,7 @@ VarPtr StokesVGPFormulation::q() const
 // ! Saves the solution(s) and mesh to an HDF5 format.
 void StokesVGPFormulation::save(std::string prefixString)
 {
+#ifdef HAVE_EPETRAEXT_HDF5
   _solution->mesh()->saveToHDF5(prefixString+".mesh");
   _solution->saveToHDF5(prefixString+".soln");
   if (_timeStepping)
@@ -1182,6 +1258,9 @@ void StokesVGPFormulation::save(std::string prefixString)
     _streamSolution->mesh()->saveToHDF5(prefixString+"_stream.mesh");
     _streamSolution->saveToHDF5(prefixString + "_stream.soln");
   }
+#else
+  TEUCHOS_TEST_FOR_EXCEPTION(true, std::invalid_argument, "File I/O is not supported when Trilinos was built without EpetraExt_ENABLE_HDF5=ON");
+#endif
 }
 
 // ! set current time step used for transient solve

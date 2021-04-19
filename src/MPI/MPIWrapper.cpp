@@ -110,6 +110,13 @@ bool MPIWrapper::globalOr(const Epetra_Comm &Comm, bool value)
 
 Teuchos::RCP<Epetra_Distributor> MPIWrapper::getDistributor(const Epetra_Comm &Comm)
 {
+  const Epetra_SerialComm* serialComm = dynamic_cast<const Epetra_SerialComm*>(&Comm);
+  if (serialComm != NULL)
+  {
+    // distributor does not do the right thing for SerialComm; return null so that client code can handle appropriately.
+    return Teuchos::null;
+  }
+  
   Teuchos::RCP<Epetra_Distributor> distributor;
 #ifdef HAVE_MPI
   const Epetra_MpiComm* mpiComm = dynamic_cast<const Epetra_MpiComm*>(&Comm);
@@ -117,18 +124,6 @@ Teuchos::RCP<Epetra_Distributor> MPIWrapper::getDistributor(const Epetra_Comm &C
   {
     distributor = Teuchos::rcp(new Epetra_MpiDistributor(*mpiComm));
   }
-  else
-  {
-    const Epetra_SerialComm* serialComm = dynamic_cast<const Epetra_SerialComm*>(&Comm);
-    distributor = Teuchos::rcp(new Epetra_SerialDistributor(*serialComm));
-  }
-#else
-  const Epetra_SerialComm* serialComm = dynamic_cast<const Epetra_SerialComm*>(&Comm);
-  if (serialComm == NULL)
-  {
-    TEUCHOS_TEST_FOR_EXCEPTION(true, std::invalid_argument, "_mesh->Comm() is not an instance of Epetra_SerialComm*, even though HAVE_MPI evaluated to false.")
-  }
-  distributor = Teuchos::rcp(new Epetra_SerialDistributor(*serialComm));
 #endif
   return distributor;
 }
@@ -148,12 +143,18 @@ double MPIWrapper::sum(const Camellia::FieldContainer<double> &valuesToSum)
   return sum(mySum);
 }
 
+double MPIWrapper::sum(const Epetra_Comm &Comm, double mySum)
+{
+  double mySumCopy = mySum;
+  Comm.SumAll(&mySumCopy, &mySum, 1);
+  return mySum;
+}
+
 double MPIWrapper::sum(double mySum)
 {
 #ifdef HAVE_MPI
-  double mySumCopy = mySum;
   Epetra_MpiComm Comm(MPI_COMM_WORLD);
-  Comm.SumAll(&mySumCopy, &mySum, 1);
+  return sum(Comm, mySum);
 #else
 #endif
   return mySum;
@@ -184,13 +185,18 @@ int MPIWrapper::sum(const Camellia::FieldContainer<int> &valuesToSum)
   return sum(mySum);
 }
 
+int MPIWrapper::sum(const Epetra_Comm &Comm, int mySum)
+{
+  int mySumCopy = mySum;
+  Comm.SumAll(&mySumCopy, &mySum, 1);
+  return mySum;
+}
+
 int MPIWrapper::sum(int mySum)
 {
 #ifdef HAVE_MPI
-  int mySumCopy = mySum;
   Epetra_MpiComm Comm(MPI_COMM_WORLD);
-  Comm.SumAll(&mySumCopy, &mySum, 1);
-
+  return sum(Comm, mySum);
 #else
 #endif
   return mySum;

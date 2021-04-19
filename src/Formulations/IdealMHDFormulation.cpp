@@ -358,19 +358,25 @@ IdealMHDFormulation::IdealMHDFormulation(MeshTopologyPtr meshTopo, Teuchos::Para
   if (savedSolutionAndMeshPrefix == "")
   {
     mesh = Teuchos::rcp( new Mesh(meshTopo, _bf, H1Order, delta_k, _trialVariablePolyOrderAdjustments) ) ;
+    mesh->setTensorTopologyMeansSpaceTime(useSpaceTime);
     _backgroundFlow = Solution::solution(_bf, mesh, bc);
     _solnIncrement = Solution::solution(_bf, mesh, bc);
     _solnPrevTime = Solution::solution(_bf, mesh, bc);
   }
   else
   {
+#ifdef HAVE_EPETRAEXT_HDF5
     mesh = MeshFactory::loadFromHDF5(_bf, savedSolutionAndMeshPrefix+".mesh");
+    mesh->setTensorTopologyMeansSpaceTime(useSpaceTime);
     _backgroundFlow = Solution::solution(_bf, mesh, bc);
     _solnIncrement = Solution::solution(_bf, mesh, bc);
     _solnPrevTime = Solution::solution(_bf, mesh, bc);
     _backgroundFlow->loadFromHDF5(savedSolutionAndMeshPrefix+".soln");
     _solnIncrement->loadFromHDF5(savedSolutionAndMeshPrefix+"_increment.soln");
     _solnPrevTime->loadFromHDF5(savedSolutionAndMeshPrefix+"_prevtime.soln");
+#else
+    TEUCHOS_TEST_FOR_EXCEPTION(true, std::invalid_argument, "File I/O is not supported when Trilinos was built without EpetraExt_ENABLE_HDF5=ON");
+#endif
   }
   
   std::string backgroundFlowIdentifierExponent = "";

@@ -256,12 +256,11 @@ public:
 void MeshTools::timeSliceExport(std::string dirPath, MeshPtr mesh, TFunctionPtr<double> spaceTimeFunction, std::vector<double> tValues, std::string functionName)
 {
   // user is responsible for ensuring that tValues all generate the same slice.  It's a bit of a burden, but there it is...
-// #ifdef HAVE_EPETRAEXT_HDF5
+#ifdef HAVE_EPETRAEXT_HDF5
   map<GlobalIndexType, GlobalIndexType> cellIDMap;
   int spatialH1Order = mesh->globalDofAssignment()->getInitialH1Order()[0];
   MeshPtr meshSlice =  timeSliceMesh(mesh, tValues[0], cellIDMap, spatialH1Order);
 
-//  cout << "At time " << t << ", slice has " << meshSlice->numActiveElements() << " active elements.\n";
   HDF5Exporter exporter(meshSlice,dirPath);
 
   for (int i=0; i<tValues.size(); i++)
@@ -269,9 +268,9 @@ void MeshTools::timeSliceExport(std::string dirPath, MeshPtr mesh, TFunctionPtr<
     TFunctionPtr<double> sliceFunction = Teuchos::rcp( new SliceFunction(mesh,cellIDMap,spaceTimeFunction,tValues[i]) );
     exporter.exportFunction(sliceFunction, functionName, tValues[i]);
   }
-// #else
-//   cout << "timeSliceExport requires Trilinos/Epetra to be built with HDF5 support.\n";
-// #endif
+#else
+  TEUCHOS_TEST_FOR_EXCEPTION(true, std::invalid_argument, "File I/O is not supported when Trilinos was built without EpetraExt_ENABLE_HDF5=ON");
+#endif
 }
 
 TFunctionPtr<double> MeshTools::timeSliceFunction(MeshPtr spaceTimeMesh, map<GlobalIndexType, GlobalIndexType> &cellIDMap, TFunctionPtr<double> spaceTimeFunction, double t)

@@ -307,6 +307,25 @@ TFunctionPtr<Scalar> SimpleSolutionFunction<Scalar>::dz()
 }
 
 template <typename Scalar>
+TFunctionPtr<Scalar> SimpleSolutionFunction<Scalar>::di(int i)
+{
+  if (_var->op() == Camellia::OP_GRAD)
+  {
+    const int spaceDim = _soln->mesh()->getDimension();
+    std::vector< TFunctionPtr<Scalar> > gradDxComponents;
+    for (int d=0; d<spaceDim; d++)
+    {
+      gradDxComponents.push_back(this->spatialComponent(d+1)->di(i));
+    }
+    return Function::vectorize(gradDxComponents);
+  }
+  else
+  {
+    return TFunction<Scalar>::solution(_var->di(i), _soln, _weightFluxesBySideParity);
+  }
+}
+
+template <typename Scalar>
 TFunctionPtr<Scalar> SimpleSolutionFunction<Scalar>::grad(int spaceDim)
 {
   if (_var->op() == Camellia::OP_VALUE)

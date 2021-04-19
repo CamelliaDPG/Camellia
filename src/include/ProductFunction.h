@@ -42,6 +42,8 @@ public:
   TFunctionPtr<Scalar> dy() override;
   TFunctionPtr<Scalar> dz() override;
   TFunctionPtr<Scalar> dt() override;
+  
+  TFunctionPtr<Scalar> di(int i) override; // 1 for dx(), 2 for dy(), 3 for dz()
 
   bool isZero(BasisCachePtr basisCache) override;
   
