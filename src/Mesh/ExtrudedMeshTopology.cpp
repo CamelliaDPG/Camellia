@@ -79,7 +79,7 @@ namespace Camellia
       const double leastCoord = startCoords[d];
       const double maxCoord   = extents[d] + leastCoord;
       const int numElements   = initialSubdivisions[d];
-      _extrusionMeshTopologies[d] = MeshFactory::intervalMeshTopology(leastCoord, maxCoord, numElements, this->getPeriodicBCs());
+      _extrusionMeshTopologies[d] = MeshFactory::intervalMeshTopology(leastCoord, maxCoord, numElements);
       vertexMultiplier *= 2;
       
       Kokkos::View<IndexType*,Kokkos::HostSpace> cellIndexView("1D Cells View", numElements);
@@ -341,12 +341,6 @@ namespace Camellia
     for (auto refObserver : _refinementObservers)
     {
       refObserver->didHRefine(thisPtr, cellIndexSet, refPattern, didRepartitionAndRebuild);
-    }
-    
-    if (this->_gda != NULL)
-    {
-      // it would be better to repartition and rebuild after *all* refinements are done
-      this->_gda->getMesh()->repartitionAndRebuild();
     }
   }
   

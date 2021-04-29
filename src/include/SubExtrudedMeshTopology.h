@@ -151,6 +151,8 @@ namespace Camellia {
     virtual MeshTopologyPtr getGatheredCopy(const std::set<IndexType> &cellsToInclude) const override;
     
     virtual const std::vector< Teuchos::RCP<PeriodicBC> > & getPeriodicBCs() const override;
+    
+    static Teuchos::RCP<SubExtrudedMeshTopology> subExtrudedMeshTopology(MeshTopologyViewPtr extrudedMeshTopo, int extrusionDimensionNumber);
   };
 
   IndexType packSideEntityIndexForSubExtrudedMeshTopology(const IndexType &physicalCellIndex, const IndexType &extrusionCellIndex,

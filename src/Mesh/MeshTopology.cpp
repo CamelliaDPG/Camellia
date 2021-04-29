@@ -952,7 +952,8 @@ vector<IndexType> MeshTopology::getCanonicalEntityNodesViaPeriodicBCs(unsigned d
       auto foundVertexIt = _canonicalVertexPeriodic.find(vertexIndex);
       if (foundVertexIt != _canonicalVertexPeriodic.end())
       {
-        return {foundVertexIt->second};
+        const auto & canonicalVertexIndex = foundVertexIt->second;
+        return {canonicalVertexIndex};
       }
       else
       {
@@ -1224,20 +1225,56 @@ CellPtr MeshTopology::findCellWithVertices(const vector< vector<double> > &cellV
     // otherwise, vertexIndex has been populated
     vertexIndices.push_back(vertexIndex);
 
-    set< pair<IndexType, unsigned> > matchingCellPairs = getCellsContainingEntity(vertexDim, vertexIndex);
-    set<IndexType> matchingCellsIntersection;
-    for (set< pair<IndexType, unsigned> >::iterator cellPairIt = matchingCellPairs.begin(); cellPairIt != matchingCellPairs.end(); cellPairIt++)
+    set< pair<IndexType, unsigned> > matchingLeafCellPairs = getCellsContainingEntity(vertexDim, vertexIndex);
+    
+    // getCellsContainingEntity() only returns the most refined cells that contain that entity; let's add any ancestors of those cells that contain the vertex
+    set<IndexType> matchingCellsForVertex;
+    for (const auto & leafEntry : matchingLeafCellPairs)
     {
-      IndexType cellID = cellPairIt->first;
+      const auto & cellID = leafEntry.first;
+      
+      CellPtr ancestralCell = getCell(cellID);
+      while (ancestralCell != Teuchos::null)
+      {
+        // when periodic BCs are in play, getCellsContainingEntity() returns matches on the other side of the BC from the specified coordinate
+        // we don't want findCellWithVertices() to include such matches.
+        // similarly, once we hit an ancestor that doesn't include the vertex, no further ancestors will include the vertex, so we can break out.
+        bool foundVertexInCell = false;
+      
+        const vector<IndexType> & cellVertices = ancestralCell->vertices();
+        for (auto &cellVertexIndex : cellVertices)
+        {
+          if (vertexIndex == cellVertexIndex)
+          {
+            foundVertexInCell = true;
+            break;
+          }
+        }
+        
+        if (foundVertexInCell)
+        {
+          matchingCellsForVertex.insert(ancestralCell->cellIndex());
+          ancestralCell = ancestralCell->getParent();
+        }
+        else
+        {
+          break; // if the leaf cell's vertex was not found in ancestralCell, no ancestors of ancestralCell will contain that vertex, either
+        }
+      }
+    }
+    
+    set<IndexType> matchingCellsIntersection;
+    for (const auto &vertexMatchingCellID : matchingCellsForVertex)
+    {
       if (firstVertex)
       {
-        matchingCellsIntersection.insert(cellID);
+        matchingCellsIntersection.insert(vertexMatchingCellID);
       }
       else
       {
-        if (matchingCells.find(cellID) != matchingCells.end())
+        if (matchingCells.find(vertexMatchingCellID) != matchingCells.end())
         {
-          matchingCellsIntersection.insert(cellID);
+          matchingCellsIntersection.insert(vertexMatchingCellID);
         }
       }
     }

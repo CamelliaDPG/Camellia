@@ -10,7 +10,7 @@
 #include "Boltzmann1D1VFormulation.h" // defines getTensorPointOrdinal()
 #include "GlobalDofAssignment.h"
 #include "MeshFactory.h"
-#include "PhasePhysicalMeshMap1D1V.h"
+#include "PhasePhysicalMeshMap.h"
 #include "PoissonFormulation.h"
 
 #include "Teuchos_LocalTestingHelpers.hpp"
@@ -19,33 +19,39 @@
 
 using namespace Camellia;
 
-MeshPtr poissonUniformMesh(vector<int> elementWidths, int H1Order, bool useConformingTraces)
+Boltzmann1D1VFormulation boltzmannFormulationUniformMesh(vector<int> elementWidths, int H1Order)
 {
-  int spaceDim = elementWidths.size();
-  int testSpaceEnrichment = spaceDim; //
-  double span = 1.0; // in each spatial dimension
+  const double q = 1.0;
+  const double eps0 = 1.0;
+  const double m = 1.0;
+  const double dt = 0.1;
+  const double x0 = 0.0;
+  const double v0 = 0.0;
+  const double xWidth = 1.0;
+  const double vWidth = 1.0;
+  const double xElements = elementWidths[0];
+  const double vElements = elementWidths[1];
+  const int delta_k = 1;
+  const bool usePeriodicBCs = true;
   
-  vector<double> dimensions(spaceDim,span);
+  auto formulationChoice = Boltzmann1D1VFormulation::ULTRAWEAK_IMPLICIT_L2_TRACE;
   
-  PoissonFormulation poissonForm(spaceDim, useConformingTraces);
+  Boltzmann1D1VFormulation form(formulationChoice, q, eps0, m, dt,
+                                x0, xWidth, xElements,
+                                v0, vWidth, vElements,
+                                H1Order, delta_k, usePeriodicBCs, Teuchos::null);
   
-  vector<double> x0(spaceDim, 0.0);
-  map<int,int> emptyOrderEnhancementsMap;
-  Epetra_CommPtr nullComm = Teuchos::null;
-  bool allowMeshTopologyPruning = (spaceDim == 2); // we allow pruning the phase space mesh, but not the physical mesh
-  
-  MeshPtr mesh = MeshFactory::rectilinearMesh(poissonForm.bf(), dimensions, elementWidths, H1Order, testSpaceEnrichment, x0, emptyOrderEnhancementsMap, emptyOrderEnhancementsMap, nullComm, allowMeshTopologyPruning);
-  return mesh;
+  return form;
 }
 
-void testPhysicalPointsAgree(const PhasePhysicalMeshMap1D1V &phasePhysicalMap, Teuchos::FancyOStream &out, bool &success)
+void testPhysicalPointsAgree(const PhasePhysicalMeshMap &phasePhysicalMap, Teuchos::FancyOStream &out, bool &success)
 {
   // test each active phase space element, both volume and side BasisCache
   const int quadratureEnrichment = 2;
   const bool testVsTest = false;
   
-  auto mesh_1D = phasePhysicalMap.mesh1D();
-  auto mesh_2D = phasePhysicalMap.mesh2D();
+  auto mesh_1D = phasePhysicalMap.physicalMesh();
+  auto mesh_2D = phasePhysicalMap.phaseMesh();
   
   auto phaseSpaceCellIDs = mesh_2D->cellIDsInPartition();
   
@@ -72,6 +78,17 @@ void testPhysicalPointsAgree(const PhasePhysicalMeshMap1D1V &phasePhysicalMap, T
       basisCache1DQuadratureEnrichment = quadratureEnrichment + (maxTestDegree2D + maxTrialDegree2D) - (maxTestDegree1D + maxTrialDegree1D);;
     }
   }
+//  int basisCache1DQuadratureEnrichment;
+//  if (testVsTest)
+//  {
+//    // test order in both 1D and 2D meshes is relative to the H^1 order, which will match in both
+//    basisCache1DQuadratureEnrichment = quadratureEnrichment;
+//  }
+//  else
+//  {
+//    // trial order is 1 higher in 2D mesh because the t_n_hat/f_hat discretization has order matching H1Order
+//    basisCache1DQuadratureEnrichment = quadratureEnrichment + 1;
+//  }
   
   const set<GlobalIndexType> physicalCellIDs = phasePhysicalMap.physicalCellIDsForPhaseSpaceCells(phaseSpaceCellIDs);
   
@@ -99,15 +116,17 @@ void testPhysicalPointsAgree(const PhasePhysicalMeshMap1D1V &phasePhysicalMap, T
         basisCache = phaseSpaceVolumeCache->getSideBasisCache(phaseSpaceSideOrdinal);
       }
       
-      int physicalSpaceSideOrdinal = -1;
-      if (phaseSpaceSideOrdinal == 1)
+      int physicalSpaceSideOrdinal;
+      auto line_x_line = CellTopology::cellTopology(CellTopology::line(), 1);
+      if (line_x_line->sideIsSpatial(phaseSpaceSideOrdinal))
       {
-        physicalSpaceSideOrdinal = 1;
+        physicalSpaceSideOrdinal = line_x_line->getSpatialComponentSideOrdinal(phaseSpaceSideOrdinal);
       }
-      else if (phaseSpaceSideOrdinal == 3)
+      else
       {
-        physicalSpaceSideOrdinal = 0;
+        physicalSpaceSideOrdinal = -1;
       }
+      
       const bool inPhysicalVolume = (physicalSpaceSideOrdinal == -1);
       auto physicalPointIterator = phasePhysicalMap.getPhysicalPointIterator(basisCache, phaseSpaceCellID, physicalBasisCachePairs);
       
@@ -180,14 +199,16 @@ TEUCHOS_UNIT_TEST( PhasePhysicalMeshMap1D1V, RefinedMeshes )
 {
   const int meshWidth = 2;
   const int H1Order = 2;
-  const bool useConformingTraces = true;
-  MeshPtr mesh_1D = poissonUniformMesh({meshWidth}, H1Order, useConformingTraces);
-  MeshPtr mesh_2D = poissonUniformMesh({meshWidth, meshWidth}, H1Order, useConformingTraces);
+  auto form = boltzmannFormulationUniformMesh({meshWidth,meshWidth}, H1Order);
+  MeshPtr mesh_1D = form.gaussMesh();
+  MeshPtr mesh_2D = form.boltzmannMesh();
   
-  PhasePhysicalMeshMap1D1V phasePhysicalMap(mesh_1D, mesh_2D);
+  PhasePhysicalMeshMap phasePhysicalMap(mesh_1D, mesh_2D);
   
   std::set<GlobalIndexType> cellsToRefine2D {0};
-  mesh_2D->hRefine(cellsToRefine2D, RefinementPattern::regularRefinementPatternQuad());
+  auto line_x_line = CellTopology::cellTopology(CellTopology::line(), 1);
+  auto refPattern = RefinementPattern::regularRefinementPattern(line_x_line->getKey());
+  mesh_2D->hRefine(cellsToRefine2D, refPattern);
   
   // the 1D mesh should be automatically refined by phasePhysicalMap; confirm this:
   TEST_EQUALITY(meshWidth+1, mesh_1D->numActiveElements());
@@ -199,11 +220,11 @@ TEUCHOS_UNIT_TEST( PhasePhysicalMeshMap1D1V, UniformMeshes )
 {
   const int meshWidth = 2;
   const int H1Order = 2;
-  const bool useConformingTraces = true;
-  MeshPtr mesh_1D = poissonUniformMesh({meshWidth}, H1Order, useConformingTraces);
-  MeshPtr mesh_2D = poissonUniformMesh({meshWidth, meshWidth}, H1Order, useConformingTraces);
+  auto form = boltzmannFormulationUniformMesh({meshWidth,meshWidth}, H1Order);
+  MeshPtr mesh_1D = form.gaussMesh();
+  MeshPtr mesh_2D = form.boltzmannMesh();
   
-  PhasePhysicalMeshMap1D1V phasePhysicalMap(mesh_1D, mesh_2D);
+  PhasePhysicalMeshMap phasePhysicalMap(mesh_1D, mesh_2D);
   
   testPhysicalPointsAgree(phasePhysicalMap, out, success);
 }
@@ -212,14 +233,24 @@ TEUCHOS_UNIT_TEST( PhasePhysicalMeshMap1D1V, UnrefinedMeshes )
 {
   const int meshWidth = 2;
   const int H1Order = 2;
-  const bool useConformingTraces = true;
-  MeshPtr mesh_1D = poissonUniformMesh({meshWidth}, H1Order, useConformingTraces);
-  MeshPtr mesh_2D = poissonUniformMesh({meshWidth, meshWidth}, H1Order, useConformingTraces);
+  auto form = boltzmannFormulationUniformMesh({meshWidth,meshWidth}, H1Order);
+  MeshPtr mesh_1D = form.gaussMesh();
+  MeshPtr mesh_2D = form.boltzmannMesh();
   
-  PhasePhysicalMeshMap1D1V phasePhysicalMap(mesh_1D, mesh_2D);
+  PhasePhysicalMeshMap phasePhysicalMap(mesh_1D, mesh_2D);
   
-  std::set<GlobalIndexType> cellsToRefine2D {0,1};
-  mesh_2D->hRefine(cellsToRefine2D, RefinementPattern::regularRefinementPatternQuad());
+  // refine two cells in the phase space mesh, each corresponding to the leftmost physical element
+  const double x_centroid = 0.25; // two physical elements, total mesh width of 1.0
+  using std::vector;
+  vector<double> bottomCell {x_centroid, 0.25}; // phase space mesh has extent of two cells in v dimension, with span 1.0
+  vector<double> topCell    {x_centroid, 0.75};
+  
+  vector<vector<double>> cellCentroids {bottomCell, topCell};
+  vector<GlobalIndexType> cellsToRefine2D = mesh_2D->getTopology()->cellIDsWithCentroids(cellCentroids);
+
+  auto line_x_line = CellTopology::cellTopology(CellTopology::line(), 1);
+  auto refPattern = RefinementPattern::regularRefinementPattern(line_x_line->getKey());
+  mesh_2D->hRefine(cellsToRefine2D, refPattern);
   
   // the 1D mesh should be automatically refined by phasePhysicalMap; confirm this:
   TEST_EQUALITY(meshWidth+1, mesh_1D->numActiveElements());

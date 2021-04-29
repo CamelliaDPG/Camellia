@@ -133,14 +133,7 @@ namespace
     std::vector<double> v0         (numTensorExtrusions, 0.0);
     std::vector<double> vWidths    (numTensorExtrusions, 0.5);
     std::vector<int>    vMeshWidths(numTensorExtrusions, 1);
-    MeshTopologyPtr extrudedMeshTopology = baseMeshTopology;
-    for (int d=0; d<numTensorExtrusions; d++)
-    {
-      const double v0_d    = v0[d];
-      const double v1_d    = v0[d] + vWidths[d];
-      const int vMeshWidth = vMeshWidths[d];
-      extrudedMeshTopology = MeshFactory::extrudedMeshTopology(extrudedMeshTopology, v0_d, v1_d, vMeshWidth);
-    }
+    MeshTopologyPtr extrudedMeshTopology = MeshFactory::extrudedMeshTopology(baseMeshTopology, v0, vWidths, vMeshWidths);
     
     ////////////////////   DECLARE VARIABLES   ///////////////////////
     // define test variables
@@ -1615,12 +1608,12 @@ namespace
     
     // define a VarFactory with just a trace variable, and an HGRAD test
     VarFactoryPtr vf = VarFactory::varFactory();
-    VarPtr v = vf->testVar("v", HGRAD);
+    VarPtr v = vf->testVarSpaceTime("v", HGRAD, HGRAD);
     VarPtr uhat;
     if (traceOrFlux == TRACE)
-      uhat = vf->traceVar("uhat");
+      uhat = vf->traceVarSpaceTime("uhat");
     else if (traceOrFlux == FLUX)
-      uhat = vf->fluxVar("u_n");
+      uhat = vf->fluxVarSpaceTime("u_n");
     
     BFPtr bf = BF::bf(vf);
     
@@ -1634,6 +1627,7 @@ namespace
     meshTopo->addCell(spaceTimeTopo, refCellNodes);
     
     MeshPtr mesh = Teuchos::rcp( new Mesh (meshTopo, bf, H1Order, pToAdd) );
+    mesh->setTensorTopologyMeansSpaceTime(true);
     
     SolutionPtr soln = Solution::solution(mesh);
     map<int, FunctionPtr > functionMap;
@@ -2068,6 +2062,7 @@ namespace
     ////////////////////   BUILD MESH   ///////////////////////
     int H1Order = 3, pToAdd = 1;
     MeshPtr spaceTimeMesh = Teuchos::rcp( new Mesh (spaceTimeMeshTopology, bf, H1Order, pToAdd) );
+    spaceTimeMesh->setTensorTopologyMeansSpaceTime(true);
     
     SolutionPtr spaceTimeSolution = Solution::solution(spaceTimeMesh);
     

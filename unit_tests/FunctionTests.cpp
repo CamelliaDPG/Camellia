@@ -29,7 +29,8 @@ void testSpaceTimeNormalTimeComponent(CellTopoPtr spaceTopo, Teuchos::FancyOStre
   CellTopoPtr spaceTimeTopo = CellTopology::cellTopology(spaceTopo, 1);
   int cubatureDegree = 1;
   bool createSideCache = true;
-  BasisCachePtr spaceTimeBasisCache = BasisCache::basisCacheForReferenceCell(spaceTimeTopo, cubatureDegree, createSideCache);
+  const bool tensorTopologyMeansSpaceTime = true;
+  BasisCachePtr spaceTimeBasisCache = BasisCache::basisCacheForReferenceCell(spaceTimeTopo, cubatureDegree, createSideCache, tensorTopologyMeansSpaceTime);
   FunctionPtr spaceTimeNormalComponent = Function::normalSpaceTime()->t();
   for (int sideOrdinal=0; sideOrdinal<spaceTimeTopo->getSideCount(); sideOrdinal++)
   {
@@ -99,7 +100,8 @@ void testSpaceTimeIntegrateByPartsInTime(CellTopoPtr spaceTopo, FunctionPtr f, T
   bool createSideCache = true;
   double spaceNodeScaling = 0.5;
   double spaceNodeTranslation = 0.5; // scale, then translate
-  BasisCachePtr spaceTimeBasisCache = BasisCache::basisCacheForReferenceCell(spaceTimeTopo, cubatureDegree, createSideCache);
+  const bool tensorTopologyMeansSpaceTime = true;
+  BasisCachePtr spaceTimeBasisCache = BasisCache::basisCacheForReferenceCell(spaceTimeTopo, cubatureDegree, createSideCache, tensorTopologyMeansSpaceTime);
   Camellia::FieldContainer<double> physicalNodesSpaceTime = getScaledTranslatedRefNodes(spaceTimeTopo, spaceNodeScaling, spaceNodeTranslation);
   double t0 = 0.0, t1 = 1.0;
   setTemporalNodes(spaceTimeTopo,physicalNodesSpaceTime,t0,t1);
@@ -161,7 +163,8 @@ void testSpaceTimeNormal(CellTopoPtr spaceTopo, Teuchos::FancyOStream &out, bool
   int cubatureDegree = 1;
   bool createSideCache = true;
   BasisCachePtr spaceBasisCache = BasisCache::basisCacheForReferenceCell(spaceTopo, cubatureDegree, createSideCache);
-  BasisCachePtr spaceTimeBasisCache = BasisCache::basisCacheForReferenceCell(spaceTimeTopo, cubatureDegree, createSideCache);
+  const bool tensorTopologyMeansSpaceTime = true;
+  BasisCachePtr spaceTimeBasisCache = BasisCache::basisCacheForReferenceCell(spaceTimeTopo, cubatureDegree, createSideCache, tensorTopologyMeansSpaceTime);
   FunctionPtr spaceTimeNormal = Function::normalSpaceTime();
   FunctionPtr spaceNormal = Function::normal();
   for (int sideOrdinal=0; sideOrdinal<spaceTimeTopo->getSideCount(); sideOrdinal++)
@@ -1084,6 +1087,12 @@ TEUCHOS_UNIT_TEST( Function, ValuesDevicePath )
         break;
       case Camellia::DIVIDE:
         expectedValue = existingValue / constantValue;
+        break;
+      case Camellia::MINIMUM:
+        expectedValue = (existingValue < constantValue) ? existingValue : constantValue;
+        break;
+      case Camellia::MAXIMUM:
+        expectedValue = (existingValue > constantValue) ? existingValue : constantValue;
     }
     auto fc = FieldContainer<double>(dim0,dim1);
     auto fcView = fc.checkoutDeviceView(false); // false: don't copy from host

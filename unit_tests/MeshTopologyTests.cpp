@@ -888,7 +888,7 @@ TEUCHOS_UNIT_TEST(MeshTopology, GetRootMeshTopology)
     
     IndexType leftCellIndex = 0, rightCellIndex = 1;
     
-    MeshTopologyPtr meshTopoExtruded = MeshFactory::extrudedMeshTopology(meshTopo, 0.0, 1.0, 1);
+    MeshTopologyPtr meshTopoExtruded = MeshFactory::extrudedMeshTopology(meshTopo, {0.0}, {1.0}, {1});
     // cell numbering remains the same, since extent in extruded dimension is 1
     
     CellPtr leftCell  = meshTopoExtruded->getCell(leftCellIndex);

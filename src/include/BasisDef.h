@@ -29,6 +29,23 @@ Basis<Scalar,ArrayScalar>::Basis()
 }
 
 template<class Scalar, class ArrayScalar>
+Intrepid2::BasisValues<Scalar,Camellia::DeviceExecutionSpace> Basis<Scalar,ArrayScalar>::allocateBasisValues( Intrepid2::TensorPoints<Scalar,ExecSpaceType> points,
+                                                                                                             const Intrepid2::EOperator op) const
+{
+  // base implementation throws exception; Intrepid2BasisWrapper overrides
+  TEUCHOS_TEST_FOR_EXCEPTION(true, std::invalid_argument, "This is only valid for Intrepid2 bases");
+}
+
+template<class Scalar, class ArrayScalar>
+void Basis<Scalar,ArrayScalar>::getValues( Intrepid2::BasisValues<Scalar,ExecSpaceType> outputValues,
+                                          const Intrepid2::TensorPoints<Scalar,ExecSpaceType>  inputPoints,
+                                          const Intrepid2::EOperator op ) const
+{
+  // base implementation throws exception; Intrepid2BasisWrapper overrides
+  TEUCHOS_TEST_FOR_EXCEPTION(true, std::invalid_argument, "This is only valid for Intrepid2 bases");
+}
+
+template<class Scalar, class ArrayScalar>
 void Basis<Scalar,ArrayScalar>::CHECK_VALUES_ARGUMENTS(const ArrayScalar &values, const ArrayScalar &refPoints, Intrepid::EOperator operatorType) const
 {
   // for VALUE, GRAD, and DIV, we can say what happens to the rank:

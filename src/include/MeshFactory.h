@@ -71,8 +71,10 @@ public:
                                      int horizontalElements, int verticalElements,
                                      TBFPtr<double> bilinearForm,
                                      int H1Order, int pTest, bool useConformingTraces);
-
-  static MeshTopologyPtr extrudedMeshTopology(MeshTopologyPtr baseMeshTopology, double v0, double v1, int divisionsInNewDimension=1);
+  
+//  static MeshTopologyPtr extrudedMeshTopology(MeshTopologyPtr baseMeshTopology, double v0, double vWidth, int numSubdivisions);
+  
+  static MeshTopologyPtr extrudedMeshTopology(MeshTopologyPtr baseMeshTopology, std::vector<double> extrusionStartCoords, std::vector<double> extrusionExtents, std::vector<int> extrusionSubdivisions);
   
   static MeshTopologyPtr importMOABMesh(string filePath, bool readInParallel=false);
   

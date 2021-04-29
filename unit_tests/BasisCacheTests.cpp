@@ -257,8 +257,9 @@ TEUCHOS_UNIT_TEST( BasisCache, SideNormals_SpaceTime )
     int cubatureDegree = 3;
 
     bool createSideCache = true;
-    BasisCachePtr volumeCacheSpaceTime = BasisCache::basisCacheForReferenceCell(cellTopo, cubatureDegree, createSideCache);
-    BasisCachePtr volumeCacheSpace = BasisCache::basisCacheForReferenceCell(shardsTopo, cubatureDegree, createSideCache);
+    const bool tensorTopologyMeansSpaceTime = true;
+    BasisCachePtr volumeCacheSpaceTime = BasisCache::basisCacheForReferenceCell(cellTopo, cubatureDegree, createSideCache, tensorTopologyMeansSpaceTime);
+    BasisCachePtr volumeCacheSpace = BasisCache::basisCacheForReferenceCell(shardsTopo, cubatureDegree, createSideCache, tensorTopologyMeansSpaceTime);
 
     // for reference cells, we expect the space-time normals to go as follows:
     //   - the first shardsTopo->getSideCount() sides will have normals identical to shardsTopo in its reference space, padded with 0 in time dimension

@@ -165,13 +165,13 @@ protected:
   ScratchStorageCache<double> _doubleScratchStorageCache; // for now, we only support double.  Could add support for int, complex, float, etc.
 public:
   BasisCache(ElementTypePtr elemType, MeshPtr mesh = Teuchos::rcp( (Mesh*) NULL ), bool testVsTest=false,
-             int cubatureDegreeEnrichment = 0, bool tensorProductTopologyMeansSpaceTime = true); // use testVsTest=true for test space inner product
+             int cubatureDegreeEnrichment = 0, bool tensorProductTopologyMeansSpaceTime = false); // use testVsTest=true for test space inner product
 
-  BasisCache(CellTopoPtr cellTopo, int cubDegree, bool createSideCacheToo, bool tensorProductTopologyMeansSpaceTime=true);
+  BasisCache(CellTopoPtr cellTopo, int cubDegree, bool createSideCacheToo, bool tensorProductTopologyMeansSpaceTime=false);
   BasisCache(shards::CellTopology &cellTopo, int cubDegree, bool createSideCacheToo);
 
   BasisCache(const Camellia::FieldContainer<double> &physicalCellNodes, shards::CellTopology &cellTopo, int cubDegree, bool createSideCacheToo = false);
-  BasisCache(const Camellia::FieldContainer<double> &physicalCellNodes, CellTopoPtr cellTopo, int cubDegree, bool createSideCacheToo = false, bool tensorProductTopologyMeansSpaceTime=true);
+  BasisCache(const Camellia::FieldContainer<double> &physicalCellNodes, CellTopoPtr cellTopo, int cubDegree, bool createSideCacheToo = false, bool tensorProductTopologyMeansSpaceTime=false);
   
   // lighter weight volume constructor:
   BasisCache(const Camellia::FieldContainer<double> &physicalCellNodes, CellTopoPtr cellTopo,
@@ -181,7 +181,7 @@ public:
              const Camellia::FieldContainer<double> &cubWeights, int cubatureDegree = 0);
 
   BasisCache(const Camellia::FieldContainer<double> &physicalCellNodes, CellTopoPtr cellTopo,
-             DofOrdering &trialOrdering, int maxTestDegree, bool createSideCacheToo = false, bool tensorProductTopologyMeansSpaceTime=true);
+             DofOrdering &trialOrdering, int maxTestDegree, bool createSideCacheToo = false, bool tensorProductTopologyMeansSpaceTime=false);
   BasisCache(const Camellia::FieldContainer<double> &physicalCellNodes, shards::CellTopology &cellTopo,
              DofOrdering &trialOrdering, int maxTestDegree, bool createSideCacheToo = false);
   
@@ -308,7 +308,7 @@ public:
   static BasisCachePtr basisCache1D(double x0, double x1, int cubatureDegree); // x0 and x1: physical space endpoints
   static BasisCachePtr basisCacheForCell(ConstMeshTopologyViewPtr meshTopology, GlobalIndexType cellID, ElementTypePtr elemType,
                                          bool testVsTest = false, int cubatureDegreeEnrichment = 0,
-                                         bool tensorProductTopologyMeansSpaceTime=true);
+                                         bool tensorProductTopologyMeansSpaceTime=false);
   static BasisCachePtr basisCacheForCell(MeshPtr mesh, GlobalIndexType cellID, bool testVsTest = false,
                                          int cubatureDegreeEnrichment = 0);
   //! bottleneck basisCacheForCell method:
@@ -322,14 +322,14 @@ public:
   static BasisCachePtr basisCacheForCellTopology(CellTopoPtr cellTopo, int cubatureDegree,
                                                  const Camellia::FieldContainer<double> &physicalCellNodes,
                                                  bool createSideCacheToo=false,
-                                                 bool tensorProductTopologyMeansSpaceTime=true);
+                                                 bool tensorProductTopologyMeansSpaceTime=false);
 
   static BasisCachePtr basisCacheForReferenceCell(CellTopoPtr cellTopo, int cubatureDegree, bool createSideCacheToo=false,
-                                                  bool tensorProductTopologyMeansSpaceTime=true);
+                                                  bool tensorProductTopologyMeansSpaceTime=false);
   static BasisCachePtr basisCacheForRefinedReferenceCell(CellTopoPtr cellTopo, int cubatureDegree, RefinementBranch refinementBranch,
-                                                         bool createSideCacheToo=false, bool tensorProductTopologyMeansSpaceTime=true);
+                                                         bool createSideCacheToo=false, bool tensorProductTopologyMeansSpaceTime=false);
   
-  static BasisCachePtr basisCacheForRefinedReferenceCell(int cubatureDegree, RefinementBranch refinementBranch, bool createSideCacheToo = false, bool tensorProductTopologyMeansSpaceTime=true);
+  static BasisCachePtr basisCacheForRefinedReferenceCell(int cubatureDegree, RefinementBranch refinementBranch, bool createSideCacheToo = false, bool tensorProductTopologyMeansSpaceTime=false);
 
   static BasisCachePtr quadBasisCache(double width, double height, int cubDegree, bool createSideCacheToo=false);
 

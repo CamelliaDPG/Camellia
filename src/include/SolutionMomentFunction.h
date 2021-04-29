@@ -79,6 +79,15 @@ namespace Camellia
   public:
     SolutionMomentFunction(SolutionPtr phaseSpaceSoln, VarPtr fieldVar, int momentNumber, MeshPtr physicalMesh, int survivingExtrusionDimension = -1);
     
+    //! Returns the mesh on which the SolutionMomentFunction is defined — may be the physical mesh, or the physical mesh extruded.
+    MeshPtr mesh();
+    
+    //! returns the cell index in the basisCoefficients container corresponding to the specified cellID, or -1 if the cellID is not owned by this MPI rank.
+    int localCellOrdinal(const IndexType &cellID) const;
+    
+    //! A (C,F) container containing the coefficients for locally-owned cells.  See localCellOrdinal().
+    const BasisIntegralView basisCoefficients() const;
+    
     //! recomputes coefficients on (extruded) spatial mesh.  MPI collective method.
     void updateValues();
     

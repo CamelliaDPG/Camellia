@@ -13,6 +13,7 @@
 #include "CamelliaMemoryTools.h"
 #include "CubatureFactory.h"
 #include "ERKTableau.h"
+#include "ExtrudedMeshTopology.h"
 #include "GlobalDofAssignment.h"
 #include "GMGSolver.h"
 #include "MeshFactory.h"
@@ -35,302 +36,6 @@ const string Boltzmann1D1VFormulation::S_E_HAT = "\\widehat{E}";
 const string Boltzmann1D1VFormulation::S_W = "w";
 const string Boltzmann1D1VFormulation::S_TAU = "\\tau";
 
-// defines a function on the spatial (1D) mesh by integrating the 1D1V function in the velocity dimension
-class VelocitySpace1DIntegral : public QuadraturePointFunction
-{
-  MeshPtr     _spatialMesh;
-  SolutionPtr _phaseSpaceSolution;
-  FunctionPtr _distributionFunction; // f from the phase space solution
-  VarPtr      _f;
-  
-  const int _numMoments   = 1; // hard-coded thus for now; we'll support more moments in the future.
-  
-  int _numPoints1D;
-  
-  std::map<GlobalIndexType, std::vector<GlobalIndexType> > _spatialCellIDToPhaseSpaceCellIDs;
-  Teuchos::RCP<PhasePhysicalMeshMap1D1V> phaseSpacePhysicalMeshMap;
-  
-  //! _basisIntegrals has shape (M,Ps,F,Px), where:
-  //! - M is the zero-based moment ordinal (0 is the first moment)
-  //! - Ps is the point set number (0 for equal-width physical cell; others follow, details still to be worked out)
-  //! - F is the phase space basis ordinal -- we assume uniform cell geometry; when we relax this we'll need something more complicated, but may want to retain the ability to specify where geometry is the same..
-  //! - Px is the ordinal of the point in the 1D quadrature rule
-  //! Note that the integrals are *relative*; they should be multiplied by the cell height to get the true integral (in 2V, 3V, this generalizes to the velocity space measure).  (The transformation for moments beyond the first is more complex, but it should be possible to construct such a transformation.)
-  FieldContainer<double> _basisIntegrals;
-  Teuchos::RCP<PhasePhysicalMeshMap1D1V> _phaseSpacePhysicalMeshMap;
-  
-  std::map< std::pair<int,int>, int> _pointSetNumbers; // (unrefinementLevel,uniformDescendantNumber) --> point set number (2nd index in _basisIntegrals)
-  
-  std::map< int, int > _physicalCellIDToLocalCellOrdinal;
-  FieldContainer<double> _physicalValuesAtQuadraturePoints; // shape: (C,M,Px)
-  
-  void updateBasisIntegrals()
-  {
-    // examine sample spatial cell to get spatial quadrature degree (we assume this is uniform)
-    const GlobalIndexType sampleSpatialCellID = 0;
-    BasisCachePtr sampleSpatialBasisCache = BasisCache::basisCacheForCell(_spatialMesh, sampleSpatialCellID);
-    const int spatialQuadratureDegree = sampleSpatialBasisCache->cubatureDegree();
-    _numPoints1D = sampleSpatialBasisCache->getRefCellPointsFC().dimension(0);
-    
-    auto phaseSpaceMesh = _phaseSpaceSolution->mesh();
-    auto & localCellIDs = phaseSpaceMesh->cellIDsInPartition();
-    
-    const int phaseSpaceDim = 2;
-    
-    if (localCellIDs.size() > 0)
-    {
-      // take the first cell; use this to determine basis integrals -- again, this assumes each cell has the same geometry; we'll want to change this eventually
-      auto cellID = *localCellIDs.begin();
-      
-      auto fBasis = phaseSpaceMesh->getElementType(cellID)->trialOrderPtr->getBasis(_f->ID());
-      BasisCachePtr basisCache = BasisCache::basisCacheForCell(phaseSpaceMesh, cellID);
-      
-      CubatureFactory quadratureFactory;
-      auto spatialLineQuadrature = quadratureFactory.create(CellTopology::line(), spatialQuadratureDegree);
-      FieldContainer<double> spatialQuadraturePoints(spatialLineQuadrature->getNumPoints(),1);
-      FieldContainer<double> spatialQuadratureWeights(spatialLineQuadrature->getNumPoints());
-      spatialLineQuadrature->getCubature(spatialQuadraturePoints, spatialQuadratureWeights);
-      
-      const auto levelNumberPairs = _phaseSpacePhysicalMeshMap->referenceSpaceUnrefinementLevelDescendantNumberPairs();
-      const int numPointSets = levelNumberPairs.size();
-      
-      int pointSetNumber = 0; // increments at bottom of levelNumberPair loop
-      _pointSetNumbers.clear();
-      for (const auto &levelNumberPair : levelNumberPairs)
-      {
-        _pointSetNumbers[levelNumberPair] = pointSetNumber++;
-      }
-      
-      const int maxMoment = _numMoments;
-      int fPolyDegree = fBasis->getDegree();
-      const int velocityQuadratureDegree = fPolyDegree + (maxMoment - 1);
-      auto velocityLineQuadrature = quadratureFactory.create(CellTopology::line(), velocityQuadratureDegree);
-      FieldContainer<double> velocityQuadraturePoints(velocityLineQuadrature->getNumPoints(),1);
-      FieldContainer<double> velocityQuadratureWeights(velocityLineQuadrature->getNumPoints());
-      velocityLineQuadrature->getCubature(velocityQuadraturePoints, velocityQuadratureWeights);
-      
-      const int numSpatialPointsPerSet = spatialLineQuadrature->getNumPoints();
-      const int numVelocityPoints      = velocityLineQuadrature->getNumPoints();
-      const int numSpatialPointsTotal  = numSpatialPointsPerSet * numPointSets;
-      const int numPointsPhaseSpace    = numSpatialPointsTotal * numVelocityPoints;
-            
-      FieldContainer<double> tensorPoints(numPointsPhaseSpace, phaseSpaceDim);
-      
-      pointSetNumber = 0; // increments at bottom of levelNumberPair loop
-      for (const auto &levelNumberPair : levelNumberPairs)
-      {
-        const int & unrefinementLevel = levelNumberPair.first;
-        const int & descendantNumber  = levelNumberPair.second;
-        for (int spatialPointOrdinalInDescendant=0; spatialPointOrdinalInDescendant<numSpatialPointsPerSet; spatialPointOrdinalInDescendant++)
-        {
-          const double & xInDescendant = spatialQuadraturePoints(spatialPointOrdinalInDescendant,0); // lies in [-1,1]
-          
-          const int numDescendants = 1 << unrefinementLevel;
-          const double xLeft = descendantNumber * 2.0 / numDescendants - 1.0; // left vertex of descendant cell in ancestor
-          const double x = xLeft + (xInDescendant + 1.0) / numDescendants;
-          
-          const int spatialPointOrdinal = spatialPointOrdinalInDescendant + pointSetNumber * numSpatialPointsPerSet;
-          
-          for (int velocityPointOrdinal=0; velocityPointOrdinal<numVelocityPoints; velocityPointOrdinal++)
-          {
-            const double & v = velocityQuadraturePoints(velocityPointOrdinal,0);
-            const int tensorPointOrdinal = getTensorPointOrdinal(spatialPointOrdinal, velocityPointOrdinal, numSpatialPointsTotal);
-            tensorPoints(tensorPointOrdinal, 0) = x;
-            tensorPoints(tensorPointOrdinal, 1) = v;
-          }
-        }
-        pointSetNumber++;
-      }
-      
-      basisCache->setRefCellPointsFC(tensorPoints);
-      auto basisValues = basisCache->getTransformedValues(fBasis, OP_VALUE);
-      
-      int basisCardinality = fBasis->getCardinality();
-      _basisIntegrals.resize(_numMoments,numPointSets,basisCardinality,_numPoints1D);
-      const int moment = 0;
-      for (int pointSetNumber=0; pointSetNumber<numPointSets; pointSetNumber++)
-      {
-        for (int basisOrdinal=0; basisOrdinal<basisCardinality; basisOrdinal++)
-        {
-          for (int spatialPointOrdinalInDescendant=0; spatialPointOrdinalInDescendant<numSpatialPointsPerSet; spatialPointOrdinalInDescendant++)
-          {
-            double integral = 0.0;
-            const int spatialPointOrdinal = pointSetNumber * numSpatialPointsPerSet + spatialPointOrdinalInDescendant;
-            for (int velocityPointOrdinal=0; velocityPointOrdinal<numVelocityPoints; velocityPointOrdinal++)
-            {
-              const int tensorPointOrdinal = getTensorPointOrdinal(spatialPointOrdinal, velocityPointOrdinal, numSpatialPointsTotal);
-              const double & basisValue = (*basisValues)(0,basisOrdinal,tensorPointOrdinal);
-              const double & velocityIntegralWeight = velocityQuadratureWeights(velocityPointOrdinal);
-              integral += basisValue * velocityIntegralWeight;
-            }
-            _basisIntegrals(moment,pointSetNumber,basisOrdinal,spatialPointOrdinalInDescendant) = integral / 2.0; // divide by 2 because the ref line has length 2
-          }
-        }
-      }
-    }
-    else
-    {
-      // no cells assigned to this MPI rank
-      _basisIntegrals.resize(0,0,0,0);
-    }
-  }
-public:
-  VelocitySpace1DIntegral(MeshPtr spatialMesh, SolutionPtr phaseSpaceSolution, VarPtr f,
-                                    const std::map<GlobalIndexType, std::vector<GlobalIndexType> > &spatialCellIDToPhaseSpaceCellIDs,
-                                    Teuchos::RCP<PhasePhysicalMeshMap1D1V> phaseSpacePhysicalMeshMap)
-  :
-  QuadraturePointFunction(spatialMesh, phaseSpaceSolution->cubatureEnrichmentDegree(), 0),
-  _spatialMesh(spatialMesh),
-  _phaseSpaceSolution(phaseSpaceSolution),
-  _f(f),
-  _spatialCellIDToPhaseSpaceCellIDs(spatialCellIDToPhaseSpaceCellIDs),
-  _phaseSpacePhysicalMeshMap(phaseSpacePhysicalMeshMap)
-  {
-    _distributionFunction = Function::solution(f, _phaseSpaceSolution);
-    updateBasisIntegrals();
-  }
-  
-  void willUpdateValues() override
-  {
-    // if the required point sets have changed, update _basisIntegrals now
-    const auto requiredPointSets = _phaseSpacePhysicalMeshMap->referenceSpaceUnrefinementLevelDescendantNumberPairs();
-    bool pointSetsMatch = true;
-    if (requiredPointSets.size() != _pointSetNumbers.size())
-    {
-      pointSetsMatch = false;
-    }
-    else
-    {
-      for (auto & requiredPointSet : requiredPointSets)
-      {
-        if (_pointSetNumbers.find(requiredPointSet) == _pointSetNumbers.end())
-        {
-          pointSetsMatch = false;
-          break;
-        }
-      }
-    }
-    if (!pointSetsMatch)
-    {
-      updateBasisIntegrals();
-    }
-    
-    // Local integrals for all physical cells for which we have corresponding phase space cells go in integralContributionsFromMyPhaseSpaceCells;
-    // we do MPI communication below once we have populated this…
-    using std::map;
-    using std::pair;
-    using std::vector;
-    using PhysicalCellPoint = pair<GlobalIndexType,int>; // first: physical cell ID; second: quadrature point ordinal
-    using SenderPID = int;
-    using RecipientPID = int;
-    using MapKey = pair<SenderPID,PhysicalCellPoint>; // first: the sender's MPI rank; second: the physical cell point
-    using MapValue = double;
-    map<RecipientPID, map<MapKey, MapValue> > integralContributionsFromMyPhaseSpaceCells;
-    
-    SenderPID myPID = _phaseSpaceSolution->mesh()->Comm()->MyPID();
-    const auto &myPhaseSpaceCellIDs = _phaseSpaceSolution->mesh()->cellIDsInPartition();
-    const int basisCardinality           = _basisIntegrals.dimension(2);
-    const int numSpatialQuadraturePoints = _basisIntegrals.dimension(3);
-    FieldContainer<double> basisCoefficients(basisCardinality);
-    int stageOrdinal;
-    if (_phaseSpaceSolution->getSolutionStage() != Teuchos::null)
-    {
-      stageOrdinal = -1;
-    }
-    else
-    {
-      stageOrdinal = 0;
-    }
-    
-    const int moment = 0;
-    for (const auto &phaseSpaceCellID : myPhaseSpaceCellIDs)
-    {
-      auto cellVertices = _phaseSpaceSolution->mesh()->verticesForCell(phaseSpaceCellID);
-      double vMin = cellVertices[0][1];
-      double vMax = vMin;
-      for (auto & vertex : cellVertices)
-      {
-        vMin = std::min(vMin, vertex[1]);
-        vMax = std::max(vMax, vertex[1]);
-      }
-      double cellHeight = vMax - vMin;
-      _phaseSpaceSolution->getBasisCoefficientsForCell(basisCoefficients, _f->ID(), phaseSpaceCellID, STANDARD_SOLUTION, stageOrdinal);
-      
-      const std::vector<PhysicalCellRelativeRefinementInfo> &physicalCellInfoVector = _phaseSpacePhysicalMeshMap->physicalCellInfo(phaseSpaceCellID);
-      for (const auto & physicalCellInfo : physicalCellInfoVector)
-      {
-        const auto & physicalCellID    = physicalCellInfo.physicalCellID;
-        const auto & recipientPID      = _spatialMesh->partitionForCellID(physicalCellID);
-        const auto & unrefinementLevel = physicalCellInfo.unrefinementLevel;
-        const auto & descendantNumber  = physicalCellInfo.uniformDescendantNumber;
-        const std::pair<int,int> pointSetKey {unrefinementLevel,descendantNumber};
-        TEUCHOS_TEST_FOR_EXCEPTION(_pointSetNumbers.find(pointSetKey) == _pointSetNumbers.end(), std::invalid_argument, "point set not found");
-        const int pointSetNumber = _pointSetNumbers[pointSetKey];
-        
-        for (int spatialPointOrdinalInDescendant=0; spatialPointOrdinalInDescendant<numSpatialQuadraturePoints; spatialPointOrdinalInDescendant++)
-        {
-          const PhysicalCellPoint physicalCellPoint {physicalCellID,spatialPointOrdinalInDescendant};
-          const MapKey mapKey {myPID,physicalCellPoint};
-          double integral = 0.0;
-          for (int basisOrdinal=0; basisOrdinal<basisCoefficients.size(); basisOrdinal++)
-          {
-            const double & basisCoefficient = basisCoefficients(basisOrdinal);
-            const double & basisIntegral    = _basisIntegrals(moment,pointSetNumber,basisOrdinal,spatialPointOrdinalInDescendant);
-            integral += basisIntegral * basisCoefficient * cellHeight;
-          }
-          integralContributionsFromMyPhaseSpaceCells[recipientPID][mapKey] += integral;
-        }
-      }
-    }
-    
-    map<MapKey, MapValue> integralContributionsToMyPhysicalCells;
-    MPIWrapper::sendDataMaps<MapKey,MapValue>(_spatialMesh->Comm(), integralContributionsFromMyPhaseSpaceCells, integralContributionsToMyPhysicalCells);
-    
-    const auto & myPhysicalCells = _spatialMesh->cellIDsInPartition();
-    _physicalValuesAtQuadraturePoints.resize(myPhysicalCells.size(),_numMoments,_numPoints1D);
-    _physicalValuesAtQuadraturePoints.initialize(0);
-    int physicalCellOrdinal = 0;
-    for (auto & physicalCellID : myPhysicalCells)
-    {
-      _physicalCellIDToLocalCellOrdinal[physicalCellID] = physicalCellOrdinal;
-      physicalCellOrdinal++;
-    }
-    for (const auto & entry : integralContributionsToMyPhysicalCells)
-    {
-      const MapKey & mapKey                       = entry.first;
-      const MapValue & integralContribution       = entry.second;
-      const PhysicalCellPoint & physicalCellPoint = mapKey.second;
-      const GlobalIndexType & physicalCellID      = physicalCellPoint.first;
-      const int & pointOrdinal                    = physicalCellPoint.second;
-      const auto & physicalCellOrdinalEntryIt     = _physicalCellIDToLocalCellOrdinal.find(physicalCellID);
-      TEUCHOS_TEST_FOR_EXCEPTION(physicalCellOrdinalEntryIt == _physicalCellIDToLocalCellOrdinal.end(), std::invalid_argument, "Physical cell ID not found");
-      const int & physicalCellOrdinal             = physicalCellOrdinalEntryIt->second;
-      _physicalValuesAtQuadraturePoints(physicalCellOrdinal, moment, pointOrdinal) += integralContribution;
-    }
-  }
-  
-  void updateValues(Camellia::FieldContainer<double> &values, BasisCachePtr basisCache) override
-  {
-    auto & physicalCellIDs = basisCache->cellIDs();
-    
-    const int moment = 0;
-    int cellOrdinalInBasisCache = 0;
-    const int numPoints = values.dimension(1);
-    for (const auto & physicalCellID : physicalCellIDs)
-    {
-      TEUCHOS_TEST_FOR_EXCEPTION(_physicalCellIDToLocalCellOrdinal.find(physicalCellID) == _physicalCellIDToLocalCellOrdinal.end(),
-                                 std::invalid_argument, "physical cellID not found");
-      const int cellOrdinalInPhysicalValuesContainer = _physicalCellIDToLocalCellOrdinal[physicalCellID];
-      
-      for (int pointOrdinal=0; pointOrdinal<numPoints; pointOrdinal++)
-      {
-        values(cellOrdinalInBasisCache,pointOrdinal) = _physicalValuesAtQuadraturePoints(cellOrdinalInPhysicalValuesContainer, moment, pointOrdinal);
-      }
-      cellOrdinalInBasisCache++;
-    }
-  }
-};
-
 /*
  Worth noting that VelocitySpaceExtrusion codifies an inefficient use of memory:
  it is simply duplicating values in the velocity dimension.  It would be better to
@@ -347,9 +52,9 @@ class VelocitySpaceExtrusion : public TFunction<double>
 {
   FunctionPtr _g_1D; // arbitrary function in physical space -- can depend on mesh/physical solution
   
-  Teuchos::RCP<PhasePhysicalMeshMap1D1V> _phaseSpacePhysicalMeshMap;
+  Teuchos::RCP<PhasePhysicalMeshMap> _phaseSpacePhysicalMeshMap;
 public:
-  VelocitySpaceExtrusion( FunctionPtr g_1D, Teuchos::RCP<PhasePhysicalMeshMap1D1V> phaseSpacePhysicalMeshMap)
+  VelocitySpaceExtrusion( FunctionPtr g_1D, Teuchos::RCP<PhasePhysicalMeshMap> phaseSpacePhysicalMeshMap)
   :
   Function(g_1D->rank()),
   _g_1D(g_1D),
@@ -360,7 +65,7 @@ public:
   
   void updateValues()
   {
-    auto & phaseSpaceCellIDs = _phaseSpacePhysicalMeshMap->mesh2D()->cellIDsInPartition();
+    auto & phaseSpaceCellIDs = _phaseSpacePhysicalMeshMap->phaseMesh()->cellIDsInPartition();
     
     const set<GlobalIndexType> physicalCellIDs = _phaseSpacePhysicalMeshMap->physicalCellIDsForPhaseSpaceCells(phaseSpaceCellIDs);
     map<GlobalIndexType, Camellia::FieldContainer<double> > physicalValuesMap;
@@ -392,9 +97,11 @@ public:
     else // isSideCache == true
     {
       const int phaseSpaceSideOrdinal = basisCache->getSideIndex();
-      // what follows assumes 1D1V with quad elements; let's throw an exception if we're not on a quad
-      TEUCHOS_TEST_FOR_EXCEPTION(basisCache->cellTopology()->getKey() != CellTopology::quad()->getKey(), std::invalid_argument, "Only phase-space quads supported right now");
-      if ((phaseSpaceSideOrdinal == 0) || (phaseSpaceSideOrdinal == 2))
+      // what follows assumes 1D1V with line x line elements; let's throw an exception if we're not on such an element
+      auto line_x_line = CellTopology::cellTopology(CellTopology::line(), 1);
+      TEUCHOS_TEST_FOR_EXCEPTION(basisCache->cellTopology()->getKey() != line_x_line->getKey(), std::invalid_argument, "Only phase-space line x line topologies are supported");
+      bool sideIsParallelToPhysicalSpace = !line_x_line->sideIsSpatial(phaseSpaceSideOrdinal);
+      if (sideIsParallelToPhysicalSpace)
       {
         // this side does not map to a physical side; runs parallel to physical space
         // therefore, it instead maps to a physical cell interior (in adaptive context, possibly multiple -- this is not yet supported)
@@ -410,13 +117,9 @@ public:
           physicalSpaceSideOrdinal = -1;
         }
       }
-      else if (phaseSpaceSideOrdinal == 1)
-      {
-        physicalSpaceSideOrdinal = 1;
-      }
       else
       {
-        physicalSpaceSideOrdinal = 0;
+        physicalSpaceSideOrdinal = line_x_line->getSpatialComponentSideOrdinal(phaseSpaceSideOrdinal);
       }
     }
     
@@ -514,8 +217,8 @@ public:
 Boltzmann1D1VFormulation::Boltzmann1D1VFormulation(Boltzmann1D1VFormulationChoice formulationChoice, double q, double eps0, double m, double dt,
                                                    const double x0, const double xWidth, const int xElementsCoarse,
                                                    const double v0, const double vWidth, const int vElementsCoarse,
-                                                   const int H1Order, const int delta_k, ERKTableauPtr erkTableau,
-                                                   const int numUniformRefinements)
+                                                   const int H1Order, const int delta_k, const bool usePeriodicBCs,
+                                                   ERKTableauPtr erkTableau, const int numUniformRefinements)
 :
 _formulationChoice(formulationChoice)
 {
@@ -525,7 +228,7 @@ _formulationChoice(formulationChoice)
 //  }
   
   const int spaceDim = 1;
-//  const int velocityDim = 1;
+  const int velocityDim = 1;
   _delta_k = delta_k;
   
   SolutionStagePtr solnStage = Teuchos::null;
@@ -549,20 +252,19 @@ _formulationChoice(formulationChoice)
   
   _n0   = ParameterFunction::parameterFunction(0.0); // will be set/updated during solve
   
-  const bool divideIntoTriangles = false;
   PeriodicBCPtr xLeftToRight     = PeriodicBC::xIdentification(x0, x0+xWidth);
-  std::vector<PeriodicBCPtr> quadMeshPeriodicBCs {xLeftToRight};
-  auto quadMeshTopology          = MeshFactory::quadMeshTopology(xWidth,vWidth,xElementsCoarse,vElementsCoarse,divideIntoTriangles,x0,v0,quadMeshPeriodicBCs);
-  bool usePeriodicBCs            = true;
   auto intervalMeshTopology      = MeshFactory::intervalMeshTopology(x0, x0+xWidth, xElementsCoarse, usePeriodicBCs);
+  
+  MeshTopologyPtr extrudedMeshTopology = MeshFactory::extrudedMeshTopology(intervalMeshTopology, {v0}, {vWidth}, {vElementsCoarse});
   
   for (int i=0; i<numUniformRefinements; i++)
   {
-    const auto & activeQuadCells = quadMeshTopology->getActiveCellIndicesGlobal();
-    auto quadRefPattern = RefinementPattern::regularRefinementPatternQuad();
+    const auto & activeQuadCells = extrudedMeshTopology->getActiveCellIndicesGlobal();
+    auto line_x_line = CellTopology::cellTopology(CellTopology::line(), 1);
+    auto refPattern = RefinementPattern::regularRefinementPattern(line_x_line->getKey());
     for (const auto & activeQuadCellIndex : activeQuadCells)
     {
-      quadMeshTopology->refineCell(activeQuadCellIndex, quadRefPattern, quadMeshTopology->nextCellID());
+      extrudedMeshTopology->refineCell(activeQuadCellIndex, refPattern, extrudedMeshTopology->nextCellID());
     }
     const auto & activeIntervalCells = intervalMeshTopology->getActiveCellIndicesGlobal();
     auto lineRefPattern = RefinementPattern::regularRefinementPatternLine();
@@ -615,8 +317,10 @@ _formulationChoice(formulationChoice)
       _gaussBF->addTerm(-E, tau->grad());
     
     _gaussBF->addTerm(E_hat, tau);
-    MeshPtr gaussMesh = MeshFactory::minRuleMesh(intervalMeshTopology, _gaussBF, H1Order, delta_k);
-    gaussMesh->globalDofAssignment()->setAllowMeshTopologyPruning(false);
+    Epetra_CommPtr comm = Teuchos::null;
+    const bool allowPruning = false;
+    MeshPtr gaussMesh = MeshFactory::minRuleMesh(intervalMeshTopology, _gaussBF, H1Order, delta_k, comm, allowPruning);
+    
     _gaussSoln = Solution::solution(_gaussBF, gaussMesh);
     auto gaussSolnWeakPtr = Teuchos::rcp(_gaussSoln.get(), false);
     
@@ -643,14 +347,16 @@ _formulationChoice(formulationChoice)
     _boltzmannBF = BF::bf(boltzmannVF);
     
     map<int,int> trialOrderEnhancements;
+    map<int,int> testOrderEnhancements;
     if (l2Trace)
     {
       trialOrderEnhancements[t_n_hat->ID()] = 1;
     }
     
-    MeshPtr boltzmannMesh = Teuchos::rcp( new Mesh(quadMeshTopology, _boltzmannBF, H1Order, delta_k, trialOrderEnhancements) );
+    MeshPartitionPolicyPtr partitionPolicy = Teuchos::null; // use default partition policy
+    MeshPtr boltzmannMesh = Teuchos::rcp( new Mesh(extrudedMeshTopology, _boltzmannBF, H1Order, delta_k, trialOrderEnhancements, testOrderEnhancements, partitionPolicy, comm, allowPruning) );
     
-    _phaseSpacePhysicalMeshMap = Teuchos::rcp( new PhasePhysicalMeshMap1D1V( gaussMesh, boltzmannMesh ) );
+    _phaseSpacePhysicalMeshMap = Teuchos::rcp( new PhasePhysicalMeshMap( gaussMesh, boltzmannMesh ) );
     auto meshMapWeakPtr        = Teuchos::rcp( _phaseSpacePhysicalMeshMap.get(), false);
     
     _E_extruded = Teuchos::rcp( new VelocitySpaceExtrusion(E_soln, meshMapWeakPtr) );
@@ -688,7 +394,7 @@ _formulationChoice(formulationChoice)
       _boltzmannSolnPrev = Solution::solution(_boltzmannBF,boltzmannMesh);
     }
     
-    _f_velocityIntegral = Teuchos::rcp( new VelocitySpace1DIntegral(_gaussSoln->mesh(), _boltzmannSoln, f, _spatialCellIDToPhaseSpaceCellIDs, meshMapWeakPtr) );
+    _f_velocityIntegral = Teuchos::rcp( new SolutionMomentFunction(_boltzmannSoln, f, 0, _gaussSoln->mesh(), -1) );
     
     // set RHS for the two problems
     auto gaussRHS = RHS::rhs();
@@ -753,7 +459,8 @@ _formulationChoice(formulationChoice)
     _boltzmannSoln->setIP(boltzmannTestNorm);
     
     // set BCs
-    // we are periodic in x; set homogeneous conditions on the v boundaries
+    // set homogeneous conditions on the v boundaries
+    // if we are not periodic in x, then the user must add conditions for left and right boundaries
     auto boltzmannBC = BC::bc();
     auto traceVar = l2Trace ? t_n_hat : f_hat;
     boltzmannBC->addDirichlet(traceVar, SpatialFilter::matchingY(v0),        Function::zero());
@@ -778,6 +485,7 @@ _formulationChoice(formulationChoice)
 //    double memoryUsageInGigabytes = memoryHighWaterMarkInGigabytes();
 //    std::cout << "At conclusion of Boltzmann1D1VFormulation construction, memory HWM: " << memoryUsageInGigabytes << " GB.\n";
 //  }
+  PhysicalMeshUpdater::registerForUpdates(_boltzmannSoln->mesh(), _gaussSoln->mesh());
 }
 
 MeshPtr Boltzmann1D1VFormulation::boltzmannMesh()
@@ -848,9 +556,19 @@ const std::map<GlobalIndexType, std::set<GlobalIndexType> > & Boltzmann1D1VFormu
   return _phaseSpaceCellIDToSpatialCellID;
 }
 
-Teuchos::RCP<PhasePhysicalMeshMap1D1V> Boltzmann1D1VFormulation::phaseSpacePhysicalMeshMap()
+Teuchos::RCP<PhasePhysicalMeshMap> Boltzmann1D1VFormulation::phaseSpacePhysicalMeshMap()
 {
   return _phaseSpacePhysicalMeshMap;
+}
+
+void Boltzmann1D1VFormulation::setBoltzmannBCs(BCPtr bc)
+{
+  _boltzmannSoln->setBC(bc);
+}
+
+void Boltzmann1D1VFormulation::setGaussBCs(BCPtr bc)
+{
+  _gaussSoln->setBC(bc);
 }
 
 void Boltzmann1D1VFormulation::setInitialConditions(FunctionPtr f0)
@@ -934,6 +652,11 @@ void Boltzmann1D1VFormulation::setTimeStep(double dt)
 void Boltzmann1D1VFormulation::setSubstepsForImplicit(int numSubsteps)
 {
   _numSubstepsForImplicit = numSubsteps;
+}
+
+double Boltzmann1D1VFormulation::t() const
+{
+  return _t;
 }
 
 void Boltzmann1D1VFormulation::takeTimeStep()
@@ -1120,6 +843,7 @@ void Boltzmann1D1VFormulation::updateElectricField()
   _f_velocityIntegral->updateValues();
   double f_integral   = _f_velocityIntegral->integrate(_gaussSoln->mesh());
   double n0 = f_integral / _gaussMeshMeasure;
+//  std::cout << "1D1V n0 = " << n0 << std::endl;
   _n0->setValue(n0);
   
   // solve for E, E_hat:
@@ -1179,6 +903,7 @@ void testVelocitySpace1DIntegral(const bool &doRefinement, Teuchos::FancyOStream
   const double dt = 0.1;
   const int H1Order = 2; // this gives f, E (which are in L^2) a polynomial order of 1
   const int delta_k = 2;
+  const bool usePeriodicBCs = true;
   
   using FormulationChoice = Camellia::Boltzmann1D1VFormulation::Boltzmann1D1VFormulationChoice;
   std::vector<FormulationChoice> formulationChoices {
@@ -1196,7 +921,7 @@ void testVelocitySpace1DIntegral(const bool &doRefinement, Teuchos::FancyOStream
   
   for (auto formulationChoice : formulationChoices)
   {
-    Boltzmann1D1VFormulation form(formulationChoice, q, eps0, m, dt, x0, xWidth, xElements, v0, vWidth, vElements, H1Order, delta_k, Teuchos::null);
+    Boltzmann1D1VFormulation form(formulationChoice, q, eps0, m, dt, x0, xWidth, xElements, v0, vWidth, vElements, H1Order, delta_k, usePeriodicBCs, Teuchos::null);
     
     FunctionPtr x  = Function::xn(1);
     FunctionPtr y  = Function::yn(1);
@@ -1213,7 +938,9 @@ void testVelocitySpace1DIntegral(const bool &doRefinement, Teuchos::FancyOStream
     if (boltzmannCellsToRefine.size() > 0)
     {
       auto boltzmannMesh = form.boltzmannMesh();
-      boltzmannMesh->hRefine(boltzmannCellsToRefine, RefinementPattern::regularRefinementPatternQuad());
+      auto line_x_line = CellTopology::cellTopology(CellTopology::line(), 1);
+      auto refPattern = RefinementPattern::regularRefinementPattern(line_x_line->getKey());
+      boltzmannMesh->hRefine(boltzmannCellsToRefine, refPattern);
     }
     
     auto f = form.f();
@@ -1227,10 +954,10 @@ void testVelocitySpace1DIntegral(const bool &doRefinement, Teuchos::FancyOStream
     auto gaussMesh = form.gaussMesh();
     auto spatialToPhaseSpaceMap = form.spatialCellIDToPhaseSpaceCellIDsMap();
     
-    auto velocitySpaceIntegral = Teuchos::rcp(new VelocitySpace1DIntegral(gaussMesh, boltzmannSoln, f, spatialToPhaseSpaceMap, form.phaseSpacePhysicalMeshMap()) );
+    auto velocitySpaceIntegral = Teuchos::rcp(new SolutionMomentFunction(boltzmannSoln, f, 0, gaussMesh, -1) );
     FunctionPtr err = FunctionPtr(velocitySpaceIntegral) - expectedIntegral;
     
-    velocitySpaceIntegral->QuadraturePointFunction::updateValues();
+    velocitySpaceIntegral->updateValues();
     
     double magnitudeExpected = expectedIntegral->l2norm(gaussMesh);
     double err_l2 = err->l2norm(gaussMesh);
@@ -1239,13 +966,13 @@ void testVelocitySpace1DIntegral(const bool &doRefinement, Teuchos::FancyOStream
   }
 }
 
-TEUCHOS_UNIT_TEST( VelocitySpace1DEquispacedIntegral_Boltzmann1D1VFormulation, AnalyticIntegralMatches )
+TEUCHOS_UNIT_TEST( SolutionMomentFunctionBoltzmann1D1VFormulation, AnalyticIntegralMatches )
 {
   const bool doRefinement = false;
   testVelocitySpace1DIntegral(doRefinement, out, success);
 }
 
-TEUCHOS_UNIT_TEST( VelocitySpace1DEquispacedIntegral_Boltzmann1D1VFormulation, AnalyticIntegralMatchesWithRefinement )
+TEUCHOS_UNIT_TEST( SolutionMomentFunctionBoltzmann1D1VFormulation, AnalyticIntegralMatchesWithRefinement )
 {
   const bool doRefinement = true;
   testVelocitySpace1DIntegral(doRefinement, out, success);
@@ -1301,6 +1028,7 @@ void testVelocityExtrusion(bool volumeVariable, bool doRefinement, Teuchos::Fanc
   const double dt = 0.1;
   const int H1Order = 2; // this gives f, E (which are in L^2) a polynomial order of 1
   const int delta_k = 2;
+  const bool usePeriodicBCs = true;
   
   using FormulationChoice = Camellia::Boltzmann1D1VFormulation::Boltzmann1D1VFormulationChoice;
   std::vector<FormulationChoice> formulationChoices {
@@ -1312,7 +1040,7 @@ void testVelocityExtrusion(bool volumeVariable, bool doRefinement, Teuchos::Fanc
   
   for (auto formulationChoice : formulationChoices)
   {
-    Boltzmann1D1VFormulation form(formulationChoice, q, eps0, m, dt, x0, xWidth, xElements, v0, vWidth, vElements, H1Order, delta_k, Teuchos::null);
+    Boltzmann1D1VFormulation form(formulationChoice, q, eps0, m, dt, x0, xWidth, xElements, v0, vWidth, vElements, H1Order, delta_k, usePeriodicBCs, Teuchos::null);
     
     FunctionPtr x  = Function::xn(1);
     
@@ -1340,13 +1068,17 @@ void testVelocityExtrusion(bool volumeVariable, bool doRefinement, Teuchos::Fanc
     auto gaussMesh = form.gaussMesh();
     auto boltzmannMesh = form.boltzmannMesh();
     
-    auto meshMap = Teuchos::rcp( new PhasePhysicalMeshMap1D1V( gaussMesh, boltzmannMesh ) );
+    auto meshMap = Teuchos::rcp( new PhasePhysicalMeshMap( gaussMesh, boltzmannMesh ) );
     auto extrusion = Teuchos::rcp( new VelocitySpaceExtrusion(soln_1D, meshMap) );
+    
+    auto cellTopo = CellTopology::cellTopology(CellTopology::line(), 1);
     
     if (doRefinement)
     {
       const set<GlobalIndexType> cellIDs_2D {0,1};
-      boltzmannMesh->hRefine(cellIDs_2D, RefinementPattern::regularRefinementPatternQuad());
+      auto line_x_line = CellTopology::cellTopology(CellTopology::line(), 1);
+      auto refPattern = RefinementPattern::regularRefinementPattern(line_x_line->getKey());
+      boltzmannMesh->hRefine(cellIDs_2D, refPattern);
     }
     
     const int solutionOrdinal =0;
@@ -1362,7 +1094,12 @@ void testVelocityExtrusion(bool volumeVariable, bool doRefinement, Teuchos::Fanc
     else
     {
       // restrict x to the spatial sides of the mesh skeleton
-      std::vector<int> spatialSides {1,3}; // left and right sides of the quad
+      // these are the sides of the hypercube corresponding to left and right sides of the physical cell (sides that do not vary in x)
+      // because of the way tensor cell topologies are numbered, the final sides are the ones of interest: here, the final two sides;
+      const int sideCount = cellTopo->getSideCount();
+      std::vector<int> spatialSides { sideCount - 2, sideCount - 1 };
+      TEUCHOS_TEST_FOR_EXCEPTION( !cellTopo->sideIsSpatial(spatialSides[0]), std::logic_error, "Spatial sides are not enumerated as expected");
+      TEUCHOS_TEST_FOR_EXCEPTION( !cellTopo->sideIsSpatial(spatialSides[1]), std::logic_error, "Spatial sides are not enumerated as expected");
       FunctionPtr sideRestriction = Teuchos::rcp(new SideRestriction(spatialSides) );
       expected = x * (xWidth - x) * sideRestriction;
     }
@@ -1380,28 +1117,28 @@ void testVelocityExtrusion(bool volumeVariable, bool doRefinement, Teuchos::Fanc
   }
 }
 
-TEUCHOS_UNIT_TEST( VelocitySpaceExtrusion_Boltzmann1D1VFormulation, SkeletonExtrusion )
+TEUCHOS_UNIT_TEST( VelocitySpaceExtrusionBoltzmann1D1VFormulation, SkeletonExtrusion )
 {
   const bool volumeVariable = false;
   const bool doRefinement = false;
   testVelocityExtrusion(volumeVariable, doRefinement, out, success);
 }
 
-TEUCHOS_UNIT_TEST( VelocitySpaceExtrusion_Boltzmann1D1VFormulation, SkeletonExtrusionWithRefinement )
+TEUCHOS_UNIT_TEST( VelocitySpaceExtrusionBoltzmann1D1VFormulation, SkeletonExtrusionWithRefinement )
 {
   const bool volumeVariable = false;
   const bool doRefinement = true;
   testVelocityExtrusion(volumeVariable, doRefinement, out, success);
 }
 
-TEUCHOS_UNIT_TEST( VelocitySpaceExtrusion_Boltzmann1D1VFormulation, VolumeExtrusion )
+TEUCHOS_UNIT_TEST( VelocitySpaceExtrusionBoltzmann1D1VFormulation, VolumeExtrusion )
 {
   const bool volumeVariable = true;
   const bool doRefinement = false;
   testVelocityExtrusion(volumeVariable, doRefinement, out, success);
 }
 
-TEUCHOS_UNIT_TEST( VelocitySpaceExtrusion_Boltzmann1D1VFormulation, VolumeExtrusionWithRefinement )
+TEUCHOS_UNIT_TEST( VelocitySpaceExtrusionBoltzmann1D1VFormulation, VolumeExtrusionWithRefinement )
 {
   const bool volumeVariable = true;
   const bool doRefinement = true;

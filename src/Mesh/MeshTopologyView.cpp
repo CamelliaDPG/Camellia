@@ -485,7 +485,6 @@ vector<double> MeshTopologyView::getCellCentroid(IndexType cellIndex) const
   return _meshTopo->getCellCentroid(cellIndex);
 }
 
-// getCellsContainingEntity() copied from MeshTopology; could possibly eliminate it in MeshTopology
 // ! pairs are (cellIndex, sideOrdinal) where the sideOrdinal is a side that contains the entity
 set< pair<IndexType, unsigned> > MeshTopologyView::getCellsContainingEntity(unsigned d, IndexType entityIndex) const  // not *all* cells, but within any refinement branch, the most refined cell that contains the entity will be present in this set.  The unsigned value is the ordinal of a *side* in the cell containing this entity.  There may be multiple sides in a cell that contain the entity; this method will return just one entry per cell.  New 6-22-16: guaranteed to return the side in the cell with least ordinal.  This allows the returned set to be independent of the side indexing in MeshTopology (potentially important for distributed MeshTopology).
 {
@@ -493,6 +492,13 @@ set< pair<IndexType, unsigned> > MeshTopologyView::getCellsContainingEntity(unsi
   {
     // entityIndex is a cell; the side then is contained within the cell; we'll flag this fact by setting the side ordinal to -1.
     return {{entityIndex,-1}};
+  }
+  if ((d == 0) && (this->getPeriodicBCs().size() > 0))
+  {
+    // then let's ensure that entityIndex points to the canonical vertex index (which is what getSidesContainingEntity() expects)
+    std::vector<IndexType> vertexIndexVector { entityIndex };
+    auto canonicalVertexIndexVector = baseMeshTopology()->getCanonicalEntityNodesViaPeriodicBCs(d, vertexIndexVector);
+    entityIndex = canonicalVertexIndexVector[0];
   }
   vector<IndexType> sidesForEntity = getSidesContainingEntity(d, entityIndex);
   typedef pair<IndexType,unsigned> CellPair;

@@ -85,6 +85,14 @@ void UnitNormalFunction::values(typename FieldContainer<double>::DeviceView &val
     }
   }
   const Camellia::FieldContainer<double> *sideNormals = _spaceTime ? &(basisCache->getSideNormalsSpaceTime()) : &(basisCache->getSideNormals());
+  if (_spaceTime)
+  {
+    TEUCHOS_TEST_FOR_EXCEPTION(sideNormals->dimension(2) != spaceDim + 1, std::invalid_argument, "space-time sideNormals must have shape (C,P,D+1) where D is the spatial dimension");
+  }
+  else
+  {
+    TEUCHOS_TEST_FOR_EXCEPTION(sideNormals->dimension(2) != spaceDim, std::invalid_argument, "spatial sideNormals must have shape (C,P,D) where D is the spatial dimension");
+  }
   auto dv_sideNormals = sideNormals->checkoutDeviceView();
   const int comp = (_comp == -2) ? spaceDim : _comp;
   using array_index_type = Kokkos::MDRangePolicy< Kokkos::Rank<2> >::array_index_type;

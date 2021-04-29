@@ -106,6 +106,39 @@ MeshPtr makeTestMesh( int spaceDim, bool spaceTime )
   return mesh;
 }
 
+MeshPtr makeSingleElementExtrudedTestMesh( int baseSpaceDim, int numTensorExtrusions )
+{
+  MeshPtr mesh;
+
+  std::vector<double> x0        (baseSpaceDim, 0.0);
+  std::vector<double> xWidths   (baseSpaceDim, 1.0);
+  std::vector<int>    meshWidths(baseSpaceDim, 1  );
+  auto baseMeshTopology = MeshFactory::rectilinearMeshTopology(xWidths, meshWidths, x0);
+  
+  std::vector<double> v0         (numTensorExtrusions, 0.0);
+  std::vector<double> vWidths    (numTensorExtrusions, 2.0);
+  std::vector<int>    vMeshWidths(numTensorExtrusions, 1);
+  MeshTopologyPtr extrudedMeshTopology = MeshFactory::extrudedMeshTopology(baseMeshTopology, v0, vWidths, vMeshWidths);
+  
+  ////////////////////   DECLARE VARIABLES   ///////////////////////
+  // define test variables
+  VarFactoryPtr varFactory = VarFactory::varFactory();
+  VarPtr v = varFactory->testVar("v", HGRAD);
+
+  // define trial variables
+  VarPtr u    = varFactory->fieldVar("u");
+  VarPtr uhat = varFactory->fluxVar("uhat");
+
+  ////////////////////   DEFINE BILINEAR FORM   ///////////////////////
+  BFPtr bf = BF::bf(varFactory);
+
+  ////////////////////   BUILD MESH   ///////////////////////
+  int H1Order = 1, pToAdd = 1;
+  mesh = Teuchos::rcp( new Mesh (extrudedMeshTopology, bf, H1Order, pToAdd) );
+
+  return mesh;
+}
+
   void checkMeshParities( MeshPtr mesh, Teuchos::FancyOStream &out, bool &success)
   {
     const auto & myCellIDs = mesh->cellIDsInPartition();
@@ -1390,6 +1423,37 @@ TEUCHOS_UNIT_TEST( Mesh, SaveAndLoadStokesConforming )
   double mu = 1.0;
   StokesVGPFormulation form = StokesVGPFormulation::steadyFormulation(spaceDim,mu,conformingTraces);
   testSaveAndLoad2D(form.bf(), out, success);
+}
+
+TEUCHOS_UNIT_TEST( Mesh, TensorExtrusionBasisRangeDimension )
+{
+  for (int baseDim=1; baseDim<4; baseDim++)
+  {
+    for (int extrusions=1; extrusions<4; extrusions++)
+    {
+      out << "baseDim = " << baseDim;
+      out << ", extrusions = " << extrusions << std::endl;
+      const int totalDim = baseDim + extrusions;
+      
+      auto mesh = makeSingleElementExtrudedTestMesh(baseDim, extrusions);
+      auto testVar = mesh->bilinearForm()->varFactory()->testVar("v");
+      auto trialVar = mesh->bilinearForm()->varFactory()->fieldVar("u");
+      
+      const auto & myCellIDs = mesh->cellIDsInPartition();
+      // only test on whichever MPI rank has the (one) cell
+      if (myCellIDs.size() > 0)
+      {
+        const auto &cellID = *myCellIDs.begin();
+        auto elemType = mesh->getElementType(cellID);
+        auto trialBasis = elemType->trialOrderPtr->getBasis(trialVar->ID());
+        auto testBasis  = elemType->testOrderPtr->getBasis(testVar->ID());
+        
+        TEST_EQUALITY(totalDim, trialBasis->rangeDimension());
+        TEST_EQUALITY(totalDim, testBasis->rangeDimension());
+      }
+    }
+  }
+  
 }
   
 void testUnrefine(int levels, int spaceDim, Teuchos::FancyOStream &out, bool &success)
