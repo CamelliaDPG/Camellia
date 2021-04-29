@@ -48,8 +48,9 @@ void testProjectFunctionOnTensorTopoSides(CellTopoPtr spaceTopo, int H1Order, Ca
   IndexType cellID = 0;
   Camellia::FieldContainer<double> physicalCellNodes = spaceTimeMeshTopo->physicalCellNodesForCell(cellID);
   physicalCellNodes.resize(1,spaceTimeTopo->getNodeCount(),spaceTimeTopo->getDimension());
+  const bool tensorTopologyMeansSpaceTime = true;
   BasisCachePtr basisCache = BasisCache::basisCacheForCellTopology(spaceTimeTopo, cubatureDegree,
-                             physicalCellNodes, createSideCache);
+                             physicalCellNodes, createSideCache, tensorTopologyMeansSpaceTime);
 
   BasisFactoryPtr basisFactory = BasisFactory::basisFactory();
 

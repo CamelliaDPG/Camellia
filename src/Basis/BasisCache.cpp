@@ -514,6 +514,10 @@ BasisCache::BasisCache(int sideIndex, BasisCachePtr volumeCache, int trialDegree
 
     _cubPointsSideRefCellFC.resize(numCubPointsSide, sideDim + 1); // cubPointsSide from the pov of the ref cell
     CamelliaCellTools::mapToReferenceSubcell(_cubPointsSideRefCellFC, _cubPointsFC, sideDim, _sideIndex, _cellTopo);
+    
+    // TODO: create the TensorPoints _cubPointsSideRefCell directly from _cubPoints
+    // for now, we create it from _cubPointsSideRefCellFC (and lose any tensor product structure)
+    _cubPointsSideRefCell = FieldContainerConversion<double>::toTensorPoints(_cubPointsSideRefCellFC);
   }
 }
 
@@ -1003,6 +1007,7 @@ constFCPtr BasisCache::getTransformedValues(BasisPtr basis, Camellia::EOperator 
       {
         auto intrepid2Op = Intrepid2BasisWrapper<double>::intrepidOpToIntrepid2Op(relatedOp);
         const auto &points = useCubPointsSideRefCell ? _cubPointsSideRefCell : _cubPoints;
+        TEUCHOS_TEST_FOR_EXCEPTION(!points.isValid(), std::logic_error, "points container is not valid!");
         auto basisValues = getValues(basisAsIntrepid2,intrepid2Op,points);
         auto convertedBasisValues = FieldContainerConversion<double>::fromBasisValues(basisValues);
         referenceValues = Teuchos::rcp(new FieldContainer<double>(convertedBasisValues));

@@ -16,118 +16,102 @@
 #include "SpatialFilter.h"
 
 using namespace Camellia;
-
-class TransformXFunction : public SimpleVectorFunction<double>
+ 
+class TransformCoordFunction : public SimpleVectorFunction<double>
 {
-  double _xFrom, _xTo;
+  double _pointFrom, _pointTo;
+  int _comp; // which component is being transformed/identified
 public:
-  TransformXFunction(double xFrom, double xTo)
+  TransformCoordFunction(double pointFrom, double pointTo, int comp)
   {
-    _xFrom = xFrom;
-    _xTo = xTo;
+    _pointFrom = pointFrom;
+    _pointTo = pointTo;
+    _comp = comp;
   }
-  vector<double> value(double x)
+  
+  vector<double> value(double x) override
   {
     vector<double> value(1);
-    double tol=1e-14;
-    if (abs(x-_xFrom)>tol)
-    {
-      cout << "x must match xFrom!\n";
-      TEUCHOS_TEST_FOR_EXCEPTION(true, std::invalid_argument, "x must match xFrom!")
-    }
-    value[0] = _xTo;
+    vector<double> point {x};
+    
+    this->getValue(value, point);
     return value;
   }
-  vector<double> value(double x, double y)
+  
+  vector<double> value(double x, double y) override
   {
     vector<double> value(2);
-    double tol=1e-14;
-    if (abs(x-_xFrom)>tol)
-    {
-      cout << "x must match xFrom!\n";
-      TEUCHOS_TEST_FOR_EXCEPTION(true, std::invalid_argument, "x must match xFrom!")
-    }
-    value[0] = _xTo;
-    value[1] = y;
+    vector<double> point {x,y};
+    
+    this->getValue(value, point);
     return value;
   }
-  vector<double> value(double x, double y, double z)
+  
+  vector<double> value(double x, double y, double z) override
   {
     vector<double> value(3);
-    double tol=1e-14;
-    if (abs(x-_xFrom)>tol)
-    {
-      cout << "x must match xFrom!\n";
-      TEUCHOS_TEST_FOR_EXCEPTION(true, std::invalid_argument, "x must match xFrom!")
-    }
-    value[0] = _xTo;
-    value[1] = y;
-    value[2] = z;
+    vector<double> point {x,y,z};
+    
+    this->getValue(value, point);
     return value;
+  }
+  
+  void getValue(vector<double> &vectorOut, const vector<double> &vectorIn) override
+  {
+    TEUCHOS_TEST_FOR_EXCEPTION(vectorOut.size() != vectorIn.size(), std::invalid_argument, "vectorOut does not match vectorIn in length");
+    
+    const double tol=1e-14;
+    if (abs(vectorIn[_comp]-_pointFrom)>tol)
+    {
+      cout << "point[comp] must match pointFrom!\n";
+      TEUCHOS_TEST_FOR_EXCEPTION(true, std::invalid_argument, "point[comp] must match pointFrom!")
+    }
+    
+    for (int d=0; d<vectorOut.size(); d++)
+    {
+      if (d == _comp)
+      {
+        vectorOut[d] = _pointTo;
+      }
+      else
+      {
+        vectorOut[d] = vectorIn[d];
+      }
+    }
   }
 };
 
-class TransformYFunction : public SimpleVectorFunction<double>
+class TransformXFunction : public TransformCoordFunction
 {
-  double _yFrom, _yTo;
+  double _pointFrom, _pointTo;
+  int _comp; // which component is being transformed/identified
+public:
+  TransformXFunction(double xFrom, double xTo)
+  :
+  TransformCoordFunction(xFrom,xTo,0)
+  {}
+};
+
+class TransformYFunction : public TransformCoordFunction
+{
+  double _pointFrom, _pointTo;
+  int _comp; // which component is being transformed/identified
 public:
   TransformYFunction(double yFrom, double yTo)
-  {
-    _yFrom = yFrom;
-    _yTo = yTo;
-  }
-  vector<double> value(double x, double y)
-  {
-    vector<double> value(2);
-    double tol=1e-14;
-    if (abs(y-_yFrom)>tol)
-    {
-      cout << "y must match yFrom!\n";
-      TEUCHOS_TEST_FOR_EXCEPTION(true, std::invalid_argument, "y must match yFrom!")
-    }
-    value[0] = x;
-    value[1] = _yTo;
-    return value;
-  }
-  vector<double> value(double x, double y, double z)
-  {
-    vector<double> value(3);
-    double tol=1e-14;
-    if (abs(y-_yFrom)>tol)
-    {
-      cout << "y must match yFrom!\n";
-      TEUCHOS_TEST_FOR_EXCEPTION(true, std::invalid_argument, "y must match yFrom!")
-    }
-    value[0] = x;
-    value[1] = _yTo;
-    value[2] = z;
-    return value;
-  }
+  :
+  TransformCoordFunction(yFrom,yTo,1)
+  {}
 };
 
-class TransformZFunction : public SimpleVectorFunction<double>
+class TransformZFunction : public TransformCoordFunction
 {
-  double _zFrom, _zTo;
+  double _pointFrom, _pointTo;
+  int _comp; // which component is being transformed/identified
 public:
   TransformZFunction(double zFrom, double zTo)
-  {
-    _zFrom = zFrom;
-    _zTo = zTo;
-  }
-  vector<double> value(double x, double y, double z)
-  {
-    vector<double> value(3);
-    double tol=1e-14;
-    if (abs(z-_zFrom)>tol)
-    {
-      cout << "z must match zFrom!\n";
-      TEUCHOS_TEST_FOR_EXCEPTION(true, std::invalid_argument, "z must match zFrom!")
-    }
-    value[0] = x;
-    value[1] = y;
-    value[2] = _zTo;
-    return value;
-  }
+  :
+  TransformCoordFunction(zFrom,zTo,2)
+  {}
 };
 
 PeriodicBC::PeriodicBC(SpatialFilterPtr pointFilter0, SpatialFilterPtr pointFilter1,

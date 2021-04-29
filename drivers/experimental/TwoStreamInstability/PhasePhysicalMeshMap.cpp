@@ -1,11 +1,11 @@
 //
-//  PhasePhysicalMeshMap1D1V.cpp
+//  PhasePhysicalMeshMap.cpp
 //  Camellia
 //
 //  Created by Roberts, Nathan V on 5/13/20.
 //
 
-#include "PhasePhysicalMeshMap1D1V.h"
+#include "PhasePhysicalMeshMap.h"
 
 #include "CamelliaDebugUtility.h"
 #include "GlobalDofAssignment.h"
@@ -13,20 +13,25 @@
 
 using namespace Camellia;
 
-PhasePhysicalMeshMap1D1V::PhasePhysicalMeshMap1D1V( MeshPtr mesh_1D, MeshPtr mesh_2D )
+PhasePhysicalMeshMap::PhasePhysicalMeshMap( MeshPtr physicalMesh, MeshPtr phaseSpaceMesh )
 :
-_mesh_1D(mesh_1D),
-_mesh_2D(mesh_2D)
+_physicalMesh(physicalMesh),
+_phaseMesh(phaseSpaceMesh)
 {
+  _extrudedMeshTopology = dynamic_cast<ExtrudedMeshTopology*>(phaseSpaceMesh->getTopology().get());
+  TEUCHOS_TEST_FOR_EXCEPTION(_extrudedMeshTopology == NULL, std::invalid_argument, "Phase-space MeshTopology must be an ExtrudedMeshTopology");
+  
   Teuchos::RCP<RefinementObserver> thisWeakPtr = Teuchos::rcp(this, false);
-  _mesh_2D->registerObserver(thisWeakPtr);
+  _phaseMesh->registerObserver(thisWeakPtr);
   this->rebuildMap();
   
-  _mesh_1D->globalDofAssignment()->setAllowMeshTopologyPruning(false); // want to keep all 1D geometry info available to all MPI ranks
+  _physicalMesh->globalDofAssignment()->setAllowMeshTopologyPruning(false); // want to keep all 1D geometry info available to all MPI ranks
+  
+  TEUCHOS_TEST_FOR_EXCEPTION(_physicalMesh->getDimension() != 1, std::invalid_argument, "Physical meshes beyond 1D not yet supported by PhasePhysicalMeshMap");
 }
 
-PhasePhysicalPointIterator PhasePhysicalMeshMap1D1V::getPhysicalPointIterator(BasisCachePtr phaseSpaceBasisCache, GlobalIndexType phaseSpaceCellID,
-                                                                              map< GlobalIndexType , pair<BasisCachePtr, vector<int> > > &physicalBasisCachePairs) const
+PhasePhysicalPointIterator PhasePhysicalMeshMap::getPhysicalPointIterator(BasisCachePtr phaseSpaceBasisCache, GlobalIndexType phaseSpaceCellID,
+                                                                          map< GlobalIndexType , pair<BasisCachePtr, vector<int> > > &physicalBasisCachePairs) const
 {
   const auto &physicalCellInfoVector = this->physicalCellInfo(phaseSpaceCellID);
   
@@ -39,27 +44,44 @@ PhasePhysicalPointIterator PhasePhysicalMeshMap1D1V::getPhysicalPointIterator(Ba
   else // isSideCache == true
   {
     const int phaseSpaceSideOrdinal = phaseSpaceBasisCache->getSideIndex();
-    // what follows assumes 1D1V with quad elements; let's throw an exception if we're not on a quad
-    TEUCHOS_TEST_FOR_EXCEPTION(phaseSpaceBasisCache->cellTopology()->getKey() != CellTopology::quad()->getKey(), std::invalid_argument, "Only phase-space quads supported right now");
-    if ((phaseSpaceSideOrdinal == 0) || (phaseSpaceSideOrdinal == 2))
+    // what follows assumes 1DnV with extruded line elements, 1 ≤ n ≤ 3; let's throw an exception if we're not on such an element
+    auto phaseCellTopo = phaseSpaceBasisCache->cellTopology();
+    
+    if (phaseCellTopo->getTensorialDegree() + _physicalMesh->getDimension() != _phaseMesh->getDimension())
     {
-      // we're in the physical cell interior
-      physicalSpaceSideOrdinal = -1;
+      TEUCHOS_TEST_FOR_EXCEPTION(true, std::invalid_argument, "phaseCellTopo must be an orthogonal extrusion of the physical mesh");
     }
-    else if (phaseSpaceSideOrdinal == 1)
+    
+    /*
+       subcell ordering in tensor cell topology is as follows.
+       
+       We take the one-lower-dimensional component topology T and make two copies, T0 and T1.
+       
+       The subcells of dimension d in the tensor topology are ordered as follows:
+       - all subcells of dimension d from T0
+       - all subcells of dimension d from T1
+       - all (subcells of dimension (d-1) from T) x Line.
+       
+       Since our physical 1D cell is the first tensorial component, the phase space sides that correspond to physical sides are exactly
+       the last two phase space sides.  (For higher physical dimensions where the physical cell has N sides, the phase
+       space sides of interest will be the last N sides.)
+       */
+      
+    const int numPhysicalSides = 2;
+    
+    if (phaseSpaceSideOrdinal < phaseCellTopo->getSideCount() - numPhysicalSides)
     {
-      physicalSpaceSideOrdinal = 1;
+      physicalSpaceSideOrdinal = -1;
     }
     else
     {
-      physicalSpaceSideOrdinal = 0;
+      physicalSpaceSideOrdinal = phaseSpaceSideOrdinal - (phaseCellTopo->getSideCount() - numPhysicalSides);
     }
   }
   const bool inPhysicalVolume = (physicalSpaceSideOrdinal == -1);
   
-  // if we are on the top side (sideOrdinal == 2) of the phase space cell, then because that side is oriented right to left, the
-  // points in the phase space BasisCache will be reversed relative to the component physical points
-  const bool reversePointOrder = (phaseSpaceBasisCache->getSideIndex() == 2);
+  // reversePointOrder is always false for a proper tensor-product mesh.  (1D1V was initially implemented with a 2D mesh, with shards quadrilaterals, which don't have a tensor-product structure.)
+  const bool reversePointOrder = false;
 
   std::vector< std::pair<int,int> > pointStartEndPairs(physicalCellInfoVector.size());
   
@@ -107,7 +129,7 @@ PhasePhysicalPointIterator PhasePhysicalMeshMap1D1V::getPhysicalPointIterator(Ba
   return PhasePhysicalPointIterator(physicalCellInfoVector, pointStartEndPairs, reversePointOrder, numPhysicalPoints);
 }
 
-int PhasePhysicalMeshMap1D1V::maximumUnrefinementLevel() const
+int PhasePhysicalMeshMap::maximumUnrefinementLevel() const
 {
   int unrefinementLevel = 0; // 0 means each phase space cell is the same width as the sole corresponding physical cell
   for (const auto & cellIDToCellInfoVectorEntry : _phaseSpaceCellIDToPhysicalCellInfo)
@@ -121,28 +143,28 @@ int PhasePhysicalMeshMap1D1V::maximumUnrefinementLevel() const
   return unrefinementLevel;
 }
 
-MeshPtr PhasePhysicalMeshMap1D1V::mesh1D() const
+MeshPtr PhasePhysicalMeshMap::physicalMesh() const
 {
-  return _mesh_1D;
+  return _physicalMesh;
 }
 
-MeshPtr PhasePhysicalMeshMap1D1V::mesh2D() const
+MeshPtr PhasePhysicalMeshMap::phaseMesh() const
 {
-  return _mesh_2D;
+  return _phaseMesh;
 }
 
-const std::vector<PhysicalCellRelativeRefinementInfo> & PhasePhysicalMeshMap1D1V::physicalCellInfo(const GlobalIndexType &phaseSpaceCellID) const
+const std::vector<PhysicalCellRelativeRefinementInfo> & PhasePhysicalMeshMap::physicalCellInfo(const GlobalIndexType &phaseSpaceCellID) const
 {
   auto entry = _phaseSpaceCellIDToPhysicalCellInfo.find(phaseSpaceCellID);
   if (entry == _phaseSpaceCellIDToPhysicalCellInfo.end())
   {
-    int myPID = _mesh_2D->Comm()->MyPID();
+    int myPID = _phaseMesh->Comm()->MyPID();
     std::cout << "phaseSpaceCellID " << phaseSpaceCellID << " not found on rank " << myPID << std::endl;
     std::cout << "valid phaseSpaceCellIDs on rank " << myPID << ": ";
-    const auto & my2DCells = _mesh_2D->cellIDsInPartition();
-    for (auto & my2DCell : my2DCells)
+    const auto & myPhaseSpaceCells = _phaseMesh->cellIDsInPartition();
+    for (auto & myPhaseSpaceCell : myPhaseSpaceCells)
     {
-      std::cout << my2DCell << " ";
+      std::cout << myPhaseSpaceCell << " ";
     }
     std::cout << std::endl << std::flush;
   }
@@ -150,7 +172,7 @@ const std::vector<PhysicalCellRelativeRefinementInfo> & PhasePhysicalMeshMap1D1V
   return entry->second;
 }
 
-std::set<GlobalIndexType> PhasePhysicalMeshMap1D1V::physicalCellIDsForPhaseSpaceCells(const std::set<GlobalIndexType> &phaseSpaceCellIDs) const
+std::set<GlobalIndexType> PhasePhysicalMeshMap::physicalCellIDsForPhaseSpaceCells(const std::set<GlobalIndexType> &phaseSpaceCellIDs) const
 {
   std::set<GlobalIndexType> physicalCellIDs;
   for (auto & phaseSpaceCellID : phaseSpaceCellIDs)
@@ -166,7 +188,7 @@ std::set<GlobalIndexType> PhasePhysicalMeshMap1D1V::physicalCellIDsForPhaseSpace
   return physicalCellIDs;
 }
 
-std::vector<GlobalIndexType> PhasePhysicalMeshMap1D1V::physicalCellIDsForPhaseSpaceCells(const std::vector<GlobalIndexType> &phaseSpaceCellIDs) const
+std::vector<GlobalIndexType> PhasePhysicalMeshMap::physicalCellIDsForPhaseSpaceCells(const std::vector<GlobalIndexType> &phaseSpaceCellIDs) const
 {
   std::set<GlobalIndexType> physicalCellIDs;
   for (auto & phaseSpaceCellID : phaseSpaceCellIDs)
@@ -183,133 +205,57 @@ std::vector<GlobalIndexType> PhasePhysicalMeshMap1D1V::physicalCellIDsForPhaseSp
   return physicalCellIDsVector;
 }
 
-void PhasePhysicalMeshMap1D1V::rebuildMap()
+void PhasePhysicalMeshMap::rebuildMap()
 {
-  // Note that much of the logic here, and in this class more generally, does assume grid-aligned quad elements in 2D
-  // We also assume that the 1D mesh is nowhere coarser than the 2D mesh
-  auto & myCells_2D = _mesh_2D->cellIDsInPartition();
-  std::vector<double> vertex_1D(1);
+  auto & myPhaseCells = _phaseMesh->cellIDsInPartition();
   _phaseSpaceCellIDToPhysicalCellInfo.clear();
   
   const int DIM_X = 0;
   
-  for (auto cell_2D : myCells_2D)
+  auto phaseMeshTopo = _phaseMesh->getTopology();
+  auto meshTopo_1D = _physicalMesh->getTopology();
+  
+  for (auto phaseCellID : myPhaseCells)
   {
-    auto meshTopo_2D = _mesh_2D->getTopology();
-    auto vertexIndices = meshTopo_2D->getCell(cell_2D)->vertices();
-    double xLeft = meshTopo_2D->getVertex(vertexIndices[0])[DIM_X];
-    double width = meshTopo_2D->getVertex(vertexIndices[1])[DIM_X] - xLeft;
-    // we're assuming here that the vertex indices are laid out in CCW order, and have cartesian structure
-    // let's confirm that:
-    {
-      if (width <= 0)
-      {
-        std::cout << "pruning ordinal " << meshTopo_2D->baseMeshTopology()->pruningOrdinal() << std::endl;
-        Camellia::print("non-positive-width cell, vertexIndices", vertexIndices);
-        TEUCHOS_TEST_FOR_EXCEPTION(width <= 0, std::invalid_argument, "element width must be positive!");
-      }
-      double topWidth = meshTopo_2D->getVertex(vertexIndices[2])[DIM_X] - meshTopo_2D->getVertex(vertexIndices[3])[DIM_X];
-      const double diff = std::fabs(topWidth-width);
-      const double tol  = std::max(1e-12 * width, 1e-12);
-      if (diff > tol)
-      {
-        using std::to_string;
-        using std::cout;
-        using std::endl;
-        cout << "width at top and bottom of element are required to match! topWidth: " << topWidth << "; bottom width: " << width << " (diff: " << diff << ")\n";
-        TEUCHOS_TEST_FOR_EXCEPTION( diff > tol , std::invalid_argument, "width at top and bottom of element are required to match! topWidth: " + to_string(topWidth) + "; bottom width: " + to_string(width) + " (diff: " + to_string(diff) + ")");
-      }
-    }
-    vertex_1D[0] = xLeft;
-    auto meshTopo_1D = _mesh_1D->getTopology();
-    IndexType leftVertexIndex;
-    const unsigned leftVertexOrdinal  = 0;
-    const unsigned rightVertexOrdinal = 1;
-    const unsigned vertexDim          = 0;
-    bool vertexFound = meshTopo_1D->getVertexIndex(vertex_1D, leftVertexIndex);
-    if (!vertexFound)
-    {
-      // for debugging, try the lookup again:
-      meshTopo_1D->getVertexIndex(vertex_1D, leftVertexIndex);
-      meshTopo_1D->printAllEntitiesInBaseMeshTopology();
-      TEUCHOS_TEST_FOR_EXCEPTION(!vertexFound, std::invalid_argument, "vertex at coordinate " + std::to_string(xLeft) + " not found!")
-    }
-    std::vector<IndexType> vertexNodeVector {leftVertexIndex};
-    IndexType leftVertexIndexForCellLookup = meshTopo_1D->baseMeshTopology()->getCanonicalEntityNodesViaPeriodicBCs(vertexDim, vertexNodeVector)[0];
+    auto physicalCellID = _extrudedMeshTopology->physicalCellIDForPhaseSpaceCellID(phaseCellID);
+    CellPtr physicalCell = meshTopo_1D->getCell(physicalCellID);
     
-    set< pair<IndexType, unsigned> > cellPairsWithVertex = meshTopo_1D->getCellsContainingEntity(0, leftVertexIndexForCellLookup);
-    IndexType physicalCellIDLeft = -1;
-    for (auto cellPair_1D : cellPairsWithVertex)
-    {
-      const unsigned & vertexOrdinalInCell = cellPair_1D.second;
-      if (vertexOrdinalInCell == leftVertexOrdinal)
-      {
-        physicalCellIDLeft = cellPair_1D.first;
-      }
-    }
-    TEUCHOS_TEST_FOR_EXCEPTION(physicalCellIDLeft == -1, std::invalid_argument, "Physical cell not found");
-    CellPtr physicalCellLeft = meshTopo_1D->getCell(physicalCellIDLeft);
+    const int leftVertexOrdinal  = 0; // in 1D element, left vertex is the first one
+    const int rightVertexOrdinal = 1; // in 1D, right vertex is the second one
     
-    IndexType rightVertexIndex;
-    vertex_1D[0] = xLeft + width; // xRight
-    vertexFound = meshTopo_1D->getVertexIndex(vertex_1D, rightVertexIndex);
-    if (!vertexFound)
-    {
-      // for debugging, try the lookup again:
-      meshTopo_1D->getVertexIndex(vertex_1D, leftVertexIndex);
-      meshTopo_1D->printAllEntitiesInBaseMeshTopology();
-      TEUCHOS_TEST_FOR_EXCEPTION(!vertexFound, std::invalid_argument, "vertex at coordinate " + std::to_string(xLeft) + " not found!")
-    }
-    vertexNodeVector[0] = rightVertexIndex;
-    IndexType rightVertexIndexForCellLookup = meshTopo_1D->baseMeshTopology()->getCanonicalEntityNodesViaPeriodicBCs(vertexDim, vertexNodeVector)[0];
-    cellPairsWithVertex = meshTopo_1D->getCellsContainingEntity(0, rightVertexIndexForCellLookup);
-    IndexType physicalCellIDRight = -1;
-    for (auto cellPair_1D : cellPairsWithVertex)
-    {
-      const unsigned & vertexOrdinalInCell = cellPair_1D.second;
-      if (vertexOrdinalInCell == rightVertexOrdinal)
-      {
-        physicalCellIDRight = cellPair_1D.first;
-      }
-    }
-    TEUCHOS_TEST_FOR_EXCEPTION(physicalCellIDRight == -1, std::invalid_argument, "Physical cell not found");
+    const bool leafNodesOnly = true;
+    auto  leftDescendants = physicalCell->getDescendantsForSide( leftVertexOrdinal, meshTopo_1D, leafNodesOnly);
+    auto rightDescendants = physicalCell->getDescendantsForSide(rightVertexOrdinal, meshTopo_1D, leafNodesOnly);
     
-    // find the ancestor whose width corresponds with the phase space cell width
-    GlobalIndexType ancestorCellID = physicalCellIDLeft;
-    int numUnrefinementLevels = 0;
-    if (physicalCellIDLeft != physicalCellIDRight)
-    {
-      auto ancestor = physicalCellLeft;
-      auto ancestorRightVertexIndex = ancestor->vertices()[rightVertexOrdinal];
-      while (ancestorRightVertexIndex != rightVertexIndex)
-      {
-        ancestor = ancestor->getParent();
-        ancestorRightVertexIndex = ancestor->vertices()[rightVertexOrdinal];
-        numUnrefinementLevels++;
-      }
-      ancestorCellID = ancestor->cellIndex();
-    }
+    const auto &  leftDescendantCellID =  leftDescendants[0].first;
+    const auto & rightDescendantCellID = rightDescendants[0].first;
+    
+    CellPtr leftDescendant = meshTopo_1D->getCell(leftDescendantCellID);
+    
+    const int physicalCellLevel = physicalCell->level();
+    const int leftDescendantLevel = leftDescendant->level();
+    int numUnrefinementLevels = leftDescendantLevel - physicalCellLevel;
     
     // now, march along physicalCells from left until we get to right
     double refSpaceXCoordThusFar = -1.0;
     std::vector<PhysicalCellRelativeRefinementInfo> physicalCellInfoVector;
     PhysicalCellRelativeRefinementInfo physicalCellInfo;
-    physicalCellInfo.physicalCellID = physicalCellIDLeft;
+    physicalCellInfo.physicalCellID = leftDescendantCellID; // this is the one that shares the left vertex with the physical ancestor corresponding to the phase space cell
     physicalCellInfo.uniformDescendantNumber = 0;
     physicalCellInfo.unrefinementLevel = numUnrefinementLevels;
     physicalCellInfoVector.push_back(physicalCellInfo);
     
     if (numUnrefinementLevels > 0)
     {
-      if (_physicalCellIDToRefSpaceXCoordInAncestor[physicalCellIDLeft].size() < numUnrefinementLevels)
+      if (_physicalCellIDToRefSpaceXCoordInAncestor[leftDescendantCellID].size() < numUnrefinementLevels)
       {
-        _physicalCellIDToRefSpaceXCoordInAncestor[physicalCellIDLeft].resize(numUnrefinementLevels);
+        _physicalCellIDToRefSpaceXCoordInAncestor[leftDescendantCellID].resize(numUnrefinementLevels);
       }
-      _physicalCellIDToRefSpaceXCoordInAncestor[physicalCellIDLeft][numUnrefinementLevels-1] = refSpaceXCoordThusFar;
+      _physicalCellIDToRefSpaceXCoordInAncestor[leftDescendantCellID][numUnrefinementLevels-1] = refSpaceXCoordThusFar;
     }
     
-    GlobalIndexType rightmostPhysicalCellID = physicalCellIDLeft;
-    while (rightmostPhysicalCellID != physicalCellIDRight)
+    GlobalIndexType rightmostPhysicalCellID = leftDescendantCellID;
+    while (rightmostPhysicalCellID != rightDescendantCellID)
     {
       CellPtr rightmostPhysicalCell = meshTopo_1D->getCell(rightmostPhysicalCellID);
       const double previousCellWidthInAncestor = 2.0 / (1 << numUnrefinementLevels);
@@ -319,12 +265,8 @@ void PhasePhysicalMeshMap1D1V::rebuildMap()
       auto neighbor = rightmostPhysicalCell->getNeighbor(rightVertexOrdinal, meshTopo_1D);
       physicalCellInfo.physicalCellID = neighbor->cellIndex();
       auto ancestor = neighbor;
-      numUnrefinementLevels = 0;
-      while (ancestor->cellIndex() != ancestorCellID)
-      {
-        ancestor = ancestor->getParent();
-        numUnrefinementLevels++;
-      }
+      numUnrefinementLevels = neighbor->level() - physicalCellLevel;
+      
       const int previousLevelTotalDescendantCount = 1 << previousUnrefinementLevel;
       const int totalDescendantCount = 1 << numUnrefinementLevels;
       
@@ -343,11 +285,11 @@ void PhasePhysicalMeshMap1D1V::rebuildMap()
       
       rightmostPhysicalCellID = neighbor->cellIndex();
     }
-    _phaseSpaceCellIDToPhysicalCellInfo[cell_2D] = physicalCellInfoVector;
+    _phaseSpaceCellIDToPhysicalCellInfo[phaseCellID] = physicalCellInfoVector;
   }
 }
 
-std::set< std::pair<int,int> > PhasePhysicalMeshMap1D1V::referenceSpaceUnrefinementLevelDescendantNumberPairs() const
+std::set< std::pair<int,int> > PhasePhysicalMeshMap::referenceSpaceUnrefinementLevelDescendantNumberPairs() const
 {
   std::set< std::pair<int,int> > levelNumberPairs;
   for (const auto & cellEntriesVectorPair : _phaseSpaceCellIDToPhysicalCellInfo)
@@ -364,13 +306,13 @@ std::set< std::pair<int,int> > PhasePhysicalMeshMap1D1V::referenceSpaceUnrefinem
 }
 
 //! Returns BasisCache, alongside a vector indicating point offsets for each ancestral level.
-std::pair<BasisCachePtr, std::vector<int> > PhasePhysicalMeshMap1D1V::physicalCellBasisCache(const GlobalIndexType physicalCellID, bool testVsTest, int quadratureEnrichment) const
+std::pair<BasisCachePtr, std::vector<int> > PhasePhysicalMeshMap::physicalCellBasisCache(const GlobalIndexType physicalCellID, bool testVsTest, int quadratureEnrichment) const
 {
-  auto elemType = _mesh_1D->getElementType(physicalCellID);
-  BasisCachePtr basisCache =  BasisCache::basisCacheForCellType(_mesh_1D, elemType, testVsTest, quadratureEnrichment);
+  auto elemType = _physicalMesh->getElementType(physicalCellID);
+  BasisCachePtr basisCache =  BasisCache::basisCacheForCellType(_physicalMesh, elemType, testVsTest, quadratureEnrichment);
   auto refPointsStandard = basisCache->getRefCellPointsFC();
   std::vector<double> xCoordsInAncestors;
-  auto physicalCellNodes = _mesh_1D->physicalCellNodesForCell(physicalCellID);
+  auto physicalCellNodes = _physicalMesh->physicalCellNodesForCell(physicalCellID);
   auto xCoordsEntry = _physicalCellIDToRefSpaceXCoordInAncestor.find(physicalCellID);
   if (xCoordsEntry != _physicalCellIDToRefSpaceXCoordInAncestor.end())
   {
@@ -456,14 +398,14 @@ std::pair<BasisCachePtr, std::vector<int> > PhasePhysicalMeshMap1D1V::physicalCe
   return {basisCache,pointOffsets};
 }
   
-void PhasePhysicalMeshMap1D1V::didHRefine(MeshTopologyPtr phaseSpaceMesh, const set<GlobalIndexType> &phaseSpaceCellIDs, Teuchos::RCP<RefinementPattern> refPattern, bool willRepartitionAndRebuild)
+void PhasePhysicalMeshMap::didHRefine(MeshTopologyPtr phaseSpaceMesh, const set<GlobalIndexType> &phaseSpaceCellIDs, Teuchos::RCP<RefinementPattern> refPattern, bool willRepartitionAndRebuild)
 {
   // We need to maintain the rule that the 1D mesh is nowhere coarser than the 2D mesh
   // Any phase space cell that is being refined is right now strictly finer than the 1D mesh if and only if the length of
   // the corresponding vector in _phaseSpaceCellIDToPhysicalCellInfo is greater than 1 (i.e. there is more than one
   // physical cell corresponding to the phase space cell).
   std::set<GlobalIndexType> physicalCellsToRefineSet;
-  auto meshTopo1D = _mesh_1D->getTopology();
+  auto meshTopo1D = _physicalMesh->getTopology();
   for (auto phaseSpaceCellID : phaseSpaceCellIDs)
   {
     if (_phaseSpaceCellIDToPhysicalCellInfo.find(phaseSpaceCellID) != _phaseSpaceCellIDToPhysicalCellInfo.end())
@@ -485,12 +427,12 @@ void PhasePhysicalMeshMap1D1V::didHRefine(MeshTopologyPtr phaseSpaceMesh, const 
   std::vector<GlobalIndexType> myPhysicalCellIDsToRefine(physicalCellsToRefineSet.begin(),physicalCellsToRefineSet.end());
   std::vector<int> offsets;
   
-  MPIWrapper::allGatherVariable<GlobalIndexType>(*_mesh_2D->Comm(), allPhysicalCellIDsToRefine, myPhysicalCellIDsToRefine, offsets);
+  MPIWrapper::allGatherVariable<GlobalIndexType>(*_phaseMesh->Comm(), allPhysicalCellIDsToRefine, myPhysicalCellIDsToRefine, offsets);
   
   // allPhysicalCellIDsToRefine may have duplicate entries; use set to deduplicate these:
   physicalCellsToRefineSet.insert(allPhysicalCellIDsToRefine.begin(),allPhysicalCellIDsToRefine.end());
   
-  _mesh_1D->hRefine(physicalCellsToRefineSet, RefinementPattern::regularRefinementPatternLine());
+  _physicalMesh->hRefine(physicalCellsToRefineSet, RefinementPattern::regularRefinementPatternLine());
   
   // if we're going to repartition anyway, we'll rebuild the map then (see didRepartition() below), and we don't need it up to date between now and then
   if (!willRepartitionAndRebuild)
@@ -499,7 +441,7 @@ void PhasePhysicalMeshMap1D1V::didHRefine(MeshTopologyPtr phaseSpaceMesh, const 
   }
 }
 
-void PhasePhysicalMeshMap1D1V::didHUnrefine(MeshTopologyPtr phaseSpaceMesh, const std::set<GlobalIndexType> &cellIDs, bool didRepartitionAndRebuild)
+void PhasePhysicalMeshMap::didHUnrefine(MeshTopologyPtr phaseSpaceMesh, const std::set<GlobalIndexType> &cellIDs, bool didRepartitionAndRebuild)
 {
   // since the 1D mesh is pretty cheap, we don't unrefine it here even if we could.
   // if we're going to repartition anyway, we'll rebuild the map then (see didRepartition() below), and we don't need it up to date between now and then
@@ -509,7 +451,7 @@ void PhasePhysicalMeshMap1D1V::didHUnrefine(MeshTopologyPtr phaseSpaceMesh, cons
   }
 }
 
-void PhasePhysicalMeshMap1D1V::didRepartition(MeshTopologyPtr phaseSpaceMesh)
+void PhasePhysicalMeshMap::didRepartition(MeshTopologyPtr phaseSpaceMesh)
 {
   rebuildMap();
 }

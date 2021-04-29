@@ -856,6 +856,7 @@ TEUCHOS_UNIT_TEST( StokesVGPFormulation, SaveAndLoad )
     p = p - p_mean;
     
     double tol = 1e-10;
+    
     double pErr = (pSoln - p)->l2norm(spaceTimeForm.solution()->mesh());
     double uErr = (uSoln - u)->l2norm(spaceTimeForm.solution()->mesh());
     
@@ -866,7 +867,7 @@ TEUCHOS_UNIT_TEST( StokesVGPFormulation, SaveAndLoad )
     TEUCHOS_TEST_COMPARE(energyError, <, tol, out, success);
     
     if (!success)
-    {         // DEBUGGING:
+    {
       {
         SolutionPtr solution = spaceTimeForm.solution();
         solution->initializeLHSVector();
@@ -1052,6 +1053,7 @@ TEUCHOS_UNIT_TEST( StokesVGPFormulation, SaveAndLoad )
     p = p - p_mean;
     
     double tol = 1e-11;
+    
     double pErr = (pSoln - p)->l2norm(spaceTimeForm.solution()->mesh());
     double uErr = (uSoln - u)->l2norm(spaceTimeForm.solution()->mesh());
     

@@ -46,7 +46,7 @@ namespace
     
     bool useConformingTraces = true;
     auto form = CompressibleNavierStokesFormulation::steadyFormulation(spaceDim, Re, useConformingTraces,
-                                                                               meshTopo, polyOrder, delta_k);
+                                                                       meshTopo, polyOrder, delta_k);
     
     // sanity checks that the constructor has set things up the way we assume:
     TEST_FLOATING_EQUALITY(form->Pr(),    TEST_PR,     tol);

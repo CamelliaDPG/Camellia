@@ -124,7 +124,32 @@ namespace Camellia
       _extrusionBasisIntegrals[extrusionOrdinal] = extrusionBasisIntegral;
     }
   }
+
+  const Camellia::DeviceView<double> SolutionMomentFunction::basisCoefficients() const
+  {
+    return _spatialBasisCoefficients;
+  }
+
+  int SolutionMomentFunction::localCellOrdinal(const IndexType &cellID) const
+  {
+    auto matchingEntry = std::lower_bound(_physicalCellIDs.begin(), _physicalCellIDs.end(), cellID);
+    if (matchingEntry == _physicalCellIDs.end())
+    {
+      // cellID not found
+      return -1;
+    }
+    else
+    {
+      const int cellOrdinal = matchingEntry - _physicalCellIDs.begin();
+      return cellOrdinal;
+    }
+  }
   
+  MeshPtr SolutionMomentFunction::mesh()
+  {
+    return _possiblyExtrudedPhysicalMesh;
+  }
+
   //! recomputes coefficients on (extruded) spatial mesh.  MPI collective method.
   void SolutionMomentFunction::updateValues()
   {
@@ -539,7 +564,7 @@ namespace Camellia
       });
       Allocation<double>::recordDeviceViewDeallocation(basisSumValues);
     }
-    transformedValues->checkinDeviceView(true);
+    transformedValues->checkinDeviceView(false); // false: don't copy back to host (has not changed)
   }
   
   SolutionMomentFunction::~SolutionMomentFunction()

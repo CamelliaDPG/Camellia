@@ -661,4 +661,17 @@ namespace Camellia
     // physical MeshTopology should have PeriodicBCs for all dimensions:
     return _physicalMeshTopology->getPeriodicBCs();
   }
+
+  Teuchos::RCP<SubExtrudedMeshTopology> SubExtrudedMeshTopology::subExtrudedMeshTopology(MeshTopologyViewPtr meshTopo, int extrusionDimensionNumber)
+  {
+    // meshTopo must be a ExtrudedMeshTopology
+    ExtrudedMeshTopology* extrudedMeshTopo = dynamic_cast<ExtrudedMeshTopology*>(meshTopo.get());
+    if (extrudedMeshTopo == NULL)
+    {
+      TEUCHOS_TEST_FOR_EXCEPTION(true, std::invalid_argument, "Only ExtrudedMeshTopology meshes are supported by PhaseSpaceVisualization.");
+    }
+    Teuchos::RCP<ExtrudedMeshTopology> extrudedMeshTopoRCP = Teuchos::rcp(extrudedMeshTopo,false); // weak pointer
+    auto subExtrudedMeshTopo = Teuchos::rcp( new SubExtrudedMeshTopology(extrudedMeshTopoRCP, extrusionDimensionNumber) );
+    return subExtrudedMeshTopo;
+  }
 } // namespace Camellia

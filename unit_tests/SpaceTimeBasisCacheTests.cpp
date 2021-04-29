@@ -170,8 +170,9 @@ void testBasisTransformation(BasisPtr spaceTimeBasis, Camellia::EOperator op,
   FC spaceTimeNodes(spaceTimeTopo->getNodeCount(), spaceTimeTopo->getDimension());
   spaceTimeTopo->initializeNodes(tensorComponentNodes, spaceTimeNodes);
   addCellDimension(spaceTimeNodes);
+  const bool tensorTopologyMeansSpaceTime = true;
   BasisCachePtr spaceTimeBasisCache = BasisCache::basisCacheForCellTopology(spaceTimeTopo, cubatureDegree,
-                                      spaceTimeNodes, createSideCaches);
+                                      spaceTimeNodes, createSideCaches, tensorTopologyMeansSpaceTime);
 
   // Volume test:
   FC spaceValues = *spatialBasisCache->getTransformedValues(spatialBasis, spaceOp);

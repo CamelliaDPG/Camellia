@@ -28,6 +28,10 @@
 #include "CellTopology.h"
 #include "TensorBasis.h"
 
+// includes specific to Projection tests (may want to move to a different test group)
+#include "MeshFactory.h"
+#include "Solution.h"
+
 using namespace Camellia;
 
 namespace
@@ -698,6 +702,64 @@ TEUCHOS_UNIT_TEST( TensorBasis, BasisFillsContainerQuadHDIV_2D )
   BasisPtr timeBasis = getTimeBasis(timePolyOrder);
 
   testTensorBasisFillsFieldContainer(spatialBasis, timeBasis, out, success);
+}
+
+TEUCHOS_UNIT_TEST( TensorBasis, Projection_2D_x )
+{
+  const double tol = 1e-16; // TODO: relax this to something more reasonable.
+  
+  const int baseDim          = 1; // corresponds to the fact that the initial mesh topo is 1D.
+  const int numExtrusionDims = 1;
+  const int totalDim         = baseDim + numExtrusionDims;
+  
+  
+  // 1. Construct extruded 2D mesh and corresponding variable, solution
+  double x0 = 0.0, xWidth = 1.0;
+  
+  const int xElements = 2;
+  bool usePeriodicBCs            = true;
+  auto intervalMeshTopology      = MeshFactory::intervalMeshTopology(x0, x0+xWidth, xElements, usePeriodicBCs);
+  
+  std::vector<double> v0(numExtrusionDims,0.0);
+  std::vector<double> vWidths(numExtrusionDims,1.0);
+  std::vector<int> vMeshWidths(numExtrusionDims,1);
+  MeshTopologyPtr extrudedMeshTopology = MeshFactory::extrudedMeshTopology(intervalMeshTopology, v0, vWidths, vMeshWidths);
+  
+  VarFactoryPtr vf = VarFactory::varFactory();
+  VarPtr u = vf->fieldVar("u");
+  
+  const int H1Order = 2;
+  const int delta_k = 0;
+  
+  MeshPtr mesh = Teuchos::rcp(new Mesh(extrudedMeshTopology, vf, H1Order, delta_k));
+  TEST_EQUALITY(false, mesh->tensorTopologyMeansSpaceTime());
+  
+  // get the basis for u:
+  auto uBasis = mesh->getElementType(0)->trialOrderPtr->getBasis(u->ID());
+  // confirm that the range dimension for u is correct:
+  TEST_EQUALITY(totalDim, uBasis->rangeDimension());
+  
+  SolutionPtr soln = Solution::solution(Teuchos::null, mesh);
+  soln->setCubatureEnrichmentDegree(H1Order); // we do this to get around a quirk in 
+  FunctionPtr u_soln = Function::solution(u, soln);
+  
+  // 2. Project x onto that variable
+  FunctionPtr x = Function::xn(1);
+  std::map<int, FunctionPtr> xMap;
+  xMap[u->ID()] = x;
+  soln->projectOntoMesh(xMap);
+
+  // 3. Check error between x and the solution
+  double err_l2 = (u_soln - x)->l2norm(mesh);
+  TEST_COMPARE(err_l2, <, tol);
+  
+//  // 4. Check d/dy of solution is zero
+//  double u_dy_l2 = u_soln->dy()->l2norm(mesh);
+//  TEST_COMPARE(u_dy_l2, <, tol);
+//  
+//  // check the more general way of expressing d/dy:
+//  u_dy_l2 = u_soln->di(1)->l2norm(mesh);
+//  TEST_COMPARE(u_dy_l2, <, tol);
 }
 
 } // namespace

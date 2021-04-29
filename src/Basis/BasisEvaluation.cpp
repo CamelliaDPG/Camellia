@@ -54,6 +54,7 @@ Intrepid2::BasisValues<double,typename BasisEvaluation::ExecSpaceType>
 BasisEvaluation::getValues(Intrepid2BasisWrapper<double>* intrepid2Basis, Intrepid2::EOperator op,
                            const Intrepid2::TensorPoints<double,ExecSpaceType> inputPoints)
 {
+  TEUCHOS_TEST_FOR_EXCEPTION(!inputPoints.isValid(), std::invalid_argument, "inputPoints must be a valid container!");
   auto outputValues = intrepid2Basis->allocateBasisValues(inputPoints, op);
   intrepid2Basis->getValues(outputValues, inputPoints, op);
   return outputValues;

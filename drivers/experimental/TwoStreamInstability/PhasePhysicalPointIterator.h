@@ -1,31 +1,17 @@
 //
-//  PhasePhysicalMeshMap1D1V.h
+//  PhasePhysicalPointIterator.h
 //  Camellia
 //
-//  Created by Roberts, Nathan V on 5/13/20.
+//  Created by Roberts, Nathan V on 1/15/21.
 //
 
-#ifndef PhasePhysicalMeshMap1D1V_h
-#define PhasePhysicalMeshMap1D1V_h
+#ifndef PhasePhysicalPointIterator_h
+#define PhasePhysicalPointIterator_h
 
-#include "MPIWrapper.h"
-#include "RefinementObserver.h"
-#include "TypeDefs.h"
+#include "PhysicalCellRelativeRefinementInfo.h"
 
 namespace Camellia
 {
-  struct PhysicalCellRelativeRefinementInfo
-  {
-    GlobalIndexType physicalCellID;
-    int unrefinementLevel; // relative to the ancestor that is as wide as the phase space cell
-    int uniformDescendantNumber;  // in 1D, these move left to right
-    double refSpaceXCoordinateInAncestor() const // left vertex coordinate; ranges from -1 to 1
-    {
-      int numDescendants = 1 << unrefinementLevel;
-      return uniformDescendantNumber * 2.0 / numDescendants - 1.0;
-    }
-  };
-
   class PhasePhysicalPointIterator
   {
   private:
@@ -127,45 +113,6 @@ namespace Camellia
       return _pointStartEndPairs[_currentCellOrdinal].first + _pointOrdinalInCurrentCell;
     }
   };
-
-  //! This class requires that the phase space mesh be an orthogonal extrusion of the physical mesh.
-  //! It also requires that on construction the physical mesh is nowhere coarser than the phase space mesh.
-  //! (It provides mechanisms for maintaining this constraint following refinement of the phase space mesh.)
-  //! It also requires that the physical (1D) mesh be replicated, as opposed to distributed across MPI ranks.
-  class PhasePhysicalMeshMap1D1V : public RefinementObserver {
-    MeshPtr _mesh_1D;
-    MeshPtr _mesh_2D;
-    
-    std::map<GlobalIndexType, std::vector<PhysicalCellRelativeRefinementInfo> > _phaseSpaceCellIDToPhysicalCellInfo;
-    std::map< GlobalIndexType, std::vector<double> > _physicalCellIDToRefSpaceXCoordInAncestor; // index to vector is ancestor level (0 being immediate parent); the length of vector indicates number of levels of (local) interest
-  public:
-    PhasePhysicalMeshMap1D1V( MeshPtr mesh_1D, MeshPtr mesh_2D );
-    
-    const std::vector<PhysicalCellRelativeRefinementInfo> &physicalCellInfo(const GlobalIndexType &phaseSpaceCellID) const;
-    std::set<GlobalIndexType> physicalCellIDsForPhaseSpaceCells(const std::set<GlobalIndexType> &phaseSpaceCellIDs) const;
-    std::vector<GlobalIndexType> physicalCellIDsForPhaseSpaceCells(const std::vector<GlobalIndexType> &phaseSpaceCellIDs) const;
-    
-    //! Returns a list of all the unrefinementLevel, uniformDescendantNumbers that appear in _phaseSpaceCellIDToPhysicalCellInfo
-    std::set< std::pair<int,int> > referenceSpaceUnrefinementLevelDescendantNumberPairs() const;
-    
-    int maximumUnrefinementLevel() const;
-    
-    MeshPtr mesh1D() const;
-    MeshPtr mesh2D() const;
-    
-    PhasePhysicalPointIterator getPhysicalPointIterator(BasisCachePtr phaseSpaceBasisCache, GlobalIndexType phaseSpaceCellID,
-                                                        map< GlobalIndexType , pair<BasisCachePtr, vector<int> > > &physicalBasisCachePairs) const;
-    
-    void rebuildMap();
-    
-    //! Returns BasisCache, alongside a vector indicating point offsets for each ancestral level.
-    std::pair<BasisCachePtr, std::vector<int> > physicalCellBasisCache(const GlobalIndexType physicalCellID, bool testVsTest, int quadratureEnrichment) const;
-      
-    // RefinementObserver overrides:
-    void didHRefine(MeshTopologyPtr phaseSpaceMesh, const set<GlobalIndexType> &phaseSpaceCellIDs, Teuchos::RCP<RefinementPattern> refPattern, bool willRepartitionAndRebuild) override;
-    void didHUnrefine(MeshTopologyPtr phaseSpaceMesh, const std::set<GlobalIndexType> &cellIDs, bool didRepartitionAndRebuild) override;
-    void didRepartition(MeshTopologyPtr phaseSpaceMesh) override;
-  };
 }
 
-#endif /* PhasePhysicalMeshMap1D1V_hpp */
+#endif /* PhasePhysicalPointIterator_h */

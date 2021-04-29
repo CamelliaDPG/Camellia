@@ -33,6 +33,8 @@ template<class Scalar, class ArrayScalar> class Basis
    */
   mutable bool _basisTagsAreSet;
   void initializeTagsAndTrim() const;
+  
+  using ExecSpaceType = Camellia::DeviceExecutionSpace;
 protected:
   Basis();
 
@@ -69,6 +71,15 @@ protected:
    */
   mutable std::vector<std::vector<std::vector<int> > > _tagToOrdinal;
 public:
+  //! allocation method for Intrepid2-style getValues() output argument.  (For non-Intrepid2 bases, throws an exception.)
+  virtual Intrepid2::BasisValues<Scalar,ExecSpaceType> allocateBasisValues( Intrepid2::TensorPoints<Scalar,ExecSpaceType> points,
+                                                                           const Intrepid2::EOperator op = Intrepid2::OPERATOR_VALUE) const;
+  
+  //! Intrepid2-style getValues() method.  This is part of the API that will be performance-optimized.  (Allows use of Intrepid2's sum factorization facilities, etc.)  Non-Intrepid2 bases throw an exception.
+  virtual void getValues( Intrepid2::BasisValues<Scalar,ExecSpaceType> outputValues,
+                         const Intrepid2::TensorPoints<Scalar,ExecSpaceType>  inputPoints,
+                         const Intrepid2::EOperator op = Intrepid2::OPERATOR_VALUE ) const;
+  
   virtual int getCardinality() const;
   virtual int getDegree() const;
 
@@ -153,35 +164,35 @@ public:
 template<class Scalar=double, class ArrayScalar=Intrepid::FieldContainer<double> > class Intrepid2BasisWrapper;
 template<class Scalar, class ArrayScalar> class Intrepid2BasisWrapper : public Basis<Scalar,ArrayScalar>
 {
-  using ExecSpaceType = Camellia::DeviceMemorySpace::execution_space;
+  using ExecSpaceType = Camellia::DeviceExecutionSpace;
 private:
   Teuchos::RCP< Intrepid2::Basis<ExecSpaceType,Scalar,Scalar> > _intrepid2Basis;
   Teuchos::RCP< Camellia::Basis<Scalar,ArrayScalar> > _continuousBasis; // continuous version of the same basis, if this basis is discontinuous
 protected:
-  void initializeTags() const;
+  void initializeTags() const override;
 public:
   Intrepid2BasisWrapper(Teuchos::RCP< Intrepid2::Basis<Kokkos::DefaultExecutionSpace,Scalar,Scalar> > intrepid2Basis,
                         int rangeDimension, int rangeRank, Camellia::EFunctionSpace functionSpace);
 
   Teuchos::RCP< Intrepid2::Basis<Kokkos::DefaultExecutionSpace,Scalar,Scalar> > intrepid2Basis();
 
-  virtual bool isConforming() const;
-  virtual bool isNodal() const;
+  virtual bool isConforming() const override;
+  virtual bool isNodal() const override;
 
-  virtual std::set<int> dofOrdinalsForSide(int sideOrdinal) const;
+  virtual std::set<int> dofOrdinalsForSide(int sideOrdinal) const override;
   
-  void getValues(ArrayScalar &values, const ArrayScalar &refPoints, Intrepid::EOperator operatorType) const;
+  void getValues(ArrayScalar &values, const ArrayScalar &refPoints, Intrepid::EOperator operatorType) const override;
   
   //! allocation method for Intrepid2-style getValues() output argument.
   Intrepid2::BasisValues<Scalar,ExecSpaceType> allocateBasisValues( Intrepid2::TensorPoints<Scalar,ExecSpaceType> points,
-                                                                    const Intrepid2::EOperator op = Intrepid2::OPERATOR_VALUE) const;
+                                                                    const Intrepid2::EOperator op = Intrepid2::OPERATOR_VALUE) const override;
   
   //! Intrepid2-style getValues() method.  This is part of the API that will be performance-optimized.  (Allows use of Intrepid2's sum factorization facilities, etc.)
   void getValues( Intrepid2::BasisValues<Scalar,ExecSpaceType> outputValues,
                   const Intrepid2::TensorPoints<Scalar,ExecSpaceType>  inputPoints,
-                  const Intrepid2::EOperator op = Intrepid2::OPERATOR_VALUE ) const;
+                  const Intrepid2::EOperator op = Intrepid2::OPERATOR_VALUE ) const override;
   
-  void getDofCoords(ArrayScalar & DofCoords) const;
+  void getDofCoords(ArrayScalar & DofCoords) const override;
   
   static Intrepid2::EOperator intrepidOpToIntrepid2Op(const Intrepid::EOperator &op)
   {

@@ -19,9 +19,11 @@
 
 #include "BF.h"
 #include "GMGSolver.h"
-#include "PhasePhysicalMeshMap1D1V.h"
+#include "PhasePhysicalMeshMap.h"
 #include "QuadraturePointFunction.h"
+#include "SolutionMomentFunction.h"
 #include "SolutionStage.h"
+#include "TensorUtilities.h"
 #include "VarFactory.h"
 
 namespace Camellia
@@ -79,14 +81,14 @@ private:
   // set during solve process:
   ParameterFunctionPtr _n0; // integral of f over the whole 1D1V space
   
-  Teuchos::RCP<QuadraturePointFunction> _f_velocityIntegral; // integral of f over all velocity space
+  Teuchos::RCP<SolutionMomentFunction> _f_velocityIntegral; // integral of f over all velocity space
   FunctionPtr _E_extruded;  // E solution extended to the Boltzmann mesh
   
   // TODO: consider whether these are still useful; PhasePhysicalMeshMap1D1V should provide everything we need (and if it doesn't, make it so)
   std::map<GlobalIndexType, std::vector<GlobalIndexType> > _spatialCellIDToPhaseSpaceCellIDs;
   std::map<GlobalIndexType, std::set<GlobalIndexType> > _phaseSpaceCellIDToSpatialCellID;
   
-  Teuchos::RCP<PhasePhysicalMeshMap1D1V> _phaseSpacePhysicalMeshMap;
+  Teuchos::RCP<PhasePhysicalMeshMap> _phaseSpacePhysicalMeshMap;
   
   int _numSubstepsForImplicit = 3; // usually the first solution is close enough to meet CG tolerance even after the electric field has been updated, so 3 is overkill
   
@@ -111,7 +113,7 @@ public:
   Boltzmann1D1VFormulation(Boltzmann1D1VFormulationChoice formulationChoice, double q, double eps0, double m, double dt,
                            const double x0, const double xWidth, const int xElements,
                            const double v0, const double vWidth, const int vElements,
-                           const int H1Order, const int delta_k, ERKTableauPtr erkTableau,
+                           const int H1Order, const int delta_k, const bool usePeriodicBCs, ERKTableauPtr erkTableau,
                            const int numUniformRefinements = 0);
 
   //! set initial conditions.  Solves for initial E, E_hat, and sets t=0;
@@ -121,6 +123,9 @@ public:
   void takeTimeStep();
   
   void setTimeStep(double dt);
+  
+  //! current time
+  double t() const;
   
   // field variables:
   VarPtr f();  // Boltzmann
@@ -138,7 +143,7 @@ public:
   MeshPtr boltzmannMesh();
   MeshPtr gaussMesh();
   
-  Teuchos::RCP<PhasePhysicalMeshMap1D1V> phaseSpacePhysicalMeshMap();
+  Teuchos::RCP<PhasePhysicalMeshMap> phaseSpacePhysicalMeshMap();
   
   SolutionPtr boltzmannSolution();
   SolutionPtr boltzmannPreviousSolution();
@@ -150,6 +155,12 @@ public:
   bool hasL2Trace() const;
   
   const std::vector< std::vector<int> > & iterationCounts() const;
+  
+  //! Set the boundary conditions for Boltzmann (relevant for the non-periodic case).
+  void setBoltzmannBCs(BCPtr bc);
+  
+  //! Set the boundary conditions for Gauss (relevant for the non-periodic case).
+  void setGaussBCs(BCPtr bc);
   
   /** \brief  Set the level of console output.
       \param  azOutputLevel   [in]  - Corresponds to the Aztec output level (though Belos is doing the output); here, 0 means no output (the default); -1 means final residual + warnings; -2 means summary, final residual, and warnings; and -3 means only print warnings.  Positive number n means print out residual every n steps.
@@ -176,12 +187,6 @@ public:
   //! map that is reverse of the above; there is exactly one spatial cell for each phase space cell
   const std::map<GlobalIndexType, std::set<GlobalIndexType> > &phaseSpaceCellIDToSpatialCellIDs();
 };
-
-// TODO: move this somewhere more generic: a TensorUtilities.h, or something
-KOKKOS_INLINE_FUNCTION int getTensorPointOrdinal(const int spatialPointOrdinal, const int velocityPointOrdinal, const int numSpatialPoints)
-{
-  return spatialPointOrdinal + numSpatialPoints * velocityPointOrdinal;
-}
 
 }
 

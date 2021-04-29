@@ -195,6 +195,46 @@ TEUCHOS_UNIT_TEST( CellTopology, GetNodeFromTensorialComponentNodes)
   }
 }
 
+TEUCHOS_UNIT_TEST( CellTopology, GetExtrudedSideOrdinal_LineExtrusions )
+{
+  // 1D: expect left/right match their trivial extrusions
+  auto hypercube_1D = CellTopology::cellTopology(CellTopology::line(), 0);
+  unsigned  leftSideOrdinal1D = 0;
+  unsigned rightSideOrdinal1D = 1;
+  unsigned leftSideOrdinal = hypercube_1D->getExtrudedSideOrdinal(leftSideOrdinal1D);
+  TEST_EQUALITY(leftSideOrdinal1D, leftSideOrdinal);
+  unsigned rightSideOrdinal = hypercube_1D->getExtrudedSideOrdinal(rightSideOrdinal1D);
+  TEST_EQUALITY(rightSideOrdinal1D, rightSideOrdinal);
+  
+  // In 2D, the two copies of the original line come first (these are sides 0 and 1)
+  // The extruded sides are then 2 (left) and 3 (right)
+  auto hypercube_2D = CellTopology::cellTopology(CellTopology::line(), 1);
+  unsigned leftSideOrdinal2D = hypercube_2D->getExtrudedSideOrdinal(leftSideOrdinal1D);
+  TEST_EQUALITY(2, leftSideOrdinal2D);
+  unsigned rightSideOrdinal2D = hypercube_2D->getExtrudedSideOrdinal(rightSideOrdinal1D);
+  TEST_EQUALITY(3, rightSideOrdinal2D);
+  
+  // In 3D, we have 4 (left) and 5 (right)
+  auto hypercube_3D = CellTopology::cellTopology(CellTopology::line(), 2);
+  unsigned leftSideOrdinal3D = hypercube_3D->getExtrudedSideOrdinal(leftSideOrdinal1D);
+  TEST_EQUALITY(4, leftSideOrdinal3D);
+  unsigned rightSideOrdinal3D = hypercube_3D->getExtrudedSideOrdinal(rightSideOrdinal1D);
+  TEST_EQUALITY(5, rightSideOrdinal3D);
+  
+  // In general, a side with ordinal n gets extruded to a side with ordinal n+2
+  for (int r=1; r<7; r++)
+  {
+    auto hypercube_rm = CellTopology::cellTopology(CellTopology::line(), r-1);
+    auto hypercube_r  = CellTopology::cellTopology(CellTopology::line(), r);
+    for (unsigned sideOrdinal = 0; sideOrdinal < hypercube_rm->getSideCount(); sideOrdinal++)
+    {
+      unsigned extrudedSideOrdinal = hypercube_r->getExtrudedSubcellOrdinal(r-1, sideOrdinal);
+      unsigned expectedExtrudedSideOrdinal = sideOrdinal + 2;
+      TEST_EQUALITY(expectedExtrudedSideOrdinal, extrudedSideOrdinal);
+    }
+  }
+}
+
 TEUCHOS_UNIT_TEST( CellTopology, InitializeNodesQuad)
 {
   Camellia::FieldContainer<double> lineNodes_x(2,1);

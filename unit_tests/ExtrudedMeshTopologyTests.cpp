@@ -78,7 +78,8 @@ namespace
     }
   }
 
-  Teuchos::RCP<ExtrudedMeshTopology> makeTestMeshTopology( int numPhysicalDims, int numExtrusionDims )
+  Teuchos::RCP<ExtrudedMeshTopology> makeTestMeshTopology( int numPhysicalDims, int numExtrusionDims,
+                                                          const int physicalMeshWidth=2, const int extrusionMeshWidth=2)
   {
     using std::vector;
     vector<double> physicalDims(numPhysicalDims,1.0);
@@ -140,6 +141,54 @@ namespace
         }
         TEST_EQUALITY(expectedCellID, actualCellID);
       }
+    }
+  }
+
+  TEUCHOS_UNIT_TEST( ExtrudedMeshTopology, CellVertexIndicesPeriodic_1D3V )
+  {
+    const int numPhysicalDims = 1;
+    const int numExtrusionDims = 3;
+    
+    // by the construction below (a 2D mesh, extruded by 1 cell in 2 further dimensions), each vertex should participate in at least two cells, and in at most four.
+    std::map<IndexType,int> vertexIncidenceCount;
+    
+    const int totalDim = numPhysicalDims + numExtrusionDims;
+    
+    using std::vector;
+    vector<double> physicalDims {1.0};
+    vector<int> physicalElementCounts {4};
+    vector<double> physicalOrigin {0.0};
+    PeriodicBCPtr xLeftToRight     = PeriodicBC::xIdentification(physicalOrigin[0], physicalOrigin[0]+physicalDims[0]);
+    auto physicalMeshTopo = MeshFactory::rectilinearMeshTopology(physicalDims, physicalElementCounts, physicalOrigin, {xLeftToRight});
+    
+    vector<double> extrusionStartCoords(numExtrusionDims, -1.0);
+    vector<double> extrusionExtents(numExtrusionDims, 2.0);
+    vector<int> extrusionElementCounts{4,1,1};
+    
+    auto extrudedMeshTopo = Teuchos::rcp(new ExtrudedMeshTopology(physicalMeshTopo,extrusionStartCoords,extrusionExtents,extrusionElementCounts));
+    auto locallyKnownCells = extrudedMeshTopo->getLocallyKnownActiveCellIndices();
+    
+    for (const auto & cellID : locallyKnownCells)
+    {
+      CellPtr cell = extrudedMeshTopo->getCell(cellID);
+      
+      auto cellTopo = cell->topology();
+      
+      const int vertexDim = 0;
+      unsigned vertexCount = cellTopo->getSubcellCount(vertexDim);
+      for (int vertexOrdinal=0; vertexOrdinal<vertexCount; vertexOrdinal++)
+      {
+        IndexType entityIndex = cell->entityIndex(vertexDim, vertexOrdinal);
+        TEST_COMPARE(entityIndex, >=, 0);
+        vertexIncidenceCount[entityIndex]++;
+      }
+    }
+    
+    for (const auto entry : vertexIncidenceCount)
+    {
+      out << "Checking incidence count for vertex index " << entry.first << std::endl;
+      TEST_COMPARE(entry.second, >=, 2);
+      TEST_COMPARE(entry.second, <=, 4);
     }
   }
 
