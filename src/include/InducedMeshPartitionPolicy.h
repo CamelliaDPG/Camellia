@@ -38,7 +38,9 @@ namespace Camellia
     // ! Suitable for setting up a partition policy passed in during Mesh construction.
     InducedMeshPartitionPolicy(MeshPtr otherMesh, const map<GlobalIndexType, GlobalIndexType> & cellIDMap);
     
+    using RefinementObserver::didHRefine;
     void didHRefine(MeshTopologyPtr meshToRefine, const set<GlobalIndexType> &cellIDs, Teuchos::RCP<RefinementPattern> refPattern, bool didRepartitionAndRebuild);
+    using RefinementObserver::didHUnrefine;
     void didHUnrefine(MeshTopologyPtr meshToRefine, const set<GlobalIndexType> &cellIDs, bool didRepartitionAndRebuild);
     
     void partitionMesh(Mesh *mesh, PartitionIndexType numPartitions);

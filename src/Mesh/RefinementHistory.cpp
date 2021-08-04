@@ -41,7 +41,7 @@ RefinementType refinementTypeForString(string refTypeStr)
   else
   {
     TEUCHOS_TEST_FOR_EXCEPTION(true, std::invalid_argument, "unknown refinement type string.");
-    return UNKNOWN_REFINEMENT;
+//    return UNKNOWN_REFINEMENT;
   }
 }
 
@@ -113,7 +113,8 @@ RefinementPatternPtr RefinementHistory::refPatternForRefType(RefinementType refT
   TEUCHOS_TEST_FOR_EXCEPTION(true, std::invalid_argument, "Unhandled refinement type");
 }
 
-void RefinementHistory::hRefine(const set<GlobalIndexType> &cellIDs, Teuchos::RCP<RefinementPattern> refPattern)
+void RefinementHistory::hRefine(const set<GlobalIndexType> &cellIDs, Teuchos::RCP<RefinementPattern> refPattern,
+                                bool repartitionAndRebuild)
 {
   if (cellIDs.size() == 0) return;
   // figure out what type of refinement we have:
@@ -215,14 +216,19 @@ void RefinementHistory::hRefine(const set<GlobalIndexType> &cellIDs, Teuchos::RC
   _refinements.push_back(ref);
 }
 
-void RefinementHistory::pRefine(const set<GlobalIndexType> &cellIDs)
+void RefinementHistory::pRefine(const set<GlobalIndexType> &cellIDs, int pToAdd, bool repartitionAndRebuild)
 {
+  TEUCHOS_TEST_FOR_EXCEPTION(pToAdd < 0, std::invalid_argument, "RefinementHistory::pRefine does not (yet) support negative pToAdd");
   if (cellIDs.size() == 0) return;
+  // right now, Refinement structure does not have support for different pToAdd values; we just do multiple p-refinements with pToAdd = 1.
   Refinement ref = make_pair(P_REFINEMENT, cellIDs);
-  _refinements.push_back(ref);
+  for (int i=0; i<pToAdd; i++)
+  {
+    _refinements.push_back(ref);
+  }
 }
 
-void RefinementHistory::hUnrefine(const set<GlobalIndexType> &cellIDs)
+void RefinementHistory::hUnrefine(const set<GlobalIndexType> &cellIDs, bool repartitionAndRebuild)
 {
   if (cellIDs.size() == 0) return;
   Refinement ref = make_pair(H_UNREFINEMENT, cellIDs);

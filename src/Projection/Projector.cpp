@@ -18,7 +18,6 @@
 
 #include "Shards_CellTopology.hpp"
 
-#include "Intrepid_CellTools.hpp"
 #include "Intrepid_DefaultCubatureFactory.hpp"
 #include "Intrepid_FunctionSpaceTools.hpp"
 
@@ -53,7 +52,7 @@ void Projector<Scalar>::projectFunctionOntoBasis(Camellia::FieldContainer<Scalar
   }
 
   int cardinality = basis->getCardinality();
-  int numCells = basisCache->getPhysicalCubaturePoints().dimension(0);
+  int numCells = basisCache->getPhysicalCubaturePointsFC().dimension(0);
   int numDofs = cardinality - fieldIndicesToSkip.size();
   if (numDofs==0)
   {
@@ -133,7 +132,7 @@ void Projector<Scalar>::projectFunctionOntoBasis(Camellia::FieldContainer<Scalar
     ipVector = ipVectorFiltered;
   }
 
-//  cout << "physical points for projection:\n" << basisCache->getPhysicalCubaturePoints();
+//  cout << "physical points for projection:\n" << basisCache->getPhysicalCubaturePointsFC();
 //  cout << "gramMatrix:\n" << gramMatrix;
 //  cout << "ipVector:\n" << ipVector;
 
@@ -164,7 +163,7 @@ void Projector<Scalar>::projectFunctionOntoBasis(Camellia::FieldContainer<Scalar
     //               (otherwise, the projection will not be uniquely defined)
     // For a vector basis, the rule is that each scalar component needs to have that many quadrature points.
     
-    int numQuadraturePoints = basisCache->getPhysicalCubaturePoints().dimension(1); // C,P,D
+    int numQuadraturePoints = basisCache->getPhysicalCubaturePointsFC().dimension(1); // C,P,D
     int numScalarComponents = 1;
     int rangeRank = basis->rangeRank();
     int rangeDim  = basis->rangeDimension();
@@ -185,7 +184,7 @@ void Projector<Scalar>::projectFunctionOntoBasis(Camellia::FieldContainer<Scalar
     if (result != 0)
     {
       cout << "WARNING: in Projector, SerialDenseWrapper::solveSPDSystemMultipleRHS returned result code " << result << endl;
-      cout << "physical points for projection:\n" << basisCache->getPhysicalCubaturePoints();
+      cout << "physical points for projection:\n" << basisCache->getPhysicalCubaturePointsFC();
       
       ostringstream matrixFileName;
       auto cellID = cellIndex; // basisCache->cellIDs()[cellIndex];
@@ -472,7 +471,7 @@ void Projector<Scalar>::projectChildFunctionOntoParentBasis(Camellia::FieldConta
   }
   
   int cardinality = parentBasis->getCardinality();
-  int numCells = unionCache->getPhysicalCubaturePoints().dimension(0);
+  int numCells = unionCache->getPhysicalCubaturePointsFC().dimension(0);
   int numDofs = cardinality - fieldIndicesToSkip.size();
   if (numDofs==0)
   {
@@ -555,7 +554,7 @@ void Projector<Scalar>::projectChildFunctionOntoParentBasis(Camellia::FieldConta
     ipVector = ipVectorFiltered;
   }
   
-  //  cout << "physical points for projection:\n" << basisCache->getPhysicalCubaturePoints();
+  //  cout << "physical points for projection:\n" << basisCache->getPhysicalCubaturePointsFC();
   //  cout << "gramMatrix:\n" << gramMatrix;
   //  cout << "ipVector:\n" << ipVector;
   
@@ -579,7 +578,7 @@ void Projector<Scalar>::projectChildFunctionOntoParentBasis(Camellia::FieldConta
     //               (otherwise, the projection will not be uniquely defined)
     // For a vector basis, the rule is that each scalar component needs to have that many quadrature points.
     
-    int numQuadraturePoints = unionCache->getPhysicalCubaturePoints().dimension(1); // C,P,D
+    int numQuadraturePoints = unionCache->getPhysicalCubaturePointsFC().dimension(1); // C,P,D
     int numScalarComponents = 1;
     int rangeRank = parentBasis->rangeRank();
     int rangeDim  = parentBasis->rangeDimension();
@@ -608,7 +607,7 @@ void Projector<Scalar>::projectChildFunctionOntoParentBasis(Camellia::FieldConta
     if (result != 0)
     {
       cout << "WARNING: in Projector, SerialDenseWrapper::solveSPDSystemMultipleRHS returned result code " << result << endl;
-      cout << "physical points for projection:\n" << unionCache->getPhysicalCubaturePoints();
+      cout << "physical points for projection:\n" << unionCache->getPhysicalCubaturePointsFC();
       
       ostringstream matrixFileName;
       auto cellID = cellIndex; // basisCache->cellIDs()[cellIndex];
@@ -656,7 +655,7 @@ void Projector<Scalar>::projectChildFunctionOntoParentBasisInterpolating(Camelli
   TIPPtr<Scalar> ip;
   
   bool traceVar;
-  unsigned sideOrdinal = -1;
+  unsigned sideOrdinal = INVALID_CELLTOPOLOGY_SIDE_ORDINAL;
   CellTopoPtr domainTopo;
   if (!subdomainCaches[0]->isSideCache())
   {

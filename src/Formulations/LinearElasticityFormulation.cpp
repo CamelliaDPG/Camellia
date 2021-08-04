@@ -53,8 +53,6 @@ const string LinearElasticityFormulation::S_TAU2 = "\\tau_{2}";
 const string LinearElasticityFormulation::S_TAU3 = "\\tau_{3}";
 const string LinearElasticityFormulation::S_Q = "q";
 
-static const int INITIAL_CONDITION_TAG = 1;
-
 LinearElasticityFormulation LinearElasticityFormulation::steadyFormulation(int spaceDim, double lambda,
                                                                            double mu, bool useConformingTraces)
 {

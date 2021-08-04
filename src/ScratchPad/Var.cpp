@@ -48,7 +48,7 @@ Camellia::EFunctionSpace Camellia::efsForSpace(Space space)
       
   default:
     TEUCHOS_TEST_FOR_EXCEPTION(true, std::invalid_argument, "Unknown function space.");
-    return Camellia::FUNCTION_SPACE_UNKNOWN;
+//    return Camellia::FUNCTION_SPACE_UNKNOWN;
   }
 }
 
@@ -89,7 +89,7 @@ int Camellia::rankForSpace(Space space)
       
     default:
       TEUCHOS_TEST_FOR_EXCEPTION(true, std::invalid_argument, "Unknown function space.");
-      return Camellia::FUNCTION_SPACE_UNKNOWN;
+//      return Camellia::FUNCTION_SPACE_UNKNOWN;
   }
 }
 
@@ -128,7 +128,7 @@ Space Camellia::spaceForEFS(Camellia::EFunctionSpace efs)
 
   default:
     TEUCHOS_TEST_FOR_EXCEPTION(true, std::invalid_argument, "Unknown function space.");
-    return UNKNOWN_FS;
+//    return UNKNOWN_FS;
   }
 
 //
@@ -541,7 +541,7 @@ LinearTermPtr Var::times_normal() const
   {
     newType = _varType;
   }
-  VarPtr var = Teuchos::rcp( new Var(_id, _rank, _name, _op, _fs, _varType ) );
+  VarPtr var = Teuchos::rcp( new Var(_id, _rank, _name, _op, _fs, newType ) );
   FunctionPtr n = Function::normal();
   return var * n;
 }

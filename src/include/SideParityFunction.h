@@ -25,6 +25,9 @@ public:
   SideParityFunction();
   bool boundaryValueOnly() override;
   string displayString() override;
+  
+  using TFunction<double>::values;
+  void values(Intrepid2::Data<double, DeviceType> values, BasisCachePtr basisCache) override;
   void values(typename Camellia::FieldContainer<double>::DeviceView &values, ValueModificationType modType, BasisCachePtr basisCache) override;
 };
 }

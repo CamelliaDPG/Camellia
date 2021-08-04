@@ -24,6 +24,10 @@ namespace Camellia
   AllocationRecord deviceViewAllocationRecord;
   AllocationRecord deviceViewFakeAllocationRecord;
   
+  int cumulativeMirrorViewFakeAllocations = 0;
+  int checkedOutMirrorViewsFakeAllocations;
+//  std::map<void *,int> checkedOutMirrorViews; // map goes from data pointer to the allocation number
+
   std::set<long long> outstandingFCAllocationNumbers;
   bool recordOutstandingFCAllocationNumbers = false; // roughly 8% performance penalty for all of runTests if this is true, but very useful for tracking down unfreed allocations.
   
@@ -42,6 +46,18 @@ namespace Camellia
     allocationReportStream << "Total bytes allocated:                " << record.bytesAllocatedTotal << " (" << totalInMB << " MB)\n";
     allocationReportStream << "Net bytes allocated:                  " << record.bytesAllocatedNet   << " (" << netInMB   << " MB)\n";
     allocationReportStream << "Net bytes allocated, high water mark: " << record.bytesAllocatedNetHighWaterMark << " (" << netHWMInMB << " MB)\n";
+    
+    if (checkedOutMirrorViewsFakeAllocations > 0)
+    {
+      allocationReportStream << "checkedOutMirrorViewsFakeAllocations: " << checkedOutMirrorViewsFakeAllocations << std::endl; // << " (allocation numbers: ";
+      
+//      for (auto entry : checkedOutMirrorViews)
+//      {
+//        allocationReportStream << entry.second << ", ";
+//      }
+//
+//      allocationReportStream << ")\n";
+    }
     return allocationReportStream.str();
   }
   
@@ -91,9 +107,9 @@ namespace Camellia
   }
 
   template<typename Scalar>
-  Intrepid2::ScalarView<Scalar, Camellia::DeviceExecutionSpace> Allocation<Scalar>::allocateIntrepid2DeviceView(const std::vector<int> &dims, const std::string &label)
+  Intrepid2::ScalarView<Scalar, Camellia::DeviceType> Allocation<Scalar>::allocateIntrepid2DeviceView(const std::vector<int> &dims, const std::string &label)
   {
-    using ScalarView = Intrepid2::ScalarView<Scalar, Camellia::DeviceExecutionSpace>;
+    using ScalarView = Intrepid2::ScalarView<Scalar, Camellia::DeviceType>;
       
     const auto rank = dims.size();
     ScalarView scalarView;
@@ -112,9 +128,9 @@ namespace Camellia
   }
 
   template<typename Scalar>
-  Intrepid2::ScalarView<Scalar, Camellia::DeviceExecutionSpace> Allocation<Scalar>::allocateIntrepid2DeviceViewMatchingView(DeviceView<Scalar> &dv)
+  Intrepid2::ScalarView<Scalar, Camellia::DeviceType> Allocation<Scalar>::allocateIntrepid2DeviceViewMatchingView(DeviceView<Scalar> &dv)
   {
-    using ScalarView = Intrepid2::ScalarView<Scalar, Camellia::DeviceExecutionSpace>;
+    using ScalarView = Intrepid2::ScalarView<Scalar, Camellia::DeviceType>;
     
     const std::string viewLabel = "Intrepid2 ScalarView matching Camellia DeviceView.";
     const auto rank = dv.rank();
@@ -130,48 +146,60 @@ namespace Camellia
   // this struct effectively allows us to implement different versions of Allocation<Scalar>::checkoutMirrorView() on host and device
   template<typename Scalar, bool memorySpacesMatch>
   struct CheckoutMirrorView {
-    static DeviceView<Scalar> impl(HostView<Scalar> &hostView);
+    static DeviceView<Scalar> impl(HostView<Scalar> &hostView, const std::string &description);
   };
   
   template<typename Scalar>
   struct CheckoutMirrorView<Scalar, true> // true: memory spaces match
   {
-    static DeviceView<Scalar> impl(HostView<Scalar> &hostView)
+    static DeviceView<Scalar> impl(HostView<Scalar> &hostView, const std::string &description)
     {
-      // record the "fake" allocation
-      recordAllocation<Scalar>(deviceViewFakeAllocationRecord, hostView.size());
-      return Kokkos::create_mirror_view(hostView);
+      auto deviceView = Kokkos::create_mirror_view(hostView);
+
+      auto entryCount = hostView.size();
+      if (entryCount > 0)
+      {
+        // record the "fake" allocation
+        recordAllocation<Scalar>(deviceViewFakeAllocationRecord, hostView.size());
+        
+        checkedOutMirrorViewsFakeAllocations++;
+//        checkedOutMirrorViews[deviceView.data()] = cumulativeMirrorViewFakeAllocations++;
+      }
+      
+      return deviceView;
     }
   };
   
   template<typename Scalar>
   struct CheckoutMirrorView<Scalar, false> // false: memory spaces don't match
   {
-    static DeviceView<Scalar> impl(HostView<Scalar> &hostView)
+    static DeviceView<Scalar> impl(HostView<Scalar> &hostView, const std::string &description)
     {
-      auto deviceView = SharedScratchStorage<Scalar>::sharedScratchStorage().checkoutScratchStorageMatchingHostView(hostView);
+      auto deviceView = SharedScratchStorage<Scalar>::sharedScratchStorage().checkoutScratchStorageMatchingHostView(hostView, description);
       return deviceView;
     }
   };
   
   template<typename Scalar>
-  DeviceView<Scalar> Allocation<Scalar>::checkoutMirrorView(HostView<Scalar> &hostView) // true: memory spaces match
+  DeviceView<Scalar> Allocation<Scalar>::checkoutMirrorView(HostView<Scalar> &hostView, const std::string &description)
   {
     constexpr bool memorySpacesMatch = std::is_same<HostMemorySpace, DeviceMemorySpace>::value;
-    return CheckoutMirrorView<Scalar, memorySpacesMatch>::impl(hostView);
+    return CheckoutMirrorView<Scalar, memorySpacesMatch>::impl(hostView,description);
   }
   
   template<typename Scalar>
-  DeviceView<Scalar> Allocation<Scalar>::checkoutDeviceView(DeviceView<Scalar> &viewForSizing)
+  DeviceView<Scalar> Allocation<Scalar>::checkoutDeviceView(DeviceView<Scalar> &viewForSizing,
+                                                            const std::string &description)
   {
-    auto deviceView = SharedScratchStorage<Scalar>::sharedScratchStorage().checkoutScratchStorageMatchingDeviceView(viewForSizing);
+    auto deviceView = SharedScratchStorage<Scalar>::sharedScratchStorage().checkoutScratchStorageMatchingDeviceView(viewForSizing, description);
     return deviceView;
   }
   
   template<typename Scalar>
-  DeviceView<Scalar> Allocation<Scalar>::checkoutDeviceView(const std::vector<int> &dims)
+  DeviceView<Scalar> Allocation<Scalar>::checkoutDeviceView(const std::vector<int> &dims,
+                                                            const std::string &description)
   {
-    auto deviceView = SharedScratchStorage<Scalar>::sharedScratchStorage().checkoutScratchStorage(dims);
+    auto deviceView = SharedScratchStorage<Scalar>::sharedScratchStorage().checkoutScratchStorage(dims,description);
     return deviceView;
   }
   
@@ -197,12 +225,15 @@ namespace Camellia
       {
         // record the "fake" deallocation
         recordDeallocation<Scalar>(deviceViewFakeAllocationRecord, deviceView.size());
+        checkedOutMirrorViewsFakeAllocations--;
+        
+//        checkedOutMirrorViews.erase(deviceView.data());
       }
     }
   }
 //
 //  template<typename Scalar>
-//  void Allocation<Scalar>::checkinDeviceView(Intrepid2::ScalarView<Scalar,Camellia::DeviceExecutionSpace> &intrepid2DeviceView)
+//  void Allocation<Scalar>::checkinDeviceView(Intrepid2::ScalarView<Scalar,Camellia::DeviceType> &intrepid2DeviceView)
 //  {
 //
 //  }

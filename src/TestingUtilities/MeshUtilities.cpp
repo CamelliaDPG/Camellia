@@ -24,7 +24,8 @@ public:
   {
     _RAMP_HEIGHT = rampHeight;
   }
-  void matchesPoints(DeviceView<bool> pointsMatch, DeviceViewConst<double> points)
+  using SpatialFilter::matchesPoints;
+  void matchesPoints(DeviceView<bool> pointsMatch, DeviceViewConst<double> points) override
   {
     double tol = 1e-14;
     double rampHeight = _RAMP_HEIGHT;
@@ -36,7 +37,8 @@ public:
       pointsMatch(cellOrdinal,pointOrdinal) = (abs(rampHeight*(x-1)-y)<tol) && (x>1.0);
     });
   }
-  bool matchesPoint(double x, double y)
+  using SpatialFilter::matchesPoint;
+  bool matchesPoint(double x, double y) override
   {
     double tol = 1e-14;
     bool onRamp = (abs(_RAMP_HEIGHT*(x-1)-y)<tol) && (x>1.0);
@@ -270,7 +272,7 @@ double MeshUtilities::computeMaxLocalConditionNumber(IPPtr ip, MeshPtr mesh, boo
 //  cout << "Checking condition numbers on rank " << rank << endl;
 
   Camellia::FieldContainer<double> maxConditionNumberIPMatrix;
-  int maxCellID = -1;
+//  int maxCellID = -1;
   double myMaxConditionNumber = -1;
   for (vector< ElementPtr >::iterator elemIt = elements.begin(); elemIt != elements.end(); elemIt++)
   {
@@ -292,7 +294,7 @@ double MeshUtilities::computeMaxLocalConditionNumber(IPPtr ip, MeshPtr mesh, boo
     {
       myMaxConditionNumber = conditionNumber;
       maxConditionNumberIPMatrix = innerProductMatrix;
-      maxCellID = cellID;
+//      maxCellID = cellID;
     }
     else if (maxConditionNumberIPMatrix.size()==0)
     {

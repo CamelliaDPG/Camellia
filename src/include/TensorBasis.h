@@ -120,6 +120,8 @@ public:
    */
   int rangeRank() const;
 
+  using Camellia::Basis<Scalar,ArrayScalar>::getValues;
+  
   /** \brief  Computes the values of the basis at the provided points.
 
    \param  values        [out] - the basis values, ordered as (F, P, D, ...)

@@ -6,11 +6,6 @@
 
 #include <Teuchos_GlobalMPISession.hpp>
 
-#include "Intrepid_CellTools.hpp"
-#include "CamelliaCellTools.h"
-#include "Intrepid_DefaultCubatureFactory.hpp"
-#include "Intrepid_FunctionSpaceTools.hpp"
-
 #include "BasisCache.h"
 #include "BasisFactory.h"
 #include "ExactSolution.h"
@@ -106,8 +101,8 @@ void ExactSolution<Scalar>::L2NormOfError(Camellia::FieldContainer<double> &erro
   Camellia::FieldContainer<double> weightedMeasure = basisCache->getWeightedMeasures();
   Camellia::FieldContainer<double> weightedErrorSquared;
 
-  int numCells = basisCache->getPhysicalCubaturePoints().dimension(0);
-  int numCubPoints = basisCache->getPhysicalCubaturePoints().dimension(1);
+  int numCells = basisCache->getPhysicalCubaturePointsFC().dimension(0);
+  int numCubPoints = basisCache->getPhysicalCubaturePointsFC().dimension(1);
   int spaceDim = basisCache->getSpaceDim();
 
   Teuchos::Array<int> dimensions;
@@ -238,7 +233,7 @@ void ExactSolution<Scalar>::solutionValues(Camellia::FieldContainer<Scalar> &val
   }
 
   // TODO: change ExactSolution<Scalar>::solutionValues (below) to take a *const* points Camellia::FieldContainer, to avoid this copy:
-  Camellia::FieldContainer<double> points = basisCache->getPhysicalCubaturePoints();
+  Camellia::FieldContainer<double> points = basisCache->getPhysicalCubaturePointsFC();
   if (basisCache->getSideIndex() >= 0)
   {
     Camellia::FieldContainer<double> unitNormals = basisCache->getSideNormals();
@@ -313,7 +308,7 @@ template <typename Scalar>
 Scalar ExactSolution<Scalar>::solutionValue(int trialID, Camellia::FieldContainer<double> &physicalPoint)
 {
   TEUCHOS_TEST_FOR_EXCEPTION(true, std::invalid_argument, "Unimplemented method.");
-  return 0;
+//  return 0;
 //  int spaceDim = physicalPoint.size();
 //  double x = physicalPoint(0);
 //  double y = physicalPoint(1);
@@ -334,7 +329,7 @@ Scalar ExactSolution<Scalar>::solutionValue(int trialID, Camellia::FieldContaine
     Camellia::FieldContainer<double> &unitNormal)
 {
   TEUCHOS_TEST_FOR_EXCEPTION(true, std::invalid_argument, "Unimplemented method.");
-  return 0;
+//  return 0;
 //  int spaceDim = physicalPoint.size();
 //  double x = physicalPoint(0);
 //  double y = physicalPoint(1);

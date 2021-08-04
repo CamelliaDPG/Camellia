@@ -151,11 +151,15 @@ public:
   virtual GlobalIndexType numPartitionOwnedGlobalFluxIndices() = 0;
   virtual GlobalIndexType numPartitionOwnedGlobalTraceIndices() = 0;
 
+  using DofInterpreter::interpretLocalData;
   virtual void interpretLocalData(GlobalIndexType cellID, const Camellia::FieldContainer<double> &localData,
                                   Camellia::FieldContainer<double> &globalData,
                                   Camellia::FieldContainer<GlobalIndexType> &globalDofIndices) = 0;
+  
+  using DofInterpreter::interpretLocalCoefficients;
   void interpretLocalCoefficients(GlobalIndexType cellID, const Camellia::FieldContainer<double> &localCoefficients,
                                   Epetra_MultiVector &globalCoefficients, int columnOrdinal);
+  
   template <typename Scalar>
   void interpretLocalCoefficients(GlobalIndexType cellID, const Camellia::FieldContainer<Scalar> &localCoefficients,
                                   TVectorPtr<Scalar> globalCoefficients, int columnOrdinal);

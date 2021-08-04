@@ -80,7 +80,7 @@ namespace Camellia
     template< bool B, class T = void >
     using enable_if_t = typename std::enable_if<B,T>::type;
     
-    using Intrepid2View = Intrepid2::ScalarView<Scalar,Camellia::DeviceExecutionSpace>;
+    using Intrepid2View = Intrepid2::ScalarView<Scalar,Camellia::DeviceType>;
   public:
     static DeviceView<Scalar> allocateDeviceView(const std::vector<int> &dims, const std::string &label);
     static DeviceView<Scalar> allocateDeviceViewMatchingView(DeviceView<Scalar> &dv);
@@ -89,18 +89,23 @@ namespace Camellia
     static Intrepid2View allocateIntrepid2DeviceViewMatchingView(DeviceView<Scalar> &dv);
     static Intrepid2View allocateIntrepid2DeviceView(const std::vector<int> &dims, const std::string &label);
     
-    static DeviceView<Scalar> checkoutMirrorView(HostView<Scalar> &hostView); // does not result in an allocation if HostMemorySpace is same as DeviceMemorySpace
+    static DeviceView<Scalar> checkoutMirrorView(HostView<Scalar> &hostView, const std::string &description); // does not result in an allocation if HostMemorySpace is same as DeviceMemorySpace
     
     static void checkinMirrorView(DeviceView<Scalar> &deviceView);
     
-    static DeviceView<Scalar> checkoutDeviceView(const std::vector<int> &dims);
-    static DeviceView<Scalar> checkoutDeviceView(DeviceView<Scalar> &deviceView); // does not result in an allocation if HostMemorySpace is same as DeviceMemorySpace
+    static DeviceView<Scalar> checkoutDeviceView(const std::vector<int> &dims, const std::string &description);
+    static DeviceView<Scalar> checkoutDeviceView(DeviceView<Scalar> &deviceView, const std::string &description); // does not result in an allocation if HostMemorySpace is same as DeviceMemorySpace
     static void checkinDeviceView(DeviceView<Scalar> &deviceView);
+    
+    template<class ViewType>
+    static void recordViewDeallocation(ViewType &dv) {
+      Camellia::recordDeallocation<Scalar>(deviceViewAllocationRecord, dv.size());
+    }
     
     // TODO: consider implementing, using these:
 //    static Intrepid2View checkoutIntrepid2DeviceView(const std::vector<int> &dims);
 //    static Intrepid2View checkoutIntrepid2DeviceView(DeviceView<Scalar> &deviceView);
-//    static void checkinIntrepid2DeviceView(Intrepid2::ScalarView<Scalar,Camellia::DeviceExecutionSpace> &intrepid2DeviceView);
+//    static void checkinIntrepid2DeviceView(Intrepid2::ScalarView<Scalar,Camellia::DeviceType> &intrepid2DeviceView);
   };
 }
 

@@ -147,8 +147,12 @@ namespace Camellia {
             int varID = varEntry.first;
             GlobalIndexType firstGlobalDofOrdinal = varEntry.second.first;
             int dofCount = varEntry.second.second;
-            GlobalIndexType lastGlobalDofOrdinal = firstGlobalDofOrdinal + dofCount;
-            if (dofCount > 0)
+            GlobalIndexType lastGlobalDofOrdinal = firstGlobalDofOrdinal + dofCount - 1;
+            if (dofCount == 1)
+            {
+              os << "     var " << varID << ", global dofs: " << firstGlobalDofOrdinal << endl;
+            }
+            else if (dofCount > 0)
             {
               os << "     var " << varID << ", global dofs: " << firstGlobalDofOrdinal << "-" << lastGlobalDofOrdinal << endl;
             }
@@ -174,7 +178,10 @@ namespace Camellia {
         }
       }
       // if none found, add to the end of the entries for the scord
-      subcellDofIndices[d][scord].push_back({varID,range});
+      if (!found)
+      {
+        subcellDofIndices[d][scord].push_back({varID,range});
+      }
     }
     
 //    typedef std::map<int, std::vector<GlobalIndexType> > VarIDToDofIndices; // key: varID

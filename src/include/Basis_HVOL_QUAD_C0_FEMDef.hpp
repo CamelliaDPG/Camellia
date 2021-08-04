@@ -78,17 +78,9 @@ namespace Intrepid {
     // Number of evaluation points = dim 0 of inputPoints
     int dim0 = inputPoints.dimension(0);  
     
-    // Temporaries: (x,y) coordinates of the evaluation point
-    Scalar x = 0.0;                                    
-    Scalar y = 0.0;                                    
-    
     switch (operatorType) {
-        
       case Intrepid::OPERATOR_VALUE:
         for (int i0 = 0; i0 < dim0; i0++) {
-          x = inputPoints(i0, 0);
-          y = inputPoints(i0, 1);
-          
           // outputValues is a rank-2 array with dimensions (basisCardinality_, dim0)
           outputValues(0, i0) = 1.0;
         }
@@ -97,9 +89,6 @@ namespace Intrepid {
       case Intrepid::OPERATOR_GRAD:
       case Intrepid::OPERATOR_D1:
         for (int i0 = 0; i0 < dim0; i0++) {
-          x = inputPoints(i0,0);
-          y = inputPoints(i0,1);
-          
           // outputValues is a rank-3 array with dimensions (basisCardinality_, dim0, spaceDim)
           outputValues(0, i0, 0) = 0.0;
           outputValues(0, i0, 1) = 0.0;
@@ -108,9 +97,6 @@ namespace Intrepid {
         
       case Intrepid::OPERATOR_CURL:
         for (int i0 = 0; i0 < dim0; i0++) {
-          x = inputPoints(i0,0);
-          y = inputPoints(i0,1);
-          
           // outputValues is a rank-3 array with dimensions (basisCardinality_, dim0, spaceDim)
           outputValues(0, i0, 0) = 0.0;
           outputValues(0, i0, 1) = 0.0;

@@ -596,7 +596,7 @@ int GMGSolver::solve(bool buildCoarseStiffness)
     }
     
     Belos::PseudoBlockCGSolMgr<Scalar,MV,OP>* cgSolver;
-    Belos::PseudoBlockGmresSolMgr<Scalar,MV,OP>* gmresSolver;
+//    Belos::PseudoBlockGmresSolMgr<Scalar,MV,OP>* gmresSolver;
     
     if (_useCG)
     {
@@ -607,7 +607,7 @@ int GMGSolver::solve(bool buildCoarseStiffness)
     {
       solverParams->set ("Num Blocks", 200); // is this equivalent to AZ_kspace??
       solver = factory.create("GMRES", solverParams);
-      gmresSolver = dynamic_cast<Belos::PseudoBlockGmresSolMgr<Scalar,MV,OP>*>(solver.get());
+//      gmresSolver = dynamic_cast<Belos::PseudoBlockGmresSolMgr<Scalar,MV,OP>*>(solver.get());
     }
     
 //    {

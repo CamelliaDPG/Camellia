@@ -36,6 +36,7 @@ public:
                                   vector<Camellia::EOperator> &trialOps,
                                   vector<Camellia::EOperator> &testOps);
 
+  using BF::applyBilinearFormData;
   virtual void applyBilinearFormData(Camellia::FieldContainer<double> &trialValues, Camellia::FieldContainer<double> &testValues,
                                      int trialID, int testID, int operatorIndex,
                                      Teuchos::RCP<BasisCache> basisCache);
@@ -51,6 +52,7 @@ public:
   // RHS:
   bool nonZeroRHS(int testVarID);
   vector<Camellia::EOperator> operatorsForTestID(int testID);
+  using RHS::rhs;
   virtual void rhs(int testVarID, int operatorIndex, Teuchos::RCP<BasisCache> basisCache,
                    Camellia::FieldContainer<double> &values);
 

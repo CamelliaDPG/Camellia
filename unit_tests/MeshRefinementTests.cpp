@@ -103,7 +103,6 @@ TEUCHOS_UNIT_TEST( MeshRefinement, TraceTermProjection )
     break;
   default:
     TEUCHOS_TEST_FOR_EXCEPTION(true, std::invalid_argument, "Unhandled spaceDim");
-    break;
   }
   rhs->addTerm(f * v);
 

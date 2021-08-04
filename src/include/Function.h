@@ -20,6 +20,9 @@
 
 #include "Camellia_FieldContainer.hpp"
 
+#include <Intrepid2_Data.hpp>
+#include <Intrepid2_TensorData.hpp>
+
 #include <string>
 
 using namespace std;
@@ -129,7 +132,7 @@ public:
   // inverse() presently unused: and unclear how useful...
   //  virtual TFunctionPtr<Scalar> inverse();
 
-  int rank();
+  int rank() const;
 
   virtual void addToValues(Camellia::FieldContainer<Scalar> &valuesToAddTo, BasisCachePtr basisCache);
 
@@ -154,6 +157,9 @@ public:
   // adaptive quadrature
   Scalar integrate(Teuchos::RCP<Mesh> mesh, double tol, bool testVsTest = false);
 
+  //! Returns true if the function is defined on the given basisCache.  Can be false for volumetric functions on sides as well as for some trace variables (e.g., some space-time trace variables are only defined on some of the sides).  Base class implementation simply returns true.
+  virtual bool isDefined(BasisCachePtr basisCache) const;
+  
   bool isPositive(BasisCachePtr basisCache);
   bool isPositive(Teuchos::RCP<Mesh> mesh, int cubEnrich = 0, bool testVsTest = false);
   
@@ -257,6 +263,27 @@ public:
   
   //! set to be the bitwise or of dimensions in which the Function might vary, as defined in the VariationDimension enum.
   void setVariationDimensions(int variationDimensions);
+  
+  //! returns true if the Function may vary in the specified coordinate dimension.
+  bool variesInDimension(const int &d) const;
+  
+  static Intrepid2::DimensionInfo generalVariationDimensionInfo(const int &extent);
+  static Intrepid2::DimensionInfo constantDimensionInfo(const int &logicalExtent);
+  
+  //! subclasses should override this method; provides information on how the data varies in each dimension of values().  Used by checkoutValuesData().
+  virtual std::vector<Intrepid2::DimensionInfo> valuesDataDims(BasisCachePtr basisCache);
+  
+  //! call this to get a suitable Data allocation for receiving values() data.
+  Intrepid2::Data<Scalar, Camellia::DeviceType> checkoutValuesData(BasisCachePtr basisCache);
+  
+  //! call this when you are done with a Data allocation received from checkoutValuesData().
+  void checkinValuesData(const Intrepid2::Data<Scalar, Camellia::DeviceType> &data);
+  
+  //! For optimal performance, subclasses should override this method, especially if their values are constant with respect to some dimensions; we can often take advantage of this to reduce data redundancy.
+  virtual void values(Intrepid2::Data<Scalar, Camellia::DeviceType> values, BasisCachePtr basisCache);
+  
+  //! For scalar Functions, this defaults to 0 (and subclasses need not/should not override).  For higher-rank Functions, this is the number of components that are defined (beyond which all components, in a higher-dimensional setting, can be assumed to be zero).  A -1 return indicates that the number of components defined is not determined prior to specification of the number of dimensions (as happens for UnitNormalFunction).
+  virtual int numVectorComponents() const;
   
   static bool isNull(TFunctionPtr<Scalar> f);
 

@@ -17,7 +17,7 @@ PhysicalPointCache::PhysicalPointCache(const Camellia::FieldContainer<double> &p
 {
   _physCubPoints = physCubPoints;
 }
-const Camellia::FieldContainer<double> & PhysicalPointCache::getPhysicalCubaturePoints()   // overrides super
+const Camellia::FieldContainer<double> & PhysicalPointCache::getPhysicalCubaturePointsFC()   // overrides super
 {
   return _physCubPoints;
 }

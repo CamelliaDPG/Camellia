@@ -80,13 +80,22 @@ public:
   virtual void setPhysicalCellNodes(const Camellia::FieldContainer<double> &physicalCellNodes,
                                     const std::vector<GlobalIndexType> &cellIDs, bool createSideCacheToo);
 
+  using BasisCache::getValues;
   virtual constFCPtr getValues(BasisPtr basis, Camellia::EOperator op, bool useCubPointsSideRefCell = false);
+  
+  using BasisCache::getTransformedWeightedValues;
   virtual constFCPtr getTransformedValues(BasisPtr basis, Camellia::EOperator op, bool useCubPointsSideRefCell = false);
+  
+  using BasisCache::getTransformedValues;
   virtual constFCPtr getTransformedWeightedValues(BasisPtr basis, Camellia::EOperator op, bool useCubPointsSideRefCell = false);
 
   static void getTensorialComponentPoints(CellTopoPtr spaceTimeTopo, const Camellia::FieldContainer<double> &tensorPoints,
                                           Camellia::FieldContainer<double> &spatialPoints, Camellia::FieldContainer<double> &temporalPoints);
   static void setDefaultStoreTransformedValues(bool storeValues);
+  
+  virtual ~SpaceTimeBasisCache() {
+//    std::cout << "destructing SpaceTimeBasisCache.\n";
+  }
 };
 }
 

@@ -8,14 +8,13 @@
 #include "Camellia_KokkosAllocations.h"
 #include "TypeDefs.h"
 
-#include "Intrepid_CellTools.hpp"
-
 using namespace Camellia;
 
 BasisSumFunction::BasisSumFunction(BasisPtr basis, const Camellia::FieldContainer<double> &basisCoefficients,
-                                   BasisCachePtr overridingBasisCache, Camellia::EOperator op, bool boundaryValueOnly) : TFunction<double>("BasisSumFunction", BasisFactory::basisFactory()->getBasisRank(basis) )
+                                   BasisCachePtr overridingBasisCache, Camellia::EOperator op, bool boundaryValueOnly)
+:
+TFunction<double>("BasisSumFunction", BasisFactory::basisFactory()->getBasisRank(basis,op) )
 {
-  // TODO: fix the rank setter here to take into account rank-changing ops (e.g. DIV, GRAD)
   _coefficients = basisCoefficients;
   _overridingBasisCache = overridingBasisCache;
   if (_coefficients.rank()==1)
@@ -151,6 +150,15 @@ BasisSumFunction::BasisSumFunction(BasisPtr basis, const Camellia::FieldContaine
 //    }
 //  }
 //}
+
+int BasisSumFunction::numVectorComponents() const
+{
+  if (this->rank() == 0) return 0;
+  else
+  {
+    return _basis->domainTopology()->getDimension();
+  }
+}
 
 // New device implementation
 void BasisSumFunction::values(DeviceView<double> &values, ValueModificationType modType, BasisCachePtr basisCache)

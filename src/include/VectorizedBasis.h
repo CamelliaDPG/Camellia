@@ -60,6 +60,7 @@ public:
   int rangeDimension() const;
   int rangeRank() const;
 
+  using Basis<Scalar,ArrayScalar>::getValues;
   void getValues(ArrayScalar &values, const ArrayScalar &refPoints, Intrepid::EOperator operatorType) const;
 };
 typedef Teuchos::RCP<VectorizedBasis<> > VectorBasisPtr;

@@ -15,6 +15,7 @@
 #include "BasisFactory.h"
 #include "BasisSumFunction.h"
 #include "CamelliaCellTools.h"
+#include "CamelliaTestingHelpers.h"
 #include "CellTopology.h"
 #include "MeshFactory.h"
 #include "PoissonFormulation.h"
@@ -23,6 +24,8 @@
 
 #include "Intrepid_CellTools.hpp"
 #include "Intrepid_FunctionSpaceTools.hpp"
+
+#include <Intrepid2_TestUtils.hpp>
 
 using namespace Camellia;
 
@@ -63,7 +66,7 @@ TEUCHOS_UNIT_TEST( BasisCache, LineCubature )
   BasisCachePtr basisCache = BasisCache::basisCache1D(x0, x1, cubDegree);
 
   const Camellia::FieldContainer<double>* cubWeights = &basisCache->getCubatureWeightsFC();
-  const Camellia::FieldContainer<double>* physicalCubaturePoints = &basisCache->getPhysicalCubaturePoints();
+  const Camellia::FieldContainer<double>* physicalCubaturePoints = &basisCache->getPhysicalCubaturePointsFC();
 
   // try a line m x + b; the integral on (0,1) should be m / 2 + b.
   double m = 2.0, b = -1;
@@ -180,6 +183,65 @@ TEUCHOS_UNIT_TEST(BasisCache, Jacobian3D)
 //      cout << "maxDiff = " << maxDiff << endl;
 //      success = false;
 //    }
+}
+
+TEUCHOS_UNIT_TEST( BasisCache, PhysicalTensorPoints_1D1V )
+{
+  const double relTol = 1e-15;
+  const double absTol = 1e-15;
+  
+  const int baseSpaceDim = 1;
+  const int numTensorExtrusions = 1;
+  std::vector<int> H1Orders {1,1};
+  MeshPtr mesh = makeSingleElementExtrudedTestMesh(baseSpaceDim, numTensorExtrusions, H1Orders);
+
+  auto myCellIDs = mesh->cellIDsInPartition(); // will be empty on all but one rank, which will have one cell w/ ID 0
+  
+  for (const auto & cellID : myCellIDs)
+  {
+    const bool testVsTest = true;
+    const int cubatureEnrichmentDegree = 0;
+    BasisCachePtr basisCache = BasisCache::basisCacheForCell(mesh, cellID, testVsTest, cubatureEnrichmentDegree);
+    
+    PhysicalTensorPoints physicalTensorPoints = basisCache->getPhysicalCubaturePoints();
+    auto physicalCubaturePointsFC             = basisCache->getPhysicalCubaturePointsFC();
+    
+    auto physicalCubaturePointsFCView = physicalCubaturePointsFC.checkoutDeviceView();
+    
+    Intrepid2::testFloatingEquality3(physicalCubaturePointsFCView, physicalTensorPoints, relTol, absTol, out, success, "physicalPointsFCView", "physicalTensorPoints");
+    
+    physicalCubaturePointsFC.checkinDeviceView(false); // false: don't deep copy to host
+  }
+}
+
+TEUCHOS_UNIT_TEST( BasisCache, PhysicalTensorPoints_2D3V )
+{
+  const int baseDim = 2;
+  const int extrusionDim = 3;
+  const double tol = 1e-15;
+  
+  const int maxPolyOrder = 2;
+  std::vector<int> H1Orders(1+extrusionDim,maxPolyOrder);
+  
+  auto mesh = makeSingleElementExtrudedTestMesh(baseDim, extrusionDim, H1Orders);
+  
+  auto myCellIDs = mesh->cellIDsInPartition(); // will be empty on all but one rank, which will have one cell w/ ID 0
+  
+  for (const auto & cellID : myCellIDs)
+  {
+    BasisCachePtr basisCache = BasisCache::basisCacheForCell(mesh, cellID);
+    
+    // check whether points agree
+    auto physicalTensorPoints = basisCache->getPhysicalCubaturePoints();
+    auto physicalPointsFC     = basisCache->getPhysicalCubaturePointsFC();
+    
+    auto physicalPointsFCView = physicalPointsFC.checkoutDeviceView();
+    
+    // points have shape (C,P,D)
+    Intrepid2::testFloatingEquality3(physicalPointsFCView, physicalTensorPoints, tol, tol, out, success, "physicalPointsFCView", "physicalTensorPoints");
+    
+    physicalPointsFC.checkinDeviceView(false);
+  }
 }
 
 TEUCHOS_UNIT_TEST( BasisCache, SideNormals_Space )
@@ -377,11 +439,11 @@ TEUCHOS_UNIT_TEST( BasisCache, SetRefCellPoints )
   {
     BasisCachePtr sideBasisCache = basisCache->getSideBasisCache(sideOrdinal);
     Camellia::FieldContainer<double> refCellPoints = sideBasisCache->getRefCellPointsFC();
-    Camellia::FieldContainer<double> physicalCubaturePointsExpected = sideBasisCache->getPhysicalCubaturePoints();
+    Camellia::FieldContainer<double> physicalCubaturePointsExpected = sideBasisCache->getPhysicalCubaturePointsFC();
     //    cout << "side " << sideIndex << " ref cell points:\n" << refCellPoints;
     //    cout << "side " << sideIndex << " physCubature points:\n" << physicalCubaturePointsExpected;
     sideBasisCache->setRefCellPointsFC(refCellPoints);
-    Camellia::FieldContainer<double> physicalCubaturePointsActual = sideBasisCache->getPhysicalCubaturePoints();
+    Camellia::FieldContainer<double> physicalCubaturePointsActual = sideBasisCache->getPhysicalCubaturePointsFC();
 
     double maxDiff = 0;
     for (int valOrdinal=0; valOrdinal<physicalCubaturePointsActual.size(); valOrdinal++)
@@ -423,7 +485,7 @@ TEUCHOS_UNIT_TEST( BasisCache, SetRefCellPoints )
 
   hexBasisCache.setRefCellPointsFC(refCellPointsHex);
 
-  Camellia::FieldContainer<double> physicalPointsActual = hexBasisCache.getPhysicalCubaturePoints();
+  Camellia::FieldContainer<double> physicalPointsActual = hexBasisCache.getPhysicalCubaturePointsFC();
 
   double maxDiff = 0;
   for (int valOrdinal=0; valOrdinal<physicalPointsActual.size(); valOrdinal++)
@@ -628,7 +690,6 @@ TEUCHOS_UNIT_TEST( BasisCache, SetRefCellPointsSpaceTimeSide )
           
         default:
           TEUCHOS_TEST_FOR_EXCEPTION(true, std::invalid_argument, "Unsupported op");
-          break;
       }
       out << "Testing with op1 = " << operatorName(op1) << ", op2 = " << operatorName(op2) << endl;
       FunctionPtr x3 = Function::xn(3); // x^3

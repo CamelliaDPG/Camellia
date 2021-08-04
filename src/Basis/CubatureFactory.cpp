@@ -22,14 +22,12 @@ using namespace Teuchos;
 
 using namespace Camellia;
 
-Teuchos::RCP< Intrepid2::Cubature<CubatureFactory::ExecSpaceType,double,double> > CubatureFactory::create(CellTopoPtr cellTopo, int cubDegree)
+Teuchos::RCP< Intrepid2::Cubature<DeviceType,double,double> > CubatureFactory::create(CellTopoPtr cellTopo, int cubDegree)
 {
   Teuchos::RCP< Cubature > shardsTopoCub;
-  int numShardsTopoCubatures = 0; // 1 or 0
   if (cellTopo->getShardsTopology().getDimension() != 0)
   {
-    shardsTopoCub = Intrepid2::DefaultCubatureFactory::create<ExecSpaceType>(cellTopo->getShardsTopology(), cubDegree);
-    numShardsTopoCubatures = 1;
+    shardsTopoCub = Intrepid2::DefaultCubatureFactory::create<DeviceType>(cellTopo->getShardsTopology(), cubDegree);
   }
   else
   {
@@ -54,10 +52,10 @@ Teuchos::RCP< Intrepid2::Cubature<CubatureFactory::ExecSpaceType,double,double> 
   {
     shards::CellTopology line_2(shards::getCellTopologyData<shards::Line<2> >() );
 
-    using CubatureDirectLine = Intrepid2::CubatureDirectLineGauss<ExecSpaceType,double,double>;
+    using CubatureDirectLine = Intrepid2::CubatureDirectLineGauss<DeviceType,double,double>;
     CubatureDirectLine lineCub(cubDegree);
 
-    using CubatureTensor = Intrepid2::CubatureTensor<ExecSpaceType,double,double>;
+    using CubatureTensor = Intrepid2::CubatureTensor<DeviceType,double,double>;
     
     Teuchos::RCP<CubatureTensor> cubatureTensor;
     
@@ -71,7 +69,7 @@ Teuchos::RCP< Intrepid2::Cubature<CubatureFactory::ExecSpaceType,double,double> 
     }
     else
     {
-      using CubatureDirect = Intrepid2::CubatureDirect<ExecSpaceType,double,double>;
+      using CubatureDirect = Intrepid2::CubatureDirect<DeviceType,double,double>;
       CubatureDirect* cubatureDirectPtr = dynamic_cast<CubatureDirect*>(shardsTopoCub.get());
       
       TEUCHOS_TEST_FOR_EXCEPTION(cubatureDirectPtr == NULL, std::invalid_argument, "shardsTopoCub is not a subclass of CubatureDirect or CubatureTensor");
@@ -89,7 +87,7 @@ Teuchos::RCP< Intrepid2::Cubature<CubatureFactory::ExecSpaceType,double,double> 
   }
 }
 
-Teuchos::RCP< Intrepid2::Cubature<CubatureFactory::ExecSpaceType,double,double> > CubatureFactory::create(CellTopoPtr cellTopo, std::vector<int> cubDegree)
+Teuchos::RCP< Intrepid2::Cubature<DeviceType,double,double> > CubatureFactory::create(CellTopoPtr cellTopo, std::vector<int> cubDegree)
 {
   Teuchos::RCP< Cubature > shardsTopoCub;
   int degreeOffset = 0;
@@ -98,13 +96,13 @@ Teuchos::RCP< Intrepid2::Cubature<CubatureFactory::ExecSpaceType,double,double> 
     vector<int> shardsDegrees;
     shardsDegrees.insert(shardsDegrees.begin(), cubDegree.begin(),cubDegree.begin() + cellTopo->getShardsTopology().getDimension());
     degreeOffset = cellTopo->getShardsTopology().getDimension();
-    shardsTopoCub = Intrepid2::DefaultCubatureFactory::create<ExecSpaceType>(cellTopo->getShardsTopology(), shardsDegrees);
+    shardsTopoCub = Intrepid2::DefaultCubatureFactory::create<DeviceType>(cellTopo->getShardsTopology(), shardsDegrees);
   }
   else if (cubDegree.size() == cellTopo->getTensorialDegree() + 1)
   {
     int shardsDegree = cubDegree[0];
     degreeOffset = 1;
-    Teuchos::RCP< Cubature > shardsTopoCub = Intrepid2::DefaultCubatureFactory::create<ExecSpaceType>(cellTopo->getShardsTopology(), shardsDegree);
+    Teuchos::RCP< Cubature > shardsTopoCub = Intrepid2::DefaultCubatureFactory::create<DeviceType>(cellTopo->getShardsTopology(), shardsDegree);
   }
   else
   {
@@ -119,10 +117,10 @@ Teuchos::RCP< Intrepid2::Cubature<CubatureFactory::ExecSpaceType,double,double> 
   {
     shards::CellTopology line_2(shards::getCellTopologyData<shards::Line<2> >() );
     
-    using CubatureDirectLine = Intrepid2::CubatureDirectLineGauss<ExecSpaceType,double,double>;
+    using CubatureDirectLine = Intrepid2::CubatureDirectLineGauss<DeviceType,double,double>;
     CubatureDirectLine lineCub0(cubDegree[degreeOffset]);
     
-    using CubatureTensor = Intrepid2::CubatureTensor<ExecSpaceType,double,double>;
+    using CubatureTensor = Intrepid2::CubatureTensor<DeviceType,double,double>;
     
     Teuchos::RCP<CubatureTensor> cubatureTensor;
     
@@ -136,7 +134,7 @@ Teuchos::RCP< Intrepid2::Cubature<CubatureFactory::ExecSpaceType,double,double> 
     }
     else
     {
-      using CubatureDirect = Intrepid2::CubatureDirect<ExecSpaceType,double,double>;
+      using CubatureDirect = Intrepid2::CubatureDirect<DeviceType,double,double>;
       
       CubatureDirect* cubatureDirectPtr = dynamic_cast<CubatureDirect*>(shardsTopoCub.get());
       

@@ -68,7 +68,7 @@ double computeFluxOverElementSides(TFunctionPtr<double> flux, Teuchos::RCP<Mesh>
       int sideIndex = it->second;
       BasisCachePtr basisCache = BasisCache::basisCacheForCell(mesh, cellID, cubatureEnrichment);
       BasisCachePtr sideBasisCache = basisCache->getSideBasisCache(sideIndex);
-      // Camellia::FieldContainer<double> physicalCubaturePoints = sideBasisCache->getPhysicalCubaturePoints();
+      // Camellia::FieldContainer<double> physicalCubaturePoints = sideBasisCache->getPhysicalCubaturePointsFC();
       // double xCell0 = physicalCubaturePoints(0,0,0);
       // cout << physicalCubaturePoints << endl;
       Camellia::FieldContainer<double> sideIntegral(1);

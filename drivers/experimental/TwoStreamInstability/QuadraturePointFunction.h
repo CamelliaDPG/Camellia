@@ -37,6 +37,8 @@ class QuadraturePointFunction : public TFunction<double>
   bool _boundaryValueOnly;
 public:
   QuadraturePointFunction(MeshPtr mesh, int quadratureEnrichment, int rank=0, bool boundaryValueOnly=false);
+  
+  using TFunction<double>::values;
   virtual void values(FieldContainer<double> &values, BasisCachePtr basisCache) override;
 
   bool boundaryValueOnly() override;

@@ -19,7 +19,7 @@
 namespace Camellia {
 
   //! helper method to perform a deep copy; this supports cases that Kokkos::deep_copy does not, including Views with incompatible layouts.  Note that such copies may have negative performance implications.
-  template<class ViewType, class ViewLikeContainer, int rank>
+  template<int rank, class ViewType, class ViewLikeContainer>
   static void deepCopy(ViewType view, ViewLikeContainer viewLikeContainer)
   {
     using ExecSpaceType = typename ViewType::execution_space;
@@ -54,13 +54,13 @@ namespace Camellia {
   {
     const auto rank = view.rank();
     switch (rank) {
-      case 1: deepCopy<ViewType, ViewLikeContainer, 1>(view, viewLikeContainer); break;
-      case 2: deepCopy<ViewType, ViewLikeContainer, 2>(view, viewLikeContainer); break;
-      case 3: deepCopy<ViewType, ViewLikeContainer, 3>(view, viewLikeContainer); break;
-      case 4: deepCopy<ViewType, ViewLikeContainer, 4>(view, viewLikeContainer); break;
-      case 5: deepCopy<ViewType, ViewLikeContainer, 5>(view, viewLikeContainer); break;
-      case 6: deepCopy<ViewType, ViewLikeContainer, 6>(view, viewLikeContainer); break;
-      case 7: deepCopy<ViewType, ViewLikeContainer, 7>(view, viewLikeContainer); break;
+      case 1: deepCopy<1, ViewType, ViewLikeContainer>(view, viewLikeContainer); break;
+      case 2: deepCopy<2, ViewType, ViewLikeContainer>(view, viewLikeContainer); break;
+      case 3: deepCopy<3, ViewType, ViewLikeContainer>(view, viewLikeContainer); break;
+      case 4: deepCopy<4, ViewType, ViewLikeContainer>(view, viewLikeContainer); break;
+      case 5: deepCopy<5, ViewType, ViewLikeContainer>(view, viewLikeContainer); break;
+      case 6: deepCopy<6, ViewType, ViewLikeContainer>(view, viewLikeContainer); break;
+      case 7: deepCopy<7, ViewType, ViewLikeContainer>(view, viewLikeContainer); break;
         
       default:
         TEUCHOS_TEST_FOR_EXCEPTION(true, std::invalid_argument, "Unsupported view rank");

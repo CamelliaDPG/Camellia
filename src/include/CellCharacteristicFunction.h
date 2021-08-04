@@ -37,6 +37,8 @@ public:
   {
     _cellIDs = cellIDs;
   }
+  
+  using TFunction<double>::values;
   void values(Camellia::FieldContainer<double> &values, BasisCachePtr basisCache)
   {
     CHECK_VALUES_RANK(values);

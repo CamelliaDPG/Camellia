@@ -100,6 +100,22 @@ std::vector<TFunctionPtr<Scalar>> VectorizedFunction<Scalar>::memberFunctions()
 }
 
 template <typename Scalar>
+int VectorizedFunction<Scalar>::numVectorComponents() const
+{
+  // requirement is that vector components beyond the return value are identically zero.
+  // we therefore look for the last component that is not zero, and return its (zero-based) index plus 1.
+  for (int d=_fxns.size()-1; d>=0; d--)
+  {
+    if (!_fxns[d]->isZero())
+    {
+      return d+1;
+    }
+  }
+  // if they're all zero, return 0
+  return 0;
+}
+
+template <typename Scalar>
 void VectorizedFunction<Scalar>::values(typename FieldContainer<Scalar>::DeviceView &values, ValueModificationType modType, BasisCachePtr basisCache)
 {
   TEUCHOS_FUNC_TIME_MONITOR("VectorizedFunction values()");
@@ -123,7 +139,7 @@ void VectorizedFunction<Scalar>::values(typename FieldContainer<Scalar>::DeviceV
   {
     dims.push_back(values.extent_int(d));
   }
-  auto dv_compValues = Allocation<Scalar>::checkoutDeviceView(dims);
+  auto dv_compValues = Allocation<Scalar>::checkoutDeviceView(dims, "VectorizedFunction::values: dv_compValues");
   const int fxnRank = dv_compValues.rank();
   
   // At the expense of additional memory usage this could be parallelized further
@@ -219,7 +235,6 @@ TFunctionPtr<Scalar> VectorizedFunction<Scalar>::di(int i)
     break;
   default:
     TEUCHOS_TEST_FOR_EXCEPTION(true, std::invalid_argument, "Invalid coordinate direction");
-    break;
   }
   vector< TFunctionPtr<Scalar> > fxns;
   for (int j = 0; j< dim(); j++)

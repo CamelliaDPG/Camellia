@@ -29,7 +29,7 @@ Basis<Scalar,ArrayScalar>::Basis()
 }
 
 template<class Scalar, class ArrayScalar>
-Intrepid2::BasisValues<Scalar,Camellia::DeviceExecutionSpace> Basis<Scalar,ArrayScalar>::allocateBasisValues( Intrepid2::TensorPoints<Scalar,ExecSpaceType> points,
+Intrepid2::BasisValues<Scalar,Camellia::DeviceType> Basis<Scalar,ArrayScalar>::allocateBasisValues( Intrepid2::TensorPoints<Scalar,Camellia::DeviceType> points,
                                                                                                              const Intrepid2::EOperator op) const
 {
   // base implementation throws exception; Intrepid2BasisWrapper overrides
@@ -37,8 +37,8 @@ Intrepid2::BasisValues<Scalar,Camellia::DeviceExecutionSpace> Basis<Scalar,Array
 }
 
 template<class Scalar, class ArrayScalar>
-void Basis<Scalar,ArrayScalar>::getValues( Intrepid2::BasisValues<Scalar,ExecSpaceType> outputValues,
-                                          const Intrepid2::TensorPoints<Scalar,ExecSpaceType>  inputPoints,
+void Basis<Scalar,ArrayScalar>::getValues( Intrepid2::BasisValues<Scalar,Camellia::DeviceType> outputValues,
+                                          const Intrepid2::TensorPoints<Scalar,Camellia::DeviceType>  inputPoints,
                                           const Intrepid2::EOperator op ) const
 {
   // base implementation throws exception; Intrepid2BasisWrapper overrides
@@ -510,7 +510,15 @@ Camellia::EFunctionSpace Basis<Scalar,ArrayScalar>::functionSpace(int tensorialR
     }
     _tagToOrdinal = tagToOrdinalTrimmed;
   }
-  
+
+template<class Scalar, class ArrayScalar>
+Teuchos::RCP< Intrepid2::Basis<Camellia::DeviceType,Scalar,Scalar> >
+Basis<Scalar,ArrayScalar>::intrepid2Basis()
+{
+  // Intrepid2 basis wrapper overrides
+  return Teuchos::null;
+}
+
 template<class Scalar, class ArrayScalar>
 bool Basis<Scalar,ArrayScalar>::isConforming() const
 {
@@ -668,13 +676,13 @@ void IntrepidBasisWrapper<Scalar,ArrayScalar>::getValues(ArrayScalar &values, co
 template<class Scalar, class ArrayScalar>
 bool Intrepid2BasisWrapper<Scalar,ArrayScalar>::isConforming() const
 {
-  bool isDiscontinuous =  Camellia::functionSpaceIsDiscontinuous(this->_functionSpace);
+  bool isDiscontinuous =  Camellia::functionSpaceIsDiscontinuous(this->_functionSpace); // returns true for L^2 spaces as well as HGRAD_DISC, etc.
   
   bool functionSpaceIsL2 = (this->_functionSpace == FUNCTION_SPACE_HVOL) || (this->_functionSpace == FUNCTION_SPACE_VECTOR_HVOL) || (this->_functionSpace == FUNCTION_SPACE_TENSOR_HVOL);
   
   if (isDiscontinuous && !functionSpaceIsL2)
     return false; // discontinuous and not L^2: definitely not conforming
-  else if (isDiscontinuous && functionSpaceIsL2)
+  else if (!isDiscontinuous && functionSpaceIsL2)
     return false; // not discontinuous but L^2: definitely not conforming (and a bit weird!)
   else // not discontinuous
     return true;  // in the usual case, if not discontinuous, we are conforming.  There could be exceptions to this, but not among the Intrepid2 bases we expect to support.
@@ -690,7 +698,7 @@ bool Intrepid2BasisWrapper<Scalar,ArrayScalar>::isNodal() const
 }
 
 template<class Scalar, class ArrayScalar>
-Intrepid2BasisWrapper<Scalar,ArrayScalar>::Intrepid2BasisWrapper(Teuchos::RCP< Intrepid2::Basis<Kokkos::DefaultExecutionSpace,Scalar,Scalar> > intrepid2Basis,
+Intrepid2BasisWrapper<Scalar,ArrayScalar>::Intrepid2BasisWrapper(Teuchos::RCP< Intrepid2::Basis<Camellia::DeviceType,Scalar,Scalar> > intrepid2Basis,
     int rangeDimension, int rangeRank,
     Camellia::EFunctionSpace fs)
 {
@@ -716,8 +724,8 @@ Intrepid2BasisWrapper<Scalar,ArrayScalar>::Intrepid2BasisWrapper(Teuchos::RCP< I
 template<class Scalar, class ArrayScalar>
 void Intrepid2BasisWrapper<Scalar,ArrayScalar>::initializeTags() const
 {
-  using OrdinalToTagType = typename Intrepid2::Basis<Kokkos::DefaultExecutionSpace,Scalar,Scalar>::OrdinalTypeArray2DHost;
-  using TagToOrdinalType = typename Intrepid2::Basis<Kokkos::DefaultExecutionSpace,Scalar,Scalar>::OrdinalTypeArray3DHost;
+  using OrdinalToTagType = typename Intrepid2::Basis<Camellia::DeviceType,Scalar,Scalar>::OrdinalTypeArray2DHost;
+  using TagToOrdinalType = typename Intrepid2::Basis<Camellia::DeviceType,Scalar,Scalar>::OrdinalTypeArray3DHost;
     
   TagToOrdinalType tagToOrdinalIntrepid2 = _intrepid2Basis->getAllDofOrdinal();
   OrdinalToTagType ordinalToTagIntrepid2 = _intrepid2Basis->getAllDofTags();
@@ -798,7 +806,7 @@ void Intrepid2BasisWrapper<Scalar,ArrayScalar>::initializeTags() const
 }
 
 template<class Scalar, class ArrayScalar>
-Teuchos::RCP< Intrepid2::Basis<Kokkos::DefaultExecutionSpace,Scalar,Scalar> > Intrepid2BasisWrapper<Scalar,ArrayScalar>::intrepid2Basis()
+Teuchos::RCP< Intrepid2::Basis<Camellia::DeviceType,Scalar,Scalar> > Intrepid2BasisWrapper<Scalar,ArrayScalar>::intrepid2Basis()
 {
   return _intrepid2Basis;
 }
@@ -811,8 +819,7 @@ Teuchos::RCP< Intrepid2::Basis<Kokkos::DefaultExecutionSpace,Scalar,Scalar> > In
     auto dofCoordsView = dofCoordsCamellia.checkoutDeviceView(false); // false: don't deep copy from host
     
     // on CUDA, layouts may differ; we therefore allocate a second view and copy.  This is obviously inefficient; we should use Intrepid2-compatible views in all performance-critical code.
-    using ExecSpaceType = Camellia::DeviceMemorySpace::execution_space;
-    using Intrepid2Values = Intrepid2::Basis<ExecSpaceType,double,double>::OutputViewType;
+    using Intrepid2Values = Intrepid2::Basis<Camellia::DeviceType,double,double>::OutputViewType;
     Intrepid2Values intrepid2DofCoords = Allocation<Scalar>::allocateIntrepid2DeviceViewMatchingView(dofCoordsView);
     
     _intrepid2Basis->getDofCoords( intrepid2DofCoords );
@@ -855,8 +862,7 @@ void Intrepid2BasisWrapper<Scalar,ArrayScalar>::getValues(ArrayScalar &values, c
   Intrepid2::EOperator opIntrepid2 = intrepidOpToIntrepid2Op(operatorType);
   
   // on CUDA, layouts may differ; we therefore allocate a second view and copy.  This is obviously inefficient; we should use Intrepid2-compatible views in all performance-critical code.
-  using ExecSpaceType = Camellia::DeviceMemorySpace::execution_space;
-  using Intrepid2Values = Intrepid2::Basis<ExecSpaceType,double,double>::OutputViewType;
+  using Intrepid2Values = Intrepid2::Basis<Camellia::DeviceType,double,double>::OutputViewType;
   Intrepid2Values intrepid2Values = Allocation<Scalar>::allocateIntrepid2DeviceViewMatchingView(valuesView);
   Intrepid2Values intrepid2Points = Allocation<Scalar>::allocateIntrepid2DeviceViewMatchingView(refPointsView);
   deepCopy(intrepid2Points, refPointsView);
@@ -873,16 +879,16 @@ void Intrepid2BasisWrapper<Scalar,ArrayScalar>::getValues(ArrayScalar &values, c
 }
 
 template<class Scalar, class ArrayScalar>
-Intrepid2::BasisValues<Scalar,typename Intrepid2BasisWrapper<Scalar,ArrayScalar>::ExecSpaceType>
-Intrepid2BasisWrapper<Scalar,ArrayScalar>::allocateBasisValues( Intrepid2::TensorPoints<Scalar,typename Intrepid2BasisWrapper::ExecSpaceType> points,
+Intrepid2::BasisValues<Scalar,Camellia::DeviceType>
+Intrepid2BasisWrapper<Scalar,ArrayScalar>::allocateBasisValues( Intrepid2::TensorPoints<Scalar,Camellia::DeviceType> points,
                                                                 const Intrepid2::EOperator op) const
 {
   return _intrepid2Basis->allocateBasisValues(points,op);
 }
 
 template<class Scalar, class ArrayScalar>
-void Intrepid2BasisWrapper<Scalar,ArrayScalar>::getValues(Intrepid2::BasisValues<Scalar,typename Intrepid2BasisWrapper<Scalar,ArrayScalar>::ExecSpaceType> outputValues,
-                                                          const Intrepid2::TensorPoints<Scalar,typename Intrepid2BasisWrapper<Scalar,ArrayScalar>::ExecSpaceType> inputPoints,
+void Intrepid2BasisWrapper<Scalar,ArrayScalar>::getValues(Intrepid2::BasisValues<Scalar,Camellia::DeviceType> outputValues,
+                                                          const Intrepid2::TensorPoints<Scalar,Camellia::DeviceType> inputPoints,
                                                           const Intrepid2::EOperator op) const
 {
   _intrepid2Basis->getValues(outputValues,inputPoints,op);

@@ -18,139 +18,197 @@
 
 namespace Camellia
 {
-  static const std::string SHARED_SCRATCH_STORAGE_LABEL("Camellia Shared Scratch storage");
+//using ScratchDataDimensions = std::vector<Intrepid2::DimensionInfo>;
+//Data checkoutScratchData(const ScratchDataDimensions &dataDims, std::string description="");
+//void checkinScratchData(Data &data);
   
-  template<typename Scalar>
-  typename SharedScratchStorage<Scalar>::DeviceView
-  SharedScratchStorage<Scalar>::allocateView(const ScratchStorageDimensions &dims, const std::string &label) const
+  template<int rank, typename FixedRankViewType>
+  Intrepid2::Data<typename FixedRankViewType::value_type, Camellia::DeviceType>
+  constructData(FixedRankViewType view, std::vector<int> extents, std::vector<Intrepid2::DataVariationType> variationTypes,
+                int blockPlusDiagonalLastNonDiagonal)
   {
-    typename SharedScratchStorage<Scalar>::DeviceView view;
-    switch (dims.size())
+    Kokkos::Array<int,rank> extentsArray;
+    Kokkos::Array<Intrepid2::DataVariationType,rank> variationTypesArray;
+    for (int d=0; d<rank; d++)
     {
-      case 0:
-        view = DeviceView(Kokkos::ViewAllocateWithoutInitializing(label));
-        break;
-      case 1:
-        view = DeviceView(Kokkos::ViewAllocateWithoutInitializing(label),dims[0]);
-        break;
-      case 2:
-        view = DeviceView(Kokkos::ViewAllocateWithoutInitializing(label),dims[0],dims[1]);
-        break;
-      case 3:
-        view = DeviceView(Kokkos::ViewAllocateWithoutInitializing(label),dims[0],dims[1],dims[2]);
-        break;
-      case 4:
-        view = DeviceView(Kokkos::ViewAllocateWithoutInitializing(label),dims[0],dims[1],dims[2],dims[3]);
-        break;
-      case 5:
-        view = DeviceView(Kokkos::ViewAllocateWithoutInitializing(label),dims[0],dims[1],dims[2],dims[3],dims[4]);
-        break;
-      case 6:
-        view = DeviceView(Kokkos::ViewAllocateWithoutInitializing(label),dims[0],dims[1],dims[2],dims[3],dims[4],dims[5]);
-        break;
-      case 7:
-        view = DeviceView(Kokkos::ViewAllocateWithoutInitializing(label),dims[0],dims[1],dims[2],dims[3],dims[4],dims[5],dims[6]);
-        break;
-      default:
-        TEUCHOS_TEST_FOR_EXCEPTION(true,std::invalid_argument,"Unsupported rank");
+      extentsArray[d]        = extents[d];
+      variationTypesArray[d] = variationTypes[d];
     }
-    recordAllocation<Scalar>(deviceViewAllocationRecord, view.size());
-    return view;
+    using Data = Intrepid2::Data<typename FixedRankViewType::value_type, Camellia::DeviceType>;
+    return Data(view, extentsArray, variationTypesArray, blockPlusDiagonalLastNonDiagonal);
+  }
+
+  template<typename FixedRankViewType>
+  Intrepid2::Data<typename FixedRankViewType::value_type, Camellia::DeviceType>
+  constructData(FixedRankViewType view, std::vector<int> extents, std::vector<Intrepid2::DataVariationType> variationTypes,
+                int blockPlusDiagonalLastNonDiagonal)
+  {
+    const int rank = variationTypes.size();
+    switch (rank)
+    {
+      case 1: return constructData<1,FixedRankViewType>(view, extents, variationTypes, blockPlusDiagonalLastNonDiagonal);
+      case 2: return constructData<2,FixedRankViewType>(view, extents, variationTypes, blockPlusDiagonalLastNonDiagonal);
+      case 3: return constructData<3,FixedRankViewType>(view, extents, variationTypes, blockPlusDiagonalLastNonDiagonal);
+      case 4: return constructData<4,FixedRankViewType>(view, extents, variationTypes, blockPlusDiagonalLastNonDiagonal);
+      case 5: return constructData<5,FixedRankViewType>(view, extents, variationTypes, blockPlusDiagonalLastNonDiagonal);
+      case 6: return constructData<6,FixedRankViewType>(view, extents, variationTypes, blockPlusDiagonalLastNonDiagonal);
+      case 7: return constructData<7,FixedRankViewType>(view, extents, variationTypes, blockPlusDiagonalLastNonDiagonal);
+      default: TEUCHOS_TEST_FOR_EXCEPTION(true, std::invalid_argument, "Unsupported rank");
+    }
+  }
+
+  template<typename Scalar>
+  void SharedScratchStorage<Scalar>::checkinScratchData(const typename SharedScratchStorage<Scalar>::Data &data)
+  {
+    const int rank = data.getUnderlyingViewRank();
+    switch (rank) {
+      case 1: _fixedRank1.checkinScratchStorage(data.template getUnderlyingView<1>()); break;
+      case 2: _fixedRank2.checkinScratchStorage(data.template getUnderlyingView<2>()); break;
+      case 3: _fixedRank3.checkinScratchStorage(data.template getUnderlyingView<3>()); break;
+      case 4: _fixedRank4.checkinScratchStorage(data.template getUnderlyingView<4>()); break;
+      case 5: _fixedRank5.checkinScratchStorage(data.template getUnderlyingView<5>()); break;
+      case 6: _fixedRank6.checkinScratchStorage(data.template getUnderlyingView<6>()); break;
+      case 7: _fixedRank7.checkinScratchStorage(data.template getUnderlyingView<7>()); break;
+        
+      default:
+        break;
+    }
+  }
+
+  template<typename Scalar>
+  typename SharedScratchStorage<Scalar>::Data
+  SharedScratchStorage<Scalar>::checkoutScratchData(const ScratchDataDimensions &dim, std::string description)
+  {
+    std::vector<int> underlyingViewDims;
+        
+    std::vector<int> extents;
+    std::vector<Intrepid2::DataVariationType> variationTypes;
+    int blockPlusDiagonalLastNonDiagonal = -1;
+    for (const auto & dimInfo : dim)
+    {
+      bool haveHitBlockPlusDiagonal = false;
+      switch (dimInfo.variationType)
+      {
+        case Intrepid2::GENERAL:
+        case Intrepid2::MODULAR:
+          underlyingViewDims.push_back(dimInfo.dataExtent);
+          break;
+        case Intrepid2::BLOCK_PLUS_DIAGONAL:
+          if (!haveHitBlockPlusDiagonal)
+          {
+            haveHitBlockPlusDiagonal = true;
+            blockPlusDiagonalLastNonDiagonal = dimInfo.blockPlusDiagonalLastNonDiagonal;
+            underlyingViewDims.push_back(dimInfo.dataExtent);
+          }
+        case Intrepid2::CONSTANT:
+          // skip this dimension; it does not enter the underlying view
+          break;
+      }
+      extents.push_back(dimInfo.logicalExtent);
+      variationTypes.push_back(dimInfo.variationType);
+    }
+    if (underlyingViewDims.size() == 0)
+    {
+      // constant everywhere: want a rank 1, single-entry view
+      underlyingViewDims.push_back(1);
+    }
+    const int nominalRank = dim.size();
+    const int dataRank = underlyingViewDims.size();
+    switch (dataRank) {
+      case 1:
+      {
+        auto view = _fixedRank1.checkoutScratchStorage(underlyingViewDims, description);
+        return constructData(view, extents, variationTypes, blockPlusDiagonalLastNonDiagonal);
+      }
+      case 2:
+      {
+        auto view = _fixedRank2.checkoutScratchStorage(underlyingViewDims, description);
+        return constructData(view, extents, variationTypes, blockPlusDiagonalLastNonDiagonal);
+      }
+      case 3:
+      {
+        auto view = _fixedRank3.checkoutScratchStorage(underlyingViewDims, description);
+        return constructData(view, extents, variationTypes, blockPlusDiagonalLastNonDiagonal);
+      }
+      case 4:
+      {
+        auto view = _fixedRank4.checkoutScratchStorage(underlyingViewDims, description);
+        return constructData(view, extents, variationTypes, blockPlusDiagonalLastNonDiagonal);
+      }
+      case 5:
+      {
+        auto view = _fixedRank5.checkoutScratchStorage(underlyingViewDims, description);
+        return constructData(view, extents, variationTypes, blockPlusDiagonalLastNonDiagonal);
+      }
+      case 6:
+      {
+        auto view = _fixedRank6.checkoutScratchStorage(underlyingViewDims, description);
+        return constructData(view, extents, variationTypes, blockPlusDiagonalLastNonDiagonal);
+      }
+      case 7:
+      {
+        auto view = _fixedRank7.checkoutScratchStorage(underlyingViewDims, description);
+        return constructData(view, extents, variationTypes, blockPlusDiagonalLastNonDiagonal);
+      }
+      default:
+        TEUCHOS_TEST_FOR_EXCEPTION(true, std::invalid_argument, "Unsupported rank");
+    }
   }
   
   template<typename Scalar>
   typename SharedScratchStorage<Scalar>::DeviceView
   SharedScratchStorage<Scalar>::checkoutScratchStorage(const ScratchStorageDimensions &dim, std::string description)
   {
-    using std::get;
-    if (_scratchStorageCache.find(dim) == _scratchStorageCache.end())
-    {
-      // no views of these dimensions have been requested before
-      // then create a single
-      DeviceView scratchView = allocateView(dim, SHARED_SCRATCH_STORAGE_LABEL);
-      ScratchStorageEntry entry {scratchView,false,description}; // false: not checked out
-      _scratchStorageCache[dim] = std::vector< ScratchStorageEntry > {entry};
-    }
-    auto & scratchStorageVector = _scratchStorageCache.find(dim)->second;
-    for (auto & entry : scratchStorageVector)
-    {
-      bool & checkedOut = get<1>(entry);
-      if (!checkedOut)
-      {
-        checkedOut = true;
-        get<2>(entry) = description;
-        _hitCount++;
-        return get<0>(entry);
-      }
-    }
-    // if we get here, all matching entries are checked out; create a new one
-    DeviceView scratchView = allocateView(dim, SHARED_SCRATCH_STORAGE_LABEL);
-    ScratchStorageEntry entry {scratchView,true,description}; // true: is checked out (will be, on return)
-    scratchStorageVector.push_back(entry);
-    return get<0>(entry);
+    return _dynRank.checkoutScratchStorage(dim, description);
   }
   
   template<typename Scalar>
   typename SharedScratchStorage<Scalar>::DeviceView
   SharedScratchStorage<Scalar>::checkoutScratchStorageMatchingDeviceView(SharedScratchStorage<Scalar>::DeviceView &dv, std::string description)
   {
-    ScratchStorageDimensions dim = viewDimensions(dv);
-    return checkoutScratchStorage(dim, description);
+    return _dynRank.checkoutScratchStorageMatchingDynRankView(dv, description);
   }
   
   template<typename Scalar>
   typename SharedScratchStorage<Scalar>::DeviceView
   SharedScratchStorage<Scalar>::checkoutScratchStorageMatchingHostView(SharedScratchStorage<Scalar>::HostView &hostView, std::string description)
   {
-    ScratchStorageDimensions dim = viewDimensions(hostView);
-    return checkoutScratchStorage(dim, description);
+    return _dynRank.checkoutScratchStorageMatchingHostView(hostView, description);
   }
   
   template<typename Scalar>
   void SharedScratchStorage<Scalar>::checkinScratchStorage(DeviceView &scratchView)
   {
-    using std::get;
-    ScratchStorageDimensions dim(scratchView.rank());
-    for (int i=0; i<scratchView.rank(); i++)
-    {
-      dim[i] = scratchView.extent_int(i);
-    }
-    TEUCHOS_TEST_FOR_EXCEPTION(_scratchStorageCache.find(dim) == _scratchStorageCache.end(), std::invalid_argument, "checkin of unrecognized scratch view");
-    auto & scratchStorageVector = _scratchStorageCache.find(dim)->second;
-    for (auto & entry : scratchStorageVector)
-    {
-      if (get<0>(entry) == scratchView)
-      {
-        get<1>(entry) = false; // no longer checked out
-        return;
-      }
-    }
-    TEUCHOS_TEST_FOR_EXCEPTION(true, std::invalid_argument, "checkin of unrecognized scratch view");
+    _dynRank.checkinScratchStorage(scratchView);
   }
   
   template<typename Scalar>
   void SharedScratchStorage<Scalar>::clear() // should be called during finalize()
   {
-    using std::get;
-    for (auto & mapEntry : _scratchStorageCache)
-    {
-      auto & storageCacheVector = mapEntry.second;
-      for (ScratchStorageEntry &entry : storageCacheVector)
-      {
-        // all scratch views should have been checked back in; assert this
-        const bool & isCheckedOut = get<1>(entry);
-        const std::string & description = get<2>(entry);
-        TEUCHOS_TEST_FOR_EXCEPTION(isCheckedOut, std::invalid_argument, "Scratch view was checked out without being checked back in; last checked out with description '" + description + "'");
-        Allocation<Scalar>::recordDeviceViewDeallocation(get<0>(entry));
-      }
-    }
-    _scratchStorageCache.clear();
+    _fixedRank1.clear();
+    _fixedRank2.clear();
+    _fixedRank3.clear();
+    _fixedRank4.clear();
+    _fixedRank5.clear();
+    _fixedRank6.clear();
+    _fixedRank7.clear();
+    
+    _dynRank.clear();
   }
   
   template<typename Scalar>
   long SharedScratchStorage<Scalar>::hitCount()
   {
-    return _hitCount;
+    long hitCount = 0;
+    hitCount += _fixedRank1.hitCount();
+    hitCount += _fixedRank2.hitCount();
+    hitCount += _fixedRank3.hitCount();
+    hitCount += _fixedRank4.hitCount();
+    hitCount += _fixedRank5.hitCount();
+    hitCount += _fixedRank6.hitCount();
+    hitCount += _fixedRank7.hitCount();
+    hitCount += _dynRank.hitCount();
+    return hitCount;
   }
   
   template<typename Scalar>

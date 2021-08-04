@@ -30,6 +30,7 @@ public:
   {
     return 1./__invDt;
   }
+  using TFunction<double>::values;
   void values(Camellia::FieldContainer<double> &values, BasisCachePtr basisCache)
   {
     CHECK_VALUES_RANK(values);

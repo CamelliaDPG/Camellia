@@ -26,8 +26,14 @@
 #include "Teuchos_TestingHelpers.hpp"
 
 
+#include "MeshFactory.h"
+#include "TypeDefs.h"
+
 namespace Camellia
 {
+
+  MeshPtr makeSingleElementExtrudedTestMesh( int baseSpaceDim, int numTensorExtrusions, std::vector<int> H1Orders );
+
 /** \brief Compare if two array objects are the same or not up to a relative
  * floating point precision.
  *

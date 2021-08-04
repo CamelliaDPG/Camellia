@@ -23,6 +23,8 @@ public:
   SimpleFunction<double>("Exp_ay2",VARIES_IN_DIMENSION_1),
   _a(a)
   {}
+  
+  using SimpleFunction<double>::value;
   double value(double x, double y)
   {
     return exp(_a*y*y);
@@ -37,6 +39,8 @@ public:
   Log_ay2b(double a, double b) :
   SimpleFunction<double>("Log_ay2b",VARIES_IN_DIMENSION_1),
   _a(a), _b(b) {}
+  
+  using SimpleFunction<double>::value;
   double value(double x, double y)
   {
     return log(_a*y*y+_b);

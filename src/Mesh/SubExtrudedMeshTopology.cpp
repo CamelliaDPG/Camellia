@@ -350,9 +350,7 @@ namespace Camellia
     {
       // rebuild
       _locallyKnownActiveCellIndices.clear();
-      
-      const int numComponents = 2;
-      
+            
       auto & physicalActiveCellIndices  = _physicalMeshTopology->getLocallyKnownActiveCellIndices();
       auto & extrusionActiveCellIndices = _extrusionMeshTopology->getLocallyKnownActiveCellIndices();
       
@@ -602,9 +600,9 @@ namespace Camellia
     auto physicalNodesPoints  = FieldContainerConversion<double>::toTensorPoints(physicalNodesFC);
     auto extrusionNodesPoints = FieldContainerConversion<double>::toTensorPoints(extrusionNodesFC);
     
-    using ViewType = Intrepid2::ScalarView<double,Kokkos::DefaultExecutionSpace>;
+    using ViewType = Intrepid2::ScalarView<double,Camellia::DeviceType>;
     Kokkos::Array<ViewType,2> tensorComponents {physicalNodesPoints.getTensorComponent(0), extrusionNodesPoints.getTensorComponent(0)};
-    Intrepid2::TensorPoints<double,Kokkos::DefaultExecutionSpace> tensorPoints(tensorComponents);
+    Intrepid2::TensorPoints<double,Camellia::DeviceType> tensorPoints(tensorComponents);
     
     auto tensorPointsFC = FieldContainerConversion<double>::fromTensorPoints(tensorPoints);
     if (includeCellDimension)

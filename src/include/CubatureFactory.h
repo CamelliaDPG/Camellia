@@ -36,8 +36,7 @@ namespace Camellia
 
 class CubatureFactory
 {
-  using ExecSpaceType = Camellia::DeviceMemorySpace::execution_space;
-  using Cubature      = Intrepid2::Cubature<ExecSpaceType,double,double>;
+  using Cubature = Intrepid2::Cubature<DeviceType,double,double>;
 public:
 
   //@{ Constructors/Destructors

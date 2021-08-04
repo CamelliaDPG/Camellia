@@ -8,10 +8,8 @@
 #include "IP.h"
 
 // Intrepid includes
-#include "Intrepid_CellTools.hpp"
 #include "Intrepid_DefaultCubatureFactory.hpp"
 #include "Camellia_FieldContainer.hpp"
-#include "Intrepid_FunctionSpaceTools.hpp"
 
 #include "Teuchos_LAPACK.hpp"
 

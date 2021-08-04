@@ -35,6 +35,7 @@ public:
   LegendreHVOL_QuadBasis(int degree, bool conforming = false); // conforming means not strictly hierarchical, but has e.g. vertex dofs defined...
   LegendreHVOL_QuadBasis(int degree_x, int degree_y, bool conforming = false);
 
+  using Basis<Scalar,ArrayScalar>::getValues;
   void getValues(ArrayScalar &values, const ArrayScalar &refPoints, Intrepid::EOperator operatorType) const;
 };
 }

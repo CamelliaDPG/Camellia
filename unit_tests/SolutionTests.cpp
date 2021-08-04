@@ -16,6 +16,7 @@
 
 #include "CamelliaCellTools.h"
 #include "CamelliaDebugUtility.h"
+#include "CamelliaTestingHelpers.h"
 #include "Cell.h"
 #include "ERKTableau.h"
 #include "GlobalDofAssignment.h"
@@ -116,41 +117,6 @@ namespace
       mesh->Comm()->MaxAll(&myChildWithNeighborCellID, &globalChildWithNeighborCellID, 1);
       cellsToRefine = {(GlobalIndexType)globalChildWithNeighborCellID};
     }
-    return mesh;
-  }
-
-  MeshPtr makeSingleElementExtrudedTestMesh( int baseSpaceDim, int numTensorExtrusions, std::vector<int> H1Orders )
-  {
-    TEUCHOS_TEST_FOR_EXCEPTION(H1Orders.size() != numTensorExtrusions+1, std::invalid_argument, "number of H1Orders must be 1 for base dim, plus 1 for each extrusion dimension");
-    
-    MeshPtr mesh;
-
-    std::vector<double> x0        (baseSpaceDim, 0.0);
-    std::vector<double> xWidths   (baseSpaceDim, 1.0);
-    std::vector<int>    meshWidths(baseSpaceDim, 1  );
-    auto baseMeshTopology = MeshFactory::rectilinearMeshTopology(xWidths, meshWidths, x0);
-    
-    std::vector<double> v0         (numTensorExtrusions, 0.0);
-    std::vector<double> vWidths    (numTensorExtrusions, 0.5);
-    std::vector<int>    vMeshWidths(numTensorExtrusions, 1);
-    MeshTopologyPtr extrudedMeshTopology = MeshFactory::extrudedMeshTopology(baseMeshTopology, v0, vWidths, vMeshWidths);
-    
-    ////////////////////   DECLARE VARIABLES   ///////////////////////
-    // define test variables
-    VarFactoryPtr varFactory = VarFactory::varFactory();
-    VarPtr v = varFactory->testVar("v", HGRAD);
-
-    // define trial variables
-    VarPtr u    = varFactory->fieldVar("u");
-    VarPtr uhat = varFactory->fluxVar("uhat");
-
-    ////////////////////   DEFINE BILINEAR FORM   ///////////////////////
-    BFPtr bf = BF::bf(varFactory);
-
-    ////////////////////   BUILD MESH   ///////////////////////
-    int pToAdd = 1;
-    mesh = Teuchos::rcp( new Mesh (extrudedMeshTopology, bf, H1Orders, pToAdd) );
-
     return mesh;
   }
   
@@ -1582,7 +1548,7 @@ namespace
         
         // are there some physical points that lie on the boundary?
         // we expect to match prescribedValue at these
-        const Camellia::FieldContainer<double>* physicalPoints = &sideCache->getPhysicalCubaturePoints();
+        const Camellia::FieldContainer<double>* physicalPoints = &sideCache->getPhysicalCubaturePointsFC();
         for (int pointOrdinal=0; pointOrdinal<numPoints; pointOrdinal++)
         {
           double x = (*physicalPoints)(0,pointOrdinal,0);
@@ -2110,7 +2076,7 @@ namespace
           for (int sideOrdinal=0; sideOrdinal<sideCount; sideOrdinal++)
           {
             BasisCachePtr sideCache = basisCache->getSideBasisCache(sideOrdinal);
-            Camellia::FieldContainer<double> physicalPoints = sideCache->getPhysicalCubaturePoints();
+            Camellia::FieldContainer<double> physicalPoints = sideCache->getPhysicalCubaturePointsFC();
             int numPoints = physicalPoints.dimension(1); // (C,P,D)
             out << "physicalPoints for side " << sideOrdinal << ":\n" << physicalPoints;
             Camellia::FieldContainer<double> actualValues(1,numPoints); // assumes scalar-valued
@@ -2122,7 +2088,7 @@ namespace
         }
         else
         {
-          Camellia::FieldContainer<double> physicalPoints = basisCache->getPhysicalCubaturePoints();
+          Camellia::FieldContainer<double> physicalPoints = basisCache->getPhysicalCubaturePointsFC();
           int numPoints = physicalPoints.dimension(1); // (C,P,D)
           out << "physicalPoints:\n" << physicalPoints;
           Camellia::FieldContainer<double> actualValues(1,numPoints); // assumes scalar-valued
@@ -2375,7 +2341,7 @@ namespace
 
   TEUCHOS_UNIT_TEST( Solution, ProjectOnExtrudedTensorMeshConstantExtrusions2D3V )
   {
-    const double tol = 1e-14;
+    const double tol = 1e-13;
     const int baseDim = 2;
     const int extrusionDim = 3;
     testProjectExtrudedMeshConstantExtrusions(baseDim, extrusionDim, tol, out, success);

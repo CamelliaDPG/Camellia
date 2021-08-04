@@ -38,10 +38,11 @@ class RefinementHistory : public RefinementObserver
   typedef pair< RefinementType, set<GlobalIndexType> > Refinement;
   vector< Refinement > _refinements;
 public:
-  void hRefine(const set<GlobalIndexType> &cellIDs, Teuchos::RCP<RefinementPattern> refPattern);
-  void hUnrefine(const set<GlobalIndexType> &cellIDs);
+  using RefinementObserver::hRefine;
+  void hRefine(const set<GlobalIndexType> &cellIDs, Teuchos::RCP<RefinementPattern> refPattern, bool repartitionAndRebuild) override;
+  void hUnrefine(const set<GlobalIndexType> &cellIDs, bool repartitionAndRebuild) override;
 
-  void pRefine(const set<GlobalIndexType> &cellIDs);
+  void pRefine(const set<GlobalIndexType> &cellIDs, int pToAdd, bool repartitionAndRebuild) override;
 
   void playback(MeshPtr mesh);
 

@@ -68,6 +68,12 @@ string UnitNormalFunction::displayString()
   }
 }
 
+int UnitNormalFunction::numVectorComponents() const
+{
+  if (_comp < 0) return -1; // vector that depends on the number of spatial dimensions
+  else return 0; // scalar valued; no vector components
+}
+
 void UnitNormalFunction::values(typename FieldContainer<double>::DeviceView &values, ValueModificationType modType, BasisCachePtr basisCache)
 {
   TEUCHOS_FUNC_TIME_MONITOR("UnitNormalFunction values()");

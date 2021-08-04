@@ -24,6 +24,8 @@
 #include "SolutionStage.h"
 #include "TypeDefs.h"
 
+#include "CamelliaDataHelpers.h"
+
 using namespace Camellia;
 
 const string Boltzmann1D1VFormulation::S_F = "f";
@@ -56,7 +58,7 @@ class VelocitySpaceExtrusion : public TFunction<double>
 public:
   VelocitySpaceExtrusion( FunctionPtr g_1D, Teuchos::RCP<PhasePhysicalMeshMap> phaseSpacePhysicalMeshMap)
   :
-  Function(g_1D->rank()),
+  Function("VelocitySpaceExtrusion",g_1D->rank(),VARIES_IN_DIMENSION_0),
   _g_1D(g_1D),
   _phaseSpacePhysicalMeshMap(phaseSpacePhysicalMeshMap)
   {
@@ -72,6 +74,204 @@ public:
     
     const std::vector<GlobalIndexType> physicalCellIDsVector(physicalCellIDs.begin(), physicalCellIDs.end());
     _g_1D->importCellData(physicalCellIDsVector);
+  }
+  
+  using TFunction<double>::values;
+  void values(Intrepid2::Data<double, DeviceType> values, BasisCachePtr basisCache) override
+  {
+    // there are two use cases to consider:
+    // 1. fully tensor-product cubature points (non-trivial PhysicalTensorPoints)
+    // 2. cubature points without a specified tensor-product structure
+    //
+    // (1) is the principal use case.  (2) is a holdover, just there until we can upgrade BasisCache to manage tensor points on sides…
+    
+    // if we are in use case (1), there will be 2 tensor components in physical cubature points; otherwise, there will be just 1
+    const bool dataExtentMatchesPhysicalPoints = basisCache->getPhysicalCubaturePoints().numTensorComponents() == 2; // true for use case (1)
+    
+    // the code that actually fills in values below assumes that values has shape (C,P1,P2) in case (1), and shape (C,P) in use case 2
+    const int numPoints = basisCache->getPhysicalCubaturePoints().extent_int(1);
+    if (dataExtentMatchesPhysicalPoints)
+    {
+      const int numPhysicalPoints = basisCache->getPhysicalCubaturePoints().getTensorComponent(0).extent_int(1);
+      TEUCHOS_TEST_FOR_EXCEPTION(numPhysicalPoints != values.extent_int(1), std::invalid_argument, "numPhysicalPoints should match the extent in dimension 1 of values");
+      const int numVelocityPoints = numPoints / numPhysicalPoints;
+      TEUCHOS_TEST_FOR_EXCEPTION(numVelocityPoints != values.extent_int(2), std::invalid_argument, "numVelocityPoints should match the extent in dimension 2 of values");
+      TEUCHOS_TEST_FOR_EXCEPTION(values.getVariationModulus(2) != 1, std::invalid_argument, "values should not vary in velocity dimension");
+    }
+    else
+    {
+      TEUCHOS_TEST_FOR_EXCEPTION(numPoints != values.extent_int(1), std::invalid_argument, "numPoints should match the extent in dimension 1 of values");
+    }
+    
+    if (dataExtentMatchesPhysicalPoints)
+    {
+      TEUCHOS_TEST_FOR_EXCEPTION(values.rank() != 3, std::invalid_argument, "Expect values to have shape (C,P0,P1)");
+      int extrusionExtentCount = 1;
+      for (int dataIndex=2; dataIndex<values.rank(); dataIndex++)
+      {
+        extrusionExtentCount *= values.getDataExtent(dataIndex);
+      }
+      TEUCHOS_TEST_FOR_EXCEPTION(extrusionExtentCount != 1, std::invalid_argument, "Data container has more than the expected extent in extrusion dimensions");
+    }
+
+    // implementation adapted from the DeviceView values() implementation below
+    
+    using HostExecSpace = Kokkos::HostSpace::execution_space;
+    Intrepid2::Data<double,HostExecSpace> valuesHost(values);
+    
+    // at present, we require that this be called on every MPI rank that owns cells in the phase space mesh
+    // we could avoid this requirement by adding an explicit, separate communication step.
+    
+    // It is also worth noting that creating basisCache_1D below is an inefficiency: those basis values won't
+    // be reused beyond the body of this method…
+    
+    bool isSideCache = (basisCache->getSideIndex() != -1);
+    int physicalSpaceSideOrdinal;
+    if (!isSideCache)
+    {
+      physicalSpaceSideOrdinal = -1;
+    }
+    else // isSideCache == true
+    {
+      const int phaseSpaceSideOrdinal = basisCache->getSideIndex();
+      
+      // what follows assumes 1D1V with line x line elements; let's throw an exception if we're not on such an element
+      auto line_x_line = CellTopology::cellTopology(CellTopology::line(), 1);
+      TEUCHOS_TEST_FOR_EXCEPTION(basisCache->cellTopology()->getKey() != line_x_line->getKey(), std::invalid_argument, "Only phase-space line x line topologies are supported");
+      bool sideIsParallelToPhysicalSpace = !line_x_line->sideIsSpatial(phaseSpaceSideOrdinal);
+      
+      if (sideIsParallelToPhysicalSpace)
+      {
+        // this side does not map to a physical side; runs parallel to physical space
+        // therefore, it instead maps to a physical cell interior (in adaptive context, possibly multiple -- this is not yet supported)
+        if (_g_1D->boundaryValueOnly())
+        {
+          // if _g_1D is a skeleton variable, then we can't evaluate it on a cell interior; we define the extrusion to be zero in this case
+          Kokkos::deep_copy(values.getUnderlyingView(), 0.0);
+          return;
+        }
+        else
+        {
+          // we can and should evaluate _g_1D on the spatial element interior
+          physicalSpaceSideOrdinal = -1;
+        }
+      }
+      else
+      {
+        physicalSpaceSideOrdinal = line_x_line->getSpatialComponentSideOrdinal(phaseSpaceSideOrdinal);
+      }
+    }
+    
+    using std::map;
+    using std::pair;
+    using std::set;
+    using std::vector;
+    
+    // determine physical cell IDs we need to compute on
+    const vector<GlobalIndexType> & phaseSpaceCellIDs = basisCache->cellIDs();
+    const vector<GlobalIndexType> physicalCellIDs = _phaseSpacePhysicalMeshMap->physicalCellIDsForPhaseSpaceCells(phaseSpaceCellIDs);
+    
+    using PhysicalValuesHost = Kokkos::DynRankView<double, Kokkos::HostSpace>;
+    map<GlobalIndexType, PhysicalValuesHost> physicalValuesMapHost;
+    map<GlobalIndexType, DeviceView<double> > physicalValuesMap;
+//    map<GlobalIndexType, Camellia::FieldContainer<double> > physicalPointsMap; // this is used for debugging; we could save something by dropping this later.
+    
+    const bool testVsTest = basisCache->testVsTest();
+    const int phaseSpaceQuadratureEnrichment = basisCache->cubatureEnrichmentDegree();
+
+    int basisCache1DQuadratureEnrichment;
+    if (testVsTest)
+    {
+      // test order in both 1D and 2D meshes is relative to the H^1 order, which will match in both
+      basisCache1DQuadratureEnrichment = phaseSpaceQuadratureEnrichment;
+    }
+    else
+    {
+      // trial order is 1 higher in 2D mesh because the t_n_hat/f_hat discretization has order matching H1Order
+      basisCache1DQuadratureEnrichment = phaseSpaceQuadratureEnrichment + 1;
+    }
+    
+    map< GlobalIndexType , pair<BasisCachePtr, vector<int> > > physicalBasisCachePairs; // index: physical cell ID
+    for ( auto & physicalCellID : physicalCellIDs )
+    {
+      physicalBasisCachePairs[physicalCellID] = _phaseSpacePhysicalMeshMap->physicalCellBasisCache(physicalCellID, testVsTest, basisCache1DQuadratureEnrichment);
+    }
+    
+    const bool inPhysicalVolume = (physicalSpaceSideOrdinal == -1);
+    for ( auto & physicalCellID : physicalCellIDs )
+    {
+      auto basisCachePair = physicalBasisCachePairs[physicalCellID];
+      auto physicalBasisCache = basisCachePair.first;
+      auto offsets            = basisCachePair.second;
+      
+      BasisCachePtr basisCacheToUse = inPhysicalVolume ? physicalBasisCache : physicalBasisCache->getSideBasisCache(physicalSpaceSideOrdinal);
+      
+      const int numCells  = 1;
+      const int numPoints = basisCacheToUse->getRefCellPointsFC().dimension(0);
+      
+      auto physicalValuesView = SharedScratchStorage<double>::sharedScratchStorage().checkoutScratchStorage({numCells,numPoints}, "VelocitySpaceExtrusion1D1V physicalValuesView");
+      
+      _g_1D->values(physicalValuesView, ASSIGN, basisCacheToUse);
+      physicalValuesMap[physicalCellID] = physicalValuesView;
+      
+      PhysicalValuesHost physicalValuesViewHost = Kokkos::create_mirror_view_and_copy(HostExecSpace::memory_space(), physicalValuesView);
+      physicalValuesMapHost[physicalCellID] = physicalValuesViewHost;
+    }
+
+    if (phaseSpaceCellIDs.size() == 0)
+    {
+      return;
+    }
+ 
+    const int numPhaseSpacePoints = basisCache->getRefCellPointsFC().dimension(0);
+        
+    for (int phaseSpaceCellOrdinal = 0; phaseSpaceCellOrdinal < phaseSpaceCellIDs.size(); phaseSpaceCellOrdinal++)
+    {
+      auto physicalPointIterator = _phaseSpacePhysicalMeshMap->getPhysicalPointIterator(basisCache, phaseSpaceCellIDs[phaseSpaceCellOrdinal], physicalBasisCachePairs);
+      
+      int numPhysicalPoints = physicalPointIterator.numPhysicalPoints();
+      const int numVelocityPoints   = numPhaseSpacePoints / numPhysicalPoints;
+      
+      TEUCHOS_TEST_FOR_EXCEPTION(numVelocityPoints * numPhysicalPoints != numPhaseSpacePoints, std::invalid_argument, "physical points do not evenly divide phase space points");
+      
+      // For the moment, we do the copying below on host; it'll take a bit of effort to manage the maps, etc. efficiently on device.
+      // (It seems likely that this will not be a performance bottleneck.)
+      for (; physicalPointIterator.isValid(); physicalPointIterator.increment() )
+      {
+        auto physicalCellID             = physicalPointIterator.physicalCellID();
+        auto & values1D                 = physicalValuesMapHost[physicalCellID];
+        auto physicalPointOrdinal       = physicalPointIterator.pointOrdinal();
+        auto pointOrdinalInPhysicalCell = physicalPointIterator.pointOrdinalInPhysicalCell();
+        double & value                  = values1D(0, pointOrdinalInPhysicalCell);
+        
+        if (dataExtentMatchesPhysicalPoints)
+        {
+          // then we only need to fill in one entry
+          valuesHost.getWritableEntry(phaseSpaceCellOrdinal, physicalPointOrdinal) = value;
+        }
+        else
+        {
+          // we need to iterate over all the velocity-space points
+          for (int velocityPointOrdinal=0; velocityPointOrdinal<numVelocityPoints; velocityPointOrdinal++)
+          {
+            const int tensorPointOrdinal = getTensorPointOrdinal(physicalPointOrdinal, velocityPointOrdinal, numPhysicalPoints);
+            valuesHost.getWritableEntry(phaseSpaceCellOrdinal, tensorPointOrdinal) = value;
+          }
+        }
+      }
+    }
+     
+    // check the views we checked out back in
+    for ( auto & physicalCellID : physicalCellIDs )
+    {
+      SharedScratchStorage<double>::sharedScratchStorage().checkinScratchStorage(physicalValuesMap[physicalCellID]);
+    }
+    
+    // copy from host to device
+    // because layouts may differ, we use a copy mechanism built into Intrepid2::Data (which may be inefficient)
+    // (we could speed things up by ensuring that layouts match, or at least checking whether they do, and doing
+    //  a deep_copy if they do), though I'm inclined to doubt this will be a performance bottleneck…
+    copyHostDataToDevice(values, valuesHost);
   }
   
   virtual void values(FieldContainer<double> &values, BasisCachePtr basisCache) override
@@ -172,7 +372,7 @@ public:
       
       _g_1D->values(values, basisCacheToUse);
       physicalValuesMap[physicalCellID] = values;
-      physicalPointsMap[physicalCellID] = basisCacheToUse->getPhysicalCubaturePoints();
+      physicalPointsMap[physicalCellID] = basisCacheToUse->getPhysicalCubaturePointsFC();
     }
 
     if (phaseSpaceCellIDs.size() == 0)
@@ -228,7 +428,6 @@ _formulationChoice(formulationChoice)
 //  }
   
   const int spaceDim = 1;
-  const int velocityDim = 1;
   _delta_k = delta_k;
   
   SolutionStagePtr solnStage = Teuchos::null;
@@ -468,7 +667,7 @@ _formulationChoice(formulationChoice)
     _boltzmannSoln->setBC(boltzmannBC);
     
     auto gaussBC = BC::bc();
-    gaussBC->addDirichlet(E_hat, SpatialFilter::matchingX(x0), Function::zero());
+    gaussBC->addSpatialPointBC(E_hat->ID(), 0.0, {x0}); // this does a vertex lookup, basically; we can't impose standard Dirichlet BCs at periodic boundaries...
     _gaussSoln->setBC(gaussBC);
     
     // static condensation does not work properly with GMG due to details of VelocitySpaceExtrusion; it also does not appear to speed things up for the direct solve
@@ -845,6 +1044,30 @@ void Boltzmann1D1VFormulation::updateElectricField()
   double n0 = f_integral / _gaussMeshMeasure;
 //  std::cout << "1D1V n0 = " << n0 << std::endl;
   _n0->setValue(n0);
+//  {
+//    // DEBUGGING
+//    std::cout << "f_integral = " << f_integral << std::endl;
+//    std::cout << "n0 = " << n0 << std::endl;
+//    
+//    std::cout << "L^2 norm of _f_velocityIntegral: " << _f_velocityIntegral->l2norm(_gaussSoln->mesh()) << std::endl;
+//    
+//    const auto physicalMesh = _gaussSoln->mesh();
+//    const auto & myCells = physicalMesh->cellIDsInPartition();
+//    for (const auto & physicalCellID : myCells)
+//    {
+//      BasisCachePtr basisCache = BasisCache::basisCacheForCell(physicalMesh, physicalCellID);
+//      bool success = true;
+//      Teuchos::basic_FancyOStream<char> out(Teuchos::rcp(&std::cout,false));
+//      testFunctionDataPathMatchesViewPath1V(_f_velocityIntegral, basisCache, 1e-14, out, success);
+//      if (!success)
+//      {
+//        std::cout << "testFunctionDataPathMatchesViewPath1V(): failed on physical cell " << physicalCellID << std::endl;
+//      }
+//    }
+//    
+//    _gaussSoln->setWriteRHSToMatrixMarketFile(true, "gaussRHS.dat");
+//    _gaussSoln->setWriteMatrixToFile(true, "gaussStiffness.dat");
+//  }
   
   // solve for E, E_hat:
   _gaussSoln->solve();
@@ -984,7 +1207,7 @@ class SideRestriction : public TFunction<double>
 public:
   SideRestriction(std::vector<int> sidesToMatch)
   :
-  Function(0),
+  Function("SideRestriction",0),
   _sidesToMatch(sidesToMatch)
   {}
   
@@ -993,6 +1216,7 @@ public:
     return true;
   }
   
+  using TFunction<double>::values;
   void values(FieldContainer<double> &values, BasisCachePtr basisCache) override
   {
     const int sideOrdinal = basisCache->getSideIndex();
@@ -1114,6 +1338,25 @@ void testVelocityExtrusion(bool volumeVariable, bool doRefinement, Teuchos::Fanc
     double err_l2 = err->l2norm(boltzmannMesh);
     
     TEST_COMPARE(err_l2, <, tol * magnitudeExpected);
+    
+    const auto & phaseCellIDs = boltzmannMesh->cellIDsInPartition();
+    for (auto phaseCellID : phaseCellIDs)
+    {
+      BasisCachePtr basisCache = BasisCache::basisCacheForCell(boltzmannMesh, phaseCellID);
+      if (volumeVariable)
+      {
+        testFunctionDataPathMatchesViewPath1V(extrusion, basisCache, tol, out, success);
+      }
+      else
+      {
+        const int numSides = basisCache->cellTopology()->getSideCount();
+        for (int sideOrdinal=0; sideOrdinal<numSides; sideOrdinal++)
+        {
+          auto sideCache = basisCache->getSideBasisCache(sideOrdinal);
+          testFunctionDataPathMatchesViewPath1V(extrusion, sideCache, tol, out, success);
+        }
+      }
+    }
   }
 }
 

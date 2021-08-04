@@ -44,6 +44,7 @@ protected:
 public:
   ParametricFunction(TFunctionPtr<double> fxn);
   void value(double t, double &x);
+  using TFunction<double>::values;
   void values(Camellia::FieldContainer<double> &values, BasisCachePtr basisCache);
 
   TFunctionPtr<double> dx(); // same function as dt_parametric()
@@ -88,6 +89,7 @@ public:
   virtual void value(double t, double &x, double &y);
   virtual void value(double t, double &x, double &y, double &z);
 
+  using TFunction<double>::values;
   virtual void values(Camellia::FieldContainer<double> &values, BasisCachePtr basisCache);
 
   virtual ParametricCurvePtr dt_parametric(); // the curve differentiated in t in each component.

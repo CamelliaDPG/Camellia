@@ -31,14 +31,20 @@ class SimpleSolutionFunction : public TFunction<Scalar>
   std::string _solutionIdentifierExponent; // used in displayString (allows disambiguation of solutions; if non-empty means we'll drop the \overline business)
 public:
   SimpleSolutionFunction(VarPtr var, TSolutionPtr<Scalar> soln, bool weightFluxesBySideParity, SolutionComponent solutionComponent=STANDARD_SOLUTION, int solutionStage=0, const std::string &solutionIdentifierExponent="");
+  
+  using TFunction<Scalar>::values;
   void values(Camellia::FieldContainer<Scalar> &values, BasisCachePtr basisCache) override;
   
   // device path:
   void values(DeviceView<Scalar> &values, ValueModificationType modType, BasisCachePtr basisCache) override;
   
+  //! Returns true if the variable is defined on the given portion of the reference cell.  (False for L^2 volumetric variables on sides and trace variables on volumes, and for some trace variables that are only defined on certain sides.)
+  bool isDefined(BasisCachePtr basisCache) const override;
+  
   TFunctionPtr<Scalar> x() override;
   TFunctionPtr<Scalar> y() override;
   TFunctionPtr<Scalar> z() override;
+  int numVectorComponents() const override;
 
   TFunctionPtr<Scalar> dx() override;
   TFunctionPtr<Scalar> dy() override;

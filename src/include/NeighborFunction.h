@@ -36,6 +36,8 @@ class NeighborFunction : public TFunction<Scalar>
   MeshPtr _mesh; // required for determining neighbors, computing neighbor values
 public:
   NeighborFunction(TFunctionPtr<Scalar> fxn, MeshPtr mesh);
+  
+  using TFunction<Scalar>::values;
   //! BasisCachePtr argument must be a side basis cache; an exception is thrown otherwise
   void values(Camellia::FieldContainer<Scalar> &values, BasisCachePtr sideBasisCache) override;
 

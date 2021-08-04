@@ -93,6 +93,12 @@ void ConstantVectorFunction<Scalar>::values(typename Camellia::FieldContainer<Sc
   value.checkinDeviceView(false);
 }
 
+template <typename Scalar>
+int ConstantVectorFunction<Scalar>::numVectorComponents() const
+{
+  return _value.size();
+}
+
 namespace Camellia
 {
 template class ConstantVectorFunction<double>;

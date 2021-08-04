@@ -146,7 +146,7 @@ void testBasisAllDofOrdinalsAssignedToSubcells(BasisPtr basis, Teuchos::FancyOSt
 TEUCHOS_UNIT_TEST( Basis, LineC1_Unisolvence )
 {
   int polyOrder = 1;
-  BasisPtr linearBasis = Camellia::intrepidLineHGRAD(polyOrder);
+  BasisPtr linearBasis = Camellia::intrepid2LineHGRAD(polyOrder);
 
   CellTopoPtr cellTopo = linearBasis->domainTopology();
 
@@ -348,7 +348,7 @@ TEUCHOS_UNIT_TEST_TEMPLATE_1_INSTANT( Basis, ScalarPolynomialBasisUnisolvence, H
   TEUCHOS_UNIT_TEST( Basis, HGRAD_Quad_L2_Eigenvalues )
   {
     Space space = HGRAD;
-    for (int k=1; k<10; k++) // poly order k
+    for (int k=1; k<9; k++) // poly order k
     {
       testQuadBasisL2Eigenvalues(k, space, out, success);
     }

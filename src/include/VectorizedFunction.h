@@ -30,6 +30,7 @@ public:
   virtual TFunctionPtr<Scalar> y() override;
   virtual TFunctionPtr<Scalar> z() override;
   virtual TFunctionPtr<Scalar> t() override;
+  int numVectorComponents() const override;
 
   virtual TFunctionPtr<Scalar> dx() override;
   virtual TFunctionPtr<Scalar> dy() override;
@@ -40,6 +41,8 @@ public:
   VectorizedFunction(TFunctionPtr<Scalar> f1, TFunctionPtr<Scalar> f2);
   VectorizedFunction(TFunctionPtr<Scalar> f1, TFunctionPtr<Scalar> f2, TFunctionPtr<Scalar> f3);
   VectorizedFunction(TFunctionPtr<Scalar> f1, TFunctionPtr<Scalar> f2, TFunctionPtr<Scalar> f3, TFunctionPtr<Scalar> f4);
+  
+  using TFunction<Scalar>::values;
   void values(typename Camellia::FieldContainer<Scalar>::DeviceView &values, ValueModificationType modType, BasisCachePtr basisCache) override;
 
   std::vector< TFunctionPtr<Scalar> > memberFunctions() override;
@@ -47,6 +50,7 @@ public:
   virtual string displayString() override;
   int dim();
 
+  using TFunction<Scalar>::isZero;
   bool isZero() override;
 
   TFunctionPtr<Scalar> evaluateAt(const map<int, TFunctionPtr<Scalar> > &valueMap) override;

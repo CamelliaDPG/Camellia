@@ -131,7 +131,7 @@ void HessianErrorIndicator<Scalar>::measureError()
     solnFunction->values(cellValue, basisCache);
     for (int d=0; d<spaceDim; d++)
     {
-      cellCenters(cellOrdinal,d) = basisCache->getPhysicalCubaturePoints()(0,0,d);
+      cellCenters(cellOrdinal,d) = basisCache->getPhysicalCubaturePointsFC()(0,0,d);
     }
     if (_hPower != 0)
     {

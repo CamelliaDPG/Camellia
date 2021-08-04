@@ -34,6 +34,7 @@ protected:
 public:
   LegendreHVOL_LineBasis(int degree); // conforming means not strictly hierarchical, but has e.g. vertex dofs defined...
 
+  using Basis<Scalar,ArrayScalar>::getValues;
   void getValues(ArrayScalar &values, const ArrayScalar &refPoints, Intrepid::EOperator operatorType) const;
 };
 }

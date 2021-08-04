@@ -27,16 +27,27 @@ public:
   ConstantScalarFunction(Scalar value);
   ConstantScalarFunction(Scalar value, string stringDisplay);
   string displayString() override;
+  
+  using TFunction<Scalar>::isZero;
   bool isZero() override;
+  
   void scalarModifyFunctionValues(Camellia::FieldContainer<Scalar> &values, ValueModificationType modType, BasisCachePtr basisCache);
+  
+  using TFunction<Scalar>::scalarMultiplyFunctionValues;
   void scalarMultiplyFunctionValues(Camellia::FieldContainer<Scalar> &values, BasisCachePtr basisCache) override;
+  
+  using TFunction<Scalar>::scalarDivideFunctionValues;
   void scalarDivideFunctionValues(Camellia::FieldContainer<Scalar> &values, BasisCachePtr basisCache) override;
   void scalarMultiplyBasisValues(Camellia::FieldContainer<double> &basisValues, BasisCachePtr basisCache) override;
   void scalarDivideBasisValues(Camellia::FieldContainer<double> &basisValues, BasisCachePtr basisCache) override;
   
+  using TFunction<Scalar>::values;
   // device path:
   void values(typename Camellia::FieldContainer<Scalar>::DeviceView &values, ValueModificationType modType, BasisCachePtr basisCache) override;
-
+  
+  std::vector<Intrepid2::DimensionInfo> valuesDataDims(BasisCachePtr basisCache) override;
+  void values(Intrepid2::Data<Scalar, Camellia::DeviceType> values, BasisCachePtr basisCache) override;
+  
   Scalar value();
   
   TFunctionPtr<Scalar> dx() override;

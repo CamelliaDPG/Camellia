@@ -197,6 +197,8 @@ public:
   {
     return {{_edgeCurve}};
   }
+  
+  using ParametricCurve::value;
   void value(double t, double &x, double &y)
   {
     _edgeCurve->value(t, x,y);
@@ -280,6 +282,8 @@ public:
       //      cout << _cutPoints[i+1] << " ";
     }
   }
+  
+  using ParametricCurve::value;
   void value(double t, double &x, double &y)
   {
     int curveIndex = matchingCurve(t);
@@ -293,7 +297,7 @@ public:
   ParametricCurvePtr dt_parametric()
   {
     TEUCHOS_TEST_FOR_EXCEPTION(true, std::invalid_argument, "Unimplemented method!");
-    return Teuchos::rcp((ParametricCurve*)NULL);
+//    return Teuchos::rcp((ParametricCurve*)NULL);
   }
   
   std::vector< TFunctionPtr<double> > memberFunctions()
@@ -689,6 +693,8 @@ public:
     _parametricGradient = parametricGradient;
     _convertBasisCacheToParametricSpace = convertBasisCacheToParametricSpace;
   }
+  
+  using TFunction<double>::values;
   void values(Camellia::FieldContainer<double> &values, BasisCachePtr basisCache)
   {
     if (basisCache->cellTopology()->getTensorialDegree() > 0)
@@ -697,7 +703,7 @@ public:
     }
 
     unsigned cellTopoKey = basisCache->cellTopology()->getShardsTopology().getBaseKey();
-    int numPoints = basisCache->getPhysicalCubaturePoints().dimension(1);
+    int numPoints = basisCache->getPhysicalCubaturePointsFC().dimension(1);
     Teuchos::Array<int> dimensions;
     values.dimensions(dimensions);
     Camellia::FieldContainer<double> parametricValuesMultiCell(dimensions);
@@ -823,7 +829,7 @@ std::vector< ParametricCurvePtr > ParametricCurve::referenceCellEdges(Camellia::
   else
   {
     TEUCHOS_TEST_FOR_EXCEPTION(true, std::invalid_argument, "unhandled cellTopoKey");
-    return std::vector< ParametricCurvePtr >();
+//    return std::vector< ParametricCurvePtr >();
   }
 }
 

@@ -71,8 +71,6 @@ const string OldroydBFormulationUWReduced::S_S22 = "S_{22}";
 const string OldroydBFormulationUWReduced::S_S23 = "S_{23}";
 const string OldroydBFormulationUWReduced::S_S33 = "S_{33}";
 
-static const int INITIAL_CONDITION_TAG = 1;
-
 // OldroydBFormulationUWReduced OldroydBFormulationUWReduced::steadyFormulation(int spaceDim, double mu, bool useConformingTraces)
 // {
 //   Teuchos::ParameterList parameters;

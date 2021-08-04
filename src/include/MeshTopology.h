@@ -36,6 +36,10 @@ namespace Camellia
   class GlobalDofAssignment;
   struct MeshGeometryInfo;
 
+  const EntityHandle INVALID_ENTITY_HANDLE = static_cast<EntityHandle>(-1);
+  const IndexType MESHTOPOLOGY_INVALID_ENTITY_INDEX = -1;
+  const IndexType MESHTOPOLOGY_INVALID_CELL_INDEX = -1;
+
 class MeshTopology : public MeshTopologyView
 {
   // _Comm and _ownedCellIndices are used when MeshTopology is distributed
@@ -52,7 +56,7 @@ class MeshTopology : public MeshTopologyView
   map< vector<double>, IndexType > _vertexMap; // maps into indices in the vertices list -- here just for vertex identification (i.e. so we don't add the same vertex twice)
   vector< vector<double> > _vertices; // vertex locations
 
-  EntityHandle _initialTimeEntityHandle = -1; // for space-time MeshTopologies: track the handle for the entity set corresponding to the space-time sides at the initial time.
+  EntityHandle _initialTimeEntityHandle = INVALID_ENTITY_HANDLE; // for space-time MeshTopologies: track the handle for the entity set corresponding to the space-time sides at the initial time.
   
   map< EntityHandle, EntitySetPtr > _entitySets;
   map< string, vector<pair<EntityHandle, int> > > _tagSetsInteger; // tags with integer value, applied to EntitySets.

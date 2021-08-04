@@ -942,8 +942,6 @@ MeshPtr MeshFactory::buildQuadMeshHybrid(const Camellia::FieldContainer<double> 
                               std::invalid_argument,
                               "quadBoundaryPoints should be dimensions (4,2), points in ccw order.");
 
-  int numDimensions = 2;
-
   double southWest_x = quadBoundaryPoints(0,0),
          southWest_y = quadBoundaryPoints(0,1),
          southEast_x = quadBoundaryPoints(1,0),
@@ -971,8 +969,8 @@ MeshPtr MeshFactory::buildQuadMeshHybrid(const Camellia::FieldContainer<double> 
     }
   }
 
-  int SOUTH = 0, EAST = 1, NORTH = 2, WEST = 3;
-  int SIDE1 = 0, SIDE2 = 1, SIDE3 = 2;
+//  int SOUTH = 0, EAST = 1, NORTH = 2, WEST = 3; // quad side enumeration
+//  int SIDE1 = 0, SIDE2 = 1, SIDE3 = 2; // triangle side enumeration
   for (int i=0; i<horizontalElements; i++)
   {
     for (int j=0; j<verticalElements; j++)
@@ -1569,8 +1567,6 @@ MeshGeometryPtr MeshFactory::halfHemkerGeometry(double xLeft, double xRight, dou
 
 MeshGeometryPtr MeshFactory::halfConfinedCylinderGeometry(double cylinderRadius)
 {
-  double yMax = 2.0*cylinderRadius;
-
   // first, set up an 5-element mesh, centered at the origin
   ParametricCurvePtr innerCircle = ParametricCurve::circle(cylinderRadius, 0, 0);
   double rOuter = sqrt(2 + 2 / sqrt(5))*cylinderRadius;
@@ -1993,8 +1989,6 @@ MeshGeometryPtr MeshFactory::halfConfinedCylinderGeometry(double cylinderRadius)
 
 MeshGeometryPtr MeshFactory::confinedCylinderGeometry(double cylinderRadius)
 {
-  double yMax = 2.0*cylinderRadius;
-
   // first, set up an 10-element mesh, centered at the origin
   ParametricCurvePtr innerCircle = ParametricCurve::circle(cylinderRadius, 0, 0);
   double rOuter = sqrt(2 + 2 / sqrt(5))*cylinderRadius;

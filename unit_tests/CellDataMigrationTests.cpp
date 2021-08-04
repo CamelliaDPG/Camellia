@@ -131,7 +131,7 @@ namespace
     for (GlobalIndexType cellID : *myCellIndices)
     {
       int size = CellDataMigration::geometryDataSize(mesh.get(), cellID);
-      vector<char> dataBuffer(size*3,-1);
+      vector<char> dataBuffer(size*3,static_cast<char>(-1));
       char* dataLocation = &dataBuffer[0];
       CellDataMigration::packGeometryData(mesh.get(), cellID, dataLocation, size);
       int sizeWritten = dataLocation - &dataBuffer[0];

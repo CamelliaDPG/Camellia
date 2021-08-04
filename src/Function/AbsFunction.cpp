@@ -40,7 +40,7 @@ void AbsFunction::values(typename FieldContainer<double>::DeviceView &values, Va
 {
   TEUCHOS_FUNC_TIME_MONITOR("AbsFunction values()");
   TEUCHOS_TEST_FOR_EXCEPTION(values.rank() != 2, std::invalid_argument, "rank is not equal to 2");
-  auto dv = SharedScratchStorage<double>::sharedScratchStorage().checkoutScratchStorageMatchingDeviceView(values);
+  auto dv = SharedScratchStorage<double>::sharedScratchStorage().checkoutScratchStorageMatchingDeviceView(values, "AbsFunction dv");
   _f->values(dv, ASSIGN, basisCache);
   Kokkos::fence();
   auto rangePolicy = Camellia::FieldContainer<double>::getMDRangePolicy2(values);

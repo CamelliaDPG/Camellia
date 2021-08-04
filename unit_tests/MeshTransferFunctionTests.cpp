@@ -26,6 +26,8 @@ class CellIDFunction : public Function
 public:
   CellIDFunction() : Function(0) {}
 
+  using Function::values;
+  
   virtual void values(Camellia::FieldContainer<double> &values, BasisCachePtr basisCache)
   {
     vector<GlobalIndexType> cellIDs = basisCache->cellIDs();
@@ -682,7 +684,7 @@ TEUCHOS_UNIT_TEST( MeshTransferFunction, FunctionValuesWithoutHangingNodes)
         transferFunction.values(actualValues, myCellSideBasisCache);
 
 //          { // DEBUGGING
-//            cout << "Physical points:\n" << myCellSideBasisCache->getPhysicalCubaturePoints();
+//            cout << "Physical points:\n" << myCellSideBasisCache->getPhysicalCubaturePointsFC();
 //            cout << "Expected values:\n" << expectedValues;
 //            cout << "Actual values:\n" << actualValues;
 //          }
@@ -831,7 +833,7 @@ TEUCHOS_UNIT_TEST( MeshTransferFunction, FunctionValuesWithHangingNodes)
         transferFunction.values(actualValues, myCellSideBasisCache);
 
 //          { // DEBUGGING
-//            cout << "Physical points:\n" << myCellSideBasisCache->getPhysicalCubaturePoints();
+//            cout << "Physical points:\n" << myCellSideBasisCache->getPhysicalCubaturePointsFC();
 //            cout << "Expected values:\n" << expectedValues;
 //            cout << "Actual values:\n" << actualValues;
 //          }

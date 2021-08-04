@@ -39,6 +39,7 @@ public:
   // if there are N nodes in D-dimensional cellTopo and C bases in bases, then subRefNodes should have dimensions (C,N,D)
   MultiBasis(std::vector< Teuchos::RCP< Basis<Scalar,ArrayScalar> > > bases, ArrayScalar &subRefNodes, shards::CellTopology &cellTopo);
 
+  using Basis<Scalar,ArrayScalar>::getValues;
   void getValues(ArrayScalar &outputValues, const ArrayScalar &  inputPoints,
                  const Intrepid::EOperator operatorType) const;
 

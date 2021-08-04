@@ -119,7 +119,9 @@ namespace Camellia
       
       // if _deviceView has previously been checked out, we should check it back in. (This comes up during calls to resize() and clear().)
       Allocation<Scalar>::checkinMirrorView(_deviceView);
-      _deviceView = Allocation<Scalar>::checkoutMirrorView(_hostView);
+      std::ostringstream mirrorViewStringStream;
+      mirrorViewStringStream << "FieldContainer::_deviceView (mirrors _hostView for FC with _fieldContainerAllocationNumber " << _fieldContainerAllocationNumber << ")";
+      _deviceView = Allocation<Scalar>::checkoutMirrorView(_hostView, mirrorViewStringStream.str());
       
       _deviceViewIsValid = true;
     }
@@ -130,7 +132,7 @@ namespace Camellia
       
       // if _deviceView has previously been checked out, we should check it back in. (This comes up during calls to resize() and clear().)
       Allocation<Scalar>::checkinMirrorView(_deviceView);
-      _deviceView = Allocation<Scalar>::checkoutMirrorView(_hostView);
+      _deviceView = Allocation<Scalar>::checkoutMirrorView(_hostView, "FieldContainer::_deviceView (mirrors _hostView)");
       
       _deviceViewIsValid = true;
     }
@@ -139,6 +141,14 @@ namespace Camellia
     {
       // called when the FC is resized, e.g.
       _hostViewIsValid = false;
+      
+//      {
+//        // DEBUGGING:
+//        if (_fieldContainerAllocationNumber == 485)
+//        {
+//          std::cout << "Invalidating views for _fieldContainerAllocationNumber " << _fieldContainerAllocationNumber << std::endl;
+//        }
+//      }
       
       // record the deallocation
       if (_deviceViewIsValid)
@@ -159,6 +169,14 @@ namespace Camellia
       if (recordIsForFieldContainer)
       {
         _fieldContainerAllocationNumber = record.allocationCount;
+//        {
+//          // DEBUGGING:
+//          if (_fieldContainerAllocationNumber == 485)
+//          {
+//            std::cout << "Recording allocation for _fieldContainerAllocationNumber " << _fieldContainerAllocationNumber << std::endl;
+//          }
+//        }
+        
         _fieldContainerDataAllocationRecorded = true;
         if (recordOutstandingFCAllocationNumbers)
         {
@@ -236,6 +254,7 @@ namespace Camellia
     
     void checkinDeviceView(bool deepCopyToHost) const
     {
+      TEUCHOS_TEST_FOR_EXCEPTION(!_deviceViewIsCheckedOut, std::invalid_argument, "this check-in request is for a device view that is not currently checked out");
       // copy back to host
       //std::cout << "deep_copy device2host..." << std::endl;
       if (deepCopyToHost)
@@ -454,6 +473,11 @@ namespace Camellia
     ~FieldContainer()
     {
       bool ownsMemory = this->getData().has_ownership();
+      
+//      if (_fieldContainerAllocationNumber == 485)
+//      {
+//        std::cout << "Deallocating _fieldContainerAllocationNumber " << _fieldContainerAllocationNumber << std::endl;
+//      }
       
       if (ownsMemory || (this->size() == 0))
       {
@@ -702,10 +726,12 @@ namespace Camellia
       recordDeallocation(fcAllocationRecord,this->size());
       
       this->FieldContainerBase::operator=(right);
-      // base assignment does deep copy; record the allocation
-      recordAllocation(fcAllocationRecord,this->size());
       this->invalidateViews();
       this->initializeHostView();
+      
+      // base assignment above does deep copy; record the allocation
+      recordAllocation(fcAllocationRecord,this->size());
+      
       return *this;
     }
 

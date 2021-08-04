@@ -20,8 +20,10 @@ namespace Camellia
   public:
     UpwindIndicatorFunction(FunctionPtr beta, bool upwind);
     
+    using TFunction<double>::isZero;
     bool isZero(BasisCachePtr basisCache);
     
+    using TFunction<double>::values;
     void values(Camellia::FieldContainer<double> &values, BasisCachePtr basisCache);
     
     std::vector< TFunctionPtr<double> > memberFunctions();

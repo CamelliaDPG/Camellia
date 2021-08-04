@@ -98,6 +98,8 @@ class Noh_u1 : public SimpleFunction<double>
 {
 public:
   Noh_u1();
+  
+  using SimpleFunction<double>::value;
   double value(double x, double y);
 };
 
@@ -105,6 +107,8 @@ class Noh_u2 : public SimpleFunction<double>
 {
 public:
   Noh_u2();
+  
+  using SimpleFunction<double>::value;
   double value(double x, double y);
 };
 

@@ -152,7 +152,7 @@ namespace Camellia
                                           int trialID, int testID, int operatorIndex,
                                           Teuchos::RCP<BasisCache> basisCache)
   {
-    applyBilinearFormData(trialValues, testValues, trialID, testID, operatorIndex, basisCache->getPhysicalCubaturePoints());
+    applyBilinearFormData(trialValues, testValues, trialID, testID, operatorIndex, basisCache->getPhysicalCubaturePointsFC());
   }
   
   template <typename Scalar>
@@ -672,7 +672,7 @@ namespace Camellia
     int numTrialDofs = trialOrdering->totalDofs();
     
     CellTopoPtr cellTopo = basisCache->cellTopology();
-    unsigned numCells = basisCache->getPhysicalCubaturePoints().dimension(0);
+    unsigned numCells = basisCache->getPhysicalCubaturePointsFC().dimension(0);
     unsigned spaceDim = cellTopo->getDimension();
     
     //cout << "trialOrdering: " << *trialOrdering;
@@ -688,11 +688,6 @@ namespace Camellia
     TEUCHOS_TEST_FOR_EXCEPTION( ( numTrialDofs != stiffness.dimension(2) ),
                                std::invalid_argument,
                                "numTrialDofs and stiffness.dimension(2) do not match.");
-    
-    // 0. Set up BasisCache
-    int cubDegreeTrial = trialOrdering->maxBasisDegree();
-    int cubDegreeTest = testOrdering->maxBasisDegree();
-    int cubDegree = cubDegreeTrial + cubDegreeTest;
     
     unsigned numSides = cellTopo->getSideCount();
     
@@ -749,7 +744,7 @@ namespace Camellia
             trialValuesTransformed = basisCache->getTransformedValues(trialBasis,trialOperator);
             testValuesTransformedWeighted = basisCache->getTransformedWeightedValues(testBasis,testOperator);
             
-            Camellia::FieldContainer<double> physicalCubaturePoints = basisCache->getPhysicalCubaturePoints();
+            Camellia::FieldContainer<double> physicalCubaturePoints = basisCache->getPhysicalCubaturePointsFC();
             Camellia::FieldContainer<Scalar> materialDataAppliedToTrialValues = *trialValuesTransformed; // copy first
             Camellia::FieldContainer<Scalar> materialDataAppliedToTestValues = *testValuesTransformedWeighted; // copy first
             this->applyBilinearFormData(materialDataAppliedToTrialValues, materialDataAppliedToTestValues,
@@ -970,9 +965,9 @@ namespace Camellia
     
     if (INFO != 0)
     {
+      result = INFO;
       cout << "dpotrf_ result: " << INFO << endl;
       TEUCHOS_TEST_FOR_EXCEPTION(true, std::invalid_argument, "Cholesky factorization failed");
-      result = INFO;
     }
     
     if (equilibriated)
@@ -1230,7 +1225,7 @@ namespace Camellia
       }
       else
       {
-        int numCells = basisCache->getPhysicalCubaturePoints().dimension(0);
+        int numCells = basisCache->getPhysicalCubaturePointsFC().dimension(0);
         int numTestDofs = testOrder->totalDofs();
         int numTrialDofs = trialOrder->totalDofs();
         
@@ -1274,7 +1269,6 @@ namespace Camellia
         Camellia::FieldContainer<Scalar> dummyRHS(numTrialDofs,1); // computed in factoredCholeskySolve, but ignored
         for (int cellIndex=0; cellIndex < numCells; cellIndex++)
         {
-          int result = 0;
           Camellia::FieldContainer<Scalar> cellIPMatrix(localIPDim, &ipMatrix(cellIndex,0,0));
           Camellia::FieldContainer<Scalar> cellStiffnessEnriched(localStiffnessEnrichedDim, &stiffnessEnriched(cellIndex,0,0));
           Camellia::FieldContainer<Scalar> cellRHSEnriched(localRHSEnrichedDim, &rhsEnriched(cellIndex,0));
@@ -1292,7 +1286,8 @@ namespace Camellia
             }
           }
           
-          result = factoredCholeskySolve(cellIPMatrix, cellStiffnessEnriched, cellRHSEnriched, dummyStiffness, dummyRHS);
+          int result = factoredCholeskySolve(cellIPMatrix, cellStiffnessEnriched, cellRHSEnriched, dummyStiffness, dummyRHS);
+          TEUCHOS_TEST_FOR_EXCEPTION(result != 0, std::invalid_argument, "Cholesky solve returned non-zero result");
         }
         timeK = timer.ElapsedTime();
         
@@ -1407,7 +1402,7 @@ namespace Camellia
       }
       else if (_optimalTestSolver == FACTORED_CHOLESKY)
       {
-        int numCells = basisCache->getPhysicalCubaturePoints().dimension(0);
+        int numCells = basisCache->getPhysicalCubaturePointsFC().dimension(0);
         int numTestDofs = testOrder->totalDofs();
         int numTrialDofs = trialOrder->totalDofs();
         
@@ -1454,7 +1449,6 @@ namespace Camellia
         timer.ResetStartTime();
         for (int cellIndex=0; cellIndex < numCells; cellIndex++)
         {
-          int result = 0;
           Camellia::FieldContainer<Scalar> cellIPMatrix(localIPDim, &ipMatrix(cellIndex,0,0));
           Camellia::FieldContainer<Scalar> cellStiffnessEnriched(localStiffnessEnrichedDim, &stiffnessEnriched(cellIndex,0,0));
           Camellia::FieldContainer<Scalar> cellStiffness(localStiffnessDim, &localStiffness(cellIndex,0,0));
@@ -1474,7 +1468,8 @@ namespace Camellia
             }
           }
           
-          result = factoredCholeskySolve(cellIPMatrix, cellStiffnessEnriched, cellRHSEnriched, cellStiffness, cellRHS);
+          int result = factoredCholeskySolve(cellIPMatrix, cellStiffnessEnriched, cellRHSEnriched, cellStiffness, cellRHS);
+          TEUCHOS_TEST_FOR_EXCEPTION(result != 0, std::invalid_argument, "Cholesky solve returned non-zero result");
         }
         timeK = timer.ElapsedTime();
         
@@ -1576,7 +1571,7 @@ namespace Camellia
     // all arguments are as in computeStiffnessMatrix, except:
     // optimalTestWeights, which has dimensions (numCells, numTrialDofs, numTestDofs)
     // innerProduct: the inner product which defines the sense in which these test functions are optimal
-    int numCells = stiffnessBasisCache->getPhysicalCubaturePoints().dimension(0);
+    int numCells = stiffnessBasisCache->getPhysicalCubaturePointsFC().dimension(0);
     int numTestDofs = testOrdering->totalDofs();
     int numTrialDofs = trialOrdering->totalDofs();
     
@@ -1663,8 +1658,8 @@ namespace Camellia
     timeK = 0;
     for (int cellIndex=0; cellIndex < numCells; cellIndex++)
     {
+      int result;
       timer.ResetStartTime();
-      int result = 0;
       Camellia::FieldContainer<Scalar> cellIPMatrix(localIPDim, &ipMatrix(cellIndex,0,0));
       Camellia::FieldContainer<Scalar> cellOptTestRHS(localRectangularStiffnessDim, &(*optimalTestRHS)(cellIndex,0,0));
       Camellia::FieldContainer<Scalar> cellRectangularStiffness(localRectangularStiffnessDim, &rectangularStiffnessMatrix(cellIndex,0,0));
@@ -1706,7 +1701,7 @@ namespace Camellia
         }
           break;
         case LU:
-          SerialDenseWrapper::solveSystemMultipleRHS(cellOptimalWeightsT, cellIPMatrix, cellOptTestRHS);
+          result = SerialDenseWrapper::solveSystemMultipleRHS(cellOptimalWeightsT, cellIPMatrix, cellOptTestRHS);
           break;
         default:
           TEUCHOS_TEST_FOR_EXCEPTION(true, std::invalid_argument, "Unsupported case");
@@ -1897,7 +1892,7 @@ namespace Camellia
     map<int, TFunctionPtr<Scalar>> opDualSolutionForVarID;
     for ( auto varIDTestTermEntry : testTermsForVarID )
     {
-      double weight = 1.0;
+      // double weight = 1.0;
       // int varID = testTermIt->first;
       // if (trialVarWeights.find(varID) != trialVarWeights.end())
       // {
@@ -2081,7 +2076,6 @@ namespace Camellia
           default:
             cout << "BilinearForm::varFactory(): unhandled function space.\n";
             TEUCHOS_TEST_FOR_EXCEPTION(true, std::invalid_argument, "BilinearForm::varFactory(): unhandled function space.");
-            break;
         }
         testVar = vf->testVar(name, space);
       }

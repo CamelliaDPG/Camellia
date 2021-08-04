@@ -91,7 +91,7 @@ void TIP<Scalar>::applyInnerProductData(Camellia::FieldContainer<Scalar> &testVa
                                         int testID1, int testID2, int operatorIndex,
                                         Teuchos::RCP<BasisCache> basisCache)
 {
-  applyInnerProductData(testValues1, testValues2, testID1, testID2, operatorIndex, basisCache->getPhysicalCubaturePoints());
+  applyInnerProductData(testValues1, testValues2, testID1, testID2, operatorIndex, basisCache->getPhysicalCubaturePointsFC());
 }
 
 template <typename Scalar>
@@ -127,7 +127,7 @@ void TIP<Scalar>::computeInnerProductMatrix(Camellia::FieldContainer<Scalar> &in
   if (_isLegacySubclass)
   {
     // much of this code is the same as what's in the volume integration in computeStiffness...
-    Camellia::FieldContainer<double> physicalCubaturePoints = basisCache->getPhysicalCubaturePoints();
+    Camellia::FieldContainer<double> physicalCubaturePoints = basisCache->getPhysicalCubaturePointsFC();
 
     unsigned numCells = physicalCubaturePoints.dimension(0);
 
@@ -221,7 +221,7 @@ void TIP<Scalar>::computeInnerProductMatrix(Camellia::FieldContainer<Scalar> &in
   else     // _isLegacySubclass is false
   {
     // innerProduct FC is sized as (C,F,F)
-    const Camellia::FieldContainer<double>* physicalCubaturePoints = &basisCache->getPhysicalCubaturePoints();
+    const Camellia::FieldContainer<double>* physicalCubaturePoints = &basisCache->getPhysicalCubaturePointsFC();
 
     unsigned numCells = physicalCubaturePoints->dimension(0);
     unsigned numDofs = dofOrdering->totalDofs();
@@ -282,7 +282,7 @@ void TIP<Scalar>::computeInnerProductMatrix(Camellia::FieldContainer<Scalar> &in
   }
   if (_homogeneousBCs.size() > 0)
   {
-    const Camellia::FieldContainer<double>* physicalCubaturePoints = &basisCache->getPhysicalCubaturePoints();
+    const Camellia::FieldContainer<double>* physicalCubaturePoints = &basisCache->getPhysicalCubaturePointsFC();
     
     unsigned numCells = physicalCubaturePoints->dimension(0);
     
@@ -335,7 +335,7 @@ void TIP<Scalar>::computeInnerProductVector(Camellia::FieldContainer<Scalar> &ip
     Teuchos::RCP<BasisCache> basisCache, bool sumInto)
 {
   // ipVector FC is sized as (C,F)
-  Camellia::FieldContainer<double> physicalCubaturePoints = basisCache->getPhysicalCubaturePoints();
+  Camellia::FieldContainer<double> physicalCubaturePoints = basisCache->getPhysicalCubaturePointsFC();
 
   if (!fxn.get())
   {
@@ -366,6 +366,26 @@ void TIP<Scalar>::computeInnerProductVector(Camellia::FieldContainer<Scalar> &ip
   {
     TEUCHOS_TEST_FOR_EXCEPTION(true, std::invalid_argument, "zero mean terms not yet supported in TIP vector computation");
   }
+}
+
+template <typename Scalar>
+std::string TIP<Scalar>::displayString() const
+{
+  ostringstream displaySS;
+  displaySS << "\\Vert v \\Vert_V^2 = ";
+  
+  const int numTerms = _linearTerms.size();
+  for (int termOrdinal = 0; termOrdinal < numTerms; termOrdinal++)
+  {
+    const auto & term = _linearTerms[termOrdinal];
+    displaySS << "\\Vert " << term->displayString() << "\\Vert^2";
+    
+    if (termOrdinal < numTerms - 1)
+    {
+      displaySS << " + ";
+    }
+  }
+  return displaySS.str();
 }
 
 template <typename Scalar>
@@ -598,7 +618,6 @@ pair<TIPPtr<Scalar>, VarPtr> TIP<Scalar>::standardInnerProductForFunctionSpace(C
   default:
     cout << "Error: unhandled function space.\n";
     TEUCHOS_TEST_FOR_EXCEPTION(true, std::invalid_argument, "unhandled function space");
-    break;
   }
   return make_pair(ip,var);
 }

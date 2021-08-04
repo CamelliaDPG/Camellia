@@ -1129,7 +1129,7 @@ LocalDofMapperPtr GMGOperator::getLocalCoefficientMap(GlobalIndexType fineCellID
   for (int sideOrdinal=0; sideOrdinal<fineSideCount; sideOrdinal++)
   {
     ancestralSideOrdinals[sideOrdinal] = RefinementPattern::ancestralSubcellOrdinal(refBranch, sideDim, sideOrdinal);
-    if (ancestralSideOrdinals[sideOrdinal] != -1)
+    if (ancestralSideOrdinals[sideOrdinal] != INVALID_CELLTOPOLOGY_SIDE_ORDINAL)
     {
       sideRefBranches[sideOrdinal] = RefinementPattern::sideRefinementBranch(refBranch, sideOrdinal);
     }
@@ -1238,7 +1238,7 @@ LocalDofMapperPtr GMGOperator::getLocalCoefficientMap(GlobalIndexType fineCellID
           BasisPtr coarseBasis, fineBasis;
           BasisMap basisMap;
           bool useTermTracedIfAvailable = true; // flag for debugging purposes (true is the production setting)
-          if (coarseSideOrdinal == -1)   // the fine side falls inside a coarse volume
+          if (coarseSideOrdinal == INVALID_CELLTOPOLOGY_SIDE_ORDINAL)   // the fine side falls inside a coarse volume
           {
             // we map trace to field using the traceTerm LinearTermPtr
             VarPtr trialVar = vf->trial(trialID);
@@ -1365,12 +1365,12 @@ LocalDofMapperPtr GMGOperator::getLocalCoefficientMap(GlobalIndexType fineCellID
                 double tol = 1e-15;
                 for (int j=0; j<fineBasisToCoarseFluxMatrix.ColDim(); j++)
                 {
-                  bool nonZero = false;
+//                  bool nonZero = false;
                   for (int i=0; i<fineBasisToCoarseFluxMatrix.RowDim(); i++)
                   {
                     if (abs(fineBasisToCoarseFluxMatrix(i,j)) > tol)
                     {
-                      nonZero = true;
+//                      nonZero = true;
                       nonZeroColumnIndices.push_back(j);
                       columnOrdinalForCoarseDofIndex[fluxOrdinalToLocalDofIndex[j]] = coarseDofIndicesVector.size();
                       coarseDofIndicesVector.push_back(fluxOrdinalToLocalDofIndex[j]);
@@ -1522,7 +1522,7 @@ LocalDofMapperPtr GMGOperator::getLocalCoefficientMap(GlobalIndexType fineCellID
   for (unsigned fineSideOrdinal=0; fineSideOrdinal<fineSideCount; fineSideOrdinal++)
   {
     unsigned coarseSideOrdinal = ancestralSideOrdinals[fineSideOrdinal];
-    if (coarseSideOrdinal != -1)   // ancestor shares side
+    if (coarseSideOrdinal != INVALID_CELLTOPOLOGY_SIDE_ORDINAL)   // ancestor shares side
     {
       double coarseParity = coarseCellSideParities(0,coarseSideOrdinal);
       double fineParity = fineCellSideParities(0,fineSideOrdinal);
@@ -2500,7 +2500,7 @@ void GMGOperator::setUpSmoother(Epetra_CrsMatrix *fineStiffnessMatrix)
     _smootherWeight = computeSchwarzSmootherWeight();
     if (rank == 0)
     {
-      int inverse = 1.0 / _smootherWeight;
+//      int inverse = 1.0 / _smootherWeight;
 //      cout << "Set _smootherWeight to 1/" << inverse << endl;
     }
     

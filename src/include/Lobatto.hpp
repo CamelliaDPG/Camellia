@@ -49,6 +49,8 @@ namespace Camellia {
       _derivative = derivative;
       _conforming = conforming;
     }
+    
+    using SimpleFunction<Scalar>::value;
     Scalar value(Scalar x) {
       Lobatto<Scalar>::values(_values,_derivatives,x,_polyOrder, _conforming);
 //      cout << "Lobatto values:\n" << _values;

@@ -112,7 +112,7 @@ void PolarizedFunction<Scalar>::values(typename FieldContainer<Scalar>::DeviceVi
 {
   TEUCHOS_FUNC_TIME_MONITOR("PolarizedFunction values()");
   static const double PI = 3.141592653589793238462;
-  const Camellia::FieldContainer<double> *points = &(basisCache->getPhysicalCubaturePoints());
+  const Camellia::FieldContainer<double> *points = &(basisCache->getPhysicalCubaturePointsFC());
   Camellia::FieldContainer<double> polarPoints = *points;
   auto dv_polarPoints = polarPoints.checkoutDeviceView();
   TEUCHOS_TEST_FOR_EXCEPTION(dv_polarPoints.rank() != 3, std::invalid_argument, "rank is not equal to 3");

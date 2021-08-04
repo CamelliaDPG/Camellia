@@ -24,7 +24,7 @@ class PhysicalPointCache : public BasisCache
   Camellia::FieldContainer<double> _physCubPoints;
 public:
   PhysicalPointCache(const Camellia::FieldContainer<double> &physCubPoints);
-  const Camellia::FieldContainer<double> & getPhysicalCubaturePoints() override;
+  const Camellia::FieldContainer<double> & getPhysicalCubaturePointsFC() override;
   Camellia::FieldContainer<double> & writablePhysicalCubaturePoints();
   int getSpaceDim() override; // overrides BasisCache::getSpaceDim();
 };

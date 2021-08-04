@@ -163,6 +163,8 @@ public:
 
   Camellia::FieldContainer<double> cellSideParities( ElementTypePtr elemTypePtr);
   Camellia::FieldContainer<double> cellSideParitiesForCell( GlobalIndexType cellID );
+  
+  double sideParity(GlobalIndexType cellID, unsigned sideOrdinal);
 
   TBFPtr<double> bilinearForm();
   void setBilinearForm( TBFPtr<double>);
@@ -252,6 +254,8 @@ public:
   void interpretGlobalCoefficients(GlobalIndexType cellID, Camellia::FieldContainer<double> &localCoefficients, const Epetra_MultiVector &globalCoefficients);
   void interpretLocalBasisCoefficients(GlobalIndexType cellID, int varID, int sideOrdinal, const Camellia::FieldContainer<double> &basisCoefficients,
                                        Camellia::FieldContainer<double> &globalCoefficients, Camellia::FieldContainer<GlobalIndexType> &globalDofIndices);
+  
+  using DofInterpreter::interpretLocalData;
   void interpretLocalData(GlobalIndexType cellID, const Camellia::FieldContainer<double> &localData,
                           Camellia::FieldContainer<double> &globalData, Camellia::FieldContainer<GlobalIndexType> &globalDofIndices);
 

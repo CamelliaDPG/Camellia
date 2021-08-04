@@ -27,6 +27,7 @@ public:
     return name.str();
   }
   
+  using TFunction<Scalar>::values;
   virtual void values(FieldContainer<Scalar> &values, BasisCachePtr basisCache)
   {
     this->CHECK_VALUES_RANK(values);
@@ -91,6 +92,7 @@ public:
     return name.str();
   }
   
+  using TFunction<Scalar>::values;
   virtual void values(FieldContainer<Scalar> &values, BasisCachePtr basisCache)
   {
     this->CHECK_VALUES_RANK(values);
@@ -233,10 +235,34 @@ Cos_ax::Cos_ax(double a, double b)
   _b = b;
 }
 
+void Cos_ax::values(Intrepid2::Data<double, Camellia::DeviceType> values, BasisCachePtr basisCache)
+{
+  auto xPoints = basisCache->getPhysicalCubaturePoints().getTensorComponent(0); // xPoints might have more coordinates than just x, but it will certainly have x in the first entry
+  
+  auto underlyingData = values.template getUnderlyingView<2>(); // (C,P0) -- Again, it may be that data has some additional point dimensions, but the underlying view must support variation in both C and P0 (x coordinate) dimensions, and thus have rank exactly 2
+  
+  using ExecutionSpace = Camellia::DeviceExecutionSpace;
+  Kokkos::MDRangePolicy<ExecutionSpace,Kokkos::Rank<2>> policy({0,0},{underlyingData.extent(0),underlyingData.extent(1)});
+  
+  // avoid implicit references to this
+  const double a = _a;
+  const double b = _b;
+  
+  const int xCoordIndex = 0; // in xPoints
+  
+  Kokkos::parallel_for("Cos_ax Data values", policy,
+  KOKKOS_LAMBDA (const int &cellOrdinal, const int &xPointOrdinal) {
+    auto & result = underlyingData(cellOrdinal, xPointOrdinal);
+    
+    const auto & x = xPoints(cellOrdinal,xPointOrdinal,xCoordIndex);
+    result = std::cos(a * x + b);
+  });
+}
+
 void Cos_ax::values(typename FieldContainer<double>::DeviceView &values, ValueModificationType modType, BasisCachePtr basisCache)
 {
   TEUCHOS_TEST_FOR_EXCEPTION(values.rank() != 2, std::invalid_argument, "rank is not equal to 2");
-  const Camellia::FieldContainer<double> &physicalPoints = basisCache->getPhysicalCubaturePoints();
+  const Camellia::FieldContainer<double> &physicalPoints = basisCache->getPhysicalCubaturePointsFC();
   auto pointsView = physicalPoints.checkoutDeviceView(); // (C,P,D)
   auto rangePolicy = FieldContainer<double>::getMDRangePolicy2(values); // (C,P) dimension
   double a = this->_a;
@@ -309,7 +335,7 @@ Sin_ax::Sin_ax(double a, double b)
 void Sin_ax::values(typename FieldContainer<double>::DeviceView &values, ValueModificationType modType, BasisCachePtr basisCache)
 {
   TEUCHOS_TEST_FOR_EXCEPTION(values.rank() != 2, std::invalid_argument, "rank is not equal to 2");
-  const Camellia::FieldContainer<double> &physicalPoints = basisCache->getPhysicalCubaturePoints();
+  const Camellia::FieldContainer<double> &physicalPoints = basisCache->getPhysicalCubaturePointsFC();
   auto pointsView = physicalPoints.checkoutDeviceView(); // (C,P,D)
   auto rangePolicy = FieldContainer<double>::getMDRangePolicy2(values); // (C,P) dimension
   double a = this->_a;

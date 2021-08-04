@@ -26,7 +26,7 @@ string Xn::displayString()
   }
   return ss.str();
 }
-Xn::Xn(int n) : TFunction<double>("Xn")
+Xn::Xn(int n) : TFunction<double>("Xn",0,(n != 0) ? VARIES_IN_DIMENSION_0 : VARIES_IN_NO_DIMENSION)
 {
   _n = n;
 }
@@ -34,7 +34,7 @@ Xn::Xn(int n) : TFunction<double>("Xn")
 void Xn::values(typename Camellia::FieldContainer<double>::DeviceView &values, ValueModificationType modType, BasisCachePtr basisCache)
 {
   TEUCHOS_FUNC_TIME_MONITOR("Xn values()");
-  auto & points = basisCache->getPhysicalCubaturePoints(); // (C,P,D) FieldContainer
+  auto & points = basisCache->getPhysicalCubaturePointsFC(); // (C,P,D) FieldContainer
   auto devicePoints = points.checkoutDeviceView();
   const int n = _n;
   Kokkos::parallel_for("Xn values() functor", Camellia::FieldContainer<double>::getMDRangePolicy2(values),
@@ -88,11 +88,12 @@ TFunctionPtr<double> Xn::di(int i)
 string Yn::displayString()
 {
   ostringstream ss;
-  if ((_n != 1) && (_n != 0))
+  const int n = this->n();
+  if ((n != 1) && (n != 0))
   {
-    ss << "y^" << _n ;
+    ss << "y^" << n ;
   }
-  else if (_n == 1)
+  else if (n == 1)
   {
     ss << "y";
   }
@@ -102,63 +103,13 @@ string Yn::displayString()
   }
   return ss.str();
 }
-Yn::Yn(int n) : TFunction<double>("Yn")
-{
-  _n = n;
-}
 
-void Yn::values(typename Camellia::FieldContainer<double>::DeviceView &values, ValueModificationType modType, BasisCachePtr basisCache)
-{
-  TEUCHOS_FUNC_TIME_MONITOR("Yn values()");
-  const auto & points = basisCache->getPhysicalCubaturePoints(); // (C,P,D) FieldContainer
-  auto devicePoints = points.checkoutDeviceView();
-  const int n = _n;
-  Kokkos::parallel_for("Yn values() functor", Camellia::FieldContainer<double>::getMDRangePolicy2(values),
-  KOKKOS_LAMBDA (const int i0, const int i1) {
-    auto & entry = values(i0, i1);
-    const int yDim = 1;
-    const auto y = devicePoints(i0,i1,yDim);
-    const double value = pow(y,n);
-    assignValue(entry, modType, value);
-  });
-  points.checkinDeviceView(true);
-}
+Yn::Yn(int n) : MonomialFunction(1, n)
+{}
 
-TFunctionPtr<double> Yn::dx()
-{
-  return TFunction<double>::zero();
-}
-TFunctionPtr<double> Yn::dy()
-{
-  if (_n == 0)
-  {
-    return TFunction<double>::zero();
-  }
-  else if (_n == 1)
-  {
-    return TFunction<double>::constant(1.0);
-  }
-  TFunctionPtr<double> y_n_minus = Teuchos::rcp( new Yn(_n-1) );
-  return (double)_n * y_n_minus;
-}
-TFunctionPtr<double> Yn::dz()
-{
-  return TFunction<double>::zero();
-}
 TFunctionPtr<double> Yn::dt()
 {
   return TFunction<double>::zero();
-}
-TFunctionPtr<double> Yn::di(int i)
-{
-  if (i == 2)
-  {
-    return dy();
-  }
-  else
-  {
-    return TFunction<double>::zero();
-  }
 }
 
 string Zn::displayString()
@@ -178,7 +129,7 @@ string Zn::displayString()
   }
   return ss.str();
 }
-Zn::Zn(int n) : TFunction<double>("Zn")
+Zn::Zn(int n) : TFunction<double>("Zn",0,(n != 0) ? VARIES_IN_DIMENSION_2 : VARIES_IN_NO_DIMENSION)
 {
   _n = n;
 }
@@ -186,7 +137,7 @@ Zn::Zn(int n) : TFunction<double>("Zn")
 void Zn::values(typename Camellia::FieldContainer<double>::DeviceView &values, ValueModificationType modType, BasisCachePtr basisCache)
 {
   TEUCHOS_FUNC_TIME_MONITOR("Zn values()");
-  const auto & points = basisCache->getPhysicalCubaturePoints(); // (C,P,D) FieldContainer
+  const auto & points = basisCache->getPhysicalCubaturePointsFC(); // (C,P,D) FieldContainer
   auto devicePoints = points.checkoutDeviceView();
   const int n = _n;
   Kokkos::parallel_for("Zn values() functor", Camellia::FieldContainer<double>::getMDRangePolicy2(values),
@@ -261,7 +212,7 @@ Tn::Tn(int n) : TFunction<double>("Tn")
 void Tn::values(typename Camellia::FieldContainer<double>::DeviceView &values, ValueModificationType modType, BasisCachePtr basisCache)
 {
   TEUCHOS_FUNC_TIME_MONITOR("Tn values()");
-  const auto & points = basisCache->getPhysicalCubaturePoints(); // (C,P,D) FieldContainer
+  const auto & points = basisCache->getPhysicalCubaturePointsFC(); // (C,P,D) FieldContainer
   auto devicePoints = points.checkoutDeviceView();
   const int n = _n;
   const int spaceDim = basisCache->cellTopology()->getDimension() - 1; // we're assuming a space-time context
@@ -324,12 +275,23 @@ MonomialFunction::MonomialFunction(int comp, int n)
 : TFunction<double>("MonomialFunction"),
 _comp(comp),
 _n(n)
-{}
+{
+  if (n == 0)
+  {
+    // constant
+    setVariationDimensions(VARIES_IN_NO_DIMENSION);
+  }
+  else
+  {
+    int variationDimensions = VARIES_IN_DIMENSION_0 << comp; // will give VARIES_IN_DIMENSION_1 for comp == 1, etc.
+    setVariationDimensions(variationDimensions);
+  }
+}
 
 void MonomialFunction::values(typename Camellia::FieldContainer<double>::DeviceView &values, ValueModificationType modType, BasisCachePtr basisCache)
 {
   TEUCHOS_FUNC_TIME_MONITOR("MonomialFunction values()");
-  const auto & points = basisCache->getPhysicalCubaturePoints(); // (C,P,D) FieldContainer
+  const auto & points = basisCache->getPhysicalCubaturePointsFC(); // (C,P,D) FieldContainer
   auto devicePoints = points.checkoutDeviceView();
   const int n = _n;
   auto comp = _comp;
@@ -341,6 +303,52 @@ void MonomialFunction::values(typename Camellia::FieldContainer<double>::DeviceV
     assignValue(entry, modType, value);
   });
   points.checkinDeviceView(true);
+}
+
+void MonomialFunction::values(Intrepid2::Data<double, DeviceType> values, BasisCachePtr basisCache)
+{
+  if (_n==0)
+  {
+    // underlying view should have rank 1, and just one entry
+    Kokkos::deep_copy(values.getUnderlyingView<1>(), 1.0);
+    return;
+  }
+  
+  const auto & physicalTensorPoints = basisCache->getPhysicalCubaturePoints();
+  
+  int numPointComponents = physicalTensorPoints.numTensorComponents();
+  int tensorComponentOrdinalForMyComp = -1;
+  int numDimsSoFar = 0;
+  int componentDimIndex = -1; // the spatial dimension index to use in the component point container
+  for (int r=0; r<numPointComponents; r++)
+  {
+    const int componentDims = physicalTensorPoints.getTensorComponent(r).extent_int(2);  // shape: (C,P,D)
+    if (componentDims + numDimsSoFar >= _comp + 1)
+    {
+      tensorComponentOrdinalForMyComp = r;
+      componentDimIndex = _comp - numDimsSoFar;
+      break;
+    }
+    numDimsSoFar += componentDims;
+  }
+  TEUCHOS_TEST_FOR_EXCEPTION(tensorComponentOrdinalForMyComp == -1, std::invalid_argument, "points container is of too low a dimension");
+  
+  auto pointComponent = physicalTensorPoints.getTensorComponent(tensorComponentOrdinalForMyComp);
+  auto underlyingData = values.getUnderlyingView<2>(); // (C,Pn)
+  
+  using ExecutionSpace = Camellia::DeviceExecutionSpace;
+  Kokkos::MDRangePolicy<ExecutionSpace,Kokkos::Rank<2>> policy({0,0},{underlyingData.extent(0),underlyingData.extent(1)});
+  
+  // avoid implicit references to this
+  const int n = _n;
+  
+  Kokkos::parallel_for("MonomialFunction values(Data) functor", policy,
+  KOKKOS_LAMBDA (const int &cellOrdinal, const int &pointCompOrdinal) {
+    auto & result = underlyingData(cellOrdinal, pointCompOrdinal);
+    const auto & xi = pointComponent(cellOrdinal, pointCompOrdinal, componentDimIndex);
+    const double value = pow(xi,n);
+    result = value;
+  });
 }
 
 TFunctionPtr<double> MonomialFunction::dx()
@@ -367,6 +375,11 @@ TFunctionPtr<double> MonomialFunction::di(int i)
   }
   TFunctionPtr<double> xi_n_minus = Teuchos::rcp( new MonomialFunction(_comp,_n-1) );
   return (double)_n * xi_n_minus;
+}
+
+int MonomialFunction::n() const
+{
+  return _n;
 }
 
 TFunctionPtr<double> MonomialFunction::xi_n(int i, int n)

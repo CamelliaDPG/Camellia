@@ -16,7 +16,7 @@ template <typename Scalar>
 vector<Scalar> SimpleVectorFunction<Scalar>::value(double x)
 {
   TEUCHOS_TEST_FOR_EXCEPTION(true, std::invalid_argument, "Unimplemented method. Subclasses of SimpleVectorFunction must implement value() for some number of arguments < spaceDim");
-  return vector<Scalar>();
+//  return vector<Scalar>();
 }
 
 template <typename Scalar>
@@ -69,7 +69,7 @@ void SimpleVectorFunction<Scalar>::values(Camellia::FieldContainer<Scalar> &valu
   int numCells = values.dimension(0);
   int numPoints = values.dimension(1);
 
-  const Camellia::FieldContainer<double> *points = &(basisCache->getPhysicalCubaturePoints());
+  const Camellia::FieldContainer<double> *points = &(basisCache->getPhysicalCubaturePointsFC());
   int spaceDim = points->dimension(2);
   vector<Scalar> point(spaceDim);
   vector<Scalar> pointValue(spaceDim);

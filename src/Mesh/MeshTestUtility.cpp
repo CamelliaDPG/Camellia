@@ -589,7 +589,7 @@ bool MeshTestUtility::determineRefTestPointsForNeighbors(MeshTopologyViewPtr mes
 
     fineCellRefPoints[0] = lineRefNodes[sideOrdinal];
     unsigned neighborSideOrdinal = fineCell->getNeighborInfo(sideOrdinal, meshTopo).second;
-    if (neighborSideOrdinal != -1)
+    if (neighborSideOrdinal != INVALID_CELLTOPOLOGY_SIDE_ORDINAL)
     {
       coarseCellRefPoints[0] = lineRefNodes[neighborSideOrdinal];
       return true;
@@ -617,7 +617,7 @@ bool MeshTestUtility::determineRefTestPointsForNeighbors(MeshTopologyViewPtr mes
   int cubDegree = 4; // fairly arbitrary choice: enough to get a decent number of test points...
   
   using ExecSpaceType = Camellia::DeviceMemorySpace::execution_space;
-  using Cubature = Intrepid2::Cubature<ExecSpaceType,double,double>;
+  using Cubature = Intrepid2::Cubature<DeviceType,double,double>;
   Teuchos::RCP< Cubature > fineSideTopoCub = cubFactory.create(fineSideTopo, cubDegree);
 
   int numCubPoints = fineSideTopoCub->getNumPoints();
@@ -689,7 +689,7 @@ bool MeshTestUtility::determineRefTestPointsForNeighbors(MeshTopologyViewPtr mes
   // add cell dimension
   fineSideNodes.resize(1,fineSideNodes.dimension(0), fineSideNodes.dimension(1));
   sideTopoCache->setPhysicalCellNodes(fineSideNodes, vector<GlobalIndexType>(), false);
-  coarseSideRefPoints = sideTopoCache->getPhysicalCubaturePoints();
+  coarseSideRefPoints = sideTopoCache->getPhysicalCubaturePointsFC();
 
   // strip off the cell dimension:
   coarseSideRefPoints.resize(coarseSideRefPoints.dimension(1),coarseSideRefPoints.dimension(2));
@@ -785,8 +785,8 @@ bool MeshTestUtility::neighborBasesAgreeOnSides(Teuchos::RCP<Mesh> mesh, Epetra_
 
       // sanity check: do physical points match?
 
-      Camellia::FieldContainer<double> fineCellPhysicalCubaturePoints = fineCellBasisCache->getPhysicalCubaturePoints();
-      Camellia::FieldContainer<double> coarseCellPhysicalCubaturePoints = coarseCellBasisCache->getPhysicalCubaturePoints();
+      Camellia::FieldContainer<double> fineCellPhysicalCubaturePoints = fineCellBasisCache->getPhysicalCubaturePointsFC();
+      Camellia::FieldContainer<double> coarseCellPhysicalCubaturePoints = coarseCellBasisCache->getPhysicalCubaturePointsFC();
 
       double tol = 1e-14;
       double maxDiff = 0;
@@ -799,8 +799,8 @@ bool MeshTestUtility::neighborBasesAgreeOnSides(Teuchos::RCP<Mesh> mesh, Epetra_
 
       if (hasSidePoints)
       {
-        Camellia::FieldContainer<double> fineSidePhysicalCubaturePoints = fineSideBasisCache->getPhysicalCubaturePoints();
-        Camellia::FieldContainer<double> coarseSidePhysicalCubaturePoints = coarseSideBasisCache->getPhysicalCubaturePoints();
+        Camellia::FieldContainer<double> fineSidePhysicalCubaturePoints = fineSideBasisCache->getPhysicalCubaturePointsFC();
+        Camellia::FieldContainer<double> coarseSidePhysicalCubaturePoints = coarseSideBasisCache->getPhysicalCubaturePointsFC();
 
         double tol = 1e-14;
         double maxDiff = 0;

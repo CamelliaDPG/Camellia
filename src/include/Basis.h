@@ -34,7 +34,7 @@ template<class Scalar, class ArrayScalar> class Basis
   mutable bool _basisTagsAreSet;
   void initializeTagsAndTrim() const;
   
-  using ExecSpaceType = Camellia::DeviceExecutionSpace;
+  using DeviceType = Camellia::DeviceType;
 protected:
   Basis();
 
@@ -72,12 +72,12 @@ protected:
   mutable std::vector<std::vector<std::vector<int> > > _tagToOrdinal;
 public:
   //! allocation method for Intrepid2-style getValues() output argument.  (For non-Intrepid2 bases, throws an exception.)
-  virtual Intrepid2::BasisValues<Scalar,ExecSpaceType> allocateBasisValues( Intrepid2::TensorPoints<Scalar,ExecSpaceType> points,
-                                                                           const Intrepid2::EOperator op = Intrepid2::OPERATOR_VALUE) const;
+  virtual Intrepid2::BasisValues<Scalar,DeviceType> allocateBasisValues( Intrepid2::TensorPoints<Scalar,DeviceType> points,
+                                                                         const Intrepid2::EOperator op = Intrepid2::OPERATOR_VALUE) const;
   
   //! Intrepid2-style getValues() method.  This is part of the API that will be performance-optimized.  (Allows use of Intrepid2's sum factorization facilities, etc.)  Non-Intrepid2 bases throw an exception.
-  virtual void getValues( Intrepid2::BasisValues<Scalar,ExecSpaceType> outputValues,
-                         const Intrepid2::TensorPoints<Scalar,ExecSpaceType>  inputPoints,
+  virtual void getValues( Intrepid2::BasisValues<Scalar,DeviceType> outputValues,
+                         const Intrepid2::TensorPoints<Scalar,DeviceType>  inputPoints,
                          const Intrepid2::EOperator op = Intrepid2::OPERATOR_VALUE ) const;
   
   virtual int getCardinality() const;
@@ -116,6 +116,8 @@ public:
   virtual Camellia::EFunctionSpace functionSpace(int tensorialRank) const; // 0 for space, 1 for time, in space-time bases
   virtual Camellia::EFunctionSpace functionSpace(int subcDim, int subcellOrdinal) const; // particularly relevant for space-time bases
 
+  virtual Teuchos::RCP< Intrepid2::Basis<Camellia::DeviceType,Scalar,Scalar> > intrepid2Basis();
+  
   // methods identifying the type of basis:
   virtual bool isConforming() const; // defaults to false (true for the Intrepid bases)
   virtual bool isModal() const; // defaults to false (true for the Lobatto bases)
@@ -156,6 +158,7 @@ public:
 
   virtual std::set<int> dofOrdinalsForSide(int sideOrdinal) const;
   
+  using Basis<Scalar,ArrayScalar>::getValues;
   void getValues(ArrayScalar &values, const ArrayScalar &refPoints, Intrepid::EOperator operatorType) const;
   
   void getDofCoords(ArrayScalar & DofCoords) const;
@@ -164,17 +167,17 @@ public:
 template<class Scalar=double, class ArrayScalar=Intrepid::FieldContainer<double> > class Intrepid2BasisWrapper;
 template<class Scalar, class ArrayScalar> class Intrepid2BasisWrapper : public Basis<Scalar,ArrayScalar>
 {
-  using ExecSpaceType = Camellia::DeviceExecutionSpace;
+  using DeviceType = Camellia::DeviceType;
 private:
-  Teuchos::RCP< Intrepid2::Basis<ExecSpaceType,Scalar,Scalar> > _intrepid2Basis;
+  Teuchos::RCP< Intrepid2::Basis<DeviceType,Scalar,Scalar> > _intrepid2Basis;
   Teuchos::RCP< Camellia::Basis<Scalar,ArrayScalar> > _continuousBasis; // continuous version of the same basis, if this basis is discontinuous
 protected:
   void initializeTags() const override;
 public:
-  Intrepid2BasisWrapper(Teuchos::RCP< Intrepid2::Basis<Kokkos::DefaultExecutionSpace,Scalar,Scalar> > intrepid2Basis,
+  Intrepid2BasisWrapper(Teuchos::RCP< Intrepid2::Basis<Camellia::DeviceType,Scalar,Scalar> > intrepid2Basis,
                         int rangeDimension, int rangeRank, Camellia::EFunctionSpace functionSpace);
 
-  Teuchos::RCP< Intrepid2::Basis<Kokkos::DefaultExecutionSpace,Scalar,Scalar> > intrepid2Basis();
+  Teuchos::RCP< Intrepid2::Basis<Camellia::DeviceType,Scalar,Scalar> > intrepid2Basis() override;
 
   virtual bool isConforming() const override;
   virtual bool isNodal() const override;
@@ -184,12 +187,12 @@ public:
   void getValues(ArrayScalar &values, const ArrayScalar &refPoints, Intrepid::EOperator operatorType) const override;
   
   //! allocation method for Intrepid2-style getValues() output argument.
-  Intrepid2::BasisValues<Scalar,ExecSpaceType> allocateBasisValues( Intrepid2::TensorPoints<Scalar,ExecSpaceType> points,
-                                                                    const Intrepid2::EOperator op = Intrepid2::OPERATOR_VALUE) const override;
+  Intrepid2::BasisValues<Scalar,DeviceType> allocateBasisValues( Intrepid2::TensorPoints<Scalar,DeviceType> points,
+                                                                const Intrepid2::EOperator op = Intrepid2::OPERATOR_VALUE) const override;
   
   //! Intrepid2-style getValues() method.  This is part of the API that will be performance-optimized.  (Allows use of Intrepid2's sum factorization facilities, etc.)
-  void getValues( Intrepid2::BasisValues<Scalar,ExecSpaceType> outputValues,
-                  const Intrepid2::TensorPoints<Scalar,ExecSpaceType>  inputPoints,
+  void getValues( Intrepid2::BasisValues<Scalar,DeviceType> outputValues,
+                  const Intrepid2::TensorPoints<Scalar,DeviceType>  inputPoints,
                   const Intrepid2::EOperator op = Intrepid2::OPERATOR_VALUE ) const override;
   
   void getDofCoords(ArrayScalar & DofCoords) const override;

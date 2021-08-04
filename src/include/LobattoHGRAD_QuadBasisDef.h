@@ -216,7 +216,6 @@ void LobattoHGRAD_QuadBasis<Scalar,ArrayScalar>::getValues(ArrayScalar &values, 
           break;
         default:
           TEUCHOS_TEST_FOR_EXCEPTION(true,std::invalid_argument,"Unsupported operatorType");
-          break;
         }
       }
     }

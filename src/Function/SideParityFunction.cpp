@@ -11,7 +11,7 @@
 
 using namespace Camellia;
 
-SideParityFunction::SideParityFunction() : TFunction<double>("SideParityFunction",0)
+SideParityFunction::SideParityFunction() : TFunction<double>("SideParityFunction",0,VARIES_IN_NO_DIMENSION)
 {
   //  cout << "SideParityFunction constructor.\n";
 }
@@ -24,6 +24,44 @@ bool SideParityFunction::boundaryValueOnly()
 string SideParityFunction::displayString()
 {
   return "sgn(n)";
+}
+
+void SideParityFunction::values(Intrepid2::Data<double, DeviceType> values, BasisCachePtr sideBasisCache)
+{
+  const int sideOrdinal = sideBasisCache->getSideIndex();
+  TEUCHOS_TEST_FOR_EXCEPTION(sideOrdinal == -1, std::invalid_argument, "non-sideBasisCache passed into SideParityFunction");
+  
+  TEUCHOS_TEST_FOR_EXCEPTION(values.getUnderlyingViewRank() != 1, std::invalid_argument, "Underlying view should have shape (C)");
+  auto underlyingView = values.getUnderlyingView<1>();
+  auto underlyingViewHost = Kokkos::create_mirror_view(underlyingView);
+  
+  if (sideBasisCache->getCellSideParities().size() > 0)
+  {
+    // then we'll use this, and won't require that mesh and cellIDs are set
+    const int numCells = values.extent_int(0);
+    TEUCHOS_TEST_FOR_EXCEPTION(sideBasisCache->getCellSideParities().dimension(0) != numCells, std::invalid_argument,
+                               "sideBasisCache->getCellSideParities() is non-empty, but the cell dimension doesn't match that of the values Camellia::FieldContainer.");
+    const auto & cellSideParities = sideBasisCache->getCellSideParities();
+    for (int cellIndex=0; cellIndex<numCells; cellIndex++)
+    {
+      const double parity = cellSideParities(0,sideOrdinal);
+      underlyingViewHost(cellIndex) = parity;
+    }
+  }
+  else
+  {
+    auto mesh = sideBasisCache->mesh();
+    
+    const vector<GlobalIndexType> & cellIDs = sideBasisCache->cellIDs();
+    const int numCells = values.extent_int(0);
+    for (int cellIndex=0; cellIndex<numCells; cellIndex++)
+    {
+      const double parity = mesh->sideParity(cellIDs[cellIndex], unsigned(sideOrdinal));
+      underlyingViewHost(cellIndex) = parity;
+    }
+  }
+  
+  Kokkos::deep_copy(underlyingView, underlyingViewHost);
 }
 
 void SideParityFunction::values(typename FieldContainer<double>::DeviceView &values, ValueModificationType modType, BasisCachePtr sideBasisCache)

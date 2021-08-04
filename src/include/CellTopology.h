@@ -29,6 +29,8 @@ namespace Camellia
 {
 typedef std::pair<unsigned,unsigned> CellTopologyKey;
 
+  static unsigned INVALID_CELLTOPOLOGY_SIDE_ORDINAL = static_cast<unsigned>(-1);
+  static unsigned INVALID_CELLTOPOLOGY_SUBCELL_ORDINAL = static_cast<unsigned>(-1);
 class CellTopology
 {
   typedef Teuchos::RCP<CellTopology> CellTopoPtr;
@@ -65,6 +67,9 @@ class CellTopology
 public:
   /** \brief  The underlying shards topology */
   const shards::CellTopology & getShardsTopology() const;
+  
+  /** \brief  The base topology (which may be extruded) */
+  CellTopoPtr getBaseTopology() const;
 
   /** \brief  The number of times we have taken a tensor product between a line topology and the shards topology to form this cell topology */
   unsigned getTensorialDegree() const;

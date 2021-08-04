@@ -39,6 +39,8 @@ public:
                            SolutionComponent solutionComponent = STANDARD_SOLUTION, int stageNumber = 0);
   bool boundaryValueOnly();
   void setOverrideMeshCheck(bool value, bool dontWarn=false);
+  
+  using TFunction<Scalar>::values;
   void values(Camellia::FieldContainer<Scalar> &values, BasisCachePtr basisCache);
   static map<int, TFunctionPtr<Scalar> > functionMap( vector< VarPtr > varPtrs, TSolutionPtr<Scalar> soln, SolutionComponent solutionComponent, int stageNumber);
   string displayString();

@@ -465,13 +465,13 @@ void MultiBasis<Scalar,ArrayScalar>::initializeTags() const
     }
 
     int internal_dof = N - 2; // all but the endpoints
-    int edge_dof;
+//    int edge_dof;
 
     tags[posScDim] = 0;
     tags[posScOrd] = 0;
     tags[posDfOrd] = 0;
     tags[posScCnt] = 1;
-    edge_dof = 1;
+//    edge_dof = 1;
 
     int n = N-1;
 
@@ -555,7 +555,7 @@ Teuchos::RCP< Basis<Scalar,ArrayScalar> > MultiBasis<Scalar, ArrayScalar>::getLe
     leafOrdinalOffset += numLeaves;
   }
   TEUCHOS_TEST_FOR_EXCEPTION(true, std::invalid_argument, "leafOrdinal basis unreachable");
-  return Teuchos::rcp((Basis<Scalar,ArrayScalar> *) NULL);
+//  return Teuchos::rcp((Basis<Scalar,ArrayScalar> *) NULL);
 }
 
 template<class Scalar, class ArrayScalar>
@@ -672,7 +672,7 @@ int MultiBasis<Scalar, ArrayScalar>::relativeToAbsoluteDofOrdinal(int basisDofOr
     previousMaxReachable = maxReachableLeaf;
   }
   TEUCHOS_TEST_FOR_EXCEPTION(true, std::invalid_argument, "requested leafOrdinal out of bounds");
-  return -1;
+//  return -1;
 }
 
 template<class Scalar, class ArrayScalar>

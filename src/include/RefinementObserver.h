@@ -38,7 +38,7 @@ public:
   {
     didHRefine(cellIDs, refPattern, didRepartitionAndRebuild);
   }
-  virtual void pRefine(const set<GlobalIndexType> &cellIDs, bool repartitionAndRebuild) {}
+  virtual void pRefine(const set<GlobalIndexType> &cellIDs, int pToAdd, bool repartitionAndRebuild) {}
   virtual void hUnrefine(const set<GlobalIndexType> &cellIDs, bool repartitionAndRebuild) {}
 
   virtual void willHUnrefine(const set<GlobalIndexType> &cellIDs, bool willRepartitionAndRebuild) {}

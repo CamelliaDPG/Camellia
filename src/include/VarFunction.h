@@ -26,6 +26,7 @@ class VarFunction : public TFunction<Scalar>
 public:
   VarFunction(VarPtr var);
   
+  using TFunction<Scalar>::values;
   // ! This is an abstract function, not valid for direct evaluation: hence, calling values will throw an exception.
   void values(Camellia::FieldContainer<Scalar> &values, BasisCachePtr basisCache);
   TFunctionPtr<Scalar> x();

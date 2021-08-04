@@ -23,6 +23,8 @@ namespace Camellia {
     double _timeScale;
   public:
     TimeRampFunction(double timeScale);
+    
+    using SimpleFunction<double>::value;
     double value(double x, double t);
     double value(double x, double y, double t);
     double value(double x, double y, double z, double t);

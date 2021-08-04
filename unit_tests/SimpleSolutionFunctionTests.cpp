@@ -56,7 +56,7 @@ namespace
       BasisCachePtr basisCache = BasisCache::basisCacheForCell(poissonMesh, cellID);
       
       const int oneCell = 1;
-      const int numPoints = basisCache->getPhysicalCubaturePoints().dimension(1); // points have shape (C,P,D)
+      const int numPoints = basisCache->getPhysicalCubaturePointsFC().dimension(1); // points have shape (C,P,D)
       Camellia::FieldContainer<double> values(oneCell, numPoints);
       
       values.initialize(startingValue);

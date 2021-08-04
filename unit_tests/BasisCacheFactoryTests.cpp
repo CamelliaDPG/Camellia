@@ -101,7 +101,7 @@ namespace
       auto unionCache = BasisCacheFactory<double>::unionBasisCacheForParentCell(parentCell->refinementPattern(), subdomainCaches);
       
       TEST_EQUALITY(totalPointCount, unionCache->getRefCellPointsFC().dimension(0));
-      TEST_EQUALITY(totalPointCount, unionCache->getPhysicalCubaturePoints().dimension(1));
+      TEST_EQUALITY(totalPointCount, unionCache->getPhysicalCubaturePointsFC().dimension(1));
       
       auto jacobian = unionCache->getJacobian();
       auto jacobianInv = unionCache->getJacobianInv();
@@ -169,7 +169,7 @@ namespace
       auto unionCache = BasisCacheFactory<double>::unionBasisCacheForParentCell(parentCell->refinementPattern(), subdomainCaches);
       
       TEST_EQUALITY(totalPointCount, unionCache->getRefCellPointsFC().dimension(0));
-      TEST_EQUALITY(totalPointCount, unionCache->getPhysicalCubaturePoints().dimension(1));
+      TEST_EQUALITY(totalPointCount, unionCache->getPhysicalCubaturePointsFC().dimension(1));
     }
   }
   

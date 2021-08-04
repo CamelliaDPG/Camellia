@@ -3,6 +3,7 @@
 //
 
 #include "CamelliaCellTools.h"
+#include "CamelliaDataHelpers.h"
 #include "ConstantScalarFunction.h"
 #include "ConstantVectorFunction.h"
 #include "Function.h"
@@ -15,8 +16,10 @@
 #include "TensorBasis.h"
 #include "TimeLogger.h"
 
-#include "Epetra_CrsMatrix.h"
-#include "Intrepid_FunctionSpaceTools.hpp"
+#include <Epetra_CrsMatrix.h>
+#include <Intrepid_FunctionSpaceTools.hpp>
+
+#include <Intrepid2_TensorArgumentIterator.hpp>
 #include <Teuchos_GlobalMPISession.hpp>
 
 namespace Camellia
@@ -247,7 +250,7 @@ void TLinearTerm<Scalar>::integrate(Camellia::FieldContainer<Scalar> &values, Do
 
   set<int> varIDs = this->varIDs();
 
-  int numCells  = basisCache->getPhysicalCubaturePoints().dimension(0);
+  int numCells  = basisCache->getPhysicalCubaturePointsFC().dimension(0);
 
   BasisPtr basis;
   bool thisFluxOrTrace  = (this->termType() == FLUX) || (this->termType() == TRACE);
@@ -271,7 +274,7 @@ void TLinearTerm<Scalar>::integrate(Camellia::FieldContainer<Scalar> &values, Do
     if (! boundaryTerm )
     {
       // first, compute volume integral
-      int numPoints = basisCache->getPhysicalCubaturePoints().dimension(1);
+      int numPoints = basisCache->getPhysicalCubaturePointsFC().dimension(1);
 
       const vector<int>* sidesForVar = &thisOrdering->getSidesForVarID(varID);
 
@@ -318,7 +321,7 @@ void TLinearTerm<Scalar>::integrate(Camellia::FieldContainer<Scalar> &values, Do
             basisCardinality = basis->getCardinality();
             ltValueDim[1] = basisCardinality;
           }
-          numPoints = sideBasisCache->getPhysicalCubaturePoints().dimension(1);
+          numPoints = sideBasisCache->getPhysicalCubaturePointsFC().dimension(1);
           ltValueDim[2] = numPoints;
           ltValues.resize(ltValueDim);
           bool naturalBoundaryValuesOnly = true; // don't restrict volume summands to boundary
@@ -476,7 +479,7 @@ void TLinearTerm<Scalar>::integrate(Epetra_CrsMatrix* valuesCrsMatrix, Camellia:
     TimeLogger::sharedInstance()->stopTimer(timerHandle);
     return;
   }
-  int numCells = basisCache->getPhysicalCubaturePoints().dimension(0);
+  int numCells = basisCache->getPhysicalCubaturePointsFC().dimension(0);
   // will integrate either in volume or along a side, depending on the type of BasisCache passed in
   if (valuesCrsMatrix==NULL)   // then the FC is the one to fill
   {
@@ -497,7 +500,7 @@ void TLinearTerm<Scalar>::integrate(Epetra_CrsMatrix* valuesCrsMatrix, Camellia:
   //  bool symmetric = (u.get()==v.get()) && (uOrdering.get() == vOrdering.get());
 
   // values has dimensions (numCells, uFields, vFields)
-  int numPoints = basisCache->getPhysicalCubaturePoints().dimension(1);
+  int numPoints = basisCache->getPhysicalCubaturePointsFC().dimension(1);
   int spaceDim = basisCache->getSpaceDim();
 
   Teuchos::Array<int> ltValueDim;
@@ -521,7 +524,7 @@ void TLinearTerm<Scalar>::integrate(Epetra_CrsMatrix* valuesCrsMatrix, Camellia:
     //    cout << "uID: " << uID << endl;
     // the DofOrdering needs a sideIndex argument; this is 0 for volume bases.
     bool uVolVar = (uOrdering->getNumSidesForVarID(uID) == 1);
-    int uSideIndex = uVolVar ? VOLUME_INTERIOR_SIDE_ORDINAL : basisCache->getSideIndex();
+    int uSideIndex = uVolVar ? VOLUME_INTERIOR_SIDE_INDEX : basisCache->getSideIndex();
 
     if (! uOrdering->hasBasisEntry(uID, uSideIndex) && (uSideIndex == basisCache->getSideIndex()))
     {
@@ -574,7 +577,7 @@ void TLinearTerm<Scalar>::integrate(Epetra_CrsMatrix* valuesCrsMatrix, Camellia:
       int vID = vIDVector[vOrdinal];
       //      cout << "vID: " << vID << endl;
       bool vVolVar = (vOrdering->getNumSidesForVarID(vID) == 1);
-      int vSideIndex = vVolVar ? VOLUME_INTERIOR_SIDE_ORDINAL : basisCache->getSideIndex();
+      int vSideIndex = vVolVar ? VOLUME_INTERIOR_SIDE_INDEX : basisCache->getSideIndex();
       if (! vOrdering->hasBasisEntry(vID, vSideIndex) && (vSideIndex == basisCache->getSideIndex()))
       {
         // this variable doesn't live on this side, so its contribution is 0...
@@ -876,9 +879,9 @@ void TLinearTerm<Scalar>::evaluate(Camellia::FieldContainer<Scalar> &values, TSo
   Teuchos::Array<int> tensorFunctionValueDim = vectorFunctionValueDim;
   tensorFunctionValueDim.append(spaceDim);
 
-  TEUCHOS_TEST_FOR_EXCEPTION( numCells != basisCache->getPhysicalCubaturePoints().dimension(0),
+  TEUCHOS_TEST_FOR_EXCEPTION( numCells != basisCache->getPhysicalCubaturePointsFC().dimension(0),
                               std::invalid_argument, "values FC numCells disagrees with cubature points container");
-  TEUCHOS_TEST_FOR_EXCEPTION( numPoints != basisCache->getPhysicalCubaturePoints().dimension(1),
+  TEUCHOS_TEST_FOR_EXCEPTION( numPoints != basisCache->getPhysicalCubaturePointsFC().dimension(1),
                               std::invalid_argument, "values FC numPoints disagrees with cubature points container");
   for (typename vector< TLinearSummand<Scalar> >::iterator lsIt = _summands.begin(); lsIt != _summands.end(); lsIt++)
   {
@@ -1200,11 +1203,11 @@ void TLinearTerm<Scalar>::values(Camellia::FieldContainer<Scalar> &values, int v
   Teuchos::Array<int> tensorFunctionValueDim = vectorFunctionValueDim;
   tensorFunctionValueDim.append(spaceDim);
 
-  TEUCHOS_TEST_FOR_EXCEPTION( numCells != basisCache->getPhysicalCubaturePoints().dimension(0),
+  TEUCHOS_TEST_FOR_EXCEPTION( numCells != basisCache->getPhysicalCubaturePointsFC().dimension(0),
                               std::invalid_argument, "values FC numCells disagrees with cubature points container");
   TEUCHOS_TEST_FOR_EXCEPTION( numFields != basis->getCardinality(),
                               std::invalid_argument, "values FC numFields disagrees with basis cardinality");
-  TEUCHOS_TEST_FOR_EXCEPTION( numPoints != basisCache->getPhysicalCubaturePoints().dimension(1),
+  TEUCHOS_TEST_FOR_EXCEPTION( numPoints != basisCache->getPhysicalCubaturePointsFC().dimension(1),
                               std::invalid_argument, "values FC numPoints disagrees with cubature points container");
   for (typename vector< TLinearSummand<Scalar> >::iterator lsIt = _summands.begin(); lsIt != _summands.end(); lsIt++)
   {
@@ -1263,19 +1266,469 @@ void TLinearTerm<Scalar>::values(Camellia::FieldContainer<Scalar> &values, int v
 
       if ( ls.first->rank() == 0 )   // scalar function -- we can speed things along in this case...
       {
-        // E.g. ConstantTFunction<double>::scalarMultiplyBasisValues() knows not to do anything at all if its value is 1.0...
-        Camellia::FieldContainer<double> weightedBasisValues = *basisValues; // weighted by the scalar function
-        ls.first->scalarMultiplyBasisValues(weightedBasisValues,basisCache);
-        // bounds check so we can safely do pointer arithmetic below:
-        int size = values.size();
-        TEUCHOS_TEST_FOR_EXCEPTION(weightedBasisValues.size() != size, std::invalid_argument, "Error: values containers are different sizes");
-        double *valuePtr = &values[0];
-        double *weightedBasisValuePtr = &weightedBasisValues[0];
-        for (int i=0; i<size; i++)
+        const bool useReducedDataPath = true; // "true" choice is what we want ultimately; we have this here to diagnose numerical differences that have arisen in development of the reduced Data path…
+        
+        const bool doDataPathComparison = false;
+        if (doDataPathComparison)
         {
-          *valuePtr++ += *weightedBasisValuePtr++;
+          // DEBUGGING
+          FunctionPtr scalarFxn = ls.first;
+          
+          bool is1V = (basisCache->cellTopology()->getTensorialDegree() == 1);
+          bool is3V = (basisCache->cellTopology()->getTensorialDegree() == 3);
+          
+          double tol = 1e-13;
+          
+          std::ostringstream someStream;
+          Teuchos::basic_FancyOStream<char> out(Teuchos::rcp(&someStream,false));
+//          Teuchos::basic_FancyOStream<char> out(Teuchos::null);
+          
+          std::vector<FunctionPtr> fxnsToTest = scalarFxn->memberFunctions();
+          fxnsToTest.push_back(scalarFxn);
+          for (auto fxn : fxnsToTest)
+          {
+            // the test methods below assume scalar member functions; let's just skip any vector ones
+            if (fxn->rank() > 0) continue;
+            bool success = true;
+            if (is1V)
+            {
+              testFunctionDataPathMatchesViewPath1V(fxn, basisCache, tol, out, success);
+              if (!success)
+              {
+                std::cout << "1D1V Data path does not match View path for function of class " << fxn->getClassName() << " with displayString " << fxn->displayString() << std::endl;
+              }
+            }
+            else if (is3V)
+            {
+              testFunctionDataPathMatchesViewPath3V(fxn, basisCache, tol, out, success);
+              if (!success)
+              {
+                std::cout << "1D3V Data path does not match View path for function of class " << fxn->getClassName() << " with displayString " << fxn->displayString() << std::endl;
+              }
+            }
+          }
         }
-        continue;
+        
+        if (!useReducedDataPath)
+        {
+          // old path
+          Camellia::FieldContainer<double> weightedBasisValues = *basisValues; // weighted by the scalar function
+          ls.first->scalarMultiplyBasisValues(weightedBasisValues,basisCache);
+          // bounds check so we can safely do pointer arithmetic below:
+          int size = values.size();
+          TEUCHOS_TEST_FOR_EXCEPTION(weightedBasisValues.size() != size, std::invalid_argument, "Error: values containers are different sizes");
+          double *valuePtr = &values[0];
+          double *weightedBasisValuePtr = &weightedBasisValues[0];
+          for (int i=0; i<size; i++)
+          {
+            *valuePtr++ += *weightedBasisValuePtr++;
+          }
+          continue;
+        }
+        else
+        {
+          const auto & scalarFxn = ls.first;
+          Intrepid2::Data<Scalar, Camellia::DeviceType> fxnData = scalarFxn->checkoutValuesData(basisCache);
+          scalarFxn->values(fxnData, basisCache);
+          
+          auto valuesView      = values.checkoutDeviceView();
+          auto basisValuesView = basisValues->checkoutDeviceView();
+          
+          const int rank = basisValuesView.rank() - 3; // (C,F,P[,D,…]), where scalar (rank 0) is (C,F,P)
+          
+          switch (rank) {
+            case 0:
+              {
+                const int nominalDataRank = fxnData.rank();
+                switch (nominalDataRank)
+                {
+                  case 2: // (C,P): we don't have tensor-product points
+                  {
+                    auto rangePolicy = FieldContainer<double>::getMDRangePolicy3(valuesView);
+                    Kokkos::parallel_for(rangePolicy,
+                      KOKKOS_LAMBDA(const int &cellOrdinal, const int &fieldOrdinal, const int &pointOrdinal )
+                      {
+                        const auto & fxnValue   = fxnData(cellOrdinal,pointOrdinal);
+                      
+                        const auto & basisValue = basisValuesView(cellOrdinal, fieldOrdinal, pointOrdinal);
+                        auto & outValue         = valuesView(cellOrdinal, fieldOrdinal, pointOrdinal);
+                      
+                        outValue += basisValue * fxnValue;
+                      }
+                    );
+                  }
+                    break;
+                  case 3: // (C,P1,P2): 1D1V, or similar
+                  {
+                    const int numPoints0 = fxnData.extent_int(1);
+                    const int numPoints1 = fxnData.extent_int(2);
+                    Kokkos::MDRangePolicy<DeviceExecutionSpace,Kokkos::Rank<4>> rangePolicy({0,0,0,0},{numCells,numFields,numPoints0,numPoints1});
+                    
+                    Kokkos::parallel_for(rangePolicy,
+                      KOKKOS_LAMBDA(const int &cellOrdinal, const int &fieldOrdinal, const int &pointOrdinal0, const int &pointOrdinal1 )
+                      {
+                        const auto & fxnValue   = fxnData(cellOrdinal,pointOrdinal0,pointOrdinal1);
+                      
+                        const int pointOrdinal  = tensorEnumerationIndex(pointOrdinal0, pointOrdinal1, numPoints0);
+                        const auto & basisValue = basisValuesView(cellOrdinal, fieldOrdinal, pointOrdinal);
+                        auto & outValue         = valuesView(cellOrdinal, fieldOrdinal, pointOrdinal);
+                      
+                        outValue += basisValue * fxnValue;
+                      }
+                    );
+                  }
+                    break;
+                  case 4: // (C,P1,P2,P3): 1D2V, or similar
+                  {
+                    const int numPoints0 = fxnData.extent_int(1);
+                    const int numPoints1 = fxnData.extent_int(2);
+                    const int numPoints2 = fxnData.extent_int(3);
+                    Kokkos::MDRangePolicy<DeviceExecutionSpace,Kokkos::Rank<5>> rangePolicy({0,0,0,0,0},{numCells,numFields,numPoints0,numPoints1,numPoints2});
+                    
+                    Kokkos::parallel_for(rangePolicy,
+                      KOKKOS_LAMBDA(const int &cellOrdinal, const int &fieldOrdinal, const int &pointOrdinal0, const int &pointOrdinal1, const int &pointOrdinal2 )
+                      {
+                        const auto & fxnValue   = fxnData(cellOrdinal,pointOrdinal0,pointOrdinal1,pointOrdinal2);
+                      
+                        const int pointOrdinal  = tensorEnumerationIndex(pointOrdinal0, pointOrdinal1, pointOrdinal2, numPoints0, numPoints1);
+                        const auto & basisValue = basisValuesView(cellOrdinal, fieldOrdinal, pointOrdinal);
+                        auto & outValue         = valuesView(cellOrdinal, fieldOrdinal, pointOrdinal);
+                      
+                        outValue += basisValue * fxnValue;
+                      }
+                    );
+                  }
+                    break;
+                  case 5: // (C,P1,P2,P3,P4): 1D3V, or similar
+                  {
+                    const int numPoints0 = fxnData.extent_int(1);
+                    const int numPoints1 = fxnData.extent_int(2);
+                    const int numPoints2 = fxnData.extent_int(3);
+                    const int numPoints3 = fxnData.extent_int(4);
+                    Kokkos::MDRangePolicy<DeviceExecutionSpace,Kokkos::Rank<6>> rangePolicy({0,0,0,0,0,0},{numCells,numFields,numPoints0,numPoints1,numPoints2,numPoints3});
+                    
+                    const int underlyingViewRank = fxnData.getUnderlyingViewRank();
+                    
+                    bool optimizedKernelExecuted = false; // will set to true if we have an optimized kernel in the switch below; otherwise, we'll run the generic case
+                    switch (underlyingViewRank) {
+                      case 1:
+                      {
+                        auto fxnView = fxnData.template getUnderlyingView<1>();
+                        
+                        if (fxnView.extent_int(1) == 1)
+                        {
+                          // constant function
+                          Kokkos::parallel_for(rangePolicy,
+                            KOKKOS_LAMBDA(const int &cellOrdinal, const int &fieldOrdinal, const int &pointOrdinal0, const int &pointOrdinal1, const int &pointOrdinal2, const int &pointOrdinal3 )
+                            {
+                              const auto & fxnValue   = fxnView(0);
+                            
+                              const int pointOrdinal  = tensorEnumerationIndex(pointOrdinal0, pointOrdinal1, pointOrdinal2, pointOrdinal3, numPoints0, numPoints1, numPoints2);
+                              const auto & basisValue = basisValuesView(cellOrdinal, fieldOrdinal, pointOrdinal);
+                              auto & outValue         = valuesView(cellOrdinal, fieldOrdinal, pointOrdinal);
+                            
+                              outValue += basisValue * fxnValue;
+                            }
+                          );
+                          optimizedKernelExecuted = true;
+                        }
+                        else
+                        {
+                          // varies in exactly one of the other dimensions.  We have an optimized kernel for the case when that dimension is the first point dimension.
+                          if (fxnData.getVariationTypes()[1] != Intrepid2::CONSTANT)
+                          {
+                            Kokkos::parallel_for(rangePolicy,
+                              KOKKOS_LAMBDA(const int &cellOrdinal, const int &fieldOrdinal, const int &pointOrdinal0, const int &pointOrdinal1, const int &pointOrdinal2, const int &pointOrdinal3 )
+                              {
+                                const auto & fxnValue   = fxnView(pointOrdinal0);
+                              
+                                const int pointOrdinal  = tensorEnumerationIndex(pointOrdinal0, pointOrdinal1, pointOrdinal2, pointOrdinal3, numPoints0, numPoints1, numPoints2);
+                                const auto & basisValue = basisValuesView(cellOrdinal, fieldOrdinal, pointOrdinal);
+                                auto & outValue         = valuesView(cellOrdinal, fieldOrdinal, pointOrdinal);
+                              
+                                outValue += basisValue * fxnValue;
+                              }
+                            );
+                            optimizedKernelExecuted = true;
+                          }
+                        }
+                      }
+                        break;
+                      case 5:
+                      {
+                        // the underlying view has the same rank as fxnData; usually, this means a one-to-one correspondance between entries.
+                        // (However, it can be MODULAR, etc. which is why we need to check the underlyingMatchesLogical property.)
+                        const bool underlyingMatchesNotional = fxnData.underlyingMatchesLogical();
+                        if (underlyingMatchesNotional)
+                        {
+                          auto fxnView = fxnData.template getUnderlyingView<5>();
+                          Kokkos::parallel_for(rangePolicy,
+                            KOKKOS_LAMBDA(const int &cellOrdinal, const int &fieldOrdinal, const int &pointOrdinal0, const int &pointOrdinal1, const int &pointOrdinal2, const int &pointOrdinal3 )
+                            {
+                              const auto & fxnValue   = fxnView(cellOrdinal, pointOrdinal0, pointOrdinal1, pointOrdinal2, pointOrdinal3);
+                            
+                              const int pointOrdinal  = tensorEnumerationIndex(pointOrdinal0, pointOrdinal1, pointOrdinal2, pointOrdinal3, numPoints0, numPoints1, numPoints2);
+                              const auto & basisValue = basisValuesView(cellOrdinal, fieldOrdinal, pointOrdinal);
+                              auto & outValue         = valuesView(cellOrdinal, fieldOrdinal, pointOrdinal);
+                            
+                              outValue += basisValue * fxnValue;
+                            }
+                          );
+                          optimizedKernelExecuted = true;
+                        }
+                      }
+                        
+                      default:
+                        break;
+                    }
+                    
+                    if (!optimizedKernelExecuted)
+                    {
+                      // the fxnData() access below is known to be pretty inefficient.
+                      Kokkos::parallel_for(rangePolicy,
+                        KOKKOS_LAMBDA(const int &cellOrdinal, const int &fieldOrdinal, const int &pointOrdinal0, const int &pointOrdinal1, const int &pointOrdinal2, const int &pointOrdinal3 )
+                        {
+                          const auto & fxnValue   = fxnData(cellOrdinal,pointOrdinal0,pointOrdinal1,pointOrdinal2,pointOrdinal3);
+                        
+                          const int pointOrdinal  = tensorEnumerationIndex(pointOrdinal0, pointOrdinal1, pointOrdinal2, pointOrdinal3, numPoints0, numPoints1, numPoints2);
+                          const auto & basisValue = basisValuesView(cellOrdinal, fieldOrdinal, pointOrdinal);
+                          auto & outValue         = valuesView(cellOrdinal, fieldOrdinal, pointOrdinal);
+                        
+                          outValue += basisValue * fxnValue;
+                        }
+                      );
+                    }
+                  }
+                    break;
+                  default:
+                    TEUCHOS_TEST_FOR_EXCEPTION(true, std::invalid_argument, "Unhandled/unexpected rank");
+                }
+              }
+              break;
+            case 1:
+              {
+                const int nominalDataRank = fxnData.rank();
+                switch (nominalDataRank)
+                {
+                  case 2: // (C,P): we don't have tensor-product points
+                  {
+                    auto rangePolicy = FieldContainer<double>::getMDRangePolicy3(valuesView);
+                    Kokkos::parallel_for(rangePolicy,
+                      KOKKOS_LAMBDA(const int &cellOrdinal, const int &fieldOrdinal, const int &pointOrdinal )
+                      {
+                        const auto & fxnValue   = fxnData(cellOrdinal,pointOrdinal);
+                      
+                        for (int d=0; d<spaceDim; d++)
+                        {
+                          const auto & basisValue = basisValuesView(cellOrdinal, fieldOrdinal, pointOrdinal, d);
+                          auto & outValue         = valuesView(cellOrdinal, fieldOrdinal, pointOrdinal, d);
+                        
+                          outValue += basisValue * fxnValue;
+                        }
+                      }
+                    );
+                  }
+                    break;
+                  case 3: // (C,P1,P2): 1D1V, or similar
+                  {
+                    const int numPoints0 = fxnData.extent_int(1);
+                    const int numPoints1 = fxnData.extent_int(2);
+                    Kokkos::MDRangePolicy<DeviceExecutionSpace,Kokkos::Rank<4>> rangePolicy({0,0,0,0},{numCells,numFields,numPoints0,numPoints1});
+                    
+                    Kokkos::parallel_for(rangePolicy,
+                      KOKKOS_LAMBDA(const int &cellOrdinal, const int &fieldOrdinal, const int &pointOrdinal0, const int &pointOrdinal1 )
+                      {
+                        const auto & fxnValue   = fxnData(cellOrdinal,pointOrdinal0,pointOrdinal1);
+                        const int pointOrdinal  = tensorEnumerationIndex(pointOrdinal0, pointOrdinal1, numPoints0);
+                        
+                        for (int d=0; d<spaceDim; d++)
+                        {
+                          const auto & basisValue = basisValuesView(cellOrdinal, fieldOrdinal, pointOrdinal, d);
+                          auto & outValue         = valuesView(cellOrdinal, fieldOrdinal, pointOrdinal, d);
+                        
+                          outValue += basisValue * fxnValue;
+                        }
+                      }
+                    );
+                  }
+                    break;
+                  case 4: // (C,P1,P2,P3): 1D2V, or similar
+                  {
+                    const int numPoints0 = fxnData.extent_int(1);
+                    const int numPoints1 = fxnData.extent_int(2);
+                    const int numPoints2 = fxnData.extent_int(3);
+                    Kokkos::MDRangePolicy<DeviceExecutionSpace,Kokkos::Rank<5>> rangePolicy({0,0,0,0,0},{numCells,numFields,numPoints0,numPoints1,numPoints2});
+                    
+                    Kokkos::parallel_for(rangePolicy,
+                      KOKKOS_LAMBDA(const int &cellOrdinal, const int &fieldOrdinal, const int &pointOrdinal0, const int &pointOrdinal1, const int &pointOrdinal2 )
+                      {
+                        const auto & fxnValue   = fxnData(cellOrdinal,pointOrdinal0,pointOrdinal1,pointOrdinal2);
+                        const int pointOrdinal  = tensorEnumerationIndex(pointOrdinal0, pointOrdinal1, pointOrdinal2, numPoints0, numPoints1);
+                        
+                        for (int d=0; d<spaceDim; d++)
+                        {
+                          const auto & basisValue = basisValuesView(cellOrdinal, fieldOrdinal, pointOrdinal, d);
+                          auto & outValue         = valuesView(cellOrdinal, fieldOrdinal, pointOrdinal, d);
+                        
+                          outValue += basisValue * fxnValue;
+                        }
+                      }
+                    );
+                  }
+                    break;
+                  case 5: // (C,P1,P2,P3,P4): 1D3V, or similar
+                  {
+                    const int numPoints0 = fxnData.extent_int(1);
+                    const int numPoints1 = fxnData.extent_int(2);
+                    const int numPoints2 = fxnData.extent_int(3);
+                    const int numPoints3 = fxnData.extent_int(4);
+                    Kokkos::MDRangePolicy<DeviceExecutionSpace,Kokkos::Rank<6>> rangePolicy({0,0,0,0,0,0},{numCells,numFields,numPoints0,numPoints1,numPoints2,numPoints3});
+                    
+                    Kokkos::parallel_for(rangePolicy,
+                      KOKKOS_LAMBDA(const int &cellOrdinal, const int &fieldOrdinal, const int &pointOrdinal0, const int &pointOrdinal1, const int &pointOrdinal2, const int &pointOrdinal3 )
+                      {
+                        const auto & fxnValue   = fxnData(cellOrdinal,pointOrdinal0,pointOrdinal1,pointOrdinal2,pointOrdinal3);
+                        const int pointOrdinal  = tensorEnumerationIndex(pointOrdinal0, pointOrdinal1, pointOrdinal2, pointOrdinal3, numPoints0, numPoints1, numPoints2);
+                        
+                        for (int d=0; d<spaceDim; d++)
+                        {
+                          const auto & basisValue = basisValuesView(cellOrdinal, fieldOrdinal, pointOrdinal, d);
+                          auto & outValue         = valuesView(cellOrdinal, fieldOrdinal, pointOrdinal, d);
+                        
+                          outValue += basisValue * fxnValue;
+                        }
+                      }
+                    );
+                  }
+                    break;
+                  default:
+                    TEUCHOS_TEST_FOR_EXCEPTION(true, std::invalid_argument, "Unhandled/unexpected rank");
+                }
+              }
+              break;
+            case 2:
+              {
+              const int nominalDataRank = fxnData.rank();
+              switch (nominalDataRank)
+              {
+                case 2: // (C,P): we don't have tensor-product points
+                {
+                  auto rangePolicy = FieldContainer<double>::getMDRangePolicy3(valuesView);
+                  Kokkos::parallel_for(rangePolicy,
+                    KOKKOS_LAMBDA(const int &cellOrdinal, const int &fieldOrdinal, const int &pointOrdinal )
+                    {
+                      const auto & fxnValue   = fxnData(cellOrdinal,pointOrdinal);
+                    
+                      for (int d0=0; d0<spaceDim; d0++)
+                      {
+                        for (int d1=0; d1<spaceDim; d1++)
+                        {
+                          const auto & basisValue = basisValuesView(cellOrdinal, fieldOrdinal, pointOrdinal, d0, d1);
+                          auto & outValue         = valuesView(cellOrdinal, fieldOrdinal, pointOrdinal, d0, d1);
+                        
+                          outValue += basisValue * fxnValue;
+                        }
+                      }
+                    }
+                  );
+                }
+                  break;
+                case 3: // (C,P1,P2): 1D1V, or similar
+                {
+                  const int numPoints0 = fxnData.extent_int(1);
+                  const int numPoints1 = fxnData.extent_int(2);
+                  Kokkos::MDRangePolicy<DeviceExecutionSpace,Kokkos::Rank<4>> rangePolicy({0,0,0,0},{numCells,numFields,numPoints0,numPoints1});
+                  
+                  Kokkos::parallel_for(rangePolicy,
+                    KOKKOS_LAMBDA(const int &cellOrdinal, const int &fieldOrdinal, const int &pointOrdinal0, const int &pointOrdinal1 )
+                    {
+                      const auto & fxnValue   = fxnData(cellOrdinal,pointOrdinal0,pointOrdinal1);
+                      const int pointOrdinal  = tensorEnumerationIndex(pointOrdinal0, pointOrdinal1, numPoints0);
+                      
+                      for (int d0=0; d0<spaceDim; d0++)
+                      {
+                        for (int d1=0; d1<spaceDim; d1++)
+                        {
+                          const auto & basisValue = basisValuesView(cellOrdinal, fieldOrdinal, pointOrdinal, d0, d1);
+                          auto & outValue         = valuesView(cellOrdinal, fieldOrdinal, pointOrdinal, d0, d1);
+                        
+                          outValue += basisValue * fxnValue;
+                        }
+                      }
+                    }
+                  );
+                }
+                  break;
+                case 4: // (C,P1,P2,P3): 1D2V, or similar
+                {
+                  const int numPoints0 = fxnData.extent_int(1);
+                  const int numPoints1 = fxnData.extent_int(2);
+                  const int numPoints2 = fxnData.extent_int(3);
+                  Kokkos::MDRangePolicy<DeviceExecutionSpace,Kokkos::Rank<5>> rangePolicy({0,0,0,0,0},{numCells,numFields,numPoints0,numPoints1,numPoints2});
+                  
+                  Kokkos::parallel_for(rangePolicy,
+                    KOKKOS_LAMBDA(const int &cellOrdinal, const int &fieldOrdinal, const int &pointOrdinal0, const int &pointOrdinal1, const int &pointOrdinal2 )
+                    {
+                      const auto & fxnValue   = fxnData(cellOrdinal,pointOrdinal0,pointOrdinal1,pointOrdinal2);
+                      const int pointOrdinal  = tensorEnumerationIndex(pointOrdinal0, pointOrdinal1, pointOrdinal2, numPoints0, numPoints1);
+                      
+                      for (int d0=0; d0<spaceDim; d0++)
+                      {
+                        for (int d1=0; d1<spaceDim; d1++)
+                        {
+                          const auto & basisValue = basisValuesView(cellOrdinal, fieldOrdinal, pointOrdinal, d0, d1);
+                          auto & outValue         = valuesView(cellOrdinal, fieldOrdinal, pointOrdinal, d0, d1);
+                        
+                          outValue += basisValue * fxnValue;
+                        }
+                      }
+                    }
+                  );
+                }
+                  break;
+                case 5: // (C,P1,P2,P3,P4): 1D3V, or similar
+                {
+                  const int numPoints0 = fxnData.extent_int(1);
+                  const int numPoints1 = fxnData.extent_int(2);
+                  const int numPoints2 = fxnData.extent_int(3);
+                  const int numPoints3 = fxnData.extent_int(4);
+                  Kokkos::MDRangePolicy<DeviceExecutionSpace,Kokkos::Rank<6>> rangePolicy({0,0,0,0,0,0},{numCells,numFields,numPoints0,numPoints1,numPoints2,numPoints3});
+                  
+                  Kokkos::parallel_for(rangePolicy,
+                    KOKKOS_LAMBDA(const int &cellOrdinal, const int &fieldOrdinal, const int &pointOrdinal0, const int &pointOrdinal1, const int &pointOrdinal2, const int &pointOrdinal3 )
+                    {
+                      const auto & fxnValue   = fxnData(cellOrdinal,pointOrdinal0,pointOrdinal1,pointOrdinal2,pointOrdinal3);
+                      const int pointOrdinal  = tensorEnumerationIndex(pointOrdinal0, pointOrdinal1, pointOrdinal2, pointOrdinal3, numPoints0, numPoints1, numPoints2);
+                      
+                      for (int d0=0; d0<spaceDim; d0++)
+                      {
+                        for (int d1=0; d1<spaceDim; d1++)
+                        {
+                          const auto & basisValue = basisValuesView(cellOrdinal, fieldOrdinal, pointOrdinal, d0, d1);
+                          auto & outValue         = valuesView(cellOrdinal, fieldOrdinal, pointOrdinal, d0, d1);
+                        
+                          outValue += basisValue * fxnValue;
+                        }
+                      }
+                    }
+                  );
+                }
+                  break;
+                default:
+                  TEUCHOS_TEST_FOR_EXCEPTION(true, std::invalid_argument, "Unhandled/unexpected rank");
+              }
+              
+              }
+              break;
+              
+            default:
+              TEUCHOS_TEST_FOR_EXCEPTION(true, std::invalid_argument, "Unsupported basis rank");
+          }
+          values.checkinDeviceView(true); // true: do deep copy to host
+          basisValues->checkinDeviceView(false); // false: don't deep copy to host
+          scalarFxn->checkinValuesData(fxnData);
+          continue;
+        }
       }
 
       if (ls.first->rank() == 0)
@@ -1509,9 +1962,9 @@ void TLinearTerm<Scalar>::values(Camellia::FieldContainer<Scalar> &values, int v
   fxnValueAsBasisDim = fxnValueDim;
   fxnValueAsBasisDim.insert(fxnValueDim.begin()+1, numFields); // (C, F, ...)
 
-  TEUCHOS_TEST_FOR_EXCEPTION( numCells != basisCache->getPhysicalCubaturePoints().dimension(0),
+  TEUCHOS_TEST_FOR_EXCEPTION( numCells != basisCache->getPhysicalCubaturePointsFC().dimension(0),
                               std::invalid_argument, "values FC numCells disagrees with cubature points container");
-  TEUCHOS_TEST_FOR_EXCEPTION( numPoints != basisCache->getPhysicalCubaturePoints().dimension(1),
+  TEUCHOS_TEST_FOR_EXCEPTION( numPoints != basisCache->getPhysicalCubaturePointsFC().dimension(1),
                               std::invalid_argument, "values FC numPoints disagrees with cubature points container");
   for (typename vector< TLinearSummand<Scalar> >::iterator lsIt = _summands.begin(); lsIt != _summands.end(); lsIt++)
   {

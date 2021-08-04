@@ -331,7 +331,7 @@ void Boundary::singletonBCsToImpose(vector<pair<GlobalIndexType,Scalar>> &dofInd
           {
             CellPtr cell = _mesh->getTopology()->getCell(matchingCellID);
             unsigned vertexOrdinal = cell->findSubcellOrdinal(vertexDim, vertexIndex);
-            TEUCHOS_TEST_FOR_EXCEPTION(vertexOrdinal == -1, std::invalid_argument, "Internal error: vertexOrdinal not found for cell to which it supposedly belongs");
+            TEUCHOS_TEST_FOR_EXCEPTION(vertexOrdinal == INVALID_CELLTOPOLOGY_SUBCELL_ORDINAL, std::invalid_argument, "Internal error: vertexOrdinal not found for cell to which it supposedly belongs");
             singletonsForCell[matchingCellID].insert(make_pair(trialID, vertexOrdinal));
           }
         }
@@ -531,8 +531,9 @@ void Boundary::singletonBCsToImpose(vector<pair<GlobalIndexType,Scalar>> &dofInd
               }
               else
               {
-                cout << "ERROR: global dof index for single-point BC is not locally owned.\n";
-                TEUCHOS_TEST_FOR_EXCEPTION(true, std::invalid_argument, "ERROR: global dof index for single-point BC is not locally owned");
+                // Rather than being an error, I *think* we can trust that the owner of the global dof index will be able to apply, and we can safely ignore here...
+//                cout << "ERROR: global dof index for single-point BC is not locally owned.\n";
+//                TEUCHOS_TEST_FOR_EXCEPTION(true, std::invalid_argument, "ERROR: global dof index for single-point BC is not locally owned");
               }
             }
           }

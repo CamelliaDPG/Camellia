@@ -164,6 +164,8 @@ public:
   
   CellConstraints getCellConstraints(GlobalIndexType cellID);
   LocalDofMapperPtr getDofMapper(GlobalIndexType cellID, int varIDToMap = -1, int sideOrdinalToMap = -1);
+  
+  using GlobalDofAssignment::getGlobalDofIndices; // same name, different interface (a little ugly)
   SubcellDofIndices& getGlobalDofIndices(GlobalIndexType cellID);
 //  set<GlobalIndexType> getGlobalDofIndicesForIntegralContribution(GlobalIndexType cellID, int sideOrdinal); // assuming an integral is being done over the whole mesh skeleton, returns either an empty set or the global dof indices associated with the given side, depending on whether the cell "owns" the side for the purpose of such contributions.
   // ! returns the permutation that goes from the indicated cell's view of the subcell to the constraining cell's view.
@@ -212,6 +214,7 @@ public:
   GlobalIndexType numPartitionOwnedGlobalFluxIndices() override;
   GlobalIndexType numPartitionOwnedGlobalTraceIndices() override;
 
+  using DofInterpreter::interpretLocalData;
   void interpretLocalData(GlobalIndexType cellID, const Camellia::FieldContainer<double> &localData,
                           Camellia::FieldContainer<double> &globalData,
                           Camellia::FieldContainer<GlobalIndexType> &globalDofIndices) override;

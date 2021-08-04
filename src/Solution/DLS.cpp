@@ -248,276 +248,281 @@ int DLS<Scalar>::assemble()
 //  cout << "Test map has " << testMap->getGlobalNumElements() << " global elements.\n";
 //  cout << "Trial map has " << solnMapNoBCs->getGlobalNumElements() << " global elements.\n";
 
-  TEUCHOS_TEST_FOR_EXCEPTION(true, invalid_argument, "Implementation incomplete - rewrite with MultiVectorFiller replacement!");
+  bool diagFillerFixed = false;
+  
+  TEUCHOS_TEST_FOR_EXCEPTION(!diagFillerFixed, invalid_argument, "Implementation incomplete - rewrite with MultiVectorFiller replacement!");
   // commented out diagFiller here and below because Tpetra has removed MultiVectorFiller.
   // (The DLS code here is a prototype implementation that is not currently used anywhere...)
   //MultiVectorFiller<TVector<Scalar>> diagFiller(solnMapNoBCs, numCols);
-  
-  vector< ElementTypePtr > elementTypes = mesh->elementTypes(rank);
-  
-  int cubatureEnrichmentDegree = _soln->cubatureEnrichmentDegree();
-  IPPtr ip = _soln->ip();
-  BFPtr bf = _soln->bf();
-  RHSPtr rhs = _soln->rhs();
-  if (bf == null)
+ 
+  if (diagFillerFixed)
   {
-    bf = mesh->bilinearForm();
-  }
-  
-  Epetra_Map timeMap(static_cast<int>(numProcs),static_cast<int>(indexBase),*Comm);
-  Epetra_Time timer(*Comm);
-  Epetra_Time subTimer(*Comm);
-  
-  double localStiffnessInterpretationTime = 0;
-  //  cout << "Computing local matrices" << endl;
-  for (ElementTypePtr elemTypePtr : elementTypes)
-  {
-    //cout << "Solution: elementType loop, iteration: " << elemTypeNumber++ << endl;
+    vector< ElementTypePtr > elementTypes = mesh->elementTypes(rank);
     
-    Camellia::FieldContainer<double> myPhysicalCellNodesForType = mesh->physicalCellNodes(elemTypePtr);
-    Camellia::FieldContainer<double> myCellSideParitiesForType = mesh->cellSideParities(elemTypePtr);
-    int totalCellsForType = myPhysicalCellNodesForType.dimension(0);
-    int startCellIndexForBatch = 0;
-    
-    if (totalCellsForType == 0) continue;
-    // if we get here, there is at least one, so we find a sample cellID to help us set up prototype BasisCaches:
-    
-    // determine cellIDs
-    vector<GlobalIndexType> cellIDsOfType = mesh->globalDofAssignment()->cellIDsOfElementType(rank, elemTypePtr);
-    
-    GlobalIndexType sampleCellID = cellIDsOfType[0];
-    BasisCachePtr basisCache = BasisCache::basisCacheForCell(mesh,sampleCellID,false,cubatureEnrichmentDegree);
-    BasisCachePtr ipBasisCache = BasisCache::basisCacheForCell(mesh,sampleCellID,true,cubatureEnrichmentDegree);
-    
-    DofOrderingPtr trialOrderingPtr = elemTypePtr->trialOrderPtr;
-    DofOrderingPtr testOrderingPtr = elemTypePtr->testOrderPtr;
-    int numTrialDofs = trialOrderingPtr->totalDofs();
-    int numTestDofs = testOrderingPtr->totalDofs();
-    int maxCellBatch = MAX_BATCH_SIZE_IN_BYTES / 8 / (numTestDofs*numTestDofs + numTestDofs*numTrialDofs + numTrialDofs*numTrialDofs);
-    maxCellBatch = max( maxCellBatch, MIN_BATCH_SIZE_IN_CELLS );
-    
-    Array<int> nodeDimensions, parityDimensions;
-    myPhysicalCellNodesForType.dimensions(nodeDimensions);
-    myCellSideParitiesForType.dimensions(parityDimensions);
-    
-    Camellia::FieldContainer<Scalar> localStiffness(maxCellBatch,numTrialDofs,numTestDofs);
-    Camellia::FieldContainer<Scalar> localRHSVector(maxCellBatch,numTestDofs);
-    
-    while (startCellIndexForBatch < totalCellsForType)
+    int cubatureEnrichmentDegree = _soln->cubatureEnrichmentDegree();
+    IPPtr ip = _soln->ip();
+    BFPtr bf = _soln->bf();
+    RHSPtr rhs = _soln->rhs();
+    if (bf == null)
     {
-      int cellsLeft = totalCellsForType - startCellIndexForBatch;
-      int numCells = min(maxCellBatch,cellsLeft);
-      localStiffness.resize(numCells,numTrialDofs,numTestDofs);
-      localRHSVector.resize(numCells,numTestDofs);
+      bf = mesh->bilinearForm();
+    }
+    
+    Epetra_Map timeMap(static_cast<int>(numProcs),static_cast<int>(indexBase),*Comm);
+    Epetra_Time timer(*Comm);
+    Epetra_Time subTimer(*Comm);
+    
+    double localStiffnessInterpretationTime = 0;
+    //  cout << "Computing local matrices" << endl;
+    for (ElementTypePtr elemTypePtr : elementTypes)
+    {
+      //cout << "Solution: elementType loop, iteration: " << elemTypeNumber++ << endl;
       
-      vector<GlobalIndexType> cellIDs;
-      for (int cellIndex=0; cellIndex<numCells; cellIndex++)
-      {
-        GlobalIndexType cellID = cellIDsOfType[cellIndex+startCellIndexForBatch];
-        cellIDs.push_back(cellID);
-      }
+      Camellia::FieldContainer<double> myPhysicalCellNodesForType = mesh->physicalCellNodes(elemTypePtr);
+      Camellia::FieldContainer<double> myCellSideParitiesForType = mesh->cellSideParities(elemTypePtr);
+      int totalCellsForType = myPhysicalCellNodesForType.dimension(0);
+      int startCellIndexForBatch = 0;
       
-      nodeDimensions[0] = numCells;
-      parityDimensions[0] = numCells;
-      Camellia::FieldContainer<double> physicalCellNodes(nodeDimensions,&myPhysicalCellNodesForType(startCellIndexForBatch,0,0));
-      Camellia::FieldContainer<double> cellSideParities(parityDimensions,&myCellSideParitiesForType(startCellIndexForBatch,0));
+      if (totalCellsForType == 0) continue;
+      // if we get here, there is at least one, so we find a sample cellID to help us set up prototype BasisCaches:
       
-      bool createSideCacheToo = true;
-      basisCache->setPhysicalCellNodes(physicalCellNodes,cellIDs,createSideCacheToo);
-      basisCache->setCellSideParities(cellSideParities);
-      
-      // hard-coding creating side cache for IP for now, since _ip->hasBoundaryTerms() only recognizes terms explicitly passed in as boundary terms:
-      ipBasisCache->setPhysicalCellNodes(physicalCellNodes,cellIDs,true);//_ip->hasBoundaryTerms()); // create side cache if ip has boundary values
-      ipBasisCache->setCellSideParities(cellSideParities); // I don't anticipate these being needed, though
-      
-      bf->localStiffnessMatrixAndRHS_DLS(localStiffness, localRHSVector, ip, ipBasisCache, rhs, basisCache);
-      
-      subTimer.ResetStartTime();
-      
-      Camellia::FieldContainer<GlobalIndexType> globalDofIndicesFC;
-      Array<GO> globalDofIndicesNoBCs;
-      Array<GO> globalDofIndicesBCs;
-      
-      Array<int> localStiffnessDim = vector<int>{numTrialDofs,numTestDofs};
-      Array<int> localRHSDim       = vector<int>{numTestDofs};
-      
-      Camellia::FieldContainer<Scalar> interpretedStiffness;
-      
-      Camellia::FieldContainer<Scalar> interpretedStiffnessNoBCs;
-      Camellia::FieldContainer<Scalar> interpretedStiffnessBCs;
-      
-      Array<int> dim;
       // determine cellIDs
       vector<GlobalIndexType> cellIDsOfType = mesh->globalDofAssignment()->cellIDsOfElementType(rank, elemTypePtr);
       
-      vector<GO> testGlobalIndices(numTestDofs);
-      Array<Scalar> rowValues;
+      GlobalIndexType sampleCellID = cellIDsOfType[0];
+      BasisCachePtr basisCache = BasisCache::basisCacheForCell(mesh,sampleCellID,false,cubatureEnrichmentDegree);
+      BasisCachePtr ipBasisCache = BasisCache::basisCacheForCell(mesh,sampleCellID,true,cubatureEnrichmentDegree);
       
-      for (int cellIndex=0; cellIndex<numCells; cellIndex++)
+      DofOrderingPtr trialOrderingPtr = elemTypePtr->trialOrderPtr;
+      DofOrderingPtr testOrderingPtr = elemTypePtr->testOrderPtr;
+      int numTrialDofs = trialOrderingPtr->totalDofs();
+      int numTestDofs = testOrderingPtr->totalDofs();
+      int maxCellBatch = MAX_BATCH_SIZE_IN_BYTES / 8 / (numTestDofs*numTestDofs + numTestDofs*numTrialDofs + numTrialDofs*numTrialDofs);
+      maxCellBatch = max( maxCellBatch, MIN_BATCH_SIZE_IN_CELLS );
+      
+      Array<int> nodeDimensions, parityDimensions;
+      myPhysicalCellNodesForType.dimensions(nodeDimensions);
+      myCellSideParitiesForType.dimensions(parityDimensions);
+      
+      Camellia::FieldContainer<Scalar> localStiffness(maxCellBatch,numTrialDofs,numTestDofs);
+      Camellia::FieldContainer<Scalar> localRHSVector(maxCellBatch,numTestDofs);
+      
+      while (startCellIndexForBatch < totalCellsForType)
       {
-        GlobalIndexType cellID = cellIDsOfType[cellIndex+startCellIndexForBatch];
-        Camellia::FieldContainer<Scalar> cellStiffness(localStiffnessDim,&localStiffness(cellIndex,0,0)); // shallow copy
-        Camellia::FieldContainer<Scalar> cellRHS(localRHSDim,&localRHSVector(cellIndex,0)); // shallow copy
+        int cellsLeft = totalCellsForType - startCellIndexForBatch;
+        int numCells = min(maxCellBatch,cellsLeft);
+        localStiffness.resize(numCells,numTrialDofs,numTestDofs);
+        localRHSVector.resize(numCells,numTestDofs);
         
-        elementTestOffset = elementTestIDOffsets[cellID];
-        for (int i=0; i<numTestDofs; i++)
+        vector<GlobalIndexType> cellIDs;
+        for (int cellIndex=0; cellIndex<numCells; cellIndex++)
         {
-          testGlobalIndices[i] = static_cast<GO>(i + elementTestOffset);
-          // "replace" below because we know, a priori, that this test globalID is only on this element
-          // (implied by the discontinuity of test functions)
-          _rhsVector->sumIntoGlobalValue(testGlobalIndices[i],colZero,cellRHS(i));
+          GlobalIndexType cellID = cellIDsOfType[cellIndex+startCellIndexForBatch];
+          cellIDs.push_back(cellID);
         }
         
-        dofInterpreter->interpretLocalData(cellID, cellStiffness, interpretedStiffness, globalDofIndicesFC);
+        nodeDimensions[0] = numCells;
+        parityDimensions[0] = numCells;
+        Camellia::FieldContainer<double> physicalCellNodes(nodeDimensions,&myPhysicalCellNodesForType(startCellIndexForBatch,0,0));
+        Camellia::FieldContainer<double> cellSideParities(parityDimensions,&myCellSideParitiesForType(startCellIndexForBatch,0));
         
+        bool createSideCacheToo = true;
+        basisCache->setPhysicalCellNodes(physicalCellNodes,cellIDs,createSideCacheToo);
+        basisCache->setCellSideParities(cellSideParities);
         
-        int numGlobalDofIndicesNoBCs = 0;
-        for (int i=0; i<globalDofIndicesFC.size(); i++)
+        // hard-coding creating side cache for IP for now, since _ip->hasBoundaryTerms() only recognizes terms explicitly passed in as boundary terms:
+        ipBasisCache->setPhysicalCellNodes(physicalCellNodes,cellIDs,true);//_ip->hasBoundaryTerms()); // create side cache if ip has boundary values
+        ipBasisCache->setCellSideParities(cellSideParities); // I don't anticipate these being needed, though
+        
+        bf->localStiffnessMatrixAndRHS_DLS(localStiffness, localRHSVector, ip, ipBasisCache, rhs, basisCache);
+        
+        subTimer.ResetStartTime();
+        
+        Camellia::FieldContainer<GlobalIndexType> globalDofIndicesFC;
+        Array<GO> globalDofIndicesNoBCs;
+        Array<GO> globalDofIndicesBCs;
+        
+        Array<int> localStiffnessDim = vector<int>{numTrialDofs,numTestDofs};
+        Array<int> localRHSDim       = vector<int>{numTestDofs};
+        
+        Camellia::FieldContainer<Scalar> interpretedStiffness;
+        
+        Camellia::FieldContainer<Scalar> interpretedStiffnessNoBCs;
+        Camellia::FieldContainer<Scalar> interpretedStiffnessBCs;
+        
+        Array<int> dim;
+        // determine cellIDs
+        vector<GlobalIndexType> cellIDsOfType = mesh->globalDofAssignment()->cellIDsOfElementType(rank, elemTypePtr);
+        
+        vector<GO> testGlobalIndices(numTestDofs);
+        Array<Scalar> rowValues;
+        
+        for (int cellIndex=0; cellIndex<numCells; cellIndex++)
         {
-          GlobalIndexType solnGlobalID = globalDofIndicesFC(i);
-          if (std::find(bcGlobalIndices.begin(),bcGlobalIndices.end(),solnGlobalID) == bcGlobalIndices.end())
+          GlobalIndexType cellID = cellIDsOfType[cellIndex+startCellIndexForBatch];
+          Camellia::FieldContainer<Scalar> cellStiffness(localStiffnessDim,&localStiffness(cellIndex,0,0)); // shallow copy
+          Camellia::FieldContainer<Scalar> cellRHS(localRHSDim,&localRHSVector(cellIndex,0)); // shallow copy
+          
+          elementTestOffset = elementTestIDOffsets[cellID];
+          for (int i=0; i<numTestDofs; i++)
           {
-            // then this is not an eliminated global ID
-            numGlobalDofIndicesNoBCs++;
+            testGlobalIndices[i] = static_cast<GO>(i + elementTestOffset);
+            // "replace" below because we know, a priori, that this test globalID is only on this element
+            // (implied by the discontinuity of test functions)
+            _rhsVector->sumIntoGlobalValue(testGlobalIndices[i],colZero,cellRHS(i));
           }
-        }
-        // numBCs imposed on this element:
-        int numBCs = globalDofIndicesFC.size() - numGlobalDofIndicesNoBCs;
-        
-//        if (numBCs == 0)
-//        {
-//          // no BCs on this element; can simply store everything in leastSquaresMatrix
-//          int numTrialValues = numGlobalDofIndicesNoBCs;
-//          rowValues.resize(numTrialValues); // trial space size
-//          
-//          for (int j=0; j<numTestDofs; j++)
-//          {
-//            for (int i=0; i<numTrialValues; i++)
-//            {
-//              rowValues[i] = interpretedStiffness(i,j);
-//            }
-//            GO globalTestID = static_cast<GO>(elementTestOffset + j);
-//            _dlsMatrix->insertGlobalValues(globalTestID, numTrialValues, &rowValues[0], &globalDofIndices(0));
-//          }
-//        }
-//        else
-        int bcOffset = 0, noBCOffset = 0;
-        // partition things into BC and non-BC rows
-        globalDofIndicesNoBCs.resize(numGlobalDofIndicesNoBCs);
-        interpretedStiffnessNoBCs.resize(numGlobalDofIndicesNoBCs,numTestDofs);
-        
-        interpretedStiffnessBCs.resize(numBCs, numTestDofs);
-        globalDofIndicesBCs.resize(numBCs);
-        
-        for (int i=0; i<globalDofIndicesFC.size(); i++)
-        {
-          GO solnGlobalID = globalDofIndicesFC(i);
-          if (std::find(bcGlobalIndices.begin(),bcGlobalIndices.end(),solnGlobalID) == bcGlobalIndices.end())
+          
+          dofInterpreter->interpretLocalData(cellID, cellStiffness, interpretedStiffness, globalDofIndicesFC);
+          
+          
+          int numGlobalDofIndicesNoBCs = 0;
+          for (int i=0; i<globalDofIndicesFC.size(); i++)
           {
-            // then this is not an eliminated global ID
-            globalDofIndicesNoBCs[noBCOffset] = static_cast<GO>(globalDofIndicesFC(i));
-            for (int j=0; j<numTestDofs; j++)
+            GlobalIndexType solnGlobalID = globalDofIndicesFC(i);
+            if (std::find(bcGlobalIndices.begin(),bcGlobalIndices.end(),solnGlobalID) == bcGlobalIndices.end())
             {
-              interpretedStiffnessNoBCs(noBCOffset,j) = interpretedStiffness(i,j);
+              // then this is not an eliminated global ID
+              numGlobalDofIndicesNoBCs++;
+            }
+          }
+          // numBCs imposed on this element:
+          int numBCs = globalDofIndicesFC.size() - numGlobalDofIndicesNoBCs;
+          
+  //        if (numBCs == 0)
+  //        {
+  //          // no BCs on this element; can simply store everything in leastSquaresMatrix
+  //          int numTrialValues = numGlobalDofIndicesNoBCs;
+  //          rowValues.resize(numTrialValues); // trial space size
+  //
+  //          for (int j=0; j<numTestDofs; j++)
+  //          {
+  //            for (int i=0; i<numTrialValues; i++)
+  //            {
+  //              rowValues[i] = interpretedStiffness(i,j);
+  //            }
+  //            GO globalTestID = static_cast<GO>(elementTestOffset + j);
+  //            _dlsMatrix->insertGlobalValues(globalTestID, numTrialValues, &rowValues[0], &globalDofIndices(0));
+  //          }
+  //        }
+  //        else
+          int bcOffset = 0, noBCOffset = 0;
+          // partition things into BC and non-BC rows
+          globalDofIndicesNoBCs.resize(numGlobalDofIndicesNoBCs);
+          interpretedStiffnessNoBCs.resize(numGlobalDofIndicesNoBCs,numTestDofs);
+          
+          interpretedStiffnessBCs.resize(numBCs, numTestDofs);
+          globalDofIndicesBCs.resize(numBCs);
+          
+          for (int i=0; i<globalDofIndicesFC.size(); i++)
+          {
+            GO solnGlobalID = globalDofIndicesFC(i);
+            if (std::find(bcGlobalIndices.begin(),bcGlobalIndices.end(),solnGlobalID) == bcGlobalIndices.end())
+            {
+              // then this is not an eliminated global ID
+              globalDofIndicesNoBCs[noBCOffset] = static_cast<GO>(globalDofIndicesFC(i));
+              for (int j=0; j<numTestDofs; j++)
+              {
+                interpretedStiffnessNoBCs(noBCOffset,j) = interpretedStiffness(i,j);
+              }
+              
+              noBCOffset++;
+            }
+            else
+            {
+              globalDofIndicesBCs[bcOffset] = static_cast<GO>(globalDofIndicesFC(i));
+              for (int j=0; j<numTestDofs; j++)
+              {
+                interpretedStiffnessBCs(bcOffset,j) = interpretedStiffness(i,j);
+              }
+              
+              bcOffset++;
+            }
+          }
+          
+          // insert into leastSquaresMatrix
+          rowValues.resize(numGlobalDofIndicesNoBCs);
+          for (int j=0; j<numTestDofs; j++)
+          {
+            for (int i=0; i<rowValues.size(); i++)
+            {
+              rowValues[i] = interpretedStiffnessNoBCs(i,j);
             }
             
-            noBCOffset++;
-          }
-          else
-          {
-            globalDofIndicesBCs[bcOffset] = static_cast<GO>(globalDofIndicesFC(i));
-            for (int j=0; j<numTestDofs; j++)
+            GO globalTestID = elementTestOffset + j;
+            _dlsMatrix->insertGlobalValues(globalTestID, globalDofIndicesNoBCs, rowValues);
+            
+            for (int i=0; i<rowValues.size(); i++)
             {
-              interpretedStiffnessBCs(bcOffset,j) = interpretedStiffness(i,j);
+              rowValues[i] = rowValues[i] * rowValues[i];
+  //            cout << "adding " << rowValues[i] << " to diagonal value with global index " << globalDofIndicesNoBCs[i] << endl;
+            }
+  //          diagFiller.sumIntoGlobalValues(globalDofIndicesNoBCs, 0, rowValues);
+          }
+          
+          // insert into bcImpositionMatrix
+          rowValues.resize(numBCs);
+          for (int j=0; j<numTestDofs; j++)
+          {
+            for (int i=0; i<rowValues.size(); i++)
+            {
+              rowValues[i] = interpretedStiffnessBCs(i,j);
             }
             
-            bcOffset++;
+            GlobalIndexType globalTestID = elementTestOffset + j;
+            bcImpositionMatrix.insertGlobalValues(globalTestID, globalDofIndicesBCs, rowValues);
           }
         }
+        localStiffnessInterpretationTime += subTimer.ElapsedTime();
         
-        // insert into leastSquaresMatrix
-        rowValues.resize(numGlobalDofIndicesNoBCs);
-        for (int j=0; j<numTestDofs; j++)
-        {
-          for (int i=0; i<rowValues.size(); i++)
-          {
-            rowValues[i] = interpretedStiffnessNoBCs(i,j);
-          }
-          
-          GO globalTestID = elementTestOffset + j;
-          _dlsMatrix->insertGlobalValues(globalTestID, globalDofIndicesNoBCs, rowValues);
-          
-          for (int i=0; i<rowValues.size(); i++)
-          {
-            rowValues[i] = rowValues[i] * rowValues[i];
-//            cout << "adding " << rowValues[i] << " to diagonal value with global index " << globalDofIndicesNoBCs[i] << endl;
-          }
-//          diagFiller.sumIntoGlobalValues(globalDofIndicesNoBCs, 0, rowValues);
-        }
-        
-        // insert into bcImpositionMatrix
-        rowValues.resize(numBCs);
-        for (int j=0; j<numTestDofs; j++)
-        {
-          for (int i=0; i<rowValues.size(); i++)
-          {
-            rowValues[i] = interpretedStiffnessBCs(i,j);
-          }
-          
-          GlobalIndexType globalTestID = elementTestOffset + j;
-          bcImpositionMatrix.insertGlobalValues(globalTestID, globalDofIndicesBCs, rowValues);
-        }
+        startCellIndexForBatch += numCells;
       }
-      localStiffnessInterpretationTime += subTimer.ElapsedTime();
-      
-      startCellIndexForBatch += numCells;
     }
-  }
 
-  // adjust RHS to account for the BCs we've eliminated
-  // compute _rhsVector -= bcImposition * bcValues
-  bcImpositionMatrix.fillComplete();
-  
-  // It appears that apply(X,Y) requires X to have a map that matches the domain map of
-  // bcImpositionMatrix, and Y to have a map that matches the range map.  It's hard to believe
-  // that all of the following is actually necessary (or maybe there is something I can do better
-  // in terms of setting up the various maps in the first place -- maybe it would be better to expand
-  // bcMap beyond the indices that match BCs, for instance).
-  TVector<Scalar> bcValues_domainMap(bcImpositionMatrix.getDomainMap(),1);
-  Tpetra::Import<LO,GO> domainMapImporter(bcMap, bcImpositionMatrix.getDomainMap());
-  bcValues_domainMap.doImport(bcValues, domainMapImporter, INSERT);
-  TVector<Scalar> bcApplication_rangeMap(bcImpositionMatrix.getRangeMap(),1);
-  bcImpositionMatrix.apply(bcValues_domainMap,bcApplication_rangeMap,NO_TRANS);
-  TVector<Scalar> bcApplication_rhsMap(_rhsVector->getMap(),1);
-  Tpetra::Import<LO,GO> rhsMapImporter(bcApplication_rangeMap.getMap(), bcApplication_rhsMap.getMap());
-  bcApplication_rhsMap.doImport(bcApplication_rangeMap, rhsMapImporter, INSERT);
-  _rhsVector->update(-1.0, bcApplication_rhsMap, 1.0);
-  
-  _dlsMatrix->fillComplete(solnMapNoBCs,testMap);
-//  cout << "_dlsMatrix dimensions: " << _dlsMatrix->getGlobalNumRows() << " x " << _dlsMatrix->getGlobalNumCols() << endl;
-//  cout << "_dlsMatrix column Map, global element count: " << _dlsMatrix->getColMap()->getGlobalNumElements() << endl;
-//  cout << "_dlsMatrix domain Map, global element count: " << _dlsMatrix->getDomainMap()->getGlobalNumElements() << endl;
-//  cout << "_dlsMatrix row Map, global element count: " << _dlsMatrix->getRowMap()->getGlobalNumElements() << endl;
-//  cout << "_dlsMatrix range Map, global element count: " << _dlsMatrix->getRangeMap()->getGlobalNumElements() << endl;
-  
-  _diag_sqrt_inverse = rcp( new Vector<Scalar>(solnMapNoBCs) );
-//  diagFiller.globalAssemble(*_diag_sqrt_inverse);
-  std::cout << "WARNING: due to Tpetra's replacement of MultiVectorFiller, this code is at present incomplete.  Need to adopt Tpetra_FEMultiVector.\n";
-  inverseSquareRoot(_diag_sqrt_inverse);
-  
-  RCP<Vector<Scalar,LO,GO>> matrixScalingVector = rcp( new Vector<Scalar,LO,GO>(_dlsMatrix->getDomainMap()) );
+    // adjust RHS to account for the BCs we've eliminated
+    // compute _rhsVector -= bcImposition * bcValues
+    bcImpositionMatrix.fillComplete();
+    
+    // It appears that apply(X,Y) requires X to have a map that matches the domain map of
+    // bcImpositionMatrix, and Y to have a map that matches the range map.  It's hard to believe
+    // that all of the following is actually necessary (or maybe there is something I can do better
+    // in terms of setting up the various maps in the first place -- maybe it would be better to expand
+    // bcMap beyond the indices that match BCs, for instance).
+    TVector<Scalar> bcValues_domainMap(bcImpositionMatrix.getDomainMap(),1);
+    Tpetra::Import<LO,GO> domainMapImporter(bcMap, bcImpositionMatrix.getDomainMap());
+    bcValues_domainMap.doImport(bcValues, domainMapImporter, INSERT);
+    TVector<Scalar> bcApplication_rangeMap(bcImpositionMatrix.getRangeMap(),1);
+    bcImpositionMatrix.apply(bcValues_domainMap,bcApplication_rangeMap,NO_TRANS);
+    TVector<Scalar> bcApplication_rhsMap(_rhsVector->getMap(),1);
+    Tpetra::Import<LO,GO> rhsMapImporter(bcApplication_rangeMap.getMap(), bcApplication_rhsMap.getMap());
+    bcApplication_rhsMap.doImport(bcApplication_rangeMap, rhsMapImporter, INSERT);
+    _rhsVector->update(-1.0, bcApplication_rhsMap, 1.0);
+    
+    _dlsMatrix->fillComplete(solnMapNoBCs,testMap);
+  //  cout << "_dlsMatrix dimensions: " << _dlsMatrix->getGlobalNumRows() << " x " << _dlsMatrix->getGlobalNumCols() << endl;
+  //  cout << "_dlsMatrix column Map, global element count: " << _dlsMatrix->getColMap()->getGlobalNumElements() << endl;
+  //  cout << "_dlsMatrix domain Map, global element count: " << _dlsMatrix->getDomainMap()->getGlobalNumElements() << endl;
+  //  cout << "_dlsMatrix row Map, global element count: " << _dlsMatrix->getRowMap()->getGlobalNumElements() << endl;
+  //  cout << "_dlsMatrix range Map, global element count: " << _dlsMatrix->getRangeMap()->getGlobalNumElements() << endl;
+    
+    _diag_sqrt_inverse = rcp( new Vector<Scalar>(solnMapNoBCs) );
+  //  diagFiller.globalAssemble(*_diag_sqrt_inverse);
+    std::cout << "WARNING: due to Tpetra's replacement of MultiVectorFiller, this code is at present incomplete.  Need to adopt Tpetra_FEMultiVector.\n";
+    inverseSquareRoot(_diag_sqrt_inverse);
+    
+    RCP<Vector<Scalar,LO,GO>> matrixScalingVector = rcp( new Vector<Scalar,LO,GO>(_dlsMatrix->getDomainMap()) );
 
-  Tpetra::Import<LO,GO> scalingImporter(_diag_sqrt_inverse->getMap(), matrixScalingVector->getMap());
-  matrixScalingVector->doImport(*_diag_sqrt_inverse, scalingImporter, INSERT);
-  
-  _dlsMatrix->rightScale(*matrixScalingVector);
+    Tpetra::Import<LO,GO> scalingImporter(_diag_sqrt_inverse->getMap(), matrixScalingVector->getMap());
+    matrixScalingVector->doImport(*_diag_sqrt_inverse, scalingImporter, INSERT);
+    
+    _dlsMatrix->rightScale(*matrixScalingVector);
 
-  // Commented out because I'm pretty sure this should be redundant with the (identical) code above
-//  // now that we've scaled the DLS matrix, let's use diagFiller to export to _diag_sqrt_inverse constructed with
-//  // the map we'll want to use to scale the solution:
-//  _diag_sqrt_inverse = rcp( new Vector<Scalar,LO,GO>(solnMapNoBCs) );
-//  diagFiller.globalAssemble(*_diag_sqrt_inverse);
-//  inverseSquareRoot(_diag_sqrt_inverse);
+    // Commented out because I'm pretty sure this should be redundant with the (identical) code above
+  //  // now that we've scaled the DLS matrix, let's use diagFiller to export to _diag_sqrt_inverse constructed with
+  //  // the map we'll want to use to scale the solution:
+  //  _diag_sqrt_inverse = rcp( new Vector<Scalar,LO,GO>(solnMapNoBCs) );
+  //  diagFiller.globalAssemble(*_diag_sqrt_inverse);
+  //  inverseSquareRoot(_diag_sqrt_inverse);
+  } // if (diagFillerFixed)
 
   return 0; // success
 }

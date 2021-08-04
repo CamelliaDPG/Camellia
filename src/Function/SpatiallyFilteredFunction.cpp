@@ -75,11 +75,14 @@ void SpatiallyFilteredFunction<Scalar>::values(DeviceView<Scalar> &values, Value
   int numCells = values.extent_int(0);
   int numPoints = values.extent_int(1);
   
-  auto &points = basisCache->getPhysicalCubaturePoints();
-  auto pointsView = points.checkoutDeviceView();
+  auto &points = basisCache->getPhysicalCubaturePointsFC();
   
-  DeviceView<bool> filterMatches = SharedScratchStorage<bool>::sharedScratchStorage().checkoutScratchStorage({numCells, numPoints});
-  _sf->matchesPoints(filterMatches, pointsView);
+  DeviceView<bool> filterMatches = SharedScratchStorage<bool>::sharedScratchStorage().checkoutScratchStorage({numCells, numPoints}, "SpatiallyFilteredFunction::values(): filterMatches");
+  {
+    auto pointsView = points.checkoutDeviceView();
+    _sf->matchesPoints(filterMatches, pointsView);
+    points.checkinDeviceView(true);
+  }
   
   Kokkos::fence(); // ensure matchesPoints has completed prior to reducing over filterMatches
   
@@ -92,7 +95,7 @@ void SpatiallyFilteredFunction<Scalar>::values(DeviceView<Scalar> &values, Value
     localSum |= filterMatches(i,j);
   },somePointMatches);
 
-  DeviceView<Scalar> functionValues = SharedScratchStorage<Scalar>::sharedScratchStorage().checkoutScratchStorageMatchingDeviceView(values);
+  DeviceView<Scalar> functionValues = SharedScratchStorage<Scalar>::sharedScratchStorage().checkoutScratchStorageMatchingDeviceView(values, "SpatiallyFilteredFunction::values(): functionValues");
   if (somePointMatches)
   {
     _f->values(functionValues,ASSIGN,basisCache);
@@ -128,7 +131,6 @@ void SpatiallyFilteredFunction<Scalar>::values(DeviceView<Scalar> &values, Value
   }
   
   Kokkos::fence(); // ensure we're done with the containers before we return them
-  points.checkinDeviceView(true);
   SharedScratchStorage<bool>::sharedScratchStorage().checkinScratchStorage(filterMatches);
   SharedScratchStorage<Scalar>::sharedScratchStorage().checkinScratchStorage(functionValues);
 }

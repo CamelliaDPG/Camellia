@@ -25,10 +25,12 @@ class PolarizedFunction : public TFunction<Scalar>   // takes a 2D Function of x
   // i.e. to implement f(r,theta) = r sin theta
   // pass in a Function f(x,y) = x sin y.
   // Given the implementation, it is important that f depend *only* on x and y, and not on the mesh, etc.
-  // (the only method in BasisCache that f may call is getPhysicalCubaturePoints())
+  // (the only method in BasisCache that f may call is getPhysicalCubaturePointsFC())
   TFunctionPtr<Scalar> _f;
 public:
   PolarizedFunction( TFunctionPtr<Scalar> f_of_xAsR_yAsTheta );
+  
+  using TFunction<Scalar>::values;
   void values(typename Camellia::FieldContainer<Scalar>::DeviceView &values, ValueModificationType modType, BasisCachePtr basisCache) override;
 
   TFunctionPtr<Scalar> dx() override;
@@ -41,6 +43,7 @@ public:
 
   virtual string displayString() override; // for PolarizedFunction, this should be _f->displayString() + "(r,theta)";
 
+  using TFunction<double>::isZero;
   bool isZero() override;
 
   static Teuchos::RCP<PolarizedFunction<double> > r();

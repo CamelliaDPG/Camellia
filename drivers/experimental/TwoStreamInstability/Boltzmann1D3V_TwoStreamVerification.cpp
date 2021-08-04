@@ -39,12 +39,14 @@ public:
   :
   _u(u),
   _sigma(sigma),
-  _n(n)
+  _n(n),
+  TFunction<double>("Maxwellian1V",0, VARIES_IN_DIMENSION_1) // varies in v_x
   {}
   
+  using TFunction<double>::values;
   void values(FieldContainer<double> &values, BasisCachePtr basisCache) override
   {
-    auto & phaseSpacePoints = basisCache->getPhysicalCubaturePoints();
+    auto & phaseSpacePoints = basisCache->getPhysicalCubaturePointsFC();
     const int numCells  = phaseSpacePoints.dimension(0);
     const int numPoints = phaseSpacePoints.dimension(1);
     
@@ -58,6 +60,51 @@ public:
         values(cellOrdinal,pointOrdinal) = weight * std::exp(exponent);
       }
     }
+  }
+  
+  void values(Intrepid2::Data<double, Camellia::DeviceType> data, BasisCachePtr basisCache) override
+  {
+    // when running in 1D3V, we require that data have shape (C,P0,P1,P2,P3), where P0 is the x dimension, and P1, P2, P3 are for v_x, v_z, v_y
+    // it should be the case that the underlying view has shape (C,P1), whether we are in 1D1V or 1D3V.
+    
+    const auto & physicalCubaturePoints = basisCache->getPhysicalCubaturePoints();
+    
+    int vxTensorComponentOrdinal;
+    int vxPointDimension;
+    if (physicalCubaturePoints.numTensorComponents() >= 2)
+    {
+      vxTensorComponentOrdinal = 1;
+      vxPointDimension = 0;
+    }
+    else
+    {
+      // trivial tensor product structure
+      vxTensorComponentOrdinal = 0;
+      const int numPhysicalDimensions = basisCache->cellTopology()->getBaseTopology()->getDimension();
+      vxPointDimension = numPhysicalDimensions; // vx dimension
+    }
+    
+    auto vxPoints = basisCache->getPhysicalCubaturePoints().getTensorComponent(vxTensorComponentOrdinal);
+    auto underlyingData = data.getUnderlyingView<2>(); // (C,P1)
+    
+    using ExecutionSpace = Camellia::DeviceExecutionSpace;
+    Kokkos::MDRangePolicy<ExecutionSpace,Kokkos::Rank<2>> policy({0,0},{underlyingData.extent(0),underlyingData.extent(1)});
+    
+    // avoid implicit references to this
+    double u = _u;
+    double sigma = _sigma;
+    
+    const double weight = _n / (sqrt(2. * M_PI) * _sigma);
+    
+    Kokkos::parallel_for("compute Maxwellian1V", policy,
+    KOKKOS_LAMBDA (const int &cellOrdinal, const int &vxPointOrdinal) {
+      auto & result = underlyingData(cellOrdinal, vxPointOrdinal);
+      
+      const auto & vx = vxPoints(cellOrdinal,vxPointOrdinal,vxPointDimension);
+      
+      const double exponent = - 0.5 * (vx - u) * (vx - u) / (sigma * sigma);
+      result = weight * std::exp(exponent);
+    });
   }
   
   FunctionPtr di(int i) override
@@ -74,6 +121,16 @@ public:
       FunctionPtr w = - (vx - _u) / (_sigma * _sigma); // chain rule: derivative of the exponent
       return w * f;
     }
+  }
+  
+  std::string displayString() override
+  {
+    return "[Maxwellian]";
+//    std::ostringstream stringStream;
+//    const double weight = _n / (sqrt(2. * M_PI) * _sigma);
+//    stringStream << weight << " e^[" << "(vx - " << _u << ")^2 / " << 2 * _sigma * _sigma << "]";
+//    
+//    return stringStream.str();
   }
 };
 
@@ -258,10 +315,12 @@ double computeL2Difference(SolutionMomentFunction &f1D3V_xvx, SolutionPtr f1D1V_
   }
   Kokkos::deep_copy(cellMeasures, cellMeasuresHost);
   Kokkos::deep_copy(receivedBasisCoefficients, receivedBasisCoefficientsHost);
+  Kokkos::deep_copy(solnBasisCoefficients, solnBasisCoefficientsHost);
   
   auto squaredCellDiffL2Norms = SharedScratchStorage<double>::sharedScratchStorage().checkoutScratchStorage(cellDims, "squaredCellDiffL2Norms");
   auto squaredCellSolnL2Norms = SharedScratchStorage<double>::sharedScratchStorage().checkoutScratchStorage(cellDims, "squaredCellSolnL2Norms");
   
+  auto basisValuesView = basisValues.checkoutDeviceView();
   // the following assumes that the VALUE transformation of basis is the identity; this is true for H^1, but not for H(div), etc.
   Kokkos::parallel_for(policy, KOKKOS_LAMBDA(const int cellOrdinal)
   {
@@ -277,7 +336,7 @@ double computeL2Difference(SolutionMomentFunction &f1D3V_xvx, SolutionPtr f1D1V_
       {
         const double & basisCoefficientSoln = solnBasisCoefficients(cellOrdinal,i);
         const double   basisCoefficientDiff = receivedBasisCoefficients(cellOrdinal,i) - basisCoefficientSoln;
-        const double & basisPointValue = basisValues(i,pointOrdinal);
+        const double & basisPointValue = basisValuesView(i,pointOrdinal);
         diffFxnValue += basisCoefficientDiff * basisPointValue;
         solnFxnValue += basisCoefficientSoln * basisPointValue;
       }
@@ -288,6 +347,7 @@ double computeL2Difference(SolutionMomentFunction &f1D3V_xvx, SolutionPtr f1D1V_
     squaredCellSolnL2Norms(cellOrdinal) = refSolnIntegral * cellMeasures(cellOrdinal);
   });
   
+  basisValues.checkinDeviceView(false);
   Kokkos::fence();
   
   double rankLocalSumDiff;
@@ -325,6 +385,7 @@ int main(int argc, char *argv[])
   
   mpiSession.barrier();
   
+  bool success = true;
   {
     bool implicit = true;
     double k_x    = 0.2; // wavelength
@@ -497,7 +558,7 @@ int main(int argc, char *argv[])
     boltzmannSS1D1V << problemPrefix <<"Boltzmann1D1V" << suffix.str();
     
     std::ostringstream boltzmannSS1D3V;
-    boltzmannSS1D1V << problemPrefix <<"Boltzmann1D3V" << suffix.str();
+    boltzmannSS1D3V << problemPrefix <<"Boltzmann1D3V" << suffix.str();
     
     std::ostringstream gaussSS1D1V;
     gaussSS1D1V << problemPrefix << "Gauss1D1V" << suffix.str();
@@ -508,7 +569,7 @@ int main(int argc, char *argv[])
   //  std::cout << "boltzmann name: " << boltzmannSS.str() << std::endl;
   //  std::cout << "gauss name: " << gaussSS.str() << std::endl;
     
-    const std::string directoryPath = "/tmp";
+    const std::string directoryPath = ".";
     
     HDF5Exporter boltzmannViz1D1V(form1D1V.boltzmannMesh(), boltzmannSS1D1V.str(), directoryPath);
     
@@ -536,9 +597,8 @@ int main(int argc, char *argv[])
     double t = 0.0;
     gaussViz1D3V.exportSolution(form1D3V.gaussSolution(),t);
     gaussViz1D1V.exportSolution(form1D1V.gaussSolution(),t);
-    // viz in 4D not supported…  (We could try doing something with 3D slices…)
     boltzmannViz1D1V.exportSolution(form1D1V.boltzmannSolution(),t);
-  //  boltzmannViz.exportSolution(form.boltzmannSolution(),t);
+    phaseSpaceViz1D3V.exportTimeStep(t);
     
     FunctionPtr E_soln1D3V     = Function::solution(form1D3V.E(), form1D3V.gaussSolution());
     FunctionPtr E_squared1D3V  = E_soln1D3V * E_soln1D3V;
@@ -575,7 +635,6 @@ int main(int argc, char *argv[])
     MeshPtr subMesh1D3V_xvx = MeshFactory::minRuleMesh(subMeshTopo1D3V_xvx, form1D3V.boltzmannMesh()->bilinearForm(), H1Order, delta_k, form1D3V.boltzmannMesh()->Comm(), false);
     SolutionMomentFunction f_xvx(form1D3V.boltzmannSolution(), form1D3V.f(), 0, subMesh1D3V_xvx, 0); // 0: first extruded dimension is not integrated
     
-    bool success = true;
     double maxDiff = 0.0;
     for (int timeStepNumber=1; timeStepNumber<=numTimeSteps; timeStepNumber++)
     {
@@ -646,5 +705,8 @@ int main(int argc, char *argv[])
   Camellia::finalize(printAllocationReport);
   Kokkos::finalize();
   
-  return 0;
+  if (success)
+    return 0;
+  else
+    return -1;
 }

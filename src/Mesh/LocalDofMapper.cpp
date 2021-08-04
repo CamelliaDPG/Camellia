@@ -603,7 +603,7 @@ set<GlobalIndexType> LocalDofMapper::globalIndicesForSubcell(int varID, unsigned
     bool assertContainment = false;
     unsigned sideSubcellOrdinal = CamelliaCellTools::subcellReverseOrdinalMap(volumeTopo, sideDim, sideOrdinal, d, subcord,
                                                                               assertContainment);
-    if (sideSubcellOrdinal == -1) continue; // subcell not found
+    if (sideSubcellOrdinal == INVALID_CELLTOPOLOGY_SUBCELL_ORDINAL) continue; // subcell not found
     
     for (auto entry : _sideMaps[sideOrdinal])
     {
@@ -839,7 +839,7 @@ Camellia::FieldContainer<double> LocalDofMapper::fitLocalCoefficients(const Came
   //    TEUCHOS_TEST_FOR_EXCEPTION(true, std::invalid_argument, "ERROR: for the present, fitLocalCoefficients is only supported when _varIDToMap has been specified.\n");
   //  }
   
-  if ( (_volumeMaps.find(_varIDToMap) != _volumeMaps.end()) && (_sideOrdinalToMap != VOLUME_INTERIOR_SIDE_ORDINAL) )
+  if ( (_volumeMaps.find(_varIDToMap) != _volumeMaps.end()) && (_sideOrdinalToMap != VOLUME_INTERIOR_SIDE_INDEX) )
   {
     // then we're mapping a partial basis.  As it stands presently,
     
@@ -959,7 +959,7 @@ void LocalDofMapper::mapLocalDataVector(const Camellia::FieldContainer<double> &
   }
   else if (_volumeMaps.find(_varIDToMap) != _volumeMaps.end())
   {
-    if (_sideOrdinalToMap == VOLUME_INTERIOR_SIDE_ORDINAL)
+    if (_sideOrdinalToMap == VOLUME_INTERIOR_SIDE_INDEX)
       dofCount = _dofOrdering->getBasis(_varIDToMap)->getCardinality();
     else
       dofCount = _dofOrdering->getBasis(_varIDToMap)->dofOrdinalsForSide(_sideOrdinalToMap).size();
@@ -986,10 +986,10 @@ void LocalDofMapper::mapLocalDataVector(const Camellia::FieldContainer<double> &
     if (skipVar) continue;
     BasisMap basisMap = volumeMapIt->second;
     // new 2-12-16: respect _sideOrdinalToMap for volume variables, too (important for imposing BCs on volume variables)
-    if ((_sideOrdinalToMap == -1) || (_sideOrdinalToMap == VOLUME_INTERIOR_SIDE_ORDINAL))
+    if ((_sideOrdinalToMap == -1) || (_sideOrdinalToMap == VOLUME_INTERIOR_SIDE_INDEX))
     {
       // mapping all sides
-      int volumeSideIndex = VOLUME_INTERIOR_SIDE_ORDINAL;
+      int volumeSideIndex = VOLUME_INTERIOR_SIDE_INDEX;
       addSubBasisMapVectorContribution(varID, volumeSideIndex, basisMap, localData, mappedDataVector, fittableGlobalDofsOnly);
     }
     else
@@ -1064,7 +1064,7 @@ Camellia::FieldContainer<double> LocalDofMapper::mapLocalData(const Camellia::Fi
   }
   else if (_volumeMaps.find(_varIDToMap) != _volumeMaps.end())
   {
-    if (_sideOrdinalToMap == VOLUME_INTERIOR_SIDE_ORDINAL)
+    if (_sideOrdinalToMap == VOLUME_INTERIOR_SIDE_INDEX)
       dofCount = _dofOrdering->getBasis(_varIDToMap)->getCardinality();
     else
       dofCount = _dofOrdering->getBasis(_varIDToMap)->dofOrdinalsForSide(_sideOrdinalToMap).size();
@@ -1225,7 +1225,7 @@ void LocalDofMapper::mapLocalDataVolume(const Camellia::FieldContainer<double> &
     bool skipVar = (_varIDToMap != -1) && (varID != _varIDToMap);
     if (skipVar) continue;
     BasisMap basisMap = volumeMapIt->second;
-    int volumeSideIndex = VOLUME_INTERIOR_SIDE_ORDINAL;
+    int volumeSideIndex = VOLUME_INTERIOR_SIDE_INDEX;
     addSubBasisMapVectorContribution(varID, volumeSideIndex, basisMap, localData, mappedData, fittableGlobalDofsOnly);
   }
 }
@@ -1264,7 +1264,7 @@ Camellia::FieldContainer<double> LocalDofMapper::mapGlobalCoefficients(const Cam
     bool skipVar = (_varIDToMap != -1) && (varID != _varIDToMap);
     if (skipVar) continue;
     BasisMap* basisMap = &volumeMapIt->second;
-    int volumeSideOrdinal = VOLUME_INTERIOR_SIDE_ORDINAL;
+    int volumeSideOrdinal = VOLUME_INTERIOR_SIDE_INDEX;
     addReverseSubBasisMapVectorContribution(varID, volumeSideOrdinal, *basisMap, globalCoefficients, localCoefficients);
   }
   
@@ -1310,7 +1310,7 @@ void LocalDofMapper::mapGlobalCoefficients(const std::map<GlobalIndexType,double
     bool skipVar = (_varIDToMap != -1) && (varID != _varIDToMap);
     if (skipVar) continue;
     BasisMap* basisMap = &entry->second;
-    int volumeSideOrdinal = VOLUME_INTERIOR_SIDE_ORDINAL;
+    int volumeSideOrdinal = VOLUME_INTERIOR_SIDE_INDEX;
     addReverseSubBasisMapVectorContribution(varID, volumeSideOrdinal, *basisMap, globalCoefficients, localCoefficients);
   }
   

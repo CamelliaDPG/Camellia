@@ -15,8 +15,6 @@
 #include "MeshTopology.h"
 #include "MeshTransformationFunction.h"
 
-#include "Intrepid_CellTools.hpp"
-
 #include <algorithm>
 
 using namespace Camellia;
@@ -185,11 +183,11 @@ map<string, long long> MeshTopology::approximateMemoryCosts() const
 
   // calibrate by computing some sizes
   map<int, int> emptyMap;
-  set<int> emptySet;
+//  set<int> emptySet;
   vector<int> emptyVector;
 
   int MAP_OVERHEAD = sizeof(emptyMap);
-  int SET_OVERHEAD = sizeof(emptySet);
+//  int SET_OVERHEAD = sizeof(emptySet);
   int VECTOR_OVERHEAD = sizeof(emptyVector);
 
   int MAP_NODE_OVERHEAD = 32; // according to http://info.prelert.com/blog/stl-container-memory-usage, this appears to be basically universal
@@ -649,7 +647,7 @@ void MeshTopology::addCellForSide(IndexType cellIndex, unsigned int sideOrdinal,
 //      }
 //    }
 //  }
-  TEUCHOS_TEST_FOR_EXCEPT(sideEntityIndex == -1);
+  TEUCHOS_TEST_FOR_EXCEPT(sideEntityIndex == MESHTOPOLOGY_INVALID_ENTITY_INDEX);
   
   if (_cellsForSideEntities.size() <= sideEntityIndex)
   {
@@ -663,26 +661,26 @@ void MeshTopology::addCellForSide(IndexType cellIndex, unsigned int sideOrdinal,
   }
   else
   {
-    pair< unsigned, unsigned > cell1 = _cellsForSideEntities[sideEntityIndex].first;
-    pair< unsigned, unsigned > cell2 = _cellsForSideEntities[sideEntityIndex].second;
+    auto cell1 = _cellsForSideEntities[sideEntityIndex].first;
+    auto cell2 = _cellsForSideEntities[sideEntityIndex].second;
 
     CellPtr cellToAdd = getCell(cellIndex);
-    unsigned parentCellIndex;
+    IndexType parentCellIndex;
     if ( cellToAdd->getParent().get() == NULL)
     {
-      parentCellIndex = -1;
+      parentCellIndex = MESHTOPOLOGY_INVALID_CELL_INDEX;
     }
     else
     {
       parentCellIndex = cellToAdd->getParent()->cellIndex();
     }
-    if ((cell1.first == -1) || (parentCellIndex == cell1.first))
+    if ((cell1.first == MESHTOPOLOGY_INVALID_CELL_INDEX) || (parentCellIndex == cell1.first))
     {
       // then replace cell1's entry with the new one
       cell1.first = cellIndex;
       cell1.second = sideOrdinal;
     }
-    else if ((cell2.first == -1) || (parentCellIndex == cell2.first))
+    else if ((cell2.first == MESHTOPOLOGY_INVALID_CELL_INDEX) || (parentCellIndex == cell2.first))
     {
       cell2.first = cellIndex;
       cell2.second = sideOrdinal;
@@ -839,11 +837,11 @@ IndexType MeshTopology::addEntity(CellTopoPtr entityTopo, const vector<IndexType
     TEUCHOS_TEST_FOR_EXCEPTION(true, std::invalid_argument, "Entities may not have repeated vertices");
   }
   unsigned d  = entityTopo->getDimension();
-  unsigned entityIndex = getEntityIndex(d, nodeSet);
+  IndexType entityIndex = getEntityIndex(d, nodeSet);
 
   vector<IndexType> sortedVertices(nodeSet.begin(),nodeSet.end());
 
-  if ( entityIndex == -1 )
+  if ( entityIndex == MESHTOPOLOGY_INVALID_ENTITY_INDEX )
   {
     // new entity
     entityIndex = _entities[d].size();
@@ -1411,7 +1409,7 @@ EntitySetPtr MeshTopology::getEntitySet(EntityHandle entitySetHandle) const
 
 EntitySetPtr MeshTopology::getEntitySetInitialTime() const
 {
-  if (_initialTimeEntityHandle == -1) return Teuchos::null;
+  if (_initialTimeEntityHandle == INVALID_ENTITY_HANDLE) return Teuchos::null;
   return getEntitySet(_initialTimeEntityHandle);
 }
 
@@ -1630,7 +1628,7 @@ bool MeshTopology::entityHasChildren(unsigned int d, IndexType entityIndex) cons
     ConstMeshTopologyPtr thisPtr = Teuchos::rcp(this,false);
     return getCell(entityIndex)->isParent(thisPtr);
   }
-  TEUCHOS_TEST_FOR_EXCEPTION((d < 0) || (d >= _childEntities.size()), std::invalid_argument, "d is out of bounds");
+  TEUCHOS_TEST_FOR_EXCEPTION(d >= _childEntities.size(), std::invalid_argument, "d is out of bounds");
   auto foundChildEntitiesEntry = _childEntities[d].find(entityIndex);
   if (foundChildEntitiesEntry == _childEntities[d].end()) return false;
   return foundChildEntitiesEntry->second.size() > 0;
@@ -1655,7 +1653,7 @@ bool MeshTopology::entityIsAncestor(unsigned d, IndexType ancestor, IndexType de
   while (parentIt != _parentEntities[d].end())
   {
     vector< pair<IndexType, unsigned> > parents = parentIt->second;
-    unsigned parentEntityIndex = -1;
+    IndexType parentEntityIndex = MESHTOPOLOGY_INVALID_ENTITY_INDEX;
     for (vector< pair<IndexType, unsigned> >::iterator entryIt = parents.begin(); entryIt != parents.end(); entryIt++)
     {
       parentEntityIndex = entryIt->first;
@@ -1779,7 +1777,7 @@ pair<IndexType, unsigned> MeshTopology::getEntityGeneralizedParent(unsigned int 
     }
   }
   TEUCHOS_TEST_FOR_EXCEPTION(true, std::invalid_argument, "Entity generalized parent not found...");
-  return make_pair(-1,-1);
+//  return make_pair(-1,-1);
 }
 
 IndexType MeshTopology::getEntityIndex(unsigned d, const set<IndexType> &nodeSet) const
@@ -2011,7 +2009,7 @@ void MeshTopology::getSubEntityIndices(unsigned d, IndexType entityIndex, unsign
     
     CellTopoPtr cellTopo = cell->topology();
     unsigned sideOrdinal = cellEntry.second;
-    unsigned entitySubcellOrdinalInCell = -1;
+    unsigned entitySubcellOrdinalInCell = INVALID_CELLTOPOLOGY_SUBCELL_ORDINAL;
     if (d == sideDim)
     {
       entitySubcellOrdinalInCell = sideOrdinal;
@@ -2029,7 +2027,7 @@ void MeshTopology::getSubEntityIndices(unsigned d, IndexType entityIndex, unsign
           break;
         }
       }
-      TEUCHOS_TEST_FOR_EXCEPTION(entitySubcellOrdinalInCell == -1, std::invalid_argument, "entity not found in Cell");
+      TEUCHOS_TEST_FOR_EXCEPTION(entitySubcellOrdinalInCell == INVALID_CELLTOPOLOGY_SUBCELL_ORDINAL, std::invalid_argument, "entity not found in Cell");
     }
     CellTopoPtr subcellTopo = cellTopo->getSubcell(d, entitySubcellOrdinalInCell);
     int subsubcellCount = subcellTopo->getSubcellCount(subEntityDim);
@@ -2455,7 +2453,6 @@ vector< pair<IndexType,unsigned> > MeshTopology::getConstrainingSideAncestry(Ind
   {
     cout << "MeshTopology internal error: # active cells for side is not 0, 1, or 2\n";
     TEUCHOS_TEST_FOR_EXCEPTION(true, std::invalid_argument, "MeshTopology internal error: # active cells for side is not 0, 1, or 2\n");
-    return ancestry; // unreachable, but most compilers don't seem to know that.
   }
 }
 
@@ -2533,7 +2530,7 @@ IndexType MeshTopology::getEntityParentForSide(unsigned d, IndexType entityIndex
 
   cout << "parent entity not found in parent side.\n";
   TEUCHOS_TEST_FOR_EXCEPTION(true, std::invalid_argument, "parent entity not found in parent side.\n");
-  return -1;
+//  return -1;
 }
 
 unsigned MeshTopology::getEntityParentCount(unsigned d, IndexType entityIndex) const
@@ -3044,7 +3041,7 @@ void MeshTopology::pruneToInclude(Epetra_CommPtr Comm, const std::set<GlobalInde
         {
           cell = cell->getParent();
           unsigned sideOrdinal = cell->findSubcellOrdinal(sideDim, oldSideEntityIndex);
-          if (sideOrdinal == -1) break; // parent does not share side
+          if (sideOrdinal == INVALID_CELLTOPOLOGY_SIDE_ORDINAL) break; // parent does not share side
           // if we get here, parent *does* share side
           // is parent one of the cells we know about??
           if (cellsToInclude.find(cell->cellIndex()) != cellsToInclude.end())
@@ -3923,7 +3920,20 @@ void MeshTopology::unrefineCell(IndexType cellIndex, RefinementPatternPtr refPat
         noCellsForSide = (cell1.first == -1);
       }
       
-      _cellsForSideEntities[sideEntityIndex] = make_pair(cell1, cell2);
+      if (!noCellsForSide)
+      {
+        _cellsForSideEntities[sideEntityIndex] = make_pair(cell1, cell2);
+      }
+      else
+      {
+        // because we number side entity indices contiguously, we don't have a convenient way
+        // to delete this index, even though it's no longer used.  Worth noting that this means we
+        // can't refine/unrefine indefinitely; we'll exhaust the index space.  If we don't do a complete
+        // overhaul of MeshTopology (which I *am* thinking about, but which is probably not in the cards
+        // for a while), we could consider a "rebuild" operation that renumbers things to allow deletion
+        // of unused entity indices.
+        _cellsForSideEntities[sideEntityIndex] = {{-1,-1}, {-1,-1}};
+      }
     }
     
     _cells.erase(cellIDToDelete);
